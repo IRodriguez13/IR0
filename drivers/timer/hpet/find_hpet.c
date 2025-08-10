@@ -1,6 +1,5 @@
 #include "find_hpet.h"
-#include <stdint.h>
-
+#include <print.h>
 
 
 /* VERSIÓN MEJORADA - Con validaciones y implementación propia */
