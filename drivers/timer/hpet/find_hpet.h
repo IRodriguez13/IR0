@@ -1,5 +1,4 @@
 #include "../acpi/acpi.h"
-#include <print.h>
 #include <stddef.h>
 #include <stdint.h>
 
