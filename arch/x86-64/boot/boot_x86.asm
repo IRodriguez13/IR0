@@ -1,20 +1,62 @@
-; boot.asm
-; Entrada compatible con mi propio bootloader.
+; --------------------------------------------
+; Kernel Entry Point for Multiboot2 Loaders   |
+; --------------------------------------------|
+; Expects:                                    |
+;   - EAX = 0x36d76289 (Multiboot2 magic)     |
+;   - EBX = Pointer to Multiboot2 info struct |
+; Guarantees:                                 |
+;   - Stack: 16KB aligned to 16 bytes         |
+;   - Interrupts: Disabled                    |
+;   - EFLAGS: Clean state                     |
+; --------------------------------------------
+
+; boot.asm - Punto de entrada para kernel Multiboot2
+section .multiboot_header
+header_start:
+    dd 0xe85250d6                ; Magic number (Multiboot 2)
+    dd 0                         ; Architecture 0 (i386)
+    dd header_end - header_start ; Header length
+    dd 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start)) ; Checksum
+    
+    ; Tags opcionales (ej: framebuffer request)
+    ; dw 5, 0, 20, 1024, 768, 32  ; Tag framebuffer
+    dw 0, 0, 8                   ; End tag
+header_end:
 
 [BITS 32]
-[EXTERN kernel_main]  ; 
-
 section .text
 global _start
+extern kernelMain
 
 _start:
-    cli 
-    call kernel_main
-
+    cli
+    
+    ; Inicializar stack (16KB alineado)
+    mov esp, stack_top
+    mov ebp, esp
+    
+    ; Limpiar EFLAGS
+    push 0
+    popf
+    
+    ; Pasar parámetros Multiboot a kernel_main
+    push ebx    ; Puntero a estructura Multiboot
+    push eax    ; Magic number (0x36d76289)
+    
+    call kernelMain
+    
+    ; Caída segura si kernel_main retorna
 .hang:
+    cli
     hlt
-    jmp .hang ; Quedate tildado si no hay instrucciones nuevas (como un fallback por si en alto nivel tenemos un retorno inválido)
-            
+    jmp .hang
+.end:
+
+section .bss
+align 16
+stack_bottom:
+    resb 16384  ; 16KB stack
+stack_top:    
 
 
 ; Esto es el punto real de entrada del sistema donde permitimos a los módulos de C funcionar, por eso no usamos main() 
