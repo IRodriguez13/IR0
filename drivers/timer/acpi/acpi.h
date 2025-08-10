@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../../includes/stdint.h"
-#include "../../../includes/stddef.h"
+#include <stdint.h>
+#include <stddef.h>
 
 
 /*
@@ -11,7 +11,8 @@
 */
 void* find_hpet_table();
 
-typedef struct {
+typedef struct 
+{
     char signature[8];
     uint8_t checksum;
     char oem_id[6];
@@ -19,7 +20,8 @@ typedef struct {
     uint32_t rsdt_address;
 } __attribute__((packed)) rsdp_t;
 
-typedef struct {
+typedef struct 
+{
     char signature[4];
     uint32_t length;
     uint8_t revision;

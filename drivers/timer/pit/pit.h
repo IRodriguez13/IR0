@@ -1,4 +1,4 @@
-#include "../../../includes/stdint.h"
+#include <stdint.h>
 #ifndef TIMER_H
 #define TIMER_H
 /*

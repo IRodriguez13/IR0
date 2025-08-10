@@ -1,11 +1,10 @@
-#include "../includes/print.h"
-#include "../Paging/Paging.h"       
+#include "../includes/ir0/print.h"
+#include "../paging/Paging.h"       
 #include "../interrupt/idt.h"
-#include "../panic/panic.h"        
+#include <panic/panic.h>        
 #include "../drivers/timer/clock_system.h" 
 #include "../scheduler/scheduler.h"  
 #include "../scheduler/task.h"      
-#include "../test/task_demo.h"
 
 
 // simulacion de memoria porque todavía no tengo stack, ni heap.
@@ -13,7 +12,9 @@
 
 uint8_t stack1[STACK_SIZE];
 uint8_t stack2[STACK_SIZE];
+
 // ==== Tasks estáticas para testing ===  
+
 task_t task1_struct;
 task_t task2_struct;
 
@@ -33,31 +34,6 @@ void kernel_main()
     scheduler_init();
     LOG_OK("Scheduler inicializado");
 
-    // Crear task1
-    task1_struct.pid = 1;
-    task1_struct.eip = (uint32_t)task1;
-    task1_struct.esp = (uint32_t)(stack1 + STACK_SIZE - 4); // Dejar espacio
-    task1_struct.ebp = task1_struct.esp;
-    task1_struct.state = TASK_READY;
-    task1_struct.priority = 10;
-    
-    // Obtener page directory actual
-    asm volatile("mov %%cr3, %0" : "=r"(task1_struct.cr3));
-    
-    add_task(&task1_struct);
-
-    // Crear task2
-    task2_struct.pid = 2;
-    task2_struct.eip = (uint32_t)task2;
-    task2_struct.esp = (uint32_t)(stack2 + STACK_SIZE - 4);
-    task2_struct.ebp = task2_struct.esp;
-    task2_struct.state = TASK_READY;
-    task2_struct.priority = 10;
-    task2_struct.cr3 = task1_struct.cr3; // Mismo page directory por ahora
-    
-    add_task(&task2_struct);
-
-    LOG_OK("Tareas creadas");
 
     // Activar interrupciones
     asm volatile("sti");
@@ -71,6 +47,7 @@ void kernel_main()
 }
 
 
+
 void ShutDown() // Como no tengo drivers para apagar la máquina, no la puedo usar.
 {
     uint8_t reset_value = 0xFE;
@@ -81,3 +58,6 @@ void ShutDown() // Como no tengo drivers para apagar la máquina, no la puedo us
        : "memory"           // clobbers: indica que puede modificar memoria
     );
 }
+
+
+

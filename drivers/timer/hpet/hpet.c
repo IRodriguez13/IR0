@@ -1,7 +1,7 @@
 #include "hpet.h"
 #include <ir0/print.h>
 #include "../../../interrupt/idt.h"
-#include "../../../panic/panic.h"
+#include <panic/panic.h>
 #include "../pit/pit.h" // para outb, inb 
 
 #define HPET_GENERAL_CAPABILITY       0x00
