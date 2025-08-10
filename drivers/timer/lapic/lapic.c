@@ -1,6 +1,6 @@
 #include "lapic.h"
-#include "../../../includes/print.h"
-#include "../../../panic/panic.h"
+#include <print.h>
+#include <panic/panic.h>
 
 #define LAPIC_BASE 0xFEE00000
 #define LAPIC_TIMER_REG 0x320

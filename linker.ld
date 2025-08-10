@@ -1,21 +1,30 @@
-/* linker.ld */
+ENTRY(_start)
 OUTPUT_FORMAT(elf32-i386)
-ENTRY(_start)         
+OUTPUT_ARCH(i386)
 
-SECTIONS {
-    . = 1M;
+SECTIONS
+{
+    . = 0x100000;
 
-    .text : {
+    .text : ALIGN(4K)
+    {
         *(.multiboot)
         *(.text)
     }
 
-    .data : {
+    .rodata : ALIGN(4K)
+    {
+        *(.rodata)
+    }
+
+    .data : ALIGN(4K)
+    {
         *(.data)
     }
 
-    .bss : {
-        *(.bss)
+    .bss : ALIGN(4K)
+    {
         *(COMMON)
+        *(.bss)
     }
 }

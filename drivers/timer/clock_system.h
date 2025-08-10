@@ -9,6 +9,7 @@ enum ClockType
     CLOCK_NONE
 };
 
-// Función faltante
 enum ClockType detect_best_clock();
+
+
 void init_clock();
