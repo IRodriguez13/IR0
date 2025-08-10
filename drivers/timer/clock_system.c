@@ -1,10 +1,10 @@
-#include "../../includes/print.h"
+#include <print.h>
 #include "acpi/acpi.h"
 #include "pit/pit.h"
 #include "lapic/lapic.h"
 #include "hpet/hpet.h"
 #include "clock_system.h"
-#include "../../panic/panic.h"
+#include <panic/panic.h>
 
 void init_clock()
 {

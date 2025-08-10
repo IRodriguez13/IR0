@@ -1,7 +1,7 @@
 #include "scheduler.h"
 #include "task.h"
-#include "../includes/print.h"
-#include "../panic/panic.h" 
+#include <print.h>
+#include <panic/panic.h> 
 
 static task_t *current_task = NULL;
 static task_t *ready_queue = NULL;
@@ -63,7 +63,7 @@ void add_task(task_t *task)
     }
 }
 
-void scheduler_start()
+void scheduler_check()
 {
     if (!ready_queue) {
         LOG_ERR("No hay procesos para ejecutar!");

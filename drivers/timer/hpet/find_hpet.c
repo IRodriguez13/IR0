@@ -1,5 +1,5 @@
 #include "find_hpet.h"
-#include "../../../includes/stdint.h"
+#include <stdint.h>
 
 
 
