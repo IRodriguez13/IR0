@@ -1,4 +1,4 @@
-#include "../includes/ir0/print.h"
+#include <print.h>
 #include "../paging/Paging.h"       
 #include "../interrupt/idt.h"
 #include <panic/panic.h>        

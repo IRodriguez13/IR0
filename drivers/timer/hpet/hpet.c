@@ -1,8 +1,8 @@
 #include "hpet.h"
-#include <ir0/print.h>
 #include "../../../interrupt/idt.h"
 #include <panic/panic.h>
 #include "../pit/pit.h" // para outb, inb 
+#include <print.h>
 
 #define HPET_GENERAL_CAPABILITY       0x00
 #define HPET_GENERAL_CONFIGURATION    0x10
