@@ -1,5 +1,6 @@
 #include <ir0/print.h>
-#include "../paging/Paging.h"
+#include "../arch/x86-64/sources/Paging_x86.h"
+// #include "../arch/x_64/sources/Paging_x64.h" // pendiente.
 #include <idt.h>
 #include <panic/panic.h>
 #include "../drivers/timer/clock_system.h"

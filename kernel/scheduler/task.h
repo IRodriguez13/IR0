@@ -1,5 +1,5 @@
 #pragma once
-#include "../includes/stdint.h"
+#include <stdint.h>
 
 typedef enum {
     TASK_READY, //0, listo para ejecutar

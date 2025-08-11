@@ -12,3 +12,4 @@ void idt_arch_set_gate(int n, uintptr_t handler, uint8_t flags)
     idt[n].offset_high = (handler >> 32) & 0xFFFFFFFF;
     idt[n].zero = 0;
 }
+

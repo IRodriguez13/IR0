@@ -63,7 +63,7 @@ void add_task(task_t *task)
     }
 }
 
-void scheduler_check()
+void scheduler_start()
 {
     if (!ready_queue) {
         LOG_ERR("No hay procesos para ejecutar!");
