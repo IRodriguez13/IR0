@@ -1,41 +1,53 @@
+// drivers/timer/pit/pit.c - ARREGLADO (quitar time_handler duplicado)
 #include <idt.h>
 #include <panic/panic.h>
 #include <print.h>
-#include "../../../paging/Paging.h" 
+#include <arch_interface.h>  // Para outb
 #define PIT_FREC 1193180
 
 extern void timer_stub();
 
+static uint32_t ticks = 0;
 
+// REMOVIDO: time_handler() - ahora está en isr_handlers.c
 
-static uint32_t ticks;
-
-
-// NO es portable tener outb si quiero pasar a ARM, RISC-V, etc.
-
-void time_handler()
+uint32_t get_pit_ticks(void)
 {
-    ticks ++;
-
-    if(ticks % 100 == 0)
-        
-        print_warning("[TIMER] Tick! \n");
-}       
-
-void init_PIT(uint32_t frecuency)
-{
-    // abro el gate para que el timer acceda a las interrupciones
-    idt_set_gate(32, (uint32_t)timer_stub, IDT_INTERRUPT_GATE_KERNEL);
-
-    // hago la división para obtener la frecuencia
-    uint32_t divisor = PIT_FREC / frecuency;
-
-    
-    // entonces ya le puedo mandar cosas al PIT
-    outb(0x43, 0x36); // modo 3, canal 0
-    outb(0x40, divisor & 0xFF); // mando los bajos
-    outb(0x40, (divisor >> 8) & 0xFF); // mando los bits altos
+    return ticks;
 }
 
+void increment_pit_ticks(void)
+{
+    ticks++;
+}
 
+void init_PIT(uint32_t frequency)
+{
+    print_colored("[PIT] Inicializando Programmable Interval Timer...\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    
+    // Abrir el gate para que el timer acceda a las interrupciones
+    idt_set_gate(32, (uintptr_t)timer_stub, IDT_INTERRUPT_GATE_KERNEL);
 
+    // Calcular divisor para la frecuencia deseada
+    uint32_t divisor = PIT_FREC / frequency;
+    
+    print("PIT frequency: ");
+    print_hex_compact(frequency);
+    print(" Hz, divisor: ");
+    print_hex_compact(divisor);
+    print("\n");
+
+    // Configurar PIT
+    outb(0x43, 0x36);                    // Comando: canal 0, lohi, modo 3
+    outb(0x40, divisor & 0xFF);          // Byte bajo del divisor
+    outb(0x40, (divisor >> 8) & 0xFF);   // Byte alto del divisor
+    
+    print_success("[PIT] Configurado correctamente\n");
+}
+
+// ===============================================================================
+
+// drivers/timer/timer.c - REMOVIDO COMPLETAMENTE
+// Todo el contenido va a isr_handlers.c
+
+// ===============================================================================
