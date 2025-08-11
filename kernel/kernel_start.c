@@ -1,10 +1,10 @@
 #include <ir0/print.h>
 #include "../paging/Paging.h"
-#include "../interrupt/idt.h"
+#include <idt.h>
 #include <panic/panic.h>
 #include "../drivers/timer/clock_system.h"
-#include "../scheduler/scheduler.h"
-#include "../scheduler/task.h"
+#include "scheduler/scheduler.h"
+#include "scheduler/task.h"
 #include "../arch/common/arch_interface.h"  
 
 
