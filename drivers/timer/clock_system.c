@@ -6,12 +6,15 @@
 #include "clock_system.h"
 #include <panic/panic.h>
 
+static enum ClockType current_timer_type;
+
 void init_clock()
 {
-    enum ClockType selected = detect_best_clock();
 
-    switch (selected)
+    switch (current_timer_type)
     {
+        current_timer_type = detect_best_clock();
+
         case CLOCK_HPET:
             LOG_OK("[CLOCK] Using HPET\n");
             hpet_init(); 

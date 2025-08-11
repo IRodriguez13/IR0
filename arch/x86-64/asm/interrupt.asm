@@ -36,8 +36,8 @@ isr_default:
 isr_page_fault:
     pusha ; me guardo todos los registros
     call page_fault_handler ; llamo a funcion de alto nivel para manejar interrupciones por page faults
-    popa ; restauro los valores
     add esp, 4 ; Limpio el error code automático generado en PF haciendo que el puntero de pila apunte a 4 bytes del err
+    popa ; restauro los valores
     iret 
 
 timer_stub: ; lo tengo que hacer porque la cpu no sabe hacer iret en C

@@ -1,13 +1,14 @@
-#include "Paging.h"
+#include "../../common/idt.h"
+#include "../../common/common_paging.h"
+#include "Paging_x86.h"
 
 extern void idt_flush(void);
 
 // Tamaño std para directiorio/tablas en 32-bit paging
 
-#define PAGE_ENTRIES 1024 // esto es 2 a la 10 bits por cada nivel, ya que el nvl1 procesa 10 bits, el segundo tambien y el tercero contiene el offset de los 12 restantes
-#define PAGE_SIZE 4096    // 4kb que es lo que suele medir cada tabla (porque son páginas también)
+#define PAGE_ENTRIES 1024                           // esto es 2 a la 10 bits por cada nivel, ya que el nvl1 procesa 10 bits, el segundo tambien y el tercero contiene el offset de los 12 restantes
+#define PAGE_SIZE 4096                              // 4kb que es lo que suele medir cada tabla (porque son páginas también)
 #define TABLE_RANGE_SIZE (PAGE_ENTRIES * PAGE_SIZE) // 4MB por tabla
-
 
 // Alineo a 4 kb por necesidad de la cpu. Estos son mis dos niveles de paginación en caada tabla que arme.
 
@@ -21,7 +22,7 @@ __attribute__((aligned(PAGE_SIZE))) uint32_t Six_page_table[PAGE_ENTRIES];
 __attribute__((aligned(PAGE_SIZE))) uint32_t Seven_page_table[PAGE_ENTRIES];
 __attribute__((aligned(PAGE_SIZE))) uint32_t Eight_page_table[PAGE_ENTRIES];
 __attribute__((aligned(PAGE_SIZE))) uint32_t Nine_page_table[PAGE_ENTRIES];
-__attribute__((aligned(PAGE_SIZE))) uint32_t Ten_page_table[PAGE_ENTRIES];
+__attribute__((aligned(PAGE_SIZE))) uint32_t Ten_page_table[PAGE_ENTRIES]; // 40 hermosos megas de paginación, pero estática.
 
 void Fill_Table_Page(uint32_t Directory_index, uint32_t *table, uint32_t start_adress)
 {
@@ -43,30 +44,25 @@ void Clean_Remaining_Tables(uint32_t dir_index)
     }
 }
 
-void init_paging()
+void init_paging_x86()
 {
     // Ahora debería llenar una página (tabla de paginación) de páginas mapeables a el directorio de páginas.
-    Fill_Table_Page(0, first_page_table, 0 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(1, second_page_table, 1 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(2, third_page_table, 2 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(3, Fouth_page_table, 3 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(4, Five_page_table, 4 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(5, Six_page_table, 5 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(6, Seven_page_table, 6 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(7, Eight_page_table, 7 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(8, Nine_page_table, 8 *TABLE_RANGE_SIZE);
-    Fill_Table_Page(9, Ten_page_table, 9 *TABLE_RANGE_SIZE);
+    Fill_Table_Page(0, first_page_table, 0 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(1, second_page_table, 1 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(2, third_page_table, 2 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(3, Fouth_page_table, 3 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(4, Five_page_table, 4 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(5, Six_page_table, 5 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(6, Seven_page_table, 6 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(7, Eight_page_table, 7 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(8, Nine_page_table, 8 * TABLE_RANGE_SIZE);
+    Fill_Table_Page(9, Ten_page_table, 9 * TABLE_RANGE_SIZE);
 
     Clean_Remaining_Tables(10);
 
-    // Le tengoque decir a la CPU cómo estoy paginando y que inicie la paginación
-    asm volatile("mov %0, %%cr3" ::"r"(page_directory));
-
-    // Le digo a la CPU que active el bit de paginación
-    uint32_t cr0;
-    asm volatile("mov %%cr0, %0" : "=r"(cr0));
-
-    cr0 |= 0x80000000;
-
-    asm volatile("mov %0, %%cr0" ::"r"(cr0));
+    paging_set_cpu(page_directory);
 }
+
+
+
+
