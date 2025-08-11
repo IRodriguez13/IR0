@@ -10,10 +10,10 @@ static enum ClockType current_timer_type;
 
 void init_clock()
 {
+    current_timer_type = detect_best_clock();
 
     switch (current_timer_type)
     {
-        current_timer_type = detect_best_clock();
 
         case CLOCK_HPET:
             LOG_OK("[CLOCK] Using HPET\n");
