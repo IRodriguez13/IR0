@@ -26,7 +26,7 @@ header_end:
 [BITS 32]
 section .text
 global _start
-extern kernelMain
+extern kmain_x32
 
 _start:
     cli
@@ -43,19 +43,28 @@ _start:
     push ebx    ; Puntero a estructura Multiboot
     push eax    ; Magic number (0x36d76289)
     
-    call kernelMain
+    call kmain_x32
     
-    ; Caída segura si kernel_main retorna
+    ; Caída segura si kmain_x32 retorna que no debería pasar.
+
+
+; hang hace lo mismo que panic en el fondo pero mas rústico. Cuelga la cpu pero en un bucle infinito.
 .hang:
+
     cli
     hlt
     jmp .hang
+
 .end:
 
 section .bss
+
 align 16
+
 stack_bottom:
+  
     resb 16384  ; 16KB stack
+
 stack_top:    
 
 
