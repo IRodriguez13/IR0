@@ -19,3 +19,7 @@ typedef struct
 } __attribute__((packed)) idt_ptr_t;
 
 void idt_arch_set_gate(int n, uintptr_t handler, uint8_t flags);
+
+
+// Esta función le dice a la CPU que empiece a paginar configurando el directorio. -- 32 bit --
+void paging_set_cpu();

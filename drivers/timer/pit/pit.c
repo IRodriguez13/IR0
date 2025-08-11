@@ -11,10 +11,7 @@ extern void timer_stub();
 static uint32_t ticks;
 
 
-static inline void outb(uint16_t port, uint8_t value)
-{
-    asm volatile("outb %0, %1"::"a"(value),"Nd"(port));
-} 
+// NO es portable tener outb si quiero pasar a ARM, RISC-V, etc.
 
 void time_handler()
 {
@@ -38,5 +35,7 @@ void init_PIT(uint32_t frecuency)
     outb(0x43, 0x36); // modo 3, canal 0
     outb(0x40, divisor & 0xFF); // mando los bajos
     outb(0x40, (divisor >> 8) & 0xFF); // mando los bits altos
-
 }
+
+
+
