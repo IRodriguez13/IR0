@@ -1,21 +1,11 @@
-#include "idt.h"
+#include <idt.h>
 
 idt_entry_t idt[IDT_ENTRIES]; // Tabla de descriptores de interrupciones (256 entradas de 8 bytes)
 idt_ptr_t idt_ptr;            // y mi puntero al idt
 
-extern void idt_flush(uint32_t); // esta es la funcion que carga el idt en asm
+extern void idt_flush(uintptr_t); // esta es la funcion que carga el idt en asm
 extern void isr_default();
 extern void isr_page_fault();
-
-
-void idt_set_gate(int n, uint32_t handler, uint8_t flags) // crea una entrada de interrupción en la IDT en la posición n a 255
-{
-    idt[n].offset_low = handler & 0xFFFF;
-    idt[n].selector = 0x08; // segmento de código en la GDT
-    idt[n].zero = 0;
-    idt[n].type_attr = flags; // Presente, ring 0, 32-bit interrupt gate
-    idt[n].offset_high = (handler >> 16) & 0xFFFF;
-}
 
 
 

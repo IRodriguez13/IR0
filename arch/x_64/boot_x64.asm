@@ -27,7 +27,7 @@ header_end:
 
 section .text
 global _start
-extern kernel_main              ; Definido en main.c
+extern kmain_64              ; Definido en main.c
 
 _start:
 
@@ -60,7 +60,7 @@ long_mode_start:
     mov ss, ax
 
     ; Cargo el kernel
-    call kernel_main
+    call kmain_64
 
     ; En caso de retorno, el típico fallback donde  duerme la cpu.
     cli

@@ -1,0 +1,11 @@
+## Notas:
+
+- Acá voy a incluir  todos los archivos de arquitectura y las implementaciones en asm que necesiten para poder escalarlo bien en los fuentes.
+
+- entonces en cada archivo de arch, tengo sus .c de reeimplementacion de asm inline. Luego, en el fuente general, importo la interfaz arch_interface.h en cada fuente y sólo llamo a la función reeimplementada sin importar nada más.
+
+## OJO:
+
+- fault() sólo esta en x_64 porque su implementación es portable con 32 bit. 
+
+- No te olvides: make ARCH=x_64, ARCH=X_86 

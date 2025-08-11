@@ -6,9 +6,13 @@ SECTIONS
 {
     . = 0x100000;
 
+    .multiboot_header : ALIGN(4K)
+    {
+        *(.multiboot_header)
+    }
+
     .text : ALIGN(4K)
     {
-        *(.multiboot)
         *(.text)
     }
 
