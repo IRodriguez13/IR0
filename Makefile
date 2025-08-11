@@ -3,9 +3,9 @@
 KERNEL_ROOT := $(CURDIR)
 
 # Arquitectura por defecto
-ARCH ?= x86-64
+ARCH ?= x86-32
 
-COMMON_SUBDIRS = kernel interrupt drivers/timer paging scheduler includes/ir0/panic
+COMMON_SUBDIRS = kernel interrupt drivers/timer paging scheduler includes/ir0/panic arch/common
 
 ifeq ($(ARCH),x_64)
     # Configuración para 64-bit
@@ -19,25 +19,22 @@ ifeq ($(ARCH),x_64)
     LDFLAGS = -m elf_x86_64 -T arch/x_64/linker.ld
     ARCH_SUBDIRS = arch/x_64
     KERNEL_ENTRY = kmain_x64
-else ifeq ($(ARCH),x86-64)
+else ifeq ($(ARCH),x86-32)
     # Configuración para 32-bit
     CC = gcc
     ASM = nasm
     LD = ld  
     CFLAGS = -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -Wall -Wextra -O1 -MMD -MP
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP
     ASMFLAGS = -f elf32
-    LDFLAGS = -m elf_i386 -T arch/x86-64/linker.ld
-    ARCH_SUBDIRS = arch/x86-64
+    LDFLAGS = -m elf_i386 -T arch/x86-32/linker.ld
+    ARCH_SUBDIRS = arch/x86-32
     KERNEL_ENTRY = kmain_x32
 else
-    $(error Arquitectura no soportada: $(ARCH). Use x_64 o x86-64)
+    $(error Arquitectura no soportada: $(ARCH). Use x_64 o x86-32)
 endif
 
-# Enlace en de los subsistemas mas los paths de los arranques por arch
-
 SUBDIRS = $(COMMON_SUBDIRS) $(ARCH_SUBDIRS)
-
 
 .PHONY: all clean $(SUBDIRS) $(ARCH_SUBDIRS) arch-info
 
@@ -51,19 +48,16 @@ arch-info:
 	@echo "Flags LD: $(LDFLAGS)"
 	@echo ""
 
-# Compilar subsistemas existentes y arquitectura específica
 subsystems: $(SUBDIRS)
 
 $(SUBDIRS):
 	$(MAKE) -C $@ CC="$(CC)" ASM="$(ASM)" CFLAGS="$(CFLAGS)" ASMFLAGS="$(ASMFLAGS)"
 
-
-
-# Archivos objeto principales (mantener estructura existente)
+# Archivos objeto principales - RUTAS ACTUALIZADAS
 KERNEL_OBJS = kernel/kernel_start.o \
               includes/print.o \
               includes/string.o \
-              interrupt/idt.o interrupt/interrupt.o interrupt/isr_handlers.o \
+              interrupt/idt.o interrupt/isr_handlers.o \
               paging/Paging.o \
               includes/ir0/panic/panic.o \
               drivers/timer/pit/pit.o \
@@ -74,7 +68,9 @@ KERNEL_OBJS = kernel/kernel_start.o \
               drivers/timer/hpet/find_hpet.o \
               drivers/timer/lapic/lapic.o \
               scheduler/scheduler.o \
-              scheduler/switch/switch.o
+              scheduler/dummy_tasks.o \
+              scheduler/switch/switch.o \
+              arch/common/arch_interface.o
 
 # Archivos objeto específicos de arquitectura
 ARCH_OBJS = $(ARCH_SUBDIRS)/boot.o \
