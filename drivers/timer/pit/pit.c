@@ -1,4 +1,4 @@
-#include "../../../interrupt/idt.h"
+#include <idt.h>
 #include <panic/panic.h>
 #include <print.h>
 #include "../../../paging/Paging.h" 

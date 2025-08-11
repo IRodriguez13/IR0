@@ -132,8 +132,9 @@ clean:
 	@if [ -d "$(ARCH_SUBDIRS)" ]; then \
 		$(MAKE) -C $(ARCH_SUBDIRS) clean; \
 	fi
-	rm -f $(ALL_OBJS) kernel-$(ARCH).bin kernel-$(ARCH).iso
+	rm -f $(ALL_OBJS) $(ALL_OBJS:.o=.d) kernel-$(ARCH).bin kernel-$(ARCH).iso
 	rm -rf iso-$(ARCH)
+
 
 # Limpieza completa (todas las arquitecturas)
 clean-all:
@@ -167,4 +168,4 @@ help:
 	@echo "  make ARCH=x_64 run      - Compilar y ejecutar en 64-bit"
 	@echo "  make ARCH=x86-64 run    - Compilar y ejecutar en 32-bit"
 
--include $(ALL_OBJS:.o=.P)
+-include $(ALL_OBJS:.o=.d)
