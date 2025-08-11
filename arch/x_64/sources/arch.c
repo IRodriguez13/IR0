@@ -1,6 +1,6 @@
+// arch/x_64/sources/arch.c - ACTUALIZADO
 #include "../../kernel/kernel_start.h"
 #include "../../common/arch_interface.h"
-
 
 // Esta es la función que llama el boot.asm
 void kmain_x64(void) 
@@ -12,15 +12,19 @@ void kmain_x64(void)
     main();
 }
 
-
 // Implementación de la interfaz común
 void arch_enable_interrupts(void) 
 {
     __asm__ volatile("sti");
 }
 
-
 const char* arch_get_name(void) 
 {
-    return "x64";
+    return "x86-64 (amd64)";
+}
+
+// NUEVO: Implementar outb para 64-bit (movido desde archivo separado)
+void outb(uint16_t port, uint8_t value)
+{
+    asm volatile("outb %0, %1" :: "a"(value), "Nd"(port));
 }
