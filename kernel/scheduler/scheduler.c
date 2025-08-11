@@ -92,7 +92,7 @@ void scheduler_tick()
 {
     // NUEVO: Si no hay current_task, inicializar scheduler
     if (!current_task) {
-        scheduler_start();
+        LOG_WARN("scheduler_tick called before scheduler_start!");
         return;
     }
 

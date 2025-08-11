@@ -78,22 +78,24 @@ check_multiboot:
     mov al, "0"
     jmp error
 
+; arch/x86_64/asm/boot_x64.asm
 check_cpuid:
-    ; ... (implementación similar a la anterior)
+    pushfd
+    pop eax
+    mov ecx, eax
+    xor eax, 1 << 21
+    push eax
+    popfd
+    pushfd
+    pop eax
+    push ecx
+    popfd
+    xor eax, ecx
+    jz .no_cpuid
     ret
-
-check_long_mode:
-    ; ... (implementación similar a la anterior)
-    ret
-
-setup_page_tables:
-    ; ... (configuración básica de paginación para el salto a 64-bit)
-    ret
-
-enable_paging:
-    ; ... (habilitar PAE y paginación)
-    ret
-
+.no_cpuid:
+    mov al, "1"
+    jmp error
 error:
     ; Manejo básico de errores
     mov dword [0xb8000], 0x4f524f45
