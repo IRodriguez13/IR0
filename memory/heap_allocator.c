@@ -1,5 +1,7 @@
 // memory/memory_interface.c - Implementación de la interfaz común
 #include "memo_interface.h"
+#include "heap_allocator.h"
+#include "physical_allocator.c"
 #include <print.h>
 #include <panic/panic.h>
 #include <string.h>
@@ -7,6 +9,8 @@
 // Variables globales para estadísticas (definidas en physical_allocator.c)
 extern uint32_t free_pages_count;
 extern uint32_t total_pages_count;
+static heap_block_t *heap_start = NULL; // Puntero al primer bloque del heap
+static size_t heap_total_size = 0;
 
 // Prototipos de funciones del physical allocator
 extern void physical_allocator_init(void);
@@ -18,7 +22,7 @@ extern void heap_allocator_init(void);
 extern void *kmalloc_impl(size_t size);
 extern void kfree_impl(void *ptr);
 
-static int memory_system_initialized = 0;
+static int memory_system_initialized = 0; // flag de control para saber si el subsistema de memoria está iniciado.
 
 void memory_init(void)
 {
@@ -96,7 +100,7 @@ void *krealloc(void *ptr, size_t new_size)
         return ptr; // Retornar el mismo puntero
     }
 
-    // Caso 4: Intentar expandir el bloque actual
+    // Caso 4: Intentar expandir el bloque actual en un Realloc()
     // Verificar si el siguiente bloque está libre y es suficiente
     heap_block_t *next_block = current_block->next;
     if (next_block && next_block->is_free)
@@ -243,6 +247,103 @@ uintptr_t virt_to_phys(uintptr_t virt_addr)
     }
 
     return arch_virt_to_phys(virt_addr);
+}
+
+bool is_valid_heap_pointer(void *ptr)
+{
+    if (!ptr)
+        return false;
+
+    heap_block_t *block = (heap_block_t *)((uint8_t *)ptr - sizeof(heap_block_t));
+
+    // Verificamos que el bloque esté dentro del heap
+    if ((void *)block < (void *)heap_start)
+        return false;
+
+    if (block->magic != HEAP_MAGIC)
+        return false;
+
+    return true;
+}
+
+void split_block(heap_block_t *block, size_t wanted_size)
+{
+    if (block->size < wanted_size + sizeof(heap_block_t) + MIN_BLOCK_SIZE)
+    {
+        // No se puede dividir, demasiado pequeño
+        LOG_ERR("Block to small to divide it");
+        return;
+    }
+
+    heap_block_t *new_block = (heap_block_t *)((uint8_t *)block + sizeof(heap_block_t) + wanted_size);
+    new_block->size = block->size - wanted_size - sizeof(heap_block_t);
+    new_block->next = block->next;
+    new_block->prev = block;
+    new_block->is_free = 1;
+    new_block->magic = HEAP_MAGIC;
+
+    if (block->next)
+    {
+        block->next->prev = new_block;
+    }
+
+    block->next = new_block;
+    block->size = wanted_size;
+}
+
+void kfree_impl(void *ptr)
+{
+    if (!is_valid_heap_pointer(ptr))
+    {
+        LOG_ERR("invalid memo at this position.");
+        return;
+    }
+
+    heap_block_t *block = (heap_block_t *)((uint8_t *)ptr - sizeof(heap_block_t));
+    block->is_free = 1;
+
+    // Intentar fusionar con el siguiente bloque libre
+    if (block->next && block->next->is_free)
+    {
+        block->size += sizeof(heap_block_t) + block->next->size;
+        block->next = block->next->next;
+        if (block->next)
+        {
+            block->next->prev = block;
+        }
+    }
+
+    // Intentar fusionar con el bloque anterior libre
+    if (block->prev && block->prev->is_free)
+    {
+        block->prev->size += sizeof(heap_block_t) + block->size;
+        block->prev->next = block->next;
+        if (block->next)
+        {
+            block->next->prev = block->prev;
+        }
+    }
+}
+
+void *kmalloc_impl(size_t size)
+{
+    heap_block_t *current = heap_start;
+
+    // Alinear tamaño a múltiplo de 8 para hacerlo mas eficiente y pq las arquitecturas me lo exigen si quiero evitar aligment faults.
+    size = (size + 7) & ~7;
+
+    while (current)
+    {
+        if (current->is_free && current->size >= size)
+        {
+            split_block(current, size);
+            current->is_free = 0;
+            return (void *)((uint8_t *)current + sizeof(heap_block_t));
+        }
+        current = current->next;
+    }
+
+    return NULL;
 }
 
 void debug_memory_state(void)

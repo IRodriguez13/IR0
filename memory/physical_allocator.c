@@ -106,7 +106,7 @@ uintptr_t alloc_physical_page(void)
     for (uint32_t byte_idx = 0; byte_idx < BITMAP_SIZE; byte_idx++)
     {
         if (page_bitmap[byte_idx] != 0xFF)
-        { // Hay al menos un bit libre
+        { // Hay al menos un bit libre que no sea 0
             for (int bit_idx = 0; bit_idx < 8; bit_idx++)
             {
                 if (!(page_bitmap[byte_idx] & (1 << bit_idx)))
@@ -116,7 +116,7 @@ uintptr_t alloc_physical_page(void)
                     uintptr_t phys_addr = PHYS_MEM_START + (page_idx * PAGE_SIZE);
 
                     set_page_used(phys_addr);
-                    free_pages_count--;
+                    free_pages_count--; // Si marco la página como usada, entonces hay menos páginas libres.
 
                     // Limpiar la página antes de retornarla
                     memset((void *)phys_addr, 0, PAGE_SIZE);
@@ -133,13 +133,13 @@ uintptr_t alloc_physical_page(void)
 
 void free_physical_page(uintptr_t phys_addr)
 {
-    if (!allocator_initialized)
+    if (!allocator_initialized) // No puedo liberar nada si no se reservó memoria antes.
     {
         LOG_ERR("free_physical_page: Allocator no inicializado");
         return;
     }
 
-    // Validar rango
+    // Validar rango para no acceder a memoria inexistente.
     if (phys_addr < PHYS_MEM_START || phys_addr >= PHYS_MEM_END)
     {
         LOG_ERR("free_physical_page: Dirección fuera de rango");
@@ -163,7 +163,6 @@ void free_physical_page(uintptr_t phys_addr)
     free_pages_count++;
 }
 
-// Función para debugging
 void debug_physical_allocator(void)
 {
     print_colored("=== PHYSICAL ALLOCATOR STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);

@@ -1,6 +1,6 @@
 // memory/arch/x86-32/mmu_x86.c - Implementación específica x86-32
 #include "../../memo_interface.h"
-#include "../../../arch/x86-32/sources/Paging_x86.h"
+#include "Paging_x86.h"
 
 // Acceso a las tablas de paginación globales definidas en Paging_x86.c
 extern uint32_t page_directory[1024];
