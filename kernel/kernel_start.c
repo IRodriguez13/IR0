@@ -6,7 +6,7 @@
 #include <kernel.h>
 // ARREGLADO: Includes con rutas correctas según arquitectura
 #if defined(__i386__)
-    #include "../arch/x86-32/sources/Paging_x86.h"
+    #include "../memory/arch/x_86-32/Paging_x86.h"  
     #define init_paging() init_paging_x86()
 #elif defined(__x86_64__)  
     #include "../arch/x_64/sources/Paging_x64.h"  // ME FALTA PAGINACION DE 64 BIT
