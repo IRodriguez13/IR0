@@ -35,9 +35,9 @@ void main()
     scheduler_init();
     LOG_OK("Scheduler inicializado");
 
-    // NUEVO: Crear procesos de prueba ANTES de iniciar scheduler
-    create_dummy_tasks();
-    LOG_OK("Procesos dummy creados");
+    // // NUEVO: Crear procesos de prueba ANTES de iniciar scheduler
+    // create_dummy_tasks();
+    // LOG_OK("Procesos dummy creados");
 
     // Opcional: Mostrar estado del scheduler
     dump_scheduler_state();
