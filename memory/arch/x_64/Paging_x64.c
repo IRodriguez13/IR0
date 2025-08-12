@@ -1,5 +1,5 @@
-#include "../../../arch/common/idt.h"
-#include "../../../arch/common/common_paging.h"
+#include <stdint.h>
+#include <stddef.h>
 #include "Paging_x64.h"
 #include <string.h>  // Para memset
 
