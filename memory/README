@@ -1,0 +1,62 @@
+## Memory Management Subsystem
+
+ UUF este subsistema.... Es el pilar de cómo gestiono la memoria RAM entre los procesos que ocurren dentro del kernel y dirime cuánto le corresponde al mismo y cuánto le va a corresponder al usuario cuando utilice alguna de estas funcionalidades en sus programas con este SO.
+
+
+- La API que expone este subsistema es kmalloc(), krealloc y kfree() al kernel y, podríamos decir que en parte al usuario syscall mediante.
+
+
+- Este subsistema es el corazón de cómo el kernel gestiona la RAM, tanto para sus propias estructuras internas como para lo que eventualmente se asignará a procesos de usuario.
+Aquí se decide qué parte de la memoria se reserva para el núcleo, qué páginas están disponibles, y cómo se traducen las direcciones virtuales a físicas.
+
+
+## Paging Subsystem (x86_64/ARM) : Componentes principales
+
+- Traduce direcciones virtuales a direcciones físicas usando tablas de paginación de 64 bits.
+
+- Configura y mantiene la jerarquía de páginas:
+
+```
+PML4 → PDPT → PD → PT → Frames de memoria física.
+```
+- No asigna memoria directamente, pero provee la infraestructura para que el resto del kernel pueda mapear páginas.
+
+## Physical Allocator
+
+- Mantiene un bitmap de páginas para saber cuáles están libres y cuáles ocupadas.
+
+#### Funciones clave:
+```
+- set_page_used()
+
+- set_page_free()
+
+- alloc_physical_page()
+```
+##### Responsable de entregar un marco físico libre cuando el kernel lo solicita.
+
+### Heap Allocator (Kernel Heap)
+
+Reserva bloques de memoria sobre páginas físicas ya asignadas.
+
+Implementa las funciones de alto nivel:
+
+- **kmalloc()** – Reserva memoria dinámica en el heap del kernel.
+
+- **krealloc()** – Redimensiona bloques existentes.
+
+- **kfree()** – Libera memoria previamente reservada.
+
+### Flujo simplificado
+```
+- kmalloc(size) → Heap Allocator → Physical Allocator → Paging Subsystem → MMU
+```
+
+- Heap Allocator: calcula cuántas páginas necesita para satisfacer la petición.
+
+- Physical Allocator: busca páginas libres en el bitmap.
+
+- Paging Subsystem: crea las entradas de tabla necesarias para mapear direcciones virtuales a físicas.
+
+- MMU (hardware): realiza la traducción en tiempo de ejecución.
+
