@@ -27,3 +27,20 @@ void page_fault_handler()
     // Por ahora, hacer panic. En el futuro implementar lazy allocation cuando tenga manejo de memo.
     panic("Page fault: abortando ejecución");
 }
+
+void time_handler() 
+{
+    static uint32_t tick_count = 0;
+    tick_count++;
+    
+    // Simple feedback visual cada 100 ticks
+    if (tick_count % 100 == 0) {
+        print(".");
+    }
+    
+    // Llamar scheduler solo si hay tareas
+    // scheduler_tick(); // Comentar por ahora
+    
+    // EOI para PIT (IRQ0 -> IRQ32)
+    outb(0x20, 0x20); // Send End of Interrupt al PIC maestro
+}
