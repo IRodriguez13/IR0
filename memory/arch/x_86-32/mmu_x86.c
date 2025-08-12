@@ -1,5 +1,5 @@
 // memory/arch/x86-32/mmu_x86.c - Implementación específica x86-32
-#include "../../memory_interface.h"
+#include "../../memo_interface.h"
 #include "../../../arch/x86-32/sources/Paging_x86.h"
 
 // Acceso a las tablas de paginación globales definidas en Paging_x86.c
@@ -133,6 +133,7 @@ void arch_destroy_page_directory(uintptr_t page_dir) {
     // TODO: Implementar cuando tengamos allocator de páginas
     (void)page_dir; // Evitar warning
 }
+
 
 void arch_switch_page_directory(uintptr_t page_dir) {
     asm volatile(
