@@ -1,5 +1,5 @@
-#include "../../../arch/common/idt.h"
-#include "../../../arch/common/common_paging.h"
+#include <stdint.h>
+#include <stddef.h>
 #include "Paging_x86.h"
 
 extern void idt_flush(void);
@@ -22,7 +22,7 @@ __attribute__((aligned(PAGE_SIZE))) uint32_t Six_page_table[PAGE_ENTRIES];
 __attribute__((aligned(PAGE_SIZE))) uint32_t Seven_page_table[PAGE_ENTRIES];
 __attribute__((aligned(PAGE_SIZE))) uint32_t Eight_page_table[PAGE_ENTRIES];
 __attribute__((aligned(PAGE_SIZE))) uint32_t Nine_page_table[PAGE_ENTRIES];
-__attribute__((aligned(PAGE_SIZE))) uint32_t Ten_page_table[PAGE_ENTRIES]; // 40 hermosos megas de paginación, pero estática.
+__attribute__((aligned(PAGE_SIZE))) uint32_t Ten_page_table[PAGE_ENTRIES]; // 40 hermosos megas de paginación, pero estáticos.
 
 void Fill_Table_Page(uint32_t Directory_index, uint32_t *table, uint32_t start_adress)
 {

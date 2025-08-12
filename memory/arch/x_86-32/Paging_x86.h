@@ -7,7 +7,7 @@
 #define PAGE_USER 0x4    // Con este bit (el 2), le digo  al sistema que tanto kernel como programas de usuario pueden acceder acá.
 
 
-#include "../includes/stdint.h"
+#include <stdint.h>
 
 void init_paging();
 
