@@ -25,6 +25,11 @@ void* kmalloc(size_t size);
 void kfree(void* ptr);
 
 /**
+ * Redimensionar bloque de memoria
+ */
+void* krealloc(void* ptr, size_t new_size);
+
+/**
  * Allocar página física (4KB)
  * Retorna dirección física
  */
@@ -101,4 +106,3 @@ void arch_switch_page_directory(uintptr_t page_dir);
 #define PAGE_ALIGN(addr)    (((addr) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1))
 #define PAGE_ALIGN_DOWN(addr) ((addr) & ~(PAGE_SIZE - 1))
 #define IS_PAGE_ALIGNED(addr) (((addr) & (PAGE_SIZE - 1)) == 0)
-
