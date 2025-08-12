@@ -1,5 +1,7 @@
 #include <idt.h>
 #include <arch_interface.h>
+#include "../arch/x86-32/sources/idt_arch_x86.h"
+#include "../arch/x_64/sources/idt_arch_x64.h"
 
 idt_entry_t idt[IDT_ENTRIES]; // Tabla de descriptores de interrupciones (256 entradas de 8 bytes)
 idt_ptr_t idt_ptr;            // y mi puntero al idt
