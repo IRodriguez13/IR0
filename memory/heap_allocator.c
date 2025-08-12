@@ -149,7 +149,7 @@ void *krealloc(void *ptr, size_t new_size)
     return new_ptr;
 }
 
-// Función wrapper para compatibilidad
+// Función wrapper para compatibilidad esta es la API que expongo al resto del kernel
 void *realloc(void *ptr, size_t size)
 {
     return krealloc(ptr, size);
