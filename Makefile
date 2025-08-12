@@ -53,12 +53,14 @@ subsystems: $(SUBDIRS)
 $(SUBDIRS):
 	$(MAKE) -C $@ CC="$(CC)" ASM="$(ASM)" CFLAGS="$(CFLAGS)" ASMFLAGS="$(ASMFLAGS)"
 
-# Archivos objeto principales - RUTAS ACTUALIZADAS
+# En la sección COMMON_SUBDIRS, cambiar:
+COMMON_SUBDIRS = kernel interrupt drivers/timer paging scheduler includes/ir0/panic arch/common memory
+
+# En la sección de objetos del kernel, agregar los objetos de memoria:
 KERNEL_OBJS = kernel/kernel_start.o \
               includes/print.o \
               includes/string.o \
               interrupt/idt.o interrupt/isr_handlers.o \
-              paging/Paging.o \
               includes/ir0/panic/panic.o \
               drivers/timer/pit/pit.o \
               drivers/timer/clock_system.o \
@@ -70,11 +72,23 @@ KERNEL_OBJS = kernel/kernel_start.o \
               scheduler/scheduler.o \
               scheduler/dummy_tasks.o \
               scheduler/switch/switch.o \
-              arch/common/arch_interface.o
+              arch/common/arch_interface.o \
+              memory/heap_allocator.o \
+              memory/physical_allocator.o
 
-# Archivos objeto específicos de arquitectura
-ARCH_OBJS = $(ARCH_SUBDIRS)/boot.o \
-            $(ARCH_SUBDIRS)/arch.o
+
+# Para arquitectura específica, actualizar ARCH_OBJS:
+ifeq ($(ARCH),x_64)
+    ARCH_OBJS = $(ARCH_SUBDIRS)/boot.o \
+                $(ARCH_SUBDIRS)/arch.o \
+                memory/arch/x_64/Paging_x64.o \
+                memory/arch/x_64/mmu_x64.o
+else ifeq ($(ARCH),x86-32)  
+    ARCH_OBJS = $(ARCH_SUBDIRS)/boot.o \
+                $(ARCH_SUBDIRS)/arch.o \
+                memory/arch/x_86-32/Paging_x86.o \
+                memory/arch/x_86-32/mmu_x86.o
+endif
 
 # Todos los objetos
 ALL_OBJS = $(KERNEL_OBJS) $(ARCH_OBJS)
