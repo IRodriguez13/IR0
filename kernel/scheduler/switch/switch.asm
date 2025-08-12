@@ -10,30 +10,36 @@
 ; despues cargamos esp y ebp la segunda tarea. y saltamos ahí en el alto nivel. 
 ;
 
+; kernel/scheduler/switch/switch.asm - CORREGIDO
+
 global switch_task
 
 switch_task:
     cli
-    mov eax, [esp + 4]              ; old_task
+    
+    ; Cargar parámetros
+    mov eax, [esp + 4]              ; old_task  
     mov ebx, [esp + 8]              ; new_task
     
-    ; Guardar contexto ANTES de modificar registros
+    ; Guardar estado del proceso actual
     pushfd                          ; Guardar flags
-    pusha                           ; Guardar todos los registros
+    pusha                           ; Guardar todos los registros generales
     
-    mov [eax + 4], esp              ; old_task->esp (ahora sí es correcto)
+    ; Guardar ESP y EBP en la estructura del proceso actual  
+    mov [eax + 4], esp              ; old_task->esp
     mov [eax + 8], ebp              ; old_task->ebp
     
-    ; Cambiar espacio de memoria
+    ; Cambiar espacio de direcciones
     mov ecx, [ebx + 16]             ; new_task->cr3
-    mov cr3, ecx
+    mov cr3, ecx                    ; Cargar nuevo page directory
     
-    ; Restaurar contexto nuevo
+    ; Restaurar estado del nuevo proceso
     mov esp, [ebx + 4]              ; new_task->esp
     mov ebp, [ebx + 8]              ; new_task->ebp
     
-    popa                            ; Restaurar registros
+    ; Restaurar registros y flags
+    popa                            ; Restaurar registros generales
     popfd                           ; Restaurar flags
-    sti
     
-    jmp dword [ebx + 12]            ; new_task->eip
+    sti
+    ret                             ; ⚠️  CAMBIO: usar 'ret' en lugar de 'jmp'
