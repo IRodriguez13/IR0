@@ -3,8 +3,8 @@
 
 #if defined(__x86_64__) || defined(__i386__)
     // Incluir las implementaciones específicas de x86
-    #include "../x86_32/sources/arch_x86.h"    // Para 32-bit
-    #include "../x86_64/sources/arch_x64.h"    // Para 64-bit
+    #include "../arch/x86-32/sources/arch_x86.h"    // Para 32-bit
+    #include "../arch/x_64/sources/arch_x64.h"    // Para 64-bit
 #elif defined(__aarch64__) || defined(__arm__)
     #include "../arm64/sources/arch_arm64.h"   // Para futuro ARM
 #endif
