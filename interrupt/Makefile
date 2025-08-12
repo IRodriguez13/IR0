@@ -5,7 +5,7 @@ CFLAGS := -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -ffreestand
 
 
 # Todos los objetos que necesitas en esta carpeta
-OBJS = interrupt.o idt.o isr_handlers.o
+OBJS =  idt.o isr_handlers.o
 
 .PHONY: all clean
 
