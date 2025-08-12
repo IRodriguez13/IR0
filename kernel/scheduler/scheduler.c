@@ -121,3 +121,43 @@ void scheduler_tick()
         current_task = next_task;
     }
 }
+
+void dump_scheduler_state(void)
+{
+    print_colored("=== SCHEDULER STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    
+    print("Current task: ");
+    if (current_task) {
+        print_hex_compact(current_task->pid);
+        print(" (state: ");
+        print_hex_compact(current_task->state);
+        print(")");
+    } else {
+        print("NULL");
+    }
+    print("\n");
+    
+    print("Ready queue: ");
+    if (ready_queue) {
+        print("Present (starting PID: ");
+        print_hex_compact(ready_queue->pid);
+        print(")");
+    } else {
+        print("Empty");
+    }
+    print("\n");
+    
+    // Contar tareas en la cola
+    int task_count = 0;
+    if (ready_queue) {
+        task_t* task = ready_queue;
+        do {
+            task_count++;
+            task = task->next;
+        } while (task && task != ready_queue && task_count < 100); // Protección anti-loop
+    }
+    
+    print("Total tasks: ");
+    print_hex_compact(task_count);
+    print("\n\n");
+}

@@ -5,8 +5,7 @@ KERNEL_ROOT := $(CURDIR)
 # Arquitectura por defecto
 ARCH ?= x86-32
 
-COMMON_SUBDIRS = kernel interrupt drivers/timer paging scheduler includes/ir0/panic arch/common
-
+COMMON_SUBDIRS = kernel interrupt drivers/timer scheduler includes/ir0/panic arch/common memory
 ifeq ($(ARCH),x_64)
     # Configuración para 64-bit
     CC = gcc
