@@ -1,6 +1,9 @@
 // kernel/kernel_start.c - ACTUALIZADO CON RUTAS CORRECTAS
-#include <ir0/print.h>
-
+#include "../drivers/timer/clock_system.h"
+#include "scheduler/scheduler.h"
+#include "scheduler/task.h"
+#include "../arch/common/arch_interface.h"  
+#include <kernel.h>
 // ARREGLADO: Includes con rutas correctas según arquitectura
 #if defined(__i386__)
     #include "../arch/x86-32/sources/Paging_x86.h"
@@ -12,12 +15,7 @@
     #error "Arquitectura no soportada en kernel_start.c"
 #endif
 
-#include <idt.h>
-#include <panic/panic.h>
-#include "../drivers/timer/clock_system.h"
-#include "scheduler/scheduler.h"
-#include "scheduler/task.h"
-#include "../arch/common/arch_interface.h"  
+
 
 void main()
 {
