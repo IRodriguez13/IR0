@@ -15,7 +15,7 @@ echo "3) Desktop 32-bit"
 echo "4) Desktop 64-bit"
 echo "5) Server 32-bit"
 echo "6) Server 64-bit"
-echo "7) IoT 32-bit"
+echo "7) IoT 32-bit (ARM)"
 echo ""
 
 read -p "Choose option [1-7]: " option
