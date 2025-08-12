@@ -4,11 +4,14 @@
 #include "lapic/lapic.h"    
 
 static enum ClockType current_timer_type = CLOCK_RTC; // Se inicializa en init_clock()
+extern enum ClockType get_current_timer_type(void); // Declarar función externa
 
 void time_handler() 
 {
     // Llamar al scheduler
     scheduler_tick();
+    
+    enum ClockType current_timer_type = get_current_timer_type();
     
     // Enviar EOI según el timer usado
     switch (current_timer_type) 

@@ -1,4 +1,4 @@
-// memory/physical_allocator.c - Allocator de páginas físicas
+#include "physical_allocator.h"
 #include "memo_interface.h"
 #include <string.h>
 #include <print.h>

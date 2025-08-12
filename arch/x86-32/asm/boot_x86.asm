@@ -50,10 +50,9 @@ _start:
 
 ; hang hace lo mismo que panic en el fondo pero mas rústico. Cuelga la cpu pero en un bucle infinito.
 .hang:
-
     cli
     hlt
-    jmp .hang
+    jmp .hang  ;
 
 .end:
 
