@@ -1,27 +1,76 @@
-// arch/common/arch_interface.c
+// arch/common/arch_interface.c - CORREGIDO
 #include "arch_interface.h"
 
-#if defined(__x86_64__) || defined(__i386__)
-    // Incluir las implementaciones específicas de x86
-    #include "../arch/x86-32/sources/arch_x86.h"    // Para 32-bit
-    #include "../arch/x_64/sources/arch_x64.h"    // Para 64-bit
-#elif defined(__aarch64__) || defined(__arm__)
-    #include "../arm64/sources/arch_arm64.h"   // Para futuro ARM
-#endif
-
-// Implementación común que llama a las específicas de cada arquitectura
-void arch_enable_interrupts(void) {
+// Implementaciones específicas de arquitectura
+void arch_enable_interrupts(void) 
+{
     #if defined(__x86_64__) || defined(__i386__)
         __asm__ volatile("sti");
     #elif defined(__aarch64__)
         // ARM64: msr daifclr, #2
+        __asm__ volatile("msr daifclr, #2" ::: "memory");
     #endif
 }
 
-static inline void outb(uint16_t port, uint8_t value) {
+void arch_disable_interrupts(void) 
+{
+    #if defined(__x86_64__) || defined(__i386__)
+        __asm__ volatile("cli");
+    #elif defined(__aarch64__)
+        // ARM64: msr daifset, #2
+        __asm__ volatile("msr daifset, #2" ::: "memory");
+    #endif
+}
+
+void outb(uint16_t port, uint8_t value) 
+{
     #if defined(__x86_64__) || defined(__i386__)
         asm volatile("outb %0, %1"::"a"(value),"Nd"(port));
     #elif defined(__aarch64__)
         // ARM no tiene outb, sería MMIO writes
+        // Por ahora no implementado
     #endif
 }
+
+uint8_t inb(uint16_t port) 
+{
+    #if defined(__x86_64__) || defined(__i386__)
+        uint8_t result;
+        asm volatile("inb %1, %0" : "=a"(result) : "Nd"(port));
+        return result;
+    #elif defined(__aarch64__)
+        // ARM no tiene inb
+        return 0;
+    #endif
+}
+
+uintptr_t read_fault_address(void) {
+    #if defined(__x86_64__) || defined(__i386__)
+        uintptr_t addr;
+        asm volatile("mov %%cr2, %0" : "=r"(addr));
+        return addr;
+    #elif defined(__aarch64__)
+        // ARM64: leer FAR_EL1 register
+        uint64_t addr;
+        asm volatile("mrs %0, far_el1" : "=r"(addr));
+        return addr;
+    #else
+        return 0;
+    #endif
+}
+
+const char* arch_get_name(void) 
+{
+    #if defined(__x86_64__)
+        return "x86-64 (amd64)";
+    #elif defined(__i386__)
+        return "x86-32 (i386)";
+    #elif defined(__aarch64__)
+        return "ARM64 (aarch64)";
+    #elif defined(__arm__)
+        return "ARM32";
+    #else
+        return "Unknown Architecture";
+    #endif
+}
+
