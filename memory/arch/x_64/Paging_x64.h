@@ -32,8 +32,8 @@ extern void paging_set_cpu_x64(uint64_t pml4_addr);
 extern void invlpg(uint64_t virt);
 
 // Macros útiles
-#define PAGE_ALIGN(addr) (((addr) + 0xFFF) & ~0xFFF)
-#define IS_PAGE_ALIGNED(addr) (((addr) & 0xFFF) == 0)
+// #define PAGE_ALIGN(addr) (((addr) + 0xFFF) & ~0xFFF)
+// #define IS_PAGE_ALIGNED(addr) (((addr) & 0xFFF) == 0)
 
 // Estructura para representar un rango de memoria
 struct memory_range 

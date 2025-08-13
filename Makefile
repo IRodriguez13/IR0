@@ -155,15 +155,59 @@ clean:
 	rm -rf iso-$(ARCH)
 
 
-# Limpieza completa (todas las arquitecturas)
-clean-all:
-	@echo "Limpieza completa..."
-	$(MAKE) ARCH=x86-64 clean
-	$(MAKE) ARCH=x_64 clean
-	rm -f *.bin *.iso
-	rm -rf iso-*
+# # Limpieza completa (todas las arquitecturas)
+# clean-all:
+# 	@echo "Limpieza completa..."
+# 	$(MAKE) ARCH=x86-64 clean
+# 	$(MAKE) ARCH=x_64 clean
+# 	rm -f *.bin *.iso
+# 	rm -rf iso-*
 
-distclean: clean-all
+# distclean: clean-all
+
+# Limpiar archivos .d en todos los subdirectorios
+clean:
+	@echo "Limpiando arquitectura: $(ARCH)"
+	@for dir in $(SUBDIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done
+	@if [ -d "$(ARCH_SUBDIRS)" ]; then \
+		$(MAKE) -C $(ARCH_SUBDIRS) clean; \
+	fi
+	# NUEVO: Limpiar archivos .d recursivamente
+	@echo "Limpiando archivos de dependencias (.d)..."
+	@find . -name "*.d" -type f -delete
+	# Limpiar objetos principales
+	rm -f $(ALL_OBJS) $(ALL_OBJS:.o=.d) kernel-$(ARCH).bin kernel-$(ARCH).iso
+	rm -rf iso-$(ARCH)
+
+# Limpieza completa (todas las arquitecturas) - MEJORADA
+clean-all:
+	@echo "Limpieza completa de todas las arquitecturas..."
+	$(MAKE) ARCH=x86-32 clean
+	$(MAKE) ARCH=x_64 clean
+	@echo "Limpiando todos los archivos .d del proyecto..."
+	@find . -name "*.d" -type f -delete
+	@echo "Limpiando archivos binarios globales..."
+	rm -f *.bin *.iso *.elf
+	rm -rf iso-*
+	@echo "Limpieza completa terminada."
+
+# NUEVO: Target específico para limpiar solo dependencias
+clean-deps:
+	@echo "Limpiando solo archivos de dependencias..."
+	@find . -name "*.d" -type f -delete
+	@echo "Archivos .d eliminados."
+
+# NUEVO: Target para verificar limpieza
+verify-clean:
+	@echo "Verificando limpieza completa..."
+	@echo "Archivos .o encontrados:"
+	@find . -name "*.o" -type f | wc -l
+	@echo "Archivos .d encontrados:"  
+	@find . -name "*.d" -type f | wc -l
+	@echo "Archivos binarios encontrados:"
+	@find . -name "*.bin" -o -name "*.iso" -o -name "*.elf" | wc -l
 
 # Información de ayuda
 help:
