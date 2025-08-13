@@ -1,7 +1,7 @@
 #include "scheduler.h"
 #include "task.h"
 #include <print.h>
-#include <panic/panic.h> 
+#include <panic/panic.h>
 
 static task_t *current_task = NULL;
 static task_t *ready_queue = NULL;
@@ -65,41 +65,41 @@ void add_task(task_t *task)
 
 void scheduler_start()
 {
-    if (!ready_queue) {
+    if (!ready_queue)
+    {
         LOG_ERR("No hay procesos para ejecutar!");
         panic("Scheduler vacío");
         return;
     }
-    
+
     // Inicializar current_task con el primer proceso
     current_task = ready_queue;
     current_task->state = TASK_RUNNING;
-    
+
     LOG_OK("Scheduler iniciado, saltando al primer proceso...");
-    
+
     // Saltar al primer proceso manualmente
     asm volatile(
         "mov %0, %%esp\n"
-        "mov %1, %%ebp\n"  
+        "mov %1, %%ebp\n"
         "jmp *%2"
         :
         : "r"(current_task->esp), "r"(current_task->ebp), "r"(current_task->eip)
-        : "memory"
-    );
+        : "memory");
 }
 
 void scheduler_tick()
 {
-    // NUEVO: Si no hay current_task, inicializar scheduler
-    if (!current_task) {
-        LOG_WARN("scheduler_tick called before scheduler_start!");
-        return;
+    // Verificar si scheduler está listo
+    if (!current_task || !ready_queue)
+    {
+        return; // No hay nada que hacer
     }
 
-    // Validación de corrupción
-    if (!current_task->next)
+    // Protección contra corrupción
+    if (!current_task->next || current_task->state == TASK_TERMINATED)
     {
-        LOG_WARN("Proceso actual corrupto");
+        LOG_ERR("Task corruption detected!");
         return;
     }
 
@@ -114,9 +114,9 @@ void scheduler_tick()
     // Si encontramos un proceso diferente y listo, cambiar contexto
     if (next_task != current_task)
     {
-        current_task->state = TASK_READY;  // El actual vuelve a READY
-        next_task->state = TASK_RUNNING;   // El nuevo está RUNNING
-        
+        current_task->state = TASK_READY; // El actual vuelve a READY
+        next_task->state = TASK_RUNNING;  // El nuevo está RUNNING
+
         switch_task(current_task, next_task);
         current_task = next_task;
     }
@@ -125,38 +125,46 @@ void scheduler_tick()
 void dump_scheduler_state(void)
 {
     print_colored("=== SCHEDULER STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    
+
     print("Current task: ");
-    if (current_task) {
+    if (current_task)
+    {
         print_hex_compact(current_task->pid);
         print(" (state: ");
         print_hex_compact(current_task->state);
         print(")");
-    } else {
+    }
+    else
+    {
         print("NULL");
     }
     print("\n");
-    
+
     print("Ready queue: ");
-    if (ready_queue) {
+    if (ready_queue)
+    {
         print("Present (starting PID: ");
         print_hex_compact(ready_queue->pid);
         print(")");
-    } else {
+    }
+    else
+    {
         print("Empty");
     }
     print("\n");
-    
+
     // Contar tareas en la cola
     int task_count = 0;
-    if (ready_queue) {
-        task_t* task = ready_queue;
-        do {
+    if (ready_queue)
+    {
+        task_t *task = ready_queue;
+        do
+        {
             task_count++;
             task = task->next;
         } while (task && task != ready_queue && task_count < 100); // Protección anti-loop
     }
-    
+
     print("Total tasks: ");
     print_hex_compact(task_count);
     print("\n\n");

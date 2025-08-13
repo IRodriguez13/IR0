@@ -22,15 +22,6 @@ void arch_disable_interrupts(void)
     #endif
 }
 
-void outb(uint16_t port, uint8_t value) 
-{
-    #if defined(__x86_64__) || defined(__i386__)
-        asm volatile("outb %0, %1"::"a"(value),"Nd"(port));
-    #elif defined(__aarch64__)
-        // ARM no tiene outb, sería MMIO writes
-        // Por ahora no implementado
-    #endif
-}
 
 uint8_t inb(uint16_t port) 
 {
