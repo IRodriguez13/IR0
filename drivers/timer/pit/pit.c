@@ -44,10 +44,3 @@ void init_PIT(uint32_t frequency)
     
     print_success("[PIT] Configurado correctamente\n");
 }
-
-// ===============================================================================
-
-// drivers/timer/timer.c - REMOVIDO COMPLETAMENTE
-// Todo el contenido va a isr_handlers.c
-
-// ===============================================================================
