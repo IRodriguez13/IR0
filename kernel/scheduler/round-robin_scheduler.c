@@ -2,6 +2,7 @@
 #include "task.h"
 #include <print.h>
 #include <panic/panic.h>
+#include <stddef.h>
 
 static task_t *current_task = NULL;
 static task_t *ready_queue = NULL;
@@ -92,35 +93,50 @@ void scheduler_tick()
 {
     // Verificar si scheduler está listo
     if (!current_task || !ready_queue)
-    {
-        return; // No hay nada que hacer
-    }
+        return;
+
+    __asm__ volatile("cli"); // corto las interrupciones mientras estoy en cambio de contexto.
 
     // Protección contra corrupción
     if (!current_task->next || current_task->state == TASK_TERMINATED)
     {
+        __asm__ volatile("sti"); // Re-enable before return
         LOG_ERR("Task corruption detected!");
         return;
     }
 
-    task_t *next_task = current_task->next; // Candidato siguiente
+    task_t *next_task = current_task->next;
 
-    // Buscar próximo proceso READY
+    // Buscar próximo proceso READY (con protection)
+    int attempts = 0;
     while (next_task->state != TASK_READY && next_task != current_task)
     {
         next_task = next_task->next;
+        attempts++;
+
+        // ✅ PREVENT infinite loop if all tasks blocked
+        if (attempts > MAX_TASKS)
+        {
+            __asm__ volatile("sti");
+            LOG_ERR("All tasks blocked - system deadlock!");
+            panic("Scheduler deadlock detected");
+            return;
+        }
     }
 
-    // Si encontramos un proceso diferente y listo, cambiar contexto
+    // Atomic state change
     if (next_task != current_task)
     {
-        current_task->state = TASK_READY; // El actual vuelve a READY
-        next_task->state = TASK_RUNNING;  // El nuevo está RUNNING
+        current_task->state = TASK_READY;
+        next_task->state = TASK_RUNNING;
 
         switch_task(current_task, next_task);
         current_task = next_task;
     }
+
+    __asm__ volatile("sti"); // ✅ Re-enable interrupts
 }
+
 
 void dump_scheduler_state(void)
 {
