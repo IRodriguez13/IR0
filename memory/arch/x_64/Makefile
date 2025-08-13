@@ -18,7 +18,9 @@ OBJECTS = $(SOURCES:.c=.o)
 .PHONY: all clean
 
 all: $(OBJECTS)
-	@echo "Memoria x86-64 compilada"
+	@echo "\033[1;32m============================================================\033[0m"
+	@echo "\033[1;32m MM subsystem compilado correctamente para $(ARCH_NAME)\033[0m"
+	@echo "\033[1;32m============================================================\033[0m"
 
 %.o: %.c
 	@echo "Compilando $< (x86-64)..."

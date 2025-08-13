@@ -11,7 +11,9 @@ OBJS =  idt.o isr_handlers.o
 
 # Target principal
 all: $(OBJS)
-
+	@echo "\033[1;32m============================================================\033[0m"
+	@echo "\033[1;32m interrupt subsystem compilado correctamente para $(ARCH_NAME)\033[0m"
+	@echo "\033[1;32m============================================================\033[0m"
 # Reglas para compilar archivos .c
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

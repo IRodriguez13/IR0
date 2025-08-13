@@ -1,8 +1,9 @@
 #include <stdint.h>
 #include <stddef.h>
-#include "Paging_x86.h"
+#include "../../arch/common/common_paging.h"
+#include "Paging_x86-32.h"
 
-extern void idt_flush(void);
+extern void idt_flush();
 
 // Tamaño std para directiorio/tablas en 32-bit paging
 
@@ -60,7 +61,7 @@ void init_paging_x86()
 
     Clean_Remaining_Tables(10);
 
-    paging_set_cpu(page_directory);
+    paging_set_cpu((uint32_t) page_directory);
 }
 
 

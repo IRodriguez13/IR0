@@ -5,7 +5,7 @@ KERNEL_ROOT := $(CURDIR)
 # Arquitectura por defecto
 ARCH ?= x86-32
 
-COMMON_SUBDIRS = kernel interrupt drivers/timer scheduler includes/ir0/panic arch/common memory
+COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory
 ifeq ($(ARCH),x_64)
     # Configuración para 64-bit
     CC = gcc
@@ -48,6 +48,12 @@ arch-info:
 	@echo ""
 
 subsystems: $(SUBDIRS)
+	@echo ""
+	@echo "\033[1;32m============================================================\033[0m"
+	@echo "\033[1;32m Todos los subsistemas compilados correctamente para $(ARCH)\033[0m"
+	@echo "\033[1;32m============================================================\033[0m"
+	@echo ""
+
 
 $(SUBDIRS):
 	$(MAKE) -C $@ CC="$(CC)" ASM="$(ASM)" CFLAGS="$(CFLAGS)" ASMFLAGS="$(ASMFLAGS)"
@@ -95,6 +101,8 @@ endif
 # Todos los objetos
 ALL_OBJS = $(KERNEL_OBJS) $(ARCH_OBJS)
 
+
+
 # Compilar kernel para arquitectura específica
 kernel-$(ARCH).bin: $(ALL_OBJS) $(ARCH_SUBDIRS)/linker.ld
 	@echo "Enlazando kernel para $(ARCH)..."
@@ -134,6 +142,7 @@ all-arch:
 	$(MAKE) ARCH=x86-64 clean all
 	$(MAKE) ARCH=x_64 clean all
 	@echo "Compilación completa para todas las arquitecturas"
+	
 
 # Limpieza
 clean:

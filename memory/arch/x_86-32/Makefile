@@ -11,13 +11,15 @@ CFLAGS += -I$(PROJECT_ROOT)/includes -I$(PROJECT_ROOT)/includes/ir0
 CFLAGS += -I$(PROJECT_ROOT)/arch/common -I$(PROJECT_ROOT)/arch/x86-32/include
 
 # Fuentes específicas de x86-32  
-SOURCES = Paging_x86.c mmu_x86.c
+SOURCES = Paging_x86-32.c mmu_x86-32.c
 OBJECTS = $(SOURCES:.c=.o)
 
 .PHONY: all clean
 
 all: $(OBJECTS)
-	@echo "Memoria x86-32 compilada"
+	@echo "\033[1;32m============================================================\033[0m"
+	@echo "\033[1;32m MM subsystem compilado correctamente para $(ARCH_NAME)\033[0m"
+	@echo "\033[1;32m============================================================\033[0m"
 
 %.o: %.c
 	@echo "Compilando $< (x86-32)..."

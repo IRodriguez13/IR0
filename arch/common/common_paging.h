@@ -12,4 +12,4 @@
 
 
 // Esta función le dice a la CPU que empiece a paginar configurando el directorio. -- 32 bit --
-void paging_set_cpu();
+void paging_set_cpu(uint32_t page_directory);
