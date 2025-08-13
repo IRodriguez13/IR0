@@ -11,6 +11,9 @@ OBJS = scheduler.o switch/switch.o
 .PHONY: all clean
 
 all: $(OBJS)
+	@echo "\033[1;32m============================================================\033[0m"
+	@echo "\033[1;32m Sched subsystem compilado correctamente para $(ARCH_NAME)\033[0m"
+	@echo "\033[1;32m============================================================\033[0m"
 
 # Reglas para archivos .c
 %.o: %.c

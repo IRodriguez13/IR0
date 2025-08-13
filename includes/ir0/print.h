@@ -133,3 +133,5 @@ void print_success(const char *str);
 */
 void print_hex_compact(uint32_t num);
 
+void print_hex64(uint64_t val);
+

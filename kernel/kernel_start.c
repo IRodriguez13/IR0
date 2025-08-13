@@ -6,10 +6,10 @@
 #include <kernel.h>
 // ARREGLADO: Includes con rutas correctas según arquitectura
 #if defined(__i386__)
-    #include "../memory/arch/x_86-32/Paging_x86.h"  
+    #include "../memory/arch/x_86-32/Paging_x86-32.h"  
     #define init_paging() init_paging_x86()
 #elif defined(__x86_64__)  
-    #include "../arch/x_64/sources/Paging_x64.h"  // ME FALTA PAGINACION DE 64 BIT
+    #include "../memory/arch/x_64/Paging_x64.h"  // ME FALTA PAGINACION DE 64 BIT
     #define init_paging() init_paging_x64()
 #else
     #error "Arquitectura no soportada en kernel_start.c"
@@ -61,9 +61,9 @@ void ShutDown()
     print_warning("System shutdown requested\n");
     
     // Intentar apagar via ACPI primero
-    outb(0x604, 0x2000);  // QEMU/ACPI shutdown
+    outb(0x604, 0x00);  // QEMU/ACPI shutdown
     
-    // Si no funciona, reset via keyboard controller
+
     uint8_t reset_value = 0xFE;
     asm volatile(
         "outb %%al, $0x64"

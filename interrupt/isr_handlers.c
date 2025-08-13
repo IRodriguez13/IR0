@@ -6,9 +6,6 @@
 #include "isr_handlers.h"
 #include "../drivers/timer/clock_system.h"
 
-static enum ClockType current_timer_type = CLOCK_RTC; // Se inicializa en init_clock()
-extern enum ClockType get_current_timer_type(void); // Declarar función externa
-
 
 void default_interrupt_handler()
 {
@@ -34,6 +31,7 @@ void page_fault_handler()
 }
 
 // MANTENER SOLO EN: interrupt/isr_handlers.c
+// En interrupt/isr_handlers.c, completar el switch:
 void time_handler()
 {
     static uint32_t tick_count = 0;
@@ -58,6 +56,10 @@ void time_handler()
     case CLOCK_PIT:
     case CLOCK_RTC:
         outb(0x20, 0x20); // EOI al PIC
+        break;
+    case CLOCK_NONE: 
+    default:
+        outb(0x20, 0x20); // EOI por defecto
         break;
     }
 }

@@ -22,14 +22,19 @@ FINAL_OBJECTS = arch.o boot.o
 .PHONY: all clean
 
 all: $(FINAL_OBJECTS)
-	@echo "Compilación de $(ARCH_NAME) completada"
+	@echo "\033[1;32m============================================================\033[0m"
+	@echo "\033[1;32m Boot subsystem compilado correctamente para $(ARCH_NAME)\033[0m"
+	@echo "\033[1;32m============================================================\033[0m"
+
+
 
 # Crear objetos consolidados que espera el Makefile principal
 arch.o: $(ARCH_OBJECTS)
-	ld -r $(ARCH_OBJECTS) -o arch.o
+	ld -m elf_i386 -r $(ARCH_OBJECTS) -o arch.o
 
 boot.o: $(BOOT_OBJECTS)
-	ld -r $(BOOT_OBJECTS) -o boot.o
+	ld -m elf_i386 -r $(BOOT_OBJECTS) -o boot.o
+
 
 # Reglas de compilación
 sources/%.o: sources/%.c

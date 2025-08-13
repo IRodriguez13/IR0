@@ -149,7 +149,7 @@ void dump_stack_trace()
     #ifdef __x86_64__
 
         uint64_t *rbp;
-        asm volatile("mov %%rbp, %0" : "=r"(rbp))
+        asm volatile("mov %%rbp, %0" : "=r"(rbp));
     #else
     
     uint32_t *ebp;

@@ -169,3 +169,8 @@ void dump_scheduler_state(void)
     print_hex_compact(task_count);
     print("\n\n");
 }
+
+int scheduler_ready(void)
+{
+    return (ready_queue != NULL && current_task != NULL);
+}
