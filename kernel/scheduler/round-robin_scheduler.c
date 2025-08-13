@@ -1,153 +1,161 @@
-#include "scheduler.h"
+// ===============================================================================
+//  round-robin_scheduler.c -
+// ===============================================================================
+
+// kernel/scheduler/round-robin_scheduler.c - VERSIÓN CORREGIDA
+#include "scheduler_types.h"
 #include "task.h"
 #include <print.h>
 #include <panic/panic.h>
 #include <stddef.h>
+#include "scheduler.h"
 
-static task_t *current_task = NULL;
-static task_t *ready_queue = NULL;
+// Estructura privada del round-robin scheduler
+typedef struct
+{
+    task_t *ready_queue;    // Cola circular de procesos listos
+    task_t *current_task;   // Proceso actualmente ejecutando
+    uint32_t task_count;    // Número de tareas en la cola
+    uint32_t time_slice;    // Quantum de tiempo (en ticks)
+    uint32_t current_ticks; // Ticks transcurridos del proceso actual
+} roundrobin_state_t;
+
+static roundrobin_state_t rr_state;
 extern void switch_task(task_t *current, task_t *next);
 
-void scheduler_init()
+static void rr_init(void)
 {
-    current_task = NULL;
-    ready_queue = NULL;
-    LOG_OK("Scheduler inicializado");
+    LOG_OK("Initializing Round-Robin scheduler");
+    rr_state.ready_queue = NULL;
+    rr_state.current_task = NULL;
+    rr_state.task_count = 0;
+    rr_state.time_slice = 5; // 5 ticks por defecto
+    rr_state.current_ticks = 0;
 }
 
-void add_task(task_t *task)
+static void rr_add_task(task_t *task)
 {
-    // Validaciones defensivas
     if (!task)
     {
-        LOG_ERR("add_task: task is NULL");
+        LOG_ERR("rr_add_task: task is NULL");
         return;
     }
 
     if (task->state == TASK_TERMINATED)
     {
-        LOG_WARN("add_task: trying to add terminated task");
+        LOG_WARN("rr_add_task: trying to add terminated task");
         return;
     }
 
     task->state = TASK_READY;
 
-    if (!ready_queue)
+    if (!rr_state.ready_queue)
     {
         // Primera tarea: crear lista circular de 1 elemento
-        ready_queue = task;
+        rr_state.ready_queue = task;
         task->next = task;
-        LOG_OK("Primera tarea agregada al scheduler");
+        LOG_OK("Primera tarea agregada al RR scheduler");
     }
     else
     {
         // Buscar el último nodo de la lista circular
-        task_t *last = ready_queue;
+        task_t *last = rr_state.ready_queue;
 
-        while (last->next != ready_queue)
+        while (last->next != rr_state.ready_queue)
         {
             last = last->next;
-
             // Protección contra listas corruptas
             if (!last || !last->next)
             {
                 LOG_ERR("Corrupted ready queue detected!");
-                panic("Scheduler corruption detected");
+                panic("RR Scheduler corruption detected");
                 return;
             }
         }
 
         // Insertar nueva tarea al final
         last->next = task;
-        task->next = ready_queue;
-        LOG_OK("Nueva tarea agregada al scheduler");
+        task->next = rr_state.ready_queue;
+        LOG_OK("Nueva tarea agregada al RR scheduler");
     }
+
+    rr_state.task_count++;
 }
 
-void scheduler_start()
+static task_t *rr_pick_next_task(void)
 {
-    if (!ready_queue)
+    if (!rr_state.ready_queue)
     {
-        LOG_ERR("No hay procesos para ejecutar!");
-        panic("Scheduler vacío");
-        return;
+        return NULL; // No hay tareas
     }
 
-    // Inicializar current_task con el primer proceso
-    current_task = ready_queue;
-    current_task->state = TASK_RUNNING;
-
-    LOG_OK("Scheduler iniciado, saltando al primer proceso...");
-
-    // Saltar al primer proceso manualmente
-    asm volatile(
-        "mov %0, %%esp\n"
-        "mov %1, %%ebp\n"
-        "jmp *%2"
-        :
-        : "r"(current_task->esp), "r"(current_task->ebp), "r"(current_task->eip)
-        : "memory");
-}
-
-void scheduler_tick()
-{
-    // Verificar si scheduler está listo
-    if (!current_task || !ready_queue)
-        return;
-
-    __asm__ volatile("cli"); // corto las interrupciones mientras estoy en cambio de contexto.
-
-    // Protección contra corrupción
-    if (!current_task->next || current_task->state == TASK_TERMINATED)
-    {
-        __asm__ volatile("sti"); // Re-enable before return
-        LOG_ERR("Task corruption detected!");
-        return;
-    }
-
-    task_t *next_task = current_task->next;
-
-    // Buscar próximo proceso READY (con protection)
+    // Buscar próximo proceso READY
+    task_t *next_task = rr_state.ready_queue;
     int attempts = 0;
-    while (next_task->state != TASK_READY && next_task != current_task)
+
+    while (next_task->state != TASK_READY && attempts < MAX_TASKS)
     {
         next_task = next_task->next;
         attempts++;
 
-        // ✅ PREVENT infinite loop if all tasks blocked
-        if (attempts > MAX_TASKS)
+        if (next_task == rr_state.ready_queue)
         {
-            __asm__ volatile("sti");
-            LOG_ERR("All tasks blocked - system deadlock!");
-            panic("Scheduler deadlock detected");
-            return;
+            break; // Dimos la vuelta completa
         }
     }
 
-    // Atomic state change
-    if (next_task != current_task)
+    if (next_task->state != TASK_READY)
     {
-        current_task->state = TASK_READY;
-        next_task->state = TASK_RUNNING;
-
-        switch_task(current_task, next_task);
-        current_task = next_task;
+        return NULL; // No hay tareas ready
     }
 
-    __asm__ volatile("sti"); // ✅ Re-enable interrupts
+    // Actualizar ready_queue para apuntar al siguiente
+    rr_state.ready_queue = next_task->next;
+
+    return next_task;
 }
 
+static void rr_task_tick(void)
+{
+    if (!rr_state.current_task)
+    {
+        return;
+    }
+
+    rr_state.current_ticks++;
+
+    // Verificar si se agotó el time slice
+    if (rr_state.current_ticks >= rr_state.time_slice)
+    {
+        rr_state.current_ticks = 0;
+
+        // Forzar context switch en próximo scheduler_tick
+        // (esto se maneja en el scheduler central)
+    }
+}
+
+static void rr_cleanup(void)
+{
+    LOG_OK("Round-Robin scheduler cleanup");
+    rr_state.ready_queue = NULL;
+    rr_state.current_task = NULL;
+    rr_state.task_count = 0;
+}
+
+// ===============================================================================
+// Funciones auxiliares para compatibilidad
+// ===============================================================================
 
 void dump_scheduler_state(void)
 {
-    print_colored("=== SCHEDULER STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("=== ROUND-ROBIN SCHEDULER STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
     print("Current task: ");
-    if (current_task)
+    if (rr_state.current_task)
     {
-        print_hex_compact(current_task->pid);
+        print_hex_compact(rr_state.current_task->pid);
         print(" (state: ");
-        print_hex_compact(current_task->state);
+        print_hex_compact(rr_state.current_task->state);
         print(")");
     }
     else
@@ -157,10 +165,10 @@ void dump_scheduler_state(void)
     print("\n");
 
     print("Ready queue: ");
-    if (ready_queue)
+    if (rr_state.ready_queue)
     {
         print("Present (starting PID: ");
-        print_hex_compact(ready_queue->pid);
+        print_hex_compact(rr_state.ready_queue->pid);
         print(")");
     }
     else
@@ -169,24 +177,35 @@ void dump_scheduler_state(void)
     }
     print("\n");
 
-    // Contar tareas en la cola
-    int task_count = 0;
-    if (ready_queue)
-    {
-        task_t *task = ready_queue;
-        do
-        {
-            task_count++;
-            task = task->next;
-        } while (task && task != ready_queue && task_count < 100); // Protección anti-loop
-    }
-
     print("Total tasks: ");
-    print_hex_compact(task_count);
+    print_hex_compact(rr_state.task_count);
+    print("\n");
+
+    print("Time slice: ");
+    print_hex_compact(rr_state.time_slice);
+    print(" ticks\n");
+
+    print("Current ticks: ");
+    print_hex_compact(rr_state.current_ticks);
     print("\n\n");
 }
 
 int scheduler_ready(void)
 {
-    return (ready_queue != NULL && current_task != NULL);
+    return (rr_state.ready_queue != NULL);
 }
+
+// ===============================================================================
+// EXPORTAR LA ESTRUCTURA scheduler_ops_t - ESTO ES LO QUE FALTABA
+// ===============================================================================
+
+scheduler_ops_t roundrobin_scheduler_ops = {
+    .type = SCHEDULER_ROUND_ROBIN,
+    .name = "Round-Robin Scheduler",
+    .init = rr_init,
+    .add_task = rr_add_task,
+    .pick_next_task = rr_pick_next_task,
+    .task_tick = rr_task_tick,
+    .cleanup = rr_cleanup,
+    .private_data = &rr_state
+};
