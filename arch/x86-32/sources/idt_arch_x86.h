@@ -1,38 +1,28 @@
-#pragma once
-#include <stdint.h>
+// arch/x86-32/sources/idt_arch_x86.c - ACTUALIZADO
+#include "../../common/idt.h"  // Solo incluir el header común
 
+// Array externo del IDT (definido en idt.c)
+extern idt_entry_t idt[256];
 
-void idt_arch_set_gate(int n, uintptr_t handler, uint8_t flags);
-
-
-#ifndef IDT_ARCH_X86_H
-#define IDT_ARCH_X86_H
-
-typedef struct 
+// Implementación específica para 32-bit
+void idt_arch_set_gate_32(int n, uintptr_t handler, uint8_t flags) 
 {
-    uint16_t offset_low;   // Bits 0-15 del offset
-    uint16_t selector;     // Segment selector (GDT)
-    uint8_t  zero;         // Siempre 0 en x86
-    uint8_t  type_attr;    // P(1) | DPL(2) | 0(1) | GateType(4)
-    uint16_t offset_high;  // Bits 16-31 del offset
-} __attribute__((packed)) idt_entry_t;
+    idt[n].offset_low = handler & 0xFFFF;           // Bits 0-15
+    idt[n].selector = 0x08;                         // Código del kernel
+    idt[n].zero = 0;                                // Siempre 0 en 32-bit
+    idt[n].type_attr = flags;                       // Tipo y privilegios
+    idt[n].offset_high = (handler >> 16) & 0xFFFF;  // Bits 16-31
+}
 
-// Estructura del puntero IDT para 'lidt'
-typedef struct {
-    uint16_t limit;
-    uint32_t base;         // Dirección lineal de la IDT
-} __attribute__((packed)) idt_ptr_t;
+// Función de paginación para 32-bit
+void paging_set_cpu(uint32_t page_directory)
+{
+    // Configurar CR3 con el directorio de páginas
+    asm volatile("mov %0, %%cr3" ::"r"(page_directory));
 
-#endif
-
-// 32 bit
-
-// Funciones ASM específicas de arquitectura
-extern void idt_flush(uintptr_t);
-extern void isr_default(void);
-extern void isr_page_fault(void);
-extern void timer_stub(void);
-
-// Esta función le dice a la CPU que empiece a paginar configurando el directorio. -- 32 bit --
-void paging_set_cpu();
-
+    // Activar el bit de paginación en CR0
+    uint32_t cr0;
+    asm volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= 0x80000000;  // Activar bit 31 (PG - Paging)
+    asm volatile("mov %0, %%cr0" ::"r"(cr0));
+}
