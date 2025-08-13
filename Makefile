@@ -5,7 +5,7 @@ KERNEL_ROOT := $(CURDIR)
 # Arquitectura por defecto
 ARCH ?= x86-32
 
-COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory
+COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory includes/ir0/print
 ifeq ($(ARCH),x_64)
     # Configuración para 64-bit
     CC = gcc
@@ -63,20 +63,18 @@ COMMON_SUBDIRS = kernel interrupt drivers/timer paging scheduler includes/ir0/pa
 
 # En la sección de objetos del kernel, agregar los objetos de memoria:
 KERNEL_OBJS = kernel/kernel_start.o \
-              includes/print.o \
+              includes/ir0/print.o \
               includes/string.o \
               interrupt/idt.o interrupt/isr_handlers.o \
               includes/ir0/panic/panic.o \
               drivers/timer/pit/pit.o \
               drivers/timer/clock_system.o \
               drivers/timer/best_clock.o \
-              drivers/timer/acpi/acpi.o \
               drivers/timer/hpet/hpet.o \
               drivers/timer/hpet/find_hpet.o \
               drivers/timer/lapic/lapic.o \
-              scheduler/scheduler.o \
-              scheduler/dummy_tasks.o \
-              scheduler/switch/switch.o \
+              kernel/scheduler/scheduler.o \
+              kernel/scheduler/switch/switch.o \
               arch/common/arch_interface.o \
               memory/heap_allocator.o \
               memory/physical_allocator.o
@@ -94,8 +92,8 @@ else ifeq ($(ARCH),x86-32)
     ARCH_OBJS = $(ARCH_SUBDIRS)/arch.o \
                 $(ARCH_SUBDIRS)/boot.o \
                 $(ARCH_SUBDIRS)/sources/idt_arch_x86.o \
-                memory/arch/x_86-32/Paging_x86.o \
-                memory/arch/x_86-32/mmu_x86.o
+                memory/arch/x_86-32/Paging_x86-32.o \
+                memory/arch/x_86-32/mmu_x86-32.o
 endif
 
 # Todos los objetos
