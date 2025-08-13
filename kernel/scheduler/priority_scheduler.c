@@ -1,6 +1,7 @@
 // kernel/scheduler/schedulers/priority_scheduler.c
 #include "scheduler_types.h"
 #include <stddef.h>
+#include <print.h>
 
 #define MAX_PRIORITY 140
 #define NICE_TO_PRIO(nice) (MAX_PRIORITY / 2 + (nice))
@@ -64,8 +65,19 @@ static task_t *priority_pick_next_task(void)
 
 static void priority_task_tick(void)
 {
-    // Implement aging to prevent starvation
-    // TODO: Age lower priority tasks
+    // Implementación básica de aging
+    // TODO: Implementar aging completo más adelante
+
+    // Por ahora, solo decrementar prioridades periódicamente
+    static int aging_counter = 0;
+    aging_counter++;
+
+    if (aging_counter >= 100)
+    { // Cada 100 ticks
+        aging_counter = 0;
+        // Implementar aging aquí cuando esté listo
+        LOG_OK("Priority scheduler: aging tick");
+    }
 }
 
 scheduler_ops_t priority_scheduler_ops = {
@@ -76,4 +88,5 @@ scheduler_ops_t priority_scheduler_ops = {
     .pick_next_task = priority_pick_next_task,
     .task_tick = priority_task_tick,
     .cleanup = NULL,
-    .private_data = &prio_rq};
+    .private_data = &prio_rq
+};

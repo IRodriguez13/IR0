@@ -1,6 +1,7 @@
 // kernel/scheduler/scheduler_detection.c
 #include "scheduler_types.h"
 #include <print.h>
+#include <panic/panic.h>
 
 // Forward declarations for scheduler implementations
 extern scheduler_ops_t cfs_scheduler_ops;

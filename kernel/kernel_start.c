@@ -27,21 +27,11 @@ void main()
     init_paging();
     LOG_OK("Paginación inicializada");
 
-    // NEW: Initialize scheduler cascade instead of simple scheduler_init()
-    if (scheduler_cascade_init() != 0)
-    {
-        panic("Failed to initialize any scheduler!");
-    }
-
-    LOG_OK("Advanced scheduler system initialized");
+    scheduler_init(); // Usa la API unificada
+    LOG_OK("Scheduler system initialized");
     print("Active scheduler: ");
-    print(current_scheduler.name);
+    print(get_scheduler_name());
     print("\n");
-    ;
-
-    // // NUEVO: Crear procesos de prueba ANTES de iniciar scheduler
-    // create_dummy_tasks();
-    // LOG_OK("Procesos dummy creados");
 
     // Opcional: Mostrar estado del scheduler
     dump_scheduler_state();
