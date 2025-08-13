@@ -2,20 +2,18 @@
 #include "../drivers/timer/clock_system.h"
 #include "scheduler/scheduler.h"
 #include "scheduler/task.h"
-#include "../arch/common/arch_interface.h"  
+#include "../arch/common/arch_interface.h"
 #include <kernel.h>
 // ARREGLADO: Includes con rutas correctas según arquitectura
 #if defined(__i386__)
-    #include "../memory/arch/x_86-32/Paging_x86-32.h"  
-    #define init_paging() init_paging_x86()
-#elif defined(__x86_64__)  
-    #include "../memory/arch/x_64/Paging_x64.h"  // ME FALTA PAGINACION DE 64 BIT
-    #define init_paging() init_paging_x64()
+#include "../memory/arch/x_86-32/Paging_x86-32.h"
+#define init_paging() init_paging_x86()
+#elif defined(__x86_64__)
+#include "../memory/arch/x_64/Paging_x64.h" // ME FALTA PAGINACION DE 64 BIT
+#define init_paging() init_paging_x64()
 #else
-    #error "Arquitectura no soportada en kernel_start.c"
+#error "Arquitectura no soportada en kernel_start.c"
 #endif
-
-
 
 void main()
 {
@@ -29,9 +27,17 @@ void main()
     init_paging();
     LOG_OK("Paginación inicializada");
 
-    // Inicializar scheduler
-    scheduler_init();
-    LOG_OK("Scheduler inicializado");
+    // NEW: Initialize scheduler cascade instead of simple scheduler_init()
+    if (scheduler_cascade_init() != 0)
+    {
+        panic("Failed to initialize any scheduler!");
+    }
+
+    LOG_OK("Advanced scheduler system initialized");
+    print("Active scheduler: ");
+    print(current_scheduler.name);
+    print("\n");
+    ;
 
     // // NUEVO: Crear procesos de prueba ANTES de iniciar scheduler
     // create_dummy_tasks();
@@ -45,7 +51,7 @@ void main()
     LOG_OK("Sistema de timers inicializado");
 
     // Activar interrupciones
-    arch_enable_interrupts();  
+    arch_enable_interrupts();
     LOG_OK("Interrupciones habilitadas");
 
     print_colored("=== STARTING SCHEDULER ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
@@ -56,22 +62,20 @@ void main()
     panic("Scheduler returned unexpectedly!");
 }
 
-void ShutDown() 
+void ShutDown()
 {
     print_warning("System shutdown requested\n");
-    
+
     // Intentar apagar via ACPI primero
-    outb(0x604, 0x00);  // QEMU/ACPI shutdown
-    
+    outb(0x604, 0x00); // QEMU/ACPI shutdown
 
     uint8_t reset_value = 0xFE;
     asm volatile(
         "outb %%al, $0x64"
-        :                  
-        : "a"(reset_value) 
-        : "memory"         
-    );
-    
+        :
+        : "a"(reset_value)
+        : "memory");
+
     // Último recurso: hang
     print_error("Shutdown failed, hanging CPU\n");
     cpu_relax();
