@@ -1,33 +1,32 @@
-#include <idt.h>
+// interrupt/idt.c - CORREGIDO (sin múltiples includes)
+#include <idt.h>  // Solo este include - contiene detección automática de arquitectura
 #include <arch_interface.h>
-#include "../arch/x86-32/sources/idt_arch_x86.h"
-#include "../arch/x_64/sources/idt_arch_x64.h"
 
-idt_entry_t idt[IDT_ENTRIES]; // Tabla de descriptores de interrupciones (256 entradas de 8 bytes)
-idt_ptr_t idt_ptr;            // y mi puntero al idt
+idt_entry_t idt[IDT_ENTRIES]; // Tabla de descriptores de interrupciones
+idt_ptr_t idt_ptr;            // Puntero al IDT
 
-extern void idt_flush(uintptr_t); // esta es la funcion que carga el idt en asm
+// Funciones ASM externas (declaradas en idt.h)
+extern void idt_flush(uintptr_t);
 extern void isr_default();
 extern void isr_page_fault();
 extern void timer_stub();
 
 void idt_init()
 {
-    // Inicializo la base y el límite del puntero del idt
+    // Inicializar la base y el límite del puntero del IDT
     idt_ptr.limit = sizeof(idt_entry_t) * IDT_ENTRIES - 1;
-    idt_ptr.base = (uint32_t)&idt;
+    idt_ptr.base = (uintptr_t)&idt;  // Usar uintptr_t para compatibilidad
 
+    // Inicializar todas las entradas con handler por defecto
     for (int i = 0; i < IDT_ENTRIES; i++)
     {
-        idt_set_gate(i, (uint32_t)isr_default, IDT_INTERRUPT_GATE_KERNEL); // Inicializa todas las entradas de la IDT con un handler genérico por defecto
+        idt_set_gate(i, (uintptr_t)isr_default, IDT_INTERRUPT_GATE_KERNEL);
     }
 
-    //  Asocia la interrupción 14 (Page Fault) a su handler específico en asm
-    idt_set_gate(14, (uint32_t)isr_page_fault, IDT_INTERRUPT_GATE_KERNEL);
-    
-    // Para timer (IRQ0 = interrupción 32 en modo protegido)
-    idt_set_gate(32, (uint32_t)timer_stub, IDT_INTERRUPT_GATE_KERNEL);
+    // Asociar interrupciones específicas
+    idt_set_gate(14, (uintptr_t)isr_page_fault, IDT_INTERRUPT_GATE_KERNEL); // Page Fault
+    idt_set_gate(32, (uintptr_t)timer_stub, IDT_INTERRUPT_GATE_KERNEL);     // Timer IRQ0
 
-    // cargo el idt desde el asm
-    idt_flush((uint32_t)&idt_ptr);
+    // Cargar el IDT desde ASM
+    idt_flush((uintptr_t)&idt_ptr);
 }
