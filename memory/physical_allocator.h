@@ -2,16 +2,15 @@
 #define IR0_PHYSCAL_ALLOCATOR
 #include <stdint.h>
 
+// Configuración
+#define PHYS_MEM_START 0x100000
+#define PHYS_MEM_END   0x8000000
+#define PAGE_SIZE      4096
+#define BITMAP_SIZE    ((PHYS_MEM_END - PHYS_MEM_START) / PAGE_SIZE / 8)
 
-
-static inline void set_page_free(uintptr_t phys_addr);
-
-
-static inline int is_page_used(uintptr_t phys_addr);
 
 
 void physical_allocator_init(void);
-
 
 /*
         === alloc_physical_page ===
@@ -32,5 +31,13 @@ void free_physical_page(uintptr_t phys_addr);
 */
 void debug_physical_allocator(void);
 
+
+
+// Funciones inline CON implementación
+void set_page_used(uintptr_t phys_addr);
+
+void set_page_free(uintptr_t phys_addr); 
+
+int is_page_used(uintptr_t phys_addr);
 #endif
 

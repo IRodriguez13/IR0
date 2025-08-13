@@ -13,3 +13,5 @@ enum ClockType detect_best_clock();
 
 
 void init_clock();
+
+enum ClockType get_current_timer_type(void);

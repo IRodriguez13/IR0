@@ -15,10 +15,14 @@ ARCH ?= x86-32
 
 ifeq ($(ARCH),x_64)
     ARCH_MEMORY_DIR = arch/x_64
+    ARCH_MMU = mmu_x64.c
+    ARCH_PAGING = Paging_x64.c
     CFLAGS += -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
     CFLAGS += -I$(PROJECT_ROOT)/arch/x_64/include
 else ifeq ($(ARCH),x86-32)
     ARCH_MEMORY_DIR = arch/x_86-32
+    ARCH_MMU = mmu_x86-32.c
+    ARCH_PAGING = Paging_x86-32.c
     CFLAGS += -m32 -march=i686
     CFLAGS += -I$(PROJECT_ROOT)/arch/x86-32/include
 else
@@ -30,16 +34,20 @@ COMMON_SOURCES = heap_allocator.c physical_allocator.c
 COMMON_OBJECTS = $(COMMON_SOURCES:.c=.o)
 
 # Archivos específicos de arquitectura
-ARCH_SOURCES = $(ARCH_MEMORY_DIR)/mmu_$(ARCH).c $(ARCH_MEMORY_DIR)/Paging_$(ARCH).c
+ARCH_SOURCES = $(ARCH_MEMORY_DIR)/$(ARCH_MMU) $(ARCH_MEMORY_DIR)/$(ARCH_PAGING)
 ARCH_OBJECTS = $(ARCH_SOURCES:.c=.o)
 
 # Todos los objetos
 ALL_OBJECTS = $(COMMON_OBJECTS) $(ARCH_OBJECTS)
 
-.PHONY: all clean arch-objects common-objects
+.PHONY: all clean arch-objects common-objects debug
 
 all: common-objects arch-objects
-	@echo "Subsistema de memoria compilado para $(ARCH)"
+		@echo ""
+	@echo "\033[1;32m===========================================================\033[0m"
+	@echo "\033[1;32m Subsistema de memoria compilado exitosamente para $(ARCH)\033[0m"
+	@echo "\033[1;32m===========================================================\033[0m"
+	@echo ""
 
 common-objects: $(COMMON_OBJECTS)
 

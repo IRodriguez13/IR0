@@ -17,7 +17,7 @@ uint32_t free_pages_count = 0;
 uint32_t total_pages_count = 0;
 
 // Funciones helper para el bitmap
-static inline void set_page_used(uintptr_t phys_addr)
+void set_page_used(uintptr_t phys_addr)
 {
     uint32_t page_idx = (phys_addr - PHYS_MEM_START) / PAGE_SIZE;
     uint32_t byte_idx = page_idx / 8;
@@ -29,7 +29,7 @@ static inline void set_page_used(uintptr_t phys_addr)
     }
 }
 
-static inline void set_page_free(uintptr_t phys_addr)
+void set_page_free(uintptr_t phys_addr)
 {
     uint32_t page_idx = (phys_addr - PHYS_MEM_START) / PAGE_SIZE;
     uint32_t byte_idx = page_idx / 8;
@@ -41,7 +41,7 @@ static inline void set_page_free(uintptr_t phys_addr)
     }
 }
 
-static inline int is_page_used(uintptr_t phys_addr)
+int is_page_used(uintptr_t phys_addr)
 {
     uint32_t page_idx = (phys_addr - PHYS_MEM_START) / PAGE_SIZE;
     uint32_t byte_idx = page_idx / 8;
