@@ -32,10 +32,18 @@ static void cfs_add_task(task_t *task)
 
 static task_t *cfs_pick_next_task(void)
 {
-    // Pick leftmost task from rb-tree (lowest vruntime)
-    // TODO: Implement rb-tree leftmost
-    LOG_OK("CFS: Picking next task");
-    return NULL; // Placeholder
+    // Implementación básica mientras desarrollas el rb-tree
+    if (!cfs_rq.rb_root)
+    {
+        return NULL;
+    }
+
+    // Por ahora, comportarse como round-robin básico
+    task_t *task = cfs_rq.rb_root;
+    cfs_rq.rb_root = task->next; // Siguiente en la "lista"
+
+    LOG_OK("CFS: Picked task (basic implementation)");
+    return task;
 }
 
 static void cfs_task_tick(void)
@@ -50,14 +58,13 @@ static void cfs_cleanup(void)
 }
 
 // Export CFS operations
-scheduler_ops_t cfs_scheduler_ops = 
-{
-    .type = SCHEDULER_CFS,
-    .name = "Completely Fair Scheduler",
-    .init = cfs_init,
-    .add_task = cfs_add_task,
-    .pick_next_task = cfs_pick_next_task,
-    .task_tick = cfs_task_tick,
-    .cleanup = cfs_cleanup,
-    .private_data = &cfs_rq
-};
+scheduler_ops_t cfs_scheduler_ops =
+    {
+        .type = SCHEDULER_CFS,
+        .name = "Completely Fair Scheduler",
+        .init = cfs_init,
+        .add_task = cfs_add_task,
+        .pick_next_task = cfs_pick_next_task,
+        .task_tick = cfs_task_tick,
+        .cleanup = cfs_cleanup,
+        .private_data = &cfs_rq};

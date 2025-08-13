@@ -6,7 +6,7 @@ ASM := nasm
 ASMFLAGS := -f elf32
 
 # Objetos en esta carpeta y subcarpetas
-OBJS = priority_scheduler.o round-robin_scheduler.o scheduler_detection.o cfs_scheduler.o switch/switch_x86.o
+OBJS = priority_scheduler.o round-robin_scheduler.o sched_central.o scheduler_detection.o cfs_scheduler.o switch/switch_x86.o
 
 .PHONY: all clean
 
