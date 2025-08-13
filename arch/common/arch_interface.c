@@ -1,8 +1,7 @@
-// arch/common/arch_interface.c - CORREGIDO
 #include "arch_interface.h"
 
 // Implementaciones específicas de arquitectura
-void arch_enable_interrupts(void) 
+void arch_enable_interrupts(void)
 {
     #if defined(__x86_64__) || defined(__i386__)
         __asm__ volatile("sti");
@@ -12,18 +11,21 @@ void arch_enable_interrupts(void)
     #endif
 }
 
-void arch_disable_interrupts(void) 
+void arch_disable_interrupts(void)
 {
     #if defined(__x86_64__) || defined(__i386__)
         __asm__ volatile("cli");
+
     #elif defined(__aarch64__)
+
         // ARM64: msr daifset, #2
         __asm__ volatile("msr daifset, #2" ::: "memory");
+
     #endif
 }
 
 
-uint8_t inb(uint16_t port) 
+uint8_t inb(uint16_t port)
 {
     #if defined(__x86_64__) || defined(__i386__)
         uint8_t result;
@@ -35,11 +37,15 @@ uint8_t inb(uint16_t port)
     #endif
 }
 
-uintptr_t read_fault_address(void) {
+
+uintptr_t read_fault_address(void)
+{
     #if defined(__x86_64__) || defined(__i386__)
+        
         uintptr_t addr;
         asm volatile("mov %%cr2, %0" : "=r"(addr));
         return addr;
+
     #elif defined(__aarch64__)
         // ARM64: leer FAR_EL1 register
         uint64_t addr;
@@ -50,7 +56,7 @@ uintptr_t read_fault_address(void) {
     #endif
 }
 
-const char* arch_get_name(void) 
+const char *arch_get_name(void)
 {
     #if defined(__x86_64__)
         return "x86-64 (amd64)";
@@ -64,4 +70,3 @@ const char* arch_get_name(void)
         return "Unknown Architecture";
     #endif
 }
-

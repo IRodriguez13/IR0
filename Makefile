@@ -5,7 +5,7 @@ KERNEL_ROOT := $(CURDIR)
 # Arquitectura por defecto
 ARCH ?= x86-32
 
-COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory includes/ir0/print
+COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory includes/ir0/
 ifeq ($(ARCH),x_64)
     # Configuración para 64-bit
     CC = gcc
@@ -74,7 +74,7 @@ KERNEL_OBJS = kernel/kernel_start.o \
               drivers/timer/hpet/find_hpet.o \
               drivers/timer/lapic/lapic.o \
               kernel/scheduler/scheduler.o \
-              kernel/scheduler/switch/switch.o \
+              kernel/scheduler/switch/switch_x86.o \
               arch/common/arch_interface.o \
               memory/heap_allocator.o \
               memory/physical_allocator.o

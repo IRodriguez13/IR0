@@ -6,7 +6,7 @@ ASM := nasm
 ASMFLAGS := -f elf32
 
 # Objetos en esta carpeta y subcarpetas
-OBJS = scheduler.o switch/switch.o
+OBJS = scheduler.o switch/switch_x86.o
 
 .PHONY: all clean
 
@@ -25,7 +25,7 @@ all: $(OBJS)
 
 # Regla específica para switch.asm en subcarpeta
 switch/switch.o: switch/switch.asm
-	$(ASM) $(ASMFLAGS) switch/switch.asm -o switch/switch.o
+	$(ASM) $(ASMFLAGS) switch/switch_x86.asm -o switch/switch_x86.o
 
 # Regla específica para scheduler.c
 scheduler.o: scheduler.c
