@@ -1,7 +1,7 @@
 // memory/memory_interface.c - Implementación de la interfaz común
 #include "memo_interface.h"
 #include "heap_allocator.h"
-#include "physical_allocator.c"
+#include "physical_allocator.h"
 #include <print.h>
 #include <panic/panic.h>
 #include <string.h>

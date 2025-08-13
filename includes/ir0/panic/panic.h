@@ -1,5 +1,4 @@
 #pragma once
-#include <panic/panic.h>
 
 
 // Niveles de panic semánticos

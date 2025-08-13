@@ -5,6 +5,9 @@
 void idt_arch_set_gate(int n, uintptr_t handler, uint8_t flags);
 
 
+#ifndef IDT_ARCH_X86_H
+#define IDT_ARCH_X86_H
+
 typedef struct 
 {
     uint16_t offset_low;   // Bits 0-15 del offset
@@ -19,6 +22,8 @@ typedef struct {
     uint16_t limit;
     uint32_t base;         // Dirección lineal de la IDT
 } __attribute__((packed)) idt_ptr_t;
+
+#endif
 
 // 32 bit
 
