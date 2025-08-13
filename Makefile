@@ -78,13 +78,16 @@ KERNEL_OBJS = kernel/kernel_start.o \
 
 # Para arquitectura específica, actualizar ARCH_OBJS:
 ifeq ($(ARCH),x_64)
-    ARCH_OBJS = $(ARCH_SUBDIRS)/boot.o \
-                $(ARCH_SUBDIRS)/arch.o \
+    ARCH_OBJS = $(ARCH_SUBDIRS)/arch.o \
+                $(ARCH_SUBDIRS)/boot.o \
+                $(ARCH_SUBDIRS)/sources/idt_arch_x64.o \
+                $(ARCH_SUBDIRS)/sources/fault.o \
                 memory/arch/x_64/Paging_x64.o \
                 memory/arch/x_64/mmu_x64.o
 else ifeq ($(ARCH),x86-32)  
-    ARCH_OBJS = $(ARCH_SUBDIRS)/boot.o \
-                $(ARCH_SUBDIRS)/arch.o \
+    ARCH_OBJS = $(ARCH_SUBDIRS)/arch.o \
+                $(ARCH_SUBDIRS)/boot.o \
+                $(ARCH_SUBDIRS)/sources/idt_arch_x86.o \
                 memory/arch/x_86-32/Paging_x86.o \
                 memory/arch/x_86-32/mmu_x86.o
 endif
