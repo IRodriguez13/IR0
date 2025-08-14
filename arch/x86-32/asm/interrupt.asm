@@ -10,35 +10,37 @@ global idt_flush
 global timer_stub
 
 extern idt_flush
-extern page_fault_handler
+extern page_fault_handler_improved
 extern default_interrupt_handler
 extern time_handler
 
 idt_flush:
-    mov eax, [esp+4] ; parámetro pasado (el puntero a idt_ptr, que también es un puntero)
-    lidt [eax] ; cargo la idt usando la memo adrss de su puntero
-    ret ; vuelvo a alto nivel
+    mov  eax, [esp+4] ; parámetro pasado (el puntero a idt_ptr, que también es un puntero)
+    lidt [eax]        ; cargo la idt usando la memo adrss de su puntero
+    ret               ; vuelvo a alto nivel
 
 isr_template: ; Es para testear el tema del byte que quiero mostrar por consola
     pusha
-    push byte 14 ; la idea es loggear este PF.
+    push byte 14                   ; la idea es loggear este PF.
     call default_interrupt_handler
-    add esp, 4
+    add  esp, 4
     popa
     iret
 
 isr_default:
-    pusha ; Guarda TODOS los registros (eax, ebx, ecx, etc.)
-    call default_interrupt_handler ; Llama a la funcion en C para manejar la interrupcion normal
-    popa ; Restaura los valores que se guardaron
-    iret ; Retorna de la interrupción (especial, no ret normal)
+    pusha                           ; Guarda TODOS los registros (eax, ebx, ecx, etc.)
+    call  default_interrupt_handler ; Llama a la funcion en C para manejar la interrupcion normal
+    popa                            ; Restaura los valores que se guardaron
+    iret                            ; Retorna de la interrupción (especial, no ret normal)
 
 isr_page_fault:
-    pusha ; me guardo todos los registros
-    call page_fault_handler ; llamo a funcion de alto nivel para manejar interrupciones por page faults
-    add esp, 4 ; Limpio el error code automático generado en PF haciendo que el puntero de pila apunte a 4 bytes del err
-    popa ; restauro los valores
-    iret 
+    ; NO hacer add esp, 4 aquí - el error code lo necesita el handler
+    pusha
+    call page_fault_handler_improved
+    ; Limpiar error code DESPUÉS del handler
+    add  esp, 4
+    popa
+    iret
 
 timer_stub: ; lo tengo que hacer porque la cpu no sabe hacer iret en C
     pusha

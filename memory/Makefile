@@ -30,7 +30,7 @@ else
 endif
 
 # Archivos comunes (independientes de arquitectura)
-COMMON_SOURCES = heap_allocator.c physical_allocator.c
+COMMON_SOURCES = heap_allocator.c physical_allocator.c ondemand-paging.c
 COMMON_OBJECTS = $(COMMON_SOURCES:.c=.o)
 
 # Archivos específicos de arquitectura
