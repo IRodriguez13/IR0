@@ -14,8 +14,8 @@
 // ===============================================================================
 
 // Memoria física
-#define PHYS_MEM_START 0x00100000 // 1MB - después de área reservada
-#define PHYS_MEM_END 0x08000000   // 128MB límite
+#define PHYS_MEM_START 0x02800000 // ✅ Después del identity mapping (40MB)
+#define PHYS_MEM_END   0x08000000 // Hasta 128MB
 
 // Memoria virtual - Layout coordinado
 #define KERNEL_VIRT_BASE 0x00000000 // 0-64MB: Kernel code/data

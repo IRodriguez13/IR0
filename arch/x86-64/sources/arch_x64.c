@@ -23,8 +23,3 @@ const char* arch_get_name(void)
     return "x86-64 (amd64)";
 }
 
-// NUEVO: Implementar outb para 64-bit (movido desde archivo separado)
-void outb(uint16_t port, uint8_t value)
-{
-    asm volatile("outb %0, %1" :: "a"(value), "Nd"(port));
-}
