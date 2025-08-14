@@ -10,7 +10,7 @@
 #include "../memory/arch/x_86-32/Paging_x86-32.h"
 #define init_paging() init_paging_x86()
 #elif defined(__x86_64__)
-#include "../memory/arch/x86-64/Paging_x64.h" 
+#include "../memory/arch/x86-64/Paging_x64.h"
 #define init_paging() init_paging_x64()
 #else
 #error "Arquitectura no soportada en kernel_start.c"
@@ -21,35 +21,48 @@ void main()
     clear_screen();
     print_colored("=== IR0 KERNEL BOOT ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
-    // 1. IDT primero (sin logging avanzado aún)
+    // 1. IDT primero (ANTES que cualquier cosa que pueda generar interrupts)
     idt_init();
+    LOG_OK("IDT initialized");
 
-    // 2. Paginación básica
+    // 2. Physical allocator (NO necesita kmalloc)
+    physical_allocator_init();
+    LOG_OK("Physical allocator ready");
+
+    // 3. Paginación básica (NO necesita kmalloc)
     init_paging();
+    LOG_OK("Basic paging enabled");
 
-    // 3. CRITICAL: Inicializar sistema de memoria ANTES que cualquier kmalloc()
+    // 4. AHORA SÍ heap allocator (puede usar physical_allocator)
+    heap_allocator_init();
+    LOG_OK("Kernel heap ready");
+
+    // 5. Memory system wrapper (conecta todo)
     memory_init();
+    LOG_OK("Memory system unified");
 
-    // 4. Ahora sí podemos usar logging avanzado y kmalloc()
-    LOG_OK("Memory system initialized");
-
-    // 5. Paginación on-demand (usa kmalloc internamente)
+    // 6. On-demand paging (AHORA puede usar kmalloc)
     ondemand_paging_init();
-    LOG_OK("On-demand paging ready");
+    LOG_OK("On-demand paging active");
 
-    // 6. Resto del sistema...
+    // 7. Scheduler (puede usar kmalloc para structures)
     scheduler_init();
-    init_clock();
-    arch_enable_interrupts();
 
-    // Opcional: Crear algunas tareas de prueba
-    create_test_tasks();
+    // 8. Clock system
+    init_clock();
+
+    // 9. Habilitar interrupts AL FINAL
+    arch_enable_interrupts();
 
     print_colored("=== SYSTEM READY ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
 
-    // No usar scheduler_start() hasta tener procesos reales
-    cpu_relax(); // Por ahora
+    // Crear tareas de prueba
+    create_test_tasks();
+
+    // NO usar scheduler_start() hasta tener procesos reales
+    scheduler_dispatch_loop();
 }
+
 
 void ShutDown()
 {

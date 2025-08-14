@@ -78,12 +78,12 @@ KERNEL_OBJS = kernel/kernel_start.o \
               kernel/scheduler/sched_central.o \
               kernel/scheduler/cfs_scheduler.o \
               kernel/scheduler/scheduler_detection.o \
-              kernel/scheduler/switch/switch_x86.asm \
+              kernel/scheduler/task.o \
               arch/common/arch_interface.o \
               memory/heap_allocator.o \
-              memory/physical_allocator.o\
-			  memory/ondemand-paging.o \
-
+              memory/physical_allocator.o \
+              memory/ondemand-paging.o \
+              memory/vallocator.o
 
 # Para arquitectura específica, actualizar ARCH_OBJS:
 ifeq ($(ARCH),x86-64)
