@@ -68,22 +68,7 @@ static const uint32_t cfs_prio_to_weight[40] = {
 // RED-BLACK TREE PARA CFS
 // ===============================================================================
 
-typedef enum
-{
-    RB_RED = 0,
-    RB_BLACK = 1
-} rb_color_t;
 
-
-typedef struct rb_node
-{
-    struct rb_node *parent;
-    struct rb_node *left;
-    struct rb_node *right;
-    rb_color_t color;
-    uint64_t key; // vruntime
-    task_t *task; // puntero a la tarea
-} rb_node_t;
 
 
 static cfs_runqueue_t cfs_rq;

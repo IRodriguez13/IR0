@@ -8,7 +8,7 @@
 #include "../../arch/common/arch_interface.h"
 
 // Estado central del scheduler
-static task_t *current_running_task = NULL;
+task_t *current_running_task = NULL;
 static int scheduler_active = 0;
 extern void switch_task(task_t *current, task_t *next);
 
