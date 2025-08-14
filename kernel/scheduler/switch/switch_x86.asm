@@ -1,4 +1,3 @@
-;
 ; ===============================================================================
 ; switch_task - Cambio de contexto entre procesos
 ; ===============================================================================
@@ -11,9 +10,8 @@
 ;
 
 ; kernel/scheduler/switch/switch.asm - CORREGIDO
-
+BITS 32
 global switch_task
-
 switch_task:
     cli
     mov eax, [esp + 4]  ; old_task

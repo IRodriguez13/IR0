@@ -108,7 +108,7 @@ void scheduler_dispatch_loop(void)
 {
     LOG_OK("Entering scheduler dispatch loop");
 
-    for(;;)
+    for (;;)
     {
         if (current_running_task)
         {
@@ -116,16 +116,20 @@ void scheduler_dispatch_loop(void)
             // NOTA: En un kernel real, esto sería más complejo
             // Por ahora, simplemente yieldeamos control al timer
             arch_enable_interrupts();
-            asm volatile("hlt"); // Esperar próxima interrupción de timer
+            cpu_wait();
         }
         else
         {
-            //Si la cpu no tiene laburo, AFK. utilizaría cpu_relax() pero ya tengo un for infinito asi que no creo que sea buena idea.
-            asm volatile("hlt");
+            cpu_wait();
+            // Si la cpu no tiene laburo, AFK. utilizaría cpu_relax() pero ya tengo un for infinito asi que no creo que sea buena idea.
         }
     }
 }
 
+void cpu_wait()
+{
+    asm volatile("hlt");
+}
 
 const char *get_scheduler_name(void)
 {
