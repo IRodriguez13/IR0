@@ -1,4 +1,4 @@
-// memory/arch/x_64/mmu_x64.c - MMU para x86-64
+// memory/arch/x86-64/mmu_x64.c - MMU para x86-64
 #include "../../memo_interface.h"
 #include "Paging_x64.h"
 #include <print.h>

@@ -6,17 +6,17 @@ KERNEL_ROOT := $(CURDIR)
 ARCH ?= x86-32
 
 COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory includes/ir0/
-ifeq ($(ARCH),x_64)
+ifeq ($(ARCH),x86-64)
     # Configuración para 64-bit
     CC = gcc
     ASM = nasm  
     LD = ld
     CFLAGS = -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
     CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x_64/include -Wall -Wextra -O1 -MMD -MP
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -Wall -Wextra -O1 -MMD -MP
     ASMFLAGS = -f elf64
-    LDFLAGS = -m elf_x86_64 -T arch/x_64/linker.ld
-    ARCH_SUBDIRS = arch/x_64
+    LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
+    ARCH_SUBDIRS = arch/x86-64
     KERNEL_ENTRY = kmain_x64
 else ifeq ($(ARCH),x86-32)
     # Configuración para 32-bit
@@ -30,7 +30,7 @@ else ifeq ($(ARCH),x86-32)
     ARCH_SUBDIRS = arch/x86-32
     KERNEL_ENTRY = kmain_x32
 else
-    $(error Arquitectura no soportada: $(ARCH). Use x_64 o x86-32)
+    $(error Arquitectura no soportada: $(ARCH). Use x86-64 o x86-32)
 endif
 
 SUBDIRS = $(COMMON_SUBDIRS) $(ARCH_SUBDIRS)
@@ -82,13 +82,13 @@ KERNEL_OBJS = kernel/kernel_start.o \
 
 
 # Para arquitectura específica, actualizar ARCH_OBJS:
-ifeq ($(ARCH),x_64)
+ifeq ($(ARCH),x86-64)
     ARCH_OBJS = $(ARCH_SUBDIRS)/arch.o \
                 $(ARCH_SUBDIRS)/boot.o \
                 $(ARCH_SUBDIRS)/sources/idt_arch_x64.o \
                 $(ARCH_SUBDIRS)/sources/fault.o \
-                memory/arch/x_64/Paging_x64.o \
-                memory/arch/x_64/mmu_x64.o
+                memory/arch/x86-64/Paging_x64.o \
+                memory/arch/x86-64/mmu_x64.o
 else ifeq ($(ARCH),x86-32)  
     ARCH_OBJS = $(ARCH_SUBDIRS)/arch.o \
                 $(ARCH_SUBDIRS)/boot.o \
@@ -139,7 +139,7 @@ run-bochs: kernel-$(ARCH).bin
 all-arch:
 	@echo "Compilando todas las arquitecturas..."
 	$(MAKE) ARCH=x86-64 clean all
-	$(MAKE) ARCH=x_64 clean all
+	$(MAKE) ARCH=x86-64 clean all
 	@echo "Compilación completa para todas las arquitecturas"
 	
 
@@ -160,7 +160,7 @@ clean:
 # clean-all:
 # 	@echo "Limpieza completa..."
 # 	$(MAKE) ARCH=x86-64 clean
-# 	$(MAKE) ARCH=x_64 clean
+# 	$(MAKE) ARCH=x86-64 clean
 # 	rm -f *.bin *.iso
 # 	rm -rf iso-*
 
@@ -186,7 +186,7 @@ clean:
 clean-all:
 	@echo "Limpieza completa de todas las arquitecturas..."
 	$(MAKE) ARCH=x86-32 clean
-	$(MAKE) ARCH=x_64 clean
+	$(MAKE) ARCH=x86-64 clean
 	@echo "Limpiando todos los archivos .d del proyecto..."
 	@find . -name "*.d" -type f -delete
 	@echo "Limpiando archivos binarios globales..."
@@ -216,11 +216,11 @@ help:
 	@echo ""
 	@echo "Arquitecturas soportadas:"
 	@echo "  x86-64  - 32-bit (i386)"
-	@echo "  x_64    - 64-bit (x86_64)"
+	@echo "  x86-64    - 64-bit (x86_64)"
 	@echo ""
 	@echo "Comandos principales:"
 	@echo "  make                    - Compilar para arquitectura por defecto (x86-64)"
-	@echo "  make ARCH=x_64          - Compilar para 64-bit"
+	@echo "  make ARCH=x86-64          - Compilar para 64-bit"
 	@echo "  make ARCH=x86-64        - Compilar para 32-bit"
 	@echo "  make all-arch           - Compilar para todas las arquitecturas"
 	@echo "  make run                - Ejecutar en QEMU"
@@ -229,7 +229,7 @@ help:
 	@echo "  make help               - Mostrar esta ayuda"
 	@echo ""
 	@echo "Ejemplos:"
-	@echo "  make ARCH=x_64 run      - Compilar y ejecutar en 64-bit"
+	@echo "  make ARCH=x86-64 run      - Compilar y ejecutar en 64-bit"
 	@echo "  make ARCH=x86-64 run    - Compilar y ejecutar en 32-bit"
 
 -include $(ALL_OBJS:.o=.d)
