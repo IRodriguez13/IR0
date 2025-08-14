@@ -73,8 +73,12 @@ KERNEL_OBJS = kernel/kernel_start.o \
               drivers/timer/hpet/hpet.o \
               drivers/timer/hpet/find_hpet.o \
               drivers/timer/lapic/lapic.o \
-              kernel/scheduler/scheduler.o \
-              kernel/scheduler/switch/switch_x86.o \
+              kernel/scheduler/priority_scheduler.o \
+              kernel/scheduler/round-robin_scheduler.o \
+              kernel/scheduler/sched_central.o \
+              kernel/scheduler/cfs_scheduler.o \
+              kernel/scheduler/scheduler_detection.o \
+              kernel/scheduler/switch/switch_x86.asm \
               arch/common/arch_interface.o \
               memory/heap_allocator.o \
               memory/physical_allocator.o\

@@ -31,8 +31,3 @@ uintptr_t read_fault_address()
     return addr;
 }
 
-// NUEVO: Implementar outb para 32-bit (movido desde archivo separado)
-void outb(uint16_t port, uint8_t value)
-{
-    asm volatile("outb %0, %1" :: "a"(value), "Nd"(port));
-}
