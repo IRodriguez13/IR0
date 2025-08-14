@@ -1,4 +1,4 @@
-// arch/x_64/sources/arch.c - ACTUALIZADO
+// arch/x86-64/sources/arch.c - ACTUALIZADO
 #include "../../kernel/kernel_start.h"
 #include "../../common/arch_interface.h"
 

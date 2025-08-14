@@ -7,7 +7,7 @@ ARCH_LDFLAGS = -m elf_x86_64
 ARCH_ASFLAGS = -f elf64
 
 # Fuentes específicas de esta arquitectura
-ARCH_SOURCES = sources/arch_x64.c sources/fault.c sources/idt_arch_x64.c sources/outb_64.c
+ARCH_SOURCES = sources/arch_x64.c sources/fault.c sources/idt_arch_x64.c
 BOOT_SOURCES = asm/boot_x64.asm
 
 # Objetos generados

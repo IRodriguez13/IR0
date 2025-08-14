@@ -35,9 +35,9 @@ It aims to be minimal at its core, but flexible enough to scale into different u
 ### 🔧 IR0 Subsystems Overview
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    USER SPACE (Future)                     │
+│                    USER SPACE (Futuro)                      │
 ├─────────────────────────────────────────────────────────────┤
-│                   KERNEL SPACE (IR0)                       │
+│                   KERNEL SPACE (IR0)                        │
 ├─────────────────────┬─────────────────┬─────────────────────┤
 │   SCHEDULER SYSTEM  │  MEMORY SYSTEM  │  INTERRUPT SYSTEM   │
 │                     │                 │                     │
@@ -62,7 +62,7 @@ It aims to be minimal at its core, but flexible enough to scale into different u
 │ │ (ARM Planned)   │ │                 │ │ Storage (TODO)  │ │
 │ └─────────────────┘ └─────────────────┘ └─────────────────┘ │
 ├─────────────────────────────────────────────────────────────┤
-│                    HARDWARE ABSTRACTION                    │
+│                    HARDWARE ABSTRACTION                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 

@@ -13,12 +13,12 @@ CFLAGS += -I$(PROJECT_ROOT)/arch/common
 # Detectar arquitectura para seleccionar implementación correcta
 ARCH ?= x86-32
 
-ifeq ($(ARCH),x_64)
-    ARCH_MEMORY_DIR = arch/x_64
+ifeq ($(ARCH),x86-64)
+    ARCH_MEMORY_DIR = arch/x86-64
     ARCH_MMU = mmu_x64.c
     ARCH_PAGING = Paging_x64.c
     CFLAGS += -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
-    CFLAGS += -I$(PROJECT_ROOT)/arch/x_64/include
+    CFLAGS += -I$(PROJECT_ROOT)/arch/x86-64/include
 else ifeq ($(ARCH),x86-32)
     ARCH_MEMORY_DIR = arch/x_86-32
     ARCH_MMU = mmu_x86-32.c

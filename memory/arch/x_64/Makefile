@@ -1,4 +1,4 @@
-# memory/arch/x_64/Makefile - Paginación y MMU para x86-64
+# memory/arch/x86-64/Makefile - Paginación y MMU para x86-64
 
 PROJECT_ROOT := ../../..
 MEMORY_ARCH_ROOT := $(CURDIR)
@@ -9,7 +9,7 @@ CFLAGS := -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
 CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector -ffreestanding
 CFLAGS += -Wall -Wextra -O1 -MMD -MP
 CFLAGS += -I$(PROJECT_ROOT)/includes -I$(PROJECT_ROOT)/includes/ir0
-CFLAGS += -I$(PROJECT_ROOT)/arch/common -I$(PROJECT_ROOT)/arch/x_64/include
+CFLAGS += -I$(PROJECT_ROOT)/arch/common -I$(PROJECT_ROOT)/arch/x86-64/include
 
 # Fuentes específicas de x86-64
 SOURCES = Paging_x64.c mmu_x64.c
