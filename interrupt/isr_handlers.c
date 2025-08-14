@@ -5,7 +5,7 @@
 #include <arch_interface.h>
 #include "isr_handlers.h"
 #include "../drivers/timer/clock_system.h"
-#include "../../memory/ondemand-paging.h"
+#include "../memory/ondemand-paging.h"
 
 
 void default_interrupt_handler()

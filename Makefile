@@ -159,35 +159,13 @@ clean:
 	@if [ -d "$(ARCH_SUBDIRS)" ]; then \
 		$(MAKE) -C $(ARCH_SUBDIRS) clean; \
 	fi
-	rm -f $(ALL_OBJS) $(ALL_OBJS:.o=.d) kernel-$(ARCH).bin kernel-$(ARCH).iso
-	rm -rf iso-$(ARCH)
-
-
-# # Limpieza completa (todas las arquitecturas)
-# clean-all:
-# 	@echo "Limpieza completa..."
-# 	$(MAKE) ARCH=x86-64 clean
-# 	$(MAKE) ARCH=x86-64 clean
-# 	rm -f *.bin *.iso
-# 	rm -rf iso-*
-
-# distclean: clean-all
-
-# Limpiar archivos .d en todos los subdirectorios
-clean:
-	@echo "Limpiando arquitectura: $(ARCH)"
-	@for dir in $(SUBDIRS); do \
-		$(MAKE) -C $$dir clean; \
-	done
-	@if [ -d "$(ARCH_SUBDIRS)" ]; then \
-		$(MAKE) -C $(ARCH_SUBDIRS) clean; \
-	fi
-	# NUEVO: Limpiar archivos .d recursivamente
+	# Limpiar archivos .d recursivamente
 	@echo "Limpiando archivos de dependencias (.d)..."
 	@find . -name "*.d" -type f -delete
 	# Limpiar objetos principales
 	rm -f $(ALL_OBJS) $(ALL_OBJS:.o=.d) kernel-$(ARCH).bin kernel-$(ARCH).iso
 	rm -rf iso-$(ARCH)
+	@echo "Limpieza de $(ARCH) completada."
 
 # Limpieza completa (todas las arquitecturas) - MEJORADA
 clean-all:
