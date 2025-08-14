@@ -17,7 +17,7 @@ BOOT_OBJECTS = $(BOOT_SOURCES:.asm=.o)
 ALL_OBJECTS = $(ARCH_OBJECTS) $(BOOT_OBJECTS)
 
 # Rutas específicas para objetos finales (lo que espera el Makefile principal)
-FINAL_OBJECTS = arch.o boot.o
+FINAL_OBJECTS = sources/arch_x86.o asm/boot_x86.o sources/idt_arch_x86.o
 
 .PHONY: all clean
 
@@ -30,10 +30,10 @@ all: $(FINAL_OBJECTS)
 
 # Crear objetos consolidados que espera el Makefile principal
 arch.o: $(ARCH_OBJECTS)
-	ld -m elf_i386 -r $(ARCH_OBJECTS) -o arch.o
+	ld -m elf_i386 -r $(ARCH_OBJECTS) -o arch_x86.o sources/idt_arch_x86.o
 
 boot.o: $(BOOT_OBJECTS)
-	ld -m elf_i386 -r $(BOOT_OBJECTS) -o boot.o
+	ld -m elf_i386 -r $(BOOT_OBJECTS) -o asm/boot_x86.o
 
 
 # Reglas de compilación

@@ -69,10 +69,15 @@ const char *arch_get_name(void)
 #endif
 }
 
-// void outb(uint16_t port, uint8_t value)
-// {
-//     asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
-// }
+void outb(uint16_t port, uint8_t value)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
+#elif defined(__aarch64__)
+    // ARM no tiene puertos I/O - usar MMIO
+    // Implementar cuando sea necesario
+#endif
+}
 
 // uint8_t inb(uint16_t port)
 // {
@@ -84,4 +89,31 @@ const char *arch_get_name(void)
 void cpu_wait(void)
 {
     asm volatile("hlt");
+}
+
+// ===============================================================================
+// FUNCIONES DE DIVISIÓN 64-BIT (para resolver referencias indefinidas)
+// ===============================================================================
+
+// Implementación simple de división unsigned 64-bit
+uint64_t __udivdi3(uint64_t a, uint64_t b)
+{
+    if (b == 0) {
+        // División por cero - en un kernel real esto debería panic
+        return 0;
+    }
+    
+    uint64_t result = 0;
+    uint64_t remainder = 0;
+    
+    // Algoritmo de división simple
+    for (int i = 63; i >= 0; i--) {
+        remainder = (remainder << 1) | ((a >> i) & 1);
+        if (remainder >= b) {
+            remainder -= b;
+            result |= (1ULL << i);
+        }
+    }
+    
+    return result;
 }

@@ -1,8 +1,4 @@
 #include <stdint.h>
 
-uintptr_t read_fault_address() 
-{
-    uintptr_t addr;
-    asm volatile("mov %%cr2, %0" : "=r"(addr));
-    return addr;
-}
+// NOTA: read_fault_address está implementada en arch_interface.c
+// para evitar duplicación de código

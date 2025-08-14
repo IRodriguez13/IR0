@@ -1,4 +1,4 @@
-// arch/x86-64/sources/arch.c - ACTUALIZADO
+// arch/x86-64/sources/arch_x64.c - ACTUALIZADO
 #include "../../kernel/kernel_start.h"
 #include "../../common/arch_interface.h"
 
@@ -10,16 +10,5 @@ void kmain_x64(void)
     
     // Saltamos a la función principal una vez terminado el inicio.
     main();
-}
-
-// Implementación de la interfaz común
-void arch_enable_interrupts(void) 
-{
-    __asm__ volatile("sti");
-}
-
-const char* arch_get_name(void) 
-{
-    return "x86-64 (amd64)";
 }
 

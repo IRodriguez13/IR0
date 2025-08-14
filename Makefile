@@ -5,7 +5,7 @@ KERNEL_ROOT := $(CURDIR)
 # Arquitectura por defecto
 ARCH ?= x86-32
 
-COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory includes/ir0/
+COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory
 ifeq ($(ARCH),x86-64)
     # Configuración para 64-bit
     CC = gcc
@@ -59,7 +59,7 @@ $(SUBDIRS):
 	$(MAKE) -C $@ CC="$(CC)" ASM="$(ASM)" CFLAGS="$(CFLAGS)" ASMFLAGS="$(ASMFLAGS)"
 
 # En la sección COMMON_SUBDIRS, cambiar:
-COMMON_SUBDIRS = kernel interrupt drivers/timer paging scheduler includes/ir0/panic arch/common memory
+COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory
 
 # En la sección de objetos del kernel, agregar los objetos de memoria:
 KERNEL_OBJS = kernel/kernel_start.o \
@@ -78,7 +78,7 @@ KERNEL_OBJS = kernel/kernel_start.o \
               kernel/scheduler/sched_central.o \
               kernel/scheduler/cfs_scheduler.o \
               kernel/scheduler/scheduler_detection.o \
-              kernel/scheduler/task.o \
+              kernel/scheduler/task_impl.o \
               arch/common/arch_interface.o \
               memory/heap_allocator.o \
               memory/physical_allocator.o \
@@ -87,18 +87,21 @@ KERNEL_OBJS = kernel/kernel_start.o \
 
 # Para arquitectura específica, actualizar ARCH_OBJS:
 ifeq ($(ARCH),x86-64)
-    ARCH_OBJS = $(ARCH_SUBDIRS)/arch.o \
-                $(ARCH_SUBDIRS)/boot.o \
+    ARCH_OBJS = $(ARCH_SUBDIRS)/sources/arch_x64.o \
+                $(ARCH_SUBDIRS)/asm/boot_x64.o \
                 $(ARCH_SUBDIRS)/sources/idt_arch_x64.o \
                 $(ARCH_SUBDIRS)/sources/fault.o \
                 memory/arch/x86-64/Paging_x64.o \
-                memory/arch/x86-64/mmu_x64.o
+                memory/arch/x86-64/mmu_x64.o \
+                kernel/scheduler/switch/switch_x64.o \
+                interrupt/arch/x86-64/interrupt.o
 else ifeq ($(ARCH),x86-32)  
-    ARCH_OBJS = $(ARCH_SUBDIRS)/arch.o \
-                $(ARCH_SUBDIRS)/boot.o \
-                $(ARCH_SUBDIRS)/sources/idt_arch_x86.o \
+    ARCH_OBJS = $(ARCH_SUBDIRS)/sources/arch_x86.o \
+                $(ARCH_SUBDIRS)/asm/boot_x86.o \
                 memory/arch/x_86-32/Paging_x86-32.o \
-                memory/arch/x_86-32/mmu_x86-32.o
+                memory/arch/x_86-32/mmu_x86-32.o \
+                kernel/scheduler/switch/switch_x86.o \
+                interrupt/arch/x86-32/interrupt.o
 endif
 
 # Todos los objetos

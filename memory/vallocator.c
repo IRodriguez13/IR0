@@ -2,10 +2,11 @@
 
 #include "memo_interface.h"
 #include "ondemand-paging.h"
-#include "krnl_memo_layout.h"
 #include <print.h>
 #include <panic/panic.h>
 #include <string.h>
+#define MEMORY_LAYOUT_IMPLEMENTATION
+#include "krnl_memo_layout.h"
 
 // ===============================================================================
 // VIRTUAL MEMORY ALLOCATOR - Reemplazo completo de vmalloc básico
