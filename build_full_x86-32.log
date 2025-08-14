@@ -1,0 +1,178 @@
+Compilando para arquitectura: x86-32
+Directorio de arquitectura: arch/x86-32
+Flags C: -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP
+Flags ASM: -f elf32
+Flags LD: -m elf_i386 -T arch/x86-32/linker.ld
+
+make -C kernel CC="gcc" ASM="nasm" CFLAGS="-m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP" ASMFLAGS="-f elf32"
+make[1]: se entra en el directorio '/home/ivanr013/Escritorio/ir0-kernel/kernel'
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c kernel_start.c -o kernel_start.o
+In file included from scheduler/scheduler.h:3,
+                 from kernel_start.c:3:
+scheduler/scheduler_types.h:48:23: warning: ‘cfs_rq’ defined but not used [-Wunused-variable]
+   48 | static cfs_runqueue_t cfs_rq;
+      |                       ^~~~~~
+[1;32m============================================================[0m
+[1;32m KernelMain subsystem compilado correctamente para [0m
+[1;32m============================================================[0m
+make[1]: se sale del directorio '/home/ivanr013/Escritorio/ir0-kernel/kernel'
+make -C interrupt CC="gcc" ASM="nasm" CFLAGS="-m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP" ASMFLAGS="-f elf32"
+make[1]: se entra en el directorio '/home/ivanr013/Escritorio/ir0-kernel/interrupt'
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c idt.c -o idt.o
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c isr_handlers.c -o isr_handlers.o
+In file included from ../kernel/scheduler/scheduler.h:3,
+                 from isr_handlers.h:6,
+                 from isr_handlers.c:6:
+../kernel/scheduler/scheduler_types.h:48:23: warning: ‘cfs_rq’ defined but not used [-Wunused-variable]
+   48 | static cfs_runqueue_t cfs_rq;
+      |                       ^~~~~~
+nasm -f elf32 arch/x86-32/interrupt.asm -o arch/x86-32/interrupt.o
+[1;32m============================================================[0m
+[1;32m interrupt subsystem compilado correctamente para x86-32[0m
+[1;32m============================================================[0m
+make[1]: se sale del directorio '/home/ivanr013/Escritorio/ir0-kernel/interrupt'
+make -C drivers/timer CC="gcc" ASM="nasm" CFLAGS="-m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP" ASMFLAGS="-f elf32"
+make[1]: se entra en el directorio '/home/ivanr013/Escritorio/ir0-kernel/drivers/timer'
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c pit/pit.c -o pit/pit.o
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c lapic/lapic.c -o lapic/lapic.o
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c hpet/hpet.c -o hpet/hpet.o
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c hpet/find_hpet.c -o hpet/find_hpet.o
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c clock_system.c -o clock_system.o
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c best_clock.c -o best_clock.o
+[1;32m============================================================[0m
+[1;32m Timer compilado correctamente para [0m
+[1;32m============================================================[0m
+make[1]: se sale del directorio '/home/ivanr013/Escritorio/ir0-kernel/drivers/timer'
+make -C kernel/scheduler CC="gcc" ASM="nasm" CFLAGS="-m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP" ASMFLAGS="-f elf32"
+make[1]: se entra en el directorio '/home/ivanr013/Escritorio/ir0-kernel/kernel/scheduler'
+Compilando priority_scheduler.c para x86-32...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c priority_scheduler.c -o priority_scheduler.o
+In file included from priority_scheduler.c:2:
+scheduler_types.h:48:23: warning: ‘cfs_rq’ defined but not used [-Wunused-variable]
+   48 | static cfs_runqueue_t cfs_rq;
+      |                       ^~~~~~
+Compilando round-robin_scheduler.c para x86-32...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c round-robin_scheduler.c -o round-robin_scheduler.o
+In file included from round-robin_scheduler.c:6:
+scheduler_types.h:48:23: warning: ‘cfs_rq’ defined but not used [-Wunused-variable]
+   48 | static cfs_runqueue_t cfs_rq;
+      |                       ^~~~~~
+Compilando sched_central.c para x86-32...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c sched_central.c -o sched_central.o
+sched_central.c: In function ‘scheduler_dispatch_loop’:
+sched_central.c:119:13: warning: implicit declaration of function ‘cpu_wait’ [-Wimplicit-function-declaration]
+  119 |             cpu_wait();
+      |             ^~~~~~~~
+In file included from scheduler.h:3,
+                 from sched_central.c:2:
+scheduler_types.h: At top level:
+scheduler_types.h:48:23: warning: ‘cfs_rq’ defined but not used [-Wunused-variable]
+   48 | static cfs_runqueue_t cfs_rq;
+      |                       ^~~~~~
+Compilando scheduler_detection.c para x86-32...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c scheduler_detection.c -o scheduler_detection.o
+In file included from scheduler_detection.c:1:
+scheduler_types.h:48:23: warning: ‘cfs_rq’ defined but not used [-Wunused-variable]
+   48 | static cfs_runqueue_t cfs_rq;
+      |                       ^~~~~~
+Compilando cfs_scheduler.c para x86-32...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c cfs_scheduler.c -o cfs_scheduler.o
+cfs_scheduler.c: In function ‘cfs_update_runqueue_stats’:
+cfs_scheduler.c:297:18: warning: unused variable ‘total_vruntime’ [-Wunused-variable]
+  297 |         uint64_t total_vruntime = 0;
+      |                  ^~~~~~~~~~~~~~
+Compilando task_impl.c para x86-32...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c task_impl.c -o task_impl.o
+Compilando context switch para x86-32...
+nasm -f elf32 switch/switch_x86.asm -o switch/switch_x86.o
+[1;32m============================================================[0m
+[1;32m Scheduler subsystem compilado correctamente para x86-32[0m
+[1;32m============================================================[0m
+make[1]: se sale del directorio '/home/ivanr013/Escritorio/ir0-kernel/kernel/scheduler'
+make -C includes/ir0/panic CC="gcc" ASM="nasm" CFLAGS="-m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP" ASMFLAGS="-f elf32"
+make[1]: se entra en el directorio '/home/ivanr013/Escritorio/ir0-kernel/includes/ir0/panic'
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c panic.c -o panic.o
+[1;32m============================================================[0m
+[1;32m Panic subsystem compilado correctamente para [0m
+[1;32m============================================================[0m
+make[1]: se sale del directorio '/home/ivanr013/Escritorio/ir0-kernel/includes/ir0/panic'
+make -C arch/common CC="gcc" ASM="nasm" CFLAGS="-m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP" ASMFLAGS="-f elf32"
+make[1]: se entra en el directorio '/home/ivanr013/Escritorio/ir0-kernel/arch/common'
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c arch_interface.c -o arch_interface.o
+make[1]: se sale del directorio '/home/ivanr013/Escritorio/ir0-kernel/arch/common'
+make -C memory CC="gcc" ASM="nasm" CFLAGS="-m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP" ASMFLAGS="-f elf32"
+make[1]: se entra en el directorio '/home/ivanr013/Escritorio/ir0-kernel/memory'
+Compilando heap_allocator.c...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c heap_allocator.c -o heap_allocator.o
+Compilando physical_allocator.c...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c physical_allocator.c -o physical_allocator.o
+Compilando ondemand-paging.c...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c ondemand-paging.c -o ondemand-paging.o
+ondemand-paging.c: In function ‘page_fault_handler_improved’:
+ondemand-paging.c:215:28: warning: implicit declaration of function ‘read_fault_address’ [-Wimplicit-function-declaration]
+  215 |     uintptr_t fault_addr = read_fault_address();
+      |                            ^~~~~~~~~~~~~~~~~~
+Compilando vallocator.c...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c vallocator.c -o vallocator.o
+In file included from vallocator.c:9:
+krnl_memo_layout.h: In function ‘get_memory_zone’:
+krnl_memo_layout.h:86:19: warning: comparison of unsigned expression in ‘>= 0’ is always true [-Wtype-limits]
+   86 |     if (virt_addr >= KERNEL_VIRT_BASE && virt_addr < KERNEL_VIRT_END)
+      |                   ^~
+vallocator.c: In function ‘vfree’:
+vallocator.c:256:13: warning: implicit declaration of function ‘unmap_page’; did you mean ‘arch_unmap_page’? [-Wimplicit-function-declaration]
+  256 |             unmap_page(addr);
+      |             ^~~~~~~~~~
+      |             arch_unmap_page
+vallocator.c: At top level:
+vallocator.c:31:18: warning: ‘vmalloc_next_addr’ defined but not used [-Wunused-variable]
+   31 | static uintptr_t vmalloc_next_addr = VMALLOC_BASE;
+      |                  ^~~~~~~~~~~~~~~~~
+Compilando específico de arquitectura: arch/x_86-32/mmu_x86-32.c...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c arch/x_86-32/mmu_x86-32.c -o arch/x_86-32/mmu_x86-32.o
+Compilando específico de arquitectura: arch/x_86-32/Paging_x86-32.c...
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c arch/x_86-32/Paging_x86-32.c -o arch/x_86-32/Paging_x86-32.o
+
+[1;32m===========================================================[0m
+[1;32m Subsistema de memoria compilado exitosamente para x86-32[0m
+[1;32m===========================================================[0m
+
+make[1]: se sale del directorio '/home/ivanr013/Escritorio/ir0-kernel/memory'
+make -C arch/x86-32 CC="gcc" ASM="nasm" CFLAGS="-m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP" ASMFLAGS="-f elf32"
+make[1]: se entra en el directorio '/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32'
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c sources/arch_x86.c -o sources/arch_x86.o
+nasm -f elf32 asm/boot_x86.asm -o asm/boot_x86.o
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP -c sources/idt_arch_x86.c -o sources/idt_arch_x86.o
+[1;32m============================================================[0m
+[1;32m Boot subsystem compilado correctamente para x86-32[0m
+[1;32m============================================================[0m
+make[1]: se sale del directorio '/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32'
+
+[1;32m============================================================[0m
+[1;32m Todos los subsistemas compilados correctamente para x86-32[0m
+[1;32m============================================================[0m
+
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP   -c -o includes/ir0/print.o includes/ir0/print.c
+gcc -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding -I/home/ivanr013/Escritorio/ir0-kernel/includes -I/home/ivanr013/Escritorio/ir0-kernel/includes/ir0 -I/home/ivanr013/Escritorio/ir0-kernel/arch/common -I/home/ivanr013/Escritorio/ir0-kernel/arch/x86-32/include -Wall -Wextra -O1 -MMD -MP   -c -o includes/string.o includes/string.c
+Enlazando kernel para x86-32...
+ld   -m elf_i386 -T arch/x86-32/linker.ld -o kernel-x86-32.bin kernel/kernel_start.o includes/ir0/print.o includes/string.o interrupt/idt.o interrupt/isr_handlers.o includes/ir0/panic/panic.o drivers/timer/pit/pit.o drivers/timer/clock_system.o drivers/timer/best_clock.o drivers/timer/hpet/hpet.o drivers/timer/hpet/find_hpet.o drivers/timer/lapic/lapic.o kernel/scheduler/priority_scheduler.o kernel/scheduler/round-robin_scheduler.o kernel/scheduler/sched_central.o kernel/scheduler/cfs_scheduler.o kernel/scheduler/scheduler_detection.o kernel/scheduler/task_impl.o arch/common/arch_interface.o memory/heap_allocator.o memory/physical_allocator.o memory/ondemand-paging.o memory/vallocator.o arch/x86-32/sources/arch_x86.o arch/x86-32/asm/boot_x86.o memory/arch/x_86-32/Paging_x86-32.o memory/arch/x_86-32/mmu_x86-32.o kernel/scheduler/switch/switch_x86.o interrupt/arch/x86-32/interrupt.o
+ld: warning: interrupt/arch/x86-32/interrupt.o: missing .note.GNU-stack section implies executable stack
+ld: NOTE: This behaviour is deprecated and will be removed in a future version of the linker
+Kernel x86-32 compilado: kernel-x86-32.bin
+Creando ISO para x86-32...
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:kernel-x86-32.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data, 43.9g free
+Added to ISO image: directory '/'='/tmp/grub.CMEQQx'
+xorriso : UPDATE :     598 files added in 1 seconds
+Added to ISO image: directory '/'='/home/ivanr013/Escritorio/ir0-kernel/iso-x86-32'
+xorriso : UPDATE :     602 files added in 1 seconds
+xorriso : NOTE : Copying to System Area: 512 bytes from file '/usr/lib/grub/i386-pc/boot_hybrid.img'
+ISO image produced: 6085 sectors
+Written to medium : 6085 sectors at LBA 0
+Writing to 'stdio:kernel-x86-32.iso' completed successfully.
+
+ISO creada: kernel-x86-32.iso
