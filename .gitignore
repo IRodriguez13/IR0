@@ -6,3 +6,6 @@
 *.d
 *.patch
 *cosas.txt
+*.bin
+*.log
+*.iso
