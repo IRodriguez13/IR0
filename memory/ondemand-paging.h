@@ -1,4 +1,4 @@
-// memory/ondemand_paging.h - Header para paginación on-demand
+// memory/ondemand-paging.h - Header para paginación on-demand
 #pragma once
 
 #include <stdint.h>

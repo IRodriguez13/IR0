@@ -41,18 +41,56 @@ check_deps()
     log_success "Dependencias verificadas"
 }
 
-# Test de compilación por arquitectura
-test_arch() 
+# Limpiar archivos compilados
+clean_build_files() 
+{
+    log_info "Limpiando archivos de compilación..."
+    
+    # Limpiar archivos .o y .d
+    find . -name "*.o" -type f -delete
+    find . -name "*.d" -type f -delete
+    
+    # Limpiar archivos binarios
+    rm -f *.bin *.iso *.elf
+    
+    # Limpiar directorios iso
+    rm -rf iso-*
+    
+    log_success "Limpieza completada"
+}
+
+# Test de subsistemas por arquitectura
+test_subsystems() 
 {
     local arch=$1
-    log_info "Testing arquitectura: $arch"
+    log_info "Testing subsistemas para arquitectura: $arch"
     
-    # Limpiar
+    # Limpiar primero
     make ARCH=$arch clean > /dev/null 2>&1
     
-    # Compilar
-    if make ARCH=$arch all > build_$arch.log 2>&1; then
-        log_success "$arch: Compilación exitosa"
+    # Compilar solo subsistemas
+    if make ARCH=$arch subsystems > build_subsystems_$arch.log 2>&1; then
+        log_success "$arch: Subsistemas compilados exitosamente"
+        return 0
+    else
+        log_error "$arch: Compilación de subsistemas FALLÓ"
+        log_error "Ver build_subsystems_$arch.log para detalles"
+        return 1
+    fi
+}
+
+# Test de compilación completa por arquitectura
+test_full_build() 
+{
+    local arch=$1
+    log_info "Testing compilación completa para arquitectura: $arch"
+    
+    # Limpiar solo para esta arquitectura
+    make ARCH=$arch clean > /dev/null 2>&1
+    
+    # Compilar todo
+    if make ARCH=$arch all > build_full_$arch.log 2>&1; then
+        log_success "$arch: Compilación completa exitosa"
         
         # Verificar archivos generados
         if [[ -f "kernel-$arch.bin" ]]; then
@@ -72,8 +110,8 @@ test_arch()
         
         return 0
     else
-        log_error "$arch: Compilación FALLÓ"
-        log_error "Ver build_$arch.log para detalles"
+        log_error "$arch: Compilación completa FALLÓ"
+        log_error "Ver build_full_$arch.log para detalles"
         return 1
     fi
 }
@@ -104,10 +142,10 @@ check_structure()
     return 0
 }
 
-# Test de subsistemas
-test_subsystems() 
+# Test de subsistemas individuales
+test_individual_subsystems() 
 {
-    log_info "Verificando subsistemas..."
+    log_info "Verificando subsistemas individuales..."
     
     # Test subsistema de memoria
     if [[ -f "memory/Makefile" ]]; then
@@ -131,7 +169,7 @@ test_subsystems()
     fi
     
     # Test scheduler
-    if [[ -f "kernel/scheduler/scheduler.c" ]]; then
+    if [[ -f "kernel/scheduler/scheduler.h" ]]; then
         log_success "✓ Scheduler"
     else
         log_error "✗ Scheduler"
@@ -148,39 +186,64 @@ main()
         exit 1
     fi
     
-    test_subsystems
+    test_individual_subsystems
     
-    # Test arquitecturas
-    log_info "Iniciando tests de compilación..."
+    # Limpiar antes de empezar
+    clean_build_files
     
-    local success_count=0
+    # Test subsistemas por arquitectura
+    log_info "Iniciando tests de subsistemas..."
+    
+    local subsystems_success_count=0
     local total_count=0
     
     for arch in "x86-32" "x86-64"; do
         ((total_count++))
-        if test_arch "$arch"; then
-            ((success_count++))
+        if test_subsystems "$arch"; then
+            ((subsystems_success_count++))
+        fi
+    done
+    
+    # Test compilación completa por arquitectura
+    log_info "Iniciando tests de compilación completa..."
+    
+    local full_success_count=0
+    
+    for arch in "x86-32" "x86-64"; do
+        ((total_count++))
+        if test_full_build "$arch"; then
+            ((full_success_count++))
         fi
     done
     
     # Resultados finales
     echo
-    echo    "╔══════════════════════════════════════════════════════╗"
-    if [[ $success_count -eq $total_count ]]; then
-        log_success "TODOS LOS TESTS PASARON ($success_count/$total_count)"
+    echo "╔══════════════════════════════════════════════════════╗"
+    local total_success=$((subsystems_success_count + full_success_count))
+    local total_tests=$((total_count))
+    
+    if [[ $total_success -eq $total_tests ]]; then
+        log_success "TODOS LOS TESTS PASARON ($total_success/$total_tests)"
         echo "║                   🎉 LISTO PARA QEMU                ║"
         echo "╚══════════════════════════════════════════════════════╝"
         echo
         echo "Para ejecutar:"
         echo "  make ARCH=x86-32 run    # Test 32-bit"
         echo "  make ARCH=x86-64 run    # Test 64-bit"
+        echo
+        echo "Para limpiar:"
+        echo "  make clean-all          # Limpiar todas las arquitecturas"
         exit 0
     else
-        log_error "ALGUNOS TESTS FALLARON ($success_count/$total_count)"
-         echo    "╔══════════════════════════════════════════════════════╗"
-
+        log_error "ALGUNOS TESTS FALLARON ($total_success/$total_tests)"
         echo "║               ❌ REVISAR ERRORES                    ║"
         echo "╚══════════════════════════════════════════════════════╝"
+        echo
+        echo "Logs disponibles:"
+        echo "  build_subsystems_x86-32.log"
+        echo "  build_subsystems_x86-64.log"
+        echo "  build_full_x86-32.log"
+        echo "  build_full_x86-64.log"
         exit 1
     fi
 }
