@@ -125,3 +125,20 @@ void scheduler_dispatch_loop(void)
         }
     }
 }
+
+// AGREGAR funciones faltantes que usa el resto del código:
+
+const char *get_scheduler_name(void)
+{
+    return current_scheduler.name ? current_scheduler.name : "None";
+}
+
+scheduler_type_t get_active_scheduler(void)
+{
+    return active_scheduler_type;
+}
+
+void force_scheduler_fallback(void)
+{
+    scheduler_fallback_to_next();
+}

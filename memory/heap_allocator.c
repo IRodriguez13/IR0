@@ -15,7 +15,6 @@ static size_t heap_total_size = 0;
 size_t heap_used_bytes = 0;
 size_t heap_free_bytes = 0;
 
-
 // Prototipos de funciones del physical allocator
 extern void physical_allocator_init(void);
 extern uintptr_t alloc_physical_page(void);
@@ -253,15 +252,21 @@ uintptr_t virt_to_phys(uintptr_t virt_addr)
     return arch_virt_to_phys(virt_addr);
 }
 
+// PROBLEMA: is_valid_heap_pointer usa heap_start que puede ser NULL
 bool is_valid_heap_pointer(void *ptr)
 {
-    if (!ptr)
+    if (!ptr || !heap_start) 
         return false;
 
     heap_block_t *block = (heap_block_t *)((uint8_t *)ptr - sizeof(heap_block_t));
 
-    // Verificamos que el bloque esté dentro del heap
+    // Verificar que esté dentro del rango del heap
     if ((void *)block < (void *)heap_start)
+        return false;
+
+    // Verificar que no exceda el final del heap
+    uintptr_t heap_end = (uintptr_t)heap_start + heap_total_size;
+    if ((uintptr_t)block >= heap_end)
         return false;
 
     if (block->magic != HEAP_MAGIC)
@@ -350,69 +355,69 @@ void *kmalloc_impl(size_t size)
     return NULL;
 }
 
-
-
 // Implementar heap_allocator_init que faltaba
 void heap_allocator_init(void)
 {
     // Por ahora, heap estático simple
     // TODO: Implementar heap dinámico usando physical allocator
-    
+
     static uint8_t static_heap[1024 * 1024]; // 1MB heap estático
-    heap_start = (heap_block_t*)static_heap;
+    heap_start = (heap_block_t *)static_heap;
     heap_total_size = sizeof(static_heap);
-    
+
     // Inicializar primer bloque
     heap_start->size = heap_total_size - sizeof(heap_block_t);
     heap_start->magic = HEAP_MAGIC;
     heap_start->is_free = true;
     heap_start->next = NULL;
     heap_start->prev = NULL;
-    
+
     heap_free_bytes = heap_start->size;
     heap_used_bytes = 0;
-    
+
     LOG_OK("Heap allocator inicializado con heap estático de 1MB");
 }
 
 void debug_heap_allocator(void)
 {
     print_colored("=== HEAP ALLOCATOR STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    
+
     print("Heap start: ");
     print_hex_compact((uintptr_t)heap_start);
     print("\n");
-    
+
     print("Heap total size: ");
     print_hex_compact(heap_total_size);
     print("\n");
-    
+
     print("Used bytes: ");
     print_hex_compact(heap_used_bytes);
     print("\n");
-    
+
     print("Free bytes: ");
     print_hex_compact(heap_free_bytes);
     print("\n");
-    
+
     // Recorrer bloques y mostrar estado
-    heap_block_t* current = heap_start;
+    heap_block_t *current = heap_start;
     int block_count = 0;
-    
+
     print("Block list:\n");
-    while (current && block_count < 10) { // Limitar a 10 bloques para no saturar pantalla
+    while (current && block_count < 10)
+    { // Limitar a 10 bloques para no saturar pantalla
         print("  Block ");
         print_hex_compact(block_count);
         print(": size=");
         print_hex_compact(current->size);
         print(current->is_free ? " [FREE]" : " [USED]");
         print("\n");
-        
+
         current = current->next;
         block_count++;
     }
-    
-    if (current) {
+
+    if (current)
+    {
         print("  ... (more blocks)\n");
     }
     print("\n");
