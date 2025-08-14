@@ -14,29 +14,21 @@ typedef enum
 
 typedef struct cfs_runqueue
 {
-    task_t *rb_root;
+    rb_node_t *root;
+    rb_node_t *leftmost;
+    uint64_t clock;
+    uint64_t exec_clock;
     uint64_t min_vruntime;
+    uint64_t avg_vruntime;
     uint32_t nr_running;
+    uint32_t total_weight;
+    uint64_t targeted_latency;
+    uint64_t min_granularity;
+    uint32_t load_avg;
+    uint32_t runnable_avg;
 } cfs_runqueue_t;
 
 static cfs_runqueue_t cfs_rq;
-
-typedef struct task
-{
-    uint32_t pid; // Identificador de proceso
-    uint32_t priority;
-    uint64_t vruntime; // Virtual runtime para CFS
-    struct task *prev; // Puntero a tarea anterior en la runqueue
-    struct task *next; // Puntero a tarea siguiente en la runqueue
-                       // Enlaces para RB-tree
-    struct task *rb_left;
-    struct task *rb_right;
-    struct task *rb_parent;
-    int rb_color;
-    void (*entry)(void *);
-    void *stack;
-    uint32_t state;
-} task_t;
 
 // Scheduler interface - Similar a tu timer interface
 typedef struct
