@@ -12,18 +12,31 @@ typedef enum
     SCHEDULER_NONE
 } scheduler_type_t;
 
-typedef struct task {
-    uint32_t pid;           // Identificador de proceso
-    uint64_t vruntime;      // Virtual runtime para CFS
-    struct task *prev;      // Puntero a tarea anterior en la runqueue
-    struct task *next;      // Puntero a tarea siguiente en la runqueue
+typedef struct cfs_runqueue
+{
+    task_t *rb_root;
+    uint64_t min_vruntime;
+    uint32_t nr_running;
+} cfs_runqueue_t;
 
+static cfs_runqueue_t cfs_rq;
+
+typedef struct task
+{
+    uint32_t pid; // Identificador de proceso
+    uint32_t priority;
+    uint64_t vruntime; // Virtual runtime para CFS
+    struct task *prev; // Puntero a tarea anterior en la runqueue
+    struct task *next; // Puntero a tarea siguiente en la runqueue
+                       // Enlaces para RB-tree
+    struct task *rb_left;
+    struct task *rb_right;
+    struct task *rb_parent;
+    int rb_color;
     void (*entry)(void *);
     void *stack;
     uint32_t state;
-    // ...
 } task_t;
-
 
 // Scheduler interface - Similar a tu timer interface
 typedef struct
