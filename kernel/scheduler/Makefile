@@ -8,7 +8,7 @@ ASM := nasm
 # ===============================================================================
 
 # Detectar arquitectura y configurar flags apropiados
-ifeq ($(ARCH),x_64)
+ifeq ($(ARCH),x86-64)
     # Configuración para 64-bit
     CFLAGS := -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
     CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector -ffreestanding
