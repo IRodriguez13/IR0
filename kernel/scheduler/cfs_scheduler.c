@@ -24,38 +24,79 @@ static void cfs_init(void)
 
 static void cfs_add_task(task_t *task)
 {
-    // Add to red-black tree based on vruntime
-    // TODO: Implement rb-tree insertion
+    LOG_OK("CFS: Adding task to runqueue");
+    task->next = NULL;
+    task->prev = NULL;
+
+    if (!cfs_rq.rb_root) {
+        cfs_rq.rb_root = task;
+    } else {
+        // Inserción ordenada por vruntime
+        task_t *curr = cfs_rq.rb_root;
+        task_t *prev = NULL;
+        while (curr && curr->vruntime < task->vruntime) {
+            prev = curr;
+            curr = curr->next;
+        }
+        task->next = curr;
+        task->prev = prev;
+        if (prev) prev->next = task;
+        else cfs_rq.rb_root = task;
+        if (curr) curr->prev = task;
+    }
+
     LOG_OK("CFS: Adding task to runqueue");
     cfs_rq.nr_running++;
 }
 
 static task_t *cfs_pick_next_task(void)
 {
-    // Implementación básica mientras desarrollas el rb-tree
-    if (!cfs_rq.rb_root)
-    {
-        return NULL;
-    }
+    if (!cfs_rq.rb_root) return NULL;
 
-    // Por ahora, comportarse como round-robin básico
+    // Escogemos la tarea con menor vruntime
     task_t *task = cfs_rq.rb_root;
-    cfs_rq.rb_root = task->next; // Siguiente en la "lista"
+    cfs_rq.rb_root = task->next;
+    if (cfs_rq.rb_root) cfs_rq.rb_root->prev = NULL;
+
+    task->next = NULL;
+    task->prev = NULL;
 
     LOG_OK("CFS: Picked task (basic implementation)");
     return task;
 }
 
+
 static void cfs_task_tick(void)
 {
-    // Update vruntime, check for preemption
-    // TODO: Implement vruntime accounting
+    if (!current_running_task)
+        return;
+
+    // Incrementar vruntime proporcional al tiempo de CPU usado
+    current_running_task->vruntime += 1; // usar tu tiempo de tick real
+
+    // Preempt si hay otra tarea con menor vruntime
+    if (cfs_rq.rb_root && cfs_rq.rb_root->vruntime < current_running_task->vruntime)
+    {
+        // Simple: colocar la tarea actual de nuevo en la runqueue
+        cfs_add_task(current_running_task);
+        current_running_task = NULL; // permitir al dispatcher escoger otra
+    }
 }
+
 
 static void cfs_cleanup(void)
 {
     LOG_OK("CFS scheduler cleanup");
+    task_t *curr = cfs_rq.rb_root;
+    while (curr) {
+        task_t *next = curr->next;
+        curr->next = curr->prev = NULL;
+        curr = next;
+    }
+    cfs_rq.rb_root = NULL;
+    cfs_rq.nr_running = 0;
 }
+
 
 // Export CFS operations
 scheduler_ops_t cfs_scheduler_ops =

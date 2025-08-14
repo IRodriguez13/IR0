@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include "task.h"
 
-// Scheduler Types - Similar a tu ClockType
+// Scheduler Types - similar a Clocktype
 typedef enum
 {
     SCHEDULER_CFS,         // Completely Fair Scheduler (most sophisticated)
@@ -11,6 +11,19 @@ typedef enum
     SCHEDULER_ROUND_ROBIN, // Simple round-robin (fallback)
     SCHEDULER_NONE
 } scheduler_type_t;
+
+typedef struct task {
+    uint32_t pid;           // Identificador de proceso
+    uint64_t vruntime;      // Virtual runtime para CFS
+    struct task *prev;      // Puntero a tarea anterior en la runqueue
+    struct task *next;      // Puntero a tarea siguiente en la runqueue
+
+    void (*entry)(void *);
+    void *stack;
+    uint32_t state;
+    // ...
+} task_t;
+
 
 // Scheduler interface - Similar a tu timer interface
 typedef struct
