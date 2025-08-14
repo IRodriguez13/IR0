@@ -9,3 +9,4 @@
 *.bin
 *.log
 *.iso
+*iso-x86-64/boot
