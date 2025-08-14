@@ -77,7 +77,8 @@ KERNEL_OBJS = kernel/kernel_start.o \
               kernel/scheduler/switch/switch_x86.o \
               arch/common/arch_interface.o \
               memory/heap_allocator.o \
-              memory/physical_allocator.o
+              memory/physical_allocator.o\
+			  memory/ondemand-paging.o \
 
 
 # Para arquitectura específica, actualizar ARCH_OBJS:

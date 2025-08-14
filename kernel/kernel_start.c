@@ -19,42 +19,36 @@
 void main()
 {
     clear_screen();
-    print_colored("=== IR0 KERNEL BOOT === :-)\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("=== IR0 KERNEL BOOT ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
-    // Inicialización básica del sistema
+    // 1. IDT primero (sin logging avanzado aún)
     idt_init();
-    LOG_OK("IDT cargado correctamente");
 
+    // 2. Paginación básica
     init_paging();
-    LOG_OK("Paginación inicializada");
-    
-    // NUEVO: Inicializar paginación on-demand
+
+    // 3. CRITICAL: Inicializar sistema de memoria ANTES que cualquier kmalloc()
+    memory_init();
+
+    // 4. Ahora sí podemos usar logging avanzado y kmalloc()
+    LOG_OK("Memory system initialized");
+
+    // 5. Paginación on-demand (usa kmalloc internamente)
     ondemand_paging_init();
-    LOG_OK("Paginación on-demand inicializada");
+    LOG_OK("On-demand paging ready");
 
-    scheduler_init(); // Usa la API unificada
-    LOG_OK("Scheduler system initialized");
-    print("Active scheduler: ");
-    print(get_scheduler_name());
-    print("\n");
-
-    // Opcional: Mostrar estado del scheduler
-    dump_scheduler_state();
-
-    // Inicializar sistema de timers (esto va a llamar scheduler_tick)
+    // 6. Resto del sistema...
+    scheduler_init();
     init_clock();
-    LOG_OK("Sistema de timers inicializado");
-
-    // Activar interrupciones
     arch_enable_interrupts();
-    LOG_OK("Interrupciones habilitadas");
 
-    print_colored("=== STARTING SCHEDULER ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    // Opcional: Crear algunas tareas de prueba
+    create_test_tasks();
 
-    // scheduler_start(); porque no tengo procesos hasta tanto no tenga lo que me falta para ejecutar programas.
+    print_colored("=== SYSTEM READY ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
 
-    // No debería llegar aquí nunca
-    panic("Scheduler returned unexpectedly!");
+    // No usar scheduler_start() hasta tener procesos reales
+    cpu_relax(); // Por ahora
 }
 
 void ShutDown()
