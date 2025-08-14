@@ -5,6 +5,10 @@
 #include "../arch/common/arch_interface.h"
 #include <kernel.h>
 #include "../memory/ondemand-paging.h"
+#include "../memory/physical_allocator.h"
+#include "../memory/heap_allocator.h"
+#include "../memory/memo_interface.h"
+#include "../arch/common/idt.h"
 // ARREGLADO: Includes con rutas correctas según arquitectura
 #if defined(__i386__)
 #include "../memory/arch/x_86-32/Paging_x86-32.h"

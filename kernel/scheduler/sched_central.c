@@ -125,11 +125,6 @@ void scheduler_dispatch_loop(void)
     }
 }
 
-void cpu_wait()
-{
-    asm volatile("hlt");
-}
-
 const char *get_scheduler_name(void)
 {
     return current_scheduler.name ? current_scheduler.name : "None";

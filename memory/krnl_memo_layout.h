@@ -102,14 +102,14 @@ void memory_region_register(uintptr_t start, uintptr_t end, memory_zone_t zone,
 {
     if (region_count >= 32)
     {
-        LOG_ERR("Memory region registry full!");
+        print_error("[X] Memory region registry full!\n");
         return;
     }
 
     // Verificar conflictos
     if (memory_region_conflicts(start, end))
     {
-        LOG_ERR("Memory region conflict detected!");
+        print_error("[X] Memory region conflict detected!\n");
         return;
     }
 
@@ -123,8 +123,13 @@ void memory_region_register(uintptr_t start, uintptr_t end, memory_zone_t zone,
 
     region_count++;
 
-    LOG_OK("Memory region registered: 0x%08X-0x%08X (zone %d)",
-           start, end, zone);
+    print_success("[OK] Memory region registered: 0x");
+    print_hex_compact(start);
+    print("-0x");
+    print_hex_compact(end);
+    print(" (zone ");
+    print_hex_compact(zone);
+    print(")\n");
 }
 
 memory_region_t *memory_region_find(uintptr_t virt_addr)
