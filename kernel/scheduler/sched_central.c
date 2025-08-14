@@ -108,7 +108,7 @@ void scheduler_dispatch_loop(void)
 {
     LOG_OK("Entering scheduler dispatch loop");
 
-    while (1)
+    for(;;)
     {
         if (current_running_task)
         {
@@ -120,13 +120,12 @@ void scheduler_dispatch_loop(void)
         }
         else
         {
-            // No hay tareas, idle
+            //Si la cpu no tiene laburo, AFK. utilizaría cpu_relax() pero ya tengo un for infinito asi que no creo que sea buena idea.
             asm volatile("hlt");
         }
     }
 }
 
-// AGREGAR funciones faltantes que usa el resto del código:
 
 const char *get_scheduler_name(void)
 {

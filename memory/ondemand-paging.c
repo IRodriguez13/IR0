@@ -15,7 +15,7 @@ typedef struct vm_area
     struct vm_area *next;
 } vm_area_t;
 
-// Lista global de áreas de memoria virtual (en un kernel real esto sería por proceso)
+// Lista global de áreas de memoria virtual.
 static vm_area_t *vm_areas = NULL;
 static int ondemand_initialized = 0;
 
