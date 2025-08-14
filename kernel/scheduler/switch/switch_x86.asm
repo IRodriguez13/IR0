@@ -16,40 +16,24 @@ global switch_task
 
 switch_task:
     cli
+    mov eax, [esp + 4]  ; old_task
+    mov ebx, [esp + 8]  ; new_task
     
-    ; Cargar parámetros
-    mov eax, [esp + 4] ; old_task  
-    mov ebx, [esp + 8] ; new_task
+    ; Guardar TODO el contexto
+    pushfd              ; EFLAGS
+    pusha              ; Todos los registros de propósito general
     
-    ; Validar punteros
-    test eax, eax
-    jz   .no_old_task
-    test ebx, ebx
-    jz   .error
+    ; Guardar ESP en old_task
+    mov [eax + 4], esp
     
-    ; Guardar estado
-    pushfd
-    pusha
+    ; Cambiar a new_task
+    mov esp, [ebx + 4]  ; Cargar nuevo stack
+    mov ecx, [ebx + 16] ; Cargar CR3
+    mov cr3, ecx        ; Cambiar espacio de memoria
     
-    ; Guardar ESP/EBP en old_task
-    mov [eax + 4], esp ; old_task->esp
-    mov [eax + 8], ebp ; old_task->ebp
+    ; Restaurar contexto de new_task
+    popa               ; Restaurar registros
+    popfd             ; Restaurar flags
     
-.no_old_task:
-    ; Cargar nuevo estado
-    mov esp, [ebx + 4]  ; new_task->esp
-    mov ebp, [ebx + 8]  ; new_task->ebp
-    mov ecx, [ebx + 16] ; new_task->cr3
-    mov cr3, ecx
-    
-    ; Restaurar contexto
-    popa
-    popfd
     sti
-    
-    ; CRÍTICO: Saltar al EIP de la nueva tarea
-    jmp [ebx + 12] ; new_task->eip
-    
-.error:
-    sti
-    ret
+    ret               ; Retornar al EIP que estaba en el stack

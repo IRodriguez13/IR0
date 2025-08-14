@@ -33,6 +33,40 @@ It aims to be minimal at its core, but flexible enough to scale into different u
 ---
 
 ### 🔧 IR0 Subsystems Overview
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    USER SPACE (Future)                     │
+├─────────────────────────────────────────────────────────────┤
+│                   KERNEL SPACE (IR0)                       │
+├─────────────────────┬─────────────────┬─────────────────────┤
+│   SCHEDULER SYSTEM  │  MEMORY SYSTEM  │  INTERRUPT SYSTEM   │
+│                     │                 │                     │
+│ ┌─────────────────┐ │ ┌─────────────┐ │ ┌─────────────────┐ │
+│ │ CFS Scheduler   │ │ │ Physical    │ │ │ IDT Manager     │ │
+│ │ Priority Sched  │ │ │ Allocator   │ │ │ ISR Handlers    │ │
+│ │ Round Robin     │ │ │             │ │ │ Page Fault      │ │
+│ └─────────────────┘ │ ├─────────────┤ │ └─────────────────┘ │
+│                     │ │ Heap        │ │                     │
+│ ┌─────────────────┐ │ │ Allocator   │ │ ┌─────────────────┐ │
+│ │ Task Manager    │ │ │ (kmalloc)   │ │ │ Timer System    │ │
+│ │ Context Switch  │ │ │             │ │ │ HPET/LAPIC/PIT  │ │
+│ └─────────────────┘ │ ├─────────────┤ │ └─────────────────┘ │
+│                     │ │ Virtual     │ │                     │
+├─────────────────────┤ │ Allocator   │ ├─────────────────────┤
+│                     │ │ (vmalloc)   │ │                     │
+│    ARCH LAYER       │ │             │ │    DEVICE DRIVERS   │
+│                     │ ├─────────────┤ │                     │
+│ ┌─────────────────┐ │ │ On-Demand   │ │ ┌─────────────────┐ │
+│ │ x86-32 Support  │ │ │ Paging      │ │ │ VGA Display     │ │
+│ │ x86-64 Support  │ │ └─────────────┘ │ │ Keyboard (TODO) │ │
+│ │ (ARM Planned)   │ │                 │ │ Storage (TODO)  │ │
+│ └─────────────────┘ └─────────────────┘ └─────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│                    HARDWARE ABSTRACTION                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+
 
 | Subsystem           | Status               | Notes                                                                 |
 |--------------------|----------------------|-----------------------------------------------------------------------|
