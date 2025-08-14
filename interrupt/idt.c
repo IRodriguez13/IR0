@@ -13,6 +13,12 @@ extern void timer_stub();
 
 void idt_init()
 {
+    #if defined(__x86_64__)
+        idt_set_gate(14, (uintptr_t)isr_page_fault, IDT_INTERRUPT_GATE_KERNEL);
+    #elif defined(__i386__)
+        idt_set_gate(14, (uintptr_t)isr_page_fault, IDT_INTERRUPT_GATE_KERNEL);
+    #endif
+
     // Inicializar la base y el límite del puntero del IDT
     idt_ptr.limit = sizeof(idt_entry_t) * IDT_ENTRIES - 1;
     idt_ptr.base = (uintptr_t)&idt;  // Usar uintptr_t para compatibilidad

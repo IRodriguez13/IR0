@@ -5,6 +5,7 @@
 #include <arch_interface.h>
 #include "isr_handlers.h"
 #include "../drivers/timer/clock_system.h"
+#include "../../memory/ondemand-paging.h"
 
 
 void default_interrupt_handler()
@@ -23,6 +24,8 @@ void page_fault_handler()
     print_error("Dirección que causó el fallo: ");
     print_hex_compact(fault_addr);
     print("\n");
+
+    page_fault_handler_improved(); 
 
     print_error("Razón: Acceso a memoria no mapeada o sin permisos\n");
 
