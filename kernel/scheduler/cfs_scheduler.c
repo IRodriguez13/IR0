@@ -89,7 +89,7 @@ typedef struct rb_node
 static cfs_runqueue_t cfs_rq;
 
 // Pool de nodos RB para evitar kmalloc durante scheduling crítico
-#define MAX_RB_NODES 256
+#define MAX_RB_NODES 1024
 static rb_node_t rb_node_pool[MAX_RB_NODES];
 static int rb_node_pool_index = 0;
 
