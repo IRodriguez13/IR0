@@ -120,8 +120,7 @@ void scheduler_dispatch_loop(void)
         }
         else
         {
-            cpu_wait();
-            // Si la cpu no tiene laburo, AFK. utilizaría cpu_relax() pero ya tengo un for infinito asi que no creo que sea buena idea.
+            cpu_wait(); // Si la cpu no tiene laburo, AFK.
         }
     }
 }
