@@ -18,28 +18,38 @@ switch_task:
     cli
     
     ; Cargar parámetros
-    mov eax, [esp + 4]              ; old_task  
-    mov ebx, [esp + 8]              ; new_task
+    mov eax, [esp + 4] ; old_task  
+    mov ebx, [esp + 8] ; new_task
     
-    ; Guardar estado del proceso actual
-    pushfd                          ; Guardar flags
-    pusha                           ; Guardar todos los registros generales
+    ; Validar punteros
+    test eax, eax
+    jz   .no_old_task
+    test ebx, ebx
+    jz   .error
     
-    ; Guardar ESP y EBP en la estructura del proceso actual  
-    mov [eax + 4], esp              ; old_task->esp
-    mov [eax + 8], ebp              ; old_task->ebp
+    ; Guardar estado
+    pushfd
+    pusha
     
-    ; Cambiar espacio de direcciones
-    mov ecx, [ebx + 16]             ; new_task->cr3
-    mov cr3, ecx                    ; Cargar nuevo page directory
+    ; Guardar ESP/EBP en old_task
+    mov [eax + 4], esp ; old_task->esp
+    mov [eax + 8], ebp ; old_task->ebp
     
-    ; Restaurar estado del nuevo proceso
-    mov esp, [ebx + 4]              ; new_task->esp
-    mov ebp, [ebx + 8]              ; new_task->ebp
+.no_old_task:
+    ; Cargar nuevo estado
+    mov esp, [ebx + 4]  ; new_task->esp
+    mov ebp, [ebx + 8]  ; new_task->ebp
+    mov ecx, [ebx + 16] ; new_task->cr3
+    mov cr3, ecx
     
-    ; Restaurar registros y flags
-    popa                            ; Restaurar registros generales
-    popfd                           ; Restaurar flags
-    
+    ; Restaurar contexto
+    popa
+    popfd
     sti
-    ret                             ; ⚠️  CAMBIO: usar 'ret' en lugar de 'jmp'
+    
+    ; CRÍTICO: Saltar al EIP de la nueva tarea
+    jmp [ebx + 12] ; new_task->eip
+    
+.error:
+    sti
+    ret
