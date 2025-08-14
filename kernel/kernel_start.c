@@ -10,7 +10,7 @@
 #include "../memory/arch/x_86-32/Paging_x86-32.h"
 #define init_paging() init_paging_x86()
 #elif defined(__x86_64__)
-#include "../memory/arch/x_64/Paging_x64.h" // ME FALTA PAGINACION DE 64 BIT
+#include "../memory/arch/x_64/Paging_x64.h" 
 #define init_paging() init_paging_x64()
 #else
 #error "Arquitectura no soportada en kernel_start.c"

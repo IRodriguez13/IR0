@@ -67,4 +67,5 @@ scheduler_ops_t cfs_scheduler_ops =
         .pick_next_task = cfs_pick_next_task,
         .task_tick = cfs_task_tick,
         .cleanup = cfs_cleanup,
-        .private_data = &cfs_rq};
+        .private_data = &cfs_rq
+    };

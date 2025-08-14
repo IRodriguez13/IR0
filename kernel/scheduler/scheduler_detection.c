@@ -1,4 +1,3 @@
-// kernel/scheduler/scheduler_detection.c
 #include "scheduler_types.h"
 #include <print.h>
 #include <panic/panic.h>
@@ -8,13 +7,15 @@ extern scheduler_ops_t cfs_scheduler_ops;
 extern scheduler_ops_t priority_scheduler_ops;
 extern scheduler_ops_t roundrobin_scheduler_ops;
 
-// Global state
+// Global state flags
 scheduler_ops_t current_scheduler;
 scheduler_type_t active_scheduler_type = SCHEDULER_NONE;
 
+
+// Este es el criterio con el que elijo el planificador que uso. Es como el semáforo si querés verlo así.
 scheduler_type_t detect_best_scheduler(void)
 {
-    // Check if we have enough memory/CPU features for sophisticated schedulers
+    // Check if we have enough memory/CPU features for sophisticated schedulers :-)
 
     // 1. Try CFS (needs more memory for rb-trees)
     extern uint32_t free_pages_count;
@@ -35,6 +36,9 @@ scheduler_type_t detect_best_scheduler(void)
     LOG_WARN("[SCHED] Low memory, using round-robin fallback");
     return SCHEDULER_ROUND_ROBIN;
 }
+
+// Este es uno de esos experimentos que se me ocurrieron en el kernel. La idea es que el sistema detecta en tiempo de ejecucion 
+// el sched que te conviene según la cantidad de memo paginada libre. Literalmente es meritocracia kernelística.
 
 int scheduler_cascade_init(void)
 {
@@ -101,7 +105,7 @@ void scheduler_fallback_to_next(void)
         return;
 
     default:
-        panic("Unknown scheduler state in fallback");
+        panic("Unknown scheduler state in fallback.");
     }
 
     // Try to initialize the fallback scheduler
@@ -112,6 +116,6 @@ void scheduler_fallback_to_next(void)
     }
     else
     {
-        scheduler_fallback_to_next(); // Recursive fallback
+        scheduler_fallback_to_next(); // Recursive fallback in real time.
     }
 }
