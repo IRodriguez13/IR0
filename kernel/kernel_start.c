@@ -4,6 +4,7 @@
 #include "scheduler/task.h"
 #include "../arch/common/arch_interface.h"
 #include <kernel.h>
+#include "../memory/ondemand-paging.h"
 // ARREGLADO: Includes con rutas correctas según arquitectura
 #if defined(__i386__)
 #include "../memory/arch/x_86-32/Paging_x86-32.h"
@@ -26,6 +27,10 @@ void main()
 
     init_paging();
     LOG_OK("Paginación inicializada");
+    
+    // NUEVO: Inicializar paginación on-demand
+    ondemand_paging_init();
+    LOG_OK("Paginación on-demand inicializada");
 
     scheduler_init(); // Usa la API unificada
     LOG_OK("Scheduler system initialized");

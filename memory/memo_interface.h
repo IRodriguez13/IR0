@@ -106,3 +106,6 @@ void arch_switch_page_directory(uintptr_t page_dir);
 #define PAGE_ALIGN(addr)    (((addr) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1))
 #define PAGE_ALIGN_DOWN(addr) ((addr) & ~(PAGE_SIZE - 1))
 #define IS_PAGE_ALIGNED(addr) (((addr) & (PAGE_SIZE - 1)) == 0)
+#define PAGE_FLAG_LAZY      (1 << 4)  // Página con lazy allocation
+#define PAGE_FLAG_COW       (1 << 5)  // Copy-on-write (para futuro)
+#define PAGE_FLAG_SWAPPABLE (1 << 6)  // Puede ir a swap (para futuro)
