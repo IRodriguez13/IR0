@@ -263,49 +263,8 @@ void page_fault_handler_improved(void)
 // FUNCIONES DE ALTO NIVEL PARA USAR EN EL KERNEL
 // ===============================================================================
 
-void *vmalloc(size_t size)
-{
-    if (!ondemand_initialized)
-    {
-        ondemand_paging_init();
-    }
-
-    // Por simplicidad, usar la región de heap registrada
-    // En implementación completa buscarías región libre
-
-    static uintptr_t next_vmalloc_addr = 0x10000000; // Start of VM heap area
-
-    size = PAGE_ALIGN(size);
-    uintptr_t result = next_vmalloc_addr;
-    next_vmalloc_addr += size;
-
-    // Verificar que no excedemos el área reservada
-    if (next_vmalloc_addr > 0x11000000)
-    {
-        LOG_ERR("vmalloc: Virtual heap exhausted");
-        return NULL;
-    }
-
-    LOG_OK("vmalloc: Reservando %u bytes en 0x%08X (no allocados aún)");
-    print_hex64(size);
-    print_hex64(result);
-
-    return (void *)result;
-}
-
-void vfree(void *ptr)
-{
-    uintptr_t addr = (uintptr_t)ptr;
-
-    // Por simplicidad, solo unmapeamos la página
-    // En implementación completa mantendrias lista de allocaciones
-
-    uintptr_t page_addr = PAGE_ALIGN_DOWN(addr);
-    unmap_page(page_addr);
-
-    LOG_OK("vfree: Liberada página 0x%08X");
-    print_hex64(page_addr);
-}
+// NOTA: vmalloc y vfree están implementados en vallocator.c
+// para evitar duplicación de código
 
 // ===============================================================================
 // DEBUGGING Y ESTADÍSTICAS

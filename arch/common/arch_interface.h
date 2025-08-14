@@ -29,17 +29,6 @@ uintptr_t read_fault_address(void);
  */
 const char *arch_get_name(void);
 
-// En arch/common/arch_interface.c - 
-void outb(uint16_t port, uint8_t value)
-{
-#if defined(__x86_64__) || defined(__i386__)
-    asm volatile("outb %0, %1" ::"a"(value), "Nd"(port));
-#elif defined(__aarch64__)
-    // ARM no tiene puertos I/O - usar MMIO
-    // Implementar cuando sea necesario
-#endif
-}
-
 // ===============================================================================
 // Macros de detección de arquitectura (para uso interno)
 // ===============================================================================

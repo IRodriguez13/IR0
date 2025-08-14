@@ -30,7 +30,7 @@ endif
 # ===============================================================================
 
 SCHEDULER_OBJS = priority_scheduler.o round-robin_scheduler.o sched_central.o \
-                 scheduler_detection.o cfs_scheduler.o
+                 scheduler_detection.o cfs_scheduler.o task_impl.o
 
 ALL_OBJS = $(SCHEDULER_OBJS) $(SWITCH_OBJ)
 

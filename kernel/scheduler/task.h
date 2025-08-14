@@ -1,6 +1,7 @@
 // kernel/scheduler/task.h -
 #pragma once
 #include <stdint.h>
+#include <print.h>
 
 typedef enum
 {
@@ -123,3 +124,10 @@ void create_test_tasks(void);
 
 // Variables globales importantes
 extern task_t *current_running_task; // Tarea actualmente ejecutándose
+
+// ===============================================================================
+// IMPLEMENTACIÓN DE FUNCIONES DE TESTING
+// ===============================================================================
+
+// Declaración de create_test_tasks
+void create_test_tasks(void);

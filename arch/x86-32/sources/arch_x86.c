@@ -12,22 +12,3 @@ void kmain_x32(void)
     main();
 }
 
-// Implementación de la interfaz común
-void arch_enable_interrupts(void) 
-{
-    __asm__ volatile("sti");
-}
-
-const char* arch_get_name(void) 
-{
-    return "x86-32 (i386)";
-}
-
-uintptr_t read_fault_address() 
-{
-    uintptr_t addr;
-    // En x86-32, CR2 también contiene la dirección del fault
-    asm volatile("mov %%cr2, %0" : "=r"(addr));
-    return addr;
-}
-
