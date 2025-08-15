@@ -1,26 +1,21 @@
 ; --------------------------------------------
-; Kernel Entry Point for Multiboot2 Loaders   |
+; Kernel Entry Point for Multiboot Loaders    |
 ; --------------------------------------------|
 ; Expects:                                    |
-;   - EAX = 0x36d76289 (Multiboot2 magic)     |
-;   - EBX = Pointer to Multiboot2 info struct |
+;   - EAX = 0x2BADB002 (Multiboot magic)      |
+;   - EBX = Pointer to Multiboot info struct  |
 ; Guarantees:                                 |
 ;   - Stack: 16KB aligned to 16 bytes         |
 ;   - Interrupts: Disabled                    |
 ;   - EFLAGS: Clean state                     |
 ; --------------------------------------------
 
-; boot.asm - Punto de entrada para kernel Multiboot2
+; boot.asm - Punto de entrada para kernel Multiboot
 section .multiboot_header
 header_start:
-    dd 0xe85250d6                ; Magic number (Multiboot 2)
-    dd 0                         ; Architecture 0 (i386)
-    dd header_end - header_start ; Header length
-    dd 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start)) ; Checksum
-    
-    ; Tags opcionales (ej: framebuffer request)
-    ; dw 5, 0, 20, 1024, 768, 32  ; Tag framebuffer
-    dw 0, 0, 8                   ; End tag
+    dd 0x1BADB002                ; Magic number (Multiboot 1)
+    dd 0x00000003                ; Flags: align modules on page boundaries, provide memory map
+    dd -(0x1BADB002 + 0x00000003) ; Checksum
 header_end:
 
 [BITS 32]

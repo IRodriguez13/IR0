@@ -41,29 +41,12 @@ void time_handler()
     static uint32_t tick_count = 0;
     tick_count++;
 
-    // Llamar scheduler si está inicializado
-    if (scheduler_ready())
-    {
-        scheduler_tick();
-    }
-
-    // EOI según timer usado
-    enum ClockType timer = get_current_timer_type();
-    switch (timer)
-    {
-    case CLOCK_HPET:
-        // HPET maneja sus propios EOI
-        break;
-    case CLOCK_LAPIC:
-        lapic_send_eoi();
-        break;
-    case CLOCK_PIT:
-    case CLOCK_RTC:
-        outb(0x20, 0x20); // EOI al PIC
-        break;
-    case CLOCK_NONE: 
-    default:
-        outb(0x20, 0x20); // EOI por defecto
-        break;
-    }
+    // Por ahora, hacer el timer handler muy simple para evitar crashes
+    // Solo enviar EOI y continuar
+    
+    // EOI simple - siempre enviar al PIC por ahora
+    outb(0x20, 0x20); // EOI al PIC
+    
+    // TODO: Implementar scheduler_tick() cuando el scheduler esté completamente estable
+    // TODO: Implementar EOI específico según el timer usado
 }
