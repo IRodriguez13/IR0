@@ -1,6 +1,10 @@
 # Makefile para el subsistema de memoria
-CC = gcc
-ASM = nasm
+
+# Usar variables pasadas desde el Makefile principal
+CC ?= gcc
+ASM ?= nasm
+CFLAGS ?= -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
+ASMFLAGS ?= -f elf32
 
 # Detectar arquitectura desde CFLAGS
 ifneq (,$(findstring -m64,$(CFLAGS)))
