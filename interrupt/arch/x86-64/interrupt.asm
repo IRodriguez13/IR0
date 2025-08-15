@@ -10,7 +10,7 @@ global idt_flush
 global timer_stub
 
 extern idt_flush
-extern page_fault_handler_improved
+extern page_fault_handler_x64
 extern default_interrupt_handler
 extern time_handler
 
@@ -111,7 +111,12 @@ isr_page_fault:
     push r13
     push r14
     push r15
-    call page_fault_handler_improved
+    
+    ; Obtener error code y fault address
+    mov rdi, [rsp + 8*16]  ; Error code está en el stack
+    mov rsi, cr2           ; Fault address está en CR2
+    
+    call page_fault_handler_x64
     ; Limpiar error code DESPUÉS del handler
     add  rsp, 8
     ; Restaurar registros

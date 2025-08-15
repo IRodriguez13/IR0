@@ -2,13 +2,12 @@
 #include <print.h>
 #include <panic/panic.h>
 
-#define LAPIC_BASE 0xFEE00000
+#define LAPIC_BASE ((uintptr_t)0xFEE00000)
 #define LAPIC_TIMER_REG 0x320
 #define LAPIC_TIMER_DIV 0x3E0
 #define LAPIC_TIMER_INIT_COUNT 0x380
 #define LAPIC_TIMER_CURR_COUNT 0x390
 #define LAPIC_EOI_REG 0xB0
-
 
 // Registra valor en MMIO del LAPIC
 static inline void lapic_write(uint32_t reg, uint32_t value)
@@ -46,9 +45,8 @@ int lapic_available()
     return (edx & (1 << 9)) != 0; // APIC bit
 }
 
-
 // Agregar esta función
-void lapic_send_eoi() 
+void lapic_send_eoi()
 {
     // Escribir cualquier valor al registro EOI (típicamente 0)
     lapic_write(LAPIC_EOI_REG, 0);
