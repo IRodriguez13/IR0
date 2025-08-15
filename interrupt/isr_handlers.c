@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <arch_interface.h>
 #include "isr_handlers.h"
+#include "../arch/common/idt.h"
 #include "../drivers/timer/clock_system.h"
 #include "../memory/ondemand-paging.h"
 

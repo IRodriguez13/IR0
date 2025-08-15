@@ -1,5 +1,5 @@
 #include "hpet.h"
-#include <idt.h>
+#include "../../arch/common/idt.h"
 #include <panic/panic.h>
 #include "../pit/pit.h" // para outb, inb 
 #include <print.h>

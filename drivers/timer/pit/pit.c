@@ -1,7 +1,8 @@
 // drivers/timer/pit/pit.c - ARREGLADO (quitar time_handler duplicado)
-#include <idt.h>
-#include <panic/panic.h>
+#include "pit.h"
+#include "../../arch/common/idt.h"
 #include <print.h>
+#include <panic/panic.h>
 #include <arch_interface.h>  // Para outb
 #define PIT_FREC 1193180
 

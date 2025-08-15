@@ -45,8 +45,6 @@ typedef struct cfs_runqueue
     uint32_t runnable_avg;
 } cfs_runqueue_t;
 
-static cfs_runqueue_t cfs_rq;
-
 // Scheduler interface - Similar a tu timer interface
 typedef struct
 {
