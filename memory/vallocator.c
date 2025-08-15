@@ -253,7 +253,7 @@ void vfree(void *ptr)
         uintptr_t phys = arch_virt_to_phys(addr);
         if (phys != 0)
         {
-            unmap_page(addr);
+            arch_unmap_page(addr);
         }
     }
 

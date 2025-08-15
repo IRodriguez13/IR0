@@ -1,5 +1,5 @@
 // interrupt/idt.c - CORREGIDO (sin múltiples includes)
-#include <idt.h>  // Solo este include - contiene detección automática de arquitectura
+#include "../arch/common/idt.h"  // Solo este include - contiene detección automática de arquitectura
 #include <arch_interface.h>
 
 idt_entry_t idt[IDT_ENTRIES]; // Tabla de descriptores de interrupciones

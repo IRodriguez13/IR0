@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include "Paging_x64.h"
 #include <string.h>  // Para memset
+#include <print.h>   // Para LOG_OK
 
 // Estructuras para paginación x86_64 (4 niveles)
 #define PML4_ENTRIES 512
@@ -59,11 +60,18 @@ void init_paging_x64()
     // Nivel PD (Usando página de 2MB)
     PD[0] = 0x0 | PAGE_PRESENT | PAGE_WRITE | PAGE_HUGE;
     
-    // 3. Mapear memoria superior (ej: 0xFFFF800000000000)
-    PML4[256] = ((uint64_t)PDPT) | PAGE_PRESENT | PAGE_WRITE;
+    // 3. Mapear memoria superior (0x8000000000000000)
+    PML4[1] = ((uint64_t)PDPT) | PAGE_PRESENT | PAGE_WRITE;
     
-    // 4. Llamar a la función que carga CR3
+    // 4. Mapear más memoria para el kernel (hasta 256MB)
+    for (int i = 1; i < 128; i++) {
+        PD[i] = (i * 0x200000) | PAGE_PRESENT | PAGE_WRITE | PAGE_HUGE;
+    }
+    
+    // 5. Llamar a la función que carga CR3
     paging_set_cpu_x64((uint64_t)PML4);
+    
+    LOG_OK("x86-64 paging initialized with identity mapping and upper memory");
 }
 
 // NUEVA: Implementar la función que faltaba
@@ -75,5 +83,15 @@ void paging_set_cpu_x64(uint64_t pml4_addr)
         : 
         : "r"(pml4_addr)
         : "memory"
+    );
+    
+    // Habilitar paginación en CR0
+    asm volatile(
+        "mov %%cr0, %%rax\n"
+        "bts $31, %%rax\n"
+        "mov %%rax, %%cr0"
+        :
+        :
+        : "rax", "memory"
     );
 }

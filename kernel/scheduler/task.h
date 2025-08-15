@@ -22,10 +22,10 @@ typedef struct task
     // CAMPOS BÁSICOS (compatibilidad con código existente)
     // ===============================================================================
     uint32_t pid;       // Process ID único
-    uint32_t esp;       // Stack Pointer - dónde está la pila del proceso
-    uint32_t ebp;       // Base Pointer - base del stack frame actual
-    uint32_t eip;       // Instruction Pointer - próxima instrucción a ejecutar
-    uint32_t cr3;       // Page Directory - espacio de memoria virtual del proceso
+    uintptr_t esp;      // Stack Pointer - dónde está la pila del proceso
+    uintptr_t ebp;      // Base Pointer - base del stack frame actual
+    uintptr_t eip;      // Instruction Pointer - próxima instrucción a ejecutar
+    uintptr_t cr3;      // Page Directory - espacio de memoria virtual del proceso
     uint8_t priority;   // Prioridad (0-255, mayor número = mayor prioridad)
     task_state_t state; // Estado actual del proceso
     struct task *next;  // Puntero al siguiente proceso (lista circular)
@@ -124,6 +124,19 @@ void create_test_tasks(void);
 
 // Variables globales importantes
 extern task_t *current_running_task; // Tarea actualmente ejecutándose
+
+// ===============================================================================
+// FUNCIONES DE UTILIDAD
+// ===============================================================================
+
+// Obtener idle task
+task_t *get_idle_task(void);
+
+// Obtener lista de tareas
+task_t *get_task_list(void);
+
+// Obtener número de tareas activas
+uint32_t get_task_count(void);
 
 // ===============================================================================
 // IMPLEMENTACIÓN DE FUNCIONES DE TESTING

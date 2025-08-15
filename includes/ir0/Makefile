@@ -1,12 +1,25 @@
-# makefile de print
+# Makefile para includes/ir0
+CC = gcc
 
-CC := gcc
-CFLAGS := -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -ffreestanding -Wall -Wextra -O1
+# Detectar arquitectura desde CFLAGS
+ifneq (,$(findstring -m64,$(CFLAGS)))
+    ARCH_DETECTED = x86-64
+else
+    ARCH_DETECTED = x86-32
+endif
 
-all: print.o
+# Incluir directorios
+CFLAGS += -I../.. -I.
 
-print.o: print.c
-	$(CC) $(CFLAGS) -c print.c -o print.o
+# Objetos
+OBJS = print.o
+
+all: $(OBJS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f print.o
+	rm -f $(OBJS)
+
+.PHONY: all clean

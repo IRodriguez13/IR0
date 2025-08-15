@@ -2,6 +2,7 @@
 #include "ondemand-paging.h"
 #include "memo_interface.h"
 #include "physical_allocator.h"
+#include "../arch/common/arch_interface.h"
 #include <print.h>
 #include <panic/panic.h>
 #include <string.h>
@@ -36,6 +37,11 @@ void ondemand_paging_init(void)
 
     LOG_OK("Inicializando paginación on-demand");
 
+    // Registrar toda la memoria mapeada estáticamente (0-256MB)
+    // Esto permite que el on-demand paging maneje page faults en esta región
+    vm_area_register(0x00000000, 0x10000000, // 0-256MB
+                     PAGE_FLAG_PRESENT | PAGE_FLAG_WRITABLE);
+
     // Reservar área para heap del kernel (ejemplo: 16MB starting at 0x10000000)
     vm_area_register(0x10000000, 0x11000000,
                      PAGE_FLAG_PRESENT | PAGE_FLAG_WRITABLE);
@@ -44,8 +50,12 @@ void ondemand_paging_init(void)
     vm_area_register(0x20000000, 0x20100000,
                      PAGE_FLAG_PRESENT | PAGE_FLAG_WRITABLE);
 
+    // Registrar área de memoria superior para x86-64
+    vm_area_register(0x8000000000000000, 0x8000000000000000 + 0x10000000,
+                     PAGE_FLAG_PRESENT | PAGE_FLAG_WRITABLE);
+
     ondemand_initialized = 1;
-    LOG_OK("Paginación on-demand inicializada");
+    LOG_OK("Paginación on-demand inicializada (cubre 0-256MB + áreas especiales + memoria superior)");
 }
 
 // ===============================================================================
@@ -153,7 +163,7 @@ int handle_page_fault_ondemand(uintptr_t fault_addr, uint32_t error_code)
     // 6. Limpiar página (importante para seguridad)
     memset((void *)phys_page, 0, PAGE_SIZE);
 
-    // 7. Mapear página
+    // 7. Mapear página usando la función mejorada
     int result = arch_map_page(page_addr, phys_page, vm_area->flags);
     if (result != 0)
     {

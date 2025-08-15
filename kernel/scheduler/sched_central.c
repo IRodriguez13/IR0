@@ -8,7 +8,7 @@
 #include "../../arch/common/arch_interface.h"
 
 // Estado central del scheduler
-task_t *current_running_task = NULL;
+extern task_t *current_running_task; // Definida en task_impl.c
 static int scheduler_active = 0;
 extern void switch_task(task_t *current, task_t *next);
 
@@ -113,13 +113,38 @@ void scheduler_dispatch_loop(void)
         if (current_running_task)
         {
             // Ejecutar tarea actual
-            // NOTA: En un kernel real, esto sería más complejo
-            // Por ahora, simplemente yieldeamos control al timer
+            if (current_running_task->state == TASK_RUNNING)
+            {
+                // En un kernel real, aquí haríamos el context switch real
+                // Por ahora, simular ejecución de la tarea
+                if (current_running_task->entry)
+                {
+                    // Llamar la función de entrada de la tarea
+                    current_running_task->entry(current_running_task->entry_arg);
+                    
+                    // Si la tarea retorna, marcarla como terminada
+                    current_running_task->state = TASK_TERMINATED;
+                    LOG_OK("Task completed and terminated");
+                }
+                else
+                {
+                    // Tarea sin función de entrada (como idle task)
+                    // Simular trabajo de CPU
+                    for (volatile int i = 0; i < 1000000; i++) {
+                        // CPU work simulation
+                    }
+                }
+            }
+            
+            // Habilitar interrupciones para permitir timer ticks
             arch_enable_interrupts();
+            
+            // Pequeña pausa para permitir interrupciones
             cpu_wait();
         }
         else
         {
+            // No hay tareas ejecutándose, ejecutar idle task
             cpu_wait(); // Si la cpu no tiene laburo, AFK.
         }
     }
@@ -138,4 +163,26 @@ scheduler_type_t get_active_scheduler(void)
 void force_scheduler_fallback(void)
 {
     scheduler_fallback_to_next();
+}
+
+// ===============================================================================
+// FUNCIONES ADICIONALES
+// ===============================================================================
+
+void scheduler_yield(void)
+{
+    if (scheduler_active && current_running_task)
+    {
+        // Forzar un tick del scheduler
+        scheduler_tick();
+    }
+}
+
+// ===============================================================================
+// IMPLEMENTACIÓN DE scheduler_ready() - FALTABA ESTA FUNCIÓN
+// ===============================================================================
+
+int scheduler_ready(void)
+{
+    return scheduler_active && current_scheduler.pick_next_task;
 }

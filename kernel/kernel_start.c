@@ -49,22 +49,25 @@ void main()
     ondemand_paging_init();
     LOG_OK("On-demand paging active");
 
-    // 7. Scheduler (puede usar kmalloc para structures)
+    // Inicializar scheduler
+    LOG_OK("Inicializando scheduler");
     scheduler_init();
-
-    // 8. Clock system
-    init_clock();
-
-    // 9. Habilitar interrupts AL FINAL
-    arch_enable_interrupts();
-
-    print_colored("=== SYSTEM READY ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-
-    // Crear tareas de prueba
+    
+    // Crear tareas de test
+    LOG_OK("Creando tareas de test");
     create_test_tasks();
-
-    // NO usar scheduler_start() hasta tener procesos reales
-    scheduler_dispatch_loop();
+    
+    // Iniciar scheduler
+    LOG_OK("Iniciando scheduler");
+    scheduler_start();
+    
+    // El scheduler debería manejar la ejecución desde aquí
+    // Si llegamos aquí, algo salió mal
+    LOG_OK("Kernel inicializado completamente - scheduler activo");
+    for (;;)
+    {
+        cpu_wait();
+    }
 }
 
 
