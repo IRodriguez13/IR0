@@ -2,9 +2,12 @@
 
 # Configuración específica para x64
 ARCH_NAME = x64
-ARCH_CFLAGS = -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
-ARCH_LDFLAGS = -m elf_x86_64
-ARCH_ASFLAGS = -f elf64
+
+# Usar variables pasadas desde el Makefile principal
+CC ?= gcc
+ASM ?= nasm
+CFLAGS ?= -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+ASMFLAGS ?= -f elf64
 
 # Fuentes específicas de esta arquitectura
 ARCH_SOURCES = sources/arch_x64.c sources/fault.c sources/idt_arch_x64.c
@@ -17,10 +20,10 @@ ALL_OBJECTS = $(ARCH_OBJECTS) $(BOOT_OBJECTS)
 
 # Reglas de compilación
 %.o: %.c
-	$(CC) $(CFLAGS) $(ARCH_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 %.o: %.asm
-	nasm $(ARCH_ASFLAGS) $< -o $@
+	$(ASM) $(ASMFLAGS) $< -o $@
 
 all: $(ALL_OBJECTS)
 	@echo "\033[1;32m============================================================\033[0m"

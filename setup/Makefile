@@ -1,5 +1,8 @@
 # Makefile para el subsistema de configuración
-CC = gcc
+
+# Usar variables pasadas desde el Makefile principal
+CC ?= gcc
+CFLAGS ?= -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
 
 # Detectar arquitectura desde CFLAGS
 ifneq (,$(findstring -m64,$(CFLAGS)))

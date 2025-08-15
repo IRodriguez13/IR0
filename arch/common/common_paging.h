@@ -1,15 +1,11 @@
 #pragma once 
 #include <stdint.h>
 
-#if defined(__x86_64__)
-    #include "../x86-64/sources/idt_arch_x64.h"
-#elif defined(__i386__) // 32 bit por si no la cazaste
-    #include "../x86-32/sources/idt_arch_x86.h"
-#else
-    #error "Arquitectura no soportada"
-#endif
-
-
+// Declaraciones comunes de paginación
+// Las implementaciones específicas están en los archivos de cada arquitectura
 
 // Esta función le dice a la CPU que empiece a paginar configurando el directorio. -- 32 bit --
 void paging_set_cpu(uint32_t page_directory);
+
+// Esta función le dice a la CPU que empiece a paginar configurando el directorio. -- 64 bit --
+void paging_set_cpu_x64(uint64_t page_directory);
