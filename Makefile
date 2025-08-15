@@ -121,12 +121,8 @@ kernel-$(ARCH).iso: kernel-$(ARCH).bin
 	@mkdir -p iso-$(ARCH)/boot/grub
 	@cp kernel-$(ARCH).bin iso-$(ARCH)/boot/
 	@cp $(ARCH_SUBDIRS)/grub.cfg iso-$(ARCH)/boot/grub/grub.cfg
-	@if command -v grub-mkrescue >/dev/null 2>&1; then \
-		grub-mkrescue -o $@ iso-$(ARCH); \
-		echo "ISO creada: $@"; \
-	else \
-		echo "grub-mkrescue no encontrado. ISO no creada."; \
-	fi
+	@grub-mkrescue -o $@ iso-$(ARCH)
+	@echo "ISO creada: $@"
 
 # Ejecutar con QEMU
 run: kernel-$(ARCH).iso
@@ -165,6 +161,9 @@ clean:
 	# Limpiar objetos principales
 	rm -f $(ALL_OBJS) $(ALL_OBJS:.o=.d) kernel-$(ARCH).bin kernel-$(ARCH).iso
 	rm -rf iso-$(ARCH)
+	# Limpiar archivos temporales adicionales
+	@find . -name "*.tmp" -type f -delete
+	@find . -name "*~" -type f -delete
 	@echo "Limpieza de $(ARCH) completada."
 
 # Limpieza completa (todas las arquitecturas) - MEJORADA
@@ -177,6 +176,10 @@ clean-all:
 	@echo "Limpiando archivos binarios globales..."
 	rm -f *.bin *.iso *.elf
 	rm -rf iso-*
+	# Limpiar archivos temporales adicionales
+	@find . -name "*.tmp" -type f -delete
+	@find . -name "*~" -type f -delete
+	@find . -name "*.log" -type f -delete
 	@echo "Limpieza completa terminada."
 
 # NUEVO: Target específico para limpiar solo dependencias

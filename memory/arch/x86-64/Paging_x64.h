@@ -28,7 +28,7 @@ void unmap_page_x64(uint64_t virt);
 uint64_t get_phys_addr_x64(uint64_t virt);
 
 // Funciones ASM externas
-extern void paging_set_cpu_x64(uint64_t pml4_addr);
+void paging_set_cpu_x64(uint64_t pml4_addr);
 extern void invlpg(uint64_t virt);
 
 // Macros útiles

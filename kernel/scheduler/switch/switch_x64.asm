@@ -5,6 +5,12 @@ global switch_task
 switch_task_64:
     cli
     
+    ; Verificar que los parámetros no sean NULL
+    test rdi, rdi
+    jz .skip_save
+    test rsi, rsi
+    jz .skip_save
+    
     ; Guardar contexto actual (64-bit registers)
     push rax
     push rbx
@@ -23,16 +29,13 @@ switch_task_64:
     push r15
     pushfq
     
-    ; Guardar RSP en old_task->rsp (64-bit)
-    ; Usar registros temporales para evitar problemas de tamaño
+    ; Guardar RSP en old_task->esp
     mov rax, rsp
-    mov [rdi + 8], rax    ; old_task->rsp (64-bit)
+    mov [rdi + 8], rax
     
     ; Cargar nuevo contexto
-    mov rax, [rsi + 8]    ; new_task->rsp
+    mov rax, [rsi + 8]
     mov rsp, rax
-    mov rax, [rsi + 24]   ; new_task->cr3 (64-bit)
-    mov cr3, rax
     
     ; Restaurar registros
     popfq
@@ -52,11 +55,10 @@ switch_task_64:
     pop rbx
     pop rax
     
+.skip_save:
     sti
     ret
 
 ; Alias para compatibilidad con código C
 switch_task:
-    ; En 64-bit, los parámetros vienen en rdi (current) y rsi (next)
-    ; switch_task_64 ya espera los parámetros en estos registros
     jmp switch_task_64

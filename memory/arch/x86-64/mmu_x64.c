@@ -32,51 +32,89 @@ static uint64_t convert_flags_x64(uint32_t common_flags)
 
 int arch_map_page(uintptr_t virt_addr, uintptr_t phys_addr, uint32_t flags)
 {
-    // Validaciones
     if (!IS_PAGE_ALIGNED(virt_addr) || !IS_PAGE_ALIGNED(phys_addr))
     {
-        LOG_ERR("arch_map_page: Direcciones no alineadas");
         return -1;
     }
 
-    // Extraer índices de la dirección virtual (x86-64: 4 niveles)
-    uint64_t pml4_index = (virt_addr >> 39) & 0x1FF; // Bits 47-39
-    uint64_t pdpt_index = (virt_addr >> 30) & 0x1FF; // Bits 38-30
-    uint64_t pd_index = (virt_addr >> 21) & 0x1FF;   // Bits 29-21
-    uint64_t pt_index = (virt_addr >> 12) & 0x1FF;   // Bits 20-12
+    // Calcular índices de las tablas de paginación
+    uint64_t pml4_index = (virt_addr >> 39) & 0x1FF;
+    uint64_t pdpt_index = (virt_addr >> 30) & 0x1FF;
+    uint64_t pd_index = (virt_addr >> 21) & 0x1FF;
+    uint64_t pt_index = (virt_addr >> 12) & 0x1FF;
 
-    // Por ahora solo mapear en las primeras entradas (mapeo básico)
-    if (pml4_index >= 1 || pdpt_index >= 1 || pd_index >= 1)
+    // Convertir flags comunes a flags x86-64
+    uint64_t x64_flags = convert_flags_x64(flags);
+
+    // Para el mapeo básico, usar el mapeo identidad ya configurado
+    // Si la dirección está en el rango 0-2MB, ya está mapeada
+    if (virt_addr < 0x200000 && virt_addr == phys_addr)
     {
-        LOG_ERR("arch_map_page: Índices fuera del rango implementado");
-        return -2;
+        // Ya está mapeado en el mapeo identidad
+        return 0;
     }
 
-    // Verificar que las tablas superiores estén correctamente configuradas
-    if (!(PML4[pml4_index] & PAGE_PRESENT))
+    // Para direcciones fuera del mapeo identidad, usar el mapeo superior
+    if (pml4_index == 1) // Mapeo superior (0x8000000000000000)
     {
-        LOG_ERR("arch_map_page: PML4 entry not present");
-        return -3;
+        // Verificar que PML4[1] esté configurado
+        if (!(PML4[1] & PAGE_PRESENT))
+        {
+            // Configurar PML4[1] para apuntar a PDPT
+            PML4[1] = ((uint64_t)PDPT) | PAGE_PRESENT | PAGE_WRITE;
+        }
+
+        // Para el mapeo básico, usar páginas de 2MB (huge pages)
+        if (pd_index < 128) // Primeras 128 entradas de PD
+        {
+            uint64_t huge_page_addr = pd_index * 0x200000; // 2MB por entrada
+            PD[pd_index] = huge_page_addr | x64_flags | PAGE_HUGE;
+            
+            // Invalidar TLB para esta página
+            arch_invalidate_page(virt_addr);
+            return 0;
+        }
     }
 
-    if (!(PDPT[pdpt_index] & PAGE_PRESENT))
+    // Implementación básica para mapeo de páginas de 4KB
+    if (pml4_index == 0) // Mapeo inferior (0x0000000000000000)
     {
-        LOG_ERR("arch_map_page: PDPT entry not present");
-        return -4;
+        // Verificar que PML4[0] esté configurado
+        if (!(PML4[0] & PAGE_PRESENT))
+        {
+            // Configurar PML4[0] para apuntar a PDPT
+            PML4[0] = ((uint64_t)PDPT) | PAGE_PRESENT | PAGE_WRITE;
+        }
+
+        // Verificar que PDPT[0] esté configurado
+        if (!(PDPT[0] & PAGE_PRESENT))
+        {
+            // Configurar PDPT[0] para apuntar a PD
+            PDPT[0] = ((uint64_t)PD) | PAGE_PRESENT | PAGE_WRITE;
+        }
+
+        // Para páginas de 4KB, necesitamos configurar la tabla de páginas
+        if (pd_index < 512)
+        {
+            // Verificar que PD[pd_index] esté configurado para tabla de páginas
+            if (!(PD[pd_index] & PAGE_PRESENT))
+            {
+                // Crear nueva tabla de páginas si es necesario
+                // Por ahora, usar la tabla PT global
+                PD[pd_index] = ((uint64_t)PT) | PAGE_PRESENT | PAGE_WRITE;
+            }
+
+            // Mapear la página específica
+            PT[pt_index] = phys_addr | x64_flags;
+            
+            // Invalidar TLB
+            arch_invalidate_page(virt_addr);
+            return 0;
+        }
     }
 
-    // Si PD está configurado para páginas de 2MB (huge pages), no podemos mapear 4KB
-    if (PD[pd_index] & PAGE_HUGE)
-    {
-        LOG_ERR("arch_map_page: Cannot map 4KB page in 2MB huge page area");
-        return -5;
-    }
-
-    // Por ahora, simplificamos usando el mapeo identidad ya creado
-    // En una implementación completa, necesitarías crear/gestionar tablas dinámicamente
-
-    LOG_WARN("arch_map_page x64: Mapeo básico no implementado completamente");
-    return -99; // Not implemented yet
+    LOG_WARN("arch_map_page x64: Dirección fuera del rango soportado");
+    return -1; // Dirección fuera del rango soportado
 }
 
 int arch_unmap_page(uintptr_t virt_addr)
@@ -86,8 +124,36 @@ int arch_unmap_page(uintptr_t virt_addr)
         return -1;
     }
 
-    LOG_WARN("arch_unmap_page x64: No implementado aún");
-    return -99;
+    // Calcular índices
+    uint64_t pml4_index = (virt_addr >> 39) & 0x1FF;
+    uint64_t pd_index = (virt_addr >> 21) & 0x1FF;
+    uint64_t pt_index = (virt_addr >> 12) & 0x1FF;
+
+    // Para páginas de 2MB (huge pages)
+    if (pml4_index == 1 && pd_index < 128)
+    {
+        // No podemos unmapear páginas de 2MB estáticas por ahora
+        LOG_WARN("arch_unmap_page x64: No se pueden unmapear páginas de 2MB estáticas");
+        return -1;
+    }
+
+    // Para páginas de 4KB
+    if (pml4_index == 0 && pd_index < 512)
+    {
+        // Verificar que la página esté mapeada
+        if (PD[pd_index] & PAGE_PRESENT)
+        {
+            // Unmapear la página específica
+            PT[pt_index] = 0;
+            
+            // Invalidar TLB
+            arch_invalidate_page(virt_addr);
+            return 0;
+        }
+    }
+
+    LOG_WARN("arch_unmap_page x64: Página no mapeada o fuera del rango soportado");
+    return -1;
 }
 
 uintptr_t arch_virt_to_phys(uintptr_t virt_addr)
@@ -98,8 +164,18 @@ uintptr_t arch_virt_to_phys(uintptr_t virt_addr)
         return virt_addr;
     }
 
-    LOG_WARN("arch_virt_to_phys x64: Solo mapeo identidad implementado");
-    return 0; // Error para direcciones fuera del mapeo identidad
+    // Para el mapeo superior (0x8000000000000000), calcular offset
+    if (virt_addr >= 0x8000000000000000)
+    {
+        uint64_t offset = virt_addr - 0x8000000000000000;
+        if (offset < 0x10000000) // 256MB mapeados
+        {
+            return offset;
+        }
+    }
+
+    LOG_WARN("arch_virt_to_phys x64: Dirección fuera del mapeo conocido");
+    return 0; // Error para direcciones fuera del mapeo conocido
 }
 
 void arch_invalidate_page(uintptr_t virt_addr)

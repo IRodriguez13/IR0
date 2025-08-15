@@ -190,11 +190,6 @@ void dump_scheduler_state(void)
     print("\n\n");
 }
 
-int scheduler_ready(void)
-{
-    return (rr_state.ready_queue != NULL);
-}
-
 // ===============================================================================
 // EXPORTAR LA ESTRUCTURA scheduler_ops_t - ESTO ES LO QUE FALTABA
 // ===============================================================================

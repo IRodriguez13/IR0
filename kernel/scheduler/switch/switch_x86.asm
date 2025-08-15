@@ -26,8 +26,13 @@ switch_task:
     
     ; Cambiar a new_task
     mov esp, [ebx + 4]  ; Cargar nuevo stack
+    
+    ; Solo cambiar CR3 si no es 0 (kernel page directory)
     mov ecx, [ebx + 16] ; Cargar CR3
+    cmp ecx, 0          ; ¿Es 0 (kernel page directory)?
+    je skip_cr3_change  ; Si es 0, no cambiar CR3
     mov cr3, ecx        ; Cambiar espacio de memoria
+skip_cr3_change:
     
     ; Restaurar contexto de new_task
     popa               ; Restaurar registros

@@ -29,6 +29,13 @@ uintptr_t read_fault_address(void);
  */
 const char *arch_get_name(void);
 
+/**
+ * Función de espera de CPU (HLT instruction en x86)
+ * Permite que la CPU entre en estado de bajo consumo
+ */
+void cpu_wait(void);
+
+
 // ===============================================================================
 // Macros de detección de arquitectura (para uso interno)
 // ===============================================================================
