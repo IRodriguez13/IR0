@@ -46,7 +46,7 @@ IR0_BUILD_DATE := $(shell date +%Y-%m-%d)
 IR0_BUILD_TIME := $(shell date +%H:%M:%S)
 
 # Subsistemas comunes (siempre presentes)
-COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes/ir0/panic arch/common memory setup
+COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
 
 # Subsistemas condicionales según build target
 ifeq ($(BUILD_TARGET),desktop)
@@ -114,7 +114,8 @@ endif
 
 .PHONY: all clean $(SUBDIRS) $(ARCH_SUBDIRS) arch-info build-info help all-arch all-targets
 
-all: build-info arch-info subsystems kernel-$(ARCH)-$(TARGET_NAME).bin kernel-$(ARCH)-$(TARGET_NAME).iso
+# Fuerza limpieza previa para evitar mezclar objetos de distintas arquitecturas
+all: clean build-info arch-info subsystems kernel-$(ARCH)-$(TARGET_NAME).bin kernel-$(ARCH)-$(TARGET_NAME).iso
 
 # Target para compilar todas las arquitecturas
 all-arch: 
@@ -212,33 +213,34 @@ endif
 
 # Objetos de arquitectura
 ifeq ($(ARCH),x86-64)
-    ARCH_OBJS = $(ARCH_SUBDIRS)/sources/arch_x64.o \
-                $(ARCH_SUBDIRS)/asm/boot_x64.o \
-                $(ARCH_SUBDIRS)/sources/idt_arch_x64.o \
-                $(ARCH_SUBDIRS)/sources/fault.o \
+    ARCH_OBJS = arch/x86-64/sources/arch_x64.o \
+                arch/x86-64/asm/boot_x64.o \
+                arch/x86-64/sources/idt_arch_x64.o \
+                arch/x86-64/sources/fault.o \
                 memory/arch/x86-64/Paging_x64.o \
                 memory/arch/x86-64/mmu_x64.o \
                 kernel/scheduler/switch/switch_x64.o \
                 interrupt/arch/x86-64/interrupt.o
 else ifeq ($(ARCH),x86-32)  
-    ARCH_OBJS = $(ARCH_SUBDIRS)/sources/arch_x86.o \
-                $(ARCH_SUBDIRS)/asm/boot_x86.o \
+    ARCH_OBJS = arch/x86-32/sources/arch_x86.o \
+                arch/x86-32/asm/boot_x86.o \
+                arch/x86-32/sources/idt_arch_x86.o \
                 memory/arch/x_86-32/Paging_x86-32.o \
                 memory/arch/x_86-32/mmu_x86-32.o \
                 kernel/scheduler/switch/switch_x86.o \
                 interrupt/arch/x86-32/interrupt.o
 else ifeq ($(ARCH),arm64)
-    ARCH_OBJS = $(ARCH_SUBDIRS)/sources/arch_arm64.o \
-                $(ARCH_SUBDIRS)/asm/boot_arm64.o \
-                $(ARCH_SUBDIRS)/sources/exception_arm64.o \
+    ARCH_OBJS = arch/arm64/sources/arch_arm64.o \
+                arch/arm64/asm/boot_arm64.o \
+                arch/arm64/sources/exception_arm64.o \
                 memory/arch/arm64/paging_arm64.o \
                 memory/arch/arm64/mmu_arm64.o \
                 kernel/scheduler/switch/switch_arm64.o \
                 interrupt/arch/arm64/interrupt.o
 else ifeq ($(ARCH),arm32)
-    ARCH_OBJS = $(ARCH_SUBDIRS)/sources/arch_arm32.o \
-                $(ARCH_SUBDIRS)/asm/boot_arm32.o \
-                $(ARCH_SUBDIRS)/sources/exception_arm32.o \
+    ARCH_OBJS = arch/arm32/sources/arch_arm32.o \
+                arch/arm32/asm/boot_arm32.o \
+                arch/arm32/sources/exception_arm32.o \
                 memory/arch/arm32/paging_arm32.o \
                 memory/arch/arm32/mmu_arm32.o \
                 kernel/scheduler/switch/switch_arm32.o \

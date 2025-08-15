@@ -147,19 +147,19 @@ void main()
 
     // 12. Loop infinito estable del kernel
     LOG_OK("Kernel inicializado completamente - modo estable");
-    print("main: Entrando en loop infinito del kernel...\n");
-    print("main: Kernel IR0 funcionando correctamente!\n");
-    print("main: Presiona Ctrl+C en QEMU para salir\n");
+    LOG_WARN("main: Entrando en loop infinito del kernel...\n");
+    LOG_OK("main: Kernel IR0 funcionando correctamente!\n");
+    LOG_WARN("main: Presiona Ctrl+C en QEMU para salir\n");
     delay_ms(2000);
 
     // Loop infinito estable del kernel
     uint32_t counter = 0;
-    while (1)
+    for(;;)
     {
         // Mostrar que el kernel está vivo
         if (counter % 1000000 == 0)
         {
-            print("IR0 Kernel: Status: Stable :-)");
+            LOG_OK("IR0 Kernel: Status: Stable :-)");
             cpu_wait();
         }
         counter++;
@@ -187,6 +187,6 @@ void ShutDown()
         : "memory");
 
     // Último recurso: hang
-    print_error("Shutdown failed, hanging CPU\n");
+    LOG_ERR("Shutdown failed, hanging CPU\n");
     cpu_relax();
 }
