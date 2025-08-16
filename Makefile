@@ -34,9 +34,6 @@ else ifeq ($(BUILD_TARGET),embedded)
     TARGET_NAME = embedded
 endif
 
-# Incluir configuración del kernel (solo para obtener versiones)
-# Las definiciones se pasan via CFLAGS_TARGET
-
 # Información de versión del kernel
 IR0_VERSION_MAJOR := 1
 IR0_VERSION_MINOR := 0
@@ -45,22 +42,7 @@ IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PA
 IR0_BUILD_DATE := $(shell date +%Y-%m-%d)
 IR0_BUILD_TIME := $(shell date +%H:%M:%S)
 
-# Subsistemas comunes (siempre presentes)
-COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
-
-# Subsistemas condicionales según build target
-ifeq ($(BUILD_TARGET),desktop)
-    CONDITIONAL_SUBDIRS = fs
-else ifeq ($(BUILD_TARGET),server)
-    CONDITIONAL_SUBDIRS = fs
-else ifeq ($(BUILD_TARGET),iot)
-    CONDITIONAL_SUBDIRS = fs
-else ifeq ($(BUILD_TARGET),embedded)
-    CONDITIONAL_SUBDIRS = 
-endif
-
-SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
-
+# Configuración por arquitectura
 ifeq ($(ARCH),x86-64)
     # Configuración para 64-bit
     CC = gcc
@@ -103,7 +85,7 @@ else ifeq ($(ARCH),arm32)
     CC = arm-linux-gnueabi-gcc
     ASM = arm-linux-gnueabi-as
     LD = arm-linux-gnueabi-ld
-    CFLAGS = -march=armv7-a -mthumb -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
+    CFLAGS = -march=armv7-a -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
     CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm32/include -I$(KERNEL_ROOT)/setup
     CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = --32
@@ -112,74 +94,28 @@ else ifeq ($(ARCH),arm32)
     KERNEL_ENTRY = kmain_arm32
 endif
 
-.PHONY: all clean $(SUBDIRS) $(ARCH_SUBDIRS) arch-info build-info help all-arch all-targets
+# Subsistemas comunes (siempre presentes)
+COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
 
-# Fuerza limpieza previa para evitar mezclar objetos de distintas arquitecturas
-all: clean build-info arch-info subsystems kernel-$(ARCH)-$(TARGET_NAME).bin kernel-$(ARCH)-$(TARGET_NAME).iso
+# Subsistemas condicionales según build target
+ifeq ($(BUILD_TARGET),desktop)
+    CONDITIONAL_SUBDIRS = fs
+else ifeq ($(BUILD_TARGET),server)
+    CONDITIONAL_SUBDIRS = fs
+else ifeq ($(BUILD_TARGET),iot)
+    CONDITIONAL_SUBDIRS = fs
+else ifeq ($(BUILD_TARGET),embedded)
+    CONDITIONAL_SUBDIRS = 
+endif
 
-# Target para compilar todas las arquitecturas
-all-arch: 
-	@echo "Compilando para todas las arquitecturas..."
-	@$(MAKE) ARCH=x86-32 BUILD_TARGET=$(BUILD_TARGET)
-	@$(MAKE) ARCH=x86-64 BUILD_TARGET=$(BUILD_TARGET)
-	@echo "Compilación completa para todas las arquitecturas"
+SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 
-# Target para compilar todos los build targets
-all-targets:
-	@echo "Compilando para todos los build targets..."
-	@$(MAKE) ARCH=$(ARCH) BUILD_TARGET=desktop
-	@$(MAKE) ARCH=$(ARCH) BUILD_TARGET=server
-	@$(MAKE) ARCH=$(ARCH) BUILD_TARGET=iot
-	@$(MAKE) ARCH=$(ARCH) BUILD_TARGET=embedded
-	@echo "Compilación completa para todos los build targets"
-
-# Target para compilar todas las combinaciones
-all-combinations:
-	@echo "Compilando todas las combinaciones de arquitectura y build target..."
-	@$(MAKE) ARCH=x86-32 BUILD_TARGET=desktop
-	@$(MAKE) ARCH=x86-32 BUILD_TARGET=server
-	@$(MAKE) ARCH=x86-32 BUILD_TARGET=iot
-	@$(MAKE) ARCH=x86-32 BUILD_TARGET=embedded
-	@$(MAKE) ARCH=x86-64 BUILD_TARGET=desktop
-	@$(MAKE) ARCH=x86-64 BUILD_TARGET=server
-	@$(MAKE) ARCH=x86-64 BUILD_TARGET=iot
-	@$(MAKE) ARCH=x86-64 BUILD_TARGET=embedded
-	@echo "Compilación completa para todas las combinaciones"
-
-build-info:
-	@echo "============================================================"
-	@echo "IR0 Kernel Build System"
-	@echo "============================================================"
-	@echo "Build Target: $(BUILD_TARGET) ($(TARGET_NAME))"
-	@echo "Architecture: $(ARCH)"
-	@echo "Version: $(IR0_VERSION_STRING)"
-	@echo "Build Date: $(IR0_BUILD_DATE)"
-	@echo "Build Time: $(IR0_BUILD_TIME)"
-	@echo ""
-
-arch-info:
-	@echo "Compilando para arquitectura: $(ARCH)"
-	@echo "Directorio de arquitectura: $(ARCH_SUBDIRS)"
-	@echo "Flags C: $(CFLAGS)"
-	@echo "Flags ASM: $(ASMFLAGS)"
-	@echo "Flags LD: $(LDFLAGS)"
-	@echo ""
-
-subsystems: $(SUBDIRS)
-	@echo ""
-	@echo "\033[1;32m============================================================\033[0m"
-	@echo "\033[1;32m Todos los subsistemas compilados correctamente para $(ARCH)-$(TARGET_NAME)\033[0m"
-	@echo "\033[1;32m============================================================\033[0m"
-	@echo ""
-
-$(SUBDIRS):
-	$(MAKE) -C $@ CC="$(CC)" ASM="$(ASM)" CFLAGS="$(CFLAGS)" ASMFLAGS="$(ASMFLAGS)"
-
-# Objetos del kernel base
+# Objetos base del kernel (comunes a todas las arquitecturas)
 KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    includes/ir0/print.o \
                    includes/string.o \
-                   interrupt/idt.o interrupt/isr_handlers.o \
+                   interrupt/idt.o \
+                   interrupt/isr_handlers.o \
                    includes/ir0/panic/panic.o \
                    drivers/timer/pit/pit.o \
                    drivers/timer/clock_system.o \
@@ -250,6 +186,16 @@ endif
 # Todos los objetos
 ALL_OBJS = $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
 
+# Reglas de compilación para archivos .c
+%.o: %.c
+	@echo "Compilando $<..."
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Reglas de compilación para archivos .asm
+%.o: %.asm
+	@echo "Ensamblando $<..."
+	$(ASM) $(ASMFLAGS) $< -o $@
+
 # Compilar kernel para arquitectura específica
 kernel-$(ARCH)-$(TARGET_NAME).bin: $(ALL_OBJS) $(ARCH_SUBDIRS)/linker.ld
 	@echo "Enlazando kernel para $(ARCH)-$(TARGET_NAME)..."
@@ -265,36 +211,80 @@ kernel-$(ARCH)-$(TARGET_NAME).iso: kernel-$(ARCH)-$(TARGET_NAME).bin
 	@grub-mkrescue -o $@ iso-$(ARCH)-$(TARGET_NAME)
 	@echo "ISO $(ARCH)-$(TARGET_NAME) creado: $@"
 
+# Targets simplificados para compatibilidad
+kernel-$(ARCH).bin: kernel-$(ARCH)-$(TARGET_NAME).bin
+	@ln -sf $< $@
+
+kernel-$(ARCH).iso: kernel-$(ARCH)-$(TARGET_NAME).iso
+	@ln -sf $< $@
+
+# Target por defecto
+all: kernel-$(ARCH)-$(TARGET_NAME).iso
+
 # Target para ejecutar en QEMU
 run: kernel-$(ARCH)-$(TARGET_NAME).iso
 	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU..."
 ifeq ($(ARCH),x86-64)
-	qemu-system-x86_64 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -display gtk
+	qemu-system-x86_64 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk
 else ifeq ($(ARCH),x86-32)
-	qemu-system-i386 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -display gtk
+	qemu-system-i386 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk
 else ifeq ($(ARCH),arm64)
-	qemu-system-aarch64 -M virt -cpu cortex-a57 -m 512M -kernel kernel-$(ARCH)-$(TARGET_NAME).bin -display gtk
+	qemu-system-aarch64 -M virt -cpu cortex-a57 -m 512M -kernel kernel-$(ARCH)-$(TARGET_NAME).bin -no-reboot -no-shutdown -display gtk
 else ifeq ($(ARCH),arm32)
-	qemu-system-arm -M vexpress-a9 -cpu cortex-a9 -m 512M -kernel kernel-$(ARCH)-$(TARGET_NAME).bin -display gtk
+	qemu-system-arm -M vexpress-a9 -cpu cortex-a9 -m 512M -kernel kernel-$(ARCH)-$(TARGET_NAME).bin -no-reboot -no-shutdown -display gtk
 endif
 
 # Target para debug en QEMU
 debug: kernel-$(ARCH)-$(TARGET_NAME).iso
 	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con debug..."
 ifeq ($(ARCH),x86-64)
-	qemu-system-x86_64 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -display gtk -d int,cpu_reset -D qemu_debug.log
+	qemu-system-x86_64 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk -d int,cpu_reset -D qemu_debug.log
 else
-	qemu-system-i386 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -display gtk -d int,cpu_reset -D qemu_debug.log
+	qemu-system-i386 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk -d int,cpu_reset -D qemu_debug.log
 endif
+
+# Compilar para todas las arquitecturas
+all-arch: 
+	@echo "Compilando para todas las arquitecturas..."
+	@for arch in x86-32 x86-64; do \
+		echo "Compilando $$arch..."; \
+		$(MAKE) ARCH=$$arch BUILD_TARGET=$(BUILD_TARGET) kernel-$$arch-$(TARGET_NAME).iso; \
+	done
+
+# Compilar para todos los build targets
+all-targets:
+	@echo "Compilando para todos los build targets..."
+	@for target in desktop server iot embedded; do \
+		echo "Compilando target $$target..."; \
+		$(MAKE) ARCH=$(ARCH) BUILD_TARGET=$$target kernel-$(ARCH)-$$target.iso; \
+	done
+
+# Compilar todas las combinaciones
+all-combinations:
+	@echo "Compilando todas las combinaciones..."
+	@for arch in x86-32 x86-64; do \
+		for target in desktop server iot embedded; do \
+			echo "Compilando $$arch-$$target..."; \
+			$(MAKE) ARCH=$$arch BUILD_TARGET=$$target kernel-$$arch-$$target.iso; \
+		done; \
+	done
 
 # Limpiar archivos de compilación
 clean:
 	@echo "Limpiando archivos de compilación..."
-	@for dir in $(SUBDIRS); do \
-		$(MAKE) -C $$dir clean; \
-	done
-	@rm -f kernel-*.bin kernel-*.iso
+	@find . -name "*.o" -type f -delete
+	@find . -name "*.d" -type f -delete
+	@find . -name "*.bin" -type f -delete
+	@find . -name "*.iso" -type f -delete
+	@find . -name "*.elf" -type f -delete
+	@find . -name "*.img" -type f -delete
+	@find . -name "*.map" -type f -delete
+	@find . -name "*.lst" -type f -delete
+	@find . -name "*.tmp" -type f -delete
+	@find . -name "*.log" -type f -delete
+	@find . -name "qemu_*" -type f -delete
 	@rm -rf iso-*
+	@rm -rf tmp-*
 	@echo "Limpieza completada"
 
 # Limpiar todo (incluyendo logs)
@@ -307,6 +297,7 @@ clean-all: clean
 # Mostrar información de arquitectura
 arch-details:
 	@echo "Arquitectura actual: $(ARCH)"
+	@echo "Build target: $(BUILD_TARGET)"
 	@echo "Compilador: $(CC)"
 	@echo "Ensamblador: $(ASM)"
 	@echo "Linker: $(LD)"
@@ -332,39 +323,15 @@ help:
 	@echo ""
 	@echo "Comandos principales:"
 	@echo "  make                    - Compilar para arquitectura por defecto (x86-32)"
-	@echo "  make ARCH=x86-64          - Compilar para 64-bit"
+	@echo "  make ARCH=x86-64        - Compilar para 64-bit"
 	@echo "  make ARCH=x86-32        - Compilar para 32-bit"
 	@echo "  make all-arch           - Compilar para todas las arquitecturas"
 	@echo "  make all-targets        - Compilar para todos los build targets"
 	@echo "  make all-combinations   - Compilar todas las combinaciones"
-	@echo "  make run                - Ejecutar en QEMU"
-	@echo "  make clean              - Limpiar arquitectura actual"
-	@echo "  make clean-all          - Limpiar todas las arquitecturas"
+	@echo "  make run                - Ejecutar kernel en QEMU"
+	@echo "  make debug              - Ejecutar kernel con debug"
+	@echo "  make clean              - Limpiar archivos de compilación"
+	@echo "  make clean-all          - Limpiar todo"
 	@echo "  make help               - Mostrar esta ayuda"
-	@echo ""
-	@echo "Ejemplos:"
-	@echo "  make ARCH=x86-64 run      - Compilar y ejecutar en 64-bit"
-	@echo "  make ARCH=x86-32 run    - Compilar y ejecutar en 32-bit"
-	@echo "  make BUILD_TARGET=server - Compilar versión servidor"
 
-# Targets específicos por build target
-desktop: BUILD_TARGET=desktop
-desktop: all
-
-server: BUILD_TARGET=server
-server: all
-
-iot: BUILD_TARGET=iot
-iot: all
-
-embedded: BUILD_TARGET=embedded
-embedded: all
-
-# Targets específicos por arquitectura
-x86-64: ARCH=x86-64
-x86-64: all
-
-x86-32: ARCH=x86-32
-x86-32: all
-
--include $(ALL_OBJS:.o=.d)
+.PHONY: all all-arch all-targets all-combinations run debug clean clean-all arch-details help
