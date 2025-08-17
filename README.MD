@@ -28,7 +28,7 @@
 ### Core Subsystems
 - **Memory Management** - Advanced paging, heap, physical allocator with 1GB identity mapping
 - **Interrupt System** - Complete IDT, ISR handlers, TSS configuration
-- **File System** - Revolutionary IR0FS with journaling, compression, and integrity
+- **File System** - IR0FS with journaling, compression, and integrity
 - **Process Management** - Complete lifecycle with CFS, Priority, and Round-Robin schedulers
 - **System Calls** - POSIX-compatible interface with 50+ calls
 - **Interactive Shell** - Advanced IR0 Shell with 25+ commands
@@ -180,9 +180,9 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **System Call Handlers**: Specific implementations for some calls
 - **LAPIC Integration**: Currently using PIT for stability
 
-## 🎯 Innovation Highlights
+## 🎯 Highlights
 
-### Revolutionary Features
+### Features
 1. **Adaptive Scheduler**: Automatically selects the best scheduler based on system load
 2. **Hybrid Filesystem**: Combines journaling and copy-on-write for optimal performance
 3. **Intelligent Compression**: Automatically selects compression algorithm based on content
