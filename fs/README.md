@@ -3,11 +3,11 @@
 ## English
 
 ### Overview
-The File System Subsystem provides a comprehensive file system implementation with the revolutionary IR0FS filesystem and a Virtual File System (VFS) layer. It supports advanced features like journaling, compression, integrity checks, and large file support up to 1PB.
+The File System Subsystem provides a comprehensive file system implementation with the IR0FS filesystem and a Virtual File System (VFS) layer. It supports advanced features like journaling, compression, integrity checks, and large file support up to 1PB.
 
 ### Key Components
 
-#### 1. IR0FS - Revolutionary File System (`ir0fs.c/h`)
+#### 1. IR0FS - File System (`ir0fs.c/h`)
 - **Purpose**: Production-level filesystem with advanced features
 - **Features**:
   - **Journaling**: Atomic transactions for crash recovery
