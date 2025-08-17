@@ -79,10 +79,6 @@ void init_PIT(uint32_t frequency)
     // Inicializar PIC primero
     init_pic();
 
-    // MODO ESTABLE: NO configurar IDT gate para timer por ahora
-    // idt_set_gate(32, (uintptr_t)timer_stub, IDT_INTERRUPT_GATE_KERNEL);
-    print("[PIT] MODO ESTABLE - IDT gate no configurado para timer\n");
-
     // Calcular divisor para la frecuencia deseada
     uint32_t divisor = PIT_FREC / frequency;
 
@@ -92,10 +88,15 @@ void init_PIT(uint32_t frequency)
     print_hex_compact(divisor);
     print("\n");
 
-    // Configurar PIT (pero sin habilitar interrupciones)
+    // Configurar PIT
     outb(0x43, 0x36);                  // Comando: canal 0, lohi, modo 3
     outb(0x40, divisor & 0xFF);        // Byte bajo del divisor
     outb(0x40, (divisor >> 8) & 0xFF); // Byte alto del divisor
 
-    print_success("[PIT] Configurado correctamente (sin interrupciones)\n");
+    // Habilitar interrupción del timer (IRQ 0)
+    uint8_t mask = inb(0x21);
+    mask &= ~(1 << 0); // Habilitar IRQ 0 (timer)
+    outb(0x21, mask);
+
+    print_success("[PIT] Configurado correctamente con interrupciones habilitadas\n");
 }

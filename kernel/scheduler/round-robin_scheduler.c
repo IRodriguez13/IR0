@@ -146,49 +146,7 @@ static void rr_cleanup(void)
 // Funciones auxiliares para compatibilidad
 // ===============================================================================
 
-void dump_scheduler_state(void)
-{
-    print_colored("=== ROUND-ROBIN SCHEDULER STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-
-    print("Current task: ");
-    if (rr_state.current_task)
-    {
-        print_hex_compact(rr_state.current_task->pid);
-        print(" (state: ");
-        print_hex_compact(rr_state.current_task->state);
-        print(")");
-    }
-    else
-    {
-        print("NULL");
-    }
-    print("\n");
-
-    print("Ready queue: ");
-    if (rr_state.ready_queue)
-    {
-        print("Present (starting PID: ");
-        print_hex_compact(rr_state.ready_queue->pid);
-        print(")");
-    }
-    else
-    {
-        print("Empty");
-    }
-    print("\n");
-
-    print("Total tasks: ");
-    print_hex_compact(rr_state.task_count);
-    print("\n");
-
-    print("Time slice: ");
-    print_hex_compact(rr_state.time_slice);
-    print(" ticks\n");
-
-    print("Current ticks: ");
-    print_hex_compact(rr_state.current_ticks);
-    print("\n\n");
-}
+// Function moved to sched_central.c to avoid duplication
 
 // ===============================================================================
 // EXPORTAR LA ESTRUCTURA scheduler_ops_t - ESTO ES LO QUE FALTABA

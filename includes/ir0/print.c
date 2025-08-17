@@ -169,6 +169,80 @@ void print_hex64(uint64_t val)
     print(buffer);
 }
 
+void print_uint64(uint64_t num)
+{
+    char buffer[21]; // Máximo 20 dígitos para uint64_t + null terminator
+    int index = 0;
+    
+    // Caso especial para 0
+    if (num == 0) {
+        print("0");
+        return;
+    }
+    
+    // Convertir a string (en orden inverso)
+    while (num > 0) {
+        buffer[index++] = '0' + (num % 10);
+        num /= 10;
+    }
+    
+    // Imprimir en orden correcto
+    for (int i = index - 1; i >= 0; i--) {
+        putchar(buffer[i]);
+    }
+}
+
+void print_int32(int32_t num)
+{
+    if (num < 0) {
+        putchar('-');
+        num = -num;
+    }
+    
+    char buffer[12]; // Máximo 11 dígitos para int32_t + null terminator
+    int index = 0;
+    
+    // Caso especial para 0
+    if (num == 0) {
+        print("0");
+        return;
+    }
+    
+    // Convertir a string (en orden inverso)
+    while (num > 0) {
+        buffer[index++] = '0' + (num % 10);
+        num /= 10;
+    }
+    
+    // Imprimir en orden correcto
+    for (int i = index - 1; i >= 0; i--) {
+        putchar(buffer[i]);
+    }
+}
+
+void print_uint32(uint32_t num)
+{
+    char buffer[11]; // Máximo 10 dígitos para uint32_t + null terminator
+    int index = 0;
+    
+    // Caso especial para 0
+    if (num == 0) {
+        print("0");
+        return;
+    }
+    
+    // Convertir a string (en orden inverso)
+    while (num > 0) {
+        buffer[index++] = '0' + (num % 10);
+        num /= 10;
+    }
+    
+    // Imprimir en orden correcto
+    for (int i = index - 1; i >= 0; i--) {
+        putchar(buffer[i]);
+    }
+}
+
 void delay_ms(uint32_t ms)
 {
     // Delay simple usando loops
