@@ -26,6 +26,7 @@ void init_paging_x64(void);
 void map_page_x64(uint64_t virt, uint64_t phys, uint64_t flags);
 void unmap_page_x64(uint64_t virt);
 uint64_t get_phys_addr_x64(uint64_t virt);
+int paging_verify_mapping(uint64_t virt_addr);
 
 // Funciones ASM externas
 void paging_set_cpu_x64(uint64_t pml4_addr);

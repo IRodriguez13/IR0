@@ -13,3 +13,4 @@
 *.raw
 *iso-x86-64/boot
 *iso-x86-64/boot
+*KERNEL_OVERVIEW.txt

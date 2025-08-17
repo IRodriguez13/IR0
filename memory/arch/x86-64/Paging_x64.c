@@ -57,13 +57,12 @@ void init_paging_x64()
     local_memset(PD, 0, PAGE_SIZE);
     local_memset(PT, 0, PAGE_SIZE);
     
-    // 2. Mapeo identidad simple de los primeros 2MB (para código/tablas)
+    // 2. Mapeo identidad completo desde 0 hasta 1GB (para kernel completo)
     PML4[0] = ((uint64_t)PDPT) | PAGE_PRESENT | PAGE_WRITE;
     PDPT[0] = ((uint64_t)PD) | PAGE_PRESENT | PAGE_WRITE;
-    PD[0] = 0x0 | PAGE_PRESENT | PAGE_WRITE | PAGE_HUGE;
     
-    // 3. Mapear más memoria para el kernel (hasta 256MB)
-    for (int i = 1; i < 128; i++)
+    // Mapear 512 entradas de 2MB cada una = 1GB total
+    for (int i = 0; i < 512; i++)
     {
         PD[i] = (i * 0x200000) | PAGE_PRESENT | PAGE_WRITE | PAGE_HUGE;
     }
@@ -104,4 +103,46 @@ void paging_set_cpu_x64(uint64_t pml4_addr)
 {
     asm volatile("mov %0, %%cr3" : : "r"(pml4_addr) : "memory");
     asm volatile("mov %%cr0, %%rax\n" "bts $31, %%rax\n" "mov %%rax, %%cr0" : : : "rax", "memory");
+}
+
+// Función para verificar que una dirección esté mapeada
+int paging_verify_mapping(uint64_t virt_addr)
+{
+    uint64_t pml4_index = (virt_addr >> 39) & 0x1FF;
+    uint64_t pdpt_index = (virt_addr >> 30) & 0x1FF;
+    uint64_t pd_index = (virt_addr >> 21) & 0x1FF;
+    uint64_t pt_index = (virt_addr >> 12) & 0x1FF;
+    
+    // Verificar PML4
+    if ((PML4[pml4_index] & PAGE_PRESENT) == 0) {
+        return 0; // No mapeado
+    }
+    
+    uint64_t *pdpt = (uint64_t *)(PML4[pml4_index] & ~0xFFFULL);
+    
+    // Verificar PDPT
+    if ((pdpt[pdpt_index] & PAGE_PRESENT) == 0) {
+        return 0; // No mapeado
+    }
+    
+    uint64_t *pd = (uint64_t *)(pdpt[pdpt_index] & ~0xFFFULL);
+    
+    // Verificar PD
+    if ((pd[pd_index] & PAGE_PRESENT) == 0) {
+        return 0; // No mapeado
+    }
+    
+    // Si es una huge page (2MB), ya está mapeado
+    if (pd[pd_index] & PAGE_HUGE) {
+        return 1; // Mapeado
+    }
+    
+    // Si no es huge page, verificar PT
+    uint64_t *pt = (uint64_t *)(pd[pd_index] & ~0xFFFULL);
+    
+    if ((pt[pt_index] & PAGE_PRESENT) == 0) {
+        return 0; // No mapeado
+    }
+    
+    return 1; // Mapeado
 }

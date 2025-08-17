@@ -19,6 +19,36 @@ typedef int64_t ssize_t;
 #define VFS_MAX_NAME_LEN 64
 #define VFS_MAX_OPEN_FILES 128
 #define VFS_ROOT_INODE 1
+#define VFS_MAX_PATH 256
+#define VFS_MAX_NAME 64
+#define MAX_OPEN_FILES 128
+#define MAX_MOUNTS 16
+#define MAX_FILESYSTEMS 8
+
+// VFS inode types
+#define VFS_INODE_TYPE_FILE 1
+#define VFS_INODE_TYPE_DIRECTORY 2
+#define VFS_INODE_TYPE_SYMLINK 3
+#define VFS_INODE_TYPE_DEVICE 4
+
+// VFS mount flags
+#define VFS_MOUNT_READONLY 0x0001
+#define VFS_MOUNT_NOEXEC 0x0002
+#define VFS_MOUNT_NOSUID 0x0004
+
+// VFS filesystem types
+#define VFS_FS_TYPE_ROOT 1
+#define VFS_FS_TYPE_IR0FS 2
+
+// File mode constants
+#define S_IFMT  00170000
+#define S_IFSOCK 0140000
+#define S_IFLNK  0120000
+#define S_IFREG  0100000
+#define S_IFBLK  0060000
+#define S_IFDIR  0040000
+#define S_IFCHR  0020000
+#define S_IFIFO  0010000
 
 // File types
 typedef enum
@@ -63,6 +93,34 @@ typedef enum
     VFS_SEEK_END = 2
 } vfs_seek_whence_t;
 
+// Additional types for compatibility
+typedef uint32_t mode_t;
+typedef uint32_t uid_t;
+typedef uint32_t gid_t;
+typedef int64_t off_t;
+typedef uint64_t time_t;
+
+// Stat structure
+typedef struct {
+    uint32_t st_dev;
+    uint32_t st_ino;
+    uint32_t st_mode;
+    uint32_t st_nlink;
+    uint32_t st_uid;
+    uint32_t st_gid;
+    uint32_t st_rdev;
+    uint64_t st_size;
+    time_t st_atime;
+    time_t st_mtime;
+    time_t st_ctime;
+} stat_t;
+
+// Utime buffer structure
+typedef struct {
+    time_t actime;
+    time_t modtime;
+} utimbuf_t;
+
 // ===============================================================================
 // VFS STRUCTURES
 // ===============================================================================
@@ -103,14 +161,7 @@ typedef struct vfs_dirent
     char name[VFS_MAX_NAME_LEN]; // File name
 } vfs_dirent_t;
 
-// Mount point structure
-typedef struct vfs_mount
-{
-    char path[VFS_MAX_PATH_LEN]; // Mount point path
-    vfs_inode_t *root_inode;     // Root inode of mounted filesystem
-    void *fs_data;               // Filesystem-specific data
-    struct vfs_mount *next;      // Next mount point
-} vfs_mount_t;
+
 
 // ===============================================================================
 // VFS OPERATIONS INTERFACE
@@ -142,6 +193,28 @@ typedef struct vfs_fs_ops
     int (*umount)(const char *target);
     int (*sync)(void);
 } vfs_fs_ops_t;
+
+// Mount point structure
+typedef struct vfs_mount
+{
+    char path[VFS_MAX_PATH_LEN]; // Mount point path
+    char source[VFS_MAX_PATH_LEN]; // Source device/path
+    vfs_inode_t *root_inode;     // Root inode of mounted filesystem
+    vfs_inode_t *inode;          // Mount point inode
+    uint32_t fs_type;            // Filesystem type
+    vfs_fs_ops_t *fs_ops;        // Filesystem operations
+    uint32_t flags;              // Mount flags
+    void *fs_data;               // Filesystem-specific data
+    struct vfs_mount *next;      // Next mount point
+} vfs_mount_t;
+
+// Filesystem structure
+typedef struct vfs_filesystem
+{
+    char name[32];               // Filesystem name
+    uint32_t type;               // Filesystem type
+    vfs_fs_ops_t *ops;           // Filesystem operations
+} vfs_filesystem_t;
 
 // ===============================================================================
 // VFS GLOBAL INTERFACE

@@ -12,6 +12,12 @@
 void arch_enable_interrupts(void);
 
 /**
+ * Función INB para leer de puertos I/O (solo x86)
+ * En ARM esto sería MMIO reads
+ */
+uint8_t inb(uint16_t port);
+
+/**
  * Función OUTB para escribir a puertos I/O (solo x86)
  * En ARM esto sería MMIO writes
  */

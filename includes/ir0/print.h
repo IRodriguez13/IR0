@@ -135,6 +135,30 @@ void print_hex_compact(uint32_t num);
 
 void print_hex64(uint64_t val);
 
+/*
+ * Imprime un entero de 64 bits sin signo.
+ * Útil para debugging y logging de interrupciones.
+ * 
+ * @param num: Número a imprimir
+ */
+void print_uint64(uint64_t num);
+
+/*
+ * Imprime un entero de 32 bits con signo.
+ * Útil para debugging y logging.
+ * 
+ * @param num: Número a imprimir
+ */
+void print_int32(int32_t num);
+
+/*
+ * Imprime un entero de 32 bits sin signo.
+ * Útil para debugging y logging.
+ * 
+ * @param num: Número a imprimir
+ */
+void print_uint32(uint32_t num);
+
 // ============ FUNCIONES DE TIMING ============
 
 /*

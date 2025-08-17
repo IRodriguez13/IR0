@@ -123,20 +123,22 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    drivers/timer/hpet/hpet.o \
                    drivers/timer/hpet/find_hpet.o \
                    drivers/timer/lapic/lapic.o \
-                   kernel/scheduler/priority_scheduler.o \
-                   kernel/scheduler/round-robin_scheduler.o \
-                   kernel/scheduler/sched_central.o \
-                   kernel/scheduler/cfs_scheduler.o \
-                   kernel/scheduler/scheduler_detection.o \
-                   kernel/scheduler/task_impl.o \
-                   kernel/process/process.o \
-                   kernel/syscalls/syscalls.o \
+                                             kernel/scheduler/priority_scheduler.o \
+                          kernel/scheduler/round-robin_scheduler.o \
+                          kernel/scheduler/sched_central.o \
+                          kernel/scheduler/cfs_scheduler.o \
+                          kernel/scheduler/scheduler_detection.o \
+                          kernel/scheduler/task_impl.o \
+                          kernel/process/process.o \
+                          kernel/syscalls/syscalls.o \
+                          kernel/shell/shell.o \
                    arch/common/arch_interface.o \
                    memory/heap_allocator.o \
                    memory/physical_allocator.o \
-                   memory/ondemand-paging.o \
-                   memory/vallocator.o \
-                   setup/kernel_config.o
+                                             memory/ondemand-paging.o \
+                          memory/vallocator.o \
+                          setup/kernel_config.o \
+                          fs/ir0fs.o
 
 # Objetos condicionales según build target
 ifeq ($(BUILD_TARGET),desktop)
@@ -155,6 +157,7 @@ ifeq ($(ARCH),x86-64)
                 arch/x86-64/asm/boot_x64.o \
                 arch/x86-64/sources/idt_arch_x64.o \
                 arch/x86-64/sources/fault.o \
+                arch/x86-64/sources/tss_x64.o \
                 memory/arch/x86-64/Paging_x64.o \
                 memory/arch/x86-64/mmu_x64.o \
                 kernel/scheduler/switch/switch_x64.o \
