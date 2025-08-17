@@ -2,6 +2,7 @@
 #include "vfs.h"
 #include "../includes/ir0/print.h"
 #include "../includes/string.h"
+#include "../memory/memo_interface.h"
 #include "../memory/heap_allocator.h"
 #include <string.h>
 

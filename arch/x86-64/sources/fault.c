@@ -1,15 +1,6 @@
 #include <stdint.h>
 #include "../../includes/ir0/print.h"
 
-// Función para delay simple
-static void delay_ms(uint32_t ms)
-{
-    for (volatile uint32_t i = 0; i < ms * 100000; i++)
-    {
-        __asm__ volatile("nop");
-    }
-}
-
 // Manejadores de excepciones básicos para x86-64
 void page_fault_handler_x64(uint64_t error_code, uint64_t fault_address)
 {

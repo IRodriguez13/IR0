@@ -4,8 +4,6 @@
 #include <print.h>
 
 // Configuración del allocator
-#define PHYS_MEM_START 0x100000 // 1MB (después del kernel)
-#define PHYS_MEM_END 0x8000000  // 128MB por ahora
 #define BITMAP_SIZE ((PHYS_MEM_END - PHYS_MEM_START) / PAGE_SIZE / 8)
 
 // Bitmap para trackear páginas libres (1 bit por página)

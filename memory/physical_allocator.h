@@ -2,9 +2,8 @@
 #define IR0_PHYSCAL_ALLOCATOR
 #include <stdint.h>
 
-// Configuración
-#define PHYS_MEM_START 0x100000
-#define PHYS_MEM_END   0x8000000
+// Configuración - Usar definiciones del layout del kernel
+#include "krnl_memo_layout.h"
 #define PAGE_SIZE      4096
 #define BITMAP_SIZE    ((PHYS_MEM_END - PHYS_MEM_START) / PAGE_SIZE / 8)
 

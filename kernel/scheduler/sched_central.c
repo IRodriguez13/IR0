@@ -87,7 +87,33 @@ void scheduler_start(void)
     task_t *first_task = current_scheduler.pick_next_task();
     if (!first_task)
     {
-        panic("scheduler_start: No tasks to run");
+        // Crear idle task si no hay tareas
+        LOG_OK("No tasks available, creating idle task");
+        
+        // Función de idle task
+        void idle_task_func(void *arg) {
+            (void)arg;
+            print_colored("[IDLE] System entering idle state\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+            
+            while (1) {
+                // Simular trabajo de CPU idle
+                for (volatile int i = 0; i < 1000000; i++) {
+                    __asm__ volatile("nop");
+                }
+                // Pequeña pausa para permitir interrupciones
+                cpu_wait();
+            }
+        }
+        
+        // Crear y agregar idle task
+        task_t *idle_task = create_task(idle_task_func, NULL, 0, 0); // Prioridad más baja
+        add_task(idle_task);
+        
+        // Obtener la idle task
+        first_task = current_scheduler.pick_next_task();
+        if (!first_task) {
+            panic("scheduler_start: Failed to create idle task");
+        }
     }
 
     current_running_task = first_task;
