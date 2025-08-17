@@ -135,3 +135,13 @@ void print_hex_compact(uint32_t num);
 
 void print_hex64(uint64_t val);
 
+// ============ FUNCIONES DE TIMING ============
+
+/*
+ * Delay simple en milisegundos usando loops.
+ * Útil para hacer logs más legibles y dar tiempo a leer mensajes.
+ * 
+ * @param ms: Milisegundos a esperar
+ */
+void delay_ms(uint32_t ms);
+
