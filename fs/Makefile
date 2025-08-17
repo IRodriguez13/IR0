@@ -1,31 +1,54 @@
-# Makefile para el subsistema de VFS
+# fs/Makefile - Filesystem Makefile
 
-# Usar variables pasadas desde el Makefile principal
-CC ?= gcc
-CFLAGS ?= -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -std=c99
+INCLUDES = -I../includes -I../includes/ir0 -I../memory
 
-# Detectar arquitectura desde CFLAGS
-ifneq (,$(findstring -m64,$(CFLAGS)))
-    ARCH_DETECTED = x86-64
-else
-    ARCH_DETECTED = x86-32
-endif
+# Source files
+VFS_SOURCES = vfs.c
+IR0FS_SOURCES = ir0fs.c
+SOURCES = $(VFS_SOURCES) $(IR0FS_SOURCES)
 
-# Incluir directorios
-CFLAGS += -I../includes -I../includes/ir0 -I../memory
+# Object files
+VFS_OBJECTS = $(VFS_SOURCES:.c=.o)
+IR0FS_OBJECTS = $(IR0FS_SOURCES:.c=.o)
+OBJECTS = $(SOURCES:.c=.o)
 
-# Objetos
-OBJS = vfs.o
+# Libraries
+VFS_LIB = libvfs.a
+IR0FS_LIB = libir0fs.a
 
-all: $(OBJS)
-	@echo "\033[1;32m============================================================\033[0m"
-	@echo "\033[1;32m VFS subsystem compilado correctamente para $(ARCH_DETECTED)\033[0m"
-	@echo "\033[1;32m============================================================\033[0m"
+# Default target
+all: $(VFS_LIB) $(IR0FS_LIB)
 
+# VFS library
+$(VFS_LIB): $(VFS_OBJECTS)
+	@echo "Creating VFS library..."
+	ar rcs $@ $^
+
+# IR0FS library
+$(IR0FS_LIB): $(IR0FS_OBJECTS)
+	@echo "Creating IR0FS library..."
+	ar rcs $@ $^
+
+# Compile source files
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "Compiling $<..."
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
+# Clean
 clean:
-	rm -f $(OBJS)
+	@echo "Cleaning filesystem objects..."
+	rm -f $(OBJECTS) $(VFS_LIB) $(IR0FS_LIB)
 
-.PHONY: all clean
+# Install
+install: all
+	@echo "Installing filesystem libraries..."
+	cp $(VFS_LIB) ../lib/
+	cp $(IR0FS_LIB) ../lib/
+
+# Dependencies
+vfs.o: vfs.c vfs.h ../includes/ir0/print.h ../includes/string.h ../memory/memo_interface.h
+ir0fs.o: ir0fs.c ir0fs.h vfs.h ../includes/ir0/print.h ../includes/ir0/panic/panic.h ../includes/string.h ../memory/memo_interface.h
+
+.PHONY: all clean install

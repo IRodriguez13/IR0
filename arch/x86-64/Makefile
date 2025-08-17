@@ -10,7 +10,7 @@ CFLAGS ?= -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
 ASMFLAGS ?= -f elf64
 
 # Fuentes específicas de esta arquitectura
-ARCH_SOURCES = sources/arch_x64.c sources/fault.c sources/idt_arch_x64.c
+ARCH_SOURCES = sources/arch_x64.c sources/fault.c sources/idt_arch_x64.c sources/tss_x64.c
 BOOT_SOURCES = asm/boot_x64.asm
 
 # Objetos generados
