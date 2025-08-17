@@ -138,11 +138,11 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
 
 # Objetos condicionales según build target
 ifeq ($(BUILD_TARGET),desktop)
-    CONDITIONAL_OBJS = fs/vfs_simple.o
+    CONDITIONAL_OBJS = fs/vfs.o
 else ifeq ($(BUILD_TARGET),server)
-    CONDITIONAL_OBJS = fs/vfs_simple.o
+    CONDITIONAL_OBJS = fs/vfs.o
 else ifeq ($(BUILD_TARGET),iot)
-    CONDITIONAL_OBJS = fs/vfs_simple.o
+    CONDITIONAL_OBJS = fs/vfs.o
 else ifeq ($(BUILD_TARGET),embedded)
     CONDITIONAL_OBJS = 
 endif

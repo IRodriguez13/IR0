@@ -15,7 +15,7 @@ endif
 CFLAGS += -I../includes -I../includes/ir0 -I../memory
 
 # Objetos
-OBJS = vfs_simple.o
+OBJS = vfs.o
 
 all: $(OBJS)
 	@echo "\033[1;32m============================================================\033[0m"

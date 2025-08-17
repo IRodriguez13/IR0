@@ -1,5 +1,5 @@
 #include "acpi/acpi.h"
-#include "lapic/lapic.h"
+// #include "lapic/lapic.h"  // DESHABILITADO TEMPORALMENTE
 #include "clock_system.h" // donde definiste ClockType enum
 #include "hpet/hpet.h"
 
@@ -13,10 +13,10 @@ enum ClockType detect_best_clock()
         return CLOCK_HPET;
     }
 
-    if (lapic_available()) 
-    {
-        return CLOCK_LAPIC;
-    }
+    // if (lapic_available())  // DESHABILITADO TEMPORALMENTE
+    // {
+    //     return CLOCK_LAPIC;
+    // }
 
     return CLOCK_PIT;
 }

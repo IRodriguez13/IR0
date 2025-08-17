@@ -48,3 +48,36 @@ int strcmp(const char *str1, const char *str2)
     }
     return *(const unsigned char *)str1 - *(const unsigned char *)str2;
 }
+
+char *strcpy(char *dest, const char *src)
+{
+    char *d = dest;
+    while (*src)
+        *d++ = *src++;
+    *d = '\0';
+    return dest;
+}
+
+char *strncpy(char *dest, const char *src, size_t n)
+{
+    char *d = dest;
+    while (n-- && *src)
+        *d++ = *src++;
+    while (n--)
+        *d++ = '\0';
+    return dest;
+}
+
+char *strrchr(const char *str, int c)
+{
+    char *last = NULL;
+    while (*str)
+    {
+        if (*str == (char)c)
+            last = (char *)str;
+        str++;
+    }
+    if (c == '\0')
+        return (char *)str;
+    return last;
+}
