@@ -34,6 +34,19 @@
 #define USER_SPACE_END 0x80000000  // hasta 2GB
 
 // ===============================================================================
+// LAPIC - Local Advanced Programmable Interrupt Controller
+// ===============================================================================
+
+// LAPIC está mapeado en memoria alta (MMIO)
+#define LAPIC_BASE     0x00000000fee00000ULL // Base del Local APIC (64-bit)
+#define LAPIC_END      0x00000000fef00000ULL // 1MB para LAPIC (64-bit)
+
+// Identity mapping extendido para LAPIC
+#define IDENTITY_MAPPING_LOW_END  0x10000000 // 256MB - fin del rango bajo
+#define IDENTITY_MAPPING_HIGH_START 0xfee00000 // Inicio del rango alto (LAPIC)
+#define IDENTITY_MAPPING_HIGH_END   0x100000000 // 4GB - fin del rango alto
+
+// ===============================================================================
 // ZONA MANAGEMENT - Evitar colisiones entre sistemas
 // ===============================================================================
 
@@ -44,6 +57,7 @@ typedef enum
     ZONE_KERNEL_STACK,  // Stacks del kernel
     ZONE_VMALLOC,       // Virtual malloc on-demand
     ZONE_USER_SPACE,    // Futuro: procesos de usuario
+    ZONE_LAPIC,         // LAPIC MMIO region
     ZONE_INVALID
 } memory_zone_t;
 

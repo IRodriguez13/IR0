@@ -136,18 +136,27 @@ if make ARCH=$ARCH BUILD_TARGET=$TARGET kernel-$ARCH-$TARGET.iso; then
         
         # Ejecutar QEMU con flags específicas
         if [[ "$ARCH" == "x86-64" ]]; then
-            echo -e "${YELLOW}🐛 Ejecutando QEMU x86-64 con debug...${NC}"
+            echo -e "${YELLOW}🐛 Ejecutando QEMU x86-64 con debug y APIC moderno...${NC}"
             qemu-system-x86_64 \
                 -cdrom kernel-$ARCH-$TARGET.iso \
                 -m 512M \
+                -cpu qemu64,+apic \
+                -smp 2 \
+                -machine q35 \
+                -no-reboot \
+                -no-shutdown \
                 -display gtk \
                 -d int,cpu_reset \
                 -D "$LOG_FILE" &
         else
-            echo -e "${YELLOW}🐛 Ejecutando QEMU x86-32 con debug...${NC}"
+            echo -e "${YELLOW}🐛 Ejecutando QEMU x86-32 con debug y APIC moderno...${NC}"
             qemu-system-i386 \
                 -cdrom kernel-$ARCH-$TARGET.iso \
                 -m 512M \
+                -cpu qemu32,+apic \
+                -machine q35 \
+                -no-reboot \
+                -no-shutdown \
                 -display gtk \
                 -d int,cpu_reset \
                 -D "$LOG_FILE" &
