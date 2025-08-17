@@ -1,6 +1,9 @@
 # IR0 Kernel
 
+-If you see some "interesting" comments around this docs make me know it in <ivanrwcm25@gmail.com>. i generate docs with ai :--)
 ## 🚀 Current Status (v0.0.1 pre-rc)
+
+- You can also watch out the IR0 wiki <https://ir0-wiki.netlify.app/>.
 
 **STABLE & FULLY FUNCTIONAL** - The kernel now compiles and runs successfully on both x86-32 and x86-64 architectures without any issues. All major subsystems are operational and the system demonstrates production-level stability.
 
@@ -80,7 +83,7 @@ make ARCH=x86-64 BUILD_TARGET=desktop
 make ARCH=x86-64 BUILD_TARGET=desktop run
 ```
 
-## 🎯 Revolutionary Features
+## 🎯 Features
 
 ### Production-Level Filesystem (IR0FS)
 - **Journaling** for atomic transactions and crash recovery
@@ -115,8 +118,8 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **Real-time System Information**
 - **Memory Management Commands**
 
-### Revolutionary Memory Management
-- **1GB Identity Mapping** for kernel stability
+###  Memory Management
+- **1GB Identity Mapping** for kernel stability (yeah, a little bit to much)
 - **Advanced Paging** with on-demand loading
 - **Heap Allocator** (kmalloc/kfree) with fragmentation management
 - **Physical Memory Management** with bitmap-based allocation
@@ -226,7 +229,6 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 
 ## 📚 Documentation
 
-- **ANALISIS_COMPLETO_KERNEL.txt** - Comprehensive Spanish analysis
 - **DEVELOPER_GUIDE.md** - Development guidelines and patterns
 - **BUILD_SYSTEM.md** - Build system documentation
 - **INSTALL.md** - Installation and setup instructions
@@ -241,6 +243,6 @@ This project is licensed under the terms specified in the LICENSE file.
 
 ---
 
-**IR0 Kernel** - *Revolutionizing Operating System Design*
+**IR0 Kernel** - *just for fun* 
 
 
