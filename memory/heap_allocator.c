@@ -380,6 +380,8 @@ void heap_allocator_init(void)
 
 void debug_heap_allocator(void)
 {
+    // DEBUG: Comentado para limpiar el log del boot
+    /*
     print_colored("=== HEAP ALLOCATOR STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
     print("Heap start: ");
@@ -421,10 +423,13 @@ void debug_heap_allocator(void)
         print("  ... (more blocks)\n");
     }
     print("\n");
+    */
 }
 
 void debug_memory_state(void)
 {
+    // DEBUG: Comentado para limpiar el log del boot
+    /*
     print_colored("=== ESTADO COMPLETO DEL SISTEMA DE MEMORIA ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
     // Estadísticas generales
@@ -458,6 +463,7 @@ void debug_memory_state(void)
 
     debug_physical_allocator();
     debug_heap_allocator();
+    */
 }
 
 // Funciones de conveniencia para compatibilidad

@@ -129,6 +129,8 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    kernel/scheduler/cfs_scheduler.o \
                    kernel/scheduler/scheduler_detection.o \
                    kernel/scheduler/task_impl.o \
+                   kernel/process/process.o \
+                   kernel/syscalls/syscalls.o \
                    arch/common/arch_interface.o \
                    memory/heap_allocator.o \
                    memory/physical_allocator.o \

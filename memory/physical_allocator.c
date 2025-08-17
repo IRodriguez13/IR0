@@ -78,6 +78,8 @@ void physical_allocator_init(void)
     allocator_initialized = 1;
 
     LOG_OK("Physical allocator inicializado");
+    // DEBUG: Comentado para limpiar el log del boot
+    /*
     print("Memoria física: ");
     print_hex_compact(PHYS_MEM_START);
     print(" - ");
@@ -85,6 +87,7 @@ void physical_allocator_init(void)
     print(" (");
     print_hex_compact(total_pages_count);
     print(" páginas)\n");
+    */
 }
 
 uintptr_t alloc_physical_page(void)
@@ -163,6 +166,8 @@ void free_physical_page(uintptr_t phys_addr)
 
 void debug_physical_allocator(void)
 {
+    // DEBUG: Comentado para limpiar el log del boot
+    /*
     print_colored("=== PHYSICAL ALLOCATOR STATE ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
     print("Memory range: ");
@@ -187,4 +192,5 @@ void debug_physical_allocator(void)
     print("Usage: ");
     print_hex_compact(usage_percent);
     print("%\n\n");
+    */
 }

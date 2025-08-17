@@ -163,7 +163,7 @@ uintptr_t find_free_virtual_space(size_t size)
 // API PÚBLICA MEJORADA
 // ===============================================================================
 
-void *vmalloc(size_t size)
+void *valloc(size_t size)
 {
     if (!vmalloc_initialized)
     {
@@ -181,7 +181,7 @@ void *vmalloc(size_t size)
     uintptr_t virt_addr = find_free_virtual_space(size);
     if (virt_addr == 0)
     {
-        LOG_ERR("vmalloc: No se puede encontrar espacio virtual");
+        LOG_ERR("valloc: No se puede encontrar espacio virtual");
         return NULL;
     }
 
@@ -189,7 +189,7 @@ void *vmalloc(size_t size)
     vmalloc_region_t *region = allocate_region_descriptor();
     if (!region)
     {
-        LOG_ERR("vmalloc: No se puede allocar descriptor");
+        LOG_ERR("valloc: No se puede allocar descriptor");
         return NULL;
     }
 
@@ -275,7 +275,7 @@ void vfree(void *ptr)
 
 void *vzalloc(size_t size)
 {
-    void *ptr = vmalloc(size);
+    void *ptr = valloc(size);
     if (ptr)
     {
         // NOTA: memset aquí forzará page faults y allocation física
@@ -284,10 +284,10 @@ void *vzalloc(size_t size)
     return ptr;
 }
 
-void *vmalloc_user(size_t size)
+void *valloc_user(size_t size)
 {
-    // Para futuro: vmalloc que puede ser accedido por user space
-    void *ptr = vmalloc(size);
+    // Para futuro: valloc que puede ser accedido por user space
+    void *ptr = valloc(size);
     if (ptr)
     {
         // TODO: Marcar páginas como USER accessible cuando se mapeen
