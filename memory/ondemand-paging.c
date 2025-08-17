@@ -273,7 +273,7 @@ void page_fault_handler_improved(void)
 // FUNCIONES DE ALTO NIVEL PARA USAR EN EL KERNEL
 // ===============================================================================
 
-// NOTA: vmalloc y vfree están implementados en vallocator.c
+// NOTA: valloc y vfree están implementados en vallocator.c
 // para evitar duplicación de código
 
 // ===============================================================================
