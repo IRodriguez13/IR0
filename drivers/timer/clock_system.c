@@ -2,7 +2,7 @@
 #include <print.h>
 #include "acpi/acpi.h"
 #include "pit/pit.h"
-#include "lapic/lapic.h"
+// #include "lapic/lapic.h"  // DESHABILITADO TEMPORALMENTE
 #include "hpet/hpet.h"
 #include "clock_system.h"
 #include <panic/panic.h>
@@ -27,10 +27,10 @@ void init_clock()
         hpet_init();
         break;
 
-    case CLOCK_LAPIC:
-        LOG_OK("[CLOCK] Using LAPIC Timer");
-        lapic_init_timer();
-        break;
+    // case CLOCK_LAPIC:  // DESHABILITADO TEMPORALMENTE
+    //     LOG_OK("[CLOCK] Using LAPIC Timer");
+    //     lapic_init_timer();
+    //     break;
 
     case CLOCK_PIT:
         LOG_OK("[CLOCK] HPET/LAPIC unavailable, using PIT");

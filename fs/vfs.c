@@ -3,6 +3,7 @@
 #include "../includes/ir0/print.h"
 #include "../includes/string.h"
 #include "../memory/heap_allocator.h"
+#include <string.h>
 
 // ===============================================================================
 // GLOBAL VFS STATE
@@ -256,7 +257,7 @@ ssize_t vfs_write(vfs_file_t *file, const void *buf, size_t count)
     file->offset += count;
 
     print_colored("VFS: Wrote ", 0x0A, 0x00);
-    print_uint(count);
+    print_hex64(count);
     print(" bytes to file\n");
 
     return count;

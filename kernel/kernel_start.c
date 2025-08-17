@@ -1,10 +1,15 @@
-// kernel/kernel_start.c - VERSIÓN MÍNIMA PARA TESTING
-#include "../arch/common/arch_interface.h"
-#include <kernel.h>
-#include "../arch/common/idt.h"
-#include "../memory/heap_allocator.h" // AGREGADO: Heap allocator
-#include "../memory/memo_interface.h" // AGREGADO: kmalloc/kfree
-#include "../memory/physical_allocator.h" // AGREGADO: Physical allocator
+#include "kernel_start.h"
+#include "../includes/ir0/kernel.h"
+#include "../includes/ir0/print.h"
+#include "../includes/ir0/panic/panic.h"
+#include "../memory/memo_interface.h"
+#include "../memory/physical_allocator.h"
+#include "../memory/heap_allocator.h"
+#include "../memory/krnl_memo_layout.h"
+#include "../kernel/scheduler/scheduler.h"
+#include "../drivers/timer/clock_system.h"
+#include "../fs/vfs.h"
+#include <string.h>
 
 // ARREGLADO: Includes con rutas correctas según arquitectura
 #if defined(__i386__)
@@ -277,19 +282,123 @@ void main()
     print("main: Test del scheduler completado\n");
     delay_ms(500);
     
-    // 8. Loop infinito estable del kernel
-    print("main: FASE 3 COMPLETADA - LAPIC Mapping funcionando!\n");
-    print("main: Entrando en loop infinito del kernel...\n");
-    delay_ms(2000);
+    // FASE 5: Timer System
+    print_colored("=== FASE 5: Timer System ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    enum ClockType timer_type = detect_best_clock();
+    print("Timer detectado: ");
+    switch (timer_type) {
+        case CLOCK_HPET: print("HPET\n"); break;
+        case CLOCK_LAPIC: print("LAPIC\n"); break;
+        case CLOCK_PIT: print("PIT\n"); break;
+        case CLOCK_RTC: print("RTC\n"); break;
+        case CLOCK_NONE: print("NONE\n"); break;
+    }
     
-    uint32_t counter = 0;
-    for(;;) {
-        if (counter % 1000000 == 0) {
-            print("IR0 Kernel: Status: FASE 2 - Physical Allocator OK :-)\n");
+    init_clock();
+    enum ClockType current_timer = get_current_timer_type();
+    print("Timer activo: ");
+    switch (current_timer) {
+        case CLOCK_HPET: print("HPET\n"); break;
+        case CLOCK_LAPIC: print("LAPIC\n"); break;
+        case CLOCK_PIT: print("PIT\n"); break;
+        case CLOCK_RTC: print("RTC\n"); break;
+        case CLOCK_NONE: print("NONE\n"); break;
+    }
+    
+    // Simular algunos ticks del timer
+    for (int i = 0; i < 3; i++) {
+        delay_ms(100);
+        print("Timer tick ");
+        print_hex64(i);
+        print("\n");
+    }
+    print_success("Timer System funcionando\n");
+
+    // FASE 6: File System (VFS)
+    print_colored("=== FASE 6: File System (VFS) ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    
+    int vfs_result = vfs_init();
+    if (vfs_result == 0) {
+        print_success("VFS inicializado correctamente\n");
+        
+        // Test: Abrir archivo
+        vfs_file_t *test_file;
+        int open_result = vfs_open("/test.txt", VFS_O_RDWR | VFS_O_CREAT, &test_file);
+        if (open_result == 0 && test_file != NULL) {
+            print_success("Archivo /test.txt abierto correctamente\n");
+            
+            // Test: Escribir en archivo
+            const char *test_data = "Hello VFS!";
+            ssize_t write_result = vfs_write(test_file, test_data, strlen(test_data));
+            if (write_result > 0) {
+                print_success("Escritura en archivo exitosa: ");
+                print_hex64(write_result);
+                print(" bytes\n");
+            }
+            
+            // Test: Cerrar archivo
+            int close_result = vfs_close(test_file);
+            if (close_result == 0) {
+                print_success("Archivo cerrado correctamente\n");
+            }
         }
-        counter++;
-        if (counter % 100000 == 0) {
-            delay_ms(100);
+        
+        // Test: Crear directorio
+        int mkdir_result = vfs_mkdir("/testdir");
+        if (mkdir_result == 0) {
+            print_success("Directorio /testdir creado correctamente\n");
         }
+        
+        // Test: Montar filesystem
+        int mount_result = vfs_mount("/dev/sda1", "/mnt", "ext2");
+        if (mount_result == 0) {
+            print_success("Filesystem montado correctamente\n");
+        }
+        
+    } else {
+        print_error("Error al inicializar VFS\n");
+    }
+    
+    // FASE 7: Sistema de Interrupciones
+    print_colored("=== FASE 7: Sistema de Interrupciones ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    
+    // Habilitar interrupciones globalmente
+    print("Habilitando interrupciones globalmente...\n");
+    __asm__ volatile("sti");
+    print_success("Interrupciones habilitadas globalmente\n");
+    
+    print_success("Sistema de interrupciones funcionando\n");
+    
+    // 8. Dispatch Loop del Scheduler
+    print_colored("=== Entrando al Dispatch Loop del Scheduler ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print("Kernel IR0 iniciado correctamente. Entrando al dispatch loop...\n");
+    
+    // Loop principal del kernel - dispatch del scheduler
+    for(;;)
+    {
+        // Obtener la siguiente tarea del scheduler
+        task_t *next_task = current_scheduler.pick_next_task();
+        
+        if (next_task != NULL) 
+        {
+            // Ejecutar la tarea
+            print("Ejecutando tarea PID: ");
+            print_hex64(next_task->pid);
+            print("\n");
+            
+            // Aquí normalmente haríamos context switch
+            // Por ahora solo simulamos la ejecución
+            next_task->entry(NULL);
+            
+            // Tick del scheduler
+            current_scheduler.task_tick();
+        } else 
+        {
+            // No hay tareas, idle
+            print("Idle - no hay tareas pendientes\n");
+        }
+        
+        // Pequeña pausa para evitar saturar la CPU
+        delay_ms(100);
     }
 }
