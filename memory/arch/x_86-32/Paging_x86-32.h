@@ -9,5 +9,5 @@
 
 #include <stdint.h>
 
-void init_paging();
+void init_paging_x86();
 

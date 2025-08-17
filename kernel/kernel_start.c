@@ -6,7 +6,14 @@
 #include "../memory/physical_allocator.h"
 #include "../memory/heap_allocator.h"
 #include "../memory/krnl_memo_layout.h"
+#ifdef __x86_64__
+#include "../memory/arch/x86-64/Paging_x64.h"
+#else
+#include "../memory/arch/x_86-32/Paging_x86-32.h"
+#endif
 #include "../kernel/scheduler/scheduler.h"
+#include "../kernel/process/process.h"
+#include "../kernel/syscalls/syscalls.h"
 #include "../drivers/timer/clock_system.h"
 #include "../fs/vfs.h"
 #include <string.h>
@@ -28,7 +35,11 @@ void main(void)
     
     // 2. Inicializar paginación
     print("Initializing memory management...\n");
+#ifdef __x86_64__
     init_paging_x64();
+#else
+    init_paging_x86();
+#endif
     print_success("Memory management initialized\n");
     delay_ms(1000);
     
@@ -43,6 +54,18 @@ void main(void)
     print("Initializing task scheduler...\n");
     scheduler_init();
     print_success("Task scheduler initialized\n");
+    delay_ms(1000);
+    
+    // 4.1. Inicializar sistema de procesos
+    print("Initializing process management...\n");
+    process_init();
+    print_success("Process management initialized\n");
+    delay_ms(1000);
+    
+    // 4.2. Inicializar sistema de system calls
+    print("Initializing system call interface...\n");
+    syscalls_init();
+    print_success("System call interface initialized\n");
     delay_ms(1000);
     
     // 5. Inicializar timer system

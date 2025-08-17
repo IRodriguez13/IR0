@@ -13,7 +13,7 @@
 */
 void virtual_allocator_init(void);
 
-void *vmalloc(size_t size);
+void *valloc(size_t size);
 void vfree(void *ptr);
 
 /**
