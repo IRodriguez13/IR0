@@ -168,3 +168,13 @@ void print_hex64(uint64_t val)
     buffer[16] = '\0';
     print(buffer);
 }
+
+void delay_ms(uint32_t ms)
+{
+    // Delay simple usando loops
+    // Aproximadamente 1ms por cada 100,000 iteraciones
+    for (volatile uint32_t i = 0; i < ms * 100000; i++)
+    {
+        __asm__ volatile("nop");
+    }
+}
