@@ -10,6 +10,7 @@ void scheduler_init(void);        // Inicializar sistema de schedulers
 void scheduler_tick(void);        // Llamado desde timer interrupt
 void add_task(task_t* task);      // Agregar tarea al scheduler activo
 void scheduler_start(void);       // Iniciar ejecución de tareas
+void scheduler_main_loop(void);   // Loop principal del scheduler - NUNCA RETORNA
 
 // ===============================================================================
 // NUEVAS FUNCIONES DE GESTIÓN

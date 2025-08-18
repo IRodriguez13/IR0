@@ -116,6 +116,7 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    includes/string.o \
                    interrupt/idt.o \
                    interrupt/isr_handlers.o \
+                   interrupt/pic.o \
                    includes/ir0/panic/panic.o \
                    drivers/timer/pit/pit.o \
                    drivers/timer/clock_system.o \

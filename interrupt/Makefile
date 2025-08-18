@@ -16,7 +16,7 @@ else
 endif
 
 # Objetos comunes
-OBJS = idt.o isr_handlers.o
+OBJS = idt.o isr_handlers.o pic.o
 
 # Objetos específicos de arquitectura
 ifeq ($(ARCH_DETECTED),x86-64)
