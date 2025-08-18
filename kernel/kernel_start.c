@@ -18,6 +18,8 @@
 #include "../memory/physical_allocator.h"
 #include "../kernel/process/process.h"
 #include "../kernel/syscalls/syscalls.h"
+#include "../drivers/IO/ps2.h"
+#include "../drivers/storage/ata.h"
 #ifdef __x86_64__
 #include "../arch/x86-64/sources/tss_x64.h"
 #endif
@@ -114,13 +116,28 @@ void main(void)
     print_success("Timer system initialized\n");
     delay_ms(1000);
 
-    // 6. Inicializar VFS
+    // 6. Inicializar drivers de hardware
+    print("Initializing hardware drivers...\n");
+    
+    // Inicializar driver de teclado PS/2
+    print("Initializing PS/2 keyboard driver...\n");
+    ps2_init();
+    print_success("PS/2 keyboard driver initialized\n");
+    
+    // Inicializar driver de disco ATA
+    print("Initializing ATA disk driver...\n");
+    ata_init();
+    print_success("ATA disk driver initialized\n");
+    
+    delay_ms(1000);
+
+    // 7. Inicializar VFS
     print("Initializing virtual file system...\n");
     vfs_init();
     print_success("Virtual file system initialized\n");
     delay_ms(1000);
 
-    // 7. MANTENER INTERRUPCIONES DESHABILITADAS (SOLUCIÓN RÁPIDA)
+    // 8. MANTENER INTERRUPCIONES DESHABILITADAS (SOLUCIÓN RÁPIDA)
     print("Keeping interrupts disabled for stability...\n");
     // __asm__ volatile("sti");
     print_success("Interrupts remain disabled (stable mode)\n");
