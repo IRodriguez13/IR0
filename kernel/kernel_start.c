@@ -20,6 +20,7 @@
 #include "../kernel/syscalls/syscalls.h"
 #include "../drivers/IO/ps2.h"
 #include "../drivers/storage/ata.h"
+#include "../interrupt/pic.h"
 #ifdef __x86_64__
 #include "../arch/x86-64/sources/tss_x64.h"
 #endif
@@ -137,10 +138,22 @@ void main(void)
     print_success("Virtual file system initialized\n");
     delay_ms(1000);
 
-    // 8. MANTENER INTERRUPCIONES DESHABILITADAS (SOLUCIÓN RÁPIDA)
-    print("Keeping interrupts disabled for stability...\n");
-    // __asm__ volatile("sti");
-    print_success("Interrupts remain disabled (stable mode)\n");
+    // 8. SISTEMA DE INTERRUPCIONES MÍNIMO
+    print("Initializing minimal interrupt system...\n");
+    idt_init();
+    print_success("IDT initialized\n");
+    
+    pic_init();
+    print_success("PIC initialized\n");
+    
+    // Unmask timer IRQ (IRQ 0) - now mapped to vector 32
+    pic_unmask_irq(0);
+    print_success("Timer IRQ unmasked (vector 32)\n");
+    
+    // Habilitar interrupciones
+    print("Enabling interrupts...\n");
+    __asm__ volatile("sti");
+    print_success("Interrupts enabled\n");
     delay_ms(1000);
 
     print_colored("=== IR0 Kernel Ready - Starting Shell ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
@@ -167,13 +180,17 @@ void main(void)
         print("Kernel is now in idle mode.\n");
         print("All subsystems are running normally.\n");
         
-        // Don't panic, just continue
-        cpu_wait();
+        // Iniciar scheduler y entrar al loop principal
+        print("Starting scheduler main loop...\n");
+        scheduler_start();
+        scheduler_main_loop(); // NUNCA RETORNA
     } else {
         print_error("Shell failed with error code: \n");
         print_error("Kernel continuing without shell...\n");
         
         // Continue kernel operation even if shell fails
-        cpu_wait();
+        print("Starting scheduler main loop...\n");
+        scheduler_start();
+        scheduler_main_loop(); // NUNCA RETORNA
     }
 }

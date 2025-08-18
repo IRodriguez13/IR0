@@ -79,12 +79,6 @@ void outb(uint16_t port, uint8_t value)
 #endif
 }
 
-// uint8_t inb(uint16_t port)
-// {
-//     uint8_t value;
-//     asm volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
-//     return value;
-// }
 
 void cpu_wait(void)
 {
@@ -98,22 +92,26 @@ void cpu_wait(void)
 // Implementación simple de división unsigned 64-bit
 uint64_t __udivdi3(uint64_t a, uint64_t b)
 {
-    if (b == 0) {
+    if (b == 0)
+    {
         // División por cero - en un kernel real esto debería panic
+        panic("Prohibidísimo dividir por cero. Division by zero detected.");
         return 0;
     }
-    
+
     uint64_t result = 0;
     uint64_t remainder = 0;
-    
+
     // Algoritmo de división simple
-    for (int i = 63; i >= 0; i--) {
+    for (int i = 63; i >= 0; i--)
+    {
         remainder = (remainder << 1) | ((a >> i) & 1);
-        if (remainder >= b) {
+        if (remainder >= b)
+        {
             remainder -= b;
             result |= (1ULL << i);
         }
     }
-    
+
     return result;
 }
