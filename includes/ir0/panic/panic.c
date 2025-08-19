@@ -71,7 +71,7 @@ void panic_advanced(const char *message, panic_level_t level, const char *file, 
 
     // Mensaje antes del cpu_relax
     print_colored("\n═══ SYSTEM HALTED ═══\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("Safe to power off or reboot\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("Safe to power off or reboot - Es seguro apagar o reiniciar el equipo.\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
 
     cpu_relax(); // la cpu a hacer noni para que no haya mas problemas intrackeables.
 }
@@ -195,7 +195,6 @@ void dump_memory_info()
 {
     print_colored("--- MEMORY INFO ---\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
 
-    // Info básica de memoria (Lo tengo que adaptar cuando tenga Stack/heap)
     extern uint32_t free_pages_count, total_pages_count;
 
     uint32_t used_pages = total_pages_count - free_pages_count;
