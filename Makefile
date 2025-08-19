@@ -114,9 +114,10 @@ SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    includes/ir0/print.o \
                    includes/string.o \
-                   interrupt/idt.o \
-                   interrupt/isr_handlers.o \
-                   interrupt/pic.o \
+                   interrupt/arch/idt.o \
+                   interrupt/arch/pic.o \
+                   interrupt/arch/isr_handlers.o \
+                   interrupt/arch/keyboard.o \
                    includes/ir0/panic/panic.o \
                    drivers/timer/pit/pit.o \
                    drivers/timer/clock_system.o \
@@ -164,7 +165,7 @@ ifeq ($(ARCH),x86-64)
                 memory/arch/x86-64/Paging_x64.o \
                 memory/arch/x86-64/mmu_x64.o \
                 kernel/scheduler/switch/switch_x64.o \
-                interrupt/arch/x86-64/interrupt.o
+                interrupt/arch/x86-64/isr_stubs_64.o
 else ifeq ($(ARCH),x86-32)  
     ARCH_OBJS = arch/x86-32/sources/arch_x86.o \
                 arch/x86-32/asm/boot_x86.o \
@@ -172,7 +173,7 @@ else ifeq ($(ARCH),x86-32)
                 memory/arch/x_86-32/Paging_x86-32.o \
                 memory/arch/x_86-32/mmu_x86-32.o \
                 kernel/scheduler/switch/switch_x86.o \
-                interrupt/arch/x86-32/interrupt.o
+                interrupt/arch/x86-32/isr_stubs_32.o
 else ifeq ($(ARCH),arm64)
     ARCH_OBJS = arch/arm64/sources/arch_arm64.o \
                 arch/arm64/asm/boot_arm64.o \
