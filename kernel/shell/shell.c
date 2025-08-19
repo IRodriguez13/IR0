@@ -110,17 +110,45 @@ static void shell_show_prompt(const char *prompt)
     print("\n");
     print(prompt);
     
-    // Hacer titilar el prompt con diferentes colores
+    // Hacer parpadear el prompt en amarillo
     static int blink_state = 0;
     blink_state = !blink_state; // Alternar estado
     
     if (blink_state) {
-        // Estado 1: Verde brillante
-        print_colored("> ", VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    } else {
-        // Estado 2: Amarillo
+        // Estado 1: Mostrar prompt amarillo
         print_colored("> ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    } else {
+        // Estado 2: Mostrar prompt invisible (mismo color que fondo)
+        print_colored("> ", VGA_COLOR_BLACK, VGA_COLOR_BLACK);
     }
+}
+
+// ===============================================================================
+// UTILITY FUNCTIONS
+// ===============================================================================
+
+// atoi ya está definido en string.h
+
+// ===============================================================================
+// SYSCALL WRAPPER FUNCTIONS
+// ===============================================================================
+
+// Función wrapper para hacer syscalls desde el shell
+static int64_t shell_syscall(int syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3)
+{
+    // Crear estructura de argumentos para syscall
+    syscall_args_t args;
+    args.arg1 = arg1;
+    args.arg2 = arg2;
+    args.arg3 = arg3;
+    args.arg4 = 0;
+    args.arg5 = 0;
+    args.arg6 = 0;
+    
+    // Llamar a la syscall
+    syscall_table[syscall_number](&args);
+    
+    return args.arg1; // Retornar resultado
 }
 
 // ===============================================================================
@@ -536,6 +564,126 @@ static int shell_cmd_clear(shell_context_t *ctx, shell_config_t *config, char ar
     return 0;
 }
 
+// Comando para probar syscalls
+static int shell_cmd_syscall_test(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)ctx;
+    (void)config;
+    (void)args;
+    (void)arg_count;
+
+    print("Testing system calls...\n");
+    
+    // Probar SYS_GETPID
+    int64_t pid = shell_syscall(SYS_GETPID, 0, 0, 0);
+    print("Current PID: ");
+    print_int32(pid);
+    print("\n");
+    
+    // Probar SYS_GETTIME
+    int64_t time = shell_syscall(SYS_GETTIME, 0, 0, 0);
+    print("Current time (ms): ");
+    print_int32(time);
+    print("\n");
+    
+    // Probar SYS_WRITE (escribir a stdout)
+    const char *message = "Hello from syscall!\n";
+    int64_t written = shell_syscall(SYS_WRITE, 1, (uint64_t)message, strlen(message));
+    print("Bytes written: ");
+    print_int32(written);
+    print("\n");
+    
+    print("Syscall test completed!\n");
+    return 0;
+}
+
+// Comando para probar sleep
+static int shell_cmd_sleep_test(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)ctx;
+    (void)config;
+    (void)arg_count;
+
+    if (arg_count < 2) {
+        print("Usage: sleep_test <milliseconds>\n");
+        return 1;
+    }
+    
+    int ms = atoi(args[1]);
+    if (ms <= 0) {
+        print("Invalid time value\n");
+        return 1;
+    }
+    
+    print("Sleeping for ");
+    print_int32(ms);
+    print(" milliseconds...\n");
+    
+    int64_t start_time = shell_syscall(SYS_GETTIME, 0, 0, 0);
+    shell_syscall(SYS_SLEEP, ms, 0, 0);
+    int64_t end_time = shell_syscall(SYS_GETTIME, 0, 0, 0);
+    
+    print("Slept for ");
+    print_int32(end_time - start_time);
+    print(" milliseconds\n");
+    
+    return 0;
+}
+
+// Comando para probar yield
+static int shell_cmd_yield_test(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)ctx;
+    (void)config;
+    (void)args;
+    (void)arg_count;
+
+    print("Testing yield...\n");
+    
+    for (int i = 0; i < 5; i++) {
+        print("Before yield ");
+        print_int32(i);
+        print("\n");
+        
+        shell_syscall(SYS_YIELD, 0, 0, 0);
+        
+        print("After yield ");
+        print_int32(i);
+        print("\n");
+    }
+    
+    print("Yield test completed!\n");
+    return 0;
+}
+
+// Comando para probar read desde stdin
+static int shell_cmd_read_test(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)ctx;
+    (void)config;
+    (void)args;
+    (void)arg_count;
+
+    print("Testing read from stdin...\n");
+    print("Type something and press Enter: ");
+    
+    char buffer[256];
+    int64_t bytes_read = shell_syscall(SYS_READ, 0, (uint64_t)buffer, sizeof(buffer) - 1);
+    
+    if (bytes_read > 0) {
+        buffer[bytes_read] = '\0';
+        print("You typed: ");
+        print(buffer);
+        print(" (");
+        print_int32(bytes_read);
+        print(" bytes)\n");
+    } else {
+        print("Read failed\n");
+    }
+    
+    return 0;
+}
+
 static int shell_cmd_echo(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
 {
     (void)ctx;
@@ -927,6 +1075,10 @@ static void shell_init_builtin_commands(void)
     shell_add_builtin_command("reboot", "Reboot system", shell_cmd_reboot);
     shell_add_builtin_command("halt", "Halt system", shell_cmd_halt);
     shell_add_builtin_command("keyboard", "Test keyboard functionality", shell_cmd_keyboard);
+    shell_add_builtin_command("syscall", "Test system calls", shell_cmd_syscall_test);
+    shell_add_builtin_command("sleep_test", "Test sleep syscall", shell_cmd_sleep_test);
+    shell_add_builtin_command("yield_test", "Test yield syscall", shell_cmd_yield_test);
+    shell_add_builtin_command("read_test", "Test read from stdin", shell_cmd_read_test);
     shell_add_builtin_command("exit", "Exit shell", shell_cmd_exit);
 }
 

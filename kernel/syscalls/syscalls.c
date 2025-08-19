@@ -4,6 +4,9 @@
 #include "../../includes/ir0/print.h"
 #include "../../includes/ir0/panic/panic.h"
 #include "../../fs/vfs.h"
+#include "../../interrupt/arch/keyboard.h"
+#include "../../drivers/timer/pit/pit.h"
+#include "../../kernel/scheduler/scheduler.h"
 #include <string.h>
 
 // ===============================================================================
@@ -418,8 +421,29 @@ int64_t sys_read(int fd, void *buf, size_t count)
     
     // Handle special file descriptors
     if (fd == STDIN_FILENO) {
-        // TODO: Read from keyboard/console
-        return 0;
+        // Read from keyboard buffer
+        char *char_buf = (char *)buf;
+        size_t bytes_read = 0;
+        
+        while (bytes_read < count) {
+            // Esperar hasta que haya datos en el buffer
+            while (!keyboard_buffer_has_data()) {
+                // Yield para no bloquear el sistema
+                scheduler_yield();
+            }
+            
+            // Leer un carácter del buffer
+            char c = keyboard_buffer_get();
+            char_buf[bytes_read] = c;
+            bytes_read++;
+            
+            // Si es enter, terminar
+            if (c == '\n') {
+                break;
+            }
+        }
+        
+        return bytes_read;
     }
     
     // Handle regular file descriptors
@@ -1227,8 +1251,11 @@ int64_t sys_sleep(uint32_t ms)
         return -ESRCH;
     }
     
-    // TODO: Implement actual sleep using scheduler
-    // For now, just return success
+    // Implementación simple de sleep
+    // Por ahora, solo yield para permitir que otros procesos ejecuten
+    // TODO: Implementar sleep real con timer
+    scheduler_yield();
+    
     return 0;
 }
 
@@ -1238,14 +1265,21 @@ int64_t sys_yield(void)
         return -ESRCH;
     }
     
-    // TODO: Implement actual yield using scheduler
-    // For now, just return success
+    // Implementar yield real usando scheduler
+    scheduler_yield();
+    
     return 0;
 }
 
 int64_t sys_gettime(void)
 {
-    // TODO: Implement actual time retrieval
-    // For now, return a dummy timestamp
-    return 0;
+    // Implementar tiempo real usando PIT
+    // Cada tick del PIT es aproximadamente 1ms
+    
+    if (!current_process) {
+        return -ESRCH;
+    }
+    
+    // Retornar tiempo en milisegundos desde el boot
+    return (int64_t)get_pit_ticks();
 }

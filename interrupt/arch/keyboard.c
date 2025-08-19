@@ -85,6 +85,21 @@ void keyboard_handler64(void) {
     }
 }
 
+// Handler de interrupciones de teclado para 32-bit
+void keyboard_handler32(void) {
+    // Leer scancode del puerto 0x60
+    uint8_t scancode = inb(0x60);
+    
+    // Solo procesar key press (scancode < 0x80)
+    if (scancode < 0x80) {
+        char ascii = translate_scancode(scancode);
+        if (ascii != 0) {
+            keyboard_buffer_add(ascii);
+            // No hacer echo aquí - el shell se encarga de todo
+        }
+    }
+}
+
 // Función para inicializar el teclado
 void keyboard_init(void) {
     // Limpiar buffer
