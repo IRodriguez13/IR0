@@ -8,7 +8,83 @@
 #include "../../kernel/process/process.h"
 #include "../../kernel/syscalls/syscalls.h"
 #include "../../fs/vfs.h"
+#include "../../drivers/IO/ps2.h"
 #include "stdarg.h"
+
+// ===============================================================================
+// KEYBOARD INPUT FUNCTIONS
+// ===============================================================================
+
+// Read a single character from keyboard
+static char shell_read_char(void)
+{
+    while (!ps2_has_char())
+    {
+        // Wait for character
+        __asm__ volatile("hlt");
+    }
+    return ps2_get_char();
+}
+
+// Read a line from keyboard with basic editing
+static int shell_read_line(char *buffer, int max_length)
+{
+    int pos = 0;
+    buffer[0] = '\0';
+
+    while (pos < max_length - 1)
+    {
+        char c = shell_read_char();
+
+        if (c == '\n' || c == '\r')
+        {
+            // Enter key - end of line
+            print("\n");
+            buffer[pos] = '\0';
+            return pos;
+        }
+        else if (c == '\b' || c == 127)
+        {
+            // Backspace
+            if (pos > 0)
+            {
+                pos--;
+                buffer[pos] = '\0';
+                print("\b \b"); // Move back, clear char, move back
+            }
+        }
+        else if (c == ' ')
+        {
+            // Space character
+            buffer[pos] = c;
+            buffer[pos + 1] = '\0';
+            pos++;
+            print(" "); // Echo space
+        }
+        else if (c >= 32 && c <= 126)
+        {
+            // Printable character
+            buffer[pos] = c;
+            buffer[pos + 1] = '\0';
+            pos++;
+            // Echo character - create a temporary string
+            char temp[2] = {c, '\0'};
+            print(temp);
+        }
+        // Ignore other characters
+    }
+
+    buffer[pos] = '\0';
+    return pos;
+}
+
+// Show shell prompt
+static void shell_show_prompt(const char *prompt)
+{
+    print("\n");
+    print(prompt);
+    print("> ");
+}
 
 // ===============================================================================
 // GLOBAL STATE
@@ -30,185 +106,226 @@ int shell_builtin_count = 0;
 
 int shell_init(shell_context_t *ctx, shell_config_t *config)
 {
-    if (!ctx || !config) {
+    if (!ctx || !config)
+    {
         return -1;
     }
-    
+
     // Initialize shell context
     memset(ctx, 0, sizeof(shell_context_t));
     strcpy(ctx->current_dir, "/");
     ctx->running = 1;
     ctx->exit_code = 0;
-    
+
     // Initialize shell configuration
     memset(config, 0, sizeof(shell_config_t));
     strcpy(config->prompt, SHELL_PROMPT_DEFAULT);
     config->max_history = SHELL_MAX_HISTORY;
     config->max_line_length = SHELL_MAX_LINE_LENGTH;
     config->colors_enabled = 1;
-    
+
     // Initialize command history
-    for (int i = 0; i < SHELL_MAX_HISTORY; i++) {
+    for (int i = 0; i < SHELL_MAX_HISTORY; i++)
+    {
         ctx->history[i][0] = '\0';
     }
     ctx->history_count = 0;
     ctx->history_index = 0;
-    
+
     // Initialize built-in commands
     shell_init_builtin_commands();
-    
-    print_success("IR0 Shell initialized successfully");
+
+    print_success("IR0 Shell initialized successfully \n");
     return 0;
 }
 
 int shell_run(shell_context_t *ctx, shell_config_t *config)
 {
-    if (!ctx || !config) {
+    if (!ctx || !config)
+    {
         return -1;
     }
-    
-    print("IR0 Shell v1.0 - Type 'help' for available commands\n");
-    
-    // Run a few demo commands
-    shell_process_line(ctx, config, "help");
-    shell_process_line(ctx, config, "info");
-    shell_process_line(ctx, config, "version");
-    shell_process_line(ctx, config, "ps");
-    shell_process_line(ctx, config, "meminfo");
-    shell_process_line(ctx, config, "debug");
-    
-    print("Shell demo completed successfully\n");
-    return 0;
+
+    print("\n");
+    print("╔══════════════════════════════════════════════════════════════╗\n");
+    print("║                    IR0 Kernel Shell v1.0                     ║\n");
+    print("║                                                              ║\n");
+    print("║  Type 'help' for available commands                          ║\n");
+    print("║  Type 'exit' to quit the shell                               ║\n");
+    print("╚══════════════════════════════════════════════════════════════╝\n");
+    print("\n");
+
+    char line[SHELL_MAX_LINE_LENGTH];
+
+    // Interactive loop
+    while (ctx->running)
+    {
+        // Show prompt
+        shell_show_prompt(config->prompt);
+
+        // Read line from keyboard
+        int len = shell_read_line(line, SHELL_MAX_LINE_LENGTH);
+
+        if (len > 0)
+        {
+            // Process the line
+            shell_process_line(ctx, config, line);
+        }
+    }
+
+    print("Shell exited\n");
+    return ctx->exit_code;
 }
 
 int shell_process_line(shell_context_t *ctx, shell_config_t *config, const char *line)
 {
-    if (!ctx || !config || !line) {
+    if (!ctx || !config || !line)
+    {
         return -1;
     }
-    
+
     // Add to history
     shell_add_to_history(ctx, line);
-    
+
     // Parse command
     char command[SHELL_MAX_LINE_LENGTH];
     char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH];
     int arg_count = 0;
-    
-    if (shell_parse_command(line, command, args, &arg_count) != 0) {
+
+    if (shell_parse_command(line, command, args, &arg_count) != 0)
+    {
         shell_print_error("Failed to parse command");
         return -1;
     }
-    
+
     // Execute command
     int result = shell_execute_command(ctx, config, command, args, arg_count);
-    
+
     return result;
 }
 
 int shell_parse_command(const char *line, char *command, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int *arg_count)
 {
-    if (!line || !command || !args || !arg_count) {
+    if (!line || !command || !args || !arg_count)
+    {
         return -1;
     }
-    
+
     *arg_count = 0;
-    
+
     // Skip leading whitespace
-    while (*line && isspace(*line)) {
+    while (*line && isspace(*line))
+    {
         line++;
     }
-    
-    if (!*line) {
+
+    if (!*line)
+    {
         return 0; // Empty line
     }
-    
+
     // Parse command
     const char *cmd_start = line;
     const char *cmd_end = line;
-    
-    while (*cmd_end && !isspace(*cmd_end)) {
+
+    while (*cmd_end && !isspace(*cmd_end))
+    {
         cmd_end++;
     }
-    
+
     size_t cmd_len = cmd_end - cmd_start;
-    if (cmd_len >= SHELL_MAX_COMMAND_LENGTH) {
+    if (cmd_len >= SHELL_MAX_COMMAND_LENGTH)
+    {
         return -1;
     }
-    
+
     strncpy(command, cmd_start, cmd_len);
     command[cmd_len] = '\0';
-    
+
     // Parse arguments
     line = cmd_end;
-    while (*line && *arg_count < SHELL_MAX_ARGS) {
+    while (*line && *arg_count < SHELL_MAX_ARGS)
+    {
         // Skip whitespace
-        while (*line && isspace(*line)) {
+        while (*line && isspace(*line))
+        {
             line++;
         }
-        
-        if (!*line) {
+
+        if (!*line)
+        {
             break;
         }
-        
+
         // Handle quoted strings
-        if (*line == '"' || *line == '\'') {
+        if (*line == '"' || *line == '\'')
+        {
             char quote = *line;
             line++; // Skip opening quote
-            
+
             const char *arg_start = line;
-            while (*line && *line != quote) {
+            while (*line && *line != quote)
+            {
                 line++;
             }
-            
-            if (*line != quote) {
+
+            if (*line != quote)
+            {
                 return -1; // Unterminated quote
             }
-            
+
             size_t arg_len = line - arg_start;
-            if (arg_len >= SHELL_MAX_ARG_LENGTH) {
+            if (arg_len >= SHELL_MAX_ARG_LENGTH)
+            {
                 return -1;
             }
-            
+
             strncpy(args[*arg_count], arg_start, arg_len);
             args[*arg_count][arg_len] = '\0';
             (*arg_count)++;
-            
+
             line++; // Skip closing quote
-        } else {
+        }
+        else
+        {
             // Regular argument
             const char *arg_start = line;
-            while (*line && !isspace(*line)) {
+            while (*line && !isspace(*line))
+            {
                 line++;
             }
-            
+
             size_t arg_len = line - arg_start;
-            if (arg_len >= SHELL_MAX_ARG_LENGTH) {
+            if (arg_len >= SHELL_MAX_ARG_LENGTH)
+            {
                 return -1;
             }
-            
+
             strncpy(args[*arg_count], arg_start, arg_len);
             args[*arg_count][arg_len] = '\0';
             (*arg_count)++;
         }
     }
-    
+
     return 0;
 }
 
 int shell_execute_command(shell_context_t *ctx, shell_config_t *config, const char *command, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
 {
-    if (!ctx || !config || !command) {
+    if (!ctx || !config || !command)
+    {
         return -1;
     }
-    
+
     // Check for built-in commands
-    for (int i = 0; i < shell_builtin_count; i++) {
-        if (strcmp(command, shell_builtin_commands[i].name) == 0) {
+    for (int i = 0; i < shell_builtin_count; i++)
+    {
+        if (strcmp(command, shell_builtin_commands[i].name) == 0)
+        {
             return shell_builtin_commands[i].handler(ctx, config, args, arg_count);
         }
     }
-    
+
     // Command not found
     shell_print_error("Command not found: ");
     shell_print_error(command);
@@ -217,24 +334,28 @@ int shell_execute_command(shell_context_t *ctx, shell_config_t *config, const ch
 
 void shell_add_to_history(shell_context_t *ctx, const char *line)
 {
-    if (!ctx || !line) {
+    if (!ctx || !line)
+    {
         return;
     }
-    
+
     // Don't add empty lines or duplicate commands
-    if (strlen(line) == 0 || 
-        (ctx->history_count > 0 && strcmp(ctx->history[ctx->history_count - 1], line) == 0)) {
+    if (strlen(line) == 0 ||
+        (ctx->history_count > 0 && strcmp(ctx->history[ctx->history_count - 1], line) == 0))
+    {
         return;
     }
-    
+
     // Shift history if full
-    if (ctx->history_count >= SHELL_MAX_HISTORY) {
-        for (int i = 0; i < SHELL_MAX_HISTORY - 1; i++) {
+    if (ctx->history_count >= SHELL_MAX_HISTORY)
+    {
+        for (int i = 0; i < SHELL_MAX_HISTORY - 1; i++)
+        {
             strcpy(ctx->history[i], ctx->history[i + 1]);
         }
         ctx->history_count--;
     }
-    
+
     // Add new command
     strncpy(ctx->history[ctx->history_count], line, SHELL_MAX_LINE_LENGTH - 1);
     ctx->history[ctx->history_count][SHELL_MAX_LINE_LENGTH - 1] = '\0';
@@ -252,8 +373,8 @@ static int shell_cmd_help(shell_context_t *ctx, shell_config_t *config, char arg
     (void)config;
     (void)args;
     (void)arg_count;
-    
-    shell_print_info("=== IR0 Shell Built-in Commands ===");
+
+    shell_print_info("=== IR0 Shell Built-in Commands ===\n");
     shell_print_info("help     - Show this help message");
     shell_print_info("info     - Show system information");
     shell_print_info("version  - Show kernel version");
@@ -275,7 +396,7 @@ static int shell_cmd_help(shell_context_t *ctx, shell_config_t *config, char arg
     shell_print_info("reboot   - Reboot system");
     shell_print_info("halt     - Halt system");
     shell_print_info("exit     - Exit shell");
-    
+
     return 0;
 }
 
@@ -285,15 +406,15 @@ static int shell_cmd_info(shell_context_t *ctx, shell_config_t *config, char arg
     (void)config;
     (void)args;
     (void)arg_count;
-    
-    shell_print_info("=== IR0 Kernel System Information ===");
+
+    shell_print_info("=== IR0 Kernel System Information ===\n");
     shell_print_info("Kernel: IR0 Kernel v0.0.0");
     shell_print_info("Architecture: x86-64");
-    shell_print_info("Memory: 4GB RAM");
+    shell_print_info("Memory: xxGB RAM");
     shell_print_info("Filesystem: IR0FS");
     shell_print_info("Scheduler: Round Robin");
     shell_print_info("Shell: IR0 Shell v1.0");
-    
+
     return 0;
 }
 
@@ -303,11 +424,11 @@ static int shell_cmd_version(shell_context_t *ctx, shell_config_t *config, char 
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     shell_print_info("IR0 Kernel v0.0.0");
     shell_print_info("Build: " __DATE__ " " __TIME__);
     shell_print_info("Compiler: GCC");
-    
+
     return 0;
 }
 
@@ -317,13 +438,13 @@ static int shell_cmd_ps(shell_context_t *ctx, shell_config_t *config, char args[
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     shell_print_info("=== Process List ===");
     shell_print_info("PID  Name     State     Priority");
     shell_print_info("1    kernel   RUNNING   0");
     shell_print_info("2    shell    RUNNING   1");
     shell_print_info("3    idle     SLEEPING  255");
-    
+
     return 0;
 }
 
@@ -333,14 +454,14 @@ static int shell_cmd_meminfo(shell_context_t *ctx, shell_config_t *config, char 
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     shell_print_info("=== Memory Information ===");
     shell_print_info("Total Memory: 4GB");
     shell_print_info("Used Memory: 256MB");
     shell_print_info("Free Memory: 3.75GB");
     shell_print_info("Kernel Memory: 64MB");
     shell_print_info("User Memory: 192MB");
-    
+
     return 0;
 }
 
@@ -350,7 +471,7 @@ static int shell_cmd_debug(shell_context_t *ctx, shell_config_t *config, char ar
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     shell_print_info("=== Debug Information ===");
     shell_print_info("Heap Allocator: Active");
     shell_print_info("VFS: Initialized");
@@ -358,7 +479,7 @@ static int shell_cmd_debug(shell_context_t *ctx, shell_config_t *config, char ar
     shell_print_info("Scheduler: Running");
     shell_print_info("Interrupts: Enabled");
     shell_print_info("Paging: Active");
-    
+
     return 0;
 }
 
@@ -368,12 +489,13 @@ static int shell_cmd_clear(shell_context_t *ctx, shell_config_t *config, char ar
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     // Clear screen by printing newlines
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 50; i++)
+    {
         print("\n");
     }
-    
+
     return 0;
 }
 
@@ -381,36 +503,40 @@ static int shell_cmd_echo(shell_context_t *ctx, shell_config_t *config, char arg
 {
     (void)ctx;
     (void)config;
-    
-    for (int i = 0; i < arg_count; i++) {
+
+    for (int i = 0; i < arg_count; i++)
+    {
         shell_print(args[i]);
-        if (i < arg_count - 1) {
+        if (i < arg_count - 1)
+        {
             print(" ");
         }
     }
     print("\n");
-    
+
     return 0;
 }
 
 static int shell_cmd_cd(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
 {
     (void)config;
-    
-    if (arg_count == 0) {
+
+    if (arg_count == 0)
+    {
         // Change to home directory
         strcpy(ctx->current_dir, "/");
         return 0;
     }
-    
-    if (arg_count > 1) {
+
+    if (arg_count > 1)
+    {
         shell_print_error("cd: too many arguments");
         return -1;
     }
-    
+
     // TODO: Implement actual directory change
     strcpy(ctx->current_dir, args[0]);
-    
+
     return 0;
 }
 
@@ -419,10 +545,10 @@ static int shell_cmd_pwd(shell_context_t *ctx, shell_config_t *config, char args
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     shell_print_info(ctx->current_dir);
     print("\n");
-    
+
     return 0;
 }
 
@@ -432,14 +558,14 @@ static int shell_cmd_ls(shell_context_t *ctx, shell_config_t *config, char args[
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     shell_print_info("=== Directory Contents ===");
     shell_print_info("drwxr-xr-x  root  root  /");
     shell_print_info("-rw-r--r--  root  root  kernel.bin");
     shell_print_info("-rw-r--r--  root  root  config.txt");
     shell_print_info("drwxr-xr-x  root  root  /boot");
     shell_print_info("drwxr-xr-x  root  root  /etc");
-    
+
     return 0;
 }
 
@@ -447,24 +573,26 @@ static int shell_cmd_cat(shell_context_t *ctx, shell_config_t *config, char args
 {
     (void)ctx;
     (void)config;
-    
-    if (arg_count == 0) {
+
+    if (arg_count == 0)
+    {
         shell_print_error("cat: missing file argument");
         return -1;
     }
-    
-    if (arg_count > 1) {
+
+    if (arg_count > 1)
+    {
         shell_print_error("cat: too many arguments");
         return -1;
     }
-    
+
     shell_print_info("=== File Contents: ");
     shell_print_info(args[0]);
     shell_print_info(" ===");
     shell_print_info("This is a sample file content.");
     shell_print_info("The file system is working correctly.");
     shell_print_info("IR0 Kernel is running smoothly.");
-    
+
     return 0;
 }
 
@@ -472,20 +600,22 @@ static int shell_cmd_mkdir(shell_context_t *ctx, shell_config_t *config, char ar
 {
     (void)ctx;
     (void)config;
-    
-    if (arg_count == 0) {
+
+    if (arg_count == 0)
+    {
         shell_print_error("mkdir: missing directory argument");
         return -1;
     }
-    
-    if (arg_count > 1) {
+
+    if (arg_count > 1)
+    {
         shell_print_error("mkdir: too many arguments");
         return -1;
     }
-    
+
     shell_print_success("Directory created: ");
     shell_print_success(args[0]);
-    
+
     return 0;
 }
 
@@ -493,20 +623,22 @@ static int shell_cmd_rm(shell_context_t *ctx, shell_config_t *config, char args[
 {
     (void)ctx;
     (void)config;
-    
-    if (arg_count == 0) {
+
+    if (arg_count == 0)
+    {
         shell_print_error("rm: missing file argument");
         return -1;
     }
-    
-    if (arg_count > 1) {
+
+    if (arg_count > 1)
+    {
         shell_print_error("rm: too many arguments");
         return -1;
     }
-    
+
     shell_print_success("File removed: ");
     shell_print_success(args[0]);
-    
+
     return 0;
 }
 
@@ -514,22 +646,24 @@ static int shell_cmd_cp(shell_context_t *ctx, shell_config_t *config, char args[
 {
     (void)ctx;
     (void)config;
-    
-    if (arg_count < 2) {
+
+    if (arg_count < 2)
+    {
         shell_print_error("cp: missing source or destination");
         return -1;
     }
-    
-    if (arg_count > 2) {
+
+    if (arg_count > 2)
+    {
         shell_print_error("cp: too many arguments");
         return -1;
     }
-    
+
     shell_print_success("File copied: ");
     shell_print_success(args[0]);
     shell_print_success(" -> ");
     shell_print_success(args[1]);
-    
+
     return 0;
 }
 
@@ -537,22 +671,24 @@ static int shell_cmd_mv(shell_context_t *ctx, shell_config_t *config, char args[
 {
     (void)ctx;
     (void)config;
-    
-    if (arg_count < 2) {
+
+    if (arg_count < 2)
+    {
         shell_print_error("mv: missing source or destination");
         return -1;
     }
-    
-    if (arg_count > 2) {
+
+    if (arg_count > 2)
+    {
         shell_print_error("mv: too many arguments");
         return -1;
     }
-    
+
     shell_print_success("File moved: ");
     shell_print_success(args[0]);
     shell_print_success(" -> ");
     shell_print_success(args[1]);
-    
+
     return 0;
 }
 
@@ -560,26 +696,29 @@ static int shell_cmd_kill(shell_context_t *ctx, shell_config_t *config, char arg
 {
     (void)ctx;
     (void)config;
-    
-    if (arg_count == 0) {
+
+    if (arg_count == 0)
+    {
         shell_print_error("kill: missing process ID");
         return -1;
     }
-    
-    if (arg_count > 1) {
+
+    if (arg_count > 1)
+    {
         shell_print_error("kill: too many arguments");
         return -1;
     }
-    
+
     int pid = atoi(args[0]);
-    if (pid <= 0) {
+    if (pid <= 0)
+    {
         shell_print_error("kill: invalid process ID");
         return -1;
     }
-    
+
     shell_print_success("Process killed: ");
     shell_print_success(args[0]);
-    
+
     return 0;
 }
 
@@ -587,32 +726,36 @@ static int shell_cmd_sleep(shell_context_t *ctx, shell_config_t *config, char ar
 {
     (void)ctx;
     (void)config;
-    
-    if (arg_count == 0) {
+
+    if (arg_count == 0)
+    {
         shell_print_error("sleep: missing time argument");
         return -1;
     }
-    
-    if (arg_count > 1) {
+
+    if (arg_count > 1)
+    {
         shell_print_error("sleep: too many arguments");
         return -1;
     }
-    
+
     int seconds = atoi(args[0]);
-    if (seconds <= 0) {
+    if (seconds <= 0)
+    {
         shell_print_error("sleep: invalid time");
         return -1;
     }
-    
+
     shell_print_info("Sleeping for ");
     shell_print_info(args[0]);
     shell_print_info(" seconds...");
-    
+
     // TODO: Implement actual sleep
-    for (volatile int i = 0; i < seconds * 1000000; i++) {
+    for (volatile int i = 0; i < seconds * 1000000; i++)
+    {
         __asm__ volatile("nop");
     }
-    
+
     return 0;
 }
 
@@ -622,12 +765,12 @@ static int shell_cmd_reboot(shell_context_t *ctx, shell_config_t *config, char a
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     shell_print_warning("Rebooting system...");
-    
+
     // TODO: Implement actual reboot
     // arch_reboot();
-    
+
     return 0;
 }
 
@@ -637,12 +780,12 @@ static int shell_cmd_halt(shell_context_t *ctx, shell_config_t *config, char arg
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     shell_print_warning("Halting system...");
-    
+
     // TODO: Implement actual halt
     // arch_halt();
-    
+
     return 0;
 }
 
@@ -651,12 +794,30 @@ static int shell_cmd_exit(shell_context_t *ctx, shell_config_t *config, char arg
     (void)config;
     (void)args;
     (void)arg_count;
-    
+
     ctx->running = 0;
     ctx->exit_code = 0;
-    
+
     shell_print_info("Exiting shell...");
+
+    return 0;
+}
+
+static int shell_cmd_keyboard(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)config;
+    (void)args;
+    (void)arg_count;
+    (void)ctx;
+
+    shell_print_info("Starting keyboard test...");
+    shell_print_info("Type some characters. Press Ctrl+C to exit the test.");
     
+    // Llamar a la función de prueba del teclado
+    extern void ps2_test_keyboard(void);
+    ps2_test_keyboard();
+    
+    shell_print_success("Keyboard test completed");
     return 0;
 }
 
@@ -667,7 +828,7 @@ static int shell_cmd_exit(shell_context_t *ctx, shell_config_t *config, char arg
 static void shell_init_builtin_commands(void)
 {
     shell_builtin_count = 0;
-    
+
     // Add all built-in commands
     shell_add_builtin_command("help", "Show help information", shell_cmd_help);
     shell_add_builtin_command("info", "Show system information", shell_cmd_info);
@@ -689,32 +850,36 @@ static void shell_init_builtin_commands(void)
     shell_add_builtin_command("sleep", "Sleep for seconds", shell_cmd_sleep);
     shell_add_builtin_command("reboot", "Reboot system", shell_cmd_reboot);
     shell_add_builtin_command("halt", "Halt system", shell_cmd_halt);
+    shell_add_builtin_command("keyboard", "Test keyboard functionality", shell_cmd_keyboard);
     shell_add_builtin_command("exit", "Exit shell", shell_cmd_exit);
 }
 
 static void shell_add_builtin_command(const char *name, const char *description, shell_command_handler_t handler)
 {
-    if (shell_builtin_count >= SHELL_MAX_BUILTIN_COMMANDS) {
+    if (shell_builtin_count >= SHELL_MAX_BUILTIN_COMMANDS)
+    {
         return;
     }
-    
+
     shell_builtin_commands[shell_builtin_count].name = name;
     shell_builtin_commands[shell_builtin_count].description = description;
     shell_builtin_commands[shell_builtin_count].handler = handler;
-    
+
     shell_builtin_count++;
 }
 
 void shell_print(const char *message)
 {
-    if (message) {
+    if (message)
+    {
         print(message);
     }
 }
 
 void shell_print_color(const char *message, uint8_t color)
 {
-    if (message) {
+    if (message)
+    {
         // TODO: Implement colored output
         print(message);
     }
@@ -722,7 +887,8 @@ void shell_print_color(const char *message, uint8_t color)
 
 void shell_print_error(const char *message)
 {
-    if (message) {
+    if (message)
+    {
         print("[ERROR] ");
         print(message);
         print("\n");
@@ -731,7 +897,8 @@ void shell_print_error(const char *message)
 
 void shell_print_success(const char *message)
 {
-    if (message) {
+    if (message)
+    {
         print("[SUCCESS] ");
         print(message);
         print("\n");
@@ -740,7 +907,8 @@ void shell_print_success(const char *message)
 
 void shell_print_warning(const char *message)
 {
-    if (message) {
+    if (message)
+    {
         print("[WARNING] ");
         print(message);
         print("\n");
@@ -749,7 +917,8 @@ void shell_print_warning(const char *message)
 
 void shell_print_info(const char *message)
 {
-    if (message) {
+    if (message)
+    {
         print("[INFO] ");
         print(message);
         print("\n");

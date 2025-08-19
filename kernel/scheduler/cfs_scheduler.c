@@ -21,7 +21,8 @@ extern task_t *current_running_task;
 #define CFS_MIN_NICE -20
 
 // Tabla de pesos según nice value (exponencial)
-static const uint32_t cfs_prio_to_weight[40] = {
+static const uint32_t cfs_prio_to_weight[40] = 
+{
     /* -20 */ 88761,
     71755,
     56483,
@@ -79,7 +80,7 @@ static rb_node_t rb_node_pool[MAX_RB_NODES];
 static int rb_node_pool_index = 0;
 
 // ===============================================================================
-// FUNCIONES AUXILIARES RED-BLACK TREE
+// FUNCIONES AUXILIARES RED-BLACK TREE -- Elegante por donde lo mires -- 
 // ===============================================================================
 
 static rb_node_t *rb_alloc_node(void)

@@ -169,6 +169,30 @@ void print_hex64(uint64_t val)
     print(buffer);
 }
 
+void print_hex32(uint32_t val)
+{
+    char buffer[9];
+    for (int i = 0; i < 8; i++)
+    {
+        uint8_t nibble = (val >> ((7 - i) * 4)) & 0xF;
+        buffer[i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
+    }
+    buffer[8] = '\0';
+    print(buffer);
+}
+
+void print_hex8(uint8_t val)
+{
+    char buffer[3];
+    for (int i = 0; i < 2; i++)
+    {
+        uint8_t nibble = (val >> ((1 - i) * 4)) & 0xF;
+        buffer[i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
+    }
+    buffer[2] = '\0';
+    print(buffer);
+}
+
 void print_uint64(uint64_t num)
 {
     char buffer[21]; // Máximo 20 dígitos para uint64_t + null terminator

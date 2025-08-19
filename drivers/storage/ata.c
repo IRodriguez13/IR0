@@ -173,7 +173,8 @@ bool ata_identify_drive(uint8_t drive) {
     return true;
 }
 
-bool ata_wait_ready(uint8_t drive) {
+bool ata_wait_ready(uint8_t drive) 
+{
     uint16_t status_port = ata_get_status_port(drive);
     
     for (int i = 0; i < 10000; i++) {
@@ -256,7 +257,8 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
 }
 
 bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer) {
-    if (!ata_drives_present[drive]) {
+    if (!ata_drives_present[drive]) 
+    {
         return false;
     }
     
