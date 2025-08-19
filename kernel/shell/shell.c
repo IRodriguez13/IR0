@@ -35,6 +35,7 @@ static char shell_read_char(void)
 static int shell_read_line(char *buffer, int max_length)
 {
     int pos = 0;
+    int echo_pos = 0; // Posición del cursor en pantalla
     buffer[0] = '\0';
 
     while (pos < max_length - 1)
@@ -50,18 +51,17 @@ static int shell_read_line(char *buffer, int max_length)
         }
         else if (c == '\b' || c == 127)
         {
-            // Backspace - mejorado con debug
-            print("BACKSPACE DETECTED (char=");
-            print_int32(c);
-            print(")");
+            // Backspace - manejar visualmente
             if (pos > 0)
             {
                 pos--;
                 buffer[pos] = '\0';
-                // Secuencia más robusta para borrar: backspace, espacio, backspace
-                print("\b");
-                print(" ");
-                print("\b");
+                echo_pos--;
+                
+                // Secuencia completa para borrar visualmente
+                print("\b");  // Mover cursor atrás
+                print(" ");   // Sobrescribir con espacio
+                print("\b");  // Volver a mover cursor atrás
             }
         }
         else if (c == '\t')
@@ -73,6 +73,7 @@ static int shell_read_line(char *buffer, int max_length)
                 buffer[pos] = ' ';
                 buffer[pos + 1] = '\0';
                 pos++;
+                echo_pos++;
                 print(" ");
             }
         }
@@ -82,6 +83,7 @@ static int shell_read_line(char *buffer, int max_length)
             buffer[pos] = c;
             buffer[pos + 1] = '\0';
             pos++;
+            echo_pos++;
             print(" "); // Echo space
         }
         else if (c >= 32 && c <= 126)
@@ -90,6 +92,7 @@ static int shell_read_line(char *buffer, int max_length)
             buffer[pos] = c;
             buffer[pos + 1] = '\0';
             pos++;
+            echo_pos++;
             // Echo character - create a temporary string
             char temp[2] = {c, '\0'};
             print(temp);
@@ -101,12 +104,23 @@ static int shell_read_line(char *buffer, int max_length)
     return pos;
 }
 
-// Show shell prompt
+// Show shell prompt with blinking cursor
 static void shell_show_prompt(const char *prompt)
 {
     print("\n");
     print(prompt);
-    print("> ");
+    
+    // Hacer titilar el prompt con diferentes colores
+    static int blink_state = 0;
+    blink_state = !blink_state; // Alternar estado
+    
+    if (blink_state) {
+        // Estado 1: Verde brillante
+        print_colored("> ", VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    } else {
+        // Estado 2: Amarillo
+        print_colored("> ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    }
 }
 
 // ===============================================================================
@@ -862,13 +876,13 @@ static int shell_cmd_keyboard(shell_context_t *ctx, shell_config_t *config, char
                 print("Quit key pressed. Exiting test.\n");
                 test_running = 0;
             } else if (c == '\b') {
-                print("Backspace pressed\n");
+                print("\b \b");
             } else if (c == '\t') {
                 print("Tab pressed\n");
             } else if (c == '\n') {
                 print("Enter pressed\n");
             } else {
-                print("Key pressed: '");
+                
                 char temp_str[2] = {c, '\0'};
                 print(temp_str);
                 print("'\n");

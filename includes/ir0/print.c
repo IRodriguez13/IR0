@@ -55,6 +55,12 @@ void putchar(char c)
     {
         cursor_x = 0;
     }
+    else if (c == '\b') // backspace - retroceder cursor
+    {
+        if (cursor_x > 0) {
+            cursor_x--;
+        }
+    }
     else if (c >= ' ') // Sólo acepta Caracteres imprimibles ASCII 32 en adelante (los anteriores son corruptos para la impresion).
     {
         putchar_at(c, current_color, cursor_x, cursor_y);

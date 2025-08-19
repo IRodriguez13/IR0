@@ -9,12 +9,12 @@ static char keyboard_buffer[KEYBOARD_BUFFER_SIZE];
 static int keyboard_buffer_head = 0;
 static int keyboard_buffer_tail = 0;
 
-// Tabla de scancodes básica
+// Tabla de scancodes básica (solo caracteres imprimibles)
 static const char scancode_to_ascii[] = {
     0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  // 0-7
-    '7',  '8',  '9',  '0',  '-',  '=',  '\b', '\t', // 8-15 (backspace, tab)
+    '7',  '8',  '9',  '0',  '-',  '=',  0,    0,    // 8-15 (backspace, tab - manejados por separado)
     'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',  // 16-23
-    'o',  'p',  '[',  ']',  '\n', 0,    'a',  's',  // 24-31 (enter, ctrl)
+    'o',  'p',  '[',  ']',  0,    0,    'a',  's',  // 24-31 (enter, ctrl - manejados por separado)
     'd',  'f',  'g',  'h',  'j',  'k',  'l',  ';',  // 32-39
     '\'', '`',  0,    '\\', 'z',  'x',  'c',  'v',  // 40-47 (shift)
     'b',  'n',  'm',  ',',  '.',  '/',  0,    '*',  // 48-55 (shift)
@@ -23,6 +23,22 @@ static const char scancode_to_ascii[] = {
     0,    0,    0,    0,    0,    0,    0,    0,    // 72-79 (numpad)
     0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
 };
+
+// Función para traducir scancode a carácter
+char translate_scancode(uint8_t sc) {
+    switch (sc) {
+        case 0x0E: return '\b';  // Backspace
+        case 0x0F: return '\t';  // Tab
+        case 0x1C: return '\n';  // Enter
+        case 0x39: return ' ';   // Space
+        default:
+            // Mapeo normal de letras y números
+            if (sc < sizeof(scancode_to_ascii)) {
+                return scancode_to_ascii[sc];
+            }
+            return 0; // Carácter no reconocido
+    }
+}
 
 // Función para agregar carácter al buffer
 static void keyboard_buffer_add(char c) {
@@ -59,14 +75,12 @@ void keyboard_handler64(void) {
     // Leer scancode del puerto 0x60
     uint8_t scancode = inb(0x60);
     
-    // Debug removido - scancodes confirmados: backspace=0x0E, space=0x39, ctrl=0x1D, tab=0x0F
-    
     // Solo procesar key press (scancode < 0x80)
-    if (scancode < 0x80 && scancode < sizeof(scancode_to_ascii)) {
-        char ascii = scancode_to_ascii[scancode];
+    if (scancode < 0x80) {
+        char ascii = translate_scancode(scancode);
         if (ascii != 0) {
             keyboard_buffer_add(ascii);
-            // No mostrar aquí - el shell se encarga del echo
+            // No hacer echo aquí - el shell se encarga de todo
         }
     }
 }
