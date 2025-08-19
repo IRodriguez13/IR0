@@ -28,13 +28,10 @@ static void idle_task_function(void *arg)
     (void)arg; // Evitar warning de parámetro no usado
     
     // Función simple que solo hace HLT
-    asm volatile("hlt");
+    cpu_wait();
     
-    // Nunca debería llegar aquí
-    for (;;)
-    {
-        asm volatile("hlt");
-    }
+    // Si llega acá, a hacer noni.
+    cpu_relax();
 }
 
 // ===============================================================================
