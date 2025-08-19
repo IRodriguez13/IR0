@@ -11,6 +11,11 @@
 #include "../../drivers/IO/ps2.h"
 #include "stdarg.h"
 
+// Declaraciones externas para el sistema de interrupciones de teclado
+extern int keyboard_buffer_has_data(void);
+extern char keyboard_buffer_get(void);
+extern void keyboard_buffer_clear(void);
+
 // ===============================================================================
 // KEYBOARD INPUT FUNCTIONS
 // ===============================================================================
@@ -18,12 +23,12 @@
 // Read a single character from keyboard
 static char shell_read_char(void)
 {
-    while (!ps2_has_char())
+    while (!keyboard_buffer_has_data())
     {
-        // Wait for character
-        __asm__ volatile("hlt");
+        // Wait for character - busy wait instead of hlt to avoid issues
+        for (volatile int i = 0; i < 1000; i++) { /* busy wait */ }
     }
-    return ps2_get_char();
+    return keyboard_buffer_get();
 }
 
 // Read a line from keyboard with basic editing
@@ -45,12 +50,30 @@ static int shell_read_line(char *buffer, int max_length)
         }
         else if (c == '\b' || c == 127)
         {
-            // Backspace
+            // Backspace - mejorado con debug
+            print("BACKSPACE DETECTED (char=");
+            print_int32(c);
+            print(")");
             if (pos > 0)
             {
                 pos--;
                 buffer[pos] = '\0';
-                print("\b \b"); // Move back, clear char, move back
+                // Secuencia más robusta para borrar: backspace, espacio, backspace
+                print("\b");
+                print(" ");
+                print("\b");
+            }
+        }
+        else if (c == '\t')
+        {
+            // Tab character - insertar espacios
+            int spaces_to_add = 4 - (pos % 4);
+            for (int i = 0; i < spaces_to_add && pos < max_length - 1; i++)
+            {
+                buffer[pos] = ' ';
+                buffer[pos + 1] = '\0';
+                pos++;
+                print(" ");
             }
         }
         else if (c == ' ')
@@ -811,11 +834,50 @@ static int shell_cmd_keyboard(shell_context_t *ctx, shell_config_t *config, char
     (void)ctx;
 
     shell_print_info("Starting keyboard test...");
-    shell_print_info("Type some characters. Press Ctrl+C to exit the test.");
+    shell_print_info("Type some characters. Press 'q' to exit the test.");
     
-    // Llamar a la función de prueba del teclado
-    extern void ps2_test_keyboard(void);
-    ps2_test_keyboard();
+    // Test interactivo del teclado
+    print("=== KEYBOARD TEST MODE ===\n");
+    print("Press keys to see them detected.\n");
+    print("Press 'q' to quit the test.\n");
+    print("Backspace: \\b, Tab: \\t, Enter: \\n\n\n");
+    
+    // Incluir las funciones del buffer de teclado
+    extern char keyboard_buffer_get(void);
+    extern int keyboard_buffer_has_data(void);
+    extern void keyboard_buffer_clear(void);
+    
+    // Limpiar buffer antes de empezar
+    keyboard_buffer_clear();
+    
+    char c;
+    int test_running = 1;
+    
+    while (test_running) {
+        // Polling del buffer de teclado
+        if (keyboard_buffer_has_data()) {
+            c = keyboard_buffer_get();
+            
+            if (c == 'q') {
+                print("Quit key pressed. Exiting test.\n");
+                test_running = 0;
+            } else if (c == '\b') {
+                print("Backspace pressed\n");
+            } else if (c == '\t') {
+                print("Tab pressed\n");
+            } else if (c == '\n') {
+                print("Enter pressed\n");
+            } else {
+                print("Key pressed: '");
+                char temp_str[2] = {c, '\0'};
+                print(temp_str);
+                print("'\n");
+            }
+        }
+        
+        // Pequeña pausa para no consumir toda la CPU
+        for (volatile int i = 0; i < 100000; i++) { /* busy wait */ }
+    }
     
     shell_print_success("Keyboard test completed");
     return 0;

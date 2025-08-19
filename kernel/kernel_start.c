@@ -20,7 +20,8 @@
 #include "../kernel/syscalls/syscalls.h"
 #include "../drivers/IO/ps2.h"
 #include "../drivers/storage/ata.h"
-#include "../interrupt/pic.h"
+#include "../interrupt/arch/idt.h"
+#include "../interrupt/arch/pic.h"
 #ifdef __x86_64__
 #include "../arch/x86-64/sources/tss_x64.h"
 #endif
@@ -41,8 +42,24 @@ void main(void)
 
     // 1. Inicializar IDT y sistema de interrupciones
     print("Initializing interrupt system...\n");
-    idt_init();
+#ifdef __x86_64__
+    idt_init64();
+    idt_load64();
+    pic_remap64();
+    keyboard_init();
+#else
+    idt_init32();
+    idt_load32();
+    pic_remap32();
+    keyboard_init();
+#endif
     print_success("Interrupt system initialized\n");
+    
+    // Habilitar interrupciones globalmente
+    print("Enabling global interrupts...\n");
+    __asm__ volatile("sti");
+    print_success("Global interrupts enabled\n");
+    
     delay_ms(1000);
 
     // 2. Inicializar paginación
@@ -120,10 +137,10 @@ void main(void)
     // 6. Inicializar drivers de hardware
     print("Initializing hardware drivers...\n");
     
-    // Inicializar driver de teclado PS/2
-    print("Initializing PS/2 keyboard driver...\n");
-    ps2_init();
-    print_success("PS/2 keyboard driver initialized\n");
+    // Inicializar driver de teclado personalizado
+    print("Initializing custom keyboard driver...\n");
+    keyboard_init();
+    print_success("Custom keyboard driver initialized\n");
     
     // Inicializar driver de disco ATA
     print("Initializing ATA disk driver...\n");
@@ -138,19 +155,7 @@ void main(void)
     print_success("Virtual file system initialized\n");
     delay_ms(1000);
 
-    // 8. SISTEMA DE INTERRUPCIONES MÍNIMO
-    print("Initializing minimal interrupt system...\n");
-    idt_init();
-    print_success("IDT initialized\n");
-    
-    pic_init();
-    print_success("PIC initialized\n");
-    
-    // Unmask timer IRQ (IRQ 0) - now mapped to vector 32
-    pic_unmask_irq(0);
-    print_success("Timer IRQ unmasked (vector 32)\n");
-    
-    // Habilitar interrupciones
+    // 8. Habilitar interrupciones
     print("Enabling interrupts...\n");
     __asm__ volatile("sti");
     print_success("Interrupts enabled\n");

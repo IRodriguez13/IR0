@@ -1,42 +1,54 @@
-# Makefile para el subsistema de interrupciones
+# Makefile para el sistema de interrupciones
 
-# Usar variables pasadas desde el Makefile principal
-CC ?= gcc
-ASM ?= nasm
-CFLAGS ?= -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-ASMFLAGS ?= -f elf32
-
-# Detectar arquitectura desde CFLAGS
-ifneq (,$(findstring -m64,$(CFLAGS)))
-    ARCH_DETECTED = x86-64
-    ASMFLAGS = -f elf64
-else
-    ARCH_DETECTED = x86-32
-    ASMFLAGS = -f elf32
-endif
+# Variables
+CC = gcc
+NASM = nasm
+CFLAGS = -Wall -Wextra -O1 -MMD -MP
+INCLUDES = -I../../includes -I../../includes/ir0 -I../../arch/common -I../../setup
 
 # Objetos comunes
-OBJS = idt.o isr_handlers.o pic.o
+COMMON_OBJS = arch/idt.o arch/pic.o arch/isr_handlers.o arch/keyboard.o
 
-# Objetos específicos de arquitectura
-ifeq ($(ARCH_DETECTED),x86-64)
-    OBJS += arch/x86-64/interrupt.o
-else
-    OBJS += arch/x86-32/interrupt.o
-endif
+# Objetos específicos por arquitectura
+X86_32_OBJS = arch/x86-32/isr_stubs_32.o
+X86_64_OBJS = arch/x86-64/isr_stubs_64.o
 
-all: $(OBJS)
-	@echo "\033[1;32m============================================================\033[0m"
-	@echo "\033[1;32m interrupt subsystem compilado correctamente para $(ARCH_DETECTED)\033[0m"
-	@echo "\033[1;32m============================================================\033[0m"
+# Objetos finales
+INTERRUPT_OBJS = $(COMMON_OBJS)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+# Reglas principales
+all: $(INTERRUPT_OBJS)
 
-%.o: %.asm
-	$(ASM) $(ASMFLAGS) $< -o $@
+# Compilar archivos C
+arch/idt.o: arch/idt.c arch/idt.h arch/io.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
+arch/pic.o: arch/pic.c arch/pic.h arch/io.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+arch/isr_handlers.o: arch/isr_handlers.c arch/idt.h arch/pic.h arch/io.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+arch/keyboard.o: arch/keyboard.c arch/idt.h arch/pic.h arch/io.h
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Compilar stubs de 32-bit
+arch/x86-32/isr_stubs_32.o: arch/x86-32/isr_stubs_32.asm
+	$(NASM) -f elf32 $< -o $@
+
+# Compilar stubs de 64-bit
+arch/x86-64/isr_stubs_64.o: arch/x86-64/isr_stubs_64.asm
+	$(NASM) -f elf64 $< -o $@
+
+# Limpiar
 clean:
-	rm -f $(OBJS)
+	rm -f $(COMMON_OBJS) $(X86_32_OBJS) $(X86_64_OBJS) *.d
 
-.PHONY: all clean
+# Información
+info:
+	@echo "Sistema de Interrupciones - Objetos:"
+	@echo "  Comunes: $(COMMON_OBJS)"
+	@echo "  32-bit:  $(X86_32_OBJS)"
+	@echo "  64-bit:  $(X86_64_OBJS)"
+
+.PHONY: all clean info
