@@ -3,7 +3,7 @@
 ## English
 
 ### Overview
-The Drivers Subsystem provides hardware abstraction and device management for the IR0 kernel. It includes timer drivers (PIT, HPET, LAPIC), storage drivers, and I/O drivers with a modular architecture that supports both x86-32 and x86-64 platforms.
+The Drivers Subsystem provides hardware abstraction and device management framework for the IR0 kernel. It includes timer drivers (PIT, HPET, LAPIC), storage drivers, and I/O drivers with a modular architecture that supports both x86-32 and x86-64 platforms.
 
 ### Key Components
 
@@ -11,28 +11,28 @@ The Drivers Subsystem provides hardware abstraction and device management for th
 - **Purpose**: System timing and scheduling support
 - **Features**:
   - **PIT (Programmable Interval Timer)**: Legacy timer for basic timing
-  - **HPET (High Precision Event Timer)**: High-resolution timing
-  - **LAPIC (Local Advanced Programmable Interrupt Controller)**: Modern timer for multi-core systems
+  - **HPET (High Precision Event Timer)**: High-resolution timing framework
+  - **LAPIC (Local Advanced Programmable Interrupt Controller)**: Modern timer framework for multi-core systems
   - **Clock System**: Automatic timer selection and management
   - **Best Clock Detection**: Intelligent timer selection based on hardware
 
 #### 2. Storage Drivers (`storage/`)
-- **Purpose**: Storage device management and I/O
+- **Purpose**: Storage device management and I/O framework
 - **Features**:
-  - **ATA/IDE Support**: Hard disk and optical drive support
-  - **SATA Support**: Modern storage interface
-  - **Block Device Interface**: Unified storage access
-  - **Partition Management**: Disk partitioning support
-  - **File System Integration**: Direct filesystem access
+  - **ATA/IDE Support**: Hard disk and optical drive support framework
+  - **SATA Support**: Modern storage interface framework
+  - **Block Device Interface**: Unified storage access framework
+  - **Partition Management**: Disk partitioning support framework
+  - **File System Integration**: Direct filesystem access framework
 
 #### 3. I/O Drivers (`IO/`)
-- **Purpose**: Input/Output device management
+- **Purpose**: Input/Output device management framework
 - **Features**:
-  - **Serial Port Support**: COM1/COM2 communication
-  - **Parallel Port Support**: LPT1/LPT2 printing
-  - **USB Support**: Universal Serial Bus devices
-  - **PS/2 Support**: Keyboard and mouse
-  - **VGA Support**: Video output and display
+  - **Serial Port Support**: COM1/COM2 communication framework
+  - **Parallel Port Support**: LPT1/LPT2 printing framework
+  - **USB Support**: Universal Serial Bus devices framework
+  - **PS/2 Support**: Keyboard and mouse framework
+  - **VGA Support**: Video output and display framework
 
 ### Timer System
 
@@ -306,20 +306,20 @@ int init_all_drivers(void) {
 
 #### Timer Performance
 - **PIT Latency**: ~1ms resolution
-- **HPET Latency**: ~1μs resolution
-- **LAPIC Latency**: ~100ns resolution
+- **HPET Latency**: ~1μs resolution framework
+- **LAPIC Latency**: ~100ns resolution framework
 - **Timer Overhead**: < 1% of CPU time
 
-#### Storage Performance
-- **ATA Read Speed**: Up to 100MB/s
-- **ATA Write Speed**: Up to 80MB/s
-- **SATA Read Speed**: Up to 600MB/s
-- **SATA Write Speed**: Up to 500MB/s
+#### Storage Performance Framework
+- **ATA Read Speed**: Framework for up to 100MB/s
+- **ATA Write Speed**: Framework for up to 80MB/s
+- **SATA Read Speed**: Framework for up to 600MB/s
+- **SATA Write Speed**: Framework for up to 500MB/s
 
-#### I/O Performance
-- **Serial Speed**: Up to 115200 baud
-- **VGA Refresh**: 60Hz
-- **USB Speed**: Up to 480Mbps (USB 2.0)
+#### I/O Performance Framework
+- **Serial Speed**: Framework for up to 115200 baud
+- **VGA Refresh**: 60Hz framework
+- **USB Speed**: Framework for up to 480Mbps (USB 2.0)
 
 ### Configuration
 
@@ -353,12 +353,28 @@ struct hardware_info {
 };
 ```
 
+### Current Status
+
+#### Working Features
+- **PIT Timer**: Basic timer functionality
+- **Timer Framework**: Framework for HPET and LAPIC
+- **Driver Architecture**: Basic driver registration and management
+- **Hardware Detection**: Framework for hardware detection
+- **I/O Framework**: Basic I/O driver framework
+
+#### Development Areas
+- **HPET Implementation**: Complete HPET driver
+- **LAPIC Implementation**: Complete LAPIC driver
+- **Storage Drivers**: Complete ATA/SATA implementation
+- **I/O Drivers**: Complete serial, VGA, USB drivers
+- **Performance Optimization**: Advanced driver optimizations
+
 ---
 
 ## Español
 
 ### Descripción General
-El Subsistema de Drivers proporciona abstracción de hardware y gestión de dispositivos para el kernel IR0. Incluye drivers de timer (PIT, HPET, LAPIC), drivers de almacenamiento y drivers de I/O con una arquitectura modular que soporta plataformas x86-32 y x86-64.
+El Subsistema de Drivers proporciona framework de abstracción de hardware y gestión de dispositivos para el kernel IR0. Incluye drivers de timer (PIT, HPET, LAPIC), drivers de almacenamiento y drivers de I/O con una arquitectura modular que soporta plataformas x86-32 y x86-64.
 
 ### Componentes Principales
 
@@ -366,28 +382,28 @@ El Subsistema de Drivers proporciona abstracción de hardware y gestión de disp
 - **Propósito**: Soporte de temporización del sistema y planificación
 - **Características**:
   - **PIT (Programmable Interval Timer)**: Timer legacy para temporización básica
-  - **HPET (High Precision Event Timer)**: Temporización de alta resolución
-  - **LAPIC (Local Advanced Programmable Interrupt Controller)**: Timer moderno para sistemas multi-core
+  - **HPET (High Precision Event Timer)**: Framework de temporización de alta resolución
+  - **LAPIC (Local Advanced Programmable Interrupt Controller)**: Framework de timer moderno para sistemas multi-core
   - **Sistema de Reloj**: Selección y gestión automática de timers
   - **Detección del Mejor Reloj**: Selección inteligente de timer basada en hardware
 
 #### 2. Drivers de Almacenamiento (`storage/`)
-- **Propósito**: Gestión de dispositivos de almacenamiento e I/O
+- **Propósito**: Framework de gestión de dispositivos de almacenamiento e I/O
 - **Características**:
-  - **Soporte ATA/IDE**: Soporte para disco duro y unidad óptica
-  - **Soporte SATA**: Interfaz de almacenamiento moderna
-  - **Interfaz de Dispositivo de Bloque**: Acceso unificado a almacenamiento
-  - **Gestión de Particiones**: Soporte para particionado de disco
-  - **Integración de Sistema de Archivos**: Acceso directo al filesystem
+  - **Soporte ATA/IDE**: Framework de soporte para disco duro y unidad óptica
+  - **Soporte SATA**: Framework de interfaz de almacenamiento moderna
+  - **Interfaz de Dispositivo de Bloque**: Framework de acceso unificado a almacenamiento
+  - **Gestión de Particiones**: Framework de soporte para particionado de disco
+  - **Integración de Sistema de Archivos**: Framework de acceso directo al filesystem
 
 #### 3. Drivers de I/O (`IO/`)
-- **Propósito**: Gestión de dispositivos de entrada/salida
+- **Propósito**: Framework de gestión de dispositivos de entrada/salida
 - **Características**:
-  - **Soporte de Puerto Serial**: Comunicación COM1/COM2
-  - **Soporte de Puerto Paralelo**: Impresión LPT1/LPT2
-  - **Soporte USB**: Dispositivos Universal Serial Bus
-  - **Soporte PS/2**: Teclado y ratón
-  - **Soporte VGA**: Salida de video y pantalla
+  - **Soporte de Puerto Serial**: Framework de comunicación COM1/COM2
+  - **Soporte de Puerto Paralelo**: Framework de impresión LPT1/LPT2
+  - **Soporte USB**: Framework de dispositivos Universal Serial Bus
+  - **Soporte PS/2**: Framework de teclado y ratón
+  - **Soporte VGA**: Framework de salida de video y pantalla
 
 ### Sistema de Timer
 
@@ -661,20 +677,20 @@ int init_all_drivers(void) {
 
 #### Rendimiento de Timer
 - **Latencia PIT**: ~1ms resolución
-- **Latencia HPET**: ~1μs resolución
-- **Latencia LAPIC**: ~100ns resolución
+- **Latencia HPET**: Framework de ~1μs resolución
+- **Latencia LAPIC**: Framework de ~100ns resolución
 - **Overhead de Timer**: < 1% del tiempo CPU
 
-#### Rendimiento de Almacenamiento
-- **Velocidad de Lectura ATA**: Hasta 100MB/s
-- **Velocidad de Escritura ATA**: Hasta 80MB/s
-- **Velocidad de Lectura SATA**: Hasta 600MB/s
-- **Velocidad de Escritura SATA**: Hasta 500MB/s
+#### Framework de Rendimiento de Almacenamiento
+- **Velocidad de Lectura ATA**: Framework para hasta 100MB/s
+- **Velocidad de Escritura ATA**: Framework para hasta 80MB/s
+- **Velocidad de Lectura SATA**: Framework para hasta 600MB/s
+- **Velocidad de Escritura SATA**: Framework para hasta 500MB/s
 
-#### Rendimiento de I/O
-- **Velocidad Serial**: Hasta 115200 baudios
-- **Refresco VGA**: 60Hz
-- **Velocidad USB**: Hasta 480Mbps (USB 2.0)
+#### Framework de Rendimiento de I/O
+- **Velocidad Serial**: Framework para hasta 115200 baudios
+- **Refresco VGA**: Framework de 60Hz
+- **Velocidad USB**: Framework para hasta 480Mbps (USB 2.0)
 
 ### Configuración
 
@@ -707,3 +723,19 @@ struct hardware_info {
     uint64_t total_memory;
 };
 ```
+
+### Estado Actual
+
+#### Características Funcionando
+- **Timer PIT**: Funcionalidad básica de timer
+- **Framework de Timer**: Framework para HPET y LAPIC
+- **Arquitectura de Drivers**: Registro y gestión básica de drivers
+- **Detección de Hardware**: Framework para detección de hardware
+- **Framework de I/O**: Framework básico de drivers de I/O
+
+#### Áreas de Desarrollo
+- **Implementación HPET**: Driver completo de HPET
+- **Implementación LAPIC**: Driver completo de LAPIC
+- **Drivers de Almacenamiento**: Implementación completa de ATA/SATA
+- **Drivers de I/O**: Drivers completos de serial, VGA, USB
+- **Optimización de Rendimiento**: Optimizaciones avanzadas de drivers

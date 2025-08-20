@@ -105,6 +105,7 @@ void arch_switch_page_directory(uintptr_t page_dir);
 #define PAGE_FLAG_WRITABLE (1 << 1)
 #define PAGE_FLAG_USER (1 << 2)
 #define PAGE_FLAG_EXECUTABLE (1 << 3) // Para NX bit en x64, XN en ARM
+#define PAGE_FLAG_NO_EXECUTE 0x80000000 // No execute
 
 // ===============================================================================
 // MACROS ÚTILES

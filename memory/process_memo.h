@@ -12,25 +12,25 @@
 
 typedef struct process_memory_space
 {
-    uintptr_t page_directory; // CR3 value para este proceso
+   uintptr_t page_directory; // CR3 value para este proceso
 
-    // Virtual memory areas del proceso
-    struct
-    {
-        uintptr_t code_start, code_end;   // .text segment
-        uintptr_t data_start, data_end;   // .data/.bss segment
-        uintptr_t heap_start, heap_end;   // Process heap
-        uintptr_t stack_start, stack_end; // Process stack
-        uintptr_t mmap_start, mmap_end;   // mmap() area
-    } layout;
+   // Virtual memory areas del proceso
+   struct
+   {
+      uintptr_t code_start, code_end;   // .text segment
+      uintptr_t data_start, data_end;   // .data/.bss segment
+      uintptr_t heap_start, heap_end;   // Process heap
+      uintptr_t stack_start, stack_end; // Process stack
+      uintptr_t mmap_start, mmap_end;   // mmap() area
+   } layout;
 
-    // Estadísticas
-    size_t resident_pages; // Páginas físicas realmente allocadas
-    size_t virtual_pages;  // Páginas virtuales reservadas
-    size_t peak_memory;    // Máximo uso de memoria
+   // Estadísticas
+   size_t resident_pages; // Páginas físicas realmente allocadas
+   size_t virtual_pages;  // Páginas virtuales reservadas
+   size_t peak_memory;    // Máximo uso de memoria
 
-    // Flags de estado
-    uint32_t flags;
+   // Flags de estado
+   uint32_t flags;
 #define PROC_MEM_COPY_ON_WRITE (1 << 0)
 #define PROC_MEM_LAZY_ALLOC (1 << 1)
 #define PROC_MEM_SWAPPABLE (1 << 2)
@@ -38,7 +38,34 @@ typedef struct process_memory_space
 } process_memory_space_t;
 
 // ===============================================================================
-// FUNCIONES FUTURAS (no implementar aún)
+// FUNCIONES IMPLEMENTADAS - MEMORY ISOLATION
+// ===============================================================================
+
+// Crear page directory para proceso
+uintptr_t create_process_page_directory(void);
+
+// Destruir page directory
+void destroy_process_page_directory(uintptr_t pml4_phys);
+
+// Cambiar page directory (context switch)
+void switch_process_page_directory(uintptr_t pml4_phys);
+
+// Mapear región en user space
+int map_user_region(uintptr_t pml4_phys, uintptr_t virt_addr, size_t size, uint32_t flags);
+
+// Unmapear región de user space
+int unmap_user_region(uintptr_t pml4_phys, uintptr_t virt_addr, size_t size);
+
+// Copy-on-write
+int mark_page_cow(uintptr_t virt_addr);
+int handle_cow_fault(uintptr_t fault_addr);
+
+// Debug
+void debug_process_memory(uintptr_t pml4_phys);
+void debug_all_process_memory(void);
+
+// ===============================================================================
+// FUNCIONES FUTURAS (para ELF loader)
 // ===============================================================================
 
 // Crear espacio de memoria para nuevo proceso
@@ -114,25 +141,4 @@ static inline void *kernel_vmalloc(size_t size) { return vmalloc(size); }
 static inline void kernel_vfree(void *ptr) { vfree(ptr); }
 
 // Helper para debug
-void debug_current_memory_layout(void)
-{
-    print_colored("=== CURRENT KERNEL MEMORY LAYOUT ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-
-    print("KERNEL AREAS:\n");
-    print("  Code/Data:    0x00000000 - 0x04000000 (64MB)\n");
-    print("  Kernel Heap:  0x04000000 - 0x06000000 (32MB)\n");
-    print("  Kernel Stack: 0x06000000 - 0x06400000 (4MB)\n");
-    print("  VMalloc:      0x10000000 - 0x20000000 (256MB)\n");
-    print("\n");
-
-    print("FUTURE PROCESS AREAS:\n");
-    print("  User Code:    0x40000000 - 0x60000000 (512MB)\n");
-    print("  User Heap:    0x60000000 - 0x70000000 (256MB)\n");
-    print("  User Stack:   0x70000000 - 0x80000000 (256MB)\n");
-    print("\n");
-
-    print("STATUS: Single address space (kernel only)\n");
-    print("NEXT STEP: Implement basic processes with shared memory\n");
-    print("FUTURE: Per-process page directories\n");
-    print("\n");
-}
+void debug_current_memory_layout(void);

@@ -161,24 +161,28 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    kernel/scheduler/task_impl.o \
                    kernel/process/process.o \
                    kernel/syscalls/syscalls.o \
+                   kernel/elf_loader.o \
                    kernel/shell/shell.o \
                    arch/common/arch_interface.o \
                    memory/heap_allocator.o \
                    memory/physical_allocator.o \
                    memory/ondemand-paging.o \
                    memory/vallocator.o \
+                   memory/process_memory.o \
                    setup/kernel_config.o \
-                   fs/ir0fs.o
+                   fs/ir0fs.o \
+                   fs/vfs.o \
+                   fs/vfs_simple.o
 
 # Objetos condicionales según build target
 ifeq ($(BUILD_TARGET),desktop)
-    CONDITIONAL_OBJS = fs/vfs.o
+    CONDITIONAL_OBJS = fs/vfs.o fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),server)
-    CONDITIONAL_OBJS = fs/vfs.o
+    CONDITIONAL_OBJS = fs/vfs.o fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),iot)
-    CONDITIONAL_OBJS = fs/vfs.o
+    CONDITIONAL_OBJS = fs/vfs.o fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),embedded)
-    CONDITIONAL_OBJS = 
+    CONDITIONAL_OBJS = fs/vfs_simple.o
 endif
 
 # Objetos de arquitectura
@@ -234,7 +238,7 @@ ALL_OBJS = $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
 # Compilar kernel para arquitectura específica
 kernel-$(ARCH)-$(TARGET_NAME).bin: $(ALL_OBJS) $(ARCH_SUBDIRS)/linker.ld
 	@echo "Enlazando kernel para $(ARCH)-$(TARGET_NAME)..."
-	$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(KERNEL_BASE_OBJS) $(ARCH_OBJS)
 	@echo "Kernel $(ARCH)-$(TARGET_NAME) compilado: $@"
 
 # Crear ISO específico por arquitectura y target

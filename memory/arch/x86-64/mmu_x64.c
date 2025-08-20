@@ -3,6 +3,11 @@
 #include "Paging_x64.h"
 #include <print.h>
 
+// Constantes adicionales
+#ifndef PAGE_HUGE
+#define PAGE_HUGE (1ULL << 7) // PS bit para páginas grandes
+#endif
+
 // Acceso a las tablas de paginación globales definidas en Paging_x64.c
 extern uint64_t PML4[512];
 extern uint64_t PDPT[512];
@@ -54,6 +59,34 @@ int arch_map_page(uintptr_t virt_addr, uintptr_t phys_addr, uint32_t flags)
         return 0;
     }
 
+    // Mapeo especial para el heap del kernel (0x04000000 - 0x06000000)
+    // Usamos páginas de 2MB para simplificar
+    if (virt_addr >= 0x04000000 && virt_addr < 0x06000000)
+    {
+        // Calcular índice en PD para esta dirección
+        uint64_t heap_pd_index = (virt_addr - 0x04000000) / 0x200000; // Páginas de 2MB
+        uint64_t heap_base_phys = phys_addr & ~0x1FFFFF;              // Alinear a 2MB
+
+        // Verificar que PML4[0] y PDPT[0] estén configurados
+        if (!(PML4[0] & PAGE_PRESENT))
+        {
+            PML4[0] = ((uint64_t)PDPT) | PAGE_PRESENT | PAGE_WRITE;
+        }
+        if (!(PDPT[0] & PAGE_PRESENT))
+        {
+            PDPT[0] = ((uint64_t)PD) | PAGE_PRESENT | PAGE_WRITE;
+        }
+
+        // Mapear usando página de 2MB
+        uint64_t pd_heap_index = 32 + heap_pd_index; // Empezar desde PD[32]
+        if (pd_heap_index < 512)
+        {
+            PD[pd_heap_index] = heap_base_phys | x64_flags | PAGE_HUGE;
+            arch_invalidate_page(virt_addr);
+            return 0;
+        }
+    }
+
     // Para direcciones fuera del mapeo identidad, usar el mapeo superior
     if (pml4_index == 1) // Mapeo superior (0x8000000000000000)
     {
@@ -69,7 +102,7 @@ int arch_map_page(uintptr_t virt_addr, uintptr_t phys_addr, uint32_t flags)
         {
             uint64_t huge_page_addr = pd_index * 0x200000; // 2MB por entrada
             PD[pd_index] = huge_page_addr | x64_flags | PAGE_HUGE;
-            
+
             // Invalidar TLB para esta página
             arch_invalidate_page(virt_addr);
             return 0;
@@ -86,11 +119,11 @@ int arch_map_page(uintptr_t virt_addr, uintptr_t phys_addr, uint32_t flags)
             PML4[0] = ((uint64_t)PDPT) | PAGE_PRESENT | PAGE_WRITE;
         }
 
-        // Verificar que PDPT[0] esté configurado
-        if (!(PDPT[0] & PAGE_PRESENT))
+        // Verificar que PDPT[pdpt_index] esté configurado
+        if (!(PDPT[pdpt_index] & PAGE_PRESENT))
         {
-            // Configurar PDPT[0] para apuntar a PD
-            PDPT[0] = ((uint64_t)PD) | PAGE_PRESENT | PAGE_WRITE;
+            // Configurar PDPT[pdpt_index] para apuntar a PD
+            PDPT[pdpt_index] = ((uint64_t)PD) | PAGE_PRESENT | PAGE_WRITE;
         }
 
         // Para páginas de 4KB, necesitamos configurar la tabla de páginas
@@ -106,7 +139,7 @@ int arch_map_page(uintptr_t virt_addr, uintptr_t phys_addr, uint32_t flags)
 
             // Mapear la página específica
             PT[pt_index] = phys_addr | x64_flags;
-            
+
             // Invalidar TLB
             arch_invalidate_page(virt_addr);
             return 0;
@@ -145,7 +178,7 @@ int arch_unmap_page(uintptr_t virt_addr)
         {
             // Unmapear la página específica
             PT[pt_index] = 0;
-            
+
             // Invalidar TLB
             arch_invalidate_page(virt_addr);
             return 0;

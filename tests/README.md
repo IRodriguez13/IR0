@@ -3,7 +3,7 @@
 ## English
 
 ### Overview
-The Tests Subsystem provides comprehensive testing infrastructure for the IR0 kernel. It includes unit tests, integration tests, performance tests, and automated test suites that validate kernel functionality, stability, and performance across different architectures and configurations.
+The Tests Subsystem provides a testing framework for the IR0 kernel. It includes unit tests, integration tests, performance tests, and automated test suites that validate kernel functionality, stability, and performance across different architectures and configurations.
 
 ### Key Components
 
@@ -12,36 +12,36 @@ The Tests Subsystem provides comprehensive testing infrastructure for the IR0 ke
 - **Features**:
   - **Test Registration**: Register and organize test cases
   - **Test Execution**: Run individual tests or complete suites
-  - **Result Reporting**: Detailed test results and statistics
+  - **Result Reporting**: Basic test results and statistics
   - **Test Categories**: Unit, integration, performance, stress tests
-  - **Test Isolation**: Independent test execution environment
+  - **Test Isolation**: Basic independent test execution environment
 
 #### 2. Unit Tests
 - **Purpose**: Test individual kernel components and functions
 - **Features**:
-  - **Memory Tests**: Heap allocation, physical memory, paging
-  - **String Tests**: String library functions and utilities
-  - **Math Tests**: Mathematical operations and conversions
-  - **Data Structure Tests**: Lists, trees, hash tables
-  - **Algorithm Tests**: Sorting, searching, compression
+  - **Memory Tests**: Basic heap allocation, physical memory, paging tests
+  - **String Tests**: String library functions and utilities tests
+  - **Math Tests**: Basic mathematical operations and conversions tests
+  - **Data Structure Tests**: Basic lists, trees, hash tables tests
+  - **Algorithm Tests**: Basic sorting, searching, compression tests
 
 #### 3. Integration Tests
 - **Purpose**: Test interactions between kernel subsystems
 - **Features**:
-  - **System Call Tests**: Complete system call functionality
-  - **Process Tests**: Process creation, scheduling, termination
-  - **File System Tests**: File operations, VFS, IR0FS
-  - **Interrupt Tests**: Interrupt handling and timing
-  - **Driver Tests**: Hardware abstraction and device drivers
+  - **System Call Tests**: Basic system call functionality tests
+  - **Process Tests**: Basic process creation, scheduling, termination tests
+  - **File System Tests**: Basic file operations, VFS, IR0FS tests
+  - **Interrupt Tests**: Basic interrupt handling and timing tests
+  - **Driver Tests**: Basic hardware abstraction and device driver tests
 
 #### 4. Performance Tests
 - **Purpose**: Measure and validate kernel performance
 - **Features**:
-  - **Benchmark Tests**: CPU, memory, I/O performance
-  - **Latency Tests**: Interrupt latency, context switching
-  - **Throughput Tests**: System call throughput, memory bandwidth
-  - **Stress Tests**: High load and resource exhaustion
-  - **Scalability Tests**: Multi-core and multi-process performance
+  - **Benchmark Tests**: Basic CPU, memory, I/O performance tests
+  - **Latency Tests**: Basic interrupt latency, context switching tests
+  - **Throughput Tests**: Basic system call throughput, memory bandwidth tests
+  - **Stress Tests**: Basic high load and resource exhaustion tests
+  - **Scalability Tests**: Basic multi-core and multi-process performance tests
 
 ### Test Framework
 
@@ -585,12 +585,28 @@ void cleanup_test_environment(void) {
 - **Test File System**: 10MB
 - **Total Test Memory**: < 15MB
 
+### Current Status
+
+#### Características Funcionando
+- **Framework de Tests**: Registro básico y ejecución de tests
+- **Unit Tests**: Framework básico de unit tests
+- **Integration Tests**: Framework básico de integration tests
+- **Performance Tests**: Framework básico de performance tests
+- **Reportes de Tests**: Reportes básicos de resultados de tests
+
+#### Áreas de Desarrollo
+- **Cobertura de Tests**: Cobertura completa de tests para todos los subsistemas
+- **Testing Avanzado**: Características y capacidades avanzadas de testing
+- **Benchmarking de Rendimiento**: Testing avanzado de rendimiento
+- **Testing Automatizado**: Suite completa de tests automatizados
+- **Documentación de Tests**: Documentación comprehensiva de tests
+
 ---
 
 ## Español
 
 ### Descripción General
-El Subsistema de Tests proporciona infraestructura de testing comprehensiva para el kernel IR0. Incluye unit tests, integration tests, performance tests y suites de tests automatizados que validan la funcionalidad, estabilidad y rendimiento del kernel a través de diferentes arquitecturas y configuraciones.
+El Subsistema de Tests proporciona un framework de testing para el kernel IR0. Incluye unit tests, integration tests, performance tests y suites de tests automatizados que validan la funcionalidad, estabilidad y rendimiento del kernel a través de diferentes arquitecturas y configuraciones.
 
 ### Componentes Principales
 
@@ -599,36 +615,36 @@ El Subsistema de Tests proporciona infraestructura de testing comprehensiva para
 - **Características**:
   - **Registro de Tests**: Registrar y organizar casos de test
   - **Ejecución de Tests**: Ejecutar tests individuales o suites completas
-  - **Reportes de Resultados**: Resultados detallados y estadísticas
+  - **Reportes de Resultados**: Resultados básicos y estadísticas
   - **Categorías de Tests**: Unit, integration, performance, stress tests
-  - **Aislamiento de Tests**: Entorno de ejecución independiente
+  - **Aislamiento de Tests**: Entorno básico de ejecución independiente
 
 #### 2. Unit Tests
 - **Propósito**: Testear componentes y funciones individuales del kernel
 - **Características**:
-  - **Tests de Memoria**: Asignación de heap, memoria física, paginación
-  - **Tests de Strings**: Funciones de biblioteca de strings y utilidades
-  - **Tests de Matemáticas**: Operaciones matemáticas y conversiones
-  - **Tests de Estructuras de Datos**: Listas, árboles, hash tables
-  - **Tests de Algoritmos**: Ordenamiento, búsqueda, compresión
+  - **Tests de Memoria**: Tests básicos de asignación de heap, memoria física, paginación
+  - **Tests de Strings**: Tests de funciones de biblioteca de strings y utilidades
+  - **Tests de Matemáticas**: Tests básicos de operaciones matemáticas y conversiones
+  - **Tests de Estructuras de Datos**: Tests básicos de listas, árboles, hash tables
+  - **Tests de Algoritmos**: Tests básicos de ordenamiento, búsqueda, compresión
 
 #### 3. Integration Tests
 - **Propósito**: Testear interacciones entre subsistemas del kernel
 - **Características**:
-  - **Tests de System Calls**: Funcionalidad completa de system calls
-  - **Tests de Procesos**: Creación, planificación, terminación de procesos
-  - **Tests de File System**: Operaciones de archivo, VFS, IR0FS
-  - **Tests de Interrupciones**: Manejo de interrupciones y timing
-  - **Tests de Drivers**: Abstracción de hardware y drivers de dispositivos
+  - **Tests de System Calls**: Tests básicos de funcionalidad de system calls
+  - **Tests de Procesos**: Tests básicos de creación, planificación, terminación de procesos
+  - **Tests de File System**: Tests básicos de operaciones de archivo, VFS, IR0FS
+  - **Tests de Interrupciones**: Tests básicos de manejo de interrupciones y timing
+  - **Tests de Drivers**: Tests básicos de abstracción de hardware y drivers de dispositivos
 
 #### 4. Performance Tests
 - **Propósito**: Medir y validar rendimiento del kernel
 - **Características**:
-  - **Tests de Benchmark**: Rendimiento de CPU, memoria, I/O
-  - **Tests de Latencia**: Latencia de interrupciones, context switching
-  - **Tests de Throughput**: Throughput de system calls, ancho de banda de memoria
-  - **Tests de Stress**: Alta carga y agotamiento de recursos
-  - **Tests de Escalabilidad**: Rendimiento multi-core y multi-proceso
+  - **Tests de Benchmark**: Tests básicos de rendimiento de CPU, memoria, I/O
+  - **Tests de Latencia**: Tests básicos de latencia de interrupciones, context switching
+  - **Tests de Throughput**: Tests básicos de throughput de system calls, ancho de banda de memoria
+  - **Tests de Stress**: Tests básicos de alta carga y agotamiento de recursos
+  - **Tests de Escalabilidad**: Tests básicos de rendimiento multi-core y multi-proceso
 
 ### Framework de Tests
 
@@ -1171,3 +1187,19 @@ void cleanup_test_environment(void) {
 - **Pool de Memoria de Tests**: 1MB
 - **File System de Tests**: 10MB
 - **Memoria Total de Tests**: < 15MB
+
+### Estado Actual
+
+#### Características Funcionando
+- **Framework de Tests**: Registro básico y ejecución de tests
+- **Unit Tests**: Framework básico de unit tests
+- **Integration Tests**: Framework básico de integration tests
+- **Performance Tests**: Framework básico de performance tests
+- **Reportes de Tests**: Reportes básicos de resultados de tests
+
+#### Áreas de Desarrollo
+- **Cobertura de Tests**: Cobertura completa de tests para todos los subsistemas
+- **Testing Avanzado**: Características y capacidades avanzadas de testing
+- **Benchmarking de Rendimiento**: Testing avanzado de rendimiento
+- **Testing Automatizado**: Suite completa de tests automatizados
+- **Documentación de Tests**: Documentación comprehensiva de tests

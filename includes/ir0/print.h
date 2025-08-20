@@ -184,4 +184,6 @@ void print_uint32(uint32_t num);
  * @param ms: Milisegundos a esperar
  */
 void delay_ms(uint32_t ms);
+void print_hex(uintptr_t value);
+void uint_to_hex(uintptr_t value, char *hex_str);
 
