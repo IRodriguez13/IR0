@@ -3,53 +3,52 @@
 ## English
 
 ### Overview
-The Memory Management Subsystem is a comprehensive memory management system that provides physical memory allocation, virtual memory management, heap allocation, and process memory isolation. It supports both x86-32 and x86-64 architectures with advanced features like on-demand paging and memory verification.
+The Memory Management Subsystem provides basic memory management functionality for the IR0 kernel, including physical memory allocation, virtual memory management, heap allocation, and process memory isolation. It supports both x86-32 and x86-64 architectures with fundamental memory management features.
 
 ### Key Components
 
 #### 1. Physical Memory Allocator (`physical_allocator.c/h`)
 - **Purpose**: Manages physical memory pages using a bitmap-based allocation system
 - **Features**:
-  - Bitmap-based tracking for efficient allocation/deallocation
-  - Support for different page sizes (4KB, 2MB, 1GB)
-  - Memory zone management (DMA, Normal, High)
-  - Automatic memory coalescing
-  - Statistics and debugging information
+  - Bitmap-based tracking for basic allocation/deallocation
+  - Support for 4KB page sizes
+  - Basic memory zone management
+  - Simple memory coalescing
+  - Basic statistics and debugging information
 
 #### 2. Heap Allocator (`heap_allocator.c/h`)
 - **Purpose**: Provides dynamic memory allocation for the kernel (kmalloc/kfree)
 - **Features**:
-  - Multiple allocation pools for different sizes
-  - Fragmentation management with coalescing
-  - Memory leak detection
-  - Performance optimization for common allocation sizes
+  - Basic allocation pools for different sizes
+  - Simple fragmentation management
+  - Memory leak detection framework
+  - Basic performance optimization
   - Debug information and statistics
 
 #### 3. Virtual Memory Allocator (`vallocator.c`)
 - **Purpose**: Manages virtual memory spaces and process memory isolation
 - **Features**:
   - Virtual address space allocation
-  - Process memory isolation
+  - Basic process memory isolation
   - Memory protection (read, write, execute)
-  - Shared memory support
+  - Simple shared memory support
   - Memory mapping and unmapping
 
 #### 4. On-Demand Paging (`ondemand-paging.c/h`)
-- **Purpose**: Implements demand paging for efficient memory usage
+- **Purpose**: Framework for demand paging implementation
 - **Features**:
-  - Lazy page allocation
-  - Page fault handling
-  - Memory pressure management
-  - Page replacement algorithms
-  - Memory compression support
+  - Basic page fault handling structure
+  - Memory pressure management framework
+  - Page replacement algorithm interface
+  - Memory compression support structure
 
 #### 5. Process Memory Management (`process_memo.h`)
 - **Purpose**: Defines structures and interfaces for process memory management
 - **Features**:
   - Process memory space definitions
   - Memory layout specifications
-  - Process memory isolation
-  - Memory sharing between processes
+  - Process memory isolation framework
+  - Memory sharing between processes structure
 
 #### 6. Kernel Memory Layout (`krnl_memo_layout.h`)
 - **Purpose**: Defines the kernel's memory layout and addressing scheme
@@ -65,13 +64,13 @@ The Memory Management Subsystem is a comprehensive memory management system that
 - 4KB page tables
 - 4GB address space
 - 32-bit physical addressing
-- PAE support for >4GB RAM
+- PAE support framework
 
 #### x86-64 Support (`arch/x86-64/`)
-- 4KB, 2MB, and 1GB pages
+- 4KB pages
 - 256TB virtual address space
 - 64-bit physical addressing
-- Advanced paging features
+- Basic paging features
 
 ### Key Features
 
@@ -80,22 +79,22 @@ The Memory Management Subsystem is a comprehensive memory management system that
    - Architecture-specific optimizations
    - Conditional compilation for different platforms
 
-2. **Advanced Memory Management**
-   - 1GB identity mapping for kernel stability
-   - Memory verification system
-   - Automatic memory mapping validation
-   - Robust error handling and recovery
+2. **Basic Memory Management**
+   - Identity mapping for kernel stability
+   - Memory verification framework
+   - Basic memory mapping validation
+   - Error handling and recovery
 
 3. **Performance Optimizations**
    - Efficient bitmap-based allocation
-   - Multiple allocation pools
+   - Basic allocation pools
    - Memory coalescing
    - Cache-friendly data structures
 
 4. **Debugging and Monitoring**
    - Memory usage statistics
-   - Leak detection
-   - Performance profiling
+   - Leak detection framework
+   - Performance profiling structure
    - Debug information output
 
 ### Usage Examples
@@ -121,63 +120,77 @@ unmap_page(virt_addr);
 ### Configuration
 
 The memory subsystem can be configured through the strategy system:
-- **Desktop**: 256MB heap, full features
+- **Desktop**: 256MB heap, basic features
 - **Server**: 1GB heap, optimized for high throughput
 - **IoT**: 16MB heap, power-efficient
 - **Embedded**: 4MB heap, minimal footprint
+
+### Current Status
+
+#### Working Features
+- **Physical Memory Allocation**: Basic bitmap-based allocation
+- **Heap Management**: kmalloc/kfree with basic pools
+- **Virtual Memory**: Basic virtual address space management
+- **Memory Layout**: Proper kernel and user space separation
+- **Architecture Support**: Both x86-32 and x86-64
+
+#### Development Areas
+- **On-Demand Paging**: Complete page fault handling
+- **Memory Protection**: Advanced user/kernel protection
+- **Memory Compression**: Actual compression implementation
+- **Performance Optimization**: Advanced allocation strategies
 
 ---
 
 ## Español
 
 ### Descripción General
-El Subsistema de Gestión de Memoria es un sistema completo de gestión de memoria que proporciona asignación de memoria física, gestión de memoria virtual, asignación de heap y aislamiento de memoria por proceso. Soporta arquitecturas x86-32 y x86-64 con características avanzadas como paginación bajo demanda y verificación de memoria.
+El Subsistema de Gestión de Memoria proporciona funcionalidad básica de gestión de memoria para el kernel IR0, incluyendo asignación de memoria física, gestión de memoria virtual, asignación de heap y aislamiento de memoria por proceso. Soporta arquitecturas x86-32 y x86-64 con características fundamentales de gestión de memoria.
 
 ### Componentes Principales
 
 #### 1. Asignador de Memoria Física (`physical_allocator.c/h`)
 - **Propósito**: Gestiona páginas de memoria física usando un sistema de asignación basado en bitmap
 - **Características**:
-  - Seguimiento basado en bitmap para asignación/liberación eficiente
-  - Soporte para diferentes tamaños de página (4KB, 2MB, 1GB)
-  - Gestión de zonas de memoria (DMA, Normal, High)
-  - Coalescencia automática de memoria
-  - Estadísticas e información de debug
+  - Seguimiento basado en bitmap para asignación/liberación básica
+  - Soporte para tamaños de página de 4KB
+  - Gestión básica de zonas de memoria
+  - Coalescencia simple de memoria
+  - Estadísticas básicas e información de debug
 
 #### 2. Asignador de Heap (`heap_allocator.c/h`)
 - **Propósito**: Proporciona asignación dinámica de memoria para el kernel (kmalloc/kfree)
 - **Características**:
-  - Múltiples pools de asignación para diferentes tamaños
-  - Gestión de fragmentación con coalescencia
-  - Detección de memory leaks
-  - Optimización de rendimiento para tamaños comunes
+  - Pools básicos de asignación para diferentes tamaños
+  - Gestión simple de fragmentación
+  - Framework de detección de memory leaks
+  - Optimización básica de rendimiento
   - Información de debug y estadísticas
 
 #### 3. Asignador de Memoria Virtual (`vallocator.c`)
 - **Propósito**: Gestiona espacios de memoria virtual y aislamiento de memoria por proceso
 - **Características**:
   - Asignación de espacios de direcciones virtuales
-  - Aislamiento de memoria por proceso
+  - Aislamiento básico de memoria por proceso
   - Protección de memoria (lectura, escritura, ejecución)
-  - Soporte para memoria compartida
+  - Soporte simple para memoria compartida
   - Mapeo y desmapeo de memoria
 
 #### 4. Paginación Bajo Demanda (`ondemand-paging.c/h`)
-- **Propósito**: Implementa paginación bajo demanda para uso eficiente de memoria
+- **Propósito**: Framework para implementación de paginación bajo demanda
 - **Características**:
-  - Asignación lazy de páginas
-  - Manejo de page faults
-  - Gestión de presión de memoria
-  - Algoritmos de reemplazo de páginas
-  - Soporte para compresión de memoria
+  - Estructura básica de manejo de page faults
+  - Framework de gestión de presión de memoria
+  - Interfaz de algoritmo de reemplazo de páginas
+  - Estructura de soporte para compresión de memoria
 
 #### 5. Gestión de Memoria de Procesos (`process_memo.h`)
 - **Propósito**: Define estructuras e interfaces para gestión de memoria de procesos
 - **Características**:
   - Definiciones de espacios de memoria de procesos
   - Especificaciones de layout de memoria
-  - Aislamiento de memoria por proceso
-  - Compartición de memoria entre procesos
+  - Framework de aislamiento de memoria por proceso
+  - Estructura de compartición de memoria entre procesos
 
 #### 6. Layout de Memoria del Kernel (`krnl_memo_layout.h`)
 - **Propósito**: Define el layout de memoria del kernel y esquema de direccionamiento
@@ -193,13 +206,13 @@ El Subsistema de Gestión de Memoria es un sistema completo de gestión de memor
 - Tablas de páginas de 4KB
 - Espacio de direcciones de 4GB
 - Direccionamiento físico de 32 bits
-- Soporte PAE para >4GB RAM
+- Framework de soporte PAE
 
 #### Soporte x86-64 (`arch/x86-64/`)
-- Páginas de 4KB, 2MB y 1GB
+- Páginas de 4KB
 - Espacio de direcciones virtual de 256TB
 - Direccionamiento físico de 64 bits
-- Características avanzadas de paginación
+- Características básicas de paginación
 
 ### Características Principales
 
@@ -208,22 +221,22 @@ El Subsistema de Gestión de Memoria es un sistema completo de gestión de memor
    - Optimizaciones específicas por arquitectura
    - Compilación condicional para diferentes plataformas
 
-2. **Gestión Avanzada de Memoria**
-   - Mapeo de identidad de 1GB para estabilidad del kernel
-   - Sistema de verificación de memoria
-   - Validación automática de mapeo de memoria
-   - Manejo robusto de errores y recuperación
+2. **Gestión Básica de Memoria**
+   - Mapeo de identidad para estabilidad del kernel
+   - Framework de verificación de memoria
+   - Validación básica de mapeo de memoria
+   - Manejo de errores y recuperación
 
 3. **Optimizaciones de Rendimiento**
    - Asignación eficiente basada en bitmap
-   - Múltiples pools de asignación
+   - Pools básicos de asignación
    - Coalescencia de memoria
    - Estructuras de datos cache-friendly
 
 4. **Debugging y Monitoreo**
    - Estadísticas de uso de memoria
-   - Detección de leaks
-   - Profiling de rendimiento
+   - Framework de detección de leaks
+   - Estructura de profiling de rendimiento
    - Salida de información de debug
 
 ### Ejemplos de Uso
@@ -249,7 +262,22 @@ unmap_page(virt_addr);
 ### Configuración
 
 El subsistema de memoria se puede configurar a través del sistema de estrategias:
-- **Desktop**: 256MB heap, todas las características
+- **Desktop**: 256MB heap, características básicas
 - **Server**: 1GB heap, optimizado para alto rendimiento
 - **IoT**: 16MB heap, eficiente en energía
 - **Embedded**: 4MB heap, huella mínima
+
+### Estado Actual
+
+#### Características Funcionando
+- **Asignación de Memoria Física**: Asignación básica basada en bitmap
+- **Gestión de Heap**: kmalloc/kfree con pools básicos
+- **Memoria Virtual**: Gestión básica de espacios de direcciones virtuales
+- **Layout de Memoria**: Separación apropiada de espacio kernel y usuario
+- **Soporte de Arquitectura**: Tanto x86-32 como x86-64
+
+#### Áreas de Desarrollo
+- **Paginación Bajo Demanda**: Manejo completo de page faults
+- **Protección de Memoria**: Protección avanzada usuario/kernel
+- **Compresión de Memoria**: Implementación real de compresión
+- **Optimización de Rendimiento**: Estrategias avanzadas de asignación

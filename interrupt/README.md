@@ -3,15 +3,15 @@
 ## English
 
 ### Overview
-The Interrupt Subsystem provides comprehensive interrupt handling for the IR0 kernel, supporting both x86-32 and x86-64 architectures. It includes a complete Interrupt Descriptor Table (IDT), exception handlers, and interrupt service routines with advanced features like context preservation and detailed error reporting.
+The Interrupt Subsystem provides basic interrupt handling for the IR0 kernel, supporting both x86-32 and x86-64 architectures. It includes an Interrupt Descriptor Table (IDT), exception handlers, and interrupt service routines with basic features like context preservation and error reporting.
 
 ### Key Components
 
 #### 1. Interrupt Descriptor Table (`idt.c`)
 - **Purpose**: Manages the IDT with 256 entries for all possible interrupts
 - **Features**:
-  - Complete IDT setup for x86-32 and x86-64
-  - Dynamic interrupt handler registration
+  - Basic IDT setup for x86-32 and x86-64
+  - Dynamic interrupt handler registration framework
   - Interrupt gate configuration
   - TSS integration for x86-64
   - Interrupt stack management
@@ -20,16 +20,16 @@ The Interrupt Subsystem provides comprehensive interrupt handling for the IR0 ke
 - **Purpose**: Handles all interrupt and exception events
 - **Features**:
   - **Exception Handlers**: Division error, page fault, invalid opcode, etc.
-  - **Hardware Interrupts**: Timer, keyboard, disk, network
+  - **Hardware Interrupts**: Timer, keyboard, disk, network framework
   - **System Calls**: Software interrupt handling
-  - **Context Preservation**: Complete CPU state saving/restoration
-  - **Error Reporting**: Detailed diagnostic information
+  - **Context Preservation**: Basic CPU state saving/restoration
+  - **Error Reporting**: Basic diagnostic information
 
 #### 3. Architecture-Specific Code (`arch/`)
 - **Purpose**: Architecture-specific interrupt handling
 - **Features**:
   - **x86-32**: 32-bit interrupt handling with legacy PIC
-  - **x86-64**: 64-bit interrupt handling with APIC/LAPIC
+  - **x86-64**: 64-bit interrupt handling with APIC/LAPIC framework
   - **Assembly Routines**: Low-level interrupt entry/exit
   - **Register Management**: Architecture-specific register handling
 
@@ -86,11 +86,12 @@ The Interrupt Subsystem provides comprehensive interrupt handling for the IR0 ke
 0x31-0xFF: Available for software use
 ```
 
-### Advanced Features
+### Basic Features
 
 #### 1. Context Preservation
 ```c
-typedef struct {
+typedef struct 
+{
 #ifdef __x86_64__
     uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp;
     uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
@@ -155,9 +156,9 @@ void isr_system_call(interrupt_context_t* context) {
 - **Register Preservation**: 32-bit register set preservation
 
 #### x86-64 Support
-- **APIC/LAPIC**: Advanced Programmable Interrupt Controller
+- **APIC/LAPIC**: Advanced Programmable Interrupt Controller framework
 - **TSS Integration**: Task State Segment for interrupt stacks
-- **Interrupt Stacks**: Dedicated interrupt stacks (IST)
+- **Interrupt Stacks**: Dedicated interrupt stacks (IST) framework
 - **Register Preservation**: 64-bit register set preservation
 - **Long Mode**: 64-bit interrupt handling
 
@@ -214,25 +215,41 @@ struct interrupt_stats {
 ```
 
 #### Debug Features
-- **Interrupt Logging**: Detailed log of all interrupt events
-- **Performance Profiling**: Interrupt latency measurement
-- **Error Diagnostics**: Detailed error information
-- **Stack Tracing**: Interrupt context stack traces
+- **Interrupt Logging**: Basic log of interrupt events
+- **Performance Profiling**: Basic interrupt latency measurement
+- **Error Diagnostics**: Basic error information
+- **Stack Tracing**: Basic interrupt context stack traces
+
+### Current Status
+
+#### Working Features
+- **IDT Setup**: Basic interrupt descriptor table configuration
+- **Exception Handling**: Basic exception handlers
+- **Context Preservation**: Basic CPU state saving/restoration
+- **System Call Interface**: Basic system call interrupt handling
+- **Architecture Support**: Both x86-32 and x86-64
+
+#### Development Areas
+- **Advanced Interrupt Handling**: Complete APIC/LAPIC implementation
+- **Performance Optimization**: Advanced interrupt optimizations
+- **Error Recovery**: Advanced error recovery mechanisms
+- **Interrupt Statistics**: Complete interrupt monitoring
+- **Debug Features**: Advanced debugging capabilities
 
 ---
 
 ## Español
 
 ### Descripción General
-El Subsistema de Interrupciones proporciona manejo completo de interrupciones para el kernel IR0, soportando arquitecturas x86-32 y x86-64. Incluye una Tabla de Descriptores de Interrupción (IDT) completa, manejadores de excepciones y rutinas de servicio de interrupción con características avanzadas como preservación de contexto y reportes detallados de errores.
+El Subsistema de Interrupciones proporciona manejo básico de interrupciones para el kernel IR0, soportando arquitecturas x86-32 y x86-64. Incluye una Tabla de Descriptores de Interrupción (IDT), manejadores de excepciones y rutinas de servicio de interrupción con características básicas como preservación de contexto y reportes de errores.
 
 ### Componentes Principales
 
 #### 1. Tabla de Descriptores de Interrupción (`idt.c`)
 - **Propósito**: Gestiona la IDT con 256 entradas para todas las interrupciones posibles
 - **Características**:
-  - Configuración completa de IDT para x86-32 y x86-64
-  - Registro dinámico de manejadores de interrupción
+  - Configuración básica de IDT para x86-32 y x86-64
+  - Framework de registro dinámico de manejadores de interrupción
   - Configuración de puertas de interrupción
   - Integración TSS para x86-64
   - Gestión de stacks de interrupción
@@ -241,16 +258,16 @@ El Subsistema de Interrupciones proporciona manejo completo de interrupciones pa
 - **Propósito**: Maneja todos los eventos de interrupción y excepción
 - **Características**:
   - **Manejadores de Excepción**: Error de división, page fault, opcode inválido, etc.
-  - **Interrupciones de Hardware**: Timer, teclado, disco, red
+  - **Interrupciones de Hardware**: Framework de timer, teclado, disco, red
   - **System Calls**: Manejo de interrupciones de software
-  - **Preservación de Contexto**: Guardado/restauración completa del estado CPU
-  - **Reportes de Error**: Información diagnóstica detallada
+  - **Preservación de Contexto**: Guardado/restauración básica del estado CPU
+  - **Reportes de Error**: Información diagnóstica básica
 
 #### 3. Código Específico de Arquitectura (`arch/`)
 - **Propósito**: Manejo de interrupciones específico por arquitectura
 - **Características**:
   - **x86-32**: Manejo de interrupciones de 32 bits con PIC legacy
-  - **x86-64**: Manejo de interrupciones de 64 bits con APIC/LAPIC
+  - **x86-64**: Framework de manejo de interrupciones de 64 bits con APIC/LAPIC
   - **Rutinas en Assembly**: Entrada/salida de interrupción de bajo nivel
   - **Gestión de Registros**: Manejo de registros específico por arquitectura
 
@@ -307,7 +324,7 @@ El Subsistema de Interrupciones proporciona manejo completo de interrupciones pa
 0x31-0xFF: Disponible para uso de software
 ```
 
-### Características Avanzadas
+### Características Básicas
 
 #### 1. Preservación de Contexto
 ```c
@@ -376,9 +393,9 @@ void isr_system_call(interrupt_context_t* context) {
 - **Preservación de Registros**: Preservación del conjunto de registros de 32 bits
 
 #### Soporte x86-64
-- **APIC/LAPIC**: Controlador de Interrupciones Programmable Avanzado
+- **APIC/LAPIC**: Framework de Controlador de Interrupciones Programmable Avanzado
 - **Integración TSS**: Task State Segment para stacks de interrupción
-- **Stacks de Interrupción**: Stacks de interrupción dedicados (IST)
+- **Stacks de Interrupción**: Framework de stacks de interrupción dedicados (IST)
 - **Preservación de Registros**: Preservación del conjunto de registros de 64 bits
 - **Long Mode**: Manejo de interrupciones de 64 bits
 
@@ -435,7 +452,23 @@ struct interrupt_stats {
 ```
 
 #### Características de Debug
-- **Logging de Interrupciones**: Log detallado de todos los eventos de interrupción
-- **Profiling de Rendimiento**: Medición de latencia de interrupciones
-- **Diagnósticos de Error**: Información detallada de errores
-- **Stack Tracing**: Trazas de stack del contexto de interrupción
+- **Logging de Interrupciones**: Log básico de eventos de interrupción
+- **Profiling de Rendimiento**: Medición básica de latencia de interrupciones
+- **Diagnósticos de Error**: Información básica de errores
+- **Stack Tracing**: Trazas básicas de stack del contexto de interrupción
+
+### Estado Actual
+
+#### Características Funcionando
+- **Configuración IDT**: Configuración básica de tabla de descriptores de interrupción
+- **Manejo de Excepciones**: Manejadores básicos de excepciones
+- **Preservación de Contexto**: Guardado/restauración básica del estado CPU
+- **Interfaz de System Calls**: Manejo básico de interrupciones de system calls
+- **Soporte de Arquitectura**: Tanto x86-32 como x86-64
+
+#### Áreas de Desarrollo
+- **Manejo Avanzado de Interrupciones**: Implementación completa de APIC/LAPIC
+- **Optimización de Rendimiento**: Optimizaciones avanzadas de interrupciones
+- **Recuperación de Errores**: Mecanismos avanzados de recuperación de errores
+- **Estadísticas de Interrupciones**: Monitoreo completo de interrupciones
+- **Características de Debug**: Capacidades avanzadas de debugging

@@ -114,4 +114,35 @@ void kfree_impl(void *ptr);
 */
 void debug_heap_allocator(void);
 
+/*
+       === heap_allocator_cleanup ===
+
+    Limpia el heap dinámico y libera todas las páginas físicas asignadas.
+    
+    Útil para shutdown del kernel o reinicio del sistema de memoria.
+
+*/
+void heap_allocator_cleanup(void);
+
+/*
+       === heap_grow ===
+
+    Expande el heap dinámicamente asignando nuevas páginas físicas.
+    
+    Retorna 0 en éxito, -1 en error.
+
+*/
+int heap_grow_public(size_t additional_pages);
+
+/*
+       === heap_get_stats ===
+
+    Obtiene estadísticas del heap dinámico.
+    
+    Retorna información sobre páginas asignadas, memoria usada, etc.
+
+*/
+void heap_get_stats(uint32_t *total_pages, uint32_t *used_pages, 
+                   size_t *total_bytes, size_t *used_bytes, size_t *free_bytes);
+
 #endif /* IR0_HEAP_ALLOCATOR_H */

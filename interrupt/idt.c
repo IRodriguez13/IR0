@@ -1,6 +1,5 @@
 // interrupt/idt.c - IMPLEMENTACIÓN MÍNIMA Y FUNCIONAL
 #include "../arch/common/idt.h"
-#include <arch_interface.h>
 
 // IDT básica
 idt_entry_t idt[256];
@@ -46,16 +45,68 @@ extern void isr_stub_33(); // Keyboard
 extern void idt_load(uintptr_t idt_ptr);
 
 // Handler C simple para todas las interrupciones
-void isr_handler(uint8_t int_no) {
-    // Solo log básico - sin funciones complejas
-    volatile uint32_t* vga = (uint32_t*)0xB8000;
-    vga[0] = 0x0F490F49; // "II" en blanco
-    vga[1] = 0x0F520F52; // "RR" en blanco
-    vga[2] = 0x0F200F20; // "  " en blanco
-    
+void isr_handler(uint8_t int_no)
+{
+    // Manejo específico para excepción 13 (General Protection Fault)
+    if (int_no == 13)
+    {
+        // Evitar bucle infinito - solo mostrar error y continuar
+        // Usar una función simple que no cause más excepciones
+        volatile uint32_t *vga = (uint32_t *)0xB8000;
+        if (vga)
+        {
+            vga[0] = 0x0F470F47; // "GG" en blanco
+            vga[1] = 0x0F500F50; // "PP" en blanco
+            vga[2] = 0x0F460F46; // "FF" en blanco
+            vga[3] = 0x0F200F20; // "  " en blanco
+        }
+
+        // Enviar EOI y retornar inmediatamente
+        if (int_no >= 40)
+        {
+            __asm__ volatile("outb %%al, %%dx" : : "a"(0x20), "d"(0xA0));
+        }
+        __asm__ volatile("outb %%al, %%dx" : : "a"(0x20), "d"(0x20));
+        return;
+    }
+
+    // Manejo específico para excepción 14 (Page Fault)
+    if (int_no == 14)
+    {
+        // Evitar bucle infinito - solo mostrar error y continuar
+        // Usar una función simple que no cause más excepciones
+        volatile uint32_t *vga = (uint32_t *)0xB8000;
+        if (vga)
+        {
+            vga[0] = 0x0F500F50; // "PP" en blanco
+            vga[1] = 0x0F460F46; // "FF" en blanco
+            vga[2] = 0x0F200F20; // "  " en blanco
+            vga[3] = 0x0F200F20; // "  " en blanco
+        }
+
+        // Enviar EOI y retornar inmediatamente
+        if (int_no >= 40)
+        {
+            __asm__ volatile("outb %%al, %%dx" : : "a"(0x20), "d"(0xA0));
+        }
+        __asm__ volatile("outb %%al, %%dx" : : "a"(0x20), "d"(0x20));
+        return;
+    }
+
+    // Para otras interrupciones, manejo normal
+    volatile uint32_t *vga = (uint32_t *)0xB8000;
+    if (vga)
+    {
+        vga[0] = 0x0F490F49; // "II" en blanco
+        vga[1] = 0x0F520F52; // "RR" en blanco
+        vga[2] = 0x0F200F20; // "  " en blanco
+    }
+
     // Enviar EOI si es IRQ
-    if (int_no >= 32) {
-        if (int_no >= 40) {
+    if (int_no >= 32)
+    {
+        if (int_no >= 40)
+        {
             // Slave PIC
             __asm__ volatile("outb %%al, %%dx" : : "a"(0x20), "d"(0xA0));
         }
@@ -65,7 +116,8 @@ void isr_handler(uint8_t int_no) {
 }
 
 // Configurar una entrada del IDT (función local, no macro)
-static void idt_set_gate_local(uint8_t num, uintptr_t handler, uint8_t flags) {
+static void idt_set_gate_local(uint8_t num, uintptr_t handler, uint8_t flags)
+{
 #if defined(__x86_64__)
     // Estructura IDT para 64-bit
     idt[num].offset_low = (uint16_t)(handler & 0xFFFF);
@@ -86,27 +138,29 @@ static void idt_set_gate_local(uint8_t num, uintptr_t handler, uint8_t flags) {
 }
 
 // Inicializar IDT mínima
-void idt_init() {
+void idt_init()
+{
     // Configurar puntero IDT
     idt_ptr.limit = sizeof(idt_entry_t) * 256 - 1;
     idt_ptr.base = (uintptr_t)&idt;
-    
+
     // Limpiar toda la IDT
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++)
+    {
         idt_set_gate_local(i, (uintptr_t)isr_stub_0, 0x8E); // Interrupt gate
     }
-    
+
     // Configurar stubs específicos para excepciones críticas
     idt_set_gate_local(0, (uintptr_t)isr_stub_0, 0x8E);   // Divide by zero
     idt_set_gate_local(6, (uintptr_t)isr_stub_6, 0x8E);   // Invalid opcode
     idt_set_gate_local(8, (uintptr_t)isr_stub_8, 0x8E);   // Double fault
     idt_set_gate_local(13, (uintptr_t)isr_stub_13, 0x8E); // General protection
     idt_set_gate_local(14, (uintptr_t)isr_stub_14, 0x8E); // Page fault
-    
+
     // Configurar IRQs (mapped to 32-47)
     idt_set_gate_local(32, (uintptr_t)isr_stub_32, 0x8E); // Timer
     idt_set_gate_local(33, (uintptr_t)isr_stub_33, 0x8E); // Keyboard
-    
+
     // Cargar IDT
     idt_load((uintptr_t)&idt_ptr);
 }
