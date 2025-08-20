@@ -1,6 +1,7 @@
 #include "kernel_start.h"
 #include <print.h>
 #include <panic/panic.h>
+#include <logging.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -31,17 +32,24 @@
 #include "../memory/arch/x_86-32/Paging_x86-32.h"
 #endif
 
-// Variables globales para debugging
-volatile uint64_t *debug_ptr = (uint64_t *)0x100000;
-
 void main(void)
 {
-    // Inicialización básica del kernel
-    print_colored("=== IR0 Kernel Starting ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    delay_ms(2000);
+    // Banner de inicio
+    print_colored("╔══════════════════════════════════════════════════════════════╗\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("║                    IR0 Kernel v0.0.0                         ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("║                                                              ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("╚══════════════════════════════════════════════════════════════╝\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    delay_ms(1000);
+
+    // 0. Inicializar sistema de logging
+    logging_init();
+    logging_set_level(LOG_LEVEL_INFO);
+    log_info("KERNEL", "System initialization started");
+    
+    delay_ms(500);
 
     // 1. Inicializar IDT y sistema de interrupciones
-    print("Initializing interrupt system...\n");
+    log_info("KERNEL", "Initializing interrupt system");
 #ifdef __x86_64__
     idt_init64();
     idt_load64();
@@ -53,22 +61,20 @@ void main(void)
     pic_remap32();
     keyboard_init();
 #endif
-    print_success("Interrupt system initialized\n");
+    log_info("KERNEL", "Interrupt system initialized");
     
     // Habilitar interrupciones globalmente
-    print("Enabling global interrupts...\n");
     __asm__ volatile("sti");
-    print_success("Global interrupts enabled\n");
+    log_info("KERNEL", "Global interrupts enabled");
     
-    delay_ms(1000);
+    delay_ms(500);
 
     // 2. Inicializar paginación
-    print("Initializing memory management...\n");
+    log_info("KERNEL", "Initializing memory management");
 #ifdef __x86_64__
     init_paging_x64();
     
     // Verificar que el kernel esté mapeado correctamente
-    print("Verifying kernel memory mapping...\n");
     extern int paging_verify_mapping(uint64_t virt_addr);
     
     // Verificar direcciones clave del kernel
@@ -77,99 +83,100 @@ void main(void)
     
     int mapping_ok = 1;
     for (uint64_t addr = kernel_start; addr < kernel_end; addr += 0x1000) {
-        if (!paging_verify_mapping(addr)) {
-            print_error("Memory not mapped at 0x");
-            print_hex64(addr);
-            print("\n");
+        if (!paging_verify_mapping(addr)) 
+        {
+            log_error_fmt("KERNEL", "Memory mapping verification failed at 0x%llx", addr);
             mapping_ok = 0;
             break;
         }
     }
     
     if (mapping_ok) {
-        print_success("Kernel memory mapping verified\n");
+        log_info("KERNEL", "Memory mapping verified successfully");
     } else {
-        print_error("Kernel memory mapping failed!\n");
+        log_fatal("KERNEL", "Memory mapping verification failed");
         panic("Memory mapping verification failed");
     }
     
     // Initialize TSS for x86-64 (needed for proper interrupt handling)
-    print("Initializing TSS...\n");
     tss_init_x64();
-    print_success("TSS initialized\n");
+    log_info("KERNEL", "TSS initialized");
 #else
     init_paging_x86();
 #endif
-    print_success("Memory management initialized\n");
-    delay_ms(1000);
+    log_info("KERNEL", "Memory management initialized");
+    delay_ms(500);
 
     // 3. Inicializar allocators
-    print("Initializing memory allocators...\n");
+    log_info("KERNEL", "Initializing memory allocators");
     heap_allocator_init();
     physical_allocator_init();
-    print_success("Memory allocators initialized\n");
-    delay_ms(1000);
+    log_info("KERNEL", "Memory allocators initialized");
+    delay_ms(500);
 
     // 4. Inicializar scheduler
-    print("Initializing task scheduler...\n");
+    log_info("KERNEL", "Initializing task scheduler");
     scheduler_init();
-    print_success("Task scheduler initialized\n");
-    delay_ms(1000);
+    log_info("KERNEL", "Task scheduler initialized");
+    delay_ms(500);
 
     // 4.1. Inicializar sistema de procesos
-    print("Initializing process management...\n");
+    log_info("KERNEL", "Initializing process management");
     process_init();
-    print_success("Process management initialized\n");
-    delay_ms(1000);
+    log_info("KERNEL", "Process management initialized");
+    delay_ms(500);
 
     // 4.2. Inicializar sistema de system calls
-    print("Initializing system call interface...\n");
+    log_info("KERNEL", "Initializing system call interface");
     syscalls_init();
-    print_success("System call interface initialized\n");
-    delay_ms(1000);
+    log_info("KERNEL", "System call interface initialized");
+    delay_ms(500);
 
     // 5. Inicializar timer system
-    print("Initializing timer system...\n");
+    log_info("KERNEL", "Initializing timer system");
     init_clock();
-    print_success("Timer system initialized\n");
-    delay_ms(1000);
+    log_info("KERNEL", "Timer system initialized");
+    delay_ms(500);
 
     // 6. Inicializar drivers de hardware
-    print("Initializing hardware drivers...\n");
+    log_info("KERNEL", "Initializing hardware drivers");
     
     // Inicializar driver de teclado personalizado
-    print("Initializing custom keyboard driver...\n");
     keyboard_init();
-    print_success("Custom keyboard driver initialized\n");
+    log_info("KERNEL", "Keyboard driver initialized");
     
     // Inicializar driver de disco ATA
-    print("Initializing ATA disk driver...\n");
     ata_init();
-    print_success("ATA disk driver initialized\n");
+    log_info("KERNEL", "ATA disk driver initialized");
     
-    delay_ms(1000);
+    delay_ms(500);
 
     // 7. Inicializar VFS
-    print("Initializing virtual file system...\n");
+    log_info("KERNEL", "Initializing virtual file system");
     vfs_init();
-    print_success("Virtual file system initialized\n");
-    delay_ms(1000);
+    log_info("KERNEL", "Virtual file system initialized");
+    delay_ms(500);
 
     // 8. Habilitar interrupciones
-    print("Enabling interrupts...\n");
     __asm__ volatile("sti");
-    print_success("Interrupts enabled\n");
+    log_info("KERNEL", "All interrupts enabled");
+    delay_ms(500);
+
+    // Banner de sistema listo
+    print_colored("╔══════════════════════════════════════════════════════════════╗\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("║                    SYSTEM READY                              ║\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("║                 All subsystems initialized                   ║\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("╚══════════════════════════════════════════════════════════════╝\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     delay_ms(1000);
 
-    print_colored("=== IR0 Kernel Ready - Starting Shell ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    delay_ms(2000);
+    log_info("KERNEL", "Starting command shell");
 
     // Initialize shell
     shell_context_t shell_ctx;
     shell_config_t shell_config;
     
     if (shell_init(&shell_ctx, &shell_config) != 0) {
-        print_error("Failed to initialize shell");
+        log_fatal("KERNEL", "Shell initialization failed");
         panic("Shell initialization failed");
     }
     
@@ -177,24 +184,18 @@ void main(void)
     int shell_result = shell_run(&shell_ctx, &shell_config);
     
     if (shell_result == 0) {
-        print_success("Shell completed successfully \n");
-        print("Kernel continuing normal operation...\n");
-        
-        // Continue with normal kernel operation
-        // For now, just print a message and continue
-        print("Kernel is now in idle mode.\n");
-        print("All subsystems are running normally.\n");
+        log_info("KERNEL", "Shell completed successfully");
+        log_info("KERNEL", "Starting scheduler main loop");
         
         // Iniciar scheduler y entrar al loop principal
-        print("Starting scheduler main loop...\n");
         scheduler_start();
         scheduler_main_loop(); // NUNCA RETORNA
     } else {
-        print_error("Shell failed with error code: \n");
-        print_error("Kernel continuing without shell...\n");
+        log_error_fmt("KERNEL", "Shell failed with error code: %d", shell_result);
+        log_info("KERNEL", "Continuing without shell");
         
         // Continue kernel operation even if shell fails
-        print("Starting scheduler main loop...\n");
+        log_info("KERNEL", "Starting scheduler main loop");
         scheduler_start();
         scheduler_main_loop(); // NUNCA RETORNA
     }

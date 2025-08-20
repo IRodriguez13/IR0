@@ -137,6 +137,8 @@ SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 # Objetos base del kernel (comunes a todas las arquitecturas)
 KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    includes/ir0/print.o \
+                   includes/ir0/logging.o \
+                   includes/ir0/validation.o \
                    includes/string.o \
                    interrupt/arch/idt.o \
                    interrupt/arch/pic.o \
