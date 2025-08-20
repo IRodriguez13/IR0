@@ -5,6 +5,7 @@
 #include "../includes/string.h"
 #include "../memory/memo_interface.h"
 #include "../memory/heap_allocator.h"
+#include "../drivers/storage/ata.h"
 #include <string.h>
 
 // ===============================================================================
@@ -326,20 +327,43 @@ int ir0fs_get_inode(ir0fs_fs_info_t *fs_info, uint32_t ino, ir0fs_inode_t *inode
 
 int ir0fs_write_inode(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *inode)
 {
-    if (!fs_info || !fs_info->superblock || !inode) {
+    if (!fs_info || !inode) {
         return -1;
     }
     
-    // Calculate inode location
+    // Calculate inode block and offset
     uint64_t inode_block = fs_info->superblock->inode_table_start + (inode->ino / IR0FS_INODES_PER_BLOCK);
     uint32_t inode_offset = (inode->ino % IR0FS_INODES_PER_BLOCK) * sizeof(ir0fs_inode_t);
     
-    // TODO: Write inode to device
-    // For now, just update timestamps
-    inode->mtime = 0; // TODO: Get current time
-    inode->ctime = 0; // TODO: Get current time
+    // Read the block containing the inode
+    uint8_t *block_data = kmalloc(IR0FS_BLOCK_SIZE);
+    if (!block_data) {
+        return -1;
+    }
     
-    return 0;
+    // Read the block from disk
+    int result = ir0fs_read_block(fs_info, inode_block, block_data);
+    if (result != 0) {
+        kfree(block_data);
+        return -1;
+    }
+    
+    // Update the inode in the block
+    ir0fs_inode_t *inodes = (ir0fs_inode_t *)block_data;
+    memcpy(&inodes[inode->ino % IR0FS_INODES_PER_BLOCK], inode, sizeof(ir0fs_inode_t));
+    
+    // Write the block back to disk
+    result = ir0fs_write_block(fs_info, inode_block, block_data);
+    
+    kfree(block_data);
+    
+    if (result == 0) {
+        print("IR0FS: Wrote inode ");
+        print_int32(inode->ino);
+        print(" to disk\n");
+    }
+    
+    return result;
 }
 
 uint32_t ir0fs_alloc_inode(ir0fs_fs_info_t *fs_info)
@@ -523,31 +547,155 @@ int ir0fs_decompress_block(void *input, size_t input_size, void *output, size_t 
 // DIRECTORY OPERATIONS
 // ===============================================================================
 
-int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name, uint32_t ino, uint8_t type)
+// Read directory entries from a directory inode
+int ir0fs_readdir(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, ir0fs_dirent_t *dirent, uint32_t *offset)
+{
+    if (!fs_info || !dir_inode || !dirent || !offset) {
+        return -1;
+    }
+    
+    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) {
+        return -1;
+    }
+    
+    // If directory has no blocks, return end of directory
+    if (dir_inode->blocks == 0) {
+        return 1;
+    }
+    
+    // Calculate which block to read
+    uint32_t block_index = *offset / IR0FS_DIR_ENTRIES_PER_BLOCK;
+    uint32_t entry_in_block = *offset % IR0FS_DIR_ENTRIES_PER_BLOCK;
+    
+    // Check if we're beyond the directory's blocks
+    if (block_index >= dir_inode->blocks) {
+        return 1; // End of directory
+    }
+    
+    // Read the directory block from disk
+    uint64_t dir_block = dir_inode->direct_blocks[block_index];
+    uint8_t *block_data = kmalloc(IR0FS_BLOCK_SIZE);
+    if (!block_data) {
+        return -1;
+    }
+    
+    int result = ir0fs_read_block(fs_info, dir_block, block_data);
+    if (result != 0) {
+        kfree(block_data);
+        return -1;
+    }
+    
+    // Get the entry at the current offset
+    ir0fs_dirent_t *entries = (ir0fs_dirent_t *)block_data;
+    if (entry_in_block < IR0FS_DIR_ENTRIES_PER_BLOCK && entries[entry_in_block].ino != 0) {
+        // Copy the entry
+        memcpy(dirent, &entries[entry_in_block], sizeof(ir0fs_dirent_t));
+        (*offset)++;
+        kfree(block_data);
+        return 0;
+    }
+    
+    kfree(block_data);
+    return 1; // End of directory
+}
+
+// Add a directory entry to a directory
+int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name, uint32_t ino, uint32_t type)
 {
     if (!fs_info || !dir_inode || !name) {
         return -1;
     }
     
-    // TODO: Add directory entry
-    // Find free space in directory block
-    // Write directory entry
-    // Update directory inode
+    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) {
+        return -1;
+    }
     
-    return 0;
+    // Find a free block for the directory if needed
+    uint64_t dir_block = 0;
+    if (dir_inode->blocks == 0) {
+        dir_block = ir0fs_alloc_block(fs_info);
+        if (dir_block == 0) {
+            return -1;
+        }
+        dir_inode->direct_blocks[0] = dir_block;
+        dir_inode->blocks = 1;
+    } else {
+        dir_block = dir_inode->direct_blocks[0]; // Use first block for now
+    }
+    
+    // Read the directory block
+    uint8_t *block_data = kmalloc(IR0FS_BLOCK_SIZE);
+    if (!block_data) {
+        return -1;
+    }
+    
+    int result = ir0fs_read_block(fs_info, dir_block, block_data);
+    if (result != 0) {
+        kfree(block_data);
+        return -1;
+    }
+    
+    // Find a free slot in the directory
+    ir0fs_dirent_t *entries = (ir0fs_dirent_t *)block_data;
+    int free_slot = -1;
+    
+    for (int i = 0; i < IR0FS_DIR_ENTRIES_PER_BLOCK; i++) {
+        if (entries[i].ino == 0) {
+            free_slot = i;
+            break;
+        }
+    }
+    
+    if (free_slot == -1) {
+        // Directory block is full, need to allocate a new block
+        kfree(block_data);
+        return -1; // TODO: Handle multiple blocks
+    }
+    
+    // Add the directory entry
+    entries[free_slot].ino = ino;
+    entries[free_slot].type = (uint8_t)type;
+    entries[free_slot].name_len = strlen(name);
+    strncpy(entries[free_slot].name, name, sizeof(entries[free_slot].name) - 1);
+    entries[free_slot].name[sizeof(entries[free_slot].name) - 1] = '\0';
+    
+    // Write the directory block back to disk
+    result = ir0fs_write_block(fs_info, dir_block, block_data);
+    
+    kfree(block_data);
+    
+    if (result == 0) {
+        // Update directory inode
+        dir_inode->size += sizeof(ir0fs_dirent_t);
+        ir0fs_write_inode(fs_info, dir_inode);
+        
+        print("IR0FS: Added directory entry '");
+        print(name);
+        print("' (ino=");
+        print_int32(ino);
+        print(") to directory\n");
+    }
+    
+    return result;
 }
 
+// Remove a directory entry from a directory
 int ir0fs_remove_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name)
 {
     if (!fs_info || !dir_inode || !name) {
         return -1;
     }
     
-    // TODO: Remove directory entry
-    // Find directory entry
-    // Mark as deleted
-    // Update directory inode
+    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) {
+        return -1;
+    }
     
+    // For now, just print the operation
+    print("IR0FS: Removing directory entry '");
+    print(name);
+    print("' from directory\n");
+    
+    // TODO: Implement real directory entry removal
     return 0;
 }
 
@@ -736,5 +884,132 @@ vfs_fs_ops_t ir0fs_ops = {
     .umount = NULL,
     .sync = NULL,
 };
+
+// ===============================================================================
+// BLOCK I/O OPERATIONS (REAL DISK ACCESS)
+// ===============================================================================
+
+// Read a block from disk
+int ir0fs_read_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, void *buffer)
+{
+    if (!fs_info || !buffer) {
+        return -1;
+    }
+    
+    // Calculate LBA (Logical Block Address) from IR0FS block
+    uint32_t lba = (uint32_t)(block_num * (IR0FS_BLOCK_SIZE / 512)); // Convert to 512-byte sectors
+    uint8_t num_sectors = IR0FS_BLOCK_SIZE / 512;
+    
+    // Use ATA driver to read from disk
+    bool success = ata_read_sectors(0, lba, num_sectors, buffer); // Drive 0
+    
+    if (success) {
+        print("IR0FS: Read block ");
+        print_int32(block_num);
+        print(" from LBA ");
+        print_int32(lba);
+        print("\n");
+        return 0;
+    } else {
+        print_error("IR0FS: Failed to read block ");
+        print_int32(block_num);
+        print("\n");
+        return -1;
+    }
+}
+
+// Write a block to disk
+int ir0fs_write_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, const void *buffer)
+{
+    if (!fs_info || !buffer) {
+        return -1;
+    }
+    
+    // Calculate LBA (Logical Block Address) from IR0FS block
+    uint32_t lba = (uint32_t)(block_num * (IR0FS_BLOCK_SIZE / 512)); // Convert to 512-byte sectors
+    uint8_t num_sectors = IR0FS_BLOCK_SIZE / 512;
+    
+    // Use ATA driver to write to disk
+    bool success = ata_write_sectors(0, lba, num_sectors, buffer); // Drive 0
+    
+    if (success) {
+        print("IR0FS: Wrote block ");
+        print_int32(block_num);
+        print(" to LBA ");
+        print_int32(lba);
+        print("\n");
+        return 0;
+    } else {
+        print_error("IR0FS: Failed to write block ");
+        print_int32(block_num);
+        print("\n");
+        return -1;
+    }
+}
+
+// Initialize filesystem on disk
+int ir0fs_format_disk(ir0fs_fs_info_t *fs_info)
+{
+    if (!fs_info || !fs_info->superblock) {
+        return -1;
+    }
+    
+    print("IR0FS: Formatting disk with IR0FS filesystem\n");
+    
+    // Write superblock to disk
+    int result = ir0fs_write_block(fs_info, 0, fs_info->superblock);
+    if (result != 0) {
+        print_error("IR0FS: Failed to write superblock to disk\n");
+        return -1;
+    }
+    
+    // Initialize bitmap blocks
+    uint8_t *bitmap_block = kmalloc(IR0FS_BLOCK_SIZE);
+    if (!bitmap_block) {
+        return -1;
+    }
+    
+    memset(bitmap_block, 0, IR0FS_BLOCK_SIZE);
+    
+    // Mark system blocks as used (superblock, bitmap, inode table)
+    for (uint64_t i = 0; i < fs_info->superblock->inode_table_start + 1; i++) {
+        bitmap_block[i / 8] |= (1 << (i % 8));
+    }
+    
+    // Write bitmap to disk
+    result = ir0fs_write_block(fs_info, fs_info->superblock->bitmap_start, bitmap_block);
+    kfree(bitmap_block);
+    
+    if (result != 0) {
+        print_error("IR0FS: Failed to write bitmap to disk\n");
+        return -1;
+    }
+    
+    // Create root directory inode
+    ir0fs_inode_t root_inode;
+    memset(&root_inode, 0, sizeof(ir0fs_inode_t));
+    root_inode.ino = 1;
+    root_inode.type = IR0FS_INODE_TYPE_DIRECTORY;
+    root_inode.permissions = 0755;
+    root_inode.uid = 0;
+    root_inode.gid = 0;
+    root_inode.size = 0;
+    root_inode.blocks = 0;
+    root_inode.links = 1;
+    root_inode.atime = 0;
+    root_inode.mtime = 0;
+    root_inode.ctime = 0;
+    strcpy(root_inode.name, "/");
+    
+    // Write root inode to disk
+    result = ir0fs_write_inode(fs_info, &root_inode);
+    if (result != 0) {
+        print_error("IR0FS: Failed to write root inode to disk\n");
+        return -1;
+    }
+    
+    print_success("IR0FS: Disk formatted successfully\n");
+    return 0;
+}
 
 
