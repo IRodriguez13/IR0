@@ -691,13 +691,103 @@ int vfs_stat(const char *path, stat_t *statbuf)
     return 0;
 }
 
+// ===============================================================================
+// DIRECTORY OPERATIONS
+// ===============================================================================
+
+int vfs_opendir(const char *path, vfs_file_t **file)
+{
+    if (!path || !file) {
+        return -1;
+    }
+    
+    // Get directory inode
+    vfs_inode_t *dir_inode = vfs_get_inode(path);
+    if (!dir_inode || dir_inode->type != VFS_INODE_TYPE_DIRECTORY) {
+        return -1;
+    }
+    
+    // Create directory file
+    vfs_file_t *dir_file = kmalloc(sizeof(vfs_file_t));
+    if (!dir_file) {
+        return -1;
+    }
+    
+    // Initialize directory file
+    dir_file->inode = dir_inode;
+    dir_file->flags = VFS_O_RDONLY;
+    dir_file->offset = 0;
+    dir_file->ref_count = 1;
+    dir_file->private_data = NULL;
+    
+    *file = dir_file;
+    return 0;
+}
+
+int vfs_readdir(vfs_file_t *file, vfs_dirent_t *dirent)
+{
+    if (!file || !dirent || !file->inode) {
+        return -1;
+    }
+    
+    if (file->inode->type != VFS_INODE_TYPE_DIRECTORY) {
+        return -1;
+    }
+    
+    // Get the filesystem-specific data
+    vfs_mount_t *mount = vfs_find_mount(file->inode);
+    if (!mount || !mount->fs_ops) {
+        return -1;
+    }
+    
+    // If this is IR0FS, use the real implementation
+    if (mount->fs_type == VFS_FS_TYPE_IR0FS) {
+        // Convert VFS inode to IR0FS inode
+        ir0fs_inode_t *ir0fs_inode = (ir0fs_inode_t *)file->inode;
+        
+        // Call IR0FS readdir
+        ir0fs_dirent_t ir0fs_dirent;
+        uint32_t offset = file->offset;
+        int result = ir0fs_readdir(&ir0fs_info, ir0fs_inode, &ir0fs_dirent, &offset);
+        
+        if (result == 0) {
+            // Convert IR0FS dirent to VFS dirent
+            dirent->ino = ir0fs_dirent.ino;
+            dirent->type = (ir0fs_dirent.type == IR0FS_INODE_TYPE_DIRECTORY) ? 
+                          VFS_INODE_TYPE_DIRECTORY : VFS_INODE_TYPE_FILE;
+            strncpy(dirent->name, ir0fs_dirent.name, sizeof(dirent->name) - 1);
+            dirent->name[sizeof(dirent->name) - 1] = '\0';
+            
+            // Update file offset
+            file->offset = offset;
+            return 0;
+        } else if (result == 1) {
+            // End of directory
+            return 1;
+        } else {
+            return -1;
+        }
+    }
+    
+    // For other filesystems, return end of directory
+    return 1;
+}
+
 int vfs_mkdir(const char *path)
 {
     if (!path) {
         return -1;
     }
     
-    return vfs_create_inode(path, VFS_TYPE_DIRECTORY);
+    // Try to create directory using VFS
+    int result = vfs_create_inode(path, VFS_INODE_TYPE_DIRECTORY);
+    if (result == 0) {
+        print_success("Directory created: ");
+        print(path);
+        print("\n");
+    }
+    
+    return result;
 }
 
 int vfs_rmdir(const char *path)
@@ -706,12 +796,15 @@ int vfs_rmdir(const char *path)
         return -1;
     }
     
-    vfs_inode_t *inode = vfs_get_inode(path);
-    if (!inode || inode->type != VFS_INODE_TYPE_DIRECTORY) {
-        return -1;
+    // Try to remove directory using VFS
+    int result = vfs_unlink(path);
+    if (result == 0) {
+        print_success("Directory removed: ");
+        print(path);
+        print("\n");
     }
     
-    return vfs_delete_inode(path);
+    return result;
 }
 
 int vfs_link(const char *oldpath, const char *newpath)

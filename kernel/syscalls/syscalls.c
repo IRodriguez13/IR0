@@ -1251,10 +1251,19 @@ int64_t sys_sleep(uint32_t ms)
         return -ESRCH;
     }
     
-    // Implementación simple de sleep
-    // Por ahora, solo yield para permitir que otros procesos ejecuten
-    // TODO: Implementar sleep real con timer
-    scheduler_yield();
+    // Implementar sleep real con timer
+    uint32_t start_time = get_pit_ticks();
+    uint32_t end_time = start_time + ms;
+    
+    // Busy wait con yields periódicos para no bloquear el sistema
+    while (get_pit_ticks() < end_time) {
+        scheduler_yield(); // Permite que otros procesos ejecuten
+        
+        // Pequeña pausa para no saturar la CPU
+        for (volatile int i = 0; i < 1000; i++) {
+            // Busy wait corto
+        }
+    }
     
     return 0;
 }

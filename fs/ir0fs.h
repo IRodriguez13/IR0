@@ -199,6 +199,15 @@ int ir0fs_mount(const char *device_path, const char *mount_point);
 // Unmount IR0FS filesystem
 int ir0fs_umount(const char *mount_point);
 
+// Directory operations
+int ir0fs_readdir(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, ir0fs_dirent_t *dirent, uint32_t *offset);
+int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name, uint32_t ino, uint32_t type);
+int ir0fs_remove_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name);
+
+// Block I/O operations
+int ir0fs_read_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, void *buffer);
+int ir0fs_write_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, const void *buffer);
+
 // Global filesystem info
 extern ir0fs_fs_info_t ir0fs_info;
 
@@ -236,8 +245,6 @@ uint32_t ir0fs_calculate_checksum(void *data, size_t size);
 bool ir0fs_verify_checksum(void *data, size_t size, uint32_t expected_checksum);
 
 // Directory operations
-int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name, uint32_t ino, uint8_t type);
-int ir0fs_remove_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name);
 int ir0fs_find_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name, uint32_t *ino, uint8_t *type);
 
 // Utility functions

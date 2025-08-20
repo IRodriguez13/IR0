@@ -238,7 +238,9 @@ int vfs_rmdir(const char *path);
 
 // Inode operations
 int vfs_lookup(const char *path, vfs_inode_t **inode);
+vfs_inode_t *vfs_get_inode(const char *path);
 int vfs_create(const char *path, vfs_file_type_t type);
+int vfs_create_inode(const char *path, vfs_file_type_t type);
 int vfs_unlink(const char *path);
 
 // Mount operations
