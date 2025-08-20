@@ -98,6 +98,30 @@ endif
 COMMON_SUBDIRS = kernel interrupt drivers/timer drivers/IO drivers/storage kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
 
 # Subsistemas condicionales según build target
+
+# ===============================================================================
+# CONFIGURACIÓN QEMU (ABSTRACCIÓN)
+# ===============================================================================
+
+# Comandos QEMU por arquitectura
+QEMU_64_CMD = qemu-system-x86_64
+QEMU_32_CMD = qemu-system-i386
+QEMU_ARM64_CMD = qemu-system-aarch64
+QEMU_ARM32_CMD = qemu-system-arm
+
+# Configuración QEMU
+QEMU_MEMORY = 512M
+QEMU_FLAGS = -no-reboot -no-shutdown
+QEMU_DISPLAY = -display gtk
+QEMU_SERIAL = -serial stdio
+QEMU_TIMEOUT = 30
+QEMU_TEST_DISPLAY = -display none  # Para pruebas automáticas
+
+# Flags específicos por arquitectura
+QEMU_64_FLAGS = -cdrom
+QEMU_32_FLAGS = -cdrom
+QEMU_ARM64_FLAGS = -M virt -cpu cortex-a57 -kernel
+QEMU_ARM32_FLAGS = -M vexpress-a9 -cpu cortex-a9 -kernel
 ifeq ($(BUILD_TARGET),desktop)
     CONDITIONAL_SUBDIRS = fs
 else ifeq ($(BUILD_TARGET),server)
@@ -230,17 +254,43 @@ kernel-$(ARCH).iso: kernel-$(ARCH)-$(TARGET_NAME).iso
 # Target por defecto
 all: kernel-$(ARCH)-$(TARGET_NAME).iso
 
-# Target para ejecutar en QEMU
+# Target para ejecutar en QEMU (Interactivo)
 run: kernel-$(ARCH)-$(TARGET_NAME).iso
-	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU..."
+	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU (Interactivo)..."
 ifeq ($(ARCH),x86-64)
-	qemu-system-x86_64 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
 else ifeq ($(ARCH),x86-32)
-	qemu-system-i386 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
 else ifeq ($(ARCH),arm64)
-	qemu-system-aarch64 -M virt -cpu cortex-a57 -m 512M -kernel kernel-$(ARCH)-$(TARGET_NAME).bin -no-reboot -no-shutdown -display gtk
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
 else ifeq ($(ARCH),arm32)
-	qemu-system-arm -M vexpress-a9 -cpu cortex-a9 -m 512M -kernel kernel-$(ARCH)-$(TARGET_NAME).bin -no-reboot -no-shutdown -display gtk
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
+endif
+
+# Target para ejecutar en QEMU (Serial/Test mode - sin display)
+run-test: kernel-$(ARCH)-$(TARGET_NAME).iso
+	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU (Test mode - sin display)..."
+ifeq ($(ARCH),x86-64)
+	timeout $(QEMU_TIMEOUT) $(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_TEST_DISPLAY) || true
+else ifeq ($(ARCH),x86-32)
+	timeout $(QEMU_TIMEOUT) $(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_TEST_DISPLAY) || true
+else ifeq ($(ARCH),arm64)
+	timeout $(QEMU_TIMEOUT) $(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_TEST_DISPLAY) || true
+else ifeq ($(ARCH),arm32)
+	timeout $(QEMU_TIMEOUT) $(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_TEST_DISPLAY) || true
+endif
+
+# Target para ejecutar en QEMU (Display mode - con interfaz gráfica)
+run-display: kernel-$(ARCH)-$(TARGET_NAME).iso
+	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU (Display mode - con interfaz gráfica)..."
+ifeq ($(ARCH),x86-64)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
+else ifeq ($(ARCH),x86-32)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
+else ifeq ($(ARCH),arm64)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
+else ifeq ($(ARCH),arm32)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
 endif
 
 # Target para debug en QEMU
@@ -314,7 +364,42 @@ arch-details:
 	@echo "Flags ASM: $(ASMFLAGS)"
 	@echo "Flags LD: $(LDFLAGS)"
 
-# Información de ayuda
+# ===============================================================================
+# TARGETS DE PRUEBAS
+# ===============================================================================
+
+# Ejecutar todas las pruebas
+test: test-compile test-qemu
+
+# Pruebas de compilación
+test-compile:
+	@echo "Ejecutando pruebas de compilación..."
+	@./scripts/test_framework.sh compile
+
+# Pruebas de QEMU
+test-qemu:
+	@echo "Ejecutando pruebas de QEMU..."
+	@./scripts/test_framework.sh qemu
+
+# Pruebas de QEMU con display
+test-qemu-display:
+	@echo "Ejecutando pruebas de QEMU con display..."
+	@./scripts/test_framework.sh qemu-display
+
+# Prueba específica
+test-specific:
+	@echo "Ejecutando prueba específica: $(TEST_NAME)"
+	@./scripts/test_framework.sh $(TEST_NAME)
+
+# Ejecutar todas las pruebas del framework
+test-all:
+	@echo "Ejecutando suite completa de pruebas..."
+	@./scripts/test_framework.sh all
+
+# ===============================================================================
+# INFORMACIÓN DE AYUDA
+# ===============================================================================
+
 help:
 	@echo "IR0 Kernel Multi-Architecture Build System"
 	@echo ""
