@@ -2,6 +2,7 @@
 #include "ir0fs.h"
 #include "../includes/ir0/print.h"
 #include "../includes/ir0/panic/panic.h"
+#include "../includes/ir0/logging.h"
 #include "../includes/string.h"
 #include "../memory/memo_interface.h"
 #include "../memory/heap_allocator.h"
