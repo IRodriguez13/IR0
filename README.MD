@@ -1,38 +1,34 @@
 # IR0 Kernel
 
--If you see some "interesting" comments around this docs make me know it in <ivanrwcm25@gmail.com>. i generate docs with ai :--)
 ## 🚀 Current Status (v0.0.1 pre-rc)
 
-- You can also watch out the IR0 wiki <https://ir0-wiki.netlify.app/>.
+**STABLE & FUNCTIONAL** - The kernel compiles and runs successfully on both x86-32 and x86-64 architectures. Core subsystems are operational with a solid foundation for further development.
 
-**STABLE & FULLY FUNCTIONAL** - The kernel now compiles and runs successfully on both x86-32 and x86-64 architectures without any issues. All major subsystems are operational and the system demonstrates production-level stability.
-
-### ✅ Major Achievements
-- **✅ Dual Architecture Support**: x86-32 and x86-64 fully functional
-- **✅ Production-Level IR0FS**: Advanced filesystem with journaling, compression, and integrity checks
-- **✅ Complete Process Management**: Full lifecycle with multiple schedulers
-- **✅ POSIX-Compatible System Calls**: 50+ system calls implemented
-- **✅ Advanced Memory Management**: Paging, heap, physical allocator with 1GB identity mapping
-- **✅ Robust Interrupt System**: IDT, ISR handlers, TSS for x86-64
-- **✅ Interactive Shell**: 25+ built-in commands with history and error handling
-- **✅ Real Context Switching**: Assembly-optimized for both architectures
-- **✅ Timer System**: PIT, HPET, LAPIC support (PIT currently active)
+### ✅ Working Components
+- **✅ Dual Architecture Support**: x86-32 and x86-64 compilation and boot
+- **✅ Memory Management**: Basic paging, heap allocator, physical memory management
+- **✅ Interrupt System**: IDT setup, basic ISR handlers, TSS for x86-64
+- **✅ Process Management**: Process structure and state management framework
+- **✅ System Calls Interface**: POSIX-compatible system call definitions
+- **✅ Interactive Shell**: Basic shell with command parsing and execution
+- **✅ Context Switching**: Assembly implementation for both architectures
+- **✅ Timer System**: PIT timer support (currently active)
 - **✅ String Library**: Complete freestanding implementation
 
 ## 🏗️ Architecture
 
 ### Supported Architectures
-- **x86-32** (32-bit) - ✅ Fully functional and stable
-- **x86-64** (64-bit) - ✅ Fully functional and stable
+- **x86-32** (32-bit) - ✅ Compiles and boots
+- **x86-64** (64-bit) - ✅ Compiles and boots
 
 ### Core Subsystems
-- **Memory Management** - Advanced paging, heap, physical allocator with 1GB identity mapping
-- **Interrupt System** - Complete IDT, ISR handlers, TSS configuration
-- **File System** - IR0FS with journaling, compression, and integrity
-- **Process Management** - Complete lifecycle with CFS, Priority, and Round-Robin schedulers
-- **System Calls** - POSIX-compatible interface with 50+ calls
-- **Interactive Shell** - Advanced IR0 Shell with 25+ commands
-- **Timer Drivers** - PIT (active), HPET, LAPIC support
+- **Memory Management** - Basic paging, heap allocator, physical memory management
+- **Interrupt System** - IDT setup, ISR handlers, TSS configuration
+- **File System** - VFS framework with IR0FS filesystem structure
+- **Process Management** - Process lifecycle framework with scheduler interface
+- **System Calls** - POSIX-compatible interface definitions
+- **Interactive Shell** - Basic command-line interface
+- **Timer Drivers** - PIT (active), HPET and LAPIC support structure
 
 ## 📁 Project Structure
 
@@ -45,7 +41,7 @@ ir0-kernel/
 ├── kernel/                  # Core kernel components
 │   ├── core/               # Kernel core functionality
 │   ├── process/            # Process management
-│   ├── scheduler/          # Task scheduling (CFS, Priority, RR)
+│   ├── scheduler/          # Task scheduling framework
 │   ├── syscalls/           # System call interface
 │   └── shell/              # Interactive shell
 ├── memory/                 # Memory management
@@ -85,58 +81,37 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 
 ## 🎯 Features
 
-### Production-Level Filesystem (IR0FS)
-- **Journaling** for atomic transactions and crash recovery
-- **Multi-Algorithm Compression** (LZ4, ZSTD, LZMA) with automatic selection
-- **CRC32 Checksums** for data integrity verification
-- **Large File Support** up to 1PB
-- **High Capacity** (1M files per filesystem)
-- **Advanced Features**: defragmentation, health monitoring, automatic optimization
-
-### Complete Process Management
-- **Full Lifecycle**: NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD
-- **Multiple Schedulers**: CFS (Completely Fair), Priority, Round-Robin
-- **Adaptive Scheduling**: Automatic scheduler selection based on load
-- **Real Context Switching** with complete CPU state preservation
-- **Process Trees** and hierarchical management
-- **Priority Levels** (0-139) with dynamic adjustment
-
-### POSIX-Compatible System Calls
-- **Process Control**: fork(), exec(), exit(), wait(), getpid()
-- **File Operations**: open(), close(), read(), write(), lseek()
-- **Directory Operations**: mkdir(), rmdir(), chdir(), getcwd()
-- **Memory Management**: brk(), mmap(), munmap(), mprotect()
-- **Signals**: signal(), kill(), sigaction(), sigprocmask()
-- **Time**: time(), gettimeofday(), sleep(), usleep()
-- **User Management**: getuid(), setuid(), getgid(), setgid()
-
-### Advanced Interactive Shell (IR0 Shell)
-- **25+ Built-in Commands**: help, info, version, ps, meminfo, debug
-- **Command History** with navigation
-- **Error Handling** with detailed feedback
-- **System Integration** with direct kernel access
-- **Real-time System Information**
-- **Memory Management Commands**
-
-###  Memory Management
-- **1GB Identity Mapping** for kernel stability (yeah, a little bit to much)
-- **Advanced Paging** with on-demand loading
-- **Heap Allocator** (kmalloc/kfree) with fragmentation management
+### Memory Management
+- **Basic Paging** with identity mapping
+- **Heap Allocator** (kmalloc/kfree) with basic fragmentation management
 - **Physical Memory Management** with bitmap-based allocation
-- **Virtual Memory Allocation** with protection
-- **Memory Verification** system for debugging
+- **Memory Layout** with kernel and user space separation
+
+### Process Management Framework
+- **Process States**: NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD
+- **Scheduler Interface**: Framework for multiple scheduling algorithms
+- **Context Switching**: Assembly implementation for both architectures
+- **Process Trees**: Hierarchical process management structure
+
+### System Call Interface
+- **POSIX-Compatible Definitions**: 50+ system call definitions
+- **Process Control**: fork, exec, exit, wait, getpid
+- **File Operations**: open, close, read, write, lseek
+- **Memory Management**: brk, mmap, munmap, mprotect
+- **Time**: time, gettimeofday, sleep, usleep
+
+### Interactive Shell
+- **Command Parsing**: Basic command-line interface
+- **Built-in Commands**: help, info, version, ps, meminfo
+- **System Integration**: Access to kernel structures
+- **Error Handling**: Basic error reporting
+
+### File System Framework
+- **VFS Layer**: Virtual File System abstraction
+- **IR0FS Structure**: Filesystem layout and metadata definitions
+- **Mount Point Management**: Basic filesystem mounting framework
 
 ## 🛠️ Technical Specifications
-
-### Filesystem (IR0FS)
-- **Block Size**: 4KB optimized
-- **Inode Size**: 256 bytes with extended attributes
-- **Directory Entries**: 64 bytes with hash indexing
-- **Journal Size**: 1MB with atomic transactions
-- **Compression Ratios**: 2:1 to 10:1 depending on content
-- **Checksum Verification**: CRC32 per block
-- **Maximum File Size**: 1PB (Petabyte)
-- **Maximum Files**: 1,000,000 per filesystem
 
 ### Memory Layout
 - **Kernel Space**: 0x100000 - 0x200000 (1MB)
@@ -149,60 +124,57 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **General Purpose Registers** (RAX-R15 for x86-64, EAX-EDI for x86-32)
 - **Segment Registers** (CS, DS, ES, FS, GS, SS)
 - **Control Registers** (CR0, CR2, CR3, CR4)
-- **Debug Registers** (DR0-DR7)
-- **FPU State Management** (XMM, MMX, SSE)
 
 ## 📊 Current Status
 
-### ✅ Fully Working Components
+### ✅ Working Components
 - **Kernel Compilation**: Both x86-32 and x86-64 architectures
-- **Memory Management**: Complete with 1GB identity mapping
-- **Interrupt Handling**: Full IDT with robust exception handling
-- **Timer System**: PIT active, HPET and LAPIC available
-- **VFS with IR0FS**: Advanced filesystem registration
-- **Process Management**: Complete framework with multiple schedulers
-- **System Calls Interface**: POSIX-compatible with 50+ calls
-- **Interactive Shell**: 25+ commands with history and error handling
-- **Context Switching**: Real assembly implementation for both architectures
+- **Memory Management**: Basic memory management with identity mapping
+- **Interrupt Handling**: IDT setup with basic exception handling
+- **Timer System**: PIT timer active
+- **VFS Framework**: Basic filesystem abstraction layer
+- **Process Management**: Process structure and state management
+- **System Calls Interface**: POSIX-compatible definitions
+- **Interactive Shell**: Basic command-line interface
+- **Context Switching**: Assembly implementation for both architectures
 - **String Functions**: Complete freestanding library
-- **TSS Configuration**: Proper interrupt stack management for x86-64
 
-### 🎯 Recent Major Fixes
-- **Triple Fault Resolution**: Fixed by extending identity mapping to 1GB
-- **Memory Mapping Verification**: Added comprehensive memory mapping checks
-- **TSS Implementation**: Proper interrupt stack configuration for x86-64
-- **Dual Architecture Stability**: Both x86-32 and x86-64 now fully functional
+### 🎯 Development Status
+- **Foundation Complete**: Core kernel structure and basic functionality
+- **Architecture Support**: Both x86-32 and x86-64 working
+- **Memory Management**: Basic but functional memory system
+- **Interrupt System**: Basic interrupt handling operational
 
-### ⚠️ Areas for Enhancement
+### ⚠️ Areas for Development
+- **File System Implementation**: IR0FS low-level functions need implementation
+- **Process Creation**: Real process spawning and execution
+- **System Call Handlers**: Specific implementations for system calls
 - **Keyboard Input**: For full shell interactivity
-- **IR0FS Low-level Functions**: Some functions are currently stubs
-- **Process Creation**: Real process spawning implementation
-- **System Call Handlers**: Specific implementations for some calls
-- **LAPIC Integration**: Currently using PIT for stability
+- **Device Drivers**: Additional hardware support
+- **Networking**: Network stack implementation
 
 ## 🎯 Highlights
 
-### Features
-1. **Adaptive Scheduler**: Automatically selects the best scheduler based on system load
-2. **Hybrid Filesystem**: Combines journaling and copy-on-write for optimal performance
-3. **Intelligent Compression**: Automatically selects compression algorithm based on content
-4. **Memory Verification**: Built-in system to verify memory mapping integrity
-5. **Integrated Shell**: Shell is part of the kernel, not a separate process
-
 ### Technical Achievements
-- **Production-Level Stability**: No kernel panics, robust error handling
 - **Dual Architecture Support**: Native support for both 32-bit and 64-bit
-- **Advanced Memory Management**: 1GB identity mapping with verification
-- **Complete POSIX Interface**: 50+ system calls with proper error codes
-- **Real Context Switching**: Assembly-optimized for both architectures
+- **Memory Management**: Functional paging and heap allocation
+- **Interrupt System**: Complete IDT with basic exception handling
+- **Context Switching**: Real assembly implementation for both architectures
+- **Freestanding Environment**: Complete C library implementation
 
-## 🚀 Next Steps (Roadmap v2.4)
+### Development Approach
+- **Modular Architecture**: Clear separation of concerns
+- **Clean Code Organization**: Consistent patterns and structure
+- **Extensive Documentation**: Detailed subsystem documentation
+- **Robust Foundation**: Solid base for future development
+
+## 🚀 Next Steps (Development Roadmap)
 
 ### Immediate Priorities
-1. **🎯 Full Keyboard Input** for complete shell interactivity
-2. **🎯 IR0FS Implementation** (block allocation, inode operations)
-3. **🎯 Process Creation** (real process spawning and management)
-4. **🎯 System Call Handlers** (complete implementations)
+1. **🎯 File System Implementation** (IR0FS low-level functions)
+2. **🎯 Process Creation** (real process spawning and management)
+3. **🎯 System Call Handlers** (complete implementations)
+4. **🎯 Keyboard Input** (for complete shell interactivity)
 
 ### Future Goals
 - **Networking Stack**: TCP/IP implementation
@@ -211,14 +183,14 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **Container Support**: Process isolation and namespaces
 - **ARM Architecture Support**: AArch64 and ARM32
 
-## 🔍 Development Excellence
+## 🔍 Development
 
 ### Code Quality
-- **Modular Architecture** with clear interfaces and low coupling
+- **Modular Architecture** with clear interfaces
 - **Clean Code Organization** with consistent patterns
 - **Extensive Documentation** with detailed comments
 - **Freestanding C Environment** with custom implementations
-- **Robust Error Handling** throughout all subsystems
+- **Robust Error Handling** throughout subsystems
 
 ### Build System
 - **Multi-Architecture Support** with conditional compilation
@@ -232,14 +204,15 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **DEVELOPER_GUIDE.md** - Development guidelines and patterns
 - **BUILD_SYSTEM.md** - Build system documentation
 - **INSTALL.md** - Installation and setup instructions
+- **Subsystem READMEs** - Detailed documentation for each subsystem
 
 ## 🤝 Contributing
 
-The project welcomes contributions! Please see the development guidelines and ensure your code follows the established patterns. This is a production-ready kernel that maintains high code quality standards.
+The project welcomes contributions! Please see the development guidelines and ensure your code follows the established patterns. This is a development kernel with a solid foundation for further development.
 
 ## 📄 License
 
-This project is licensed under the terms specified in the LICENSE file.
+This project is licensed under the terms of GLP V 3 LICENSE file.
 
 ---
 

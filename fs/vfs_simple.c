@@ -1,401 +1,327 @@
-// fs/vfs_simple.c - Simplified Virtual File System Implementation
+// fs/vfs_simple.c - Implementación simple del sistema de archivos en memoria
 #include "vfs_simple.h"
 #include "../includes/ir0/print.h"
-#include "../memory/heap_allocator.h"
-#include "../memory/memo_interface.h"
+#include "../includes/string.h"
+#include <stddef.h>
 
 // ===============================================================================
-// GLOBAL VFS STATE
+// ESTRUCTURAS DE DATOS PARA DIRECTORIOS EN MEMORIA
 // ===============================================================================
 
-static vfs_inode_t *vfs_root_inode = NULL;
-static bool vfs_initialized = false;
+#define MAX_DIRECTORIES 100
+#define MAX_FILES_PER_DIR 50
+#define MAX_FILENAME_LEN 64
 
-// ===============================================================================
-// SIMPLIFIED VFS IMPLEMENTATION
-// ===============================================================================
-
-int vfs_init(void)
+// Estructura para un archivo
+typedef struct
 {
-    if (vfs_initialized)
+    char name[MAX_FILENAME_LEN];
+    uint32_t size;
+    uint32_t permissions;
+    uint64_t created_time;
+    bool is_directory;
+} simple_file_t;
+
+// Estructura para un directorio
+typedef struct
+{
+    char name[MAX_FILENAME_LEN];
+    simple_file_t files[MAX_FILES_PER_DIR];
+    int file_count;
+    uint32_t permissions;
+    uint64_t created_time;
+} simple_directory_t;
+
+// Sistema de archivos simple
+static simple_directory_t root_directory;
+static simple_directory_t directories[MAX_DIRECTORIES];
+static int directory_count = 0;
+static bool vfs_simple_initialized = false;
+
+// ===============================================================================
+// FUNCIONES AUXILIARES
+// ===============================================================================
+
+static uint64_t get_current_time(void)
+{
+    // Simular tiempo actual (en un sistema real usaríamos RTC)
+    static uint64_t fake_time = 1000000;
+    return fake_time++;
+}
+
+static simple_directory_t *find_directory(const char *path)
+{
+    if (strcmp(path, "/") == 0)
+    {
+        return &root_directory;
+    }
+
+    // Buscar en directorios creados
+    for (int i = 0; i < directory_count; i++)
+    {
+        if (strcmp(directories[i].name, path) == 0)
+        {
+            return &directories[i];
+        }
+    }
+
+    return NULL;
+}
+
+static bool is_valid_filename(const char *name)
+{
+    if (!name || strlen(name) == 0 || strlen(name) >= MAX_FILENAME_LEN)
+    {
+        return false;
+    }
+
+    // Verificar caracteres válidos
+    for (int i = 0; name[i]; i++)
+    {
+        if (name[i] == '/' || name[i] == '\\' || name[i] == ':' || name[i] == '*')
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// ===============================================================================
+// INICIALIZACIÓN
+// ===============================================================================
+
+void vfs_simple_init(void)
+{
+    if (vfs_simple_initialized)
+    {
+        return;
+    }
+
+    // Inicializar directorio raíz
+    strcpy(root_directory.name, "/");
+    root_directory.file_count = 0;
+    root_directory.permissions = 0755;
+    root_directory.created_time = get_current_time();
+
+    // Agregar archivos del sistema al directorio raíz
+    simple_file_t system_files[] = {
+        {"kernel.log", 1024, 0644, get_current_time(), false},
+        {"memory.log", 512, 0644, get_current_time(), false},
+        {"recovery.log", 256, 0644, get_current_time(), false}};
+
+    for (int i = 0; i < 3 && root_directory.file_count < MAX_FILES_PER_DIR; i++)
+    {
+        root_directory.files[root_directory.file_count] = system_files[i];
+        root_directory.file_count++;
+    }
+
+    directory_count = 0;
+    vfs_simple_initialized = true;
+
+    print("VFS Simple: Sistema de archivos inicializado\n");
+}
+
+// ===============================================================================
+// OPERACIONES DE DIRECTORIOS
+// ===============================================================================
+
+int vfs_simple_mkdir(const char *path)
+{
+    if (!vfs_simple_initialized)
+    {
+        vfs_simple_init();
+    }
+
+    if (!path || !is_valid_filename(path))
+    {
+        print("VFS Simple: Nombre de directorio inválido\n");
+        return -1;
+    }
+
+    // Verificar si ya existe
+    if (find_directory(path))
+    {
+        print("VFS Simple: El directorio ya existe: ");
+        print(path);
+        print("\n");
+        return -1;
+    }
+
+    // Verificar límite de directorios
+    if (directory_count >= MAX_DIRECTORIES)
+    {
+        print("VFS Simple: Límite de directorios alcanzado\n");
+        return -1;
+    }
+
+    // Crear nuevo directorio
+    simple_directory_t *new_dir = &directories[directory_count];
+    strcpy(new_dir->name, path);
+    new_dir->file_count = 0;
+    new_dir->permissions = 0755;
+    new_dir->created_time = get_current_time();
+
+    directory_count++;
+
+    print("VFS Simple: Directorio creado exitosamente: ");
+    print(path);
+    print("\n");
+
+    return 0;
+}
+
+// Función para verificar si archivo existe
+int vfs_file_exists(const char *pathname)
+{
+    if (!pathname)
     {
         return 0;
     }
 
-    // Create root inode
-    vfs_root_inode = kmalloc(sizeof(vfs_inode_t));
-    if (!vfs_root_inode)
+    // Buscar en el directorio raíz por ahora
+    for (int i = 0; i < root_directory.file_count; i++)
     {
-        print_error("VFS: Failed to allocate root inode\n");
-        return -1;
-    }
-
-    // Initialize root inode
-    vfs_root_inode->ino = VFS_ROOT_INODE;
-    vfs_root_inode->type = VFS_TYPE_DIRECTORY;
-    vfs_root_inode->size = 0;
-    vfs_root_inode->blocks = 0;
-    vfs_root_inode->permissions = VFS_PERM_READ | VFS_PERM_WRITE | VFS_PERM_EXEC;
-    vfs_root_inode->uid = 0;
-    vfs_root_inode->gid = 0;
-    vfs_root_inode->atime = 0;
-    vfs_root_inode->mtime = 0;
-    vfs_root_inode->ctime = 0;
-    vfs_root_inode->links = 1;
-    vfs_root_inode->fs_data = NULL;
-    vfs_root_inode->private_data = NULL;
-
-    vfs_initialized = true;
-    print_colored("VFS: Virtual File System initialized\n", 0x0A, 0x00);
-
-    return 0;
-}
-
-int vfs_open(const char *path, uint32_t flags, vfs_file_t **file)
-{
-    if (!vfs_initialized || !path || !file)
-    {
-        return -1;
-    }
-
-    // For now, create a simple file structure
-    vfs_file_t *new_file = kmalloc(sizeof(vfs_file_t));
-    if (!new_file)
-    {
-        return -1;
-    }
-
-    // Create a new inode for this file
-    vfs_inode_t *inode = kmalloc(sizeof(vfs_inode_t));
-    if (!inode)
-    {
-        kfree(new_file);
-        return -1;
-    }
-
-    // Initialize inode
-    inode->ino = 2; // Simple inode number
-    inode->type = VFS_TYPE_REGULAR;
-    inode->size = 0;
-    inode->blocks = 0;
-    inode->permissions = VFS_PERM_READ | VFS_PERM_WRITE;
-    inode->uid = 0;
-    inode->gid = 0;
-    inode->atime = 0;
-    inode->mtime = 0;
-    inode->ctime = 0;
-    inode->links = 1;
-    inode->fs_data = NULL;
-    inode->private_data = NULL;
-
-    // Initialize file
-    new_file->inode = inode;
-    new_file->flags = flags;
-    new_file->offset = 0;
-    new_file->ref_count = 1;
-    new_file->private_data = NULL;
-
-    *file = new_file;
-
-    print_colored("VFS: Opened file: ", 0x0A, 0x00);
-    print(path);
-    print("\n");
-
-    return 0;
-}
-
-int vfs_close(vfs_file_t *file)
-{
-    if (!file)
-    {
-        return -1;
-    }
-
-    file->ref_count--;
-    if (file->ref_count == 0)
-    {
-        if (file->inode)
+        if (strcmp(root_directory.files[i].name, pathname) == 0)
         {
-            kfree(file->inode);
+            return 1;
         }
-        kfree(file);
     }
 
     return 0;
 }
 
-ssize_t vfs_read(vfs_file_t *file, void *buf, size_t count)
+// Función para verificar si directorio existe
+int vfs_directory_exists(const char *pathname)
 {
-    if (!file || !buf)
+    if (!pathname)
     {
-        return -1;
+        return 0;
     }
 
-    // For now, return 0 (no data to read)
-    return 0;
-}
-
-ssize_t vfs_write(vfs_file_t *file, const void *buf, size_t count)
-{
-    if (!file || !buf)
+    // Verificar directorio raíz
+    if (strcmp(pathname, "/") == 0)
     {
-        return -1;
+        return 1;
     }
 
-    // For now, just update the file size
-    file->inode->size += count;
-    file->offset += count;
-
-    print_colored("VFS: Wrote ", 0x0A, 0x00);
-    print("bytes to file\n");
-
-    return count;
-}
-
-int vfs_seek(vfs_file_t *file, int64_t offset, vfs_seek_whence_t whence)
-{
-    if (!file)
+    // Buscar en directorios creados
+    for (int i = 0; i < directory_count; i++)
     {
-        return -1;
-    }
-
-    switch (whence)
-    {
-    case VFS_SEEK_SET:
-        file->offset = offset;
-        break;
-    case VFS_SEEK_CUR:
-        file->offset += offset;
-        break;
-    case VFS_SEEK_END:
-        file->offset = file->inode->size + offset;
-        break;
-    default:
-        return -1;
-    }
-
-    return 0;
-}
-
-int vfs_opendir(const char *path, vfs_file_t **file)
-{
-    if (!vfs_initialized || !path || !file)
-    {
-        return -1;
-    }
-
-    // Create a directory file
-    vfs_file_t *dir_file = kmalloc(sizeof(vfs_file_t));
-    if (!dir_file)
-    {
-        return -1;
-    }
-
-    // Create directory inode
-    vfs_inode_t *inode = kmalloc(sizeof(vfs_inode_t));
-    if (!inode)
-    {
-        kfree(dir_file);
-        return -1;
-    }
-
-    // Initialize directory inode
-    inode->ino = 3; // Directory inode number
-    inode->type = VFS_TYPE_DIRECTORY;
-    inode->size = 0;
-    inode->blocks = 0;
-    inode->permissions = VFS_PERM_READ | VFS_PERM_WRITE | VFS_PERM_EXEC;
-    inode->uid = 0;
-    inode->gid = 0;
-    inode->atime = 0;
-    inode->mtime = 0;
-    inode->ctime = 0;
-    inode->links = 1;
-    inode->fs_data = NULL;
-    inode->private_data = NULL;
-
-    // Initialize directory file
-    dir_file->inode = inode;
-    dir_file->flags = VFS_O_RDONLY;
-    dir_file->offset = 0;
-    dir_file->ref_count = 1;
-    dir_file->private_data = NULL;
-
-    *file = dir_file;
-
-    print_colored("VFS: Opened directory: ", 0x0A, 0x00);
-    print(path);
-    print("\n");
-
-    return 0;
-}
-
-int vfs_readdir(vfs_file_t *file, vfs_dirent_t *dirent)
-{
-    if (!file || !dirent)
-    {
-        return -1;
-    }
-
-    if (file->inode->type != VFS_TYPE_DIRECTORY)
-    {
-        return -1;
-    }
-
-    // For now, return end of directory
-    return 0;
-}
-
-int vfs_mkdir(const char *path)
-{
-    if (!vfs_initialized || !path)
-    {
-        return -1;
-    }
-
-    print_colored("VFS: Created directory: ", 0x0A, 0x00);
-    print(path);
-    print("\n");
-
-    return 0;
-}
-
-int vfs_rmdir(const char *path)
-{
-    if (!vfs_initialized || !path)
-    {
-        return -1;
-    }
-
-    print_colored("VFS: Removed directory: ", 0x0A, 0x00);
-    print(path);
-    print("\n");
-
-    return 0;
-}
-
-int vfs_lookup(const char *path, vfs_inode_t **inode)
-{
-    if (!vfs_initialized || !path || !inode)
-    {
-        return -1;
-    }
-
-    // For now, return root inode for any path
-    *inode = vfs_root_inode;
-    return 0;
-}
-
-int vfs_create(const char *path, vfs_file_type_t type)
-{
-    if (!vfs_initialized || !path)
-    {
-        return -1;
-    }
-
-    print_colored("VFS: Created file: ", 0x0A, 0x00);
-    print(path);
-    print("\n");
-
-    return 0;
-}
-
-int vfs_unlink(const char *path)
-{
-    if (!vfs_initialized || !path)
-    {
-        return -1;
-    }
-
-    print_colored("VFS: Unlinked file: ", 0x0A, 0x00);
-    print(path);
-    print("\n");
-
-    return 0;
-}
-
-// ===============================================================================
-// SIMPLIFIED UTILITY FUNCTIONS
-// ===============================================================================
-
-char *vfs_basename(const char *path)
-{
-    if (!path)
-        return NULL;
-
-    // Simple basename implementation
-    const char *last_slash = path;
-    while (*path)
-    {
-        if (*path == '/')
+        if (strcmp(directories[i].name, pathname) == 0)
         {
-            last_slash = path + 1;
+            return 1;
         }
-        path++;
     }
 
-    return (char *)last_slash;
+    return 0;
 }
 
-char *vfs_dirname(const char *path)
+int vfs_simple_ls(const char *path)
 {
-    if (!path)
-        return NULL;
-
-    // Simple dirname implementation
-    const char *last_slash = path;
-    const char *end = path;
-
-    while (*end)
+    if (!vfs_simple_initialized)
     {
-        if (*end == '/')
-        {
-            last_slash = end;
-        }
-        end++;
+        vfs_simple_init();
     }
 
-    if (last_slash == path)
-    {
-        return (char *)".";
-    }
-
-    // Create a copy of the path up to the last slash
-    size_t len = last_slash - path;
-    char *dir = kmalloc(len + 1);
+    simple_directory_t *dir = find_directory(path);
     if (!dir)
-        return NULL;
-
-    // Simple string copy
-    for (size_t i = 0; i < len; i++)
     {
-        dir[i] = path[i];
+        print("VFS Simple: Directorio no encontrado: ");
+        print(path);
+        print("\n");
+        return -1;
     }
-    dir[len] = '\0';
 
-    return dir;
+    print("=== Contenido del directorio: ");
+    print(path);
+    print(" ===\n");
+
+    // Mostrar archivos
+    for (int i = 0; i < dir->file_count; i++)
+    {
+        simple_file_t *file = &dir->files[i];
+        const char *type = file->is_directory ? "d" : "-";
+        const char *permissions = "rwxr-xr-x";
+
+        print(type);
+        print(permissions);
+        print("  root  root  ");
+        print(file->name);
+        print("\n");
+    }
+
+    // Mostrar directorios creados
+    for (int i = 0; i < directory_count; i++)
+    {
+        print("drwxr-xr-x  root  root  ");
+        print(directories[i].name);
+        print("\n");
+    }
+
+    return 0;
 }
 
-bool vfs_path_is_absolute(const char *path)
-{
-    return path && path[0] == '/';
-}
+// ===============================================================================
+// FUNCIONES DE INTERFAZ
+// ===============================================================================
 
-int vfs_resolve_path(const char *path, char *resolved_path)
+int vfs_simple_create_file(const char *path, const char *filename, uint32_t size)
 {
-    if (!path || !resolved_path)
+    if (!vfs_simple_initialized)
+    {
+        vfs_simple_init();
+    }
+
+    simple_directory_t *dir = find_directory(path);
+    if (!dir)
     {
         return -1;
     }
 
-    // Simple path copy
-    while (*path)
+    if (dir->file_count >= MAX_FILES_PER_DIR)
     {
-        *resolved_path = *path;
-        path++;
-        resolved_path++;
+        return -1;
     }
-    *resolved_path = '\0';
 
+    simple_file_t *new_file = &dir->files[dir->file_count];
+    strcpy(new_file->name, filename);
+    new_file->size = size;
+    new_file->permissions = 0644;
+    new_file->created_time = get_current_time();
+    new_file->is_directory = false;
+
+    dir->file_count++;
+
+    return 0;
+}
+
+int vfs_simple_get_directory_count(void)
+{
+    return directory_count;
+}
+
+const char *vfs_simple_get_directory_name(int index)
+{
+    if (index >= 0 && index < directory_count)
+    {
+        return directories[index].name;
+    }
+    return NULL;
+}
+
+// Función simple para asignar sectores
+int vfs_allocate_sectors(int count)
+{
+    // TODO: Implementar asignación real de sectores
+    // Por ahora, retornar éxito
+    return 0;
+}
+
+// Función simple para remover directorio
+int vfs_remove_directory(const char *path)
+{
+    // TODO: Implementar remoción real de directorio
+    // Por ahora, retornar éxito
     return 0;
 }

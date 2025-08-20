@@ -8,6 +8,7 @@
 #include "../../kernel/process/process.h"
 #include "../../kernel/syscalls/syscalls.h"
 #include "../../fs/vfs.h"
+#include "../../fs/vfs_simple.h"
 #include "../../drivers/IO/ps2.h"
 #include "stdarg.h"
 
@@ -26,9 +27,11 @@ static char shell_read_char(void)
     while (!keyboard_buffer_has_data())
     {
         // Wait for character - busy wait instead of hlt to avoid issues
-        for (volatile int i = 0; i < 1000; i++) { /* busy wait */ }
+        for (volatile int i = 0; i < 1000; i++)
+        { /* busy wait */
+        }
     }
-    
+
     return keyboard_buffer_get();
 }
 
@@ -58,11 +61,11 @@ static int shell_read_line(char *buffer, int max_length)
                 pos--;
                 buffer[pos] = '\0';
                 echo_pos--;
-                
+
                 // Secuencia completa para borrar visualmente
-                print("\b");  // Mover cursor atrás
-                print(" ");   // Sobrescribir con espacio
-                print("\b");  // Volver a mover cursor atrás
+                print("\b"); // Mover cursor atrás
+                print(" ");  // Sobrescribir con espacio
+                print("\b"); // Volver a mover cursor atrás
             }
         }
         else if (c == '\t')
@@ -110,15 +113,18 @@ static void shell_show_prompt(const char *prompt)
 {
     print("\n");
     print(prompt);
-    
+
     // Hacer parpadear el prompt en amarillo
     static int blink_state = 0;
     blink_state = !blink_state; // Alternar estado
-    
-    if (blink_state) {
+
+    if (blink_state)
+    {
         // Estado 1: Mostrar prompt amarillo
         print_colored("> ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    } else {
+    }
+    else
+    {
         // Estado 2: Mostrar prompt invisible (mismo color que fondo)
         print_colored("> ", VGA_COLOR_BLACK, VGA_COLOR_BLACK);
     }
@@ -145,10 +151,10 @@ static int64_t shell_syscall(int syscall_number, uint64_t arg1, uint64_t arg2, u
     args.arg4 = 0;
     args.arg5 = 0;
     args.arg6 = 0;
-    
+
     // Llamar a la syscall
     syscall_table[syscall_number](&args);
-    
+
     return args.arg1; // Retornar resultado
 }
 
@@ -440,28 +446,36 @@ static int shell_cmd_help(shell_context_t *ctx, shell_config_t *config, char arg
     (void)args;
     (void)arg_count;
 
-    shell_print_info("=== IR0 Shell Built-in Commands ===\n");
-    shell_print_info("help     - Show this help message");
-    shell_print_info("info     - Show system information");
-    shell_print_info("version  - Show kernel version");
-    shell_print_info("ps       - List processes");
-    shell_print_info("meminfo  - Show memory information");
-    shell_print_info("debug    - Show debug information");
-    shell_print_info("clear    - Clear screen");
-    shell_print_info("echo     - Print text");
-    shell_print_info("cd       - Change directory");
-    shell_print_info("pwd      - Print working directory");
-    shell_print_info("ls       - List directory contents");
-    shell_print_info("cat      - Display file contents");
-    shell_print_info("mkdir    - Create directory");
-    shell_print_info("rm       - Remove file");
-    shell_print_info("cp       - Copy file");
-    shell_print_info("mv       - Move file");
-    shell_print_info("kill     - Kill process");
-    shell_print_info("sleep    - Sleep for seconds");
-    shell_print_info("reboot   - Reboot system");
-    shell_print_info("halt     - Halt system");
-    shell_print_info("exit     - Exit shell");
+    shell_print_info("=== IR0 Shell - REAL IMPLEMENTED COMMANDS ===\n");
+    shell_print_info("help         - Show this help message");
+    shell_print_info("info         - Show system information");
+    shell_print_info("version      - Show kernel version");
+    shell_print_info("debug        - Show debug information");
+    shell_print_info("clear        - Clear screen");
+    shell_print_info("echo         - Print text");
+    shell_print_info("ls           - List directory contents (REAL VFS)");
+    shell_print_info("mkdir        - Create directory (REAL VFS)");
+    shell_print_info("kernel_info  - Get kernel information");
+    shell_print_info("keyboard     - Test keyboard functionality");
+    shell_print_info("exit         - Exit shell");
+    shell_print_info("");
+    shell_print_info("=== NOT FULLY IMPLEMENTED (Simulations) ===");
+    shell_print_info("ps           - List processes (simulated)");
+    shell_print_info("meminfo      - Show memory info (simulated)");
+    shell_print_info("cd           - Change directory (simulated)");
+    shell_print_info("pwd          - Print working directory (simulated)");
+    shell_print_info("cat          - Display file contents (simulated)");
+    shell_print_info("rm           - Remove file (simulated)");
+    shell_print_info("cp           - Copy file (simulated)");
+    shell_print_info("mv           - Move file (simulated)");
+    shell_print_info("kill         - Kill process (simulated)");
+    shell_print_info("sleep        - Sleep for seconds (simulated)");
+    shell_print_info("reboot       - Reboot system (simulated)");
+    shell_print_info("halt         - Halt system (simulated)");
+    shell_print_info("touch        - Create empty file (simulated)");
+    shell_print_info("echo_file    - Write text to file (simulated)");
+    shell_print_info("grep         - Search text in files (simulated)");
+    shell_print_info("find         - Find files by name (simulated)");
 
     return 0;
 }
@@ -565,123 +579,32 @@ static int shell_cmd_clear(shell_context_t *ctx, shell_config_t *config, char ar
     return 0;
 }
 
-// Comando para probar syscalls
-static int shell_cmd_syscall_test(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+// Comando para probar kernel info
+static int shell_cmd_kernel_info(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
 {
     (void)ctx;
     (void)config;
     (void)args;
     (void)arg_count;
 
-    print("Testing system calls...\n");
-    
-    // Probar SYS_GETPID
-    int64_t pid = shell_syscall(SYS_GETPID, 0, 0, 0);
-    print("Current PID: ");
-    print_int32(pid);
-    print("\n");
-    
-    // Probar SYS_GETTIME
-    int64_t time = shell_syscall(SYS_GETTIME, 0, 0, 0);
-    print("Current time (ms): ");
-    print_int32(time);
-    print("\n");
-    
-    // Probar SYS_WRITE (escribir a stdout)
-    const char *message = "Hello from syscall!\n";
-    int64_t written = shell_syscall(SYS_WRITE, 1, (uint64_t)message, strlen(message));
-    print("Bytes written: ");
-    print_int32(written);
-    print("\n");
-    
-    print("Syscall test completed!\n");
-    return 0;
-}
+    print("Testing kernel info syscall...\n");
 
-// Comando para probar sleep
-static int shell_cmd_sleep_test(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
-{
-    (void)ctx;
-    (void)config;
-    (void)arg_count;
+    char buffer[2048];
+    int64_t result = shell_syscall(SYS_KERNEL_INFO, (uint64_t)buffer, sizeof(buffer), 0);
 
-    if (arg_count < 2) {
-        print("Usage: sleep_test <milliseconds>\n");
-        return 1;
-    }
-    
-    int ms = atoi(args[1]);
-    if (ms <= 0) {
-        print("Invalid time value\n");
-        return 1;
-    }
-    
-    print("Sleeping for ");
-    print_int32(ms);
-    print(" milliseconds...\n");
-    
-    int64_t start_time = shell_syscall(SYS_GETTIME, 0, 0, 0);
-    shell_syscall(SYS_SLEEP, ms, 0, 0);
-    int64_t end_time = shell_syscall(SYS_GETTIME, 0, 0, 0);
-    
-    print("Slept for ");
-    print_int32(end_time - start_time);
-    print(" milliseconds\n");
-    
-    return 0;
-}
-
-// Comando para probar yield
-static int shell_cmd_yield_test(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
-{
-    (void)ctx;
-    (void)config;
-    (void)args;
-    (void)arg_count;
-
-    print("Testing yield...\n");
-    
-    for (int i = 0; i < 5; i++) {
-        print("Before yield ");
-        print_int32(i);
-        print("\n");
-        
-        shell_syscall(SYS_YIELD, 0, 0, 0);
-        
-        print("After yield ");
-        print_int32(i);
-        print("\n");
-    }
-    
-    print("Yield test completed!\n");
-    return 0;
-}
-
-// Comando para probar read desde stdin
-static int shell_cmd_read_test(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
-{
-    (void)ctx;
-    (void)config;
-    (void)args;
-    (void)arg_count;
-
-    print("Testing read from stdin...\n");
-    print("Type something and press Enter: ");
-    
-    char buffer[256];
-    int64_t bytes_read = shell_syscall(SYS_READ, 0, (uint64_t)buffer, sizeof(buffer) - 1);
-    
-    if (bytes_read > 0) {
-        buffer[bytes_read] = '\0';
-        print("You typed: ");
+    if (result > 0)
+    {
+        print("Kernel info retrieved successfully:\n");
         print(buffer);
-        print(" (");
-        print_int32(bytes_read);
-        print(" bytes)\n");
-    } else {
-        print("Read failed\n");
+        print("Bytes read: ");
+        print_int32(result);
+        print("\n");
     }
-    
+    else
+    {
+        print("Failed to get kernel info\n");
+    }
+
     return 0;
 }
 
@@ -711,62 +634,26 @@ static int shell_cmd_ls(shell_context_t *ctx, shell_config_t *config, char args[
 {
     (void)ctx;
     (void)config;
-    
+
     const char *path = (arg_count > 0) ? args[0] : "/";
-    
-    shell_print_info("=== Directory Contents: ");
+
+    shell_print_info("=== Contenido del directorio: ");
     shell_print_info(path);
     shell_print_info(" ===");
-    
-    // Get directory inode from VFS
-    vfs_inode_t *dir_inode = vfs_get_inode(path);
-    if (!dir_inode) {
-        shell_print_error("ls: directory not found");
-        return -1;
-    }
-    
-    if (dir_inode->type != VFS_INODE_TYPE_DIRECTORY) {
-        shell_print_error("ls: not a directory");
-        return -1;
-    }
-    
-    // Try to open directory using VFS
-    vfs_file_t *dir_file;
-    int result = vfs_opendir(path, &dir_file);
-    if (result != 0) {
-        shell_print_error("ls: failed to open directory");
-        return -1;
-    }
-    
-    // Read directory entries
-    vfs_dirent_t dirent;
-    int entries_found = 0;
-    
-    // Always show . and ..
-    shell_print_info("drwxr-xr-x  root  root  .");
-    shell_print_info("drwxr-xr-x  root  root  ..");
-    entries_found = 2;
-    
-    // Read real directory entries
-    while (vfs_readdir(dir_file, &dirent) == 0) {
-        if (dirent.ino != 0) {  // Valid entry
-            char entry_line[256];
-            const char *type_char = (dirent.type == VFS_INODE_TYPE_DIRECTORY) ? "d" : "-";
-            const char *permissions = "rwxr-xr-x";
-            const char *owner = "root";
-            const char *group = "root";
-            
-            snprintf(entry_line, sizeof(entry_line), "%s%s  %s  %s  %s", 
-                    type_char, permissions, owner, group, dirent.name);
-            shell_print_info(entry_line);
-            entries_found++;
-        }
-    }
-    
-    // Close directory
-    vfs_close(dir_file);
-    
-    return 0;
+
+    // 🧪 PROBAR SISTEMA DE RECUPERACIÓN RESILIENTE
+    // Mostrar información del sistema de memoria
+
+    shell_print_info("🧪 Sistema de recuperación resiliente - Estado del heap:");
+
+    // Mostrar estadísticas del heap
+    shell_print_info("📊 Estadísticas del heap:");
+    debug_heap_allocator();
+
+    // Listar el directorio real
+    int result = vfs_simple_ls(path);
+
+    return result;
 }
 
 static int shell_cmd_cat(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
@@ -774,55 +661,68 @@ static int shell_cmd_cat(shell_context_t *ctx, shell_config_t *config, char args
     (void)ctx;
     (void)config;
 
-    if (arg_count == 0) {
+    if (arg_count == 0)
+    {
         shell_print_error("cat: missing file argument");
         return -1;
     }
 
-    if (arg_count > 1) {
+    if (arg_count > 1)
+    {
         shell_print_error("cat: too many arguments");
         return -1;
     }
 
     const char *filename = args[0];
-    
+
     shell_print_info("=== File Contents: ");
     shell_print_info(filename);
     shell_print_info(" ===");
-    
+
     // Try to get file inode from VFS
     vfs_inode_t *file_inode = vfs_get_inode(filename);
-    if (!file_inode) {
+    if (!file_inode)
+    {
         shell_print_error("cat: file not found");
         return -1;
     }
-    
-    if (file_inode->type != VFS_INODE_TYPE_FILE) {
+
+    if (file_inode->type != VFS_INODE_TYPE_FILE)
+    {
         shell_print_error("cat: not a regular file");
         return -1;
     }
-    
+
     // Show realistic file content based on filename
-    if (strcmp(filename, "/etc/passwd") == 0) {
+    if (strcmp(filename, "/etc/passwd") == 0)
+    {
         shell_print_info("root:x:0:0:root:/root:/bin/bash");
         shell_print_info("user:x:1000:1000:User:/home/user:/bin/bash");
         shell_print_info("nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin");
-    } else if (strcmp(filename, "/etc/hosts") == 0) {
+    }
+    else if (strcmp(filename, "/etc/hosts") == 0)
+    {
         shell_print_info("127.0.0.1 localhost");
         shell_print_info("::1 localhost");
         shell_print_info("127.0.1.1 ir0-kernel");
-    } else if (strcmp(filename, "config.txt") == 0) {
+    }
+    else if (strcmp(filename, "config.txt") == 0)
+    {
         shell_print_info("IR0 Kernel Configuration");
         shell_print_info("Version: 1.0.0");
         shell_print_info("Architecture: x86-64");
         shell_print_info("Memory: 512MB");
         shell_print_info("Filesystem: IR0FS");
         shell_print_info("Scheduler: Round Robin");
-    } else if (strcmp(filename, "/etc/fstab") == 0) {
+    }
+    else if (strcmp(filename, "/etc/fstab") == 0)
+    {
         shell_print_info("/dev/sda1 / ext4 defaults 0 1");
         shell_print_info("/dev/sda2 /home ext4 defaults 0 2");
         shell_print_info("proc /proc proc defaults 0 0");
-    } else {
+    }
+    else
+    {
         shell_print_info("This is a sample file content.");
         shell_print_info("The IR0 filesystem is working correctly.");
         shell_print_info("File size: ");
@@ -853,19 +753,21 @@ static int shell_cmd_cd(shell_context_t *ctx, shell_config_t *config, char args[
     (void)config;
 
     const char *new_dir = (arg_count > 0) ? args[0] : "/";
-    
+
     // Verify directory exists in VFS
     vfs_inode_t *dir_inode = vfs_get_inode(new_dir);
-    if (!dir_inode) {
+    if (!dir_inode)
+    {
         shell_print_error("cd: directory not found");
         return -1;
     }
-    
-    if (dir_inode->type != VFS_INODE_TYPE_DIRECTORY) {
+
+    if (dir_inode->type != VFS_INODE_TYPE_DIRECTORY)
+    {
         shell_print_error("cd: not a directory");
         return -1;
     }
-    
+
     shell_print_success("Changed directory to: ");
     shell_print_success(new_dir);
     return 0;
@@ -876,67 +778,60 @@ static int shell_cmd_mkdir(shell_context_t *ctx, shell_config_t *config, char ar
     (void)ctx;
     (void)config;
 
-    if (arg_count == 0) {
+    if (arg_count == 0)
+    {
         shell_print_error("mkdir: missing directory argument");
         return -1;
     }
 
-    if (arg_count > 1) {
+    if (arg_count > 1)
+    {
         shell_print_error("mkdir: too many arguments");
         return -1;
     }
 
     const char *dirname = args[0];
-    
-    // Add detailed logging
-    log_info_fmt("SHELL", "mkdir: attempting to create directory '%s'", dirname);
-    
+
     // Simple validation
-    if (!dirname || strlen(dirname) == 0) {
-        log_error("SHELL", "mkdir: invalid directory name");
+    if (!dirname || strlen(dirname) == 0)
+    {
         shell_print_error("mkdir: invalid directory name");
         return -1;
     }
-    
+
     // Check for path traversal attempts
-    if (strstr(dirname, "..") != NULL) {
-        log_error("SHELL", "mkdir: path traversal attempt detected");
+    if (strstr(dirname, "..") != NULL)
+    {
         shell_print_error("mkdir: invalid path");
         return -1;
     }
-    
-    // For now, implement a simple working version
-    // This avoids the complex VFS operations that might cause GPF
-    
-    if (strcmp(dirname, "testdir") == 0) {
-        log_info("SHELL", "mkdir: creating test directory (simulated)");
-        shell_print_success("Directory created: ");
+
+    // 🧪 PROBAR SISTEMA DE RECUPERACIÓN RESILIENTE
+    // Usar syscall real para probar el heap
+
+    shell_print_info("mkdir: 🧪 Probando sistema de recuperación resiliente...");
+
+    // Llamar al syscall real que probará kmalloc
+    int64_t result = sys_mkdir(dirname, 0755); // Permisos estándar
+
+    if (result == 0)
+    {
         shell_print_success(dirname);
-        shell_print_info("(simulated - VFS integration pending)");
+        shell_print_info("🎉 Sistema de recuperación resiliente funcionando");
         return 0;
     }
-    
-    if (strcmp(dirname, "docs") == 0) {
-        log_info("SHELL", "mkdir: creating docs directory (simulated)");
-        shell_print_success("Directory created: ");
-        shell_print_success(dirname);
-        shell_print_info("(simulated - VFS integration pending)");
-        return 0;
+    else
+    {
+        shell_print_error("❌ Error al crear directorio: ");
+        shell_print_error(dirname);
+        shell_print_error("Código de error: ");
+
+        char error_str[16];
+        itoa(result, error_str, 10);
+        shell_print_error(error_str);
+
+        return -1;
     }
-    
-    if (strcmp(dirname, "temp") == 0) {
-        log_info("SHELL", "mkdir: creating temp directory (simulated)");
-        shell_print_success("Directory created: ");
-        shell_print_success(dirname);
-        shell_print_info("(simulated - VFS integration pending)");
-        return 0;
-    }
-    
-    // For other directories, show the issue
-    log_error_fmt("SHELL", "mkdir: VFS integration not ready for '%s'", dirname);
-    shell_print_error("mkdir: VFS integration not ready");
-    shell_print_error("Try: mkdir testdir, mkdir docs, or mkdir temp");
-    return -1;
 }
 
 static int shell_cmd_rm(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
@@ -944,37 +839,44 @@ static int shell_cmd_rm(shell_context_t *ctx, shell_config_t *config, char args[
     (void)ctx;
     (void)config;
 
-    if (arg_count == 0) {
+    if (arg_count == 0)
+    {
         shell_print_error("rm: missing file argument");
         return -1;
     }
 
-    if (arg_count > 1) {
+    if (arg_count > 1)
+    {
         shell_print_error("rm: too many arguments");
         return -1;
     }
 
     const char *filename = args[0];
-    
+
     // Check if file exists
     vfs_inode_t *file_inode = vfs_get_inode(filename);
-    if (!file_inode) {
+    if (!file_inode)
+    {
         shell_print_error("rm: file not found");
         return -1;
     }
-    
-    if (file_inode->type != VFS_INODE_TYPE_FILE) {
+
+    if (file_inode->type != VFS_INODE_TYPE_FILE)
+    {
         shell_print_error("rm: not a regular file");
         return -1;
     }
-    
+
     // Try to remove file using VFS
     int result = vfs_unlink(filename);
-    if (result == 0) {
+    if (result == 0)
+    {
         shell_print_success("File removed: ");
         shell_print_success(filename);
         return 0;
-    } else {
+    }
+    else
+    {
         shell_print_error("rm: failed to remove file");
         return -1;
     }
@@ -989,33 +891,39 @@ static int shell_cmd_touch(shell_context_t *ctx, shell_config_t *config, char ar
     (void)ctx;
     (void)config;
 
-    if (arg_count == 0) {
+    if (arg_count == 0)
+    {
         shell_print_error("touch: missing file argument");
         return -1;
     }
 
-    if (arg_count > 1) {
+    if (arg_count > 1)
+    {
         shell_print_error("touch: too many arguments");
         return -1;
     }
 
     const char *filename = args[0];
-    
+
     // Check if file already exists
     vfs_inode_t *existing = vfs_get_inode(filename);
-    if (existing) {
+    if (existing)
+    {
         shell_print_info("File already exists: ");
         shell_print_info(filename);
         return 0;
     }
-    
+
     // Create file using VFS
     int result = vfs_create_inode(filename, VFS_INODE_TYPE_FILE);
-    if (result == 0) {
+    if (result == 0)
+    {
         shell_print_success("File created: ");
         shell_print_success(filename);
         return 0;
-    } else {
+    }
+    else
+    {
         shell_print_error("touch: failed to create file");
         return -1;
     }
@@ -1026,14 +934,15 @@ static int shell_cmd_echo_file(shell_context_t *ctx, shell_config_t *config, cha
     (void)ctx;
     (void)config;
 
-    if (arg_count < 2) {
+    if (arg_count < 2)
+    {
         shell_print_error("echo_file: usage: echo_file <filename> <text>");
         return -1;
     }
 
     const char *filename = args[0];
     const char *text = args[1];
-    
+
     // TODO: Implement real file writing
     // int fd = vfs_open(filename, VFS_O_WRONLY | VFS_O_CREAT, 0644);
     // if (fd >= 0) {
@@ -1043,7 +952,7 @@ static int shell_cmd_echo_file(shell_context_t *ctx, shell_config_t *config, cha
     //     shell_print_success(filename);
     //     return 0;
     // }
-    
+
     shell_print_success("Text written to: ");
     shell_print_success(filename);
     shell_print_info("Content: ");
@@ -1056,20 +965,21 @@ static int shell_cmd_grep(shell_context_t *ctx, shell_config_t *config, char arg
     (void)ctx;
     (void)config;
 
-    if (arg_count < 2) {
+    if (arg_count < 2)
+    {
         shell_print_error("grep: usage: grep <pattern> <filename>");
         return -1;
     }
 
     const char *pattern = args[0];
     const char *filename = args[1];
-    
+
     shell_print_info("=== Searching for '");
     shell_print_info(pattern);
     shell_print_info("' in ");
     shell_print_info(filename);
     shell_print_info(" ===");
-    
+
     // TODO: Implement real text search
     // int fd = vfs_open(filename, VFS_O_RDONLY, 0);
     // if (fd >= 0) {
@@ -1083,16 +993,21 @@ static int shell_cmd_grep(shell_context_t *ctx, shell_config_t *config, char arg
     //     }
     //     vfs_close(fd);
     // }
-    
+
     // Simulate search results
-    if (strcmp(filename, "/etc/passwd") == 0 && strcmp(pattern, "root") == 0) {
+    if (strcmp(filename, "/etc/passwd") == 0 && strcmp(pattern, "root") == 0)
+    {
         shell_print_success("root:x:0:0:root:/root:/bin/bash");
-    } else if (strcmp(filename, "config.txt") == 0 && strcmp(pattern, "Version") == 0) {
+    }
+    else if (strcmp(filename, "config.txt") == 0 && strcmp(pattern, "Version") == 0)
+    {
         shell_print_success("Version: 1.0.0");
-    } else {
+    }
+    else
+    {
         shell_print_info("No matches found");
     }
-    
+
     return 0;
 }
 
@@ -1101,37 +1016,45 @@ static int shell_cmd_find(shell_context_t *ctx, shell_config_t *config, char arg
     (void)ctx;
     (void)config;
 
-    if (arg_count < 2) {
+    if (arg_count < 2)
+    {
         shell_print_error("find: usage: find <path> <name>");
         return -1;
     }
 
     const char *path = args[0];
     const char *name = args[1];
-    
+
     shell_print_info("=== Finding files named '");
     shell_print_info(name);
     shell_print_info("' in ");
     shell_print_info(path);
     shell_print_info(" ===");
-    
+
     // TODO: Implement real file search
     // vfs_inode_t *dir_inode = vfs_get_inode(path);
     // if (dir_inode && dir_inode->type == VFS_INODE_TYPE_DIRECTORY) {
     //     // Recursively search directory
     // }
-    
+
     // Simulate search results
-    if (strcmp(name, "*.txt") == 0) {
+    if (strcmp(name, "*.txt") == 0)
+    {
         shell_print_success("./config.txt");
-    } else if (strcmp(name, "passwd") == 0) {
+    }
+    else if (strcmp(name, "passwd") == 0)
+    {
         shell_print_success("/etc/passwd");
-    } else if (strcmp(name, "hosts") == 0) {
+    }
+    else if (strcmp(name, "hosts") == 0)
+    {
         shell_print_success("/etc/hosts");
-    } else {
+    }
+    else
+    {
         shell_print_info("No files found");
     }
-    
+
     return 0;
 }
 
@@ -1305,50 +1228,63 @@ static int shell_cmd_keyboard(shell_context_t *ctx, shell_config_t *config, char
 
     shell_print_info("Starting keyboard test...");
     shell_print_info("Type some characters. Press 'q' to exit the test.");
-    
+
     // Test interactivo del teclado
     print("=== KEYBOARD TEST MODE ===\n");
     print("Press keys to see them detected.\n");
     print("Press 'q' to quit the test.\n");
     print("Backspace: \\b, Tab: \\t, Enter: \\n\n\n");
-    
+
     // Incluir las funciones del buffer de teclado
     extern char keyboard_buffer_get(void);
     extern int keyboard_buffer_has_data(void);
     extern void keyboard_buffer_clear(void);
-    
+
     // Limpiar buffer antes de empezar
     keyboard_buffer_clear();
-    
+
     char c;
     int test_running = 1;
-    
-    while (test_running) {
+
+    while (test_running)
+    {
         // Polling del buffer de teclado
-        if (keyboard_buffer_has_data()) {
+        if (keyboard_buffer_has_data())
+        {
             c = keyboard_buffer_get();
-            
-            if (c == 'q') {
+
+            if (c == 'q')
+            {
                 print("Quit key pressed. Exiting test.\n");
                 test_running = 0;
-            } else if (c == '\b') {
+            }
+            else if (c == '\b')
+            {
                 print("\b \b");
-            } else if (c == '\t') {
+            }
+            else if (c == '\t')
+            {
                 print("Tab pressed\n");
-            } else if (c == '\n') {
+            }
+            else if (c == '\n')
+            {
                 print("Enter pressed\n");
-            } else {
-                
+            }
+            else
+            {
+
                 char temp_str[2] = {c, '\0'};
                 print(temp_str);
                 print("'\n");
             }
         }
-        
+
         // Pequeña pausa para no consumir toda la CPU
-        for (volatile int i = 0; i < 100000; i++) { /* busy wait */ }
+        for (volatile int i = 0; i < 100000; i++)
+        { /* busy wait */
+        }
     }
-    
+
     shell_print_success("Keyboard test completed");
     return 0;
 }
@@ -1383,10 +1319,7 @@ static void shell_init_builtin_commands(void)
     shell_add_builtin_command("reboot", "Reboot system", shell_cmd_reboot);
     shell_add_builtin_command("halt", "Halt system", shell_cmd_halt);
     shell_add_builtin_command("keyboard", "Test keyboard functionality", shell_cmd_keyboard);
-    shell_add_builtin_command("syscall", "Test system calls", shell_cmd_syscall_test);
-    shell_add_builtin_command("sleep_test", "Test sleep syscall", shell_cmd_sleep_test);
-    shell_add_builtin_command("yield_test", "Test yield syscall", shell_cmd_yield_test);
-    shell_add_builtin_command("read_test", "Test read from stdin", shell_cmd_read_test);
+    shell_add_builtin_command("kernel_info", "Get kernel information", shell_cmd_kernel_info);
     shell_add_builtin_command("touch", "Create empty file", shell_cmd_touch);
     shell_add_builtin_command("echo_file", "Write text to file", shell_cmd_echo_file);
     shell_add_builtin_command("grep", "Search text in files", shell_cmd_grep);

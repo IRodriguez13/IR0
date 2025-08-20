@@ -19,7 +19,7 @@ endif
 CFLAGS += -I../includes -I../includes/ir0 -I../arch/common
 
 # Objetos comunes
-OBJS = heap_allocator.o physical_allocator.o ondemand-paging.o vallocator.o
+OBJS = heap_allocator.o physical_allocator.o ondemand-paging.o vallocator.o process_memory.o
 
 # Objetos específicos de arquitectura
 ifeq ($(ARCH_DETECTED),x86-64)

@@ -204,265 +204,306 @@ struct tms
 #define MAX_SYSCALLS 256
 #define SYSCALL_INVALID -1
 
-// Números de system calls
+// Números de system calls - NUMERACIÓN CONSECUTIVA
 typedef enum
 {
-    SYS_EXIT = 0,                      // Terminar proceso
-    SYS_FORK = 1,                      // Crear proceso hijo
-    SYS_READ = 2,                      // Leer de descriptor
-    SYS_WRITE = 3,                     // Escribir a descriptor
-    SYS_OPEN = 4,                      // Abrir archivo
-    SYS_CLOSE = 5,                     // Cerrar descriptor
-    SYS_EXEC = 6,                      // Ejecutar programa
-    SYS_WAIT = 7,                      // Esperar proceso hijo
-    SYS_KILL = 8,                      // Enviar señal
-    SYS_GETPID = 9,                    // Obtener PID actual
-    SYS_GETPPID = 10,                  // Obtener PID del padre
-    SYS_SLEEP = 11,                    // Dormir por milisegundos
-    SYS_YIELD = 12,                    // Ceder CPU
-    SYS_BRK = 13,                      // Cambiar tamaño del heap
-    SYS_MMAP = 14,                     // Mapear memoria
-    SYS_MUNMAP = 15,                   // Desmapear memoria
-    SYS_GETTIME = 16,                  // Obtener tiempo actual
-    SYS_GETUID = 17,                   // Obtener UID
-    SYS_SETUID = 18,                   // Establecer UID
-    SYS_CHDIR = 19,                    // Cambiar directorio
-    SYS_GETCWD = 20,                   // Obtener directorio actual
-    SYS_MKDIR = 21,                    // Crear directorio
-    SYS_RMDIR = 22,                    // Eliminar directorio
-    SYS_LINK = 23,                     // Crear enlace duro
-    SYS_UNLINK = 24,                   // Eliminar enlace
-    SYS_STAT = 25,                     // Obtener información de archivo
-    SYS_FSTAT = 26,                    // Obtener información de descriptor
-    SYS_LSEEK = 27,                    // Reposicionar en archivo
-    SYS_DUP = 28,                      // Duplicar descriptor
-    SYS_DUP2 = 29,                     // Duplicar descriptor a número específico
-    SYS_PIPE = 30,                     // Crear pipe
-    SYS_ALARM = 31,                    // Establecer alarma
-    SYS_SIGNAL = 32,                   // Establecer manejador de señal
-    SYS_SIGACTION = 33,                // Establecer acción de señal
-    SYS_SIGPROCMASK = 34,              // Cambiar máscara de señales
-    SYS_SIGSUSPEND = 35,               // Suspender hasta señal
-    SYS_SOCKET = 36,                   // Crear socket
-    SYS_BIND = 37,                     // Vincular socket
-    SYS_CONNECT = 38,                  // Conectar socket
-    SYS_LISTEN = 39,                   // Escuchar en socket
-    SYS_ACCEPT = 40,                   // Aceptar conexión
-    SYS_SEND = 41,                     // Enviar datos
-    SYS_RECV = 42,                     // Recibir datos
-    SYS_SHUTDOWN = 43,                 // Cerrar socket
-    SYS_GETSOCKOPT = 44,               // Obtener opción de socket
-    SYS_SETSOCKOPT = 45,               // Establecer opción de socket
-    SYS_GETPEERNAME = 46,              // Obtener nombre del peer
-    SYS_GETSOCKNAME = 47,              // Obtener nombre del socket
-    SYS_SELECT = 48,                   // Multiplexación I/O
-    SYS_POLL = 49,                     // Poll de descriptores
-    SYS_EPOLL_CREATE = 50,             // Crear epoll
-    SYS_EPOLL_CTL = 51,                // Controlar epoll
-    SYS_EPOLL_WAIT = 52,               // Esperar eventos epoll
-    SYS_CLONE = 53,                    // Clonar proceso/thread
-    SYS_SET_THREAD_AREA = 54,          // Establecer área de thread
-    SYS_GET_THREAD_AREA = 55,          // Obtener área de thread
-    SYS_TGKILL = 56,                   // Enviar señal a thread
-    SYS_IO_SETUP = 57,                 // Configurar AIO
-    SYS_IO_DESTROY = 58,               // Destruir AIO
-    SYS_IO_SUBMIT = 59,                // Enviar AIO
-    SYS_IO_CANCEL = 60,                // Cancelar AIO
-    SYS_IO_GETEVENTS = 61,             // Obtener eventos AIO
-    SYS_MQ_OPEN = 62,                  // Abrir cola de mensajes
-    SYS_MQ_UNLINK = 63,                // Eliminar cola de mensajes
-    SYS_MQ_TIMEDSEND = 64,             // Enviar mensaje con timeout
-    SYS_MQ_TIMEDRECEIVE = 65,          // Recibir mensaje con timeout
-    SYS_MQ_NOTIFY = 66,                // Notificar cola de mensajes
-    SYS_MQ_GETSETATTR = 67,            // Obtener/establecer atributos
-    SYS_GETDENTS = 68,                 // Obtener entradas de directorio
-    SYS_FCNTL = 69,                    // Control de archivo
-    SYS_FLOCK = 70,                    // Bloquear archivo
-    SYS_FSYNC = 71,                    // Sincronizar archivo
-    SYS_FDATASYNC = 72,                // Sincronizar datos
-    SYS_TRUNCATE = 73,                 // Truncar archivo
-    SYS_FTRUNCATE = 74,                // Truncar descriptor
-    SYS_GETRLIMIT = 75,                // Obtener límite de recursos
-    SYS_SETRLIMIT = 76,                // Establecer límite de recursos
-    SYS_GETRUSAGE = 77,                // Obtener uso de recursos
-    SYS_TIMES = 78,                    // Obtener tiempos de proceso
-    SYS_PTRACE = 79,                   // Trazado de proceso
-    SYS_GETUID32 = 80,                 // Obtener UID (32-bit)
-    SYS_GETGID32 = 81,                 // Obtener GID (32-bit)
-    SYS_GETEUID32 = 82,                // Obtener EUID (32-bit)
-    SYS_GETEGID32 = 83,                // Obtener EGID (32-bit)
-    SYS_SETUID32 = 84,                 // Establecer UID (32-bit)
-    SYS_SETGID32 = 85,                 // Establecer GID (32-bit)
-    SYS_SETEUID32 = 86,                // Establecer EUID (32-bit)
-    SYS_SETEGID32 = 87,                // Establecer EGID (32-bit)
-    SYS_GETGROUPS32 = 88,              // Obtener grupos (32-bit)
-    SYS_SETGROUPS32 = 89,              // Establecer grupos (32-bit)
-    SYS_FCHOWN32 = 90,                 // Cambiar propietario (32-bit)
-    SYS_SETRESUID32 = 91,              // Establecer UIDs real/efectivo/guardado
-    SYS_GETRESUID32 = 92,              // Obtener UIDs real/efectivo/guardado
-    SYS_SETRESGID32 = 93,              // Establecer GIDs real/efectivo/guardado
-    SYS_GETRESGID32 = 94,              // Obtener GIDs real/efectivo/guardado
-    SYS_CHOWN32 = 95,                  // Cambiar propietario (32-bit)
-    SYS_SETREUID32 = 96,               // Establecer UIDs real/efectivo
-    SYS_SETREGID32 = 97,               // Establecer GIDs real/efectivo
-    SYS_RENAME = 98,                   // Renombrar archivo
-    SYS_TRUNCATE64 = 99,               // Truncar archivo (64-bit)
-    SYS_FTRUNCATE64 = 100,             // Truncar descriptor (64-bit)
-    SYS_STAT64 = 101,                  // Obtener información de archivo (64-bit)
-    SYS_LSTAT64 = 102,                 // Obtener información de enlace (64-bit)
-    SYS_FSTAT64 = 103,                 // Obtener información de descriptor (64-bit)
-    SYS_LSEEK64 = 104,                 // Reposicionar en archivo (64-bit)
-    SYS_MMAP2 = 105,                   // Mapear memoria (versión 2)
-    SYS_FADVISE64 = 106,               // Consejo de acceso a archivo
-    SYS_NEWFSTATAT = 107,              // Obtener información de archivo relativo
-    SYS_READLINKAT = 108,              // Leer enlace simbólico relativo
-    SYS_FCHMODAT = 109,                // Cambiar modo de archivo relativo
-    SYS_FACCESSAT = 110,               // Verificar acceso a archivo relativo
-    SYS_PSELECT6 = 111,                // Select con timeout (versión 6)
-    SYS_PPOLL = 112,                   // Poll con timeout
-    SYS_UNSHARE = 113,                 // Descompartir namespace
-    SYS_SET_ROBUST_LIST = 114,         // Establecer lista robusta de futex
-    SYS_GET_ROBUST_LIST = 115,         // Obtener lista robusta de futex
-    SYS_SPLICE = 116,                  // Empalmar datos entre descriptores
-    SYS_TEE = 117,                     // Duplicar datos entre descriptores
-    SYS_SYNC_FILE_RANGE = 118,         // Sincronizar rango de archivo
-    SYS_VMSPLICE = 119,                // Empalmar datos desde memoria
-    SYS_MOVE_PAGES = 120,              // Mover páginas entre nodos NUMA
-    SYS_UTIMENSAT = 121,               // Cambiar timestamps de archivo relativo
-    SYS_EPOLL_PWAIT = 122,             // Esperar eventos epoll con timeout
-    SYS_SIGNALFD = 123,                // Crear descriptor de señal
-    SYS_TIMERFD_CREATE = 124,          // Crear descriptor de timer
-    SYS_EVENTFD = 125,                 // Crear descriptor de evento
-    SYS_FALLOCATE = 126,               // Pre-asignar espacio en archivo
-    SYS_TIMERFD_SETTIME = 127,         // Establecer tiempo de timer
-    SYS_TIMERFD_GETTIME = 128,         // Obtener tiempo de timer
-    SYS_ACCEPT4 = 129,                 // Aceptar conexión con flags
-    SYS_SIGNALFD4 = 130,               // Crear descriptor de señal con flags
-    SYS_EVENTFD2 = 131,                // Crear descriptor de evento con flags
-    SYS_EPOLL_CREATE1 = 132,           // Crear epoll con flags
-    SYS_DUP3 = 133,                    // Duplicar descriptor con flags
-    SYS_PIPE2 = 134,                   // Crear pipe con flags
-    SYS_INOTIFY_INIT1 = 135,           // Inicializar inotify con flags
-    SYS_PREADV = 136,                  // Leer vectorizado con offset
-    SYS_PWRITEV = 137,                 // Escribir vectorizado con offset
-    SYS_RT_TGSIGQUEUEINFO = 138,       // Encolar señal en tiempo real
-    SYS_PERF_EVENT_OPEN = 139,         // Abrir evento de performance
-    SYS_RECVMMSG = 140,                // Recibir múltiples mensajes
-    SYS_FANOTIFY_INIT = 141,           // Inicializar fanotify
-    SYS_FANOTIFY_MARK = 142,           // Marcar archivo para fanotify
-    SYS_PRLIMIT64 = 143,               // Obtener/establecer límite de recursos (64-bit)
-    SYS_NAME_TO_HANDLE_AT = 144,       // Convertir nombre a handle
-    SYS_OPEN_BY_HANDLE_AT = 145,       // Abrir por handle
-    SYS_CLOCK_ADJTIME = 146,           // Ajustar reloj del sistema
-    SYS_SYNCFS = 147,                  // Sincronizar filesystem
-    SYS_SENDMMSG = 148,                // Enviar múltiples mensajes
-    SYS_SETNS = 149,                   // Establecer namespace
-    SYS_PROCESS_VM_READV = 150,        // Leer vectorizado de proceso
-    SYS_PROCESS_VM_WRITEV = 151,       // Escribir vectorizado a proceso
-    SYS_KCMP = 152,                    // Comparar procesos
-    SYS_FINIT_MODULE = 153,            // Cargar módulo del kernel
-    SYS_SCHED_SETATTR = 154,           // Establecer atributos de scheduling
-    SYS_SCHED_GETATTR = 155,           // Obtener atributos de scheduling
-    SYS_RENAMEAT2 = 156,               // Renombrar archivo (versión 2)
-    SYS_SECCOMP = 157,                 // Configurar seccomp
-    SYS_GETRANDOM = 158,               // Obtener bytes aleatorios
-    SYS_MEMFD_CREATE = 159,            // Crear descriptor de memoria anónimo
-    SYS_KEXEC_FILE_LOAD = 160,         // Cargar kernel para kexec
-    SYS_BPF = 161,                     // Sistema de Berkeley Packet Filter
-    SYS_EXECVEAT = 162,                // Ejecutar programa relativo
-    SYS_USERFAULTFD = 163,             // Crear descriptor de userfault
-    SYS_MEMBARRIER = 164,              // Barrera de memoria
-    SYS_MLOCK2 = 165,                  // Bloquear memoria (versión 2)
-    SYS_COPY_FILE_RANGE = 166,         // Copiar rango de archivo
-    SYS_PREADV2 = 167,                 // Leer vectorizado con offset y flags
-    SYS_PWRITEV2 = 168,                // Escribir vectorizado con offset y flags
-    SYS_PKEY_MPROTECT = 169,           // Proteger memoria con key
-    SYS_PKEY_ALLOC = 170,              // Allocar protection key
-    SYS_PKEY_FREE = 171,               // Liberar protection key
-    SYS_STATX = 172,                   // Obtener información de archivo extendida
-    SYS_IO_PGETEVENTS = 173,           // Obtener eventos AIO con timeout
-    SYS_RSEQ = 174,                    // Restartable sequences
-    SYS_PIDFD_SEND_SIGNAL = 175,       // Enviar señal por file descriptor
-    SYS_IO_URING_SETUP = 176,          // Configurar io_uring
-    SYS_IO_URING_ENTER = 177,          // Entrar en io_uring
-    SYS_IO_URING_REGISTER = 178,       // Registrar buffers/archivos
-    SYS_OPEN_TREE = 179,               // Abrir árbol de archivos
-    SYS_MOVE_MOUNT = 180,              // Mover mount point
-    SYS_FSOPEN = 181,                  // Abrir filesystem
-    SYS_FSCONFIG = 182,                // Configurar filesystem
-    SYS_FSMOUNT = 183,                 // Montar filesystem
-    SYS_FSPICK = 184,                  // Seleccionar filesystem
-    SYS_PIDFD_OPEN = 185,              // Abrir file descriptor de proceso
-    SYS_CLONE3 = 186,                  // Clonar proceso/thread (versión 3)
-    SYS_CLOSE_RANGE = 187,             // Cerrar rango de descriptores
-    SYS_OPENAT2 = 188,                 // Abrir archivo relativo (versión 2)
-    SYS_PIDFD_GETFD = 189,             // Obtener file descriptor de proceso
-    SYS_FACCESSAT2 = 190,              // Verificar acceso a archivo relativo (versión 2)
-    SYS_PROCESS_MADVISE = 191,         // Consejo de memoria para proceso
-    SYS_EPOLL_PWAIT2 = 192,            // Esperar eventos epoll con timeout (versión 2)
-    SYS_MOUNT_SETATTR = 193,           // Establecer atributos de mount
-    SYS_QUOTACTL_FD = 194,             // Control de cuotas por file descriptor
-    SYS_LANDLOCK_CREATE_RULESET = 195, // Crear ruleset de Landlock
-    SYS_LANDLOCK_ADD_RULE = 196,       // Agregar regla a Landlock
-    SYS_LANDLOCK_RESTRICT_SELF = 197,  // Restringir proceso con Landlock
-    SYS_MEMFD_SECRET = 198,            // Crear descriptor de memoria secreta
-    SYS_PROCESS_MRELEASE = 199,        // Liberar memoria de proceso
-    SYS_WAITPID = 200,                 // Esperar proceso específico
-    SYS_OLDLSTAT = 201,                // Obtener información de enlace (legacy)
-    SYS_OLDSELECT = 202,               // Select (legacy)
-    SYS_OLDLSEEK = 203,                // Lseek (legacy)
-    SYS_OLDFSTAT = 204,                // Obtener información de descriptor (legacy)
-    SYS_OLDFCNTL = 205,                // Fcntl (legacy)
-    SYS_OLDFSYNC = 206,                // Fsync (legacy)
-    SYS_OLDFTRUNCATE = 207,            // Ftruncate (legacy)
-    SYS_OLDFSTATAT = 208,              // Fstatat (legacy)
-    SYS_OLDLSTATAT = 209,              // Lstatat (legacy)
-    SYS_OLDFSTATAT64 = 210,            // Fstatat64 (legacy)
-    SYS_OLDLSTATAT64 = 211,            // Lstatat64 (legacy)
-    SYS_OLDFSTAT64 = 212,              // Fstat64 (legacy)
-    SYS_OLDLSTAT64 = 213,              // Lstat64 (legacy)
-    SYS_OLDSTAT64 = 214,               // Stat64 (legacy)
-    SYS_OLDFTRUNCATE64 = 215,          // Ftruncate64 (legacy)
-    SYS_OLDLSEEK64 = 216,              // Lseek64 (legacy)
-    SYS_OLDFCNTL64 = 217,              // Fcntl64 (legacy)
-    SYS_OLDFSYNC64 = 218,              // Fsync64 (legacy)
-    SYS_OLDFSTATAT64_2 = 219,          // Fstatat64 (legacy, versión 2)
-    SYS_OLDLSTATAT64_2 = 220,          // Lstatat64 (legacy, versión 2)
-    SYS_OLDFSTAT64_2 = 221,            // Fstat64 (legacy, versión 2)
-    SYS_OLDLSTAT64_2 = 222,            // Lstat64 (legacy, versión 2)
-    SYS_OLDSTAT64_2 = 223,             // Stat64 (legacy, versión 2)
-    SYS_OLDFTRUNCATE64_2 = 224,        // Ftruncate64 (legacy, versión 2)
-    SYS_OLDLSEEK64_2 = 225,            // Lseek64 (legacy, versión 2)
-    SYS_OLDFCNTL64_2 = 226,            // Fcntl64 (legacy, versión 2)
-    SYS_OLDFSYNC64_2 = 227,            // Fsync64 (legacy, versión 2)
-    SYS_OLDFSTATAT64_3 = 228,          // Fstatat64 (legacy, versión 3)
-    SYS_OLDLSTATAT64_3 = 229,          // Lstatat64 (legacy, versión 3)
-    SYS_OLDFSTAT64_3 = 230,            // Fstat64 (legacy, versión 3)
-    SYS_OLDLSTAT64_3 = 231,            // Lstat64 (legacy, versión 3)
-    SYS_OLDSTAT64_3 = 232,             // Stat64 (legacy, versión 3)
-    SYS_OLDFTRUNCATE64_3 = 233,        // Ftruncate64 (legacy, versión 3)
-    SYS_OLDLSEEK64_3 = 234,            // Lseek64 (legacy, versión 3)
-    SYS_OLDFCNTL64_3 = 235,            // Fcntl64 (legacy, versión 3)
-    SYS_OLDFSYNC64_3 = 236,            // Fsync64 (legacy, versión 3)
-    SYS_OLDFSTATAT64_4 = 237,          // Fstatat64 (legacy, versión 4)
-    SYS_OLDLSTATAT64_4 = 238,          // Lstatat64 (legacy, versión 4)
-    SYS_OLDFSTAT64_4 = 239,            // Fstat64 (legacy, versión 4)
-    SYS_OLDLSTAT64_4 = 240,            // Lstat64 (legacy, versión 4)
-    SYS_OLDSTAT64_4 = 241,             // Stat64 (legacy, versión 4)
-    SYS_OLDFTRUNCATE64_4 = 242,        // Ftruncate64 (legacy, versión 4)
-    SYS_OLDLSEEK64_4 = 243,            // Lseek64 (legacy, versión 4)
-    SYS_OLDFCNTL64_4 = 244,            // Fcntl64 (legacy, versión 4)
-    SYS_OLDFSYNC64_4 = 245,            // Fsync64 (legacy, versión 4)
-    SYS_OLDFSTATAT64_5 = 246,          // Fstatat64 (legacy, versión 5)
-    SYS_OLDLSTATAT64_5 = 247,          // Lstatat64 (legacy, versión 5)
-    SYS_OLDFSTAT64_5 = 248,            // Fstat64 (legacy, versión 5)
-    SYS_OLDLSTAT64_5 = 249,            // Lstat64 (legacy, versión 5)
-    SYS_OLDSTAT64_5 = 250,             // Stat64 (legacy, versión 5)
-    SYS_OLDFTRUNCATE64_5 = 251,        // Ftruncate64 (legacy, versión 5)
-    SYS_OLDLSEEK64_5 = 252,            // Lseek64 (legacy, versión 5)
-    SYS_OLDFCNTL64_5 = 253,            // Fcntl64 (legacy, versión 5)
-    SYS_OLDFSYNC64_5 = 254,            // Fsync64 (legacy, versión 5)
-    SYS_OLDFSTATAT64_6 = 255           // Fstatat64 (legacy, versión 6)
+    // System calls básicas de proceso
+    SYS_EXIT = 0,    // Terminar proceso
+    SYS_FORK = 1,    // Crear proceso hijo
+    SYS_EXEC = 2,    // Ejecutar programa
+    SYS_WAIT = 3,    // Esperar proceso hijo
+    SYS_GETPID = 4,  // Obtener PID actual
+    SYS_GETPPID = 5, // Obtener PID del padre
+    SYS_KILL = 6,    // Enviar señal
+    SYS_YIELD = 7,   // Ceder CPU
+    SYS_SLEEP = 8,   // Dormir por milisegundos
+
+    // System calls de archivos
+    SYS_READ = 9,   // Leer de descriptor
+    SYS_WRITE = 10, // Escribir a descriptor
+    SYS_OPEN = 11,  // Abrir archivo
+    SYS_CLOSE = 12, // Cerrar descriptor
+    SYS_LSEEK = 13, // Reposicionar en archivo
+    SYS_STAT = 14,  // Obtener información de archivo
+    SYS_FSTAT = 15, // Obtener información de descriptor
+    SYS_DUP = 16,   // Duplicar descriptor
+    SYS_DUP2 = 17,  // Duplicar descriptor a número específico
+    SYS_PIPE = 18,  // Crear pipe
+
+    // System calls de directorios
+    SYS_CHDIR = 19,    // Cambiar directorio
+    SYS_GETCWD = 20,   // Obtener directorio actual
+    SYS_MKDIR = 21,    // Crear directorio
+    SYS_RMDIR = 22,    // Eliminar directorio
+    SYS_LINK = 23,     // Crear enlace duro
+    SYS_UNLINK = 24,   // Eliminar enlace
+    SYS_GETDENTS = 25, // Obtener entradas de directorio
+    SYS_LS = 26,       // Listar contenido de directorio
+
+    // System calls de memoria
+    SYS_BRK = 27,    // Cambiar tamaño del heap
+    SYS_MMAP = 28,   // Mapear memoria
+    SYS_MUNMAP = 29, // Desmapear memoria
+
+    // System calls de tiempo
+    SYS_GETTIME = 30, // Obtener tiempo actual
+    SYS_ALARM = 31,   // Establecer alarma
+
+    // System calls de usuarios
+    SYS_GETUID = 32, // Obtener UID
+    SYS_SETUID = 33, // Establecer UID
+
+    // System calls de señales
+    SYS_SIGNAL = 34,      // Establecer manejador de señal
+    SYS_SIGACTION = 35,   // Establecer acción de señal
+    SYS_SIGPROCMASK = 36, // Cambiar máscara de señales
+    SYS_SIGSUSPEND = 37,  // Suspender hasta señal
+
+    // System calls de información del kernel
+    SYS_KERNEL_INFO = 38, // Obtener información del kernel
+
+    // System calls de red (socket)
+    SYS_SOCKET = 39,      // Crear socket
+    SYS_BIND = 40,        // Vincular socket
+    SYS_CONNECT = 41,     // Conectar socket
+    SYS_LISTEN = 42,      // Escuchar en socket
+    SYS_ACCEPT = 43,      // Aceptar conexión
+    SYS_SEND = 44,        // Enviar datos
+    SYS_RECV = 45,        // Recibir datos
+    SYS_SHUTDOWN = 46,    // Cerrar socket
+    SYS_GETSOCKOPT = 47,  // Obtener opción de socket
+    SYS_SETSOCKOPT = 48,  // Establecer opción de socket
+    SYS_GETPEERNAME = 49, // Obtener nombre del peer
+    SYS_GETSOCKNAME = 50, // Obtener nombre del socket
+
+    // System calls de multiplexación I/O
+    SYS_SELECT = 51,       // Multiplexación I/O
+    SYS_POLL = 52,         // Poll de descriptores
+    SYS_EPOLL_CREATE = 53, // Crear epoll
+    SYS_EPOLL_CTL = 54,    // Controlar epoll
+    SYS_EPOLL_WAIT = 55,   // Esperar eventos epoll
+
+    // System calls de threads
+    SYS_CLONE = 56,           // Clonar proceso/thread
+    SYS_SET_THREAD_AREA = 57, // Establecer área de thread
+    SYS_GET_THREAD_AREA = 58, // Obtener área de thread
+    SYS_TGKILL = 59,          // Enviar señal a thread
+
+    // System calls de I/O asíncrono
+    SYS_IO_SETUP = 60,     // Configurar AIO
+    SYS_IO_DESTROY = 61,   // Destruir AIO
+    SYS_IO_SUBMIT = 62,    // Enviar AIO
+    SYS_IO_CANCEL = 63,    // Cancelar AIO
+    SYS_IO_GETEVENTS = 64, // Obtener eventos AIO
+
+    // System calls de colas de mensajes
+    SYS_MQ_OPEN = 65,         // Abrir cola de mensajes
+    SYS_MQ_UNLINK = 66,       // Eliminar cola de mensajes
+    SYS_MQ_TIMEDSEND = 67,    // Enviar mensaje con timeout
+    SYS_MQ_TIMEDRECEIVE = 68, // Recibir mensaje con timeout
+    SYS_MQ_NOTIFY = 69,       // Notificar cola de mensajes
+    SYS_MQ_GETSETATTR = 70,   // Obtener/establecer atributos
+
+    // System calls de archivos avanzadas
+    SYS_FCNTL = 71,     // Control de archivo
+    SYS_FLOCK = 72,     // Bloquear archivo
+    SYS_FSYNC = 73,     // Sincronizar archivo
+    SYS_FDATASYNC = 74, // Sincronizar datos
+    SYS_TRUNCATE = 75,  // Truncar archivo
+    SYS_FTRUNCATE = 76, // Truncar descriptor
+
+    // System calls de recursos
+    SYS_GETRLIMIT = 77, // Obtener límite de recursos
+    SYS_SETRLIMIT = 78, // Establecer límite de recursos
+    SYS_GETRUSAGE = 79, // Obtener uso de recursos
+    SYS_TIMES = 80,     // Obtener tiempos de proceso
+
+    // System calls de debugging
+    SYS_PTRACE = 81, // Trazado de proceso
+
+    // System calls de usuarios (32-bit)
+    SYS_GETUID32 = 82,    // Obtener UID (32-bit)
+    SYS_GETGID32 = 83,    // Obtener GID (32-bit)
+    SYS_GETEUID32 = 84,   // Obtener EUID (32-bit)
+    SYS_GETEGID32 = 85,   // Obtener EGID (32-bit)
+    SYS_SETUID32 = 86,    // Establecer UID (32-bit)
+    SYS_SETGID32 = 87,    // Establecer GID (32-bit)
+    SYS_SETEUID32 = 88,   // Establecer EUID (32-bit)
+    SYS_SETEGID32 = 89,   // Establecer EGID (32-bit)
+    SYS_GETGROUPS32 = 90, // Obtener grupos (32-bit)
+    SYS_SETGROUPS32 = 91, // Establecer grupos (32-bit)
+    SYS_FCHOWN32 = 92,    // Cambiar propietario (32-bit)
+    SYS_SETRESUID32 = 93, // Establecer UIDs real/efectivo/guardado
+    SYS_GETRESUID32 = 94, // Obtener UIDs real/efectivo/guardado
+    SYS_SETRESGID32 = 95, // Establecer GIDs real/efectivo/guardado
+    SYS_GETRESGID32 = 96, // Obtener GIDs real/efectivo/guardado
+    SYS_CHOWN32 = 97,     // Cambiar propietario (32-bit)
+    SYS_SETREUID32 = 98,  // Establecer UIDs real/efectivo
+    SYS_SETREGID32 = 99,  // Establecer GIDs real/efectivo
+
+    // System calls de archivos adicionales
+    SYS_RENAME = 100,      // Renombrar archivo
+    SYS_TRUNCATE64 = 101,  // Truncar archivo (64-bit)
+    SYS_FTRUNCATE64 = 102, // Truncar descriptor (64-bit)
+    SYS_STAT64 = 103,      // Obtener información de archivo (64-bit)
+    SYS_LSTAT64 = 104,     // Obtener información de enlace (64-bit)
+    SYS_FSTAT64 = 105,     // Obtener información de descriptor (64-bit)
+    SYS_LSEEK64 = 106,     // Reposicionar en archivo (64-bit)
+    SYS_MMAP2 = 107,       // Mapear memoria (versión 2)
+    SYS_FADVISE64 = 108,   // Consejo de acceso a archivo
+
+    // System calls modernas
+    SYS_NEWFSTATAT = 109,              // Obtener información de archivo relativo
+    SYS_READLINKAT = 110,              // Leer enlace simbólico relativo
+    SYS_FCHMODAT = 111,                // Cambiar modo de archivo relativo
+    SYS_FACCESSAT = 112,               // Verificar acceso a archivo relativo
+    SYS_PSELECT6 = 113,                // Select con timeout (versión 6)
+    SYS_PPOLL = 114,                   // Poll con timeout
+    SYS_UNSHARE = 115,                 // Descompartir namespace
+    SYS_SET_ROBUST_LIST = 116,         // Establecer lista robusta de futex
+    SYS_GET_ROBUST_LIST = 117,         // Obtener lista robusta de futex
+    SYS_SPLICE = 118,                  // Empalmar datos entre descriptores
+    SYS_TEE = 119,                     // Duplicar datos entre descriptores
+    SYS_SYNC_FILE_RANGE = 120,         // Sincronizar rango de archivo
+    SYS_VMSPLICE = 121,                // Empalmar datos desde memoria
+    SYS_MOVE_PAGES = 122,              // Mover páginas entre nodos NUMA
+    SYS_UTIMENSAT = 123,               // Cambiar timestamps de archivo relativo
+    SYS_EPOLL_PWAIT = 124,             // Esperar eventos epoll con timeout
+    SYS_SIGNALFD = 125,                // Crear descriptor de señal
+    SYS_TIMERFD_CREATE = 126,          // Crear descriptor de timer
+    SYS_EVENTFD = 127,                 // Crear descriptor de evento
+    SYS_FALLOCATE = 128,               // Pre-asignar espacio en archivo
+    SYS_TIMERFD_SETTIME = 129,         // Establecer tiempo de timer
+    SYS_TIMERFD_GETTIME = 130,         // Obtener tiempo de timer
+    SYS_ACCEPT4 = 131,                 // Aceptar conexión con flags
+    SYS_SIGNALFD4 = 132,               // Crear descriptor de señal con flags
+    SYS_EVENTFD2 = 133,                // Crear descriptor de evento con flags
+    SYS_EPOLL_CREATE1 = 134,           // Crear epoll con flags
+    SYS_DUP3 = 135,                    // Duplicar descriptor con flags
+    SYS_PIPE2 = 136,                   // Crear pipe con flags
+    SYS_INOTIFY_INIT1 = 137,           // Inicializar inotify con flags
+    SYS_PREADV = 138,                  // Leer vectorizado con offset
+    SYS_PWRITEV = 139,                 // Escribir vectorizado con offset
+    SYS_RT_TGSIGQUEUEINFO = 140,       // Encolar señal en tiempo real
+    SYS_PERF_EVENT_OPEN = 141,         // Abrir evento de performance
+    SYS_RECVMMSG = 142,                // Recibir múltiples mensajes
+    SYS_FANOTIFY_INIT = 143,           // Inicializar fanotify
+    SYS_FANOTIFY_MARK = 144,           // Marcar archivo para fanotify
+    SYS_PRLIMIT64 = 145,               // Obtener/establecer límite de recursos (64-bit)
+    SYS_NAME_TO_HANDLE_AT = 146,       // Convertir nombre a handle
+    SYS_OPEN_BY_HANDLE_AT = 147,       // Abrir por handle
+    SYS_CLOCK_ADJTIME = 148,           // Ajustar reloj del sistema
+    SYS_SYNCFS = 149,                  // Sincronizar filesystem
+    SYS_SENDMMSG = 150,                // Enviar múltiples mensajes
+    SYS_SETNS = 151,                   // Establecer namespace
+    SYS_PROCESS_VM_READV = 152,        // Leer vectorizado de proceso
+    SYS_PROCESS_VM_WRITEV = 153,       // Escribir vectorizado a proceso
+    SYS_KCMP = 154,                    // Comparar procesos
+    SYS_FINIT_MODULE = 155,            // Cargar módulo del kernel
+    SYS_SCHED_SETATTR = 156,           // Establecer atributos de scheduling
+    SYS_SCHED_GETATTR = 157,           // Obtener atributos de scheduling
+    SYS_RENAMEAT2 = 158,               // Renombrar archivo (versión 2)
+    SYS_SECCOMP = 159,                 // Configurar seccomp
+    SYS_GETRANDOM = 160,               // Obtener bytes aleatorios
+    SYS_MEMFD_CREATE = 161,            // Crear descriptor de memoria anónimo
+    SYS_KEXEC_FILE_LOAD = 162,         // Cargar kernel para kexec
+    SYS_BPF = 163,                     // Sistema de Berkeley Packet Filter
+    SYS_EXECVEAT = 164,                // Ejecutar programa relativo
+    SYS_USERFAULTFD = 165,             // Crear descriptor de userfault
+    SYS_MEMBARRIER = 166,              // Barrera de memoria
+    SYS_MLOCK2 = 167,                  // Bloquear memoria (versión 2)
+    SYS_COPY_FILE_RANGE = 168,         // Copiar rango de archivo
+    SYS_PREADV2 = 169,                 // Leer vectorizado con offset y flags
+    SYS_PWRITEV2 = 170,                // Escribir vectorizado con offset y flags
+    SYS_PKEY_MPROTECT = 171,           // Proteger memoria con key
+    SYS_PKEY_ALLOC = 172,              // Allocar protection key
+    SYS_PKEY_FREE = 173,               // Liberar protection key
+    SYS_STATX = 174,                   // Obtener información de archivo extendida
+    SYS_IO_PGETEVENTS = 175,           // Obtener eventos AIO con timeout
+    SYS_RSEQ = 176,                    // Restartable sequences
+    SYS_PIDFD_SEND_SIGNAL = 177,       // Enviar señal por file descriptor
+    SYS_IO_URING_SETUP = 178,          // Configurar io_uring
+    SYS_IO_URING_ENTER = 179,          // Entrar en io_uring
+    SYS_IO_URING_REGISTER = 180,       // Registrar buffers/archivos
+    SYS_OPEN_TREE = 181,               // Abrir árbol de archivos
+    SYS_MOVE_MOUNT = 182,              // Mover mount point
+    SYS_FSOPEN = 183,                  // Abrir filesystem
+    SYS_FSCONFIG = 184,                // Configurar filesystem
+    SYS_FSMOUNT = 185,                 // Montar filesystem
+    SYS_FSPICK = 186,                  // Seleccionar filesystem
+    SYS_PIDFD_OPEN = 187,              // Abrir file descriptor de proceso
+    SYS_CLONE3 = 188,                  // Clonar proceso/thread (versión 3)
+    SYS_CLOSE_RANGE = 189,             // Cerrar rango de descriptores
+    SYS_OPENAT2 = 190,                 // Abrir archivo relativo (versión 2)
+    SYS_PIDFD_GETFD = 191,             // Obtener file descriptor de proceso
+    SYS_FACCESSAT2 = 192,              // Verificar acceso a archivo relativo (versión 2)
+    SYS_PROCESS_MADVISE = 193,         // Consejo de memoria para proceso
+    SYS_EPOLL_PWAIT2 = 194,            // Esperar eventos epoll con timeout (versión 2)
+    SYS_MOUNT_SETATTR = 195,           // Establecer atributos de mount
+    SYS_QUOTACTL_FD = 196,             // Control de cuotas por file descriptor
+    SYS_LANDLOCK_CREATE_RULESET = 197, // Crear ruleset de Landlock
+    SYS_LANDLOCK_ADD_RULE = 198,       // Agregar regla a Landlock
+    SYS_LANDLOCK_RESTRICT_SELF = 199,  // Restringir proceso con Landlock
+    SYS_MEMFD_SECRET = 200,            // Crear descriptor de memoria secreta
+    SYS_PROCESS_MRELEASE = 201,        // Liberar memoria de proceso
+    SYS_WAITPID = 202,                 // Esperar proceso específico
+
+    // System calls legacy (mantenidas para compatibilidad)
+    SYS_OLDLSTAT = 203,         // Obtener información de enlace (legacy)
+    SYS_OLDSELECT = 204,        // Select (legacy)
+    SYS_OLDLSEEK = 205,         // Lseek (legacy)
+    SYS_OLDFSTAT = 206,         // Obtener información de descriptor (legacy)
+    SYS_OLDFCNTL = 207,         // Fcntl (legacy)
+    SYS_OLDFSYNC = 208,         // Fsync (legacy)
+    SYS_OLDFTRUNCATE = 209,     // Ftruncate (legacy)
+    SYS_OLDFSTATAT = 210,       // Fstatat (legacy)
+    SYS_OLDLSTATAT = 211,       // Lstatat (legacy)
+    SYS_OLDFSTATAT64 = 212,     // Fstatat64 (legacy)
+    SYS_OLDLSTATAT64 = 213,     // Lstatat64 (legacy)
+    SYS_OLDFSTAT64 = 214,       // Fstat64 (legacy)
+    SYS_OLDLSTAT64 = 215,       // Lstat64 (legacy)
+    SYS_OLDSTAT64 = 216,        // Stat64 (legacy)
+    SYS_OLDFTRUNCATE64 = 217,   // Ftruncate64 (legacy)
+    SYS_OLDLSEEK64 = 218,       // Lseek64 (legacy)
+    SYS_OLDFCNTL64 = 219,       // Fcntl64 (legacy)
+    SYS_OLDFSYNC64 = 220,       // Fsync64 (legacy)
+    SYS_OLDFSTATAT64_2 = 221,   // Fstatat64 (legacy, versión 2)
+    SYS_OLDLSTATAT64_2 = 222,   // Lstatat64 (legacy, versión 2)
+    SYS_OLDFSTAT64_2 = 223,     // Fstat64 (legacy, versión 2)
+    SYS_OLDLSTAT64_2 = 224,     // Lstat64 (legacy, versión 2)
+    SYS_OLDSTAT64_2 = 225,      // Stat64 (legacy, versión 2)
+    SYS_OLDFTRUNCATE64_2 = 226, // Ftruncate64 (legacy, versión 2)
+    SYS_OLDLSEEK64_2 = 227,     // Lseek64 (legacy, versión 2)
+    SYS_OLDFCNTL64_2 = 228,     // Fcntl64 (legacy, versión 2)
+    SYS_OLDFSYNC64_2 = 229,     // Fsync64 (legacy, versión 2)
+    SYS_OLDFSTATAT64_3 = 230,   // Fstatat64 (legacy, versión 3)
+    SYS_OLDLSTATAT64_3 = 231,   // Lstatat64 (legacy, versión 3)
+    SYS_OLDFSTAT64_3 = 232,     // Fstat64 (legacy, versión 3)
+    SYS_OLDLSTAT64_3 = 233,     // Lstat64 (legacy, versión 3)
+    SYS_OLDSTAT64_3 = 234,      // Stat64 (legacy, versión 3)
+    SYS_OLDFTRUNCATE64_3 = 235, // Ftruncate64 (legacy, versión 3)
+    SYS_OLDLSEEK64_3 = 236,     // Lseek64 (legacy, versión 3)
+    SYS_OLDFCNTL64_3 = 237,     // Fcntl64 (legacy, versión 3)
+    SYS_OLDFSYNC64_3 = 238,     // Fsync64 (legacy, versión 3)
+    SYS_OLDFSTATAT64_4 = 239,   // Fstatat64 (legacy, versión 4)
+    SYS_OLDLSTATAT64_4 = 240,   // Lstatat64 (legacy, versión 4)
+    SYS_OLDFSTAT64_4 = 241,     // Fstat64 (legacy, versión 4)
+    SYS_OLDLSTAT64_4 = 242,     // Lstat64 (legacy, versión 4)
+    SYS_OLDSTAT64_4 = 243,      // Stat64 (legacy, versión 4)
+    SYS_OLDFTRUNCATE64_4 = 244, // Ftruncate64 (legacy, versión 4)
+    SYS_OLDLSEEK64_4 = 245,     // Lseek64 (legacy, versión 4)
+    SYS_OLDFCNTL64_4 = 246,     // Fcntl64 (legacy, versión 4)
+    SYS_OLDFSYNC64_4 = 247,     // Fsync64 (legacy, versión 4)
+    SYS_OLDFSTATAT64_5 = 248,   // Fstatat64 (legacy, versión 5)
+    SYS_OLDLSTATAT64_5 = 249,   // Lstatat64 (legacy, versión 5)
+    SYS_OLDFSTAT64_5 = 250,     // Fstat64 (legacy, versión 5)
+    SYS_OLDLSTAT64_5 = 251,     // Lstat64 (legacy, versión 5)
+    SYS_OLDSTAT64_5 = 252,      // Stat64 (legacy, versión 5)
+    SYS_OLDFTRUNCATE64_5 = 253, // Ftruncate64 (legacy, versión 5)
+    SYS_OLDLSEEK64_5 = 254,     // Lseek64 (legacy, versión 5)
+    SYS_OLDFCNTL64_5 = 255,     // Fcntl64 (legacy, versión 5)
+    SYS_OLDFSYNC64_5 = 255,     // Fsync64 (legacy, versión 5)
+    SYS_OLDFSTATAT64_6 = 256    // Fstatat64 (legacy, versión 6)
 } syscall_number_t;
 
 // ===============================================================================
@@ -479,8 +520,6 @@ typedef struct
     uint64_t arg5;
     uint64_t arg6;
 } syscall_args_t;
-
-
 
 // Estructura para información de proceso
 typedef struct
@@ -546,6 +585,13 @@ void sys_signal_wrapper(syscall_args_t *args);
 void sys_sigaction_wrapper(syscall_args_t *args);
 void sys_sigprocmask_wrapper(syscall_args_t *args);
 void sys_sigsuspend_wrapper(syscall_args_t *args);
+void sys_ls_wrapper(syscall_args_t *args);
+void sys_kernel_info_wrapper(syscall_args_t *args);
+void sys_fork_wrapper(syscall_args_t *args);
+void sys_exec_wrapper(syscall_args_t *args);
+void sys_wait_wrapper(syscall_args_t *args);
+void sys_kill_wrapper(syscall_args_t *args);
+void sys_getppid_wrapper(syscall_args_t *args);
 
 // System calls básicas
 int64_t sys_exit(int exit_code);
@@ -583,6 +629,9 @@ int64_t sys_rmdir(const char *pathname);
 int64_t sys_link(const char *oldpath, const char *newpath);
 int64_t sys_unlink(const char *pathname);
 int64_t sys_rename(const char *oldpath, const char *newpath);
+int64_t sys_getdents(int fd, void *dirent, unsigned int count);
+int64_t sys_ls(const char *pathname);
+int64_t sys_kernel_info(void *info_buffer, size_t buffer_size);
 
 // System calls de señales
 int64_t sys_signal(int signum, void (*handler)(int));
