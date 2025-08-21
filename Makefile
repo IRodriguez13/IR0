@@ -50,7 +50,7 @@ ifeq ($(ARCH),x86-64)
     LD = ld
     CFLAGS = -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
     CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -I$(KERNEL_ROOT)/setup
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x86-64 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
     CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = -f elf64
     LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
@@ -62,7 +62,7 @@ else ifeq ($(ARCH),x86-32)
     ASM = nasm
     LD = ld  
     CFLAGS = -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-32/include -I$(KERNEL_ROOT)/setup
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-32/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x_86-32 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
     CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = -f elf32
     LDFLAGS = -m elf_i386 -T arch/x86-32/linker.ld
@@ -74,7 +74,7 @@ else ifeq ($(ARCH),arm64)
     ASM = aarch64-linux-gnu-as
     LD = aarch64-linux-gnu-ld
     CFLAGS = -march=armv8-a -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm64/include -I$(KERNEL_ROOT)/setup
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm64/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory
     CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = --64
     LDFLAGS = -m aarch64linux -T arch/arm64/linker.ld
@@ -86,7 +86,7 @@ else ifeq ($(ARCH),arm32)
     ASM = arm-linux-gnueabi-as
     LD = arm-linux-gnueabi-ld
     CFLAGS = -march=armv7-a -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm32/include -I$(KERNEL_ROOT)/setup
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm32/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory
     CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = --32
     LDFLAGS = -m armelf_linux_eabi -T arch/arm32/linker.ld
@@ -153,34 +153,30 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    drivers/timer/lapic/lapic.o \
                    drivers/IO/ps2.o \
                    drivers/storage/ata.o \
-                   kernel/scheduler/priority_scheduler.o \
-                   kernel/scheduler/round-robin_scheduler.o \
-                   kernel/scheduler/sched_central.o \
-                   kernel/scheduler/cfs_scheduler.o \
-                   kernel/scheduler/scheduler_detection.o \
-                   kernel/scheduler/task_impl.o \
-                   kernel/process/process.o \
+                   # kernel/scheduler/priority_scheduler.o \
+                   # kernel/scheduler/round-robin_scheduler.o \
+                   # kernel/scheduler/sched_central.o \
+                   # kernel/scheduler/cfs_scheduler.o \
+                   # kernel/scheduler/scheduler_detection.o \
+                   # kernel/scheduler/task_impl.o \
+                   # kernel/process/process.o \
                    kernel/syscalls/syscalls.o \
-                   kernel/elf_loader.o \
-                   kernel/shell/shell.o \
+                   # kernel/elf_loader.o \
+                   # kernel/shell/shell.o \
                    arch/common/arch_interface.o \
-                   memory/heap_allocator.o \
-                   memory/physical_allocator.o \
-                   memory/ondemand-paging.o \
-                   memory/vallocator.o \
-                   memory/process_memory.o \
+                   memory/bump_allocator.o \
                    setup/kernel_config.o \
-                   fs/ir0fs.o \
-                   fs/vfs.o \
+                   # fs/ir0fs.o \
+                   # fs/vfs.o \
                    fs/vfs_simple.o
 
 # Objetos condicionales según build target
 ifeq ($(BUILD_TARGET),desktop)
-    CONDITIONAL_OBJS = fs/vfs.o fs/vfs_simple.o
+    CONDITIONAL_OBJS = fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),server)
-    CONDITIONAL_OBJS = fs/vfs.o fs/vfs_simple.o
+    CONDITIONAL_OBJS = fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),iot)
-    CONDITIONAL_OBJS = fs/vfs.o fs/vfs_simple.o
+    CONDITIONAL_OBJS = fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),embedded)
     CONDITIONAL_OBJS = fs/vfs_simple.o
 endif
@@ -192,16 +188,12 @@ ifeq ($(ARCH),x86-64)
                 arch/x86-64/sources/idt_arch_x64.o \
                 arch/x86-64/sources/fault.o \
                 arch/x86-64/sources/tss_x64.o \
-                memory/arch/x86-64/Paging_x64.o \
-                memory/arch/x86-64/mmu_x64.o \
                 kernel/scheduler/switch/switch_x64.o \
                 interrupt/arch/x86-64/isr_stubs_64.o
 else ifeq ($(ARCH),x86-32)  
     ARCH_OBJS = arch/x86-32/sources/arch_x86.o \
                 arch/x86-32/asm/boot_x86.o \
                 arch/x86-32/sources/idt_arch_x86.o \
-                memory/arch/x_86-32/Paging_x86-32.o \
-                memory/arch/x_86-32/mmu_x86-32.o \
                 kernel/scheduler/switch/switch_x86.o \
                 interrupt/arch/x86-32/isr_stubs_32.o
 else ifeq ($(ARCH),arm64)
@@ -238,7 +230,7 @@ ALL_OBJS = $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
 # Compilar kernel para arquitectura específica
 kernel-$(ARCH)-$(TARGET_NAME).bin: $(ALL_OBJS) $(ARCH_SUBDIRS)/linker.ld
 	@echo "Enlazando kernel para $(ARCH)-$(TARGET_NAME)..."
-	$(LD) $(LDFLAGS) -o $@ $(KERNEL_BASE_OBJS) $(ARCH_OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
 	@echo "Kernel $(ARCH)-$(TARGET_NAME) compilado: $@"
 
 # Crear ISO específico por arquitectura y target

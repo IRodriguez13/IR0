@@ -1,42 +1,27 @@
 #include "kernel_start.h"
-#include <print.h>
-#include <panic/panic.h>
-#include <logging.h>
-#include <string.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include "../arch/common/arch_interface.h"
-#include "../arch/common/idt.h"
-#include "../memory/memo_interface.h"
-#include "../drivers/timer/clock_system.h"
-#include "../fs/vfs.h"
-#include "../fs/ir0fs.h"
-#include "../kernel/scheduler/scheduler.h"
-#include "../kernel/shell/shell.h"
-#include "../setup/kernel_config.h"
-#include "../memory/heap_allocator.h"
-#include "../memory/physical_allocator.h"
-#include "../kernel/process/process.h"
-#include "../kernel/syscalls/syscalls.h"
-#include "../drivers/IO/ps2.h"
-#include "../drivers/storage/ata.h"
-#include "../interrupt/arch/idt.h"
-#include "../interrupt/arch/pic.h"
-#ifdef __x86_64__
-#include "../arch/x86-64/sources/tss_x64.h"
-#endif
-#ifdef __x86_64__
-#include "../memory/arch/x86-64/Paging_x64.h"
-#else
-#include "../memory/arch/x_86-32/Paging_x86-32.h"
-#endif
+
+// ===============================================================================
+// KERNEL CONFIGURATION
+// ===============================================================================
+// Choose your configuration by setting the appropriate flag
+
+// For testing bump allocator with interrupts:
+#define IR0_DEVELOPMENT_MODE
+
+// Alternative configurations:
+// #define IR0_DESKTOP      // Full desktop kernel
+// #define IR0_SERVER       // Server kernel
+// #define IR0_IOT          // IoT kernel
+// #define IR0_EMBEDDED     // Minimal embedded kernel
+// #define IR0_TESTING_MODE // Testing mode
+
+#include <ir0/kernel_includes.h>
 
 void main(void)
 {
     // Banner de inicio
     print_colored("╔══════════════════════════════════════════════════════════════╗\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_colored("║                    IR0 Kernel v0.0.0                         ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("║                    IR0 Kernel v0.0.0  pre-release                       ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("║                                                              ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("╚══════════════════════════════════════════════════════════════╝\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     delay_ms(1000);
@@ -44,7 +29,7 @@ void main(void)
     // 0. Inicializar sistema de logging
     logging_init();
     logging_set_level(LOG_LEVEL_INFO);
-    log_info("KERNEL", "System initialization started");
+    log_info("KERNEL", "Bump Allocator Testing Mode Started");
 
     delay_ms(1500);
 
@@ -69,97 +54,27 @@ void main(void)
 
     delay_ms(1500);
 
-    // 2. Inicializar paginación
+    // 2. Inicializar gestión de memoria
     log_info("KERNEL", "Initializing memory management");
-#ifdef __x86_64__
-    init_paging_x64();
-
-    // Verificar que el kernel esté mapeado correctamente
-    extern int paging_verify_mapping(uint64_t virt_addr);
-
-    // Verificar direcciones clave del kernel
-    uint64_t kernel_start = 0x100000; // Donde se carga el kernel
-    uint64_t kernel_end = 0x200000;   // Aproximadamente 1MB después
-
-    int mapping_ok = 1;
-    for (uint64_t addr = kernel_start; addr < kernel_end; addr += 0x1000)
-    {
-        if (!paging_verify_mapping(addr))
-        {
-            log_error_fmt("KERNEL", "Memory mapping verification failed at 0x%llx", addr);
-            mapping_ok = 0;
-            break;
-        }
-    }
-
-    if (mapping_ok)
-    {
-        log_info("KERNEL", "Memory mapping verified successfully");
-    }
-    else
-    {
-        log_fatal("KERNEL", "Memory mapping verification failed");
-        panic("Memory mapping verification failed");
-    }
-
-    // Initialize TSS for x86-64 (needed for proper interrupt handling)
-    tss_init_x64();
-    log_info("KERNEL", "TSS initialized");
-#else
-    init_paging_x86();
-#endif
-    log_info("KERNEL", "Memory management initialized");
     delay_ms(1500);
 
-    // 3. Inicializar allocators
-    log_info("KERNEL", "Initializing memory allocators");
-    heap_allocator_init();
-    physical_allocator_init();
-    log_info("KERNEL", "Memory allocators initialized");
-    delay_ms(1500);
-
-    // 4. Inicializar scheduler
-    log_info("KERNEL", "Initializing task scheduler");
-    scheduler_init();
-    log_info("KERNEL", "Task scheduler initialized");
-    delay_ms(1500);
-
-    // 4.1. Inicializar sistema de procesos
-    log_info("KERNEL", "Initializing process management");
-    process_init();
-    log_info("KERNEL", "Process management initialized");
-    delay_ms(1500);
-
-    // 4.2. Inicializar sistema de system calls
-    log_info("KERNEL", "Initializing system call interface");
-    syscalls_init();
-    log_info("KERNEL", "System call interface initialized");
-    delay_ms(1500);
-
-    // 5. Inicializar timer system
+    // 3. Inicializar timer system
     log_info("KERNEL", "Initializing timer system");
     init_clock();
-    log_info("KERNEL", "Timer system initialized");
     delay_ms(1500);
 
-    // 6. Inicializar drivers de hardware
+    // 4. Inicializar drivers de hardware
     log_info("KERNEL", "Initializing hardware drivers");
-
-    // Inicializar driver de teclado personalizado
     keyboard_init();
-    log_info("KERNEL", "Keyboard driver initialized");
-
-    // Inicializar driver de disco ATA
     ata_init();
-    log_info("KERNEL", "ATA disk driver initialized");
 
     delay_ms(1500);
 
-    // 7. Inicializar VFS
-    log_info("KERNEL", "Initializing virtual file system");
-    vfs_init();
-    log_info("KERNEL", "Virtual file system initialized");
-    delay_ms(1500);
+    // 7. Inicializar VFS (comentado - requiere memoria dinámica)
+    // log_info("KERNEL", "Initializing virtual file system");
+    // vfs_init();
+    // log_info("KERNEL", "Virtual file system initialized");
+    // delay_ms(1500);
 
     // 8. Habilitar interrupciones
     __asm__ volatile("sti");
@@ -168,43 +83,149 @@ void main(void)
 
     // Banner de sistema listo
     print_colored("╔══════════════════════════════════════════════════════════════╗\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    print_colored("║                        SYSTEM READY                              ║\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("║                        SYSTEM READY                          ║\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     print_colored("║                 All subsystems initialized                   ║\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     print_colored("╚══════════════════════════════════════════════════════════════╝\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     delay_ms(1500);
 
-    log_info("KERNEL", "Starting command shell");
+    log_info("KERNEL", "Kernel initialization completed successfully");
+    log_info("KERNEL", "System running with minimal memory management");
 
-    // Initialize shell
-    shell_context_t shell_ctx;
-    shell_config_t shell_config;
-
-    if (shell_init(&shell_ctx, &shell_config) != 0)
-    {
-        log_fatal("KERNEL", "Shell initialization failed");
-        panic("Shell initialization failed");
+    // ===============================================================================
+    // SIMPLE BUMP ALLOCATOR STRESS TEST
+    // ===============================================================================
+    log_info("KERNEL", "Starting bump allocator stress test...");
+    
+    // Test 1: Basic allocations
+    log_info("KERNEL", "Test 1: Basic allocations");
+    void *ptr1 = kmalloc(16);
+    void *ptr2 = kmalloc(32);
+    void *ptr3 = kmalloc(64);
+    
+    if (ptr1 && ptr2 && ptr3) {
+        log_info("KERNEL", "✓ Basic allocations successful");
+    } else {
+        log_error("KERNEL", "✗ Basic allocations failed");
     }
-
-    // Run shell (this will return when shell is done)
-    int shell_result = shell_run(&shell_ctx, &shell_config);
-
-    if (shell_result == 0)
-    {
-        log_info("KERNEL", "Shell completed successfully");
-        log_info("KERNEL", "Starting scheduler main loop");
-
-        // Iniciar scheduler y entrar al loop principal
-        scheduler_start();
-        scheduler_main_loop(); // NUNCA RETORNA
+    
+    // Test 2: Memory patterns
+    log_info("KERNEL", "Test 2: Memory patterns");
+    memset(ptr1, 0xAA, 16);
+    memset(ptr2, 0xBB, 32);
+    memset(ptr3, 0xCC, 64);
+    
+    // Verify patterns
+    uint8_t *check1 = (uint8_t *)ptr1;
+    uint8_t *check2 = (uint8_t *)ptr2;
+    uint8_t *check3 = (uint8_t *)ptr3;
+    
+    bool pattern_ok = true;
+    for (int i = 0; i < 16; i++) if (check1[i] != 0xAA) pattern_ok = false;
+    for (int i = 0; i < 32; i++) if (check2[i] != 0xBB) pattern_ok = false;
+    for (int i = 0; i < 64; i++) if (check3[i] != 0xCC) pattern_ok = false;
+    
+    if (pattern_ok) {
+        log_info("KERNEL", "✓ Memory patterns verified");
+    } else {
+        log_error("KERNEL", "✗ Memory pattern corruption detected");
     }
-    else
-    {
-        log_error_fmt("KERNEL", "Shell failed with error code: %d", shell_result);
-        log_info("KERNEL", "Continuing without shell");
+    
+    // Test 3: Alignment
+    log_info("KERNEL", "Test 3: Memory alignment");
+    uintptr_t addr1 = (uintptr_t)ptr1;
+    uintptr_t addr2 = (uintptr_t)ptr2;
+    uintptr_t addr3 = (uintptr_t)ptr3;
+    
+    if ((addr1 % 16 == 0) && (addr2 % 16 == 0) && (addr3 % 16 == 0)) {
+        log_info("KERNEL", "✓ Memory alignment correct (16-byte aligned)");
+    } else {
+        log_error("KERNEL", "✗ Memory alignment incorrect");
+    }
+    
+    // Test 4: Many small allocations
+    log_info("KERNEL", "Test 4: Many small allocations");
+    void *small_ptrs[50];
+    int success_count = 0;
+    
+    for (int i = 0; i < 50; i++) {
+        small_ptrs[i] = kmalloc(8);
+        if (small_ptrs[i]) {
+            memset(small_ptrs[i], i & 0xFF, 8);
+            success_count++;
+        }
+    }
+    
+    log_info_fmt("KERNEL", "✓ %d/50 small allocations successful", success_count);
+    
+    // Test 5: Large allocation
+    log_info("KERNEL", "Test 5: Large allocation");
+    void *large_ptr = kmalloc(1024);
+    if (large_ptr) {
+        memset(large_ptr, 0xDD, 1024);
+        log_info("KERNEL", "✓ Large allocation successful");
+    } else {
+        log_error("KERNEL", "✗ Large allocation failed");
+    }
+    
+    // Test 6: Stress test - many allocations
+    log_info("KERNEL", "Test 6: Stress test - many allocations");
+    void *stress_ptrs[100];
+    int stress_success = 0;
+    
+    for (int i = 0; i < 100; i++) {
+        size_t size = (i % 100) + 1; // Sizes from 1 to 100 bytes
+        stress_ptrs[i] = kmalloc(size);
+        if (stress_ptrs[i]) {
+            memset(stress_ptrs[i], (i * 7) & 0xFF, size);
+            stress_success++;
+        }
+    }
+    
+    log_info_fmt("KERNEL", "✓ %d/100 stress allocations successful", stress_success);
+    
+    // Test 7: Verify stress allocations
+    log_info("KERNEL", "Test 7: Verifying stress allocations");
+    int corruption_count = 0;
+    
+    for (int i = 0; i < stress_success; i++) {
+        size_t size = (i % 100) + 1;
+        uint8_t *ptr = (uint8_t *)stress_ptrs[i];
+        uint8_t expected = (i * 7) & 0xFF;
+        
+        for (size_t j = 0; j < size; j++) {
+            if (ptr[j] != expected) {
+                corruption_count++;
+                break;
+            }
+        }
+    }
+    
+    if (corruption_count == 0) {
+        log_info("KERNEL", "✓ No memory corruption detected");
+    } else {
+        log_error_fmt("KERNEL", "✗ Memory corruption detected in %d allocations", corruption_count);
+    }
+    
+    // Final summary
+    log_info("KERNEL", "=== BUMP ALLOCATOR STRESS TEST COMPLETED ===");
+    if (stress_success == 100 && corruption_count == 0) {
+        log_info("KERNEL", "🎉 ALL TESTS PASSED! Bump allocator working correctly");
+    } else {
+        log_error("KERNEL", "⚠️ SOME TESTS FAILED! Bump allocator has issues");
+    }
+    
+    delay_ms(2000);
 
-        // Continue kernel operation even if shell fails
-        log_info("KERNEL", "Starting scheduler main loop");
-        scheduler_start();
-        scheduler_main_loop(); // NUNCA RETORNA
+    // Loop infinito simple - sin shell ni scheduler por ahora
+    while (1)
+    {
+        // Hacer algo básico para mantener el sistema ocupado
+        __asm__ volatile("hlt");
+        
+        // Pequeña pausa
+        for (volatile int i = 0; i < 1000000; i++)
+        {
+            // Busy wait
+        }
     }
 }

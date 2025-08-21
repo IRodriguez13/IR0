@@ -2,7 +2,8 @@
 
 #include "task.h"
 #include "scheduler.h"
-#include "../../memory/memo_interface.h"
+// #include "../../memory/memo_interface.h"  // Comentado - no existe en esta rama
+#include <bump_allocator.h>  // Usar bump_allocator directamente
 #include <print.h>
 #include <panic/panic.h>
 #include <string.h>
