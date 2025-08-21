@@ -4,8 +4,8 @@
 #include "../includes/ir0/print.h"
 #include "../includes/ir0/panic/panic.h"
 #include "../includes/string.h"
-#include "../memory/memo_interface.h"
-#include "../memory/heap_allocator.h"
+// #include "../memory/memo_interface.h"  // Comentado - no existe en esta rama
+#include <bump_allocator.h>  // Usar bump_allocator directamente
 #include <string.h>
 
 // ===============================================================================
