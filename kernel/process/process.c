@@ -3,8 +3,9 @@
 // ===============================================================================
 
 #include "process.h"
-#include "../../includes/ir0/print.h"
-#include "../../memory/memo_interface.h"
+#include <print.h>
+// #include "../../memory/memo_interface.h"  // Comentado - no existe en esta rama
+#include <bump_allocator.h>  // Usar bump_allocator directamente
 #include <string.h>
 
 // ===============================================================================
@@ -40,7 +41,9 @@ static void process_add_to_list(process_t *process)
 
 static void process_remove_from_list(process_t *process)
 {
-    if (!process) return;
+    if (!process)
+         return;
+    
     
     // Remove from current list
     if (process->prev) {

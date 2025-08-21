@@ -36,6 +36,9 @@ SECTIONS
         *(.bss.*)
     }
 
+    /* Definir símbolo _end para el bump_allocator */
+    _end = .;
+
     /DISCARD/ :
     {
         *(.comment)
