@@ -3,8 +3,8 @@
 #include "../../includes/ir0/print.h"
 #include "../../includes/ir0/panic/panic.h"
 #include "../../includes/string.h"
-#include "../../memory/memo_interface.h"
-#include "../../memory/heap_allocator.h"
+// #include "../../memory/memo_interface.h"  // Comentado - no existe en esta rama
+#include <bump_allocator.h>  // Usar bump_allocator directamente
 #include "../../kernel/process/process.h"
 #include "../../kernel/syscalls/syscalls.h"
 #include "../../fs/vfs.h"
@@ -648,7 +648,7 @@ static int shell_cmd_ls(shell_context_t *ctx, shell_config_t *config, char args[
 
     // Mostrar estadísticas del heap
     shell_print_info("📊 Estadísticas del heap:");
-    debug_heap_allocator();
+    // debug_heap_allocator();  // Comentado - función no existe en esta rama
 
     // Listar el directorio real
     int result = vfs_simple_ls(path);

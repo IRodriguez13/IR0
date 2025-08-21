@@ -1,4 +1,0 @@
-## Notas includes:
-
-- Estas son las librerías std que tengo que reeimplementar porque estoy trabajando en un kernel.  Cada nueva arquitectura que implemente debe compatibilizarse en estas libs para  permitir
-su uso en los archivos de fuente.
