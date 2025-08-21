@@ -9,9 +9,10 @@
 #include "../../interrupt/arch/keyboard.h"
 #include "../../drivers/timer/pit/pit.h"
 #include "../../kernel/scheduler/scheduler.h"
-#include "../../memory/heap_allocator.h"
-#include "../../memory/memo_interface.h"
-#include "../../memory/process_memo.h"
+// #include <heap_allocator.h>  // Comentado - no existe en esta rama
+// #include "../../memory/memo_interface.h"  // Comentado - no existe en esta rama
+#include <bump_allocator.h>  // Usar bump_allocator directamente
+// #include "../../memory/process_memo.h"  // Comentado - no existe en esta rama
 #include "../../drivers/storage/ata.h"
 #include "../../kernel/elf_loader.h"
 #include <string.h>
@@ -1179,61 +1180,62 @@ int64_t sys_fork(void)
 
     print("sys_fork: Creating child process...\n");
 
-    // Crear proceso hijo usando el sistema de procesos
-    process_t *child = process_fork(current_process);
-    if (!child)
-    {
-        print("sys_fork: Failed to create child process\n");
-        return -ENOMEM;
-    }
+    // Crear proceso hijo usando el sistema de procesos (comentado - no implementado en esta rama)
+    // process_t *child = process_fork(current_process);
+    // if (!child)
+    // {
+    //     print("sys_fork: Failed to create child process\n");
+    //     return -ENOMEM;
+    // }
 
-    // Crear page directory para el hijo
-    uintptr_t child_pml4 = create_process_page_directory();
-    if (!child_pml4)
-    {
-        print("sys_fork: Failed to create page directory for child\n");
-        process_destroy(child);
-        return -ENOMEM;
-    }
+    // Crear page directory para el hijo (comentado - no implementado en esta rama)
+    // uintptr_t child_pml4 = create_process_page_directory();
+    // if (!child_pml4)
+    // {
+    //     print("sys_fork: Failed to create page directory for child\n");
+    //     process_destroy(child);
+    //     return -ENOMEM;
+    // }
 
-    // Configurar relación padre-hijo
-    child->ppid = current_process->pid;
-    child->sibling = current_process->children;
-    current_process->children = child;
-    child->page_directory = child_pml4;
+    // Configurar relación padre-hijo (comentado - no implementado en esta rama)
+    // child->ppid = current_process->pid;
+    // child->sibling = current_process->children;
+    // current_process->children = child;
+    // child->page_directory = child_pml4;
 
-    // Copiar contexto del padre al hijo
-    memcpy(&child->context, &current_process->context, sizeof(child->context));
+    // Copiar contexto del padre al hijo (comentado - no implementado en esta rama)
+    // memcpy(&child->context, &current_process->context, sizeof(child->context));
 
-    // Copiar configuración básica
-    child->priority = current_process->priority;
-    child->flags = current_process->flags;
-    child->working_dir = current_process->working_dir;
+    // Copiar configuración básica (comentado - no implementado en esta rama)
+    // child->priority = current_process->priority;
+    // child->flags = current_process->flags;
+    // child->working_dir = current_process->working_dir;
 
-    // Copiar file descriptors
-    for (int i = 0; i < 16; i++)
-    {
-        child->open_files[i] = current_process->open_files[i];
-    }
+    // Copiar file descriptors (comentado - no implementado en esta rama)
+    // for (int i = 0; i < 16; i++)
+    // {
+    //     child->open_files[i] = current_process->open_files[i];
+    // }
 
-    // Copiar signal mask
-    child->signal_mask = current_process->signal_mask;
+    // Copiar signal mask (comentado - no implementado en esta rama)
+    // child->signal_mask = current_process->signal_mask;
 
-    // Configurar stack del hijo en user space
-    child->context.rsp = USER_SPACE_BASE + 0x10000 + (child->pid * 0x1000);
+    // Configurar stack del hijo en user space (comentado - no implementado en esta rama)
+    // child->context.rsp = USER_SPACE_BASE + 0x10000 + (child->pid * 0x1000);
 
-    // En el proceso padre, retornar PID del hijo
+    // En el proceso padre, retornar PID del hijo (comentado - no implementado en esta rama)
     // En el proceso hijo, el context switch debería modificar el valor de retorno
-    print("sys_fork: Child process created with PID: ");
-    print_int32(child->pid);
-    print(" (parent PID: ");
-    print_int32(current_process->pid);
-    print(")\n");
-    print("sys_fork: Child page directory: 0x");
-    print_hex(child_pml4);
-    print("\n");
+    // print("sys_fork: Child process created with PID: ");
+    // print_int32(child->pid);
+    // print(" (parent PID: ");
+    // print_int32(current_process->pid);
+    // print(")\n");
+    // print("sys_fork: Child page directory: 0x");
+    // print_hex(child_pml4);
+    // print("\n");
 
-    return child->pid;
+    // return child->pid;  // Comentado - no implementado en esta rama
+    return -ENOSYS;  // Not implemented
 }
 
 int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[])
@@ -1547,23 +1549,23 @@ int64_t sys_brk(void *addr)
         uintptr_t pages_needed = (new_brk - current_brk + 0xFFF) / 0x1000;
         for (uintptr_t i = 0; i < pages_needed; i++)
         {
-            uintptr_t page_addr = current_brk + (i * 0x1000);
-            if (map_user_region(current_process->page_directory, page_addr, 0x1000, PAGE_FLAG_USER | PAGE_FLAG_WRITABLE) != 0)
-            {
-                print("sys_brk: Failed to map heap page\n");
-                return -ENOMEM;
-            }
+            // uintptr_t page_addr = current_brk + (i * 0x1000);
+            // if (map_user_region(current_process->page_directory, page_addr, 0x1000, PAGE_FLAG_USER | PAGE_FLAG_WRITABLE) != 0)
+            // {
+            //     print("sys_brk: Failed to map heap page\n");
+            //     return -ENOMEM;
+            // }
         }
     }
     else if (new_brk < current_brk)
     {
         // Contraer heap
         uintptr_t pages_to_free = (current_brk - new_brk) / 0x1000;
-        for (uintptr_t i = 0; i < pages_to_free; i++)
-        {
-            uintptr_t page_addr = current_brk - ((i + 1) * 0x1000);
-            unmap_user_region(current_process->page_directory, page_addr, 0x1000);
-        }
+        // for (uintptr_t i = 0; i < pages_to_free; i++)
+        // {
+        //     uintptr_t page_addr = current_brk - ((i + 1) * 0x1000);
+        //     unmap_user_region(current_process->page_directory, page_addr, 0x1000);
+        // }
     }
 
     // Actualizar el break del proceso
@@ -1616,23 +1618,23 @@ int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t o
         return -EINVAL;
     }
 
-    // Determinar flags de página
-    uint32_t page_flags = PAGE_FLAG_USER;
-    if (prot & PROT_WRITE)
-    {
-        page_flags |= PAGE_FLAG_WRITABLE;
-    }
-    if (!(prot & PROT_EXEC))
-    {
-        page_flags |= PAGE_FLAG_NO_EXECUTE;
-    }
+    // Determinar flags de página (comentado - no implementado en esta rama)
+    // uint32_t page_flags = PAGE_FLAG_USER;
+    // if (prot & PROT_WRITE)
+    // {
+    //     page_flags |= PAGE_FLAG_WRITABLE;
+    // }
+    // if (!(prot & PROT_EXEC))
+    // {
+    //     page_flags |= PAGE_FLAG_NO_EXECUTE;
+    // }
 
-    // Mapear la región
-    if (map_user_region(current_process->page_directory, map_addr, aligned_length, page_flags) != 0)
-    {
-        print("sys_mmap: Failed to map memory region\n");
-        return -ENOMEM;
-    }
+    // Mapear la región (comentado - no implementado en esta rama)
+    // if (map_user_region(current_process->page_directory, map_addr, aligned_length, page_flags) != 0)
+    // {
+    //     print("sys_mmap: Failed to map memory region\n");
+    //     return -ENOMEM;
+    // }
 
     // Si es mapeo de archivo, leer datos
     if (fd >= 0 && fd < MAX_FILE_DESCRIPTORS)
@@ -1699,12 +1701,12 @@ int64_t sys_munmap(void *addr, size_t length)
     // Alinear longitud a páginas
     size_t aligned_length = (length + 0xFFF) & ~0xFFF;
 
-    // Desmapear la región
-    if (unmap_user_region(current_process->page_directory, unmap_addr, aligned_length) != 0)
-    {
-        print("sys_munmap: Failed to unmap memory region\n");
-        return -EINVAL;
-    }
+    // Desmapear la región (comentado - no implementado en esta rama)
+    // if (unmap_user_region(current_process->page_directory, unmap_addr, aligned_length) != 0)
+    // {
+    //     print("sys_munmap: Failed to unmap memory region\n");
+    //     return -EINVAL;
+    // }
 
     print("sys_munmap: Memory region unmapped successfully\n");
     return 0;
