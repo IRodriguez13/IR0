@@ -8,6 +8,7 @@
 #pragma once
 
 #include "kernel_config.h"
+#include "../arch/common/arch_config.h"
 
 // ===============================================================================
 // SUBSYSTEM ENABLE/DISABLE FLAGS
@@ -19,6 +20,7 @@
 #define ENABLE_HEAP_ALLOCATOR     0   // Dynamic heap allocator
 #define ENABLE_PHYSICAL_ALLOCATOR 0   // Physical page allocator
 #define ENABLE_VIRTUAL_MEMORY     0   // Virtual memory management
+#define ENABLE_PAGING             1   // Simple paging system for testing
 
 // Process Management Subsystems
 #define ENABLE_PROCESS_MANAGEMENT 0   // Process creation and management
@@ -32,11 +34,14 @@
 #define ENABLE_EXT2               0   // EXT2 file system support
 
 // Driver Subsystems
-#define ENABLE_KEYBOARD_DRIVER    1   // Keyboard input driver
-#define ENABLE_ATA_DRIVER         1   // ATA disk driver
-#define ENABLE_PS2_DRIVER         1   // PS2 controller driver
-#define ENABLE_TIMER_DRIVERS      1   // Timer drivers (PIT, HPET, LAPIC)
-#define ENABLE_VGA_DRIVER         1   // VGA display driver
+#define ENABLE_KEYBOARD_DRIVER    1   // Keyboard input driver (PS2 for x86, UART for ARM)
+#define ENABLE_ATA_DRIVER         1   // ATA disk driver (x86 only)
+#define ENABLE_PS2_DRIVER         1   // PS2 controller driver (x86 only)
+#define ENABLE_TIMER_DRIVERS      1   // Timer drivers (PIT/HPET for x86, ARM timer for ARM)
+#define ENABLE_VGA_DRIVER         1   // VGA display driver (x86 only)
+#define ENABLE_MMC_DRIVER         0   // MMC/SD card driver (ARM only)
+#define ENABLE_UART_DRIVER        0   // UART serial driver (ARM only)
+#define ENABLE_FRAMEBUFFER_DRIVER 0   // Framebuffer display driver (ARM only)
 
 // Debugging and Development
 #define ENABLE_DEBUGGING          0   // Debugging system
@@ -47,6 +52,35 @@
 // Shell and User Interface
 #define ENABLE_SHELL              0   // Interactive shell
 #define ENABLE_GUI                0   // Graphical user interface
+
+// ===============================================================================
+// ARCHITECTURE COMPATIBILITY VALIDATION
+// ===============================================================================
+// Validate that enabled subsystems are compatible with current architecture
+
+#if ENABLE_PS2_DRIVER && !ARCH_SUPPORTS_PS2
+    #error "PS2 driver enabled but not supported on current architecture"
+#endif
+
+#if ENABLE_ATA_DRIVER && !ARCH_SUPPORTS_ATA
+    #error "ATA driver enabled but not supported on current architecture"
+#endif
+
+#if ENABLE_VGA_DRIVER && !ARCH_SUPPORTS_VGA
+    #error "VGA driver enabled but not supported on current architecture"
+#endif
+
+#if ENABLE_MMC_DRIVER && (ARCH_SUPPORTS_ATA || ARCH_SUPPORTS_PS2)
+    #warning "MMC driver typically used on ARM architectures"
+#endif
+
+#if ENABLE_UART_DRIVER && (ARCH_SUPPORTS_PS2 || ARCH_SUPPORTS_ATA)
+    #warning "UART driver typically used on ARM architectures"
+#endif
+
+#if ENABLE_FRAMEBUFFER_DRIVER && ARCH_SUPPORTS_VGA
+    #warning "Framebuffer driver typically used on ARM architectures"
+#endif
 
 // ===============================================================================
 // TARGET-SPECIFIC OVERRIDES
