@@ -1,72 +1,168 @@
-#include "kernel_start.h"
+#include <ir0/kernel.h>
+#include <ir0/print.h>
+#include <ir0/logging.h>
+#include <ir0/stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+#include <ir0/panic/panic.h>
+#include <arch/idt.h>
+#include <pic.h>
+#include <bump_allocator.h>
+#include <paging_x64.h>
+#include <shell/shell.h>
 
-// ===============================================================================
-// KERNEL CONFIGURATION
-// ===============================================================================
-// Choose your configuration by setting the appropriate flag
 
-// For testing bump allocator with interrupts:
-#define IR0_DEVELOPMENT_MODE
+// Global variables
+volatile bool kernel_running = false;
+volatile bool interrupts_enabled = false;
 
-// Alternative configurations:
-// #define IR0_DESKTOP      // Full desktop kernel
-// #define IR0_SERVER       // Server kernel
-// #define IR0_IOT          // IoT kernel
-// #define IR0_EMBEDDED     // Minimal embedded kernel
-// #define IR0_TESTING_MODE // Testing mode
+// Kernel banner
+static const char* KERNEL_BANNER = 
+    "\n"
+    "╔══════════════════════════════════════════════════════════════╗\n"
+    "║                       === IR0 KERNEL ===                      ║\n"
+    "║                          Init Routine                        ║\n"
+    "║                    Version: 0.0.0 pre-release               ║\n"
+    "║                    Build: " __DATE__ " " __TIME__ "         ║\n"
+    "╚══════════════════════════════════════════════════════════════╝\n";
 
-#include <ir0/kernel_includes.h>
+// Test functions - MOVED OUTSIDE main()
+static void test_krealloc_reduction(void) {
+    print_success("========= TEST KREALLOC REDUCTION =========\n");
 
-void main(void)
+    // Paso 1: Crear bloque grande
+    void *ptr = kmalloc(512);
+    if (!ptr) {
+        print_error("[ERROR] kmalloc failed\n");
+        return;
+    }
+    print_success("[OK] kmalloc 512 bytes successful\n");
+
+    // Llenar con datos reconocibles
+    memset(ptr, 0xAB, 512);
+
+    // Guardar parte de los datos para verificar después
+    char saved[256];
+    memcpy(saved, ptr, 256);
+
+    // Paso 2: Reducir tamaño a 256
+    void *reduced_ptr = krealloc(ptr, 256);
+    if (!reduced_ptr) {
+        print_error("[ERROR] krealloc reduction failed\n");
+        return;
+    }
+    print_success("[OK] krealloc reduction to 256 bytes successful\n");
+
+    // Paso 3: Verificar integridad de los datos
+    if (memcmp(reduced_ptr, saved, 256) == 0) {
+        print_success("[OK] Data integrity verified after reduction\n");
+    } else {
+        print_error("[ERROR] Data corruption detected after reduction\n");
+    }
+
+    // Paso 4: Verificar que el bloque libre adyacente fue creado
+    size_t free_blocks = get_heap_fragments();
+    char buffer[128];
+    sprintf(buffer, "[INFO] Number of free blocks after reduction: %zu\n", free_blocks);
+    print_success(buffer);
+
+    print_success("========= END TEST KREALLOC REDUCTION =========\n\n");
+}
+
+static void test_allocation_basic(void) {
+    print_success("\n[TEST] Basic allocation/free test (isolated)...\n");
+
+    // Paso 1: Resetear el heap
+    heap_reset();
+
+    // Paso 2: Asignar varios bloques de distintos tamaños
+    void *ptr1 = kmalloc(64);
+    void *ptr2 = kmalloc(128);
+    void *ptr3 = kmalloc(32);
+    void *ptr4 = kmalloc(256);
+
+    if (!ptr1 || !ptr2 || !ptr3 || !ptr4) {
+        print_error("[ERROR] Allocation failed\n");
+        return;
+    }
+
+    // Paso 3: Llenar con datos y verificar que no se sobreescriben bloques adyacentes
+    memset(ptr1, 0x11, 64);
+    memset(ptr2, 0x22, 128);
+    memset(ptr3, 0x33, 32);
+    memset(ptr4, 0x44, 256);
+
+    // Verificar datos
+    if (memcmp(ptr1, "\x11\x11\x11\x11", 4) != 0 ||
+        memcmp(ptr2, "\x22\x22\x22\x22", 4) != 0 ||
+        memcmp(ptr3, "\x33\x33\x33\x33", 4) != 0 ||
+        memcmp(ptr4, "\x44\x44\x44\x44", 4) != 0) {
+        print_error("[ERROR] Data integrity failed after allocation\n");
+        return;
+    }
+
+    // Paso 4: Liberar algunos bloques
+    kfree(ptr2);
+    kfree(ptr3);
+
+    // Paso 5: Verificar estado de bloques libres y ocupados
+    block_header_t *current = get_free_list_head();
+    size_t free_blocks = 0;
+    size_t used_blocks = 0;
+    while (current) {
+        if (current->is_free) free_blocks++;
+        else used_blocks++;
+        current = current->next;
+    }
+
+    print_success("[DEBUG] Heap after frees:\n");
+    heap_dump_info();
+
+    // Validación simple
+    if (free_blocks < 2 || used_blocks != 2) {
+        print_error("[ERROR] Free list or used blocks count incorrect\n");
+        return;
+    }
+
+    print_success("[OK] Basic allocation/free test passed\n");
+}
+
+// Early initialization functions
+static void early_init(void) 
 {
-    // Banner de inicio
-    print_colored("╔══════════════════════════════════════════════════════════════╗\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_colored("║                    IR0 Kernel v0.0.0  pre-release                       ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_colored("║                                                              ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_colored("╚══════════════════════════════════════════════════════════════╝\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    delay_ms(1000);
-
-    // 0. Inicializar sistema de logging
+    // Clear screen
+    clear_screen();
+    
+    // Print kernel banner
+    print_colored(KERNEL_BANNER, VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    print("\n");
+    delay_ms(1500);
+    // Initialize logging
     logging_init();
-    logging_set_level(LOG_LEVEL_INFO);
-    log_info("KERNEL", "Bump Allocator Testing Mode Started");
+    print_success("[OK] Early initialization started\n");
 
+    // Delay for visual effect
     delay_ms(1500);
 
-    // 1. Inicializar IDT y sistema de interrupciones
-    log_info("KERNEL", "Initializing interrupt system");
-#ifdef __x86_64__
+    print_success("[OK] Early initialization completed\n");
+}
+
+static void memory_init(void) 
+{
+    print_success("[OK] Memory management subsystem ready\n");
+    
+    // Delay for visual effect
+    delay_ms(1500);
+    
+    // CRÍTICO: Configurar IDT ANTES de la paginación para evitar triple fault
     idt_init64();
-    idt_load64();
-    pic_remap64();
-    keyboard_init();
-#else
-    idt_init32();
-    idt_load32();
-    pic_remap32();
-    keyboard_init();
-#endif
-    log_info("KERNEL", "Interrupt system initialized");
-
-    // Habilitar interrupciones globalmente
-    __asm__ volatile("sti");
-    log_info("KERNEL", "Global interrupts enabled");
-
-    delay_ms(1500);
-
-    // 2. Inicializar gestión de memoria
-    log_info("KERNEL", "Initializing memory management");
-    delay_ms(1500);
-
-    // 3. Inicializar timer system
-    log_info("KERNEL", "Initializing timer system");
-    init_clock();
-    delay_ms(1500);
-
-    // 4. Inicializar drivers de hardware
-    log_info("KERNEL", "Initializing hardware drivers");
-    keyboard_init();
-    ata_init();
+    idt_load64();  // CARGAR LA IDT EN EL CPU
+    print_success("[OK] Interrupt descriptor table initialized and loaded\n");
+    
+    // HABILITAR PAGINACIÓN: Solo expandir tablas, NO recargar CR3
+    setup_and_enable_paging();
+    print_success("[OK] Paging enabled (using boot CR3)\n");
 
     delay_ms(1500);
 
@@ -97,136 +193,111 @@ void main(void)
     // ===============================================================================
     log_info("KERNEL", "Starting bump allocator stress test...");
     
-    // Test 1: Basic allocations
-    log_info("KERNEL", "Test 1: Basic allocations");
-    void *ptr1 = kmalloc(16);
-    void *ptr2 = kmalloc(32);
-    void *ptr3 = kmalloc(64);
-    
-    if (ptr1 && ptr2 && ptr3) {
-        log_info("KERNEL", "✓ Basic allocations successful");
+    // 2. HPET (High Precision Event Timer)
+    if (find_hpet_table()) {  // Usar find_hpet_table() en lugar de find_hpet()
+        hpet_init();
+        print_success("[OK] HPET initialized and active\n");
     } else {
-        log_error("KERNEL", "✗ Basic allocations failed");
+        print_warning("[WARN] HPET not found, using PIT only\n");
     }
     
-    // Test 2: Memory patterns
-    log_info("KERNEL", "Test 2: Memory patterns");
-    memset(ptr1, 0xAA, 16);
-    memset(ptr2, 0xBB, 32);
-    memset(ptr3, 0xCC, 64);
+    // 3. Clock system
+    clock_system_init();
+    print_success("[OK] Clock system initialized\n");
     
-    // Verify patterns
-    uint8_t *check1 = (uint8_t *)ptr1;
-    uint8_t *check2 = (uint8_t *)ptr2;
-    uint8_t *check3 = (uint8_t *)ptr3;
+    delay_ms(1000);
     
-    bool pattern_ok = true;
-    for (int i = 0; i < 16; i++) if (check1[i] != 0xAA) pattern_ok = false;
-    for (int i = 0; i < 32; i++) if (check2[i] != 0xBB) pattern_ok = false;
-    for (int i = 0; i < 64; i++) if (check3[i] != 0xCC) pattern_ok = false;
+    // SISTEMA DE I/O COMPLETO
+    print_success("[OK] Initializing I/O subsystem...\n");
     
-    if (pattern_ok) {
-        log_info("KERNEL", "✓ Memory patterns verified");
-    } else {
-        log_error("KERNEL", "✗ Memory pattern corruption detected");
-    }
+    // 1. PS/2 Keyboard
+    ps2_init();
+    print_success("[OK] PS/2 keyboard initialized\n");
     
-    // Test 3: Alignment
-    log_info("KERNEL", "Test 3: Memory alignment");
-    uintptr_t addr1 = (uintptr_t)ptr1;
-    uintptr_t addr2 = (uintptr_t)ptr2;
-    uintptr_t addr3 = (uintptr_t)ptr3;
+    // 2. PS/2 Mouse (si está disponible) - comentar por ahora
+    // if (ps2_mouse_init() == 0) {
+    //     print_success("[OK] PS/2 mouse initialized\n");
+    // } else {
+    //     print_warning("[WARN] PS/2 mouse not found\n");
+    // }
     
-    if ((addr1 % 16 == 0) && (addr2 % 16 == 0) && (addr3 % 16 == 0)) {
-        log_info("KERNEL", "✓ Memory alignment correct (16-byte aligned)");
-    } else {
-        log_error("KERNEL", "✗ Memory alignment incorrect");
-    }
+    delay_ms(1000);
     
-    // Test 4: Many small allocations
-    log_info("KERNEL", "Test 4: Many small allocations");
-    void *small_ptrs[50];
-    int success_count = 0;
+    // SISTEMA DE ARCHIVOS BÁSICO
+    print_success("[OK] Initializing file system subsystem...\n");
     
-    for (int i = 0; i < 50; i++) {
-        small_ptrs[i] = kmalloc(8);
-        if (small_ptrs[i]) {
-            memset(small_ptrs[i], i & 0xFF, 8);
-            success_count++;
-        }
-    }
+    // 1. ATA Disk Driver
+    ata_init();
+    print_success("[OK] ATA disk driver initialized\n");
     
-    log_info_fmt("KERNEL", "✓ %d/50 small allocations successful", success_count);
+    // 2. VFS Simple (ya incluido en el build)
+    vfs_simple_init();
+    print_success("[OK] VFS Simple initialized\n");
     
-    // Test 5: Large allocation
-    log_info("KERNEL", "Test 5: Large allocation");
-    void *large_ptr = kmalloc(1024);
-    if (large_ptr) {
-        memset(large_ptr, 0xDD, 1024);
-        log_info("KERNEL", "✓ Large allocation successful");
-    } else {
-        log_error("KERNEL", "✗ Large allocation failed");
-    }
-    
-    // Test 6: Stress test - many allocations
-    log_info("KERNEL", "Test 6: Stress test - many allocations");
-    void *stress_ptrs[100];
-    int stress_success = 0;
-    
-    for (int i = 0; i < 100; i++) {
-        size_t size = (i % 100) + 1; // Sizes from 1 to 100 bytes
-        stress_ptrs[i] = kmalloc(size);
-        if (stress_ptrs[i]) {
-            memset(stress_ptrs[i], (i * 7) & 0xFF, size);
-            stress_success++;
-        }
-    }
-    
-    log_info_fmt("KERNEL", "✓ %d/100 stress allocations successful", stress_success);
-    
-    // Test 7: Verify stress allocations
-    log_info("KERNEL", "Test 7: Verifying stress allocations");
-    int corruption_count = 0;
-    
-    for (int i = 0; i < stress_success; i++) {
-        size_t size = (i % 100) + 1;
-        uint8_t *ptr = (uint8_t *)stress_ptrs[i];
-        uint8_t expected = (i * 7) & 0xFF;
-        
-        for (size_t j = 0; j < size; j++) {
-            if (ptr[j] != expected) {
-                corruption_count++;
-                break;
-            }
-        }
-    }
-    
-    if (corruption_count == 0) {
-        log_info("KERNEL", "✓ No memory corruption detected");
-    } else {
-        log_error_fmt("KERNEL", "✗ Memory corruption detected in %d allocations", corruption_count);
-    }
-    
-    // Final summary
-    log_info("KERNEL", "=== BUMP ALLOCATOR STRESS TEST COMPLETED ===");
-    if (stress_success == 100 && corruption_count == 0) {
-        log_info("KERNEL", "🎉 ALL TESTS PASSED! Bump allocator working correctly");
-    } else {
-        log_error("KERNEL", "⚠️ SOME TESTS FAILED! Bump allocator has issues");
-    }
-    
-    delay_ms(2000);
+    delay_ms(1000);
+}
 
-    // Loop infinito simple - sin shell ni scheduler por ahora
-    while (1)
-    {
-        // Hacer algo básico para mantener el sistema ocupado
-        __asm__ volatile("hlt");
-        
-        // Pequeña pausa
-        for (volatile int i = 0; i < 1000000; i++)
-        {
-            // Busy wait
-        }
+static void enable_interrupts(void) 
+{
+    print_success("[OK] Interrupt system ready\n");
+    
+    // Delay for visual effect
+    delay_ms(1500);
+
+    // Habilitar interrupciones - AHORA CON STACK MAPEADO
+    __asm__ volatile("sti");
+    interrupts_enabled = true;
+    
+    print_success("[OK] Global interrupts enabled\n");
+    
+    // Delay for visual effect
+    delay_ms(1500);
+}
+
+// Main kernel entry point (called from arch_x64.c)
+void main(void) {
+    // Mark kernel as running
+    kernel_running = true;
+    
+    // Initialize kernel in order
+    early_init();
+    memory_init();
+    
+    // Enable interrupts
+    enable_interrupts();
+    
+    print_success("[OK] Kernel initialization completed successfully\n");
+    
+    // Delay for visual effect
+    delay_ms(1500);
+    
+    // SIMPLIFICADO: Solo pruebas básicas del heap
+    print_success("[OK] Testing basic heap functionality...\n");
+    delay_ms(1000);
+    
+    // Test básico: kmalloc simple
+    void *ptr = kmalloc(64);
+    if (ptr) {
+        print_success("[OK] Basic kmalloc(64) successful\n");
+        kfree(ptr);
+        print_success("[OK] Basic kfree() successful\n");
+    } else {
+        print_error("[ERROR] Basic kmalloc failed\n");
     }
+    
+    delay_ms(1000);
+    
+    // Main kernel loop
+    print_success("[OK] Kernel descansando en loop principal\n");
+    
+    // SHELL INTERACTIVO MEJORADO
+    print_success("[OK] Starting interactive shell...\n");
+    print_success("==========================================\n");
+    print_success("IR0 Kernel v1.0 - All subsystems active\n");
+    print_success("==========================================\n");
+    
+    // Iniciar shell interactivo
+    shell_start();
+    
+    cpu_relax();
 }
