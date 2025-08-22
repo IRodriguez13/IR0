@@ -29,6 +29,12 @@ SECTIONS
         *(.data.*)
     }
 
+    /* Sección específica para tablas de páginas - dentro del rango mapeado */
+    .paging : ALIGN(4K)
+    {
+        *(.paging)
+    }
+
     .bss : ALIGN(4K)
     {
         *(COMMON)

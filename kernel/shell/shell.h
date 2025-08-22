@@ -103,6 +103,9 @@ shell_context_t *shell_get_context(void);
 // Update shell prompt
 void shell_update_prompt(void);
 
+// Start the shell (main entry point)
+void shell_start(void);
+
 // ===============================================================================
 // SHELL HISTORY FUNCTIONS
 // ===============================================================================

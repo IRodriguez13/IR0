@@ -1,143 +1,175 @@
-; boot_x64.asm - Bootloader Multiboot1 para x86-64
-BITS 32                     ; GRUB nos deja en modo 32-bit protegido
+; boot_x64.asm - Bootloader completo para x86-64
+; Hecho DESDE CERO para evitar problemas de jmp far
 
-; Multiboot1 header
+; Multiboot header
 section .multiboot
 align 4
-multiboot_header:
-    dd 0x1BADB002          ; Magic number
-    dd 0x00000000          ; Flags (no special requirements)
-    dd -(0x1BADB002 + 0x00000000) ; Checksum
+    dd 0x1BADB002               ; Multiboot magic
+    dd 0x00                     ; Flags
+    dd -(0x1BADB002 + 0x00)     ; Checksum
 
+; Stack para boot
+section .bss
+align 16
+stack_bottom:
+    resb 16384                  ; 16KB stack
+stack_top:
 
+; Código principal
 section .text
 global _start
 extern kmain_x64
 
+; Todo en 32-bit inicialmente
+BITS 32
+
 _start:
-    ; Configurar stack
+    ; Verificar que tenemos multiboot
+    cmp eax, 0x2BADB002
+    jne error_no_multiboot
+
+    ; Configurar stack inicial
     mov esp, stack_top
 
-    ; Verificar multiboot
-    cmp eax, 0x2BADB002    ; Magic number de multiboot
-    jne .no_multiboot
+    ; Verificar que estamos en modo protegido
+    mov eax, cr0
+    test eax, 1
+    jz error_no_protected
 
-    ; Configurar paginación
-    call setup_paging
+    ; === CONFIGURACIÓN PARA LONG MODE ===
 
-    ; Habilitar PAE
+    ; 1. Habilitar PAE
     mov eax, cr4
-    or eax, 1 << 5        ; PAE bit
+    or eax, 1 << 5              ; PAE bit (Physical Address Extension)
     mov cr4, eax
 
-    ; Configurar EFER para long mode
-    mov ecx, 0xC0000080   ; EFER MSR
+    ; 2. Configurar EFER para Long Mode
+    mov ecx, 0xC0000080         ; EFER MSR
     rdmsr
-    or eax, 1 << 8        ; Long Mode Enable
+    or eax, 1 << 8              ; LME bit (Long Mode Enable)
     wrmsr
 
-    ; Habilitar paginación
+    ; 3. Cargar nuestra GDT
+    lgdt [gdt_descriptor]
+
+    ; 4. Configurar CR3 con PML4 mínimo (solo para boot)
+    mov eax, pml4_minimal       ; PML4 mínimo para boot
+    mov cr3, eax
+
+    ; 5. Habilitar paging - REQUERIDO para Long Mode
     mov eax, cr0
-    or eax, 1 << 31       ; Paging Enable
+    or eax, 1 << 31             ; PG bit
     mov cr0, eax
 
-    ; Cargar GDT 64-bit
-    lgdt [gdt64_descriptor]
+    ; 6. Ahora hacemos el jmp far CORRECTAMENTE
+    jmp CODE_SEL:modo_64bit
 
-    ; Saltar a modo 64-bit
-    jmp 0x08:long_mode
-
-.no_multiboot:
-    mov dword [0xb8000], 0x4f524f45  ; "ER" en rojo
-    mov dword [0xb8004], 0x4f3a4f52  ; "R:" en rojo
+; === MANEJADORES DE ERROR ===
+error_no_multiboot:
+    mov dword [0xB8000], 0x4F4E4F4D  ; "MN" en rojo
+    mov dword [0xB8004], 0x4F544F42  ; "BT" en rojo
     cli
     hlt
-    jmp .no_multiboot
+    jmp $
 
-; ===============================================================================
-; Modo 64-bit
-; ===============================================================================
+error_no_protected:
+    mov dword [0xB8000], 0x4F334F33  ; "33" en rojo
+    mov dword [0xB8004], 0x4F324F32  ; "22" en rojo
+    cli
+    hlt
+    jmp $
+
+; === CÓDIGO 64-BIT ===
 BITS 64
-long_mode:
-    ; Configurar segmentos de datos
-    mov ax, 0x10
+modo_64bit:
+    ; Configurar selectores de datos para 64-bit
+    mov ax, DATA_SEL
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
     mov ss, ax
 
-    ; Configurar stack 64-bit
-    mov rsp, 0x90000
+    ; Configurar stack 64-bit seguro dentro del rango mapeado
+    ; Stack: 0x80000 - 0x8FFFF (64KB, alineado a 16 bytes)
+    mov rsp, 0x8FF00
 
-    ; Log entrada a 64-bit
-    mov rax, 0x0f380f38    ; "88" en blanco sobre azul
-    mov [0xb8000], rax
-
-    ; Llamar al kernel
+    ; === SALTO A KMAIN_X64 COMO LA GENTE ===
+    ; NO usamos dirección hardcodeada - usamos el símbolo directamente
     call kmain_x64
 
-    ; Si el kernel retorna, halt
-.halt:
+    ; Si kmain_x64 retorna, detenerse
+.halt_loop:
     cli
     hlt
-    jmp .halt
+    jmp .halt_loop
 
-; ===============================================================================
-; Configuración de paginación
-; ===============================================================================
-BITS 32
-setup_paging:
-    ; Limpiar tablas de páginas
-    mov edi, 0x1000
-    mov ecx, 4096
-    xor eax, eax
-    rep stosd
-
-    ; Configurar PML4
-    mov eax, 0x2003       ; PDPT address + present + writable
-    mov [0x1000], eax
-
-    ; Configurar PDPT
-    mov eax, 0x3003       ; PD address + present + writable
-    mov [0x2000], eax
-
-    ; Configurar PD (2MB pages)
-    mov edi, 0x3000
-    mov ecx, 0
-.loop:
-    mov eax, ecx
-    shl eax, 21           ; 2MB por entrada
-    or eax, 0x83          ; Present + writable + huge page
-    mov [edi + ecx * 8], eax
-    mov dword [edi + ecx * 8 + 4], 0
-    inc ecx
-    cmp ecx, 512          ; 1GB de memoria
-    jb .loop
-
-    ; Cargar CR3
-    mov eax, 0x1000
-    mov cr3, eax
-
-    ret
-
-; ===============================================================================
-; Datos
-; ===============================================================================
-section .bss
-align 16
-stack_bottom:
-    resb 16384              ; 16KB de stack
-stack_top:
-
+; === TABLAS MÍNIMAS PARA BOOT - SOLUCIÓN HÍBRIDA ===
 section .data
-; GDT para modo 64-bit
-gdt64:
-    dq 0x0000000000000000  ; Null descriptor
-    dq 0x00AF9A000000FFFF  ; Code 64-bit descriptor
-    dq 0x00AF92000000FFFF  ; Data 64-bit descriptor
-gdt64_end:
+align 4096
+; PML4 mínimo - solo para boot
+pml4_minimal:
+    dq pdp_minimal + 0x3        ; Present + RW + User (PDPT)
+    times 511 dq 0              ; Resto de entradas = 0
 
-gdt64_descriptor:
-    dw gdt64_end - gdt64 - 1
-    dq gdt64
+align 4096
+; PDPT mínimo - solo para boot
+pdp_minimal:
+    dq pd_minimal + 0x3         ; Present + RW + User (PD)
+    times 511 dq 0              ; Resto de entradas = 0
+
+align 4096
+; PD mínimo - kernel + expansión futura (32MB)
+pd_minimal:
+    dq 0x000000 + 0x83          ; 0x000000 - 0x1FFFFF (2MB) - Present + RW + 2MB
+    ; Expandir para 32MB (16 entradas de 2MB)
+    dq 0x200000 + 0x83          ; 0x200000 - 0x3FFFFF (2MB) - Present + RW + 2MB
+    dq 0x400000 + 0x83          ; 0x400000 - 0x5FFFFF (2MB) - Present + RW + 2MB
+    dq 0x600000 + 0x83          ; 0x600000 - 0x7FFFFF (2MB) - Present + RW + 2MB
+    dq 0x800000 + 0x83          ; 0x800000 - 0x9FFFFF (2MB) - Present + RW + 2MB
+    dq 0xA00000 + 0x83          ; 0xA00000 - 0xBFFFFF (2MB) - Present + RW + 2MB
+    dq 0xC00000 + 0x83          ; 0xC00000 - 0xDFFFFF (2MB) - Present + RW + 2MB
+    dq 0xE00000 + 0x83          ; 0xE00000 - 0xFFFFFF (2MB) - Present + RW + 2MB
+    dq 0x1000000 + 0x83         ; 0x1000000 - 0x11FFFFF (2MB) - Present + RW + 2MB
+    dq 0x1200000 + 0x83         ; 0x1200000 - 0x13FFFFF (2MB) - Present + RW + 2MB
+    dq 0x1400000 + 0x83         ; 0x1400000 - 0x15FFFFF (2MB) - Present + RW + 2MB
+    dq 0x1600000 + 0x83         ; 0x1600000 - 0x17FFFFF (2MB) - Present + RW + 2MB
+    dq 0x1800000 + 0x83         ; 0x1800000 - 0x19FFFFF (2MB) - Present + RW + 2MB
+    dq 0x1A00000 + 0x83         ; 0x1A00000 - 0x1BFFFFF (2MB) - Present + RW + 2MB
+    dq 0x1C00000 + 0x83         ; 0x1C00000 - 0x1DFFFFF (2MB) - Present + RW + 2MB
+    dq 0x1E00000 + 0x83         ; 0x1E00000 - 0x1FFFFFF (2MB) - Present + RW + 2MB
+    times 495 dq 0              ; Resto de entradas = 0
+
+; === GLOBAL DESCRIPTOR TABLE ===
+align 16
+gdt_start:
+    ; Descriptor nulo (obligatorio)
+    dq 0x0000000000000000
+
+gdt_code:
+    ; Descriptor de código 64-bit
+    dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
+    dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
+    db 0x00             ; Base 23:16 (ignorado en 64-bit)
+    db 0x9A             ; Present, DPL=0, Code, Execute/Read
+    db 0x20             ; 64-bit mode, no otros flags
+    db 0x00             ; Base 31:24 (ignorado en 64-bit)
+
+gdt_data:
+    ; Descriptor de datos 64-bit
+    dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
+    dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
+    db 0x00             ; Base 23:16 (ignorado en 64-bit)
+    db 0x92             ; Present, DPL=0, Data, Read/Write
+    db 0x00             ; Sin flags especiales
+    db 0x00             ; Base 31:24 (ignorado en 64-bit)
+
+gdt_end:
+
+gdt_descriptor:
+    dw gdt_end - gdt_start - 1  ; Tamaño de la GDT
+    dd gdt_start                ; Dirección de la GDT
+
+; Selectores
+CODE_SEL equ gdt_code - gdt_start   ; 0x08
+DATA_SEL equ gdt_data - gdt_start   ; 0x10

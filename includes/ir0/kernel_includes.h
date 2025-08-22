@@ -7,7 +7,8 @@
 #pragma once
 
 // Include the integrated configuration system
-#include <setup/subsystem_config.h>
+#include <subsystem_config.h>
+#include <arch_config.h>
 
 // ===============================================================================
 // CORE INCLUDES (Always included)
@@ -24,43 +25,52 @@
 // ===============================================================================
 // ARCHITECTURE INCLUDES
 // ===============================================================================
-#include <arch/arch_interface.h>
-#include <arch/idt.h>
+#include <arch_interface.h>
+#include <arch_portable.h>
+#include <idt.h>
 
-#ifdef __x86_64__
-    #include <arch/x86-64/tss.h>
+#ifdef ARCH_X86_64
+    // #include <tss_x64.h>  // TODO: Fix include path
     // #include <arch/x86-64/paging.h>  // TODO: Implement
-#else
+#elif defined(ARCH_X86_32)
     // #include <arch/x86-32/paging.h>  // TODO: Implement
+#elif defined(ARCH_ARM64)
+    // #include <arch/arm-64/paging.h>  // TODO: Implement
+#elif defined(ARCH_ARM32)
+    // #include <arch/arm-32/paging.h>  // TODO: Implement
 #endif
 
 // ===============================================================================
 // MEMORY MANAGEMENT INCLUDES
 // ===============================================================================
 #if ENABLE_BUMP_ALLOCATOR
-    #include <memory/bump_allocator.h>
+    #include <bump_allocator.h>
 #endif
 
 #if ENABLE_HEAP_ALLOCATOR
-    #include <memory/heap_allocator.h>
+    // #include <heap_allocator.h>  // TODO: Implement
 #endif
 
 #if ENABLE_PHYSICAL_ALLOCATOR
-    #include <memory/physical_allocator.h>
+    // #include <physical_allocator.h>  // TODO: Implement
 #endif
 
 #if ENABLE_VIRTUAL_MEMORY
-    #include <memory/virtual_memory.h>
+    // #include <virtual_memory.h>  // TODO: Implement
+#endif
+
+#if ENABLE_PAGING
+    #include <paging_x64.h>
 #endif
 
 // ===============================================================================
 // INTERRUPT SYSTEM INCLUDES
 // ===============================================================================
-#include <interrupt/idt.h>
-#include <interrupt/pic.h>
+#include <idt.h>
+#include <pic.h>
 
 #if ENABLE_KEYBOARD_DRIVER
-    #include <interrupt/keyboard.h>
+    // #include <keyboard.h>  // TODO: Fix include path
 #endif
 
 // ===============================================================================
@@ -69,20 +79,20 @@
 
 // Timer drivers
 #if ENABLE_TIMER_DRIVERS
-    #include <drivers/timer/clock_system.h>
-    #include <drivers/timer/pit.h>
-    #include <drivers/timer/hpet.h>
-    #include <drivers/timer/lapic.h>
+    // #include <clock_system.h>  // TODO: Fix include path
+    // #include <pit.h>  // TODO: Fix include path
+    // #include <hpet.h>  // TODO: Fix include path
+    // #include <lapic.h>  // TODO: Fix include path
 #endif
 
 // I/O drivers
 #if ENABLE_PS2_DRIVER
-    #include <drivers/io/ps2.h>
+    // #include <ps2.h>  // TODO: Fix include path
 #endif
 
 // Storage drivers
 #if ENABLE_ATA_DRIVER
-    #include <drivers/storage/ata.h>
+    // #include <ata.h>  // TODO: Fix include path
 #endif
 
 // Uncomment when implemented:
@@ -93,14 +103,14 @@
 // ===============================================================================
 // FILE SYSTEM INCLUDES
 // ===============================================================================
-#include <fs/vfs_simple.h>
+// #include <vfs_simple.h>  // TODO: Fix include path
 
 #if ENABLE_VFS
-    #include <fs/vfs.h>
+    // #include <vfs.h>  // TODO: Fix include path
 #endif
 
 #if ENABLE_IR0FS
-    #include <fs/ir0fs.h>
+    // #include <ir0fs.h>  // TODO: Fix include path
 #endif
 
 // ===============================================================================
@@ -109,32 +119,32 @@
 
 // Process management
 #if ENABLE_PROCESS_MANAGEMENT
-    #include <kernel/process/process.h>
+    // #include <process.h>  // TODO: Fix include path
 #endif
 
 #if ENABLE_ELF_LOADER
-    #include <kernel/process/elf_loader.h>
+    // #include <elf_loader.h>  // TODO: Fix include path
 #endif
 
 // Scheduler
 #if ENABLE_SCHEDULER
-    #include <kernel/scheduler/scheduler.h>
-    #include <kernel/scheduler/priority_scheduler.h>
-    #include <kernel/scheduler/round_robin_scheduler.h>
-    #include <kernel/scheduler/cfs_scheduler.h>
+    // #include <scheduler.h>  // TODO: Fix include path
+    // #include <priority_scheduler.h>  // TODO: Fix include path
+    // #include <round_robin_scheduler.h>  // TODO: Fix include path
+    // #include <cfs_scheduler.h>  // TODO: Fix include path
 #endif
 
 // System calls
 #if ENABLE_SYSCALLS
-    #include <kernel/syscalls/syscalls.h>
+    // #include <syscalls.h>  // TODO: Fix include path
 #endif
 
 // Shell
 #if ENABLE_SHELL
-    #include <kernel/shell/shell.h>
+    // #include <shell.h>  // TODO: Fix include path
 #endif
 
 // ===============================================================================
 // CONFIGURATION INCLUDES
 // ===============================================================================
-#include <setup/kernel_config.h>
+#include <kernel_config.h>

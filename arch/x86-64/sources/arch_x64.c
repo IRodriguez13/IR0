@@ -3,7 +3,7 @@
 #include "../../common/arch_interface.h"
 #include "../../includes/ir0/print.h"
 #include "arch_x64.h"
-#include <panic/panic.h>
+#include <ir0/panic/panic.h>
 
 // Implementaciones de funciones de I/O
 void outb(uint16_t port, uint8_t value) {
