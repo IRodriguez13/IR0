@@ -18,13 +18,21 @@
 #include "../memory/physical_allocator.h"
 #include "../kernel/process/process.h"
 #include "../kernel/syscalls/syscalls.h"
+
 #ifdef __x86_64__
+
 #include "../arch/x86-64/sources/tss_x64.h"
+
 #endif
+
 #ifdef __x86_64__
+
 #include "../memory/arch/x86-64/Paging_x64.h"
+
 #else
+
 #include "../memory/arch/x_86-32/Paging_x86-32.h"
+
 #endif
 
 // Variables globales para debugging
