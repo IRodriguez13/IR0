@@ -9,6 +9,10 @@ static char keyboard_buffer[KEYBOARD_BUFFER_SIZE];
 static int keyboard_buffer_head = 0;
 static int keyboard_buffer_tail = 0;
 
+// Sistema de despertar del idle
+static int system_in_idle_mode = 0;
+static int wake_requested = 0;
+
 // Tabla de scancodes básica (solo caracteres imprimibles)
 static const char scancode_to_ascii[] = {
     0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  // 0-7
@@ -77,10 +81,23 @@ void keyboard_handler64(void) {
     
     // Solo procesar key press (scancode < 0x80)
     if (scancode < 0x80) {
+        // DEBUG: Mostrar scancode cuando estamos en idle
+        if (system_in_idle_mode) {
+            print_colored("DEBUG: Scancode in idle: 0x", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+            print_hex_compact(scancode);
+            print_colored("\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+        }
+        
+        // Verificar si estamos en modo idle y detectar tecla especial (F12 = 0x58)
+        if (system_in_idle_mode && scancode == 0x58) {
+            print_colored("DEBUG: F12 detected!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+            wakeup_from_idle();
+            return;
+        }
+        
         char ascii = translate_scancode(scancode);
         if (ascii != 0) {
             keyboard_buffer_add(ascii);
-            // No hacer echo aquí - el shell se encarga de todo
         }
     }
 }
@@ -108,4 +125,38 @@ void keyboard_init(void) {
     
     // Habilitar IRQ del teclado (IRQ1)
     pic_unmask_irq(IRQ_KEYBOARD);
+}
+
+// ===============================================================================
+// SISTEMA DE DESPERTAR DEL IDLE
+// ===============================================================================
+
+void set_idle_mode(int is_idle) {
+    system_in_idle_mode = is_idle;
+    if (is_idle) {
+        wake_requested = 0; // Reset wake request when entering idle
+    }
+}
+
+int is_in_idle_mode(void) {
+    return system_in_idle_mode;
+}
+
+void wakeup_from_idle(void) {
+    if (system_in_idle_mode) {
+        wake_requested = 1;
+        system_in_idle_mode = 0;
+        print_colored("🔔 System woken from idle mode!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+        print_colored("DEBUG: wake_requested set to 1\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    } else {
+        print_colored("DEBUG: wakeup called but not in idle mode\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+    }
+}
+
+int is_wake_requested(void) {
+    return wake_requested;
+}
+
+void clear_wake_request(void) {
+    wake_requested = 0;
 }
