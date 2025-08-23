@@ -1,8 +1,8 @@
 // kernel/scheduler/cfs_scheduler.c - IMPLEMENTACIÓN COMPLETA
 #include "scheduler_types.h"
-#include <print.h>
+#include <ir0/print.h>
 #include <stddef.h>
-#include <panic/panic.h>
+#include <ir0/panic/panic.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -352,7 +352,7 @@ static void cfs_update_min_vruntime(void)
 // IMPLEMENTACIÓN SCHEDULER OPERATIONS
 // ===============================================================================
 
-static void cfs_init(void)
+void cfs_init_impl(void)
 {
     LOG_OK("Initializing CFS scheduler");
 
@@ -384,7 +384,7 @@ static void cfs_init(void)
     LOG_OK("CFS initialized with advanced runqueue management");
 }
 
-static void cfs_add_task(task_t *task)
+void cfs_add_task_impl(task_t *task)
 {
     if (!task)
     {
@@ -433,7 +433,22 @@ static void cfs_add_task(task_t *task)
     LOG_OK("CFS: Task added to runqueue");
 }
 
-static task_t *cfs_pick_next_task(void)
+void cfs_remove_task_impl(task_t *task)
+{
+    if (!task)
+    {
+        LOG_ERR("CFS: remove_task received NULL task");
+        return;
+    }
+    
+    // Simple implementation - just mark as terminated
+    task->state = TASK_TERMINATED;
+    cfs_rq.nr_running--;
+    
+    LOG_OK("CFS: Task removed from runqueue");
+}
+
+task_t *cfs_pick_next_task_impl(void)
 {
     if (!cfs_rq.leftmost)
     {
@@ -526,7 +541,7 @@ static void cfs_task_tick(void)
         current_running_task->state = TASK_READY;
         current_running_task->context_switches++;
 
-        cfs_add_task(current_running_task);
+        cfs_add_task_impl(current_running_task);
         current_running_task = NULL;
 
         LOG_OK("CFS: Task preempted due to fairness/time slice");
@@ -647,9 +662,9 @@ void cfs_dump_state(void)
 scheduler_ops_t cfs_scheduler_ops = {
     .type = SCHEDULER_CFS,
     .name = "Completely Fair Scheduler (Full Implementation)",
-    .init = cfs_init,
-    .add_task = cfs_add_task,
-    .pick_next_task = cfs_pick_next_task,
+    .init = (void (*)(void))cfs_init_impl,
+    .add_task = (void (*)(task_t *))cfs_add_task_impl,
+    .pick_next_task = (task_t *(*)(void))cfs_pick_next_task_impl,
     .task_tick = cfs_task_tick,
     .cleanup = cfs_cleanup,
     .private_data = &cfs_rq};

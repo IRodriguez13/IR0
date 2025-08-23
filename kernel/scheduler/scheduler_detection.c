@@ -1,11 +1,14 @@
 #include "scheduler_types.h"
-#include <print.h>
-#include <panic/panic.h>
+#include <ir0/print.h>
+#include <ir0/panic/panic.h>
 
 // Forward declarations for scheduler implementations
 extern scheduler_ops_t cfs_scheduler_ops;
 extern scheduler_ops_t priority_scheduler_ops;
 extern scheduler_ops_t roundrobin_scheduler_ops;
+
+// External memory info
+extern uint32_t free_pages_count;
 
 // Global state flags
 scheduler_ops_t current_scheduler;

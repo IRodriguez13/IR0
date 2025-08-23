@@ -11,6 +11,18 @@
 #include <bump_allocator.h>
 #include <paging_x64.h>
 #include <shell/shell.h>
+#include <IO/ps2.h>
+#include <scheduler/scheduler.h>
+#include <process/process.h>
+#include <auth/auth.h>
+
+// Declaraciones externas para el teclado
+extern int keyboard_buffer_has_data(void);
+extern char keyboard_buffer_get(void);
+
+// Declaraciones externas para el sistema de procesos
+extern task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t nice);
+extern void add_task(task_t *task);
 
 // Global variables
 volatile bool kernel_running = false;
@@ -222,6 +234,10 @@ static void memory_init(void)
     // 1. PS/2 Keyboard
     ps2_init();
     print_success("[OK] PS/2 keyboard initialized\n");
+    
+    // Habilitar explícitamente IRQ1 (teclado) en el PIC
+    pic_unmask_irq(1);
+    print_success("[OK] Keyboard IRQ1 enabled in PIC\n");
 
     // 2. PS/2 Mouse (si está disponible) - comentar por ahora
     // if (ps2_mouse_init() == 0) {
@@ -244,6 +260,20 @@ static void memory_init(void)
     print_success("[OK] VFS Simple initialized\n");
 
     delay_ms(1000);
+
+    // SISTEMA DE SCHEDULER CON DETECCIÓN AUTOMÁTICA
+    print_success("[OK] Initializing scheduler subsystem with auto-detection...\n");
+    
+    // Usar el sistema de detección automática de schedulers
+    extern int scheduler_cascade_init(void);
+    if (scheduler_cascade_init() != 0) {
+        print_error("[ERROR] Scheduler auto-detection failed!\n");
+        panic("Scheduler initialization failed");
+    }
+    
+    print_success("[OK] Scheduler auto-detection completed\n");
+    
+    delay_ms(1000);
 }
 
 static void enable_interrupts(void)
@@ -261,6 +291,99 @@ static void enable_interrupts(void)
 
     // Delay for visual effect
     delay_ms(1500);
+}
+
+// ===============================================================================
+// AUTHENTICATION INITIALIZATION
+// ===============================================================================
+
+static void init_auth_system(void)
+{
+    auth_config_t config;
+    config.max_attempts = 3;
+    config.lockout_time = 0;
+    config.require_password = false;
+    config.case_sensitive = true;
+    
+    if (auth_init(&config) != 0) {
+        print_error("[ERROR] Failed to initialize authentication system\n");
+        panic("Authentication system initialization failed");
+    }
+    
+    print_success("[OK] Authentication system initialized\n");
+}
+
+// ===============================================================================
+// USER SPACE PROCESS IMPLEMENTATION
+// ===============================================================================
+
+// Simple user space program that prints hello world
+static void user_program_entry(void *arg)
+{
+    (void)arg;
+    
+    // This would normally be in user space
+    // For now, we'll simulate it from kernel space
+    print_colored("🎉 USER SPACE PROCESS STARTED!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("Hello from user space process!\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("PID: ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    
+    // Get current process info
+    process_t *current = process_get_current();
+    if (current) {
+        print_uint32(current->pid);
+        print("\n");
+    }
+    
+    print_colored("User process running successfully!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    
+    // Simulate some work
+    for (int i = 0; i < 5; i++) {
+        print_colored("User process iteration: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+        print_uint32(i + 1);
+        print("\n");
+        
+        // Small delay
+        for (volatile int j = 0; j < 1000000; j++) {
+            __asm__ volatile("nop");
+        }
+    }
+    
+    print_colored("User process completed successfully!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    
+    // Exit the process
+    process_exit(0);
+}
+
+// Create and start the first user space process
+static void user_start(void)
+{
+    print_colored("🚀 Starting first user space process...\n", VGA_COLOR_MAGENTA, VGA_COLOR_BLACK);
+    
+    // Create the user process
+    process_t *user_process = process_create("user_program", user_program_entry, NULL);
+    if (!user_process) {
+        print_error("[ERROR] Failed to create user process\n");
+        return;
+    }
+    
+    print_colored("✅ User process created successfully!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("Process PID: ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    print_uint32(user_process->pid);
+    print("\n");
+    
+    // Add the process to the scheduler
+    task_t *user_task = create_task(user_program_entry, NULL, 5, 0);
+    if (!user_task) {
+        print_error("[ERROR] Failed to create user task\n");
+        return;
+    }
+    
+    // Add to scheduler
+    add_task(user_task);
+    
+    print_colored("✅ User process added to scheduler!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("🎯 User space transition ready!\n", VGA_COLOR_MAGENTA, VGA_COLOR_BLACK);
 }
 
 // Main kernel entry point (called from arch_x64.c)
@@ -301,7 +424,20 @@ void main(void)
     delay_ms(1000);
 
     // Main kernel loop
-    print_success("[OK] Kernel descansando en loop principal\n");
+    print_success("[OK] Kernel boot completed successfully\n");
+    
+    delay_ms(1000);
+
+    // AUTHENTICATION SYSTEM
+    print_success("[OK] Initializing authentication system...\n");
+    init_auth_system();
+    
+    // Kernel login - required before shell access
+    auth_result_t login_result = kernel_login();
+    if (login_result != AUTH_SUCCESS) {
+        // Login failed - system halted in kernel_login()
+        return;
+    }
 
     // SHELL INTERACTIVO MEJORADO
     print_success("[OK] Starting interactive shell...\n");
@@ -312,5 +448,18 @@ void main(void)
     // Iniciar shell interactivo
     shell_start();
 
-    cpu_relax();
+    // Cuando el shell termina, crear el primer proceso de user space
+    print_success("[OK] Shell exited, creating first user space process...\n");
+    print_success("==========================================\n");
+    print_success("IR0 Kernel - User Space Transition\n");
+    print_success("==========================================\n");
+
+    // Crear y iniciar el primer proceso de user space
+    user_start();
+
+    // Iniciar el scheduler
+    scheduler_start();
+    
+    // Ir al dispatch loop del scheduler (nunca retorna)
+    scheduler_dispatch_loop();
 }
