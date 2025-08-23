@@ -169,14 +169,15 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    drivers/timer/lapic/lapic.o \
                    drivers/IO/ps2.o \
                    drivers/storage/ata.o \
-                   # kernel/scheduler/priority_scheduler.o \
-                   # kernel/scheduler/round-robin_scheduler.o \
-                   # kernel/scheduler/sched_central.o \
-                   # kernel/scheduler/cfs_scheduler.o \
-                   # kernel/scheduler/scheduler_detection.o \
-                   # kernel/scheduler/task_impl.o \
-                   # kernel/process/process.o \
-                   kernel/syscalls/syscalls.o \
+                   kernel/scheduler/priority_scheduler.o \
+                   kernel/scheduler/round-robin_scheduler.o \
+                   kernel/scheduler/sched_central.o \
+                   kernel/scheduler/cfs_scheduler.o \
+                   kernel/scheduler/scheduler_detection.o \
+                   kernel/scheduler/task_impl.o \
+                   kernel/process/process.o \
+                   kernel/auth/auth.o \
+                   # kernel/syscalls/syscalls.o \
                    # kernel/elf_loader.o \
                    kernel/shell/shell.o \
                    arch/common/arch_interface.o \
