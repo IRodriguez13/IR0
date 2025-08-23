@@ -1,28 +1,22 @@
-# Makefile para el kernel principal
+# kernel/Makefile - Compilación del kernel
 
-# Usar variables pasadas desde el Makefile principal
-CC ?= gcc
-CFLAGS ?= -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
+# Variables
+KERNEL_OBJS = kernel_start.o process/process.o scheduler/scheduler.o scheduler/cfs_scheduler.o scheduler/round-robin_scheduler.o scheduler/priority_scheduler.o scheduler/task_impl.o syscalls/syscalls.o shell/shell.o elf_loader.o
+KERNEL_TARGET = kernel.a
 
-# Detectar arquitectura desde CFLAGS
-ifneq (,$(findstring -m64,$(CFLAGS)))
-    ARCH_DETECTED = x86-64
-else
-    ARCH_DETECTED = x86-32
-endif
+# Reglas
+all: $(KERNEL_TARGET)
 
-# Objetos
-OBJS = kernel_start.o
+$(KERNEL_TARGET): $(KERNEL_OBJS)
+	$(AR) rcs $@ $^
 
-all: $(OBJS)
-	@echo "\033[1;32m============================================================\033[0m"
-	@echo "\033[1;32m KernelMain subsystem compilado correctamente para $(ARCH_DETECTED)\033[0m"
-	@echo "\033[1;32m============================================================\033[0m"
+kernel_start.o: kernel_start.c kernel_start.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
-%.o: %.c
+elf_loader.o: elf_loader.c elf_loader.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS)
+	rm -f *.o *.a
 
 .PHONY: all clean

@@ -48,10 +48,10 @@ ifeq ($(ARCH),x86-64)
     CC = gcc
     ASM = nasm  
     LD = ld
-    CFLAGS = -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+    CFLAGS = -m64 -mcmodel=kernel -mno-red-zone -mno-mmx -mno-sse -mno-sse2
     CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -I$(KERNEL_ROOT)/setup
-    CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x86-64 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
+    CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = -f elf64
     LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
     ARCH_SUBDIRS = arch/x86-64
@@ -62,8 +62,8 @@ else ifeq ($(ARCH),x86-32)
     ASM = nasm
     LD = ld  
     CFLAGS = -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-32/include -I$(KERNEL_ROOT)/setup
-    CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-32/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x_86-32 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
+    CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = -f elf32
     LDFLAGS = -m elf_i386 -T arch/x86-32/linker.ld
     ARCH_SUBDIRS = arch/x86-32
@@ -74,8 +74,8 @@ else ifeq ($(ARCH),arm64)
     ASM = aarch64-linux-gnu-as
     LD = aarch64-linux-gnu-ld
     CFLAGS = -march=armv8-a -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm64/include -I$(KERNEL_ROOT)/setup
-    CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm64/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory
+    CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = --64
     LDFLAGS = -m aarch64linux -T arch/arm64/linker.ld
     ARCH_SUBDIRS = arch/arm64
@@ -86,8 +86,8 @@ else ifeq ($(ARCH),arm32)
     ASM = arm-linux-gnueabi-as
     LD = arm-linux-gnueabi-ld
     CFLAGS = -march=armv7-a -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm32/include -I$(KERNEL_ROOT)/setup
-    CFLAGS += -Wall -Wextra -O1 -MMD -MP $(CFLAGS_TARGET)
+    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm32/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory
+    CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = --32
     LDFLAGS = -m armelf_linux_eabi -T arch/arm32/linker.ld
     ARCH_SUBDIRS = arch/arm32
@@ -95,9 +95,49 @@ else ifeq ($(ARCH),arm32)
 endif
 
 # Subsistemas comunes (siempre presentes)
-COMMON_SUBDIRS = kernel interrupt drivers/timer kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
+COMMON_SUBDIRS = kernel interrupt drivers/timer drivers/IO drivers/storage kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
 
 # Subsistemas condicionales según build target
+
+# ===============================================================================
+# CONFIGURACIÓN QEMU (ABSTRACCIÓN)
+# ===============================================================================
+
+# Comandos QEMU por arquitectura
+QEMU_64_CMD = qemu-system-x86_64
+QEMU_32_CMD = qemu-system-i386
+QEMU_ARM64_CMD = qemu-system-aarch64
+QEMU_ARM32_CMD = qemu-system-arm
+
+# Configuración QEMU básica
+QEMU_MEMORY = 512M
+QEMU_FLAGS = -no-reboot -no-shutdown
+QEMU_TIMEOUT = 30
+
+# Modos de display
+QEMU_DISPLAY_GTK = -display gtk
+QEMU_DISPLAY_SDL = -display sdl2
+QEMU_DISPLAY_NONE = -display none
+QEMU_NGRAPHIC = -nographic
+
+# Configuración por defecto
+QEMU_DISPLAY = $(QEMU_DISPLAY_GTK)
+QEMU_SERIAL = -serial stdio
+QEMU_TEST_DISPLAY = $(QEMU_DISPLAY_NONE)  # Para pruebas automáticas
+
+# Opciones de debugging y logging
+QEMU_DEBUG_INT = -d int,cpu_reset
+QEMU_DEBUG_EXEC = -d exec
+QEMU_DEBUG_GUEST = -d guest_errors
+QEMU_DEBUG_PAGE = -d page
+QEMU_DEBUG_ALL = -d int,cpu_reset,exec,guest_errors,page
+QEMU_LOG_FILE = -D qemu_debug.log
+
+# Flags específicos por arquitectura
+QEMU_64_FLAGS = -cdrom
+QEMU_32_FLAGS = -cdrom
+QEMU_ARM64_FLAGS = -M virt -cpu cortex-a57 -kernel
+QEMU_ARM32_FLAGS = -M vexpress-a9 -cpu cortex-a9 -kernel
 ifeq ($(BUILD_TARGET),desktop)
     CONDITIONAL_SUBDIRS = fs
 else ifeq ($(BUILD_TARGET),server)
@@ -113,9 +153,13 @@ SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 # Objetos base del kernel (comunes a todas las arquitecturas)
 KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    includes/ir0/print.o \
+                   includes/ir0/logging.o \
+                   includes/ir0/validation.o \
                    includes/string.o \
-                   interrupt/idt.o \
-                   interrupt/isr_handlers.o \
+                   interrupt/arch/idt.o \
+                   interrupt/arch/pic.o \
+                   interrupt/arch/isr_handlers.o \
+                   interrupt/arch/keyboard.o \
                    includes/ir0/panic/panic.o \
                    drivers/timer/pit/pit.o \
                    drivers/timer/clock_system.o \
@@ -123,32 +167,35 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    drivers/timer/hpet/hpet.o \
                    drivers/timer/hpet/find_hpet.o \
                    drivers/timer/lapic/lapic.o \
-                                             kernel/scheduler/priority_scheduler.o \
-                          kernel/scheduler/round-robin_scheduler.o \
-                          kernel/scheduler/sched_central.o \
-                          kernel/scheduler/cfs_scheduler.o \
-                          kernel/scheduler/scheduler_detection.o \
-                          kernel/scheduler/task_impl.o \
-                          kernel/process/process.o \
-                          kernel/syscalls/syscalls.o \
-                          kernel/shell/shell.o \
+                   drivers/IO/ps2.o \
+                   drivers/storage/ata.o \
+                   kernel/scheduler/priority_scheduler.o \
+                   kernel/scheduler/round-robin_scheduler.o \
+                   kernel/scheduler/sched_central.o \
+                   kernel/scheduler/cfs_scheduler.o \
+                   kernel/scheduler/scheduler_detection.o \
+                   kernel/scheduler/task_impl.o \
+                   kernel/process/process.o \
+                   kernel/auth/auth.o \
+                   # kernel/syscalls/syscalls.o \
+                   # kernel/elf_loader.o \
+                   kernel/shell/shell.o \
                    arch/common/arch_interface.o \
-                   memory/heap_allocator.o \
-                   memory/physical_allocator.o \
-                                             memory/ondemand-paging.o \
-                          memory/vallocator.o \
-                          setup/kernel_config.o \
-                          fs/ir0fs.o
+                   memory/bump_allocator.o \
+                   memory/paging_x64.o \
+                   setup/kernel_config.o \
+                   # fs/ir0fs.o \
+                   # fs/vfs.o
 
 # Objetos condicionales según build target
 ifeq ($(BUILD_TARGET),desktop)
-    CONDITIONAL_OBJS = fs/vfs.o
+    CONDITIONAL_OBJS = fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),server)
-    CONDITIONAL_OBJS = fs/vfs.o
+    CONDITIONAL_OBJS = fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),iot)
-    CONDITIONAL_OBJS = fs/vfs.o
+    CONDITIONAL_OBJS = fs/vfs_simple.o
 else ifeq ($(BUILD_TARGET),embedded)
-    CONDITIONAL_OBJS = 
+    CONDITIONAL_OBJS = fs/vfs_simple.o
 endif
 
 # Objetos de arquitectura
@@ -158,18 +205,16 @@ ifeq ($(ARCH),x86-64)
                 arch/x86-64/sources/idt_arch_x64.o \
                 arch/x86-64/sources/fault.o \
                 arch/x86-64/sources/tss_x64.o \
-                memory/arch/x86-64/Paging_x64.o \
-                memory/arch/x86-64/mmu_x64.o \
+                memory/bump_allocator.o \
+                memory/paging_x64.o \
                 kernel/scheduler/switch/switch_x64.o \
-                interrupt/arch/x86-64/interrupt.o
+                interrupt/arch/x86-64/isr_stubs_64.o
 else ifeq ($(ARCH),x86-32)  
     ARCH_OBJS = arch/x86-32/sources/arch_x86.o \
                 arch/x86-32/asm/boot_x86.o \
                 arch/x86-32/sources/idt_arch_x86.o \
-                memory/arch/x_86-32/Paging_x86-32.o \
-                memory/arch/x_86-32/mmu_x86-32.o \
                 kernel/scheduler/switch/switch_x86.o \
-                interrupt/arch/x86-32/interrupt.o
+                interrupt/arch/x86-32/isr_stubs_32.o
 else ifeq ($(ARCH),arm64)
     ARCH_OBJS = arch/arm64/sources/arch_arm64.o \
                 arch/arm64/asm/boot_arm64.o \
@@ -202,9 +247,9 @@ ALL_OBJS = $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 # Compilar kernel para arquitectura específica
-kernel-$(ARCH)-$(TARGET_NAME).bin: $(ALL_OBJS) $(ARCH_SUBDIRS)/linker.ld
+kernel-$(ARCH)-$(TARGET_NAME).bin: $(ALL_OBJS) kernel/shell/shell.o $(ARCH_SUBDIRS)/linker.ld
 	@echo "Enlazando kernel para $(ARCH)-$(TARGET_NAME)..."
-	$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS) kernel/shell/shell.o
 	@echo "Kernel $(ARCH)-$(TARGET_NAME) compilado: $@"
 
 # Crear ISO específico por arquitectura y target
@@ -226,17 +271,22 @@ kernel-$(ARCH).iso: kernel-$(ARCH)-$(TARGET_NAME).iso
 # Target por defecto
 all: kernel-$(ARCH)-$(TARGET_NAME).iso
 
-# Target para ejecutar en QEMU
-run: kernel-$(ARCH)-$(TARGET_NAME).iso
-	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU..."
+# Target para ejecutar en QEMU (por defecto con GUI)
+run: run-gui
+
+
+
+# Target para ejecutar en QEMU (Display mode - con interfaz gráfica)
+run-display: kernel-$(ARCH)-$(TARGET_NAME).iso
+	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU (Display mode - con interfaz gráfica)..."
 ifeq ($(ARCH),x86-64)
-	qemu-system-x86_64 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
 else ifeq ($(ARCH),x86-32)
-	qemu-system-i386 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
 else ifeq ($(ARCH),arm64)
-	qemu-system-aarch64 -M virt -cpu cortex-a57 -m 512M -kernel kernel-$(ARCH)-$(TARGET_NAME).bin -no-reboot -no-shutdown -display gtk
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
 else ifeq ($(ARCH),arm32)
-	qemu-system-arm -M vexpress-a9 -cpu cortex-a9 -m 512M -kernel kernel-$(ARCH)-$(TARGET_NAME).bin -no-reboot -no-shutdown -display gtk
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
 endif
 
 # Target para debug en QEMU
@@ -310,7 +360,42 @@ arch-details:
 	@echo "Flags ASM: $(ASMFLAGS)"
 	@echo "Flags LD: $(LDFLAGS)"
 
-# Información de ayuda
+# ===============================================================================
+# TARGETS DE PRUEBAS
+# ===============================================================================
+
+# Ejecutar todas las pruebas
+test: test-compile test-qemu
+
+# Pruebas de compilación
+test-compile:
+	@echo "Ejecutando pruebas de compilación..."
+	@./scripts/test_framework.sh compile
+
+# Pruebas de QEMU
+test-qemu:
+	@echo "Ejecutando pruebas de QEMU..."
+	@./scripts/test_framework.sh qemu
+
+# Pruebas de QEMU con display
+test-qemu-display:
+	@echo "Ejecutando pruebas de QEMU con display..."
+	@./scripts/test_framework.sh qemu-display
+
+# Prueba específica
+test-specific:
+	@echo "Ejecutando prueba específica: $(TEST_NAME)"
+	@./scripts/test_framework.sh $(TEST_NAME)
+
+# Ejecutar todas las pruebas del framework
+test-all:
+	@echo "Ejecutando suite completa de pruebas..."
+	@./scripts/test_framework.sh all
+
+# ===============================================================================
+# INFORMACIÓN DE AYUDA
+# ===============================================================================
+
 help:
 	@echo "IR0 Kernel Multi-Architecture Build System"
 	@echo ""
@@ -333,10 +418,153 @@ help:
 	@echo "  make all-arch           - Compilar para todas las arquitecturas"
 	@echo "  make all-targets        - Compilar para todos los build targets"
 	@echo "  make all-combinations   - Compilar todas las combinaciones"
-	@echo "  make run                - Ejecutar kernel en QEMU"
+	@echo ""
+	@echo "Comandos QEMU simples:"
+	@echo "  make run                - Ejecutar kernel en QEMU con GUI"
+	@echo "  make run-gui            - Ejecutar kernel en QEMU con GUI"
+	@echo "  make run-nographic      - Ejecutar kernel en QEMU sin GUI (terminal)"
+	@echo "  make run-test           - Ejecutar kernel en QEMU para testing"
 	@echo "  make debug              - Ejecutar kernel con debug"
+	@echo ""
+	@echo "Comandos de limpieza:"
 	@echo "  make clean              - Limpiar archivos de compilación"
 	@echo "  make clean-all          - Limpiar todo"
+	@echo ""
+	@echo "Comandos de ayuda:"
 	@echo "  make help               - Mostrar esta ayuda"
+	@echo "  make help-qemu          - Mostrar ayuda específica de QEMU"
 
-.PHONY: all all-arch all-targets all-combinations run debug clean clean-all arch-details help
+# ===============================================================================
+# COMANDOS QEMU SIMPLES Y RÁPIDOS
+# ===============================================================================
+
+# Ejecutar con GUI (por defecto)
+run-gui: all
+	@echo "🚀 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con GUI..."
+ifeq ($(ARCH),x86-64)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+else ifeq ($(ARCH),x86-32)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+else ifeq ($(ARCH),arm64)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+else ifeq ($(ARCH),arm32)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+endif
+
+# Ejecutar sin GUI (terminal)
+run-nographic: all
+	@echo "🖥️  Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU sin GUI (terminal)..."
+ifeq ($(ARCH),x86-64)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL)
+else ifeq ($(ARCH),x86-32)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL)
+else ifeq ($(ARCH),arm64)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL)
+else ifeq ($(ARCH),arm32)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL)
+endif
+
+# Ejecutar para testing (sin display, con timeout)
+run-test: all
+	@echo "🧪 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU para testing..."
+ifeq ($(ARCH),x86-64)
+	timeout $(QEMU_TIMEOUT) $(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_DISPLAY_NONE) || true
+else ifeq ($(ARCH),x86-32)
+	timeout $(QEMU_TIMEOUT) $(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_DISPLAY_NONE) || true
+else ifeq ($(ARCH),arm64)
+	timeout $(QEMU_TIMEOUT) $(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_DISPLAY_NONE) || true
+else ifeq ($(ARCH),arm32)
+	timeout $(QEMU_TIMEOUT) $(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_DISPLAY_NONE) || true
+endif
+
+# Comandos rápidos para 32-bit y 64-bit
+run-32: 
+	@$(MAKE) ARCH=x86-32 run-gui
+
+run-64:
+	@$(MAKE) ARCH=x86-64 run-gui
+
+run-32-nographic:
+	@$(MAKE) ARCH=x86-32 run-nographic
+
+run-64-nographic:
+	@$(MAKE) ARCH=x86-64 run-nographic
+
+# Comandos con debugging
+run-debug: all
+	@echo "🐛 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con debugging..."
+ifeq ($(ARCH),x86-64)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+else ifeq ($(ARCH),x86-32)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+else ifeq ($(ARCH),arm64)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+else ifeq ($(ARCH),arm32)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+endif
+
+run-debug-nographic: all
+	@echo "🐛 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con debugging (terminal)..."
+ifeq ($(ARCH),x86-64)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+else ifeq ($(ARCH),x86-32)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+else ifeq ($(ARCH),arm64)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+else ifeq ($(ARCH),arm32)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+endif
+
+# Comandos rápidos con debugging
+run-32-debug:
+	@$(MAKE) ARCH=x86-32 run-debug
+
+run-64-debug:
+	@$(MAKE) ARCH=x86-64 run-debug
+
+run-32-debug-nographic:
+	@$(MAKE) ARCH=x86-32 run-debug-nographic
+
+run-64-debug-nographic:
+	@$(MAKE) ARCH=x86-64 run-debug-nographic
+
+# Ayuda específica de QEMU
+help-qemu:
+	@echo "🎮 IR0 Kernel QEMU Commands"
+	@echo ""
+	@echo "Comandos principales:"
+	@echo "  make run-gui              - Ejecutar con interfaz gráfica (GTK)"
+	@echo "  make run-nographic        - Ejecutar en terminal (sin GUI)"
+	@echo "  make run-test             - Ejecutar para testing (con timeout)"
+	@echo ""
+	@echo "Comandos con debugging:"
+	@echo "  make run-debug            - Ejecutar con debugging completo"
+	@echo "  make run-debug-nographic  - Ejecutar con debugging en terminal"
+	@echo ""
+	@echo "Comandos rápidos por arquitectura:"
+	@echo "  make run-32               - Compilar y ejecutar 32-bit con GUI"
+	@echo "  make run-64               - Compilar y ejecutar 64-bit con GUI"
+	@echo "  make run-32-nographic     - Compilar y ejecutar 32-bit sin GUI"
+	@echo "  make run-64-nographic     - Compilar y ejecutar 64-bit sin GUI"
+	@echo "  make run-32-debug         - Compilar y ejecutar 32-bit con debugging"
+	@echo "  make run-64-debug         - Compilar y ejecutar 64-bit con debugging"
+	@echo ""
+	@echo "Opciones de QEMU incluidas:"
+	@echo "  -no-reboot               - No reiniciar automáticamente"
+	@echo "  -no-shutdown             - No apagar automáticamente"
+	@echo "  -nographic               - Modo terminal (sin GUI)"
+	@echo "  -display gtk             - Interfaz gráfica GTK"
+	@echo "  -serial stdio            - Salida serial a terminal"
+	@echo ""
+	@echo "Opciones de debugging:"
+	@echo "  -d int,cpu_reset         - Log de interrupciones y resets"
+	@echo "  -d exec                  - Log de ejecución de instrucciones"
+	@echo "  -d guest_errors          - Log de errores del guest"
+	@echo "  -d page                  - Log de page faults"
+	@echo "  -D qemu_debug.log        - Archivo de log de debugging"
+	@echo ""
+	@echo "Para salir de QEMU:"
+	@echo "  Ctrl+A, X                - Salir de QEMU"
+	@echo "  Ctrl+C                   - Interrumpir ejecución"
+
+.PHONY: all all-arch all-targets all-combinations run debug clean clean-all arch-details help run-gui run-nographic run-test run-32 run-64 run-32-nographic run-64-nographic run-debug run-debug-nographic run-32-debug run-64-debug run-32-debug-nographic run-64-debug-nographic help-qemu

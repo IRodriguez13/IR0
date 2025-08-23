@@ -3,7 +3,7 @@
 ## English
 
 ### Overview
-The Kernel Subsystem is the core of the IR0 operating system, providing process management, task scheduling, system calls, and an interactive shell. It implements a complete process lifecycle with multiple scheduling algorithms and POSIX-compatible system call interface.
+The Kernel Subsystem is the core of the IR0 operating system, providing process management framework, task scheduling framework, system calls interface, and an interactive shell. It implements a process lifecycle framework with multiple scheduling algorithm interfaces and POSIX-compatible system call interface definitions.
 
 ### Key Components
 
@@ -17,42 +17,42 @@ The Kernel Subsystem is the core of the IR0 operating system, providing process 
   - Shell startup and management
 
 #### 2. Process Management (`process/`)
-- **Purpose**: Complete process lifecycle management
+- **Purpose**: Process lifecycle management framework
 - **Features**:
   - **Process States**: NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD
-  - **Process Creation**: fork(), exec(), exit()
-  - **Process Control**: kill(), wait(), signal handling
-  - **Process Trees**: Hierarchical process management
-  - **Priority Management**: 0-139 priority levels
+  - **Process Creation Framework**: fork(), exec(), exit() interfaces
+  - **Process Control Framework**: kill(), wait(), signal handling interfaces
+  - **Process Trees**: Hierarchical process management framework
+  - **Priority Management**: 0-139 priority levels framework
 
 #### 3. Task Scheduler (`scheduler/`)
-- **Purpose**: Advanced task scheduling with multiple algorithms
+- **Purpose**: Task scheduling framework with multiple algorithm interfaces
 - **Features**:
-  - **CFS (Completely Fair Scheduler)**: Fair scheduling for servers
-  - **Priority Scheduler**: Real-time scheduling
-  - **Round-Robin Scheduler**: Simple time-slicing
-  - **Adaptive Scheduling**: Automatic algorithm selection
-  - **Context Switching**: Real assembly implementation
+  - **CFS (Completely Fair Scheduler)**: Fair scheduling framework for servers
+  - **Priority Scheduler**: Real-time scheduling framework
+  - **Round-Robin Scheduler**: Simple time-slicing framework
+  - **Adaptive Scheduling**: Automatic algorithm selection framework
+  - **Context Switching**: Assembly implementation for both architectures
 
 #### 4. System Calls (`syscalls/`)
-- **Purpose**: POSIX-compatible system call interface
+- **Purpose**: POSIX-compatible system call interface definitions
 - **Features**:
-  - **50+ System Calls**: Complete POSIX interface
-  - **Process Control**: fork, exec, exit, wait, getpid
-  - **File Operations**: open, close, read, write, lseek
-  - **Memory Management**: brk, mmap, munmap, mprotect
-  - **Signals**: signal, kill, sigaction, sigprocmask
-  - **Time**: time, gettimeofday, sleep, usleep
+  - **50+ System Call Definitions**: Complete POSIX interface definitions
+  - **Process Control**: fork, exec, exit, wait, getpid interfaces
+  - **File Operations**: open, close, read, write, lseek interfaces
+  - **Memory Management**: brk, mmap, munmap, mprotect interfaces
+  - **Signals**: signal, kill, sigaction, sigprocmask interfaces
+  - **Time**: time, gettimeofday, sleep, usleep interfaces
 
 #### 5. Interactive Shell (`shell/`)
-- **Purpose**: Advanced interactive shell with 25+ commands
+- **Purpose**: Basic interactive shell with command framework
 - **Features**:
   - **Built-in Commands**: help, info, version, ps, meminfo, debug
-  - **File Operations**: ls, cd, pwd, cat, echo, mkdir, rm, cp, mv
-  - **System Control**: reboot, halt, sleep
-  - **Memory Management**: malloc, free
-  - **Command History**: Navigation and recall
-  - **Error Handling**: Robust error reporting
+  - **File Operations Framework**: ls, cd, pwd, cat, echo, mkdir, rm, cp, mv interfaces
+  - **System Control Framework**: reboot, halt, sleep interfaces
+  - **Memory Management Framework**: malloc, free interfaces
+  - **Command History**: Navigation and recall framework
+  - **Error Handling**: Basic error reporting
 
 #### 6. Core Kernel (`core/`)
 - **Purpose**: Core kernel functionality and utilities
@@ -101,20 +101,20 @@ typedef struct process {
 #### Scheduler Types
 
 1. **CFS (Completely Fair Scheduler)**
-   - Fair scheduling for server workloads
-   - Load balancing across CPUs
-   - Dynamic priority adjustment
-   - Optimized for multi-core systems
+   - Fair scheduling framework for server workloads
+   - Load balancing framework across CPUs
+   - Dynamic priority adjustment framework
+   - Framework for multi-core systems
 
 2. **Priority Scheduler**
-   - Real-time scheduling
-   - Fixed priority levels
-   - Preemption control
-   - Predictable latencies
+   - Real-time scheduling framework
+   - Fixed priority levels framework
+   - Preemption control framework
+   - Predictable latencies framework
 
 3. **Round-Robin Scheduler**
-   - Simple time-slicing
-   - Equal time distribution
+   - Simple time-slicing framework
+   - Equal time distribution framework
    - Minimal overhead
    - Easy to understand and debug
 
@@ -246,31 +246,31 @@ static shell_command_t shell_builtin_commands[] = {
 ```
 
 #### Shell Features
-- **Command History**: Navigate through previous commands
-- **Error Handling**: Detailed error messages and recovery
-- **System Integration**: Direct access to kernel structures
-- **Real-time Information**: Live system statistics
-- **Memory Management**: Direct memory allocation/deallocation
+- **Command History**: Framework for navigating through previous commands
+- **Error Handling**: Basic error messages and recovery
+- **System Integration**: Framework for direct access to kernel structures
+- **Real-time Information**: Framework for live system statistics
+- **Memory Management**: Framework for direct memory allocation/deallocation
 
 ### Performance Characteristics
 
-#### Process Management
-- **Process Creation**: < 1ms for simple processes
+#### Process Management Framework
+- **Process Creation**: Framework for < 1ms for simple processes
 - **Context Switch**: ~100 CPU cycles
-- **Memory Allocation**: O(1) for common sizes
-- **Process Lookup**: O(log n) with process tree
+- **Memory Allocation**: O(1) framework for common sizes
+- **Process Lookup**: O(log n) framework with process tree
 
-#### Scheduling
+#### Scheduling Framework
 - **Scheduler Overhead**: < 1% of CPU time
-- **Load Balancing**: Automatic across available CPUs
-- **Priority Management**: Real-time priority support
-- **Fairness**: CFS ensures fair CPU distribution
+- **Load Balancing**: Framework for automatic across available CPUs
+- **Priority Management**: Framework for real-time priority support
+- **Fairness**: Framework for CFS ensuring fair CPU distribution
 
-#### System Calls
+#### System Calls Framework
 - **System Call Overhead**: ~50 CPU cycles
-- **Error Handling**: Comprehensive error codes
-- **POSIX Compliance**: Full compatibility
-- **Performance**: Optimized for common operations
+- **Error Handling**: Framework for comprehensive error codes
+- **POSIX Compliance**: Framework for full compatibility
+- **Performance**: Framework for optimization for common operations
 
 ### Configuration
 
@@ -292,12 +292,29 @@ struct kernel_config {
 - **Priority Levels**: 0-139 (IDLE to REALTIME)
 - **Stack Size**: 8KB per process (configurable)
 
+### Current Status
+
+#### Working Features
+- **Kernel Startup**: Basic kernel initialization and subsystem coordination
+- **Process Framework**: Process structure and state management
+- **Scheduler Framework**: Basic scheduling algorithm interfaces
+- **System Call Interface**: POSIX-compatible system call definitions
+- **Interactive Shell**: Basic command-line interface
+- **Context Switching**: Assembly implementation for both architectures
+
+#### Development Areas
+- **Process Creation**: Complete process spawning and execution
+- **Scheduler Implementation**: Complete scheduling algorithms
+- **System Call Handlers**: Complete system call implementations
+- **Shell Enhancement**: Advanced shell features and interactivity
+- **Performance Optimization**: Advanced kernel optimizations
+
 ---
 
 ## Español
 
 ### Descripción General
-El Subsistema de Kernel es el núcleo del sistema operativo IR0, proporcionando gestión de procesos, planificación de tareas, system calls y una shell interactiva. Implementa un ciclo de vida completo de procesos con múltiples algoritmos de planificación e interfaz de system calls compatible con POSIX.
+El Subsistema de Kernel es el núcleo del sistema operativo IR0, proporcionando framework de gestión de procesos, framework de planificación de tareas, interfaz de system calls y una shell interactiva. Implementa un framework de ciclo de vida de procesos con interfaces de múltiples algoritmos de planificación y definiciones de interfaz de system calls compatible con POSIX.
 
 ### Componentes Principales
 
@@ -311,42 +328,42 @@ El Subsistema de Kernel es el núcleo del sistema operativo IR0, proporcionando 
   - Inicio y gestión de la shell
 
 #### 2. Gestión de Procesos (`process/`)
-- **Propósito**: Gestión completa del ciclo de vida de procesos
+- **Propósito**: Framework de gestión del ciclo de vida de procesos
 - **Características**:
   - **Estados de Proceso**: NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD
-  - **Creación de Procesos**: fork(), exec(), exit()
-  - **Control de Procesos**: kill(), wait(), manejo de señales
-  - **Árboles de Procesos**: Gestión jerárquica de procesos
-  - **Gestión de Prioridades**: Niveles de prioridad 0-139
+  - **Framework de Creación de Procesos**: Interfaces de fork(), exec(), exit()
+  - **Framework de Control de Procesos**: Interfaces de kill(), wait(), manejo de señales
+  - **Árboles de Procesos**: Framework de gestión jerárquica de procesos
+  - **Framework de Gestión de Prioridades**: Niveles de prioridad 0-139
 
 #### 3. Planificador de Tareas (`scheduler/`)
-- **Propósito**: Planificación avanzada de tareas con múltiples algoritmos
+- **Propósito**: Framework de planificación de tareas con interfaces de múltiples algoritmos
 - **Características**:
-  - **CFS (Completely Fair Scheduler)**: Planificación justa para servidores
-  - **Priority Scheduler**: Planificación en tiempo real
-  - **Round-Robin Scheduler**: Time-slicing simple
-  - **Planificación Adaptativa**: Selección automática de algoritmo
-  - **Context Switching**: Implementación real en assembly
+  - **CFS (Completely Fair Scheduler)**: Framework de planificación justa para servidores
+  - **Priority Scheduler**: Framework de planificación en tiempo real
+  - **Round-Robin Scheduler**: Framework de time-slicing simple
+  - **Framework de Planificación Adaptativa**: Framework de selección automática de algoritmo
+  - **Context Switching**: Implementación en assembly para ambas arquitecturas
 
 #### 4. System Calls (`syscalls/`)
-- **Propósito**: Interfaz de system calls compatible con POSIX
+- **Propósito**: Definiciones de interfaz de system calls compatible con POSIX
 - **Características**:
-  - **50+ System Calls**: Interfaz POSIX completa
-  - **Control de Procesos**: fork, exec, exit, wait, getpid
-  - **Operaciones de Archivo**: open, close, read, write, lseek
-  - **Gestión de Memoria**: brk, mmap, munmap, mprotect
-  - **Señales**: signal, kill, sigaction, sigprocmask
-  - **Tiempo**: time, gettimeofday, sleep, usleep
+  - **50+ Definiciones de System Calls**: Definiciones completas de interfaz POSIX
+  - **Control de Procesos**: Interfaces de fork, exec, exit, wait, getpid
+  - **Operaciones de Archivo**: Interfaces de open, close, read, write, lseek
+  - **Gestión de Memoria**: Interfaces de brk, mmap, munmap, mprotect
+  - **Señales**: Interfaces de signal, kill, sigaction, sigprocmask
+  - **Tiempo**: Interfaces de time, gettimeofday, sleep, usleep
 
 #### 5. Shell Interactiva (`shell/`)
-- **Propósito**: Shell interactiva avanzada con 25+ comandos
+- **Propósito**: Shell interactiva básica con framework de comandos
 - **Características**:
   - **Comandos Integrados**: help, info, version, ps, meminfo, debug
-  - **Operaciones de Archivo**: ls, cd, pwd, cat, echo, mkdir, rm, cp, mv
-  - **Control del Sistema**: reboot, halt, sleep
-  - **Gestión de Memoria**: malloc, free
-  - **Historial de Comandos**: Navegación y recuperación
-  - **Manejo de Errores**: Reportes robustos de errores
+  - **Framework de Operaciones de Archivo**: Interfaces de ls, cd, pwd, cat, echo, mkdir, rm, cp, mv
+  - **Framework de Control del Sistema**: Interfaces de reboot, halt, sleep
+  - **Framework de Gestión de Memoria**: Interfaces de malloc, free
+  - **Historial de Comandos**: Framework de navegación y recuperación
+  - **Manejo de Errores**: Reportes básicos de errores
 
 #### 6. Kernel Core (`core/`)
 - **Propósito**: Funcionalidad core del kernel y utilidades
@@ -395,20 +412,20 @@ typedef struct process {
 #### Tipos de Planificador
 
 1. **CFS (Completely Fair Scheduler)**
-   - Planificación justa para cargas de servidor
-   - Balanceo de carga entre CPUs
-   - Ajuste dinámico de prioridades
-   - Optimizado para sistemas multi-core
+   - Framework de planificación justa para cargas de servidor
+   - Framework de balanceo de carga entre CPUs
+   - Framework de ajuste dinámico de prioridades
+   - Framework para sistemas multi-core
 
 2. **Priority Scheduler**
-   - Planificación en tiempo real
-   - Niveles de prioridad fijos
-   - Control de preemption
-   - Latencias predecibles
+   - Framework de planificación en tiempo real
+   - Framework de niveles de prioridad fijos
+   - Framework de control de preemption
+   - Framework de latencias predecibles
 
 3. **Round-Robin Scheduler**
-   - Time-slicing simple
-   - Distribución equitativa de tiempo
+   - Framework de time-slicing simple
+   - Framework de distribución equitativa de tiempo
    - Overhead mínimo
    - Fácil de entender y debuggear
 
@@ -540,31 +557,31 @@ static shell_command_t shell_builtin_commands[] = {
 ```
 
 #### Características de la Shell
-- **Historial de Comandos**: Navegar por comandos anteriores
-- **Manejo de Errores**: Mensajes de error detallados y recuperación
-- **Integración del Sistema**: Acceso directo a estructuras del kernel
-- **Información en Tiempo Real**: Estadísticas del sistema en vivo
-- **Gestión de Memoria**: Asignación/liberación directa de memoria
+- **Historial de Comandos**: Framework para navegar por comandos anteriores
+- **Manejo de Errores**: Mensajes básicos de error y recuperación
+- **Integración del Sistema**: Framework para acceso directo a estructuras del kernel
+- **Información en Tiempo Real**: Framework para estadísticas del sistema en vivo
+- **Gestión de Memoria**: Framework para asignación/liberación directa de memoria
 
 ### Características de Rendimiento
 
-#### Gestión de Procesos
-- **Creación de Procesos**: < 1ms para procesos simples
+#### Framework de Gestión de Procesos
+- **Creación de Procesos**: Framework para < 1ms para procesos simples
 - **Context Switch**: ~100 ciclos CPU
-- **Asignación de Memoria**: O(1) para tamaños comunes
-- **Búsqueda de Procesos**: O(log n) con árbol de procesos
+- **Asignación de Memoria**: Framework O(1) para tamaños comunes
+- **Búsqueda de Procesos**: Framework O(log n) con árbol de procesos
 
-#### Planificación
+#### Framework de Planificación
 - **Overhead del Planificador**: < 1% del tiempo CPU
-- **Balanceo de Carga**: Automático entre CPUs disponibles
-- **Gestión de Prioridades**: Soporte de prioridades en tiempo real
-- **Justicia**: CFS asegura distribución justa de CPU
+- **Balanceo de Carga**: Framework para automático entre CPUs disponibles
+- **Gestión de Prioridades**: Framework para soporte de prioridades en tiempo real
+- **Justicia**: Framework para CFS asegurando distribución justa de CPU
 
-#### System Calls
+#### Framework de System Calls
 - **Overhead de System Calls**: ~50 ciclos CPU
-- **Manejo de Errores**: Códigos de error comprehensivos
-- **Compatibilidad POSIX**: Compatibilidad completa
-- **Rendimiento**: Optimizado para operaciones comunes
+- **Manejo de Errores**: Framework para códigos de error comprehensivos
+- **Compatibilidad POSIX**: Framework para compatibilidad completa
+- **Rendimiento**: Framework para optimización de operaciones comunes
 
 ### Configuración
 
@@ -585,3 +602,20 @@ struct kernel_config {
 - **Max Threads**: 4096 (Desktop), 16384 (Server), 256 (IoT), 64 (Embedded)
 - **Niveles de Prioridad**: 0-139 (IDLE a REALTIME)
 - **Tamaño de Stack**: 8KB por proceso (configurable)
+
+### Estado Actual
+
+#### Características Funcionando
+- **Inicio del Kernel**: Inicialización básica del kernel y coordinación de subsistemas
+- **Framework de Procesos**: Estructura de procesos y gestión de estados
+- **Framework de Planificador**: Interfaces básicas de algoritmos de planificación
+- **Interfaz de System Calls**: Definiciones de system calls compatible con POSIX
+- **Shell Interactiva**: Interfaz básica de línea de comandos
+- **Context Switching**: Implementación en assembly para ambas arquitecturas
+
+#### Áreas de Desarrollo
+- **Creación de Procesos**: Spawning y ejecución completos de procesos
+- **Implementación del Planificador**: Algoritmos completos de planificación
+- **Manejadores de System Calls**: Implementaciones completas de system calls
+- **Mejora de la Shell**: Características avanzadas de shell e interactividad
+- **Optimización de Rendimiento**: Optimizaciones avanzadas del kernel

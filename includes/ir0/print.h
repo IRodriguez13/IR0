@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdint.h>
+#include "../stdint.h"
 
 #define LOG_OK(msg)    print_success("[OK] " msg "\n")
 #define LOG_WARN(msg)  print_warning("[!] " msg "\n")
@@ -136,6 +136,22 @@ void print_hex_compact(uint32_t num);
 void print_hex64(uint64_t val);
 
 /*
+ * Imprime un entero de 32 bits en hexadecimal.
+ * Útil para debugging y logging de direcciones de memoria.
+ * 
+ * @param num: Número a imprimir en hex
+ */
+void print_hex32(uint32_t num);
+
+/*
+ * Imprime un entero de 8 bits en hexadecimal.
+ * Útil para debugging y logging de valores pequeños.
+ * 
+ * @param num: Número a imprimir en hex
+ */
+void print_hex8(uint8_t num);
+
+/*
  * Imprime un entero de 64 bits sin signo.
  * Útil para debugging y logging de interrupciones.
  * 
@@ -168,4 +184,6 @@ void print_uint32(uint32_t num);
  * @param ms: Milisegundos a esperar
  */
 void delay_ms(uint32_t ms);
+void print_hex(uintptr_t value);
+void uint_to_hex(uintptr_t value, char *hex_str);
 

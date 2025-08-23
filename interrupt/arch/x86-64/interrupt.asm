@@ -1,101 +1,69 @@
-; Básicamente, acá tengo funciones que se encargan de orquestar llamados a los diferentes handlers de interrupciones.
-; Lo hago en asm porque la funcion flush requiere de lidt que me permite cargar el idt que hice en el alto nivel. 
-; Aparte, iret no existe en alto nivel y retornar con los registros puhseados al interrumpir corrompe todo
+; interrupt/arch/x86-64/interrupt.asm - IMPLEMENTACIÓN MÍNIMA Y FUNCIONAL
+BITS 64
 
-[bits 64]
+; Variables globales
+extern isr_handler
 
-global isr_default
-global isr_page_fault
-global idt_flush
-global timer_stub
+; Macro para crear stubs sin error code
+%macro ISR_NOERRCODE 1
+global isr_stub_%1
+isr_stub_%1:
+    cli                     ; Deshabilitar interrupciones
+    push qword 0           ; Error code dummy
+    push qword %1          ; Número de interrupción
+    jmp isr_common_stub
+%endmacro
 
-extern idt_flush
-extern page_fault_handler_x64
-extern default_interrupt_handler
-extern time_handler
+; Macro para crear stubs con error code
+%macro ISR_ERRCODE 1
+global isr_stub_%1
+isr_stub_%1:
+    cli                     ; Deshabilitar interrupciones
+    push qword %1          ; Número de interrupción
+    jmp isr_common_stub
+%endmacro
 
-idt_flush:
-    mov  rax, [rsp+8] ; parámetro pasado (el puntero a idt_ptr, que también es un puntero)
-    lidt [rax]        ; cargo la idt usando la memo adrss de su puntero
-    ret               ; vuelvo a alto nivel
+; Crear todos los stubs
+ISR_NOERRCODE 0   ; Divide by zero
+ISR_NOERRCODE 1   ; Debug
+ISR_NOERRCODE 2   ; Non-maskable interrupt
+ISR_NOERRCODE 3   ; Breakpoint
+ISR_NOERRCODE 4   ; Overflow
+ISR_NOERRCODE 5   ; Bound range exceeded
+ISR_NOERRCODE 6   ; Invalid opcode
+ISR_NOERRCODE 7   ; Device not available
+ISR_ERRCODE 8     ; Double fault
+ISR_NOERRCODE 9   ; Coprocessor segment overrun
+ISR_ERRCODE 10    ; Invalid TSS
+ISR_ERRCODE 11    ; Segment not present
+ISR_ERRCODE 12    ; Stack segment fault
+ISR_ERRCODE 13    ; General protection fault
+ISR_ERRCODE 14    ; Page fault
+ISR_NOERRCODE 15  ; Reserved
+ISR_NOERRCODE 16  ; x87 FPU error
+ISR_ERRCODE 17    ; Alignment check
+ISR_NOERRCODE 18  ; Machine check
+ISR_NOERRCODE 19  ; SIMD FPU error
+ISR_NOERRCODE 20  ; Virtualization error
+ISR_NOERRCODE 21  ; Reserved
+ISR_NOERRCODE 22  ; Reserved
+ISR_NOERRCODE 23  ; Reserved
+ISR_NOERRCODE 24  ; Reserved
+ISR_NOERRCODE 25  ; Reserved
+ISR_NOERRCODE 26  ; Reserved
+ISR_NOERRCODE 27  ; Reserved
+ISR_NOERRCODE 28  ; Reserved
+ISR_NOERRCODE 29  ; Reserved
+ISR_NOERRCODE 30  ; Security exception
+ISR_NOERRCODE 31  ; Reserved
 
-isr_template: ; Es para testear el tema del byte que quiero mostrar por consola
-    ; Guardar registros en 64-bit
-    push rax
-    push rcx
-    push rdx
-    push rbx
-    push rbp
-    push rsi
-    push rdi
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
-    push qword 14                   ; la idea es loggear este PF.
-    call default_interrupt_handler
-    add  rsp, 8
-    ; Restaurar registros
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rdi
-    pop rsi
-    pop rbp
-    pop rbx
-    pop rdx
-    pop rcx
-    pop rax
-    iretq
+; IRQs
+ISR_NOERRCODE 32  ; Timer
+ISR_NOERRCODE 33  ; Keyboard
 
-isr_default:
-    ; Guardar registros en 64-bit
-    push rax
-    push rcx
-    push rdx
-    push rbx
-    push rbp
-    push rsi
-    push rdi
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
-    call  default_interrupt_handler ; Llama a la funcion en C para manejar la interrupcion normal
-    ; Restaurar registros
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rdi
-    pop rsi
-    pop rbp
-    pop rbx
-    pop rdx
-    pop rcx
-    pop rax
-    iretq                           ; Retorna de la interrupción (especial, no ret normal)
-
-isr_page_fault:
-    ; NO hacer add rsp, 8 aquí - el error code lo necesita el handler
-    ; Guardar registros en 64-bit
+; Stub común para todas las interrupciones
+isr_common_stub:
+    ; Guardar todos los registros
     push rax
     push rcx
     push rdx
@@ -112,13 +80,10 @@ isr_page_fault:
     push r14
     push r15
     
-    ; Obtener error code y fault address
-    mov rdi, [rsp + 8*16]  ; Error code está en el stack
-    mov rsi, cr2           ; Fault address está en CR2
+    ; Llamar al handler C
+    mov rdi, [rsp + 120]   ; Obtener número de interrupción
+    call isr_handler
     
-    call page_fault_handler_x64
-    ; Limpiar error code DESPUÉS del handler
-    add  rsp, 8
     ; Restaurar registros
     pop r15
     pop r14
@@ -135,73 +100,16 @@ isr_page_fault:
     pop rdx
     pop rcx
     pop rax
+    
+    ; Limpiar error code y número de interrupción
+    add rsp, 16
+    
+    ; Restaurar interrupciones y retornar
+    sti
     iretq
 
-timer_stub: ; lo tengo que hacer porque la cpu no sabe hacer iret en C
-    ; Guardar registros en 64-bit
-    push rax
-    push rcx
-    push rdx
-    push rbx
-    push rbp
-    push rsi
-    push rdi
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
-    call time_handler
-    ; Restaurar registros
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rdi
-    pop rsi
-    pop rbp
-    pop rbx
-    pop rdx
-    pop rcx
-    pop rax
-    iretq
-
-
-; Al entrar a la interrupción, CPU hace automáticamente:
-;pushf        ; Guarda EFLAGS (incluyendo IF = interrupt flag)
-;cli          ; Deshabilita interrupciones (IF = 0)
-;push cs      ; Guarda segmento
-;push eip     ; Guarda posición actual
-;CON error code: 8, 10, 11, 12, 13, 14, 17, 21
-;SIN error code: Todas las demás
-
-;el iret me popea todos esos datos desde el momento en que finaliza la interrupcion
-;iret
-; CPU hace internamente:
-; pop eip       ; eip = [esp], esp += 4
-; pop cs        ; cs = [esp], esp += 4  
-; pop eflags    ; eflags = [esp], esp += 4
-;
-;
-;al momento de hacer iret con errores
-;iret
-; CPU hace internamente:
-; pop eip       ; eip = [esp], esp += 4
-; pop cs        ; cs = [esp], esp += 4  
-; pop eflags    ; eflags = [esp], esp += 4 
-;
-; Stack después de una interrupción con error code:
-;
-;ESP+12 -> [eflags ]  (4 bytes)
-;ESP+8  -> [cs     ]  (4 bytes)  
-;ESP+4  -> [eip    ]  (4 bytes) <- ESP debería apuntar acá
-;ESP+0  -> [error  ]  (4 bytes) <- ESP apunta aquí
-;
-;La idea es correrlo 4 bytes "arriba" para que el puntero de pila apunte al instruction pointer como debe ser.
+; Función para cargar IDT
+global idt_load
+idt_load:
+    lidt [rdi]    ; RDI contiene el puntero al IDT
+    ret

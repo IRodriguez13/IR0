@@ -110,6 +110,8 @@ typedef struct {
     uint32_t st_gid;
     uint32_t st_rdev;
     uint64_t st_size;
+    uint32_t st_blksize;
+    uint64_t st_blocks;
     time_t st_atime;
     time_t st_mtime;
     time_t st_ctime;
@@ -141,6 +143,14 @@ typedef struct vfs_inode
     uint32_t links;       // Hard link count
     void *fs_data;        // Filesystem-specific data
     void *private_data;   // Private data for this inode
+    
+    // Additional fields for file operations
+    uint32_t start_sector; // Starting sector for file data
+    uint32_t file_offset;  // Current file offset
+    uint64_t modify_time;  // Modification time
+    uint64_t access_time;  // Access time
+    uint64_t create_time;  // Creation time
+    uint32_t inode_number; // Inode number
 } vfs_inode_t;
 
 // File descriptor structure
@@ -238,7 +248,9 @@ int vfs_rmdir(const char *path);
 
 // Inode operations
 int vfs_lookup(const char *path, vfs_inode_t **inode);
+vfs_inode_t *vfs_get_inode(const char *path);
 int vfs_create(const char *path, vfs_file_type_t type);
+int vfs_create_inode(const char *path, vfs_file_type_t type);
 int vfs_unlink(const char *path);
 
 // Mount operations

@@ -16,7 +16,7 @@ The Architecture Subsystem provides architecture-specific implementations and ab
   - **idt.h**: Common interrupt descriptor table definitions
 
 #### 2. x86-32 Architecture (`x86-32/`)
-- **Purpose**: Complete x86-32 implementation
+- **Purpose**: x86-32 implementation
 - **Features**:
   - **Boot Assembly**: `boot_x86.asm` - 32-bit boot sequence
   - **Architecture Code**: `arch_x86.c/h` - x86-32 specific functions
@@ -25,7 +25,7 @@ The Architecture Subsystem provides architecture-specific implementations and ab
   - **GRUB Configuration**: `grub.cfg` - Bootloader configuration
 
 #### 3. x86-64 Architecture (`x86-64/`)
-- **Purpose**: Complete x86-64 implementation
+- **Purpose**: x86-64 implementation
 - **Features**:
   - **Boot Assembly**: `boot_x64.asm` - 64-bit boot sequence
   - **Architecture Code**: `arch_x64.c/h` - x86-64 specific functions
@@ -392,6 +392,21 @@ else ifeq ($(ARCH),x86-64)
 endif
 ```
 
+### Current Status
+
+#### Working Features
+- **Dual Architecture Support**: Both x86-32 and x86-64 compile and boot
+- **Basic Paging**: Identity mapping and page table setup
+- **Interrupt System**: IDT setup and basic interrupt handling
+- **Boot Process**: Working boot sequences for both architectures
+- **Memory Layout**: Proper kernel and user space separation
+
+#### Development Areas
+- **Advanced Paging**: On-demand paging and page fault handling
+- **Memory Protection**: User/kernel space protection
+- **Performance Optimization**: Architecture-specific optimizations
+- **ARM Support**: Implementation for ARM32 and ARM64
+
 ---
 
 ## Español
@@ -410,7 +425,7 @@ El Subsistema de Arquitectura proporciona implementaciones y abstracciones espec
   - **idt.h**: Definiciones comunes de tabla de descriptores de interrupción
 
 #### 2. Arquitectura x86-32 (`x86-32/`)
-- **Propósito**: Implementación completa de x86-32
+- **Propósito**: Implementación de x86-32
 - **Características**:
   - **Assembly de Boot**: `boot_x86.asm` - Secuencia de boot de 32 bits
   - **Código de Arquitectura**: `arch_x86.c/h` - Funciones específicas de x86-32
@@ -419,7 +434,7 @@ El Subsistema de Arquitectura proporciona implementaciones y abstracciones espec
   - **Configuración GRUB**: `grub.cfg` - Configuración del bootloader
 
 #### 3. Arquitectura x86-64 (`x86-64/`)
-- **Propósito**: Implementación completa de x86-64
+- **Propósito**: Implementación de x86-64
 - **Características**:
   - **Assembly de Boot**: `boot_x64.asm` - Secuencia de boot de 64 bits
   - **Código de Arquitectura**: `arch_x64.c/h` - Funciones específicas de x86-64
@@ -785,3 +800,18 @@ else ifeq ($(ARCH),x86-64)
     KERNEL_BASE = 0xFFFFFFFF80000000
 endif
 ```
+
+### Estado Actual
+
+#### Características Funcionando
+- **Soporte Dual de Arquitectura**: Tanto x86-32 como x86-64 compilan y bootean
+- **Paginación Básica**: Mapeo de identidad y configuración de tablas de páginas
+- **Sistema de Interrupciones**: Configuración IDT y manejo básico de interrupciones
+- **Proceso de Boot**: Secuencias de boot funcionando para ambas arquitecturas
+- **Layout de Memoria**: Separación apropiada de espacio kernel y usuario
+
+#### Áreas de Desarrollo
+- **Paginación Avanzada**: Paginación bajo demanda y manejo de page faults
+- **Protección de Memoria**: Protección de espacio usuario/kernel
+- **Optimización de Rendimiento**: Optimizaciones específicas por arquitectura
+- **Soporte ARM**: Implementación para ARM32 y ARM64

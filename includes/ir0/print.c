@@ -55,6 +55,13 @@ void putchar(char c)
     {
         cursor_x = 0;
     }
+    else if (c == '\b') // backspace - retroceder cursor
+    {
+        if (cursor_x > 0)
+        {
+            cursor_x--;
+        }
+    }
     else if (c >= ' ') // Sólo acepta Caracteres imprimibles ASCII 32 en adelante (los anteriores son corruptos para la impresion).
     {
         putchar_at(c, current_color, cursor_x, cursor_y);
@@ -169,53 +176,84 @@ void print_hex64(uint64_t val)
     print(buffer);
 }
 
+void print_hex32(uint32_t val)
+{
+    char buffer[9];
+    for (int i = 0; i < 8; i++)
+    {
+        uint8_t nibble = (val >> ((7 - i) * 4)) & 0xF;
+        buffer[i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
+    }
+    buffer[8] = '\0';
+    print(buffer);
+}
+
+void print_hex8(uint8_t val)
+{
+    char buffer[3];
+    for (int i = 0; i < 2; i++)
+    {
+        uint8_t nibble = (val >> ((1 - i) * 4)) & 0xF;
+        buffer[i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
+    }
+    buffer[2] = '\0';
+    print(buffer);
+}
+
 void print_uint64(uint64_t num)
 {
     char buffer[21]; // Máximo 20 dígitos para uint64_t + null terminator
     int index = 0;
-    
+
     // Caso especial para 0
-    if (num == 0) {
+    if (num == 0)
+    {
         print("0");
         return;
     }
-    
+
     // Convertir a string (en orden inverso)
-    while (num > 0) {
+    while (num > 0)
+    {
         buffer[index++] = '0' + (num % 10);
         num /= 10;
     }
-    
+
     // Imprimir en orden correcto
-    for (int i = index - 1; i >= 0; i--) {
+    for (int i = index - 1; i >= 0; i--)
+    {
         putchar(buffer[i]);
     }
 }
 
 void print_int32(int32_t num)
 {
-    if (num < 0) {
+    if (num < 0)
+    {
         putchar('-');
         num = -num;
     }
-    
+
     char buffer[12]; // Máximo 11 dígitos para int32_t + null terminator
     int index = 0;
-    
+
     // Caso especial para 0
-    if (num == 0) {
+    if (num == 0)
+    {
         print("0");
         return;
     }
-    
+
     // Convertir a string (en orden inverso)
-    while (num > 0) {
+    while (num > 0)
+    {
         buffer[index++] = '0' + (num % 10);
         num /= 10;
     }
-    
+
     // Imprimir en orden correcto
-    for (int i = index - 1; i >= 0; i--) {
+    for (int i = index - 1; i >= 0; i--)
+    {
         putchar(buffer[i]);
     }
 }
@@ -224,21 +262,24 @@ void print_uint32(uint32_t num)
 {
     char buffer[11]; // Máximo 10 dígitos para uint32_t + null terminator
     int index = 0;
-    
+
     // Caso especial para 0
-    if (num == 0) {
+    if (num == 0)
+    {
         print("0");
         return;
     }
-    
+
     // Convertir a string (en orden inverso)
-    while (num > 0) {
+    while (num > 0)
+    {
         buffer[index++] = '0' + (num % 10);
         num /= 10;
     }
-    
+
     // Imprimir en orden correcto
-    for (int i = index - 1; i >= 0; i--) {
+    for (int i = index - 1; i >= 0; i--)
+    {
         putchar(buffer[i]);
     }
 }
@@ -251,4 +292,27 @@ void delay_ms(uint32_t ms)
     {
         __asm__ volatile("nop");
     }
+}
+
+// Función para convertir uint a hex string
+void uint_to_hex(uintptr_t value, char *hex_str)
+{
+    char hex_chars[] = "0123456789ABCDEF";
+    int i = 0;
+
+    // Convertir a hex
+    for (int j = 7; j >= 0; j--)
+    {
+        uint8_t nibble = (value >> (j * 4)) & 0xF;
+        hex_str[i++] = hex_chars[nibble];
+    }
+    hex_str[i] = '\0';
+}
+
+// Función para imprimir valores hexadecimales
+void print_hex(uintptr_t value)
+{
+    char hex_str[20];
+    uint_to_hex(value, hex_str);
+    print(hex_str);
 }
