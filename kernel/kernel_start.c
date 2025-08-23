@@ -440,9 +440,8 @@ void main(void)
     }
 
     // SHELL INTERACTIVO MEJORADO
-    print_success("[OK] Starting interactive shell...\n");
     print_success("==========================================\n");
-    print_success("IR0 Kernel v1.0 - All subsystems active\n");
+    print_success("[OK] Starting interactive shell...\n");
     print_success("==========================================\n");
 
     // Iniciar shell interactivo
