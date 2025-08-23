@@ -147,7 +147,8 @@
 #define EHWPOISON 133
 
 // System call structure
-typedef struct {
+typedef struct 
+{
     uint64_t arg1;
     uint64_t arg2;
     uint64_t arg3;
@@ -160,7 +161,8 @@ typedef struct {
 int64_t syscall(uint64_t number, syscall_args_t *args);
 
 // Helper function to print strings
-void print_string(const char *str) {
+void print_string(const char *str) 
+{
     syscall_args_t args;
     args.arg1 = STDOUT_FILENO;
     args.arg2 = (uint64_t)str;
@@ -170,19 +172,22 @@ void print_string(const char *str) {
 }
 
 // Helper function to print newline
-void print_newline() {
+void print_newline() 
+{
     print_string("\n");
 }
 
 // Helper function to print error message
-void print_error(const char *message) {
+void print_error(const char *message) 
+{
     print_string("ERROR: ");
     print_string(message);
     print_newline();
 }
 
 // Helper function to print success message
-void print_success(const char *message) {
+void print_success(const char *message) 
+{
     print_string("SUCCESS: ");
     print_string(message);
     print_newline();
@@ -303,7 +308,9 @@ void test_mkdir_ls() {
 }
 
 // Entry point
-void _start() {
+void _start() 
+{
+    
     test_mkdir_ls();
     
     // Exit with success
