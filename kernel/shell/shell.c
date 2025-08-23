@@ -4,12 +4,12 @@
 #include <ir0/panic/panic.h>
 #include <string.h>
 #include <ir0/stdbool.h>
-#include <bump_allocator.h>  // Usar bump_allocator directamente
+#include <bump_allocator.h>
 #include <process/process.h>
 #include <syscalls/syscalls.h>
 #include <vfs.h>
 #include <vfs_simple.h>
-#include <IO/ps2.h>
+#include <ps2.h>
 #include <stdarg.h>
 
 // Declaraciones externas para el sistema de interrupciones de teclado
@@ -28,7 +28,8 @@ static char shell_read_char(void)
     {
         // Wait for character - busy wait instead of hlt to avoid issues
         for (volatile int i = 0; i < 1000; i++)
-        { /* busy wait */
+        { 
+            /* busy wait */
         }
     }
 
