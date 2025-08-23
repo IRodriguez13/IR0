@@ -1,6 +1,6 @@
 #include "ps2.h"
-#include "../../includes/ir0/print.h"
-#include "../../includes/ir0/panic/panic.h"
+#include <print.h>
+#include <panic/panic.h>
 #include <string.h>
 
 // Global variables
@@ -31,7 +31,8 @@ static const char scancode_to_ascii_shift[] = {
 };
 
 // I/O functions
-static inline void outb(uint16_t port, uint8_t value) {
+static inline void outb(uint16_t port, uint8_t value) 
+{
     __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
