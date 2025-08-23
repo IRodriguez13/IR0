@@ -1,6 +1,10 @@
 # IR0 Kernel
 
+If you see some "interesting" comments around this docs make me know it in <ivanrwcm25@gmail.com>. i generate docs with ai :--)
+
 ## 🚀 Current Status (v0.0.1 pre-rc)
+
+- You can also watch out the IR0 wiki <https://ir0-wiki.netlify.app/>.
 
 **STABLE & FUNCTIONAL** - The kernel compiles and runs successfully on both x86-32 and x86-64 architectures. Core subsystems are operational with a solid foundation for further development.
 
