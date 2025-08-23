@@ -9,7 +9,7 @@
 #include <syscalls/syscalls.h>
 #include <vfs.h>
 #include <vfs_simple.h>
-#include <IO/ps2.h>
+#include <ps2.h>
 #include <stdarg.h>
 
 // Declaraciones externas para el sistema de interrupciones de teclado
