@@ -2,16 +2,17 @@
 
 #include "task.h"
 #include "scheduler.h"
-#include "../../memory/memo_interface.h"
-#include <print.h>
-#include <panic/panic.h>
+#include <bump_allocator.h>
+#include <ir0/print.h>
+#include <ir0/panic/panic.h>
+#include <arch_interface.h>
 #include <string.h>
 
 // ===============================================================================
 // VARIABLES GLOBALES
 // ===============================================================================
 
-static task_t *idle_task = NULL;
+task_t *idle_task = NULL;
 static uint32_t next_pid = 1;
 static task_t *task_list = NULL;
 
@@ -23,18 +24,15 @@ task_t *current_running_task = NULL;
 // ===============================================================================
 
 // Función que ejecuta el idle task - simplemente hace HLT
-static void idle_task_function(void *arg)
+void idle_task_function(void *arg)
 {
     (void)arg; // Evitar warning de parámetro no usado
     
     // Función simple que solo hace HLT
-    asm volatile("hlt");
+    cpu_wait();
     
-    // Nunca debería llegar aquí
-    for (;;)
-    {
-        asm volatile("hlt");
-    }
+    // Si llega acá, a hacer noni.
+    cpu_relax();
 }
 
 // ===============================================================================

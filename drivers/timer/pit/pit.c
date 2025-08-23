@@ -1,5 +1,8 @@
 // drivers/timer/pit/pit.c - VERSIÓN ESTABLE
 #include "pit.h"
+
+// Variable global para ticks del PIT
+uint64_t pit_ticks = 0;
 #include "../../arch/common/idt.h"
 #include <print.h>
 #include <panic/panic.h>

@@ -101,6 +101,14 @@ typedef struct process
     // Archivos y recursos
     int open_files[16];    // File descriptors abiertos
     uintptr_t working_dir; // Directorio de trabajo (inode)
+    
+    // User/Group management
+    uint32_t uid;          // User ID
+    uint32_t gid;          // Group ID
+    
+    // Memory management
+    uintptr_t heap_break;  // Current heap break
+    uintptr_t next_mmap_addr; // Next mmap address
 
     // Señales
     uint32_t signal_mask;     // Máscara de señales bloqueadas
