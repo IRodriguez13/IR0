@@ -101,7 +101,7 @@ void main(void)
         log_fatal("KERNEL", "Memory mapping verification failed");
         panic("Memory mapping verification failed");
     }
-
+    
     // Initialize TSS for x86-64 (needed for proper interrupt handling)
     tss_init_x64();
     log_info("KERNEL", "TSS initialized");
@@ -168,10 +168,10 @@ void main(void)
 
     // Banner de sistema listo
     print_colored("╔══════════════════════════════════════════════════════════════╗\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    print_colored("║                        SYSTEM READY                              ║\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("║                        SYSTEM READY                          ║\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     print_colored("║                 All subsystems initialized                   ║\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     print_colored("╚══════════════════════════════════════════════════════════════╝\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    delay_ms(1500);
+    delay_ms(2500);
 
     log_info("KERNEL", "Starting command shell");
 

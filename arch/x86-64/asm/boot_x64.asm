@@ -9,6 +9,7 @@ multiboot_header:
     dd 0x00000000          ; Flags (no special requirements)
     dd -(0x1BADB002 + 0x00000000) ; Checksum
 
+
 section .text
 global _start
 extern kmain_x64
@@ -20,11 +21,6 @@ _start:
     ; Verificar multiboot
     cmp eax, 0x2BADB002    ; Magic number de multiboot
     jne .no_multiboot
-
-    ; Log inicial en VGA
-    mov dword [0xb8000], 0x0f420f49  ; "IB" en blanco sobre azul
-    mov dword [0xb8004], 0x0f4f0f52  ; "RO" en blanco sobre azul
-    mov dword [0xb8008], 0x0f200f20  ; "  " en blanco sobre azul
 
     ; Configurar paginación
     call setup_paging
@@ -56,6 +52,7 @@ _start:
     mov dword [0xb8004], 0x4f3a4f52  ; "R:" en rojo
     cli
     hlt
+    jmp .no_multiboot
 
 ; ===============================================================================
 ; Modo 64-bit
