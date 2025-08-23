@@ -22,4 +22,9 @@ void keyboard_init(void);
 // Función de traducción de scancodes
 char translate_scancode(uint8_t sc);
 
+// Sistema de despertar del idle
+void set_idle_mode(int is_idle);
+int is_in_idle_mode(void);
+void wakeup_from_idle(void);
+
 #endif // KEYBOARD_H
