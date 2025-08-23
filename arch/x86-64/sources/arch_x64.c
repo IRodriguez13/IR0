@@ -1,9 +1,29 @@
 // arch/x86-64/sources/arch_x64.c - SIMPLIFICADO
-#include "../../kernel/kernel_start.h"
-#include "../../common/arch_interface.h"
-#include "../../includes/ir0/print.h"
+#include <kernel_start.h>
+#include <arch_interface.h>
+#include <ir0/print.h>
 #include "arch_x64.h"
-#include <panic/panic.h>
+#include <ir0/panic/panic.h>
+
+// Implementaciones de funciones de I/O
+void outb(uint16_t port, uint8_t value) 
+{
+    __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+uint8_t inb(uint16_t port) 
+{
+    uint8_t value;
+
+    __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
+    
+    return value;
+}
+
+void cpu_wait(void) 
+{
+    __asm__ volatile("hlt");
+}
 
 void kmain_x64(void)
 {

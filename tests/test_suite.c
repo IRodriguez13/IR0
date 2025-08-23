@@ -2,7 +2,7 @@
 #include "test_suite.h"
 #include "../includes/ir0/print.h"
 #include "../includes/string.h"
-#include "../memory/heap_allocator.h"
+#include <heap_allocator.h>
 #include "../fs/vfs.h"
 
 // ===============================================================================

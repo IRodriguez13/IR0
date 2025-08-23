@@ -3,19 +3,19 @@
 ## English
 
 ### Overview
-The File System Subsystem provides a comprehensive file system implementation with the IR0FS filesystem and a Virtual File System (VFS) layer. It supports advanced features like journaling, compression, integrity checks, and large file support up to 1PB.
+The File System Subsystem provides a filesystem framework for the IR0 kernel with the IR0FS filesystem structure and a Virtual File System (VFS) layer. It includes basic filesystem functionality with a framework for advanced features like journaling, compression, and integrity checks.
 
 ### Key Components
 
 #### 1. IR0FS - File System (`ir0fs.c/h`)
-- **Purpose**: Production-level filesystem with advanced features
+- **Purpose**: Filesystem structure with framework for advanced features
 - **Features**:
-  - **Journaling**: Atomic transactions for crash recovery
-  - **Multi-Algorithm Compression**: LZ4, ZSTD, LZMA with automatic selection
-  - **Integrity Checks**: CRC32 checksums per block
-  - **Large File Support**: Up to 1PB (Petabyte) files
-  - **High Capacity**: 1,000,000 files per filesystem
-  - **Advanced Features**: Defragmentation, health monitoring, automatic optimization
+  - **Journaling Framework**: Structure for atomic transactions and crash recovery
+  - **Compression Framework**: Framework for multi-algorithm compression (LZ4, ZSTD, LZMA)
+  - **Integrity Framework**: Framework for CRC32 checksums per block
+  - **Large File Support**: Framework for files up to 1PB
+  - **High Capacity**: Framework for 1,000,000 files per filesystem
+  - **Advanced Features**: Framework for defragmentation, health monitoring, optimization
 
 #### 2. Virtual File System (`vfs.c/h`)
 - **Purpose**: Abstraction layer for multiple filesystem types
@@ -38,9 +38,9 @@ The File System Subsystem provides a comprehensive file system implementation wi
 #### 4. File System Tools (`tools/`)
 - **Purpose**: Utilities for filesystem management
 - **Features**:
-  - Filesystem creation and formatting
-  - Health checking and repair
-  - Performance analysis
+  - Filesystem creation and formatting framework
+  - Health checking and repair framework
+  - Performance analysis framework
   - Debugging tools
 
 ### IR0FS Technical Specifications
@@ -49,48 +49,48 @@ The File System Subsystem provides a comprehensive file system implementation wi
 ```
 Superblock (4KB)
 ├── Filesystem metadata
-├── Journal information
-├── Compression settings
-└── Integrity checksums
+├── Journal information framework
+├── Compression settings framework
+└── Integrity checksums framework
 
 Inode Table
 ├── File metadata (256 bytes per inode)
-├── Extended attributes
-├── Compression information
-└── Checksum data
+├── Extended attributes framework
+├── Compression information framework
+└── Checksum data framework
 
 Data Blocks (4KB each)
 ├── File data
 ├── Directory entries (64 bytes each)
-├── Journal entries
-└── Compression metadata
+├── Journal entries framework
+└── Compression metadata framework
 ```
 
-#### Advanced Features
+#### Framework Features
 
-1. **Journaling System**
-   - Atomic transactions for data consistency
-   - Automatic crash recovery
-   - Logging with rollback capability
-   - Post-crash integrity verification
+1. **Journaling System Framework**
+   - Structure for atomic transactions
+   - Framework for automatic crash recovery
+   - Logging with rollback capability framework
+   - Post-crash integrity verification framework
 
-2. **Intelligent Compression**
-   - **LZ4**: Maximum speed (2:1 compression)
-   - **ZSTD**: Balanced speed/compression (3:1)
-   - **LZMA**: Maximum compression (10:1)
-   - Automatic algorithm selection based on content type
+2. **Compression Framework**
+   - **LZ4**: Framework for maximum speed (2:1 compression)
+   - **ZSTD**: Framework for balanced speed/compression (3:1)
+   - **LZMA**: Framework for maximum compression (10:1)
+   - Framework for automatic algorithm selection
 
-3. **Data Integrity**
-   - CRC32 checksums per block
-   - Automatic verification on read
-   - Corruption detection
-   - Automatic recovery when possible
+3. **Data Integrity Framework**
+   - CRC32 checksums framework per block
+   - Framework for automatic verification on read
+   - Corruption detection framework
+   - Framework for automatic recovery
 
-4. **Scalability**
-   - Files up to 1PB
-   - 1,000,000 files per filesystem
-   - Automatic defragmentation
-   - Access optimization
+4. **Scalability Framework**
+   - Framework for files up to 1PB
+   - Framework for 1,000,000 files per filesystem
+   - Framework for automatic defragmentation
+   - Framework for access optimization
 
 ### VFS Architecture
 
@@ -135,18 +135,18 @@ int vfs_readdir(int fd, struct dirent* entry);
 
 ### Performance Characteristics
 
-#### IR0FS Performance
-- **Read Speed**: Up to 500MB/s (depending on compression)
-- **Write Speed**: Up to 300MB/s (with journaling)
-- **Compression Ratio**: 2:1 to 10:1 (content dependent)
-- **Journal Recovery**: < 1 second for 1GB filesystem
-- **Defragmentation**: Automatic background process
+#### IR0FS Performance Framework
+- **Read Speed**: Framework for up to 500MB/s
+- **Write Speed**: Framework for up to 300MB/s
+- **Compression Ratio**: Framework for 2:1 to 10:1
+- **Journal Recovery**: Framework for < 1 second recovery
+- **Defragmentation**: Framework for automatic background process
 
 #### VFS Performance
-- **Path Resolution**: O(log n) complexity
-- **File Operations**: Optimized for common patterns
+- **Path Resolution**: O(log n) complexity framework
+- **File Operations**: Framework for optimized common patterns
 - **Memory Usage**: Minimal overhead per mount
-- **Cache Efficiency**: Intelligent caching strategies
+- **Cache Efficiency**: Framework for intelligent caching strategies
 
 ### Configuration Options
 
@@ -159,7 +159,7 @@ struct ir0fs_config {
     uint32_t compression_level; // 0-9
     bool enable_journaling;     // true
     bool enable_compression;    // true
-    bool enable_checksums;      // true
+    bool enable_checksums;      // true;
 };
 ```
 
@@ -185,30 +185,46 @@ struct vfs_mount_options {
 - `EIO`: Input/output error
 - `EINVAL`: Invalid argument
 
-#### Recovery Mechanisms
-- Automatic journal recovery
-- Checksum verification
-- Defragmentation on corruption
-- Backup superblock usage
+#### Recovery Framework
+- Framework for automatic journal recovery
+- Framework for checksum verification
+- Framework for defragmentation on corruption
+- Framework for backup superblock usage
+
+### Current Status
+
+#### Working Features
+- **VFS Framework**: Basic filesystem abstraction layer
+- **IR0FS Structure**: Filesystem layout and metadata definitions
+- **Mount Point Management**: Basic filesystem mounting
+- **File Operations**: Basic file operation framework
+- **Directory Operations**: Basic directory operation framework
+
+#### Development Areas
+- **IR0FS Implementation**: Complete low-level filesystem functions
+- **Journaling**: Actual journaling implementation
+- **Compression**: Real compression algorithms
+- **Integrity Checks**: Actual checksum verification
+- **Performance Optimization**: Complete performance features
 
 ---
 
 ## Español
 
 ### Descripción General
-El Subsistema de Sistema de Archivos proporciona una implementación completa de sistema de archivos con el revolucionario sistema de archivos IR0FS y una capa de Sistema de Archivos Virtual (VFS). Soporta características avanzadas como journaling, compresión, verificaciones de integridad y soporte para archivos grandes de hasta 1PB.
+El Subsistema de Sistema de Archivos proporciona un framework de sistema de archivos para el kernel IR0 con la estructura del sistema de archivos IR0FS y una capa de Sistema de Archivos Virtual (VFS). Incluye funcionalidad básica de sistema de archivos con un framework para características avanzadas como journaling, compresión y verificaciones de integridad.
 
 ### Componentes Principales
 
-#### 1. IR0FS - Sistema de Archivos Revolucionario (`ir0fs.c/h`)
-- **Propósito**: Sistema de archivos de nivel producción con características avanzadas
+#### 1. IR0FS - Sistema de Archivos (`ir0fs.c/h`)
+- **Propósito**: Estructura de sistema de archivos con framework para características avanzadas
 - **Características**:
-  - **Journaling**: Transacciones atómicas para recuperación de fallos
-  - **Compresión Multi-Algoritmo**: LZ4, ZSTD, LZMA con selección automática
-  - **Verificaciones de Integridad**: Checksums CRC32 por bloque
-  - **Soporte para Archivos Grandes**: Hasta 1PB (Petabyte)
-  - **Alta Capacidad**: 1,000,000 archivos por filesystem
-  - **Características Avanzadas**: Defragmentación, monitoreo de salud, optimización automática
+  - **Framework de Journaling**: Estructura para transacciones atómicas y recuperación de fallos
+  - **Framework de Compresión**: Framework para compresión multi-algoritmo (LZ4, ZSTD, LZMA)
+  - **Framework de Integridad**: Framework para checksums CRC32 por bloque
+  - **Soporte para Archivos Grandes**: Framework para archivos de hasta 1PB
+  - **Alta Capacidad**: Framework para 1,000,000 archivos por filesystem
+  - **Características Avanzadas**: Framework para defragmentación, monitoreo de salud, optimización
 
 #### 2. Sistema de Archivos Virtual (`vfs.c/h`)
 - **Propósito**: Capa de abstracción para múltiples tipos de filesystem
@@ -231,9 +247,9 @@ El Subsistema de Sistema de Archivos proporciona una implementación completa de
 #### 4. Herramientas del Sistema de Archivos (`tools/`)
 - **Propósito**: Utilidades para gestión del filesystem
 - **Características**:
-  - Creación y formateo de filesystem
-  - Verificación de salud y reparación
-  - Análisis de rendimiento
+  - Framework de creación y formateo de filesystem
+  - Framework de verificación de salud y reparación
+  - Framework de análisis de rendimiento
   - Herramientas de debugging
 
 ### Especificaciones Técnicas de IR0FS
@@ -242,48 +258,48 @@ El Subsistema de Sistema de Archivos proporciona una implementación completa de
 ```
 Superblock (4KB)
 ├── Metadatos del filesystem
-├── Información del journal
-├── Configuración de compresión
-└── Checksums de integridad
+├── Framework de información del journal
+├── Framework de configuración de compresión
+└── Framework de checksums de integridad
 
 Tabla de Inodos
 ├── Metadatos de archivo (256 bytes por inodo)
-├── Atributos extendidos
-├── Información de compresión
-└── Datos de checksum
+├── Framework de atributos extendidos
+├── Framework de información de compresión
+└── Framework de datos de checksum
 
 Bloques de Datos (4KB cada uno)
 ├── Datos de archivo
 ├── Entradas de directorio (64 bytes cada una)
-├── Entradas del journal
-└── Metadatos de compresión
+├── Framework de entradas del journal
+└── Framework de metadatos de compresión
 ```
 
-#### Características Avanzadas
+#### Características de Framework
 
-1. **Sistema de Journaling**
-   - Transacciones atómicas para consistencia de datos
-   - Recuperación automática de fallos
-   - Logging con capacidad de rollback
-   - Verificación de integridad post-fallo
+1. **Framework de Sistema de Journaling**
+   - Estructura para transacciones atómicas
+   - Framework para recuperación automática de fallos
+   - Framework de logging con capacidad de rollback
+   - Framework de verificación de integridad post-fallo
 
-2. **Compresión Inteligente**
-   - **LZ4**: Máxima velocidad (2:1 compresión)
-   - **ZSTD**: Balance velocidad/compresión (3:1)
-   - **LZMA**: Máxima compresión (10:1)
-   - Selección automática de algoritmo según tipo de contenido
+2. **Framework de Compresión**
+   - **LZ4**: Framework para máxima velocidad (2:1 compresión)
+   - **ZSTD**: Framework para balance velocidad/compresión (3:1)
+   - **LZMA**: Framework para máxima compresión (10:1)
+   - Framework para selección automática de algoritmo
 
-3. **Integridad de Datos**
-   - Checksums CRC32 por bloque
-   - Verificación automática en lectura
-   - Detección de corrupción
-   - Recuperación automática cuando es posible
+3. **Framework de Integridad de Datos**
+   - Framework de checksums CRC32 por bloque
+   - Framework para verificación automática en lectura
+   - Framework de detección de corrupción
+   - Framework para recuperación automática
 
-4. **Escalabilidad**
-   - Archivos de hasta 1PB
-   - 1,000,000 archivos por filesystem
-   - Defragmentación automática
-   - Optimización de acceso
+4. **Framework de Escalabilidad**
+   - Framework para archivos de hasta 1PB
+   - Framework para 1,000,000 archivos por filesystem
+   - Framework para defragmentación automática
+   - Framework para optimización de acceso
 
 ### Arquitectura VFS
 
@@ -328,18 +344,18 @@ int vfs_readdir(int fd, struct dirent* entry);
 
 ### Características de Rendimiento
 
-#### Rendimiento de IR0FS
-- **Velocidad de Lectura**: Hasta 500MB/s (dependiendo de compresión)
-- **Velocidad de Escritura**: Hasta 300MB/s (con journaling)
-- **Ratio de Compresión**: 2:1 a 10:1 (dependiente del contenido)
-- **Recuperación de Journal**: < 1 segundo para filesystem de 1GB
-- **Defragmentación**: Proceso automático en background
+#### Framework de Rendimiento de IR0FS
+- **Velocidad de Lectura**: Framework para hasta 500MB/s
+- **Velocidad de Escritura**: Framework para hasta 300MB/s
+- **Ratio de Compresión**: Framework para 2:1 a 10:1
+- **Recuperación de Journal**: Framework para < 1 segundo de recuperación
+- **Defragmentación**: Framework para proceso automático en background
 
 #### Rendimiento de VFS
-- **Resolución de Rutas**: Complejidad O(log n)
-- **Operaciones de Archivo**: Optimizadas para patrones comunes
+- **Resolución de Rutas**: Framework de complejidad O(log n)
+- **Operaciones de Archivo**: Framework para patrones comunes optimizados
 - **Uso de Memoria**: Overhead mínimo por montaje
-- **Eficiencia de Cache**: Estrategias de cache inteligentes
+- **Eficiencia de Cache**: Framework para estrategias de cache inteligentes
 
 ### Opciones de Configuración
 
@@ -378,8 +394,24 @@ struct vfs_mount_options {
 - `EIO`: Error de entrada/salida
 - `EINVAL`: Argumento inválido
 
-#### Mecanismos de Recuperación
-- Recuperación automática de journal
-- Verificación de checksum
-- Defragmentación en corrupción
-- Uso de superblock de respaldo
+#### Framework de Recuperación
+- Framework para recuperación automática de journal
+- Framework para verificación de checksum
+- Framework para defragmentación en corrupción
+- Framework para uso de superblock de respaldo
+
+### Estado Actual
+
+#### Características Funcionando
+- **Framework VFS**: Capa básica de abstracción de sistema de archivos
+- **Estructura IR0FS**: Layout del sistema de archivos y definiciones de metadatos
+- **Gestión de Puntos de Montaje**: Montaje básico de sistemas de archivos
+- **Operaciones de Archivo**: Framework básico de operaciones de archivo
+- **Operaciones de Directorio**: Framework básico de operaciones de directorio
+
+#### Áreas de Desarrollo
+- **Implementación IR0FS**: Funciones completas de bajo nivel del sistema de archivos
+- **Journaling**: Implementación real de journaling
+- **Compresión**: Algoritmos reales de compresión
+- **Verificaciones de Integridad**: Verificación real de checksums
+- **Optimización de Rendimiento**: Características completas de rendimiento

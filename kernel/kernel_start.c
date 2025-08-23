@@ -1,9 +1,8 @@
-#include "kernel_start.h"
-#include <print.h>
-#include <panic/panic.h>
-#include <string.h>
+#include <ir0/kernel.h>
+#include <ir0/print.h>
+#include <ir0/logging.h>
+#include <ir0/stdbool.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include "../arch/common/arch_interface.h"
 #include "../arch/common/idt.h"
@@ -44,127 +43,237 @@ void main(void)
     print_colored("=== IR0 Kernel Starting ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     delay_ms(2000);
 
-    // 1. Inicializar IDT y sistema de interrupciones
-    print("Initializing interrupt system...\n");
-    idt_init();
-    print_success("Interrupt system initialized\n");
+    // SISTEMA DE I/O COMPLETO
+    print_success("[OK] Initializing I/O subsystem...\n");
+
+    // 1. PS/2 Keyboard
+    ps2_init();
+    print_success("[OK] PS/2 keyboard initialized\n");
+    
+    // Habilitar explícitamente IRQ1 (teclado) en el PIC
+    pic_unmask_irq(1);
+    print_success("[OK] Keyboard IRQ1 enabled in PIC\n");
+
+    // 2. PS/2 Mouse (si está disponible) - comentar por ahora
+    // if (ps2_mouse_init() == 0) {
+    //     print_success("[OK] PS/2 mouse initialized\n");
+    // } else {
+    //     print_warning("[WARN] PS/2 mouse not found\n");
+    // }
+
     delay_ms(1000);
 
-    // 2. Inicializar paginación
-    print("Initializing memory management...\n");
-#ifdef __x86_64__
-    init_paging_x64();
+    // SISTEMA DE ARCHIVOS BÁSICO
+    print_success("[OK] Initializing file system subsystem...\n");
+
+    // 1. ATA Disk Driver
+    ata_init();
+    print_success("[OK] ATA disk driver initialized\n");
+
+    // 2. VFS Simple (ya incluido en el build)
+    vfs_simple_init();
+    print_success("[OK] VFS Simple initialized\n");
+
+    delay_ms(1000);
+
+    // SISTEMA DE SCHEDULER CON DETECCIÓN AUTOMÁTICA
+    print_success("[OK] Initializing scheduler subsystem with auto-detection...\n");
     
-    // Verificar que el kernel esté mapeado correctamente
-    print("Verifying kernel memory mapping...\n");
-    extern int paging_verify_mapping(uint64_t virt_addr);
+    // Usar el sistema de detección automática de schedulers
+    extern int scheduler_cascade_init(void);
+    if (scheduler_cascade_init() != 0) {
+        print_error("[ERROR] Scheduler auto-detection failed!\n");
+        panic("Scheduler initialization failed");
+    }
     
-    // Verificar direcciones clave del kernel
-    uint64_t kernel_start = 0x100000;  // Donde se carga el kernel
-    uint64_t kernel_end = 0x200000;    // Aproximadamente 1MB después
+    print_success("[OK] Scheduler auto-detection completed\n");
     
-    int mapping_ok = 1;
-    for (uint64_t addr = kernel_start; addr < kernel_end; addr += 0x1000) {
-        if (!paging_verify_mapping(addr)) {
-            print_error("Memory not mapped at 0x");
-            print_hex64(addr);
-            print("\n");
-            mapping_ok = 0;
-            break;
+    delay_ms(1000);
+}
+
+static void enable_interrupts(void)
+{
+    print_success("[OK] Interrupt system ready\n");
+
+    // Delay for visual effect
+    delay_ms(1500);
+
+    // Habilitar interrupciones - AHORA CON STACK MAPEADO
+    __asm__ volatile("sti");
+    interrupts_enabled = true;
+
+    print_success("[OK] Global interrupts enabled\n");
+
+    // Delay for visual effect
+    delay_ms(1500);
+}
+
+// ===============================================================================
+// AUTHENTICATION INITIALIZATION
+// ===============================================================================
+
+static void init_auth_system(void)
+{
+    auth_config_t config;
+    config.max_attempts = 3;
+    config.lockout_time = 0;
+    config.require_password = false;
+    config.case_sensitive = true;
+    
+    if (auth_init(&config) != 0) {
+        print_error("[ERROR] Failed to initialize authentication system\n");
+        panic("Authentication system initialization failed");
+    }
+    
+    print_success("[OK] Authentication system initialized\n");
+}
+
+// ===============================================================================
+// USER SPACE PROCESS IMPLEMENTATION
+// ===============================================================================
+
+// Simple user space program that prints hello world
+static void user_program_entry(void *arg)
+{
+    (void)arg;
+    
+    // This would normally be in user space
+    // For now, we'll simulate it from kernel space
+    print_colored("🎉 USER SPACE PROCESS STARTED!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("Hello from user space process!\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("PID: ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    
+    // Get current process info
+    process_t *current = process_get_current();
+    if (current) {
+        print_uint32(current->pid);
+        print("\n");
+    }
+    
+    print_colored("User process running successfully!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    
+    // Simulate some work
+    for (int i = 0; i < 5; i++) {
+        print_colored("User process iteration: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+        print_uint32(i + 1);
+        print("\n");
+        
+        // Small delay
+        for (volatile int j = 0; j < 1000000; j++) {
+            __asm__ volatile("nop");
         }
     }
     
-    if (mapping_ok) {
-        print_success("Kernel memory mapping verified\n");
-    } else {
-        print_error("Kernel memory mapping failed!\n");
-        panic("Memory mapping verification failed");
+    print_colored("User process completed successfully!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    
+    // Exit the process
+    process_exit(0);
+}
+
+// Create and start the first user space process
+static void user_start(void)
+{
+    print_colored("🚀 Starting first user space process...\n", VGA_COLOR_MAGENTA, VGA_COLOR_BLACK);
+    
+    // Create the user process
+    process_t *user_process = process_create("user_program", user_program_entry, NULL);
+    if (!user_process) {
+        print_error("[ERROR] Failed to create user process\n");
+        return;
     }
     
-    // Initialize TSS for x86-64 (needed for proper interrupt handling)
-    print("Initializing TSS...\n");
-    tss_init_x64();
-    print_success("TSS initialized\n");
-#else
-    init_paging_x86();
-#endif
-    print_success("Memory management initialized\n");
-    delay_ms(1000);
-
-    // 3. Inicializar allocators
-    print("Initializing memory allocators...\n");
-    heap_allocator_init();
-    physical_allocator_init();
-    print_success("Memory allocators initialized\n");
-    delay_ms(1000);
-
-    // 4. Inicializar scheduler
-    print("Initializing task scheduler...\n");
-    scheduler_init();
-    print_success("Task scheduler initialized\n");
-    delay_ms(1000);
-
-    // 4.1. Inicializar sistema de procesos
-    print("Initializing process management...\n");
-    process_init();
-    print_success("Process management initialized\n");
-    delay_ms(1000);
-
-    // 4.2. Inicializar sistema de system calls
-    print("Initializing system call interface...\n");
-    syscalls_init();
-    print_success("System call interface initialized\n");
-    delay_ms(1000);
-
-    // 5. Inicializar timer system
-    print("Initializing timer system...\n");
-    init_clock();
-    print_success("Timer system initialized\n");
-    delay_ms(1000);
-
-    // 6. Inicializar VFS
-    print("Initializing virtual file system...\n");
-    vfs_init();
-    print_success("Virtual file system initialized\n");
-    delay_ms(1000);
-
-    // 7. MANTENER INTERRUPCIONES DESHABILITADAS (SOLUCIÓN RÁPIDA)
-    print("Keeping interrupts disabled for stability...\n");
-    // __asm__ volatile("sti");
-    print_success("Interrupts remain disabled (stable mode)\n");
-    delay_ms(1000);
-
-    print_colored("=== IR0 Kernel Ready - Starting Shell ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    delay_ms(2000);
-
-    // Initialize shell
-    shell_context_t shell_ctx;
-    shell_config_t shell_config;
+    print_colored("✅ User process created successfully!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("Process PID: ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    print_uint32(user_process->pid);
+    print("\n");
     
-    if (shell_init(&shell_ctx, &shell_config) != 0) {
-        print_error("Failed to initialize shell");
-        panic("Shell initialization failed");
+    // Add the process to the scheduler
+    task_t *user_task = create_task(user_program_entry, NULL, 5, 0);
+    if (!user_task) {
+        print_error("[ERROR] Failed to create user task\n");
+        return;
     }
     
-    // Run shell (this will return when shell is done)
-    int shell_result = shell_run(&shell_ctx, &shell_config);
+    // Add to scheduler
+    add_task(user_task);
     
-    if (shell_result == 0) {
-        print_success("Shell completed successfully \n");
-        print("Kernel continuing normal operation...\n");
-        
-        // Continue with normal kernel operation
-        // For now, just print a message and continue
-        print("Kernel is now in idle mode.\n");
-        print("All subsystems are running normally.\n");
-        
-        // Don't panic, just continue
-        cpu_wait();
-    } else {
-        print_error("Shell failed with error code: \n");
-        print_error("Kernel continuing without shell...\n");
-        
-        // Continue kernel operation even if shell fails
-        cpu_wait();
+    print_colored("✅ User process added to scheduler!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("🎯 User space transition ready!\n", VGA_COLOR_MAGENTA, VGA_COLOR_BLACK);
+}
+
+// Main kernel entry point (called from arch_x64.c)
+void main(void)
+{
+    // Mark kernel as running
+    kernel_running = true;
+
+    // Initialize kernel in order
+    early_init();
+    memory_init();
+
+    // Enable interrupts
+    enable_interrupts();
+
+    print_success("[OK] Kernel initialization completed successfully\n");
+
+    // Delay for visual effect
+    delay_ms(1500);
+
+    // SIMPLIFICADO: Solo pruebas básicas del heap
+    print_success("[OK] Testing basic heap functionality...\n");
+    delay_ms(1000);
+
+    // Test básico: kmalloc simple
+    void *ptr = kmalloc(64);
+    if (ptr)
+    {
+        print_success("[OK] Basic kmalloc(64) successful\n");
+        kfree(ptr);
+        print_success("[OK] Basic kfree() successful\n");
     }
+    else
+    {
+        print_error("[ERROR] Basic kmalloc failed\n");
+    }
+
+    delay_ms(1000);
+
+    // Main kernel loop
+    print_success("[OK] Kernel boot completed successfully\n");
+    
+    delay_ms(1000);
+
+    // AUTHENTICATION SYSTEM
+    print_success("[OK] Initializing authentication system...\n");
+    init_auth_system();
+    
+    // Kernel login - required before shell access
+    auth_result_t login_result = kernel_login();
+    if (login_result != AUTH_SUCCESS) {
+        // Login failed - system halted in kernel_login()
+        return;
+    }
+
+    // SHELL INTERACTIVO MEJORADO
+    print_success("==========================================\n");
+    print_success("[OK] Starting interactive shell...\n");
+    print_success("==========================================\n");
+
+    // Iniciar shell interactivo
+    shell_start();
+
+    // Cuando el shell termina, crear el primer proceso de user space
+    print_success("[OK] Shell exited, creating first user space process...\n");
+    print_success("==========================================\n");
+    print_success("IR0 Kernel - User Space Transition\n");
+    print_success("==========================================\n");
+
+    // Crear y iniciar el primer proceso de user space
+    user_start();
+
+    // Iniciar el scheduler
+    scheduler_start();
+    
+    // Ir al dispatch loop del scheduler (nunca retorna)
+    scheduler_dispatch_loop();
 }
