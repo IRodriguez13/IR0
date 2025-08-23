@@ -11,12 +11,13 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 ### ✅ Working Components
 - **✅ Dual Architecture Support**: x86-32 and x86-64 compilation and boot
 - **✅ Memory Management**: Basic paging, heap allocator, physical memory management
-- **✅ Interrupt System**: IDT setup, basic ISR handlers, TSS for x86-64
-- **✅ Process Management**: Process structure and state management framework
+- **✅ Interrupt System**: Complete IDT setup, PIC configuration, ISR handlers, TSS for x86-64
+- **✅ Process Management**: Process structure and state management framework with multiple schedulers
 - **✅ System Calls Interface**: POSIX-compatible system call definitions
 - **✅ Interactive Shell**: Basic shell with command parsing and execution
 - **✅ Context Switching**: Assembly implementation for both architectures
-- **✅ Timer System**: PIT timer support (currently active)
+- **✅ Timer System**: PIT, HPET, and LAPIC timer support
+- **✅ Hardware Drivers**: PS/2 keyboard, ATA storage, VGA display
 - **✅ String Library**: Complete freestanding implementation
 
 ## 🏗️ Architecture
@@ -27,12 +28,13 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 
 ### Core Subsystems
 - **Memory Management** - Basic paging, heap allocator, physical memory management
-- **Interrupt System** - IDT setup, ISR handlers, TSS configuration
+- **Interrupt System** - Complete IDT setup, PIC configuration, ISR handlers, TSS configuration
 - **File System** - VFS framework with IR0FS filesystem structure
-- **Process Management** - Process lifecycle framework with scheduler interface
+- **Process Management** - Process lifecycle framework with multiple scheduler algorithms
 - **System Calls** - POSIX-compatible interface definitions
-- **Interactive Shell** - Basic command-line interface
-- **Timer Drivers** - PIT (active), HPET and LAPIC support structure
+- **Interactive Shell** - Basic command-line interface with authentication
+- **Timer Drivers** - PIT, HPET, and LAPIC timer support
+- **Hardware Drivers** - PS/2 keyboard, ATA storage, VGA display drivers
 
 ## 📁 Project Structure
 
@@ -93,7 +95,7 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 
 ### Process Management Framework
 - **Process States**: NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD
-- **Scheduler Interface**: Framework for multiple scheduling algorithms
+- **Multiple Schedulers**: CFS (Completely Fair Scheduler), Priority-based, Round-Robin
 - **Context Switching**: Assembly implementation for both architectures
 - **Process Trees**: Hierarchical process management structure
 
@@ -108,6 +110,7 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **Command Parsing**: Basic command-line interface
 - **Built-in Commands**: help, info, version, ps, meminfo
 - **System Integration**: Access to kernel structures
+- **Authentication System**: Basic user authentication framework
 - **Error Handling**: Basic error reporting
 
 ### File System Framework
@@ -134,27 +137,28 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 ### ✅ Working Components
 - **Kernel Compilation**: Both x86-32 and x86-64 architectures
 - **Memory Management**: Basic memory management with identity mapping
-- **Interrupt Handling**: IDT setup with basic exception handling
-- **Timer System**: PIT timer active
+- **Interrupt Handling**: Complete IDT setup with PIC configuration and exception handling
+- **Timer System**: PIT, HPET, and LAPIC timer support
 - **VFS Framework**: Basic filesystem abstraction layer
-- **Process Management**: Process structure and state management
+- **Process Management**: Process structure and state management with multiple schedulers
 - **System Calls Interface**: POSIX-compatible definitions
-- **Interactive Shell**: Basic command-line interface
+- **Interactive Shell**: Basic command-line interface with authentication
 - **Context Switching**: Assembly implementation for both architectures
+- **Hardware Drivers**: PS/2 keyboard, ATA storage, VGA display
 - **String Functions**: Complete freestanding library
 
 ### 🎯 Development Status
 - **Foundation Complete**: Core kernel structure and basic functionality
 - **Architecture Support**: Both x86-32 and x86-64 working
 - **Memory Management**: Basic but functional memory system
-- **Interrupt System**: Basic interrupt handling operational
+- **Interrupt System**: Complete interrupt handling with PIC and multiple timer support
+- **Hardware Support**: PS/2 keyboard, ATA storage, and VGA display drivers operational
 
 ### ⚠️ Areas for Development
 - **File System Implementation**: IR0FS low-level functions need implementation
 - **Process Creation**: Real process spawning and execution
 - **System Call Handlers**: Specific implementations for system calls
-- **Keyboard Input**: For full shell interactivity
-- **Device Drivers**: Additional hardware support
+- **Additional Device Drivers**: USB, PCI, SATA support
 - **Networking**: Network stack implementation
 
 ## 🎯 Highlights
@@ -162,8 +166,10 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 ### Technical Achievements
 - **Dual Architecture Support**: Native support for both 32-bit and 64-bit
 - **Memory Management**: Functional paging and heap allocation
-- **Interrupt System**: Complete IDT with basic exception handling
+- **Interrupt System**: Complete IDT with PIC configuration and multiple timer support
 - **Context Switching**: Real assembly implementation for both architectures
+- **Hardware Drivers**: PS/2 keyboard, ATA storage, and VGA display support
+- **Multiple Schedulers**: CFS, Priority-based, and Round-Robin scheduling algorithms
 - **Freestanding Environment**: Complete C library implementation
 
 ### Development Approach
@@ -178,7 +184,7 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 1. **🎯 File System Implementation** (IR0FS low-level functions)
 2. **🎯 Process Creation** (real process spawning and management)
 3. **🎯 System Call Handlers** (complete implementations)
-4. **🎯 Keyboard Input** (for complete shell interactivity)
+4. **🎯 Additional Device Drivers** (USB, PCI, SATA support)
 
 ### Future Goals
 - **Networking Stack**: TCP/IP implementation
