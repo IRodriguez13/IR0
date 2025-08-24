@@ -1,10 +1,11 @@
 #include "pic.h"
 #include "io.h"
-#include "../../includes/ir0/print.h"
+#include <ir0/print.h>
 
 // Remapear PIC para 32-bit
 void pic_remap32(void) {
     uint8_t a1, a2;
+    (void)a1; (void)a2; // Variables not used in this implementation
 
     // Guardar máscaras originales
     a1 = inb(PIC1_DATA);
@@ -35,13 +36,12 @@ void pic_remap32(void) {
     // Máscara PIC2: 0xFF = 11111111 (deshabilitar todos)
     outb(PIC1_DATA, 0xFC);
     outb(PIC2_DATA, 0xFF);
-
-    print("PIC remapeado para 32-bit - IRQ0 (timer) y IRQ1 (teclado) habilitados\n");
 }
 
 // Remapear PIC para 64-bit
 void pic_remap64(void) {
     uint8_t a1, a2;
+    (void)a1; (void)a2; // Variables not used in this implementation
 
     // Guardar máscaras originales
     a1 = inb(PIC1_DATA);
@@ -72,8 +72,6 @@ void pic_remap64(void) {
     // Máscara PIC2: 0xFF = 11111111 (deshabilitar todos)
     outb(PIC1_DATA, 0xFC);
     outb(PIC2_DATA, 0xFF);
-
-    print("PIC remapeado para 64-bit - IRQ0 (timer) y IRQ1 (teclado) habilitados\n");
 }
 
 // Enviar EOI para 32-bit

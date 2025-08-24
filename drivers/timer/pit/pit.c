@@ -3,12 +3,12 @@
 
 // Variable global para ticks del PIT
 uint64_t pit_ticks = 0;
-#include "../../arch/common/idt.h"
+#include <arch/common/idt.h>
 #include <print.h>
 #include <panic/panic.h>
 #include <arch_interface.h> // Para outb
-#include "../../../includes/ir0/print.h"
-#include "../../../arch/x86-64/sources/arch_x64.h"
+#include <ir0/print.h>
+#include <arch/x86-64/sources/arch_x64.h>
 #define PIT_FREC 1193180
 
 extern void timer_stub();

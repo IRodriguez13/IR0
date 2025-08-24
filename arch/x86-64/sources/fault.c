@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "../../includes/ir0/print.h"
+#include <ir0/print.h>
 
 // Manejadores de excepciones básicos para x86-64
 // Buffer seguro para logging (en memoria estática)

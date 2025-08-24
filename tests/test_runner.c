@@ -1,6 +1,6 @@
 #include "test_suite.h"
-#include "../includes/ir0/print.h"
-#include "../includes/string.h"
+#include <ir0/print.h>
+#include <string.h>
 
 // ===============================================================================
 // SIMPLE TEST RUNNER FOR BUMP ALLOCATOR STRESS TESTS

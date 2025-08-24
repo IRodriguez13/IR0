@@ -1,16 +1,9 @@
 #include "pic.h"
-#include "../includes/ir0/print.h"
+#include <ir0/print.h>
+#include <arch/common/arch_interface.h>
 
 // I/O functions
-static inline void outb(uint16_t port, uint8_t value) {
-    __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static inline uint8_t inb(uint16_t port) {
-    uint8_t value;
-    __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
+// Using I/O functions from arch_interface.h
 
 // Initialize PIC - VECTORES ESTÁNDAR (32-47)
 void pic_init(void) {
@@ -41,7 +34,7 @@ void pic_init(void) {
     outb(PIC1_DATA, 0xFF);
     outb(PIC2_DATA, 0xFF);
 
-    print("PIC initialized with standard vector mapping (32-47)\n");
+    // PIC initialized with standard vector mapping (32-47)
 }
 
 // Send End of Interrupt signal
