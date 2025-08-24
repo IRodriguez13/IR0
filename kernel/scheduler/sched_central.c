@@ -519,12 +519,14 @@ int priority_init(void)
 
 int priority_add_task(task_t *task)
 {
+    (void)task; // Parameter not used yet
     // TODO: Implement Priority add task
     return 0;
 }
 
 int priority_remove_task(task_t *task)
 {
+    (void)task; // Parameter not used yet
     // TODO: Implement Priority remove task
     return 0;
 }

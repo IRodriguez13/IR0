@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "../../includes/ir0/print.h"
+#include <ir0/print.h>
 #include "pit/pit.h"
 
 // Define time_t as uint64_t for freestanding environment

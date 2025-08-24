@@ -50,7 +50,7 @@ ifeq ($(ARCH),x86-64)
     LD = ld
     CFLAGS = -m64 -mcmodel=kernel -mno-red-zone -mno-mmx -mno-sse -mno-sse2
     CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x86-64 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
+    CFLAGS += -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -I$(KERNEL_ROOT)/arch/x86-64/sources -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x86-64 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
     CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = -f elf64
     LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
@@ -162,11 +162,12 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    interrupt/arch/keyboard.o \
                    includes/ir0/panic/panic.o \
                    drivers/timer/pit/pit.o \
-                   drivers/timer/clock_system.o \
-                   drivers/timer/best_clock.o \
-                   drivers/timer/hpet/hpet.o \
-                   drivers/timer/hpet/find_hpet.o \
-                   drivers/timer/lapic/lapic.o \
+drivers/timer/clock_system.o \
+drivers/timer/best_clock.o \
+drivers/timer/hpet/hpet.o \
+drivers/timer/hpet/find_hpet.o \
+drivers/timer/lapic/lapic.o \
+drivers/timer/rtc/rtc.o \
                    drivers/IO/ps2.o \
                    drivers/storage/ata.o \
                    kernel/scheduler/priority_scheduler.o \
@@ -177,15 +178,16 @@ KERNEL_BASE_OBJS = kernel/kernel_start.o \
                    kernel/scheduler/task_impl.o \
                    kernel/process/process.o \
                    kernel/auth/auth.o \
-                   # kernel/syscalls/syscalls.o \
-                   # kernel/elf_loader.o \
+                   kernel/login/login_system.o \
+                   kernel/syscalls/syscalls.o \
+                   kernel/elf_loader.o \
                    kernel/shell/shell.o \
                    arch/common/arch_interface.o \
                    memory/bump_allocator.o \
                    memory/paging_x64.o \
                    setup/kernel_config.o \
-                   # fs/ir0fs.o \
-                   # fs/vfs.o
+                   fs/ir0fs.o \
+                   fs/vfs.o
 
 # Objetos condicionales según build target
 ifeq ($(BUILD_TARGET),desktop)
@@ -205,8 +207,6 @@ ifeq ($(ARCH),x86-64)
                 arch/x86-64/sources/idt_arch_x64.o \
                 arch/x86-64/sources/fault.o \
                 arch/x86-64/sources/tss_x64.o \
-                memory/bump_allocator.o \
-                memory/paging_x64.o \
                 kernel/scheduler/switch/switch_x64.o \
                 interrupt/arch/x86-64/isr_stubs_64.o
 else ifeq ($(ARCH),x86-32)  
@@ -247,9 +247,9 @@ ALL_OBJS = $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
 	$(ASM) $(ASMFLAGS) $< -o $@
 
 # Compilar kernel para arquitectura específica
-kernel-$(ARCH)-$(TARGET_NAME).bin: $(ALL_OBJS) kernel/shell/shell.o $(ARCH_SUBDIRS)/linker.ld
+kernel-$(ARCH)-$(TARGET_NAME).bin: $(ALL_OBJS) $(ARCH_SUBDIRS)/linker.ld
 	@echo "Enlazando kernel para $(ARCH)-$(TARGET_NAME)..."
-	$(LD) $(LDFLAGS) -o $@ $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS) kernel/shell/shell.o
+	$(LD) $(LDFLAGS) -o $@ $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
 	@echo "Kernel $(ARCH)-$(TARGET_NAME) compilado: $@"
 
 # Crear ISO específico por arquitectura y target

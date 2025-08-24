@@ -1,5 +1,5 @@
 // interrupt/idt.c - IMPLEMENTACIÓN MÍNIMA Y FUNCIONAL
-#include "../arch/common/idt.h"
+#include <arch/common/idt.h>
 
 // IDT básica
 idt_entry_t idt[256];

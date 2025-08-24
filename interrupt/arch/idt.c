@@ -1,6 +1,6 @@
 #include "idt.h"
 #include "io.h"
-#include "../../includes/ir0/print.h"
+#include <ir0/print.h>
 
 #ifdef __x86_64__
 // Variables globales para 64-bit

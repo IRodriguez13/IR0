@@ -1,4 +1,4 @@
-#include "../acpi/acpi.h"
+#include <drivers/timer/acpi/acpi.h>
 #include <stddef.h>
 #include <stdint.h>
 

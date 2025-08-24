@@ -158,11 +158,12 @@ static int64_t shell_syscall(int syscall_number, uint64_t arg1, uint64_t arg2, u
 // GLOBAL STATE
 // ===============================================================================
 
-static shell_context_t shell_ctx;
-static shell_config_t shell_config;
-static shell_command_t shell_commands[64];
-static int shell_command_count = 0;
-static int shell_initialized = 0;
+// Global variables for shell context (commented out if not used)
+// static shell_context_t shell_ctx;
+// static shell_config_t shell_config;
+// static shell_command_t shell_commands[64];
+// static int shell_command_count = 0;
+// static int shell_initialized = 0;
 
 // Global variables for built-in commands
 shell_command_t shell_builtin_commands[SHELL_MAX_BUILTIN_COMMANDS];
@@ -1303,6 +1304,7 @@ void shell_print(const char *message)
 
 void shell_print_color(const char *message, uint8_t color)
 {
+    (void)color; // Parameter not used yet
     if (message)
     {
         // TODO: Implement colored output

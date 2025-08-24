@@ -1,5 +1,5 @@
 // arch/x86-32/sources/idt_arch_x86.c - CORREGIDO
-#include "../../common/idt.h"  // Solo incluir el header común
+#include <arch/common/idt.h>  // Solo incluir el header común
 
 // Array externo del IDT (definido en idt.c)
 extern idt_entry_t idt[256];

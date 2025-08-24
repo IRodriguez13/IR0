@@ -8,7 +8,7 @@
 #pragma once
 
 #include "kernel_config.h"
-#include "../arch/common/arch_config.h"
+#include <arch/common/arch_config.h>
 
 // ===============================================================================
 // SUBSYSTEM ENABLE/DISABLE FLAGS

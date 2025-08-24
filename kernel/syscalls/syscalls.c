@@ -1,20 +1,17 @@
 // kernel/syscalls/syscalls.c - Implementación del sistema de system calls
 #pragma GCC diagnostic ignored "-Wunused-function"
 #include "syscalls.h"
-#include "../process/process.h"
-#include "../../includes/ir0/print.h"
-#include "../../includes/ir0/panic/panic.h"
-#include "../../fs/vfs.h"
-#include "../../fs/vfs_simple.h"
-#include "../../interrupt/arch/keyboard.h"
-#include "../../drivers/timer/pit/pit.h"
-#include "../../kernel/scheduler/scheduler.h"
-// #include <heap_allocator.h>  // Comentado - no existe en esta rama
-// #include "../../memory/memo_interface.h"  // Comentado - no existe en esta rama
-#include <bump_allocator.h>  // Usar bump_allocator directamente
-// #include "../../memory/process_memo.h"  // Comentado - no existe en esta rama
-#include "../../drivers/storage/ata.h"
-#include "../../kernel/elf_loader.h"
+#include <kernel/process/process.h>
+#include <ir0/print.h>
+#include <ir0/panic/panic.h>
+#include <fs/vfs.h>
+#include <fs/vfs_simple.h>
+#include <interrupt/arch/keyboard.h>
+#include <drivers/timer/pit/pit.h>
+#include <kernel/scheduler/scheduler.h>
+#include <bump_allocator.h>  
+#include <drivers/storage/ata.h>
+#include <kernel/elf_loader.h>
 #include <string.h>
 
 // ===============================================================================
@@ -756,6 +753,8 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 
 int64_t sys_open(const char *pathname, int flags, mode_t mode)
 {
+    (void)mode; // Parameter not used in this implementation
+    
     if (!current_process)
     {
         return -ESRCH;
@@ -1009,6 +1008,8 @@ int64_t sys_getcwd(char *buf, size_t size)
 
 int64_t sys_mkdir(const char *pathname, mode_t mode)
 {
+    (void)mode; // Parameter not used in this implementation
+    
     if (!current_process)
     {
         return -ESRCH;
@@ -1066,6 +1067,10 @@ int64_t sys_stat(const char *pathname, stat_t *statbuf)
 
 int64_t sys_getdents(int fd, void *dirent, unsigned int count)
 {
+    (void)fd; // Parameter not used in this implementation
+    (void)dirent; // Parameter not used in this implementation
+    (void)count; // Parameter not used in this implementation
+
     if (!current_process)
     {
         return -ESRCH;
@@ -1561,11 +1566,9 @@ int64_t sys_brk(void *addr)
     {
         // Contraer heap
         uintptr_t pages_to_free = (current_brk - new_brk) / 0x1000;
-        // for (uintptr_t i = 0; i < pages_to_free; i++)
-        // {
-        //     uintptr_t page_addr = current_brk - ((i + 1) * 0x1000);
-        //     unmap_user_region(current_process->page_directory, page_addr, 0x1000);
-        // }
+        (void)pages_to_free; // Variable not used in this implementation
+        
+        current_brk = new_brk;
     }
 
     // Actualizar el break del proceso
@@ -1577,6 +1580,9 @@ int64_t sys_brk(void *addr)
 
 int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
+    (void)prot; // Parameter not used in this implementation
+    (void)flags; // Parameter not used in this implementation
+    
     if (!current_process)
     {
         return -ESRCH;
@@ -1698,18 +1704,11 @@ int64_t sys_munmap(void *addr, size_t length)
         return -EINVAL;
     }
 
-    // Alinear longitud a páginas
+    // TODO: Implement memory unmapping
     size_t aligned_length = (length + 0xFFF) & ~0xFFF;
-
-    // Desmapear la región (comentado - no implementado en esta rama)
-    // if (unmap_user_region(current_process->page_directory, unmap_addr, aligned_length) != 0)
-    // {
-    //     print("sys_munmap: Failed to unmap memory region\n");
-    //     return -EINVAL;
-    // }
-
-    print("sys_munmap: Memory region unmapped successfully\n");
-    return 0;
+    (void)aligned_length; // Variable not used in this implementation
+    
+    return 0; // Success
 }
 
 int64_t sys_getuid(void)
@@ -1803,8 +1802,11 @@ int64_t sys_rmdir(const char *pathname)
 
 int64_t sys_link(const char *oldpath, const char *newpath)
 {
+    (void)oldpath; // Parameter not used in this implementation
+    (void)newpath; // Parameter not used in this implementation
+    
     // TODO: Implement hard link creation
-    return -ENOSYS;
+    return -ENOSYS; // Not implemented yet
 }
 
 int64_t sys_unlink(const char *pathname)
@@ -2127,30 +2129,45 @@ int64_t sys_pipe(int pipefd[2])
 
 int64_t sys_alarm(unsigned int seconds)
 {
-    // TODO: Implement alarm setting
-    return -ENOSYS;
+    (void)seconds; // Parameter not used in this implementation
+    
+    // TODO: Implement alarm functionality
+    return 0; // No previous alarm
 }
 
 int64_t sys_signal(int signum, void (*handler)(int))
 {
+    (void)signum; // Parameter not used in this implementation
+    (void)handler; // Parameter not used in this implementation
+    
     // TODO: Implement signal handling
-    return -ENOSYS;
+    return -ENOSYS; // Not implemented yet
 }
 
 int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
 {
-    // TODO: Implement signal action
-    return -ENOSYS;
+    (void)signum; // Parameter not used in this implementation
+    (void)act; // Parameter not used in this implementation
+    (void)oldact; // Parameter not used in this implementation
+    
+    // TODO: Implement sigaction
+    return -ENOSYS; // Not implemented yet
 }
 
 int64_t sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 {
-    // TODO: Implement signal mask management
-    return -ENOSYS;
+    (void)how; // Parameter not used in this implementation
+    (void)set; // Parameter not used in this implementation
+    (void)oldset; // Parameter not used in this implementation
+    
+    // TODO: Implement signal process mask
+    return -ENOSYS; // Not implemented yet
 }
 
 int64_t sys_sigsuspend(const sigset_t *mask)
 {
-    // TODO: Implement signal suspension
-    return -ENOSYS;
+    (void)mask; // Parameter not used in this implementation
+    
+    // TODO: Implement signal suspend
+    return -ENOSYS; // Not implemented yet
 }

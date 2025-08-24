@@ -1,9 +1,7 @@
 // setup/kernel_config.c - IR0 Kernel Configuration Implementation
 #include "kernel_config.h"
-#include "../includes/ir0/print.h"
-#include "../includes/string.h"
-#include "../includes/ir0/print.h"
-#include "../includes/string.h"
+#include <ir0/print.h>
+#include <string.h>
 
 // ===============================================================================
 // CONFIGURATION FUNCTIONS IMPLEMENTATION

@@ -1,7 +1,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "io.h"
-#include "../../includes/ir0/print.h"
+#include <ir0/print.h>
 
 // Declaraciones externas para el nuevo driver de teclado
 extern void keyboard_handler64(void);

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ir0/print.h>
-#include "../../arch/common/idt.h"
+#include <arch/common/idt.h>
 #include <panic/panic.h>
 
 // Prototipos de funciones

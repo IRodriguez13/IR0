@@ -2,6 +2,7 @@
 #include <print.h>
 #include <panic/panic.h>
 #include <string.h>
+#include <arch/common/arch_interface.h>
 
 // Global variables
 uint8_t keyboard_buffer[KEYBOARD_BUFFER_SIZE];
@@ -30,21 +31,11 @@ static const char scancode_to_ascii_shift[] = {
     '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '0', '.'
 };
 
-// I/O functions
-static inline void outb(uint16_t port, uint8_t value) 
-{
-    __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static inline uint8_t inb(uint16_t port) {
-    uint8_t value;
-    __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
+// Using I/O functions from arch_interface.h
 
 // PS/2 Controller functions
 void ps2_init(void) {
-    print("Initializing PS/2 controller...\n");
+    // PS/2 controller initialization
     
     // Disable both ports
     outb(PS2_COMMAND_PORT, PS2_CMD_DISABLE_PORT1);
@@ -65,8 +56,7 @@ void ps2_init(void) {
     // Test controller
     outb(PS2_COMMAND_PORT, PS2_CMD_TEST_CONTROLLER);
     if (inb(PS2_DATA_PORT) != 0x55) {
-        print_error("PS/2 controller test failed\n");
-        return;
+        return; // PS/2 controller test failed
     }
     
     // Enable port 1
@@ -75,8 +65,7 @@ void ps2_init(void) {
     // Test port 1
     outb(PS2_COMMAND_PORT, PS2_CMD_TEST_PORT1);
     if (inb(PS2_DATA_PORT) != 0x00) {
-        print_error("PS/2 port 1 test failed\n");
-        return;
+        return; // PS/2 port 1 test failed
     }
     
     // Set configuration byte again to enable IRQ1
@@ -86,7 +75,7 @@ void ps2_init(void) {
     outb(PS2_COMMAND_PORT, PS2_CMD_WRITE_CONFIG);
     outb(PS2_DATA_PORT, config);
     
-    print_success("PS/2 controller initialized\n");
+    // PS/2 controller ready
 }
 
 bool ps2_send_command(uint8_t command) {
