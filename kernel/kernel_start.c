@@ -288,6 +288,10 @@ static void user_start(void)
     
     // Authenticate user
     if (login_authenticate() == 0) {
+        // Clear keyboard buffer to prevent residual input from being interpreted as shell commands
+        extern void keyboard_buffer_clear(void);
+        keyboard_buffer_clear();
+        
         // Start shell after successful authentication
         start_shell();
     }
