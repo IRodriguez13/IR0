@@ -1,6 +1,6 @@
 // arch/x86-32/sources/arch.c - ACTUALIZADO
-#include "../../kernel/kernel_start.h"
-#include "../../common/arch_interface.h"
+#include <kernel/kernel_start.h>
+#include <arch/common/arch_interface.h>
 
 // Esta es la función que llama el boot.asm
 void kmain_x32(void) 

@@ -1,7 +1,7 @@
 // fs/vfs_simple.c - Implementación simple del sistema de archivos en memoria
 #include "vfs_simple.h"
-#include "../includes/ir0/print.h"
-#include "../includes/string.h"
+#include <ir0/print.h>
+#include <string.h>
 #include <stddef.h>
 
 // ===============================================================================

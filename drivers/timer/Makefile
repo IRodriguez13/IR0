@@ -19,7 +19,7 @@ endif
 INCLUDES = -I../../includes -I../../includes/ir0 -I../../arch/common
 
 # Objetos
-OBJS = pit/pit.o lapic/lapic.o hpet/hpet.o hpet/find_hpet.o clock_system.o best_clock.o
+OBJS = pit/pit.o lapic/lapic.o hpet/hpet.o hpet/find_hpet.o rtc/rtc.o clock_system.o best_clock.o
 
 all: $(OBJS)
 	@echo "\033[1;32m============================================================\033[0m"

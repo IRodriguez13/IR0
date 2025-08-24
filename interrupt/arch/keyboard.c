@@ -1,7 +1,10 @@
 #include "idt.h"
 #include "pic.h"
 #include "io.h"
-#include "../../includes/ir0/print.h"
+#include <ir0/print.h>
+
+// Forward declarations
+void wakeup_from_idle(void);
 
 // Buffer de teclado simple
 #define KEYBOARD_BUFFER_SIZE 256

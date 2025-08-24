@@ -2,13 +2,13 @@
 // Usando la infraestructura de memoria existente
 
 #include "elf_loader.h"
-#include "../includes/ir0/print.h"
+#include <ir0/print.h>
 // #include "../memory/memo_interface.h"  // Comentado - no existe en esta rama
 #include <bump_allocator.h>  // Usar bump_allocator directamente
 // #include "../memory/process_memo.h"  // Comentado - no existe en esta rama
 // #include "../memory/krnl_memo_layout.h"  // Comentado - no existe en esta rama
 #include "process/process.h"
-#include "../fs/vfs.h"
+#include <fs/vfs.h>
 #include <print.h>
 #include <panic/panic.h>
 #include <string.h>
@@ -80,6 +80,13 @@ static int validate_elf_header(const elf64_header_t *header)
 // Cargar segmento desde archivo real
 static int load_segment_from_file(vfs_file_t *elf_file, const elf64_phdr_t *phdr, uintptr_t pml4_phys)
 {
+    (void)pml4_phys; // Parameter not used in this implementation
+    
+    if (!elf_file || !phdr)
+    {
+        return -1;
+    }
+
     if (phdr->p_type != PT_LOAD)
     {
         return 0; // No es segmento cargable

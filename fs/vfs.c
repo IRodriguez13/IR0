@@ -1,9 +1,9 @@
 // fs/vfs.c - Virtual File System Implementation (Production Level)
 #include "vfs.h"
 #include "ir0fs.h"
-#include "../includes/ir0/print.h"
-#include "../includes/ir0/panic/panic.h"
-#include "../includes/string.h"
+#include <ir0/print.h>
+#include <ir0/panic/panic.h>
+#include <string.h>
 // #include "../memory/memo_interface.h"  // Comentado - no existe en esta rama
 #include <bump_allocator.h>  // Usar bump_allocator directamente
 #include <string.h>

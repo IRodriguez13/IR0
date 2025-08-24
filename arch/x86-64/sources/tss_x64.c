@@ -1,8 +1,9 @@
 #include <stdint.h>
-#include "../../includes/ir0/print.h"
+#include <ir0/print.h>
 
 // TSS structure for x86-64
-typedef struct {
+typedef struct 
+{
     uint32_t reserved1;
     uint64_t rsp0;      // Stack pointer for privilege level 0
     uint64_t rsp1;      // Stack pointer for privilege level 1

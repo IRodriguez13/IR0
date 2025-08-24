@@ -1,13 +1,11 @@
 // fs/ir0fs.c - IR0 File System Implementation
 #include "ir0fs.h"
-#include "../includes/ir0/print.h"
-#include "../includes/ir0/panic/panic.h"
-#include "../includes/ir0/logging.h"
-#include "../includes/string.h"
-// #include "../memory/memo_interface.h"  // Comentado - no existe en esta rama
+#include <ir0/print.h>
+#include <ir0/panic/panic.h>
+#include <ir0/logging.h>
+#include <string.h>
 #include <bump_allocator.h>  // Usar bump_allocator directamente
-// #include <heap_allocator.h>  // Comentado - no existe en esta rama
-#include "../drivers/storage/ata.h"
+#include <drivers/storage/ata.h>
 #include <string.h>
 
 // ===============================================================================

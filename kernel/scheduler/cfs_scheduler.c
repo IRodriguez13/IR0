@@ -296,6 +296,7 @@ static void cfs_update_runqueue_stats(void)
     if (cfs_rq.nr_running > 0)
     {
         uint64_t total_vruntime = 0;
+        (void)total_vruntime; // Variable not used in this implementation
 
         // En una implementación real, iteraríamos sobre todas las tareas
         // Por simplicidad, usamos min_vruntime como aproximación

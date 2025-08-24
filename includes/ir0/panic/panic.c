@@ -1,5 +1,5 @@
 #include "panic.h"
-#include "../print.h"
+#include <ir0/print.h>
 
 // IR0 Advanced Panic Handler
 // Convertido a sintaxis Intel para mejor legibilidad

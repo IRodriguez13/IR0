@@ -108,6 +108,7 @@ void process_init(void)
 
 process_t *process_create(const char *name, void (*entry_point)(void *), void *arg)
 {
+    (void)arg; // Parameter not used yet
     if (!name || !entry_point) {
         return NULL;
     }

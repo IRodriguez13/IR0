@@ -1,23 +1,13 @@
 #include "ata.h"
-#include "../../includes/ir0/print.h"
-#include "../../includes/ir0/panic/panic.h"
+#include <ir0/print.h>
+#include <ir0/panic/panic.h>
 #include <string.h>
+#include <arch/common/arch_interface.h>
 
 // Global variables
 bool ata_drives_present[4] = {false, false, false, false};
 
-// I/O functions
-static inline void outb(uint16_t port, uint8_t value) 
-{
-    __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static inline uint8_t inb(uint16_t port) 
-{
-    uint8_t value;
-    __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
+// Using I/O functions from arch_interface.h
 
 static inline void outw(uint16_t port, uint16_t value) 
 {
@@ -105,7 +95,7 @@ static uint16_t ata_get_command_port(uint8_t drive) {
 }
 
 void ata_init(void) {
-    print("Initializing ATA controller...\n");
+    // ATA controller initialization
     
     // Reset all drives
     for (int i = 0; i < 4; i++) {
@@ -150,6 +140,7 @@ void ata_reset_drive(uint8_t drive) {
 
 bool ata_identify_drive(uint8_t drive) {
     uint16_t status_port = ata_get_status_port(drive);
+    (void)status_port; // Variable not used in this implementation
     uint16_t drive_head_port = ata_get_drive_head_port(drive);
     uint16_t command_port = ata_get_command_port(drive);
     uint16_t data_port = ata_get_port_base(drive);
@@ -173,6 +164,7 @@ bool ata_identify_drive(uint8_t drive) {
     
     // Read identify data (we don't need to store it for basic functionality)
     uint16_t identify_data[256];
+    (void)identify_data; // Variable not used in this implementation
     for (int i = 0; i < 256; i++) {
         identify_data[i] = inw(data_port);
     }
@@ -219,6 +211,7 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
     }
     
     uint16_t status_port = ata_get_status_port(drive);
+    (void)status_port; // Variable not used in this implementation
     uint16_t drive_head_port = ata_get_drive_head_port(drive);
     uint16_t sector_count_port = ata_get_sector_count_port(drive);
     uint16_t lba_low_port = ata_get_lba_low_port(drive);
@@ -270,6 +263,7 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     }
     
     uint16_t status_port = ata_get_status_port(drive);
+    (void)status_port; // Variable not used in this implementation
     uint16_t drive_head_port = ata_get_drive_head_port(drive);
     uint16_t sector_count_port = ata_get_sector_count_port(drive);
     uint16_t lba_low_port = ata_get_lba_low_port(drive);

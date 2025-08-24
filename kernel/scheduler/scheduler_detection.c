@@ -20,16 +20,16 @@ scheduler_type_t detect_best_scheduler(void)
 {
     // Check if we have enough memory/CPU features for sophisticated schedulers :-)
 
-    // 1. Try CFS (needs more memory for rb-trees)
+    // 1. Try CFS (needs more memory for rb-trees) - PRIORITIZED
     extern uint32_t free_pages_count;
-    if (free_pages_count > 1000)
-    { // Need decent amount of memory
+    if (free_pages_count > 100)
+    { // Reduced threshold to prioritize CFS
         LOG_OK("[SCHED] Sufficient memory for CFS");
         return SCHEDULER_CFS;
     }
 
     // 2. Try Priority scheduler (medium memory usage)
-    if (free_pages_count > 100)
+    if (free_pages_count > 50)
     {
         LOG_OK("[SCHED] Using priority scheduler");
         return SCHEDULER_PRIORITY;

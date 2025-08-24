@@ -1,6 +1,6 @@
 // interrupt/isr_handlers.c - IMPLEMENTACIÓN MÍNIMA
 #include "isr_handlers.h"
-#include "../includes/ir0/print.h"
+#include <ir0/print.h>
 
 // Handler mínimo ya definido en idt.c
 // void isr_handler(uint8_t int_no) está en idt.c

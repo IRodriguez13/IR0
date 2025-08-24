@@ -1,9 +1,9 @@
 // tests/test_suite.c - Comprehensive Testing Framework Implementation
 #include "test_suite.h"
-#include "../includes/ir0/print.h"
-#include "../includes/string.h"
+#include <ir0/print.h>
+#include <string.h>
 #include <heap_allocator.h>
-#include "../fs/vfs.h"
+#include <fs/vfs.h>
 
 // ===============================================================================
 // GLOBAL TEST STATE
