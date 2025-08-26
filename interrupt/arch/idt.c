@@ -3,6 +3,7 @@
 #include <ir0/print.h>
 
 #ifdef __x86_64__
+// Código específico para 64-bit
 // Variables globales para 64-bit
 struct idt_entry64 idt[256];
 struct idt_ptr64 idt_ptr;
@@ -140,138 +141,7 @@ void idt_load64(void) {
 }
 
 #else
-// Variables globales para 32-bit
-struct idt_entry32 idt[256];
-struct idt_ptr32 idt_ptr;
-
-// Función para configurar una entrada IDT en 32-bit
-void idt_set_gate32(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
-    idt[num].base_lo = (base & 0xFFFF);
-    idt[num].base_hi = (base >> 16) & 0xFFFF;
-    idt[num].sel = sel;
-    idt[num].always0 = 0;
-    idt[num].flags = flags;
-}
-
-// Inicializar IDT para 32-bit
-void idt_init32(void) {
-    idt_ptr.limit = (sizeof(struct idt_entry32) * 256) - 1;
-    idt_ptr.base = (uint32_t)&idt;
-
-    // Limpiar IDT - configurar con stubs por defecto
-    for (int i = 0; i < 256; i++) {
-        idt_set_gate32(i, (uint32_t)isr0_32, 0x08, 0x8E);
-    }
-
-    // Configurar stubs específicos para cada interrupción
-    extern void isr0_32(void);
-    extern void isr1_32(void);
-    extern void isr2_32(void);
-    extern void isr3_32(void);
-    extern void isr4_32(void);
-    extern void isr5_32(void);
-    extern void isr6_32(void);
-    extern void isr7_32(void);
-    extern void isr8_32(void);
-    extern void isr9_32(void);
-    extern void isr10_32(void);
-    extern void isr11_32(void);
-    extern void isr12_32(void);
-    extern void isr13_32(void);
-    extern void isr14_32(void);
-    extern void isr15_32(void);
-    extern void isr16_32(void);
-    extern void isr17_32(void);
-    extern void isr18_32(void);
-    extern void isr19_32(void);
-    extern void isr20_32(void);
-    extern void isr21_32(void);
-    extern void isr22_32(void);
-    extern void isr23_32(void);
-    extern void isr24_32(void);
-    extern void isr25_32(void);
-    extern void isr26_32(void);
-    extern void isr27_32(void);
-    extern void isr28_32(void);
-    extern void isr29_32(void);
-    extern void isr30_32(void);
-    extern void isr31_32(void);
-    extern void isr32_32(void);  // Timer
-    extern void isr33_32(void);  // Keyboard
-    extern void isr34_32(void);
-    extern void isr35_32(void);
-    extern void isr36_32(void);
-    extern void isr37_32(void);
-    extern void isr38_32(void);
-    extern void isr39_32(void);
-    extern void isr40_32(void);
-    extern void isr41_32(void);
-    extern void isr42_32(void);
-    extern void isr43_32(void);
-    extern void isr44_32(void);
-    extern void isr45_32(void);
-    extern void isr46_32(void);
-    extern void isr47_32(void);
-
-    // Configurar excepciones (0-31)
-    idt_set_gate32(0, (uint32_t)isr0_32, 0x08, 0x8E);
-    idt_set_gate32(1, (uint32_t)isr1_32, 0x08, 0x8E);
-    idt_set_gate32(2, (uint32_t)isr2_32, 0x08, 0x8E);
-    idt_set_gate32(3, (uint32_t)isr3_32, 0x08, 0x8E);
-    idt_set_gate32(4, (uint32_t)isr4_32, 0x08, 0x8E);
-    idt_set_gate32(5, (uint32_t)isr5_32, 0x08, 0x8E);
-    idt_set_gate32(6, (uint32_t)isr6_32, 0x08, 0x8E);
-    idt_set_gate32(7, (uint32_t)isr7_32, 0x08, 0x8E);
-    idt_set_gate32(8, (uint32_t)isr8_32, 0x08, 0x8E);
-    idt_set_gate32(9, (uint32_t)isr9_32, 0x08, 0x8E);
-    idt_set_gate32(10, (uint32_t)isr10_32, 0x08, 0x8E);
-    idt_set_gate32(11, (uint32_t)isr11_32, 0x08, 0x8E);
-    idt_set_gate32(12, (uint32_t)isr12_32, 0x08, 0x8E);
-    idt_set_gate32(13, (uint32_t)isr13_32, 0x08, 0x8E);
-    idt_set_gate32(14, (uint32_t)isr14_32, 0x08, 0x8E);
-    idt_set_gate32(15, (uint32_t)isr15_32, 0x08, 0x8E);
-    idt_set_gate32(16, (uint32_t)isr16_32, 0x08, 0x8E);
-    idt_set_gate32(17, (uint32_t)isr17_32, 0x08, 0x8E);
-    idt_set_gate32(18, (uint32_t)isr18_32, 0x08, 0x8E);
-    idt_set_gate32(19, (uint32_t)isr19_32, 0x08, 0x8E);
-    idt_set_gate32(20, (uint32_t)isr20_32, 0x08, 0x8E);
-    idt_set_gate32(21, (uint32_t)isr21_32, 0x08, 0x8E);
-    idt_set_gate32(22, (uint32_t)isr22_32, 0x08, 0x8E);
-    idt_set_gate32(23, (uint32_t)isr23_32, 0x08, 0x8E);
-    idt_set_gate32(24, (uint32_t)isr24_32, 0x08, 0x8E);
-    idt_set_gate32(25, (uint32_t)isr25_32, 0x08, 0x8E);
-    idt_set_gate32(26, (uint32_t)isr26_32, 0x08, 0x8E);
-    idt_set_gate32(27, (uint32_t)isr27_32, 0x08, 0x8E);
-    idt_set_gate32(28, (uint32_t)isr28_32, 0x08, 0x8E);
-    idt_set_gate32(29, (uint32_t)isr29_32, 0x08, 0x8E);
-    idt_set_gate32(30, (uint32_t)isr30_32, 0x08, 0x8E);
-    idt_set_gate32(31, (uint32_t)isr31_32, 0x08, 0x8E);
-
-    // Configurar IRQs (32-47)
-    idt_set_gate32(32, (uint32_t)isr32_32, 0x08, 0x8E);  // Timer
-    idt_set_gate32(33, (uint32_t)isr33_32, 0x08, 0x8E);  // Keyboard
-    idt_set_gate32(34, (uint32_t)isr34_32, 0x08, 0x8E);
-    idt_set_gate32(35, (uint32_t)isr35_32, 0x08, 0x8E);
-    idt_set_gate32(36, (uint32_t)isr36_32, 0x08, 0x8E);
-    idt_set_gate32(37, (uint32_t)isr37_32, 0x08, 0x8E);
-    idt_set_gate32(38, (uint32_t)isr38_32, 0x08, 0x8E);
-    idt_set_gate32(39, (uint32_t)isr39_32, 0x08, 0x8E);
-    idt_set_gate32(40, (uint32_t)isr40_32, 0x08, 0x8E);
-    idt_set_gate32(41, (uint32_t)isr41_32, 0x08, 0x8E);
-    idt_set_gate32(42, (uint32_t)isr42_32, 0x08, 0x8E);
-    idt_set_gate32(43, (uint32_t)isr43_32, 0x08, 0x8E);
-    idt_set_gate32(44, (uint32_t)isr44_32, 0x08, 0x8E);
-    idt_set_gate32(45, (uint32_t)isr45_32, 0x08, 0x8E);
-    idt_set_gate32(46, (uint32_t)isr46_32, 0x08, 0x8E);
-    idt_set_gate32(47, (uint32_t)isr47_32, 0x08, 0x8E);
-
-    print("IDT inicializada para 32-bit\n");
-}
-
-// Cargar IDT para 32-bit
-void idt_load32(void) {
-    __asm__ volatile("lidt %0" : : "m"(idt_ptr));
-    print("IDT cargada para 32-bit\n");
-}
+// Código específico para 32-bit - usar archivos modulares
+#include "idt_32.h"
 
 #endif

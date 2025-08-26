@@ -144,14 +144,20 @@ static void shell_show_prompt(const char *prompt)
 // Función wrapper para hacer syscalls desde el shell
 static int64_t shell_syscall(int syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3)
 {
-    // TODO: Implementar syscalls cuando estén disponibles
-    (void)syscall_number;
-    (void)arg1;
-    (void)arg2;
-    (void)arg3;
+    // Crear estructura de argumentos para syscall
+    syscall_args_t args;
+    args.arg1 = arg1;
+    args.arg2 = arg2;
+    args.arg3 = arg3;
+    args.arg4 = 0;
+    args.arg5 = 0;
+    args.arg6 = 0;
     
-    print("[INFO] Syscall not implemented yet\n");
-    return -1; // Not implemented
+    // Llamar al handler de syscalls
+    extern int64_t syscall_handler(uint64_t number, syscall_args_t *args);
+    int64_t result = syscall_handler(syscall_number, &args);
+    
+    return result;
 }
 
 // ===============================================================================
@@ -647,8 +653,9 @@ static int shell_cmd_ls(shell_context_t *ctx, shell_config_t *config, char args[
     shell_print_info("📊 Estadísticas del heap:");
     // debug_heap_allocator();  // Comentado - función no existe en esta rama
 
-    // Listar el directorio real
-    int result = vfs_simple_ls(path);
+    // Listar el directorio usando syscall LS (con disco)
+    shell_print_info("ls: Usando syscall LS (con disco)...");
+    int64_t result = shell_syscall(SYS_LS, (uint64_t)path, 0, 0);
 
     return result;
 }
@@ -780,13 +787,14 @@ static int shell_cmd_mkdir(shell_context_t *ctx, shell_config_t *config, char ar
         return -1;
     }
 
-    // 🧪 PROBAR SISTEMA DE RECUPERACIÓN RESILIENTE
-    // Usar syscall real para probar el heap
+    // 🧪 PROBAR SISTEMA DE ARCHIVOS REAL
+    // Usar VFS simple para crear directorio
 
-    shell_print_info("mkdir: 🧪 Probando sistema de recuperación resiliente...");
+    shell_print_info("mkdir: 🧪 Probando sistema de archivos real...");
 
-    // TODO: Implementar sys_mkdir cuando esté disponible
-    int64_t result = 0; // Simular éxito
+    // Usar syscall para crear el directorio (con disco)
+    shell_print_info("mkdir: Usando syscall MKDIR (con disco)...");
+    int64_t result = shell_syscall(SYS_MKDIR, (uint64_t)dirname, 0755, 0);
 
     if (result == 0)
     {
@@ -1287,8 +1295,8 @@ static void shell_add_builtin_command(const char *name, const char *description,
         return;
     }
 
-    shell_builtin_commands[shell_builtin_count].name = name;
-    shell_builtin_commands[shell_builtin_count].description = description;
+    shell_builtin_commands[shell_builtin_count].name = (char*)name;
+    shell_builtin_commands[shell_builtin_count].description = (char*)description;
     shell_builtin_commands[shell_builtin_count].handler = handler;
 
     shell_builtin_count++;

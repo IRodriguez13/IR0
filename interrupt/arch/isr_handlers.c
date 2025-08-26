@@ -52,49 +52,4 @@ void isr_handler64(uint64_t interrupt_number) {
     print("\n");
 }
 
-#else
-
-// Handler de interrupciones para 32-bit
-void isr_handler32(uint32_t interrupt_number) {
-    // Manejar excepciones del CPU (0-31)
-    if (interrupt_number < 32) {
-        print("Excepción CPU #");
-        print_int32(interrupt_number);
-        print("\n");
-        
-        // Para excepciones, NO enviar EOI
-        return;
-    }
-    
-    // Manejar IRQs del PIC (32-47)
-    if (interrupt_number >= 32 && interrupt_number <= 47) {
-        uint8_t irq = interrupt_number - 32;
-        
-        switch (irq) {
-            case 0: // Timer
-                // Timer tick - por ahora solo debug
-                break;
-                
-            case 1: // Keyboard
-                keyboard_handler32();
-                break;
-                
-            default:
-                print("IRQ desconocido: ");
-                print_int32(irq);
-                print("\n");
-                break;
-        }
-        
-        // Enviar EOI para IRQs
-        pic_send_eoi32(irq);
-        return;
-    }
-    
-    // Interrupciones spurious o desconocidas
-    print("Interrupción spurious: ");
-    print_int32(interrupt_number);
-    print("\n");
-}
-
 #endif

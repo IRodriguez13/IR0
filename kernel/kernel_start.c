@@ -27,6 +27,7 @@
 
 // Forward declarations
 extern int vfs_simple_init(void);
+extern void run_minix_test(void);
 
 #ifdef __x86_64__
 
@@ -127,17 +128,26 @@ void main(void)
     heap_init();
     log_subsystem_ok("Memory management");
     
+    // Memory Manager initialized
+    log_subsystem_ok("Memory manager");
+    
+    // Minix Filesystem Structure Test
+    run_minix_test();
+    log_subsystem_ok("Minix filesystem structure test");
+    
     // Storage subsystem
     ata_init();
     log_subsystem_ok("Storage subsystem");
     
-    // File systems
-    vfs_simple_init();
-    extern int vfs_init(void);
-    vfs_init();
-    extern int ir0fs_init(void);
-    ir0fs_init();
-    log_subsystem_ok("File systems");
+    // File systems - SOLO MINIX (con disco)
+    extern int minix_fs_init(void);
+    minix_fs_init();
+    log_subsystem_ok("File systems (MINIX)");
+    
+    // Test Minix + ATA completo
+    extern void run_minix_ata_test(void);
+    run_minix_ata_test();
+    log_subsystem_ok("Minix + ATA test");
     
     // Process management
     extern void process_init(void);
@@ -173,14 +183,17 @@ void main(void)
     extern void idt_load64(void);
     idt_init64();
     idt_load64();
-#else
-    extern void idt_init32(void);
-    extern void idt_load32(void);
-    idt_init32();
-    idt_load32();
-#endif
     extern void pic_remap64(void);
     pic_remap64();
+#else
+    // Inicializar IDT para 32-bit
+    extern void idt_init32_simple(void);
+    extern void idt_load32_simple(void);
+    idt_init32_simple();
+    idt_load32_simple();
+    extern void pic_remap32_simple(void);
+    pic_remap32_simple();
+#endif
     log_subsystem_ok("Interrupt system");
     
     // ===============================================================================
