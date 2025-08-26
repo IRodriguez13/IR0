@@ -103,21 +103,49 @@ void process_init(void)
     sleeping_queue = NULL;
     zombie_queue = NULL;
     
+    // Create initial shell process
+    // Create a dummy entry point function for the shell process
+    void shell_entry_point(void *arg) {
+        (void)arg;
+        // This will never be called, it's just a placeholder
+    }
+    
+    process_t *shell_process = process_create("shell", shell_entry_point, NULL);
+    if (shell_process) {
+        current_process = shell_process;
+        print("Created initial shell process with PID ");
+        print_int32(shell_process->pid);
+        print("\n");
+    } else {
+        print("Failed to create initial shell process\n");
+    }
+    
     print_success("Process management system initialized\n");
+    print("process_init: Final current_process = ");
+    print_uint64((uint64_t)current_process);
+    print("\n");
 }
 
 process_t *process_create(const char *name, void (*entry_point)(void *), void *arg)
 {
+    print("process_create: Creating process '");
+    print(name);
+    print("'\n");
+    
     (void)arg; // Parameter not used yet
     if (!name || !entry_point) {
+        print("process_create: Invalid parameters\n");
         return NULL;
     }
     
     // Allocate process structure
     process_t *process = kmalloc(sizeof(process_t));
     if (!process) {
+        print("process_create: Failed to allocate process structure\n");
         return NULL;
     }
+    
+    print("process_create: Process structure allocated\n");
     
     // Initialize process
     memset(process, 0, sizeof(process_t));
@@ -174,6 +202,10 @@ process_t *process_create(const char *name, void (*entry_point)(void *), void *a
     process->state = PROCESS_READY;
     process_add_to_list(process);
     process_count++;
+    
+    print("process_create: Process created successfully with PID ");
+    print_int32(process->pid);
+    print("\n");
     
     return process;
 }
