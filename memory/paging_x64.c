@@ -152,11 +152,17 @@ int is_paging_enabled(void)
 
 int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
 {
+    (void)virt_addr; // Suppress unused parameter warning
+    (void)phys_addr; // Suppress unused parameter warning
+    (void)flags;     // Suppress unused parameter warning
+
     return 0;
 }
 
 int unmap_page(uint64_t virt_addr)
 {
+    (void)virt_addr; // Suppress unused parameter warning
+
     return 0;
 }
 

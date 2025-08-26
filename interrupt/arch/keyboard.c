@@ -56,6 +56,7 @@ static void keyboard_buffer_add(char c) {
     }
 }
 
+#ifdef __x86_64__
 // Función para obtener carácter del buffer
 char keyboard_buffer_get(void) {
     if (keyboard_buffer_head == keyboard_buffer_tail) {
@@ -76,6 +77,7 @@ void keyboard_buffer_clear(void) {
     keyboard_buffer_head = 0;
     keyboard_buffer_tail = 0;
 }
+#endif
 
 // Handler de interrupciones de teclado para 64-bit
 void keyboard_handler64(void) {
@@ -105,20 +107,7 @@ void keyboard_handler64(void) {
     }
 }
 
-// Handler de interrupciones de teclado para 32-bit
-void keyboard_handler32(void) {
-    // Leer scancode del puerto 0x60
-    uint8_t scancode = inb(0x60);
-    
-    // Solo procesar key press (scancode < 0x80)
-    if (scancode < 0x80) {
-        char ascii = translate_scancode(scancode);
-        if (ascii != 0) {
-            keyboard_buffer_add(ascii);
-            // No hacer echo aquí - el shell se encarga de todo
-        }
-    }
-}
+
 
 // Función para inicializar el teclado
 void keyboard_init(void) {

@@ -152,7 +152,8 @@ void ir0_print_build_config(void) {
     };
     
     int enabled_count = 0;
-    for (int i = 0; i < sizeof(features) / sizeof(features[0]); i++) {
+    for (size_t i = 0; i < sizeof(features) / sizeof(features[0]); i++) 
+    {
         if (ir0_is_feature_enabled(features[i])) {
             print_colored("  ✅ ", 0x0A, 0x00);
             print(features[i]);
