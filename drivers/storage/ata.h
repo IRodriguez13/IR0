@@ -52,6 +52,7 @@
 
 // Function prototypes
 void ata_init(void);
+bool ata_is_available(void);
 bool ata_identify_drive(uint8_t drive);
 bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer);
 bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer);

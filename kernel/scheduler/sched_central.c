@@ -5,6 +5,7 @@
 #include "scheduler.h"
 #include "scheduler_types.h"
 #include "task.h"
+#include <stdbool.h>
 #include <ir0/print.h>
 #include <ir0/panic/panic.h>
 #include <arch_interface.h>
@@ -155,14 +156,12 @@ void scheduler_init(void)
     // Create idle task
     extern task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t nice);
     extern void idle_task_function(void *arg);
-    extern task_t *get_idle_task(void);
     
-    // Create idle task and add to scheduler
-    extern task_t *idle_task; // Reference to global variable
-    idle_task = create_task(idle_task_function, NULL, 0, 0);
+    // Get or create idle task
+    task_t *idle_task = get_idle_task();
     if (!idle_task)
     {
-        print_error("Failed to create idle task!\n");
+        print_error("Failed to get idle task!\n");
         return;
     }
 
@@ -208,7 +207,6 @@ void scheduler_main_loop(void)
             scheduler_switch_task(next_task);
 
             // Ejecutar la tarea (esto debería hacer context switch)
-            // Por ahora, solo simulamos la ejecución
             if (next_task->entry)
             {
                 next_task->entry(next_task->entry_arg);
@@ -390,8 +388,19 @@ void scheduler_switch_task(task_t *new_task)
 
     task_t *old_task = scheduler_state.current_task;
 
+    // CRÍTICO: No hacer context switch si la tarea actual está terminada
+    if (old_task && old_task->state == TASK_TERMINATED)
+    {
+        print("WARNING: Attempting to context switch from terminated task PID: ");
+        print_uint32(old_task->pid);
+        print("\n");
+        
+        // Usar idle task en lugar de la tarea terminada
+        old_task = get_idle_task();
+    }
+
     // Update task states
-    if (old_task)
+    if (old_task && old_task->state != TASK_TERMINATED)
     {
         old_task->state = TASK_READY;
         old_task->total_runtime += scheduler_state.tick_count - old_task->last_run_time;
@@ -399,6 +408,7 @@ void scheduler_switch_task(task_t *new_task)
 
     new_task->state = TASK_RUNNING;
     new_task->last_run_time = scheduler_state.tick_count;
+    new_task->context_switches++;
 
     // Update scheduler state
     scheduler_state.current_task = new_task;
@@ -407,8 +417,22 @@ void scheduler_switch_task(task_t *new_task)
     // Perform context switch
     if (old_task != new_task)
     {
-        // TODO: Implement actual context switch
-        // switch_context(old_task, new_task);
+        print("Context switching from task ");
+        if (old_task) {
+            print_uint32(old_task->pid);
+        } else {
+            print("IDLE");
+        }
+        print(" to task ");
+        print_uint32(new_task->pid);
+        print("\n");
+        
+        // Call the actual context switch function
+        extern void switch_context_x64(task_t *current, task_t *next);
+        
+        // Handle NULL task as idle task
+        task_t *current_task = old_task ? old_task : get_idle_task();
+        switch_context_x64(current_task, new_task);
     }
 }
 
@@ -434,6 +458,25 @@ uint32_t scheduler_get_time_slice(task_t *task)
     default:
         return scheduler_state.quantum;
     }
+}
+
+// ===============================================================================
+// IDLE TASK MANAGEMENT
+// ===============================================================================
+
+static task_t idle_task;
+static bool idle_task_initialized = false;
+
+task_t *get_idle_task(void) {
+    if (!idle_task_initialized) {
+        memset(&idle_task, 0, sizeof(task_t));
+        idle_task.pid = 0;
+        idle_task.state = TASK_READY;
+        idle_task.priority = 0;
+        idle_task_initialized = true;
+        print("IDLE: Idle task initialized\n");
+    }
+    return &idle_task;
 }
 
 // ===============================================================================
@@ -596,6 +639,7 @@ uint32_t cfs_get_time_slice(task_t *task)
 
 void scheduler_dispatch_loop(void)
 {    
+    print("scheduler_dispatch_loop: ENTRY\n");
     print_colored("=== ENTERING SCHEDULER DISPATCH LOOP ===\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     print_colored("Shell exited, kernel now running scheduler dispatch loop\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
     print_colored("System will run until next interrupt or system call\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
@@ -641,7 +685,6 @@ void scheduler_dispatch_loop(void)
         // Crear idle task si no existe
         extern task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t nice);
         extern void idle_task_function(void *arg);
-        extern task_t *idle_task; // Reference to global variable
         
         idle_task = create_task(idle_task_function, NULL, 0, 0);
         if (!idle_task)
@@ -733,6 +776,65 @@ void scheduler_dispatch_loop(void)
 scheduler_type_t get_active_scheduler(void)
 {
     return scheduler_state.scheduler_type;
+}
+
+// Getter function for current task
+task_t *get_current_task(void)
+{
+    return scheduler_state.current_task;
+}
+
+// Setter function to clear current task (for sys_exit)
+void set_current_task_null(void)
+{
+    scheduler_state.current_task = NULL;
+}
+
+// Function to terminate current task and switch to next
+void terminate_current_task(void)
+{
+    if (!scheduler_state.running)
+    {
+        return;
+    }
+
+    task_t *current_task = scheduler_state.current_task;
+    if (!current_task)
+    {
+        return;
+    }
+
+    print("Terminating current task PID: ");
+    print_uint32(current_task->pid);
+    print("\n");
+
+    // Mark current task as terminated
+    current_task->state = TASK_TERMINATED;
+
+    // Get next task (this will skip terminated tasks)
+    task_t *next_task = scheduler_get_next_task();
+    if (!next_task)
+    {
+        // No other tasks available, switch to idle
+        next_task = get_idle_task();
+    }
+
+    if (next_task)
+    {
+        print("Switching to next task PID: ");
+        print_uint32(next_task->pid);
+        print("\n");
+
+        // Switch to next task
+        scheduler_switch_task(next_task);
+    }
+    else
+    {
+        print("No tasks available, entering idle mode\n");
+        // Enter idle mode
+        extern void cpu_wait(void);
+        cpu_wait();
+    }
 }
 
 const char *get_scheduler_name(void)

@@ -54,7 +54,7 @@ bool slab_is_valid_ptr(slab_cache_t *cache, void *ptr) {
     slab_t *slab = cache->free_slabs;
     while (slab) {
         if (ptr >= slab->objects && 
-            ptr < (char*)slab->objects + (slab->total_objects * cache->object_size)) {
+            ptr < (void*)((uintptr_t)slab->objects + (slab->total_objects * cache->object_size))) {
             return true;
         }
         slab = slab->next;
@@ -63,7 +63,7 @@ bool slab_is_valid_ptr(slab_cache_t *cache, void *ptr) {
     slab = cache->partial_slabs;
     while (slab) {
         if (ptr >= slab->objects && 
-            ptr < (char*)slab->objects + (slab->total_objects * cache->object_size)) {
+            ptr < (void*)((uintptr_t)slab->objects + (slab->total_objects * cache->object_size))) {
             return true;
         }
         slab = slab->next;
@@ -72,7 +72,7 @@ bool slab_is_valid_ptr(slab_cache_t *cache, void *ptr) {
     slab = cache->full_slabs;
     while (slab) {
         if (ptr >= slab->objects && 
-            ptr < (char*)slab->objects + (slab->total_objects * cache->object_size)) {
+            ptr < (void*)((uintptr_t)slab->objects + (slab->total_objects * cache->object_size))) {
             return true;
         }
         slab = slab->next;
@@ -275,7 +275,7 @@ void slab_free(slab_cache_t *cache, void *obj) {
     slab_t *slab = cache->free_slabs;
     while (slab) {
         if (obj >= slab->objects && 
-            obj < (char*)slab->objects + (slab->total_objects * cache->object_size)) {
+            obj < (void*)((uintptr_t)slab->objects + (slab->total_objects * cache->object_size))) {
             break;
         }
         slab = slab->next;
@@ -285,7 +285,7 @@ void slab_free(slab_cache_t *cache, void *obj) {
         slab = cache->partial_slabs;
         while (slab) {
             if (obj >= slab->objects && 
-                obj < (char*)slab->objects + (slab->total_objects * cache->object_size)) {
+                obj < (void*)((uintptr_t)slab->objects + (slab->total_objects * cache->object_size))) {
                 break;
             }
             slab = slab->next;
@@ -296,7 +296,7 @@ void slab_free(slab_cache_t *cache, void *obj) {
         slab = cache->full_slabs;
         while (slab) {
             if (obj >= slab->objects && 
-                obj < (char*)slab->objects + (slab->total_objects * cache->object_size)) {
+                obj < (void*)((uintptr_t)slab->objects + (slab->total_objects * cache->object_size))) {
                 break;
             }
             slab = slab->next;

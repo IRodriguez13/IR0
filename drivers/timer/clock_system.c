@@ -249,4 +249,17 @@ void clock_tick(void)
     // TODO: Handle time events
 }
 
+// ===============================================================================
+// SYSTEM TIME FUNCTIONS
+// ===============================================================================
+
+uint64_t get_system_time(void)
+{
+    if (!clock_state.initialized) {
+        return 0;
+    }
+    
+    return clock_state.current_time;
+}
+
 

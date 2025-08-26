@@ -39,7 +39,7 @@ static void process_add_to_list(process_t *process)
     process->prev = NULL;
 }
 
-static void process_remove_from_list(process_t *process)
+void process_remove_from_list(process_t *process)
 {
     if (!process)
          return;
@@ -67,7 +67,7 @@ static void process_remove_from_list(process_t *process)
     process->prev = NULL;
 }
 
-static void process_add_to_zombie_queue(process_t *process)
+void process_add_to_zombie_queue(process_t *process)
 {
     if (!process) return;
     
@@ -82,6 +82,71 @@ static void process_add_to_zombie_queue(process_t *process)
 static void process_remove_from_zombie_queue(process_t *process)
 {
     process_remove_from_list(process);
+}
+
+// ===============================================================================
+// PROCESS TO TASK CONVERSION
+// ===============================================================================
+
+task_t *process_to_task(process_t *process)
+{
+    if (!process) {
+        return NULL;
+    }
+    
+    // Create task from process
+    extern task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t nice);
+    extern void process_entry_point(void *arg);
+    
+    task_t *task = create_task(process_entry_point, process, process->priority, 0);
+    if (!task) {
+        return NULL;
+    }
+    
+    // Set task PID to match process PID
+    task->pid = process->pid;
+    
+    // Copy process state to task
+    task->state = (task_state_t)process->state;
+    
+    print("Process ");
+    print_uint32(process->pid);
+    print(" converted to task ");
+    print_uint32(task->pid);
+    print("\n");
+    
+    return task;
+}
+
+void process_entry_point(void *arg)
+{
+    process_t *process = (process_t *)arg;
+    if (!process) {
+        return;
+    }
+    
+    print("Process ");
+    print_uint32(process->pid);
+    print(" started execution\n");
+    
+    // TODO: Execute process code
+    // For now, just simulate execution
+    for (int i = 0; i < 10; i++) {
+        print("Process ");
+        print_uint32(process->pid);
+        print(" running...\n");
+        
+        // Yield to other tasks
+        extern void scheduler_yield(void);
+        scheduler_yield();
+    }
+    
+    print("Process ");
+    print_uint32(process->pid);
+    print(" finished execution\n");
+    
+    // Exit process
+    process_exit(0);
 }
 
 // ===============================================================================
@@ -176,9 +241,10 @@ process_t *process_create(const char *name, void (*entry_point)(void *), void *a
     process->heap_start = 0;
     process->heap_end = 0;
     
-    // Initialize file descriptors
-    for (int i = 0; i < 16; i++) {
-        process->open_files[i] = -1;
+    // Inicializar file descriptors
+    for (int i = 0; i < 16; i++) 
+    {
+        process->open_files[i] = (void *)(uintptr_t)-1;  // Cast explícito para evitar warning
     }
     
     // Initialize working directory
@@ -234,16 +300,18 @@ void process_destroy(process_t *process)
     process_count--;
 }
 
-int process_fork(process_t *parent)
+process_t *process_fork(process_t *parent)
 {
-    if (!parent) {
-        return -1;
+    if (!parent) 
+    {
+        return NULL;
     }
     
     // Create child process
     process_t *child = process_create(parent->name, NULL, NULL);
-    if (!child) {
-        return -1;
+    if (!child) 
+    {
+        return NULL;
     }
     
     // Copy parent's context
@@ -271,7 +339,7 @@ int process_fork(process_t *parent)
     child->sibling = parent->children;
     parent->children = child;
     
-    return child->pid;
+    return child;
 }
 
 int process_exec(const char *path, char *const argv[], char *const envp[])
