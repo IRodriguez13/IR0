@@ -109,7 +109,7 @@ int ir0fs_init(void)
     
     // Initialize bitmap (mark system blocks as allocated)
     memset(ir0fs_info.bitmap, 0, ir0fs_info.bitmap_size);
-    for (int i = 0; i < ir0fs_info.superblock->data_blocks_start; i++) 
+    for (size_t i = 0; i < ir0fs_info.superblock->data_blocks_start; i++) 
     {
         uint64_t byte_index = i / 8;
         uint8_t bit_index = i % 8;
@@ -305,8 +305,10 @@ int ir0fs_get_inode(ir0fs_fs_info_t *fs_info, uint32_t ino, ir0fs_inode_t *inode
     }
     
     // Calculate inode location
-    uint64_t inode_block = fs_info->superblock->inode_table_start + (ino / IR0FS_INODES_PER_BLOCK);
-    uint32_t inode_offset = (ino % IR0FS_INODES_PER_BLOCK) * sizeof(ir0fs_inode_t);
+    (void)fs_info; // Suppress unused variable warning
+    (void)ino;     // Suppress unused variable warning
+    // uint64_t inode_block = fs_info->superblock->inode_table_start + (ino / IR0FS_INODES_PER_BLOCK);
+    // uint32_t inode_offset = (ino % IR0FS_INODES_PER_BLOCK) * sizeof(ir0fs_inode_t);
     
     // TODO: Read inode from device
     // For now, create a dummy inode
@@ -333,7 +335,8 @@ int ir0fs_write_inode(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *inode)
     
     // Calculate inode block and offset
     uint64_t inode_block = fs_info->superblock->inode_table_start + (inode->ino / IR0FS_INODES_PER_BLOCK);
-    uint32_t inode_offset = (inode->ino % IR0FS_INODES_PER_BLOCK) * sizeof(ir0fs_inode_t);
+    (void)inode; // Suppress unused variable warning
+    // uint32_t inode_offset = (inode->ino % IR0FS_INODES_PER_BLOCK) * sizeof(ir0fs_inode_t);
     
     // Read the block containing the inode
     uint8_t *block_data = kmalloc(IR0FS_BLOCK_SIZE);
@@ -464,6 +467,9 @@ int ir0fs_journal_rollback(ir0fs_fs_info_t *fs_info)
 
 int ir0fs_journal_write_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, void *data)
 {
+    (void)fs_info;   // Suppress unused parameter warning
+    (void)block_num; // Suppress unused parameter warning
+    (void)data;      // Suppress unused parameter warning
     if (!fs_info || !data) {
         return -1;
     }
@@ -639,7 +645,7 @@ int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const c
     ir0fs_dirent_t *entries = (ir0fs_dirent_t *)block_data;
     int free_slot = -1;
     
-    for (int i = 0; i < IR0FS_DIR_ENTRIES_PER_BLOCK; i++) {
+    for (size_t i = 0; i < IR0FS_DIR_ENTRIES_PER_BLOCK; i++) {
         if (entries[i].ino == 0) {
             free_slot = i;
             break;
@@ -821,6 +827,7 @@ int ir0fs_link(vfs_inode_t *inode, const char *newpath)
 
 static ssize_t ir0fs_read(vfs_file_t *file, void *buf, size_t count)
 {
+    (void)count; // Suppress unused parameter warning
     if (!file || !buf) {
         return -1;
     }
@@ -851,7 +858,10 @@ static ssize_t ir0fs_write(vfs_file_t *file, const void *buf, size_t count)
 
 static int ir0fs_seek(vfs_file_t *file, int64_t offset, vfs_seek_whence_t whence)
 {
-    if (!file) {
+    (void)offset; // Suppress unused parameter warning
+    (void)whence; // Suppress unused parameter warning
+    if (!file) 
+    {
         return -1;
     }
     

@@ -95,8 +95,6 @@ static uint16_t ata_get_command_port(uint8_t drive) {
 }
 
 void ata_init(void) {
-    // ATA controller initialization
-    
     // Reset all drives
     for (int i = 0; i < 4; i++) {
         ata_reset_drive(i);
@@ -104,17 +102,29 @@ void ata_init(void) {
     }
     
     // Try to identify drives
-    for (int i = 0; i < 4; i++) 
-    {
+    for (int i = 0; i < 4; i++) {
         if (ata_identify_drive(i)) {
             ata_drives_present[i] = true;
-            print("ATA drive ");
-            print_hex64(i);
-            print(" detected\n");
+            print("ATA: Drive ");
+            print_uint64(i);
+            print(" detected - REAL DISK\n");
         }
     }
     
-    print("ATA controller initialized\n");
+    // Verificar si hay discos reales
+    bool any_disk = false;
+    for (int i = 0; i < 4; i++) {
+        if (ata_drives_present[i]) {
+            any_disk = true;
+            break;
+        }
+    }
+    
+    if (any_disk) {
+        print("ATA: REAL DISK DETECTED - Filesystem will be persistent\n");
+    } else {
+        print("ATA: NO REAL DISK DETECTED - Filesystem will be in-memory only\n");
+    }
 }
 
 void ata_reset_drive(uint8_t drive) {
@@ -139,6 +149,7 @@ void ata_reset_drive(uint8_t drive) {
 }
 
 bool ata_identify_drive(uint8_t drive) {
+    
     uint16_t status_port = ata_get_status_port(drive);
     (void)status_port; // Variable not used in this implementation
     uint16_t drive_head_port = ata_get_drive_head_port(drive);
@@ -184,6 +195,9 @@ bool ata_wait_ready(uint8_t drive)
         }
     }
     
+    print("ATA: Drive ");
+    print_uint64(drive);
+    print(" not ready after timeout\n");
     return false;
 }
 
@@ -194,6 +208,9 @@ bool ata_wait_drq(uint8_t drive) {
         uint8_t status = inb(status_port);
         
         if (status & ATA_STATUS_ERR) {
+            print("ATA: Drive ");
+            print_uint64(drive);
+            print(" error during DRQ wait\n");
             return false;
         }
         
@@ -202,11 +219,26 @@ bool ata_wait_drq(uint8_t drive) {
         }
     }
     
+    print("ATA: Drive ");
+    print_uint64(drive);
+    print(" DRQ timeout\n");
     return false;
 }
 
-bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer) {
+bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer) 
+{
+    print("ATA: Reading ");
+    print_uint64(num_sectors);
+    print(" sectors from drive ");
+    print_uint64(drive);
+    print(" at LBA ");
+    print_uint64(lba);
+    print("\n");
+    
     if (!ata_drives_present[drive]) {
+        print("ATA: Drive ");
+        print_uint64(drive);
+        print(" not present\n");
         return false;
     }
     
@@ -244,6 +276,7 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
     for (int sector = 0; sector < num_sectors; sector++) {
         // Wait for data
         if (!ata_wait_drq(drive)) {
+            print("ATA: Failed to wait for DRQ during read\n");
             return false;
         }
         
@@ -253,12 +286,24 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
         }
     }
     
+    print("ATA: Read operation completed successfully - REAL DISK I/O\n");
     return true;
 }
 
 bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer) {
+    print("ATA: Writing ");
+    print_uint64(num_sectors);
+    print(" sectors to drive ");
+    print_uint64(drive);
+    print(" at LBA ");
+    print_uint64(lba);
+    print("\n");
+    
     if (!ata_drives_present[drive]) 
     {
+        print("ATA: Drive ");
+        print_uint64(drive);
+        print(" not present\n");
         return false;
     }
     
@@ -309,5 +354,11 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     outb(command_port, ATA_CMD_FLUSH_CACHE);
     
     // Wait for completion
-    return ata_wait_ready(drive);
+    bool result = ata_wait_ready(drive);
+    if (result) {
+        print("ATA: Write operation completed successfully - REAL DISK I/O\n");
+    } else {
+        print("ATA: Write operation failed\n");
+    }
+    return result;
 }
