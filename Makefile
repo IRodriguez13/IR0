@@ -187,6 +187,7 @@ drivers/timer/rtc/rtc.o \
                    memory/buddy_allocator.o \
                    setup/kernel_config.o \
                    fs/minix_fs.o \
+                   fs/vfs_simple.o \
                    kernel/kernel_start.o \
                    examples/minix_test.o \
                    examples/minix_ata_test.o
@@ -394,42 +395,50 @@ test-all:
 # ===============================================================================
 
 help:
-	@echo "IR0 Kernel Multi-Architecture Build System"
+	@echo "🎯 IR0 Kernel Build System"
 	@echo ""
-	@echo "Arquitecturas soportadas:"
-	@echo "  x86-32  - 32-bit (i386)"
-	@echo "  x86-64  - 64-bit (x86_64)"
-	@echo "  arm32   - ARM 32-bit (ARMv7)"
-	@echo "  arm64   - ARM 64-bit (ARMv8)"
+	@echo "📋 Comandos principales:"
+	@echo "  make all                    - Compilar kernel completo"
+	@echo "  make clean                  - Limpiar archivos de compilación"
+	@echo "  make clean-all              - Limpiar todo (incluye ISOs)"
 	@echo ""
-	@echo "Build Targets soportados:"
-	@echo "  desktop   - Sistema de escritorio"
-	@echo "  server    - Sistema servidor"
-	@echo "  iot       - Sistema IoT"
-	@echo "  embedded  - Sistema embebido"
+	@echo "🏗️  Compilación por arquitectura:"
+	@echo "  make ARCH=x86-64 all        - Compilar para x86-64"
+	@echo "  make ARCH=x86-32 all        - Compilar para x86-32"
+	@echo "  make ARCH=arm64 all         - Compilar para ARM64"
+	@echo "  make ARCH=arm32 all         - Compilar para ARM32"
 	@echo ""
-	@echo "Comandos principales:"
-	@echo "  make                    - Compilar para arquitectura por defecto (x86-32)"
-	@echo "  make ARCH=x86-64        - Compilar para 64-bit"
-	@echo "  make ARCH=x86-32        - Compilar para 32-bit"
-	@echo "  make all-arch           - Compilar para todas las arquitecturas"
-	@echo "  make all-targets        - Compilar para todos los build targets"
-	@echo "  make all-combinations   - Compilar todas las combinaciones"
+	@echo "🎮 Ejecución en QEMU:"
+	@echo "  make run-gui                - Ejecutar con interfaz gráfica"
+	@echo "  make run-nographic          - Ejecutar en terminal"
+	@echo "  make run-test               - Ejecutar para testing"
 	@echo ""
-	@echo "Comandos QEMU simples:"
-	@echo "  make run                - Ejecutar kernel en QEMU con GUI"
-	@echo "  make run-gui            - Ejecutar kernel en QEMU con GUI"
-	@echo "  make run-nographic      - Ejecutar kernel en QEMU sin GUI (terminal)"
-	@echo "  make run-test           - Ejecutar kernel en QEMU para testing"
-	@echo "  make debug              - Ejecutar kernel con debug"
+	@echo "💾 Comandos con disco virtual:"
+	@echo "  make create-disk            - Crear disco virtual con Minix FS"
+	@echo "  make run-64-with-disk       - Compilar y ejecutar 64-bit con disco"
+	@echo "  make run-32-with-disk       - Compilar y ejecutar 32-bit con disco"
 	@echo ""
-	@echo "Comandos de limpieza:"
-	@echo "  make clean              - Limpiar archivos de compilación"
-	@echo "  make clean-all          - Limpiar todo"
+	@echo "🔧 Comandos rápidos:"
+	@echo "  make run-64                 - Compilar y ejecutar 64-bit"
+	@echo "  make run-32                 - Compilar y ejecutar 32-bit"
+	@echo "  make run-64-nographic       - Compilar y ejecutar 64-bit sin GUI"
+	@echo "  make run-32-nographic       - Compilar y ejecutar 32-bit sin GUI"
 	@echo ""
-	@echo "Comandos de ayuda:"
-	@echo "  make help               - Mostrar esta ayuda"
-	@echo "  make help-qemu          - Mostrar ayuda específica de QEMU"
+	@echo "🐛 Debugging:"
+	@echo "  make run-debug              - Ejecutar con debugging completo"
+	@echo "  make run-debug-nographic    - Ejecutar con debugging en terminal"
+	@echo ""
+	@echo "📊 Información:"
+	@echo "  make arch-details           - Mostrar detalles de arquitectura"
+	@echo "  make help-qemu              - Ayuda específica de QEMU"
+	@echo ""
+	@echo "🎯 Build targets disponibles:"
+	@echo "  - desktop (por defecto)"
+	@echo "  - server"
+	@echo "  - iot"
+	@echo "  - embedded"
+	@echo ""
+	@echo "Ejemplo: make ARCH=x86-64 BUILD_TARGET=desktop run-gui"
 
 # ===============================================================================
 # COMANDOS QEMU SIMPLES Y RÁPIDOS
@@ -439,13 +448,25 @@ help:
 run-gui: all
 	@echo "🚀 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con GUI..."
 ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -drive file=disk.img,format=raw,if=ide,index=0 -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL) $(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
 else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
 else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
 else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
+endif
+
+run-gui-with-disk: all
+	@echo "🚀 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con GUI y disco virtual..."
+ifeq ($(ARCH),x86-64)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -drive file=disk.img,format=raw,if=ide,index=0 -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL) $(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
+else ifeq ($(ARCH),x86-32)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
+else ifeq ($(ARCH),arm64)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
+else ifeq ($(ARCH),arm32)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
 endif
 
 run-console: all
@@ -498,6 +519,18 @@ run-32-nographic:
 
 run-64-nographic:
 	@$(MAKE) ARCH=x86-64 run-nographic
+
+# Comando para crear disco virtual
+create-disk:
+	@echo "🔧 Creando disco virtual para IR0 Kernel..."
+	@./scripts/create_disk.sh
+
+# Comandos con disco virtual
+run-64-with-disk: create-disk
+	@$(MAKE) ARCH=x86-64 run-gui-with-disk
+
+run-32-with-disk: create-disk
+	@$(MAKE) ARCH=x86-32 run-gui-with-disk
 
 # Comandos con debugging
 run-debug: all

@@ -110,3 +110,6 @@ void clock_print_stats(void);
 
 // Tick handler (called from interrupt)
 void clock_tick(void);
+
+// System time function
+uint64_t get_system_time(void);

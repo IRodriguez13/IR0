@@ -98,33 +98,27 @@ void ata_init(void) {
     // Reset all drives
     for (int i = 0; i < 4; i++) {
         ata_reset_drive(i);
-        ata_drives_present[i] = false;
     }
     
     // Try to identify drives
     for (int i = 0; i < 4; i++) {
-        if (ata_identify_drive(i)) {
-            ata_drives_present[i] = true;
+        ata_drives_present[i] = ata_identify_drive(i);
+        if (ata_drives_present[i]) {
             print("ATA: Drive ");
-            print_uint64(i);
-            print(" detected - REAL DISK\n");
+            print_int32(i);
+            print(" identified\n");
         }
     }
-    
-    // Verificar si hay discos reales
-    bool any_disk = false;
+}
+
+bool ata_is_available(void) {
+    // Check if any drive is present
     for (int i = 0; i < 4; i++) {
         if (ata_drives_present[i]) {
-            any_disk = true;
-            break;
+            return true;
         }
     }
-    
-    if (any_disk) {
-        print("ATA: REAL DISK DETECTED - Filesystem will be persistent\n");
-    } else {
-        print("ATA: NO REAL DISK DETECTED - Filesystem will be in-memory only\n");
-    }
+    return false;
 }
 
 void ata_reset_drive(uint8_t drive) {
@@ -362,3 +356,4 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     }
     return result;
 }
+

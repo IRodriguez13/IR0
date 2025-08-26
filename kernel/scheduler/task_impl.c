@@ -113,8 +113,8 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
     *stack_ptr = (uintptr_t)entry;
     
     // Guardar puntero al stack
-    task->esp = (uintptr_t)stack_ptr;
-    task->ebp = 0; // EBP inicial
+    task->rsp = (uintptr_t)stack_ptr;
+    task->rbp = 0; // RBP inicial
     
     // Usar el page directory del kernel por ahora
     task->cr3 = 0; // TODO: Implementar page directories por proceso
@@ -313,11 +313,6 @@ void create_test_tasks(void)
 // ===============================================================================
 // FUNCIONES DE UTILIDAD
 // ===============================================================================
-
-task_t *get_idle_task(void)
-{
-    return idle_task;
-}
 
 task_t *get_task_list(void)
 {

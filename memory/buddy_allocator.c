@@ -307,9 +307,9 @@ void buddy_print_info(buddy_allocator_t *buddy) {
     print("\n");
     
     // Mostrar bloques libres por orden
-    for (int i = 0; i <= buddy->max_order; i++) {
+    for (uint32_t i = 0; i <= buddy->max_order; i++) {
         if (buddy->free_lists[i]) {
-            int count = 0;
+            uint32_t count = 0;
             buddy_block_t *block = buddy->free_lists[i];
             while (block) {
                 count++;

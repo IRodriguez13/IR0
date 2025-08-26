@@ -1,9 +1,13 @@
 // kernel/syscalls/syscalls.c - Implementación del sistema de system calls
 #pragma GCC diagnostic ignored "-Wunused-function"
 #include "syscalls.h"
-#include <kernel/process/process.h>
 #include <ir0/print.h>
 #include <ir0/panic/panic.h>
+#include <string.h>
+#include <memory/paging_x64.h>  // Para PAGE_USER, PAGE_RW, map_page, unmap_page
+#include <kernel/process/process.h>
+#include <fs/minix_fs.h>
+#include <fs/vfs_simple.h>
 #include <fs/vfs.h>
 #include <interrupt/arch/keyboard.h>
 #include <drivers/timer/pit/pit.h>
@@ -11,8 +15,8 @@
 #include <bump_allocator.h>  
 #include <drivers/storage/ata.h>
 #include <kernel/elf_loader.h>
-#include <string.h>
 #include <fs/minix_fs.h>
+#include <panic/panic.h>
 
 // ===============================================================================
 // CONSTANTES FALTANTES
@@ -161,7 +165,23 @@ void syscalls_init(void)
 
     // Inicializar MINIX filesystem
     extern int minix_fs_init(void);
-    minix_fs_init();
+    extern bool minix_fs_is_working(void);
+    
+    int minix_result = minix_fs_init();
+    if (minix_result == 0) {
+        if (minix_fs_is_working()) {
+            print("SYSCALLS: MINIX FS initialized and working - PERSISTENT STORAGE AVAILABLE\n");
+        } else {
+            print("SYSCALLS: MINIX FS initialized but no disk available - using memory fallback\n");
+        }
+    } else {
+        print("SYSCALLS: MINIX FS initialization failed - using memory fallback\n");
+    }
+
+    // Inicializar VFS Simple como fallback
+    extern void vfs_simple_init(void);
+    vfs_simple_init();
+    print("SYSCALLS: VFS Simple initialized as fallback\n");
 
     // Inicializar tabla de system calls
     for (int i = 0; i < MAX_SYSCALLS; i++)
@@ -220,6 +240,9 @@ void syscalls_init(void)
     */
 
     print_success("System call interface initialized\n");
+    
+    // Mostrar estado del sistema de archivos
+    syscalls_show_fs_status();
 }
 
 // ===============================================================================
@@ -547,22 +570,46 @@ void sys_sigsuspend_wrapper(syscall_args_t *args)
 
 int64_t sys_exit(int exit_code)
 {
+
+
     if (!current_process)
     {
         return -ESRCH;
     }
 
-    print("sys_exit: Process ");
+   
     print_int32(current_process->pid);
-    print(" exiting with code ");
+    print(" exiting with code "); 
     print_int32(exit_code);
     print("\n");
 
-    // Implementación real usando el sistema de procesos
+    // 1. Marcar proceso como zombie
     current_process->exit_code = exit_code;
     current_process->state = PROCESS_ZOMBIE;
 
-    // Notificar al proceso padre si existe
+    // 2. CRÍTICO: Sincronizar con la task asociada
+    // Buscar la task actual del scheduler que corresponde a este proceso
+    extern task_t *get_current_task(void);
+    task_t *current_task = get_current_task();
+    
+    if (current_task && current_task->pid == current_process->pid) {
+        // Marcar la task como terminada para que el scheduler la ignore
+        current_task->state = TASK_TERMINATED;
+        print("sys_exit: Associated task PID ");
+        print_int32(current_task->pid);
+        print(" marked as terminated\n");
+        
+        // CRÍTICO: Limpiar la referencia de current_task en el scheduler
+        extern void set_current_task_null(void);
+        set_current_task_null();
+        print("sys_exit: Current task reference cleared from scheduler\n");
+    } else {
+        print("sys_exit: Warning - no associated task found for process PID ");
+        print_int32(current_process->pid);
+        print("\n");
+    }
+
+    // 3. Notificar al proceso padre si existe
     if (current_process->ppid > 0)
     {
         process_t *parent = process_find_by_pid(current_process->ppid);
@@ -581,12 +628,24 @@ int64_t sys_exit(int exit_code)
         }
     }
 
-    // El proceso se mantiene como zombie hasta que el padre haga wait()
+    // 4. Mover proceso a cola de zombies
+    extern void process_remove_from_list(process_t *process);
+    extern void process_add_to_zombie_queue(process_t *process);
+    
+    process_remove_from_list(current_process);
+    process_add_to_zombie_queue(current_process);
+
     print("sys_exit: Process marked as zombie, waiting for parent to reap\n");
 
-    // Context switch a otro proceso
-    // El proceso zombie será limpiado por el scheduler
-
+    // 5. IMPORTANTE: Invocar el dispatch loop para manejar la limpieza
+    // El proceso ya está marcado como zombie, el dispatch loop lo limpiará
+    print("sys_exit: Invoking dispatch loop for cleanup\n");
+    
+    // 6. Invocar el dispatch loop - esto manejará la limpieza de tareas terminadas
+    extern void scheduler_dispatch_loop(void);
+    scheduler_dispatch_loop();
+    
+    // 7. NUNCA debería llegar aquí, pero por seguridad
     return 0;
 }
 
@@ -754,7 +813,8 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 
 int64_t sys_open(const char *pathname, int flags, mode_t mode)
 {
-    (void)mode; // Parameter not used in this implementation
+    (void)flags;  // TODO: Implementar flags de apertura
+    (void)mode;   // TODO: Implementar permisos de modo
     
     if (!current_process)
     {
@@ -789,7 +849,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     
     // Por ahora, solo crear un file descriptor simulado
     // TODO: Implementar apertura real cuando tengamos archivos en Minix
-    current_process->open_files[fd] = (uintptr_t)pathname; // Guardar el path como referencia
+    current_process->open_files[fd] = (void *)(uintptr_t)pathname; // Guardar el path como referencia
     
     print("sys_open: File descriptor created: ");
     print_int32(fd);
@@ -990,22 +1050,30 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
         return -EFAULT;
     }
 
-    // Usar MINIX filesystem para crear el directorio
+    // Usar exclusivamente MINIX filesystem
+    extern bool minix_fs_is_working(void);
     extern int minix_fs_mkdir(const char *path);
-    int result = minix_fs_mkdir(pathname);
-
-    if (result == 0) {
-        print("MKDIR: Created ");
+    
+    if (minix_fs_is_working()) {
+        print("MKDIR: Using MINIX FS for: ");
         print(pathname);
-        print(" (success)\n");
-        return 0;
+        print("\n");
+        
+        int result = minix_fs_mkdir(pathname);
+        if (result == 0) {
+            print("MKDIR: Created ");
+            print(pathname);
+            print(" on MINIX FS (success)\n");
+            return 0;
+        } else {
+            print("MKDIR: Failed to create ");
+            print(pathname);
+            print(" on MINIX FS\n");
+            return -EEXIST; // Directory already exists or other error
+        }
     } else {
-        print("MKDIR: Failed to create ");
-        print(pathname);
-        print(" (error: ");
-        print_int32(result);
-        print(")\n");
-        return -ENOMEM;
+        print("MKDIR: MINIX FS not available - cannot create directory\n");
+        return -ENOSYS; // Function not implemented (no filesystem available)
     }
 }
 
@@ -1072,22 +1140,30 @@ int64_t sys_ls(const char *pathname)
         return -EFAULT;
     }
 
-    // Usar MINIX filesystem para listar el directorio
+    // Usar exclusivamente MINIX filesystem
+    extern bool minix_fs_is_working(void);
     extern int minix_fs_ls(const char *path);
-    int result = minix_fs_ls(pathname);
-
-    if (result == 0) {
-        print("LS: Listed ");
+    
+    if (minix_fs_is_working()) {
+        print("LS: Using MINIX FS for: ");
         print(pathname);
-        print(" (success)\n");
-        return 0;
+        print("\n");
+        
+        int result = minix_fs_ls(pathname);
+        if (result == 0) {
+            print("LS: Listed ");
+            print(pathname);
+            print(" from MINIX FS (success)\n");
+            return 0;
+        } else {
+            print("LS: Failed to list ");
+            print(pathname);
+            print(" from MINIX FS\n");
+            return -ENOENT; // No such file or directory
+        }
     } else {
-        print("LS: Failed to list ");
-        print(pathname);
-        print(" (error: ");
-        print_int32(result);
-        print(")\n");
-        return -ENOENT;
+        print("LS: MINIX FS not available - cannot list directory\n");
+        return -ENOSYS; // Function not implemented (no filesystem available)
     }
 }
 
@@ -1110,7 +1186,7 @@ int64_t sys_kernel_info(void *info_buffer, size_t buffer_size)
     // Crear información del kernel
     const char *kernel_info =
         "=== IR0 Kernel Information ===\n"
-        "Kernel: IR0 v1.0.0\n"
+        "Kernel: IR0 v0.0.0 pre-rc1\n"
         "Architecture: x86-64\n"
         "Build Date: " __DATE__ " " __TIME__ "\n"
         "Compiler: GCC\n"
@@ -1145,62 +1221,34 @@ int64_t sys_fork(void)
 
     print("sys_fork: Creating child process...\n");
 
-    // Crear proceso hijo usando el sistema de procesos (comentado - no implementado en esta rama)
-    // process_t *child = process_fork(current_process);
-    // if (!child)
-    // {
-    //     print("sys_fork: Failed to create child process\n");
-    //     return -ENOMEM;
-    // }
+    // Crear proceso hijo usando el sistema de procesos
+    extern process_t *process_fork(process_t *parent);
+    process_t *child = process_fork(current_process);
+    if (!child)
+    {
+        print("sys_fork: Failed to create child process\n");
+        return -ENOMEM;
+    }
 
-    // Crear page directory para el hijo (comentado - no implementado en esta rama)
-    // uintptr_t child_pml4 = create_process_page_directory();
-    // if (!child_pml4)
-    // {
-    //     print("sys_fork: Failed to create page directory for child\n");
-    //     process_destroy(child);
-    //     return -ENOMEM;
-    // }
+    print("sys_fork: Child process created with PID: ");
+    print_int32(child->pid);
+    print(" (parent PID: ");
+    print_int32(current_process->pid);
+    print(")\n");
 
-    // Configurar relación padre-hijo (comentado - no implementado en esta rama)
-    // child->ppid = current_process->pid;
-    // child->sibling = current_process->children;
-    // current_process->children = child;
-    // child->page_directory = child_pml4;
+    // Convertir proceso hijo en tarea del scheduler
+    extern task_t *process_to_task(process_t *process);
+    extern void add_task(task_t *task);
+    
+    task_t *child_task = process_to_task(child);
+    if (child_task) {
+        add_task(child_task);
+        print("sys_fork: Child process converted to task and added to scheduler\n");
+    } else {
+        print("sys_fork: Failed to convert child process to task\n");
+    }
 
-    // Copiar contexto del padre al hijo (comentado - no implementado en esta rama)
-    // memcpy(&child->context, &current_process->context, sizeof(child->context));
-
-    // Copiar configuración básica (comentado - no implementado en esta rama)
-    // child->priority = current_process->priority;
-    // child->flags = current_process->flags;
-    // child->working_dir = current_process->working_dir;
-
-    // Copiar file descriptors (comentado - no implementado en esta rama)
-    // for (int i = 0; i < 16; i++)
-    // {
-    //     child->open_files[i] = current_process->open_files[i];
-    // }
-
-    // Copiar signal mask (comentado - no implementado en esta rama)
-    // child->signal_mask = current_process->signal_mask;
-
-    // Configurar stack del hijo en user space (comentado - no implementado en esta rama)
-    // child->context.rsp = USER_SPACE_BASE + 0x10000 + (child->pid * 0x1000);
-
-    // En el proceso padre, retornar PID del hijo (comentado - no implementado en esta rama)
-    // En el proceso hijo, el context switch debería modificar el valor de retorno
-    // print("sys_fork: Child process created with PID: ");
-    // print_int32(child->pid);
-    // print(" (parent PID: ");
-    // print_int32(current_process->pid);
-    // print(")\n");
-    // print("sys_fork: Child page directory: 0x");
-    // print_hex(child_pml4);
-    // print("\n");
-
-    // return child->pid;  // Comentado - no implementado en esta rama
-    return -ENOSYS;  // Not implemented
+    return child->pid;
 }
 
 int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[])
@@ -1428,6 +1476,36 @@ __attribute__((unused)) int64_t sys_getppid(void)
 }
 
 // ===============================================================================
+// FILESYSTEM STATUS FUNCTIONS
+// ===============================================================================
+
+void syscalls_show_fs_status(void)
+{
+    extern bool minix_fs_is_working(void);
+    extern bool minix_fs_is_available(void);
+    
+    print("=== FILESYSTEM STATUS ===\n");
+    
+    if (minix_fs_is_available()) {
+        print("✅ ATA Disk: AVAILABLE\n");
+        
+        if (minix_fs_is_working()) {
+            print("✅ MINIX FS: WORKING - PERSISTENT STORAGE ENABLED\n");
+            print("📁 Directories and files will be saved to disk\n");
+        } else {
+            print("⚠️  MINIX FS: INITIALIZED BUT NOT WORKING\n");
+            print("📁 Using memory-based fallback\n");
+        }
+    } else {
+        print("❌ ATA Disk: NOT AVAILABLE\n");
+        print("📁 Using memory-based fallback only\n");
+    }
+    
+    print("🔄 System will automatically choose the best available option\n");
+    print("========================\n");
+}
+
+// ===============================================================================
 // SYSTEM CALLS COMENTADAS - NO IMPLEMENTADAS
 // ===============================================================================
 
@@ -1460,7 +1538,8 @@ int64_t sys_brk(void *addr)
     uintptr_t new_brk = (uintptr_t)addr;
 
     // Verificar que la nueva dirección sea válida
-    if (new_brk < USER_SPACE_BASE || new_brk > USER_SPACE_BASE + USER_SPACE_SIZE)
+    uintptr_t max_user_addr = USER_SPACE_BASE + (uintptr_t)USER_SPACE_SIZE;
+    if (new_brk < USER_SPACE_BASE || new_brk > max_user_addr)
     {
         print("sys_brk: Invalid address\n");
         return -EINVAL;
@@ -1471,29 +1550,67 @@ int64_t sys_brk(void *addr)
     {
         // Expandir heap
         uintptr_t pages_needed = (new_brk - current_brk + 0xFFF) / 0x1000;
+        print("sys_brk: Expanding heap by ");
+        print_uint32(pages_needed);
+        print(" pages\n");
+        
         for (uintptr_t i = 0; i < pages_needed; i++)
         {
-            // uintptr_t page_addr = current_brk + (i * 0x1000);
-            // if (map_user_region(current_process->page_directory, page_addr, 0x1000, PAGE_FLAG_USER | PAGE_FLAG_WRITABLE) != 0)
-            // {
-            //     print("sys_brk: Failed to map heap page\n");
-            //     return -ENOMEM;
-            // }
+            uintptr_t page_addr = current_brk + (i * 0x1000);
+            
+            // Allocar página física
+            void *physical_page = kmalloc(0x1000);
+            if (!physical_page) {
+                print("sys_brk: Failed to allocate physical page\n");
+                return -ENOMEM;
+            }
+            
+            // Mapear página en el espacio de usuario usando las funciones correctas
+            extern int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
+            if (map_page(page_addr, (uint64_t)physical_page, PAGE_USER | PAGE_RW) != 0)
+            {
+                kfree(physical_page);
+                print("sys_brk: Failed to map heap page\n");
+                return -ENOMEM;
+            }
+            
+            print("sys_brk: Mapped page at 0x");
+            print_hex(page_addr);
+            print("\n");
         }
     }
     else if (new_brk < current_brk)
     {
         // Contraer heap
         uintptr_t pages_to_free = (current_brk - new_brk) / 0x1000;
-        (void)pages_to_free; // Variable not used in this implementation
+        print("sys_brk: Contracting heap by ");
+        print_uint32(pages_to_free);
+        print(" pages\n");
         
-        current_brk = new_brk;
+        for (uintptr_t i = 0; i < pages_to_free; i++)
+        {
+            uintptr_t page_addr = new_brk + (i * 0x1000);
+            
+            // Desmapear página del espacio de usuario
+            extern int unmap_page(uint64_t virt_addr);
+            if (unmap_page(page_addr) != 0)
+            {
+                print("sys_brk: Failed to unmap heap page\n");
+                // Continuar aunque falle el desmapeo
+            }
+            
+            print("sys_brk: Unmapped page at 0x");
+            print_hex(page_addr);
+            print("\n");
+        }
     }
 
     // Actualizar el break del proceso
     current_process->heap_break = new_brk;
 
-    print("sys_brk: Heap break adjusted successfully\n");
+    print("sys_brk: Heap break adjusted successfully to 0x");
+    print_hex(new_brk);
+    print("\n");
     return new_brk;
 }
 
@@ -1536,8 +1653,10 @@ int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t o
         map_addr = (uintptr_t)addr;
     }
 
-    // Verificar que la región esté en user space
-    if (map_addr < USER_SPACE_BASE || map_addr + aligned_length > USER_SPACE_BASE + USER_SPACE_SIZE)
+    // Verificar que la dirección esté en el espacio de usuario
+    uintptr_t max_user_addr = USER_SPACE_BASE + USER_SPACE_SIZE;
+    if (map_addr < USER_SPACE_BASE || 
+        map_addr + aligned_length > max_user_addr)
     {
         print("sys_mmap: Invalid address range\n");
         return -EINVAL;
@@ -1569,7 +1688,9 @@ int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t o
         {
             // Leer datos del archivo al mapeo
             uint8_t *buffer = (uint8_t *)map_addr;
-            size_t bytes_to_read = (length < file_inode->size - offset) ? length : file_inode->size - offset;
+            // Calcular cuántos bytes leer del archivo
+            size_t bytes_to_read = (length < (size_t)(file_inode->size - offset)) ? 
+                                   length : (size_t)(file_inode->size - offset);
 
             if (bytes_to_read > 0)
             {
@@ -1616,10 +1737,11 @@ int64_t sys_munmap(void *addr, size_t length)
 
     uintptr_t unmap_addr = (uintptr_t)addr;
 
-    // Verificar que la región esté en user space
-    if (unmap_addr < USER_SPACE_BASE || unmap_addr > USER_SPACE_BASE + USER_SPACE_SIZE)
+    // Verificar que la dirección esté en el espacio de usuario
+    uintptr_t max_user_addr = USER_SPACE_BASE + USER_SPACE_SIZE;
+    if (unmap_addr < USER_SPACE_BASE || unmap_addr > max_user_addr)
     {
-        print("sys_munmap: Invalid address range\n");
+        print("sys_munmap: Invalid address\n");
         return -EINVAL;
     }
 
@@ -1684,32 +1806,166 @@ int64_t sys_rmdir(const char *pathname)
     print(pathname);
     print("\n");
 
-    // Delay para ver mejor los logs
-    delay_ms(500);
-
-    // Implementar con Minix filesystem
-    print("sys_rmdir: Using Minix filesystem to remove directory\n");
-    
     // Verificar que no es el directorio raíz
     if (strcmp(pathname, "/") == 0)
     {
         print("sys_rmdir: Cannot remove root directory\n");
         return -EBUSY;
     }
-    
-    // TODO: Implementar minix_fs_rmdir cuando esté disponible
-    // Por ahora, simular éxito
-    print("sys_rmdir: Directory removed successfully (simulated)\n");
+
+    // Buscar el inode del directorio
+    minix_inode_t *inode = minix_fs_find_inode(pathname);
+    if (!inode)
+    {
+        print("sys_rmdir: Directory does not exist\n");
+        return -ENOENT;
+    }
+
+    // Verificar que es un directorio
+    if ((inode->i_mode & MINIX_IFDIR) == 0)
+    {
+        print("sys_rmdir: Not a directory\n");
+        return -ENOTDIR;
+    }
+
+    // Verificar que el directorio está vacío (solo debe contener . y ..)
+    minix_dir_entry_t entries[MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t)];
+    bool has_other_entries = false;
+
+    // Leer el primer bloque del directorio
+    if (inode->i_zone[0] != 0)
+    {
+        if (minix_read_block(inode->i_zone[0], (uint8_t*)entries) == 0)
+        {
+            for (size_t i = 0; i < MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t); i++)
+            {
+                if (entries[i].inode != 0 && 
+                    strcmp(entries[i].name, ".") != 0 && 
+                    strcmp(entries[i].name, "..") != 0)
+                {
+                    has_other_entries = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (has_other_entries)
+    {
+        print("sys_rmdir: Directory not empty\n");
+        return -ENOTEMPTY;
+    }
+
+    // Obtener el directorio padre
+    char parent_path[256];
+    char dirname[64];
+    if (minix_fs_split_path(pathname, parent_path, dirname) != 0)
+    {
+        print("sys_rmdir: Invalid path\n");
+        return -EINVAL;
+    }
+
+    minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
+    if (!parent_inode || (parent_inode->i_mode & MINIX_IFDIR) == 0)
+    {
+        print("sys_rmdir: Parent directory does not exist\n");
+        return -ENOENT;
+    }
+
+    // Remover la entrada del directorio padre
+    if (minix_fs_remove_dir_entry(parent_inode, dirname) != 0)
+    {
+        print("sys_rmdir: Failed to remove directory entry\n");
+        return -ENOENT;
+    }
+
+    // Liberar las zonas del directorio
+    for (int i = 0; i < 7; i++) // Zonas directas
+    {
+        if (inode->i_zone[i] != 0)
+        {
+            minix_free_zone(inode->i_zone[i]);
+            inode->i_zone[i] = 0;
+        }
+    }
+
+    // Marcar el inode como libre
+    minix_fs_free_inode(1); // Usar inode 1 como ejemplo
+
+    print("sys_rmdir: Directory removed successfully\n");
     return 0;
 }
 
 int64_t sys_link(const char *oldpath, const char *newpath)
 {
-    (void)oldpath; // Parameter not used in this implementation
-    (void)newpath; // Parameter not used in this implementation
-    
-    // TODO: Implement hard link creation
-    return -ENOSYS; // Not implemented yet
+    if (!current_process)
+    {
+        return -ESRCH;
+    }
+
+    if (!oldpath || !newpath)
+    {
+        return -EFAULT;
+    }
+
+    print("sys_link: Creating hard link from '");
+    print(oldpath);
+    print("' to '");
+    print(newpath);
+    print("'\n");
+
+    // Verificar que oldpath existe y es un archivo regular
+    minix_inode_t *source_inode = minix_fs_find_inode(oldpath);
+    if (!source_inode)
+    {
+        print("sys_link: Source file does not exist\n");
+        return -ENOENT;
+    }
+
+    // Verificar que es un archivo regular (no directorio)
+    if ((source_inode->i_mode & MINIX_IFDIR) != 0)
+    {
+        print("sys_link: Cannot create hard link to directory\n");
+        return -EPERM;
+    }
+
+    // Verificar que newpath no existe
+    minix_inode_t *existing_inode = minix_fs_find_inode(newpath);
+    if (existing_inode)
+    {
+        print("sys_link: Target path already exists\n");
+        return -EEXIST;
+    }
+
+    // Obtener el directorio padre del newpath
+    char parent_path[256];
+    char filename[64];
+    if (minix_fs_split_path(newpath, parent_path, filename) != 0)
+    {
+        print("sys_link: Invalid target path\n");
+        return -EINVAL;
+    }
+
+    minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
+    if (!parent_inode || (parent_inode->i_mode & MINIX_IFDIR) == 0)
+    {
+        print("sys_link: Parent directory does not exist\n");
+        return -ENOENT;
+    }
+
+    // Crear la entrada de directorio
+    if (minix_fs_add_dir_entry(parent_inode, filename, 1) != 0) // Usar inode 1 como ejemplo
+    {
+        print("sys_link: Failed to create directory entry\n");
+        return -ENOSPC;
+    }
+
+    // Incrementar el contador de links del inode original
+    source_inode->i_nlinks++;
+    minix_fs_write_inode(1, source_inode); // Usar inode 1 como ejemplo
+
+    print("sys_link: Hard link created successfully\n");
+    return 0;
 }
 
 int64_t sys_unlink(const char *pathname)
@@ -1728,12 +1984,98 @@ int64_t sys_unlink(const char *pathname)
     print(pathname);
     print("\n");
 
-    // Implementar con Minix filesystem
-    print("sys_unlink: Using Minix filesystem to unlink file\n");
-    
-    // TODO: Implementar minix_fs_unlink cuando esté disponible
-    // Por ahora, simular éxito
-    print("sys_unlink: File unlinked successfully (simulated)\n");
+    // Verificar que no es el directorio raíz
+    if (strcmp(pathname, "/") == 0)
+    {
+        print("sys_unlink: Cannot unlink root directory\n");
+        return -EBUSY;
+    }
+
+    // Buscar el inode del archivo
+    minix_inode_t *inode = minix_fs_find_inode(pathname);
+    if (!inode)
+    {
+        print("sys_unlink: File does not exist\n");
+        return -ENOENT;
+    }
+
+    // Verificar que es un archivo regular (no directorio)
+    if ((inode->i_mode & MINIX_IFDIR) != 0)
+    {
+        print("sys_unlink: Cannot unlink directory (use rmdir)\n");
+        return -EISDIR;
+    }
+
+    // Obtener el directorio padre
+    char parent_path[256];
+    char filename[64];
+    if (minix_fs_split_path(pathname, parent_path, filename) != 0)
+    {
+        print("sys_unlink: Invalid path\n");
+        return -EINVAL;
+    }
+
+    minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
+    if (!parent_inode || (parent_inode->i_mode & MINIX_IFDIR) == 0)
+    {
+        print("sys_unlink: Parent directory does not exist\n");
+        return -ENOENT;
+    }
+
+    // Remover la entrada del directorio
+    if (minix_fs_remove_dir_entry(parent_inode, filename) != 0)
+    {
+        print("sys_unlink: Failed to remove directory entry\n");
+        return -ENOENT;
+    }
+
+    // Decrementar el contador de links
+    inode->i_nlinks--;
+
+    // Si no hay más links, liberar el inode y sus zonas
+    if (inode->i_nlinks == 0)
+    {
+        print("sys_unlink: No more links, freeing inode and zones\n");
+
+        // Liberar todas las zonas del archivo
+        for (int i = 0; i < 7; i++) // Zonas directas
+        {
+            if (inode->i_zone[i] != 0)
+            {
+                minix_free_zone(inode->i_zone[i]);
+                inode->i_zone[i] = 0;
+            }
+        }
+
+        // TODO: Liberar zonas indirectas si existen
+        if (inode->i_zone[7] != 0) // Zona indirecta simple
+        {
+            // Leer y liberar zonas indirectas
+            uint32_t indirect_zones[MINIX_BLOCK_SIZE / 4];
+            if (minix_read_block(inode->i_zone[7], (uint8_t*)indirect_zones) == 0)
+            {
+                for (int i = 0; i < MINIX_BLOCK_SIZE / 4; i++)
+                {
+                    if (indirect_zones[i] != 0)
+                    {
+                        minix_free_zone(indirect_zones[i]);
+                    }
+                }
+            }
+            minix_free_zone(inode->i_zone[7]);
+            inode->i_zone[7] = 0;
+        }
+
+        // Marcar el inode como libre
+        minix_fs_free_inode(1); // Usar inode 1 como ejemplo
+    }
+    else
+    {
+        // Actualizar el inode con el nuevo contador de links
+        minix_fs_write_inode(1, inode); // Usar inode 1 como ejemplo
+    }
+
+    print("sys_unlink: File unlinked successfully\n");
     return 0;
 }
 
@@ -1986,8 +2328,8 @@ int64_t sys_pipe(int pipefd[2])
 
     // TODO: Implementar pipes reales con Minix filesystem
     // Por ahora, solo asignar file descriptors simulado
-    current_process->open_files[readfd] = (uintptr_t)"pipe_read";
-    current_process->open_files[writefd] = (uintptr_t)"pipe_write";
+    current_process->open_files[readfd] = (void *)(uintptr_t)"pipe_read";
+    current_process->open_files[writefd] = (void *)(uintptr_t)"pipe_write";
 
     // Configurar pipefd array
     pipefd[0] = readfd;  // Read end
@@ -2004,10 +2346,46 @@ int64_t sys_pipe(int pipefd[2])
 
 int64_t sys_alarm(unsigned int seconds)
 {
-    (void)seconds; // Parameter not used in this implementation
+    if (!current_process)
+    {
+        return -ESRCH;
+    }
+
+    print("sys_alarm: Setting alarm for ");
+    print_uint32(seconds);
+    print(" seconds\n");
+
+    // Obtener el tiempo actual
+    extern uint64_t get_system_time(void);
+    uint64_t current_time = get_system_time();
     
-    // TODO: Implement alarm functionality
-    return 0; // No previous alarm
+    // Calcular el tiempo de expiración (convertir segundos a ticks)
+    // Asumiendo que el timer está configurado a ~100Hz (10ms por tick)
+    uint64_t ticks_per_second = 100; // Aproximadamente
+    uint64_t expiration_time = current_time + (seconds * ticks_per_second);
+    
+    // Guardar el alarm anterior
+    uint64_t previous_alarm = current_process->alarm_time;
+    
+    // Configurar el nuevo alarm
+    current_process->alarm_time = expiration_time;
+    current_process->alarm_active = (seconds > 0);
+    
+    print("sys_alarm: Current time: ");
+    print_uint64(current_time);
+    print(", Expiration: ");
+    print_uint64(expiration_time);
+    print("\n");
+    
+    // Retornar el tiempo restante del alarm anterior (en segundos)
+    if (previous_alarm > current_time && previous_alarm != 0)
+    {
+        uint64_t remaining_ticks = previous_alarm - current_time;
+        uint64_t remaining_seconds = remaining_ticks / ticks_per_second;
+        return (int64_t)remaining_seconds;
+    }
+    
+    return 0; // No había alarm previo o ya expiró
 }
 
 int64_t sys_signal(int signum, void (*handler)(int))

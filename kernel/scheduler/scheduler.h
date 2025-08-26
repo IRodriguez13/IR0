@@ -19,6 +19,9 @@ void scheduler_main_loop(void);   // Loop principal del scheduler - NUNCA RETORN
 void scheduler_dispatch_loop(void);              // Loop principal del dispatcher
 void scheduler_yield(void);                      // Yield del proceso actual
 scheduler_type_t get_active_scheduler(void);     // Obtener tipo de scheduler activo
+task_t *get_current_task(void);                  // Obtener tarea actual
+void set_current_task_null(void);                // Limpiar referencia de tarea actual
+void terminate_current_task(void);               // Terminar tarea actual y cambiar a siguiente
 const char* get_scheduler_name(void);            // Obtener nombre del scheduler
 void force_scheduler_fallback(void);             // Forzar fallback manual
 

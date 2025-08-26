@@ -126,20 +126,42 @@ static inline uint16_t minix_get_oth_perms(const minix_inode_t *inode) {
 }
 
 // ===============================================================================
-// MINIX FILESYSTEM FUNCTIONS
+// PUBLIC FUNCTIONS
 // ===============================================================================
 
-// Inicializar el filesystem Minix
+// Filesystem availability check
+bool minix_fs_is_available(void);
+bool minix_fs_is_working(void);
+
+// Filesystem operations
 int minix_fs_init(void);
-
-// Formatear el disco con Minix filesystem
 int minix_fs_format(void);
-
-// Crear directorio
 int minix_fs_mkdir(const char *path);
-
-// Listar directorio
 int minix_fs_ls(const char *path);
-
-// Limpiar el filesystem
 void minix_fs_cleanup(void);
+
+// Operaciones de inodes
+minix_inode_t *minix_fs_find_inode(const char *pathname);
+int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode);
+int minix_fs_free_inode(uint16_t inode_num);
+
+// Operaciones de directorios
+int minix_fs_split_path(const char *pathname, char *parent_path, char *filename);
+int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename, uint16_t inode_num);
+int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename);
+uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode, const char *name);
+
+// Operaciones de bloques
+int minix_read_block(uint32_t block_num, void *buffer);
+int minix_write_block(uint32_t block_num, const void *buffer);
+
+// Operaciones de zonas
+uint32_t minix_alloc_zone(void);
+void minix_free_zone(uint32_t zone_num);
+bool minix_is_zone_free(uint32_t zone_num);
+void minix_mark_zone_used(uint32_t zone_num);
+
+// Operaciones de inodes (bitmap)
+uint32_t minix_alloc_inode(void);
+void minix_mark_inode_used(uint32_t inode_num);
+void minix_mark_inode_free(uint32_t inode_num);

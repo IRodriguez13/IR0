@@ -675,3 +675,9 @@ int64_t sys_ptrace(long request, pid_t pid, void *addr, void *data);
 // ===============================================================================
 
 extern void (*syscall_table[MAX_SYSCALLS])(syscall_args_t *);
+
+// ===============================================================================
+// FILESYSTEM STATUS FUNCTIONS
+// ===============================================================================
+
+void syscalls_show_fs_status(void);

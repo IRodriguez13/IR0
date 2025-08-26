@@ -39,6 +39,10 @@ void page_fault_handler_x64(uint64_t error_code, uint64_t fault_address)
     
     pf_log_buffer[pf_log_pos] = '\0';
     
+
+    
+    pf_log_buffer[pf_log_pos] = '\0';
+    
     // ✅ SOLUCIÓN: Halt inmediato sin más operaciones
     while (1) 
     {
