@@ -526,7 +526,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             {
                 int value = va_arg(ap, int);
                 char num_str[32];
-                int len = int_to_string(value, num_str, 10);
+                size_t len = int_to_string(value, num_str, 10);
                 if (len > remaining)
                 {
                     len = remaining;
@@ -540,7 +540,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             {
                 unsigned int value = va_arg(ap, unsigned int);
                 char num_str[32];
-                int len = int_to_string((int)value, num_str, 10);
+                size_t len = int_to_string((int)value, num_str, 10);
                 if (len > remaining)
                 {
                     len = remaining;
@@ -555,7 +555,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             {
                 unsigned int value = va_arg(ap, unsigned int);
                 char num_str[32];
-                int len = int_to_string((int)value, num_str, 16);
+                size_t len = int_to_string((int)value, num_str, 16);
                 if (len > remaining)
                 {
                     len = remaining;

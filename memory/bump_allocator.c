@@ -305,6 +305,7 @@ void *kmalloc_aligned(size_t size, size_t alignment)
 }
 
 void kfree_aligned(void *ptr) {
+    (void)ptr; // Suppress unused parameter warning
     // NO IMPLEMENTADO - SOLO MÍNIMO
 }
 

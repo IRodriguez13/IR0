@@ -313,6 +313,8 @@ const char *vfs_simple_get_directory_name(int index)
 // Función simple para asignar sectores
 int vfs_allocate_sectors(int count)
 {
+    (void)count; // Suppress unused parameter warning
+
     // TODO: Implementar asignación real de sectores
     // Por ahora, retornar éxito
     return 0;
@@ -321,6 +323,8 @@ int vfs_allocate_sectors(int count)
 // Función simple para remover directorio
 int vfs_remove_directory(const char *path)
 {
+    (void)path; // Suppress unused parameter warning
+
     // TODO: Implementar remoción real de directorio
     // Por ahora, retornar éxito
     return 0;

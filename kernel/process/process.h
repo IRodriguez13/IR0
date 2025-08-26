@@ -99,7 +99,7 @@ typedef struct process
     } context;
 
     // Archivos y recursos
-    int open_files[16];    // File descriptors abiertos
+    void *open_files[16];    // File descriptors abiertos
     uintptr_t working_dir; // Directorio de trabajo (inode)
     
     // User/Group management

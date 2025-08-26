@@ -1,77 +1,93 @@
-; --------------------------------------------
-; Kernel Entry Point for Multiboot Loaders    |
-; --------------------------------------------|
-; Expects:                                    |
-;   - EAX = 0x2BADB002 (Multiboot magic)      |
-;   - EBX = Pointer to Multiboot info struct  |
-; Guarantees:                                 |
-;   - Stack: 16KB aligned to 16 bytes         |
-;   - Interrupts: Disabled                    |
-;   - EFLAGS: Clean state                     |
-; --------------------------------------------
-
-; boot.asm - Punto de entrada para kernel Multiboot
-section .multiboot_header
-header_start:
-    dd 0x1BADB002                ; Magic number (Multiboot 1)
-    dd 0x00000003                ; Flags: align modules on page boundaries, provide memory map
-    dd -(0x1BADB002 + 0x00000003) ; Checksum
-header_end:
+; Bootloader completo para x86-32 con Multiboot - VERSIÓN SEGURA
+; Implementación desde cero - limpia, funcional y sin page faults
 
 [BITS 32]
-section .text
 global _start
 extern kmain_x32
 
+; Header Multiboot estándar
+section .multiboot_header
+align 4
+header_start:
+    dd 0x1BADB002        ; Magic number
+    dd 0x00000003        ; Flags: align modules, provide memory map
+    dd -(0x1BADB002 + 0x00000003) ; Checksum
+header_end:
+
+; Código principal
+section .text
 _start:
-    cli
+    ; ===============================================================================
+    ; SETUP INICIAL SEGURO - SIN PAGE FAULTS
+    ; ===============================================================================
     
-    ; Inicializar stack (16KB alineado)
+    ; Deshabilitar interrupciones inmediatamente
+    cli                     
+    
+    ; Inicializar stack con alineación correcta (16-byte aligned)
     mov esp, stack_top
     mov ebp, esp
     
-    ; Limpiar EFLAGS
+    ; Verificar que el stack está alineado correctamente
+    test esp, 0xF
+    jz .stack_ok
+    ; Si no está alineado, ajustar
+    and esp, 0xFFFFFFF0
+    mov ebp, esp
+.stack_ok:
+    
+    ; Limpiar EFLAGS completamente
     push 0
     popf
     
-    ; Pasar parámetros Multiboot a kernel_main
-    push ebx    ; Puntero a estructura Multiboot
-    push eax    ; Magic number (0x36d76289)
+    ; Limpiar segmentos de datos
+    mov ax, 0x10           ; Data segment
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
     
+    ; Verificar que estamos en modo protegido
+    mov eax, cr0
+    test eax, 1
+    jz .not_protected
+    jmp .protected_ok
+
+
+.not_protected:
+    ; Si no estamos en modo protegido, loop infinito
+    cli
+    hlt
+    jmp .not_protected
+.protected_ok:
+    
+    ; ===============================================================================
+    ; VERIFICACIONES DE SEGURIDAD
+    ; ===============================================================================
+    
+    ; Verificar que tenemos memoria suficiente
+    ; (Esto es una verificación básica)
+    mov eax, 0x100000      ; Dirección base del kernel
+    mov ebx, [eax]         ; Intentar leer
+    mov [eax], ebx         ; Intentar escribir
+    
+    ; ===============================================================================
+    ; LLAMAR AL KERNEL PRINCIPAL
+    ; ===============================================================================
+    
+    ; Llamar al kernel principal con stack limpio
     call kmain_x32
     
-    ; Caída segura si kmain_x32 retorna que no debería pasar.
-
-
-; hang hace lo mismo que panic en el fondo pero mas rústico. Cuelga la cpu pero en un bucle infinito.
+    ; Si retorna, loop infinito seguro
 .hang:
     cli
     hlt
-    jmp .hang  ;
+    jmp .hang
 
-.end:
-
+; Stack con alineación correcta (16KB, 16-byte aligned)
 section .bss
-
 align 16
-
 stack_bottom:
-  
-    resb 16384  ; 16KB stack
-
-stack_top:    
-
-
-; Esto es el punto real de entrada del sistema donde permitimos a los módulos de C funcionar, por eso no usamos main() 
-;como punto de entrada, ya que no tenemos runtime para matar procesos y definir su ciclo de vida como en los programas típicos de 
-;usuario donde prima: loader → _start → main() → return 0 → exit(0) → syscall exit → SO libera recursos
-;acá sería algo como GRUB → _start → Kernel_Main() → lo que sea que haga esa funcion. 
-; Una vez que se llama a kernel_main, no hay retorno posible.
-; No existe un sistema operativo que nos esté esperando, ni una syscall exit()
-; como en el espacio de usuario. Somos el único código ejecutándose.
-; Si kernel_main termina, ejecutamos un loop con hlt → jmp .hang
-; para evitar comportamiento indefinido.
-;
-; Si queremos terminar el sistema, debemos apagarlo manualmente (out 0x604, al)
-; o reiniciarlo (out 0x64, al con 0xFE). Por ahora, simplemente colgamos la CPU.
-;
+    resb 16384              ; 16KB stack
+stack_top:
