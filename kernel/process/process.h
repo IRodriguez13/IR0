@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <ir0/print.h>
+#include "kernel/scheduler/task.h"  // Para task_t y task_state_t
 
 // Tipos básicos
 typedef int32_t pid_t;
@@ -110,6 +112,10 @@ typedef struct process
     uintptr_t heap_break;  // Current heap break
     uintptr_t next_mmap_addr; // Next mmap address
 
+    // Alarm management
+    uint64_t alarm_time;    // Tiempo de expiración del alarm
+    bool alarm_active;      // Si el alarm está activo
+
     // Señales
     uint32_t signal_mask;     // Máscara de señales bloqueadas
     uint32_t pending_signals; // Señales pendientes
@@ -134,14 +140,17 @@ typedef struct process
 
 // Inicialización
 void process_init(void);
+// Process creation and management
 process_t *process_create(const char *name, void (*entry_point)(void *), void *arg);
-void process_destroy(process_t *process);
-
-// Control de procesos
-int process_fork(process_t *parent);
+process_t *process_fork(process_t *parent);
 int process_exec(const char *path, char *const argv[], char *const envp[]);
 void process_exit(int exit_code);
 int process_wait(pid_t pid, int *status);
+void process_destroy(process_t *process);
+
+// Process to task conversion
+task_t *process_to_task(process_t *process);
+void process_entry_point(void *arg);
 
 // Scheduling
 void process_schedule(void);
@@ -159,6 +168,10 @@ process_t *process_find_by_pid(pid_t pid);
 process_t *process_get_current(void);
 pid_t process_get_pid(void);
 pid_t process_get_ppid(void);
+
+// Queue management (internal functions made external for syscalls)
+void process_remove_from_list(process_t *process);
+void process_add_to_zombie_queue(process_t *process);
 
 // Señales
 void process_send_signal(pid_t pid, int signal);

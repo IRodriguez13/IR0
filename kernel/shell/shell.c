@@ -11,6 +11,8 @@
 #include <vfs_simple.h>
 #include <IO/ps2.h>
 #include <stdarg.h>
+#include <scheduler/scheduler.h>
+#include <minix_fs.h>
 
 // Declaraciones externas para el sistema de interrupciones de teclado
 extern int keyboard_buffer_has_data(void);
@@ -240,11 +242,26 @@ int shell_run(shell_context_t *ctx, shell_config_t *config)
 
         // Read line from keyboard
         int len = shell_read_line(line, SHELL_MAX_LINE_LENGTH);
+        print_int32(len);
+        print("\n");
 
         if (len > 0)
         {
+            // Check if command is "exit" - handle directly
+            if (strcmp(line, "exit") == 0)
+            {
+                print("shell_run: Direct exit detected, calling dispatch loop\n");
+                shell_print_info("Exiting shell...");
+                panic("shell_run: Should not reach here after dispatch loop");
+                extern void scheduler_dispatch_loop(void);
+                scheduler_dispatch_loop();
+                // Should not reach here
+            }
+            
+           
             // Process the line
             shell_process_line(ctx, config, line);
+            print("shell_run: Line processed\n");
         }
     }
 
@@ -479,6 +496,9 @@ static int shell_cmd_help(shell_context_t *ctx, shell_config_t *config, char arg
     shell_print_info("echo_file    - Write text to file (simulated)");
     shell_print_info("grep         - Search text in files (simulated)");
     shell_print_info("find         - Find files by name (simulated)");
+    shell_print_info("fsstatus     - Show filesystem status");
+    shell_print_info("fork         - Create child process");
+    shell_print_info("exit         - Exit shell");
 
     return 0;
 }
@@ -1172,11 +1192,17 @@ static int shell_cmd_exit(shell_context_t *ctx, shell_config_t *config, char arg
     (void)args;
     (void)arg_count;
 
+    shell_print_info("Exiting shell...");
+    
+    // Llamar directamente al dispatch loop del scheduler
+    extern void scheduler_dispatch_loop(void);
+    scheduler_dispatch_loop();
+    
+    panic("shell_cmd_exit: Should not reach here");
+    
+    // Si llegamos aquí, algo salió mal
     ctx->running = 0;
     ctx->exit_code = 0;
-
-    shell_print_info("Exiting shell...");
-
     return 0;
 }
 
@@ -1250,6 +1276,64 @@ static int shell_cmd_keyboard(shell_context_t *ctx, shell_config_t *config, char
     return 0;
 }
 
+static int shell_cmd_fsstatus(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)ctx;
+    (void)config;
+    (void)args;
+    (void)arg_count;
+
+    shell_print_info("=== FILESYSTEM STATUS ===\n");
+    
+    // Verificar estado de Minix FS
+    extern bool minix_fs_is_working(void);
+    extern bool minix_fs_is_available(void);
+    
+    if (minix_fs_is_available()) {
+        shell_print_success("✅ ATA Disk: AVAILABLE\n");
+        
+        if (minix_fs_is_working()) {
+            shell_print_success("✅ MINIX FS: WORKING - PERSISTENT STORAGE ENABLED\n");
+            shell_print_info("📁 Directories and files will be saved to disk\n");
+        } else {
+            shell_print_warning("⚠️  MINIX FS: INITIALIZED BUT NOT WORKING\n");
+            shell_print_info("📁 Using memory-based fallback\n");
+        }
+    } else {
+        shell_print_error("❌ ATA Disk: NOT AVAILABLE\n");
+        shell_print_info("📁 Using memory-based fallback only\n");
+    }
+    
+    shell_print_info("🔄 System will automatically choose the best available option\n");
+    shell_print_info("========================\n");
+    
+    return 0;
+}
+
+static int shell_cmd_fork(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)ctx;
+    (void)config;
+    (void)args;
+    (void)arg_count;
+
+    shell_print_info("FORK: Creating child process...\n");
+    
+    // Llamar syscall fork
+    int64_t result = shell_syscall(SYS_FORK, 0, 0, 0);
+    
+    if (result >= 0) {
+        shell_print_success("FORK: Child process created with PID: ");
+        print_int32(result);
+        shell_print("\n");
+        shell_print_info("FORK: Both parent and child will continue execution\n");
+    } else {
+        shell_print_error("FORK: Failed to create child process\n");
+    }
+    
+    return 0;
+}
+
 // ===============================================================================
 // UTILITY FUNCTIONS
 // ===============================================================================
@@ -1285,6 +1369,8 @@ static void shell_init_builtin_commands(void)
     shell_add_builtin_command("echo_file", "Write text to file", shell_cmd_echo_file);
     shell_add_builtin_command("grep", "Search text in files", shell_cmd_grep);
     shell_add_builtin_command("find", "Find files by name", shell_cmd_find);
+    shell_add_builtin_command("fsstatus", "Show filesystem status", shell_cmd_fsstatus);
+    shell_add_builtin_command("fork", "Create child process", shell_cmd_fork);
     shell_add_builtin_command("exit", "Exit shell", shell_cmd_exit);
 }
 
