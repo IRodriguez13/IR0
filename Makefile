@@ -48,7 +48,7 @@ ifeq ($(ARCH),x86-64)
     CC = gcc
     ASM = nasm  
     LD = ld
-    CFLAGS = -m64 -mcmodel=kernel -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+    CFLAGS = -m64 -mcmodel=kernel -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -D__x86_64__
     CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
     CFLAGS += -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -I$(KERNEL_ROOT)/arch/x86-64/sources -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x86-64 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
     CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
@@ -61,8 +61,8 @@ else ifeq ($(ARCH),x86-32)
     CC = gcc
     ASM = nasm
     LD = ld  
-    CFLAGS = -m32 -march=i686 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-32/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x_86-32 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
+    CFLAGS = -m32 -march=i686 -D__i386__ -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
+    CFLAGS += -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-32/include -I$(KERNEL_ROOT)/arch/x86-32/sources -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x86-32 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
     CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = -f elf32
     LDFLAGS = -m elf_i386 -T arch/x86-32/linker.ld
@@ -82,15 +82,15 @@ else ifeq ($(ARCH),arm64)
     KERNEL_ENTRY = kmain_arm64
 else ifeq ($(ARCH),arm32)
     # Configuración para ARM32
-    CC = arm-linux-gnueabi-gcc
-    ASM = arm-linux-gnueabi-as
-    LD = arm-linux-gnueabi-ld
+    CC = arm-none-eabi-gcc
+    ASM = arm-none-eabi-as
+    LD = arm-none-eabi-ld
     CFLAGS = -march=armv7-a -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm32/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory
+    CFLAGS += -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm-32/include -I$(KERNEL_ROOT)/arch/arm-32/sources -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
     CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
     ASMFLAGS = --32
-    LDFLAGS = -m armelf_linux_eabi -T arch/arm32/linker.ld
-    ARCH_SUBDIRS = arch/arm32
+    LDFLAGS = -m armelf_linux_eabi -T arch/arm-32/linker.ld
+    ARCH_SUBDIRS = arch/arm-32
     KERNEL_ENTRY = kmain_arm32
 endif
 
@@ -151,8 +151,7 @@ endif
 SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 
 # Objetos base del kernel (comunes a todas las arquitecturas)
-KERNEL_BASE_OBJS = kernel/kernel_start.o \
-                   includes/ir0/print.o \
+KERNEL_BASE_OBJS = includes/ir0/print.o \
                    includes/ir0/logging.o \
                    includes/ir0/validation.o \
                    includes/string.o \
@@ -180,24 +179,27 @@ drivers/timer/rtc/rtc.o \
                    kernel/auth/auth.o \
                    kernel/login/login_system.o \
                    kernel/syscalls/syscalls.o \
-                   kernel/elf_loader.o \
                    kernel/shell/shell.o \
                    arch/common/arch_interface.o \
                    memory/bump_allocator.o \
-                   memory/paging_x64.o \
+                   memory/memory_manager.o \
+                   memory/slab_allocator.o \
+                   memory/buddy_allocator.o \
                    setup/kernel_config.o \
-                   fs/ir0fs.o \
-                   fs/vfs.o
+                   fs/minix_fs.o \
+                   kernel/kernel_start.o \
+                   examples/minix_test.o \
+                   examples/minix_ata_test.o
 
 # Objetos condicionales según build target
 ifeq ($(BUILD_TARGET),desktop)
-    CONDITIONAL_OBJS = fs/vfs_simple.o
+    CONDITIONAL_OBJS = 
 else ifeq ($(BUILD_TARGET),server)
-    CONDITIONAL_OBJS = fs/vfs_simple.o
+    CONDITIONAL_OBJS = 
 else ifeq ($(BUILD_TARGET),iot)
-    CONDITIONAL_OBJS = fs/vfs_simple.o
+    CONDITIONAL_OBJS = 
 else ifeq ($(BUILD_TARGET),embedded)
-    CONDITIONAL_OBJS = fs/vfs_simple.o
+    CONDITIONAL_OBJS = 
 endif
 
 # Objetos de arquitectura
@@ -208,13 +210,14 @@ ifeq ($(ARCH),x86-64)
                 arch/x86-64/sources/fault.o \
                 arch/x86-64/sources/tss_x64.o \
                 kernel/scheduler/switch/switch_x64.o \
-                interrupt/arch/x86-64/isr_stubs_64.o
+                interrupt/arch/x86-64/isr_stubs_64.o \
+                memory/paging_x64.o
 else ifeq ($(ARCH),x86-32)  
     ARCH_OBJS = arch/x86-32/sources/arch_x86.o \
                 arch/x86-32/asm/boot_x86.o \
-                arch/x86-32/sources/idt_arch_x86.o \
                 kernel/scheduler/switch/switch_x86.o \
-                interrupt/arch/x86-32/isr_stubs_32.o
+                interrupt/arch/x86-32/isr_stubs_32.o \
+                memory/paging_x86-32.o
 else ifeq ($(ARCH),arm64)
     ARCH_OBJS = arch/arm64/sources/arch_arm64.o \
                 arch/arm64/asm/boot_arm64.o \
@@ -224,13 +227,7 @@ else ifeq ($(ARCH),arm64)
                 kernel/scheduler/switch/switch_arm64.o \
                 interrupt/arch/arm64/interrupt.o
 else ifeq ($(ARCH),arm32)
-    ARCH_OBJS = arch/arm32/sources/arch_arm32.o \
-                arch/arm32/asm/boot_arm32.o \
-                arch/arm32/sources/exception_arm32.o \
-                memory/arch/arm32/paging_arm32.o \
-                memory/arch/arm32/mmu_arm32.o \
-                kernel/scheduler/switch/switch_arm32.o \
-                interrupt/arch/arm32/interrupt.o
+    ARCH_OBJS = arch/arm-32/sources/arch_arm.o
 endif
 
 # Todos los objetos
@@ -442,13 +439,25 @@ help:
 run-gui: all
 	@echo "🚀 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con GUI..."
 ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
 else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
 else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
 else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK)
+endif
+
+run-console: all
+	@echo "🚀 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU sin GUI..."
+ifeq ($(ARCH),x86-64)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) -nographic
+else ifeq ($(ARCH),x86-32)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) -nographic
+else ifeq ($(ARCH),arm64)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) -nographic
+else ifeq ($(ARCH),arm32)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) -nographic
 endif
 
 # Ejecutar sin GUI (terminal)
@@ -506,13 +515,13 @@ endif
 run-debug-nographic: all
 	@echo "🐛 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con debugging (terminal)..."
 ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
 else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
 else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
 else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
+	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
 endif
 
 # Comandos rápidos con debugging
@@ -568,3 +577,4 @@ help-qemu:
 	@echo "  Ctrl+C                   - Interrumpir ejecución"
 
 .PHONY: all all-arch all-targets all-combinations run debug clean clean-all arch-details help run-gui run-nographic run-test run-32 run-64 run-32-nographic run-64-nographic run-debug run-debug-nographic run-32-debug run-64-debug run-32-debug-nographic run-64-debug-nographic help-qemu
+

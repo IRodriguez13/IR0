@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <ir0/print.h>
+#include <stddef.h>
 
 // TSS structure for x86-64
 typedef struct 
@@ -33,7 +34,8 @@ void tss_init_x64(void)
     print_colored("[TSS] Initializing Task State Segment for x86-64...\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     
     // Clear TSS structure
-    for (int i = 0; i < sizeof(tss_entry_t); i++) {
+    for (size_t i = 0; i < sizeof(tss_entry_t); i++) 
+    {
         ((uint8_t*)&tss)[i] = 0;
     }
     
