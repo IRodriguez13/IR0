@@ -6,7 +6,7 @@
 #include <bump_allocator.h>
 
 // ===============================================================================
-// PAGE TABLE STRUCTURES
+//                              PAGE TABLE STRUCTURES
 // ===============================================================================
 
 // Punteros a tablas, alineadas a 4KiB

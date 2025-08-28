@@ -5,7 +5,8 @@
 #include <stdbool.h>
 
 // Estructuras ultra simples para paginación 32-bit
-typedef struct {
+typedef struct
+{
     uint32_t present : 1;
     uint32_t read_write : 1;
     uint32_t user_supervisor : 1;
@@ -19,7 +20,8 @@ typedef struct {
     uint32_t page_address : 20;
 } __attribute__((packed)) page_table_entry_t;
 
-typedef struct {
+typedef struct
+{
     uint32_t present : 1;
     uint32_t read_write : 1;
     uint32_t user_supervisor : 1;

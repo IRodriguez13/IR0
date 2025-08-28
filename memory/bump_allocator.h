@@ -6,18 +6,20 @@
 // === ESTRUCTURAS DE METADATOS PARA FREE-LIST ===
 
 // Metadatos de bloque de memoria
-typedef struct block_header {
-    size_t size;                    // Tamaño del bloque (sin incluir header)
-    struct block_header *next;      // Siguiente bloque en la lista
-    uint8_t is_free;               // 1 = libre, 0 = ocupado
-    uint8_t padding[7];            // Padding para alineación 16-byte
+typedef struct block_header
+{
+    size_t size;               // Tamaño del bloque (sin incluir header)
+    struct block_header *next; // Siguiente bloque en la lista
+    uint8_t is_free;           // 1 = libre, 0 = ocupado
+    uint8_t padding[7];        // Padding para alineación 16-byte
 } block_header_t;
 
 // Estrategias de búsqueda de bloques
-typedef enum {
-    FIRST_FIT,      // Primer bloque que quepa
-    BEST_FIT,       // Bloque más pequeño que quepa
-    WORST_FIT       // Bloque más grande disponible
+typedef enum
+{
+    FIRST_FIT, // Primer bloque que quepa
+    BEST_FIT,  // Bloque más pequeño que quepa
+    WORST_FIT  // Bloque más grande disponible
 } allocation_strategy_t;
 
 // === FUNCIONES PRINCIPALES DE MEMORIA ===

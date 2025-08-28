@@ -21,43 +21,43 @@ typedef struct task
     // ===============================================================================
     // CAMPOS DE CONTEXTO PARA CONTEXT SWITCHING (x86-64)
     // ===============================================================================
-    uint64_t rax;       // +0x00: RAX register
-    uint64_t rbx;       // +0x08: RBX register
-    uint64_t rcx;       // +0x10: RCX register
-    uint64_t rdx;       // +0x18: RDX register
-    uint64_t rsi;       // +0x20: RSI register
-    uint64_t rdi;       // +0x28: RDI register
-    uint64_t r8;        // +0x30: R8 register
-    uint64_t r9;        // +0x38: R9 register
-    uint64_t r10;       // +0x40: R10 register
-    uint64_t r11;       // +0x48: R11 register
-    uint64_t r12;       // +0x50: R12 register
-    uint64_t r13;       // +0x58: R13 register
-    uint64_t r14;       // +0x60: R14 register
-    uint64_t r15;       // +0x68: R15 register
-    uint64_t rsp;       // +0x70: Stack Pointer
-    uint64_t rbp;       // +0x78: Base Pointer
-    uint64_t rip;       // +0x80: Instruction Pointer
-    uint64_t rflags;    // +0x88: Flags register
-    uint16_t cs;        // +0x90: Code Segment
-    uint16_t ds;        // +0x92: Data Segment
-    uint16_t es;        // +0x94: Extra Segment
-    uint16_t fs;        // +0x96: FS Segment
-    uint16_t gs;        // +0x98: GS Segment
-    uint16_t ss;        // +0x9A: Stack Segment
-    uint16_t padding1;  // +0x9C: Padding
-    uint32_t padding2;  // +0x9E: Padding
-    uint64_t cr0;       // +0xA0: Control Register 0
-    uint64_t cr2;       // +0xA8: Control Register 2
-    uint64_t cr3;       // +0xB0: Control Register 3 (Page Directory)
-    uint64_t cr4;       // +0xB8: Control Register 4
-    uint64_t dr0;       // +0xC0: Debug Register 0
-    uint64_t dr1;       // +0xC8: Debug Register 1
-    uint64_t dr2;       // +0xD0: Debug Register 2
-    uint64_t dr3;       // +0xD8: Debug Register 3
-    uint64_t dr6;       // +0xE0: Debug Register 6
-    uint64_t dr7;       // +0xE8: Debug Register 7
-    
+    uint64_t rax;      // +0x00: RAX register
+    uint64_t rbx;      // +0x08: RBX register
+    uint64_t rcx;      // +0x10: RCX register
+    uint64_t rdx;      // +0x18: RDX register
+    uint64_t rsi;      // +0x20: RSI register
+    uint64_t rdi;      // +0x28: RDI register
+    uint64_t r8;       // +0x30: R8 register
+    uint64_t r9;       // +0x38: R9 register
+    uint64_t r10;      // +0x40: R10 register
+    uint64_t r11;      // +0x48: R11 register
+    uint64_t r12;      // +0x50: R12 register
+    uint64_t r13;      // +0x58: R13 register
+    uint64_t r14;      // +0x60: R14 register
+    uint64_t r15;      // +0x68: R15 register
+    uint64_t rsp;      // +0x70: Stack Pointer
+    uint64_t rbp;      // +0x78: Base Pointer
+    uint64_t rip;      // +0x80: Instruction Pointer
+    uint64_t rflags;   // +0x88: Flags register
+    uint16_t cs;       // +0x90: Code Segment
+    uint16_t ds;       // +0x92: Data Segment
+    uint16_t es;       // +0x94: Extra Segment
+    uint16_t fs;       // +0x96: FS Segment
+    uint16_t gs;       // +0x98: GS Segment
+    uint16_t ss;       // +0x9A: Stack Segment
+    uint16_t padding1; // +0x9C: Padding
+    uint32_t padding2; // +0x9E: Padding
+    uint64_t cr0;      // +0xA0: Control Register 0
+    uint64_t cr2;      // +0xA8: Control Register 2
+    uint64_t cr3;      // +0xB0: Control Register 3 (Page Directory)
+    uint64_t cr4;      // +0xB8: Control Register 4
+    uint64_t dr0;      // +0xC0: Debug Register 0
+    uint64_t dr1;      // +0xC8: Debug Register 1
+    uint64_t dr2;      // +0xD0: Debug Register 2
+    uint64_t dr3;      // +0xD8: Debug Register 3
+    uint64_t dr6;      // +0xE0: Debug Register 6
+    uint64_t dr7;      // +0xE8: Debug Register 7
+
     // ===============================================================================
     // CAMPOS BÁSICOS (compatibilidad con código existente)
     // ===============================================================================
@@ -99,8 +99,6 @@ typedef struct task
 
 } task_t;
 
-
-
 // ===============================================================================
 // CONSTANTES Y LÍMITES
 // ===============================================================================
@@ -110,7 +108,6 @@ typedef struct task
 #define MAX_NICE 19                   // Nice máximo
 #define MIN_NICE -20                  // Nice mínimo
 #define DEFAULT_NICE 0                // Nice por defecto
-
 
 // ===============================================================================
 // MACROS DE UTILIDAD

@@ -18,7 +18,6 @@ typedef enum
     RB_BLACK = 1
 } rb_color_t;
 
-
 typedef struct rb_node
 {
     struct rb_node *parent;
