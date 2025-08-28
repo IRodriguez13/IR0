@@ -4,7 +4,7 @@
 #include "elf_loader.h"
 #include <ir0/print.h>
 // #include "../memory/memo_interface.h"  // Comentado - no existe en esta rama
-#include <bump_allocator.h>  // Usar bump_allocator directamente
+#include <bump_allocator.h> // Usar bump_allocator directamente
 // #include "../memory/process_memo.h"  // Comentado - no existe en esta rama
 // #include "../memory/krnl_memo_layout.h"  // Comentado - no existe en esta rama
 #include "process/process.h"
@@ -81,7 +81,7 @@ static int validate_elf_header(const elf64_header_t *header)
 static int load_segment_from_file(vfs_file_t *elf_file, const elf64_phdr_t *phdr, uintptr_t pml4_phys)
 {
     (void)pml4_phys; // Parameter not used in this implementation
-    
+
     if (!elf_file || !phdr)
     {
         return -1;
@@ -116,7 +116,7 @@ static int load_segment_from_file(vfs_file_t *elf_file, const elf64_phdr_t *phdr
 
     // Mapear región en user space (comentado - no implementado en esta rama)
     // int result = map_user_region(pml4_phys, virt_addr, mem_size, page_flags);
-    int result = 0;  // Stub - siempre exitoso
+    int result = 0; // Stub - siempre exitoso
     if (result != 0)
     {
         print("Failed to map user region for segment\n");
@@ -278,7 +278,7 @@ int load_elf_program(const char *pathname, process_t *process)
     //     vfs_close(elf_file);
     //     return -1;
     // }
-    uintptr_t pml4_phys = 0;  // Stub - siempre exitoso
+    uintptr_t pml4_phys = 0; // Stub - siempre exitoso
 
     // Leer program headers reales del archivo
     if (header.e_phnum == 0)
@@ -309,12 +309,12 @@ int load_elf_program(const char *pathname, process_t *process)
         ssize_t bytes_read = vfs_read(elf_file, &phdr, sizeof(elf64_phdr_t));
         if (bytes_read != sizeof(elf64_phdr_t))
         {
-                print("Failed to read program header ");
-                print_int32(i);
-                print("\n");
-                // destroy_process_page_directory(pml4_phys);  // Comentado - no implementado en esta rama
-                vfs_close(elf_file);
-                return -1;
+            print("Failed to read program header ");
+            print_int32(i);
+            print("\n");
+            // destroy_process_page_directory(pml4_phys);  // Comentado - no implementado en esta rama
+            vfs_close(elf_file);
+            return -1;
         }
 
         debug_program_header(&phdr, i);

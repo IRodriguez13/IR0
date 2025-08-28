@@ -27,10 +27,10 @@ task_t *current_running_task = NULL;
 void idle_task_function(void *arg)
 {
     (void)arg; // Evitar warning de parámetro no usado
-    
+
     // Función simple que solo hace HLT
     cpu_wait();
-    
+
     // Si llega acá, a hacer noni.
     cpu_relax();
 }
@@ -60,7 +60,7 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
 
     // Inicializar estructura de tarea
     memset(task, 0, sizeof(task_t));
-    
+
     task->pid = next_pid++;
     task->priority = priority;
     task->nice = nice;
@@ -69,65 +69,65 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
     task->stack_size = DEFAULT_STACK_SIZE;
     task->entry = entry;
     task->entry_arg = arg;
-    
+
     // Configurar stack para la tarea
     uint32_t *stack_ptr = (uint32_t *)((uintptr_t)stack + DEFAULT_STACK_SIZE);
-    
+
     // Alinear stack a 16 bytes (requerimiento x86)
     stack_ptr = (uint32_t *)((uintptr_t)stack_ptr & ~0xF);
-    
+
     // Configurar stack frame simple para context switch
     // El context switch espera: PUSHA (8 registros) + PUSHFD (EFLAGS)
-    
+
     // PUSHFD - EFLAGS
     stack_ptr -= 4;
     *stack_ptr = 0x202; // EFLAGS con interrupts habilitadas
-    
+
     // PUSHA - EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
     stack_ptr -= 4; // EDI
     *stack_ptr = 0;
-    
+
     stack_ptr -= 4; // ESI
     *stack_ptr = 0;
-    
+
     stack_ptr -= 4; // EBP
     *stack_ptr = 0;
-    
+
     stack_ptr -= 4; // ESP (placeholder)
     *stack_ptr = 0;
-    
+
     stack_ptr -= 4; // EBX
     *stack_ptr = 0;
-    
+
     stack_ptr -= 4; // EDX
     *stack_ptr = 0;
-    
+
     stack_ptr -= 4; // ECX
     *stack_ptr = 0;
-    
+
     stack_ptr -= 4; // EAX
     *stack_ptr = 0;
-    
+
     // EIP de retorno - apuntar a la función de entrada
     stack_ptr -= 4;
     *stack_ptr = (uintptr_t)entry;
-    
+
     // Guardar puntero al stack
     task->rsp = (uintptr_t)stack_ptr;
     task->rbp = 0; // RBP inicial
-    
+
     // Usar el page directory del kernel por ahora
     task->cr3 = 0; // TODO: Implementar page directories por proceso
-    
+
     // Agregar a lista global de tareas
     task->next = task_list;
     task_list = task;
-    
+
     LOG_OK("Task created: PID=%u, priority=%u, nice=%d");
     print_hex_compact(task->pid);
     print_hex_compact(task->priority);
     print_hex_compact(task->nice);
-    
+
     return task;
 }
 
@@ -137,17 +137,17 @@ void destroy_task(task_t *task)
     {
         return;
     }
-    
+
     // Marcar como terminada
     task->state = TASK_TERMINATED;
-    
+
     // Liberar stack
     if (task->stack_base)
     {
         kfree(task->stack_base);
         task->stack_base = NULL;
     }
-    
+
     // Remover de lista global
     if (task_list == task)
     {
@@ -165,7 +165,7 @@ void destroy_task(task_t *task)
             current->next = task->next;
         }
     }
-    
+
     // Liberar estructura
     kfree(task);
 }
@@ -176,13 +176,13 @@ void task_set_nice(task_t *task, int8_t nice)
     {
         return;
     }
-    
+
     if (nice < MIN_NICE || nice > MAX_NICE)
     {
         LOG_WARN("task_set_nice: Invalid nice value");
         return;
     }
-    
+
     task->nice = nice;
 }
 
@@ -193,12 +193,12 @@ void task_get_info(task_t *task)
         LOG_ERR("task_get_info: task is NULL");
         return;
     }
-    
+
     print("Task Info:\n");
     print("  PID: ");
     print_hex_compact(task->pid);
     print("\n");
-    
+
     print("  State: ");
     switch (task->state)
     {
@@ -219,11 +219,11 @@ void task_get_info(task_t *task)
         break;
     }
     print("\n");
-    
+
     print("  Priority: ");
     print_hex_compact(task->priority);
     print("\n");
-    
+
     print("  Nice: ");
     print_hex_compact(task->nice);
     print("\n");
@@ -237,11 +237,11 @@ void task_get_info(task_t *task)
 static void test_task_function(void *arg)
 {
     int task_id = (int)(uintptr_t)arg;
-    
+
     print("Test task ");
     print_hex_compact(task_id);
     print(" started\n");
-    
+
     // Simular trabajo de la tarea
     for (int i = 0; i < 5; i++)
     {
@@ -250,13 +250,14 @@ static void test_task_function(void *arg)
         print(" iteration ");
         print_hex_compact(i);
         print("\n");
-        
+
         // Simular trabajo de CPU
-        for (volatile int j = 0; j < 1000000; j++) {
+        for (volatile int j = 0; j < 1000000; j++)
+        {
             // CPU work
         }
     }
-    
+
     print("Test task ");
     print_hex_compact(task_id);
     print(" completed\n");
@@ -265,33 +266,33 @@ static void test_task_function(void *arg)
 void create_test_tasks(void)
 {
     LOG_OK("Creating test tasks...");
-    
+
     // Crear idle task primero
     idle_task = create_task(idle_task_function, NULL, 0, 0);
     if (!idle_task)
     {
         panic("Failed to create idle task!");
     }
-    
+
     // Crear tareas de prueba más interesantes
-    task_t *test_task1 = create_task(test_task_function, (void*)1, 1, 0);
+    task_t *test_task1 = create_task(test_task_function, (void *)1, 1, 0);
     if (!test_task1)
     {
         LOG_WARN("Failed to create test task 1");
     }
-    
-    task_t *test_task2 = create_task(test_task_function, (void*)2, 2, 1);
+
+    task_t *test_task2 = create_task(test_task_function, (void *)2, 2, 1);
     if (!test_task2)
     {
         LOG_WARN("Failed to create test task 2");
     }
-    
-    task_t *test_task3 = create_task(test_task_function, (void*)3, 3, -1);
+
+    task_t *test_task3 = create_task(test_task_function, (void *)3, 3, -1);
     if (!test_task3)
     {
         LOG_WARN("Failed to create test task 3");
     }
-    
+
     // Agregar tareas al scheduler
     add_task(idle_task);
     if (test_task1)
@@ -306,7 +307,7 @@ void create_test_tasks(void)
     {
         add_task(test_task3);
     }
-    
+
     LOG_OK("Test tasks created successfully");
 }
 
@@ -323,7 +324,7 @@ uint32_t get_task_count(void)
 {
     uint32_t count = 0;
     task_t *current = task_list;
-    
+
     while (current)
     {
         if (current->state != TASK_TERMINATED)
@@ -332,6 +333,6 @@ uint32_t get_task_count(void)
         }
         current = current->next;
     }
-    
+
     return count;
 }

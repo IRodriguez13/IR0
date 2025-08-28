@@ -4,7 +4,7 @@
 #include <ir0/print.h>
 #include <ir0/panic/panic.h>
 #include <string.h>
-#include <memory/paging_x64.h>  // Para PAGE_USER, PAGE_RW, map_page, unmap_page
+#include <memory/paging_x64.h> // Para PAGE_USER, PAGE_RW, map_page, unmap_page
 #include <kernel/process/process.h>
 #include <fs/minix_fs.h>
 #include <fs/vfs_simple.h>
@@ -12,7 +12,7 @@
 #include <interrupt/arch/keyboard.h>
 #include <drivers/timer/pit/pit.h>
 #include <kernel/scheduler/scheduler.h>
-#include <bump_allocator.h>  
+#include <bump_allocator.h>
 #include <drivers/storage/ata.h>
 #include <kernel/elf_loader.h>
 #include <fs/minix_fs.h>
@@ -166,15 +166,21 @@ void syscalls_init(void)
     // Inicializar MINIX filesystem
     extern int minix_fs_init(void);
     extern bool minix_fs_is_working(void);
-    
+
     int minix_result = minix_fs_init();
-    if (minix_result == 0) {
-        if (minix_fs_is_working()) {
+    if (minix_result == 0)
+    {
+        if (minix_fs_is_working())
+        {
             print("SYSCALLS: MINIX FS initialized and working - PERSISTENT STORAGE AVAILABLE\n");
-        } else {
+        }
+        else
+        {
             print("SYSCALLS: MINIX FS initialized but no disk available - using memory fallback\n");
         }
-    } else {
+    }
+    else
+    {
         print("SYSCALLS: MINIX FS initialization failed - using memory fallback\n");
     }
 
@@ -240,7 +246,7 @@ void syscalls_init(void)
     */
 
     print_success("System call interface initialized\n");
-    
+
     // Mostrar estado del sistema de archivos
     syscalls_show_fs_status();
 }
@@ -571,15 +577,13 @@ void sys_sigsuspend_wrapper(syscall_args_t *args)
 int64_t sys_exit(int exit_code)
 {
 
-
     if (!current_process)
     {
         return -ESRCH;
     }
 
-   
     print_int32(current_process->pid);
-    print(" exiting with code "); 
+    print(" exiting with code ");
     print_int32(exit_code);
     print("\n");
 
@@ -591,19 +595,22 @@ int64_t sys_exit(int exit_code)
     // Buscar la task actual del scheduler que corresponde a este proceso
     extern task_t *get_current_task(void);
     task_t *current_task = get_current_task();
-    
-    if (current_task && current_task->pid == current_process->pid) {
+
+    if (current_task && current_task->pid == current_process->pid)
+    {
         // Marcar la task como terminada para que el scheduler la ignore
         current_task->state = TASK_TERMINATED;
         print("sys_exit: Associated task PID ");
         print_int32(current_task->pid);
         print(" marked as terminated\n");
-        
+
         // CRÍTICO: Limpiar la referencia de current_task en el scheduler
         extern void set_current_task_null(void);
         set_current_task_null();
         print("sys_exit: Current task reference cleared from scheduler\n");
-    } else {
+    }
+    else
+    {
         print("sys_exit: Warning - no associated task found for process PID ");
         print_int32(current_process->pid);
         print("\n");
@@ -629,9 +636,9 @@ int64_t sys_exit(int exit_code)
     }
 
     // 4. Mover proceso a cola de zombies
-    extern void process_remove_from_list(process_t *process);
-    extern void process_add_to_zombie_queue(process_t *process);
-    
+    extern void process_remove_from_list(process_t * process);
+    extern void process_add_to_zombie_queue(process_t * process);
+
     process_remove_from_list(current_process);
     process_add_to_zombie_queue(current_process);
 
@@ -640,11 +647,11 @@ int64_t sys_exit(int exit_code)
     // 5. IMPORTANTE: Invocar el dispatch loop para manejar la limpieza
     // El proceso ya está marcado como zombie, el dispatch loop lo limpiará
     print("sys_exit: Invoking dispatch loop for cleanup\n");
-    
+
     // 6. Invocar el dispatch loop - esto manejará la limpieza de tareas terminadas
     extern void scheduler_dispatch_loop(void);
     scheduler_dispatch_loop();
-    
+
     // 7. NUNCA debería llegar aquí, pero por seguridad
     return 0;
 }
@@ -813,9 +820,9 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 
 int64_t sys_open(const char *pathname, int flags, mode_t mode)
 {
-    (void)flags;  // TODO: Implementar flags de apertura
-    (void)mode;   // TODO: Implementar permisos de modo
-    
+    (void)flags; // TODO: Implementar flags de apertura
+    (void)mode;  // TODO: Implementar permisos de modo
+
     if (!current_process)
     {
         return -ESRCH;
@@ -846,15 +853,15 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     print("sys_open: Opening file with Minix filesystem: ");
     print(pathname);
     print("\n");
-    
+
     // Por ahora, solo crear un file descriptor simulado
     // TODO: Implementar apertura real cuando tengamos archivos en Minix
     current_process->open_files[fd] = (void *)(uintptr_t)pathname; // Guardar el path como referencia
-    
+
     print("sys_open: File descriptor created: ");
     print_int32(fd);
     print("\n");
-    
+
     return fd;
 }
 
@@ -879,10 +886,10 @@ int64_t sys_close(int fd)
     print("sys_close: Closing file descriptor: ");
     print_int32(fd);
     print("\n");
-    
+
     // Liberar el file descriptor
     current_process->open_files[fd] = 0;
-    
+
     print("sys_close: File descriptor closed successfully\n");
     return 0;
 }
@@ -1041,37 +1048,45 @@ int64_t sys_getcwd(char *buf, size_t size)
 int64_t sys_mkdir(const char *pathname, mode_t mode)
 {
     (void)mode; // Parameter not used in this implementation
-    
-    if (!current_process) {
+
+    if (!current_process)
+    {
         return -ESRCH;
     }
 
-    if (!pathname) {
+    if (!pathname)
+    {
         return -EFAULT;
     }
 
     // Usar exclusivamente MINIX filesystem
     extern bool minix_fs_is_working(void);
     extern int minix_fs_mkdir(const char *path);
-    
-    if (minix_fs_is_working()) {
+
+    if (minix_fs_is_working())
+    {
         print("MKDIR: Using MINIX FS for: ");
         print(pathname);
         print("\n");
-        
+
         int result = minix_fs_mkdir(pathname);
-        if (result == 0) {
+        if (result == 0)
+        {
             print("MKDIR: Created ");
             print(pathname);
             print(" on MINIX FS (success)\n");
             return 0;
-        } else {
+        }
+        else
+        {
             print("MKDIR: Failed to create ");
             print(pathname);
             print(" on MINIX FS\n");
             return -EEXIST; // Directory already exists or other error
         }
-    } else {
+    }
+    else
+    {
         print("MKDIR: MINIX FS not available - cannot create directory\n");
         return -ENOSYS; // Function not implemented (no filesystem available)
     }
@@ -1101,9 +1116,9 @@ int64_t sys_stat(const char *pathname, stat_t *statbuf)
 
 int64_t sys_getdents(int fd, void *dirent, unsigned int count)
 {
-    (void)fd; // Parameter not used in this implementation
+    (void)fd;     // Parameter not used in this implementation
     (void)dirent; // Parameter not used in this implementation
-    (void)count; // Parameter not used in this implementation
+    (void)count;  // Parameter not used in this implementation
 
     if (!current_process)
     {
@@ -1132,36 +1147,44 @@ int64_t sys_getdents(int fd, void *dirent, unsigned int count)
 
 int64_t sys_ls(const char *pathname)
 {
-    if (!current_process) {
+    if (!current_process)
+    {
         return -ESRCH;
     }
 
-    if (!pathname) {
+    if (!pathname)
+    {
         return -EFAULT;
     }
 
     // Usar exclusivamente MINIX filesystem
     extern bool minix_fs_is_working(void);
     extern int minix_fs_ls(const char *path);
-    
-    if (minix_fs_is_working()) {
+
+    if (minix_fs_is_working())
+    {
         print("LS: Using MINIX FS for: ");
         print(pathname);
         print("\n");
-        
+
         int result = minix_fs_ls(pathname);
-        if (result == 0) {
+        if (result == 0)
+        {
             print("LS: Listed ");
             print(pathname);
             print(" from MINIX FS (success)\n");
             return 0;
-        } else {
+        }
+        else
+        {
             print("LS: Failed to list ");
             print(pathname);
             print(" from MINIX FS\n");
             return -ENOENT; // No such file or directory
         }
-    } else {
+    }
+    else
+    {
         print("LS: MINIX FS not available - cannot list directory\n");
         return -ENOSYS; // Function not implemented (no filesystem available)
     }
@@ -1222,7 +1245,7 @@ int64_t sys_fork(void)
     print("sys_fork: Creating child process...\n");
 
     // Crear proceso hijo usando el sistema de procesos
-    extern process_t *process_fork(process_t *parent);
+    extern process_t *process_fork(process_t * parent);
     process_t *child = process_fork(current_process);
     if (!child)
     {
@@ -1237,17 +1260,21 @@ int64_t sys_fork(void)
     print(")\n");
 
     // Convertir proceso hijo en tarea del scheduler
-    extern task_t *process_to_task(process_t *process);
-    extern void add_task(task_t *task);
-    
+    extern task_t *process_to_task(process_t * process);
+    extern void add_task(task_t * task);
+
     task_t *child_task = process_to_task(child);
-    if (child_task) {
-        add_task(child_task);
-        print("sys_fork: Child process converted to task and added to scheduler\n");
-    } else {
+    
+    if (!child_task)
+    {
+
         print("sys_fork: Failed to convert child process to task\n");
+        return;
     }
 
+    add_task(child_task);
+    print("sys_fork: Child process converted to task and added to scheduler\n");
+    
     return child->pid;
 }
 
@@ -1483,24 +1510,30 @@ void syscalls_show_fs_status(void)
 {
     extern bool minix_fs_is_working(void);
     extern bool minix_fs_is_available(void);
-    
+
     print("=== FILESYSTEM STATUS ===\n");
-    
-    if (minix_fs_is_available()) {
+
+    if (minix_fs_is_available())
+    {
         print("✅ ATA Disk: AVAILABLE\n");
-        
-        if (minix_fs_is_working()) {
+
+        if (minix_fs_is_working())
+        {
             print("✅ MINIX FS: WORKING - PERSISTENT STORAGE ENABLED\n");
             print("📁 Directories and files will be saved to disk\n");
-        } else {
+        }
+        else
+        {
             print("⚠️  MINIX FS: INITIALIZED BUT NOT WORKING\n");
             print("📁 Using memory-based fallback\n");
         }
-    } else {
+    }
+    else
+    {
         print("❌ ATA Disk: NOT AVAILABLE\n");
         print("📁 Using memory-based fallback only\n");
     }
-    
+
     print("🔄 System will automatically choose the best available option\n");
     print("========================\n");
 }
@@ -1553,18 +1586,19 @@ int64_t sys_brk(void *addr)
         print("sys_brk: Expanding heap by ");
         print_uint32(pages_needed);
         print(" pages\n");
-        
+
         for (uintptr_t i = 0; i < pages_needed; i++)
         {
             uintptr_t page_addr = current_brk + (i * 0x1000);
-            
+
             // Allocar página física
             void *physical_page = kmalloc(0x1000);
-            if (!physical_page) {
+            if (!physical_page)
+            {
                 print("sys_brk: Failed to allocate physical page\n");
                 return -ENOMEM;
             }
-            
+
             // Mapear página en el espacio de usuario usando las funciones correctas
             extern int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
             if (map_page(page_addr, (uint64_t)physical_page, PAGE_USER | PAGE_RW) != 0)
@@ -1573,7 +1607,7 @@ int64_t sys_brk(void *addr)
                 print("sys_brk: Failed to map heap page\n");
                 return -ENOMEM;
             }
-            
+
             print("sys_brk: Mapped page at 0x");
             print_hex(page_addr);
             print("\n");
@@ -1586,11 +1620,11 @@ int64_t sys_brk(void *addr)
         print("sys_brk: Contracting heap by ");
         print_uint32(pages_to_free);
         print(" pages\n");
-        
+
         for (uintptr_t i = 0; i < pages_to_free; i++)
         {
             uintptr_t page_addr = new_brk + (i * 0x1000);
-            
+
             // Desmapear página del espacio de usuario
             extern int unmap_page(uint64_t virt_addr);
             if (unmap_page(page_addr) != 0)
@@ -1598,7 +1632,7 @@ int64_t sys_brk(void *addr)
                 print("sys_brk: Failed to unmap heap page\n");
                 // Continuar aunque falle el desmapeo
             }
-            
+
             print("sys_brk: Unmapped page at 0x");
             print_hex(page_addr);
             print("\n");
@@ -1616,9 +1650,9 @@ int64_t sys_brk(void *addr)
 
 int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-    (void)prot; // Parameter not used in this implementation
+    (void)prot;  // Parameter not used in this implementation
     (void)flags; // Parameter not used in this implementation
-    
+
     if (!current_process)
     {
         return -ESRCH;
@@ -1655,7 +1689,7 @@ int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t o
 
     // Verificar que la dirección esté en el espacio de usuario
     uintptr_t max_user_addr = USER_SPACE_BASE + USER_SPACE_SIZE;
-    if (map_addr < USER_SPACE_BASE || 
+    if (map_addr < USER_SPACE_BASE ||
         map_addr + aligned_length > max_user_addr)
     {
         print("sys_mmap: Invalid address range\n");
@@ -1689,8 +1723,7 @@ int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t o
             // Leer datos del archivo al mapeo
             uint8_t *buffer = (uint8_t *)map_addr;
             // Calcular cuántos bytes leer del archivo
-            size_t bytes_to_read = (length < (size_t)(file_inode->size - offset)) ? 
-                                   length : (size_t)(file_inode->size - offset);
+            size_t bytes_to_read = (length < (size_t)(file_inode->size - offset)) ? length : (size_t)(file_inode->size - offset);
 
             if (bytes_to_read > 0)
             {
@@ -1748,7 +1781,7 @@ int64_t sys_munmap(void *addr, size_t length)
     // TODO: Implement memory unmapping
     size_t aligned_length = (length + 0xFFF) & ~0xFFF;
     (void)aligned_length; // Variable not used in this implementation
-    
+
     return 0; // Success
 }
 
@@ -1835,12 +1868,12 @@ int64_t sys_rmdir(const char *pathname)
     // Leer el primer bloque del directorio
     if (inode->i_zone[0] != 0)
     {
-        if (minix_read_block(inode->i_zone[0], (uint8_t*)entries) == 0)
+        if (minix_read_block(inode->i_zone[0], (uint8_t *)entries) == 0)
         {
             for (size_t i = 0; i < MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t); i++)
             {
-                if (entries[i].inode != 0 && 
-                    strcmp(entries[i].name, ".") != 0 && 
+                if (entries[i].inode != 0 &&
+                    strcmp(entries[i].name, ".") != 0 &&
                     strcmp(entries[i].name, "..") != 0)
                 {
                     has_other_entries = true;
@@ -2052,7 +2085,7 @@ int64_t sys_unlink(const char *pathname)
         {
             // Leer y liberar zonas indirectas
             uint32_t indirect_zones[MINIX_BLOCK_SIZE / 4];
-            if (minix_read_block(inode->i_zone[7], (uint8_t*)indirect_zones) == 0)
+            if (minix_read_block(inode->i_zone[7], (uint8_t *)indirect_zones) == 0)
             {
                 for (int i = 0; i < MINIX_BLOCK_SIZE / 4; i++)
                 {
@@ -2358,25 +2391,25 @@ int64_t sys_alarm(unsigned int seconds)
     // Obtener el tiempo actual
     extern uint64_t get_system_time(void);
     uint64_t current_time = get_system_time();
-    
+
     // Calcular el tiempo de expiración (convertir segundos a ticks)
     // Asumiendo que el timer está configurado a ~100Hz (10ms por tick)
     uint64_t ticks_per_second = 100; // Aproximadamente
     uint64_t expiration_time = current_time + (seconds * ticks_per_second);
-    
+
     // Guardar el alarm anterior
     uint64_t previous_alarm = current_process->alarm_time;
-    
+
     // Configurar el nuevo alarm
     current_process->alarm_time = expiration_time;
     current_process->alarm_active = (seconds > 0);
-    
+
     print("sys_alarm: Current time: ");
     print_uint64(current_time);
     print(", Expiration: ");
     print_uint64(expiration_time);
     print("\n");
-    
+
     // Retornar el tiempo restante del alarm anterior (en segundos)
     if (previous_alarm > current_time && previous_alarm != 0)
     {
@@ -2384,15 +2417,15 @@ int64_t sys_alarm(unsigned int seconds)
         uint64_t remaining_seconds = remaining_ticks / ticks_per_second;
         return (int64_t)remaining_seconds;
     }
-    
+
     return 0; // No había alarm previo o ya expiró
 }
 
 int64_t sys_signal(int signum, void (*handler)(int))
 {
-    (void)signum; // Parameter not used in this implementation
+    (void)signum;  // Parameter not used in this implementation
     (void)handler; // Parameter not used in this implementation
-    
+
     // TODO: Implement signal handling
     return -ENOSYS; // Not implemented yet
 }
@@ -2400,19 +2433,19 @@ int64_t sys_signal(int signum, void (*handler)(int))
 int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
 {
     (void)signum; // Parameter not used in this implementation
-    (void)act; // Parameter not used in this implementation
+    (void)act;    // Parameter not used in this implementation
     (void)oldact; // Parameter not used in this implementation
-    
+
     // TODO: Implement sigaction
     return -ENOSYS; // Not implemented yet
 }
 
 int64_t sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 {
-    (void)how; // Parameter not used in this implementation
-    (void)set; // Parameter not used in this implementation
+    (void)how;    // Parameter not used in this implementation
+    (void)set;    // Parameter not used in this implementation
     (void)oldset; // Parameter not used in this implementation
-    
+
     // TODO: Implement signal process mask
     return -ENOSYS; // Not implemented yet
 }
@@ -2420,7 +2453,7 @@ int64_t sys_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 int64_t sys_sigsuspend(const sigset_t *mask)
 {
     (void)mask; // Parameter not used in this implementation
-    
+
     // TODO: Implement signal suspend
     return -ENOSYS; // Not implemented yet
 }

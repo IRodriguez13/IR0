@@ -88,5 +88,4 @@ scheduler_ops_t priority_scheduler_ops = {
     .pick_next_task = priority_pick_next_task,
     .task_tick = priority_task_tick,
     .cleanup = NULL,
-    .private_data = &prio_rq
-};
+    .private_data = &prio_rq};
