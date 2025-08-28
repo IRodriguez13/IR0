@@ -160,5 +160,4 @@ scheduler_ops_t roundrobin_scheduler_ops = {
     .pick_next_task = rr_pick_next_task,
     .task_tick = rr_task_tick,
     .cleanup = rr_cleanup,
-    .private_data = &rr_state
-};
+    .private_data = &rr_state};

@@ -12,26 +12,28 @@
 // SLAB ALLOCATOR STRUCTURES
 // ===============================================================================
 
-typedef struct slab {
+typedef struct slab
+{
     struct slab *next;
     struct slab *prev;
-    void *objects;           // Puntero al array de objetos
-    uint32_t free_map;       // Bitmap de objetos libres (1 = libre, 0 = ocupado)
-    uint32_t inuse_count;    // Número de objetos en uso
-    uint32_t total_objects;  // Número total de objetos en este slab
+    void *objects;          // Puntero al array de objetos
+    uint32_t free_map;      // Bitmap de objetos libres (1 = libre, 0 = ocupado)
+    uint32_t inuse_count;   // Número de objetos en uso
+    uint32_t total_objects; // Número total de objetos en este slab
 } slab_t;
 
-typedef struct slab_cache {
+typedef struct slab_cache
+{
     const char *name;
     size_t object_size;      // Tamaño de cada objeto
     size_t objects_per_slab; // Objetos por slab
     size_t total_objects;    // Total de objetos en todos los slabs
     size_t free_objects;     // Objetos libres totales
-    
-    slab_t *free_slabs;      // Slabs completamente libres
-    slab_t *partial_slabs;   // Slabs parcialmente ocupados
-    slab_t *full_slabs;      // Slabs completamente ocupados
-    
+
+    slab_t *free_slabs;    // Slabs completamente libres
+    slab_t *partial_slabs; // Slabs parcialmente ocupados
+    slab_t *full_slabs;    // Slabs completamente ocupados
+
     // Callbacks opcionales
     void (*ctor)(void *obj); // Constructor
     void (*dtor)(void *obj); // Destructor
@@ -43,7 +45,7 @@ typedef struct slab_cache {
 
 // Crear un nuevo slab cache
 slab_cache_t *slab_cache_create(const char *name, size_t object_size,
-                               void (*ctor)(void *), void (*dtor)(void *));
+                                void (*ctor)(void *), void (*dtor)(void *));
 
 // Destruir un slab cache
 void slab_cache_destroy(slab_cache_t *cache);
