@@ -12,6 +12,11 @@ void kmain_x64(void)
     // Setup mínimo específico de x86-64
     __asm__ volatile("cli"); // Deshabilitar interrupciones al arrancar
         
+    // Initialize TSS for user mode support
+    setup_tss();
+    
+    // Initialize interrupt system
+    
     // Saltar a la función principal
     main();
     

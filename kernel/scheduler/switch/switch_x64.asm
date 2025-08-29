@@ -170,40 +170,54 @@ switch_to_user_mode_x64:
     
     ; rdi = user stack, rsi = user entry point
     
+    ; Save parameters in preserved registers
+    mov r12, rdi    ; Save user stack in r12
+    mov r13, rsi    ; Save user entry in r13
+    
     ; Set up user mode stack
-    mov rsp, rdi             ; Set user stack pointer
+    mov rsp, r12    ; Set user stack pointer
     
     ; Set up segment registers for user mode
     ; In x86-64, user mode segments are:
-    ; CS = 0x23 (35 = 4*8+3, user code segment)
-    ; DS/ES/FS/GS/SS = 0x2B (43 = 5*8+3, user data segment)
-    mov ax, 0x2B             ; User data segment (0x2B = 43 = 5*8+3)
+    ; CS = 0x1B (27 = 3*8+3, user code segment with RPL=3)
+    ; DS/ES/FS/GS/SS = 0x23 (35 = 4*8+3, user data segment with RPL=3)
+    
+    ; CORRECCIÓN: Usar los selectores correctos de la GDT
+    ; 0x18 = User code segment (índice 3 * 8 = 24, + 0 = 24 = 0x18)
+    ; 0x20 = User data segment (índice 4 * 8 = 32, + 0 = 32 = 0x20)
+    ; Para RPL=3, sumamos 3: 0x18 + 3 = 0x1B, 0x20 + 3 = 0x23
+    
+    ; Set up data segments
+    mov ax, 0x23    ; User data segment (0x20 + 3 = 0x23)
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
-    mov ss, ax
     
-    ; Clear flags (disable interrupts, etc.)
-    cli                      ; Disable interrupts
-    cld                      ; Clear direction flag
+    ; Clear flags
+    cli             ; Disable interrupts
+    cld             ; Clear direction flag
     
     ; Set up return to user mode
     ; Stack layout for iretq:
-    ; [RSP+32] = SS (user data segment)
+    ; [RSP+32] = SS (user data segment with RPL=3)
     ; [RSP+24] = RSP (user stack pointer)
     ; [RSP+16] = RFLAGS (with IF=1 for interrupts)
-    ; [RSP+8]  = CS (user code segment)
+    ; [RSP+8]  = CS (user code segment with RPL=3)
     ; [RSP+0]  = RIP (user entry point)
     
-    push 0x2B                ; User data segment (SS)
-    push rdi                 ; User stack pointer (RSP)
-    push 0x202               ; RFLAGS (IF=1, IOPL=0, other bits cleared)
-    push 0x23                ; User code segment (CS) (0x23 = 35 = 4*8+3)
-    push rsi                 ; User entry point (RIP)
+    ; Push the iretq frame
+    push 0x23       ; User data segment (SS) with RPL=3 (0x20 + 3)
+    push r12        ; User stack pointer (RSP)
+    push 0x202      ; RFLAGS (IF=1, IOPL=0, other bits cleared)
+    push 0x1B       ; User code segment (CS) with RPL=3 (0x18 + 3)
+    push r13        ; User entry point (RIP)
     
     ; Return to user mode
     iretq
+    
+    ; This should never be reached
+    ret
 
 ; ===============================================================================
 ; TASK SWITCHING WITH TSS

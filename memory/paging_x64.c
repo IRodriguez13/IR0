@@ -167,6 +167,61 @@ int unmap_page(uint64_t virt_addr)
 }
 
 // ===============================================================================
+// USER MEMORY MAPPING FUNCTIONS
+// ===============================================================================
+
+// Mapear página de usuario con permisos U/S=1
+int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags)
+{
+    // Agregar flag de usuario (U/S=1)
+    flags |= PAGE_USER;
+    
+    // Mapear la página
+    return map_page(virtual_addr, physical_addr, flags);
+}
+
+// Mapear región de memoria de usuario
+int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
+{
+    // Alinear a 4KB
+    virtual_start &= ~0xFFF;
+    size = (size + 0xFFF) & ~0xFFF;
+    
+    // Agregar flag de usuario
+    flags |= PAGE_USER;
+    
+    print("map_user_region: Mapping ");
+    print_uint32(size);
+    print(" bytes at 0x");
+    print_hex64(virtual_start);
+    print(" with flags 0x");
+    print_hex64(flags);
+    print("\n");
+    
+    // Mapear cada página
+    for (size_t offset = 0; offset < size; offset += 0x1000) {
+        uintptr_t virt_addr = virtual_start + offset;
+        
+        // Asignar página física usando kmalloc (simplificado)
+        // En un kernel real, esto usaría un allocator de páginas físicas
+        extern void *kmalloc(size_t size);
+        uintptr_t phys_addr = (uintptr_t)kmalloc(0x1000);
+        if (phys_addr == 0) {
+            print("map_user_region: Failed to allocate physical page\n");
+            return -1;
+        }
+        
+        // Mapear la página
+        if (map_page(virt_addr, phys_addr, flags) != 0) {
+            print("map_user_region: Failed to map page\n");
+            return -1;
+        }
+    }
+    
+    return 0;
+}
+
+// ===============================================================================
 // DEBUG FUNCTIONS
 // ===============================================================================
 
