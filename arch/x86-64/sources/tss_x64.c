@@ -1,85 +1,64 @@
 #include <stdint.h>
 #include <ir0/print.h>
 #include <stddef.h>
+#include <string.h>
+
+// ===============================================================================
+// TSS CONFIGURATION FOR USER MODE
+// ===============================================================================
 
 // TSS structure for x86-64
-typedef struct 
+typedef struct
 {
-    uint32_t reserved1;
-    uint64_t rsp0;      // Stack pointer for privilege level 0
-    uint64_t rsp1;      // Stack pointer for privilege level 1
-    uint64_t rsp2;      // Stack pointer for privilege level 2
+    uint32_t reserved0;
+    uint64_t rsp0; // Kernel stack pointer for Ring 0
+    uint64_t rsp1; // Kernel stack pointer for Ring 1
+    uint64_t rsp2; // Kernel stack pointer for Ring 2
+    uint64_t reserved1;
+    uint64_t ist1; // Interrupt stack table 1
+    uint64_t ist2; // Interrupt stack table 2
+    uint64_t ist3; // Interrupt stack table 3
+    uint64_t ist4; // Interrupt stack table 4
+    uint64_t ist5; // Interrupt stack table 5
+    uint64_t ist6; // Interrupt stack table 6
+    uint64_t ist7; // Interrupt stack table 7
     uint64_t reserved2;
-    uint64_t ist1;      // Interrupt stack table entry 1
-    uint64_t ist2;      // Interrupt stack table entry 2
-    uint64_t ist3;      // Interrupt stack table entry 3
-    uint64_t ist4;      // Interrupt stack table entry 4
-    uint64_t ist5;      // Interrupt stack table entry 5
-    uint64_t ist6;      // Interrupt stack table entry 6
-    uint64_t ist7;      // Interrupt stack table entry 7
-    uint64_t reserved3;
-    uint16_t reserved4;
-    uint16_t iopb_offset;
-} __attribute__((packed)) tss_entry_t;
+    uint16_t reserved3;
+    uint16_t iopb_offset; // I/O permission bitmap offset
+} __attribute__((packed)) tss_t;
 
-// TSS instance
-static tss_entry_t tss;
+// Global TSS instance
+static tss_t kernel_tss __attribute__((aligned(16)));
 
-// Interrupt stack (16KB stack for interrupts)
-#define INTERRUPT_STACK_SIZE 16384
-static uint8_t interrupt_stack[INTERRUPT_STACK_SIZE] __attribute__((aligned(16)));
+// Kernel stack for Ring 0 (when returning from user mode)
+static uint8_t kernel_stack[8192] __attribute__((aligned(16)));
 
-void tss_init_x64(void)
+void setup_tss(void)
 {
-    print_colored("[TSS] Initializing Task State Segment for x86-64...\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    
     // Clear TSS structure
-    for (size_t i = 0; i < sizeof(tss_entry_t); i++) 
-    {
-        ((uint8_t*)&tss)[i] = 0;
-    }
-    
-    // Set up interrupt stack pointers
-    uint64_t stack_top = (uint64_t)interrupt_stack + INTERRUPT_STACK_SIZE;
-    
-    // Set RSP0 (kernel stack for privilege level 0)
-    tss.rsp0 = stack_top;
-    
-    // Set IST entries (Interrupt Stack Table)
-    tss.ist1 = stack_top - 4096;  // 4KB from top
-    tss.ist2 = stack_top - 8192;  // 8KB from top
-    tss.ist3 = stack_top - 12288; // 12KB from top
-    tss.ist4 = stack_top - 16384; // 16KB from top
-    tss.ist5 = stack_top - 20480; // 20KB from top (if needed)
-    tss.ist6 = stack_top - 24576; // 24KB from top (if needed)
-    tss.ist7 = stack_top - 28672; // 28KB from top (if needed)
-    
-    // IOPB offset (no I/O permission bitmap)
-    tss.iopb_offset = sizeof(tss_entry_t);
-    
-    print_success("[TSS] TSS initialized successfully\n");
-    print("[TSS] Interrupt stack top: 0x");
-    print_hex64(stack_top);
+    memset(&kernel_tss, 0, sizeof(tss_t));
+
+    // Set up kernel stack pointer for Ring 0
+    // This is where the CPU will jump when an interrupt occurs in user mode
+    kernel_tss.rsp0 = (uint64_t)(kernel_stack + sizeof(kernel_stack));
+
+    // Set up interrupt stack table (optional, for now just use rsp0)
+    kernel_tss.ist1 = kernel_tss.rsp0;
+    kernel_tss.ist2 = kernel_tss.rsp0;
+    kernel_tss.ist3 = kernel_tss.rsp0;
+    kernel_tss.ist4 = kernel_tss.rsp0;
+    kernel_tss.ist5 = kernel_tss.rsp0;
+    kernel_tss.ist6 = kernel_tss.rsp0;
+    kernel_tss.ist7 = kernel_tss.rsp0;
+
+    // I/O permission bitmap (for now, no I/O access from user mode)
+    kernel_tss.iopb_offset = sizeof(tss_t);
+
+    print("setup_tss: TSS configured with RSP0 at 0x");
+    print_hex64(kernel_tss.rsp0);
     print("\n");
-}
 
-// Load TSS into GDT and set up TR register
-void tss_load_x64(void)
-{
-    // This function should be called after GDT is set up
-    // For now, we'll just print that TSS is ready
-    print("[TSS] TSS ready to be loaded into GDT\n");
-    print("[TSS] Use 'ltr' instruction to load TSS selector\n");
-}
-
-// Get TSS address (for GDT setup)
-uint64_t tss_get_address(void)
-{
-    return (uint64_t)&tss;
-}
-
-// Get TSS size
-uint32_t tss_get_size(void)
-{
-    return sizeof(tss_entry_t);
+    // Update GDT TSS descriptor with the actual TSS address
+    extern void update_gdt_tss(uint64_t tss_addr);
+    update_gdt_tss((uint64_t)&kernel_tss);
 }

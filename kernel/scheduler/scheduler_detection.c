@@ -108,6 +108,7 @@ void scheduler_fallback_to_next(void)
         return;
 
     default:
+    
         panic("Unknown scheduler state in fallback.");
     }
 

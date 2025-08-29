@@ -242,8 +242,7 @@ int shell_run(shell_context_t *ctx, shell_config_t *config)
 
         // Read line from keyboard
         int len = shell_read_line(line, SHELL_MAX_LINE_LENGTH);
-        print_int32(len);
-        print("\n");
+
 
         if (len > 0)
         {
@@ -261,7 +260,6 @@ int shell_run(shell_context_t *ctx, shell_config_t *config)
            
             // Process the line
             shell_process_line(ctx, config, line);
-            print("shell_run: Line processed\n");
         }
     }
 
@@ -1365,8 +1363,6 @@ static int shell_cmd_ring(shell_context_t *ctx, shell_config_t *config, char arg
     (void)args;
     (void)arg_count;
 
-    shell_print_info("RING: Checking current privilege level...\\n");
-    
     // Read CS register to determine current privilege level
     uint16_t cs_register;
     __asm__ volatile("mov %%cs, %0" : "=r"(cs_register));
@@ -1374,33 +1370,17 @@ static int shell_cmd_ring(shell_context_t *ctx, shell_config_t *config, char arg
     // Extract privilege level (bits 0-1)
     uint8_t current_ring = cs_register & 0x03;
     
-    shell_print("RING: CS Register = 0x");
-    print_hex32(cs_register);
-    shell_print("\\n");
-    
-    shell_print("RING: Current privilege level = ");
+    // Simple, clear output
+    shell_print("RING: ");
     print_uint32(current_ring);
-    shell_print(" (");
     
-    switch (current_ring) {
-        case 0:
-            shell_print("Ring 0 - Kernel Mode");
-            break;
-        case 1:
-            shell_print("Ring 1 - Reserved");
-            break;
-        case 2:
-            shell_print("Ring 2 - Reserved");
-            break;
-        case 3:
-            shell_print("Ring 3 - User Mode");
-            break;
-        default:
-            shell_print("Unknown");
-            break;
+    if (current_ring == 0) {
+        shell_print(" (Kernel Mode)\n");
+    } else if (current_ring == 3) {
+        shell_print(" (User Mode)\n");
+    } else {
+        shell_print(" (Unknown Mode)\n");
     }
-    
-    shell_print(")\\n");
     
     return 0;
 }

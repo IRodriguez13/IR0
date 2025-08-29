@@ -76,6 +76,16 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
 int unmap_page(uint64_t virt_addr);
 
 // ===============================================================================
+// USER MEMORY MAPPING FUNCTIONS
+// ===============================================================================
+
+// Mapear página de usuario con permisos U/S=1
+int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags);
+
+// Mapear región de memoria de usuario
+int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags);
+
+// ===============================================================================
 // DEBUG FUNCTIONS
 // ===============================================================================
 
