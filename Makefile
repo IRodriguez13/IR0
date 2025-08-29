@@ -397,6 +397,8 @@ test-all:
 help:
 	@echo "🎯 IR0 Kernel Build System"
 	@echo ""
+	@echo "For now, it only works in x64 :-("
+	@echo ""
 	@echo "📋 Comandos principales:"
 	@echo "  make all                    - Compilar kernel completo"
 	@echo "  make clean                  - Limpiar archivos de compilación"
