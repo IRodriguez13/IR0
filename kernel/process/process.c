@@ -344,10 +344,44 @@ process_t *process_fork(process_t *parent)
 
 int process_exec(const char *path, char *const argv[], char *const envp[])
 {
-    // TODO: Implement process execution
-    (void)path;
-    (void)argv;
-    (void)envp;
+    if (!current_process || !path) {
+        return -1;
+    }
+    
+    print("process_exec: Executing '");
+    print(path);
+    print("'\n");
+    
+    // For now, we'll implement a simple test process execution
+    // This will create a real user process that runs in ring 3
+    
+    // Allocate user stack (16KB)
+    void *user_stack = kmalloc(16 * 1024);
+    if (!user_stack) {
+        print("process_exec: Failed to allocate user stack\n");
+        return -1;
+    }
+    
+    // Set up user stack pointer (grows downward)
+    uintptr_t user_stack_ptr = (uintptr_t)user_stack + (16 * 1024) - 16;
+    user_stack_ptr &= ~0xF; // 16-byte align
+    
+    // Create a simple test function that will run in user mode
+    extern void test_user_process(void);
+    
+    // Set up process for user mode execution
+    current_process->user_stack = (uintptr_t)user_stack;
+    current_process->state = PROCESS_RUNNING;
+    current_process->flags |= PROCESS_FLAG_USER;
+    
+    print("process_exec: Switching to user mode...\n");
+    
+    // Switch to user mode using our assembly function
+    extern void switch_to_user_mode_x64(void *user_stack, void *user_entry);
+    switch_to_user_mode_x64((void *)user_stack_ptr, test_user_process);
+    
+    // This should never return if user mode switch is successful
+    print("process_exec: ERROR - Returned from user mode switch!\n");
     return -1;
 }
 
@@ -412,9 +446,36 @@ void process_wakeup(process_t *process)
 
 void process_switch(process_t *from, process_t *to)
 {
-    // TODO: Implement context switching
-    (void)from;
-    (void)to;
+    if (!from || !to) {
+        return;
+    }
+    
+    print("process_switch: Switching from PID ");
+    print_uint32(from->pid);
+    print(" to PID ");
+    print_uint32(to->pid);
+    print("\n");
+    
+    // Update process states
+    from->state = PROCESS_READY;
+    to->state = PROCESS_RUNNING;
+    
+    // Update current process
+    current_process = to;
+    
+    // Use our assembly context switching function
+    extern void switch_context_x64(task_t *current, task_t *next);
+    
+    // Convert process_t to task_t for the switch
+    task_t *current_task = process_to_task(from);
+    task_t *next_task = process_to_task(to);
+    
+    if (current_task && next_task) {
+        // Perform the actual context switch
+        switch_context_x64(current_task, next_task);
+    } else {
+        print("process_switch: Failed to convert processes to tasks\n");
+    }
 }
 
 void process_save_context(process_t *process)
@@ -569,4 +630,44 @@ void process_print_all(void)
 uint32_t process_get_count(void)
 {
     return process_count;
+}
+
+// ===============================================================================
+// TEST USER PROCESS FUNCTION
+// ===============================================================================
+// This function will run in user mode (ring 3) to test our implementation
+
+void test_user_process(void)
+{
+    // This code runs in user mode (ring 3)
+    // We can't use kernel functions here, so we'll use a simple loop
+    
+    // DETECT CURRENT PRIVILEGE LEVEL
+    uint16_t cs_register;
+    __asm__ volatile("mov %%cs, %0" : "=r"(cs_register));
+    
+    // CS register bits 0-1 indicate privilege level:
+    // 00 = Ring 0 (kernel)
+    // 01 = Ring 1
+    // 10 = Ring 2  
+    // 11 = Ring 3 (user)
+    uint8_t current_ring = cs_register & 0x03;
+    
+    // Simple user mode test - count and exit
+    volatile int counter = 0;
+    
+    // Count to 10 in user mode
+    for (int i = 0; i < 10; i++) {
+        counter++;
+        
+        // Small delay (busy wait)
+        for (volatile int j = 0; j < 1000000; j++) {
+            // Busy wait
+        }
+    }
+    
+    // Exit user mode process
+    // In a real implementation, this would call syscall exit
+    // For now, we'll just return to kernel mode
+    __asm__ volatile("int $0x80"); // Trigger a system call to return to kernel
 }

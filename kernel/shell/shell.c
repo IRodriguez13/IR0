@@ -1334,6 +1334,77 @@ static int shell_cmd_fork(shell_context_t *ctx, shell_config_t *config, char arg
     return 0;
 }
 
+static int shell_cmd_testproc(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)ctx;
+    (void)config;
+    (void)args;
+    (void)arg_count;
+
+    shell_print_info("TESTPROC: Testing real process execution...\\n");
+    
+    // Call process_exec to test user mode
+    char *test_argv[] = {"test_program", NULL};
+    char *test_envp[] = {NULL};
+    
+    int result = process_exec("test_program", test_argv, test_envp);
+    
+    if (result >= 0) {
+        shell_print_success("TESTPROC: Process execution test completed\\n");
+    } else {
+        shell_print_error("TESTPROC: Process execution test failed\\n");
+    }
+    
+    return 0;
+}
+
+static int shell_cmd_ring(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
+{
+    (void)ctx;
+    (void)config;
+    (void)args;
+    (void)arg_count;
+
+    shell_print_info("RING: Checking current privilege level...\\n");
+    
+    // Read CS register to determine current privilege level
+    uint16_t cs_register;
+    __asm__ volatile("mov %%cs, %0" : "=r"(cs_register));
+    
+    // Extract privilege level (bits 0-1)
+    uint8_t current_ring = cs_register & 0x03;
+    
+    shell_print("RING: CS Register = 0x");
+    print_hex32(cs_register);
+    shell_print("\\n");
+    
+    shell_print("RING: Current privilege level = ");
+    print_uint32(current_ring);
+    shell_print(" (");
+    
+    switch (current_ring) {
+        case 0:
+            shell_print("Ring 0 - Kernel Mode");
+            break;
+        case 1:
+            shell_print("Ring 1 - Reserved");
+            break;
+        case 2:
+            shell_print("Ring 2 - Reserved");
+            break;
+        case 3:
+            shell_print("Ring 3 - User Mode");
+            break;
+        default:
+            shell_print("Unknown");
+            break;
+    }
+    
+    shell_print(")\\n");
+    
+    return 0;
+}
+
 // ===============================================================================
 // UTILITY FUNCTIONS
 // ===============================================================================
@@ -1371,6 +1442,8 @@ static void shell_init_builtin_commands(void)
     shell_add_builtin_command("find", "Find files by name", shell_cmd_find);
     shell_add_builtin_command("fsstatus", "Show filesystem status", shell_cmd_fsstatus);
     shell_add_builtin_command("fork", "Create child process", shell_cmd_fork);
+    shell_add_builtin_command("testproc", "Test real process execution", shell_cmd_testproc);
+    shell_add_builtin_command("ring", "Check current privilege level", shell_cmd_ring);
     shell_add_builtin_command("exit", "Exit shell", shell_cmd_exit);
 }
 
