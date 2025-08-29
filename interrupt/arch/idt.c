@@ -78,8 +78,9 @@ void idt_init64(void) {
     extern void isr45_64(void);
     extern void isr46_64(void);
     extern void isr47_64(void);
+    extern void isr128_64(void);  // Syscall (0x80)
 
-    // Configurar excepciones (0-31)
+    // Configurar excepciones (0-31) - DPL=0 (solo kernel)
     idt_set_gate64(0, (uint64_t)isr0_64, 0x08, 0x8E);
     idt_set_gate64(1, (uint64_t)isr1_64, 0x08, 0x8E);
     idt_set_gate64(2, (uint64_t)isr2_64, 0x08, 0x8E);
@@ -112,24 +113,28 @@ void idt_init64(void) {
     idt_set_gate64(29, (uint64_t)isr29_64, 0x08, 0x8E);
     idt_set_gate64(30, (uint64_t)isr30_64, 0x08, 0x8E);
     idt_set_gate64(31, (uint64_t)isr31_64, 0x08, 0x8E);
-
-    // Configurar IRQs (32-47)
-    idt_set_gate64(32, (uint64_t)isr32_64, 0x08, 0x8E);  // Timer
-    idt_set_gate64(33, (uint64_t)isr33_64, 0x08, 0x8E);  // Keyboard
-    idt_set_gate64(34, (uint64_t)isr34_64, 0x08, 0x8E);
-    idt_set_gate64(35, (uint64_t)isr35_64, 0x08, 0x8E);
-    idt_set_gate64(36, (uint64_t)isr36_64, 0x08, 0x8E);
-    idt_set_gate64(37, (uint64_t)isr37_64, 0x08, 0x8E);
-    idt_set_gate64(38, (uint64_t)isr38_64, 0x08, 0x8E);
-    idt_set_gate64(39, (uint64_t)isr39_64, 0x08, 0x8E);
-    idt_set_gate64(40, (uint64_t)isr40_64, 0x08, 0x8E);
-    idt_set_gate64(41, (uint64_t)isr41_64, 0x08, 0x8E);
-    idt_set_gate64(42, (uint64_t)isr42_64, 0x08, 0x8E);
-    idt_set_gate64(43, (uint64_t)isr43_64, 0x08, 0x8E);
-    idt_set_gate64(44, (uint64_t)isr44_64, 0x08, 0x8E);
-    idt_set_gate64(45, (uint64_t)isr45_64, 0x08, 0x8E);
-    idt_set_gate64(46, (uint64_t)isr46_64, 0x08, 0x8E);
-    idt_set_gate64(47, (uint64_t)isr47_64, 0x08, 0x8E);
+    
+    // Configurar interrupciones IRQ (32-47) - DPL=3 (aceptar desde user mode)
+    // 0xEE = Present (1) + DPL=3 (11) + System (0) + Interrupt Gate (1110)
+    idt_set_gate64(32, (uint64_t)isr32_64, 0x08, 0xEE);  // Timer
+    idt_set_gate64(33, (uint64_t)isr33_64, 0x08, 0xEE);  // Keyboard
+    idt_set_gate64(34, (uint64_t)isr34_64, 0x08, 0xEE);
+    idt_set_gate64(35, (uint64_t)isr35_64, 0x08, 0xEE);
+    idt_set_gate64(36, (uint64_t)isr36_64, 0x08, 0xEE);
+    idt_set_gate64(37, (uint64_t)isr37_64, 0x08, 0xEE);
+    idt_set_gate64(38, (uint64_t)isr38_64, 0x08, 0xEE);
+    idt_set_gate64(39, (uint64_t)isr39_64, 0x08, 0xEE);
+    idt_set_gate64(40, (uint64_t)isr40_64, 0x08, 0xEE);
+    idt_set_gate64(41, (uint64_t)isr41_64, 0x08, 0xEE);
+    idt_set_gate64(42, (uint64_t)isr42_64, 0x08, 0xEE);
+    idt_set_gate64(43, (uint64_t)isr43_64, 0x08, 0xEE);
+    idt_set_gate64(44, (uint64_t)isr44_64, 0x08, 0xEE);
+    idt_set_gate64(45, (uint64_t)isr45_64, 0x08, 0xEE);
+    idt_set_gate64(46, (uint64_t)isr46_64, 0x08, 0xEE);
+    idt_set_gate64(47, (uint64_t)isr47_64, 0x08, 0xEE);
+    
+    // Configurar syscall (0x80) - DPL=3 (aceptar desde user mode)
+    idt_set_gate64(128, (uint64_t)isr128_64, 0x08, 0xEE);
 
     print("IDT inicializada para 64-bit\n");
 }

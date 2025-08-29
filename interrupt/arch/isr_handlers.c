@@ -21,6 +21,14 @@ void isr_handler64(uint64_t interrupt_number) {
         return;
     }
     
+    // Manejar syscall (0x80)
+    if (interrupt_number == 128) {
+        print("SYSCALL: Interrupción 0x80 recibida\n");
+        // TODO: Implementar manejo de syscall
+        // Por ahora, solo imprimir y retornar
+        return;
+    }
+    
     // Manejar IRQs del PIC (32-47)
     if (interrupt_number >= 32 && interrupt_number <= 47) {
         uint8_t irq = interrupt_number - 32;

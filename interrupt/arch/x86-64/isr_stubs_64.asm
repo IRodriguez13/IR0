@@ -74,6 +74,14 @@ ISR_NOERRCODE 45  ; FPU
 ISR_NOERRCODE 46  ; ATA1
 ISR_NOERRCODE 47  ; ATA2
 
+; Stub para syscall (interrupción 0x80)
+global isr128_64
+isr128_64:
+    cli                     ; Deshabilitar interrupciones
+    push qword 0            ; Código de error dummy
+    push qword 128          ; Número de interrupción (0x80 = 128)
+    jmp isr_common_stub_64  ; Ir al handler común
+
 ; Handler común para todas las interrupciones
 isr_common_stub_64:
     ; Guardar todos los registros

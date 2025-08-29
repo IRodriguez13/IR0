@@ -51,6 +51,19 @@ _start:
 
     ; 3. Cargar nuestra GDT
     lgdt [gdt_descriptor]
+    
+    ; Cargar TSS (Task State Segment)
+    ; Esto es necesario para que las interrupciones desde user mode funcionen
+    mov ax, TSS_SEL
+    ltr ax
+    
+    ; Configurar segmentos de datos
+    mov ax, DATA_SEL
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
 
     ; 4. Configurar CR3 con PML4 mínimo (solo para boot)
     mov eax, pml4_minimal       ; PML4 mínimo para boot
@@ -147,7 +160,7 @@ gdt_start:
     dq 0x0000000000000000
 
 gdt_code:
-    ; Descriptor de código 64-bit
+    ; Descriptor de código 64-bit (kernel, DPL=0)
     dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
     dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
     db 0x00             ; Base 23:16 (ignorado en 64-bit)
@@ -156,13 +169,41 @@ gdt_code:
     db 0x00             ; Base 31:24 (ignorado en 64-bit)
 
 gdt_data:
-    ; Descriptor de datos 64-bit
+    ; Descriptor de datos 64-bit (kernel, DPL=0)
     dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
     dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
     db 0x00             ; Base 23:16 (ignorado en 64-bit)
     db 0x92             ; Present, DPL=0, Data, Read/Write
     db 0x00             ; Sin flags especiales
     db 0x00             ; Base 31:24 (ignorado en 64-bit)
+
+gdt_user_code:
+    ; Descriptor de código 64-bit (usuario, DPL=3)
+    dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
+    dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
+    db 0x00             ; Base 23:16 (ignorado en 64-bit)
+    db 0xFA             ; Present, DPL=3, Code, Execute/Read
+    db 0x20             ; 64-bit mode, no otros flags
+    db 0x00             ; Base 31:24 (ignorado en 64-bit)
+
+gdt_user_data:
+    ; Descriptor de datos 64-bit (usuario, DPL=3)
+    dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
+    dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
+    db 0x00             ; Base 23:16 (ignorado en 64-bit)
+    db 0xF2             ; Present, DPL=3, Data, Read/Write
+    db 0x00             ; Sin flags especiales
+    db 0x00             ; Base 31:24 (ignorado en 64-bit)
+
+gdt_tss:
+    ; TSS descriptor (para cambio de contexto)
+    dw 0x0067           ; Limit (103 bytes)
+    dw 0x0000           ; Base 15:0 (se configurará dinámicamente)
+    db 0x00             ; Base 23:16
+    db 0x89             ; Present, DPL=0, System, Available TSS
+    db 0x00             ; Sin flags especiales
+    db 0x00             ; Base 31:24
+    dq 0x0000000000000000 ; Base 63:32 (64-bit)
 
 gdt_end:
 
@@ -171,5 +212,36 @@ gdt_descriptor:
     dd gdt_start                ; Dirección de la GDT
 
 ; Selectores
-CODE_SEL equ gdt_code - gdt_start   ; 0x08
-DATA_SEL equ gdt_data - gdt_start   ; 0x10
+CODE_SEL equ 0x08       ; Kernel code
+DATA_SEL equ 0x10       ; Kernel data
+USER_CODE_SEL equ 0x18  ; User code
+USER_DATA_SEL equ 0x20  ; User data
+TSS_SEL equ 0x28        ; TSS
+
+; ===============================================================================
+; GDT UPDATE FUNCTIONS
+; ===============================================================================
+
+; void update_gdt_tss(uint64_t tss_addr)
+; Updates the TSS descriptor in the GDT with the actual TSS address
+global update_gdt_tss
+update_gdt_tss:
+    ; rdi = TSS address
+    
+    ; Calculate TSS descriptor address in GDT
+    ; TSS is at index 5 (0x28 / 8 = 5)
+    ; Each descriptor is 16 bytes
+    ; So TSS descriptor is at gdt_start + 5 * 16 = gdt_start + 80
+    
+    ; Update base address in TSS descriptor
+    ; Base 15:0
+    mov word [gdt_start + 80 + 2], di
+    ; Base 23:16  
+    mov byte [gdt_start + 80 + 4], dil
+    ; Base 31:24
+    mov byte [gdt_start + 80 + 7], dil
+    ; Base 63:32 (64-bit)
+    shr rdi, 32
+    mov dword [gdt_start + 80 + 8], edi
+    
+    ret
