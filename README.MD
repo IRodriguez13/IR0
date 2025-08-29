@@ -36,26 +36,22 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 - **Timer Drivers** - PIT, HPET, and LAPIC timer support
 - **Hardware Drivers** - PS/2 keyboard, ATA storage, VGA display drivers
 
-## 📁 Project Structure
+## 📁 Setup
 
 ```
-ir0-kernel/
-├── arch/                    # Architecture-specific code
-│   ├── x86-32/             # 32-bit x86 implementation
-│   ├── x86-64/             # 64-bit x86 implementation
-│   └── common/              # Common architecture code
-├── kernel/                  # Core kernel components
-│   ├── core/               # Kernel core functionality
-│   ├── process/            # Process management
-│   ├── scheduler/          # Task scheduling framework
-│   ├── syscalls/           # System call interface
-│   └── shell/              # Interactive shell
-├── memory/                 # Memory management
-├── fs/                     # File system (VFS + IR0FS)
-├── drivers/                # Hardware drivers
-├── interrupt/              # Interrupt handling
-├── includes/               # Header files and utilities
-└── setup/                  # Kernel configuration
+
+### Common Commands
+```bash
+make help                    # Show all available commands
+make create-disk             # Create virtual disk with filesystem
+make run-64                  # Build and run x86-64 with GUI
+make run-32                  # Build and run x86-32 with GUI
+make run-64-nographic        # Build and run x86-64 in terminal
+make run-32-nographic        # Build and run x86-32 in terminal
+make run-64-with-disk        # Run x86-64 with disk support
+make run-32-with-disk        # Run x86-32 with disk support
+make run-debug               # Run with full debugging
+make clean-all               # Clean everything (including ISOs)
 ```
 
 ## 🔧 Building and Running
@@ -68,18 +64,25 @@ ir0-kernel/
 
 ### Quick Build
 ```bash
-# Build for x86-64 desktop
-./scripts/build_simple.sh -a x86-64 -t desktop -r -l
-
-# Build for x86-32 desktop
-./scripts/build_simple.sh -a x86-32 -t desktop -r -l
+make all                    # Build kernel for current architecture
+make clean                  # Clean build files
+make clean-all              # Clean everything (including ISOs)
 ```
 
-### Manual Build
+#### 🎮 **Run Commands**
 ```bash
-# Clean and build
-make clean-all
-make ARCH=x86-64 BUILD_TARGET=desktop
+make run-64                 # Build and run x86-64 with GUI
+make run-32                 # Build and run x86-32 with GUI
+make run-64-nographic       # Build and run x86-64 in terminal
+make run-32-nographic       # Build and run x86-32 in terminal
+```
+
+#### 💾 **Disk Operations**
+```bash
+make create-disk            # Create virtual disk with filesystem
+make run-64-with-disk       # Run x86-64 with disk support
+make run-32-with-disk       # Run x86-32 with disk support
+```
 
 # Run in QEMU
 make ARCH=x86-64 BUILD_TARGET=desktop run
@@ -172,28 +175,42 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **Multiple Schedulers**: CFS, Priority-based, and Round-Robin scheduling algorithms
 - **Freestanding Environment**: Complete C library implementation
 
-### Development Approach
-- **Modular Architecture**: Clear separation of concerns
-- **Clean Code Organization**: Consistent patterns and structure
-- **Extensive Documentation**: Detailed subsystem documentation
-- **Robust Foundation**: Solid base for future development
+### Basic Commands
+```bash
+help                    # Show available commands
+info                    # System information
+version                 # Kernel version
+ps                      # List processes
+meminfo                 # Memory information
+clear                   # Clear screen
+```
 
-## 🚀 Next Steps (Development Roadmap)
+### File System Commands
+```bash
+ls                      # List directory contents
+cd                      # Change directory
+pwd                     # Print working directory
+cat                     # Display file contents
+mkdir                   # Create directory
+rm                      # Remove file
+cp                      # Copy file
+mv                      # Move file
+touch                   # Create empty file
+```
 
-### Immediate Priorities
-1. **🎯 File System Implementation** (IR0FS low-level functions)
-2. **🎯 Process Creation** (real process spawning and management)
-3. **🎯 System Call Handlers** (complete implementations)
-4. **🎯 Additional Device Drivers** (USB, PCI, SATA support)
+### System Commands
+```bash
+reboot                  # Reboot system
+halt                    # Halt system
+kill                    # Kill process
+sleep                   # Sleep for seconds
+fork                    # Create child process
+exit                    # Exit shell
+```
 
-### Future Goals
-- **Networking Stack**: TCP/IP implementation
-- **Additional Device Drivers**: USB, PCI, SATA
-- **GUI Framework**: Basic graphical interface
-- **Container Support**: Process isolation and namespaces
-- **ARM Architecture Support**: AArch64 and ARM32
+---
 
-## 🔍 Development
+## 🛠️ Development
 
 ### Code Quality
 - **Modular Architecture** with clear interfaces
@@ -209,23 +226,45 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **Debug/Release Modes** with optimization options
 - **ISO Generation** for easy distribution
 
+---
+
 ## 📚 Documentation
 
-- **DEVELOPER_GUIDE.md** - Development guidelines and patterns
-- **BUILD_SYSTEM.md** - Build system documentation
-- **INSTALL.md** - Installation and setup instructions
-- **Subsystem READMEs** - Detailed documentation for each subsystem
-
-## 🤝 Contributing
-
-The project welcomes contributions! Please see the development guidelines and ensure your code follows the established patterns. This is a development kernel with a solid foundation for further development.
-
-## 📄 License
-
-This project is licensed under the terms of GLP V 3 LICENSE file.
+- **[Developer Guide](setup/DEVELOPER_GUIDE.md)** - Development guidelines and patterns
+- **[Build System](setup/BUILD_SYSTEM.md)** - Build system documentation
+- **[Installation](setup/INSTALL.md)** - Installation and setup instructions
+- **[Configuration](setup/CONFIGURATION_SYSTEM_README.md)** - Kernel configuration system
+- **[Include System](setup/INCLUDE_SYSTEM_GUIDE.md)** - Header file organization
 
 ---
 
-**IR0 Kernel** - *just for fun* 
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Developer Guide](setup/DEVELOPER_GUIDE.md) for:
+
+- **Coding Standards** and patterns
+- **Architecture Guidelines** for new features
+- **Testing Procedures** for changes
+- **Documentation Requirements** for new code
+
+### Getting Started
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes following the coding standards
+4. Test your changes thoroughly
+5. Submit a pull request
+
+---
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
+
+---
+
+
+**IR0 Kernel** 
+
+For feedback, please open an issue or contact me at [ivanrwcm25@gmail.com](mailto:ivanrwcm25@gmail.com). 
 
 

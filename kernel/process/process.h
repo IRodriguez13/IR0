@@ -182,6 +182,9 @@ void process_print_info(process_t *process);
 void process_print_all(void);
 uint32_t process_get_count(void);
 
+// Test user process function
+void test_user_process(void);
+
 // ===============================================================================
 // VARIABLES GLOBALES
 // ===============================================================================
