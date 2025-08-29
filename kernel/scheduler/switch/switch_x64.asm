@@ -174,7 +174,10 @@ switch_to_user_mode_x64:
     mov rsp, rdi             ; Set user stack pointer
     
     ; Set up segment registers for user mode
-    mov ax, 0x23             ; User data segment (0x23 = 35 = 4*8+3)
+    ; In x86-64, user mode segments are:
+    ; CS = 0x23 (35 = 4*8+3, user code segment)
+    ; DS/ES/FS/GS/SS = 0x2B (43 = 5*8+3, user data segment)
+    mov ax, 0x2B             ; User data segment (0x2B = 43 = 5*8+3)
     mov ds, ax
     mov es, ax
     mov fs, ax
@@ -186,11 +189,18 @@ switch_to_user_mode_x64:
     cld                      ; Clear direction flag
     
     ; Set up return to user mode
-    push 0x23                ; User data segment
-    push rdi                 ; User stack pointer
-    push 0x202               ; RFLAGS (IF=1, IOPL=0)
-    push 0x1B                ; User code segment (0x1B = 27 = 3*8+3)
-    push rsi                 ; User entry point
+    ; Stack layout for iretq:
+    ; [RSP+32] = SS (user data segment)
+    ; [RSP+24] = RSP (user stack pointer)
+    ; [RSP+16] = RFLAGS (with IF=1 for interrupts)
+    ; [RSP+8]  = CS (user code segment)
+    ; [RSP+0]  = RIP (user entry point)
+    
+    push 0x2B                ; User data segment (SS)
+    push rdi                 ; User stack pointer (RSP)
+    push 0x202               ; RFLAGS (IF=1, IOPL=0, other bits cleared)
+    push 0x23                ; User code segment (CS) (0x23 = 35 = 4*8+3)
+    push rsi                 ; User entry point (RIP)
     
     ; Return to user mode
     iretq
