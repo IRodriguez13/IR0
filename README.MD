@@ -38,7 +38,6 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 
 ## 📁 Setup
 
-```
 
 ### Common Commands
 ```bash
@@ -80,11 +79,12 @@ make run-32-nographic       # Build and run x86-32 in terminal
 #### 💾 **Disk Operations**
 ```bash
 make create-disk            # Create virtual disk with filesystem
-make run-64-with-disk       # Run x86-64 with disk support
+make run-64-with-disk       # Run x86-64 with disk support == RECOMENDED ==
 make run-32-with-disk       # Run x86-32 with disk support
 ```
 
 # Run in QEMU
+```
 make ARCH=x86-64 BUILD_TARGET=desktop run
 ```
 
