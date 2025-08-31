@@ -23,7 +23,7 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 ## 🏗️ Architecture
 
 ### Supported Architectures
-- **x86-32** (32-bit) - ✅ Compiles and boots
+- **x86-32** (32-bit) -  Needs fixes
 - **x86-64** (64-bit) - ✅ Compiles and boots
 
 ### Core Subsystems
@@ -41,8 +41,8 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 
 ### Common Commands
 ```bash
-make help                    # Show all available commands
-make create-disk             # Create virtual disk with filesystem
+make help                    # Show all available commands == RECOMENDED ==
+make create-disk             # Create virtual disk with filesystem == RECOMENDED ==
 make run-64                  # Build and run x86-64 with GUI
 make run-32                  # Build and run x86-32 with GUI
 make run-64-nographic        # Build and run x86-64 in terminal
@@ -50,13 +50,14 @@ make run-32-nographic        # Build and run x86-32 in terminal
 make run-64-with-disk        # Run x86-64 with disk support
 make run-32-with-disk        # Run x86-32 with disk support
 make run-debug               # Run with full debugging
-make clean-all               # Clean everything (including ISOs)
+make clean-all               # Clean everything (including ISOs and bin's)
+make clean                   # Clean everything
 ```
 
 ## 🔧 Building and Running
 
 ### Prerequisites
-- GCC with multilib support
+- GCC/G++/CLANG with multilib support
 - NASM assembler
 - QEMU for testing
 - Make
@@ -138,7 +139,7 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 ## 📊 Current Status
 
 ### ✅ Working Components
-- **Kernel Compilation**: Both x86-32 and x86-64 architectures
+- **Kernel Compilation**: x86-64 architecture
 - **Memory Management**: Basic memory management with identity mapping
 - **Interrupt Handling**: Complete IDT setup with PIC configuration and exception handling
 - **Timer System**: PIT, HPET, and LAPIC timer support
@@ -152,7 +153,7 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 
 ### 🎯 Development Status
 - **Foundation Complete**: Core kernel structure and basic functionality
-- **Architecture Support**: Both x86-32 and x86-64 working
+- **Architecture Support**: x86-64 working
 - **Memory Management**: Basic but functional memory system
 - **Interrupt System**: Complete interrupt handling with PIC and multiple timer support
 - **Hardware Support**: PS/2 keyboard, ATA storage, and VGA display drivers operational
@@ -167,7 +168,7 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 ## 🎯 Highlights
 
 ### Technical Achievements
-- **Dual Architecture Support**: Native support for both 32-bit and 64-bit
+- **Dual Architecture Support**: Native support for both 32-bit and 64-bit (ARM32 in progress)
 - **Memory Management**: Functional paging and heap allocation
 - **Interrupt System**: Complete IDT with PIC configuration and multiple timer support
 - **Context Switching**: Real assembly implementation for both architectures
@@ -175,7 +176,7 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **Multiple Schedulers**: CFS, Priority-based, and Round-Robin scheduling algorithms
 - **Freestanding Environment**: Complete C library implementation
 
-### Basic Commands
+### Basic IR-0 Shell Commands
 ```bash
 help                    # Show available commands
 info                    # System information
@@ -188,22 +189,22 @@ clear                   # Clear screen
 ### File System Commands
 ```bash
 ls                      # List directory contents
-cd                      # Change directory
-pwd                     # Print working directory
-cat                     # Display file contents
+cd                      # Change directory -- not implemented
+pwd                     # Print working directory -- not implemented
+cat                     # Display file contents -- not implemented
 mkdir                   # Create directory
-rm                      # Remove file
-cp                      # Copy file
-mv                      # Move file
-touch                   # Create empty file
+rm                      # Remove file -- not implemented
+cp                      # Copy file -- not implemented
+mv                      # Move file -- not implemented
+touch                   # Create empty file -- not implemented
 ```
 
 ### System Commands
 ```bash
-reboot                  # Reboot system
-halt                    # Halt system
-kill                    # Kill process
-sleep                   # Sleep for seconds
+reboot                  # Reboot system -- not implemented
+halt                    # Halt system -- not implemented
+kill                    # Kill process -- not implemented
+sleep                   # Sleep for seconds -- not implemented
 fork                    # Create child process
 exit                    # Exit shell
 ```
@@ -230,17 +231,17 @@ exit                    # Exit shell
 
 ## 📚 Documentation
 
-- **[Developer Guide](setup/DEVELOPER_GUIDE.md)** - Development guidelines and patterns
-- **[Build System](setup/BUILD_SYSTEM.md)** - Build system documentation
-- **[Installation](setup/INSTALL.md)** - Installation and setup instructions
-- **[Configuration](setup/CONFIGURATION_SYSTEM_README.md)** - Kernel configuration system
-- **[Include System](setup/INCLUDE_SYSTEM_GUIDE.md)** - Header file organization
+- **[Developer Guide](setup/docs/DEVELOPER_GUIDE.md)** - Development guidelines and patterns
+- **[Build System](setup/docsBUILD_SYSTEM.md)** - Build system documentation
+- **[Installation](setup/docsINSTALL.md)** - Installation and setup instructions
+- **[Configuration](setup/docsCONFIGURATION_SYSTEM_README.md)** - Kernel configuration system
+- **[Include System](setup/docsINCLUDE_SYSTEM_GUIDE.md)** - Header file organization
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Developer Guide](setup/DEVELOPER_GUIDE.md) for:
+We welcome contributions! Please see our [Developer Guide](setup/docs/DEVELOPER_GUIDE.md) for:
 
 - **Coding Standards** and patterns
 - **Architecture Guidelines** for new features
@@ -249,7 +250,7 @@ We welcome contributions! Please see our [Developer Guide](setup/DEVELOPER_GUIDE
 
 ### Getting Started
 1. Fork the repository
-2. Create a feature branch
+2. Create a 'feat/xx' branch
 3. Make your changes following the coding standards
 4. Test your changes thoroughly
 5. Submit a pull request
