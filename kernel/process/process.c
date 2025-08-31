@@ -8,7 +8,6 @@
 #include <ir0/validation.h>
 #include <string.h>
 #include <memory/paging_x64.h>
-// #include "../../memory/memo_interface.h"  // Comentado - no existe en esta rama
 #include <bump_allocator.h> // Usar bump_allocator directamente
 
 // ===============================================================================
@@ -661,30 +660,46 @@ void process_print_info(process_t *process)
     print(")\n");
 
     print("  State: ");
+
     switch (process->state)
     {
     case PROCESS_NEW:
+
         print("NEW");
         break;
+
     case PROCESS_READY:
+
         print("READY");
         break;
+
     case PROCESS_RUNNING:
+
         print("RUNNING");
         break;
+
     case PROCESS_SLEEPING:
+
         print("SLEEPING");
         break;
+
     case PROCESS_STOPPED:
+
         print("STOPPED");
         break;
+
     case PROCESS_ZOMBIE:
+
         print("ZOMBIE");
         break;
+
     case PROCESS_DEAD:
+
         print("DEAD");
         break;
+
     default:
+
         print("UNKNOWN");
         break;
     }
@@ -735,6 +750,7 @@ uint32_t process_get_count(void)
 // ===============================================================================
 // This function will run in user mode (ring 3) to test our implementation
 
+// Se supone que me metí en el user space con esta función. El tema es que parece que tengo triple fault al volver al kernel space.
 void test_user_process(void)
 {
     // This code runs in user mode (ring 3)
@@ -758,5 +774,5 @@ void test_user_process(void)
     // Exit user mode process
     // In a real implementation, this would call a syscall
     // For now, we'll just return to kernel mode
-    __asm__ volatile("int $0x80"); // Syscall para volver al kernel
+    __asm__ volatile("int $0x80"); // Syscall para volver al kernel space.
 }
