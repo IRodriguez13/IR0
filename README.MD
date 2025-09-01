@@ -229,9 +229,8 @@ exit                    # Exit shell
 
 ---
 
-## 📚 Documentation
+## 📚 Some Documentation
 
-- **[Developer Guide](setup/docs/DEVELOPER_GUIDE.md)** - Development guidelines and patterns
 - **[Build System](setup/docsBUILD_SYSTEM.md)** - Build system documentation
 - **[Installation](setup/docsINSTALL.md)** - Installation and setup instructions
 - **[Configuration](setup/docsCONFIGURATION_SYSTEM_README.md)** - Kernel configuration system
