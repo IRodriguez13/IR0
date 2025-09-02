@@ -8,7 +8,8 @@ static uint32_t *framebuffer = (uint32_t*)0x60000000;
 static bool fb_initialized = false;
 
 // Función para inicializar el framebuffer
-void fb_init(void) {
+void fb_init(void) 
+{
     // Intentar diferentes direcciones de framebuffer
     // QEMU VExpress-A9 puede usar diferentes direcciones
     uint32_t *test_addr = (uint32_t*)0x60000000;
@@ -23,36 +24,45 @@ void fb_init(void) {
 }
 
 // Función para limpiar la pantalla
-void fb_clear(uint32_t color) {
+void fb_clear(uint32_t color) 
+{
     if (!fb_initialized) return;
     
     // Usar una resolución más pequeña para asegurar compatibilidad
-    for (int y = 0; y < 480; y++) {
-        for (int x = 0; x < 640; x++) {
+    for (int y = 0; y < 480; y++) 
+    {
+        for (int x = 0; x < 640; x++) 
+        {
             framebuffer[y * 640 + x] = color;
         }
     }
 }
 
 // Función para dibujar un pixel
-void fb_draw_pixel(int x, int y, uint32_t color) {
+void fb_draw_pixel(int x, int y, uint32_t color) 
+{
     if (!fb_initialized || x < 0 || x >= 640 || y < 0 || y >= 480) return;
     framebuffer[y * 640 + x] = color;
 }
 
 // Función para dibujar un rectángulo
-void fb_draw_rect(int x, int y, int width, int height, uint32_t color) {
-    for (int py = y; py < y + height && py < 480; py++) {
-        for (int px = x; px < x + width && px < 640; px++) {
+void fb_draw_rect(int x, int y, int width, int height, uint32_t color) 
+{
+    for (int py = y; py < y + height && py < 480; py++) 
+    {
+        for (int px = x; px < x + width && px < 640; px++) 
+        {
             fb_draw_pixel(px, py, color);
         }
     }
 }
 
 // Función para dibujar texto simple (fuente 8x8)
-void fb_draw_char(int x, int y, char c, uint32_t color) {
+void fb_draw_char(int x, int y, char c, uint32_t color) 
+{
     // Fuente simple 8x8 (solo algunos caracteres)
-    static const uint8_t font_8x8[][8] = {
+    static const uint8_t font_8x8[][8] = 
+    {
         // 'I' (0x49)
         {0x00, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00},
         // 'R' (0x52)
@@ -84,7 +94,8 @@ void fb_draw_char(int x, int y, char c, uint32_t color) {
     };
     
     int char_index = -1;
-    switch (c) {
+    switch (c) 
+    {
         case 'I': char_index = 0; break;
         case 'R': char_index = 1; break;
         case '0': char_index = 2; break;
@@ -100,10 +111,14 @@ void fb_draw_char(int x, int y, char c, uint32_t color) {
         default: return;
     }
     
-    if (char_index >= 0) {
-        for (int py = 0; py < 8; py++) {
-            for (int px = 0; px < 8; px++) {
-                if (font_8x8[char_index][py] & (0x80 >> px)) {
+    if (char_index >= 0) 
+    {
+        for (int py = 0; py < 8; py++) 
+        {
+            for (int px = 0; px < 8; px++) 
+            {
+                if (font_8x8[char_index][py] & (0x80 >> px)) 
+                {
                     fb_draw_pixel(x + px, y + py, color);
                 }
             }
@@ -112,17 +127,21 @@ void fb_draw_char(int x, int y, char c, uint32_t color) {
 }
 
 // Función para dibujar texto
-void fb_draw_text(int x, int y, const char *text, uint32_t color) {
+void fb_draw_text(int x, int y, const char *text, uint32_t color) 
+{
     int current_x = x;
-    for (int i = 0; text[i] != '\0'; i++) {
+    for (int i = 0; text[i] != '\0'; i++) 
+    {
         fb_draw_char(current_x, y, text[i], color);
         current_x += 8;
     }
 }
 
 // Función para mostrar la secuencia de arranque
-void fb_show_boot_sequence(void) {
-    if (!fb_initialized) {
+void fb_show_boot_sequence(void) 
+{
+    if (!fb_initialized) 
+    {
         fb_init();
     }
     
@@ -130,7 +149,8 @@ void fb_show_boot_sequence(void) {
     fb_clear(COLOR_BLACK);
     
     // Dibujar un patrón de prueba visible
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 100; i++) 
+    {
         fb_draw_rect(i * 6, i * 4, 4, 4, COLOR_RED);
         fb_draw_rect(i * 6 + 2, i * 4 + 2, 4, 4, COLOR_GREEN);
         fb_draw_rect(i * 6 + 4, i * 4 + 4, 4, 4, COLOR_BLUE);
@@ -144,7 +164,8 @@ void fb_show_boot_sequence(void) {
     fb_draw_text(200, 200, "INITIALIZING...", COLOR_YELLOW);
     
     // Dibujar barra de progreso
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 50; i++) 
+    {
         fb_draw_rect(100 + i * 8, 250, 6, 20, COLOR_GREEN);
         // Simular delay
         for (volatile int j = 0; j < 500000; j++);

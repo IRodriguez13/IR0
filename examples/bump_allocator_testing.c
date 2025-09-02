@@ -131,9 +131,12 @@ void main(void)
     void *ptr2 = kmalloc(32);
     void *ptr3 = kmalloc(64);
     
-    if (ptr1 && ptr2 && ptr3) {
+    if (ptr1 && ptr2 && ptr3) 
+    {
         log_info("KERNEL", "✓ Basic allocations successful with interrupts");
-    } else {
+    } 
+    else 
+    {
         log_error("KERNEL", "✗ Basic allocations failed with interrupts");
     }
     
@@ -153,9 +156,12 @@ void main(void)
     for (int i = 0; i < 32; i++) if (check2[i] != 0xBB) pattern_ok = false;
     for (int i = 0; i < 64; i++) if (check3[i] != 0xCC) pattern_ok = false;
     
-    if (pattern_ok) {
+    if (pattern_ok) 
+    {
         log_info("KERNEL", "✓ Memory patterns verified with interrupts");
-    } else {
+    } 
+    else 
+    {
         log_error("KERNEL", "✗ Memory pattern corruption with interrupts");
     }
     
@@ -165,9 +171,12 @@ void main(void)
     uintptr_t addr2 = (uintptr_t)ptr2;
     uintptr_t addr3 = (uintptr_t)ptr3;
     
-    if ((addr1 % 16 == 0) && (addr2 % 16 == 0) && (addr3 % 16 == 0)) {
+    if ((addr1 % 16 == 0) && (addr2 % 16 == 0) && (addr3 % 16 == 0)) 
+    {
         log_info("KERNEL", "✓ Memory alignment correct with interrupts");
-    } else {
+    } 
+    else 
+    {
         log_error("KERNEL", "✗ Memory alignment incorrect with interrupts");
     }
     
@@ -176,9 +185,11 @@ void main(void)
     void *small_ptrs[50];
     int success_count = 0;
     
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 50; i++) 
+    {
         small_ptrs[i] = kmalloc(8);
-        if (small_ptrs[i]) {
+        if (small_ptrs[i]) 
+        {
             memset(small_ptrs[i], i & 0xFF, 8);
             success_count++;
         }
@@ -189,10 +200,13 @@ void main(void)
     // Test 5: Large allocation with interrupts
     log_info("KERNEL", "Test 5: Large allocation with interrupts");
     void *large_ptr = kmalloc(1024);
-    if (large_ptr) {
+    if (large_ptr) 
+    {
         memset(large_ptr, 0xDD, 1024);
         log_info("KERNEL", "✓ Large allocation successful with interrupts");
-    } else {
+    } 
+    else 
+    {
         log_error("KERNEL", "✗ Large allocation failed with interrupts");
     }
     
@@ -201,10 +215,12 @@ void main(void)
     void *stress_ptrs[100];
     int stress_success = 0;
     
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 100; i++) 
+    {
         size_t size = (i % 100) + 1; // Sizes from 1 to 100 bytes
         stress_ptrs[i] = kmalloc(size);
-        if (stress_ptrs[i]) {
+        if (stress_ptrs[i]) 
+        {
             memset(stress_ptrs[i], (i * 7) & 0xFF, size);
             stress_success++;
         }
@@ -216,30 +232,39 @@ void main(void)
     log_info("KERNEL", "Test 7: Verifying stress allocations with interrupts");
     int corruption_count = 0;
     
-    for (int i = 0; i < stress_success; i++) {
+    for (int i = 0; i < stress_success; i++) 
+    {
         size_t size = (i % 100) + 1;
         uint8_t *ptr = (uint8_t *)stress_ptrs[i];
         uint8_t expected = (i * 7) & 0xFF;
         
-        for (size_t j = 0; j < size; j++) {
-            if (ptr[j] != expected) {
+        for (size_t j = 0; j < size; j++) 
+        {
+            if (ptr[j] != expected) 
+            {
                 corruption_count++;
                 break;
             }
         }
     }
     
-    if (corruption_count == 0) {
+    if (corruption_count == 0) 
+    {
         log_info("KERNEL", "✓ No memory corruption with interrupts");
-    } else {
+    } 
+    else 
+    {
         log_error_fmt("KERNEL", "✗ Memory corruption detected in %d allocations with interrupts", corruption_count);
     }
     
     // Final summary
     log_info("KERNEL", "=== BUMP ALLOCATOR STRESS TEST WITH INTERRUPTS COMPLETED ===");
-    if (stress_success == 100 && corruption_count == 0) {
+    if (stress_success == 100 && corruption_count == 0) 
+    {
         log_info("KERNEL", "🎉 ALL TESTS PASSED! Bump allocator working correctly with interrupts");
-    } else {
+    } 
+    else 
+    {
         log_error("KERNEL", "⚠️ SOME TESTS FAILED! Bump allocator has issues with interrupts");
     }
     

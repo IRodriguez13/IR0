@@ -27,12 +27,17 @@ static uint32_t ir0fs_crc32_table[256];
 
 static void ir0fs_init_crc32_table(void)
 {
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++) 
+    {
         uint32_t c = i;
-        for (int j = 0; j < 8; j++) {
-            if (c & 1) {
+        for (int j = 0; j < 8; j++) 
+        {
+            if (c & 1) 
+            {
                 c = 0xEDB88320L ^ (c >> 1);
-            } else {
+            } 
+            else 
+            {
                 c = c >> 1;
             }
         }
@@ -42,14 +47,16 @@ static void ir0fs_init_crc32_table(void)
 
 uint32_t ir0fs_calculate_checksum(void *data, size_t size)
 {
-    if (!ir0fs_initialized) {
+    if (!ir0fs_initialized) 
+    {
         ir0fs_init_crc32_table();
     }
     
     uint32_t crc = 0xFFFFFFFF;
     uint8_t *bytes = (uint8_t *)data;
     
-    for (size_t i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) 
+    {
         crc = ir0fs_crc32_table[(crc ^ bytes[i]) & 0xFF] ^ (crc >> 8);
     }
     
@@ -75,7 +82,8 @@ int ir0fs_init(void)
     
     // Allocate superblock
     ir0fs_info.superblock = kmalloc(sizeof(ir0fs_superblock_t));
-    if (!ir0fs_info.superblock) {
+    if (!ir0fs_info.superblock) 
+    {
         print_error("IR0FS: Failed to allocate superblock\n");
         return -1;
     }
@@ -101,7 +109,8 @@ int ir0fs_init(void)
     
     // Allocate bitmap
     ir0fs_info.bitmap = kmalloc(ir0fs_info.bitmap_size);
-    if (!ir0fs_info.bitmap) {
+    if (!ir0fs_info.bitmap) 
+    {
         print_error("IR0FS: Failed to allocate bitmap\n");
         kfree(ir0fs_info.superblock);
         return -1;
@@ -160,7 +169,8 @@ int ir0fs_init(void)
 
 int ir0fs_mount(const char *device, const char *mount_point)
 {
-    if (!device || !mount_point) {
+    if (!device || !mount_point) 
+    {
         return -1;
     }
     
@@ -176,7 +186,8 @@ int ir0fs_mount(const char *device, const char *mount_point)
 
 int ir0fs_umount(const char *mount_point)
 {
-    if (!mount_point) {
+    if (!mount_point) 
+    {
         return -1;
     }
     
@@ -190,7 +201,8 @@ int ir0fs_umount(const char *mount_point)
 
 int ir0fs_fsck(const char *device)
 {
-    if (!device) {
+    if (!device) 
+    {
         return -1;
     }
     
@@ -211,7 +223,8 @@ int ir0fs_fsck(const char *device)
 
 int ir0fs_defrag(const char *device)
 {
-    if (!device) {
+    if (!device) 
+    {
         return -1;
     }
     
@@ -235,18 +248,22 @@ int ir0fs_defrag(const char *device)
 
 uint64_t ir0fs_alloc_block(ir0fs_fs_info_t *fs_info)
 {
-    if (!fs_info || !fs_info->superblock) {
+    if (!fs_info || !fs_info->superblock) 
+    {
         return 0;
     }
     
     // Find first free block in bitmap
-    for (uint64_t i = 0; i < fs_info->superblock->total_blocks; i++) {
+    for (uint64_t i = 0; i < fs_info->superblock->total_blocks; i++) 
+    {
         uint64_t byte_index = i / 8;
         uint8_t bit_index = i % 8;
         
-        if (byte_index < fs_info->bitmap_size) {
+        if (byte_index < fs_info->bitmap_size) 
+        {
             uint8_t byte = fs_info->bitmap[byte_index];
-            if (!(byte & (1 << bit_index))) {
+            if (!(byte & (1 << bit_index))) 
+            {
                 // Mark block as allocated
                 fs_info->bitmap[byte_index] |= (1 << bit_index);
                 fs_info->superblock->free_blocks--;
@@ -260,14 +277,16 @@ uint64_t ir0fs_alloc_block(ir0fs_fs_info_t *fs_info)
 
 int ir0fs_free_block(ir0fs_fs_info_t *fs_info, uint64_t block_num)
 {
-    if (!fs_info || !fs_info->superblock || block_num >= fs_info->superblock->total_blocks) {
+    if (!fs_info || !fs_info->superblock || block_num >= fs_info->superblock->total_blocks) 
+    {
         return -1;
     }
     
     uint64_t byte_index = block_num / 8;
     uint8_t bit_index = block_num % 8;
     
-    if (byte_index < fs_info->bitmap_size) {
+    if (byte_index < fs_info->bitmap_size) 
+    {
         // Mark block as free
         fs_info->bitmap[byte_index] &= ~(1 << bit_index);
         fs_info->superblock->free_blocks++;
@@ -279,14 +298,16 @@ int ir0fs_free_block(ir0fs_fs_info_t *fs_info, uint64_t block_num)
 
 int ir0fs_is_block_free(ir0fs_fs_info_t *fs_info, uint64_t block_num)
 {
-    if (!fs_info || !fs_info->superblock || block_num >= fs_info->superblock->total_blocks) {
+    if (!fs_info || !fs_info->superblock || block_num >= fs_info->superblock->total_blocks) 
+    {
         return 0;
     }
     
     uint64_t byte_index = block_num / 8;
     uint8_t bit_index = block_num % 8;
     
-    if (byte_index < fs_info->bitmap_size) {
+    if (byte_index < fs_info->bitmap_size) 
+    {
         uint8_t byte = fs_info->bitmap[byte_index];
         return !(byte & (1 << bit_index));
     }
@@ -300,7 +321,8 @@ int ir0fs_is_block_free(ir0fs_fs_info_t *fs_info, uint64_t block_num)
 
 int ir0fs_get_inode(ir0fs_fs_info_t *fs_info, uint32_t ino, ir0fs_inode_t *inode)
 {
-    if (!fs_info || !fs_info->superblock || !inode || ino >= fs_info->superblock->total_inodes) {
+    if (!fs_info || !fs_info->superblock || !inode || ino >= fs_info->superblock->total_inodes) 
+    {
         return -1;
     }
     
@@ -329,7 +351,8 @@ int ir0fs_get_inode(ir0fs_fs_info_t *fs_info, uint32_t ino, ir0fs_inode_t *inode
 
 int ir0fs_write_inode(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *inode)
 {
-    if (!fs_info || !inode) {
+    if (!fs_info || !inode) 
+    {
         return -1;
     }
     
@@ -340,13 +363,15 @@ int ir0fs_write_inode(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *inode)
     
     // Read the block containing the inode
     uint8_t *block_data = kmalloc(IR0FS_BLOCK_SIZE);
-    if (!block_data) {
+    if (!block_data) 
+    {
         return -1;
     }
     
     // Read the block from disk
     int result = ir0fs_read_block(fs_info, inode_block, block_data);
-    if (result != 0) {
+    if (result != 0) 
+    {
         kfree(block_data);
         return -1;
     }
@@ -360,7 +385,8 @@ int ir0fs_write_inode(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *inode)
     
     kfree(block_data);
     
-    if (result == 0) {
+    if (result == 0) 
+    {
         print("IR0FS: Wrote inode ");
         print_int32(inode->ino);
         print(" to disk\n");
@@ -371,15 +397,19 @@ int ir0fs_write_inode(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *inode)
 
 uint32_t ir0fs_alloc_inode(ir0fs_fs_info_t *fs_info)
 {
-    if (!fs_info || !fs_info->superblock) {
+    if (!fs_info || !fs_info->superblock) 
+    {
         return 0;
     }
     
     // Find first free inode
-    for (uint32_t i = 1; i < fs_info->superblock->total_inodes; i++) {
+    for (uint32_t i = 1; i < fs_info->superblock->total_inodes; i++) 
+    {
         ir0fs_inode_t inode;
-        if (ir0fs_get_inode(fs_info, i, &inode) == 0) {
-            if (inode.links == 0) {
+        if (ir0fs_get_inode(fs_info, i, &inode) == 0) 
+        {
+            if (inode.links == 0) 
+            {
                 // This inode is free
                 return i;
             }
@@ -391,21 +421,26 @@ uint32_t ir0fs_alloc_inode(ir0fs_fs_info_t *fs_info)
 
 int ir0fs_free_inode(ir0fs_fs_info_t *fs_info, uint32_t ino)
 {
-    if (!fs_info || !fs_info->superblock || ino >= fs_info->superblock->total_inodes) {
+    if (!fs_info || !fs_info->superblock || ino >= fs_info->superblock->total_inodes) 
+    {
         return -1;
     }
     
     ir0fs_inode_t inode;
-    if (ir0fs_get_inode(fs_info, ino, &inode) == 0) {
+    if (ir0fs_get_inode(fs_info, ino, &inode) == 0) 
+    {
         // Free all blocks associated with this inode
-        for (int i = 0; i < 12; i++) {
-            if (inode.direct_blocks[i] != 0) {
+        for (int i = 0; i < 12; i++) 
+        {
+            if (inode.direct_blocks[i] != 0) 
+            {
                 ir0fs_free_block(fs_info, inode.direct_blocks[i]);
                 inode.direct_blocks[i] = 0;
             }
         }
         
-        if (inode.indirect_block != 0) {
+        if (inode.indirect_block != 0) 
+        {
             ir0fs_free_block(fs_info, inode.indirect_block);
             inode.indirect_block = 0;
         }
@@ -427,7 +462,8 @@ int ir0fs_free_inode(ir0fs_fs_info_t *fs_info, uint32_t ino)
 
 int ir0fs_journal_start(ir0fs_fs_info_t *fs_info)
 {
-    if (!fs_info) {
+    if (!fs_info) 
+    {
         return -1;
     }
     
@@ -440,7 +476,8 @@ int ir0fs_journal_start(ir0fs_fs_info_t *fs_info)
 
 int ir0fs_journal_commit(ir0fs_fs_info_t *fs_info)
 {
-    if (!fs_info) {
+    if (!fs_info) 
+    {
         return -1;
     }
     
@@ -454,7 +491,8 @@ int ir0fs_journal_commit(ir0fs_fs_info_t *fs_info)
 
 int ir0fs_journal_rollback(ir0fs_fs_info_t *fs_info)
 {
-    if (!fs_info) {
+    if (!fs_info) 
+    {
         return -1;
     }
     
@@ -470,7 +508,8 @@ int ir0fs_journal_write_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, void
     (void)fs_info;   // Suppress unused parameter warning
     (void)block_num; // Suppress unused parameter warning
     (void)data;      // Suppress unused parameter warning
-    if (!fs_info || !data) {
+    if (!fs_info || !data) 
+    {
         return -1;
     }
     
@@ -487,13 +526,16 @@ int ir0fs_journal_write_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, void
 
 int ir0fs_compress_block(void *input, size_t input_size, void *output, size_t *output_size, ir0fs_compression_t algorithm)
 {
-    if (!input || !output || !output_size) {
+    if (!input || !output || !output_size) 
+    {
         return -1;
     }
     
-    switch (algorithm) {
+    switch (algorithm) 
+    {
         case IR0FS_COMPRESS_NONE:
-            if (*output_size < input_size) {
+            if (*output_size < input_size) 
+            {
                 return -1;
             }
             memcpy(output, input, input_size);
@@ -519,13 +561,16 @@ int ir0fs_compress_block(void *input, size_t input_size, void *output, size_t *o
 
 int ir0fs_decompress_block(void *input, size_t input_size, void *output, size_t *output_size, ir0fs_compression_t algorithm)
 {
-    if (!input || !output || !output_size) {
+    if (!input || !output || !output_size) 
+    {
         return -1;
     }
     
-    switch (algorithm) {
+    switch (algorithm) 
+    {
         case IR0FS_COMPRESS_NONE:
-            if (*output_size < input_size) {
+            if (*output_size < input_size) 
+            {
                 return -1;
             }
             memcpy(output, input, input_size);
@@ -556,16 +601,19 @@ int ir0fs_decompress_block(void *input, size_t input_size, void *output, size_t 
 // Read directory entries from a directory inode
 int ir0fs_readdir(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, ir0fs_dirent_t *dirent, uint32_t *offset)
 {
-    if (!fs_info || !dir_inode || !dirent || !offset) {
+    if (!fs_info || !dir_inode || !dirent || !offset) 
+    {
         return -1;
     }
     
-    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) {
+    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) 
+    {
         return -1;
     }
     
     // If directory has no blocks, return end of directory
-    if (dir_inode->blocks == 0) {
+    if (dir_inode->blocks == 0) 
+    {
         return 1;
     }
     
@@ -574,26 +622,30 @@ int ir0fs_readdir(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, ir0fs_dire
     uint32_t entry_in_block = *offset % IR0FS_DIR_ENTRIES_PER_BLOCK;
     
     // Check if we're beyond the directory's blocks
-    if (block_index >= dir_inode->blocks) {
+    if (block_index >= dir_inode->blocks) 
+    {
         return 1; // End of directory
     }
     
     // Read the directory block from disk
     uint64_t dir_block = dir_inode->direct_blocks[block_index];
     uint8_t *block_data = kmalloc(IR0FS_BLOCK_SIZE);
-    if (!block_data) {
+    if (!block_data) 
+    {
         return -1;
     }
     
     int result = ir0fs_read_block(fs_info, dir_block, block_data);
-    if (result != 0) {
+    if (result != 0) 
+    {
         kfree(block_data);
         return -1;
     }
     
     // Get the entry at the current offset
     ir0fs_dirent_t *entries = (ir0fs_dirent_t *)block_data;
-    if (entry_in_block < IR0FS_DIR_ENTRIES_PER_BLOCK && entries[entry_in_block].ino != 0) {
+    if (entry_in_block < IR0FS_DIR_ENTRIES_PER_BLOCK && entries[entry_in_block].ino != 0) 
+    {
         // Copy the entry
         memcpy(dirent, &entries[entry_in_block], sizeof(ir0fs_dirent_t));
         (*offset)++;
@@ -608,35 +660,43 @@ int ir0fs_readdir(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, ir0fs_dire
 // Add a directory entry to a directory
 int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name, uint32_t ino, uint32_t type)
 {
-    if (!fs_info || !dir_inode || !name) {
+    if (!fs_info || !dir_inode || !name) 
+    {
         return -1;
     }
     
-    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) {
+    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) 
+    {
         return -1;
     }
     
     // Find a free block for the directory if needed
     uint64_t dir_block = 0;
-    if (dir_inode->blocks == 0) {
+    if (dir_inode->blocks == 0) 
+    {
         dir_block = ir0fs_alloc_block(fs_info);
-        if (dir_block == 0) {
+        if (dir_block == 0) 
+        {
             return -1;
         }
         dir_inode->direct_blocks[0] = dir_block;
         dir_inode->blocks = 1;
-    } else {
+    } 
+    else 
+    {
         dir_block = dir_inode->direct_blocks[0]; // Use first block for now
     }
     
     // Read the directory block
     uint8_t *block_data = kmalloc(IR0FS_BLOCK_SIZE);
-    if (!block_data) {
+    if (!block_data) 
+    {
         return -1;
     }
     
     int result = ir0fs_read_block(fs_info, dir_block, block_data);
-    if (result != 0) {
+    if (result != 0) 
+    {
         kfree(block_data);
         return -1;
     }
@@ -645,14 +705,17 @@ int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const c
     ir0fs_dirent_t *entries = (ir0fs_dirent_t *)block_data;
     int free_slot = -1;
     
-    for (size_t i = 0; i < IR0FS_DIR_ENTRIES_PER_BLOCK; i++) {
-        if (entries[i].ino == 0) {
+    for (size_t i = 0; i < IR0FS_DIR_ENTRIES_PER_BLOCK; i++) 
+    {
+        if (entries[i].ino == 0) 
+        {
             free_slot = i;
             break;
         }
     }
     
-    if (free_slot == -1) {
+    if (free_slot == -1) 
+    {
         // Directory block is full, need to allocate a new block
         kfree(block_data);
         return -1; // TODO: Handle multiple blocks
@@ -670,7 +733,8 @@ int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const c
     
     kfree(block_data);
     
-    if (result == 0) {
+    if (result == 0) 
+    {
         // Update directory inode
         dir_inode->size += sizeof(ir0fs_dirent_t);
         ir0fs_write_inode(fs_info, dir_inode);
@@ -688,11 +752,13 @@ int ir0fs_add_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const c
 // Remove a directory entry from a directory
 int ir0fs_remove_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name)
 {
-    if (!fs_info || !dir_inode || !name) {
+    if (!fs_info || !dir_inode || !name) 
+    {
         return -1;
     }
     
-    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) {
+    if (dir_inode->type != IR0FS_INODE_TYPE_DIRECTORY) 
+    {
         return -1;
     }
     
@@ -707,7 +773,8 @@ int ir0fs_remove_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, cons
 
 int ir0fs_find_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const char *name, uint32_t *ino, uint8_t *type)
 {
-    if (!fs_info || !dir_inode || !name || !ino || !type) {
+    if (!fs_info || !dir_inode || !name || !ino || !type) 
+    {
         return -1;
     }
     
@@ -724,19 +791,22 @@ int ir0fs_find_dirent(ir0fs_fs_info_t *fs_info, ir0fs_inode_t *dir_inode, const 
 
 int ir0fs_create_inode(vfs_inode_t *parent, const char *name, vfs_file_type_t type, vfs_inode_t **inode)
 {
-    if (!parent || !name || !inode) {
+    if (!parent || !name || !inode) 
+    {
         return -1;
     }
     
     // Allocate new inode
     uint32_t ino = ir0fs_alloc_inode(&ir0fs_info);
-    if (ino == 0) {
+    if (ino == 0) 
+    {
         return -1;
     }
     
     // Create inode structure
     ir0fs_inode_t *new_inode = kmalloc(sizeof(ir0fs_inode_t));
-    if (!new_inode) {
+    if (!new_inode) 
+    {
         ir0fs_free_inode(&ir0fs_info, ino);
         return -1;
     }
@@ -758,7 +828,8 @@ int ir0fs_create_inode(vfs_inode_t *parent, const char *name, vfs_file_type_t ty
     new_inode->name[sizeof(new_inode->name) - 1] = '\0';
     
     // Write inode to disk
-    if (ir0fs_write_inode(&ir0fs_info, new_inode) != 0) {
+    if (ir0fs_write_inode(&ir0fs_info, new_inode) != 0) 
+    {
         kfree(new_inode);
         ir0fs_free_inode(&ir0fs_info, ino);
         return -1;
@@ -766,13 +837,15 @@ int ir0fs_create_inode(vfs_inode_t *parent, const char *name, vfs_file_type_t ty
     
     // Add directory entry
     ir0fs_inode_t parent_ir0fs;
-    if (ir0fs_get_inode(&ir0fs_info, parent->ino, &parent_ir0fs) == 0) {
+    if (ir0fs_get_inode(&ir0fs_info, parent->ino, &parent_ir0fs) == 0) 
+    {
         ir0fs_add_dirent(&ir0fs_info, &parent_ir0fs, name, ino, new_inode->type);
     }
     
     // Convert to VFS inode
     vfs_inode_t *vfs_inode = kmalloc(sizeof(vfs_inode_t));
-    if (!vfs_inode) {
+    if (!vfs_inode) 
+    {
         kfree(new_inode);
         ir0fs_free_inode(&ir0fs_info, ino);
         return -1;
@@ -798,13 +871,15 @@ int ir0fs_create_inode(vfs_inode_t *parent, const char *name, vfs_file_type_t ty
 
 int ir0fs_delete_inode(vfs_inode_t *inode)
 {
-    if (!inode) {
+    if (!inode) 
+    {
         return -1;
     }
     
     // Free inode
     int result = ir0fs_free_inode(&ir0fs_info, inode->ino);
-    if (result == 0) {
+    if (result == 0) 
+    {
         kfree(inode);
     }
     
@@ -813,7 +888,8 @@ int ir0fs_delete_inode(vfs_inode_t *inode)
 
 int ir0fs_link(vfs_inode_t *inode, const char *newpath)
 {
-    if (!inode || !newpath) {
+    if (!inode || !newpath) 
+    {
         return -1;
     }
     
@@ -828,7 +904,8 @@ int ir0fs_link(vfs_inode_t *inode, const char *newpath)
 static ssize_t ir0fs_read(vfs_file_t *file, void *buf, size_t count)
 {
     (void)count; // Suppress unused parameter warning
-    if (!file || !buf) {
+    if (!file || !buf) 
+    {
         return -1;
     }
     
@@ -843,7 +920,8 @@ static ssize_t ir0fs_read(vfs_file_t *file, void *buf, size_t count)
 
 static ssize_t ir0fs_write(vfs_file_t *file, const void *buf, size_t count)
 {
-    if (!file || !buf) {
+    if (!file || !buf) 
+    {
         return -1;
     }
     
@@ -877,7 +955,8 @@ static int ir0fs_seek(vfs_file_t *file, int64_t offset, vfs_seek_whence_t whence
 // VFS OPERATIONS TABLE
 // ===============================================================================
 
-vfs_fs_ops_t ir0fs_ops = {
+vfs_fs_ops_t ir0fs_ops = 
+{
     .read_inode = NULL,
     .write_inode = NULL,
     .create_inode = ir0fs_create_inode,
@@ -902,7 +981,8 @@ vfs_fs_ops_t ir0fs_ops = {
 // Read a block from disk
 int ir0fs_read_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, void *buffer)
 {
-    if (!fs_info || !buffer) {
+    if (!fs_info || !buffer) 
+    {
         return -1;
     }
     
@@ -913,14 +993,17 @@ int ir0fs_read_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, void *buffer)
     // Use ATA driver to read from disk
     bool success = ata_read_sectors(0, lba, num_sectors, buffer); // Drive 0
     
-    if (success) {
+    if (success) 
+    {
         print("IR0FS: Read block ");
         print_int32(block_num);
         print(" from LBA ");
         print_int32(lba);
         print("\n");
         return 0;
-    } else {
+    } 
+    else 
+    {
         print_error("IR0FS: Failed to read block ");
         print_int32(block_num);
         print("\n");
@@ -931,7 +1014,8 @@ int ir0fs_read_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, void *buffer)
 // Write a block to disk
 int ir0fs_write_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, const void *buffer)
 {
-    if (!fs_info || !buffer) {
+    if (!fs_info || !buffer) 
+    {
         return -1;
     }
     
@@ -942,14 +1026,17 @@ int ir0fs_write_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, const void *
     // Use ATA driver to write to disk
     bool success = ata_write_sectors(0, lba, num_sectors, buffer); // Drive 0
     
-    if (success) {
+    if (success) 
+    {
         print("IR0FS: Wrote block ");
         print_int32(block_num);
         print(" to LBA ");
         print_int32(lba);
         print("\n");
         return 0;
-    } else {
+    } 
+    else 
+    {
         print_error("IR0FS: Failed to write block ");
         print_int32(block_num);
         print("\n");
@@ -960,7 +1047,8 @@ int ir0fs_write_block(ir0fs_fs_info_t *fs_info, uint64_t block_num, const void *
 // Initialize filesystem on disk
 int ir0fs_format_disk(ir0fs_fs_info_t *fs_info)
 {
-    if (!fs_info || !fs_info->superblock) {
+    if (!fs_info || !fs_info->superblock) 
+    {
         return -1;
     }
     
@@ -968,21 +1056,24 @@ int ir0fs_format_disk(ir0fs_fs_info_t *fs_info)
     
     // Write superblock to disk
     int result = ir0fs_write_block(fs_info, 0, fs_info->superblock);
-    if (result != 0) {
+    if (result != 0) 
+    {
         print_error("IR0FS: Failed to write superblock to disk\n");
         return -1;
     }
     
     // Initialize bitmap blocks
     uint8_t *bitmap_block = kmalloc(IR0FS_BLOCK_SIZE);
-    if (!bitmap_block) {
+    if (!bitmap_block) 
+    {
         return -1;
     }
     
     memset(bitmap_block, 0, IR0FS_BLOCK_SIZE);
     
     // Mark system blocks as used (superblock, bitmap, inode table)
-    for (uint64_t i = 0; i < fs_info->superblock->inode_table_start + 1; i++) {
+    for (uint64_t i = 0; i < fs_info->superblock->inode_table_start + 1; i++) 
+    {
         bitmap_block[i / 8] |= (1 << (i % 8));
     }
     
@@ -990,7 +1081,8 @@ int ir0fs_format_disk(ir0fs_fs_info_t *fs_info)
     result = ir0fs_write_block(fs_info, fs_info->superblock->bitmap_start, bitmap_block);
     kfree(bitmap_block);
     
-    if (result != 0) {
+    if (result != 0) 
+    {
         print_error("IR0FS: Failed to write bitmap to disk\n");
         return -1;
     }
@@ -1013,7 +1105,8 @@ int ir0fs_format_disk(ir0fs_fs_info_t *fs_info)
     
     // Write root inode to disk
     result = ir0fs_write_inode(fs_info, &root_inode);
-    if (result != 0) {
+    if (result != 0) 
+    {
         print_error("IR0FS: Failed to write root inode to disk\n");
         return -1;
     }

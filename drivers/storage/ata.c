@@ -27,83 +27,116 @@ static uint16_t ata_get_port_base(uint8_t drive)
     if (drive < 2) 
     {
         return ATA_PRIMARY_DATA;
-    } else 
+    } 
+    else 
     {
         return ATA_SECONDARY_DATA;
     }
 }
 
 // Get status port for drive
-static uint16_t ata_get_status_port(uint8_t drive) {
-    if (drive < 2) {
+static uint16_t ata_get_status_port(uint8_t drive) 
+{
+    if (drive < 2) 
+    {
         return ATA_PRIMARY_STATUS;
-    } else {
+    } 
+    else 
+    {
         return ATA_SECONDARY_STATUS;
     }
 }
 
 // Get drive head port for drive
-static uint16_t ata_get_drive_head_port(uint8_t drive) {
-    if (drive < 2) {
+static uint16_t ata_get_drive_head_port(uint8_t drive) 
+{
+    if (drive < 2) 
+    {
         return ATA_PRIMARY_DRIVE_HEAD;
-    } else {
+    } 
+    else 
+    {
         return ATA_SECONDARY_DRIVE_HEAD;
     }
 }
 
 // Get sector count port for drive
-static uint16_t ata_get_sector_count_port(uint8_t drive) {
-    if (drive < 2) {
+static uint16_t ata_get_sector_count_port(uint8_t drive) 
+{
+    if (drive < 2) 
+    {
         return ATA_PRIMARY_SECTOR_COUNT;
-    } else {
+    } 
+    else 
+    {
         return ATA_SECONDARY_SECTOR_COUNT;
     }
 }
 
 // Get LBA ports for drive
-static uint16_t ata_get_lba_low_port(uint8_t drive) {
-    if (drive < 2) {
+static uint16_t ata_get_lba_low_port(uint8_t drive) 
+{
+    if (drive < 2) 
+    {
         return ATA_PRIMARY_LBA_LOW;
-    } else {
+    } 
+    else 
+    {
         return ATA_SECONDARY_LBA_LOW;
     }
 }
 
-static uint16_t ata_get_lba_mid_port(uint8_t drive) {
-    if (drive < 2) {
+static uint16_t ata_get_lba_mid_port(uint8_t drive) 
+{
+    if (drive < 2) 
+    {
         return ATA_PRIMARY_LBA_MID;
-    } else {
+    } 
+    else 
+    {
         return ATA_SECONDARY_LBA_MID;
     }
 }
 
-static uint16_t ata_get_lba_high_port(uint8_t drive) {
-    if (drive < 2) {
+static uint16_t ata_get_lba_high_port(uint8_t drive) 
+{
+    if (drive < 2) 
+    {
         return ATA_PRIMARY_LBA_HIGH;
-    } else {
+    } 
+    else 
+    {
         return ATA_SECONDARY_LBA_HIGH;
     }
 }
 
 // Get command port for drive
-static uint16_t ata_get_command_port(uint8_t drive) {
-    if (drive < 2) {
+static uint16_t ata_get_command_port(uint8_t drive) 
+{
+    if (drive < 2) 
+    {
         return ATA_PRIMARY_COMMAND;
-    } else {
+    } 
+    else 
+    {
         return ATA_SECONDARY_COMMAND;
     }
 }
 
-void ata_init(void) {
+void ata_init(void) 
+{
     // Reset all drives
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) 
+    {
         ata_reset_drive(i);
     }
     
     // Try to identify drives
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) 
+    {
         ata_drives_present[i] = ata_identify_drive(i);
-        if (ata_drives_present[i]) {
+        if (ata_drives_present[i]) 
+        {
             print("ATA: Drive ");
             print_int32(i);
             print(" identified\n");
@@ -111,17 +144,21 @@ void ata_init(void) {
     }
 }
 
-bool ata_is_available(void) {
+bool ata_is_available(void) 
+{
     // Check if any drive is present
-    for (int i = 0; i < 4; i++) {
-        if (ata_drives_present[i]) {
+    for (int i = 0; i < 4; i++) 
+    {
+        if (ata_drives_present[i]) 
+        {
             return true;
         }
     }
     return false;
 }
 
-void ata_reset_drive(uint8_t drive) {
+void ata_reset_drive(uint8_t drive) 
+{
     uint16_t status_port = ata_get_status_port(drive);
     uint16_t drive_head_port = ata_get_drive_head_port(drive);
     
@@ -134,7 +171,8 @@ void ata_reset_drive(uint8_t drive) {
     
     // Check if drive is present
     uint8_t status = inb(status_port);
-    if (status == 0xFF) {
+    if (status == 0xFF) 
+    {
         return; // No drive
     }
     
@@ -142,7 +180,8 @@ void ata_reset_drive(uint8_t drive) {
     ata_wait_ready(drive);
 }
 
-bool ata_identify_drive(uint8_t drive) {
+bool ata_identify_drive(uint8_t drive) 
+{
     
     uint16_t status_port = ata_get_status_port(drive);
     (void)status_port; // Variable not used in this implementation
@@ -155,7 +194,8 @@ bool ata_identify_drive(uint8_t drive) {
     outb(drive_head_port, drive_select);
     
     // Wait for drive to be ready
-    if (!ata_wait_ready(drive)) {
+    if (!ata_wait_ready(drive)) 
+    {
         return false;
     }
     
@@ -163,14 +203,16 @@ bool ata_identify_drive(uint8_t drive) {
     outb(command_port, ATA_CMD_IDENTIFY);
     
     // Wait for response
-    if (!ata_wait_drq(drive)) {
+    if (!ata_wait_drq(drive)) 
+    {
         return false;
     }
     
     // Read identify data (we don't need to store it for basic functionality)
     uint16_t identify_data[256];
     (void)identify_data; // Variable not used in this implementation
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++) 
+    {
         identify_data[i] = inw(data_port);
     }
     
@@ -181,10 +223,12 @@ bool ata_wait_ready(uint8_t drive)
 {
     uint16_t status_port = ata_get_status_port(drive);
     
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 10000; i++) 
+    {
         uint8_t status = inb(status_port);
         
-        if (!(status & ATA_STATUS_BSY)) {
+        if (!(status & ATA_STATUS_BSY)) 
+        {
             return true;
         }
     }
@@ -195,20 +239,24 @@ bool ata_wait_ready(uint8_t drive)
     return false;
 }
 
-bool ata_wait_drq(uint8_t drive) {
+bool ata_wait_drq(uint8_t drive) 
+{
     uint16_t status_port = ata_get_status_port(drive);
     
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 10000; i++) 
+    {
         uint8_t status = inb(status_port);
         
-        if (status & ATA_STATUS_ERR) {
+        if (status & ATA_STATUS_ERR) 
+        {
             print("ATA: Drive ");
             print_uint64(drive);
             print(" error during DRQ wait\n");
             return false;
         }
         
-        if (status & ATA_STATUS_DRQ) {
+        if (status & ATA_STATUS_DRQ) 
+        {
             return true;
         }
     }
@@ -229,7 +277,8 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
     print_uint64(lba);
     print("\n");
     
-    if (!ata_drives_present[drive]) {
+    if (!ata_drives_present[drive]) 
+    {
         print("ATA: Drive ");
         print_uint64(drive);
         print(" not present\n");
@@ -251,7 +300,8 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
     outb(drive_head_port, drive_select | 0x40); // LBA mode
     
     // Wait for drive to be ready
-    if (!ata_wait_ready(drive)) {
+    if (!ata_wait_ready(drive)) 
+    {
         return false;
     }
     
@@ -267,15 +317,18 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
     
     // Read data
     uint16_t* buffer16 = (uint16_t*)buffer;
-    for (int sector = 0; sector < num_sectors; sector++) {
+    for (int sector = 0; sector < num_sectors; sector++) 
+    {
         // Wait for data
-        if (!ata_wait_drq(drive)) {
+        if (!ata_wait_drq(drive)) 
+        {
             print("ATA: Failed to wait for DRQ during read\n");
             return false;
         }
         
         // Read sector
-        for (int i = 0; i < 256; i++) {
+        for (int i = 0; i < 256; i++) 
+        {
             buffer16[sector * 256 + i] = inw(data_port);
         }
     }
@@ -284,7 +337,8 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
     return true;
 }
 
-bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer) {
+bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer) 
+{
     print("ATA: Writing ");
     print_uint64(num_sectors);
     print(" sectors to drive ");
@@ -316,7 +370,8 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     outb(drive_head_port, drive_select | 0x40); // LBA mode
     
     // Wait for drive to be ready
-    if (!ata_wait_ready(drive)) {
+    if (!ata_wait_ready(drive)) 
+    {
         return false;
     }
     
@@ -332,14 +387,17 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     
     // Write data
     const uint16_t* buffer16 = (const uint16_t*)buffer;
-    for (int sector = 0; sector < num_sectors; sector++) {
+    for (int sector = 0; sector < num_sectors; sector++) 
+    {
         // Wait for DRQ
-        if (!ata_wait_drq(drive)) {
+        if (!ata_wait_drq(drive)) 
+        {
             return false;
         }
         
         // Write sector
-        for (int i = 0; i < 256; i++) {
+        for (int i = 0; i < 256; i++) 
+        {
             outw(data_port, buffer16[sector * 256 + i]);
         }
     }
@@ -349,9 +407,12 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     
     // Wait for completion
     bool result = ata_wait_ready(drive);
-    if (result) {
+    if (result) 
+    {
         print("ATA: Write operation completed successfully - REAL DISK I/O\n");
-    } else {
+    } 
+    else 
+    {
         print("ATA: Write operation failed\n");
     }
     return result;

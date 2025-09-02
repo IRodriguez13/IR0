@@ -19,7 +19,8 @@ static bool system_locked = false;
 static int failed_attempts = 0;
 
 // Default users database (simple for now)
-static user_credentials_t users[] = {
+static user_credentials_t users[] = 
+{
     {"admin", "", 0, 0, 0xFFFFFFFF},
     {"root", "", 0, 0, 0xFFFFFFFF},
     {"user", "", 1000, 1000, 0x00000001}
@@ -46,43 +47,55 @@ static int auth_read_input(char *buffer, int max_length, bool echo)
     int pos = 0;
     buffer[0] = '\0';
     
-    while (pos < max_length - 1) {
+    while (pos < max_length - 1) 
+    {
         // Wait for keyboard input
-        while (!keyboard_buffer_has_data()) {
+        while (!keyboard_buffer_has_data()) 
+        {
             for (volatile int i = 0; i < 1000; i++) { /* busy wait */ }
         }
         
         char c = keyboard_buffer_get();
         
-        if (c == '\n' || c == '\r') {
+        if (c == '\n' || c == '\r') 
+        {
             // Enter pressed
             buffer[pos] = '\0';
             print("\n");
             break;
         }
-        else if (c == '\b' || c == 127) {
+        else if (c == '\b' || c == 127) 
+        {
             // Backspace
-            if (pos > 0) {
+            if (pos > 0) 
+            {
                 pos--;
                 buffer[pos] = '\0';
-                if (echo) {
+                if (echo) 
+                {
                     print("\b \b");
-                } else {
+                } 
+                else 
+                {
                     print("\b \b");
                 }
             }
         }
-        else if (c >= 32 && c <= 126) {
+        else if (c >= 32 && c <= 126) 
+        {
             // Valid character
             buffer[pos] = c;
             buffer[pos + 1] = '\0';
             pos++;
             
             // Echo character (or asterisk for passwords)
-            if (echo) {
+            if (echo) 
+            {
                 char temp[2] = {c, '\0'};
                 print(temp);
-            } else {
+            } 
+            else 
+            {
                 print("*");
             }
         }
@@ -93,8 +106,10 @@ static int auth_read_input(char *buffer, int max_length, bool echo)
 
 static auth_result_t auth_validate_user(const char *username)
 {
-    for (int i = 0; i < num_users; i++) {
-        if (strcmp(username, users[i].username) == 0) {
+    for (int i = 0; i < num_users; i++) 
+    {
+        if (strcmp(username, users[i].username) == 0) 
+        {
             // Copy user data
             memcpy(&current_user, &users[i], sizeof(user_credentials_t));
             is_authenticated = true;
@@ -114,7 +129,8 @@ static void auth_handle_lockout(void)
     print_colored("💀 Access denied. System halting for security...\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     
     // Halt the system
-    for (;;) {
+    for (;;) 
+    {
         __asm__ volatile("hlt");
     }
 }
@@ -125,9 +141,12 @@ static void auth_handle_lockout(void)
 
 int auth_init(auth_config_t *config)
 {
-    if (config) {
+    if (config) 
+    {
         memcpy(&auth_config, config, sizeof(auth_config_t));
-    } else {
+    } 
+    else 
+    {
         // Default configuration
         auth_config.max_attempts = 3;
         auth_config.lockout_time = 0;
@@ -146,19 +165,22 @@ auth_result_t kernel_login(void)
 {
     char username[64];
     
-    if (system_locked) {
+    if (system_locked) 
+    {
         return AUTH_SYSTEM_LOCKED;
     }
     
     auth_display_banner();
     
-    while (failed_attempts < auth_config.max_attempts) {
+    while (failed_attempts < auth_config.max_attempts) 
+    {
         print_colored("IR0-Kernel login: ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
         
         // Read username
         int len = auth_read_input(username, sizeof(username), true);
         
-        if (len == 0) {
+        if (len == 0) 
+        {
             print_colored("❌ Username cannot be empty\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
             continue;
         }
@@ -166,18 +188,21 @@ auth_result_t kernel_login(void)
         // Validate user
         auth_result_t result = auth_validate_user(username);
         
-        if (result == AUTH_SUCCESS) {
+        if (result == AUTH_SUCCESS) 
+        {
             print_colored("✅ Authentication successful! Welcome, ", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
             print_colored(current_user.username, VGA_COLOR_GREEN, VGA_COLOR_BLACK);
             print_colored(".\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
             print_colored("🔓 Access granted to IR0 Kernel.\n\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
             return AUTH_SUCCESS;
         }
-        else {
+        else 
+        {
             print_colored("❌ Authentication failed! Invalid username.\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
             
             int remaining = auth_config.max_attempts - failed_attempts;
-            if (remaining > 0) {
+            if (remaining > 0) 
+            {
                 print_colored("Attempts remaining: ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
                 print_uint32(remaining);
                 print_colored("\n\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
@@ -192,11 +217,13 @@ auth_result_t kernel_login(void)
 
 auth_result_t auth_user_simple(const char *username)
 {
-    if (!username) {
+    if (!username) 
+    {
         return AUTH_INVALID_CREDENTIALS;
     }
     
-    if (system_locked) {
+    if (system_locked) 
+    {
         return AUTH_SYSTEM_LOCKED;
     }
     
