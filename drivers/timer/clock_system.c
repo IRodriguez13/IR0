@@ -155,7 +155,8 @@ int clock_set_alarm(uint32_t seconds, clock_alarm_callback_t callback, void *dat
 // Statistics
 int clock_get_stats(clock_stats_t *stats)
 {
-    if (!stats) {
+    if (!stats) 
+    {
         return -1;
     }
     
@@ -176,7 +177,8 @@ int clock_get_stats(clock_stats_t *stats)
 void clock_print_stats(void)
 {
     clock_stats_t stats;
-    if (clock_get_stats(&stats) != 0) {
+    if (clock_get_stats(&stats) != 0) 
+    {
         return;
     }
     
@@ -186,7 +188,8 @@ void clock_print_stats(void)
     print("\n");
     
     print("Active Timer: ");
-    switch (stats.active_timer) {
+    switch (stats.active_timer) 
+    {
         case CLOCK_TIMER_PIT:
             print("PIT");
             break;
@@ -228,7 +231,8 @@ void clock_print_stats(void)
 // Tick handler (called from interrupt)
 void clock_tick(void)
 {
-    if (!clock_state.initialized) {
+    if (!clock_state.initialized) 
+    {
         return;
     }
     
@@ -237,7 +241,8 @@ void clock_tick(void)
     
     // Update uptime
     clock_state.uptime_milliseconds++;
-    if (clock_state.uptime_milliseconds >= 1000) {
+    if (clock_state.uptime_milliseconds >= 1000) 
+    {
         clock_state.uptime_milliseconds = 0;
         clock_state.uptime_seconds++;
     }
@@ -255,7 +260,8 @@ void clock_tick(void)
 
 uint64_t get_system_time(void)
 {
-    if (!clock_state.initialized) {
+    if (!clock_state.initialized) 
+    {
         return 0;
     }
     
