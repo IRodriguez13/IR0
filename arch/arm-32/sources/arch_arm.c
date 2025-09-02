@@ -41,7 +41,8 @@ void _start(void) {
     kmain_arm32();
     
     // Loop infinito si retorna
-    while(1) {
+    while(1) 
+    {
         __asm__ volatile("wfi");  // Wait For Interrupt
     }
 }

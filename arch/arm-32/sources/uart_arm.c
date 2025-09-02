@@ -24,7 +24,8 @@
 #define UART_CR_RXE (1 << 9)    // Receive Enable
 
 // Función para escribir un byte a UART
-void uart_putc(char c) {
+void uart_putc(char c) 
+{
     // Esperar hasta que el buffer de transmisión esté libre
     while (*(volatile uint32_t*)UART0_FR & UART_FR_TXFF);
     
@@ -33,7 +34,8 @@ void uart_putc(char c) {
 }
 
 // Función para leer un byte de UART
-char uart_getc(void) {
+char uart_getc(void) 
+{
     // Esperar hasta que haya datos disponibles
     while (*(volatile uint32_t*)UART0_FR & UART_FR_RXFE);
     
@@ -42,7 +44,8 @@ char uart_getc(void) {
 }
 
 // Función para inicializar UART
-void uart_init(void) {
+void uart_init(void) 
+{
     // Deshabilitar UART
     *(volatile uint32_t*)UART0_CR = 0;
     
@@ -58,26 +61,32 @@ void uart_init(void) {
 }
 
 // Función para imprimir una cadena
-void uart_puts(const char *str) {
-    while (*str) {
+void uart_puts(const char *str) 
+{
+    while (*str) 
+    {
         uart_putc(*str++);
     }
 }
 
 // Función para imprimir un número hexadecimal
-void uart_puthex(uint32_t value) {
+void uart_puthex(uint32_t value) 
+{
     const char hex_chars[] = "0123456789ABCDEF";
     uart_putc('0');
     uart_putc('x');
     
-    for (int i = 7; i >= 0; i--) {
+    for (int i = 7; i >= 0; i--) 
+    {
         uart_putc(hex_chars[(value >> (i * 4)) & 0xF]);
     }
 }
 
 // Función para imprimir un número decimal
-void uart_putdec(uint32_t value) {
-    if (value == 0) {
+void uart_putdec(uint32_t value) 
+{
+    if (value == 0) 
+    {
         uart_putc('0');
         return;
     }
@@ -85,18 +94,21 @@ void uart_putdec(uint32_t value) {
     char buffer[16];
     int i = 0;
     
-    while (value > 0) {
+    while (value > 0) 
+    {
         buffer[i++] = '0' + (value % 10);
         value /= 10;
     }
     
-    while (i > 0) {
+    while (i > 0) 
+    {
         uart_putc(buffer[--i]);
     }
 }
 
 // Función para mostrar la secuencia de arranque por UART
-void uart_show_boot_sequence(void) {
+void uart_show_boot_sequence(void) 
+{
     uart_init();
     
     uart_puts("\n\n");
@@ -121,7 +133,8 @@ void uart_show_boot_sequence(void) {
     uart_puts("MODULAR (ARM-32 specific code)\n");
     
     uart_puts("Progress: [");
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 50; i++) 
+    {
         uart_putc('#');
         // Simular delay
         for (volatile int j = 0; j < 100000; j++);
