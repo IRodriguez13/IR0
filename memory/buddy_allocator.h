@@ -12,19 +12,21 @@
 // BUDDY ALLOCATOR STRUCTURES
 // ===============================================================================
 
-typedef struct buddy_block {
+typedef struct buddy_block
+{
     struct buddy_block *next;
-    uint32_t order;        // Orden del bloque (2^order = tamaño)
-    bool is_free;          // Si el bloque está libre
-    uintptr_t start_addr;  // Dirección de inicio del bloque
+    uint32_t order;       // Orden del bloque (2^order = tamaño)
+    bool is_free;         // Si el bloque está libre
+    uintptr_t start_addr; // Dirección de inicio del bloque
 } buddy_block_t;
 
-typedef struct buddy_allocator {
-    uintptr_t start_addr;      // Dirección de inicio del área
-    size_t total_size;         // Tamaño total del área
-    uint32_t max_order;        // Orden máximo (2^max_order = tamaño máximo)
+typedef struct buddy_allocator
+{
+    uintptr_t start_addr;          // Dirección de inicio del área
+    size_t total_size;             // Tamaño total del área
+    uint32_t max_order;            // Orden máximo (2^max_order = tamaño máximo)
     buddy_block_t *free_lists[32]; // Listas de bloques libres por orden
-    uint8_t *bitmap;           // Bitmap para tracking de bloques
+    uint8_t *bitmap;               // Bitmap para tracking de bloques
 } buddy_allocator_t;
 
 // ===============================================================================
