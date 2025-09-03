@@ -12,7 +12,8 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-print_header() {
+print_header() 
+{
     clear
     echo -e "${CYAN}============================================================${NC}"
     echo -e "${CYAN}           IR0 Kernel - Sistema de Compilación${NC}"
@@ -20,24 +21,29 @@ print_header() {
     echo ""
 }
 
-print_info() {
+print_info() 
+{
     echo -e "${BLUE}[INFO]${NC} $1"
 }
 
-print_success() {
+print_success() 
+{
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-print_warning() {
+print_warning() 
+{
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-print_error() {
+print_error() 
+{
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
 # Función para mostrar el menú principal
-show_main_menu() {
+show_main_menu() 
+{
     print_header
     echo -e "${YELLOW}Menú Principal:${NC}"
     echo ""
@@ -55,7 +61,8 @@ show_main_menu() {
 }
 
 # Función para mostrar menú de arquitecturas
-show_arch_menu() {
+show_arch_menu() 
+{
     echo ""
     echo -e "${YELLOW}Seleccione arquitectura:${NC}"
     echo "1. x86-32 (32-bit)"
@@ -68,7 +75,8 @@ show_arch_menu() {
 }
 
 # Función para mostrar menú de build targets
-show_target_menu() {
+show_target_menu() 
+{
     echo ""
     echo -e "${YELLOW}Seleccione build target:${NC}"
     echo "1. Desktop (Sistema de escritorio)"
@@ -81,7 +89,8 @@ show_target_menu() {
 }
 
 # Función para compilar kernel específico
-compile_specific_kernel() {
+compile_specific_kernel() 
+{
     local arch=""
     local target=""
     
@@ -129,7 +138,8 @@ compile_specific_kernel() {
 }
 
 # Función para compilar todas las arquitecturas
-compile_all_architectures() {
+compile_all_architectures() 
+{
     print_info "Compilando para todas las arquitecturas..."
     
     if ./scripts/build_all.sh -a; then
@@ -144,7 +154,8 @@ compile_all_architectures() {
 }
 
 # Función para compilar todos los build targets
-compile_all_targets() {
+compile_all_targets() 
+{
     print_info "Compilando para todos los build targets..."
     
     if ./scripts/build_all.sh -t; then
@@ -159,7 +170,8 @@ compile_all_targets() {
 }
 
 # Función para compilar todas las combinaciones
-compile_all_combinations() {
+compile_all_combinations() 
+{
     print_info "Compilando todas las combinaciones..."
     
     if ./scripts/build_all.sh -c; then
@@ -174,7 +186,8 @@ compile_all_combinations() {
 }
 
 # Función para crear ISO personalizada
-create_custom_iso() {
+create_custom_iso() 
+{
     local arch=""
     local target=""
     local output_name=""
@@ -242,7 +255,8 @@ create_custom_iso() {
 }
 
 # Función para ejecutar en QEMU
-run_qemu() {
+run_qemu() 
+{
     local arch=""
     local target=""
     
@@ -309,7 +323,8 @@ run_qemu() {
 }
 
 # Función para limpiar archivos
-clean_files() {
+clean_files() 
+{
     print_info "Limpiando archivos de compilación..."
     
     if make clean-all; then
@@ -324,7 +339,8 @@ clean_files() {
 }
 
 # Función para mostrar información del sistema
-show_system_info() {
+show_system_info() 
+{
     print_header
     echo -e "${YELLOW}Información del Sistema:${NC}"
     echo ""
@@ -387,7 +403,8 @@ show_system_info() {
 }
 
 # Función principal del menú
-main_menu() {
+main_menu() 
+{
     while true; do
         show_main_menu
         read -r choice

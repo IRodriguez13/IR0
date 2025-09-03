@@ -60,7 +60,8 @@ ESTRATEGIAS DISPONIBLES:
     #define IR0_IO_BUFFER_SIZE (64 * 1024)  // 64KB
     
     // Funciones de inicialización
-    void ir0_desktop_init(void) {
+    void ir0_desktop_init(void) 
+    {
         // Inicializar subsistemas de escritorio
         ir0_init_gui();
         ir0_init_audio();
@@ -106,7 +107,8 @@ ESTRATEGIAS DISPONIBLES:
     #define IR0_IO_BUFFER_SIZE (256 * 1024)  // 256KB
     
     // Funciones de inicialización
-    void ir0_server_init(void) {
+    void ir0_server_init(void) 
+    {
         // Inicializar subsistemas de servidor
         ir0_init_networking();
         ir0_init_ssl();
@@ -153,7 +155,8 @@ ESTRATEGIAS DISPONIBLES:
     #define IR0_IO_BUFFER_SIZE (4 * 1024)  // 4KB
     
     // Funciones de inicialización
-    void ir0_iot_init(void) {
+    void ir0_iot_init(void) 
+    {
         // Inicializar subsistemas IoT
         ir0_init_lapic_timer();
         ir0_init_low_power_mode();
@@ -200,7 +203,8 @@ ESTRATEGIAS DISPONIBLES:
     #define IR0_IO_BUFFER_SIZE (1 * 1024)  // 1KB
     
     // Funciones de inicialización
-    void ir0_embedded_init(void) {
+    void ir0_embedded_init(void) 
+    {
         // Inicializar subsistemas embebidos
         ir0_init_minimal_timer();
         ir0_init_low_power_mode();
@@ -243,7 +247,8 @@ ESTRATEGIAS DISPONIBLES:
     #define IR0_IO_BUFFER_SIZE (16 * 1024)  // 16KB
     
     // Funciones de inicialización
-    void ir0_generic_init(void) {
+    void ir0_generic_init(void) 
+    {
         // Inicialización genérica
         ir0_init_basic_subsystems();
     }
@@ -254,75 +259,93 @@ ESTRATEGIAS DISPONIBLES:
 // ===============================================================================
 
 // Funciones de inicialización de subsistemas
-void ir0_init_gui(void) {
+void ir0_init_gui(void) 
+{
     // TODO: Implementar inicialización de GUI
 }
 
-void ir0_init_audio(void) {
+void ir0_init_audio(void) 
+{
     // TODO: Implementar inicialización de audio
 }
 
-void ir0_init_usb(void) {
+void ir0_init_usb(void) 
+{
     // TODO: Implementar inicialización de USB
 }
 
-void ir0_init_networking(void) {
+void ir0_init_networking(void) 
+{
     // TODO: Implementar inicialización de networking
 }
 
-void ir0_init_multimedia(void) {
+void ir0_init_multimedia(void) 
+{
     // TODO: Implementar inicialización de multimedia
 }
 
-void ir0_init_printing(void) {
+void ir0_init_printing(void) 
+{
     // TODO: Implementar inicialización de printing
 }
 
-void ir0_init_ssl(void) {
+void ir0_init_ssl(void) 
+{
     // TODO: Implementar inicialización de SSL
 }
 
-void ir0_init_docker_runtime(void) {
+void ir0_init_docker_runtime(void) 
+{
     // TODO: Implementar inicialización de Docker runtime
 }
 
-void ir0_init_virtualization(void) {
+void ir0_init_virtualization(void) 
+{
     // TODO: Implementar inicialización de virtualización
 }
 
-void ir0_init_network_security(void) {
+void ir0_init_network_security(void) 
+{
     // TODO: Implementar inicialización de seguridad de red
 }
 
-void ir0_init_lapic_timer(void) {
+void ir0_init_lapic_timer(void) 
+{
     // TODO: Implementar inicialización de timer LAPIC
 }
 
-void ir0_init_low_power_mode(void) {
+void ir0_init_low_power_mode(void) 
+{
     // TODO: Implementar inicialización de modo de baja potencia
 }
 
-void ir0_init_network_lightweight(void) {
+void ir0_init_network_lightweight(void) 
+{
     // TODO: Implementar inicialización de networking ligero
 }
 
-void ir0_init_sensor_interface(void) {
+void ir0_init_sensor_interface(void) 
+{
     // TODO: Implementar inicialización de interfaz de sensores
 }
 
-void ir0_init_power_management(void) {
+void ir0_init_power_management(void) 
+{
     // TODO: Implementar inicialización de gestión de energía
 }
 
-void ir0_init_minimal_timer(void) {
+void ir0_init_minimal_timer(void) 
+{
     // TODO: Implementar inicialización de timer mínimo
 }
 
-void ir0_init_basic_io(void) {
+void ir0_init_basic_io(void) 
+{
     // TODO: Implementar inicialización de I/O básico
 }
 
-void ir0_init_basic_subsystems(void) {
+void ir0_init_basic_subsystems(void) 
+{
     // TODO: Implementar inicialización de subsistemas básicos
 }
 
