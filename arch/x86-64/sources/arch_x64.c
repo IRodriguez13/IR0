@@ -1,6 +1,7 @@
 // arch/x86-64/sources/arch_x64.c - SIMPLIFICADO
 #include <kernel_start.h>
 #include <arch_interface.h>
+#include "tss_x64.h"
 #include <ir0/print.h>
 #include "arch_x64.h"
 #include <ir0/panic/panic.h>
