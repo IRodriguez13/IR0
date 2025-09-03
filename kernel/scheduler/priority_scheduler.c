@@ -48,25 +48,26 @@ static task_t *priority_pick_next_task(void)
         if (prio_rq.priority_lists[i])
         {
             task_t *task = prio_rq.priority_lists[i];
+
             prio_rq.priority_lists[i] = task->next;
 
             // If list empty, clear bitmap
             if (!prio_rq.priority_lists[i])
             {
-                prio_rq.priority_bitmap[i / 32] &= ~(1 << (i % 32));
+                prio_rq.priority_bitmap[i / 32] &= ~(1 << (i % 32)); // Acá uso el and para buscar salida 0 en cada iteración.
             }
 
             prio_rq.nr_running--;
             return task;
         }
     }
+
     return NULL;
 }
 
 static void priority_task_tick(void)
 {
     // Implementación básica de aging
-    // TODO: Implementar aging completo más adelante
 
     // Por ahora, solo decrementar prioridades periódicamente
     static int aging_counter = 0;
@@ -76,11 +77,31 @@ static void priority_task_tick(void)
     { // Cada 100 ticks
         aging_counter = 0;
         // Implementar aging aquí cuando esté listo
-        LOG_OK("Priority scheduler: aging tick");
+        for(int i = 0; i < MAX_PRIORITY; i++)
+        {
+            task_t *task = prio_rq.priority_lists[i];
+            while(task != NULL)
+            {
+                // Si la tarea lleva mucho tiempo en ejecución, bajo prioridad sin dejar que llegue a 0.
+                if(task->exec_time > 100)
+                {
+                    task->priority --;
+
+                    if (task->priority < 0)
+                    {
+                        task->priority = 0;
+                    } 
+                }
+                task = task->next;
+            }
+        }
+        
+        // LOG_OK("Priority scheduler: aging tick");
     }
 }
 
-scheduler_ops_t priority_scheduler_ops = {
+scheduler_ops_t priority_scheduler_ops = 
+{
     .type = SCHEDULER_PRIORITY,
     .name = "Priority Scheduler with Aging",
     .init = priority_init,
@@ -88,4 +109,5 @@ scheduler_ops_t priority_scheduler_ops = {
     .pick_next_task = priority_pick_next_task,
     .task_tick = priority_task_tick,
     .cleanup = NULL,
-    .private_data = &prio_rq};
+    .private_data = &prio_rq
+};

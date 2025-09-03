@@ -3,11 +3,11 @@
 // ===============================================================================
 
 // kernel/scheduler/round-robin_scheduler.c - VERSIÓN CORREGIDA
-#include "scheduler_types.h"
-#include "task.h"
 #include <print.h>
 #include <panic/panic.h>
 #include <stddef.h>
+#include "scheduler_types.h"
+#include "task.h"
 #include "scheduler.h"
 
 // Estructura privada del round-robin scheduler
@@ -152,7 +152,8 @@ static void rr_cleanup(void)
 // EXPORTAR LA ESTRUCTURA scheduler_ops_t - ESTO ES LO QUE FALTABA
 // ===============================================================================
 
-scheduler_ops_t roundrobin_scheduler_ops = {
+scheduler_ops_t roundrobin_scheduler_ops = 
+{
     .type = SCHEDULER_ROUND_ROBIN,
     .name = "Round-Robin Scheduler",
     .init = rr_init,
@@ -160,4 +161,5 @@ scheduler_ops_t roundrobin_scheduler_ops = {
     .pick_next_task = rr_pick_next_task,
     .task_tick = rr_task_tick,
     .cleanup = rr_cleanup,
-    .private_data = &rr_state};
+    .private_data = &rr_state
+};
