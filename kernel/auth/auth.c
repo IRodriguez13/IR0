@@ -2,6 +2,7 @@
 #include <ir0/print.h>
 #include <string.h>
 #include <stddef.h>
+#include <panic/panic.h>
 
 // ===============================================================================
 // AUTHENTICATION SYSTEM IMPLEMENTATION
@@ -125,14 +126,11 @@ static auth_result_t auth_validate_user(const char *username)
 static void auth_handle_lockout(void)
 {
     system_locked = true;
-    print_colored("🔒 SYSTEM LOCKED: Too many failed authentication attempts\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-    print_colored("💀 Access denied. System halting for security...\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+    print_colored("SYSTEM LOCKED: Too many failed authentication attempts\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+    print_colored("Access denied. System halting for security...\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     
     // Halt the system
-    for (;;) 
-    {
-        __asm__ volatile("hlt");
-    }
+    cpu_relax();
 }
 
 // ===============================================================================
