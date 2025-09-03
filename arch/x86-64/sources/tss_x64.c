@@ -33,7 +33,7 @@ static tss_t kernel_tss __attribute__((aligned(16)));
 // Kernel stack for Ring 0 (when returning from user mode)
 static uint8_t kernel_stack[8192] __attribute__((aligned(16)));
 
-void setup_tss(void)
+void setup_tss()
 {
     // Clear TSS structure
     memset(&kernel_tss, 0, sizeof(tss_t));
