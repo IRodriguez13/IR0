@@ -3,6 +3,32 @@
 This guide provides comprehensive information for developers working on the IR0 kernel, including architecture details, coding standards, and development workflows.
 
 ---
+## Required dependencies to build the kernel
+
+### Build Tools
+- **GCC** (GNU Compiler Collection, version 7.0+)
+- **Make** (build automation tool)
+- **NASM** (Netwide Assembler, version 2.13+)
+- **LD** (GNU Linker)
+- **AR** (GNU Archiver, usually part of build-essential)
+
+### Bootable image tools
+- **GRUB** (grub-pc-bin)
+- **Xorriso** (for ISO creation)
+
+### Emulation and testing
+- **QEMU** (qemu-system-x86)
+
+### Recommended for development and debugging
+- **Git** (version control)
+- **Valgrind** (memory debugging, optional)
+- **GDB** (debugger, optional)
+
+### Cross-compilation dependencies (optional, only if building for ARM)
+- **gcc-aarch64-linux-gnu** (ARM64 cross-compiler)
+- **gcc-arm-linux-gnueabi** (ARM32 cross-compiler)
+- **qemu-system-arm** (ARM emulator)
+---
 
 ## 🏗️ Architecture Overview
 
