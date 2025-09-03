@@ -8,7 +8,8 @@
 // ===============================================================================
 
 // Authentication result codes
-typedef enum {
+typedef enum
+{
     AUTH_SUCCESS = 0,
     AUTH_INVALID_CREDENTIALS = 1,
     AUTH_TOO_MANY_ATTEMPTS = 2,
@@ -16,16 +17,18 @@ typedef enum {
 } auth_result_t;
 
 // User credentials structure
-typedef struct {
+typedef struct
+{
     char username[32];
-    char password[64];  // For future password support
+    char password[64]; // For future password support
     uint32_t uid;
     uint32_t gid;
     uint32_t permissions;
 } user_credentials_t;
 
 // Authentication configuration
-typedef struct {
+typedef struct
+{
     int max_attempts;
     int lockout_time;
     bool require_password;
