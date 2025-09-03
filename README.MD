@@ -240,7 +240,7 @@ exit                    # Exit shell
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Developer Guide](setup/docs/DEVELOPER_GUIDE.md) for:
+We welcome contributions! Please see our [Developer Guide](setup/docs/CONTRIBUTING.md) for:
 
 - **Coding Standards** and patterns
 - **Architecture Guidelines** for new features
