@@ -164,17 +164,6 @@ static void rr_task_tick(void)
     }
 }
 
-void scheduler_force_context_switch()
-{
-    scheduler_central_notify_context_switch();
-}
-
-void scheduler_central_notify_context_switch(void)
-{
-    if(scheduler_flags & SCHEDULER_CONTEXT_SWITCH)
-        scheduler_context_switch();
-}
-
 static void rr_cleanup(void)
 {
     LOG_OK("Round-Robin scheduler cleanup");
