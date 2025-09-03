@@ -9,6 +9,8 @@
 #include "scheduler_types.h"
 #include "task.h"
 #include "scheduler.h"
+#define SCHEDULER_CONTEXT_SWITCH (1 << 0)
+unsigned int scheduler_flags = 0;
 
 // Estructura privada del round-robin scheduler
 typedef struct
@@ -92,21 +94,37 @@ static task_t *rr_pick_next_task(void)
     // Buscar próximo proceso READY
     task_t *next_task = rr_state.ready_queue;
     int attempts = 0;
-
+    
+    // itero si las tareas no son ready y no me paso de MAX_TASKS
     while (next_task->state != TASK_READY && attempts < MAX_TASKS)
     {
+        // Avanzar al siguiente y aumentar el contador de intentos
         next_task = next_task->next;
         attempts++;
 
+        // Si llego al inicio de la cola, terminar
         if (next_task == rr_state.ready_queue)
         {
             break; // Dimos la vuelta completa
         }
     }
 
+    // Si la tarea encontrada es la actual, retorno NULL
+    if(next_task == rr_state.current_task)
+    {
+        return NULL;
+    }
+
+    // Si llego al final de la cola sin encontrar una tarea ready
     if (next_task->state != TASK_READY)
     {
         return NULL; // No hay tareas ready
+    }
+
+    // Verificar si la tarea encontrada es NULL
+    if (!next_task)
+    {
+        return NULL;
     }
 
     // Actualizar ready_queue para apuntar al siguiente
@@ -129,9 +147,32 @@ static void rr_task_tick(void)
     {
         rr_state.current_ticks = 0;
 
-        // Forzar context switch en próximo scheduler_tick
-        // (esto se maneja en el scheduler central)
+        task_t *next_task = rr_pick_next_task();
+
+        if(next_task == rr_state.current_task)
+        {
+            return;
+        }
+        
+        if (!next_task)
+        {
+            return;
+        }    
+
+        switch_task(rr_state.current_task, next_task);
+        
     }
+}
+
+void scheduler_force_context_switch()
+{
+    scheduler_central_notify_context_switch();
+}
+
+void scheduler_central_notify_context_switch(void)
+{
+    if(scheduler_flags & SCHEDULER_CONTEXT_SWITCH)
+        scheduler_context_switch();
 }
 
 static void rr_cleanup(void)
@@ -152,14 +193,14 @@ static void rr_cleanup(void)
 // EXPORTAR LA ESTRUCTURA scheduler_ops_t - ESTO ES LO QUE FALTABA
 // ===============================================================================
 
-scheduler_ops_t roundrobin_scheduler_ops = 
-{
-    .type = SCHEDULER_ROUND_ROBIN,
-    .name = "Round-Robin Scheduler",
-    .init = rr_init,
-    .add_task = rr_add_task,
-    .pick_next_task = rr_pick_next_task,
-    .task_tick = rr_task_tick,
-    .cleanup = rr_cleanup,
-    .private_data = &rr_state
-};
+scheduler_ops_t roundrobin_scheduler_ops =
+    {
+        .type = SCHEDULER_ROUND_ROBIN,
+        .name = "Round-Robin Scheduler",
+        .init = rr_init,
+        .add_task = rr_add_task,
+        .pick_next_task = rr_pick_next_task,
+        .task_tick = rr_task_tick,
+        .cleanup = rr_cleanup,
+        .private_data = &rr_state
+    };
