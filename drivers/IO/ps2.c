@@ -50,7 +50,7 @@ void ps2_init(void)
     // Set configuration byte
     outb(PS2_COMMAND_PORT, PS2_CMD_READ_CONFIG);
     uint8_t config = inb(PS2_DATA_PORT);
-    config &= ~(1 << 0); // Disable IRQ1
+    config &= ~(1 << 0); // Disable IRQ1 
     config &= ~(1 << 1); // Disable IRQ12
     config |= (1 << 6);  // Enable translation
     outb(PS2_COMMAND_PORT, PS2_CMD_WRITE_CONFIG);
