@@ -19,7 +19,8 @@
 // ===============================================================================
 
 // Filesystem statistics
-typedef struct {
+typedef struct
+{
     uint64_t total_blocks;
     uint64_t free_blocks;
     uint64_t total_inodes;
@@ -33,7 +34,8 @@ typedef struct {
 } ir0fs_stats_t;
 
 // Filesystem health report
-typedef struct {
+typedef struct
+{
     bool superblock_valid;
     bool bitmap_valid;
     bool inode_table_valid;
