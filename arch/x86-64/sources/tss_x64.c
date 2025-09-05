@@ -2,36 +2,19 @@
 #include <ir0/print.h>
 #include <stddef.h>
 #include <string.h>
+#include "gdt.h"
+#include "tss_x64.h"
 
 // ===============================================================================
 // TSS CONFIGURATION FOR USER MODE
 // ===============================================================================
 
-// TSS structure for x86-64
-typedef struct
-{
-    uint32_t reserved0;
-    uint64_t rsp0; // Kernel stack pointer for Ring 0
-    uint64_t rsp1; // Kernel stack pointer for Ring 1
-    uint64_t rsp2; // Kernel stack pointer for Ring 2
-    uint64_t reserved1;
-    uint64_t ist1; // Interrupt stack table 1
-    uint64_t ist2; // Interrupt stack table 2
-    uint64_t ist3; // Interrupt stack table 3
-    uint64_t ist4; // Interrupt stack table 4
-    uint64_t ist5; // Interrupt stack table 5
-    uint64_t ist6; // Interrupt stack table 6
-    uint64_t ist7; // Interrupt stack table 7
-    uint64_t reserved2;
-    uint16_t reserved3;
-    uint16_t iopb_offset; // I/O permission bitmap offset
-} __attribute__((packed)) tss_t;
 
 // Global TSS instance
-static tss_t kernel_tss __attribute__((aligned(16)));
-
+tss_t kernel_tss __attribute__((aligned(16)));
 // Kernel stack for Ring 0 (when returning from user mode)
 static uint8_t kernel_stack[8192] __attribute__((aligned(16)));
+
 
 void setup_tss()
 {
@@ -59,6 +42,6 @@ void setup_tss()
     print("\n");
 
     // Update GDT TSS descriptor with the actual TSS address
-    extern void update_gdt_tss(uint64_t tss_addr);
     update_gdt_tss((uint64_t)&kernel_tss);
 }
+
