@@ -1,247 +1,169 @@
-; boot_x64.asm - Bootloader completo para x86-64
-; Hecho DESDE CERO para evitar problemas de jmp far
+; ===========================================================================
+; boot_x64.asm - Arranque mínimo para x86-64 con Multiboot
+; ===========================================================================
+; Hace SOLO lo indispensable:
+;  - Verifica Multiboot
+;  - Configura stack inicial
+;  - Configura paginación mínima (32 MiB, 2MiB pages)
+;  - Habilita Long Mode
+;  - Carga GDT mínima
+;  - Salta a modo 64-bit y llama a kmain_x64
+; ===========================================================================
 
+; --------------------------
 ; Multiboot header
+; --------------------------
 section .multiboot
 align 4
-    dd 0x1BADB002               ; Multiboot magic
+    dd 0x1BADB002               ; Magic
     dd 0x00                     ; Flags
     dd -(0x1BADB002 + 0x00)     ; Checksum
 
-; Stack para boot
+; --------------------------
+; Stack
+; --------------------------
 section .bss
 align 16
 stack_bottom:
     resb 16384                  ; 16KB stack
 stack_top:
 
-; Código principal
+; --------------------------
+; Código principal (32-bit)
+; --------------------------
 section .text
+
+[BITS 32]
+
 global _start
 extern kmain_x64
 
-; Todo en 32-bit inicialmente
-BITS 32
-
 _start:
-    ; Verificar que tenemos multiboot
+    ; Multiboot check
     cmp eax, 0x2BADB002
-    jne error_no_multiboot
+    jne .no_multiboot
 
-    ; Configurar stack inicial
+    ; Stack inicial
     mov esp, stack_top
 
-    ; Verificar que estamos en modo protegido
-    mov eax, cr0
-    test eax, 1
-    jz error_no_protected
-
-    ; === CONFIGURACIÓN PARA LONG MODE ===
-
-    ; 1. Habilitar PAE
+    ; --------------------------
+    ; Habilitar PAE
+    ; --------------------------
     mov eax, cr4
-    or eax, 1 << 5              ; PAE bit (Physical Address Extension)
+    or eax, 1 << 5              ; CR4.PAE
     mov cr4, eax
 
-    ; 2. Configurar EFER para Long Mode
-    mov ecx, 0xC0000080         ; EFER MSR
+    ; --------------------------
+    ; Habilitar Long Mode (LME)
+    ; --------------------------
+    mov ecx, 0xC0000080         ; IA32_EFER MSR
     rdmsr
-    or eax, 1 << 8              ; LME bit (Long Mode Enable)
+    or eax, 1 << 8              ; bit LME
     wrmsr
 
-    ; 3. Cargar nuestra GDT
-    lgdt [gdt_descriptor]
-    
-    ; Cargar TSS (Task State Segment)
-    ; Esto es necesario para que las interrupciones desde user mode funcionen
-    mov ax, TSS_SEL
-    ltr ax
-    
-    ; Configurar segmentos de datos
-    mov ax, DATA_SEL
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
-
-    ; 4. Configurar CR3 con PML4 mínimo (solo para boot)
-    mov eax, pml4_minimal       ; PML4 mínimo para boot
+    ; --------------------------
+    ; Configurar CR3
+    ; --------------------------
+    mov eax, pml4_minimal
     mov cr3, eax
 
-    ; 5. Habilitar paging - REQUERIDO para Long Mode
+    ; --------------------------
+    ; Habilitar Paging
+    ; --------------------------
     mov eax, cr0
-    or eax, 1 << 31             ; PG bit
+    or eax, 1 << 31             ; CR0.PG
     mov cr0, eax
 
-    ; 6. Ahora hacemos el jmp far CORRECTAMENTE
+    ; --------------------------
+    ; Cargar GDT mínima
+    ; --------------------------
+    lgdt [gdt_descriptor]
+
+    ; --------------------------
+    ; Salto far a 64-bit
+    ; --------------------------
     jmp CODE_SEL:modo_64bit
 
-; === MANEJADORES DE ERROR ===
-error_no_multiboot:
-    mov dword [0xB8000], 0x4F4E4F4D  ; "MN" en rojo
-    mov dword [0xB8004], 0x4F544F42  ; "BT" en rojo
+.no_multiboot:
+    mov dword [0xB8000], 0x4F4E4F4D  ; "MN"
     cli
     hlt
-    jmp $
 
-error_no_protected:
-    mov dword [0xB8000], 0x4F334F33  ; "33" en rojo
-    mov dword [0xB8004], 0x4F324F32  ; "22" en rojo
-    cli
-    hlt
-    jmp $
-
-; === CÓDIGO 64-BIT ===
-BITS 64
+; --------------------------
+; 64-bit code
+; --------------------------
+[BITS 64]
 modo_64bit:
-    ; Configurar selectores de datos para 64-bit
+    ; Segments
     mov ax, DATA_SEL
     mov ds, ax
     mov es, ax
+    mov ss, ax
+    xor ax, ax
     mov fs, ax
     mov gs, ax
-    mov ss, ax
 
-    ; Configurar stack 64-bit seguro dentro del rango mapeado
-    ; Stack: 0x80000 - 0x8FFFF (64KB, alineado a 16 bytes)
+    ; Stack en rango mapeado
     mov rsp, 0x8FF00
 
-    ; === SALTO A KMAIN_X64 COMO LA GENTE ===
-    ; NO usamos dirección hardcodeada - usamos el símbolo directamente
+    ; Call a C
     call kmain_x64
 
-    ; Si kmain_x64 retorna, detenerse
-.halt_loop:
+.halt:
     cli
     hlt
-    jmp .halt_loop
+    jmp .halt
 
-; === TABLAS MÍNIMAS PARA BOOT - SOLUCIÓN HÍBRIDA ===
+; ===========================================================================
+; Tablas de paginación mínimas
+; ===========================================================================
 section .data
 align 4096
-; PML4 mínimo - solo para boot
 pml4_minimal:
-    dq pdp_minimal + 0x3        ; Present + RW + User (PDPT)
-    times 511 dq 0              ; Resto de entradas = 0
+    dq pdp_minimal + 0x3
+    times 511 dq 0
 
 align 4096
-; PDPT mínimo - solo para boot
 pdp_minimal:
-    dq pd_minimal + 0x3         ; Present + RW + User (PD)
-    times 511 dq 0              ; Resto de entradas = 0
+    dq pd_minimal + 0x3
+    times 511 dq 0
 
 align 4096
-; PD mínimo - kernel + expansión futura (32MB)
 pd_minimal:
-    dq 0x000000 + 0x83          ; 0x000000 - 0x1FFFFF (2MB) - Present + RW + 2MB
-    ; Expandir para 32MB (16 entradas de 2MB)
-    dq 0x200000 + 0x83          ; 0x200000 - 0x3FFFFF (2MB) - Present + RW + 2MB
-    dq 0x400000 + 0x83          ; 0x400000 - 0x5FFFFF (2MB) - Present + RW + 2MB
-    dq 0x600000 + 0x83          ; 0x600000 - 0x7FFFFF (2MB) - Present + RW + 2MB
-    dq 0x800000 + 0x83          ; 0x800000 - 0x9FFFFF (2MB) - Present + RW + 2MB
-    dq 0xA00000 + 0x83          ; 0xA00000 - 0xBFFFFF (2MB) - Present + RW + 2MB
-    dq 0xC00000 + 0x83          ; 0xC00000 - 0xDFFFFF (2MB) - Present + RW + 2MB
-    dq 0xE00000 + 0x83          ; 0xE00000 - 0xFFFFFF (2MB) - Present + RW + 2MB
-    dq 0x1000000 + 0x83         ; 0x1000000 - 0x11FFFFF (2MB) - Present + RW + 2MB
-    dq 0x1200000 + 0x83         ; 0x1200000 - 0x13FFFFF (2MB) - Present + RW + 2MB
-    dq 0x1400000 + 0x83         ; 0x1400000 - 0x15FFFFF (2MB) - Present + RW + 2MB
-    dq 0x1600000 + 0x83         ; 0x1600000 - 0x17FFFFF (2MB) - Present + RW + 2MB
-    dq 0x1800000 + 0x83         ; 0x1800000 - 0x19FFFFF (2MB) - Present + RW + 2MB
-    dq 0x1A00000 + 0x83         ; 0x1A00000 - 0x1BFFFFF (2MB) - Present + RW + 2MB
-    dq 0x1C00000 + 0x83         ; 0x1C00000 - 0x1DFFFFF (2MB) - Present + RW + 2MB
-    dq 0x1E00000 + 0x83         ; 0x1E00000 - 0x1FFFFFF (2MB) - Present + RW + 2MB
-    times 495 dq 0              ; Resto de entradas = 0
+    ; 16 entradas de 2 MiB -> 32 MiB mapeados
+    dq 0x000000 + 0x83
+    dq 0x200000 + 0x83
+    dq 0x400000 + 0x83
+    dq 0x600000 + 0x83
+    dq 0x800000 + 0x83
+    dq 0xA00000 + 0x83
+    dq 0xC00000 + 0x83
+    dq 0xE00000 + 0x83
+    dq 0x1000000 + 0x83
+    dq 0x1200000 + 0x83
+    dq 0x1400000 + 0x83
+    dq 0x1600000 + 0x83
+    dq 0x1800000 + 0x83
+    dq 0x1A00000 + 0x83
+    dq 0x1C00000 + 0x83
+    dq 0x1E00000 + 0x83
+    times 495 dq 0
 
-; === GLOBAL DESCRIPTOR TABLE ===
+; ===========================================================================
+; GDT mínima
+; ===========================================================================
 align 16
+
 gdt_start:
-    ; Descriptor nulo (obligatorio)
-    dq 0x0000000000000000
-
-gdt_code:
-    ; Descriptor de código 64-bit (kernel, DPL=0)
-    dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
-    dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
-    db 0x00             ; Base 23:16 (ignorado en 64-bit)
-    db 0x9A             ; Present, DPL=0, Code, Execute/Read
-    db 0x20             ; 64-bit mode, no otros flags
-    db 0x00             ; Base 31:24 (ignorado en 64-bit)
-
-gdt_data:
-    ; Descriptor de datos 64-bit (kernel, DPL=0)
-    dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
-    dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
-    db 0x00             ; Base 23:16 (ignorado en 64-bit)
-    db 0x92             ; Present, DPL=0, Data, Read/Write
-    db 0x00             ; Sin flags especiales
-    db 0x00             ; Base 31:24 (ignorado en 64-bit)
-
-gdt_user_code:
-    ; Descriptor de código 64-bit (usuario, DPL=3)
-    dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
-    dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
-    db 0x00             ; Base 23:16 (ignorado en 64-bit)
-    db 0xFA             ; Present, DPL=3, Code, Execute/Read
-    db 0x20             ; 64-bit mode, no otros flags
-    db 0x00             ; Base 31:24 (ignorado en 64-bit)
-
-gdt_user_data:
-    ; Descriptor de datos 64-bit (usuario, DPL=3)
-    dw 0x0000           ; Limit 15:0 (ignorado en 64-bit)
-    dw 0x0000           ; Base 15:0 (ignorado en 64-bit)
-    db 0x00             ; Base 23:16 (ignorado en 64-bit)
-    db 0xF2             ; Present, DPL=3, Data, Read/Write
-    db 0x00             ; Sin flags especiales
-    db 0x00             ; Base 31:24 (ignorado en 64-bit)
-
-gdt_tss:
-    ; TSS descriptor (para cambio de contexto)
-    dw 0x0067           ; Limit (103 bytes)
-    dw 0x0000           ; Base 15:0 (se configurará dinámicamente)
-    db 0x00             ; Base 23:16
-    db 0x89             ; Present, DPL=0, System, Available TSS
-    db 0x00             ; Sin flags especiales
-    db 0x00             ; Base 31:24
-    dq 0x0000000000000000 ; Base 63:32 (64-bit)
-
+    dq 0x0000000000000000        ; Null
+    dq 0x00AF9A000000FFFF        ; Code 64-bit (base=0, limit=FFFFF, gran=4K)
+    dq 0x00AF92000000FFFF        ; Data 64-bit (base=0, limit=FFFFF, gran=4K)
 gdt_end:
 
 gdt_descriptor:
-    dw gdt_end - gdt_start - 1  ; Tamaño de la GDT
-    dd gdt_start                ; Dirección de la GDT
+    dw gdt_end - gdt_start - 1
+    dq gdt_start
 
 ; Selectores
-CODE_SEL equ 0x08       ; Kernel code
-DATA_SEL equ 0x10       ; Kernel data
-USER_CODE_SEL equ 0x18  ; User code
-USER_DATA_SEL equ 0x20  ; User data
-TSS_SEL equ 0x28        ; TSS
-
-; ===============================================================================
-; GDT UPDATE FUNCTIONS
-; ===============================================================================
-
-; void update_gdt_tss(uint64_t tss_addr)
-; Updates the TSS descriptor in the GDT with the actual TSS address
-global update_gdt_tss
-update_gdt_tss:
-    ; rdi = TSS address
-    
-    ; Calculate TSS descriptor address in GDT
-    ; TSS is at index 5 (0x28 / 8 = 5)
-    ; Each descriptor is 16 bytes
-    ; So TSS descriptor is at gdt_start + 5 * 16 = gdt_start + 80
-    
-    ; Update base address in TSS descriptor
-    ; Base 15:0
-    mov word [gdt_start + 80 + 2], di
-    ; Base 23:16  
-    mov byte [gdt_start + 80 + 4], dil
-    ; Base 31:24
-    mov byte [gdt_start + 80 + 7], dil
-    ; Base 63:32 (64-bit)
-    shr rdi, 32
-    mov dword [gdt_start + 80 + 8], edi
-    
-    ret
+CODE_SEL equ 0x08
+DATA_SEL equ 0x10
