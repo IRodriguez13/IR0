@@ -6,7 +6,8 @@
 // Using I/O functions from arch_interface.h
 
 // Initialize PIC - VECTORES ESTÁNDAR (32-47)
-void pic_init(void) {
+void pic_init(void)
+{
     unsigned char a1, a2;
 
     // Save masks
@@ -18,8 +19,8 @@ void pic_init(void) {
     outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
 
     // ICW2: Master PIC vector offset - VECTORES ESTÁNDAR
-    outb(PIC1_DATA, 32);     // IRQ 0-7: interrupts 32-39
-    outb(PIC2_DATA, 40);     // IRQ 8-15: interrupts 40-47
+    outb(PIC1_DATA, 32); // IRQ 0-7: interrupts 32-39
+    outb(PIC2_DATA, 40); // IRQ 8-15: interrupts 40-47
 
     // ICW3: tell Master PIC that there is a slave PIC at IRQ2 (0000 0100)
     outb(PIC1_DATA, 4);
@@ -38,21 +39,27 @@ void pic_init(void) {
 }
 
 // Send End of Interrupt signal
-void pic_send_eoi(unsigned char irq) {
-    if (irq >= 8) {
+void pic_send_eoi(unsigned char irq)
+{
+    if (irq >= 8)
+    {
         outb(PIC2_COMMAND, PIC_EOI);
     }
     outb(PIC1_COMMAND, PIC_EOI);
 }
 
 // Mask IRQ
-void pic_mask_irq(unsigned char irq) {
+void pic_mask_irq(unsigned char irq)
+{
     uint16_t port;
     uint8_t value;
 
-    if (irq < 8) {
+    if (irq < 8)
+    {
         port = PIC1_DATA;
-    } else {
+    }
+    else
+    {
         port = PIC2_DATA;
         irq -= 8;
     }
@@ -62,13 +69,17 @@ void pic_mask_irq(unsigned char irq) {
 }
 
 // Unmask IRQ
-void pic_unmask_irq(unsigned char irq) {
+void pic_unmask_irq(unsigned char irq)
+{
     uint16_t port;
     uint8_t value;
 
-    if (irq < 8) {
+    if (irq < 8)
+    {
         port = PIC1_DATA;
-    } else {
+    }
+    else
+    {
         port = PIC2_DATA;
         irq -= 8;
     }

@@ -127,6 +127,7 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
     print_hex_compact(task->pid);
     print_hex_compact(task->priority);
     print_hex_compact(task->nice);
+    delay_ms(2000);
 
     return task;
 }
@@ -309,6 +310,7 @@ void create_test_tasks(void)
     }
 
     LOG_OK("Test tasks created successfully");
+    delay_ms(2000);
 }
 
 // ===============================================================================

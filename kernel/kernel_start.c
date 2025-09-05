@@ -105,7 +105,8 @@ void main(void)
     // ===============================================================================
     // SUBSYSTEM INITIALIZATION
     // ===============================================================================
-
+    log_subsystem_ok("GDT initialized");
+    log_subsystem_ok("TSS initialized");
     // Logging system
     extern void logging_init(void);
     logging_init();
@@ -132,10 +133,6 @@ void main(void)
     // Memory Manager initialized
     log_subsystem_ok("Memory manager");
 
-    // Minix Filesystem Structure Test
-    run_minix_test();
-    log_subsystem_ok("Minix filesystem structure test");
-
     // Storage subsystem
     ata_init();
     log_subsystem_ok("Storage subsystem");
@@ -145,16 +142,21 @@ void main(void)
     minix_fs_init();
     log_subsystem_ok("File systems (MINIX)");
 
+    // Minix Filesystem Structure Test
+    run_minix_test();
+    log_subsystem_ok("Minix filesystem structure test");
+    delay_ms(2000);
     // Test Minix + ATA completo
     extern void run_minix_ata_test(void);
     run_minix_ata_test();
+    delay_ms(2000);
     log_subsystem_ok("Minix + ATA test");
 
     // Process management
     extern void process_init(void);
     process_init();
     log_subsystem_ok("Process management");
-
+    delay_ms(2000);
     // Clock system
     extern int clock_system_init(void);
     clock_system_init();
@@ -169,6 +171,7 @@ void main(void)
         scheduler_fallback_to_next();
     }
     log_subsystem_ok("Scheduler system");
+    delay_ms(4000);
 
     // System calls
     extern void syscalls_init(void);
@@ -204,12 +207,12 @@ void main(void)
     enable_interrupts();
 
     // ===============================================================================
-    // AUTHENTICATION SYSTEM
+    // AUTHENTICATION SYSTEM | yeah, i know is kernel space, but is for debug
     // ===============================================================================
-    init_auth_system();
+    // init_auth_system(); //Totally temporal
 
     // ===============================================================================
-    // SHELL AND USER SPACE
+    // SHELL AND "USER SPACE"
     // ===============================================================================
     user_start();
 
@@ -233,19 +236,19 @@ static void enable_interrupts(void)
 // AUTHENTICATION INITIALIZATION
 // ===============================================================================
 
-static void init_auth_system(void)
-{
-    auth_config_t config;
-    config.max_attempts = 3;
-    config.lockout_time = 0;
-    config.require_password = false;
-    config.case_sensitive = true;
+// static void init_auth_system(void)
+// {
+//     auth_config_t config;
+//     config.max_attempts = 3;
+//     config.lockout_time = 0;
+//     config.require_password = false;
+//     config.case_sensitive = true;
 
-    if (auth_init(&config) != 0)
-    {
-        panic("Authentication system initialization failed");
-    }
-}
+//     if (auth_init(&config) != 0)
+//     {
+//         panic("Authentication system initialization failed");
+//     }
+// }
 
 // ===============================================================================
 // USER SPACE PROCESS IMPLEMENTATION
@@ -305,14 +308,16 @@ static void user_start(void)
         panic("Login system initialization failed");
     }
 
-    // Authenticate user
-    if (login_authenticate() == 0)
-    {
-        // Clear keyboard buffer to prevent residual input from being interpreted as shell commands
-        extern void keyboard_buffer_clear(void);
-        keyboard_buffer_clear();
+    // if we gonna pass into user space, we need use login only in ring 3, i know...
 
-        // Start shell after successful authentication
-        start_shell();
-    }
+    // // Authenticate user
+    // if (login_authenticate() == 0)
+    // {
+    //     // Clear keyboard buffer to prevent residual input from being interpreted as shell commands
+    //     extern void keyboard_buffer_clear(void);
+    //     keyboard_buffer_clear();
+
+    //     // Start shell after successful authentication
+    // }
+    start_shell();
 }

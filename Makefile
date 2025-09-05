@@ -206,6 +206,7 @@ endif
 # Objetos de arquitectura
 ifeq ($(ARCH),x86-64)
     ARCH_OBJS = arch/x86-64/sources/arch_x64.o \
+				arch/x86-64/sources/gdt.o \
                 arch/x86-64/asm/boot_x64.o \
                 arch/x86-64/sources/idt_arch_x64.o \
                 arch/x86-64/sources/fault.o \
