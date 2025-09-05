@@ -37,10 +37,6 @@ void setup_tss()
     // I/O permission bitmap (for now, no I/O access from user mode)
     kernel_tss.iopb_offset = sizeof(tss_t);
 
-    print("setup_tss: TSS configured with RSP0 at 0x");
-    print_hex64(kernel_tss.rsp0);
-    print("\n");
-
     // Update GDT TSS descriptor with the actual TSS address
     update_gdt_tss((uint64_t)&kernel_tss);
 }

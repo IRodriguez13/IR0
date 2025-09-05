@@ -136,12 +136,12 @@ void main(void)
     // Storage subsystem
     ata_init();
     log_subsystem_ok("Storage subsystem");
-
+    delay_ms(2000);
     // File systems - SOLO MINIX (con disco)
     extern int minix_fs_init(void);
     minix_fs_init();
     log_subsystem_ok("File systems (MINIX)");
-
+    delay_ms(2000);
     // Minix Filesystem Structure Test
     run_minix_test();
     log_subsystem_ok("Minix filesystem structure test");
@@ -149,19 +149,19 @@ void main(void)
     // Test Minix + ATA completo
     extern void run_minix_ata_test(void);
     run_minix_ata_test();
-    delay_ms(2000);
+    delay_ms(4000);
     log_subsystem_ok("Minix + ATA test");
 
     // Process management
     extern void process_init(void);
     process_init();
     log_subsystem_ok("Process management");
-    delay_ms(2000);
+    delay_ms(4000);
     // Clock system
     extern int clock_system_init(void);
     clock_system_init();
     log_subsystem_ok("Clock system");
-
+    delay_ms(4000);
     // Scheduler
     extern int scheduler_cascade_init(void);
     extern void scheduler_fallback_to_next(void);
@@ -212,7 +212,7 @@ void main(void)
     // init_auth_system(); //Totally temporal
 
     // ===============================================================================
-    // SHELL AND "USER SPACE"
+    // SHELL AND "USER SPACE" | Yeah, yeah, temporally
     // ===============================================================================
     user_start();
 
