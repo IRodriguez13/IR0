@@ -6,7 +6,8 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 
 - You can also watch our Discord Server <https://discord.gg/XZ84aPXtxh>.
 
-**STABLE & FUNCTIONAL** - The kernel compiles and runs successfully on both x86-32 and x86-64 architectures. Core subsystems are operational with a solid foundation for further development.
+
+- The kernel compiles and runs successfully x86-64 architectures.
 
 ### ✅ Working Components
 - **✅ Dual Architecture Support**: x86-32 and x86-64 compilation and boot
