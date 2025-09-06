@@ -13,7 +13,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Función para mostrar ayuda
-show_help() {
+show_help() 
+{
     echo -e "${YELLOW}IR0 Kernel Quick Run Script${NC}"
     echo ""
     echo "Uso: $0 [OPCIONES]"
@@ -88,7 +89,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Función para mostrar información
-show_info() {
+show_info() 
+{
     echo -e "${BLUE}🎯 IR0 Kernel Quick Run${NC}"
     echo -e "Arquitectura: ${YELLOW}$ARCH${NC}"
     echo -e "Modo: ${YELLOW}$MODE${NC}"
@@ -98,7 +100,8 @@ show_info() {
 }
 
 # Función para limpiar
-clean_build() {
+clean_build() 
+{
     if [ "$CLEAN" = true ]; then
         echo -e "${YELLOW}🧹 Limpiando build anterior...${NC}"
         make clean
@@ -108,7 +111,8 @@ clean_build() {
 }
 
 # Función para compilar
-compile_kernel() {
+compile_kernel() 
+{
     echo -e "${YELLOW}🔨 Compilando kernel para $ARCH...${NC}"
     make ARCH=$ARCH
     echo -e "${GREEN}✅ Compilación completada${NC}"
@@ -116,7 +120,8 @@ compile_kernel() {
 }
 
 # Función para ejecutar
-run_kernel() {
+run_kernel() 
+{
     echo -e "${YELLOW}🚀 Ejecutando kernel...${NC}"
     
     if [ "$DEBUG" = true ]; then
@@ -156,7 +161,8 @@ run_kernel() {
 }
 
 # Función principal
-main() {
+main() 
+{
     show_info
     clean_build
     compile_kernel

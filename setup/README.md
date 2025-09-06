@@ -39,7 +39,8 @@ The Setup Subsystem provides kernel configuration management and build strategy 
 #### Kernel Configuration
 ```c
 // Kernel configuration structure
-struct kernel_config {
+struct kernel_config 
+{
     // Architecture configuration
     arch_config_t arch;
     
@@ -69,7 +70,8 @@ struct kernel_config {
 };
 
 // Architecture configuration
-struct arch_config {
+struct arch_config 
+{
     arch_type_t type;
     bool enable_64bit;
     bool enable_sse;
@@ -79,7 +81,8 @@ struct arch_config {
 };
 
 // Memory configuration
-struct memory_config {
+struct memory_config 
+{
     uint64_t kernel_heap_size;
     uint64_t user_heap_size;
     uint64_t page_size;
@@ -90,7 +93,8 @@ struct memory_config {
 };
 
 // Process configuration
-struct process_config {
+struct process_config 
+{
     uint32_t max_processes;
     uint32_t max_threads_per_process;
     uint32_t default_priority;
@@ -101,7 +105,8 @@ struct process_config {
 };
 
 // File system configuration
-struct filesystem_config {
+struct filesystem_config 
+{
     uint32_t max_open_files;
     uint32_t max_mount_points;
     uint64_t max_file_size;
@@ -112,7 +117,8 @@ struct filesystem_config {
 };
 
 // Driver configuration
-struct driver_config {
+struct driver_config 
+{
     bool enable_pci;
     bool enable_usb;
     bool enable_network;
@@ -123,7 +129,8 @@ struct driver_config {
 };
 
 // Network configuration
-struct network_config {
+struct network_config 
+{
     bool enable_tcp_ip;
     bool enable_udp;
     bool enable_icmp;
@@ -134,7 +141,8 @@ struct network_config {
 };
 
 // Security configuration
-struct security_config {
+struct security_config 
+{
     bool enable_user_mode;
     bool enable_process_isolation;
     bool enable_memory_protection;
@@ -145,7 +153,8 @@ struct security_config {
 };
 
 // Performance configuration
-struct performance_config {
+struct performance_config 
+{
     bool enable_caching;
     bool enable_prefetching;
     bool enable_optimization;
@@ -156,7 +165,8 @@ struct performance_config {
 };
 
 // Debug configuration
-struct debug_config {
+struct debug_config 
+{
     bool enable_logging;
     bool enable_tracing;
     bool enable_profiling;
@@ -172,9 +182,11 @@ struct debug_config {
 #### Desktop Strategy
 ```c
 // Desktop-oriented configuration
-struct desktop_config {
+struct desktop_config 
+{
     // Performance-oriented settings
-    .performance = {
+    .performance = 
+    {
         .enable_caching = true,
         .enable_prefetching = true,
         .enable_optimization = true,
@@ -185,7 +197,8 @@ struct desktop_config {
     },
     
     // User interface settings
-    .ui = {
+    .ui = 
+    {
         .enable_gui = true,
         .enable_window_manager = true,
         .enable_desktop_environment = true,
@@ -194,7 +207,8 @@ struct desktop_config {
     },
     
     // Hardware support
-    .hardware = {
+    .hardware = 
+    {
         .enable_graphics = true,
         .enable_audio = true,
         .enable_usb = true,
@@ -207,9 +221,11 @@ struct desktop_config {
 #### Server Strategy
 ```c
 // Server-oriented configuration
-struct server_config {
+struct server_config 
+{
     // Reliability settings
-    .reliability = {
+    .reliability = 
+    {
         .enable_redundancy = true,
         .enable_failover = true,
         .enable_monitoring = true,
@@ -218,7 +234,8 @@ struct server_config {
     },
     
     // Performance settings
-    .performance = {
+    .performance = 
+    {
         .enable_caching = true,
         .enable_prefetching = false,
         .enable_optimization = true,
@@ -229,7 +246,8 @@ struct server_config {
     },
     
     // Network settings
-    .network = {
+    .network = 
+    {
         .enable_tcp_ip = true,
         .enable_udp = true,
         .enable_icmp = true,
@@ -246,7 +264,8 @@ struct server_config {
 // IoT-oriented configuration
 struct iot_config {
     // Power management
-    .power = {
+    .power = 
+    {
         .enable_sleep_modes = true,
         .enable_power_saving = true,
         .enable_dynamic_frequency = true,
@@ -255,7 +274,8 @@ struct iot_config {
     },
     
     // Resource constraints
-    .resources = {
+    .resources = 
+    {
         .max_memory = 64 * 1024 * 1024,  // 64MB
         .max_storage = 512 * 1024 * 1024,  // 512MB
         .max_processes = 32,
@@ -264,7 +284,8 @@ struct iot_config {
     },
     
     // Communication
-    .communication = {
+    .communication = 
+    {
         .enable_wifi = true,
         .enable_bluetooth = true,
         .enable_zigbee = true,
@@ -278,9 +299,11 @@ struct iot_config {
 #### Embedded Strategy
 ```c
 // Embedded-oriented configuration
-struct embedded_config {
+struct embedded_config 
+{
     // Minimal configuration
-    .minimal = {
+    .minimal = 
+    {
         .enable_gui = false,
         .enable_network = false,
         .enable_storage = false,
@@ -290,7 +313,8 @@ struct embedded_config {
     },
     
     // Real-time settings
-    .realtime = {
+    .realtime = 
+    {
         .enable_preemption = true,
         .enable_priority_inheritance = true,
         .enable_deadline_scheduling = true,
@@ -299,7 +323,8 @@ struct embedded_config {
     },
     
     // Hardware abstraction
-    .hardware = {
+    .hardware = 
+    {
         .enable_gpio = true,
         .enable_spi = true,
         .enable_i2c = true,
@@ -315,49 +340,59 @@ struct embedded_config {
 #### Configuration Validation
 ```c
 // Validate kernel configuration
-bool validate_kernel_config(const kernel_config_t* config) {
+bool validate_kernel_config(const kernel_config_t* config) 
+{
     // Validate architecture configuration
-    if (!validate_arch_config(&config->arch)) {
+    if (!validate_arch_config(&config->arch)) 
+    {
         return false;
     }
     
     // Validate memory configuration
-    if (!validate_memory_config(&config->memory)) {
+    if (!validate_memory_config(&config->memory)) 
+    {
         return false;
     }
     
     // Validate process configuration
-    if (!validate_process_config(&config->process)) {
+    if (!validate_process_config(&config->process)) 
+    {
     return false;
 }
     
     // Validate file system configuration
-    if (!validate_filesystem_config(&config->filesystem)) {
+    if (!validate_filesystem_config(&config->filesystem)) 
+    {
         return false;
     }
     
     // Validate driver configuration
-    if (!validate_driver_config(&config->driver)) {
+    if (!validate_driver_config(&config->driver)) 
+    {
         return false;
     }
     
     // Validate network configuration
-    if (!validate_network_config(&config->network)) {
+    if (!validate_network_config(&config->network)) 
+    {
         return false;
     }
     
     // Validate security configuration
-    if (!validate_security_config(&config->security)) {
+    if (!validate_security_config(&config->security)) 
+    {
         return false;
     }
     
     // Validate performance configuration
-    if (!validate_performance_config(&config->performance)) {
+    if (!validate_performance_config(&config->performance)) 
+    {
         return false;
     }
     
     // Validate debug configuration
-    if (!validate_debug_config(&config->debug)) {
+    if (!validate_debug_config(&config->debug)) 
+    {
         return false;
     }
     
@@ -365,19 +400,23 @@ bool validate_kernel_config(const kernel_config_t* config) {
 }
 
 // Validate architecture configuration
-bool validate_arch_config(const arch_config_t* config) {
+bool validate_arch_config(const arch_config_t* config) 
+{
     // Check architecture type
-    if (config->type < ARCH_X86_32 || config->type > ARCH_ARM64) {
+    if (config->type < ARCH_X86_32 || config->type > ARCH_ARM64) 
+    {
         return false;
     }
     
     // Check CPU count
-    if (config->max_cpus == 0 || config->max_cpus > MAX_CPUS) {
+    if (config->max_cpus == 0 || config->max_cpus > MAX_CPUS) 
+    {
         return false;
     }
     
     // Check feature compatibility
-    if (config->enable_64bit && config->type == ARCH_X86_32) {
+    if (config->enable_64bit && config->type == ARCH_X86_32) 
+    {
         return false;
     }
     
@@ -385,19 +424,23 @@ bool validate_arch_config(const arch_config_t* config) {
 }
 
 // Validate memory configuration
-bool validate_memory_config(const memory_config_t* config) {
+bool validate_memory_config(const memory_config_t* config) 
+{
     // Check heap sizes
-    if (config->kernel_heap_size == 0 || config->user_heap_size == 0) {
+    if (config->kernel_heap_size == 0 || config->user_heap_size == 0) 
+    {
         return false;
     }
     
     // Check page size
-    if (config->page_size != 4096 && config->page_size != 8192) {
+    if (config->page_size != 4096 && config->page_size != 8192) 
+    {
         return false;
     }
     
     // Check physical page count
-    if (config->max_physical_pages == 0) {
+    if (config->max_physical_pages == 0) 
+    {
         return false;
     }
     
@@ -408,15 +451,18 @@ bool validate_memory_config(const memory_config_t* config) {
 #### Dynamic Configuration Updates
 ```c
 // Update kernel configuration dynamically
-bool update_kernel_config(kernel_config_t* config, const char* key, const char* value) {
+bool update_kernel_config(kernel_config_t* config, const char* key, const char* value) 
+{
     // Parse configuration key
     config_key_t parsed_key = parse_config_key(key);
-    if (parsed_key == CONFIG_KEY_INVALID) {
+    if (parsed_key == CONFIG_KEY_INVALID) 
+    {
         return false;
     }
     
     // Update configuration value
-    switch (parsed_key) {
+    switch (parsed_key) 
+    {
         case CONFIG_KEY_KERNEL_HEAP_SIZE:
             return update_kernel_heap_size(config, value);
             
@@ -438,14 +484,17 @@ bool update_kernel_config(kernel_config_t* config, const char* key, const char* 
 }
 
 // Update kernel heap size
-bool update_kernel_heap_size(kernel_config_t* config, const char* value) {
+bool update_kernel_heap_size(kernel_config_t* config, const char* value) 
+{
     uint64_t new_size = parse_size_string(value);
-    if (new_size == 0) {
+    if (new_size == 0) 
+    {
         return false;
     }
     
     // Validate new size
-    if (new_size < MIN_KERNEL_HEAP_SIZE || new_size > MAX_KERNEL_HEAP_SIZE) {
+    if (new_size < MIN_KERNEL_HEAP_SIZE || new_size > MAX_KERNEL_HEAP_SIZE) 
+    {
         return false;
     }
     
@@ -457,14 +506,17 @@ bool update_kernel_heap_size(kernel_config_t* config, const char* value) {
 }
 
 // Update user heap size
-bool update_user_heap_size(kernel_config_t* config, const char* value) {
+bool update_user_heap_size(kernel_config_t* config, const char* value) 
+{
     uint64_t new_size = parse_size_string(value);
-    if (new_size == 0) {
+    if (new_size == 0) 
+    {
         return false;
     }
     
     // Validate new size
-    if (new_size < MIN_USER_HEAP_SIZE || new_size > MAX_USER_HEAP_SIZE) {
+    if (new_size < MIN_USER_HEAP_SIZE || new_size > MAX_USER_HEAP_SIZE) 
+    {
         return false;
     }
     
@@ -479,10 +531,12 @@ bool update_user_heap_size(kernel_config_t* config, const char* value) {
 #### Configuration Persistence
 ```c
 // Save configuration to persistent storage
-bool save_kernel_config(const kernel_config_t* config) {
+bool save_kernel_config(const kernel_config_t* config) 
+{
     // Serialize configuration
     uint8_t* buffer = serialize_kernel_config(config);
-    if (buffer == NULL) {
+    if (buffer == NULL) 
+    {
         return false;
     }
     
@@ -499,10 +553,12 @@ bool save_kernel_config(const kernel_config_t* config) {
 }
 
 // Load configuration from persistent storage
-bool load_kernel_config(kernel_config_t* config) {
+bool load_kernel_config(kernel_config_t* config) 
+{
     // Read from storage
     uint8_t* buffer = read_config_from_storage();
-    if (buffer == NULL) {
+    if (buffer == NULL) 
+    {
         return false;
     }
     
@@ -510,7 +566,8 @@ bool load_kernel_config(kernel_config_t* config) {
     uint32_t stored_checksum = get_stored_checksum();
     uint32_t calculated_checksum = calculate_checksum(buffer, CONFIG_SIZE);
     
-    if (stored_checksum != calculated_checksum) {
+    if (stored_checksum != calculated_checksum) 
+    {
         kfree(buffer);
         return false;
     }
@@ -525,9 +582,11 @@ bool load_kernel_config(kernel_config_t* config) {
 }
 
 // Serialize kernel configuration
-uint8_t* serialize_kernel_config(const kernel_config_t* config) {
+uint8_t* serialize_kernel_config(const kernel_config_t* config) 
+{
     uint8_t* buffer = kmalloc(CONFIG_SIZE);
-    if (buffer == NULL) {
+    if (buffer == NULL) 
+    {
         return NULL;
     }
     
@@ -578,7 +637,8 @@ uint8_t* serialize_kernel_config(const kernel_config_t* config) {
 #### Strategy Selection
 ```c
 // Build strategy types
-typedef enum {
+typedef enum 
+{
     BUILD_STRATEGY_DESKTOP,
     BUILD_STRATEGY_SERVER,
     BUILD_STRATEGY_IOT,
@@ -587,8 +647,10 @@ typedef enum {
 } build_strategy_t;
 
 // Select build strategy
-bool select_build_strategy(build_strategy_t strategy, kernel_config_t* config) {
-    switch (strategy) {
+bool select_build_strategy(build_strategy_t strategy, kernel_config_t* config) 
+{
+    switch (strategy) 
+    {
         case BUILD_STRATEGY_DESKTOP:
             return apply_desktop_strategy(config);
             
@@ -610,7 +672,8 @@ bool select_build_strategy(build_strategy_t strategy, kernel_config_t* config) {
 }
 
 // Apply desktop strategy
-bool apply_desktop_strategy(kernel_config_t* config) {
+bool apply_desktop_strategy(kernel_config_t* config) 
+{
     // Set desktop-specific configuration
     config->performance.enable_caching = true;
     config->performance.enable_prefetching = true;
@@ -638,7 +701,8 @@ bool apply_desktop_strategy(kernel_config_t* config) {
 }
 
 // Apply server strategy
-bool apply_server_strategy(kernel_config_t* config) {
+bool apply_server_strategy(kernel_config_t* config) 
+{
     // Set server-specific configuration
     config->reliability.enable_redundancy = true;
     config->reliability.enable_failover = true;
@@ -739,7 +803,8 @@ El Subsistema de Setup proporciona gestión de configuración del kernel y siste
 #### Configuración del Kernel
 ```c
 // Estructura de configuración del kernel
-struct kernel_config {
+struct kernel_config 
+{
     // Configuración de arquitectura
     arch_config_t arch;
     
@@ -769,7 +834,8 @@ struct kernel_config {
 };
 
 // Configuración de arquitectura
-struct arch_config {
+struct arch_config 
+{
     arch_type_t type;
     bool enable_64bit;
     bool enable_sse;
@@ -779,7 +845,8 @@ struct arch_config {
 };
 
 // Configuración de memoria
-struct memory_config {
+struct memory_config 
+{
     uint64_t kernel_heap_size;
     uint64_t user_heap_size;
     uint64_t page_size;
@@ -790,7 +857,8 @@ struct memory_config {
 };
 
 // Configuración de procesos
-struct process_config {
+struct process_config 
+{
     uint32_t max_processes;
     uint32_t max_threads_per_process;
     uint32_t default_priority;
@@ -801,7 +869,8 @@ struct process_config {
 };
 
 // Configuración de filesystem
-struct filesystem_config {
+struct filesystem_config 
+{
     uint32_t max_open_files;
     uint32_t max_mount_points;
     uint64_t max_file_size;
@@ -812,7 +881,8 @@ struct filesystem_config {
 };
 
 // Configuración de drivers
-struct driver_config {
+struct driver_config 
+{
     bool enable_pci;
     bool enable_usb;
     bool enable_network;
@@ -823,7 +893,8 @@ struct driver_config {
 };
 
 // Configuración de red
-struct network_config {
+struct network_config 
+{
     bool enable_tcp_ip;
     bool enable_udp;
     bool enable_icmp;
@@ -834,7 +905,8 @@ struct network_config {
 };
 
 // Configuración de seguridad
-struct security_config {
+struct security_config 
+{
     bool enable_user_mode;
     bool enable_process_isolation;
     bool enable_memory_protection;
@@ -845,7 +917,8 @@ struct security_config {
 };
 
 // Configuración de rendimiento
-struct performance_config {
+struct performance_config 
+{
     bool enable_caching;
     bool enable_prefetching;
     bool enable_optimization;
@@ -856,7 +929,8 @@ struct performance_config {
 };
 
 // Configuración de debug
-struct debug_config {
+struct debug_config 
+{
     bool enable_logging;
     bool enable_tracing;
     bool enable_profiling;
@@ -872,9 +946,11 @@ struct debug_config {
 #### Estrategia Desktop
 ```c
 // Configuración orientada a desktop
-struct desktop_config {
+struct desktop_config 
+{
     // Configuración orientada a rendimiento
-    .performance = {
+    .performance = 
+    {
         .enable_caching = true,
         .enable_prefetching = true,
         .enable_optimization = true,
@@ -885,7 +961,8 @@ struct desktop_config {
     },
     
     // Configuración de interfaz de usuario
-    .ui = {
+    .ui = 
+    {
         .enable_gui = true,
         .enable_window_manager = true,
         .enable_desktop_environment = true,
@@ -894,7 +971,8 @@ struct desktop_config {
     },
     
     // Soporte de hardware
-    .hardware = {
+    .hardware = 
+    {
         .enable_graphics = true,
         .enable_audio = true,
         .enable_usb = true,
@@ -907,9 +985,11 @@ struct desktop_config {
 #### Estrategia Server
 ```c
 // Configuración orientada a servidor
-struct server_config {
+struct server_config 
+{
     // Configuración de confiabilidad
-    .reliability = {
+    .reliability = 
+    {
         .enable_redundancy = true,
         .enable_failover = true,
         .enable_monitoring = true,
@@ -918,7 +998,8 @@ struct server_config {
     },
     
     // Configuración de rendimiento
-    .performance = {
+    .performance = 
+    {
         .enable_caching = true,
         .enable_prefetching = false,
         .enable_optimization = true,
@@ -929,7 +1010,8 @@ struct server_config {
     },
     
     // Configuración de red
-    .network = {
+    .network = 
+    {
         .enable_tcp_ip = true,
         .enable_udp = true,
         .enable_icmp = true,
@@ -944,9 +1026,11 @@ struct server_config {
 #### Estrategia IoT
 ```c
 // Configuración orientada a IoT
-struct iot_config {
+struct iot_config 
+{
     // Gestión de energía
-    .power = {
+    .power = 
+    {
         .enable_sleep_modes = true,
         .enable_power_saving = true,
         .enable_dynamic_frequency = true,
@@ -955,7 +1039,8 @@ struct iot_config {
     },
     
     // Restricciones de recursos
-    .resources = {
+    .resources = 
+    {
         .max_memory = 64 * 1024 * 1024,  // 64MB
         .max_storage = 512 * 1024 * 1024,  // 512MB
         .max_processes = 32,
@@ -964,7 +1049,8 @@ struct iot_config {
     },
     
     // Comunicación
-    .communication = {
+    .communication = 
+    {
         .enable_wifi = true,
         .enable_bluetooth = true,
         .enable_zigbee = true,
@@ -978,9 +1064,11 @@ struct iot_config {
 #### Estrategia Embedded
 ```c
 // Configuración orientada a embedded
-struct embedded_config {
+struct embedded_config 
+{
     // Configuración mínima
-    .minimal = {
+    .minimal = 
+    {
         .enable_gui = false,
         .enable_network = false,
         .enable_storage = false,
@@ -990,7 +1078,8 @@ struct embedded_config {
     },
     
     // Configuración de tiempo real
-    .realtime = {
+    .realtime = 
+    {
         .enable_preemption = true,
         .enable_priority_inheritance = true,
         .enable_deadline_scheduling = true,
@@ -999,7 +1088,8 @@ struct embedded_config {
     },
     
     // Abstracción de hardware
-    .hardware = {
+    .hardware = 
+    {
         .enable_gpio = true,
         .enable_spi = true,
         .enable_i2c = true,
@@ -1015,49 +1105,59 @@ struct embedded_config {
 #### Validación de Configuración
 ```c
 // Validar configuración del kernel
-bool validate_kernel_config(const kernel_config_t* config) {
+bool validate_kernel_config(const kernel_config_t* config) 
+{
     // Validar configuración de arquitectura
-    if (!validate_arch_config(&config->arch)) {
+    if (!validate_arch_config(&config->arch)) 
+    {
         return false;
     }
     
     // Validar configuración de memoria
-    if (!validate_memory_config(&config->memory)) {
+    if (!validate_memory_config(&config->memory)) 
+    {
         return false;
     }
     
     // Validar configuración de procesos
-    if (!validate_process_config(&config->process)) {
+    if (!validate_process_config(&config->process)) 
+    {
     return false;
 }
     
     // Validar configuración de filesystem
-    if (!validate_filesystem_config(&config->filesystem)) {
+    if (!validate_filesystem_config(&config->filesystem)) 
+    {
         return false;
     }
     
     // Validar configuración de drivers
-    if (!validate_driver_config(&config->driver)) {
+    if (!validate_driver_config(&config->driver)) 
+    {
         return false;
     }
     
     // Validar configuración de red
-    if (!validate_network_config(&config->network)) {
+    if (!validate_network_config(&config->network)) 
+    {
         return false;
     }
     
     // Validar configuración de seguridad
-    if (!validate_security_config(&config->security)) {
+    if (!validate_security_config(&config->security)) 
+    {
         return false;
     }
     
     // Validar configuración de rendimiento
-    if (!validate_performance_config(&config->performance)) {
+    if (!validate_performance_config(&config->performance)) 
+    {
         return false;
     }
     
     // Validar configuración de debug
-    if (!validate_debug_config(&config->debug)) {
+    if (!validate_debug_config(&config->debug)) 
+    {
         return false;
     }
     
@@ -1065,19 +1165,23 @@ bool validate_kernel_config(const kernel_config_t* config) {
 }
 
 // Validar configuración de arquitectura
-bool validate_arch_config(const arch_config_t* config) {
+bool validate_arch_config(const arch_config_t* config) 
+{
     // Verificar tipo de arquitectura
-    if (config->type < ARCH_X86_32 || config->type > ARCH_ARM64) {
+    if (config->type < ARCH_X86_32 || config->type > ARCH_ARM64) 
+    {
         return false;
     }
     
     // Verificar número de CPUs
-    if (config->max_cpus == 0 || config->max_cpus > MAX_CPUS) {
+    if (config->max_cpus == 0 || config->max_cpus > MAX_CPUS) 
+    {
         return false;
     }
     
     // Verificar compatibilidad de características
-    if (config->enable_64bit && config->type == ARCH_X86_32) {
+    if (config->enable_64bit && config->type == ARCH_X86_32) 
+    {
         return false;
     }
     
@@ -1085,19 +1189,23 @@ bool validate_arch_config(const arch_config_t* config) {
 }
 
 // Validar configuración de memoria
-bool validate_memory_config(const memory_config_t* config) {
+bool validate_memory_config(const memory_config_t* config) 
+{
     // Verificar tamaños de heap
-    if (config->kernel_heap_size == 0 || config->user_heap_size == 0) {
+    if (config->kernel_heap_size == 0 || config->user_heap_size == 0) 
+    {
         return false;
     }
     
     // Verificar tamaño de página
-    if (config->page_size != 4096 && config->page_size != 8192) {
+    if (config->page_size != 4096 && config->page_size != 8192) 
+    {
         return false;
     }
     
     // Verificar número de páginas físicas
-    if (config->max_physical_pages == 0) {
+    if (config->max_physical_pages == 0) 
+    {
         return false;
     }
     
@@ -1108,15 +1216,18 @@ bool validate_memory_config(const memory_config_t* config) {
 #### Actualizaciones Dinámicas de Configuración
 ```c
 // Actualizar configuración del kernel dinámicamente
-bool update_kernel_config(kernel_config_t* config, const char* key, const char* value) {
+bool update_kernel_config(kernel_config_t* config, const char* key, const char* value) 
+{
     // Parsear clave de configuración
     config_key_t parsed_key = parse_config_key(key);
-    if (parsed_key == CONFIG_KEY_INVALID) {
+    if (parsed_key == CONFIG_KEY_INVALID) 
+    {
         return false;
     }
     
     // Actualizar valor de configuración
-    switch (parsed_key) {
+    switch (parsed_key) 
+    {
         case CONFIG_KEY_KERNEL_HEAP_SIZE:
             return update_kernel_heap_size(config, value);
             
@@ -1138,14 +1249,17 @@ bool update_kernel_config(kernel_config_t* config, const char* key, const char* 
 }
 
 // Actualizar tamaño de heap del kernel
-bool update_kernel_heap_size(kernel_config_t* config, const char* value) {
+bool update_kernel_heap_size(kernel_config_t* config, const char* value) 
+{
     uint64_t new_size = parse_size_string(value);
-    if (new_size == 0) {
+    if (new_size == 0) 
+    {
         return false;
     }
     
     // Validar nuevo tamaño
-    if (new_size < MIN_KERNEL_HEAP_SIZE || new_size > MAX_KERNEL_HEAP_SIZE) {
+    if (new_size < MIN_KERNEL_HEAP_SIZE || new_size > MAX_KERNEL_HEAP_SIZE) 
+    {
         return false;
     }
     
@@ -1157,14 +1271,17 @@ bool update_kernel_heap_size(kernel_config_t* config, const char* value) {
 }
 
 // Actualizar tamaño de heap de usuario
-bool update_user_heap_size(kernel_config_t* config, const char* value) {
+bool update_user_heap_size(kernel_config_t* config, const char* value) 
+{
     uint64_t new_size = parse_size_string(value);
-    if (new_size == 0) {
+    if (new_size == 0) 
+    {
         return false;
     }
     
     // Validar nuevo tamaño
-    if (new_size < MIN_USER_HEAP_SIZE || new_size > MAX_USER_HEAP_SIZE) {
+    if (new_size < MIN_USER_HEAP_SIZE || new_size > MAX_USER_HEAP_SIZE) 
+    {
         return false;
     }
     
@@ -1179,10 +1296,12 @@ bool update_user_heap_size(kernel_config_t* config, const char* value) {
 #### Persistencia de Configuración
 ```c
 // Guardar configuración en almacenamiento persistente
-bool save_kernel_config(const kernel_config_t* config) {
+bool save_kernel_config(const kernel_config_t* config) 
+{
     // Serializar configuración
     uint8_t* buffer = serialize_kernel_config(config);
-    if (buffer == NULL) {
+    if (buffer == NULL) 
+    {
         return false;
     }
     
@@ -1199,10 +1318,12 @@ bool save_kernel_config(const kernel_config_t* config) {
 }
 
 // Cargar configuración desde almacenamiento persistente
-bool load_kernel_config(kernel_config_t* config) {
+bool load_kernel_config(kernel_config_t* config) 
+{
     // Leer desde almacenamiento
     uint8_t* buffer = read_config_from_storage();
-    if (buffer == NULL) {
+    if (buffer == NULL) 
+    {
         return false;
     }
     
@@ -1210,7 +1331,8 @@ bool load_kernel_config(kernel_config_t* config) {
     uint32_t stored_checksum = get_stored_checksum();
     uint32_t calculated_checksum = calculate_checksum(buffer, CONFIG_SIZE);
     
-    if (stored_checksum != calculated_checksum) {
+    if (stored_checksum != calculated_checksum) 
+    {
         kfree(buffer);
         return false;
     }
@@ -1225,9 +1347,11 @@ bool load_kernel_config(kernel_config_t* config) {
 }
 
 // Serializar configuración del kernel
-uint8_t* serialize_kernel_config(const kernel_config_t* config) {
+uint8_t* serialize_kernel_config(const kernel_config_t* config) 
+{
     uint8_t* buffer = kmalloc(CONFIG_SIZE);
-    if (buffer == NULL) {
+    if (buffer == NULL) 
+    {
         return NULL;
     }
     
@@ -1278,7 +1402,8 @@ uint8_t* serialize_kernel_config(const kernel_config_t* config) {
 #### Selección de Estrategia
 ```c
 // Tipos de estrategia de build
-typedef enum {
+typedef enum 
+{
     BUILD_STRATEGY_DESKTOP,
     BUILD_STRATEGY_SERVER,
     BUILD_STRATEGY_IOT,
@@ -1287,8 +1412,10 @@ typedef enum {
 } build_strategy_t;
 
 // Seleccionar estrategia de build
-bool select_build_strategy(build_strategy_t strategy, kernel_config_t* config) {
-    switch (strategy) {
+bool select_build_strategy(build_strategy_t strategy, kernel_config_t* config) 
+{
+    switch (strategy) 
+    {
         case BUILD_STRATEGY_DESKTOP:
             return apply_desktop_strategy(config);
             
@@ -1310,7 +1437,8 @@ bool select_build_strategy(build_strategy_t strategy, kernel_config_t* config) {
 }
 
 // Aplicar estrategia desktop
-bool apply_desktop_strategy(kernel_config_t* config) {
+bool apply_desktop_strategy(kernel_config_t* config) 
+{
     // Establecer configuración específica de desktop
     config->performance.enable_caching = true;
     config->performance.enable_prefetching = true;
@@ -1338,7 +1466,8 @@ bool apply_desktop_strategy(kernel_config_t* config) {
 }
 
 // Aplicar estrategia servidor
-bool apply_server_strategy(kernel_config_t* config) {
+bool apply_server_strategy(kernel_config_t* config) 
+{
     // Establecer configuración específica de servidor
     config->reliability.enable_redundancy = true;
     config->reliability.enable_failover = true;

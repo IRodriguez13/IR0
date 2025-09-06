@@ -10,7 +10,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Función para mostrar ayuda
-show_help() {
+show_help() 
+{
     echo "Uso: $0 [OPCIONES]"
     echo ""
     echo "OPCIONES:"

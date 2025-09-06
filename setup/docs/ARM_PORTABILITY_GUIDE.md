@@ -184,7 +184,8 @@ make ARCH=arm-32
 ```c
 #include <arch_portable.h>
 
-void init_system(void) {
+void init_system(void) 
+{
     // Initialize architecture-specific components
     arch_early_init();
     arch_memory_init();
@@ -196,7 +197,8 @@ void init_system(void) {
     arch_enable_interrupts();
 }
 
-void handle_io(void) {
+void handle_io(void) 
+{
     // Portable I/O operations
     uint8_t value = arch_io_read8(0x3F8);  // UART on ARM, port on x86
     arch_io_write8(0x3F8, value);
