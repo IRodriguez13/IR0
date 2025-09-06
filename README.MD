@@ -37,24 +37,6 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 - **Timer Drivers** - PIT, HPET, and LAPIC timer support
 - **Hardware Drivers** - PS/2 keyboard, ATA storage, VGA display drivers
 
-## 📁 Setup
-
-
-### Common Commands
-```bash
-make help                    # Show all available commands == RECOMENDED ==
-make create-disk             # Create virtual disk with filesystem == RECOMENDED ==
-make run-64                  # Build and run x86-64 with GUI
-make run-32                  # Build and run x86-32 with GUI
-make run-64-nographic        # Build and run x86-64 in terminal
-make run-32-nographic        # Build and run x86-32 in terminal
-make run-64-with-disk        # Run x86-64 with disk support
-make run-32-with-disk        # Run x86-32 with disk support
-make run-debug               # Run with full debugging
-make clean-all               # Clean everything (including ISOs and bin's)
-make clean                   # Clean everything
-```
-
 ## 🔧 Building and Running
 
 ### Prerequisites
@@ -76,12 +58,6 @@ make clean                   # Clean everything
 - **Valgrind** (memory debugging, optional)
 - **GDB** (debugger, optional)
 
-### Quick Build
-```bash
-make clean                  # Clean build files
-make clean-all              # Clean everything (including ISOs)
-```
-
 #### 💾 **Run with Disk Operations**
 ```bash
 make create-disk            # Create virtual disk with filesystem
@@ -89,6 +65,11 @@ make run-64-with-disk       # Run x86-64 with disk support == RECOMENDED ==
 make run-32-with-disk       # Run x86-32 with disk support
 ```
 
+### Quick Build
+```bash
+make clean                  # Clean build files
+make clean-all              # Clean everything (including ISOs)
+```
 
 ## 🎯 Features
 
@@ -176,24 +157,6 @@ make run-32-with-disk       # Run x86-32 with disk support
 - **Hardware Drivers**: PS/2 keyboard, ATA storage, and VGA display support
 - **Multiple Schedulers**: CFS, Priority-based, and Round-Robin scheduling algorithms
 - **Freestanding Environment**: Complete C library implementation
----
-
-## 🛠️ Development
-
-### Code Quality
-- **Modular Architecture** with clear interfaces
-- **Clean Code Organization** with consistent patterns
-- **Extensive Documentation** with detailed comments
-- **Freestanding C Environment** with custom implementations
-- **Robust Error Handling** throughout subsystems
-
-### Build System
-- **Multi-Architecture Support** with conditional compilation
-- **Automatic Dependency Management** with proper Makefiles
-- **QEMU Integration** for testing and debugging
-- **Debug/Release Modes** with optimization options
-- **ISO Generation** for easy distribution
-
 ---
 
 ## 📚 Some Documentation
