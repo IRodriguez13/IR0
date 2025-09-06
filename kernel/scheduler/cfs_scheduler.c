@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stdbool.h>
 
-
 // Variable externa del task actual
 extern task_t *current_running_task;
 
@@ -21,56 +20,53 @@ extern task_t *current_running_task;
 #define CFS_MIN_NICE -20
 
 // Tabla de pesos según nice value (exponencial)
-static const uint32_t cfs_prio_to_weight[40] = 
-{
-    /* -20 */ 88761,
-    71755,
-    56483,
-    46273,
-    36291,
-    /* -15 */ 29154,
-    23254,
-    18705,
-    14949,
-    11916,
-    /* -10 */ 9548,
-    7620,
-    6100,
-    4904,
-    3906,
-    /*  -5 */ 3121,
-    2501,
-    1991,
-    1586,
-    1277,
-    /*   0 */ 1024,
-    820,
-    655,
-    526,
-    423,
-    /*   5 */ 335,
-    272,
-    215,
-    172,
-    137,
-    /*  10 */ 110,
-    87,
-    70,
-    56,
-    45,
-    /*  15 */ 36,
-    29,
-    23,
-    18,
-    15,
+static const uint32_t cfs_prio_to_weight[40] =
+    {
+        /* -20 */ 88761,
+        71755,
+        56483,
+        46273,
+        36291,
+        /* -15 */ 29154,
+        23254,
+        18705,
+        14949,
+        11916,
+        /* -10 */ 9548,
+        7620,
+        6100,
+        4904,
+        3906,
+        /*  -5 */ 3121,
+        2501,
+        1991,
+        1586,
+        1277,
+        /*   0 */ 1024,
+        820,
+        655,
+        526,
+        423,
+        /*   5 */ 335,
+        272,
+        215,
+        172,
+        137,
+        /*  10 */ 110,
+        87,
+        70,
+        56,
+        45,
+        /*  15 */ 36,
+        29,
+        23,
+        18,
+        15,
 };
 
 // ===============================================================================
 // RED-BLACK TREE PARA CFS
 // ===============================================================================
-
-
-
 
 static cfs_runqueue_t cfs_rq;
 
@@ -80,7 +76,7 @@ static rb_node_t rb_node_pool[MAX_RB_NODES];
 static int rb_node_pool_index = 0;
 
 // ===============================================================================
-// FUNCIONES AUXILIARES RED-BLACK TREE -- Elegante por donde lo mires -- 
+// FUNCIONES AUXILIARES RED-BLACK TREE -- Elegante por donde lo mires --
 // ===============================================================================
 
 static rb_node_t *rb_alloc_node(void)
@@ -441,11 +437,11 @@ void cfs_remove_task_impl(task_t *task)
         LOG_ERR("CFS: remove_task received NULL task");
         return;
     }
-    
+
     // Simple implementation - just mark as terminated
     task->state = TASK_TERMINATED;
     cfs_rq.nr_running--;
-    
+
     LOG_OK("CFS: Task removed from runqueue");
 }
 
@@ -563,6 +559,37 @@ static void cfs_cleanup(void)
     rb_node_pool_index = 0;
 }
 
+void unified_add_task(task_t *task)
+{
+    if (!task)
+        return;
+
+    // Usar el scheduler activo detectado automáticamente
+    extern scheduler_ops_t current_scheduler;
+
+    if (current_scheduler.add_task)
+    {
+        current_scheduler.add_task(task);
+        LOG_OK("Task added to active scheduler");
+    }
+    else
+    {
+        LOG_ERR("No active scheduler available!");
+    }
+}
+
+task_t *unified_pick_next_task(void)
+{
+    extern scheduler_ops_t current_scheduler;
+
+    if (current_scheduler.pick_next_task)
+    {
+        return current_scheduler.pick_next_task();
+    }
+
+    return get_idle_task(); // Fallback
+}
+
 // ===============================================================================
 // FUNCIONES DE DEBUG
 // ===============================================================================
@@ -665,7 +692,7 @@ scheduler_ops_t cfs_scheduler_ops = {
     .name = "Completely Fair Scheduler (Full Implementation)",
     .init = (void (*)(void))cfs_init_impl,
     .add_task = (void (*)(task_t *))cfs_add_task_impl,
-    .pick_next_task = (task_t *(*)(void))cfs_pick_next_task_impl,
+    .pick_next_task = (task_t * (*)(void)) cfs_pick_next_task_impl,
     .task_tick = cfs_task_tick,
     .cleanup = cfs_cleanup,
     .private_data = &cfs_rq};

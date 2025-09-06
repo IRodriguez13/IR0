@@ -41,26 +41,20 @@ void idle_task_function(void *arg)
 
 task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t nice)
 {
-    // Allocar estructura de tarea
     task_t *task = (task_t *)kmalloc(sizeof(task_t));
     if (!task)
-    {
-        LOG_ERR("create_task: No memory for task structure");
         return NULL;
-    }
 
-    // Allocar stack para la tarea
     void *stack = kmalloc(DEFAULT_STACK_SIZE);
     if (!stack)
     {
-        LOG_ERR("create_task: No memory for task stack");
         kfree(task);
         return NULL;
     }
 
-    // Inicializar estructura de tarea
     memset(task, 0, sizeof(task_t));
 
+    // Setup básico
     task->pid = next_pid++;
     task->priority = priority;
     task->nice = nice;
@@ -70,64 +64,26 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
     task->entry = entry;
     task->entry_arg = arg;
 
-    // Configurar stack para la tarea
-    uint32_t *stack_ptr = (uint32_t *)((uintptr_t)stack + DEFAULT_STACK_SIZE);
+    // ✅ CRITICAL: Setup correcto del stack para x86-64
+    uint64_t *stack_ptr = (uint64_t *)((uintptr_t)stack + DEFAULT_STACK_SIZE);
 
-    // Alinear stack a 16 bytes (requerimiento x86)
-    stack_ptr = (uint32_t *)((uintptr_t)stack_ptr & ~0xF);
+    // Alinear a 16 bytes (ABI x86-64)
+    stack_ptr = (uint64_t *)((uintptr_t)stack_ptr & ~0xF);
 
-    // Configurar stack frame simple para context switch
-    // El context switch espera: PUSHA (8 registros) + PUSHFD (EFLAGS)
+    // Setup stack frame que switch_context_x64 espera
+    *--stack_ptr = 0;                        // User SS (if needed)
+    *--stack_ptr = (uint64_t)stack_ptr + 16; // User RSP
+    *--stack_ptr = 0x202;                    // RFLAGS (IF=1)
+    *--stack_ptr = 0x08;                     // Kernel CS
+    *--stack_ptr = (uint64_t)entry;          // RIP - donde saltar
 
-    // PUSHFD - EFLAGS
-    stack_ptr -= 4;
-    *stack_ptr = 0x202; // EFLAGS con interrupts habilitadas
-
-    // PUSHA - EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
-    stack_ptr -= 4; // EDI
-    *stack_ptr = 0;
-
-    stack_ptr -= 4; // ESI
-    *stack_ptr = 0;
-
-    stack_ptr -= 4; // EBP
-    *stack_ptr = 0;
-
-    stack_ptr -= 4; // ESP (placeholder)
-    *stack_ptr = 0;
-
-    stack_ptr -= 4; // EBX
-    *stack_ptr = 0;
-
-    stack_ptr -= 4; // EDX
-    *stack_ptr = 0;
-
-    stack_ptr -= 4; // ECX
-    *stack_ptr = 0;
-
-    stack_ptr -= 4; // EAX
-    *stack_ptr = 0;
-
-    // EIP de retorno - apuntar a la función de entrada
-    stack_ptr -= 4;
-    *stack_ptr = (uintptr_t)entry;
-
-    // Guardar puntero al stack
-    task->rsp = (uintptr_t)stack_ptr;
-    task->rbp = 0; // RBP inicial
-
-    // Usar el page directory del kernel por ahora
-    task->cr3 = 0; // TODO: Implementar page directories por proceso
-
-    // Agregar a lista global de tareas
-    task->next = task_list;
-    task_list = task;
-
-    LOG_OK("Task created: PID=%u, priority=%u, nice=%d");
-    print_hex_compact(task->pid);
-    print_hex_compact(task->priority);
-    print_hex_compact(task->nice);
-    delay_ms(2000);
+    // El assembly switch_context_x64 restaurará estos registros
+    task->rsp = (uint64_t)stack_ptr;
+    task->rbp = 0;
+    task->rip = (uint64_t)entry; // Punto de entrada
+    task->rflags = 0x202;        // Interrupts enabled
+    task->cs = 0x08;             // Kernel code segment
+    task->ss = 0x10;             // Kernel data segment
 
     return task;
 }
