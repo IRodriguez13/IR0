@@ -58,37 +58,37 @@ make clean                   # Clean everything
 ## 🔧 Building and Running
 
 ### Prerequisites
-- GCC/G++/CLANG with multilib support
-- NASM assembler
-- QEMU for testing
-- Make
+- **GCC** (GNU Compiler Collection, version 7.0+)
+- **Make** (build automation tool)
+- **NASM** (Netwide Assembler, version 2.13+)
+- **LD** (GNU Linker)
+- **AR** (GNU Archiver, usually part of build-essential)
+
+### Bootable image tools
+- **GRUB** (grub-pc-bin)
+- **Xorriso** (for ISO creation)
+
+### Emulation and testing
+- **QEMU** (qemu-system-x86)
+
+### Recommended for development and debugging
+- **Git** (version control)
+- **Valgrind** (memory debugging, optional)
+- **GDB** (debugger, optional)
 
 ### Quick Build
 ```bash
-make all                    # Build kernel for current architecture
 make clean                  # Clean build files
 make clean-all              # Clean everything (including ISOs)
 ```
 
-#### 🎮 **Run Commands**
-```bash
-make run-64                 # Build and run x86-64 with GUI
-make run-32                 # Build and run x86-32 with GUI
-make run-64-nographic       # Build and run x86-64 in terminal
-make run-32-nographic       # Build and run x86-32 in terminal
-```
-
-#### 💾 **Disk Operations**
+#### 💾 **Run with Disk Operations**
 ```bash
 make create-disk            # Create virtual disk with filesystem
 make run-64-with-disk       # Run x86-64 with disk support == RECOMENDED ==
 make run-32-with-disk       # Run x86-32 with disk support
 ```
 
-# Run in QEMU
-```
-make ARCH=x86-64 BUILD_TARGET=desktop run
-```
 
 ## 🎯 Features
 
@@ -176,40 +176,6 @@ make ARCH=x86-64 BUILD_TARGET=desktop run
 - **Hardware Drivers**: PS/2 keyboard, ATA storage, and VGA display support
 - **Multiple Schedulers**: CFS, Priority-based, and Round-Robin scheduling algorithms
 - **Freestanding Environment**: Complete C library implementation
-
-### Basic IR-0 Shell Commands
-```bash
-help                    # Show available commands
-info                    # System information
-version                 # Kernel version
-ps                      # List processes
-meminfo                 # Memory information
-clear                   # Clear screen
-```
-
-### File System Commands
-```bash
-ls                      # List directory contents
-cd                      # Change directory -- not implemented
-pwd                     # Print working directory -- not implemented
-cat                     # Display file contents -- not implemented
-mkdir                   # Create directory
-rm                      # Remove file -- not implemented
-cp                      # Copy file -- not implemented
-mv                      # Move file -- not implemented
-touch                   # Create empty file -- not implemented
-```
-
-### System Commands
-```bash
-reboot                  # Reboot system -- not implemented
-halt                    # Halt system -- not implemented
-kill                    # Kill process -- not implemented
-sleep                   # Sleep for seconds -- not implemented
-fork                    # Create child process
-exit                    # Exit shell
-```
-
 ---
 
 ## 🛠️ Development
