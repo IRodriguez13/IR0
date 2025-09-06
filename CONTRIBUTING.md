@@ -123,10 +123,12 @@ scheduler_type_t detect_best_scheduler(void)
     if (free_pages_count > 1000) 
     {
         return SCHEDULER_CFS;        // Most sophisticated
-    } else if (free_pages_count > 100) 
+    } 
+    else if (free_pages_count > 100) 
     {
         return SCHEDULER_PRIORITY;   // Medium complexity
-    } else 
+    } 
+    else 
     {
         return SCHEDULER_ROUND_ROBIN; // Fallback
     }
@@ -143,7 +145,8 @@ static void my_scheduler_add_task(task_t *task) { /* ... */ }
 static task_t *my_scheduler_pick_next_task(void) { /* ... */ }
 static void my_scheduler_task_tick(void) { /* ... */ }
 
-scheduler_ops_t my_scheduler_ops = {
+scheduler_ops_t my_scheduler_ops = 
+{
     .type = SCHEDULER_MY,
     .name = "My Scheduler",
     .init = my_scheduler_init,
@@ -244,7 +247,8 @@ Physical Memory:
 #### 1. New Memory Zone
 ```c
 // Add to memory_zone_t enum
-typedef enum {
+typedef enum 
+{
     ZONE_KERNEL_STATIC,
     ZONE_KERNEL_HEAP,
     ZONE_KERNEL_STACK,
@@ -257,7 +261,8 @@ typedef enum {
 
 #### 2. New Allocation Function
 ```c
-void *my_alloc(size_t size) {
+void *my_alloc(size_t size) 
+{
     // Your allocation logic
     uintptr_t phys = alloc_physical_page();
     int result = arch_map_page(virt_addr, phys, flags);
@@ -322,13 +327,15 @@ isr_my_handler:
 #### 2. Register Handler
 ```c
 // In C
-void my_handler_c(void) {
+void my_handler_c(void) 
+{
     // Handle your interrupt
     LOG_INFO("My interrupt handled");
 }
 
 // Register in IDT
-void register_my_handler(void) {
+void register_my_handler(void) 
+{
     idt_set_gate(MY_IRQ_VECTOR, (uint32_t)isr_my_handler, 0x08, 0x8E);
 }
 ```
@@ -436,7 +443,8 @@ else ifeq ($(ARCH),myarch)
 
 #### 1. Define File System Operations
 ```c
-typedef struct {
+typedef struct 
+{
     const char *name;
     int (*mount)(const char *device, const char *mountpoint);
     int (*open)(const char *path, int flags, vfs_file_t **file);
@@ -448,12 +456,14 @@ typedef struct {
 
 #### 2. Implement File System
 ```c
-static int myfs_open(const char *path, int flags, vfs_file_t **file) {
+static int myfs_open(const char *path, int flags, vfs_file_t **file) 
+{
     // Your file system implementation
     return 0;
 }
 
-vfs_ops_t myfs_ops = {
+vfs_ops_t myfs_ops = 
+{
     .name = "myfs",
     .open = myfs_open,
     // ... other operations
@@ -462,7 +472,8 @@ vfs_ops_t myfs_ops = {
 
 #### 3. Register File System
 ```c
-void register_myfs(void) {
+void register_myfs(void) 
+{
     vfs_register_filesystem(&myfs_ops);
 }
 ```
@@ -494,7 +505,8 @@ make ARCH=x86-64 BUILD_TARGET=desktop
 #### C Code Style
 ```c
 // Function naming: snake_case
-void my_function_name(void) {
+void my_function_name(void) 
+{
     // Variable naming: snake_case
     int my_variable = 0;
     
@@ -502,7 +514,8 @@ void my_function_name(void) {
     const int MAX_SIZE = 1024;
     
     // Error handling
-    if (error_condition) {
+    if (error_condition) 
+    {
         LOG_ERR("Error message");
         return ERROR_CODE;
     }
@@ -533,16 +546,19 @@ void my_function_name(void) {
 
 #### Error Handling
 ```c
-int my_function(void) {
+int my_function(void) 
+{
     // Always check for errors
     void *ptr = kmalloc(size);
-    if (!ptr) {
+    if (!ptr) 
+    {
         LOG_ERR("Failed to allocate memory");
         return -ENOMEM;
     }
     
     // Use error codes consistently
-    if (operation_failed) {
+    if (operation_failed) 
+    {
         kfree(ptr);
         return -EINVAL;
     }
