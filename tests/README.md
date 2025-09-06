@@ -48,7 +48,8 @@ The Tests Subsystem provides a testing framework for the IR0 kernel. It includes
 #### Test Structure
 ```c
 // Test case structure
-struct test_case {
+struct test_case 
+{
     const char* name;
     const char* description;
     test_category_t category;
@@ -58,7 +59,8 @@ struct test_case {
 };
 
 // Test result structure
-struct test_result {
+struct test_result 
+{
     test_status_t status;
     const char* message;
     uint64_t execution_time_us;
@@ -68,7 +70,8 @@ struct test_result {
 };
 
 // Test categories
-typedef enum {
+typedef enum 
+{
     TEST_CATEGORY_UNIT,
     TEST_CATEGORY_INTEGRATION,
     TEST_CATEGORY_PERFORMANCE,
@@ -77,7 +80,8 @@ typedef enum {
 } test_category_t;
 
 // Test status
-typedef enum {
+typedef enum 
+{
     TEST_STATUS_PASSED,
     TEST_STATUS_FAILED,
     TEST_STATUS_SKIPPED,
@@ -103,25 +107,34 @@ typedef enum {
 
 // Test assertion macros
 #define ASSERT_TRUE(condition) \
-    do { \
-        if (!(condition)) { \
+    do 
+    { \
+        if (!(condition)) 
+        { \
             return (test_result_t){TEST_STATUS_FAILED, "Assertion failed: " #condition, 0, 0, 0, 1}; \
         } \
-    } while(0)
+    } 
+    while(0)
 
 #define ASSERT_FALSE(condition) \
-    do { \
-        if (condition) { \
+    do 
+    { \
+        if (condition) 
+        { \
             return (test_result_t){TEST_STATUS_FAILED, "Assertion failed: !" #condition, 0, 0, 0, 1}; \
         } \
-    } while(0)
+    } 
+    while(0)
 
 #define ASSERT_EQUAL(expected, actual) \
-    do { \
-        if ((expected) != (actual)) { \
+    do 
+    { \
+        if ((expected) != (actual)) 
+        { \
             return (test_result_t){TEST_STATUS_FAILED, "Assertion failed: " #expected " != " #actual, 0, 0, 0, 1}; \
         } \
-    } while(0)
+    } 
+    while(0)
 ```
 
 ### Unit Tests
@@ -129,7 +142,8 @@ typedef enum {
 #### Memory Tests
 ```c
 // Test heap allocation
-test_result_t test_heap_allocation(void) {
+test_result_t test_heap_allocation(void) 
+{
     uint64_t start_time = get_timestamp();
     uint64_t start_memory = get_memory_usage();
     
@@ -153,7 +167,8 @@ test_result_t test_heap_allocation(void) {
     uint64_t end_time = get_timestamp();
     uint64_t end_memory = get_memory_usage();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Heap allocation test passed",
         end_time - start_time,
@@ -163,7 +178,8 @@ test_result_t test_heap_allocation(void) {
 }
 
 // Test physical memory allocation
-test_result_t test_physical_allocation(void) {
+test_result_t test_physical_allocation(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Allocate physical pages
@@ -192,7 +208,8 @@ test_result_t test_physical_allocation(void) {
 #### String Tests
 ```c
 // Test string functions
-test_result_t test_string_functions(void) {
+test_result_t test_string_functions(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Test strlen
@@ -230,7 +247,8 @@ test_result_t test_string_functions(void) {
 #### System Call Tests
 ```c
 // Test system call functionality
-test_result_t test_system_calls(void) {
+test_result_t test_system_calls(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Test getpid
@@ -258,15 +276,19 @@ test_result_t test_system_calls(void) {
 }
 
 // Test process management
-test_result_t test_process_management(void) {
+test_result_t test_process_management(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Test process creation
     pid_t child_pid = sys_fork();
-    if (child_pid == 0) {
+    if (child_pid == 0) 
+    {
         // Child process
         sys_exit(42);
-    } else {
+    } 
+    else 
+    {
         // Parent process
         ASSERT_TRUE(child_pid > 0);
         
@@ -278,7 +300,8 @@ test_result_t test_process_management(void) {
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Process management test passed",
         end_time - start_time,
@@ -292,12 +315,14 @@ test_result_t test_process_management(void) {
 #### Benchmark Tests
 ```c
 // CPU performance benchmark
-test_result_t test_cpu_performance(void) {
+test_result_t test_cpu_performance(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // CPU-intensive operation
     uint64_t result = 0;
-    for (int i = 0; i < 1000000; i++) {
+    for (int i = 0; i < 1000000; i++) 
+    {
         result += i * i;
     }
     
@@ -307,7 +332,8 @@ test_result_t test_cpu_performance(void) {
     // Performance threshold: should complete in < 100ms
     ASSERT_TRUE(duration < 100000);
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "CPU performance test passed",
         duration,
@@ -316,7 +342,8 @@ test_result_t test_cpu_performance(void) {
 }
 
 // Memory bandwidth test
-test_result_t test_memory_bandwidth(void) {
+test_result_t test_memory_bandwidth(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Allocate large buffer
@@ -330,7 +357,8 @@ test_result_t test_memory_bandwidth(void) {
     // Read from buffer
     uint8_t* ptr = (uint8_t*)buffer;
     uint64_t sum = 0;
-    for (size_t i = 0; i < buffer_size; i++) {
+    for (size_t i = 0; i < buffer_size; i++) 
+    {
         sum += ptr[i];
     }
     
@@ -342,7 +370,8 @@ test_result_t test_memory_bandwidth(void) {
     // Performance threshold: should complete in < 10ms
     ASSERT_TRUE(duration < 10000);
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Memory bandwidth test passed",
         duration,
@@ -356,16 +385,19 @@ test_result_t test_memory_bandwidth(void) {
 #### Resource Exhaustion Tests
 ```c
 // Test memory exhaustion
-test_result_t test_memory_exhaustion(void) {
+test_result_t test_memory_exhaustion(void) 
+{
     uint64_t start_time = get_timestamp();
     
     void* allocations[1000];
     int allocation_count = 0;
     
     // Try to allocate until failure
-    while (allocation_count < 1000) {
+    while (allocation_count < 1000) 
+    {
         allocations[allocation_count] = kmalloc(1024);
-        if (allocations[allocation_count] == NULL) {
+        if (allocations[allocation_count] == NULL) 
+        {
             break;
         }
         allocation_count++;
@@ -375,13 +407,15 @@ test_result_t test_memory_exhaustion(void) {
     ASSERT_TRUE(allocation_count < 1000);
     
     // Clean up
-    for (int i = 0; i < allocation_count; i++) {
+    for (int i = 0; i < allocation_count; i++) 
+    {
         kfree(allocations[i]);
     }
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Memory exhaustion test passed",
         end_time - start_time,
@@ -390,19 +424,23 @@ test_result_t test_memory_exhaustion(void) {
 }
 
 // Test process limit
-test_result_t test_process_limit(void) {
+test_result_t test_process_limit(void) 
+{
     uint64_t start_time = get_timestamp();
     
     pid_t pids[1000];
     int process_count = 0;
     
     // Try to create processes until failure
-    while (process_count < 1000) {
+    while (process_count < 1000) 
+    {
         pids[process_count] = sys_fork();
-        if (pids[process_count] == -1) {
+        if (pids[process_count] == -1) 
+        {
             break;
         }
-        if (pids[process_count] == 0) {
+        if (pids[process_count] == 0) 
+        {
             // Child process
             sys_exit(0);
         }
@@ -413,13 +451,15 @@ test_result_t test_process_limit(void) {
     ASSERT_TRUE(process_count < 1000);
     
     // Clean up
-    for (int i = 0; i < process_count; i++) {
+    for (int i = 0; i < process_count; i++) 
+    {
         sys_wait(NULL);
     }
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Process limit test passed",
         end_time - start_time,
@@ -433,7 +473,8 @@ test_result_t test_process_limit(void) {
 #### Test Runner
 ```c
 // Run all tests
-void run_all_tests(void) {
+void run_all_tests(void) 
+{
     print("Running IR0 Kernel Test Suite\n");
     print("=============================\n\n");
     
@@ -450,8 +491,10 @@ void run_all_tests(void) {
 }
 
 // Run tests by category
-void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) {
-    const char* category_names[] = {
+void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) 
+{
+    const char* category_names[] = 
+    {
         "Unit Tests",
         "Integration Tests", 
         "Performance Tests",
@@ -475,7 +518,8 @@ void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) 
         
         test_result_t result = tests[i]->function();
         
-        switch (result.status) {
+        switch (result.status) 
+        {
             case TEST_STATUS_PASSED:
                 print_success("PASSED");
                 stats->passed++;
@@ -516,7 +560,8 @@ void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) 
 #### Test Configuration
 ```c
 // Test configuration structure
-struct test_config {
+struct test_config 
+{
     bool run_unit_tests;
     bool run_integration_tests;
     bool run_performance_tests;
@@ -528,7 +573,8 @@ struct test_config {
 };
 
 // Default test configuration
-struct test_config default_test_config = {
+struct test_config default_test_config = 
+{
     .run_unit_tests = true,
     .run_integration_tests = true,
     .run_performance_tests = true,
@@ -543,7 +589,8 @@ struct test_config default_test_config = {
 #### Test Environment
 ```c
 // Test environment setup
-void setup_test_environment(void) {
+void setup_test_environment(void) 
+{
     // Initialize test framework
     init_test_framework();
     
@@ -558,7 +605,8 @@ void setup_test_environment(void) {
 }
 
 // Test environment cleanup
-void cleanup_test_environment(void) {
+void cleanup_test_environment(void) 
+{
     // Clean up test memory pool
     cleanup_test_memory_pool();
     
@@ -651,7 +699,8 @@ El Subsistema de Tests proporciona un framework de testing para el kernel IR0. I
 #### Estructura de Tests
 ```c
 // Estructura de caso de test
-struct test_case {
+struct test_case 
+{
     const char* name;
     const char* description;
     test_category_t category;
@@ -661,7 +710,8 @@ struct test_case {
 };
 
 // Estructura de resultado de test
-struct test_result {
+struct test_result 
+{
     test_status_t status;
     const char* message;
     uint64_t execution_time_us;
@@ -671,7 +721,8 @@ struct test_result {
 };
 
 // Categorías de tests
-typedef enum {
+typedef enum 
+{
     TEST_CATEGORY_UNIT,
     TEST_CATEGORY_INTEGRATION,
     TEST_CATEGORY_PERFORMANCE,
@@ -680,7 +731,8 @@ typedef enum {
 } test_category_t;
 
 // Estado de test
-typedef enum {
+typedef enum 
+{
     TEST_STATUS_PASSED,
     TEST_STATUS_FAILED,
     TEST_STATUS_SKIPPED,
@@ -706,25 +758,34 @@ typedef enum {
 
 // Macros de aserciones de test
 #define ASSERT_TRUE(condition) \
-    do { \
-        if (!(condition)) { \
+    do 
+    { \
+        if (!(condition)) 
+        { \
             return (test_result_t){TEST_STATUS_FAILED, "Aserción falló: " #condition, 0, 0, 0, 1}; \
         } \
-    } while(0)
+    } 
+    while(0)
 
 #define ASSERT_FALSE(condition) \
-    do { \
-        if (condition) { \
+    do 
+    { \
+        if (condition) 
+        { \
             return (test_result_t){TEST_STATUS_FAILED, "Aserción falló: !" #condition, 0, 0, 0, 1}; \
         } \
-    } while(0)
+    } 
+    while(0)
 
 #define ASSERT_EQUAL(expected, actual) \
-    do { \
-        if ((expected) != (actual)) { \
+    do 
+    { \
+        if ((expected) != (actual)) 
+        { \
             return (test_result_t){TEST_STATUS_FAILED, "Aserción falló: " #expected " != " #actual, 0, 0, 0, 1}; \
         } \
-    } while(0)
+    } 
+    while(0)
 ```
 
 ### Unit Tests
@@ -732,7 +793,8 @@ typedef enum {
 #### Tests de Memoria
 ```c
 // Test de asignación de heap
-test_result_t test_heap_allocation(void) {
+test_result_t test_heap_allocation(void) 
+{
     uint64_t start_time = get_timestamp();
     uint64_t start_memory = get_memory_usage();
     
@@ -766,7 +828,8 @@ test_result_t test_heap_allocation(void) {
 }
 
 // Test de asignación de memoria física
-test_result_t test_physical_allocation(void) {
+test_result_t test_physical_allocation(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Asignar páginas físicas
@@ -795,7 +858,8 @@ test_result_t test_physical_allocation(void) {
 #### Tests de Strings
 ```c
 // Test de funciones de string
-test_result_t test_string_functions(void) {
+test_result_t test_string_functions(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Test strlen
@@ -819,7 +883,8 @@ test_result_t test_string_functions(void) {
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Test de funciones de string pasado",
         end_time - start_time,
@@ -833,7 +898,8 @@ test_result_t test_string_functions(void) {
 #### Tests de System Calls
 ```c
 // Test de funcionalidad de system calls
-test_result_t test_system_calls(void) {
+test_result_t test_system_calls(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Test getpid
@@ -861,15 +927,19 @@ test_result_t test_system_calls(void) {
 }
 
 // Test de gestión de procesos
-test_result_t test_process_management(void) {
+test_result_t test_process_management(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Test de creación de proceso
     pid_t child_pid = sys_fork();
-    if (child_pid == 0) {
+    if (child_pid == 0) 
+    {
         // Proceso hijo
         sys_exit(42);
-    } else {
+    } 
+    else 
+    {
         // Proceso padre
         ASSERT_TRUE(child_pid > 0);
         
@@ -881,7 +951,8 @@ test_result_t test_process_management(void) {
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Test de gestión de procesos pasado",
         end_time - start_time,
@@ -895,12 +966,14 @@ test_result_t test_process_management(void) {
 #### Tests de Benchmark
 ```c
 // Benchmark de rendimiento de CPU
-test_result_t test_cpu_performance(void) {
+test_result_t test_cpu_performance(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Operación intensiva de CPU
     uint64_t result = 0;
-    for (int i = 0; i < 1000000; i++) {
+    for (int i = 0; i < 1000000; i++) 
+    {
         result += i * i;
     }
     
@@ -910,7 +983,8 @@ test_result_t test_cpu_performance(void) {
     // Umbral de rendimiento: debe completarse en < 100ms
     ASSERT_TRUE(duration < 100000);
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Test de rendimiento de CPU pasado",
         duration,
@@ -919,7 +993,8 @@ test_result_t test_cpu_performance(void) {
 }
 
 // Test de ancho de banda de memoria
-test_result_t test_memory_bandwidth(void) {
+test_result_t test_memory_bandwidth(void) 
+{
     uint64_t start_time = get_timestamp();
     
     // Asignar buffer grande
@@ -933,7 +1008,8 @@ test_result_t test_memory_bandwidth(void) {
     // Leer del buffer
     uint8_t* ptr = (uint8_t*)buffer;
     uint64_t sum = 0;
-    for (size_t i = 0; i < buffer_size; i++) {
+    for (size_t i = 0; i < buffer_size; i++) 
+    {
         sum += ptr[i];
     }
     
@@ -945,7 +1021,8 @@ test_result_t test_memory_bandwidth(void) {
     // Umbral de rendimiento: debe completarse en < 10ms
     ASSERT_TRUE(duration < 10000);
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Test de ancho de banda de memoria pasado",
         duration,
@@ -959,16 +1036,19 @@ test_result_t test_memory_bandwidth(void) {
 #### Tests de Agotamiento de Recursos
 ```c
 // Test de agotamiento de memoria
-test_result_t test_memory_exhaustion(void) {
+test_result_t test_memory_exhaustion(void) 
+{
     uint64_t start_time = get_timestamp();
     
     void* allocations[1000];
     int allocation_count = 0;
     
     // Intentar asignar hasta fallar
-    while (allocation_count < 1000) {
+    while (allocation_count < 1000) 
+    {
         allocations[allocation_count] = kmalloc(1024);
-        if (allocations[allocation_count] == NULL) {
+        if (allocations[allocation_count] == NULL) 
+        {
             break;
         }
         allocation_count++;
@@ -978,13 +1058,15 @@ test_result_t test_memory_exhaustion(void) {
     ASSERT_TRUE(allocation_count < 1000);
     
     // Limpiar
-    for (int i = 0; i < allocation_count; i++) {
+    for (int i = 0; i < allocation_count; i++) 
+    {
         kfree(allocations[i]);
     }
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Test de agotamiento de memoria pasado",
         end_time - start_time,
@@ -993,19 +1075,23 @@ test_result_t test_memory_exhaustion(void) {
 }
 
 // Test de límite de procesos
-test_result_t test_process_limit(void) {
+test_result_t test_process_limit(void) 
+{
     uint64_t start_time = get_timestamp();
     
     pid_t pids[1000];
     int process_count = 0;
     
     // Intentar crear procesos hasta fallar
-    while (process_count < 1000) {
+    while (process_count < 1000) 
+    {
         pids[process_count] = sys_fork();
-        if (pids[process_count] == -1) {
+        if (pids[process_count] == -1) 
+        {
             break;
         }
-        if (pids[process_count] == 0) {
+        if (pids[process_count] == 0) 
+        {
             // Proceso hijo
             sys_exit(0);
         }
@@ -1016,13 +1102,15 @@ test_result_t test_process_limit(void) {
     ASSERT_TRUE(process_count < 1000);
     
     // Limpiar
-    for (int i = 0; i < process_count; i++) {
+    for (int i = 0; i < process_count; i++) 
+    {
         sys_wait(NULL);
     }
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Test de límite de procesos pasado",
         end_time - start_time,
@@ -1036,7 +1124,8 @@ test_result_t test_process_limit(void) {
 #### Test Runner
 ```c
 // Ejecutar todos los tests
-void run_all_tests(void) {
+void run_all_tests(void) 
+{
     print("Ejecutando Test Suite del Kernel IR0\n");
     print("====================================\n\n");
     
@@ -1053,8 +1142,10 @@ void run_all_tests(void) {
 }
 
 // Ejecutar tests por categoría
-void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) {
-    const char* category_names[] = {
+void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) 
+{
+    const char* category_names[] = 
+    {
         "Unit Tests",
         "Integration Tests", 
         "Performance Tests",
@@ -1069,7 +1160,8 @@ void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) 
     test_case_t** tests = get_tests_by_category(category);
     int test_count = get_test_count_by_category(category);
     
-    for (int i = 0; i < test_count; i++) {
+    for (int i = 0; i < test_count; i++) 
+    {
         if (!tests[i]->enabled) continue;
         
         print("Ejecutando: ");
@@ -1078,7 +1170,8 @@ void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) 
         
         test_result_t result = tests[i]->function();
         
-        switch (result.status) {
+        switch (result.status) 
+        {
             case TEST_STATUS_PASSED:
                 print_success("PASADO");
                 stats->passed++;
@@ -1119,7 +1212,8 @@ void run_tests_by_category(test_category_t category, test_suite_stats_t* stats) 
 #### Configuración de Tests
 ```c
 // Estructura de configuración de tests
-struct test_config {
+struct test_config 
+{
     bool run_unit_tests;
     bool run_integration_tests;
     bool run_performance_tests;
@@ -1131,7 +1225,8 @@ struct test_config {
 };
 
 // Configuración por defecto de tests
-struct test_config default_test_config = {
+struct test_config default_test_config = 
+{
     .run_unit_tests = true,
     .run_integration_tests = true,
     .run_performance_tests = true,
@@ -1146,7 +1241,8 @@ struct test_config default_test_config = {
 #### Entorno de Tests
 ```c
 // Configuración del entorno de tests
-void setup_test_environment(void) {
+void setup_test_environment(void) 
+{
     // Inicializar framework de tests
     init_test_framework();
     
@@ -1161,7 +1257,8 @@ void setup_test_environment(void) {
 }
 
 // Limpieza del entorno de tests
-void cleanup_test_environment(void) {
+void cleanup_test_environment(void) 
+{
     // Limpiar pool de memoria de tests
     cleanup_test_memory_pool();
     

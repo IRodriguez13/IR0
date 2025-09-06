@@ -14,7 +14,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Función para mostrar ayuda
-show_help() {
+show_help() 
+{
     echo -e "${BLUE}IR0 Kernel Debug Log Analyzer${NC}"
     echo ""
     echo "Uso: $0 [OPCIONES] [ARCHIVO_LOG]"
@@ -103,7 +104,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Función para verificar si el archivo existe
-check_file() {
+check_file() 
+{
     if [ ! -f "$LOG_FILE" ]; then
         echo -e "${RED}Error: Archivo de log no encontrado: $LOG_FILE${NC}"
         echo -e "${YELLOW}Tip: Ejecuta el kernel con debugging primero:${NC}"
@@ -114,7 +116,8 @@ check_file() {
 }
 
 # Función para mostrar información del archivo
-show_file_info() {
+show_file_info() 
+{
     echo -e "${BLUE}📊 Analizando archivo: ${YELLOW}$LOG_FILE${NC}"
     echo -e "Tamaño: ${CYAN}$(du -h "$LOG_FILE" | cut -f1)${NC}"
     echo -e "Líneas: ${CYAN}$(wc -l < "$LOG_FILE")${NC}"
@@ -123,7 +126,8 @@ show_file_info() {
 }
 
 # Función para analizar page faults
-analyze_page_faults() {
+analyze_page_faults() 
+{
     if [ "$ANALYZE_PAGE_FAULTS" = true ]; then
         echo -e "${YELLOW}🔍 Analizando Page Faults...${NC}"
         
@@ -151,7 +155,8 @@ analyze_page_faults() {
 }
 
 # Función para analizar interrupciones
-analyze_interrupts() {
+analyze_interrupts() 
+{
     if [ "$ANALYZE_INTERRUPTS" = true ]; then
         echo -e "${YELLOW}🔍 Analizando Interrupciones...${NC}"
         
@@ -177,7 +182,8 @@ analyze_interrupts() {
 }
 
 # Función para analizar ejecución
-analyze_execution() {
+analyze_execution() 
+{
     if [ "$ANALYZE_EXECUTION" = true ]; then
         echo -e "${YELLOW}🔍 Analizando Ejecución...${NC}"
         
@@ -203,7 +209,8 @@ analyze_execution() {
 }
 
 # Función para analizar errores del guest
-analyze_guest_errors() {
+analyze_guest_errors() 
+{
     if [ "$ANALYZE_GUEST_ERRORS" = true ]; then
         echo -e "${YELLOW}🔍 Analizando Errores del Guest...${NC}"
         
@@ -238,7 +245,8 @@ analyze_guest_errors() {
 }
 
 # Función para mostrar resumen general
-show_general_summary() {
+show_general_summary() 
+{
     echo -e "${BLUE}📈 Resumen General${NC}"
     
     local total_lines=$(wc -l < "$LOG_FILE")
@@ -259,7 +267,8 @@ show_general_summary() {
 }
 
 # Función principal
-main() {
+main() 
+{
     check_file
     show_file_info
     

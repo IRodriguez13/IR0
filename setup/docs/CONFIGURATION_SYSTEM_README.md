@@ -24,10 +24,12 @@
 #define IR0_DEVELOPMENT_MODE
 #include <ir0/kernel_includes.h>
 
-void main(void) {
+void main(void) 
+{
     // Your tests here / Tus tests aquí
     void *ptr = kmalloc(16);
-    if (ptr) {
+    if (ptr) 
+    {
         print_colored("✓ Bump allocator working!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     }
 }
@@ -39,7 +41,8 @@ void main(void) {
 #define IR0_DESKTOP
 #include <ir0/kernel_includes.h>
 
-void main(void) {
+void main(void) 
+{
     // Full system with scheduler, VFS, GUI / Sistema completo con scheduler, VFS, GUI
 }
 ```

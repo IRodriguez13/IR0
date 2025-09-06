@@ -97,7 +97,8 @@ examples/
 #define IR0_DEVELOPMENT_MODE
 #include <ir0/kernel_includes.h>
 
-void main(void) {
+void main(void) 
+{
     // Banners and basic init / Banners e inicialización básica
     // ... your tests / ... tus tests
 }
@@ -109,7 +110,8 @@ void main(void) {
 #define IR0_DESKTOP
 #include <ir0/kernel_includes.h>
 
-void main(void) {
+void main(void) 
+{
     // Full system initialization / Inicialización completa del sistema
     // All subsystems available / Todos los subsistemas disponibles
 }
