@@ -2,6 +2,8 @@
 
 If you see some "interesting" comments around this docs make me know it in <ivanrwcm25@gmail.com>. i generate docs with ai :--)
 
+- The kernel will reach version 0.0.1 once it successfully runs Doom.
+
 ## 🚀 Current Status (v0.0.1 pre-rc)
 
 - You can also watch our Discord Server <https://discord.gg/XZ84aPXtxh>.

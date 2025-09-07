@@ -661,47 +661,71 @@ void scheduler_switch_task(task_t *new_task)
     // Early return si es la misma tarea
     if (old_task == new_task)
     {
-        LOG_OK("scheduler_switch_task: Same task, no switch needed");
+        print("scheduler_switch_task: Same task, no switch needed");
         return;
     }
 
     // ===============================================================================
-    // 2. MANEJO DE TAREAS TERMINADAS
+    // 2. MANEJO DE TAREAS TERMINADAS O INVÁLIDAS
     // ===============================================================================
 
     if (old_task && old_task->state == TASK_TERMINATED)
     {
-        LOG_WARN("scheduler_switch_task: Switching from terminated task");
+        LOG_WARN("scheduler_switch_task: Current task is terminated, using idle task as placeholder");
 
-        // CRÍTICO: No usar la tarea terminada para context switch
-        // El assembly switch_context_x64 necesita registros válidos
-        old_task = get_idle_task(); // Forzar NULL para que assembly maneje correctamente
-
-        // Opcional: Usar idle task como placeholder
-        // old_task = get_idle_task();
+        // CRÍTICO: El assembly switch_context_x64 necesita un contexto válido para old_task
+        // No podemos pasar NULL, así que usamos idle_task como placeholder seguro
+        old_task = get_idle_task();
+        
+        // Verificación adicional del idle task
+        if (!old_task)
+        {
+            panic("scheduler_switch_task: Idle task is NULL - system corrupted");
+        }
+    }
+    
+    // Si old_task sigue siendo NULL (primera ejecución), usar idle task
+    if (!old_task)
+    {
+        old_task = get_idle_task();
+        
+        if (!old_task)
+        {
+            panic("scheduler_switch_task: Cannot get idle task - system corrupted");
+        }
     }
 
     // ===============================================================================
-    // 3. VALIDACIONES DE STACK Y ESTADO
+    // 3. VALIDACIONES DE STACK Y ESTADO DE LA NUEVA TAREA
     // ===============================================================================
 
     // Validar que new_task tiene stack válido
     if (new_task->rsp == 0)
     {
-        LOG_ERR("scheduler_switch_task: New task has invalid stack pointer");
+        LOG_ERR("scheduler_switch_task: New task has invalid stack pointer (RSP=0)");
         return;
     }
 
     // Validar que new_task no está en estado inválido
     if (new_task->state == TASK_TERMINATED)
     {
-        LOG_ERR("scheduler_switch_task: Cannot switch to terminated task");
+        LOG_ERR("scheduler_switch_task: Cannot switch to terminated task PID");
         return;
     }
 
-    // ===============================================================================
-    // 4. LOGGING PRE-SWITCH (Para debugging)
-    // ===============================================================================
+    // Validación adicional: verificar que el stack está en rango válido
+    if (new_task->stack_base && new_task->stack_size > 0)
+    {
+        uintptr_t stack_start = (uintptr_t)new_task->stack_base;
+        uintptr_t stack_end = stack_start + new_task->stack_size;
+        
+        if (new_task->rsp < stack_start || new_task->rsp >= stack_end)
+        {
+            LOG_ERR("scheduler_switch_task: New task stack pointer out of bounds");
+            return;
+        }
+    }
+
 
     // ===============================================================================
     // 5. ACTUALIZAR ESTADÍSTICAS ANTES DEL SWITCH
@@ -714,9 +738,13 @@ void scheduler_switch_task(task_t *new_task)
         uint64_t runtime = current_time - old_task->last_run_time;
 
         old_task->total_runtime += runtime;
-        old_task->state = TASK_READY; // Será agregado de vuelta a ready queue
+        
+        // Solo cambiar estado si no es idle task
+        if (old_task != get_idle_task())
+        {
+            old_task->state = TASK_READY; // Será agregado de vuelta a ready queue
+        }
 
-        LOG_OK("scheduler_switch_task");
     }
 
     // ===============================================================================
@@ -734,23 +762,57 @@ void scheduler_switch_task(task_t *new_task)
     scheduler_state.current_task = new_task;
     scheduler_state.next_task = NULL;
 
-    // CRÍTICO: El context switch debe ser lo ÚLTIMO que se hace
-    // Después de switch_context_x64, estaremos ejecutando en la nueva tarea
+    // ===============================================================================
+    // 8. VALIDACIÓN FINAL ANTES DEL CONTEXT SWITCH
+    // ===============================================================================
+    
+    // Última verificación de integridad
+    if (!old_task || !new_task)
+    {
+        panic("scheduler_switch_task: NULL task in context switch");
+    }
+    
+    if (old_task->rsp == 0 && old_task != get_idle_task())
+    {
+        LOG_WARN("scheduler_switch_task: Old task has invalid RSP, but proceeding");
+    }
 
-    LOG_OK("scheduler_switch_task: Performing hardware context switch");
+    // ===============================================================================
+    // 9. PERFORM HARDWARE CONTEXT SWITCH
+    // ===============================================================================
 
-    // Verificar que la función existe (safety check)
-    extern void switch_context_x64(task_t * current, task_t * next);
+
+    // Verificar que la función existe (safety check en debug builds)
+    #ifdef DEBUG
+    extern void switch_context_x64(task_t *current, task_t *next);
+    if (!switch_context_x64)
+    {
+        panic("scheduler_switch_task: switch_context_x64 function not available");
+    }
+    #endif
 
     // IMPORTANTE: Después de esta llamada, ejecutaremos en el contexto de new_task
-    // Todo el código que sigue se ejecutará en la nueva tarea
+    // Todo el código que sigue se ejecutará en la nueva tarea cuando sea preempted
+    extern void switch_context_x64(task_t *current, task_t *next);
     switch_context_x64(old_task, new_task);
 
+    // ===============================================================================
+    // 10. POST-SWITCH CODE (se ejecuta cuando la tarea retorna al scheduler)
+    // ===============================================================================
+    
     // Este código se ejecuta cuando la tarea RETORNA al scheduler
     // (por ejemplo, después de un yield o preemption)
-
-    LOG_WARN("scheduler_switch_task: Resumed in task");
+    
+    // Opcional: verificaciones post-switch para debugging
+    #ifdef DEBUG_SCHEDULER
+    if (scheduler_state.current_task && scheduler_state.current_task->state != TASK_RUNNING)
+    {
+        LOG_WARN("scheduler_switch_task: Current task state inconsistent after switch");
+    }
+    #endif
 }
+
+
 
 uint32_t scheduler_get_time_slice(task_t *task)
 {
