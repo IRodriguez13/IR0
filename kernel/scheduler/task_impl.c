@@ -191,7 +191,7 @@ void task_get_info(task_t *task)
 // ===============================================================================
 
 // Función de test task que hace algo útil
-static void test_task_function(void *arg)
+void test_task_function(void *arg)
 {
     int task_id = (int)(uintptr_t)arg;
 

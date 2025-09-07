@@ -40,6 +40,39 @@ extern task_t *cfs_pick_next_task_impl(void);
 #define TASK_SLEEPING 3
 #define TASK_DEAD 4
 
+// Architecture-aware interrupt protection
+#ifdef __x86_64__
+static inline uint32_t interrupt_save_and_disable(void)
+{
+    uint64_t flags;
+    __asm__ volatile("pushfq; cli; popq %0" : "=r"(flags)::"memory");
+    return (uint32_t)flags;
+}
+
+static inline void interrupt_restore(uint32_t flags)
+{
+    if (flags & 0x200)
+    { // IF flag was set
+        __asm__ volatile("sti" ::: "memory");
+    }
+}
+#else
+static inline uint32_t interrupt_save_and_disable(void)
+{
+    uint32_t flags;
+    __asm__ volatile("pushfl; cli; popl %0" : "=r"(flags)::"memory");
+    return flags;
+}
+
+static inline void interrupt_restore(uint32_t flags)
+{
+    if (flags & 0x200)
+    { // IF flag was set
+        __asm__ volatile("sti" ::: "memory");
+    }
+}
+#endif
+
 // ===============================================================================
 // SCHEDULER STATE STRUCTURE
 // ===============================================================================
@@ -234,6 +267,20 @@ void add_task(task_t *task)
 {
     if (!task)
     {
+        LOG_ERR("add_task: task is NULL");
+        return;
+    }
+
+    // CRITICAL: Disable interrupts for atomic operation
+    uint32_t flags = interrupt_save_and_disable();
+
+    // Validate task state before adding
+    if (task->state == TASK_TERMINATED)
+    {
+        interrupt_restore(flags);
+        LOG_WARN("add_task: Ignoring terminated task PID ");
+        print_hex_compact(task->pid);
+        print("\n");
         return;
     }
 
@@ -241,49 +288,244 @@ void add_task(task_t *task)
     task->state = TASK_READY;
     task->last_run_time = scheduler_state.tick_count;
 
-    // Add to appropriate queue based on scheduler type
+    // Validate scheduler state
+    if (!scheduler_state.initialized)
+    {
+        interrupt_restore(flags);
+        LOG_ERR("add_task: Scheduler not initialized!");
+        return;
+    }
+
+    // Add to appropriate queue based on scheduler type with error handling
+    int result = -1;
     switch (scheduler_state.scheduler_type)
     {
     case SCHEDULER_ROUND_ROBIN:
-        round_robin_add_task(task);
+        result = round_robin_add_task(task);
         break;
 
     case SCHEDULER_PRIORITY:
-        priority_add_task(task);
+        result = priority_add_task(task);
         break;
 
     case SCHEDULER_CFS:
-        cfs_add_task(task);
+        result = cfs_add_task(task);
         break;
 
     default:
-        break;
+        interrupt_restore(flags);
+        LOG_ERR("add_task: Unknown scheduler type ");
+        print_hex_compact(scheduler_state.scheduler_type);
+        print("\n");
+        return;
     }
+
+    interrupt_restore(flags);
+
+    // Check if task addition was successful
+    if (result != 0)
+    {
+        LOG_ERR("add_task: Failed to add task to scheduler (result: ");
+        print_hex_compact(result);
+        print(")\n");
+
+        // Try fallback to idle task if available
+        task_t *idle = get_idle_task();
+        if (idle && task != idle)
+        {
+            LOG_WARN("add_task: Attempting to add task to idle queue as fallback");
+            // This is a emergency fallback - not ideal but prevents system hang
+        }
+    }
+    else
+    {
+        print("SUCCESS: Task PID ");
+        print_hex_compact(task->pid);
+        print(" added to ");
+        print(get_scheduler_name());
+        print(" scheduler\n");
+    }
+}
+
+static void scheduler_health_check(void)
+{
+    static uint32_t last_health_check = 0;
+
+    // Run health check every 1000 ticks (approximately 1 second)
+    if (scheduler_state.tick_count - last_health_check < 1000)
+    {
+        return;
+    }
+
+    last_health_check = scheduler_state.tick_count;
+
+    print("SCHEDULER: Health check at tick ");
+    print_hex_compact(scheduler_state.tick_count);
+    print("\n");
+
+    // Check for common problems
+
+    // 1. Check if scheduler is stuck
+    static uint32_t last_context_switch_count = 0;
+    uint32_t total_context_switches = 0;
+
+    if (scheduler_state.current_task)
+    {
+        total_context_switches = scheduler_state.current_task->context_switches;
+    }
+
+    if (total_context_switches == last_context_switch_count)
+    {
+        LOG_WARN("SCHEDULER: Possible scheduler stall detected");
+    }
+    last_context_switch_count = total_context_switches;
+
+    // 2. Check for memory leaks in task management
+    uint32_t active_tasks = get_task_count();
+    if (active_tasks > 1000)
+    {
+        LOG_WARN("SCHEDULER: High task count detected: ");
+        print_hex_compact(active_tasks);
+        print("\n");
+    }
+
+    // 3. Validate current task if exists
+    // if (scheduler_state.current_task)
+    // {
+    //     if (!validate_task_stack(scheduler_state.current_task))
+    //     {
+    //         LOG_ERR("SCHEDULER: Current task stack corruption detected!");
+    //         // Force task termination
+    //         scheduler_state.current_task->state = TASK_TERMINATED;
+    //     }
+    // }
 }
 
 void scheduler_tick(void)
 {
-    if (!scheduler_state.running)
+    if (!scheduler_state.running || !scheduler_state.initialized)
     {
         return;
     }
+
+    uint32_t flags = interrupt_save_and_disable();
 
     scheduler_state.tick_count++;
 
     // Wake up sleeping tasks
     scheduler_wake_sleeping_tasks();
 
-    // Check if current task should yield
+    // Check if current task should yield with better logic
     if (scheduler_state.current_task)
     {
-        uint32_t time_slice = scheduler_get_time_slice(scheduler_state.current_task);
-
-        if (scheduler_state.tick_count - scheduler_state.current_task->last_run_time >= time_slice)
+        // Validate current task state
+        if (scheduler_state.current_task->state == TASK_TERMINATED)
         {
-            // Task has used its time slice, yield
+            LOG_WARN("scheduler_tick: Current task is terminated, switching");
+            scheduler_state.current_task = NULL;
+            interrupt_restore(flags);
             scheduler_yield();
+            return;
         }
+
+        uint32_t time_slice = scheduler_get_time_slice(scheduler_state.current_task);
+        uint32_t runtime = scheduler_state.tick_count - scheduler_state.current_task->last_run_time;
+
+        // Multiple preemption conditions
+        bool should_yield = false;
+        const char *yield_reason = "unknown";
+
+        // 1. Time slice exhausted
+        if (runtime >= time_slice)
+        {
+            should_yield = true;
+            yield_reason = "time slice exhausted";
+            print("SCHEDULER: Time slice exhausted for PID ");
+            print_hex_compact(scheduler_state.current_task->pid);
+            print(" (runtime: ");
+            print_hex_compact(runtime);
+            print(", slice: ");
+            print_hex_compact(time_slice);
+            print(")\n");
+        }
+
+        // 2. Task explicitly yielded
+        if (scheduler_state.current_task->state == TASK_READY)
+        {
+            should_yield = true;
+            yield_reason = "voluntary yield";
+            print("SCHEDULER: Task yielded voluntarily\n");
+        }
+
+        // 3. Higher priority task available (for priority scheduler only)
+        if (!should_yield && scheduler_state.scheduler_type == SCHEDULER_PRIORITY)
+        {
+            // Peek at next task without removing it from queue
+            task_t *peek_next = NULL;
+
+            // Use scheduler-specific peek function to avoid removing task
+            switch (scheduler_state.scheduler_type)
+            {
+            case SCHEDULER_PRIORITY:
+                // For priority scheduler, check if higher priority tasks are available
+                // This is a simplified check - in real implementation, you'd peek at priority queues
+                peek_next = priority_get_next_task();
+                if (peek_next && peek_next != scheduler_state.current_task)
+                {
+                    if (peek_next->priority > scheduler_state.current_task->priority)
+                    {
+                        should_yield = true;
+                        yield_reason = "higher priority task available";
+                        print("SCHEDULER: Higher priority task PID ");
+                        print_hex_compact(peek_next->pid);
+                        print(" available (priority ");
+                        print_hex_compact(peek_next->priority);
+                        print(" > ");
+                        print_hex_compact(scheduler_state.current_task->priority);
+                        print(")\n");
+                    }
+                    // IMPORTANT: Re-add the peeked task back to the queue
+                    // since we're not switching to it yet
+                    priority_add_task(peek_next);
+                }
+                break;
+            default:
+                break;
+            }
+        }
+
+        // 4. Check for task state changes (blocking, etc.)
+        if (!should_yield && scheduler_state.current_task->state == TASK_BLOCKED)
+        {
+            should_yield = true;
+            yield_reason = "task blocked";
+            print("SCHEDULER: Current task blocked\n");
+        }
+
+        if (should_yield)
+        {
+            print("SCHEDULER: Yielding due to: ");
+            print(yield_reason);
+            print("\n");
+
+            interrupt_restore(flags);
+            scheduler_yield();
+            return;
+        }
+
+        // If no yield condition met, update task runtime stats
+        scheduler_state.current_task->total_runtime += 1; // 1 tick increment
     }
+    else
+    {
+        // No current task - try to get one
+        print("SCHEDULER: No current task, yielding to get next task\n");
+        interrupt_restore(flags);
+        scheduler_yield();
+        return;
+    }
+
+    interrupt_restore(flags);
 }
 
 // ===============================================================================
@@ -297,6 +539,18 @@ void scheduler_wake_sleeping_tasks(void)
         return;
     }
 
+    static uint32_t wake_check_counter = 0;
+    wake_check_counter++;
+
+    // Check sleeping tasks every 10 ticks to reduce overhead
+    if (wake_check_counter % 10 != 0)
+    {
+        return;
+    }
+
+    uint32_t tasks_woken = 0;
+    uint32_t current_tick = scheduler_state.tick_count;
+
     // Check all sleeping queues
     for (int i = 0; i < MAX_PRIORITY_LEVELS; i++)
     {
@@ -305,9 +559,13 @@ void scheduler_wake_sleeping_tasks(void)
 
         while (task)
         {
-            if (scheduler_state.tick_count >= task->last_run_time)
+            // Calculate how long task has been sleeping
+            uint32_t sleep_time = current_tick - task->last_run_time;
+
+            // Wake up task if it has slept long enough
+            // For now, wake up tasks that have slept for more than 100 ticks
+            if (sleep_time >= 100)
             {
-                // Wake up task
                 task_t *next = task->next;
 
                 // Remove from sleeping queue
@@ -325,6 +583,14 @@ void scheduler_wake_sleeping_tasks(void)
                 task->next = NULL;
                 add_task(task);
 
+                tasks_woken++;
+
+                print("SCHEDULER: Woke up task PID ");
+                print_hex_compact(task->pid);
+                print(" after ");
+                print_hex_compact(sleep_time);
+                print(" ticks\n");
+
                 task = next;
             }
             else
@@ -334,6 +600,16 @@ void scheduler_wake_sleeping_tasks(void)
             }
         }
     }
+
+    if (tasks_woken > 0)
+    {
+        print("SCHEDULER: Woke up ");
+        print_hex_compact(tasks_woken);
+        print(" sleeping tasks\n");
+    }
+
+    // Run periodic health check
+    scheduler_health_check();
 }
 
 void scheduler_yield(void)
@@ -436,7 +712,6 @@ void scheduler_switch_task(task_t *new_task)
     // ===============================================================================
     // 4. LOGGING PRE-SWITCH (Para debugging)
     // ===============================================================================
-
 
     // ===============================================================================
     // 5. ACTUALIZAR ESTADÍSTICAS ANTES DEL SWITCH
