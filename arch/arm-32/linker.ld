@@ -8,18 +8,21 @@ SECTIONS
     . = 0x80000000;
     
     /* Sección de texto */
-    .text : {
+    .text : 
+    {
         *(.text.boot)
         *(.text)
     }
     
     /* Sección de datos */
-    .data : {
+    .data : 
+    {
         *(.data)
     }
     
     /* Sección BSS */
-    .bss : {
+    .bss : 
+    {
         __bss_start = .;
         *(.bss)
         *(COMMON)
@@ -27,7 +30,8 @@ SECTIONS
     }
     
     /* Stack */
-    .stack : {
+    .stack : 
+    {
         . = . + 4096;
         stack_top = .;
     }
