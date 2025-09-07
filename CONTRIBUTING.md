@@ -79,8 +79,8 @@ typedef struct
     task_t *(*pick_next_task)(void);
     void (*task_tick)(void);
     void (*cleanup)(void);
-    
     void *private_data;
+    
 } scheduler_ops_t;
 ```
 

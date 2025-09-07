@@ -9,6 +9,45 @@
 // Variable externa del task actual
 extern task_t *current_running_task;
 
+// Funciones de protección de interrupciones
+#ifdef __x86_64__
+static inline uint32_t interrupt_save_and_disable(void)
+{
+    uint64_t flags;
+    __asm__ volatile("pushfq; cli; popq %0" : "=r"(flags)::"memory");
+    return (uint32_t)flags;
+}
+
+static inline void interrupt_restore(uint32_t flags)
+{
+    if (flags & 0x200)
+    { // IF flag was set
+        __asm__ volatile("sti" ::: "memory");
+    }
+}
+#else
+static inline uint32_t interrupt_save_and_disable(void)
+{
+    uint32_t flags;
+    __asm__ volatile("pushfl; cli; popl %0" : "=r"(flags)::"memory");
+    return flags;
+}
+
+static inline void interrupt_restore(uint32_t flags)
+{
+    if (flags & 0x200)
+    { // IF flag was set
+        __asm__ volatile("sti" ::: "memory");
+    }
+}
+#endif
+
+// Debug logging macro
+#ifndef LOG_DEBUG
+#define LOG_DEBUG(fmt, ...) print("DEBUG: " fmt "\n")
+#endif
+
+
 // ===============================================================================
 // CONFIGURACIONES CFS
 // ===============================================================================
@@ -78,24 +117,101 @@ static int rb_node_pool_index = 0;
 // ===============================================================================
 // FUNCIONES AUXILIARES RED-BLACK TREE -- Elegante por donde lo mires --
 // ===============================================================================
-
 static rb_node_t *rb_alloc_node(void)
 {
+    // Disable interrupts para atomic operation
+    uint32_t flags = interrupt_save_and_disable();
+
     if (rb_node_pool_index >= MAX_RB_NODES)
     {
+        // Restore interrupts before fallback
+        interrupt_restore(flags);
+
         LOG_ERR("CFS: RB node pool exhausted!");
+        print(" (");
+        print_hex_compact(rb_node_pool_index);
+        print("/");
+        print_hex_compact(MAX_RB_NODES);
+        print(" nodes used)\n");
+
+        // Trigger automatic fallback to simpler scheduler
+        extern void scheduler_fallback_to_next(void);
+        scheduler_fallback_to_next();
+
         return NULL;
     }
+
     rb_node_t *node = &rb_node_pool[rb_node_pool_index++];
     memset(node, 0, sizeof(rb_node_t));
+
+    // Restore interrupts
+    interrupt_restore(flags);
+
+    print("CFS: Allocated RB node ");
+    print_hex_compact(rb_node_pool_index);
+    print("/");
+    print_hex_compact(MAX_RB_NODES);
+    print("\n");
+
     return node;
+}
+
+// NUEVA FUNCIÓN: Compactación del pool de nodos
+static void rb_compact_node_pool(void)
+{
+    LOG_OK("CFS: Compacting RB node pool...");
+
+    int write_index = 0;
+
+    // Compactar pool eliminando nodos libres
+    for (int read_index = 0; read_index < rb_node_pool_index; read_index++)
+    {
+        if (rb_node_pool[read_index].task != NULL)
+        {
+            if (write_index != read_index)
+            {
+                rb_node_pool[write_index] = rb_node_pool[read_index];
+                // Clear the old location
+                memset(&rb_node_pool[read_index], 0, sizeof(rb_node_t));
+            }
+            write_index++;
+        }
+    }
+
+    rb_node_pool_index = write_index;
+
+    print("CFS: Pool compacted to ");
+    print_hex_compact(rb_node_pool_index);
+    print("/");
+    print_hex_compact(MAX_RB_NODES);
+    print(" nodes\n");
 }
 
 static void rb_free_node(rb_node_t *node)
 {
-    // En un pool estático simple, solo marcar como libre
+    if (!node)
+    {
+        return;
+    }
+
+    uint32_t flags = interrupt_save_and_disable();
+
+    // Marcar como libre
     node->task = NULL;
     node->parent = node->left = node->right = NULL;
+    node->key = 0;
+    node->color = RB_RED;
+
+    // Restore interrupts
+    interrupt_restore(flags);
+
+    // Si el pool está muy fragmentado, compactar
+    static int free_calls = 0;
+    if (++free_calls >= 50)
+    { // Cada 50 liberaciones
+        free_calls = 0;
+        rb_compact_node_pool();
+    }
 }
 
 static void rb_rotate_left(rb_node_t **root, rb_node_t *node)
@@ -389,23 +505,55 @@ void cfs_add_task_impl(task_t *task)
         return;
     }
 
-    rb_node_t *node = rb_alloc_node();
-    if (!node)
+    // Verificar que el scheduler CFS esté activo
+    extern scheduler_type_t active_scheduler_type;
+    if (active_scheduler_type != SCHEDULER_CFS)
     {
-        LOG_ERR("CFS: Failed to allocate RB node");
+        LOG_WARN("CFS: Trying to add task to inactive CFS scheduler");
+        // Forward to active scheduler
+        extern void add_task(task_t * task);
+        add_task(task);
         return;
     }
 
-    // Inicializar vruntime para nuevas tareas
-    if (task->vruntime == 0)
+    uint32_t flags = interrupt_save_and_disable();
+
+    rb_node_t *node = rb_alloc_node();
+    if (!node)
     {
-        task->vruntime = cfs_rq.min_vruntime;
+        // Restore interrupts
+        interrupt_restore(flags);
+
+        LOG_ERR("CFS: Failed to allocate RB node for task PID ");
+        print_hex_compact(task->pid);
+        print("\n");
+
+        // Critical error: try fallback scheduling
+        LOG_WARN("CFS: Attempting scheduler fallback due to node exhaustion");
+        extern void scheduler_fallback_to_next(void);
+        scheduler_fallback_to_next();
+        return;
     }
 
-    // Garantizar que nuevas tareas no tengan ventaja injusta
-    if (task->vruntime < cfs_rq.min_vruntime)
+    // Inicializar vruntime para nuevas tareas con better logic
+    if (task->vruntime == 0)
     {
-        task->vruntime = cfs_rq.min_vruntime;
+        if (cfs_rq.nr_running > 0)
+        {
+            // Nueva tarea toma vruntime mínimo + small penalty para fairness
+            task->vruntime = cfs_rq.min_vruntime + (CFS_TARGETED_LATENCY / 2);
+        }
+        else
+        {
+            task->vruntime = cfs_rq.min_vruntime;
+        }
+    }
+
+    // Anti-starvation: garantizar que nuevas tareas no tengan ventaja injusta
+    uint64_t max_allowed_vruntime = cfs_rq.min_vruntime + CFS_TARGETED_LATENCY;
+    if (task->vruntime > max_allowed_vruntime)
+    {
+        task->vruntime = max_allowed_vruntime;
     }
 
     uint32_t weight = cfs_nice_to_weight(task->nice);
@@ -414,12 +562,18 @@ void cfs_add_task_impl(task_t *task)
     node->task = task;
     node->color = RB_RED;
 
+    // Insert with error checking
     rb_insert(&cfs_rq.root, node);
 
     // Actualizar leftmost si es necesario
     if (!cfs_rq.leftmost || task->vruntime < cfs_rq.leftmost->key)
     {
         cfs_rq.leftmost = node;
+        print("CFS: New leftmost task PID ");
+        print_hex_compact(task->pid);
+        print(", vruntime ");
+        print_hex64(task->vruntime);
+        print("\n");
     }
 
     cfs_rq.nr_running++;
@@ -427,7 +581,18 @@ void cfs_add_task_impl(task_t *task)
 
     task->state = TASK_READY;
 
-    LOG_OK("CFS: Task added to runqueue");
+    // Restore interrupts
+    interrupt_restore(flags);
+
+    print("CFS: Task PID ");
+    print_hex_compact(task->pid);
+    print(" added (vruntime: ");
+    print_hex64(task->vruntime);
+    print(", weight: ");
+    print_hex_compact(weight);
+    print(", running: ");
+    print_hex_compact(cfs_rq.nr_running);
+    print(")\n");
 }
 
 void cfs_remove_task_impl(task_t *task)
@@ -490,6 +655,8 @@ static void cfs_task_tick(void)
     if (!current_running_task)
         return;
 
+    uint32_t flags = interrupt_save_and_disable();
+
     // Actualizar estadísticas del runqueue
     cfs_update_runqueue_stats();
     cfs_rq.exec_clock += 1000000; // Agregar tiempo transcurrido
@@ -505,30 +672,47 @@ static void cfs_task_tick(void)
     // Actualizar min_vruntime del runqueue
     cfs_update_min_vruntime();
 
-    // Verificar si necesitamos preempción
+    // Verificar si necesitamos preempción con improved logic
     bool should_preempt = false;
 
     if (cfs_rq.leftmost)
     {
-        // Preemptar si hay una tarea con vruntime significativamente menor
         uint64_t leftmost_vruntime = cfs_rq.leftmost->key;
         uint64_t current_vruntime = current_running_task->vruntime;
 
+        // Preemption conditions:
+
+        // 1. Fairness violation (otra tarea está muy atrás en vruntime)
         if (current_vruntime > leftmost_vruntime + cfs_rq.min_granularity)
         {
             should_preempt = true;
+            print("CFS: Preemption due to fairness (current: ");
+            print_hex64(current_vruntime);
+            print(", leftmost: ");
+            print_hex64(leftmost_vruntime);
+            print(")\n");
         }
 
-        // O si se agotó el time slice asignado
+        // 2. Time slice exhausted
         if (current_running_task->exec_time >= current_running_task->time_slice)
         {
             should_preempt = true;
+            print("CFS: Preemption due to time slice exhausted\n");
         }
 
-        // O si la diferencia de fairness es muy grande
-        if (current_vruntime > cfs_rq.avg_vruntime + cfs_rq.targeted_latency)
+        // 3. Severe unfairness (current task too far ahead)
+        if (current_vruntime > cfs_rq.avg_vruntime + (CFS_TARGETED_LATENCY * 2))
         {
             should_preempt = true;
+            print("CFS: Preemption due to severe unfairness\n");
+        }
+
+        // 4. Load balancing (si hay muchas tareas)
+        if (cfs_rq.nr_running > 4 &&
+            current_running_task->exec_time > (CFS_TARGETED_LATENCY / cfs_rq.nr_running))
+        {
+            should_preempt = true;
+            print("CFS: Preemption for load balancing\n");
         }
     }
 
@@ -538,11 +722,18 @@ static void cfs_task_tick(void)
         current_running_task->state = TASK_READY;
         current_running_task->context_switches++;
 
+        // Reset exec_time for next run
+        current_running_task->exec_time = 0;
+
+        // Re-add to CFS queue
         cfs_add_task_impl(current_running_task);
         current_running_task = NULL;
 
-        LOG_OK("CFS: Task preempted due to fairness/time slice");
+        LOG_OK("CFS: Task preempted due to scheduling policy");
     }
+
+    // Restore interrupts
+    interrupt_restore(flags);
 }
 
 static void cfs_cleanup(void)
