@@ -6,11 +6,50 @@
 #include <print.h>
 #include <panic/panic.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include "scheduler_types.h"
 #include "task.h"
 #include "scheduler.h"
 #define SCHEDULER_CONTEXT_SWITCH (1 << 0)
 unsigned int scheduler_flags = 0;
+
+// Architecture-aware interrupt protection
+#ifdef __x86_64__
+static inline uint32_t interrupt_save_and_disable(void)
+{
+    uint64_t flags;
+    __asm__ volatile("pushfq; cli; popq %0" : "=r"(flags)::"memory");
+    return (uint32_t)flags;
+}
+
+static inline void interrupt_restore(uint32_t flags)
+{
+    if (flags & 0x200)
+    { // IF flag was set
+        __asm__ volatile("sti" ::: "memory");
+    }
+}
+#else
+static inline uint32_t interrupt_save_and_disable(void)
+{
+    uint32_t flags;
+    __asm__ volatile("pushfl; cli; popl %0" : "=r"(flags)::"memory");
+    return flags;
+}
+
+static inline void interrupt_restore(uint32_t flags)
+{
+    if (flags & 0x200)
+    { // IF flag was set
+        __asm__ volatile("sti" ::: "memory");
+    }
+}
+#endif
+
+// Debug logging macro
+#ifndef LOG_DEBUG
+#define LOG_DEBUG(fmt, ...) print("DEBUG: " fmt "\n")
+#endif
 
 // Estructura privada del round-robin scheduler
 typedef struct
@@ -24,6 +63,80 @@ typedef struct
 
 static roundrobin_state_t rr_state;
 extern void switch_task(task_t *current, task_t *next);
+
+static bool validate_circular_list(task_t *head)
+{
+    if (!head)
+        return true; // Lista vacía es válida
+
+    task_t *slow = head;
+    task_t *fast = head;
+    int count = 0;
+
+    while (slow != fast && fast != head && fast->next != head)
+        ;
+    {
+        if (!slow || !fast || !fast->next)
+        {
+            return false; // NULL pointer encontrado
+        }
+
+        slow = slow->next;
+        fast = fast->next->next;
+        count++;
+
+        if (count > MAX_TASKS)
+        {
+            return false; // Lista demasiado larga
+        }
+    }
+
+    return slow == fast || fast == head || fast->next == head;
+}
+
+static void remove_task_from_queue(task_t *task_to_remove)
+{
+    if (!task_to_remove || !rr_state.ready_queue)
+    {
+        return;
+    }
+
+    // Si es la única tarea
+    if (rr_state.ready_queue->next == rr_state.ready_queue)
+    {
+        if (rr_state.ready_queue == task_to_remove)
+        {
+            rr_state.ready_queue = NULL;
+        }
+        
+        return;
+    }
+
+    // Buscar el nodo anterior al que queremos remover
+    task_t *current = rr_state.ready_queue;
+    task_t *prev = NULL;
+
+    while (current != rr_state.ready_queue)
+    {
+        if (current->next == task_to_remove)
+        {
+            prev = current;
+            break;
+        }
+        current = current->next;
+    }
+
+    if (prev)
+    {
+        prev->next = task_to_remove->next;
+
+        // Si removemos el head, actualizar ready_queue
+        if (rr_state.ready_queue == task_to_remove)
+        {
+            rr_state.ready_queue = task_to_remove->next;
+        }
+    }
+}
 
 static void rr_init(void)
 {
@@ -45,9 +158,14 @@ static void rr_add_task(task_t *task)
 
     if (task->state == TASK_TERMINATED)
     {
-        LOG_WARN("rr_add_task: trying to add terminated task");
+        print("RR: WARNING - trying to add terminated task PID ");
+        print_hex_compact(task->pid);
+        print("\n");
         return;
     }
+
+    // CRITICAL: Disable interrupts for atomic operation
+    uint32_t flags = interrupt_save_and_disable();
 
     task->state = TASK_READY;
 
@@ -56,32 +174,59 @@ static void rr_add_task(task_t *task)
         // Primera tarea: crear lista circular de 1 elemento
         rr_state.ready_queue = task;
         task->next = task;
-        LOG_OK("Primera tarea agregada al RR scheduler");
+        rr_state.task_count = 1;
+        print("RR: First task PID ");
+        print_hex_compact(task->pid);
+        print(" added to queue\n");
     }
     else
     {
+        // Validar integridad de la lista circular ANTES de modificar
+        if (!validate_circular_list(rr_state.ready_queue))
+        {
+            interrupt_restore(flags);
+            panic("RR: Corrupted ready queue detected in add_task!");
+        }
+
         // Buscar el último nodo de la lista circular
         task_t *last = rr_state.ready_queue;
+        int safety_counter = 0;
 
-        while (last->next != rr_state.ready_queue)
+        while (last->next != rr_state.ready_queue && safety_counter < MAX_TASKS)
         {
             last = last->next;
-            // Protección contra listas corruptas
+            safety_counter++;
+
             if (!last || !last->next)
             {
-                LOG_ERR("Corrupted ready queue detected!");
-                panic("RR Scheduler corruption detected");
-                return;
+                interrupt_restore(flags);
+                LOG_ERR("RR: NULL pointer in ready queue at position ");
+                print_hex_compact(safety_counter);
+                print("\n");
+                panic("RR: Ready queue corruption detected!");
             }
+        }
+
+        if (safety_counter >= MAX_TASKS)
+        {
+            interrupt_restore(flags);
+            LOG_ERR("RR: Infinite loop detected in ready queue");
+            panic("RR: Ready queue infinite loop!");
         }
 
         // Insertar nueva tarea al final
         last->next = task;
         task->next = rr_state.ready_queue;
-        LOG_OK("Nueva tarea agregada al RR scheduler");
+        rr_state.task_count++;
+
+        print("RR: Task PID ");
+        print_hex_compact(task->pid);
+        print(" added to queue (total: ");
+        print_hex_compact(rr_state.task_count);
+        print(" tasks)\n");
     }
 
-    rr_state.task_count++;
+    interrupt_restore(flags);
 }
 
 static task_t *rr_pick_next_task(void)
@@ -94,7 +239,7 @@ static task_t *rr_pick_next_task(void)
     // Buscar próximo proceso READY
     task_t *next_task = rr_state.ready_queue;
     int attempts = 0;
-    
+
     // itero si las tareas no son ready y no me paso de MAX_TASKS
     while (next_task->state != TASK_READY && attempts < MAX_TASKS)
     {
@@ -110,7 +255,7 @@ static task_t *rr_pick_next_task(void)
     }
 
     // Si la tarea encontrada es la actual, retorno NULL
-    if(next_task == rr_state.current_task)
+    if (next_task == rr_state.current_task)
     {
         return NULL;
     }
@@ -140,28 +285,69 @@ static void rr_task_tick(void)
         return;
     }
 
+    uint32_t flags = interrupt_save_and_disable();
+
     rr_state.current_ticks++;
 
+    // Update task statistics
+    rr_state.current_task->exec_time += 1000000; // 1ms
+    rr_state.current_task->total_runtime += 1000000;
+
     // Verificar si se agotó el time slice
+    bool should_preempt = false;
+
     if (rr_state.current_ticks >= rr_state.time_slice)
+    {
+        should_preempt = true;
+        print("RR: Time slice expired for task PID ");
+        print_hex_compact(rr_state.current_task->pid);
+        print("\n");
+    }
+
+    // También preemptar si hay tareas de mayor prioridad esperando
+    if (rr_state.task_count > 1 && rr_state.current_ticks >= (rr_state.time_slice / 2))
+    {
+        task_t *peek_next = rr_state.ready_queue;
+        
+        if (peek_next && peek_next->priority > rr_state.current_task->priority)
+        {
+            should_preempt = true;
+            print("RR: Higher priority task available\n");
+        }
+    }
+
+    if (should_preempt && rr_state.task_count >= 0)
     {
         rr_state.current_ticks = 0;
 
+        task_t *current_task = rr_state.current_task;
         task_t *next_task = rr_pick_next_task();
 
-        if(next_task == rr_state.current_task)
+        if (next_task && next_task != current_task)
         {
-            return;
-        }
-        
-        if (!next_task)
-        {
-            return;
-        }    
+            // Re-add current task to queue
+            current_task->state = TASK_READY;
+            current_task->context_switches++;
 
-        switch_task(rr_state.current_task, next_task);
-        
+            // Switch to next task
+            rr_state.current_task = next_task;
+            next_task->state = TASK_RUNNING;
+
+            print("RR: Switched from PID ");
+            print_hex_compact(current_task->pid);
+            print(" to PID ");
+            print_hex_compact(next_task->pid);
+            print("\n");
+
+            // Re-add current task back to queue for next round
+            rr_add_task(current_task);
+
+            extern void switch_context_x64(task_t * current, task_t * next);
+            switch_context_x64(current_task, next_task);
+        }
     }
+
+    interrupt_restore(flags);
 }
 
 static void rr_cleanup(void)
@@ -191,5 +377,4 @@ scheduler_ops_t roundrobin_scheduler_ops =
         .pick_next_task = rr_pick_next_task,
         .task_tick = rr_task_tick,
         .cleanup = rr_cleanup,
-        .private_data = &rr_state
-    };
+        .private_data = &rr_state};
