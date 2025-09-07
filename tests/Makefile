@@ -12,7 +12,7 @@ endif
 CFLAGS += -I../includes -I../includes/ir0 -I../memory -I../fs
 
 # Objetos
-OBJS = test_suite.o
+OBJS = ctx_test.o
 
 all: $(OBJS)
 	@echo "\033[1;32m============================================================\033[0m"
