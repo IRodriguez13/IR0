@@ -16,7 +16,8 @@ DEFAULT_ARCH="x86-64"
 DEFAULT_STRATEGY="desktop"
 
 # Función para mostrar ayuda
-show_help() {
+show_help() 
+{
     echo -e "${CYAN}IR0 Kernel - Strategy Builder${NC}"
     echo ""
     echo "Uso: $0 [OPCIONES]"
@@ -45,7 +46,8 @@ show_help() {
 }
 
 # Función para mostrar información de estrategia
-show_strategy_info() {
+show_strategy_info() 
+{
     local strategy=$1
     
     echo -e "${CYAN}========================================${NC}"
@@ -180,7 +182,8 @@ show_strategy_info() {
 }
 
 # Función para validar estrategia
-validate_strategy() {
+validate_strategy() 
+{
     local strategy=$1
     case $strategy in
         "desktop"|"server"|"iot"|"embedded")
@@ -193,7 +196,8 @@ validate_strategy() {
 }
 
 # Función para validar arquitectura
-validate_arch() {
+validate_arch() 
+{
     local arch=$1
     case $arch in
         "x86-32"|"x86-64"|"arm32"|"arm64")
@@ -206,7 +210,8 @@ validate_arch() {
 }
 
 # Función para compilar con estrategia
-compile_with_strategy() {
+compile_with_strategy() 
+{
     local arch=$1
     local strategy=$2
     local clean=$3
@@ -260,7 +265,8 @@ compile_with_strategy() {
 }
 
 # Función para ejecutar en QEMU
-run_in_qemu() {
+run_in_qemu() 
+{
     local arch=$1
     local strategy=$2
     local show_logs=$3

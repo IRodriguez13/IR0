@@ -44,7 +44,8 @@ The Drivers Subsystem provides hardware abstraction and device management framew
 #define PIT_COMMAND 0x43  // Command port
 
 // Initialize PIT
-void init_PIT(uint32_t frequency) {
+void init_PIT(uint32_t frequency) 
+{
     uint32_t divisor = PIT_FREQ / frequency;
     outb(PIT_COMMAND, 0x36);  // Mode 3, 16-bit
     outb(PIT_CHANNEL0, divisor & 0xFF);
@@ -55,7 +56,8 @@ void init_PIT(uint32_t frequency) {
 #### HPET (High Precision Event Timer)
 ```c
 // HPET Configuration
-struct hpet_config {
+struct hpet_config 
+{
     uint64_t base_address;     // HPET base address
     uint32_t capabilities;     // HPET capabilities
     uint32_t period;           // Timer period in femtoseconds
@@ -63,7 +65,8 @@ struct hpet_config {
 };
 
 // Initialize HPET
-int init_HPET(void) {
+int init_HPET(void) 
+{
     // Find HPET in ACPI tables
     struct acpi_hpet* hpet = find_hpet();
     if (!hpet) return -1;
@@ -87,7 +90,8 @@ int init_HPET(void) {
 #define LAPIC_ICR_HIGH 0x310
 
 // Initialize LAPIC
-void init_LAPIC(void) {
+void init_LAPIC(void) 
+{
     // Enable LAPIC
     write_lapic_register(LAPIC_SIVR, 0x100 | 0xFF);
     
@@ -101,19 +105,26 @@ void init_LAPIC(void) {
 #### Automatic Timer Selection
 ```c
 // Clock detection and selection
-typedef enum {
+typedef enum 
+{
     CLOCK_TIMER_PIT,    // Legacy PIT
     CLOCK_TIMER_HPET,   // High Precision Event Timer
     CLOCK_TIMER_LAPIC   // Local APIC Timer
 } clock_timer_t;
 
 // Detect best available timer
-clock_timer_t detect_best_clock(void) {
-    if (is_lapic_available()) {
+clock_timer_t detect_best_clock(void) 
+{
+    if (is_lapic_available()) 
+    {
         return CLOCK_TIMER_LAPIC;
-    } else if (is_hpet_available()) {
+    } 
+    else if (is_hpet_available()) 
+    {
         return CLOCK_TIMER_HPET;
-    } else {
+    } 
+    else 
+    {
         return CLOCK_TIMER_PIT;
     }
 }
@@ -122,7 +133,8 @@ clock_timer_t detect_best_clock(void) {
 #### Clock System Management
 ```c
 // Clock system state
-struct clock_system {
+struct clock_system 
+{
     clock_timer_t active_timer;
     uint32_t frequency;
     uint64_t ticks;
@@ -133,12 +145,14 @@ struct clock_system {
 };
 
 // Initialize clock system
-int clock_system_init(void) {
+int clock_system_init(void) 
+{
     // Detect best timer
     clock_timer_t best = detect_best_clock();
     
     // Initialize selected timer
-    switch (best) {
+    switch (best) 
+    {
         case CLOCK_TIMER_LAPIC:
             return init_LAPIC();
         case CLOCK_TIMER_HPET:
@@ -156,7 +170,8 @@ int clock_system_init(void) {
 #### Block Device Interface
 ```c
 // Block device structure
-struct block_device {
+struct block_device 
+{
     char name[32];
     uint64_t size;
     uint32_t block_size;
@@ -167,13 +182,15 @@ struct block_device {
 };
 
 // Register block device
-int register_block_device(struct block_device* device) {
+int register_block_device(struct block_device* device) 
+{
     // Add to device list
     return add_block_device(device);
 }
 
 // Read from block device
-int block_read(struct block_device* device, uint64_t offset, void* buffer, size_t size) {
+int block_read(struct block_device* device, uint64_t offset, void* buffer, size_t size) 
+{
     return device->read(device, offset, buffer, size);
 }
 ```
@@ -181,7 +198,8 @@ int block_read(struct block_device* device, uint64_t offset, void* buffer, size_
 #### ATA/IDE Support
 ```c
 // ATA device structure
-struct ata_device {
+struct ata_device 
+{
     uint16_t base_port;
     uint16_t control_port;
     bool is_master;
@@ -191,9 +209,11 @@ struct ata_device {
 };
 
 // Initialize ATA device
-int init_ATA_device(struct ata_device* device) {
+int init_ATA_device(struct ata_device* device) 
+{
     // Detect device
-    if (!ata_detect_device(device)) {
+    if (!ata_detect_device(device)) 
+    {
         return -1;
     }
     
@@ -209,7 +229,8 @@ int init_ATA_device(struct ata_device* device) {
 #### Serial Port Support
 ```c
 // Serial port configuration
-struct serial_port {
+struct serial_port 
+{
     uint16_t base_port;
     uint32_t baud_rate;
     uint8_t data_bits;
@@ -219,7 +240,8 @@ struct serial_port {
 };
 
 // Initialize serial port
-int init_serial_port(struct serial_port* port) {
+int init_serial_port(struct serial_port* port) 
+{
     // Configure UART
     outb(port->base_port + 3, 0x80);  // Enable DLAB
     
@@ -238,7 +260,8 @@ int init_serial_port(struct serial_port* port) {
 #### VGA Support
 ```c
 // VGA configuration
-struct vga_config {
+struct vga_config 
+{
     uint16_t width;
     uint16_t height;
     uint8_t depth;
@@ -247,11 +270,15 @@ struct vga_config {
 };
 
 // Initialize VGA
-int init_VGA(struct vga_config* config) {
+int init_VGA(struct vga_config* config) 
+{
     // Set video mode
-    if (config->text_mode) {
+    if (config->text_mode) 
+    {
         set_text_mode();
-    } else {
+    } 
+    else 
+    {
         set_graphics_mode(config->width, config->height, config->depth);
     }
     
@@ -267,7 +294,8 @@ int init_VGA(struct vga_config* config) {
 #### Driver Registration
 ```c
 // Driver structure
-struct driver {
+struct driver 
+{
     char name[32];
     uint32_t version;
     int (*init)(void*);
@@ -276,25 +304,30 @@ struct driver {
 };
 
 // Register driver
-int register_driver(struct driver* driver) {
+int register_driver(struct driver* driver) 
+{
     // Add to driver list
     return add_driver(driver);
 }
 
 // Initialize all drivers
-int init_all_drivers(void) {
+int init_all_drivers(void) 
+{
     // Initialize timer drivers
-    if (clock_system_init() != 0) {
+    if (clock_system_init() != 0) 
+    {
         return -1;
     }
     
     // Initialize storage drivers
-    if (init_storage_drivers() != 0) {
+    if (init_storage_drivers() != 0) 
+    {
         return -1;
     }
     
     // Initialize I/O drivers
-    if (init_io_drivers() != 0) {
+    if (init_io_drivers() != 0) 
+    {
         return -1;
     }
     
@@ -325,7 +358,8 @@ int init_all_drivers(void) {
 
 #### Driver Configuration
 ```c
-struct driver_config {
+struct driver_config 
+{
     bool enable_pit;           // Enable PIT timer
     bool enable_hpet;          // Enable HPET timer
     bool enable_lapic;         // Enable LAPIC timer
@@ -340,7 +374,8 @@ struct driver_config {
 #### Hardware Detection
 ```c
 // Detect available hardware
-struct hardware_info {
+struct hardware_info 
+{
     bool has_pit;
     bool has_hpet;
     bool has_lapic;
@@ -415,7 +450,8 @@ El Subsistema de Drivers proporciona framework de abstracción de hardware y ges
 #define PIT_COMMAND 0x43  // Puerto de comando
 
 // Inicializar PIT
-void init_PIT(uint32_t frequency) {
+void init_PIT(uint32_t frequency) 
+{
     uint32_t divisor = PIT_FREQ / frequency;
     outb(PIT_COMMAND, 0x36);  // Modo 3, 16-bit
     outb(PIT_CHANNEL0, divisor & 0xFF);
@@ -426,7 +462,8 @@ void init_PIT(uint32_t frequency) {
 #### HPET (High Precision Event Timer)
 ```c
 // Configuración HPET
-struct hpet_config {
+struct hpet_config 
+{
     uint64_t base_address;     // Dirección base HPET
     uint32_t capabilities;     // Capacidades HPET
     uint32_t period;           // Período del timer en femtosegundos
@@ -434,7 +471,8 @@ struct hpet_config {
 };
 
 // Inicializar HPET
-int init_HPET(void) {
+int init_HPET(void) 
+{
     // Buscar HPET en tablas ACPI
     struct acpi_hpet* hpet = find_hpet();
     if (!hpet) return -1;
@@ -458,7 +496,8 @@ int init_HPET(void) {
 #define LAPIC_ICR_HIGH 0x310
 
 // Inicializar LAPIC
-void init_LAPIC(void) {
+void init_LAPIC(void) 
+{
     // Habilitar LAPIC
     write_lapic_register(LAPIC_SIVR, 0x100 | 0xFF);
     
@@ -472,19 +511,26 @@ void init_LAPIC(void) {
 #### Selección Automática de Timer
 ```c
 // Detección y selección de reloj
-typedef enum {
+typedef enum 
+{
     CLOCK_TIMER_PIT,    // PIT legacy
     CLOCK_TIMER_HPET,   // High Precision Event Timer
     CLOCK_TIMER_LAPIC   // Local APIC Timer
 } clock_timer_t;
 
 // Detectar mejor timer disponible
-clock_timer_t detect_best_clock(void) {
-    if (is_lapic_available()) {
+clock_timer_t detect_best_clock(void) 
+{
+    if (is_lapic_available()) 
+    {
         return CLOCK_TIMER_LAPIC;
-    } else if (is_hpet_available()) {
+    } 
+    else if (is_hpet_available()) 
+    {
         return CLOCK_TIMER_HPET;
-    } else {
+    } 
+    else 
+    {
         return CLOCK_TIMER_PIT;
     }
 }
@@ -493,7 +539,8 @@ clock_timer_t detect_best_clock(void) {
 #### Gestión del Sistema de Reloj
 ```c
 // Estado del sistema de reloj
-struct clock_system {
+struct clock_system 
+{
     clock_timer_t active_timer;
     uint32_t frequency;
     uint64_t ticks;
@@ -504,12 +551,14 @@ struct clock_system {
 };
 
 // Inicializar sistema de reloj
-int clock_system_init(void) {
+int clock_system_init(void) 
+{
     // Detectar mejor timer
     clock_timer_t best = detect_best_clock();
     
     // Inicializar timer seleccionado
-    switch (best) {
+    switch (best) 
+    {
         case CLOCK_TIMER_LAPIC:
             return init_LAPIC();
         case CLOCK_TIMER_HPET:
@@ -527,7 +576,8 @@ int clock_system_init(void) {
 #### Interfaz de Dispositivo de Bloque
 ```c
 // Estructura de dispositivo de bloque
-struct block_device {
+struct block_device 
+{
     char name[32];
     uint64_t size;
     uint32_t block_size;
@@ -538,13 +588,15 @@ struct block_device {
 };
 
 // Registrar dispositivo de bloque
-int register_block_device(struct block_device* device) {
+int register_block_device(struct block_device* device) 
+{
     // Añadir a lista de dispositivos
     return add_block_device(device);
 }
 
 // Leer de dispositivo de bloque
-int block_read(struct block_device* device, uint64_t offset, void* buffer, size_t size) {
+int block_read(struct block_device* device, uint64_t offset, void* buffer, size_t size) 
+{
     return device->read(device, offset, buffer, size);
 }
 ```
@@ -552,7 +604,8 @@ int block_read(struct block_device* device, uint64_t offset, void* buffer, size_
 #### Soporte ATA/IDE
 ```c
 // Estructura de dispositivo ATA
-struct ata_device {
+struct ata_device 
+{
     uint16_t base_port;
     uint16_t control_port;
     bool is_master;
@@ -562,9 +615,11 @@ struct ata_device {
 };
 
 // Inicializar dispositivo ATA
-int init_ATA_device(struct ata_device* device) {
+int init_ATA_device(struct ata_device* device) 
+{
     // Detectar dispositivo
-    if (!ata_detect_device(device)) {
+    if (!ata_detect_device(device)) 
+    {
         return -1;
     }
     
@@ -580,7 +635,8 @@ int init_ATA_device(struct ata_device* device) {
 #### Soporte de Puerto Serial
 ```c
 // Configuración de puerto serial
-struct serial_port {
+struct serial_port 
+{
     uint16_t base_port;
     uint32_t baud_rate;
     uint8_t data_bits;
@@ -590,7 +646,8 @@ struct serial_port {
 };
 
 // Inicializar puerto serial
-int init_serial_port(struct serial_port* port) {
+int init_serial_port(struct serial_port* port) 
+{
     // Configurar UART
     outb(port->base_port + 3, 0x80);  // Habilitar DLAB
     
@@ -609,7 +666,8 @@ int init_serial_port(struct serial_port* port) {
 #### Soporte VGA
 ```c
 // Configuración VGA
-struct vga_config {
+struct vga_config 
+{
     uint16_t width;
     uint16_t height;
     uint8_t depth;
@@ -618,11 +676,15 @@ struct vga_config {
 };
 
 // Inicializar VGA
-int init_VGA(struct vga_config* config) {
+int init_VGA(struct vga_config* config) 
+{
     // Establecer modo de video
-    if (config->text_mode) {
+    if (config->text_mode) 
+    {
         set_text_mode();
-    } else {
+    } 
+    else 
+    {
         set_graphics_mode(config->width, config->height, config->depth);
     }
     
@@ -638,7 +700,8 @@ int init_VGA(struct vga_config* config) {
 #### Registro de Drivers
 ```c
 // Estructura de driver
-struct driver {
+struct driver 
+{
     char name[32];
     uint32_t version;
     int (*init)(void*);
@@ -647,25 +710,30 @@ struct driver {
 };
 
 // Registrar driver
-int register_driver(struct driver* driver) {
+int register_driver(struct driver* driver) 
+{
     // Añadir a lista de drivers
     return add_driver(driver);
 }
 
 // Inicializar todos los drivers
-int init_all_drivers(void) {
+int init_all_drivers(void) 
+{
     // Inicializar drivers de timer
-    if (clock_system_init() != 0) {
+    if (clock_system_init() != 0) 
+    {
         return -1;
     }
     
     // Inicializar drivers de almacenamiento
-    if (init_storage_drivers() != 0) {
+    if (init_storage_drivers() != 0) 
+    {
         return -1;
     }
     
     // Inicializar drivers de I/O
-    if (init_io_drivers() != 0) {
+    if (init_io_drivers() != 0) 
+    {
         return -1;
     }
     
@@ -696,7 +764,8 @@ int init_all_drivers(void) {
 
 #### Configuración de Drivers
 ```c
-struct driver_config {
+struct driver_config 
+{
     bool enable_pit;           // Habilitar timer PIT
     bool enable_hpet;          // Habilitar timer HPET
     bool enable_lapic;         // Habilitar timer LAPIC
@@ -711,7 +780,8 @@ struct driver_config {
 #### Detección de Hardware
 ```c
 // Detectar hardware disponible
-struct hardware_info {
+struct hardware_info 
+{
     bool has_pit;
     bool has_hpet;
     bool has_lapic;
