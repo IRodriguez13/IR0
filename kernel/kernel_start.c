@@ -106,6 +106,7 @@ void main(void)
     // SUBSYSTEM INITIALIZATION
     // ===============================================================================
     log_subsystem_ok("GDT initialized");
+    delay_ms(1500);
     log_subsystem_ok("TSS initialized");
     // Logging system
     extern void logging_init(void);

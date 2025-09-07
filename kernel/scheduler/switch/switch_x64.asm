@@ -20,7 +20,7 @@ switch_context_x64:
     ; Function prologue
     push rbp
     mov rbp, rsp
-    
+
     ; Save current task state
     ; rdi = current task, rsi = next task
     
@@ -30,7 +30,8 @@ switch_context_x64:
     mov qword [rdi + 0x10], rcx    ; Save RCX
     mov qword [rdi + 0x18], rdx    ; Save RDX
     mov qword [rdi + 0x20], rsi    ; Save RSI
-    mov qword [rdi + 0x28], rdi    ; Save RDI
+    mov rax, rdi
+    mov qword [rdi + 0x28], rax    ; Save RDI
     mov qword [rdi + 0x30], r8     ; Save R8
     mov qword [rdi + 0x38], r9     ; Save R9
     mov qword [rdi + 0x40], r10    ; Save R10
@@ -162,6 +163,8 @@ switch_task:
 ; ===============================================================================
 ; void switch_to_user_mode_x64(void *user_stack, void *user_entry)
 ; Switches from kernel mode to user mode
+
+
 
 switch_to_user_mode_x64:
     ; Function prologue

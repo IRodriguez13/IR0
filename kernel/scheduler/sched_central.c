@@ -1,5 +1,5 @@
 // ===============================================================================
-// SCHEDULER CENTRAL IMPLEMENTATION WITH REAL FUNCTIONALITY
+// SCHEDULER CENTRAL IMPLEMENTATION
 // ===============================================================================
 
 #include "scheduler.h"
@@ -365,7 +365,7 @@ static void scheduler_health_check(void)
 
     // Check for common problems
 
-    // 1. Check if scheduler is stuck
+    //  Check if scheduler is stuck
     static uint32_t last_context_switch_count = 0;
     uint32_t total_context_switches = 0;
 
@@ -380,7 +380,7 @@ static void scheduler_health_check(void)
     }
     last_context_switch_count = total_context_switches;
 
-    // 2. Check for memory leaks in task management
+    //  Check for memory leaks in task management
     uint32_t active_tasks = get_task_count();
     if (active_tasks > 1000)
     {
@@ -389,16 +389,6 @@ static void scheduler_health_check(void)
         print("\n");
     }
 
-    // 3. Validate current task if exists
-    // if (scheduler_state.current_task)
-    // {
-    //     if (!validate_task_stack(scheduler_state.current_task))
-    //     {
-    //         LOG_ERR("SCHEDULER: Current task stack corruption detected!");
-    //         // Force task termination
-    //         scheduler_state.current_task->state = TASK_TERMINATED;
-    //     }
-    // }
 }
 
 void scheduler_tick(void)
@@ -685,7 +675,7 @@ void scheduler_switch_task(task_t *new_task)
 
         // CRÍTICO: No usar la tarea terminada para context switch
         // El assembly switch_context_x64 necesita registros válidos
-        old_task = NULL; // Forzar NULL para que assembly maneje correctamente
+        old_task = get_idle_task(); // Forzar NULL para que assembly maneje correctamente
 
         // Opcional: Usar idle task como placeholder
         // old_task = get_idle_task();
