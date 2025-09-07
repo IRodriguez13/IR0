@@ -38,6 +38,7 @@ section .text
 global _start
 extern kmain_x64
 
+; Segmento de texto principal
 _start:
     ; Multiboot check
     cmp eax, 0x2BADB002
@@ -75,7 +76,7 @@ _start:
     mov cr0, eax
 
     ; --------------------------
-    ; Cargar GDT mínima
+    ; Cargar GDT mínima, que después voy a reemplazar en gdt.c
     ; --------------------------
     lgdt [gdt_descriptor]
 
@@ -84,7 +85,7 @@ _start:
     ; --------------------------
     jmp CODE_SEL:modo_64bit
 
-.no_multiboot:
+.no_multiboot: ; panic por si se cae el multiboot
     mov dword [0xB8000], 0x4F4E4F4D  ; "MN"
     cli
     hlt
@@ -106,10 +107,10 @@ modo_64bit:
     ; Stack en rango mapeado
     mov rsp, 0x8FF00
 
-    ; Call a C
+    ; Salto al  kernel 
     call kmain_x64
 
-.halt:
+.halt: ; Si retorno panic en bajo  nivel.
     cli
     hlt
     jmp .halt
