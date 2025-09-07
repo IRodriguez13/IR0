@@ -59,7 +59,8 @@ void setup_and_enable_paging(void)
     asm volatile("mov %%cr0, %0" : "=r"(cr0));
     asm volatile("mov %%cr4, %0" : "=r"(cr4));
     
-    if (!(cr4 & (1 << 5))) {
+    if (!(cr4 & (1 << 5))) 
+    {
         // PAE no habilitado - fallo crítico
         return;
     }
@@ -86,9 +87,12 @@ void verify_paging_setup_safe(void)
     log_info("PAGING", "=== POST-PAGING VERIFICATION ===");
     
     // Ahora es seguro usar print porque el paging está activo
-    if (is_paging_enabled()) {
+    if (is_paging_enabled()) 
+    {
         log_info("PAGING", "✓ Paging is enabled");
-    } else {
+    } 
+    else 
+    {
         log_error("PAGING", "✗ Paging is NOT enabled");
         return;
     }
@@ -98,29 +102,41 @@ void verify_paging_setup_safe(void)
     log_info_fmt("PAGING", "CR3: 0x%llx", cr3);
     
     // Verificar que CR3 apunta a PML4
-    if (cr3 == (uint64_t)PML4) {
+    if (cr3 == (uint64_t)PML4) 
+    {
         log_info("PAGING", "✓ CR3 points to correct PML4");
-    } else {
+    } 
+    else 
+    {
         log_error("PAGING", "✗ CR3 points to wrong address");
     }
     
     // Verificar entradas críticas
-    if (PML4[0] & PAGE_PRESENT) {
+    if (PML4[0] & PAGE_PRESENT) 
+    {
         log_info("PAGING", "✓ PML4[0] is present");
-    } else {
+    } 
+    else 
+    {
         log_error("PAGING", "✗ PML4[0] is not present");
     }
     
-    if (PDPT[0] & PAGE_PRESENT) {
+    if (PDPT[0] & PAGE_PRESENT) 
+    {
         log_info("PAGING", "✓ PDPT[0] is present");
-    } else {
+    } 
+    else 
+    {
         log_error("PAGING", "✗ PDPT[0] is not present");
     }
     
     // Verificar primera entrada PD
-    if (PD[0] & PAGE_PRESENT && PD[0] & PAGE_SIZE_2MB_FLAG) {
+    if (PD[0] & PAGE_PRESENT && PD[0] & PAGE_SIZE_2MB_FLAG) 
+    {
         log_info("PAGING", "✓ PD[0] is present and 2MB page");
-    } else {
+    } 
+    else 
+    {
         log_error("PAGING", "✗ PD[0] is not properly configured");
     }
     
@@ -199,20 +215,23 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
     print("\n");
     
     // Mapear cada página
-    for (size_t offset = 0; offset < size; offset += 0x1000) {
+    for (size_t offset = 0; offset < size; offset += 0x1000) 
+    {
         uintptr_t virt_addr = virtual_start + offset;
         
         // Asignar página física usando kmalloc (simplificado)
         // En un kernel real, esto usaría un allocator de páginas físicas
         extern void *kmalloc(size_t size);
         uintptr_t phys_addr = (uintptr_t)kmalloc(0x1000);
-        if (phys_addr == 0) {
+        if (phys_addr == 0) 
+        {
             print("map_user_region: Failed to allocate physical page\n");
             return -1;
         }
         
         // Mapear la página
-        if (map_page(virt_addr, phys_addr, flags) != 0) {
+        if (map_page(virt_addr, phys_addr, flags) != 0) 
+        {
             print("map_user_region: Failed to map page\n");
             return -1;
         }
@@ -240,15 +259,18 @@ void print_paging_status(void)
 
 void dump_page_tables(void)
 {
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) 
+    {
         log_info_fmt("PAGING", "PML4[%d]: 0x%llx", i, PML4[i]);
     }
     
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) 
+    {
         log_info_fmt("PAGING", "PDPT[%d]: 0x%llx", i, PDPT[i]);
     }
     
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 8; i++) 
+    {
         log_info_fmt("PAGING", "PD[%d]: 0x%llx", i, PD[i]);
     }
 }
@@ -261,37 +283,44 @@ int verify_paging_integrity(void)
     log_info("PAGING", "=== PAGING INTEGRITY CHECK ===");
     
     // 1. Verificar que paging está habilitado
-    if (!is_paging_enabled()) {
+    if (!is_paging_enabled()) 
+    {
         log_error("PAGING", "Paging not enabled!");
         return 0;
     }
     
     // 2. Verificar que CR3 apunta a PML4
     uint64_t cr3 = get_current_page_directory();
-    if (cr3 != (uint64_t)PML4) {
+    if (cr3 != (uint64_t)PML4) 
+    {
         log_error_fmt("PAGING", "CR3 mismatch: 0x%llx != 0x%llx", cr3, (uint64_t)PML4);
         return 0;
     }
     
     // 3. Verificar entradas PML4
-    if ((PML4[0] & PAGE_PRESENT) == 0) {
+    if ((PML4[0] & PAGE_PRESENT) == 0) 
+    {
         log_error("PAGING", "PML4[0] not present!");
         return 0;
     }
     
     // 4. Verificar entradas PDPT
-    if ((PDPT[0] & PAGE_PRESENT) == 0) {
+    if ((PDPT[0] & PAGE_PRESENT) == 0) 
+    {
         log_error("PAGING", "PDPT[0] not present!");
         return 0;
     }
     
     // 5. Verificar entradas PD (primeras 8)
-    for (int i = 0; i < 8; i++) {
-        if ((PD[i] & PAGE_PRESENT) == 0) {
+    for (int i = 0; i < 8; i++) 
+    {
+        if ((PD[i] & PAGE_PRESENT) == 0) 
+        {
             log_error_fmt("PAGING", "PD[%d] not present!", i);
             return 0;
         }
-        if ((PD[i] & PAGE_SIZE_2MB_FLAG) == 0) {
+        if ((PD[i] & PAGE_SIZE_2MB_FLAG) == 0) 
+        {
             log_error_fmt("PAGING", "PD[%d] not 2MB page!", i);
             return 0;
         }

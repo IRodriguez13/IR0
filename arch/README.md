@@ -45,7 +45,8 @@ The Architecture Subsystem provides architecture-specific implementations and ab
 #define X86_32_KERNEL_BASE 0xC0000000
 
 // x86-32 page table entry
-typedef struct {
+typedef struct 
+{
     uint32_t present : 1;
     uint32_t rw : 1;
     uint32_t user : 1;
@@ -65,7 +66,8 @@ typedef struct {
 #define X86_64_KERNEL_BASE 0xFFFFFFFF80000000
 
 // x86-64 page table entry
-typedef struct {
+typedef struct 
+{
     uint64_t present : 1;
     uint64_t rw : 1;
     uint64_t user : 1;
@@ -203,7 +205,8 @@ long_mode:
 #### Architecture Awareness
 ```c
 // arch_awareness.h - Architecture detection
-typedef enum {
+typedef enum 
+{
     ARCH_UNKNOWN = 0,
     ARCH_X86_32,
     ARCH_X86_64,
@@ -212,7 +215,8 @@ typedef enum {
 } architecture_t;
 
 // Architecture capabilities
-struct arch_capabilities {
+struct arch_capabilities 
+{
     architecture_t arch;
     bool has_pae;
     bool has_sse;
@@ -224,16 +228,21 @@ struct arch_capabilities {
 };
 
 // Detect current architecture
-architecture_t detect_architecture(void) {
+architecture_t detect_architecture(void) 
+{
     // Check CPUID for x86
     uint32_t eax, ebx, ecx, edx;
     asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0));
     
-    if (eax >= 1) {
+    if (eax >= 1) 
+    {
         asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
-        if (edx & (1 << 29)) {  // Long mode support
+        if (edx & (1 << 29)) 
+        {  // Long mode support
             return ARCH_X86_64;
-        } else {
+        } 
+        else 
+        {
             return ARCH_X86_32;
         }
     }
@@ -247,12 +256,14 @@ architecture_t detect_architecture(void) {
 #### x86-32 Paging
 ```c
 // x86-32 paging implementation
-void x86_32_init_paging(void) {
+void x86_32_init_paging(void) 
+{
     // Clear page directory
     memset(page_directory, 0, sizeof(page_directory));
     
     // Identity map first 4MB
-    for (int i = 0; i < 1024; i++) {
+    for (int i = 0; i < 1024; i++) 
+    {
         page_directory[i] = (i * 4096) | 0x3;  // Present, RW, User
     }
     
@@ -270,7 +281,8 @@ void x86_32_init_paging(void) {
 #### x86-64 Paging
 ```c
 // x86-64 paging implementation
-void x86_64_init_paging(void) {
+void x86_64_init_paging(void) 
+{
     // Clear page tables
     memset(page_table_l4, 0, sizeof(page_table_l4));
     memset(page_table_l3, 0, sizeof(page_table_l3));
@@ -301,12 +313,14 @@ void x86_64_init_paging(void) {
 #### x86-32 IDT
 ```c
 // x86-32 IDT setup
-void x86_32_setup_idt(void) {
+void x86_32_setup_idt(void) 
+{
     // Clear IDT
     memset(idt, 0, sizeof(idt));
     
     // Set up interrupt gates
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++) 
+    {
         idt[i].offset_low = (uint16_t)((uint32_t)interrupt_handlers[i] & 0xFFFF);
         idt[i].selector = 0x08;  // Kernel code segment
         idt[i].zero = 0;
@@ -324,12 +338,14 @@ void x86_32_setup_idt(void) {
 #### x86-64 IDT
 ```c
 // x86-64 IDT setup
-void x86_64_setup_idt(void) {
+void x86_64_setup_idt(void) 
+{
     // Clear IDT
     memset(idt, 0, sizeof(idt));
     
     // Set up interrupt gates
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++) 
+    {
         idt[i].offset_low = (uint16_t)((uint64_t)interrupt_handlers[i] & 0xFFFF);
         idt[i].selector = 0x08;  // Kernel code segment
         idt[i].ist = 0;
@@ -366,7 +382,8 @@ void x86_64_setup_idt(void) {
 
 #### Architecture Configuration
 ```c
-struct arch_config {
+struct arch_config 
+{
     architecture_t target_arch;
     bool enable_pae;
     bool enable_sse;
@@ -454,7 +471,8 @@ El Subsistema de Arquitectura proporciona implementaciones y abstracciones espec
 #define X86_32_KERNEL_BASE 0xC0000000
 
 // Entrada de tabla de páginas x86-32
-typedef struct {
+typedef struct 
+{
     uint32_t present : 1;
     uint32_t rw : 1;
     uint32_t user : 1;
@@ -474,7 +492,8 @@ typedef struct {
 #define X86_64_KERNEL_BASE 0xFFFFFFFF80000000
 
 // Entrada de tabla de páginas x86-64
-typedef struct {
+typedef struct 
+{
     uint64_t present : 1;
     uint64_t rw : 1;
     uint64_t user : 1;
@@ -612,7 +631,8 @@ long_mode:
 #### Conciencia de Arquitectura
 ```c
 // arch_awareness.h - Detección de arquitectura
-typedef enum {
+typedef enum 
+{
     ARCH_UNKNOWN = 0,
     ARCH_X86_32,
     ARCH_X86_64,
@@ -621,7 +641,8 @@ typedef enum {
 } architecture_t;
 
 // Capacidades de arquitectura
-struct arch_capabilities {
+struct arch_capabilities 
+{
     architecture_t arch;
     bool has_pae;
     bool has_sse;
@@ -633,16 +654,21 @@ struct arch_capabilities {
 };
 
 // Detectar arquitectura actual
-architecture_t detect_architecture(void) {
+architecture_t detect_architecture(void) 
+{
     // Verificar CPUID para x86
     uint32_t eax, ebx, ecx, edx;
     asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0));
     
-    if (eax >= 1) {
+    if (eax >= 1) 
+    {
         asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
-        if (edx & (1 << 29)) {  // Soporte de long mode
+        if (edx & (1 << 29)) 
+        {  // Soporte de long mode
             return ARCH_X86_64;
-        } else {
+        } 
+        else 
+        {
             return ARCH_X86_32;
         }
     }
@@ -656,12 +682,14 @@ architecture_t detect_architecture(void) {
 #### Paginación x86-32
 ```c
 // Implementación de paginación x86-32
-void x86_32_init_paging(void) {
+void x86_32_init_paging(void) 
+{
     // Limpiar directorio de páginas
     memset(page_directory, 0, sizeof(page_directory));
     
     // Mapeo de identidad de primeros 4MB
-    for (int i = 0; i < 1024; i++) {
+    for (int i = 0; i < 1024; i++) 
+    {
         page_directory[i] = (i * 4096) | 0x3;  // Present, RW, User
     }
     
@@ -679,7 +707,8 @@ void x86_32_init_paging(void) {
 #### Paginación x86-64
 ```c
 // Implementación de paginación x86-64
-void x86_64_init_paging(void) {
+void x86_64_init_paging(void) 
+{
     // Limpiar tablas de páginas
     memset(page_table_l4, 0, sizeof(page_table_l4));
     memset(page_table_l3, 0, sizeof(page_table_l3));
@@ -696,7 +725,8 @@ void x86_64_init_paging(void) {
     page_table_l2[0] = (uint64_t)page_table_l1 | 0x3;
     
     // Mapeo de identidad de primeros 2MB
-    for (int i = 0; i < 512; i++) {
+    for (int i = 0; i < 512; i++) 
+    {
         page_table_l1[i] = (i * 4096) | 0x3;  // Present, RW, User
     }
     
@@ -710,12 +740,14 @@ void x86_64_init_paging(void) {
 #### IDT x86-32
 ```c
 // Configuración IDT x86-32
-void x86_32_setup_idt(void) {
+void x86_32_setup_idt(void) 
+{
     // Limpiar IDT
     memset(idt, 0, sizeof(idt));
     
     // Configurar puertas de interrupción
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++) 
+    {
         idt[i].offset_low = (uint16_t)((uint32_t)interrupt_handlers[i] & 0xFFFF);
         idt[i].selector = 0x08;  // Segmento de código kernel
         idt[i].zero = 0;
@@ -733,12 +765,14 @@ void x86_32_setup_idt(void) {
 #### IDT x86-64
 ```c
 // Configuración IDT x86-64
-void x86_64_setup_idt(void) {
+void x86_64_setup_idt(void) 
+{
     // Limpiar IDT
     memset(idt, 0, sizeof(idt));
     
     // Configurar puertas de interrupción
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++) 
+    {
         idt[i].offset_low = (uint16_t)((uint64_t)interrupt_handlers[i] & 0xFFFF);
         idt[i].selector = 0x08;  // Segmento de código kernel
         idt[i].ist = 0;
@@ -775,7 +809,8 @@ void x86_64_setup_idt(void) {
 
 #### Configuración de Arquitectura
 ```c
-struct arch_config {
+struct arch_config 
+{
     architecture_t target_arch;
     bool enable_pae;
     bool enable_sse;

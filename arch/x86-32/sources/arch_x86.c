@@ -61,7 +61,8 @@ extern void isr47_32(void);
 // ===============================================================================
 
 // Estructura de entrada IDT para 32-bit
-struct idt_entry32 {
+struct idt_entry32 
+{
     uint16_t offset_low;    // Bits 0-15 del offset
     uint16_t selector;      // Selector del segmento
     uint8_t zero;           // Siempre 0 en 32-bit
@@ -70,7 +71,8 @@ struct idt_entry32 {
 } __attribute__((packed));
 
 // Puntero IDT para 32-bit
-struct idt_ptr32 {
+struct idt_ptr32 
+{
     uint16_t limit;
     uint32_t base;
 } __attribute__((packed));
@@ -80,14 +82,16 @@ struct idt_ptr32 {
 // ===============================================================================
 
 // Función para leer un byte de un puerto
-static inline uint8_t inb(uint16_t port) {
+static inline uint8_t inb(uint16_t port) 
+{
     uint8_t ret;
     __asm__ volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
     return ret;
 }
 
 // Función para escribir un byte a un puerto
-static inline void outb(uint16_t port, uint8_t val) {
+static inline void outb(uint16_t port, uint8_t val) 
+{
     __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
 }
 
@@ -107,7 +111,8 @@ struct idt_entry32 idt[256];
 // ===============================================================================
 
 // Configurar entrada IDT
-static void idt_set_gate32(int num, uint32_t base, uint16_t sel, uint8_t flags) {
+static void idt_set_gate32(int num, uint32_t base, uint16_t sel, uint8_t flags) 
+{
     idt32[num].offset_low = base & 0xFFFF;
     idt32[num].offset_high = (base >> 16) & 0xFFFF;
     idt32[num].selector = sel;
@@ -116,7 +121,8 @@ static void idt_set_gate32(int num, uint32_t base, uint16_t sel, uint8_t flags) 
 }
 
 // Inicializar IDT
-void idt_init32_simple(void) {
+void idt_init32_simple(void) 
+{
     print("Inicializando IDT 32-bit...\n");
     
     // Configurar puntero IDT
@@ -124,7 +130,8 @@ void idt_init32_simple(void) {
     idt_ptr32.base = (uint32_t)&idt32;
     
     // Limpiar IDT completamente
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++) 
+    {
         idt_set_gate32(i, (uint32_t)isr0_32, 0x08, 0x8E);
     }
     
@@ -172,7 +179,8 @@ void idt_init32_simple(void) {
 }
 
 // Cargar IDT
-void idt_load32_simple(void) {
+void idt_load32_simple(void) 
+{
     print("Cargando IDT 32-bit...\n");
     __asm__ volatile("lidt %0" : : "m"(idt_ptr32));
     print("IDT 32-bit cargada\n");
@@ -183,7 +191,8 @@ void idt_load32_simple(void) {
 // ===============================================================================
 
 // Remapear PIC
-void pic_remap32_simple(void) {
+void pic_remap32_simple(void) 
+{
     print("Remapeando PIC 32-bit...\n");
     
     // ICW1: Inicializar PIC
@@ -227,18 +236,22 @@ static int keyboard_buffer_tail32 = 0;
 static int keyboard_buffer_count32 = 0;
 
 // Funciones de compatibilidad para el teclado
-void keyboard_buffer_clear(void) {
+void keyboard_buffer_clear(void) 
+{
     keyboard_buffer_head32 = 0;
     keyboard_buffer_tail32 = 0;
     keyboard_buffer_count32 = 0;
 }
 
-int keyboard_buffer_has_data(void) {
+int keyboard_buffer_has_data(void) 
+{
     return keyboard_buffer_count32 > 0;
 }
 
-char keyboard_buffer_get(void) {
-    if (keyboard_buffer_count32 > 0) {
+char keyboard_buffer_get(void) 
+{
+    if (keyboard_buffer_count32 > 0) 
+    {
         char c = keyboard_buffer32[keyboard_buffer_head32];
         keyboard_buffer_head32 = (keyboard_buffer_head32 + 1) % 256;
         keyboard_buffer_count32--;
@@ -252,7 +265,8 @@ char keyboard_buffer_get(void) {
 // ===============================================================================
 
 // Función de compatibilidad para pic_remap32
-void pic_remap32(void) {
+void pic_remap32(void) 
+{
     pic_remap32_simple();
 }
 
@@ -261,15 +275,18 @@ void pic_remap32(void) {
 // ===============================================================================
 
 // Handler de interrupciones
-void isr_handler32(uint32_t interrupt_number) {
+void isr_handler32(uint32_t interrupt_number) 
+{
     // Manejar excepciones críticas
-    if (interrupt_number < 32) {
+    if (interrupt_number < 32) 
+    {
         print("EXCEPCIÓN CRÍTICA: ");
         print_uint32(interrupt_number);
         print("\n");
         
         // Para excepciones críticas, loop infinito
-        if (interrupt_number == 8 || interrupt_number == 13 || interrupt_number == 14) {
+        if (interrupt_number == 8 || interrupt_number == 13 || interrupt_number == 14) 
+        {
             print("TRIPLE FAULT PREVENIDO - HALTING\n");
             __asm__ volatile("cli");
             __asm__ volatile("hlt");
@@ -277,22 +294,27 @@ void isr_handler32(uint32_t interrupt_number) {
     }
     
     // Manejar IRQs
-    if (interrupt_number >= 32 && interrupt_number <= 47) {
+    if (interrupt_number >= 32 && interrupt_number <= 47) 
+    {
         // Enviar EOI al PIC
-        if (interrupt_number >= 40) {
+        if (interrupt_number >= 40) 
+        {
             outb(0xA0, 0x20);  // Slave PIC
         }
         outb(0x20, 0x20);      // Master PIC
         
         // Manejar teclado (IRQ1)
-        if (interrupt_number == 33) {
+        if (interrupt_number == 33) 
+        {
             uint8_t scancode = inb(0x60);
             
             // Solo procesar teclas presionadas (bit 7 = 0)
-            if (!(scancode & 0x80)) {
+            if (!(scancode & 0x80)) 
+            {
                 // Convertir scancode a ASCII (versión simple)
                 char ascii = 0;
-                switch (scancode) {
+                switch (scancode) 
+                {
                     case 0x1E: ascii = 'a'; break;
                     case 0x30: ascii = 'b'; break;
                     case 0x2E: ascii = 'c'; break;
@@ -325,7 +347,8 @@ void isr_handler32(uint32_t interrupt_number) {
                     default: ascii = 0; break;
                 }
                 
-                if (ascii && keyboard_buffer_count32 < 256) {
+                if (ascii && keyboard_buffer_count32 < 256) 
+                {
                     keyboard_buffer32[keyboard_buffer_tail32] = ascii;
                     keyboard_buffer_tail32 = (keyboard_buffer_tail32 + 1) % 256;
                     keyboard_buffer_count32++;
@@ -362,7 +385,8 @@ void kmain_x32(void)
     // Verificar que estamos en modo protegido
     uint32_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
-    if (!(cr0 & 1)) {
+    if (!(cr0 & 1)) 
+    {
         print("ERROR: No estamos en modo protegido\n");
         __asm__ volatile("cli");
         __asm__ volatile("hlt");
@@ -371,7 +395,8 @@ void kmain_x32(void)
     // Verificar que tenemos stack válido
     uint32_t esp_val;
     __asm__ volatile("mov %%esp, %0" : "=r"(esp_val));
-    if (esp_val < 0x100000) {
+    if (esp_val < 0x100000) 
+    {
         print("ERROR: Stack inválido\n");
         __asm__ volatile("cli");
         __asm__ volatile("hlt");
@@ -399,7 +424,8 @@ void kmain_x32(void)
     uint32_t idt_base;
     uint16_t idt_limit;
     __asm__ volatile("sidt %0" : "=m"(idt_limit), "=m"(idt_base));
-    if (idt_base == 0) {
+    if (idt_base == 0) 
+    {
         print("ERROR: IDT no cargada correctamente\n");
         __asm__ volatile("cli");
         __asm__ volatile("hlt");

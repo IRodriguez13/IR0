@@ -17,7 +17,8 @@ typedef uint32_t uintptr_t;
 typedef int32_t intptr_t;
 
 // Tipo booleano
-typedef enum {
+typedef enum 
+{
     false = 0,
     true = 1
 } bool;

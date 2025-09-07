@@ -13,13 +13,15 @@ void _start(void) __attribute__((section(".text.boot")));
 void kmain_arm32(void);
 
 // Función simple de print para ARM
-void arm_print(const char *str) {
+void arm_print(const char *str) 
+{
     // Usar UART para output
     uart_puts(str);
 }
 
 // Función de entrada - llamada directamente por el bootloader
-void _start(void) {
+void _start(void) 
+{
     // Configuración mínima para ARM
     // Deshabilitar interrupciones
     __asm__ volatile("cpsid if");
