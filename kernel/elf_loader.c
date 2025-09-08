@@ -1,12 +1,6 @@
-// kernel/elf_loader.c - ELF Loader básico para el kernel IR0
-// Usando la infraestructura de memoria existente
-
 #include "elf_loader.h"
 #include <ir0/print.h>
-// #include "../memory/memo_interface.h"  // Comentado - no existe en esta rama
 #include <bump_allocator.h> // Usar bump_allocator directamente
-// #include "../memory/process_memo.h"  // Comentado - no existe en esta rama
-// #include "../memory/krnl_memo_layout.h"  // Comentado - no existe en esta rama
 #include "process/process.h"
 #include <fs/vfs.h>
 #include <print.h>
@@ -106,13 +100,6 @@ static int load_segment_from_file(vfs_file_t *elf_file, const elf64_phdr_t *phdr
     print(", offset=0x");
     print_hex(file_offset);
     print("\n");
-
-    // Calcular flags de página (comentado - no implementado en esta rama)
-    // uint32_t page_flags = PAGE_FLAG_PRESENT | PAGE_FLAG_USER;
-    // if (phdr->p_flags & PF_W)
-    //     page_flags |= PAGE_FLAG_WRITABLE;
-    // if (!(phdr->p_flags & PF_X))
-    //     page_flags |= PAGE_FLAG_NO_EXECUTE;
 
     // Mapear región en user space (comentado - no implementado en esta rama)
     // int result = map_user_region(pml4_phys, virt_addr, mem_size, page_flags);
@@ -270,14 +257,6 @@ int load_elf_program(const char *pathname, process_t *process)
     print("ELF header validated successfully\n");
     debug_elf_header(&header);
 
-    // Crear page directory para el proceso (comentado - no implementado en esta rama)
-    // uintptr_t pml4_phys = create_process_page_directory();
-    // if (!pml4_phys)
-    // {
-    //     print("Failed to create process page directory\n");
-    //     vfs_close(elf_file);
-    //     return -1;
-    // }
     uintptr_t pml4_phys = 0; // Stub - siempre exitoso
 
     // Leer program headers reales del archivo

@@ -5,14 +5,16 @@
 #include <stdint.h>
 
 // Login system configuration
-typedef struct {
+typedef struct
+{
     const char *correct_password;
     int max_attempts;
     bool case_sensitive;
 } login_config_t;
 
 // Login system state
-typedef struct {
+typedef struct
+{
     int attempts;
     bool authenticated;
     bool locked;
