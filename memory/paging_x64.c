@@ -223,9 +223,15 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
         // En un kernel real, esto usaría un allocator de páginas físicas
         extern void *kmalloc(size_t size);
         uintptr_t phys_addr = (uintptr_t)kmalloc(0x1000);
+        
+        print_paging_status();
+        delay_ms(5000);
+        
         if (phys_addr == 0) 
         {
             print("map_user_region: Failed to allocate physical page\n");
+            delay_ms(4000);
+            panic("Failed to allocate physical page");
             return -1;
         }
         
@@ -233,6 +239,8 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
         if (map_page(virt_addr, phys_addr, flags) != 0) 
         {
             print("map_user_region: Failed to map page\n");
+            delay_ms(4000);
+            panic("Failed to map page");
             return -1;
         }
     }
