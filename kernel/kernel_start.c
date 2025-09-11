@@ -88,14 +88,14 @@ void main(void)
     // Print professional banner
     print_colored("╔══════════════════════════════════════════════════════════════════════════════╗\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("║                                                                              ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_colored("║                                IR0 KERNEL v0.0.0 PRE-RELEASE                               ║\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("║                                     init routine                             ║\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    print_colored("║                      IR0 KERNEL v0.0.0 PRE-RELEASE                               ║\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    print_colored("║                              init routine                             ║\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
     print_colored("║                                                                              ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("║            Date: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored(date_str, VGA_COLOR_WHITE, VGA_COLOR_BLACK);
     print_colored("         Time: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored(time_str, VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("                 Arch: x86-64                              ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("          Arch: x86-64                              ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("║                                                                              ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("╚══════════════════════════════════════════════════════════════════════════════╝\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
@@ -233,29 +233,14 @@ static void enable_interrupts(void)
     interrupts_enabled = true;
 }
 
-// ===============================================================================
-// AUTHENTICATION INITIALIZATION
-// ===============================================================================
 
-// static void init_auth_system(void)
-// {
-//     auth_config_t config;
-//     config.max_attempts = 3;
-//     config.lockout_time = 0;
-//     config.require_password = false;
-//     config.case_sensitive = true;
-
-//     if (auth_init(&config) != 0)
-//     {
-//         panic("Authentication system initialization failed");
-//     }
-// }
 
 // ===============================================================================
 // USER SPACE PROCESS IMPLEMENTATION
 // ===============================================================================
 
 // User space program entry point (if needed in the future)
+
 
 // ===============================================================================
 // SCHEDULER INTEGRATION
@@ -309,16 +294,5 @@ static void user_start(void)
         panic("Login system initialization failed");
     }
 
-    // if we gonna pass into user space, we need use login only in ring 3, i know...
-
-    // // Authenticate user
-    // if (login_authenticate() == 0)
-    // {
-    //     // Clear keyboard buffer to prevent residual input from being interpreted as shell commands
-    //     extern void keyboard_buffer_clear(void);
-    //     keyboard_buffer_clear();
-
-    //     // Start shell after successful authentication
-    // }
     start_shell();
 }

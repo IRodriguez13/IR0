@@ -76,11 +76,9 @@ ISR_NOERRCODE 47  ; ATA2
 
 ; Stub para syscall (interrupción 0x80)
 global isr128_64
+extern syscall_entry_asm
 isr128_64:
-    cli                     ; Deshabilitar interrupciones
-    push qword 0            ; Código de error dummy
-    push qword 128          ; Número de interrupción (0x80 = 128)
-    jmp isr_common_stub_64  ; Ir al handler común
+    jmp syscall_entry_asm   
 
 ; Handler común para todas las interrupciones
 isr_common_stub_64:

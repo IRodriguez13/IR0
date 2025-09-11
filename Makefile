@@ -154,6 +154,7 @@ SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 KERNEL_BASE_OBJS = includes/ir0/print.o \
                    includes/ir0/logging.o \
                    includes/ir0/validation.o \
+				   arch/x86-64/sources/user_mode.o \
                    includes/string.o \
                    interrupt/arch/idt.o \
                    interrupt/arch/pic.o \
@@ -208,6 +209,7 @@ ifeq ($(ARCH),x86-64)
     ARCH_OBJS = arch/x86-64/sources/arch_x64.o \
 				arch/x86-64/sources/gdt.o \
                 arch/x86-64/asm/boot_x64.o \
+                arch/x86-64/asm/syscall_entry_64.o \
                 arch/x86-64/sources/idt_arch_x64.o \
                 arch/x86-64/sources/fault.o \
                 arch/x86-64/sources/tss_x64.o \
@@ -410,11 +412,6 @@ help:
 	@echo "  make ARCH=x86-32 all        - Build for x86-32"
 	@echo "  make ARCH=arm64 all         - Build for ARM64"
 	@echo "  make ARCH=arm32 all         - Build for ARM32"
-	@echo ""
-	@echo "🎮 Ejecución en QEMU:"
-	@echo "  make run-gui                - Run with GUI"
-	@echo "  make run-nographic          - Run without GUI (no recomended for debugging)"
-	@echo "  make run-test               - Run for testing (with timeout)"
 	@echo ""
 	@echo "💾 Comandos con disco virtual:"
 	@echo "  make create-disk            - Create virtual disk for Minix FS"

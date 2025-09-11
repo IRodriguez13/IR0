@@ -30,7 +30,7 @@ static char shell_read_char(void)
     {
         // Wait for character - busy wait instead of hlt to avoid issues
         for (volatile int i = 0; i < 1000; i++)
-        { 
+        {
             /* busy wait */
         }
     }
@@ -154,11 +154,11 @@ static int64_t shell_syscall(int syscall_number, uint64_t arg1, uint64_t arg2, u
     args.arg4 = 0;
     args.arg5 = 0;
     args.arg6 = 0;
-    
+
     // Llamar al handler de syscalls
     extern int64_t syscall_handler(uint64_t number, syscall_args_t *args);
     int64_t result = syscall_handler(syscall_number, &args);
-    
+
     return result;
 }
 
@@ -243,7 +243,6 @@ int shell_run(shell_context_t *ctx, shell_config_t *config)
         // Read line from keyboard
         int len = shell_read_line(line, SHELL_MAX_LINE_LENGTH);
 
-
         if (len > 0)
         {
             // Check if command is "exit" - handle directly
@@ -256,8 +255,7 @@ int shell_run(shell_context_t *ctx, shell_config_t *config)
                 scheduler_dispatch_loop();
                 // Should not reach here
             }
-            
-           
+
             // Process the line
             shell_process_line(ctx, config, line);
         }
@@ -834,6 +832,22 @@ static int shell_cmd_mkdir(shell_context_t *ctx, shell_config_t *config, char ar
     }
 }
 
+// Agregar esta función antes de la tabla de comandos
+static void cmd_usertest(shell_context_t *ctx, char **args)
+{
+    (void)ctx;
+    (void)args;
+
+    print("Testing user mode transition...\n");
+
+    extern void switch_to_user_mode(void *entry_point);
+    extern void test_user_function(void);
+
+    switch_to_user_mode(test_user_function);
+
+    print("Returned from user mode successfully!\n");
+}
+
 static int shell_cmd_rm(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
 {
     (void)ctx;
@@ -1178,8 +1192,7 @@ static int shell_cmd_halt(shell_context_t *ctx, shell_config_t *config, char arg
 
     shell_print_warning("Halting system...");
 
-    // TODO: Implement actual halt
-    // arch_halt();
+    cpu_wait();
 
     return 0;
 }
@@ -1191,13 +1204,13 @@ static int shell_cmd_exit(shell_context_t *ctx, shell_config_t *config, char arg
     (void)arg_count;
 
     shell_print_info("Exiting shell...");
-    
+
     // Llamar directamente al dispatch loop del scheduler
     extern void scheduler_dispatch_loop(void);
     scheduler_dispatch_loop();
-    
+
     panic("shell_cmd_exit: Should not reach here");
-    
+
     // Si llegamos aquí, algo salió mal
     ctx->running = 0;
     ctx->exit_code = 0;
@@ -1282,29 +1295,35 @@ static int shell_cmd_fsstatus(shell_context_t *ctx, shell_config_t *config, char
     (void)arg_count;
 
     shell_print_info("=== FILESYSTEM STATUS ===\n");
-    
+
     // Verificar estado de Minix FS
     extern bool minix_fs_is_working(void);
     extern bool minix_fs_is_available(void);
-    
-    if (minix_fs_is_available()) {
+
+    if (minix_fs_is_available())
+    {
         shell_print_success("✅ ATA Disk: AVAILABLE\n");
-        
-        if (minix_fs_is_working()) {
+
+        if (minix_fs_is_working())
+        {
             shell_print_success("✅ MINIX FS: WORKING - PERSISTENT STORAGE ENABLED\n");
             shell_print_info("📁 Directories and files will be saved to disk\n");
-        } else {
+        }
+        else
+        {
             shell_print_warning("⚠️  MINIX FS: INITIALIZED BUT NOT WORKING\n");
             shell_print_info("📁 Using memory-based fallback\n");
         }
-    } else {
+    }
+    else
+    {
         shell_print_error("❌ ATA Disk: NOT AVAILABLE\n");
         shell_print_info("📁 Using memory-based fallback only\n");
     }
-    
+
     shell_print_info("🔄 System will automatically choose the best available option\n");
     shell_print_info("========================\n");
-    
+
     return 0;
 }
 
@@ -1316,19 +1335,22 @@ static int shell_cmd_fork(shell_context_t *ctx, shell_config_t *config, char arg
     (void)arg_count;
 
     shell_print_info("FORK: Creating child process...\n");
-    
+
     // Llamar syscall fork
     int64_t result = shell_syscall(SYS_FORK, 0, 0, 0);
-    
-    if (result >= 0) {
+
+    if (result >= 0)
+    {
         shell_print_success("FORK: Child process created with PID: ");
         print_int32(result);
         shell_print("\n");
         shell_print_info("FORK: Both parent and child will continue execution\n");
-    } else {
+    }
+    else
+    {
         shell_print_error("FORK: Failed to create child process\n");
     }
-    
+
     return 0;
 }
 
@@ -1340,19 +1362,22 @@ static int shell_cmd_testproc(shell_context_t *ctx, shell_config_t *config, char
     (void)arg_count;
 
     shell_print_info("TESTPROC: Testing real process execution...\\n");
-    
+
     // Call process_exec to test user mode
     char *test_argv[] = {"test_program", NULL};
     char *test_envp[] = {NULL};
-    
+
     int result = process_exec("test_program", test_argv, test_envp);
-    
-    if (result >= 0) {
+
+    if (result >= 0)
+    {
         shell_print_success("TESTPROC: Process execution test completed\\n");
-    } else {
+    }
+    else
+    {
         shell_print_error("TESTPROC: Process execution test failed\\n");
     }
-    
+
     return 0;
 }
 
@@ -1366,22 +1391,27 @@ static int shell_cmd_ring(shell_context_t *ctx, shell_config_t *config, char arg
     // Read CS register to determine current privilege level
     uint16_t cs_register;
     __asm__ volatile("mov %%cs, %0" : "=r"(cs_register));
-    
+
     // Extract privilege level (bits 0-1)
     uint8_t current_ring = cs_register & 0x03;
-    
+
     // Simple, clear output
     shell_print("RING: ");
     print_uint32(current_ring);
-    
-    if (current_ring == 0) {
+
+    if (current_ring == 0)
+    {
         shell_print(" (Kernel Mode)\n");
-    } else if (current_ring == 3) {
+    }
+    else if (current_ring == 3)
+    {
         shell_print(" (User Mode)\n");
-    } else {
+    }
+    else
+    {
         shell_print(" (Unknown Mode)\n");
     }
-    
+
     return 0;
 }
 
@@ -1411,6 +1441,7 @@ static void shell_init_builtin_commands(void)
     shell_add_builtin_command("cp", "Copy file", shell_cmd_cp);
     shell_add_builtin_command("mv", "Move file", shell_cmd_mv);
     shell_add_builtin_command("kill", "Kill process", shell_cmd_kill);
+    shell_add_builtin_command("usertest", "Test user mode transition", cmd_usertest);
     shell_add_builtin_command("sleep", "Sleep for seconds", shell_cmd_sleep);
     shell_add_builtin_command("reboot", "Reboot system", shell_cmd_reboot);
     shell_add_builtin_command("halt", "Halt system", shell_cmd_halt);
@@ -1434,8 +1465,8 @@ static void shell_add_builtin_command(const char *name, const char *description,
         return;
     }
 
-    shell_builtin_commands[shell_builtin_count].name = (char*)name;
-    shell_builtin_commands[shell_builtin_count].description = (char*)description;
+    shell_builtin_commands[shell_builtin_count].name = (char *)name;
+    shell_builtin_commands[shell_builtin_count].description = (char *)description;
     shell_builtin_commands[shell_builtin_count].handler = handler;
 
     shell_builtin_count++;
@@ -1508,13 +1539,14 @@ void shell_start(void)
     // Initialize shell context and config
     shell_context_t ctx;
     shell_config_t config;
-    
+
     // Initialize shell
-    if (shell_init(&ctx, &config) != 0) {
+    if (shell_init(&ctx, &config) != 0)
+    {
         print_error("[ERROR] Failed to initialize shell\n");
         return;
     }
-    
+
     // Run shell interactive loop
     shell_run(&ctx, &config);
 }

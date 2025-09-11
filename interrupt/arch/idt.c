@@ -9,7 +9,8 @@ struct idt_entry64 idt[256];
 struct idt_ptr64 idt_ptr;
 
 // Función para configurar una entrada IDT en 64-bit
-void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags) {
+void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags)
+{
     idt[num].offset_low = (uint16_t)(base & 0xFFFF);
     idt[num].offset_mid = (uint16_t)((base >> 16) & 0xFFFF);
     idt[num].offset_high = (uint32_t)((base >> 32) & 0xFFFFFFFF);
@@ -20,12 +21,14 @@ void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags) {
 }
 
 // Inicializar IDT para 64-bit
-void idt_init64(void) {
+void idt_init64(void)
+{
     idt_ptr.limit = (sizeof(struct idt_entry64) * 256) - 1;
     idt_ptr.base = (uint64_t)&idt;
 
     // Limpiar IDT - configurar con stubs por defecto
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++)
+    {
         idt_set_gate64(i, (uint64_t)isr0_64, 0x08, 0x8E);
     }
 
@@ -62,8 +65,8 @@ void idt_init64(void) {
     extern void isr29_64(void);
     extern void isr30_64(void);
     extern void isr31_64(void);
-    extern void isr32_64(void);  // Timer
-    extern void isr33_64(void);  // Keyboard
+    extern void isr32_64(void); // Timer
+    extern void isr33_64(void); // Keyboard
     extern void isr34_64(void);
     extern void isr35_64(void);
     extern void isr36_64(void);
@@ -78,7 +81,7 @@ void idt_init64(void) {
     extern void isr45_64(void);
     extern void isr46_64(void);
     extern void isr47_64(void);
-    extern void isr128_64(void);  // Syscall (0x80)
+    extern void isr128_64(void); // Syscall (0x80)
 
     // Configurar excepciones (0-31) - DPL=0 (solo kernel)
     idt_set_gate64(0, (uint64_t)isr0_64, 0x08, 0x8E);
@@ -113,11 +116,11 @@ void idt_init64(void) {
     idt_set_gate64(29, (uint64_t)isr29_64, 0x08, 0x8E);
     idt_set_gate64(30, (uint64_t)isr30_64, 0x08, 0x8E);
     idt_set_gate64(31, (uint64_t)isr31_64, 0x08, 0x8E);
-    
+
     // Configurar interrupciones IRQ (32-47) - DPL=3 (aceptar desde user mode)
     // 0xEE = Present (1) + DPL=3 (11) + System (0) + Interrupt Gate (1110)
-    idt_set_gate64(32, (uint64_t)isr32_64, 0x08, 0xEE);  // Timer
-    idt_set_gate64(33, (uint64_t)isr33_64, 0x08, 0xEE);  // Keyboard
+    idt_set_gate64(32, (uint64_t)isr32_64, 0x08, 0xEE); // Timer
+    idt_set_gate64(33, (uint64_t)isr33_64, 0x08, 0xEE); // Keyboard
     idt_set_gate64(34, (uint64_t)isr34_64, 0x08, 0xEE);
     idt_set_gate64(35, (uint64_t)isr35_64, 0x08, 0xEE);
     idt_set_gate64(36, (uint64_t)isr36_64, 0x08, 0xEE);
@@ -132,15 +135,17 @@ void idt_init64(void) {
     idt_set_gate64(45, (uint64_t)isr45_64, 0x08, 0xEE);
     idt_set_gate64(46, (uint64_t)isr46_64, 0x08, 0xEE);
     idt_set_gate64(47, (uint64_t)isr47_64, 0x08, 0xEE);
-    
-    // Configurar syscall (0x80) - DPL=3 (aceptar desde user mode)
-    idt_set_gate64(128, (uint64_t)isr128_64, 0x08, 0xEE);
+
+    // Por ahora dejo así para debug
+    extern void syscall_entry_asm(void);
+    idt_set_gate64(128, (uint64_t)syscall_entry_asm, 0x08, 0xEE); // Syscall handler para ir a syscall_entry 
 
     print("IDT inicializada para 64-bit\n");
 }
 
 // Cargar IDT para 64-bit
-void idt_load64(void) {
+void idt_load64(void)
+{
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
     print("IDT cargada para 64-bit\n");
 }
