@@ -6,18 +6,22 @@
 
 // Using I/O functions from arch_interface.h
 
-int rtc_init(void) {
+int rtc_init(void) 
+{
     // Check if RTC is available by reading status register B
     uint8_t status_b = rtc_read_register(RTC_STATUS_B);
-    if (status_b == 0xFF) {
+    if (status_b == 0xFF) 
+    {
         return -1; // RTC not available
     }
     
     return 0;
 }
 
-int rtc_read_time(rtc_time_t *time) {
-    if (!time) {
+int rtc_read_time(rtc_time_t *time) 
+{
+    if (!time) 
+    {
         return -1;
     }
     
@@ -32,7 +36,8 @@ int rtc_read_time(rtc_time_t *time) {
     
     // Check if RTC is in BCD mode
     uint8_t status_b = rtc_read_register(RTC_STATUS_B);
-    if (!(status_b & RTC_STATUS_B_BINARY)) {
+    if (!(status_b & RTC_STATUS_B_BINARY)) 
+    {
         // Convert BCD to binary
         time->second = rtc_bcd_to_binary(time->second);
         time->minute = rtc_bcd_to_binary(time->minute);
@@ -44,8 +49,10 @@ int rtc_read_time(rtc_time_t *time) {
     }
     
     // Handle 12-hour format
-    if (!(status_b & RTC_STATUS_B_24HOUR)) {
-        if (time->hour & 0x80) {
+    if (!(status_b & RTC_STATUS_B_24HOUR)) 
+    {
+        if (time->hour & 0x80) 
+        {
             time->hour = ((time->hour & 0x7F) + 12) % 24;
         }
     }
@@ -53,24 +60,29 @@ int rtc_read_time(rtc_time_t *time) {
     return 0;
 }
 
-uint8_t rtc_read_register(uint8_t reg) {
+uint8_t rtc_read_register(uint8_t reg) 
+{
     outb(RTC_ADDRESS_REG, reg);
     return inb(RTC_DATA_REG);
 }
 
-void rtc_write_register(uint8_t reg, uint8_t value) {
+void rtc_write_register(uint8_t reg, uint8_t value) 
+{
     outb(RTC_ADDRESS_REG, reg);
     outb(RTC_DATA_REG, value);
 }
 
-uint8_t rtc_bcd_to_binary(uint8_t bcd) {
+uint8_t rtc_bcd_to_binary(uint8_t bcd) 
+{
     return ((bcd >> 4) * 10) + (bcd & 0x0F);
 }
 
-void rtc_get_time_string(char *buffer, size_t buffer_size) {
+void rtc_get_time_string(char *buffer, size_t buffer_size) 
+{
     (void)buffer_size; // Parameter not used in this implementation
     rtc_time_t time;
-    if (rtc_read_time(&time) != 0) {
+    if (rtc_read_time(&time) != 0) 
+    {
         // Simple fallback implementation
         buffer[0] = '0'; buffer[1] = '0'; buffer[2] = ':';
         buffer[3] = '0'; buffer[4] = '0'; buffer[5] = ':';
@@ -90,10 +102,12 @@ void rtc_get_time_string(char *buffer, size_t buffer_size) {
     buffer[8] = '\0';
 }
 
-void rtc_get_date_string(char *buffer, size_t buffer_size) {
+void rtc_get_date_string(char *buffer, size_t buffer_size) 
+{
     (void)buffer_size; // Parameter not used in this implementation
     rtc_time_t time;
-    if (rtc_read_time(&time) != 0) {
+    if (rtc_read_time(&time) != 0) 
+    {
         // Simple fallback implementation
         buffer[0] = '0'; buffer[1] = '1'; buffer[2] = '/';
         buffer[3] = '0'; buffer[4] = '1'; buffer[5] = '/';

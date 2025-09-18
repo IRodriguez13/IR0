@@ -5,7 +5,8 @@
 // Remapear PIC para 32-bit - usar archivo modular
 #ifdef __x86_64__
 // Para 64-bit, usar implementación local
-void pic_remap32(void) {
+void pic_remap32(void) 
+{
     uint8_t a1, a2;
     (void)a1; (void)a2; // Variables not used in this implementation
 
@@ -41,8 +42,10 @@ void pic_remap32(void) {
 }
 
 // Enviar EOI para 32-bit
-void pic_send_eoi32(uint8_t irq) {
-    if (irq >= 8) {
+void pic_send_eoi32(uint8_t irq) 
+{
+    if (irq >= 8) 
+    {
         outb(PIC2_COMMAND, PIC_EOI);
     }
     outb(PIC1_COMMAND, PIC_EOI);
@@ -50,7 +53,8 @@ void pic_send_eoi32(uint8_t irq) {
 #endif
 
 // Remapear PIC para 64-bit
-void pic_remap64(void) {
+void pic_remap64(void) 
+{
     uint8_t a1, a2;
     (void)a1; (void)a2; // Variables not used in this implementation
 
@@ -88,21 +92,27 @@ void pic_remap64(void) {
 
 
 // Enviar EOI para 64-bit
-void pic_send_eoi64(uint8_t irq) {
-    if (irq >= 8) {
+void pic_send_eoi64(uint8_t irq) 
+{
+    if (irq >= 8) 
+    {
         outb(PIC2_COMMAND, PIC_EOI);
     }
     outb(PIC1_COMMAND, PIC_EOI);
 }
 
 // Enmascarar IRQ
-void pic_mask_irq(uint8_t irq) {
+void pic_mask_irq(uint8_t irq) 
+{
     uint16_t port;
     uint8_t value;
 
-    if (irq < 8) {
+    if (irq < 8) 
+    {
         port = PIC1_DATA;
-    } else {
+    } 
+    else 
+    {
         port = PIC2_DATA;
         irq -= 8;
     }
@@ -112,13 +122,17 @@ void pic_mask_irq(uint8_t irq) {
 }
 
 // Desenmascarar IRQ
-void pic_unmask_irq(uint8_t irq) {
+void pic_unmask_irq(uint8_t irq) 
+{
     uint16_t port;
     uint8_t value;
 
-    if (irq < 8) {
+    if (irq < 8) 
+    {
         port = PIC1_DATA;
-    } else {
+    } 
+    else 
+    {
         port = PIC2_DATA;
         irq -= 8;
     }

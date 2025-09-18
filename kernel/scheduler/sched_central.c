@@ -917,7 +917,8 @@ int round_robin_remove_task(task_t *task)
                 break;
             }
             current = current->next;
-        } while (current != round_robin_queue);
+        } 
+        while (current != round_robin_queue);
     }
     return 0;
 }

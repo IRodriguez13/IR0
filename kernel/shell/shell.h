@@ -34,7 +34,8 @@
 // SHELL DATA STRUCTURES
 // ===============================================================================
 
-typedef struct {
+typedef struct 
+{
     char current_dir[256];
     char prompt[SHELL_MAX_PROMPT_LENGTH];
     char history[SHELL_MAX_HISTORY][SHELL_MAX_LINE_LENGTH];
@@ -44,7 +45,8 @@ typedef struct {
     int exit_code;
 } shell_context_t;
 
-typedef struct {
+typedef struct 
+{
     int enable_history;
     int enable_colors;
     int max_line_length;
@@ -54,7 +56,8 @@ typedef struct {
     int colors_enabled;
 } shell_config_t;
 
-typedef struct {
+typedef struct 
+{
     char *name;
     char *description;
     int (*handler)(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count);

@@ -153,7 +153,8 @@ int vfs_readdir(int fd, struct dirent* entry);
 #### IR0FS Configuration
 ```c
 // Filesystem creation options
-struct ir0fs_config {
+struct ir0fs_config 
+{
     uint32_t block_size;        // 4096 bytes
     uint32_t journal_size;      // 1MB
     uint32_t compression_level; // 0-9
@@ -166,7 +167,8 @@ struct ir0fs_config {
 #### VFS Configuration
 ```c
 // VFS mount options
-struct vfs_mount_options {
+struct vfs_mount_options 
+{
     bool read_only;             // false
     bool no_exec;               // false
     bool no_access_time;        // false
@@ -362,7 +364,8 @@ int vfs_readdir(int fd, struct dirent* entry);
 #### Configuración de IR0FS
 ```c
 // Opciones de creación de filesystem
-struct ir0fs_config {
+struct ir0fs_config 
+{
     uint32_t block_size;        // 4096 bytes
     uint32_t journal_size;      // 1MB
     uint32_t compression_level; // 0-9
@@ -375,7 +378,8 @@ struct ir0fs_config {
 #### Configuración de VFS
 ```c
 // Opciones de montaje VFS
-struct vfs_mount_options {
+struct vfs_mount_options 
+{
     bool read_only;             // false
     bool no_exec;               // false
     bool no_access_time;        // false
