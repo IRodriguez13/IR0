@@ -88,11 +88,11 @@ void shell_add_to_history(shell_context_t *ctx, const char *line);
 // Type alias for command handler
 typedef int (*shell_command_handler_t)(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count);
 
-// Initialize builtin commands (static function)
-static void shell_init_builtin_commands(void);
+// Initialize builtin commands (implemented in shell.c)
+void shell_init_builtin_commands(void);
 
-// Add builtin command (static function)
-static void shell_add_builtin_command(const char *name, const char *description, shell_command_handler_t handler);
+// Add builtin command (implemented in shell.c)
+void shell_add_builtin_command(const char *name, const char *description, shell_command_handler_t handler);
 
 // Register a new command
 int shell_register_command(const char *name, const char *description, int (*handler)(int argc, char *argv[]));

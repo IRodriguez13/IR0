@@ -94,7 +94,7 @@ static bool validate_circular_list(task_t *head)
     return slow == fast || fast == head || fast->next == head;
 }
 
-static void remove_task_from_queue(task_t *task_to_remove)
+static void __attribute__((unused)) remove_task_from_queue(task_t *task_to_remove)
 {
     if (!task_to_remove || !rr_state.ready_queue)
     {
@@ -316,7 +316,7 @@ static void rr_task_tick(void)
         }
     }
 
-    if (should_preempt && rr_state.task_count >= 0)
+    if (should_preempt && rr_state.task_count > 0)
     {
         rr_state.current_ticks = 0;
 

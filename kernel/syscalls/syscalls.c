@@ -596,7 +596,7 @@ int64_t sys_exit(int exit_code)
     extern task_t *get_current_task(void);
     task_t *current_task = get_current_task();
 
-    if (current_task && current_task->pid == current_process->pid)
+    if (current_task && (int32_t)current_task->pid == current_process->pid)
     {
         // Marcar la task como terminada para que el scheduler la ignore
         current_task->state = TASK_TERMINATED;
@@ -1269,7 +1269,7 @@ int64_t sys_fork(void)
     {
 
         print("sys_fork: Failed to convert child process to task\n");
-        return;
+        return -1;
     }
 
     add_task(child_task);
@@ -1688,7 +1688,7 @@ int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t o
     }
 
     // Verificar que la dirección esté en el espacio de usuario
-    uintptr_t max_user_addr = USER_SPACE_BASE + USER_SPACE_SIZE;
+    uintptr_t max_user_addr = (uintptr_t)USER_SPACE_BASE + (uintptr_t)USER_SPACE_SIZE;
     if (map_addr < USER_SPACE_BASE ||
         map_addr + aligned_length > max_user_addr)
     {
@@ -1771,7 +1771,7 @@ int64_t sys_munmap(void *addr, size_t length)
     uintptr_t unmap_addr = (uintptr_t)addr;
 
     // Verificar que la dirección esté en el espacio de usuario
-    uintptr_t max_user_addr = USER_SPACE_BASE + USER_SPACE_SIZE;
+    uintptr_t max_user_addr = (uintptr_t)USER_SPACE_BASE + (uintptr_t)USER_SPACE_SIZE;
     if (unmap_addr < USER_SPACE_BASE || unmap_addr > max_user_addr)
     {
         print("sys_munmap: Invalid address\n");
