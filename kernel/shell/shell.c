@@ -833,10 +833,12 @@ static int shell_cmd_mkdir(shell_context_t *ctx, shell_config_t *config, char ar
 }
 
 // Agregar esta función antes de la tabla de comandos
-static void cmd_usertest(shell_context_t *ctx, char **args)
+static int cmd_usertest(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
 {
     (void)ctx;
+    (void)config;
     (void)args;
+    (void)arg_count;
 
     print("Testing user mode transition...\n");
 
@@ -846,6 +848,7 @@ static void cmd_usertest(shell_context_t *ctx, char **args)
     switch_to_user_mode(test_user_function);
 
     print("Returned from user mode successfully!\n");
+    return 0;
 }
 
 static int shell_cmd_rm(shell_context_t *ctx, shell_config_t *config, char args[SHELL_MAX_ARGS][SHELL_MAX_ARG_LENGTH], int arg_count)
@@ -1192,7 +1195,7 @@ static int shell_cmd_halt(shell_context_t *ctx, shell_config_t *config, char arg
 
     shell_print_warning("Halting system...");
 
-    cpu_wait();
+    __asm__ volatile("hlt");
 
     return 0;
 }
@@ -1419,7 +1422,7 @@ static int shell_cmd_ring(shell_context_t *ctx, shell_config_t *config, char arg
 // UTILITY FUNCTIONS
 // ===============================================================================
 
-static void shell_init_builtin_commands(void)
+void shell_init_builtin_commands(void)
 {
     shell_builtin_count = 0;
 
@@ -1458,7 +1461,7 @@ static void shell_init_builtin_commands(void)
     shell_add_builtin_command("exit", "Exit shell", shell_cmd_exit);
 }
 
-static void shell_add_builtin_command(const char *name, const char *description, shell_command_handler_t handler)
+void shell_add_builtin_command(const char *name, const char *description, shell_command_handler_t handler)
 {
     if (shell_builtin_count >= SHELL_MAX_BUILTIN_COMMANDS)
     {

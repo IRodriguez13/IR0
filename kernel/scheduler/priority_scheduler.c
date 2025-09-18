@@ -85,12 +85,10 @@ static void priority_task_tick(void)
                 // Si la tarea lleva mucho tiempo en ejecución, bajo prioridad sin dejar que llegue a 0.
                 if(task->exec_time > 100)
                 {
-                    task->priority --;
-
-                    if (task->priority < 0)
+                    if (task->priority > 0)
                     {
-                        task->priority = 0;
-                    } 
+                        task->priority--;
+                    }
                 }
                 task = task->next;
             }

@@ -53,7 +53,6 @@ volatile bool interrupts_enabled = false;
 
 // Forward declarations
 static void enable_interrupts(void);
-static void init_auth_system(void);
 static void user_start(void);
 static void start_shell(void);
 
