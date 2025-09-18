@@ -233,7 +233,8 @@ test_result_t test_string_functions(void)
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "String functions test passed",
         end_time - start_time,
@@ -267,7 +268,8 @@ test_result_t test_system_calls(void)
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "System calls test passed",
         end_time - start_time,
@@ -509,7 +511,8 @@ void run_tests_by_category(test_category_t category, test_suite_stats_t* stats)
     test_case_t** tests = get_tests_by_category(category);
     int test_count = get_test_count_by_category(category);
     
-    for (int i = 0; i < test_count; i++) {
+    for (int i = 0; i < test_count; i++) 
+    {
         if (!tests[i]->enabled) continue;
         
         print("Running: ");
@@ -846,7 +849,8 @@ test_result_t test_physical_allocation(void)
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Test de asignación física pasado",
         end_time - start_time,
@@ -918,7 +922,8 @@ test_result_t test_system_calls(void)
     
     uint64_t end_time = get_timestamp();
     
-    return (test_result_t){
+    return (test_result_t)
+    {
         TEST_STATUS_PASSED,
         "Test de system calls pasado",
         end_time - start_time,

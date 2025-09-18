@@ -66,7 +66,8 @@ The Kernel Subsystem is the core of the IR0 operating system, providing process 
 
 #### Process States
 ```c
-typedef enum {
+typedef enum 
+{
     PROCESS_STATE_NEW,      // Process being created
     PROCESS_STATE_READY,    // Ready to run
     PROCESS_STATE_RUNNING,  // Currently executing
@@ -79,7 +80,8 @@ typedef enum {
 
 #### Process Structure
 ```c
-typedef struct process {
+typedef struct process 
+{
     pid_t pid;                    // Process ID
     pid_t ppid;                   // Parent Process ID
     process_state_t state;        // Current state
@@ -121,7 +123,8 @@ typedef struct process {
 #### Context Switching
 ```c
 // x86-64 context switch
-void switch_context_x64(task_t* from, task_t* to) {
+void switch_context_x64(task_t* from, task_t* to) 
+{
     // Save current context
     asm volatile(
         "pushq %%rbp\n"
@@ -189,8 +192,10 @@ void switch_context_x64(task_t* from, task_t* to) {
 
 #### System Call Handler
 ```c
-uint64_t handle_system_call(uint64_t number, uint64_t arg1, uint64_t arg2, uint64_t arg3) {
-    switch (number) {
+uint64_t handle_system_call(uint64_t number, uint64_t arg1, uint64_t arg2, uint64_t arg3) 
+{
+    switch (number) 
+    {
         case SYS_FORK:
             return sys_fork();
         case SYS_EXEC:
@@ -276,7 +281,8 @@ static shell_command_t shell_builtin_commands[] = {
 
 #### Kernel Configuration
 ```c
-struct kernel_config {
+struct kernel_config 
+{
     uint32_t max_processes;       // Maximum number of processes
     uint32_t max_threads;         // Maximum number of threads
     uint32_t scheduler_quantum;   // Scheduler time quantum
@@ -377,7 +383,8 @@ El Subsistema de Kernel es el núcleo del sistema operativo IR0, proporcionando 
 
 #### Estados de Proceso
 ```c
-typedef enum {
+typedef enum 
+{
     PROCESS_STATE_NEW,      // Proceso siendo creado
     PROCESS_STATE_READY,    // Listo para ejecutar
     PROCESS_STATE_RUNNING,  // Ejecutándose actualmente
@@ -390,7 +397,8 @@ typedef enum {
 
 #### Estructura de Proceso
 ```c
-typedef struct process {
+typedef struct process 
+{
     pid_t pid;                    // ID del proceso
     pid_t ppid;                   // ID del proceso padre
     process_state_t state;        // Estado actual
@@ -432,7 +440,8 @@ typedef struct process {
 #### Context Switching
 ```c
 // Context switch x86-64
-void switch_context_x64(task_t* from, task_t* to) {
+void switch_context_x64(task_t* from, task_t* to) 
+{
     // Guardar contexto actual
     asm volatile(
         "pushq %%rbp\n"
@@ -500,8 +509,10 @@ void switch_context_x64(task_t* from, task_t* to) {
 
 #### Manejador de System Calls
 ```c
-uint64_t handle_system_call(uint64_t number, uint64_t arg1, uint64_t arg2, uint64_t arg3) {
-    switch (number) {
+uint64_t handle_system_call(uint64_t number, uint64_t arg1, uint64_t arg2, uint64_t arg3) 
+{
+    switch (number) 
+    {
         case SYS_FORK:
             return sys_fork();
         case SYS_EXEC:
@@ -587,7 +598,8 @@ static shell_command_t shell_builtin_commands[] = {
 
 #### Configuración del Kernel
 ```c
-struct kernel_config {
+struct kernel_config 
+{
     uint32_t max_processes;       // Número máximo de procesos
     uint32_t max_threads;         // Número máximo de threads
     uint32_t scheduler_quantum;   // Quantum de tiempo del planificador

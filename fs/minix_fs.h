@@ -91,37 +91,44 @@ typedef struct minix_superblock
 // ===============================================================================
 
 // Verificar si un inode es un directorio
-static inline bool minix_is_dir(const minix_inode_t *inode) {
+static inline bool minix_is_dir(const minix_inode_t *inode) 
+{
     return (inode->i_mode & MINIX_IFMT) == MINIX_IFDIR;
 }
 
 // Verificar si un inode es un archivo regular
-static inline bool minix_is_reg(const minix_inode_t *inode) {
+static inline bool minix_is_reg(const minix_inode_t *inode) 
+{
     return (inode->i_mode & MINIX_IFMT) == MINIX_IFREG;
 }
 
 // Verificar si un inode es un dispositivo de caracteres
-static inline bool minix_is_chr(const minix_inode_t *inode) {
+static inline bool minix_is_chr(const minix_inode_t *inode) 
+{
     return (inode->i_mode & MINIX_IFMT) == MINIX_IFCHR;
 }
 
 // Verificar si un inode es un dispositivo de bloques
-static inline bool minix_is_blk(const minix_inode_t *inode) {
+static inline bool minix_is_blk(const minix_inode_t *inode) 
+{
     return (inode->i_mode & MINIX_IFMT) == MINIX_IFBLK;
 }
 
 // Obtener permisos de usuario
-static inline uint16_t minix_get_uid_perms(const minix_inode_t *inode) {
+static inline uint16_t minix_get_uid_perms(const minix_inode_t *inode) 
+{
     return (inode->i_mode & MINIX_IRWXU) >> 6;
 }
 
 // Obtener permisos de grupo
-static inline uint16_t minix_get_gid_perms(const minix_inode_t *inode) {
+static inline uint16_t minix_get_gid_perms(const minix_inode_t *inode) 
+{
     return (inode->i_mode & MINIX_IRWXG) >> 3;
 }
 
 // Obtener permisos de otros
-static inline uint16_t minix_get_oth_perms(const minix_inode_t *inode) {
+static inline uint16_t minix_get_oth_perms(const minix_inode_t *inode) 
+{
     return inode->i_mode & MINIX_IRWXO;
 }
 

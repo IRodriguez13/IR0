@@ -702,7 +702,8 @@ char *itoa(int value, char *str, int base)
         tmp_value = value;
         value /= base;
         *ptr++ = "0123456789abcdefghijklmnopqrstuvwxyz"[tmp_value - value * base];
-    } while (value);
+    } 
+    while (value);
 
     // Apply negative sign for base 10
     if (tmp_value < 0 && base == 10)
