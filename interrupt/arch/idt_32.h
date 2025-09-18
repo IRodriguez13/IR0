@@ -2,7 +2,8 @@
 #include <stdint.h>
 
 // Estructura de entrada IDT para 32-bit
-struct idt_entry32 {
+struct idt_entry32 
+{
     uint16_t offset_low;    // Bits 0-15 del offset
     uint16_t selector;      // Selector del segmento
     uint8_t zero;           // Siempre 0 en 32-bit
@@ -11,7 +12,8 @@ struct idt_entry32 {
 } __attribute__((packed));
 
 // Puntero IDT para 32-bit
-struct idt_ptr32 {
+struct idt_ptr32 
+{
     uint16_t limit;
     uint32_t base;
 } __attribute__((packed));

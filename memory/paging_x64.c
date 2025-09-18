@@ -72,7 +72,8 @@ void setup_and_enable_paging(void)
     // load_page_directory((uint64_t)PML4);  // COMENTADO: No recargar CR3
     
     // 4. Verificar que paging está habilitado
-    if (!is_paging_enabled()) {
+    if (!is_paging_enabled()) 
+    {
         // Paging no está habilitado - habilitarlo
         enable_paging();
     }

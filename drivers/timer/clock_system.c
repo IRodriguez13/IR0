@@ -135,7 +135,8 @@ int clock_sleep(uint32_t milliseconds)
 int clock_sleep_ticks(uint32_t ticks)
 {
     uint32_t start_ticks = clock_state.tick_count;
-    while ((clock_state.tick_count - start_ticks) < ticks) {
+    while ((clock_state.tick_count - start_ticks) < ticks) 
+    {
         // Wait for ticks to increment
         __asm__ volatile("hlt");
     }

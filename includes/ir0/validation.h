@@ -10,7 +10,8 @@
 // ===============================================================================
 
 // Error codes for validation
-typedef enum {
+typedef enum 
+{
     VALIDATION_SUCCESS = 0,
     VALIDATION_ERROR_NULL_POINTER = -1,
     VALIDATION_ERROR_INVALID_RANGE = -2,

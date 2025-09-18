@@ -15,7 +15,8 @@ Implement robust page fault handling for x86-32 architecture to properly handle 
 ### 1. Page Fault Exception Handler
 ```c
 // Page fault handler structure
-struct page_fault_info {
+struct page_fault_info 
+{
     uint32_t fault_address;      // Linear address that caused fault
     uint32_t error_code;         // Page fault error code
     uint32_t eip;               // Instruction pointer
@@ -200,7 +201,8 @@ void* ptr = (void*)0x1000000;
 *ptr = 42;  // Page fault: page not present
 
 // Resolution: Allocate and map page
-bool resolve_not_present_fault(uintptr_t address) {
+bool resolve_not_present_fault(uintptr_t address) 
+{
     uintptr_t page_addr = PAGE_ALIGN_DOWN(address);
     uintptr_t phys_addr = allocate_physical_page();
     if (phys_addr == 0) return false;
@@ -216,11 +218,14 @@ char* ro_string = "read-only";
 ro_string[0] = 'X';  // Page fault: protection violation
 
 // Resolution: Handle based on context
-bool resolve_protection_fault(uintptr_t address, bool write) {
-    if (is_copy_on_write_page(address)) {
+bool resolve_protection_fault(uintptr_t address, bool write) 
+{
+    if (is_copy_on_write_page(address)) 
+    {
         return handle_copy_on_write(address);
     }
-    if (is_stack_guard_page(address)) {
+    if (is_stack_guard_page(address)) 
+    {
         return handle_stack_expansion(address);
     }
     return false;  // Genuine protection violation
@@ -234,8 +239,10 @@ void* kernel_ptr = (void*)0xC0000000;
 *kernel_ptr = 42;  // Page fault: user access to kernel
 
 // Resolution: Terminate process or handle gracefully
-bool resolve_user_kernel_fault(uintptr_t address) {
-    if (is_valid_user_address(address, 1)) {
+bool resolve_user_kernel_fault(uintptr_t address) 
+{
+    if (is_valid_user_address(address, 1)) 
+    {
         return allocate_user_page(address);
     }
     // Invalid access - terminate process
@@ -247,14 +254,17 @@ bool resolve_user_kernel_fault(uintptr_t address) {
 ### 4. Stack Overflow/Underflow
 ```c
 // Scenario: Stack access beyond allocated pages
-void recursive_function(int depth) {
+void recursive_function(int depth) 
+{
     char large_array[4096];  // May cause stack fault
     if (depth > 0) recursive_function(depth - 1);
 }
 
 // Resolution: Expand stack
-bool resolve_stack_fault(uintptr_t address) {
-    if (is_stack_expansion_address(address)) {
+bool resolve_stack_fault(uintptr_t address) 
+{
+    if (is_stack_expansion_address(address)) 
+    {
         return allocate_stack_page(address);
     }
     return false;  // Stack overflow
@@ -312,7 +322,8 @@ page_fault_handler_asm:
 
 ### Fault Resolution Logic
 ```c
-void page_fault_handler(struct page_fault_info* info) {
+void page_fault_handler(struct page_fault_info* info) 
+{
     uintptr_t fault_addr = info->fault_address;
     bool write = is_write_access(info->error_code);
     bool user = is_user_mode_access(info->error_code);
@@ -322,14 +333,19 @@ void page_fault_handler(struct page_fault_info* info) {
     log_page_fault(info);
     
     // Handle different fault types
-    if (!present) {
+    if (!present) 
+    {
         // Page not present - try demand paging
-        if (!resolve_not_present_fault(fault_addr, write, user)) {
+        if (!resolve_not_present_fault(fault_addr, write, user)) 
+        {
             handle_fatal_fault(info);
         }
-    } else {
+    } 
+    else 
+    {
         // Page present but access denied
-        if (!resolve_protection_fault(fault_addr, write, user)) {
+        if (!resolve_protection_fault(fault_addr, write, user)) 
+        {
             handle_fatal_fault(info);
         }
     }
