@@ -85,28 +85,35 @@ typedef char*               va_list;
 #### Memory Functions
 ```c
 // Memory manipulation functions
-void* memcpy(void* dest, const void* src, size_t n) {
+void* memcpy(void* dest, const void* src, size_t n) 
+{
     char* d = (char*)dest;
     const char* s = (const char*)src;
-    for (size_t i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; i++) 
+    {
         d[i] = s[i];
     }
     return dest;
 }
 
-void* memset(void* dest, int c, size_t n) {
+void* memset(void* dest, int c, size_t n) 
+{
     char* d = (char*)dest;
-    for (size_t i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; i++) 
+    {
         d[i] = (char)c;
     }
     return dest;
 }
 
-int memcmp(const void* s1, const void* s2, size_t n) {
+int memcmp(const void* s1, const void* s2, size_t n) 
+{
     const unsigned char* p1 = (const unsigned char*)s1;
     const unsigned char* p2 = (const unsigned char*)s2;
-    for (size_t i = 0; i < n; i++) {
-        if (p1[i] != p2[i]) {
+    for (size_t i = 0; i < n; i++) 
+    {
+        if (p1[i] != p2[i]) 
+        {
             return p1[i] - p2[i];
         }
     }
@@ -117,17 +124,21 @@ int memcmp(const void* s1, const void* s2, size_t n) {
 #### String Functions
 ```c
 // String manipulation functions
-size_t strlen(const char* str) {
+size_t strlen(const char* str) 
+{
     size_t len = 0;
-    while (str[len] != '\0') {
+    while (str[len] != '\0') 
+    {
         len++;
     }
     return len;
 }
 
-char* strcpy(char* dest, const char* src) {
+char* strcpy(char* dest, const char* src) 
+{
     char* d = dest;
-    while (*src != '\0') {
+    while (*src != '\0') 
+    {
         *d = *src;
         d++;
         src++;
@@ -136,9 +147,12 @@ char* strcpy(char* dest, const char* src) {
     return dest;
 }
 
-int strcmp(const char* s1, const char* s2) {
-    while (*s1 != '\0' && *s2 != '\0') {
-        if (*s1 != *s2) {
+int strcmp(const char* s1, const char* s2) 
+{
+    while (*s1 != '\0' && *s2 != '\0') 
+    {
+        if (*s1 != *s2) 
+        {
             return *s1 - *s2;
         }
         s1++;
@@ -151,9 +165,12 @@ int strcmp(const char* s1, const char* s2) {
 #### String Analysis Functions
 ```c
 // String analysis and search
-char* strchr(const char* str, int c) {
-    while (*str != '\0') {
-        if (*str == (char)c) {
+char* strchr(const char* str, int c) 
+{
+    while (*str != '\0') 
+    {
+        if (*str == (char)c) 
+        {
             return (char*)str;
         }
         str++;
@@ -161,12 +178,15 @@ char* strchr(const char* str, int c) {
     return NULL;
 }
 
-char* strstr(const char* haystack, const char* needle) {
+char* strstr(const char* haystack, const char* needle) 
+{
     size_t needle_len = strlen(needle);
     if (needle_len == 0) return (char*)haystack;
     
-    while (*haystack != '\0') {
-        if (strncmp(haystack, needle, needle_len) == 0) {
+    while (*haystack != '\0') 
+    {
+        if (strncmp(haystack, needle, needle_len) == 0) 
+        {
             return (char*)haystack;
         }
         haystack++;
@@ -235,7 +255,8 @@ void print_warning(const char* str);
 #ifndef __bool_true_false_are_defined
 #define __bool_true_false_are_defined 1
 
-typedef enum {
+typedef enum 
+{
     false = 0,
     true = 1
 } bool;
@@ -254,7 +275,8 @@ void dump_kernel_state(void);
 void print_stack_trace(void);
 
 // panic.c - Implementation
-void panic(const char* message) {
+void panic(const char* message) 
+{
     // Disable interrupts
     asm volatile("cli");
     
@@ -277,7 +299,8 @@ void panic(const char* message) {
 #### Debug Information
 ```c
 // Debug information structures
-struct debug_info {
+struct debug_info 
+{
     uint64_t kernel_start;
     uint64_t kernel_end;
     uint64_t memory_used;
@@ -334,7 +357,8 @@ void dump_filesystem_info(void);
 
 #### Debug Configuration
 ```c
-struct debug_config {
+struct debug_config 
+{
     bool enable_panic;
     bool enable_stack_trace;
     bool enable_memory_dump;
@@ -446,28 +470,35 @@ typedef char*               va_list;
 #### Funciones de Memoria
 ```c
 // Funciones de manipulación de memoria
-void* memcpy(void* dest, const void* src, size_t n) {
+void* memcpy(void* dest, const void* src, size_t n) 
+{
     char* d = (char*)dest;
     const char* s = (const char*)src;
-    for (size_t i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; i++) 
+    {
         d[i] = s[i];
     }
     return dest;
 }
 
-void* memset(void* dest, int c, size_t n) {
+void* memset(void* dest, int c, size_t n) 
+{
     char* d = (char*)dest;
-    for (size_t i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; i++) 
+    {
         d[i] = (char)c;
     }
     return dest;
 }
 
-int memcmp(const void* s1, const void* s2, size_t n) {
+int memcmp(const void* s1, const void* s2, size_t n) 
+{
     const unsigned char* p1 = (const unsigned char*)s1;
     const unsigned char* p2 = (const unsigned char*)s2;
-    for (size_t i = 0; i < n; i++) {
-        if (p1[i] != p2[i]) {
+    for (size_t i = 0; i < n; i++) 
+    {
+        if (p1[i] != p2[i]) 
+        {
             return p1[i] - p2[i];
         }
     }
@@ -478,17 +509,21 @@ int memcmp(const void* s1, const void* s2, size_t n) {
 #### Funciones de String
 ```c
 // Funciones de manipulación de strings
-size_t strlen(const char* str) {
+size_t strlen(const char* str) 
+{
     size_t len = 0;
-    while (str[len] != '\0') {
+    while (str[len] != '\0') 
+    {
         len++;
     }
     return len;
 }
 
-char* strcpy(char* dest, const char* src) {
+char* strcpy(char* dest, const char* src) 
+{
     char* d = dest;
-    while (*src != '\0') {
+    while (*src != '\0') 
+    {
         *d = *src;
         d++;
         src++;
@@ -497,9 +532,12 @@ char* strcpy(char* dest, const char* src) {
     return dest;
 }
 
-int strcmp(const char* s1, const char* s2) {
-    while (*s1 != '\0' && *s2 != '\0') {
-        if (*s1 != *s2) {
+int strcmp(const char* s1, const char* s2) 
+{
+    while (*s1 != '\0' && *s2 != '\0') 
+    {
+        if (*s1 != *s2) 
+        {
             return *s1 - *s2;
         }
         s1++;
@@ -512,9 +550,12 @@ int strcmp(const char* s1, const char* s2) {
 #### Funciones de Análisis de Strings
 ```c
 // Análisis y búsqueda de strings
-char* strchr(const char* str, int c) {
-    while (*str != '\0') {
-        if (*str == (char)c) {
+char* strchr(const char* str, int c) 
+{
+    while (*str != '\0') 
+    {
+        if (*str == (char)c) 
+        {
             return (char*)str;
         }
         str++;
@@ -522,12 +563,15 @@ char* strchr(const char* str, int c) {
     return NULL;
 }
 
-char* strstr(const char* haystack, const char* needle) {
+char* strstr(const char* haystack, const char* needle) 
+{
     size_t needle_len = strlen(needle);
     if (needle_len == 0) return (char*)haystack;
     
-    while (*haystack != '\0') {
-        if (strncmp(haystack, needle, needle_len) == 0) {
+    while (*haystack != '\0') 
+    {
+        if (strncmp(haystack, needle, needle_len) == 0) 
+        {
             return (char*)haystack;
         }
         haystack++;
@@ -596,7 +640,8 @@ void print_warning(const char* str);
 #ifndef __bool_true_false_are_defined
 #define __bool_true_false_are_defined 1
 
-typedef enum {
+typedef enum 
+{
     false = 0,
     true = 1
 } bool;
@@ -615,7 +660,8 @@ void dump_kernel_state(void);
 void print_stack_trace(void);
 
 // panic.c - Implementación
-void panic(const char* message) {
+void panic(const char* message) 
+{
     // Deshabilitar interrupciones
     asm volatile("cli");
     
@@ -638,7 +684,8 @@ void panic(const char* message) {
 #### Información de Debug
 ```c
 // Estructuras de información de debug
-struct debug_info {
+struct debug_info 
+{
     uint64_t kernel_start;
     uint64_t kernel_end;
     uint64_t memory_used;
@@ -695,7 +742,8 @@ void dump_filesystem_info(void);
 
 #### Configuración de Debug
 ```c
-struct debug_config {
+struct debug_config 
+{
     bool enable_panic;
     bool enable_stack_trace;
     bool enable_memory_dump;

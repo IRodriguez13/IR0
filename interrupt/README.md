@@ -123,7 +123,8 @@ void isr_page_fault_handler(interrupt_context_t* context) {
 
 #### 3. System Call Handling
 ```c
-void isr_system_call(interrupt_context_t* context) {
+void isr_system_call(interrupt_context_t* context) 
+{
 #ifdef __x86_64__
     uint64_t syscall_number = context->rax;
     uint64_t arg1 = context->rbx;
@@ -178,7 +179,8 @@ void isr_system_call(interrupt_context_t* context) {
 
 #### Interrupt Configuration
 ```c
-struct interrupt_config {
+struct interrupt_config 
+{
     bool enable_pic;           // Enable legacy PIC
     bool enable_apic;          // Enable APIC/LAPIC
     bool enable_nmi;           // Enable NMI handling
@@ -190,7 +192,8 @@ struct interrupt_config {
 
 #### Error Handling
 ```c
-struct interrupt_error_handling {
+struct interrupt_error_handling 
+{
     bool verbose_errors;       // Detailed error reporting
     bool panic_on_critical;    // Panic on critical errors
     bool log_all_interrupts;   // Log all interrupt events
@@ -202,7 +205,8 @@ struct interrupt_error_handling {
 
 #### Interrupt Statistics
 ```c
-struct interrupt_stats {
+struct interrupt_stats 
+{
     uint64_t total_interrupts;
     uint64_t exceptions_handled;
     uint64_t hardware_interrupts;
@@ -328,7 +332,8 @@ El Subsistema de Interrupciones proporciona manejo básico de interrupciones par
 
 #### 1. Preservación de Contexto
 ```c
-typedef struct {
+typedef struct 
+{
 #ifdef __x86_64__
     uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp;
     uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
@@ -342,7 +347,8 @@ typedef struct {
 
 #### 2. Reportes de Error
 ```c
-void isr_page_fault_handler(interrupt_context_t* context) {
+void isr_page_fault_handler(interrupt_context_t* context) 
+{
     uint64_t fault_address;
 #ifdef __x86_64__
     asm volatile("mov %%cr2, %0" : "=r"(fault_address));
@@ -360,7 +366,8 @@ void isr_page_fault_handler(interrupt_context_t* context) {
 
 #### 3. Manejo de System Calls
 ```c
-void isr_system_call(interrupt_context_t* context) {
+void isr_system_call(interrupt_context_t* context) 
+{
 #ifdef __x86_64__
     uint64_t syscall_number = context->rax;
     uint64_t arg1 = context->rbx;
@@ -415,7 +422,8 @@ void isr_system_call(interrupt_context_t* context) {
 
 #### Configuración de Interrupciones
 ```c
-struct interrupt_config {
+struct interrupt_config 
+{
     bool enable_pic;           // Habilitar PIC legacy
     bool enable_apic;          // Habilitar APIC/LAPIC
     bool enable_nmi;           // Habilitar manejo NMI
@@ -427,7 +435,8 @@ struct interrupt_config {
 
 #### Manejo de Errores
 ```c
-struct interrupt_error_handling {
+struct interrupt_error_handling 
+{
     bool verbose_errors;       // Reportes de error detallados
     bool panic_on_critical;    // Panic en errores críticos
     bool log_all_interrupts;   // Log de todos los eventos de interrupción
@@ -439,7 +448,8 @@ struct interrupt_error_handling {
 
 #### Estadísticas de Interrupciones
 ```c
-struct interrupt_stats {
+struct interrupt_stats 
+{
     uint64_t total_interrupts;
     uint64_t exceptions_handled;
     uint64_t hardware_interrupts;
