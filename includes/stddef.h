@@ -37,7 +37,8 @@ typedef int wchar_t;
 #define offsetof(type, member) __builtin_offsetof(type, member)
 
 /* max_align_t - type with strictest alignment requirement */
-typedef struct {
+typedef struct 
+{
     long long __ll;
     long double __ld;
 } max_align_t;

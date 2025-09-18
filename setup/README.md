@@ -262,7 +262,8 @@ struct server_config
 #### IoT Strategy
 ```c
 // IoT-oriented configuration
-struct iot_config {
+struct iot_config 
+{
     // Power management
     .power = 
     {

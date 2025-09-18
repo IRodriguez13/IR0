@@ -26,7 +26,8 @@
 #define RTC_STATUS_B_BINARY 0x04
 
 // Time structure
-typedef struct {
+typedef struct 
+{
     uint8_t second;
     uint8_t minute;
     uint8_t hour;

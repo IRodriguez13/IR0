@@ -299,7 +299,8 @@ void x86_64_init_paging(void)
     page_table_l2[0] = (uint64_t)page_table_l1 | 0x3;
     
     // Identity map first 2MB
-    for (int i = 0; i < 512; i++) {
+    for (int i = 0; i < 512; i++) 
+    {
         page_table_l1[i] = (i * 4096) | 0x3;  // Present, RW, User
     }
     

@@ -8,7 +8,8 @@
 // LOGGING SYSTEM
 // ===============================================================================
 
-typedef enum {
+typedef enum 
+{
     LOG_LEVEL_DEBUG = 0,
     LOG_LEVEL_INFO = 1,
     LOG_LEVEL_WARN = 2,
