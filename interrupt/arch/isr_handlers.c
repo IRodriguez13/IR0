@@ -10,9 +10,11 @@ extern void keyboard_handler32(void);
 #ifdef __x86_64__
 
 // Handler de interrupciones para 64-bit
-void isr_handler64(uint64_t interrupt_number) {
+void isr_handler64(uint64_t interrupt_number) 
+{
     // Manejar excepciones del CPU (0-31)
-    if (interrupt_number < 32) {
+    if (interrupt_number < 32) 
+    {
         print("Excepción CPU #");
         print_int32(interrupt_number);
         print("\n");
@@ -22,7 +24,8 @@ void isr_handler64(uint64_t interrupt_number) {
     }
     
     // Manejar syscall (0x80)
-    if (interrupt_number == 128) {
+    if (interrupt_number == 128) 
+    {
         print("SYSCALL: Interrupción 0x80 recibida\n");
         // TODO: Implementar manejo de syscall
         // Por ahora, solo imprimir y retornar
@@ -30,10 +33,12 @@ void isr_handler64(uint64_t interrupt_number) {
     }
     
     // Manejar IRQs del PIC (32-47)
-    if (interrupt_number >= 32 && interrupt_number <= 47) {
+    if (interrupt_number >= 32 && interrupt_number <= 47) 
+    {
         uint8_t irq = interrupt_number - 32;
         
-        switch (irq) {
+        switch (irq) 
+        {
             case 0: // Timer
                 // Timer tick - silencioso
                 break;

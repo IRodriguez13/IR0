@@ -10,7 +10,8 @@ typedef uint64_t time_t;
 // ===============================================================================
 
 // Timer types
-typedef enum {
+typedef enum 
+{
     CLOCK_TIMER_NONE = 0,
     CLOCK_TIMER_PIT,
     CLOCK_TIMER_HPET,
@@ -22,7 +23,8 @@ typedef enum {
 #define CLOCK_RESOLUTION_MS 1
 
 // Clock state structure
-typedef struct {
+typedef struct 
+{
     int initialized;
     uint64_t tick_count;
     uint64_t uptime_seconds;
@@ -59,7 +61,8 @@ typedef struct {
 typedef void (*clock_alarm_callback_t)(void *data);
 
 // Clock statistics structure
-typedef struct {
+typedef struct 
+{
     int initialized;
     clock_timer_t active_timer;
     uint32_t timer_frequency;

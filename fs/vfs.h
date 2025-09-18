@@ -101,7 +101,8 @@ typedef int64_t off_t;
 typedef uint64_t time_t;
 
 // Stat structure
-typedef struct {
+typedef struct 
+{
     uint32_t st_dev;
     uint32_t st_ino;
     uint32_t st_mode;
@@ -118,7 +119,8 @@ typedef struct {
 } stat_t;
 
 // Utime buffer structure
-typedef struct {
+typedef struct 
+{
     time_t actime;
     time_t modtime;
 } utimbuf_t;

@@ -5,7 +5,8 @@
 
 #ifdef __x86_64__
 // Estructura de entrada IDT para 64-bit
-struct idt_entry64 {
+struct idt_entry64 
+{
     uint16_t offset_low;
     uint16_t selector;
     uint8_t ist;
@@ -16,7 +17,8 @@ struct idt_entry64 {
 } __attribute__((packed));
 
 // Puntero IDT para 64-bit
-struct idt_ptr64 {
+struct idt_ptr64 
+{
     uint16_t limit;
     uint64_t base;
 } __attribute__((packed));
