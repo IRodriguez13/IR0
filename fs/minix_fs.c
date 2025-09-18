@@ -118,7 +118,7 @@ int minix_write_block(uint32_t block_num, const void *buffer)
 // BITMAP FUNCTIONS
 // ===============================================================================
 
-static bool minix_is_inode_free(uint32_t inode_num)
+static bool __attribute__((unused)) minix_is_inode_free(uint32_t inode_num)
 {
     if (inode_num >= MINIX_MAX_INODES)
         return false;
@@ -310,7 +310,7 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
     return 0;
 }
 
-static int minix_write_inode(uint32_t inode_num, const minix_inode_t *inode)
+static int __attribute__((unused)) minix_write_inode(uint32_t inode_num, const minix_inode_t *inode)
 {
     if (inode_num == 0 || inode_num >= MINIX_MAX_INODES || !inode)
     {

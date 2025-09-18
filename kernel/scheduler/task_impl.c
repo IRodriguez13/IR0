@@ -72,7 +72,8 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
 
     // Setup stack frame que switch_context_x64 espera
     *--stack_ptr = 0;                        // User SS (if needed)
-    *--stack_ptr = (uint64_t)stack_ptr + 16; // User RSP
+    uint64_t user_rsp = (uint64_t)stack_ptr + 16;
+    *--stack_ptr = user_rsp;                 // User RSP
     *--stack_ptr = 0x202;                    // RFLAGS (IF=1)
     *--stack_ptr = 0x08;                     // Kernel CS
     *--stack_ptr = (uint64_t)entry;          // RIP - donde saltar

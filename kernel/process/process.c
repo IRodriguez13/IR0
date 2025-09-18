@@ -380,7 +380,7 @@ static void *create_user_memory(size_t size)
 {
     // SOLUCIÓN MÁS SIMPLE: Usar el stack del kernel pero con permisos de usuario
     // Esto es solo para testing - en un kernel real usaríamos memoria separada
-    static uintptr_t user_memory_base = 0x80000; // Stack del kernel
+    static uintptr_t __attribute__((unused)) user_memory_base = 0x80000; // Stack del kernel
     static uintptr_t user_memory_used = 0x80000;
 
     // Alinear a 4KB
@@ -419,6 +419,9 @@ static void *create_user_memory(size_t size)
 
 int process_exec(const char *path, char *const argv[], char *const envp[])
 {
+    (void)argv; // Unused parameter
+    (void)envp; // Unused parameter
+    
     if (!current_process || !path)
     {
         return -1;
