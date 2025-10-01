@@ -20,7 +20,7 @@ void kmain_x64(void)
     // Banner
     print_colored("╔══════════════════════════════════════════════════════════════════════════════╗\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("║                              IR0 KERNEL v0.0.1                               ║\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("║                         Minimal Monolithic Kernel                            ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("║                              Monolithic Kernel                            ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("║                              Arch: x86-64                                    ║\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_colored("╚══════════════════════════════════════════════════════════════════════════════╝\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
@@ -96,17 +96,34 @@ void kmain_x64(void)
     print_colored("╚══════════════════════════════════════════════════════════════════════════════╝\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     delay_ms(1000);
 
-    // Start shell in Ring 3
+    // Create init process (PID 1) before going to Ring 3
+    extern int start_init_process(void);
+    
+    print("\nCreating init process (PID 1)...\n");
+    if (start_init_process() == 0) {
+        print("Init process created successfully\n");
+    } else {
+        print("ERROR: Failed to create init process!\n");
+    }
+    
+    // Start shell in Ring 3 (this will be called by init process)
     extern void shell_ring3_entry(void);
     extern void switch_to_user_mode(void *entry_point);
     
-    print("\nTransitioning to Ring 3...\n");
+    print("Transitioning to Ring 3...\n");
     delay_ms(1000);
     
     print("Enabling interrupts for user space...\n");
     delay_ms(500);
     
-    switch_to_user_mode((void*)shell_ring3_entry);
+    print("Starting init_proc_1 (PID 1)...\n");
+    delay_ms(500);
+    
+    // Enable interrupts before switching to user mode
+    __asm__ volatile("sti");
+    
+    extern void init_proc_1(void);
+    switch_to_user_mode((void*)init_proc_1);
 
     // Should never return
     panic("Kernel halted unexpectedly");

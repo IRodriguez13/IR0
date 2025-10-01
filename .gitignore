@@ -19,3 +19,9 @@
 .aider*
 disk.img
 iso-x86-64-desktop/boot/grub/grub.cfg
+CONSOLIDATION_PLAN.md
+KERNEL_SIMPLIFICATION_PLAN.md
+test_vmm_config.h
+backup-old-files/kernel_start_old.c
+backup-old-files/kernel_start.c.backup
+kernel/process.c.complex
