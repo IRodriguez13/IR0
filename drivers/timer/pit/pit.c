@@ -31,9 +31,9 @@ void increment_pit_ticks(void)
 void init_pic(void)
 {
 
-    // Guardar máscaras actuales
-    uint8_t mask1 = inb(0x21);
-    uint8_t mask2 = inb(0xA1);
+    // Guardar máscaras actuales (no utilizadas por ahora)
+    (void)inb(0x21);  // Read current mask1
+    (void)inb(0xA1);  // Read current mask2
 
 
     // Deshabilitar todas las interrupciones temporalmente

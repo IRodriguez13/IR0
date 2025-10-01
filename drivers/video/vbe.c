@@ -53,7 +53,7 @@ static struct {
 } vbe_state = {0};
 
 // Simple font (8x16 bitmap font - simplified)
-static const uint8_t font_8x16[256][16] = {0}; // Would contain actual font data
+static const uint8_t font_8x16[256][16] __attribute__((unused)) = {0}; // Would contain actual font data
 
 // Initialize VBE framebuffer
 int vbe_init(void)
@@ -67,7 +67,7 @@ int vbe_init(void)
     vbe_state.height = 25;
     vbe_state.pitch = 160; // 80 chars * 2 bytes
     vbe_state.bpp = 16; // Text mode
-    vbe_state.fb = (uint8_t*)vbe_state.framebuffer_addr;
+    vbe_state.fb = (uint8_t*)(uintptr_t)vbe_state.framebuffer_addr;
     vbe_state.initialized = true;
     
     return 0;
@@ -102,7 +102,7 @@ void vbe_putpixel(uint32_t x, uint32_t y, uint32_t color)
 }
 
 // Draw character at position
-void vbe_putchar(uint32_t x, uint32_t y, char c, uint32_t fg, uint32_t bg)
+void vbe_putchar(uint32_t x, uint32_t y, char c, uint32_t fg, uint32_t bg __attribute__((unused)))
 {
     if (!vbe_state.initialized) return;
     if (x >= vbe_state.width || y >= vbe_state.height) return;

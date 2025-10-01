@@ -926,3 +926,37 @@ task_t *get_idle_task(void)
     extern task_t *idle_task;
     return idle_task;
 }
+
+// ===============================================================================
+// FUNCIONES DE DEBUG Y INFORMACIÓN
+// ===============================================================================
+
+void dump_scheduler_state(void) {
+    print("Active scheduler: CFS (Completely Fair Scheduler)\n");
+    
+    extern task_t *current_running_task;
+    if (current_running_task) {
+        print("Current task PID: ");
+        print_uint32(current_running_task->pid);
+        print(", vruntime: ");
+        print_uint32((uint32_t)(current_running_task->vruntime / 1000000));
+        print("ms\n");
+    } else {
+        print("No current task\n");
+    }
+    
+    print("Scheduler ready: ");
+    int ready = (active_scheduler_type != SCHEDULER_NONE) && (current_scheduler.init != NULL);
+    print(ready ? "YES" : "NO");
+    print("\n");
+}
+
+task_t *get_current_task(void) {
+    extern task_t *current_running_task;
+    return current_running_task;
+}
+
+int scheduler_ready(void) {
+    return (active_scheduler_type != SCHEDULER_NONE) && 
+           (current_scheduler.init != NULL);
+}
