@@ -20,69 +20,68 @@ void kmain_x64(void)
     setup_tss();
     
     // Banner
-    print("IR0 Kernel v0.0.1\n");
-    print("Booting...\n\n");
+    print("                 IR0 Kernel v0.0.0 pre-rc1 Boot sequence\n");
 
     // Initialize logging first
     logging_init();
     log_subsystem_ok("INIT");
-    delay_ms(2500);
+    delay_ms(1000);
 
     // Initialize subsystems
     log_subsystem_ok("GDT_TSS");
-    delay_ms(2500);
+    delay_ms(1000);
 
     // Initialize PS/2 controller
     ps2_init();
     log_subsystem_ok("PS2");
-    delay_ms(2500);
+    delay_ms(1000);
 
     // Initialize keyboard
     extern void keyboard_init(void);
     keyboard_init();
     pic_unmask_irq(1);  // Enable IRQ1 (keyboard)
-    log_subsystem_ok("KEYBOARD");
-    delay_ms(2500);
+    log_subsystem_ok("KEYBOARD DRIVER");
+    delay_ms(1000);
 
     // Initialize memory
     extern void simple_alloc_init(void);
     simple_alloc_init();
-    log_subsystem_ok("MEMORY");
-    delay_ms(2500);
+    log_subsystem_ok("MEMORY SUBS");
+    delay_ms(1000);
 
     // Initialize storage
     ata_init();
-    log_subsystem_ok("STORAGE");
-    delay_ms(2500);
+    log_subsystem_ok("ATA STORAGE DRIVER");
+    delay_ms(1000);
 
     // Mount filesystem
     extern int vfs_init_with_minix(void);
     vfs_init_with_minix();
-    log_subsystem_ok("FILESYSTEM");
-    delay_ms(2500);
+    log_subsystem_ok("MINIX FILESYSTEM");
+    delay_ms(1000);
 
     // Initialize process management
     extern void process_init(void);
     process_init();
-    log_subsystem_ok("PROCESS");
-    delay_ms(2500);
+    log_subsystem_ok("PROCESS SUBS");
+    delay_ms(1000);
 
     // Initialize system clock
     extern int clock_system_init(void);
     clock_system_init();
-    log_subsystem_ok("CLOCK");
+    log_subsystem_ok("CLOCK SUBS");
     delay_ms(2500);
 
     // Initialize scheduler
     extern int scheduler_cascade_init(void);
     scheduler_cascade_init();
-    log_subsystem_ok("SCHEDULER");
+    log_subsystem_ok("SCHED SUBS");
     delay_ms(2500);
 
     // Initialize system calls
     extern void syscalls_init(void);
     syscalls_init();
-    log_subsystem_ok("SYSCALLS");
+    log_subsystem_ok("SYSCALLS SUBS");
     delay_ms(2500);
 
     // Set up interrupt handlers
@@ -92,7 +91,7 @@ void kmain_x64(void)
     idt_init64();
     idt_load64();
     pic_remap64();
-    log_subsystem_ok("INTERRUPTS");
+    log_subsystem_ok("INTERRUPTS ON");
     delay_ms(2500);
 #endif
 
@@ -102,11 +101,11 @@ void kmain_x64(void)
     extern void switch_to_user_mode(void *entry_point);
     
     start_init_process();
-    log_subsystem_ok("INIT_PROCESS");
+    log_subsystem_ok("INIT_PROC1 STARTING");
     delay_ms(2500);
 
     print("\nSwitching to user mode...\n");
-    delay_ms(2500);
+    delay_ms(4500);
     
     __asm__ volatile("sti");
     switch_to_user_mode((void*)init_proc_1);

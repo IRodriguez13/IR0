@@ -62,15 +62,12 @@ void setup_and_enable_paging(void)
 
     if (!(cr4 & (1 << 5)))
     {
-        // PAE no habilitado - fallo crítico
+        // PAE no habilitado - fallo crítico básicamente va a ser triple fault. Como todos los errores en un kernel :'-(
         return;
     }
 
     // 2. Expandir tablas existentes SILENCIOSO
     setup_paging_identity_16mb();
-
-    // 3. NO recargar CR3 - el boot assembly ya lo configuró correctamente
-    // load_page_directory((uint64_t)PML4);  // COMENTADO: No recargar CR3
 
     // 4. Verificar que paging está habilitado
     if (!is_paging_enabled())
@@ -78,71 +75,6 @@ void setup_and_enable_paging(void)
         // Paging no está habilitado - habilitarlo
         enable_paging();
     }
-}
-
-/**
- * Verificación POST-paging que SÍ puede usar print/log
- * Solo llamar DESPUÉS de que el paging esté completamente configurado
- */
-void verify_paging_setup_safe(void)
-{
-    log_info("PAGING", "=== POST-PAGING VERIFICATION ===");
-
-    // Ahora es seguro usar print porque el paging está activo
-    if (is_paging_enabled())
-    {
-        log_info("PAGING", "✓ Paging is enabled");
-    }
-    else
-    {
-        log_error("PAGING", "✗ Paging is NOT enabled");
-        return;
-    }
-
-    // Verificar CR3
-    uint64_t cr3 = get_current_page_directory();
-    log_info_fmt("PAGING", "CR3: 0x%llx", cr3);
-
-    // Verificar que CR3 apunta a PML4
-    if (cr3 == (uint64_t)PML4)
-    {
-        log_info("PAGING", "✓ CR3 points to correct PML4");
-    }
-    else
-    {
-        log_error("PAGING", "✗ CR3 points to wrong address");
-    }
-
-    // Verificar entradas críticas
-    if (PML4[0] & PAGE_PRESENT)
-    {
-        log_info("PAGING", "✓ PML4[0] is present");
-    }
-    else
-    {
-        log_error("PAGING", "✗ PML4[0] is not present");
-    }
-
-    if (PDPT[0] & PAGE_PRESENT)
-    {
-        log_info("PAGING", "✓ PDPT[0] is present");
-    }
-    else
-    {
-        log_error("PAGING", "✗ PDPT[0] is not present");
-    }
-
-    // Verificar primera entrada PD
-    if (PD[0] & PAGE_PRESENT && PD[0] & PAGE_SIZE_2MB_FLAG)
-    {
-        log_info("PAGING", "✓ PD[0] is present and 2MB page");
-    }
-    else
-    {
-        log_error("PAGING", "✗ PD[0] is not properly configured");
-    }
-
-    log_info("PAGING", "=== POST-PAGING VERIFICATION COMPLETE ===");
 }
 
 void load_page_directory(uint64_t pml4_addr)
