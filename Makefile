@@ -1,38 +1,14 @@
-# IR0 master kernel makefile - Multi-architecture support with conditional compilation
+# ===============================================================================
+# IR0 KERNEL MAKEFILE - x86-64 ONLY
+# ===============================================================================
 KERNEL_ROOT := $(CURDIR)
 
-# Arquitectura por defecto
-ARCH ?= x86-32
+# Architecture: x86-64 only
+ARCH := x86-64
 
-# Build target por defecto
-BUILD_TARGET ?= desktop
-
-# Validar build target
-VALID_TARGETS = desktop server iot embedded
-ifeq ($(filter $(BUILD_TARGET),$(VALID_TARGETS)),)
-    $(error Build target no válido: $(BUILD_TARGET). Use: desktop, server, iot, embedded)
-endif
-
-# Validar arquitectura
-VALID_ARCHS = x86-32 x86-64 arm32 arm64
-ifeq ($(filter $(ARCH),$(VALID_ARCHS)),)
-    $(error Arquitectura no soportada: $(ARCH). Use: x86-32, x86-64, arm32, arm64)
-endif
-
-# Configurar flags según build target
-ifeq ($(BUILD_TARGET),desktop)
-    CFLAGS_TARGET = -DIR0_DESKTOP
-    TARGET_NAME = desktop
-else ifeq ($(BUILD_TARGET),server)
-    CFLAGS_TARGET = -DIR0_SERVER
-    TARGET_NAME = server
-else ifeq ($(BUILD_TARGET),iot)
-    CFLAGS_TARGET = -DIR0_IOT
-    TARGET_NAME = iot
-else ifeq ($(BUILD_TARGET),embedded)
-    CFLAGS_TARGET = -DIR0_EMBEDDED
-    TARGET_NAME = embedded
-endif
+# Build target
+BUILD_TARGET := desktop
+CFLAGS_TARGET := -DIR0_DESKTOP
 
 # Información de versión del kernel
 IR0_VERSION_MAJOR := 1
@@ -42,57 +18,38 @@ IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PA
 IR0_BUILD_DATE := $(shell date +%Y-%m-%d)
 IR0_BUILD_TIME := $(shell date +%H:%M:%S)
 
-# Configuración por arquitectura
-ifeq ($(ARCH),x86-64)
-    # Configuración para 64-bit
-    CC = gcc
-    ASM = nasm  
-    LD = ld
-    CFLAGS = -m64 -mcmodel=kernel -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -D__x86_64__
-    CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-64/include -I$(KERNEL_ROOT)/arch/x86-64/sources -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x86-64 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
-    CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
-    ASMFLAGS = -f elf64
-    LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
-    ARCH_SUBDIRS = arch/x86-64
-    KERNEL_ENTRY = kmain_x64
-else ifeq ($(ARCH),x86-32)
-    # Configuración para 32-bit
-    CC = gcc
-    ASM = nasm
-    LD = ld  
-    CFLAGS = -m32 -march=i686 -D__i386__ -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/x86-32/include -I$(KERNEL_ROOT)/arch/x86-32/sources -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/memory/arch/x86-32 -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
-    CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
-    ASMFLAGS = -f elf32
-    LDFLAGS = -m elf_i386 -T arch/x86-32/linker.ld
-    ARCH_SUBDIRS = arch/x86-32
-    KERNEL_ENTRY = kmain_x32
-else ifeq ($(ARCH),arm64)
-    # Configuración para ARM64
-    CC = aarch64-linux-gnu-gcc
-    ASM = aarch64-linux-gnu-as
-    LD = aarch64-linux-gnu-ld
-    CFLAGS = -march=armv8-a -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm64/include -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory
-    CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
-    ASMFLAGS = --64
-    LDFLAGS = -m aarch64linux -T arch/arm64/linker.ld
-    ARCH_SUBDIRS = arch/arm64
-    KERNEL_ENTRY = kmain_arm64
-else ifeq ($(ARCH),arm32)
-    # Configuración para ARM32
-    CC = arm-none-eabi-gcc
-    ASM = arm-none-eabi-as
-    LD = arm-none-eabi-ld
-    CFLAGS = -march=armv7-a -nostdlib -nostdinc -fno-builtin -fno-stack-protector -fno-pic -nodefaultlibs -ffreestanding
-    CFLAGS += -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/arch/arm-32/include -I$(KERNEL_ROOT)/arch/arm-32/sources -I$(KERNEL_ROOT)/setup -I$(KERNEL_ROOT)/memory -I$(KERNEL_ROOT)/interrupt -I$(KERNEL_ROOT)/drivers -I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)/examples
-    CFLAGS += -Wall -Wextra -O0 -MMD -MP $(CFLAGS_TARGET)
-    ASMFLAGS = --32
-    LDFLAGS = -m armelf_linux_eabi -T arch/arm-32/linker.ld
-    ARCH_SUBDIRS = arch/arm-32
-    KERNEL_ENTRY = kmain_arm32
-endif
+# ===============================================================================
+# COMPILER CONFIGURATION (x86-64)
+# ===============================================================================
+CC = gcc
+ASM = nasm  
+LD = ld
+
+# Compiler flags
+CFLAGS = -m64 -mcmodel=kernel -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+CFLAGS += -D__x86_64__
+CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector
+CFLAGS += -fno-pic -nodefaultlibs -ffreestanding
+CFLAGS += -Wall -Wextra -Werror=implicit-function-declaration -O0 -g -MMD -MP
+CFLAGS += $(CFLAGS_TARGET)
+
+# Include paths
+CFLAGS += -I$(KERNEL_ROOT)
+CFLAGS += -I$(KERNEL_ROOT)/includes
+CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
+CFLAGS += -I$(KERNEL_ROOT)/arch/common
+CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/include
+CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/sources
+CFLAGS += -I$(KERNEL_ROOT)/setup
+CFLAGS += -I$(KERNEL_ROOT)/memory
+CFLAGS += -I$(KERNEL_ROOT)/interrupt
+CFLAGS += -I$(KERNEL_ROOT)/drivers
+CFLAGS += -I$(KERNEL_ROOT)/fs
+CFLAGS += -I$(KERNEL_ROOT)/kernel
+
+# Assembler and linker flags
+ASMFLAGS = -f elf64
+LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
 
 # Subsistemas comunes (siempre presentes)
 COMMON_SUBDIRS = kernel interrupt drivers/timer drivers/IO drivers/storage kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
@@ -150,463 +107,190 @@ endif
 
 SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 
-# Objetos base del kernel (comunes a todas las arquitecturas)
-KERNEL_BASE_OBJS = includes/ir0/print.o \
-                   includes/ir0/logging.o \
-                   includes/ir0/validation.o \
-				   arch/x86-64/sources/user_mode.o \
-                   includes/string.o \
-                   interrupt/arch/idt.o \
-                   interrupt/arch/pic.o \
-                   interrupt/arch/isr_handlers.o \
-                   interrupt/arch/keyboard.o \
-                   includes/ir0/panic/panic.o \
-                   drivers/timer/pit/pit.o \
-drivers/timer/clock_system.o \
-drivers/timer/best_clock.o \
-drivers/timer/hpet/hpet.o \
-drivers/timer/hpet/find_hpet.o \
-drivers/timer/lapic/lapic.o \
-drivers/timer/rtc/rtc.o \
-                   drivers/IO/ps2.o \
-                   drivers/storage/ata.o \
-                   kernel/scheduler/priority_scheduler.o \
-                   kernel/scheduler/round-robin_scheduler.o \
-                   kernel/scheduler/sched_central.o \
-                   kernel/scheduler/cfs_scheduler.o \
-                   kernel/scheduler/scheduler_detection.o \
-                   kernel/scheduler/task_impl.o \
-                   kernel/process/process.o \
-                   kernel/auth/auth.o \
-                   kernel/login/login_system.o \
-                   kernel/syscalls/syscalls.o \
-                   kernel/shell/shell.o \
-                   arch/common/arch_interface.o \
-                   memory/bump_allocator.o \
-                   memory/memory_manager.o \
-                   memory/slab_allocator.o \
-                   memory/buddy_allocator.o \
-                   setup/kernel_config.o \
-                   fs/minix_fs.o \
-                   fs/vfs_simple.o \
-                   kernel/kernel_start.o \
-                   examples/minix_test.o \
-                   examples/minix_ata_test.o
+# ===============================================================================
+# KERNEL OBJECTS (CONSOLIDATED)
+# ===============================================================================
+KERNEL_OBJS = \
+    kernel/kernel.o \
+    kernel/init.o \
+    kernel/process.o \
+    kernel/scheduler.o \
+    kernel/task.o \
+    kernel/syscalls.o \
+    kernel/shell.o
 
-# Objetos condicionales según build target
-ifeq ($(BUILD_TARGET),desktop)
-    CONDITIONAL_OBJS = 
-else ifeq ($(BUILD_TARGET),server)
-    CONDITIONAL_OBJS = 
-else ifeq ($(BUILD_TARGET),iot)
-    CONDITIONAL_OBJS = 
-else ifeq ($(BUILD_TARGET),embedded)
-    CONDITIONAL_OBJS = 
-endif
+MEMORY_OBJS = \
+    memory/allocator.o \
+    memory/paging.o
 
-# Objetos de arquitectura
-ifeq ($(ARCH),x86-64)
-    ARCH_OBJS = arch/x86-64/sources/arch_x64.o \
-				arch/x86-64/sources/gdt.o \
-                arch/x86-64/asm/boot_x64.o \
-                arch/x86-64/asm/syscall_entry_64.o \
-                arch/x86-64/sources/idt_arch_x64.o \
-                arch/x86-64/sources/fault.o \
-                arch/x86-64/sources/tss_x64.o \
-                kernel/scheduler/switch/switch_x64.o \
-                interrupt/arch/x86-64/isr_stubs_64.o \
-                memory/paging_x64.o
-else ifeq ($(ARCH),x86-32)  
-    ARCH_OBJS = arch/x86-32/sources/arch_x86.o \
-                arch/x86-32/asm/boot_x86.o \
-                kernel/scheduler/switch/switch_x86.o \
-                interrupt/arch/x86-32/isr_stubs_32.o \
-                memory/paging_x86-32.o
-else ifeq ($(ARCH),arm64)
-    ARCH_OBJS = arch/arm64/sources/arch_arm64.o \
-                arch/arm64/asm/boot_arm64.o \
-                arch/arm64/sources/exception_arm64.o \
-                memory/arch/arm64/paging_arm64.o \
-                memory/arch/arm64/mmu_arm64.o \
-                kernel/scheduler/switch/switch_arm64.o \
-                interrupt/arch/arm64/interrupt.o
-else ifeq ($(ARCH),arm32)
-    ARCH_OBJS = arch/arm-32/sources/arch_arm.o
-endif
+LIB_OBJS = \
+    includes/ir0/print.o \
+    includes/ir0/logging.o \
+    includes/ir0/validation.o \
+    includes/ir0/panic/panic.o \
+    includes/string.o
 
-# Todos los objetos
-ALL_OBJS = $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
+INTERRUPT_OBJS = \
+    interrupt/arch/idt.o \
+    interrupt/arch/pic.o \
+    interrupt/arch/isr_handlers.o \
+    interrupt/arch/keyboard.o \
+    interrupt/arch/x86-64/isr_stubs_64.o
 
-# Reglas de compilación para archivos .c
+DRIVER_OBJS = \
+    drivers/IO/ps2.o \
+    drivers/timer/pit/pit.o \
+    drivers/timer/clock_system.o \
+    drivers/timer/best_clock.o \
+    drivers/timer/rtc/rtc.o \
+    drivers/timer/hpet/hpet.o \
+    drivers/timer/hpet/find_hpet.o \
+    drivers/timer/lapic/lapic.o \
+    drivers/storage/ata.o \
+    drivers/video/vbe.o
+
+FS_OBJS = \
+    fs/minix_fs.o \
+    fs/vfs_simple.o
+
+ARCH_OBJS = \
+    arch/x86-64/sources/arch_x64.o \
+    arch/x86-64/sources/gdt.o \
+    arch/x86-64/sources/tss_x64.o \
+    arch/x86-64/sources/user_mode.o \
+    arch/x86-64/sources/idt_arch_x64.o \
+    arch/x86-64/sources/fault.o \
+    arch/x86-64/asm/boot_x64.o \
+    arch/x86-64/asm/syscall_entry_64.o \
+    arch/common/arch_interface.o \
+    kernel/scheduler/switch/switch_x64.o
+
+SETUP_OBJS = \
+    setup/kernel_config.o
+
+# All objects
+ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS)
+
+# ===============================================================================
+# BUILD RULES
+# ===============================================================================
+
+# Compile C files
 %.o: %.c
-	@echo "Compilando $<..."
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
 
-# Reglas de compilación para archivos .asm
+# Compile ASM files
 %.o: %.asm
-	@echo "Ensamblando $<..."
-	$(ASM) $(ASMFLAGS) $< -o $@
+	@echo "  ASM     $<"
+	@$(ASM) $(ASMFLAGS) $< -o $@
 
-# Compilar kernel para arquitectura específica
-kernel-$(ARCH)-$(TARGET_NAME).bin: $(ALL_OBJS) $(ARCH_SUBDIRS)/linker.ld
-	@echo "Enlazando kernel para $(ARCH)-$(TARGET_NAME)..."
-	$(LD) $(LDFLAGS) -o $@ $(KERNEL_BASE_OBJS) $(CONDITIONAL_OBJS) $(ARCH_OBJS)
-	@echo "Kernel $(ARCH)-$(TARGET_NAME) compilado: $@"
+# Link kernel
+kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
+	@echo "  LD      $@"
+	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS)
+	@echo "✓ Kernel linked: $@"
 
-# Crear ISO específico por arquitectura y target
-kernel-$(ARCH)-$(TARGET_NAME).iso: kernel-$(ARCH)-$(TARGET_NAME).bin
-	@echo "Creando ISO para $(ARCH)-$(TARGET_NAME)..."
-	@mkdir -p iso-$(ARCH)-$(TARGET_NAME)/boot/grub
-	@cp $(ARCH_SUBDIRS)/grub.cfg iso-$(ARCH)-$(TARGET_NAME)/boot/grub/
-	@cp kernel-$(ARCH)-$(TARGET_NAME).bin iso-$(ARCH)-$(TARGET_NAME)/boot/
-	@grub-mkrescue -o $@ iso-$(ARCH)-$(TARGET_NAME)
-	@echo "ISO $(ARCH)-$(TARGET_NAME) creado: $@"
+# Create ISO
+kernel-x64.iso: kernel-x64.bin
+	@echo "  ISO     $@"
+	@mkdir -p iso/boot/grub
+	@cp arch/x86-64/grub.cfg iso/boot/grub/
+	@cp kernel-x64.bin iso/boot/
+	@grub-mkrescue -o $@ iso 2>/dev/null
+	@echo "✓ ISO created: $@"
 
-# Targets simplificados para compatibilidad
-kernel-$(ARCH).bin: kernel-$(ARCH)-$(TARGET_NAME).bin
-	@ln -sf $< $@
+# Default target
+all: kernel-x64.iso
 
-kernel-$(ARCH).iso: kernel-$(ARCH)-$(TARGET_NAME).iso
-	@ln -sf $< $@
+# ===============================================================================
+# QEMU COMMANDS
+# ===============================================================================
 
-# Target por defecto
-all: kernel-$(ARCH)-$(TARGET_NAME).iso
+# Run with GUI and disk (default)
+run: kernel-x64.iso
+	@echo "🚀 Running IR0 Kernel..."
+	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	    -drive file=disk.img,format=raw,if=ide,index=0 \
+	    -m 512M -no-reboot -no-shutdown \
+	    -display gtk -serial stdio \
+	    -d guest_errors -D qemu_debug.log
 
-# Target para ejecutar en QEMU (por defecto con GUI)
-run: run-gui
+# Run without disk
+run-nodisk: kernel-x64.iso
+	@echo "🚀 Running IR0 Kernel (no disk)..."
+	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	    -m 512M -no-reboot -no-shutdown \
+	    -display gtk -serial stdio
 
+# Run in console mode
+run-console: kernel-x64.iso
+	@echo "🚀 Running IR0 Kernel (console)..."
+	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	    -drive file=disk.img,format=raw,if=ide,index=0 \
+	    -m 512M -no-reboot -no-shutdown \
+	    -nographic
 
+# Debug mode
+debug: kernel-x64.iso
+	@echo "🐛 Running IR0 Kernel (debug)..."
+	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	    -drive file=disk.img,format=raw,if=ide,index=0 \
+	    -m 512M -no-reboot -no-shutdown \
+	    -display gtk -serial stdio \
+	    -d int,cpu_reset,guest_errors -D qemu_debug.log
 
-# Target para ejecutar en QEMU (Display mode - con interfaz gráfica)
-run-display: kernel-$(ARCH)-$(TARGET_NAME).iso
-	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU (Display mode - con interfaz gráfica)..."
-ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
-else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
-else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
-else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY)
-endif
+# Create disk image
+create-disk:
+	@echo "🔧 Creating virtual disk..."
+	@./scripts/create_disk.sh
 
-# Target para debug en QEMU
-debug: kernel-$(ARCH)-$(TARGET_NAME).iso
-	@echo "Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con debug..."
-ifeq ($(ARCH),x86-64)
-	qemu-system-x86_64 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk -d int,cpu_reset -D qemu_debug.log
-else
-	qemu-system-i386 -cdrom kernel-$(ARCH)-$(TARGET_NAME).iso -m 512M -no-reboot -no-shutdown -display gtk -d int,cpu_reset -D qemu_debug.log
-endif
+# ===============================================================================
+# CLEAN
+# ===============================================================================
 
-# Compilar para todas las arquitecturas
-all-arch: 
-	@echo "Compilando para todas las arquitecturas..."
-	@for arch in x86-32 x86-64; do \
-		echo "Compilando $$arch..."; \
-		$(MAKE) ARCH=$$arch BUILD_TARGET=$(BUILD_TARGET) kernel-$$arch-$(TARGET_NAME).iso; \
-	done
-
-# Compilar para todos los build targets
-all-targets:
-	@echo "Compilando para todos los build targets..."
-	@for target in desktop server iot embedded; do \
-		echo "Compilando target $$target..."; \
-		$(MAKE) ARCH=$(ARCH) BUILD_TARGET=$$target kernel-$(ARCH)-$$target.iso; \
-	done
-
-# Compilar todas las combinaciones
-all-combinations:
-	@echo "Compilando todas las combinaciones..."
-	@for arch in x86-32 x86-64; do \
-		for target in desktop server iot embedded; do \
-			echo "Compilando $$arch-$$target..."; \
-			$(MAKE) ARCH=$$arch BUILD_TARGET=$$target kernel-$$arch-$$target.iso; \
-		done; \
-	done
-
-# Limpiar archivos de compilación
 clean:
-	@echo "Limpiando archivos de compilación..."
+	@echo "🧹 Cleaning build artifacts..."
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
 	@find . -name "*.bin" -type f -delete
 	@find . -name "*.iso" -type f -delete
-	@find . -name "*.elf" -type f -delete
-	@find . -name "*.img" -type f -delete
-	@find . -name "*.map" -type f -delete
-	@find . -name "*.lst" -type f -delete
-	@find . -name "*.tmp" -type f -delete
-	@find . -name "*.log" -type f -delete
-	@find . -name "qemu_*" -type f -delete
-	@rm -rf iso-*
-	@rm -rf tmp-*
-	@echo "Cleaning complete"
-
-# Limpiar todo (incluyendo logs)
-clean-all: clean
-	@echo "Cleaning additional files..."
-	@rm -f *.log
-	@rm -f qemu_*.log
-	@echo "Cleaning all complete"
-
-# Mostrar información de arquitectura
-arch-details:
-	@echo "Current arch: $(ARCH)"
-	@echo "Build target: $(BUILD_TARGET)"
-	@echo "Compilador: $(CC)"
-	@echo "Ensamblador: $(ASM)"
-	@echo "Linker: $(LD)"
-	@echo "Flags C: $(CFLAGS)"
-	@echo "Flags ASM: $(ASMFLAGS)"
-	@echo "Flags LD: $(LDFLAGS)"
+	@rm -rf iso/
+	@rm -f qemu_debug.log
+	@echo "✓ Clean complete"
 
 # ===============================================================================
-# TARGETS DE PRUEBAS
-# ===============================================================================
-
-# Ejecutar todas las pruebas
-test: test-compile test-qemu
-
-# Pruebas de compilación
-test-compile:
-	@echo "Ejecutando pruebas de compilación..."
-	@./scripts/test_framework.sh compile
-
-# Pruebas de QEMU
-test-qemu:
-	@echo "Ejecutando pruebas de QEMU..."
-	@./scripts/test_framework.sh qemu
-
-# Pruebas de QEMU con display
-test-qemu-display:
-	@echo "Ejecutando pruebas de QEMU con display..."
-	@./scripts/test_framework.sh qemu-display
-
-# Prueba específica
-test-specific:
-	@echo "Ejecutando prueba específica: $(TEST_NAME)"
-	@./scripts/test_framework.sh $(TEST_NAME)
-
-# Ejecutar todas las pruebas del framework
-test-all:
-	@echo "Ejecutando suite completa de pruebas..."
-	@./scripts/test_framework.sh all
-
-# ===============================================================================
-# INFORMACIÓN DE AYUDA
+# HELP
 # ===============================================================================
 
 help:
-	@echo "=== IR-0 Kernel Build System ==="
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║       IR0 KERNEL - BUILD SYSTEM (x86-64 ONLY)             ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
-	@echo "For now, it only works in x64 :-("
+	@echo "📦 Build:"
+	@echo "  make all              Build kernel ISO"
+	@echo "  make clean            Clean build artifacts"
 	@echo ""
-	@echo "📋 Comandos principales:"
-	@echo "  make all                    - build kernel for current arch and target"
-	@echo "  make clean                  - Clean build files"
-	@echo "  make clean-all              - Clean all files, including logs"
+	@echo "🚀 Run:"
+	@echo "  make run              Run with GUI + disk (recommended)"
+	@echo "  make run-nodisk       Run without disk"
+	@echo "  make run-console      Run in console mode"
+	@echo "  make debug            Run with full debug logging"
 	@echo ""
-	@echo "🏗️  Compilación por arquitectura:"
-	@echo "  make ARCH=x86-64 all        - Build for x86-64"
-	@echo "  make ARCH=x86-32 all        - Build for x86-32"
-	@echo "  make ARCH=arm64 all         - Build for ARM64"
-	@echo "  make ARCH=arm32 all         - Build for ARM32"
+	@echo "🔧 Utilities:"
+	@echo "  make create-disk      Create virtual disk for MINIX FS"
+	@echo "  make help             Show this help"
 	@echo ""
-	@echo "💾 Comandos con disco virtual:"
-	@echo "  make create-disk            - Create virtual disk for Minix FS"
-	@echo "  make run-64-with-disk       - Build & run 64-bit with disk  == RECOMENDED == "
-	@echo "  make run-32-with-disk       - Build & run 32-bit with disk"
+	@echo "💡 Quick start: make run"
 	@echo ""
-	@echo "🔧 Comandos rápidos:"
-	@echo "  make run-64                 - Build & run 64-bit"
-	@echo "  make run-32                 - Build & run 32-bit"
-	@echo "  make run-64-nographic       - Build & run 64-bit sin GUI"
-	@echo "  make run-32-nographic       - Build & run 32-bit sin GUI"
-	@echo ""
-	@echo "🐛 Debugging:"
-	@echo "  make run-debug              - Run with debugging"
-	@echo ""
-	@echo "📊 Información:"
-	@echo "  make arch-details           - Show arch details"
-	@echo "  make help-qemu              - Show QEMU help"
-	@echo ""
-	@echo "🎯 Build targets disponibles:"
-	@echo "  - desktop (default)"
-	@echo "  - server (future)"
-	@echo "  - iot (future)"
-	@echo "  - embedded (future)"
-	@echo ""
-	@echo "Example: make ARCH=x86-64 BUILD_TARGET=desktop run-gui"
 
 # ===============================================================================
-# COMANDOS QEMU SIMPLES Y RÁPIDOS
+# PHONY TARGETS
 # ===============================================================================
 
-# Ejecutar con GUI (por defecto)
-run-gui: all
-	@echo "🚀 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con GUI..."
-ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -drive file=disk.img,format=raw,if=ide,index=0 -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL) $(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
-else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
-else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
-else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
-endif
+.PHONY: all clean run run-nodisk run-console debug create-disk help
 
-run-gui-with-disk: all
-	@echo "🚀 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con GUI y disco virtual..."
-ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -drive file=disk.img,format=raw,if=ide,index=0 -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL) $(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
-else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
-else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
-else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_SERIAL)
-endif
-
-run-console: all
-	@echo "🚀 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU sin GUI..."
-ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) -nographic
-else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) -nographic
-else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) -nographic
-else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -hda disk.img -m $(QEMU_MEMORY) $(QEMU_FLAGS) -nographic
-endif
-
-# Ejecutar sin GUI (terminal)
-run-nographic: all
-	@echo "🖥️  Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU sin GUI (terminal)..."
-ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL)
-else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL)
-else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL)
-else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_SERIAL)
-endif
-
-# Ejecutar para testing (sin display, con timeout)
-run-test: all
-	@echo "🧪 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU para testing..."
-ifeq ($(ARCH),x86-64)
-	timeout $(QEMU_TIMEOUT) $(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_DISPLAY_NONE) || true
-else ifeq ($(ARCH),x86-32)
-	timeout $(QEMU_TIMEOUT) $(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_DISPLAY_NONE) || true
-else ifeq ($(ARCH),arm64)
-	timeout $(QEMU_TIMEOUT) $(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_DISPLAY_NONE) || true
-else ifeq ($(ARCH),arm32)
-	timeout $(QEMU_TIMEOUT) $(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_SERIAL) $(QEMU_DISPLAY_NONE) || true
-endif
-
-# Comandos rápidos para 32-bit y 64-bit
-run-32: 
-	@$(MAKE) ARCH=x86-32 run-gui
-
-run-64:
-	@$(MAKE) ARCH=x86-64 run-gui
-
-run-32-nographic:
-	@$(MAKE) ARCH=x86-32 run-nographic
-
-run-64-nographic:
-	@$(MAKE) ARCH=x86-64 run-nographic
-
-# Comando para crear disco virtual
-create-disk:
-	@echo "🔧 Creando disco virtual para IR0 Kernel..."
-	@./scripts/create_disk.sh
-
-# Comandos con disco virtual
-run-64-with-disk: create-disk
-	@$(MAKE) ARCH=x86-64 run-gui-with-disk
-
-run-32-with-disk: create-disk
-	@$(MAKE) ARCH=x86-32 run-gui-with-disk
-
-# Comandos con debugging
-run-debug: all
-	@echo "🐛 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con debugging..."
-ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
-else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
-else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
-else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_DISPLAY_GTK) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
-endif
-
-run-debug-nographic: all
-	@echo "🐛 Ejecutando kernel $(ARCH)-$(TARGET_NAME) en QEMU con debugging (terminal)..."
-ifeq ($(ARCH),x86-64)
-	$(QEMU_64_CMD) $(QEMU_64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
-else ifeq ($(ARCH),x86-32)
-	$(QEMU_32_CMD) $(QEMU_32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).iso -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
-else ifeq ($(ARCH),arm64)
-	$(QEMU_ARM64_CMD) $(QEMU_ARM64_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
-else ifeq ($(ARCH),arm32)
-	$(QEMU_ARM32_CMD) $(QEMU_ARM32_FLAGS) kernel-$(ARCH)-$(TARGET_NAME).bin -m $(QEMU_MEMORY) $(QEMU_FLAGS) $(QEMU_NGRAPHIC) $(QEMU_DEBUG_ALL) $(QEMU_LOG_FILE)
-endif
-
-# Comandos rápidos con debugging
-run-32-debug:
-	@$(MAKE) ARCH=x86-32 run-debug
-
-run-64-debug:
-	@$(MAKE) ARCH=x86-64 run-debug
-
-run-32-debug-nographic:
-	@$(MAKE) ARCH=x86-32 run-debug-nographic
-
-run-64-debug-nographic:
-	@$(MAKE) ARCH=x86-64 run-debug-nographic
-
-# Ayuda específica de QEMU
-help-qemu:
-	@echo "🎮 IR0 Kernel QEMU Commands"
-	@echo ""
-	@echo "Comandos principales:"
-	@echo "  make run-gui              - Ejecutar con interfaz gráfica (GTK)"
-	@echo "  make run-nographic        - Ejecutar en terminal (sin GUI)"
-	@echo "  make run-test             - Ejecutar para testing (con timeout)"
-	@echo ""
-	@echo "Comandos con debugging:"
-	@echo "  make run-debug            - Ejecutar con debugging completo"
-	@echo "  make run-debug-nographic  - Ejecutar con debugging en terminal"
-	@echo ""
-	@echo "Comandos rápidos por arquitectura:"
-	@echo "  make run-32               - Compilar y ejecutar 32-bit con GUI"
-	@echo "  make run-64               - Compilar y ejecutar 64-bit con GUI"
-	@echo "  make run-32-nographic     - Compilar y ejecutar 32-bit sin GUI"
-	@echo "  make run-64-nographic     - Compilar y ejecutar 64-bit sin GUI"
-	@echo "  make run-32-debug         - Compilar y ejecutar 32-bit con debugging"
-	@echo "  make run-64-debug         - Compilar y ejecutar 64-bit con debugging"
-	@echo ""
-	@echo "Opciones de QEMU incluidas:"
-	@echo "  -no-reboot               - No reiniciar automáticamente"
-	@echo "  -no-shutdown             - No apagar automáticamente"
-	@echo "  -nographic               - Modo terminal (sin GUI)"
-	@echo "  -display gtk             - Interfaz gráfica GTK"
-	@echo "  -serial stdio            - Salida serial a terminal"
-	@echo ""
-	@echo "Opciones de debugging:"
-	@echo "  -d int,cpu_reset         - Log de interrupciones y resets"
-	@echo "  -d exec                  - Log de ejecución de instrucciones"
-	@echo "  -d guest_errors          - Log de errores del guest"
-	@echo "  -d page                  - Log de page faults"
-	@echo "  -D qemu_debug.log        - Archivo de log de debugging"
-	@echo ""
-	@echo "Para salir de QEMU:"
-	@echo "  Ctrl+A, X                - Salir de QEMU"
-	@echo "  Ctrl+C                   - Interrumpir ejecución"
-
-.PHONY: all all-arch all-targets all-combinations run debug clean clean-all arch-details help run-gui run-nographic run-test run-32 run-64 run-32-nographic run-64-nographic run-debug run-debug-nographic run-32-debug run-64-debug run-32-debug-nographic run-64-debug-nographic help-qemu
-
+# Include dependency files
+-include $(ALL_OBJS:.o=.d)

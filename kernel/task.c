@@ -2,11 +2,15 @@
 
 #include "task.h"
 #include "scheduler.h"
-#include <bump_allocator.h>
 #include <ir0/print.h>
 #include <ir0/panic/panic.h>
 #include <arch_interface.h>
 #include <string.h>
+#include <memory/allocator.h>
+
+// Forward declarations
+extern void *kmalloc(size_t size);
+extern void kfree(void *ptr);
 
 // ===============================================================================
 // VARIABLES GLOBALES

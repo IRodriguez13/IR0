@@ -40,6 +40,7 @@ void log_syscall(const char *syscall, int result, const char *args);
 void log_filesystem_op(const char *op, const char *path, int result);
 void log_memory_op(const char *op, void *ptr, size_t size, int result);
 void log_interrupt(uint8_t irq, const char *handler, int result);
+void log_subsystem_ok(const char *subsystem_name);
 
 // Logging initialization
 void logging_init(void);

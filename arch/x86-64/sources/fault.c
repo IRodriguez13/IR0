@@ -3,114 +3,61 @@
 #include <panic/panic.h>
 
 // Manejadores de excepciones básicos para x86-64
-// Buffer seguro para logging (en memoria estática)
 static char pf_log_buffer[256];
 static int pf_log_pos = 0;
 
 void page_fault_handler_x64(uint64_t error_code, uint64_t fault_address)
 {
-    // ✅ SOLUCIÓN: Usar buffer estático en lugar de print/heap
-    // Limpiar buffer
-    pf_log_pos = 0;
-
-    // Log básico sin funciones complejas
-    const char *msg = "PAGE FAULT: ";
-    for (int i = 0; msg[i] && pf_log_pos < 255; i++)
-    {
-        pf_log_buffer[pf_log_pos++] = msg[i];
+    // CRITICAL: NO CALLS TO ANYTHING - Direct VGA write to avoid recursion
+    volatile uint16_t *vga = (volatile uint16_t *)0xB8000;
+    const char *msg = "PAGE FAULT!";
+    
+    // Clear screen with red background
+    for (int i = 0; i < 80 * 25; i++) {
+        vga[i] = 0x4F20; // White on red, space
     }
-
-    // Convertir error_code a hex simple
-    for (int i = 0; i < 16; i++)
-    {
-        uint8_t nibble = (error_code >> (60 - i * 4)) & 0xF;
-        char hex_char = (nibble < 10) ? '0' + nibble : 'A' + (nibble - 10);
-        if (pf_log_pos < 255)
-            pf_log_buffer[pf_log_pos++] = hex_char;
+    
+    // Write message
+    for (int i = 0; msg[i] != '\0'; i++) {
+        vga[i] = 0x4F00 | msg[i]; // White on red
     }
-
-    // Agregar fault address
-    msg = " FA: ";
-    for (int i = 0; msg[i] && pf_log_pos < 255; i++)
-    {
-        pf_log_buffer[pf_log_pos++] = msg[i];
+    
+    // Write fault address in hex (simple)
+    vga[80] = 0x4F00 | 'A';
+    vga[81] = 0x4F00 | 'd';
+    vga[82] = 0x4F00 | 'd';
+    vga[83] = 0x4F00 | 'r';
+    vga[84] = 0x4F00 | ':';
+    vga[85] = 0x4F00 | ' ';
+    
+    // Write address (simplified - just show it's not zero)
+    if (fault_address) {
+        vga[86] = 0x4F00 | 'N';
+        vga[87] = 0x4F00 | 'O';
+        vga[88] = 0x4F00 | 'N';
+        vga[89] = 0x4F00 | 'Z';
+    } else {
+        vga[86] = 0x4F00 | 'Z';
+        vga[87] = 0x4F00 | 'E';
+        vga[88] = 0x4F00 | 'R';
+        vga[89] = 0x4F00 | 'O';
     }
-
-    for (int i = 0; i < 16; i++)
-    {
-        uint8_t nibble = (fault_address >> (60 - i * 4)) & 0xF;
-        char hex_char = (nibble < 10) ? '0' + nibble : 'A' + (nibble - 10);
-        if (pf_log_pos < 255)
-            pf_log_buffer[pf_log_pos++] = hex_char;
-    }
-
-    pf_log_buffer[pf_log_pos] = '\0';
-
-    pf_log_buffer[pf_log_pos] = '\0';
-
-    // ✅ SOLUCIÓN: Halt inmediato sin más operaciones
-    print(pf_log_buffer);
-    cpu_relax();
+    
+    // Halt forever - NO RETURN
+    __asm__ volatile("cli");
+    for(;;) __asm__ volatile("hlt");
 }
 
 void general_protection_fault_x64(uint64_t error_code)
 {
-    print_colored("GENERAL PROTECTION FAULT x86-64!\n", 0x0C, 0x00);
-    delay_ms(1000);
-
-    print("Error code: ");
-    print_hex_compact(error_code);
-    print("\n");
-    delay_ms(2000);
-
-    // Mostrar información adicional
-    print("GP FAULT DETALLES:\n");
-    if (error_code & 1)
-    {
-        print("  - External: SI\n");
-    }
-    else
-    {
-        print("  - External: NO\n");
-    }
-
-    if (error_code & 2)
-    {
-        print("  - Table: IDT\n");
-    }
-    else
-    {
-        print("  - Table: GDT/LDT\n");
-    }
-
-    uint16_t selector = (error_code >> 3) & 0xFFFF;
-    print("  - Selector: ");
-    print_hex_compact(selector);
-    print("\n");
-
-    delay_ms(3000);
-
-    print("GP FAULT - Error crítico del sistema!\n");
-    panic("GP FAULT");
+    (void)error_code;
+    panic("GPF");
 }
 
 void double_fault_x64(uint64_t error_code)
 {
-    print_colored("DOUBLE FAULT x86-64!\n", 0x0C, 0x00);
-    delay_ms(1000);
-
-    print("Error code: ");
-    print_hex_compact(error_code);
-    print("\n");
-    delay_ms(2000);
-
-    print("DOUBLE FAULT - Error crítico del sistema!\n");
-    print("Esto indica que una excepción ocurrió mientras se manejaba otra excepción.\n");
-    delay_ms(3000);
-
-    // Halt el sistema
-    print("DOUBLE FAULT - Error crítico del sistema!\n");
-    panic("Double FAULT");
+    (void)error_code;
+    for(;;) __asm__ volatile("cli; hlt");
 }
 
 void triple_fault_x64()
