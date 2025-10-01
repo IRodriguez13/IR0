@@ -155,7 +155,7 @@ int64_t sys_ps(void)
   sys_write(1, "PID  STATE    COMMAND\n", 21);
   sys_write(1, "---  -------  -------\n", 22);
 
-  // Show current process (real)
+  // Show current process (this is not real, but it works for testing syscalls)
   if (current_process)
   {
     char pid_str[16];
