@@ -90,25 +90,14 @@ void keyboard_handler64(void) {
     
     // Solo procesar key press (scancode < 0x80)
     if (scancode < 0x80) {
-        // DEBUG: Mostrar scancode cuando estamos en idle
-        if (system_in_idle_mode) {
-            print_colored("DEBUG: Scancode in idle: 0x", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-            print_hex_compact(scancode);
-            print_colored("\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-        }
-        
-        // Verificar si estamos en modo idle y detectar tecla especial (F12 = 0x58)
-        if (system_in_idle_mode && scancode == 0x58) {
-            print_colored("DEBUG: F12 detected!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-            wakeup_from_idle();
-            return;
-        }
-        
         char ascii = translate_scancode(scancode);
         if (ascii != 0) {
             keyboard_buffer_add(ascii);
         }
     }
+    
+    // Send EOI to PIC
+    outb(0x20, 0x20);
 }
 
 
