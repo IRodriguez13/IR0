@@ -118,7 +118,6 @@ void vfs_simple_init(void)
 
     directory_count = 0;
     vfs_simple_initialized = true;
-
 }
 
 // ===============================================================================
@@ -157,7 +156,6 @@ int vfs_simple_mkdir(const char *path)
     new_dir->created_time = get_current_time();
 
     directory_count++;
-
 
     return 0;
 }
@@ -221,14 +219,12 @@ int vfs_simple_ls(const char *path)
         return -1;
     }
 
-
     // Mostrar archivos
     for (int i = 0; i < dir->file_count; i++)
     {
         simple_file_t *file = &dir->files[i];
-        const char *type = file->is_directory ? "d" : "-";
-        const char *permissions = "rwxr-xr-x";
-
+        const char *type __attribute__((unused)) = file->is_directory ? "d" : "-";
+        const char *permissions __attribute__((unused)) = "rwxr-xr-x";
     }
 
     // Mostrar directorios creados
