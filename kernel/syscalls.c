@@ -29,7 +29,8 @@ typedef uint32_t mode_t;
 // SYSCALL IMPLEMENTATIONS - ONLY WORKING ONES
 // ============================================================================
 
-int64_t sys_exit(int exit_code) {
+int64_t sys_exit(int exit_code)
+{
   (void)exit_code;
   if (!current_process)
     return -ESRCH;
@@ -42,19 +43,23 @@ int64_t sys_exit(int exit_code) {
   return 0;
 }
 
-int64_t sys_write(int fd, const void *buf, size_t count) {
+int64_t sys_write(int fd, const void *buf, size_t count)
+{
   if (!current_process)
     return -ESRCH;
   if (!buf || count == 0)
     return 0;
 
-  if (fd == STDOUT_FILENO || fd == STDERR_FILENO) {
+  if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
+  {
     const char *str = (const char *)buf;
     // Use print directly for simplicity
-    for (size_t i = 0; i < count && i < 1024; i++) {
+    for (size_t i = 0; i < count && i < 1024; i++)
+    {
       if (str[i] == '\n')
         print("\n");
-      else {
+      else
+      {
         char temp[2] = {str[i], 0};
         print(temp);
       }
@@ -68,22 +73,27 @@ int64_t sys_write(int fd, const void *buf, size_t count) {
 extern char keyboard_buffer_get(void);
 extern int keyboard_buffer_has_data(void);
 
-int64_t sys_read(int fd, void *buf, size_t count) {
-  if (!current_process) {
+int64_t sys_read(int fd, void *buf, size_t count)
+{
+  if (!current_process)
+  {
     return -ESRCH;
   }
   if (!buf || count == 0)
     return 0;
 
-  if (fd == STDIN_FILENO) {
+  if (fd == STDIN_FILENO)
+  {
     // Read from keyboard buffer - NON-BLOCKING
     char *buffer = (char *)buf;
     size_t bytes_read = 0;
 
     // Only read if there's data available
-    if (keyboard_buffer_has_data()) {
+    if (keyboard_buffer_has_data())
+    {
       char c = keyboard_buffer_get();
-      if (c != 0) {
+      if (c != 0)
+      {
         buffer[bytes_read++] = c;
       }
     }
@@ -93,45 +103,36 @@ int64_t sys_read(int fd, void *buf, size_t count) {
   return -EBADF;
 }
 
-int64_t sys_getpid(void) {
-  if (!current_process) {
+int64_t sys_getpid(void)
+{
+  if (!current_process)
+  {
     return -ESRCH;
   }
   return current_process->pid;
 }
 
-int64_t sys_getppid(void) {
+int64_t sys_getppid(void)
+{
   if (!current_process)
     return -ESRCH;
   return 0; // No parent tracking yet
 }
 
-int64_t sys_ls(const char *pathname) {
+int64_t sys_ls(const char *pathname)
+{
   if (!current_process)
     return -ESRCH;
 
-  // Simple ls implementation - just show some dummy files
-  print("\n=== Directory Listing ===\n");
-  print("drwxr-xr-x  2 root root  4096 Jan 10 12:00 .\n");
-  print("drwxr-xr-x  3 root root  4096 Jan 10 12:00 ..\n");
-  print("-rw-r--r--  1 root root   256 Jan 10 12:00 test.txt\n");
-  print("-rw-r--r--  1 root root   512 Jan 10 12:00 readme.md\n");
-  print("drwxr-xr-x  2 root root  4096 Jan 10 12:00 bin\n");
-  print("drwxr-xr-x  2 root root  4096 Jan 10 12:00 etc\n");
-  
-  // Try real filesystem if available
-  extern bool minix_fs_is_working(void);
-  extern int minix_fs_ls(const char *path);
+  // Use VFS layer
+  extern int vfs_ls(const char *path);
+  const char *target_path = pathname ? pathname : "/";
 
-  if (minix_fs_is_working()) {
-    print("\n=== Real Filesystem ===\n");
-    return minix_fs_ls(pathname ? pathname : "/");
-  }
-  
-  return 0;
+  return vfs_ls(target_path);
 }
 
-int64_t sys_mkdir(const char *pathname, mode_t mode) {
+int64_t sys_mkdir(const char *pathname, mode_t mode)
+{
   (void)mode;
   if (!current_process)
     return -ESRCH;
@@ -141,29 +142,183 @@ int64_t sys_mkdir(const char *pathname, mode_t mode) {
   extern bool minix_fs_is_working(void);
   extern int minix_fs_mkdir(const char *path);
 
-  if (minix_fs_is_working()) {
+  if (minix_fs_is_working())
+  {
     return minix_fs_mkdir(pathname);
   }
   return -ENOSYS;
 }
 
-int64_t sys_ps(void) {
-  print("\n=== PROCESS LIST ===\n");
-  print("PID  PPID  STATE    COMMAND\n");
-  print("---  ----  -------  -------\n");
+int64_t sys_ps(void)
+{
+  // Use sys_write to send output to shell
+  sys_write(1, "PID  STATE    COMMAND\n", 21);
+  sys_write(1, "---  -------  -------\n", 22);
 
-  if (current_process) {
-    print("  ");
-    print_uint32(current_process->pid);
-    print("     0  RUNNING  init\n");
+  // Show current process (real)
+  if (current_process)
+  {
+    char pid_str[16];
+    int len = 0;
+    uint32_t pid = current_process->pid;
+
+    // Convert PID to string
+    if (pid == 0)
+    {
+      pid_str[len++] = '0';
+    }
+    else
+    {
+      char temp[16];
+      int temp_len = 0;
+      while (pid > 0)
+      {
+        temp[temp_len++] = '0' + (pid % 10);
+        pid /= 10;
+      }
+      for (int i = temp_len - 1; i >= 0; i--)
+      {
+        pid_str[len++] = temp[i];
+      }
+    }
+
+    sys_write(1, "  ", 2);
+    sys_write(1, pid_str, len);
+
+    // Show real state
+    switch (current_process->state)
+    {
+    case 0:
+      sys_write(1, "  READY    ", 11);
+      break;
+    case 1:
+      sys_write(1, "  RUNNING  ", 11);
+      break;
+    case 2:
+      sys_write(1, "  BLOCKED  ", 11);
+      break;
+    case 3:
+      sys_write(1, "  SLEEPING ", 11);
+      break;
+    case 4:
+      sys_write(1, "  ZOMBIE   ", 11);
+      break;
+    default:
+      sys_write(1, "  UNKNOWN  ", 11);
+      break;
+    }
+    sys_write(1, "shell\n", 6);
   }
-  
-  print("  0     0  IDLE     kernel\n");
-  print("\nTotal: 2 processes\n");
+
+  // Show kernel process (always exists)
+  sys_write(1, "  0  IDLE     kernel\n", 20);
+
   return 0;
 }
 
-int64_t sys_kernel_info(void *info_buffer, size_t buffer_size) {
+int64_t sys_cat(const char *pathname)
+{
+  if (!current_process)
+    return -ESRCH;
+  if (!pathname)
+    return -EFAULT;
+
+  extern bool minix_fs_is_working(void);
+  extern int minix_fs_cat(const char *path);
+
+  if (minix_fs_is_working())
+  {
+    return minix_fs_cat(pathname);
+  }
+  else
+  {
+    const char *error_msg = "Error: MINIX filesystem not initialized\n";
+    sys_write(STDERR_FILENO, error_msg, strlen(error_msg));
+    return -1;
+  }
+}
+
+int64_t sys_touch(const char *pathname)
+{
+  if (!current_process)
+    return -ESRCH;
+  if (!pathname)
+    return -EFAULT;
+
+  extern bool minix_fs_is_working(void);
+  extern int minix_fs_touch(const char *path);
+
+  if (minix_fs_is_working())
+  {
+    return minix_fs_touch(pathname);
+  }
+  else
+  {
+    const char *error_msg = "Error: MINIX filesystem not initialized\n";
+    sys_write(STDERR_FILENO, error_msg, strlen(error_msg));
+    return -1;
+  }
+}
+
+int64_t sys_rm(const char *pathname)
+{
+  if (!current_process)
+    return -ESRCH;
+  if (!pathname)
+    return -EFAULT;
+
+  extern bool minix_fs_is_working(void);
+  extern int minix_fs_rm(const char *path);
+
+  if (minix_fs_is_working())
+  {
+    return minix_fs_rm(pathname);
+  }
+  else
+  {
+    const char *error_msg = "Error: MINIX filesystem not initialized\n";
+    sys_write(STDERR_FILENO, error_msg, strlen(error_msg));
+    return -1;
+  }
+}
+
+// ============================================================================
+// PROCESS MANAGEMENT SYSCALLS
+// ============================================================================
+
+int64_t sys_fork(void)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  extern pid_t process_fork(void);
+  return process_fork();
+}
+
+int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
+{
+  (void)options; // Ignore options for now
+  (void)rusage;  // Ignore rusage for now
+
+  if (!current_process)
+    return -ESRCH;
+
+  extern int process_wait(pid_t pid, int *status);
+  return process_wait(pid, status);
+}
+
+int64_t sys_waitpid(pid_t pid, int *status, int options)
+{
+  return sys_wait4(pid, status, options, NULL);
+}
+
+int64_t sys_kernel_info(void *info_buffer, size_t buffer_size)
+{
+
+  // ============================================================================
+  // PROCESS MANAGEMENT SYSCALLS
+  // ============================================================================
+
   if (!current_process)
     return -ESRCH;
   if (!info_buffer)
@@ -189,12 +344,14 @@ int64_t sys_kernel_info(void *info_buffer, size_t buffer_size) {
 
 void sys_exit_wrapper(syscall_args_t *args) { sys_exit((int)args->arg1); }
 
-void sys_write_wrapper(syscall_args_t *args) {
+void sys_write_wrapper(syscall_args_t *args)
+{
   args->arg1 =
       sys_write((int)args->arg1, (void *)args->arg2, (size_t)args->arg3);
 }
 
-void sys_read_wrapper(syscall_args_t *args) {
+void sys_read_wrapper(syscall_args_t *args)
+{
   args->arg1 =
       sys_read((int)args->arg1, (void *)args->arg2, (size_t)args->arg3);
 }
@@ -203,33 +360,42 @@ void sys_getpid_wrapper(syscall_args_t *args) { args->arg1 = sys_getpid(); }
 
 void sys_getppid_wrapper(syscall_args_t *args) { args->arg1 = sys_getppid(); }
 
-void sys_ls_wrapper(syscall_args_t *args) {
+void sys_ls_wrapper(syscall_args_t *args)
+{
   args->arg1 = sys_ls((const char *)args->arg1);
 }
 
-void sys_mkdir_wrapper(syscall_args_t *args) {
+void sys_mkdir_wrapper(syscall_args_t *args)
+{
   args->arg1 = sys_mkdir((const char *)args->arg1, (mode_t)args->arg2);
 }
 
 void sys_ps_wrapper(syscall_args_t *args) { args->arg1 = sys_ps(); }
 
-void sys_kernel_info_wrapper(syscall_args_t *args) {
+void sys_kernel_info_wrapper(syscall_args_t *args)
+{
   args->arg1 = sys_kernel_info((void *)args->arg1, (size_t)args->arg2);
 }
 
 // Syscall table
 void (*syscall_table[256])(syscall_args_t *) = {
-    [0] = sys_exit_wrapper,        [1] = sys_write_wrapper,
-    [2] = sys_read_wrapper,        [3] = sys_getpid_wrapper,
-    [4] = sys_getppid_wrapper,     [5] = sys_ls_wrapper,
-    [6] = sys_mkdir_wrapper,       [7] = sys_ps_wrapper,
+    [0] = sys_exit_wrapper,
+    [1] = sys_write_wrapper,
+    [2] = sys_read_wrapper,
+    [3] = sys_getpid_wrapper,
+    [4] = sys_getppid_wrapper,
+    [5] = sys_ls_wrapper,
+    [6] = sys_mkdir_wrapper,
+    [7] = sys_ps_wrapper,
     [8] = sys_kernel_info_wrapper,
 };
 
 // Syscall dispatcher called from assembly
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
-                         uint64_t arg3, uint64_t arg4, uint64_t arg5) {
-  switch (syscall_num) {
+                         uint64_t arg3, uint64_t arg4 __attribute__((unused)), uint64_t arg5 __attribute__((unused)))
+{
+  switch (syscall_num)
+  {
   case 0: // exit
     return sys_exit((int)arg1);
 
@@ -257,6 +423,21 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   case 8: // kernel_info
     return sys_kernel_info((void *)arg1, (size_t)arg2);
 
+  case 9: // cat
+    return sys_cat((const char *)arg1);
+
+  case 10: // touch
+    return sys_touch((const char *)arg1);
+
+  case 11: // rm
+    return sys_rm((const char *)arg1);
+
+  case 12: // fork
+    return sys_fork();
+
+  case 13: // waitpid
+    return sys_waitpid((pid_t)arg1, (int *)arg2, (int)arg3);
+
   default:
     print("UNKNOWN_SYSCALL:");
     print_hex_compact(syscall_num);
@@ -265,7 +446,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   }
 }
 
-void syscalls_init(void) {
+void syscalls_init(void)
+{
   // Register int 0x80 handler in IDT
   extern void syscall_entry_asm(void);
   extern void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel,
@@ -281,13 +463,15 @@ void syscalls_init(void) {
 // ============================================================================
 
 // Syscall handler for shell
-int64_t syscall_handler(uint64_t number, syscall_args_t *args) {
+int64_t syscall_handler(uint64_t number, syscall_args_t *args)
+{
   if (number >= 256)
     return -1;
 
   extern void (*syscall_table[256])(syscall_args_t *);
 
-  if (syscall_table[number]) {
+  if (syscall_table[number])
+  {
     syscall_table[number](args);
     return args->arg1;
   }
@@ -296,7 +480,8 @@ int64_t syscall_handler(uint64_t number, syscall_args_t *args) {
 }
 
 // Test user function stub
-void test_user_function(void) {
+void test_user_function(void)
+{
   print("[USER] Test function in Ring 3\n");
   // Just return - no syscalls yet
 }

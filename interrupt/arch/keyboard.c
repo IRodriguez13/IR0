@@ -84,7 +84,8 @@ void keyboard_buffer_clear(void) {
 #endif
 
 // Handler de interrupciones de teclado para 64-bit
-void keyboard_handler64(void) {
+void keyboard_handler64(void) 
+{
     // Leer scancode del puerto 0x60
     uint8_t scancode = inb(0x60);
     

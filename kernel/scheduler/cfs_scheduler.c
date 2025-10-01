@@ -47,7 +47,6 @@ static inline void interrupt_restore(uint32_t flags)
 #define LOG_DEBUG(fmt, ...) print("DEBUG: " fmt "\n")
 #endif
 
-
 // ===============================================================================
 // CONFIGURACIONES CFS
 // ===============================================================================

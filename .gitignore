@@ -25,3 +25,7 @@ test_vmm_config.h
 backup-old-files/kernel_start_old.c
 backup-old-files/kernel_start.c.backup
 kernel/process.c.complex
+*memory-wip
+ROADMAP_TO_PRODUCTION.md
+fs/vfs_simple.c
+fs/vfs_simple.c
