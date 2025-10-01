@@ -254,3 +254,12 @@ void log_interrupt(uint8_t irq, const char *handler, int result)
     snprintf(message, sizeof(message), "IRQ: %d handled by %s = %d", irq, handler ? handler : "unknown", result);
     log_debug("INTERRUPT", message);
 }
+
+void log_subsystem_ok(const char *subsystem_name)
+{
+    print_colored("[", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    print_colored("OK", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("] ", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    print_colored(subsystem_name, VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    print_colored("\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+}

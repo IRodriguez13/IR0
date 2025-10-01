@@ -30,17 +30,11 @@ void increment_pit_ticks(void)
 // Inicializar PIC (Programmable Interrupt Controller) - VERSIÓN CONSERVADORA
 void init_pic(void)
 {
-    print_colored("[PIC] Inicializando Programmable Interrupt Controller...\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
     // Guardar máscaras actuales
     uint8_t mask1 = inb(0x21);
     uint8_t mask2 = inb(0xA1);
 
-    print("[PIC] Máscaras originales - PIC1: ");
-    print_hex_compact(mask1);
-    print(" PIC2: ");
-    print_hex_compact(mask2);
-    print("\n");
 
     // Deshabilitar todas las interrupciones temporalmente
     outb(0x21, 0xFF);
@@ -66,18 +60,11 @@ void init_pic(void)
     outb(0x21, 0xFF); // PIC1: Todas deshabilitadas
     outb(0xA1, 0xFF); // PIC2: Todas deshabilitadas
 
-    print("[PIC] Máscaras finales - PIC1: ");
-    print_hex_compact(inb(0x21));
-    print(" PIC2: ");
-    print_hex_compact(inb(0xA1));
-    print("\n");
 
-    print_success("[PIC] Configurado correctamente (modo estable)\n");
 }
 
 void init_PIT(uint32_t frequency)
 {
-    print_colored("[PIT] Inicializando Programmable Interval Timer...\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
 
     // Inicializar PIC primero
     init_pic();
@@ -85,11 +72,6 @@ void init_PIT(uint32_t frequency)
     // Calcular divisor para la frecuencia deseada
     uint32_t divisor = PIT_FREC / frequency;
 
-    print("PIT frequency: ");
-    print_hex_compact(frequency);
-    print(" Hz, divisor: ");
-    print_hex_compact(divisor);
-    print("\n");
 
     // Configurar PIT
     outb(0x43, 0x36);                  // Comando: canal 0, lohi, modo 3
@@ -101,5 +83,4 @@ void init_PIT(uint32_t frequency)
     mask &= ~(1 << 0); // Habilitar IRQ 0 (timer)
     outb(0x21, mask);
 
-    print_success("[PIT] Configurado correctamente con interrupciones habilitadas\n");
 }

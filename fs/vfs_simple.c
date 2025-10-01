@@ -119,7 +119,6 @@ void vfs_simple_init(void)
     directory_count = 0;
     vfs_simple_initialized = true;
 
-    print("VFS Simple: Sistema de archivos inicializado\n");
 }
 
 // ===============================================================================
@@ -135,23 +134,18 @@ int vfs_simple_mkdir(const char *path)
 
     if (!path || !is_valid_filename(path))
     {
-        print("VFS Simple: Nombre de directorio inválido\n");
         return -1;
     }
 
     // Verificar si ya existe
     if (find_directory(path))
     {
-        print("VFS Simple: El directorio ya existe: ");
-        print(path);
-        print("\n");
         return -1;
     }
 
     // Verificar límite de directorios
     if (directory_count >= MAX_DIRECTORIES)
     {
-        print("VFS Simple: Límite de directorios alcanzado\n");
         return -1;
     }
 
@@ -164,9 +158,6 @@ int vfs_simple_mkdir(const char *path)
 
     directory_count++;
 
-    print("VFS Simple: Directorio creado exitosamente: ");
-    print(path);
-    print("\n");
 
     return 0;
 }
@@ -227,15 +218,9 @@ int vfs_simple_ls(const char *path)
     simple_directory_t *dir = find_directory(path);
     if (!dir)
     {
-        print("VFS Simple: Directorio no encontrado: ");
-        print(path);
-        print("\n");
         return -1;
     }
 
-    print("=== Contenido del directorio: ");
-    print(path);
-    print(" ===\n");
 
     // Mostrar archivos
     for (int i = 0; i < dir->file_count; i++)
@@ -244,19 +229,11 @@ int vfs_simple_ls(const char *path)
         const char *type = file->is_directory ? "d" : "-";
         const char *permissions = "rwxr-xr-x";
 
-        print(type);
-        print(permissions);
-        print("  root  root  ");
-        print(file->name);
-        print("\n");
     }
 
     // Mostrar directorios creados
     for (int i = 0; i < directory_count; i++)
     {
-        print("drwxr-xr-x  root  root  ");
-        print(directories[i].name);
-        print("\n");
     }
 
     return 0;
