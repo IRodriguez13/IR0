@@ -10,8 +10,6 @@ void pic_remap32(void)
     uint8_t a1, a2;
     (void)a1;
     (void)a2; // Variables not used in this implementation
-    (void)a1;
-    (void)a2; // Variables not used in this implementation
 
     // Guardar máscaras originales
     a1 = inb(PIC1_DATA);
@@ -21,9 +19,7 @@ void pic_remap32(void)
     outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
     io_wait();
     outb(PIC1_DATA, 0x20); // Vector offset 0x20 (32)
-    outb(PIC1_DATA, 0x20); // Vector offset 0x20 (32)
     io_wait();
-    outb(PIC1_DATA, 0x04); // PIC2 en IRQ2
     outb(PIC1_DATA, 0x04); // PIC2 en IRQ2
     io_wait();
     outb(PIC1_DATA, ICW4_8086);
@@ -33,9 +29,7 @@ void pic_remap32(void)
     outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
     io_wait();
     outb(PIC2_DATA, 0x28); // Vector offset 0x28 (40)
-    outb(PIC2_DATA, 0x28); // Vector offset 0x28 (40)
     io_wait();
-    outb(PIC2_DATA, 0x02); // Cascada
     outb(PIC2_DATA, 0x02); // Cascada
     io_wait();
     outb(PIC2_DATA, ICW4_8086);
@@ -65,8 +59,6 @@ void pic_remap64(void)
     uint8_t a1, a2;
     (void)a1;
     (void)a2; // Variables not used in this implementation
-    (void)a1;
-    (void)a2; // Variables not used in this implementation
 
     // Guardar máscaras originales
     a1 = inb(PIC1_DATA);
@@ -76,9 +68,7 @@ void pic_remap64(void)
     outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
     io_wait();
     outb(PIC1_DATA, 0x20); // Vector offset 0x20 (32)
-    outb(PIC1_DATA, 0x20); // Vector offset 0x20 (32)
     io_wait();
-    outb(PIC1_DATA, 0x04); // PIC2 en IRQ2
     outb(PIC1_DATA, 0x04); // PIC2 en IRQ2
     io_wait();
     outb(PIC1_DATA, ICW4_8086);
@@ -88,9 +78,7 @@ void pic_remap64(void)
     outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
     io_wait();
     outb(PIC2_DATA, 0x28); // Vector offset 0x28 (40)
-    outb(PIC2_DATA, 0x28); // Vector offset 0x28 (40)
     io_wait();
-    outb(PIC2_DATA, 0x02); // Cascada
     outb(PIC2_DATA, 0x02); // Cascada
     io_wait();
     outb(PIC2_DATA, ICW4_8086);

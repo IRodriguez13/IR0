@@ -58,8 +58,6 @@ void general_protection_fault_x64(uint64_t error_code)
 {
     (void)error_code;
     panic("GPF");
-    (void)error_code;
-    panic("GPF");
 }
 
 void double_fault_x64(uint64_t error_code)
