@@ -137,9 +137,6 @@ void ata_init(void)
         ata_drives_present[i] = ata_identify_drive(i);
         if (ata_drives_present[i]) 
         {
-            print("ATA: Drive ");
-            print_int32(i);
-            print(" identified\n");
         }
     }
 }
@@ -233,9 +230,6 @@ bool ata_wait_ready(uint8_t drive)
         }
     }
     
-    print("ATA: Drive ");
-    print_uint64(drive);
-    print(" not ready after timeout\n");
     return false;
 }
 
@@ -249,9 +243,6 @@ bool ata_wait_drq(uint8_t drive)
         
         if (status & ATA_STATUS_ERR) 
         {
-            print("ATA: Drive ");
-            print_uint64(drive);
-            print(" error during DRQ wait\n");
             return false;
         }
         
@@ -261,27 +252,14 @@ bool ata_wait_drq(uint8_t drive)
         }
     }
     
-    print("ATA: Drive ");
-    print_uint64(drive);
-    print(" DRQ timeout\n");
     return false;
 }
 
 bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer) 
 {
-    print("ATA: Reading ");
-    print_uint64(num_sectors);
-    print(" sectors from drive ");
-    print_uint64(drive);
-    print(" at LBA ");
-    print_uint64(lba);
-    print("\n");
     
     if (!ata_drives_present[drive]) 
     {
-        print("ATA: Drive ");
-        print_uint64(drive);
-        print(" not present\n");
         return false;
     }
     
@@ -322,7 +300,6 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
         // Wait for data
         if (!ata_wait_drq(drive)) 
         {
-            print("ATA: Failed to wait for DRQ during read\n");
             return false;
         }
         
@@ -333,25 +310,14 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
         }
     }
     
-    print("ATA: Read operation completed successfully - REAL DISK I/O\n");
     return true;
 }
 
 bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer) 
 {
-    print("ATA: Writing ");
-    print_uint64(num_sectors);
-    print(" sectors to drive ");
-    print_uint64(drive);
-    print(" at LBA ");
-    print_uint64(lba);
-    print("\n");
     
     if (!ata_drives_present[drive]) 
     {
-        print("ATA: Drive ");
-        print_uint64(drive);
-        print(" not present\n");
         return false;
     }
     
@@ -409,11 +375,9 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     bool result = ata_wait_ready(drive);
     if (result) 
     {
-        print("ATA: Write operation completed successfully - REAL DISK I/O\n");
     } 
     else 
     {
-        print("ATA: Write operation failed\n");
     }
     return result;
 }

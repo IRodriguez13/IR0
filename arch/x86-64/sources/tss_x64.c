@@ -11,10 +11,10 @@
 
 
 // Global TSS instance
-tss_t kernel_tss __attribute__((aligned(16)));
-// Kernel stack for Ring 0 (when returning from user mode)
-static uint8_t kernel_stack[8192] __attribute__((aligned(16)));
+tss_t kernel_tss __attribute__((aligned(4096)));
 
+// Kernel stack for Ring 0 - 32KB for safety
+static uint8_t kernel_stack[32768] __attribute__((aligned(4096)));
 
 void setup_tss()
 {
@@ -22,22 +22,21 @@ void setup_tss()
     memset(&kernel_tss, 0, sizeof(tss_t));
 
     // Set up kernel stack pointer for Ring 0
-    // This is where the CPU will jump when an interrupt occurs in user mode
-    kernel_tss.rsp0 = (uint64_t)(kernel_stack + sizeof(kernel_stack));
+    kernel_tss.rsp0 = (uint64_t)(kernel_stack + sizeof(kernel_stack) - 16);
+    
+    // IST not used - set to 0
+    kernel_tss.ist1 = 0;
+    kernel_tss.ist2 = 0;
+    kernel_tss.ist3 = 0;
+    kernel_tss.ist4 = 0;
+    kernel_tss.ist5 = 0;
+    kernel_tss.ist6 = 0;
+    kernel_tss.ist7 = 0;
 
-    // Set up interrupt stack table (optional, for now just use rsp0)
-    kernel_tss.ist1 = kernel_tss.rsp0;
-    kernel_tss.ist2 = kernel_tss.rsp0;
-    kernel_tss.ist3 = kernel_tss.rsp0;
-    kernel_tss.ist4 = kernel_tss.rsp0;
-    kernel_tss.ist5 = kernel_tss.rsp0;
-    kernel_tss.ist6 = kernel_tss.rsp0;
-    kernel_tss.ist7 = kernel_tss.rsp0;
-
-    // I/O permission bitmap (for now, no I/O access from user mode)
+    // I/O permission bitmap
     kernel_tss.iopb_offset = sizeof(tss_t);
 
-    // Update GDT TSS descriptor with the actual TSS address
+    // Update GDT TSS descriptor
     update_gdt_tss((uint64_t)&kernel_tss);
 }
 

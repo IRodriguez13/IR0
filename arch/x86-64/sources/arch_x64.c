@@ -1,5 +1,4 @@
-// arch/x86-64/sources/arch_x64.c - SIMPLIFICADO
-#include <kernel_start.h>
+// arch/x86-64/sources/arch_x64.c - Architecture setup functions
 #include <arch_interface.h>
 #include <ir0/print.h>
 #include <ir0/panic/panic.h>
@@ -9,7 +8,8 @@
 
 // I/O functions are now in arch_interface.h
 
-void kmain_x64(void)
+// Architecture-specific initialization (called from kernel_start.c)
+void arch_x64_init(void)
 {
     // Setup mínimo específico de x86-64
     __asm__ volatile("cli"); // Deshabilitar interrupciones al arrancar
@@ -19,11 +19,6 @@ void kmain_x64(void)
     
     // Initialize TSS for user mode support
     setup_tss();
-    // Saltar a la función principal
-    main();
-    
-    // Si llegamos aquí, algo salió mal
-    panic("kmain_x64: main() retornó - esto no debería pasar!\n");
 }
 
 
