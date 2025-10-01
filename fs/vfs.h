@@ -1,4 +1,5 @@
 // vfs.h - Virtual File System minimalista
+// vfs.h - Virtual File System minimalista
 #pragma once
 
 #include <stdint.h>
@@ -44,49 +45,8 @@ struct filesystem_type
     struct filesystem_type *next;
 };
 
-<<<<<<< HEAD
-// Additional types for compatibility
-typedef uint32_t mode_t;
-typedef uint32_t uid_t;
-typedef uint32_t gid_t;
-typedef int64_t off_t;
-typedef uint64_t time_t;
-
-// Stat structure
-typedef struct 
-{
-    uint32_t st_dev;
-    uint32_t st_ino;
-    uint32_t st_mode;
-    uint32_t st_nlink;
-    uint32_t st_uid;
-    uint32_t st_gid;
-    uint32_t st_rdev;
-    uint64_t st_size;
-    uint32_t st_blksize;
-    uint64_t st_blocks;
-    time_t st_atime;
-    time_t st_mtime;
-    time_t st_ctime;
-} stat_t;
-
-// Utime buffer structure
-typedef struct 
-{
-    time_t actime;
-    time_t modtime;
-} utimbuf_t;
-
-// ===============================================================================
-// VFS STRUCTURES
-// ===============================================================================
-
-// Inode structure
-typedef struct vfs_inode
-=======
 // Superblock
 struct vfs_superblock
->>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
 {
     struct super_operations *s_op;
     struct filesystem_type *s_type;
@@ -123,8 +83,21 @@ int vfs_write(struct vfs_file *file, const char *buf, size_t count);
 int vfs_close(struct vfs_file *file);
 int vfs_ls(const char *path);
 int vfs_mkdir(const char *path, int mode);
+int vfs_mount(const char *dev, const char *mountpoint, const char *fstype);
+int vfs_open(const char *path, int flags, struct vfs_file **file);
+int vfs_read(struct vfs_file *file, char *buf, size_t count);
+int vfs_write(struct vfs_file *file, const char *buf, size_t count);
+int vfs_close(struct vfs_file *file);
+int vfs_ls(const char *path);
+int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);
 
+// Registro de filesystems
+int register_filesystem(struct filesystem_type *fs);
+int unregister_filesystem(struct filesystem_type *fs);
+
+// Lookup de paths
+struct vfs_inode *vfs_path_lookup(const char *path);
 // Registro de filesystems
 int register_filesystem(struct filesystem_type *fs);
 int unregister_filesystem(struct filesystem_type *fs);
