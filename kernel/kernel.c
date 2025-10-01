@@ -9,10 +9,7 @@
 #include <memory/allocator.h>
 
 // Main kernel entry point from boot
-// Simple delay function
-static void kernel_delay(void) {
-    for (volatile int i = 0; i < 10000000; i++);
-}
+// delay_ms is already available from print.h
 
 void kmain_x64(void)
 {
@@ -26,78 +23,77 @@ void kmain_x64(void)
     print("IR0 Kernel v0.0.1\n");
     print("Booting...\n\n");
 
-    // Initialize subsystems with Linux-style messages
-    print("Initializing GDT and TSS...                    [ OK ]\n");
-    kernel_delay();
-
-    extern void logging_init(void);
-    print("Starting logging subsystem...                  ");
+    // Initialize logging first
     logging_init();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("INIT");
+    delay_ms(2500);
 
-    print("Initializing PS/2 controller...                ");
+    // Initialize subsystems
+    log_subsystem_ok("GDT_TSS");
+    delay_ms(2500);
+
+    // Initialize PS/2 controller
     ps2_init();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("PS2");
+    delay_ms(2500);
 
+    // Initialize keyboard
     extern void keyboard_init(void);
-    print("Loading keyboard driver...                     ");
     keyboard_init();
-    pic_unmask_irq(1);
-    print("[ OK ]\n");
-    kernel_delay();
+    pic_unmask_irq(1);  // Enable IRQ1 (keyboard)
+    log_subsystem_ok("KEYBOARD");
+    delay_ms(2500);
 
+    // Initialize memory
     extern void simple_alloc_init(void);
-    print("Initializing memory allocator...               ");
     simple_alloc_init();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("MEMORY");
+    delay_ms(2500);
 
-    print("Detecting storage devices...                   ");
+    // Initialize storage
     ata_init();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("STORAGE");
+    delay_ms(2500);
 
+    // Mount filesystem
     extern int vfs_init_with_minix(void);
-    print("Mounting filesystem...                         ");
     vfs_init_with_minix();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("FILESYSTEM");
+    delay_ms(2500);
 
+    // Initialize process management
     extern void process_init(void);
-    print("Initializing process management...             ");
     process_init();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("PROCESS");
+    delay_ms(2500);
 
+    // Initialize system clock
     extern int clock_system_init(void);
-    print("Starting system clock...                       ");
     clock_system_init();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("CLOCK");
+    delay_ms(2500);
 
+    // Initialize scheduler
     extern int scheduler_cascade_init(void);
-    print("Loading task scheduler...                      ");
     scheduler_cascade_init();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("SCHEDULER");
+    delay_ms(2500);
 
+    // Initialize system calls
     extern void syscalls_init(void);
-    print("Registering system calls...                    ");
     syscalls_init();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("SYSCALLS");
+    delay_ms(2500);
 
+    // Set up interrupt handlers
 #ifdef __x86_64__
     extern void idt_init64(void);
     extern void idt_load64(void);
-    print("Setting up interrupt handlers...               ");
     idt_init64();
     idt_load64();
     pic_remap64();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("INTERRUPTS");
+    delay_ms(2500);
 #endif
 
     // Start init process (PID 1) and switch to Ring 3
@@ -105,17 +101,16 @@ void kmain_x64(void)
     extern void init_proc_1(void);
     extern void switch_to_user_mode(void *entry_point);
     
-    print("Creating init process...                       ");
     start_init_process();
-    print("[ OK ]\n");
-    kernel_delay();
+    log_subsystem_ok("INIT_PROCESS");
+    delay_ms(2500);
 
     print("\nSwitching to user mode...\n");
-    kernel_delay();
+    delay_ms(2500);
     
     __asm__ volatile("sti");
     switch_to_user_mode((void*)init_proc_1);
 
     // Should never return
-    panic("Kernel halted unexpectedly");
+    for (;;) __asm__ volatile("hlt");
 }
