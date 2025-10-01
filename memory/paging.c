@@ -74,7 +74,11 @@ void setup_and_enable_paging(void)
 
     // 4. Verificar que paging está habilitado
 <<<<<<< HEAD
+<<<<<<< HEAD
     if (!is_paging_enabled()) 
+=======
+    if (!is_paging_enabled())
+>>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
 =======
     if (!is_paging_enabled())
 >>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
@@ -177,6 +181,7 @@ int is_paging_enabled(void)
  * NO dynamic allocation to avoid complexity
  */
 <<<<<<< HEAD
+<<<<<<< HEAD
 static uint64_t *get_existing_table(uint64_t *table, size_t index)
 {
     if (!(table[index] & PAGE_PRESENT))
@@ -194,19 +199,28 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
     return (uint64_t *)(table[index] & ~0xFFF);
 =======
 static uint64_t* get_existing_table(uint64_t *table, size_t index)
+=======
+static uint64_t *get_existing_table(uint64_t *table, size_t index)
+>>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
 {
-    if (!(table[index] & PAGE_PRESENT)) {
+    if (!(table[index] & PAGE_PRESENT))
+    {
         return NULL; // Table doesn't exist
     }
-    
+
     // Check if it's a huge page (2MB)
-    if (table[index] & (1ULL << 7)) {
+    if (table[index] & (1ULL << 7))
+    {
         return NULL; // Can't walk into huge pages
     }
-    
+
     // Return physical address (identity mapped)
+<<<<<<< HEAD
     return (uint64_t*)(table[index] & ~0xFFF);
 >>>>>>> 915dd51 (feat: Consolidación completa del kernel + Shell funcional en Ring 3)
+=======
+    return (uint64_t *)(table[index] & ~0xFFF);
+>>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
 }
 
 /**
@@ -218,6 +232,7 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
 {
     // Get current CR3 (PML4 address)
     uint64_t cr3 = get_current_page_directory();
+<<<<<<< HEAD
 <<<<<<< HEAD
     uint64_t *pml4 = (uint64_t *)cr3;
 
@@ -249,29 +264,41 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
 =======
     uint64_t *pml4 = (uint64_t*)cr3;
     
+=======
+    uint64_t *pml4 = (uint64_t *)cr3;
+
+>>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
     // Extract indices from virtual address
     size_t pml4_index = (virt_addr >> 39) & 0x1FF;
     size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
-    size_t pd_index   = (virt_addr >> 21) & 0x1FF;
-    size_t pt_index   = (virt_addr >> 12) & 0x1FF;
-    
+    size_t pd_index = (virt_addr >> 21) & 0x1FF;
+    size_t pt_index = (virt_addr >> 12) & 0x1FF;
+
     // Walk existing page tables ONLY
     uint64_t *pdpt = get_existing_table(pml4, pml4_index);
-    if (!pdpt) return -1;
-    
+    if (!pdpt)
+        return -1;
+
     uint64_t *pd = get_existing_table(pdpt, pdpt_index);
-    if (!pd) return -1;
-    
+    if (!pd)
+        return -1;
+
     uint64_t *pt = get_existing_table(pd, pd_index);
-    if (!pt) return -1;
-    
+    if (!pt)
+        return -1;
+
     // Map the page
     pt[pt_index] = (phys_addr & ~0xFFF) | (flags & 0xFFF) | PAGE_PRESENT;
-    
+
     // Flush TLB
+<<<<<<< HEAD
     __asm__ volatile("invlpg (%0)" :: "r"(virt_addr) : "memory");
     
 >>>>>>> 915dd51 (feat: Consolidación completa del kernel + Shell funcional en Ring 3)
+=======
+    __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
+
+>>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
     return 0;
 }
 
@@ -282,6 +309,7 @@ int unmap_page(uint64_t virt_addr)
 {
     // Get current CR3 (PML4 address)
     uint64_t cr3 = get_current_page_directory();
+<<<<<<< HEAD
 <<<<<<< HEAD
     uint64_t *pml4 = (uint64_t *)cr3;
 
@@ -313,29 +341,41 @@ int unmap_page(uint64_t virt_addr)
 =======
     uint64_t *pml4 = (uint64_t*)cr3;
     
+=======
+    uint64_t *pml4 = (uint64_t *)cr3;
+
+>>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
     // Extract indices
     size_t pml4_index = (virt_addr >> 39) & 0x1FF;
     size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
-    size_t pd_index   = (virt_addr >> 21) & 0x1FF;
-    size_t pt_index   = (virt_addr >> 12) & 0x1FF;
-    
+    size_t pd_index = (virt_addr >> 21) & 0x1FF;
+    size_t pt_index = (virt_addr >> 12) & 0x1FF;
+
     // Walk page tables to find the page
-    if (!(pml4[pml4_index] & PAGE_PRESENT)) return -1;
-    uint64_t *pdpt = (uint64_t*)(pml4[pml4_index] & ~0xFFF);
-    
-    if (!(pdpt[pdpt_index] & PAGE_PRESENT)) return -1;
-    uint64_t *pd = (uint64_t*)(pdpt[pdpt_index] & ~0xFFF);
-    
-    if (!(pd[pd_index] & PAGE_PRESENT)) return -1;
-    uint64_t *pt = (uint64_t*)(pd[pd_index] & ~0xFFF);
-    
+    if (!(pml4[pml4_index] & PAGE_PRESENT))
+        return -1;
+    uint64_t *pdpt = (uint64_t *)(pml4[pml4_index] & ~0xFFF);
+
+    if (!(pdpt[pdpt_index] & PAGE_PRESENT))
+        return -1;
+    uint64_t *pd = (uint64_t *)(pdpt[pdpt_index] & ~0xFFF);
+
+    if (!(pd[pd_index] & PAGE_PRESENT))
+        return -1;
+    uint64_t *pt = (uint64_t *)(pd[pd_index] & ~0xFFF);
+
     // Clear the page table entry
     pt[pt_index] = 0;
-    
+
     // Flush TLB
+<<<<<<< HEAD
     __asm__ volatile("invlpg (%0)" :: "r"(virt_addr) : "memory");
     
 >>>>>>> 915dd51 (feat: Consolidación completa del kernel + Shell funcional en Ring 3)
+=======
+    __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
+
+>>>>>>> 70ce376 (fix: resolve compilation warnings without technical debt)
     return 0;
 }
 
