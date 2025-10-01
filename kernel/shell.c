@@ -16,21 +16,21 @@
 #define SYS_FORK 12
 #define SYS_WAITPID 13
 
-// Syscall wrapper - uses int 0x80
+// Syscall wrapper - uses int 0x80 - This is a ugly way to call syscalls, but i promise i'll turn it more elegant xd
 static inline int64_t syscall(uint64_t num, uint64_t arg1, uint64_t arg2,
                               uint64_t arg3)
 {
-  int64_t ret;
+  int64_t sysret; 
   __asm__ volatile("mov %1, %%rax\n"
                    "mov %2, %%rbx\n"
                    "mov %3, %%rcx\n"
                    "mov %4, %%rdx\n"
                    "int $0x80\n"
                    "mov %%rax, %0\n"
-                   : "=r"(ret)
+                   : "=r"(sysret)
                    : "r"(num), "r"(arg1), "r"(arg2), "r"(arg3)
                    : "rax", "rbx", "rcx", "rdx", "memory");
-  return ret;
+  return sysret;
 }
 
 // Syscall wrappers
@@ -324,20 +324,11 @@ void shell_ring3_entry(void)
 
   // Show minimal banner (Linux 0.0.1 style)
   int64_t pid = sys_getpid();
-  fb_print("IR0 v0.0.1 (", 0x0F);
-  if (pid >= 0 && pid <= 9)
-  {
-    char pid_str[2] = {'0' + (char)pid, '\0'};
-    fb_print(pid_str, 0x0F);
-  }
-  fb_print(")\n", 0x0F);
 
   // Show banner
-  fb_print("=== IR0 SHELL ===\n", 0x0F);
-  fb_print("Running in Ring 3\n", 0x0A);
-
+  fb_print("                === IR0 SHELL ===\n\n", 0x0F);
   // Test getpid syscall
-  fb_print("Process ID: ", 0x0E);
+  fb_print("initproc1 Process PID: ", 0x0E);
   if (pid >= 0 && pid <= 9)
   {
     char pid_str[2] = {'0' + (char)pid, '\0'};
@@ -415,8 +406,7 @@ void shell_ring3_entry(void)
     else
     {
       // No input, small delay
-      for (volatile int i = 0; i < 5000; i++)
-        ;
+      for (volatile int i = 0; i < 5000; i++);
     }
   }
 }
