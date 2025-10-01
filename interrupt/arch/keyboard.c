@@ -6,11 +6,16 @@
 // Forward declarations
 void wakeup_from_idle(void);
 
-// Buffer de teclado simple
+// Buffer de teclado simple (interno del kernel)
 #define KEYBOARD_BUFFER_SIZE 256
 static char keyboard_buffer[KEYBOARD_BUFFER_SIZE];
 static int keyboard_buffer_head = 0;
 static int keyboard_buffer_tail = 0;
+
+// Buffer compartido con Ring 3 (shell)
+#define SHARED_KEYBOARD_BUFFER_ADDR 0x500000
+volatile char *shared_keyboard_buffer = (volatile char *)SHARED_KEYBOARD_BUFFER_ADDR;
+volatile int *shared_keyboard_buffer_pos = (volatile int *)(SHARED_KEYBOARD_BUFFER_ADDR + 256);
 
 // Sistema de despertar del idle
 static int system_in_idle_mode = 0;
@@ -25,7 +30,6 @@ static const char scancode_to_ascii[] = {
     'd',  'f',  'g',  'h',  'j',  'k',  'l',  ';',  // 32-39
     '\'', '`',  0,    '\\', 'z',  'x',  'c',  'v',  // 40-47 (shift)
     'b',  'n',  'm',  ',',  '.',  '/',  0,    '*',  // 48-55 (shift)
-    0,    ' ',  0,    0,    0,    0,    0,    0,    // 56-63 (alt, space, caps, F1-F4)
     0,    0,    0,    0,    0,    0,    0,    0,    // 64-71 (F5-F12)
     0,    0,    0,    0,    0,    0,    0,    0,    // 72-79 (numpad)
     0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
