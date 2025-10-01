@@ -99,6 +99,7 @@ void keyboard_handler64(void)
     uint8_t scancode = inb(0x60);
     
     // Solo procesar key press (scancode < 0x80)
+<<<<<<< HEAD
     if (scancode < 0x80) 
     {
         // DEBUG: Mostrar scancode cuando estamos en idle
@@ -117,12 +118,18 @@ void keyboard_handler64(void)
             return;
         }
         
+=======
+    if (scancode < 0x80) {
+>>>>>>> 28fa625 (checkpoint de teclado funcional)
         char ascii = translate_scancode(scancode);
         if (ascii != 0) 
         {
             keyboard_buffer_add(ascii);
         }
     }
+    
+    // Send EOI to PIC
+    outb(0x20, 0x20);
 }
 
 
