@@ -32,7 +32,6 @@ int validate_string(const char *str, const char *context)
         return VALIDATION_ERROR_NULL_POINTER;
     }
 
-
     // Check for null-terminated string
     size_t len = strlen(str);
     if (len > MAX_PATH_LENGTH)
@@ -40,7 +39,6 @@ int validate_string(const char *str, const char *context)
         log_error_fmt("VALIDATION", "String too long in %s (length: %zu)", context, len);
         return VALIDATION_ERROR_INVALID_SIZE;
     }
-
 
     return VALIDATION_SUCCESS;
 }
@@ -64,7 +62,6 @@ int validate_buffer(const void *buf, size_t size, const char *context)
         log_error_fmt("VALIDATION", "Buffer too large in %s (size: %zu)", context, size);
         return VALIDATION_ERROR_INVALID_SIZE;
     }
-
 
     return VALIDATION_SUCCESS;
 }
@@ -121,14 +118,12 @@ int validate_path(const char *path, const char *context)
         return VALIDATION_ERROR_INVALID_PATH;
     }
 
-
     // Check for path traversal attempts
     if (strstr(path, "..") != NULL)
     {
         log_warn_fmt("VALIDATION", "Path traversal attempt in %s: %s", context, path);
         return VALIDATION_ERROR_INVALID_PATH;
     }
-
 
     return VALIDATION_SUCCESS;
 }
@@ -141,7 +136,6 @@ int validate_path_length(const char *path, size_t max_length, const char *contex
         return VALIDATION_ERROR_NULL_POINTER;
     }
 
-
     size_t len = strlen(path);
     if (len > max_length)
     {
@@ -149,7 +143,6 @@ int validate_path_length(const char *path, size_t max_length, const char *contex
                       context, len, max_length);
         return VALIDATION_ERROR_INVALID_SIZE;
     }
-
 
     return VALIDATION_SUCCESS;
 }
@@ -168,10 +161,8 @@ int validate_memory_access(const void *ptr, size_t size, const char *context)
         return VALIDATION_ERROR_INVALID_SIZE;
     }
 
-
     // TODO: Add memory boundary checks
     // This would require knowledge of memory layout
-
 
     return VALIDATION_SUCCESS;
 }
@@ -196,10 +187,8 @@ int validate_user_buffer(const void *buf, size_t size, const char *context)
         return VALIDATION_ERROR_INVALID_SIZE;
     }
 
-
     // TODO: Add user space validation
     // This would require checking if the buffer is in user space
-
 
     return VALIDATION_SUCCESS;
 }

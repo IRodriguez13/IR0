@@ -1,5 +1,4 @@
 // vfs.h - Virtual File System minimalista
-// vfs.h - Virtual File System minimalista
 #pragma once
 
 #include <stdint.h>
@@ -83,21 +82,8 @@ int vfs_write(struct vfs_file *file, const char *buf, size_t count);
 int vfs_close(struct vfs_file *file);
 int vfs_ls(const char *path);
 int vfs_mkdir(const char *path, int mode);
-int vfs_mount(const char *dev, const char *mountpoint, const char *fstype);
-int vfs_open(const char *path, int flags, struct vfs_file **file);
-int vfs_read(struct vfs_file *file, char *buf, size_t count);
-int vfs_write(struct vfs_file *file, const char *buf, size_t count);
-int vfs_close(struct vfs_file *file);
-int vfs_ls(const char *path);
-int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);
 
-// Registro de filesystems
-int register_filesystem(struct filesystem_type *fs);
-int unregister_filesystem(struct filesystem_type *fs);
-
-// Lookup de paths
-struct vfs_inode *vfs_path_lookup(const char *path);
 // Registro de filesystems
 int register_filesystem(struct filesystem_type *fs);
 int unregister_filesystem(struct filesystem_type *fs);

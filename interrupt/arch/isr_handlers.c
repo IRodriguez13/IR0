@@ -19,11 +19,9 @@ void isr_handler64(uint64_t interrupt_number)
         print_int32(interrupt_number);
         print("\n");
 
-
         // Para excepciones, NO enviar EOI
         return;
     }
-
 
     // Manejar syscall (0x80)
     if (interrupt_number == 128)
@@ -33,7 +31,6 @@ void isr_handler64(uint64_t interrupt_number)
         // Por ahora, solo imprimir y retornar
         return;
     }
-
 
     // Manejar IRQs del PIC (32-47)
     if (interrupt_number >= 32 && interrupt_number <= 47)
@@ -57,12 +54,10 @@ void isr_handler64(uint64_t interrupt_number)
             break;
         }
 
-
         // Enviar EOI para IRQs
         pic_send_eoi64(irq);
         return;
     }
-
 
     // Interrupciones spurious o desconocidas
     print("Interrupción spurious: ");
