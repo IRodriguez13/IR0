@@ -59,6 +59,9 @@ int minix_read_block(uint32_t block_num, void *buffer)
   uint32_t lba =
       block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
   uint8_t num_sectors = 2;
+    uint32_t lba = block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
+    uint8_t num_sectors = 2;
+
 
   bool success = ata_read_sectors(0, lba, num_sectors, buffer);
 
@@ -70,6 +73,14 @@ int minix_read_block(uint32_t block_num, void *buffer)
   {
     return -1;
   }
+    if (success)
+    {
+        return 0;
+    }
+    else
+    {
+        return -1;
+    }
 }
 
 int minix_write_block(uint32_t block_num, const void *buffer)
@@ -77,6 +88,9 @@ int minix_write_block(uint32_t block_num, const void *buffer)
   uint32_t lba =
       block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
   uint8_t num_sectors = 2;
+    uint32_t lba = block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
+    uint8_t num_sectors = 2;
+
 
   bool success = ata_write_sectors(0, lba, num_sectors, buffer);
 
@@ -88,6 +102,14 @@ int minix_write_block(uint32_t block_num, const void *buffer)
   {
     return -1;
   }
+    if (success)
+    {
+        return 0;
+    }
+    else
+    {
+        return -1;
+    }
 }
 
 // ===============================================================================
@@ -215,6 +237,11 @@ void minix_free_zone(uint32_t zone_num)
   {
     return;
   }
+    if (zone_num < minix_fs.superblock.s_firstdatazone || zone_num >= MINIX_MAX_ZONES)
+    {
+        return;
+    }
+
 
   // Calcular la posición en el bitmap
   uint32_t byte_index = (zone_num - minix_fs.superblock.s_firstdatazone) / 8;
@@ -224,6 +251,10 @@ void minix_free_zone(uint32_t zone_num)
   {
     return;
   }
+    if (byte_index >= minix_fs.superblock.s_zmap_blocks * MINIX_BLOCK_SIZE)
+    {
+        return;
+    }
 
   // Leer el bloque del bitmap si no está en memoria
   uint32_t block_num =
@@ -235,6 +266,11 @@ void minix_free_zone(uint32_t zone_num)
   {
     return;
   }
+    uint8_t bitmap_block[MINIX_BLOCK_SIZE];
+    if (minix_read_block(block_num, bitmap_block) != 0)
+    {
+        return;
+    }
 
   // Marcar la zona como libre (bit = 1)
   bitmap_block[block_offset] |= (1 << bit_index);
@@ -244,6 +280,12 @@ void minix_free_zone(uint32_t zone_num)
   {
     return;
   }
+    // Escribir el bloque actualizado
+    if (minix_write_block(block_num, bitmap_block) != 0)
+    {
+        return;
+    }
+
 }
 
 // ===============================================================================
@@ -367,6 +409,19 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
       return NULL;
     }
   }
+    // Si es el directorio raíz
+    if (strcmp(pathname, "/") == 0)
+    {
+        static minix_inode_t root_inode;
+        if (minix_read_inode(MINIX_ROOT_INODE, &root_inode) == 0)
+        {
+            return &root_inode;
+        }
+        else
+        {
+            return NULL;
+        }
+    }
 
   // Parsear el path
   char path_copy[256];
@@ -379,6 +434,12 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   {
     return NULL;
   }
+    // Empezar desde el inode raíz
+    minix_inode_t current_inode;
+    if (minix_read_inode(MINIX_ROOT_INODE, &current_inode) != 0)
+    {
+        return NULL;
+    }
 
   // Dividir el path en componentes
   char *token = strtok(path_copy, "/");
@@ -389,6 +450,15 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
     {
       return NULL;
     }
+    // Dividir el path en componentes
+    char *token = strtok(path_copy, "/");
+    while (token != NULL)
+    {
+        // Verificar que el inode actual es un directorio
+        if (!(current_inode.i_mode & MINIX_IFDIR))
+        {
+            return NULL;
+        }
 
     // Buscar la entrada en el directorio actual
     uint16_t found_inode = minix_fs_find_dir_entry(&current_inode, token);
@@ -396,12 +466,23 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
     {
       return NULL;
     }
+        // Buscar la entrada en el directorio actual
+        uint16_t found_inode = minix_fs_find_dir_entry(&current_inode, token);
+        if (found_inode == 0)
+        {
+            return NULL;
+        }
 
     // Leer el inode encontrado
     if (minix_read_inode(found_inode, &current_inode) != 0)
     {
       return NULL;
     }
+        // Leer el inode encontrado
+        if (minix_read_inode(found_inode, &current_inode) != 0)
+        {
+            return NULL;
+        }
 
     token = strtok(NULL, "/");
   }
@@ -411,6 +492,7 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   memcpy(&result_inode, &current_inode, sizeof(minix_inode_t));
 
   return &result_inode;
+    return &result_inode;
 }
 
 // Función auxiliar para obtener el número de inode de un path
@@ -483,6 +565,11 @@ uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode,
   {
     return 0;
   }
+    if (!dir_inode || !name || !(dir_inode->i_mode & MINIX_IFDIR))
+    {
+        return 0;
+    }
+
 
   // Leer todas las zonas del directorio
   for (int i = 0; i < 7; i++)
@@ -497,6 +584,11 @@ uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode,
     {
       continue;
     }
+        uint8_t block_buffer[MINIX_BLOCK_SIZE];
+        if (minix_read_block(dir_inode->i_zone[i], block_buffer) != 0)
+        {
+            continue;
+        }
 
     // Buscar en las entradas del directorio
     minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
@@ -515,8 +607,15 @@ uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode,
       }
     }
   }
+            if (strcmp(entries[j].name, name) == 0)
+            {
+                return entries[j].inode;
+            }
+        }
+    }
 
   return 0;
+    return 0;
 }
 
 int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
@@ -525,6 +624,11 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   {
     return -1;
   }
+    if (!inode || inode_num == 0)
+    {
+        return -1;
+    }
+
 
   // Calcular la posición del inode en el disco
   uint32_t inode_block =
@@ -540,6 +644,12 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   {
     return -1;
   }
+    // Leer el bloque que contiene el inode
+    uint8_t block_buffer[MINIX_BLOCK_SIZE];
+    if (minix_read_block(inode_block, block_buffer) != 0)
+    {
+        return -1;
+    }
 
   // Copiar el inode al buffer
   memcpy(block_buffer + inode_offset, inode, MINIX_INODE_SIZE);
@@ -549,8 +659,14 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   {
     return -1;
   }
+    // Escribir el bloque actualizado
+    if (minix_write_block(inode_block, block_buffer) != 0)
+    {
+        return -1;
+    }
 
   return 0;
+    return 0;
 }
 
 int minix_fs_free_inode(uint16_t inode_num)
@@ -559,6 +675,11 @@ int minix_fs_free_inode(uint16_t inode_num)
   {
     return -1;
   }
+    if (inode_num == 0 || inode_num > minix_fs.superblock.s_ninodes)
+    {
+        return -1;
+    }
+
 
   // Calcular la posición en el bitmap de inodes
   uint32_t byte_index = (inode_num - 1) / 8;
@@ -568,6 +689,10 @@ int minix_fs_free_inode(uint16_t inode_num)
   {
     return -1;
   }
+    if (byte_index >= minix_fs.superblock.s_imap_blocks * MINIX_BLOCK_SIZE)
+    {
+        return -1;
+    }
 
   // Leer el bloque del bitmap
   uint32_t block_num = 1 + byte_index / MINIX_BLOCK_SIZE;
@@ -578,6 +703,11 @@ int minix_fs_free_inode(uint16_t inode_num)
   {
     return -1;
   }
+    uint8_t bitmap_block[MINIX_BLOCK_SIZE];
+    if (minix_read_block(block_num, bitmap_block) != 0)
+    {
+        return -1;
+    }
 
   // Marcar el inode como libre (bit = 1)
   bitmap_block[block_offset] |= (1 << bit_index);
@@ -587,8 +717,14 @@ int minix_fs_free_inode(uint16_t inode_num)
   {
     return -1;
   }
+    // Escribir el bloque actualizado
+    if (minix_write_block(block_num, bitmap_block) != 0)
+    {
+        return -1;
+    }
 
   return 0;
+    return 0;
 }
 
 int minix_fs_split_path(const char *pathname, char *parent_path,
@@ -624,6 +760,9 @@ int minix_fs_split_path(const char *pathname, char *parent_path,
 
   // Copiar el nombre del archivo
   strcpy(filename, last_slash + 1);
+    // Copiar el nombre del archivo
+    strcpy(filename, last_slash + 1);
+
 
   return 0;
 }
@@ -635,6 +774,11 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
   {
     return -1;
   }
+    if (!parent_inode || !filename || inode_num == 0)
+    {
+        return -1;
+    }
+
 
   // Buscar una zona con espacio libre o asignar una nueva
   uint32_t target_zone = 0;
@@ -704,6 +848,10 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
   {
     return -1;
   }
+    if (target_entry == -1)
+    {
+        return -1;
+    }
 
   // Leer el bloque donde agregaremos la entrada
   uint8_t block_buffer[MINIX_BLOCK_SIZE];
@@ -711,6 +859,12 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
   {
     return -1;
   }
+    // Leer el bloque donde agregaremos la entrada
+    uint8_t block_buffer[MINIX_BLOCK_SIZE];
+    if (minix_read_block(target_block, block_buffer) != 0)
+    {
+        return -1;
+    }
 
   // Agregar la nueva entrada
   minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
@@ -723,6 +877,11 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
   {
     return -1;
   }
+    // Escribir el bloque actualizado
+    if (minix_write_block(target_block, block_buffer) != 0)
+    {
+        return -1;
+    }
 
   // Actualizar el tamaño del directorio si es necesario
   if ((size_t)target_entry >=
@@ -732,6 +891,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
   }
 
   return 0;
+    return 0;
 }
 
 int minix_fs_remove_dir_entry(minix_inode_t *parent_inode,
@@ -741,6 +901,11 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode,
   {
     return -1;
   }
+    if (!parent_inode || !filename)
+    {
+        return -1;
+    }
+
 
   // Buscar la entrada en todas las zonas del directorio
   for (int i = 0; i < 7; i++)
@@ -777,6 +942,11 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode,
         {
           return -1;
         }
+                // Escribir el bloque actualizado
+                if (minix_write_block(parent_inode->i_zone[i], block_buffer) != 0)
+                {
+                    return -1;
+                }
 
         // Actualizar el tamaño del directorio si es necesario
         if ((size_t)j < parent_inode->i_size / sizeof(minix_dir_entry_t))
@@ -788,8 +958,13 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode,
       }
     }
   }
+                return 0;
+            }
+        }
+    }
 
   return -1;
+    return -1;
 }
 
 // ===============================================================================
@@ -814,12 +989,23 @@ int minix_fs_init(void)
     return 0;
   }
 
+    // Verificar si ATA está disponible
+    if (!ata_is_available())
+    {
+        return -1;
+    }
+
   // Leer el superblock del disco
   if (minix_read_block(1, &minix_fs.superblock) != 0)
   {
     // Si no se puede leer, formatear el disco
     return minix_fs_format();
   }
+    // Leer el superblock
+    if (minix_read_block(1, &minix_fs.superblock) != 0)
+    {
+        return -1;
+    }
 
   // Verificar magic number
   if (minix_fs.superblock.s_magic != MINIX_SUPER_MAGIC)
@@ -827,6 +1013,11 @@ int minix_fs_init(void)
     // Si no es válido, formatear el disco
     return minix_fs_format();
   }
+    // Verificar magic number
+    if (minix_fs.superblock.s_magic != MINIX_SUPER_MAGIC)
+    {
+        return minix_fs_format();
+    }
 
   minix_fs.initialized = true;
   return 0;
@@ -849,15 +1040,26 @@ int minix_fs_init(void)
   {
     return minix_fs_format();
   }
+    // Leer bitmaps
+    if (minix_read_block(minix_fs.superblock.s_imap_blocks, minix_fs.inode_bitmap) != 0)
+    {
+        return -1;
+    }
 
   if (minix_read_block(minix_fs.superblock.s_zmap_blocks,
                        minix_fs.zone_bitmap) != 0)
   {
     return minix_fs_format();
   }
+    if (minix_read_block(minix_fs.superblock.s_zmap_blocks, minix_fs.zone_bitmap) != 0)
+    {
+        return -1;
+    }
 
   minix_fs.initialized = true;
   return 0;
+    minix_fs.initialized = true;
+    return 0;
 }
 
 int minix_fs_format(void)
@@ -879,6 +1081,11 @@ int minix_fs_format(void)
   {
     return -1;
   }
+    // Escribir superblock
+    if (minix_write_block(1, &minix_fs.superblock) != 0)
+    {
+        return -1;
+    }
 
   // Inicializar bitmaps
   memset(minix_fs.inode_bitmap, 0, MINIX_BLOCK_SIZE);
@@ -893,12 +1100,21 @@ int minix_fs_format(void)
   {
     return -1;
   }
+    // Escribir bitmaps
+    if (minix_write_block(minix_fs.superblock.s_imap_blocks, minix_fs.inode_bitmap) != 0)
+    {
+        return -1;
+    }
 
   if (minix_write_block(minix_fs.superblock.s_zmap_blocks,
                         minix_fs.zone_bitmap) != 0)
   {
     return -1;
   }
+    if (minix_write_block(minix_fs.superblock.s_zmap_blocks, minix_fs.zone_bitmap) != 0)
+    {
+        return -1;
+    }
 
   // Crear inode raíz
   minix_inode_t root_inode;
@@ -921,9 +1137,15 @@ int minix_fs_format(void)
   {
     return -1;
   }
+    if (minix_write_block(minix_fs.superblock.s_imap_blocks + 1, inode_block) != 0)
+    {
+        return -1;
+    }
 
   minix_fs.initialized = true;
   return 0;
+    minix_fs.initialized = true;
+    return 0;
 }
 
 int minix_fs_mkdir(const char *path)
@@ -932,11 +1154,19 @@ int minix_fs_mkdir(const char *path)
   {
     return -1;
   }
+    if (!minix_fs.initialized)
+    {
+        return -1;
+    }
 
   if (!path || strlen(path) == 0)
   {
     return -1;
   }
+    if (!path || strlen(path) == 0)
+    {
+        return -1;
+    }
 
   // Si no hay disco real, simular creación
   if (!ata_is_available())
@@ -952,6 +1182,10 @@ int minix_fs_mkdir(const char *path)
   {
     return -1;
   }
+    if (minix_fs_split_path(path, parent_path, dirname) != 0)
+    {
+        return -1;
+    }
 
   // Obtener el inode del directorio padre
   minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
@@ -959,11 +1193,21 @@ int minix_fs_mkdir(const char *path)
   {
     return -1;
   }
+    // Obtener el inode del directorio padre
+    minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
+    if (!parent_inode)
+    {
+        return -1;
+    }
 
   if (!(parent_inode->i_mode & MINIX_IFDIR))
   {
     return -1;
   }
+    if (!(parent_inode->i_mode & MINIX_IFDIR))
+    {
+        return -1;
+    }
 
   // Verificar si el directorio ya existe
   uint16_t existing_inode = minix_fs_find_dir_entry(parent_inode, dirname);
@@ -971,6 +1215,12 @@ int minix_fs_mkdir(const char *path)
   {
     return -1;
   }
+    // Verificar si el directorio ya existe
+    uint16_t existing_inode = minix_fs_find_dir_entry(parent_inode, dirname);
+    if (existing_inode != 0)
+    {
+        return -1;
+    }
 
   // Asignar un nuevo inode
   uint16_t new_inode_num = minix_alloc_inode();
@@ -978,6 +1228,12 @@ int minix_fs_mkdir(const char *path)
   {
     return -1;
   }
+    // Asignar un nuevo inode
+    uint16_t new_inode_num = minix_alloc_inode();
+    if (new_inode_num == 0)
+    {
+        return -1;
+    }
 
   // Crear el nuevo inode de directorio
   minix_inode_t new_inode;
@@ -996,6 +1252,12 @@ int minix_fs_mkdir(const char *path)
     minix_fs_free_inode(new_inode_num);
     return -1;
   }
+    // Escribir el nuevo inode
+    if (minix_fs_write_inode(new_inode_num, &new_inode) != 0)
+    {
+        minix_fs_free_inode(new_inode_num);
+        return -1;
+    }
 
   // Agregar entrada al directorio padre
   if (minix_fs_add_dir_entry(parent_inode, dirname, new_inode_num) != 0)
@@ -1003,6 +1265,12 @@ int minix_fs_mkdir(const char *path)
     minix_fs_free_inode(new_inode_num);
     return -1;
   }
+    // Agregar entrada al directorio padre
+    if (minix_fs_add_dir_entry(parent_inode, dirname, new_inode_num) != 0)
+    {
+        minix_fs_free_inode(new_inode_num);
+        return -1;
+    }
 
   // Obtener el número de inode del padre
   uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
@@ -1019,8 +1287,21 @@ int minix_fs_mkdir(const char *path)
   {
     return -1;
   }
+    // Actualizar el inode del padre
+    if (parent_inode_num != 0)
+    {
+        if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0)
+        {
+            return -1;
+        }
+    }
+    else
+    {
+        return -1;
+    }
 
   return 0;
+    return 0;
 }
 
 int minix_fs_ls(const char *path)
@@ -1029,6 +1310,10 @@ int minix_fs_ls(const char *path)
   {
     return -1;
   }
+    if (!minix_fs.initialized)
+    {
+        return -1;
+    }
 
   const char *target_path = path ? path : "/";
 
@@ -1066,6 +1351,14 @@ int minix_fs_ls(const char *path)
     sys_write(2, "\n", 1);
     return -1;
   }
+    const char *target_path = path ? path : "/";
+
+    // Obtener el inode del directorio
+    minix_inode_t *dir_inode = minix_fs_find_inode(target_path);
+    if (!dir_inode)
+    {
+        return -1;
+    }
 
   if (!(dir_inode->i_mode & MINIX_IFDIR))
   {
@@ -1075,6 +1368,10 @@ int minix_fs_ls(const char *path)
     sys_write(2, "\n", 1);
     return -1;
   }
+    if (!(dir_inode->i_mode & MINIX_IFDIR))
+    {
+        return -1;
+    }
 
   // Listar todas las entradas del directorio
   bool found_entries = false;
@@ -1093,6 +1390,11 @@ int minix_fs_ls(const char *path)
     {
       continue;
     }
+        uint8_t block_buffer[MINIX_BLOCK_SIZE];
+        if (minix_read_block(dir_inode->i_zone[i], block_buffer) != 0)
+        {
+            continue;
+        }
 
     minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
     int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
@@ -1139,6 +1441,26 @@ int minix_fs_ls(const char *path)
       }
     }
   }
+            // Leer el inode para obtener información
+            minix_inode_t entry_inode;
+            if (minix_read_inode(entries[j].inode, &entry_inode) == 0)
+            {
+                // Mostrar tipo de archivo
+                if (entry_inode.i_mode & MINIX_IFDIR)
+                {
+                }
+                else
+                {
+                }
+
+                // Mostrar permisos
+
+            }
+            else
+            {
+            }
+        }
+    }
 
   if (!has_zones)
   {
@@ -1148,8 +1470,15 @@ int minix_fs_ls(const char *path)
   {
     print("Directory is empty\n");
   }
+    if (!has_zones)
+    {
+    }
+    else if (!found_entries)
+    {
+    }
 
   return 0;
+    return 0;
 }
 
 void minix_fs_cleanup(void)
@@ -1158,6 +1487,10 @@ void minix_fs_cleanup(void)
   {
     minix_fs.initialized = false;
   }
+    if (minix_fs.initialized)
+    {
+        minix_fs.initialized = false;
+    }
 }
 // ===============================================================================
 // FUNCIÓN PARA LEER ARCHIVOS (CAT)

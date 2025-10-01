@@ -176,6 +176,7 @@ int is_paging_enabled(void)
  * Simple page table getter - only returns existing tables
  * NO dynamic allocation to avoid complexity
  */
+<<<<<<< HEAD
 static uint64_t *get_existing_table(uint64_t *table, size_t index)
 {
     if (!(table[index] & PAGE_PRESENT))
@@ -191,6 +192,21 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
 
     // Return physical address (identity mapped)
     return (uint64_t *)(table[index] & ~0xFFF);
+=======
+static uint64_t* get_existing_table(uint64_t *table, size_t index)
+{
+    if (!(table[index] & PAGE_PRESENT)) {
+        return NULL; // Table doesn't exist
+    }
+    
+    // Check if it's a huge page (2MB)
+    if (table[index] & (1ULL << 7)) {
+        return NULL; // Can't walk into huge pages
+    }
+    
+    // Return physical address (identity mapped)
+    return (uint64_t*)(table[index] & ~0xFFF);
+>>>>>>> 915dd51 (feat: Consolidación completa del kernel + Shell funcional en Ring 3)
 }
 
 /**
@@ -202,6 +218,7 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
 {
     // Get current CR3 (PML4 address)
     uint64_t cr3 = get_current_page_directory();
+<<<<<<< HEAD
     uint64_t *pml4 = (uint64_t *)cr3;
 
     // Extract indices from virtual address
@@ -229,6 +246,32 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
     // Flush TLB
     __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
 
+=======
+    uint64_t *pml4 = (uint64_t*)cr3;
+    
+    // Extract indices from virtual address
+    size_t pml4_index = (virt_addr >> 39) & 0x1FF;
+    size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
+    size_t pd_index   = (virt_addr >> 21) & 0x1FF;
+    size_t pt_index   = (virt_addr >> 12) & 0x1FF;
+    
+    // Walk existing page tables ONLY
+    uint64_t *pdpt = get_existing_table(pml4, pml4_index);
+    if (!pdpt) return -1;
+    
+    uint64_t *pd = get_existing_table(pdpt, pdpt_index);
+    if (!pd) return -1;
+    
+    uint64_t *pt = get_existing_table(pd, pd_index);
+    if (!pt) return -1;
+    
+    // Map the page
+    pt[pt_index] = (phys_addr & ~0xFFF) | (flags & 0xFFF) | PAGE_PRESENT;
+    
+    // Flush TLB
+    __asm__ volatile("invlpg (%0)" :: "r"(virt_addr) : "memory");
+    
+>>>>>>> 915dd51 (feat: Consolidación completa del kernel + Shell funcional en Ring 3)
     return 0;
 }
 
@@ -239,6 +282,7 @@ int unmap_page(uint64_t virt_addr)
 {
     // Get current CR3 (PML4 address)
     uint64_t cr3 = get_current_page_directory();
+<<<<<<< HEAD
     uint64_t *pml4 = (uint64_t *)cr3;
 
     // Extract indices
@@ -266,6 +310,32 @@ int unmap_page(uint64_t virt_addr)
     // Flush TLB
     __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
 
+=======
+    uint64_t *pml4 = (uint64_t*)cr3;
+    
+    // Extract indices
+    size_t pml4_index = (virt_addr >> 39) & 0x1FF;
+    size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
+    size_t pd_index   = (virt_addr >> 21) & 0x1FF;
+    size_t pt_index   = (virt_addr >> 12) & 0x1FF;
+    
+    // Walk page tables to find the page
+    if (!(pml4[pml4_index] & PAGE_PRESENT)) return -1;
+    uint64_t *pdpt = (uint64_t*)(pml4[pml4_index] & ~0xFFF);
+    
+    if (!(pdpt[pdpt_index] & PAGE_PRESENT)) return -1;
+    uint64_t *pd = (uint64_t*)(pdpt[pdpt_index] & ~0xFFF);
+    
+    if (!(pd[pd_index] & PAGE_PRESENT)) return -1;
+    uint64_t *pt = (uint64_t*)(pd[pd_index] & ~0xFFF);
+    
+    // Clear the page table entry
+    pt[pt_index] = 0;
+    
+    // Flush TLB
+    __asm__ volatile("invlpg (%0)" :: "r"(virt_addr) : "memory");
+    
+>>>>>>> 915dd51 (feat: Consolidación completa del kernel + Shell funcional en Ring 3)
     return 0;
 }
 
