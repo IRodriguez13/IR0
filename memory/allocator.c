@@ -9,57 +9,69 @@ static int g_initialized = 0;
 // Dummy for scheduler detection (not used)
 uint32_t free_pages_count = 1000;
 
-void simple_alloc_init(void) {
-    if (g_initialized) return;
-    
-    g_allocator.start = (void*)SIMPLE_HEAP_START;
-    g_allocator.end = (void*)SIMPLE_HEAP_END;
+void simple_alloc_init(void)
+{
+    if (g_initialized)
+        return;
+
+    g_allocator.start = (void *)SIMPLE_HEAP_START;
+    g_allocator.end = (void *)SIMPLE_HEAP_END;
     g_allocator.current = g_allocator.start;
     g_allocator.total_size = SIMPLE_HEAP_SIZE;
     g_allocator.used = 0;
     g_allocator.allocations = 0;
-    
+
     g_initialized = 1;
 }
 
-void *simple_alloc(size_t size) {
-    if (!g_initialized) {
+void *simple_alloc(size_t size)
+{
+    if (!g_initialized)
+    {
         simple_alloc_init();
     }
-    
-    if (size == 0) return NULL;
-    
+
+    if (size == 0)
+        return NULL;
+
     // Align to 16 bytes
     size = (size + 15) & ~15;
-    
+
     // Check if we have space
-    if ((uintptr_t)g_allocator.current + size > (uintptr_t)g_allocator.end) {
+    if ((uintptr_t)g_allocator.current + size > (uintptr_t)g_allocator.end)
+    {
         return NULL; // Out of memory
     }
-    
+
     void *ptr = g_allocator.current;
-    g_allocator.current = (void*)((uintptr_t)g_allocator.current + size);
+    g_allocator.current = (void *)((uintptr_t)g_allocator.current + size);
     g_allocator.used += size;
     g_allocator.allocations++;
-    
+
     // Zero the memory
     memset(ptr, 0, size);
-    
+
     return ptr;
 }
 
-void simple_free(void *ptr) {
+void simple_free(void *ptr)
+{
     // Bump allocator - no free
     (void)ptr;
 }
 
-void simple_alloc_stats(size_t *total, size_t *used, size_t *allocs) {
-    if (total) *total = g_allocator.total_size;
-    if (used) *used = g_allocator.used;
-    if (allocs) *allocs = g_allocator.allocations;
+void simple_alloc_stats(size_t *total, size_t *used, size_t *allocs)
+{
+    if (total)
+        *total = g_allocator.total_size;
+    if (used)
+        *used = g_allocator.used;
+    if (allocs)
+        *allocs = g_allocator.allocations;
 }
 
-void simple_alloc_trace(void) {
+void simple_alloc_trace(void)
+{
     print("=== Memory Allocator ===\n");
     print("Start: 0x");
     print_hex64((uintptr_t)g_allocator.start);
@@ -78,21 +90,26 @@ void simple_alloc_trace(void) {
 }
 
 // Compatibility wrappers for existing code
-void *kmalloc(size_t size) {
+void *kmalloc(size_t size)
+{
     return simple_alloc(size);
 }
 
-void kfree(void *ptr) {
+void kfree(void *ptr)
+{
     simple_free(ptr);
 }
 
-void *krealloc(void *ptr, size_t new_size) {
-    if (!ptr) return simple_alloc(new_size);
+void *krealloc(void *ptr, size_t new_size)
+{
+    if (!ptr)
+        return simple_alloc(new_size);
     // Simple implementation: allocate new and copy
     // We don't know old size, so just allocate new
     return simple_alloc(new_size);
 }
 
-void heap_init(void) {
+void heap_init(void)
+{
     simple_alloc_init();
 }

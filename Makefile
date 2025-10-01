@@ -150,6 +150,7 @@ DRIVER_OBJS = \
     drivers/video/vbe.o
 
 FS_OBJS = \
+    fs/vfs.o \
     fs/minix_fs.o \
     fs/vfs_simple.o
 
