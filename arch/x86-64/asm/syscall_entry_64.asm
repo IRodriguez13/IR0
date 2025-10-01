@@ -1,8 +1,8 @@
-; System call entry point
+; System call entry point for int 0x80
 [BITS 64]
 
 global syscall_entry_asm
-extern syscall_handler_c
+extern syscall_dispatch
 
 section .text
 
@@ -24,17 +24,33 @@ syscall_entry_asm:
     push r14
     push r15
     
-    ; Switch to kernel segments
+    ; CRITICAL: Save syscall number BEFORE overwriting rax!
+    mov rdi, rax    ; Save syscall number FIRST
+    
+    ; Switch to kernel segments (this overwrites ax/rax!)
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-    mov fs, ax
-    mov gs, ax
     
-    ; Call C handler
-    call syscall_handler_c
+    ; Setup syscall arguments correctly
+    ; Shell passes: rax=syscall_num, rbx=arg1, rcx=arg2, rdx=arg3
+    ; C function expects: (rdi=syscall_num, rsi=arg1, rdx=arg2, rcx=arg3, r8=arg4, r9=arg5)
     
-    ; Restore registers if returns
+    ; rdi already has syscall number (saved above)
+    mov rsi, rbx    ; arg1
+    mov r10, rcx    ; Save arg2 temporarily
+    mov r11, rdx    ; Save arg3 temporarily
+    mov rdx, r10    ; arg2 (from rcx)
+    mov rcx, r11    ; arg3 (from rdx)
+    mov r8, 0       ; arg4 (unused)
+    mov r9, 0       ; arg5 (unused)
+    
+    ; Call C dispatcher
+    call syscall_dispatch
+    
+    ; Return value in rax (already set by syscall_dispatch)
+    
+    ; Restore registers
     pop r15
     pop r14
     pop r13
@@ -49,7 +65,9 @@ syscall_entry_asm:
     pop rdx
     pop rcx
     pop rbx
-    pop rax
+    add rsp, 8      ; Skip saved rax, use return value instead
+    
+    ; No need to send EOI for syscalls (they are software interrupts)
     
     ; Return to user mode
     iretq

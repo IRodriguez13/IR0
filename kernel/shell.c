@@ -1,30 +1,118 @@
 // shell.c - Shell running in Ring 3 (user space)
 #include <stdint.h>
+#include <stddef.h>
 
-// Keyboard buffer shared with kernel (in low memory, always mapped)
-#define KEYBOARD_BUFFER_ADDR 0x500000  // 5MB mark - safe area
-volatile char *shell_keyboard_buffer = (volatile char *)KEYBOARD_BUFFER_ADDR;
-volatile int *shell_keyboard_buffer_pos = (volatile int *)(KEYBOARD_BUFFER_ADDR + 256);
+// Syscall numbers
+#define SYS_EXIT   0
+#define SYS_WRITE  1
+#define SYS_READ   2
+#define SYS_GETPID 3
 
-// Direct VGA write for Ring 3 (no kernel functions)
-static void shell_write_char(char c, int pos, uint8_t color)
+// Syscall wrapper - uses int 0x80
+static inline int64_t syscall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3)
 {
-    volatile uint16_t *vga = (volatile uint16_t *)0xB8000;
-    vga[pos] = (color << 8) | c;
+    int64_t ret;
+    __asm__ volatile(
+        "mov %1, %%rax\n"
+        "mov %2, %%rbx\n"
+        "mov %3, %%rcx\n"
+        "mov %4, %%rdx\n"
+        "int $0x80\n"
+        "mov %%rax, %0\n"
+        : "=r"(ret)
+        : "r"(num), "r"(arg1), "r"(arg2), "r"(arg3)
+        : "rax", "rbx", "rcx", "rdx", "memory"
+    );
+    return ret;
 }
 
-static void shell_write_vga(const char *msg, uint8_t color)
+// Syscall wrappers
+static inline int64_t sys_read(int fd, void *buf, size_t count)
 {
-    volatile uint16_t *vga = (volatile uint16_t *)0xB8000;
-    static int pos = 0;
-    
-    for (int i = 0; msg[i] != '\0'; i++) {
-        if (msg[i] == '\n') {
-            pos = (pos / 80 + 1) * 80;
-        } else {
-            vga[pos++] = (color << 8) | msg[i];
+    return syscall(SYS_READ, fd, (uint64_t)buf, count);
+}
+
+static inline int64_t sys_getpid(void)
+{
+    return syscall(SYS_GETPID, 0, 0, 0);
+}
+
+// VGA buffer and cursor management
+static volatile uint16_t *vga = (volatile uint16_t *)0xB8000;
+static int cursor_pos = 0;
+
+// Write directly to VGA buffer
+static void vga_putchar(char c, uint8_t color)
+{
+    if (c == '\n') {
+        cursor_pos = (cursor_pos / 80 + 1) * 80;
+        if (cursor_pos >= 80 * 25) {
+            // Scroll screen
+            for (int i = 0; i < 24 * 80; i++) {
+                vga[i] = vga[i + 80];
+            }
+            for (int i = 24 * 80; i < 25 * 80; i++) {
+                vga[i] = 0x0F20;
+            }
+            cursor_pos = 24 * 80;
         }
-        if (pos >= 80 * 25) pos = 0;
+    } else if (c == '\b') {
+        if (cursor_pos > 0) {
+            cursor_pos--;
+            vga[cursor_pos] = (color << 8) | ' ';
+        }
+    } else {
+        vga[cursor_pos] = (color << 8) | c;
+        cursor_pos++;
+        if (cursor_pos >= 80 * 25) {
+            // Scroll screen
+            for (int i = 0; i < 24 * 80; i++) {
+                vga[i] = vga[i + 80];
+            }
+            for (int i = 24 * 80; i < 25 * 80; i++) {
+                vga[i] = 0x0F20;
+            }
+            cursor_pos = 24 * 80;
+        }
+    }
+}
+
+// Write string to VGA
+static void vga_print(const char *str, uint8_t color)
+{
+    for (int i = 0; str[i] != '\0'; i++) {
+        vga_putchar(str[i], color);
+    }
+}
+
+// Process commands
+static void process_command(const char *cmd)
+{
+    if (cmd[0] == '\0') return;
+    
+    if (cmd[0] == 'l' && cmd[1] == 's' && (cmd[2] == '\0' || cmd[2] == ' ')) {
+        vga_print("Executing ls...\n", 0x0A);
+        syscall(5, (uint64_t)"/", 0, 0); // SYS_LS
+    }
+    else if (cmd[0] == 'p' && cmd[1] == 's' && cmd[2] == '\0') {
+        vga_print("Executing ps...\n", 0x0A);
+        syscall(7, 0, 0, 0); // SYS_PS
+    }
+    else if (cmd[0] == 'h' && cmd[1] == 'e' && cmd[2] == 'l' && cmd[3] == 'p') {
+        vga_print("Available commands:\n", 0x0E);
+        vga_print("  ls    - List files\n", 0x0F);
+        vga_print("  ps    - Show processes\n", 0x0F);
+        vga_print("  help  - Show this help\n", 0x0F);
+        vga_print("  exit  - Exit shell\n", 0x0F);
+    }
+    else if (cmd[0] == 'e' && cmd[1] == 'x' && cmd[2] == 'i' && cmd[3] == 't') {
+        vga_print("Exiting shell...\n", 0x0C);
+        syscall(SYS_EXIT, 0, 0, 0);
+    }
+    else {
+        vga_print("Unknown command: ", 0x0C);
+        vga_print(cmd, 0x0F);
+        vga_print("\nType 'help' for available commands\n", 0x0E);
     }
 }
 
@@ -32,56 +120,82 @@ static void shell_write_vga(const char *msg, uint8_t color)
 void shell_ring3_entry(void)
 {
     // Clear screen
-    volatile uint16_t *vga = (volatile uint16_t *)0xB8000;
     for (int i = 0; i < 80 * 25; i++) {
         vga[i] = 0x0F20; // White on black, space
     }
+    cursor_pos = 0;
     
     // Show banner
-    shell_write_vga("╔═══════════════════════════════════════════════════════╗\n", 0x0B);
-    shell_write_vga("║         IR0 SHELL - Running in Ring 3 (User Mode)    ║\n", 0x0F);
-    shell_write_vga("╚═══════════════════════════════════════════════════════╝\n", 0x0B);
-    shell_write_vga("\n", 0x0F);
-    shell_write_vga("Shell is now running in user space (Ring 3)\n", 0x0A);
-    shell_write_vga("Interrupts are enabled. Keyboard should work!\n", 0x0A);
-    shell_write_vga("Type something to test...\n", 0x07);
-    shell_write_vga("\n", 0x0F);
-    shell_write_vga("Shell> ", 0x0E);
+    vga_print("=== IR0 SHELL ===\n", 0x0F);
+    vga_print("Running in Ring 3\n", 0x0A);
     
-    int cursor_pos = 7 * 80 + 7; // After "Shell> "
-    int last_buffer_pos = 0;
+    // Test getpid syscall
+    int64_t pid = sys_getpid();
+    vga_print("Process ID: ", 0x0E);
+    if (pid >= 0 && pid <= 9) {
+        char pid_str[2] = {'0' + (char)pid, '\0'};
+        vga_print(pid_str, 0x0F);
+    } else {
+        vga_print("ERROR", 0x0C);
+    }
+    vga_print("\n", 0x0F);
     
-    // Main loop - read keyboard and display
-    for (;;) {
-        // Check if there's new keyboard input
-        int current_pos = *shell_keyboard_buffer_pos;
+    vga_print("Type 'help' for commands, ESC to exit\n", 0x0B);
+    
+    char buffer[64];
+    int pos = 0;
+    int echo_pos = 0; // Position for visual echo
+    
+    vga_print("shell> ", 0x0E);
+    echo_pos = cursor_pos; // Remember where input starts
+    
+    // Main input loop
+    while (1) {
+        char c;
+        int64_t bytes_read = sys_read(0, &c, 1); // STDIN
         
-        while (last_buffer_pos < current_pos) {
-            char c = shell_keyboard_buffer[last_buffer_pos++];
-            
-            if (c == '\n') {
-                // Enter pressed - new line
-                cursor_pos = (cursor_pos / 80 + 1) * 80;
-                shell_write_vga("\nShell> ", 0x0E);
-                cursor_pos = (cursor_pos / 80) * 80 + 7;
-            } else if (c == '\b') {
-                // Backspace
-                if ((cursor_pos % 80) > 7) {
-                    cursor_pos--;
-                    shell_write_char(' ', cursor_pos, 0x0F);
+        if (bytes_read > 0) {
+            if (c == '\n' || c == '\r') {
+                // Enter - process command
+                vga_putchar('\n', 0x0F);
+                buffer[pos] = '\0';
+                
+                if (pos > 0) {
+                    process_command(buffer);
                 }
-            } else if (c >= 32 && c < 127) {
-                // Printable character
-                shell_write_char(c, cursor_pos++, 0x0F);
-                if (cursor_pos >= 80 * 25) cursor_pos = 0;
+                
+                // Reset for next command
+                pos = 0;
+                vga_print("shell> ", 0x0E);
+                echo_pos = cursor_pos;
+            }
+            else if (c == '\b' || c == 127) {
+                // Backspace - manejar visualmente
+                if (pos > 0) {
+                    pos--;
+                    buffer[pos] = '\0';
+                    
+                    // Borrar visualmente: mover cursor atrás y escribir espacio
+                    if (cursor_pos > echo_pos) {
+                        cursor_pos--;
+                        vga[cursor_pos] = 0x0F20; // Espacio blanco
+                    }
+                }
+            }
+            else if (c == 27) {
+                // ESC - exit
+                vga_print("\nExiting...\n", 0x0C);
+                syscall(SYS_EXIT, 0, 0, 0);
+            }
+            else if (c >= 32 && c < 127 && pos < 63) {
+                // Regular character
+                buffer[pos++] = c;
+                vga_putchar(c, 0x0F);
             }
         }
-        
-        // Blink cursor
-        static int blink = 0;
-        shell_write_char((blink++ & 0x10) ? '_' : ' ', cursor_pos, 0x0F);
-        
-        // Small delay
-        for (volatile int i = 0; i < 100000; i++);
+        else {
+            // No input, small delay
+            for (volatile int i = 0; i < 5000; i++);
+        }
     }
 }
