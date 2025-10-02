@@ -956,6 +956,8 @@ task_t *get_current_task(void) {
     return current_running_task;
 }
 
+
+
 int scheduler_ready(void) {
     return (active_scheduler_type != SCHEDULER_NONE) && 
            (current_scheduler.init != NULL);
