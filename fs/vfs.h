@@ -90,3 +90,6 @@ int unregister_filesystem(struct filesystem_type *fs);
 
 // Lookup de paths
 struct vfs_inode *vfs_path_lookup(const char *path);
+
+// MINIX filesystem integration
+int vfs_init_with_minix(void);
