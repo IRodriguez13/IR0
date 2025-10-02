@@ -43,7 +43,6 @@ typedef struct minix_fs_info {
 // ===============================================================================
 
 static minix_fs_info_t minix_fs;
-static bool minix_fs_initialized = false;
 
 // ===============================================================================
 // DISK I/O FUNCTIONS (using ATA driver)
@@ -297,19 +296,36 @@ uint32_t minix_alloc_inode(void) {
 // ===============================================================================
 
 minix_inode_t *minix_fs_find_inode(const char *pathname) {
-  if (!pathname || !minix_fs_initialized) {
+  extern void print(const char *str);
+  
+  // Debug log para verificar entrada
+  print("MINIX_DEBUG: minix_fs_find_inode called with path: ");
+  print(pathname ? pathname : "NULL");
+  print("\n");
+  
+  if (!pathname || !minix_fs.initialized) {
+    print("MINIX_DEBUG: Early return - pathname=");
+    print(pathname ? "valid" : "NULL");
+    print(", initialized=");
+    print(minix_fs.initialized ? "true" : "false");
+    print("\n");
     return NULL;
   }
+
+  print("MINIX_DEBUG: Passed initial checks, filesystem is initialized\n");
 
   // FORCE REAL DISK USAGE - Always try to read from disk
   // (Skip ATA check for QEMU compatibility)
 
   // Si es el directorio raíz
   if (strcmp(pathname, "/") == 0) {
+    print("MINIX_DEBUG: Looking for root directory, calling minix_read_inode...\n");
     static minix_inode_t root_inode;
     if (minix_read_inode(MINIX_ROOT_INODE, &root_inode) == 0) {
+      print("MINIX_DEBUG: Successfully read root inode, returning valid pointer\n");
       return &root_inode;
     } else {
+      print("MINIX_DEBUG: Failed to read root inode from disk\n");
       return NULL;
     }
   }
@@ -356,7 +372,7 @@ minix_inode_t *minix_fs_find_inode(const char *pathname) {
 
 // Función auxiliar para obtener el número de inode de un path
 static uint16_t minix_fs_get_inode_number(const char *pathname) {
-  if (!pathname || !minix_fs_initialized) {
+  if (!pathname || !minix_fs.initialized) {
     return 0;
   }
 
