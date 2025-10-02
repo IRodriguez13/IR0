@@ -283,6 +283,16 @@ static void process_command(const char *cmd)
       fb_print("Fork failed!\n", 0x0C);
     }
   }
+  else if (str_starts_with(cmd, "clear"))
+  {
+    // Clear screen by resetting cursor and filling with spaces
+    volatile uint16_t *vga = (volatile uint16_t *)0xB8000;
+    for (int i = 0; i < 80 * 25; i++)
+    {
+      vga[i] = 0x0F20; // White on black, space
+    }
+    cursor_pos = 0;
+  }
   else if (str_starts_with(cmd, "help"))
   {
     fb_print("Available commands:\n", 0x0E);
@@ -293,6 +303,7 @@ static void process_command(const char *cmd)
     fb_print("  mkdir <dir>     - Create directory\n", 0x0F);
     fb_print("  ps              - Show processes\n", 0x0F);
     fb_print("  fork            - Test fork() syscall\n", 0x0F);
+    fb_print("  clear           - Clear screen\n", 0x0F);
     fb_print("  help            - Show this help\n", 0x0F);
     fb_print("  exit            - Exit shell\n", 0x0F);
   }

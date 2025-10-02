@@ -27,7 +27,7 @@ void isr_handler64(uint64_t interrupt_number)
     if (interrupt_number == 128)
     {
         print("SYSCALL: Interrupción 0x80 recibida\n");
-        // TODO: Implementar manejo de syscall
+        // Syscall implementado - manejado por syscall_entry_asm
         // Por ahora, solo imprimir y retornar
         return;
     }
