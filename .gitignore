@@ -31,3 +31,4 @@ fs/vfs_simple.c
 fs/vfs_simple.c
 disk.img.backup.1759425883
 disk.img.backup.1759425351
+iso/boot/grub/grub.cfg

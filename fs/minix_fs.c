@@ -1299,3 +1299,127 @@ int minix_fs_ensure_valid(void) {
   // Valid filesystem found
   return 0;
 }
+
+int minix_fs_rmdir(const char *path) {
+  if (!minix_fs.initialized) {
+    print("Error: MINIX filesystem not initialized\n");
+    return -1;
+  }
+
+  if (!path || strlen(path) == 0) {
+    print("Error: No directory path specified\n");
+    return -1;
+  }
+
+  // No permitir eliminar el directorio raíz
+  if (strcmp(path, "/") == 0) {
+    print("Error: Cannot remove root directory\n");
+    return -1;
+  }
+
+  // Obtener el inode del directorio
+  minix_inode_t *dir_inode = minix_fs_find_inode(path);
+  if (!dir_inode) {
+    print("Error: Directory '");
+    print(path);
+    print("' not found\n");
+    return -1;
+  }
+
+  // Verificar que sea un directorio
+  if (!minix_is_dir(dir_inode)) {
+    print("Error: '");
+    print(path);
+    print("' is not a directory\n");
+    return -1;
+  }
+
+  // Verificar que el directorio esté vacío (solo . y ..)
+  bool is_empty = true;
+
+  for (int i = 0; i < 7; i++) {
+    if (dir_inode->i_zone[i] == 0) {
+      continue;
+    }
+
+    uint8_t block_buffer[MINIX_BLOCK_SIZE];
+    if (minix_read_block(dir_inode->i_zone[i], block_buffer) != 0) {
+      continue;
+    }
+
+    minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
+    int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
+
+    for (int j = 0; j < num_entries; j++) {
+      if (entries[j].inode == 0) {
+        continue; // Entrada vacía
+      }
+      
+      // Solo permitir . y ..
+      if (strcmp(entries[j].name, ".") != 0 && strcmp(entries[j].name, "..") != 0) {
+        is_empty = false;
+        break;
+      }
+    }
+
+    if (!is_empty) {
+      break;
+    }
+  }
+
+  if (!is_empty) {
+    print("Error: Directory '");
+    print(path);
+    print("' is not empty\n");
+    return -1;
+  }
+
+  // Parsear el path para obtener directorio padre y nombre
+  char parent_path[256];
+  char dirname[64];
+
+  if (minix_fs_split_path(path, parent_path, dirname) != 0) {
+    print("Error: Invalid path\n");
+    return -1;
+  }
+
+  // Obtener el inode del directorio padre
+  minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
+  if (!parent_inode) {
+    print("Error: Parent directory not found\n");
+    return -1;
+  }
+
+  // Obtener el número de inode del directorio
+  uint16_t dir_inode_num = minix_fs_get_inode_number(path);
+  if (dir_inode_num == 0) {
+    print("Error: Could not get inode number\n");
+    return -1;
+  }
+
+  // Eliminar entrada del directorio padre
+  if (minix_fs_remove_dir_entry(parent_inode, dirname) != 0) {
+    print("Error: Could not remove directory entry\n");
+    return -1;
+  }
+
+  // Liberar el inode
+  if (minix_fs_free_inode(dir_inode_num) != 0) {
+    print("Error: Could not free inode\n");
+    return -1;
+  }
+
+  // Actualizar el inode del padre
+  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
+  if (parent_inode_num != 0) {
+    if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0) {
+      print("Warning: Could not update parent directory\n");
+    }
+  }
+
+  print("Directory '");
+  print(path);
+  print("' removed successfully\n");
+
+  return 0;
+}

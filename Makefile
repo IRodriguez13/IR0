@@ -203,14 +203,14 @@ kernel-x64.iso: kernel-x64.bin
 	@echo "✓ ISO created: $@"
 
 # Default target
-all: kernel-x64.iso
+ir0: kernel-x64.iso
 
 # ===============================================================================
 # QEMU COMMANDS
 # ===============================================================================
 
 # Run with GUI and disk (default)
-run: kernel-x64.iso
+run-kernel: kernel-x64.iso
 	@echo "🚀 Running IR0 Kernel..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
 	    -drive file=disk.img,format=raw,if=ide,index=0 \
@@ -251,7 +251,7 @@ create-disk:
 # CLEAN
 # ===============================================================================
 
-clean:
+clear:
 	@echo "🧹 Cleaning build artifacts..."
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
@@ -271,11 +271,11 @@ help:
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "📦 Build:"
-	@echo "  make all              Build kernel ISO"
+	@echo "  make ir0              Build kernel ISO"
 	@echo "  make clean            Clean build artifacts"
 	@echo ""
 	@echo "🚀 Run:"
-	@echo "  make run              Run with GUI + disk (recommended)"
+	@echo "  make run-kernel              Run with GUI + disk (recommended)"
 	@echo "  make run-nodisk       Run without disk"
 	@echo "  make run-console      Run in console mode"
 	@echo "  make debug            Run with full debug logging"

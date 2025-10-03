@@ -13,6 +13,7 @@
 #define SYS_CAT 9
 #define SYS_TOUCH 10
 #define SYS_RM 11
+#define SYS_RMDIR 40
 #define SYS_FORK 12
 #define SYS_WAITPID 13
 
@@ -174,6 +175,18 @@ static void process_command(const char *cmd)
       fb_print("Usage: touch <filename>\n", 0x0C);
     }
   }
+  else if (str_starts_with(cmd, "rmdir"))
+  {
+    const char *path = find_arg(cmd, "rmdir");
+    if (path)
+    {
+      syscall(SYS_RMDIR, (uint64_t)path, 0, 0);
+    }
+    else
+    {
+      fb_print("Usage: rmdir <directory>\n", 0x0C);
+    }
+  }
   else if (str_starts_with(cmd, "rm"))
   {
     const char *path = find_arg(cmd, "rm");
@@ -301,6 +314,7 @@ static void process_command(const char *cmd)
     fb_print("  touch <file>    - Create empty file\n", 0x0F);
     fb_print("  rm <file>       - Remove file\n", 0x0F);
     fb_print("  mkdir <dir>     - Create directory\n", 0x0F);
+    fb_print("  rmdir <dir>     - Remove directory\n", 0x0F);
     fb_print("  ps              - Show processes\n", 0x0F);
     fb_print("  fork            - Test fork() syscall\n", 0x0F);
     fb_print("  clear           - Clear screen\n", 0x0F);
