@@ -1,27 +1,76 @@
-# IR0 Kernel
 
-If you see some "interesting" comments around this docs make me know it in <ivanrwcm25@gmail.com>. i generate docs with ai :--)
+# IR0 Kernel pre-rc1
 
-- The kernel will reach version 0.0.1 once it successfully runs Doom.
+IR0 is a monolithic hobby operating system kernel for x86-64, focused on learning, experimentation, and pushing the boundaries of what a homebrew OS can achieve. The project aims to provide a robust, modular, and extensible base for running real-world userland software, including Doom, GCC, Bash, and external TCP/IP networking (ping).
 
-## 🚀 Current Status (v0.0.1 pre-rc)
+## Project Overview
 
-- You can also watch our Discord Server <https://discord.gg/XZ84aPXtxh>.
+- **Type:** Monolithic hobby OS kernel
+- **Architecture:** x86-64 (x86-32 support is experimental)
+- **License:** GNU GPL v3.0
 
+## Current Status
 
-- The kernel compiles and runs successfully x86-64 architectures.
+IR0 currently boots on x86-64 hardware and emulators, providing a functional multitasking environment, memory management, basic drivers, and a minimal shell. The kernel is under active development, with the following features implemented:
 
-### ✅ Working Components
-- **✅ Dual Architecture Support**: x86-32 and x86-64 compilation and boot
-- **✅ Memory Management**: Basic paging, heap allocator, physical memory management
-- **✅ Interrupt System**: Complete IDT setup, PIC configuration, ISR handlers, TSS for x86-64
-- **✅ Process Management**: Process structure and state management framework with multiple schedulers
-- **✅ System Calls Interface**: POSIX-compatible system call definitions
-- **✅ Interactive Shell**: Basic shell with command parsing and execution
-- **✅ Context Switching**: Assembly implementation for both architectures
-- **✅ Timer System**: PIT, HPET, and LAPIC timer support
-- **✅ Hardware Drivers**: PS/2 keyboard, ATA storage, VGA display
-- **✅ String Library**: Complete freestanding implementation
+### Implemented Features
+
+- **x86-64 Boot and Initialization**
+- **Memory Management:** Paging, heap allocator, physical memory bitmap
+- **Interrupt Handling:** Full IDT, PIC, TSS, and exception support
+- **Process Management:** Process structures, state transitions, and multiple schedulers (CFS, priority, round-robin)
+- **System Call Interface:** POSIX-like syscall definitions (50+ syscalls)
+- **Context Switching:** Assembly implementation for both 32/64-bit
+- **Shell:** Minimal interactive shell with command parsing
+- **Timer Support:** PIT, HPET, LAPIC
+- **Drivers:** PS/2 keyboard, ATA storage, VGA display
+- **String/Utility Library:** Freestanding C implementation
+- **VFS Layer:** Virtual file system abstraction and IR0FS structure
+
+## Technical Architecture
+
+- **Memory Layout:** Kernel/user separation, identity mapping, protected stack
+- **Process Model:** Standard UNIX-like states, process tree, context switch
+- **File System:** VFS and IR0FS, basic mounting and directory operations
+- **System Calls:** Process, file, memory, and time management
+- **Shell:** Built-in commands for system inspection and management
+
+## Build & Run
+
+Requirements: GCC, Make, NASM, LD, AR, GRUB, Xorriso, QEMU
+
+Example:
+```bash
+create the virtual hard disk
+make create-disk
+for build & run:
+make ir0
+make run-kernel
+```
+
+## Roadmap & Final Goal
+
+The ultimate goal for IR0 is to:
+
+- Support external TCP/IP networking and utilities like `ping`
+- Run Doom natively in userland
+- Provide a working GCC toolchain and Bash shell in user space
+
+## Development Status
+
+- **Core:** Stable and functional multitasking, memory, interrupts, and drivers
+- **In Progress:** TCP/IP stack, ELF userland loader, advanced file system
+- **Next Milestones:** Networking, Doom, Bash, GCC
+
+## Contributing
+
+Contributions are welcome. Please see the developer guide and coding standards in the repository.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0.
+
+---
 
 ## 🏗️ Architecture
 
@@ -60,18 +109,6 @@ If you see some "interesting" comments around this docs make me know it in <ivan
 - **Valgrind** (memory debugging, optional)
 - **GDB** (debugger, optional)
 
-#### 💾 **Run with Disk Operations**
-```bash
-make create-disk            # Create virtual disk with filesystem
-make run-64-with-disk       # Run x86-64 with disk support == RECOMENDED ==
-make run-32-with-disk       # Run x86-32 with disk support
-```
-
-### Quick Build
-```bash
-make clean                  # Clean build files
-make clean-all              # Clean everything (including ISOs)
-```
 
 ## 🎯 Features
 
@@ -142,12 +179,6 @@ make clean-all              # Clean everything (including ISOs)
 - **Interrupt System**: Complete interrupt handling with PIC and multiple timer support
 - **Hardware Support**: PS/2 keyboard, ATA storage, and VGA display drivers operational
 
-### ⚠️ Areas for Development
-- **File System Implementation**: IR0FS low-level functions need implementation
-- **Process Creation**: Real process spawning and execution
-- **System Call Handlers**: Specific implementations for system calls
-- **Additional Device Drivers**: USB, PCI, SATA support
-- **Networking**: Network stack implementation
 
 ## 🎯 Highlights
 
