@@ -229,10 +229,11 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode) {
   }
 
   // Calcular posición del inode en el disco
-  uint32_t inode_block = minix_fs.superblock.s_imap_blocks + 1 +
-                         (inode_num * sizeof(minix_inode_t)) / MINIX_BLOCK_SIZE;
-  uint32_t inode_offset =
-      (inode_num * sizeof(minix_inode_t)) % MINIX_BLOCK_SIZE;
+  // Para MINIX: inode table starts after superblock + bitmaps
+  // Block layout: 0=boot, 1=super, 2=imap, 3=zmap, 4=inodes, 5+=data
+  uint32_t inode_table_start = 1 + minix_fs.superblock.s_imap_blocks + minix_fs.superblock.s_zmap_blocks;
+  uint32_t inode_block = inode_table_start + ((inode_num - 1) * sizeof(minix_inode_t)) / MINIX_BLOCK_SIZE;
+  uint32_t inode_offset = ((inode_num - 1) * sizeof(minix_inode_t)) % MINIX_BLOCK_SIZE;
 
   uint8_t block_buffer[MINIX_BLOCK_SIZE];
   int result = minix_read_block(inode_block, block_buffer);
@@ -295,39 +296,33 @@ uint32_t minix_alloc_inode(void) {
 // MINIX FILESYSTEM FUNCTIONS IMPLEMENTATION
 // ===============================================================================
 
+// Global static inodes to avoid memory issues
+static minix_inode_t cached_root_inode;
+static minix_inode_t cached_result_inode;
+static bool root_inode_cached = false;
+
 minix_inode_t *minix_fs_find_inode(const char *pathname) {
   extern void print(const char *str);
   
-  // Debug log para verificar entrada
-  print("MINIX_DEBUG: minix_fs_find_inode called with path: ");
-  print(pathname ? pathname : "NULL");
-  print("\n");
-  
   if (!pathname || !minix_fs.initialized) {
-    print("MINIX_DEBUG: Early return - pathname=");
-    print(pathname ? "valid" : "NULL");
-    print(", initialized=");
-    print(minix_fs.initialized ? "true" : "false");
-    print("\n");
     return NULL;
   }
-
-  print("MINIX_DEBUG: Passed initial checks, filesystem is initialized\n");
 
   // FORCE REAL DISK USAGE - Always try to read from disk
   // (Skip ATA check for QEMU compatibility)
 
   // Si es el directorio raíz
   if (strcmp(pathname, "/") == 0) {
-    print("MINIX_DEBUG: Looking for root directory, calling minix_read_inode...\n");
-    static minix_inode_t root_inode;
-    if (minix_read_inode(MINIX_ROOT_INODE, &root_inode) == 0) {
-      print("MINIX_DEBUG: Successfully read root inode, returning valid pointer\n");
-      return &root_inode;
-    } else {
-      print("MINIX_DEBUG: Failed to read root inode from disk\n");
-      return NULL;
+    // Use cached root inode if available
+    if (!root_inode_cached) {
+      if (minix_read_inode(MINIX_ROOT_INODE, &cached_root_inode) == 0) {
+        root_inode_cached = true;
+      } else {
+        return NULL;
+      }
     }
+    
+    return &cached_root_inode;
   }
 
   // Parsear el path
@@ -364,10 +359,9 @@ minix_inode_t *minix_fs_find_inode(const char *pathname) {
   }
 
   // Retornar una copia estática del inode encontrado
-  static minix_inode_t result_inode;
-  memcpy(&result_inode, &current_inode, sizeof(minix_inode_t));
+  memcpy(&cached_result_inode, &current_inode, sizeof(minix_inode_t));
 
-  return &result_inode;
+  return &cached_result_inode;
 }
 
 // Función auxiliar para obtener el número de inode de un path
@@ -731,6 +725,7 @@ int minix_fs_init(void) {
 
   // Valid filesystem found
   minix_fs.initialized = true;
+  root_inode_cached = false; // Reset cache
   return 0;
 }
 
@@ -829,6 +824,7 @@ int minix_fs_format(void) {
   }
 
   minix_fs.initialized = true;
+  root_inode_cached = false; // Reset cache
   return 0;
 }
 
@@ -938,7 +934,7 @@ int minix_fs_ls(const char *path) {
     return -1;
   }
 
-  if (!(dir_inode->i_mode & MINIX_IFDIR)) {
+  if (!minix_is_dir(dir_inode)) {
     extern int64_t sys_write(int fd, const void *buf, size_t count);
     sys_write(2, "Not a directory: ", 17);
     sys_write(2, target_path, strlen(target_path));
@@ -981,8 +977,7 @@ int minix_fs_ls(const char *path) {
           print("-");
         }
 
-        // Mostrar permisos básicos
-        print("rwxr-xr-x ");
+        // Mostrar permisos básicos (removido hardcode)
 
         // Mostrar tamaño
         print_uint32(entry_inode.i_size);
