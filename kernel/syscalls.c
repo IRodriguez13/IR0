@@ -282,6 +282,29 @@ int64_t sys_rm(const char *pathname)
   }
 }
 
+
+int64_t sys_rmdir(const char *pathname)
+{
+  if (!current_process)
+    return -ESRCH;
+  if (!pathname)
+    return -EFAULT;
+
+  extern bool minix_fs_is_working(void);
+  extern int minix_fs_rmdir(const char *path);
+
+  if (minix_fs_is_working())
+  {
+    return minix_fs_rmdir(pathname);
+  }
+  else
+  {
+    const char *error_msg = "Error: MINIX filesystem not initialized\n";
+    sys_write(STDERR_FILENO, error_msg, strlen(error_msg));
+    return -1;
+  }
+}
+
 // ============================================================================
 // PROCESS MANAGEMENT SYSCALLS
 // ============================================================================
@@ -437,6 +460,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 
   case 13: // waitpid
     return sys_waitpid((pid_t)arg1, (int *)arg2, (int)arg3);
+
+
+  case 40: // rmdir
+    return sys_rmdir((const char *)arg1);
 
   default:
     print("UNKNOWN_SYSCALL:");

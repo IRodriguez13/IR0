@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// Forward declarations
+typedef uint32_t mode_t;
+
 // Syscall arguments structure
 typedef struct {
     uint64_t arg1;
@@ -21,6 +24,8 @@ int64_t sys_read(int fd, void *buf, size_t count);
 int64_t sys_getpid(void);
 int64_t sys_getppid(void);
 int64_t sys_ls(const char *pathname);
+int64_t sys_mkdir(const char *pathname, mode_t mode);
+int64_t sys_rmdir(const char *pathname);
 
 // Syscall handler
 int64_t syscall_handler(uint64_t number, syscall_args_t *args);
