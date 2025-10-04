@@ -220,6 +220,7 @@ int memcmp(const void *ptr1, const void *ptr2, size_t num)
         {
             return *p1 - *p2;
         }
+
         p1++;
         p2++;
     }
@@ -697,14 +698,13 @@ char *itoa(int value, char *str, int base)
         return str;
     }
 
-    do
+    while (value);
     {
         tmp_value = value;
         value /= base;
         *ptr++ = "0123456789abcdefghijklmnopqrstuvwxyz"[tmp_value - value * base];
     } 
-    while (value);
-
+    
     // Apply negative sign for base 10
     if (tmp_value < 0 && base == 10)
         *ptr++ = '-';

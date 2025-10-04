@@ -18,7 +18,8 @@ static struct vfs_inode *root_inode = NULL;
 // REGISTRO DE FILESYSTEMS
 // ============================================================================
 
-int register_filesystem(struct filesystem_type *fs) {
+int register_filesystem(struct filesystem_type *fs)
+{
   if (!fs)
     return -1;
 
@@ -27,13 +28,16 @@ int register_filesystem(struct filesystem_type *fs) {
   return 0;
 }
 
-int unregister_filesystem(struct filesystem_type *fs) {
+int unregister_filesystem(struct filesystem_type *fs)
+{
   if (!fs)
     return -1;
 
   struct filesystem_type **p = &filesystems;
-  while (*p) {
-    if (*p == fs) {
+  while (*p)
+  {
+    if (*p == fs)
+    {
       *p = fs->next;
       return 0;
     }
@@ -46,12 +50,14 @@ int unregister_filesystem(struct filesystem_type *fs) {
 // PATH LOOKUP
 // ============================================================================
 
-struct vfs_inode *vfs_path_lookup(const char *path) {
+struct vfs_inode *vfs_path_lookup(const char *path)
+{
   if (!path || !root_inode)
     return NULL;
 
   // Por simplicidad, solo soportamos root "/"
-  if (strcmp(path, "/") == 0) {
+  if (strcmp(path, "/") == 0)
+  {
     return root_inode;
   }
 
@@ -64,7 +70,8 @@ struct vfs_inode *vfs_path_lookup(const char *path) {
 // VFS OPERATIONS
 // ============================================================================
 
-int vfs_init(void) {
+int vfs_init(void)
+{
   // Inicializar lista de filesystems
   filesystems = NULL;
   root_sb = NULL;
@@ -73,14 +80,17 @@ int vfs_init(void) {
   return 0;
 }
 
-int vfs_mount(const char *dev, const char *mountpoint, const char *fstype) {
+int vfs_mount(const char *dev, const char *mountpoint, const char *fstype)
+{
   if (!fstype)
     return -1;
 
   // Buscar el tipo de filesystem
   struct filesystem_type *fs_type = filesystems;
-  while (fs_type) {
-    if (strcmp(fs_type->name, fstype) == 0) {
+  while (fs_type)
+  {
+    if (strcmp(fs_type->name, fstype) == 0)
+    {
       break;
     }
     fs_type = fs_type->next;
@@ -93,7 +103,8 @@ int vfs_mount(const char *dev, const char *mountpoint, const char *fstype) {
   return fs_type->mount(dev, mountpoint);
 }
 
-int vfs_open(const char *path, int flags, struct vfs_file **file) {
+int vfs_open(const char *path, int flags, struct vfs_file **file)
+{
   if (!path || !file)
     return -1;
 
@@ -112,41 +123,48 @@ int vfs_open(const char *path, int flags, struct vfs_file **file) {
   (*file)->private_data = NULL;
 
   // Llamar a open del filesystem específico
-  if (inode->i_fop && inode->i_fop->open) {
+  if (inode->i_fop && inode->i_fop->open)
+  {
     return inode->i_fop->open(inode, *file);
   }
 
   return 0;
 }
 
-int vfs_read(struct vfs_file *file, char *buf, size_t count) {
+int vfs_read(struct vfs_file *file, char *buf, size_t count)
+{
   if (!file || !buf)
     return -1;
 
-  if (file->f_inode->i_fop && file->f_inode->i_fop->read) {
+  if (file->f_inode->i_fop && file->f_inode->i_fop->read)
+  {
     return file->f_inode->i_fop->read(file, buf, count);
   }
 
   return -1;
 }
 
-int vfs_write(struct vfs_file *file, const char *buf, size_t count) {
+int vfs_write(struct vfs_file *file, const char *buf, size_t count)
+{
   if (!file || !buf)
     return -1;
 
-  if (file->f_inode->i_fop && file->f_inode->i_fop->write) {
+  if (file->f_inode->i_fop && file->f_inode->i_fop->write)
+  {
     return file->f_inode->i_fop->write(file, buf, count);
   }
 
   return -1;
 }
 
-int vfs_close(struct vfs_file *file) {
+int vfs_close(struct vfs_file *file)
+{
   if (!file)
     return -1;
 
   int ret = 0;
-  if (file->f_inode->i_fop && file->f_inode->i_fop->close) {
+  if (file->f_inode->i_fop && file->f_inode->i_fop->close)
+  {
     ret = file->f_inode->i_fop->close(file);
   }
 
@@ -158,18 +176,21 @@ int vfs_close(struct vfs_file *file) {
 // VFS WRAPPERS PARA SYSCALLS
 // ============================================================================
 
-int vfs_ls(const char *path) {
+int vfs_ls(const char *path)
+{
   // Use real MINIX filesystem implementation
   return minix_fs_ls(path);
 }
 
-int vfs_mkdir(const char *path, int mode __attribute__((unused))) {
+int vfs_mkdir(const char *path, int mode __attribute__((unused)))
+{
   // Delegar al filesystem específico por ahora
   extern int minix_fs_mkdir(const char *path);
   return minix_fs_mkdir(path);
 }
 
-int vfs_unlink(const char *path) {
+int vfs_unlink(const char *path)
+{
   // Delegar al filesystem específico por ahora
   extern int minix_fs_rm(const char *path);
   return minix_fs_rm(path);
@@ -215,67 +236,79 @@ static struct super_operations minix_super_ops = {
 static struct filesystem_type minix_fs_type = {
     .name = "minix",
     .mount = minix_mount,
-    .next = NULL
-};
+    .next = NULL};
 
 // Mount function para MINIX
 static int minix_mount(const char *dev_name __attribute__((unused)),
-                       const char *dir_name __attribute__((unused))) {
+                       const char *dir_name __attribute__((unused)))
+{
   extern void print(const char *str);
-  
+
   print("MINIX_MOUNT: Starting mount process...\n");
-  
+
   // Inicializar MINIX filesystem si no está funcionando
-  if (!minix_fs_is_working()) {
+  if (!minix_fs_is_working())
+  {
     print("MINIX_MOUNT: MINIX FS not working, initializing...\n");
     extern int minix_fs_init(void);
     int ret = minix_fs_init();
-    if (ret != 0) {
+    if (ret != 0)
+    {
       print("MINIX_MOUNT: ERROR - minix_fs_init failed\n");
       return ret;
     }
     print("MINIX_MOUNT: minix_fs_init OK\n");
-  } else {
+  }
+  else
+  {
     print("MINIX_MOUNT: MINIX FS already working\n");
   }
 
   // Crear superblock si no existe
-  if (!root_sb) {
+  if (!root_sb)
+  {
     print("MINIX_MOUNT: Creating superblock...\n");
     root_sb = kmalloc(sizeof(struct vfs_superblock));
-    if (!root_sb) {
+    if (!root_sb)
+    {
       print("MINIX_MOUNT: ERROR - kmalloc failed for superblock\n");
       return -1;
     }
 
     root_sb->s_op = &minix_super_ops;
-    root_sb->s_type = &minix_fs_type;  // Asignar el tipo correcto
-    root_sb->s_fs_info = NULL;         // Datos específicos de MINIX
+    root_sb->s_type = &minix_fs_type; // Asignar el tipo correcto
+    root_sb->s_fs_info = NULL;        // Datos específicos de MINIX
     print("MINIX_MOUNT: Superblock created OK\n");
-  } else {
+  }
+  else
+  {
     print("MINIX_MOUNT: Superblock already exists\n");
   }
 
   // Crear root inode si no existe
-  if (!root_inode) {
+  if (!root_inode)
+  {
     print("MINIX_MOUNT: Creating root inode...\n");
     root_inode = kmalloc(sizeof(struct vfs_inode));
-    if (!root_inode) {
+    if (!root_inode)
+    {
       print("MINIX_MOUNT: ERROR - kmalloc failed for root_inode\n");
       kfree(root_sb);
       root_sb = NULL;
       return -1;
     }
 
-    root_inode->i_ino = 1;                    // Root inode number
-    root_inode->i_mode = 0040755;             // Directory with 755 permissions  
-    root_inode->i_size = 0;                   // Directory size
-    root_inode->i_op = &minix_inode_ops;      // Inode operations
-    root_inode->i_fop = &minix_file_ops;      // File operations
-    root_inode->i_sb = root_sb;               // Superblock reference
-    root_inode->i_private = NULL;             // No private data
+    root_inode->i_ino = 1;               // Root inode number
+    root_inode->i_mode = 0040755;        // Directory with 755 permissions
+    root_inode->i_size = 0;              // Directory size
+    root_inode->i_op = &minix_inode_ops; // Inode operations
+    root_inode->i_fop = &minix_file_ops; // File operations
+    root_inode->i_sb = root_sb;          // Superblock reference
+    root_inode->i_private = NULL;        // No private data
     print("MINIX_MOUNT: Root inode created OK\n");
-  } else {
+  }
+  else
+  {
     print("MINIX_MOUNT: Root inode already exists\n");
   }
 
@@ -286,13 +319,15 @@ static int minix_mount(const char *dev_name __attribute__((unused)),
 // Removed duplicate minix_fs_type definition
 
 // Initialize VFS with MINIX filesystem
-int vfs_init_with_minix(void) {
+int vfs_init_with_minix(void)
+{
   extern void print(const char *str);
-  
+
   // Inicializar VFS
   print("VFS: Initializing VFS...\n");
   int ret = vfs_init();
-  if (ret != 0) {
+  if (ret != 0)
+  {
     print("VFS: ERROR - vfs_init failed\n");
     return ret;
   }
@@ -301,7 +336,8 @@ int vfs_init_with_minix(void) {
   // Registrar MINIX filesystem
   print("VFS: Registering MINIX filesystem...\n");
   ret = register_filesystem(&minix_fs_type);
-  if (ret != 0) {
+  if (ret != 0)
+  {
     print("VFS: ERROR - register_filesystem failed\n");
     return ret;
   }
@@ -310,16 +346,20 @@ int vfs_init_with_minix(void) {
   // Montar root filesystem
   print("VFS: Mounting root filesystem...\n");
   ret = vfs_mount("/dev/hda", "/", "minix");
-  if (ret != 0) {
+  if (ret != 0)
+  {
     print("VFS: ERROR - vfs_mount failed\n");
     return ret;
   }
   print("VFS: vfs_mount OK\n");
 
   // Verificar que root_inode se creó
-  if (root_inode) {
+  if (root_inode)
+  {
     print("VFS: root_inode created successfully\n");
-  } else {
+  }
+  else
+  {
     print("VFS: ERROR - root_inode is still NULL\n");
     return -1;
   }

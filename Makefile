@@ -251,7 +251,7 @@ create-disk:
 # CLEAN
 # ===============================================================================
 
-clear:
+clean:
 	@echo "🧹 Cleaning build artifacts..."
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete

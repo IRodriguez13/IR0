@@ -18,8 +18,7 @@
 #define SYS_WAITPID 13
 
 // Syscall wrapper - uses int 0x80 - This is a ugly way to call syscalls, but i promise i'll turn it more elegant xd
-static inline int64_t syscall(uint64_t num, uint64_t arg1, uint64_t arg2,
-                              uint64_t arg3)
+static inline int64_t syscall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3)
 {
   int64_t sysret; 
   __asm__ volatile("mov %1, %%rax\n"
