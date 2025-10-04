@@ -34,6 +34,8 @@ void switch_to_user_mode(void *entry_point)
     panic("Returned from user mode unexpectedly");
 }
 
+
+
 // Syscall handler placeholder
 void syscall_handler_c(void)
 {

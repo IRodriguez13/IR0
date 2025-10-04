@@ -203,6 +203,7 @@ void print_hex8(uint8_t val)
 void print_uint64(uint64_t num)
 {
 #ifdef __x86_64__
+    
     char buffer[21]; // Máximo 20 dígitos para uint64_t + null terminator
     int index = 0;
 
@@ -230,6 +231,7 @@ void print_uint64(uint64_t num)
     print("0x");
     print_hex32((uint32_t)(num >> 32));
     print_hex32((uint32_t)(num & 0xFFFFFFFF));
+
 #endif
 }
 

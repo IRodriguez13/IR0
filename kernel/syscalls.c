@@ -506,9 +506,3 @@ int64_t syscall_handler(uint64_t number, syscall_args_t *args)
   return -1;
 }
 
-// Test user function stub
-void test_user_function(void)
-{
-  print("[USER] Test function in Ring 3\n");
-  // Just return - no syscalls yet
-}
