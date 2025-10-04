@@ -1,5 +1,4 @@
-#ifndef ATA_H
-#define ATA_H
+#pragma once
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -63,4 +62,4 @@ void ata_reset_drive(uint8_t drive);
 // Global variables
 extern bool ata_drives_present[4]; // Primary master, primary slave, secondary master, secondary slave
 
-#endif // ATA_H
+

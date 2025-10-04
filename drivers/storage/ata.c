@@ -135,9 +135,6 @@ void ata_init(void)
     for (int i = 0; i < 4; i++) 
     {
         ata_drives_present[i] = ata_identify_drive(i);
-        if (ata_drives_present[i]) 
-        {
-        }
     }
 }
 
@@ -373,12 +370,7 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     
     // Wait for completion
     bool result = ata_wait_ready(drive);
-    if (result) 
-    {
-    } 
-    else 
-    {
-    }
+
     return result;
 }
 
