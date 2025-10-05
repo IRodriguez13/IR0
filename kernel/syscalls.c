@@ -152,15 +152,81 @@ int64_t sys_mkdir(const char *pathname, mode_t mode) {
   return -ENOSYS;
 }
 
+// Helper function to convert number to string
+static void int_to_str(int num, char *str, int *len) {
+  *len = 0;
+  if (num == 0) {
+    str[(*len)++] = '0';
+  } else {
+    int temp = num;
+    int digits = 0;
+    while (temp > 0) {
+      temp /= 10;
+      digits++;
+    }
+    for (int i = digits - 1; i >= 0; i--) {
+      str[i] = '0' + (num % 10);
+      num /= 10;
+    }
+    *len = digits;
+  }
+  str[*len] = '\0';
+}
+
 int64_t sys_ps(void) {
-  // Simple process list
+  // Access real process functions
+  extern void *get_process_list(void);
+  extern void process_print_all(void);
+  extern void *current_process;
+
   sys_write(1, "PID  STATE    COMMAND\n", 21);
   sys_write(1, "---  -------  -------\n", 22);
 
+  // Debug: print process list to serial
+  serial_print("SERIAL: sys_ps called, dumping process list:\n");
+
+  // Check both process systems
+  serial_print("SERIAL: Simple current_proc = ");
+  if (current_proc) {
+    serial_print_hex32(current_proc->pid);
+  } else {
+    serial_print("NULL");
+  }
+  serial_print("\n");
+
+  serial_print("SERIAL: Real current_process = ");
+  serial_print_hex32((uint32_t)(uintptr_t)current_process);
+  serial_print("\n");
+
+  process_print_all();
+
+  // Show kernel process (always PID 0)
+  sys_write(1, "  0  IDLE     kernel\n", 20);
+
+  // Show simple process (PID 1)
   if (current_proc) {
     sys_write(1, "  1  RUNNING  shell\n", 19);
   }
-  sys_write(1, "  0  IDLE     kernel\n", 20);
+
+  // Get real process list
+  void *proc_list = get_process_list();
+
+  if (proc_list) {
+    serial_print("SERIAL: Found process list, showing processes\n");
+
+    // Use external function to iterate safely
+    extern void show_process_list_in_shell(void);
+    show_process_list_in_shell();
+  } else {
+    serial_print("SERIAL: No process list found\n");
+
+    // Fallback: show current process only
+    if (current_proc) {
+      sys_write(1, "  1  RUNNING  shell\n", 19);
+    } else {
+      sys_write(1, "  No processes found\n", 21);
+    }
+  }
 
   return 0;
 }
@@ -485,6 +551,12 @@ int sys_mprotect(void *addr, size_t len, int prot) {
 // ============================================================================
 
 void syscalls_init(void) {
+  // Connect to real process management
+  extern void *current_process;
+  extern void *get_process_list(void);
+
+  serial_print("SERIAL: syscalls_init: connecting to process management\n");
+
   // Initialize current process stub with heap
   static struct simple_process init_proc = {
       .pid = 1,
@@ -494,6 +566,18 @@ void syscalls_init(void) {
       .heap_limit = (void *)0x20000000  // 512MB - heap limit (256MB max heap)
   };
   current_proc = &init_proc;
+
+  // Debug: check real process system
+  void *real_current = current_process;
+  void *real_list = get_process_list();
+
+  serial_print("SERIAL: Real current_process = ");
+  serial_print_hex32((uint32_t)(uintptr_t)real_current);
+  serial_print("\n");
+
+  serial_print("SERIAL: Real process_list = ");
+  serial_print_hex32((uint32_t)(uintptr_t)real_list);
+  serial_print("\n");
 
   // Register syscall interrupt handler
   extern void syscall_entry_asm(void);
