@@ -21,6 +21,17 @@ switch_context_x64:
     push rbp
     mov rbp, rsp
 
+    ; CRITICAL: Validate input pointers
+    ; rdi = current task, rsi = next task
+    
+    ; Check if current task pointer (rdi) is null
+    test rdi, rdi
+    jz .error_null_current
+    
+    ; Check if next task pointer (rsi) is null
+    test rsi, rsi
+    jz .error_null_next
+    
     ; Save current task state
     ; rdi = current task, rsi = next task
     
@@ -148,6 +159,20 @@ switch_context_x64:
     mov rdi, qword [rdi + 0x28]    ; Restore RDI
     
     ; Return to the new task
+    ret
+
+.error_null_current:
+    ; Current task pointer is null - this is a critical error
+    ; We can't safely continue, so we'll return immediately
+    ; In a real system, this should trigger a kernel panic
+    pop rbp
+    ret
+
+.error_null_next:
+    ; Next task pointer is null - this is a critical error
+    ; We can't safely continue, so we'll return immediately
+    ; In a real system, this should trigger a kernel panic
+    pop rbp
     ret
 
 ; ===============================================================================

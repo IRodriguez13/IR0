@@ -2,42 +2,31 @@
 #include "syscalls.h"
 #include "../drivers/serial/serial.h"
 #include "../includes/ir0/print.h"
+#include "process.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-// Forward declarations
-// Removed current_process extern - using local current_proc
+// Forward declarations for external functions
 extern char keyboard_buffer_get(void);
 extern int keyboard_buffer_has_data(void);
 extern bool minix_fs_is_working(void);
 extern int minix_fs_ls(const char *path);
 extern int minix_fs_mkdir(const char *path);
 extern int minix_fs_cat(const char *path);
+extern int minix_fs_write_file(const char *path, const char *content);
 extern int minix_fs_touch(const char *path);
 extern int minix_fs_rm(const char *path);
 extern int minix_fs_rmdir(const char *path);
-extern int process_fork(void);
-extern int process_wait(int pid, int *status);
 extern void print_hex_compact(uint32_t num);
 
 // Basic types and constants
 typedef uint32_t mode_t;
-typedef int32_t pid_t;
 typedef long intptr_t;
 typedef long off_t;
 
 // Process states
 #define TASK_ZOMBIE 4
-
-// Simple process structure for syscalls
-struct simple_process {
-  pid_t pid;
-  int state;
-  void *heap_start; // Start of process heap
-  void *heap_end;   // Current break (end of heap)
-  void *heap_limit; // Maximum heap size
-};
 
 // Errno codes
 #define ESRCH 3
@@ -49,10 +38,6 @@ struct simple_process {
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
-#define MAX_FILE_DESCRIPTORS 16
-
-// Global current process pointer
-static struct simple_process *current_proc = NULL;
 
 // ============================================================================
 // SYSCALL IMPLEMENTATIONS - ONLY WORKING ONES
@@ -60,10 +45,10 @@ static struct simple_process *current_proc = NULL;
 
 int64_t sys_exit(int exit_code) {
   (void)exit_code;
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
 
-  current_proc->state = TASK_ZOMBIE;
+  current_process->state = TASK_ZOMBIE;
 
   // Halt forever
   for (;;)
@@ -72,7 +57,7 @@ int64_t sys_exit(int exit_code) {
 }
 
 int64_t sys_write(int fd, const void *buf, size_t count) {
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
   if (!buf || count == 0)
     return 0;
@@ -96,7 +81,7 @@ int64_t sys_write(int fd, const void *buf, size_t count) {
 // Remove duplicate declarations
 
 int64_t sys_read(int fd, void *buf, size_t count) {
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
   if (!buf || count == 0)
     return 0;
@@ -120,19 +105,19 @@ int64_t sys_read(int fd, void *buf, size_t count) {
 }
 
 int64_t sys_getpid(void) {
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
-  return current_proc->pid;
+  return process_pid(current_process);
 }
 
 int64_t sys_getppid(void) {
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
   return 0; // No parent tracking yet
 }
 
 int64_t sys_ls(const char *pathname) {
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
 
   // Use MINIX filesystem directly
@@ -142,7 +127,7 @@ int64_t sys_ls(const char *pathname) {
 
 int64_t sys_mkdir(const char *pathname, mode_t mode) {
   (void)mode;
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
   if (!pathname)
     return -EFAULT;
@@ -152,87 +137,124 @@ int64_t sys_mkdir(const char *pathname, mode_t mode) {
   return -ENOSYS;
 }
 
-// Helper function to convert number to string
-static void int_to_str(int num, char *str, int *len) {
-  *len = 0;
-  if (num == 0) {
-    str[(*len)++] = '0';
-  } else {
-    int temp = num;
-    int digits = 0;
-    while (temp > 0) {
-      temp /= 10;
-      digits++;
-    }
-    for (int i = digits - 1; i >= 0; i--) {
-      str[i] = '0' + (num % 10);
-      num /= 10;
-    }
-    *len = digits;
-  }
-  str[*len] = '\0';
-}
+// Helper function removed - was unused
 
 int64_t sys_ps(void) {
-  // Access real process functions
-  extern void *get_process_list(void);
-  extern void process_print_all(void);
-  extern void *current_process;
+  // REAL sys_ps() - uses only real process management
+
+  serial_print("SERIAL: REAL sys_ps() called\n");
 
   sys_write(1, "PID  STATE    COMMAND\n", 21);
   sys_write(1, "---  -------  -------\n", 22);
 
-  // Debug: print process list to serial
-  serial_print("SERIAL: sys_ps called, dumping process list:\n");
+  // Get REAL process list
+  process_t *proc_list = get_process_list();
 
-  // Check both process systems
-  serial_print("SERIAL: Simple current_proc = ");
-  if (current_proc) {
-    serial_print_hex32(current_proc->pid);
-  } else {
-    serial_print("NULL");
+  serial_print("SERIAL: Real process_list = ");
+  serial_print_hex32((uint32_t)(uintptr_t)proc_list);
+  serial_print("\n");
+
+  if (!proc_list) {
+    serial_print("SERIAL: No processes in list, checking current_process\n");
+
+    // If list is empty but current_process exists, add it
+    if (current_process) {
+      serial_print("SERIAL: Adding current_process to list\n");
+      extern process_t *process_list;
+      process_list = current_process;
+      current_process->next = NULL;
+      proc_list = current_process;
+    }
   }
-  serial_print("\n");
 
-  serial_print("SERIAL: Real current_process = ");
-  serial_print_hex32((uint32_t)(uintptr_t)current_process);
-  serial_print("\n");
-
-  process_print_all();
-
-  // Show kernel process (always PID 0)
+  // Show kernel process (PID 0)
   sys_write(1, "  0  IDLE     kernel\n", 20);
 
-  // Show simple process (PID 1)
-  if (current_proc) {
-    sys_write(1, "  1  RUNNING  shell\n", 19);
+  // Iterate through REAL process list
+  process_t *proc = proc_list;
+  int count = 0;
+
+  while (proc && count < 20) {
+    serial_print("SERIAL: Processing PID=");
+    serial_print_hex32(process_pid(proc));
+    serial_print(" state=");
+    serial_print_hex32(proc->state);
+    serial_print("\n");
+
+    // Show PID
+    sys_write(1, "  ", 2);
+
+    // Convert PID to string
+    char pid_str[12];
+    uint32_t pid = process_pid(proc);
+    int len = 0;
+
+    if (pid == 0) {
+      pid_str[len++] = '0';
+    } else {
+      char temp[12];
+      int temp_len = 0;
+      while (pid > 0) {
+        temp[temp_len++] = '0' + (pid % 10);
+        pid /= 10;
+      }
+      for (int i = temp_len - 1; i >= 0; i--) {
+        pid_str[len++] = temp[i];
+      }
+    }
+    pid_str[len] = '\0';
+
+    sys_write(1, pid_str, len);
+
+    // Show state
+    switch (proc->state) {
+    case 0:
+      sys_write(1, "  READY   ", 10);
+      break;
+    case 1:
+      sys_write(1, "  RUNNING ", 10);
+      break;
+    case 2:
+      sys_write(1, "  BLOCKED ", 10);
+      break;
+    case 3:
+      sys_write(1, "  SLEEPING", 10);
+      break;
+    case 4:
+      sys_write(1, "  ZOMBIE  ", 10);
+      break;
+    default:
+      sys_write(1, "  UNKNOWN ", 10);
+      break;
+    }
+
+    // Show command based on PID
+    if (process_pid(proc) == 1) {
+      sys_write(1, " shell\n", 7);
+    } else if (process_pid(proc) == 0) {
+      sys_write(1, " kernel\n", 8);
+    } else {
+      sys_write(1, " process\n", 9);
+    }
+
+    proc = proc->next;
+    count++;
   }
 
-  // Get real process list
-  void *proc_list = get_process_list();
-
-  if (proc_list) {
-    serial_print("SERIAL: Found process list, showing processes\n");
-
-    // Use external function to iterate safely
-    extern void show_process_list_in_shell(void);
-    show_process_list_in_shell();
+  if (count == 0) {
+    serial_print("SERIAL: No processes found in list\n");
+    sys_write(1, "  No processes running\n", 23);
   } else {
-    serial_print("SERIAL: No process list found\n");
-
-    // Fallback: show current process only
-    if (current_proc) {
-      sys_write(1, "  1  RUNNING  shell\n", 19);
-    } else {
-      sys_write(1, "  No processes found\n", 21);
-    }
+    serial_print("SERIAL: Showed ");
+    serial_print_hex32(count);
+    serial_print(" processes\n");
   }
 
   return 0;
 }
 
 int64_t sys_cat(const char *pathname) {
-  if (!current_proc || !pathname)
+  if (!current_process || !pathname)
     return -EFAULT;
 
   if (minix_fs_is_working())
@@ -242,8 +264,65 @@ int64_t sys_cat(const char *pathname) {
   return -1;
 }
 
+int64_t sys_write_file(const char *pathname, const char *content) {
+  extern void serial_print(const char *str);
+  extern void serial_print_hex32(uint32_t num);
+  
+  serial_print("SERIAL: sys_write_file called\n");
+  
+  if (!current_process) {
+    serial_print("SERIAL: sys_write_file: no current process\n");
+    return -EFAULT;
+  }
+  
+  if (!pathname) {
+    serial_print("SERIAL: sys_write_file: pathname is NULL\n");
+    return -EFAULT;
+  }
+  
+  if (!content) {
+    serial_print("SERIAL: sys_write_file: content is NULL\n");
+    return -EFAULT;
+  }
+  
+  // Validar que los punteros estén en rango válido
+  if ((uint64_t)pathname < 0x1000 || (uint64_t)content < 0x1000) {
+    serial_print("SERIAL: sys_write_file: invalid pointer range\n");
+    return -EFAULT;
+  }
+  
+  serial_print("SERIAL: sys_write_file: pathname=");
+  serial_print_hex32((uint32_t)(uintptr_t)pathname);
+  serial_print(" content=");
+  serial_print_hex32((uint32_t)(uintptr_t)content);
+  serial_print("\n");
+
+  if (minix_fs_is_working()) {
+    serial_print("SERIAL: sys_write_file: calling minix_fs_write_file\n");
+    return minix_fs_write_file(pathname, content);
+  }
+
+  serial_print("SERIAL: sys_write_file: filesystem not ready\n");
+  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
+  return -1;
+}
+
+int64_t sys_exec(const char *pathname, char *const argv[] __attribute__((unused)), char *const envp[] __attribute__((unused))) {
+  extern void serial_print(const char *str);
+  
+  serial_print("SERIAL: sys_exec called\n");
+  
+  if (!current_process || !pathname) {
+    return -EFAULT;
+  }
+  
+  // For now, simple implementation - load and execute ELF
+  extern int elf_load_and_execute(const char *path);
+  return elf_load_and_execute(pathname);
+}
+
 int64_t sys_touch(const char *pathname) {
-  if (!current_proc || !pathname)
+  if (!current_process || !pathname)
     return -EFAULT;
 
   if (minix_fs_is_working())
@@ -254,7 +333,7 @@ int64_t sys_touch(const char *pathname) {
 }
 
 int64_t sys_rm(const char *pathname) {
-  if (!current_proc || !pathname)
+  if (!current_process || !pathname)
     return -EFAULT;
 
   if (minix_fs_is_working())
@@ -265,7 +344,7 @@ int64_t sys_rm(const char *pathname) {
 }
 
 int64_t sys_rmdir(const char *pathname) {
-  if (!current_proc || !pathname)
+  if (!current_process || !pathname)
     return -EFAULT;
 
   if (minix_fs_is_working())
@@ -280,7 +359,7 @@ int64_t sys_rmdir(const char *pathname) {
 // ============================================================================
 
 int64_t sys_fork(void) {
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
 
   return process_fork();
@@ -290,7 +369,7 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage) {
   (void)options;
   (void)rusage;
 
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
 
   return process_wait(pid, status);
@@ -301,7 +380,7 @@ int64_t sys_waitpid(pid_t pid, int *status, int options) {
 }
 
 int64_t sys_kernel_info(void *info_buffer, size_t buffer_size) {
-  if (!current_proc || !info_buffer)
+  if (!current_process || !info_buffer)
     return -EFAULT;
 
   const char *info = "IR0 Kernel v0.0.1 x86-64\n";
@@ -319,7 +398,7 @@ int64_t sys_kernel_info(void *info_buffer, size_t buffer_size) {
 }
 
 int64_t sys_malloc_test(size_t size) {
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
 
   // Test malloc/free functionality
@@ -364,36 +443,37 @@ int64_t sys_malloc_test(size_t size) {
 // ============================================================================
 
 int64_t sys_brk(void *addr) {
-  if (!current_proc)
+  if (!current_process)
     return -ESRCH;
 
   // If addr is NULL, return current break
   if (!addr)
-    return (int64_t)current_proc->heap_end;
+    return (int64_t)current_process->heap_end;
 
   // Validate new break address
-  if (addr < current_proc->heap_start || addr > current_proc->heap_limit)
+  if (addr < (void *)current_process->heap_start ||
+      addr > (void *)((char *)current_process->heap_start + 0x10000000))
     return -EFAULT;
 
   // Set new break
-  current_proc->heap_end = addr;
+  current_process->heap_end = (uint64_t)addr;
   return (int64_t)addr;
 }
 
 void *sys_sbrk(intptr_t increment) {
-  if (!current_proc)
+  if (!current_process)
     return (void *)-1;
 
-  void *old_break = current_proc->heap_end;
+  void *old_break = (void *)current_process->heap_end;
   void *new_break = (char *)old_break + increment;
 
-  // Check bounds
-  if (new_break < current_proc->heap_start ||
-      new_break > current_proc->heap_limit)
+  // Check bounds (simplified)
+  if (new_break < (void *)current_process->heap_start ||
+      new_break > (void *)((char *)current_process->heap_start + 0x10000000))
     return (void *)-1;
 
   // Update break
-  current_proc->heap_end = new_break;
+  current_process->heap_end = (uint64_t)new_break;
   return old_break;
 }
 
@@ -432,7 +512,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
   // Debug output to serial
   serial_print("SERIAL: mmap: entering syscall\n");
 
-  if (!current_proc) {
+  if (!current_process) {
     serial_print("SERIAL: mmap: no current process\n");
     return (void *)-1;
   }
@@ -500,7 +580,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
 }
 
 int sys_munmap(void *addr, size_t length) {
-  if (!current_proc || !addr || length == 0)
+  if (!current_process || !addr || length == 0)
     return -1;
 
   // Find the mapping
@@ -528,7 +608,7 @@ int sys_munmap(void *addr, size_t length) {
 }
 
 int sys_mprotect(void *addr, size_t len, int prot) {
-  if (!current_proc || !addr || len == 0)
+  if (!current_process || !addr || len == 0)
     return -1;
 
   // Find the mapping
@@ -551,25 +631,12 @@ int sys_mprotect(void *addr, size_t len, int prot) {
 // ============================================================================
 
 void syscalls_init(void) {
-  // Connect to real process management
-  extern void *current_process;
-  extern void *get_process_list(void);
-
-  serial_print("SERIAL: syscalls_init: connecting to process management\n");
-
-  // Initialize current process stub with heap
-  static struct simple_process init_proc = {
-      .pid = 1,
-      .state = 1,
-      .heap_start = (void *)0x10000000, // 256MB - user heap start
-      .heap_end = (void *)0x10000000,   // Initially empty
-      .heap_limit = (void *)0x20000000  // 512MB - heap limit (256MB max heap)
-  };
-  current_proc = &init_proc;
+  // Connect to REAL process management only
+  serial_print("SERIAL: syscalls_init: using REAL process management\n");
 
   // Debug: check real process system
-  void *real_current = current_process;
-  void *real_list = get_process_list();
+  process_t *real_current = current_process;
+  process_t *real_list = get_process_list();
 
   serial_print("SERIAL: Real current_process = ");
   serial_print_hex32((uint32_t)(uintptr_t)real_current);
@@ -611,7 +678,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   case 7:
     return sys_ps();
   case 8:
-    return sys_kernel_info((void *)arg1, (size_t)arg2);
+    return sys_write_file((const char *)arg1, (const char *)arg2);
   case 9:
     return sys_cat((const char *)arg1);
   case 10:
@@ -647,7 +714,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_munmap((void *)arg1, (size_t)arg2);
   case 55:
     return sys_mprotect((void *)arg1, (size_t)arg2, (int)arg3);
-
+  case 56:
+    return sys_exec((const char *)arg1, (char *const *)arg2, (char *const *)arg3);
   default:
     print("UNKNOWN_SYSCALL:");
     print_hex_compact(syscall_num);

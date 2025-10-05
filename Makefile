@@ -117,7 +117,8 @@ KERNEL_OBJS = \
     kernel/scheduler.o \
     kernel/task.o \
     kernel/syscalls.o \
-    kernel/shell.o
+    kernel/shell.o \
+    kernel/elf_loader.o
 
 MEMORY_OBJS = \
     memory/allocator.o \
@@ -204,7 +205,7 @@ kernel-x64.iso: kernel-x64.bin
 	@echo "✓ ISO created: $@"
 
 # Default target
-ir0: kernel-x64.iso
+ir0: kernel-x64.iso userspace-programs
 
 # ===============================================================================
 # QEMU COMMANDS
@@ -273,7 +274,7 @@ create-disk:
 # CLEAN
 # ===============================================================================
 
-clean:
+clean: userspace-clean
 	@echo "🧹 Cleaning build artifacts..."
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
@@ -293,8 +294,10 @@ help:
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "📦 Build:"
-	@echo "  make ir0              Build kernel ISO"
-	@echo "  make clean            Clean build artifacts"
+	@echo "  make ir0              Build kernel ISO + userspace programs"
+	@echo "  make clean            Clean all build artifacts"
+	@echo "  make userspace-programs  Build only userspace programs"
+	@echo "  make userspace-clean     Clean only userspace programs"
 	@echo ""
 	@echo "🚀 Run:"
 	@echo "  make run-kernel       Run with GUI + disk (recommended)"
@@ -311,10 +314,51 @@ help:
 	@echo ""
 
 # ===============================================================================
+# USERSPACE PROGRAMS
+# ===============================================================================
+
+# Userspace configuration
+USERSPACE_DIR = userspace
+USERSPACE_BUILD_DIR = $(USERSPACE_DIR)/build
+USERSPACE_CC = gcc
+USERSPACE_CFLAGS = -m64 -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -fno-stack-protector
+USERSPACE_CFLAGS += -I$(USERSPACE_DIR)/libc/include -I$(KERNEL_ROOT)/includes -static -fPIC
+USERSPACE_LDFLAGS = -nostdlib -static
+
+# Userspace libc objects
+LIBC_OBJS = $(USERSPACE_BUILD_DIR)/syscalls.o $(USERSPACE_BUILD_DIR)/stdio.o
+
+# Userspace programs
+USERSPACE_PROGRAMS = $(USERSPACE_BUILD_DIR)/echo
+
+# Build userspace programs
+userspace-programs: $(USERSPACE_PROGRAMS)
+	@echo "✓ Userspace programs built"
+
+# Create userspace build directory
+$(USERSPACE_BUILD_DIR):
+	@mkdir -p $(USERSPACE_BUILD_DIR)
+
+# Build libc objects
+$(USERSPACE_BUILD_DIR)/%.o: $(USERSPACE_DIR)/libc/src/%.c | $(USERSPACE_BUILD_DIR)
+	@echo "  CC      $<"
+	@$(USERSPACE_CC) $(USERSPACE_CFLAGS) -c $< -o $@
+
+# Build echo program
+$(USERSPACE_BUILD_DIR)/echo: $(USERSPACE_DIR)/bin/echo.c $(LIBC_OBJS) | $(USERSPACE_BUILD_DIR)
+	@echo "  LD      $@"
+	@$(USERSPACE_CC) $(USERSPACE_CFLAGS) $(USERSPACE_LDFLAGS) -o $@ $^
+
+# Clean userspace programs
+userspace-clean:
+	@echo "Cleaning userspace programs..."
+	@rm -rf $(USERSPACE_BUILD_DIR)
+
+# ===============================================================================
 # PHONY TARGETS
 # ===============================================================================
 
-.PHONY: all clean run run-nodisk run-console debug create-disk help
+.PHONY: all clean run run-nodisk run-console debug create-disk help userspace-programs userspace-clean
 
 # Include dependency files
 -include $(ALL_OBJS:.o=.d)
