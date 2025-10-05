@@ -16,8 +16,14 @@
 #define SYS_RMDIR 40
 #define SYS_FORK 12
 #define SYS_WAITPID 13
+#define SYS_MALLOC_TEST 50
+#define SYS_BRK 51
+#define SYS_SBRK 52
+#define SYS_MMAP 53
+#define SYS_MUNMAP 54
+#define SYS_MPROTECT 55
 
-// Syscall wrapper - uses int 0x80 - This is a ugly way to call syscalls, but i promise i'll turn it more elegant xd
+// Syscall wrapper - uses int 0x80
 static inline int64_t syscall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3)
 {
   int64_t sysret; 
@@ -30,6 +36,25 @@ static inline int64_t syscall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64
                    : "=r"(sysret)
                    : "r"(num), "r"(arg1), "r"(arg2), "r"(arg3)
                    : "rax", "rbx", "rcx", "rdx", "memory");
+  return sysret;
+}
+
+// Extended syscall wrapper for mmap (6 args)
+static inline int64_t syscall6(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6)
+{
+  (void)arg6; // Unused for now
+  int64_t sysret; 
+  __asm__ volatile("mov %1, %%rax\n"
+                   "mov %2, %%rbx\n"
+                   "mov %3, %%rcx\n"
+                   "mov %4, %%rdx\n"
+                   "mov %5, %%rsi\n"
+                   "mov %6, %%rdi\n"
+                   "int $0x80\n"
+                   "mov %%rax, %0\n"
+                   : "=r"(sysret)
+                   : "r"(num), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4), "r"(arg5)
+                   : "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "memory");
   return sysret;
 }
 
@@ -305,6 +330,311 @@ static void process_command(const char *cmd)
     }
     cursor_pos = 0;
   }
+  else if (str_starts_with(cmd, "malloc"))
+  {
+    const char *size_str = find_arg(cmd, "malloc");
+    size_t size = 1024; // Default size
+    if (size_str)
+    {
+      // Simple string to number conversion
+      size = 0;
+      for (int i = 0; size_str[i] >= '0' && size_str[i] <= '9'; i++)
+      {
+        size = size * 10 + (size_str[i] - '0');
+      }
+      if (size == 0) size = 1024;
+    }
+    syscall(SYS_MALLOC_TEST, size, 0, 0);
+  }
+  else if (str_starts_with(cmd, "sbrk"))
+  {
+    const char *size_str = find_arg(cmd, "sbrk");
+    int size = 4096; // Default 4KB
+    if (size_str)
+    {
+      // Simple string to number conversion
+      size = 0;
+      int negative = 0;
+      if (*size_str == '-') {
+        negative = 1;
+        size_str++;
+      }
+      for (int i = 0; size_str[i] >= '0' && size_str[i] <= '9'; i++)
+      {
+        size = size * 10 + (size_str[i] - '0');
+      }
+      if (negative) size = -size;
+      if (size == 0) size = 4096;
+    }
+    
+    fb_print("Current break: 0x", 0x0E);
+    void *old_break = (void*)syscall(SYS_SBRK, 0, 0, 0);
+    // Simple hex print for shell
+    uint64_t addr = (uint64_t)old_break;
+    char hex_str[17];
+    for (int i = 15; i >= 0; i--) {
+      int digit = (addr >> (i * 4)) & 0xF;
+      hex_str[15-i] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+    }
+    hex_str[16] = '\0';
+    fb_print(hex_str, 0x0F);
+    fb_print("\n", 0x0F);
+    
+    fb_print("Calling sbrk(", 0x0E);
+    if (size < 0) {
+      fb_print("-", 0x0F);
+      size = -size;
+    }
+    // Simple number to string
+    char num_str[12];
+    int len = 0;
+    if (size == 0) {
+      num_str[len++] = '0';
+    } else {
+      int temp = size;
+      while (temp > 0) {
+        temp /= 10;
+        len++;
+      }
+      for (int i = len - 1; i >= 0; i--) {
+        num_str[i] = '0' + (size % 10);
+        size /= 10;
+      }
+    }
+    num_str[len] = '\0';
+    fb_print(num_str, 0x0F);
+    fb_print(")...\n", 0x0F);
+    
+    void *result = (void*)syscall(SYS_SBRK, size, 0, 0);
+    if (result == (void*)-1) {
+      fb_print("sbrk failed!\n", 0x0C);
+    } else {
+      fb_print("sbrk returned: 0x", 0x0A);
+      // Simple hex print
+      uint64_t addr = (uint64_t)result;
+      char hex_str[17];
+      for (int i = 15; i >= 0; i--) {
+        int digit = (addr >> (i * 4)) & 0xF;
+        hex_str[15-i] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+      }
+      hex_str[16] = '\0';
+      fb_print(hex_str, 0x0F);
+      fb_print("\n", 0x0F);
+      
+      void *new_break = (void*)syscall(SYS_SBRK, 0, 0, 0);
+      fb_print("New break: 0x", 0x0E);
+      addr = (uint64_t)new_break;
+      for (int i = 15; i >= 0; i--) {
+        int digit = (addr >> (i * 4)) & 0xF;
+        hex_str[15-i] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+      }
+      fb_print(hex_str, 0x0F);
+      fb_print("\n", 0x0F);
+    }
+  }
+  else if (str_starts_with(cmd, "brk"))
+  {
+    const char *addr_str = find_arg(cmd, "brk");
+    if (addr_str) {
+      // Parse hex address
+      uint64_t addr = 0;
+      if (addr_str[0] == '0' && addr_str[1] == 'x') {
+        addr_str += 2;
+      }
+      for (int i = 0; addr_str[i]; i++) {
+        char c = addr_str[i];
+        if (c >= '0' && c <= '9') {
+          addr = addr * 16 + (c - '0');
+        } else if (c >= 'a' && c <= 'f') {
+          addr = addr * 16 + (c - 'a' + 10);
+        } else if (c >= 'A' && c <= 'F') {
+          addr = addr * 16 + (c - 'A' + 10);
+        } else {
+          break;
+        }
+      }
+      
+      fb_print("Setting break to: 0x", 0x0E);
+      // Simple hex print
+      char hex_str[17];
+      for (int i = 15; i >= 0; i--) {
+        int digit = (addr >> (i * 4)) & 0xF;
+        hex_str[15-i] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+      }
+      hex_str[16] = '\0';
+      fb_print(hex_str, 0x0F);
+      fb_print("\n", 0x0F);
+      
+      int64_t result = syscall(SYS_BRK, addr, 0, 0);
+      if (result < 0) {
+        fb_print("brk failed!\n", 0x0C);
+      } else {
+        fb_print("brk success, new break: 0x", 0x0A);
+        // Simple hex print
+        char hex_str[17];
+        uint64_t addr = result;
+        for (int i = 15; i >= 0; i--) {
+          int digit = (addr >> (i * 4)) & 0xF;
+          hex_str[15-i] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+        }
+        hex_str[16] = '\0';
+        fb_print(hex_str, 0x0F);
+        fb_print("\n", 0x0F);
+      }
+    } else {
+      // Show current break
+      int64_t current = syscall(SYS_BRK, 0, 0, 0);
+      fb_print("Current break: 0x", 0x0E);
+      // Simple hex print
+      char hex_str[17];
+      uint64_t addr = current;
+      for (int i = 15; i >= 0; i--) {
+        int digit = (addr >> (i * 4)) & 0xF;
+        hex_str[15-i] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+      }
+      hex_str[16] = '\0';
+      fb_print(hex_str, 0x0F);
+      fb_print("\n", 0x0F);
+    }
+  }
+  else if (str_starts_with(cmd, "mmap"))
+  {
+    const char *size_str = find_arg(cmd, "mmap");
+    size_t size = 4096; // Default 4KB
+    if (size_str)
+    {
+      // Parse size
+      size = 0;
+      for (int i = 0; size_str[i] >= '0' && size_str[i] <= '9'; i++)
+      {
+        size = size * 10 + (size_str[i] - '0');
+      }
+      if (size == 0) size = 4096;
+    }
+
+    fb_print("Calling mmap(NULL, ", 0x0E);
+    // Simple number to string
+    char num_str[12];
+    int len = 0;
+    size_t temp_size = size;
+    if (temp_size == 0) {
+      num_str[len++] = '0';
+    } else {
+      int temp = temp_size;
+      while (temp > 0) {
+        temp /= 10;
+        len++;
+      }
+      for (int i = len - 1; i >= 0; i--) {
+        num_str[i] = '0' + (temp_size % 10);
+        temp_size /= 10;
+      }
+    }
+    num_str[len] = '\0';
+    fb_print(num_str, 0x0F);
+    fb_print(", PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS)...\n", 0x0F);
+
+    // PROT_READ|PROT_WRITE = 0x3, MAP_PRIVATE|MAP_ANONYMOUS = 0x22, fd = -1, offset = 0
+    void *result = (void*)syscall6(SYS_MMAP, 0, size, 0x3, 0x22, (uint64_t)-1, 0);
+    
+    if (result == (void*)-1) {
+      fb_print("mmap failed!\n", 0x0C);
+    } else {
+      fb_print("mmap success: 0x", 0x0A);
+      // Simple hex print
+      char hex_str[17];
+      uint64_t addr = (uint64_t)result;
+      for (int i = 15; i >= 0; i--) {
+        int digit = (addr >> (i * 4)) & 0xF;
+        hex_str[15-i] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+      }
+      hex_str[16] = '\0';
+      fb_print(hex_str, 0x0F);
+      fb_print("\n", 0x0F);
+
+      // Test writing to the memory
+      fb_print("Testing write to mapped memory...\n", 0x0E);
+      char *test_mem = (char*)result;
+      for (size_t i = 0; i < 10 && i < size; i++) {
+        test_mem[i] = 'A' + i;
+      }
+      fb_print("Write test OK\n", 0x0A);
+    }
+  }
+  else if (str_starts_with(cmd, "munmap"))
+  {
+    const char *args = find_arg(cmd, "munmap");
+    if (!args) {
+      fb_print("Usage: munmap <addr> <size>\n", 0x0C);
+    } else {
+      // Parse address (hex)
+      uint64_t addr = 0;
+      const char *addr_str = args;
+      if (addr_str[0] == '0' && addr_str[1] == 'x') {
+        addr_str += 2;
+      }
+      while (*addr_str && *addr_str != ' ') {
+        char c = *addr_str++;
+        if (c >= '0' && c <= '9') {
+          addr = addr * 16 + (c - '0');
+        } else if (c >= 'a' && c <= 'f') {
+          addr = addr * 16 + (c - 'a' + 10);
+        } else if (c >= 'A' && c <= 'F') {
+          addr = addr * 16 + (c - 'A' + 10);
+        }
+      }
+
+      // Skip spaces
+      while (*addr_str == ' ') addr_str++;
+
+      // Parse size
+      size_t size = 0;
+      while (*addr_str >= '0' && *addr_str <= '9') {
+        size = size * 10 + (*addr_str++ - '0');
+      }
+
+      if (addr && size) {
+        fb_print("Calling munmap(0x", 0x0E);
+        char hex_str[17];
+        for (int i = 15; i >= 0; i--) {
+          int digit = (addr >> (i * 4)) & 0xF;
+          hex_str[15-i] = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+        }
+        hex_str[16] = '\0';
+        fb_print(hex_str, 0x0F);
+        fb_print(", ", 0x0F);
+        
+        char num_str[12];
+        int len = 0;
+        size_t temp_size = size;
+        if (temp_size == 0) {
+          num_str[len++] = '0';
+        } else {
+          int temp = temp_size;
+          while (temp > 0) {
+            temp /= 10;
+            len++;
+          }
+          for (int i = len - 1; i >= 0; i--) {
+            num_str[i] = '0' + (temp_size % 10);
+            temp_size /= 10;
+          }
+        }
+        num_str[len] = '\0';
+        fb_print(num_str, 0x0F);
+        fb_print(")...\n", 0x0F);
+
+        int result = syscall(SYS_MUNMAP, addr, size, 0);
+        if (result == 0) {
+          fb_print("munmap success\n", 0x0A);
+        } else {
+          fb_print("munmap failed\n", 0x0C);
+        }
+      } else {
+        fb_print("Invalid address or size\n", 0x0C);
+      }
+    }
+  }
   else if (str_starts_with(cmd, "help"))
   {
     fb_print("Available commands:\n", 0x0E);
@@ -316,6 +646,11 @@ static void process_command(const char *cmd)
     fb_print("  rmdir <dir>     - Remove directory\n", 0x0F);
     fb_print("  ps              - Show processes\n", 0x0F);
     fb_print("  fork            - Test fork() syscall\n", 0x0F);
+    fb_print("  malloc [size]   - Test malloc/free\n", 0x0F);
+    fb_print("  sbrk [bytes]    - Adjust heap break\n", 0x0F);
+    fb_print("  brk [addr]      - Set heap break\n", 0x0F);
+    fb_print("  mmap [size]     - Map anonymous memory\n", 0x0F);
+    fb_print("  munmap <addr> <size> - Unmap memory\n", 0x0F);
     fb_print("  clear           - Clear screen\n", 0x0F);
     fb_print("  help            - Show this help\n", 0x0F);
     fb_print("  exit            - Exit shell\n", 0x0F);

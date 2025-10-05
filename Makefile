@@ -139,6 +139,7 @@ INTERRUPT_OBJS = \
 
 DRIVER_OBJS = \
     drivers/IO/ps2.o \
+    drivers/serial/serial.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
     drivers/timer/best_clock.o \
@@ -218,6 +219,27 @@ run-kernel: kernel-x64.iso
 	    -display gtk -serial stdio \
 	    -d guest_errors -D qemu_debug.log
 
+# Run with GUI and serial debug output
+run-debug: kernel-x64.iso
+	@echo "🐛 Running IR0 Kernel with debug output..."
+	@echo "Serial output will appear in this terminal"
+	@echo "QEMU GUI will open in separate window"
+	@echo "Press Ctrl+C to stop"
+	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	    -drive file=disk.img,format=raw,if=ide,index=0 \
+	    -m 512M -no-reboot -no-shutdown \
+	    -display gtk \
+	    -serial stdio \
+	    -monitor telnet:127.0.0.1:1234,server,nowait \
+	    -d guest_errors,int -D qemu_debug.log
+
+# Quick debug - minimal setup with serial
+debug: kernel-x64.iso
+	@echo "🔍 Quick debug mode - serial output only"
+	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	    -m 256M -nographic -serial stdio \
+	    -d guest_errors
+
 # Run without disk
 run-nodisk: kernel-x64.iso
 	@echo "🚀 Running IR0 Kernel (no disk)..."
@@ -275,10 +297,11 @@ help:
 	@echo "  make clean            Clean build artifacts"
 	@echo ""
 	@echo "🚀 Run:"
-	@echo "  make run-kernel              Run with GUI + disk (recommended)"
+	@echo "  make run-kernel       Run with GUI + disk (recommended)"
+	@echo "  make run-debug        Run with GUI + serial debug output"
+	@echo "  make debug            Quick debug - serial output only"
 	@echo "  make run-nodisk       Run without disk"
 	@echo "  make run-console      Run in console mode"
-	@echo "  make debug            Run with full debug logging"
 	@echo ""
 	@echo "🔧 Utilities:"
 	@echo "  make create-disk      Create virtual disk for MINIX FS"
