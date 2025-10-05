@@ -1,484 +1,219 @@
-# Interrupt Subsystem
+# IR0 Interrupt System
 
-## English
+This directory contains the complete interrupt handling system for IR0, including IDT management, PIC configuration, and ISR implementations.
 
-### Overview
-The Interrupt Subsystem provides basic interrupt handling for the IR0 kernel, supporting both x86-32 and x86-64 architectures. It includes an Interrupt Descriptor Table (IDT), exception handlers, and interrupt service routines with basic features like context preservation and error reporting.
+## Components
 
-### Key Components
+### Core Files
+- `idt.c/h` - Interrupt Descriptor Table management
+- `pic.c/h` - Programmable Interrupt Controller configuration
+- `isr_handlers.c/h` - Interrupt Service Routine implementations
 
-#### 1. Interrupt Descriptor Table (`idt.c`)
-- **Purpose**: Manages the IDT with 256 entries for all possible interrupts
-- **Features**:
-  - Basic IDT setup for x86-32 and x86-64
-  - Dynamic interrupt handler registration framework
-  - Interrupt gate configuration
-  - TSS integration for x86-64
-  - Interrupt stack management
+### Architecture-Specific (`arch/`)
+- `arch/idt.c/h` - Architecture-specific IDT implementation
+- `arch/keyboard.c/h` - Keyboard interrupt handler
+- `arch/isr_handlers.c` - Low-level ISR implementations
+- `arch/pic.c/h` - PIC-specific code
+- `arch/io.h` - I/O port operations for interrupts
+- `arch/x86-64/isr_stubs_64.asm` - Assembly interrupt stubs
 
-#### 2. Interrupt Service Routines (`isr_handlers.c/h`)
-- **Purpose**: Handles all interrupt and exception events
-- **Features**:
-  - **Exception Handlers**: Division error, page fault, invalid opcode, etc.
-  - **Hardware Interrupts**: Timer, keyboard, disk, network framework
-  - **System Calls**: Software interrupt handling
-  - **Context Preservation**: Basic CPU state saving/restoration
-  - **Error Reporting**: Basic diagnostic information
+## Features
 
-#### 3. Architecture-Specific Code (`arch/`)
-- **Purpose**: Architecture-specific interrupt handling
-- **Features**:
-  - **x86-32**: 32-bit interrupt handling with legacy PIC
-  - **x86-64**: 64-bit interrupt handling with APIC/LAPIC framework
-  - **Assembly Routines**: Low-level interrupt entry/exit
-  - **Register Management**: Architecture-specific register handling
+### Interrupt Descriptor Table (IDT)
+- ✅ Complete IDT setup with 64 interrupt vectors
+- ✅ Exception handlers (0-31)
+- ✅ Hardware interrupt handlers (32-47)
+- ✅ Software interrupt handlers (48-255)
+- ✅ Proper privilege level configuration
+- ✅ Gate type configuration (interrupt/trap gates)
 
-### Interrupt Types
+### Programmable Interrupt Controller (PIC)
+- ✅ PIC initialization and remapping
+- ✅ IRQ masking and unmasking
+- ✅ End-of-interrupt (EOI) handling
+- ✅ Cascade configuration for dual PIC setup
+- ✅ IRQ priority management
 
-#### 1. Exceptions (0-31)
-```
-0x00: Division Error
-0x01: Debug Exception
-0x02: Non-Maskable Interrupt
-0x03: Breakpoint
-0x04: Overflow
-0x05: Bound Range Exceeded
-0x06: Invalid Opcode
-0x07: Device Not Available
-0x08: Double Fault
-0x09: Coprocessor Segment Overrun
-0x0A: Invalid TSS
-0x0B: Segment Not Present
-0x0C: Stack-Segment Fault
-0x0D: General Protection Fault
-0x0E: Page Fault
-0x0F: Reserved
-0x10: x87 FPU Error
-0x11: Alignment Check
-0x12: Machine Check
-0x13: SIMD Floating-Point Exception
-0x14-0x1F: Reserved
-```
+### Hardware Interrupts
+- ✅ Timer interrupt (IRQ 0) - System timer
+- ✅ Keyboard interrupt (IRQ 1) - PS/2 keyboard
+- ✅ Sound Blaster interrupt (IRQ 5) - Audio
+- ✅ Mouse interrupt (IRQ 12) - PS/2 mouse
+- ✅ Primary IDE interrupt (IRQ 14) - Storage
+- ✅ Secondary IDE interrupt (IRQ 15) - Storage
 
-#### 2. Hardware Interrupts (32-47)
-```
-0x20: Timer (PIT)
-0x21: Keyboard
-0x22: Cascade
-0x23: COM2
-0x24: COM1
-0x25: LPT2
-0x26: Floppy Disk
-0x27: LPT1
-0x28: CMOS Real-time Clock
-0x29: Free for peripherals
-0x2A: Free for peripherals
-0x2B: Free for peripherals
-0x2C: PS/2 Mouse
-0x2D: FPU
-0x2E: Primary ATA Hard Disk
-0x2F: Secondary ATA Hard Disk
-```
+### Exception Handling
+- ✅ Division by zero (INT 0)
+- ✅ Debug exception (INT 1)
+- ✅ Non-maskable interrupt (INT 2)
+- ✅ Breakpoint (INT 3)
+- ✅ Overflow (INT 4)
+- ✅ Bound range exceeded (INT 5)
+- ✅ Invalid opcode (INT 6)
+- ✅ Device not available (INT 7)
+- ✅ Double fault (INT 8)
+- ✅ Invalid TSS (INT 10)
+- ✅ Segment not present (INT 11)
+- ✅ Stack fault (INT 12)
+- ✅ General protection fault (INT 13)
+- ✅ Page fault (INT 14)
+- ✅ x87 FPU error (INT 16)
 
-#### 3. Software Interrupts (48-255)
-```
-0x30: System Call (IR0_SYSCALL)
-0x31-0xFF: Available for software use
-```
+### Software Interrupts
+- ✅ System call interface (INT 0x80)
+- ✅ Custom software interrupts
+- ✅ Inter-processor interrupts (framework)
 
-### Basic Features
+## Architecture
 
-#### 1. Context Preservation
+### IDT Structure
 ```c
-typedef struct 
-{
-#ifdef __x86_64__
-    uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp;
-    uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
-    uint64_t rip, rflags, cs, ss, ds, es, fs, gs;
-#else
-    uint32_t eax, ebx, ecx, edx, esi, edi, ebp, esp;
-    uint32_t eip, eflags, cs, ss, ds, es, fs, gs;
-#endif
-} interrupt_context_t;
+// IDT entry structure
+struct idt_entry {
+    uint16_t offset_low;    // Lower 16 bits of handler address
+    uint16_t selector;      // Kernel segment selector
+    uint8_t ist;           // Interrupt Stack Table offset
+    uint8_t type_attr;     // Type and attributes
+    uint16_t offset_mid;   // Middle 16 bits of handler address
+    uint32_t offset_high;  // Upper 32 bits of handler address
+    uint32_t zero;         // Reserved
+} __attribute__((packed));
+
+// IDT descriptor
+struct idt_descriptor {
+    uint16_t limit;        // Size of IDT - 1
+    uint64_t base;         // Base address of IDT
+} __attribute__((packed));
 ```
 
-#### 2. Error Reporting
+### Interrupt Handler Flow
+```
+1. Hardware/Software interrupt occurs
+2. CPU saves current state on stack
+3. CPU looks up handler in IDT
+4. Jump to assembly stub (isr_stubs_64.asm)
+5. Assembly stub saves registers
+6. Call C interrupt handler
+7. C handler processes interrupt
+8. Send EOI to PIC (if hardware interrupt)
+9. Assembly stub restores registers
+10. Return from interrupt (IRET)
+```
+
+### PIC Configuration
 ```c
-void isr_page_fault_handler(interrupt_context_t* context) {
-    uint64_t fault_address;
-#ifdef __x86_64__
-    asm volatile("mov %%cr2, %0" : "=r"(fault_address));
-#else
-    asm volatile("mov %%cr2, %0" : "=r"(fault_address));
-#endif
+// PIC ports
+#define PIC1_COMMAND    0x20
+#define PIC1_DATA       0x21
+#define PIC2_COMMAND    0xA0
+#define PIC2_DATA       0xA1
+
+// PIC initialization
+void pic_remap(int offset1, int offset2);
+void pic_mask_irq(uint8_t irq);
+void pic_unmask_irq(uint8_t irq);
+void pic_send_eoi(uint8_t irq);
+```
+
+## Interrupt Handlers
+
+### Timer Interrupt (IRQ 0)
+- System tick for scheduler
+- Time keeping
+- Periodic tasks
+- Scheduler preemption
+
+### Keyboard Interrupt (IRQ 1)
+- PS/2 keyboard input
+- Scancode processing
+- Key event generation
+- Buffer management
+
+### Mouse Interrupt (IRQ 12)
+- PS/2 mouse input
+- Movement tracking
+- Button state changes
+- Scroll wheel events
+
+### Storage Interrupts (IRQ 14/15)
+- ATA/IDE completion
+- Error handling
+- DMA transfer completion
+- Device status updates
+
+### Audio Interrupt (IRQ 5)
+- Sound Blaster completion
+- Audio buffer management
+- Playback control
+- DMA transfer status
+
+## System Call Interface
+
+### INT 0x80 Handler
+```c
+// System call entry point
+void syscall_handler(void) {
+    // Get system call number from RAX
+    uint64_t syscall_num = get_register(RAX);
     
-    print_error("Page Fault at address 0x");
-    print_hex64(fault_address);
-    print(" (");
-    print_hex32(context->error_code);
-    print(")\n");
+    // Get arguments from registers
+    uint64_t arg1 = get_register(RBX);
+    uint64_t arg2 = get_register(RCX);
+    uint64_t arg3 = get_register(RDX);
+    
+    // Call system call dispatcher
+    uint64_t result = handle_syscall(syscall_num, arg1, arg2, arg3);
+    
+    // Return result in RAX
+    set_register(RAX, result);
 }
 ```
 
-#### 3. System Call Handling
-```c
-void isr_system_call(interrupt_context_t* context) 
-{
-#ifdef __x86_64__
-    uint64_t syscall_number = context->rax;
-    uint64_t arg1 = context->rbx;
-    uint64_t arg2 = context->rcx;
-    uint64_t arg3 = context->rdx;
-#else
-    uint32_t syscall_number = context->eax;
-    uint32_t arg1 = context->ebx;
-    uint32_t arg2 = context->ecx;
-    uint32_t arg3 = context->edx;
-#endif
-    
-    // Handle system call
-    uint64_t result = handle_system_call(syscall_number, arg1, arg2, arg3);
-    
-#ifdef __x86_64__
-    context->rax = result;
-#else
-    context->eax = result;
-#endif
-}
-```
+## Current Status
 
-### Architecture Support
+### ✅ Fully Functional
+- IDT setup and management
+- PIC configuration and control
+- Exception handling
+- Hardware interrupt handling
+- System call interface
+- Assembly interrupt stubs
 
-#### x86-32 Support
-- **PIC Configuration**: Legacy 8259A Programmable Interrupt Controller
-- **Interrupt Gates**: 32-bit interrupt gates with proper privilege levels
-- **Stack Management**: Interrupt stack frames on kernel stack
-- **Register Preservation**: 32-bit register set preservation
+### ✅ Working Interrupts
+- Timer (IRQ 0) - System scheduling
+- Keyboard (IRQ 1) - User input
+- Mouse (IRQ 12) - Mouse input
+- Storage (IRQ 14/15) - Disk I/O
+- Audio (IRQ 5) - Sound output
+- System calls (INT 0x80) - Kernel services
 
-#### x86-64 Support
-- **APIC/LAPIC**: Advanced Programmable Interrupt Controller framework
-- **TSS Integration**: Task State Segment for interrupt stacks
-- **Interrupt Stacks**: Dedicated interrupt stacks (IST) framework
-- **Register Preservation**: 64-bit register set preservation
-- **Long Mode**: 64-bit interrupt handling
+### ⚠️ Limitations
+- Single CPU support only
+- Basic exception handling
+- No advanced interrupt features (MSI, etc.)
+- Limited debugging support
 
-### Performance Characteristics
+### 🔄 Potential Improvements
+- SMP interrupt handling
+- Advanced PIC features
+- MSI/MSI-X support
+- Better exception debugging
+- Interrupt statistics and monitoring
 
-#### Interrupt Latency
-- **Minimum Latency**: < 1 microsecond
-- **Average Latency**: 2-5 microseconds
-- **Maximum Latency**: < 10 microseconds (worst case)
+## Build Integration
 
-#### Context Switch Overhead
-- **Save Context**: ~50 CPU cycles
-- **Restore Context**: ~50 CPU cycles
-- **Total Overhead**: ~100 CPU cycles per interrupt
+The interrupt system is built as part of the main kernel:
+- Assembly stubs compiled with NASM
+- C handlers compiled with GCC
+- Architecture-specific optimizations
+- Debug symbol generation
 
-### Configuration Options
+## Testing
 
-#### Interrupt Configuration
-```c
-struct interrupt_config 
-{
-    bool enable_pic;           // Enable legacy PIC
-    bool enable_apic;          // Enable APIC/LAPIC
-    bool enable_nmi;           // Enable NMI handling
-    bool enable_debug;         // Enable debug exceptions
-    uint32_t timer_frequency;  // Timer interrupt frequency
-    bool enable_syscalls;      // Enable system call interrupts
-};
-```
-
-#### Error Handling
-```c
-struct interrupt_error_handling 
-{
-    bool verbose_errors;       // Detailed error reporting
-    bool panic_on_critical;    // Panic on critical errors
-    bool log_all_interrupts;   // Log all interrupt events
-    bool enable_recovery;      // Enable automatic recovery
-};
-```
-
-### Debugging and Monitoring
-
-#### Interrupt Statistics
-```c
-struct interrupt_stats 
-{
-    uint64_t total_interrupts;
-    uint64_t exceptions_handled;
-    uint64_t hardware_interrupts;
-    uint64_t software_interrupts;
-    uint64_t page_faults;
-    uint64_t system_calls;
-    uint64_t average_latency;
-    uint64_t max_latency;
-};
-```
-
-#### Debug Features
-- **Interrupt Logging**: Basic log of interrupt events
-- **Performance Profiling**: Basic interrupt latency measurement
-- **Error Diagnostics**: Basic error information
-- **Stack Tracing**: Basic interrupt context stack traces
-
-### Current Status
-
-#### Working Features
-- **IDT Setup**: Basic interrupt descriptor table configuration
-- **Exception Handling**: Basic exception handlers
-- **Context Preservation**: Basic CPU state saving/restoration
-- **System Call Interface**: Basic system call interrupt handling
-- **Architecture Support**: Both x86-32 and x86-64
-
-#### Development Areas
-- **Advanced Interrupt Handling**: Complete APIC/LAPIC implementation
-- **Performance Optimization**: Advanced interrupt optimizations
-- **Error Recovery**: Advanced error recovery mechanisms
-- **Interrupt Statistics**: Complete interrupt monitoring
-- **Debug Features**: Advanced debugging capabilities
-
----
-
-## Español
-
-### Descripción General
-El Subsistema de Interrupciones proporciona manejo básico de interrupciones para el kernel IR0, soportando arquitecturas x86-32 y x86-64. Incluye una Tabla de Descriptores de Interrupción (IDT), manejadores de excepciones y rutinas de servicio de interrupción con características básicas como preservación de contexto y reportes de errores.
-
-### Componentes Principales
-
-#### 1. Tabla de Descriptores de Interrupción (`idt.c`)
-- **Propósito**: Gestiona la IDT con 256 entradas para todas las interrupciones posibles
-- **Características**:
-  - Configuración básica de IDT para x86-32 y x86-64
-  - Framework de registro dinámico de manejadores de interrupción
-  - Configuración de puertas de interrupción
-  - Integración TSS para x86-64
-  - Gestión de stacks de interrupción
-
-#### 2. Rutinas de Servicio de Interrupción (`isr_handlers.c/h`)
-- **Propósito**: Maneja todos los eventos de interrupción y excepción
-- **Características**:
-  - **Manejadores de Excepción**: Error de división, page fault, opcode inválido, etc.
-  - **Interrupciones de Hardware**: Framework de timer, teclado, disco, red
-  - **System Calls**: Manejo de interrupciones de software
-  - **Preservación de Contexto**: Guardado/restauración básica del estado CPU
-  - **Reportes de Error**: Información diagnóstica básica
-
-#### 3. Código Específico de Arquitectura (`arch/`)
-- **Propósito**: Manejo de interrupciones específico por arquitectura
-- **Características**:
-  - **x86-32**: Manejo de interrupciones de 32 bits con PIC legacy
-  - **x86-64**: Framework de manejo de interrupciones de 64 bits con APIC/LAPIC
-  - **Rutinas en Assembly**: Entrada/salida de interrupción de bajo nivel
-  - **Gestión de Registros**: Manejo de registros específico por arquitectura
-
-### Tipos de Interrupciones
-
-#### 1. Excepciones (0-31)
-```
-0x00: Error de División
-0x01: Excepción de Debug
-0x02: Interrupción No Enmascarable
-0x03: Breakpoint
-0x04: Overflow
-0x05: Rango Excedido
-0x06: Opcode Inválido
-0x07: Dispositivo No Disponible
-0x08: Doble Fallo
-0x09: Desbordamiento de Segmento de Coprocesador
-0x0A: TSS Inválido
-0x0B: Segmento No Presente
-0x0C: Fallo de Stack-Segment
-0x0D: Fallo de Protección General
-0x0E: Page Fault
-0x0F: Reservado
-0x10: Error FPU x87
-0x11: Verificación de Alineación
-0x12: Verificación de Máquina
-0x13: Excepción FPU SIMD
-0x14-0x1F: Reservado
-```
-
-#### 2. Interrupciones de Hardware (32-47)
-```
-0x20: Timer (PIT)
-0x21: Teclado
-0x22: Cascada
-0x23: COM2
-0x24: COM1
-0x25: LPT2
-0x26: Disco Floppy
-0x27: LPT1
-0x28: Reloj Real CMOS
-0x29: Libre para periféricos
-0x2A: Libre para periféricos
-0x2B: Libre para periféricos
-0x2C: Ratón PS/2
-0x2D: FPU
-0x2E: Disco Duro ATA Primario
-0x2F: Disco Duro ATA Secundario
-```
-
-#### 3. Interrupciones de Software (48-255)
-```
-0x30: System Call (IR0_SYSCALL)
-0x31-0xFF: Disponible para uso de software
-```
-
-### Características Básicas
-
-#### 1. Preservación de Contexto
-```c
-typedef struct 
-{
-#ifdef __x86_64__
-    uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp;
-    uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
-    uint64_t rip, rflags, cs, ss, ds, es, fs, gs;
-#else
-    uint32_t eax, ebx, ecx, edx, esi, edi, ebp, esp;
-    uint32_t eip, eflags, cs, ss, ds, es, fs, gs;
-#endif
-} interrupt_context_t;
-```
-
-#### 2. Reportes de Error
-```c
-void isr_page_fault_handler(interrupt_context_t* context) 
-{
-    uint64_t fault_address;
-#ifdef __x86_64__
-    asm volatile("mov %%cr2, %0" : "=r"(fault_address));
-#else
-    asm volatile("mov %%cr2, %0" : "=r"(fault_address));
-#endif
-    
-    print_error("Page Fault en dirección 0x");
-    print_hex64(fault_address);
-    print(" (");
-    print_hex32(context->error_code);
-    print(")\n");
-}
-```
-
-#### 3. Manejo de System Calls
-```c
-void isr_system_call(interrupt_context_t* context) 
-{
-#ifdef __x86_64__
-    uint64_t syscall_number = context->rax;
-    uint64_t arg1 = context->rbx;
-    uint64_t arg2 = context->rcx;
-    uint64_t arg3 = context->rdx;
-#else
-    uint32_t syscall_number = context->eax;
-    uint32_t arg1 = context->ebx;
-    uint32_t arg2 = context->ecx;
-    uint32_t arg3 = context->edx;
-#endif
-    
-    // Manejar system call
-    uint64_t result = handle_system_call(syscall_number, arg1, arg2, arg3);
-    
-#ifdef __x86_64__
-    context->rax = result;
-#else
-    context->eax = result;
-#endif
-}
-```
-
-### Soporte de Arquitecturas
-
-#### Soporte x86-32
-- **Configuración PIC**: Controlador de Interrupciones Programmable 8259A legacy
-- **Puertas de Interrupción**: Puertas de interrupción de 32 bits con niveles de privilegio apropiados
-- **Gestión de Stack**: Frames de stack de interrupción en stack del kernel
-- **Preservación de Registros**: Preservación del conjunto de registros de 32 bits
-
-#### Soporte x86-64
-- **APIC/LAPIC**: Framework de Controlador de Interrupciones Programmable Avanzado
-- **Integración TSS**: Task State Segment para stacks de interrupción
-- **Stacks de Interrupción**: Framework de stacks de interrupción dedicados (IST)
-- **Preservación de Registros**: Preservación del conjunto de registros de 64 bits
-- **Long Mode**: Manejo de interrupciones de 64 bits
-
-### Características de Rendimiento
-
-#### Latencia de Interrupción
-- **Latencia Mínima**: < 1 microsegundo
-- **Latencia Promedio**: 2-5 microsegundos
-- **Latencia Máxima**: < 10 microsegundos (peor caso)
-
-#### Overhead de Context Switch
-- **Guardar Contexto**: ~50 ciclos CPU
-- **Restaurar Contexto**: ~50 ciclos CPU
-- **Overhead Total**: ~100 ciclos CPU por interrupción
-
-### Opciones de Configuración
-
-#### Configuración de Interrupciones
-```c
-struct interrupt_config 
-{
-    bool enable_pic;           // Habilitar PIC legacy
-    bool enable_apic;          // Habilitar APIC/LAPIC
-    bool enable_nmi;           // Habilitar manejo NMI
-    bool enable_debug;         // Habilitar excepciones de debug
-    uint32_t timer_frequency;  // Frecuencia de interrupción del timer
-    bool enable_syscalls;      // Habilitar interrupciones de system call
-};
-```
-
-#### Manejo de Errores
-```c
-struct interrupt_error_handling 
-{
-    bool verbose_errors;       // Reportes de error detallados
-    bool panic_on_critical;    // Panic en errores críticos
-    bool log_all_interrupts;   // Log de todos los eventos de interrupción
-    bool enable_recovery;      // Habilitar recuperación automática
-};
-```
-
-### Debugging y Monitoreo
-
-#### Estadísticas de Interrupciones
-```c
-struct interrupt_stats 
-{
-    uint64_t total_interrupts;
-    uint64_t exceptions_handled;
-    uint64_t hardware_interrupts;
-    uint64_t software_interrupts;
-    uint64_t page_faults;
-    uint64_t system_calls;
-    uint64_t average_latency;
-    uint64_t max_latency;
-};
-```
-
-#### Características de Debug
-- **Logging de Interrupciones**: Log básico de eventos de interrupción
-- **Profiling de Rendimiento**: Medición básica de latencia de interrupciones
-- **Diagnósticos de Error**: Información básica de errores
-- **Stack Tracing**: Trazas básicas de stack del contexto de interrupción
-
-### Estado Actual
-
-#### Características Funcionando
-- **Configuración IDT**: Configuración básica de tabla de descriptores de interrupción
-- **Manejo de Excepciones**: Manejadores básicos de excepciones
-- **Preservación de Contexto**: Guardado/restauración básica del estado CPU
-- **Interfaz de System Calls**: Manejo básico de interrupciones de system calls
-- **Soporte de Arquitectura**: Tanto x86-32 como x86-64
-
-#### Áreas de Desarrollo
-- **Manejo Avanzado de Interrupciones**: Implementación completa de APIC/LAPIC
-- **Optimización de Rendimiento**: Optimizaciones avanzadas de interrupciones
-- **Recuperación de Errores**: Mecanismos avanzados de recuperación de errores
-- **Estadísticas de Interrupciones**: Monitoreo completo de interrupciones
-- **Características de Debug**: Capacidades avanzadas de debugging
+Interrupt functionality can be tested through:
+- Keyboard input (IRQ 1)
+- Mouse movement (IRQ 12)
+- Timer-based operations (IRQ 0)
+- System call usage (INT 0x80)
+- Exception triggering (for debugging)
+- Storage operations (IRQ 14/15)
