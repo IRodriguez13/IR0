@@ -3,6 +3,8 @@
 #include <ir0/logging.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <drivers/IO/ps2_mouse.h>
+#include <drivers/audio/sound_blaster.h>
 
 // Main kernel entry point from boot
 // delay_ms is already available from print.h
@@ -52,9 +54,19 @@ void kmain_x64(void)
     pic_unmask_irq(1);  // Enable keyboard IRQ
     log_subsystem_ok("PS2_KEYBOARD");
 
+    // Initialize PS/2 mouse
+    ps2_mouse_init();
+    log_subsystem_ok("PS2_MOUSE");
+
+
     // Initialize memory allocator
     simple_alloc_init();
     log_subsystem_ok("MEMORY");
+
+    // Initialize Sound Blaster audio
+    sb16_init();
+    log_subsystem_ok("AUDIO_SB16");
+
 
     // Initialize storage
     ata_init();

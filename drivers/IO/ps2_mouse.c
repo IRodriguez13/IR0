@@ -1,10 +1,7 @@
 #include "ps2_mouse.h"
 #include <ir0/print.h>
 #include <stddef.h>
-
-// I/O port operations
-extern uint8_t inb(uint16_t port);
-extern void outb(uint16_t port, uint8_t data);
+#include <arch/common/arch_interface.h>
 
 // Global mouse state
 static ps2_mouse_state_t mouse_state = {0};
