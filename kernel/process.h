@@ -23,7 +23,6 @@ typedef struct process {
     task_t task;
     
     // Process hierarchy
-    pid_t pid;
     pid_t ppid;                    // Parent PID
     struct process *parent;        // Parent process
     struct process *children;      // First child
@@ -43,17 +42,28 @@ typedef struct process {
     process_state_t state;
     int exit_code;
     
-    // Execution context (saved registers)
-    uint64_t rax, rbx, rcx, rdx;
-    uint64_t rsi, rdi, rbp, rsp;
-    uint64_t r8, r9, r10, r11;
-    uint64_t r12, r13, r14, r15;
-    uint64_t rip, rflags;
-    uint64_t cs, ss, ds, es, fs, gs;
-    
     // Next process in global list
     struct process *next;
 } process_t;
+
+// Macros para acceder a los registros a través de task_t
+#define process_rax(p) ((p)->task.rax)
+#define process_rbx(p) ((p)->task.rbx)
+#define process_rcx(p) ((p)->task.rcx)
+#define process_rdx(p) ((p)->task.rdx)
+#define process_rsi(p) ((p)->task.rsi)
+#define process_rdi(p) ((p)->task.rdi)
+#define process_rsp(p) ((p)->task.rsp)
+#define process_rbp(p) ((p)->task.rbp)
+#define process_rip(p) ((p)->task.rip)
+#define process_rflags(p) ((p)->task.rflags)
+#define process_cs(p) ((p)->task.cs)
+#define process_ss(p) ((p)->task.ss)
+#define process_ds(p) ((p)->task.ds)
+#define process_es(p) ((p)->task.es)
+#define process_fs(p) ((p)->task.fs)
+#define process_gs(p) ((p)->task.gs)
+#define process_pid(p) ((p)->task.pid)
 
 // Global current process
 extern process_t *current_process;

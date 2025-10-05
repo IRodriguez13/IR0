@@ -41,17 +41,17 @@ int start_init_process(void)
   }
 
   // Initialize init process
-  init->pid = 1;
+  process_pid(init) = 1;
   init->state = PROCESS_READY;
-  init->rip = (uint64_t)init_proc_1;
-  init->rsp = 0x1000000 - 0x1000; // 16MB - 4KB = Safe stack
-  init->cs = 0x1B;                // User code (GDT entry 3, RPL=3)
-  init->ss = 0x23;                // User data (GDT entry 4, RPL=3)
-  init->rflags = 0x202;           // IF=1, Reserved=1
+  process_rip(init) = (uint64_t)init_proc_1;
+  process_rsp(init) = 0x1000000 - 0x1000; // 16MB - 4KB = Safe stack
+  process_cs(init) = 0x1B;                // User code (GDT entry 3, RPL=3)
+  process_ss(init) = 0x23;                // User data (GDT entry 4, RPL=3)
+  process_rflags(init) = 0x202;           // IF=1, Reserved=1
 
   // Add to scheduler
   extern void cfs_add_task_impl(task_t * task);
-  cfs_add_task_impl((task_t *)init);
+  cfs_add_task_impl(&init->task);
   current_process = init;
 
   return 0;

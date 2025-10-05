@@ -37,7 +37,7 @@ process_t *process_get_current(void)
 // Get current PID
 pid_t process_get_pid(void)
 {
-    return current_process ? current_process->pid : 0;
+    return current_process ? process_pid(current_process) : 0;
 }
 
 // Get parent PID (not implemented yet)
@@ -58,14 +58,434 @@ void process_exit(int exit_code)
 
 
 pid_t process_fork(void) {
-    // Simplified fork for testing
-    return -1;  // Not implemented yet
+    extern void serial_print(const char *str);
+    extern void serial_print_hex32(uint32_t num);
+    extern void *kmalloc(size_t size);
+    extern void switch_context_x64(void *current, void *next);
+    
+    serial_print("SERIAL: REAL fork() called\n");
+    
+    if (!current_process) {
+        serial_print("SERIAL: fork: no current process\n");
+        return -1;
+    }
+    
+    serial_print("SERIAL: fork: parent PID=");
+    serial_print_hex32(process_pid(current_process));
+    serial_print("\n");
+    
+    // Allocate new process structure
+    process_t *child = kmalloc(sizeof(process_t));
+    if (!child) {
+        serial_print("SERIAL: fork: kmalloc failed for child process\n");
+        return -1;
+    }
+    
+    // REAL FORK: Copy entire parent process FIRST
+    *child = *current_process;
+    
+    // Set unique child properties AFTER copying
+    pid_t child_pid = next_pid++;
+    
+    serial_print("SERIAL: fork: assigning child PID=");
+    serial_print_hex32(child_pid);
+    serial_print("\n");
+    
+    // Override child-specific fields after copy
+    serial_print("SERIAL: fork: setting child PID from ");
+    serial_print_hex32(process_pid(child));
+    serial_print(" to ");
+    serial_print_hex32(child_pid);
+    serial_print("\n");
+    
+    process_pid(child) = child_pid;
+    
+    // Verify the PID was set correctly
+    serial_print("SERIAL: fork: child PID verification=");
+    serial_print_hex32(process_pid(child));
+    serial_print("\n");
+    
+    // Also verify parent PID hasn't changed
+    serial_print("SERIAL: fork: parent PID verification=");
+    serial_print_hex32(process_pid(current_process));
+    serial_print("\n");
+    child->ppid = process_pid(current_process);
+    child->parent = current_process;
+    child->children = NULL;
+    child->sibling = NULL;
+    child->state = PROCESS_READY;
+    child->exit_code = 0;
+    
+    // REAL FORK: Copy memory space
+    serial_print("SERIAL: fork: copying memory space\n");
+    
+    // Allocate new page directory for child
+    extern uint64_t create_process_page_directory(void);
+    child->page_directory = (uint64_t*)create_process_page_directory();
+    if (!child->page_directory) {
+        serial_print("SERIAL: fork: failed to create page directory\n");
+        extern void kfree(void *ptr);
+        kfree(child);
+        return -1;
+    }
+    
+    // Copy parent's memory to child
+    extern int copy_process_memory(process_t *parent, process_t *child);
+    if (copy_process_memory(current_process, child) != 0) {
+        serial_print("SERIAL: fork: failed to copy memory\n");
+        extern void destroy_process_page_directory(uint64_t *pml4);
+        destroy_process_page_directory(child->page_directory);
+        extern void kfree(void *ptr);
+        kfree(child);
+        return -1;
+    }
+    
+    // REAL FORK: Copy registers/context using ASM function
+    serial_print("SERIAL: fork: copying CPU context\n");
+    
+    // CRITICAL: Save CURRENT CPU state to parent process first
+    serial_print("SERIAL: fork: saving current CPU state to parent\n");
+    
+    // Get current CPU state and save it to parent
+    uint64_t current_rsp, current_rbp, current_rflags;
+    __asm__ volatile("mov %%rsp, %0" : "=r"(current_rsp));
+    __asm__ volatile("mov %%rbp, %0" : "=r"(current_rbp));
+    __asm__ volatile("pushfq; popq %0" : "=r"(current_rflags));
+    
+    // Update parent's task with current CPU state
+    current_process->task.rsp = current_rsp;
+    current_process->task.rbp = current_rbp;
+    current_process->task.rflags = current_rflags;
+    current_process->task.rip = (uint64_t)__builtin_return_address(0);
+    
+    serial_print("SERIAL: fork: parent updated with current CPU state\n");
+    serial_print("SERIAL: fork: parent rsp=");
+    serial_print_hex32((uint32_t)current_process->task.rsp);
+    serial_print(" rip=");
+    serial_print_hex32((uint32_t)current_process->task.rip);
+    serial_print("\n");
+    
+    // Save current CPU state to both parent and child
+    extern void save_fork_context(process_t *parent, process_t *child);
+    save_fork_context(current_process, child);
+    
+    // Set up return values for fork()
+    process_rax(child) = 0;           // Child returns 0
+    process_rax(current_process) = child_pid; // Parent returns child PID
+    
+    // Add child to process list
+    child->next = process_list;
+    process_list = child;
+    
+    // Add to scheduler
+    extern void scheduler_add_process(process_t *proc);
+    scheduler_add_process(child);
+    
+    serial_print("SERIAL: fork: child PID=");
+    serial_print_hex32(process_pid(child));
+    serial_print(" ready for execution\n");
+    
+    // Use the ASM context switch function
+    serial_print("SERIAL: fork: performing ASM context switch\n");
+    
+    // CRITICAL: Validate pointers before ASM call
+    serial_print("SERIAL: fork: validating pointers before context switch\n");
+    
+    if (!current_process) {
+        serial_print("SERIAL: fork: ERROR - current_process is NULL!\n");
+        kfree(child);
+        return -1;
+    }
+    
+    if (!child) {
+        serial_print("SERIAL: fork: ERROR - child is NULL!\n");
+        return -1;
+    }
+    
+    serial_print("SERIAL: fork: current_process=");
+    serial_print_hex32((uint32_t)(uintptr_t)current_process);
+    serial_print("\n");
+    
+    serial_print("SERIAL: fork: child=");
+    serial_print_hex32((uint32_t)(uintptr_t)child);
+    serial_print("\n");
+    
+    serial_print("SERIAL: fork: &current_process->task=");
+    serial_print_hex32((uint32_t)(uintptr_t)&current_process->task);
+    serial_print("\n");
+    
+    serial_print("SERIAL: fork: &child->task=");
+    serial_print_hex32((uint32_t)(uintptr_t)&child->task);
+    serial_print("\n");
+    
+    // Validate task structure fields
+    serial_print("SERIAL: fork: current_process->task.rsp=");
+    serial_print_hex32((uint32_t)current_process->task.rsp);
+    serial_print("\n");
+    
+    serial_print("SERIAL: fork: child->task.rsp=");
+    serial_print_hex32((uint32_t)child->task.rsp);
+    serial_print("\n");
+    
+    serial_print("SERIAL: fork: current_process->task.rip=");
+    serial_print_hex32((uint32_t)current_process->task.rip);
+    serial_print("\n");
+    
+    serial_print("SERIAL: fork: child->task.rip=");
+    serial_print_hex32((uint32_t)child->task.rip);
+    serial_print("\n");
+    
+    // Check if task structures are properly initialized
+    if (current_process->task.rsp == 0) {
+        serial_print("SERIAL: fork: ERROR - current_process->task.rsp is 0!\n");
+        kfree(child);
+        return -1;
+    }
+    
+    if (child->task.rsp == 0) {
+        serial_print("SERIAL: fork: ERROR - child->task.rsp is 0!\n");
+        kfree(child);
+        return -1;
+    }
+    
+    serial_print("SERIAL: fork: all validations passed, calling switch_context_x64\n");
+    
+    // Now call the ASM function with validated pointers
+    switch_context_x64(&current_process->task, &child->task);
+    
+    serial_print("SERIAL: fork: context switch completed successfully\n");
+    
+    // After context switch, we return the appropriate value
+    return process_rax(current_process);
 }
 
 int process_wait(pid_t pid, int *status) {
-    // Simplified wait for testing
-    (void)pid; (void)status;
-    return -1;  // Not implemented yet
+    extern void serial_print(const char *str);
+    extern void serial_print_hex32(uint32_t num);
+    
+    serial_print("SERIAL: process_wait() called for PID=");
+    serial_print_hex32(pid);
+    serial_print("\n");
+    
+    if (!current_process) {
+        serial_print("SERIAL: wait: no current process\n");
+        return -1;
+    }
+    
+    // Find the child process
+    process_t *proc = process_list;
+    while (proc) {
+        if (process_pid(proc) == pid && proc->ppid == process_pid(current_process)) {
+            serial_print("SERIAL: wait: found child PID=");
+            serial_print_hex32(process_pid(proc));
+            serial_print(" state=");
+            serial_print_hex32(proc->state);
+            serial_print("\n");
+            
+            // Check if child is zombie (finished)
+            if (proc->state == PROCESS_ZOMBIE) {
+                serial_print("SERIAL: wait: child is zombie, cleaning up\n");
+                
+                if (status) {
+                    *status = proc->exit_code;
+                }
+                
+                // Remove from process list (simplified cleanup)
+                if (process_list == proc) {
+                    process_list = proc->next;
+                } else {
+                    process_t *prev = process_list;
+                    while (prev && prev->next != proc) {
+                        prev = prev->next;
+                    }
+                    if (prev) {
+                        prev->next = proc->next;
+                    }
+                }
+                
+                pid_t child_pid = process_pid(proc);
+                extern void kfree(void *ptr);
+                kfree(proc);
+                
+                serial_print("SERIAL: wait: child cleaned up, returning PID=");
+                serial_print_hex32(child_pid);
+                serial_print("\n");
+                
+                return child_pid;
+            } else {
+                serial_print("SERIAL: wait: child still running, would block\n");
+                // In real implementation, this would block
+                // For now, return -1 (would block)
+                return -1;
+            }
+        }
+        proc = proc->next;
+    }
+    
+    serial_print("SERIAL: wait: child not found\n");
+    return -1;
+}
+
+// Simulate child process exit (for testing)
+void simulate_child_exit(pid_t pid, int exit_code) {
+    extern void serial_print(const char *str);
+    extern void serial_print_hex32(uint32_t num);
+    
+    serial_print("SERIAL: simulate_child_exit: PID=");
+    serial_print_hex32(pid);
+    serial_print(" exit_code=");
+    serial_print_hex32(exit_code);
+    serial_print("\n");
+    
+    process_t *proc = process_list;
+    while (proc) {
+        if (process_pid(proc) == pid) {
+            serial_print("SERIAL: simulate_child_exit: found process, marking as zombie\n");
+            proc->state = PROCESS_ZOMBIE;
+            proc->exit_code = exit_code;
+            return;
+        }
+        proc = proc->next;
+    }
+    
+    serial_print("SERIAL: simulate_child_exit: process not found\n");
+}
+
+// ============================================================================
+// REAL FORK IMPLEMENTATION HELPERS
+// ============================================================================
+
+uint64_t create_process_page_directory(void) {
+    extern void serial_print(const char *str);
+    extern void *kmalloc(size_t size);
+    
+    serial_print("SERIAL: create_process_page_directory\n");
+    
+    // Allocate new page directory (4KB aligned)
+    void *pml4 = kmalloc(4096);
+    if (!pml4) {
+        serial_print("SERIAL: failed to allocate page directory\n");
+        return 0;
+    }
+    
+    // Initialize with kernel mappings (simplified)
+    // In real implementation, copy kernel space and create new user space
+    
+    serial_print("SERIAL: page directory created\n");
+    return (uint64_t)pml4;
+}
+
+void destroy_process_page_directory(uint64_t *pml4) {
+    extern void serial_print(const char *str);
+    extern void kfree(void *ptr);
+    
+    serial_print("SERIAL: destroy_process_page_directory\n");
+    
+    if (pml4) {
+        // In real implementation, free all page tables
+        kfree(pml4);
+    }
+}
+
+int copy_process_memory(process_t *parent, process_t *child) {
+    extern void serial_print(const char *str);
+    
+    serial_print("SERIAL: copy_process_memory\n");
+    
+    if (!parent || !child) {
+        return -1;
+    }
+    
+    // Copy heap pointers (simplified)
+    child->heap_start = parent->heap_start;
+    child->heap_end = parent->heap_end;
+    child->stack_start = parent->stack_start;
+    child->stack_size = parent->stack_size;
+    
+    // In real implementation:
+    // 1. Walk parent's page tables
+    // 2. Copy all user pages to child
+    // 3. Set up child's page tables to point to copied pages
+    
+    serial_print("SERIAL: memory copied (simplified)\n");
+    return 0;
+}
+
+void save_fork_context(process_t *parent, process_t *child) {
+    extern void serial_print(const char *str);
+    
+    serial_print("SERIAL: save_fork_context\n");
+    
+    if (!parent || !child) {
+        return;
+    }
+    
+    // Copy CPU registers from parent to child (task_t structure)
+    child->task = parent->task;
+    
+    // Child should return 0 from fork, parent returns child PID
+    process_rax(child) = 0;  // Child gets 0 return value
+    
+    serial_print("SERIAL: CPU context copied\n");
+}
+
+void scheduler_add_process(process_t *proc) {
+    extern void serial_print(const char *str);
+    extern void serial_print_hex32(uint32_t num);
+    
+    serial_print("SERIAL: scheduler_add_process PID=");
+    serial_print_hex32(process_pid(proc));
+    serial_print("\n");
+    
+    // Add to scheduler queue (simplified)
+    // In real implementation, add to CFS runqueue
+    proc->state = PROCESS_READY;
+    
+    serial_print("SERIAL: process added to scheduler\n");
+}
+
+// Child process main function - what the child does after fork
+void child_process_main(void) {
+    extern void serial_print(const char *str);
+    extern void serial_print_hex32(uint32_t num);
+    
+    serial_print("SERIAL: CHILD PROCESS STARTED - PID=");
+    serial_print_hex32(process_pid(current_process));
+    serial_print("\n");
+    
+    // Child process does some work
+    serial_print("SERIAL: Child: Hello from child process!\n");
+    serial_print("SERIAL: Child: Doing some work...\n");
+    
+    // Simulate some work
+    for (volatile int i = 0; i < 1000000; i++) {
+        // Busy work
+    }
+    
+    serial_print("SERIAL: Child: Work completed, exiting with code 42\n");
+    
+    // Child exits with code 42
+    process_exit(42);
+}
+
+// ============================================================================
+// SCHEDULER HELPER FUNCTIONS
+// ============================================================================
+
+void schedule_process_later(process_t *proc) {
+    extern void serial_print(const char *str);
+    extern void serial_print_hex32(uint32_t num);
+    
+    serial_print("SERIAL: schedule_process_later PID=");
+    serial_print_hex32(process_pid(proc));
+    serial_print("\n");
+    
+    // Mark process as ready for scheduling
+    proc->state = PROCESS_READY;
+    
+    // In a real scheduler, this would add to the runqueue
+    // For now, we just mark it as ready
+    serial_print("SERIAL: process scheduled for later execution\n");
 }
 
 process_t *process_duplicate(process_t *parent) { (void)parent; return NULL; }
@@ -97,7 +517,7 @@ void process_print_all(void) {
     
     while (proc && count < 10) {
         serial_print("SERIAL: PID=");
-        serial_print_hex32(proc->pid);
+        serial_print_hex32(process_pid(proc));
         serial_print(" state=");
         serial_print_hex32(proc->state);
         serial_print(" next=");
@@ -110,7 +530,7 @@ void process_print_all(void) {
     
     if (current_process) {
         serial_print("SERIAL: Current process PID=");
-        serial_print_hex32(current_process->pid);
+        serial_print_hex32(process_pid(current_process));
         serial_print("\n");
     } else {
         serial_print("SERIAL: No current process\n");
@@ -134,7 +554,7 @@ void show_process_list_in_shell(void) {
     
     while (proc && count < 10) {
         serial_print("SERIAL: Showing process PID=");
-        serial_print_hex32(proc->pid);
+        serial_print_hex32(process_pid(proc));
         serial_print("\n");
         
         // Show in shell
@@ -142,7 +562,7 @@ void show_process_list_in_shell(void) {
         
         // Convert PID to string
         char pid_str[12];
-        uint32_t pid = proc->pid;
+        uint32_t pid = process_pid(proc);
         int len = 0;
         if (pid == 0) {
             pid_str[len++] = '0';
@@ -171,7 +591,7 @@ void show_process_list_in_shell(void) {
             default: sys_write(1, "  UNKNOWN ", 10); break;
         }
         
-        if (proc->pid == 1) {
+        if (process_pid(proc) == 1) {
             sys_write(1, " shell\n", 7);
         } else {
             sys_write(1, " process\n", 9);
