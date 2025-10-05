@@ -1,4 +1,4 @@
-// echo.c - Echo command for IR0 (like Linux echo)
+// echo.c - Echo command for IR0 userspace
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

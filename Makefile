@@ -140,6 +140,7 @@ INTERRUPT_OBJS = \
 
 DRIVER_OBJS = \
     drivers/IO/ps2.o \
+    drivers/IO/ps2_mouse.o \
     drivers/serial/serial.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
@@ -149,7 +150,9 @@ DRIVER_OBJS = \
     drivers/timer/hpet/find_hpet.o \
     drivers/timer/lapic/lapic.o \
     drivers/storage/ata.o \
-    drivers/video/vbe.o
+    drivers/video/vbe.o \
+    drivers/audio/sound_blaster.o \
+    drivers/dma/dma.o
 
 FS_OBJS = \
     fs/vfs.o \
@@ -326,7 +329,7 @@ USERSPACE_CFLAGS += -I$(USERSPACE_DIR)/libc/include -I$(KERNEL_ROOT)/includes -s
 USERSPACE_LDFLAGS = -nostdlib -static
 
 # Userspace libc objects
-LIBC_OBJS = $(USERSPACE_BUILD_DIR)/syscalls.o $(USERSPACE_BUILD_DIR)/stdio.o
+LIBC_OBJS = $(USERSPACE_BUILD_DIR)/syscalls.o $(USERSPACE_BUILD_DIR)/stdio.o $(USERSPACE_BUILD_DIR)/malloc.o
 
 # Userspace programs
 USERSPACE_PROGRAMS = $(USERSPACE_BUILD_DIR)/echo

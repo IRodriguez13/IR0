@@ -2,17 +2,9 @@
 #include <ir0/print.h>
 #include <stddef.h>
 #include <string.h>
-
-// I/O port operations (these need to be implemented in your kernel)
-extern uint8_t inb(uint16_t port);
-extern void outb(uint16_t port, uint8_t data);
-extern uint16_t inw(uint16_t port);
-extern void outw(uint16_t port, uint16_t data);
-
-// DMA controller functions (these need to be implemented)
-extern void dma_setup_channel(uint8_t channel, uint32_t addr, uint16_t length, bool is_16bit);
-extern void dma_enable_channel(uint8_t channel);
-extern void dma_disable_channel(uint8_t channel);
+#include <arch/common/arch_interface.h>
+#include <interrupt/arch/io.h>
+#include <drivers/dma/dma.h>
 
 // Global Sound Blaster state
 static sb16_state_t sb16_state = {0};
