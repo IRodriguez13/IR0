@@ -40,14 +40,14 @@ typedef int64_t off_t;
 
 // Low-level syscall interface
 static inline int64_t syscall0(int64_t num) {
-    int64_t result;
+    int64_t sysret;
     __asm__ volatile (
         "int $0x80"
-        : "=a"(result)
+        : "=a"(sysret)
         : "a"(num)
         : "memory"
     );
-    return result;
+    return sysret;
 }
 
 static inline int64_t syscall1(int64_t num, int64_t arg1) {
