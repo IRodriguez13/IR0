@@ -10,10 +10,11 @@
 // 0x800000 - 0x2000000: Heap (8MB-32MB = 24MB heap)
 
 #define SIMPLE_HEAP_START 0x800000
-#define SIMPLE_HEAP_SIZE  0x1800000  // 24MB
-#define SIMPLE_HEAP_END   (SIMPLE_HEAP_START + SIMPLE_HEAP_SIZE)
+#define SIMPLE_HEAP_SIZE 0x1800000 // 24MB
+#define SIMPLE_HEAP_END (SIMPLE_HEAP_START + SIMPLE_HEAP_SIZE)
 
-typedef struct {
+typedef struct
+{
     void *start;
     void *end;
     void *current;
