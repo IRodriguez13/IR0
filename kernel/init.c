@@ -14,7 +14,7 @@ extern void cfs_add_task_impl(task_t *task);
 extern void switch_to_user_mode(void *entry_point);
 extern void shell_ring3_entry(void);
 
-void init_proc_1(void)
+void init_1(void)
 {
   // This is the first user process (PID 1)
 
@@ -43,7 +43,7 @@ int start_init_process(void)
   // Initialize init process
   process_pid(init) = 1;
   init->state = PROCESS_READY;
-  process_rip(init) = (uint64_t)init_proc_1;
+  process_rip(init) = (uint64_t)init_1;
   process_rsp(init) = 0x1000000 - 0x1000; // 16MB - 4KB = Safe stack
   process_cs(init) = 0x1B;                // User code (GDT entry 3, RPL=3)
   process_ss(init) = 0x23;                // User data (GDT entry 4, RPL=3)
