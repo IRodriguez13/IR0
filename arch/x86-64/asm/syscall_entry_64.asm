@@ -24,26 +24,28 @@ syscall_entry_asm:
     push r14
     push r15
     
-    ; CRITICAL: Save syscall number BEFORE overwriting rax!
-    mov rdi, rax    ; Save syscall number FIRST
+    ; Save syscall arguments BEFORE overwriting anything
+    ; Shell passes: rax=syscall_num, rbx=arg1, rcx=arg2, rdx=arg3, rsi=arg4, rdi=arg5
+    mov r10, rax    ; Save syscall number
+    mov r11, rbx    ; Save arg1
+    mov r12, rcx    ; Save arg2  
+    mov r13, rdx    ; Save arg3
+    mov r14, rsi    ; Save arg4
+    mov r15, rdi    ; Save arg5
     
     ; Switch to kernel segments (this overwrites ax/rax!)
     mov ax, 0x10
     mov ds, ax
     mov es, ax
     
-    ; Setup syscall arguments correctly
-    ; Shell passes: rax=syscall_num, rbx=arg1, rcx=arg2, rdx=arg3
+    ; Setup syscall arguments for C function
     ; C function expects: (rdi=syscall_num, rsi=arg1, rdx=arg2, rcx=arg3, r8=arg4, r9=arg5)
-    
-    ; rdi already has syscall number (saved above)
-    mov rsi, rbx    ; arg1
-    mov r10, rcx    ; Save arg2 temporarily
-    mov r11, rdx    ; Save arg3 temporarily
-    mov rdx, r10    ; arg2 (from rcx)
-    mov rcx, r11    ; arg3 (from rdx)
-    mov r8, 0       ; arg4 (unused)
-    mov r9, 0       ; arg5 (unused)
+    mov rdi, r10    ; syscall number
+    mov rsi, r11    ; arg1
+    mov rdx, r12    ; arg2
+    mov rcx, r13    ; arg3
+    mov r8, r14     ; arg4
+    mov r9, r15     ; arg5
     
     ; Call C dispatcher
     call syscall_dispatch
