@@ -698,7 +698,7 @@ char *itoa(int value, char *str, int base)
         return str;
     }
 
-    while (value);
+    while (value)
     {
         tmp_value = value;
         value /= base;

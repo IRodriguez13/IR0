@@ -1,15 +1,43 @@
-// Syscalls MINIMALISTAS - Solo lo esencial que funciona
+// Syscalls - Essential system calls only
 #include "syscalls.h"
-#include <drivers/timer/pit/pit.h>
-#include <fs/minix_fs.h>
-#include <ir0/print.h>
-#include <kernel/process.h>
-#include <kernel/scheduler/task.h>
-#include <string.h>
+#include "../drivers/serial/serial.h"
+#include "../includes/ir0/print.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-// Missing defines
-#define TASK_ZOMBIE 4
+// Forward declarations
+// Removed current_process extern - using local current_proc
+extern char keyboard_buffer_get(void);
+extern int keyboard_buffer_has_data(void);
+extern bool minix_fs_is_working(void);
+extern int minix_fs_ls(const char *path);
+extern int minix_fs_mkdir(const char *path);
+extern int minix_fs_cat(const char *path);
+extern int minix_fs_touch(const char *path);
+extern int minix_fs_rm(const char *path);
+extern int minix_fs_rmdir(const char *path);
+extern int process_fork(void);
+extern int process_wait(int pid, int *status);
+extern void print_hex_compact(uint32_t num);
+
+// Basic types and constants
 typedef uint32_t mode_t;
+typedef int32_t pid_t;
+typedef long intptr_t;
+typedef long off_t;
+
+// Process states
+#define TASK_ZOMBIE 4
+
+// Simple process structure for syscalls
+struct simple_process {
+  pid_t pid;
+  int state;
+  void *heap_start; // Start of process heap
+  void *heap_end;   // Current break (end of heap)
+  void *heap_limit; // Maximum heap size
+};
 
 // Errno codes
 #define ESRCH 3
@@ -23,19 +51,19 @@ typedef uint32_t mode_t;
 #define STDERR_FILENO 2
 #define MAX_FILE_DESCRIPTORS 16
 
-// current_process is process_t* from process.h
+// Global current process pointer
+static struct simple_process *current_proc = NULL;
 
 // ============================================================================
 // SYSCALL IMPLEMENTATIONS - ONLY WORKING ONES
 // ============================================================================
 
-int64_t sys_exit(int exit_code)
-{
+int64_t sys_exit(int exit_code) {
   (void)exit_code;
-  if (!current_process)
+  if (!current_proc)
     return -ESRCH;
 
-  current_process->state = TASK_ZOMBIE;
+  current_proc->state = TASK_ZOMBIE;
 
   // Halt forever
   for (;;)
@@ -43,427 +71,499 @@ int64_t sys_exit(int exit_code)
   return 0;
 }
 
-int64_t sys_write(int fd, const void *buf, size_t count)
-{
-  if (!current_process)
+int64_t sys_write(int fd, const void *buf, size_t count) {
+  if (!current_proc)
     return -ESRCH;
   if (!buf || count == 0)
     return 0;
 
-  if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
-  {
+  if (fd == STDOUT_FILENO || fd == STDERR_FILENO) {
     const char *str = (const char *)buf;
     // Use print directly for simplicity
-    for (size_t i = 0; i < count && i < 1024; i++)
-    {
+    for (size_t i = 0; i < count && i < 1024; i++) {
       if (str[i] == '\n')
         print("\n");
-      else
-      {
+      else {
         char temp[2] = {str[i], 0};
         print(temp);
       }
     }
-    return count;
+    return (int64_t)count;
   }
   return -EBADF;
 }
 
-// Keyboard buffer access from kernel
-extern char keyboard_buffer_get(void);
-extern int keyboard_buffer_has_data(void);
+// Remove duplicate declarations
 
-int64_t sys_read(int fd, void *buf, size_t count)
-{
-  if (!current_process)
-  {
+int64_t sys_read(int fd, void *buf, size_t count) {
+  if (!current_proc)
     return -ESRCH;
-  }
   if (!buf || count == 0)
     return 0;
 
-  if (fd == STDIN_FILENO)
-  {
+  if (fd == STDIN_FILENO) {
     // Read from keyboard buffer - NON-BLOCKING
     char *buffer = (char *)buf;
     size_t bytes_read = 0;
 
     // Only read if there's data available
-    if (keyboard_buffer_has_data())
-    {
+    if (keyboard_buffer_has_data()) {
       char c = keyboard_buffer_get();
-      if (c != 0)
-      {
+      if (c != 0) {
         buffer[bytes_read++] = c;
       }
     }
 
-    return bytes_read; // Return 0 if no data available
+    return (int64_t)bytes_read; // Return 0 if no data available
   }
   return -EBADF;
 }
 
-int64_t sys_getpid(void)
-{
-  if (!current_process)
-  {
+int64_t sys_getpid(void) {
+  if (!current_proc)
     return -ESRCH;
-  }
-  return current_process->pid;
+  return current_proc->pid;
 }
 
-int64_t sys_getppid(void)
-{
-  if (!current_process)
+int64_t sys_getppid(void) {
+  if (!current_proc)
     return -ESRCH;
   return 0; // No parent tracking yet
 }
 
-int64_t sys_ls(const char *pathname)
-{
-  if (!current_process)
+int64_t sys_ls(const char *pathname) {
+  if (!current_proc)
     return -ESRCH;
 
-  // Use VFS layer
-  extern int vfs_ls(const char *path);
+  // Use MINIX filesystem directly
   const char *target_path = pathname ? pathname : "/";
-
-  return vfs_ls(target_path);
+  return minix_fs_ls(target_path);
 }
 
-int64_t sys_mkdir(const char *pathname, mode_t mode)
-{
+int64_t sys_mkdir(const char *pathname, mode_t mode) {
   (void)mode;
-  if (!current_process)
+  if (!current_proc)
     return -ESRCH;
   if (!pathname)
     return -EFAULT;
 
-  extern bool minix_fs_is_working(void);
-  extern int minix_fs_mkdir(const char *path);
-
   if (minix_fs_is_working())
-  {
     return minix_fs_mkdir(pathname);
-  }
   return -ENOSYS;
 }
 
-int64_t sys_ps(void)
-{
-  // Use sys_write to send output to shell
+int64_t sys_ps(void) {
+  // Simple process list
   sys_write(1, "PID  STATE    COMMAND\n", 21);
   sys_write(1, "---  -------  -------\n", 22);
 
-  // Show current process (this is not real, but it works for testing syscalls)
-  if (current_process)
-  {
-    char pid_str[16];
-    int len = 0;
-    uint32_t pid = current_process->pid;
-
-    // Convert PID to string
-    if (pid == 0)
-    {
-      pid_str[len++] = '0';
-    }
-    else
-    {
-      char temp[16];
-      int temp_len = 0;
-      while (pid > 0)
-      {
-        temp[temp_len++] = '0' + (pid % 10);
-        pid /= 10;
-      }
-      for (int i = temp_len - 1; i >= 0; i--)
-      {
-        pid_str[len++] = temp[i];
-      }
-    }
-
-    sys_write(1, "  ", 2);
-    sys_write(1, pid_str, len);
-
-    // Show real state
-    switch (current_process->state)
-    {
-    case 0:
-      sys_write(1, "  READY    ", 11);
-      break;
-    case 1:
-      sys_write(1, "  RUNNING  ", 11);
-      break;
-    case 2:
-      sys_write(1, "  BLOCKED  ", 11);
-      break;
-    case 3:
-      sys_write(1, "  SLEEPING ", 11);
-      break;
-    case 4:
-      sys_write(1, "  ZOMBIE   ", 11);
-      break;
-    default:
-      sys_write(1, "  UNKNOWN  ", 11);
-      break;
-    }
-    sys_write(1, "shell\n", 6);
+  if (current_proc) {
+    sys_write(1, "  1  RUNNING  shell\n", 19);
   }
-
-  // Show kernel process (always exists)
   sys_write(1, "  0  IDLE     kernel\n", 20);
 
   return 0;
 }
 
-int64_t sys_cat(const char *pathname)
-{
-  if (!current_process)
-    return -ESRCH;
-  if (!pathname)
+int64_t sys_cat(const char *pathname) {
+  if (!current_proc || !pathname)
     return -EFAULT;
 
-  extern bool minix_fs_is_working(void);
-  extern int minix_fs_cat(const char *path);
-
   if (minix_fs_is_working())
-  {
     return minix_fs_cat(pathname);
-  }
-  else
-  {
-    const char *error_msg = "Error: MINIX filesystem not initialized\n";
-    sys_write(STDERR_FILENO, error_msg, strlen(error_msg));
-    return -1;
-  }
+
+  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
+  return -1;
 }
 
-int64_t sys_touch(const char *pathname)
-{
-  if (!current_process)
-    return -ESRCH;
-  if (!pathname)
+int64_t sys_touch(const char *pathname) {
+  if (!current_proc || !pathname)
     return -EFAULT;
 
-  extern bool minix_fs_is_working(void);
-  extern int minix_fs_touch(const char *path);
-
   if (minix_fs_is_working())
-  {
     return minix_fs_touch(pathname);
-  }
-  else
-  {
-    const char *error_msg = "Error: MINIX filesystem not initialized\n";
-    sys_write(STDERR_FILENO, error_msg, strlen(error_msg));
-    return -1;
-  }
+
+  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
+  return -1;
 }
 
-int64_t sys_rm(const char *pathname)
-{
-  if (!current_process)
-    return -ESRCH;
-  if (!pathname)
+int64_t sys_rm(const char *pathname) {
+  if (!current_proc || !pathname)
     return -EFAULT;
 
-  extern bool minix_fs_is_working(void);
-  extern int minix_fs_rm(const char *path);
-
   if (minix_fs_is_working())
-  {
     return minix_fs_rm(pathname);
-  }
-  else
-  {
-    const char *error_msg = "Error: MINIX filesystem not initialized\n";
-    sys_write(STDERR_FILENO, error_msg, strlen(error_msg));
-    return -1;
-  }
+
+  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
+  return -1;
 }
 
-
-int64_t sys_rmdir(const char *pathname)
-{
-  if (!current_process)
-    return -ESRCH;
-  if (!pathname)
+int64_t sys_rmdir(const char *pathname) {
+  if (!current_proc || !pathname)
     return -EFAULT;
 
-  extern bool minix_fs_is_working(void);
-  extern int minix_fs_rmdir(const char *path);
-
   if (minix_fs_is_working())
-  {
     return minix_fs_rmdir(pathname);
-  }
-  else
-  {
-    const char *error_msg = "Error: MINIX filesystem not initialized\n";
-    sys_write(STDERR_FILENO, error_msg, strlen(error_msg));
-    return -1;
-  }
+
+  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
+  return -1;
 }
 
 // ============================================================================
 // PROCESS MANAGEMENT SYSCALLS
 // ============================================================================
 
-int64_t sys_fork(void)
-{
-  if (!current_process)
+int64_t sys_fork(void) {
+  if (!current_proc)
     return -ESRCH;
 
-  extern pid_t process_fork(void);
   return process_fork();
 }
 
-int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
-{
-  (void)options; // Ignore options for now
-  (void)rusage;  // Ignore rusage for now
+int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage) {
+  (void)options;
+  (void)rusage;
 
-  if (!current_process)
+  if (!current_proc)
     return -ESRCH;
 
-  extern int process_wait(pid_t pid, int *status);
   return process_wait(pid, status);
 }
 
-int64_t sys_waitpid(pid_t pid, int *status, int options)
-{
+int64_t sys_waitpid(pid_t pid, int *status, int options) {
   return sys_wait4(pid, status, options, NULL);
 }
 
-int64_t sys_kernel_info(void *info_buffer, size_t buffer_size)
-{
-
-  // ============================================================================
-  // PROCESS MANAGEMENT SYSCALLS
-  // ============================================================================
-
-  if (!current_process)
-    return -ESRCH;
-  if (!info_buffer)
+int64_t sys_kernel_info(void *info_buffer, size_t buffer_size) {
+  if (!current_proc || !info_buffer)
     return -EFAULT;
 
-  const char *info = "=== IR0 Kernel ===\n"
-                     "Version: v0.0.1\n"
-                     "Arch: x86-64\n"
-                     "Scheduler: CFS\n"
-                     "FS: MINIX\n";
+  const char *info = "IR0 Kernel v0.0.1 x86-64\n";
+  size_t len = 26; // Length of info string
 
-  size_t len = strlen(info);
   if (buffer_size < len)
     len = buffer_size;
 
-  memcpy(info_buffer, info, len);
-  return len;
+  // Simple copy without memcpy dependency
+  char *dst = (char *)info_buffer;
+  for (size_t i = 0; i < len; i++)
+    dst[i] = info[i];
+
+  return (int64_t)len;
+}
+
+int64_t sys_malloc_test(size_t size) {
+  if (!current_proc)
+    return -ESRCH;
+
+  // Test malloc/free functionality
+  extern void *kmalloc(size_t size);
+  extern void kfree(void *ptr);
+  extern void simple_alloc_trace(void);
+
+  sys_write(1, "Testing malloc/free...\n", 23);
+
+  // Allocate memory
+  void *ptr1 = kmalloc(size ? size : 1024);
+  if (!ptr1) {
+    sys_write(1, "malloc failed!\n", 15);
+    return -1;
+  }
+
+  sys_write(1, "malloc OK, ptr=0x", 17);
+  print_hex64((uint64_t)ptr1);
+  sys_write(1, "\n", 1);
+
+  // Write some data
+  char *data = (char *)ptr1;
+  for (size_t i = 0; i < (size ? size : 1024) && i < 100; i++) {
+    data[i] = 'A' + (i % 26);
+  }
+
+  sys_write(1, "Data written, freeing...\n", 25);
+
+  // Free memory
+  kfree(ptr1);
+
+  sys_write(1, "free OK\n", 8);
+
+  // Show allocator stats
+  simple_alloc_trace();
+
+  return 0;
 }
 
 // ============================================================================
-// SYSCALL WRAPPERS
+// HEAP MANAGEMENT SYSCALLS (brk/sbrk)
 // ============================================================================
 
-void sys_exit_wrapper(syscall_args_t *args) { sys_exit((int)args->arg1); }
+int64_t sys_brk(void *addr) {
+  if (!current_proc)
+    return -ESRCH;
 
-void sys_write_wrapper(syscall_args_t *args)
-{
-  args->arg1 =
-      sys_write((int)args->arg1, (void *)args->arg2, (size_t)args->arg3);
+  // If addr is NULL, return current break
+  if (!addr)
+    return (int64_t)current_proc->heap_end;
+
+  // Validate new break address
+  if (addr < current_proc->heap_start || addr > current_proc->heap_limit)
+    return -EFAULT;
+
+  // Set new break
+  current_proc->heap_end = addr;
+  return (int64_t)addr;
 }
 
-void sys_read_wrapper(syscall_args_t *args)
-{
-  args->arg1 =
-      sys_read((int)args->arg1, (void *)args->arg2, (size_t)args->arg3);
+void *sys_sbrk(intptr_t increment) {
+  if (!current_proc)
+    return (void *)-1;
+
+  void *old_break = current_proc->heap_end;
+  void *new_break = (char *)old_break + increment;
+
+  // Check bounds
+  if (new_break < current_proc->heap_start ||
+      new_break > current_proc->heap_limit)
+    return (void *)-1;
+
+  // Update break
+  current_proc->heap_end = new_break;
+  return old_break;
 }
 
-void sys_getpid_wrapper(syscall_args_t *args) { args->arg1 = sys_getpid(); }
+// ============================================================================
+// MEMORY MAPPING SYSCALLS (mmap/munmap)
+// ============================================================================
 
-void sys_getppid_wrapper(syscall_args_t *args) { args->arg1 = sys_getppid(); }
+// mmap flags
+#define MAP_PRIVATE 0x02
+#define MAP_ANONYMOUS 0x20
+#define MAP_SHARED 0x01
 
-void sys_ls_wrapper(syscall_args_t *args)
-{
-  args->arg1 = sys_ls((const char *)args->arg1);
-}
+// Protection flags
+#define PROT_READ 0x1
+#define PROT_WRITE 0x2
+#define PROT_EXEC 0x4
 
-void sys_mkdir_wrapper(syscall_args_t *args)
-{
-  args->arg1 = sys_mkdir((const char *)args->arg1, (mode_t)args->arg2);
-}
-
-void sys_ps_wrapper(syscall_args_t *args) { args->arg1 = sys_ps(); }
-
-void sys_kernel_info_wrapper(syscall_args_t *args)
-{
-  args->arg1 = sys_kernel_info((void *)args->arg1, (size_t)args->arg2);
-}
-
-// Syscall table
-void (*syscall_table[256])(syscall_args_t *) = {
-    [0] = sys_exit_wrapper,
-    [1] = sys_write_wrapper,
-    [2] = sys_read_wrapper,
-    [3] = sys_getpid_wrapper,
-    [4] = sys_getppid_wrapper,
-    [5] = sys_ls_wrapper,
-    [6] = sys_mkdir_wrapper,
-    [7] = sys_ps_wrapper,
-    [8] = sys_kernel_info_wrapper,
+// Simple memory mapping structure
+struct mmap_region {
+  void *addr;
+  size_t length;
+  int prot;
+  int flags;
+  struct mmap_region *next;
 };
+
+static struct mmap_region *mmap_list = NULL;
+
+void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
+               off_t offset) {
+  (void)addr;
+  (void)prot;
+  (void)fd;
+  (void)offset; // Ignore for now
+
+  // Debug output to serial
+  serial_print("SERIAL: mmap: entering syscall\n");
+
+  if (!current_proc) {
+    serial_print("SERIAL: mmap: no current process\n");
+    return (void *)-1;
+  }
+
+  if (length == 0) {
+    serial_print("SERIAL: mmap: zero length\n");
+    return (void *)-1;
+  }
+
+  // Debug: show what flags we received
+  serial_print("SERIAL: mmap: flags received = ");
+  serial_print_hex32((uint32_t)flags);
+  serial_print("\n");
+
+  // Only support anonymous mapping for now
+  if (!(flags & MAP_ANONYMOUS)) {
+    serial_print("SERIAL: mmap: not anonymous mapping\n");
+    serial_print("SERIAL: mmap: MAP_ANONYMOUS = 0x20\n");
+    return (void *)-1;
+  }
+
+  sys_write(1, "mmap: allocating memory\n", 24);
+
+  // Align length to reasonable boundary
+  length = (length + 15) & ~15;
+
+  // For simplicity, use kernel allocator to get real memory
+  extern void *kmalloc(size_t size);
+  void *real_addr = kmalloc(length);
+  if (!real_addr) {
+    sys_write(1, "mmap: kmalloc failed\n", 21);
+    return (void *)-1;
+  }
+
+  sys_write(1, "mmap: creating region entry\n", 28);
+
+  // Create mapping entry
+  struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
+  if (!region) {
+    sys_write(1, "mmap: region kmalloc failed\n", 28);
+    extern void kfree(void *ptr);
+    kfree(real_addr);
+    return (void *)-1;
+  }
+
+  region->addr = real_addr;
+  region->length = length;
+  region->prot = prot;
+  region->flags = flags;
+  region->next = mmap_list;
+  mmap_list = region;
+
+  sys_write(1, "mmap: zeroing memory\n", 21);
+
+  // Zero the memory if it's anonymous
+  if (flags & MAP_ANONYMOUS) {
+    for (size_t i = 0; i < length; i++)
+      ((char *)real_addr)[i] = 0;
+  }
+
+  sys_write(1, "mmap: success, returning address\n", 33);
+  return real_addr;
+
+  return real_addr;
+}
+
+int sys_munmap(void *addr, size_t length) {
+  if (!current_proc || !addr || length == 0)
+    return -1;
+
+  // Find the mapping
+  struct mmap_region *current = mmap_list;
+  struct mmap_region *prev = NULL;
+
+  while (current) {
+    if (current->addr == addr && current->length == length) {
+      // Remove from list
+      if (prev)
+        prev->next = current->next;
+      else
+        mmap_list = current->next;
+
+      // Free the mapping structure
+      extern void kfree(void *ptr);
+      kfree(current);
+      return 0;
+    }
+    prev = current;
+    current = current->next;
+  }
+
+  return -1; // Not found
+}
+
+int sys_mprotect(void *addr, size_t len, int prot) {
+  if (!current_proc || !addr || len == 0)
+    return -1;
+
+  // Find the mapping
+  struct mmap_region *current = mmap_list;
+  while (current) {
+    if (current->addr <= addr &&
+        (char *)addr + len <= (char *)current->addr + current->length) {
+      // Update protection
+      current->prot = prot;
+      return 0;
+    }
+    current = current->next;
+  }
+
+  return -1; // Not found
+}
+
+// ============================================================================
+// SYSCALL INITIALIZATION
+// ============================================================================
+
+void syscalls_init(void) {
+  // Initialize current process stub with heap
+  static struct simple_process init_proc = {
+      .pid = 1,
+      .state = 1,
+      .heap_start = (void *)0x10000000, // 256MB - user heap start
+      .heap_end = (void *)0x10000000,   // Initially empty
+      .heap_limit = (void *)0x20000000  // 512MB - heap limit (256MB max heap)
+  };
+  current_proc = &init_proc;
+
+  // Register syscall interrupt handler
+  extern void syscall_entry_asm(void);
+  extern void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel,
+                             uint8_t flags);
+
+  // IDT entry 0x80 for syscalls (DPL=3 for user mode)
+  idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE);
+}
 
 // Syscall dispatcher called from assembly
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
-                         uint64_t arg3, uint64_t arg4 __attribute__((unused)), uint64_t arg5 __attribute__((unused)))
-{
-  switch (syscall_num)
-  {
-  case 0: // exit
+                         uint64_t arg3, uint64_t arg4, uint64_t arg5) {
+  (void)arg4;
+  (void)arg5; // Unused parameters
+
+  switch (syscall_num) {
+  case 0:
     return sys_exit((int)arg1);
-
-  case 1: // write
+  case 1:
     return sys_write((int)arg1, (const void *)arg2, (size_t)arg3);
-
-  case 2: // read
+  case 2:
     return sys_read((int)arg1, (void *)arg2, (size_t)arg3);
-
-  case 3: // getpid
+  case 3:
     return sys_getpid();
-
-  case 4: // getppid
+  case 4:
     return sys_getppid();
-
-  case 5: // ls
+  case 5:
     return sys_ls((const char *)arg1);
-
-  case 6: // mkdir
+  case 6:
     return sys_mkdir((const char *)arg1, (mode_t)arg2);
-
-  case 7: // ps
+  case 7:
     return sys_ps();
-
-  case 8: // kernel_info
+  case 8:
     return sys_kernel_info((void *)arg1, (size_t)arg2);
-
-  case 9: // cat
+  case 9:
     return sys_cat((const char *)arg1);
-
-  case 10: // touch
+  case 10:
     return sys_touch((const char *)arg1);
-
-  case 11: // rm
+  case 11:
     return sys_rm((const char *)arg1);
-
-  case 12: // fork
+  case 12:
     return sys_fork();
-
-  case 13: // waitpid
+  case 13:
     return sys_waitpid((pid_t)arg1, (int *)arg2, (int)arg3);
-
-
-  case 40: // rmdir
+  case 40:
     return sys_rmdir((const char *)arg1);
+  case 50:
+    return sys_malloc_test((size_t)arg1);
+  case 51:
+    return sys_brk((void *)arg1);
+  case 52:
+    return (int64_t)sys_sbrk((intptr_t)arg1);
+  case 53:
+    // Debug mmap arguments to serial
+    serial_print("SERIAL: dispatcher: mmap args: arg1=");
+    serial_print_hex32((uint32_t)arg1);
+    serial_print(" arg2=");
+    serial_print_hex32((uint32_t)arg2);
+    serial_print(" arg3=");
+    serial_print_hex32((uint32_t)arg3);
+    serial_print(" arg4=");
+    serial_print_hex32((uint32_t)arg4);
+    serial_print("\n");
+    return (int64_t)sys_mmap((void *)arg1, (size_t)arg2, (int)arg3, (int)arg4,
+                             (int)arg5, (off_t)0);
+  case 54:
+    return sys_munmap((void *)arg1, (size_t)arg2);
+  case 55:
+    return sys_mprotect((void *)arg1, (size_t)arg2, (int)arg3);
 
   default:
     print("UNKNOWN_SYSCALL:");
@@ -472,37 +572,3 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return -ENOSYS;
   }
 }
-
-void syscalls_init(void)
-{
-  // Register int 0x80 handler in IDT
-  extern void syscall_entry_asm(void);
-  extern void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel,
-                             uint8_t flags);
-
-  // IDT entry 0x80 for syscalls (DPL=3 for user mode)
-  // 0xEE = Present (1) + DPL=3 (11) + Interrupt Gate (1110)
-  idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE);
-}
-
-// ============================================================================
-// SYSCALL HANDLER AND STUBS
-// ============================================================================
-
-// Syscall handler for shell
-int64_t syscall_handler(uint64_t number, syscall_args_t *args)
-{
-  if (number >= 256)
-    return -1;
-
-  extern void (*syscall_table[256])(syscall_args_t *);
-
-  if (syscall_table[number])
-  {
-    syscall_table[number](args);
-    return args->arg1;
-  }
-
-  return -1;
-}
-

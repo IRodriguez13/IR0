@@ -1,7 +1,7 @@
 # kernel/Makefile - Compilación del kernel
 
 # Variables
-KERNEL_OBJS = kernel_start.o process/process.o scheduler/scheduler.o scheduler/cfs_scheduler.o scheduler/round-robin_scheduler.o scheduler/priority_scheduler.o scheduler/task_impl.o syscalls/syscalls.o shell/shell.o elf_loader.o
+KERNEL_OBJS = kernel.o init.o process.o scheduler.o task.o syscalls.o shell.o elf_loader.o
 KERNEL_TARGET = kernel.a
 
 # Reglas
@@ -10,7 +10,25 @@ all: $(KERNEL_TARGET)
 $(KERNEL_TARGET): $(KERNEL_OBJS)
 	$(AR) rcs $@ $^
 
-kernel_start.o: kernel_start.c kernel_start.h
+kernel.o: kernel.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+init.o: init.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+process.o: process.c process.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+scheduler.o: scheduler.c scheduler.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+task.o: task.c task.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+syscalls.o: syscalls.c syscalls.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+shell.o: shell.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 elf_loader.o: elf_loader.c elf_loader.h
