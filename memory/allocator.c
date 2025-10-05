@@ -3,14 +3,16 @@
 #include "../includes/ir0/print.h"
 
 // Block header for free-list allocator
-typedef struct block_header {
-    size_t size;                    // Size of this block (including header)
-    int is_free;                    // 1 if free, 0 if allocated
-    struct block_header *next;      // Next block in free list
+typedef struct block_header
+{
+    size_t size;               // Size of this block (including header)
+    int is_free;               // 1 if free, 0 if allocated
+    struct block_header *next; // Next block in free list
 } block_header_t;
 
 // Global allocator state
-static struct {
+static struct
+{
     void *heap_start;
     void *heap_end;
     size_t heap_size;
@@ -57,18 +59,21 @@ void *simple_alloc(size_t size)
     // Find a free block that fits
     block_header_t *current = allocator.free_list;
 
-    while (current) {
-        if (current->is_free && current->size >= total_size) {
+    while (current)
+    {
+        if (current->is_free && current->size >= total_size)
+        {
             // Found a suitable block
             current->is_free = 0;
 
             // Split block if it's much larger than needed
-            if (current->size > total_size + sizeof(block_header_t) + 32) {
+            if (current->size > total_size + sizeof(block_header_t) + 32)
+            {
                 block_header_t *new_block = (block_header_t *)((char *)current + total_size);
                 new_block->size = current->size - total_size;
                 new_block->is_free = 1;
                 new_block->next = current->next;
-                
+
                 current->size = total_size;
                 current->next = new_block;
             }
@@ -77,7 +82,7 @@ void *simple_alloc(size_t size)
 
             // Return pointer after header
             void *ptr = (char *)current + sizeof(block_header_t);
-            
+
             // Zero the memory
             for (size_t i = 0; i < size; i++)
                 ((char *)ptr)[i] = 0;
@@ -97,7 +102,7 @@ void simple_free(void *ptr)
 
     // Get block header
     block_header_t *block = (block_header_t *)((char *)ptr - sizeof(block_header_t));
-    
+
     // Validate block is within heap bounds
     if ((void *)block < allocator.heap_start || (void *)block >= allocator.heap_end)
         return;
@@ -107,19 +112,22 @@ void simple_free(void *ptr)
     allocator.total_freed += block->size;
 
     // Coalesce with next block if it's free
-    if (block->next && block->next->is_free) {
+    if (block->next && block->next->is_free)
+    {
         block->size += block->next->size;
         block->next = block->next->next;
     }
 
     // Coalesce with previous block if it's free
     block_header_t *current = allocator.free_list;
-    while (current && current->next != block) {
+    while (current && current->next != block)
+    {
         current = current->next;
     }
-    
-    if (current && current->is_free && 
-        (char *)current + current->size == (char *)block) {
+
+    if (current && current->is_free &&
+        (char *)current + current->size == (char *)block)
+    {
         current->size += block->size;
         current->next = block->next;
     }
@@ -159,8 +167,10 @@ void simple_alloc_trace(void)
     print("Free blocks:\n");
     block_header_t *current = allocator.free_list;
     int count = 0;
-    while (current && count < 10) {
-        if (current->is_free) {
+    while (current && count < 10)
+    {
+        if (current->is_free)
+        {
             print("  Block ");
             print_uint32(count);
             print(": ");
@@ -187,8 +197,9 @@ void *krealloc(void *ptr, size_t new_size)
 {
     if (!ptr)
         return simple_alloc(new_size);
-    
-    if (new_size == 0) {
+
+    if (new_size == 0)
+    {
         simple_free(ptr);
         return NULL;
     }

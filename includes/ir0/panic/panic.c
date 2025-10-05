@@ -5,14 +5,13 @@
 // Convertido a sintaxis Intel para mejor legibilidad
 
 static const char *panic_level_names[] =
-{
+    {
         "KERNEL BUG",
         "HARDWARE FAULT",
         "OUT OF MEMORY",
         "STACK OVERFLOW",
         "ASSERTION FAILED"
-};
-
+    };
 
 // Nos fijamos si estamos en doble panic
 static volatile int in_panic = 0;
@@ -82,8 +81,8 @@ void dump_registers()
     // Versión 64-bit
     uint64_t rax, rbx, rcx, rdx, rsi, rdi, rsp, rbp;
     uint64_t rflags;
-    
-    __asm__ volatile (
+
+    __asm__ volatile(
         "movq %%rax, %0\n"
         "movq %%rbx, %1\n"
         "movq %%rcx, %2\n"
@@ -97,20 +96,23 @@ void dump_registers()
         : "=m"(rax), "=m"(rbx), "=m"(rcx), "=m"(rdx),
           "=m"(rsi), "=m"(rdi), "=m"(rsp), "=m"(rbp), "=m"(rflags)
         :
-        : "memory"
-    );
-    
+        : "memory");
+
     print_colored("--- REGISTER DUMP (64-bit) ---\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    print("RAX: "); print_hex64(rax); print("  ");
-    print("RBX: "); print_hex64(rbx); print("\n");
+    print("RAX: ");
+    print_hex64(rax);
+    print("  ");
+    print("RBX: ");
+    print_hex64(rbx);
+    print("\n");
     // ... resto de registros 64-bit
-    
+
 #else
     // Versión 32-bit (tu código actual)
     uint32_t eax, ebx, ecx, edx, esi, edi, esp, ebp;
     uint32_t eflags;
-    
-    __asm__ volatile (
+
+    __asm__ volatile(
         "movl %%eax, %0\n"
         "movl %%ebx, %1\n"
         "movl %%ecx, %2\n"
@@ -124,21 +126,34 @@ void dump_registers()
         : "=m"(eax), "=m"(ebx), "=m"(ecx), "=m"(edx),
           "=m"(esi), "=m"(edi), "=m"(esp), "=m"(ebp), "=m"(eflags)
         :
-        : "memory"
-    );
-    
+        : "memory");
+
     print_colored("--- REGISTER DUMP (32-bit) ---\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    
-    print("EAX: "); print_hex_compact(eax); print("  ");
-    print("EBX: "); print_hex_compact(ebx); print("\n");
-    
-    print("ECX: "); print_hex_compact(ecx); print("  ");
-    print("EDX: "); print_hex_compact(edx); print("\n");
-    
-    print("ESP: "); print_hex_compact(esp); print("  ");
-    print("EBP: "); print_hex_compact(ebp); print("\n");
-    
-    print("EFLAGS: "); print_hex_compact(eflags); print("\n\n");
+
+    print("EAX: ");
+    print_hex_compact(eax);
+    print("  ");
+    print("EBX: ");
+    print_hex_compact(ebx);
+    print("\n");
+
+    print("ECX: ");
+    print_hex_compact(ecx);
+    print("  ");
+    print("EDX: ");
+    print_hex_compact(edx);
+    print("\n");
+
+    print("ESP: ");
+    print_hex_compact(esp);
+    print("  ");
+    print("EBP: ");
+    print_hex_compact(ebp);
+    print("\n");
+
+    print("EFLAGS: ");
+    print_hex_compact(eflags);
+    print("\n\n");
 #endif
 }
 
@@ -146,18 +161,16 @@ void dump_stack_trace()
 {
     print_colored("--- STACK TRACE ---\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
 
-    #ifdef __x86_64__
+#ifdef __x86_64__
 
-        uint64_t *rbp;
-        asm volatile("mov %%rbp, %0" : "=r"(rbp));
-    #else
-    
+    uint64_t *rbp;
+    asm volatile("mov %%rbp, %0" : "=r"(rbp));
+#else
+
     uint32_t *ebp;
-        asm volatile("movl %%ebp, %0" : "=r"(ebp));
-    
-       
-    
-        int frame_count = 0;
+    asm volatile("movl %%ebp, %0" : "=r"(ebp));
+
+    int frame_count = 0;
     const int max_frames = 10;
 
     while (ebp && frame_count < max_frames)
@@ -188,7 +201,7 @@ void dump_stack_trace()
     }
 
     print("\n");
- #endif
+#endif
 }
 
 void dump_memory_info()
