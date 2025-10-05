@@ -36,15 +36,18 @@ static const char scancode_to_ascii[] = {
 };
 
 // Función para traducir scancode a carácter
-char translate_scancode(uint8_t sc) {
-    switch (sc) {
+char translate_scancode(uint8_t sc) 
+{
+    switch (sc) 
+    {
         case 0x0E: return '\b';  // Backspace
         case 0x0F: return '\t';  // Tab
         case 0x1C: return '\n';  // Enter
         case 0x39: return ' ';   // Space
         default:
             // Mapeo normal de letras y números
-            if (sc < sizeof(scancode_to_ascii)) {
+            if (sc < sizeof(scancode_to_ascii)) 
+            {
                 return scancode_to_ascii[sc];
             }
             return 0; // Carácter no reconocido
@@ -52,9 +55,11 @@ char translate_scancode(uint8_t sc) {
 }
 
 // Función para agregar carácter al buffer
-static void keyboard_buffer_add(char c) {
+static void keyboard_buffer_add(char c)
+{
     int next = (keyboard_buffer_head + 1) % KEYBOARD_BUFFER_SIZE;
-    if (next != keyboard_buffer_tail) {
+    if (next != keyboard_buffer_tail) 
+    {
         keyboard_buffer[keyboard_buffer_head] = c;
         keyboard_buffer_head = next;
     }
@@ -62,8 +67,10 @@ static void keyboard_buffer_add(char c) {
 
 #ifdef __x86_64__
 // Función para obtener carácter del buffer
-char keyboard_buffer_get(void) {
-    if (keyboard_buffer_head == keyboard_buffer_tail) {
+char keyboard_buffer_get(void) 
+{
+    if (keyboard_buffer_head == keyboard_buffer_tail) 
+    {
         return 0; // Buffer vacío
     }
     char c = keyboard_buffer[keyboard_buffer_tail];
@@ -72,12 +79,14 @@ char keyboard_buffer_get(void) {
 }
 
 // Función para verificar si hay caracteres en el buffer
-int keyboard_buffer_has_data(void) {
+int keyboard_buffer_has_data(void) 
+{
     return keyboard_buffer_head != keyboard_buffer_tail;
 }
 
 // Función para limpiar el buffer
-void keyboard_buffer_clear(void) {
+void keyboard_buffer_clear(void) 
+{
     keyboard_buffer_head = 0;
     keyboard_buffer_tail = 0;
 }
@@ -90,9 +99,11 @@ void keyboard_handler64(void)
     uint8_t scancode = inb(0x60);
     
     // Solo procesar key press (scancode < 0x80)
-    if (scancode < 0x80) {
+    if (scancode < 0x80) 
+    {
         char ascii = translate_scancode(scancode);
-        if (ascii != 0) {
+        if (ascii != 0) 
+        {
             keyboard_buffer_add(ascii);
         }
     }
@@ -104,7 +115,8 @@ void keyboard_handler64(void)
 
 
 // Función para inicializar el teclado
-void keyboard_init(void) {
+void keyboard_init(void) 
+{
     // Limpiar buffer
     keyboard_buffer_head = 0;
     keyboard_buffer_tail = 0;
@@ -117,18 +129,22 @@ void keyboard_init(void) {
 // SISTEMA DE DESPERTAR DEL IDLE
 // ===============================================================================
 
-void set_idle_mode(int is_idle) {
+void set_idle_mode(int is_idle) 
+{
     system_in_idle_mode = is_idle;
-    if (is_idle) {
+    if (is_idle) 
+    {
         wake_requested = 0; // Reset wake request when entering idle
     }
 }
 
-int is_in_idle_mode(void) {
+int is_in_idle_mode(void) 
+{
     return system_in_idle_mode;
 }
 
-void wakeup_from_idle(void) {
+void wakeup_from_idle(void) 
+{
     if (system_in_idle_mode) {
         wake_requested = 1;
         system_in_idle_mode = 0;
@@ -139,10 +155,12 @@ void wakeup_from_idle(void) {
     }
 }
 
-int is_wake_requested(void) {
+int is_wake_requested(void) 
+{
     return wake_requested;
 }
 
-void clear_wake_request(void) {
+void clear_wake_request(void) 
+{
     wake_requested = 0;
 }
