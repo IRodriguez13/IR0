@@ -1,6 +1,6 @@
 // kernel.c - kernel initialization routine
-#include "../includes/ir0/print.h"
-#include "../includes/ir0/logging.h"
+#include <ir0/print.h>
+#include <ir0/logging.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -25,7 +25,7 @@ extern void idt_load64(void);
 extern void pic_remap64(void);
 extern void pic_unmask_irq(uint8_t irq);
 extern int start_init_process(void);
-extern void init_proc_1(void);
+extern void init_1(void);
 extern void switch_to_user_mode(void *entry_point);
 
 void kmain_x64(void)
@@ -90,7 +90,7 @@ void kmain_x64(void)
     print("Switching to user mode...\n");
     
     __asm__ volatile("sti");
-    switch_to_user_mode((void*)init_proc_1);
+    switch_to_user_mode((void*)init_1);
 
     // Should never return
     for (;;) __asm__ volatile("hlt");
