@@ -11,7 +11,7 @@ BIN_SRC = bin
 BUILD_DIR = build
 
 # Libc object files
-LIBC_OBJS = $(BUILD_DIR)/syscalls.o $(BUILD_DIR)/stdio.o
+LIBC_OBJS = $(BUILD_DIR)/syscalls.o $(BUILD_DIR)/stdio.o $(BUILD_DIR)/malloc.o
 
 # Programs
 PROGRAMS = $(BUILD_DIR)/echo
