@@ -1,14 +1,15 @@
-; ===========================================================================
-; boot_x64.asm - Arranque mínimo para x86-64 con Multiboot
-; ===========================================================================
-; Hace SOLO lo indispensable:
-;  - Verifica Multiboot
-;  - Configura stack inicial
-;  - Configura paginación mínima (32 MiB, 2MiB pages)
-;  - Habilita Long Mode
-;  - Carga GDT mínima
-;  - Salta a modo 64-bit y llama a kmain_x64
-; ===========================================================================
+; SPDX-License-Identifier: GPL-3.0-only
+;/**
+; * IR0 Kernel — Core system software
+; * Copyright (C) 2025  Iván Rodriguez
+; *
+; * This file is part of the IR0 Operating System.
+; * Distributed under the terms of the GNU General Public License v3.0.
+; * See the LICENSE file in the project root for full license information.
+; *
+; * File: boot_x64.asm
+; * Description: x86-64 boot loader with long mode setup, paging, and kernel entry
+; */
 
 ; --------------------------
 ; Multiboot header
@@ -36,7 +37,7 @@ section .text
 [BITS 32]
 
 global _start
-extern kmain_x64
+extern kmain
 
 ; Segmento de texto principal
 _start:
@@ -108,7 +109,7 @@ modo_64bit:
     mov rsp, 0x8FF00
 
     ; Salto al  kernel 
-    call kmain_x64
+    call kmain
 
 .halt: ; Si retorno panic en bajo  nivel.
     cli
@@ -169,3 +170,7 @@ gdt_descriptor:
 ; Selectores
 CODE_SEL equ 0x08
 DATA_SEL equ 0x10
+; ===============================================================================
+; GNU STACK SECTION - Prevents executable stack warning
+; ===============================================================================
+section .note.GNU-stack noalloc noexec nowrite progbits

@@ -962,3 +962,4 @@ int scheduler_ready(void) {
     return (active_scheduler_type != SCHEDULER_NONE) && 
            (current_scheduler.init != NULL);
 }
+

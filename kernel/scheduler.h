@@ -40,3 +40,16 @@ int scheduler_ready(void);       // Verificar si scheduler está listo
 #ifndef MAX_TASKS
 #define MAX_TASKS 256 // Máximo número de tareas para evitar loops infinitos
 #endif
+
+// ===============================================================================
+// PROCESS MANAGEMENT INTERFACE  
+// ===============================================================================
+
+// Forward declaration for process_t
+struct process;
+
+/**
+ * Add a process to the scheduler
+ * Wrapper around add_task for process_t structures
+ */
+void scheduler_add_process(struct process *proc);

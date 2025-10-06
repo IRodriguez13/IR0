@@ -5,8 +5,8 @@ This directory contains the core kernel functionality and main subsystems for IR
 ## Components
 
 ### Core Files
-- `kernel.c` - Main kernel initialization, driver setup, and entry point
-- `init.c` - PID 1 init process (mini-systemd) with service management
+- `main.c` - Main kernel initialization and user-space transition routines
+- `init.c` - PID 1 init process "init_1" with service management
 - `process.c` - Complete process lifecycle management with fork/exec/wait
 - `syscalls.c` - 23 implemented system calls with INT 0x80 interface
 - `shell.c` - Interactive shell running in Ring 3 user mode

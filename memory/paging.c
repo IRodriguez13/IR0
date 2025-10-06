@@ -5,14 +5,13 @@
 #include "paging.h"
 #include <string.h>
 #include "allocator.h"
+#include "../kernel/process.h"
 
 // ===============================================================================
 //                              PAGE TABLE STRUCTURES
 // ===============================================================================
 
-// Punteros a tablas, alineadas a 4KiB
-__attribute__((aligned(4096), section(".paging"))) static uint64_t PML4[512];
-__attribute__((aligned(4096))) static uint64_t PDPT[512];
+// Page directory for identity mapping (used by setup functions)
 __attribute__((aligned(4096))) static uint64_t PD[512];
 
 // ===============================================================================
@@ -96,10 +95,6 @@ int is_paging_enabled(void)
     return (cr0 & 0x80000000) != 0;
 }
 
-// ===============================================================================
-// PAGE MAPPING (FULL IMPLEMENTATION)
-// ===============================================================================
-
 /**
  * Simple page table getter - only returns existing tables
  * NO dynamic allocation to avoid complexity
@@ -114,7 +109,7 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
     // Check if it's a huge page (2MB)
     if (table[index] & (1ULL << 7))
     {
-        return NULL; // Can't walk into huge pages
+        return NULL; 
     }
 
     // Return physical address (identity mapped)
@@ -221,13 +216,6 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
     // Agregar flag de usuario
     flags |= PAGE_USER;
 
-    print("map_user_region: Mapping ");
-    print_uint32(size);
-    print(" bytes at 0x");
-    print_hex64(virtual_start);
-    print(" with flags 0x");
-    print_hex64(flags);
-    print("\n");
 
     // Mapear cada página
     for (size_t offset = 0; offset < size; offset += 0x1000)
@@ -235,17 +223,12 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
         uintptr_t virt_addr = virtual_start + offset;
 
         // Asignar página física usando kmalloc (simplificado)
-        // En un kernel real, esto usaría un allocator de páginas físicas
         extern void *kmalloc(size_t size);
         uintptr_t phys_addr = (uintptr_t)kmalloc(0x1000);
 
-        print_paging_status();
-        delay_ms(5000);
 
         if (phys_addr == 0)
         {
-            print("map_user_region: Failed to allocate physical page\n");
-            delay_ms(4000);
             panic("Failed to allocate physical page");
             return -1;
         }
@@ -253,124 +236,10 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
         // Mapear la página
         if (map_page(virt_addr, phys_addr, flags) != 0)
         {
-            print("map_user_region: Failed to map page\n");
-            delay_ms(4000);
             panic("Failed to map page");
             return -1;
         }
     }
 
     return 0;
-}
-
-// ===============================================================================
-// DEBUG FUNCTIONS
-// ===============================================================================
-
-void print_paging_status(void)
-{
-    uint64_t cr0, cr3, cr4;
-
-    asm volatile("mov %%cr0, %0" : "=r"(cr0));
-    asm volatile("mov %%cr3, %0" : "=r"(cr3));
-    asm volatile("mov %%cr4, %0" : "=r"(cr4));
-
-    log_info_fmt("PAGING", "CR0: 0x%llx (PG: %s)", cr0, (cr0 & 0x80000000) ? "ON" : "OFF");
-    log_info_fmt("PAGING", "CR3: 0x%llx", cr3);
-    log_info_fmt("PAGING", "CR4: 0x%llx", cr4);
-}
-
-void dump_page_tables(void)
-{
-    for (int i = 0; i < 4; i++)
-    {
-        log_info_fmt("PAGING", "PML4[%d]: 0x%llx", i, PML4[i]);
-    }
-
-    for (int i = 0; i < 4; i++)
-    {
-        log_info_fmt("PAGING", "PDPT[%d]: 0x%llx", i, PDPT[i]);
-    }
-
-    for (int i = 0; i < 8; i++)
-    {
-        log_info_fmt("PAGING", "PD[%d]: 0x%llx", i, PD[i]);
-    }
-}
-
-/**
- * Verificar integridad del sistema de paginación
- */
-int verify_paging_integrity(void)
-{
-    log_info("PAGING", "=== PAGING INTEGRITY CHECK ===");
-
-    // 1. Verificar que paging está habilitado
-    if (!is_paging_enabled())
-    {
-        log_error("PAGING", "Paging not enabled!");
-        return 0;
-    }
-
-    // 2. Verificar que CR3 apunta a PML4
-    uint64_t cr3 = get_current_page_directory();
-    if (cr3 != (uint64_t)PML4)
-    {
-        log_error_fmt("PAGING", "CR3 mismatch: 0x%llx != 0x%llx", cr3, (uint64_t)PML4);
-        return 0;
-    }
-
-    // 3. Verificar entradas PML4
-    if ((PML4[0] & PAGE_PRESENT) == 0)
-    {
-        log_error("PAGING", "PML4[0] not present!");
-        return 0;
-    }
-
-    // 4. Verificar entradas PDPT
-    if ((PDPT[0] & PAGE_PRESENT) == 0)
-    {
-        log_error("PAGING", "PDPT[0] not present!");
-        return 0;
-    }
-
-    // 5. Verificar entradas PD (primeras 8)
-    for (int i = 0; i < 8; i++)
-    {
-        if ((PD[i] & PAGE_PRESENT) == 0)
-        {
-            log_error_fmt("PAGING", "PD[%d] not present!", i);
-            return 0;
-        }
-        if ((PD[i] & PAGE_SIZE_2MB_FLAG) == 0)
-        {
-            log_error_fmt("PAGING", "PD[%d] not 2MB page!", i);
-            return 0;
-        }
-    }
-
-    log_info("PAGING", "✓ Paging integrity verified");
-    return 1;
-}
-
-/**
- * Test de acceso a memoria fuera del rango mapeado
- * Debe causar page fault si el paging funciona correctamente
- */
-void test_page_fault_protection(void)
-{
-    log_info("PAGING", "=== PAGE FAULT PROTECTION TEST ===");
-
-    // Intentar acceder a memoria fuera del rango mapeado (16 MiB)
-    volatile uint64_t *test_addr = (volatile uint64_t *)0x2000000; // 32 MiB
-
-    log_info("PAGING", "Testing access to unmapped memory (should cause page fault)...");
-    log_info_fmt("PAGING", "Attempting to read from 0x%llx", (uint64_t)test_addr);
-
-    // Este acceso debería causar page fault si el paging funciona
-    // Si llegamos aquí sin page fault, algo está mal
-    uint64_t value = *test_addr;
-
-    log_error("PAGING", "WARNING: Access to unmapped memory succeeded!");
-    log_error_fmt("PAGING", "Read value: 0x%llx (this should not happen)", value);
 }

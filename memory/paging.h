@@ -115,3 +115,27 @@ void test_page_fault_protection(void);
  * Only call AFTER paging is completely configured
  */
 void verify_paging_setup_safe(void);
+// ===============================================================================
+// PROCESS PAGE DIRECTORY MANAGEMENT
+// ===============================================================================
+
+// Forward declaration for process_t
+struct process;
+
+/**
+ * Create a new page directory for a user process
+ * Returns physical address of the new PML4 table
+ */
+uint64_t create_process_page_directory(void);
+
+/**
+ * Destroy a process page directory
+ * Frees the PML4 table and associated user pages
+ */
+void destroy_process_page_directory(uint64_t *pml4);
+
+/**
+ * Copy memory from parent process to child process
+ * Used for fork() implementation
+ */
+int copy_process_memory(struct process *parent, struct process *child);
