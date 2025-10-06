@@ -1,3 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: sound_blaster.c
+ * Description: Sound Blaster 16 audio driver with DMA support and 8/16-bit playback
+ */
+
 #include "sound_blaster.h"
 #include <ir0/print.h>
 #include <stddef.h>
@@ -70,8 +83,9 @@ bool sb16_reset_dsp(void)
     // Send reset command
     outb(SB16_RESET_PORT, 1);
     
-    // Wait a bit
-    for (volatile int i = 0; i < 1000; i++);
+    // Wait for reset to take effect (1ms)
+    extern void udelay(uint32_t microseconds);
+    udelay(1000);
     
     // Clear reset
     outb(SB16_RESET_PORT, 0);
@@ -85,7 +99,7 @@ bool sb16_reset_dsp(void)
                 return true;
             }
         }
-        for (volatile int i = 0; i < 100; i++);
+        udelay(100); // Wait 100 microseconds
     }
     
     return false;
@@ -165,8 +179,16 @@ int sb16_create_sample(sb16_sample_t *sample, uint8_t *data, uint32_t size,
         return -1;
     }
     
-    // Allocate memory for sample data (in a real kernel, use proper memory allocation)
-    sample->data = data; // For now, just reference the provided data
+    // Allocate memory for sample data
+    extern void *kmalloc(size_t size);
+    sample->data = (uint8_t*)kmalloc(size);
+    if (!sample->data) {
+        return -1; // Memory allocation failed
+    }
+    
+    // Copy the audio data to our allocated buffer
+    extern void *memcpy(void *dest, const void *src, size_t n);
+    memcpy(sample->data, data, size);
     sample->size = size;
     sample->sample_rate = sample_rate;
     sample->channels = channels;
@@ -194,8 +216,12 @@ void sb16_destroy_sample(sb16_sample_t *sample)
         sb16_stop_playback();
     }
     
-    // In a real implementation, free the allocated memory
-    sample->data = NULL;
+    // Free the allocated memory
+    if (sample->data) {
+        extern void kfree(void *ptr);
+        kfree(sample->data);
+        sample->data = NULL;
+    }
     sample->size = 0;
     sample->is_playing = false;
 }
@@ -322,7 +348,7 @@ bool sb16_dsp_write(uint8_t data)
             outb(SB16_WRITE_DATA, data);
             return true;
         }
-        for (volatile int i = 0; i < 10; i++);
+        udelay(10); // Wait 10 microseconds
     }
     
     return false;
@@ -383,4 +409,62 @@ void sb16_irq_handler(void)
         sb16_state.current_sample->is_playing = false;
         sb16_state.current_sample = NULL;
     }
+}
+
+/**
+ * Microsecond delay function for Sound Blaster timing
+ * Uses CPU timing for precise delays
+ */
+void udelay(uint32_t microseconds) {
+    // Detect CPU frequency using PIT timer calibration
+    static uint64_t cpu_freq_mhz = 0;
+    
+    if (cpu_freq_mhz == 0) {
+        // Use PIT timer for calibration (1.193182 MHz base frequency)
+        const uint32_t pit_frequency = 1193182;
+        const uint16_t pit_divisor = 1193; // ~1ms interval
+        
+        // Program PIT channel 0 for one-shot mode
+        outb(0x43, 0x30); // Channel 0, lobyte/hibyte, mode 0
+        outb(0x40, pit_divisor & 0xFF);
+        outb(0x40, (pit_divisor >> 8) & 0xFF);
+        
+        // Read initial TSC
+        uint64_t tsc_start, tsc_end;
+        __asm__ volatile("rdtsc" : "=A"(tsc_start));
+        
+        // Wait for PIT to count down
+        uint16_t pit_count;
+        do {
+            outb(0x43, 0x00); // Latch count
+            pit_count = inb(0x40);
+            pit_count |= (inb(0x40) << 8);
+        } while (pit_count > 100); // Wait until near zero
+        
+        // Read final TSC
+        __asm__ volatile("rdtsc" : "=A"(tsc_end));
+        
+        // Calculate frequency
+        uint64_t tsc_cycles = tsc_end - tsc_start;
+        uint64_t time_us = (pit_divisor * 1000000ULL) / pit_frequency;
+        cpu_freq_mhz = (tsc_cycles * 1000000ULL) / (time_us * 1000000ULL);
+        
+        // Sanity check: frequency should be between 100MHz and 10GHz
+        if (cpu_freq_mhz < 100 || cpu_freq_mhz > 10000) {
+            // Fallback to reasonable default
+            cpu_freq_mhz = 2000; // 2GHz default
+        }
+    }
+    uint64_t cycles = (uint64_t)microseconds * cpu_freq_mhz;
+    
+    // Use RDTSC for precise timing
+    uint64_t start_tsc, current_tsc;
+    
+    // Read Time Stamp Counter
+    __asm__ volatile("rdtsc" : "=A"(start_tsc));
+    
+    do {
+        __asm__ volatile("rdtsc" : "=A"(current_tsc));
+        __asm__ volatile("pause"); // CPU hint for spin loops
+    } while ((current_tsc - start_tsc) < cycles);
 }

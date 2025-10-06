@@ -1,9 +1,3 @@
-// ===============================================================================
-// IR0 KERNEL ARCHITECTURE CONFIGURATION
-// ===============================================================================
-// This file provides architecture detection and configuration for portability
-// Supports: x86-32, x86-64, ARM-32, ARM-64 (future)
-
 #pragma once
 
 // ===============================================================================

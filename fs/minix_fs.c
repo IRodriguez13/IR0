@@ -11,6 +11,10 @@
 #include <stdint.h>
 #include <string.h>
 
+// External memory functions
+extern void *kmalloc(size_t size);
+extern void kfree(void *ptr);
+
 // Definir constantes faltantes
 #define MINIX_SUPER_MAGIC 0x137F
 #define EIO 5 // Input/output error
@@ -1561,4 +1565,92 @@ int minix_fs_rmdir(const char *path) {
   print("' removed successfully\n");
 
   return 0;
+}
+
+/**
+ * Read entire file into memory - for ELF loader support
+ * This function reads a complete file and allocates memory for it
+ */
+int minix_fs_read_file(const char *path, void **data, size_t *size) {
+    if (!path || !data || !size) {
+        return -1;
+    }
+    
+    // Find the file inode
+    uint16_t inode_num = minix_fs_get_inode_number(path);
+    if (inode_num == 0) {
+        return -1; // File not found
+    }
+    
+    // Read the inode
+    minix_inode_t inode;
+    if (minix_read_inode(inode_num, &inode) != 0) {
+        return -1;
+    }
+    
+    // Check if it's a regular file
+    if (!(inode.i_mode & MINIX_IFREG)) {
+        return -1; // Not a regular file
+    }
+    
+    // Allocate memory for file content
+    *size = inode.i_size;
+    *data = kmalloc(*size);
+    if (!*data) {
+        return -1; // Memory allocation failed
+    }
+    
+    // Read file content
+    uint8_t *buffer = (uint8_t *)*data;
+    size_t bytes_read = 0;
+    
+    // Read direct zones (first 7 zones)
+    for (int i = 0; i < 7 && bytes_read < *size; i++) {
+        if (inode.i_zone[i] == 0) {
+            continue;
+        }
+        
+        uint8_t block_buffer[MINIX_BLOCK_SIZE];
+        if (minix_read_block(inode.i_zone[i], block_buffer) != 0) {
+            kfree(*data);
+            return -1;
+        }
+        
+        size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE) ? 
+                               MINIX_BLOCK_SIZE : (*size - bytes_read);
+        memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+        bytes_read += bytes_to_copy;
+    }
+    
+    // Handle indirect zones if needed (zone[7] and zone[8])
+    if (bytes_read < *size && inode.i_zone[7] != 0) {
+        // Single indirect zone
+        uint8_t indirect_buffer[MINIX_BLOCK_SIZE];
+        if (minix_read_block(inode.i_zone[7], indirect_buffer) != 0) {
+            kfree(*data);
+            return -1;
+        }
+        
+        uint16_t *zone_list = (uint16_t *)indirect_buffer;
+        int num_zones = MINIX_BLOCK_SIZE / sizeof(uint16_t);
+        
+        for (int i = 0; i < num_zones && bytes_read < *size; i++) {
+            if (zone_list[i] == 0) {
+                continue;
+            }
+            
+            uint8_t block_buffer[MINIX_BLOCK_SIZE];
+            if (minix_read_block(zone_list[i], block_buffer) != 0) {
+                kfree(*data);
+                return -1;
+            }
+            
+            size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE) ? 
+                                   MINIX_BLOCK_SIZE : (*size - bytes_read);
+            memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+            bytes_read += bytes_to_copy;
+        }
+    }
+    
+    return 0;
 }

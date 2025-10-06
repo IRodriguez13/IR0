@@ -111,7 +111,7 @@ SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 # KERNEL OBJECTS (CONSOLIDATED)
 # ===============================================================================
 KERNEL_OBJS = \
-    kernel/kernel.o \
+	kernel/main.o \
     kernel/init.o \
     kernel/process.o \
     kernel/scheduler.o \
@@ -141,6 +141,8 @@ INTERRUPT_OBJS = \
 DRIVER_OBJS = \
     drivers/IO/ps2.o \
     drivers/IO/ps2_mouse.o \
+    drivers/audio/sound_blaster.o \
+    drivers/dma/dma.o \
     drivers/serial/serial.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
@@ -150,9 +152,7 @@ DRIVER_OBJS = \
     drivers/timer/hpet/find_hpet.o \
     drivers/timer/lapic/lapic.o \
     drivers/storage/ata.o \
-    drivers/video/vbe.o \
-    drivers/audio/sound_blaster.o \
-    drivers/dma/dma.o
+    drivers/video/vbe.o
 
 FS_OBJS = \
     fs/vfs.o \
@@ -172,7 +172,7 @@ ARCH_OBJS = \
     kernel/scheduler/switch/switch_x64.o
 
 SETUP_OBJS = \
-    setup/kernel_config.o
+	setup/kconfig.o
 
 # All objects
 ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \

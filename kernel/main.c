@@ -1,4 +1,16 @@
-// kernel.c - kernel initialization routine
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: main.c
+ * Description: Kernel initialization and user-space transition routines
+ */
+
 #include <ir0/print.h>
 #include <ir0/logging.h>
 #include <stdbool.h>
@@ -6,8 +18,6 @@
 #include <drivers/IO/ps2_mouse.h>
 #include <drivers/audio/sound_blaster.h>
 
-// Main kernel entry point from boot
-// delay_ms is already available from print.h
 
 // Forward declarations for subsystem init functions
 extern void gdt_install(void);
@@ -30,7 +40,7 @@ extern int start_init_process(void);
 extern void init_1(void);
 extern void switch_to_user_mode(void *entry_point);
 
-void kmain_x64(void)
+void kmain(void)
 {
     // Initialize GDT and TSS first
     gdt_install();
