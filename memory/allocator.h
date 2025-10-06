@@ -37,3 +37,6 @@ void simple_alloc_stats(size_t *total, size_t *used, size_t *allocs);
 
 // Trace allocation
 void simple_alloc_trace(void);
+// Aligned allocation functions
+void *kmalloc_aligned(size_t size, size_t alignment);
+void kfree_aligned(void *ptr);

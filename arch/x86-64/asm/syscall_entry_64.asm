@@ -73,3 +73,8 @@ syscall_entry_asm:
     
     ; Return to user mode
     iretq
+    
+; ===============================================================================
+; GNU STACK SECTION - Prevents executable stack warning
+; ===============================================================================
+section .note.GNU-stack noalloc noexec nowrite progbits

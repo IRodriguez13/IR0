@@ -317,3 +317,8 @@ invalidate_tlb_x64:
 flush_cache_x64:
     wbinvd                   ; Write back and invalidate cache
     ret
+
+; ===============================================================================
+; GNU STACK SECTION - Prevents executable stack warning
+; ===============================================================================
+section .note.GNU-stack noalloc noexec nowrite progbits

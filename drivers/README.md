@@ -113,7 +113,7 @@ This directory contains all hardware drivers for the IR0 kernel, organized by de
 ## Driver Architecture
 
 ### Initialization
-All drivers are initialized during kernel boot in `kernel/kernel.c`:
+All drivers are initialized during kernel boot in `kernel/main.c`:
 ```c
 // Driver initialization sequence
 ps2_init();           // PS/2 controller

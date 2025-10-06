@@ -1,6 +1,18 @@
-// Real malloc/free allocator with free-list
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: allocator.c
+ * Description: Kernel heap allocator with free-list implementation for dynamic memory management
+ */
+
 #include "allocator.h"
-#include "../includes/ir0/print.h"
+#include <ir0/print.h>
 
 // Block header for free-list allocator
 typedef struct block_header
@@ -227,4 +239,60 @@ void *krealloc(void *ptr, size_t new_size)
 void heap_init(void)
 {
     simple_alloc_init();
+}
+// ===============================================================================
+// ALIGNED ALLOCATION FOR PAGE DIRECTORIES
+// ===============================================================================
+
+/**
+ * Allocate aligned memory for page tables
+ * Required for page directory structures that must be 4KB aligned
+ */
+void *kmalloc_aligned(size_t size, size_t alignment) {
+    if (!allocator.initialized) {
+        simple_alloc_init();
+    }
+
+    if (size == 0 || alignment == 0) {
+        return NULL;
+    }
+
+    // Ensure alignment is power of 2
+    if ((alignment & (alignment - 1)) != 0) {
+        return NULL;
+    }
+
+    // Allocate extra space to ensure we can align
+    size_t total_size = size + alignment - 1 + sizeof(void*);
+    void *raw_ptr = kmalloc(total_size);
+    if (!raw_ptr) {
+        return NULL;
+    }
+
+    // Calculate aligned address
+    uintptr_t raw_addr = (uintptr_t)raw_ptr;
+    uintptr_t aligned_addr = (raw_addr + sizeof(void*) + alignment - 1) & ~(alignment - 1);
+    void *aligned_ptr = (void*)aligned_addr;
+
+    // Store original pointer just before aligned address
+    void **orig_ptr_storage = (void**)aligned_ptr - 1;
+    *orig_ptr_storage = raw_ptr;
+
+    return aligned_ptr;
+}
+
+/**
+ * Free aligned memory allocated with kmalloc_aligned
+ */
+void kfree_aligned(void *ptr) {
+    if (!ptr) {
+        return;
+    }
+
+    // Get original pointer stored before aligned address
+    void **orig_ptr_storage = (void**)ptr - 1;
+    void *orig_ptr = *orig_ptr_storage;
+
+    // Free the original allocation
+    kfree(orig_ptr);
 }

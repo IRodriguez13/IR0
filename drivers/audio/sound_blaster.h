@@ -119,4 +119,7 @@ void sb16_setup_dma_16bit(uint32_t buffer_addr, uint16_t length);
 // Interrupt handler
 void sb16_irq_handler(void);
 
+// Timing utilities
+void udelay(uint32_t microseconds);
+
 #endif // SOUND_BLASTER_H

@@ -126,3 +126,7 @@ isr_common_stub_64:
     ; Habilitar interrupciones y retornar
     sti
     iretq
+; ===============================================================================
+; GNU STACK SECTION - Prevents executable stack warning
+; ===============================================================================
+section .note.GNU-stack noalloc noexec nowrite progbits
