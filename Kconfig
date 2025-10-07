@@ -1,0 +1,216 @@
+#
+# IR0 Kernel Configuration
+#
+
+menu "General Configuration"
+
+    config LOCALVERSION
+        string "Local version - append to kernel release"
+        default ""
+        help
+          Append an extra string to the end of your kernel version.
+          This will show up when you type uname, for example.
+          The string you set here will be appended after the contents of
+          any files with a filename matching localversion* in your
+          object and source tree, in that order.
+
+endmenu
+
+menu "Processor type and features"
+
+    config ARCH_X86_64
+        bool "x86-64 architecture"
+        default y
+        help
+          This is the processor type of your CPU. This is used to optimize
+          performance. If you have a mixed system, you can select the CPU
+          type that you have.
+
+    config ENABLE_SMP
+        bool "Symmetric Multi-Processing (SMP) support"
+        default n
+        help
+          This enables support for systems with more than one CPU. If you have
+          a system with only one CPU, say N. If you have a system with more
+          than one CPU, say Y.
+
+endmenu
+
+menu "Memory Management"
+
+    config ENABLE_PAGING
+        bool "Paging support"
+        default y
+        help
+          This option enables the kernel to use paging to manage memory.
+          Paging is a memory management scheme that allows the physical
+          address space of a process to be noncontiguous.
+
+    config ENABLE_VM
+        bool "Virtual Memory"
+        default y
+        depends on ENABLE_PAGING
+        help
+          This option enables the virtual memory system, which allows
+          each process to have its own virtual address space.
+
+endmenu
+
+menu "Process Scheduler"
+
+    config ENABLE_SCHEDULER
+        bool "Enable Scheduler"
+        default y
+        help
+          This option enables the kernel's process scheduler. The scheduler
+          is responsible for deciding which runnable process will be executed
+          by the CPU next.
+
+    if ENABLE_SCHEDULER
+
+    config ENABLE_CFS_SCHEDULER
+        bool "CFS Scheduler (Completely Fair Scheduler)"
+        default y
+        help
+          This is the default scheduler used by the kernel. It handles CPU
+          resource allocation for executing processes, with the goal of
+          maximizing overall CPU utilization while maximizing interactive
+          performance.
+
+    config ENABLE_RR_SCHEDULER
+        bool "Round-Robin Scheduler"
+        default n
+        help
+          A simple scheduler that assigns time slices to each process in
+          equal portions and in order, handling all processes without priority.
+          Not currently implemented.
+
+    config ENABLE_PRIORITY_SCHEDULER
+        bool "Priority Scheduler"
+        default n
+        help
+          A priority-based scheduler where each process is assigned a priority
+          and the process with the highest priority is allowed to run first.
+          Not currently implemented.
+
+    config TICK_RATE_HZ
+        int "Timer frequency (Hz)"
+        range 100 1000
+        default 100
+        help
+          The frequency of the system timer interrupt, in Hz. Higher values
+          result in better timekeeping precision at the cost of more
+          frequent interrupts and thus higher overhead.
+
+    endif # ENABLE_SCHEDULER
+
+endmenu
+
+menu "File Systems"
+
+    config ENABLE_VFS
+        bool "Virtual File System (VFS) support"
+        default y
+        help
+          This option provides a unified interface for different file systems.
+          It allows the kernel to support multiple file system types.
+
+    if ENABLE_VFS
+
+    config ENABLE_MINIX_FS
+        bool "Minix file system support"
+        default y
+        help
+          Minix is a simple file system used in the Minix operating system.
+          It's useful for small disks and embedded systems.
+
+    config ENABLE_RAMDISK
+        bool "RAM disk support"
+        default y
+        help
+          Support for RAM disk devices that can be used for temporary storage
+          or as an initial root file system during boot.
+
+    endif # ENABLE_VFS
+
+endmenu
+
+menu "Device Drivers"
+
+    menu "Character devices"
+
+        config ENABLE_SERIAL_DRIVER
+            bool "Serial port driver"
+            default y
+            help
+              This enables support for serial ports, which can be used for
+              console output and debugging.
+
+        config ENABLE_KEYBOARD_DRIVER
+            bool "Keyboard driver"
+            default y
+            help
+              This enables support for PS/2 keyboards.
+
+    endmenu
+
+    menu "Block devices"
+
+        config ENABLE_ATA_DRIVER
+            bool "ATA disk driver"
+            default y
+            help
+              This enables support for ATA hard disks and ATAPI CD-ROMs.
+
+    endmenu
+
+    menu "Graphics"
+
+        config ENABLE_VGA_DRIVER
+            bool "VGA video driver"
+            default y
+            help
+              This enables support for VGA-compatible video cards.
+
+    endmenu
+
+endmenu
+
+menu "Kernel Debugging"
+
+    config ENABLE_DEBUG
+        bool "Kernel debugging"
+        default y
+        help
+          This enables kernel debugging features. These features are useful
+          for kernel developers but may impact performance.
+
+    if ENABLE_DEBUG
+
+    config DEBUG_LEVEL
+        int "Debug level (0-3)"
+        range 0 3
+        default 1
+        help
+          This sets the verbosity of debug messages in the kernel.
+          0 = No debug messages
+          1 = Critical errors only
+          2 = Warnings and errors
+          3 = Verbose debug output
+
+    config DEBUG_SERIAL
+        bool "Enable serial debug output"
+        default y
+        help
+          This enables debug output to the first serial port (COM1).
+
+    config DEBUG_ASSERT
+        bool "Enable assertions"
+        default y
+        help
+          This enables runtime assertions in the kernel code. Disabling this
+          may improve performance but makes debugging more difficult.
+
+    endif # ENABLE_DEBUG
+
+endmenu
