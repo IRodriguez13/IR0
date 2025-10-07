@@ -33,3 +33,4 @@ disk.img.backup.1759425883
 disk.img.backup.1759425351
 iso/boot/grub/grub.cfg
 userspace/build/echo
+.config
