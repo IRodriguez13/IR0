@@ -10,11 +10,8 @@ ARCH := x86-64
 BUILD_TARGET := desktop
 CFLAGS_TARGET := -DIR0_DESKTOP
 
-# Información de versión del kernel
-IR0_VERSION_MAJOR := 1
-IR0_VERSION_MINOR := 0
-IR0_VERSION_PATCH := 0
-IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PATCH)
+# Kernel version information (v0.0.1 pre-rc1)
+IR0_VERSION_STRING := 0.0.1-pre-rc1
 IR0_BUILD_DATE := $(shell date +%Y-%m-%d)
 IR0_BUILD_TIME := $(shell date +%H:%M:%S)
 
@@ -182,6 +179,15 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
 # BUILD RULES
 # ===============================================================================
 
+# Include configuration if it exists
+-include .config
+
+# Add configuration defines to CFLAGS if .config exists
+ifneq (,$(wildcard .config))
+    CFLAGS += $(addprefix -D,$(shell grep -v '^\#' .config 2>/dev/null | grep '=y' | cut -d'=' -f1))
+    CFLAGS += $(foreach c, $(shell grep -v '^\#' .config 2>/dev/null | grep -v '=y' | grep -v '^$$'), -D$(c))
+endif
+
 # Compile C files
 %.o: %.c
 	@echo "  CC      $<"
@@ -272,14 +278,16 @@ debug: kernel-x64.iso
 create-disk:
 	@echo "🔧 Creating virtual disk..."
 	@./scripts/create_disk.sh
-
 # ===============================================================================
 # CLEAN
 # ===============================================================================
 
 clean: userspace-clean
-	@echo "🧹 Cleaning build artifacts..."
-	@find . -name "*.o" -type f -delete
+	@echo "  CLEAN   Object files and binaries"
+	@find . -name '*.o' -delete
+	@rm -f kernel-x64.bin kernel-x64.iso
+	@echo "  CLEAN   Configuration files"
+	@rm -f .config include/generated/autoconf.h
 	@find . -name "*.d" -type f -delete
 	@find . -name "*.bin" -type f -delete
 	@find . -name "*.iso" -type f -delete
@@ -291,16 +299,19 @@ clean: userspace-clean
 # HELP
 # ===============================================================================
 
+# Include menuconfig Makefile if it exists
+-include setup/Makefile.menuconfig
+
 help:
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║       IR0 KERNEL - BUILD SYSTEM (x86-64 ONLY)             ║"
-	@echo "╚════════════════════════════════════════════════════════════╝"
-	@echo ""
+	@echo "╚══════════════════════════════════════════════════════════╝"
 	@echo "📦 Build:"
 	@echo "  make ir0              Build kernel ISO + userspace programs"
 	@echo "  make clean            Clean all build artifacts"
 	@echo "  make userspace-programs  Build only userspace programs"
 	@echo "  make userspace-clean     Clean only userspace programs"
+	@echo "  make menuconfig       Configure kernel build options (requires Python 3 and tkinter)"
 	@echo ""
 	@echo "🚀 Run:"
 	@echo "  make run-kernel       Run with GUI + disk (recommended)"
