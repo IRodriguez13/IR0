@@ -1,0 +1,221 @@
+#
+# IR0 Kernel Configuration
+#
+
+mainmenu "IR0 Kernel Configuration"
+
+# Core Features
+config IR0_DEBUG
+    bool "Enable debug mode"
+    default y
+    help
+      Enable kernel debug messages and assertions.
+
+# Subsystems
+menu "Subsystems"
+
+config SUBSYS_PROCESS
+    bool "Process Management"
+    default y
+    help
+      Core process management including:
+      - Process creation, scheduling, and termination
+      - Context switching and process state management
+      - Basic process isolation and protection
+      Required for multi-tasking support.
+
+config SUBSYS_FS
+    bool "File System"
+    default y
+    help
+      Virtual File System (VFS) layer and file system implementations.
+      Includes:
+      - VFS abstraction layer
+      - In-memory file system (tmpfs)
+      - Block device support
+      - File operations and permissions
+      Required for persistent storage access.
+
+config SUBSYS_NET
+    bool "Networking"
+    default n
+    help
+      Network protocol stack implementation (experimental).
+      Includes:
+      - TCP/IP protocol suite
+      - Network device drivers
+      - Socket interface
+      - Basic network utilities
+      Enables network communication when combined with drivers.
+
+endmenu
+
+# Timer Subsystem
+menu "Timer and Clocksource"
+
+config TIMER_PIT
+    bool "Programmable Interval Timer (PIT)"
+    default y
+    help
+      Legacy 8254 Programmable Interval Timer support.
+      Features:
+      - 1.193182 MHz base frequency
+      - Multiple operating modes
+      - Used for system clock and scheduling
+      - Required for preemptive multitasking
+      Recommended unless using HPET or APIC timers.
+
+config TIMER_HPET
+    bool "High Precision Event Timer (HPET)"
+    default n
+    help
+      Modern High Precision Event Timer support.
+      Features:
+      - Sub-microsecond resolution
+      - Multiple comparators
+      - 64-bit main counter
+      - Better power efficiency than PIT
+      Recommended for modern hardware with ACPI support.
+
+config TIMER_LAPIC
+    bool "Local APIC Timer"
+    default y if ARCH_X86_64
+    depends on ARCH_X86_64 || ARCH_X86_32
+    help
+      Local APIC Timer for per-CPU timing.
+      Features:
+      - Per-CPU timer interrupts
+      - Used for scheduler ticks
+      - Supports TSC-deadline mode
+      - More accurate than PIT
+      Recommended for SMP systems.
+
+config TIMER_TSC
+    bool "Time Stamp Counter (TSC)"
+    default y
+    depends on ARCH_X86_64 || ARCH_X86_32
+    help
+      High-resolution timestamp counter using CPU's TSC register.
+      Features:
+      - CPU cycle counter based
+      - Very high resolution
+      - Low overhead
+      - Requires constant TSC feature on modern CPUs
+      Used for high-precision timing.
+
+config TIMER_JIFFIES
+    bool "Jiffies-based timing"
+    default y
+    help
+      Traditional Linux-style jiffies timing.
+      Features:
+      - Simple counter of timer ticks
+      - Used for timeouts and delays
+      - Lower resolution but very efficient
+      Required for kernel timing functions.
+
+config TIMER_HZ
+    int "Timer frequency (HZ)"
+    range 100 1000
+    default 1000
+    help
+      System timer interrupt frequency in Hz.
+      Higher values give better time resolution but increase overhead.
+      Common values:
+      - 1000 Hz: Desktop systems (1ms resolution)
+      - 100 Hz: Servers and embedded systems (10ms resolution)
+      - 250 Hz: Balanced setting
+      Note: Affects scheduling granularity and power usage.
+
+endmenu
+
+# Drivers
+menu "Device Drivers"
+
+config DRV_KEYBOARD
+    bool "PS/2 Keyboard"
+    default y
+    help
+      PS/2 keyboard controller driver with support for:
+      - Standard 102/104-key layouts
+      - Key press/release events
+      - Modifier keys (Shift, Ctrl, Alt)
+      - NumLock, CapsLock, ScrollLock indicators
+      - Common keyboard shortcuts
+      Required for text input in console mode.
+
+config DRV_VGA
+    bool "VGA Text Mode Driver"
+    default y
+    help
+      VGA-compatible text mode display driver.
+      Features:
+      - 80x25 character text mode
+      - 16-color text attributes
+      - Hardware cursor support
+      - Scrolling and screen clearing
+      Basic display output for system messages and console.
+
+config DRV_IDE
+    bool "IDE/ATA Controller"
+    default y
+    help
+      IDE/ATA disk controller driver with support for:
+      - PIO and DMA transfer modes
+      - Master/Slave device detection
+      - LBA28/LBA48 addressing
+      - Basic disk read/write operations
+      Required for hard disk and CD-ROM access on legacy systems.
+
+config DRV_AUDIO
+    bool "PC Speaker/Audio"
+    default n
+    help
+      Basic audio output support including:
+      - PC Speaker beep and tone generation
+      - Basic sound synthesis
+      - System sound events
+      Note: Full sound card support requires additional drivers.
+
+endmenu
+
+# Architectures
+menu "Supported Architectures"
+
+config ARCH_X86_64
+    bool "x86-64 (64-bit)"
+    default y
+    help
+      64-bit x86 architecture support (AMD64/Intel 64).
+      Features:
+      - Long mode operation
+      - 64-bit registers and addressing
+      - 4-level paging
+      - SYSCALL/SYSRET instructions
+      Recommended for modern x86-64 processors.
+
+config ARCH_X86_32
+    bool "x86 (32-bit)"
+    default n
+    help
+      Legacy 32-bit x86 architecture support (i386+).
+      Features:
+      - Protected mode operation
+      - 4GB address space
+      - PAE support for >4GB RAM
+      - Legacy BIOS services
+      For older 32-bit only systems.
+
+config ARCH_ARM
+    bool "ARM (experimental)"
+    default n
+    help
+      Experimental ARM architecture support.
+      Currently supports:
+      - ARMv7-A and ARMv8-A profiles
+      - Basic exception handling
+      - UART for debugging
+      - Limited device tree support
+      Work in progress - not all features available.
+
+endmenu
