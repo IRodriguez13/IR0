@@ -48,6 +48,7 @@ void kmain(void)
     
     // Banner
     print("IR0 Kernel v0.0.1 Boot\n");
+    delay_ms(2500);
 
     // Initialize logging
     logging_init();
@@ -110,7 +111,7 @@ void kmain(void)
     log_subsystem_ok("USERMODE");
 
     print("Switching to user mode...\n");
-    
+    delay_ms(2500);
     __asm__ volatile("sti");
     switch_to_user_mode((void*)init_1);
 
