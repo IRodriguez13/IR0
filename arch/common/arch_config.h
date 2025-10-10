@@ -53,7 +53,7 @@
     #define ARCH_PAGING_METHOD "arm_paging"
     
 #else
-    #error "Arquitectura no soportada"
+    #error "ISA not supported"
 #endif
 
 // ===============================================================================
