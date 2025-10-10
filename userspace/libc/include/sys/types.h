@@ -1,5 +1,4 @@
-#ifndef SYS_TYPES_H
-#define SYS_TYPES_H
+#pragma once
 
 #include <stdint.h>
 
@@ -11,4 +10,3 @@ typedef uint32_t mode_t;
 typedef uint32_t uid_t;
 typedef uint32_t gid_t;
 
-#endif // SYS_TYPES_H
