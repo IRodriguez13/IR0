@@ -1,0 +1,27 @@
+name: Update LOC
+
+on:
+  push:
+    branches: [mainline]
+
+jobs:
+  contar-lineas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - run: sudo apt-get install -y cloc
+
+      - run: cloc --json . > loc.json
+
+      # 🔹 Paso de ping para despertar la API
+      - run: |
+          echo "Ping a la API para evitar el sleeping del server"
+          curl -s https://ir0-loc.onrender.com/ || true
+
+      # 🔹 Paso de POST del loc.json
+      - run: |
+          echo "Enviando loc.json a la API..."
+          curl -X POST https://ir0-loc.onrender.com/api/loc \
+               -H "Content-Type: application/json" \
+               -d @loc.json
