@@ -1,5 +1,4 @@
-#ifndef PS2_MOUSE_H
-#define PS2_MOUSE_H
+#pragma once
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -124,4 +123,3 @@ ps2_mouse_type_t ps2_mouse_detect_type(void);
 bool ps2_mouse_enable_wheel(void);
 bool ps2_mouse_enable_5buttons(void);
 
-#endif // PS2_MOUSE_H
