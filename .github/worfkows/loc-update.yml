@@ -16,8 +16,9 @@ jobs:
 
       # 🔹 Paso de ping para despertar la API
       - run: |
-          echo "Ping a la API para evitar el sleeping del server"
+          echo "Ping a la API para despertar el server..."
           curl -s https://ir0-loc.onrender.com/ || true
+          sleep 10
 
       # 🔹 Paso de POST del loc.json
       - run: |
