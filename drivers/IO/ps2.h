@@ -1,5 +1,4 @@
-#ifndef PS2_H
-#define PS2_H
+#pragma once
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -158,4 +157,3 @@ extern bool keyboard_shift_pressed;
 extern bool keyboard_ctrl_pressed;
 extern bool keyboard_alt_pressed;
 
-#endif // PS2_H
