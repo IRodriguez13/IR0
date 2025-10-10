@@ -1,5 +1,4 @@
-#ifndef UNISTD_H
-#define UNISTD_H
+#pragma once
 
 #include <stddef.h>
 #include <sys/types.h>
@@ -27,4 +26,3 @@ char *getcwd(char *buf, size_t size);
 void *sbrk(intptr_t increment);
 int brk(void *addr);
 
-#endif // UNISTD_H

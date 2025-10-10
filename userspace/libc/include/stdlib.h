@@ -1,5 +1,4 @@
-#ifndef STDLIB_H
-#define STDLIB_H
+#pragma once
 
 #include <stddef.h>
 
@@ -17,4 +16,3 @@ int system(const char *command);
 int atoi(const char *str);
 long atol(const char *str);
 
-#endif // STDLIB_H

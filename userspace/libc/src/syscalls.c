@@ -1,7 +1,7 @@
 // syscalls.c - System call wrappers for IR0 libc
 #include <stdint.h>
 #include <sys/types.h>
-#include <ir0/syscall.h> // Use kernel's syscall interface
+#include <ir0/syscall.h> 
 
 // System call implementations using ir0/syscall.h
 void exit(int status)
