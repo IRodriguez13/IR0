@@ -1,5 +1,4 @@
-#ifndef SYSCALLS_H
-#define SYSCALLS_H
+#pragma once
 
 #include <stdint.h>
 #include <stddef.h>
@@ -36,4 +35,3 @@ void syscalls_init(void);
 // Test function
 void test_user_function(void);
 
-#endif // SYSCALLS_H

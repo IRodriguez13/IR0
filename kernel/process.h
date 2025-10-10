@@ -1,5 +1,4 @@
-#ifndef PROCESS_H
-#define PROCESS_H
+#pragma once
 
 #include <stdint.h>
 #include <stddef.h>
@@ -111,4 +110,3 @@ struct file_descriptor {
     void *private_data;
 };
 
-#endif // PROCESS_H

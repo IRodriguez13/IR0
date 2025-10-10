@@ -9,7 +9,7 @@
 // Variable externa del task actual
 extern task_t *current_running_task;
 
-// Funciones de protección de interrupciones
+
 #ifdef __x86_64__
 static inline uint32_t interrupt_save_and_disable(void)
 {
@@ -48,9 +48,6 @@ static inline void interrupt_restore(uint32_t flags)
 #endif
 
 
-// ===============================================================================
-// CONFIGURACIONES CFS
-// ===============================================================================
 
 #define CFS_TARGETED_LATENCY 20000000ULL // 20ms en nanosegundos
 #define CFS_MIN_GRANULARITY 4000000ULL   // 4ms mínimo por proceso
@@ -114,9 +111,7 @@ static cfs_runqueue_t cfs_rq;
 static rb_node_t rb_node_pool[MAX_RB_NODES];
 static int rb_node_pool_index = 0;
 
-// ===============================================================================
-// FUNCIONES AUXILIARES RED-BLACK TREE -- Elegante por donde lo mires --
-// ===============================================================================
+
 static rb_node_t *rb_alloc_node(void)
 {
     // Disable interrupts para atomic operation
@@ -180,11 +175,6 @@ static void rb_compact_node_pool(void)
 
     rb_node_pool_index = write_index;
 
-    print("CFS: Pool compacted to ");
-    print_hex_compact(rb_node_pool_index);
-    print("/");
-    print_hex_compact(MAX_RB_NODES);
-    print(" nodes\n");
 }
 
 static void rb_free_node(rb_node_t *node)
@@ -353,9 +343,6 @@ static rb_node_t *rb_find_leftmost(rb_node_t *root)
     return root;
 }
 
-// ===============================================================================
-// FUNCIONES CFS CORE
-// ===============================================================================
 
 static uint32_t cfs_nice_to_weight(int nice)
 {
@@ -416,7 +403,6 @@ static void cfs_update_runqueue_stats(void)
     }
 
     // Actualizar estadísticas de carga (simplificado)
-    // En Linux real, esto usa exponential weighted moving average
     cfs_rq.load_avg = (cfs_rq.load_avg * 7 + cfs_rq.total_weight) / 8;
     cfs_rq.runnable_avg = (cfs_rq.runnable_avg * 7 + cfs_rq.nr_running) / 8;
 
@@ -569,11 +555,6 @@ void cfs_add_task_impl(task_t *task)
     if (!cfs_rq.leftmost || task->vruntime < cfs_rq.leftmost->key)
     {
         cfs_rq.leftmost = node;
-        print("CFS: New leftmost task PID ");
-        print_hex_compact(task->pid);
-        print(", vruntime ");
-        print_hex64(task->vruntime);
-        print("\n");
     }
 
     cfs_rq.nr_running++;
@@ -874,9 +855,6 @@ void cfs_dump_state(void)
     print("\n");
 }
 
-// ===============================================================================
-// EXPORT CFS OPERATIONS
-// ===============================================================================
 
 scheduler_ops_t cfs_scheduler_ops = {
     .type = SCHEDULER_CFS,
@@ -887,9 +865,6 @@ scheduler_ops_t cfs_scheduler_ops = {
     .task_tick = cfs_task_tick,
     .cleanup = cfs_cleanup,
     .private_data = &cfs_rq};
-// ===============================================================================
-// SCHEDULER INITIALIZATION (from scheduler_detection.c)
-// ===============================================================================
 
 // Global state flags
 scheduler_ops_t current_scheduler;
