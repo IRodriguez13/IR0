@@ -18,7 +18,7 @@ jobs:
       - run: |
           echo "Ping a la API para despertar el server..."
           curl -s https://ir0-loc.onrender.com/ || true
-          sleep 10
+          sleep 14
 
       # 🔹 Paso de POST del loc.json
       - run: |
