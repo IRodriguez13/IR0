@@ -1,10 +1,10 @@
-name: CI Pipeline for IR0 Kernel
+name: CI - IR0 Kernel
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ mainline, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ mainline, dev ]
 
 jobs:
   build-and-test:
@@ -25,5 +25,5 @@ jobs:
     - name: Run kernel (only on main branch)
       if: github.ref == 'refs/heads/main' && success()
       run: |
-        timeout 60 make run || echo "Run failed or timed out - this is expected in CI environments"
-      continue-on-error: true  # No fallar el pipeline si la ejecución falla
+        timeout 60 make run-kernel || echo "Run failed or timed out - this is expected in CI environments"
+      continue-on-error: true 
