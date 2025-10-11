@@ -13,10 +13,10 @@
  */
 
 #include "vfs.h"
-#include "../kernel/process.h"
-#include "../memory/allocator.h"
-#include "../memory/paging.h"
 #include "minix_fs.h"
+#include <kernel/process.h>
+#include <ir0/memory/allocator.h>
+#include <ir0/memory/paging.h>
 #include <string.h>
 
 // External memory functions

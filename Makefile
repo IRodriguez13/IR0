@@ -118,8 +118,9 @@ KERNEL_OBJS = \
     kernel/elf_loader.o
 
 MEMORY_OBJS = \
-    memory/allocator.o \
-    memory/paging.o
+    includes/ir0/memory/allocator.o \
+    includes/ir0/memory/paging.o \
+	includes/ir0/memory/kmem.o
 
 LIB_OBJS = \
     includes/ir0/print.o \
