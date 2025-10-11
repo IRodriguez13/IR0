@@ -1,4 +1,4 @@
-// kernel/scheduler/cfs_scheduler.c - IMPLEMENTACIÓN COMPLETA
+// kernel/scheduler/cfs_scheduler.c
 #include "scheduler_types.h"
 #include <ir0/print.h>
 #include <stddef.h>
@@ -8,7 +8,6 @@
 
 // Variable externa del task actual
 extern task_t *current_running_task;
-
 
 #ifdef __x86_64__
 static inline uint32_t interrupt_save_and_disable(void)
@@ -41,13 +40,6 @@ static inline void interrupt_restore(uint32_t flags)
     }
 }
 #endif
-
-// Debug logging macro
-#ifndef LOG_DEBUG
-#define LOG_DEBUG(fmt, ...) print("DEBUG: " fmt "\n")
-#endif
-
-
 
 #define CFS_TARGETED_LATENCY 20000000ULL // 20ms en nanosegundos
 #define CFS_MIN_GRANULARITY 4000000ULL   // 4ms mínimo por proceso
@@ -111,7 +103,6 @@ static cfs_runqueue_t cfs_rq;
 static rb_node_t rb_node_pool[MAX_RB_NODES];
 static int rb_node_pool_index = 0;
 
-
 static rb_node_t *rb_alloc_node(void)
 {
     // Disable interrupts para atomic operation
@@ -121,18 +112,6 @@ static rb_node_t *rb_alloc_node(void)
     {
         // Restore interrupts before fallback
         interrupt_restore(flags);
-
-        LOG_ERR("CFS: RB node pool exhausted!");
-        print(" (");
-        print_hex_compact(rb_node_pool_index);
-        print("/");
-        print_hex_compact(MAX_RB_NODES);
-        print(" nodes used)\n");
-
-        // Trigger automatic fallback to simpler scheduler
-        extern void scheduler_fallback_to_next(void);
-        scheduler_fallback_to_next();
-
         return NULL;
     }
 
@@ -142,20 +121,12 @@ static rb_node_t *rb_alloc_node(void)
     // Restore interrupts
     interrupt_restore(flags);
 
-    print("CFS: Allocated RB node ");
-    print_hex_compact(rb_node_pool_index);
-    print("/");
-    print_hex_compact(MAX_RB_NODES);
-    print("\n");
-
     return node;
 }
 
 // NUEVA FUNCIÓN: Compactación del pool de nodos
 static void rb_compact_node_pool(void)
 {
-    LOG_OK("CFS: Compacting RB node pool...");
-
     int write_index = 0;
 
     // Compactar pool eliminando nodos libres
@@ -174,7 +145,6 @@ static void rb_compact_node_pool(void)
     }
 
     rb_node_pool_index = write_index;
-
 }
 
 static void rb_free_node(rb_node_t *node)
@@ -342,7 +312,6 @@ static rb_node_t *rb_find_leftmost(rb_node_t *root)
         root = root->left;
     return root;
 }
-
 
 static uint32_t cfs_nice_to_weight(int nice)
 {
@@ -565,15 +534,6 @@ void cfs_add_task_impl(task_t *task)
     // Restore interrupts
     interrupt_restore(flags);
 
-    print("CFS: Task PID ");
-    print_hex_compact(task->pid);
-    print(" added (vruntime: ");
-    print_hex64(task->vruntime);
-    print(", weight: ");
-    print_hex_compact(weight);
-    print(", running: ");
-    print_hex_compact(cfs_rq.nr_running);
-    print(")\n");
 }
 
 void cfs_remove_task_impl(task_t *task)
@@ -762,10 +722,6 @@ task_t *unified_pick_next_task(void)
     return get_idle_task(); // Fallback
 }
 
-// ===============================================================================
-// FUNCIONES DE DEBUG
-// ===============================================================================
-
 void cfs_dump_state(void)
 {
     print_colored("=== CFS SCHEDULER STATE (COMPLETE) ===\n", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
@@ -855,7 +811,6 @@ void cfs_dump_state(void)
     print("\n");
 }
 
-
 scheduler_ops_t cfs_scheduler_ops = {
     .type = SCHEDULER_CFS,
     .name = "Completely Fair Scheduler (Full Implementation)",
@@ -875,13 +830,13 @@ int scheduler_cascade_init(void)
     // Only CFS - no fallbacks, no detection
     active_scheduler_type = SCHEDULER_CFS;
     current_scheduler = cfs_scheduler_ops;
-    
+
     if (current_scheduler.init)
     {
         current_scheduler.init();
         return 0;
     }
-    
+
     panic("CFS initialization failed");
     return -1;
 }
@@ -893,7 +848,8 @@ void scheduler_fallback_to_next(void)
 
 void add_task(task_t *task)
 {
-    if (task) cfs_add_task_impl(task);
+    if (task)
+        cfs_add_task_impl(task);
 }
 
 task_t *get_idle_task(void)
@@ -906,35 +862,38 @@ task_t *get_idle_task(void)
 // FUNCIONES DE DEBUG Y INFORMACIÓN
 // ===============================================================================
 
-void dump_scheduler_state(void) {
+void dump_scheduler_state(void)
+{
     print("Active scheduler: CFS (Completely Fair Scheduler)\n");
-    
+
     extern task_t *current_running_task;
-    if (current_running_task) {
+    if (current_running_task)
+    {
         print("Current task PID: ");
         print_uint32(current_running_task->pid);
         print(", vruntime: ");
         print_uint32((uint32_t)(current_running_task->vruntime / 1000000));
         print("ms\n");
-    } else {
+    }
+    else
+    {
         print("No current task\n");
     }
-    
+
     print("Scheduler ready: ");
     int ready = (active_scheduler_type != SCHEDULER_NONE) && (current_scheduler.init != NULL);
     print(ready ? "YES" : "NO");
     print("\n");
 }
 
-task_t *get_current_task(void) {
+task_t *get_current_task(void)
+{
     extern task_t *current_running_task;
     return current_running_task;
 }
 
-
-
-int scheduler_ready(void) {
-    return (active_scheduler_type != SCHEDULER_NONE) && 
+int scheduler_ready(void)
+{
+    return (active_scheduler_type != SCHEDULER_NONE) &&
            (current_scheduler.init != NULL);
 }
-

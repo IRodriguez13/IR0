@@ -26,25 +26,28 @@ extern void cfs_add_task_impl(task_t *task);
 extern void switch_to_user_mode(void *entry_point);
 extern void shell_ring3_entry(void);
 
-void init_1(void) {
+void init_1(void)
+{
   // This is the first user process (PID 1)
 
   // Launch the shell
-  extern void shell_ring3_entry(void);
   shell_ring3_entry();
 
   // If shell exits, restart it
-  for (;;) {
+  for (;;)
+  {
     shell_ring3_entry();
   }
 }
 
 // Create and start init process from kernel
-int start_init_process(void) {
+int start_init_process(void)
+{
   // Create process structure
   extern process_t *current_process;
   process_t *init = kmalloc(sizeof(process_t));
-  if (!init) {
+  if (!init)
+  {
     return -1;
   }
 
@@ -56,16 +59,17 @@ int start_init_process(void) {
   process_cs(init) = 0x1B;                // User code (GDT entry 3, RPL=3)
   process_ss(init) = 0x23;                // User data (GDT entry 4, RPL=3)
   process_rflags(init) = 0x202;           // IF=1, Reserved=1
-  
+
   // Create page directory for init process
   extern uint64_t create_process_page_directory(void);
   extern void kfree(void *ptr);
-  init->page_directory = (uint64_t*)create_process_page_directory();
-  if (!init->page_directory) {
+  init->page_directory = (uint64_t *)create_process_page_directory();
+  if (!init->page_directory)
+  {
     kfree(init);
     return -1;
   }
-  
+
   // Set up memory layout
   init->heap_start = 0x2000000;  // 32MB
   init->heap_end = 0x2000000;    // Initially empty
