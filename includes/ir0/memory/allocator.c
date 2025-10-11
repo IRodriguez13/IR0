@@ -12,6 +12,7 @@
  */
 
 #include "allocator.h"
+#include <ir0/memory/kmem.h>
 #include <ir0/print.h>
 
 // Block header for free-list allocator
@@ -37,7 +38,7 @@ static struct
 // Dummy for scheduler detection (not used)
 uint32_t free_pages_count = 1000;
 
-void simple_alloc_init(void)
+void alloc_init(void)
 {
     if (allocator.initialized)
         return;
@@ -57,10 +58,10 @@ void simple_alloc_init(void)
     allocator.initialized = 1;
 }
 
-void *simple_alloc(size_t size)
+void *alloc(size_t size)
 {
     if (!allocator.initialized)
-        simple_alloc_init();
+        alloc_init();
 
     if (size == 0)
         return NULL;
@@ -107,7 +108,38 @@ void *simple_alloc(size_t size)
     return NULL; // Out of memory
 }
 
-void simple_free(void *ptr)
+void *all_realloc(void *ptr, size_t new_size)
+{
+    if (!ptr)
+        return alloc(new_size);
+
+    if (new_size == 0)
+    {
+        alloc_free(ptr);
+        return NULL;
+    }
+
+    // Get old block size
+    block_header_t *old_block = (block_header_t *)((char *)ptr - sizeof(block_header_t));
+    size_t old_size = old_block->size - sizeof(block_header_t);
+
+    // Allocate new block
+    void *new_ptr = alloc(new_size);
+    if (!new_ptr)
+        return NULL;
+
+    // Copy data (use smaller of old/new size)
+    size_t copy_size = (old_size < new_size) ? old_size : new_size;
+    for (size_t i = 0; i < copy_size; i++)
+        ((char *)new_ptr)[i] = ((char *)ptr)[i];
+
+    // Free old block
+    alloc_free(ptr);
+
+    return new_ptr;
+}
+
+void alloc_free(void *ptr)
 {
     if (!ptr || !allocator.initialized)
         return;
@@ -137,15 +169,14 @@ void simple_free(void *ptr)
         current = current->next;
     }
 
-    if (current && current->is_free &&
-        (char *)current + current->size == (char *)block)
+    if (current && current->is_free && (char *)current + current->size == (char *)block)
     {
         current->size += block->size;
         current->next = block->next;
     }
 }
 
-void simple_alloc_stats(size_t *total, size_t *used, size_t *allocs)
+void alloc_stats(size_t *total, size_t *used, size_t *allocs)
 {
     if (total)
         *total = allocator.heap_size;
@@ -155,7 +186,7 @@ void simple_alloc_stats(size_t *total, size_t *used, size_t *allocs)
         *allocs = allocator.total_allocated;
 }
 
-void simple_alloc_trace(void)
+void alloc_trace(void)
 {
     print("=== Real Memory Allocator ===\n");
     print("Heap: 0x");
@@ -194,88 +225,43 @@ void simple_alloc_trace(void)
     }
 }
 
-// Compatibility wrappers for existing code
-void *kmalloc(size_t size)
-{
-    return simple_alloc(size);
-}
-
-void kfree(void *ptr)
-{
-    simple_free(ptr);
-}
-
-void *krealloc(void *ptr, size_t new_size)
-{
-    if (!ptr)
-        return simple_alloc(new_size);
-
-    if (new_size == 0)
-    {
-        simple_free(ptr);
-        return NULL;
-    }
-
-    // Get old block size
-    block_header_t *old_block = (block_header_t *)((char *)ptr - sizeof(block_header_t));
-    size_t old_size = old_block->size - sizeof(block_header_t);
-
-    // Allocate new block
-    void *new_ptr = simple_alloc(new_size);
-    if (!new_ptr)
-        return NULL;
-
-    // Copy data (use smaller of old/new size)
-    size_t copy_size = (old_size < new_size) ? old_size : new_size;
-    for (size_t i = 0; i < copy_size; i++)
-        ((char *)new_ptr)[i] = ((char *)ptr)[i];
-
-    // Free old block
-    simple_free(ptr);
-
-    return new_ptr;
-}
-
-void heap_init(void)
-{
-    simple_alloc_init();
-}
-// ===============================================================================
-// ALIGNED ALLOCATION FOR PAGE DIRECTORIES
-// ===============================================================================
-
 /**
  * Allocate aligned memory for page tables
  * Required for page directory structures that must be 4KB aligned
  */
-void *kmalloc_aligned(size_t size, size_t alignment) {
-    if (!allocator.initialized) {
-        simple_alloc_init();
+void *kmalloc_aligned(size_t size, size_t alignment)
+{
+    if (!allocator.initialized)
+    {
+        alloc_init();
     }
 
-    if (size == 0 || alignment == 0) {
+    if (size == 0 || alignment == 0)
+    {
         return NULL;
     }
 
     // Ensure alignment is power of 2
-    if ((alignment & (alignment - 1)) != 0) {
+    if ((alignment & (alignment - 1)) != 0)
+    {
         return NULL;
     }
 
     // Allocate extra space to ensure we can align
-    size_t total_size = size + alignment - 1 + sizeof(void*);
+    size_t total_size = size + alignment - 1 + sizeof(void *);
     void *raw_ptr = kmalloc(total_size);
-    if (!raw_ptr) {
+    if (!raw_ptr)
+    {
         return NULL;
     }
 
     // Calculate aligned address
     uintptr_t raw_addr = (uintptr_t)raw_ptr;
-    uintptr_t aligned_addr = (raw_addr + sizeof(void*) + alignment - 1) & ~(alignment - 1);
-    void *aligned_ptr = (void*)aligned_addr;
+    uintptr_t aligned_addr = (raw_addr + sizeof(void *) + alignment - 1) & ~(alignment - 1);
+    void *aligned_ptr = (void *)aligned_addr;
 
     // Store original pointer just before aligned address
-    void **orig_ptr_storage = (void**)aligned_ptr - 1;
+    void **orig_ptr_storage = (void **)aligned_ptr - 1;
     *orig_ptr_storage = raw_ptr;
 
     return aligned_ptr;
@@ -284,13 +270,15 @@ void *kmalloc_aligned(size_t size, size_t alignment) {
 /**
  * Free aligned memory allocated with kmalloc_aligned
  */
-void kfree_aligned(void *ptr) {
-    if (!ptr) {
+void kfree_aligned(void *ptr)
+{
+    if (!ptr)
+    {
         return;
     }
 
     // Get original pointer stored before aligned address
-    void **orig_ptr_storage = (void**)ptr - 1;
+    void **orig_ptr_storage = (void **)ptr - 1;
     void *orig_ptr = *orig_ptr_storage;
 
     // Free the original allocation

@@ -18,6 +18,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <ir0/memory/kmem.h>
+#include <ir0/memory/allocator.h>
 
 // Forward declarations for external functions
 extern char keyboard_buffer_get(void);
@@ -409,9 +411,6 @@ int64_t sys_rmdir(const char *pathname)
   return -1;
 }
 
-// ============================================================================
-// PROCESS MANAGEMENT SYSCALLS
-// ============================================================================
 
 int64_t sys_fork(void)
 {
@@ -462,9 +461,6 @@ int64_t sys_malloc_test(size_t size)
     return -ESRCH;
 
   // Test malloc/free functionality
-  extern void *kmalloc(size_t size);
-  extern void kfree(void *ptr);
-  extern void simple_alloc_trace(void);
 
   sys_write(1, "Testing malloc/free...\n", 23);
 
@@ -495,14 +491,11 @@ int64_t sys_malloc_test(size_t size)
   sys_write(1, "free OK\n", 8);
 
   // Show allocator stats
-  simple_alloc_trace();
+  alloc_trace();
 
   return 0;
 }
 
-// ============================================================================
-// HEAP MANAGEMENT SYSCALLS (brk/sbrk)
-// ============================================================================
 
 int64_t sys_brk(void *addr)
 {
@@ -609,22 +602,16 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
   length = (length + 15) & ~15;
 
   // For simplicity, use kernel allocator to get real memory
-  extern void *kmalloc(size_t size);
   void *real_addr = kmalloc(length);
   if (!real_addr)
   {
-    sys_write(1, "mmap: kmalloc failed\n", 21);
     return (void *)-1;
   }
-
-  sys_write(1, "mmap: creating region entry\n", 28);
 
   // Create mapping entry
   struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
   if (!region)
   {
-    sys_write(1, "mmap: region kmalloc failed\n", 28);
-    extern void kfree(void *ptr);
     kfree(real_addr);
     return (void *)-1;
   }
@@ -636,17 +623,12 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
   region->next = mmap_list;
   mmap_list = region;
 
-  sys_write(1, "mmap: zeroing memory\n", 21);
-
   // Zero the memory if it's anonymous
   if (flags & MAP_ANONYMOUS)
   {
     for (size_t i = 0; i < length; i++)
       ((char *)real_addr)[i] = 0;
   }
-
-  sys_write(1, "mmap: success, returning address\n", 33);
-  return real_addr;
 
   return real_addr;
 }
@@ -671,7 +653,6 @@ int sys_munmap(void *addr, size_t length)
         mmap_list = current->next;
 
       // Free the mapping structure
-      extern void kfree(void *ptr);
       kfree(current);
       return 0;
     }
@@ -704,10 +685,6 @@ int sys_mprotect(void *addr, size_t len, int prot)
   return -1; // Not found
 }
 
-// ============================================================================
-// SYSCALL INITIALIZATION
-// ============================================================================
-
 void syscalls_init(void)
 {
   // Connect to REAL process management only
@@ -727,8 +704,7 @@ void syscalls_init(void)
 
   // Register syscall interrupt handler
   extern void syscall_entry_asm(void);
-  extern void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel,
-                             uint8_t flags);
+  extern void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags);
 
   // IDT entry 0x80 for syscalls (DPL=3 for user mode)
   idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE);
@@ -738,7 +714,6 @@ void syscalls_init(void)
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                          uint64_t arg3, uint64_t arg4, uint64_t arg5)
 {
-  // arg4 and arg5 are used by mmap
 
   switch (syscall_num)
   {
@@ -779,18 +754,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   case 52:
     return (int64_t)sys_sbrk((intptr_t)arg1);
   case 53:
-    // Debug mmap arguments to serial
-    serial_print("SERIAL: dispatcher: mmap args: arg1=");
-    serial_print_hex32((uint32_t)arg1);
-    serial_print(" arg2=");
-    serial_print_hex32((uint32_t)arg2);
-    serial_print(" arg3=");
-    serial_print_hex32((uint32_t)arg3);
-    serial_print(" arg4=");
-    serial_print_hex32((uint32_t)arg4);
-    serial_print("\n");
-    return (int64_t)sys_mmap((void *)arg1, (size_t)arg2, (int)arg3, (int)arg4,
-                             (int)arg5, (off_t)0);
+    return (int64_t)sys_mmap((void *)arg1, (size_t)arg2, (int)arg3, (int)arg4, (int)arg5, (off_t)0);
   case 54:
     return sys_munmap((void *)arg1, (size_t)arg2);
   case 55:
@@ -798,8 +762,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   case 56:
     return sys_exec((const char *)arg1, (char *const *)arg2, (char *const *)arg3);
   default:
-    print("UNKNOWN_SYSCALL:");
-    print_hex_compact(syscall_num);
+    print("UNKNOWN_SYSCALL");
     print("\n");
     return -ENOSYS;
   }

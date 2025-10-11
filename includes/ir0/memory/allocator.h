@@ -1,4 +1,4 @@
-// Simple unified memory allocator - ONE allocator for everything
+// Simple unified memory allocator
 #pragma once
 
 #include <stdint.h>
@@ -24,19 +24,23 @@ typedef struct
 } simple_allocator_t;
 
 // Initialize the allocator
-void simple_alloc_init(void);
+void alloc_init(void);
 
 // Allocate memory
-void *simple_alloc(size_t size);
+void *alloc(size_t size);
 
 // Free memory (no-op for now, we use bump allocation)
-void simple_free(void *ptr);
+void alloc_free(void *ptr);
 
 // Get stats
-void simple_alloc_stats(size_t *total, size_t *used, size_t *allocs);
+void alloc_stats(size_t *total, size_t *used, size_t *allocs);
 
+// Reallocate memory
+void *all_realloc(void *ptr, size_t new_size);
 // Trace allocation
-void simple_alloc_trace(void);
+void alloc_trace(void);
 // Aligned allocation functions
 void *kmalloc_aligned(size_t size, size_t alignment);
+
 void kfree_aligned(void *ptr);
+

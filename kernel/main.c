@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <drivers/IO/ps2_mouse.h>
 #include <drivers/audio/sound_blaster.h>
+#include <ir0/memory/kmem.h>
 
 
 // Forward declarations for subsystem init functions
@@ -71,7 +72,7 @@ void kmain(void)
 
 
     // Initialize memory allocator
-    simple_alloc_init();
+    heap_init();
     log_subsystem_ok("MEMORY");
 
     // Initialize Sound Blaster audio
