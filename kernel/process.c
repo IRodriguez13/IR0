@@ -21,37 +21,45 @@
 #include <string.h>
 
 #define TASK_ZOMBIE 4
-
 // Global variables
 process_t *current_process = NULL;
 process_t *idle_process = NULL;
 process_t *process_list = NULL; // Global process list
-static pid_t next_pid = 1;      // Next available PID
 
-extern void scheduler_add_process(process_t *proc);
+static pid_t next_pid = 2;
+
+pid_t process_get_next_pid(void) { return next_pid++; }
 
 // Initialize process subsystem
 void process_init(void)
 {
-  current_process = NULL;
-  idle_process = NULL;
-  process_list = NULL;
-  next_pid = 1;
-  print("Process subsystem initialized\n");
+    current_process = NULL;
+    idle_process = NULL;
+    process_list = NULL;
+
+    // NOTA: No reiniciamos next_pid para evitar duplicar PIDs
+    print("Process subsystem initialized\n");
 }
 
 // Get current process
-process_t *process_get_current(void) { return current_process; }
+process_t *process_get_current(void)
+{
+    return current_process;
+}
 
 // Get current PID
 pid_t process_get_pid(void)
 {
-  return current_process ? process_pid(current_process) : 0;
+    return current_process ? process_pid(current_process) : 0;
 }
 
-// Get parent PID (not implemented yet)
-pid_t process_get_ppid(void) { return 0; }
-
+// Get parent PID
+pid_t process_get_ppid(void)
+{
+    return (current_process && current_process->parent)
+               ? process_pid(current_process->parent)
+               : 0;
+}
 // Exit process
 void process_exit(int exit_code)
 {
@@ -66,6 +74,8 @@ void process_exit(int exit_code)
 
 pid_t process_fork(void)
 {
+  extern pid_t next_pid; 
+  
   serial_print("SERIAL: REAL fork() called\n");
 
   if (!current_process)
@@ -86,34 +96,50 @@ pid_t process_fork(void)
     return -1;
   }
 
-  // REAL FORK: Copy entire parent process FIRST
-  *child = *current_process;
-
-  // Set unique child properties AFTER copying
+  // ✅ FIX: ASIGNAR PID ÚNICO USANDO POST-INCREMENTO
+  // IMPORTANTE: next_pid debe estar inicializado en 2, no en 1
   pid_t child_pid = next_pid++;
-
+  
+  serial_print("SERIAL: fork: next_pid before=");
+  serial_print_hex32(child_pid);
+  serial_print(" after=");
+  serial_print_hex32(next_pid);
+  serial_print("\n");
+  
   serial_print("SERIAL: fork: assigning child PID=");
   serial_print_hex32(child_pid);
   serial_print("\n");
 
-  // Override child-specific fields after copy
-  serial_print("SERIAL: fork: setting child PID from ");
-  serial_print_hex32(process_pid(child));
-  serial_print(" to ");
-  serial_print_hex32(child_pid);
-  serial_print("\n");
+  // REAL FORK: Copy entire parent process
+  *child = *current_process;
 
-  process_pid(child) = child_pid;
+  // Usar acceso directo a task.pid, no la macro
+  child->task.pid = child_pid;
+  
+  serial_print("SERIAL: fork: child PID after copy=");
+  serial_print_hex32(process_pid(child));
+  serial_print("\n");
 
   // Verify the PID was set correctly
-  serial_print("SERIAL: fork: child PID verification=");
-  serial_print_hex32(process_pid(child));
-  serial_print("\n");
+  if (process_pid(child) != child_pid)
+  {
+    serial_print("SERIAL: fork: ERROR - PID mismatch! Expected=");
+    serial_print_hex32(child_pid);
+    serial_print(" Got=");
+    serial_print_hex32(process_pid(child));
+    serial_print("\n");
+    kfree(child);
+    return -1;
+  }
+
+  serial_print("SERIAL: fork: child PID verification OK\n");
 
   // Also verify parent PID hasn't changed
   serial_print("SERIAL: fork: parent PID verification=");
   serial_print_hex32(process_pid(current_process));
   serial_print("\n");
+
+  // Override other child-specific fields after copy
   child->ppid = process_pid(current_process);
   child->parent = current_process;
   child->children = NULL;
@@ -174,6 +200,27 @@ pid_t process_fork(void)
   extern void save_fork_context(process_t * parent, process_t * child);
   save_fork_context(current_process, child);
 
+  // ✅ FIX: VERIFICAR QUE EL PID NO SE HAYA SOBRESCRITO
+  serial_print("SERIAL: fork: child PID after save_fork_context=");
+  serial_print_hex32(process_pid(child));
+  serial_print("\n");
+  
+  if (process_pid(child) != child_pid)
+  {
+    serial_print("SERIAL: fork: ERROR - PID was overwritten in save_fork_context!\n");
+    serial_print("SERIAL: fork: Expected=");
+    serial_print_hex32(child_pid);
+    serial_print(" Got=");
+    serial_print_hex32(process_pid(child));
+    serial_print("\n");
+    
+    // Fix it again
+    child->task.pid = child_pid;
+    serial_print("SERIAL: fork: PID restored to ");
+    serial_print_hex32(process_pid(child));
+    serial_print("\n");
+  }
+
   // Set up return values for fork()
   process_rax(child) = 0;                   // Child returns 0
   process_rax(current_process) = child_pid; // Parent returns child PID
@@ -189,11 +236,8 @@ pid_t process_fork(void)
   serial_print_hex32(process_pid(child));
   serial_print(" ready for execution\n");
 
-  // Use the ASM context switch function
-  serial_print("SERIAL: fork: performing ASM context switch\n");
-
-  // CRITICAL: Validate pointers before ASM call
-  serial_print("SERIAL: fork: validating pointers before context switch\n");
+  // CRITICAL: Validate pointers before returning
+  serial_print("SERIAL: fork: validating final state\n");
 
   if (!current_process)
   {
@@ -208,37 +252,11 @@ pid_t process_fork(void)
     return -1;
   }
 
-  serial_print("SERIAL: fork: current_process=");
-  serial_print_hex32((uint32_t)(uintptr_t)current_process);
-  serial_print("\n");
-
-  serial_print("SERIAL: fork: child=");
-  serial_print_hex32((uint32_t)(uintptr_t)child);
-  serial_print("\n");
-
-  serial_print("SERIAL: fork: &current_process->task=");
-  serial_print_hex32((uint32_t)(uintptr_t)&current_process->task);
-  serial_print("\n");
-
-  serial_print("SERIAL: fork: &child->task=");
-  serial_print_hex32((uint32_t)(uintptr_t)&child->task);
-  serial_print("\n");
-
-  // Validate task structure fields
-  serial_print("SERIAL: fork: current_process->task.rsp=");
-  serial_print_hex32((uint32_t)current_process->task.rsp);
-  serial_print("\n");
-
-  serial_print("SERIAL: fork: child->task.rsp=");
-  serial_print_hex32((uint32_t)child->task.rsp);
-  serial_print("\n");
-
-  serial_print("SERIAL: fork: current_process->task.rip=");
-  serial_print_hex32((uint32_t)current_process->task.rip);
-  serial_print("\n");
-
-  serial_print("SERIAL: fork: child->task.rip=");
-  serial_print_hex32((uint32_t)child->task.rip);
+  serial_print("SERIAL: fork: Final verification:\n");
+  serial_print("SERIAL: fork: parent PID=");
+  serial_print_hex32(process_pid(current_process));
+  serial_print(" child PID=");
+  serial_print_hex32(process_pid(child));
   serial_print("\n");
 
   // Check if task structures are properly initialized
@@ -256,8 +274,14 @@ pid_t process_fork(void)
     return -1;
   }
 
+  serial_print("SERIAL: fork: SUCCESS - returning child PID=");
+  serial_print_hex32(child_pid);
+  serial_print("\n");
+
   return process_rax(current_process);
 }
+
+
 
 int process_wait(pid_t pid, int *status)
 {
@@ -606,28 +630,25 @@ void save_fork_context(process_t *parent, process_t *child)
     return;
   }
 
+  pid_t saved_child_pid = child->task.pid;
+  
+  serial_print("SERIAL: save_fork_context: child PID before copy=");
+  serial_print_hex32(saved_child_pid);
+  serial_print("\n");
+
   // Copy CPU registers from parent to child (task_t structure)
   child->task = parent->task;
+
+  child->task.pid = saved_child_pid;
+  
+  serial_print("SERIAL: save_fork_context: child PID after restore=");
+  serial_print_hex32(child->task.pid);
+  serial_print("\n");
 
   // Child should return 0 from fork, parent returns child PID
   process_rax(child) = 0; // Child gets 0 return value
 
-  serial_print("SERIAL: CPU context copied\n");
-}
-
-void scheduler_add_process(process_t *proc)
-{
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
-
-  serial_print("SERIAL: scheduler_add_process PID=");
-  serial_print_hex32(process_pid(proc));
-  serial_print("\n");
-
-  // Add to scheduler queue
-  proc->state = PROCESS_READY;
-
-  serial_print("SERIAL: process added to scheduler\n");
+  serial_print("SERIAL: CPU context copied with PID preserved\n");
 }
 
 // Child process main function - what the child does after fork
