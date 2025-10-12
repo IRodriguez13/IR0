@@ -6,11 +6,10 @@
 #include <arch/x86-64/sources/user_mode.h>
 #include <ir0/panic/panic.h>
 
-// Globals
 rr_task_t *rr_head = NULL;
 rr_task_t *rr_tail = NULL;
 rr_task_t *rr_current = NULL;
-extern void switch_context_x64(void *prev, void *next);
+extern void switch_context_x64(task_t *prev, task_t *next);
 
 // Add a process to RR queue
 void rr_add_process(process_t *proc)
@@ -49,31 +48,76 @@ void rr_schedule_next(void)
     if (!rr_head)
         return;
 
-    // We select the next process
+    static int first = 1;
+    process_t *prev = current_process;
+
     if (!rr_current)
         rr_current = rr_head;
     else
         rr_current = rr_current->next ? rr_current->next : rr_head;
 
-    current_process = rr_current->process;
-    current_process->state = PROCESS_RUNNING;
+    process_t *next = rr_current->process;
 
-    serial_print("RR: switching to process PID=");
-    serial_print_hex32(process_pid(current_process));
+    if (!first && prev == next)
+        return;
+
+    if (prev && prev->state == PROCESS_RUNNING)
+        prev->state = PROCESS_READY;
+
+    next->state = PROCESS_RUNNING;
+    current_process = next;
+
+    serial_print("RR: switching to PID=");
+    serial_print_hex32(next->task.pid);
     serial_print("\n");
 
-    // Just for the first time, we use jmp_ring3. I know is ugly but it works
-    static int first_time = 1;
-    if (first_time)
+    if (first)
     {
-        first_time = 0;
-        jmp_ring3((void *)process_rip(current_process));
+        // I know it's ugly but it works
+        first = 0;
+        serial_print("RR: first switch - jumping to ring3\n");
+        __asm__ volatile("sti");
+        jmp_ring3((void *)next->task.rip);
 
-        // panic should't be executed
+        // we should never get here
         panic("Returned from jmp_ring3!");
     }
 
-    // Next ones we use switch_context normally
-    switch_context_x64(NULL, &current_process->task);
-}
+    if (prev)
+    {
+        serial_print("RR: switching context from PID=");
+        serial_print("RR: switching context from PID=");
+        serial_print_hex32(prev->task.pid);
+        serial_print(" to PID=");
+        serial_print_hex32(next->task.pid);
+        serial_print("\n");
 
+        serial_print("Prev RSP=0x");
+        serial_print_hex32(prev->task.rsp);
+        serial_print(" RIP=0x");
+        serial_print_hex32(prev->task.rip);
+        serial_print("\n");
+
+        serial_print("Next RSP=0x");
+        serial_print_hex32(next->task.rsp);
+        serial_print(" RIP=0x");
+        serial_print_hex32(next->task.rip);
+        serial_print("\n");
+
+        serial_print("Prev CR3=0x");
+        serial_print_hex32(prev->task.cr3);
+        serial_print(" Next CR3=0x");
+        serial_print_hex32(next->task.cr3);
+        serial_print("\n");
+
+        serial_print("Prev stack_start=0x");
+        serial_print_hex32(prev->stack_start);
+        serial_print(" Next stack_start=0x");
+        serial_print_hex32(next->stack_start);
+        serial_print("\n");
+
+        switch_context_x64(&prev->task, &next->task);
+
+        serial_print("RR: returned from switch_context_x64?\n"); // no debería pasar normalmente
+    }
+}

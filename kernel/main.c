@@ -22,7 +22,6 @@
 #include <arch/x86-64/sources/user_mode.h>
 #include <rr_sched.h>
 
-
 // Forward declarations for subsystem init functions
 extern void gdt_install(void);
 extern void setup_tss(void);
@@ -47,7 +46,7 @@ void kmain(void)
     // Initialize GDT and TSS first
     gdt_install();
     setup_tss();
-    
+
     // Banner
     print("IR0 Kernel v0.0.1 Boot\n");
     delay_ms(2500);
@@ -64,13 +63,12 @@ void kmain(void)
     // Initialize PS/2 controller and keyboard
     ps2_init();
     keyboard_init();
-    pic_unmask_irq(1);  // Enable keyboard IRQ
+    pic_unmask_irq(1); // Enable keyboard IRQ
     log_subsystem_ok("PS2_KEYBOARD");
 
     // Initialize PS/2 mouse
     ps2_mouse_init();
     log_subsystem_ok("PS2_MOUSE");
-
 
     // Initialize memory allocator
     heap_init();
@@ -79,7 +77,6 @@ void kmain(void)
     // Initialize Sound Blaster audio
     sb16_init();
     log_subsystem_ok("AUDIO_SB16");
-
 
     // Initialize storage
     ata_init();
@@ -104,14 +101,15 @@ void kmain(void)
     idt_init64();
     idt_load64();
     pic_remap64();
+ 
     log_subsystem_ok("INTERRUPTS");
 
-    // Start init process and switch to user mode
     start_init_process();
     log_subsystem_ok("SCHEDULER");
     log_subsystem_ok("USERMODE");
-    rr_schedule_next();
 
-    // Should never return
-    for (;;) __asm__ volatile("hlt");
+    for (;;)
+    {
+        __asm__ volatile("hlt"); // fallback if something goes wrong
+    }
 }

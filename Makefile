@@ -221,7 +221,7 @@ ir0: kernel-x64.iso userspace-programs
 # ===============================================================================
 
 # Run with GUI and disk (default)
-run-kernel: kernel-x64.iso
+run: kernel-x64.iso
 	@echo "🚀 Running IR0 Kernel..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
 	    -drive file=disk.img,format=raw,if=ide,index=0 \

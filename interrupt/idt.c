@@ -1,11 +1,10 @@
-// interrupt/idt.c - IMPLEMENTACIÓN MÍNIMA Y FUNCIONAL
+// interrupt/idt.c - 
 #include <arch/common/idt.h>
 
 // IDT básica
 idt_entry_t idt[256];
 idt_ptr_t idt_ptr;
 
-// Stubs ASM externos (implementación mínima)
 extern void isr_stub_0();
 extern void isr_stub_1();
 extern void isr_stub_2();

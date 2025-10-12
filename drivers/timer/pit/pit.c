@@ -8,6 +8,7 @@ uint64_t pit_ticks = 0;
 #include <panic/panic.h>
 #include <arch_interface.h>
 #include <ir0/print.h>
+#include <kernel/rr_sched.h>
 #include <arch/x86-64/sources/arch_x64.h>
 #define PIT_FREC 1193180
 
