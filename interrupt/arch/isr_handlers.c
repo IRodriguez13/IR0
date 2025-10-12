@@ -15,11 +15,12 @@
 #include "pic.h"
 #include "io.h"
 #include <ir0/print.h>
+#include <kernel/rr_sched.h>
 
 // Declaraciones externas para el nuevo driver de teclado
 extern void keyboard_handler64(void);
 extern void keyboard_handler32(void);
-
+extern void increment_pit_ticks(void);
 #ifdef __x86_64__
 
 // Handler de interrupciones para 64-bit
@@ -40,8 +41,6 @@ void isr_handler64(uint64_t interrupt_number)
     if (interrupt_number == 128)
     {
         print("SYSCALL: Interrupción 0x80 recibida\n");
-        // Syscall implementado - manejado por syscall_entry_asm
-        // Por ahora, solo imprimir y retornar
         return;
     }
 
@@ -53,17 +52,28 @@ void isr_handler64(uint64_t interrupt_number)
         switch (irq)
         {
         case 0: // Timer
-            // Timer tick - silencioso
+        {
+            
+            increment_pit_ticks();
+
+            static int tick_counter = 0;
+            tick_counter++;
+
+            // Cada 10 ticks (~10ms si PIT=1kHz), hacer cambio de proceso
+            if (tick_counter >= 10)
+            {
+                tick_counter = 0;
+                rr_schedule_next();
+            }
+
             break;
+        }
 
         case 1: // Keyboard
             keyboard_handler64();
             break;
 
         default:
-            print("IRQ desconocido: ");
-            print_int32(irq);
-            print("\n");
             break;
         }
 
@@ -72,10 +82,6 @@ void isr_handler64(uint64_t interrupt_number)
         return;
     }
 
-    // Interrupciones spurious o desconocidas
-    print("Interrupción spurious: ");
-    print_int32(interrupt_number);
-    print("\n");
 }
 
 #endif

@@ -5,7 +5,7 @@
 // Minimal user mode support - no dynamic mapping
 
 // User mode transition function - WITH INTERRUPTS ENABLED
-void switch_to_user_mode(void *entry_point)
+void jmp_ring3(void *entry_point)
 {
     // Use stack within mapped 32MB region (safe area at 16MB)
     uintptr_t stack_top = 0x1000000 - 0x1000; // 16MB - 4KB

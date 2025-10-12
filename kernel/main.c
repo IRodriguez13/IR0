@@ -18,6 +18,9 @@
 #include <drivers/IO/ps2_mouse.h>
 #include <drivers/audio/sound_blaster.h>
 #include <ir0/memory/kmem.h>
+#include <init.h>
+#include <arch/x86-64/sources/user_mode.h>
+#include <rr_sched.h>
 
 
 // Forward declarations for subsystem init functions
@@ -38,8 +41,6 @@ extern void idt_load64(void);
 extern void pic_remap64(void);
 extern void pic_unmask_irq(uint8_t irq);
 extern int start_init_process(void);
-extern void init_1(void);
-extern void switch_to_user_mode(void *entry_point);
 
 void kmain(void)
 {
@@ -94,8 +95,6 @@ void kmain(void)
 
     // Initialize scheduler
     clock_system_init();
-    scheduler_cascade_init();
-    log_subsystem_ok("SCHEDULER");
 
     // Initialize system calls
     syscalls_init();
@@ -109,12 +108,9 @@ void kmain(void)
 
     // Start init process and switch to user mode
     start_init_process();
+    log_subsystem_ok("SCHEDULER");
     log_subsystem_ok("USERMODE");
-
-    print("Switching to user mode...\n");
-    delay_ms(2500);
-    __asm__ volatile("sti");
-    switch_to_user_mode((void*)init_1);
+    rr_schedule_next();
 
     // Should never return
     for (;;) __asm__ volatile("hlt");
