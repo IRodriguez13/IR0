@@ -13,8 +13,11 @@
  */
 
 #include "process.h"
-#include <memory/allocator.h>
+#include <ir0/memory/kmem.h>
+#include <ir0/memory/allocator.h>
 #include <ir0/print.h>
+#include <drivers/serial/serial.h>
+#include <rr_sched.h>
 #include <string.h>
 
 #define TASK_ZOMBIE 4
@@ -25,9 +28,7 @@ process_t *idle_process = NULL;
 process_t *process_list = NULL; // Global process list
 static pid_t next_pid = 1;      // Next available PID
 
-// External memory functions
-extern void *kmalloc(size_t size);
-extern void kfree(void *ptr);
+extern void scheduler_add_process(process_t *proc);
 
 // Initialize process subsystem
 void process_init(void)
@@ -65,11 +66,6 @@ void process_exit(int exit_code)
 
 pid_t process_fork(void)
 {
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
-  extern void *kmalloc(size_t size);
-  extern void switch_context_x64(void *current, void *next);
-
   serial_print("SERIAL: REAL fork() called\n");
 
   if (!current_process)
@@ -134,7 +130,6 @@ pid_t process_fork(void)
   if (!child->page_directory)
   {
     serial_print("SERIAL: fork: failed to create page directory\n");
-    extern void kfree(void *ptr);
     kfree(child);
     return -1;
   }
@@ -146,7 +141,6 @@ pid_t process_fork(void)
     serial_print("SERIAL: fork: failed to copy memory\n");
     extern void destroy_process_page_directory(uint64_t *pml4);
     destroy_process_page_directory(child->page_directory);
-    extern void kfree(void *ptr);
     kfree(child);
     return -1;
   }
@@ -189,8 +183,7 @@ pid_t process_fork(void)
   process_list = child;
 
   // Add to scheduler
-  extern void scheduler_add_process(process_t * proc);
-  scheduler_add_process(child);
+  rr_add_process(child);
 
   serial_print("SERIAL: fork: child PID=");
   serial_print_hex32(process_pid(child));
@@ -263,22 +256,11 @@ pid_t process_fork(void)
     return -1;
   }
 
-  serial_print(
-      "SERIAL: fork: all validations passed, calling switch_context_x64\n");
-
-  // Now call the ASM function with validated pointers
-  switch_context_x64(&current_process->task, &child->task);
-
-  serial_print("SERIAL: fork: context switch completed successfully\n");
-
-  // After context switch, we return the appropriate value
   return process_rax(current_process);
 }
 
 int process_wait(pid_t pid, int *status)
 {
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
 
   serial_print("SERIAL: process_wait() called for PID=");
   serial_print_hex32(pid);
@@ -485,6 +467,8 @@ void destroy_process_page_directory(uint64_t *pml4)
 
   serial_print("SERIAL: page directory destroyed\n");
 }
+
+
 
 int copy_process_memory(process_t *parent, process_t *child)
 {

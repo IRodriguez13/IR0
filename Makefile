@@ -111,8 +111,7 @@ KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
     kernel/process.o \
-    kernel/scheduler.o \
-    kernel/task.o \
+    kernel/rr_sched.o \
     kernel/syscalls.o \
     kernel/shell.o \
     kernel/elf_loader.o

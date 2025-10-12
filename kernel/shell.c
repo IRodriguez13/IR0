@@ -47,8 +47,6 @@ static inline int64_t sys_read(int fd, void *buf, size_t count)
   return syscall(SYS_READ, fd, (uint64_t)buf, count);
 }
 
-static inline int64_t sys_getpid(void) { return syscall(SYS_GETPID, 0, 0, 0); }
-
 // Framebuffer management
 static int cursor_pos = 0;
 static int screen_width = 80;
@@ -850,7 +848,7 @@ static void process_command(const char *cmd)
 }
 
 // Shell entry point - runs in Ring 3
-void shell_ring3_entry(void)
+void shell_entry(void)
 {
   cursor_pos = 0;
 
@@ -861,24 +859,8 @@ void shell_ring3_entry(void)
     vga[i] = 0x0F20; // White on black, space
   }
   cursor_pos = 0;
-
-  // Show minimal banner (Linux 0.0.1 style)
-  int64_t pid = sys_getpid();
-
   // Show banner
   fb_print("                === IR0 SHELL ===\n\n", 0x0F);
-  // Test getpid syscall
-  fb_print("initproc1 Process PID: ", 0x0E);
-  if (pid >= 0 && pid <= 9)
-  {
-    char pid_str[2] = {'0' + (char)pid, '\0'};
-    fb_print(pid_str, 0x0F);
-  }
-  else
-  {
-    fb_print("ERROR", 0x0C);
-  }
-  fb_print("\n", 0x0F);
 
   fb_print("Type 'help' for commands, ESC to exit\n", 0x0B);
 

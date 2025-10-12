@@ -1,5 +1,4 @@
-#ifndef IR0_SYSCALL_H
-#define IR0_SYSCALL_H
+#pragma once
 
 #include <stdint.h>
 #include <stddef.h>
@@ -200,4 +199,3 @@ static inline int64_t ir0_munmap(void *addr, size_t length)
     return syscall2(SYS_MUNMAP, (int64_t)addr, length);
 }
 
-#endif // IR0_SYSCALL_H

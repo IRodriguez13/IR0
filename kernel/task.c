@@ -43,55 +43,55 @@ void idle_task_function(void *arg)
 // FUNCIONES DE GESTIÓN DE TAREAS
 // ===============================================================================
 
-task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t nice)
-{
-    task_t *task = (task_t *)kmalloc(sizeof(task_t));
-    if (!task)
-        return NULL;
+// task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t nice)
+// {
+//     task_t *task = (task_t *)kmalloc(sizeof(task_t));
+//     if (!task)
+//         return NULL;
 
-    void *stack = kmalloc(DEFAULT_STACK_SIZE);
-    if (!stack)
-    {
-        kfree(task);
-        return NULL;
-    }
+//     void *stack = kmalloc(DEFAULT_STACK_SIZE);
+//     if (!stack)
+//     {
+//         kfree(task);
+//         return NULL;
+//     }
 
-    memset(task, 0, sizeof(task_t));
+//     memset(task, 0, sizeof(task_t));
 
-    // Setup básico
-    task->pid = next_pid++;
-    task->priority = priority;
-    task->nice = nice;
-    task->state = TASK_READY;
-    task->stack_base = stack;
-    task->stack_size = DEFAULT_STACK_SIZE;
-    task->entry = entry;
-    task->entry_arg = arg;
+//     // Setup básico
+//     task->pid = next_pid++;
+//     task->priority = priority;
+//     task->nice = nice;
+//     task->state = TASK_READY;
+//     task->stack_base = stack;
+//     task->stack_size = DEFAULT_STACK_SIZE;
+//     task->entry = entry;
+//     task->entry_arg = arg;
 
-    // ✅ CRITICAL: Setup correcto del stack para x86-64
-    uint64_t *stack_ptr = (uint64_t *)((uintptr_t)stack + DEFAULT_STACK_SIZE);
+//     // ✅ CRITICAL: Setup correcto del stack para x86-64
+//     uint64_t *stack_ptr = (uint64_t *)((uintptr_t)stack + DEFAULT_STACK_SIZE);
 
-    // Alinear a 16 bytes (ABI x86-64)
-    stack_ptr = (uint64_t *)((uintptr_t)stack_ptr & ~0xF);
+//     // Alinear a 16 bytes (ABI x86-64)
+//     stack_ptr = (uint64_t *)((uintptr_t)stack_ptr & ~0xF);
 
-    // Setup stack frame que switch_context_x64 espera
-    *--stack_ptr = 0; // User SS (if needed)
-    uint64_t user_rsp = (uint64_t)stack_ptr + 16;
-    *--stack_ptr = user_rsp;        // User RSP
-    *--stack_ptr = 0x202;           // RFLAGS (IF=1)
-    *--stack_ptr = 0x08;            // Kernel CS
-    *--stack_ptr = (uint64_t)entry; // RIP - donde saltar
+//     // Setup stack frame que switch_context_x64 espera
+//     *--stack_ptr = 0; // User SS (if needed)
+//     uint64_t user_rsp = (uint64_t)stack_ptr + 16;
+//     *--stack_ptr = user_rsp;        // User RSP
+//     *--stack_ptr = 0x202;           // RFLAGS (IF=1)
+//     *--stack_ptr = 0x08;            // Kernel CS
+//     *--stack_ptr = (uint64_t)entry; // RIP - donde saltar
 
-    // El assembly switch_context_x64 restaurará estos registros
-    task->rsp = (uint64_t)stack_ptr;
-    task->rbp = 0;
-    task->rip = (uint64_t)entry; // Punto de entrada
-    task->rflags = 0x202;        // Interrupts enabled
-    task->cs = 0x08;             // Kernel code segment
-    task->ss = 0x10;             // Kernel data segment
+//     // El assembly switch_context_x64 restaurará estos registros
+//     task->rsp = (uint64_t)stack_ptr;
+//     task->rbp = 0;
+//     task->rip = (uint64_t)entry; // Punto de entrada
+//     task->rflags = 0x202;        // Interrupts enabled
+//     task->cs = 0x08;             // Kernel code segment
+//     task->ss = 0x10;             // Kernel data segment
 
-    return task;
-}
+//     return task;
+// }
 
 void destroy_task(task_t *task)
 {

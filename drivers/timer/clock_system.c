@@ -20,9 +20,7 @@ static clock_state_t clock_state;
 // ===============================================================================
 
 int clock_system_init(void)
-{
-    print("Initializing IR0 Clock System\n");
-    
+{    
     // Initialize clock state
     memset(&clock_state, 0, sizeof(clock_state_t));
     clock_state.initialized = 0;

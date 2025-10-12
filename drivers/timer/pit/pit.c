@@ -1,4 +1,4 @@
-// drivers/timer/pit/pit.c - VERSIÓN ESTABLE
+// drivers/timer/pit/pit.c 
 #include "pit.h"
 
 // Variable global para ticks del PIT
@@ -6,7 +6,7 @@ uint64_t pit_ticks = 0;
 #include <arch/common/idt.h>
 #include <print.h>
 #include <panic/panic.h>
-#include <arch_interface.h> // Para outb
+#include <arch_interface.h>
 #include <ir0/print.h>
 #include <arch/x86-64/sources/arch_x64.h>
 #define PIT_FREC 1193180
@@ -14,8 +14,6 @@ uint64_t pit_ticks = 0;
 extern void timer_stub();
 
 static uint32_t ticks = 0;
-
-// REMOVIDO: time_handler() - ahora está en isr_handlers.c
 
 uint32_t get_pit_ticks(void)
 {
@@ -27,7 +25,7 @@ void increment_pit_ticks(void)
     ticks++;
 }
 
-// Inicializar PIC (Programmable Interrupt Controller) - VERSIÓN CONSERVADORA
+// Inicializar PIC (Programmable Interrupt Controller)
 void init_pic(void)
 {
 
@@ -36,7 +34,6 @@ void init_pic(void)
     (void)inb(0xA1);  // Read current mask2
 
 
-    // Deshabilitar todas las interrupciones temporalmente
     outb(0x21, 0xFF);
     outb(0xA1, 0xFF);
 
