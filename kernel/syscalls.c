@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <ir0/memory/kmem.h>
 #include <ir0/memory/allocator.h>
+#include <kernel/rr_sched.h>
 
 // Forward declarations for external functions
 extern char keyboard_buffer_get(void);
@@ -39,8 +40,6 @@ typedef uint32_t mode_t;
 typedef long intptr_t;
 typedef long off_t;
 
-// Process states
-#define TASK_ZOMBIE 4
 
 // Errno codes
 #define ESRCH 3
@@ -59,17 +58,19 @@ typedef long off_t;
 
 int64_t sys_exit(int exit_code)
 {
-  (void)exit_code;
-  if (!current_process)
-    return -ESRCH;
+    if (!current_process)
+        return -ESRCH;
 
-  current_process->state = TASK_ZOMBIE;
+    current_process->exit_code = exit_code;
+    current_process->state = PROCESS_ZOMBIE;
 
-  // Halt forever
-  for (;;)
-    __asm__ volatile("hlt");
-  return 0;
+    // Llamar al scheduler para pasar a otro proceso
+    rr_schedule_next();
+
+    // Nunca debería volver aquí
+    return 0;
 }
+
 
 int64_t sys_write(int fd, const void *buf, size_t count)
 {
