@@ -18,6 +18,7 @@
 #include <ir0/memory/allocator.h>
 #include <ir0/memory/paging.h>
 #include <string.h>
+#include <kernel/rr_sched.h>
 
 // External memory functions
 extern void *kmalloc(size_t size);
@@ -442,8 +443,7 @@ int process_create_user(const char *name, uint64_t entry_point) {
   process_list = new_process;
 
   // Add to scheduler
-  extern void scheduler_add_process(process_t *proc);
-  scheduler_add_process(new_process);
+  rr_add_process(new_process);
   serial_print("VFS: Process added to scheduler\n");
 
   serial_print("VFS: Created user process PID=");
