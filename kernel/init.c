@@ -13,20 +13,13 @@
  */
 
 #include "process.h"
-#include <ir0/memory/allocator.h>
 #include <ir0/memory/kmem.h>
-#include "scheduler/task.h"
-#include <ir0/print.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <string.h>
 #include <shell.h>
 #include <rr_sched.h>
 
-// Forward declarations
-extern process_t *current_process;
-extern uint64_t *create_process_page_directory(void);
+extern uint64_t create_process_page_directory(void);
 
-// init_1: lo que ejecuta el proceso en modo usuario
 void init_1(void)
 {
   shell_entry();
@@ -34,46 +27,41 @@ void init_1(void)
     shell_entry();
 }
 
-// Create and start init process from kernel
 int start_init_process(void)
 {
   process_t *init = kmalloc(sizeof(process_t));
   if (!init)
     return -1;
 
-  process_pid(init) = 1;
-  init->state = PROCESS_READY;
-  init->ppid = 0;
-  init->parent = NULL;
-  init->children = NULL;
-  init->sibling = NULL;
-  init->exit_code = 0;
+  memset(init, 0, sizeof(process_t));
 
-  process_rip(init) = (uint64_t)init_1;
-  init->stack_start = 0x1000000;
-  init->stack_size = 0x1000;
-  process_rsp(init) = init->stack_start + init->stack_size - 8;
-  process_rbp(init) = process_rsp(init);
+  init->task.pid = 1;
+  init->task.rip = (uint64_t)init_1;
+  init->task.rsp = 0x1000000 + 0x1000 - 8;
+  init->task.rbp = 0x1000000 + 0x1000;
+  init->task.rflags = 0x202;
+  init->task.cs = 0x1B;
+  init->task.ss = 0x23;
+  init->task.ds = 0x23;
+  init->task.es = 0x23;
+  init->task.fs = 0x23;
+  init->task.gs = 0x23;
+  init->task.cr3 = create_process_page_directory();
 
-  process_cs(init) = 0x1B;
-  process_ss(init) = 0x23;
-  process_rflags(init) = 0x202;
-
-  init->page_directory = (uint64_t *)create_process_page_directory();
-  if (!init->page_directory)
+  if (!init->task.cr3)
   {
     kfree(init);
     return -1;
   }
 
-  init->task.rip = process_rip(init);
-  init->task.rsp = process_rsp(init);
-  init->task.rbp = process_rbp(init);
-  init->task.cs = process_cs(init);
-  init->task.ss = process_ss(init);
-  init->task.rflags = process_rflags(init);
+  init->ppid = 1;
+  init->state = PROCESS_READY;
+  init->stack_start = 0x1000000;
+  init->stack_size = 0x1000;
+  init->page_directory = (uint64_t *)init->task.cr3;
 
   rr_add_process(init);
+  rr_schedule_next();
 
   return 0;
 }
