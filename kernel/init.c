@@ -13,56 +13,52 @@
  */
 
 #include "process.h"
-#include <memory/allocator.h>
+#include <ir0/memory/allocator.h>
+#include <ir0/memory/kmem.h>
 #include "scheduler/task.h"
 #include <ir0/print.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <shell.h>
+#include <rr_sched.h>
 
 // Forward declarations
-extern void *kmalloc(size_t size);
 extern process_t *current_process;
-extern void cfs_add_task_impl(task_t *task);
-extern void switch_to_user_mode(void *entry_point);
-extern void shell_ring3_entry(void);
+extern uint64_t *create_process_page_directory(void);
 
+// init_1: lo que ejecuta el proceso en modo usuario
 void init_1(void)
 {
-  // This is the first user process (PID 1)
-
-  // Launch the shell
-  shell_ring3_entry();
-
-  // If shell exits, restart it
+  shell_entry();
   for (;;)
-  {
-    shell_ring3_entry();
-  }
+    shell_entry();
 }
 
 // Create and start init process from kernel
 int start_init_process(void)
 {
-  // Create process structure
-  extern process_t *current_process;
   process_t *init = kmalloc(sizeof(process_t));
   if (!init)
-  {
     return -1;
-  }
 
-  // Initialize init process
   process_pid(init) = 1;
   init->state = PROCESS_READY;
-  process_rip(init) = (uint64_t)init_1;
-  process_rsp(init) = 0x1000000 - 0x1000; // 16MB - 4KB = Safe stack
-  process_cs(init) = 0x1B;                // User code (GDT entry 3, RPL=3)
-  process_ss(init) = 0x23;                // User data (GDT entry 4, RPL=3)
-  process_rflags(init) = 0x202;           // IF=1, Reserved=1
+  init->ppid = 0;
+  init->parent = NULL;
+  init->children = NULL;
+  init->sibling = NULL;
+  init->exit_code = 0;
 
-  // Create page directory for init process
-  extern uint64_t create_process_page_directory(void);
-  extern void kfree(void *ptr);
+  process_rip(init) = (uint64_t)init_1;
+  init->stack_start = 0x1000000;
+  init->stack_size = 0x1000;
+  process_rsp(init) = init->stack_start + init->stack_size - 8;
+  process_rbp(init) = process_rsp(init);
+
+  process_cs(init) = 0x1B;
+  process_ss(init) = 0x23;
+  process_rflags(init) = 0x202;
+
   init->page_directory = (uint64_t *)create_process_page_directory();
   if (!init->page_directory)
   {
@@ -70,16 +66,14 @@ int start_init_process(void)
     return -1;
   }
 
-  // Set up memory layout
-  init->heap_start = 0x2000000;  // 32MB
-  init->heap_end = 0x2000000;    // Initially empty
-  init->stack_start = 0x1000000; // 16MB
-  init->stack_size = 0x1000;     // 4KB
+  init->task.rip = process_rip(init);
+  init->task.rsp = process_rsp(init);
+  init->task.rbp = process_rbp(init);
+  init->task.cs = process_cs(init);
+  init->task.ss = process_ss(init);
+  init->task.rflags = process_rflags(init);
 
-  // Add to scheduler
-  extern void cfs_add_task_impl(task_t * task);
-  cfs_add_task_impl(&init->task);
-  current_process = init;
+  rr_add_process(init);
 
   return 0;
 }

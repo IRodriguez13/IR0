@@ -846,12 +846,6 @@ void scheduler_fallback_to_next(void)
     panic("Scheduler failed - CFS only, no fallback");
 }
 
-void add_task(task_t *task)
-{
-    if (task)
-        cfs_add_task_impl(task);
-}
-
 task_t *get_idle_task(void)
 {
     extern task_t *idle_task;

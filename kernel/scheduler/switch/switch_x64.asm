@@ -10,11 +10,6 @@ extern next_task
 
 section .text
 
-; ===============================================================================
-; CONTEXT SWITCHING FUNCTION
-; ===============================================================================
-; void switch_context_x64(task_t *current, task_t *next)
-; Switches from current task to next task, preserving all CPU state
 
 switch_context_x64:
     ; Function prologue
@@ -175,19 +170,10 @@ switch_context_x64:
     pop rbp
     ret
 
-; ===============================================================================
-; ALIAS FOR COMPATIBILITY
-; ===============================================================================
 
 switch_task:
     ; Alias for switch_context_x64 for compatibility
     jmp switch_context_x64
-
-; ===============================================================================
-; USER MODE SWITCHING FUNCTION
-; ===============================================================================
-; void switch_to_user_mode_x64(void *user_stack, void *user_entry)
-; Switches from kernel mode to user mode
 
 
 
@@ -210,10 +196,6 @@ switch_to_user_mode_x64:
     ; CS = 0x1B (27 = 3*8+3, user code segment with RPL=3)
     ; DS/ES/FS/GS/SS = 0x23 (35 = 4*8+3, user data segment with RPL=3)
     
-    ; CORRECCIÓN: Usar los selectores correctos de la GDT
-    ; 0x18 = User code segment (índice 3 * 8 = 24, + 0 = 24 = 0x18)
-    ; 0x20 = User data segment (índice 4 * 8 = 32, + 0 = 32 = 0x20)
-    ; Para RPL=3, sumamos 3: 0x18 + 3 = 0x1B, 0x20 + 3 = 0x23
     
     ; Set up data segments
     mov ax, 0x23    ; User data segment (0x20 + 3 = 0x23)
@@ -247,78 +229,5 @@ switch_to_user_mode_x64:
     ; This should never be reached
     ret
 
-; ===============================================================================
-; TASK SWITCHING WITH TSS
-; ===============================================================================
-; void switch_task_tss_x64(task_t *next_task)
-; Switches tasks using TSS (Task State Segment)
 
-switch_task_tss_x64:
-    ; Function prologue
-    push rbp
-    mov rbp, rsp
-    
-    ; rdi = next task pointer
-    
-    ; Load TSS selector
-    mov ax, [rdi + 0xF0]     ; Load TSS selector from task structure
-    ltr ax                    ; Load task register
-    
-    ; Jump to the task
-    jmp far [rdi + 0xE8]     ; Far jump to task entry point
-    
-    ; This should never return
-    ret
-
-; ===============================================================================
-; INTERRUPT CONTEXT SWITCHING
-; ===============================================================================
-; void interrupt_context_switch_x64(void)
-; Performs context switching from interrupt context
-
-interrupt_context_switch_x64:
-    ; This is called from interrupt context
-    ; The interrupt frame is already on the stack
-    
-    ; Save current task state to current_task structure
-    ; This is a simplified version - in practice, you'd need to
-    ; save the interrupt frame and restore it later
-    
-    ; For now, just return
-    ret
-
-; ===============================================================================
-; UTILITY FUNCTIONS
-; ===============================================================================
-
-; void save_fpu_state_x64(void *fpu_state)
-; Saves FPU/SSE state
-save_fpu_state_x64:
-    ; rdi = pointer to FPU state buffer
-    fxsave [rdi]             ; Save FPU/SSE state
-    ret
-
-; void restore_fpu_state_x64(void *fpu_state)
-; Restores FPU/SSE state
-restore_fpu_state_x64:
-    ; rdi = pointer to FPU state buffer
-    fxrstor [rdi]            ; Restore FPU/SSE state
-    ret
-
-; void invalidate_tlb_x64(void)
-; Invalidates the TLB (Translation Lookaside Buffer)
-invalidate_tlb_x64:
-    mov rax, cr3             ; Load CR3
-    mov cr3, rax             ; Write back CR3 (invalidates TLB)
-    ret
-
-; void flush_cache_x64(void)
-; Flushes the CPU cache
-flush_cache_x64:
-    wbinvd                   ; Write back and invalidate cache
-    ret
-
-; ===============================================================================
-; GNU STACK SECTION - Prevents executable stack warning
-; ===============================================================================
 section .note.GNU-stack noalloc noexec nowrite progbits

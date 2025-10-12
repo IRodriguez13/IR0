@@ -1,5 +1,4 @@
-#ifndef IO_H
-#define IO_H
+#pragma once
 
 #include <stdint.h>
 #include <arch/common/arch_interface.h>
@@ -37,4 +36,3 @@ static inline void io_wait(void)
     outb(0x80, 0);
 }
 
-#endif // IO_H
