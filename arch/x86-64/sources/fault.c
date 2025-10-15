@@ -1,117 +1,113 @@
 #include <stdint.h>
 #include <ir0/print.h>
+#include <includes/ir0/memory/paging.h>
+#include <includes/ir0/memory/kmem.h>
 #include <panic/panic.h>
 
-// Manejadores de excepciones básicos para x86-64
-static char pf_log_buffer[256] __attribute__((unused));
-static int pf_log_pos __attribute__((unused)) = 0;
 
-void page_fault_handler_x64(uint64_t error_code __attribute__((unused)), uint64_t fault_address)
+void page_fault_handler_x64(uint64_t *stack)
 {
-    // CRITICAL: NO CALLS TO ANYTHING - Direct VGA write to avoid recursion
-    volatile uint16_t *vga = (volatile uint16_t *)0xB8000;
-    const char *msg = "PAGE FAULT!";
+    uint64_t fault_addr;
+    asm volatile("mov %%cr2, %0" : "=r"(fault_addr));
 
-    // Clear screen with red background
-    for (int i = 0; i < 80 * 25; i++)
+    uint64_t errcode = stack[1];
+
+    int not_present = !(errcode & 1);
+    int write = errcode & 2;
+    int user = errcode & 4;
+
+    if (user && not_present)
     {
-        vga[i] = 0x4F20; // White on red, space
+        void *phys_page = kmalloc(0x1000);
+        if (!phys_page)
+        {
+            panic("[PF] No hay memoria física para usuario");
+        }
+
+        uint64_t flags = PAGE_USER;
+        if (write)
+            flags |= PAGE_RW;
+
+        map_user_page(fault_addr & ~0xFFF, (uintptr_t)phys_page, flags);
+
+        return;
     }
 
-    // Write message
-    for (int i = 0; msg[i] != '\0'; i++)
-    {
-        vga[i] = 0x4F00 | msg[i]; // White on red
-    }
-
-    // Write fault address in hex (simple)
-    vga[80] = 0x4F00 | 'A';
-    vga[81] = 0x4F00 | 'd';
-    vga[82] = 0x4F00 | 'd';
-    vga[83] = 0x4F00 | 'r';
-    vga[84] = 0x4F00 | ':';
-    vga[85] = 0x4F00 | ' ';
-
-    // Write address (simplified - just show it's not zero)
-    if (fault_address)
-    {
-        vga[86] = 0x4F00 | 'N';
-        vga[87] = 0x4F00 | 'O';
-        vga[88] = 0x4F00 | 'N';
-        vga[89] = 0x4F00 | 'Z';
-    }
-    else
-    {
-        vga[86] = 0x4F00 | 'Z';
-        vga[87] = 0x4F00 | 'E';
-        vga[88] = 0x4F00 | 'R';
-        vga[89] = 0x4F00 | 'O';
-    }
-
-    // Halt forever - NO RETURN
-    __asm__ volatile("cli");
-    for (;;)
-        __asm__ volatile("hlt");
+    // Kernel fault o violación de permisos
+    print("[PF] Kernel page fault en ");
+    print_hex(fault_addr);
+    print(" - código: ");
+    print_hex(errcode);
+    print("\n");
+    panic("Unhandled kernel page fault");
 }
 
-void general_protection_fault_x64(uint64_t error_code)
+// -------------------------------------------------------------------
+// Double Fault
+// -------------------------------------------------------------------
+void double_fault_x64(uint64_t error_code, uint64_t rip)
 {
-    (void)error_code;
-    panic("GPF");
+    print_colored("DOUBLE FAULT!\n", 0x0C, 0x00);
+    print("Error code: ");
+    print_hex(error_code);
+    print("\n");
+    print("RIP: ");
+    print_hex(rip);
+    print("\n");
+    panic("Double fault - Kernel halted");
 }
 
-void double_fault_x64(uint64_t error_code)
-{
-    (void)error_code;
-    for (;;)
-        __asm__ volatile("cli; hlt");
-}
-
+// -------------------------------------------------------------------
+// Triple Fault
+// -------------------------------------------------------------------
 void triple_fault_x64()
 {
-    print_colored("TRIPLE FAULT x86-64!\n", 0x0C, 0x00);
-    delay_ms(1000);
-
-    print("TRIPLE FAULT - Error FATAL del sistema!\n");
-    print("Esto causa un reset inmediato del CPU.\n");
-    print("Posibles causas:\n");
-    print("  1. IDT mal configurado\n");
-    print("  2. PIC mal configurado\n");
-    print("  3. Manejador de excepción corrupto\n");
-    print("  4. Stack overflow\n");
-    delay_ms(5000);
-
-    // Triple fault causa reset automático, pero intentamos mostrar info
-    print("TRIPLE FAULT - Error FATAL del sistema!\n");
-    panic("Triple FAULT");
+    print_colored("TRIPLE FAULT!\n", 0x0C, 0x00);
+    print("FATAL: CPU reset imminent\n");
+    panic("Triple fault - System halted");
 }
 
-void invalid_opcode_x64()
+// -------------------------------------------------------------------
+// General Protection Fault
+// -------------------------------------------------------------------
+void general_protection_fault_x64(uint64_t error_code, uint64_t rip, uint64_t cs, uint64_t rsp)
 {
-    print_colored("INVALID OPCODE x86-64!\n", 0x0C, 0x00);
-    delay_ms(1000);
-
-    print("Se intentó ejecutar una instrucción no válida\n");
-    delay_ms(2000);
-
-    // Halt el sistema
-    while (1)
-    {
-        __asm__ volatile("hlt");
-    }
+    print_colored("GENERAL PROTECTION FAULT!\n", 0x0C, 0x00);
+    print("Error code: ");
+    print_hex(error_code);
+    print("\n");
+    print("RIP: ");
+    print_hex(rip);
+    print("\n");
+    print("CS: ");
+    print_hex(cs);
+    print("\n");
+    print("RSP: ");
+    print_hex(rsp);
+    print("\n");
+    panic("GPF - Kernel halted");
 }
 
-void divide_by_zero_x64()
+// -------------------------------------------------------------------
+// Invalid Opcode
+// -------------------------------------------------------------------
+void invalid_opcode_x64(uint64_t rip)
 {
-    print_colored("DIVIDE BY ZERO x86-64!\n", 0x0C, 0x00);
-    delay_ms(1000);
+    print_colored("INVALID OPCODE!\n", 0x0C, 0x00);
+    print("RIP: ");
+    print_hex(rip);
+    print("\n");
+    panic("Invalid instruction - Kernel halted");
+}
 
-    print("Se intentó dividir por cero\n");
-    delay_ms(2000);
-
-    // Halt el sistema
-    while (1)
-    {
-        __asm__ volatile("hlt");
-    }
+// -------------------------------------------------------------------
+// Divide by Zero
+// -------------------------------------------------------------------
+void divide_by_zero_x64(uint64_t rip)
+{
+    print_colored("DIVIDE BY ZERO!\n", 0x0C, 0x00);
+    print("RIP: ");
+    print_hex(rip);
+    print("\n");
+    panic("Divide by zero - Kernel halted");
 }

@@ -20,10 +20,7 @@ __attribute__((aligned(4096))) static uint64_t PD[512];
 
 void setup_paging_identity_16mb()
 {
-    // NO limpiar tablas - expandir las existentes del boot
-    // Las tablas mínimas del boot ya están configuradas
 
-    // Expandir PD para mapear 32MB (16 entradas de 2MB) - SOLUCIÓN IDEAL
     for (int i = 1; i < 16; i++) // Empezar desde 1 (0 ya está mapeado)
     {
         uint64_t phys_addr = i * PAGE_SIZE_2MB;

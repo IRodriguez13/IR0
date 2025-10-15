@@ -65,3 +65,12 @@ void serial_print_hex32(uint32_t num)
         serial_putchar(c);
     }
 }
+void serial_print_hex64(uint64_t num)
+{
+    serial_print("0x");
+    for (int i = 15; i >= 0; i--) {
+        int digit = (num >> (i * 4)) & 0xF;
+        char c = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+        serial_putchar(c);
+    }
+}
