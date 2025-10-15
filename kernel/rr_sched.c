@@ -43,81 +43,111 @@ void rr_add_process(process_t *proc)
     serial_print("\n");
 }
 
+void debug_print_task(const char *prefix, const task_t *task) {
+    if (!task) {
+        serial_print("SERIAL: [DEBUG] Task is NULL\n");
+        return;
+    }
+    
+    serial_print("SERIAL: [DEBUG] ");
+    serial_print(prefix);
+    serial_print(" PID=");
+    serial_print_hex32(task->pid);
+    serial_print(" RIP=0x");
+    serial_print_hex64(task->rip);
+    serial_print(" RSP=0x");
+    serial_print_hex64(task->rsp);
+    serial_print(" CR3=0x");
+    serial_print_hex64(task->cr3);
+    serial_print("\n");
+}
+
 void rr_schedule_next(void)
 {
-    if (!rr_head)
+    serial_print("SERIAL: [SCHED] Starting scheduler\n");
+    
+    if (!rr_head) {
+        serial_print("SERIAL: [SCHED] No processes in scheduler queue\n");
         return;
+    }
 
     static int first = 1;
     process_t *prev = current_process;
 
-    if (!rr_current)
+    // Log estado actual
+    if (prev) {
+        serial_print("SERIAL: [SCHED] Current process PID=");
+        serial_print_hex32(process_pid(prev));
+        serial_print(" state=");
+        serial_print_hex32(prev->state);
+        serial_print("\n");
+    } else {
+        serial_print("SERIAL: [SCHED] No current process\n");
+    }
+
+    // Seleccionar siguiente proceso
+    if (!rr_current) {
+        serial_print("SERIAL: [SCHED] First process in queue\n");
         rr_current = rr_head;
-    else
+    } else {
         rr_current = rr_current->next ? rr_current->next : rr_head;
+        serial_print("SERIAL: [SCHED] Next process in queue\n");
+    }
 
     process_t *next = rr_current->process;
-
-    if (!first && prev == next)
+    
+    if (!next) {
+        serial_print("SERIAL: [SCHED] ERROR: Next process is NULL\n");
         return;
+    }
 
-    if (prev && prev->state == PROCESS_RUNNING)
+    // Evitar cambio innecesario
+    if (!first && prev == next) {
+        serial_print("SERIAL: [SCHED] No context switch needed\n");
+        return;
+    }
+
+    // Actualizar estados
+    if (prev && prev->state == PROCESS_RUNNING) {
+        serial_print("SERIAL: [SCHED] Pausing PID=");
+        serial_print_hex32(process_pid(prev));
+        serial_print("\n");
         prev->state = PROCESS_READY;
+    }
 
+    serial_print("SERIAL: [SCHED] Activating PID=");
+    serial_print_hex32(process_pid(next));
+    serial_print("\n");
+    
     next->state = PROCESS_RUNNING;
     current_process = next;
 
-    serial_print("RR: switching to PID=");
-    serial_print_hex32(next->task.pid);
-    serial_print("\n");
+    // Log detallado del cambio
+    if (prev) {
+        serial_print("SERIAL: [SCHED] Context switch from PID=");
+        serial_print_hex32(process_pid(prev));
+        serial_print(" to PID=");
+        serial_print_hex32(process_pid(next));
+        serial_print("\n");
 
-    if (first)
-    {
-        // I know it's ugly but it works
+        debug_print_task("Previous task: ", &prev->task);
+    }
+    debug_print_task("Next task: ", &next->task);
+
+    // Primer cambio de contexto
+    if (first) {
         first = 0;
-        serial_print("RR: first switch - jumping to ring3\n");
+        serial_print("SERIAL: [SCHED] First context switch, jumping to ring3\n");
+        
+        // Habilitar interrupciones antes del salto
         __asm__ volatile("sti");
+        
+        // Saltar al proceso de usuario
         jmp_ring3((void *)next->task.rip);
 
-        // we should never get here
-        panic("Returned from jmp_ring3!");
+        // No deberíamos llegar aquí
+        panic("SERIAL: [PANIC] Returned from jmp_ring3!\n");
     }
 
-    if (prev)
-    {
-        serial_print("RR: switching context from PID=");
-        serial_print("RR: switching context from PID=");
-        serial_print_hex32(prev->task.pid);
-        serial_print(" to PID=");
-        serial_print_hex32(next->task.pid);
-        serial_print("\n");
-
-        serial_print("Prev RSP=0x");
-        serial_print_hex32(prev->task.rsp);
-        serial_print(" RIP=0x");
-        serial_print_hex32(prev->task.rip);
-        serial_print("\n");
-
-        serial_print("Next RSP=0x");
-        serial_print_hex32(next->task.rsp);
-        serial_print(" RIP=0x");
-        serial_print_hex32(next->task.rip);
-        serial_print("\n");
-
-        serial_print("Prev CR3=0x");
-        serial_print_hex32(prev->task.cr3);
-        serial_print(" Next CR3=0x");
-        serial_print_hex32(next->task.cr3);
-        serial_print("\n");
-
-        serial_print("Prev stack_start=0x");
-        serial_print_hex32(prev->stack_start);
-        serial_print(" Next stack_start=0x");
-        serial_print_hex32(next->stack_start);
-        serial_print("\n");
-
-        switch_context_x64(&prev->task, &next->task);
-
-        serial_print("RR: returned from switch_context_x64?\n"); // no debería pasar normalmente
-    }
+    // Cambio de contexto normal
 }
