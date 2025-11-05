@@ -7,6 +7,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <ir0/stat.h>
+
+typedef uint32_t mode_t;
 
 // ===============================================================================
 // MINIX FILESYSTEM CONSTANTS
@@ -143,14 +146,15 @@ bool minix_fs_is_working(void);
 // Filesystem operations
 int minix_fs_init(void);
 int minix_fs_format(void);
-int minix_fs_mkdir(const char *path);
+int minix_fs_mkdir(const char *path, mode_t mode);
 int minix_fs_ls(const char *path);
 
 int minix_fs_cat(const char *path);
 int minix_fs_write_file(const char *path, const char *content);
-int minix_fs_touch(const char *path);
+int minix_fs_touch(const char *path, mode_t mode);
 int minix_fs_rm(const char *path);
 int minix_fs_rmdir(const char *path);
+int minix_fs_stat(const char *pathname, stat_t *buf);
 void minix_fs_cleanup(void);
 
 // Operaciones de inodes
