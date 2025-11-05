@@ -2,9 +2,11 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <ir0/stat.h>
 
 // Basic types
 typedef int64_t off_t;
+typedef uint32_t mode_t;
 
 // ===============================================================================
 // SYSCALL NUMBERS - Must match kernel/shell.c
@@ -32,6 +34,14 @@ typedef int64_t off_t;
 #define SYS_MUNMAP 54
 #define SYS_MPROTECT 55
 #define SYS_EXEC 56
+#define SYS_FSTAT 57
+#define SYS_STAT 58
+#define SYS_OPEN 59
+#define SYS_CLOSE 60
+#define SYS_LS_DETAILED 61
+#define SYS_CREAT 62
+#define SYS_OPEN 59
+#define SYS_CLOSE 60
 
 // ===============================================================================
 // SYSCALL WRAPPER FUNCTIONS
@@ -197,5 +207,26 @@ static inline void *ir0_mmap(void *addr, size_t length, int prot, int flags, int
 static inline int64_t ir0_munmap(void *addr, size_t length)
 {
     return syscall2(SYS_MUNMAP, (int64_t)addr, length);
+}
+
+// File status
+static inline int64_t ir0_fstat(int fd, stat_t *buf)
+{
+    return syscall2(SYS_FSTAT, fd, (int64_t)buf);
+}
+
+static inline int64_t ir0_stat(const char *pathname, stat_t *buf)
+{
+    return syscall2(SYS_STAT, (int64_t)pathname, (int64_t)buf);
+}
+
+static inline int64_t ir0_open(const char *pathname, int flags, mode_t mode)
+{
+    return syscall3(SYS_OPEN, (int64_t)pathname, flags, mode);
+}
+
+static inline int64_t ir0_close(int fd)
+{
+    return syscall1(SYS_CLOSE, fd);
 }
 

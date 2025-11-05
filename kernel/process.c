@@ -245,3 +245,25 @@ uint64_t create_process_page_directory(void)
 
     return (uint64_t)pml4;
 }
+
+void process_init_fd_table(process_t *process)
+{
+    if (!process) {
+        return;
+    }
+
+    for (int i = 0; i < MAX_FDS_PER_PROCESS; i++) {
+        process->fd_table[i].in_use = false;
+        process->fd_table[i].path[0] = '\0';
+        process->fd_table[i].flags = 0;
+        process->fd_table[i].offset = 0;
+        process->fd_table[i].vfs_file = NULL;
+    }
+
+    process->fd_table[0].in_use = true;
+    strncpy(process->fd_table[0].path, "/dev/stdin", sizeof(process->fd_table[0].path) - 1);
+    process->fd_table[1].in_use = true;
+    strncpy(process->fd_table[1].path, "/dev/stdout", sizeof(process->fd_table[1].path) - 1);
+    process->fd_table[2].in_use = true;
+    strncpy(process->fd_table[2].path, "/dev/stderr", sizeof(process->fd_table[2].path) - 1);
+}

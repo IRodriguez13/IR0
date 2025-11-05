@@ -2,9 +2,21 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <kernel/scheduler/task.h>
 
 typedef uint32_t pid_t;
+typedef long off_t;
+
+#define MAX_FDS_PER_PROCESS 32
+
+typedef struct fd_entry {
+    bool in_use;
+    char path[256];
+    int flags;
+    off_t offset;
+    void *vfs_file;
+} fd_entry_t;
 
 typedef enum {
     PROCESS_READY = 0,
@@ -27,6 +39,7 @@ typedef struct process {
     process_state_t state;
     int exit_code;
     struct process *next;
+    fd_entry_t fd_table[MAX_FDS_PER_PROCESS];
 } process_t;
 
 #define process_rax(p) ((p)->task.rax)
@@ -62,3 +75,4 @@ process_t *get_process_list(void);
 pid_t process_get_next_pid(void);
 
 uint64_t create_process_page_directory(void);
+void process_init_fd_table(process_t *process);
