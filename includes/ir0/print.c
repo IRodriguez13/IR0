@@ -19,7 +19,7 @@ void putchar_at(char c, unsigned char color, int x, int y)
     vga[index] = (unsigned short)c | (unsigned short)color << 8;
 }
 
-// Función para scroll (mover todo una línea arriba)
+// Scroll screen up by one line
 void scroll()
 {
     unsigned short *vga = (unsigned short *)VGA_MEMORY;
