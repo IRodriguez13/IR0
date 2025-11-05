@@ -1,6 +1,16 @@
-// ===============================================================================
-// IR0 KERNEL - MINIX FILESYSTEM IMPLEMENTATION
-// ===============================================================================
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: minix_fs.c
+ * Description: MINIX filesystem implementation with disk I/O and directory
+ * operations
+ */
 
 #include "minix_fs.h"
 #include <drivers/storage/ata.h>
@@ -12,27 +22,17 @@
 #include <stdint.h>
 #include <string.h>
 
-// External memory functions
 extern void *kmalloc(size_t size);
 extern void kfree(void *ptr);
 
-// Definir constantes faltantes
 #define MINIX_SUPER_MAGIC 0x137F
-#define EIO 5 // Input/output error
+#define EIO 5
 #define MINIX_MAGIC 0x137F
-
-// ===============================================================================
-// MINIX FILESYSTEM CONSTANTS
-// ===============================================================================
 
 #define MINIX_ROOT_INODE 1
 #define MINIX_MAX_INODES 1024
 #define MINIX_MAX_ZONES 1024
 #define MINIX_ZONE_SIZE 1024
-
-// ===============================================================================
-// MINIX FILESYSTEM STRUCTURES
-// ===============================================================================
 
 typedef struct minix_fs_info {
   minix_superblock_t superblock;
@@ -42,10 +42,6 @@ typedef struct minix_fs_info {
   uint8_t *zone_table;
   bool initialized;
 } minix_fs_info_t;
-
-// ===============================================================================
-// GLOBAL VARIABLES
-// ===============================================================================
 
 static minix_fs_info_t minix_fs;
 

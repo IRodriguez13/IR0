@@ -447,10 +447,8 @@ int64_t sys_fstat(int fd, stat_t *buf) {
 }
 
 // Open file and return file descriptor
-// TODO: This should use proper VFS operations and be integrated with process fd
-// table
 int64_t sys_open(const char *pathname, int flags, mode_t mode) {
-  (void)mode; // TODO: Implement proper mode handling
+  (void)mode; /* Mode handling not implemented yet */
 
   if (!current_process || !pathname)
     return -EFAULT;
