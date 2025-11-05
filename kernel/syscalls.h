@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <ir0/stat.h>
 
 // Forward declarations
 typedef uint32_t mode_t;
@@ -25,6 +26,10 @@ int64_t sys_getppid(void);
 int64_t sys_ls(const char *pathname);
 int64_t sys_mkdir(const char *pathname, mode_t mode);
 int64_t sys_rmdir(const char *pathname);
+int64_t sys_fstat(int fd, stat_t *buf);
+int64_t sys_stat(const char *pathname, stat_t *buf);
+int64_t sys_open(const char *pathname, int flags, mode_t mode);
+int64_t sys_close(int fd);
 
 // Syscall handler
 int64_t syscall_handler(uint64_t number, syscall_args_t *args);

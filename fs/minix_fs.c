@@ -6,6 +6,7 @@
 #include <drivers/storage/ata.h>
 #include <drivers/timer/clock_system.h>
 #include <ir0/print.h>
+#include <ir0/stat.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -562,12 +563,10 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
     return -1;
   }
 
-  // Buscar una zona con espacio libre o asignar una nueva
   uint32_t target_zone = 0;
   uint32_t target_block = 0;
   int target_entry = -1;
 
-  // Primero buscar en zonas existentes
   for (int i = 0; i < 7; i++) {
     if (parent_inode->i_zone[i] == 0) {
       continue;
@@ -810,8 +809,6 @@ int minix_fs_format(void) {
   entries[1].inode = 1; // Root inode (parent of root is root)
   strcpy(entries[1].name, "..");
 
-  // No crear archivos ficticios - el directorio root solo tiene . y ..
-
   // Escribir directorio root
   if (minix_write_block(minix_fs.superblock.s_firstdatazone, root_dir_block) !=
       0) {
@@ -836,7 +833,7 @@ int minix_fs_format(void) {
   return 0;
 }
 
-int minix_fs_mkdir(const char *path) {
+int minix_fs_mkdir(const char *path, mode_t mode) {
   if (!minix_fs.initialized) {
     return -1;
   }
@@ -883,7 +880,7 @@ int minix_fs_mkdir(const char *path) {
   // Crear el nuevo inode de directorio
   minix_inode_t new_inode;
   memset(&new_inode, 0, sizeof(minix_inode_t));
-  new_inode.i_mode = MINIX_IFDIR | MINIX_IRWXU | MINIX_IRGRP | MINIX_IROTH;
+  new_inode.i_mode = MINIX_IFDIR | (mode & 0777);
   new_inode.i_uid = 0; // root
   new_inode.i_gid = 0; // root
   new_inode.i_size = 0;
@@ -1016,9 +1013,6 @@ void minix_fs_cleanup(void) {
     minix_fs.initialized = false;
   }
 }
-// ===============================================================================
-// FUNCIÓN PARA LEER ARCHIVOS (CAT)
-// ===============================================================================
 
 int minix_fs_cat(const char *path) {
   if (!minix_fs.initialized) {
@@ -1116,9 +1110,9 @@ int minix_fs_cat(const char *path) {
 int minix_fs_write_file(const char *path, const char *content) {
   extern void serial_print(const char *str);
   extern void serial_print_hex32(uint32_t num);
-  
+
   serial_print("SERIAL: minix_fs_write_file called\n");
-  
+
   if (!minix_fs.initialized) {
     serial_print("SERIAL: minix_fs_write_file: filesystem not initialized\n");
     return -1;
@@ -1128,12 +1122,12 @@ int minix_fs_write_file(const char *path, const char *content) {
     serial_print("SERIAL: minix_fs_write_file: path is NULL\n");
     return -1;
   }
-  
+
   if (!content) {
     serial_print("SERIAL: minix_fs_write_file: content is NULL\n");
     return -1;
   }
-  
+
   serial_print("SERIAL: minix_fs_write_file: path=");
   serial_print(path);
   serial_print(" content=");
@@ -1159,7 +1153,7 @@ int minix_fs_write_file(const char *path, const char *content) {
     }
   } else {
     // El archivo no existe, crearlo primero
-    if (minix_fs_touch(path) != 0) {
+    if (minix_fs_touch(path, 0644) != 0) {
       extern void serial_print(const char *str);
       serial_print("SERIAL: Error: Could not create file ");
       serial_print(path);
@@ -1247,7 +1241,7 @@ int minix_fs_write_file(const char *path, const char *content) {
 // FUNCIÓN PARA CREAR ARCHIVOS (TOUCH)
 // ===============================================================================
 
-int minix_fs_touch(const char *path) {
+int minix_fs_touch(const char *path, mode_t mode) {
   if (!minix_fs.initialized) {
     return -1;
   }
@@ -1300,8 +1294,7 @@ int minix_fs_touch(const char *path) {
 
   // Crear el nuevo inode para el archivo
   minix_inode_t new_inode = {0};
-  new_inode.i_mode =
-      MINIX_IFREG | 0644; // Regular file with rw-r--r-- permissions
+  new_inode.i_mode = MINIX_IFREG | (mode & 0777);
   new_inode.i_uid = 0;
   new_inode.i_size = 0; // Empty file
   new_inode.i_time = 0; // Simplified timestamp
@@ -1572,85 +1565,120 @@ int minix_fs_rmdir(const char *path) {
  * This function reads a complete file and allocates memory for it
  */
 int minix_fs_read_file(const char *path, void **data, size_t *size) {
-    if (!path || !data || !size) {
+  if (!path || !data || !size) {
+    return -1;
+  }
+
+  // Find the file inode
+  uint16_t inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0) {
+    return -1; // File not found
+  }
+
+  // Read the inode
+  minix_inode_t inode;
+  if (minix_read_inode(inode_num, &inode) != 0) {
+    return -1;
+  }
+
+  // Check if it's a regular file
+  if (!(inode.i_mode & MINIX_IFREG)) {
+    return -1; // Not a regular file
+  }
+
+  // Allocate memory for file content
+  *size = inode.i_size;
+  *data = kmalloc(*size);
+  if (!*data) {
+    return -1; // Memory allocation failed
+  }
+
+  // Read file content
+  uint8_t *buffer = (uint8_t *)*data;
+  size_t bytes_read = 0;
+
+  // Read direct zones (first 7 zones)
+  for (int i = 0; i < 7 && bytes_read < *size; i++) {
+    if (inode.i_zone[i] == 0) {
+      continue;
+    }
+
+    uint8_t block_buffer[MINIX_BLOCK_SIZE];
+    if (minix_read_block(inode.i_zone[i], block_buffer) != 0) {
+      kfree(*data);
+      return -1;
+    }
+
+    size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
+                               ? MINIX_BLOCK_SIZE
+                               : (*size - bytes_read);
+    memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+    bytes_read += bytes_to_copy;
+  }
+
+  // Handle indirect zones if needed (zone[7] and zone[8])
+  if (bytes_read < *size && inode.i_zone[7] != 0) {
+    // Single indirect zone
+    uint8_t indirect_buffer[MINIX_BLOCK_SIZE];
+    if (minix_read_block(inode.i_zone[7], indirect_buffer) != 0) {
+      kfree(*data);
+      return -1;
+    }
+
+    uint16_t *zone_list = (uint16_t *)indirect_buffer;
+    int num_zones = MINIX_BLOCK_SIZE / sizeof(uint16_t);
+
+    for (int i = 0; i < num_zones && bytes_read < *size; i++) {
+      if (zone_list[i] == 0) {
+        continue;
+      }
+
+      uint8_t block_buffer[MINIX_BLOCK_SIZE];
+      if (minix_read_block(zone_list[i], block_buffer) != 0) {
+        kfree(*data);
         return -1;
+      }
+
+      size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
+                                 ? MINIX_BLOCK_SIZE
+                                 : (*size - bytes_read);
+      memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+      bytes_read += bytes_to_copy;
     }
-    
-    // Find the file inode
-    uint16_t inode_num = minix_fs_get_inode_number(path);
-    if (inode_num == 0) {
-        return -1; // File not found
-    }
-    
-    // Read the inode
-    minix_inode_t inode;
-    if (minix_read_inode(inode_num, &inode) != 0) {
-        return -1;
-    }
-    
-    // Check if it's a regular file
-    if (!(inode.i_mode & MINIX_IFREG)) {
-        return -1; // Not a regular file
-    }
-    
-    // Allocate memory for file content
-    *size = inode.i_size;
-    *data = kmalloc(*size);
-    if (!*data) {
-        return -1; // Memory allocation failed
-    }
-    
-    // Read file content
-    uint8_t *buffer = (uint8_t *)*data;
-    size_t bytes_read = 0;
-    
-    // Read direct zones (first 7 zones)
-    for (int i = 0; i < 7 && bytes_read < *size; i++) {
-        if (inode.i_zone[i] == 0) {
-            continue;
-        }
-        
-        uint8_t block_buffer[MINIX_BLOCK_SIZE];
-        if (minix_read_block(inode.i_zone[i], block_buffer) != 0) {
-            kfree(*data);
-            return -1;
-        }
-        
-        size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE) ? 
-                               MINIX_BLOCK_SIZE : (*size - bytes_read);
-        memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
-        bytes_read += bytes_to_copy;
-    }
-    
-    // Handle indirect zones if needed (zone[7] and zone[8])
-    if (bytes_read < *size && inode.i_zone[7] != 0) {
-        // Single indirect zone
-        uint8_t indirect_buffer[MINIX_BLOCK_SIZE];
-        if (minix_read_block(inode.i_zone[7], indirect_buffer) != 0) {
-            kfree(*data);
-            return -1;
-        }
-        
-        uint16_t *zone_list = (uint16_t *)indirect_buffer;
-        int num_zones = MINIX_BLOCK_SIZE / sizeof(uint16_t);
-        
-        for (int i = 0; i < num_zones && bytes_read < *size; i++) {
-            if (zone_list[i] == 0) {
-                continue;
-            }
-            
-            uint8_t block_buffer[MINIX_BLOCK_SIZE];
-            if (minix_read_block(zone_list[i], block_buffer) != 0) {
-                kfree(*data);
-                return -1;
-            }
-            
-            size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE) ? 
-                                   MINIX_BLOCK_SIZE : (*size - bytes_read);
-            memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
-            bytes_read += bytes_to_copy;
-        }
-    }
-    
-    return 0;
+  }
+
+  return 0;
+}
+
+int minix_fs_stat(const char *pathname, stat_t *buf) {
+  if (!minix_fs.initialized || !pathname || !buf) {
+    return -1;
+  }
+
+  // Find the inode for this path
+  minix_inode_t *inode = minix_fs_find_inode(pathname);
+  if (!inode) {
+    return -1; // File not found
+  }
+
+  // Get inode number
+  uint16_t inode_num = minix_fs_get_inode_number(pathname);
+
+  // Fill stat structure with UNIX-compatible information
+  buf->st_dev = 0;                 // Device ID (0 for our simple FS)
+  buf->st_ino = inode_num;         // Inode number
+  buf->st_nlink = inode->i_nlinks; // Number of hard links
+  buf->st_uid = inode->i_uid;      // User ID
+  buf->st_gid = inode->i_gid;      // Group ID
+  buf->st_size = inode->i_size;    // File size in bytes
+  buf->st_atime = inode->i_time;   // Access time
+  buf->st_mtime = inode->i_time;   // Modification time
+  buf->st_ctime = inode->i_time;   // Creation time
+
+  // Convert MINIX mode to UNIX mode - simplified approach
+  // Since MINIX and UNIX use the same permission bit layout, we can copy
+  // directly
+  buf->st_mode = inode->i_mode;
+
+  return 0;
 }

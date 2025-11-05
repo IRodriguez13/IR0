@@ -19,6 +19,106 @@
 #include <ir0/memory/paging.h>
 #include <string.h>
 #include <kernel/rr_sched.h>
+#include <stdarg.h>
+
+// Proper path building without fake snprintf
+static void format_timestamp(uint32_t timestamp, char *buffer, size_t buffer_size) {
+  if (!buffer || buffer_size < 13) {
+    return;
+  }
+  
+  if (timestamp == 0) {
+    strncpy(buffer, "Jan  1 00:00 ", buffer_size - 1);
+    buffer[buffer_size - 1] = '\0';
+    return;
+  }
+  
+  const char *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  
+  uint32_t days_since_epoch = timestamp / 86400;
+  uint32_t seconds_today = timestamp % 86400;
+  uint32_t hours = seconds_today / 3600;
+  uint32_t minutes = (seconds_today % 3600) / 60;
+  
+  uint32_t year = 1970;
+  uint32_t month = 0;
+  uint32_t day = 1;
+  
+  uint32_t days_in_year = 365;
+  while (days_since_epoch >= days_in_year) {
+    days_since_epoch -= days_in_year;
+    year++;
+    days_in_year = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 366 : 365;
+  }
+  
+  uint32_t days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
+    days_in_month[1] = 29;
+  }
+  
+  while (days_since_epoch >= days_in_month[month]) {
+    days_since_epoch -= days_in_month[month];
+    month++;
+    if (month >= 12) {
+      month = 0;
+      year++;
+    }
+  }
+  day = days_since_epoch + 1;
+  
+  buffer[0] = months[month][0];
+  buffer[1] = months[month][1];
+  buffer[2] = months[month][2];
+  buffer[3] = ' ';
+  buffer[4] = ' ';
+  if (day >= 10) {
+    buffer[4] = '0' + (day / 10);
+  }
+  buffer[5] = '0' + (day % 10);
+  buffer[6] = ' ';
+  buffer[7] = '0' + (hours / 10);
+  buffer[8] = '0' + (hours % 10);
+  buffer[9] = ':';
+  buffer[10] = '0' + (minutes / 10);
+  buffer[11] = '0' + (minutes % 10);
+  buffer[12] = ' ';
+  buffer[13] = '\0';
+}
+
+static int build_path(char *dest, size_t dest_size, const char *dir, const char *name) {
+  if (!dest || !dir || !name || dest_size == 0) {
+    return -1;
+  }
+  
+  size_t dir_len = strlen(dir);
+  size_t name_len = strlen(name);
+  size_t total_len = dir_len + name_len + 2; // +2 for '/' and '\0'
+  
+  if (total_len > dest_size) {
+    return -1; // Path too long
+  }
+  
+  size_t i = 0;
+  
+  // Copy directory
+  for (size_t j = 0; j < dir_len && i < dest_size - 1; j++) {
+    dest[i++] = dir[j];
+  }
+  
+  // Add separator if needed
+  if (dir_len > 0 && dir[dir_len - 1] != '/' && i < dest_size - 1) {
+    dest[i++] = '/';
+  }
+  
+  // Copy filename
+  for (size_t j = 0; j < name_len && i < dest_size - 1; j++) {
+    dest[i++] = name[j];
+  }
+  
+  dest[i] = '\0';
+  return 0;
+}
 
 // External memory functions
 extern void *kmalloc(size_t size);
@@ -176,16 +276,159 @@ int vfs_ls(const char *path) {
   return minix_fs_ls(path);
 }
 
-int vfs_mkdir(const char *path, int mode __attribute__((unused))) {
+int vfs_mkdir(const char *path, int mode) {
   // Delegar al filesystem específico por ahora
-  extern int minix_fs_mkdir(const char *path);
-  return minix_fs_mkdir(path);
+  extern int minix_fs_mkdir(const char *path, mode_t mode);
+  return minix_fs_mkdir(path, (mode_t)mode);
 }
 
 int vfs_unlink(const char *path) {
   // Delegar al filesystem específico por ahora
   extern int minix_fs_rm(const char *path);
   return minix_fs_rm(path);
+}
+
+int vfs_stat(const char *path, stat_t *buf) {
+  if (!path || !buf) {
+    return -1;
+  }
+
+  // VFS layer - route to appropriate filesystem
+  // For now, delegate to MINIX filesystem
+  extern int minix_fs_stat(const char *pathname, stat_t *buf);
+  return minix_fs_stat(path, buf);
+}
+
+typedef struct {
+  char name[256];
+  uint16_t inode;
+  uint8_t type;
+} vfs_dirent_t;
+
+static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries) {
+  if (!path || !entries || max_entries <= 0) {
+    return -1;
+  }
+  
+  extern bool minix_fs_is_working(void);
+  extern minix_inode_t *minix_fs_find_inode(const char *pathname);
+  extern bool minix_is_dir(const minix_inode_t *inode);
+  extern int minix_read_block(uint32_t block_num, void *buffer);
+  
+  if (!minix_fs_is_working()) {
+    return -1;
+  }
+
+  minix_inode_t *dir_inode = minix_fs_find_inode(path);
+  if (!dir_inode || !minix_is_dir(dir_inode)) {
+    return -1;
+  }
+
+  int entry_count = 0;
+  
+  for (int i = 0; i < 7 && entry_count < max_entries; i++) {
+    if (dir_inode->i_zone[i] == 0) {
+      continue;
+    }
+
+    uint8_t block_buffer[MINIX_BLOCK_SIZE];
+    if (minix_read_block(dir_inode->i_zone[i], block_buffer) != 0) {
+      continue;
+    }
+
+    typedef struct {
+      uint16_t inode;
+      char name[14];
+    } minix_dir_entry_t;
+
+    minix_dir_entry_t *minix_entries = (minix_dir_entry_t *)block_buffer;
+    int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
+
+    for (int j = 0; j < num_entries && entry_count < max_entries; j++) {
+      if (minix_entries[j].inode == 0) {
+        continue;
+      }
+
+      strncpy(entries[entry_count].name, minix_entries[j].name, sizeof(entries[entry_count].name) - 1);
+      entries[entry_count].name[sizeof(entries[entry_count].name) - 1] = '\0';
+      entries[entry_count].inode = minix_entries[j].inode;
+      entries[entry_count].type = 0;
+      entry_count++;
+    }
+  }
+
+  return entry_count;
+}
+
+int vfs_ls_with_stat(const char *path) {
+  if (!path) {
+    path = "/";
+  }
+
+  extern void print_uint32(uint32_t num);
+  extern int64_t sys_write(int fd, const void *buf, size_t count);
+  
+  vfs_dirent_t entries[64];
+  int entry_count = vfs_readdir(path, entries, 64);
+  
+  if (entry_count < 0) {
+    sys_write(2, "ls: cannot access directory\n", 28);
+    return -1;
+  }
+
+  sys_write(1, "total 0\n", 8);
+
+  for (int i = 0; i < entry_count; i++) {
+    char full_path[256];
+    if (build_path(full_path, sizeof(full_path), path, entries[i].name) != 0) {
+      continue;
+    }
+
+    stat_t file_stat;
+    if (vfs_stat(full_path, &file_stat) == 0) {
+      char perms[11] = "----------";
+      
+      if (S_ISDIR(file_stat.st_mode)) perms[0] = 'd';
+      else if (S_ISREG(file_stat.st_mode)) perms[0] = '-';
+      else if (S_ISCHR(file_stat.st_mode)) perms[0] = 'c';
+      else if (S_ISBLK(file_stat.st_mode)) perms[0] = 'b';
+      else if (S_ISLNK(file_stat.st_mode)) perms[0] = 'l';
+      
+      if (file_stat.st_mode & S_IRUSR) perms[1] = 'r';
+      if (file_stat.st_mode & S_IWUSR) perms[2] = 'w';
+      if (file_stat.st_mode & S_IXUSR) perms[3] = 'x';
+      if (file_stat.st_mode & S_IRGRP) perms[4] = 'r';
+      if (file_stat.st_mode & S_IWGRP) perms[5] = 'w';
+      if (file_stat.st_mode & S_IXGRP) perms[6] = 'x';
+      if (file_stat.st_mode & S_IROTH) perms[7] = 'r';
+      if (file_stat.st_mode & S_IWOTH) perms[8] = 'w';
+      if (file_stat.st_mode & S_IXOTH) perms[9] = 'x';
+      
+      perms[10] = '\0';
+
+      sys_write(1, perms, 10);
+      sys_write(1, " ", 1);
+      
+      print_uint32(file_stat.st_nlink);
+      sys_write(1, " root root ", 11);
+      
+      print_uint32(file_stat.st_size);
+      sys_write(1, " ", 1);
+      
+      char date_str[14];
+      format_timestamp(file_stat.st_mtime, date_str, sizeof(date_str));
+      sys_write(1, date_str, strlen(date_str));
+      
+      sys_write(1, entries[i].name, strlen(entries[i].name));
+      sys_write(1, "\n", 1);
+    } else {
+      sys_write(1, "?????????? ? ? ? ? ? ", 20);
+      sys_write(1, entries[i].name, strlen(entries[i].name));
+      sys_write(1, "\n", 1);
+    }
+  }
+
+  return 0;
 }
 
 // Forward declarations for MINIX filesystem functions
