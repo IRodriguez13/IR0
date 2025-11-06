@@ -97,8 +97,6 @@ int64_t sys_write(int fd, const void *buf, size_t count) {
   return -EBADF;
 }
 
-// Remove duplicate declarations
-
 int64_t sys_read(int fd, void *buf, size_t count) {
   if (!current_process)
     return -ESRCH;
@@ -167,8 +165,6 @@ int64_t sys_mkdir(const char *pathname, mode_t mode) {
   extern int vfs_mkdir(const char *path, int mode);
   return vfs_mkdir(pathname, (int)mode);
 }
-
-// Helper function removed - was unused
 
 int64_t sys_ps(void) {
   // REAL sys_ps() - uses only real process management
