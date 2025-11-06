@@ -113,8 +113,10 @@ KERNEL_OBJS = \
     kernel/process.o \
     kernel/rr_sched.o \
     kernel/syscalls.o \
+    kernel/syscall_wrappers.o \
     kernel/shell.o \
-    kernel/elf_loader.o
+    kernel/elf_loader.o \
+    kernel/test_elf.o
 
 MEMORY_OBJS = \
     includes/ir0/memory/allocator.o \
