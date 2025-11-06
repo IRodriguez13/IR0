@@ -47,56 +47,48 @@ static uint16_t ata_get_port_base(uint8_t drive)
     }
 }
 
-// Get status port for drive
-static uint16_t ata_get_status_port(uint8_t drive) 
+/**
+ * ata_get_status_port - get status port for drive
+ * @drive: drive number (0-3)
+ *
+ * Returns status port address for the specified drive.
+ */
+static uint16_t ata_get_status_port(uint8_t drive)
 {
-    if (drive < 2) 
-    {
-        return ATA_PRIMARY_STATUS;
-    } 
-    else 
-    {
-        return ATA_SECONDARY_STATUS;
-    }
+	return (drive < 2) ? ATA_PRIMARY_STATUS : ATA_SECONDARY_STATUS;
 }
 
-// Get drive head port for drive
-static uint16_t ata_get_drive_head_port(uint8_t drive) 
+/**
+ * ata_get_drive_head_port - get drive head port for drive
+ * @drive: drive number (0-3)
+ *
+ * Returns drive head port address for the specified drive.
+ */
+static uint16_t ata_get_drive_head_port(uint8_t drive)
 {
-    if (drive < 2) 
-    {
-        return ATA_PRIMARY_DRIVE_HEAD;
-    } 
-    else 
-    {
-        return ATA_SECONDARY_DRIVE_HEAD;
-    }
+	return (drive < 2) ? ATA_PRIMARY_DRIVE_HEAD : ATA_SECONDARY_DRIVE_HEAD;
 }
 
-// Get sector count port for drive
-static uint16_t ata_get_sector_count_port(uint8_t drive) 
+/**
+ * ata_get_sector_count_port - get sector count port for drive
+ * @drive: drive number (0-3)
+ *
+ * Returns sector count port address for the specified drive.
+ */
+static uint16_t ata_get_sector_count_port(uint8_t drive)
 {
-    if (drive < 2) 
-    {
-        return ATA_PRIMARY_SECTOR_COUNT;
-    } 
-    else 
-    {
-        return ATA_SECONDARY_SECTOR_COUNT;
-    }
+	return (drive < 2) ? ATA_PRIMARY_SECTOR_COUNT : ATA_SECONDARY_SECTOR_COUNT;
 }
 
-// Get LBA ports for drive
-static uint16_t ata_get_lba_low_port(uint8_t drive) 
+/**
+ * ata_get_lba_low_port - get LBA low port for drive
+ * @drive: drive number (0-3)
+ *
+ * Returns LBA low port address for the specified drive.
+ */
+static uint16_t ata_get_lba_low_port(uint8_t drive)
 {
-    if (drive < 2) 
-    {
-        return ATA_PRIMARY_LBA_LOW;
-    } 
-    else 
-    {
-        return ATA_SECONDARY_LBA_LOW;
-    }
+	return (drive < 2) ? ATA_PRIMARY_LBA_LOW : ATA_SECONDARY_LBA_LOW;
 }
 
 static uint16_t ata_get_lba_mid_port(uint8_t drive) 

@@ -14,41 +14,74 @@
 #include "string.h"
 #include "stdarg.h"
 
-// ===============================================================================
-// BASIC STRING FUNCTIONS
-// ===============================================================================
+/* Compiler optimization hints */
+#define likely(x)	__builtin_expect(!!(x), 1)
+#define unlikely(x)	__builtin_expect(!!(x), 0)
 
+/**
+ * strlen - calculate length of string
+ * @str: string to measure
+ *
+ * Returns length of string excluding null terminator.
+ */
 size_t strlen(const char *str)
 {
-    size_t len = 0;
-    while (str[len] != '\0')
-    {
-        len++;
-    }
-    return len;
+	size_t len = 0;
+	
+	if (unlikely(!str))
+		return 0;
+	
+	while (str[len] != '\0')
+		len++;
+	
+	return len;
 }
 
+/**
+ * strcmp - compare two strings
+ * @s1: first string
+ * @s2: second string
+ *
+ * Returns negative, zero, or positive value if s1 is less than,
+ * equal to, or greater than s2.
+ */
 int strcmp(const char *s1, const char *s2)
 {
-    while (*s1 && (*s1 == *s2))
-    {
-        s1++;
-        s2++;
-    }
-    return *(unsigned char *)s1 - *(unsigned char *)s2;
+	if (unlikely(!s1 || !s2))
+		return s1 ? 1 : (s2 ? -1 : 0);
+	
+	while (*s1 && (*s1 == *s2)) {
+		s1++;
+		s2++;
+	}
+	
+	return *(unsigned char *)s1 - *(unsigned char *)s2;
 }
 
+/**
+ * strncmp - compare two strings up to n characters
+ * @s1: first string
+ * @s2: second string
+ * @n: maximum number of characters to compare
+ *
+ * Returns negative, zero, or positive value if s1 is less than,
+ * equal to, or greater than s2.
+ */
 int strncmp(const char *s1, const char *s2, size_t n)
 {
-    while (n && *s1 && (*s1 == *s2))
-    {
-        s1++;
-        s2++;
-        n--;
-    }
-    if (n == 0)
-        return 0;
-    return *(unsigned char *)s1 - *(unsigned char *)s2;
+	if (unlikely(!s1 || !s2 || n == 0))
+		return 0;
+	
+	while (n && *s1 && (*s1 == *s2)) {
+		s1++;
+		s2++;
+		n--;
+	}
+	
+	if (n == 0)
+		return 0;
+	
+	return *(unsigned char *)s1 - *(unsigned char *)s2;
 }
 
 char *strcpy(char *dest, const char *src)
