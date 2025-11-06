@@ -37,8 +37,7 @@
 #define SYS_MUNMAP 54
 #define SYS_MPROTECT 55
 #define SYS_EXEC 56
-#define SYS_SIMULATE_CHILD_EXIT 56
-// Use kernel's libc syscall interface
+#define SYS_LS_DETAILED 61
 #include <ir0/syscall.h>
 #include <string.h>
 

@@ -1,4 +1,12 @@
-// kernel/scheduler/scheduler.h - VERSIÓN CORREGIDA
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * File: scheduler.h
+ * Description: Process scheduler interface declarations
+ */
+
 #pragma once
 #include "scheduler_types.h"
 
@@ -27,9 +35,6 @@ int scheduler_ready(void);
 #define MAX_TASKS 256 // Máximo número de tareas para evitar loops infinitos
 #endif
 
-// ===============================================================================
-// PROCESS MANAGEMENT INTERFACE  
-// ===============================================================================
 
 // Forward declaration for process_t
 struct process;

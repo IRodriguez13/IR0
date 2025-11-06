@@ -821,29 +821,15 @@ scheduler_ops_t cfs_scheduler_ops = {
     .cleanup = cfs_cleanup,
     .private_data = &cfs_rq};
 
-// Global state flags
-scheduler_ops_t current_scheduler;
+// Global scheduler state
+scheduler_ops_t current_scheduler = {0};
 scheduler_type_t active_scheduler_type = SCHEDULER_NONE;
 
 int scheduler_cascade_init(void)
 {
-    // Only CFS - no fallbacks, no detection
-    active_scheduler_type = SCHEDULER_CFS;
-    current_scheduler = cfs_scheduler_ops;
-
-    if (current_scheduler.init)
-    {
-        current_scheduler.init();
-        return 0;
-    }
-
-    panic("CFS initialization failed");
-    return -1;
-}
-
-void scheduler_fallback_to_next(void)
-{
-    panic("Scheduler failed - CFS only, no fallback");
+    // Using Round Robin scheduler for now - simple and stable
+    // CFS will be added later when kernel is more mature
+    return 0; // RR scheduler doesn't need complex initialization
 }
 
 task_t *get_idle_task(void)

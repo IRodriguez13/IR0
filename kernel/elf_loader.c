@@ -66,42 +66,30 @@ typedef struct {
 #define ET_EXEC     2
 #define PT_LOAD     1
 #define EM_X86_64   0x3e
+#define ET_EXEC     2
+#define PT_LOAD     1
 
-
-/**
- * validate_elf_header - validate ELF64 header
- * @header: pointer to ELF header
- *
- * Returns 1 if valid, 0 if invalid.
- */
-static int validate_elf_header(const elf64_header_t *header)
-{
-	if (unlikely(!header))
-		return 0;
-
-	/* Check ELF magic number */
-	if (header->e_ident[0] != ELF_MAGIC_0 ||
-	    header->e_ident[1] != ELF_MAGIC_1 ||
-	    header->e_ident[2] != ELF_MAGIC_2 ||
-	    header->e_ident[3] != ELF_MAGIC_3)
-		return 0;
-
-	/* Check 64-bit class */
-	if (header->e_ident[4] != ELFCLASS64)
-		return 0;
-
-	/* Check x86-64 architecture */
-	if (header->e_machine != EM_X86_64)
-		return 0;
-
-	/* Check executable type */
-	if (header->e_type != ET_EXEC)
-		return 0;
-
-	return 1;
+static int validate_elf_header(const elf64_header_t *header) {
+    // Check ELF magic number
+    if (header->e_ident[0] != ELF_MAGIC_0 ||
+        header->e_ident[1] != ELF_MAGIC_1 ||
+        header->e_ident[2] != ELF_MAGIC_2 ||
+        header->e_ident[3] != ELF_MAGIC_3) {
+        return 0;
+    }
+    
+    // Check 64-bit and x86-64 architecture
+    if (header->e_ident[4] != ELFCLASS64 || header->e_machine != EM_X86_64) {
+        return 0;
+    }
+    
+    // Check executable type
+    if (header->e_type != ET_EXEC) {
+        return 0;
+    }
+    
+    return 1;
 }
-
-
 
 // Load ELF segments into memory at correct virtual addresses
 static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process_t *process) {
