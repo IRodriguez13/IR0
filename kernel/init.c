@@ -8,27 +8,24 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: init.c
- * Description: PID 1 init process - init_1 implementation for service management
- * and shell supervision
+ * Description: PID 1 init process - init_1 implementation for service
+ * management and shell supervision
  */
 
 #include "process.h"
 #include <ir0/memory/kmem.h>
-#include <string.h>
-#include <shell.h>
+#include <ir0/memory/paging.h>
 #include <rr_sched.h>
+#include <shell.h>
+#include <string.h>
 
-extern uint64_t create_process_page_directory(void);
-
-void init_1(void)
-{
+void init_1(void) {
   shell_entry();
   for (;;)
     shell_entry();
 }
 
-int start_init_process(void)
-{
+int start_init_process(void) {
   process_t *init = kmalloc(sizeof(process_t));
   if (!init)
     return -1;
@@ -48,8 +45,7 @@ int start_init_process(void)
   init->task.gs = 0x23;
   init->task.cr3 = create_process_page_directory();
 
-  if (!init->task.cr3)
-  {
+  if (!init->task.cr3) {
     kfree(init);
     return -1;
   }

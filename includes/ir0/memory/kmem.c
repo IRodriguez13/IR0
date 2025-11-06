@@ -13,23 +13,55 @@
 #include "kmem.h"
 #include <ir0/memory/allocator.h>
 
+/* Compiler optimization hints */
+#define likely(x)	__builtin_expect(!!(x), 1)
+#define unlikely(x)	__builtin_expect(!!(x), 0)
 
+/**
+ * kmalloc - allocate kernel memory
+ * @size: number of bytes to allocate
+ *
+ * Returns pointer to allocated memory or NULL on failure.
+ */
 void *kmalloc(size_t size)
 {
-    return alloc(size);
+	if (unlikely(size == 0))
+		return NULL;
+	
+	return alloc(size);
 }
 
+/**
+ * kfree - free kernel memory
+ * @ptr: pointer to memory to free
+ */
 void kfree(void *ptr)
 {
-    alloc_free(ptr);
+	if (likely(ptr))
+		alloc_free(ptr);
 }
 
+/**
+ * krealloc - reallocate kernel memory
+ * @ptr: pointer to existing memory
+ * @size: new size in bytes
+ *
+ * Returns pointer to reallocated memory or NULL on failure.
+ */
 void *krealloc(void *ptr, size_t size)
 {
-    return all_realloc(ptr, size);
+	if (unlikely(size == 0)) {
+		kfree(ptr);
+		return NULL;
+	}
+	
+	return all_realloc(ptr, size);
 }
 
+/**
+ * heap_init - initialize kernel heap allocator
+ */
 void heap_init(void)
 {
-    alloc_init();
+	alloc_init();
 }
