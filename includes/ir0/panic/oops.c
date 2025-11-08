@@ -1,4 +1,4 @@
-#include "panic.h"
+#include "oops.h"
 #include <ir0/print.h>
 
 // IR0 Advanced Panic Handler
@@ -65,8 +65,6 @@ void panic_advanced(const char *message, panic_level_t level, const char *file, 
     // Stack trace
     dump_stack_trace();
 
-    // informacion de la memoria
-    dump_memory_info();
 
     // Mensaje antes del cpu_relax
     print_colored("\n═══ SYSTEM HALTED ═══\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
@@ -204,28 +202,6 @@ void dump_stack_trace()
 #endif
 }
 
-void dump_memory_info()
-{
-    print_colored("--- MEMORY INFO ---\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-
-    // extern uint32_t free_pages_count, total_pages_count;  // Comentado - no existe en esta rama
-
-    // uint32_t used_pages = total_pages_count - free_pages_count;  // Comentado - no existe en esta rama
-    // uint32_t mem_usage_percent = (used_pages * 100) / total_pages_count;  // Comentado - no existe en esta rama
-
-    print("Using bump_allocator only\n");
-    // print("Total memory: ");
-    // print_hex_compact(total_pages_count * 4096);  // Comentado - no existe en esta rama
-    // print(" bytes\n");
-
-    // print("Free memory: ");
-    // print_hex_compact(free_pages_count * 4096);  // Comentado - no existe en esta rama
-    // print(" bytes\n");
-
-    // print("Memory usage: ");
-    // print_hex_compact(mem_usage_percent);  // Comentado - no existe en esta rama
-    // print("%\n\n");
-}
 
 // panic() original como wrapper. Así no tengo que reemplazarlo en cada llamado.
 void panic(const char *message)

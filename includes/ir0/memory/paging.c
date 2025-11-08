@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <ir0/print.h>
 #include <ir0/logging.h>
-#include <ir0/panic/panic.h>
+#include <ir0/panic/oops.h>
 #include "paging.h"
 #include <string.h>
 #include "allocator.h"
@@ -106,7 +106,7 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
     // Check if it's a huge page (2MB)
     if (table[index] & (1ULL << 7))
     {
-        return NULL; 
+        return NULL;
     }
 
     // Return physical address (identity mapped)
@@ -213,7 +213,6 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
     // Agregar flag de usuario
     flags |= PAGE_USER;
 
-
     // Mapear cada página
     for (size_t offset = 0; offset < size; offset += 0x1000)
     {
@@ -222,7 +221,6 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
         // Asignar página física usando kmalloc (simplificado)
         extern void *kmalloc(size_t size);
         uintptr_t phys_addr = (uintptr_t)kmalloc(0x1000);
-
 
         if (phys_addr == 0)
         {
