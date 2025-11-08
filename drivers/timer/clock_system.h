@@ -1,9 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-
-// Define time_t as uint64_t for freestanding environment
-typedef uint64_t time_t;
+#include <ir0/types.h>  // For time_t
 
 // ===============================================================================
 // CLOCK SYSTEM TYPES AND CONSTANTS

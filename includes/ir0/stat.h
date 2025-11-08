@@ -1,49 +1,36 @@
-#pragma once
+#ifndef _IR0_STAT_H
+#define _IR0_STAT_H
 
-#include <stdint.h>
-#include <stddef.h>
+#include <ir0/types.h>  // For standard types and mode bits
+#include <ir0/types.h> // Incluir types.h para off_t
 
-// File type constants for st_mode
-#define S_IFMT   0170000  // File type mask
-#define S_IFREG  0100000  // Regular file
-#define S_IFDIR  0040000  // Directory
-#define S_IFCHR  0020000  // Character device
-#define S_IFBLK  0060000  // Block device
-#define S_IFLNK  0120000  // Symbolic link
-#define S_IFSOCK 0140000  // Socket
+typedef struct stat stat_t;
 
-// Permission constants
-#define S_IRWXU 0000700  // User: read, write, execute
-#define S_IRUSR 0000400  // User: read
-#define S_IWUSR 0000200  // User: write
-#define S_IXUSR 0000100  // User: execute
+/* Structure describing file characteristics */
+struct stat {
+    dev_t     st_dev;         /* ID of device containing file */
+    ino_t     st_ino;         /* Inode number */
+    mode_t    st_mode;        /* File type and mode */
+    nlink_t   st_nlink;       /* Number of hard links */
+    uid_t     st_uid;         /* User ID of owner */
+    gid_t     st_gid;         /* Group ID of owner */
+    dev_t     st_rdev;        /* Device ID (if special file) */
+    off_t     st_size;        /* Total size, in bytes */
+    blksize_t st_blksize;     /* Block size for filesystem I/O */
+    blkcnt_t  st_blocks;      /* Number of 512B blocks allocated */
+    time_t    st_atime;       /* Time of last access */
+    time_t    st_mtime;       /* Time of last modification */
+    time_t    st_ctime;       /* Time of last status change */
+};
 
-#define S_IRWXG 0000070  // Group: read, write, execute
-#define S_IRGRP 0000040  // Group: read
-#define S_IWGRP 0000020  // Group: write
-#define S_IXGRP 0000010  // Group: execute
 
-#define S_IRWXO 0000007  // Others: read, write, execute
-#define S_IROTH 0000004  // Others: read
-#define S_IWOTH 0000002  // Others: write
-#define S_IXOTH 0000001  // Others: execute
+/* Test macros for file types */
+#define S_ISREG(m)  (((m) & S_IFMT) == S_IFREG)  /* Regular file */
+#define S_ISDIR(m)  (((m) & S_IFMT) == S_IFDIR)  /* Directory */
+#define S_ISCHR(m)  (((m) & S_IFMT) == S_IFCHR)  /* Character device */
+#define S_ISBLK(m)  (((m) & S_IFMT) == S_IFBLK)  /* Block device */
+#define S_ISFIFO(m) (((m) & S_IFMT) == S_IFIFO)  /* FIFO/pipe */
+#define S_ISLNK(m)  (((m) & S_IFMT) == S_IFLNK)  /* Symbolic link */
+#define S_ISSOCK(m) (((m) & S_IFMT) == S_IFSOCK) /* Socket */
 
-// Utility macros
-#define S_ISREG(m)  (((m) & S_IFMT) == S_IFREG)
-#define S_ISDIR(m)  (((m) & S_IFMT) == S_IFDIR)
-#define S_ISCHR(m)  (((m) & S_IFMT) == S_IFCHR)
-#define S_ISBLK(m)  (((m) & S_IFMT) == S_IFBLK)
-#define S_ISLNK(m)  (((m) & S_IFMT) == S_IFLNK)
-
-typedef struct stat {
-    uint16_t st_dev;     // Device ID
-    uint16_t st_ino;     // Inode number
-    uint16_t st_mode;    // File type and permissions
-    uint16_t st_nlink;   // Number of hard links
-    uint16_t st_uid;     // User ID
-    uint16_t st_gid;     // Group ID
-    uint32_t st_size;    // File size in bytes
-    uint32_t st_atime;   // Access time
-    uint32_t st_mtime;   // Modification time
-    uint32_t st_ctime;   // Creation time
-} stat_t;
+#endif /* _IR0_STAT_H */

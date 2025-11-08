@@ -3,9 +3,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <ir0/stat.h>
+#include <ir0/types.h> // Incluir types.h para off_t
 
 // Basic types
-typedef int64_t off_t;
 typedef uint32_t mode_t;
 
 // ===============================================================================
@@ -46,6 +46,7 @@ typedef uint32_t mode_t;
 #define SYS_UNLINK 87
 #define SYS_RMDIR_R 88
 #define SYS_MOUNT 90
+#define SYS_CHMOD 100 // Definición de SYS_CHMOD
 
 // ===============================================================================
 // SYSCALL WRAPPER FUNCTIONS

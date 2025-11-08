@@ -8,47 +8,12 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <ir0/types.h>  // For standard types
 #include <stddef.h>
 
 /* Forward declarations */
 struct stat;
 typedef struct stat stat_t;
-typedef uint32_t mode_t;
-typedef long off_t;
-typedef uint32_t pid_t;
-
-
-#define SYS_READ       0
-#define SYS_WRITE      1
-#define SYS_OPEN       2
-#define SYS_CLOSE      3
-#define SYS_STAT       4
-#define SYS_FSTAT      5
-#define SYS_LSEEK      8
-#define SYS_WRITE_FILE 8
-#define SYS_MMAP       9
-#define SYS_MUNMAP     11
-#define SYS_BRK        12
-#define SYS_GETPID     39
-#define SYS_FORK       57
-#define SYS_EXEC       56
-#define SYS_EXIT       60
-#define SYS_WAIT4      61
-#define SYS_GETCWD     79
-#define SYS_CHDIR      80
-#define SYS_MKDIR      83
-#define SYS_RMDIR      84
-#define SYS_UNLINK     87
-#define SYS_RMDIR_R    88
-#define SYS_GETPPID    110
-
-/* Special/Debug */
-#define SYS_LS         5
-#define SYS_PS         7
-#define SYS_CAT        9
-#define SYS_READ_FILE  10
-#define SYS_LS_DETAILED 61
 
 
 /* Syscall implementations */

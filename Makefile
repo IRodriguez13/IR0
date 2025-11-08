@@ -38,14 +38,15 @@ CFLAGS += -I$(KERNEL_ROOT)
 CFLAGS += -I$(KERNEL_ROOT)/includes
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
-CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/include
-CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/sources
-CFLAGS += -I$(KERNEL_ROOT)/setup
-CFLAGS += -I$(KERNEL_ROOT)/memory
-CFLAGS += -I$(KERNEL_ROOT)/interrupt
+CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include
+CFLAGS += -I$(KERNEL_ROOT)/include
+CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/drivers
 CFLAGS += -I$(KERNEL_ROOT)/fs
-CFLAGS += -I$(KERNEL_ROOT)/kernel
+CFLAGS += -I$(KERNEL_ROOT)/interrupt
+CFLAGS += -I$(KERNEL_ROOT)/memory
+CFLAGS += -I$(KERNEL_ROOT)/scheduler
+CFLAGS += -I$(KERNEL_ROOT)/includesnel
 
 # Assembler and linker flags
 ASMFLAGS = -f elf64
@@ -118,7 +119,8 @@ KERNEL_OBJS = \
     kernel/task.o \
     kernel/syscalls.o \
     kernel/shell.o \
-    kernel/elf_loader.o
+    kernel/elf_loader.o \
+    kernel/user.o
 
 MEMORY_OBJS = \
 	includes/ir0/memory/allocator.o \
@@ -153,13 +155,20 @@ DRIVER_OBJS = \
     drivers/timer/hpet/find_hpet.o \
     drivers/timer/lapic/lapic.o \
     drivers/storage/ata.o \
+    drivers/storage/ata_helpers.o \
+    drivers/storage/fs_types.o \
 	drivers/video/vbe.o \
 	drivers/video/typewriter.o
 
 FS_OBJS = \
     fs/vfs.o \
     fs/minix_fs.o \
-    fs/vfs_simple.o
+    fs/vfs_simple.o \
+    fs/path.o \
+    fs/chmod.o
+
+DISK_OBJS = \
+    drivers/disk/partition.o
 
 ARCH_OBJS = \
     arch/x86-64/sources/arch_x64.o \
@@ -178,7 +187,7 @@ SETUP_OBJS = \
 
 # All objects
 ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
-           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS)
+           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS)
 
 # ===============================================================================
 # BUILD RULES
@@ -280,6 +289,15 @@ debug: kernel-x64.iso disk.img
 # Create disk image (wrapper for scripts/create_disk.sh)
 create-disk: disk.img
 	@echo "🔧 Disk image is ready: disk.img"
+
+# Delete disk image (useful to reset persistent disk for QEMU)
+delete-disk:
+	@if [ -f disk.img ]; then \
+		rm -f disk.img; \
+		echo "✓ Disk image removed: disk.img"; \
+	else \
+		echo "  Disk image not found: disk.img"; \
+	fi
 
 # ===============================================================================
 # CLEAN
