@@ -39,7 +39,7 @@ void panic_advanced(const char *message, panic_level_t level, const char *file, 
 
     // Header con timestamp pero para timer.
     print_colored("╔═══════════════════════════════════════════════════════════╗\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-    print_colored("║                     KERNEL PANIC                          ║\n", VGA_COLOR_WHITE, VGA_COLOR_RED);
+    print_colored("║                     KERNEL PANIC :-(                         ║\n", VGA_COLOR_WHITE, VGA_COLOR_RED);
     print_colored("╚═══════════════════════════════════════════════════════════╝\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
 
     print("\n");
