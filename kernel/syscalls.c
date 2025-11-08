@@ -818,10 +818,9 @@ int64_t sys_rmdir_recursive(const char *pathname)
 	if (!pathname)
 		return -EFAULT;
 
-	/* TODO: Implement recursive directory removal */
-	/* For now, just try regular rmdir */
-	extern int minix_fs_rmdir(const char *path);
-	return minix_fs_rmdir(pathname);
+	/* Call VFS recursive removal */
+	extern int vfs_rmdir_recursive(const char *path);
+	return vfs_rmdir_recursive(pathname);
 }
 
 void syscalls_init(void) {
@@ -918,6 +917,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_chdir((const char *)arg1);
   case 87:
     return sys_unlink((const char *)arg1);
+  case 88:
+    return sys_rmdir_recursive((const char *)arg1);
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");

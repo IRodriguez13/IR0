@@ -21,6 +21,16 @@
 #include <kernel/rr_sched.h>
 #include <stdarg.h>
 
+/* Forward declarations and types */
+typedef struct {
+  char name[256];
+  uint16_t inode;
+  uint8_t type;
+} vfs_dirent_t;
+
+static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries);
+static int build_path(char *dest, size_t dest_size, const char *dir, const char *name);
+
 // Proper path building without fake snprintf
 static void format_timestamp(uint32_t timestamp, char *buffer, size_t buffer_size) {
   if (!buffer || buffer_size < 13) {
@@ -288,6 +298,80 @@ int vfs_unlink(const char *path) {
   return minix_fs_rm(path);
 }
 
+int vfs_rmdir_recursive(const char *path) {
+  extern int64_t sys_write(int fd, const void *buf, size_t count);
+  
+  if (!path) {
+    return -1;
+  }
+
+  // Check if path is valid and not root
+  if (path[0] == '\0' || (path[0] == '/' && path[1] == '\0')) {
+    sys_write(2, "rm: cannot remove root directory\n", 33);
+    return -1;
+  }
+
+  // Read directory contents
+  vfs_dirent_t entries[64];
+  int entry_count = vfs_readdir(path, entries, 64);
+  
+  if (entry_count < 0) {
+    // Not a directory, try to remove as file
+    return vfs_unlink(path);
+  }
+
+  // Recursively delete all entries
+  for (int i = 0; i < entry_count; i++) {
+    // Skip . and .. - check both name and first character
+    if (entries[i].name[0] == '\0') {
+      continue;
+    }
+    
+    if (entries[i].name[0] == '.' && 
+        (entries[i].name[1] == '\0' || 
+         (entries[i].name[1] == '.' && entries[i].name[2] == '\0'))) {
+      continue;
+    }
+
+    // Build full path
+    char full_path[512];
+    if (build_path(full_path, sizeof(full_path), path, entries[i].name) != 0) {
+      continue;
+    }
+
+    // Prevent infinite recursion - check if we're trying to delete parent
+    if (strcmp(full_path, path) == 0) {
+      continue;
+    }
+
+    // Check if it's a directory
+    stat_t st;
+    if (vfs_stat(full_path, &st) == 0) {
+      if (S_ISDIR(st.st_mode)) {
+        // Recursively delete subdirectory
+        if (vfs_rmdir_recursive(full_path) != 0) {
+          sys_write(2, "rm: failed to remove subdirectory: ", 35);
+          sys_write(2, full_path, strlen(full_path));
+          sys_write(2, "\n", 1);
+          return -1;
+        }
+      } else {
+        // Delete file
+        if (vfs_unlink(full_path) != 0) {
+          sys_write(2, "rm: failed to remove file: ", 27);
+          sys_write(2, full_path, strlen(full_path));
+          sys_write(2, "\n", 1);
+          return -1;
+        }
+      }
+    }
+  }
+
+  // Finally, remove the now-empty directory
+  extern int minix_fs_rmdir(const char *path);
+  return minix_fs_rmdir(path);
+}
+
 int vfs_stat(const char *path, stat_t *buf) {
   if (!path || !buf) {
     return -1;
@@ -298,12 +382,6 @@ int vfs_stat(const char *path, stat_t *buf) {
   extern int minix_fs_stat(const char *pathname, stat_t *buf);
   return minix_fs_stat(path, buf);
 }
-
-typedef struct {
-  char name[256];
-  uint16_t inode;
-  uint8_t type;
-} vfs_dirent_t;
 
 static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries) {
   if (!path || !entries || max_entries <= 0) {

@@ -82,6 +82,7 @@ int vfs_close(struct vfs_file *file);
 int vfs_ls(const char *path);
 int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);
+int vfs_rmdir_recursive(const char *path);
 int vfs_stat(const char *path, stat_t *buf);
 int vfs_ls_with_stat(const char *path);
 
