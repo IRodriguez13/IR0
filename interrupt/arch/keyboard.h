@@ -1,5 +1,4 @@
-#ifndef KEYBOARD_H
-#define KEYBOARD_H
+#pragma once
 
 #include <stdint.h>
 
@@ -27,4 +26,3 @@ void set_idle_mode(int is_idle);
 int is_in_idle_mode(void);
 void wakeup_from_idle(void);
 
-#endif // KEYBOARD_H

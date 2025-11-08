@@ -14,25 +14,21 @@
 #include <ir0/memory/paging.h>
 #include <string.h>
 
-/* ========================================================================== */
-/* INIT PROCESS ENTRY POINT                                                   */
-/* ========================================================================== */
+
 
 void init_1(void)
 {
 	/* Initialize typewriter effect */
 	typewriter_init();
-	
+
 	shell_entry();
-	
+
 	/* If shell exits, restart it */
 	for (;;)
 		shell_entry();
 }
 
-/* ========================================================================== */
-/* START INIT PROCESS                                                         */
-/* ========================================================================== */
+/*                                                START INIT 1 PROCESS                                                         */
 
 int start_init_process(void)
 {
