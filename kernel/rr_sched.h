@@ -1,18 +1,28 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/*
+ * IR0 Kernel - Round-Robin Scheduler
+ * Copyright (C) 2025 Iván Rodriguez
+ *
+ * Public interface for round-robin scheduler
+ */
+
 #pragma once
-#include <stdint.h>
+
 #include "process.h"
+
+/* ========================================================================== */
+/* TYPES                                                                      */
+/* ========================================================================== */
 
 typedef struct rr_task
 {
-    struct rr_task *next;
-    process_t *process;
+	process_t *process;
+	struct rr_task *next;
 } rr_task_t;
 
-// Scheduler globals
-extern rr_task_t *rr_head;
-extern rr_task_t *rr_tail;
-extern rr_task_t *rr_current;
+/* ========================================================================== */
+/* PUBLIC API                                                                 */
+/* ========================================================================== */
 
-// Round-robin API
 void rr_add_process(process_t *proc);
 void rr_schedule_next(void);
