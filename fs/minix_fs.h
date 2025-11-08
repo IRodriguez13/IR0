@@ -8,8 +8,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <ir0/stat.h>
-
-typedef uint32_t mode_t;
+#include <ir0/types.h>  // For standard types
 
 
 #define MINIX_BLOCK_SIZE 1024

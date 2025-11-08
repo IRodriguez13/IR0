@@ -5,11 +5,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <ir0/print.h>
+#include <ir0/types.h>  // For time_t
 #include "pit/pit.h"
-
-// Define time_t as uint64_t for freestanding environment
-typedef uint64_t time_t;
-
 #include "clock_system.h"
 
 // Global clock state

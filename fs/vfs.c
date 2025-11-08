@@ -20,6 +20,8 @@
 #include <string.h>
 #include <kernel/rr_sched.h>
 #include <stdarg.h>
+#include <ir0/fcntl.h>  // For file open flags
+#include <ir0/stat.h>   // For file mode flags
 
 /* Forward declarations and types */
 typedef struct {
@@ -264,6 +266,29 @@ int vfs_write(struct vfs_file *file, const char *buf, size_t count) {
   return -1;
 }
 
+int vfs_append(const char *path, const char *buf, size_t count) {
+  if (!path || !buf)
+    return -1;
+
+  struct vfs_file *file;
+  int ret = vfs_open(path, O_WRONLY | O_APPEND, &file);
+  if (ret != 0)
+    return ret;
+
+  // Move to end of file
+  if (file->f_inode->i_fop && file->f_inode->i_fop->seek) {
+    file->f_inode->i_fop->seek(file, 0, SEEK_END);
+  } else {
+    file->f_pos = file->f_inode->i_size;
+  }
+
+  // Write data
+  ret = vfs_write(file, buf, count);
+
+  vfs_close(file);
+  return ret;
+}
+
 int vfs_close(struct vfs_file *file) {
   if (!file)
     return -1;
@@ -377,8 +402,10 @@ int vfs_stat(const char *path, stat_t *buf) {
     return -1;
   }
 
-  // VFS layer - route to appropriate filesystem
-  // For now, delegate to MINIX filesystem
+  /*
+   * Route stat request through VFS layer to appropriate filesystem.
+   * Currently all requests are handled by the MINIX filesystem.
+   */
   extern int minix_fs_stat(const char *pathname, stat_t *buf);
   return minix_fs_stat(path, buf);
 }
@@ -454,7 +481,21 @@ int vfs_ls_with_stat(const char *path) {
     return -1;
   }
 
-  sys_write(1, "total 0\n", 8);
+  // Calculate total blocks
+  int total_blocks = 0;
+  for (int i = 0; i < entry_count; i++) {
+    char full_path[256];
+    if (build_path(full_path, sizeof(full_path), path, entries[i].name) == 0) {
+      stat_t st;
+      if (vfs_stat(full_path, &st) == 0) {
+        total_blocks += (st.st_size + 1023) / 1024;
+      }
+    }
+  }
+
+  char total[32];
+  snprintf(total, sizeof(total), "total %d\n", total_blocks);
+  sys_write(1, total, strlen(total));
 
   for (int i = 0; i < entry_count; i++) {
     char full_path[256];
@@ -487,10 +528,19 @@ int vfs_ls_with_stat(const char *path) {
       sys_write(1, perms, 10);
       sys_write(1, " ", 1);
       
-      print_uint32(file_stat.st_nlink);
-      sys_write(1, " root root ", 11);
-      
-      print_uint32(file_stat.st_size);
+      // Format links field (right-aligned width 2)
+      char links[8];
+      snprintf(links, sizeof(links), "%2d", file_stat.st_nlink);
+      sys_write(1, links, strlen(links));
+      sys_write(1, " ", 1);
+
+      // Owner and group (fixed width fields)
+      sys_write(1, "root      root      ", 19);
+
+      // Format size field (right-aligned width 8)
+      char size[16];
+      snprintf(size, sizeof(size), "%8d", (int)file_stat.st_size);
+      sys_write(1, size, strlen(size));
       sys_write(1, " ", 1);
       
       char date_str[14];
@@ -498,6 +548,14 @@ int vfs_ls_with_stat(const char *path) {
       sys_write(1, date_str, strlen(date_str));
       
       sys_write(1, entries[i].name, strlen(entries[i].name));
+      // Add trailing slash for directories
+      if (S_ISDIR(file_stat.st_mode)) {
+        sys_write(1, "/", 1);
+      }
+      // Add execute marker for executables
+      else if (S_ISREG(file_stat.st_mode) && (file_stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
+        sys_write(1, "*", 1);
+      }
       sys_write(1, "\n", 1);
     } else {
       sys_write(1, "?????????? ? ? ? ? ? ", 20);

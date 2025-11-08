@@ -16,13 +16,25 @@
 #include "process.h"
 #include <drivers/serial/serial.h>
 #include <drivers/video/typewriter.h>
+#include <drivers/disk/partition.h>
+#include <drivers/storage/ata.h>
+#include <drivers/storage/fs_types.h>
 #include <fs/minix_fs.h>
 #include <kernel/elf_loader.h>
 #include <ir0/memory/allocator.h>
 #include <ir0/memory/kmem.h>
 #include <ir0/print.h>
 #include <ir0/stat.h>
+#include <ir0/user.h>
 #include <kernel/rr_sched.h>
+
+// ATA driver function declarations
+extern bool ata_drive_present(uint8_t drive);
+extern uint64_t ata_get_size(uint8_t drive);
+extern const char* ata_get_model(uint8_t drive);
+extern const char* ata_get_serial(uint8_t drive);
+extern bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t count, void *buffer);
+extern const char* get_fs_type(uint8_t system_id);
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -35,14 +47,13 @@
 // well-defined interface and avoid scattered forward declarations.
 #include <ir0/keyboard.h>
 #include <fs/vfs.h>
+#include <ir0/path.h>
 
 // All filesystem and utility functions are declared in their respective
 // headers (included above): <fs/minix_fs.h>, <fs/vfs.h>, <ir0/print.h>.
 
 // Basic types and constants
 typedef uint32_t mode_t;
-typedef long intptr_t;
-typedef long off_t;
 
 // Errno codes
 #define ESRCH 3
@@ -415,14 +426,151 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   if (!dev || !mountpoint)
     return -EFAULT;
 
-  // Use unified VFS mount; fstype may be NULL to autodetect or use default
+  /* Validate device path */
+  if (dev[0] != '/' || strlen(dev) >= 256) {
+    sys_write(STDERR_FILENO, "mount: invalid device path\n", 26);
+    return -EFAULT;
+  }
+
+  /* Validate mountpoint path */
+  if (mountpoint[0] != '/' || strlen(mountpoint) >= 256) {
+    sys_write(STDERR_FILENO, "mount: invalid mount point\n", 26);
+    return -EFAULT;
+  }
+
+  /* Check if mountpoint exists and is a directory */
+  stat_t st;
+  if (vfs_stat(mountpoint, &st) < 0) {
+    sys_write(STDERR_FILENO, "mount: mount point does not exist\n", 33);
+    return -EFAULT;
+  }
+  if (!S_ISDIR(st.st_mode)) {
+    sys_write(STDERR_FILENO, "mount: mount point is not a directory\n", 37);
+    return -EFAULT;
+  }
+
+  /* Use unified VFS mount; fstype may be NULL to autodetect */
   int ret = vfs_mount(dev, mountpoint, fstype);
-  if (ret < 0)
-  {
-    sys_write(STDERR_FILENO, "mount failed\n", 13);
+  if (ret < 0) {
+    /* Report specific error */
+    if (!fstype || !*fstype) {
+      sys_write(STDERR_FILENO, "mount: failed to autodetect filesystem type\n", 43);
+    } else {
+      sys_write(STDERR_FILENO, "mount: failed to mount ", 22);
+      sys_write(STDERR_FILENO, fstype, strlen(fstype));
+      sys_write(STDERR_FILENO, " filesystem\n", 12);
+    }
     return -1;
   }
+
   return ret;
+}
+
+// Get current user information
+int64_t sys_whoami(void) {
+  if (!current_process)
+    return -ESRCH;
+
+  user_info_t user;
+  if (get_current_user(&user) < 0) {
+    sys_write(STDERR_FILENO, "whoami: failed to get user info\n", 31);
+    return -1;
+  }
+
+  // Print username
+  sys_write(STDOUT_FILENO, user.name, strlen(user.name));
+  sys_write(STDOUT_FILENO, "\n", 1);
+
+  return 0;
+}
+
+int64_t sys_chmod(const char *path, mode_t mode) 
+{
+  if (!current_process || !path)
+    return -EFAULT;
+
+  // Call chmod through VFS layer
+  extern int chmod(const char *path, mode_t mode);
+  return chmod(path, mode);
+}
+
+int64_t sys_append(const char *path, const char *content, size_t count)
+{
+  if (!current_process || !path || !content)
+    return -EFAULT;
+
+  // Call append through VFS layer
+  extern int vfs_append(const char *path, const char *content, size_t count);
+  return vfs_append(path, content, count);
+}
+
+int64_t sys_lsblk(void)
+{
+  if (!current_process)
+    return -ESRCH;
+    
+  // Get list of drives first
+  uint8_t drives[4] = {0};
+  int drive_count = 0;
+  
+  for (uint8_t i = 0; i < 4; i++) {
+    if (ata_drive_present(i)) {
+      drives[drive_count++] = i;
+    }
+  }
+
+  // Header
+  sys_write(1, "NAME MAJ:MIN SIZE MODEL\n", 23);
+
+  // For each drive
+  for (int i = 0; i < drive_count; i++) {
+    uint8_t drive = drives[i];
+    char info[256];
+    int len = 0;
+    
+    uint64_t size = ata_get_size(drive);
+    const char *model = ata_get_model(drive);
+    const char *serial = ata_get_serial(drive);
+    
+    // Format basic info
+    len = snprintf(info, sizeof(info), "hd%c  %3d:0   %5lluG %s (%s)\n", 
+                   'a' + drive, drive, size / (2 * 1024 * 1024), model, serial);
+    
+    sys_write(1, info, len);
+
+    // Read first sector to check partition table type
+    uint8_t first_sector[512];
+    if (ata_read_sectors(drive, 0, 1, first_sector) == 0) {
+      // Detect partition table type and handle accordingly
+      if (first_sector[450] == 0xEE) { // GPT signature check
+        // GPT handling will be implemented later
+        continue;
+      }
+
+      // Check MBR signature
+      if (first_sector[510] == 0x55 && first_sector[511] == 0xAA) {
+        // Process MBR partition entries
+        for (int j = 0; j < 4; j++) {
+          // Partition entry offset calculation
+          int entry_offset = 446 + (j * 16);
+          uint8_t system_id = first_sector[entry_offset + 4];
+          uint32_t total_sectors;
+
+          memcpy(&total_sectors, &first_sector[entry_offset + 12], 4);
+
+          if (system_id != 0) {
+            len = snprintf(info, sizeof(info), "└─hd%c%d %3d:%-3d %5uG %s\n",
+                         'a' + drive, j + 1, drive, j + 1,
+                         total_sectors / (2 * 1024 * 1024),
+                         get_fs_type(system_id));
+            sys_write(1, info, len);
+          }
+        }
+      }
+    }
+  }
+
+  return 0;
 }
 
 int64_t sys_creat(const char *pathname, mode_t mode)
@@ -876,10 +1024,28 @@ int64_t sys_chdir(const char *pathname)
   if (len == 0 || len >= 256)
     return -EFAULT;
 
-  /* TODO: Validate that path exists and is a directory */
-  /* For now, just copy the path */
-  strncpy(current_process->cwd, pathname, 255);
-  current_process->cwd[255] = '\0';
+  /* Calculate new path */
+  char new_path[256];
+
+  if (is_absolute_path(pathname)) {
+    /* Absolute path - just normalize it */
+    if (normalize_path(pathname, new_path, sizeof(new_path)) != 0)
+      return -EFAULT;
+  } else {
+    /* Relative path - join with current working directory */
+    if (join_paths(current_process->cwd, pathname, new_path, sizeof(new_path)) != 0)
+      return -EFAULT;
+  }
+
+  /* Verify directory exists */
+  stat_t st;
+  int64_t ret = vfs_stat(new_path, &st);
+  if (ret < 0 || !S_ISDIR(st.st_mode))
+    return -EFAULT;
+
+  /* Update current working directory */
+  strncpy(current_process->cwd, new_path, sizeof(current_process->cwd) - 1);
+  current_process->cwd[sizeof(current_process->cwd) - 1] = '\0';
 
   return 0;
 }
@@ -921,6 +1087,9 @@ void syscalls_init(void)
 {
   // Connect to REAL process management only
   serial_print("SERIAL: syscalls_init: using REAL process management\n");
+
+  // Initialize user subsystem
+  user_init();
 
   // Debug: check real process system
   process_t *real_current = current_process;
@@ -1019,8 +1188,16 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   case 88:
     return sys_rmdir_recursive((const char *)arg1);
   case 90:
+    return sys_chmod((const char *)arg1, (mode_t)arg2);
+  case 91:
+    return sys_append((const char *)arg1, (const char *)arg2, (size_t)arg3);
+  case 92:
+    return sys_lsblk();
+  case 93:
     return sys_mount((const char *)arg1, (const char *)arg2,
                      (const char *)arg3);
+  case 94:
+    return sys_whoami();
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");

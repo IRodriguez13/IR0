@@ -12,7 +12,10 @@
 #include <ir0/memory/kmem.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <ir0/stat.h>
 #include <string.h>
+#include <drivers/storage/ata.h>
 
 // kernel/shell.c: use public headers for functions (kmem/string)
 
@@ -92,6 +95,50 @@ static const char *skip_whitespace(const char *str)
     str++;
   return str;
 }
+
+// Print unsigned 64-bit integer as decimal via typewriter_vga_print
+static void shell_print_u64(uint64_t v)
+{
+  char buf[32];
+  int idx = 0;
+  if (v == 0)
+  {
+    typewriter_vga_print("0", 0x0F);
+    return;
+  }
+  while (v > 0 && idx < (int)sizeof(buf) - 1)
+  {
+    buf[idx++] = '0' + (v % 10);
+    v /= 10;
+  }
+  for (int i = idx - 1; i >= 0; i--)
+  {
+    char tmp[2] = {buf[i], '\0'};
+    typewriter_vga_print(tmp, 0x0F);
+  }
+}
+
+// Human-readable size: prints bytes in B, KB, MB, GB with suffix
+static void shell_print_hr_size(uint64_t bytes)
+{
+  const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+  double value = (double)bytes;
+  int unit = 0;
+  while (value >= 1024.0 && unit < 4)
+  {
+    value /= 1024.0;
+    unit++;
+  }
+  // Print with one decimal if >= 10, else two decimals for small numbers
+  char buf[32];
+  if (value >= 100.0)
+    snprintf(buf, sizeof(buf), "%.0f%s", value, units[unit]);
+  else if (value >= 10.0)
+    snprintf(buf, sizeof(buf), "%.1f%s", value, units[unit]);
+  else
+    snprintf(buf, sizeof(buf), "%.2f%s", value, units[unit]);
+  typewriter_vga_print(buf, 0x0F);
+}
 /* Forward declarations for command handlers used in the table */
 static void cmd_list_help(void);
 static void cmd_mount(const char *args);
@@ -101,6 +148,11 @@ static void cmd_help(void)
   typewriter_vga_print("IR0 Shell - Available commands:\n", 0x0F);
   /* commands table will drive help output */
   cmd_list_help();
+}
+
+static void cmd_whoami(void)
+{
+  syscall(94, 0, 0, 0); // SYS_WHOAMI
 }
 
 static void cmd_clear(void)
@@ -195,55 +247,177 @@ static void cmd_echo(const char *text)
     return;
   }
 
-  // Check for output redirection (>)
-  const char *redirect_pos = strstr(text, " > ");
+  // Check for output redirection: support '>', ' > ', '>>', ' >> '
+  const char *redir = NULL;
+  int append = 0;
 
-  if (redirect_pos)
+  // Search for '>>' first (append), then single '>' (overwrite)
+  const char *pos = strstr(text, ">>");
+  if (pos)
   {
-    // Extract the text before '>'
-    size_t text_len = redirect_pos - text;
-    char *content = (char *)kmalloc(text_len + 2); // +1 for newline, +1 for null
-    if (!content)
+    redir = pos;
+    append = 1;
+  }
+  else
+  {
+    pos = strstr(text, ">");
+    if (pos)
+    {
+      redir = pos;
+      append = 0;
+    }
+  }
+
+  if (redir)
+  {
+    // Extract message (trim trailing space before redir)
+    size_t msg_len = (size_t)(redir - text);
+    while (msg_len > 0 && (text[msg_len - 1] == ' ' || text[msg_len - 1] == '\t'))
+      msg_len--;
+
+    // Build content (message + newline)
+    char *new_content = (char *)kmalloc(msg_len + 2);
+    if (!new_content)
     {
       typewriter_vga_print("Error: Out of memory\n", 0x0C);
       return;
     }
+    for (size_t i = 0; i < msg_len; i++)
+      new_content[i] = text[i];
+    new_content[msg_len] = '\n';
+    new_content[msg_len + 1] = '\0';
 
-    // Copy text content
-    for (size_t i = 0; i < text_len; i++)
-    {
-      content[i] = text[i];
-    }
-    content[text_len] = '\n';
-    content[text_len + 1] = '\0';
+    // Determine filename start (skip redir token and whitespace)
+    const char *fname_start = redir;
+    // Skip '>>' or '>' tokens
+    if (append && fname_start[0] == '>' && fname_start[1] == '>')
+      fname_start += 2;
+    else if (!append && fname_start[0] == '>')
+      fname_start += 1;
 
-    // Get filename (skip " > ")
-    const char *filename = skip_whitespace(redirect_pos + 3);
-
-    if (*filename == '\0')
+    fname_start = skip_whitespace(fname_start);
+    if (*fname_start == '\0')
     {
       typewriter_vga_print("Error: No filename specified\n", 0x0C);
-      kfree(content);
+      kfree(new_content);
       return;
     }
 
-    // Write to file using syscall
-    int64_t result = syscall(SYS_WRITE_FILE, (uint64_t)filename, (uint64_t)content, 0);
-
-    if (result < 0)
+    // If append requested, read existing file and concatenate
+    if (append)
     {
-      typewriter_vga_print("Error: Could not write to file '", 0x0C);
-      typewriter_vga_print(filename, 0x0C);
-      typewriter_vga_print("'\n", 0x0C);
+      // Prevent appending to directories or root
+      if (strcmp(fname_start, "/") == 0)
+      {
+        typewriter_vga_print("Error: Refusing to write to root '/'\n", 0x0C);
+        kfree(new_content);
+        return;
+      }
+      stat_t st;
+      int64_t sret = syscall(SYS_STAT, (uint64_t)fname_start, (uint64_t)&st, 0);
+      if (sret == 0 && S_ISDIR(st.st_mode))
+      {
+        typewriter_vga_print("Error: Refusing to write to a directory\n", 0x0C);
+        kfree(new_content);
+        return;
+      }
+
+      void *old_data = NULL;
+      size_t old_size = 0;
+      int64_t r = syscall(SYS_READ_FILE, (uint64_t)fname_start, (uint64_t)&old_data, (uint64_t)&old_size);
+      if (r >= 0 && old_data && old_size > 0)
+      {
+        // Allocate combined buffer
+        size_t total = old_size + (msg_len + 1);
+        char *combined = (char *)kmalloc(total + 1);
+        if (!combined)
+        {
+          typewriter_vga_print("Error: Out of memory\n", 0x0C);
+          // Free old_data if allocated by FS
+          if (old_data)
+            kfree(old_data);
+          kfree(new_content);
+          return;
+        }
+        // Copy old data then new content
+        for (size_t i = 0; i < old_size; i++)
+          combined[i] = ((char *)old_data)[i];
+        for (size_t i = 0; i < msg_len + 1; i++)
+          combined[old_size + i] = new_content[i];
+        combined[total] = '\0';
+
+        // Write back
+        int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)fname_start, (uint64_t)combined, 0);
+        if (w < 0)
+        {
+          typewriter_vga_print("Error: Could not write to file '", 0x0C);
+          typewriter_vga_print(fname_start, 0x0C);
+          typewriter_vga_print("'\n", 0x0C);
+        }
+        else
+        {
+          typewriter_vga_print("Written to '", 0x0A);
+          typewriter_vga_print(fname_start, 0x0A);
+          typewriter_vga_print("'\n", 0x0A);
+        }
+
+        kfree(combined);
+        if (old_data)
+          kfree(old_data);
+      }
+      else
+      {
+        // File doesn't exist or empty: just write new_content
+        int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)fname_start, (uint64_t)new_content, 0);
+        if (w < 0)
+        {
+          typewriter_vga_print("Error: Could not write to file '", 0x0C);
+          typewriter_vga_print(fname_start, 0x0C);
+          typewriter_vga_print("'\n", 0x0C);
+        }
+        else
+        {
+          typewriter_vga_print("Written to '", 0x0A);
+          typewriter_vga_print(fname_start, 0x0A);
+          typewriter_vga_print("'\n", 0x0A);
+        }
+      }
     }
     else
     {
-      typewriter_vga_print("Written to '", 0x0A);
-      typewriter_vga_print(filename, 0x0A);
-      typewriter_vga_print("'\n", 0x0A);
+      // Prevent overwriting root or directories
+      if (strcmp(fname_start, "/") == 0)
+      {
+        typewriter_vga_print("Error: Refusing to write to root '/'\n", 0x0C);
+        kfree(new_content);
+        return;
+      }
+      stat_t st;
+      int64_t sret = syscall(SYS_STAT, (uint64_t)fname_start, (uint64_t)&st, 0);
+      if (sret == 0 && S_ISDIR(st.st_mode))
+      {
+        typewriter_vga_print("Error: Refusing to overwrite a directory\n", 0x0C);
+        kfree(new_content);
+        return;
+      }
+
+      // Overwrite mode: write new_content directly
+      int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)fname_start, (uint64_t)new_content, 0);
+      if (w < 0)
+      {
+        typewriter_vga_print("Error: Could not write to file '", 0x0C);
+        typewriter_vga_print(fname_start, 0x0C);
+        typewriter_vga_print("'\n", 0x0C);
+      }
+      else
+      {
+        typewriter_vga_print("Written to '", 0x0A);
+        typewriter_vga_print(fname_start, 0x0A);
+        typewriter_vga_print("'\n", 0x0A);
+      }
     }
 
-    kfree(content);
+    kfree(new_content);
   }
   else
   {
@@ -550,6 +724,153 @@ static void cmd_type(const char *mode)
   }
 }
 
+/* Copy file: cp SRC DST */
+static void cmd_cp(const char *args)
+{
+  if (!args || *args == '\0') {
+    typewriter_vga_print("Usage: cp <src> <dst>\n", 0x0C);
+    return;
+  }
+
+  // tokenize
+  char buf[512];
+  size_t i = 0;
+  while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n') buf[i] = args[i++];
+  buf[i] = '\0';
+  char *p = buf;
+  while (*p == ' ' || *p == '\t') p++;
+  char *src = p;
+  while (*p && *p != ' ' && *p != '\t') p++;
+  if (*p) { *p++ = '\0'; }
+  while (*p == ' ' || *p == '\t') p++;
+  char *dst = p;
+  if (!src || !dst || *dst == '\0') {
+    typewriter_vga_print("Usage: cp <src> <dst>\n", 0x0C);
+    return;
+  }
+
+  void *data = NULL;
+  size_t size = 0;
+  int64_t r = syscall(SYS_READ_FILE, (uint64_t)src, (uint64_t)&data, (uint64_t)&size);
+  if (r < 0 || !data) {
+    typewriter_vga_print("cp: cannot read source\n", 0x0C);
+    return;
+  }
+
+  int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)dst, (uint64_t)data, 0);
+  if (w < 0) {
+    typewriter_vga_print("cp: cannot write destination\n", 0x0C);
+  } else {
+    typewriter_vga_print("cp: done\n", 0x0A);
+  }
+
+  if (data) kfree(data);
+}
+
+/* Move file: mv SRC DST (implemented as cp + unlink) */
+static void cmd_mv(const char *args)
+{
+  if (!args || *args == '\0') {
+    typewriter_vga_print("Usage: mv <src> <dst>\n", 0x0C);
+    return;
+  }
+  // simple reuse of cp parsing
+  char buf[512];
+  size_t i = 0;
+  while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n') buf[i] = args[i++];
+  buf[i] = '\0';
+  char *p = buf;
+  while (*p == ' ' || *p == '\t') p++;
+  char *src = p;
+  while (*p && *p != ' ' && *p != '\t') p++;
+  if (*p) { *p++ = '\0'; }
+  while (*p == ' ' || *p == '\t') p++;
+  char *dst = p;
+  if (!src || !dst || *dst == '\0') {
+    typewriter_vga_print("Usage: mv <src> <dst>\n", 0x0C);
+    return;
+  }
+
+  // Copy
+  void *data = NULL;
+  size_t size = 0;
+  int64_t r = syscall(SYS_READ_FILE, (uint64_t)src, (uint64_t)&data, (uint64_t)&size);
+  if (r < 0 || !data) {
+    typewriter_vga_print("mv: cannot read source\n", 0x0C);
+    return;
+  }
+
+  int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)dst, (uint64_t)data, 0);
+  if (w < 0) {
+    typewriter_vga_print("mv: cannot write destination\n", 0x0C);
+    if (data) kfree(data);
+    return;
+  }
+
+  // Unlink source
+  int64_t u = syscall(SYS_UNLINK, (uint64_t)src, 0, 0);
+  if (u < 0) {
+    typewriter_vga_print("mv: copied but failed to remove source\n", 0x0C);
+  } else {
+    typewriter_vga_print("mv: done\n", 0x0A);
+  }
+
+  if (data) kfree(data);
+}
+
+/* ln - create link (not implemented) */
+static void cmd_ln(const char *args)
+{
+  (void)args;
+  typewriter_vga_print("ln: creating hard links is not supported yet\n", 0x0C);
+}
+
+/* chmod MODE PATH */
+static void cmd_chmod(const char *args)
+{
+  if (!args || *args == '\0') {
+    typewriter_vga_print("Usage: chmod <mode> <path>\n", 0x0C);
+    return;
+  }
+  char buf[256];
+  size_t i = 0;
+  while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n') buf[i] = args[i++];
+  buf[i] = '\0';
+  char *p = buf;
+  while (*p == ' ' || *p == '\t') p++;
+  char *mode_s = p;
+  while (*p && *p != ' ' && *p != '\t') p++;
+  if (*p) { *p++ = '\0'; }
+  while (*p == ' ' || *p == '\t') p++;
+  char *path = p;
+  if (!mode_s || !path || *path == '\0') {
+    typewriter_vga_print("Usage: chmod <mode> <path>\n", 0x0C);
+    return;
+  }
+
+  // Parse octal mode
+  int mode = 0;
+  for (char *q = mode_s; *q; q++) {
+    if (*q < '0' || *q > '7') {
+      typewriter_vga_print("chmod: invalid mode\n", 0x0C);
+      return;
+    }
+    mode = (mode << 3) + (*q - '0');
+  }
+
+  int64_t r = syscall(SYS_CHMOD, (uint64_t)path, (uint64_t)mode, 0);
+  if (r < 0) {
+    typewriter_vga_print("chmod: failed\n", 0x0C);
+  }
+}
+
+/* chown not implemented (requires user subsystem) */
+static void cmd_chown(const char *args)
+{
+  (void)args;
+  typewriter_vga_print("chown: not implemented (requires user/uid support)\n", 0x0C);
+}
+
 /* Mount command: mount <device> <mountpoint> [fstype] */
 static void cmd_mount(const char *args)
 {
@@ -655,16 +976,26 @@ static void cmd_rm(const char *args)
     return;
   }
 
-  /* Check for -r flag */
-  if (str_starts_with(args, "-r "))
+  /* Robust flag parsing: allow -r, -f, -rf, -fr */
+  if (args[0] == '-')
   {
-    recursive = 1;
-    filename = skip_whitespace(args + 2);
-  }
-  else if (str_starts_with(args, "-rf "))
-  {
-    recursive = 1;
-    filename = skip_whitespace(args + 3);
+    int i = 1;
+    int seen_flag = 0;
+    while (args[i] && args[i] != ' ' && args[i] != '\t')
+    {
+      seen_flag = 1;
+      if (args[i] == 'r')
+        recursive = 1;
+      i++;
+    }
+    if (seen_flag)
+    {
+      filename = skip_whitespace(args + i);
+    }
+    else
+    {
+      filename = args; // should not happen, fallback
+    }
   }
   else
   {
@@ -703,6 +1034,127 @@ static void cmd_rm(const char *args)
     }
   }
 }
+
+/* List block devices (lsblk) - simple output based on ATA driver */
+static void cmd_lsblk(const char *args __attribute__((unused)))
+{
+  // Print header
+  typewriter_vga_print("NAME    MODEL                                 SIZE\n", 0x0F);
+
+  for (int i = 0; i < 4; i++)
+  {
+    char name[8];
+    name[0] = 'h';
+    name[1] = 'd';
+    name[2] = 'a' + i;
+    name[3] = '\0';
+
+    ata_device_info_t info;
+    if (!ata_get_device_info(i, &info))
+    {
+      // Device absent
+      typewriter_vga_print(name, 0x07);
+      typewriter_vga_print("    absent\n", 0x0C);
+      continue;
+    }
+
+    // Print device line: name + model + size
+    typewriter_vga_print(name, 0x07);
+    typewriter_vga_print("    ", 0x07);
+    typewriter_vga_print(info.model, 0x0F);
+    typewriter_vga_print("    ", 0x07);
+    if (info.capacity_bytes)
+    {
+      shell_print_hr_size(info.capacity_bytes);
+      typewriter_vga_print(" (", 0x07);
+      shell_print_u64(info.capacity_bytes);
+      typewriter_vga_print(" bytes)", 0x0F);
+    }
+    else
+    {
+      typewriter_vga_print("unknown", 0x0C);
+    }
+
+    // Print serial on the next line if present
+    if (info.serial[0] != '\0')
+    {
+      typewriter_vga_print("\n        S/N: ", 0x07);
+      typewriter_vga_print(info.serial, 0x0F);
+    }
+
+    typewriter_vga_print("\n", 0x0F);
+
+    // Attempt to read MBR and list partitions (basic MBR parsing)
+    unsigned char sector[ATA_SECTOR_SIZE];
+    if (ata_read_sectors(i, 0, 1, sector))
+    {
+      // Check MBR signature 0x55AA at offset 510
+      if (sector[510] == 0x55 && sector[511] == 0xAA)
+      {
+        // Partition table at offset 446, four entries of 16 bytes
+        for (int pe = 0; pe < 4; pe++)
+        {
+          int off = 446 + pe * 16;
+          unsigned char part_type = sector[off + 4];
+          uint32_t start_lba = *(uint32_t *)&sector[off + 8];
+          uint32_t num_sectors = *(uint32_t *)&sector[off + 12];
+          if (part_type != 0 && num_sectors != 0)
+          {
+            // Print partition line with human-readable size
+            char pname[16];
+            snprintf(pname, sizeof(pname), "  %s%d", name, pe + 1);
+            typewriter_vga_print(pname, 0x07);
+            typewriter_vga_print("    type=0x", 0x07);
+            char hx[4];
+            snprintf(hx, sizeof(hx), "%02X", part_type);
+            typewriter_vga_print(hx, 0x0F);
+            typewriter_vga_print(" start=", 0x07);
+            shell_print_u64(start_lba);
+            typewriter_vga_print(" size=", 0x07);
+            uint64_t part_bytes = (uint64_t)num_sectors * ATA_SECTOR_SIZE;
+            shell_print_hr_size(part_bytes);
+            typewriter_vga_print(" (", 0x07);
+            shell_print_u64(part_bytes);
+            typewriter_vga_print(" bytes)\n", 0x0F);
+          }
+        }
+      }
+    }
+  }
+}
+
+/* df - show simple disk capacity (per device) */
+static void cmd_df(const char *args __attribute__((unused)))
+{
+  typewriter_vga_print("Filesystem   Size\n", 0x0F);
+  for (int i = 0; i < 4; i++) {
+    char devname[16];
+    snprintf(devname, sizeof(devname), "/dev/hd%c", 'a' + i);
+
+    ata_device_info_t info;
+    if (!ata_get_device_info(i, &info)) {
+      continue;
+    }
+
+    uint64_t total = info.capacity_bytes;
+    uint64_t used = 0;
+    unsigned char sector[ATA_SECTOR_SIZE];
+    if (ata_read_sectors(i, 0, 1, sector)) {
+      if (sector[510] == 0x55 && sector[511] == 0xAA) {
+        for (int pe = 0; pe < 4; pe++) {
+          int off = 446 + pe * 16;
+          uint32_t num_sectors = *(uint32_t *)&sector[off + 12];
+          used += (uint64_t)num_sectors * ATA_SECTOR_SIZE;
+        }
+      }
+    }
+
+    typewriter_vga_print(devname, 0x07);
+    typewriter_vga_print("   ", 0x07);
+    shell_print_hr_size(total);
+    typewriter_vga_print("\n", 0x0F);
+  }
+}
 /* Command table: name, handler, description */
 struct shell_cmd
 {
@@ -715,7 +1167,13 @@ struct shell_cmd
 static const struct shell_cmd commands[] = {
     {"help", (void (*)(const char *))cmd_help, "help", "Show help"},
     {"clear", (void (*)(const char *))cmd_clear, "clear", "Clear screen"},
+    {"whoami", (void (*)(const char *))cmd_whoami, "whoami", "Print effective user name"},
     {"ls", cmd_ls, "ls [-l] [DIR]", "List directory"},
+  {"lsblk", cmd_lsblk, "lsblk", "List block devices"},
+  {"df", (void (*)(const char *))cmd_df, "df", "Show disk space"},
+  {"cp", cmd_cp, "cp SRC DST", "Copy file"},
+  {"mv", cmd_mv, "mv SRC DST", "Move (rename) file"},
+  {"ln", (void (*)(const char *))cmd_ln, "ln", "Create link (not supported)"},
     {"cat", cmd_cat, "cat FILE", "Print file"},
     {"mkdir", cmd_mkdir, "mkdir DIR", "Create directory"},
     {"rmdir", cmd_rmdir, "rmdir DIR", "Remove directory"},
@@ -728,6 +1186,8 @@ static const struct shell_cmd commands[] = {
     {"sed", cmd_sed, "sed 's/OLD/NEW/' FILE", "Substitute text in file"},
     {"type", cmd_type, "type [mode]", "Typewriter effect control"},
     {"mount", cmd_mount, "mount DEV MOUNTPOINT [fstype]", "Mount filesystem"},
+  {"chmod", (void (*)(const char *))cmd_chmod, "chmod MODE PATH", "Change file mode"},
+  {"chown", (void (*)(const char *))cmd_chown, "chown USER PATH", "Change file owner (not implemented)"},
     {"exit", (void (*)(const char *))cmd_exit, "exit", "Exit shell"},
 };
 
