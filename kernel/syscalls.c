@@ -27,6 +27,14 @@
 #include <ir0/stat.h>
 #include <ir0/user.h>
 #include <kernel/rr_sched.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <panic/oops.h>
+#include <ir0/keyboard.h>
+#include <fs/vfs.h>
+#include <ir0/path.h>
 
 // ATA driver function declarations
 extern bool ata_drive_present(uint8_t drive);
@@ -35,22 +43,6 @@ extern const char* ata_get_model(uint8_t drive);
 extern const char* ata_get_serial(uint8_t drive);
 extern bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t count, void *buffer);
 extern const char* get_fs_type(uint8_t system_id);
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-#include <panic/oops.h>
-
-// Use subsystem headers for proper declarations (keyboard/minix/vfs)
-#include <ir0/keyboard.h>
-// Use proper subsystem headers instead of manual externs to expose a
-// well-defined interface and avoid scattered forward declarations.
-#include <ir0/keyboard.h>
-#include <fs/vfs.h>
-#include <ir0/path.h>
-
-// All filesystem and utility functions are declared in their respective
-// headers (included above): <fs/minix_fs.h>, <fs/vfs.h>, <ir0/print.h>.
 
 // Basic types and constants
 typedef uint32_t mode_t;

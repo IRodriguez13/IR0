@@ -16,6 +16,7 @@
 #include <ir0/stat.h>
 #include <string.h>
 #include <drivers/storage/ata.h>
+#include "kernel/syscalls.h" // Ensure SYS_GET_BLOCK_DEVICES is included
 
 // kernel/shell.c: use public headers for functions (kmem/string)
 
@@ -1036,91 +1037,27 @@ static void cmd_rm(const char *args)
 }
 
 /* List block devices (lsblk) - simple output based on ATA driver */
-static void cmd_lsblk(const char *args __attribute__((unused)))
-{
-  // Print header
-  typewriter_vga_print("NAME    MODEL                                 SIZE\n", 0x0F);
+static void cmd_lsblk(const char *args) {
+    typewriter_vga_print("Listing block devices:\n", 0x0F);
 
-  for (int i = 0; i < 4; i++)
-  {
-    char name[8];
-    name[0] = 'h';
-    name[1] = 'd';
-    name[2] = 'a' + i;
-    name[3] = '\0';
+    // Allocate memory for block devices
+    ata_device_info_t devices[4];
+    size_t device_count = 4;
 
-    ata_device_info_t info;
-    if (!ata_get_device_info(i, &info))
-    {
-      // Device absent
-      typewriter_vga_print(name, 0x07);
-      typewriter_vga_print("    absent\n", 0x0C);
-      continue;
+    int64_t result = syscall(SYS_GET_BLOCK_DEVICES, (int64_t)devices, (int64_t)&device_count, 0);
+
+    if (result < 0 || device_count == 0) {
+        typewriter_vga_print("No block devices found or error occurred.\n", 0x0C);
+        return;
     }
 
-    // Print device line: name + model + size
-    typewriter_vga_print(name, 0x07);
-    typewriter_vga_print("    ", 0x07);
-    typewriter_vga_print(info.model, 0x0F);
-    typewriter_vga_print("    ", 0x07);
-    if (info.capacity_bytes)
-    {
-      shell_print_hr_size(info.capacity_bytes);
-      typewriter_vga_print(" (", 0x07);
-      shell_print_u64(info.capacity_bytes);
-      typewriter_vga_print(" bytes)", 0x0F);
+    // Iterate over the devices and print their details
+    for (size_t i = 0; i < device_count; i++) {
+        char buffer[256];
+        snprintf(buffer, sizeof(buffer), "Device: %s, Serial: %s, Size: %llu bytes\n",
+                 devices[i].model, devices[i].serial, devices[i].capacity_bytes);
+        typewriter_vga_print(buffer, 0x0F);
     }
-    else
-    {
-      typewriter_vga_print("unknown", 0x0C);
-    }
-
-    // Print serial on the next line if present
-    if (info.serial[0] != '\0')
-    {
-      typewriter_vga_print("\n        S/N: ", 0x07);
-      typewriter_vga_print(info.serial, 0x0F);
-    }
-
-    typewriter_vga_print("\n", 0x0F);
-
-    // Attempt to read MBR and list partitions (basic MBR parsing)
-    unsigned char sector[ATA_SECTOR_SIZE];
-    if (ata_read_sectors(i, 0, 1, sector))
-    {
-      // Check MBR signature 0x55AA at offset 510
-      if (sector[510] == 0x55 && sector[511] == 0xAA)
-      {
-        // Partition table at offset 446, four entries of 16 bytes
-        for (int pe = 0; pe < 4; pe++)
-        {
-          int off = 446 + pe * 16;
-          unsigned char part_type = sector[off + 4];
-          uint32_t start_lba = *(uint32_t *)&sector[off + 8];
-          uint32_t num_sectors = *(uint32_t *)&sector[off + 12];
-          if (part_type != 0 && num_sectors != 0)
-          {
-            // Print partition line with human-readable size
-            char pname[16];
-            snprintf(pname, sizeof(pname), "  %s%d", name, pe + 1);
-            typewriter_vga_print(pname, 0x07);
-            typewriter_vga_print("    type=0x", 0x07);
-            char hx[4];
-            snprintf(hx, sizeof(hx), "%02X", part_type);
-            typewriter_vga_print(hx, 0x0F);
-            typewriter_vga_print(" start=", 0x07);
-            shell_print_u64(start_lba);
-            typewriter_vga_print(" size=", 0x07);
-            uint64_t part_bytes = (uint64_t)num_sectors * ATA_SECTOR_SIZE;
-            shell_print_hr_size(part_bytes);
-            typewriter_vga_print(" (", 0x07);
-            shell_print_u64(part_bytes);
-            typewriter_vga_print(" bytes)\n", 0x0F);
-          }
-        }
-      }
-    }
-  }
 }
 
 /* df - show simple disk capacity (per device) */
