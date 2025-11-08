@@ -45,6 +45,7 @@ typedef uint32_t mode_t;
 #define SYS_GETCWD 79
 #define SYS_UNLINK 87
 #define SYS_RMDIR_R 88
+#define SYS_MOUNT 90
 
 // ===============================================================================
 // SYSCALL WRAPPER FUNCTIONS
@@ -221,6 +222,12 @@ static inline int64_t ir0_fstat(int fd, stat_t *buf)
 static inline int64_t ir0_stat(const char *pathname, stat_t *buf)
 {
     return syscall2(SYS_STAT, (int64_t)pathname, (int64_t)buf);
+}
+
+// Mount filesystem: dev (e.g. "/dev/sda1"), mountpoint (e.g. "/"), fstype (e.g. "minix")
+static inline int64_t ir0_mount(const char *dev, const char *mountpoint, const char *fstype)
+{
+    return syscall3(SYS_MOUNT, (int64_t)dev, (int64_t)mountpoint, (int64_t)fstype);
 }
 
 static inline int64_t ir0_open(const char *pathname, int flags, mode_t mode)

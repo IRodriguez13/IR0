@@ -95,3 +95,19 @@ struct vfs_inode *vfs_path_lookup(const char *path);
 
 // MINIX filesystem integration
 int vfs_init_with_minix(void);
+
+/* Compatibility wrappers (previously in vfs_simple.h):
+ * These provide a lightweight API used by some tools/tests. They are
+ * thin wrappers around the unified VFS implementation.
+ */
+void vfs_simple_init(void);
+int vfs_simple_mkdir(const char *path);
+int vfs_simple_ls(const char *path);
+int vfs_simple_create_file(const char *path, const char *filename,
+                           uint32_t size);
+int vfs_simple_get_directory_count(void);
+const char *vfs_simple_get_directory_name(int index);
+int vfs_file_exists(const char *pathname);
+int vfs_directory_exists(const char *pathname);
+int vfs_allocate_sectors(int count);
+int vfs_remove_directory(const char *path);

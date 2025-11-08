@@ -5,7 +5,7 @@ CFLAGS = -Wall -Wextra -O2 -std=c99
 INCLUDES = -I../includes -I../includes/ir0 -I../memory
 
 # Source files
-VFS_SOURCES = vfs.c
+VFS_SOURCES = vfs.c vfs_simple_wrappers.c
 IR0FS_SOURCES = ir0fs.c
 SOURCES = $(VFS_SOURCES) $(IR0FS_SOURCES)
 
