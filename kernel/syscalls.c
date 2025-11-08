@@ -766,6 +766,64 @@ int sys_mprotect(void *addr, size_t len, int prot) {
   return -1; // Not found
 }
 
+/* ========================================================================== */
+/* DIRECTORY OPERATIONS                                                       */
+/* ========================================================================== */
+
+int64_t sys_chdir(const char *pathname)
+{
+	if (!current_process || !pathname)
+		return -EFAULT;
+
+	/* Validate path length */
+	size_t len = strlen(pathname);
+	if (len == 0 || len >= 256)
+		return -EFAULT;
+
+	/* TODO: Validate that path exists and is a directory */
+	/* For now, just copy the path */
+	strncpy(current_process->cwd, pathname, 255);
+	current_process->cwd[255] = '\0';
+
+	return 0;
+}
+
+int64_t sys_getcwd(char *buf, size_t size)
+{
+	if (!current_process || !buf || size == 0)
+		return -EFAULT;
+
+	size_t len = strlen(current_process->cwd);
+	if (len >= size)
+		return -EFAULT;
+
+	strncpy(buf, current_process->cwd, size - 1);
+	buf[size - 1] = '\0';
+
+	return len;
+}
+
+int64_t sys_unlink(const char *pathname)
+{
+	if (!pathname)
+		return -EFAULT;
+
+	/* Call VFS unlink function */
+	extern int vfs_unlink(const char *path);
+	return vfs_unlink(pathname);
+}
+
+int64_t sys_rmdir_recursive(const char *pathname)
+{
+	if (!pathname)
+		return -EFAULT;
+
+	/* TODO: Implement recursive directory removal */
+	/* For now, just try regular rmdir */
+	extern int minix_fs_rmdir(const char *path);
+	return minix_fs_rmdir(pathname);
+}
+
 void syscalls_init(void) {
   // Connect to REAL process management only
   serial_print("SERIAL: syscalls_init: using REAL process management\n");
@@ -854,6 +912,12 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_ls_detailed((const char *)arg1);
   case 62:
     return sys_creat((const char *)arg1, (mode_t)arg2);
+  case 79:
+    return sys_getcwd((char *)arg1, (size_t)arg2);
+  case 80:
+    return sys_chdir((const char *)arg1);
+  case 87:
+    return sys_unlink((const char *)arg1);
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");

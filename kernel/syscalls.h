@@ -32,6 +32,9 @@
 #define SYS_GETPPID    110
 #define SYS_MKDIR      83
 #define SYS_RMDIR      84
+#define SYS_CHDIR      80
+#define SYS_GETCWD     79
+#define SYS_UNLINK     87
 
 /* ========================================================================== */
 /* TYPES                                                                      */
