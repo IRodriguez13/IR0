@@ -33,6 +33,11 @@ $(BUILD_DIR)/echo: $(BIN_SRC)/echo.c $(LIBC_OBJS)
 
 clean:
 	rm -rf $(BUILD_DIR)
+disk:
+	dd if=/dev/zero of=/home/ivanr013/Escritorio/ir0-kernel/disk.img bs=1M count=10
+
+rmdisk:
+	rm /home/ivanr013/Escritorio/ir0-kernel/disk.img
 
 install: all
 	# Copy programs to filesystem (when we have one)

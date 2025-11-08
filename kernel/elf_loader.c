@@ -166,7 +166,8 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
 static void elf_dummy_entry(void)
 {
     // This should never be called as we override RIP
-    while (1);
+    while (1)
+        ;
 }
 
 // Create a new process for the ELF program

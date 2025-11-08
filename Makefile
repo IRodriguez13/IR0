@@ -10,8 +10,11 @@ ARCH := x86-64
 BUILD_TARGET := desktop
 CFLAGS_TARGET := -DIR0_DESKTOP
 
-# Kernel version information (v0.0.1 pre-rc1)
-IR0_VERSION_STRING := 0.0.1-pre-rc1
+# Información de versión del kernel
+IR0_VERSION_MAJOR := 1
+IR0_VERSION_MINOR := 0
+IR0_VERSION_PATCH := 0
+IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PATCH)
 IR0_BUILD_DATE := $(shell date +%Y-%m-%d)
 IR0_BUILD_TIME := $(shell date +%H:%M:%S)
 
@@ -111,15 +114,15 @@ KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
     kernel/process.o \
-    kernel/rr_sched.o \
+	kernel/rr_sched.o \
+    kernel/task.o \
     kernel/syscalls.o \
-    kernel/syscall_wrappers.o \
     kernel/shell.o \
-    kernel/elf_loader.o \
+    kernel/elf_loader.o
 
 MEMORY_OBJS = \
-    includes/ir0/memory/allocator.o \
-    includes/ir0/memory/paging.o \
+	includes/ir0/memory/allocator.o \
+	includes/ir0/memory/paging.o \
 	includes/ir0/memory/kmem.o
 
 LIB_OBJS = \
@@ -150,8 +153,8 @@ DRIVER_OBJS = \
     drivers/timer/hpet/find_hpet.o \
     drivers/timer/lapic/lapic.o \
     drivers/storage/ata.o \
-    drivers/video/vbe.o \
-    drivers/video/typewriter.o
+	drivers/video/vbe.o \
+	drivers/video/typewriter.o
 
 FS_OBJS = \
     fs/vfs.o \
@@ -181,15 +184,6 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
 # BUILD RULES
 # ===============================================================================
 
-# Include configuration if it exists
--include .config
-
-# Add configuration defines to CFLAGS if .config exists
-ifneq (,$(wildcard .config))
-    CFLAGS += $(addprefix -D,$(shell grep -v '^\#' .config 2>/dev/null | grep '=y' | cut -d'=' -f1))
-    CFLAGS += $(foreach c, $(shell grep -v '^\#' .config 2>/dev/null | grep -v '=y' | grep -v '^$$'), -D$(c))
-endif
-
 # Compile C files
 %.o: %.c
 	@echo "  CC      $<"
@@ -209,11 +203,25 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 # Create ISO
 kernel-x64.iso: kernel-x64.bin
 	@echo "  ISO     $@"
+	@rm -rf iso
 	@mkdir -p iso/boot/grub
 	@cp arch/x86-64/grub.cfg iso/boot/grub/
 	@cp kernel-x64.bin iso/boot/
-	@grub-mkrescue -o $@ iso 2>/dev/null
+	@echo "Running grub-mkrescue (will print errors if it fails)..."
+	@grub-mkrescue -o $@ iso
 	@echo "✓ ISO created: $@"
+
+# Create a raw disk image used by QEMU. If you want a persistent filesystem
+# you can format and populate this image separately. This target will
+# create a 64 MiB raw disk image if it doesn't already exist.
+disk.img:
+	@if [ -f $@ ]; then \
+		echo "  DISK    $@ already exists"; \
+	else \
+		echo "  DISK    creating $@ using scripts/create_disk.sh"; \
+		./scripts/create_disk.sh; \
+	fi
+	@echo "✓ Disk image ready: $@"
 
 # Default target
 ir0: kernel-x64.iso userspace-programs
@@ -223,73 +231,63 @@ ir0: kernel-x64.iso userspace-programs
 # ===============================================================================
 
 # Run with GUI and disk (default)
-run: kernel-x64.iso
+run: kernel-x64.iso disk.img
 	@echo "🚀 Running IR0 Kernel..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-	    -drive file=disk.img,format=raw,if=ide,index=0 \
-	    -m 512M -no-reboot -no-shutdown \
-	    -display gtk -serial stdio \
-	    -d guest_errors -D qemu_debug.log
+		-drive file=disk.img,format=raw,if=ide,index=0 \
+		-m 512M -no-reboot -no-shutdown \
+		-display gtk -serial stdio \
+		-d guest_errors -D qemu_debug.log
 
 # Run with GUI and serial debug output
-run-debug: kernel-x64.iso
+run-debug: kernel-x64.iso disk.img
 	@echo "🐛 Running IR0 Kernel with debug output..."
 	@echo "Serial output will appear in this terminal"
 	@echo "QEMU GUI will open in separate window"
 	@echo "Press Ctrl+C to stop"
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-	    -drive file=disk.img,format=raw,if=ide,index=0 \
-	    -m 512M -no-reboot -no-shutdown \
-	    -display gtk \
-	    -serial stdio \
-	    -monitor telnet:127.0.0.1:1234,server,nowait \
-	    -d guest_errors,int -D qemu_debug.log
-
-# Quick debug - minimal setup with serial
-debug: kernel-x64.iso
-	@echo "🔍 Quick debug mode - serial output only"
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
-	    -m 256M -nographic -serial stdio \
-	    -d guest_errors
+		-drive file=disk.img,format=raw,if=ide,index=0 \
+		-m 512M -no-reboot -no-shutdown \
+		-display gtk \
+		-serial stdio \
+		-monitor telnet:127.0.0.1:1234,server,nowait \
+		-d guest_errors,int -D qemu_debug.log
 
 # Run without disk
 run-nodisk: kernel-x64.iso
 	@echo "🚀 Running IR0 Kernel (no disk)..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-	    -m 512M -no-reboot -no-shutdown \
-	    -display gtk -serial stdio
+		-m 512M -no-reboot -no-shutdown \
+		-display gtk -serial stdio
 
-# Run in console mode
-run-console: kernel-x64.iso
+# Run in console mode (attach disk image)
+run-console: kernel-x64.iso disk.img
 	@echo "🚀 Running IR0 Kernel (console)..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-	    -drive file=disk.img,format=raw,if=ide,index=0 \
-	    -m 512M -no-reboot -no-shutdown \
-	    -nographic
+		-drive file=disk.img,format=raw,if=ide,index=0 \
+		-m 512M -no-reboot -no-shutdown \
+		-nographic
 
-# Debug mode
-debug: kernel-x64.iso
+# Debug mode (detailed QEMU logging)
+debug: kernel-x64.iso disk.img
 	@echo "🐛 Running IR0 Kernel (debug)..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-	    -drive file=disk.img,format=raw,if=ide,index=0 \
-	    -m 512M -no-reboot -no-shutdown \
-	    -display gtk -serial stdio \
-	    -d int,cpu_reset,guest_errors -D qemu_debug.log
+		-drive file=disk.img,format=raw,if=ide,index=0 \
+		-m 512M -no-reboot -no-shutdown \
+		-display gtk -serial stdio \
+		-d int,cpu_reset,guest_errors -D qemu_debug.log
 
-# Create disk image
-create-disk:
-	@echo "🔧 Creating virtual disk..."
-	@./scripts/create_disk.sh
+# Create disk image (wrapper for scripts/create_disk.sh)
+create-disk: disk.img
+	@echo "🔧 Disk image is ready: disk.img"
+
 # ===============================================================================
 # CLEAN
 # ===============================================================================
 
 clean: userspace-clean
-	@echo "  CLEAN   Object files and binaries"
-	@find . -name '*.o' -delete
-	@rm -f kernel-x64.bin kernel-x64.iso
-	@echo "  CLEAN   Configuration files"
-	@rm -f .config include/generated/autoconf.h
+	@echo "🧹 Cleaning build artifacts..."
+	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
 	@find . -name "*.bin" -type f -delete
 	@find . -name "*.iso" -type f -delete
@@ -301,19 +299,16 @@ clean: userspace-clean
 # HELP
 # ===============================================================================
 
-# Include menuconfig Makefile if it exists
--include setup/Makefile.menuconfig
-
 help:
 	@echo "╔════════════════════════════════════════════════════════════╗"
 	@echo "║       IR0 KERNEL - BUILD SYSTEM (x86-64 ONLY)             ║"
-	@echo "╚══════════════════════════════════════════════════════════╝"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
 	@echo "📦 Build:"
 	@echo "  make ir0              Build kernel ISO + userspace programs"
 	@echo "  make clean            Clean all build artifacts"
 	@echo "  make userspace-programs  Build only userspace programs"
 	@echo "  make userspace-clean     Clean only userspace programs"
-	@echo "  make menuconfig       Configure kernel build options (requires Python 3 and tkinter)"
 	@echo ""
 	@echo "🚀 Run:"
 	@echo "  make run-kernel       Run with GUI + disk (recommended)"
