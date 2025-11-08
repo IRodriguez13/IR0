@@ -117,7 +117,7 @@ static void cmd_help(void)
 	vga_print("IR0 Shell - Available commands:\n", 0x0F);
 	vga_print("  help      - Show this help\n", 0x0F);
 	vga_print("  clear     - Clear screen\n", 0x0F);
-	vga_print("  ls [DIR]  - List directory contents\n", 0x0F);
+	vga_print("  ls [-l] [DIR] - List directory contents (-l for details)\n", 0x0F);
 	vga_print("  cat FILE  - Display file contents\n", 0x0F);
 	vga_print("  mkdir DIR - Create directory\n", 0x0F);
 	vga_print("  rmdir DIR - Remove empty directory\n", 0x0F);
@@ -133,14 +133,42 @@ static void cmd_help(void)
 static void cmd_clear(void)
 {
 	vga_clear();
+	
+	/* Show banner after clear */
+	vga_print("IR0 Shell v0.0.1 pre-release 1\n", 0x0B);
+	vga_print("Type 'help' for available commands\n\n", 0x07);
 }
 
-static void cmd_ls(const char *path)
+static void cmd_ls(const char *args)
 {
-	if (!path || *path == '\0')
+	int detailed = 0;
+	const char *path;
+
+	if (!args || *args == '\0')
+	{
 		path = "/";
-	
-	syscall(SYS_LS, (uint64_t)path, 0, 0);
+	}
+	else if (str_starts_with(args, "-l "))
+	{
+		detailed = 1;
+		path = skip_whitespace(args + 2);
+		if (*path == '\0')
+			path = "/";
+	}
+	else if (str_starts_with(args, "-l"))
+	{
+		detailed = 1;
+		path = "/";
+	}
+	else
+	{
+		path = args;
+	}
+
+	if (detailed)
+		syscall(SYS_LS_DETAILED, (uint64_t)path, 0, 0);
+	else
+		syscall(SYS_LS, (uint64_t)path, 0, 0);
 }
 
 static void cmd_cat(const char *filename)
