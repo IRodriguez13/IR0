@@ -150,7 +150,8 @@ DRIVER_OBJS = \
     drivers/timer/hpet/find_hpet.o \
     drivers/timer/lapic/lapic.o \
     drivers/storage/ata.o \
-    drivers/video/vbe.o
+    drivers/video/vbe.o \
+    drivers/video/typewriter.o
 
 FS_OBJS = \
     fs/vfs.o \
