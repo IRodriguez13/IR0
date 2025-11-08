@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <ir0/print.h>
-#include <panic/panic.h>
+#include <panic/oops.h>
 
 // Minimal user mode support - no dynamic mapping
 

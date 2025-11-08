@@ -5,7 +5,7 @@
 uint64_t pit_ticks = 0;
 #include <arch/common/idt.h>
 #include <print.h>
-#include <panic/panic.h>
+#include <panic/oops.h>
 #include <arch_interface.h>
 #include <ir0/print.h>
 #include <kernel/rr_sched.h>

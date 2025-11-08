@@ -11,18 +11,12 @@
 
 typedef uint32_t mode_t;
 
-// ===============================================================================
-// MINIX FILESYSTEM CONSTANTS
-// ===============================================================================
 
 #define MINIX_BLOCK_SIZE 1024
 #define MINIX_INODE_SIZE 32
 #define MINIX_NAME_LEN 14
 #define MINIX_DIR_ENTRY_SIZE 16
 
-// ===============================================================================
-// MINIX INODE STRUCTURE (Linux 0.0.1 style)
-// ===============================================================================
 
 typedef struct minix_inode
 {
@@ -35,19 +29,12 @@ typedef struct minix_inode
     uint16_t i_zone[9]; // Zonas/bloques (7 directos + 1 indirecto + 1 doble indirecto)
 } minix_inode_t;
 
-// ===============================================================================
-// MINIX DIRECTORY ENTRY STRUCTURE
-// ===============================================================================
-
 typedef struct minix_dir_entry
 {
     uint16_t inode;            // Número de inode
     char name[MINIX_NAME_LEN]; // Nombre del archivo
 } minix_dir_entry_t;
 
-// ===============================================================================
-// MINIX SUPERBLOCK STRUCTURE
-// ===============================================================================
 
 typedef struct minix_superblock
 {
@@ -61,9 +48,6 @@ typedef struct minix_superblock
     uint16_t s_magic;         // Número mágico
 } minix_superblock_t;
 
-// ===============================================================================
-// INODE MODE FLAGS
-// ===============================================================================
 
 #define MINIX_IFMT 00170000  // Tipo de archivo
 #define MINIX_IFDIR 0040000  // Directorio
@@ -89,9 +73,6 @@ typedef struct minix_superblock
 #define MINIX_IWOTH 0000002 // Otros: escritura
 #define MINIX_IXOTH 0000001 // Otros: ejecución
 
-// ===============================================================================
-// UTILITY FUNCTIONS
-// ===============================================================================
 
 // Verificar si un inode es un directorio
 static inline bool minix_is_dir(const minix_inode_t *inode)
@@ -135,9 +116,6 @@ static inline uint16_t minix_get_oth_perms(const minix_inode_t *inode)
     return inode->i_mode & MINIX_IRWXO;
 }
 
-// ===============================================================================
-// PUBLIC FUNCTIONS
-// ===============================================================================
 
 // Filesystem availability check
 bool minix_fs_is_available(void);

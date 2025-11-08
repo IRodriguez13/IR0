@@ -1,8 +1,6 @@
 #include "find_hpet.h"
 #include <print.h>
 
-/* VERSIÓN MEJORADA - Con validaciones y implementación propia */
-// Implementación propia de memcmp para freestanding
 static int memcmp(const void *s1, const void *s2, size_t n)
 {
     const unsigned char *p1 = (const unsigned char *)s1;

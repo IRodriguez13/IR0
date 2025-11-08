@@ -2,7 +2,7 @@
 #include <ir0/print.h>
 #include <includes/ir0/memory/paging.h>
 #include <includes/ir0/memory/kmem.h>
-#include <panic/panic.h>
+#include <panic/oops.h>
 
 
 void page_fault_handler_x64(uint64_t *stack)

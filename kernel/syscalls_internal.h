@@ -55,6 +55,5 @@ int64_t sys_unlink(const char *pathname);
 /* ========================================================================== */
 
 int64_t sys_brk(void *addr);
-int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
-		 off_t offset);
+int64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 int64_t sys_munmap(void *addr, size_t length);

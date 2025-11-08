@@ -126,7 +126,7 @@ LIB_OBJS = \
     includes/ir0/print.o \
     includes/ir0/logging.o \
     includes/ir0/validation.o \
-    includes/ir0/panic/panic.o \
+    includes/ir0/panic/oops.o \
     includes/string.o
 
 INTERRUPT_OBJS = \

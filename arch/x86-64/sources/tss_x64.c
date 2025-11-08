@@ -5,10 +5,6 @@
 #include "gdt.h"
 #include "tss_x64.h"
 
-// ===============================================================================
-// TSS CONFIGURATION FOR USER MODE
-// ===============================================================================
-
 
 // Global TSS instance
 tss_t kernel_tss __attribute__((aligned(4096)));

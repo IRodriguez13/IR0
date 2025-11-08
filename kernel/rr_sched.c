@@ -9,7 +9,7 @@
 #include "process.h"
 #include "rr_sched.h"
 #include <ir0/memory/kmem.h>
-#include <ir0/panic/panic.h>
+#include <ir0/panic/oops.h>
 #include <arch/x86-64/sources/user_mode.h>
 
 /* ========================================================================== */

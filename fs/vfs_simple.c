@@ -4,9 +4,6 @@
 #include <string.h>
 #include <stddef.h>
 
-// ===============================================================================
-// ESTRUCTURAS DE DATOS PARA DIRECTORIOS EN MEMORIA
-// ===============================================================================
 
 #define MAX_DIRECTORIES 100
 #define MAX_FILES_PER_DIR 50
@@ -38,9 +35,6 @@ static simple_directory_t directories[MAX_DIRECTORIES];
 static int directory_count = 0;
 static bool vfs_simple_initialized = false;
 
-// ===============================================================================
-// FUNCIONES AUXILIARES
-// ===============================================================================
 
 static uint64_t get_current_time(void)
 {
@@ -87,9 +81,6 @@ static bool is_valid_filename(const char *name)
     return true;
 }
 
-// ===============================================================================
-// INICIALIZACIÓN
-// ===============================================================================
 
 void vfs_simple_init(void)
 {
@@ -120,9 +111,6 @@ void vfs_simple_init(void)
     vfs_simple_initialized = true;
 }
 
-// ===============================================================================
-// OPERACIONES DE DIRECTORIOS
-// ===============================================================================
 
 int vfs_simple_mkdir(const char *path)
 {
@@ -235,9 +223,6 @@ int vfs_simple_ls(const char *path)
     return 0;
 }
 
-// ===============================================================================
-// FUNCIONES DE INTERFAZ
-// ===============================================================================
 
 int vfs_simple_create_file(const char *path, const char *filename, uint32_t size)
 {
