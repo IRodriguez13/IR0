@@ -8,8 +8,8 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: syscalls.c
- * Description: System call implementations - 23 essential syscalls for process,
- * file, and memory management
+ * Description: System call POSIX ABI interface source module
+ * 
  */
 
 #include "syscalls.h"
@@ -17,6 +17,7 @@
 #include <drivers/serial/serial.h>
 #include <drivers/video/typewriter.h>
 #include <fs/minix_fs.h>
+#include <kernel/elf_loader.h>
 #include <ir0/memory/allocator.h>
 #include <ir0/memory/kmem.h>
 #include <ir0/print.h>
@@ -28,19 +29,15 @@
 #include <string.h>
 #include <panic/oops.h>
 
-// Forward declarations for external functions
-extern char keyboard_buffer_get(void);
-extern int keyboard_buffer_has_data(void);
-extern bool minix_fs_is_working(void);
-extern int minix_fs_ls(const char *path);
-extern int minix_fs_mkdir(const char *path, mode_t mode);
-extern int minix_fs_cat(const char *path);
-extern int minix_fs_write_file(const char *path, const char *content);
-extern int minix_fs_read_file(const char *path, void **data, size_t *size);
-extern int minix_fs_touch(const char *path, mode_t mode);
-extern int minix_fs_rm(const char *path);
-extern int minix_fs_rmdir(const char *path);
-extern void print_hex_compact(uint32_t num);
+// Use subsystem headers for proper declarations (keyboard/minix/vfs)
+#include <ir0/keyboard.h>
+// Use proper subsystem headers instead of manual externs to expose a
+// well-defined interface and avoid scattered forward declarations.
+#include <ir0/keyboard.h>
+#include <fs/vfs.h>
+
+// All filesystem and utility functions are declared in their respective
+// headers (included above): <fs/minix_fs.h>, <fs/vfs.h>, <ir0/print.h>.
 
 // Basic types and constants
 typedef uint32_t mode_t;
@@ -151,7 +148,6 @@ int64_t sys_ls(const char *pathname)
     return -ESRCH;
 
   // Use VFS layer for better abstraction
-  extern int vfs_ls(const char *path);
   const char *target_path = pathname ? pathname : "/";
   return vfs_ls(target_path);
 }
@@ -165,7 +161,6 @@ int64_t sys_ls_detailed(const char *pathname)
   const char *target_path = pathname ? pathname : "/";
 
   // First get directory listing, then stat each file
-  extern int vfs_ls_with_stat(const char *path);
   return vfs_ls_with_stat(target_path);
 }
 
@@ -177,7 +172,6 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
     return -EFAULT;
 
   // Use VFS layer with proper mode
-  extern int vfs_mkdir(const char *path, int mode);
   return vfs_mkdir(pathname, (int)mode);
 }
 
@@ -205,7 +199,6 @@ int64_t sys_ps(void)
     if (current_process)
     {
       serial_print("SERIAL: Adding current_process to list\n");
-      extern process_t *process_list;
       process_list = current_process;
       current_process->next = NULL;
       proc_list = current_process;
@@ -340,9 +333,6 @@ int64_t sys_read_file(const char *pathname, void **data, size_t *size)
 
 int64_t sys_write_file(const char *pathname, const char *content)
 {
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
-
   serial_print("SERIAL: sys_write_file called\n");
 
   if (!current_process)
@@ -391,8 +381,6 @@ int64_t sys_exec(const char *pathname,
                  char *const argv[] __attribute__((unused)),
                  char *const envp[] __attribute__((unused)))
 {
-  extern void serial_print(const char *str);
-
   serial_print("SERIAL: sys_exec called\n");
 
   if (!current_process || !pathname)
@@ -401,7 +389,6 @@ int64_t sys_exec(const char *pathname,
   }
 
   // For now, simple implementation - load and execute ELF
-  extern int elf_load_and_execute(const char *path);
   return elf_load_and_execute(pathname);
 }
 
@@ -418,6 +405,24 @@ int64_t sys_touch(const char *pathname)
 
   sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
   return -1;
+}
+
+int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (!dev || !mountpoint)
+    return -EFAULT;
+
+  // Use unified VFS mount; fstype may be NULL to autodetect or use default
+  int ret = vfs_mount(dev, mountpoint, fstype);
+  if (ret < 0)
+  {
+    sys_write(STDERR_FILENO, "mount failed\n", 13);
+    return -1;
+  }
+  return ret;
 }
 
 int64_t sys_creat(const char *pathname, mode_t mode)
@@ -503,7 +508,6 @@ int64_t sys_fstat(int fd, stat_t *buf)
   }
 
   // For regular files, get info from filesystem via VFS
-  extern int vfs_stat(const char *path, stat_t *buf);
   return vfs_stat(fd_table[fd].path, buf);
 }
 
@@ -534,7 +538,6 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
 
   // Check if file exists using VFS
   stat_t file_stat;
-  extern int vfs_stat(const char *path, stat_t *buf);
   if (vfs_stat(pathname, &file_stat) != 0)
   {
     return -ENOENT;
@@ -584,7 +587,6 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
     return -EFAULT;
 
   // Use VFS layer instead of direct MINIX calls
-  extern int vfs_stat(const char *path, stat_t *buf);
   return vfs_stat(pathname, buf);
 }
 
@@ -903,7 +905,6 @@ int64_t sys_unlink(const char *pathname)
     return -EFAULT;
 
   /* Call VFS unlink function */
-  extern int vfs_unlink(const char *path);
   return vfs_unlink(pathname);
 }
 
@@ -913,7 +914,6 @@ int64_t sys_rmdir_recursive(const char *pathname)
     return -EFAULT;
 
   /* Call VFS recursive removal */
-  extern int vfs_rmdir_recursive(const char *path);
   return vfs_rmdir_recursive(pathname);
 }
 
@@ -1018,6 +1018,9 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_unlink((const char *)arg1);
   case 88:
     return sys_rmdir_recursive((const char *)arg1);
+  case 90:
+    return sys_mount((const char *)arg1, (const char *)arg2,
+                     (const char *)arg3);
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");
