@@ -134,12 +134,3 @@ const char *errno_str[] = {
     [ERFKILL] = "Operation not possible due to RF-kill",
     [EHWPOISON] = "Memory page has hardware error",
 };
-
-// const char *strerror(int errnum)
-// {
-//     if (errnum < 0 || errnum > ERRNO_MAX)
-//     {
-//         return (void *)0; // NULL
-//     }
-//     return errno_str[errnum];
-// }

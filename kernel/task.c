@@ -12,9 +12,8 @@
  */
 
 #include "task.h"
-#include "scheduler.h"
 #include <ir0/print.h>
-#include <ir0/panic/panic.h>
+#include <ir0/panic/oops.h>
 #include <arch_interface.h>
 #include <string.h>
 #include <memory/allocator.h>
@@ -230,54 +229,7 @@ void test_task_function(void *arg)
     print(" completed\n");
 }
 
-void create_test_tasks(void)
-{
-    LOG_OK("Creating test tasks...");
 
-    // Crear idle task primero
-    idle_task = create_task(idle_task_function, NULL, 0, 0);
-    if (!idle_task)
-    {
-        panic("Failed to create idle task!");
-    }
-
-    // Crear tareas de prueba más interesantes
-    task_t *test_task1 = create_task(test_task_function, (void *)1, 1, 0);
-    if (!test_task1)
-    {
-        LOG_WARN("Failed to create test task 1");
-    }
-
-    task_t *test_task2 = create_task(test_task_function, (void *)2, 2, 1);
-    if (!test_task2)
-    {
-        LOG_WARN("Failed to create test task 2");
-    }
-
-    task_t *test_task3 = create_task(test_task_function, (void *)3, 3, -1);
-    if (!test_task3)
-    {
-        LOG_WARN("Failed to create test task 3");
-    }
-
-    // Agregar tareas al scheduler
-    add_task(idle_task);
-    if (test_task1)
-    {
-        add_task(test_task1);
-    }
-    if (test_task2)
-    {
-        add_task(test_task2);
-    }
-    if (test_task3)
-    {
-        add_task(test_task3);
-    }
-
-    LOG_OK("Test tasks created successfully");
-    delay_ms(2000);
-}
 
 
 task_t *get_task_list(void)

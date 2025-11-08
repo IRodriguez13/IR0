@@ -6,7 +6,7 @@
 // Forward declarations
 void wakeup_from_idle(void);
 
-// Buffer de teclado simple (interno del kernel)
+// Buffer de teclado simple
 #define KEYBOARD_BUFFER_SIZE 256
 static char keyboard_buffer[KEYBOARD_BUFFER_SIZE];
 static int keyboard_buffer_head = 0;
@@ -46,7 +46,7 @@ static const char scancode_to_ascii_shift[] = {
     'O',  'P',  '{',  '}',  0,    0,    'A',  'S',  // 24-31
     'D',  'F',  'G',  'H',  'J',  'K',  'L',  ':',  // 32-39
     '"',  '~',  0,    '|',  'Z',  'X',  'C',  'V',  // 40-47
-    'B',  'N',  'M',  '<',  '>',  '?',  0,    '*',  // 48-55 (< y > están aquí!)
+    'B',  'N',  'M',  '<',  '>',  '?',  0,    '*',  // 48-55
     0,    0,    0,    0,    0,    0,    0,    0,    // 56-63
     0,    0,    0,    0,    0,    0,    0,    0,    // 64-71
     0,    0,    0,    0,    0,    0,    0,    0,    // 72-79
@@ -161,9 +161,6 @@ void keyboard_init(void)
     pic_unmask_irq(IRQ_KEYBOARD);
 }
 
-// ===============================================================================
-// SISTEMA DE DESPERTAR DEL IDLE
-// ===============================================================================
 
 void set_idle_mode(int is_idle) 
 {
@@ -184,8 +181,7 @@ void wakeup_from_idle(void)
     if (system_in_idle_mode) {
         wake_requested = 1;
         system_in_idle_mode = 0;
-        print_colored("🔔 System woken from idle mode!\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-        print_colored("DEBUG: wake_requested set to 1\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+      
     } else {
         print_colored("DEBUG: wakeup called but not in idle mode\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     }
