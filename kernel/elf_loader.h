@@ -20,6 +20,12 @@ struct process;
  */
 int load_elf_program(const char *path, struct process *process);
 
+/* Backwards-compatible wrapper used by callers in the kernel
+ * Historically some files call elf_load_and_execute(path) which
+ * loads and schedules a process. Provide the same symbol here.
+ */
+int elf_load_and_execute(const char *path);
+
 // ===============================================================================
 // FUNCIONES DE DEBUG
 // ===============================================================================
