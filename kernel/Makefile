@@ -1,7 +1,7 @@
 # kernel/Makefile - Compilación del kernel
 
 # Variables
-KERNEL_OBJS = kernel.o init.o process.o scheduler.o task.o syscalls.o shell.o elf_loader.o
+KERNEL_OBJS = kernel.o init.o process.o scheduler.o task.o syscalls.o shell.o elf_loader.o typewriter.o
 KERNEL_TARGET = kernel.a
 
 # Reglas
@@ -32,6 +32,9 @@ shell.o: shell.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 elf_loader.o: elf_loader.c elf_loader.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+typewriter.o: typewriter.c typewriter.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:

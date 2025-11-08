@@ -17,6 +17,7 @@
 #include <drivers/timer/clock_system.h>
 #include <ir0/print.h>
 #include <ir0/stat.h>
+#include <drivers/video/typewriter.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -1119,39 +1120,39 @@ int minix_fs_ls(const char *path)
         // Mostrar tipo de archivo
         if (entry_inode.i_mode & MINIX_IFDIR)
         {
-          print("d");
+          typewriter_print("d");
         }
         else
         {
-          print("-");
+          typewriter_print("-");
         }
 
         // Mostrar permisos básicos (removido hardcode)
 
         // Mostrar tamaño
-        print_uint32(entry_inode.i_size);
-        print(" ");
+        typewriter_print_uint32(entry_inode.i_size);
+        typewriter_print(" ");
 
         // Mostrar nombre
-        print(entries[j].name);
-        print("\n");
+        typewriter_print(entries[j].name);
+        typewriter_print("\n");
       }
       else
       {
-        print("? ??? ");
-        print(entries[j].name);
-        print(" (inode error)\n");
+        typewriter_print("? ??? ");
+        typewriter_print(entries[j].name);
+        typewriter_print(" (inode error)\n");
       }
     }
   }
 
   if (!has_zones)
   {
-    print("Directory has no data blocks\n");
+    typewriter_print("Directory has no data blocks\n");
   }
   else if (!found_entries)
   {
-    print("Directory is empty\n");
+    typewriter_print("Directory is empty\n");
   }
 
   return 0;
@@ -1180,7 +1181,7 @@ int minix_fs_cat(const char *path)
   // Verificar que el disco esté disponible
   if (!ata_is_available())
   {
-    print("cat: disk not available\n");
+    typewriter_print("cat: disk not available\n");
     return -EIO; // Error real - no hay disco disponible
   }
 
@@ -1188,24 +1189,24 @@ int minix_fs_cat(const char *path)
   minix_inode_t *file_inode = minix_fs_find_inode(path);
   if (!file_inode)
   {
-    print("Error: File '");
-    print(path);
-    print("' not found\n");
+    typewriter_print("Error: File '");
+    typewriter_print(path);
+    typewriter_print("' not found\n");
     return -1;
   }
 
   // Verificar que sea un archivo regular
   if (file_inode->i_mode & MINIX_IFDIR)
   {
-    print("Error: '");
-    print(path);
-    print("' is a directory\n");
+    typewriter_print("Error: '");
+    typewriter_print(path);
+    typewriter_print("' is a directory\n");
     return -1;
   }
 
-  print("\n=== File: ");
-  print(path);
-  print(" ===\n");
+  typewriter_print("\n=== File: ");
+  typewriter_print(path);
+  typewriter_print(" ===\n");
 
   // Leer y mostrar el contenido del archivo
   uint32_t file_size = file_inode->i_size;
@@ -1221,9 +1222,9 @@ int minix_fs_cat(const char *path)
     uint8_t block_buffer[MINIX_BLOCK_SIZE];
     if (minix_read_block(file_inode->i_zone[i], block_buffer) != 0)
     {
-      print("Error reading block ");
-      print_uint32(i);
-      print("\n");
+      typewriter_print("Error reading block ");
+      typewriter_print_uint32(i);
+      typewriter_print("\n");
       continue;
     }
 
@@ -1243,21 +1244,20 @@ int minix_fs_cat(const char *path)
       if (c >= 32 && c < 127)
       {
         // Printable character
-        char str[2] = {c, '\0'};
-        print(str);
+        typewriter_print_char(c);
       }
       else if (c == '\n')
       {
-        print("\n");
+        typewriter_print("\n");
       }
       else if (c == '\t')
       {
-        print("    "); // Tab as 4 spaces
+        typewriter_print("    "); // Tab as 4 spaces
       }
       else
       {
         // Non-printable character, show as hex
-        print("\\x");
+        typewriter_print("\\x");
         print_hex_compact(c);
       }
     }
@@ -1265,9 +1265,9 @@ int minix_fs_cat(const char *path)
     bytes_read += bytes_to_show;
   }
 
-  print("\n--- End of file (");
-  print_uint32(bytes_read);
-  print(" bytes) ---\n");
+  typewriter_print("\n--- End of file (");
+  typewriter_print_uint32(bytes_read);
+  typewriter_print(" bytes) ---\n");
 
   return 0;
 }

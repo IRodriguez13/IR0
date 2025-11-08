@@ -9,6 +9,7 @@
 #include "process.h"
 #include "shell.h"
 #include "rr_sched.h"
+#include <drivers/video/typewriter.h>
 #include <ir0/memory/kmem.h>
 #include <ir0/memory/paging.h>
 #include <string.h>
@@ -19,6 +20,9 @@
 
 void init_1(void)
 {
+	/* Initialize typewriter effect */
+	typewriter_init();
+	
 	shell_entry();
 	
 	/* If shell exits, restart it */
