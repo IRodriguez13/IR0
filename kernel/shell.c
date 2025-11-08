@@ -299,27 +299,30 @@ static void cmd_rm(const char *args)
 		return;
 	}
 
-	/* Try to remove as file first */
-	int64_t result = syscall(SYS_UNLINK, (uint64_t)filename, 0, 0);
-	
-	/* If failed and recursive flag is set, try as directory */
-	if (result < 0 && recursive)
+	int64_t result;
+
+	/* If recursive flag is set, use recursive removal */
+	if (recursive)
 	{
-		result = syscall(SYS_RMDIR, (uint64_t)filename, 0, 0);
+		result = syscall(SYS_RMDIR_R, (uint64_t)filename, 0, 0);
 		if (result < 0)
 		{
 			vga_print("rm: cannot remove '", 0x0C);
 			vga_print(filename, 0x0C);
-			vga_print("': Directory not empty or does not exist\n", 0x0C);
-			vga_print("Note: Recursive deletion of non-empty directories not yet implemented\n", 0x0C);
+			vga_print("': Failed to remove recursively\n", 0x0C);
 		}
 	}
-	else if (result < 0)
+	else
 	{
-		vga_print("rm: cannot remove '", 0x0C);
-		vga_print(filename, 0x0C);
-		vga_print("': No such file or directory\n", 0x0C);
-		vga_print("Hint: Use 'rm -r' for directories\n", 0x0C);
+		/* Try to remove as file */
+		result = syscall(SYS_UNLINK, (uint64_t)filename, 0, 0);
+		if (result < 0)
+		{
+			vga_print("rm: cannot remove '", 0x0C);
+			vga_print(filename, 0x0C);
+			vga_print("': No such file or directory\n", 0x0C);
+			vga_print("Hint: Use 'rm -r' for directories\n", 0x0C);
+		}
 	}
 }
 

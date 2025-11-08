@@ -43,6 +43,7 @@ typedef uint32_t mode_t;
 #define SYS_CHDIR 80
 #define SYS_GETCWD 79
 #define SYS_UNLINK 87
+#define SYS_RMDIR_R 88
 
 // ===============================================================================
 // SYSCALL WRAPPER FUNCTIONS
