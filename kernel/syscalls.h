@@ -1,51 +1,55 @@
-// SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+/* SPDX-License-Identifier: GPL-3.0-only */
+/*
+ * IR0 Kernel - System Calls
+ * Copyright (C) 2025 Iván Rodriguez
  *
- * File: syscalls.h
- * Description: System call interface declarations
+ * Public interface for system call subsystem
  */
 
 #pragma once
 
 #include <stdint.h>
 #include <stddef.h>
-#include <ir0/stat.h>
 
-// Forward declarations
-typedef uint32_t mode_t;
+/* ========================================================================== */
+/* SYSCALL NUMBERS                                                            */
+/* ========================================================================== */
 
-// Syscall arguments structure
-typedef struct {
-    uint64_t arg1;
-    uint64_t arg2;
-    uint64_t arg3;
-    uint64_t arg4;
-    uint64_t arg5;
-    uint64_t arg6;
+#define SYS_READ       0
+#define SYS_WRITE      1
+#define SYS_OPEN       2
+#define SYS_CLOSE      3
+#define SYS_STAT       4
+#define SYS_FSTAT      5
+#define SYS_LSEEK      8
+#define SYS_MMAP       9
+#define SYS_MUNMAP     11
+#define SYS_BRK        12
+#define SYS_GETPID     39
+#define SYS_FORK       57
+#define SYS_EXIT       60
+#define SYS_WAIT4      61
+#define SYS_GETPPID    110
+#define SYS_MKDIR      83
+#define SYS_RMDIR      84
+
+/* ========================================================================== */
+/* TYPES                                                                      */
+/* ========================================================================== */
+
+typedef struct
+{
+	uint64_t arg1;
+	uint64_t arg2;
+	uint64_t arg3;
+	uint64_t arg4;
+	uint64_t arg5;
+	uint64_t arg6;
 } syscall_args_t;
 
-// Syscall implementations
-int64_t sys_exit(int exit_code);
-int64_t sys_write(int fd, const void *buf, size_t count);
-int64_t sys_read(int fd, void *buf, size_t count);
-int64_t sys_getpid(void);
-int64_t sys_getppid(void);
-int64_t sys_ls(const char *pathname);
-int64_t sys_mkdir(const char *pathname, mode_t mode);
-int64_t sys_rmdir(const char *pathname);
-int64_t sys_fstat(int fd, stat_t *buf);
-int64_t sys_stat(const char *pathname, stat_t *buf);
-int64_t sys_open(const char *pathname, int flags, mode_t mode);
-int64_t sys_close(int fd);
+/* ========================================================================== */
+/* PUBLIC API                                                                 */
+/* ========================================================================== */
 
-// Syscall handler
-int64_t syscall_handler(uint64_t number, syscall_args_t *args);
-
-// Syscall initialization
 void syscalls_init(void);
-
-// Test function
-void test_user_function(void);
-
+int64_t syscall_handler(uint64_t number, syscall_args_t *args);

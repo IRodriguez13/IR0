@@ -116,7 +116,6 @@ KERNEL_OBJS = \
     kernel/syscall_wrappers.o \
     kernel/shell.o \
     kernel/elf_loader.o \
-    kernel/test_elf.o
 
 MEMORY_OBJS = \
     includes/ir0/memory/allocator.o \
