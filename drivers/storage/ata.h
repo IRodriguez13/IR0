@@ -49,17 +49,36 @@
 // Sector size
 #define ATA_SECTOR_SIZE         512
 
-// Function prototypes
+// ATA device information structure
+typedef struct {
+    bool present;
+    bool is_atapi;
+    uint64_t size;              // Size in sectors
+    uint64_t capacity_bytes;    // Device capacity in bytes
+    char model[41];             // NUL-terminated model string
+    char serial[21];           // NUL-terminated serial number string
+    uint16_t sectors_per_intr;  // Sectors per interrupt (for multi-sector transfers)
+} ata_device_info_t;
+
+// Global variables
+extern bool ata_drives_present[4]; // Primary master, primary slave, secondary master, secondary slave
+extern ata_device_info_t ata_devices[4];
+
+// Core ATA functions
 void ata_init(void);
 bool ata_is_available(void);
+bool ata_drive_present(uint8_t drive);
 bool ata_identify_drive(uint8_t drive);
 bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer);
 bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer);
 bool ata_wait_ready(uint8_t drive);
 bool ata_wait_drq(uint8_t drive);
 void ata_reset_drive(uint8_t drive);
+bool ata_get_device_info(uint8_t drive, ata_device_info_t *out);
 
-// Global variables
-extern bool ata_drives_present[4]; // Primary master, primary slave, secondary master, secondary slave
+// Helper functions
+uint64_t ata_get_size(uint8_t drive);
+const char* ata_get_model(uint8_t drive);
+const char* ata_get_serial(uint8_t drive);
 
 

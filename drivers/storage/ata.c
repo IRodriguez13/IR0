@@ -20,6 +20,19 @@
 // Global variables
 bool ata_drives_present[4] = {false, false, false, false};
 
+// Parsed device info array (filled during identify)
+ata_device_info_t ata_devices[4] = {{0}};
+
+bool ata_get_device_info(uint8_t drive, ata_device_info_t *out)
+{
+    if (drive >= 4 || !out)
+        return false;
+    if (!ata_devices[drive].present)
+        return false;
+    *out = ata_devices[drive];
+    return true;
+}
+
 // Using I/O functions from arch_interface.h
 
 static inline void outw(uint16_t port, uint16_t value) 
@@ -207,14 +220,76 @@ bool ata_identify_drive(uint8_t drive)
         return false;
     }
     
-    // Read identify data (we don't need to store it for basic functionality)
+    // Read identify data and store/parse it for richer device information
     uint16_t identify_data[256];
-    (void)identify_data; // Variable not used in this implementation
     for (int i = 0; i < 256; i++) 
     {
         identify_data[i] = inw(data_port);
     }
-    
+
+    // Mark presence
+    ata_drives_present[drive] = true;
+    ata_devices[drive].present = true;
+
+    // Helper: extract ASCII string from identify words (each word is two bytes; high byte first)
+    // Extract serial (words 10-19, 20 bytes)
+    {
+        int out_i = 0;
+        for (int w = 10; w <= 19 && out_i < (int)sizeof(ata_devices[drive].serial) - 1; w++)
+        {
+            uint16_t word = identify_data[w];
+            char c1 = (char)(word >> 8);
+            char c2 = (char)(word & 0xFF);
+            ata_devices[drive].serial[out_i++] = c1;
+            if (out_i < (int)sizeof(ata_devices[drive].serial) - 1)
+                ata_devices[drive].serial[out_i++] = c2;
+        }
+        ata_devices[drive].serial[out_i] = '\0';
+        // Trim trailing spaces
+        while (out_i > 0 && ata_devices[drive].serial[out_i - 1] == ' ')
+            ata_devices[drive].serial[--out_i] = '\0';
+    }
+
+    // Extract model (words 27-46, 40 bytes)
+    {
+        int out_i = 0;
+        for (int w = 27; w <= 46 && out_i < (int)sizeof(ata_devices[drive].model) - 1; w++)
+        {
+            uint16_t word = identify_data[w];
+            char c1 = (char)(word >> 8);
+            char c2 = (char)(word & 0xFF);
+            ata_devices[drive].model[out_i++] = c1;
+            if (out_i < (int)sizeof(ata_devices[drive].model) - 1)
+                ata_devices[drive].model[out_i++] = c2;
+        }
+        ata_devices[drive].model[out_i] = '\0';
+        while (out_i > 0 && ata_devices[drive].model[out_i - 1] == ' ')
+            ata_devices[drive].model[--out_i] = '\0';
+    }
+
+    // Capacity: try 28-bit LBA words 60-61 first
+    uint32_t sectors28 = ((uint32_t)identify_data[61] << 16) | (uint32_t)identify_data[60];
+    if (sectors28 != 0)
+    {
+        ata_devices[drive].capacity_bytes = (uint64_t)sectors28 * (uint64_t)ATA_SECTOR_SIZE;
+    }
+    else
+    {
+        // Try 48-bit LBA (words 100-103)
+        uint64_t sectors48 = ((uint64_t)identify_data[103] << 48) |
+                             ((uint64_t)identify_data[102] << 32) |
+                             ((uint64_t)identify_data[101] << 16) |
+                             (uint64_t)identify_data[100];
+        if (sectors48 != 0)
+        {
+            ata_devices[drive].capacity_bytes = sectors48 * (uint64_t)ATA_SECTOR_SIZE;
+        }
+        else
+        {
+            ata_devices[drive].capacity_bytes = 0; // unknown
+        }
+    }
+
     return true;
 }
 

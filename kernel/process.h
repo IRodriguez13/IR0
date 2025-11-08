@@ -17,8 +17,7 @@
 /* PUBLIC TYPES                                                               */
 /* ========================================================================== */
 
-typedef uint32_t pid_t;
-typedef long off_t;
+#include <ir0/types.h>  // For standard types
 
 #define MAX_FDS_PER_PROCESS 32
 
@@ -27,8 +26,8 @@ typedef struct fd_entry
 	bool in_use;
 	char path[256];
 	int flags;
-	off_t offset;
 	void *vfs_file;
+	uint64_t offset; // Agregado para manejar desplazamientos
 } fd_entry_t;
 
 typedef enum
@@ -42,7 +41,7 @@ typedef enum
 typedef struct process
 {
 	task_t task;
-	pid_t ppid;
+	pid_t ppid;  // Parent process ID (matches task.pid type)
 	struct process *parent;
 	struct process *children;
 	struct process *sibling;

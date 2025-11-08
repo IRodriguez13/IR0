@@ -240,8 +240,8 @@ int process_wait(pid_t pid, int *status)
 		p = process_list;
 		while (p)
 		{
-			if (p->task.pid == pid &&
-			    p->ppid == current_process->task.pid)
+			// Both pids are now of type pid_t (int32_t)
+			if ((uint32_t)p->task.pid == (uint32_t)pid && (uint32_t)p->ppid == (uint32_t)current_process->task.pid) // Conversión explícita
 			{
 				if (p->state == PROCESS_ZOMBIE)
 				{

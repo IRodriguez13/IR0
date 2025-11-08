@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <sys/types.h>
+#include <ir0/types.h> 
 
 // Process management
 pid_t fork(void);

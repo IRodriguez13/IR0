@@ -1,5 +1,5 @@
 # Storage Drivers Makefile
-STORAGE_SOURCES = ata.c
+STORAGE_SOURCES = ata.c ata_helpers.c
 STORAGE_OBJECTS = $(STORAGE_SOURCES:.c=.o)
 
 # Compiler flags

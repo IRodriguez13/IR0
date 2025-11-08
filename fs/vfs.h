@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <ir0/syscall.h> // Para off_t
 
 // Forward declarations
 struct vfs_inode;
@@ -17,9 +18,9 @@ struct file_operations {
   int (*read)(struct vfs_file *file, char *buf, size_t count);
   int (*write)(struct vfs_file *file, const char *buf, size_t count);
   int (*close)(struct vfs_file *file);
+  off_t (*seek)(struct vfs_file *file, off_t offset, int whence);
   int (*readdir)(struct vfs_file *file, void *dirent,
-                 int (*filldir)(void *, const char *, int, long, uint64_t,
-                                unsigned));
+                 int (*filldir)(void *, const char *, int, long, uint64_t,  unsigned));
 };
 
 // Operaciones de inode
@@ -78,6 +79,7 @@ int vfs_mount(const char *dev, const char *mountpoint, const char *fstype);
 int vfs_open(const char *path, int flags, struct vfs_file **file);
 int vfs_read(struct vfs_file *file, char *buf, size_t count);
 int vfs_write(struct vfs_file *file, const char *buf, size_t count);
+int vfs_append(const char *path, const char *buf, size_t count);
 int vfs_close(struct vfs_file *file);
 int vfs_ls(const char *path);
 int vfs_mkdir(const char *path, int mode);

@@ -15,7 +15,6 @@
 
 /* Type definitions */
 typedef uint32_t mode_t;
-typedef long off_t;
 
 /* ========================================================================== */
 /* PROCESS MANAGEMENT                                                         */
