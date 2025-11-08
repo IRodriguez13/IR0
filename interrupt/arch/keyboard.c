@@ -21,6 +21,9 @@ volatile int *shared_keyboard_buffer_pos = (volatile int *)(SHARED_KEYBOARD_BUFF
 static int system_in_idle_mode = 0;
 static int wake_requested = 0;
 
+// Estado de teclas modificadoras
+static int shift_pressed = 0;
+
 // Tabla de scancodes básica (solo caracteres imprimibles)
 static const char scancode_to_ascii[] = {
     0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  // 0-7
@@ -35,6 +38,21 @@ static const char scancode_to_ascii[] = {
     0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
 };
 
+// Tabla de scancodes con Shift presionado
+static const char scancode_to_ascii_shift[] = {
+    0,    0,    '!',  '@',  '#',  '$',  '%',  '^',  // 0-7
+    '&',  '*',  '(',  ')',  '_',  '+',  0,    0,    // 8-15
+    'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',  // 16-23
+    'O',  'P',  '{',  '}',  0,    0,    'A',  'S',  // 24-31
+    'D',  'F',  'G',  'H',  'J',  'K',  'L',  ':',  // 32-39
+    '"',  '~',  0,    '|',  'Z',  'X',  'C',  'V',  // 40-47
+    'B',  'N',  'M',  '<',  '>',  '?',  0,    '*',  // 48-55 (< y > están aquí!)
+    0,    0,    0,    0,    0,    0,    0,    0,    // 56-63
+    0,    0,    0,    0,    0,    0,    0,    0,    // 64-71
+    0,    0,    0,    0,    0,    0,    0,    0,    // 72-79
+    0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
+};
+
 // Función para traducir scancode a carácter
 char translate_scancode(uint8_t sc) 
 {
@@ -45,10 +63,17 @@ char translate_scancode(uint8_t sc)
         case 0x1C: return '\n';  // Enter
         case 0x39: return ' ';   // Space
         default:
-            // Mapeo normal de letras y números
+            // Mapeo con o sin Shift
             if (sc < sizeof(scancode_to_ascii)) 
             {
-                return scancode_to_ascii[sc];
+                if (shift_pressed) 
+                {
+                    return scancode_to_ascii_shift[sc];
+                }
+                else 
+                {
+                    return scancode_to_ascii[sc];
+                }
             }
             return 0; // Carácter no reconocido
     }
@@ -98,8 +123,19 @@ void keyboard_handler64(void)
     // Leer scancode del puerto 0x60
     uint8_t scancode = inb(0x60);
     
+    // Detectar Shift press/release
+    if (scancode == 0x2A || scancode == 0x36) 
+    {
+        // Left Shift (0x2A) o Right Shift (0x36) presionado
+        shift_pressed = 1;
+    }
+    else if (scancode == 0xAA || scancode == 0xB6) 
+    {
+        // Left Shift (0xAA) o Right Shift (0xB6) liberado
+        shift_pressed = 0;
+    }
     // Solo procesar key press (scancode < 0x80)
-    if (scancode < 0x80) 
+    else if (scancode < 0x80) 
     {
         char ascii = translate_scancode(scancode);
         if (ascii != 0) 

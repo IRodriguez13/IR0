@@ -104,7 +104,7 @@ static void cmd_help(void) {
   typewriter_vga_print("  cd [DIR]  - Change directory\n", 0x0F);
   typewriter_vga_print("  pwd       - Print working directory\n", 0x0F);
   typewriter_vga_print("  ps        - List processes\n", 0x0F);
-  typewriter_vga_print("  echo TEXT - Print text\n", 0x0F);
+  typewriter_vga_print("  echo TEXT - Print text (use 'echo TEXT > FILE' to write to file)\n", 0x0F);
   typewriter_vga_print("  exec FILE - Execute binary\n", 0x0F);
   typewriter_vga_print(
       "  sed 's/OLD/NEW/' FILE - Edit file (substitute text)\n", 0x0F);
@@ -183,9 +183,58 @@ static void cmd_ps(void) {
 }
 
 static void cmd_echo(const char *text) {
-  if (text && *text)
+  if (!text || *text == '\0') {
+    typewriter_vga_print("\n", 0x0F);
+    return;
+  }
+
+  // Check for output redirection (>)
+  const char *redirect_pos = strstr(text, " > ");
+  
+  if (redirect_pos) {
+    // Extract the text before '>'
+    size_t text_len = redirect_pos - text;
+    char *content = (char *)kmalloc(text_len + 2); // +1 for newline, +1 for null
+    if (!content) {
+      typewriter_vga_print("Error: Out of memory\n", 0x0C);
+      return;
+    }
+    
+    // Copy text content
+    for (size_t i = 0; i < text_len; i++) {
+      content[i] = text[i];
+    }
+    content[text_len] = '\n';
+    content[text_len + 1] = '\0';
+    
+    // Get filename (skip " > ")
+    const char *filename = skip_whitespace(redirect_pos + 3);
+    
+    if (*filename == '\0') {
+      typewriter_vga_print("Error: No filename specified\n", 0x0C);
+      kfree(content);
+      return;
+    }
+    
+    // Write to file using syscall
+    int64_t result = syscall(SYS_WRITE_FILE, (uint64_t)filename, (uint64_t)content, 0);
+    
+    if (result < 0) {
+      typewriter_vga_print("Error: Could not write to file '", 0x0C);
+      typewriter_vga_print(filename, 0x0C);
+      typewriter_vga_print("'\n", 0x0C);
+    } else {
+      typewriter_vga_print("Written to '", 0x0A);
+      typewriter_vga_print(filename, 0x0A);
+      typewriter_vga_print("'\n", 0x0A);
+    }
+    
+    kfree(content);
+  } else {
+    // No redirection, just print to screen
     typewriter_vga_print(text, 0x0F);
-  typewriter_vga_print("\n", 0x0F);
+    typewriter_vga_print("\n", 0x0F);
+  }
 }
 
 static void cmd_exec(const char *filename) {
