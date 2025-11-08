@@ -46,6 +46,9 @@ int64_t sys_fstat(int fd, stat_t *buf);
 int64_t sys_mkdir(const char *pathname, mode_t mode);
 int64_t sys_rmdir(const char *pathname);
 int64_t sys_ls(const char *pathname);
+int64_t sys_chdir(const char *pathname);
+int64_t sys_getcwd(char *buf, size_t size);
+int64_t sys_unlink(const char *pathname);
 
 /* ========================================================================== */
 /* MEMORY MANAGEMENT                                                          */

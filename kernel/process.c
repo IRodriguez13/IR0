@@ -93,6 +93,9 @@ process_t *process_create(void (*entry)(void))
 	proc->egid = 0;
 	proc->umask = 0022;
 
+	/* Initialize current working directory */
+	strcpy(proc->cwd, "/");
+
 	/* Create stack */
 	proc->stack_size = 0x2000;
 	proc->stack_start = (uint64_t)kmalloc(proc->stack_size);
@@ -193,6 +196,9 @@ pid_t process_fork(void)
 	/* Set return values for fork */
 	child->task.rax = 0;
 	current_process->task.rax = child->task.pid;
+
+	/* Inherit current working directory from parent */
+	strcpy(child->cwd, current_process->cwd);
 
 	/* Insert into process list and scheduler */
 	child->next = process_list;

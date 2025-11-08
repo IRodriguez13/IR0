@@ -40,8 +40,9 @@ typedef uint32_t mode_t;
 #define SYS_CLOSE 60
 #define SYS_LS_DETAILED 61
 #define SYS_CREAT 62
-#define SYS_OPEN 59
-#define SYS_CLOSE 60
+#define SYS_CHDIR 80
+#define SYS_GETCWD 79
+#define SYS_UNLINK 87
 
 // ===============================================================================
 // SYSCALL WRAPPER FUNCTIONS

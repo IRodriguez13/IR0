@@ -66,6 +66,9 @@ typedef struct process
 	/* Memory mapping for ELF loader */
 	uintptr_t memory_base;
 	size_t memory_size;
+	
+	/* Current working directory */
+	char cwd[256];
 } process_t;
 
 /* ========================================================================== */
