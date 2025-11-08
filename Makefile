@@ -337,6 +337,7 @@ help:
 	@echo ""
 	@echo "🔧 Utilities:"
 	@echo "  make create-disk      Create virtual disk for MINIX FS"
+	@echo "  make delete-disk      Delete virtual disk for MINIX FS"
 	@echo "  make help             Show this help"
 	@echo ""
 	@echo "💡 Quick start: make run"
