@@ -15,6 +15,7 @@
 #include "syscalls.h"
 #include "process.h"
 #include <drivers/serial/serial.h>
+#include <drivers/video/typewriter.h>
 #include <fs/minix_fs.h>
 #include <ir0/memory/allocator.h>
 #include <ir0/memory/kmem.h>
@@ -35,6 +36,7 @@ extern int minix_fs_ls(const char *path);
 extern int minix_fs_mkdir(const char *path, mode_t mode);
 extern int minix_fs_cat(const char *path);
 extern int minix_fs_write_file(const char *path, const char *content);
+extern int minix_fs_read_file(const char *path, void **data, size_t *size);
 extern int minix_fs_touch(const char *path, mode_t mode);
 extern int minix_fs_rm(const char *path);
 extern int minix_fs_rmdir(const char *path);
@@ -86,15 +88,14 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
   {
     const char *str = (const char *)buf;
-    // Use print directly for simplicity
+    // Use typewriter effect for console output
     for (size_t i = 0; i < count && i < 1024; i++)
     {
       if (str[i] == '\n')
-        print("\n");
+        typewriter_print("\n");
       else
       {
-        char temp[2] = {str[i], 0};
-        print(temp);
+        typewriter_print_char(str[i]);
       }
     }
     return (int64_t)count;
@@ -186,8 +187,8 @@ int64_t sys_ps(void)
 
   serial_print("SERIAL: REAL sys_ps() called\n");
 
-  sys_write(1, "PID  STATE    COMMAND\n", 21);
-  sys_write(1, "---  -------  -------\n", 22);
+  sys_write(1, "PID  STATE     COMMAND\n", 22);
+  sys_write(1, "---  --------  -------\n", 23);
 
   // Get REAL process list
   process_t *proc_list = get_process_list();
@@ -212,7 +213,7 @@ int64_t sys_ps(void)
   }
 
   // Show kernel process (PID 0)
-  sys_write(1, "  0  IDLE     kernel\n", 20);
+  sys_write(1, "  0  IDLE       kernel\n", 22);
 
   // Iterate through REAL process list
   process_t *proc = proc_list;
@@ -256,38 +257,38 @@ int64_t sys_ps(void)
 
     sys_write(1, pid_str, len);
 
-    // Show state
+    // Show state with proper spacing
     switch (proc->state)
     {
     case PROCESS_READY:
-      sys_write(1, "  READY   ", 10);
+      sys_write(1, "  READY     ", 12);
       break;
     case PROCESS_RUNNING:
-      sys_write(1, "  RUNNING ", 10);
+      sys_write(1, "  RUNNING   ", 12);
       break;
     case PROCESS_BLOCKED:
-      sys_write(1, "  BLOCKED ", 10);
+      sys_write(1, "  BLOCKED   ", 12);
       break;
     case PROCESS_ZOMBIE:
-      sys_write(1, "  ZOMBIE  ", 10);
+      sys_write(1, "  ZOMBIE    ", 12);
       break;
     default:
-      sys_write(1, "  UNKNOWN ", 10);
+      sys_write(1, "  UNKNOWN   ", 12);
       break;
     }
 
     // Show command based on PID
     if (process_pid(proc) == 1)
     {
-      sys_write(1, " shell\n", 7);
+      sys_write(1, "shell\n", 6);
     }
     else if (process_pid(proc) == 0)
     {
-      sys_write(1, " kernel\n", 8);
+      sys_write(1, "kernel\n", 7);
     }
     else
     {
-      sys_write(1, " process\n", 9);
+      sys_write(1, "process\n", 8);
     }
 
     proc = proc->next;
@@ -316,6 +317,22 @@ int64_t sys_cat(const char *pathname)
 
   if (minix_fs_is_working())
     return minix_fs_cat(pathname);
+
+  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
+  return -1;
+}
+
+int64_t sys_read_file(const char *pathname, void **data, size_t *size)
+{
+  if (!current_process)
+    return -ESRCH;
+  if (!pathname || !data || !size)
+    return -EFAULT;
+
+  if (minix_fs_is_working())
+  {
+    return minix_fs_read_file(pathname, data, size);
+  }
 
   sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
   return -1;
@@ -961,6 +978,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_fork();
   case 13:
     return sys_waitpid((pid_t)arg1, (int *)arg2, (int)arg3);
+  case 14:
+    return sys_read_file((const char *)arg1, (void **)arg2, (size_t *)arg3);
   case 40:
     return sys_rmdir((const char *)arg1);
   case 50:

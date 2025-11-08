@@ -9,9 +9,15 @@
 #include "shell.h"
 #include <drivers/video/typewriter.h>
 #include <ir0/syscall.h>
+#include <ir0/memory/kmem.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+// External function declarations
+extern void *kmalloc(size_t size);
+extern void kfree(void *ptr);
+extern char *strstr(const char *haystack, const char *needle);
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -100,7 +106,11 @@ static void cmd_help(void) {
   typewriter_vga_print("  ps        - List processes\n", 0x0F);
   typewriter_vga_print("  echo TEXT - Print text\n", 0x0F);
   typewriter_vga_print("  exec FILE - Execute binary\n", 0x0F);
-  typewriter_vga_print("  type [fast|normal|slow|off] - Control typewriter effect\n", 0x0F);
+  typewriter_vga_print(
+      "  sed 's/OLD/NEW/' FILE - Edit file (substitute text)\n", 0x0F);
+  typewriter_vga_print(
+      "  typewriter [fast|normal|slow|off] - Control typewriter effect\n",
+      0x0F);
   typewriter_vga_print("  exit      - Exit shell\n", 0x0F);
 }
 
@@ -168,10 +178,8 @@ static void cmd_rmdir(const char *dirname) {
 }
 
 static void cmd_ps(void) {
-  typewriter_vga_print("PID  STATE  COMMAND\n", 0x0F);
-  typewriter_vga_print("---  -----  -------\n", 0x0F);
-  /* TODO: Implement process listing syscall */
-  typewriter_vga_print("  1  RUN    init\n", 0x0F);
+  /* Use real process listing syscall */
+  syscall(SYS_PS, 0, 0, 0);
 }
 
 static void cmd_echo(const char *text) {
@@ -192,6 +200,200 @@ static void cmd_exec(const char *filename) {
 }
 
 static void cmd_exit(void) { syscall(SYS_EXIT, 0, 0, 0); }
+
+// Helper function to perform text substitution
+static char *perform_substitution(const char *original, size_t original_size, 
+                                 const char *old_str, const char *new_str) {
+  if (!original || !old_str || !new_str) {
+    return NULL;
+  }
+
+  int old_len = 0, new_len = 0;
+  
+  // Calculate string lengths
+  while (old_str[old_len]) old_len++;
+  while (new_str[new_len]) new_len++;
+  
+  if (old_len == 0) {
+    return NULL; // Can't replace empty string
+  }
+
+  // Count occurrences of old_str in original
+  int count = 0;
+  const char *pos = original;
+  while (pos && (pos = strstr(pos, old_str)) != NULL) {
+    count++;
+    pos += old_len;
+  }
+
+  if (count == 0) {
+    // No replacements needed, return copy of original
+    char *result = (char *)kmalloc(original_size + 1);
+    if (!result) return NULL;
+    
+    for (size_t i = 0; i < original_size; i++) {
+      result[i] = original[i];
+    }
+    result[original_size] = '\0';
+    return result;
+  }
+
+  // Calculate new size
+  size_t new_size = original_size + count * (new_len - old_len);
+  char *result = (char *)kmalloc(new_size + 1);
+  if (!result) {
+    return NULL;
+  }
+
+  // Perform substitution
+  const char *src = original;
+  char *dst = result;
+  
+  while (*src) {
+    // Check if we found old_str at current position
+    int match = 1;
+    for (int i = 0; i < old_len && src[i]; i++) {
+      if (src[i] != old_str[i]) {
+        match = 0;
+        break;
+      }
+    }
+    
+    if (match && (src + old_len <= original + original_size)) {
+      // Copy new_str
+      for (int i = 0; i < new_len; i++) {
+        *dst++ = new_str[i];
+      }
+      src += old_len; // Skip old_str
+    } else {
+      // Copy original character
+      *dst++ = *src++;
+    }
+  }
+  
+  *dst = '\0';
+  return result;
+}
+
+static void cmd_sed(const char *args) {
+  if (!args || *args == '\0') {
+    typewriter_vga_print("Usage: sed 's/OLD/NEW/' FILE\n", 0x0C);
+    typewriter_vga_print("Example: sed 's/hello/world/' myfile.txt\n", 0x07);
+    return;
+  }
+
+  // Parse sed command: s/OLD/NEW/ FILE
+  if (!str_starts_with(args, "s/")) {
+    typewriter_vga_print(
+        "Error: Only substitute command 's/OLD/NEW/' supported\n", 0x0C);
+    return;
+  }
+
+  // Find the pattern: s/OLD/NEW/
+  const char *pattern_start = args + 2; // Skip "s/"
+  const char *old_end = NULL;
+  const char *new_start = NULL;
+  const char *new_end = NULL;
+  const char *filename = NULL;
+
+  // Find first '/' (end of OLD)
+  for (const char *p = pattern_start; *p; p++) {
+    if (*p == '/') {
+      old_end = p;
+      new_start = p + 1;
+      break;
+    }
+  }
+
+  if (!old_end) {
+    typewriter_vga_print("Error: Invalid sed pattern. Use 's/OLD/NEW/'\n",
+                         0x0C);
+    return;
+  }
+
+  // Find second '/' (end of NEW)
+  for (const char *p = new_start; *p; p++) {
+    if (*p == '/') {
+      new_end = p;
+      filename = skip_whitespace(p + 1);
+      break;
+    }
+  }
+
+  if (!new_end || !filename || *filename == '\0') {
+    typewriter_vga_print("Error: Invalid sed pattern or missing filename\n",
+                         0x0C);
+    return;
+  }
+
+  // Extract OLD and NEW strings
+  char old_str[256], new_str[256];
+  int old_len = old_end - pattern_start;
+  int new_len = new_end - new_start;
+
+  if (old_len >= 255 || new_len >= 255) {
+    typewriter_vga_print("Error: Pattern too long\n", 0x0C);
+    return;
+  }
+
+  // Copy strings
+  for (int i = 0; i < old_len; i++) {
+    old_str[i] = pattern_start[i];
+  }
+  old_str[old_len] = '\0';
+
+  for (int i = 0; i < new_len; i++) {
+    new_str[i] = new_start[i];
+  }
+  new_str[new_len] = '\0';
+
+  // Read the file content
+  void *file_data = NULL;
+  size_t file_size = 0;
+  
+  int64_t result = syscall(SYS_READ_FILE, (uint64_t)filename, (uint64_t)&file_data, (uint64_t)&file_size);
+  
+  if (result < 0) {
+    typewriter_vga_print("Error: Could not read file '", 0x0C);
+    typewriter_vga_print(filename, 0x0C);
+    typewriter_vga_print("'\n", 0x0C);
+    return;
+  }
+
+  if (!file_data || file_size == 0) {
+    typewriter_vga_print("Error: File is empty or could not be read\n", 0x0C);
+    return;
+  }
+
+  // Perform text substitution
+  char *original = (char *)file_data;
+  char *modified = perform_substitution(original, file_size, old_str, new_str);
+  
+  if (!modified) {
+    typewriter_vga_print("Error: Could not perform substitution\n", 0x0C);
+    // Free the original file data (would need kfree syscall)
+    return;
+  }
+
+  // Write the modified content back to the file
+  result = syscall(SYS_WRITE_FILE, (uint64_t)filename, (uint64_t)modified, 0);
+  
+  if (result < 0) {
+    typewriter_vga_print("Error: Could not write to file '", 0x0C);
+    typewriter_vga_print(filename, 0x0C);
+    typewriter_vga_print("'\n", 0x0C);
+  } else {
+    typewriter_vga_print("Successfully replaced '", 0x0A);
+    typewriter_vga_print(old_str, 0x0A);
+    typewriter_vga_print("' with '", 0x0A);
+    typewriter_vga_print(new_str, 0x0A);
+    typewriter_vga_print("' in '", 0x0A);
+    typewriter_vga_print(filename, 0x0A);
+    typewriter_vga_print("'\n", 0x0A);
+  }
+
+  // TODO: Free memory (need kfree syscall or memory management)
+}
 
 static void cmd_type(const char *mode) {
   if (!mode || *mode == '\0') {
@@ -336,6 +538,8 @@ static void execute_command(const char *cmd) {
     cmd_echo(arg);
   } else if ((arg = get_arg(cmd, "exec"))) {
     cmd_exec(arg);
+  } else if ((arg = get_arg(cmd, "sed"))) {
+    cmd_sed(arg);
   } else if (str_starts_with(cmd, "exit")) {
     cmd_exit();
   } else if ((arg = get_arg(cmd, "type"))) {
@@ -346,7 +550,6 @@ static void execute_command(const char *cmd) {
     typewriter_vga_print("\nType 'help' for available commands\n", 0x0C);
   }
 }
-
 
 void shell_entry(void) {
   char input[256];
