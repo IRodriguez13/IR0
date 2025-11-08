@@ -66,6 +66,9 @@ int start_init_process(void)
 	init->stack_size = 0x1000;
 	init->page_directory = (uint64_t *)init->task.cr3;
 
+	/* Initialize current working directory */
+	strcpy(init->cwd, "/");
+
 	/* Add to scheduler and start */
 	rr_add_process(init);
 	rr_schedule_next();
