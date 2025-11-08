@@ -532,30 +532,45 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
     return -1;
   }
 
-  // Calcular la posición del inode en el disco
+  // Calcular la posición del inode en el disco (DEBE SER IGUAL A minix_read_inode)
+  // Block layout: 0=boot, 1=super, 2=imap, 3=zmap, 4=inodes, 5+=data
+  uint32_t inode_table_start =
+      1 + minix_fs.superblock.s_imap_blocks + minix_fs.superblock.s_zmap_blocks;
   uint32_t inode_block =
-      minix_fs.superblock.s_imap_blocks + 1 +
-      (inode_num - 1) / (MINIX_BLOCK_SIZE / MINIX_INODE_SIZE);
+      inode_table_start +
+      ((inode_num - 1) * sizeof(minix_inode_t)) / MINIX_BLOCK_SIZE;
   uint32_t inode_offset =
-      ((inode_num - 1) % (MINIX_BLOCK_SIZE / MINIX_INODE_SIZE)) *
-      MINIX_INODE_SIZE;
+      ((inode_num - 1) * sizeof(minix_inode_t)) % MINIX_BLOCK_SIZE;
+
+  extern void serial_print(const char *str);
+  extern void serial_print_hex32(uint32_t num);
+  serial_print("SERIAL: write_inode: inode_num=");
+  serial_print_hex32(inode_num);
+  serial_print(" block=");
+  serial_print_hex32(inode_block);
+  serial_print(" offset=");
+  serial_print_hex32(inode_offset);
+  serial_print("\n");
 
   // Leer el bloque que contiene el inode
   uint8_t block_buffer[MINIX_BLOCK_SIZE];
   if (minix_read_block(inode_block, block_buffer) != 0)
   {
+    serial_print("SERIAL: write_inode: failed to read block\n");
     return -1;
   }
 
   // Copiar el inode al buffer
-  memcpy(block_buffer + inode_offset, inode, MINIX_INODE_SIZE);
+  memcpy(block_buffer + inode_offset, inode, sizeof(minix_inode_t));
 
   // Escribir el bloque actualizado
   if (minix_write_block(inode_block, block_buffer) != 0)
   {
+    serial_print("SERIAL: write_inode: failed to write block\n");
     return -1;
   }
 
+  serial_print("SERIAL: write_inode: success\n");
   return 0;
 }
 
@@ -1185,9 +1200,9 @@ int minix_fs_cat(const char *path)
     return -EIO; // Error real - no hay disco disponible
   }
 
-  // Obtener el inode del archivo
-  minix_inode_t *file_inode = minix_fs_find_inode(path);
-  if (!file_inode)
+  // Obtener el número de inode del archivo
+  uint16_t inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0)
   {
     typewriter_print("Error: File '");
     typewriter_print(path);
@@ -1195,8 +1210,25 @@ int minix_fs_cat(const char *path)
     return -1;
   }
 
+  // Leer el inode desde el disco (para obtener el tamaño actualizado)
+  minix_inode_t file_inode_data;
+  if (minix_read_inode(inode_num, &file_inode_data) != 0)
+  {
+    typewriter_print("Error: Could not read inode\n");
+    return -1;
+  }
+
+  // Debug: mostrar tamaño leído
+  extern void serial_print(const char *str);
+  extern void serial_print_hex32(uint32_t num);
+  serial_print("SERIAL: cat: inode_num=");
+  serial_print_hex32(inode_num);
+  serial_print(" size=");
+  serial_print_hex32(file_inode_data.i_size);
+  serial_print("\n");
+
   // Verificar que sea un archivo regular
-  if (file_inode->i_mode & MINIX_IFDIR)
+  if (file_inode_data.i_mode & MINIX_IFDIR)
   {
     typewriter_print("Error: '");
     typewriter_print(path);
@@ -1209,18 +1241,18 @@ int minix_fs_cat(const char *path)
   typewriter_print(" ===\n");
 
   // Leer y mostrar el contenido del archivo
-  uint32_t file_size = file_inode->i_size;
+  uint32_t file_size = file_inode_data.i_size;
   uint32_t bytes_read = 0;
 
   for (int i = 0; i < 7 && bytes_read < file_size; i++)
   {
-    if (file_inode->i_zone[i] == 0)
+    if (file_inode_data.i_zone[i] == 0)
     {
       continue;
     }
 
     uint8_t block_buffer[MINIX_BLOCK_SIZE];
-    if (minix_read_block(file_inode->i_zone[i], block_buffer) != 0)
+    if (minix_read_block(file_inode_data.i_zone[i], block_buffer) != 0)
     {
       typewriter_print("Error reading block ");
       typewriter_print_uint32(i);
@@ -1405,6 +1437,12 @@ int minix_fs_write_file(const char *path, const char *content)
   // Actualizar el tamaño del archivo en el inode
   file_inode->i_size = content_size;
 
+  serial_print("SERIAL: write_file: before write_inode, inode_num=");
+  serial_print_hex32(inode_num);
+  serial_print(" size=");
+  serial_print_hex32(file_inode->i_size);
+  serial_print("\n");
+
   // Escribir el inode actualizado al disco
   if (minix_fs_write_inode(inode_num, file_inode) != 0)
   {
@@ -1412,6 +1450,8 @@ int minix_fs_write_file(const char *path, const char *content)
     serial_print("SERIAL: Error: Could not update inode\n");
     return -1;
   }
+
+  serial_print("SERIAL: write_file: after write_inode\n");
 
   extern void serial_print(const char *str);
   extern void serial_print_hex32(uint32_t num);

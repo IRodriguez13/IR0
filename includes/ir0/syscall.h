@@ -21,9 +21,9 @@ typedef uint32_t mode_t;
 #define SYS_MKDIR 6
 #define SYS_PS 7
 #define SYS_WRITE_FILE 8
-#define SYS_READ_FILE 14
 #define SYS_CAT 9
 #define SYS_TOUCH 10
+#define SYS_READ_FILE 14
 #define SYS_RM 11
 #define SYS_FORK 12
 #define SYS_WAITPID 13
