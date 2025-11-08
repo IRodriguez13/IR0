@@ -1,5 +1,5 @@
 #include "arch_interface.h"
-#include <panic/panic.h>
+#include <panic/oops.h>
 
 // Implementaciones específicas de arquitectura
 void arch_enable_interrupts(void)

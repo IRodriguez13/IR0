@@ -14,8 +14,8 @@
 #include <ir0/memory/allocator.h>
 
 /* Compiler optimization hints */
-#define likely(x)	__builtin_expect(!!(x), 1)
-#define unlikely(x)	__builtin_expect(!!(x), 0)
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 /**
  * kmalloc - allocate kernel memory
@@ -27,7 +27,7 @@ void *kmalloc(size_t size)
 {
 	if (unlikely(size == 0))
 		return NULL;
-	
+
 	return alloc(size);
 }
 
@@ -50,11 +50,12 @@ void kfree(void *ptr)
  */
 void *krealloc(void *ptr, size_t size)
 {
-	if (unlikely(size == 0)) {
+	if (unlikely(size == 0))
+	{
 		kfree(ptr);
 		return NULL;
 	}
-	
+
 	return all_realloc(ptr, size);
 }
 

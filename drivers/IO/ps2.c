@@ -1,6 +1,6 @@
 #include "ps2.h"
 #include <print.h>
-#include <panic/panic.h>
+#include <panic/oops.h>
 #include <string.h>
 #include <arch/common/arch_interface.h>
 
