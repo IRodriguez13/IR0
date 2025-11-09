@@ -1,11 +1,11 @@
 #include <stdint.h>
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <ir0/logging.h>
-#include <ir0/panic/oops.h>
+#include <ir0/oops.h>
 #include "paging.h"
 #include <string.h>
 #include "allocator.h"
-#include "../kernel/process.h"
+#include <kernel/process.h>
 
 // ===============================================================================
 //                              PAGE TABLE STRUCTURES

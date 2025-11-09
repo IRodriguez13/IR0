@@ -1,8 +1,8 @@
 #include "hpet.h"
 #include <arch/common/idt.h>
-#include <panic/oops.h>
+#include <ir0/oops.h>
 #include <drivers/timer/pit/pit.h> // para outb, inb 
-#include <print.h>
+#include <vga.h>
 
 #define HPET_GENERAL_CAPABILITY       0x00
 #define HPET_GENERAL_CONFIGURATION    0x10

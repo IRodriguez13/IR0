@@ -12,8 +12,8 @@
  */
 
 #include "task.h"
-#include <ir0/print.h>
-#include <ir0/panic/oops.h>
+#include <ir0/vga.h>
+#include <ir0/oops.h>
 #include <arch_interface.h>
 #include <string.h>
 #include <memory/allocator.h>

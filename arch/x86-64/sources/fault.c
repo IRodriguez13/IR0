@@ -1,8 +1,8 @@
 #include <stdint.h>
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <includes/ir0/memory/paging.h>
 #include <includes/ir0/memory/kmem.h>
-#include <panic/oops.h>
+#include <ir0/oops.h>
 
 
 void page_fault_handler_x64(uint64_t *stack)
@@ -42,9 +42,7 @@ void page_fault_handler_x64(uint64_t *stack)
     panic("Unhandled kernel page fault");
 }
 
-// -------------------------------------------------------------------
 // Double Fault
-// -------------------------------------------------------------------
 void double_fault_x64(uint64_t error_code, uint64_t rip)
 {
     print_colored("DOUBLE FAULT!\n", 0x0C, 0x00);
@@ -57,9 +55,7 @@ void double_fault_x64(uint64_t error_code, uint64_t rip)
     panic("Double fault - Kernel halted");
 }
 
-// -------------------------------------------------------------------
 // Triple Fault
-// -------------------------------------------------------------------
 void triple_fault_x64()
 {
     print_colored("TRIPLE FAULT!\n", 0x0C, 0x00);

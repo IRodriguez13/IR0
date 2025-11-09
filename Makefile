@@ -128,10 +128,10 @@ MEMORY_OBJS = \
 	includes/ir0/memory/kmem.o
 
 LIB_OBJS = \
-    includes/ir0/print.o \
+    includes/ir0/vga.o \
     includes/ir0/logging.o \
     includes/ir0/validation.o \
-    includes/ir0/panic/oops.o \
+    includes/ir0/oops.o \
     includes/string.o
 
 INTERRUPT_OBJS = \
@@ -149,7 +149,6 @@ DRIVER_OBJS = \
     drivers/serial/serial.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
-    drivers/timer/best_clock.o \
     drivers/timer/rtc/rtc.o \
     drivers/timer/hpet/hpet.o \
     drivers/timer/hpet/find_hpet.o \

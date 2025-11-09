@@ -23,7 +23,7 @@
 #include <kernel/elf_loader.h>
 #include <ir0/memory/allocator.h>
 #include <ir0/memory/kmem.h>
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <ir0/stat.h>
 #include <ir0/user.h>
 #include <kernel/rr_sched.h>
@@ -31,7 +31,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include <panic/oops.h>
+#include <ir0/oops.h>
 #include <ir0/keyboard.h>
 #include <fs/vfs.h>
 #include <ir0/path.h>

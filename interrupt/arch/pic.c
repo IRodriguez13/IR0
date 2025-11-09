@@ -1,6 +1,6 @@
 #include "pic.h"
 #include "io.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 
 // Remapear PIC para 32-bit - usar archivo modular
 #ifdef __x86_64__

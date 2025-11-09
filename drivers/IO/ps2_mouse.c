@@ -1,5 +1,5 @@
 #include "ps2_mouse.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <stddef.h>
 #include <arch/common/arch_interface.h>
 

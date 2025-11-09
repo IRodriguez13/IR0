@@ -777,7 +777,7 @@ static void cmd_mv(const char *args)
   // simple reuse of cp parsing
   char buf[512];
   size_t i = 0;
-  while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n') 
+  while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
   {
     buf[i] = args[i];
     i++;
@@ -853,7 +853,8 @@ static void cmd_chmod(const char *args)
   }
   char buf[256];
   size_t i = 0;
-  while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n') {
+  while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
+  {
     buf[i] = args[i];
     i++;
   }
@@ -1069,100 +1070,113 @@ static void cmd_rm(const char *args)
 
 /* List block devices (lsblk) - shows real disk information */
 
-
 // Using itoa from string.h
 
 // Touch command: create empty file or update its timestamp
-static void cmd_touch(const char *filename) {
-    if (!filename || *filename == '\0') {
-        vga_print("Usage: touch FILE\n", 0x0C);
-        return;
-    }
+static void cmd_touch(const char *filename)
+{
+  if (!filename || *filename == '\0')
+  {
+    vga_print("Usage: touch FILE\n", 0x0C);
+    return;
+  }
 
-    // Use default file permissions (0644 = rw-r--r--)
-    mode_t default_mode = 0644;
-    
-    // Call the filesystem's touch function
-    int64_t result = syscall(SYS_TOUCH, (uint64_t)filename, default_mode, 0);
-    if (result < 0) {
-        vga_print("touch: failed to create/update file\n", 0x0C);
-    }
+  // Use default file permissions (0644 = rw-r--r--)
+  mode_t default_mode = 0644;
+
+  // Call the filesystem's touch function
+  int64_t result = syscall(SYS_TOUCH, (uint64_t)filename, default_mode, 0);
+  if (result < 0)
+  {
+    vga_print("touch: failed to create/update file\n", 0x0C);
+  }
 }
 
 // Helper function to convert number to string
-static void uint64_to_str(uint64_t num, char* str) {
-    char tmp[32];
-    char* p = tmp;
-    
-    if (num == 0) {
-        *p++ = '0';
-    } else {
-        while (num > 0) {
-            *p++ = '0' + (num % 10);
-            num /= 10;
-        }
+static void uint64_to_str(uint64_t num, char *str)
+{
+  char tmp[32];
+  char *p = tmp;
+
+  if (num == 0)
+  {
+    *p++ = '0';
+  }
+  else
+  {
+    while (num > 0)
+    {
+      *p++ = '0' + (num % 10);
+      num /= 10;
     }
-    
-    // Reverse the string
-    while (p > tmp) {
-        *str++ = *--p;
-    }
-    *str = '\0';
+  }
+
+  // Reverse the string
+  while (p > tmp)
+  {
+    *str++ = *--p;
+  }
+  *str = '\0';
 }
 
-static void cmd_lsblk(const char *args) {
-    (void)args; // Unused parameter
-    
-    // Print header
-    typewriter_vga_print("NAME        MAJ:MIN   SIZE (bytes)    MODEL\n", 0x0F);
-    typewriter_vga_print("------------------------------------------------\n", 0x07);
+static void cmd_lsblk(const char *args)
+{
+  (void)args; // Unused parameter
 
-    // Check each possible ATA device (0-3)
-    for (uint8_t i = 0; i < 4; i++) {
-        ata_device_info_t info;
-        
-        // Get device info
-        if (!ata_get_device_info(i, &info)) {
-            continue; // Skip if device not present
-        }
-        
-        char name[8];
-        
-        // Generate device name (hda, hdb, etc.)
-        name[0] = 'h';
-        name[1] = 'd' + i;
-        name[2] = '\0';
-        
-        // Print device name
-        typewriter_vga_print(name, 0x0F);
-        typewriter_vga_print("         ", 0x0F);
-        
-        // Print major:minor
-        char num_buf[16];
-        itoa(i, num_buf, 10);
-        typewriter_vga_print(num_buf, 0x0F);
-        typewriter_vga_print(":0", 0x0F);
-        typewriter_vga_print("       ", 0x0F);
-        
-        // Print size in bytes
-        char size_buf[32];
-        uint64_to_str(info.capacity_bytes, size_buf);
-        typewriter_vga_print(size_buf, 0x0A);
-        
-        // Add some padding for alignment
-        int pad = 15 - strlen(size_buf);
-        while (pad-- > 0) {
-            typewriter_vga_print(" ", 0x0A);
-        }
-        
-        // Print model if available
-        if (info.model[0] != '\0') {
-            typewriter_vga_print("  ", 0x0F);
-            typewriter_vga_print(info.model, 0x0F);
-        }
-        
-        typewriter_vga_print("\n", 0x0F);
+  // Print header
+  typewriter_vga_print("NAME        MAJ:MIN   SIZE (bytes)    MODEL\n", 0x0F);
+  typewriter_vga_print("------------------------------------------------\n", 0x07);
+
+  // Check each possible ATA device (0-3)
+  for (uint8_t i = 0; i < 4; i++)
+  {
+    ata_device_info_t info;
+
+    // Get device info
+    if (!ata_get_device_info(i, &info))
+    {
+      continue; // Skip if device not present
     }
+
+    char name[8];
+
+    // Generate device name (hda, hdb, etc.)
+    name[0] = 'h';
+    name[1] = 'd' + i;
+    name[2] = '\0';
+
+    // Print device name
+    typewriter_vga_print(name, 0x0F);
+    typewriter_vga_print("         ", 0x0F);
+
+    // Print major:minor
+    char num_buf[16];
+    itoa(i, num_buf, 10);
+    typewriter_vga_print(num_buf, 0x0F);
+    typewriter_vga_print(":0", 0x0F);
+    typewriter_vga_print("       ", 0x0F);
+
+    // Print size in bytes
+    char size_buf[32];
+    uint64_to_str(info.capacity_bytes, size_buf);
+    typewriter_vga_print(size_buf, 0x0A);
+
+    // Add some padding for alignment
+    int pad = 15 - strlen(size_buf);
+    while (pad-- > 0)
+    {
+      typewriter_vga_print(" ", 0x0A);
+    }
+
+    // Print model if available
+    if (info.model[0] != '\0')
+    {
+      typewriter_vga_print("  ", 0x0F);
+      typewriter_vga_print(info.model, 0x0F);
+    }
+
+    typewriter_vga_print("\n", 0x0F);
+  }
 }
 
 /* df - show simple disk capacity (per device) */

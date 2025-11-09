@@ -1,7 +1,7 @@
 // kernel/scheduler/task.h -
 #pragma once
 #include <stdint.h>
-#include <ir0/print.h>
+#include <ir0/vga.h>
 
 typedef enum
 {
