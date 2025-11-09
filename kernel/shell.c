@@ -123,6 +123,7 @@ static void shell_print_hr_size(uint64_t bytes)
 /* Forward declarations for command handlers used in the table */
 static void cmd_list_help(void);
 static void cmd_mount(const char *args);
+static void cmd_touch(const char *filename);
 
 static void cmd_help(void)
 {
@@ -1071,6 +1072,23 @@ static void cmd_rm(const char *args)
 
 // Using itoa from string.h
 
+// Touch command: create empty file or update its timestamp
+static void cmd_touch(const char *filename) {
+    if (!filename || *filename == '\0') {
+        vga_print("Usage: touch FILE\n", 0x0C);
+        return;
+    }
+
+    // Use default file permissions (0644 = rw-r--r--)
+    mode_t default_mode = 0644;
+    
+    // Call the filesystem's touch function
+    int64_t result = syscall(SYS_TOUCH, (uint64_t)filename, default_mode, 0);
+    if (result < 0) {
+        vga_print("touch: failed to create/update file\n", 0x0C);
+    }
+}
+
 // Helper function to convert number to string
 static void uint64_to_str(uint64_t num, char* str) {
     char tmp[32];
@@ -1218,6 +1236,7 @@ static const struct shell_cmd commands[] = {
     {"chmod", (void (*)(const char *))cmd_chmod, "chmod MODE PATH", "Change file mode"},
     {"chown", (void (*)(const char *))cmd_chown, "chown USER PATH", "Change file owner (not implemented)"},
     {"exit", (void (*)(const char *))cmd_exit, "exit", "Exit shell"},
+    {"touch", cmd_touch, "touch FILE", "Create empty file or update timestamp"},
 };
 
 static void cmd_list_help(void)
