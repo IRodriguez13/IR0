@@ -66,9 +66,7 @@ process_t *get_process_list(void)
 	return process_list;
 }
 
-/* ========================================================================== */
-/* PROCESS CREATION                                                           */
-/* ========================================================================== */
+
 
 process_t *process_create(void (*entry)(void))
 {
@@ -130,9 +128,6 @@ process_t *process_create(void (*entry)(void))
 	return proc;
 }
 
-/* ========================================================================== */
-/* FORK - Create child process                                               */
-/* ========================================================================== */
 
 pid_t process_fork(void)
 {
@@ -163,7 +158,7 @@ pid_t process_fork(void)
 	new_cr3 = create_process_page_directory();
 	if (!new_cr3)
 	{
-		kfree(child);
+		goto cleanup;
 		return -1;
 	}
 	child->task.cr3 = new_cr3;
@@ -173,7 +168,7 @@ pid_t process_fork(void)
 	new_stack = kmalloc(current_process->stack_size);
 	if (!new_stack)
 	{
-		kfree(child);
+		goto cleanup;
 		return -1;
 	}
 	memcpy(new_stack, (void *)current_process->stack_start,
@@ -205,6 +200,9 @@ pid_t process_fork(void)
 	process_list = child;
 	rr_add_process(child);
 
+	cleanup:
+		kfree(child);
+		
 	return child->task.pid;
 }
 
@@ -235,7 +233,7 @@ int process_wait(pid_t pid, int *status)
 	process_t *prev;
 	pid_t ret;
 
-	while (1)
+	for(;;)
 	{
 		p = process_list;
 		while (p)
@@ -275,9 +273,7 @@ int process_wait(pid_t pid, int *status)
 	}
 }
 
-/* ========================================================================== */
-/* MEMORY MANAGEMENT                                                          */
-/* ========================================================================== */
+
 
 uint64_t create_process_page_directory(void)
 {
