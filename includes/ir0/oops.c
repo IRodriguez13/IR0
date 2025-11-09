@@ -12,14 +12,16 @@ static const char *panic_level_names[] =
         "HARDWARE FAULT",
         "OUT OF MEMORY",
         "STACK OVERFLOW",
-        "ASSERTION FAILED"
+        "ASSERTION FAILED",
+        "TESTING",
+        "RUNNING OUT PROCESS"
     };
 
 // We make sure we've doble panic
 static volatile int in_panic = 0;
 
 // Better stacktrace pipeline
-void panic_advanced(const char *message, panic_level_t level, const char *file, int line)
+void panicex(const char *message, panic_level_t level, const char *file, int line)
 {
     // 
     if (in_panic)
@@ -37,7 +39,7 @@ void panic_advanced(const char *message, panic_level_t level, const char *file, 
     clear_screen();
     print_colored("     ╔════════════════════════════════════════════════════════╗\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     print_colored("     ║                                                        ║\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-    print_colored("     ║                O_o KERNEL PANIC :-(                    ║\n", VGA_COLOR_WHITE, VGA_COLOR_RED);
+    print_colored("     ║                      O_o KERNEL PANIC                        ║\n", VGA_COLOR_WHITE, VGA_COLOR_RED);
     print_colored("     ║                                                        ║\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     print_colored("     ╚════════════════════════════════════════════════════════╝\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
 
@@ -205,7 +207,7 @@ void dump_stack_trace()
 // Unix panic() pipeline wrapper 
 void panic(const char *message)
 {
-    panic_advanced(message, PANIC_KERNEL_BUG, "unknown", 0);
+    panicex(message, PANIC_KERNEL_BUG, "unknown", 0);
 }
 
 

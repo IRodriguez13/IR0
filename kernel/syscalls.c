@@ -72,7 +72,7 @@ int64_t sys_exit(int exit_code)
   // Llamar al scheduler para pasar a otro proceso
   rr_schedule_next();
 
-  panic("Failed exit!");
+  panicex("You left the shell succesfully! but you should't do that!", RUNNING_OUT_PROCESS, "SYSCALLS.C", 75);
 
   // Nunca debería volver aquí
   return 0;
