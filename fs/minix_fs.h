@@ -124,7 +124,7 @@ bool minix_fs_is_working(void);
 int minix_fs_init(void);
 int minix_fs_format(void);
 int minix_fs_mkdir(const char *path, mode_t mode);
-int minix_fs_ls(const char *path);
+int minix_fs_ls(const char *path, bool detailed);
 
 int minix_fs_cat(const char *path);
 int minix_fs_write_file(const char *path, const char *content);

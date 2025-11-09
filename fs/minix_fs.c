@@ -18,16 +18,63 @@
 #include <ir0/print.h>
 #include <ir0/stat.h>
 #include <drivers/video/typewriter.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
+
+// Custom string functions for kernel space
+static inline size_t kstrlen(const char *s) {
+    const char *p = s;
+    while (*p) p++;
+    return p - s;
+}
+
+static inline char *kstrncpy(char *dest, const char *src, size_t n) {
+    size_t i;
+    for (i = 0; i < n && src[i] != '\0'; i++)
+        dest[i] = src[i];
+    for (; i < n; i++)
+        dest[i] = '\0';
+    return dest;
+}
+
+static inline int kstrcmp(const char *s1, const char *s2) {
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+}
+
+static inline int kstrncmp(const char *s1, const char *s2, size_t n) {
+    while (n && *s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+        n--;
+    }
+    if (n == 0) return 0;
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+}
+
+static inline void *kmemset(void *s, int c, size_t n) {
+    unsigned char *p = s;
+    while (n-- > 0) *p++ = (unsigned char)c;
+    return s;
+}
+
+static inline void *kmemcpy(void *dest, const void *src, size_t n) {
+    char *d = dest;
+    const char *s = src;
+    while (n-- > 0) *d++ = *s++;
+    return dest;
+}
 
 extern void *kmalloc(size_t size);
 extern void kfree(void *ptr);
 
+// Error code definitions
+#define ENOENT  2  // No such file or directory
+#define EIO     5  // I/O error
+#define ENOTDIR 20 // Not a directory
+
 #define MINIX_SUPER_MAGIC 0x137F
-#define EIO 5
 #define MINIX_MAGIC 0x137F
 
 #define MINIX_ROOT_INODE 1
@@ -279,7 +326,7 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
   }
 
   // Copiar inode del buffer
-  memcpy(inode, block_buffer + inode_offset, sizeof(minix_inode_t));
+  kmemcpy(inode, block_buffer + inode_offset, sizeof(minix_inode_t));
 
   return 0;
 }
@@ -306,7 +353,7 @@ minix_write_inode(uint32_t inode_num, const minix_inode_t *inode)
   }
 
   // Copiar inode al buffer
-  memcpy(block_buffer + inode_offset, inode, sizeof(minix_inode_t));
+  kmemcpy(block_buffer + inode_offset, inode, sizeof(minix_inode_t));
 
   // Escribir bloque de vuelta al disco
   result = minix_write_block(inode_block, block_buffer);
@@ -339,6 +386,30 @@ uint32_t minix_alloc_inode(void)
 // MINIX FILESYSTEM FUNCTIONS IMPLEMENTATION
 // ===============================================================================
 
+// Helper function to format file permissions in rwxr-xr-x format
+static void format_permissions(uint16_t mode, char *buffer) {
+    // File type
+    buffer[0] = (mode & MINIX_IFDIR) ? 'd' : '-';
+    
+    // User permissions
+    buffer[1] = (mode & MINIX_IRUSR) ? 'r' : '-';
+    buffer[2] = (mode & MINIX_IWUSR) ? 'w' : '-';
+    buffer[3] = (mode & MINIX_IXUSR) ? 'x' : '-';
+    
+    // Group permissions
+    buffer[4] = (mode & MINIX_IRGRP) ? 'r' : '-';
+    buffer[5] = (mode & MINIX_IWGRP) ? 'w' : '-';
+    buffer[6] = (mode & MINIX_IXGRP) ? 'x' : '-';
+    
+    // Other permissions
+    buffer[7] = (mode & MINIX_IROTH) ? 'r' : '-';
+    buffer[8] = (mode & MINIX_IWOTH) ? 'w' : '-';
+    buffer[9] = (mode & MINIX_IXOTH) ? 'x' : '-';
+    
+    buffer[10] = ' ';  // Space after permissions
+    buffer[11] = '\0'; // Null terminator
+}
+
 // Global static inodes to avoid memory issues
 static minix_inode_t cached_root_inode;
 static minix_inode_t cached_result_inode;
@@ -346,7 +417,7 @@ static bool root_inode_cached = false;
 
 minix_inode_t *minix_fs_find_inode(const char *pathname)
 {
-  extern void print(const char *str);
+  // Using typewriter_print for kernel output
   static minix_inode_t result_inode;
 
   if (!pathname || !minix_fs.initialized)
@@ -358,13 +429,13 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   // (Skip ATA check for QEMU compatibility)
 
   // Si es el directorio raíz
-  if (strcmp(pathname, "/") == 0)
+  if (kstrcmp(pathname, "/") == 0)
   {
     // Always read from disk to ensure we have the latest version
     if (minix_read_inode(MINIX_ROOT_INODE, &cached_root_inode) == 0)
     {
       root_inode_cached = true;
-      memcpy(&result_inode, &cached_root_inode, sizeof(minix_inode_t));
+      kmemcpy(&result_inode, &cached_root_inode, sizeof(minix_inode_t));
       return &result_inode;
     }
     return NULL;
@@ -372,7 +443,7 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
 
   // Parsear el path
   char path_copy[256];
-  strncpy(path_copy, pathname, sizeof(path_copy) - 1);
+  kstrncpy(path_copy, pathname, sizeof(path_copy) - 1);
   path_copy[sizeof(path_copy) - 1] = '\0';
 
   // Empezar desde el inode raíz
@@ -383,7 +454,12 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   }
 
   // Dividir el path en componentes
-  char *token = strtok(path_copy, "/");
+  // Simple tokenizer to replace strtok
+  char *token = path_copy;
+  if (*token == '/') token++;  // Skip leading slash
+  char *next = token;
+  while (*next && *next != '/') next++;
+  if (*next) *next++ = '\0';
   while (token != NULL)
   {
     // Verificar que el inode actual es un directorio
@@ -405,11 +481,14 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
       return NULL;
     }
 
-    token = strtok(NULL, "/");
+    // Get next token
+    token = next;
+    while (*next && *next != '/') next++;
+    if (*next) *next++ = '\0';
   }
 
   // Retornar una copia estática del inode encontrado
-  memcpy(&cached_result_inode, &current_inode, sizeof(minix_inode_t));
+  kmemcpy(&cached_result_inode, &current_inode, sizeof(minix_inode_t));
 
   return &cached_result_inode;
 }
@@ -423,14 +502,14 @@ static uint16_t minix_fs_get_inode_number(const char *pathname)
   }
 
   // Si es el directorio raíz
-  if (strcmp(pathname, "/") == 0)
+  if (kstrcmp(pathname, "/") == 0)
   {
     return MINIX_ROOT_INODE;
   }
 
   // Parsear el path
   char path_copy[256];
-  strncpy(path_copy, pathname, sizeof(path_copy) - 1);
+  kstrncpy(path_copy, pathname, sizeof(path_copy) - 1);
   path_copy[sizeof(path_copy) - 1] = '\0';
 
   // Empezar desde el inode raíz
@@ -441,7 +520,12 @@ static uint16_t minix_fs_get_inode_number(const char *pathname)
   }
 
   // Dividir el path en componentes
-  char *token = strtok(path_copy, "/");
+  // Simple tokenizer to replace strtok
+  char *token = path_copy;
+  if (*token == '/') token++;  // Skip leading slash
+  char *next = token;
+  while (*next && *next != '/') next++;
+  if (*next) *next++ = '\0';
   uint16_t current_inode_num = MINIX_ROOT_INODE;
 
   while (token != NULL)
@@ -467,7 +551,10 @@ static uint16_t minix_fs_get_inode_number(const char *pathname)
       return 0;
     }
 
-    token = strtok(NULL, "/");
+    // Get next token
+    token = next;
+    while (*next && *next != '/') next++;
+    if (*next) *next++ = '\0';
   }
 
   return current_inode_num;
@@ -510,7 +597,7 @@ uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode,
         continue; // Entrada vacía
       }
 
-      if (strcmp(entries[j].name, name) == 0)
+      if (kstrcmp(entries[j].name, name) == 0)
       {
         return entries[j].inode;
       }
@@ -556,7 +643,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   }
 
   // Copiar el inode al buffer
-  memcpy(block_buffer + inode_offset, inode, sizeof(minix_inode_t));
+  kmemcpy(block_buffer + inode_offset, inode, sizeof(minix_inode_t));
 
   // Escribir el bloque actualizado
   if (minix_write_block(inode_block, block_buffer) != 0)
@@ -616,220 +703,215 @@ int minix_fs_split_path(const char *pathname, char *parent_path,
   }
 
   // Encontrar la última barra
-  const char *last_slash = strrchr(pathname, '/');
+  // Find last slash
+  const char *last_slash = pathname;
+  const char *p = pathname;
+  while (*p) {
+    if (*p == '/') last_slash = p;
+    p++;
+  }
   if (!last_slash)
   {
     // No hay barra, el archivo está en el directorio actual
-    strcpy(parent_path, ".");
-    strcpy(filename, pathname);
+    kstrncpy(parent_path, ".", 2);
+    kstrncpy(filename, pathname, MINIX_NAME_LEN);
     return 0;
   }
 
   if (last_slash == pathname)
   {
     // Es el directorio raíz
-    strcpy(parent_path, "/");
+    kstrncpy(parent_path, "/", 2);
   }
   else
   {
     // Copiar la parte del directorio padre
     size_t parent_len = last_slash - pathname;
-    strncpy(parent_path, pathname, parent_len);
+    kstrncpy(parent_path, pathname, parent_len);
     parent_path[parent_len] = '\0';
   }
 
   // Copiar el nombre del archivo
-  strcpy(filename, last_slash + 1);
+  kstrncpy(filename, last_slash + 1, MINIX_NAME_LEN);
 
   return 0;
 }
 
+/**
+ * Add a directory entry to the parent directory
+ * @param parent_inode Parent directory inode (will be modified)
+ * @param filename Name of the new entry
+ * @param inode_num Inode number of the new entry
+ * @return 0 on success, -1 on failure
+ */
 int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
-                           uint16_t inode_num)
+                         uint16_t inode_num)
 {
-  if (!parent_inode || !filename || inode_num == 0)
-  {
-    return -1;
+  if (!parent_inode || !filename || inode_num == 0 || inode_num >= 65535) {
+    return -1;  // Invalid parameters
   }
 
-  uint32_t target_zone = 0;
-  uint32_t target_block = 0;
-  int target_entry = -1;
-  int zone_index = 0;
+  // Check if filename is too long or empty
+  size_t name_len = kstrlen(filename);
+  if (name_len == 0 || name_len >= MINIX_NAME_LEN) {
+    return -1;  // Invalid filename length
+  }
 
-  // First, try to find a free entry in existing zones
-  for (zone_index = 0; zone_index < 7; zone_index++)
-  {
-    if (parent_inode->i_zone[zone_index] == 0)
-    {
-      break; // No more zones allocated
+  // Try to find a free entry in existing zones
+  for (int zone_index = 0; zone_index < 7; zone_index++) {
+    if (parent_inode->i_zone[zone_index] == 0) {
+      break;  // No more allocated zones
     }
 
+    uint32_t zone = parent_inode->i_zone[zone_index];
     uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
-    if (minix_read_block(parent_inode->i_zone[zone_index], block_buffer) != 0)
-    {
-      continue;
+    
+    // Read the zone
+    if (minix_read_block(zone, block_buffer) != 0) {
+      continue;  // Skip bad blocks
     }
 
     minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
     int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
 
-    // Start from 2 to skip . and .. entries
-    for (int j = 2; j < num_entries; j++)
-    {
-      if (entries[j].inode == 0)
-      {
-        // Found a free entry
-        target_zone = parent_inode->i_zone[zone_index];
-        target_block = target_zone;
-        target_entry = j;
+    // Look for a free entry or check for duplicate filename
+    for (int i = 0; i < num_entries; i++) {
+      // Check for duplicate filename
+      if (entries[i].inode != 0 && kstrncmp(entries[i].name, filename, MINIX_NAME_LEN) == 0) {
+        return -1;  // Entry with this name already exists
+      }
+      
+      // Found a free entry
+      if (entries[i].inode == 0) {
+        // Initialize the entry
+        entries[i].inode = inode_num;
+        kstrncpy(entries[i].name, filename, MINIX_NAME_LEN);
+        entries[i].name[MINIX_NAME_LEN - 1] = '\0';
+        
+        // Write the updated block back
+        if (minix_write_block(zone, block_buffer) != 0) {
+          return -1;  // Failed to write block
+        }
+        
+        // Update directory size if needed
+        size_t entry_offset = (zone_index * MINIX_BLOCK_SIZE) + (i * sizeof(minix_dir_entry_t));
+        if (entry_offset + sizeof(minix_dir_entry_t) > parent_inode->i_size) {
+          parent_inode->i_size = entry_offset + sizeof(minix_dir_entry_t);
+        }
+        
+        return 0;  // Success
+      }
+    }
+  }
+
+  // No space in existing zones, allocate a new one
+  for (int zone_index = 0; zone_index < 7; zone_index++) {
+    if (parent_inode->i_zone[zone_index] == 0) {
+      // Allocate a new zone
+      uint32_t new_zone = minix_alloc_zone();
+      if (new_zone == 0) {
+        return -1;  // No free zones
+      }
+      
+      // Initialize the new zone with zeros
+      uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
+      minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
+      
+      // Add the new entry as the first one
+      entries[0].inode = inode_num;
+      kstrncpy(entries[0].name, filename, MINIX_NAME_LEN);
+      entries[0].name[MINIX_NAME_LEN - 1] = '\0';
+      
+      // Write the new zone
+      if (minix_write_block(new_zone, block_buffer) != 0) {
+        minix_free_zone(new_zone);  // Clean up
+        return -1;
+      }
+      
+      // Update parent inode
+      parent_inode->i_zone[zone_index] = new_zone;
+      parent_inode->i_size = (zone_index + 1) * MINIX_BLOCK_SIZE;
+      
+      return 0;  // Success
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Remove a directory entry from a directory
+ * @param parent_inode Parent directory inode (will be modified)
+ * @param filename Name of the entry to remove
+ * @return 0 on success, -1 on failure
+ */
+int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
+{
+  if (!parent_inode || !filename || !*filename) {
+    return -1;  // Invalid parameters
+  }
+
+  // Search for the entry in all directory zones
+  for (int zone_idx = 0; zone_idx < 7; zone_idx++) {
+    uint32_t zone = parent_inode->i_zone[zone_idx];
+    if (zone == 0) {
+      continue;  // No more allocated zones
+    }
+
+    uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
+    if (minix_read_block(zone, block_buffer) != 0) {
+      continue;  // Skip bad blocks
+    }
+
+    minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
+    int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
+    bool entry_found = false;
+
+    // First pass: find the entry
+    for (int i = 0; i < num_entries; i++) {
+      if (entries[i].inode == 0) {
+        continue;  // Skip empty entries
+      }
+
+      if (kstrncmp(entries[i].name, filename, MINIX_NAME_LEN) == 0) {
+        // Found the entry, mark it as free
+        entries[i].inode = 0;
+        kmemset(entries[i].name, 0, MINIX_NAME_LEN);
+        entry_found = true;
         break;
       }
     }
 
-    if (target_entry != -1)
-    {
-      break;
-    }
-  }
-
-  // If no space found in existing zones, allocate a new one
-  if (target_entry == -1)
-  {
-    for (zone_index = 0; zone_index < 7; zone_index++)
-    {
-      if (parent_inode->i_zone[zone_index] == 0)
-      {
-        target_zone = minix_alloc_zone();
-        if (target_zone != 0)
-        {
-          parent_inode->i_zone[zone_index] = target_zone;
-          target_block = target_zone;
-          target_entry = 2; // Start after . and ..
-          
-          // Initialize the new zone with zeros
-          uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
-          minix_write_block(target_zone, block_buffer);
-          
-          // Update parent directory size
-          parent_inode->i_size = (zone_index + 1) * MINIX_BLOCK_SIZE;
-          break;
-        }
-        return -1; // No more zones available
+    if (entry_found) {
+      // Write the updated block back
+      if (minix_write_block(zone, block_buffer) != 0) {
+        return -1;  // Failed to write block
       }
-    }
-  }
-
-  // Si no encontramos espacio, asignar una nueva zona
-  if (target_entry == -1)
-  {
-    for (int i = 0; i < 7; i++)
-    {
-      if (parent_inode->i_zone[i] == 0)
-      {
-        target_zone = minix_alloc_zone();
-        if (target_zone != 0)
-        {
-          parent_inode->i_zone[i] = target_zone;
-          target_block = target_zone;
-          target_entry = 0;
-
-          // Inicializar el nuevo bloque con ceros
-          uint8_t block_buffer[MINIX_BLOCK_SIZE];
-          memset(block_buffer, 0, MINIX_BLOCK_SIZE);
-          minix_write_block(target_zone, block_buffer);
-          break;
+      
+      // Update directory size if needed
+      size_t entry_size = sizeof(minix_dir_entry_t);
+      size_t current_size = parent_inode->i_size;
+      if (current_size > 0) {
+        // Only shrink the directory if this was the last entry
+        bool is_last_entry = true;
+        for (int i = 0; i < num_entries; i++) {
+          if (entries[i].inode != 0) {
+            is_last_entry = false;
+            break;
+          }
+        }
+        
+        if (is_last_entry) {
+          // This was the last entry in this block
+          if (parent_inode->i_size >= entry_size) {
+            parent_inode->i_size -= entry_size;
+          } else {
+            parent_inode->i_size = 0;
+          }
         }
       }
-    }
-  }
-
-  if (target_entry == -1)
-  {
-    return -1;
-  }
-
-  // Leer el bloque donde agregaremos la entrada
-  uint8_t block_buffer[MINIX_BLOCK_SIZE];
-  if (minix_read_block(target_block, block_buffer) != 0)
-  {
-    return -1;
-  }
-
-  // Agregar la nueva entrada
-  minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
-  entries[target_entry].inode = inode_num;
-  strncpy(entries[target_entry].name, filename, MINIX_NAME_LEN);
-  entries[target_entry].name[MINIX_NAME_LEN - 1] = '\0';
-
-  // Escribir el bloque actualizado
-  if (minix_write_block(target_block, block_buffer) != 0)
-  {
-    return -1;
-  }
-
-  // Actualizar el tamaño del directorio si es necesario
-  if ((size_t)target_entry >=
-      parent_inode->i_size / sizeof(minix_dir_entry_t))
-  {
-    parent_inode->i_size = (target_entry + 1) * sizeof(minix_dir_entry_t);
-  }
-
-  return 0;
-}
-
-int minix_fs_remove_dir_entry(minix_inode_t *parent_inode,
-                              const char *filename)
-{
-  if (!parent_inode || !filename)
-  {
-    return -1;
-  }
-
-  // Buscar la entrada en todas las zonas del directorio
-  for (int i = 0; i < 7; i++)
-  {
-    if (parent_inode->i_zone[i] == 0)
-    {
-      continue;
-    }
-
-    uint8_t block_buffer[MINIX_BLOCK_SIZE];
-    if (minix_read_block(parent_inode->i_zone[i], block_buffer) != 0)
-    {
-      continue;
-    }
-
-    minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
-    int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
-
-    for (int j = 0; j < num_entries; j++)
-    {
-      if (entries[j].inode == 0)
-      {
-        continue; // Entrada vacía
-      }
-
-      if (strcmp(entries[j].name, filename) == 0)
-      {
-        // Encontramos la entrada, marcarla como libre
-        entries[j].inode = 0;
-        memset(entries[j].name, 0, MINIX_NAME_LEN);
-
-        // Escribir el bloque actualizado
-        if (minix_write_block(parent_inode->i_zone[i], block_buffer) != 0)
-        {
-          return -1;
-        }
-
-        // Actualizar el tamaño del directorio si es necesario
-        if ((size_t)j < parent_inode->i_size / sizeof(minix_dir_entry_t))
-        {
-          parent_inode->i_size = j * sizeof(minix_dir_entry_t);
-        }
-
-        return 0;
-      }
+      
+      return 0;  // Success
     }
   }
 
@@ -890,7 +972,7 @@ int minix_fs_format(void)
   // REAL MINIX FILESYSTEM CREATION
 
   // Initialize superblock
-  memset(&minix_fs.superblock, 0, sizeof(minix_superblock_t));
+  kmemset(&minix_fs.superblock, 0, sizeof(minix_superblock_t));
   minix_fs.superblock.s_magic = MINIX_SUPER_MAGIC;
   minix_fs.superblock.s_ninodes = 64;    // Small but real
   minix_fs.superblock.s_nzones = 1024;   // 1MB of data
@@ -908,8 +990,8 @@ int minix_fs_format(void)
   }
 
   // Inicializar bitmaps
-  memset(minix_fs.inode_bitmap, 0, MINIX_BLOCK_SIZE);
-  memset(minix_fs.zone_bitmap, 0, MINIX_BLOCK_SIZE);
+  kmemset(minix_fs.inode_bitmap, 0, MINIX_BLOCK_SIZE);
+  kmemset(minix_fs.zone_bitmap, 0, MINIX_BLOCK_SIZE);
 
   // Marcar inode 1 como usado (root directory)
   minix_fs.inode_bitmap[0] = 0x01;
@@ -929,7 +1011,7 @@ int minix_fs_format(void)
 
   // Crear inode raíz
   minix_inode_t root_inode;
-  memset(&root_inode, 0, sizeof(minix_inode_t));
+  kmemset(&root_inode, 0, sizeof(minix_inode_t));
   root_inode.i_mode = MINIX_IFDIR | MINIX_IRWXU | MINIX_IRGRP | MINIX_IROTH;
   root_inode.i_uid = 0;
   root_inode.i_size = 2 * sizeof(minix_dir_entry_t); // . and .. entries
@@ -940,8 +1022,8 @@ int minix_fs_format(void)
 
   // Escribir inode raíz (inode 1)
   uint8_t inode_block[MINIX_BLOCK_SIZE];
-  memset(inode_block, 0, MINIX_BLOCK_SIZE);
-  memcpy(inode_block, &root_inode, sizeof(minix_inode_t));
+  kmemset(inode_block, 0, MINIX_BLOCK_SIZE);
+  kmemcpy(inode_block, &root_inode, sizeof(minix_inode_t));
 
   if (minix_write_block(3, inode_block) != 0) // Block 3 = inode table
   {
@@ -950,17 +1032,17 @@ int minix_fs_format(void)
 
   // Crear directorio root con entradas . y ..
   uint8_t root_dir_block[MINIX_BLOCK_SIZE];
-  memset(root_dir_block, 0, MINIX_BLOCK_SIZE);
+  kmemset(root_dir_block, 0, MINIX_BLOCK_SIZE);
 
   minix_dir_entry_t *entries = (minix_dir_entry_t *)root_dir_block;
 
   // Entrada "."
   entries[0].inode = 1; // Root inode
-  strcpy(entries[0].name, ".");
+  kstrncpy(entries[0].name, ".", MINIX_NAME_LEN);
 
   // Entrada ".."
   entries[1].inode = 1; // Root inode (parent of root is root)
-  strcpy(entries[1].name, "..");
+  kstrncpy(entries[1].name, "..", MINIX_NAME_LEN);
 
   // Escribir directorio root
   if (minix_write_block(minix_fs.superblock.s_firstdatazone, root_dir_block) !=
@@ -996,7 +1078,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
 
-  if (!path || strlen(path) == 0)
+  if (!path || kstrlen(path) == 0)
   {
     return -1;
   }
@@ -1023,7 +1105,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   {
     return -1;
   }
-  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
+  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   if (!(parent_inode.i_mode & MINIX_IFDIR))
   {
@@ -1044,35 +1126,47 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
 
-  // Crear el nuevo inode de directorio
+  // Get parent inode number before making changes
+  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
+  if (parent_inode_num == 0) {
+    return -1;
+  }
+
+  // Create new directory inode
   minix_inode_t new_inode;
-  memset(&new_inode, 0, sizeof(minix_inode_t));
+  kmemset(&new_inode, 0, sizeof(minix_inode_t));
   new_inode.i_mode = MINIX_IFDIR | (mode & 0777);
   new_inode.i_uid = 0; // root
   new_inode.i_gid = 0; // root
-  new_inode.i_size = 2 * sizeof(minix_dir_entry_t); // . and .. entries
-  new_inode.i_time = get_system_time(); // Usar tiempo real del sistema
-  new_inode.i_nlinks = 2;               // . y ..
+  new_inode.i_size = MINIX_BLOCK_SIZE; // One block for . and ..
+  new_inode.i_time = get_system_time();
+  new_inode.i_nlinks = 2; // . and ..
   
-  // Allocate a zone for the directory data
+  // Allocate and initialize directory block
   uint32_t zone = minix_alloc_zone();
   if (zone == 0) {
     return -1;
   }
   new_inode.i_zone[0] = zone;
   
-  // Initialize the directory block with . and .. entries
+  // Initialize directory block with . and ..
   uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
   minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
   
   // Add . entry (self)
   entries[0].inode = new_inode_num;
-  strcpy(entries[0].name, ".");
+  kstrncpy(entries[0].name, ".", MINIX_NAME_LEN);
   
   // Add .. entry (parent)
-  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
   entries[1].inode = parent_inode_num;
-  strcpy(entries[1].name, "..");
+  kstrncpy(entries[1].name, "..", MINIX_NAME_LEN);
+  
+  // Clear remaining entries
+  size_t max_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
+  for (size_t i = 2; i < max_entries; i++) {
+    entries[i].inode = 0;
+    kmemset(entries[i].name, 0, MINIX_NAME_LEN);
+  }
   
   // Write the directory block
   if (minix_write_block(zone, block_buffer) != 0) {
@@ -1080,88 +1174,87 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
 
-  // Escribir el nuevo inode
-  if (minix_fs_write_inode(new_inode_num, &new_inode) != 0)
-  {
+  // Write the directory block first
+  if (minix_write_block(zone, block_buffer) != 0) {
+    minix_free_zone(zone);
+    return -1;
+  }
+
+  // Write the new inode
+  if (minix_fs_write_inode(new_inode_num, &new_inode) != 0) {
+    minix_free_zone(zone);
     minix_fs_free_inode(new_inode_num);
     return -1;
   }
 
-  // Agregar entrada al directorio padre
-  if (minix_fs_add_dir_entry(&parent_inode, dirname, new_inode_num) != 0)
-  {
+  // Add entry to parent directory
+  if (minix_fs_add_dir_entry(&parent_inode, dirname, new_inode_num) != 0) {
+    minix_free_zone(zone);
     minix_fs_free_inode(new_inode_num);
     return -1;
   }
 
-  // Actualizar el inode del padre (reuse parent_inode_num from above)
-  if (parent_inode_num != 0)
-  {
-    if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
-    {
-      return -1;
-    }
-  }
-  else
-  {
+  // Update parent directory's link count and mtime
+  parent_inode.i_nlinks++;  // Increment link count for the new directory
+  parent_inode.i_time = get_system_time();
+  
+  // Write back the updated parent inode
+  if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0) {
+    // If we can't update the parent, we're in an inconsistent state
+    // This is bad - we've already created the directory
     return -1;
   }
 
   return 0;
 }
 
-int minix_fs_ls(const char *path)
+int minix_fs_ls(const char *path, bool detailed)
 {
   if (!minix_fs.initialized)
   {
+    typewriter_print("Error: Filesystem not initialized\n");
     return -1;
   }
 
-  const char *target_path = path ? path : "/";
-
-  // Verificar que el disco esté disponible
-  if (!ata_is_available())
-  {
-    extern int64_t sys_write(int fd, const void *buf, size_t count);
-    sys_write(2, "ls: disk not available\n", 23);
-    return -EIO; // Error real - no hay disco disponible
-  }
-
-  // Obtener el inode del directorio (solo si hay disco real)
-  minix_inode_t *dir_inode = minix_fs_find_inode(target_path);
+  minix_inode_t *dir_inode = minix_fs_find_inode(path);
   if (!dir_inode)
   {
-    extern int64_t sys_write(int fd, const void *buf, size_t count);
-    sys_write(2, "Directory not found: ", 21);
-    sys_write(2, target_path, strlen(target_path));
-    sys_write(2, "\n", 1);
-    return -1;
+    char error_msg[256];
+    char *msg = "ls: cannot access '";
+    char *p = error_msg;
+    while (*msg) *p++ = *msg++;
+    const char *s = path;
+    while (*s && (size_t)(p - error_msg) < sizeof(error_msg) - 2) *p++ = *s++;
+    *p++ = '\'';
+    *p++ = '\n';
+    *p = '\0';
+    typewriter_print(error_msg);
+    return -ENOENT;
   }
 
-  if (!minix_is_dir(dir_inode))
-  {
-    extern int64_t sys_write(int fd, const void *buf, size_t count);
-    sys_write(2, "Not a directory: ", 17);
-    sys_write(2, target_path, strlen(target_path));
-    sys_write(2, "\n", 1);
-    return -1;
-  }
+  // Make a local copy of the inode to prevent issues with the static buffer
+  minix_inode_t dir_inode_copy;
+  kmemcpy(&dir_inode_copy, dir_inode, sizeof(minix_inode_t));
 
-  // Listar todas las entradas del directorio
+  // Always show detailed view for now
+  typewriter_print("Permissions Size Name\n");
+
   bool found_entries = false;
   bool has_zones = false;
 
-  for (int i = 0; i < 7; i++)
+  for (int i = 0; i < 7; i++) // Iterate through direct zones
   {
-    if (dir_inode->i_zone[i] == 0)
+    uint32_t zone = dir_inode_copy.i_zone[i];
+    if (zone == 0)
     {
       continue;
     }
-    has_zones = true;
 
+    has_zones = true;
     uint8_t block_buffer[MINIX_BLOCK_SIZE];
-    if (minix_read_block(dir_inode->i_zone[i], block_buffer) != 0)
+    if (minix_read_block(zone, block_buffer) != 0)
     {
+      typewriter_print("Error reading directory block\n");
       continue;
     }
 
@@ -1170,42 +1263,46 @@ int minix_fs_ls(const char *path)
 
     for (int j = 0; j < num_entries; j++)
     {
-      if (entries[j].inode == 0)
+      if (entries[j].inode != 0)
       {
-        continue; // Entrada vacía
-      }
-
-      found_entries = true;
-
-      // Leer el inode para obtener información
-      minix_inode_t entry_inode;
-      if (minix_read_inode(entries[j].inode, &entry_inode) == 0)
-      {
-        // Mostrar tipo de archivo
-        if (entry_inode.i_mode & MINIX_IFDIR)
+        found_entries = true;
+        minix_inode_t entry_inode;
+        if (minix_read_inode(entries[j].inode, &entry_inode) != 0)
         {
-          typewriter_print("d");
-        }
-        else
-        {
-          typewriter_print("-");
+          typewriter_print("Error reading inode for entry\n");
+          continue;
         }
 
-        // Mostrar permisos básicos (removido hardcode)
+        // Permissions (e.g., rwxrwxrwx)
+        char perm_str[11]; // -rwxrwxrwx\0
+        perm_str[0] = (entry_inode.i_mode & MINIX_IFDIR) ? 'd' : '-';
+        perm_str[1] = (entry_inode.i_mode & MINIX_IRUSR) ? 'r' : '-';
+        perm_str[2] = (entry_inode.i_mode & MINIX_IWUSR) ? 'w' : '-';
+        perm_str[3] = (entry_inode.i_mode & MINIX_IXUSR) ? 'x' : '-';
+        perm_str[4] = (entry_inode.i_mode & MINIX_IRGRP) ? 'r' : '-';
+        perm_str[5] = (entry_inode.i_mode & MINIX_IWGRP) ? 'w' : '-';
+        perm_str[6] = (entry_inode.i_mode & MINIX_IXGRP) ? 'x' : '-';
+        perm_str[7] = (entry_inode.i_mode & MINIX_IROTH) ? 'r' : '-';
+        perm_str[8] = (entry_inode.i_mode & MINIX_IWOTH) ? 'w' : '-';
+        perm_str[9] = (entry_inode.i_mode & MINIX_IXOTH) ? 'x' : '-';
+        perm_str[10] = '\0';
+        typewriter_print(perm_str);
+        typewriter_print(" ");
 
-        // Mostrar tamaño
+        // Links
+        typewriter_print_uint32(entry_inode.i_nlinks);
+        typewriter_print(" ");
+
+        // Owner/Group (simplified for now)
+        typewriter_print("root root ");
+
+        // Size
         typewriter_print_uint32(entry_inode.i_size);
         typewriter_print(" ");
 
-        // Mostrar nombre
+        // Name
         typewriter_print(entries[j].name);
         typewriter_print("\n");
-      }
-      else
-      {
-        typewriter_print("? ??? ");
-        typewriter_print(entries[j].name);
-        typewriter_print(" (inode error)\n");
       }
     }
   }
@@ -1339,7 +1436,7 @@ int minix_fs_cat(const char *path)
       {
         // Non-printable character, show as hex
         typewriter_print("\\x");
-        print_hex_compact(c);
+        // Print hex representation of character
       }
     }
 
@@ -1436,7 +1533,7 @@ int minix_fs_write_file(const char *path, const char *content)
   }
 
   // Calcular el tamaño del contenido
-  uint32_t content_size = strlen(content);
+  uint32_t content_size = kstrlen(content);
 
   // Verificar que no exceda el tamaño máximo de archivo
   if (content_size > MINIX_BLOCK_SIZE * 7)
@@ -1464,7 +1561,7 @@ int minix_fs_write_file(const char *path, const char *content)
 
   // Escribir el contenido al primer bloque
   uint8_t block_buffer[MINIX_BLOCK_SIZE];
-  memset(block_buffer, 0, MINIX_BLOCK_SIZE);
+  kmemset(block_buffer, 0, MINIX_BLOCK_SIZE);
 
   // Copiar el contenido al buffer
   uint32_t bytes_to_write = content_size;
@@ -1473,7 +1570,7 @@ int minix_fs_write_file(const char *path, const char *content)
     bytes_to_write = MINIX_BLOCK_SIZE;
   }
 
-  memcpy(block_buffer, content, bytes_to_write);
+  kmemcpy(block_buffer, content, bytes_to_write);
 
   // Escribir el bloque al disco
   if (minix_write_block(file_inode->i_zone[0], block_buffer) != 0)
@@ -1513,113 +1610,134 @@ int minix_fs_write_file(const char *path, const char *content)
   return 0;
 }
 
-// ===============================================================================
-// FUNCIÓN PARA CREAR ARCHIVOS (TOUCH)
-// ===============================================================================
 
+/**
+ * Creates a new empty file with the specified path and mode.
+ * If the file already exists, updates its modification time.
+ * 
+ * @param path Path of the file to create
+ * @param mode File mode (permissions)
+ * @return 0 on success, -1 on error
+ */
 int minix_fs_touch(const char *path, mode_t mode)
 {
-  if (!minix_fs.initialized)
-  {
+  if (!minix_fs.initialized) {
+    typewriter_print("Error: Filesystem not initialized\n");
     return -1;
   }
 
-  if (!path || strlen(path) == 0)
-  {
+  if (!path || *path == '\0') {
+    typewriter_print("Error: Invalid path\n");
     return -1;
   }
 
-  // Verificar que el disco esté disponible
-  if (!ata_is_available())
-  {
-    return -EIO; // Error real - no hay disco disponible
+  // Prevent creating files with the same name as the root directory
+  if (kstrcmp(path, "/") == 0) {
+    typewriter_print("Error: Cannot create file with root directory name\n");
+    return -1;
   }
 
-  // Verificar si el archivo ya existe
+  // Check if disk is available
+  if (!ata_is_available()) {
+    typewriter_print("Error: Disk not available\n");
+    return -EIO;
+  }
+
+  // Check if file already exists
   minix_inode_t *existing_inode = minix_fs_find_inode(path);
-  if (existing_inode)
-  {
-    print("File '");
-    print(path);
-    print("' already exists\n");
-    return 0; // No error, just update timestamp (simplified)
+  if (existing_inode) {
+    // File exists, just update its timestamp
+    existing_inode->i_time = get_system_time();
+    uint16_t inode_num = minix_fs_get_inode_number(path);
+    if (inode_num != 0) {
+      // Make a copy to avoid modifying the static buffer
+      minix_inode_t inode_copy;
+      kmemcpy(&inode_copy, existing_inode, sizeof(minix_inode_t));
+      minix_fs_write_inode(inode_num, &inode_copy);
+    }
+    return 0;
   }
 
-  // Parsear el path para obtener directorio padre y nombre
-  char parent_path[256];
-  char filename[64];
+  // Parse path to get parent directory and filename
+  char parent_path[256] = {0};
+  char filename[64] = {0};
 
-  if (minix_fs_split_path(path, parent_path, filename) != 0)
-  {
-    print("Error: Invalid path\n");
+  if (minix_fs_split_path(path, parent_path, filename) != 0) {
+    typewriter_print("Error: Invalid path format\n");
     return -1;
   }
 
-  // Obtener el inode del directorio padre (hacemos una copia local)
+  // Get parent directory inode (make a local copy)
   minix_inode_t parent_inode;
   minix_inode_t *parent_inode_ptr = minix_fs_find_inode(parent_path);
-  if (!parent_inode_ptr)
-  {
-    print("Error: Parent directory not found\n");
+  if (!parent_inode_ptr) {
+    typewriter_print("Error: Parent directory not found\n");
     return -1;
   }
-  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
+  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
-  if (!(parent_inode.i_mode & MINIX_IFDIR))
-  {
-    print("Error: Parent is not a directory\n");
+  // Ensure parent is a directory
+  if (!(parent_inode.i_mode & MINIX_IFDIR)) {
+    typewriter_print("Error: Parent is not a directory\n");
     return -1;
   }
 
-  // Obtener un inode libre
+  // Check if filename is too long
+  if (kstrlen(filename) >= MINIX_NAME_LEN) {
+    typewriter_print("Error: Filename too long\n");
+    return -1;
+  }
+
+  // Check if entry already exists in parent directory
+  if (minix_fs_find_dir_entry(&parent_inode, filename) != 0) {
+    typewriter_print("Error: File already exists\n");
+    return -1;
+  }
+
+  // Allocate a new inode
   uint16_t new_inode_num = minix_alloc_inode();
-  if (new_inode_num == 0)
-  {
-    print("Error: No free inodes available\n");
+  if (new_inode_num == 0) {
+    typewriter_print("Error: No free inodes available\n");
     return -1;
   }
 
-  // Crear el nuevo inode para el archivo
+  // Create new file inode
   minix_inode_t new_inode = {0};
-  new_inode.i_mode = MINIX_IFREG | (mode & 0777);
-  new_inode.i_uid = 0;
-  new_inode.i_size = 0; // Empty file
-  new_inode.i_time = 0; // Simplified timestamp
-  new_inode.i_gid = 0;
-  new_inode.i_nlinks = 1;
+  new_inode.i_mode = MINIX_IFREG | (mode & 0777);  // Regular file with given permissions
+  new_inode.i_uid = 0;                             // root
+  new_inode.i_gid = 0;                             // root
+  new_inode.i_size = 0;                            // Empty file
+  new_inode.i_time = get_system_time();            // Current time
+  new_inode.i_nlinks = 1;                          // Single hard link
+  kmemset(new_inode.i_zone, 0, sizeof(new_inode.i_zone));  // No data blocks allocated yet
 
-  // Escribir el nuevo inode
-  if (minix_fs_write_inode(new_inode_num, &new_inode) != 0)
-  {
+  // Write the new inode to disk
+  if (minix_fs_write_inode(new_inode_num, &new_inode) != 0) {
     minix_fs_free_inode(new_inode_num);
-    print("Error: Could not write inode\n");
+    typewriter_print("Error: Failed to write inode to disk\n");
     return -1;
   }
 
-  // Agregar entrada al directorio padre
-  if (minix_fs_add_dir_entry(&parent_inode, filename, new_inode_num) != 0)
-  {
+  // Add directory entry in parent
+  if (minix_fs_add_dir_entry(&parent_inode, filename, new_inode_num) != 0) {
     minix_fs_free_inode(new_inode_num);
-    print("Error: Could not add directory entry\n");
+    typewriter_print("Error: Failed to add directory entry\n");
     return -1;
   }
 
-  // Actualizar el inode del padre
+  // Update parent directory's mtime and write it back
+  parent_inode.i_time = get_system_time();
   uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
-  if (parent_inode_num != 0)
-  {
-    if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
-    {
-      print("Warning: Could not update parent directory\n");
+  if (parent_inode_num != 0) {
+    if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0) {
+      typewriter_print("Warning: Failed to update parent directory\n");
+      // Not a fatal error, continue
     }
   }
 
-  print("File '");
-  print(path);
-  print("' created successfully\n");
-
   return 0;
 }
+
 
 // ===============================================================================
 // FUNCIÓN PARA ELIMINAR ARCHIVOS (RM)
@@ -1629,13 +1747,13 @@ int minix_fs_rm(const char *path)
 {
   if (!minix_fs.initialized)
   {
-    print("Error: MINIX filesystem not initialized\n");
+    typewriter_print("Error: MINIX filesystem not initialized\n");
     return -1;
   }
 
-  if (!path || strlen(path) == 0)
+  if (!path || kstrlen(path) == 0)
   {
-    print("Error: No file path specified\n");
+    typewriter_print("Error: No file path specified\n");
     return -1;
   }
 
@@ -1643,18 +1761,18 @@ int minix_fs_rm(const char *path)
   minix_inode_t *file_inode = minix_fs_find_inode(path);
   if (!file_inode)
   {
-    print("Error: File '");
-    print(path);
-    print("' not found\n");
+    typewriter_print("Error: File not found: ");
+    typewriter_print(path);
+    typewriter_print("\n");
     return -1;
   }
 
   // Verificar que no sea un directorio
   if (file_inode->i_mode & MINIX_IFDIR)
   {
-    print("Error: '");
-    print(path);
-    print("' is a directory (use rmdir)\n");
+    typewriter_print("Error: '");
+    typewriter_print(path);
+    typewriter_print(" is a directory (use rmdir)\n");
     return -1;
   }
 
@@ -1664,7 +1782,7 @@ int minix_fs_rm(const char *path)
 
   if (minix_fs_split_path(path, parent_path, filename) != 0)
   {
-    print("Error: Invalid path\n");
+    typewriter_print("Error: Invalid path\n");
     return -1;
   }
 
@@ -1672,7 +1790,7 @@ int minix_fs_rm(const char *path)
   minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
   if (!parent_inode)
   {
-    print("Error: Parent directory not found\n");
+    typewriter_print("Error: Parent directory not found\n");
     return -1;
   }
 
@@ -1680,21 +1798,21 @@ int minix_fs_rm(const char *path)
   uint16_t file_inode_num = minix_fs_get_inode_number(path);
   if (file_inode_num == 0)
   {
-    print("Error: Could not get inode number\n");
+    typewriter_print("Error: Could not get inode number\n");
     return -1;
   }
 
   // Eliminar entrada del directorio padre
   if (minix_fs_remove_dir_entry(parent_inode, filename) != 0)
   {
-    print("Error: Could not remove directory entry\n");
+    typewriter_print("Error: Could not remove directory entry\n");
     return -1;
   }
 
   // Liberar el inode
   if (minix_fs_free_inode(file_inode_num) != 0)
   {
-    print("Error: Could not free inode\n");
+    typewriter_print("Error: Could not free inode\n");
     return -1;
   }
 
@@ -1704,13 +1822,13 @@ int minix_fs_rm(const char *path)
   {
     if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0)
     {
-      print("Warning: Could not update parent directory\n");
+      typewriter_print("Warning: Could not update parent directory\n");
     }
   }
 
-  print("File '");
-  print(path);
-  print("' removed successfully\n");
+  typewriter_print("File '");
+  typewriter_print(path);
+  typewriter_print("' removed successfully\n");
 
   return 0;
 }
@@ -1741,148 +1859,159 @@ int minix_fs_ensure_valid(void)
   return 0;
 }
 
+/**
+ * Remove a directory
+ * @param path Path to the directory to remove
+ * @return 0 on success, -1 on error
+ */
+/**
+ * Remove a directory
+ * @param path Path to the directory to remove
+ * @return 0 on success, -1 on error
+ */
 int minix_fs_rmdir(const char *path)
 {
-  if (!minix_fs.initialized)
-  {
-    print("Error: MINIX filesystem not initialized\n");
+  if (!minix_fs.initialized) {
+    typewriter_print("Error: MINIX filesystem not initialized\n");
     return -1;
   }
 
-  if (!path || strlen(path) == 0)
-  {
-    print("Error: No directory path specified\n");
+  if (!path || *path == '\0') {
+    typewriter_print("Error: No directory path specified\n");
     return -1;
   }
 
-  // No permitir eliminar el directorio raíz
-  if (strcmp(path, "/") == 0)
-  {
-    print("Error: Cannot remove root directory\n");
+  // Don't allow removing the root directory
+  if (kstrcmp(path, "/") == 0) {
+    typewriter_print("Error: Cannot remove root directory\n");
     return -1;
   }
 
-  // Obtener el inode del directorio
-  minix_inode_t *dir_inode = minix_fs_find_inode(path);
-  if (!dir_inode)
-  {
-    print("Error: Directory '");
-    print(path);
-    print("' not found\n");
+  // Get the directory inode
+  minix_inode_t *dir_inode_ptr = minix_fs_find_inode(path);
+  if (!dir_inode_ptr) {
+    typewriter_print("Error: Directory '");
+    typewriter_print(path);
+    typewriter_print("' not found\n");
+    return -1;
+  }
+  
+  // Make a local copy of the inode
+  minix_inode_t dir_inode;
+  kmemcpy(&dir_inode, dir_inode_ptr, sizeof(minix_inode_t));
+
+  // Verify it's a directory
+  if (!(dir_inode.i_mode & MINIX_IFDIR)) {
+    typewriter_print("Error: '");
+    typewriter_print(path);
+    typewriter_print("' is not a directory\n");
     return -1;
   }
 
-  // Verificar que sea un directorio
-  if (!minix_is_dir(dir_inode))
-  {
-    print("Error: '");
-    print(path);
-    print("' is not a directory\n");
-    return -1;
-  }
-
-  // Verificar que el directorio esté vacío (solo . y ..)
+  // Check if directory is empty (only . and .. allowed)
   bool is_empty = true;
-
-  for (int i = 0; i < 7; i++)
-  {
-    if (dir_inode->i_zone[i] == 0)
-    {
-      continue;
+  
+  for (int i = 0; i < 7 && is_empty; i++) {
+    uint32_t zone = dir_inode.i_zone[i];
+    if (zone == 0) {
+      continue;  // No more zones
     }
 
-    uint8_t block_buffer[MINIX_BLOCK_SIZE];
-    if (minix_read_block(dir_inode->i_zone[i], block_buffer) != 0)
-    {
-      continue;
+    uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
+    if (minix_read_block(zone, block_buffer) != 0) {
+      typewriter_print("Error: Could not read directory block\n");
+      return -1;
     }
 
     minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
     int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
 
-    for (int j = 0; j < num_entries; j++)
-    {
-      if (entries[j].inode == 0)
-      {
-        continue; // Entrada vacía
+    for (int j = 0; j < num_entries; j++) {
+      // Skip empty entries
+      if (entries[j].inode == 0) {
+        continue;
       }
 
-      // Solo permitir . y ..
-      if (strcmp(entries[j].name, ".") != 0 &&
-          strcmp(entries[j].name, "..") != 0)
-      {
+      // Only allow . and ..
+      if (kstrcmp(entries[j].name, ".") != 0 && 
+          kstrcmp(entries[j].name, "..") != 0) {
         is_empty = false;
         break;
       }
     }
-
-    if (!is_empty)
-    {
-      break;
-    }
   }
 
-  if (!is_empty)
-  {
-    print("Error: Directory '");
-    print(path);
-    print("' is not empty\n");
+  if (!is_empty) {
+    typewriter_print("Error: Directory '");
+    typewriter_print(path);
+    typewriter_print("' is not empty\n");
     return -1;
   }
 
-  // Parsear el path para obtener directorio padre y nombre
-  char parent_path[256];
-  char dirname[64];
-
-  if (minix_fs_split_path(path, parent_path, dirname) != 0)
-  {
-    print("Error: Invalid path\n");
+  // Get parent directory path and directory name
+  char parent_path[256] = {0};
+  char dirname[64] = {0};
+  
+  if (minix_fs_split_path(path, parent_path, dirname) != 0) {
+    typewriter_print("Error: Invalid path\n");
     return -1;
   }
 
-  // Obtener el inode del directorio padre
-  minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
-  if (!parent_inode)
-  {
-    print("Error: Parent directory not found\n");
+  // Get parent directory inode
+  minix_inode_t *parent_inode_ptr = minix_fs_find_inode(parent_path);
+  if (!parent_inode_ptr) {
+    typewriter_print("Error: Parent directory not found\n");
     return -1;
   }
+  
+  // Make a local copy of the parent inode
+  minix_inode_t parent_inode;
+  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
-  // Obtener el número de inode del directorio
+  // Get the directory inode number
   uint16_t dir_inode_num = minix_fs_get_inode_number(path);
-  if (dir_inode_num == 0)
-  {
-    print("Error: Could not get inode number\n");
+  if (dir_inode_num == 0) {
+    typewriter_print("Error: Could not get inode number\n");
     return -1;
   }
 
-  // Eliminar entrada del directorio padre
-  if (minix_fs_remove_dir_entry(parent_inode, dirname) != 0)
-  {
-    print("Error: Could not remove directory entry\n");
+  // Remove the directory entry from parent
+  if (minix_fs_remove_dir_entry(&parent_inode, dirname) != 0) {
+    typewriter_print("Error: Could not remove directory entry\n");
     return -1;
   }
 
-  // Liberar el inode
-  if (minix_fs_free_inode(dir_inode_num) != 0)
-  {
-    print("Error: Could not free inode\n");
-    return -1;
-  }
-
-  // Actualizar el inode del padre
-  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
-  if (parent_inode_num != 0)
-  {
-    if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0)
-    {
-      print("Warning: Could not update parent directory\n");
+  // Free all zones used by the directory
+  for (int i = 0; i < 7; i++) {
+    if (dir_inode.i_zone[i] != 0) {
+      minix_free_zone(dir_inode.i_zone[i]);
+      dir_inode.i_zone[i] = 0;
     }
   }
 
-  print("Directory '");
-  print(path);
-  print("' removed successfully\n");
+  // Free the inode
+  if (minix_fs_free_inode(dir_inode_num) != 0) {
+    typewriter_print("Error: Could not free inode\n");
+    return -1;
+  }
+
+  // Update the parent directory's inode
+  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
+  if (parent_inode_num != 0) {
+    // Decrease parent's link count (for the removed .. entry)
+    if (parent_inode.i_nlinks > 2) {  // Keep at least 2 for . and ..
+      parent_inode.i_nlinks--;
+    }
+    parent_inode.i_time = get_system_time();
+    
+    if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0) {
+      typewriter_print("Warning: Could not update parent directory inode\n");
+    }
+  }
+
+  typewriter_print("Directory '");
+  typewriter_print(path);
+  typewriter_print("' removed successfully\n");
 
   return 0;
 }
@@ -1948,7 +2077,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
     size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
                                ? MINIX_BLOCK_SIZE
                                : (*size - bytes_read);
-    memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+    kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
     bytes_read += bytes_to_copy;
   }
 
@@ -1983,7 +2112,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
       size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
                                  ? MINIX_BLOCK_SIZE
                                  : (*size - bytes_read);
-      memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+      kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
       bytes_read += bytes_to_copy;
     }
   }

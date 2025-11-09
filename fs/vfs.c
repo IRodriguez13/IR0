@@ -308,7 +308,7 @@ int vfs_close(struct vfs_file *file) {
 
 int vfs_ls(const char *path) {
   // Use real MINIX filesystem implementation
-  return minix_fs_ls(path);
+  return minix_fs_ls(path, false);
 }
 
 int vfs_mkdir(const char *path, int mode) {
@@ -466,105 +466,8 @@ static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries)
 }
 
 int vfs_ls_with_stat(const char *path) {
-  if (!path) {
-    path = "/";
-  }
-
-  extern void print_uint32(uint32_t num);
-  extern int64_t sys_write(int fd, const void *buf, size_t count);
-  
-  vfs_dirent_t entries[64];
-  int entry_count = vfs_readdir(path, entries, 64);
-  
-  if (entry_count < 0) {
-    sys_write(2, "ls: cannot access directory\n", 28);
-    return -1;
-  }
-
-  // Calculate total blocks
-  int total_blocks = 0;
-  for (int i = 0; i < entry_count; i++) {
-    char full_path[256];
-    if (build_path(full_path, sizeof(full_path), path, entries[i].name) == 0) {
-      stat_t st;
-      if (vfs_stat(full_path, &st) == 0) {
-        total_blocks += (st.st_size + 1023) / 1024;
-      }
-    }
-  }
-
-  char total[32];
-  snprintf(total, sizeof(total), "total %d\n", total_blocks);
-  sys_write(1, total, strlen(total));
-
-  for (int i = 0; i < entry_count; i++) {
-    char full_path[256];
-    if (build_path(full_path, sizeof(full_path), path, entries[i].name) != 0) {
-      continue;
-    }
-
-    stat_t file_stat;
-    if (vfs_stat(full_path, &file_stat) == 0) {
-      char perms[11] = "----------";
-      
-      if (S_ISDIR(file_stat.st_mode)) perms[0] = 'd';
-      else if (S_ISREG(file_stat.st_mode)) perms[0] = '-';
-      else if (S_ISCHR(file_stat.st_mode)) perms[0] = 'c';
-      else if (S_ISBLK(file_stat.st_mode)) perms[0] = 'b';
-      else if (S_ISLNK(file_stat.st_mode)) perms[0] = 'l';
-      
-      if (file_stat.st_mode & S_IRUSR) perms[1] = 'r';
-      if (file_stat.st_mode & S_IWUSR) perms[2] = 'w';
-      if (file_stat.st_mode & S_IXUSR) perms[3] = 'x';
-      if (file_stat.st_mode & S_IRGRP) perms[4] = 'r';
-      if (file_stat.st_mode & S_IWGRP) perms[5] = 'w';
-      if (file_stat.st_mode & S_IXGRP) perms[6] = 'x';
-      if (file_stat.st_mode & S_IROTH) perms[7] = 'r';
-      if (file_stat.st_mode & S_IWOTH) perms[8] = 'w';
-      if (file_stat.st_mode & S_IXOTH) perms[9] = 'x';
-      
-      perms[10] = '\0';
-
-      sys_write(1, perms, 10);
-      sys_write(1, " ", 1);
-      
-      // Format links field (right-aligned width 2)
-      char links[8];
-      snprintf(links, sizeof(links), "%2d", file_stat.st_nlink);
-      sys_write(1, links, strlen(links));
-      sys_write(1, " ", 1);
-
-      // Owner and group (fixed width fields)
-      sys_write(1, "root      root      ", 19);
-
-      // Format size field (right-aligned width 8)
-      char size[16];
-      snprintf(size, sizeof(size), "%8d", (int)file_stat.st_size);
-      sys_write(1, size, strlen(size));
-      sys_write(1, " ", 1);
-      
-      char date_str[14];
-      format_timestamp(file_stat.st_mtime, date_str, sizeof(date_str));
-      sys_write(1, date_str, strlen(date_str));
-      
-      sys_write(1, entries[i].name, strlen(entries[i].name));
-      // Add trailing slash for directories
-      if (S_ISDIR(file_stat.st_mode)) {
-        sys_write(1, "/", 1);
-      }
-      // Add execute marker for executables
-      else if (S_ISREG(file_stat.st_mode) && (file_stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
-        sys_write(1, "*", 1);
-      }
-      sys_write(1, "\n", 1);
-    } else {
-      sys_write(1, "?????????? ? ? ? ? ? ", 20);
-      sys_write(1, entries[i].name, strlen(entries[i].name));
-      sys_write(1, "\n", 1);
-    }
-  }
-
-  return 0;
+  // Use the detailed flag in minix_fs_ls
+  return minix_fs_ls(path, true);
 }
 
 // Forward declarations for MINIX filesystem functions
