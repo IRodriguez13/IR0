@@ -5,11 +5,12 @@
 typedef enum
 {
     PANIC_KERNEL_BUG = 0, // Bug en kernel code
-    PANIC_HARDWARE_FAULT, // Hardware malfunction
-    PANIC_OUT_OF_MEMORY,  // System out of memory
-    PANIC_STACK_OVERFLOW, // Stack corruption
-    PANIC_ASSERT_FAILED   // Assertion failure
-
+    PANIC_HARDWARE_FAULT = 1, // Hardware malfunction
+    PANIC_OUT_OF_MEMORY = 2,  // System out of memory
+    PANIC_STACK_OVERFLOW = 3, // Stack corruption
+    PANIC_ASSERT_FAILED= 4,   // Assertion failure
+    TESTING = 5,
+    RUNNING_OUT_PROCESS = 6
 } panic_level_t;
 
 
@@ -26,14 +27,12 @@ typedef enum
 
 
 void panic(const char *message);
+void panicex(const char *message, panic_level_t level, const char *file, int line); /*Panic with more detailed logs*/
 void cpu_relax();
-void panic(const char* message);
-void panic_advanced(const char *message, panic_level_t level, const char *file, int line);
-void dump_registers(void);      
-void dump_stack_trace(void);    
-void dump_memory_info(void); 
+void dump_stack_trace();
+void dump_registers();
 
-// Macros para facilidad en el panic event
+// Macros for better panic message tunning
 #define BUG_ON(condition) \
     do { \
         if (unlikely(condition)) \
@@ -42,6 +41,7 @@ void dump_memory_info(void);
         } \
     } while(0)
 
+/* For testing */
 #define ASSERT(condition) \
     do { \
         if (unlikely(!(condition))) \
