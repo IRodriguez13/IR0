@@ -1,6 +1,6 @@
 #include "idt.h"
 #include "io.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 
 #ifdef __x86_64__
 // Código específico para 64-bit

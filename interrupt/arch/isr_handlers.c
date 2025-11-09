@@ -14,7 +14,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "io.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <kernel/rr_sched.h>
 
 // Declaraciones externas para el nuevo driver de teclado

@@ -1,4 +1,4 @@
-#include "print.h"
+#include "vga.h"
 
 // Variables globales para trackear posición
 static int cursor_x = 0;

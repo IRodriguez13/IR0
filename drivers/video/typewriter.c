@@ -7,7 +7,7 @@
  */
 
 #include "typewriter.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <stdint.h>
 
 /* VGA Text Mode Constants */

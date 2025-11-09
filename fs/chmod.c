@@ -72,11 +72,15 @@ int parse_mode(const char *mode_str)
 int chmod(const char *path, mode_t mode)
 {
     if (!path)
+    {
         return -1;
+    }
 
     stat_t st;
     if (vfs_stat(path, &st) != 0)
+    {
         return -1;
+    }
 
     st.st_mode = (st.st_mode & ~07777) | (mode & 07777);
 
@@ -89,7 +93,9 @@ int chmod(const char *path, mode_t mode)
 
     // Write inode back to disk
     if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->write_inode)
+    {
         return inode->i_sb->s_op->write_inode(inode);
+    }
 
     return 0;
 }

@@ -1,6 +1,6 @@
 #include "lapic.h"
-#include <print.h>
-#include <panic/oops.h>
+#include <vga.h>
+#include <ir0/oops.h>
 
 #define LAPIC_BASE ((uintptr_t)0xFEE00000)
 #define LAPIC_TIMER_REG 0x320

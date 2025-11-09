@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <stddef.h>
 #include <string.h>
 #include "gdt.h"

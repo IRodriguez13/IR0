@@ -12,12 +12,8 @@
  */
 
 #include "kernel_config.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <string.h>
-
-// ===============================================================================
-// BUILD CONFIGURATION FUNCTIONS
-// ===============================================================================
 
 const char *ir0_get_target_name(void)
 {

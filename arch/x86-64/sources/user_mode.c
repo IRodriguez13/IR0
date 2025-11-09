@@ -1,8 +1,7 @@
 #include <stdint.h>
-#include <ir0/print.h>
-#include <panic/oops.h>
+#include <ir0/vga.h>
+#include <ir0/oops.h>
 
-// Minimal user mode support - no dynamic mapping
 
 // User mode transition function - WITH INTERRUPTS ENABLED
 void jmp_ring3(void *entry_point)
@@ -36,8 +35,7 @@ void jmp_ring3(void *entry_point)
 
 
 
-// Syscall handler placeholder
-void syscall_handler_c(void)
+[[maybe_unused]]void syscall_handler_c(void)
 {
     // Syscall received
 }

@@ -3,11 +3,11 @@
 
 // Variable global para ticks del PIT
 uint64_t pit_ticks = 0;
-#include <arch/common/idt.h>
-#include <print.h>
-#include <panic/oops.h>
+#include <ir0/oops.h>
+#include <ir0/vga.h>
 #include <arch_interface.h>
-#include <ir0/print.h>
+#include <arch/common/idt.h>
+#include <vga.h>
 #include <kernel/rr_sched.h>
 #include <arch/x86-64/sources/arch_x64.h>
 #define PIT_FREC 1193180
