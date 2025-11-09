@@ -1071,17 +1071,41 @@ static void cmd_rm(const char *args)
 
 // Using itoa from string.h
 
+// Helper function to convert number to string
+static void uint64_to_str(uint64_t num, char* str) {
+    char tmp[32];
+    char* p = tmp;
+    
+    if (num == 0) {
+        *p++ = '0';
+    } else {
+        while (num > 0) {
+            *p++ = '0' + (num % 10);
+            num /= 10;
+        }
+    }
+    
+    // Reverse the string
+    char* start = str;
+    while (p > tmp) {
+        *str++ = *--p;
+    }
+    *str = '\0';
+}
+
 static void cmd_lsblk(const char *args) {
     (void)args; // Unused parameter
     
     // Print header
-    typewriter_vga_print("NAME        MAJ:MIN   STATUS\n", 0x0F);
-    typewriter_vga_print("-----------------------\n", 0x07);
+    typewriter_vga_print("NAME        MAJ:MIN   SIZE (bytes)    MODEL\n", 0x0F);
+    typewriter_vga_print("------------------------------------------------\n", 0x07);
 
     // Check each possible ATA device (0-3)
     for (uint8_t i = 0; i < 4; i++) {
-        // Just check if device is present without reading sectors
-        if (!ata_drive_present(i)) {
+        ata_device_info_t info;
+        
+        // Get device info
+        if (!ata_get_device_info(i, &info)) {
             continue; // Skip if device not present
         }
         
@@ -1092,7 +1116,7 @@ static void cmd_lsblk(const char *args) {
         name[1] = 'd' + i;
         name[2] = '\0';
         
-        // Simple output without trying to read sectors
+        // Print device name
         typewriter_vga_print(name, 0x0F);
         typewriter_vga_print("         ", 0x0F);
         
@@ -1103,8 +1127,24 @@ static void cmd_lsblk(const char *args) {
         typewriter_vga_print(":0", 0x0F);
         typewriter_vga_print("       ", 0x0F);
         
-        // Just show if the drive is present
-        typewriter_vga_print("Present\n", 0x0A);
+        // Print size in bytes
+        char size_buf[32];
+        uint64_to_str(info.capacity_bytes, size_buf);
+        typewriter_vga_print(size_buf, 0x0A);
+        
+        // Add some padding for alignment
+        int pad = 15 - strlen(size_buf);
+        while (pad-- > 0) {
+            typewriter_vga_print(" ", 0x0A);
+        }
+        
+        // Print model if available
+        if (info.model[0] != '\0') {
+            typewriter_vga_print("  ", 0x0F);
+            typewriter_vga_print(info.model, 0x0F);
+        }
+        
+        typewriter_vga_print("\n", 0x0F);
     }
 }
 
