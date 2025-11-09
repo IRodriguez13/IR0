@@ -347,6 +347,7 @@ static bool root_inode_cached = false;
 minix_inode_t *minix_fs_find_inode(const char *pathname)
 {
   extern void print(const char *str);
+  static minix_inode_t result_inode;
 
   if (!pathname || !minix_fs.initialized)
   {
@@ -359,20 +360,14 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   // Si es el directorio raíz
   if (strcmp(pathname, "/") == 0)
   {
-    // Use cached root inode if available
-    if (!root_inode_cached)
+    // Always read from disk to ensure we have the latest version
+    if (minix_read_inode(MINIX_ROOT_INODE, &cached_root_inode) == 0)
     {
-      if (minix_read_inode(MINIX_ROOT_INODE, &cached_root_inode) == 0)
-      {
-        root_inode_cached = true;
-      }
-      else
-      {
-        return NULL;
-      }
+      root_inode_cached = true;
+      memcpy(&result_inode, &cached_root_inode, sizeof(minix_inode_t));
+      return &result_inode;
     }
-
-    return &cached_root_inode;
+    return NULL;
   }
 
   // Parsear el path
@@ -660,16 +655,18 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
   uint32_t target_zone = 0;
   uint32_t target_block = 0;
   int target_entry = -1;
+  int zone_index = 0;
 
-  for (int i = 0; i < 7; i++)
+  // First, try to find a free entry in existing zones
+  for (zone_index = 0; zone_index < 7; zone_index++)
   {
-    if (parent_inode->i_zone[i] == 0)
+    if (parent_inode->i_zone[zone_index] == 0)
     {
-      continue;
+      break; // No more zones allocated
     }
 
-    uint8_t block_buffer[MINIX_BLOCK_SIZE];
-    if (minix_read_block(parent_inode->i_zone[i], block_buffer) != 0)
+    uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
+    if (minix_read_block(parent_inode->i_zone[zone_index], block_buffer) != 0)
     {
       continue;
     }
@@ -677,13 +674,14 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
     minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
     int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
 
-    for (int j = 0; j < num_entries; j++)
+    // Start from 2 to skip . and .. entries
+    for (int j = 2; j < num_entries; j++)
     {
       if (entries[j].inode == 0)
       {
-        // Encontramos una entrada libre
-        target_zone = parent_inode->i_zone[i];
-        target_block = parent_inode->i_zone[i];
+        // Found a free entry
+        target_zone = parent_inode->i_zone[zone_index];
+        target_block = target_zone;
         target_entry = j;
         break;
       }
@@ -692,6 +690,33 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
     if (target_entry != -1)
     {
       break;
+    }
+  }
+
+  // If no space found in existing zones, allocate a new one
+  if (target_entry == -1)
+  {
+    for (zone_index = 0; zone_index < 7; zone_index++)
+    {
+      if (parent_inode->i_zone[zone_index] == 0)
+      {
+        target_zone = minix_alloc_zone();
+        if (target_zone != 0)
+        {
+          parent_inode->i_zone[zone_index] = target_zone;
+          target_block = target_zone;
+          target_entry = 2; // Start after . and ..
+          
+          // Initialize the new zone with zeros
+          uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
+          minix_write_block(target_zone, block_buffer);
+          
+          // Update parent directory size
+          parent_inode->i_size = (zone_index + 1) * MINIX_BLOCK_SIZE;
+          break;
+        }
+        return -1; // No more zones available
+      }
     }
   }
 
@@ -991,20 +1016,22 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
 
-  // Obtener el inode del directorio padre
-  minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
-  if (!parent_inode)
+  // Obtener el inode del directorio padre (hacemos una copia local)
+  minix_inode_t parent_inode;
+  minix_inode_t *parent_inode_ptr = minix_fs_find_inode(parent_path);
+  if (!parent_inode_ptr)
   {
     return -1;
   }
+  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
-  if (!(parent_inode->i_mode & MINIX_IFDIR))
+  if (!(parent_inode.i_mode & MINIX_IFDIR))
   {
     return -1;
   }
 
   // Verificar si el directorio ya existe
-  uint16_t existing_inode = minix_fs_find_dir_entry(parent_inode, dirname);
+  uint16_t existing_inode = minix_fs_find_dir_entry(&parent_inode, dirname);
   if (existing_inode != 0)
   {
     return -1;
@@ -1023,10 +1050,35 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   new_inode.i_mode = MINIX_IFDIR | (mode & 0777);
   new_inode.i_uid = 0; // root
   new_inode.i_gid = 0; // root
-  new_inode.i_size = 0;
+  new_inode.i_size = 2 * sizeof(minix_dir_entry_t); // . and .. entries
   new_inode.i_time = get_system_time(); // Usar tiempo real del sistema
   new_inode.i_nlinks = 2;               // . y ..
-  memset(new_inode.i_zone, 0, sizeof(new_inode.i_zone));
+  
+  // Allocate a zone for the directory data
+  uint32_t zone = minix_alloc_zone();
+  if (zone == 0) {
+    return -1;
+  }
+  new_inode.i_zone[0] = zone;
+  
+  // Initialize the directory block with . and .. entries
+  uint8_t block_buffer[MINIX_BLOCK_SIZE] = {0};
+  minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
+  
+  // Add . entry (self)
+  entries[0].inode = new_inode_num;
+  strcpy(entries[0].name, ".");
+  
+  // Add .. entry (parent)
+  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
+  entries[1].inode = parent_inode_num;
+  strcpy(entries[1].name, "..");
+  
+  // Write the directory block
+  if (minix_write_block(zone, block_buffer) != 0) {
+    minix_free_zone(zone);
+    return -1;
+  }
 
   // Escribir el nuevo inode
   if (minix_fs_write_inode(new_inode_num, &new_inode) != 0)
@@ -1036,19 +1088,16 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   }
 
   // Agregar entrada al directorio padre
-  if (minix_fs_add_dir_entry(parent_inode, dirname, new_inode_num) != 0)
+  if (minix_fs_add_dir_entry(&parent_inode, dirname, new_inode_num) != 0)
   {
     minix_fs_free_inode(new_inode_num);
     return -1;
   }
 
-  // Obtener el número de inode del padre
-  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
-
-  // Actualizar el inode del padre
+  // Actualizar el inode del padre (reuse parent_inode_num from above)
   if (parent_inode_num != 0)
   {
-    if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0)
+    if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
     {
       return -1;
     }
@@ -1506,15 +1555,17 @@ int minix_fs_touch(const char *path, mode_t mode)
     return -1;
   }
 
-  // Obtener el inode del directorio padre
-  minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
-  if (!parent_inode)
+  // Obtener el inode del directorio padre (hacemos una copia local)
+  minix_inode_t parent_inode;
+  minix_inode_t *parent_inode_ptr = minix_fs_find_inode(parent_path);
+  if (!parent_inode_ptr)
   {
     print("Error: Parent directory not found\n");
     return -1;
   }
+  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
-  if (!(parent_inode->i_mode & MINIX_IFDIR))
+  if (!(parent_inode.i_mode & MINIX_IFDIR))
   {
     print("Error: Parent is not a directory\n");
     return -1;
@@ -1546,7 +1597,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   }
 
   // Agregar entrada al directorio padre
-  if (minix_fs_add_dir_entry(parent_inode, filename, new_inode_num) != 0)
+  if (minix_fs_add_dir_entry(&parent_inode, filename, new_inode_num) != 0)
   {
     minix_fs_free_inode(new_inode_num);
     print("Error: Could not add directory entry\n");
@@ -1557,7 +1608,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
   if (parent_inode_num != 0)
   {
-    if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0)
+    if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
     {
       print("Warning: Could not update parent directory\n");
     }
