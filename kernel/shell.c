@@ -1086,7 +1086,6 @@ static void uint64_to_str(uint64_t num, char* str) {
     }
     
     // Reverse the string
-    char* start = str;
     while (p > tmp) {
         *str++ = *--p;
     }
