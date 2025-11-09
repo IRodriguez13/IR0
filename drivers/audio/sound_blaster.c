@@ -12,7 +12,7 @@
  */
 
 #include "sound_blaster.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <stddef.h>
 #include <string.h>
 #include <arch/common/arch_interface.h>

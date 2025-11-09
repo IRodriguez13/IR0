@@ -1,5 +1,5 @@
 #include "logging.h"
-#include "print.h"
+#include "vga.h"
 #include "string.h"
 #include <stdbool.h>
 #include <stdarg.h>

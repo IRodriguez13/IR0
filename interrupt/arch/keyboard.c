@@ -1,7 +1,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "io.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 
 // Forward declarations
 void wakeup_from_idle(void);

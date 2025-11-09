@@ -1,7 +1,7 @@
 // arch/x86-64/sources/arch_x64.c - Architecture setup functions
 #include <arch_interface.h>
-#include <ir0/print.h>
-#include <ir0/panic/oops.h>
+#include <ir0/vga.h>
+#include <ir0/oops.h>
 #include "tss_x64.h"
 #include "arch_x64.h"
 #include "gdt.h"

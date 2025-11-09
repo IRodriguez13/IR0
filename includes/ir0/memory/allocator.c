@@ -13,7 +13,7 @@
 
 #include "allocator.h"
 #include <ir0/memory/kmem.h>
-#include <ir0/print.h>
+#include <ir0/vga.h>
 
 // Block header for free-list allocator
 typedef struct block_header

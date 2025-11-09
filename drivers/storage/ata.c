@@ -12,8 +12,8 @@
  */
 
 #include "ata.h"
-#include <ir0/print.h>
-#include <ir0/panic/oops.h>
+#include <ir0/vga.h>
+#include <ir0/oops.h>
 #include <string.h>
 #include <arch/common/arch_interface.h>
 

@@ -1,5 +1,5 @@
 #include "rtc.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <string.h>
 #include <stddef.h>
 #include <arch/common/arch_interface.h>

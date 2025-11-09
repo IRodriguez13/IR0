@@ -9,20 +9,14 @@
 #include "process.h"
 #include "rr_sched.h"
 #include <ir0/memory/kmem.h>
-#include <ir0/panic/oops.h>
+#include <ir0/oops.h>
 #include <arch/x86-64/sources/user_mode.h>
 
-/* ========================================================================== */
-/* PRIVATE STATE                                                              */
-/* ========================================================================== */
 
 static rr_task_t *rr_head = NULL;
 static rr_task_t *rr_tail = NULL;
 static rr_task_t *rr_current = NULL;
 
-/* ========================================================================== */
-/* ADD PROCESS TO SCHEDULER                                                   */
-/* ========================================================================== */
 
 void rr_add_process(process_t *proc)
 {
@@ -51,9 +45,6 @@ void rr_add_process(process_t *proc)
 	proc->state = PROCESS_READY;
 }
 
-/* ========================================================================== */
-/* SCHEDULE NEXT PROCESS                                                      */
-/* ========================================================================== */
 
 void rr_schedule_next(void)
 {

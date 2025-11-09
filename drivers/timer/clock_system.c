@@ -1,20 +1,27 @@
-// ===============================================================================
-// CLOCK SYSTEM IMPLEMENTATION WITH REAL FUNCTIONALITY
-// ===============================================================================
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: clock_system.c
+ * Description: Kernel timer managment subsystem
+ */
 
 #include <stdint.h>
 #include <string.h>
-#include <ir0/print.h>
-#include <ir0/types.h>  // For time_t
+#include <ir0/vga.h>
+#include <ir0/types.h>  
 #include "pit/pit.h"
 #include "clock_system.h"
 
 // Global clock state
 static clock_state_t clock_state;
 
-// ===============================================================================
-// MAIN CLOCK SYSTEM FUNCTIONS
-// ===============================================================================
+//                          MAIN CLOCK SYSTEM FUNCTIONS
 
 int clock_system_init(void)
 {    

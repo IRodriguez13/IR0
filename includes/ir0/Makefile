@@ -15,7 +15,7 @@ endif
 CFLAGS += -I../.. -I.
 
 # Objetos
-OBJS = print.o logging.o validation.o
+OBJS = print.o logging.o validation.o oops.o
 
 all: $(OBJS)
 	@echo "\033[1;32m============================================================\033[0m"

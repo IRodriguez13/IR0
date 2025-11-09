@@ -2,7 +2,7 @@
 // These forward to the unified VFS/minix implementations.
 #include "vfs.h"
 #include "minix_fs.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 #include <ir0/stat.h>
 #include <string.h>
 

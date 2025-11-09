@@ -11,7 +11,8 @@
  * Description: Kernel initialization and user-space transition routines
  */
 
-#include <ir0/print.h>
+#include <ir0/vga.h>
+#include <ir0/oops.h>
 #include <ir0/logging.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -86,6 +87,8 @@ void kmain(void)
     pic_remap64();
  
     log_subsystem_ok("INTERRUPTS");
+
+    // panic("Test"); Just for testing
 
     start_init_process();
     log_subsystem_ok("SCHEDULER");

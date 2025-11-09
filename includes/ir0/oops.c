@@ -1,8 +1,10 @@
 #include "oops.h"
-#include <ir0/print.h>
+#include <ir0/vga.h>
 
-// IR0 Advanced Panic Handler
-// Convertido a sintaxis Intel para mejor legibilidad
+#define Interrupts_off asm volatile("cli")
+#define Cpu_Sleep asm volatile("hlt")
+
+// IR0 Advanced Panic event Handler in INTEL syntax 
 
 static const char *panic_level_names[] =
     {
@@ -13,17 +15,16 @@ static const char *panic_level_names[] =
         "ASSERTION FAILED"
     };
 
-// Nos fijamos si estamos en doble panic
+// We make sure we've doble panic
 static volatile int in_panic = 0;
 
-// Utilizamos un mejor manejo del stack-trace
+// Better stacktrace pipeline
 void panic_advanced(const char *message, panic_level_t level, const char *file, int line)
 {
-    // Por si de casualidad también falla Panic (es el peor evento posible).
+    // 
     if (in_panic)
     {
-        // corto interrupciones directo de nuevo.
-        asm volatile("cli");
+        Interrupts_off;
         print_error("DOUBLE PANIC! System completely fucked.\n");
         cpu_relax();
         return;
@@ -31,20 +32,18 @@ void panic_advanced(const char *message, panic_level_t level, const char *file, 
 
     in_panic = 1;
 
-    // Cortamos las interrupciones inmediatamente.
-    asm volatile("cli");
+    Interrupts_off;
 
-    // Limpio la pantalla
     clear_screen();
-
-    // Header con timestamp pero para timer.
-    print_colored("╔═══════════════════════════════════════════════════════════╗\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-    print_colored("║                     KERNEL PANIC :-(                         ║\n", VGA_COLOR_WHITE, VGA_COLOR_RED);
-    print_colored("╚═══════════════════════════════════════════════════════════╝\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+    print_colored("     ╔════════════════════════════════════════════════════════╗\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+    print_colored("     ║                                                        ║\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+    print_colored("     ║                O_o KERNEL PANIC :-(                    ║\n", VGA_COLOR_WHITE, VGA_COLOR_RED);
+    print_colored("     ║                                                        ║\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+    print_colored("     ╚════════════════════════════════════════════════════════╝\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
 
     print("\n");
 
-    // Panic info básica
+    // Panic info 
     print_colored("Type: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_error(panic_level_names[level]);
     print("\n");
@@ -55,22 +54,23 @@ void panic_advanced(const char *message, panic_level_t level, const char *file, 
     print_hex_compact(line);
     print("\n");
 
-    print_colored("Message: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print_colored("Due to: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_error(message);
     print("\n\n");
 
-    // Me guardo una foto de los registros en el momento del panic
     dump_registers();
 
-    // Stack trace
     dump_stack_trace();
 
 
-    // Mensaje antes del cpu_relax
-    print_colored("\n═══ SYSTEM HALTED ═══\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("Safe to power off or reboot - Es seguro apagar o reiniciar el equipo.\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    /*Little message before going to bed*/ 
+    print_colored("\n                          ═══ OOPS, SYSTEM HALTED ═══\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    print_colored("\n Safe to power off or reboot - Es seguro apagar o reiniciar el equipo.\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
 
-    cpu_relax(); // la cpu a hacer noni para que no haya mas problemas intrackeables.
+    goto sleep;
+
+    sleep:
+        cpu_relax(); // zzzz
 }
 
 void dump_registers()
@@ -103,10 +103,9 @@ void dump_registers()
     print("RBX: ");
     print_hex64(rbx);
     print("\n");
-    // ... resto de registros 64-bit
 
 #else
-    // Versión 32-bit (tu código actual)
+    //  32-bit Version 
     uint32_t eax, ebx, ecx, edx, esi, edi, esp, ebp;
     uint32_t eflags;
 
@@ -174,7 +173,7 @@ void dump_stack_trace()
     while (ebp && frame_count < max_frames)
     {
 
-        // Validar que ebp esté en rango de memoria válido osea entre 1mb y 1 gb
+        
         if ((uint32_t)ebp < 0x100000 || (uint32_t)ebp > 0x40000000)
         {
             print_warning("Stack trace truncated (invalid frame pointer)\n");
@@ -189,7 +188,7 @@ void dump_stack_trace()
         print_hex_compact(return_addr);
         print("\n");
 
-        ebp = (uint32_t *)*ebp; // Siguiente marco de pila
+        ebp = (uint32_t *)*ebp; 
         frame_count++;
     }
 
@@ -203,19 +202,17 @@ void dump_stack_trace()
 }
 
 
-// panic() original como wrapper. Así no tengo que reemplazarlo en cada llamado.
+// Unix panic() pipeline wrapper 
 void panic(const char *message)
 {
     panic_advanced(message, PANIC_KERNEL_BUG, "unknown", 0);
 }
 
-// cpu_relax - halt es una instruccion que corta cualquier ejecucion de la cpu y la incia en modo de bajo consumo, hasta la siguiente interrupcion
-// en este caso, la cpu no entra nunca en ninguna interrupción y es eso lo que queremos.
 
 void cpu_relax()
 {
     for (;;)
     {
-        asm volatile("hlt");
+        Cpu_Sleep; /*CPU in sleep mode*/
     }
 }
