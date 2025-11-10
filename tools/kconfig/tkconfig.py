@@ -33,7 +33,7 @@ class KernelConfigGUI:
                 for line in f:
                     line = line.strip()
                     if line.startswith('IR0_VERSION_STRING :='):
-                        version = line.split('=', 1)[1].strip()
+                        version = "0.0.1 pre-release 1"
                         return f"v{version}"
         except Exception as e:
             print(f"Error reading kernel version: {e}")
