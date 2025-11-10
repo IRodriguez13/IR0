@@ -7,9 +7,12 @@
  */
 
 #pragma once
+#include <stdint.h>
 
 /* ========================================================================== */
 /* PUBLIC API                                                                 */
 /* ========================================================================== */
 
 void shell_entry(void);
+void cmd_clear(void);
+void vga_print(const char *str, uint8_t color);
