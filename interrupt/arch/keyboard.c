@@ -2,6 +2,8 @@
 #include "pic.h"
 #include "io.h"
 #include <ir0/vga.h>
+#include <kernel/shell.h>
+
 
 // Forward declarations
 void wakeup_from_idle(void);
@@ -23,6 +25,7 @@ static int wake_requested = 0;
 
 // Estado de teclas modificadoras
 static int shift_pressed = 0;
+static int ctrl_pressed = 0;
 
 // Tabla de scancodes básica (solo caracteres imprimibles)
 static const char scancode_to_ascii[] = {
@@ -62,8 +65,25 @@ char translate_scancode(uint8_t sc)
         case 0x0F: return '\t';  // Tab
         case 0x1C: return '\n';  // Enter
         case 0x39: return ' ';   // Space
+        
+        case 0x1D: ctrl_pressed = 1; return 0;  // Left/Right Ctrl press
+        case 0x9D: ctrl_pressed = 0; return 0;  // Left/Right Ctrl release
+        
+        case 0x26:
+            if (!ctrl_pressed) 
+            {
+                return 'l';      
+            }
+            else
+            {
+                cmd_clear();
+                ctrl_pressed = 0;
+                vga_print("~$ ", 0x0A);
+                return 0;
+            }
+                        
         default:
-            // Mapeo con o sin Shift
+            
             if (sc < sizeof(scancode_to_ascii)) 
             {
                 if (shift_pressed) 
@@ -75,11 +95,11 @@ char translate_scancode(uint8_t sc)
                     return scancode_to_ascii[sc];
                 }
             }
-            return 0; // Carácter no reconocido
+            return 0;
     }
 }
 
-// Función para agregar carácter al buffer
+
 static void keyboard_buffer_add(char c)
 {
     int next = (keyboard_buffer_head + 1) % KEYBOARD_BUFFER_SIZE;
@@ -91,25 +111,25 @@ static void keyboard_buffer_add(char c)
 }
 
 #ifdef __x86_64__
-// Función para obtener carácter del buffer
+
 char keyboard_buffer_get(void) 
 {
     if (keyboard_buffer_head == keyboard_buffer_tail) 
     {
-        return 0; // Buffer vacío
+        return 0; 
     }
+
     char c = keyboard_buffer[keyboard_buffer_tail];
     keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KEYBOARD_BUFFER_SIZE;
     return c;
 }
 
-// Función para verificar si hay caracteres en el buffer
 int keyboard_buffer_has_data(void) 
 {
     return keyboard_buffer_head != keyboard_buffer_tail;
 }
 
-// Función para limpiar el buffer
+
 void keyboard_buffer_clear(void) 
 {
     keyboard_buffer_head = 0;
@@ -117,16 +137,12 @@ void keyboard_buffer_clear(void)
 }
 #endif
 
-// Handler de interrupciones de teclado para 64-bit
 void keyboard_handler64(void) 
 {
-    // Leer scancode del puerto 0x60
     uint8_t scancode = inb(0x60);
     
-    // Detectar Shift press/release
     if (scancode == 0x2A || scancode == 0x36) 
     {
-        // Left Shift (0x2A) o Right Shift (0x36) presionado
         shift_pressed = 1;
     }
     else if (scancode == 0xAA || scancode == 0xB6) 
@@ -134,7 +150,6 @@ void keyboard_handler64(void)
         // Left Shift (0xAA) o Right Shift (0xB6) liberado
         shift_pressed = 0;
     }
-    // Solo procesar key press (scancode < 0x80)
     else if (scancode < 0x80) 
     {
         char ascii = translate_scancode(scancode);

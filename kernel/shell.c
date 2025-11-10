@@ -69,7 +69,7 @@ static void vga_putchar(char c, uint8_t color)
   }
 }
 
-static void vga_print(const char *str, uint8_t color)
+void vga_print(const char *str, uint8_t color)
 {
   while (*str)
     vga_putchar(*str++, color);
@@ -137,7 +137,7 @@ static void cmd_whoami(void)
   syscall(94, 0, 0, 0); // SYS_WHOAMI
 }
 
-static void cmd_clear(void)
+void cmd_clear(void)
 {
   vga_clear();
 
