@@ -4,6 +4,7 @@
 #include <ir0/vga.h>
 #include <kernel/shell.h>
 
+
 // Forward declarations
 void wakeup_from_idle(void);
 
@@ -24,6 +25,7 @@ static int wake_requested = 0;
 
 // Estado de teclas modificadoras
 static int shift_pressed = 0;
+static int ctrl_pressed = 0;
 static int ctrl_pressed = 0;
 
 // Tabla de scancodes básica (solo caracteres imprimibles)
@@ -81,7 +83,25 @@ char translate_scancode(uint8_t sc)
                 return 0;
             }
                         
+        
+        case 0x1D: ctrl_pressed = 1; return 0;  // Left/Right Ctrl press
+        case 0x9D: ctrl_pressed = 0; return 0;  // Left/Right Ctrl release
+        
+        case 0x26:
+            if (!ctrl_pressed) 
+            {
+                return 'l';      
+            }
+            else
+            {
+                cmd_clear();
+                ctrl_pressed = 0;
+                vga_print("~$ ", 0x0A);
+                return 0;
+            }
+                        
         default:
+            
             
             if (sc < sizeof(scancode_to_ascii)) 
             {
@@ -95,8 +115,10 @@ char translate_scancode(uint8_t sc)
                 }
             }
             return 0;
+            return 0;
     }
 }
+
 
 
 static void keyboard_buffer_add(char c)
@@ -111,12 +133,15 @@ static void keyboard_buffer_add(char c)
 
 #ifdef __x86_64__
 
+
 char keyboard_buffer_get(void) 
 {
     if (keyboard_buffer_head == keyboard_buffer_tail) 
     {
         return 0; 
+        return 0; 
     }
+
 
     char c = keyboard_buffer[keyboard_buffer_tail];
     keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KEYBOARD_BUFFER_SIZE;
@@ -127,6 +152,7 @@ int keyboard_buffer_has_data(void)
 {
     return keyboard_buffer_head != keyboard_buffer_tail;
 }
+
 
 
 void keyboard_buffer_clear(void) 
