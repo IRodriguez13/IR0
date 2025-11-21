@@ -164,7 +164,8 @@ FS_OBJS = \
     fs/minix_fs.o \
     fs/vfs_simple.o \
     fs/path.o \
-    fs/chmod.o
+    fs/chmod.o \
+    fs/ramfs.o
 
 DISK_OBJS = \
     drivers/disk/partition.o

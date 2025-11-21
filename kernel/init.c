@@ -3,6 +3,10 @@
  * IR0 Kernel - Init Process (PID 1)
  * Copyright (C) 2025 Iván Rodriguez
  *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ * 
  * First userspace process, runs the shell
  */
 
@@ -68,6 +72,10 @@ int start_init_process(void)
 
 	/* Initialize current working directory */
 	strcpy(init->cwd, "/");
+	
+	/* Set process command name */
+	strncpy(init->comm, "init_1", sizeof(init->comm) - 1);
+	init->comm[sizeof(init->comm) - 1] = '\0';
 
 	/* Add to scheduler and start */
 	rr_add_process(init);
