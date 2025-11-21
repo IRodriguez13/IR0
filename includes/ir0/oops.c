@@ -23,7 +23,7 @@ static volatile int in_panic = 0;
 // Better stacktrace pipeline
 void panicex(const char *message, panic_level_t level, const char *file, int line)
 {
-    // 
+    // This is more an easter egg than a real problem :)
     if (in_panic)
     {
         Interrupts_off;
@@ -39,7 +39,7 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     clear_screen();
     print_colored("     ╔════════════════════════════════════════════════════════╗\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     print_colored("     ║                                                        ║\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-    print_colored("     ║                      O_o KERNEL PANIC                        ║\n", VGA_COLOR_WHITE, VGA_COLOR_RED);
+    print_colored("     ║                      O_o KERNEL PANIC                  ║\n", VGA_COLOR_WHITE, VGA_COLOR_RED);
     print_colored("     ║                                                        ║\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     print_colored("     ╚════════════════════════════════════════════════════════╝\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
 
