@@ -93,6 +93,10 @@ process_t *process_create(void (*entry)(void))
 
 	/* Initialize current working directory */
 	strcpy(proc->cwd, "/");
+	
+	/* Initialize command name */
+	strncpy(proc->comm, "process", sizeof(proc->comm) - 1);
+	proc->comm[sizeof(proc->comm) - 1] = '\0';
 
 	/* Create stack */
 	proc->stack_size = 0x2000;

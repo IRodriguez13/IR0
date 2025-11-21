@@ -47,13 +47,14 @@ extern const char* get_fs_type(uint8_t system_id);
 // Basic types and constants
 typedef uint32_t mode_t;
 
-// Errno codes
 #define ESRCH 3
 #define EBADF 9
 #define EFAULT 14
 #define ENOSYS 38
 #define ENOENT 2
 #define EMFILE 24
+#define EINVAL 22
+#define ESPIPE 29
 
 // File descriptors
 #define STDIN_FILENO 0
@@ -88,14 +89,15 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
   {
     const char *str = (const char *)buf;
-    // Use typewriter effect for console output
+    uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
+    // Use typewriter VGA effect for console output
     for (size_t i = 0; i < count && i < 1024; i++)
     {
       if (str[i] == '\n')
-        typewriter_print("\n");
+        typewriter_vga_print("\n", color);
       else
       {
-        typewriter_print_char(str[i]);
+        typewriter_vga_print_char(str[i], color);
       }
     }
     return (int64_t)count;
@@ -208,8 +210,6 @@ int64_t sys_ps(void)
     }
   }
 
-  // Show kernel process (PID 0)
-  sys_write(1, "  0  IDLE       kernel\n", 22);
 
   // Iterate through REAL process list
   process_t *proc = proc_list;
@@ -273,18 +273,25 @@ int64_t sys_ps(void)
       break;
     }
 
-    // Show command based on PID
-    if (process_pid(proc) == 1)
-    {
-      sys_write(1, "shell\n", 6);
-    }
-    else if (process_pid(proc) == 0)
+    // Show command name from process structure
+    if (process_pid(proc) == 0)
     {
       sys_write(1, "kernel\n", 7);
     }
     else
     {
-      sys_write(1, "process\n", 8);
+      // Use comm field if available, otherwise default
+      if (proc->comm[0] != '\0')
+      {
+        size_t comm_len = 0;
+        while (proc->comm[comm_len] && comm_len < 15) comm_len++;
+        sys_write(1, proc->comm, comm_len);
+        sys_write(1, "\n", 1);
+      }
+      else
+      {
+        sys_write(1, "process\n", 8);
+      }
     }
 
     proc = proc->next;
@@ -496,12 +503,55 @@ int64_t sys_append(const char *path, const char *content, size_t count)
   return vfs_append(path, content, count);
 }
 
+int64_t sys_df(void)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  typewriter_vga_print("Filesystem   Size\n", 0x0F);
+
+  for (uint8_t i = 0; i < 4; i++)
+  {
+    if (!ata_drive_present(i))
+      continue;
+
+    char devname[16];
+    int len = snprintf(devname, sizeof(devname), "/dev/hd%c", 'a' + i);
+    if (len < 0 || len >= (int)sizeof(devname))
+      continue;
+
+    uint64_t size = ata_get_size(i);
+    if (size == 0)
+      continue;
+
+    char size_str[32];
+    uint64_t size_gb = size / (1024ULL * 1024ULL * 1024ULL);
+    if (size_gb > 0)
+    {
+      len = snprintf(size_str, sizeof(size_str), "%lluG", size_gb);
+    }
+    else
+    {
+      uint64_t size_mb = size / (1024ULL * 1024ULL);
+      len = snprintf(size_str, sizeof(size_str), "%lluM", size_mb);
+    }
+
+    if (len > 0 && len < (int)sizeof(size_str))
+    {
+      char line[64];
+      snprintf(line, sizeof(line), "%s   %s\n", devname, size_str);
+      typewriter_vga_print(line, 0x0F);
+    }
+  }
+
+  return 0;
+}
+
 int64_t sys_lsblk(void)
 {
   if (!current_process)
     return -ESRCH;
     
-  // Get list of drives first
   uint8_t drives[4] = {0};
   int drive_count = 0;
   
@@ -511,7 +561,6 @@ int64_t sys_lsblk(void)
     }
   }
 
-  // Header
   sys_write(1, "NAME MAJ:MIN SIZE MODEL\n", 23);
 
   // For each drive
@@ -693,7 +742,6 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   return fd;
 }
 
-// Close file descriptor
 int64_t sys_close(int fd)
 {
   if (!current_process)
@@ -707,17 +755,102 @@ int64_t sys_close(int fd)
   if (!fd_table[fd].in_use)
     return -EBADF;
 
-  // Don't close standard streams
   if (fd <= 2)
     return -EBADF;
 
-  // Close the file descriptor
   fd_table[fd].in_use = false;
   fd_table[fd].path[0] = '\0';
   fd_table[fd].flags = 0;
   fd_table[fd].offset = 0;
 
   return 0;
+}
+
+int64_t sys_lseek(int fd, off_t offset, int whence)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table[fd].in_use)
+    return -EBADF;
+
+  off_t new_offset;
+
+  if (fd <= 2)
+  {
+    if (whence == 0)
+      new_offset = offset;
+    else if (whence == 1)
+      new_offset = fd_table[fd].offset + offset;
+    else
+      return -ESPIPE;
+  }
+  else
+  {
+    stat_t st;
+    if (vfs_stat(fd_table[fd].path, &st) != 0)
+      return -EBADF;
+
+    switch (whence)
+    {
+    case 0:
+      new_offset = offset;
+      break;
+    case 1:
+      new_offset = fd_table[fd].offset + offset;
+      break;
+    case 2:
+      new_offset = st.st_size + offset;
+      break;
+    default:
+      return -EINVAL;
+    }
+  }
+
+  if (new_offset < 0)
+    return -EINVAL;
+
+  fd_table[fd].offset = new_offset;
+  return new_offset;
+}
+
+int64_t sys_dup2(int oldfd, int newfd)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (oldfd < 0 || oldfd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+  if (newfd < 0 || newfd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  if (oldfd == newfd)
+    return newfd;
+
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table[oldfd].in_use)
+    return -EBADF;
+
+  if (fd_table[newfd].in_use && newfd > 2)
+  {
+    fd_table[newfd].in_use = false;
+    fd_table[newfd].path[0] = '\0';
+    fd_table[newfd].flags = 0;
+    fd_table[newfd].offset = 0;
+  }
+
+  fd_table[newfd].in_use = true;
+  strncpy(fd_table[newfd].path, fd_table[oldfd].path, sizeof(fd_table[newfd].path) - 1);
+  fd_table[newfd].path[sizeof(fd_table[newfd].path) - 1] = '\0';
+  fd_table[newfd].flags = fd_table[oldfd].flags;
+  fd_table[newfd].offset = fd_table[oldfd].offset;
+  fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+
+  return newfd;
 }
 
 // Helper function to get file stats by path (for ls improvement)
@@ -773,46 +906,6 @@ int64_t sys_kernel_info(void *info_buffer, size_t buffer_size)
   return (int64_t)len;
 }
 
-int64_t sys_malloc_test(size_t size)
-{
-  if (!current_process)
-    return -ESRCH;
-
-  // Test malloc/free functionality
-
-  sys_write(1, "Testing malloc/free...\n", 23);
-
-  // Allocate memory
-  void *ptr1 = kmalloc(size ? size : 1024);
-  if (!ptr1)
-  {
-    sys_write(1, "malloc failed!\n", 15);
-    return -1;
-  }
-
-  sys_write(1, "malloc OK, ptr=0x", 17);
-  print_hex64((uint64_t)ptr1);
-  sys_write(1, "\n", 1);
-
-  // Write some data
-  char *data = (char *)ptr1;
-  for (size_t i = 0; i < (size ? size : 1024) && i < 100; i++)
-  {
-    data[i] = 'A' + (i % 26);
-  }
-
-  sys_write(1, "Data written, freeing...\n", 25);
-
-  // Free memory
-  kfree(ptr1);
-
-  sys_write(1, "free OK\n", 8);
-
-  // Show allocator stats
-  alloc_trace();
-
-  return 0;
-}
 
 int64_t sys_brk(void *addr)
 {
@@ -1143,8 +1236,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_read_file((const char *)arg1, (void **)arg2, (size_t *)arg3);
   case 40:
     return sys_rmdir((const char *)arg1);
-  case 50:
-    return sys_malloc_test((size_t)arg1);
   case 51:
     return sys_brk((void *)arg1);
   case 52:
@@ -1169,8 +1260,12 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_close((int)arg1);
   case 61:
     return sys_ls_detailed((const char *)arg1);
+  case 19:
+    return sys_lseek((int)arg1, (off_t)arg2, (int)arg3);
   case 62:
     return sys_creat((const char *)arg1, (mode_t)arg2);
+  case 63:
+    return sys_dup2((int)arg1, (int)arg2);
   case 79:
     return sys_getcwd((char *)arg1, (size_t)arg2);
   case 80:
@@ -1185,6 +1280,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_append((const char *)arg1, (const char *)arg2, (size_t)arg3);
   case 92:
     return sys_lsblk();
+  case 95:
+    return sys_df();
   case 93:
     return sys_mount((const char *)arg1, (const char *)arg2,
                      (const char *)arg3);

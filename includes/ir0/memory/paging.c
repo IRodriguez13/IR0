@@ -7,16 +7,9 @@
 #include "allocator.h"
 #include <kernel/process.h>
 
-// ===============================================================================
-//                              PAGE TABLE STRUCTURES
-// ===============================================================================
-
 // Page directory for identity mapping (used by setup functions)
 __attribute__((aligned(4096))) static uint64_t PD[512];
 
-// ===============================================================================
-// PAGING SETUP
-// ===============================================================================
 
 void setup_paging_identity_16mb()
 {
@@ -189,9 +182,6 @@ int unmap_page(uint64_t virt_addr)
     return 0;
 }
 
-// ===============================================================================
-// USER MEMORY MAPPING FUNCTIONS
-// ===============================================================================
 
 // Mapear página de usuario con permisos U/S=1
 int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags)

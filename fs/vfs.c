@@ -20,8 +20,11 @@
 #include <string.h>
 #include <kernel/rr_sched.h>
 #include <stdarg.h>
-#include <ir0/fcntl.h> 
-#include <ir0/stat.h>  
+#include <ir0/fcntl.h>
+#include <ir0/stat.h>
+#include <serial.h>
+#include <memory/kmem.h>
+#include <ir0/vga.h>
 
 /* Forward declarations and types */
 typedef struct
@@ -34,7 +37,6 @@ typedef struct
 static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries);
 static int build_path(char *dest, size_t dest_size, const char *dir, const char *name);
 
-// Proper path building without fake snprintf
 [[maybe_unused]] static void format_timestamp(uint32_t timestamp, char *buffer, size_t buffer_size)
 {
   if (!buffer || buffer_size < 13)
@@ -147,9 +149,6 @@ static int build_path(char *dest, size_t dest_size, const char *dir, const char 
   return 0;
 }
 
-// External memory functions
-extern void *kmalloc(size_t size);
-extern void kfree(void *ptr);
 
 // Lista de filesystems registrados
 static struct filesystem_type *filesystems = NULL;
@@ -571,15 +570,13 @@ static struct super_operations minix_super_ops = {
 };
 
 // MINIX filesystem type definition
-static struct filesystem_type minix_fs_type = {
-    .name = "minix", .mount = minix_mount, .next = NULL};
+static struct filesystem_type minix_fs_type =
+    {
+        .name = "minix", .mount = minix_mount, .next = NULL};
 
 // Mount function para MINIX
-static int minix_mount(const char *dev_name __attribute__((unused)),
-                       const char *dir_name __attribute__((unused)))
+static int minix_mount(const char *dev_name __attribute__((unused)), const char *dir_name __attribute__((unused)))
 {
-  extern void print(const char *str);
-
   print("MINIX_MOUNT: Starting mount process...\n");
 
   // Inicializar MINIX filesystem si no está funcionando
@@ -641,15 +638,17 @@ static int minix_mount(const char *dev_name __attribute__((unused)),
     root_inode->i_fop = &minix_file_ops; // File operations
     root_inode->i_sb = root_sb;          // Superblock reference
     root_inode->i_private = NULL;        // No private data
-    print("MINIX_MOUNT: Root inode created OK\n");
+
+    serial_print("MINIX_MOUNT: Root inode CREATED SUCCESSFULLY\n");
   }
   else
   {
-    print("MINIX_MOUNT: Root inode already exists\n");
+    serial_print("MINIX_MOUNT: Root inode already exists\n");
   }
 
   print("MINIX_MOUNT: Mount completed successfully\n");
   return 0;
+
 }
 
 // Removed duplicate minix_fs_type definition
@@ -700,6 +699,28 @@ int vfs_init_with_minix(void)
     return -1;
   }
 
+  extern int ramfs_register(void);
+  extern int ramfs_init_boot_files(void);
+  extern int vfs_mkdir(const char *path, int mode);
+
+  ramfs_register();
+  print("VFS: RAMFS registered\n");
+
+  vfs_mkdir("/boot", 0755);
+  print("VFS: /boot directory created\n");
+
+  ret = vfs_mount("none", "/boot", "ramfs");
+  if (ret == 0)
+  {
+    print("VFS: RAMFS mounted on /boot\n");
+    ramfs_init_boot_files();
+    print("VFS: Boot files initialized in RAMFS\n");
+  }
+  else
+  {
+    print("VFS: WARNING - Failed to mount RAMFS on /boot\n");
+  }
+
   return 0;
 }
 
@@ -730,7 +751,6 @@ int vfs_read_file(const char *path, void **data, size_t *size)
   if (result == 0)
   {
     // File read successfully through VFS
-    extern void serial_print(const char *str);
     serial_print("VFS: File read successfully: ");
     serial_print(path);
     serial_print("\n");
@@ -806,6 +826,7 @@ int process_create_user(const char *name, uint64_t entry_point)
 
   // Create page directory for user process
   new_process->page_directory = (uint64_t *)create_process_page_directory();
+
   if (!new_process->page_directory)
   {
     serial_print("VFS: Failed to create page directory\n");
