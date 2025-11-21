@@ -190,6 +190,21 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     }
 
     // Set up user mode execution
+    
+    // Extract command name from path (basename)
+    const char *basename = path;
+    const char *last_slash = path;
+    while (*path) {
+        if (*path == '/') last_slash = path + 1;
+        path++;
+    }
+    basename = last_slash;
+    
+    // Copy basename to comm (max 15 chars)
+    size_t name_len = 0;
+    while (basename[name_len] && name_len < 15) name_len++;
+    memcpy(process->comm, basename, name_len);
+    process->comm[name_len] = '\0';
 
     process->task.rip = process->memory_base + (header->e_entry - 0x400000);
     process->task.cs = 0x1B; // User code segment (GDT entry 3, RPL=3)

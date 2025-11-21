@@ -176,54 +176,6 @@ void alloc_free(void *ptr)
     }
 }
 
-void alloc_stats(size_t *total, size_t *used, size_t *allocs)
-{
-    if (total)
-        *total = allocator.heap_size;
-    if (used)
-        *used = allocator.total_allocated - allocator.total_freed;
-    if (allocs)
-        *allocs = allocator.total_allocated;
-}
-
-void alloc_trace(void)
-{
-    print("=== Real Memory Allocator ===\n");
-    print("Heap: 0x");
-    print_hex64((uintptr_t)allocator.heap_start);
-    print(" - 0x");
-    print_hex64((uintptr_t)allocator.heap_end);
-    print("\nTotal: ");
-    print_uint32(allocator.heap_size);
-    print(" bytes\n");
-    print("Allocated: ");
-    print_uint32(allocator.total_allocated);
-    print(" bytes\n");
-    print("Freed: ");
-    print_uint32(allocator.total_freed);
-    print(" bytes\n");
-    print("In use: ");
-    print_uint32(allocator.total_allocated - allocator.total_freed);
-    print(" bytes\n");
-
-    // Show free blocks
-    print("Free blocks:\n");
-    block_header_t *current = allocator.free_list;
-    int count = 0;
-    while (current && count < 10)
-    {
-        if (current->is_free)
-        {
-            print("  Block ");
-            print_uint32(count);
-            print(": ");
-            print_uint32(current->size);
-            print(" bytes\n");
-            count++;
-        }
-        current = current->next;
-    }
-}
 
 /**
  * Allocate aligned memory for page tables

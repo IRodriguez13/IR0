@@ -68,6 +68,9 @@ typedef struct process
 	
 	/* Current working directory */
 	char cwd[256];
+	
+	/* Process command name (for ps) */
+	char comm[16]; // Process command name (max 15 chars + null)
 } process_t;
 
 /* ========================================================================== */
