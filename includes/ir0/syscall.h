@@ -41,12 +41,15 @@ typedef uint32_t mode_t;
 #define SYS_CLOSE 60
 #define SYS_LS_DETAILED 61
 #define SYS_CREAT 62
+#define SYS_DUP2 63
 #define SYS_CHDIR 80
 #define SYS_GETCWD 79
+#define SYS_LSEEK 19
 #define SYS_UNLINK 87
 #define SYS_RMDIR_R 88
 #define SYS_MOUNT 90
-#define SYS_CHMOD 100 // Definición de SYS_CHMOD
+#define SYS_DF 95
+#define SYS_CHMOD 100
 
 // ===============================================================================
 // SYSCALL WRAPPER FUNCTIONS

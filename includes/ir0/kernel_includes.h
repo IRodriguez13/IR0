@@ -1,18 +1,10 @@
-// ===============================================================================
-// IR0 KERNEL INCLUDES - Centralized Include System
-// ===============================================================================
-// This file centralizes all kernel includes and allows easy subsystem activation
-// Usage: #include <ir0/kernel_includes.h>
-
 #pragma once
 
 // Include the integrated configuration system
 #include <subsystem_config.h>
 #include <arch_config.h>
 
-// ===============================================================================
-// CORE INCLUDES (Always included)
-// ===============================================================================
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -95,10 +87,6 @@
     // #include <ata.h>  // TODO: Fix include path
 #endif
 
-// Uncomment when implemented:
-// #include <drivers/video/vga.h>
-// #include <drivers/network/ethernet.h>
-// #include <drivers/audio/sound.h>
 
 // ===============================================================================
 // FILE SYSTEM INCLUDES
@@ -107,10 +95,6 @@
 
 #if ENABLE_VFS
     // #include <vfs.h>  // TODO: Fix include path
-#endif
-
-#if ENABLE_IR0FS
-    // #include <ir0fs.h>  // TODO: Fix include path
 #endif
 
 // ===============================================================================
@@ -144,7 +128,4 @@
     // #include <shell.h>  // TODO: Fix include path
 #endif
 
-// ===============================================================================
-// CONFIGURATION INCLUDES
-// ===============================================================================
-#include <kernel_config.h>
+

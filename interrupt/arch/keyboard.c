@@ -4,7 +4,6 @@
 #include <ir0/vga.h>
 #include <kernel/shell.h>
 
-
 // Forward declarations
 void wakeup_from_idle(void);
 
