@@ -28,6 +28,19 @@
 
 int cursor_pos = 0; /* Made global for typewriter access */
 
+static void shell_write(int fd, const char *str)
+{
+  if (!str)
+    return;
+  
+  uint8_t color = (fd == 2) ? 0x0C : 0x0F;
+  
+  if (fd == 1 || fd == 2)
+  {
+    typewriter_vga_print(str, color);
+  }
+}
+
 static void vga_putchar(char c, uint8_t color)
 {
   if (c == '\n')
@@ -100,7 +113,7 @@ static const char *skip_whitespace(const char *str)
 }
 
 // Human-readable size: prints bytes in B, KB, MB, GB with suffix
-static void shell_print_hr_size(uint64_t bytes)
+[[maybe_unused]]static void shell_print_hr_size(uint64_t bytes)
 {
   const char *units[] = {"B", "KB", "MB", "GB", "TB"};
   double value = (double)bytes;
@@ -127,7 +140,7 @@ static void cmd_touch(const char *filename);
 
 static void cmd_help(void)
 {
-  typewriter_vga_print("IR0 Shell - Available commands:\n", 0x0F);
+  shell_write(1, "IR0 Shell - Available commands:\n");
   /* commands table will drive help output */
   cmd_list_help();
 }
@@ -182,7 +195,7 @@ static void cmd_cat(const char *filename)
 {
   if (!filename || *filename == '\0')
   {
-    typewriter_vga_print("Usage: cat <filename>\n", 0x0C);
+    shell_write(2, "Usage: cat <filename>\n");
     return;
   }
 
@@ -193,26 +206,26 @@ static void cmd_mkdir(const char *dirname)
 {
   if (!dirname || *dirname == '\0')
   {
-    typewriter_vga_print("Usage: mkdir <dirname>\n", 0x0C);
+    shell_write(2, "Usage: mkdir <dirname>\n");
     return;
   }
 
   int64_t result = syscall(SYS_MKDIR, (uint64_t)dirname, 0755, 0);
   if (result < 0)
-    typewriter_vga_print("mkdir: failed\n", 0x0C);
+    shell_write(2, "mkdir: failed\n");
 }
 
 static void cmd_rmdir(const char *dirname)
 {
   if (!dirname || *dirname == '\0')
   {
-    typewriter_vga_print("Usage: rmdir <dirname>\n", 0x0C);
+    shell_write(2, "Usage: rmdir <dirname>\n");
     return;
   }
 
   int64_t result = syscall(SYS_RMDIR, (uint64_t)dirname, 0, 0);
   if (result < 0)
-    typewriter_vga_print("rmdir: failed\n", 0x0C);
+    shell_write(2, "rmdir: failed\n");
 }
 
 static void cmd_ps(void)
@@ -225,7 +238,7 @@ static void cmd_echo(const char *text)
 {
   if (!text || *text == '\0')
   {
-    typewriter_vga_print("\n", 0x0F);
+    shell_write(1, "\n");
     return;
   }
 
@@ -404,8 +417,8 @@ static void cmd_echo(const char *text)
   else
   {
     // No redirection, just print to screen
-    typewriter_vga_print(text, 0x0F);
-    typewriter_vga_print("\n", 0x0F);
+    shell_write(1, text);
+    shell_write(1, "\n");
   }
 }
 
@@ -711,7 +724,7 @@ static void cmd_cp(const char *args)
 {
   if (!args || *args == '\0')
   {
-    typewriter_vga_print("Usage: cp <src> <dst>\n", 0x0C);
+    shell_write(2, "Usage: cp <src> <dst>\n");
     return;
   }
 
@@ -739,7 +752,7 @@ static void cmd_cp(const char *args)
   char *dst = p;
   if (!src || !dst || *dst == '\0')
   {
-    typewriter_vga_print("Usage: cp <src> <dst>\n", 0x0C);
+    shell_write(2, "Usage: cp <src> <dst>\n");
     return;
   }
 
@@ -748,18 +761,18 @@ static void cmd_cp(const char *args)
   int64_t r = syscall(SYS_READ_FILE, (uint64_t)src, (uint64_t)&data, (uint64_t)&size);
   if (r < 0 || !data)
   {
-    typewriter_vga_print("cp: cannot read source\n", 0x0C);
+    shell_write(2, "cp: cannot read source\n");
     return;
   }
 
   int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)dst, (uint64_t)data, 0);
   if (w < 0)
   {
-    typewriter_vga_print("cp: cannot write destination\n", 0x0C);
+    shell_write(2, "cp: cannot write destination\n");
   }
   else
   {
-    typewriter_vga_print("cp: done\n", 0x0A);
+    shell_write(1, "cp: done\n");
   }
 
   if (data)
@@ -771,7 +784,7 @@ static void cmd_mv(const char *args)
 {
   if (!args || *args == '\0')
   {
-    typewriter_vga_print("Usage: mv <src> <dst>\n", 0x0C);
+    shell_write(2, "Usage: mv <src> <dst>\n");
     return;
   }
   // simple reuse of cp parsing
@@ -798,7 +811,7 @@ static void cmd_mv(const char *args)
   char *dst = p;
   if (!src || !dst || *dst == '\0')
   {
-    typewriter_vga_print("Usage: mv <src> <dst>\n", 0x0C);
+    shell_write(2, "Usage: mv <src> <dst>\n");
     return;
   }
 
@@ -808,14 +821,14 @@ static void cmd_mv(const char *args)
   int64_t r = syscall(SYS_READ_FILE, (uint64_t)src, (uint64_t)&data, (uint64_t)&size);
   if (r < 0 || !data)
   {
-    typewriter_vga_print("mv: cannot read source\n", 0x0C);
+    shell_write(2, "mv: cannot read source\n");
     return;
   }
 
   int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)dst, (uint64_t)data, 0);
   if (w < 0)
   {
-    typewriter_vga_print("mv: cannot write destination\n", 0x0C);
+    shell_write(2, "mv: cannot write destination\n");
     if (data)
       kfree(data);
     return;
@@ -825,11 +838,11 @@ static void cmd_mv(const char *args)
   int64_t u = syscall(SYS_UNLINK, (uint64_t)src, 0, 0);
   if (u < 0)
   {
-    typewriter_vga_print("mv: copied but failed to remove source\n", 0x0C);
+    shell_write(2, "mv: copied but failed to remove source\n");
   }
   else
   {
-    typewriter_vga_print("mv: done\n", 0x0A);
+    shell_write(1, "mv: done\n");
   }
 
   if (data)
@@ -840,7 +853,7 @@ static void cmd_mv(const char *args)
 static void cmd_ln(const char *args)
 {
   (void)args;
-  typewriter_vga_print("ln: creating hard links is not supported yet\n", 0x0C);
+  shell_write(2, "ln: creating hard links is not supported yet\n");
 }
 
 /* chmod MODE PATH */
@@ -848,7 +861,7 @@ static void cmd_chmod(const char *args)
 {
   if (!args || *args == '\0')
   {
-    typewriter_vga_print("Usage: chmod <mode> <path>\n", 0x0C);
+    shell_write(2, "Usage: chmod <mode> <path>\n");
     return;
   }
   char buf[256];
@@ -874,7 +887,7 @@ static void cmd_chmod(const char *args)
   char *path = p;
   if (!mode_s || !path || *path == '\0')
   {
-    typewriter_vga_print("Usage: chmod <mode> <path>\n", 0x0C);
+    shell_write(2, "Usage: chmod <mode> <path>\n");
     return;
   }
 
@@ -884,7 +897,7 @@ static void cmd_chmod(const char *args)
   {
     if (*q < '0' || *q > '7')
     {
-      typewriter_vga_print("chmod: invalid mode\n", 0x0C);
+      shell_write(2, "chmod: invalid mode\n");
       return;
     }
     mode = (mode << 3) + (*q - '0');
@@ -893,7 +906,7 @@ static void cmd_chmod(const char *args)
   int64_t r = syscall(SYS_CHMOD, (uint64_t)path, (uint64_t)mode, 0);
   if (r < 0)
   {
-    typewriter_vga_print("chmod: failed\n", 0x0C);
+    shell_write(2, "chmod: failed\n");
   }
 }
 
@@ -1077,7 +1090,7 @@ static void cmd_touch(const char *filename)
 {
   if (!filename || *filename == '\0')
   {
-    vga_print("Usage: touch FILE\n", 0x0C);
+    shell_write(2, "Usage: touch FILE\n");
     return;
   }
 
@@ -1179,42 +1192,9 @@ static void cmd_lsblk(const char *args)
   }
 }
 
-/* df - show simple disk capacity (per device) */
 static void cmd_df(const char *args __attribute__((unused)))
 {
-  typewriter_vga_print("Filesystem   Size\n", 0x0F);
-  for (int i = 0; i < 4; i++)
-  {
-    char devname[16];
-    snprintf(devname, sizeof(devname), "/dev/hd%c", 'a' + i);
-
-    ata_device_info_t info;
-    if (!ata_get_device_info(i, &info))
-    {
-      continue;
-    }
-
-    uint64_t total = info.capacity_bytes;
-    uint64_t used = 0;
-    unsigned char sector[ATA_SECTOR_SIZE];
-    if (ata_read_sectors(i, 0, 1, sector))
-    {
-      if (sector[510] == 0x55 && sector[511] == 0xAA)
-      {
-        for (int pe = 0; pe < 4; pe++)
-        {
-          int off = 446 + pe * 16;
-          uint32_t num_sectors = *(uint32_t *)&sector[off + 12];
-          used += (uint64_t)num_sectors * ATA_SECTOR_SIZE;
-        }
-      }
-    }
-
-    typewriter_vga_print(devname, 0x07);
-    typewriter_vga_print("   ", 0x07);
-    shell_print_hr_size(total);
-    typewriter_vga_print("\n", 0x0F);
-  }
+  syscall(95, 0, 0, 0);
 }
 /* Command table: name, handler, description */
 struct shell_cmd
@@ -1257,37 +1237,35 @@ static void cmd_list_help(void)
 {
   for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++)
   {
-    typewriter_vga_print("  ", 0x0F);
-    typewriter_vga_print(commands[i].usage, 0x0F);
-    typewriter_vga_print(" - ", 0x0F);
-    typewriter_vga_print(commands[i].desc, 0x0F);
-    typewriter_vga_print("\n", 0x0F);
+    shell_write(1, "  ");
+    shell_write(1, commands[i].usage);
+    shell_write(1, " - ");
+    shell_write(1, commands[i].desc);
+    shell_write(1, "\n");
   }
 }
 
-static void execute_command(const char *cmd)
+static void execute_single_command(const char *cmd_line)
 {
   char buf[256];
   size_t i = 0;
-  cmd = skip_whitespace(cmd);
-  if (*cmd == '\0')
+  const char *p = skip_whitespace(cmd_line);
+  if (*p == '\0')
     return;
-  while (i < sizeof(buf) - 1 && *cmd && *cmd != '\n')
-    buf[i++] = *cmd++;
+  while (i < sizeof(buf) - 1 && *p && *p != '\n' && *p != '|')
+    buf[i++] = *p++;
   buf[i] = '\0';
 
-  // Extract command name
-  char *p = buf;
-  while (*p && *p != ' ' && *p != '\t')
-    p++;
+  char *cmd_name = buf;
+  while (*cmd_name && *cmd_name != ' ' && *cmd_name != '\t')
+    cmd_name++;
   const char *rest = NULL;
-  if (*p)
+  if (*cmd_name)
   {
-    *p++ = '\0';
-    rest = skip_whitespace(p);
+    *cmd_name++ = '\0';
+    rest = skip_whitespace(cmd_name);
   }
 
-  // Lookup command
   for (size_t j = 0; j < sizeof(commands) / sizeof(commands[0]); j++)
   {
     if (strcmp(buf, commands[j].name) == 0)
@@ -1297,9 +1275,45 @@ static void execute_command(const char *cmd)
     }
   }
 
-  typewriter_vga_print("Unknown command: ", 0x0C);
-  typewriter_vga_print(buf, 0x0C);
-  typewriter_vga_print("\nType 'help' for available commands\n", 0x0C);
+  shell_write(2, "Unknown command: ");
+  shell_write(2, buf);
+  shell_write(2, "\nType 'help' for available commands\n");
+}
+
+static void execute_command(const char *cmd)
+{
+  if (!cmd || *cmd == '\0')
+    return;
+
+  char cmd_copy[512];
+  size_t len = 0;
+  const char *src = cmd;
+  while (len < sizeof(cmd_copy) - 1 && *src && *src != '\n')
+    cmd_copy[len++] = *src++;
+  cmd_copy[len] = '\0';
+
+  char *pipe_pos = strchr(cmd_copy, '|');
+  if (!pipe_pos)
+  {
+    execute_single_command(cmd_copy);
+    return;
+  }
+
+  *pipe_pos = '\0';
+  char *first_cmd = cmd_copy;
+  char *second_cmd = pipe_pos + 1;
+
+  first_cmd = (char *)skip_whitespace(first_cmd);
+  second_cmd = (char *)skip_whitespace(second_cmd);
+
+  if (*first_cmd == '\0' || *second_cmd == '\0')
+  {
+    shell_write(2, "Invalid pipe syntax\n");
+    return;
+  }
+
+  execute_single_command(first_cmd);
+  execute_single_command(second_cmd);
 }
 
 void shell_entry(void)
