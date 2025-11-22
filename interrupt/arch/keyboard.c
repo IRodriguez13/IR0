@@ -83,6 +83,7 @@ char translate_scancode(uint8_t sc)
                         
         default:
             
+            
             if (sc < sizeof(scancode_to_ascii)) 
             {
                 if (shift_pressed) 
@@ -99,6 +100,7 @@ char translate_scancode(uint8_t sc)
 }
 
 
+
 static void keyboard_buffer_add(char c)
 {
     int next = (keyboard_buffer_head + 1) % KEYBOARD_BUFFER_SIZE;
@@ -111,12 +113,14 @@ static void keyboard_buffer_add(char c)
 
 #ifdef __x86_64__
 
+
 char keyboard_buffer_get(void) 
 {
     if (keyboard_buffer_head == keyboard_buffer_tail) 
     {
         return 0; 
     }
+
 
     char c = keyboard_buffer[keyboard_buffer_tail];
     keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KEYBOARD_BUFFER_SIZE;
@@ -127,6 +131,7 @@ int keyboard_buffer_has_data(void)
 {
     return keyboard_buffer_head != keyboard_buffer_tail;
 }
+
 
 
 void keyboard_buffer_clear(void) 
