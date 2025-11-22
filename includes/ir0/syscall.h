@@ -3,14 +3,10 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <ir0/stat.h>
-#include <ir0/types.h> // Incluir types.h para off_t
+#include <ir0/types.h>
 
 // Basic types
 typedef uint32_t mode_t;
-
-// ===============================================================================
-// SYSCALL NUMBERS - Must match kernel/shell.c
-// ===============================================================================
 
 #define SYS_EXIT 0
 #define SYS_WRITE 1
@@ -51,9 +47,6 @@ typedef uint32_t mode_t;
 #define SYS_DF 95
 #define SYS_CHMOD 100
 
-// ===============================================================================
-// SYSCALL WRAPPER FUNCTIONS
-// ===============================================================================
 
 // Low-level syscall interface
 static inline int64_t syscall0(int64_t num)
@@ -117,9 +110,6 @@ static inline int64_t syscall(int64_t num, int64_t arg1, int64_t arg2, int64_t a
     return syscall3(num, arg1, arg2, arg3);
 }
 
-// ===============================================================================
-// HIGH-LEVEL SYSCALL WRAPPERS
-// ===============================================================================
 
 // Process management
 static inline void ir0_exit(int status)

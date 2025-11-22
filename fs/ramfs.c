@@ -19,57 +19,6 @@
 #define RAMFS_MAX_FILE_SIZE 4096
 #define RAMFS_MAX_NAME_LEN 255
 
-static inline size_t kstrlen(const char *s)
-{
-  const char *p = s;
-  while (*p)
-    p++;
-  return p - s;
-}
-
-static inline char *kstrncpy(char *dest, const char *src, size_t n)
-{
-  size_t i;
-  for (i = 0; i < n && src[i] != '\0'; i++)
-    dest[i] = src[i];
-  for (; i < n; i++)
-    dest[i] = '\0';
-  return dest;
-}
-
-static inline int kstrcmp(const char *s1, const char *s2)
-{
-  while (*s1 && (*s1 == *s2))
-  {
-    s1++;
-    s2++;
-  }
-  return *(const unsigned char *)s1 - *(const unsigned char *)s2;
-}
-
-static inline void *kmemset(void *s, int c, size_t n)
-{
-  unsigned char *p = s;
-  while (n-- > 0)
-    *p++ = (unsigned char)c;
-  return s;
-}
-
-static inline void *kmemcpy(void *dest, const void *src, size_t n)
-{
-
-  if(!dest || !src)
-  {
-      panicex("Segfault in kmemcpy", 1, "RAMFS.C", 62);
-  }
-
-  char *d = dest;
-  const char *s = src;
-  while (n-- > 0)
-    *d++ = *s++;
-  return dest;
-}
-
 typedef struct ramfs_file
 {
   char name[RAMFS_MAX_NAME_LEN + 1];
