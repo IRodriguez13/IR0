@@ -18,7 +18,7 @@
 #include <ir0/vga.h>
 #include <ir0/stat.h>
 #include <drivers/video/typewriter.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial.h>
 #include <ir0/memory/kmem.h>
 #include <string.h>
 
@@ -640,6 +640,12 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
     root_inode_cached = false;
   }
 
+  // Invalidate root cache if we wrote the root inode
+  if (inode_num == MINIX_ROOT_INODE)
+  {
+    root_inode_cached = false;
+  }
+
   serial_print("SERIAL: write_inode: success\n");
   return 0;
 }
@@ -1131,8 +1137,6 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   char parent_path[256];
   char dirname[64];
 
-  extern void serial_print(const char *str);
-  
   serial_print("SERIAL: minix_fs_mkdir: splitting path: ");
   serial_print(path);
   serial_print("\n");
@@ -1181,7 +1185,6 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
   serial_print("SERIAL: minix_fs_mkdir: allocated inode ");
-  extern void serial_print_hex32(uint32_t num);
   serial_print_hex32(new_inode_num);
   serial_print("\n");
 
@@ -1329,6 +1332,13 @@ int minix_fs_ls(const char *path, bool detailed)
   if (!path)
   {
     typewriter_vga_print("ls: invalid path\n", 0x0C);
+    typewriter_vga_print("ls: filesystem not initialized\n", 0x0C);
+    return -1;
+  }
+
+  if (!path)
+  {
+    typewriter_vga_print("ls: invalid path\n", 0x0C);
     return -1;
   }
 
@@ -1356,7 +1366,12 @@ int minix_fs_ls(const char *path, bool detailed)
   {
     typewriter_vga_print("Permissions Links Size Owner Group Name\n", 0x0F);
   }
+  if (detailed)
+  {
+    typewriter_vga_print("Permissions Links Size Owner Group Name\n", 0x0F);
+  }
 
+  for (int i = 0; i < 7; i++)
   for (int i = 0; i < 7; i++)
   {
     uint32_t zone = dir_inode_copy.i_zone[i];
@@ -1366,6 +1381,7 @@ int minix_fs_ls(const char *path, bool detailed)
     uint8_t block_buffer[MINIX_BLOCK_SIZE];
     if (minix_read_block(zone, block_buffer) != 0)
     {
+      typewriter_vga_print("ls: error reading directory block\n", 0x0C);
       typewriter_vga_print("ls: error reading directory block\n", 0x0C);
       continue;
     }
@@ -1462,17 +1478,21 @@ int minix_fs_cat(const char *path)
   if (!minix_fs.initialized)
   {
     typewriter_vga_print("cat: filesystem not initialized\n", 0x0C);
+    typewriter_vga_print("cat: filesystem not initialized\n", 0x0C);
     return -1;
   }
 
   if (!path)
   {
     typewriter_vga_print("cat: invalid path\n", 0x0C);
+    typewriter_vga_print("cat: invalid path\n", 0x0C);
     return -1;
   }
 
   if (!ata_is_available())
   {
+    typewriter_vga_print("cat: disk not available\n", 0x0C);
+    return -EIO;
     typewriter_vga_print("cat: disk not available\n", 0x0C);
     return -EIO;
   }
@@ -1809,6 +1829,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   if (minix_fs_find_dir_entry(&parent_inode, filename) != 0)
   {
     typewriter_vga_print("Error: File already exists\n", 0x0C);
+    typewriter_vga_print("Error: File already exists\n", 0x0C);
     return -1;
   }
 
@@ -1903,12 +1924,14 @@ int minix_fs_rm(const char *path)
   if (minix_fs_split_path(path, parent_path, filename) != 0)
   {
     typewriter_vga_print("Error: Invalid path\n", 0x0C);
+    typewriter_vga_print("Error: Invalid path\n", 0x0C);
     return -1;
   }
 
   minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
   if (!parent_inode)
   {
+    typewriter_vga_print("Error: Parent directory not found\n", 0x0C);
     typewriter_vga_print("Error: Parent directory not found\n", 0x0C);
     return -1;
   }
@@ -1917,17 +1940,20 @@ int minix_fs_rm(const char *path)
   if (file_inode_num == 0)
   {
     typewriter_vga_print("Error: Could not get inode number\n", 0x0C);
+    typewriter_vga_print("Error: Could not get inode number\n", 0x0C);
     return -1;
   }
 
   if (minix_fs_remove_dir_entry(parent_inode, filename) != 0)
   {
     typewriter_vga_print("Error: Could not remove directory entry\n", 0x0C);
+    typewriter_vga_print("Error: Could not remove directory entry\n", 0x0C);
     return -1;
   }
 
   if (minix_fs_free_inode(file_inode_num) != 0)
   {
+    typewriter_vga_print("Error: Could not free inode\n", 0x0C);
     typewriter_vga_print("Error: Could not free inode\n", 0x0C);
     return -1;
   }
@@ -1937,6 +1963,7 @@ int minix_fs_rm(const char *path)
   {
     if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0)
     {
+      typewriter_vga_print("Warning: Could not update parent directory\n", 0x0C);
       typewriter_vga_print("Warning: Could not update parent directory\n", 0x0C);
     }
   }
@@ -1970,11 +1997,6 @@ int minix_fs_ensure_valid(void)
   return 0;
 }
 
-/**
- * Remove a directory
- * @param path Path to the directory to remove
- * @return 0 on success, -1 on error
- */
 /**
  * Remove a directory
  * @param path Path to the directory to remove
