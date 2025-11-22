@@ -1412,6 +1412,13 @@ static void uint32_to_str(uint32_t num, char *buf, size_t buf_size)
 
 int minix_fs_ls(const char *path, bool detailed)
 {
+  extern void serial_print(const char *str);
+  extern void serial_print_hex32(uint32_t num);
+
+  serial_print("SERIAL: minix_fs_ls called for path: ");
+  serial_print(path ? path : "NULL");
+  serial_print("\n");
+
   if (!minix_fs.initialized)
   {
     typewriter_vga_print("ls: filesystem not initialized\n", 0x0C);
@@ -1493,21 +1500,22 @@ int minix_fs_ls(const char *path, bool detailed)
       if (entries[j].inode == 0)
         continue;
 
-      if (kstrcmp(entries[j].name, ".") == 0)
-      {
-        if (kstrcmp(path, "/") == 0)
-        {
-          char line[256];
-          snprintf(line, sizeof(line), "%s\n", "/");
-          typewriter_vga_print(line, 0x0F);
-        }
-        continue;
+      // Safe name copy to ensure null termination
+      char safe_name[MINIX_NAME_LEN + 1];
+      // Copy manually to handle non-null terminated source
+      int k;
+      for (k = 0; k < MINIX_NAME_LEN; k++) {
+          safe_name[k] = entries[j].name[k];
+          if (safe_name[k] == '\0') break;
       }
-      if (kstrcmp(entries[j].name, "..") == 0)
+      safe_name[k] = '\0';
+
+      if (kstrcmp(safe_name, ".") == 0)
+        continue;
+      if (kstrcmp(safe_name, "..") == 0)
         continue;
 
-      size_t name_len = kstrlen(entries[j].name);
-      if (name_len == 0)
+      if (safe_name[0] == '\0')
         continue;
 
       if (detailed)
@@ -1545,14 +1553,21 @@ int minix_fs_ls(const char *path, bool detailed)
 
         char line[512];
         snprintf(line, sizeof(line), "%s %s %s root root %s\n",
-                perm_str, nlinks_str, size_str, entries[j].name);
+                perm_str, nlinks_str, size_str, safe_name);
         typewriter_vga_print(line, 0x0F);
       }
       else
       {
         char line[256];
-        snprintf(line, sizeof(line), "%s\n", entries[j].name);
-        typewriter_vga_print(line, 0x0F);
+        int len = snprintf(line, sizeof(line), "%s\n", safe_name);
+        
+        serial_print("SERIAL: minix_fs_ls: printing line: '");
+        serial_print(line);
+        serial_print("' len=");
+        serial_print_hex32(len);
+        serial_print("\n");
+        
+        typewriter_vga_print(line, 0x0F); 
       }
     }
   }
