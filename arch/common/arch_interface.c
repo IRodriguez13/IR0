@@ -1,11 +1,22 @@
 #include "arch_interface.h"
 #include <ir0/oops.h>
 
+// Detect MinGW-w64 cross-compilation
+#if defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32)
+    #define MINGW_BUILD 1
+#else
+    #define MINGW_BUILD 0
+#endif
+
 // Implementaciones específicas de arquitectura
 void arch_enable_interrupts(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
-    __asm__ volatile("sti");
+    #if MINGW_BUILD
+        __asm__ __volatile__("sti" ::: "memory");
+    #else
+        __asm__ volatile("sti");
+    #endif
 #elif defined(__aarch64__)
     // ARM64: msr daifclr, #2
     __asm__ volatile("msr daifclr, #2" ::: "memory");
@@ -15,13 +26,14 @@ void arch_enable_interrupts(void)
 void arch_disable_interrupts(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
-    __asm__ volatile("cli");
-
+    #if MINGW_BUILD
+        __asm__ __volatile__("cli" ::: "memory");
+    #else
+        __asm__ volatile("cli");
+    #endif
 #elif defined(__aarch64__)
-
     // ARM64: msr daifset, #2
     __asm__ volatile("msr daifset, #2" ::: "memory");
-
 #endif
 }
 
@@ -29,7 +41,11 @@ uint8_t inb(uint16_t port)
 {
 #if defined(__x86_64__) || defined(__i386__)
     uint8_t result;
-    asm volatile("inb %1, %0" : "=a"(result) : "Nd"(port));
+    #if MINGW_BUILD
+        __asm__ __volatile__("inb %1, %0" : "=a"(result) : "Nd"(port) : "memory");
+    #else
+        asm volatile("inb %1, %0" : "=a"(result) : "Nd"(port));
+    #endif
     return result;
 #elif defined(__aarch64__)
     // ARM no tiene inb
@@ -40,11 +56,20 @@ uint8_t inb(uint16_t port)
 uintptr_t read_fault_address(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
-
-    uintptr_t addr;
-    asm volatile("mov %%cr2, %0" : "=r"(addr));
-    return addr;
-
+    #if MINGW_BUILD && defined(__x86_64__)
+        // MinGW-w64 requires explicit 64-bit register constraint
+        uint64_t addr64;
+        __asm__ __volatile__("mov %%cr2, %q0" : "=r"(addr64) : : "memory");
+        return (uintptr_t)addr64;
+    #elif defined(__x86_64__)
+        uintptr_t addr;
+        asm volatile("mov %%cr2, %0" : "=r"(addr));
+        return addr;
+    #else
+        uintptr_t addr;
+        asm volatile("mov %%cr2, %0" : "=r"(addr));
+        return addr;
+    #endif
 #elif defined(__aarch64__)
     // ARM64: leer FAR_EL1 register
     uint64_t addr;
@@ -73,17 +98,24 @@ const char *arch_get_name(void)
 void outb(uint16_t port, uint8_t value)
 {
 #if defined(__x86_64__) || defined(__i386__)
-    asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
+    #if MINGW_BUILD
+        __asm__ __volatile__("outb %0, %1" : : "a"(value), "Nd"(port) : "memory");
+    #else
+        asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
+    #endif
 #elif defined(__aarch64__)
     // ARM no tiene puertos I/O - usar MMIO
     // Implementar cuando sea necesario
 #endif
 }
 
-
 void cpu_wait(void)
 {
+#if MINGW_BUILD
+    __asm__ __volatile__("hlt" ::: "memory");
+#else
     asm volatile("hlt");
+#endif
 }
 
 // ===============================================================================
