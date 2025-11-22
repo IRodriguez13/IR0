@@ -55,7 +55,6 @@ static const char scancode_to_ascii_shift[] = {
     0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
 };
 
-// Función para traducir scancode a carácter
 char translate_scancode(uint8_t sc) 
 {
     switch (sc) 
