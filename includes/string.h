@@ -11,6 +11,12 @@
 
 // Basic string functions
 size_t strlen(const char *str);
+
+// Kernel-specific string functions
+size_t kstrlen(const char *s);
+char *kstrncpy(char *dest, const char *src, size_t n);
+int kstrcmp(const char *s1, const char *s2);
+int kstrncmp(const char *s1, const char *s2, size_t n);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strcpy(char *dest, const char *src);
@@ -28,6 +34,10 @@ void *memset(void *ptr, int value, size_t num);
 void *memcpy(void *dest, const void *src, size_t num);
 void *memmove(void *dest, const void *src, size_t num);
 int memcmp(const void *ptr1, const void *ptr2, size_t num);
+
+// Kernel-specific memory functions
+void *kmemset(void *s, int c, size_t n);
+void *kmemcpy(void *dest, const void *src, size_t n);
 
 // String tokenization
 char *strtok(char *str, const char *delim);
