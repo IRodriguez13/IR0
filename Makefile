@@ -20,17 +20,32 @@ IR0_BUILD_TIME := $(shell date +%H:%M:%S)
 
 # ===============================================================================
 # COMPILER CONFIGURATION (x86-64)
-# ===============================================================================
+# ===============================================================================# Build tools
+# Build tools
 CC = gcc
-ASM = nasm  
 LD = ld
+ASM = nasm
+NASM = nasm
+QEMU = qemu-system-x86_64
+PYTHON = python3
 
-# Compiler flags
-CFLAGS = -m64 -mcmodel=kernel -mno-red-zone -mno-mmx -mno-sse -mno-sse2
-CFLAGS += -D__x86_64__
-CFLAGS += -nostdlib -nostdinc -fno-builtin -fno-stack-protector
-CFLAGS += -fno-pic -nodefaultlibs -ffreestanding
-CFLAGS += -Wall -Wextra -Werror=implicit-function-declaration -O0 -g -MMD -MP
+# Flags
+CFLAGS = -m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -I./includes -I./ -g -Wall -Wextra -fno-stack-protector -fno-builtin
+LDFLAGS = -T kernel/linker.ld -z max-page-size=0x1000
+NASMFLAGS = -f elf64
+
+# Directories
+BUILD_DIR = build
+ISO_DIR = iso
+
+# Targets
+.PHONY: all clean run debug menuconfig
+
+all: $(BUILD_DIR)/kernel.iso
+
+menuconfig:
+	@echo "Launching Menu Configuration..."
+	@./menuconfig
 CFLAGS += $(CFLAGS_TARGET)
 
 # Include paths
