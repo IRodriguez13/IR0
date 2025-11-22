@@ -26,69 +26,6 @@ extern int cursor_pos;
 
 extern int cursor_pos;
 
-
-// Custom string functions for kernel space
-static inline size_t kstrlen(const char *s)
-{
-  const char *p = s;
-  while (*p)
-    p++;
-  return p - s;
-}
-
-static inline char *kstrncpy(char *dest, const char *src, size_t n)
-{
-  size_t i;
-  for (i = 0; i < n && src[i] != '\0'; i++)
-    dest[i] = src[i];
-  for (; i < n; i++)
-    dest[i] = '\0';
-  return dest;
-}
-
-static inline int kstrcmp(const char *s1, const char *s2)
-{
-  while (*s1 && (*s1 == *s2))
-  {
-    s1++;
-    s2++;
-  }
-  return *(const unsigned char *)s1 - *(const unsigned char *)s2;
-}
-
-static inline int kstrncmp(const char *s1, const char *s2, size_t n)
-{
-  while (n && *s1 && (*s1 == *s2))
-  {
-    s1++;
-    s2++;
-    n--;
-  }
-  if (n == 0)
-    return 0;
-  return *(const unsigned char *)s1 - *(const unsigned char *)s2;
-}
-
-static inline void *kmemset(void *s, int c, size_t n)
-{
-  unsigned char *p = s;
-  while (n-- > 0)
-    *p++ = (unsigned char)c;
-  return s;
-}
-
-static inline void *kmemcpy(void *dest, const void *src, size_t n)
-{
-  char *d = dest;
-  const char *s = src;
-  while (n-- > 0)
-    *d++ = *s++;
-  return dest;
-}
-
-extern void *kmalloc(size_t size);
-extern void kfree(void *ptr);
-
 // Error code definitions
 #define ENOENT 2   // No such file or directory
 #define EIO 5      // I/O error
@@ -113,13 +50,6 @@ typedef struct minix_fs_info
 } minix_fs_info_t;
 
 static minix_fs_info_t minix_fs;
-
-
-// Declaraciones externas del driver ATA
-extern bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors,
-                             void *buffer);
-extern bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors,
-                              const void *buffer);
 
 int minix_read_block(uint32_t block_num, void *buffer)
 {
@@ -619,10 +549,6 @@ static uint16_t minix_fs_get_inode_number(const char *pathname)
   return current_inode_num;
 }
 
-// ===============================================================================
-// DIRECTORY ENTRY FUNCTIONS
-// ===============================================================================
-
 uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode,
                                  const char *name)
 {
@@ -683,8 +609,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   uint32_t inode_offset =
       ((inode_num - 1) * sizeof(minix_inode_t)) % MINIX_BLOCK_SIZE;
 
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
+
   serial_print("SERIAL: write_inode: inode_num=");
   serial_print_hex32(inode_num);
   serial_print(" block=");

@@ -116,9 +116,6 @@ void idt_init64(void)
     idt_set_gate64(29, (uint64_t)isr29_64, 0x08, 0x8E);
     idt_set_gate64(30, (uint64_t)isr30_64, 0x08, 0x8E);
     idt_set_gate64(31, (uint64_t)isr31_64, 0x08, 0x8E);
-
-    // Configurar interrupciones IRQ (32-47) - DPL=3 (aceptar desde user mode)
-    // 0xEE = Present (1) + DPL=3 (11) + System (0) + Interrupt Gate (1110)
     idt_set_gate64(32, (uint64_t)isr32_64, 0x08, 0xEE); // Timer
     idt_set_gate64(33, (uint64_t)isr33_64, 0x08, 0xEE); // Keyboard
     idt_set_gate64(34, (uint64_t)isr34_64, 0x08, 0xEE);
