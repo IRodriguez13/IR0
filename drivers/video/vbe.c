@@ -58,7 +58,6 @@ static const uint8_t font_8x16[256][16] __attribute__((unused)) = {0}; // Would 
 // Initialize VBE framebuffer
 int vbe_init(void)
 {
-    // For now, we'll use a simple fallback:
     // Most GRUB bootloaders set up a framebuffer at 0xFD000000
     // with 1024x768x32 by default
     
@@ -107,7 +106,6 @@ void vbe_putchar(uint32_t x, uint32_t y, char c, uint32_t fg, uint32_t bg __attr
     if (!vbe_state.initialized) return;
     if (x >= vbe_state.width || y >= vbe_state.height) return;
     
-    // For now, use VGA text mode
     uint16_t *fb = (uint16_t*)vbe_state.fb;
     uint16_t entry = (uint16_t)c | ((uint16_t)fg << 8);
     fb[y * vbe_state.width + x] = entry;

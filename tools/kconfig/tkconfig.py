@@ -1,21 +1,242 @@
 #!/usr/bin/env python3
 
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext
 import os
 import json
 import subprocess
 import sys
+import datetime
+import threading
+
+class KernelArchitectureCanvas:
+    """Canvas widget for displaying kernel architecture diagram"""
+    
+    def __init__(self, parent, subsystems_data, architecture_data, on_subsystem_click=None):
+        self.parent = parent
+        self.subsystems_data = subsystems_data
+        self.architecture_data = architecture_data
+        self.on_subsystem_click = on_subsystem_click
+        self.selected_subsystems = set()
+        self.hovered_subsystem = None
+        self.highlighted_subsystem = None
+        
+        # Create canvas with scrollbar
+        self.canvas_frame = ttk.Frame(parent)
+        self.canvas_frame.pack(expand=True, fill='both', padx=5, pady=5)
+        
+        self.canvas = tk.Canvas(self.canvas_frame, bg='white', highlightthickness=1, highlightbackground='gray')
+        scrollbar = ttk.Scrollbar(self.canvas_frame, orient='vertical', command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        
+        scrollbar.pack(side='right', fill='y')
+        self.canvas.pack(side='left', expand=True, fill='both')
+        
+        # Bind events
+        self.canvas.bind('<Button-1>', self.on_click)
+        self.canvas.bind('<Motion>', self.on_motion)
+        self.canvas.bind('<Leave>', self.on_leave)
+        
+        # Store subsystem rectangles
+        self.subsystem_rects = {}
+        self.subsystem_positions = {}
+        
+        self.draw_architecture()
+    
+    def draw_architecture(self):
+        """Draw the kernel architecture diagram"""
+        self.canvas.delete('all')
+        self.subsystem_rects = {}
+        self.subsystem_positions = {}
+        
+        # Calculate dimensions (larger for better visibility)
+        canvas_width = self.canvas.winfo_width() if self.canvas.winfo_width() > 1 else 1000
+        canvas_height = max(700, len(self.architecture_data['layers']) * 140)
+        
+        # Set canvas scroll region
+        self.canvas.config(scrollregion=(0, 0, canvas_width, canvas_height))
+        
+        # Draw layers (larger for better visibility)
+        layer_width = canvas_width - 40
+        layer_height = 120
+        layer_spacing = 25
+        start_x = 20
+        start_y = 20
+        
+        for layer_idx, layer in enumerate(self.architecture_data['layers']):
+            y_pos = start_y + layer_idx * (layer_height + layer_spacing)
+            
+            # Draw layer background
+            self.canvas.create_rectangle(
+                start_x, y_pos, start_x + layer_width, y_pos + layer_height,
+                fill='#f0f0f0', outline='#888888', width=2, tags='layer'
+            )
+            
+            # Draw layer name
+            self.canvas.create_text(
+                start_x + 10, y_pos + 15,
+                text=layer['name'], anchor='w',
+                font=('Arial', 12, 'bold'), fill='#333333', tags='layer'
+            )
+            
+            # Draw subsystems in this layer
+            subsystems_in_layer = layer['subsystems']
+            num_subsystems = len(subsystems_in_layer)
+            if num_subsystems > 0:
+                subsystem_width = (layer_width - 30) // num_subsystems
+                subsystem_spacing = 10
+                
+                for idx, subsystem_id in enumerate(subsystems_in_layer):
+                    if subsystem_id not in self.subsystems_data:
+                        continue
+                    
+                    subsystem = self.subsystems_data[subsystem_id]
+                    x_pos = start_x + 15 + idx * (subsystem_width + subsystem_spacing)
+                    
+                    # Determine color based on state
+                    if subsystem_id == self.highlighted_subsystem:
+                        fill_color = '#2196F3'  # Blue when highlighted/selected
+                        outline_color = '#1976D2'
+                        outline_width = 3
+                    elif subsystem_id in self.selected_subsystems:
+                        fill_color = '#4CAF50'  # Green when enabled
+                        outline_color = '#2E7D32'
+                        outline_width = 2
+                    elif subsystem_id == self.hovered_subsystem:
+                        fill_color = '#81C784'  # Light green on hover
+                        outline_color = '#388E3C'
+                        outline_width = 2
+                    elif subsystem.get('required', False):
+                        fill_color = '#FFC107'  # Amber for required
+                        outline_color = '#F57C00'
+                        outline_width = 2
+                    else:
+                        fill_color = '#E0E0E0'  # Gray for unselected
+                        outline_color = '#9E9E9E'
+                        outline_width = 2
+                    
+                    # Draw subsystem box
+                    rect_id = self.canvas.create_rectangle(
+                        x_pos, y_pos + 35, x_pos + subsystem_width - subsystem_spacing, y_pos + layer_height - 10,
+                        fill=fill_color, outline=outline_color, width=outline_width,
+                        tags=('subsystem', subsystem_id)
+                    )
+                    
+                    self.subsystem_rects[subsystem_id] = rect_id
+                    self.subsystem_positions[subsystem_id] = (x_pos, y_pos + 35, 
+                                                               x_pos + subsystem_width - subsystem_spacing, 
+                                                               y_pos + layer_height - 10)
+                    
+                    # Draw subsystem name (larger font)
+                    self.canvas.create_text(
+                        x_pos + (subsystem_width - subsystem_spacing) // 2, y_pos + 60,
+                        text=subsystem['name'], anchor='center',
+                        font=('Arial', 10, 'bold'), fill='#000000', tags=('subsystem', subsystem_id)
+                    )
+                    
+                    # Draw required indicator
+                    if subsystem.get('required', False):
+                        self.canvas.create_text(
+                            x_pos + (subsystem_width - subsystem_spacing) // 2, y_pos + 85,
+                            text='[Required]', anchor='center',
+                            font=('Arial', 8), fill='#666666', tags=('subsystem', subsystem_id)
+                        )
+        
+        # Draw connections between layers (simplified)
+        self.draw_connections()
+    
+    def draw_connections(self):
+        """Draw connections between subsystems"""
+        # Simple vertical lines connecting layers
+        canvas_width = self.canvas.winfo_width() if self.canvas.winfo_width() > 1 else 600
+        center_x = canvas_width // 2
+        
+        layers = self.architecture_data['layers']
+        for i in range(len(layers) - 1):
+            if i < len(layers) - 1:
+                y1 = 20 + (i + 1) * 120
+                y2 = 20 + (i + 1) * 120 + 20
+                self.canvas.create_line(
+                    center_x, y1, center_x, y2,
+                    fill='#CCCCCC', width=1, dash=(5, 5), tags='connection'
+                )
+    
+    def on_click(self, event):
+        """Handle click on subsystem"""
+        item = self.canvas.find_closest(event.x, event.y)[0]
+        tags = self.canvas.gettags(item)
+        
+        if 'subsystem' in tags:
+            subsystem_id = None
+            for tag in tags:
+                if tag != 'subsystem' and tag in self.subsystems_data:
+                    subsystem_id = tag
+                    break
+            
+            if subsystem_id:
+                if self.on_subsystem_click:
+                    self.on_subsystem_click(subsystem_id)
+    
+    def on_motion(self, event):
+        """Handle mouse motion for hover effect"""
+        item = self.canvas.find_closest(event.x, event.y)[0]
+        tags = self.canvas.gettags(item)
+        
+        hovered = None
+        if 'subsystem' in tags:
+            for tag in tags:
+                if tag != 'subsystem' and tag in self.subsystems_data:
+                    hovered = tag
+                    break
+        
+        if hovered != self.hovered_subsystem:
+            self.hovered_subsystem = hovered
+            self.draw_architecture()
+    
+    def on_leave(self, event):
+        """Handle mouse leave"""
+        if self.hovered_subsystem:
+            self.hovered_subsystem = None
+            self.draw_architecture()
+    
+    def set_selected_subsystems(self, selected):
+        """Update selected subsystems"""
+        self.selected_subsystems = set(selected)
+        self.draw_architecture()
+    
+    def highlight_subsystem(self, subsystem_id):
+        """Highlight a specific subsystem in the diagram"""
+        self.highlighted_subsystem = subsystem_id
+        self.draw_architecture()
+        # Clear highlight after 2 seconds
+        self.canvas.after(2000, lambda: self.clear_highlight())
+    
+    def clear_highlight(self):
+        """Clear subsystem highlight"""
+        self.highlighted_subsystem = None
+        self.draw_architecture()
+    
+    def update_size(self):
+        """Update canvas size"""
+        self.draw_architecture()
+
 
 class KernelConfigGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("IR0 Kernel Configuration")
-        self.root.geometry("1000x700")
-        self.root.minsize(800, 600)
+        self.root.geometry("1600x900")
+        self.root.minsize(1400, 800)
         
         # Load kernel version
         self.kernel_version = self.get_kernel_version()
+        
+        # Load subsystems configuration
+        self.subsystems_data = {}
+        self.architecture_data = {}
+        self.profiles_data = {}
+        self.current_architecture = 'x86-64'  # Default architecture
+        self.load_subsystems_config()
         
         # Configuration data
         self.config = {}
@@ -39,7 +260,29 @@ class KernelConfigGUI:
             print(f"Error reading kernel version: {e}")
         return "v0.0.1-pre-rc1"
     
+    def load_subsystems_config(self):
+        """Load subsystems configuration from JSON"""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(script_dir, 'subsystems.json')
+        
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    data = json.load(f)
+                    self.subsystems_data = data.get('subsystems', {})
+                    self.architecture_data = data.get('architecture', {})
+                    self.profiles_data = data.get('profiles', {})
+            except Exception as e:
+                print(f"Error loading subsystems config: {e}")
+                self.subsystems_data = {}
+                self.architecture_data = {'layers': []}
+        else:
+            print(f"Warning: subsystems.json not found at {config_path}")
+            self.subsystems_data = {}
+            self.architecture_data = {'layers': []}
+    
     def load_config(self):
+        """Load configuration from .config file"""
         if os.path.exists('.config'):
             try:
                 with open('.config', 'r') as f:
@@ -51,33 +294,41 @@ class KernelConfigGUI:
                                 self.config[key] = value.strip('\n\r\t ')
             except Exception as e:
                 print(f"Error loading config: {e}")
+        
+        # Initialize subsystem states from config
+        for subsystem_id in self.subsystems_data:
+            config_key = f"SUBSYSTEM_{subsystem_id}"
+            if config_key not in self.config:
+                # Default: required subsystems are enabled, others are disabled
+                if self.subsystems_data[subsystem_id].get('required', False):
+                    self.config[config_key] = 'y'
+                else:
+                    self.config[config_key] = 'n'
     
     def save_config(self):
+        """Save configuration to .config file"""
         try:
             with open('.config', 'w') as f:
-                f.write(f"# IR0 Kernel Configuration\n")
-                f.write(f"# Generated by IR0 Kernel Config Tool\n")
+                f.write("# IR0 Kernel Configuration\n")
+                f.write("# Generated by IR0 Kernel Config Tool\n")
                 f.write(f"# {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 
-                # Ordenar las opciones para una mejor legibilidad
                 sorted_keys = sorted(self.config.keys())
                 
-                # Escribir las opciones habilitadas (=y) primero
                 for key in sorted_keys:
                     if self.config[key] == 'y':
                         f.write(f"{key}=y\n")
                 
-                # Escribir las opciones con valores específicos
                 for key in sorted_keys:
-                    if self.config[key] not in ['y', 'n'] and '=' in key:
+                    if self.config[key] not in ['y', 'n']:
                         f.write(f"{key}={self.config[key]}\n")
                 
-                # Escribir las opciones deshabilitadas al final
                 for key in sorted_keys:
                     if self.config[key] == 'n':
                         f.write(f"# {key} is not set\n")
             
-            # Crear un archivo de configuración para el Makefile
+            # Create autoconf.h
+            os.makedirs('include/generated', exist_ok=True)
             with open('include/generated/autoconf.h', 'w') as f:
                 f.write("/* AUTOGENERATED BY KCONFIG - DO NOT EDIT */\n")
                 f.write("#ifndef __AUTOCONF_H__\n")
@@ -89,7 +340,6 @@ class KernelConfigGUI:
                     elif value == 'n':
                         f.write(f"#undef {key}\n")
                     else:
-                        # Para valores que no son booleanos
                         if '=' in key:
                             k, v = key.split('=', 1)
                             f.write(f"#define {k} {v}\n")
@@ -104,546 +354,274 @@ class KernelConfigGUI:
             messagebox.showerror("Error", f"Failed to save configuration: {e}")
             return False
     
-    def load_kernel_options(self):
-        # Get build information
-        self.kernel_version = self.get_kernel_version()
-        self.kernel_build_date = ""
-        self.kernel_build_time = ""
+    def on_subsystem_toggle(self, subsystem_id):
+        """Handle subsystem checkbox toggle"""
+        config_key = f"SUBSYSTEM_{subsystem_id}"
+        subsystem = self.subsystems_data.get(subsystem_id, {})
         
-        try:
-            with open('Makefile', 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith('IR0_BUILD_DATE :='):
-                        self.kernel_build_date = line.split('=', 1)[1].strip()
-                    elif line.startswith('IR0_BUILD_TIME :='):
-                        self.kernel_build_time = line.split('=', 1)[1].strip()
-        except Exception as e:
-            print(f"Error reading build info: {e}")
-            self.kernel_build_date = "Unknown date"
-            self.kernel_build_time = "Unknown time"
+        # Get current checkbox state (after toggle - tkinter already toggled it)
+        if subsystem_id in self.subsystem_vars:
+            new_checkbox_state = self.subsystem_vars[subsystem_id].get()
+        else:
+            new_checkbox_state = not (self.config.get(config_key, 'n') == 'y')
         
-        # Kernel version information (read-only)
-        version_frame = ttk.LabelFrame(self.root, text="Kernel Version", padding=5)
-        version_frame.pack(fill='x', padx=5, pady=5)
-        
-        version_label = ttk.Label(
-            version_frame, 
-            text=f"IR0 Kernel {self.kernel_version}",
-            font=('TkDefaultFont', 10, 'bold')
-        )
-        version_label.pack(anchor='w')
-        
-        build_info = f"Build: {self.kernel_build_date} {self.kernel_build_time}"
-        build_label = ttk.Label(
-            version_frame, 
-            text=build_info, 
-            font=('TkDefaultFont', 8)
-        )
-        build_label.pack(anchor='w')
-        
-        # Configuration options
-        self.kernel_options = {
-            "General Configuration": {
-                "description": "General IR0 Kernel configuration options",
-                "options": {
-                    "LOCALVERSION": {
-                        "type": "string",
-                        "prompt": "Local version string",
-                        "default": "",
-                        "help": "Append an extra string to the end of kernel version"
-                    }
-                }
-            },
-            
-            "Architecture and Processor": {
-                "description": "Processor architecture and features configuration",
-                "options": {
-                    "ARCH_X86_64": {
-                        "type": "bool",
-                        "prompt": "x86-64 Architecture",
-                        "default": "y",
-                        "help": "Enable support for x86-64 architecture"
-                    },
-                    "ENABLE_SMP": {
-                        "type": "bool",
-                        "prompt": "Symmetric Multi-Processing (SMP) Support",
-                        "default": "n",
-                        "help": "Enable support for multiple CPUs"
-                    }
-                }
-            },
-            
-            "Memory Management": {
-                "description": "Memory management configuration options",
-                "options": {
-                    "ENABLE_BUMP_ALLOCATOR": {
-                        "type": "bool",
-                        "prompt": "Bump Allocator",
-                        "default": "y",
-                        "help": "Simple memory allocator (always enabled)"
-                    },
-                    "ENABLE_HEAP_ALLOCATOR": {
-                        "type": "bool",
-                        "prompt": "Heap Allocator",
-                        "default": "y",
-                        "help": "Dynamic memory allocator with free/alloc support"
-                    },
-                    "ENABLE_PAGING": {
-                        "type": "bool",
-                        "prompt": "Paging Support",
-                        "default": "y",
-                        "help": "Enable memory paging support"
-                    },
-                    "ENABLE_VM": {
-                        "type": "bool",
-                        "prompt": "Virtual Memory",
-                        "default": "y",
-                        "help": "Enable virtual memory management"
-                    }
-                }
-            },
-            
-            "File Systems": {
-                "description": "File system configuration options",
-                "options": {
-                    "ENABLE_VFS": {
-                        "type": "bool",
-                        "prompt": "Virtual File System (VFS)",
-                        "default": "y",
-                        "help": "Enables the Virtual File System layer that provides a unified interface \
-to access different file system types. VFS acts as an abstraction layer that allows \
-the kernel to support multiple file system formats transparently, offering standard \
-operations like open(), read(), write(), and close() regardless of the underlying \
-file system implementation."
-                    },
-                    "ENABLE_MINIX_FS": {
-                        "type": "bool",
-                        "prompt": "MINIX File System",
-                        "default": "y",
-                        "help": "Enables support for the MINIX file system, one of the first file systems \
-used in Unix-like operating systems. This file system is simple yet robust, featuring \
-a hierarchical directory structure. It's ideal for embedded devices or systems with \
-limited resources due to its low memory footprint and processing overhead."
-                    },
-                    "ENABLE_RAMDISK": {
-                        "type": "bool",
-                        "prompt": "RAM Disk Support",
-                        "default": "y",
-                        "help": "Enables RAM Disk support, which allows using a portion of system RAM as \
-a block device. RAM Disks provide extremely fast access times and are useful for \
-temporary storage, caching, or during system boot. Note that all data in RAM Disks \
-will be lost on system shutdown or reboot."
-                    }
-                }
-            },
-            
-            "Device Drivers": {
-                "description": "System device drivers configuration",
-                "options": {
-                    "ENABLE_SERIAL_DRIVER": {
-                        "type": "bool",
-                        "prompt": "Serial Port Driver",
-                        "default": "y",
-                        "help": "Enable the serial port driver for console output and debugging"
-                    },
-                    "ENABLE_KEYBOARD_DRIVER": {
-                        "type": "bool",
-                        "prompt": "Keyboard Driver",
-                        "default": "y",
-                        "help": "Enable the PS/2 keyboard input driver"
-                    },
-                    "ENABLE_VGA_DRIVER": {
-                        "type": "bool",
-                        "prompt": "VGA Video Driver",
-                        "default": "y",
-                        "help": "Enable the VGA video driver for text-mode display"
-                    },
-                    "ENABLE_ATA_DRIVER": {
-                        "type": "bool",
-                        "prompt": "ATA Disk Driver",
-                        "default": "y",
-                        "help": "Enable the ATA disk driver for hard disk access"
-                    }
-                }
-            },
-            
-            "Time System": {
-                "description": "Timer and clock configuration options",
-                "options": {
-                    "ENABLE_PIT": {
-                        "type": "bool",
-                        "prompt": "PIT (Programmable Interval Timer)",
-                        "default": "y",
-                        "help": "Enable the legacy Programmable Interval Timer for system timing"
-                    },
-                    "ENABLE_HPET": {
-                        "type": "bool",
-                        "prompt": "HPET (High Precision Event Timer)",
-                        "default": "y",
-                        "help": "Enable the High Precision Event Timer for more accurate timing"
-                    },
-                    "ENABLE_LAPIC": {
-                        "type": "bool",
-                        "prompt": "Local APIC (Advanced Programmable Interrupt Controller)",
-                        "default": "y",
-                        "help": "Enable the Local APIC for advanced interrupt handling and timing"
-                    }
-                }
-            },
-            
-            "Process Scheduler": {
-                "description": "Process scheduling configuration",
-                "options": {
-                    "ENABLE_SCHEDULER": {
-                        "type": "bool",
-                        "prompt": "Task Scheduler",
-                        "default": "y",
-                        "help": "Enables the kernel's task scheduler, which determines which runnable process \
-should execute next on each CPU. The scheduler is a critical kernel component that directly \
-affects system performance, responsiveness, and efficient CPU resource utilization."
-                    },
-                    "ENABLE_CFS_SCHEDULER": {
-                        "type": "bool",
-                        "prompt": "CFS Scheduler (Completely Fair Scheduler)",
-                        "default": "y",
-                        "help": "Enables the Completely Fair Scheduler (CFS), an advanced scheduling algorithm \
-that allocates CPU time in proportion to each process's weight (priority), aiming for fair \
-CPU usage distribution. This is the recommended scheduler for most general-purpose systems.",
-                        "depends": ["ENABLE_SCHEDULER"]
-                    },
-                    "ENABLE_RR_SCHEDULER": {
-                        "type": "bool",
-                        "prompt": "Round-Robin Scheduler",
-                        "default": "n",
-                        "help": "Enables the Round-Robin scheduler which allocates a fixed time slice to each \
-process in a circular order. This is a simple and predictable scheduler but may not provide \
-optimal performance for interactive tasks.",
-                        "depends": ["ENABLE_SCHEDULER"],
-                        "disabled_reason": "Not implemented in this kernel version"
-                    },
-                    "ENABLE_PRIORITY_SCHEDULER": {
-                        "type": "bool",
-                        "prompt": "Priority Scheduler",
-                        "default": "n",
-                        "help": "Enables the Priority-based scheduler which executes processes based on their \
-assigned priority, with higher priority processes running first. This scheduler is useful \
-for real-time systems but requires careful priority assignment.",
-                        "depends": ["ENABLE_SCHEDULER"],
-                        "disabled_reason": "Not implemented in this kernel version"
-                    },
-                    "TICK_RATE_HZ": {
-                        "type": "int",
-                        "prompt": "Timer Frequency (Hz)",
-                        "default": "100",
-                        "help": "Sets the system timer interrupt frequency in Hertz (Hz). \
-Typical values are 100Hz for general-purpose systems, 250Hz or 300Hz for desktop systems \
-requiring good responsiveness, and 1000Hz for systems needing low latency. Higher values \
-provide better timing granularity but increase system overhead.",
-                        "range": [100, 1000],
-                        "depends": ["ENABLE_SCHEDULER"]
-                    }
-                }
-            },
-            
-            "Interrupt System": {
-                "description": "Interrupt handling configuration",
-                "options": {
-                    "ENABLE_PIC": {
-                        "type": "bool",
-                        "prompt": "Programmable Interrupt Controller (PIC)",
-                        "default": "y",
-                        "help": "Enable the legacy 8259A Programmable Interrupt Controller"
-                    },
-                    "ENABLE_APIC": {
-                        "type": "bool",
-                        "prompt": "Advanced Programmable Interrupt Controller (APIC)",
-                        "default": "y",
-                        "help": "Enable the Advanced Programmable Interrupt Controller"
-                    },
-                    "ENABLE_IOAPIC": {
-                        "type": "bool",
-                        "prompt": "I/O APIC Controller",
-                        "default": "y",
-                        "help": "Enable the I/O APIC for advanced interrupt routing in multi-processor systems"
-                    }
-                }
-            },
-            
-            "Debugging and Logging": {
-                "description": "System debugging and logging options",
-                "options": {
-                    "ENABLE_DEBUG": {
-                        "type": "bool",
-                        "prompt": "Debugging Support",
-                        "default": "y",
-                        "help": "Enables kernel debugging support, including debug messages, assertion checks, \
-and diagnostic functions. This option is essential during development but can be disabled in \
-production environments to improve performance and reduce kernel size."
-                    },
-                    "DEBUG_LEVEL": {
-                        "type": "int",
-                        "prompt": "Debug Level",
-                        "default": "1",
-                        "help": "Controls the verbosity of debug messages:\n\
-• 0: Critical messages only (system failures)\n\
-• 1: Errors and warnings (recommended for production)\n\
-• 2: Detailed information (useful for basic debugging)\n\
-• 3: Very detailed traces (may affect performance)"
-                    },
-                    "ENABLE_SERIAL_DEBUG": {
-                        "type": "bool",
-                        "prompt": "Serial Port Debugging",
-                        "default": "y",
-                        "help": "Enables sending debug messages through the serial port (UART). This is particularly \
-useful for early system boot debugging when other output mechanisms like graphical console \
-or logging systems might not be available. Requires a properly configured serial connection."
-                    },
-                    "ENABLE_ASSERT": {
-                        "type": "bool",
-                        "prompt": "Debug Assertions",
-                        "default": "y",
-                        "help": "Enables runtime assertion checks. Assertions verify code assumptions and halt execution \
-if these assumptions are not met, helping to detect programming errors during development. \
-Recommended: Enable during development, disable in production for better performance."
-                    }
-                }
-            }
-        }
-        
-        # Create tree items
-        for category, data in self.kernel_options.items():
-            parent = self.tree.insert("", "end", text=category, values=("", ""))
-            for option_id, option_data in data["options"].items():
-                value = self.config.get(option_id, option_data["default"])
-                self.tree.insert(parent, "end", text=option_data["prompt"], 
-                               values=(option_id, value))
-    
-    def on_tree_select(self, event):
-        selected = self.tree.selection()
-        if not selected:
+        # If required and trying to disable, prevent it
+        if subsystem.get('required', False) and not new_checkbox_state:
+            # Reset checkbox to checked
+            if subsystem_id in self.subsystem_vars:
+                self.subsystem_vars[subsystem_id].set(True)
+            messagebox.showwarning("Required Subsystem", 
+                                 f"{subsystem.get('name', subsystem_id)} is a required subsystem and cannot be disabled.\n\n"
+                                 f"Required subsystems are essential for kernel operation and must remain enabled.")
             return
-            
-        item = selected[0]
-        item_text = self.tree.item(item, "text")
-        item_values = self.tree.item(item, "values")
         
-        # Clear previous content
+        # Update the config value based on checkbox state
+        new_value = 'y' if new_checkbox_state else 'n'
+        self.config[config_key] = new_value
+        
+        # Update architecture diagram immediately
+        selected = [sid for sid in self.subsystems_data.keys() 
+                   if self.config.get(f"SUBSYSTEM_{sid}", 'n') == 'y']
+        self.arch_canvas.set_selected_subsystems(selected)
+        
+        # Update details and highlight in diagram
+        self.current_subsystem = subsystem_id
+        self.update_subsystem_details(subsystem_id)
+        
+        # Highlight the subsystem in the diagram (briefly)
+        self.arch_canvas.highlight_subsystem(subsystem_id)
+    
+    def on_subsystem_click_arch(self, subsystem_id):
+        """Handle click on subsystem in architecture diagram"""
+        self.on_subsystem_toggle(subsystem_id)
+    
+    def build_subsystem(self, subsystem_id):
+        """Build a specific subsystem using unibuild"""
+        subsystem = self.subsystems_data.get(subsystem_id, {})
+        # Get files for current architecture (default to x86-64)
+        arch = self.current_architecture
+        files_dict = subsystem.get('files', {})
+        files = files_dict.get(arch, files_dict.get('x86-64', []))
+        
+        if not files:
+            messagebox.showwarning("No Files", f"No source files defined for {subsystem.get('name', subsystem_id)}")
+            return
+        
+        # Check if subsystem is enabled
+        config_key = f"SUBSYSTEM_{subsystem_id}"
+        if self.config.get(config_key, 'n') != 'y':
+            messagebox.showwarning("Subsystem Disabled", 
+                                 f"{subsystem.get('name', subsystem_id)} is not enabled. Enable it first.")
+            return
+        
+        # Build using unibuild
+        self.status_var.set(f"Building {subsystem.get('name', subsystem_id)}...")
+        
+        def build_thread():
+            try:
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                kernel_root = os.path.dirname(os.path.dirname(script_dir))
+                unibuild_script = os.path.join(kernel_root, 'scripts', 'unibuild.sh')
+                
+                # Build all files in the subsystem
+                cmd = [unibuild_script] + files
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                    cwd=kernel_root
+                )
+                
+                output_lines = []
+                for line in process.stdout:
+                    output_lines.append(line)
+                    print(line.strip())
+                
+                process.wait()
+                
+                if process.returncode == 0:
+                    self.root.after(0, lambda: self.status_var.set(
+                        f"✓ {subsystem.get('name', subsystem_id)} built successfully"))
+                    self.root.after(0, lambda: messagebox.showinfo("Build Success", 
+                        f"{subsystem.get('name', subsystem_id)} built successfully!"))
+                else:
+                    error_msg = '\n'.join(output_lines[-10:])  # Last 10 lines
+                    self.root.after(0, lambda: self.status_var.set(
+                        f"✗ Build failed for {subsystem.get('name', subsystem_id)}"))
+                    self.root.after(0, lambda: messagebox.showerror("Build Failed", 
+                        f"Build failed:\n\n{error_msg}"))
+            except Exception as e:
+                self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to build: {e}"))
+        
+        thread = threading.Thread(target=build_thread, daemon=True)
+        thread.start()
+    
+    def update_subsystem_details(self, subsystem_id):
+        """Update subsystem details display"""
+        subsystem = self.subsystems_data.get(subsystem_id, {})
+        if not subsystem:
+            return
+        
+        config_key = f"SUBSYSTEM_{subsystem_id}"
+        enabled = self.config.get(config_key, 'n') == 'y'
+        required = subsystem.get('required', False)
+        
         self.details_text.config(state=tk.NORMAL)
         self.details_text.delete(1.0, tk.END)
         
-        # If it's a category, show its description
-        if not item_values or len(item_values) < 2:
-            for category, data in self.kernel_options.items():
-                if category == item_text:
-                    self.details_text.insert(tk.END, f"{category}\n")
-                    self.details_text.insert(tk.END, "=" * len(category) + "\n\n")
-                    self.details_text.insert(tk.END, data["description"] + "\n\n")
-                    self.details_text.insert(tk.END, "Options in this category:\n")
-                    for opt_id, opt_data in data["options"].items():
-                        self.details_text.insert(tk.END, f"  • {opt_data['prompt']}\n")
-                    break
-        else:
-            # It's an option, show its details
-            option_id = item_values[0]
-            for category, data in self.kernel_options.items():
-                if option_id in data["options"]:
-                    opt_data = data["options"][option_id]
-                    self.details_text.insert(tk.END, f"{opt_data['prompt']} ({option_id})\n")
-                    self.details_text.insert(tk.END, "=" * (len(opt_data['prompt']) + len(option_id) + 2) + "\n\n")
-                    self.details_text.insert(tk.END, f"Type: {opt_data['type']}\n")
-                    self.details_text.insert(tk.END, f"Current value: {self.config.get(option_id, opt_data['default'])}\n\n")
-                    self.details_text.insert(tk.END, opt_data['help'])
-                    break
+        details = f"{subsystem.get('name', subsystem_id)}\n"
+        details += "=" * len(subsystem.get('name', subsystem_id)) + "\n\n"
+        details += f"Status: {'✓ Enabled' if enabled else '✗ Disabled'}\n"
         
+        if required:
+            details += f"Required: Yes (Essential for kernel operation)\n\n"
+        else:
+            details += f"Required: No (Optional subsystem)\n\n"
+        
+        details += f"Description:\n{subsystem.get('description', 'No description')}\n\n"
+        
+        # Get files for current architecture
+        arch = self.current_architecture
+        files_dict = subsystem.get('files', {})
+        files = files_dict.get(arch, files_dict.get('x86-64', []))
+        
+        if files:
+            details += f"Source Files ({len(files)}):\n"
+            for f in files:
+                details += f"  • {f}\n"
+        else:
+            details += f"Source Files: None (not available for {arch})\n"
+        
+        dependencies = subsystem.get('dependencies', [])
+        if dependencies:
+            details += f"\nDependencies:\n"
+            for dep in dependencies:
+                dep_enabled = self.config.get(f"SUBSYSTEM_{dep}", 'n') == 'y'
+                details += f"  • {dep} {'✓' if dep_enabled else '✗'}\n"
+        
+        architectures = subsystem.get('architectures', [])
+        if architectures:
+            details += f"\nSupported Architectures: {', '.join(architectures)}\n"
+        
+        self.details_text.insert(1.0, details)
         self.details_text.config(state=tk.DISABLED)
     
-    def on_toggle_option(self):
-        selected = self.tree.selection()
-        if not selected:
-            return
-            
-        item = selected[0]
-        item_values = self.tree.item(item, "values")
+    def apply_profile(self, profile_id):
+        """Apply a predefined profile"""
+        profile = self.profiles_data.get(profile_id, {})
         
-        # Only process if it's an option (has values)
-        if item_values and len(item_values) >= 2:
-            option_id = item_values[0]
-            current_value = item_values[1]
-            
-            # Find the option in our configuration
-            for category, data in self.kernel_options.items():
-                if option_id in data["options"]:
-                    opt_data = data["options"][option_id]
-                    if opt_data["type"] == "bool":
-                        new_value = "y" if current_value != "y" else "n"
-                        self.config[option_id] = new_value
-                        # Update the tree display
-                        self.tree.item(item, values=(option_id, new_value))
-                        # Update the details view
-                        self.on_tree_select(None)
-                    break
+        if not profile:
+            messagebox.showerror("Error", f"Profile {profile_id} not found")
+            return
+        
+        # Check if profile is enabled
+        if not profile.get('enabled', True):
+            messagebox.showinfo("Profile Unavailable", 
+                              f"{profile.get('name', profile_id)} is not yet available.\n\n{profile.get('description', '')}")
+            return
+        
+        # Confirm application
+        if not messagebox.askyesno("Apply Profile", 
+                                  f"Apply profile '{profile.get('name', profile_id)}'?\n\n"
+                                  f"This will enable/disable subsystems according to the profile."):
+            return
+        
+        # Update architecture
+        arch = profile.get('architecture', 'x86-64')
+        self.current_architecture = arch
+        
+        # Disable all subsystems first
+        for subsystem_id in self.subsystems_data.keys():
+            config_key = f"SUBSYSTEM_{subsystem_id}"
+            self.config[config_key] = 'n'
+        
+        # Enable subsystems in profile
+        profile_subsystems = profile.get('subsystems', [])
+        for subsystem_id in profile_subsystems:
+            config_key = f"SUBSYSTEM_{subsystem_id}"
+            self.config[config_key] = 'y'
+        
+        # Reload UI
+        self.load_kernel_options()
+        
+        # Update architecture diagram
+        selected = [sid for sid in profile_subsystems]
+        self.arch_canvas.set_selected_subsystems(selected)
+        
+        messagebox.showinfo("Profile Applied", 
+                          f"Profile '{profile.get('name', profile_id)}' applied successfully.\n\n"
+                          f"{len(profile_subsystems)} subsystem(s) enabled.")
     
-    def on_edit_string(self):
-        selected = self.tree.selection()
-        if not selected:
+    def load_kernel_options(self):
+        """Load and display subsystem options"""
+        # Clear checkbox frame
+        if hasattr(self, 'checkbox_frame'):
+            for widget in self.checkbox_frame.winfo_children():
+                widget.destroy()
+        else:
             return
-            
-        item = selected[0]
-        item_values = self.tree.item(item, "values")
         
-        # Only process if it's an option (has values)
-        if item_values and len(item_values) >= 2:
-            option_id = item_values[0]
-            current_value = item_values[1]
+        # Add subsystems to list
+        self.subsystem_vars = {}
+        for subsystem_id, subsystem in sorted(self.subsystems_data.items()):
+            config_key = f"SUBSYSTEM_{subsystem_id}"
+            enabled = self.config.get(config_key, 'n') == 'y'
             
-            # Find the option in our configuration
-            for category, data in self.kernel_options.items():
-                if option_id in data["options"] and data["options"][option_id]["type"] == "string":
-                    new_value = tk.simpledialog.askstring("Edit Value", 
-                        f"Enter value for {data['options'][option_id]['prompt']}:",
-                        initialvalue=current_value)
-                    
-                    if new_value is not None:  # User didn't cancel
-                        self.config[option_id] = new_value
-                        # Update the tree display
-                        self.tree.item(item, values=(option_id, new_value))
-                        # Update the details view
-                        self.on_tree_select(None)
-                    break
-    
-    def on_build_kernel(self):
-        if not self.save_config():
-            return
+            var = tk.BooleanVar(value=enabled)
+            self.subsystem_vars[subsystem_id] = var
             
-        # Disable buttons during build
-        self.build_button.config(state=tk.DISABLED)
-        self.clean_button.config(state=tk.DISABLED)
-        self.save_button.config(state=tk.DISABLED)
-        
-        # Create a new window for build output
-        build_win = tk.Toplevel(self.root)
-        build_win.title("Building Kernel...")
-        build_win.geometry("800x600")
-        
-        text = scrolledtext.ScrolledText(build_win, wrap=tk.WORD)
-        text.pack(expand=True, fill='both', padx=5, pady=5)
-        
-        def update_output(process):
-            while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    text.insert(tk.END, output)
-                    text.see(tk.END)
-                    text.update_idletasks()
+            # Create frame for each subsystem
+            item_frame = ttk.Frame(self.checkbox_frame)
+            item_frame.pack(fill='x', padx=5, pady=2)
             
-            process.poll()
-            if process.returncode == 0:
-                text.insert(tk.END, "\nBuild completed successfully!\n")
-            else:
-                text.insert(tk.END, f"\nBuild failed with return code {process.returncode}\n")
-            
-            # Re-enable buttons
-            self.build_button.config(state=tk.NORMAL)
-            self.clean_button.config(state=tk.NORMAL)
-            self.save_button.config(state=tk.NORMAL)
-            
-            # Add a close button
-            close_btn = ttk.Button(build_win, text="Close", command=build_win.destroy)
-            close_btn.pack(pady=5)
-        
-        try:
-            # Start the build process
-            process = subprocess.Popen(
-                ["make", "-j4"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1
+            # Create checkbox
+            checkbox = ttk.Checkbutton(
+                item_frame,
+                text=subsystem.get('name', subsystem_id),
+                variable=var,
+                command=lambda sid=subsystem_id: self.on_subsystem_toggle(sid)
             )
+            checkbox.pack(side='left', anchor='w')
             
-            # Start a thread to update the output
-            import threading
-            thread = threading.Thread(target=update_output, args=(process,), daemon=True)
-            thread.start()
+            # Add required indicator
+            if subsystem.get('required', False):
+                req_label = ttk.Label(item_frame, text="[Required - Essential]", 
+                                     font=('Arial', 7, 'bold'), foreground='#F57C00')
+                req_label.pack(side='left', padx=(5, 0))
             
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to start build: {e}")
-            self.build_button.config(state=tk.NORMAL)
-            self.clean_button.config(state=tk.NORMAL)
-            self.save_button.config(state=tk.NORMAL)
+            # Add description label
+            desc_text = subsystem.get('description', '')
+            if len(desc_text) > 60:
+                desc_text = desc_text[:57] + "..."
+            desc_label = ttk.Label(item_frame, text=desc_text, 
+                                  font=('Arial', 8), foreground='gray')
+            desc_label.pack(side='left', padx=(10, 0), anchor='w')
+            
+            # Store subsystem ID in frame for click handling
+            item_frame.subsystem_id = subsystem_id
+            # Bind frame click to show details (but don't interfere with checkbox)
+            item_frame.bind('<Button-1>', lambda e, sid=subsystem_id: self.on_subsystem_frame_click(sid))
+            # Don't bind checkbox Button-1 - let the command handle it
+        
+        # Update architecture diagram
+        selected = [sid for sid in self.subsystems_data.keys() 
+                   if self.config.get(f"SUBSYSTEM_{sid}", 'n') == 'y']
+        self.arch_canvas.set_selected_subsystems(selected)
     
-    def on_clean_build(self):
-        if not messagebox.askyesno("Confirm", "This will clean all build artifacts. Continue?"):
-            return
-            
-        # Disable buttons during clean
-        self.build_button.config(state=tk.DISABLED)
-        self.clean_button.config(state=tk.DISABLED)
-        self.save_button.config(state=tk.DISABLED)
-        
-        # Create a new window for clean output
-        clean_win = tk.Toplevel(self.root)
-        clean_win.title("Cleaning Build...")
-        clean_win.geometry("600x400")
-        
-        text = scrolledtext.ScrolledText(clean_win, wrap=tk.WORD)
-        text.pack(expand=True, fill='both', padx=5, pady=5)
-        text.insert(tk.END, "Cleaning build artifacts...\n")
-        
-        def update_output(process):
-            while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    text.insert(tk.END, output)
-                    text.see(tk.END)
-                    text.update_idletasks()
-            
-            process.poll()
-            if process.returncode == 0:
-                text.insert(tk.END, "\nClean completed successfully!\n")
-            else:
-                text.insert(tk.END, f"\nClean failed with return code {process.returncode}\n")
-            
-            # Re-enable buttons
-            self.build_button.config(state=tk.NORMAL)
-            self.clean_button.config(state=tk.NORMAL)
-            self.save_button.config(state=tk.NORMAL)
-            
-            # Add a close button
-            close_btn = ttk.Button(clean_win, text="Close", command=clean_win.destroy)
-            close_btn.pack(pady=5)
-        
-        try:
-            # Start the clean process
-            process = subprocess.Popen(
-                ["make", "clean"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1
-            )
-            
-            # Start a thread to update the output
-            import threading
-            thread = threading.Thread(target=update_output, args=(process,), daemon=True)
-            thread.start()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to clean: {e}")
-            self.build_button.config(state=tk.NORMAL)
-            self.clean_button.config(state=tk.NORMAL)
-            self.save_button.config(state=tk.NORMAL)
+    def on_subsystem_frame_click(self, subsystem_id):
+        """Handle click on subsystem frame (not checkbox)"""
+        self.current_subsystem = subsystem_id
+        self.update_subsystem_details(subsystem_id)
+        # Highlight in diagram
+        self.arch_canvas.highlight_subsystem(subsystem_id)
     
     def setup_ui(self):
+        """Setup the user interface"""
         # Configure style
         style = ttk.Style()
         style.configure("Treeview", rowheight=25)
-        style.configure("TButton", padding=5)
         
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
@@ -653,79 +631,108 @@ Recommended: Enable during development, disable in production for better perform
         header_frame = ttk.Frame(main_frame)
         header_frame.pack(fill='x', pady=(0, 10))
         
-        ttk.Label(header_frame, text=self.kernel_version, font=('Helvetica', 14, 'bold')).pack(side='left')
+        ttk.Label(header_frame, text=f"IR0 Kernel Configuration {self.kernel_version}", 
+                 font=('Helvetica', 14, 'bold')).pack(side='left')
         
         # Button frame
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill='x', pady=(0, 10))
         
-        self.save_button = ttk.Button(button_frame, text="Save Configuration", command=self.save_config)
+        # Profile buttons
+        profile_frame = ttk.LabelFrame(button_frame, text="Profiles", padding=5)
+        profile_frame.pack(side='left', padx=5)
+        
+        self.profile_x86_btn = ttk.Button(profile_frame, text="x86-64 Generic", 
+                                          command=lambda: self.apply_profile('x86-64-generic'))
+        self.profile_x86_btn.pack(side='left', padx=2)
+        
+        self.profile_arm_btn = ttk.Button(profile_frame, text="ARM32 Generic", 
+                                         command=lambda: self.apply_profile('arm32-generic'),
+                                         state='disabled')
+        self.profile_arm_btn.pack(side='left', padx=2)
+        
+        # Action buttons
+        action_frame = ttk.Frame(button_frame)
+        action_frame.pack(side='left', padx=10)
+        
+        self.save_button = ttk.Button(action_frame, text="Save Configuration", command=self.save_config)
         self.save_button.pack(side='left', padx=5)
         
-        self.build_button = ttk.Button(button_frame, text="Build Kernel", command=self.on_build_kernel)
+        self.build_button = ttk.Button(action_frame, text="Build Selected Subsystems", 
+                                      command=self.on_build_selected)
         self.build_button.pack(side='left', padx=5)
         
-        self.clean_button = ttk.Button(button_frame, text="Clean Build", command=self.on_clean_build)
+        self.clean_button = ttk.Button(action_frame, text="Clean Selected Subsystems", 
+                                      command=self.on_clean_selected)
         self.clean_button.pack(side='left', padx=5)
         
-        # Paned window for tree and details
+        self.run_button = ttk.Button(action_frame, text="Run Kernel", 
+                                     command=self.on_run_kernel)
+        self.run_button.pack(side='left', padx=5)
+        
+        # Paned window for left (subsystems) and right (architecture)
         paned = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
         paned.pack(expand=True, fill='both')
         
-        # Left pane - Treeview for options
-        tree_frame = ttk.Frame(paned, padding=5)
-        paned.add(tree_frame, weight=1)
+        # Left pane - Subsystem list (smaller, more space for diagram)
+        left_frame = ttk.Frame(paned, padding=5)
+        paned.add(left_frame, weight=1)
+        self.left_pane_content = left_frame
         
-        # Add search frame
-        search_frame = ttk.Frame(tree_frame)
-        search_frame.pack(fill='x', pady=(0, 5))
+        ttk.Label(left_frame, text="Subsystems", font=('Helvetica', 11, 'bold')).pack(anchor='w', pady=(0, 5))
         
-        ttk.Label(search_frame, text="Search:").pack(side='left')
-        search_var = tk.StringVar()
-        search_entry = ttk.Entry(search_frame, textvariable=search_var)
-        search_entry.pack(side='left', fill='x', expand=True, padx=5)
+        # Create scrollable frame for checkboxes
+        canvas_container = tk.Canvas(left_frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=canvas_container.yview)
+        scrollable_frame = ttk.Frame(canvas_container)
         
-        # Create treeview with scrollbar
-        tree_scroll = ttk.Scrollbar(tree_frame)
-        tree_scroll.pack(side='right', fill='y')
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas_container.configure(scrollregion=canvas_container.bbox("all"))
+        )
         
-        self.tree = ttk.Treeview(tree_frame, yscrollcommand=tree_scroll.set, 
-                               selectmode='browse', height=20)
-        tree_scroll.config(command=self.tree.yview)
-        self.tree.pack(expand=True, fill='both')
+        canvas_container.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas_container.configure(yscrollcommand=scrollbar.set)
         
-        # Configure tree columns
-        self.tree["columns"] = ("option", "value")
-        self.tree.column("#0", width=300, minwidth=200, stretch=tk.YES)
-        self.tree.column("option", width=0, stretch=tk.NO)  # Hidden column for option ID
-        self.tree.column("value", width=50, minwidth=30, anchor='center')
+        canvas_container.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
-        self.tree.heading("#0", text="Option")
-        self.tree.heading("option", text="")
-        self.tree.heading("value", text="Value")
+        # Store reference for checkbox frame
+        self.checkbox_frame = scrollable_frame
         
-        # Right pane - Details
-        details_frame = ttk.Frame(paned, padding=5)
-        paned.add(details_frame, weight=2)
+        # Placeholder for subsystem_list (kept for compatibility)
+        self.subsystem_list = None
         
-        ttk.Label(details_frame, text="Option Details", font=('Helvetica', 10, 'bold')).pack(anchor='w')
+        # Right pane - Architecture diagram and details (larger)
+        right_frame = ttk.Frame(paned, padding=5)
+        paned.add(right_frame, weight=3)
         
-        # Add a text widget for details
-        self.details_text = scrolledtext.ScrolledText(details_frame, wrap=tk.WORD, height=20,
-                                                     font=('Courier', 10), state=tk.DISABLED)
+        # Architecture diagram
+        arch_label_frame = ttk.LabelFrame(right_frame, text="Kernel Architecture", padding=5)
+        arch_label_frame.pack(fill='both', expand=True, pady=(0, 5))
+        
+        self.arch_canvas = KernelArchitectureCanvas(
+            arch_label_frame, 
+            self.subsystems_data, 
+            self.architecture_data,
+            on_subsystem_click=self.on_subsystem_click_arch
+        )
+        
+        # Details frame
+        details_label_frame = ttk.LabelFrame(right_frame, text="Subsystem Details", padding=5)
+        details_label_frame.pack(fill='both', expand=False, pady=(5, 0))
+        
+        self.details_text = scrolledtext.ScrolledText(details_label_frame, wrap=tk.WORD, 
+                                                      height=8, font=('Courier', 9), state=tk.DISABLED)
         self.details_text.pack(expand=True, fill='both')
         
-        # Button frame for option actions
-        option_btn_frame = ttk.Frame(details_frame)
-        option_btn_frame.pack(fill='x', pady=(5, 0))
+        # Build button for selected subsystem
+        build_frame = ttk.Frame(details_label_frame)
+        build_frame.pack(fill='x', pady=(5, 0))
         
-        self.toggle_btn = ttk.Button(option_btn_frame, text="Toggle Option (Y/N)", 
-                                   command=self.on_toggle_option)
-        self.toggle_btn.pack(side='left', padx=2)
-        
-        self.edit_btn = ttk.Button(option_btn_frame, text="Edit Value", 
-                                 command=self.on_edit_string)
-        self.edit_btn.pack(side='left', padx=2)
+        self.build_subsystem_btn = ttk.Button(build_frame, text="Build This Subsystem", 
+                                             command=self.on_build_current_subsystem)
+        self.build_subsystem_btn.pack(side='left', padx=2)
         
         # Status bar
         self.status_var = tk.StringVar()
@@ -734,40 +741,251 @@ Recommended: Enable during development, disable in production for better perform
                              anchor=tk.W, padding=3)
         status_bar.pack(fill='x', pady=(5, 0))
         
-        # Bind events
-        self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
-        self.tree.bind('<Double-1>', lambda e: self.on_toggle_option())
+        self.current_subsystem = None
+    
+    def on_subsystem_select(self, event):
+        """Handle subsystem selection (legacy, not used with new UI)"""
+        pass
+    
+    def on_build_current_subsystem(self):
+        """Build currently selected subsystem"""
+        if self.current_subsystem:
+            self.build_subsystem(self.current_subsystem)
+        else:
+            messagebox.showwarning("No Selection", "Please select a subsystem first")
+    
+    def on_build_selected(self):
+        """Build all selected subsystems"""
+        selected_subsystems = [sid for sid in self.subsystems_data.keys() 
+                              if self.config.get(f"SUBSYSTEM_{sid}", 'n') == 'y']
         
-        # Set initial focus
-        self.tree.focus_set()
+        if not selected_subsystems:
+            messagebox.showwarning("No Selection", "No subsystems are enabled")
+            return
         
-        # Auto-expand all categories
-        def expand_categories():
-            for item in self.tree.get_children():
-                self.tree.item(item, open=True)
+        if not messagebox.askyesno("Build Subsystems", 
+                                  f"Build {len(selected_subsystems)} subsystem(s)?"):
+            return
         
-        self.root.after(100, expand_categories)
+        self.status_var.set("Building subsystems...")
+        
+        def build_all_thread():
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            kernel_root = os.path.dirname(os.path.dirname(script_dir))
+            unibuild_script = os.path.join(kernel_root, 'scripts', 'unibuild.sh')
+            
+            all_files = []
+            arch = self.current_architecture
+            for sid in selected_subsystems:
+                subsystem = self.subsystems_data.get(sid, {})
+                files_dict = subsystem.get('files', {})
+                files = files_dict.get(arch, files_dict.get('x86-64', []))
+                all_files.extend(files)
+            
+            if all_files:
+                try:
+                    cmd = [unibuild_script] + all_files
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        universal_newlines=True,
+                        cwd=kernel_root
+                    )
+                    
+                    output_lines = []
+                    for line in process.stdout:
+                        output_lines.append(line)
+                        print(line.strip())
+                    
+                    process.wait()
+                    
+                    if process.returncode == 0:
+                        self.root.after(0, lambda: self.status_var.set(
+                            f"✓ Built {len(selected_subsystems)} subsystem(s) successfully"))
+                        self.root.after(0, lambda: messagebox.showinfo("Build Success", 
+                            f"Built {len(selected_subsystems)} subsystem(s) successfully!"))
+                    else:
+                        error_msg = '\n'.join(output_lines[-10:])
+                        self.root.after(0, lambda: self.status_var.set("✗ Build failed"))
+                        self.root.after(0, lambda: messagebox.showerror("Build Failed", 
+                            f"Build failed:\n\n{error_msg}"))
+                except Exception as e:
+                    self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to build: {e}"))
+        
+        thread = threading.Thread(target=build_all_thread, daemon=True)
+        thread.start()
+    
+    def on_clean_selected(self):
+        """Clean object files for selected subsystems"""
+        selected_subsystems = [sid for sid in self.subsystems_data.keys() 
+                              if self.config.get(f"SUBSYSTEM_{sid}", 'n') == 'y']
+        
+        if not selected_subsystems:
+            messagebox.showwarning("No Selection", "No subsystems are enabled")
+            return
+        
+        if not messagebox.askyesno("Clean Subsystems", 
+                                  f"Clean object files for {len(selected_subsystems)} subsystem(s)?"):
+            return
+        
+        self.status_var.set("Cleaning subsystems...")
+        
+        def clean_all_thread():
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            kernel_root = os.path.dirname(os.path.dirname(script_dir))
+            unibuild_clean_script = os.path.join(kernel_root, 'scripts', 'unibuild-clean.sh')
+            
+            all_files = []
+            arch = self.current_architecture
+            for sid in selected_subsystems:
+                subsystem = self.subsystems_data.get(sid, {})
+                files_dict = subsystem.get('files', {})
+                files = files_dict.get(arch, files_dict.get('x86-64', []))
+                all_files.extend(files)
+            
+            cleaned_count = 0
+            if all_files:
+                try:
+                    for source_file in all_files:
+                        # Only clean .c and .asm files (skip .o files)
+                        if source_file.endswith('.c') or source_file.endswith('.asm'):
+                            cmd = [unibuild_clean_script, source_file]
+                            process = subprocess.Popen(
+                                cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                universal_newlines=True,
+                                cwd=kernel_root
+                            )
+                            stdout, stderr = process.communicate()
+                            if process.returncode == 0:
+                                cleaned_count += 1
+                                print(f"Cleaned: {source_file}")
+                    
+                    self.root.after(0, lambda: self.status_var.set(
+                        f"✓ Cleaned {cleaned_count} file(s) successfully"))
+                    self.root.after(0, lambda: messagebox.showinfo("Clean Success", 
+                        f"Cleaned {cleaned_count} object file(s) successfully!"))
+                except Exception as e:
+                    self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to clean: {e}"))
+            else:
+                self.root.after(0, lambda: self.status_var.set("No files to clean"))
+        
+        thread = threading.Thread(target=clean_all_thread, daemon=True)
+        thread.start()
+    
+    def on_run_kernel(self):
+        """Run the kernel using make run"""
+        if not messagebox.askyesno("Run Kernel", 
+                                  "Run the kernel in QEMU?\n\nThis will execute 'make run'."):
+            return
+        
+        self.status_var.set("Starting kernel...")
+        self.run_button.config(state='disabled')
+        
+        def run_thread():
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            kernel_root = os.path.dirname(os.path.dirname(script_dir))
+            
+            try:
+                # Run make run
+                process = subprocess.Popen(
+                    ['make', 'run'],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                    cwd=kernel_root,
+                    bufsize=1
+                )
+                
+                # Show output in a window
+                self.root.after(0, lambda: self.show_run_output(process))
+                
+            except Exception as e:
+                self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to run kernel: {e}"))
+                self.root.after(0, lambda: self.run_button.config(state='normal'))
+        
+        thread = threading.Thread(target=run_thread, daemon=True)
+        thread.start()
+    
+    def show_run_output(self, process):
+        """Show QEMU output in a window"""
+        output_win = tk.Toplevel(self.root)
+        output_win.title("Kernel Output (QEMU)")
+        output_win.geometry("800x600")
+        
+        text = scrolledtext.ScrolledText(output_win, wrap=tk.WORD, font=('Courier', 9))
+        text.pack(expand=True, fill='both', padx=5, pady=5)
+        
+        text.insert(tk.END, "Starting kernel in QEMU...\n")
+        text.insert(tk.END, "=" * 50 + "\n\n")
+        
+        def update_output():
+            try:
+                if process.poll() is None:
+                    # Process still running
+                    line = process.stdout.readline()
+                    if line:
+                        text.insert(tk.END, line)
+                        text.see(tk.END)
+                        text.update_idletasks()
+                        output_win.after(100, update_output)
+                    else:
+                        output_win.after(100, update_output)
+                else:
+                    # Process finished
+                    remaining = process.stdout.read()
+                    if remaining:
+                        text.insert(tk.END, remaining)
+                    text.insert(tk.END, "\n" + "=" * 50 + "\n")
+                    text.insert(tk.END, f"Process finished with return code {process.returncode}\n")
+                    text.see(tk.END)
+                    self.run_button.config(state='normal')
+                    self.status_var.set("Kernel execution finished")
+            except Exception as e:
+                text.insert(tk.END, f"\nError reading output: {e}\n")
+                self.run_button.config(state='normal')
+                self.status_var.set(f"Error: {e}")
+        
+        def on_close():
+            if process.poll() is None:
+                if messagebox.askyesno("Kernel Running", "Kernel is still running. Terminate QEMU?"):
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except:
+                        process.kill()
+            output_win.destroy()
+            self.run_button.config(state='normal')
+        
+        output_win.protocol("WM_DELETE_WINDOW", on_close)
+        output_win.after(100, update_output)
+
 
 def main():
+    # Change to kernel root directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    kernel_root = os.path.dirname(os.path.dirname(script_dir))
+    os.chdir(kernel_root)
+    
     root = tk.Tk()
     app = KernelConfigGUI(root)
     
     # Center the window
-    window_width = 1000
-    window_height = 700
+    window_width = 1600
+    window_height = 900
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
     center_x = int(screen_width/2 - window_width/2)
     center_y = int(screen_height/2 - window_height/2)
     root.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
     
-    # Set application icon if available
-    try:
-        root.iconbitmap('kernel.ico')  # You can add an icon file if desired
-    except:
-        pass
-    
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()
