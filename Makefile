@@ -426,13 +426,19 @@ deptest:
 # ===============================================================================
 
 unibuild:
-	@if [ -z "$(FILE)" ]; then \
-		echo "Error: FILE parameter required"; \
+	@if [ -z "$(FILE)" ] && [ -z "$(FILES)" ]; then \
+		echo "Error: FILE or FILES parameter required"; \
 		echo "Usage: make unibuild FILE=<source_file>"; \
+		echo "       Or: make unibuild FILES=\"file1.c file2.c file3.c\""; \
 		echo "Example: make unibuild FILE=fs/ramfs.c"; \
+		echo "Example: make unibuild FILES=\"fs/ramfs.c fs/vfs.c\""; \
 		exit 1; \
 	fi
-	@$(KERNEL_ROOT)/scripts/unibuild.sh "$(FILE)"
+	@if [ -n "$(FILES)" ]; then \
+		$(KERNEL_ROOT)/scripts/unibuild.sh $(FILES); \
+	else \
+		$(KERNEL_ROOT)/scripts/unibuild.sh "$(FILE)"; \
+	fi
 
 unibuild-clean:
 	@if [ -z "$(FILE)" ]; then \

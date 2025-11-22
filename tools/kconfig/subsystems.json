@@ -1,0 +1,322 @@
+{
+  "subsystems": {
+    "KERNEL": {
+      "name": "Kernel Core",
+      "description": "Core kernel functionality including process management, scheduling, and system calls. Provides the fundamental kernel services.",
+      "required": true,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "kernel/main.c",
+          "kernel/init.c",
+          "kernel/process.c",
+          "kernel/task.c",
+          "kernel/syscalls.c",
+          "kernel/shell.c",
+          "kernel/elf_loader.c",
+          "kernel/user.c",
+          "kernel/rr_sched.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "MEMORY": {
+      "name": "Memory Management",
+      "description": "Memory allocation, paging, and virtual memory management. Handles physical and virtual memory allocation.",
+      "required": true,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "includes/ir0/memory/allocator.c",
+          "includes/ir0/memory/paging.c",
+          "includes/ir0/memory/kmem.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "INTERRUPT": {
+      "name": "Interrupt System",
+      "description": "Interrupt handling, IDT/PIC (x86-64) or interrupt controllers (ARM). Essential for hardware event handling.",
+      "required": true,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "interrupt/arch/idt.c",
+          "interrupt/arch/pic.c",
+          "interrupt/arch/isr_handlers.c",
+          "interrupt/arch/keyboard.c",
+          "interrupt/arch/x86-64/isr_stubs_64.asm"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "FILESYSTEM": {
+      "name": "File System",
+      "description": "Virtual File System (VFS), MINIX filesystem, and RAM filesystem. Provides file and directory operations.",
+      "required": false,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "fs/vfs.c",
+          "fs/minix_fs.c",
+          "fs/vfs_simple.c",
+          "fs/path.c",
+          "fs/chmod.c",
+          "fs/ramfs.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "DRIVERS": {
+      "name": "Device Drivers",
+      "description": "Hardware drivers including PS/2, serial, ATA, timer, and video drivers. Platform-specific drivers.",
+      "required": false,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "drivers/IO/ps2.c",
+          "drivers/IO/ps2_mouse.c",
+          "drivers/serial/serial.c",
+          "drivers/storage/ata.c",
+          "drivers/storage/ata_helpers.c",
+          "drivers/storage/fs_types.c",
+          "drivers/timer/pit/pit.c",
+          "drivers/timer/clock_system.c",
+          "drivers/timer/rtc/rtc.c",
+          "drivers/timer/hpet/hpet.c",
+          "drivers/timer/hpet/find_hpet.c",
+          "drivers/timer/lapic/lapic.c",
+          "drivers/video/vbe.c",
+          "drivers/video/typewriter.c",
+          "drivers/audio/sound_blaster.c",
+          "drivers/dma/dma.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "ARCH": {
+      "name": "Architecture",
+      "description": "Architecture-specific code including GDT, TSS, boot code (x86-64) or ARM-specific initialization.",
+      "required": true,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "arch/x86-64/sources/arch_x64.c",
+          "arch/x86-64/sources/gdt.c",
+          "arch/x86-64/sources/tss_x64.c",
+          "arch/x86-64/sources/user_mode.c",
+          "arch/x86-64/sources/idt_arch_x64.c",
+          "arch/x86-64/sources/fault.c",
+          "arch/x86-64/asm/boot_x64.asm",
+          "arch/x86-64/asm/syscall_entry_64.asm",
+          "arch/common/arch_interface.c",
+          "kernel/scheduler/switch/switch_x64.asm"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "LIBRARIES": {
+      "name": "Kernel Libraries",
+      "description": "Core kernel libraries including VGA, logging, validation, and string functions. Essential utilities.",
+      "required": true,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "includes/ir0/vga.c",
+          "includes/ir0/logging.c",
+          "includes/ir0/validation.c",
+          "includes/ir0/oops.c",
+          "includes/string.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "DISK": {
+      "name": "Disk Management",
+      "description": "Disk partitioning and storage management. Requires filesystem support.",
+      "required": false,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "drivers/disk/partition.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": ["FILESYSTEM"]
+    },
+    "SCHEDULER": {
+      "name": "Process Scheduler",
+      "description": "Task scheduling algorithms and process switching. Required for multitasking.",
+      "required": true,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "kernel/rr_sched.c",
+          "kernel/scheduler/switch/switch_x64.asm"
+        ],
+        "arm32": []
+      },
+      "dependencies": ["KERNEL"]
+    },
+    "SERIAL": {
+      "name": "Serial Port Driver",
+      "description": "Serial port communication driver. Useful for debugging and console output.",
+      "required": false,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "drivers/serial/serial.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "KEYBOARD": {
+      "name": "Keyboard Driver",
+      "description": "PS/2 keyboard input driver (x86-64) or UART keyboard (ARM). Required for user input.",
+      "required": false,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "interrupt/arch/keyboard.c",
+          "drivers/IO/ps2.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": ["INTERRUPT"]
+    },
+    "VIDEO": {
+      "name": "Video Driver",
+      "description": "VGA text mode and VBE graphics support. Required for display output.",
+      "required": false,
+      "architectures": ["x86-64"],
+      "files": {
+        "x86-64": [
+          "drivers/video/vbe.c",
+          "drivers/video/typewriter.c",
+          "includes/ir0/vga.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "TIMER": {
+      "name": "Timer Drivers",
+      "description": "Timer drivers including PIT, HPET, LAPIC (x86-64) or ARM timer. Required for system timing.",
+      "required": false,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "drivers/timer/pit/pit.c",
+          "drivers/timer/clock_system.c",
+          "drivers/timer/rtc/rtc.c",
+          "drivers/timer/hpet/hpet.c",
+          "drivers/timer/hpet/find_hpet.c",
+          "drivers/timer/lapic/lapic.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "STORAGE": {
+      "name": "Storage Drivers",
+      "description": "ATA/IDE disk driver and storage device support. Required for disk access.",
+      "required": false,
+      "architectures": ["x86-64"],
+      "files": {
+        "x86-64": [
+          "drivers/storage/ata.c",
+          "drivers/storage/ata_helpers.c",
+          "drivers/storage/fs_types.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "AUDIO": {
+      "name": "Audio Driver",
+      "description": "Sound Blaster 16 audio driver. Provides sound output support.",
+      "required": false,
+      "architectures": ["x86-64"],
+      "files": {
+        "x86-64": [
+          "drivers/audio/sound_blaster.c",
+          "drivers/dma/dma.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "DMA": {
+      "name": "DMA Controller",
+      "description": "Direct Memory Access controller driver. Required for high-speed data transfers.",
+      "required": false,
+      "architectures": ["x86-64"],
+      "files": {
+        "x86-64": [
+          "drivers/dma/dma.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    }
+  },
+  "architecture": {
+    "layers": [
+      {
+        "name": "Hardware Layer",
+        "subsystems": ["ARCH", "INTERRUPT"],
+        "y": 50
+      },
+      {
+        "name": "Memory Layer",
+        "subsystems": ["MEMORY"],
+        "y": 150
+      },
+      {
+        "name": "Kernel Core",
+        "subsystems": ["KERNEL", "LIBRARIES", "SCHEDULER"],
+        "y": 250
+      },
+      {
+        "name": "Device Layer",
+        "subsystems": ["DRIVERS", "SERIAL", "KEYBOARD", "VIDEO", "TIMER", "STORAGE", "AUDIO", "DMA"],
+        "y": 350
+      },
+      {
+        "name": "Storage Layer",
+        "subsystems": ["FILESYSTEM", "DISK"],
+        "y": 450
+      }
+    ]
+  },
+  "profiles": {
+    "x86-64-generic": {
+      "name": "x86-64 Generic",
+      "description": "Full-featured x86-64 kernel with all subsystems enabled",
+      "architecture": "x86-64",
+      "subsystems": [
+        "KERNEL", "MEMORY", "INTERRUPT", "ARCH", "LIBRARIES", "SCHEDULER",
+        "FILESYSTEM", "DRIVERS", "DISK", "SERIAL", "KEYBOARD", "VIDEO", 
+        "TIMER", "STORAGE", "AUDIO", "DMA"
+      ]
+    },
+    "arm32-generic": {
+      "name": "ARM32 Generic",
+      "description": "Full-featured ARM32 kernel (port in progress)",
+      "architecture": "arm32",
+      "subsystems": [
+        "KERNEL", "MEMORY", "INTERRUPT", "ARCH", "LIBRARIES", "SCHEDULER",
+        "FILESYSTEM", "SERIAL", "KEYBOARD", "TIMER"
+      ],
+      "enabled": false
+    }
+  }
+}
