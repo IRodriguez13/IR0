@@ -1,0 +1,304 @@
+# ===============================================================================
+# IR0 KERNEL MAKEFILE - WINDOWS BUILD
+# ===============================================================================
+KERNEL_ROOT := $(CURDIR)
+
+# Architecture: x86-64 only
+ARCH := x86-64
+
+# Build target
+BUILD_TARGET := desktop
+CFLAGS_TARGET := -DIR0_DESKTOP
+
+# Version information
+IR0_VERSION_MAJOR := 1
+IR0_VERSION_MINOR := 0
+IR0_VERSION_PATCH := 0
+IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PATCH)
+
+# Detect OS and set build tools
+ifeq ($(OS),Windows_NT)
+    # Native Windows build
+    CC = gcc
+    ASM = nasm
+    DATE_CMD = powershell -Command "Get-Date -Format 'yyyy-MM-dd'"
+    TIME_CMD = powershell -Command "Get-Date -Format 'HH:mm:ss'"
+    RM = del /Q
+    MKDIR = mkdir
+    CP = copy
+    SLASH = \\
+    ASMFLAGS = -f win64
+    
+    # Try to find ELF linker (MSYS2/MinGW usually has it)
+    # Kernel needs ELF format to run on hardware/QEMU
+    ELF_LD := $(shell where ld 2>nul | findstr /i "msys mingw" >nul && echo ld || echo "")
+    ifeq ($(ELF_LD),)
+        # Try common MSYS2/MinGW paths
+        ifeq ($(shell test -f /usr/bin/ld.exe && echo yes),yes)
+            LD = /usr/bin/ld.exe
+            LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
+            ASMFLAGS = -f elf64
+            HAS_ELF_LD = 1
+        else ifeq ($(shell test -f /mingw64/bin/ld.exe && echo yes),yes)
+            LD = /mingw64/bin/ld.exe
+            LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
+            ASMFLAGS = -f elf64
+            HAS_ELF_LD = 1
+        else
+            # Fallback to MinGW linker (PE format, won't work for kernel but compiles)
+            LD = ld
+            LDFLAGS = -m i386pep -T arch/x86-64/linker.ld
+            HAS_ELF_LD = 0
+        endif
+    else
+        LD = $(ELF_LD)
+        LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
+        ASMFLAGS = -f elf64
+        HAS_ELF_LD = 1
+    endif
+else
+    # Cross-compilation from Linux
+    # Use native Linux tools for ELF format (kernel needs ELF to run)
+    CC = gcc
+    LD = ld
+    ASM = nasm
+    DATE_CMD = date +%Y-%m-%d
+    TIME_CMD = date +%H:%M:%S
+    RM = rm -f
+    MKDIR = mkdir -p
+    CP = cp
+    SLASH = /
+    ASMFLAGS = -f elf64
+    LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
+    HAS_ELF_LD = 1
+endif
+
+IR0_BUILD_DATE := $(shell $(DATE_CMD) 2>/dev/null || echo "unknown")
+IR0_BUILD_TIME := $(shell $(TIME_CMD) 2>/dev/null || echo "unknown")
+
+
+# Flags
+CFLAGS = -m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -I./includes -I./ -g -Wall -Wextra -fno-stack-protector -fno-builtin
+CFLAGS += $(CFLAGS_TARGET)
+
+# MinGW-w64 specific flags for cross-compiling
+ifeq ($(OS),Windows_NT)
+    # Native Windows - no special flags needed
+else
+    # Cross-compiling from Linux - suppress warnings about pointer casts
+    # Note: Some kernel code with inline assembly may not compile correctly
+    # when cross-compiling to Windows PE format
+    CFLAGS += -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
+endif
+
+# Include paths
+CFLAGS += -I$(KERNEL_ROOT)
+CFLAGS += -I$(KERNEL_ROOT)/includes
+CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
+CFLAGS += -I$(KERNEL_ROOT)/arch/common
+CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include
+CFLAGS += -I$(KERNEL_ROOT)/include
+CFLAGS += -I$(KERNEL_ROOT)/kernel
+CFLAGS += -I$(KERNEL_ROOT)/drivers
+CFLAGS += -I$(KERNEL_ROOT)/fs
+CFLAGS += -I$(KERNEL_ROOT)/interrupt
+CFLAGS += -I$(KERNEL_ROOT)/memory
+CFLAGS += -I$(KERNEL_ROOT)/scheduler
+
+
+# Directories
+BUILD_DIR = build
+ISO_DIR = iso
+
+# Common subsystems
+COMMON_SUBDIRS = kernel interrupt drivers/timer drivers/IO drivers/storage kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
+
+# Conditional subsystems
+ifeq ($(BUILD_TARGET),desktop)
+    CONDITIONAL_SUBDIRS = fs
+else ifeq ($(BUILD_TARGET),server)
+    CONDITIONAL_SUBDIRS = fs
+else ifeq ($(BUILD_TARGET),iot)
+    CONDITIONAL_SUBDIRS = fs
+else ifeq ($(BUILD_TARGET),embedded)
+    CONDITIONAL_SUBDIRS = 
+endif
+
+SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS)
+
+# ===============================================================================
+# KERNEL OBJECTS
+# ===============================================================================
+KERNEL_OBJS = \
+	kernel/main.o \
+    kernel/init.o \
+    kernel/process.o \
+	kernel/rr_sched.o \
+    kernel/task.o \
+    kernel/syscalls.o \
+    kernel/shell.o \
+    kernel/elf_loader.o \
+    kernel/user.o
+
+MEMORY_OBJS = \
+	includes/ir0/memory/allocator.o \
+	includes/ir0/memory/paging.o \
+	includes/ir0/memory/kmem.o
+
+LIB_OBJS = \
+    includes/ir0/vga.o \
+    includes/ir0/logging.o \
+    includes/ir0/validation.o \
+    includes/ir0/oops.o \
+    includes/string.o
+
+INTERRUPT_OBJS = \
+    interrupt/arch/idt.o \
+    interrupt/arch/pic.o \
+    interrupt/arch/isr_handlers.o \
+    interrupt/arch/keyboard.o \
+    interrupt/arch/x86-64/isr_stubs_64.o
+
+DRIVER_OBJS = \
+    drivers/IO/ps2.o \
+    drivers/IO/ps2_mouse.o \
+    drivers/audio/sound_blaster.o \
+    drivers/dma/dma.o \
+    drivers/serial/serial.o \
+    drivers/timer/pit/pit.o \
+    drivers/timer/clock_system.o \
+    drivers/timer/rtc/rtc.o \
+    drivers/timer/hpet/hpet.o \
+    drivers/timer/hpet/find_hpet.o \
+    drivers/timer/lapic/lapic.o \
+    drivers/storage/ata.o \
+    drivers/storage/ata_helpers.o \
+    drivers/storage/fs_types.o \
+	drivers/video/vbe.o \
+	drivers/video/typewriter.o
+
+FS_OBJS = \
+    fs/vfs.o \
+    fs/minix_fs.o \
+    fs/vfs_simple.o \
+    fs/path.o \
+    fs/chmod.o \
+    fs/ramfs.o
+
+DISK_OBJS = \
+    drivers/disk/partition.o
+
+ARCH_OBJS = \
+    arch/x86-64/sources/arch_x64.o \
+    arch/x86-64/sources/gdt.o \
+    arch/x86-64/sources/tss_x64.o \
+    arch/x86-64/sources/user_mode.o \
+    arch/x86-64/sources/idt_arch_x64.o \
+    arch/x86-64/sources/fault.o \
+    arch/x86-64/asm/boot_x64.o \
+    arch/x86-64/asm/syscall_entry_64.o \
+    arch/common/arch_interface.o \
+    kernel/scheduler/switch/switch_x64.o
+
+SETUP_OBJS = \
+	setup/kconfig.o
+
+ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS)
+
+# ===============================================================================
+# BUILD RULES
+# ===============================================================================
+
+.PHONY: all clean ir0 deptest disk.img
+
+# Compile C files
+%.o: %.c
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile ASM files
+%.o: %.asm
+	@echo "  ASM     $<"
+	@$(ASM) $(ASMFLAGS) $< -o $@
+
+# Link kernel
+kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
+ifeq ($(OS),Windows_NT)
+    ifeq ($(HAS_ELF_LD),1)
+	@echo "  LD      $@ (ELF format)"
+	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS) 2>&1 || (echo "  ERROR   Linking failed. Make sure you have binutils installed (MSYS2/MinGW)" && exit 1)
+	@echo "Kernel linked: $@"
+    else
+	@echo "  WARNING ELF linker not found. Kernel binary cannot be created."
+	@echo "  NOTE    Install MSYS2 or MinGW-w64 with binutils for full build support"
+	@echo "  NOTE    Objects compiled successfully: $(words $(ALL_OBJS)) files"
+	@echo "  NOTE    Run 'make ir0' on Linux or install MSYS2/MinGW-w64 for linking"
+	@touch $@
+    endif
+else
+	@echo "  LD      $@ (cross-compile from Linux)"
+	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS)
+	@echo "Kernel linked: $@"
+endif
+
+# Create virtual disk image
+disk.img:
+ifeq ($(OS),Windows_NT)
+	@if exist disk.img ( \
+		echo "  DISK    disk.img already exists" \
+	) else ( \
+		echo "  DISK    creating disk.img using scripts/create_disk.sh" && \
+		bash scripts/create_disk.sh \
+	)
+	@echo "Disk image ready: disk.img"
+else
+	@if [ -f disk.img ]; then \
+		echo "  DISK    disk.img already exists"; \
+	else \
+		echo "  DISK    creating disk.img using scripts/create_disk.sh"; \
+		./scripts/create_disk.sh; \
+	fi
+	@echo "Disk image ready: disk.img"
+endif
+
+# Default target
+ir0: kernel-x64.bin disk.img
+ifeq ($(OS),Windows_NT)
+    ifeq ($(HAS_ELF_LD),1)
+	@echo "IR0 Kernel built successfully for Windows: kernel-x64.bin"
+    else
+	@echo "IR0 Kernel objects compiled for Windows"
+	@echo "Total objects: $(words $(ALL_OBJS))"
+	@echo "Install MSYS2 or MinGW-w64 with binutils to enable full linking"
+    endif
+else
+	@echo "IR0 Kernel built successfully (cross-compile from Linux): kernel-x64.bin"
+endif
+
+# ===============================================================================
+# DEPENDENCY TEST
+# ===============================================================================
+
+deptest:
+	@$(KERNEL_ROOT)/scripts/deptest.sh
+
+# ===============================================================================
+# CLEAN
+# ===============================================================================
+
+clean:
+	@echo "Cleaning build artifacts..."
+ifeq ($(OS),Windows_NT)
+	@for /r %%f in (*.o) do @if exist "%%f" del /Q "%%f"
+	@for /r %%f in (*.d) do @if exist "%%f" del /Q "%%f"
+	@for /r %%f in (*.bin) do @if exist "%%f" del /Q "%%f"
+	@if exist iso rmdir /S /Q iso
+else
+	@find . -name "*.o" -type f -delete
+	@find . -name "*.d" -type f -delete
+	@find . -name "*.bin" -type f -delete
+	@rm -rf iso/
+endif
+	@echo "Clean complete"
+
