@@ -1,233 +1,421 @@
+# IR0 Kernel
 
-# IR0 Kernel pre-rc1
+IR0 is a monolithic operating system kernel for x86-64/ARM32 architecture.
 
-IR0 is a monolithic hobby operating system kernel for x86-64, focused on learning, experimentation, and pushing the boundaries of what a homebrew OS can achieve. The project aims to provide a robust, modular, and extensible base for running real-world userland software, including Doom, GCC, Bash, and external TCP/IP networking (ping).
+## Dependencies
 
-## Project Overview
+The following tools are required to build and run IR0:
 
-- **Type:** Monolithic hobby OS kernel
-- **Architecture:** x86-64 (x86-32 support is experimental)
-- **License:** GNU GPL v3.0
+### Essential Build Tools
+- **GCC** (GNU Compiler Collection) - C compiler
+- **NASM** (Netwide Assembler) - Assembly compiler
+- **LD** (GNU Linker) - ELF format linker with x86-64 support
+- **Make** - Build automation tool
 
-## Current Status
+### Runtime Tools
+- **QEMU** (qemu-system-x86_64) - Virtual machine emulator
+- **GRUB** (grub-mkrescue) - Bootloader tools for ISO creation
 
-IR0 currently boots on x86-64 hardware and emulators, providing a functional multitasking environment, memory management, basic drivers, and a minimal shell. The kernel is under active development, with the following features implemented:
+### Optional Tools
+- **Python 3** - Required for kernel configuration system
 
-### Implemented Features
+### Platform-Specific Notes
 
-- **x86-64 Boot and Initialization**
-- **Memory Management:** Paging, heap allocator, physical memory bitmap
-- **Interrupt Handling:** Full IDT, PIC, TSS, and exception support
-- **Process Management:** Process structures, state transitions, and multiple schedulers (CFS, priority, round-robin)
-- **System Call Interface:** POSIX-like syscall definitions (50+ syscalls)
-- **Context Switching:** Assembly implementation for both 32/64-bit
-- **Shell:** Minimal interactive shell with command parsing
-- **Timer Support:** PIT, HPET, LAPIC
-- **Drivers:** PS/2 keyboard, ATA storage, VGA display
-- **String/Utility Library:** Freestanding C implementation
-- **VFS Layer:** Virtual file system abstraction and IR0FS structure
+**Linux:**
+- Install build tools: `apt-get install build-essential nasm qemu-system-x86 grub-pc-bin`
+- Or on Debian/Ubuntu: `apt-get install gcc nasm binutils make qemu-system-x86 grub-pc-bin`
 
-## Technical Architecture
+**Windows:**
+- Install MSYS2 or MinGW-w64 with binutils package
+- Ensure ELF linker is available at `/usr/bin/ld.exe` or `/mingw64/bin/ld.exe`
+- QEMU can be installed via MSYS2: `pacman -S qemu`
 
-- **Memory Layout:** Kernel/user separation, identity mapping, protected stack
-- **Process Model:** Standard UNIX-like states, process tree, context switch
-- **File System:** VFS and IR0FS, basic mounting and directory operations
-- **System Calls:** Process, file, memory, and time management
-- **Shell:** Built-in commands for system inspection and management
+## First-Time Setup
 
-## Build & Run
+Before building the kernel, verify that all dependencies are installed:
 
-Requirements: GCC, Make, NASM, LD, AR, GRUB, Xorriso, QEMU
-
-Example:
 ```bash
-create the virtual hard disk
-make create-disk
-for build & run:
-make ir0
-make run-kernel
+make deptest
 ```
 
-## Roadmap & Final Goal
+This command checks for all required tools and displays installation instructions for any missing dependencies.
 
-The ultimate goal for IR0 is to:
+## Building the Kernel
 
-- Support external TCP/IP networking and utilities like `ping`
-- Run Doom natively in userland
-- Provide a working GCC toolchain and Bash shell in user space
+### Full Build
 
-## Development Status
+To build the complete kernel with ISO image and userspace programs:
 
-- **Core:** Stable and functional multitasking, memory, interrupts, and drivers
-- **In Progress:** TCP/IP stack, ELF userland loader, advanced file system
-- **Next Milestones:** Networking, Doom, Bash, GCC
+```bash
+make ir0
+```
 
-## Contributing
+This command:
+1. Compiles all kernel source files
+2. Links the kernel binary
+3. Creates a bootable ISO image
+4. Builds userspace programs
 
-Contributions are welcome. Please see the developer guide and coding standards in the repository.
+The virtual disk image (`disk.img`) is created automatically on first build.
+
+### Windows Build
+
+On Windows, use the Windows-specific Makefile:
+
+```bash
+make -f Makefile.win ir0
+```
+
+The Makefile automatically detects MSYS2/MinGW environments and uses the appropriate tools.
+
+## Running the Kernel
+
+After building, run the kernel in QEMU:
+
+```bash
+make run
+```
+
+This starts QEMU with the kernel ISO and virtual disk attached.
+
+Additional run options:
+- `make run-debug` - Run with serial debug output
+- `make run-nodisk` - Run without virtual disk
+- `make run-console` - Run in console mode (no GUI)
+
+## Development
+
+### Compiling Individual Files
+
+When developing drivers or kernel modules, compile a single file in isolation:
+
+```bash
+make unibuild FILE=drivers/IO/ps2.c
+```
+
+This compiles the specified file without building the entire kernel.
+
+To clean a single compiled file:
+
+```bash
+make unibuild-clean FILE=drivers/IO/ps2.c
+```
+
+### Creating Virtual Disk
+
+The virtual disk is created automatically during build. To create it manually:
+
+```bash
+make create-disk
+```
+
+To remove the virtual disk:
+
+```bash
+make delete-disk
+```
+
+### Cleaning Build Artifacts
+
+To clean all compiled objects and binaries:
+
+```bash
+make clean
+```
+
+To clean Windows build artifacts:
+
+```bash
+make windows-clean
+```
+
+## Kernel Features
+
+### Memory Management
+- Paging with identity mapping
+- Heap allocator (kmalloc/kfree)
+- Physical memory bitmap management
+- Kernel and user space separation
+
+### Process Management
+- Process state management (NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD)
+- Multiple scheduler algorithms (CFS, Priority-based, Round-Robin)
+- Context switching implementation
+- Process tree hierarchy
+
+### System Calls
+- POSIX-compatible system call interface
+- Process control (fork, exec, exit, wait, getpid)
+- File operations (open, close, read, write, lseek)
+- Memory management (brk, mmap, munmap, mprotect)
+- Time operations (time, gettimeofday, sleep, usleep)
+
+### Virtual File System
+- VFS abstraction layer
+- MINIX filesystem support
+- RAM filesystem for boot files
+- Mount point management
+
+### Hardware Drivers
+- PS/2 keyboard driver
+- ATA storage driver
+- VGA display driver
+- Timer drivers (PIT, HPET, LAPIC)
+
+### Interrupt System
+- Complete IDT setup
+- PIC configuration
+- Exception handling
+- TSS configuration
+
+### Interactive Shell
+- Command-line interface
+- Built-in commands (help, info, version, ps, meminfo)
+- System integration
+- Basic authentication framework
+
+## Architecture
+
+IR0 targets x86-64 architecture. The kernel uses:
+- ELF64 binary format
+- Multiboot boot protocol
+- Protected mode with paging
+- Ring 0 (kernel) and Ring 3 (user) separation
+
+## Build System
+
+The build system supports:
+- Native Linux compilation
+- Native Windows compilation (with MSYS2/MinGW)
+- Cross-compilation from Linux to Windows
+
+Build targets:
+- `make ir0` - Full kernel build (Linux)
+- `make -f Makefile.win ir0` - Full kernel build (Windows)
+- `make deptest` - Check dependencies
+- `make unibuild FILE=<file>` - Compile single file
+- `make clean` - Clean build artifacts
+
+## Documentation
+
+Additional documentation is available in the repository:
+- Build System: `setup/docs/BUILD_SYSTEM.md`
+- Installation: `setup/docs/INSTALL.md`
+- Configuration: `setup/docs/CONFIGURATION_SYSTEM_README.md`
+- Include System: `setup/docs/INCLUDE_SYSTEM_GUIDE.md`
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0.
+This project is licensed under the GNU General Public License v3.0. See the LICENSE file for details.
 
 ---
 
-## 🏗️ Architecture
+# IR0 Kernel (Español)
 
-### Supported Architectures
-- **x86-32** (32-bit) -  Needs fixes
-- **x86-64** (64-bit) - ✅ Compiles and boots
+IR0 es un kernel de sistema operativo monolítico para arquitectura x86-64/ARM32.
 
-### Core Subsystems
-- **Memory Management** - Basic paging, heap allocator, physical memory management
-- **Interrupt System** - Complete IDT setup, PIC configuration, ISR handlers, TSS configuration
-- **File System** - VFS framework with IR0FS filesystem structure
-- **Process Management** - Process lifecycle framework with multiple scheduler algorithms
-- **System Calls** - POSIX-compatible interface definitions
-- **Interactive Shell** - Basic command-line interface with authentication
-- **Timer Drivers** - PIT, HPET, and LAPIC timer support
-- **Hardware Drivers** - PS/2 keyboard, ATA storage, VGA display drivers
+## Dependencias
 
-## 🔧 Building and Running
+Las siguientes herramientas son necesarias para compilar y ejecutar IR0:
 
-### Prerequisites
-- **GCC** (GNU Compiler Collection, version 7.0+)
-- **Make** (build automation tool)
-- **NASM** (Netwide Assembler, version 2.13+)
-- **LD** (GNU Linker)
-- **AR** (GNU Archiver, usually part of build-essential)
+### Herramientas de Compilación Esenciales
+- **GCC** (GNU Compiler Collection) - Compilador C
+- **NASM** (Netwide Assembler) - Compilador de ensamblador
+- **LD** (GNU Linker) - Enlazador con soporte para formato ELF x86-64
+- **Make** - Herramienta de automatización de compilación
 
-### Bootable image tools
-- **GRUB** (grub-pc-bin)
-- **Xorriso** (for ISO creation)
+### Herramientas de Ejecución
+- **QEMU** (qemu-system-x86_64) - Emulador de máquina virtual
+- **GRUB** (grub-mkrescue) - Herramientas de bootloader para creación de ISO
 
-### Emulation and testing
-- **QEMU** (qemu-system-x86)
+### Herramientas Opcionales
+- **Python 3** - Requerido para el sistema de configuración del kernel
 
-### Recommended for development and debugging
-- **Git** (version control)
-- **Valgrind** (memory debugging, optional)
-- **GDB** (debugger, optional)
+### Notas Específicas por Plataforma
 
+**Linux:**
+- Instalar herramientas de compilación: `apt-get install build-essential nasm qemu-system-x86 grub-pc-bin`
+- O en Debian/Ubuntu: `apt-get install gcc nasm binutils make qemu-system-x86 grub-pc-bin`
 
-## 🎯 Features
+**Windows:**
+- Instalar MSYS2 o MinGW-w64 con el paquete binutils
+- Asegurar que el enlazador ELF esté disponible en `/usr/bin/ld.exe` o `/mingw64/bin/ld.exe`
+- QEMU se puede instalar vía MSYS2: `pacman -S qemu`
 
-### Memory Management
-- **Basic Paging** with identity mapping
-- **Heap Allocator** (kmalloc/kfree) with basic fragmentation management
-- **Physical Memory Management** with bitmap-based allocation
-- **Memory Layout** with kernel and user space separation
+## Configuración Inicial
 
-### Process Management Framework
-- **Process States**: NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD
-- **Multiple Schedulers**: CFS (Completely Fair Scheduler), Priority-based, Round-Robin
-- **Context Switching**: Assembly implementation for both architectures
-- **Process Trees**: Hierarchical process management structure
+Antes de compilar el kernel, verificar que todas las dependencias estén instaladas:
 
-### System Call Interface
-- **POSIX-Compatible Definitions**: 50+ system call definitions
-- **Process Control**: fork, exec, exit, wait, getpid
-- **File Operations**: open, close, read, write, lseek
-- **Memory Management**: brk, mmap, munmap, mprotect
-- **Time**: time, gettimeofday, sleep, usleep
+```bash
+make deptest
+```
 
-### Interactive Shell
-- **Command Parsing**: Basic command-line interface
-- **Built-in Commands**: help, info, version, ps, meminfo
-- **System Integration**: Access to kernel structures
-- **Authentication System**: Basic user authentication framework
-- **Error Handling**: Basic error reporting
+Este comando verifica todas las herramientas requeridas y muestra instrucciones de instalación para cualquier dependencia faltante.
 
-### File System Framework
-- **VFS Layer**: Virtual File System abstraction
-- **IR0FS Structure**: Filesystem layout and metadata definitions
-- **Mount Point Management**: Basic filesystem mounting framework
+## Compilación del Kernel
 
-## 🛠️ Technical Specifications
+### Compilación Completa
 
-### Memory Layout
-- **Kernel Space**: 0x100000 - 0x200000 (1MB)
-- **Identity Mapping**: 0x000000 - 0x40000000 (1GB)
-- **User Space**: 0x40000000+ (1GB+)
-- **Stack**: 0x1000000 with protection
+Para compilar el kernel completo con imagen ISO y programas de espacio de usuario:
 
-### Context Switching
-- **Complete CPU State Preservation**
-- **General Purpose Registers** (RAX-R15 for x86-64, EAX-EDI for x86-32)
-- **Segment Registers** (CS, DS, ES, FS, GS, SS)
-- **Control Registers** (CR0, CR2, CR3, CR4)
+```bash
+make ir0
+```
 
-## 📊 Current Status
+Este comando:
+1. Compila todos los archivos fuente del kernel
+2. Enlaza el binario del kernel
+3. Crea una imagen ISO booteable
+4. Compila los programas de espacio de usuario
 
-### ✅ Working Components
-- **Kernel Compilation**: x86-64 architecture
-- **Memory Management**: Basic memory management with identity mapping
-- **Interrupt Handling**: Complete IDT setup with PIC configuration and exception handling
-- **Timer System**: PIT, HPET, and LAPIC timer support
-- **VFS Framework**: Basic filesystem abstraction layer
-- **Process Management**: Process structure and state management with multiple schedulers
-- **System Calls Interface**: POSIX-compatible definitions
-- **Interactive Shell**: Basic command-line interface with authentication
-- **Context Switching**: Assembly implementation for both architectures
-- **Hardware Drivers**: PS/2 keyboard, ATA storage, VGA display
-- **String Functions**: Complete freestanding library
+La imagen de disco virtual (`disk.img`) se crea automáticamente en la primera compilación.
 
-### 🎯 Development Status
-- **Foundation Complete**: Core kernel structure and basic functionality
-- **Architecture Support**: x86-64 working
-- **Memory Management**: Basic but functional memory system
-- **Interrupt System**: Complete interrupt handling with PIC and multiple timer support
-- **Hardware Support**: PS/2 keyboard, ATA storage, and VGA display drivers operational
+### Compilación en Windows
 
+En Windows, usar el Makefile específico de Windows:
 
-## 🎯 Highlights
+```bash
+make -f Makefile.win ir0
+```
 
-### Technical Achievements
-- **Dual Architecture Support**: Native support for both 32-bit and 64-bit (ARM32 in progress)
-- **Memory Management**: Functional paging and heap allocation
-- **Interrupt System**: Complete IDT with PIC configuration and multiple timer support
-- **Context Switching**: Real assembly implementation for both architectures
-- **Hardware Drivers**: PS/2 keyboard, ATA storage, and VGA display support
-- **Multiple Schedulers**: CFS, Priority-based, and Round-Robin scheduling algorithms
-- **Freestanding Environment**: Complete C library implementation
----
+El Makefile detecta automáticamente los entornos MSYS2/MinGW y usa las herramientas apropiadas.
 
-## 📚 Some Documentation
+## Ejecución del Kernel
 
-- **[Build System](setup/docsBUILD_SYSTEM.md)** - Build system documentation
-- **[Installation](setup/docsINSTALL.md)** - Installation and setup instructions
-- **[Configuration](setup/docsCONFIGURATION_SYSTEM_README.md)** - Kernel configuration system
-- **[Include System](setup/docsINCLUDE_SYSTEM_GUIDE.md)** - Header file organization
+Después de compilar, ejecutar el kernel en QEMU:
 
----
+```bash
+make run
+```
 
-## 🤝 Contributing
+Esto inicia QEMU con la ISO del kernel y el disco virtual adjunto.
 
-We welcome contributions! Please see our [Developer Guide](CONTRIBUTING.md) for:
+Opciones adicionales de ejecución:
+- `make run-debug` - Ejecutar con salida de depuración serial
+- `make run-nodisk` - Ejecutar sin disco virtual
+- `make run-console` - Ejecutar en modo consola (sin GUI)
 
-- **Coding Standards** and patterns
-- **Architecture Guidelines** for new features
-- **Testing Procedures** for changes
-- **Documentation Requirements** for new code
+## Desarrollo
 
-### Getting Started
-1. Fork the repository
-2. Create a 'feat/xx' branch
-3. Make your changes following the coding standards
-4. Test your changes thoroughly
-5. Submit a pull request
+### Compilación de Archivos Individuales
 
----
+Al desarrollar controladores o módulos del kernel, compilar un solo archivo de forma aislada:
 
-## 📄 License
+```bash
+make unibuild FILE=drivers/IO/ps2.c
+```
 
-This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
+Esto compila el archivo especificado sin compilar todo el kernel.
 
----
+Para limpiar un archivo compilado individual:
 
+```bash
+make unibuild-clean FILE=drivers/IO/ps2.c
+```
 
-**IR0 Kernel** 
+### Creación de Disco Virtual
 
-For feedback, please open an issue or contact me at [ivanrwcm25@gmail.com](mailto:ivanrwcm25@gmail.com). 
+El disco virtual se crea automáticamente durante la compilación. Para crearlo manualmente:
 
+```bash
+make create-disk
+```
 
+Para eliminar el disco virtual:
+
+```bash
+make delete-disk
+```
+
+### Limpieza de Artefactos de Compilación
+
+Para limpiar todos los objetos compilados y binarios:
+
+```bash
+make clean
+```
+
+Para limpiar artefactos de compilación de Windows:
+
+```bash
+make windows-clean
+```
+
+## Características del Kernel
+
+### Gestión de Memoria
+- Paginación con mapeo de identidad
+- Asignador de heap (kmalloc/kfree)
+- Gestión de mapa de bits de memoria física
+- Separación de espacio de kernel y usuario
+
+### Gestión de Procesos
+- Gestión de estados de proceso (NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD)
+- Múltiples algoritmos de planificación (CFS, basado en prioridad, Round-Robin)
+- Implementación de cambio de contexto
+- Jerarquía de árbol de procesos
+
+### Llamadas al Sistema
+- Interfaz de llamadas al sistema compatible con POSIX
+- Control de procesos (fork, exec, exit, wait, getpid)
+- Operaciones de archivo (open, close, read, write, lseek)
+- Gestión de memoria (brk, mmap, munmap, mprotect)
+- Operaciones de tiempo (time, gettimeofday, sleep, usleep)
+
+### Sistema de Archivos Virtual
+- Capa de abstracción VFS
+- Soporte para sistema de archivos MINIX
+- Sistema de archivos RAM para archivos de arranque
+- Gestión de puntos de montaje
+
+### Controladores de Hardware
+- Controlador de teclado PS/2
+- Controlador de almacenamiento ATA
+- Controlador de pantalla VGA
+- Controladores de temporizador (PIT, HPET, LAPIC)
+
+### Sistema de Interrupciones
+- Configuración completa de IDT
+- Configuración de PIC
+- Manejo de excepciones
+- Configuración de TSS
+
+### Shell Interactivo
+- Interfaz de línea de comandos
+- Comandos integrados (help, info, version, ps, meminfo)
+- Integración con el sistema
+- Marco básico de autenticación
+
+## Arquitectura
+
+IR0 está dirigido a la arquitectura x86-64. El kernel utiliza:
+- Formato binario ELF64
+- Protocolo de arranque Multiboot
+- Modo protegido con paginación
+- Separación de Ring 0 (kernel) y Ring 3 (usuario)
+
+## Sistema de Compilación
+
+El sistema de compilación soporta:
+- Compilación nativa en Linux
+- Compilación nativa en Windows (con MSYS2/MinGW)
+- Compilación cruzada desde Linux a Windows
+
+Objetivos de compilación:
+- `make ir0` - Compilación completa del kernel (Linux)
+- `make -f Makefile.win ir0` - Compilación completa del kernel (Windows)
+- `make deptest` - Verificar dependencias
+- `make unibuild FILE=<archivo>` - Compilar archivo individual
+- `make clean` - Limpiar artefactos de compilación
+
+## Documentación
+
+Documentación adicional disponible en el repositorio:
+- Sistema de Compilación: `setup/docs/BUILD_SYSTEM.md`
+- Instalación: `setup/docs/INSTALL.md`
+- Configuración: `setup/docs/CONFIGURATION_SYSTEM_README.md`
+- Sistema de Inclusión: `setup/docs/INCLUDE_SYSTEM_GUIDE.md`
+
+## Licencia
+
+Este proyecto está licenciado bajo la Licencia Pública General de GNU v3.0. Ver el archivo LICENSE para más detalles.

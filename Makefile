@@ -250,6 +250,15 @@ disk.img:
 # Default target
 ir0: kernel-x64.iso userspace-programs
 
+# Windows build target
+windows win:
+	@echo "Building IR0 Kernel for Windows..."
+	@$(MAKE) -f Makefile.win ir0
+
+windows-clean win-clean:
+	@echo "Cleaning Windows build artifacts..."
+	@$(MAKE) -f Makefile.win clean
+
 # ===============================================================================
 # QEMU COMMANDS
 # ===============================================================================
@@ -339,7 +348,10 @@ help:
 	@echo ""
 	@echo "📦 Build:"
 	@echo "  make ir0              Build kernel ISO + userspace programs"
+	@echo "  make ir0 windows      Build kernel for Windows (cross-compile)"
+	@echo "  make ir0 win          Alias for 'make ir0 windows'"
 	@echo "  make clean            Clean all build artifacts"
+	@echo "  make windows-clean    Clean Windows build artifacts"
 	@echo "  make userspace-programs  Build only userspace programs"
 	@echo "  make userspace-clean     Clean only userspace programs"
 	@echo ""
@@ -351,8 +363,11 @@ help:
 	@echo "  make run-console      Run in console mode"
 	@echo ""
 	@echo "🔧 Utilities:"
+	@echo "  make deptest          Check all dependencies (run this first!)"
 	@echo "  make create-disk      Create virtual disk for MINIX FS"
 	@echo "  make delete-disk      Delete virtual disk for MINIX FS"
+	@echo "  make unibuild FILE=<file>  Compile single file in isolation"
+	@echo "  make unibuild-clean FILE=<file>  Clean single compiled file"
 	@echo "  make help             Show this help"
 	@echo ""
 	@echo "💡 Quick start: make run"
@@ -400,10 +415,39 @@ userspace-clean:
 	@rm -rf $(USERSPACE_BUILD_DIR)
 
 # ===============================================================================
+# DEPENDENCY TEST
+# ===============================================================================
+
+deptest:
+	@$(KERNEL_ROOT)/scripts/deptest.sh
+
+# ===============================================================================
+# UNIBUILD - ISOLATED FILE COMPILATION
+# ===============================================================================
+
+unibuild:
+	@if [ -z "$(FILE)" ]; then \
+		echo "Error: FILE parameter required"; \
+		echo "Usage: make unibuild FILE=<source_file>"; \
+		echo "Example: make unibuild FILE=fs/ramfs.c"; \
+		exit 1; \
+	fi
+	@$(KERNEL_ROOT)/scripts/unibuild.sh "$(FILE)"
+
+unibuild-clean:
+	@if [ -z "$(FILE)" ]; then \
+		echo "Error: FILE parameter required"; \
+		echo "Usage: make unibuild-clean FILE=<source_file>"; \
+		echo "Example: make unibuild-clean FILE=fs/ramfs.c"; \
+		exit 1; \
+	fi
+	@$(KERNEL_ROOT)/scripts/unibuild-clean.sh "$(FILE)"
+
+# ===============================================================================
 # PHONY TARGETS
 # ===============================================================================
 
-.PHONY: all clean run run-nodisk run-console debug create-disk help userspace-programs userspace-clean
+.PHONY: all clean run run-nodisk run-console debug create-disk help userspace-programs userspace-clean unibuild unibuild-clean ir0 windows win windows-clean win-clean deptest
 
 # Include dependency files
 -include $(ALL_OBJS:.o=.d)

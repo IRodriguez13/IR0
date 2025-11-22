@@ -10,18 +10,11 @@
 #include <stddef.h>
 #include "arch_config.h"
 
-// ===============================================================================
-// PORTABLE TYPES
-// ===============================================================================
-
 typedef uintptr_t arch_addr_t;
 typedef uintptr_t arch_size_t;
 typedef uint32_t arch_irq_t;
 typedef uint32_t arch_flags_t;
 
-// ===============================================================================
-// MEMORY MANAGEMENT INTERFACE
-// ===============================================================================
 
 /**
  * Initialize architecture-specific memory management
@@ -63,10 +56,6 @@ int arch_unmap_page(arch_addr_t virt);
  */
 size_t arch_get_page_size(void);
 
-// ===============================================================================
-// INTERRUPT INTERFACE
-// ===============================================================================
-
 /**
  * Initialize architecture-specific interrupt system
  */
@@ -96,10 +85,6 @@ int arch_unregister_irq(arch_irq_t irq);
  * Send end-of-interrupt signal
  */
 void arch_eoi(arch_irq_t irq);
-
-// ===============================================================================
-// I/O INTERFACE
-// ===============================================================================
 
 /**
  * Read from I/O port (x86) or MMIO address (ARM)
@@ -131,9 +116,6 @@ uint32_t arch_io_read32(arch_addr_t addr);
  */
 void arch_io_write32(arch_addr_t addr, uint32_t value);
 
-// ===============================================================================
-// CPU CONTROL INTERFACE
-// ===============================================================================
 
 /**
  * Halt the CPU (low power mode)
@@ -160,10 +142,6 @@ void arch_switch_to_user(arch_addr_t entry, arch_addr_t stack);
  */
 uint32_t arch_get_cpu_mode(void);
 
-// ===============================================================================
-// TIMER INTERFACE
-// ===============================================================================
-
 /**
  * Initialize architecture-specific timer
  */
@@ -183,10 +161,6 @@ void arch_timer_set_frequency(uint32_t hz);
  * Get timer frequency
  */
 uint32_t arch_timer_get_frequency(void);
-
-// ===============================================================================
-// DEBUGGING INTERFACE
-// ===============================================================================
 
 /**
  * Get fault address (for page faults, etc.)
@@ -208,10 +182,6 @@ uint32_t arch_get_fault_error(void);
  */
 void arch_dump_registers(void);
 
-// ===============================================================================
-// BOOT INTERFACE
-// ===============================================================================
-
 /**
  * Early architecture initialization
  */
@@ -231,10 +201,6 @@ void *arch_get_boot_params(void);
  * Get command line arguments
  */
 const char *arch_get_cmdline(void);
-
-// ===============================================================================
-// UTILITY FUNCTIONS
-// ===============================================================================
 
 /**
  * Get architecture name
