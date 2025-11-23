@@ -455,7 +455,7 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
 }
 
 // Función auxiliar para obtener el número de inode de un path
-static uint16_t minix_fs_get_inode_number(const char *pathname)
+uint16_t minix_fs_get_inode_number(const char *pathname)
 {
   if (!pathname || !minix_fs.initialized)
   {
@@ -708,8 +708,8 @@ int minix_fs_split_path(const char *pathname, char *parent_path,
   }
   if (!last_slash)
   {
-    // No hay barra, el archivo está en el directorio actual
-    kstrncpy(parent_path, ".", 2);
+    // No hay barra, el archivo está en el directorio raíz (paths relativos se tratan como absolutos desde root)
+    kstrncpy(parent_path, "/", 2);
     kstrncpy(filename, pathname, MINIX_NAME_LEN);
     return 0;
   }
@@ -1332,13 +1332,6 @@ int minix_fs_ls(const char *path, bool detailed)
   if (!path)
   {
     typewriter_vga_print("ls: invalid path\n", 0x0C);
-    typewriter_vga_print("ls: filesystem not initialized\n", 0x0C);
-    return -1;
-  }
-
-  if (!path)
-  {
-    typewriter_vga_print("ls: invalid path\n", 0x0C);
     return -1;
   }
 
@@ -1366,12 +1359,7 @@ int minix_fs_ls(const char *path, bool detailed)
   {
     typewriter_vga_print("Permissions Links Size Owner Group Name\n", 0x0F);
   }
-  if (detailed)
-  {
-    typewriter_vga_print("Permissions Links Size Owner Group Name\n", 0x0F);
-  }
 
-  for (int i = 0; i < 7; i++)
   for (int i = 0; i < 7; i++)
   {
     uint32_t zone = dir_inode_copy.i_zone[i];
@@ -1381,7 +1369,6 @@ int minix_fs_ls(const char *path, bool detailed)
     uint8_t block_buffer[MINIX_BLOCK_SIZE];
     if (minix_read_block(zone, block_buffer) != 0)
     {
-      typewriter_vga_print("ls: error reading directory block\n", 0x0C);
       typewriter_vga_print("ls: error reading directory block\n", 0x0C);
       continue;
     }
@@ -1478,21 +1465,17 @@ int minix_fs_cat(const char *path)
   if (!minix_fs.initialized)
   {
     typewriter_vga_print("cat: filesystem not initialized\n", 0x0C);
-    typewriter_vga_print("cat: filesystem not initialized\n", 0x0C);
     return -1;
   }
 
   if (!path)
   {
     typewriter_vga_print("cat: invalid path\n", 0x0C);
-    typewriter_vga_print("cat: invalid path\n", 0x0C);
     return -1;
   }
 
   if (!ata_is_available())
   {
-    typewriter_vga_print("cat: disk not available\n", 0x0C);
-    return -EIO;
     typewriter_vga_print("cat: disk not available\n", 0x0C);
     return -EIO;
   }
@@ -1828,7 +1811,6 @@ int minix_fs_touch(const char *path, mode_t mode)
 
   if (minix_fs_find_dir_entry(&parent_inode, filename) != 0)
   {
-    typewriter_vga_print("Error: File already exists\n", 0x0C);
     typewriter_vga_print("Error: File already exists\n", 0x0C);
     return -1;
   }
