@@ -13,10 +13,11 @@
 
 #include "string.h"
 #include "stdarg.h"
+#include <ir0/oops.h>
 
 /* Compiler optimization hints */
-#define likely(x)	__builtin_expect(!!(x), 1)
-#define unlikely(x)	__builtin_expect(!!(x), 0)
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 /**
  * strlen - calculate length of string
@@ -26,75 +27,131 @@
  */
 size_t strlen(const char *str)
 {
-	size_t len = 0;
-	
-	if (unlikely(!str))
-		return 0;
-	
-	while (str[len] != '\0')
-		len++;
-	
-	return len;
+    size_t len = 0;
+
+    if (unlikely(!str))
+        return 0;
+
+    while (str[len] != '\0')
+        len++;
+
+    return len;
 }
 
 size_t kstrlen(const char *s)
 {
-  const char *p = s;
-  while (*p)
-    p++;
-  return p - s;
+    const char *p = s;
+    while (*p)
+        p++;
+    return p - s;
 }
 
-char *kstrncpy(char *dest, const char *src, size_t n)
+// ===============================================================================
+// KERNEL MEMORY/STRING FUNCTIONS - Internal Implementations
+// ===============================================================================
+
+/**
+ * __kstrncpy_impl - Internal implementation of kernel string copy
+ * Pure implementation without validation - called by checked wrapper
+ */
+char *__kstrncpy_impl(char *dest, const char *src, size_t n)
 {
-  size_t i;
-  for (i = 0; i < n && src[i] != '\0'; i++)
-    dest[i] = src[i];
-  for (; i < n; i++)
-    dest[i] = '\0';
-  return dest;
+    size_t i;
+    for (i = 0; i < n && src[i] != '\0'; i++)
+        dest[i] = src[i];
+    for (; i < n; i++)
+        dest[i] = '\0';
+    return dest;
+}
+
+/**
+ * __kstrncpy_checked - Checked wrapper with automatic debug tracking
+ * Validates parameters and calls implementation
+ */
+char *__kstrncpy_checked(char *dest, const char *src, size_t n,
+                        const char *file, int line, const char *caller)
+{
+    if (unlikely(!dest || !src))
+        panicex("null pointer in kstrncpy", PANIC_MEM, file, line, caller);
+
+    return __kstrncpy_impl(dest, src, n);
 }
 
 int kstrcmp(const char *s1, const char *s2)
 {
-  while (*s1 && (*s1 == *s2))
-  {
-    s1++;
-    s2++;
-  }
-  return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+    while (*s1 && (*s1 == *s2))
+    {
+        s1++;
+        s2++;
+    }
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
 }
 
 int kstrncmp(const char *s1, const char *s2, size_t n)
 {
-  while (n && *s1 && (*s1 == *s2))
-  {
-    s1++;
-    s2++;
-    n--;
-  }
-  if (n == 0)
-    return 0;
-  return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+    while (n && *s1 && (*s1 == *s2))
+    {
+        s1++;
+        s2++;
+        n--;
+    }
+    if (n == 0)
+        return 0;
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
 }
 
-void *kmemset(void *s, int c, size_t n)
+/**
+ * __kmemset_impl - Internal implementation of kernel memset
+ * Pure implementation without validation - called by checked wrapper
+ */
+void *__kmemset_impl(void *s, int c, size_t n)
 {
-  unsigned char *p = s;
-  while (n-- > 0)
-    *p++ = (unsigned char)c;
-  return s;
+    unsigned char *p = s;
+    while (n-- > 0)
+        *p++ = (unsigned char)c;
+    return s;
 }
 
-void *kmemcpy(void *dest, const void *src, size_t n)
+/**
+ * __kmemset_checked - Checked wrapper with automatic debug tracking
+ * Validates parameters and calls implementation
+ */
+void *__kmemset_checked(void *dst, int c, size_t n,
+                       const char *file, int line, const char *caller)
 {
-  char *d = dest;
-  const char *s = src;
-  while (n-- > 0)
-    *d++ = *s++;
-  return dest;
+    if (unlikely(!dst))
+        panicex("null destination pointer in kmemset", PANIC_MEM, file, line, caller);
+
+    return __kmemset_impl(dst, c, n);
 }
 
+/**
+ * __kmemcpy_impl - Internal implementation of kernel memcpy
+ * Pure implementation without validation - called by checked wrapper
+ */
+void *__kmemcpy_impl(void *dest, const void *src, size_t n)
+{
+    char *d = dest;
+    const char *s = src;
+    while (n-- > 0)
+    {
+        *d++ = *s++;
+    }
+    return dest;
+}
+
+/**
+ * __kmemcpy_checked - Checked wrapper with automatic debug tracking
+ * Validates parameters and calls implementation
+ */
+void *__kmemcpy_checked(void *dst, const void *src, size_t n,
+                       const char *file, int line, const char *caller)
+{
+    if (unlikely(!dst || !src))
+        panicex("null pointer in kmemcpy", PANIC_MEM, file, line, caller);
+
+    return __kmemcpy_impl(dst, src, n);
+}
 
 /**
  * strcmp - compare two strings
@@ -106,15 +163,16 @@ void *kmemcpy(void *dest, const void *src, size_t n)
  */
 int strcmp(const char *s1, const char *s2)
 {
-	if (unlikely(!s1 || !s2))
-		return s1 ? 1 : (s2 ? -1 : 0);
-	
-	while (*s1 && (*s1 == *s2)) {
-		s1++;
-		s2++;
-	}
-	
-	return *(unsigned char *)s1 - *(unsigned char *)s2;
+    if (unlikely(!s1 || !s2))
+        return s1 ? 1 : (s2 ? -1 : 0);
+
+    while (*s1 && (*s1 == *s2))
+    {
+        s1++;
+        s2++;
+    }
+
+    return *(unsigned char *)s1 - *(unsigned char *)s2;
 }
 
 /**
@@ -128,19 +186,20 @@ int strcmp(const char *s1, const char *s2)
  */
 int strncmp(const char *s1, const char *s2, size_t n)
 {
-	if (unlikely(!s1 || !s2 || n == 0))
-		return 0;
-	
-	while (n && *s1 && (*s1 == *s2)) {
-		s1++;
-		s2++;
-		n--;
-	}
-	
-	if (n == 0)
-		return 0;
-	
-	return *(unsigned char *)s1 - *(unsigned char *)s2;
+    if (unlikely(!s1 || !s2 || n == 0))
+        return 0;
+
+    while (n && *s1 && (*s1 == *s2))
+    {
+        s1++;
+        s2++;
+        n--;
+    }
+
+    if (n == 0)
+        return 0;
+
+    return *(unsigned char *)s1 - *(unsigned char *)s2;
 }
 
 char *strcpy(char *dest, const char *src)
@@ -172,8 +231,9 @@ char *strcat(char *dest, const char *src)
     char *d = dest;
     while (*d != '\0')
         d++;
-    while ((*d++ = *src++) != '\0');
-    
+    while ((*d++ = *src++) != '\0')
+        ;
+
     return dest;
 }
 
@@ -803,8 +863,8 @@ char *itoa(int value, char *str, int base)
         tmp_value = value;
         value /= base;
         *ptr++ = "0123456789abcdefghijklmnopqrstuvwxyz"[tmp_value - value * base];
-    } 
-    
+    }
+
     // Apply negative sign for base 10
     if (tmp_value < 0 && base == 10)
         *ptr++ = '-';

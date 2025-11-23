@@ -17,10 +17,7 @@
 #include <arch_interface.h>
 #include <string.h>
 #include <memory/allocator.h>
-
-// Forward declarations
-extern void *kmalloc(size_t size);
-extern void kfree(void *ptr);
+#include <ir0/memory/kmem.h>
 
 // ===============================================================================
 // VARIABLES GLOBALES

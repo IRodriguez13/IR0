@@ -6,6 +6,7 @@
 #include <string.h>
 #include "allocator.h"
 #include <kernel/process.h>
+#include <ir0/memory/kmem.h>
 
 // Page directory for identity mapping (used by setup functions)
 __attribute__((aligned(4096))) static uint64_t PD[512];
@@ -209,7 +210,6 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
         uintptr_t virt_addr = virtual_start + offset;
 
         // Asignar página física usando kmalloc (simplificado)
-        extern void *kmalloc(size_t size);
         uintptr_t phys_addr = (uintptr_t)kmalloc(0x1000);
 
         if (phys_addr == 0)

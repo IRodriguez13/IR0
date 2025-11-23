@@ -132,6 +132,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size);
 int minix_fs_touch(const char *path, mode_t mode);
 int minix_fs_rm(const char *path);
 int minix_fs_rmdir(const char *path);
+int minix_fs_rmdir_force(const char *path);
 int minix_fs_stat(const char *pathname, stat_t *buf);
 void minix_fs_cleanup(void);
 

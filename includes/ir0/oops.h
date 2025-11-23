@@ -9,8 +9,9 @@ typedef enum
     PANIC_OUT_OF_MEMORY = 2,  // System out of memory
     PANIC_STACK_OVERFLOW = 3, // Stack corruption
     PANIC_ASSERT_FAILED= 4,   // Assertion failure
-    TESTING = 5,
-    RUNNING_OUT_PROCESS = 6
+    PANIC_MEM = 5,            // Memory operation error (null ptr, invalid access, etc.)
+    TESTING = 6,
+    RUNNING_OUT_PROCESS = 7
 } panic_level_t;
 
 
@@ -27,7 +28,7 @@ typedef enum
 
 
 void panic(const char *message);
-void panicex(const char *message, panic_level_t level, const char *file, int line); /*Panic with more detailed logs*/
+void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller); /*Panic with more detailed logs*/
 void cpu_relax();
 void dump_stack_trace();
 void dump_registers();
@@ -37,7 +38,7 @@ void dump_registers();
     do { \
         if (unlikely(condition)) \
         { \
-            panic_advanced("BUG_ON: " #condition, PANIC_KERNEL_BUG, __FILE__, __LINE__); \
+            panicex("BUG_ON: " #condition, PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__); \
         } \
     } while(0)
 
@@ -46,7 +47,7 @@ void dump_registers();
     do { \
         if (unlikely(!(condition))) \
         { \
-            panic_advanced("ASSERT failed: " #condition, PANIC_ASSERT_FAILED, __FILE__, __LINE__); \
+            panicex("ASSERT failed: " #condition, PANIC_ASSERT_FAILED, __FILE__, __LINE__, __func__); \
         } \
     } while(0)
       

@@ -35,7 +35,6 @@ static struct
     int initialized;
 } allocator = {0};
 
-// Dummy for scheduler detection (not used)
 uint32_t free_pages_count = 1000;
 
 void alloc_init(void)
@@ -174,65 +173,4 @@ void alloc_free(void *ptr)
         current->size += block->size;
         current->next = block->next;
     }
-}
-
-
-/**
- * Allocate aligned memory for page tables
- * Required for page directory structures that must be 4KB aligned
- */
-void *kmalloc_aligned(size_t size, size_t alignment)
-{
-    if (!allocator.initialized)
-    {
-        alloc_init();
-    }
-
-    if (size == 0 || alignment == 0)
-    {
-        return NULL;
-    }
-
-    // Ensure alignment is power of 2
-    if ((alignment & (alignment - 1)) != 0)
-    {
-        return NULL;
-    }
-
-    // Allocate extra space to ensure we can align
-    size_t total_size = size + alignment - 1 + sizeof(void *);
-    void *raw_ptr = kmalloc(total_size);
-    if (!raw_ptr)
-    {
-        return NULL;
-    }
-
-    // Calculate aligned address
-    uintptr_t raw_addr = (uintptr_t)raw_ptr;
-    uintptr_t aligned_addr = (raw_addr + sizeof(void *) + alignment - 1) & ~(alignment - 1);
-    void *aligned_ptr = (void *)aligned_addr;
-
-    // Store original pointer just before aligned address
-    void **orig_ptr_storage = (void **)aligned_ptr - 1;
-    *orig_ptr_storage = raw_ptr;
-
-    return aligned_ptr;
-}
-
-/*
- * Free aligned memory allocated with kmalloc_aligned
- */
-void kfree_aligned(void *ptr)
-{
-    if (!ptr)
-    {
-        return;
-    }
-
-    // Get original pointer stored before aligned address
-    void **orig_ptr_storage = (void **)ptr - 1;
-    void *orig_ptr = *orig_ptr_storage;
-
-    // Free the original allocation
-    kfree(orig_ptr);
 }
