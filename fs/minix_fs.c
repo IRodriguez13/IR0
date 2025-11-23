@@ -2122,13 +2122,14 @@ int minix_fs_rmdir(const char *path)
     }
   }
 
-  if (minix_fs_free_inode(dir_inode_num) != 0)
+  if(minix_fs_free_inode(dir_inode_num) != 0)
   {
     typewriter_vga_print("Error: Could not free inode\n", 0x0C);
     return -1;
   }
 
   uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
+  
   if (parent_inode_num != 0)
   {
     if (parent_inode.i_nlinks > 2)
@@ -2137,7 +2138,7 @@ int minix_fs_rmdir(const char *path)
     }
     parent_inode.i_time = get_system_time();
 
-    if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
+    if(minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
     {
       typewriter_vga_print("Warning: Could not update parent directory inode\n", 0x0C);
     }
