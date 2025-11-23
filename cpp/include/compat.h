@@ -194,27 +194,15 @@ inline void operator delete(void*, void*) noexcept {}
 
 // DRIVER INTERFACE (Multi-language)
 
-IR0_EXTERN_C_BEGIN
-
-/**
- * Standard driver operations structure
- * Compatible with C, C++, and Rust drivers
- */
-typedef struct ir0_driver_ops {
-    i32 (*init)(void);                          // Initialize driver
-    i32 (*probe)(void* device);                 // Probe device
-    void (*remove)(void* device);               // Remove device
-    i32 (*read)(void* buf, usize len);          // Read from device
-    i32 (*write)(const void* buf, usize len);   // Write to device
-    i32 (*ioctl)(u32 cmd, void* arg);          // Device control
-} ir0_driver_ops_t;
-
-/**
- * Register a driver (callable from  any language)
- */
-IR0_API i32 ir0_register_driver(const char* name, const ir0_driver_ops_t* ops);
-
-IR0_EXTERN_C_END
+// Include the canonical driver interface
+// This provides ir0_driver_ops_t, ir0_driver_info_t, and registration functions
+#ifdef __cplusplus
+extern "C" {
+#endif
+    #include <ir0/driver.h>
+#ifdef __cplusplus
+}
+#endif
 
 // USAGE EXAMPLES
 
