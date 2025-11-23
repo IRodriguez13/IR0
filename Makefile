@@ -18,9 +18,8 @@ IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PA
 IR0_BUILD_DATE := $(shell date +%Y-%m-%d)
 IR0_BUILD_TIME := $(shell date +%H:%M:%S)
 
-# ===============================================================================
 # COMPILER CONFIGURATION (x86-64)
-# ===============================================================================# Build tools
+
 # Build tools
 CC = gcc
 LD = ld
@@ -72,9 +71,7 @@ COMMON_SUBDIRS = kernel interrupt drivers/timer drivers/IO drivers/storage kerne
 
 # Subsistemas condicionales según build target
 
-# ===============================================================================
 # CONFIGURACIÓN QEMU (ABSTRACCIÓN)
-# ===============================================================================
 
 # Comandos QEMU por arquitectura
 QEMU_64_CMD = qemu-system-x86_64
@@ -123,9 +120,8 @@ endif
 
 SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 
-# ===============================================================================
 # KERNEL OBJECTS (CONSOLIDATED)
-# ===============================================================================
+
 KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
@@ -204,9 +200,7 @@ SETUP_OBJS = \
 ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS)
 
-# ===============================================================================
 # BUILD RULES
-# ===============================================================================
 
 # Compile C files
 %.o: %.c
@@ -259,9 +253,7 @@ windows-clean win-clean:
 	@echo "Cleaning Windows build artifacts..."
 	@$(MAKE) -f Makefile.win clean
 
-# ===============================================================================
 # QEMU COMMANDS
-# ===============================================================================
 
 # Run with GUI and disk (default)
 run: kernel-x64.iso disk.img
@@ -288,14 +280,14 @@ run-debug: kernel-x64.iso disk.img
 
 # Run without disk
 run-nodisk: kernel-x64.iso
-	@echo "🚀 Running IR0 Kernel (no disk)..."
+	@echo "Running IR0 Kernel (no disk)..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
 		-m 512M -no-reboot -no-shutdown \
 		-display gtk -serial stdio
 
 # Run in console mode (attach disk image)
 run-console: kernel-x64.iso disk.img
-	@echo "🚀 Running IR0 Kernel (console)..."
+	@echo "Running IR0 Kernel (console)..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
 		-drive file=disk.img,format=raw,if=ide,index=0 \
 		-m 512M -no-reboot -no-shutdown \
@@ -303,7 +295,7 @@ run-console: kernel-x64.iso disk.img
 
 # Debug mode (detailed QEMU logging)
 debug: kernel-x64.iso disk.img
-	@echo "🐛 Running IR0 Kernel (debug)..."
+	@echo "Running IR0 Kernel (debug)..."
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
 		-drive file=disk.img,format=raw,if=ide,index=0 \
 		-m 512M -no-reboot -no-shutdown \
@@ -312,7 +304,7 @@ debug: kernel-x64.iso disk.img
 
 # Create disk image (wrapper for scripts/create_disk.sh)
 create-disk: disk.img
-	@echo "🔧 Disk image is ready: disk.img"
+	@echo "Disk image is ready: disk.img"
 
 # Delete disk image (useful to reset persistent disk for QEMU)
 delete-disk:
@@ -323,12 +315,10 @@ delete-disk:
 		echo "  Disk image not found: disk.img"; \
 	fi
 
-# ===============================================================================
 # CLEAN
-# ===============================================================================
 
 clean: userspace-clean
-	@echo "🧹 Cleaning build artifacts..."
+	@echo "Cleaning build artifacts..."
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
 	@find . -name "*.bin" -type f -delete
@@ -337,9 +327,7 @@ clean: userspace-clean
 	@rm -f qemu_debug.log
 	@echo "✓ Clean complete"
 
-# ===============================================================================
 # HELP
-# ===============================================================================
 
 help:
 	@echo "╔════════════════════════════════════════════════════════════╗"
@@ -373,9 +361,7 @@ help:
 	@echo "💡 Quick start: make run"
 	@echo ""
 
-# ===============================================================================
 # USERSPACE PROGRAMS
-# ===============================================================================
 
 # Userspace configuration
 USERSPACE_DIR = userspace
@@ -414,31 +400,47 @@ userspace-clean:
 	@echo "Cleaning userspace programs..."
 	@rm -rf $(USERSPACE_BUILD_DIR)
 
-# ===============================================================================
 # DEPENDENCY TEST
-# ===============================================================================
 
 deptest:
 	@$(KERNEL_ROOT)/scripts/deptest.sh
 
-# ===============================================================================
 # UNIBUILD - ISOLATED FILE COMPILATION
-# ===============================================================================
 
 unibuild:
-	@if [ -z "$(FILE)" ] && [ -z "$(FILES)" ]; then \
-		echo "Error: FILE or FILES parameter required"; \
-		echo "Usage: make unibuild FILE=<source_file>"; \
+	@# Check if no parameters at all (both FILE and positional args)
+	@if [ -z "$(FILE)" ] && [ -z "$(FILES)" ] && [ -z "$(filter-out unibuild,$@)" ] && [ -z "$(MAKECMDGOALS)" ]; then \
+		echo "Error: No files specified"; \
+		echo "Usage: make unibuild <source_file>"; \
+		echo "       Or: make unibuild -win <source_file>  (cross-compile for Windows)"; \
+		echo "       Or: make unibuild -cpp <source_file>  (C++ compilation - future)"; \
+		echo "       Or: make unibuild -rust <source_file> (Rust compilation - future)"; \
+		echo "       Or: make unibuild -win -cpp <source_file>  (Windows C++ - future)"; \
+		echo "       Or: make unibuild -win -rust <source_file> (Windows Rust - future)"; \
+		echo "       Or: make unibuild FILE=<source_file>"; \
 		echo "       Or: make unibuild FILES=\"file1.c file2.c file3.c\""; \
+		echo "Example: make unibuild fs/ramfs.c"; \
+		echo "Example: make unibuild -win drivers/IO/ps2.c"; \
+		echo "Example: make unibuild -win -cpp kernel/module.cpp (future)"; \
 		echo "Example: make unibuild FILE=fs/ramfs.c"; \
 		echo "Example: make unibuild FILES=\"fs/ramfs.c fs/vfs.c\""; \
 		exit 1; \
 	fi
-	@if [ -n "$(FILES)" ]; then \
+	@# Handle positional arguments (everything after 'unibuild')
+	@if [ -z "$(FILE)" ] && [ -z "$(FILES)" ]; then \
+		ARGS="$(filter-out unibuild,$(MAKECMDGOALS))"; \
+		if [ -n "$$ARGS" ]; then \
+			$(KERNEL_ROOT)/scripts/unibuild.sh $$ARGS; \
+		fi; \
+	elif [ -n "$(FILES)" ]; then \
 		$(KERNEL_ROOT)/scripts/unibuild.sh $(FILES); \
 	else \
 		$(KERNEL_ROOT)/scripts/unibuild.sh "$(FILE)"; \
 	fi
+
+# Catch-all target to prevent make from complaining about unknown targets (for positional args)
+%:
+	@:
 
 unibuild-clean:
 	@if [ -z "$(FILE)" ]; then \
@@ -449,9 +451,7 @@ unibuild-clean:
 	fi
 	@$(KERNEL_ROOT)/scripts/unibuild-clean.sh "$(FILE)"
 
-# ===============================================================================
 # PHONY TARGETS
-# ===============================================================================
 
 .PHONY: all clean run run-nodisk run-console debug create-disk help userspace-programs userspace-clean unibuild unibuild-clean ir0 windows win windows-clean win-clean deptest
 

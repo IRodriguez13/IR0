@@ -1,5 +1,7 @@
 #include "chmod.h"
 #include <fs/vfs.h>
+#include <fs/minix_fs.h>
+#include <ir0/memory/kmem.h>
 #include <string.h>
 
 /**
@@ -76,25 +78,49 @@ int chmod(const char *path, mode_t mode)
         return -1;
     }
 
+    // Check if MINIX filesystem is available
+    extern bool minix_fs_is_working(void);
+    if (!minix_fs_is_working())
+    {
+        return -1;
+    }
+
+    // Get current file stats
     stat_t st;
     if (vfs_stat(path, &st) != 0)
     {
         return -1;
     }
 
-    st.st_mode = (st.st_mode & ~07777) | (mode & 07777);
-
-    // Update inode with new mode
-    struct vfs_inode *inode = vfs_path_lookup(path);
-    if (!inode)
-        return -1;
-
-    inode->i_mode = st.st_mode;
-
-    // Write inode back to disk
-    if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->write_inode)
+    // Get the inode for this path
+    minix_inode_t *inode_ptr = minix_fs_find_inode(path);
+    if (!inode_ptr)
     {
-        return inode->i_sb->s_op->write_inode(inode);
+        return -1;
+    }
+
+    // Get the inode number for this path
+    uint16_t inode_num = minix_fs_get_inode_number(path);
+    if (inode_num == 0)
+    {
+        return -1;
+    }
+
+    // Copy the inode to avoid modifying the cached version
+    minix_inode_t inode;
+    kmemcpy(&inode, inode_ptr, sizeof(minix_inode_t));
+
+    // Update mode: preserve file type bits, update permission bits
+    // File type bits are in the upper bits (IFDIR, IFREG, etc.)
+    // Permission bits are in the lower 12 bits (07777)
+    uint16_t file_type = inode.i_mode & ~07777;  // Preserve file type
+    uint16_t new_perms = (mode & 07777);          // New permissions
+    inode.i_mode = file_type | new_perms;
+
+    // Write the updated inode back to disk
+    if (minix_fs_write_inode(inode_num, &inode) != 0)
+    {
+        return -1;
     }
 
     return 0;

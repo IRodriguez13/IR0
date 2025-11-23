@@ -37,9 +37,3 @@ void alloc_stats(size_t *total, size_t *used, size_t *allocs);
 
 // Reallocate memory
 void *all_realloc(void *ptr, size_t new_size);
-
-// Aligned allocation functions
-void *kmalloc_aligned(size_t size, size_t alignment);
-
-void kfree_aligned(void *ptr);
-
