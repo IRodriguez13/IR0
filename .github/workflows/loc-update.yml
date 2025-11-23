@@ -12,7 +12,15 @@ jobs:
 
       - run: sudo apt-get install -y cloc
 
-      - run: cloc --json . > loc.json
+      # Count lines including Rust (.rs) and C++ (.cpp) files for multi-language kernel
+      - run: |
+          echo "Counting lines of code (C, C++, Rust, ASM)..."
+          cloc --json \
+               --include-lang=C,C++,Rust,"Assembly" \
+               --by-file-by-lang \
+               . > loc.json
+          echo "LOC count complete"
+
 
       # 🔹 Paso de ping para despertar la API
       - run: |
