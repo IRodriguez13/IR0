@@ -298,18 +298,47 @@ static void cmd_echo(const char *text)
       return;
     }
 
+    // Normalize path: convert relative paths to absolute paths
+    // If path doesn't start with '/', prepend '/' to make it absolute
+    char normalized_path[256];
+    if (fname_start[0] == '/')
+    {
+      // Already absolute path
+      size_t len = strlen(fname_start);
+      if (len >= sizeof(normalized_path))
+      {
+        typewriter_vga_print("Error: Path too long\n", 0x0C);
+        kfree(new_content);
+        return;
+      }
+      strcpy(normalized_path, fname_start);
+    }
+    else
+    {
+      // Relative path: make it absolute by prepending '/'
+      size_t len = strlen(fname_start);
+      if (len + 1 >= sizeof(normalized_path))
+      {
+        typewriter_vga_print("Error: Path too long\n", 0x0C);
+        kfree(new_content);
+        return;
+      }
+      normalized_path[0] = '/';
+      strcpy(normalized_path + 1, fname_start);
+    }
+
     // If append requested, read existing file and concatenate
     if (append)
     {
       // Prevent appending to directories or root
-      if (strcmp(fname_start, "/") == 0)
+      if (strcmp(normalized_path, "/") == 0)
       {
         typewriter_vga_print("Error: Refusing to write to root '/'\n", 0x0C);
         kfree(new_content);
         return;
       }
       stat_t st;
-      int64_t sret = syscall(SYS_STAT, (uint64_t)fname_start, (uint64_t)&st, 0);
+      int64_t sret = syscall(SYS_STAT, (uint64_t)normalized_path, (uint64_t)&st, 0);
       if (sret == 0 && S_ISDIR(st.st_mode))
       {
         typewriter_vga_print("Error: Refusing to write to a directory\n", 0x0C);
@@ -319,7 +348,7 @@ static void cmd_echo(const char *text)
 
       void *old_data = NULL;
       size_t old_size = 0;
-      int64_t r = syscall(SYS_READ_FILE, (uint64_t)fname_start, (uint64_t)&old_data, (uint64_t)&old_size);
+      int64_t r = syscall(SYS_READ_FILE, (uint64_t)normalized_path, (uint64_t)&old_data, (uint64_t)&old_size);
       if (r >= 0 && old_data && old_size > 0)
       {
         // Allocate combined buffer
@@ -342,17 +371,17 @@ static void cmd_echo(const char *text)
         combined[total] = '\0';
 
         // Write back
-        int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)fname_start, (uint64_t)combined, 0);
+        int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)combined, 0);
         if (w < 0)
         {
           typewriter_vga_print("Error: Could not write to file '", 0x0C);
-          typewriter_vga_print(fname_start, 0x0C);
+          typewriter_vga_print(normalized_path, 0x0C);
           typewriter_vga_print("'\n", 0x0C);
         }
         else
         {
           typewriter_vga_print("Written to '", 0x0A);
-          typewriter_vga_print(fname_start, 0x0A);
+          typewriter_vga_print(normalized_path, 0x0A);
           typewriter_vga_print("'\n", 0x0A);
         }
 
@@ -363,17 +392,17 @@ static void cmd_echo(const char *text)
       else
       {
         // File doesn't exist or empty: just write new_content
-        int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)fname_start, (uint64_t)new_content, 0);
+        int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)new_content, 0);
         if (w < 0)
         {
           typewriter_vga_print("Error: Could not write to file '", 0x0C);
-          typewriter_vga_print(fname_start, 0x0C);
+          typewriter_vga_print(normalized_path, 0x0C);
           typewriter_vga_print("'\n", 0x0C);
         }
         else
         {
           typewriter_vga_print("Written to '", 0x0A);
-          typewriter_vga_print(fname_start, 0x0A);
+          typewriter_vga_print(normalized_path, 0x0A);
           typewriter_vga_print("'\n", 0x0A);
         }
       }
@@ -381,14 +410,14 @@ static void cmd_echo(const char *text)
     else
     {
       // Prevent overwriting root or directories
-      if (strcmp(fname_start, "/") == 0)
+      if (strcmp(normalized_path, "/") == 0)
       {
         typewriter_vga_print("Error: Refusing to write to root '/'\n", 0x0C);
         kfree(new_content);
         return;
       }
       stat_t st;
-      int64_t sret = syscall(SYS_STAT, (uint64_t)fname_start, (uint64_t)&st, 0);
+      int64_t sret = syscall(SYS_STAT, (uint64_t)normalized_path, (uint64_t)&st, 0);
       if (sret == 0 && S_ISDIR(st.st_mode))
       {
         typewriter_vga_print("Error: Refusing to overwrite a directory\n", 0x0C);
@@ -397,17 +426,17 @@ static void cmd_echo(const char *text)
       }
 
       // Overwrite mode: write new_content directly
-      int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)fname_start, (uint64_t)new_content, 0);
+      int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)new_content, 0);
       if (w < 0)
       {
         typewriter_vga_print("Error: Could not write to file '", 0x0C);
-        typewriter_vga_print(fname_start, 0x0C);
+        typewriter_vga_print(normalized_path, 0x0C);
         typewriter_vga_print("'\n", 0x0C);
       }
       else
       {
         typewriter_vga_print("Written to '", 0x0A);
-        typewriter_vga_print(fname_start, 0x0A);
+        typewriter_vga_print(normalized_path, 0x0A);
         typewriter_vga_print("'\n", 0x0A);
       }
     }
