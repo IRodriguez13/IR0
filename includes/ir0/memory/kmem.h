@@ -2,6 +2,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Internal implementations (pure logic, no validation)
 void *__kmalloc_impl(size_t size);
 void __kfree_impl(void *ptr);
@@ -17,6 +22,13 @@ void *__krealloc_checked(void *ptr, size_t new_size,
 void *__kmalloc_aligned_checked(size_t size, size_t alignment,
                                const char *file, int line, const char *caller);
 void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *caller);
+
+void heap_init(void);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 // Automatic debug tracking macros - capture caller location transparently
 #define kmalloc(size) \
@@ -34,4 +46,4 @@ void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *
 #define kfree_aligned(ptr) \
     __kfree_aligned_checked((ptr), __FILE__, __LINE__, __func__)
 
-void heap_init(void);
+
