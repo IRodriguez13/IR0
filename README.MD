@@ -188,7 +188,6 @@ IR0 supports kernel development in C, C++, and Rust. Each language has a specifi
     *   Global `new` and `delete` operators (mapped to kernel `kmalloc`/`kfree`).
     *   Pure virtual functions.
     *   Static initialization guards.
-*   **Example**: `cpp/examples/cpp_example.cpp`
 
 #### Rust (Modern Drivers)
 *   **Role**: New device drivers (Network, Storage, USB) focusing on memory safety.
@@ -200,7 +199,6 @@ IR0 supports kernel development in C, C++, and Rust. Each language has a specifi
     ```
 *   **Compilation**: `make unibuild-rust <file.rs>`
     *   Uses `cargo` with `-Z build-std=core` to compile the standard library for the bare-metal target.
-*   **Example**: `rust/drivers/rust_example_driver.rs`
 
 For detailed API documentation and development guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
