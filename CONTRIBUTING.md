@@ -1,666 +1,838 @@
-# IR0 Kernel - Developer Guide
+# IR0 Kernel - Contributing Guide
 
-This guide provides comprehensive information for developers working on the IR0 kernel, including architecture details, coding standards, and development workflows.
+Este documento proporciona información completa para desarrolladores trabajando en el kernel IR0, incluyendo detalles de arquitectura, estándares de codificación, y flujos de trabajo de desarrollo.
 
 ---
-## Required dependencies to build the kernel
 
-### Build Tools
-- **GCC** (GNU Compiler Collection, version 7.0+)
-- **Make** (build automation tool)
-- **NASM** (Netwide Assembler, version 2.13+)
+## 📋 Table of Contents
+
+1. [Required Dependencies](#required-dependencies)
+2. [Architecture Overview](#architecture-overview)
+3. [Multi-Language Development](#multi-language-development)
+   - [Rust Driver Development](#rust-driver-development)
+   - [C++ Kernel Components](#c-kernel-components)
+4. [Core Subsystems](#core-subsystems)
+5. [Development Workflow](#development-workflow)
+6. [Code Style Guidelines](#code-style-guidelines)
+7. [Testing Guidelines](#testing-guidelines)
+
+---
+
+## Required Dependencies
+
+### Essential Build Tools
+- **GCC** (GNU Compiler Collection 7.0+)
+- **Make** (build automation)
+- **NASM** (Netwide Assembler 2.13+)
 - **LD** (GNU Linker)
-- **AR** (GNU Archiver, usually part of build-essential)
+- **AR** (GNU Archiver)
 
-### Bootable image tools
+### Multi-Language Support (Optional)
+- **G++** (C++ compiler for kernel components)
+- **Rust** (rustc + cargo for drivers)
+  - Install: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- **MinGW-w64** (for cross-compilation to Windows)
+
+### Bootable Image Tools
 - **GRUB** (grub-pc-bin)
-- **Xorriso** (for ISO creation)
+- **Xorriso** (ISO creation)
 
-### Emulation and testing
+### Emulation and Testing
 - **QEMU** (qemu-system-x86)
 
-### Recommended for development and debugging
+### Recommended
 - **Git** (version control)
-- **Valgrind** (memory debugging, optional)
-- **GDB** (debugger, optional)
+- **Python 3** with tkinter (for menuconfig)
+- **GDB** (debugging)
 
-### Cross-compilation dependencies (optional, only if building for ARM)
-- **gcc-aarch64-linux-gnu** (ARM64 cross-compiler)
-- **gcc-arm-linux-gnueabi** (ARM32 cross-compiler)
-- **qemu-system-arm** (ARM emulator)
+### Dependency Verification
+
+Run the dependency checker:
+```bash
+make deptest
+```
+
+This will verify:
+- ✓ C compiler (GCC/Clang)
+- ✓ C++ compiler (G++/Clang++)
+- ✓ Rust compiler (rustc + cargo)
+- ✓ MinGW cross-compilers (Linux only)
+- ✓ Python 3 with tkinter and PIL
+- ✓ NASM, QEMU, GRUB
+
 ---
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ### Kernel Design Philosophy
 
-The IR0 kernel follows these design principles:
+The IR0 kernel follows these principles:
 
-1. **Modularity**: Each subsystem is independent and can be enabled/disabled
-2. **Portability**: Architecture-agnostic design with arch-specific implementations
-3. **Educational**: Clear code structure for learning OS development
-4. **Performance**: Efficient algorithms and data structures
-5. **Extensibility**: Easy to add new features and architectures
-
-### Core Subsystems
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    KERNEL ARCHITECTURE                      │
-├─────────────────────────────────────────────────────────────┤
-│  SCHEDULER  │  MEMORY  │  INTERRUPTS  │  FILESYSTEM  │  DRIVERS │
-│             │          │              │              │          │
-│ ┌─────────┐ │ ┌──────┐ │ ┌──────────┐ │ ┌─────────┐ │ ┌──────┐ │
-│ │ CFS     │ │ │Phys  │ │ │ IDT      │ │ │ VFS     │ │ │VGA   │ │
-│ │Priority │ │ │Alloc │ │ │ ISR      │ │ │ Basic   │ │ │Timer │ │
-│ │RR       │ │ │Heap  │ │ │ Timer    │ │ │ Ops     │ │ │Storage│ │
-│ └─────────┘ │ │VM    │ │ │ Fault    │ │ └─────────┘ │ └──────┘ │
-│             │ └──────┘ │ └──────────┘ │              │          │
-└─────────────────────────────────────────────────────────────┘
-```
+1. **Modularity**: Subsystems are independent and configurable
+2. **Portability**: Architecture-agnostic design
+3. **Multi-Language**: C core with Rust drivers and C++ components
+4. **Educational**: Clear structure for learning
+5. **Performance**: Efficient algorithms
+6. **Extensibility**: Easy to add features
 
 ---
 
-## 🧠 Scheduler System
+## Multi-Language Development
 
-### Architecture
+IR0 supports **C, C++, and Rust** for different purposes:
 
-The scheduler system uses a plugin architecture with multiple implementations:
+- **C**: Kernel core, memory management, core drivers
+- **Rust**: New device drivers (network, storage, USB, etc.)
+- **C++**: Advanced kernel components (schedulers, network stacks)
 
-```c
-typedef struct 
-{
-    scheduler_type_t type;
-    const char *name;
-    
-    // Function pointers
-    void (*init)(void);
-    void (*add_task)(task_t *task);
-    task_t *(*pick_next_task)(void);
-    void (*task_tick)(void);
-    void (*cleanup)(void);
-    void *private_data;
-    
-} scheduler_ops_t;
+### Language Usage Guidelines
+
+| Component | C | Rust | C++ |
+|-----------|---|------|-----|
+| Kernel Core | ✅ Primary | ❌ No | ⚠️ Limited |
+| Memory Management | ✅ Yes | ❌ No | ❌ No |
+| Device Drivers | ✅ Legacy | ✅ Preferred | ❌ No |
+| Schedulers | ✅ Yes | ❌ No | ✅ Advanced only |
+| Network Stack | ✅ Yes | ❌ No | ✅ Optional |
+| Userspace | ✅ Utilities | ⚠️ Apps | ✅ Apps/Libraries |
+
+---
+
+## Rust Driver Development
+
+### Introduction
+
+Rust provides **memory safety** without runtime overhead, making it ideal for device drivers. All new drivers should be written in Rust when possible.
+
+### Why Rust for Drivers?
+
+✅ **Memory Safety**: No buffer overflows, use-after-free, or null pointer dereferences  
+✅ **Type Safety**: Compiler catches errors at compile time  
+✅ **Zero-Cost Abstractions**: No runtime penalty  
+✅ **Clear Ownership**: Prevents data races  
+✅ **FFI Integration**: Easy C interoperability
+
+### Project Structure
+
+```
+ir0-kernel/
+├── rust/
+│   ├── ffi/
+│   │   ├── kernel.rs      # Kernel API bindings
+│   │   └── README.md
+│   └── drivers/           # Rust drivers
+│       ├── network/
+│       ├── storage/
+│       └── usb/
+├── drivers/              # C drivers (legacy)
+└── Makefile
 ```
 
-### Available Schedulers
+### Setting Up Rust Environment
 
-#### 1. CFS (Completely Fair Scheduler)
-- **File**: `kernel/scheduler/cfs_scheduler.c`
-- **Data Structure**: Red-Black Tree
-- **Key Features**:
-  - Virtual runtime tracking
-  - Nice value support (-20 to +19)
-  - Load balancing
-  - Fair time distribution
+1. **Install Rust**:
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+```
 
-#### 2. Priority Scheduler
-- **File**: `kernel/scheduler/priority_scheduler.c`
-- **Data Structure**: Priority lists with bitmap
-- **Key Features**:
-  - 140 priority levels
-  - Aging to prevent starvation
-  - Fast priority selection
+2. **Install required components**:
+```bash
+rustup component add rust-src
+rustup target add x86_64-unknown-none
+```
 
-#### 3. Round-Robin Scheduler
-- **File**: `kernel/scheduler/round-robin_scheduler.c`
-- **Data Structure**: Circular linked list
-- **Key Features**:
-  - Minimal memory usage
-  - Equal time slices
-  - Simple implementation
+3. **Verify installation**:
+```bash
+rustc --version
+cargo --version
+```
 
-### Auto-Detection Logic
+### Kernel FFI Bindings
 
-The system automatically selects the best scheduler:
+The kernel provides Rust bindings in `rust/ffi/kernel.rs`:
 
-```c
-scheduler_type_t detect_best_scheduler(void) 
-{
-    extern uint32_t free_pages_count;
+```rust
+use ir0::ffi::kernel::*;
+
+// Memory allocation
+let ptr = kernel_alloc(1024)?;
+kernel_free(ptr);
+
+// Printing
+kernel_print("Hello from Rust!\n");
+
+// Panic handling
+if error {
+    kernel_panic("Fatal error");
+}
+```
+
+### Writing a Rust Driver
+
+#### Step 1: Create Driver File
+
+Create `rust/drivers/network/my_driver.rs`:
+
+```rust
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — Rust Driver
+ * Copyright (C) 2025  Your Name
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ */
+
+#![no_std]
+#![no_main]
+
+use core::ffi::c_void;
+
+// Import kernel FFI
+extern crate ir0_ffi;
+use ir0_ffi::*;
+
+/// Driver state structure
+struct MyDriver {
+    initialized: bool,
+    device_addr: usize,
+}
+
+impl MyDriver {
+    const fn new() -> Self {
+        Self {
+            initialized: false,
+            device_addr: 0,
+        }
+    }
+}
+
+static mut DRIVER: MyDriver = MyDriver::new();
+
+/// Initialize driver
+#[no_mangle]
+pub extern "C" fn my_driver_init() -> i32 {
+    kernel_print("My Rust driver initializing...\n");
     
-    if (free_pages_count > 1000) 
-    {
-        return SCHEDULER_CFS;        // Most sophisticated
-    } 
-    else if (free_pages_count > 100) 
-    {
-        return SCHEDULER_PRIORITY;   // Medium complexity
-    } 
-    else 
-    {
-        return SCHEDULER_ROUND_ROBIN; // Fallback
+    unsafe {
+        DRIVER.initialized = true;
+    }
+    
+    kernel_print("My Rust driver initialized successfully\n");
+    0  // IR0_OK
+}
+
+/// Probe device
+#[no_mangle]
+pub extern "C" fn my_driver_probe(device: *mut c_void) -> i32 {
+    if device.is_null() {
+        kernel_panic("NULL device pointer");
+    }
+    
+    kernel_print("Probing device...\n");
+    
+    // Probe logic here
+    
+    0  // IR0_OK
+}
+
+/// Remove device
+#[no_mangle]
+pub extern "C" fn my_driver_remove(device: *mut c_void) {
+    kernel_print("Removing device...\n");
+    
+    // Cleanup logic here
+}
+
+/// Read from device
+#[no_mangle]
+pub extern "C" fn my_driver_read(buf: *mut c_void, len: usize) -> i32 {
+    if buf.is_null() {
+        return -1;  // ERROR
+    }
+    
+    // Read logic here
+    
+    len as i32
+}
+
+/// Write to device
+#[no_mangle]
+pub extern "C" fn my_driver_write(buf: *const c_void, len: usize) -> i32 {
+    if buf.is_null() {
+        return -1;  // ERROR
+    }
+    
+    // Write logic here
+    
+    len as i32
+}
+
+/// Driver operations structure
+#[no_mangle]
+static DRIVER_OPS: DriverOps = DriverOps {
+    init: Some(my_driver_init),
+    probe: Some(my_driver_probe),
+    remove: Some(my_driver_remove),
+    read: Some(my_driver_read),
+    write: Some(my_driver_write),
+    ioctl: None,
+};
+
+/// Register driver with kernel
+#[no_mangle]
+pub extern "C" fn register_my_driver() -> i32 {
+    unsafe {
+        ir0_register_driver(
+            b"my_rust_driver\0".as_ptr(),
+            &DRIVER_OPS as *const DriverOps
+        )
+    }
+}
+
+/// Panic handler (required for no_std)
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    let msg = b"Rust driver panic\0";
+    unsafe {
+        panic(msg.as_ptr());
+        core::hint::unreachable_unchecked()
     }
 }
 ```
 
-### Adding a New Scheduler
+#### Step 2: Build the Driver
 
-1. **Create Implementation**:
-```c
-// my_scheduler.c
-static void my_scheduler_init(void) { /* ... */ }
-static void my_scheduler_add_task(task_t *task) { /* ... */ }
-static task_t *my_scheduler_pick_next_task(void) { /* ... */ }
-static void my_scheduler_task_tick(void) { /* ... */ }
-
-scheduler_ops_t my_scheduler_ops = 
-{
-    .type = SCHEDULER_MY,
-    .name = "My Scheduler",
-    .init = my_scheduler_init,
-    .add_task = my_scheduler_add_task,
-    .pick_next_task = my_scheduler_pick_next_task,
-    .task_tick = my_scheduler_task_tick,
-    .cleanup = NULL,
-    .private_data = NULL
-};
+```bash
+make unibuild -rust rust/drivers/network/my_driver.rs
 ```
 
-2. **Register in Detection**:
-```c
-// scheduler_detection.c
-extern scheduler_ops_t my_scheduler_ops;
+#### Step 3: Link with Kernel
 
-scheduler_type_t detect_best_scheduler(void) 
-{
-    // Add your detection logic
-    if (my_condition) 
-    {
-        return SCHEDULER_MY;
+The driver will be automatically linked if added to the Makefile's `RUST_DRIVERS` variable.
+
+### Rust Best Practices for Kernel Development
+
+#### Memory Management
+
+```rust
+// Allocate memory
+let ptr = match kernel_alloc(1024) {
+    Some(p) => p,
+    None => {
+        kernel_panic("Out of memory");
     }
-    // ... existing logic
+};
+
+// Always free memory
+kernel_free(ptr);
+```
+
+#### Error Handling
+
+```rust
+// Use Result for fallible operations
+fn do_operation() -> Result<(), i32> {
+    if condition {
+        Ok(())
+    } else {
+        Err(-1)
+    }
+}
+
+// Handle errors properly
+match do_operation() {
+    Ok(_) => kernel_print("Success\n"),
+    Err(e) => kernel_print("Error occurred\n"),
 }
 ```
+
+#### Safety
+
+```rust
+// Minimize unsafe code
+unsafe {
+    // Only use unsafe when absolutely necessary
+    // Document why it's safe
+}
+
+// Prefer safe wrappers
+let result = safe_wrapper(data);  // Better
+let result = unsafe { raw_call(data) };  // Avoid
+```
+
+### Debugging Rust Drivers
+
+```rust
+// Use kernel_print for debugging
+kernel_print(&format!("Value: {}\n", value));
+
+// Use macros
+check_ptr!(ptr, "my_function");
+kernel_assert!(condition, "assertion failed");
+```
+
+### Rust Driver Examples
+
+See `rust/drivers/` for complete examples:
+- `network/rtl8139.rs` - Network card driver
+- `storage/ahci.rs` - SATA storage driver
+- `usb/xhci.rs` - USB 3.0 host controller
 
 ---
 
-## 🧠 Memory Management
+## C++ Kernel Components
 
-### Architecture
+### Introduction
 
-The memory system is organized in layers:
+C++ can be used for **specific kernel components** where object-oriented design or templates provide clear benefits. However, C++ use is **highly restricted** and **optional**.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    MEMORY MANAGEMENT                        │
-├─────────────────────────────────────────────────────────────┤
-│                    INTERFACE LAYER                          │
-│  kmalloc()  │  kfree()  │  krealloc()  │  vmalloc()  │      │
-├─────────────────────────────────────────────────────────────┤
-│                    HEAP ALLOCATOR                           │
-│  Block Management  │  Fragmentation  │  Statistics  │       │
-├─────────────────────────────────────────────────────────────┤
-│                  PHYSICAL ALLOCATOR                          │
-│  Bitmap Management  │  Page Allocation  │  Memory Zones  │   │
-├─────────────────────────────────────────────────────────────┤
-│                    PAGING SYSTEM                            │
-│  Page Tables  │  TLB Management  │  Fault Handling  │       │
-└─────────────────────────────────────────────────────────────┘
-```
+### Why C++ (Limited Use)?
 
-### Key Components
+✅ **RAII**: Automatic resource management  
+✅ **Templates**: Generic data structures  
+✅ **OOP**: Complex state machines  
+⚠️ **Restrictions**: No exceptions, no RTTI, freestanding only
 
-#### Physical Allocator
-- **File**: `memory/physical_allocator.c`
-- **Purpose**: Manages physical memory pages
-- **Data Structure**: Bitmap
-- **Functions**:
-  - `alloc_physical_page()`: Allocate 4KB page
-  - `free_physical_page()`: Free page
-  - `set_page_used()/set_page_free()`: Mark pages
+### When to Use C++
 
-#### Heap Allocator
-- **File**: `memory/heap_allocator.c`
-- **Purpose**: Kernel memory allocation
-- **Data Structure**: Linked list of blocks
-- **Functions**:
-  - `kmalloc()`: Allocate memory
-  - `kfree()`: Free memory
-  - `krealloc()`: Resize memory
+**✅ Appropriate:**
+- Advanced schedulers (template-based)
+- Network protocol stacks (state machines)
+- Complex filesystem implementations
 
-#### Virtual Memory
-- **File**: `memory/ondemand-paging.c`
-- **Purpose**: Virtual memory management
-- **Features**:
-  - On-demand page loading
-  - Page fault handling
-  - Memory mapping
+**❌ Inappropriate:**
+- Memory management primitives
+- Interrupt handlers
+- Boot code
+- Architecture-specific code
+- Simple drivers
 
-### Memory Layout
+### Project Structure
 
 ```
-Virtual Address Space:
-0x00000000 - 0x04000000: Kernel code/data (64MB)
-0x04000000 - 0x06000000: Kernel heap (32MB)
-0x06000000 - 0x06400000: Kernel stacks (4MB)
-0x10000000 - 0x20000000: vmalloc area (256MB)
-0x40000000 - 0x80000000: User space (1GB)
-
-Physical Memory:
-0x02800000 - 0x08000000: Available physical memory
+ir0-kernel/
+├── cpp/
+│   ├── include/
+│   │   └── compat.h       # C++ compatibility
+│   └── runtime/
+│       └── compat.cpp     # C++ runtime
+├── kernel/
+│   ├── scheduler/
+│   │   └── cfs_cpp.cpp   # C++ scheduler (example)
+│   └── net/
+│       └── tcp_stack.cpp # C++ network stack
+└── Makefile
 ```
 
-### Adding Memory Features
+### Setting Up C++ Environment
 
-#### 1. New Memory Zone
-```c
-// Add to memory_zone_t enum
-typedef enum 
-{
-    ZONE_KERNEL_STATIC,
-    ZONE_KERNEL_HEAP,
-    ZONE_KERNEL_STACK,
-    ZONE_VMALLOC,
-    ZONE_USER_SPACE,
-    ZONE_MY_NEW_ZONE,  // Add your zone
-    ZONE_INVALID
-} memory_zone_t;
-```
-
-#### 2. New Allocation Function
-```c
-void *my_alloc(size_t size) 
-{
-    // Your allocation logic
-    uintptr_t phys = alloc_physical_page();
-    int result = arch_map_page(virt_addr, phys, flags);
-    return (void *)virt_addr;
-}
-```
-
----
-
-## ⚡ Interrupt System
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    INTERRUPT SYSTEM                         │
-├─────────────────────────────────────────────────────────────┤
-│                    IDT (Interrupt Descriptor Table)         │
-│  Vector 0-31: CPU Exceptions  │  Vector 32-255: IRQs  │     │
-├─────────────────────────────────────────────────────────────┤
-│                    ISR HANDLERS                             │
-│  Exception Handlers  │  IRQ Handlers  │  Timer Handlers  │  │
-├─────────────────────────────────────────────────────────────┤
-│                    TIMER SYSTEM                             │
-│  PIT  │  HPET  │  LAPIC  │  Best Clock Selection  │        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Key Components
-
-#### IDT Management
-- **File**: `interrupt/idt.c`
-- **Purpose**: Interrupt descriptor table setup
-- **Features**:
-  - Exception handling
-  - IRQ routing
-  - Page fault handling
-
-#### Timer System
-- **Files**: `drivers/timer/`
-- **Purpose**: System timing and scheduling
-- **Components**:
-  - PIT: Programmable Interval Timer
-  - HPET: High Precision Event Timer
-  - LAPIC: Local APIC timer
-
-### Adding Interrupt Handlers
-
-#### 1. Define ISR
-```c
-// In assembly
-global isr_my_handler
-isr_my_handler:
-    cli
-    push eax
-    call my_handler_c
-    pop eax
-    sti
-    iret
-```
-
-#### 2. Register Handler
-```c
-// In C
-void my_handler_c(void) 
-{
-    // Handle your interrupt
-    LOG_INFO("My interrupt handled");
-}
-
-// Register in IDT
-void register_my_handler(void) 
-{
-    idt_set_gate(MY_IRQ_VECTOR, (uint32_t)isr_my_handler, 0x08, 0x8E);
-}
-```
-
----
-
-## 🏗️ Build System
-
-### Architecture Support
-
-The build system supports multiple architectures through conditional compilation:
-
-```makefile
-ifeq ($(ARCH),x86-64)
-    CC = gcc
-    CFLAGS = -m64 -mcmodel=large
-    ASMFLAGS = -f elf64
-    LDFLAGS = -m elf_x86_64
-else ifeq ($(ARCH),x86-32)
-    CC = gcc
-    CFLAGS = -m32 -march=i686
-    ASMFLAGS = -f elf32
-    LDFLAGS = -m elf_i386
-else ifeq ($(ARCH),arm64)
-    CC = aarch64-linux-gnu-gcc
-    CFLAGS = -march=armv8-a
-    ASMFLAGS = --64
-    LDFLAGS = -m aarch64linux
-endif
-```
-
-### Build Targets
-
-Different build targets enable/disable features:
-
-```c
-// setup/kernel_config.h
-#ifdef IR0_DESKTOP
-    #define IR0_ENABLE_GUI 1
-    #define IR0_ENABLE_AUDIO 1
-    #define IR0_ENABLE_FILESYSTEM 1
-#elif defined(IR0_SERVER)
-    #define IR0_ENABLE_NETWORKING 1
-    #define IR0_ENABLE_FILESYSTEM 1
-#elif defined(IR0_IOT)
-    #define IR0_ENABLE_POWER_MANAGEMENT 1
-    #define IR0_ENABLE_FILESYSTEM 1
-#elif defined(IR0_EMBEDDED)
-    // Minimal features only
-#endif
-```
-
-### Adding New Architecture
-
-1. **Create Architecture Directory**:
+1. **Install G++**:
 ```bash
-mkdir -p arch/myarch/{sources,asm}
-mkdir -p memory/arch/myarch
-mkdir -p interrupt/arch/myarch
+sudo apt-get install g++
 ```
 
-2. **Add Build Configuration**:
-```makefile
-else ifeq ($(ARCH),myarch)
-    CC = myarch-linux-gnu-gcc
-    CFLAGS = -march=myarch
-    ASMFLAGS = -f myarch
-    LDFLAGS = -m myarch
-    ARCH_SUBDIRS = arch/myarch
-    KERNEL_ENTRY = kmain_myarch
+2. **Verify installation**:
+```bash
+g++ --version
 ```
 
-3. **Implement Architecture Files**:
-- `arch/myarch/sources/arch_myarch.c`
-- `arch/myarch/asm/boot_myarch.asm`
-- `arch/myarch/linker.ld`
+### C++ Restrictions in Kernel
 
----
-
-## 📁 File System
-
-### VFS Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    VIRTUAL FILE SYSTEM                      │
-├─────────────────────────────────────────────────────────────┤
-│                    VFS INTERFACE                            │
-│  vfs_open()  │  vfs_read()  │  vfs_write()  │  vfs_close() │
-├─────────────────────────────────────────────────────────────┤
-│                    FILE SYSTEM DRIVERS                      │
-│  RAMFS  │  EXT2  │  FAT32  │  Custom FS  │                │
-└─────────────────────────────────────────────────────────────┘
+**Compiler Flags (Required):**
+```bash
+-fno-exceptions      # No C++ exceptions
+-fno-rtti           # No runtime type information
+-ffreestanding      # Freestanding environment
+-nostdlib           # No standard library
+-fno-threadsafe-statics  # No thread-safe statics
 ```
 
-### Current Implementation
+**Language Features:**
 
-- **File**: `fs/vfs_simple.c`
-- **Features**:
-  - Basic file operations
-  - In-memory file system
-  - Extensible design
+| Feature | Allowed | Notes |
+|---------|---------|-------|
+| Classes | ✅ Yes | Core OOP |
+| Templates | ✅ Yes | Generic programming |
+| Constructors/Destructors | ✅ Yes | RAII |
+| Operator Overloading | ✅ Yes | Custom types |
+| Exceptions | ❌ No | -fno-exceptions |
+| RTTI | ❌ No | -fno-rtti |
+| STL | ❌ No | Freestanding |
+| `<iostream>` | ❌ No | No I/O streams |
+| `new`/`delete` | ✅ Custom | Use kernel allocator |
 
-### Adding File System Support
+### Writing C++ Kernel Components
 
-#### 1. Define File System Operations
-```c
-typedef struct 
-{
-    const char *name;
-    int (*mount)(const char *device, const char *mountpoint);
-    int (*open)(const char *path, int flags, vfs_file_t **file);
-    int (*read)(vfs_file_t *file, void *buffer, size_t size);
-    int (*write)(vfs_file_t *file, const void *buffer, size_t size);
-    int (*close)(vfs_file_t *file);
-} vfs_ops_t;
-```
+#### Step 1: Create Component File
 
-#### 2. Implement File System
-```c
-static int myfs_open(const char *path, int flags, vfs_file_t **file) 
-{
-    // Your file system implementation
-    return 0;
+Create `kernel/scheduler/advanced_scheduler.cpp`:
+
+```cpp
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — C++ Component
+ * Copyright (C) 2025  Your Name
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ *
+ * File: advanced_scheduler.cpp
+ * Description: Template-based advanced scheduler
+ */
+
+#include <cpp/include/compat.h>
+
+extern "C" {
+    #include <ir0/memory/kmem.h>
+    #include <ir0/print.h>
+    #include <ir0/critical.h>
 }
 
-vfs_ops_t myfs_ops = 
+namespace ir0 {
+namespace scheduler {
+
+/// Template-based task queue
+template<typename T, size_t Size>
+class TaskQueue {
+private:
+    T buffer[Size];
+    size_t head;
+    size_t tail;
+    size_t count;
+
+public:
+    TaskQueue() : head(0), tail(0), count(0) {}
+    
+    bool enqueue(const T& item) {
+        if (count >= Size) return false;
+        
+        buffer[tail] = item;
+        tail = (tail + 1) % Size;
+        count++;
+        return true;
+    }
+    
+    bool dequeue(T& item) {
+        if (count == 0) return false;
+        
+        item = buffer[head];
+        head = (head + 1) % Size;
+        count--;
+        return true;
+    }
+    
+    size_t size() const { return count; }
+    bool empty() const { return count == 0; }
+    bool full() const { return count >= Size; }
+};
+
+/// Advanced scheduler class
+class AdvancedScheduler {
+private:
+    TaskQueue<void*, 256> ready_queue;
+    bool initialized;
+
+public:
+    AdvancedScheduler() : initialized(false) {}
+    
+    ~AdvancedScheduler() {
+        // Cleanup
+    }
+    
+    void init() {
+        if (initialized) return;
+        
+        print("Advanced C++ scheduler initializing...\n");
+        initialized = true;
+        print_success("Advanced scheduler initialized\n");
+    }
+    
+    void add_task(void* task) {
+        CHECK_PTR(task, "add_task");
+        
+        if (!ready_queue.enqueue(task)) {
+            print_error("Task queue full!\n");
+        }
+    }
+    
+    void* pick_next_task() {
+        void* task = nullptr;
+        
+        if (ready_queue.dequeue(task)) {
+            return task;
+        }
+        
+        return nullptr;  // No tasks
+    }
+    
+    size_t task_count() const {
+        return ready_queue.size();
+    }
+};
+
+// Global scheduler instance
+static AdvancedScheduler* g_scheduler = nullptr;
+
+} // namespace scheduler
+} // namespace ir0
+
+// C interface for kernel
+extern "C" {
+
+void advanced_scheduler_init() {
+    using namespace ir0::scheduler;
+    
+    // Allocate scheduler using kernel allocator
+    g_scheduler = new AdvancedScheduler();
+    g_scheduler->init();
+}
+
+void advanced_scheduler_add_task(void* task) {
+    if (ir0::scheduler::g_scheduler) {
+        ir0::scheduler::g_scheduler->add_task(task);
+    }
+}
+
+void* advanced_scheduler_pick_next() {
+    if (ir0::scheduler::g_scheduler) {
+        return ir0::scheduler::g_scheduler->pick_next_task();
+    }
+    return nullptr;
+}
+
+void advanced_scheduler_cleanup() {
+    if (ir0::scheduler::g_scheduler) {
+        delete ir0::scheduler::g_scheduler;
+        ir0::scheduler::g_scheduler = nullptr;
+    }
+}
+
+} // extern "C"
+```
+
+#### Step 2: Build the Component
+
+```bash
+make unibuild -cpp kernel/scheduler/advanced_scheduler.cpp
+```
+
+### C++ Best Practices for Kernel
+
+#### RAII (Resource Acquisition Is Initialization)
+
+```cpp
+class ResourceGuard {
+private:
+    void* resource;
+    
+public:
+    ResourceGuard(size_t size) {
+        resource = kmalloc(size);
+        if (!resource) {
+            kernel_panic("Allocation failed");
+        }
+    }
+    
+    ~ResourceGuard() {
+        if (resource) {
+            kfree(resource);
+        }
+    }
+    
+    void* get() { return resource; }
+};
+
+// Usage - automatically freed when scope exits
 {
-    .name = "myfs",
-    .open = myfs_open,
-    // ... other operations
+    ResourceGuard guard(1024);
+    void* ptr = guard.get();
+    // Use ptr...
+} // Automatically freed here
+```
+
+#### Templates for Type Safety
+
+```cpp
+template<typename T>
+class TypedBuffer {
+private:
+    T* data;
+    size_t capacity;
+    
+public:
+    TypedBuffer(size_t size) 
+        : capacity(size) {
+        data = static_cast<T*>(kmalloc(size * sizeof(T)));
+    }
+    
+    ~TypedBuffer() {
+        if (data) kfree(data);
+    }
+    
+    T& operator[](size_t index) {
+        CHECK_BOUNDS(index, capacity, "TypedBuffer");
+        return data[index];
+    }
 };
 ```
 
-#### 3. Register File System
-```c
-void register_myfs(void) 
-{
-    vfs_register_filesystem(&myfs_ops);
-}
+#### Namespace Organization
+
+```cpp
+namespace ir0 {
+namespace kernel {
+namespace memory {
+
+class Allocator {
+    // Implementation
+};
+
+} // namespace memory
+} // namespace kernel
+} // namespace ir0
 ```
+
+### C++ Component Examples
+
+See `kernel/` for examples:
+- `scheduler/cfs_cpp.cpp` - C++ CFS scheduler
+- `net/tcp_stack.cpp` - TCP/IP stack
+- `fs/ext2_cpp.cpp` - EXT2 filesystem
 
 ---
 
-## 🛠️ Development Workflow
+## Code Style Guidelines
 
-### Setting Up Development Environment
+### C Code Style
 
-1. **Install Dependencies**:
-```bash
-sudo apt-get install build-essential nasm grub-pc-bin xorriso qemu-system-x86
-```
-
-2. **Clone Repository**:
-```bash
-git clone https://github.com/your-repo/ir0-kernel.git
-cd ir0-kernel
-```
-
-3. **Build for Development**:
-```bash
-make ARCH=x86-64 BUILD_TARGET=desktop
-```
-
-### Code Style Guidelines
-
-#### C Code Style
 ```c
 // Function naming: snake_case
-void my_function_name(void) 
-{
+void my_function_name(void) {
     // Variable naming: snake_case
     int my_variable = 0;
     
     // Constants: UPPER_SNAKE_CASE
     const int MAX_SIZE = 1024;
     
-    // Error handling
-    if (error_condition) 
-    {
-        LOG_ERR("Error message");
-        return ERROR_CODE;
-    }
+    // Pointer style: type* name (star with type)
+    void* ptr = kmalloc(size);
     
-    // Success logging
-    LOG_OK("Operation completed successfully");
+    // Braces: K&R style
+    if (condition) {
+        // code
+    } else {
+        // code
+    }
 }
 ```
 
-#### Comment Style
+### Rust Code Style
+
+```rust
+// Follow Rust conventions
+fn my_function_name() -> Result<(), i32> {
+    // Use snake_case for variables
+    let my_variable = 0;
+    
+    // Use SCREAMING_SNAKE_CASE for constants
+    const MAX_SIZE: usize = 1024;
+    
+    // Use match for error handling
+    match operation() {
+        Ok(value) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+```
+
+### C++ Code Style
+
+```cpp
+// Classes: PascalCase
+class MyClassName {
+private:
+    // Members: snake_case with trailing underscore
+    int member_variable_;
+    
+public:
+    // Methods: snake_case
+    void my_method() {
+        // Local variables: snake_case
+        int local_var = 0;
+    }
+};
+
+// Namespaces: lowercase
+namespace ir0 {
+namespace subsystem {
+    // code
+}
+}
+```
+
+### File Headers
+
+All source files must include a GPL-3.0 header:
+
 ```c
-// Single line comments for simple explanations
-
-/*
- * Multi-line comments for complex explanations
- * Use this for function documentation
- */
-
+// SPDX-License-Identifier: GPL-3.0-only
 /**
- * Function: my_function
- * Purpose: Brief description
- * Parameters:
- *   @param1: Description
- *   @param2: Description
- * Returns: Description of return value
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: filename.c
+ * Description: Brief file description
  */
 ```
 
-#### Error Handling
-```c
-int my_function(void) 
-{
-    // Always check for errors
-    void *ptr = kmalloc(size);
-    if (!ptr) 
-    {
-        LOG_ERR("Failed to allocate memory");
-        return -ENOMEM;
-    }
-    
-    // Use error codes consistently
-    if (operation_failed) 
-    {
-        kfree(ptr);
-        return -EINVAL;
-    }
-    
-    return 0; // Success
-}
-```
+---
 
-### Testing Guidelines
+## Testing Guidelines
 
-#### 1. Build Testing
+### Build Testing
+
 ```bash
-# Test all architectures
-make all-arch
+# Test all configurations
+make deptest
 
-# Test all build targets
-make all-targets
+# Test C compilation
+make unibuild kernel/process.c
 
-# Test all combinations
-make all-combinations
+# Test Rust compilation
+make unibuild -rust rust/drivers/test.rs
+
+# Test C++ compilation
+make unibuild -cpp kernel/component.cpp
+
+# Test cross-compilation
+make unibuild -win kernel/module.c
 ```
 
-#### 2. Runtime Testing
+### Runtime Testing
+
 ```bash
-# Test in QEMU
-make ARCH=x86-64 BUILD_TARGET=desktop run
+# Run in QEMU
+make run
 
-# Debug mode
-make ARCH=x86-32 BUILD_TARGET=desktop debug
-```
-
-#### 3. Memory Testing
-```c
-// Test memory allocation
-void *ptr1 = kmalloc(1024);
-void *ptr2 = kmalloc(2048);
-kfree(ptr1);
-void *ptr3 = krealloc(ptr2, 4096);
-kfree(ptr3);
-```
-
-### Debugging
-
-#### 1. Logging System
-```c
-// Use appropriate log levels
-LOG_INFO("Information message");
-LOG_OK("Success message");
-LOG_WARN("Warning message");
-LOG_ERR("Error message");
-```
-
-#### 2. Debug Functions
-```c
-// Memory debugging
-debug_memory_state();
-
-// Scheduler debugging
-dump_scheduler_state();
-
-// Architecture debugging
-arch_dump_registers();
-```
-
-#### 3. QEMU Debugging
-```bash
-# Run with debug output
-make ARCH=x86-64 BUILD_TARGET=desktop debug
-
-# Check debug log
-cat qemu_debug.log
+# Run with menuconfig
+make menuconfig
 ```
 
 ---
 
-## 🚀 Performance Considerations
+## Resources
 
-### Memory Management
-- Use appropriate allocation sizes
-- Avoid memory fragmentation
-- Profile memory usage
-
-### Scheduler Performance
-- Choose appropriate scheduler for workload
-- Monitor scheduler overhead
-- Optimize context switch time
-
-### Interrupt Handling
-- Keep ISRs short
-- Use bottom halves for complex processing
-- Minimize interrupt latency
+- **Documentation**: `/docs/LANGUAGE_SUPPORT_ROADMAP.md`
+- **Rust FFI**: `/rust/ffi/kernel.rs`
+- **C++ Compat**: `/cpp/include/compat.h`
+- **Examples**: `/rust/drivers/` and `/kernel/`
 
 ---
 
-## 📚 Additional Resources
-
-- **[BUILD_SYSTEM.md](BUILD_SYSTEM.md)**: Complete build system documentation
-- **[memory/README](memory/README)**: Memory management details
-- **[kernel/scheduler/](kernel/scheduler/)**: Scheduler implementation details
-- **OSDev Wiki**: General OS development resources
-- **Linux Kernel Documentation**: Reference for design patterns
-
----
-
-*This guide is a living document. Please contribute improvements and corrections.*
+*This guide is a living document. Contributions welcome!*
