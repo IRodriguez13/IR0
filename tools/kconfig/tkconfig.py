@@ -1313,7 +1313,10 @@ For more information, documentation, and source code:
         info_text.insert('1.0', info_content)
         info_text.config(state=tk.DISABLED)
         
+        # Create links frame
+        links_frame = ttk.Frame(main_container)
         links_frame.pack(pady=(10, 0))
+
         
         # Repository link
         def open_repository():
