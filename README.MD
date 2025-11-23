@@ -153,6 +153,9 @@ make unibuild-win drivers/serial/serial.c drivers/dma/dma.c
 #### Cleaning Compiled Files
 
 ```bash
+make unibuild-clean FILE=<file>
+```
+
 ### Driver Management
 
 The build system provides specific commands to compile, link, and clean drivers on demand. This allows for modular development and testing of drivers in different languages.
