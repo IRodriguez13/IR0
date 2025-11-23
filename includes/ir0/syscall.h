@@ -43,6 +43,7 @@ typedef uint32_t mode_t;
 #define SYS_LSEEK 19
 #define SYS_UNLINK 87
 #define SYS_RMDIR_R 88
+#define SYS_RMDIR_FORCE 89
 #define SYS_MOUNT 90
 #define SYS_DF 95
 #define SYS_CHMOD 100

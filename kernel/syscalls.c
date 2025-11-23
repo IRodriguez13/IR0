@@ -73,7 +73,7 @@ int64_t sys_exit(int exit_code)
   // Llamar al scheduler para pasar a otro proceso
   rr_schedule_next();
 
-  panicex("You left the shell succesfully! but you should't do that!", RUNNING_OUT_PROCESS, "SYSCALLS.C", 75);
+  panicex("You left the shell succesfully! but you should't do that!", RUNNING_OUT_PROCESS, "SYSCALLS.C", 75, "sys_exit");
 
   // Nunca debería volver aquí
   return 0;
@@ -645,6 +645,21 @@ int64_t sys_rmdir(const char *pathname)
 
   if (minix_fs_is_working())
     return minix_fs_rmdir(pathname);
+
+  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
+  return -1;
+}
+
+int64_t sys_rmdir_force(const char *pathname)
+{
+  if (!current_process || !pathname)
+    return -EFAULT;
+
+  if (minix_fs_is_working())
+  {
+    extern int minix_fs_rmdir_force(const char *path);
+    return minix_fs_rmdir_force(pathname);
+  }
 
   sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
   return -1;
@@ -1236,6 +1251,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_read_file((const char *)arg1, (void **)arg2, (size_t *)arg3);
   case 40:
     return sys_rmdir((const char *)arg1);
+  case 88:
+    return sys_rmdir_recursive((const char *)arg1);
+  case 89:
+    return sys_rmdir_force((const char *)arg1);
   case 51:
     return sys_brk((void *)arg1);
   case 52:
@@ -1272,8 +1291,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_chdir((const char *)arg1);
   case 87:
     return sys_unlink((const char *)arg1);
-  case 88:
-    return sys_rmdir_recursive((const char *)arg1);
   case 90:
     return sys_chmod((const char *)arg1, (mode_t)arg2);
   case 91:

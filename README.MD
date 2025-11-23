@@ -87,13 +87,40 @@ Additional run options:
 
 ### Compiling Individual Files
 
+
 When developing drivers or kernel modules, compile a single file in isolation:
+
+```bash
+make unibuild drivers/IO/ps2.c
+```
+
+Or using the traditional syntax:
 
 ```bash
 make unibuild FILE=drivers/IO/ps2.c
 ```
 
-This compiles the specified file without building the entire kernel.
+**Cross-Platform Compilation:**
+
+Compile for Windows using MinGW cross-compiler:
+
+```bash
+make unibuild -win drivers/IO/ps2.c
+```
+
+And support for other languages:
+
+```bash
+make unibuild -cpp kernel/module.cpp    # C++ support (planned)
+make unibuild -rust kernel/module.rs    # Rust support (planned)
+```
+
+This compiles the specified file without building the entire kernel. Multiple files can be compiled at once:
+
+```bash
+make unibuild fs/vfs.c fs/ramfs.c
+make unibuild -win drivers/serial/serial.c drivers/dma/dma.c
+```
 
 To clean a single compiled file:
 
@@ -123,11 +150,31 @@ To clean all compiled objects and binaries:
 make clean
 ```
 
-To clean Windows build artifacts:
+### Kernel Configuration Menu (Experimental)
 
+IR0 includes an **experimental** graphical configuration tool (`menuconfig`) that provides an interactive interface for kernel subsystem selection and compilation. This tool is designed to simplify kernel development and allow fine-grained control over which components are built.
+
+**Features:**
+- **Visual subsystem selection**: Interactive interface showing kernel architecture layers
+- **Selective compilation**: Build only the subsystems you need using the integrated `unibuild` system
+- **Real-time architecture diagram**: Visual representation of kernel components and their dependencies
+- **Profile support**: Pre-configured profiles for different use cases (x86-64 Generic, ARM32, etc.)
+- **Cross-platform**: Supports Linux, Windows (MSYS2/MinGW), and macOS
+
+**Usage:**
 ```bash
-make windows-clean
+make menuconfig
 ```
+
+Or run directly:
+```bash
+./menuconfig
+```
+
+**Requirements:**
+- Python 3 with tkinter support (`python3-tk` package on Debian/Ubuntu)
+
+**Note:** This feature is currently experimental. While it provides a convenient way to configure and build the kernel subsystems, the standard `make ir0` workflow remains the primary recommended build method. The configuration tool integrates with the kernel's `unibuild` system to compile selected subsystems incrementally.
 
 ## Kernel Features
 
@@ -196,13 +243,6 @@ Build targets:
 - `make unibuild FILE=<file>` - Compile single file
 - `make clean` - Clean build artifacts
 
-## Documentation
-
-Additional documentation is available in the repository:
-- Build System: `setup/docs/BUILD_SYSTEM.md`
-- Installation: `setup/docs/INSTALL.md`
-- Configuration: `setup/docs/CONFIGURATION_SYSTEM_README.md`
-- Include System: `setup/docs/INCLUDE_SYSTEM_GUIDE.md`
 
 ## License
 
@@ -302,10 +342,36 @@ Opciones adicionales de ejecución:
 Al desarrollar controladores o módulos del kernel, compilar un solo archivo de forma aislada:
 
 ```bash
+make unibuild drivers/IO/ps2.c
+```
+
+O usando la sintaxis tradicional:
+
+```bash
 make unibuild FILE=drivers/IO/ps2.c
 ```
 
-Esto compila el archivo especificado sin compilar todo el kernel.
+**Compilación Cruzada para Múltiples Plataformas:**
+
+Compilar para Windows usando el compilador cruzado MinGW:
+
+```bash
+make unibuild -win drivers/IO/ps2.c
+```
+
+Soporte para otros lenguajes:
+
+```bash
+make unibuild -cpp kernel/module.cpp    # Soporte C++ (planificado)
+make unibuild -rust kernel/module.rs    # Soporte Rust (planificado)
+```
+
+Esto compila el archivo especificado sin compilar todo el kernel. Se pueden compilar múltiples archivos a la vez:
+
+```bash
+make unibuild fs/vfs.c fs/ramfs.c
+make unibuild -win drivers/serial/serial.c drivers/dma/dma.c
+```
 
 Para limpiar un archivo compilado individual:
 
@@ -335,11 +401,31 @@ Para limpiar todos los objetos compilados y binarios:
 make clean
 ```
 
-Para limpiar artefactos de compilación de Windows:
+### Menú de Configuración del Kernel (Experimental)
 
+IR0 incluye una herramienta gráfica de configuración **experimental** (`menuconfig`) que proporciona una interfaz interactiva para la selección y compilación de subsistemas del kernel. Esta herramienta está diseñada para simplificar el desarrollo del kernel y permitir un control granular sobre qué componentes se compilan.
+
+**Características:**
+- **Selección visual de subsistemas**: Interfaz interactiva mostrando las capas de arquitectura del kernel
+- **Compilación selectiva**: Compila solo los subsistemas que necesites usando el sistema integrado `unibuild`
+- **Diagrama de arquitectura en tiempo real**: Representación visual de los componentes del kernel y sus dependencias
+- **Soporte de perfiles**: Perfiles preconfigurados para diferentes casos de uso (x86-64 Genérico, ARM32, etc.)
+- **Multiplataforma**: Soporta Linux, Windows (MSYS2/MinGW) y macOS
+
+**Uso:**
 ```bash
-make windows-clean
+make menuconfig
 ```
+
+O ejecutar directamente:
+```bash
+./menuconfig
+```
+
+**Requisitos:**
+- Python 3 con soporte para tkinter (paquete `python3-tk` en Debian/Ubuntu)
+
+**Nota:** Esta característica es actualmente experimental. Aunque proporciona una manera conveniente de configurar y compilar los subsistemas del kernel, el flujo de trabajo estándar `make ir0` sigue siendo el método de compilación principal recomendado. La herramienta de configuración se integra con el sistema `unibuild` del kernel para compilar subsistemas seleccionados de forma incremental.
 
 ## Características del Kernel
 
