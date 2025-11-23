@@ -11,27 +11,23 @@
 ; * Description: x86-64 boot loader with long mode setup, paging, and kernel entry
 ; */
 
-; --------------------------
 ; Multiboot header
-; --------------------------
+
 section .multiboot
 align 4
     dd 0x1BADB002               ; Magic
     dd 0x00                     ; Flags
     dd -(0x1BADB002 + 0x00)     ; Checksum
 
-; --------------------------
+
 ; Stack
-; --------------------------
+
 section .bss
 align 16
 stack_bottom:
     resb 16384                  ; 16KB stack
 stack_top:
 
-; --------------------------
-; Código principal (32-bit)
-; --------------------------
 section .text
 
 [BITS 32]
@@ -39,61 +35,52 @@ section .text
 global _start
 extern kmain
 
-; Segmento de texto principal
+; Main text segment
 _start:
     ; Multiboot check
     cmp eax, 0x2BADB002
     jne .no_multiboot
 
-    ; Stack inicial
+    ; Initial Stack 
     mov esp, stack_top
 
-    ; --------------------------
-    ; Habilitar PAE
-    ; --------------------------
+    ; PAE on
+
     mov eax, cr4
     or eax, 1 << 5              ; CR4.PAE
     mov cr4, eax
 
-    ; --------------------------
-    ; Habilitar Long Mode (LME)
-    ; --------------------------
+    ; Long Mode (LME)
+
     mov ecx, 0xC0000080         ; IA32_EFER MSR
     rdmsr
     or eax, 1 << 8              ; bit LME
     wrmsr
 
-    ; --------------------------
-    ; Configurar CR3
-    ; --------------------------
+    ; Config CR3
+
     mov eax, pml4_minimal
     mov cr3, eax
 
-    ; --------------------------
-    ; Habilitar Paging
-    ; --------------------------
+    ; Paging on
+
     mov eax, cr0
     or eax, 1 << 31             ; CR0.PG
     mov cr0, eax
 
-    ; --------------------------
-    ; Cargar GDT mínima, que después voy a reemplazar en gdt.c
-    ; --------------------------
+    ; GDT load before to replace it in c code.
+
     lgdt [gdt_descriptor]
 
-    ; --------------------------
     ; Salto far a 64-bit
-    ; --------------------------
     jmp CODE_SEL:modo_64bit
 
-.no_multiboot: ; panic por si se cae el multiboot
+.no_multiboot: ; panic if multiboot crashes
     mov dword [0xB8000], 0x4F4E4F4D  ; "MN"
     cli
     hlt
 
-; --------------------------
 ; 64-bit code
-; --------------------------
 [BITS 64]
 modo_64bit:
     ; Segments
@@ -105,20 +92,18 @@ modo_64bit:
     mov fs, ax
     mov gs, ax
 
-    ; Stack en rango mapeado
+    ; Stack in mapped range
     mov rsp, 0x8FF00
 
-    ; Salto al  kernel 
+    ; jump to kernel
     call kmain
 
-.halt: ; Si retorno panic en bajo  nivel.
+.halt: ; primitive panic if returns
     cli
     hlt
     jmp .halt
 
-; ===========================================================================
-; Tablas de paginación mínimas
-; ===========================================================================
+; page tables in early boot
 section .data
 align 4096
 pml4_minimal:
@@ -132,7 +117,7 @@ pdp_minimal:
 
 align 4096
 pd_minimal:
-    ; 16 entradas de 2 MiB -> 32 MiB mapeados
+    
     ; 0x87 = Present (1) + RW (1) + User (1) + PS (1) = 10000111
     dq 0x000000 + 0x87
     dq 0x200000 + 0x87
@@ -152,9 +137,7 @@ pd_minimal:
     dq 0x1E00000 + 0x87
     times 495 dq 0
 
-; ===========================================================================
-; GDT mínima
-; ===========================================================================
+
 align 16
 
 gdt_start:
@@ -167,7 +150,7 @@ gdt_descriptor:
     dw gdt_end - gdt_start - 1
     dq gdt_start
 
-; Selectores
+; Selectors
 CODE_SEL equ 0x08
 DATA_SEL equ 0x10
 ; ===============================================================================
