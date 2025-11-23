@@ -219,7 +219,7 @@ void *kmalloc_aligned(size_t size, size_t alignment)
     return aligned_ptr;
 }
 
-/**
+/*
  * Free aligned memory allocated with kmalloc_aligned
  */
 void kfree_aligned(void *ptr)
