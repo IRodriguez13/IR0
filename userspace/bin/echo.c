@@ -15,11 +15,3 @@ int main(int argc, char *argv[]) {
     putchar('\n'); // Newline at end
     return 0;
 }
-
-// Alternative simple version without argc/argv
-void _start(void) 
-{
-    // For now, just print a test message
-    printf("Hello from /bin/echo!\n");
-    exit(0);
-}
