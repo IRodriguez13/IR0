@@ -24,9 +24,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-// ===============================================================================
 // LANGUAGE DETECTION
-// ===============================================================================
 
 #if defined(__cplusplus)
     #define IR0_LANG_CPP 1
@@ -42,10 +40,7 @@
 #if defined(__IR0_RUST__)
     #define IR0_LANG_RUST 1
 #endif
-
-// ===============================================================================
 // ABI COMPATIBILITY
-// ===============================================================================
 
 /**
  * IR0_API - Marks functions as part of stable kernel API
@@ -71,9 +66,7 @@
     #define IR0_NO_MANGLE
 #endif
 
-// ===============================================================================
 // PLATFORM-SPECIFIC ATTRIBUTES
-// ===============================================================================
 
 /**
  * Calling conventions
@@ -100,9 +93,7 @@
 #define IR0_PURE __attribute__((pure))
 #define IR0_CONST __attribute__((const))
 
-// ===============================================================================
 // TYPE DEFINITIONS FOR CROSS-LANGUAGE USE
-// ===============================================================================
 
 /**
  * Standard integer types (guaranteed size across C/C++/Rust)
@@ -141,9 +132,7 @@ typedef enum {
 #define IR0_NONE NULL
 #define IR0_SOME(x) (x)
 
-// ===============================================================================
 // RUST FFI COMPATIBILITY
-// ===============================================================================
 
 /**
  * When calling Rust from C, use these types for compatibility:
@@ -171,9 +160,7 @@ typedef enum {
  */
 IR0_API void ir0_rust_panic_handler(const char *file, u32 line, const char *msg);
 
-// ===============================================================================
 // C++ COMPATIBILITY
-// ===============================================================================
 
 #ifdef __cplusplus
 
@@ -205,9 +192,7 @@ inline void operator delete(void*, void*) noexcept {}
 
 #endif // __cplusplus
 
-// ===============================================================================
 // DRIVER INTERFACE (Multi-language)
-// ===============================================================================
 
 IR0_EXTERN_C_BEGIN
 
@@ -231,9 +216,7 @@ IR0_API i32 ir0_register_driver(const char* name, const ir0_driver_ops_t* ops);
 
 IR0_EXTERN_C_END
 
-// ===============================================================================
 // USAGE EXAMPLES
-// ===============================================================================
 
 /*
  * C EXAMPLE:
