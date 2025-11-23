@@ -34,3 +34,4 @@ disk.img.backup.1759425351
 iso/boot/grub/grub.cfg
 userspace/build/echo
 .config
+docs/LANGUAGE_SUPPORT_ROADMAP.md
