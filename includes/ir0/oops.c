@@ -13,6 +13,7 @@ static const char *panic_level_names[] =
         "OUT OF MEMORY",
         "STACK OVERFLOW",
         "ASSERTION FAILED",
+        "MEMORY ERROR",
         "TESTING",
         "RUNNING OUT PROCESS"
     };
@@ -21,7 +22,7 @@ static const char *panic_level_names[] =
 static volatile int in_panic = 0;
 
 // Better stacktrace pipeline
-void panicex(const char *message, panic_level_t level, const char *file, int line)
+void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller)
 {
     // This is more an easter egg than a real problem :)
     if (in_panic)
@@ -54,6 +55,10 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     print(file);
     print(":");
     print_hex_compact(line);
+    print("\n");
+
+    print_colored("Caller: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+    print(caller ? caller : "unknown");
     print("\n");
 
     print_colored("Due to: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
@@ -207,7 +212,7 @@ void dump_stack_trace()
 // Unix panic() pipeline wrapper 
 void panic(const char *message)
 {
-    panicex(message, PANIC_KERNEL_BUG, "unknown", 0);
+    panicex(message, PANIC_KERNEL_BUG, "unknown", 0, "unknown");
 }
 
 
