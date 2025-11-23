@@ -18,10 +18,6 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// ===============================================================================
-// INTERNAL IMPLEMENTATIONS (Pure logic, no validation)
-// ===============================================================================
-
 /**
  * __kmalloc_impl - Internal implementation of kernel memory allocation
  * Pure implementation without validation - called by checked wrapper
@@ -107,9 +103,6 @@ void __kfree_aligned_impl(void *ptr)
 	__kfree_impl(orig_ptr);
 }
 
-// ===============================================================================
-// CHECKED WRAPPERS (Validation + automatic debug tracking)
-// ===============================================================================
 
 /**
  * __kmalloc_checked - Checked wrapper for kmalloc with automatic debug tracking

@@ -19,10 +19,6 @@
 
 typedef uint32_t mode_t;
 
-/* ========================================================================== */
-/* FILE OPERATIONS                                                            */
-/* ========================================================================== */
-
 int64_t safe_sys_write(int fd, const void *buf, size_t count)
 {
 	if (!buf || count == 0)
@@ -56,9 +52,6 @@ int64_t safe_sys_open(const char *pathname, int flags, mode_t mode)
 	return sys_open(pathname, flags, mode);
 }
 
-/* ========================================================================== */
-/* DIRECTORY OPERATIONS                                                       */
-/* ========================================================================== */
 
 int64_t safe_sys_mkdir(const char *pathname, mode_t mode)
 {
@@ -73,10 +66,6 @@ int64_t safe_sys_mkdir(const char *pathname, mode_t mode)
 
 	return sys_mkdir(pathname, mode);
 }
-
-/* ========================================================================== */
-/* MEMORY OPERATIONS                                                          */
-/* ========================================================================== */
 
 void *safe_kmalloc(size_t size)
 {

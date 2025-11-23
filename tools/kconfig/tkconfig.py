@@ -8,6 +8,136 @@ import subprocess
 import sys
 import datetime
 import threading
+import platform
+
+# ===============================================================================
+# PLATFORM DETECTION AND COMMAND ADAPTATION
+# ===============================================================================
+
+class PlatformCommands:
+    """Encapsulates platform-specific commands"""
+    
+    COMMANDS = {
+        "windows": {
+            "make": "mingw32-make",
+            "python": "python",
+            "qemu": "qemu-system-x86_64w.exe",
+            "shell": "bash"
+        },
+        "linux": {
+            "make": "make",
+            "python": "python3",
+            "qemu": "qemu-system-x86_64",
+            "shell": "sh"
+        },
+        "macos": {
+            "make": "make",
+            "python": "python3",
+            "qemu": "qemu-system-x86_64",
+            "shell": "sh"
+        }
+    }
+    
+    def __init__(self, platform_name=None):
+        if platform_name is None:
+            platform_name = self.detect_platform()
+        self.platform = platform_name
+        self.commands = self.COMMANDS.get(platform_name, self.COMMANDS["linux"])
+    
+    @staticmethod
+    def detect_platform():
+        """Auto-detect current platform"""
+        system = platform.system()
+        if system == "Windows":
+            return "windows"
+        elif system == "Darwin":
+            return "macos"
+        else:
+            return "linux"
+    
+    def get_make_cmd(self):
+        return self.commands["make"]
+    
+    def get_python_cmd(self):
+        return self.commands["python"]
+    
+    def get_qemu_cmd(self):
+        return self.commands["qemu"]
+    
+    def get_shell_cmd(self):
+        return self.commands["shell"]
+
+
+class PlatformSelectorDialog:
+    """Dialog for selecting build platform"""
+    
+    def __init__(self, parent):
+        self.result = None
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("Select Build Platform")
+        self.dialog.geometry("500x320")
+        self.dialog.resizable(False, False)
+        
+        # Center dialog
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Detect current platform
+        detected = PlatformCommands.detect_platform()
+        
+        # Header
+        header_frame = ttk.Frame(self.dialog, padding=20)
+        header_frame.pack(fill='x')
+        
+        ttk.Label(header_frame, text="Select Your Build Platform", 
+                 font=('Helvetica', 14, 'bold')).pack()
+        ttk.Label(header_frame, text="This determines which build tools will be used",
+                 font=('Helvetica', 9), foreground='gray').pack(pady=(5, 0))
+        
+        # Platform selection
+        selection_frame = ttk.LabelFrame(self.dialog, text="Platform", padding=20)
+        selection_frame.pack(fill='both', expand=True, padx=20, pady=10)
+        
+        self.platform_var = tk.StringVar(value=detected)
+        
+        platforms = [
+            ("windows", "Windows", "mingw32-make, python, qemu-system-x86_64w.exe"),
+            ("linux", "Linux", "make, python3, qemu-system-x86_64"),
+            ("macos", "macOS", "make, python3, qemu-system-x86_64")
+        ]
+        
+        for platform_id, platform_name, description in platforms:
+            frame = ttk.Frame(selection_frame)
+            frame.pack(fill='x', pady=5)
+            
+            radio = ttk.Radiobutton(frame, text=platform_name, 
+                                   variable=self.platform_var, value=platform_id)
+            radio.pack(side='left', anchor='w')
+            
+            if platform_id == detected:
+                ttk.Label(frame, text="(Detected)", foreground='green',
+                         font=('Helvetica', 8, 'italic')).pack(side='left', padx=(5, 0))
+            
+            ttk.Label(frame, text=description, foreground='gray',
+                     font=('Helvetica', 8)).pack(anchor='w', padx=(25, 0))
+        
+        # Buttons
+        button_frame = ttk.Frame(self.dialog, padding=10)
+        button_frame.pack(fill='x', side='bottom')
+        
+        ttk.Button(button_frame, text="OK", command=self.on_ok).pack(side='right', padx=5)
+        ttk.Button(button_frame, text="Cancel", command=self.on_cancel).pack(side='right')
+        
+        # Wait for dialog to close
+        self.dialog.wait_window()
+    
+    def on_ok(self):
+        self.result = self.platform_var.get()
+        self.dialog.destroy()
+    
+    def on_cancel(self):
+        self.result = None
+        self.dialog.destroy()
 
 class KernelArchitectureCanvas:
     """Canvas widget for displaying kernel architecture diagram"""
@@ -51,19 +181,30 @@ class KernelArchitectureCanvas:
         
         # Calculate dimensions (larger for better visibility)
         canvas_width = self.canvas.winfo_width() if self.canvas.winfo_width() > 1 else 1000
-        canvas_height = max(700, len(self.architecture_data['layers']) * 140)
+        
+        # Calculate dynamic canvas height based on subsystem count in largest layer
+        max_subsystems = max(len(layer['subsystems']) for layer in self.architecture_data['layers'])
+        # Adjust height for layers with many subsystems
+        base_layer_height = 120
+        if max_subsystems > 6:
+            base_layer_height = 140
+        
+        canvas_height = max(800, len(self.architecture_data['layers']) * (base_layer_height + 25))
         
         # Set canvas scroll region
         self.canvas.config(scrollregion=(0, 0, canvas_width, canvas_height))
         
-        # Draw layers (larger for better visibility)
+        # Draw layers
         layer_width = canvas_width - 40
-        layer_height = 120
         layer_spacing = 25
         start_x = 20
         start_y = 20
         
         for layer_idx, layer in enumerate(self.architecture_data['layers']):
+            # Use dynamic height for layers with many subsystems
+            num_subsystems = len(layer['subsystems'])
+            layer_height = base_layer_height if num_subsystems <= 6 else 140
+            
             y_pos = start_y + layer_idx * (layer_height + layer_spacing)
             
             # Draw layer background
@@ -83,8 +224,20 @@ class KernelArchitectureCanvas:
             subsystems_in_layer = layer['subsystems']
             num_subsystems = len(subsystems_in_layer)
             if num_subsystems > 0:
-                subsystem_width = (layer_width - 30) // num_subsystems
-                subsystem_spacing = 10
+                # Dynamic subsystem width calculation
+                # For layers with many subsystems, reduce size to fit better
+                available_width = layer_width - 30
+                min_subsystem_width = 90  # Minimum width for readability
+                subsystem_spacing = 8 if num_subsystems > 6 else 10
+                
+                # Calculate subsystem width ensuring minimum size
+                calculated_width = (available_width - (num_subsystems - 1) * subsystem_spacing) / num_subsystems
+                subsystem_width = max(min_subsystem_width, calculated_width)
+                
+                # If subsystems are too wide, use scrollable approach or wrap to multiple rows
+                if subsystem_width * num_subsystems + (num_subsystems - 1) * subsystem_spacing > available_width:
+                    # Use minimum width and allow horizontal scrolling conceptually
+                    subsystem_width = min_subsystem_width
                 
                 for idx, subsystem_id in enumerate(subsystems_in_layer):
                     if subsystem_id not in self.subsystems_data:
@@ -115,9 +268,10 @@ class KernelArchitectureCanvas:
                         outline_color = '#9E9E9E'
                         outline_width = 2
                     
-                    # Draw subsystem box
+                    # Draw subsystem box (adjust height for better fit)
+                    box_height = layer_height - 45
                     rect_id = self.canvas.create_rectangle(
-                        x_pos, y_pos + 35, x_pos + subsystem_width - subsystem_spacing, y_pos + layer_height - 10,
+                        x_pos, y_pos + 35, x_pos + subsystem_width - subsystem_spacing, y_pos + 35 + box_height,
                         fill=fill_color, outline=outline_color, width=outline_width,
                         tags=('subsystem', subsystem_id)
                     )
@@ -125,21 +279,30 @@ class KernelArchitectureCanvas:
                     self.subsystem_rects[subsystem_id] = rect_id
                     self.subsystem_positions[subsystem_id] = (x_pos, y_pos + 35, 
                                                                x_pos + subsystem_width - subsystem_spacing, 
-                                                               y_pos + layer_height - 10)
+                                                               y_pos + 35 + box_height)
                     
-                    # Draw subsystem name (larger font)
+                    # Draw subsystem name (adjust font size for smaller boxes)
+                    font_size = 9 if num_subsystems > 6 else 10
+                    text_y = y_pos + 35 + box_height // 2
+                    
+                    # Truncate long names if needed
+                    display_name = subsystem['name']
+                    if len(display_name) > 12 and num_subsystems > 6:
+                        display_name = display_name[:10] + "..."
+                    
                     self.canvas.create_text(
-                        x_pos + (subsystem_width - subsystem_spacing) // 2, y_pos + 60,
-                        text=subsystem['name'], anchor='center',
-                        font=('Arial', 10, 'bold'), fill='#000000', tags=('subsystem', subsystem_id)
+                        x_pos + (subsystem_width - subsystem_spacing) // 2, text_y,
+                        text=display_name, anchor='center',
+                        font=('Arial', font_size, 'bold'), fill='#000000', tags=('subsystem', subsystem_id)
                     )
                     
-                    # Draw required indicator
+                    # Draw required indicator (smaller for dense layers)
                     if subsystem.get('required', False):
+                        req_font_size = 7 if num_subsystems > 6 else 8
                         self.canvas.create_text(
-                            x_pos + (subsystem_width - subsystem_spacing) // 2, y_pos + 85,
+                            x_pos + (subsystem_width - subsystem_spacing) // 2, text_y + 15,
                             text='[Required]', anchor='center',
-                            font=('Arial', 8), fill='#666666', tags=('subsystem', subsystem_id)
+                            font=('Arial', req_font_size), fill='#666666', tags=('subsystem', subsystem_id)
                         )
         
         # Draw connections between layers (simplified)
@@ -225,8 +388,8 @@ class KernelConfigGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("IR0 Kernel Configuration")
-        self.root.geometry("1600x900")
-        self.root.minsize(1400, 800)
+        self.root.geometry("1800x1000")
+        self.root.minsize(1600, 900)
         
         # Load kernel version
         self.kernel_version = self.get_kernel_version()
@@ -241,6 +404,9 @@ class KernelConfigGUI:
         # Configuration data
         self.config = {}
         self.load_config()
+        
+        # Initialize platform commands
+        self.init_platform()
         
         # Create GUI
         self.setup_ui()
@@ -304,6 +470,25 @@ class KernelConfigGUI:
                     self.config[config_key] = 'y'
                 else:
                     self.config[config_key] = 'n'
+    
+    def init_platform(self):
+        """Initialize platform commands"""
+        # Check if platform is already configured
+        if 'BUILD_PLATFORM' not in self.config:
+            # Show platform selector dialog
+            dialog = PlatformSelectorDialog(self.root)
+            if dialog.result:
+                self.config['BUILD_PLATFORM'] = dialog.result
+            else:
+                # User cancelled, use auto-detected platform
+                self.config['BUILD_PLATFORM'] = PlatformCommands.detect_platform()
+        
+        # Initialize platform commands
+        self.platform_commands = PlatformCommands(self.config.get('BUILD_PLATFORM'))
+        
+        # Update window title with platform
+        platform_name = self.config.get('BUILD_PLATFORM', 'unknown').capitalize()
+        self.root.title(f"IR0 Kernel Configuration ({platform_name})")
     
     def save_config(self):
         """Save configuration to .config file"""
@@ -423,8 +608,9 @@ class KernelConfigGUI:
                 kernel_root = os.path.dirname(os.path.dirname(script_dir))
                 unibuild_script = os.path.join(kernel_root, 'scripts', 'unibuild.sh')
                 
-                # Build all files in the subsystem
-                cmd = [unibuild_script] + files
+                # Build all files in the subsystem using platform-specific shell
+                shell_cmd = self.platform_commands.get_shell_cmd()
+                cmd = [shell_cmd, unibuild_script] + files
                 process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
@@ -634,6 +820,10 @@ class KernelConfigGUI:
         ttk.Label(header_frame, text=f"IR0 Kernel Configuration {self.kernel_version}", 
                  font=('Helvetica', 14, 'bold')).pack(side='left')
         
+        # About button
+        about_btn = ttk.Button(header_frame, text="About IR0", command=self.show_about_dialog)
+        about_btn.pack(side='right', padx=5)
+        
         # Button frame
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill='x', pady=(0, 10))
@@ -784,7 +974,8 @@ class KernelConfigGUI:
             
             if all_files:
                 try:
-                    cmd = [unibuild_script] + all_files
+                    shell_cmd = self.platform_commands.get_shell_cmd()
+                    cmd = [shell_cmd, unibuild_script] + all_files
                     process = subprocess.Popen(
                         cmd,
                         stdout=subprocess.PIPE,
@@ -851,7 +1042,8 @@ class KernelConfigGUI:
                     for source_file in all_files:
                         # Only clean .c and .asm files (skip .o files)
                         if source_file.endswith('.c') or source_file.endswith('.asm'):
-                            cmd = [unibuild_clean_script, source_file]
+                            shell_cmd = self.platform_commands.get_shell_cmd()
+                            cmd = [shell_cmd, unibuild_clean_script, source_file]
                             process = subprocess.Popen(
                                 cmd,
                                 stdout=subprocess.PIPE,
@@ -891,9 +1083,10 @@ class KernelConfigGUI:
             kernel_root = os.path.dirname(os.path.dirname(script_dir))
             
             try:
-                # Run make run
+                # Run make run using platform-specific make command
+                make_cmd = self.platform_commands.get_make_cmd()
                 process = subprocess.Popen(
-                    ['make', 'run'],
+                    [make_cmd, 'run'],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     universal_newlines=True,
@@ -964,6 +1157,184 @@ class KernelConfigGUI:
         
         output_win.protocol("WM_DELETE_WINDOW", on_close)
         output_win.after(100, update_output)
+    
+    def show_about_dialog(self):
+        """Show About dialog with kernel information and optional image"""
+        about_win = tk.Toplevel(self.root)
+        about_win.title("About IR0 Kernel")
+        about_win.geometry("700x600")
+        about_win.resizable(False, False)
+        
+        # Center dialog
+        about_win.transient(self.root)
+        about_win.grab_set()
+        
+        # Main container with scrollbar
+        main_container = ttk.Frame(about_win)
+        main_container.pack(expand=True, fill='both', padx=10, pady=10)
+        
+        # Try to load image
+        image_label = None
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        image_paths = [
+            os.path.join(script_dir, 'assets', 'black_hole_logo.png'),  # User's logo
+            os.path.join(script_dir, 'assets', 'kernel_logo.png'),
+            os.path.join(script_dir, 'assets', 'ir0_architecture.png'),
+            os.path.join(script_dir, 'assets', 'logo.png'),
+        ]
+        
+        image_loaded = False
+        for image_path in image_paths:
+            if os.path.exists(image_path):
+                try:
+                    # Try using PIL if available
+                    try:
+                        from PIL import Image, ImageTk
+                        img = Image.open(image_path)
+                        # Resize if too large
+                        max_width, max_height = 600, 300
+                        img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+                        photo = ImageTk.PhotoImage(img)
+                        image_label = ttk.Label(main_container, image=photo)
+                        image_label.image = photo  # Keep reference
+                        image_label.pack(pady=(0, 10))
+                        image_loaded = True
+                        break
+                    except ImportError:
+                        # Fallback to tkinter PhotoImage (PNG/GIF only)
+                        if image_path.lower().endswith(('.png', '.gif')):
+                            photo = tk.PhotoImage(file=image_path)
+                            # Subsample if too large
+                            if photo.width() > 600 or photo.height() > 300:
+                                factor = max(photo.width() // 600, photo.height() // 300, 1)
+                                photo = photo.subsample(factor, factor)
+                            image_label = ttk.Label(main_container, image=photo)
+                            image_label.image = photo
+                            image_label.pack(pady=(0, 10))
+                            image_loaded = True
+                            break
+                except Exception as e:
+                    print(f"Could not load image {image_path}: {e}")
+        
+        # Header
+        header = ttk.Label(main_container, text="IR0 Kernel", 
+                          font=('Helvetica', 18, 'bold'))
+        header.pack(pady=(0 if image_loaded else 10, 5))
+        
+        version_label = ttk.Label(main_container, text=f"Version {self.kernel_version}", 
+                                 font=('Helvetica', 11))
+        version_label.pack(pady=(0, 15))
+        
+        # Scrollable text area for description
+        text_frame = ttk.Frame(main_container)
+        text_frame.pack(expand=True, fill='both')
+        
+        scrollbar = ttk.Scrollbar(text_frame)
+        scrollbar.pack(side='right', fill='y')
+        
+        info_text = tk.Text(text_frame, wrap=tk.WORD, height=15, 
+                           font=('Arial', 10), yscrollcommand=scrollbar.set,
+                           relief=tk.FLAT, bg='#f5f5f5')
+        info_text.pack(side='left', expand=True, fill='both')
+        scrollbar.config(command=info_text.yview)
+        
+        # Kernel information content
+        info_content = """IR0 Kernel
+
+IR0 is a monolithic operating system kernel designed for x86-64 architecture, with planned support for ARM32. The kernel is built from the ground up to demonstrate fundamental OS concepts while maintaining a clean, modular architecture.
+
+Architecture Overview:
+
+The IR0 kernel follows a layered architecture:
+
+• Hardware Layer: Low-level architecture-specific code (GDT, IDT, interrupt handling)
+• Memory Layer: Physical and virtual memory management, paging, heap allocation
+• Kernel Core: Process management, scheduling, system calls, and core services
+• Device Layer: Hardware drivers (PS/2, serial, ATA, timers, video, audio)
+• Storage Layer: Virtual File System (VFS), MINIX filesystem, disk partitions
+
+Key Features:
+
+Memory Management:
+- Paging with identity mapping for kernel space
+- Dynamic heap allocation (kmalloc/kfree)
+- Physical memory bitmap management
+- Kernel and user space separation with ring 0/3 protection
+
+Process Management:
+- Complete process state machine (NEW, READY, RUNNING, SLEEPING, ZOMBIE, DEAD)
+- Multiple scheduling algorithms (Round-Robin, Priority-based, CFS)
+- Process tree hierarchy with parent-child relationships
+- Context switching with full register preservation
+
+System Calls:
+- POSIX-compatible system call interface via syscall/sysret (x86-64)
+- Process control: fork, exec, exit, wait, getpid
+- File operations: open, close, read, write, lseek
+- Memory management: brk, mmap, munmap, mprotect
+- Time operations: time, gettimeofday, sleep, usleep
+
+File System:
+- Virtual File System (VFS) abstraction layer
+- MINIX filesystem support for persistent storage
+- RAM filesystem for boot files and temporary storage
+- Mount point management with unified namespace
+
+Hardware Support:
+- PS/2 keyboard and mouse drivers
+- ATA/IDE storage controller
+- VGA text mode and VBE graphics
+- Multiple timer sources (PIT, HPET, LAPIC)
+- Serial port communication for debugging
+- Sound Blaster 16 audio (experimental)
+- DMA controller support
+
+Development Tools:
+- Interactive shell with built-in commands
+- Configuration menu system (this tool)
+- Incremental compilation with unibuild
+- Cross-platform build support (Linux, Windows/MinGW)
+- Comprehensive debugging infrastructure
+
+Build System:
+- Native Linux compilation
+- Windows cross-compilation with MinGW-w64
+- Modular subsystem selection
+- Dependency checking and automated testing
+- Future support planned for Rust and C++ components
+
+The IR0 kernel serves as both an educational project demonstrating operating system internals and a platform for experimenting with OS design concepts.
+
+For more information, documentation, and source code:
+- GitHub Repository: https://github.com/IRodriguez13/IR0
+- Documentation Wiki: https://ir0-wiki.netlify.app/
+"""
+        
+        info_text.insert('1.0', info_content)
+        info_text.config(state=tk.DISABLED)
+        
+        links_frame.pack(pady=(10, 0))
+        
+        # Repository link
+        def open_repository():
+            import webbrowser
+            webbrowser.open('https://github.com/IRodriguez13/IR0')
+        
+        repo_btn = ttk.Button(links_frame, text="📁 GitHub Repository", command=open_repository)
+        repo_btn.pack(side='left', padx=5)
+        
+        # Wiki link
+        def open_wiki():
+            import webbrowser
+            webbrowser.open('https://ir0-wiki.netlify.app/')
+        
+        wiki_btn = ttk.Button(links_frame, text="📚 Documentation Wiki", command=open_wiki)
+        wiki_btn.pack(side='left', padx=5)
+        
+        # Close button
+        close_btn = ttk.Button(main_container, text="Close", command=about_win.destroy)
+        close_btn.pack(pady=(10, 0))
+
 
 
 def main():
@@ -976,8 +1347,8 @@ def main():
     app = KernelConfigGUI(root)
     
     # Center the window
-    window_width = 1600
-    window_height = 900
+    window_width = 1800
+    window_height = 1000
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
     center_x = int(screen_width/2 - window_width/2)

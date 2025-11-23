@@ -1,8 +1,42 @@
 #!/bin/sh
 
+# Parse flags
+BUILD_MODE="native"
+LANGUAGE="c"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -win)
+            BUILD_MODE="win"
+            shift
+            ;;
+        -rust)
+            LANGUAGE="rust"
+            shift
+            ;;
+        -cpp)
+            LANGUAGE="cpp"
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Check if files were provided after flags
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 <source_file1> [source_file2] [source_file3] ..."
+    echo "Usage: $0 [-win] [-rust|-cpp] <source_file1> [source_file2] [source_file3] ..."
     echo "       Compiles one or more source files independently"
+    echo ""
+    echo "Flags:"
+    echo "  -win   Cross-compile for Windows using MinGW"
+    echo "  -rust  Compile Rust source files (future support)"
+    echo "  -cpp   Compile C++ source files (future support)"
+    echo ""
+    echo "Flags can be combined:"
+    echo "  -win -cpp    Cross-compile C++ for Windows"
+    echo "  -win -rust   Cross-compile Rust for Windows (future)"
     exit 1
 fi
 
@@ -12,8 +46,42 @@ cd "$KERNEL_ROOT" || exit 1
 
 SOURCE_FILES="$@"
 
-# Detect OS and compiler
-if [ "$OS" = "Windows_NT" ] || [ -n "$WINDIR" ]; then
+# Detect OS and compiler based on BUILD_MODE and LANGUAGE
+if [ "$LANGUAGE" = "rust" ]; then
+    # Rust compilation (future support)
+    echo "Error: Rust support is not yet implemented"
+    echo "This feature is planned for future releases"
+    if [ "$BUILD_MODE" = "win" ]; then
+        echo "Target: Windows cross-compilation"
+    fi
+    exit 1
+elif [ "$LANGUAGE" = "cpp" ]; then
+    # C++ compilation (future support)
+    echo "Error: C++ support is not yet implemented"
+    echo "This feature is planned for future releases"
+    if [ "$BUILD_MODE" = "win" ]; then
+        echo "Target: Windows cross-compilation"
+        echo "Will use: x86_64-w64-mingw32-g++ (when implemented)"
+    else
+        echo "Will use: g++ or clang++ (when implemented)"
+    fi
+    exit 1
+elif [ "$BUILD_MODE" = "win" ]; then
+    # Cross-compilation to Windows using MinGW (C language)
+    echo "==> Cross-compiling C for Windows with MinGW"
+    if command -v x86_64-w64-mingw32-gcc > /dev/null 2>&1; then
+        CC="x86_64-w64-mingw32-gcc"
+        ASM="nasm"
+        ASMFLAGS="-f win64"
+        CFLAGS="-m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
+        CFLAGS="$CFLAGS -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast"
+        export USE_MINGW=1
+    else
+        echo "Error: MinGW cross-compiler not found"
+        echo "Install with: sudo apt-get install mingw-w64"
+        exit 1
+    fi
+elif [ "$OS" = "Windows_NT" ] || [ -n "$WINDIR" ]; then
     # Native Windows - use GCC (MSYS2/MinGW) which supports ELF
     CC="gcc"
     ASM="nasm"
@@ -24,7 +92,7 @@ if [ "$OS" = "Windows_NT" ] || [ -n "$WINDIR" ]; then
     if ! nasm -f elf64 /dev/null 2>/dev/null && ! nasm -f elf64 nul 2>/dev/null; then
         ASMFLAGS="-f win64"
     fi
-elif [ -n "$USE_MINGW" ] && command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
+elif [ -n "$USE_MINGW" ] && command -v x86_64-w64-mingw32-gcc > /dev/null 2>&1; then
     # Explicit cross-compilation from Linux using MinGW-w64
     CC="x86_64-w64-mingw32-gcc"
     ASM="nasm"

@@ -46,10 +46,6 @@ size_t kstrlen(const char *s)
     return p - s;
 }
 
-// ===============================================================================
-// KERNEL MEMORY/STRING FUNCTIONS - Internal Implementations
-// ===============================================================================
-
 /**
  * __kstrncpy_impl - Internal implementation of kernel string copy
  * Pure implementation without validation - called by checked wrapper

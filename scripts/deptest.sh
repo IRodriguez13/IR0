@@ -112,18 +112,139 @@ check_grub() {
 
 # Check Python (for kconfig)
 check_python() {
-    if command -v python3 >/dev/null 2>&1; then
+    if command -v python3 > /dev/null 2>&1; then
         VERSION=$(python3 --version 2>&1)
         echo "✓ Python3 found: $VERSION"
+        
+        # Check tkinter
+        if python3 -c "import tkinter" 2>/dev/null; then
+            echo "  ✓ tkinter library found"
+        else
+            echo "  ⚠ tkinter library not found (required for menuconfig)"
+            if [ "$OS_TYPE" = "linux" ]; then
+                echo "    Install: apt-get install python3-tk"
+            else
+                echo "    Usually included with Python on Windows"
+            fi
+            WARNINGS=$((WARNINGS + 1))
+        fi
+        
+        # Check PIL/Pillow (optional but recommended)
+        if python3 -c "from PIL import Image" 2>/dev/null; then
+            echo "  ✓ PIL/Pillow library found"
+        else
+            echo "  ⚠ PIL/Pillow not found (optional, for menuconfig images)"
+            echo "    Install: pip3 install pillow"
+            WARNINGS=$((WARNINGS + 1))
+        fi
+        
         return 0
-    elif command -v python >/dev/null 2>&1; then
+    elif command -v python > /dev/null 2>&1; then
         VERSION=$(python --version 2>&1)
         echo "✓ Python found: $VERSION"
-        return 0
-    else
-        echo "⚠ Python not found (optional for kconfig)"
         WARNINGS=$((WARNINGS + 1))
         return 0
+    else
+        echo "⚠ Python not found (optional for menuconfig)"
+        if [ "$OS_TYPE" = "linux" ]; then
+            echo "  Install: apt-get install python3 python3-tk"
+        else
+            echo "  Install: Download from python.org"
+        fi
+        WARNINGS=$((WARNINGS + 1))
+        return 0
+    fi
+}
+
+# Check C++ compiler (REQUIRED for kernel components)
+check_cpp() {
+    if command -v g++ > /dev/null 2>&1; then
+        VERSION=$(g++ --version 2>&1 | head -1)
+        echo "✓ G++ (C++) found: $VERSION"
+        return 0
+    elif command -v clang++ > /dev/null 2>&1; then
+        VERSION=$(clang++ --version 2>&1 | head -1)
+        echo "✓ Clang++ (C++) found: $VERSION"
+        return 0
+    else
+        echo "✗ C++ compiler not found (REQUIRED for kernel C++ components)"
+        if [ "$OS_TYPE" = "windows" ]; then
+            echo "  Install: MSYS2/MinGW-w64 (g++) or LLVM (clang++)"
+            echo "  MSYS2: pacman -S mingw-w64-x86_64-gcc"
+        else
+            echo "  Install: apt-get install g++"
+        fi
+        return 1
+    fi
+}
+
+# Check Rust compiler (REQUIRED for drivers)
+check_rust() {
+    if command -v rustc > /dev/null 2>&1; then
+        VERSION=$(rustc --version 2>&1)
+        echo "✓ Rust compiler found: $VERSION"
+        
+        # Check cargo
+        if command -v cargo > /dev/null 2>&1; then
+            CARGO_VERSION=$(cargo --version 2>&1)
+            echo "  ✓ Cargo found: $CARGO_VERSION"
+        else
+            echo "  ⚠ Cargo not found (package manager for Rust)"
+            WARNINGS=$((WARNINGS + 1))
+        fi
+        
+        # Check rust-src component
+        if rustup component list 2>&1 | grep -q "rust-src (installed)"; then
+            echo "  ✓ rust-src component installed"
+        else
+            echo "  ⚠ rust-src component not installed (needed for no_std)"
+            echo "    Install: rustup component add rust-src"
+            WARNINGS=$((WARNINGS + 1))
+        fi
+        
+        return 0
+    else
+        echo "✗ Rust compiler not found (REQUIRED for Rust drivers)"
+        echo "  Install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        echo "  Or visit: https://www.rust-lang.org/tools/install"
+        echo "  After install, run: rustup component add rust-src"
+        return 1
+    fi
+}
+
+# Check MinGW cross-compiler (Linux only)
+check_mingw_cross() {
+    if [ "$OS_TYPE" = "linux" ]; then
+        echo ""
+        echo "Cross-compilation tools (Windows targets):"
+        echo "-------------------------------------------"
+        echo "ℹ For cross-platform development, install MinGW to compile for Windows"
+        echo ""
+        
+        # Check MinGW GCC
+        if command -v x86_64-w64-mingw32-gcc > /dev/null 2>&1; then
+            VERSION=$(x86_64-w64-mingw32-gcc --version 2>&1 | head -1)
+            echo "✓ MinGW GCC found: $VERSION"
+        else
+            echo "⚠ MinGW GCC not found (for Windows cross-compilation)"
+            echo "  Install: apt-get install mingw-w64"
+            echo "  Enables: make unibuild -win <file>"
+            WARNINGS=$((WARNINGS + 1))
+        fi
+        
+        # Check MinGW G++
+        if command -v x86_64-w64-mingw32-g++ > /dev/null 2>&1; then
+            VERSION=$(x86_64-w64-mingw32-g++ --version 2>&1 | head -1)
+            echo "✓ MinGW G++ found: $VERSION"
+        else
+            echo "⚠ MinGW G++ not found (for Windows C++ cross-compilation)"
+            echo "  Install: apt-get install mingw-w64"
+            echo "  Enables: make unibuild -win -cpp <file>"
+            WARNINGS=$((WARNINGS + 1))
+        fi
+        
+        echo ""
+        echo "ℹ Note: On Linux, you can compile native binaries AND cross-compile for Windows"
     fi
 }
 
@@ -192,6 +313,13 @@ echo "--------------"
 check_qemu || ERRORS=$((ERRORS + 1))
 check_grub
 check_python
+echo ""
+
+echo "Multi-language compilers (REQUIRED):"
+echo "------------------------------------"
+check_cpp || ERRORS=$((ERRORS + 1))
+check_rust || ERRORS=$((ERRORS + 1))
+check_mingw_cross
 echo ""
 
 if [ "$OS_TYPE" = "windows" ]; then
