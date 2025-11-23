@@ -131,7 +131,8 @@ KERNEL_OBJS = \
     kernel/syscalls.o \
     kernel/shell.o \
     kernel/elf_loader.o \
-    kernel/user.o
+    kernel/user.o \
+    kernel/driver_registry.o
 
 MEMORY_OBJS = \
 	includes/ir0/memory/allocator.o \
@@ -196,9 +197,12 @@ ARCH_OBJS = \
 SETUP_OBJS = \
 	setup/kconfig.o
 
+CPP_OBJS = \
+	cpp/runtime/compat.o
+
 # All objects
 ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
-           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS)
+           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS) $(CPP_OBJS)
 
 # BUILD RULES
 
@@ -206,6 +210,14 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
 %.o: %.c
 	@echo "  CC      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile C++ files
+%.o: %.cpp
+	@echo "  CXX     $<"
+	@g++ -m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \
+		-mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
+		-nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin \
+		-I./cpp/include $(CFLAGS) -c $< -o $@
 
 # Compile ASM files
 %.o: %.asm
@@ -354,9 +366,39 @@ help:
 	@echo "  make deptest          Check all dependencies (run this first!)"
 	@echo "  make create-disk      Create virtual disk for MINIX FS"
 	@echo "  make delete-disk      Delete virtual disk for MINIX FS"
-	@echo "  make unibuild FILE=<file>  Compile single file in isolation"
-	@echo "  make unibuild-clean FILE=<file>  Clean single compiled file"
 	@echo "  make help             Show this help"
+	@echo ""
+	@echo "🔨 Unibuild - Isolated Compilation:"
+	@echo "  C files (can compile multiple at once):"
+	@echo "    make unibuild <file1.c> [file2.c] ..."
+	@echo "    make unibuild-win <file1.c> [file2.c] ...     (Windows)"
+	@echo ""
+	@echo "  C++ files (can compile multiple at once):"
+	@echo "    make unibuild-cpp <file1.cpp> [file2.cpp] ..."
+	@echo "    make unibuild-cpp-win <file1.cpp> [file2.cpp] ...  (Windows)"
+	@echo ""
+	@echo "  Rust files (can compile multiple at once):"
+	@echo "    make unibuild-rust <file1.rs> [file2.rs] ..."
+	@echo "    make unibuild-rust-win <file1.rs> [file2.rs] ...   (Windows)"
+	@echo ""
+	@echo "  Clean:"
+	@echo "    make unibuild-clean FILE=<file>"
+	@echo ""
+	@echo "  Examples:"
+	@echo "    make unibuild fs/ramfs.c"
+	@echo "    make unibuild fs/ramfs.c fs/vfs.c fs/path.c"
+	@echo "    make unibuild-cpp cpp/examples/cpp_example.cpp"
+	@echo "    make unibuild-rust rust/drivers/rust_example_driver.rs"
+	@echo "    make unibuild-win drivers/IO/ps2.c"
+	@echo "    make unibuild-cpp-win cpp/examples/cpp_example.cpp"
+	@echo ""
+	@echo "  Note: You can also use FILE=\"file1 file2\" syntax"
+	@echo ""
+	@echo "🦀 Test Drivers (Multi-Language):"
+	@echo "  make test-drivers     Compile all test drivers (Rust + C++)"
+	@echo "  make test-driver-rust Compile Rust test driver"
+	@echo "  make test-driver-cpp  Compile C++ test driver"
+	@echo "  make test-drivers-clean  Clean test driver objects"
 	@echo ""
 	@echo "💡 Quick start: make run"
 	@echo ""
@@ -407,36 +449,84 @@ deptest:
 
 # UNIBUILD - ISOLATED FILE COMPILATION
 
+# Helper to get file arguments (supports multiple files from FILE= or positional)
+# Usage in targets: $(call get-file-arg)
+define get-file-arg
+$(if $(FILE),$(FILE),$(filter-out $@,$(MAKECMDGOALS)))
+endef
+
+# Standard C compilation (supports multiple files)
 unibuild:
-	@# Check if no parameters at all (both FILE and positional args)
-	@if [ -z "$(FILE)" ] && [ -z "$(FILES)" ] && [ -z "$(filter-out unibuild,$@)" ] && [ -z "$(MAKECMDGOALS)" ]; then \
-		echo "Error: No files specified"; \
-		echo "Usage: make unibuild <source_file>"; \
-		echo "       Or: make unibuild -win <source_file>  (cross-compile for Windows)"; \
-		echo "       Or: make unibuild -cpp <source_file>  (C++ compilation - future)"; \
-		echo "       Or: make unibuild -rust <source_file> (Rust compilation - future)"; \
-		echo "       Or: make unibuild -win -cpp <source_file>  (Windows C++ - future)"; \
-		echo "       Or: make unibuild -win -rust <source_file> (Windows Rust - future)"; \
-		echo "       Or: make unibuild FILE=<source_file>"; \
-		echo "       Or: make unibuild FILES=\"file1.c file2.c file3.c\""; \
+	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ]; then \
+		echo "Error: No file specified"; \
+		echo "Usage: make unibuild <file1.c> [file2.c] ..."; \
+		echo "   Or: make unibuild FILE=\"<file1.c> <file2.c>\""; \
 		echo "Example: make unibuild fs/ramfs.c"; \
-		echo "Example: make unibuild -win drivers/IO/ps2.c"; \
-		echo "Example: make unibuild -win -cpp kernel/module.cpp (future)"; \
-		echo "Example: make unibuild FILE=fs/ramfs.c"; \
-		echo "Example: make unibuild FILES=\"fs/ramfs.c fs/vfs.c\""; \
+		echo "Example: make unibuild fs/ramfs.c fs/vfs.c"; \
 		exit 1; \
-	fi
-	@# Handle positional arguments (everything after 'unibuild')
-	@if [ -z "$(FILE)" ] && [ -z "$(FILES)" ]; then \
-		ARGS="$(filter-out unibuild,$(MAKECMDGOALS))"; \
-		if [ -n "$$ARGS" ]; then \
-			$(KERNEL_ROOT)/scripts/unibuild.sh $$ARGS; \
-		fi; \
-	elif [ -n "$(FILES)" ]; then \
-		$(KERNEL_ROOT)/scripts/unibuild.sh $(FILES); \
-	else \
-		$(KERNEL_ROOT)/scripts/unibuild.sh "$(FILE)"; \
-	fi
+	fi; \
+	$(KERNEL_ROOT)/scripts/unibuild.sh $$FILE_ARG
+
+# C++ compilation (supports multiple files)
+unibuild-cpp:
+	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ]; then \
+		echo "Error: No file specified"; \
+		echo "Usage: make unibuild-cpp <file1.cpp> [file2.cpp] ..."; \
+		echo "   Or: make unibuild-cpp FILE=\"<file1.cpp> <file2.cpp>\""; \
+		echo "Example: make unibuild-cpp cpp/examples/cpp_example.cpp"; \
+		exit 1; \
+	fi; \
+	$(KERNEL_ROOT)/scripts/unibuild.sh -cpp $$FILE_ARG
+
+# Rust compilation (supports multiple files)
+unibuild-rust:
+	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ]; then \
+		echo "Error: No file specified"; \
+		echo "Usage: make unibuild-rust <file1.rs> [file2.rs] ..."; \
+		echo "   Or: make unibuild-rust FILE=\"<file1.rs> <file2.rs>\""; \
+		echo "Example: make unibuild-rust rust/drivers/rust_example_driver.rs"; \
+		exit 1; \
+	fi; \
+	$(KERNEL_ROOT)/scripts/unibuild.sh -rust $$FILE_ARG
+
+# Windows cross-compilation (C, supports multiple files)
+unibuild-win:
+	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ]; then \
+		echo "Error: No file specified"; \
+		echo "Usage: make unibuild-win <file1.c> [file2.c] ..."; \
+		echo "   Or: make unibuild-win FILE=\"<file1.c> <file2.c>\""; \
+		echo "Example: make unibuild-win drivers/IO/ps2.c"; \
+		exit 1; \
+	fi; \
+	$(KERNEL_ROOT)/scripts/unibuild.sh -win $$FILE_ARG
+
+# Windows cross-compilation (C++, supports multiple files)
+unibuild-cpp-win:
+	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ]; then \
+		echo "Error: No file specified"; \
+		echo "Usage: make unibuild-cpp-win <file1.cpp> [file2.cpp] ..."; \
+		echo "   Or: make unibuild-cpp-win FILE=\"<file1.cpp> <file2.cpp>\""; \
+		echo "Example: make unibuild-cpp-win cpp/examples/cpp_example.cpp"; \
+		exit 1; \
+	fi; \
+	$(KERNEL_ROOT)/scripts/unibuild.sh -win -cpp $$FILE_ARG
+
+# Windows cross-compilation (Rust, supports multiple files)
+unibuild-rust-win:
+	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ]; then \
+		echo "Error: No file specified"; \
+		echo "Usage: make unibuild-rust-win <file1.rs> [file2.rs] ..."; \
+		echo "   Or: make unibuild-rust-win FILE=\"<file1.rs> <file2.rs>\""; \
+		echo "Example: make unibuild-rust-win rust/drivers/rust_example_driver.rs"; \
+		exit 1; \
+	fi; \
+	$(KERNEL_ROOT)/scripts/unibuild.sh -win -rust $$FILE_ARG
 
 # Catch-all target to prevent make from complaining about unknown targets (for positional args)
 %:
@@ -451,9 +541,108 @@ unibuild-clean:
 	fi
 	@$(KERNEL_ROOT)/scripts/unibuild-clean.sh "$(FILE)"
 
+# ============================================================================
+# TEST DRIVERS - MULTI-LANGUAGE EXAMPLES
+# ============================================================================
+
+# Rust test driver
+RUST_TEST_DRIVER = rust/drivers/rust_example_driver.rs
+RUST_TEST_OBJ = rust/drivers/rust_example_driver.o
+
+# C++ test driver
+CPP_TEST_DRIVER = cpp/examples/cpp_example.cpp
+CPP_TEST_OBJ = cpp/examples/cpp_example.o
+
+# Compile Rust test driver using unibuild
+test-driver-rust: $(RUST_TEST_DRIVER)
+	@echo "🦀 Compiling Rust test driver with unibuild..."
+	@$(KERNEL_ROOT)/scripts/unibuild.sh -rust $(RUST_TEST_DRIVER)
+	@if [ -f $(RUST_TEST_OBJ) ]; then \
+		echo "✓ Rust driver compiled: $(RUST_TEST_OBJ)"; \
+	else \
+		echo "✗ Rust driver compilation failed"; \
+		exit 1; \
+	fi
+
+# Compile C++ test driver using unibuild
+test-driver-cpp: $(CPP_TEST_DRIVER)
+	@echo "➕ Compiling C++ test driver with unibuild..."
+	@$(KERNEL_ROOT)/scripts/unibuild.sh -cpp $(CPP_TEST_DRIVER)
+	@if [ -f $(CPP_TEST_OBJ) ]; then \
+		echo "✓ C++ driver compiled: $(CPP_TEST_OBJ)"; \
+	else \
+		echo "✗ C++ driver compilation failed"; \
+		exit 1; \
+	fi
+
+# Compile all test drivers
+test-drivers: test-driver-rust test-driver-cpp
+	@echo ""
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║          TEST DRIVERS COMPILATION COMPLETE                 ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "✓ Rust driver:  $(RUST_TEST_OBJ)"
+	@echo "✓ C++ driver:   $(CPP_TEST_OBJ)"
+	@echo ""
+
+# Clean test driver objects
+# Clean test driver objects
+test-drivers-clean:
+	@echo "Cleaning test driver objects..."
+	@if [ -n "$(RUST_ONLY)" ]; then \
+		rm -f $(RUST_TEST_OBJ); \
+		echo "✓ Rust driver objects cleaned"; \
+	elif [ -n "$(CPP_ONLY)" ]; then \
+		rm -f $(CPP_TEST_OBJ); \
+		echo "✓ C++ driver objects cleaned"; \
+	else \
+		rm -f $(RUST_TEST_OBJ); \
+		rm -f $(CPP_TEST_OBJ); \
+		echo "✓ All test driver objects cleaned"; \
+	fi
+
+# -------------------------------------------------------------------
+# Load drivers on demand (convenient wrapper)
+# Usage examples:
+#   make load-driver rust          # compile and link all Rust drivers
+#   make load-driver cpp           # compile and link all C++ drivers
+#   make load-driver rust cpp      # compile and link both
+# The arguments are parsed from MAKECMDGOALS
+
+load-driver: $(if $(filter rust,$(MAKECMDGOALS)),load-driver-rust) $(if $(filter cpp,$(MAKECMDGOALS)),load-driver-cpp)
+	@echo "Selected drivers have been compiled and linked."
+
+load-driver-rust:
+	$(MAKE) test-driver-rust
+
+load-driver-cpp:
+	$(MAKE) test-driver-cpp
+
+# Unload drivers (clean objects)
+# Usage: make unload-driver rust cpp
+unload-driver: $(if $(filter rust,$(MAKECMDGOALS)),unload-driver-rust) $(if $(filter cpp,$(MAKECMDGOALS)),unload-driver-cpp)
+	@echo "Selected drivers have been cleaned."
+
+unload-driver-rust:
+	$(MAKE) test-drivers-clean RUST_ONLY=1
+
+unload-driver-cpp:
+	$(MAKE) test-drivers-clean CPP_ONLY=1
+
+# Prevent make from treating the arguments as separate targets
+rust:
+	@:
+
+cpp:
+	@:
+
 # PHONY TARGETS
 
-.PHONY: all clean run run-nodisk run-console debug create-disk help userspace-programs userspace-clean unibuild unibuild-clean ir0 windows win windows-clean win-clean deptest
+.PHONY: all clean run run-nodisk run-console debug create-disk help userspace-programs userspace-clean \
+        unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
+        ir0 windows win windows-clean win-clean deptest \
+        test-driver-rust test-driver-cpp test-drivers test-drivers-clean
 
 # Include dependency files
 -include $(ALL_OBJS:.o=.d)

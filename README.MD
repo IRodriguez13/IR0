@@ -85,48 +85,130 @@ Additional run options:
 
 ## Development
 
-### Compiling Individual Files
+### Compiling Individual Files (Unibuild System)
 
+IR0 provides the **unibuild** system for isolated compilation of individual files without rebuilding the entire kernel. This system supports **C, C++, and Rust** with both native and Windows cross-compilation.
 
-When developing drivers or kernel modules, compile a single file in isolation:
+#### Quick Start
+
+Compile a single file:
 
 ```bash
+# C files
 make unibuild drivers/IO/ps2.c
+
+# C++ files  
+make unibuild-cpp cpp/examples/cpp_example.cpp
+
+# Rust files
+make unibuild-rust rust/drivers/rust_example_driver.rs
 ```
 
-Or using the traditional syntax:
+#### Multi-File Compilation
+
+Compile multiple files at once:
 
 ```bash
-make unibuild FILE=drivers/IO/ps2.c
+# Compile 3 C files together
+make unibuild fs/vfs.c fs/ramfs.c fs/path.c
+
+# Compile multiple C++ files
+make unibuild-cpp kernel/sched1.cpp kernel/sched2.cpp
+
+# Using FILE= syntax (also supported)
+make unibuild FILE="drivers/IO/ps2.c drivers/IO/ps2_mouse.c"
 ```
 
-**Cross-Platform Compilation:**
+#### Cross-Compilation to Windows
 
-Compile for Windows using MinGW cross-compiler:
+All languages support cross-compilation to Windows using MinGW:
 
 ```bash
-make unibuild -win drivers/IO/ps2.c
+# C to Windows
+make unibuild-win drivers/IO/ps2.c
+
+# C++ to Windows
+make unibuild-cpp-win cpp/examples/cpp_example.cpp
+
+# Rust to Windows
+make unibuild-rust-win rust/drivers/rust_example_driver.rs
+
+# Multiple files
+make unibuild-win drivers/serial/serial.c drivers/dma/dma.c
 ```
 
-And support for other languages:
+#### Available Targets
+
+| Target | Description | Example |
+|--------|-------------|---------|
+| `unibuild` | Compile C file(s) | `make unibuild fs/ramfs.c` |
+| `unibuild-cpp` | Compile C++ file(s) | `make unibuild-cpp cpp/example.cpp` |
+| `unibuild-rust` | Compile Rust file(s) * | `make unibuild-rust rust/driver.rs` |
+| `unibuild-win` | Cross-compile C to Windows | `make unibuild-win drivers/io.c` |
+| `unibuild-cpp-win` | Cross-compile C++ to Windows | `make unibuild-cpp-win cpp/example.cpp` |
+| `unibuild-rust-win` | Cross-compile Rust to Windows * | `make unibuild-rust-win rust/driver.rs` |
+
+\* **Rust Note**: Rust compilation for bare-metal targets requires additional setup. See [Multi-Language Development](#multi-language-development) section for details.
+
+#### Cleaning Compiled Files
 
 ```bash
-make unibuild -cpp kernel/module.cpp    # C++ support (planned)
-make unibuild -rust kernel/module.rs    # Rust support (planned)
-```
+### Driver Management
 
-This compiles the specified file without building the entire kernel. Multiple files can be compiled at once:
+The build system provides specific commands to compile, link, and clean drivers on demand. This allows for modular development and testing of drivers in different languages.
 
-```bash
-make unibuild fs/vfs.c fs/ramfs.c
-make unibuild -win drivers/serial/serial.c drivers/dma/dma.c
-```
+**Compilation and Linking:**
 
-To clean a single compiled file:
+*   `make load-driver rust`: Compiles and links all registered Rust drivers.
+*   `make load-driver cpp`: Compiles and links all registered C++ drivers.
+*   `make load-driver rust cpp`: Compiles and links both Rust and C++ drivers simultaneously.
 
-```bash
-make unibuild-clean FILE=drivers/IO/ps2.c
-```
+**Cleaning Driver Objects:**
+
+*   `make unload-driver rust`: Removes compiled objects for Rust drivers.
+*   `make unload-driver cpp`: Removes compiled objects for C++ drivers.
+
+### Multi-Language Development
+
+IR0 supports kernel development in C, C++, and Rust. Each language has a specific role and build requirements.
+
+#### C (Primary Language)
+*   **Role**: Kernel core, memory management, and critical system drivers.
+*   **Setup**: Standard GCC build environment (included in `build-essential`).
+*   **Compilation**: `make unibuild <file.c>`
+
+#### C++ (Advanced Components)
+*   **Role**: Complex kernel components, schedulers, and abstractions requiring object-oriented features.
+*   **Setup**: Requires `g++` compiler.
+*   **Compilation**: `make unibuild-cpp <file.cpp>`
+*   **Runtime Support**: The kernel includes a minimal C++ runtime (`compat.cpp`) supporting:
+    *   Global `new` and `delete` operators (mapped to kernel `kmalloc`/`kfree`).
+    *   Pure virtual functions.
+    *   Static initialization guards.
+*   **Example**: `cpp/examples/cpp_example.cpp`
+
+#### Rust (Modern Drivers)
+*   **Role**: New device drivers (Network, Storage, USB) focusing on memory safety.
+*   **Setup**: Requires Rust Nightly toolchain for `build-std` support.
+    ```bash
+    rustup toolchain install nightly
+    rustup component add rust-src --toolchain nightly
+    rustup target add x86_64-unknown-none
+    ```
+*   **Compilation**: `make unibuild-rust <file.rs>`
+    *   Uses `cargo` with `-Z build-std=core` to compile the standard library for the bare-metal target.
+*   **Example**: `rust/drivers/rust_example_driver.rs`
+
+For detailed API documentation and development guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Test Drivers
+
+The kernel includes example drivers to verify the multi-language build system.
+
+*   `make test-driver-cpp`: Compiles the C++ example driver.
+*   `make test-drivers`: Compiles all example drivers.
+*   `make test-drivers-clean`: Removes example driver objects.
+
 
 ### Creating Virtual Disk
 

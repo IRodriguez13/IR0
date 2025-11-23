@@ -179,6 +179,7 @@ check_cpp() {
 }
 
 # Check Rust compiler (REQUIRED for drivers)
+# Check Rust compiler (REQUIRED for drivers)
 check_rust() {
     if command -v rustc > /dev/null 2>&1; then
         VERSION=$(rustc --version 2>&1)
@@ -189,17 +190,26 @@ check_rust() {
             CARGO_VERSION=$(cargo --version 2>&1)
             echo "  ✓ Cargo found: $CARGO_VERSION"
         else
-            echo "  ⚠ Cargo not found (package manager for Rust)"
-            WARNINGS=$((WARNINGS + 1))
+            echo "  ✗ Cargo not found (package manager for Rust)"
+            return 1
         fi
         
-        # Check rust-src component
-        if rustup component list 2>&1 | grep -q "rust-src (installed)"; then
-            echo "  ✓ rust-src component installed"
+        # Check for nightly toolchain (REQUIRED for build-std)
+        if rustup toolchain list 2>&1 | grep -q "nightly"; then
+            echo "  ✓ Nightly toolchain found"
         else
-            echo "  ⚠ rust-src component not installed (needed for no_std)"
-            echo "    Install: rustup component add rust-src"
-            WARNINGS=$((WARNINGS + 1))
+            echo "  ✗ Nightly toolchain not found (REQUIRED for build-std)"
+            echo "    Install: rustup toolchain install nightly"
+            return 1
+        fi
+
+        # Check rust-src component
+        if rustup component list --toolchain nightly 2>&1 | grep -q "rust-src (installed)"; then
+            echo "  ✓ rust-src component installed (nightly)"
+        else
+            echo "  ✗ rust-src component not installed for nightly (needed for no_std)"
+            echo "    Install: rustup component add rust-src --toolchain nightly"
+            return 1
         fi
         
         return 0
@@ -207,7 +217,8 @@ check_rust() {
         echo "✗ Rust compiler not found (REQUIRED for Rust drivers)"
         echo "  Install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
         echo "  Or visit: https://www.rust-lang.org/tools/install"
-        echo "  After install, run: rustup component add rust-src"
+        echo "  After install, run: rustup toolchain install nightly"
+        echo "  And: rustup component add rust-src --toolchain nightly"
         return 1
     fi
 }

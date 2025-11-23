@@ -27,11 +27,21 @@ typedef enum
 
 
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void panic(const char *message);
 void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller); /*Panic with more detailed logs*/
 void cpu_relax();
 void dump_stack_trace();
 void dump_registers();
+
+#ifdef __cplusplus
+}
+#endif
+
 
 // Macros for better panic message tunning
 #define BUG_ON(condition) \

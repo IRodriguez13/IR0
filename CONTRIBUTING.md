@@ -89,12 +89,12 @@ IR0 supports **C, C++, and Rust** for different purposes:
 
 | Component | C | Rust | C++ |
 |-----------|---|------|-----|
-| Kernel Core | ✅ Primary | ❌ No | ⚠️ Limited |
+| Kernel Core | ✅ Primary | ❌ No | ⚠️ Very Limited |
 | Memory Management | ✅ Yes | ❌ No | ❌ No |
-| Device Drivers | ✅ Legacy | ✅ Preferred | ❌ No |
+| Device Drivers | ✅ Legacy | ✅ Preferred | ✅ Preferred |
 | Schedulers | ✅ Yes | ❌ No | ✅ Advanced only |
 | Network Stack | ✅ Yes | ❌ No | ✅ Optional |
-| Userspace | ✅ Utilities | ⚠️ Apps | ✅ Apps/Libraries |
+| Userspace | ✅ Utilities | ✅ Apps/Libraries | ✅ Apps/Libraries |
 
 ---
 
@@ -281,36 +281,200 @@ static DRIVER_OPS: DriverOps = DriverOps {
 };
 
 /// Register driver with kernel
-#[no_mangle]
-pub extern "C" fn register_my_driver() -> i32 {
-    unsafe {
-        ir0_register_driver(
-            b"my_rust_driver\0".as_ptr(),
-            &DRIVER_OPS as *const DriverOps
-        )
-    }
-}
+### Rust Driver Development
 
-/// Panic handler (required for no_std)
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    let msg = b"Rust driver panic\0";
-    unsafe {
-        panic(msg.as_ptr());
-        core::hint::unreachable_unchecked()
-    }
-}
-```
+Rust drivers are integrated into the IR0 kernel as static libraries linked at build time. The build system uses `cargo` with the `build-std` feature to compile the Rust core library for the custom bare-metal target.
 
-#### Step 2: Build the Driver
+#### 1. Environment Setup
+
+To develop Rust drivers, you must configure the Rust toolchain for bare-metal development. The `nightly` channel is required to access the unstable `build-std` feature.
 
 ```bash
-make unibuild -rust rust/drivers/network/my_driver.rs
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install Nightly Toolchain
+rustup toolchain install nightly
+
+# Install Rust Source Code (Required for recompiling libcore)
+rustup component add rust-src --toolchain nightly
+
+# Add the bare-metal target (optional, handled automatically by unibuild)
+rustup target add x86_64-unknown-none
 ```
 
-#### Step 3: Link with Kernel
+#### 2. Driver Structure
 
-The driver will be automatically linked if added to the Makefile's `RUST_DRIVERS` variable.
+A Rust driver consists of a single `.rs` file (or a module structure) that must adhere to the following requirements:
+
+*   **No Standard Library**: Must use `#![no_std]` as the kernel environment does not support the full Rust standard library.
+*   **No Main Function**: Must use `#![no_main]` as the entry point is controlled by the kernel.
+*   **FFI Bindings**: Must declare external kernel functions using `extern "C"`.
+*   **Thread Safety**: Static structures containing raw pointers must implement `unsafe impl Sync`.
+
+**Example Driver Template:**
+
+```rust
+#![no_std]
+#![no_main]
+
+use core::ffi::c_void;
+
+// Kernel FFI Bindings (External Functions)
+extern "C" {
+    fn kernel_print(msg: *const u8);
+    fn kmalloc(size: usize) -> *mut c_void;
+    fn kfree(ptr: *mut c_void);
+    fn ir0_register_driver(info: *const DriverInfo, ops: *const DriverOps) -> *mut c_void;
+}
+
+// Driver Information Structure
+#[repr(C)]
+struct DriverInfo {
+    name: *const u8,
+    version: *const u8,
+    author: *const u8,
+    description: *const u8,
+    language: i32, // 2 = Rust
+}
+
+// Driver Operations Structure
+#[repr(C)]
+struct DriverOps {
+    init: Option<extern "C" fn() -> i32>,
+    probe: Option<extern "C" fn() -> i32>,
+    remove: Option<extern "C" fn() -> i32>,
+    shutdown: Option<extern "C" fn() -> i32>,
+    // ... other operations
+}
+
+// Driver Initialization Function
+extern "C" fn my_driver_init() -> i32 {
+    unsafe { kernel_print(b"Rust driver initialized\n\0".as_ptr()) };
+    0 // Success
+}
+
+// Static Driver Definitions
+static DRIVER_INFO: DriverInfo = DriverInfo {
+    name: b"my_rust_driver\0".as_ptr(),
+    version: b"1.0.0\0".as_ptr(),
+    author: b"Author Name\0".as_ptr(),
+    description: b"Description\0".as_ptr(),
+    language: 2,
+};
+unsafe impl Sync for DriverInfo {}
+
+static DRIVER_OPS: DriverOps = DriverOps {
+    init: Some(my_driver_init),
+    probe: None,
+    remove: None,
+    shutdown: None,
+};
+unsafe impl Sync for DriverOps {}
+
+// Registration Entry Point
+#[no_mangle]
+pub extern "C" fn register_my_driver() -> *mut c_void {
+    unsafe { ir0_register_driver(&DRIVER_INFO, &DRIVER_OPS) }
+}
+
+// Panic Handler (Required for no_std)
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+```
+
+#### 3. Compilation and Management
+
+The `Makefile` provides commands to manage the driver lifecycle:
+
+*   **Compile Single File**: `make unibuild-rust rust/drivers/my_driver.rs`
+*   **Load All Rust Drivers**: `make load-driver rust`
+*   **Clean Rust Objects**: `make unload-driver rust`
+
+### C++ Driver Development
+
+C++ drivers allow for object-oriented design within the kernel. The environment provides a minimal runtime to support essential C++ features.
+
+#### 1. Runtime Support
+
+The kernel includes a compatibility layer (`compat.cpp`) that provides:
+*   `new` and `delete` operators (using kernel heap).
+*   Pure virtual function handlers.
+*   Static initialization guards.
+*   **Note**: Exceptions (`try`/`catch`) and RTTI (`dynamic_cast`, `typeid`) are **disabled** to reduce overhead.
+
+#### 2. Driver Structure
+
+C++ drivers should follow the standard kernel driver interface defined in `includes/ir0/driver.h`.
+
+**Example Driver Template:**
+
+```cpp
+#include <ir0/driver.h>
+#include <ir0/logging.h>
+
+// Driver Class
+class MyDriver {
+public:
+    MyDriver() {
+        LOG_INFO("MyDriver", "Constructor called");
+    }
+    
+    ~MyDriver() {
+        LOG_INFO("MyDriver", "Destructor called");
+    }
+    
+    int init() {
+        return 0;
+    }
+};
+
+// Global Instance
+static MyDriver* g_driver = nullptr;
+
+// C-Compatible Entry Points
+extern "C" {
+
+    int my_driver_init() {
+        g_driver = new MyDriver();
+        return g_driver->init();
+    }
+
+    int my_driver_shutdown() {
+        if (g_driver) {
+            delete g_driver;
+            g_driver = nullptr;
+        }
+        return 0;
+    }
+
+    // Driver Registration
+    void register_cpp_driver() {
+        static ir0_driver_info_t info = {
+            .name = "cpp_driver",
+            .version = "1.0",
+            .author = "Author",
+            .description = "C++ Driver",
+            .language = IR0_DRIVER_LANG_CPP
+        };
+        
+        static ir0_driver_ops_t ops = {
+            .init = my_driver_init,
+            .shutdown = my_driver_shutdown
+        };
+        
+        ir0_register_driver(&info, &ops);
+    }
+}
+```
+
+#### 3. Compilation
+
+*   **Compile Single File**: `make unibuild-cpp cpp/drivers/my_driver.cpp`
+*   **Load All C++ Drivers**: `make load-driver cpp`
+*   **Clean C++ Objects**: `make unload-driver cpp`
 
 ### Rust Best Practices for Kernel Development
 
