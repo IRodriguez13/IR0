@@ -2,10 +2,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// ===============================================================================
-// MEMORY ALLOCATION - Internal Implementations
-// ===============================================================================
-
 // Internal implementations (pure logic, no validation)
 void *__kmalloc_impl(size_t size);
 void __kfree_impl(void *ptr);
