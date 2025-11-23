@@ -215,15 +215,53 @@ static void cmd_mkdir(const char *dirname)
     shell_write(2, "mkdir: failed\n");
 }
 
-static void cmd_rmdir(const char *dirname)
+static void cmd_rmdir(const char *args)
 {
-  if (!dirname || *dirname == '\0')
+  if (!args || *args == '\0')
   {
-    shell_write(2, "Usage: rmdir <dirname>\n");
+    shell_write(2, "Usage: rmdir [-e] <dirname>\n");
     return;
   }
 
-  int64_t result = syscall(SYS_RMDIR, (uint64_t)dirname, 0, 0);
+  int force = 0;
+  const char *dirname = args;
+
+  // Check for -e flag
+  if (args[0] == '-')
+  {
+    int i = 1;
+    while (args[i] && args[i] != ' ' && args[i] != '\t')
+    {
+      if (args[i] == 'e')
+        force = 1;
+      i++;
+    }
+    if (force)
+    {
+      dirname = skip_whitespace(args + i);
+    }
+    else
+    {
+      dirname = skip_whitespace(args + i);
+    }
+  }
+
+  if (!dirname || *dirname == '\0')
+  {
+    shell_write(2, "Usage: rmdir [-e] <dirname>\n");
+    return;
+  }
+
+  int64_t result;
+  if (force)
+  {
+    result = syscall(SYS_RMDIR_FORCE, (uint64_t)dirname, 0, 0);
+  }
+  else
+  {
+    result = syscall(SYS_RMDIR, (uint64_t)dirname, 0, 0);
+  }
+
   if (result < 0)
     shell_write(2, "rmdir: failed\n");
 }
@@ -1246,7 +1284,7 @@ static const struct shell_cmd commands[] = {
     {"ln", (void (*)(const char *))cmd_ln, "ln", "Create link (not supported)"},
     {"cat", cmd_cat, "cat FILE", "Print file"},
     {"mkdir", cmd_mkdir, "mkdir DIR", "Create directory"},
-    {"rmdir", cmd_rmdir, "rmdir DIR", "Remove directory"},
+    {"rmdir", cmd_rmdir, "rmdir [-e] DIR", "Remove directory (use -e to force empty dir)"},
     {"rm", cmd_rm, "rm [-r] FILE", "Remove file or dir"},
     {"cd", cmd_cd, "cd [DIR]", "Change directory"},
     {"pwd", (void (*)(const char *))cmd_pwd, "pwd", "Print working directory"},

@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <ir0/memory/kmem.h>
 #include "process.h"
 
 /* Compiler optimization hints */
@@ -23,8 +24,6 @@
 /* External functions */
 extern void serial_print(const char *str);
 extern void serial_print_hex32(uint32_t num);
-extern void *kmalloc(size_t size);
-extern void kfree(void *ptr);
 
 // Use external strstr from string.h
 

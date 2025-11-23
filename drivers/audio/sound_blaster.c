@@ -18,6 +18,7 @@
 #include <arch/common/arch_interface.h>
 #include <interrupt/arch/io.h>
 #include <drivers/dma/dma.h>
+#include <ir0/memory/kmem.h>
 
 // Global Sound Blaster state
 static sb16_state_t sb16_state = {0};
@@ -192,7 +193,6 @@ int sb16_create_sample(sb16_sample_t *sample, uint8_t *data, uint32_t size,
     }
 
     // Allocate memory for sample data
-    extern void *kmalloc(size_t size);
     sample->data = (uint8_t *)kmalloc(size);
     if (!sample->data)
     {
@@ -237,7 +237,6 @@ void sb16_destroy_sample(sb16_sample_t *sample)
     // Free the allocated memory
     if (sample->data)
     {
-        extern void kfree(void *ptr);
         kfree(sample->data);
         sample->data = NULL;
     }
