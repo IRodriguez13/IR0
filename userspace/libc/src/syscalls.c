@@ -4,20 +4,6 @@
 #include <ir0/syscall.h> 
 
 // System call implementations using ir0/syscall.h
-void exit(int status)
-{
-    ir0_exit(status);
-}
-
-int write(int fd, const void *buf, size_t count)
-{
-    return (int)ir0_write(fd, buf, count);
-}
-
-int read(int fd, void *buf, size_t count)
-{
-    return (int)ir0_read(fd, buf, count);
-}
 
 pid_t getpid(void)
 {
@@ -38,11 +24,6 @@ pid_t waitpid(pid_t pid, int *status, int options)
 {
     (void)options; // Ignore options for now
     return ir0_waitpid(pid, status);
-}
-
-void *sbrk(intptr_t increment)
-{
-    return ir0_sbrk(increment);
 }
 
 int brk(void *addr)

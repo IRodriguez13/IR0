@@ -11,10 +11,14 @@ BIN_SRC = bin
 BUILD_DIR = build
 
 # Libc object files
-LIBC_OBJS = $(BUILD_DIR)/syscalls.o $(BUILD_DIR)/stdio.o $(BUILD_DIR)/malloc.o
+LIBC_OBJS = $(BUILD_DIR)/syscalls.o $(BUILD_DIR)/stdio.o $(BUILD_DIR)/malloc.o \
+            $(BUILD_DIR)/unistd.o $(BUILD_DIR)/strtok.o $(BUILD_DIR)/atoi.o $(BUILD_DIR)/strtod.o \
+            $(BUILD_DIR)/string.o $(BUILD_DIR)/math.o $(BUILD_DIR)/time.o
+
 
 # Programs
-PROGRAMS = $(BUILD_DIR)/echo
+PROGRAMS = $(BUILD_DIR)/echo $(BUILD_DIR)/libctest
+
 
 .PHONY: all clean
 
@@ -30,6 +34,11 @@ $(BUILD_DIR)/%.o: $(LIBC_SRC)/%.c
 # Build echo program
 $(BUILD_DIR)/echo: $(BIN_SRC)/echo.c $(LIBC_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+# Build libctest program
+$(BUILD_DIR)/libctest: $(BIN_SRC)/libctest.c $(LIBC_OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
 
 clean:
 	rm -rf $(BUILD_DIR)
