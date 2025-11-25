@@ -34,3 +34,29 @@ jobs:
           curl -X POST https://ir0-loc.onrender.com/api/loc \
                -H "Content-Type: application/json" \
                -d @loc.json
+
+      # 🔹 Obtener contribuidores del repositorio
+      - name: Fetch and send contributors
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Obteniendo contribuidores del repositorio..."
+          
+          # Obtener owner y repo del contexto de GitHub
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          
+          # Hacer GET a la API de GitHub para obtener contribuidores
+          curl -s -H "Authorization: token $GITHUB_TOKEN" \
+               -H "Accept: application/vnd.github.v3+json" \
+               "https://api.github.com/repos/$OWNER/$REPO/contributors" \
+               > contributors.json
+          
+          echo "Contribuidores obtenidos, enviando al endpoint Flask..."
+          
+          # Enviar JSON de contribuidores al endpoint Flask
+          curl -X POST https://ir0-loc.onrender.com/api/contributors \
+               -H "Content-Type: application/json" \
+               -d @contributors.json
+          
+          echo "✓ Contribuidores enviados exitosamente"
