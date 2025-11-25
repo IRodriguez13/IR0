@@ -134,6 +134,7 @@ int minix_fs_rm(const char *path);
 int minix_fs_rmdir(const char *path);
 int minix_fs_rmdir_force(const char *path);
 int minix_fs_stat(const char *pathname, stat_t *buf);
+int minix_fs_link(const char *oldpath, const char *newpath);
 void minix_fs_cleanup(void);
 
 // Operaciones de inodes

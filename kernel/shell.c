@@ -916,11 +916,50 @@ static void cmd_mv(const char *args)
     kfree(data);
 }
 
-/* ln - create link (not implemented) */
+/* ln - create link */
 static void cmd_ln(const char *args)
 {
-  (void)args;
-  shell_write(2, "ln: creating hard links is not supported yet\n");
+  if (!args || *args == '\0')
+  {
+    shell_write(2, "Usage: ln <oldpath> <newpath>\n");
+    return;
+  }
+
+  // Parse arguments: oldpath newpath
+  char buf[256];
+  size_t i = 0;
+  while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
+  {
+    buf[i] = args[i];
+    i++;
+  }
+  buf[i] = '\0';
+  
+  char *p = buf;
+  while (*p == ' ' || *p == '\t')
+    p++;
+  char *oldpath = p;
+  while (*p && *p != ' ' && *p != '\t')
+    p++;
+  if (*p)
+  {
+    *p++ = '\0';
+  }
+  while (*p == ' ' || *p == '\t')
+    p++;
+  char *newpath = p;
+  
+  if (!oldpath || !newpath || *oldpath == '\0' || *newpath == '\0')
+  {
+    shell_write(2, "Usage: ln <oldpath> <newpath>\n");
+    return;
+  }
+
+  int64_t result = syscall(SYS_LINK, (uint64_t)oldpath, (uint64_t)newpath, 0);
+  if (result < 0)
+  {
+    shell_write(2, "ln: failed to create hard link\n");
+  }
 }
 
 /* chmod MODE PATH */
@@ -1281,7 +1320,7 @@ static const struct shell_cmd commands[] = {
     {"df", (void (*)(const char *))cmd_df, "df", "Show disk space"},
     {"cp", cmd_cp, "cp SRC DST", "Copy file"},
     {"mv", cmd_mv, "mv SRC DST", "Move (rename) file"},
-    {"ln", (void (*)(const char *))cmd_ln, "ln", "Create link (not supported)"},
+    {"ln", (void (*)(const char *))cmd_ln, "ln OLDPATH NEWPATH", "Create hard link"},
     {"cat", cmd_cat, "cat FILE", "Print file"},
     {"mkdir", cmd_mkdir, "mkdir DIR", "Create directory"},
     {"rmdir", cmd_rmdir, "rmdir [-e] DIR", "Remove directory (use -e to force empty dir)"},
