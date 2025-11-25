@@ -185,10 +185,6 @@ int unregister_filesystem(struct filesystem_type *fs)
   return -1;
 }
 
-// ============================================================================
-// PATH LOOKUP
-// ============================================================================
-
 struct vfs_inode *vfs_path_lookup(const char *path)
 {
   if (!path || !root_inode)
@@ -204,10 +200,6 @@ struct vfs_inode *vfs_path_lookup(const char *path)
   // Lookup completo implementado usando MINIX filesystem
   return NULL;
 }
-
-// ============================================================================
-// VFS OPERATIONS
-// ============================================================================
 
 int vfs_init(void)
 {
@@ -338,10 +330,6 @@ int vfs_close(struct vfs_file *file)
   return ret;
 }
 
-// ============================================================================
-// VFS WRAPPERS PARA SYSCALLS
-// ============================================================================
-
 int vfs_ls(const char *path)
 {
   // Use real MINIX filesystem implementation
@@ -367,8 +355,6 @@ int vfs_link(const char *oldpath, const char *newpath)
   if (!oldpath || !newpath)
     return -1;
   
-  // Delegar al filesystem específico (MINIX)
-  extern int minix_fs_link(const char *oldpath, const char *newpath);
   return minix_fs_link(oldpath, newpath);
 }
 

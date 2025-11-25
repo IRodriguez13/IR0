@@ -71,9 +71,7 @@ typedef struct ir0_driver_info {
 // Driver registration handle (opaque)
 typedef struct ir0_driver ir0_driver_t;
 
-// ============================================================================
 // DRIVER REGISTRATION API
-// ============================================================================
 
 /**
  * Register a driver with the kernel
@@ -115,9 +113,7 @@ ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver);
  */
 void ir0_driver_registry_init(void);
 
-// ============================================================================
 // SIMPLIFIED REGISTRATION API (for simple drivers)
-// ============================================================================
 
 /**
  * Register a simple driver (C compatibility)
@@ -141,9 +137,7 @@ static inline int32_t ir0_register_simple_driver(const char* name,
     return drv ? IR0_DRIVER_OK : IR0_DRIVER_ERR;
 }
 
-// ============================================================================
 // HELPER MACROS
-// ============================================================================
 
 /**
  * Define a driver with automatic registration
