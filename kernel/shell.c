@@ -869,7 +869,8 @@ static void cmd_mv(const char *args)
     shell_write(2, "Usage: mv <src> <dst>\n");
     return;
   }
-  // simple reuse of cp parsing
+  
+  // Parse arguments
   char buf[512];
   size_t i = 0;
   while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
@@ -878,6 +879,7 @@ static void cmd_mv(const char *args)
     i++;
   }
   buf[i] = '\0';
+  
   char *p = buf;
   while (*p == ' ' || *p == '\t')
     p++;
@@ -891,13 +893,51 @@ static void cmd_mv(const char *args)
   while (*p == ' ' || *p == '\t')
     p++;
   char *dst = p;
+  
   if (!src || !dst || *dst == '\0')
   {
     shell_write(2, "Usage: mv <src> <dst>\n");
     return;
   }
 
-  // Copy
+  // Check if destination is a directory
+  stat_t dst_stat;
+  char target_path[256];
+  int64_t stat_result = syscall(SYS_STAT, (uint64_t)dst, (uint64_t)&dst_stat, 0);
+  
+  if (stat_result >= 0 && S_ISDIR(dst_stat.st_mode))
+  {
+    // Destination is a directory, extract filename from source
+    const char *filename = src;
+    const char *last_slash = src;
+    for (const char *p = src; *p; p++)
+    {
+      if (*p == '/')
+        last_slash = p + 1;
+    }
+    if (last_slash != src)
+      filename = last_slash;
+    
+    // Build target path: dst/filename
+    size_t dst_len = strlen(dst);
+    size_t filename_len = strlen(filename);
+    if (dst_len + filename_len + 2 > sizeof(target_path))
+    {
+      shell_write(2, "mv: path too long\n");
+      return;
+    }
+    
+    strcpy(target_path, dst);
+    if (dst[dst_len - 1] != '/')
+    {
+      target_path[dst_len] = '/';
+      target_path[dst_len + 1] = '\0';
+    }
+    strcat(target_path, filename);
+    dst = target_path;
+  }
+
+  // Copy file content
   void *data = NULL;
   size_t size = 0;
   int64_t r = syscall(SYS_READ_FILE, (uint64_t)src, (uint64_t)&data, (uint64_t)&size);

@@ -508,40 +508,56 @@ int64_t sys_df(void)
   if (!current_process)
     return -ESRCH;
 
-  typewriter_vga_print("Filesystem   Size\n", 0x0F);
+  typewriter_vga_print("Filesystem          Size\n", 0x0F);
+  typewriter_vga_print("----------------------------------\n", 0x07);
 
+  int found_drives = 0;
   for (uint8_t i = 0; i < 4; i++)
   {
     if (!ata_drive_present(i))
       continue;
 
+    found_drives++;
     char devname[16];
     int len = snprintf(devname, sizeof(devname), "/dev/hd%c", 'a' + i);
     if (len < 0 || len >= (int)sizeof(devname))
       continue;
 
+    // ata_get_size() returns size in 512-byte sectors
     uint64_t size = ata_get_size(i);
     if (size == 0)
+    {
+      char line[64];
+      snprintf(line, sizeof(line), "%-20s (empty)\n", devname);
+      typewriter_vga_print(line, 0x0E);
       continue;
+    }
 
     char size_str[32];
-    uint64_t size_gb = size / (1024ULL * 1024ULL * 1024ULL);
+    // Same calculation as lsblk: sectors / (2 * 1024 * 1024) = GB
+    uint64_t size_gb = size / (2 * 1024 * 1024);
     if (size_gb > 0)
     {
       len = snprintf(size_str, sizeof(size_str), "%lluG", size_gb);
     }
     else
     {
-      uint64_t size_mb = size / (1024ULL * 1024ULL);
+      // sectors / (2 * 1024) = MB
+      uint64_t size_mb = size / (2 * 1024);
       len = snprintf(size_str, sizeof(size_str), "%lluM", size_mb);
     }
 
     if (len > 0 && len < (int)sizeof(size_str))
     {
       char line[64];
-      snprintf(line, sizeof(line), "%s   %s\n", devname, size_str);
+      snprintf(line, sizeof(line), "%-20s %s\n", devname, size_str);
       typewriter_vga_print(line, 0x0F);
     }
+  }
+
+  if (found_drives == 0)
+  {
+    typewriter_vga_print("No drives detected\n", 0x0E);
   }
 
   return 0;
