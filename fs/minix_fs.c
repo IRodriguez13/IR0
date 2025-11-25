@@ -2062,10 +2062,6 @@ int minix_fs_rm(const char *path)
   return 0;
 }
 
-// ===============================================================================
-// FUNCIÓN PARA CREAR ENLACES DUROS (HARD LINKS)
-// ===============================================================================
-
 int minix_fs_link(const char *oldpath, const char *newpath)
 {
   if (!minix_fs.initialized)
