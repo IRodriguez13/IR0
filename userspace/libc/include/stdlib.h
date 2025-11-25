@@ -15,4 +15,5 @@ int system(const char *command);
 // String conversion
 int atoi(const char *str);
 long atol(const char *str);
+double strtod(const char *nptr, char **endptr);
 
