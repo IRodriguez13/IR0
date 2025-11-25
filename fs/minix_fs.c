@@ -2062,6 +2062,114 @@ int minix_fs_rm(const char *path)
   return 0;
 }
 
+// ===============================================================================
+// FUNCIÓN PARA CREAR ENLACES DUROS (HARD LINKS)
+// ===============================================================================
+
+int minix_fs_link(const char *oldpath, const char *newpath)
+{
+  if (!minix_fs.initialized)
+  {
+    typewriter_vga_print("Error: MINIX filesystem not initialized\n", 0x0C);
+    return -1;
+  }
+
+  if (!oldpath || !newpath || kstrlen(oldpath) == 0 || kstrlen(newpath) == 0)
+  {
+    typewriter_vga_print("Error: Invalid path specified\n", 0x0C);
+    return -1;
+  }
+
+  // Check if old file exists
+  minix_inode_t *old_inode = minix_fs_find_inode(oldpath);
+  if (!old_inode)
+  {
+    char error_msg[256];
+    snprintf(error_msg, sizeof(error_msg), "ln: '%s': No such file\n", oldpath);
+    typewriter_vga_print(error_msg, 0x0C);
+    return -1;
+  }
+
+  // Cannot create hard link to a directory
+  if (old_inode->i_mode & MINIX_IFDIR)
+  {
+    typewriter_vga_print("ln: cannot create hard link to directory\n", 0x0C);
+    return -1;
+  }
+
+  // Check if new path already exists
+  if (minix_fs_find_inode(newpath) != NULL)
+  {
+    char error_msg[256];
+    snprintf(error_msg, sizeof(error_msg), "ln: '%s': File exists\n", newpath);
+    typewriter_vga_print(error_msg, 0x0C);
+    return -1;
+  }
+
+  // Get the inode number of the old file
+  uint16_t old_inode_num = minix_fs_get_inode_number(oldpath);
+  if (old_inode_num == 0)
+  {
+    typewriter_vga_print("Error: Could not get inode number\n", 0x0C);
+    return -1;
+  }
+
+  // Split new path into parent directory and filename
+  char parent_path[256];
+  char filename[64];
+  if (minix_fs_split_path(newpath, parent_path, filename) != 0)
+  {
+    typewriter_vga_print("Error: Invalid new path\n", 0x0C);
+    return -1;
+  }
+
+  // Get parent directory inode
+  minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
+  if (!parent_inode)
+  {
+    char error_msg[256];
+    snprintf(error_msg, sizeof(error_msg), "ln: '%s': No such directory\n", parent_path);
+    typewriter_vga_print(error_msg, 0x0C);
+    return -1;
+  }
+
+  // Verify parent is a directory
+  if (!(parent_inode->i_mode & MINIX_IFDIR))
+  {
+    typewriter_vga_print("ln: parent is not a directory\n", 0x0C);
+    return -1;
+  }
+
+  // Add new directory entry pointing to the old inode
+  if (minix_fs_add_dir_entry(parent_inode, filename, old_inode_num) != 0)
+  {
+    typewriter_vga_print("Error: Could not add directory entry\n", 0x0C);
+    return -1;
+  }
+
+  // Increment link count on the inode
+  old_inode->i_nlinks++;
+
+  // Write updated inode back to disk
+  if (minix_fs_write_inode(old_inode_num, old_inode) != 0)
+  {
+    typewriter_vga_print("Error: Could not update inode\n", 0x0C);
+    return -1;
+  }
+
+  // Write updated parent directory
+  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
+  if (parent_inode_num != 0)
+  {
+    if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0)
+    {
+      typewriter_vga_print("Warning: Could not update parent directory\n", 0x0E);
+    }
+  }
+
+  return 0;
+}
+
 // Removed unused function format_permissions
 
 // Removed unused function uint32_to_str
