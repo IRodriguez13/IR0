@@ -977,14 +977,17 @@ static void cmd_ln(const char *args)
   }
 }
 
-/* chmod MODE PATH */
+/* chmod MODE PATH - supports both octal (755) and symbolic (+x, u+rw, etc.) */
 static void cmd_chmod(const char *args)
 {
   if (!args || *args == '\0')
   {
     shell_write(2, "Usage: chmod <mode> <path>\n");
+    shell_write(2, "  Octal mode: chmod 755 file\n");
+    shell_write(2, "  Symbolic mode: chmod +x file, chmod u+rw file, chmod go-w file\n");
     return;
   }
+  
   char buf[256];
   size_t i = 0;
   while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
@@ -993,6 +996,7 @@ static void cmd_chmod(const char *args)
     i++;
   }
   buf[i] = '\0';
+  
   char *p = buf;
   while (*p == ' ' || *p == '\t')
     p++;
@@ -1006,22 +1010,104 @@ static void cmd_chmod(const char *args)
   while (*p == ' ' || *p == '\t')
     p++;
   char *path = p;
+  
   if (!mode_s || !path || *path == '\0')
   {
     shell_write(2, "Usage: chmod <mode> <path>\n");
     return;
   }
 
-  // Parse octal mode
-  int mode = 0;
+  int mode = -1;
+  
+  // Check if it's octal mode (all digits 0-7)
+  int is_octal = 1;
   for (char *q = mode_s; *q; q++)
   {
     if (*q < '0' || *q > '7')
     {
-      shell_write(2, "chmod: invalid mode\n");
+      is_octal = 0;
+      break;
+    }
+  }
+  
+  if (is_octal && mode_s[0] != '\0')
+  {
+    // Parse octal mode
+    mode = 0;
+    for (char *q = mode_s; *q; q++)
+    {
+      mode = (mode << 3) + (*q - '0');
+    }
+  }
+  else
+  {
+    // Parse symbolic mode (e.g., +x, u+rw, go-w)
+    // First, get current file mode
+    stat_t st;
+    int64_t stat_result = syscall(SYS_STAT, (uint64_t)path, (uint64_t)&st, 0);
+    if (stat_result < 0)
+    {
+      shell_write(2, "chmod: cannot access file\n");
       return;
     }
-    mode = (mode << 3) + (*q - '0');
+    mode = st.st_mode & 0777;  // Extract permission bits
+    
+    // Parse symbolic mode
+    char *s = mode_s;
+    int who = 0;  // bitmask: u=1, g=2, o=4, a=7
+    int op = 0;   // '+' or '-'
+    int perms = 0;  // r=4, w=2, x=1
+    
+    // Parse who (u, g, o, a) or default to 'a'
+    while (*s && (*s == 'u' || *s == 'g' || *s == 'o' || *s == 'a'))
+    {
+      if (*s == 'u') who |= 1;
+      else if (*s == 'g') who |= 2;
+      else if (*s == 'o') who |= 4;
+      else if (*s == 'a') who = 7;
+      s++;
+    }
+    if (who == 0) who = 7;  // default is 'all'
+    
+    // Parse operator (+ or -)
+    if (*s == '+' || *s == '-')
+    {
+      op = *s++;
+    }
+    else
+    {
+      shell_write(2, "chmod: invalid symbolic mode (use + or -)\n");
+      return;
+    }
+    
+    // Parse permissions (r, w, x)
+    while (*s && (*s == 'r' || *s == 'w' || *s == 'x'))
+    {
+      if (*s == 'r') perms |= 4;
+      else if (*s == 'w') perms |= 2;
+      else if (*s == 'x') perms |= 1;
+      s++;
+    }
+    
+    // Apply changes
+    if (op == '+')
+    {
+      if (who & 1) mode |= (perms << 6);  // user
+      if (who & 2) mode |= (perms << 3);  // group
+      if (who & 4) mode |= perms;         // others
+    }
+    else if (op == '-')
+    {
+      if (who & 1) mode &= ~(perms << 6);  // user
+      if (who & 2) mode &= ~(perms << 3);  // group
+      if (who & 4) mode &= ~perms;         // others
+    }
+  }
+
+  if (mode < 0)
+  {
+    shell_write(2, "chmod: invalid mode\n");
+    return;
   }
 
   int64_t r = syscall(SYS_CHMOD, (uint64_t)path, (uint64_t)mode, 0);
