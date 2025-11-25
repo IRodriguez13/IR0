@@ -163,22 +163,37 @@ static void cmd_ls(const char *args)
 {
   int detailed = 0;
   const char *path;
+  char cwd[256];
 
   if (!args || *args == '\0')
   {
-    path = "/";
+    // Get current working directory
+    if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) >= 0)
+      path = cwd;
+    else
+      path = "/";
   }
   else if (str_starts_with(args, "-l "))
   {
     detailed = 1;
     path = skip_whitespace(args + 2);
     if (*path == '\0')
-      path = "/";
+    {
+      // Get current working directory
+      if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) >= 0)
+        path = cwd;
+      else
+        path = "/";
+    }
   }
   else if (str_starts_with(args, "-l"))
   {
     detailed = 1;
-    path = "/";
+    // Get current working directory
+    if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) >= 0)
+      path = cwd;
+    else
+      path = "/";
   }
   else
   {
