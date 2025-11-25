@@ -1,4 +1,3 @@
-// fs/vfs_simple.c - Implementación simple del sistema de archivos en memoria
 #include "vfs_simple.h"
 #include <ir0/vga.h>
 #include <string.h>
@@ -9,7 +8,7 @@
 #define MAX_FILES_PER_DIR 50
 #define MAX_FILENAME_LEN 64
 
-// Estructura para un archivo
+
 typedef struct
 {
     char name[MAX_FILENAME_LEN];
@@ -19,7 +18,7 @@ typedef struct
     bool is_directory;
 } simple_file_t;
 
-// Estructura para un directorio
+
 typedef struct
 {
     char name[MAX_FILENAME_LEN];
@@ -29,7 +28,6 @@ typedef struct
     uint64_t created_time;
 } simple_directory_t;
 
-// Sistema de archivos simple
 static simple_directory_t root_directory;
 static simple_directory_t directories[MAX_DIRECTORIES];
 static int directory_count = 0;
@@ -38,7 +36,6 @@ static bool vfs_simple_initialized = false;
 
 static uint64_t get_current_time(void)
 {
-    // Simular tiempo actual (en un sistema real usaríamos RTC)
     static uint64_t fake_time = 1000000;
     return fake_time++;
 }
@@ -50,7 +47,6 @@ static simple_directory_t *find_directory(const char *path)
         return &root_directory;
     }
 
-    // Buscar en directorios creados
     for (int i = 0; i < directory_count; i++)
     {
         if (strcmp(directories[i].name, path) == 0)
@@ -69,7 +65,6 @@ static bool is_valid_filename(const char *name)
         return false;
     }
 
-    // Verificar caracteres válidos
     for (int i = 0; name[i]; i++)
     {
         if (name[i] == '/' || name[i] == '\\' || name[i] == ':' || name[i] == '*')
@@ -89,13 +84,11 @@ void vfs_simple_init(void)
         return;
     }
 
-    // Inicializar directorio raíz
     strcpy(root_directory.name, "/");
     root_directory.file_count = 0;
     root_directory.permissions = 0755;
     root_directory.created_time = get_current_time();
 
-    // Agregar archivos del sistema al directorio raíz
     simple_file_t system_files[] = {
         {"kernel.log", 1024, 0644, get_current_time(), false},
         {"memory.log", 512, 0644, get_current_time(), false},
@@ -124,19 +117,16 @@ int vfs_simple_mkdir(const char *path)
         return -1;
     }
 
-    // Verificar si ya existe
     if (find_directory(path))
     {
         return -1;
     }
 
-    // Verificar límite de directorios
     if (directory_count >= MAX_DIRECTORIES)
     {
         return -1;
     }
 
-    // Crear nuevo directorio
     simple_directory_t *new_dir = &directories[directory_count];
     strcpy(new_dir->name, path);
     new_dir->file_count = 0;
@@ -148,7 +138,6 @@ int vfs_simple_mkdir(const char *path)
     return 0;
 }
 
-// Función para verificar si archivo existe
 int vfs_file_exists(const char *pathname)
 {
     if (!pathname)
@@ -156,7 +145,6 @@ int vfs_file_exists(const char *pathname)
         return 0;
     }
 
-    // Buscar en el directorio raíz por ahora
     for (int i = 0; i < root_directory.file_count; i++)
     {
         if (strcmp(root_directory.files[i].name, pathname) == 0)
@@ -168,7 +156,6 @@ int vfs_file_exists(const char *pathname)
     return 0;
 }
 
-// Función para verificar si directorio existe
 int vfs_directory_exists(const char *pathname)
 {
     if (!pathname)
@@ -176,13 +163,11 @@ int vfs_directory_exists(const char *pathname)
         return 0;
     }
 
-    // Verificar directorio raíz
     if (strcmp(pathname, "/") == 0)
     {
         return 1;
     }
 
-    // Buscar en directorios creados
     for (int i = 0; i < directory_count; i++)
     {
         if (strcmp(directories[i].name, pathname) == 0)
@@ -207,7 +192,6 @@ int vfs_simple_ls(const char *path)
         return -1;
     }
 
-    // Mostrar archivos
     for (int i = 0; i < dir->file_count; i++)
     {
         simple_file_t *file = &dir->files[i];
@@ -215,7 +199,6 @@ int vfs_simple_ls(const char *path)
         const char *permissions __attribute__((unused)) = "rwxr-xr-x";
     }
 
-    // Mostrar directorios creados
     for (int i = 0; i < directory_count; i++)
     {
     }
@@ -268,7 +251,6 @@ const char *vfs_simple_get_directory_name(int index)
     return NULL;
 }
 
-// Función simple para asignar sectores
 int vfs_allocate_sectors(int count)
 {
     (void)count; // Suppress unused parameter warning
@@ -278,7 +260,6 @@ int vfs_allocate_sectors(int count)
     return 0;
 }
 
-// Función simple para remover directorio
 int vfs_remove_directory(const char *path)
 {
     (void)path; // Suppress unused parameter warning
