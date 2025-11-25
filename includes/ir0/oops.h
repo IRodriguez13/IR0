@@ -14,20 +14,6 @@ typedef enum
     RUNNING_OUT_PROCESS = 7
 } panic_level_t;
 
-
-/*
- * ============ Panic() ================
- * Detiene el kernel completamente y muestra mensaje de error crítico.
- * Limpia pantalla, muestra mensaje en rojo, deshabilita interrupciones
- * y entra en loop infinito con hlt para mantener la cpu en modo de ahorro.
- * 
- * Cómo es un estado límite del sistema, la idea es frenar en seco la ejecución del sistema. 
- */
-
-
-
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
