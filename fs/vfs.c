@@ -362,6 +362,16 @@ int vfs_unlink(const char *path)
   return minix_fs_rm(path);
 }
 
+int vfs_link(const char *oldpath, const char *newpath)
+{
+  if (!oldpath || !newpath)
+    return -1;
+  
+  // Delegar al filesystem específico (MINIX)
+  extern int minix_fs_link(const char *oldpath, const char *newpath);
+  return minix_fs_link(oldpath, newpath);
+}
+
 // Internal recursive function with depth limit to prevent stack overflow
 static int vfs_rmdir_recursive_internal(const char *path, int depth)
 {

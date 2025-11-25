@@ -47,6 +47,7 @@ typedef uint32_t mode_t;
 #define SYS_MOUNT 90
 #define SYS_DF 95
 #define SYS_CHMOD 100
+#define SYS_LINK 101
 
 
 // Low-level syscall interface
@@ -233,5 +234,10 @@ static inline int64_t ir0_open(const char *pathname, int flags, mode_t mode)
 static inline int64_t ir0_close(int fd)
 {
     return syscall1(SYS_CLOSE, fd);
+}
+
+static inline int64_t ir0_link(const char *oldpath, const char *newpath)
+{
+    return syscall2(SYS_LINK, (int64_t)oldpath, (int64_t)newpath);
 }
 

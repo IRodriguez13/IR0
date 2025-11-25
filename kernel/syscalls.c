@@ -547,6 +547,15 @@ int64_t sys_df(void)
   return 0;
 }
 
+int64_t sys_link(const char *oldpath, const char *newpath)
+{
+  if (!current_process || !oldpath || !newpath)
+    return -EFAULT;
+
+  // Call link through VFS layer
+  return vfs_link(oldpath, newpath);
+}
+
 int64_t sys_lsblk(void)
 {
   if (!current_process)
@@ -1299,6 +1308,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_lsblk();
   case 95:
     return sys_df();
+  case 100:
+    return sys_chmod((const char *)arg1, (mode_t)arg2);
+  case 101:
+    return sys_link((const char *)arg1, (const char *)arg2);
   case 93:
     return sys_mount((const char *)arg1, (const char *)arg2,
                      (const char *)arg3);
