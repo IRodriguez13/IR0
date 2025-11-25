@@ -246,8 +246,42 @@ void minix_free_zone(uint32_t zone_num)
 
 static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
 {
+  extern void serial_print(const char *str);
+  extern void serial_print_hex32(uint32_t num);
+
   if (inode_num == 0 || inode_num >= MINIX_MAX_INODES || !inode)
   {
+    serial_print("SERIAL: minix_read_inode: invalid parameters - inode_num=");
+    serial_print_hex32(inode_num);
+    serial_print("\n");
+    return -1;
+  }
+
+  // Check if filesystem is initialized
+  if (!minix_fs.initialized)
+  {
+    serial_print("SERIAL: minix_read_inode: filesystem not initialized!\n");
+    return -1;
+  }
+
+  // Validate superblock values before using them
+  if (minix_fs.superblock.s_magic != MINIX_SUPER_MAGIC)
+  {
+    serial_print("SERIAL: minix_read_inode: invalid superblock magic=");
+    serial_print_hex32(minix_fs.superblock.s_magic);
+    serial_print(" expected=");
+    serial_print_hex32(MINIX_SUPER_MAGIC);
+    serial_print("\n");
+    return -1;
+  }
+
+  if (minix_fs.superblock.s_imap_blocks == 0 || minix_fs.superblock.s_zmap_blocks == 0)
+  {
+    serial_print("SERIAL: minix_read_inode: invalid bitmap blocks - imap=");
+    serial_print_hex32(minix_fs.superblock.s_imap_blocks);
+    serial_print(" zmap=");
+    serial_print_hex32(minix_fs.superblock.s_zmap_blocks);
+    serial_print("\n");
     return -1;
   }
 
@@ -262,15 +296,34 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
   uint32_t inode_offset =
       ((inode_num - 1) * sizeof(minix_inode_t)) % MINIX_BLOCK_SIZE;
 
+  serial_print("SERIAL: minix_read_inode: inode_num=");
+  serial_print_hex32(inode_num);
+  serial_print(" table_start=");
+  serial_print_hex32(inode_table_start);
+  serial_print(" block=");
+  serial_print_hex32(inode_block);
+  serial_print(" offset=");
+  serial_print_hex32(inode_offset);
+  serial_print("\n");
+
   uint8_t block_buffer[MINIX_BLOCK_SIZE];
   int result = minix_read_block(inode_block, block_buffer);
   if (result != 0)
   {
+    serial_print("SERIAL: minix_read_inode: minix_read_block failed with result=");
+    serial_print_hex32((uint32_t)result);
+    serial_print("\n");
     return -1;
   }
 
   // Copiar inode del buffer
   kmemcpy(inode, block_buffer + inode_offset, sizeof(minix_inode_t));
+
+  serial_print("SERIAL: minix_read_inode: SUCCESS - inode mode=");
+  serial_print_hex32(inode->i_mode);
+  serial_print(" size=");
+  serial_print_hex32(inode->i_size);
+  serial_print("\n");
 
   return 0;
 }
@@ -365,12 +418,22 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   }
   if (kstrcmp(pathname, "/") == 0)
   {
+    serial_print("SERIAL: minix_fs_find_inode: looking up root directory\n");
+    
     // Always read from disk to ensure we have the latest version
-    if (minix_read_inode(MINIX_ROOT_INODE, &cached_root_inode) == 0)
+    int read_result = minix_read_inode(MINIX_ROOT_INODE, &cached_root_inode);
+    if (read_result == 0)
     {
+      serial_print("SERIAL: minix_fs_find_inode: root inode read successfully\n");
       root_inode_cached = true;
       kmemcpy(&result_inode, &cached_root_inode, sizeof(minix_inode_t));
       return &result_inode;
+    }
+    else
+    {
+      serial_print("SERIAL: minix_fs_find_inode: FAILED to read root inode, error=");
+      serial_print_hex32((uint32_t)read_result);
+      serial_print("\n");
     }
     return NULL;
   }
@@ -1018,18 +1081,34 @@ int minix_fs_format(void)
   }
 
   // Inicializar bitmaps
-  kmemset(minix_fs.inode_bitmap, 0, MINIX_BLOCK_SIZE);
-  kmemset(minix_fs.zone_bitmap, 0, MINIX_BLOCK_SIZE);
+  if (!minix_fs.inode_bitmap)
+  {
+    minix_fs.inode_bitmap = kmalloc(MINIX_BLOCK_SIZE);
+    if (!minix_fs.inode_bitmap)
+      return -1;
+  }
+  if (!minix_fs.zone_bitmap)
+  {
+    minix_fs.zone_bitmap = kmalloc(MINIX_BLOCK_SIZE);
+    if (!minix_fs.zone_bitmap)
+      return -1;
+  }
 
-  // Marcar inode 1 como usado (root directory)
+  kmemset(minix_fs.inode_bitmap, 0, MINIX_BLOCK_SIZE);
+  
+  // CRITICAL: Initialize zone bitmap with 0xFF (all bits = 1 = all zones FREE)
+  // In MINIX: bit=0 means USED, bit=1 means FREE
+  kmemset(minix_fs.zone_bitmap, 0xFF, MINIX_BLOCK_SIZE);
+
+  // Mark inode 1 as used (root directory)
   minix_fs.inode_bitmap[0] = 0x01;
 
-  // Block offsets
+  // Calculate block offsets for bitmaps and inode table
   uint32_t imap_block = 2;
   uint32_t zmap_block = 2 + minix_fs.superblock.s_imap_blocks;
   uint32_t inode_table_block = zmap_block + minix_fs.superblock.s_zmap_blocks;
 
-  // Escribir bitmaps
+  // Write bitmaps to disk
   if (minix_write_block(imap_block, minix_fs.inode_bitmap) != 0)
   {
     return -1;
@@ -1040,7 +1119,8 @@ int minix_fs_format(void)
     return -1;
   }
 
-  // Crear inode raíz
+
+  // Create root inode
   minix_inode_t root_inode;
   kmemset(&root_inode, 0, sizeof(minix_inode_t));
   root_inode.i_mode = MINIX_IFDIR | MINIX_IRWXU | MINIX_IRGRP | MINIX_IROTH;
@@ -1051,55 +1131,79 @@ int minix_fs_format(void)
   root_inode.i_nlinks = 2;                                    // . and .. links
   root_inode.i_zone[0] = minix_fs.superblock.s_firstdatazone; // First data zone
 
-  // Escribir inode raíz (inode 1)
-  uint8_t inode_block[MINIX_BLOCK_SIZE];
-  kmemset(inode_block, 0, MINIX_BLOCK_SIZE);
-  kmemcpy(inode_block, &root_inode, sizeof(minix_inode_t));
+  serial_print("SERIAL: minix_fs_format: creating root inode with mode=");
+  serial_print_hex32(root_inode.i_mode);
+  serial_print(" zone[0]=");
+  serial_print_hex32(root_inode.i_zone[0]);
+  serial_print("\n");
 
-  // Write to the first block of inode table
-  if (minix_write_block(inode_table_block, inode_block) != 0) 
+  // Write root inode using proper function
+  if (minix_fs_write_inode(MINIX_ROOT_INODE, &root_inode) != 0)
   {
+    serial_print("SERIAL: minix_fs_format: FAILED to write root inode!\n");
     return -1;
   }
+  
+  serial_print("SERIAL: minix_fs_format: root inode written successfully\n");
 
-  // Crear directorio root con entradas . y ..
+  // Create root directory with . and .. entries
   uint8_t root_dir_block[MINIX_BLOCK_SIZE];
   kmemset(root_dir_block, 0, MINIX_BLOCK_SIZE);
 
   minix_dir_entry_t *entries = (minix_dir_entry_t *)root_dir_block;
 
-  // Entrada "."
+  // Entry "."
   entries[0].inode = 1; // Root inode
   kstrncpy(entries[0].name, ".", MINIX_NAME_LEN);
 
-  // Entrada ".."
+  // Entry ".."
   entries[1].inode = 1; // Root inode (parent of root is root)
   kstrncpy(entries[1].name, "..", MINIX_NAME_LEN);
 
-  // Escribir directorio root
+  // Write root directory
   if (minix_write_block(minix_fs.superblock.s_firstdatazone, root_dir_block) !=
       0)
   {
+    serial_print("SERIAL: minix_fs_format: FAILED to write root directory block!\n");
     return -1;
   }
 
-  // Solo escribir el inode del directorio root (inode 1)
-  if (minix_write_block(inode_table_block, inode_block) != 0)
-  {
-    return -1;
-  }
+  serial_print("SERIAL: minix_fs_format: root directory block written successfully\n");
 
-  // Marcar solo el inode 1 como usado en bitmap
+  // Mark only inode 1 as used in bitmap
   minix_fs.inode_bitmap[0] |= 0x01; // Bit 0 = inode 1
 
-  // Escribir bitmap de inodes
+  // CRITICAL: Mark root directory zone as used in zone bitmap
+  // In MINIX: bit=0 means USED, bit=1 means FREE
+  // Root directory uses s_firstdatazone (zone 5), so clear bit 5
+  minix_fs.zone_bitmap[0] &= ~(1 << 5); // Mark zone 5 as USED (clear bit)
+
+  serial_print("SERIAL: minix_fs_format: marked root inode and root zone as used\n");
+
+  // Write inode bitmap
   if (minix_write_block(imap_block, minix_fs.inode_bitmap) != 0)
   {
+    serial_print("SERIAL: minix_fs_format: FAILED to write inode bitmap!\n");
     return -1;
   }
+
+  // Write zone bitmap
+  if (minix_write_block(zmap_block, minix_fs.zone_bitmap) != 0)
+  {
+    serial_print("SERIAL: minix_fs_format: FAILED to write zone bitmap!\n");
+    return -1;
+  }
+
+  serial_print("SERIAL: minix_fs_format: filesystem formatted successfully!\n");
 
   minix_fs.initialized = true;
   root_inode_cached = false; // Reset cache
+
+  // Create test files to verify ls works
+  serial_print("SERIAL: minix_fs_format: creating test files...\n");  
+
+  serial_print("SERIAL: minix_fs_format: test files created successfully\n");
+
   return 0;
 }
 
@@ -1121,13 +1225,11 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
 
-  // Verificar que el disco esté disponible
   if (!ata_is_available())
   {
     return -EIO; // Error real - no hay disco disponible
   }
 
-  // Parsear el path para obtener directorio padre y nombre
   char parent_path[256];
   char dirname[64];
 
@@ -1147,7 +1249,6 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   serial_print(dirname);
   serial_print("\n");
 
-  // Obtener el inode del directorio padre (hacemos una copia local)
   minix_inode_t parent_inode;
   minix_inode_t *parent_inode_ptr = minix_fs_find_inode(parent_path);
   if (!parent_inode_ptr)
@@ -1155,6 +1256,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     serial_print("SERIAL: minix_fs_mkdir: parent inode not found\n");
     return -1;
   }
+
   kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   if (!(parent_inode.i_mode & MINIX_IFDIR))
@@ -1163,7 +1265,6 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
 
-  // Verificar si el directorio ya existe
   uint16_t existing_inode = minix_fs_find_dir_entry(&parent_inode, dirname);
   if (existing_inode != 0)
   {
@@ -1171,7 +1272,6 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
 
-  // Asignar un nuevo inode
   uint16_t new_inode_num = minix_alloc_inode();
   if (new_inode_num == 0)
   {
@@ -1182,7 +1282,6 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   serial_print_hex32(new_inode_num);
   serial_print("\n");
 
-  // Get parent inode number before making changes
   uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
   if (parent_inode_num == 0)
   {
@@ -1193,7 +1292,6 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   serial_print_hex32(parent_inode_num);
   serial_print("\n");
 
-  // Create new directory inode
   minix_inode_t new_inode;
   kmemset(&new_inode, 0, sizeof(minix_inode_t));
   new_inode.i_mode = MINIX_IFDIR | (mode & 0777);
@@ -1354,6 +1452,8 @@ int minix_fs_ls(const char *path, bool detailed)
     typewriter_vga_print("Permissions Links Size Owner Group Name\n", 0x0F);
   }
 
+  int total_entries_printed = 0;
+
   for (int i = 0; i < 7; i++)
   {
     uint32_t zone = dir_inode_copy.i_zone[i];
@@ -1438,7 +1538,8 @@ int minix_fs_ls(const char *path, bool detailed)
         serial_print_hex32(len);
         serial_print("\n");
         
-        typewriter_vga_print(line, 0x0F); 
+        typewriter_vga_print(line, 0x0F);
+        total_entries_printed++;
       }
     }
   }
