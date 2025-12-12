@@ -51,38 +51,29 @@ static minix_fs_info_t minix_fs;
 
 int minix_read_block(uint32_t block_num, void *buffer)
 {
-  uint32_t lba =
-      block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
+  uint32_t lba = block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
   uint8_t num_sectors = 2;
 
   bool success = ata_read_sectors(0, lba, num_sectors, buffer);
 
-  if (success)
-  {
-    return 0;
-  }
-  else
-  {
+  if (!success)
     return -1;
-  }
+  
+  return 0;
 }
 
 int minix_write_block(uint32_t block_num, const void *buffer)
 {
-  uint32_t lba =
-      block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
+  uint32_t lba = block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
   uint8_t num_sectors = 2;
 
   bool success = ata_write_sectors(0, lba, num_sectors, buffer);
 
   if (success)
-  {
-    return 0;
-  }
-  else
-  {
     return -1;
-  }
+    
+  return 0;
+  
 }
 
 [[maybe_unused]] static bool minix_is_inode_free(uint32_t inode_num)
