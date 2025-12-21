@@ -5,7 +5,6 @@
 *.dll
 *.d
 *.patch
-*cosas.txt
 *.bin
 *.log
 *.iso
@@ -13,25 +12,12 @@
 *.raw
 *iso-x86-64/boot
 *iso-x86-64/boot
-*KERNEL_OVERVIEW.txt
 *.txt
 
 .aider*
 disk.img
 iso-x86-64-desktop/boot/grub/grub.cfg
-CONSOLIDATION_PLAN.md
-KERNEL_SIMPLIFICATION_PLAN.md
-test_vmm_config.h
-backup-old-files/kernel_start_old.c
-backup-old-files/kernel_start.c.backup
-kernel/process.c.complex
 *memory-wip
-ROADMAP_TO_PRODUCTION.md
-fs/vfs_simple.c
-fs/vfs_simple.c
-disk.img.backup.1759425883
-disk.img.backup.1759425351
 iso/boot/grub/grub.cfg
 userspace/build/echo
 .config
-docs/LANGUAGE_SUPPORT_ROADMAP.md
