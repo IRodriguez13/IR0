@@ -410,14 +410,11 @@ USERSPACE_DIR = userspace
 USERSPACE_BUILD_DIR = $(USERSPACE_DIR)/build
 USERSPACE_CC = gcc
 USERSPACE_CFLAGS = -m64 -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -fno-stack-protector
-USERSPACE_CFLAGS += -I$(USERSPACE_DIR)/libc/include -I$(KERNEL_ROOT)/includes -static -fPIC
+USERSPACE_CFLAGS += -I$(KERNEL_ROOT)/includes -static -fPIC
 USERSPACE_LDFLAGS = -nostdlib -static
 
-# Userspace libc objects
-LIBC_OBJS = $(USERSPACE_BUILD_DIR)/syscalls.o $(USERSPACE_BUILD_DIR)/stdio.o $(USERSPACE_BUILD_DIR)/malloc.o
-
 # Userspace programs
-USERSPACE_PROGRAMS = $(USERSPACE_BUILD_DIR)/echo
+USERSPACE_PROGRAMS = $(USERSPACE_BUILD_DIR)/echo $(USERSPACE_BUILD_DIR)/hello
 
 # Build userspace programs
 userspace-programs: $(USERSPACE_PROGRAMS)
@@ -427,15 +424,14 @@ userspace-programs: $(USERSPACE_PROGRAMS)
 $(USERSPACE_BUILD_DIR):
 	@mkdir -p $(USERSPACE_BUILD_DIR)
 
-# Build libc objects
-$(USERSPACE_BUILD_DIR)/%.o: $(USERSPACE_DIR)/libc/src/%.c | $(USERSPACE_BUILD_DIR)
-	@echo "  CC      $<"
-	@$(USERSPACE_CC) $(USERSPACE_CFLAGS) -c $< -o $@
+# Build programs
+$(USERSPACE_BUILD_DIR)/echo: $(USERSPACE_DIR)/bin/echo.c | $(USERSPACE_BUILD_DIR)
+	@echo "  CC      $@"
+	@$(USERSPACE_CC) $(USERSPACE_CFLAGS) $(USERSPACE_LDFLAGS) -o $@ $<
 
-# Build echo program
-$(USERSPACE_BUILD_DIR)/echo: $(USERSPACE_DIR)/bin/echo.c $(LIBC_OBJS) | $(USERSPACE_BUILD_DIR)
-	@echo "  LD      $@"
-	@$(USERSPACE_CC) $(USERSPACE_CFLAGS) $(USERSPACE_LDFLAGS) -o $@ $^
+$(USERSPACE_BUILD_DIR)/hello: $(USERSPACE_DIR)/bin/hello.c | $(USERSPACE_BUILD_DIR)
+	@echo "  CC      $@"
+	@$(USERSPACE_CC) $(USERSPACE_CFLAGS) $(USERSPACE_LDFLAGS) -o $@ $<
 
 # Clean userspace programs
 userspace-clean:
