@@ -22,7 +22,8 @@
 
 /* RTL8139 Registers */
 #define RTL8139_REG_MAC0            0x00    /* MAC Address */
-#define RTL8139_REG_MAR0            0x08    /* Multicast Filter */
+#define RTL8139_REG_MAR0            0x08    /* Multicast Filter High */
+#define RTL8139_REG_MAR4            0x0C    /* Multicast Filter Low */
 #define RTL8139_REG_TSD0            0x10    /* Transmit Status Descriptor 0 */
 #define RTL8139_REG_TSAD0           0x20    /* Transmit Start Address Descriptor 0 */
 #define RTL8139_REG_RBSTART         0x30    /* Receive Buffer Start Address */
@@ -45,6 +46,9 @@
 #define RTL8139_INT_RER             (1 << 1)    /* Receive Error */
 #define RTL8139_INT_TOK             (1 << 2)    /* Transmit OK */
 #define RTL8139_INT_TER             (1 << 3)    /* Transmit Error */
+#define RTL8139_INT_RXOVW           (1 << 4)    /* RX Buffer Overflow */
+#define RTL8139_INT_PUN             (1 << 5)    /* Packet Underrun */
+#define RTL8139_INT_FIFOOVW         (1 << 6)    /* FIFO Overflow */
 
 /* Receive Configuration Register bits */
 #define RTL8139_RCR_AAP             (1 << 0)    /* Accept All Packets */

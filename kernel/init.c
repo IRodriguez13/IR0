@@ -74,7 +74,7 @@ int start_init_process(void)
 	strcpy(init->cwd, "/");
 	
 	/* Set process command name */
-	strncpy(init->comm, "init_1", sizeof(init->comm) - 1);
+	strncpy(init->comm, "debshell", sizeof(init->comm) - 1);
 	init->comm[sizeof(init->comm) - 1] = '\0';
 
 	/* Add to scheduler and start */
