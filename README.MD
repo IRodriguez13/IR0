@@ -1,6 +1,69 @@
 # IR0 Kernel
 
-IR0 is a monolithic operating system kernel for x86-64/ARM32 architecture.
+IR0 is a monolithic operating system kernel designed for x86-64 architecture, focusing on modularity, multi-language support (C, C++, Rust), and POSIX compliance.
+
+## System Architecture
+
+The IR0 architecture is built upon a modular monolithic design, where core services reside in Ring 0, providing a robust interface for Ring 3 user applications.
+
+```mermaid
+graph TD
+    subgraph "User Space (Ring 3)"
+        INIT["Init Process"]
+        Shell["Bash/Yell Shell"]
+        Libc["IR0 Libc (Standard C Library)"]
+        Apps["User Applications"]
+    end
+
+    subgraph "System Call Interface"
+        Syscall["Syscall Dispatcher (int 0x80)"]
+    end
+
+    subgraph "Kernel Space (Ring 0)"
+        subgraph "Process Management"
+            Sched["Round Robin Scheduler"]
+            Proc["Process Lifecycle (Fork/Exec)"]
+        end
+
+        subgraph "Memory Management"
+            Paging["Paging (Identity Map)"]
+            Kalloc["Kmalloc (Static/Dynamic Heap)"]
+        end
+
+        subgraph "Virtual File System (VFS)"
+            Minix["Minix FS Driver"]
+            VFS["VFS Abstraction Layer"]
+            DevFS["Device Nodes"]
+        end
+
+        subgraph "Network Stack (Beta)"
+            ARP["ARP Protocol"]
+            IPv4["IPv4 Layer"]
+            RTL8139["RTL8139 Driver"]
+        end
+
+        subgraph "Hardware Abstraction Layer"
+            IDT["IDT / PIC / Exceptions"]
+            Timer["PIT / HPET / LAPIC"]
+            Storage["ATA Disk Driver"]
+            IO["PS/2 Keyboard & Mouse"]
+        end
+    end
+
+    Shell --> Libc
+    INIT --> Shell
+    Libc --> Syscall
+    Syscall --> VFS
+    Syscall --> Proc
+    Syscall --> Kalloc
+    VFS --> Minix
+    VFS --> Storage
+    Proc --> Sched
+    Sched --> IDT
+    RTL8139 --> ARP
+    ARP --> IPv4
+```
+
 
 ## Dependencies
 
@@ -287,10 +350,16 @@ Or run directly:
 - Mount point management
 
 ### Hardware Drivers
-- PS/2 keyboard driver
-- ATA storage driver
+- PS/2 keyboard and mouse drivers
+- ATA storage driver with DMA support
+- RTL8139 Network Interface Card (NIC) driver
 - VGA display driver
 - Timer drivers (PIT, HPET, LAPIC)
+
+### Networking (Under Development)
+- Ethernet frame handling
+- ARP (Address Resolution Protocol)
+- IPv4 protocol foundation
 
 ### Interrupt System
 - Complete IDT setup
@@ -335,7 +404,70 @@ This project is licensed under the GNU General Public License v3.0. See the LICE
 
 # IR0 Kernel (Español)
 
-IR0 es un kernel de sistema operativo monolítico para arquitectura x86-64/ARM32.
+IR0 es un kernel de sistema operativo monolítico diseñado para arquitectura x86-64, con un enfoque en la modularidad, soporte multilenguaje (C, C++, Rust) y cumplimiento de estándares POSIX.
+
+## Arquitectura del Sistema
+
+La arquitectura de IR0 se basa en un diseño monolítico modular, donde los servicios principales residen en el Ring 0, proporcionando una interfaz robusta para las aplicaciones de usuario en el Ring 3.
+
+```mermaid
+graph TD
+    subgraph "Espacio de Usuario (Ring 3)"
+        INIT["Proceso Init"]
+        Shell["Bash/Yell Shell"]
+        Libc["IR0 Libc (Biblioteca C Estándar)"]
+        Apps["Aplicaciones de Usuario"]
+    end
+
+    subgraph "Interfaz de Llamadas al Sistema"
+        Syscall["Despachador de Syscalls (int 0x80)"]
+    end
+
+    subgraph "Espacio de Kernel (Ring 0)"
+        subgraph "Gestión de Procesos"
+            Sched["Planificador Round Robin"]
+            Proc["Ciclo de Vida de Procesos (Fork/Exec)"]
+        end
+
+        subgraph "Gestión de Memoria"
+            Paging["Paginación (Mapeo de Identidad)"]
+            Kalloc["Kmalloc (Heap Estático/Dinámico)"]
+        end
+
+        subgraph "Sistema de Archivos Virtual (VFS)"
+            Minix["Driver Minix FS"]
+            VFS["Capa de Abstracción VFS"]
+            DevFS["Nodos de Dispositivo"]
+        end
+
+        subgraph "Pila de Red (Beta)"
+            ARP["Protocolo ARP"]
+            IPv4["Capa IPv4"]
+            RTL8139["Driver RTL8139"]
+        end
+
+        subgraph "Capa de Abstracción de Hardware"
+            IDT["IDT / PIC / Excepciones"]
+            Timer["PIT / HPET / LAPIC"]
+            Storage["Driver de Disco ATA"]
+            IO["Teclado y Ratón PS/2"]
+        end
+    end
+
+    Shell --> Libc
+    INIT --> Shell
+    Libc --> Syscall
+    Syscall --> VFS
+    Syscall --> Proc
+    Syscall --> Kalloc
+    VFS --> Minix
+    VFS --> Storage
+    Proc --> Sched
+    Sched --> IDT
+    RTL8139 --> ARP
+    ARP --> IPv4
+```
+
 
 ## Dependencias
 
@@ -538,10 +670,16 @@ O ejecutar directamente:
 - Gestión de puntos de montaje
 
 ### Controladores de Hardware
-- Controlador de teclado PS/2
-- Controlador de almacenamiento ATA
+- Controladores de teclado y ratón PS/2
+- Controlador de almacenamiento ATA con soporte DMA
+- Controlador de tarjeta de red RTL8139 (NIC)
 - Controlador de pantalla VGA
 - Controladores de temporizador (PIT, HPET, LAPIC)
+
+### Redes (En Desarrollo)
+- Manejo de tramas Ethernet
+- Protocolo ARP (Address Resolution Protocol)
+- Base del protocolo IPv4
 
 ### Sistema de Interrupciones
 - Configuración completa de IDT
