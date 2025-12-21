@@ -15,12 +15,14 @@
 #include "rtl8139.h"
 #include <interrupt/arch/io.h>
 #include <ir0/memory/allocator.h>
+#include <ir0/memory/kmem.h>
 #include <drivers/serial/serial.h>
 #include <string.h>
 
 /* Global driver state */
 static uint16_t rtl8139_io_base = 0;
 static uint8_t *rtl8139_rx_buffer = NULL;
+static uint32_t rtl8139_rx_offset = 0;
 static uint32_t rtl8139_current_tx_descriptor = 0;
 static uint8_t rtl8139_mac[6];
 
@@ -125,6 +127,10 @@ int rtl8139_init(void)
     /* Accept Broadcast, Multicast, Physical match, and let it wrap */
     outl(rtl8139_io_base + RTL8139_REG_RCR, RTL8139_RCR_AB | RTL8139_RCR_AM | RTL8139_RCR_APM | RTL8139_RCR_AAP | RTL8139_RCR_WRAP);
 
+    /* Reset Multicast registers (to accept nothing by default except broadcast) */
+    outl(rtl8139_io_base + RTL8139_REG_MAR0, 0);
+    outl(rtl8139_io_base + RTL8139_REG_MAR4, 0);
+
     /* 5. Enable Transmitter and Receiver */
     outb(rtl8139_io_base + RTL8139_REG_CR, RTL8139_CR_TE | RTL8139_CR_RE);
 
@@ -184,7 +190,7 @@ void rtl8139_send(void *data, size_t len)
     outl(rtl8139_io_base + RTL8139_REG_TSAD0 + (rtl8139_current_tx_descriptor * 4), (uint32_t)(uintptr_t)data);
 
     /* Set transmit status (this starts the transmission) */
-    uint32_t status = (len & RTL8139_TSD_SIZE_MASK);
+    uint32_t status = (len & RTL8139_TSD_SIZE_MASK) | 0x00002000; /* Early TX threshold 64 bytes */
     outl(rtl8139_io_base + RTL8139_REG_TSD0 + (rtl8139_current_tx_descriptor * 4), status);
 
     /* Advance descriptor (there are 4) */
@@ -200,21 +206,66 @@ void rtl8139_handle_interrupt(void)
 {
     uint16_t status = inw(rtl8139_io_base + RTL8139_REG_ISR);
 
-    if (status & RTL8139_INT_ROK)
+    while (!(inb(rtl8139_io_base + RTL8139_REG_CR) & RTL8139_CR_BUFE))
     {
-        serial_print("RTL8139: Packet received!\n");
-        /* For now, just pass the RX buffer directly to net_receive. 
-           Real implementation should handle the buffer wrap and packet structure. */
-        /* The RTL8139 packet format: [status, length, payload...] */
-        uint16_t *packet_header = (uint16_t*)rtl8139_rx_buffer;
+        /* The RTL8139 packet format: [status(2), length(2), payload..., CRC(4)] */
+        /* Note: length includes the 4 bytes of header. */
+        uint16_t *packet_header = (uint16_t*)(rtl8139_rx_buffer + rtl8139_rx_offset);
+        uint16_t status_bits = packet_header[0];
         uint16_t packet_len = packet_header[1];
+
+        if (!(status_bits & 0x01)) {
+            serial_print("RTL8139: RX Error (packet invalid)\n");
+            break;
+        }
+
+        /* Forward packet to network core (skip 4 byte header) */
+        /* Real payload length is packet_len - 4 (header) */
+        /* Note: RTL8139 align packets to 4 bytes inside the buffer. */
         
-        net_receive(&rtl8139_dev, rtl8139_rx_buffer + 4, packet_len);
+        uint8_t *payload = kmalloc(packet_len - 4);
+        if (payload) {
+            /* Handle wrap around if packet is split at end of buffer */
+            if (rtl8139_rx_offset + packet_len > 8192) {
+                size_t tail = 8192 - (rtl8139_rx_offset + 4);
+                memcpy(payload, rtl8139_rx_buffer + rtl8139_rx_offset + 4, tail);
+                memcpy(payload + tail, rtl8139_rx_buffer, (packet_len - 4) - tail);
+            } else {
+                memcpy(payload, rtl8139_rx_buffer + rtl8139_rx_offset + 4, packet_len - 4);
+            }
+            
+            net_receive(&rtl8139_dev, payload, packet_len - 4);
+            kfree(payload);
+        }
+
+        /* Update offset for next packet */
+        /* (packet_len + 4 + 3) & ~3 -> next packet is 4-byte aligned */
+        /* We add 4 because length field doesn't count the header in some docs, 
+           but in RTL8139 it actually counts status + length + payload + CRC. 
+           Wait, RTL8139 length is status(2)+length(2)+payload+CRC(4). */
+        
+        rtl8139_rx_offset = (rtl8139_rx_offset + packet_len + 4 + 3) & ~3;
+        rtl8139_rx_offset %= 8192;
+
+        /* Update CAPR (Current Address of Packet Read) */
+        /* RTL8139 requires CAPR = offset - 0x10 */
+        outw(rtl8139_io_base + RTL8139_REG_CAPR, rtl8139_rx_offset - 0x10);
     }
 
     if (status & RTL8139_INT_TOK)
     {
-        /* Transmit OK */
+        /* Transmit OK - we could clear some local TX state if we tracked it per descriptor */
+        serial_print("RTL8139: Packet sent successfully!\n");
+    }
+
+    if (status & (RTL8139_INT_RXOVW | RTL8139_INT_RER))
+    {
+        serial_print("RTL8139: RX Error or Overflow!\n");
+        /* Reset RX buffer if overflow */
+        if (status & RTL8139_INT_RXOVW) {
+             outw(rtl8139_io_base + RTL8139_REG_ISR, RTL8139_INT_RXOVW);
+             /* We might need to re-init RX here in a real production environment */
+        }
     }
 
     /* Acknowledge interrupts */
