@@ -21,45 +21,45 @@
 #define RTL8139_DEVICE_ID 0x8139
 
 /* RTL8139 Registers */
-#define RTL8139_REG_MAC0            0x00    /* MAC Address */
-#define RTL8139_REG_MAR0            0x08    /* Multicast Filter High */
-#define RTL8139_REG_MAR4            0x0C    /* Multicast Filter Low */
-#define RTL8139_REG_TSD0            0x10    /* Transmit Status Descriptor 0 */
-#define RTL8139_REG_TSAD0           0x20    /* Transmit Start Address Descriptor 0 */
-#define RTL8139_REG_RBSTART         0x30    /* Receive Buffer Start Address */
-#define RTL8139_REG_CR              0x37    /* Command Register */
-#define RTL8139_REG_CAPR            0x38    /* Current Address of Packet Read */
-#define RTL8139_REG_IMR             0x3C    /* Interrupt Mask Register */
-#define RTL8139_REG_ISR             0x3E    /* Interrupt Status Register */
-#define RTL8139_REG_TCR             0x40    /* Transmit Configuration Register */
-#define RTL8139_REG_RCR             0x44    /* Receive Configuration Register */
-#define RTL8139_REG_CONFIG1         0x52    /* Configuration Register 1 */
+#define RTL8139_REG_MAC0 0x00    /* MAC Address */
+#define RTL8139_REG_MAR0 0x08    /* Multicast Filter High */
+#define RTL8139_REG_MAR4 0x0C    /* Multicast Filter Low */
+#define RTL8139_REG_TSD0 0x10    /* Transmit Status Descriptor 0 */
+#define RTL8139_REG_TSAD0 0x20   /* Transmit Start Address Descriptor 0 */
+#define RTL8139_REG_RBSTART 0x30 /* Receive Buffer Start Address */
+#define RTL8139_REG_CR 0x37      /* Command Register */
+#define RTL8139_REG_CAPR 0x38    /* Current Address of Packet Read */
+#define RTL8139_REG_IMR 0x3C     /* Interrupt Mask Register */
+#define RTL8139_REG_ISR 0x3E     /* Interrupt Status Register */
+#define RTL8139_REG_TCR 0x40     /* Transmit Configuration Register */
+#define RTL8139_REG_RCR 0x44     /* Receive Configuration Register */
+#define RTL8139_REG_CONFIG1 0x52 /* Configuration Register 1 */
 
 /* Command Register bits */
-#define RTL8139_CR_BUFE             (1 << 0)    /* Buffer Empty */
-#define RTL8139_CR_TE               (1 << 2)    /* Transmitter Enable */
-#define RTL8139_CR_RE               (1 << 3)    /* Receiver Enable */
-#define RTL8139_CR_RST              (1 << 4)    /* Software Reset */
+#define RTL8139_CR_BUFE (1 << 0) /* Buffer Empty */
+#define RTL8139_CR_TE (1 << 2)   /* Transmitter Enable */
+#define RTL8139_CR_RE (1 << 3)   /* Receiver Enable */
+#define RTL8139_CR_RST (1 << 4)  /* Software Reset */
 
 /* Interrupt Status/Mask Register bits */
-#define RTL8139_INT_ROK             (1 << 0)    /* Receive OK */
-#define RTL8139_INT_RER             (1 << 1)    /* Receive Error */
-#define RTL8139_INT_TOK             (1 << 2)    /* Transmit OK */
-#define RTL8139_INT_TER             (1 << 3)    /* Transmit Error */
-#define RTL8139_INT_RXOVW           (1 << 4)    /* RX Buffer Overflow */
-#define RTL8139_INT_PUN             (1 << 5)    /* Packet Underrun */
-#define RTL8139_INT_FIFOOVW         (1 << 6)    /* FIFO Overflow */
+#define RTL8139_INT_ROK (1 << 0)     /* Receive OK */
+#define RTL8139_INT_RER (1 << 1)     /* Receive Error */
+#define RTL8139_INT_TOK (1 << 2)     /* Transmit OK */
+#define RTL8139_INT_TER (1 << 3)     /* Transmit Error */
+#define RTL8139_INT_RXOVW (1 << 4)   /* RX Buffer Overflow */
+#define RTL8139_INT_PUN (1 << 5)     /* Packet Underrun */
+#define RTL8139_INT_FIFOOVW (1 << 6) /* FIFO Overflow */
 
 /* Receive Configuration Register bits */
-#define RTL8139_RCR_AAP             (1 << 0)    /* Accept All Packets */
-#define RTL8139_RCR_APM             (1 << 1)    /* Accept Physical Match */
-#define RTL8139_RCR_AM              (1 << 2)    /* Accept Multicast */
-#define RTL8139_RCR_AB              (1 << 3)    /* Accept Broadcast */
-#define RTL8139_RCR_WRAP            (1 << 7)    /* Wrap around */
+#define RTL8139_RCR_AAP (1 << 0)  /* Accept All Packets */
+#define RTL8139_RCR_APM (1 << 1)  /* Accept Physical Match */
+#define RTL8139_RCR_AM (1 << 2)   /* Accept Multicast */
+#define RTL8139_RCR_AB (1 << 3)   /* Accept Broadcast */
+#define RTL8139_RCR_WRAP (1 << 7) /* Wrap around */
 
 /* Transmit Status Descriptor bits */
-#define RTL8139_TSD_SIZE_MASK       0x1FFF      /* Packet size mask */
-#define RTL8139_TSD_OWN             (1 << 13)   /* DMA operation completed */
+#define RTL8139_TSD_SIZE_MASK 0x1FFF /* Packet size mask */
+#define RTL8139_TSD_OWN (1 << 13)    /* DMA operation completed */
 
 /* Public API */
 int rtl8139_init(void);

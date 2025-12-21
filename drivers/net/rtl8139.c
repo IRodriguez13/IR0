@@ -162,7 +162,7 @@ int rtl8139_init(void)
     rtl8139_dev.mtu = 1500;
     rtl8139_dev.send = rtl8139_netdev_send;
     rtl8139_dev.priv = NULL;
-    
+
     net_register_device(&rtl8139_dev);
 
     return 0;
@@ -210,11 +210,12 @@ void rtl8139_handle_interrupt(void)
     {
         /* The RTL8139 packet format: [status(2), length(2), payload..., CRC(4)] */
         /* Note: length includes the 4 bytes of header. */
-        uint16_t *packet_header = (uint16_t*)(rtl8139_rx_buffer + rtl8139_rx_offset);
+        uint16_t *packet_header = (uint16_t *)(rtl8139_rx_buffer + rtl8139_rx_offset);
         uint16_t status_bits = packet_header[0];
         uint16_t packet_len = packet_header[1];
 
-        if (!(status_bits & 0x01)) {
+        if (!(status_bits & 0x01))
+        {
             serial_print("RTL8139: RX Error (packet invalid)\n");
             break;
         }
@@ -222,28 +223,32 @@ void rtl8139_handle_interrupt(void)
         /* Forward packet to network core (skip 4 byte header) */
         /* Real payload length is packet_len - 4 (header) */
         /* Note: RTL8139 align packets to 4 bytes inside the buffer. */
-        
+
         uint8_t *payload = kmalloc(packet_len - 4);
-        if (payload) {
+        if (payload)
+        {
             /* Handle wrap around if packet is split at end of buffer */
-            if (rtl8139_rx_offset + packet_len > 8192) {
+            if (rtl8139_rx_offset + packet_len > 8192)
+            {
                 size_t tail = 8192 - (rtl8139_rx_offset + 4);
                 memcpy(payload, rtl8139_rx_buffer + rtl8139_rx_offset + 4, tail);
                 memcpy(payload + tail, rtl8139_rx_buffer, (packet_len - 4) - tail);
-            } else {
+            }
+            else
+            {
                 memcpy(payload, rtl8139_rx_buffer + rtl8139_rx_offset + 4, packet_len - 4);
             }
-            
+
             net_receive(&rtl8139_dev, payload, packet_len - 4);
             kfree(payload);
         }
 
         /* Update offset for next packet */
         /* (packet_len + 4 + 3) & ~3 -> next packet is 4-byte aligned */
-        /* We add 4 because length field doesn't count the header in some docs, 
-           but in RTL8139 it actually counts status + length + payload + CRC. 
+        /* We add 4 because length field doesn't count the header in some docs,
+           but in RTL8139 it actually counts status + length + payload + CRC.
            Wait, RTL8139 length is status(2)+length(2)+payload+CRC(4). */
-        
+
         rtl8139_rx_offset = (rtl8139_rx_offset + packet_len + 4 + 3) & ~3;
         rtl8139_rx_offset %= 8192;
 
@@ -262,9 +267,10 @@ void rtl8139_handle_interrupt(void)
     {
         serial_print("RTL8139: RX Error or Overflow!\n");
         /* Reset RX buffer if overflow */
-        if (status & RTL8139_INT_RXOVW) {
-             outw(rtl8139_io_base + RTL8139_REG_ISR, RTL8139_INT_RXOVW);
-             /* We might need to re-init RX here in a real production environment */
+        if (status & RTL8139_INT_RXOVW)
+        {
+            outw(rtl8139_io_base + RTL8139_REG_ISR, RTL8139_INT_RXOVW);
+            /* We might need to re-init RX here in a real production environment */
         }
     }
 
