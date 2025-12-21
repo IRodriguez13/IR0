@@ -69,11 +69,10 @@ int minix_write_block(uint32_t block_num, const void *buffer)
 
   bool success = ata_write_sectors(0, lba, num_sectors, buffer);
 
-  if (success)
+  if (!success)
     return -1;
     
   return 0;
-  
 }
 
 [[maybe_unused]] static bool minix_is_inode_free(uint32_t inode_num)
@@ -1033,6 +1032,19 @@ int minix_fs_init(void)
   uint32_t imap_block = 2;
   uint32_t zmap_block = 2 + minix_fs.superblock.s_imap_blocks;
 
+  if (!minix_fs.inode_bitmap)
+  {
+    minix_fs.inode_bitmap = kmalloc(MINIX_BLOCK_SIZE);
+    if (!minix_fs.inode_bitmap)
+      return -1;
+  }
+  if (!minix_fs.zone_bitmap)
+  {
+    minix_fs.zone_bitmap = kmalloc(MINIX_BLOCK_SIZE);
+    if (!minix_fs.zone_bitmap)
+      return -1;
+  }
+
   if (minix_read_block(imap_block, minix_fs.inode_bitmap) != 0)
   {
     return minix_fs_format();
@@ -1040,6 +1052,16 @@ int minix_fs_init(void)
 
   if (minix_read_block(zmap_block, minix_fs.zone_bitmap) != 0)
   {
+    return minix_fs_format();
+  }
+
+  // Double check root inode - if it's all zeros, the disk is corrupt or uninitialized
+  minix_inode_t root_inode_check;
+  minix_fs.initialized = true; // Temporary set to allow read_inode to work
+  if (minix_read_inode(MINIX_ROOT_INODE, &root_inode_check) != 0 || root_inode_check.i_mode == 0)
+  {
+    serial_print("SERIAL: minix_fs_init: Root inode corrupt (mode=0), forcing format!\n");
+    minix_fs.initialized = false;
     return minix_fs_format();
   }
 
@@ -1092,7 +1114,8 @@ int minix_fs_format(void)
   kmemset(minix_fs.zone_bitmap, 0xFF, MINIX_BLOCK_SIZE);
 
   // Mark inode 1 as used (root directory)
-  minix_fs.inode_bitmap[0] = 0x01;
+  // In MINIX bitmap: bit 1 is inode 1, bit 0 is unused or reserved
+  minix_fs.inode_bitmap[0] = 0x02; // Bit 1 = inode 1
 
   // Calculate block offsets for bitmaps and inode table
   uint32_t imap_block = 2;
@@ -1135,6 +1158,16 @@ int minix_fs_format(void)
     return -1;
   }
   
+  // Verify what we just wrote
+  minix_inode_t verify_inode;
+  if (minix_read_inode(MINIX_ROOT_INODE, &verify_inode) == 0) {
+    serial_print("SERIAL: minix_fs_format: VERIFY root inode mode=");
+    serial_print_hex32(verify_inode.i_mode);
+    serial_print("\n");
+  } else {
+    serial_print("SERIAL: minix_fs_format: VERIFY FAILED to read back!\n");
+  }
+  
   serial_print("SERIAL: minix_fs_format: root inode written successfully\n");
 
   // Create root directory with . and .. entries
@@ -1162,7 +1195,7 @@ int minix_fs_format(void)
   serial_print("SERIAL: minix_fs_format: root directory block written successfully\n");
 
   // Mark only inode 1 as used in bitmap
-  minix_fs.inode_bitmap[0] |= 0x01; // Bit 0 = inode 1
+  minix_fs.inode_bitmap[0] |= 0x02; // Bit 1 = inode 1
 
   // CRITICAL: Mark root directory zone as used in zone bitmap
   // In MINIX: bit=0 means USED, bit=1 means FREE
