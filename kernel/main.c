@@ -19,6 +19,7 @@
 #include <drivers/IO/ps2_mouse.h>
 #include <drivers/audio/sound_blaster.h>
 #include <ir0/memory/kmem.h>
+#include <drivers/net/rtl8139.h>
 #include <init.h>
 #include <arch/x86-64/sources/user_mode.h>
 #include <rr_sched.h>
@@ -65,6 +66,10 @@ void kmain(void)
     // Initialize storage
     ata_init();
     log_subsystem_ok("STORAGE");
+
+    // Initialize network card
+    rtl8139_init();
+    log_subsystem_ok("NET_RTL8139");
 
     // Initialize filesystem
     vfs_init_with_minix();

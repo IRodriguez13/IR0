@@ -158,6 +158,7 @@ DRIVER_OBJS = \
     drivers/IO/ps2_mouse.o \
     drivers/audio/sound_blaster.o \
     drivers/dma/dma.o \
+    drivers/net/rtl8139.o \
     drivers/serial/serial.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
