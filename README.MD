@@ -10,8 +10,8 @@ The IR0 architecture is built upon a modular monolithic design, where core servi
 graph TD
     subgraph "User Space (Ring 3)"
         INIT["Init Process"]
-        Shell["Bash/Yell Shell"]
-        Libc["IR0 Libc (Standard C Library)"]
+        Shell["Baash Shell"]
+        Libc["ILibc (Standard IR0 C Library)"]
         Apps["User Applications"]
     end
 
