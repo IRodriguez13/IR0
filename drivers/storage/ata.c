@@ -451,6 +451,11 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
     // Wait for completion
     bool result = ata_wait_ready(drive);
 
+    if (!result) {
+        extern void serial_print(const char *str);
+        serial_print("SERIAL: ATA_WRITE: TIMEOUT waiting for ready!\n");
+    }
+
     return result;
 }
 

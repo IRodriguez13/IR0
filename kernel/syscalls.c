@@ -1317,22 +1317,20 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   case 87:
     return sys_unlink((const char *)arg1);
   case 90:
-    return sys_chmod((const char *)arg1, (mode_t)arg2);
+    return sys_mount((const char *)arg1, (const char *)arg2,
+                     (const char *)arg3);
   case 91:
     return sys_append((const char *)arg1, (const char *)arg2, (size_t)arg3);
   case 92:
     return sys_lsblk();
+  case 94:
+    return sys_whoami();
   case 95:
     return sys_df();
   case 100:
     return sys_chmod((const char *)arg1, (mode_t)arg2);
   case 101:
     return sys_link((const char *)arg1, (const char *)arg2);
-  case 93:
-    return sys_mount((const char *)arg1, (const char *)arg2,
-                     (const char *)arg3);
-  case 94:
-    return sys_whoami();
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");

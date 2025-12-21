@@ -742,27 +742,7 @@ int vfs_init_with_minix(void)
     return -1;
   }
 
-  extern int ramfs_register(void);
-  extern int ramfs_init_boot_files(void);
   extern int vfs_mkdir(const char *path, int mode);
-
-  ramfs_register();
-  print("VFS: RAMFS registered\n");
-
-  vfs_mkdir("/boot", 0755);
-  print("VFS: /boot directory created\n");
-
-  ret = vfs_mount("none", "/boot", "ramfs");
-  if (ret == 0)
-  {
-    print("VFS: RAMFS mounted on /boot\n");
-    ramfs_init_boot_files();
-    print("VFS: Boot files initialized in RAMFS\n");
-  }
-  else
-  {
-    print("VFS: WARNING - Failed to mount RAMFS on /boot\n");
-  }
 
   return 0;
 }
