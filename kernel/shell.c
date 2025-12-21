@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * IR0 Kernel - Built-in Shell
+ * IR0 Kernel - Built-in DebShell
  * Copyright (C) 2025 Iván Rodriguez
  *
  * Interactive shell for Ring 3 commands
@@ -140,7 +140,7 @@ static void cmd_touch(const char *filename);
 
 static void cmd_help(void)
 {
-  shell_write(1, "IR0 Shell - Available commands:\n");
+  shell_write(1, "IR0 DebShell - Available commands:\n");
   /* commands table will drive help output */
   cmd_list_help();
 }
@@ -155,7 +155,7 @@ void cmd_clear(void)
   vga_clear();
 
   /* Show banner after clear */
-  typewriter_vga_print("IR0 Shell v0.0.1 pre-release 1\n", 0x0B);
+  typewriter_vga_print("IR0 DebShell v0.0.1 pre-release 1\n", 0x0B);
   typewriter_vga_print("Type 'help' for available commands\n\n", 0x07);
 }
 
@@ -1575,7 +1575,7 @@ void shell_entry(void)
   int input_pos = 0;
 
   vga_clear();
-  vga_print("IR0 Shell v0.0.1 pre-release 1\n", 0x0B);
+  vga_print("IR0 DebShell v0.0.1 pre-release 1\n", 0x0B);
   vga_print("Type 'help' for available commands\n\n", 0x07);
 
   for (;;)
