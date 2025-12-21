@@ -98,13 +98,13 @@ void kmain(void)
     log_subsystem_ok("DEBUG_SHELL");
 #else
     serial_print("SERIAL: kmain: Loading userspace init...\n");
-    if (elf_load_and_execute("/bin/init") < 0) {
+    if (elf_load_and_execute("/bin/init") < 0) 
+    {
         serial_print("SERIAL: kmain: FAILED to load /bin/init, falling back to debug shell\n");
-        start_init_process();
+        panic("Failed to load /bin/init");
     }
 #endif
 
-    log_subsystem_ok("USERMODE");
 
     for (;;)
     {
