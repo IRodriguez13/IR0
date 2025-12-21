@@ -86,12 +86,24 @@ void kmain(void)
     idt_load64();
     pic_remap64();
  
+#include <ir0/config.h>
+#include <kernel/elf_loader.h>
+
     log_subsystem_ok("INTERRUPTS");
 
     // panic("Test"); Just for testing
 
+#if KERNEL_DEBUG_SHELL
     start_init_process();
-    log_subsystem_ok("SCHEDULER");
+    log_subsystem_ok("DEBUG_SHELL");
+#else
+    serial_print("SERIAL: kmain: Loading userspace init...\n");
+    if (elf_load_and_execute("/bin/init") < 0) {
+        serial_print("SERIAL: kmain: FAILED to load /bin/init, falling back to debug shell\n");
+        start_init_process();
+    }
+#endif
+
     log_subsystem_ok("USERMODE");
 
     for (;;)
