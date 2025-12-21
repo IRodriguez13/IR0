@@ -1,0 +1,72 @@
+IR0 KERNEL: GUIA TECNICA PARA EL DESARROLLO DE LA PILA DE RED (NET STACK)
+
+Este documento establece las normas y arquitectura que deben seguir los protocolos de red (ARP, IP, ICMP, etc.) para integrarse correctamente en el kernel IR0.
+
+1. ARQUITECTURA DE CAPAS
+IR0 sigue el modelo estandar de capas. Cada protocolo debe implementarse de forma modular en la carpeta /net:
+
+- Capa 2 (Enlace): Ethernet (manejado parcialmente por el driver RTL8139).
+- Capa 2.5: ARP (Address Resolution Protocol).
+- Capa 3 (Red): IPv4, ICMP.
+- Capa 4 (Transporte): UDP, TCP (futuro).
+
+2. CONFIGURACION CRITICA (IMPORTANTE)
+Para evitar fallos en el arranque (Panic), se debe asegurar que en /includes/ir0/config.h la flag KERNEL_DEBUG_SHELL este en 1.
+Si esta en 0, el kernel intentará cargar /bin/init desde el disco y, si no existe o el sistema de archivos no esta listo, disparará un kernel Panic desde Oops.
+
+3. INTERFAZ DEL DRIVER (NIC INTERFACE)
+El driver RTL8139 (drivers/net/rtl8139.h) expone:
+- int rtl8139_init(void): Inicializa el hardware y detecta la tarjeta en el bus PCI.
+- void rtl8139_send(void *data, size_t len): Envia una trama Ethernet raw.
+- void rtl8139_get_mac(uint8_t mac[6]): Copia la MAC fisica de la tarjeta al buffer proveido.
+- void rtl8139_handle_interrupt(void): Debe ser llamada (o expandida) para procesar paquetes entrantes.
+
+4. UTILIDADES DEL KERNEL DISPONIBLES
+Para el desarrollo en /net/, pueden usar las siguientes funciones del core:
+
+A) Memoria (ir0/memory/kmem.h):
+- void *kmalloc(size_t size): Asignacion de memoria dinamica en el heap del kernel (recomendado).
+- void kfree(void *ptr): Libera la memoria previamente asignada con kmalloc.
+- void *kmalloc_aligned(size_t size, size_t alignment): Para buffers que requieran alineacion especifica (ej: DMA de red).
+
+B) Logs y Salida (ir0/logging.h y serial.h):
+- void serial_print(const char *str): Envia texto al puerto serial (COM1). Recomendado para debug de red.
+- void print(const char *str): Imprime en la pantalla VGA.
+- void log_subsystem_ok(const char *subsys): Registra que un protocolo se inicio correctamente.
+
+C) Utilidades (string.h):
+- void *memcpy(void *dest, const void *src, size_t n);
+- void *memset(void *s, int c, size_t n);
+- int strcmp(const char *s1, const char *s2);
+
+5. GESTION DE PAQUETES Y MEMORIA
+- Endianness: IR0 corre en x86-64 (Little Endian). Los protocolos de red DEBEN usar Big Endian (Network Byte Order). Se deben implementar macros htons(), htonl(), ntohs(), ntohl().
+- Alineacion: Los buffers de red deben estar alineados a 4 bytes para optimizar el DMA de la tarjeta.
+- MTU: El tamano maximo de trama Ethernet es de 1500 bytes (payload). Total aprox 1518 bytes.
+
+4. RECEPCION DE DATOS (INTERRUPCIONES)
+El driver RTL8139 genera una interrupcion (IRQ) cuando llega un paquete.
+- El handler del driver debe extraer el paquete del buffer circular de RX.
+- El paquete debe pasarse a una funcion de "despacho" (ej: net_receive(data, len)).
+- net_receive debe inspeccionar el EtherType para decidir si enviarlo a ARP (0x0806) o IP (0x0800).
+
+5. REQUISITOS PARA ARP
+- Tabla ARP: Se debe implementar una cache (IP -> MAC) con expiracion.
+- ARP Request: Funcion para enviar un broadcast preguntando por una IP.
+- ARP Reply: Funcion para responder automaticamente a peticiones de otros hosts.
+
+6. INTEGRACION CON SYSTEM CALLS (FUTURO)
+El objetivo final es que los programas de usuario (R3) usen sockets mediante syscalls:
+- SYS_SOCKET, SYS_BIND, SYS_SENDTO, SYS_RECVFROM.
+Estas syscalls interactuaran con la capa de transporte que se desarrolle en /net.
+
+7. ESTANDAR DE CODIGO
+- Usar tipos de <stdint.h> (uint8_t, uint16_t, etc.).
+- Comentar los headers de los protocolos con diagramas de bits si es posible.
+- Evitar el uso de floats/doubles en la pila de red.
+- Usar curl Allman para el desarrollo y los comentarios como /* */.
+
+DIRECCIONES UTILES:
+- Drivers: /drivers/net/
+- Protocolos: /net/
+- Headers: /includes/ir0/ (se recomienda crear net.h para estructuras comunes).
