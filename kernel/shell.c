@@ -519,6 +519,11 @@ static void cmd_exec(const char *filename)
 
 static void cmd_exit(void) { syscall(SYS_EXIT, 0, 0, 0); }
 
+static void cmd_netinfo(void)
+{
+    syscall(SYS_NETINFO, 0, 0, 0);
+}
+
 // Helper function to perform text substitution
 static char *perform_substitution(const char *original, size_t original_size,
                                   const char *old_str, const char *new_str)
@@ -1478,6 +1483,7 @@ static const struct shell_cmd commands[] = {
     {"chown", (void (*)(const char *))cmd_chown, "chown USER PATH", "Change file owner (not implemented)"},
     {"exit", (void (*)(const char *))cmd_exit, "exit", "Exit shell"},
     {"touch", cmd_touch, "touch FILE", "Create empty file or update timestamp"},
+    {"netinfo", (void (*)(const char *))cmd_netinfo, "netinfo", "Display network interface information"},
 };
 
 static void cmd_list_help(void)

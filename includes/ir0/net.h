@@ -14,6 +14,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 /* Byte order conversion macros (Big Endian <-> Little Endian) */
 /* IR0 is x86-64 (Little Endian) */
@@ -47,5 +48,39 @@ typedef uint8_t mac_addr_t[6];
 
 /* Function to create an IP address from 4 octets */
 static inline ip4_addr_t make_ip4_addr(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+   
+   /* Returns IPv4 address in network byte order */
     return (a << 24) | (b << 16) | (c << 8) | d;
 }
+
+/* --- Networking Abstraction Layer --- */
+
+/* Standard Network Device Flags */
+#define IFF_UP          (1 << 0)    /* Interface is up */
+#define IFF_BROADCAST   (1 << 1)    /* Broadcast address valid */
+#define IFF_LOOPBACK    (1 << 2)    /* Is a loopback net */
+#define IFF_RUNNING     (1 << 3)    /* Interface is running */
+
+struct net_device {
+    const char *name;
+    mac_addr_t mac;
+    uint32_t flags;
+    size_t mtu;
+    void *priv; /* Driver private data */
+    
+    /* Driver operations */
+    int (*send)(struct net_device *dev, void *data, size_t len);
+    
+    struct net_device *next;
+};
+
+/* Core Networking API */
+int net_register_device(struct net_device *dev);
+void net_unregister_device(struct net_device *dev);
+struct net_device *net_get_devices(void);
+
+/* Protocol to Driver */
+int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac, const void *payload, size_t len);
+
+/* Driver to Protocol */
+void net_receive(struct net_device *dev, const void *data, size_t len);
