@@ -67,7 +67,7 @@ ASMFLAGS = -f elf64
 LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld
 
 # Subsistemas comunes (siempre presentes)
-COMMON_SUBDIRS = kernel interrupt drivers/timer drivers/IO drivers/storage kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup
+COMMON_SUBDIRS = kernel interrupt drivers/timer drivers/IO drivers/storage kernel/scheduler includes includes/ir0 includes/ir0/panic arch/common memory setup net
 
 # Subsistemas condicionales según build target
 
@@ -183,6 +183,9 @@ FS_OBJS = \
 DISK_OBJS = \
     drivers/disk/partition.o
 
+NET_OBJS = \
+    net/net.o
+
 ARCH_OBJS = \
     arch/x86-64/sources/arch_x64.o \
     arch/x86-64/sources/gdt.o \
@@ -203,7 +206,7 @@ CPP_OBJS = \
 
 # All objects
 ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
-           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS) $(CPP_OBJS)
+           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS) $(CPP_OBJS) $(NET_OBJS)
 
 # BUILD RULES
 
@@ -255,7 +258,7 @@ disk.img:
 	@echo "✓ Disk image ready: $@"
 
 # Default target
-ir0: kernel-x64.iso userspace-programs
+ir0: kernel-x64.iso
 
 # Windows build target
 windows win:
@@ -275,6 +278,7 @@ run: kernel-x64.iso disk.img
 		-drive file=disk.img,format=raw,if=ide,index=0 \
 		-m 512M -no-reboot -no-shutdown \
 		-display gtk -serial stdio \
+		-net nic,model=rtl8139 -net user \
 		-d guest_errors -D qemu_debug.log
 
 # Run with GUI and serial debug output
@@ -288,6 +292,7 @@ run-debug: kernel-x64.iso disk.img
 		-m 512M -no-reboot -no-shutdown \
 		-display gtk \
 		-serial stdio \
+		-net nic,model=rtl8139 -net user \
 		-monitor telnet:127.0.0.1:1234,server,nowait \
 		-d guest_errors,int -D qemu_debug.log
 
@@ -304,6 +309,7 @@ run-console: kernel-x64.iso disk.img
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
 		-drive file=disk.img,format=raw,if=ide,index=0 \
 		-m 512M -no-reboot -no-shutdown \
+		-net nic,model=rtl8139 -net user \
 		-nographic
 
 # Debug mode (detailed QEMU logging)
@@ -330,7 +336,7 @@ delete-disk:
 
 # CLEAN
 
-clean: userspace-clean
+clean:
 	@echo "Cleaning build artifacts..."
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
@@ -403,41 +409,6 @@ help:
 	@echo ""
 	@echo "💡 Quick start: make run"
 	@echo ""
-
-# USERSPACE PROGRAMS
-
-# Userspace configuration
-USERSPACE_DIR = userspace
-USERSPACE_BUILD_DIR = $(USERSPACE_DIR)/build
-USERSPACE_CC = gcc
-USERSPACE_CFLAGS = -m64 -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -fno-stack-protector
-USERSPACE_CFLAGS += -I$(KERNEL_ROOT)/includes -static -fPIC
-USERSPACE_LDFLAGS = -nostdlib -static
-
-# Userspace programs
-USERSPACE_PROGRAMS = $(USERSPACE_BUILD_DIR)/echo $(USERSPACE_BUILD_DIR)/hello
-
-# Build userspace programs
-userspace-programs: $(USERSPACE_PROGRAMS)
-	@echo "✓ Userspace programs built"
-
-# Create userspace build directory
-$(USERSPACE_BUILD_DIR):
-	@mkdir -p $(USERSPACE_BUILD_DIR)
-
-# Build programs
-$(USERSPACE_BUILD_DIR)/echo: $(USERSPACE_DIR)/bin/echo.c | $(USERSPACE_BUILD_DIR)
-	@echo "  CC      $@"
-	@$(USERSPACE_CC) $(USERSPACE_CFLAGS) $(USERSPACE_LDFLAGS) -o $@ $<
-
-$(USERSPACE_BUILD_DIR)/hello: $(USERSPACE_DIR)/bin/hello.c | $(USERSPACE_BUILD_DIR)
-	@echo "  CC      $@"
-	@$(USERSPACE_CC) $(USERSPACE_CFLAGS) $(USERSPACE_LDFLAGS) -o $@ $<
-
-# Clean userspace programs
-userspace-clean:
-	@echo "Cleaning userspace programs..."
-	@rm -rf $(USERSPACE_BUILD_DIR)
 
 # DEPENDENCY TEST
 
@@ -636,7 +607,7 @@ cpp:
 
 # PHONY TARGETS
 
-.PHONY: all clean run run-nodisk run-console debug create-disk help userspace-programs userspace-clean \
+.PHONY: all clean run run-nodisk run-console debug create-disk help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
         ir0 windows win windows-clean win-clean deptest \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean

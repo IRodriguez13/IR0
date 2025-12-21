@@ -24,6 +24,7 @@
 #include <ir0/memory/allocator.h>
 #include <ir0/memory/kmem.h>
 #include <ir0/vga.h>
+#include <ir0/net.h>
 #include <ir0/stat.h>
 #include <ir0/user.h>
 #include <kernel/rr_sched.h>
@@ -1208,6 +1209,42 @@ int64_t sys_rmdir_recursive(const char *pathname)
   return vfs_rmdir_recursive(pathname);
 }
 
+int64_t sys_netinfo(void)
+{
+    struct net_device *dev = net_get_devices();
+    if (!dev) {
+        print("NET: No devices registered.\n");
+        return 0;
+    }
+
+    print("--- Network Interfaces ---\n");
+    while (dev) {
+        print("Name: ");
+        print(dev->name);
+        print(" [");
+        if (dev->flags & IFF_UP) print("UP ");
+        if (dev->flags & IFF_RUNNING) print("RUNNING ");
+        if (dev->flags & IFF_BROADCAST) print("BROADCAST ");
+        print("] MTU: ");
+        
+        char buf[32];
+        itoa(dev->mtu, buf, 10);
+        print(buf);
+        print("\n  MAC: ");
+        
+        for (int i = 0; i < 6; i++) {
+            char hex[3];
+            itoa(dev->mac[i], hex, 16);
+            if (dev->mac[i] < 0x10) print("0");
+            print(hex);
+            if (i < 5) print(":");
+        }
+        print("\n");
+        dev = dev->next;
+    }
+    return 0;
+}
+
 void syscalls_init(void)
 {
   // Connect to REAL process management only
@@ -1331,6 +1368,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_chmod((const char *)arg1, (mode_t)arg2);
   case 101:
     return sys_link((const char *)arg1, (const char *)arg2);
+  case 110:
+    return sys_netinfo();
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");

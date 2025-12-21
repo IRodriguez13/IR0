@@ -11,6 +11,7 @@
  * Description: RTL8139 network card driver implementation
  */
 
+#include <ir0/net.h>
 #include "rtl8139.h"
 #include <interrupt/arch/io.h>
 #include <ir0/memory/allocator.h>
@@ -22,6 +23,11 @@ static uint16_t rtl8139_io_base = 0;
 static uint8_t *rtl8139_rx_buffer = NULL;
 static uint32_t rtl8139_current_tx_descriptor = 0;
 static uint8_t rtl8139_mac[6];
+
+static struct net_device rtl8139_dev;
+
+/* Forward declarations for net_device ops */
+static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len);
 
 /* PCI configuration space access */
 static uint32_t pci_config_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
@@ -142,6 +148,24 @@ int rtl8139_init(void)
     outw(rtl8139_io_base + RTL8139_REG_IMR, 0x0005); /* ROK + TER for testing */
 
     serial_print("RTL8139: Initialization successful.\n");
+
+    /* Register as a network device */
+    rtl8139_dev.name = "eth0";
+    memcpy(rtl8139_dev.mac, rtl8139_mac, 6);
+    rtl8139_dev.flags = IFF_UP | IFF_BROADCAST | IFF_RUNNING;
+    rtl8139_dev.mtu = 1500;
+    rtl8139_dev.send = rtl8139_netdev_send;
+    rtl8139_dev.priv = NULL;
+    
+    net_register_device(&rtl8139_dev);
+
+    return 0;
+}
+
+static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
+{
+    (void)dev;
+    rtl8139_send(data, len);
     return 0;
 }
 
@@ -179,7 +203,13 @@ void rtl8139_handle_interrupt(void)
     if (status & RTL8139_INT_ROK)
     {
         serial_print("RTL8139: Packet received!\n");
-        /* Packet processing would happen here */
+        /* For now, just pass the RX buffer directly to net_receive. 
+           Real implementation should handle the buffer wrap and packet structure. */
+        /* The RTL8139 packet format: [status, length, payload...] */
+        uint16_t *packet_header = (uint16_t*)rtl8139_rx_buffer;
+        uint16_t packet_len = packet_header[1];
+        
+        net_receive(&rtl8139_dev, rtl8139_rx_buffer + 4, packet_len);
     }
 
     if (status & RTL8139_INT_TOK)
