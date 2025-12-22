@@ -1,4 +1,13 @@
-# Makefile para el subsistema de configuración
+# ===============================================================================
+# SETUP SUBSYSTEM MAKEFILE
+# ===============================================================================
+# Makefile for setup subsystem and menuconfig integration
+
+KERNEL_ROOT := $(shell cd .. && pwd)
+SETUP_DIR := $(shell pwd)
+
+# Include menuconfig targets
+-include $(SETUP_DIR)/Makefile.menuconfig
 
 # Usar variables pasadas desde el Makefile principal
 CC ?= gcc
@@ -12,7 +21,7 @@ else
 endif
 
 # Incluir directorios
-CFLAGS += -I../includes -I../includes/ir0
+CFLAGS += -I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0
 
 # Objetos
 OBJS = kernel_config.o
@@ -28,4 +37,4 @@ all: $(OBJS)
 clean:
 	rm -f $(OBJS)
 
-.PHONY: all clean
+.PHONY: all clean menuconfig build-config clean-config help

@@ -59,11 +59,15 @@ typedef uint32_t mode_t;
 #define EMFILE 24
 #define EINVAL 22
 #define ESPIPE 29
+#define EIO 5
 
 // File descriptors
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
+
+// Forward declaration
+static fd_entry_t *get_process_fd_table(void);
 
 
 int64_t sys_exit(int exit_code)
@@ -106,6 +110,25 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     }
     return (int64_t)count;
   }
+
+  // Handle regular file descriptors
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return -EBADF;
+
+  // Use VFS file handle if available
+  if (fd_table[fd].vfs_file)
+  {
+    struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
+    int ret = vfs_write(vfs_file, (const char *)buf, count);
+    if (ret >= 0)
+    {
+      fd_table[fd].offset = vfs_file->f_pos;
+      return ret;
+    }
+    return -EIO;
+  }
+
   return -EBADF;
 }
 
@@ -134,6 +157,25 @@ int64_t sys_read(int fd, void *buf, size_t count)
 
     return (int64_t)bytes_read; // Return 0 if no data available
   }
+
+  // Handle regular file descriptors
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return -EBADF;
+
+  // Use VFS file handle if available
+  if (fd_table[fd].vfs_file)
+  {
+    struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
+    int ret = vfs_read(vfs_file, (char *)buf, count);
+    if (ret >= 0)
+    {
+      fd_table[fd].offset = vfs_file->f_pos;
+      return ret;
+    }
+    return -EIO;
+  }
+
   return -EBADF;
 }
 
@@ -769,19 +811,21 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   if (fd == -1)
     return -EMFILE; // Too many open files
 
-  // Check if file exists using VFS
-  stat_t file_stat;
-  if (vfs_stat(pathname, &file_stat) != 0)
+  // Open file using VFS layer to get real file handle
+  struct vfs_file *vfs_file = NULL;
+  int ret = vfs_open(pathname, flags, &vfs_file);
+  if (ret != 0)
   {
     return -ENOENT;
   }
 
-  // Set up file descriptor
+  // Set up file descriptor with real VFS file handle
   fd_table[fd].in_use = true;
   strncpy(fd_table[fd].path, pathname, sizeof(fd_table[fd].path) - 1);
   fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
   fd_table[fd].flags = flags;
-  fd_table[fd].offset = 0;
+  fd_table[fd].vfs_file = vfs_file;
+  fd_table[fd].offset = vfs_file ? vfs_file->f_pos : 0;
 
   return fd;
 }
@@ -801,6 +845,14 @@ int64_t sys_close(int fd)
 
   if (fd <= 2)
     return -EBADF;
+
+  // Close VFS file if it exists
+  if (fd_table[fd].vfs_file)
+  {
+    struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
+    vfs_close(vfs_file);
+    fd_table[fd].vfs_file = NULL;
+  }
 
   fd_table[fd].in_use = false;
   fd_table[fd].path[0] = '\0';
@@ -835,23 +887,66 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
   }
   else
   {
-    stat_t st;
-    if (vfs_stat(fd_table[fd].path, &st) != 0)
-      return -EBADF;
-
-    switch (whence)
+    // Use VFS file handle if available for better offset management
+    if (fd_table[fd].vfs_file)
     {
-    case 0:
-      new_offset = offset;
-      break;
-    case 1:
-      new_offset = fd_table[fd].offset + offset;
-      break;
-    case 2:
-      new_offset = st.st_size + offset;
-      break;
-    default:
-      return -EINVAL;
+      struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
+      if (vfs_file->f_inode && vfs_file->f_inode->i_fop && 
+          vfs_file->f_inode->i_fop->seek)
+      {
+        // Use filesystem's seek implementation
+        off_t result = vfs_file->f_inode->i_fop->seek(vfs_file, offset, whence);
+        if (result < 0)
+          return result;
+        new_offset = result;
+        fd_table[fd].offset = new_offset;
+      }
+      else
+      {
+        // Fallback to stat-based calculation
+        stat_t st;
+        if (vfs_stat(fd_table[fd].path, &st) != 0)
+          return -EBADF;
+
+        switch (whence)
+        {
+        case 0:
+          new_offset = offset;
+          break;
+        case 1:
+          new_offset = fd_table[fd].offset + offset;
+          break;
+        case 2:
+          new_offset = st.st_size + offset;
+          break;
+        default:
+          return -EINVAL;
+        }
+        fd_table[fd].offset = new_offset;
+      }
+    }
+    else
+    {
+      // Fallback to stat-based calculation
+      stat_t st;
+      if (vfs_stat(fd_table[fd].path, &st) != 0)
+        return -EBADF;
+
+      switch (whence)
+      {
+      case 0:
+        new_offset = offset;
+        break;
+      case 1:
+        new_offset = fd_table[fd].offset + offset;
+        break;
+      case 2:
+        new_offset = st.st_size + offset;
+        break;
+      default:
+        return -EINVAL;
+      }
+      fd_table[fd].offset = new_offset;
     }
   }
 
