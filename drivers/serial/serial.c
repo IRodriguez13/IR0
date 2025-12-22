@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2025  Iván Rodriguez
@@ -14,53 +14,62 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <arch/common/arch_interface.h>
+#include "serial.h"
+#include <ir0/driver.h>
+#include <ir0/logging.h>
+#include <string.h>
 
 /* Compiler optimization hints */
 #define likely(x)	__builtin_expect(!!(x), 1)
 #define unlikely(x)	__builtin_expect(!!(x), 0)
 
-/* Serial port definitions */
-#define SERIAL_PORT_COM1	0x3F8
-#define SERIAL_DATA_REG		0
-#define SERIAL_INT_EN_REG	1
-#define SERIAL_FIFO_CTRL_REG	2
-#define SERIAL_LINE_CTRL_REG	3
-#define SERIAL_MODEM_CTRL_REG	4
-#define SERIAL_LINE_STATUS_REG	5
-
-/* Line status register bits */
-#define SERIAL_LSR_THRE		0x20	/* Transmitter holding register empty */
-
 static bool serial_initialized = false;
 
+/* Internal hardware initialization function */
+static int32_t serial_hw_init(void)
+{
+    /* Disable interrupts */
+    outb(SERIAL_PORT_COM1 + SERIAL_INT_EN_REG, SERIAL_IER_DISABLE);
+
+    /* Set baud rate divisor (38400 baud) */
+    outb(SERIAL_PORT_COM1 + SERIAL_LINE_CTRL_REG, SERIAL_LCR_DLAB);     /* Enable DLAB */
+    outb(SERIAL_PORT_COM1 + SERIAL_DATA_REG, SERIAL_BAUD_38400);        /* Divisor low byte */
+    outb(SERIAL_PORT_COM1 + SERIAL_INT_EN_REG, 0x00);                   /* Divisor high byte */
+
+    /* Configure: 8 bits, no parity, one stop bit */
+    outb(SERIAL_PORT_COM1 + SERIAL_LINE_CTRL_REG, SERIAL_LCR_8N1);
+
+    /* Enable FIFO, clear them, with 14-byte threshold */
+    outb(SERIAL_PORT_COM1 + SERIAL_FIFO_CTRL_REG, SERIAL_FCR_CONFIG);
+
+    /* Enable IRQs, set RTS/DSR */
+    outb(SERIAL_PORT_COM1 + SERIAL_MODEM_CTRL_REG, SERIAL_MCR_CONFIG);
+
+    serial_initialized = true;
+    return 0;
+}
+
+/* Driver registration structures */
+static ir0_driver_ops_t serial_ops = {
+    .init = serial_hw_init,
+    .shutdown = NULL
+};
+
+static ir0_driver_info_t serial_info = {
+    .name = "Serial UART",
+    .version = "1.0",
+    .author = "Iván Rodriguez",
+    .description = "Standard 16550 UART Serial Driver",
+    .language = IR0_DRIVER_LANG_C
+};
+
 /**
- * serial_init - initialize serial port for debugging
- *
- * Configure COM1 port for 38400 baud, 8N1.
+ * serial_init - register serial port driver
  */
 void serial_init(void)
 {
-	if (serial_initialized)
-		return;
-
-	/* Disable interrupts */
-	outb(SERIAL_PORT_COM1 + SERIAL_INT_EN_REG, 0x00);
-
-	/* Set baud rate divisor (38400 baud) */
-	outb(SERIAL_PORT_COM1 + SERIAL_LINE_CTRL_REG, 0x80);	/* Enable DLAB */
-	outb(SERIAL_PORT_COM1 + SERIAL_DATA_REG, 0x03);	/* Divisor low byte */
-	outb(SERIAL_PORT_COM1 + SERIAL_INT_EN_REG, 0x00);	/* Divisor high byte */
-
-	/* Configure: 8 bits, no parity, one stop bit */
-	outb(SERIAL_PORT_COM1 + SERIAL_LINE_CTRL_REG, 0x03);
-
-	/* Enable FIFO, clear them, with 14-byte threshold */
-	outb(SERIAL_PORT_COM1 + SERIAL_FIFO_CTRL_REG, 0xC7);
-
-	/* Enable IRQs, set RTS/DSR */
-	outb(SERIAL_PORT_COM1 + SERIAL_MODEM_CTRL_REG, 0x0B);
-
-	serial_initialized = true;
+    LOG_INFO("SERIAL", "Registering Serial UART (COM1) driver...");
+    ir0_register_driver(&serial_info, &serial_ops);
 }
 
 /**
@@ -68,51 +77,57 @@ void serial_init(void)
  *
  * Returns true if transmitter holding register is empty.
  */
-static bool serial_is_transmit_empty(void)
+static int serial_is_transmit_empty(void)
 {
-	return inb(SERIAL_PORT_COM1 + SERIAL_LINE_STATUS_REG) & SERIAL_LSR_THRE;
+    return inb(SERIAL_PORT_COM1 + SERIAL_LINE_STATUS_REG) & SERIAL_LSR_THRE;
 }
 
 /**
- * serial_putchar - send a character to serial port
- * @c: character to send
+ * serial_putchar - write a character to the serial port
  */
 void serial_putchar(char c)
 {
-	if (unlikely(!serial_initialized))
-		serial_init();
+    while (serial_is_transmit_empty() == 0)
+    {
+        /* Wait for transmitter buffer to be empty */
+    }
 
-	while (!serial_is_transmit_empty())
-		;
-	
-	outb(SERIAL_PORT_COM1, c);
+    outb(SERIAL_PORT_COM1, (uint8_t)c);
 }
 
+/**
+ * serial_print - print a string to the serial port
+ */
 void serial_print(const char *str)
 {
-    if (!str) return;
-    
-    while (*str) {
-        serial_putchar(*str);
-        str++;
+    if (unlikely(!str))
+    {
+        return;
+    }
+
+    while (*str)
+    {
+        if (unlikely(*str == '\n'))
+        {
+            serial_putchar('\r');
+        }
+        serial_putchar(*str++);
     }
 }
 
-void serial_print_hex32(uint32_t num)
+/**
+ * serial_print_hex32 - print a 32-bit hex value to the serial port
+ */
+void serial_print_hex32(uint32_t val)
 {
-    serial_print("0x");
-    for (int i = 7; i >= 0; i--) {
-        int digit = (num >> (i * 4)) & 0xF;
-        char c = (digit < 10) ? '0' + digit : 'a' + digit - 10;
-        serial_putchar(c);
+    char buf[9];
+    const char *hex = "0123456789ABCDEF";
+
+    for (int i = 7; i >= 0; i--)
+    {
+        buf[i] = hex[val & 0xF];
+        val >>= 4;
     }
-}
-void serial_print_hex64(uint64_t num)
-{
-    serial_print("0x");
-    for (int i = 15; i >= 0; i--) {
-        int digit = (num >> (i * 4)) & 0xF;
-        char c = (digit < 10) ? '0' + digit : 'a' + digit - 10;
-        serial_putchar(c);
-    }
+    buf[8] = '\0';
+    serial_print(buf);
 }

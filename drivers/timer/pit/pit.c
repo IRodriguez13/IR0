@@ -1,8 +1,17 @@
-// drivers/timer/pit/pit.c 
-#include "pit.h"
+/* SPDX-License-Identifier: GPL-3.0-only */
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025 Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: pit.c
+ * Description: PIT and PIC initialization
+ */
 
-// Variable global para ticks del PIT
-uint64_t pit_ticks = 0;
+#include "pit.h"
 #include <ir0/oops.h>
 #include <ir0/vga.h>
 #include <arch_interface.h>
@@ -10,7 +19,31 @@ uint64_t pit_ticks = 0;
 #include <vga.h>
 #include <kernel/rr_sched.h>
 #include <arch/x86-64/sources/arch_x64.h>
-#define PIT_FREC 1193180
+#include <ir0/driver.h>
+#include <ir0/logging.h>
+
+/* Driver registration structures */
+static int32_t pit_hw_init(void)
+{
+    /* PIT is already initialized by init_PIT, but we can return 0 */
+    return 0;
+}
+
+static ir0_driver_ops_t pit_ops = {
+    .init = pit_hw_init,
+    .shutdown = NULL
+};
+
+static ir0_driver_info_t pit_info = {
+    .name = "PIT Timer",
+    .version = "1.0",
+    .author = "Iván Rodriguez",
+    .description = "Programmable Interval Timer Driver",
+    .language = IR0_DRIVER_LANG_C
+};
+
+/* Global variable for PIT ticks */
+uint64_t pit_ticks = 0;
 
 extern void timer_stub();
 
@@ -26,59 +59,56 @@ void increment_pit_ticks(void)
     ticks++;
 }
 
-// Inicializar PIC (Programmable Interrupt Controller)
+/* Initialize PIC (Programmable Interrupt Controller) */
 void init_pic(void)
 {
+    /* Save current masks (not used for now) */
+    (void)inb(PIC1_DATA); /* Read current mask1 */
+    (void)inb(PIC2_DATA); /* Read current mask2 */
 
-    // Guardar máscaras actuales (no utilizadas por ahora)
-    (void)inb(0x21);  // Read current mask1
-    (void)inb(0xA1);  // Read current mask2
+    /* Initially disable all interrupts */
+    outb(PIC1_DATA, 0xFF);
+    outb(PIC2_DATA, 0xFF);
 
+    /* ICW1: Initialization */
+    outb(PIC1_COMMAND, PIC_ICW1_INIT); /* ICW1 for PIC1 */
+    outb(PIC2_COMMAND, PIC_ICW1_INIT); /* ICW1 for PIC2 */
 
-    outb(0x21, 0xFF);
-    outb(0xA1, 0xFF);
+    /* ICW2: Vector offset */
+    outb(PIC1_DATA, 0x20); /* PIC1: IRQ 0-7 -> INT 0x20-0x27 */
+    outb(PIC2_DATA, 0x28); /* PIC2: IRQ 8-15 -> INT 0x28-0x2F */
 
-    // ICW1: Inicialización
-    outb(0x20, 0x11); // ICW1 para PIC1
-    outb(0xA0, 0x11); // ICW1 para PIC2
+    /* ICW3: Cascade */
+    outb(PIC1_DATA, 0x04); /* PIC1: IRQ2 connected to PIC2 */
+    outb(PIC2_DATA, 0x02); /* PIC2: Cascada a IRQ2 de PIC1 */
 
-    // ICW2: Vector offset
-    outb(0x21, 0x20); // PIC1: IRQ 0-7 -> INT 0x20-0x27
-    outb(0xA1, 0x28); // PIC2: IRQ 8-15 -> INT 0x28-0x2F
+    /* ICW4: 8086 Mode */
+    outb(PIC1_DATA, PIC_ICW4_8086); /* PIC1: 8086 mode */
+    outb(PIC2_DATA, PIC_ICW4_8086); /* PIC2: 8086 mode */
 
-    // ICW3: Cascada
-    outb(0x21, 0x04); // PIC1: IRQ2 conectado a PIC2
-    outb(0xA1, 0x02); // PIC2: Cascada a IRQ2 de PIC1
-
-    // ICW4: Modo 8086
-    outb(0x21, 0x01); // PIC1: Modo 8086
-    outb(0xA1, 0x01); // PIC2: Modo 8086
-
-    // MODO ESTABLE: Mantener todas las interrupciones deshabilitadas
-    outb(0x21, 0xFF); // PIC1: Todas deshabilitadas
-    outb(0xA1, 0xFF); // PIC2: Todas deshabilitadas
-
-
+    /* Stable mode: Keep all interrupts disabled */
+    outb(PIC1_DATA, 0xFF); /* PIC1: All disabled */
+    outb(PIC2_DATA, 0xFF); /* PIC2: All disabled */
 }
 
 void init_PIT(uint32_t frequency)
 {
+    LOG_INFO_FMT("PIT", "Registering PIT Timer at %d Hz...", frequency);
+    ir0_register_driver(&pit_info, &pit_ops);
 
-    // Inicializar PIC primero
+    /* Initialize PIC first */
     init_pic();
 
-    // Calcular divisor para la frecuencia deseada
-    uint32_t divisor = PIT_FREC / frequency;
+    /* Calculate divisor for the desired frequency */
+    uint32_t divisor = PIT_BASE_FREC / frequency;
 
+    /* Configure PIT */
+    outb(PIT_REG_COMMAND, PIT_COMMAND_VAL);    /* Command: canal 0, lohi, modo 3 */
+    outb(PIT_REG_CHAN0, divisor & 0xFF);       /* Low byte of divisor */
+    outb(PIT_REG_CHAN0, (divisor >> 8) & 0xFF); /* High byte of divisor */
 
-    // Configurar PIT
-    outb(0x43, 0x36);                  // Comando: canal 0, lohi, modo 3
-    outb(0x40, divisor & 0xFF);        // Byte bajo del divisor
-    outb(0x40, (divisor >> 8) & 0xFF); // Byte alto del divisor
-
-    // Habilitar interrupción del timer (IRQ 0)
-    uint8_t mask = inb(0x21);
-    mask &= ~(1 << 0); // Habilitar IRQ 0 (timer)
-    outb(0x21, mask);
-
+    /* Enable timer interrupt (IRQ 0) */
+    uint8_t mask = inb(PIC1_DATA);
+    mask &= ~(1 << 0); /* Enable IRQ 0 (timer) */
+    outb(PIC1_DATA, mask);
 }

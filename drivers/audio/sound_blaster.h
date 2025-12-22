@@ -14,6 +14,17 @@
 #define SB16_READ_STATUS        (SB16_BASE_PORT + 0x0E)
 #define SB16_ACK_16BIT          (SB16_BASE_PORT + 0x0F)
 
+// DSP Status bits
+#define SB16_DSP_BUSY           0x80
+#define SB16_DSP_READY          0xAA
+
+// DSP Timeouts and delays
+#define SB16_DSP_TIMEOUT        1000
+#define SB16_RESET_DELAY_US     1000
+
+// Mixer values
+#define SB16_MIXER_VOL_MEDIUM   0x88
+
 // DMA Channels
 #define SB16_DMA_8BIT           1
 #define SB16_DMA_16BIT          5

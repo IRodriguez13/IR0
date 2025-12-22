@@ -7,7 +7,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: net_core.c
+ * File: net.c
  * Description: Networking abstraction layer core implementation.
  */
 
@@ -22,6 +22,20 @@ int net_register_device(struct net_device *dev)
 {
     if (!dev)
         return -1;
+
+    /* Check if already registered */
+    struct net_device *curr = devices;
+    while (curr)
+    {
+        if (curr == dev)
+        {
+            serial_print("NET: Device already registered: ");
+            serial_print(dev->name);
+            serial_print("\n");
+            return 0;
+        }
+        curr = curr->next;
+    }
 
     dev->next = devices;
     devices = dev;
@@ -52,6 +66,7 @@ void net_unregister_device(struct net_device *dev)
             curr->next = dev->next;
             return;
         }
+        
         curr = curr->next;
     }
 }
