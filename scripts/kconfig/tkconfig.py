@@ -10,6 +10,14 @@ import datetime
 import threading
 import platform
 
+# Import build wrapper
+try:
+    from kconfig_build_wrapper import KConfigBuild
+    BUILD_WRAPPER_AVAILABLE = True
+except ImportError:
+    BUILD_WRAPPER_AVAILABLE = False
+    print("Warning: kconfig_build_wrapper not available, using subprocess fallback")
+
 # ===============================================================================
 # PLATFORM DETECTION AND COMMAND ADAPTATION
 # ===============================================================================
@@ -403,6 +411,15 @@ class KernelConfigGUI:
         
         # Configuration data
         self.config = {}
+        # Initialize build wrapper if available
+        if BUILD_WRAPPER_AVAILABLE:
+            try:
+                self.build_wrapper = KConfigBuild()
+            except Exception as e:
+                print(f"Warning: Could not initialize build wrapper: {e}")
+                self.build_wrapper = None
+        else:
+            self.build_wrapper = None
         self.load_config()
         
         # Initialize platform commands
@@ -429,6 +446,7 @@ class KernelConfigGUI:
     def load_subsystems_config(self):
         """Load subsystems configuration from JSON"""
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        # subsystems.json is in the same directory as tkconfig.py (scripts/kconfig/)
         config_path = os.path.join(script_dir, 'subsystems.json')
         
         if os.path.exists(config_path):
@@ -599,44 +617,62 @@ class KernelConfigGUI:
                                  f"{subsystem.get('name', subsystem_id)} is not enabled. Enable it first.")
             return
         
-        # Build using unibuild
+        # Build using build wrapper (C library) or fallback to subprocess
         self.status_var.set(f"Building {subsystem.get('name', subsystem_id)}...")
         
         def build_thread():
             try:
                 script_dir = os.path.dirname(os.path.abspath(__file__))
                 kernel_root = os.path.dirname(os.path.dirname(script_dir))
-                unibuild_script = os.path.join(kernel_root, 'scripts', 'unibuild.sh')
                 
-                # Build all files in the subsystem using platform-specific shell
-                shell_cmd = self.platform_commands.get_shell_cmd()
-                cmd = [shell_cmd, unibuild_script] + files
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    universal_newlines=True,
-                    cwd=kernel_root
-                )
+                success = False
+                error_msg = ""
                 
-                output_lines = []
-                for line in process.stdout:
-                    output_lines.append(line)
-                    print(line.strip())
+                # Try using C library wrapper first
+                if self.build_wrapper:
+                    success_count = 0
+                    for file_path in files:
+                        file_success, msg = self.build_wrapper.build_file(file_path, kernel_root)
+                        if file_success:
+                            success_count += 1
+                        else:
+                            error_msg += f"{file_path}: {msg}\n"
+                    success = success_count == len(files)
+                else:
+                    # Fallback to subprocess
+                    unibuild_script = os.path.join(kernel_root, 'scripts', 'unibuild.sh')
+                    shell_cmd = self.platform_commands.get_shell_cmd()
+                    cmd = [shell_cmd, unibuild_script] + files
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        universal_newlines=True,
+                        cwd=kernel_root
+                    )
+                    
+                    output_lines = []
+                    for line in process.stdout:
+                        output_lines.append(line)
+                        print(line.strip())
+                    
+                    process.wait()
+                    success = process.returncode == 0
+                    if not success:
+                        error_msg = '\n'.join(output_lines[-10:])  # Last 10 lines
                 
-                process.wait()
-                
-                if process.returncode == 0:
+                if success:
                     self.root.after(0, lambda: self.status_var.set(
                         f"✓ {subsystem.get('name', subsystem_id)} built successfully"))
                     self.root.after(0, lambda: messagebox.showinfo("Build Success", 
-                        f"{subsystem.get('name', subsystem_id)} built successfully!"))
+                        f"{subsystem.get('name', subsystem_id)} built successfully!\n\n"
+                        f"The module is ready to use."))
                 else:
-                    error_msg = '\n'.join(output_lines[-10:])  # Last 10 lines
                     self.root.after(0, lambda: self.status_var.set(
                         f"✗ Build failed for {subsystem.get('name', subsystem_id)}"))
                     self.root.after(0, lambda: messagebox.showerror("Build Failed", 
-                        f"Build failed:\n\n{error_msg}"))
+                        f"Build failed:\n\n{error_msg}\n\n"
+                        f"Check the console output for more details."))
             except Exception as e:
                 self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to build: {e}"))
@@ -962,48 +998,91 @@ class KernelConfigGUI:
         def build_all_thread():
             script_dir = os.path.dirname(os.path.abspath(__file__))
             kernel_root = os.path.dirname(os.path.dirname(script_dir))
-            unibuild_script = os.path.join(kernel_root, 'scripts', 'unibuild.sh')
             
-            all_files = []
+            # Save config first
+            self.save_config()
+            config_file = os.path.join(kernel_root, '.config')
+            subsystems_json = os.path.join(script_dir, 'subsystems.json')
             arch = self.current_architecture
-            for sid in selected_subsystems:
-                subsystem = self.subsystems_data.get(sid, {})
-                files_dict = subsystem.get('files', {})
-                files = files_dict.get(arch, files_dict.get('x86-64', []))
-                all_files.extend(files)
             
-            if all_files:
-                try:
-                    shell_cmd = self.platform_commands.get_shell_cmd()
-                    cmd = [shell_cmd, unibuild_script] + all_files
-                    process = subprocess.Popen(
-                        cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        universal_newlines=True,
-                        cwd=kernel_root
+            success = False
+            error_msg = ""
+            
+            try:
+                # Try using C library wrapper first (builds from config)
+                if self.build_wrapper:
+                    success, msg = self.build_wrapper.build_from_config(
+                        config_file, subsystems_json, arch, kernel_root
                     )
-                    
-                    output_lines = []
-                    for line in process.stdout:
-                        output_lines.append(line)
-                        print(line.strip())
-                    
-                    process.wait()
-                    
-                    if process.returncode == 0:
-                        self.root.after(0, lambda: self.status_var.set(
-                            f"✓ Built {len(selected_subsystems)} subsystem(s) successfully"))
-                        self.root.after(0, lambda: messagebox.showinfo("Build Success", 
-                            f"Built {len(selected_subsystems)} subsystem(s) successfully!"))
+                    if not success:
+                        error_msg = msg
+                else:
+                    # Fallback to subprocess
+                    build_script = os.path.join(script_dir, 'build_from_config.py')
+                    if os.path.exists(build_script):
+                        process = subprocess.Popen(
+                            ['python3', build_script, config_file, subsystems_json, arch],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            universal_newlines=True,
+                            cwd=kernel_root
+                        )
+                        
+                        output_lines = []
+                        for line in process.stdout:
+                            output_lines.append(line)
+                            print(line.strip())
+                        
+                        process.wait()
+                        success = process.returncode == 0
+                        if not success:
+                            error_msg = '\n'.join(output_lines[-10:])
                     else:
-                        error_msg = '\n'.join(output_lines[-10:])
-                        self.root.after(0, lambda: self.status_var.set("✗ Build failed"))
-                        self.root.after(0, lambda: messagebox.showerror("Build Failed", 
-                            f"Build failed:\n\n{error_msg}"))
-                except Exception as e:
-                    self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
-                    self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to build: {e}"))
+                        # Ultimate fallback: build files directly
+                        unibuild_script = os.path.join(kernel_root, 'scripts', 'unibuild.sh')
+                        all_files = []
+                        for sid in selected_subsystems:
+                            subsystem = self.subsystems_data.get(sid, {})
+                            files_dict = subsystem.get('files', {})
+                            files = files_dict.get(arch, files_dict.get('x86-64', []))
+                            all_files.extend(files)
+                        
+                        if all_files:
+                            shell_cmd = self.platform_commands.get_shell_cmd()
+                            cmd = [shell_cmd, unibuild_script] + all_files
+                            process = subprocess.Popen(
+                                cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                universal_newlines=True,
+                                cwd=kernel_root
+                            )
+                            
+                            output_lines = []
+                            for line in process.stdout:
+                                output_lines.append(line)
+                                print(line.strip())
+                            
+                            process.wait()
+                            success = process.returncode == 0
+                            if not success:
+                                error_msg = '\n'.join(output_lines[-10:])
+                
+                # Show results
+                if success:
+                    self.root.after(0, lambda: self.status_var.set(
+                        f"✓ Built {len(selected_subsystems)} subsystem(s) successfully"))
+                    self.root.after(0, lambda: messagebox.showinfo("Build Success", 
+                        f"Built {len(selected_subsystems)} subsystem(s) successfully!\n\n"
+                        f"The compiled modules are ready to use."))
+                else:
+                    self.root.after(0, lambda: self.status_var.set("✗ Build failed"))
+                    self.root.after(0, lambda: messagebox.showerror("Build Failed", 
+                        f"Build failed:\n\n{error_msg}\n\n"
+                        f"Check the console output for more details."))
+            except Exception as e:
+                self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to build: {e}"))
         
         thread = threading.Thread(target=build_all_thread, daemon=True)
         thread.start()
@@ -1342,6 +1421,8 @@ For more information, documentation, and source code:
 
 def main():
     # Change to kernel root directory
+    # tkconfig.py is in scripts/kconfig/
+    # So we go up 2 levels: kconfig -> scripts -> root
     script_dir = os.path.dirname(os.path.abspath(__file__))
     kernel_root = os.path.dirname(os.path.dirname(script_dir))
     os.chdir(kernel_root)

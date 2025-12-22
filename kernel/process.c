@@ -150,7 +150,7 @@ pid_t process_fork(void)
 	new_cr3 = create_process_page_directory();
 	if (!new_cr3)
 	{
-		goto cleanup;
+		kfree(child);
 		return -1;
 	}
 	child->task.cr3 = new_cr3;
@@ -160,7 +160,8 @@ pid_t process_fork(void)
 	new_stack = kmalloc(current_process->stack_size);
 	if (!new_stack)
 	{
-		goto cleanup;
+		// Free page directory if allocated (simplified - in production would need proper cleanup)
+		kfree(child);
 		return -1;
 	}
 	memcpy(new_stack, (void *)current_process->stack_start,
@@ -192,9 +193,7 @@ pid_t process_fork(void)
 	process_list = child;
 	rr_add_process(child);
 
-	cleanup:
-		kfree(child);
-		
+	/* Return child PID - DO NOT free child here! */
 	return child->task.pid;
 }
 

@@ -190,15 +190,46 @@ struct vfs_inode *vfs_path_lookup(const char *path)
   if (!path || !root_inode)
     return NULL;
 
-  // Por simplicidad, solo soportamos root "/"
+  // Handle root directory
   if (strcmp(path, "/") == 0)
   {
     return root_inode;
   }
 
-  // Para otros paths, usar el filesystem específico
-  // Lookup completo implementado usando MINIX filesystem
-  return NULL;
+  // Use MINIX filesystem for path lookup
+  if (!minix_fs_is_working())
+  {
+    return NULL;
+  }
+
+  // Find inode using MINIX filesystem
+  uint16_t inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0)
+  {
+    return NULL;
+  }
+
+  minix_inode_t *minix_inode = minix_fs_find_inode(path);
+  if (!minix_inode)
+  {
+    return NULL;
+  }
+
+  // Convert MINIX inode to VFS inode
+  // For now, create a temporary VFS inode wrapper
+  // In a full implementation, we'd cache these properly
+  static struct vfs_inode vfs_inode_wrapper;
+  vfs_inode_wrapper.i_ino = inode_num;  // Use inode number from get_inode_number
+  vfs_inode_wrapper.i_mode = minix_inode->i_mode;
+  vfs_inode_wrapper.i_size = minix_inode->i_size;
+  vfs_inode_wrapper.i_sb = root_inode->i_sb;
+  vfs_inode_wrapper.i_private = minix_inode;
+  
+  // Use root inode's operations (MINIX filesystem)
+  vfs_inode_wrapper.i_op = root_inode->i_op;
+  vfs_inode_wrapper.i_fop = root_inode->i_fop;
+
+  return &vfs_inode_wrapper;
 }
 
 int vfs_init(void)
@@ -339,14 +370,12 @@ int vfs_ls(const char *path)
 int vfs_mkdir(const char *path, int mode)
 {
   // Delegar al filesystem específico por ahora
-  extern int minix_fs_mkdir(const char *path, mode_t mode);
   return minix_fs_mkdir(path, (mode_t)mode);
 }
 
 int vfs_unlink(const char *path)
 {
   // Delegar al filesystem específico por ahora
-  extern int minix_fs_rm(const char *path);
   return minix_fs_rm(path);
 }
 
@@ -426,7 +455,6 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
   {
     // Error reading directory, but it exists - try to remove it anyway
     // This might happen if directory is already empty or corrupted
-    extern int minix_fs_rmdir(const char *path);
     return minix_fs_rmdir(normalized_path);
   }
 
@@ -486,7 +514,6 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
   }
 
   // Finally, remove the now-empty directory
-  extern int minix_fs_rmdir(const char *path);
   return minix_fs_rmdir(normalized_path);
 }
 
@@ -507,7 +534,6 @@ int vfs_stat(const char *path, stat_t *buf)
    * Route stat request through VFS layer to appropriate filesystem.
    * Currently all requests are handled by the MINIX filesystem.
    */
-  extern int minix_fs_stat(const char *pathname, stat_t *buf);
   return minix_fs_stat(path, buf);
 }
 
@@ -517,11 +543,6 @@ static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries)
   {
     return -1;
   }
-
-  extern bool minix_fs_is_working(void);
-  extern minix_inode_t *minix_fs_find_inode(const char *pathname);
-  extern bool minix_is_dir(const minix_inode_t *inode);
-  extern int minix_read_block(uint32_t block_num, void *buffer);
 
   if (!minix_fs_is_working())
   {
@@ -582,10 +603,6 @@ int vfs_ls_with_stat(const char *path)
   return minix_fs_ls(path, true);
 }
 
-// Forward declarations for MINIX filesystem functions
-extern bool minix_fs_is_working(void);
-extern int minix_fs_init(void);
-
 // Forward declaration for mount function
 static int minix_mount(const char *dev_name, const char *dir_name);
 
@@ -626,7 +643,6 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
   if (!minix_fs_is_working())
   {
     print("MINIX_MOUNT: MINIX FS not working, initializing...\n");
-    extern int minix_fs_init(void);
     int ret = minix_fs_init();
     if (ret != 0)
     {
@@ -768,7 +784,6 @@ int vfs_read_file(const char *path, void **data, size_t *size)
   }
 
   // Route to MINIX filesystem (primary filesystem)
-  extern int minix_fs_read_file(const char *path, void **data, size_t *size);
   int result = minix_fs_read_file(path, data, size);
 
   if (result == 0)

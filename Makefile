@@ -43,8 +43,10 @@ ISO_DIR = iso
 all: $(BUILD_DIR)/kernel.iso
 
 menuconfig:
-	@echo "Launching Menu Configuration..."
-	@./menuconfig
+	@echo "Building kconfig library..."
+	@$(MAKE) -C setup -f Makefile.kconfig install || echo "Warning: Library build failed, GUI will use fallback"
+	@echo "Launching IR0 Kernel Configuration Menu..."
+	@$(MAKE) -C setup menuconfig
 CFLAGS += $(CFLAGS_TARGET)
 
 # Include paths
