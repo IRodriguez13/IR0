@@ -676,6 +676,19 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
         if (*format == '%')
         {
             format++;
+            int width = 0;
+            char pad = ' ';
+            if (*format == '0')
+            {
+                pad = '0';
+                format++;
+            }
+            while (*format >= '0' && *format <= '9')
+            {
+                width = width * 10 + (*format - '0');
+                format++;
+            }
+
             switch (*format)
             {
             case 'd':
@@ -683,11 +696,14 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             {
                 int value = va_arg(ap, int);
                 char num_str[32];
-                size_t len = int_to_string(value, num_str, 10);
-                if (len > remaining)
+                int len = int_to_string(value, num_str, 10);
+                while (width > len && remaining > 0)
                 {
-                    len = remaining;
+                    *ptr++ = pad;
+                    remaining--;
+                    width--;
                 }
+                if (len > (int)remaining) len = (int)remaining;
                 memcpy(ptr, num_str, len);
                 ptr += len;
                 remaining -= len;
@@ -697,11 +713,15 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             {
                 unsigned int value = va_arg(ap, unsigned int);
                 char num_str[32];
-                size_t len = int_to_string((int)value, num_str, 10);
-                if (len > remaining)
+                /* Workaround for unsigned in int_to_string */
+                int len = int_to_string((int)value, num_str, 10);
+                while (width > len && remaining > 0)
                 {
-                    len = remaining;
+                    *ptr++ = pad;
+                    remaining--;
+                    width--;
                 }
+                if (len > (int)remaining) len = (int)remaining;
                 memcpy(ptr, num_str, len);
                 ptr += len;
                 remaining -= len;
@@ -712,11 +732,14 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             {
                 unsigned int value = va_arg(ap, unsigned int);
                 char num_str[32];
-                size_t len = int_to_string((int)value, num_str, 16);
-                if (len > remaining)
+                int len = int_to_string((int)value, num_str, 16);
+                while (width > len && remaining > 0)
                 {
-                    len = remaining;
+                    *ptr++ = pad;
+                    remaining--;
+                    width--;
                 }
+                if (len > (int)remaining) len = (int)remaining;
                 memcpy(ptr, num_str, len);
                 ptr += len;
                 remaining -= len;
@@ -725,15 +748,9 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             case 's':
             {
                 char *s = va_arg(ap, char *);
-                if (s == NULL)
-                {
-                    s = "(null)";
-                }
-                size_t len = strlen(s);
-                if (len > remaining)
-                {
-                    len = remaining;
-                }
+                if (s == NULL) s = "(null)";
+                int len = strlen(s);
+                if (len > (int)remaining) len = (int)remaining;
                 memcpy(ptr, s, len);
                 ptr += len;
                 remaining -= len;
@@ -741,7 +758,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             }
             case 'c':
             {
-                char c = va_arg(ap, int);
+                char c = (char)va_arg(ap, int);
                 if (remaining > 0)
                 {
                     *ptr++ = c;
@@ -758,23 +775,12 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
                 }
                 break;
             }
-            default:
-                if (remaining > 0)
-                {
-                    *ptr++ = '%';
-                    *ptr++ = *format;
-                    remaining -= 2;
-                }
-                break;
             }
         }
         else
         {
-            if (remaining > 0)
-            {
-                *ptr++ = *format;
-                remaining--;
-            }
+            *ptr++ = *format;
+            remaining--;
         }
         format++;
     }

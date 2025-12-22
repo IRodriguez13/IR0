@@ -108,6 +108,11 @@ ir0_driver_t* ir0_find_driver(const char* name);
 ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver);
 
 /**
+ * List all registered drivers (for debugging)
+ */
+void ir0_driver_list_all(void);
+
+/**
  * Initialize the driver registry subsystem
  * Called during kernel boot
  */

@@ -36,6 +36,9 @@
 #include <ir0/keyboard.h>
 #include <fs/vfs.h>
 #include <ir0/path.h>
+#include <ir0/driver.h>
+#include <drivers/audio/sound_blaster.h>
+#include <drivers/IO/ps2_mouse.h>
 
 // ATA driver function declarations
 extern bool ata_drive_present(uint8_t drive);
@@ -1222,27 +1225,69 @@ int64_t sys_netinfo(void)
         print("Name: ");
         print(dev->name);
         print(" [");
-        if (dev->flags & IFF_UP) print("UP ");
-        if (dev->flags & IFF_RUNNING) print("RUNNING ");
-        if (dev->flags & IFF_BROADCAST) print("BROADCAST ");
+        bool first = true;
+        if (dev->flags & IFF_UP) { print("UP"); first = false; }
+        if (dev->flags & IFF_RUNNING) { if (!first) print(", "); print("RUNNING"); first = false; }
+        if (dev->flags & IFF_BROADCAST) { if (!first) print(", "); print("BROADCAST"); }
         print("] MTU: ");
         
-        char buf[32];
-        itoa(dev->mtu, buf, 10);
-        print(buf);
+        print_uint32(dev->mtu);
         print("\n  MAC: ");
         
         for (int i = 0; i < 6; i++) {
-            char hex[3];
-            itoa(dev->mac[i], hex, 16);
-            if (dev->mac[i] < 0x10) print("0");
-            print(hex);
+            print_hex8(dev->mac[i]);
             if (i < 5) print(":");
         }
         print("\n");
         dev = dev->next;
     }
     return 0;
+}
+
+int64_t sys_lsdrv(void)
+{
+    ir0_driver_list_all();
+    return 0;
+}
+
+int64_t sys_audio_test(void)
+{
+    if (sb16_is_available())
+    {
+        /* Just initialize speaker as a test or play a beep if implemented */
+        sb16_speaker_on();
+        print("AUDIO: SB16 Speaker toggled ON\n");
+        return 0;
+    }
+    print("AUDIO: Sound Blaster not available\n");
+    return -1;
+}
+
+int64_t sys_mouse_test(void)
+{
+    if (ps2_mouse_is_available())
+    {
+        ps2_mouse_state_t *st = ps2_mouse_get_state();
+        print("MOUSE: Status: Initialized\n");
+        print("MOUSE: Pos: (");
+        char buf[16];
+        itoa((int)st->x, buf, 10);
+        print(buf);
+        print(", ");
+        itoa((int)st->y, buf, 10);
+        print(buf);
+        print(")\n");
+        print("MOUSE: Buttons: L=");
+        print(st->left_button ? "1" : "0");
+        print(" R=");
+        print(st->right_button ? "1" : "0");
+        print(" M=");
+        print(st->middle_button ? "1" : "0");
+        print("\n");
+        return 0;
+    }
+    print("MOUSE: PS/2 Mouse not available\n");
+    return -1;
 }
 
 void syscalls_init(void)
@@ -1370,6 +1415,12 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_link((const char *)arg1, (const char *)arg2);
   case 110:
     return sys_netinfo();
+  case 111:
+    return sys_lsdrv();
+  case 112:
+    return sys_audio_test();
+  case 113:
+    return sys_mouse_test();
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");

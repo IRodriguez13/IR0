@@ -1,327 +1,119 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: ps2.c
+ * Description: PS/2 Controller driver
+ */
+
 #include "ps2.h"
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <string.h>
 #include <arch/common/arch_interface.h>
+#include <ir0/driver.h>
+#include <ir0/logging.h>
 
-// Global variables
-uint8_t keyboard_buffer[KEYBOARD_BUFFER_SIZE];
-int keyboard_buffer_head = 0;
-int keyboard_buffer_tail = 0;
-bool keyboard_shift_pressed = false;
-bool keyboard_ctrl_pressed = false;
-bool keyboard_alt_pressed = false;
-
-// ASCII conversion tables
-static const char scancode_to_ascii_normal[] = 
+/* Internal hardware initialization function */
+static int32_t ps2_hw_init(void)
 {
-    0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
-    '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
-    0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`',
-    0, '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0,
-    '*', 0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '0', '.'
-};
+    uint8_t config;
 
-static const char scancode_to_ascii_shift[] = 
-{
-    0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '\b',
-    '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n',
-    0, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~',
-    0, '|', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0,
-    '*', 0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '0', '.'
-};
+    LOG_INFO("PS2", "Running PS/2 Controller HW Init...");
 
-// Using I/O functions from arch_interface.h
-
-// PS/2 Controller functions
-void ps2_init(void) 
-{
-    // PS/2 controller initialization
-    
-    // Disable both ports
+    /* Disable both ports */
     outb(PS2_COMMAND_PORT, PS2_CMD_DISABLE_PORT1);
     outb(PS2_COMMAND_PORT, PS2_CMD_DISABLE_PORT2);
     
-    // Flush output buffer
+    /* Flush output buffer */
     inb(PS2_DATA_PORT);
     
-    // Set configuration byte
-    outb(PS2_COMMAND_PORT, PS2_CMD_READ_CONFIG);
-    uint8_t config = inb(PS2_DATA_PORT);
-    config &= ~(1 << 0); // Disable IRQ1 
-    config &= ~(1 << 1); // Disable IRQ12
-    config |= (1 << 6);  // Enable translation
-    outb(PS2_COMMAND_PORT, PS2_CMD_WRITE_CONFIG);
-    outb(PS2_DATA_PORT, config);
-    
-    // Test controller
-    outb(PS2_COMMAND_PORT, PS2_CMD_TEST_CONTROLLER);
-    if (inb(PS2_DATA_PORT) != 0x55) 
-    {
-        return; // PS/2 controller test failed
-    }
-    
-    // Enable port 1
-    outb(PS2_COMMAND_PORT, PS2_CMD_ENABLE_PORT1);
-    
-    // Test port 1
-    outb(PS2_COMMAND_PORT, PS2_CMD_TEST_PORT1);
-    if (inb(PS2_DATA_PORT) != 0x00) 
-    {
-        return; // PS/2 port 1 test failed
-    }
-    
-    // Set configuration byte again to enable IRQ1
+    /* Set configuration byte */
     outb(PS2_COMMAND_PORT, PS2_CMD_READ_CONFIG);
     config = inb(PS2_DATA_PORT);
-    config |= (1 << 0);  // Enable IRQ1
+    config &= ~(PS2_CFG_INT1 | PS2_CFG_INT2); /* Disable interrupts for now */
+    config |= PS2_CFG_TRANS;                  /* Enable translation */
     outb(PS2_COMMAND_PORT, PS2_CMD_WRITE_CONFIG);
     outb(PS2_DATA_PORT, config);
     
-    // PS/2 controller ready
+    /* Test controller */
+    outb(PS2_COMMAND_PORT, PS2_CMD_TEST_CONTROLLER);
+    if (inb(PS2_DATA_PORT) != PS2_RESP_SELF_TEST_OK) 
+    {
+        return -1; /* PS/2 controller test failed */
+    }
+    
+    /* Enable port 1 */
+    outb(PS2_COMMAND_PORT, PS2_CMD_ENABLE_PORT1);
+    
+    /* Test port 1 */
+    outb(PS2_COMMAND_PORT, PS2_CMD_TEST_PORT1);
+    if (inb(PS2_DATA_PORT) != PS2_RESP_PORT_TEST_OK) 
+    {
+        return -1; /* PS/2 port 1 test failed */
+    }
+    
+    /* Set configuration byte again to enable IRQ1 */
+    outb(PS2_COMMAND_PORT, PS2_CMD_READ_CONFIG);
+    config = inb(PS2_DATA_PORT);
+    config |= PS2_CFG_INT1;  /* Enable IRQ1 */
+    outb(PS2_COMMAND_PORT, PS2_CMD_WRITE_CONFIG);
+    outb(PS2_DATA_PORT, config);
+    
+    return 0;
+}
+
+/* Driver registration structures */
+static ir0_driver_ops_t ps2_ops = {
+    .init = ps2_hw_init,
+    .shutdown = NULL
+};
+
+static ir0_driver_info_t ps2_info = {
+    .name = "PS/2 Controller",
+    .version = "1.0",
+    .author = "Iván Rodriguez",
+    .description = "Standard i8042 PS/2 Controller Driver",
+    .language = IR0_DRIVER_LANG_C
+};
+
+/**
+ * ps2_init - register PS/2 controller
+ */
+void ps2_init(void) 
+{
+    LOG_INFO("PS2", "Registering PS/2 Controller driver...");
+    ir0_register_driver(&ps2_info, &ps2_ops);
 }
 
 bool ps2_send_command(uint8_t command) 
 {
-    // Wait for input buffer to be empty
-    for (int i = 0; i < 1000; i++) 
+    int timeout = 100000;
+    while (timeout--) 
     {
-        if (!(inb(PS2_STATUS_PORT) & PS2_STATUS_INPUT_FULL)) 
+        if ((inb(PS2_STATUS_PORT) & 2) == 0) 
         {
-            break;
+            outb(PS2_DATA_PORT, command);
+            return true;
         }
     }
-    
-    outb(PS2_COMMAND_PORT, command);
-    return true;
+    return false;
 }
 
 uint8_t ps2_read_data(void) 
 {
-    // Wait for output buffer to be full
-    for (int i = 0; i < 1000; i++) 
+    int timeout = 100000;
+    while (timeout--) 
     {
-        if (inb(PS2_STATUS_PORT) & PS2_STATUS_OUTPUT_FULL) 
+        if (inb(PS2_STATUS_PORT) & 1) 
         {
-            break;
+            return inb(PS2_DATA_PORT);
         }
-    }
-    
-    return inb(PS2_DATA_PORT);
-}
-
-bool ps2_wait_for_output(void) 
-{
-    for (int i = 0; i < 1000; i++) 
-    {
-        if (inb(PS2_STATUS_PORT) & PS2_STATUS_OUTPUT_FULL) 
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool ps2_wait_for_input(void) 
-{
-    for (int i = 0; i < 1000; i++) 
-    {
-        if (!(inb(PS2_STATUS_PORT) & PS2_STATUS_INPUT_FULL)) 
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Keyboard functions
-void ps2_keyboard_init(void) 
-{
-    print("Initializing PS/2 keyboard...\n");
-    
-    // Reset keyboard
-    if (!ps2_keyboard_send_command(PS2_DEV_RESET)) 
-    {
-        print_error("Keyboard reset failed\n");
-        return;
-    }
-    
-    // Wait for ACK
-    uint8_t response = ps2_read_data();
-    if (response != 0xFA) 
-    {
-        print_error("Keyboard reset ACK failed\n");
-        return;
-    }
-    
-    // Wait for reset complete
-    response = ps2_read_data();
-    if (response != 0xAA) 
-    {
-        print_error("Keyboard reset complete failed\n");
-        return;
-    }
-    
-    // Enable scanning
-    if (!ps2_keyboard_send_command(PS2_DEV_ENABLE_SCAN)) 
-    {
-        print_error("Keyboard enable scan failed\n");
-        return;
-    }
-    
-    response = ps2_read_data();
-    if (response != 0xFA) 
-    {
-        print_error("Keyboard enable scan ACK failed\n");
-        return;
-    }
-    
-    print_success("PS/2 keyboard initialized\n");
-}
-
-bool ps2_keyboard_send_command(uint8_t command) 
-{
-    return ps2_send_command(command);
-}
-
-uint8_t ps2_keyboard_read_scancode(void) 
-{
-    if (ps2_wait_for_output()) 
-    {
-        return inb(PS2_DATA_PORT);
     }
     return 0;
-}
-
-char ps2_scancode_to_ascii(uint8_t scancode) 
-{
-    if (scancode >= sizeof(scancode_to_ascii_normal)) 
-    {
-        return 0;
-    }
-    
-    if (keyboard_shift_pressed) 
-    {
-        return scancode_to_ascii_shift[scancode];
-    } else 
-    {
-        return scancode_to_ascii_normal[scancode];
-    }
-}
-
-bool ps2_is_key_pressed(uint8_t scancode) 
-{
-    // Check if key is in buffer
-    int i = keyboard_buffer_head;
-    while (i != keyboard_buffer_tail) 
-    {
-        if (keyboard_buffer[i] == scancode) 
-        {
-            return true;
-        }
-        i = (i + 1) % KEYBOARD_BUFFER_SIZE;
-    }
-    return false;
-}
-
-bool ps2_is_shift_pressed(void) 
-{
-    return keyboard_shift_pressed;
-}
-
-bool ps2_is_ctrl_pressed(void) 
-{
-    return keyboard_ctrl_pressed;
-}
-
-bool ps2_is_alt_pressed(void) 
-{
-    return keyboard_alt_pressed;
-}
-
-void ps2_keyboard_handler(void) 
-{
-    uint8_t scancode = ps2_keyboard_read_scancode();
-    
-    if (scancode == 0) 
-    {
-        return;
-    }
-    
-    // Handle special keys
-    if (scancode == KEY_LSHIFT || scancode == KEY_RSHIFT) 
-    {
-        keyboard_shift_pressed = true;
-        return;
-    }
-    
-    if (scancode == (KEY_LSHIFT | KEY_RELEASE) || scancode == (KEY_RSHIFT | KEY_RELEASE)) 
-    {
-        keyboard_shift_pressed = false;
-        return;
-    }
-    
-    if (scancode == KEY_LCTRL) 
-    {
-        keyboard_ctrl_pressed = true;
-        return;
-    }
-    
-    if (scancode == (KEY_LCTRL | KEY_RELEASE)) 
-    {
-        keyboard_ctrl_pressed = false;
-        return;
-    }
-    
-    if (scancode == KEY_LALT) 
-    {
-        keyboard_alt_pressed = true;
-        return;
-    }
-    
-    if (scancode == (KEY_LALT | KEY_RELEASE)) 
-    {
-        keyboard_alt_pressed = false;
-        return;
-    }
-    
-    // Handle key release
-    if (scancode & KEY_RELEASE) 
-    {
-        return;
-    }
-    
-    // Add to buffer
-    int next_tail = (keyboard_buffer_tail + 1) % KEYBOARD_BUFFER_SIZE;
-    if (next_tail != keyboard_buffer_head) 
-    {
-        keyboard_buffer[keyboard_buffer_tail] = scancode;
-        keyboard_buffer_tail = next_tail;
-    }
-}
-
-// Public interface functions
-char ps2_get_char(void) 
-{
-    if (keyboard_buffer_head == keyboard_buffer_tail) 
-    {
-        return 0;
-    }
-    
-    uint8_t scancode = keyboard_buffer[keyboard_buffer_head];
-    keyboard_buffer_head = (keyboard_buffer_head + 1) % KEYBOARD_BUFFER_SIZE;
-    
-    return ps2_scancode_to_ascii(scancode);
-}
-
-bool ps2_has_char(void) 
-{
-    return keyboard_buffer_head != keyboard_buffer_tail;
-}
-
-void ps2_flush_buffer(void) 
-{
-    keyboard_buffer_head = keyboard_buffer_tail;
 }

@@ -16,6 +16,24 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* PCI configuration space access constants */
+#define PCI_CONFIG_ADDRESS_PORT 0xCF8
+#define PCI_CONFIG_DATA_PORT    0xCFC
+#define PCI_ENABLE_BIT          0x80000000
+
+/* PCI configuration register offsets */
+#define PCI_REG_COMMAND         0x04
+#define PCI_REG_BAR0            0x10
+
+/* PCI command register bits */
+#define PCI_CMD_IO_SPACE        (1 << 0)
+#define PCI_CMD_BUS_MASTER      (1 << 2)
+
+/* RTL8139 size definitions */
+#define RTL8139_RX_BUF_SIZE     8192
+#define RTL8139_RX_BUF_PADDING  (16 + 1500)
+#define RTL8139_MAX_TX_SIZE     1792
+
 /* PCI definitions for RTL8139 */
 #define RTL8139_VENDOR_ID 0x10EC
 #define RTL8139_DEVICE_ID 0x8139
@@ -34,6 +52,12 @@
 #define RTL8139_REG_TCR 0x40     /* Transmit Configuration Register */
 #define RTL8139_REG_RCR 0x44     /* Receive Configuration Register */
 #define RTL8139_REG_CONFIG1 0x52 /* Configuration Register 1 */
+#define RTL8139_REG_MSR     0x58 /* Media Status Register */
+
+/* Media Status Register bits */
+#define RTL8139_MSR_LINKB   (1 << 2) /* Link Status (0=Fail, 1=OK) */
+#define RTL8139_MSR_SPEED   (1 << 3) /* Speed (0=10M, 1=100M) */
+#define RTL8139_MSR_AUX     (1 << 4) /* Aux. Power Status */
 
 /* Command Register bits */
 #define RTL8139_CR_BUFE (1 << 0) /* Buffer Empty */
@@ -58,8 +82,12 @@
 #define RTL8139_RCR_WRAP (1 << 7) /* Wrap around */
 
 /* Transmit Status Descriptor bits */
-#define RTL8139_TSD_SIZE_MASK 0x1FFF /* Packet size mask */
-#define RTL8139_TSD_OWN (1 << 13)    /* DMA operation completed */
+#define RTL8139_TSD_SIZE_MASK   0x1FFF /* Packet size mask */
+#define RTL8139_TSD_OWN         (1 << 13)    /* DMA operation completed */
+#define RTL8139_TSD_ERTX_64     0x00002000 /* Early TX threshold 64 bytes */
+
+/* Receive Status bits (from packet header) */
+#define RTL8139_RX_STAT_ROK     (1 << 0) /* Receive OK */
 
 /* Public API */
 int rtl8139_init(void);
