@@ -181,12 +181,18 @@ static int32_t rtl8139_hw_init(void)
     return 0;
 }
 
-static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
+/**
+ * rtl8139_send - Send data through RTL8139 hardware
+ * @data: Pointer to data buffer to send
+ * @len: Length of data to send
+ * 
+ * This is the low-level hardware send function. It directly interfaces
+ * with the RTL8139 hardware registers.
+ */
+void rtl8139_send(void *data, size_t len)
 {
-    (void)dev;
-
-    if (len > RTL8139_MAX_TX_SIZE)
-        return -1;
+    if (!data || len == 0 || len > RTL8139_MAX_TX_SIZE)
+        return;
 
     /* Copy data to TX buffer (must be aligned, ideally) */
     /* This driver currently assumes fixed physical buffers or direct map */
@@ -194,6 +200,24 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
     outl(rtl8139_io_base + RTL8139_REG_TSD0 + (rtl8139_current_tx_descriptor * 4), (uint32_t)len);
 
     rtl8139_current_tx_descriptor = (rtl8139_current_tx_descriptor + 1) % 4;
+}
 
+/**
+ * rtl8139_netdev_send - Network device send wrapper
+ * @dev: Network device structure (unused, kept for API compatibility)
+ * @data: Pointer to data buffer to send
+ * @len: Length of data to send
+ * 
+ * This wrapper adapts the net_device API to the rtl8139_send() function.
+ * It provides the interface expected by the network stack.
+ */
+static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
+{
+    (void)dev;
+
+    if (len > RTL8139_MAX_TX_SIZE)
+        return -1;
+
+    rtl8139_send(data, len);
     return 0;
 }

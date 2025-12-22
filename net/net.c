@@ -17,6 +17,7 @@
 #include <string.h>
 
 static struct net_device *devices = NULL;
+static struct net_protocol *protocols = NULL;
 
 int net_register_device(struct net_device *dev)
 {
@@ -109,22 +110,142 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
     serial_print_hex32(type);
     serial_print("\n");
 
-    /* Dispatch to protocols */
-    switch (type)
+    /* Look up protocol handler */
+    struct net_protocol *proto = net_find_protocol_by_ethertype(type);
+    if (proto && proto->handler)
     {
-    case ETHERTYPE_ARP:
-        serial_print("NET: ARP packet dispatch (not implemented)\n");
-        break;
-    case ETHERTYPE_IP:
-        serial_print("NET: IP packet dispatch (not implemented)\n");
-        break;
-    default:
-        serial_print("NET: Unknown EtherType\n");
-        break;
+        /* Extract payload (after Ethernet header) */
+        const void *payload = (const uint8_t *)data + sizeof(struct eth_header);
+        size_t payload_len = len - sizeof(struct eth_header);
+        
+        /* Call protocol handler */
+        proto->handler(dev, payload, payload_len, proto->priv);
+    }
+    else
+    {
+        serial_print("NET: No handler registered for EtherType 0x");
+        serial_print_hex32(type);
+        serial_print("\n");
     }
 }
 
 struct net_device *net_get_devices(void)
 {
     return devices;
+}
+
+/* --- Protocol Registration System --- */
+
+/**
+ * Register a network protocol handler
+ * @proto: Protocol registration structure
+ * @return: 0 on success, -1 on error
+ */
+int net_register_protocol(struct net_protocol *proto)
+{
+    if (!proto || !proto->name || !proto->handler)
+        return -1;
+
+    /* Check if already registered */
+    struct net_protocol *curr = protocols;
+    while (curr)
+    {
+        if (curr == proto)
+        {
+            serial_print("NET: Protocol already registered: ");
+            serial_print(proto->name);
+            serial_print("\n");
+            return 0;
+        }
+        curr = curr->next;
+    }
+
+    /* Add to protocol list */
+    proto->next = protocols;
+    protocols = proto;
+
+    serial_print("NET: Registered protocol: ");
+    serial_print(proto->name);
+    if (proto->ethertype != 0)
+    {
+        serial_print(" (EtherType: 0x");
+        serial_print_hex32(proto->ethertype);
+        serial_print(")");
+    }
+    if (proto->ipproto != 0)
+    {
+        serial_print(" (IP Proto: ");
+        serial_print_hex32(proto->ipproto);
+        serial_print(")");
+    }
+    serial_print("\n");
+
+    return 0;
+}
+
+/**
+ * Unregister a network protocol handler
+ * @proto: Protocol registration structure
+ */
+void net_unregister_protocol(struct net_protocol *proto)
+{
+    if (!proto || !protocols)
+        return;
+
+    if (protocols == proto)
+    {
+        protocols = proto->next;
+        serial_print("NET: Unregistered protocol: ");
+        serial_print(proto->name);
+        serial_print("\n");
+        return;
+    }
+
+    struct net_protocol *curr = protocols;
+    while (curr->next)
+    {
+        if (curr->next == proto)
+        {
+            curr->next = proto->next;
+            serial_print("NET: Unregistered protocol: ");
+            serial_print(proto->name);
+            serial_print("\n");
+            return;
+        }
+        curr = curr->next;
+    }
+}
+
+/**
+ * Find protocol handler by Ethernet type (Layer 2)
+ * @ethertype: Ethernet type (e.g., ETHERTYPE_ARP, ETHERTYPE_IP)
+ * @return: Protocol structure or NULL if not found
+ */
+struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype)
+{
+    struct net_protocol *curr = protocols;
+    while (curr)
+    {
+        if (curr->ethertype == ethertype)
+            return curr;
+        curr = curr->next;
+    }
+    return NULL;
+}
+
+/**
+ * Find protocol handler by IP protocol number (Layer 3+)
+ * @ipproto: IP protocol number (e.g., IPPROTO_ICMP, IPPROTO_TCP, IPPROTO_UDP)
+ * @return: Protocol structure or NULL if not found
+ */
+struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto)
+{
+    struct net_protocol *curr = protocols;
+    while (curr)
+    {
+        if (curr->ipproto == ipproto)
+            return curr;
+        curr = curr->next;
+    }
+    return NULL;
 }
