@@ -3,6 +3,7 @@
 #include "string.h"
 #include <stdbool.h>
 #include <stdarg.h>
+#include <drivers/serial/serial.h>
 
 // ===============================================================================
 // GLOBAL VARIABLES
@@ -87,6 +88,15 @@ void log_message(log_level_t level, const char *component, const char *message)
     print("] ");
     print(message);
     print("\n");
+
+    /* Also output to serial for debugging */
+    serial_print("[");
+    serial_print(get_level_string(level));
+    serial_print("] [");
+    serial_print(component);
+    serial_print("] ");
+    serial_print(message);
+    serial_print("\n");
 }
 
 void log_debug(const char *component, const char *message)
@@ -257,9 +267,5 @@ void log_interrupt(uint8_t irq, const char *handler, int result)
 
 void log_subsystem_ok(const char *subsystem_name)
 {
-    print_colored("[", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("OK", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    print_colored("] ", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored(subsystem_name, VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    log_info(subsystem_name, "Registered and Initialized OK");
 }

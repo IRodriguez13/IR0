@@ -1448,6 +1448,21 @@ static void cmd_df(const char *args __attribute__((unused)))
 {
   syscall(95, 0, 0, 0);
 }
+static void cmd_lsdrv(const char *args __attribute__((unused)))
+{
+  syscall(111, 0, 0, 0);
+}
+
+static void cmd_audio_test(const char *args __attribute__((unused)))
+{
+  syscall(112, 0, 0, 0);
+}
+
+static void cmd_mouse_test(const char *args __attribute__((unused)))
+{
+  syscall(113, 0, 0, 0);
+}
+
 /* Command table: name, handler, description */
 struct shell_cmd
 {
@@ -1481,6 +1496,9 @@ static const struct shell_cmd commands[] = {
     {"mount", cmd_mount, "mount DEV MOUNTPOINT [fstype]", "Mount filesystem"},
     {"chmod", (void (*)(const char *))cmd_chmod, "chmod MODE PATH", "Change file mode"},
     {"chown", (void (*)(const char *))cmd_chown, "chown USER PATH", "Change file owner (not implemented)"},
+    {"lsdrv", cmd_lsdrv, "lsdrv", "List all registered drivers"},
+    {"audio_test", cmd_audio_test, "audio_test", "Test Sound Blaster audio"},
+    {"mouse_test", cmd_mouse_test, "mouse_test", "Test PS/2 mouse"},
     {"exit", (void (*)(const char *))cmd_exit, "exit", "Exit shell"},
     {"touch", cmd_touch, "touch FILE", "Create empty file or update timestamp"},
     {"netinfo", (void (*)(const char *))cmd_netinfo, "netinfo", "Display network interface information"},

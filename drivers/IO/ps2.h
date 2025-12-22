@@ -36,6 +36,20 @@
 #define PS2_STATUS_TIMEOUT      0x40
 #define PS2_STATUS_PARITY_ERROR 0x80
 
+// PS/2 Configuration Byte bits
+#define PS2_CFG_INT1            (1 << 0)
+#define PS2_CFG_INT2            (1 << 1)
+#define PS2_CFG_SYS             (1 << 2)
+#define PS2_CFG_CLK1            (1 << 4)
+#define PS2_CFG_CLK2            (1 << 5)
+#define PS2_CFG_TRANS           (1 << 6)
+
+// PS/2 Controller Responses
+#define PS2_RESP_SELF_TEST_OK   0x55
+#define PS2_RESP_PORT_TEST_OK   0x00
+#define PS2_RESP_ACK            0xFA
+#define PS2_RESP_RESET_DONE     0xAA
+
 // Keyboard scan codes (set 1)
 #define KEY_ESC          0x01
 #define KEY_1            0x02

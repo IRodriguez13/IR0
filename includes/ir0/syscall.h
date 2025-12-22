@@ -49,6 +49,9 @@ typedef uint32_t mode_t;
 #define SYS_CHMOD 100
 #define SYS_LINK 101
 #define SYS_NETINFO 110
+#define SYS_LSDRV 111
+#define SYS_AUDIO_TEST 112
+#define SYS_MOUSE_TEST 113
 
 
 // Low-level syscall interface

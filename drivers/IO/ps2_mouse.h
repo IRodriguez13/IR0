@@ -8,6 +8,15 @@
 #define PS2_STATUS_PORT         0x64
 #define PS2_COMMAND_PORT        0x64
 
+// PS/2 Status register bits
+#define PS2_STATUS_OUTPUT_FULL  0x01
+#define PS2_STATUS_INPUT_FULL   0x02
+
+// PS/2 Device commands
+#define PS2_DEV_RESET           0xFF
+#define PS2_DEV_IDENTIFY        0xF2
+#define PS2_DEV_ENABLE_SCAN     0xF4
+
 // PS/2 Controller commands
 #define PS2_CMD_READ_CONFIG     0x20
 #define PS2_CMD_WRITE_CONFIG    0x60
@@ -35,9 +44,23 @@
 #define PS2_MOUSE_SET_SCALING_1_1 0xE6
 
 // Mouse responses
+#define PS2_MOUSE_SELF_TEST_OK  0xAA
+#define PS2_MOUSE_ID_STANDARD   0x00
+#define PS2_MOUSE_ID_WHEEL      0x03
+#define PS2_MOUSE_ID_5BUTTON    0x04
 #define PS2_MOUSE_ACK           0xFA
 #define PS2_MOUSE_NACK          0xFE
 #define PS2_MOUSE_ERROR         0xFC
+
+// Mouse configuration defaults
+#define PS2_MOUSE_DEFAULT_SAMPLE_RATE  100
+#define PS2_MOUSE_DEFAULT_RESOLUTION   4
+#define PS2_MOUSE_WHEEL_SEQUENCE_1     200
+#define PS2_MOUSE_WHEEL_SEQUENCE_2     100
+#define PS2_MOUSE_WHEEL_SEQUENCE_3     80
+#define PS2_MOUSE_5BTN_SEQUENCE_1      200
+#define PS2_MOUSE_5BTN_SEQUENCE_2      200
+#define PS2_MOUSE_5BTN_SEQUENCE_3      80
 
 // Mouse packet flags
 #define PS2_MOUSE_LEFT_BUTTON   0x01

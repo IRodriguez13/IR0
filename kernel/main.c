@@ -23,6 +23,8 @@
 #include <init.h>
 #include <arch/x86-64/sources/user_mode.h>
 #include <rr_sched.h>
+#include <ir0/config.h>
+#include <kernel/elf_loader.h>
 
 // Include kernel header with all function declarations
 #include "kernel.h"
@@ -34,16 +36,15 @@ void kmain(void)
     setup_tss();
 
     // Banner
-    print("IR0 Kernel v0.0.1 Boot\n");
+    print("IR0 Kernel v0.0.1 Boot routine\n");
     delay_ms(2500);
 
-    // Initialize logging
+    // Initialize core subsystems first (need heap for registration)
+    heap_init();
     logging_init();
-    log_subsystem_ok("INIT");
-
-    // Initialize serial for debugging
     serial_init();
-    log_subsystem_ok("SERIAL");
+
+    log_subsystem_ok("CORE");
 
     // Initialize PS/2 controller and keyboard
     ps2_init();
@@ -54,10 +55,6 @@ void kmain(void)
     // Initialize PS/2 mouse
     ps2_mouse_init();
     log_subsystem_ok("PS2_MOUSE");
-
-    // Initialize memory allocator
-    heap_init();
-    log_subsystem_ok("MEMORY");
 
     // Initialize Sound Blaster audio
     sb16_init();
@@ -90,9 +87,6 @@ void kmain(void)
     idt_init64();
     idt_load64();
     pic_remap64();
- 
-#include <ir0/config.h>
-#include <kernel/elf_loader.h>
 
     log_subsystem_ok("INTERRUPTS");
 
