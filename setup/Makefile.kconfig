@@ -1,0 +1,49 @@
+# ===============================================================================
+# KCONFIG BUILD LIBRARY MAKEFILE
+# ===============================================================================
+# Builds the C library for executing build commands from menuconfig
+
+KERNEL_ROOT := $(shell cd .. && pwd)
+SETUP_DIR := $(shell pwd)
+
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -O2 -fPIC
+LDFLAGS ?= -shared
+
+# Source files
+KCONFIG_SRC := kconfig_build.c
+KCONFIG_OBJ := kconfig_build.o
+KCONFIG_SO := libkconfig_build.so
+KCONFIG_A := libkconfig_build.a
+
+.PHONY: all clean install
+
+all: $(KCONFIG_SO) $(KCONFIG_A)
+
+# Build shared library
+$(KCONFIG_SO): $(KCONFIG_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $<
+
+# Build static library
+$(KCONFIG_A): $(KCONFIG_OBJ)
+	ar rcs $@ $<
+
+# Compile object file
+$(KCONFIG_OBJ): $(KCONFIG_SRC)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Install library to scripts/kconfig/
+install: all
+	@mkdir -p $(KERNEL_ROOT)/scripts/kconfig
+	@cp $(KCONFIG_SO) $(KERNEL_ROOT)/scripts/kconfig/ 2>/dev/null || true
+	@cp $(KCONFIG_A) $(KERNEL_ROOT)/scripts/kconfig/ 2>/dev/null || true
+	@if [ -f "$(KCONFIG_SO)" ]; then \
+		echo "$(GREEN)✓ Library installed to scripts/kconfig/$(NC)"; \
+	else \
+		echo "$(YELLOW)Warning: Library compilation may have failed$(NC)"; \
+	fi
+
+clean:
+	rm -f $(KCONFIG_OBJ) $(KCONFIG_SO) $(KCONFIG_A)
+
+.PHONY: all clean install

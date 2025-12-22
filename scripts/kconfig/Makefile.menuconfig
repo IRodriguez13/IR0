@@ -1,0 +1,19 @@
+# ===============================================================================
+# MENUCONFIG MAKEFILE
+# ===============================================================================
+
+# Menu-based configuration
+menuconfig:
+	@if [ ! -f "$(KERNEL_ROOT)/menuconfig" ]; then \
+		echo "Error: menuconfig script not found in the root directory."; \
+		exit 1; \
+	fi
+	@chmod +x "$(KERNEL_ROOT)/menuconfig"
+	@"$(KERNEL_ROOT)/menuconfig"
+
+# Help target for menuconfig
+help-menuconfig:
+	@echo "Menu Configuration Targets:"
+	@echo "  make menuconfig     Configure kernel build options"
+
+.PHONY: menuconfig help-menuconfig

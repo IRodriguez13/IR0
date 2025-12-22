@@ -1,19 +1,59 @@
 # ===============================================================================
-# MENUCONFIG MAKEFILE
+# SETUP MENUCONFIG MAKEFILE
 # ===============================================================================
+# Makefile for building kernel with selected subsystems from menuconfig
 
-# Menu-based configuration
+KERNEL_ROOT := $(shell cd .. && pwd)
+SETUP_DIR := $(shell pwd)
+CONFIG_FILE := $(KERNEL_ROOT)/.config
+SUBSYSTEMS_JSON := $(KERNEL_ROOT)/scripts/kconfig/subsystems.json
+UNIBUILD_SCRIPT := $(KERNEL_ROOT)/scripts/unibuild.sh
+
+# Default architecture
+ARCH ?= x86-64
+
+# Colors for output
+GREEN := \033[1;32m
+YELLOW := \033[1;33m
+RED := \033[1;31m
+NC := \033[0m
+
+.PHONY: menuconfig build-config clean-config help
+
+# Run menuconfig GUI (library should already be compiled by main Makefile)
 menuconfig:
-	@if [ ! -f "$(KERNEL_ROOT)/menuconfig" ]; then \
-		echo "Error: menuconfig script not found in the root directory."; \
+	@echo "$(GREEN)Launching IR0 Kernel Configuration Menu...$(NC)"
+	@$(SETUP_DIR)/menuconfig
+
+# Build kernel with selected subsystems from .config
+build-config: $(CONFIG_FILE)
+	@if [ ! -f "$(CONFIG_FILE)" ]; then \
+		echo "$(RED)Error: No .config file found. Run 'make menuconfig' first.$(NC)"; \
 		exit 1; \
 	fi
-	@chmod +x "$(KERNEL_ROOT)/menuconfig"
-	@"$(KERNEL_ROOT)/menuconfig"
+	@echo "$(GREEN)Building kernel with selected subsystems...$(NC)"
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/build_from_config.py $(CONFIG_FILE) $(SUBSYSTEMS_JSON) $(ARCH)
 
-# Help target for menuconfig
-help-menuconfig:
-	@echo "Menu Configuration Targets:"
-	@echo "  make menuconfig     Configure kernel build options"
+# Clean configuration file
+clean-config:
+	@if [ -f "$(CONFIG_FILE)" ]; then \
+		rm -f "$(CONFIG_FILE)"; \
+		echo "$(YELLOW)Configuration file removed.$(NC)"; \
+	else \
+		echo "$(YELLOW)No configuration file to remove.$(NC)"; \
+	fi
 
-.PHONY: menuconfig help-menuconfig
+# Show help
+help:
+	@echo "$(GREEN)IR0 Kernel Setup Makefile$(NC)"
+	@echo ""
+	@echo "Targets:"
+	@echo "  make menuconfig      - Launch kernel configuration menu"
+	@echo "  make build-config    - Build kernel with selected subsystems"
+	@echo "  make clean-config    - Remove .config file"
+	@echo ""
+	@echo "Usage:"
+	@echo "  1. Run 'make menuconfig' to select subsystems"
+	@echo "  2. Run 'make build-config' to compile selected subsystems"
+	@echo "  3. Or use 'make -C setup menuconfig' from kernel root"
+

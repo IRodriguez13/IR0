@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# IR0 Kernel Menu Configuration Script
+# Moved to setup/ directory for unified organization
+
+# Get script directory (setup/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Get kernel root (parent of setup/)
+KERNEL_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Change to kernel root directory
+cd "$KERNEL_ROOT" || exit 1
+
+# Check if Python 3 is installed
+if ! command -v python3 &> /dev/null; then
+    echo "Error: Python 3 is not installed. Please install it to continue."
+    echo "You can install it with: sudo apt update && sudo apt install python3 python3-tk"
+    exit 1
+fi
+
+# Check if tkinter is installed
+if ! python3 -c "import tkinter" 2>/dev/null; then
+    echo "Installing required dependencies..."
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update && sudo apt-get install -y python3-tk
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y python3-tk
+    else
+        echo "Could not determine package manager."
+        echo "Please install 'python3-tk' or 'python-tk' manually."
+        exit 1
+    fi
+fi
+
+# Run the configuration menu
+echo "Starting IR0 Kernel Configuration Menu..."
+echo "Kernel root: $KERNEL_ROOT"
+python3 "$KERNEL_ROOT/scripts/kconfig/tkconfig.py"
+
+# Show confirmation message
+echo ""
+if [ -f "$KERNEL_ROOT/.config" ]; then
+    echo "Configuration saved to .config"
+    echo "You can review the generated .config file"
+    echo ""
+    echo "To build with selected subsystems, run:"
+    echo "  make -C setup build-config"
+    echo ""
+else
+    echo "Warning: No .config file was generated"
+fi
+
+exit 0
+
