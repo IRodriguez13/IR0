@@ -24,6 +24,8 @@ void *__kmalloc_aligned_checked(size_t size, size_t alignment,
 void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *caller);
 
 void heap_init(void);
+void kmem_stats(void);  /* Print memory statistics (debug only) */
+
 
 
 #ifdef __cplusplus
