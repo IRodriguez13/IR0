@@ -122,3 +122,6 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
 
 /* Driver to Protocol */
 void net_receive(struct net_device *dev, const void *data, size_t len);
+
+/* Network Stack Initialization */
+int init_net_stack(void);

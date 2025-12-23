@@ -133,7 +133,7 @@ void typewriter_print_uint32(uint32_t num)
 /* VGA typewriter functions for shell */
 void typewriter_vga_print_char(char c, uint8_t color)
 {
-    extern int cursor_pos; /* Defined in shell.c */
+    extern int cursor_pos; /* Defined in dbgshell.c */
     
     /* If typewriter is disabled, write directly to VGA */
     if (current_mode == TYPEWRITER_DISABLED || !command_output_enabled) {

@@ -4,11 +4,31 @@
 #include <stdbool.h>
 #include <stdarg.h>
 #include <drivers/serial/serial.h>
+#include <drivers/timer/clock_system.h>
+#include <ir0/memory/kmem.h>
+
+/* LOG BUFFER CONFIGURATION */
+#define LOG_BUFFER_MAX_ENTRIES 1024  // Maximum number of log entries to store
+#define LOG_BUFFER_ENTRY_SIZE  256   // Maximum size per log entry
+
+/* LOG ENTRY STRUCTURE */
+typedef struct {
+    uint64_t timestamp_ms;      // Timestamp in milliseconds
+    log_level_t level;           // Log level
+    char component[32];          // Component name (truncated if needed)
+    char message[LOG_BUFFER_ENTRY_SIZE - 32 - 8 - 4];  // Message text
+} log_entry_t;
 
 /* GLOBAL VARIABLES */
 
 static log_level_t current_log_level = LOG_LEVEL_INFO;
 static bool logging_initialized = false;
+
+/* Circular log buffer */
+static log_entry_t *log_buffer = NULL;
+static size_t log_buffer_head = 0;    // Next position to write
+static size_t log_buffer_count = 0;   // Number of entries in buffer
+static bool log_buffer_wrapped = false; // True if buffer has wrapped around
 
 /* INTERNAL FUNCTIONS */
 
@@ -31,12 +51,88 @@ static const char *get_level_string(log_level_t level)
     }
 }
 
+/* Helper function to format and print timestamp to VGA */
 static void print_timestamp(void)
 {
-    /* TODO: Implement real timestamp */
+    uint64_t uptime_ms = 0;
+    
+    /* Get uptime if clock system is initialized */
+    /* clock_system_init() is called after logging_init(), so initially this will be 0 */
+    /* Once clock is initialized, timestamps will be accurate */
+    uptime_ms = clock_get_uptime_milliseconds();
+    
+    /* Format: [SSSS.mmm] where S = seconds, m = milliseconds */
+    uint64_t seconds = uptime_ms / 1000;
+    uint32_t milliseconds = (uint32_t)(uptime_ms % 1000);
+    
     print("[");
-    print_int32(0); // Placeholder for timestamp
+    print_uint64(seconds);
+    print(".");
+    
+    /* Print milliseconds with leading zeros (3 digits) */
+    char ms_str[4];
+    ms_str[0] = '0' + (char)((milliseconds / 100) % 10);
+    ms_str[1] = '0' + (char)((milliseconds / 10) % 10);
+    ms_str[2] = '0' + (char)(milliseconds % 10);
+    ms_str[3] = '\0';
+    
+    print(ms_str);
     print("] ");
+}
+
+/* Helper function to format and print timestamp to serial */
+static void serial_print_timestamp(void)
+{
+    uint64_t uptime_ms = 0;
+    
+    /* Get uptime if clock system is initialized */
+    uptime_ms = clock_get_uptime_milliseconds();
+    
+    /* Format: [SSSS.mmm] where S = seconds, m = milliseconds */
+    uint64_t seconds = uptime_ms / 1000;
+    uint32_t milliseconds = (uint32_t)(uptime_ms % 1000);
+    
+    /* Convert seconds to string manually (simple approach for uint64_t) */
+    char sec_buffer[32];
+    uint64_t sec_temp = seconds;
+    int sec_len = 0;
+    
+    if (sec_temp == 0) 
+    {
+        sec_buffer[sec_len++] = '0';
+    } 
+    else 
+    {
+        /* Convert to string in reverse */
+        char rev_buffer[32];
+        int rev_len = 0;
+        
+        while (sec_temp > 0) 
+        {
+            rev_buffer[rev_len++] = '0' + (char)(sec_temp % 10);
+            sec_temp /= 10;
+        }
+        /* Reverse it */
+        for (int i = rev_len - 1; i >= 0; i--) 
+        {
+            sec_buffer[sec_len++] = rev_buffer[i];
+        }
+    }
+    sec_buffer[sec_len] = '\0';
+    
+    serial_print("[");
+    serial_print(sec_buffer);
+    serial_print(".");
+    
+    /* Print milliseconds with leading zeros (3 digits) */
+    char ms_str[4];
+    ms_str[0] = '0' + (char)((milliseconds / 100) % 10);
+    ms_str[1] = '0' + (char)((milliseconds / 10) % 10);
+    ms_str[2] = '0' + (char)(milliseconds % 10);
+    ms_str[3] = '\0';
+    
+    serial_print(ms_str);
+    serial_print("] ");
 }
 
 /* PUBLIC FUNCTIONS */
@@ -46,6 +142,33 @@ void logging_init(void)
     if (logging_initialized)
     {
         return;
+    }
+
+    /* Allocate log buffer */
+    size_t buffer_size = sizeof(log_entry_t) * LOG_BUFFER_MAX_ENTRIES;
+    log_buffer = (log_entry_t *)kmalloc(buffer_size);
+    if (!log_buffer)
+    {
+        /* If allocation fails, logging will still work but buffer won't */
+        log_buffer = NULL;
+        /* Log to serial that buffer allocation failed */
+        serial_print("[LOGGING] Warning: Failed to allocate log buffer (size: ");
+        char buf[32];
+        itoa((int)buffer_size, buf, 10);
+        serial_print(buf);
+        serial_print(" bytes)\n");
+    }
+    else
+    {
+        memset(log_buffer, 0, buffer_size);
+        log_buffer_head = 0;
+        log_buffer_count = 0;
+        log_buffer_wrapped = false;
+        serial_print("[LOGGING] Log buffer allocated successfully (");
+        char buf[32];
+        itoa(LOG_BUFFER_MAX_ENTRIES, buf, 10);
+        serial_print(buf);
+        serial_print(" entries)\n");
     }
 
     current_log_level = LOG_LEVEL_INFO;
@@ -74,6 +197,40 @@ void log_message(log_level_t level, const char *component, const char *message)
         return;
     }
 
+    /* Store log entry in circular buffer */
+    if (log_buffer)
+    {
+        log_entry_t *entry = &log_buffer[log_buffer_head];
+        entry->timestamp_ms = clock_get_uptime_milliseconds();
+        entry->level = level;
+        
+        /* Copy component name (truncate if too long) */
+        size_t comp_len = strlen(component);
+        if (comp_len >= sizeof(entry->component))
+            comp_len = sizeof(entry->component) - 1;
+        memcpy(entry->component, component, comp_len);
+        entry->component[comp_len] = '\0';
+        
+        /* Copy message (truncate if too long) */
+        size_t msg_len = strlen(message);
+        size_t max_msg_len = sizeof(entry->message) - 1;
+        if (msg_len >= max_msg_len)
+            msg_len = max_msg_len;
+        memcpy(entry->message, message, msg_len);
+        entry->message[msg_len] = '\0';
+        
+        /* Advance buffer head */
+        log_buffer_head = (log_buffer_head + 1) % LOG_BUFFER_MAX_ENTRIES;
+        if (log_buffer_count < LOG_BUFFER_MAX_ENTRIES)
+        {
+            log_buffer_count++;
+        }
+        else
+        {
+            log_buffer_wrapped = true;
+        }
+    }
+
     print_timestamp();
     print("[");
     print(get_level_string(level));
@@ -83,7 +240,8 @@ void log_message(log_level_t level, const char *component, const char *message)
     print(message);
     print("\n");
 
-    /* Also output to serial for debugging */
+    /* Also output to serial for debugging (with timestamp) */
+    serial_print_timestamp();
     serial_print("[");
     serial_print(get_level_string(level));
     serial_print("] [");
@@ -262,4 +420,103 @@ void log_interrupt(uint8_t irq, const char *handler, int result)
 void log_subsystem_ok(const char *subsystem_name)
 {
     log_info(subsystem_name, "Registered and Initialized OK");
+}
+
+/* =============================================================================== */
+/* LOG BUFFER ACCESS FUNCTIONS (for dmesg/journalctl-like functionality) */
+/* =============================================================================== */
+
+/**
+ * logging_print_buffer - Print all logs from the circular buffer
+ * 
+ * This function prints all log entries stored in the circular buffer,
+ * similar to dmesg or journalctl. Logs are printed in chronological order.
+ */
+void logging_print_buffer(void)
+{
+    if (!log_buffer)
+    {
+        print("Log buffer not allocated (no memory available)\n");
+        return;
+    }
+    
+    if (log_buffer_count == 0)
+    {
+        print("No log entries available (buffer is empty)\n");
+        print("Buffer initialized: ");
+        print(logging_initialized ? "yes" : "no");
+        print("\n");
+        return;
+    }
+
+    size_t start_idx;
+    size_t count = log_buffer_count;
+    
+    /* Determine start index */
+    if (log_buffer_wrapped)
+    {
+        /* Buffer has wrapped, start from head (oldest entry) */
+        start_idx = log_buffer_head;
+    }
+    else
+    {
+        /* Buffer hasn't wrapped, start from beginning */
+        start_idx = 0;
+    }
+
+    /* Print header */
+    print("=== Kernel Log Buffer (dmesg) ===\n");
+    print("Entries: ");
+    char buf[32];
+    itoa((int)log_buffer_count, buf, 10);
+    print(buf);
+    print("\n");
+    print("-----------------------------------\n");
+
+    /* Print all entries in chronological order */
+    for (size_t i = 0; i < count; i++)
+    {
+        size_t idx = (start_idx + i) % LOG_BUFFER_MAX_ENTRIES;
+        log_entry_t *entry = &log_buffer[idx];
+        
+        /* Format timestamp: [SSSS.mmm] */
+        uint64_t seconds = entry->timestamp_ms / 1000;
+        uint32_t milliseconds = (uint32_t)(entry->timestamp_ms % 1000);
+        
+        print("[");
+        print_uint64(seconds);
+        print(".");
+        
+        /* Print milliseconds with leading zeros (3 digits) */
+        char ms_str[4];
+        ms_str[0] = '0' + (char)((milliseconds / 100) % 10);
+        ms_str[1] = '0' + (char)((milliseconds / 10) % 10);
+        ms_str[2] = '0' + (char)(milliseconds % 10);
+        ms_str[3] = '\0';
+        print(ms_str);
+        print("] ");
+        
+        /* Print level */
+        print("[");
+        print(get_level_string(entry->level));
+        print("] ");
+        
+        /* Print component */
+        print("[");
+        print(entry->component);
+        print("] ");
+        
+        /* Print message */
+        print(entry->message);
+        print("\n");
+    }
+}
+
+/**
+ * logging_get_buffer_size - Get number of log entries in buffer
+ * @return: Number of log entries currently stored
+ */
+size_t logging_get_buffer_size(void)
+{
+    return log_buffer_count;
 }
