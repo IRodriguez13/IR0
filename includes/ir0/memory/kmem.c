@@ -13,6 +13,7 @@
 #include "kmem.h"
 #include <ir0/memory/allocator.h>
 #include <ir0/oops.h>
+#include <config.h>
 
 /* Compiler optimization hints */
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -187,26 +188,31 @@ void *__krealloc_checked(void *ptr, size_t new_size,
 void *__kmalloc_aligned_checked(size_t size, size_t alignment,
                                const char *file, int line, const char *caller)
 {
-	if (unlikely(size == 0)) {
+	if (unlikely(size == 0)) 
+	{
 		panicex("kmalloc_aligned: size is 0", PANIC_MEM, file, line, caller);
 	}
 
-	if (unlikely(alignment == 0)) {
+	if (unlikely(alignment == 0)) 
+	{
 		panicex("kmalloc_aligned: alignment is 0", PANIC_MEM, file, line, caller);
 	}
 
 	// Ensure alignment is power of 2
-	if (unlikely((alignment & (alignment - 1)) != 0)) {
+	if (unlikely((alignment & (alignment - 1)) != 0)) 
+	{
 		panicex("kmalloc_aligned: alignment not power of 2", PANIC_MEM, file, line, caller);
 	}
 
-	if (unlikely(size > SIMPLE_HEAP_SIZE)) {
+	if (unlikely(size > SIMPLE_HEAP_SIZE)) 
+	{
 		panicex("kmalloc_aligned: size too large", PANIC_MEM, file, line, caller);
 	}
 
 	void *ptr = __kmalloc_aligned_impl(size, alignment);
 
-	if (unlikely(!ptr)) {
+	if (unlikely(!ptr)) 
+	{
 		panicex("kmalloc_aligned: out of memory", PANIC_OUT_OF_MEMORY, file, line, caller);
 	}
 
@@ -219,14 +225,16 @@ void *__kmalloc_aligned_checked(size_t size, size_t alignment,
  */
 void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *caller)
 {
-	if (unlikely(!ptr)) {
+	if (unlikely(!ptr)) 
+	{
 		// Allow NULL like regular kfree
 		return;
 	}
 
 	// Validate that the pointer is within heap range
 	if (unlikely((uintptr_t)ptr < SIMPLE_HEAP_START || 
-	             (uintptr_t)ptr >= SIMPLE_HEAP_END)) {
+	             (uintptr_t)ptr >= SIMPLE_HEAP_END)) 
+	{
 		panicex("kfree_aligned: pointer out of heap range", PANIC_MEM, file, line, caller);
 	}
 
@@ -239,4 +247,20 @@ void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *
 void heap_init(void)
 {
 	alloc_init();
+}
+
+/**
+ * kmem_stats - print kernel memory statistics
+ * Only active when DEBUG_MEMORY_STATS is enabled
+ */
+void kmem_stats(void)
+{
+#if DEBUG_MEMORY_STATS
+	size_t total, used, allocs;
+	alloc_stats(&total, &used, &allocs);
+	/* Stats are printed by alloc_stats when DEBUG_MEMORY_STATS is on */
+#else
+	/* No-op when debug is disabled */
+	(void)0;
+#endif
 }
