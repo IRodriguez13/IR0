@@ -23,10 +23,9 @@ int send_signal(int pid, int signal)
         return -1;
     }
 
-    /* Find target process - for now, stub (no process list walking) */
-    /* TODO: Implement proper process lookup by PID */
-    process_t *proc = process_get_current();
-    if (!proc || proc->task.pid != pid)
+    /* Find target process by PID */
+    process_t *proc = process_find_by_pid(pid);
+    if (!proc)
     {
         return -1; /* Process not found */
     }

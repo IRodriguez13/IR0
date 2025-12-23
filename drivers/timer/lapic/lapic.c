@@ -45,9 +45,7 @@ int lapic_available()
     return (edx & (1 << 9)) != 0; // APIC bit
 }
 
-// Agregar esta función
 void lapic_send_eoi()
 {
-    // Escribir cualquier valor al registro EOI (típicamente 0)
     lapic_write(LAPIC_EOI_REG, 0);
 }
