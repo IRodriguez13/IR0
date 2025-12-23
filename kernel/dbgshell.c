@@ -6,7 +6,7 @@
  * Interactive shell for Ring 3 commands
  */
 
-#include "shell.h"
+#include "dbgshell.h"
 #include <drivers/video/typewriter.h>
 #include <ir0/syscall.h>
 #include <ir0/memory/kmem.h>
@@ -19,6 +19,7 @@
 #include <drivers/storage/ata.h>
 #include <drivers/storage/fs_types.h>
 #include "kernel/syscalls.h" // Ensure SYS_GET_BLOCK_DEVICES is included
+#include <ir0/net.h>
 
 /* kernel/shell.c: use public headers for functions (kmem/string) */
 
@@ -522,6 +523,20 @@ static void cmd_exit(void) { syscall(SYS_EXIT, 0, 0, 0); }
 static void cmd_netinfo(void)
 {
     syscall(SYS_NETINFO, 0, 0, 0);
+}
+
+static void cmd_arpcache(void)
+{
+    /* Note: This command runs in user space, so we cannot directly
+     * access kernel memory like arp_cache. For now, just show a message.
+     * To properly implement this, we would need a syscall that returns
+     * the ARP cache entries.
+     */
+    shell_write(1, "ARP Cache:\n");
+    shell_write(1, "==========\n");
+    shell_write(1, "  ARP cache information is available via serial output.\n");
+    shell_write(1, "  Check serial logs for ARP cache entries.\n");
+    shell_write(1, "  (To implement proper display, add a syscall for ARP cache)\n");
 }
 
 /* Helper function to perform text substitution */
@@ -1453,6 +1468,11 @@ static void cmd_lsdrv(const char *args __attribute__((unused)))
   syscall(111, 0, 0, 0);
 }
 
+static void cmd_dmesg(const char *args __attribute__((unused)))
+{
+  syscall(114, 0, 0, 0);
+}
+
 static void cmd_audio_test(const char *args __attribute__((unused)))
 {
   syscall(112, 0, 0, 0);
@@ -1497,11 +1517,13 @@ static const struct shell_cmd commands[] = {
     {"chmod", (void (*)(const char *))cmd_chmod, "chmod MODE PATH", "Change file mode"},
     {"chown", (void (*)(const char *))cmd_chown, "chown USER PATH", "Change file owner (not implemented)"},
     {"lsdrv", cmd_lsdrv, "lsdrv", "List all registered drivers"},
+    {"dmesg", cmd_dmesg, "dmesg", "Show kernel log buffer (like dmesg/journalctl)"},
     {"audio_test", cmd_audio_test, "audio_test", "Test Sound Blaster audio"},
     {"mouse_test", cmd_mouse_test, "mouse_test", "Test PS/2 mouse"},
     {"exit", (void (*)(const char *))cmd_exit, "exit", "Exit shell"},
     {"touch", cmd_touch, "touch FILE", "Create empty file or update timestamp"},
     {"netinfo", (void (*)(const char *))cmd_netinfo, "netinfo", "Display network interface information"},
+    {"arpcache", (void (*)(const char *))cmd_arpcache, "arpcache", "Display ARP cache"},
 };
 
 static void cmd_list_help(void)

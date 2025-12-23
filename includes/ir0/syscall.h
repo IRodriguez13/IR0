@@ -8,53 +8,62 @@
 // Basic types
 typedef uint32_t mode_t;
 
-#define SYS_EXIT 0
-#define SYS_WRITE 1
-#define SYS_READ 2
-#define SYS_GETPID 3
-#define SYS_GETPPID 4
-#define SYS_LS 5
-#define SYS_MKDIR 6
-#define SYS_PS 7
-#define SYS_WRITE_FILE 8
-#define SYS_CAT 9
-#define SYS_TOUCH 10
-#define SYS_READ_FILE 14
-#define SYS_RM 11
-#define SYS_FORK 12
-#define SYS_WAITPID 13
-#define SYS_RMDIR 40
-#define SYS_MALLOC_TEST 50
-#define SYS_BRK 51
-#define SYS_SBRK 52
-#define SYS_MMAP 53
-#define SYS_MUNMAP 54
-#define SYS_MPROTECT 55
-#define SYS_EXEC 56
-#define SYS_FSTAT 57
-#define SYS_STAT 58
-#define SYS_OPEN 59
-#define SYS_CLOSE 60
-#define SYS_LS_DETAILED 61
-#define SYS_CREAT 62
-#define SYS_DUP2 63
-#define SYS_CHDIR 80
-#define SYS_GETCWD 79
-#define SYS_LSEEK 19
-#define SYS_UNLINK 87
-#define SYS_RMDIR_R 88
-#define SYS_RMDIR_FORCE 89
-#define SYS_MOUNT 90
-#define SYS_DF 95
-#define SYS_CHMOD 100
-#define SYS_LINK 101
-#define SYS_NETINFO 110
-#define SYS_LSDRV 111
-#define SYS_AUDIO_TEST 112
-#define SYS_MOUSE_TEST 113
+/**
+ * Syscall numbers enumeration
+ * 
+ * This enum defines all system call numbers used by the IR0 kernel.
+ * Values are explicitly assigned to maintain compatibility with existing code.
+ */
+typedef enum {
+    SYS_EXIT = 0,
+    SYS_WRITE = 1,
+    SYS_READ = 2,
+    SYS_GETPID = 3,
+    SYS_GETPPID = 4,
+    SYS_LS = 5,
+    SYS_MKDIR = 6,
+    SYS_PS = 7,
+    SYS_WRITE_FILE = 8,
+    SYS_CAT = 9,
+    SYS_TOUCH = 10,
+    SYS_RM = 11,
+    SYS_FORK = 12,
+    SYS_WAITPID = 13,
+    SYS_READ_FILE = 14,
+    SYS_LSEEK = 19,
+    SYS_RMDIR = 40,
+    SYS_MALLOC_TEST = 50,
+    SYS_BRK = 51,
+    SYS_SBRK = 52,
+    SYS_MMAP = 53,
+    SYS_MUNMAP = 54,
+    SYS_MPROTECT = 55,
+    SYS_EXEC = 56,
+    SYS_FSTAT = 57,
+    SYS_STAT = 58,
+    SYS_OPEN = 59,
+    SYS_CLOSE = 60,
+    SYS_LS_DETAILED = 61,
+    SYS_CREAT = 62,
+    SYS_DUP2 = 63,
+    SYS_GETCWD = 79,
+    SYS_CHDIR = 80,
+    SYS_UNLINK = 87,
+    SYS_RMDIR_R = 88,
+    SYS_RMDIR_FORCE = 89,
+    SYS_MOUNT = 90,
+    SYS_DF = 95,
+    SYS_CHMOD = 100,
+    SYS_LINK = 101,
+    SYS_NETINFO = 110,
+    SYS_LSDRV = 111,
+    SYS_AUDIO_TEST = 112,
+    SYS_MOUSE_TEST = 113,
+    SYS_DMESG = 114
+} syscall_num_t;
 
 
-// Low-level syscall interface
+// Low-level syscall interface simulated for dbgshell
 static inline int64_t syscall0(int64_t num)
 {
     int64_t sysret;

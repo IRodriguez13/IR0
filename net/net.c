@@ -13,7 +13,11 @@
 
 #include <ir0/net.h>
 #include <ir0/memory/kmem.h>
+#include <ir0/logging.h>
 #include <drivers/serial/serial.h>
+#include <drivers/net/rtl8139.h>
+#include <drivers/net/e1000.h>
+#include "arp.h"
 #include <string.h>
 
 static struct net_device *devices = NULL;
@@ -248,4 +252,32 @@ struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto)
         curr = curr->next;
     }
     return NULL;
+}
+
+/**
+ * init_net_stack - Initialize the complete network stack
+ * 
+ * This function initializes all network drivers and protocols:
+ * - Network drivers (RTL8139, e1000)
+ * - Network protocols (ARP, and future protocols like IP, ICMP, etc.)
+ * 
+ * @return: 0 on success, -1 on error
+ */
+int init_net_stack(void)
+{
+    LOG_INFO("NET", "Initializing network stack");
+    
+    /* Initialize network drivers */
+    rtl8139_init();
+    e1000_init();
+    
+    /* Initialize network protocols (order matters: ARP before IP) */
+    if (arp_init() != 0)
+    {
+        LOG_ERROR("NET", "Failed to initialize ARP protocol");
+        return -1;
+    }
+    
+    LOG_INFO("NET", "Network stack initialized successfully");
+    return 0;
 }

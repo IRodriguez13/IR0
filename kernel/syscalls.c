@@ -1317,7 +1317,16 @@ int64_t sys_netinfo(void)
 
 int64_t sys_lsdrv(void)
 {
+    /* Show only registered drivers */
     ir0_driver_list_all();
+    return 0;
+}
+
+int64_t sys_dmesg(void)
+{
+    /* Show kernel log buffer (like dmesg/journalctl) */
+    extern void logging_print_buffer(void);
+    logging_print_buffer();
     return 0;
 }
 
@@ -1492,6 +1501,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_audio_test();
   case 113:
     return sys_mouse_test();
+  case 114:
+    return sys_dmesg();
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");
