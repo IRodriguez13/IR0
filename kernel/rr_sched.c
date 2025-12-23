@@ -11,6 +11,7 @@
 #include <ir0/memory/kmem.h>
 #include <ir0/oops.h>
 #include <arch/x86-64/sources/user_mode.h>
+#include <ir0/signals.h>
 
 
 static rr_task_t *rr_head = NULL;
@@ -77,6 +78,9 @@ void rr_schedule_next(void)
 
 	next->state = PROCESS_RUNNING;
 	current_process = next;
+	
+	/* Handle pending signals before context switch */
+	handle_signals();
 
 	/* First context switch - jump to ring3 */
 	if (first)
