@@ -139,6 +139,7 @@ KERNEL_OBJS = \
 MEMORY_OBJS = \
 	includes/ir0/memory/allocator.o \
 	includes/ir0/memory/paging.o \
+	includes/ir0/memory/pmm.o \
 	includes/ir0/memory/kmem.o
 
 LIB_OBJS = \

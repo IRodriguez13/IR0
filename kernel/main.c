@@ -19,6 +19,7 @@
 #include <drivers/IO/ps2_mouse.h>
 #include <drivers/audio/sound_blaster.h>
 #include <ir0/memory/kmem.h>
+#include <ir0/memory/pmm.h>
 #include <drivers/net/rtl8139.h>
 #include <init.h>
 #include <arch/x86-64/sources/user_mode.h>
@@ -41,6 +42,13 @@ void kmain(void)
 
     // Initialize core subsystems first (need heap for registration)
     heap_init();
+    
+    /* Initialize Physical Memory Manager (PMM)
+     * Manage physical frames in the 32MB region (8MB-32MB)
+     * This gives us ~24MB of physical memory frames
+     */
+    pmm_init(0x800000, 0x1800000); // 8MB start, 24MB size
+    
     logging_init();
     serial_init();
 
