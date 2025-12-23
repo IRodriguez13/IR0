@@ -4,7 +4,7 @@
 #define Interrupts_off asm volatile("cli")
 #define Cpu_Sleep asm volatile("hlt")
 
-// IR0 Advanced Panic event Handler in INTEL syntax 
+/* IR0 Advanced Panic event Handler in INTEL syntax  */
 
 static const char *panic_level_names[] =
     {
@@ -18,13 +18,13 @@ static const char *panic_level_names[] =
         "RUNNING OUT PROCESS"
     };
 
-// We make sure we've doble panic
+/* We make sure we've doble panic */
 static volatile int in_panic = 0;
 
-// Better stacktrace pipeline
+/* Better stacktrace pipeline */
 void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller)
 {
-    // This is more an easter egg than a real problem :)
+    /* This is more an easter egg than a real problem :) */
     if (in_panic)
     {
         Interrupts_off;
@@ -46,7 +46,7 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
 
     print("\n");
 
-    // Panic info 
+    /* Panic info  */
     print_colored("Type: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_error(panic_level_names[level]);
     print("\n");
@@ -83,7 +83,7 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
 void dump_registers()
 {
 #ifdef __x86_64__
-    // Versión 64-bit
+    /* Versión 64-bit */
     uint64_t rax, rbx, rcx, rdx, rsi, rdi, rsp, rbp;
     uint64_t rflags;
 
@@ -112,7 +112,7 @@ void dump_registers()
     print("\n");
 
 #else
-    //  32-bit Version 
+    /* 32-bit Version  */
     uint32_t eax, ebx, ecx, edx, esi, edi, esp, ebp;
     uint32_t eflags;
 
@@ -209,7 +209,7 @@ void dump_stack_trace()
 }
 
 
-// Unix panic() pipeline wrapper 
+/* Unix panic() pipeline wrapper  */
 void panic(const char *message)
 {
     panicex(message, PANIC_KERNEL_BUG, "unknown", 0, "unknown");

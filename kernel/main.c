@@ -38,7 +38,6 @@ void kmain(void)
 
     // Banner
     print("IR0 Kernel v0.0.1 Boot routine\n");
-    delay_ms(2500);
 
     // Initialize core subsystems first (need heap for registration)
     heap_init();
@@ -105,10 +104,10 @@ void kmain(void)
     log_subsystem_ok("DEBUG_SHELL");
 #else
     serial_print("SERIAL: kmain: Loading userspace init...\n");
-    if (elf_load_and_execute("/bin/init") < 0) 
+    if (elf_load_and_execute("/sbin/init") < 0) 
     {
-        serial_print("SERIAL: kmain: FAILED to load /bin/init, falling back to debug shell\n");
-        panic("Failed to load /bin/init");
+        serial_print("SERIAL: kmain: FAILED to load /sbin/init, falling back to debug shell\n");
+        panic("Failed to load /sbin/init");
     }
 #endif
 

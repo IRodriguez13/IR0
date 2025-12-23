@@ -17,10 +17,10 @@
 #include <ir0/validation.h>
 #include <string.h>
 
-// Maximum number of drivers (can be made dynamic)
+/* Maximum number of drivers (can be made dynamic) */
 #define MAX_DRIVERS 128
 
-// Driver internal structure
+/* Driver internal structure */
 struct ir0_driver {
     ir0_driver_info_t info;
     ir0_driver_ops_t ops;
@@ -29,14 +29,14 @@ struct ir0_driver {
     struct ir0_driver* next;        // Linked list
 };
 
-// Driver registry state
+/* Driver registry state */
 static struct {
     ir0_driver_t* drivers;          // Linked list of drivers
     size_t count;                   // Number of registered drivers
     int initialized;                // Registry initialized flag
 } driver_registry = { NULL, 0, 0 };
 
-// INTERNAL HELPER FUNCTIONS
+/* INTERNAL HELPER FUNCTIONS */
 
 static const char* lang_to_string(ir0_driver_lang_t lang)
 {
@@ -87,7 +87,7 @@ static int validate_driver_ops(const ir0_driver_ops_t* ops)
         return 0;
     }
     
-    // At least init function is required
+    /* At least init function is required */
     if (!ops->init) {
         LOG_ERROR("DriverRegistry", "Driver must have init function");
         return 0;
@@ -111,7 +111,7 @@ static ir0_driver_t* find_driver_by_name(const char* name)
     return NULL;
 }
 
-// PUBLIC API IMPLEMENTATION
+/* PUBLIC API IMPLEMENTATION */
 
 void ir0_driver_registry_init(void)
 {
@@ -130,7 +130,7 @@ void ir0_driver_registry_init(void)
 ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info, 
                                    const ir0_driver_ops_t* ops)
 {
-    // Validate inputs
+    /* Validate inputs */
     if (!validate_driver_info(info)) {
         return NULL;
     }
@@ -139,32 +139,32 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
         return NULL;
     }
     
-    // Check if registry is initialized
+    /* Check if registry is initialized */
     if (!driver_registry.initialized) {
         LOG_WARNING("DriverRegistry", "Driver registry not initialized, initializing now");
         ir0_driver_registry_init();
     }
     
-    // Check if driver already exists
+    /* Check if driver already exists */
     if (find_driver_by_name(info->name)) {
         LOG_ERROR_FMT("DriverRegistry", "Driver '%s' already registered", info->name);
         return NULL;
     }
     
-    // Check driver limit
+    /* Check driver limit */
     if (driver_registry.count >= MAX_DRIVERS) {
         LOG_ERROR_FMT("DriverRegistry", "Maximum number of drivers (%d) reached", MAX_DRIVERS);
         return NULL;
     }
     
-    // Allocate driver structure
+    /* Allocate driver structure */
     ir0_driver_t* driver = (ir0_driver_t*)kmalloc(sizeof(ir0_driver_t));
     if (!driver) {
         LOG_ERROR_FMT("DriverRegistry", "Failed to allocate memory for driver '%s'", info->name);
         return NULL;
     }
     
-    // Allocate and copy driver name (persistent storage)
+    /* Allocate and copy driver name (persistent storage) */
     size_t name_len = strlen(info->name) + 1;
     char* name_copy = (char*)kmalloc(name_len);
     if (!name_copy) {
@@ -174,7 +174,7 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
     }
     memcpy(name_copy, info->name, name_len);
     
-    // Copy version if provided
+    /* Copy version if provided */
     char* version_copy = NULL;
     if (info->version) {
         size_t version_len = strlen(info->version) + 1;
@@ -184,7 +184,7 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
         }
     }
     
-    // Copy author if provided
+    /* Copy author if provided */
     char* author_copy = NULL;
     if (info->author) {
         size_t author_len = strlen(info->author) + 1;
@@ -194,7 +194,7 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
         }
     }
     
-    // Copy description if provided
+    /* Copy description if provided */
     char* desc_copy = NULL;
     if (info->description) {
         size_t desc_len = strlen(info->description) + 1;
@@ -204,7 +204,7 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
         }
     }
     
-    // Initialize driver structure
+    /* Initialize driver structure */
     driver->info.name = name_copy;
     driver->info.version = version_copy ? version_copy : "1.0";
     driver->info.author = author_copy ? author_copy : "Unknown";
@@ -215,18 +215,18 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
     driver->private_data = NULL;
     driver->next = NULL;
     
-    // Add to registry (at head of linked list)
+    /* Add to registry (at head of linked list) */
     driver->next = driver_registry.drivers;
     driver_registry.drivers = driver;
     driver_registry.count++;
     
-    // Log registration
+    /* Log registration */
     LOG_INFO_FMT("DriverRegistry", "Registered driver: %s (v%s) [%s]", 
              driver->info.name, 
              driver->info.version,
              lang_to_string(driver->info.language));
     
-    // Call driver init function
+    /* Call driver init function */
     if (driver->ops.init) {
         LOG_INFO_FMT("DriverRegistry", "Initializing driver: %s", driver->info.name);
         int32_t result = driver->ops.init();
@@ -250,26 +250,26 @@ int32_t ir0_unregister_driver(ir0_driver_t* driver)
         return IR0_DRIVER_ERR_INVAL;
     }
     
-    // Find driver in list
+    /* Find driver in list */
     ir0_driver_t* current = driver_registry.drivers;
     ir0_driver_t* prev = NULL;
     
     while (current) {
         if (current == driver) {
-            // Call shutdown if available
+            /* Call shutdown if available */
             if (driver->ops.shutdown) {
                 LOG_INFO_FMT("DriverRegistry", "Shutting down driver: %s", driver->info.name);
                 driver->ops.shutdown();
             }
             
-            // Remove from list
+            /* Remove from list */
             if (prev) {
                 prev->next = driver->next;
             } else {
                 driver_registry.drivers = driver->next;
             }
             
-            // Free allocated memory
+            /* Free allocated memory */
             if (driver->info.name) kfree((void*)driver->info.name);
             if (driver->info.version && strcmp(driver->info.version, "1.0") != 0) {
                 kfree((void*)driver->info.version);
@@ -310,7 +310,7 @@ ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver)
     return driver->state;
 }
 
-// DEBUG/UTILITY FUNCTIONS
+/* DEBUG/UTILITY FUNCTIONS */
 
 /**
  * List all registered drivers (for debugging)

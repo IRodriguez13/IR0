@@ -5,16 +5,12 @@
 #include <stdarg.h>
 #include <drivers/serial/serial.h>
 
-// ===============================================================================
-// GLOBAL VARIABLES
-// ===============================================================================
+/* GLOBAL VARIABLES */
 
 static log_level_t current_log_level = LOG_LEVEL_INFO;
 static bool logging_initialized = false;
 
-// ===============================================================================
-// INTERNAL FUNCTIONS
-// ===============================================================================
+/* INTERNAL FUNCTIONS */
 
 static const char *get_level_string(log_level_t level)
 {
@@ -37,15 +33,13 @@ static const char *get_level_string(log_level_t level)
 
 static void print_timestamp(void)
 {
-    // TODO: Implement real timestamp
+    /* TODO: Implement real timestamp */
     print("[");
     print_int32(0); // Placeholder for timestamp
     print("] ");
 }
 
-// ===============================================================================
-// PUBLIC FUNCTIONS
-// ===============================================================================
+/* PUBLIC FUNCTIONS */
 
 void logging_init(void)
 {
@@ -124,9 +118,9 @@ void log_fatal(const char *component, const char *message)
     log_message(LOG_LEVEL_FATAL, component, message);
 }
 
-// ===============================================================================
-// FORMATTED LOGGING FUNCTIONS
-// ===============================================================================
+/* =============================================================================== */
+/* FORMATTED LOGGING FUNCTIONS */
+/* =============================================================================== */
 
 void log_debug_fmt(const char *component, const char *format, ...)
 {
@@ -233,9 +227,9 @@ void log_fatal_fmt(const char *component, const char *format, ...)
     log_message(LOG_LEVEL_FATAL, component, message);
 }
 
-// ===============================================================================
-// SYSTEM-SPECIFIC LOGGING
-// ===============================================================================
+/* =============================================================================== */
+/* SYSTEM-SPECIFIC LOGGING */
+/* =============================================================================== */
 
 void log_syscall(const char *syscall, int result, const char *args)
 {
