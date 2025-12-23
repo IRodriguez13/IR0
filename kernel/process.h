@@ -70,12 +70,13 @@ typedef struct process
 	char cwd[256];
 	
 	/* Process command name (for ps) */
-	char comm[16]; // Process command name (max 15 chars + null)
+	char comm[16]; /* Process command name (max 15 chars + null) */
+	
+	/* Signal management */
+	uint32_t signal_pending; /* Bitmask of pending signals */
 } process_t;
 
-/* ========================================================================== */
 /* PUBLIC MACROS - Register accessors                                        */
-/* ========================================================================== */
 
 #define process_rax(p)    ((p)->task.rax)
 #define process_rbx(p)    ((p)->task.rbx)
@@ -95,18 +96,12 @@ typedef struct process
 #define process_gs(p)     ((p)->task.gs)
 #define process_pid(p)    ((p)->task.pid)
 
-/* ========================================================================== */
-/* PUBLIC API - Process lifecycle                                            */
-/* ========================================================================== */
 
 void process_init(void);
 pid_t process_fork(void);
 void process_exit(int code);
 int process_wait(pid_t pid, int *status);
 
-/* ========================================================================== */
-/* PUBLIC API - Process queries                                              */
-/* ========================================================================== */
 
 pid_t process_get_pid(void);
 pid_t process_get_ppid(void);
@@ -114,16 +109,10 @@ process_t *process_get_current(void);
 process_t *get_process_list(void);
 pid_t process_get_next_pid(void);
 
-/* ========================================================================== */
-/* PUBLIC API - Memory management                                            */
-/* ========================================================================== */
 
 uint64_t create_process_page_directory(void);
 void process_init_fd_table(process_t *process);
 
-/* ========================================================================== */
-/* GLOBAL STATE - Exported for scheduler and syscalls                        */
-/* ========================================================================== */
 
 extern process_t *current_process;
 extern process_t *process_list;

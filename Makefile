@@ -147,6 +147,8 @@ LIB_OBJS = \
     includes/ir0/logging.o \
     includes/ir0/validation.o \
     includes/ir0/oops.o \
+    includes/ir0/signals.o \
+    includes/ir0/pipe.o \
     includes/string.o
 
 INTERRUPT_OBJS = \
