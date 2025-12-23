@@ -30,6 +30,13 @@ typedef struct fd_entry
 	uint64_t offset; // Agregado para manejar desplazamientos
 } fd_entry_t;
 
+/* Process execution mode */
+typedef enum
+{
+	KERNEL_MODE = 0,  /* Running in kernel (dbgshell, embedded init) */
+	USER_MODE = 1     /* Running in userspace (real processes) */
+} process_mode_t;
+
 typedef enum
 {
 	PROCESS_READY = 0,
@@ -51,6 +58,7 @@ typedef struct process
 	uint64_t stack_start;
 	uint64_t stack_size;
 	process_state_t state;
+	process_mode_t mode;  /* Execution mode (kernel vs user) */
 	int exit_code;
 	struct process *next;
 	fd_entry_t fd_table[MAX_FDS_PER_PROCESS];
@@ -108,6 +116,8 @@ pid_t process_get_ppid(void);
 process_t *process_get_current(void);
 process_t *get_process_list(void);
 pid_t process_get_next_pid(void);
+process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
+
 
 
 uint64_t create_process_page_directory(void);

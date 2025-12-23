@@ -128,6 +128,7 @@ KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
     kernel/process.o \
+    kernel/process_util.o \
 	kernel/rr_sched.o \
     kernel/task.o \
     kernel/syscalls.o \
@@ -149,6 +150,7 @@ LIB_OBJS = \
     includes/ir0/oops.o \
     includes/ir0/signals.o \
     includes/ir0/pipe.o \
+    includes/ir0/copy_user.o \
     includes/string.o
 
 INTERRUPT_OBJS = \
