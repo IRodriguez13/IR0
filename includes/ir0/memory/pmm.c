@@ -13,9 +13,7 @@
 #include <drivers/serial/serial.h>
 #include <config.h>
 
-/* ========================================================================== */
 /* INTERNAL STATE                                                            */
-/* ========================================================================== */
 
 static struct
 {
@@ -27,9 +25,7 @@ static struct
     int initialized;          /* Initialization flag */
 } pmm = {0};
 
-/* ========================================================================== */
 /* BITMAP OPERATIONS                                                         */
-/* ========================================================================== */
 
 /* Set bit at frame_index (mark as used) */
 static inline void bitmap_set(size_t frame_index)
@@ -49,9 +45,6 @@ static inline int bitmap_test(size_t frame_index)
     return (pmm.bitmap[frame_index / 8] & (1 << (frame_index % 8))) != 0;
 }
 
-/* ========================================================================== */
-/* PUBLIC API IMPLEMENTATION                                                 */
-/* ========================================================================== */
 
 void pmm_init(uintptr_t mem_start, size_t mem_size)
 {
