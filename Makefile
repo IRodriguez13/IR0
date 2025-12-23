@@ -105,6 +105,28 @@ QEMU_DEBUG_PAGE = -d page
 QEMU_DEBUG_ALL = -d int,cpu_reset,exec,guest_errors,page
 QEMU_LOG_FILE = -D qemu_debug.log
 
+# Hardware soportado por IR0 Kernel (configuración completa)
+# Network: RTL8139 y e1000 (Intel)
+QEMU_NET_RTL8139 = -netdev user,id=net0 -device rtl8139,netdev=net0
+# QEMU_NET_E1000 = -netdev user,id=net1 -device e1000,netdev=net1
+QEMU_NET_ALL = $(QEMU_NET_RTL8139) $(QEMU_NET_E1000)
+
+# Audio: Sound Blaster 16 y Adlib OPL2 (sintaxis moderna QEMU)
+QEMU_AUDIO_SB16 = -device sb16
+QEMU_AUDIO_ADLIB = -device adlib
+QEMU_AUDIO_ALL = $(QEMU_AUDIO_SB16) $(QEMU_AUDIO_ADLIB)
+
+# Storage: ATA/IDE disk
+QEMU_STORAGE_IDE = -drive file=disk.img,format=raw,if=ide,index=0
+
+# Serial: COM1 para debug
+QEMU_SERIAL_COM1 = -serial stdio
+
+# Hardware completo soportado por IR0
+# Incluye: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2 (default), VGA (default)
+# Nota: e1000 desactivado temporalmente por problemas de inicialización
+QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1)
+
 # Flags específicos por arquitectura
 QEMU_64_FLAGS = -cdrom
 QEMU_32_FLAGS = -cdrom
@@ -132,7 +154,7 @@ KERNEL_OBJS = \
 	kernel/rr_sched.o \
     kernel/task.o \
     kernel/syscalls.o \
-    kernel/shell.o \
+    kernel/dbgshell.o \
     kernel/elf_loader.o \
     kernel/user.o \
     kernel/driver_registry.o
@@ -164,8 +186,10 @@ DRIVER_OBJS = \
     drivers/IO/ps2.o \
     drivers/IO/ps2_mouse.o \
     drivers/audio/sound_blaster.o \
+    drivers/audio/adlib.o \
     drivers/dma/dma.o \
     drivers/net/rtl8139.o \
+    drivers/net/e1000.o \
     drivers/serial/serial.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
@@ -191,7 +215,8 @@ DISK_OBJS = \
     drivers/disk/partition.o
 
 NET_OBJS = \
-    net/net.o
+    net/net.o \
+    net/arp.o
 
 ARCH_OBJS = \
     arch/x86-64/sources/arch_x64.o \
@@ -278,30 +303,29 @@ windows-clean win-clean:
 
 # QEMU COMMANDS
 
-# Run with GUI and disk (default)
+# Run with GUI and disk (default) - ALL IR0 SUPPORTED HARDWARE
 run: kernel-x64.iso disk.img
-	@echo "🚀 Running IR0 Kernel..."
+	@echo "🚀 Running IR0 Kernel with all supported hardware..."
+	@echo "   Hardware: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2, VGA"
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-		-drive file=disk.img,format=raw,if=ide,index=0 \
+		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
-		-display gtk -serial stdio \
-		-net nic,model=rtl8139 -net user \
-		-d guest_errors -D qemu_debug.log
+		$(QEMU_DISPLAY) \
+		$(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
 
-# Run with GUI and serial debug output
+# Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
 run-debug: kernel-x64.iso disk.img
-	@echo "🐛 Running IR0 Kernel with debug output..."
+	@echo "🐛 Running IR0 Kernel with debug output and all supported hardware..."
+	@echo "   Hardware: RTL8139, e1000, SB16, ATA/IDE, Serial, PS/2, VGA"
 	@echo "Serial output will appear in this terminal"
 	@echo "QEMU GUI will open in separate window"
 	@echo "Press Ctrl+C to stop"
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-		-drive file=disk.img,format=raw,if=ide,index=0 \
+		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
-		-display gtk \
-		-serial stdio \
-		-net nic,model=rtl8139 -net user \
+		$(QEMU_DISPLAY) \
 		-monitor telnet:127.0.0.1:1234,server,nowait \
-		-d guest_errors,int -D qemu_debug.log
+		-d guest_errors,int $(QEMU_LOG_FILE)
 
 # Run without disk
 run-nodisk: kernel-x64.iso
@@ -310,23 +334,35 @@ run-nodisk: kernel-x64.iso
 		-m 512M -no-reboot -no-shutdown \
 		-display gtk -serial stdio
 
-# Run in console mode (attach disk image)
+# Run in console mode (attach disk image) - ALL IR0 SUPPORTED HARDWARE
 run-console: kernel-x64.iso disk.img
-	@echo "Running IR0 Kernel (console)..."
+	@echo "Running IR0 Kernel (console) with all supported hardware..."
+	@echo "   Hardware: RTL8139, e1000, SB16, ATA/IDE, Serial, PS/2"
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-		-drive file=disk.img,format=raw,if=ide,index=0 \
+		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
-		-net nic,model=rtl8139 -net user \
-		-nographic
+		$(QEMU_NGRAPHIC)
 
-# Debug mode (detailed QEMU logging)
+# Debug mode (detailed QEMU logging) - ALL IR0 SUPPORTED HARDWARE
 debug: kernel-x64.iso disk.img
-	@echo "Running IR0 Kernel (debug)..."
+	@echo "Running IR0 Kernel (debug) with all supported hardware..."
+	@echo "   Hardware: RTL8139, e1000, SB16, ATA/IDE, Serial, PS/2, VGA"
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
-		-drive file=disk.img,format=raw,if=ide,index=0 \
+		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
-		-display gtk -serial stdio \
-		-d int,cpu_reset,guest_errors -D qemu_debug.log
+		$(QEMU_DISPLAY) \
+		-d int,cpu_reset,guest_errors $(QEMU_LOG_FILE)
+
+# Run with minimal hardware (only essentials for testing)
+run-minimal: kernel-x64.iso disk.img
+	@echo "Running IR0 Kernel (minimal hardware)..."
+	@echo "   Hardware: RTL8139 only, ATA/IDE, Serial"
+	qemu-system-x86_64 -cdrom kernel-x64.iso \
+		-netdev user,id=net0 -device rtl8139,netdev=net0 \
+		$(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) \
+		-m 512M -no-reboot -no-shutdown \
+		$(QEMU_DISPLAY) \
+		$(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
 
 # Create disk image (wrapper for scripts/create_disk.sh)
 create-disk: disk.img

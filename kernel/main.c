@@ -18,17 +18,69 @@
 #include <stdint.h>
 #include <drivers/IO/ps2_mouse.h>
 #include <drivers/audio/sound_blaster.h>
+#include <drivers/audio/adlib.h>
+#include <drivers/serial/serial.h>
 #include <ir0/memory/kmem.h>
 #include <ir0/memory/pmm.h>
-#include <drivers/net/rtl8139.h>
+#include <ir0/net.h>
 #include <init.h>
 #include <arch/x86-64/sources/user_mode.h>
 #include <rr_sched.h>
 #include <config.h>
 #include <kernel/elf_loader.h>
+#include <drivers/timer/clock_system.h>
 
 // Include kernel header with all function declarations
 #include "kernel.h"
+
+/**
+ * init_all_drivers - Initialize all hardware drivers
+ * 
+ * This function initializes all hardware drivers in the correct order
+ * and logs the initialization process via serial output.
+ */
+static void init_all_drivers(void)
+{
+    serial_print("[DRIVERS] Initializing all hardware drivers...\n");
+    
+    // Initialize PS/2 controller and keyboard
+    serial_print("[DRIVERS] Initializing PS/2 controller and keyboard...\n");
+    ps2_init();
+    keyboard_init();
+    pic_unmask_irq(1); // Enable keyboard IRQ
+    log_subsystem_ok("PS2_KEYBOARD");
+    serial_print("[DRIVERS] PS/2 keyboard initialized\n");
+    
+    // Initialize PS/2 mouse
+    serial_print("[DRIVERS] Initializing PS/2 mouse...\n");
+    ps2_mouse_init();
+    log_subsystem_ok("PS2_MOUSE");
+    serial_print("[DRIVERS] PS/2 mouse initialized\n");
+    
+    // Initialize audio drivers
+    serial_print("[DRIVERS] Initializing audio drivers...\n");
+    sb16_init();
+    log_subsystem_ok("AUDIO_SB16");
+    serial_print("[DRIVERS] Sound Blaster 16 initialized\n");
+    
+    adlib_init();
+    log_subsystem_ok("AUDIO_ADLIB");
+    serial_print("[DRIVERS] Adlib OPL2 initialized\n");
+    
+    // Initialize storage
+    serial_print("[DRIVERS] Initializing storage drivers...\n");
+    ata_init();
+    log_subsystem_ok("STORAGE");
+    serial_print("[DRIVERS] ATA/IDE storage initialized\n");
+    
+    // Initialize network stack (drivers + protocols)
+    serial_print("[DRIVERS] Initializing network stack...\n");
+    init_net_stack();
+    log_subsystem_ok("NETWORK_STACK");
+    serial_print("[DRIVERS] Network stack initialized\n");
+    
+    serial_print("[DRIVERS] All drivers initialized successfully\n");
+}
 
 void kmain(void)
 {
@@ -53,27 +105,8 @@ void kmain(void)
 
     log_subsystem_ok("CORE");
 
-    // Initialize PS/2 controller and keyboard
-    ps2_init();
-    keyboard_init();
-    pic_unmask_irq(1); // Enable keyboard IRQ
-    log_subsystem_ok("PS2_KEYBOARD");
-
-    // Initialize PS/2 mouse
-    ps2_mouse_init();
-    log_subsystem_ok("PS2_MOUSE");
-
-    // Initialize Sound Blaster audio
-    sb16_init();
-    log_subsystem_ok("AUDIO_SB16");
-
-    // Initialize storage
-    ata_init();
-    log_subsystem_ok("STORAGE");
-
-    // Initialize network card
-    rtl8139_init();
-    log_subsystem_ok("NET_RTL8139");
+    // Initialize all hardware drivers
+    init_all_drivers();
 
     // Initialize filesystem
     vfs_init_with_minix();
@@ -110,7 +143,6 @@ void kmain(void)
         panic("Failed to load /sbin/init");
     }
 #endif
-
 
     for (;;)
     {
