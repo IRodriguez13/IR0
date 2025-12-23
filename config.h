@@ -17,6 +17,8 @@
 #define DEBUG_MEMORY_ALLOCATOR 1      /* Enable allocator debug output */
 #define DEBUG_MEMORY_COALESCING 1     /* Track coalescing operations */
 #define DEBUG_MEMORY_STATS 1          /* Show allocation statistics */
+#define DEBUG_PMM 1                   /* Physical memory manager debug */
+
 
 /* Paging Debug */
 #define DEBUG_PAGING 0                /* Paging operations */
