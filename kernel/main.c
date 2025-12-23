@@ -23,7 +23,7 @@
 #include <init.h>
 #include <arch/x86-64/sources/user_mode.h>
 #include <rr_sched.h>
-#include <ir0/config.h>
+#include <config.h>
 #include <kernel/elf_loader.h>
 
 // Include kernel header with all function declarations
