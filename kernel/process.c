@@ -160,7 +160,7 @@ pid_t process_fork(void)
 	new_stack = kmalloc(current_process->stack_size);
 	if (!new_stack)
 	{
-		// Free page directory if allocated (simplified - in production would need proper cleanup)
+		/* Free page directory if allocated (simplified - in production would need proper cleanup) */
 		kfree(child);
 		return -1;
 	}
@@ -222,7 +222,7 @@ int process_wait(pid_t pid, int *status)
 		p = process_list;
 		while (p)
 		{
-			// Both pids are now of type pid_t (int32_t)
+			/* Both pids are now of type pid_t (int32_t) */
 			if ((uint32_t)p->task.pid == (uint32_t)pid && (uint32_t)p->ppid == (uint32_t)current_process->task.pid) // Conversión explícita
 			{
 				if (p->state == PROCESS_ZOMBIE)
