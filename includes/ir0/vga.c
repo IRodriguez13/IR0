@@ -1,17 +1,17 @@
 #include "vga.h"
 
-// Variables globales para trackear posición
+/* Variables globales para trackear posición */
 static int cursor_x = 0;
 static int cursor_y = 0;
 static unsigned char current_color = 0x0F; // Blanco sobre negro
 
-// Función para crear atributo de color
+/* Función para crear atributo de color */
 unsigned char make_color(unsigned char fg, unsigned char bg)
 {
     return fg | bg << 4;
 }
 
-// Función para poner un carácter en posición específica
+/* Función para poner un carácter en posición específica */
 void putchar_at(char c, unsigned char color, int x, int y)
 {
     unsigned short *vga = (unsigned short *)VGA_MEMORY;
@@ -19,18 +19,18 @@ void putchar_at(char c, unsigned char color, int x, int y)
     vga[index] = (unsigned short)c | (unsigned short)color << 8;
 }
 
-// Scroll screen up by one line
+/* Scroll screen up by one line */
 void scroll()
 {
     unsigned short *vga = (unsigned short *)VGA_MEMORY;
 
-    // Mover todas las líneas una posición arriba
+    /* Mover todas las líneas una posición arriba */
     for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++)
     {
         vga[i] = vga[i + VGA_WIDTH];
     }
 
-    // Limpiar la última línea
+    /* Limpiar la última línea */
     for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++)
     {
         vga[i] = make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK) << 8 | ' ';
@@ -39,7 +39,7 @@ void scroll()
     cursor_y = VGA_HEIGHT - 1;
 }
 
-// Función para poner un carácter (con cursor automático)
+/* Función para poner un carácter (con cursor automático) */
 void putchar(char c)
 {
     if (c == '\n') // el famoso "salto de línea"
@@ -68,14 +68,14 @@ void putchar(char c)
         cursor_x++;
     }
 
-    // Nueva línea si llegamos al final, que sería la columna 79 o la 80-1
+    /* Nueva línea si llegamos al final, que sería la columna 79 o la 80-1 */
     if (cursor_x >= VGA_WIDTH)
     {
         cursor_x = 0;
         cursor_y++;
     }
 
-    // Scroll si llegamos al final de la pantalla
+    /* Scroll si llegamos al final de la pantalla */
     if (cursor_y >= VGA_HEIGHT)
     {
         scroll();
@@ -92,7 +92,7 @@ void print(const char *str)
     }
 }
 
-// Funciones útiles adicionales
+/* Funciones útiles adicionales */
 void print_colored(const char *str, unsigned char fg, unsigned char bg)
 {
     unsigned char old_color = current_color;
@@ -115,7 +115,7 @@ void clear_screen()
     cursor_y = 0;
 }
 
-// Función para printf básico (sin implementar aquí, pero la idea)
+/* Función para printf básico (sin implementar aquí, pero la idea) */
 void set_cursor_pos(int x, int y)
 {
     if (x >= 0 && x < VGA_WIDTH && y >= 0 && y < VGA_HEIGHT)
@@ -207,27 +207,27 @@ void print_uint64(uint64_t num)
     char buffer[21]; // Máximo 20 dígitos para uint64_t + null terminator
     int index = 0;
 
-    // Caso especial para 0
+    /* Caso especial para 0 */
     if (num == 0)
     {
         print("0");
         return;
     }
 
-    // Convertir a string (en orden inverso)
+    /* Convertir a string (en orden inverso) */
     while (num > 0)
     {
         buffer[index++] = '0' + (num % 10);
         num /= 10;
     }
 
-    // Imprimir en orden correcto
+    /* Imprimir en orden correcto */
     for (int i = index - 1; i >= 0; i--)
     {
         putchar(buffer[i]);
     }
 #else
-    // En 32-bit, solo imprimir los 32 bits superiores e inferiores por separado
+    /* En 32-bit, solo imprimir los 32 bits superiores e inferiores por separado */
     print("0x");
     print_hex32((uint32_t)(num >> 32));
     print_hex32((uint32_t)(num & 0xFFFFFFFF));
@@ -246,21 +246,21 @@ void print_int32(int32_t num)
     char buffer[12]; // Máximo 11 dígitos para int32_t + null terminator
     int index = 0;
 
-    // Caso especial para 0
+    /* Caso especial para 0 */
     if (num == 0)
     {
         print("0");
         return;
     }
 
-    // Convertir a string (en orden inverso)
+    /* Convertir a string (en orden inverso) */
     while (num > 0)
     {
         buffer[index++] = '0' + (num % 10);
         num /= 10;
     }
 
-    // Imprimir en orden correcto
+    /* Imprimir en orden correcto */
     for (int i = index - 1; i >= 0; i--)
     {
         putchar(buffer[i]);
@@ -272,21 +272,21 @@ void print_uint32(uint32_t num)
     char buffer[11]; // Máximo 10 dígitos para uint32_t + null terminator
     int index = 0;
 
-    // Caso especial para 0
+    /* Caso especial para 0 */
     if (num == 0)
     {
         print("0");
         return;
     }
 
-    // Convertir a string (en orden inverso)
+    /* Convertir a string (en orden inverso) */
     while (num > 0)
     {
         buffer[index++] = '0' + (num % 10);
         num /= 10;
     }
 
-    // Imprimir en orden correcto
+    /* Imprimir en orden correcto */
     for (int i = index - 1; i >= 0; i--)
     {
         putchar(buffer[i]);
@@ -295,21 +295,21 @@ void print_uint32(uint32_t num)
 
 void delay_ms(uint32_t ms)
 {
-    // Delay simple usando loops
-    // Aproximadamente 1ms por cada 100,000 iteraciones
+    /* Delay simple usando loops */
+    /* Aproximadamente 1ms por cada 100,000 iteraciones */
     for (volatile uint32_t i = 0; i < ms * 100000; i++)
     {
         __asm__ volatile("nop");
     }
 }
 
-// Función para convertir uint a hex string
+/* Función para convertir uint a hex string */
 void uint_to_hex(uintptr_t value, char *hex_str)
 {
     char hex_chars[] = "0123456789ABCDEF";
     int i = 0;
 
-    // Convertir a hex
+    /* Convertir a hex */
     for (int j = 7; j >= 0; j--)
     {
         uint8_t nibble = (value >> (j * 4)) & 0xF;
@@ -318,7 +318,7 @@ void uint_to_hex(uintptr_t value, char *hex_str)
     hex_str[i] = '\0';
 }
 
-// Función para imprimir valores hexadecimales
+/* Función para imprimir valores hexadecimales */
 void print_hex(uintptr_t value)
 {
     char hex_str[20];

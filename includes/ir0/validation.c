@@ -2,17 +2,13 @@
 #include "logging.h"
 #include "string.h"
 
-// ===============================================================================
-// CONSTANTS
-// ===============================================================================
+/* CONSTANTS */
 
 #define MAX_FD_COUNT 1024
 #define MAX_PATH_LENGTH 4096
 #define MAX_BUFFER_SIZE (1024 * 1024) // 1MB
 
-// ===============================================================================
-// VALIDATION FUNCTIONS
-// ===============================================================================
+/* VALIDATION FUNCTIONS */
 
 int validate_pointer(const void *ptr, const char *context)
 {
@@ -32,7 +28,7 @@ int validate_string(const char *str, const char *context)
         return VALIDATION_ERROR_NULL_POINTER;
     }
 
-    // Check for null-terminated string
+    /* Check for null-terminated string */
     size_t len = strlen(str);
     if (len > MAX_PATH_LENGTH)
     {
@@ -118,7 +114,7 @@ int validate_path(const char *path, const char *context)
         return VALIDATION_ERROR_INVALID_PATH;
     }
 
-    // Check for path traversal attempts
+    /* Check for path traversal attempts */
     if (strstr(path, "..") != NULL)
     {
         log_warn_fmt("VALIDATION", "Path traversal attempt in %s: %s", context, path);
@@ -161,8 +157,8 @@ int validate_memory_access(const void *ptr, size_t size, const char *context)
         return VALIDATION_ERROR_INVALID_SIZE;
     }
 
-    // TODO: Add memory boundary checks
-    // This would require knowledge of memory layout
+    /* TODO: Add memory boundary checks */
+    /* This would require knowledge of memory layout */
 
     return VALIDATION_SUCCESS;
 }
@@ -187,8 +183,8 @@ int validate_user_buffer(const void *buf, size_t size, const char *context)
         return VALIDATION_ERROR_INVALID_SIZE;
     }
 
-    // TODO: Add user space validation
-    // This would require checking if the buffer is in user space
+    /* TODO: Add user space validation */
+    /* This would require checking if the buffer is in user space */
 
     return VALIDATION_SUCCESS;
 }
@@ -204,9 +200,7 @@ int validate_permissions(int flags, int allowed_flags, const char *context)
     return VALIDATION_SUCCESS;
 }
 
-// ===============================================================================
-// ERROR HANDLING
-// ===============================================================================
+/* ERROR HANDLING */
 
 const char *validation_error_string(validation_error_t error)
 {

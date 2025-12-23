@@ -19,27 +19,27 @@
 #include <memory/allocator.h>
 #include <ir0/memory/kmem.h>
 
-// ===============================================================================
-// VARIABLES GLOBALES
-// ===============================================================================
+/* =============================================================================== */
+/* VARIABLES GLOBALES */
+/* =============================================================================== */
 
 task_t *idle_task = NULL;
 static uint32_t next_pid = 1;
 static task_t *task_list = NULL;
 
-// Variable global para la tarea actualmente ejecutándose
+/* Variable global para la tarea actualmente ejecutándose */
 task_t *current_running_task = NULL;
 
 
-// Función que ejecuta el idle task - simplemente hace HLT
+/* Función que ejecuta el idle task - simplemente hace HLT */
 void idle_task_function(void *arg)
 {
     (void)arg; // Evitar warning de parámetro no usado
 
-    // Función simple que solo hace HLT
+    /* Función simple que solo hace HLT */
     cpu_wait();
 
-    // Si llega acá, a hacer noni.
+    /* Si llega acá, a hacer noni. */
     cpu_relax();
 }
 
@@ -58,7 +58,7 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
 
     memset(task, 0, sizeof(task_t));
 
-    // Setup básico
+    /* Setup básico */
     task->pid = next_pid++;
     task->priority = priority;
     task->nice = nice;
@@ -68,13 +68,13 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
     task->entry = entry;
     task->entry_arg = arg;
 
-    // Setup correcto del stack para x86-64
+    /* Setup correcto del stack para x86-64 */
     uint64_t *stack_ptr = (uint64_t *)((uintptr_t)stack + DEFAULT_STACK_SIZE);
 
-    // Alinear a 16 bytes (ABI x86-64)
+    /* Alinear a 16 bytes (ABI x86-64) */
     stack_ptr = (uint64_t *)((uintptr_t)stack_ptr & ~0xF);
 
-    // Setup stack frame que switch_context_x64 espera
+    /* Setup stack frame que switch_context_x64 espera */
     *--stack_ptr = 0; // User SS (if needed)
     uint64_t user_rsp = (uint64_t)stack_ptr + 16;
     *--stack_ptr = user_rsp;        // User RSP
@@ -82,7 +82,7 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
     *--stack_ptr = 0x08;            // Kernel CS
     *--stack_ptr = (uint64_t)entry; // RIP - donde saltar
 
-    // El assembly switch_context_x64 restaurará estos registros
+    /* El assembly switch_context_x64 restaurará estos registros */
     task->rsp = (uint64_t)stack_ptr;
     task->rbp = 0;
     task->rip = (uint64_t)entry; // Punto de entrada
@@ -90,7 +90,7 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
     task->cs = 0x08;             // Kernel code segment
     task->ss = 0x10;             // Kernel data segment
 
-    // Agregar a lista global
+    /* Agregar a lista global */
     task->next = task_list;
     task_list = task;
 
@@ -104,17 +104,17 @@ void destroy_task(task_t *task)
         return;
     }
 
-    // Marcar como terminada
+    /* Marcar como terminada */
     task->state = TASK_TERMINATED;
 
-    // Liberar stack
+    /* Liberar stack */
     if (task->stack_base)
     {
         kfree(task->stack_base);
         task->stack_base = NULL;
     }
 
-    // Remover de lista global
+    /* Remover de lista global */
     if (task_list == task)
     {
         task_list = task->next;
@@ -132,7 +132,7 @@ void destroy_task(task_t *task)
         }
     }
 
-    // Liberar estructura
+    /* Liberar estructura */
     kfree(task);
 }
 
@@ -196,7 +196,7 @@ void task_get_info(task_t *task)
 }
 
 
-// Función de test task que hace algo útil
+/* Función de test task que hace algo útil */
 void test_task_function(void *arg)
 {
     int task_id = (int)(uintptr_t)arg;
@@ -205,7 +205,7 @@ void test_task_function(void *arg)
     print_hex_compact(task_id);
     print(" started\n");
 
-    // Simular trabajo de la tarea
+    /* Simular trabajo de la tarea */
     for (int i = 0; i < 5; i++)
     {
         print("Task ");
@@ -214,10 +214,10 @@ void test_task_function(void *arg)
         print_hex_compact(i);
         print("\n");
 
-        // Simular trabajo de CPU
+        /* Simular trabajo de CPU */
         for (volatile int j = 0; j < 1000000; j++)
         {
-            // CPU work
+            /* CPU work */
         }
     }
 

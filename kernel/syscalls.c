@@ -39,34 +39,10 @@
 #include <ir0/driver.h>
 #include <drivers/audio/sound_blaster.h>
 #include <drivers/IO/ps2_mouse.h>
+#include <ir0/errno.h>
+#include <ir0/copy_user.h>
 
-// ATA driver function declarations
-extern bool ata_drive_present(uint8_t drive);
-extern uint64_t ata_get_size(uint8_t drive);
-extern const char* ata_get_model(uint8_t drive);
-extern const char* ata_get_serial(uint8_t drive);
-extern bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t count, void *buffer);
-extern const char* get_fs_type(uint8_t system_id);
-
-// Basic types and constants
-typedef uint32_t mode_t;
-
-#define ESRCH 3
-#define EBADF 9
-#define EFAULT 14
-#define ENOSYS 38
-#define ENOENT 2
-#define EMFILE 24
-#define EINVAL 22
-#define ESPIPE 29
-#define EIO 5
-
-// File descriptors
-#define STDIN_FILENO 0
-#define STDOUT_FILENO 1
-#define STDERR_FILENO 2
-
-// Forward declaration
+/* Forward declaration */
 static fd_entry_t *get_process_fd_table(void);
 
 
@@ -78,12 +54,12 @@ int64_t sys_exit(int exit_code)
   current_process->exit_code = exit_code;
   current_process->state = PROCESS_ZOMBIE;
 
-  // Llamar al scheduler para pasar a otro proceso
+  /* Llamar al scheduler para pasar a otro proceso */
   rr_schedule_next();
 
   panicex("You left the shell succesfully! but you should't do that!", RUNNING_OUT_PROCESS, "SYSCALLS.C", 75, "sys_exit");
 
-  // Nunca debería volver aquí
+  /* Nunca debería volver aquí */
   return 0;
 }
 
@@ -98,7 +74,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   {
     const char *str = (const char *)buf;
     uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
-    // Use typewriter VGA effect for console output
+    /* Use typewriter VGA effect for console output */
     for (size_t i = 0; i < count && i < 1024; i++)
     {
       if (str[i] == '\n')
@@ -111,12 +87,12 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     return (int64_t)count;
   }
 
-  // Handle regular file descriptors
+  /* Handle regular file descriptors */
   fd_entry_t *fd_table = get_process_fd_table();
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
 
-  // Use VFS file handle if available
+  /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)
   {
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
@@ -141,11 +117,11 @@ int64_t sys_read(int fd, void *buf, size_t count)
 
   if (fd == STDIN_FILENO)
   {
-    // Read from keyboard buffer - NON-BLOCKING
+    /* Read from keyboard buffer - NON-BLOCKING */
     char *buffer = (char *)buf;
     size_t bytes_read = 0;
 
-    // Only read if there's data available
+    /* Only read if there's data available */
     if (keyboard_buffer_has_data())
     {
       char c = keyboard_buffer_get();
@@ -158,12 +134,12 @@ int64_t sys_read(int fd, void *buf, size_t count)
     return (int64_t)bytes_read; // Return 0 if no data available
   }
 
-  // Handle regular file descriptors
+  /* Handle regular file descriptors */
   fd_entry_t *fd_table = get_process_fd_table();
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
 
-  // Use VFS file handle if available
+  /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)
   {
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
@@ -198,12 +174,12 @@ int64_t sys_ls(const char *pathname)
   if (!current_process)
     return -ESRCH;
 
-  // Use VFS layer for better abstraction
+  /* Use VFS layer for better abstraction */
   const char *target_path = pathname ? pathname : "/";
   return vfs_ls(target_path);
 }
 
-// Enhanced ls with detailed file information (like Linux ls -l)
+/* Enhanced ls with detailed file information (like Linux ls -l) */
 int64_t sys_ls_detailed(const char *pathname)
 {
   if (!current_process)
@@ -211,7 +187,7 @@ int64_t sys_ls_detailed(const char *pathname)
 
   const char *target_path = pathname ? pathname : "/";
 
-  // First get directory listing, then stat each file
+  /* First get directory listing, then stat each file */
   return vfs_ls_with_stat(target_path);
 }
 
@@ -222,20 +198,20 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
   if (!pathname)
     return -EFAULT;
 
-  // Use VFS layer with proper mode
+  /* Use VFS layer with proper mode */
   return vfs_mkdir(pathname, (int)mode);
 }
 
 int64_t sys_ps(void)
 {
-  // REAL sys_ps() - uses only real process management
+  /* REAL sys_ps() - uses only real process management */
 
   serial_print("SERIAL: REAL sys_ps() called\n");
 
   sys_write(1, "PID  STATE     COMMAND\n", 22);
   sys_write(1, "---  --------  -------\n", 23);
 
-  // Get REAL process list
+  /* Get REAL process list */
   process_t *proc_list = get_process_list();
 
   serial_print("SERIAL: Real process_list = ");
@@ -246,7 +222,7 @@ int64_t sys_ps(void)
   {
     serial_print("SERIAL: No processes in list, checking current_process\n");
 
-    // If list is empty but current_process exists, add it
+    /* If list is empty but current_process exists, add it */
     if (current_process)
     {
       serial_print("SERIAL: Adding current_process to list\n");
@@ -257,7 +233,7 @@ int64_t sys_ps(void)
   }
 
 
-  // Iterate through REAL process list
+  /* Iterate through REAL process list */
   process_t *proc = proc_list;
   int count = 0;
 
@@ -269,10 +245,10 @@ int64_t sys_ps(void)
     serial_print_hex32(proc->state);
     serial_print("\n");
 
-    // Show PID
+    /* Show PID */
     sys_write(1, "  ", 2);
 
-    // Convert PID to string
+    /* Convert PID to string */
     char pid_str[12];
     uint32_t pid = process_pid(proc);
     int len = 0;
@@ -299,7 +275,7 @@ int64_t sys_ps(void)
 
     sys_write(1, pid_str, len);
 
-    // Show state with proper spacing
+    /* Show state with proper spacing */
     switch (proc->state)
     {
     case PROCESS_READY:
@@ -319,14 +295,14 @@ int64_t sys_ps(void)
       break;
     }
 
-    // Show command name from process structure
+    /* Show command name from process structure */
     if (process_pid(proc) == 0)
     {
       sys_write(1, "kernel\n", 7);
     }
     else
     {
-      // Use comm field if available, otherwise default
+      /* Use comm field if available, otherwise default */
       if (proc->comm[0] != '\0')
       {
         size_t comm_len = 0;
@@ -409,7 +385,7 @@ int64_t sys_write_file(const char *pathname, const char *content)
     return -EFAULT;
   }
 
-  // Validar que los punteros estén en rango válido
+  /* Validar que los punteros estén en rango válido */
   if ((uint64_t)pathname < 0x1000 || (uint64_t)content < 0x1000)
   {
     serial_print("SERIAL: sys_write_file: invalid pointer range\n");
@@ -444,7 +420,7 @@ int64_t sys_exec(const char *pathname,
     return -EFAULT;
   }
 
-  // For now, simple implementation - load and execute ELF
+  /* For now, simple implementation - load and execute ELF */
   return elf_load_and_execute(pathname);
 }
 
@@ -453,7 +429,7 @@ int64_t sys_touch(const char *pathname)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  // Use default file permissions (0644 = rw-r--r--)
+  /* Use default file permissions (0644 = rw-r--r--) */
   mode_t default_mode = 0644;
 
   if (minix_fs_is_working())
@@ -511,7 +487,7 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   return ret;
 }
 
-// Get current user information
+/* Get current user information */
 int64_t sys_whoami(void) {
   if (!current_process)
     return -ESRCH;
@@ -522,7 +498,7 @@ int64_t sys_whoami(void) {
     return -1;
   }
 
-  // Print username
+  /* Print username */
   sys_write(STDOUT_FILENO, user.name, strlen(user.name));
   sys_write(STDOUT_FILENO, "\n", 1);
 
@@ -534,7 +510,7 @@ int64_t sys_chmod(const char *path, mode_t mode)
   if (!current_process || !path)
     return -EFAULT;
 
-  // Call chmod through VFS layer
+  /* Call chmod through VFS layer */
   extern int chmod(const char *path, mode_t mode);
   return chmod(path, mode);
 }
@@ -544,7 +520,7 @@ int64_t sys_append(const char *path, const char *content, size_t count)
   if (!current_process || !path || !content)
     return -EFAULT;
 
-  // Call append through VFS layer
+  /* Call append through VFS layer */
   extern int vfs_append(const char *path, const char *content, size_t count);
   return vfs_append(path, content, count);
 }
@@ -569,7 +545,7 @@ int64_t sys_df(void)
     if (len < 0 || len >= (int)sizeof(devname))
       continue;
 
-    // ata_get_size() returns size in 512-byte sectors
+    /* ata_get_size() returns size in 512-byte sectors */
     uint64_t size = ata_get_size(i);
     if (size == 0)
     {
@@ -580,7 +556,7 @@ int64_t sys_df(void)
     }
 
     char size_str[32];
-    // Same calculation as lsblk: sectors / (2 * 1024 * 1024) = GB
+    /* Same calculation as lsblk: sectors / (2 * 1024 * 1024) = GB */
     uint64_t size_gb = size / (2 * 1024 * 1024);
     if (size_gb > 0)
     {
@@ -588,7 +564,7 @@ int64_t sys_df(void)
     }
     else
     {
-      // sectors / (2 * 1024) = MB
+      /* sectors / (2 * 1024) = MB */
       uint64_t size_mb = size / (2 * 1024);
       len = snprintf(size_str, sizeof(size_str), "%lluM", size_mb);
     }
@@ -614,7 +590,7 @@ int64_t sys_link(const char *oldpath, const char *newpath)
   if (!current_process || !oldpath || !newpath)
     return -EFAULT;
 
-  // Call link through VFS layer
+  /* Call link through VFS layer */
   return vfs_link(oldpath, newpath);
 }
 
@@ -634,7 +610,7 @@ int64_t sys_lsblk(void)
 
   sys_write(1, "NAME MAJ:MIN SIZE MODEL\n", 23);
 
-  // For each drive
+  /* For each drive */
   for (int i = 0; i < drive_count; i++) {
     uint8_t drive = drives[i];
     char info[256];
@@ -644,26 +620,26 @@ int64_t sys_lsblk(void)
     const char *model = ata_get_model(drive);
     const char *serial = ata_get_serial(drive);
     
-    // Format basic info
+    /* Format basic info */
     len = snprintf(info, sizeof(info), "hd%c  %3d:0   %5lluG %s (%s)\n", 
                    'a' + drive, drive, size / (2 * 1024 * 1024), model, serial);
     
     sys_write(1, info, len);
 
-    // Read first sector to check partition table type
+    /* Read first sector to check partition table type */
     uint8_t first_sector[512];
     if (ata_read_sectors(drive, 0, 1, first_sector) == 0) {
-      // Detect partition table type and handle accordingly
+      /* Detect partition table type and handle accordingly */
       if (first_sector[450] == 0xEE) { // GPT signature check
-        // GPT handling will be implemented later
+        /* GPT handling will be implemented later */
         continue;
       }
 
-      // Check MBR signature
+      /* Check MBR signature */
       if (first_sector[510] == 0x55 && first_sector[511] == 0xAA) {
-        // Process MBR partition entries
+        /* Process MBR partition entries */
         for (int j = 0; j < 4; j++) {
-          // Partition entry offset calculation
+          /* Partition entry offset calculation */
           int entry_offset = 446 + (j * 16);
           uint8_t system_id = first_sector[entry_offset + 4];
           uint32_t total_sectors;
@@ -765,10 +741,10 @@ int64_t sys_fstat(int fd, stat_t *buf)
   if (!fd_table[fd].in_use)
     return -EBADF;
 
-  // Handle standard file descriptors
+  /* Handle standard file descriptors */
   if (fd <= 2)
   {
-    // Standard streams - fill with basic info
+    /* Standard streams - fill with basic info */
     buf->st_dev = 0;
     buf->st_ino = fd;
     buf->st_mode = S_IFCHR | S_IRUSR | S_IWUSR;
@@ -782,11 +758,11 @@ int64_t sys_fstat(int fd, stat_t *buf)
     return 0;
   }
 
-  // For regular files, get info from filesystem via VFS
+  /* For regular files, get info from filesystem via VFS */
   return vfs_stat(fd_table[fd].path, buf);
 }
 
-// Open file and return file descriptor
+/* Open file and return file descriptor */
 int64_t sys_open(const char *pathname, int flags, mode_t mode)
 {
   (void)mode; /* Mode handling not implemented yet */
@@ -796,7 +772,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
 
   fd_entry_t *fd_table = get_process_fd_table();
 
-  // Find free file descriptor
+  /* Find free file descriptor */
   int fd = -1;
   for (int i = 3; i < MAX_FDS_PER_PROCESS;
        i++)
@@ -811,7 +787,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   if (fd == -1)
     return -EMFILE; // Too many open files
 
-  // Open file using VFS layer to get real file handle
+  /* Open file using VFS layer to get real file handle */
   struct vfs_file *vfs_file = NULL;
   int ret = vfs_open(pathname, flags, &vfs_file);
   if (ret != 0)
@@ -819,7 +795,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     return -ENOENT;
   }
 
-  // Set up file descriptor with real VFS file handle
+  /* Set up file descriptor with real VFS file handle */
   fd_table[fd].in_use = true;
   strncpy(fd_table[fd].path, pathname, sizeof(fd_table[fd].path) - 1);
   fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
@@ -846,7 +822,7 @@ int64_t sys_close(int fd)
   if (fd <= 2)
     return -EBADF;
 
-  // Close VFS file if it exists
+  /* Close VFS file if it exists */
   if (fd_table[fd].vfs_file)
   {
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
@@ -887,14 +863,14 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
   }
   else
   {
-    // Use VFS file handle if available for better offset management
+    /* Use VFS file handle if available for better offset management */
     if (fd_table[fd].vfs_file)
     {
       struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
       if (vfs_file->f_inode && vfs_file->f_inode->i_fop && 
           vfs_file->f_inode->i_fop->seek)
       {
-        // Use filesystem's seek implementation
+        /* Use filesystem's seek implementation */
         off_t result = vfs_file->f_inode->i_fop->seek(vfs_file, offset, whence);
         if (result < 0)
           return result;
@@ -903,7 +879,7 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
       }
       else
       {
-        // Fallback to stat-based calculation
+        /* Fallback to stat-based calculation */
         stat_t st;
         if (vfs_stat(fd_table[fd].path, &st) != 0)
           return -EBADF;
@@ -927,7 +903,7 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     }
     else
     {
-      // Fallback to stat-based calculation
+      /* Fallback to stat-based calculation */
       stat_t st;
       if (vfs_stat(fd_table[fd].path, &st) != 0)
         return -EBADF;
@@ -992,13 +968,13 @@ int64_t sys_dup2(int oldfd, int newfd)
   return newfd;
 }
 
-// Helper function to get file stats by path (for ls improvement)
+/* Helper function to get file stats by path (for ls improvement) */
 int64_t sys_stat(const char *pathname, stat_t *buf)
 {
   if (!current_process || !pathname || !buf)
     return -EFAULT;
 
-  // Use VFS layer instead of direct MINIX calls
+  /* Use VFS layer instead of direct MINIX calls */
   return vfs_stat(pathname, buf);
 }
 
@@ -1037,7 +1013,7 @@ int64_t sys_kernel_info(void *info_buffer, size_t buffer_size)
   if (buffer_size < len)
     len = buffer_size;
 
-  // Simple copy without memcpy dependency
+  /* Simple copy without memcpy dependency */
   char *dst = (char *)info_buffer;
   for (size_t i = 0; i < len; i++)
     dst[i] = info[i];
@@ -1051,16 +1027,16 @@ int64_t sys_brk(void *addr)
   if (!current_process)
     return -ESRCH;
 
-  // If addr is NULL, return current break
+  /* If addr is NULL, return current break */
   if (!addr)
     return (int64_t)current_process->heap_end;
 
-  // Validate new break address
+  /* Validate new break address */
   if (addr < (void *)current_process->heap_start ||
       addr > (void *)((char *)current_process->heap_start + 0x10000000))
     return -EFAULT;
 
-  // Set new break
+  /* Set new break */
   current_process->heap_end = (uint64_t)addr;
   return (int64_t)addr;
 }
@@ -1073,31 +1049,31 @@ void *sys_sbrk(intptr_t increment)
   void *old_break = (void *)current_process->heap_end;
   void *new_break = (char *)old_break + increment;
 
-  // Check bounds (simplified)
+  /* Check bounds (simplified) */
   if (new_break < (void *)current_process->heap_start ||
       new_break > (void *)((char *)current_process->heap_start + 0x10000000))
     return (void *)-1;
 
-  // Update break
+  /* Update break */
   current_process->heap_end = (uint64_t)new_break;
   return old_break;
 }
 
-// ============================================================================
-// MEMORY MAPPING SYSCALLS (mmap/munmap)
-// ============================================================================
+/* ============================================================================ */
+/* MEMORY MAPPING SYSCALLS (mmap/munmap) */
+/* ============================================================================ */
 
-// mmap flags
+/* mmap flags */
 #define MAP_PRIVATE 0x02
 #define MAP_ANONYMOUS 0x20
 #define MAP_SHARED 0x01
 
-// Protection flags
+/* Protection flags */
 #define PROT_READ 0x1
 #define PROT_WRITE 0x2
 #define PROT_EXEC 0x4
 
-// Simple memory mapping structure
+/* Simple memory mapping structure */
 struct mmap_region
 {
   void *addr;
@@ -1117,7 +1093,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
   (void)fd;
   (void)offset; // Ignore for now
 
-  // Debug output to serial
+  /* Debug output to serial */
   serial_print("SERIAL: mmap: entering syscall\n");
 
   if (!current_process)
@@ -1132,12 +1108,12 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
     return (void *)-1;
   }
 
-  // Debug: show what flags we received
+  /* Debug: show what flags we received */
   serial_print("SERIAL: mmap: flags received = ");
   serial_print_hex32((uint32_t)flags);
   serial_print("\n");
 
-  // Only support anonymous mapping for now
+  /* Only support anonymous mapping for now */
   if (!(flags & MAP_ANONYMOUS))
   {
     serial_print("SERIAL: mmap: not anonymous mapping\n");
@@ -1147,17 +1123,17 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
 
   sys_write(1, "mmap: allocating memory\n", 24);
 
-  // Align length to reasonable boundary
+  /* Align length to reasonable boundary */
   length = (length + 15) & ~15;
 
-  // For simplicity, use kernel allocator to get real memory
+  /* For simplicity, use kernel allocator to get real memory */
   void *real_addr = kmalloc(length);
   if (!real_addr)
   {
     return (void *)-1;
   }
 
-  // Create mapping entry
+  /* Create mapping entry */
   struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
   if (!region)
   {
@@ -1172,7 +1148,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
   region->next = mmap_list;
   mmap_list = region;
 
-  // Zero the memory if it's anonymous
+  /* Zero the memory if it's anonymous */
   if (flags & MAP_ANONYMOUS)
   {
     for (size_t i = 0; i < length; i++)
@@ -1187,7 +1163,7 @@ int sys_munmap(void *addr, size_t length)
   if (!current_process || !addr || length == 0)
     return -1;
 
-  // Find the mapping
+  /* Find the mapping */
   struct mmap_region *current = mmap_list;
   struct mmap_region *prev = NULL;
 
@@ -1195,13 +1171,13 @@ int sys_munmap(void *addr, size_t length)
   {
     if (current->addr == addr && current->length == length)
     {
-      // Remove from list
+      /* Remove from list */
       if (prev)
         prev->next = current->next;
       else
         mmap_list = current->next;
 
-      // Free the mapping structure
+      /* Free the mapping structure */
       kfree(current);
       return 0;
     }
@@ -1217,14 +1193,14 @@ int sys_mprotect(void *addr, size_t len, int prot)
   if (!current_process || !addr || len == 0)
     return -1;
 
-  // Find the mapping
+  /* Find the mapping */
   struct mmap_region *current = mmap_list;
   while (current)
   {
     if (current->addr <= addr &&
         (char *)addr + len <= (char *)current->addr + current->length)
     {
-      // Update protection
+      /* Update protection */
       current->prot = prot;
       return 0;
     }
@@ -1387,13 +1363,13 @@ int64_t sys_mouse_test(void)
 
 void syscalls_init(void)
 {
-  // Connect to REAL process management only
+  /* Connect to REAL process management only */
   serial_print("SERIAL: syscalls_init: using REAL process management\n");
 
-  // Initialize user subsystem
+  /* Initialize user subsystem */
   user_init();
 
-  // Debug: check real process system
+  /* Debug: check real process system */
   process_t *real_current = current_process;
   process_t *real_list = get_process_list();
 
@@ -1405,16 +1381,16 @@ void syscalls_init(void)
   serial_print_hex32((uint32_t)(uintptr_t)real_list);
   serial_print("\n");
 
-  // Register syscall interrupt handler
+  /* Register syscall interrupt handler */
   extern void syscall_entry_asm(void);
   extern void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel,
                              uint8_t flags);
 
-  // IDT entry 0x80 for syscalls (DPL=3 for user mode)
+  /* IDT entry 0x80 for syscalls (DPL=3 for user mode) */
   idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE);
 }
 
-// Syscall dispatcher called from assembly
+/* Syscall dispatcher called from assembly */
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                          uint64_t arg3, uint64_t arg4, uint64_t arg5)
 {

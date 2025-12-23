@@ -20,7 +20,7 @@
 #include <drivers/storage/fs_types.h>
 #include "kernel/syscalls.h" // Ensure SYS_GET_BLOCK_DEVICES is included
 
-// kernel/shell.c: use public headers for functions (kmem/string)
+/* kernel/shell.c: use public headers for functions (kmem/string) */
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -112,7 +112,7 @@ static const char *skip_whitespace(const char *str)
   return str;
 }
 
-// Human-readable size: prints bytes in B, KB, MB, GB with suffix
+/* Human-readable size: prints bytes in B, KB, MB, GB with suffix */
 [[maybe_unused]]static void shell_print_hr_size(uint64_t bytes)
 {
   const char *units[] = {"B", "KB", "MB", "GB", "TB"};
@@ -123,7 +123,7 @@ static const char *skip_whitespace(const char *str)
     value /= 1024.0;
     unit++;
   }
-  // Print with one decimal if >= 10, else two decimals for small numbers
+  /* Print with one decimal if >= 10, else two decimals for small numbers */
   char buf[32];
   if (value >= 100.0)
     snprintf(buf, sizeof(buf), "%.0f%s", value, units[unit]);
@@ -167,7 +167,7 @@ static void cmd_ls(const char *args)
 
   if (!args || *args == '\0')
   {
-    // Get current working directory
+    /* Get current working directory */
     if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) >= 0)
       path = cwd;
     else
@@ -179,7 +179,7 @@ static void cmd_ls(const char *args)
     path = skip_whitespace(args + 2);
     if (*path == '\0')
     {
-      // Get current working directory
+      /* Get current working directory */
       if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) >= 0)
         path = cwd;
       else
@@ -189,7 +189,7 @@ static void cmd_ls(const char *args)
   else if (str_starts_with(args, "-l"))
   {
     detailed = 1;
-    // Get current working directory
+    /* Get current working directory */
     if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) >= 0)
       path = cwd;
     else
@@ -241,7 +241,7 @@ static void cmd_rmdir(const char *args)
   int force = 0;
   const char *dirname = args;
 
-  // Check for -e flag
+  /* Check for -e flag */
   if (args[0] == '-')
   {
     int i = 1;
@@ -295,11 +295,11 @@ static void cmd_echo(const char *text)
     return;
   }
 
-  // Check for output redirection: support '>', ' > ', '>>', ' >> '
+  /* Check for output redirection: support '>', ' > ', '>>', ' >> ' */
   const char *redir = NULL;
   int append = 0;
 
-  // Search for '>>' first (append), then single '>' (overwrite)
+  /* Search for '>>' first (append), then single '>' (overwrite) */
   const char *pos = strstr(text, ">>");
   if (pos)
   {
@@ -318,12 +318,12 @@ static void cmd_echo(const char *text)
 
   if (redir)
   {
-    // Extract message (trim trailing space before redir)
+    /* Extract message (trim trailing space before redir) */
     size_t msg_len = (size_t)(redir - text);
     while (msg_len > 0 && (text[msg_len - 1] == ' ' || text[msg_len - 1] == '\t'))
       msg_len--;
 
-    // Build content (message + newline)
+    /* Build content (message + newline) */
     char *new_content = (char *)kmalloc(msg_len + 2);
     if (!new_content)
     {
@@ -335,9 +335,9 @@ static void cmd_echo(const char *text)
     new_content[msg_len] = '\n';
     new_content[msg_len + 1] = '\0';
 
-    // Determine filename start (skip redir token and whitespace)
+    /* Determine filename start (skip redir token and whitespace) */
     const char *fname_start = redir;
-    // Skip '>>' or '>' tokens
+    /* Skip '>>' or '>' tokens */
     if (append && fname_start[0] == '>' && fname_start[1] == '>')
       fname_start += 2;
     else if (!append && fname_start[0] == '>')
@@ -351,12 +351,12 @@ static void cmd_echo(const char *text)
       return;
     }
 
-    // Normalize path: convert relative paths to absolute paths
-    // If path doesn't start with '/', prepend '/' to make it absolute
+    /* Normalize path: convert relative paths to absolute paths */
+    /* If path doesn't start with '/', prepend '/' to make it absolute */
     char normalized_path[256];
     if (fname_start[0] == '/')
     {
-      // Already absolute path
+      /* Already absolute path */
       size_t len = strlen(fname_start);
       if (len >= sizeof(normalized_path))
       {
@@ -368,7 +368,7 @@ static void cmd_echo(const char *text)
     }
     else
     {
-      // Relative path: make it absolute by prepending '/'
+      /* Relative path: make it absolute by prepending '/' */
       size_t len = strlen(fname_start);
       if (len + 1 >= sizeof(normalized_path))
       {
@@ -380,10 +380,10 @@ static void cmd_echo(const char *text)
       strcpy(normalized_path + 1, fname_start);
     }
 
-    // If append requested, read existing file and concatenate
+    /* If append requested, read existing file and concatenate */
     if (append)
     {
-      // Prevent appending to directories or root
+      /* Prevent appending to directories or root */
       if (strcmp(normalized_path, "/") == 0)
       {
         typewriter_vga_print("Error: Refusing to write to root '/'\n", 0x0C);
@@ -404,26 +404,26 @@ static void cmd_echo(const char *text)
       int64_t r = syscall(SYS_READ_FILE, (uint64_t)normalized_path, (uint64_t)&old_data, (uint64_t)&old_size);
       if (r >= 0 && old_data && old_size > 0)
       {
-        // Allocate combined buffer
+        /* Allocate combined buffer */
         size_t total = old_size + (msg_len + 1);
         char *combined = (char *)kmalloc(total + 1);
         if (!combined)
         {
           typewriter_vga_print("Error: Out of memory\n", 0x0C);
-          // Free old_data if allocated by FS
+          /* Free old_data if allocated by FS */
           if (old_data)
             kfree(old_data);
           kfree(new_content);
           return;
         }
-        // Copy old data then new content
+        /* Copy old data then new content */
         for (size_t i = 0; i < old_size; i++)
           combined[i] = ((char *)old_data)[i];
         for (size_t i = 0; i < msg_len + 1; i++)
           combined[old_size + i] = new_content[i];
         combined[total] = '\0';
 
-        // Write back
+        /* Write back */
         int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)combined, 0);
         if (w < 0)
         {
@@ -444,7 +444,7 @@ static void cmd_echo(const char *text)
       }
       else
       {
-        // File doesn't exist or empty: just write new_content
+        /* File doesn't exist or empty: just write new_content */
         int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)new_content, 0);
         if (w < 0)
         {
@@ -462,7 +462,7 @@ static void cmd_echo(const char *text)
     }
     else
     {
-      // Prevent overwriting root or directories
+      /* Prevent overwriting root or directories */
       if (strcmp(normalized_path, "/") == 0)
       {
         typewriter_vga_print("Error: Refusing to write to root '/'\n", 0x0C);
@@ -478,7 +478,7 @@ static void cmd_echo(const char *text)
         return;
       }
 
-      // Overwrite mode: write new_content directly
+      /* Overwrite mode: write new_content directly */
       int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)new_content, 0);
       if (w < 0)
       {
@@ -498,7 +498,7 @@ static void cmd_echo(const char *text)
   }
   else
   {
-    // No redirection, just print to screen
+    /* No redirection, just print to screen */
     shell_write(1, text);
     shell_write(1, "\n");
   }
@@ -524,7 +524,7 @@ static void cmd_netinfo(void)
     syscall(SYS_NETINFO, 0, 0, 0);
 }
 
-// Helper function to perform text substitution
+/* Helper function to perform text substitution */
 static char *perform_substitution(const char *original, size_t original_size,
                                   const char *old_str, const char *new_str)
 {
@@ -535,7 +535,7 @@ static char *perform_substitution(const char *original, size_t original_size,
 
   int old_len = 0, new_len = 0;
 
-  // Calculate string lengths
+  /* Calculate string lengths */
   while (old_str[old_len])
     old_len++;
   while (new_str[new_len])
@@ -546,7 +546,7 @@ static char *perform_substitution(const char *original, size_t original_size,
     return NULL; // Can't replace empty string
   }
 
-  // Count occurrences of old_str in original
+  /* Count occurrences of old_str in original */
   int count = 0;
   const char *pos = original;
   while (pos && (pos = strstr(pos, old_str)) != NULL)
@@ -557,7 +557,7 @@ static char *perform_substitution(const char *original, size_t original_size,
 
   if (count == 0)
   {
-    // No replacements needed, return copy of original
+    /* No replacements needed, return copy of original */
     char *result = (char *)kmalloc(original_size + 1);
     if (!result)
       return NULL;
@@ -570,7 +570,7 @@ static char *perform_substitution(const char *original, size_t original_size,
     return result;
   }
 
-  // Calculate new size
+  /* Calculate new size */
   size_t new_size = original_size + count * (new_len - old_len);
   char *result = (char *)kmalloc(new_size + 1);
   if (!result)
@@ -578,13 +578,13 @@ static char *perform_substitution(const char *original, size_t original_size,
     return NULL;
   }
 
-  // Perform substitution
+  /* Perform substitution */
   const char *src = original;
   char *dst = result;
 
   while (*src)
   {
-    // Check if we found old_str at current position
+    /* Check if we found old_str at current position */
     int match = 1;
     for (int i = 0; i < old_len && src[i]; i++)
     {
@@ -597,7 +597,7 @@ static char *perform_substitution(const char *original, size_t original_size,
 
     if (match && (src + old_len <= original + original_size))
     {
-      // Copy new_str
+      /* Copy new_str */
       for (int i = 0; i < new_len; i++)
       {
         *dst++ = new_str[i];
@@ -606,7 +606,7 @@ static char *perform_substitution(const char *original, size_t original_size,
     }
     else
     {
-      // Copy original character
+      /* Copy original character */
       *dst++ = *src++;
     }
   }
@@ -624,7 +624,7 @@ static void cmd_sed(const char *args)
     return;
   }
 
-  // Parse sed command: s/OLD/NEW/ FILE
+  /* Parse sed command: s/OLD/NEW/ FILE */
   if (!str_starts_with(args, "s/"))
   {
     typewriter_vga_print(
@@ -632,14 +632,14 @@ static void cmd_sed(const char *args)
     return;
   }
 
-  // Find the pattern: s/OLD/NEW/
+  /* Find the pattern: s/OLD/NEW/ */
   const char *pattern_start = args + 2; // Skip "s/"
   const char *old_end = NULL;
   const char *new_start = NULL;
   const char *new_end = NULL;
   const char *filename = NULL;
 
-  // Find first '/' (end of OLD)
+  /* Find first '/' (end of OLD) */
   for (const char *p = pattern_start; *p; p++)
   {
     if (*p == '/')
@@ -657,7 +657,7 @@ static void cmd_sed(const char *args)
     return;
   }
 
-  // Find second '/' (end of NEW)
+  /* Find second '/' (end of NEW) */
   for (const char *p = new_start; *p; p++)
   {
     if (*p == '/')
@@ -675,7 +675,7 @@ static void cmd_sed(const char *args)
     return;
   }
 
-  // Extract OLD and NEW strings
+  /* Extract OLD and NEW strings */
   char old_str[256], new_str[256];
   int old_len = old_end - pattern_start;
   int new_len = new_end - new_start;
@@ -686,7 +686,7 @@ static void cmd_sed(const char *args)
     return;
   }
 
-  // Copy strings
+  /* Copy strings */
   for (int i = 0; i < old_len; i++)
   {
     old_str[i] = pattern_start[i];
@@ -699,7 +699,7 @@ static void cmd_sed(const char *args)
   }
   new_str[new_len] = '\0';
 
-  // Read the file content
+  /* Read the file content */
   void *file_data = NULL;
   size_t file_size = 0;
 
@@ -719,18 +719,18 @@ static void cmd_sed(const char *args)
     return;
   }
 
-  // Perform text substitution
+  /* Perform text substitution */
   char *original = (char *)file_data;
   char *modified = perform_substitution(original, file_size, old_str, new_str);
 
   if (!modified)
   {
     typewriter_vga_print("Error: Could not perform substitution\n", 0x0C);
-    // Free the original file data (would need kfree syscall)
+    /* Free the original file data (would need kfree syscall) */
     return;
   }
 
-  // Write the modified content back to the file
+  /* Write the modified content back to the file */
   result = syscall(SYS_WRITE_FILE, (uint64_t)filename, (uint64_t)modified, 0);
 
   if (result < 0)
@@ -750,7 +750,7 @@ static void cmd_sed(const char *args)
     typewriter_vga_print("'\n", 0x0A);
   }
 
-  // TODO: Free memory (need kfree syscall or memory management)
+  /* TODO: Free memory (need kfree syscall or memory management) */
 }
 
 static void cmd_type(const char *mode)
@@ -815,7 +815,7 @@ static void cmd_cp(const char *args)
     return;
   }
 
-  // tokenize
+  /* tokenize */
   char buf[512];
   size_t i = 0;
   while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
@@ -875,7 +875,7 @@ static void cmd_mv(const char *args)
     return;
   }
   
-  // Parse arguments
+  /* Parse arguments */
   char buf[512];
   size_t i = 0;
   while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
@@ -905,14 +905,14 @@ static void cmd_mv(const char *args)
     return;
   }
 
-  // Check if destination is a directory
+  /* Check if destination is a directory */
   stat_t dst_stat;
   char target_path[256];
   int64_t stat_result = syscall(SYS_STAT, (uint64_t)dst, (uint64_t)&dst_stat, 0);
   
   if (stat_result >= 0 && S_ISDIR(dst_stat.st_mode))
   {
-    // Destination is a directory, extract filename from source
+    /* Destination is a directory, extract filename from source */
     const char *filename = src;
     const char *last_slash = src;
     for (const char *p = src; *p; p++)
@@ -923,7 +923,7 @@ static void cmd_mv(const char *args)
     if (last_slash != src)
       filename = last_slash;
     
-    // Build target path: dst/filename
+    /* Build target path: dst/filename */
     size_t dst_len = strlen(dst);
     size_t filename_len = strlen(filename);
     if (dst_len + filename_len + 2 > sizeof(target_path))
@@ -942,7 +942,7 @@ static void cmd_mv(const char *args)
     dst = target_path;
   }
 
-  // Copy file content
+  /* Copy file content */
   void *data = NULL;
   size_t size = 0;
   int64_t r = syscall(SYS_READ_FILE, (uint64_t)src, (uint64_t)&data, (uint64_t)&size);
@@ -961,7 +961,7 @@ static void cmd_mv(const char *args)
     return;
   }
 
-  // Unlink source
+  /* Unlink source */
   int64_t u = syscall(SYS_UNLINK, (uint64_t)src, 0, 0);
   if (u < 0)
   {
@@ -985,7 +985,7 @@ static void cmd_ln(const char *args)
     return;
   }
 
-  // Parse arguments: oldpath newpath
+  /* Parse arguments: oldpath newpath */
   char buf[256];
   size_t i = 0;
   while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
@@ -1064,7 +1064,7 @@ static void cmd_chmod(const char *args)
 
   int mode = -1;
   
-  // Check if it's octal mode (all digits 0-7)
+  /* Check if it's octal mode (all digits 0-7) */
   int is_octal = 1;
   for (char *q = mode_s; *q; q++)
   {
@@ -1077,7 +1077,7 @@ static void cmd_chmod(const char *args)
   
   if (is_octal && mode_s[0] != '\0')
   {
-    // Parse octal mode
+    /* Parse octal mode */
     mode = 0;
     for (char *q = mode_s; *q; q++)
     {
@@ -1086,8 +1086,8 @@ static void cmd_chmod(const char *args)
   }
   else
   {
-    // Parse symbolic mode (e.g., +x, u+rw, go-w)
-    // First, get current file mode
+    /* Parse symbolic mode (e.g., +x, u+rw, go-w) */
+    /* First, get current file mode */
     stat_t st;
     int64_t stat_result = syscall(SYS_STAT, (uint64_t)path, (uint64_t)&st, 0);
     if (stat_result < 0)
@@ -1097,13 +1097,13 @@ static void cmd_chmod(const char *args)
     }
     mode = st.st_mode & 0777;  // Extract permission bits
     
-    // Parse symbolic mode
+    /* Parse symbolic mode */
     char *s = mode_s;
     int who = 0;  // bitmask: u=1, g=2, o=4, a=7
     int op = 0;   // '+' or '-'
     int perms = 0;  // r=4, w=2, x=1
     
-    // Parse who (u, g, o, a) or default to 'a'
+    /* Parse who (u, g, o, a) or default to 'a' */
     while (*s && (*s == 'u' || *s == 'g' || *s == 'o' || *s == 'a'))
     {
       if (*s == 'u') who |= 1;
@@ -1114,7 +1114,7 @@ static void cmd_chmod(const char *args)
     }
     if (who == 0) who = 7;  // default is 'all'
     
-    // Parse operator (+ or -)
+    /* Parse operator (+ or -) */
     if (*s == '+' || *s == '-')
     {
       op = *s++;
@@ -1125,7 +1125,7 @@ static void cmd_chmod(const char *args)
       return;
     }
     
-    // Parse permissions (r, w, x)
+    /* Parse permissions (r, w, x) */
     while (*s && (*s == 'r' || *s == 'w' || *s == 'x'))
     {
       if (*s == 'r') perms |= 4;
@@ -1134,7 +1134,7 @@ static void cmd_chmod(const char *args)
       s++;
     }
     
-    // Apply changes
+    /* Apply changes */
     if (op == '+')
     {
       if (who & 1) mode |= (perms << 6);  // user
@@ -1178,8 +1178,8 @@ static void cmd_mount(const char *args)
     return;
   }
 
-  // Parse arguments: device mountpoint [fstype]
-  // copy to local buffer to tokenize safely
+  /* Parse arguments: device mountpoint [fstype] */
+  /* copy to local buffer to tokenize safely */
   char buf[256];
   size_t i = 0;
   while (i < sizeof(buf) - 1 && args[i] && args[i] != '\n')
@@ -1189,7 +1189,7 @@ static void cmd_mount(const char *args)
   }
   buf[i] = '\0';
 
-  // find tokens
+  /* find tokens */
   char *p = buf;
   while (*p == ' ' || *p == '\t')
     p++;
@@ -1335,9 +1335,9 @@ static void cmd_rm(const char *args)
 
 /* List block devices (lsblk) - shows real disk information */
 
-// Using itoa from string.h
+/* Using itoa from string.h */
 
-// Touch command: create empty file or update its timestamp
+/* Touch command: create empty file or update its timestamp */
 static void cmd_touch(const char *filename)
 {
   if (!filename || *filename == '\0')
@@ -1346,10 +1346,10 @@ static void cmd_touch(const char *filename)
     return;
   }
 
-  // Use default file permissions (0644 = rw-r--r--)
+  /* Use default file permissions (0644 = rw-r--r--) */
   mode_t default_mode = 0644;
 
-  // Call the filesystem's touch function
+  /* Call the filesystem's touch function */
   int64_t result = syscall(SYS_TOUCH, (uint64_t)filename, default_mode, 0);
   if (result < 0)
   {
@@ -1357,7 +1357,7 @@ static void cmd_touch(const char *filename)
   }
 }
 
-// Helper function to convert number to string
+/* Helper function to convert number to string */
 static void uint64_to_str(uint64_t num, char *str)
 {
   char tmp[32];
@@ -1376,7 +1376,7 @@ static void uint64_to_str(uint64_t num, char *str)
     }
   }
 
-  // Reverse the string
+  /* Reverse the string */
   while (p > tmp)
   {
     *str++ = *--p;
@@ -1388,16 +1388,16 @@ static void cmd_lsblk(const char *args)
 {
   (void)args; // Unused parameter
 
-  // Print header
+  /* Print header */
   typewriter_vga_print("NAME        MAJ:MIN   SIZE (bytes)    MODEL\n", 0x0F);
   typewriter_vga_print("------------------------------------------------\n", 0x07);
 
-  // Check each possible ATA device (0-3)
+  /* Check each possible ATA device (0-3) */
   for (uint8_t i = 0; i < 4; i++)
   {
     ata_device_info_t info;
 
-    // Get device info
+    /* Get device info */
     if (!ata_get_device_info(i, &info))
     {
       continue; // Skip if device not present
@@ -1405,35 +1405,35 @@ static void cmd_lsblk(const char *args)
 
     char name[8];
 
-    // Generate device name (hda, hdb, etc.)
+    /* Generate device name (hda, hdb, etc.) */
     name[0] = 'h';
     name[1] = 'd' + i;
     name[2] = '\0';
 
-    // Print device name
+    /* Print device name */
     typewriter_vga_print(name, 0x0F);
     typewriter_vga_print("         ", 0x0F);
 
-    // Print major:minor
+    /* Print major:minor */
     char num_buf[16];
     itoa(i, num_buf, 10);
     typewriter_vga_print(num_buf, 0x0F);
     typewriter_vga_print(":0", 0x0F);
     typewriter_vga_print("       ", 0x0F);
 
-    // Print size in bytes
+    /* Print size in bytes */
     char size_buf[32];
     uint64_to_str(info.capacity_bytes, size_buf);
     typewriter_vga_print(size_buf, 0x0A);
 
-    // Add some padding for alignment
+    /* Add some padding for alignment */
     int pad = 15 - strlen(size_buf);
     while (pad-- > 0)
     {
       typewriter_vga_print(" ", 0x0A);
     }
 
-    // Print model if available
+    /* Print model if available */
     if (info.model[0] != '\0')
     {
       typewriter_vga_print("  ", 0x0F);

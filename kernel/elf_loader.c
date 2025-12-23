@@ -25,9 +25,9 @@
 extern void serial_print(const char *str);
 extern void serial_print_hex32(uint32_t num);
 
-// Use external strstr from string.h
+/* Use external strstr from string.h */
 
-// Minimal ELF structures
+/* Minimal ELF structures */
 typedef struct
 {
     unsigned char e_ident[16];
@@ -58,7 +58,7 @@ typedef struct
     uint64_t p_align;
 } elf64_phdr_t;
 
-// ELF constants
+/* ELF constants */
 #define ELF_MAGIC_0 0x7f
 #define ELF_MAGIC_1 'E'
 #define ELF_MAGIC_2 'L'
@@ -72,7 +72,7 @@ typedef struct
 
 static int validate_elf_header(const elf64_header_t *header)
 {
-    // Check ELF magic number
+    /* Check ELF magic number */
     if (header->e_ident[0] != ELF_MAGIC_0 ||
         header->e_ident[1] != ELF_MAGIC_1 ||
         header->e_ident[2] != ELF_MAGIC_2 ||
@@ -81,13 +81,13 @@ static int validate_elf_header(const elf64_header_t *header)
         return 0;
     }
 
-    // Check 64-bit and x86-64 architecture
+    /* Check 64-bit and x86-64 architecture */
     if (header->e_ident[4] != ELFCLASS64 || header->e_machine != EM_X86_64)
     {
         return 0;
     }
 
-    // Check executable type
+    /* Check executable type */
     if (header->e_type != ET_EXEC)
     {
         return 0;
@@ -96,7 +96,7 @@ static int validate_elf_header(const elf64_header_t *header)
     return 1;
 }
 
-// Load ELF segments into memory at correct virtual addresses
+/* Load ELF segments into memory at correct virtual addresses */
 static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process_t *process)
 {
     elf64_phdr_t *phdr = (elf64_phdr_t *)(file_data + header->e_phoff);
@@ -117,10 +117,10 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
             serial_print_hex32((uint32_t)phdr[i].p_memsz);
             serial_print("\n");
 
-            // Map virtual address to physical memory
+            /* Map virtual address to physical memory */
             uint64_t memsz = phdr[i].p_memsz;
 
-            // Allocate physical memory for the segment
+            /* Allocate physical memory for the segment */
             void *phys_mem = kmalloc(memsz);
             if (!phys_mem)
             {
@@ -128,7 +128,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
                 return -1;
             }
 
-            // Copy segment data from file
+            /* Copy segment data from file */
             if (phdr[i].p_filesz > 0)
             {
                 memcpy(phys_mem, file_data + phdr[i].p_offset, phdr[i].p_filesz);
@@ -137,7 +137,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
                 serial_print(" bytes from file\n");
             }
 
-            // Zero out BSS section if needed
+            /* Zero out BSS section if needed */
             if (phdr[i].p_memsz > phdr[i].p_filesz)
             {
                 memset((uint8_t *)phys_mem + phdr[i].p_filesz, 0,
@@ -149,7 +149,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
             serial_print_hex32((uint32_t)(uintptr_t)phys_mem);
             serial_print("\n");
 
-            // Store the mapping for the process (simplified)
+            /* Store the mapping for the process (simplified) */
             if (i == 0)
             {
                 process->memory_base = (uintptr_t)phys_mem;
@@ -161,15 +161,15 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
     return 0;
 }
 
-// Dummy entry function for ELF processes (will be overridden)
+/* Dummy entry function for ELF processes (will be overridden) */
 static void elf_dummy_entry(void)
 {
-    // This should never be called as we override RIP
+    /* This should never be called as we override RIP */
     while (1)
         ;
 }
 
-// Create a new process for the ELF program
+/* Create a new process for the ELF program */
 static process_t *elf_create_process(elf64_header_t *header, const char *path)
 {
     extern process_t *process_create(void (*entry)(void));
@@ -180,7 +180,7 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     serial_print_hex32((uint32_t)header->e_entry);
     serial_print("\n");
 
-    // Create user process with dummy entry (we'll override RIP)
+    /* Create user process with dummy entry (we'll override RIP) */
     process_t *process = process_create(elf_dummy_entry);
     if (!process)
     {
@@ -188,9 +188,9 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
         return NULL;
     }
 
-    // Set up user mode execution
+    /* Set up user mode execution */
     
-    // Extract command name from path (basename)
+    /* Extract command name from path (basename) */
     const char *basename = path;
     const char *last_slash = path;
     while (*path) {
@@ -199,7 +199,7 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     }
     basename = last_slash;
     
-    // Copy basename to comm (max 15 chars)
+    /* Copy basename to comm (max 15 chars) */
     size_t name_len = 0;
     while (basename[name_len] && name_len < 15) name_len++;
     memcpy(process->comm, basename, name_len);
@@ -211,11 +211,11 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     process->task.ds = 0x23; // User data segment
     process->task.es = 0x23; // User data segment
 
-    // Set up user stack in a safe area (8MB mark)
+    /* Set up user stack in a safe area (8MB mark) */
     process->task.rsp = 0x800000 - 0x1000;
     process->task.rbp = process->task.rsp;
 
-    // Enable interrupts in user mode
+    /* Enable interrupts in user mode */
     process->task.rflags = 0x202; // IF=1, reserved bit=1
 
     serial_print("SERIAL: ELF: Process created with PID ");
@@ -231,7 +231,7 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     return process;
 }
 
-// Main ELF loader function
+/* Main ELF loader function */
 int elf_load_and_execute(const char *path)
 {
     serial_print("SERIAL: ELF: ========================================\n");
@@ -239,7 +239,7 @@ int elf_load_and_execute(const char *path)
     serial_print(path);
     serial_print("\n");
 
-    // Step 1: Read the ELF file from filesystem
+    /* Step 1: Read the ELF file from filesystem */
     extern int vfs_read_file(const char *path, void **data, size_t *size);
     void *file_data = NULL;
     size_t file_size = 0;
@@ -255,7 +255,7 @@ int elf_load_and_execute(const char *path)
     serial_print_hex32(file_size);
     serial_print(" bytes\n");
 
-    // Step 2: Validate ELF header
+    /* Step 2: Validate ELF header */
     if (!validate_elf_header((elf64_header_t *)file_data))
     {
         serial_print("SERIAL: ELF: ERROR - Invalid ELF header\n");
@@ -266,7 +266,7 @@ int elf_load_and_execute(const char *path)
     elf64_header_t *header = (elf64_header_t *)file_data;
     serial_print("SERIAL: ELF: Header validation passed\n");
 
-    // Step 3: Create process first
+    /* Step 3: Create process first */
     process_t *process = elf_create_process(header, path);
     if (!process)
     {
@@ -275,7 +275,7 @@ int elf_load_and_execute(const char *path)
         return -1;
     }
 
-    // Step 4: Load segments into memory
+    /* Step 4: Load segments into memory */
     if (elf_load_segments(header, (uint8_t *)file_data, process) != 0)
     {
         serial_print("SERIAL: ELF: ERROR - Failed to load segments\n");
@@ -283,12 +283,12 @@ int elf_load_and_execute(const char *path)
         return -1;
     }
 
-    // Step 5: Add process to scheduler
+    /* Step 5: Add process to scheduler */
     extern void rr_add_process(process_t * proc);
     rr_add_process(process);
     serial_print("SERIAL: ELF: Process added to scheduler\n");
 
-    // Step 6: Clean up file data
+    /* Step 6: Clean up file data */
     kfree(file_data);
 
     serial_print("SERIAL: ELF: SUCCESS - Program loaded and scheduled for execution\n");

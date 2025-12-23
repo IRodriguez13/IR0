@@ -4,10 +4,10 @@
 #include <string.h>
 #include <errno.h>
 
-// Global file system list
+/* Global file system list */
 static filesystem_type_t *filesystems = NULL;
 
-// File operations for MINIX
+/* File operations for MINIX */
 extern file_operations_t minix_file_ops;
 
 int register_filesystem(filesystem_type_t *fs)
@@ -17,7 +17,7 @@ int register_filesystem(filesystem_type_t *fs)
         return -EINVAL;
     }
 
-    // Add to the beginning of the list
+    /* Add to the beginning of the list */
     fs->next = filesystems;
     filesystems = fs;
 
@@ -40,7 +40,7 @@ int alloc_fd(void)
         return -ESRCH;
     }
 
-    // Find first available file descriptor (starting from 3)
+    /* Find first available file descriptor (starting from 3) */
     for (int i = 3; i < 16; i++)
     {
         if (!current_process->fd_table[i])
@@ -75,10 +75,10 @@ void free_fd(int fd)
     }
 }
 
-// Initialize the file system
+/* Initialize the file system */
 void fs_init(void)
 {
-    // Register MINIX file system
+    /* Register MINIX file system */
     static filesystem_type_t minix_fs = {
         .name = "minix",
         .fops = &minix_file_ops,

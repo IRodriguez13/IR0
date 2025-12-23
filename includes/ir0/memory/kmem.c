@@ -65,22 +65,22 @@ void *__kmalloc_aligned_impl(size_t size, size_t alignment)
 	if (size == 0 || alignment == 0)
 		return NULL;
 
-	// Ensure alignment is power of 2
+	/* Ensure alignment is power of 2 */
 	if ((alignment & (alignment - 1)) != 0)
 		return NULL;
 
-	// Allocate extra space to ensure we can align
+	/* Allocate extra space to ensure we can align */
 	size_t total_size = size + alignment - 1 + sizeof(void *);
 	void *raw_ptr = __kmalloc_impl(total_size);
 	if (!raw_ptr)
 		return NULL;
 
-	// Calculate aligned address
+	/* Calculate aligned address */
 	uintptr_t raw_addr = (uintptr_t)raw_ptr;
 	uintptr_t aligned_addr = (raw_addr + sizeof(void *) + alignment - 1) & ~(alignment - 1);
 	void *aligned_ptr = (void *)aligned_addr;
 
-	// Store original pointer just before aligned address
+	/* Store original pointer just before aligned address */
 	void **orig_ptr_storage = (void **)aligned_ptr - 1;
 	*orig_ptr_storage = raw_ptr;
 
@@ -96,11 +96,11 @@ void __kfree_aligned_impl(void *ptr)
 	if (!ptr)
 		return;
 
-	// Get original pointer stored before aligned address
+	/* Get original pointer stored before aligned address */
 	void **orig_ptr_storage = (void **)ptr - 1;
 	void *orig_ptr = *orig_ptr_storage;
 
-	// Free the original allocation
+	/* Free the original allocation */
 	__kfree_impl(orig_ptr);
 }
 
@@ -135,12 +135,12 @@ void *__kmalloc_checked(size_t size, const char *file, int line, const char *cal
 void __kfree_checked(void *ptr, const char *file, int line, const char *caller)
 {
 	if (unlikely(!ptr)) {
-		// Linux allows free(NULL), but we can warn about it
-		// For now, we'll allow it silently like the original implementation
+		/* Linux allows free(NULL), but we can warn about it */
+		/* For now, we'll allow it silently like the original implementation */
 		return;
 	}
 
-	// Validate that the pointer is within heap range
+	/* Validate that the pointer is within heap range */
 	if (unlikely((uintptr_t)ptr < SIMPLE_HEAP_START || 
 	             (uintptr_t)ptr >= SIMPLE_HEAP_END)) {
 		panicex("kfree: pointer out of heap range", PANIC_MEM, file, line, caller);
@@ -157,7 +157,7 @@ void *__krealloc_checked(void *ptr, size_t new_size,
                         const char *file, int line, const char *caller)
 {
 	if (unlikely(new_size == 0)) {
-		// realloc(ptr, 0) is equivalent to free(ptr)
+		/* realloc(ptr, 0) is equivalent to free(ptr) */
 		__kfree_checked(ptr, file, line, caller);
 		return NULL;
 	}
@@ -166,7 +166,7 @@ void *__krealloc_checked(void *ptr, size_t new_size,
 		panicex("krealloc: new_size too large", PANIC_MEM, file, line, caller);
 	}
 
-	// Validate existing pointer if not NULL
+	/* Validate existing pointer if not NULL */
 	if (ptr && unlikely((uintptr_t)ptr < SIMPLE_HEAP_START || 
 	                    (uintptr_t)ptr >= SIMPLE_HEAP_END)) {
 		panicex("krealloc: invalid pointer", PANIC_MEM, file, line, caller);
@@ -198,7 +198,7 @@ void *__kmalloc_aligned_checked(size_t size, size_t alignment,
 		panicex("kmalloc_aligned: alignment is 0", PANIC_MEM, file, line, caller);
 	}
 
-	// Ensure alignment is power of 2
+	/* Ensure alignment is power of 2 */
 	if (unlikely((alignment & (alignment - 1)) != 0)) 
 	{
 		panicex("kmalloc_aligned: alignment not power of 2", PANIC_MEM, file, line, caller);
@@ -227,11 +227,11 @@ void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *
 {
 	if (unlikely(!ptr)) 
 	{
-		// Allow NULL like regular kfree
+		/* Allow NULL like regular kfree */
 		return;
 	}
 
-	// Validate that the pointer is within heap range
+	/* Validate that the pointer is within heap range */
 	if (unlikely((uintptr_t)ptr < SIMPLE_HEAP_START || 
 	             (uintptr_t)ptr >= SIMPLE_HEAP_END)) 
 	{
