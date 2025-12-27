@@ -2,7 +2,7 @@
   "subsystems": {
     "KERNEL": {
       "name": "Kernel Core",
-      "description": "Core kernel functionality including process management, scheduling, and system calls. Provides the fundamental kernel services.",
+      "description": "Core kernel functionality including process management, scheduling, system calls, and error handling. Provides the fundamental kernel services.",
       "required": true,
       "architectures": ["x86-64", "arm32"],
       "files": {
@@ -12,10 +12,12 @@
           "kernel/process.c",
           "kernel/task.c",
           "kernel/syscalls.c",
-          "kernel/shell.c",
           "kernel/elf_loader.c",
           "kernel/user.c",
-          "kernel/rr_sched.c"
+          "kernel/rr_sched.c",
+          "kernel/driver_registry.c",
+          "kernel/dbgshell.c",
+          "kernel/process_util.c"
         ],
         "arm32": []
       },
@@ -23,14 +25,15 @@
     },
     "MEMORY": {
       "name": "Memory Management",
-      "description": "Memory allocation, paging, and virtual memory management. Handles physical and virtual memory allocation.",
+      "description": "Memory allocation, paging, virtual memory management, and physical memory manager. Handles physical and virtual memory allocation.",
       "required": true,
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
           "includes/ir0/memory/allocator.c",
           "includes/ir0/memory/paging.c",
-          "includes/ir0/memory/kmem.c"
+          "includes/ir0/memory/kmem.c",
+          "includes/ir0/memory/pmm.c"
         ],
         "arm32": []
       },
@@ -55,7 +58,7 @@
     },
     "FILESYSTEM": {
       "name": "File System",
-      "description": "Virtual File System (VFS), MINIX filesystem, and RAM filesystem. Provides file and directory operations.",
+      "description": "Virtual File System (VFS), MINIX filesystem, RAM filesystem, and file operations. Provides file and directory operations.",
       "required": false,
       "architectures": ["x86-64", "arm32"],
       "files": {
@@ -66,34 +69,6 @@
           "fs/path.c",
           "fs/chmod.c",
           "fs/ramfs.c"
-        ],
-        "arm32": []
-      },
-      "dependencies": []
-    },
-    "DRIVERS": {
-      "name": "Device Drivers",
-      "description": "Hardware drivers including PS/2, serial, ATA, timer, and video drivers. Platform-specific drivers.",
-      "required": false,
-      "architectures": ["x86-64", "arm32"],
-      "files": {
-        "x86-64": [
-          "drivers/IO/ps2.c",
-          "drivers/IO/ps2_mouse.c",
-          "drivers/serial/serial.c",
-          "drivers/storage/ata.c",
-          "drivers/storage/ata_helpers.c",
-          "drivers/storage/fs_types.c",
-          "drivers/timer/pit/pit.c",
-          "drivers/timer/clock_system.c",
-          "drivers/timer/rtc/rtc.c",
-          "drivers/timer/hpet/hpet.c",
-          "drivers/timer/hpet/find_hpet.c",
-          "drivers/timer/lapic/lapic.c",
-          "drivers/video/vbe.c",
-          "drivers/video/typewriter.c",
-          "drivers/audio/sound_blaster.c",
-          "drivers/dma/dma.c"
         ],
         "arm32": []
       },
@@ -123,7 +98,7 @@
     },
     "LIBRARIES": {
       "name": "Kernel Libraries",
-      "description": "Core kernel libraries including VGA, logging, validation, and string functions. Essential utilities.",
+      "description": "Core kernel libraries including VGA, logging, validation, string functions, signals, pipes, and user-space copy utilities. Essential utilities.",
       "required": true,
       "architectures": ["x86-64", "arm32"],
       "files": {
@@ -132,24 +107,14 @@
           "includes/ir0/logging.c",
           "includes/ir0/validation.c",
           "includes/ir0/oops.c",
+          "includes/ir0/signals.c",
+          "includes/ir0/pipe.c",
+          "includes/ir0/copy_user.c",
           "includes/string.c"
         ],
         "arm32": []
       },
       "dependencies": []
-    },
-    "DISK": {
-      "name": "Disk Management",
-      "description": "Disk partitioning and storage management. Requires filesystem support.",
-      "required": false,
-      "architectures": ["x86-64", "arm32"],
-      "files": {
-        "x86-64": [
-          "drivers/disk/partition.c"
-        ],
-        "arm32": []
-      },
-      "dependencies": ["FILESYSTEM"]
     },
     "SCHEDULER": {
       "name": "Process Scheduler",
@@ -178,11 +143,11 @@
       },
       "dependencies": []
     },
-    "KEYBOARD": {
-      "name": "Keyboard Driver",
-      "description": "PS/2 keyboard input driver (x86-64) or UART keyboard (ARM). Required for user input.",
+    "PS2_KEYBOARD": {
+      "name": "PS/2 Keyboard Driver",
+      "description": "PS/2 keyboard input driver with scancode translation and circular buffer. Required for keyboard input.",
       "required": false,
-      "architectures": ["x86-64", "arm32"],
+      "architectures": ["x86-64"],
       "files": {
         "x86-64": [
           "interrupt/arch/keyboard.c",
@@ -191,6 +156,19 @@
         "arm32": []
       },
       "dependencies": ["INTERRUPT"]
+    },
+    "PS2_MOUSE": {
+      "name": "PS/2 Mouse Driver",
+      "description": "PS/2 mouse driver with 3/5 button and scroll wheel support. Provides mouse input.",
+      "required": false,
+      "architectures": ["x86-64"],
+      "files": {
+        "x86-64": [
+          "drivers/IO/ps2_mouse.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": ["PS2_KEYBOARD"]
     },
     "VIDEO": {
       "name": "Video Driver",
@@ -209,7 +187,7 @@
     },
     "TIMER": {
       "name": "Timer Drivers",
-      "description": "Timer drivers including PIT, HPET, LAPIC (x86-64) or ARM timer. Required for system timing.",
+      "description": "Timer drivers including PIT, HPET, LAPIC, and RTC (x86-64) or ARM timer. Required for system timing.",
       "required": false,
       "architectures": ["x86-64", "arm32"],
       "files": {
@@ -240,9 +218,9 @@
       },
       "dependencies": []
     },
-    "AUDIO": {
-      "name": "Audio Driver",
-      "description": "Sound Blaster 16 audio driver. Provides sound output support.",
+    "AUDIO_SB16": {
+      "name": "Sound Blaster 16 Audio",
+      "description": "Sound Blaster 16 audio driver with DMA support. Provides 8-bit/16-bit audio playback.",
       "required": false,
       "architectures": ["x86-64"],
       "files": {
@@ -252,11 +230,24 @@
         ],
         "arm32": []
       },
+      "dependencies": ["DMA"]
+    },
+    "AUDIO_ADLIB": {
+      "name": "Adlib OPL2 Audio",
+      "description": "Adlib OPL2 FM synthesis audio driver. Provides FM synthesis audio output.",
+      "required": false,
+      "architectures": ["x86-64"],
+      "files": {
+        "x86-64": [
+          "drivers/audio/adlib.c"
+        ],
+        "arm32": []
+      },
       "dependencies": []
     },
     "DMA": {
       "name": "DMA Controller",
-      "description": "Direct Memory Access controller driver. Required for high-speed data transfers.",
+      "description": "Direct Memory Access controller driver. Required for high-speed data transfers and audio.",
       "required": false,
       "architectures": ["x86-64"],
       "files": {
@@ -266,6 +257,59 @@
         "arm32": []
       },
       "dependencies": []
+    },
+    "DISK": {
+      "name": "Disk Management",
+      "description": "Disk partitioning and storage management. Requires filesystem support.",
+      "required": false,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "drivers/disk/partition.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": ["FILESYSTEM"]
+    },
+    "NETWORK": {
+      "name": "Network Stack",
+      "description": "Core network stack with device and protocol registration. Provides networking abstraction layer.",
+      "required": false,
+      "architectures": ["x86-64", "arm32"],
+      "files": {
+        "x86-64": [
+          "net/net.c",
+          "net/arp.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": []
+    },
+    "NET_E1000": {
+      "name": "Intel e1000 Ethernet Driver",
+      "description": "Intel e1000 (82540EM) Gigabit Ethernet network adapter driver. Provides network connectivity.",
+      "required": false,
+      "architectures": ["x86-64"],
+      "files": {
+        "x86-64": [
+          "drivers/net/e1000.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": ["NETWORK"]
+    },
+    "NET_RTL8139": {
+      "name": "Realtek RTL8139 Ethernet Driver",
+      "description": "Realtek RTL8139 Fast Ethernet network adapter driver. Provides network connectivity.",
+      "required": false,
+      "architectures": ["x86-64"],
+      "files": {
+        "x86-64": [
+          "drivers/net/rtl8139.c"
+        ],
+        "arm32": []
+      },
+      "dependencies": ["NETWORK"]
     }
   },
   "architecture": {
@@ -287,8 +331,13 @@
       },
       {
         "name": "Device Layer",
-        "subsystems": ["DRIVERS", "SERIAL", "KEYBOARD", "VIDEO", "TIMER", "STORAGE", "AUDIO", "DMA"],
+        "subsystems": ["SERIAL", "PS2_KEYBOARD", "PS2_MOUSE", "VIDEO", "TIMER", "STORAGE", "AUDIO_SB16", "AUDIO_ADLIB", "DMA"],
         "y": 350
+      },
+      {
+        "name": "Network Layer",
+        "subsystems": ["NETWORK", "NET_E1000", "NET_RTL8139"],
+        "y": 400
       },
       {
         "name": "Storage Layer",
@@ -304,8 +353,16 @@
       "architecture": "x86-64",
       "subsystems": [
         "KERNEL", "MEMORY", "INTERRUPT", "ARCH", "LIBRARIES", "SCHEDULER",
-        "FILESYSTEM", "DRIVERS", "DISK", "SERIAL", "KEYBOARD", "VIDEO", 
-        "TIMER", "STORAGE", "AUDIO", "DMA"
+        "FILESYSTEM", "DISK", "SERIAL", "PS2_KEYBOARD", "PS2_MOUSE", "VIDEO", 
+        "TIMER", "STORAGE", "AUDIO_SB16", "AUDIO_ADLIB", "DMA", "NETWORK", "NET_E1000", "NET_RTL8139"
+      ]
+    },
+    "x86-64-minimal": {
+      "name": "x86-64 Minimal",
+      "description": "Minimal x86-64 kernel with only essential subsystems",
+      "architecture": "x86-64",
+      "subsystems": [
+        "KERNEL", "MEMORY", "INTERRUPT", "ARCH", "LIBRARIES", "SCHEDULER"
       ]
     },
     "arm32-generic": {
@@ -314,7 +371,7 @@
       "architecture": "arm32",
       "subsystems": [
         "KERNEL", "MEMORY", "INTERRUPT", "ARCH", "LIBRARIES", "SCHEDULER",
-        "FILESYSTEM", "SERIAL", "KEYBOARD", "TIMER"
+        "FILESYSTEM", "SERIAL"
       ],
       "enabled": false
     }

@@ -59,7 +59,9 @@ typedef enum {
     SYS_LSDRV = 111,
     SYS_AUDIO_TEST = 112,
     SYS_MOUSE_TEST = 113,
-    SYS_DMESG = 114
+    SYS_DMESG = 114,
+    SYS_PING = 115,
+    SYS_IFCONFIG = 116,
 } syscall_num_t;
 
 

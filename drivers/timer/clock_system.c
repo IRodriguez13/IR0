@@ -253,13 +253,23 @@ void clock_tick(void)
     // Update current time
     clock_state.current_time++;
     
+    // Debug: Log every 10000 ticks (~10 seconds) to serial only (not VGA)
+    if ((clock_state.tick_count % 10000) == 0)
+    {
+        extern void serial_print(const char *);
+        extern void print_uint32(uint32_t);
+        serial_print("[CLOCK] Tick #");
+        print_uint32((uint32_t)clock_state.tick_count);
+        serial_print(", uptime_ms=");
+        print_uint32((uint32_t)clock_get_uptime_milliseconds());
+        serial_print("\n");
+    }
+    
     // TODO: Call scheduler tick if scheduler is running
     // TODO: Handle time events
 }
 
-// ===============================================================================
 // SYSTEM TIME FUNCTIONS
-// ===============================================================================
 
 uint64_t get_system_time(void)
 {
