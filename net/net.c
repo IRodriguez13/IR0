@@ -18,6 +18,8 @@
 #include <drivers/net/rtl8139.h>
 #include <drivers/net/e1000.h>
 #include "arp.h"
+#include "ip.h"
+#include "icmp.h"
 #include <string.h>
 
 static struct net_device *devices = NULL;
@@ -78,52 +80,86 @@ void net_unregister_device(struct net_device *dev)
 
 int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac, const void *payload, size_t len)
 {
+    LOG_INFO_FMT("NET", "net_send: dev=%p, ethertype=0x%04x, payload=%p, len=%d", 
+                 dev, ethertype, payload, (int)len);
+    
     if (!dev || !dev->send || !payload || len > dev->mtu)
+    {
+        LOG_ERROR_FMT("NET", "net_send: Invalid parameters (dev=%p, send=%p, payload=%p, len=%d, mtu=%d)",
+                     dev, dev ? dev->send : NULL, payload, (int)len, dev ? (int)dev->mtu : 0);
         return -1;
+    }
 
     size_t frame_len = sizeof(struct eth_header) + len;
+    LOG_INFO_FMT("NET", "net_send: Allocating frame buffer, frame_len=%d", (int)frame_len);
     uint8_t *frame = kmalloc(frame_len);
 
     if (!frame)
+    {
+        LOG_ERROR("NET", "net_send: Failed to allocate frame buffer");
         return -1;
+    }
+    LOG_INFO_FMT("NET", "net_send: Frame buffer allocated at %p", frame);
 
     struct eth_header *eth = (struct eth_header *)frame;
     memcpy(eth->dest, dest_mac, 6);
     memcpy(eth->src, dev->mac, 6);
     eth->type = htons(ethertype);
+    LOG_INFO_FMT("NET", "net_send: Ethernet header filled, copying %d bytes of payload", (int)len);
 
     memcpy(frame + sizeof(struct eth_header), payload, len);
+    LOG_INFO("NET", "net_send: Payload copied, calling dev->send");
+    
+    /* CRITICAL: Log exact values before calling dev->send to catch corruption */
+    LOG_INFO_FMT("NET", "net_send: About to call dev->send: dev=%p, frame=%p, frame_len=%d (0x%x)", 
+                 dev, frame, (int)frame_len, (unsigned int)frame_len);
+    LOG_INFO_FMT("NET", "net_send: dev->send function pointer=%p", dev->send);
+    
+    /* Verify frame_len is reasonable before calling */
+    if (frame_len > 2000)
+    {
+        LOG_ERROR_FMT("NET", "net_send: CORRUPTION DETECTED! frame_len=%d is too large!", (int)frame_len);
+        kfree(frame);
+        return -1;
+    }
 
     int ret = dev->send(dev, frame, frame_len);
+    LOG_INFO_FMT("NET", "net_send: dev->send returned %d, freeing frame buffer", ret);
 
     kfree(frame);
+    LOG_INFO("NET", "net_send: Frame buffer freed, returning");
     return ret;
 }
 
 void net_receive(struct net_device *dev, const void *data, size_t len)
 {
     if (!dev || !data || len < sizeof(struct eth_header))
+    {
+        LOG_WARNING_FMT("NET", "Invalid packet: dev=%p, data=%p, len=%d", dev, data, (int)len);
         return;
+    }
 
     struct eth_header *eth = (struct eth_header *)data;
     uint16_t type = ntohs(eth->type);
 
-    serial_print("NET: Received packet on ");
-    serial_print(dev->name);
-    serial_print(" Type: 0x");
-    serial_print_hex32(type);
-    serial_print("\n");
+    LOG_INFO_FMT("NET", "Received packet on %s: len=%d, type=0x%04x, src_mac=%02x:%02x:%02x:%02x:%02x:%02x, dst_mac=%02x:%02x:%02x:%02x:%02x:%02x",
+                 dev->name, (int)len, type,
+                 eth->src[0], eth->src[1], eth->src[2], eth->src[3], eth->src[4], eth->src[5],
+                 eth->dest[0], eth->dest[1], eth->dest[2], eth->dest[3], eth->dest[4], eth->dest[5]);
 
     /* Look up protocol handler */
     struct net_protocol *proto = net_find_protocol_by_ethertype(type);
     if (proto && proto->handler)
     {
+        LOG_INFO_FMT("NET", "Found protocol handler: %s", proto->name);
         /* Extract payload (after Ethernet header) */
         const void *payload = (const uint8_t *)data + sizeof(struct eth_header);
         size_t payload_len = len - sizeof(struct eth_header);
         
+        LOG_INFO_FMT("NET", "Calling protocol handler %s with payload_len=%d", proto->name, (int)payload_len);
         /* Call protocol handler */
         proto->handler(dev, payload, payload_len, proto->priv);
+        LOG_INFO_FMT("NET", "Protocol handler %s returned", proto->name);
     }
     else
     {
@@ -271,10 +307,22 @@ int init_net_stack(void)
     rtl8139_init();
     e1000_init();
     
-    /* Initialize network protocols (order matters: ARP before IP) */
+    /* Initialize network protocols (order matters: ARP before IP, IP before ICMP) */
     if (arp_init() != 0)
     {
         LOG_ERROR("NET", "Failed to initialize ARP protocol");
+        return -1;
+    }
+    
+    if (ip_init() != 0)
+    {
+        LOG_ERROR("NET", "Failed to initialize IP protocol");
+        return -1;
+    }
+    
+    if (icmp_init() != 0)
+    {
+        LOG_ERROR("NET", "Failed to initialize ICMP protocol");
         return -1;
     }
     

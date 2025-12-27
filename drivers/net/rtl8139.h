@@ -24,6 +24,7 @@
 /* PCI configuration register offsets */
 #define PCI_REG_COMMAND         0x04
 #define PCI_REG_BAR0            0x10
+#define PCI_REG_INTERRUPT_LINE  0x3C  /* Interrupt Line (IRQ number) */
 
 /* PCI command register bits */
 #define PCI_CMD_IO_SPACE        (1 << 0)
@@ -93,4 +94,5 @@
 int rtl8139_init(void);
 void rtl8139_send(void *data, size_t len);
 void rtl8139_handle_interrupt(void);
+void rtl8139_poll(void);  /* Poll for received packets (fallback when interrupts don't work) */
 void rtl8139_get_mac(uint8_t mac[6]);

@@ -216,7 +216,9 @@ DISK_OBJS = \
 
 NET_OBJS = \
     net/net.o \
-    net/arp.o
+    net/arp.o \
+    net/ip.o \
+    net/icmp.o
 
 ARCH_OBJS = \
     arch/x86-64/sources/arch_x64.o \

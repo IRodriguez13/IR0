@@ -231,16 +231,21 @@ void log_message(log_level_t level, const char *component, const char *message)
         }
     }
 
-    print_timestamp();
-    print("[");
-    print(get_level_string(level));
-    print("] [");
-    print(component);
-    print("] ");
-    print(message);
-    print("\n");
+    /* Only print to VGA for WARN, ERROR, and FATAL levels to reduce clutter */
+    /* INFO and DEBUG go only to serial */
+    if (level >= LOG_LEVEL_WARN)
+    {
+        print_timestamp();
+        print("[");
+        print(get_level_string(level));
+        print("] [");
+        print(component);
+        print("] ");
+        print(message);
+        print("\n");
+    }
 
-    /* Also output to serial for debugging (with timestamp) */
+    /* Always output to serial for debugging (with timestamp) */
     serial_print_timestamp();
     serial_print("[");
     serial_print(get_level_string(level));

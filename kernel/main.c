@@ -29,6 +29,7 @@
 #include <config.h>
 #include <kernel/elf_loader.h>
 #include <drivers/timer/clock_system.h>
+#include <interrupt/arch/pic.h>
 
 // Include kernel header with all function declarations
 #include "kernel.h"
@@ -76,6 +77,7 @@ static void init_all_drivers(void)
     // Initialize network stack (drivers + protocols)
     serial_print("[DRIVERS] Initializing network stack...\n");
     init_net_stack();
+    pic_unmask_irq(11); // Enable RTL8139 IRQ
     log_subsystem_ok("NETWORK_STACK");
     serial_print("[DRIVERS] Network stack initialized\n");
     
@@ -127,6 +129,11 @@ void kmain(void)
     idt_init64();
     idt_load64();
     pic_remap64();
+
+    // CRITICAL: Enable interrupts globally after IDT and PIC are initialized
+    // Without this, timer interrupts will never fire!
+    __asm__ volatile("sti");
+    serial_print("[BOOT] Interrupts enabled globally (sti)\n");
 
     log_subsystem_ok("INTERRUPTS");
 

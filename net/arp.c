@@ -15,6 +15,7 @@
 #include <ir0/memory/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
+#include <drivers/timer/clock_system.h>
 #include <string.h>
 
 /* Macros for IP address formatting */
@@ -24,6 +25,13 @@
     (int)((ip >> 16) & 0xFF), \
     (int)((ip >> 8) & 0xFF), \
     (int)(ip & 0xFF)
+
+/* ARP Cache timeout (in milliseconds) */
+#define ARP_CACHE_TIMEOUT_MS (5 * 60 * 1000)  /* 5 minutes */
+
+/* ARP Resolution timeout (in milliseconds) */
+#define ARP_RESOLVE_TIMEOUT_MS 2000  /* 2 seconds */
+#define ARP_RESOLVE_RETRIES 3        /* 3 attempts */
 
 /* ARP Cache */
 static struct arp_cache_entry *arp_cache = NULL;
@@ -68,10 +76,15 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
     }
     
     uint16_t opcode = ntohs(arp->opcode);
-    ip4_addr_t sender_ip = ntohl(arp->sender_ip);  /* Convert to host byte order */
-    ip4_addr_t target_ip = ntohl(arp->target_ip);  /* Convert to host byte order */
+    /* Keep IPs in network byte order for comparisons and cache operations */
+    ip4_addr_t sender_ip = arp->sender_ip;  /* Already in network byte order */
+    ip4_addr_t target_ip = arp->target_ip;  /* Already in network byte order */
     
-    LOG_INFO_FMT("ARP", "Received ARP packet: opcode=%d", (int)opcode);
+    LOG_INFO_FMT("ARP", "Received ARP packet: opcode=%d, sender_ip=" IP4_FMT ", target_ip=" IP4_FMT,
+                 (int)opcode, IP4_ARGS(ntohl(sender_ip)), IP4_ARGS(ntohl(target_ip)));
+    LOG_INFO_FMT("ARP", "Sender MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+                 arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
+                 arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
     
     if (opcode == ARP_OP_REQUEST)
     {
@@ -99,7 +112,8 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
             
             /* Sender (us) */
             memcpy(reply->sender_mac, dev->mac, 6);
-            reply->sender_ip = htonl(my_ip);
+            /* my_ip is already in network byte order */
+            reply->sender_ip = my_ip;
             
             /* Target (request sender) */
             memcpy(reply->target_mac, arp->sender_mac, 6);
@@ -126,7 +140,7 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
         arp_cache_add(sender_ip, arp->sender_mac);
         
         LOG_INFO_FMT("ARP", "Resolved IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
-                     IP4_ARGS(sender_ip),
+                     IP4_ARGS(ntohl(sender_ip)),
                      arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
                      arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
     }
@@ -147,7 +161,8 @@ int arp_init(void)
     arp_proto.priv = NULL;
     
     /* Set default IP (should be configurable per interface) */
-    my_ip = make_ip4_addr(192, 168, 1, 100);
+    /* QEMU user mode networking default: 10.0.2.15 */
+    my_ip = make_ip4_addr(10, 0, 2, 15);
     
     int ret = net_register_protocol(&arp_proto);
     if (ret == 0)
@@ -171,14 +186,36 @@ int arp_init(void)
  */
 struct arp_cache_entry *arp_lookup(ip4_addr_t ip)
 {
+    uint64_t now = clock_get_uptime_milliseconds();
     struct arp_cache_entry *entry = arp_cache;
+    struct arp_cache_entry *prev = NULL;
     
     while (entry)
     {
+        /* Check if entry has expired */
+        if (now - entry->timestamp > ARP_CACHE_TIMEOUT_MS)
+        {
+            /* Remove expired entry */
+            struct arp_cache_entry *next = entry->next;
+            if (prev)
+            {
+                prev->next = next;
+            }
+            else
+            {
+                arp_cache = next;
+            }
+            kfree(entry);
+            entry = next;
+            continue;
+        }
+        
         if (entry->ip == ip)
         {
             return entry;
         }
+        
+        prev = entry;
         entry = entry->next;
     }
     
@@ -199,8 +236,8 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
     {
         /* Update existing entry */
         memcpy(entry->mac, mac, 6);
-        entry->timestamp = 0; /* TODO: Use actual timestamp */
-        LOG_INFO_FMT("ARP", "Updated ARP cache entry for IP " IP4_FMT, IP4_ARGS(ip));
+        entry->timestamp = clock_get_uptime_milliseconds();
+        LOG_INFO_FMT("ARP", "Updated ARP cache entry for IP " IP4_FMT, IP4_ARGS(ntohl(ip)));
         return;
     }
     
@@ -214,12 +251,12 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
     
     entry->ip = ip;
     memcpy(entry->mac, mac, 6);
-    entry->timestamp = 0; /* TODO: Use actual timestamp */
+    entry->timestamp = clock_get_uptime_milliseconds();
     entry->next = arp_cache;
     arp_cache = entry;
     
     LOG_INFO_FMT("ARP", "Added ARP cache entry: IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
-                 IP4_ARGS(ip),
+                 IP4_ARGS(ntohl(ip)),
                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
@@ -230,7 +267,7 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
  */
 void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
 {
-    LOG_INFO_FMT("ARP", "Sending ARP request for IP " IP4_FMT, IP4_ARGS(target_ip));
+    LOG_INFO_FMT("ARP", "Sending ARP request for IP " IP4_FMT, IP4_ARGS(ntohl(target_ip)));
     
     struct arp_header *request = (struct arp_header *)kmalloc(sizeof(struct arp_header));
     if (!request)
@@ -248,11 +285,13 @@ void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
     
     /* Sender (us) */
     memcpy(request->sender_mac, dev->mac, 6);
-    request->sender_ip = htonl(my_ip);
+    /* my_ip is already in network byte order from make_ip4_addr */
+    request->sender_ip = my_ip;
     
     /* Target (unknown MAC, IP to resolve) */
     memset(request->target_mac, 0, 6);
-    request->target_ip = htonl(target_ip);
+    /* target_ip is already in network byte order */
+    request->target_ip = target_ip;
     
     /* Send ARP request as broadcast */
     if (net_send(dev, ETHERTYPE_ARP, broadcast_mac, request, sizeof(struct arp_header)) == 0)
@@ -281,15 +320,170 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
     if (entry)
     {
         memcpy(mac, entry->mac, 6);
-        LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved from cache", IP4_ARGS(ip));
+        LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved from cache", IP4_ARGS(ntohl(ip)));
         return 0;
     }
     
-    /* Not in cache, send ARP request */
-    LOG_INFO_FMT("ARP", "IP " IP4_FMT " not in cache, sending ARP request", IP4_ARGS(ip));
-    arp_send_request(dev, ip);
+    /* Not in cache, try to resolve with timeout and retries */
+    LOG_INFO_FMT("ARP", "IP " IP4_FMT " not in cache, attempting resolution", IP4_ARGS(ntohl(ip)));
     
-    /* TODO: Wait for reply with timeout, for now just return error */
+    for (int retry = 0; retry < ARP_RESOLVE_RETRIES; retry++)
+    {
+        if (retry > 0)
+        {
+            LOG_INFO_FMT("ARP", "Retry %d/%d for IP " IP4_FMT, 
+                        retry, ARP_RESOLVE_RETRIES, IP4_ARGS(ntohl(ip)));
+        }
+        
+        /* Send ARP request */
+        arp_send_request(dev, ip);
+        
+        /* Wait for ARP reply with timeout */
+        uint64_t start_time = clock_get_uptime_milliseconds();
+        uint64_t timeout_ms = ARP_RESOLVE_TIMEOUT_MS;
+        
+        /* Log to serial only for verbose info */
+        extern void serial_print(const char *);
+        extern void serial_print_hex32(uint32_t);
+        serial_print("[ARP] Waiting for ARP reply (timeout=");
+        serial_print_hex32((uint32_t)timeout_ms);
+        serial_print(" ms, attempt ");
+        serial_print_hex32((uint32_t)(retry + 1));
+        serial_print("/");
+        serial_print_hex32((uint32_t)ARP_RESOLVE_RETRIES);
+        serial_print(")\n");
+        
+        uint64_t last_log_time = start_time;
+        int check_count = 0;
+        int max_checks = (timeout_ms / 10) + 10; /* Safety limit */
+        
+        while (check_count < max_checks)
+        {
+            uint64_t current_time = clock_get_uptime_milliseconds();
+            uint64_t elapsed = 0;
+            
+            /* Check for overflow */
+            if (current_time >= start_time)
+            {
+                elapsed = current_time - start_time;
+            }
+            else
+            {
+                LOG_WARNING("ARP", "Timer overflow detected!");
+                elapsed = timeout_ms + 1; /* Force exit */
+            }
+            
+            /* Reduced logging: only log every 500ms to reduce VGA clutter */
+            if (check_count == 0 || (current_time - last_log_time) >= 500)
+            {
+                /* Use serial for verbose progress logs */
+                extern void serial_print(const char *);
+                extern void serial_print_hex32(uint32_t);
+                serial_print("[ARP] Waiting... elapsed=");
+                serial_print_hex32((uint32_t)elapsed);
+                serial_print(" ms, check_count=");
+                serial_print_hex32((uint32_t)check_count);
+                serial_print("\n");
+                last_log_time = current_time;
+            }
+            
+            /* Check timeout */
+            if (elapsed >= timeout_ms)
+            {
+                LOG_INFO_FMT("ARP", "Timeout reached: elapsed=%d ms >= timeout=%d ms", 
+                            (int)elapsed, (int)timeout_ms);
+                break;
+            }
+            
+            /* CRITICAL: Poll network card for received packets */
+            /* This is necessary because interrupts may not be working properly */
+            /* Include rtl8139.h at top of file for this function */
+            {
+                extern void rtl8139_poll(void);
+                rtl8139_poll();
+            }
+            
+            /* Check if entry appeared in cache (ARP reply received) */
+            entry = arp_lookup(ip);
+            if (entry)
+            {
+                memcpy(mac, entry->mac, 6);
+                LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved after %d ms (attempt %d)",
+                            IP4_ARGS(ntohl(ip)), (int)elapsed, retry + 1);
+                LOG_INFO_FMT("ARP", "Resolved MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+                            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                return 0;
+            }
+            
+            check_count++;
+            
+            /* Reduced logging: only log every 50 checks (every ~500ms) to reduce VGA clutter */
+            if ((check_count % 50) == 0)
+            {
+                uint64_t now = clock_get_uptime_milliseconds();
+                uint64_t elapsed_check = (now >= start_time) ? (now - start_time) : 0;
+                /* Use serial only for verbose logging */
+                extern void serial_print(const char *);
+                extern void serial_print_hex32(uint32_t);
+                serial_print("[ARP] Loop check #");
+                serial_print_hex32((uint32_t)check_count);
+                serial_print(", elapsed=");
+                serial_print_hex32((uint32_t)elapsed_check);
+                serial_print(" ms\n");
+            }
+            
+            /* Small delay to allow interrupts to be processed */
+            /* Instead of clock_sleep() which uses hlt (can block forever),
+             * we do a small busy-wait loop that checks the timer periodically.
+             * CRITICAL: We must enable interrupts during the delay to allow
+             * timer interrupts to be processed and update the clock.
+             */
+            uint64_t delay_start = clock_get_uptime_milliseconds();
+            uint64_t delay_target = delay_start + 10; /* 10ms delay */
+            int delay_iterations = 0;
+            
+            /* Enable interrupts during delay to allow timer to advance */
+            __asm__ volatile("sti");
+            
+            /* Busy-wait checking timer periodically */
+            while (clock_get_uptime_milliseconds() < delay_target)
+            {
+                delay_iterations++;
+                /* Check every ~1000 iterations to avoid excessive timer calls */
+                if ((delay_iterations % 1000) == 0)
+                {
+                    /* If timer hasn't advanced, break to avoid infinite loop */
+                    if (clock_get_uptime_milliseconds() == delay_start && delay_iterations > 10000)
+                    {
+                        LOG_WARNING("ARP", "Timer not advancing during delay, breaking delay loop");
+                        break;
+                    }
+                }
+                /* Small CPU pause to reduce power consumption and allow interrupts */
+                __asm__ volatile("pause");
+            }
+            
+            /* Keep interrupts enabled to allow RX interrupts to be processed */
+            /* Note: We don't disable interrupts here because we need RX interrupts
+             * from the network card to process ARP replies. The ARP resolution
+             * loop is already protected by checking the cache entry atomically.
+             */
+        }
+        
+        uint64_t elapsed = clock_get_uptime_milliseconds() - start_time;
+        LOG_WARNING_FMT("ARP", "Timeout waiting for ARP reply after %d ms (attempt %d/%d, checks=%d)",
+                       (int)elapsed, retry + 1, ARP_RESOLVE_RETRIES, check_count);
+        
+        /* Check if we should continue with next retry */
+        if (retry < ARP_RESOLVE_RETRIES - 1)
+        {
+            LOG_INFO_FMT("ARP", "Continuing to next retry... (retry %d/%d)", 
+                        retry + 2, ARP_RESOLVE_RETRIES);
+        }
+    }
+    
+    LOG_ERROR_FMT("ARP", "Failed to resolve IP " IP4_FMT " after %d attempts",
+                 IP4_ARGS(ntohl(ip)), ARP_RESOLVE_RETRIES);
     return -1;
 }
 
@@ -313,12 +507,22 @@ void arp_print_cache(void)
     {
         LOG_INFO_FMT("ARP", "  %d. IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
                      ++count,
-                     IP4_ARGS(entry->ip),
+                     IP4_ARGS(ntohl(entry->ip)),
                      entry->mac[0], entry->mac[1], entry->mac[2],
                      entry->mac[3], entry->mac[4], entry->mac[5]);
         entry = entry->next;
     }
     
     LOG_INFO_FMT("ARP", "Total entries: %d", count);
+}
+
+/**
+ * arp_set_my_ip - Update ARP's IP address (synchronize with IP layer)
+ * @ip: New IP address in network byte order
+ */
+void arp_set_my_ip(ip4_addr_t ip)
+{
+    my_ip = ip;
+    LOG_INFO_FMT("ARP", "Updated ARP IP address to " IP4_FMT, IP4_ARGS(ntohl(ip)));
 }
 

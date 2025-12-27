@@ -16,6 +16,7 @@
 #include "io.h"
 #include <ir0/vga.h>
 #include <kernel/rr_sched.h>
+#include <drivers/net/rtl8139.h>
 
 // Declaraciones externas para el nuevo driver de teclado
 extern void keyboard_handler64(void);
@@ -71,6 +72,10 @@ void isr_handler64(uint64_t interrupt_number)
 
         case 1: // Keyboard
             keyboard_handler64();
+            break;
+
+        case 11: // RTL8139 Network Card
+            rtl8139_handle_interrupt();
             break;
 
         default:

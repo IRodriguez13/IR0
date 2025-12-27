@@ -141,7 +141,7 @@ static void cmd_touch(const char *filename);
 
 static void cmd_help(void)
 {
-  shell_write(1, "IR0 DebShell - Available commands:\n");
+  shell_write(1, "IR0 Dbgshell - Available commands:\n");
   /* commands table will drive help output */
   cmd_list_help();
 }
@@ -1483,6 +1483,123 @@ static void cmd_mouse_test(const char *args __attribute__((unused)))
   syscall(113, 0, 0, 0);
 }
 
+/* Parse IP address from string (e.g., "192.168.1.1") */
+static ip4_addr_t parse_ip(const char *ip_str)
+{
+    if (!ip_str || *ip_str == '\0')
+        return 0;
+    
+    uint8_t octets[4] = {0, 0, 0, 0};
+    int octet_idx = 0;
+    int value = 0;
+    const char *p = ip_str;
+    
+    while (*p && octet_idx < 4)
+    {
+        if (*p >= '0' && *p <= '9')
+        {
+            value = value * 10 + (*p - '0');
+            if (value > 255)
+                return 0;  /* Invalid */
+        }
+        else if (*p == '.')
+        {
+            if (octet_idx >= 4)
+                return 0;
+            octets[octet_idx++] = (uint8_t)value;
+            value = 0;
+        }
+        else
+        {
+            return 0;  /* Invalid character */
+        }
+        p++;
+    }
+    
+    if (octet_idx < 3)
+        return 0;  /* Not enough octets */
+    
+    octets[octet_idx] = (uint8_t)value;
+    
+    /* Convert to network byte order */
+    return htonl((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]);
+}
+
+static void cmd_ping(const char *args)
+{
+    if (!args || *args == '\0')
+    {
+        shell_write(2, "Usage: ping <IP_ADDRESS>\n");
+        shell_write(2, "Example: ping 192.168.1.1\n");
+        return;
+    }
+    
+    ip4_addr_t dest_ip = parse_ip(args);
+    if (dest_ip == 0)
+    {
+        shell_write(2, "Invalid IP address format. Use: XXX.XXX.XXX.XXX\n");
+        return;
+    }
+    
+    int64_t ret = syscall(SYS_PING, dest_ip, 0, 0);
+    if (ret != 0)
+    {
+        shell_write(2, "Ping failed\n");
+    }
+}
+
+static void cmd_ifconfig(const char *args)
+{
+    if (!args || *args == '\0')
+    {
+        /* Show current configuration */
+        syscall(SYS_IFCONFIG, 0, 0, 0);
+        return;
+    }
+    
+    /* Parse arguments: ifconfig <ip> [netmask] [gateway] */
+    char arg_copy[256];
+    size_t i = 0;
+    const char *p = args;
+    while (i < sizeof(arg_copy) - 1 && *p && *p != '\n')
+        arg_copy[i++] = *p++;
+    arg_copy[i] = '\0';
+    
+    /* Find first space (IP address) */
+    char *ip_str = arg_copy;
+    char *netmask_str = NULL;
+    char *gateway_str = NULL;
+    
+    char *q = ip_str;
+    while (*q && *q != ' ' && *q != '\t')
+        q++;
+    if (*q)
+    {
+        *q++ = '\0';
+        netmask_str = (char *)skip_whitespace(q);
+        q = netmask_str;
+        while (*q && *q != ' ' && *q != '\t')
+            q++;
+        if (*q)
+        {
+            *q++ = '\0';
+            gateway_str = (char *)skip_whitespace(q);
+        }
+    }
+    
+    ip4_addr_t ip = parse_ip(ip_str);
+    ip4_addr_t netmask = netmask_str ? parse_ip(netmask_str) : 0;
+    ip4_addr_t gateway = gateway_str ? parse_ip(gateway_str) : 0;
+    
+    if (ip == 0 && ip_str[0] != '\0')
+    {
+        shell_write(2, "Invalid IP address format\n");
+        return;
+    }
+    
+    syscall(SYS_IFCONFIG, ip, netmask, gateway);
+}
+
 /* Command table: name, handler, description */
 struct shell_cmd
 {
@@ -1524,6 +1641,8 @@ static const struct shell_cmd commands[] = {
     {"touch", cmd_touch, "touch FILE", "Create empty file or update timestamp"},
     {"netinfo", (void (*)(const char *))cmd_netinfo, "netinfo", "Display network interface information"},
     {"arpcache", (void (*)(const char *))cmd_arpcache, "arpcache", "Display ARP cache"},
+    {"ping", cmd_ping, "ping <IP>", "Send ICMP Echo Request (ping) to IP address"},
+    {"ifconfig", cmd_ifconfig, "ifconfig [IP] [NETMASK] [GATEWAY]", "Configure or display network interface"},
 };
 
 static void cmd_list_help(void)

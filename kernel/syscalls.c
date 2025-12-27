@@ -25,6 +25,8 @@
 #include <ir0/memory/kmem.h>
 #include <ir0/vga.h>
 #include <ir0/net.h>
+#include <net/icmp.h>
+#include <net/ip.h>
 #include <ir0/stat.h>
 #include <ir0/user.h>
 #include <kernel/rr_sched.h>
@@ -1370,6 +1372,111 @@ int64_t sys_mouse_test(void)
     return -1;
 }
 
+int64_t sys_ping(ip4_addr_t dest_ip)
+{
+    struct net_device *dev = net_get_devices();
+    if (!dev)
+    {
+        print("PING: No network device available\n");
+        return -1;
+    }
+    
+    /* Use process ID as identifier, sequence 0 */
+    pid_t pid = sys_getpid();
+    uint16_t id = (uint16_t)(pid & 0xFFFF);
+    uint16_t seq = 0;
+    
+    print("PING: Sending ICMP Echo Request to ");
+    char ip_str[16];
+    uint32_t host_ip = ntohl(dest_ip);
+    itoa((host_ip >> 24) & 0xFF, ip_str, 10);
+    print(ip_str);
+    print(".");
+    itoa((host_ip >> 16) & 0xFF, ip_str, 10);
+    print(ip_str);
+    print(".");
+    itoa((host_ip >> 8) & 0xFF, ip_str, 10);
+    print(ip_str);
+    print(".");
+    itoa(host_ip & 0xFF, ip_str, 10);
+    print(ip_str);
+    print("\n");
+    
+    int ret = icmp_send_echo_request(dev, dest_ip, id, seq, NULL, 0);
+    if (ret == 0)
+    {
+        print("PING: Echo Request sent successfully\n");
+        return 0;
+    }
+    else
+    {
+        print("PING: Failed to send Echo Request\n");
+        return -1;
+    }
+}
+
+int64_t sys_ifconfig(ip4_addr_t ip, ip4_addr_t netmask, ip4_addr_t gateway)
+{
+    extern ip4_addr_t ip_local_addr;
+    extern ip4_addr_t ip_netmask;
+    extern ip4_addr_t ip_gateway;
+    extern void arp_set_my_ip(ip4_addr_t ip);
+    
+    if (ip != 0)
+    {
+        ip_local_addr = ip;
+        /* Synchronize ARP's IP address */
+        arp_set_my_ip(ip);
+        print("IFCONFIG: IP address set to ");
+        char ip_str[16];
+        uint32_t host_ip = ntohl(ip);
+        itoa((host_ip >> 24) & 0xFF, ip_str, 10);
+        print(ip_str);
+        print(".");
+        itoa((host_ip >> 16) & 0xFF, ip_str, 10);
+        print(ip_str);
+        print(".");
+        itoa((host_ip >> 8) & 0xFF, ip_str, 10);
+        print(ip_str);
+        print(".");
+        itoa(host_ip & 0xFF, ip_str, 10);
+        print(ip_str);
+        print("\n");
+    }
+    
+    if (netmask != 0)
+    {
+        ip_netmask = netmask;
+        print("IFCONFIG: Netmask set\n");
+    }
+    
+    if (gateway != 0)
+    {
+        ip_gateway = gateway;
+        print("IFCONFIG: Gateway set\n");
+    }
+    
+    /* Show current configuration */
+    print("IFCONFIG: Current configuration:\n");
+    print("  IP: ");
+    uint32_t host_ip = ntohl(ip_local_addr);
+    char ip_str[16];
+    itoa((host_ip >> 24) & 0xFF, ip_str, 10);
+    print(ip_str);
+    print(".");
+    itoa((host_ip >> 16) & 0xFF, ip_str, 10);
+    print(ip_str);
+    print(".");
+    itoa((host_ip >> 8) & 0xFF, ip_str, 10);
+    print(ip_str);
+    print(".");
+    itoa(host_ip & 0xFF, ip_str, 10);
+    print(ip_str);
+    print("\n");
+    
+    return 0;
+}
+
 void syscalls_init(void)
 {
   /* Connect to REAL process management only */
@@ -1503,6 +1610,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_mouse_test();
   case 114:
     return sys_dmesg();
+  case 115:
+    return sys_ping((ip4_addr_t)arg1);
+  case 116:
+    return sys_ifconfig((ip4_addr_t)arg1, (ip4_addr_t)arg2, (ip4_addr_t)arg3);
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");
