@@ -60,6 +60,23 @@ class KConfigBuild:
         # kconfig_get_kernel_root
         self.lib.kconfig_get_kernel_root.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
         self.lib.kconfig_get_kernel_root.restype = ctypes.c_int
+        
+        # kconfig_generate_makefile
+        self.lib.kconfig_generate_makefile.argtypes = [
+            ctypes.c_char_p,  # config_file
+            ctypes.c_char_p,  # subsystems_json
+            ctypes.c_char_p,  # arch
+            ctypes.c_char_p   # kernel_root
+        ]
+        self.lib.kconfig_generate_makefile.restype = ctypes.c_int
+        
+        # kconfig_build_dynamic_makefile
+        self.lib.kconfig_build_dynamic_makefile.argtypes = [ctypes.c_char_p]
+        self.lib.kconfig_build_dynamic_makefile.restype = ctypes.c_int
+        
+        # kconfig_clean_dynamic_makefile
+        self.lib.kconfig_clean_dynamic_makefile.argtypes = [ctypes.c_char_p]
+        self.lib.kconfig_clean_dynamic_makefile.restype = ctypes.c_int
     
     def get_kernel_root(self):
         """Get kernel root directory"""
@@ -139,6 +156,98 @@ class KConfigBuild:
                 result = subprocess.run(
                     ['python3', build_script, config_file, subsystems_json, arch],
                     cwd=kernel_root,
+                    capture_output=True,
+                    text=True
+                )
+                return result.returncode == 0, result.stderr if result.returncode != 0 else result.stdout
+            except Exception as e:
+                return False, str(e)
+    
+    def generate_makefile(self, config_file, subsystems_json, arch='x86-64', kernel_root=None):
+        """Generate dynamic Makefile based on selected subsystems"""
+        if not kernel_root:
+            kernel_root = self.get_kernel_root()
+        
+        if not kernel_root:
+            return False, "Could not find kernel root"
+        
+        # Always use Python script for reliability (better JSON parsing)
+        import subprocess
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        generate_script = os.path.join(script_dir, 'generate_dynamic_makefile.py')
+        
+        if not os.path.exists(generate_script):
+            return False, f"generate_dynamic_makefile.py not found at {generate_script}"
+        
+        try:
+            result = subprocess.run(
+                ['python3', generate_script, config_file, subsystems_json, arch, kernel_root],
+                capture_output=True,
+                text=True,
+                cwd=kernel_root
+            )
+            if result.returncode == 0:
+                return True, result.stderr if result.stderr else "Makefile generated successfully"
+            else:
+                return False, result.stderr if result.stderr else f"Exit code: {result.returncode}"
+        except Exception as e:
+            return False, str(e)
+    
+    def build_dynamic(self, kernel_root=None):
+        """Build using dynamic Makefile"""
+        if not kernel_root:
+            kernel_root = self.get_kernel_root()
+        
+        if not kernel_root:
+            return False, "Could not find kernel root"
+        
+        if self.lib:
+            # Use C library
+            result = self.lib.kconfig_build_dynamic_makefile(
+                kernel_root.encode('utf-8')
+            )
+            return result == 0, f"Exit code: {result}"
+        else:
+            # Fallback to subprocess
+            import subprocess
+            makefile_path = os.path.join(kernel_root, 'setup', '.build', 'Makefile.dynamic')
+            if not os.path.exists(makefile_path):
+                return False, "Dynamic Makefile not found. Run configuration first."
+            
+            try:
+                result = subprocess.run(
+                    ['make', '-f', makefile_path, '-C', kernel_root, 'all'],
+                    capture_output=True,
+                    text=True
+                )
+                return result.returncode == 0, result.stderr if result.returncode != 0 else result.stdout
+            except Exception as e:
+                return False, str(e)
+    
+    def clean_dynamic(self, kernel_root=None):
+        """Clean using dynamic Makefile"""
+        if not kernel_root:
+            kernel_root = self.get_kernel_root()
+        
+        if not kernel_root:
+            return False, "Could not find kernel root"
+        
+        if self.lib:
+            # Use C library
+            result = self.lib.kconfig_clean_dynamic_makefile(
+                kernel_root.encode('utf-8')
+            )
+            return result == 0, f"Exit code: {result}"
+        else:
+            # Fallback to subprocess
+            import subprocess
+            makefile_path = os.path.join(kernel_root, 'setup', '.build', 'Makefile.dynamic')
+            if not os.path.exists(makefile_path):
+                return True, "No Makefile to clean"  # Not an error
+            
+            try:
+                result = subprocess.run(
+                    ['make', '-f', makefile_path, '-C', kernel_root, 'clean'],
                     capture_output=True,
                     text=True
                 )

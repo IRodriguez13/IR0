@@ -78,7 +78,8 @@ int copy_to_user(void *dst, const void *src, size_t n)
     return 0;
 }
 
-/**
+/*
+ *
  * copy_from_user - Copy from user space with mode-aware validation
  */
 int copy_from_user(void *dst, const void *src, size_t n)
