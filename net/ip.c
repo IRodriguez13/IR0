@@ -308,8 +308,7 @@ int ip_init(void)
     /* Synchronize ARP's IP address */
     arp_set_my_ip(ip_local_addr);
 
-    LOG_INFO_FMT("IP", "Initializing IPv4 with address " IP4_FMT,
-                 IP4_ARGS(ntohl(ip_local_addr)));
+    LOG_INFO_FMT("IP", "Initializing IPv4 with address " IP4_FMT, IP4_ARGS(ntohl(ip_local_addr)));
 
     /* Register IP protocol handler */
     memset(&ip_proto, 0, sizeof(ip_proto));

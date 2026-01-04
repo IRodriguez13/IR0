@@ -155,10 +155,12 @@ static int ramfs_write_file(const char *name, const void *data, size_t size)
   return count;
 }
 
-static struct filesystem_type ramfs_fs_type = {
+static struct filesystem_type ramfs_fs_type = 
+{
     .name = "ramfs",
     .mount = ramfs_mount,
-    .next = NULL};
+    .next = NULL
+};
 
 int ramfs_register(void)
 {
