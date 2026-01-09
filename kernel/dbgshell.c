@@ -9,11 +9,15 @@
 #include "dbgshell.h"
 #include <drivers/video/typewriter.h>
 #include <ir0/syscall.h>
+#include <ir0/fcntl.h>
 #include <ir0/memory/kmem.h>
+#include <ir0/vga.h>
+#include <ir0/types.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <drivers/serial/serial.h>
 #include <ir0/stat.h>
 #include <ir0/chmod.h>
 #include <drivers/storage/ata.h>
@@ -215,7 +219,23 @@ static void cmd_cat(const char *filename)
     return;
   }
 
-  syscall(SYS_CAT, (uint64_t)filename, 0, 0);
+  // Use sys_open+read instead of sys_cat for /proc support
+  int fd = syscall(SYS_OPEN, (uint64_t)filename, O_RDONLY, 0);
+  if (fd < 0) {
+    shell_write(2, "cat: cannot open '");
+    shell_write(2, filename);
+    shell_write(2, "'\n");
+    return;
+  }
+
+  char buffer[1024];
+  int64_t bytes_read = syscall(SYS_READ, fd, (uint64_t)buffer, sizeof(buffer));
+  
+  if (bytes_read > 0) {
+    shell_write(1, buffer);
+  }
+  
+  syscall(SYS_CLOSE, fd, 0, 0);
 }
 
 static void cmd_mkdir(const char *dirname)

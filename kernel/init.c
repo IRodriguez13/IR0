@@ -16,6 +16,7 @@
 #include <drivers/video/typewriter.h>
 #include <ir0/memory/kmem.h>
 #include <ir0/memory/paging.h>
+#include <ir0/permissions.h>
 #include <string.h>
 
 
@@ -76,6 +77,13 @@ int start_init_process(void)
 	/* Set process command name */
 	strncpy(init->comm, "debshell", sizeof(init->comm) - 1);
 	init->comm[sizeof(init->comm) - 1] = '\0';
+
+	/* Set root permissions for dbgshell */
+	init->uid = ROOT_UID;
+	init->gid = ROOT_GID;
+	init->euid = ROOT_UID;
+	init->egid = ROOT_GID;
+	init->umask = DEFAULT_UMASK;
 
 	/* Add to scheduler and start */
 	rr_add_process(init);
