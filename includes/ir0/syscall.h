@@ -23,13 +23,10 @@ typedef enum {
     SYS_LS = 5,
     SYS_MKDIR = 6,
     SYS_PS = 7,
-    SYS_WRITE_FILE = 8,
-    SYS_CAT = 9,
     SYS_TOUCH = 10,
     SYS_RM = 11,
     SYS_FORK = 12,
     SYS_WAITPID = 13,
-    SYS_READ_FILE = 14,
     SYS_LSEEK = 19,
     SYS_RMDIR = 40,
     SYS_MALLOC_TEST = 50,
@@ -167,16 +164,6 @@ static inline int64_t ir0_read(int fd, void *buf, size_t count)
 }
 
 // File operations
-static inline int64_t ir0_write_file(const char *path, const char *content)
-{
-    return syscall2(SYS_WRITE_FILE, (int64_t)path, (int64_t)content);
-}
-
-static inline int64_t ir0_cat(const char *path)
-{
-    return syscall1(SYS_CAT, (int64_t)path);
-}
-
 static inline int64_t ir0_touch(const char *path)
 {
     return syscall1(SYS_TOUCH, (int64_t)path);

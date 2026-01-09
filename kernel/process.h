@@ -110,6 +110,9 @@ pid_t process_fork(void);
 void process_exit(int code);
 int process_wait(pid_t pid, int *status);
 
+/* Simple spawn process - deterministic alternative to fork */
+pid_t process_spawn(void (*entry)(void), const char *name);
+
 
 pid_t process_get_pid(void);
 pid_t process_get_ppid(void);

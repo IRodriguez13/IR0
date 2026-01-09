@@ -28,7 +28,6 @@
 #include <net/icmp.h>
 #include <net/ip.h>
 #include <ir0/stat.h>
-#include <ir0/user.h>
 #include <kernel/rr_sched.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -43,6 +42,9 @@
 #include <drivers/IO/ps2_mouse.h>
 #include <ir0/errno.h>
 #include <ir0/copy_user.h>
+#include <ir0/permissions.h>
+#include <ir0/fcntl.h>
+#include <ir0/procfs.h>
 
 /* Forward declaration */
 static fd_entry_t *get_process_fd_table(void);
@@ -94,6 +96,10 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
 
+  /* Check write permissions */
+  if (!check_file_access(fd_table[fd].path, ACCESS_WRITE, current_process))
+    return -EACCES;
+
   /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)
   {
@@ -116,6 +122,11 @@ int64_t sys_read(int fd, void *buf, size_t count)
     return -ESRCH;
   if (!buf || count == 0)
     return 0;
+
+  /* Handle /proc file descriptors (special positive numbers) */
+  if (fd >= 1000 && fd <= 1999) {
+    return proc_read(fd, (char*)buf, count);
+  }
 
   if (fd == STDIN_FILENO)
   {
@@ -140,6 +151,10 @@ int64_t sys_read(int fd, void *buf, size_t count)
   fd_entry_t *fd_table = get_process_fd_table();
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
+
+  /* Check read permissions */
+  if (!check_file_access(fd_table[fd].path, ACCESS_READ, current_process))
+    return -EACCES;
 
   /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)
@@ -206,207 +221,46 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
 
 int64_t sys_ps(void)
 {
-  /* REAL sys_ps() - uses only real process management */
-
-  serial_print("SERIAL: REAL sys_ps() called\n");
-
-  sys_write(1, "PID  STATE     COMMAND\n", 22);
-  sys_write(1, "---  --------  -------\n", 23);
-
-  /* Get REAL process list */
-  process_t *proc_list = get_process_list();
-
-  serial_print("SERIAL: Real process_list = ");
-  serial_print_hex32((uint32_t)(uintptr_t)proc_list);
-  serial_print("\n");
-
-  if (!proc_list)
-  {
-    serial_print("SERIAL: No processes in list, checking current_process\n");
-
-    /* If list is empty but current_process exists, add it */
-    if (current_process)
-    {
-      serial_print("SERIAL: Adding current_process to list\n");
-      process_list = current_process;
-      current_process->next = NULL;
-      proc_list = current_process;
-    }
+  /* Use /proc filesystem - show current process status */
+  // For now, show current process via /proc/status
+  int fd = sys_open("/proc/status", O_RDONLY, 0);
+  if (fd < 0) {
+    return -1;
   }
-
-
-  /* Iterate through REAL process list */
-  process_t *proc = proc_list;
-  int count = 0;
-
-  while (proc && count < 20)
-  {
-    serial_print("SERIAL: Processing PID=");
-    serial_print_hex32(process_pid(proc));
-    serial_print(" state=");
-    serial_print_hex32(proc->state);
-    serial_print("\n");
-
-    /* Show PID */
-    sys_write(1, "  ", 2);
-
-    /* Convert PID to string */
-    char pid_str[12];
-    uint32_t pid = process_pid(proc);
-    int len = 0;
-
-    if (pid == 0)
-    {
-      pid_str[len++] = '0';
-    }
-    else
-    {
-      char temp[12];
-      int temp_len = 0;
-      while (pid > 0)
-      {
-        temp[temp_len++] = '0' + (pid % 10);
-        pid /= 10;
-      }
-      for (int i = temp_len - 1; i >= 0; i--)
-      {
-        pid_str[len++] = temp[i];
-      }
-    }
-    pid_str[len] = '\0';
-
-    sys_write(1, pid_str, len);
-
-    /* Show state with proper spacing */
-    switch (proc->state)
-    {
-    case PROCESS_READY:
-      sys_write(1, "  READY     ", 12);
-      break;
-    case PROCESS_RUNNING:
-      sys_write(1, "  RUNNING   ", 12);
-      break;
-    case PROCESS_BLOCKED:
-      sys_write(1, "  BLOCKED   ", 12);
-      break;
-    case PROCESS_ZOMBIE:
-      sys_write(1, "  ZOMBIE    ", 12);
-      break;
-    default:
-      sys_write(1, "  UNKNOWN   ", 12);
-      break;
-    }
-
-    /* Show command name from process structure */
-    if (process_pid(proc) == 0)
-    {
-      sys_write(1, "kernel\n", 7);
-    }
-    else
-    {
-      /* Use comm field if available, otherwise default */
-      if (proc->comm[0] != '\0')
-      {
-        size_t comm_len = 0;
-        while (proc->comm[comm_len] && comm_len < 15) comm_len++;
-        sys_write(1, proc->comm, comm_len);
-        sys_write(1, "\n", 1);
-      }
-      else
-      {
-        sys_write(1, "process\n", 8);
-      }
-    }
-
-    proc = proc->next;
-    count++;
+  
+  char buffer[1024];
+  int64_t bytes = sys_read(fd, buffer, sizeof(buffer) - 1);
+  sys_close(fd);
+  
+  if (bytes > 0) {
+    sys_write(STDOUT_FILENO, buffer, bytes);
+    sys_write(STDOUT_FILENO, "\n", 1);
   }
-
-  if (count == 0)
-  {
-    serial_print("SERIAL: No processes found in list\n");
-    sys_write(1, "  No processes running\n", 23);
-  }
-  else
-  {
-    serial_print("SERIAL: Showed ");
-    serial_print_hex32(count);
-    serial_print(" processes\n");
-  }
-
+  
   return 0;
 }
 
-int64_t sys_cat(const char *pathname)
+int64_t sys_touch(const char *pathname)
 {
   if (!current_process || !pathname)
     return -EFAULT;
 
   if (minix_fs_is_working())
-    return minix_fs_cat(pathname);
+    return minix_fs_touch(pathname, 0644);  // Default mode
 
   sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
   return -1;
 }
 
-int64_t sys_read_file(const char *pathname, void **data, size_t *size)
-{
-  if (!current_process)
-    return -ESRCH;
-  if (!pathname || !data || !size)
-    return -EFAULT;
-
-  if (minix_fs_is_working())
-  {
-    return minix_fs_read_file(pathname, data, size);
-  }
-
-  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
-  return -1;
-}
 
 int64_t sys_write_file(const char *pathname, const char *content)
 {
-  serial_print("SERIAL: sys_write_file called\n");
-
-  if (!current_process)
-  {
-    serial_print("SERIAL: sys_write_file: no current process\n");
+  if (!current_process || !pathname || !content)
     return -EFAULT;
-  }
-
-  if (!pathname)
-  {
-    serial_print("SERIAL: sys_write_file: pathname is NULL\n");
-    return -EFAULT;
-  }
-
-  if (!content)
-  {
-    serial_print("SERIAL: sys_write_file: content is NULL\n");
-    return -EFAULT;
-  }
-
-  /* Validar que los punteros estén en rango válido */
-  if ((uint64_t)pathname < 0x1000 || (uint64_t)content < 0x1000)
-  {
-    serial_print("SERIAL: sys_write_file: invalid pointer range\n");
-    return -EFAULT;
-  }
-
-  serial_print("SERIAL: sys_write_file: pathname=");
-  serial_print_hex32((uint32_t)(uintptr_t)pathname);
-  serial_print(" content=");
-  serial_print_hex32((uint32_t)(uintptr_t)content);
-  serial_print("\n");
 
   if (minix_fs_is_working())
-  {
-    serial_print("SERIAL: sys_write_file: calling minix_fs_write_file\n");
     return minix_fs_write_file(pathname, content);
-  }
 
-  serial_print("SERIAL: sys_write_file: filesystem not ready\n");
   sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
   return -1;
 }
@@ -424,21 +278,6 @@ int64_t sys_exec(const char *pathname,
 
   /* For now, simple implementation - load and execute ELF */
   return elf_load_and_execute(pathname);
-}
-
-int64_t sys_touch(const char *pathname)
-{
-  if (!current_process || !pathname)
-    return -EFAULT;
-
-  /* Use default file permissions (0644 = rw-r--r--) */
-  mode_t default_mode = 0644;
-
-  if (minix_fs_is_working())
-    return minix_fs_touch(pathname, default_mode);
-
-  sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
-  return -1;
 }
 
 int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
@@ -494,14 +333,11 @@ int64_t sys_whoami(void) {
   if (!current_process)
     return -ESRCH;
 
-  user_info_t user;
-  if (get_current_user(&user) < 0) {
-    sys_write(STDERR_FILENO, "whoami: failed to get user info\n", 31);
-    return -1;
-  }
-
+  /* Use new permission system - simple root/user display */
+  const char *username = (current_process->uid == ROOT_UID) ? "root" : "user";
+  
   /* Print username */
-  sys_write(STDOUT_FILENO, user.name, strlen(user.name));
+  sys_write(STDOUT_FILENO, username, strlen(username));
   sys_write(STDOUT_FILENO, "\n", 1);
 
   return 0;
@@ -772,6 +608,21 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   if (!current_process || !pathname)
     return -EFAULT;
 
+  /* Handle /proc filesystem on-demand */
+  if (is_proc_path(pathname)) {
+    return proc_open(pathname, flags);
+  }
+
+  /* Check access permissions based on flags */
+  int access_mode = 0;
+  if (flags & O_RDONLY || flags & O_RDWR)
+    access_mode |= ACCESS_READ;
+  if (flags & O_WRONLY || flags & O_RDWR)
+    access_mode |= ACCESS_WRITE;
+  
+  if (access_mode && !check_file_access(pathname, access_mode, current_process))
+    return -EACCES;
+
   fd_entry_t *fd_table = get_process_fd_table();
 
   /* Find free file descriptor */
@@ -976,6 +827,11 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   if (!current_process || !pathname || !buf)
     return -EFAULT;
 
+  /* Handle /proc filesystem */
+  if (is_proc_path(pathname)) {
+    return proc_stat(pathname, buf);
+  }
+
   /* Use VFS layer instead of direct MINIX calls */
   return vfs_stat(pathname, buf);
 }
@@ -986,6 +842,15 @@ int64_t sys_fork(void)
     return -ESRCH;
 
   return process_fork();
+}
+
+/* Spawn a new process with specific entry point */
+int64_t sys_spawn(void (*entry)(void), const char *name)
+{
+  if (!current_process || !entry || !name)
+    return -EFAULT;
+
+  return process_spawn(entry, name);
 }
 
 int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
@@ -1483,7 +1348,7 @@ void syscalls_init(void)
   serial_print("SERIAL: syscalls_init: using REAL process management\n");
 
   /* Initialize user subsystem */
-  user_init();
+  /* User system is now handled by permissions system */
 
   /* Debug: check real process system */
   process_t *real_current = current_process;
@@ -1529,10 +1394,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_mkdir((const char *)arg1, (mode_t)arg2);
   case 7:
     return sys_ps();
-  case 8:
-    return sys_write_file((const char *)arg1, (const char *)arg2);
-  case 9:
-    return sys_cat((const char *)arg1);
   case 10:
     return sys_touch((const char *)arg1);
   case 11:
@@ -1541,8 +1402,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_fork();
   case 13:
     return sys_waitpid((pid_t)arg1, (int *)arg2, (int)arg3);
-  case 14:
-    return sys_read_file((const char *)arg1, (void **)arg2, (size_t *)arg3);
   case 40:
     return sys_rmdir((const char *)arg1);
   case 88:

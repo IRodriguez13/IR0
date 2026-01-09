@@ -20,6 +20,7 @@
 #include <drivers/video/typewriter.h>
 #include <ir0/serial.h>
 #include <ir0/memory/kmem.h>
+#include <kernel/process.h>
 #include <string.h>
 
 extern int cursor_pos;
@@ -1318,9 +1319,12 @@ int minix_fs_mkdir(const char *path, mode_t mode)
 
   minix_inode_t new_inode;
   kmemset(&new_inode, 0, sizeof(minix_inode_t));
-  new_inode.i_mode = MINIX_IFDIR | (mode & 0777);
-  new_inode.i_uid = 0;                 // root
-  new_inode.i_gid = 0;                 // root
+  
+  // Apply umask to mode
+  mode_t effective_mode = mode & ~current_process->umask;
+  new_inode.i_mode = MINIX_IFDIR | (effective_mode & 0777);
+  new_inode.i_uid = current_process ? current_process->uid : 0;
+  new_inode.i_gid = current_process ? current_process->gid : 0;
   new_inode.i_size = MINIX_BLOCK_SIZE; // One block for . and ..
   new_inode.i_time = get_system_time();
   new_inode.i_nlinks = 2; // . and ..
@@ -1957,9 +1961,12 @@ int minix_fs_touch(const char *path, mode_t mode)
 
   // Create new file inode
   minix_inode_t new_inode = {0};
-  new_inode.i_mode = MINIX_IFREG | (mode & 0777);         // Regular file with given permissions
-  new_inode.i_uid = 0;                                    // root
-  new_inode.i_gid = 0;                                    // root
+  
+  // Apply umask to mode
+  mode_t effective_mode = mode & ~current_process->umask;
+  new_inode.i_mode = MINIX_IFREG | (effective_mode & 0777);         // Regular file with given permissions
+  new_inode.i_uid = current_process ? current_process->uid : 0;     // Use current process UID
+  new_inode.i_gid = current_process ? current_process->gid : 0;     // Use current process GID
   new_inode.i_size = 0;                                   // Empty file
   new_inode.i_time = get_system_time();                   // Current time
   new_inode.i_nlinks = 1;                                 // Single hard link
@@ -1991,10 +1998,6 @@ int minix_fs_touch(const char *path, mode_t mode)
 
   return 0;
 }
-
-// ===============================================================================
-// FUNCIÓN PARA ELIMINAR ARCHIVOS (RM)
-// ===============================================================================
 
 int minix_fs_rm(const char *path)
 {

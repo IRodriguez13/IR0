@@ -1,92 +1,212 @@
-#ifndef IR0_VALIDATION_H
-#define IR0_VALIDATION_H
+// SPDX-License-Identifier: GPL-3.0-only
+/**
+ * IR0 Kernel — Critical Debugging Macros
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: critical.h
+ * Description: Unified header for critical debugging macros across all kernel subsystems
+ */
 
-#include <stdint.h>
-#include <stddef.h>
+/**
+ * IR0 Kernel - Critical Debugging Macros
+ * 
+ * Unified header for critical debugging macros across all kernel subsystems.
+ * Expande las macros existentes para proporcionar información detallada de ubicación
+ * en todos los puntos críticos del kernel.
+ */
+
+#pragma once
+
+#include <ir0/oops.h>
 #include <stdbool.h>
+#include <stddef.h>
 
-// ===============================================================================
-// VALIDATION SYSTEM
-// ===============================================================================
+// CRITICAL MACROS - Extended from oops.h
 
-// Error codes for validation
-typedef enum 
-{
-    VALIDATION_SUCCESS = 0,
-    VALIDATION_ERROR_NULL_POINTER = -1,
-    VALIDATION_ERROR_INVALID_RANGE = -2,
-    VALIDATION_ERROR_INVALID_SIZE = -3,
-    VALIDATION_ERROR_INVALID_FLAGS = -4,
-    VALIDATION_ERROR_PERMISSION_DENIED = -5,
-    VALIDATION_ERROR_INVALID_PATH = -6,
-    VALIDATION_ERROR_BUFFER_OVERFLOW = -7,
-    VALIDATION_ERROR_INVALID_FD = -8
-} validation_error_t;
-
-// ===============================================================================
-// VALIDATION FUNCTIONS
-// ===============================================================================
-
-// Pointer validation
-int validate_pointer(const void *ptr, const char *context);
-int validate_string(const char *str, const char *context);
-int validate_buffer(const void *buf, size_t size, const char *context);
-
-// Range validation
-int validate_range(int value, int min, int max, const char *context);
-int validate_range_unsigned(size_t value, size_t min, size_t max, const char *context);
-int validate_fd(int fd, const char *context);
-
-// Path validation
-int validate_path(const char *path, const char *context);
-int validate_path_length(const char *path, size_t max_length, const char *context);
-
-// Memory validation
-int validate_memory_access(const void *ptr, size_t size, const char *context);
-int validate_user_buffer(const void *buf, size_t size, const char *context);
-
-// Permission validation
-int validate_permissions(int flags, int allowed_flags, const char *context);
-
-// ===============================================================================
-// VALIDATION MACROS
-// ===============================================================================
-
-#define VALIDATE_POINTER(ptr, context) \
+/**
+ * CHECK_PTR - Validates pointer is not NULL before use
+ * Expands to panicex with exact location if check fails
+ */
+#define CHECK_PTR(ptr, context) \
     do { \
-        int result = validate_pointer(ptr, context); \
-        if (result != VALIDATION_SUCCESS) return result; \
+        if (unlikely(!(ptr))) { \
+            panicex("NULL pointer in " context, PANIC_MEM, \
+                   __FILE__, __LINE__, __func__); \
+        } \
     } while(0)
 
-#define VALIDATE_STRING(str, context) \
+/**
+ * CHECK_RANGE - Validates value is within bounds
+ */
+#define CHECK_RANGE(val, min, max, context) \
     do { \
-        int result = validate_string(str, context); \
-        if (result != VALIDATION_SUCCESS) return result; \
+        if (unlikely((val) < (min) || (val) > (max))) { \
+            panicex("Range check failed in " context, PANIC_KERNEL_BUG, \
+                   __FILE__, __LINE__, __func__); \
+        } \
     } while(0)
 
-#define VALIDATE_RANGE(value, min, max, context) \
+/**
+ * CHECK_ALIGN - Validates pointer alignment
+ */
+#define CHECK_ALIGN(ptr, alignment, context) \
     do { \
-        int result = validate_range(value, min, max, context); \
-        if (result != VALIDATION_SUCCESS) return result; \
+        if (unlikely(((uintptr_t)(ptr) & ((alignment) - 1)) != 0)) { \
+            panicex("Alignment check failed in " context, PANIC_MEM, \
+                   __FILE__, __LINE__, __func__); \
+        } \
     } while(0)
 
-#define VALIDATE_FD(fd, context) \
+/**
+ * CHECK_SIZE - Validates size parameter
+ */
+#define CHECK_SIZE(size, max_size, context) \
     do { \
-        int result = validate_fd(fd, context); \
-        if (result != VALIDATION_SUCCESS) return result; \
+        if (unlikely((size) == 0 || (size) > (max_size))) { \
+            panicex("Invalid size in " context, PANIC_MEM, \
+                   __FILE__, __LINE__, __func__); \
+        } \
     } while(0)
 
-#define VALIDATE_PATH(path, context) \
+/**
+ * CHECK_BOUNDS - Validates array/buffer bounds
+ */
+#define CHECK_BOUNDS(index, max, context) \
     do { \
-        int result = validate_path(path, context); \
-        if (result != VALIDATION_SUCCESS) return result; \
+        if (unlikely((index) >= (max))) { \
+            panicex("Bounds check failed in " context, PANIC_KERNEL_BUG, \
+                   __FILE__, __LINE__, __func__); \
+        } \
     } while(0)
 
-// ===============================================================================
-// ERROR HANDLING
-// ===============================================================================
+/**
+ * CHECK_SYSCALL - Validates syscall number
+ */
+#define CHECK_SYSCALL(num, max, context) \
+    do { \
+        if (unlikely((num) < 0 || (num) >= (max))) { \
+            panicex("Invalid syscall number in " context, PANIC_KERNEL_BUG, \
+                   __FILE__, __LINE__, __func__); \
+        } \
+    } while(0)
 
-const char* validation_error_string(validation_error_t error);
-void validation_log_error(validation_error_t error, const char *context, const char *operation);
+/**
+ * CHECK_FD - Validates file descriptor
+ */
+#define CHECK_FD(fd, max, context) \
+    do { \
+        if (unlikely((fd) < 0 || (fd) >= (max))) { \
+            panicex("Invalid file descriptor in " context, PANIC_KERNEL_BUG, \
+                   __FILE__, __LINE__, __func__); \
+        } \
+    } while(0)
 
-#endif // IR0_VALIDATION_H
+/**
+ * CHECK_BUFFER - Validates buffer pointer and size
+ */
+#define CHECK_BUFFER(buf, size, context) \
+    do { \
+        CHECK_PTR(buf, context); \
+        CHECK_SIZE(size, (size_t)-1, context); \
+    } while(0)
+
+/**
+ * VERIFY - Runtime assertion that doesn't get compiled out
+ * Unlike ASSERT, this always runs even in release builds
+ */
+#define VERIFY(condition, context) \
+    do { \
+        if (unlikely(!(condition))) { \
+            panicex("Verification failed: " #condition " in " context, \
+                   PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__); \
+        } \
+    } while(0)
+
+/**
+ * NOT_REACHED - Marks code paths that should never execute
+ */
+#define NOT_REACHED(context) \
+    panicex("Reached unreachable code in " context, PANIC_KERNEL_BUG, \
+           __FILE__, __LINE__, __func__)
+
+/**
+ * TODO_IMPLEMENT - Marks unimplemented functionality
+ */
+#define TODO_IMPLEMENT(feature) \
+    panicex("Unimplemented feature: " feature, PANIC_KERNEL_BUG, \
+           __FILE__, __LINE__, __func__)
+
+// SUBSYSTEM-SPECIFIC MACROS
+
+/**
+ * FS_CHECK - Filesystem-specific checks
+ */
+#define FS_CHECK_PATH(path) CHECK_PTR(path, "filesystem path")
+#define FS_CHECK_FD(fd) CHECK_FD(fd, 256, "filesystem")
+#define FS_CHECK_OFFSET(offset, max) CHECK_RANGE(offset, 0, max, "filesystem offset")
+
+/**
+ * MEM_CHECK - Memory management checks (already in kmem.h, but aliased here)
+ */
+#define MEM_CHECK_PTR(ptr) CHECK_PTR(ptr, "memory allocation")
+#define MEM_CHECK_SIZE(size) CHECK_SIZE(size, (size_t)-1, "memory size")
+#define MEM_CHECK_ALIGN(ptr, align) CHECK_ALIGN(ptr, align, "memory alignment")
+
+/**
+ * SCHED_CHECK - Scheduler checks
+ */
+#define SCHED_CHECK_PID(pid, max) CHECK_RANGE(pid, 0, max, "scheduler PID")
+#define SCHED_CHECK_PRIORITY(prio, min, max) CHECK_RANGE(prio, min, max, "scheduler priority")
+
+/**
+ * DRV_CHECK - Driver checks
+ */
+#define DRV_CHECK_IRQ(irq, max) CHECK_RANGE(irq, 0, max, "driver IRQ")
+#define DRV_CHECK_PORT(port) CHECK_RANGE(port, 0, 0xFFFF, "driver I/O port")
+
+// C++/RUST INTEROPERABILITY GUARDS
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// All functions remain C-callable even when included from C++
+
+#ifdef __cplusplus
+}
+
+// C++-specific debug helpers
+namespace ir0 {
+namespace debug {
+    
+    // RAII-style scope guard for critical sections
+    class ScopeGuard {
+    public:
+        explicit ScopeGuard(const char* name) : name_(name) {}
+        ~ScopeGuard() {}
+    private:
+        const char* name_;
+    };
+    
+} // namespace debug
+} // namespace ir0
+
+#endif // __cplusplus
+
+// COMPATIBILITY NOTES
+
+/*
+ * These macros are designed to work with:
+ * - Pure C code (current kernel)
+ * - C++ kernel components (future)
+ * - Rust FFI bindings (future)
+ *
+ * When calling from Rust:
+ *   - All panicex calls are extern "C"
+ *   - Use #[no_mangle] for FFI functions
+ *   - panic_level_t maps to u32 in Rust
+ */
