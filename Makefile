@@ -150,13 +150,11 @@ KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
     kernel/process.o \
-    kernel/process_util.o \
 	kernel/rr_sched.o \
     kernel/task.o \
     kernel/syscalls.o \
     kernel/dbgshell.o \
     kernel/elf_loader.o \
-    kernel/user.o \
     kernel/driver_registry.o
 
 MEMORY_OBJS = \
@@ -168,7 +166,6 @@ MEMORY_OBJS = \
 LIB_OBJS = \
     includes/ir0/vga.o \
     includes/ir0/logging.o \
-    includes/ir0/validation.o \
     includes/ir0/oops.o \
     includes/ir0/signals.o \
     includes/ir0/pipe.o \
@@ -209,7 +206,9 @@ FS_OBJS = \
     fs/vfs_simple.o \
     fs/path.o \
     fs/chmod.o \
-    fs/ramfs.o
+    fs/ramfs.o \
+    fs/permissions.o \
+    fs/procfs.o
 
 DISK_OBJS = \
     drivers/disk/partition.o
@@ -232,8 +231,7 @@ ARCH_OBJS = \
     arch/common/arch_interface.o \
     kernel/scheduler/switch/switch_x64.o
 
-SETUP_OBJS = \
-	setup/kconfig.o
+SETUP_OBJS =
 
 CPP_OBJS = \
 	cpp/runtime/compat.o
