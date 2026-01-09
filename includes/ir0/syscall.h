@@ -59,6 +59,8 @@ typedef enum {
     SYS_DMESG = 114,
     SYS_PING = 115,
     SYS_IFCONFIG = 116,
+    SYS_READ_FILE = 117,
+    SYS_WRITE_FILE = 118,
 } syscall_num_t;
 
 
