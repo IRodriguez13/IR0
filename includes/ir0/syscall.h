@@ -56,11 +56,8 @@ typedef enum {
     SYS_DF = 95,
     SYS_CHMOD = 100,
     SYS_LINK = 101,
-    SYS_NETINFO = 110,
-    SYS_LSDRV = 111,
     SYS_AUDIO_TEST = 112,
     SYS_MOUSE_TEST = 113,
-    SYS_DMESG = 114,
     SYS_PING = 115,
     SYS_IFCONFIG = 116,
 } syscall_num_t;
@@ -88,10 +85,10 @@ typedef enum {
 #define PROC_MOUNTS        "/proc/mounts"
 #define PROC_VERSION       "/proc/version"
 
-/* System information files in /sys */
-#define SYS_NETINFO_PATH   "/sys/net/info"
-#define SYS_DRIVERS_PATH   "/sys/drivers"
-#define SYS_UPTIME_PATH    "/sys/uptime"
+/* System information files in /proc (legacy /sys paths redirected) */
+#define SYS_NETINFO_PATH   "/proc/netinfo"
+#define SYS_DRIVERS_PATH   "/proc/drivers"
+#define SYS_UPTIME_PATH    "/proc/uptime"
 
 /* Standard file descriptors */
 #define STDIN_FILENO   0

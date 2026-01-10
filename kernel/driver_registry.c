@@ -16,6 +16,7 @@
 #include <ir0/logging.h>
 #include <ir0/validation.h>
 #include <string.h>
+#include <drivers/serial/serial.h>
 
 /* Maximum number of drivers (can be made dynamic) */
 #define MAX_DRIVERS 128
@@ -345,15 +346,20 @@ int ir0_driver_list_to_buffer(char *buf, size_t count)
     if (!buf || count == 0)
         return -1;
 
+    /* Initialize buffer to zero */
+    memset(buf, 0, count);
+
     size_t off = 0;
     int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
                      "NAME\tVERSION\tLANG\tSTATE\tDESC\n");
     if (n < 0)
         return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
     off += (size_t)n;
 
     ir0_driver_t *current = driver_registry.drivers;
-    while (current && off < count)
+    while (current && off < count - 1)
     {
         const char *lang = lang_to_string(current->info.language);
         const char *state = state_to_string(current->state);
@@ -362,14 +368,20 @@ int ir0_driver_list_to_buffer(char *buf, size_t count)
                      "%s\t%s\t%s\t%s\t%s\n",
                      current->info.name ? current->info.name : "",
                      current->info.version ? current->info.version : "",
-                     lang,
-                     state,
+                     lang ? lang : "",
+                     state ? state : "",
                      current->info.description ? current->info.description : "");
         if (n < 0)
             break;
+        if (n >= (int)(count - off))
+            n = (int)(count - off) - 1;
         off += (size_t)n;
         current = current->next;
     }
 
-    return (off < count) ? (int)off : (int)count;
+    /* Ensure null termination */
+    if (off < count)
+        buf[off] = '\0';
+
+    return (int)off;
 }

@@ -153,7 +153,12 @@ int64_t sys_read(int fd, void *buf, size_t count)
 
   /* Handle /proc file descriptors (special positive numbers) */
   if (fd >= 1000 && fd <= 1999) {
-    return proc_read(fd, (char*)buf, count);
+    off_t offset = proc_get_offset(fd);
+    int ret = proc_read(fd, (char*)buf, count, offset);
+    if (ret > 0) {
+      proc_set_offset(fd, offset + ret);
+    }
+    return ret;
   }
 
   /* Handle /dev file descriptors (special positive numbers) */
@@ -1202,52 +1207,6 @@ int64_t sys_rmdir_recursive(const char *pathname)
   return vfs_rmdir_recursive(pathname);
 }
 
-int64_t sys_netinfo(void)
-{
-    struct net_device *dev = net_get_devices();
-    if (!dev) {
-        print("NET: No devices registered.\n");
-        return 0;
-    }
-
-    print("--- Network Interfaces ---\n");
-    while (dev) {
-        print("Name: ");
-        print(dev->name);
-        print(" [");
-        bool first = true;
-        if (dev->flags & IFF_UP) { print("UP"); first = false; }
-        if (dev->flags & IFF_RUNNING) { if (!first) print(", "); print("RUNNING"); first = false; }
-        if (dev->flags & IFF_BROADCAST) { if (!first) print(", "); print("BROADCAST"); }
-        print("] MTU: ");
-        
-        print_uint32(dev->mtu);
-        print("\n  MAC: ");
-        
-        for (int i = 0; i < 6; i++) {
-            print_hex8(dev->mac[i]);
-            if (i < 5) print(":");
-        }
-        print("\n");
-        dev = dev->next;
-    }
-    return 0;
-}
-
-int64_t sys_lsdrv(void)
-{
-    /* Show only registered drivers */
-    ir0_driver_list_all();
-    return 0;
-}
-
-int64_t sys_dmesg(void)
-{
-    /* Show kernel log buffer (like dmesg/journalctl) */
-    extern void logging_print_buffer(void);
-    logging_print_buffer();
-    return 0;
-}
 
 int64_t sys_audio_test(void)
 {
@@ -1511,16 +1470,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_chmod((const char *)arg1, (mode_t)arg2);
   case 101:
     return sys_link((const char *)arg1, (const char *)arg2);
-  case 110:
-    return sys_netinfo();
-  case 111:
-    return sys_lsdrv();
   case 112:
     return sys_audio_test();
   case 113:
     return sys_mouse_test();
-  case 114:
-    return sys_dmesg();
   case 115:
     return sys_ping((ip4_addr_t)arg1);
   case 116:

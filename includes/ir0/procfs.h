@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <ir0/stat.h>
+#include <ir0/types.h>  
 #include <kernel/process.h>
 
 /* /proc entry types */
@@ -34,9 +35,13 @@ typedef struct proc_entry {
 /* /proc filesystem interface */
 bool is_proc_path(const char *path);
 int proc_open(const char *path, int flags);
-int proc_read(int fd, char *buf, size_t count);
+int proc_read(int fd, char *buf, size_t count, off_t offset);
 int proc_write(int fd, const char *buf, size_t count);
 int proc_stat(const char *path, stat_t *st);
+
+/* Offset management for /proc files */
+off_t proc_get_offset(int fd);
+void proc_set_offset(int fd, off_t offset);
 
 /* /proc entry generators */
 int proc_meminfo_read(char *buf, size_t count);
