@@ -45,9 +45,26 @@
 #include <ir0/permissions.h>
 #include <ir0/fcntl.h>
 #include <ir0/procfs.h>
+#include <ir0/devfs.h>
 
 /* Forward declaration */
 static fd_entry_t *get_process_fd_table(void);
+
+static int devfs_initialized = 0;
+
+static void ensure_devfs_init(void)
+{
+  if (!devfs_initialized)
+  {
+    devfs_init();
+    devfs_initialized = 1;
+  }
+}
+
+static int is_dev_path(const char *path)
+{
+  return path && strncmp(path, "/dev/", 5) == 0;
+}
 
 
 int64_t sys_exit(int exit_code)
@@ -91,6 +108,17 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     return (int64_t)count;
   }
 
+  /* Handle /dev file descriptors (special positive numbers) */
+  if (fd >= 2000 && fd <= 2999)
+  {
+    ensure_devfs_init();
+    uint32_t device_id = (uint32_t)(fd - 2000);
+    devfs_node_t *node = devfs_find_node_by_id(device_id);
+    if (!node || !node->ops || !node->ops->write)
+      return -EBADF;
+    return node->ops->write(&node->entry, buf, count, 0);
+  }
+
   /* Handle regular file descriptors */
   fd_entry_t *fd_table = get_process_fd_table();
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
@@ -126,6 +154,17 @@ int64_t sys_read(int fd, void *buf, size_t count)
   /* Handle /proc file descriptors (special positive numbers) */
   if (fd >= 1000 && fd <= 1999) {
     return proc_read(fd, (char*)buf, count);
+  }
+
+  /* Handle /dev file descriptors (special positive numbers) */
+  if (fd >= 2000 && fd <= 2999)
+  {
+    ensure_devfs_init();
+    uint32_t device_id = (uint32_t)(fd - 2000);
+    devfs_node_t *node = devfs_find_node_by_id(device_id);
+    if (!node || !node->ops || !node->ops->read)
+      return -EBADF;
+    return node->ops->read(&node->entry, buf, count, 0);
   }
 
   if (fd == STDIN_FILENO)
@@ -613,6 +652,16 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     return proc_open(pathname, flags);
   }
 
+  /* Handle /dev filesystem on-demand */
+  if (is_dev_path(pathname))
+  {
+    ensure_devfs_init();
+    devfs_node_t *node = devfs_find_node(pathname);
+    if (!node)
+      return -ENOENT;
+    return 2000 + (int64_t)node->entry.device_id;
+  }
+
   /* Check access permissions based on flags */
   int access_mode = 0;
   if (flags & O_RDONLY || flags & O_RDWR)
@@ -674,6 +723,9 @@ int64_t sys_close(int fd)
 
   if (fd <= 2)
     return -EBADF;
+
+  if (fd >= 2000 && fd <= 2999)
+    return 0;
 
   /* Close VFS file if it exists */
   if (fd_table[fd].vfs_file)

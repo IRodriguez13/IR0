@@ -12,6 +12,7 @@
 #include <ir0/oops.h>
 #include <arch/x86-64/sources/user_mode.h>
 #include <ir0/signals.h>
+#include <ir0/context.h>
 
 
 static rr_task_t *rr_head = NULL;
@@ -90,5 +91,8 @@ void rr_schedule_next(void)
 		panic("Returned from jmp_ring3");
 	}
 
-	/* Normal context switch - TODO: implement switch_context */
+	/* Normal context switch */
+	if (prev && next) {
+		switch_context_x64(&prev->task, &next->task);
+	}
 }

@@ -208,7 +208,8 @@ FS_OBJS = \
     fs/chmod.o \
     fs/ramfs.o \
     fs/permissions.o \
-    fs/procfs.o
+    fs/procfs.o \
+    fs/devfs.o
 
 DISK_OBJS = \
     drivers/disk/partition.o

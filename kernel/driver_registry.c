@@ -339,3 +339,37 @@ void ir0_driver_list_all(void)
         LOG_INFO("DriverRegistry", "No drivers registered");
     }
 }
+
+int ir0_driver_list_to_buffer(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "NAME\tVERSION\tLANG\tSTATE\tDESC\n");
+    if (n < 0)
+        return -1;
+    off += (size_t)n;
+
+    ir0_driver_t *current = driver_registry.drivers;
+    while (current && off < count)
+    {
+        const char *lang = lang_to_string(current->info.language);
+        const char *state = state_to_string(current->state);
+
+        n = snprintf(buf + off, count - off,
+                     "%s\t%s\t%s\t%s\t%s\n",
+                     current->info.name ? current->info.name : "",
+                     current->info.version ? current->info.version : "",
+                     lang,
+                     state,
+                     current->info.description ? current->info.description : "");
+        if (n < 0)
+            break;
+        off += (size_t)n;
+        current = current->next;
+    }
+
+    return (off < count) ? (int)off : (int)count;
+}
