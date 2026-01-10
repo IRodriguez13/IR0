@@ -32,7 +32,7 @@
 #include <drivers/timer/clock_system.h>
 #include <interrupt/arch/pic.h>
 
-// Include kernel header with all function declarations
+/* Include kernel header with all function declarations */
 #include "kernel.h"
 
 /**
@@ -45,27 +45,28 @@ static void init_all_drivers(void)
 {
     serial_print("[DRIVERS] Initializing all hardware drivers...\n");
     
-    // Initialize PS/2 controller and keyboard
+    /* Initialize PS/2 controller and keyboard */
     serial_print("[DRIVERS] Initializing PS/2 controller and keyboard...\n");
     ps2_init();
     keyboard_init();
-    pic_unmask_irq(1); // Enable keyboard IRQ
+    /* Enable keyboard IRQ */
+    pic_unmask_irq(1);
     log_subsystem_ok("PS2_KEYBOARD");
     serial_print("[DRIVERS] PS/2 keyboard initialized\n");
     
-    // Initialize PS/2 mouse
+    /* Initialize PS/2 mouse */
     serial_print("[DRIVERS] Initializing PS/2 mouse...\n");
     ps2_mouse_init();
     log_subsystem_ok("PS2_MOUSE");
     serial_print("[DRIVERS] PS/2 mouse initialized\n");
     
-    // Initialize PC Speaker
+    /* Initialize PC Speaker */
     serial_print("[DRIVERS] Initializing PC Speaker...\n");
     pc_speaker_init();
     log_subsystem_ok("PC_SPEAKER");
     serial_print("[DRIVERS] PC Speaker initialized\n");
     
-    // Initialize audio drivers
+    /* Initialize audio drivers */
     serial_print("[DRIVERS] Initializing audio drivers...\n");
     sb16_init();
     log_subsystem_ok("AUDIO_SB16");
@@ -75,16 +76,17 @@ static void init_all_drivers(void)
     log_subsystem_ok("AUDIO_ADLIB");
     serial_print("[DRIVERS] Adlib OPL2 initialized\n");
     
-    // Initialize storage
+    /* Initialize storage */
     serial_print("[DRIVERS] Initializing storage drivers...\n");
     ata_init();
     log_subsystem_ok("STORAGE");
     serial_print("[DRIVERS] ATA/IDE storage initialized\n");
     
-    // Initialize network stack (drivers + protocols)
+    /* Initialize network stack (drivers + protocols) */
     serial_print("[DRIVERS] Initializing network stack...\n");
     init_net_stack();
-    pic_unmask_irq(11); // Enable RTL8139 IRQ
+    /* Enable RTL8139 IRQ */
+    pic_unmask_irq(11);
     log_subsystem_ok("NETWORK_STACK");
     serial_print("[DRIVERS] Network stack initialized\n");
     
@@ -93,57 +95,57 @@ static void init_all_drivers(void)
 
 void kmain(void)
 {
-    // Initialize GDT and TSS first
+    /* Initialize GDT and TSS first */
     gdt_install();
     setup_tss();
 
-    // Banner
+    /* Banner */
     print("IR0 Kernel v0.0.1 Boot routine\n");
 
-    // Initialize core subsystems first (need heap for registration)
+    /* Initialize core subsystems first (need heap for registration) */
     heap_init();
     
     /* Initialize Physical Memory Manager (PMM)
      * Manage physical frames in the 32MB region (8MB-32MB)
      * This gives us ~24MB of physical memory frames
+     * 8MB start, 24MB size
      */
-    pmm_init(0x800000, 0x1800000); // 8MB start, 24MB size
+    pmm_init(0x800000, 0x1800000);
     
     logging_init();
     serial_init();
 
     log_subsystem_ok("CORE");
 
-    // Initialize all hardware drivers
+    /* Initialize all hardware drivers */
     init_all_drivers();
 
-    // Initialize filesystem
+    /* Initialize filesystem */
     vfs_init_with_minix();
     log_subsystem_ok("FILESYSTEM");
 
-    // Initialize process management
+    /* Initialize process management */
     process_init();
     log_subsystem_ok("PROCESSES");
 
-    // Initialize scheduler (using Round Robin for now)
+    /* Initialize scheduler (using Round Robin for now) */
     clock_system_init();
 
-    // Initialize system calls
+    /* Initialize system calls */
     syscalls_init();
     log_subsystem_ok("SYSCALLS");
 
-    // Set up interrupts
+    /* Set up interrupts */
     idt_init64();
     idt_load64();
     pic_remap64();
 
-  
     __asm__ volatile("sti");
     serial_print("[BOOT] Interrupts enabled globally (sti)\n");
 
     log_subsystem_ok("INTERRUPTS");
 
-    // panic("Test"); Just for testing
+    /* panic("Test"); Just for testing */
 
 #if KERNEL_DEBUG_SHELL
     start_init_process();
@@ -159,6 +161,7 @@ void kmain(void)
 
     for (;;)
     {
-        __asm__ volatile("hlt"); // fallback if something goes wrong
+        /* Fallback if something goes wrong */
+        __asm__ volatile("hlt");
     }
 }
