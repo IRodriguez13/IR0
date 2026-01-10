@@ -229,12 +229,24 @@ static void cmd_cat(const char *filename)
   }
 
   char buffer[512];
+  int max_iterations = 1000; /* Safety limit to prevent infinite loops */
+  int iteration = 0;
+  
   for (;;)
   {
+    if (iteration >= max_iterations)
+    {
+      shell_write(2, "cat: too many iterations, possible infinite loop\n");
+      break;
+    }
+    
     int64_t bytes_read = ir0_read(fd, buffer, sizeof(buffer));
+    
     if (bytes_read <= 0)
       break;
+    
     syscall(SYS_WRITE, STDOUT_FILENO, (uint64_t)buffer, (uint64_t)bytes_read);
+    iteration++;
   }
 
   ir0_close(fd);

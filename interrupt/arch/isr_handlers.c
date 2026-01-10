@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2025  Iván Rodriguez
@@ -18,63 +18,53 @@
 #include <kernel/rr_sched.h>
 #include <drivers/net/rtl8139.h>
 
-// Declaraciones externas para el nuevo driver de teclado
+/* Declaraciones externas para el nuevo driver de teclado */
 extern void keyboard_handler64(void);
 extern void keyboard_handler32(void);
 extern void increment_pit_ticks(void);
 #ifdef __x86_64__
 
-// Handler de interrupciones para 64-bit
+/* Handler de interrupciones para 64-bit */
 void isr_handler64(uint64_t interrupt_number)
 {
-    // Manejar excepciones del CPU (0-31)
+    /* Manejar excepciones del CPU (0-31) */
     if (interrupt_number < 32)
     {
         print("Excepción CPU #");
         print_int32(interrupt_number);
         print("\n");
 
-        // Para excepciones, NO enviar EOI
+        /* Para excepciones, NO enviar EOI */
         return;
     }
 
-    // Manejar syscall (0x80)
+    /* Manejar syscall (0x80) */
     if (interrupt_number == 128)
     {
         print("SYSCALL: Interrupción 0x80 recibida\n");
         return;
     }
 
-    // Manejar IRQs del PIC (32-47)
+    /* Manejar IRQs del PIC (32-47) */
     if (interrupt_number >= 32 && interrupt_number <= 47)
     {
         uint8_t irq = interrupt_number - 32;
 
         switch (irq)
         {
-        case 0: // Timer
+        case 0: /* Timer */
         {
-            
+            /* Increment PIT ticks and update clock system */
+            /* clock_tick() will handle scheduler integration */
             increment_pit_ticks();
-
-            static int tick_counter = 0;
-            tick_counter++;
-
-            // Cada 10 ticks (~10ms si PIT=1kHz), hacer cambio de proceso
-            if (tick_counter >= 10)
-            {
-                tick_counter = 0;
-                rr_schedule_next();
-            }
-
             break;
         }
 
-        case 1: // Keyboard
+        case 1: /* Keyboard */
             keyboard_handler64();
             break;
 
-        case 11: // RTL8139 Network Card
+        case 11: /* RTL8139 Network Card */
             rtl8139_handle_interrupt();
             break;
 
@@ -82,7 +72,7 @@ void isr_handler64(uint64_t interrupt_number)
             break;
         }
 
-        // Enviar EOI para IRQs
+        /* Enviar EOI para IRQs */
         pic_send_eoi64(irq);
         return;
     }
