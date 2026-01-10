@@ -61,10 +61,8 @@
 #endif
 
 /* KERNEL VERSION AND BUILD INFO */
-#define IR0_VERSION_MAJOR 0
-#define IR0_VERSION_MINOR 0
-#define IR0_VERSION_PATCH 1
-#define IR0_VERSION_STRING "0.0.1-pre-rc1"
+/* Version is now centralized in includes/ir0/version.h */
+#include <ir0/version.h>
 
 /* MEMORY CONFIGURATION */
 #define DEFAULT_STACK_SIZE (4 * 1024)    // 4KB stack per process
@@ -78,11 +76,6 @@
 #define MIN_NICE -20
 #define DEFAULT_NICE 0
 
-/* SCHEDULER CONFIGURATION */
-#define CFS_TARGETED_LATENCY 20000000ULL  // 20ms in nanoseconds
-#define CFS_MIN_GRANULARITY 4000000ULL    // 4ms minimum per process
-#define CFS_NICE_0_LOAD 1024              // Weight of nice 0
-#define MAX_RB_NODES 1024                 // RB-tree node pool size
 
 /* FILESYSTEM CONFIGURATION */
 #define MAX_PATH_LENGTH 256

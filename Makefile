@@ -1,6 +1,5 @@
-# ===============================================================================
 # IR0 KERNEL MAKEFILE - x86-64 ONLY
-# ===============================================================================
+
 KERNEL_ROOT := $(CURDIR)
 
 # Architecture: x86-64 only
@@ -10,13 +9,28 @@ ARCH := x86-64
 BUILD_TARGET := desktop
 CFLAGS_TARGET := -DIR0_DESKTOP
 
-# Información de versión del kernel
-IR0_VERSION_MAJOR := 1
+
+IR0_VERSION_MAJOR := 0
 IR0_VERSION_MINOR := 0
-IR0_VERSION_PATCH := 0
-IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PATCH)
-IR0_BUILD_DATE := $(shell date +%Y-%m-%d)
-IR0_BUILD_TIME := $(shell date +%H:%M:%S)
+IR0_VERSION_PATCH := 1
+IR0_VERSION_SUFFIX := -pre-rc3
+IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PATCH)$(IR0_VERSION_SUFFIX)
+
+# Build information 
+
+IR0_BUILD_DATE := $(shell LC_TIME=C date +"%b %d %Y")
+IR0_BUILD_TIME := $(shell date +"%H:%M:%S")
+IR0_BUILD_USER := $(shell whoami 2>/dev/null || echo "unknown")
+IR0_BUILD_HOST := $(shell hostname 2>/dev/null || echo "localhost")
+IR0_BUILD_CC := $(shell $(CC) --version 2>/dev/null | head -n1 | cut -d' ' -f1-3 || echo "gcc unknown")
+# Build number - auto-increment on each build
+IR0_BUILD_NUMBER := $(shell if [ -f .build_number ]; then \
+	cat .build_number; \
+else \
+	echo "1" > .build_number && echo "1"; \
+fi)
+# Increment build number for next build (only if building kernel target)
+-include .build_number_inc
 
 # COMPILER CONFIGURATION (x86-64)
 
@@ -122,9 +136,7 @@ QEMU_STORAGE_IDE = -drive file=disk.img,format=raw,if=ide,index=0
 # Serial: COM1 para debug
 QEMU_SERIAL_COM1 = -serial stdio
 
-# Hardware completo soportado por IR0
-# Incluye: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2 (default), VGA (default)
-# Nota: e1000 desactivado temporalmente por problemas de inicialización
+
 QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1)
 
 # Flags específicos por arquitectura
@@ -144,7 +156,7 @@ endif
 
 SUBDIRS = $(COMMON_SUBDIRS) $(CONDITIONAL_SUBDIRS) $(ARCH_SUBDIRS)
 
-# KERNEL OBJECTS (CONSOLIDATED)
+# KERNEL OBJECTS 
 
 KERNEL_OBJS = \
 	kernel/main.o \
@@ -247,7 +259,14 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
 # Compile C files
 %.o: %.c
 	@echo "  CC      $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) \
+		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
+		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
+		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
+		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
+		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
+		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
+		-c $< -o $@
 
 # Compile C++ files
 %.o: %.cpp
@@ -267,6 +286,14 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 	@echo "  LD      $@"
 	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS)
 	@echo "✓ Kernel linked: $@"
+	@echo "  BUILD   Incrementing build number..."
+	@if [ -f .build_number ]; then \
+		BUILD_NUM=$$(cat .build_number); \
+		BUILD_NUM=$$((BUILD_NUM + 1)); \
+		echo $$BUILD_NUM > .build_number; \
+	else \
+		echo "1" > .build_number; \
+	fi
 
 # Create ISO
 kernel-x64.iso: kernel-x64.bin

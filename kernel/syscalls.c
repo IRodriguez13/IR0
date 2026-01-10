@@ -14,6 +14,7 @@
 
 #include "syscalls.h"
 #include "process.h"
+#include <ir0/version.h>
 #include <drivers/serial/serial.h>
 #include <drivers/video/typewriter.h>
 #include <drivers/disk/partition.h>
@@ -931,13 +932,29 @@ int64_t sys_kernel_info(void *info_buffer, size_t buffer_size)
   if (!current_process || !info_buffer)
     return -EFAULT;
 
-  const char *info = "IR0 Kernel v0.0.1 x86-64\n";
-  size_t len = 26; // Length of info string
+  /* Use centralized version from config.h */
+  /* Format: "IR0 Kernel vX.Y.Z ARCH\n" (similar to Linux uname) */
+  const char *arch = "x86-64";
+#ifdef __i386__
+  arch = "i386";
+#elif defined(__aarch64__)
+  arch = "aarch64";
+#elif defined(__arm__)
+  arch = "arm";
+#endif
 
+  char info[128];
+  int info_len = snprintf(info, sizeof(info), "IR0 Kernel %s %s\n",
+                          IR0_VERSION_STRING, arch);
+  
+  if (info_len < 0)
+    return -EFAULT;
+  
+  size_t len = (size_t)info_len;
   if (buffer_size < len)
     len = buffer_size;
 
-  /* Simple copy without memcpy dependency */
+  /* Copy version string to user buffer */
   char *dst = (char *)info_buffer;
   for (size_t i = 0; i < len; i++)
     dst[i] = info[i];
