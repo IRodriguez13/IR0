@@ -1,5 +1,5 @@
 # IO Drivers Makefile
-IO_SOURCES = ps2.c ps2_mouse.c
+IO_SOURCES = ps2.c ps2_mouse.c pc_speaker.c
 IO_OBJECTS = $(IO_SOURCES:.c=.o)
 
 # Compiler flags

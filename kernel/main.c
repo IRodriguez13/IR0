@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <drivers/IO/ps2_mouse.h>
+#include <drivers/IO/pc_speaker.h>
 #include <drivers/audio/sound_blaster.h>
 #include <drivers/audio/adlib.h>
 #include <drivers/serial/serial.h>
@@ -57,6 +58,12 @@ static void init_all_drivers(void)
     ps2_mouse_init();
     log_subsystem_ok("PS2_MOUSE");
     serial_print("[DRIVERS] PS/2 mouse initialized\n");
+    
+    // Initialize PC Speaker
+    serial_print("[DRIVERS] Initializing PC Speaker...\n");
+    pc_speaker_init();
+    log_subsystem_ok("PC_SPEAKER");
+    serial_print("[DRIVERS] PC Speaker initialized\n");
     
     // Initialize audio drivers
     serial_print("[DRIVERS] Initializing audio drivers...\n");
@@ -130,8 +137,7 @@ void kmain(void)
     idt_load64();
     pic_remap64();
 
-    // CRITICAL: Enable interrupts globally after IDT and PIC are initialized
-    // Without this, timer interrupts will never fire!
+  
     __asm__ volatile("sti");
     serial_print("[BOOT] Interrupts enabled globally (sti)\n");
 
