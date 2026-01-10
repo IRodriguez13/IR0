@@ -65,6 +65,16 @@ struct vfs_inode {
   void *i_private; // Datos específicos del FS
 };
 
+// Mount point structure
+struct mount_point {
+  char path[256];                    // Mount point path (e.g., "/tmp", "/proc")
+  char dev[64];                      // Device name (e.g., "/dev/hda", "none")
+  struct vfs_superblock *sb;         // Superblock of mounted filesystem
+  struct vfs_inode *mount_root;      // Root inode of mounted filesystem
+  struct filesystem_type *fs_type;   // Filesystem type
+  struct mount_point *next;          // Linked list
+};
+
 // File descriptor
 struct vfs_file {
   struct vfs_inode *f_inode;
@@ -95,6 +105,13 @@ int unregister_filesystem(struct filesystem_type *fs);
 
 // Lookup de paths
 struct vfs_inode *vfs_path_lookup(const char *path);
+
+// Mount point management
+struct mount_point *vfs_find_mount_point(const char *path);
+int vfs_add_mount_point(const char *path, const char *dev, 
+                        struct vfs_superblock *sb, struct vfs_inode *root,
+                        struct filesystem_type *fs_type);
+int vfs_remove_mount_point(const char *path);
 
 // MINIX filesystem integration
 int vfs_init_with_minix(void);
