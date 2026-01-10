@@ -3,7 +3,7 @@
  * IR0 Kernel - Built-in DebShell
  * Copyright (C) 2025 Iván Rodriguez
  *
- * Interactive shell for Ring 3 commands
+ * Debug shell for kernel testing purposes
  */
 
 #include "dbgshell.h"
@@ -24,6 +24,7 @@
 #include <drivers/storage/fs_types.h>
 #include "kernel/syscalls.h" // Ensure SYS_GET_BLOCK_DEVICES is included
 #include <ir0/net.h>
+#include <ir0/version.h>
 
 /* kernel/shell.c: use public headers for functions (kmem/string) */
 
@@ -142,6 +143,7 @@ static const char *skip_whitespace(const char *str)
 static void cmd_list_help(void);
 static void cmd_mount(const char *args);
 static void cmd_touch(const char *filename);
+static void cmd_uname(const char *args);
 
 static void cmd_help(void)
 {
@@ -319,6 +321,132 @@ static void cmd_rmdir(const char *args)
 static void cmd_ps(void)
 {
   cmd_cat("/proc/ps");
+}
+
+static void cmd_uname(const char *args)
+{
+    if (!args || *args == '\0' || strcmp(args, "-a") == 0)
+    {
+        /* uname -a: Show all information (similar to Linux) */
+        /* Format: KernelName Hostname KernelVersion KernelRelease Machine */
+        char buffer[512];  /* Increased for more information */
+        
+        /* Get architecture */
+        const char *arch = "x86_64";
+#ifdef __i386__
+        arch = "i386";
+#elif defined(__aarch64__)
+        arch = "aarch64";
+#elif defined(__arm__)
+        arch = "arm";
+#endif
+        
+        /* Format: IR0 hostname IR0_VERSION_STRING #BUILD_NUMBER SMP DATE ARCH GNU/Linux */
+        /* Similar to Linux: "Linux hostname 5.15.0 #42 SMP Mon Jan 10 14:30:00 UTC 2025 x86_64 GNU/Linux" */
+        int len = snprintf(buffer, sizeof(buffer),
+                          "IR0 %s %s #%s SMP %s %s %s GNU/Linux\n",
+                          IR0_BUILD_HOST,  /* Real hostname */
+                          IR0_VERSION_STRING,
+                          IR0_BUILD_NUMBER,  /* Real build number */
+                          IR0_BUILD_DATE,
+                          IR0_BUILD_TIME,
+                          arch);
+        
+        if (len > 0 && len < (int)sizeof(buffer))
+        {
+            shell_write(1, buffer);
+        }
+        else
+        {
+            print("This not works :( \n");
+        }
+    }
+    else if (strcmp(args, "-s") == 0 || strcmp(args, "--kernel-name") == 0)
+    {
+        shell_write(1, "IR0\n");
+    }
+    else if (strcmp(args, "-r") == 0 || strcmp(args, "--kernel-release") == 0)
+    {
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%s\n", IR0_VERSION_STRING);
+        shell_write(1, buffer);
+    }
+    else if (strcmp(args, "-v") == 0 || strcmp(args, "--kernel-version") == 0)
+    {
+        /* Show build information: #BUILD_NUMBER SMP DATE TIME by user@host */
+        char buffer[256];
+        snprintf(buffer, sizeof(buffer), "#%s SMP %s %s by %s@%s\n",
+                IR0_BUILD_NUMBER,
+                IR0_BUILD_DATE,
+                IR0_BUILD_TIME,
+                IR0_BUILD_USER,
+                IR0_BUILD_HOST);
+        shell_write(1, buffer);
+    }
+    else if (strcmp(args, "-m") == 0 || strcmp(args, "--machine") == 0)
+    {
+        const char *arch = "x86_64";
+#ifdef __i386__
+        arch = "i386";
+#elif defined(__aarch64__)
+        arch = "aarch64";
+#elif defined(__arm__)
+        arch = "arm";
+#endif
+        shell_write(1, arch);
+        shell_write(1, "\n");
+    }
+    else if (strcmp(args, "-p") == 0 || strcmp(args, "--processor") == 0)
+    {
+        const char *arch = "x86_64";
+#ifdef __i386__
+        arch = "i386";
+#elif defined(__aarch64__)
+        arch = "aarch64";
+#elif defined(__arm__)
+        arch = "arm";
+#endif
+        shell_write(1, arch);
+        shell_write(1, "\n");
+    }
+    else if (strcmp(args, "-i") == 0 || strcmp(args, "--hardware-platform") == 0)
+    {
+        const char *arch = "x86_64";
+#ifdef __i386__
+        arch = "i386";
+#elif defined(__aarch64__)
+        arch = "aarch64";
+#elif defined(__arm__)
+        arch = "arm";
+#endif
+        shell_write(1, arch);
+        shell_write(1, "\n");
+    }
+
+    else if (strcmp(args, "--help") == 0 || strcmp(args, "-h") == 0)
+    {
+        shell_write(1, "Usage: uname [OPTION]...\n");
+        shell_write(1, "Print system information\n");
+        shell_write(1, "\n");
+        shell_write(1, "Options:\n");
+        shell_write(1, "  -a, --all           Print all information\n");
+        shell_write(1, "  -s, --kernel-name   Print kernel name\n");
+        shell_write(1, "  -r, --kernel-release Print kernel release\n");
+        shell_write(1, "  -v, --kernel-version Print kernel version\n");
+        shell_write(1, "  -m, --machine       Print machine hardware name\n");
+        shell_write(1, "  -p, --processor     Print processor type\n");
+        shell_write(1, "  -i, --hardware-platform Print hardware platform\n");
+        shell_write(1, "  -n, --nodename      Print network node hostname\n");
+        shell_write(1, "  -o, --operating-system Print operating system\n");
+        shell_write(1, "  -h, --help          Print this help\n");
+    }
+    else
+    {
+        shell_write(2, "uname: invalid option: ");
+        shell_write(2, args);
+        shell_write(2, "\n");
+        shell_write(2, "Try 'uname --help' for more information\n");
+    }
 }
 
 static void cmd_echo(const char *text)
@@ -1794,6 +1922,7 @@ static const struct shell_cmd commands[] = {
     {"arpcache", (void (*)(const char *))cmd_arpcache, "arpcache", "Display ARP cache"},
     {"ping", cmd_ping, "ping <IP>", "Send ICMP Echo Request (ping) to IP address"},
     {"ifconfig", cmd_ifconfig, "ifconfig [IP] [NETMASK] [GATEWAY]", "Configure or display network interface"},
+    {"uname", cmd_uname, "uname [-a|-s|-r|-v|-m|-p|-i|-o]", "Print system information"},
 };
 
 static void cmd_list_help(void)

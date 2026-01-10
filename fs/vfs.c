@@ -22,6 +22,8 @@
 #include <stdarg.h>
 #include <ir0/fcntl.h>
 #include <ir0/stat.h>
+#include <ir0/permissions.h>
+#include <ir0/errno.h>
 #include <serial.h>
 #include <memory/kmem.h>
 #include <ir0/vga.h>
@@ -111,19 +113,20 @@ static int build_path(char *dest, size_t dest_size, const char *dir, const char 
 
 static int build_path(char *dest, size_t dest_size, const char *dir, const char *name)
 {
-  if (!dest || !dir || !name || dest_size == 0)
-  {
-    return -1;
-  }
-
-  size_t dir_len = strlen(dir);
-  size_t name_len = strlen(name);
-  size_t total_len = dir_len + name_len + 2; // +2 for '/' and '\0'
-
-  if (total_len > dest_size)
-  {
-    return -1; // Path too long
-  }
+    /* Validate inputs */
+    if (!dest || !dir || !name || dest_size == 0)
+    {
+        return -EINVAL;
+    }
+    
+    size_t dir_len = strlen(dir);
+    size_t name_len = strlen(name);
+    size_t total_len = dir_len + name_len + 2;  /* +2 for '/' and '\0' */
+    
+    if (total_len > dest_size)
+    {
+        return -ENAMETOOLONG;  /* Path too long */
+    }
 
   size_t i = 0;
 
@@ -159,32 +162,90 @@ static struct vfs_inode *root_inode = NULL;
 // Mount points list
 static struct mount_point *mount_points = NULL;
 
+/* Maximum path length */
+#define MAX_PATH_LENGTH 256
+
+/* Forward declarations */
+static struct filesystem_type *vfs_get_filesystem_for_path(const char *path);
+
+/* Convert open flags to access mode for permission checking */
+static int flags_to_access_mode(int flags)
+{
+    int mode = 0;
+    int accmode = flags & O_ACCMODE;
+    
+    /* Use values directly to avoid conflict between permissions.h and syscall.h */
+    if (accmode == O_RDONLY || accmode == O_RDWR)
+        mode |= 0x1;  /* Read access */
+    
+    if (accmode == O_WRONLY || accmode == O_RDWR)
+        mode |= 0x2;  /* Write access */
+    
+    return mode;
+}
+
+/* Validate path string */
+static int validate_path(const char *path)
+{
+    if (!path)
+        return -EINVAL;
+    
+    size_t len = strlen(path);
+    if (len == 0)
+        return -EINVAL;
+    
+    if (len >= MAX_PATH_LENGTH)
+        return -ENAMETOOLONG;
+    
+    return 0;
+}
+
 int register_filesystem(struct filesystem_type *fs)
 {
-  if (!fs)
-    return -1;
-
-  fs->next = filesystems;
-  filesystems = fs;
-  return 0;
+    /* Validate input */
+    if (!fs)
+        return -EINVAL;
+    
+    /* Check if filesystem name is valid */
+    if (!fs->name || strlen(fs->name) == 0)
+        return -EINVAL;
+    
+    /* Check if already registered */
+    struct filesystem_type *current = filesystems;
+    while (current)
+    {
+        if (current == fs || (current->name && strcmp(current->name, fs->name) == 0))
+        {
+            return -EEXIST;  /* Already registered */
+        }
+        current = current->next;
+    }
+    
+    /* Register filesystem */
+    fs->next = filesystems;
+    filesystems = fs;
+    return 0;
 }
 
 int unregister_filesystem(struct filesystem_type *fs)
 {
-  if (!fs)
-    return -1;
-
-  struct filesystem_type **p = &filesystems;
-  while (*p)
-  {
-    if (*p == fs)
+    /* Validate input */
+    if (!fs)
+        return -EINVAL;
+    
+    /* Find and unregister filesystem */
+    struct filesystem_type **p = &filesystems;
+    while (*p)
     {
-      *p = fs->next;
-      return 0;
+        if (*p == fs)
+        {
+            *p = fs->next;
+            return 0;
+        }
+        p = &(*p)->next;
     }
-    p = &(*p)->next;
-  }
-  return -1;
+    
+    return -ENOENT;  /* Filesystem not found */
 }
 
 /* Find mount point for a given path */
@@ -227,18 +288,25 @@ int vfs_add_mount_point(const char *path, const char *dev,
                         struct vfs_superblock *sb, struct vfs_inode *root,
                         struct filesystem_type *fs_type)
 {
-  if (!path || !sb || !root || !fs_type)
-    return -1;
-
-  /* Check if mount point already exists */
-  if (vfs_find_mount_point(path))
-  {
-    return -1; /* Already mounted */
-  }
-
-  struct mount_point *mp = kmalloc(sizeof(struct mount_point));
-  if (!mp)
-    return -1;
+    /* Validate inputs */
+    if (!path || !sb || !root || !fs_type)
+        return -EINVAL;
+    
+    /* Validate path */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    /* Check if mount point already exists */
+    if (vfs_find_mount_point(path))
+    {
+        return -EBUSY;  /* Already mounted */
+    }
+    
+    /* Allocate mount point structure */
+    struct mount_point *mp = kmalloc(sizeof(struct mount_point));
+    if (!mp)
+        return -ENOMEM;
 
   strncpy(mp->path, path, sizeof(mp->path) - 1);
   mp->path[sizeof(mp->path) - 1] = '\0';
@@ -265,22 +333,33 @@ int vfs_add_mount_point(const char *path, const char *dev,
 /* Remove mount point */
 int vfs_remove_mount_point(const char *path)
 {
-  if (!path)
-    return -1;
-
-  struct mount_point **p = &mount_points;
-  while (*p)
-  {
-    if (strcmp((*p)->path, path) == 0)
+    /* Validate inputs */
+    if (!path)
+        return -EINVAL;
+    
+    /* Check if current process exists and is root */
+    if (!current_process)
+        return -ESRCH;
+    
+    /* Only root can unmount filesystems */
+    if (current_process->uid != ROOT_UID)
+        return -EPERM;
+    
+    /* Find and remove mount point */
+    struct mount_point **p = &mount_points;
+    while (*p)
     {
-      struct mount_point *to_free = *p;
-      *p = (*p)->next;
-      kfree(to_free);
-      return 0;
+        if (strcmp((*p)->path, path) == 0)
+        {
+            struct mount_point *to_free = *p;
+            *p = (*p)->next;
+            kfree(to_free);
+            return 0;
+        }
+        p = &(*p)->next;
     }
-    p = &(*p)->next;
-  }
-  return -1;
+    
+    return -ENOENT;  /* Mount point not found */
 }
 
 struct vfs_inode *vfs_path_lookup(const char *path)
@@ -388,232 +467,495 @@ int vfs_init(void)
 
 int vfs_mount(const char *dev, const char *mountpoint, const char *fstype)
 {
-  if (!fstype || !mountpoint)
-    return -1;
-
-  /* Buscar el tipo de filesystem */
-  struct filesystem_type *fs_type = filesystems;
-  while (fs_type)
-  {
-    if (strcmp(fs_type->name, fstype) == 0)
+    /* Validate inputs */
+    if (!fstype || !mountpoint)
+        return -EINVAL;
+    
+    /* Check if current process exists and is root */
+    if (!current_process)
+        return -ESRCH;
+    
+    /* Only root can mount filesystems */
+    if (current_process->uid != ROOT_UID)
+        return -EPERM;
+    
+    /* Validate mountpoint path */
+    int ret = validate_path(mountpoint);
+    if (ret != 0)
+        return ret;
+    
+    /* Search for filesystem type */
+    struct filesystem_type *fs_type = filesystems;
+    while (fs_type)
     {
-      break;
+        if (strcmp(fs_type->name, fstype) == 0)
+        {
+            break;
+        }
+        fs_type = fs_type->next;
     }
-    fs_type = fs_type->next;
-  }
+    
+    if (!fs_type)
+        return -ENODEV;  /* Filesystem not found */
 
-  if (!fs_type)
-    return -1; /* Filesystem no encontrado */
+    /* Montar el filesystem (llama a la función mount específica) */
+    int mount_ret = fs_type->mount(dev, mountpoint);
+    if (mount_ret != 0)
+        return mount_ret;
 
-  /* Montar el filesystem (llama a la función mount específica) */
-  int ret = fs_type->mount(dev, mountpoint);
-  if (ret != 0)
-    return ret;
-
-  /* Para el root filesystem, ya está configurado en root_sb/root_inode */
   if (strcmp(mountpoint, "/") == 0)
   {
-    /* Root mount ya está manejado en minix_mount() */
-    /* Agregar como mount point también */
     return vfs_add_mount_point("/", dev ? dev : "root", root_sb, root_inode, fs_type);
   }
 
-  /* Para otros mount points, necesitamos obtener el superblock y root inode */
-  /* Por ahora, solo MINIX soporta esto - otros FS necesitan implementar mount() */
-  if (strcmp(fstype, "minix") == 0)
-  {
-    /* Para MINIX en mount points no-root, usamos el mismo root_sb por ahora */
-    /* TODO: Implementar múltiples instancias de MINIX filesystems */
-    struct vfs_inode *mount_root = kmalloc(sizeof(struct vfs_inode));
-    if (!mount_root)
-      return -1;
 
-    /* Copiar estructura del root inode */
-    memcpy(mount_root, root_inode, sizeof(struct vfs_inode));
-
-    /* Agregar mount point */
-    return vfs_add_mount_point(mountpoint, dev ? dev : "none", root_sb, mount_root, fs_type);
-  }
-
-  /* Otros filesystems necesitan implementar mount() correctamente */
-  return 0;
+    /* For filesystems other than root, create mount root inode */
+    /* Currently only MINIX is fully supported for non-root mounts */
+    if (strcmp(fstype, "minix") == 0)
+    {
+        struct vfs_inode *mount_root = kmalloc(sizeof(struct vfs_inode));
+        if (!mount_root)
+            return -ENOMEM;
+        
+        /* Copy structure from root inode */
+        memcpy(mount_root, root_inode, sizeof(struct vfs_inode));
+        
+        return vfs_add_mount_point(mountpoint, dev ? dev : "none", root_sb, mount_root, fs_type);
+    }
+    
+    /* For other filesystem types, filesystem-specific mount should handle mount point */
+    /* If mount succeeded but no mount point was added, assume it's OK */
+    return 0;
 }
 
 int vfs_open(const char *path, int flags, struct vfs_file **file)
 {
-  if (!path || !file)
-    return -1;
-
-  struct vfs_inode *inode = vfs_path_lookup(path);
-  if (!inode)
-    return -1;
-
-  // Crear file descriptor
-  *file = kmalloc(sizeof(struct vfs_file));
-  if (!*file)
-    return -1;
-
-  (*file)->f_inode = inode;
-  (*file)->f_pos = 0;
-  (*file)->f_flags = flags;
-  (*file)->private_data = NULL;
-
-  // Llamar a open del filesystem específico
-  if (inode->i_fop && inode->i_fop->open)
-  {
-    return inode->i_fop->open(inode, *file);
-  }
-
-  return 0;
+    /* Validate inputs */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    if (!file)
+        return -EFAULT;
+    
+    /* Check if current process exists */
+    if (!current_process)
+        return -ESRCH;
+    
+    /* Check permissions before opening */
+    int access_mode = flags_to_access_mode(flags);
+    
+    /* For O_CREAT, check write permission on parent directory */
+    if (flags & O_CREAT)
+    {
+        /* Get parent directory path */
+        char parent_path[256];
+        const char *last_slash = strrchr(path, '/');
+        
+        if (last_slash && last_slash != path)
+        {
+            size_t parent_len = (size_t)(last_slash - path);
+            if (parent_len >= sizeof(parent_path))
+                return -ENAMETOOLONG;
+            
+            strncpy(parent_path, path, parent_len);
+            parent_path[parent_len] = '\0';
+            
+            /* Check write permission on parent directory */
+            if (!check_file_access(parent_path, 0x2, current_process))  /* ACCESS_WRITE */
+                return -EACCES;
+        }
+    }
+    else
+    {
+        /* Check access permission on file/directory */
+        if (!check_file_access(path, access_mode, current_process))
+            return -EACCES;
+    }
+    
+    /* Lookup inode */
+    struct vfs_inode *inode = vfs_path_lookup(path);
+    if (!inode)
+    {
+        /* File doesn't exist - only OK if O_CREAT is set */
+        if (flags & O_CREAT)
+        {
+            /* Will create file, so no permission check needed yet */
+        }
+        else
+        {
+            return -ENOENT;
+        }
+    }
+    else if (flags & O_EXCL)
+    {
+        /* File exists and O_EXCL is set - error */
+        return -EEXIST;
+    }
+    
+    /* Allocate file descriptor */
+    *file = kmalloc(sizeof(struct vfs_file));
+    if (!*file)
+        return -ENOMEM;
+    
+    (*file)->f_inode = inode;
+    (*file)->f_pos = 0;
+    (*file)->f_flags = flags;
+    (*file)->private_data = NULL;
+    
+    /* Call filesystem-specific open */
+    if (inode && inode->i_fop && inode->i_fop->open)
+    {
+        ret = inode->i_fop->open(inode, *file);
+        if (ret != 0)
+        {
+            kfree(*file);
+            *file = NULL;
+            return ret;
+        }
+    }
+    
+    return 0;
 }
 
 int vfs_read(struct vfs_file *file, char *buf, size_t count)
 {
-  if (!file || !buf)
-    return -1;
-
-  if (file->f_inode->i_fop && file->f_inode->i_fop->read)
-  {
-    return file->f_inode->i_fop->read(file, buf, count);
-  }
-
-  return -1;
+    /* Validate inputs */
+    if (!file)
+        return -EBADF;
+    
+    if (!buf)
+        return -EFAULT;
+    
+    if (count == 0)
+        return 0;
+    
+    /* Check if file was opened for reading */
+    int accmode = file->f_flags & O_ACCMODE;
+    if (accmode == O_WRONLY)
+        return -EBADF;
+    
+    /* Call filesystem-specific read */
+    if (file->f_inode->i_fop && file->f_inode->i_fop->read)
+    {
+        return file->f_inode->i_fop->read(file, buf, count);
+    }
+    
+    return -ENOSYS;
 }
 
 int vfs_write(struct vfs_file *file, const char *buf, size_t count)
 {
-  if (!file || !buf)
-    return -1;
-
-  if (file->f_inode->i_fop && file->f_inode->i_fop->write)
-  {
-    return file->f_inode->i_fop->write(file, buf, count);
-  }
-
-  return -1;
+    /* Validate inputs */
+    if (!file)
+        return -EBADF;
+    
+    if (!buf)
+        return -EFAULT;
+    
+    if (count == 0)
+        return 0;
+    
+    /* Check if file was opened for writing */
+    int accmode = file->f_flags & O_ACCMODE;
+    if (accmode == O_RDONLY)
+        return -EBADF;
+    
+    /* Check write permission */
+    if (!current_process)
+        return -ESRCH;
+    
+    /* Get file path from inode for permission check */
+    /* For now, we trust that if file was opened with write flags,
+     * it was already checked in vfs_open() */
+    /* Future improvement: store path in vfs_file for better permission checking */
+    
+    /* Call filesystem-specific write */
+    if (file->f_inode->i_fop && file->f_inode->i_fop->write)
+    {
+        return file->f_inode->i_fop->write(file, buf, count);
+    }
+    
+    return -ENOSYS;
 }
 
 int vfs_append(const char *path, const char *buf, size_t count)
 {
-  if (!path || !buf)
-    return -1;
-
-  struct vfs_file *file;
-  int ret = vfs_open(path, O_WRONLY | O_APPEND, &file);
-  if (ret != 0)
+    /* Validate inputs */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    if (!buf)
+        return -EFAULT;
+    
+    if (count == 0)
+        return 0;
+    
+    /* Open file with append mode (vfs_open will check permissions) */
+    struct vfs_file *file;
+    ret = vfs_open(path, O_WRONLY | O_APPEND, &file);
+    if (ret != 0)
+        return ret;
+    
+    /* Move to end of file */
+    if (file->f_inode->i_fop && file->f_inode->i_fop->seek)
+    {
+        file->f_inode->i_fop->seek(file, 0, SEEK_END);
+    }
+    else
+    {
+        file->f_pos = file->f_inode->i_size;
+    }
+    
+    /* Write data */
+    ret = vfs_write(file, buf, count);
+    
+    vfs_close(file);
     return ret;
-
-  // Move to end of file
-  if (file->f_inode->i_fop && file->f_inode->i_fop->seek)
-  {
-    file->f_inode->i_fop->seek(file, 0, SEEK_END);
-  }
-  else
-  {
-    file->f_pos = file->f_inode->i_size;
-  }
-
-  // Write data
-  ret = vfs_write(file, buf, count);
-
-  vfs_close(file);
-  return ret;
 }
 
 int vfs_close(struct vfs_file *file)
 {
-  if (!file)
-    return -1;
-
-  int ret = 0;
-  if (file->f_inode->i_fop && file->f_inode->i_fop->close)
-  {
-    ret = file->f_inode->i_fop->close(file);
-  }
-
-  kfree(file);
-  return ret;
+    if (!file)
+        return -EBADF;
+    
+    int ret = 0;
+    if (file->f_inode->i_fop && file->f_inode->i_fop->close)
+    {
+        ret = file->f_inode->i_fop->close(file);
+    }
+    
+    kfree(file);
+    return ret;
 }
 
 int vfs_ls(const char *path)
 {
-  // Use real MINIX filesystem implementation
-  return minix_fs_ls(path, false);
+    /* Validate input */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    /* Get filesystem for this path */
+    struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
+    
+    /* Currently only MINIX is fully implemented */
+    if (fs && fs->name && strcmp(fs->name, "minix") == 0)
+    {
+        return minix_fs_ls(path, false);
+    }
+    
+    /* Fallback: try MINIX if available */
+    if (minix_fs_is_working())
+    {
+        return minix_fs_ls(path, false);
+    }
+    
+    return -ENODEV;  /* No filesystem available */
 }
 
 int vfs_mkdir(const char *path, int mode)
 {
-  // Delegar al filesystem específico por ahora
-  return minix_fs_mkdir(path, (mode_t)mode);
+    /* Validate inputs */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    /* Check if current process exists */
+    if (!current_process)
+        return -ESRCH;
+    
+    /* Check write permission on parent directory */
+    char parent_path[256];
+    const char *last_slash = strrchr(path, '/');
+    
+    if (last_slash && last_slash != path)
+    {
+        size_t parent_len = (size_t)(last_slash - path);
+        if (parent_len >= sizeof(parent_path))
+            return -ENAMETOOLONG;
+        
+        strncpy(parent_path, path, parent_len);
+        parent_path[parent_len] = '\0';
+        
+        /* Check write permission on parent directory */
+        if (!check_file_access(parent_path, 0x2, current_process))  /* ACCESS_WRITE */
+            return -EACCES;
+    }
+    else if (strcmp(path, "/") == 0)
+    {
+        /* Cannot create root directory */
+        return -EEXIST;
+    }
+    
+    /* Check if directory already exists */
+    stat_t st;
+    if (vfs_stat(path, &st) == 0)
+    {
+        if (S_ISDIR(st.st_mode))
+            return -EEXIST;
+        else
+            return -ENOTDIR;
+    }
+    
+    /* Delegate to filesystem-specific implementation */
+    return minix_fs_mkdir(path, (mode_t)mode);
 }
 
 int vfs_unlink(const char *path)
 {
-  // Delegar al filesystem específico por ahora
-  return minix_fs_rm(path);
+    /* Validate inputs */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    /* Check if current process exists */
+    if (!current_process)
+        return -ESRCH;
+    
+    /* Cannot unlink root directory */
+    if (strcmp(path, "/") == 0)
+        return -EPERM;
+    
+    /* Get file stats to check permissions */
+    stat_t st;
+    if (vfs_stat(path, &st) != 0)
+        return -ENOENT;
+    
+    /* Check write permission */
+    if (S_ISDIR(st.st_mode))
+    {
+        /* For directories, check write permission on parent */
+        char parent_path[256];
+        const char *last_slash = strrchr(path, '/');
+        
+        if (last_slash && last_slash != path)
+        {
+            size_t parent_len = (size_t)(last_slash - path);
+            if (parent_len >= sizeof(parent_path))
+                return -ENAMETOOLONG;
+            
+            strncpy(parent_path, path, parent_len);
+            parent_path[parent_len] = '\0';
+            
+            if (!check_file_access(parent_path, 0x2, current_process))  /* ACCESS_WRITE */
+                return -EACCES;
+        }
+    }
+    else
+    {
+        /* For files, check write permission on the file itself */
+        if (!check_file_access(path, 0x2, current_process))  /* ACCESS_WRITE */
+            return -EACCES;
+    }
+    
+    /* Delegate to filesystem-specific implementation */
+    return minix_fs_rm(path);
 }
 
 int vfs_link(const char *oldpath, const char *newpath)
 {
-  if (!oldpath || !newpath)
-    return -1;
-
-  return minix_fs_link(oldpath, newpath);
+    /* Validate inputs */
+    int ret = validate_path(oldpath);
+    if (ret != 0)
+        return ret;
+    
+    ret = validate_path(newpath);
+    if (ret != 0)
+        return ret;
+    
+    /* Check if current process exists */
+    if (!current_process)
+        return -ESRCH;
+    
+    /* Check that oldpath exists and is readable */
+    stat_t st;
+    if (vfs_stat(oldpath, &st) != 0)
+        return -ENOENT;
+    
+    if (!check_file_access(oldpath, 0x1, current_process))  /* ACCESS_READ */
+        return -EACCES;
+    
+    /* Check write permission on parent directory of newpath */
+    char parent_path[256];
+    const char *last_slash = strrchr(newpath, '/');
+    
+    if (last_slash && last_slash != newpath)
+    {
+        size_t parent_len = (size_t)(last_slash - newpath);
+        if (parent_len >= sizeof(parent_path))
+            return -ENAMETOOLONG;
+        
+        strncpy(parent_path, newpath, parent_len);
+        parent_path[parent_len] = '\0';
+        
+        /* Check write permission on parent directory */
+        if (!check_file_access(parent_path, 0x2, current_process))  /* ACCESS_WRITE */
+            return -EACCES;
+    }
+    
+    /* Check if newpath already exists */
+    if (vfs_stat(newpath, &st) == 0)
+        return -EEXIST;
+    
+    /* Delegate to filesystem-specific implementation */
+    return minix_fs_link(oldpath, newpath);
 }
 
-// Internal recursive function with depth limit to prevent stack overflow
+/* Internal recursive function with depth limit to prevent stack overflow */
 static int vfs_rmdir_recursive_internal(const char *path, int depth)
 {
-  extern int64_t sys_write(int fd, const void *buf, size_t count);
-
-  // Limit recursion depth to prevent stack overflow (max 32 levels)
-  if (depth > 32)
-  {
-    sys_write(2, "rm: recursion depth limit exceeded\n", 35);
-    return -1;
-  }
-
-  if (!path)
-  {
-    return -1;
-  }
-
-  // Normalize path: ensure it starts with /
-  char normalized_path[256]; // Reduced from 512 to prevent stack overflow
-  if (path[0] != '/')
-  {
-    normalized_path[0] = '/';
-    size_t len = strlen(path);
-    if (len >= sizeof(normalized_path) - 1)
+    extern int64_t sys_write(int fd, const void *buf, size_t count);
+    
+    /* Limit recursion depth to prevent stack overflow (max 32 levels) */
+    if (depth > 32)
     {
-      return -1; // Path too long
+        sys_write(2, "rm: recursion depth limit exceeded\n", 35);
+        return -ELOOP;
     }
-    strcpy(normalized_path + 1, path);
-  }
-  else
-  {
-    size_t len = strlen(path);
-    if (len >= sizeof(normalized_path))
+    
+    /* Validate path */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    /* Normalize path: ensure it starts with / */
+    char normalized_path[256];  /* Reduced from 512 to prevent stack overflow */
+    if (path[0] != '/')
     {
-      return -1; // Path too long
+        normalized_path[0] = '/';
+        size_t len = strlen(path);
+        if (len >= sizeof(normalized_path) - 1)
+        {
+            return -ENAMETOOLONG;  /* Path too long */
+        }
+        strcpy(normalized_path + 1, path);
     }
-    strcpy(normalized_path, path);
-  }
-
-  // Check if path is valid and not root
-  if (normalized_path[0] == '\0' || (normalized_path[0] == '/' && normalized_path[1] == '\0'))
-  {
-    sys_write(2, "rm: cannot remove root directory\n", 33);
-    return -1;
-  }
-
-  // First check if it's a directory
-  stat_t st;
-  if (vfs_stat(normalized_path, &st) != 0)
-  {
-    // File doesn't exist or error reading stat
-    return -1;
-  }
+    else
+    {
+        size_t len = strlen(path);
+        if (len >= sizeof(normalized_path))
+        {
+            return -ENAMETOOLONG;  /* Path too long */
+        }
+        strcpy(normalized_path, path);
+    }
+    
+    /* Check if path is valid and not root */
+    if (normalized_path[0] == '\0' || (normalized_path[0] == '/' && normalized_path[1] == '\0'))
+    {
+        sys_write(2, "rm: cannot remove root directory\n", 33);
+        return -EPERM;
+    }
+    
+    /* First check if it's a directory */
+    stat_t st;
+    if (vfs_stat(normalized_path, &st) != 0)
+    {
+        /* File doesn't exist or error reading stat */
+        return -ENOENT;
+    }
 
   if (!S_ISDIR(st.st_mode))
   {
@@ -625,12 +967,12 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
   vfs_dirent_t entries[32]; // Reduced from 64 to prevent stack overflow
   int entry_count = vfs_readdir(normalized_path, entries, 32);
 
-  if (entry_count < 0)
-  {
-    // Error reading directory, but it exists - try to remove it anyway
-    // This might happen if directory is already empty or corrupted
-    return minix_fs_rmdir(normalized_path);
-  }
+    if (entry_count < 0)
+    {
+        /* Error reading directory, but it exists - try to remove it anyway */
+        /* This might happen if directory is already empty or corrupted */
+        return minix_fs_rmdir(normalized_path);
+    }
 
   // Recursively delete all entries
   for (int i = 0; i < entry_count; i++)
@@ -697,37 +1039,106 @@ int vfs_rmdir_recursive(const char *path)
   return vfs_rmdir_recursive_internal(path, 0);
 }
 
+/* Get filesystem type for a given path */
+static struct filesystem_type *vfs_get_filesystem_for_path(const char *path)
+{
+    if (!path)
+        return NULL;
+    
+    /* Check if path is on a mounted filesystem */
+    struct mount_point *mp = vfs_find_mount_point(path);
+    if (mp && mp->fs_type)
+    {
+        return mp->fs_type;
+    }
+    
+    /* Default to root filesystem (MINIX) */
+    struct filesystem_type *fs = filesystems;
+    while (fs)
+    {
+        if (fs->name && strcmp(fs->name, "minix") == 0)
+        {
+            return fs;
+        }
+        fs = fs->next;
+    }
+    
+    return NULL;
+}
+
 int vfs_stat(const char *path, stat_t *buf)
 {
-  if (!path || !buf)
-  {
-    return -1;
-  }
-
-  /*
-   * Route stat request through VFS layer to appropriate filesystem.
-   * Currently all requests are handled by the MINIX filesystem.
-   */
-  return minix_fs_stat(path, buf);
+    /* Validate inputs */
+    if (!path || !buf)
+    {
+        return -EINVAL;
+    }
+    
+    /* Validate path */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    /* Get filesystem for this path */
+    struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
+    
+    /* Route stat request through VFS layer to appropriate filesystem */
+    if (fs && fs->name)
+    {
+        /* Currently MINIX is the only fully implemented filesystem */
+        if (strcmp(fs->name, "minix") == 0)
+        {
+            return minix_fs_stat(path, buf);
+        }
+        /* For other filesystems, they should provide stat through their operations */
+        /* TODO: Add filesystem-specific stat operations */
+    }
+    
+    /* Fallback: try MINIX if available */
+    if (minix_fs_is_working())
+    {
+        return minix_fs_stat(path, buf);
+    }
+    
+    return -ENODEV;  /* No filesystem available */
 }
 
 static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries)
 {
-  if (!path || !entries || max_entries <= 0)
-  {
-    return -1;
-  }
+    /* Validate inputs */
+    if (!path || !entries || max_entries <= 0)
+    {
+        return -EINVAL;
+    }
+    
+    /* Validate path */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    /* Get filesystem for this path */
+    struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
+    
+    /* Currently only MINIX is fully implemented */
+    if (!fs || !fs->name || strcmp(fs->name, "minix") != 0)
+    {
+        if (!minix_fs_is_working())
+        {
+            return -ENODEV;  /* Filesystem not available */
+        }
+    }
 
-  if (!minix_fs_is_working())
-  {
-    return -1;
-  }
-
-  minix_inode_t *dir_inode = minix_fs_find_inode(path);
-  if (!dir_inode || !minix_is_dir(dir_inode))
-  {
-    return -1;
-  }
+    /* Get directory inode */
+    minix_inode_t *dir_inode = minix_fs_find_inode(path);
+    if (!dir_inode)
+    {
+        return -ENOENT;  /* Path not found */
+    }
+    
+    if (!minix_is_dir(dir_inode))
+    {
+        return -ENOTDIR;  /* Not a directory */
+    }
 
   int entry_count = 0;
 
@@ -773,8 +1184,27 @@ static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries)
 
 int vfs_ls_with_stat(const char *path)
 {
-  // Use the detailed flag in minix_fs_ls
-  return minix_fs_ls(path, true);
+    /* Validate input */
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    
+    /* Get filesystem for this path */
+    struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
+    
+    /* Currently only MINIX is fully implemented */
+    if (fs && fs->name && strcmp(fs->name, "minix") == 0)
+    {
+        return minix_fs_ls(path, true);
+    }
+    
+    /* Fallback: try MINIX if available */
+    if (minix_fs_is_working())
+    {
+        return minix_fs_ls(path, true);
+    }
+    
+    return -ENODEV;  /* No filesystem available */
 }
 
 // Forward declaration for mount function
@@ -838,7 +1268,7 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
     if (!root_sb)
     {
       print("MINIX_MOUNT: ERROR - kmalloc failed for superblock\n");
-      return -1;
+      return -ENOMEM;
     }
 
     root_sb->s_op = &minix_super_ops;
@@ -861,7 +1291,7 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
       print("MINIX_MOUNT: ERROR - kmalloc failed for root_inode\n");
       kfree(root_sb);
       root_sb = NULL;
-      return -1;
+      return -ENOMEM;
     }
 
     root_inode->i_ino = 1;               // Root inode number
@@ -928,7 +1358,7 @@ int vfs_init_with_minix(void)
   else
   {
     print("VFS: ERROR - root_inode is still NULL\n");
-    return -1;
+    return -ENODEV;  /* Root inode not created */
   }
 
   /* Agregar root mount point */
