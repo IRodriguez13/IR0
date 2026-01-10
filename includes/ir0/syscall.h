@@ -1,18 +1,22 @@
 #pragma once
 
+#ifndef _IR0_SYSCALL_H
+#define _IR0_SYSCALL_H
+
 #include <stdint.h>
 #include <stddef.h>
 #include <ir0/stat.h>
 #include <ir0/types.h>
+#include <ir0/fcntl.h>
+#include <string.h>
 
-// Basic types
+/* Basic types */
 typedef uint32_t mode_t;
 
 /**
- * Syscall numbers enumeration
+ * POSIX Minimal Syscalls
  * 
- * This enum defines all system call numbers used by the IR0 kernel.
- * Values are explicitly assigned to maintain compatibility with existing code.
+ * Reduced to essential syscalls.
  */
 typedef enum {
     SYS_EXIT = 0,
@@ -59,12 +63,59 @@ typedef enum {
     SYS_DMESG = 114,
     SYS_PING = 115,
     SYS_IFCONFIG = 116,
-    SYS_READ_FILE = 117,
-    SYS_WRITE_FILE = 118,
 } syscall_num_t;
 
+/* Virtual filesystem paths for file operations */
+#define VFS_PROC_PATH     "/proc"
+#define VFS_DEV_PATH       "/dev"
+#define VFS_SYS_PATH       "/sys"
 
-// Low-level syscall interface simulated for dbgshell
+/* Standard device nodes */
+#define DEV_NULL           "/dev/null"
+#define DEV_ZERO           "/dev/zero"
+#define DEV_CONSOLE        "/dev/console"
+#define DEV_TTY            "/dev/tty"
+#define DEV_AUDIO          "/dev/audio"
+#define DEV_MOUSE          "/dev/mouse"
+#define DEV_NET            "/dev/net"
+#define DEV_DISK           "/dev/disk"
+#define DEV_KMSG           "/dev/kmsg"
+
+/* Process information files in /proc */
+#define PROC_STATUS        "/proc/self/status"
+#define PROC_MEMINFO       "/proc/meminfo"
+#define PROC_CPUINFO       "/proc/cpuinfo"
+#define PROC_MOUNTS        "/proc/mounts"
+#define PROC_VERSION       "/proc/version"
+
+/* System information files in /sys */
+#define SYS_NETINFO_PATH   "/sys/net/info"
+#define SYS_DRIVERS_PATH   "/sys/drivers"
+#define SYS_UPTIME_PATH    "/sys/uptime"
+
+/* Standard file descriptors */
+#define STDIN_FILENO   0
+#define STDOUT_FILENO  1
+#define STDERR_FILENO  2
+
+/* Access modes for permission checking */
+#define ACCESS_READ    0x1
+#define ACCESS_WRITE   0x2
+#define ACCESS_EXECUTE 0x4
+
+/* Memory protection flags for mmap */
+#define PROT_READ     0x1
+#define PROT_WRITE    0x2
+#define PROT_EXEC     0x4
+#define PROT_NONE     0x0
+
+/* Mapping flags for mmap */
+#define MAP_SHARED    0x01
+#define MAP_PRIVATE   0x02
+#define MAP_ANONYMOUS 0x20
+
+
+/* Low-level syscall interface */
 static inline int64_t syscall0(int64_t num)
 {
     int64_t sysret;
@@ -120,14 +171,15 @@ static inline int64_t syscall6(int64_t num, int64_t arg1, int64_t arg2, int64_t 
     return result;
 }
 
-// Generic syscall (for compatibility)
+/* Generic syscall */
 static inline int64_t syscall(int64_t num, int64_t arg1, int64_t arg2, int64_t arg3)
 {
     return syscall3(num, arg1, arg2, arg3);
 }
 
+/* POSIX WRAPPER FUNCTIONS */
 
-// Process management
+/* Process management */
 static inline void ir0_exit(int status)
 {
     syscall1(SYS_EXIT, status);
@@ -144,20 +196,20 @@ static inline int64_t ir0_exec(const char *path)
     return syscall1(SYS_EXEC, (int64_t)path);
 }
 
-static inline int64_t ir0_getpid(void)
-{
-    return syscall0(SYS_GETPID);
-}
-
 static inline int64_t ir0_waitpid(int64_t pid, int *status)
 {
     return syscall2(SYS_WAITPID, pid, (int64_t)status);
 }
 
-// I/O operations
-static inline int64_t ir0_write(int fd, const void *buf, size_t count)
+/* Universal I/O interface */
+static inline int64_t ir0_open(const char *pathname, int flags, mode_t mode)
 {
-    return syscall3(SYS_WRITE, fd, (int64_t)buf, count);
+    return syscall3(SYS_OPEN, (int64_t)pathname, flags, mode);
+}
+
+static inline int64_t ir0_close(int fd)
+{
+    return syscall1(SYS_CLOSE, fd);
 }
 
 static inline int64_t ir0_read(int fd, void *buf, size_t count)
@@ -165,34 +217,28 @@ static inline int64_t ir0_read(int fd, void *buf, size_t count)
     return syscall3(SYS_READ, fd, (int64_t)buf, count);
 }
 
-// File operations
-static inline int64_t ir0_touch(const char *path)
+static inline int64_t ir0_write(int fd, const void *buf, size_t count)
 {
-    return syscall1(SYS_TOUCH, (int64_t)path);
+    return syscall3(SYS_WRITE, fd, (int64_t)buf, count);
 }
 
-static inline int64_t ir0_rm(const char *path)
+static inline int64_t ir0_lseek(int fd, off_t offset, int whence)
 {
-    return syscall1(SYS_RM, (int64_t)path);
+    return syscall3(SYS_LSEEK, fd, offset, whence);
 }
 
-static inline int64_t ir0_mkdir(const char *path)
+/* File status */
+static inline int64_t ir0_stat(const char *pathname, stat_t *buf)
 {
-    return syscall2(SYS_MKDIR, (int64_t)path, 0755);
+    return syscall2(SYS_STAT, (int64_t)pathname, (int64_t)buf);
 }
 
-static inline int64_t ir0_ls(const char *path)
+static inline int64_t ir0_fstat(int fd, stat_t *buf)
 {
-    return syscall1(SYS_LS, (int64_t)path);
+    return syscall2(SYS_FSTAT, fd, (int64_t)buf);
 }
 
-// System info
-static inline int64_t ir0_ps(void)
-{
-    return syscall0(SYS_PS);
-}
-
-// Memory management
+/* Memory management */
 static inline void *ir0_sbrk(intptr_t increment)
 {
     return (void *)syscall1(SYS_SBRK, increment);
@@ -213,31 +259,32 @@ static inline int64_t ir0_munmap(void *addr, size_t length)
     return syscall2(SYS_MUNMAP, (int64_t)addr, length);
 }
 
-// File status
-static inline int64_t ir0_fstat(int fd, stat_t *buf)
+/* Process info */
+static inline int64_t ir0_getpid(void)
 {
-    return syscall2(SYS_FSTAT, fd, (int64_t)buf);
+    return syscall0(SYS_GETPID);
 }
 
-static inline int64_t ir0_stat(const char *pathname, stat_t *buf)
+/* Directory operations */
+static inline int64_t ir0_getcwd(char *buf, size_t size)
 {
-    return syscall2(SYS_STAT, (int64_t)pathname, (int64_t)buf);
+    return syscall2(SYS_GETCWD, (int64_t)buf, size);
 }
 
-// Mount filesystem: dev (e.g. "/dev/sda1"), mountpoint (e.g. "/"), fstype (e.g. "minix")
+static inline int64_t ir0_chdir(const char *path)
+{
+    return syscall1(SYS_CHDIR, (int64_t)path);
+}
+
+/* Filesystem operations */
 static inline int64_t ir0_mount(const char *dev, const char *mountpoint, const char *fstype)
 {
     return syscall3(SYS_MOUNT, (int64_t)dev, (int64_t)mountpoint, (int64_t)fstype);
 }
 
-static inline int64_t ir0_open(const char *pathname, int flags, mode_t mode)
+static inline int64_t ir0_unlink(const char *pathname)
 {
-    return syscall3(SYS_OPEN, (int64_t)pathname, flags, mode);
-}
-
-static inline int64_t ir0_close(int fd)
-{
-    return syscall1(SYS_CLOSE, fd);
+    return syscall1(SYS_UNLINK, (int64_t)pathname);
 }
 
 static inline int64_t ir0_link(const char *oldpath, const char *newpath)
@@ -245,3 +292,147 @@ static inline int64_t ir0_link(const char *oldpath, const char *newpath)
     return syscall2(SYS_LINK, (int64_t)oldpath, (int64_t)newpath);
 }
 
+/* Advanced I/O */
+static inline int64_t ir0_dup2(int oldfd, int newfd)
+{
+    return syscall2(SYS_DUP2, oldfd, newfd);
+}
+
+/* Permissions */
+static inline int64_t ir0_chmod(const char *pathname, mode_t mode)
+{
+    return syscall2(SYS_CHMOD, (int64_t)pathname, mode);
+}
+
+/* Unix-style file operations for legacy compatibility */
+
+/* Process listing via /proc filesystem */
+static inline int64_t ir0_ps(void)
+{
+    return ir0_open("/proc", O_RDONLY, 0);
+}
+
+/* Directory listing */
+static inline int64_t ir0_ls(const char *path)
+{
+    return ir0_open(path, O_RDONLY | O_DIRECTORY, 0);
+}
+
+/* File creation */
+static inline int64_t ir0_touch(const char *path)
+{
+    return ir0_open(path, O_CREAT | O_WRONLY, 0644);
+}
+
+/* File deletion */
+static inline int64_t ir0_rm(const char *path)
+{
+    return ir0_unlink(path);
+}
+
+/* Directory creation */
+static inline int64_t ir0_mkdir(const char *path, mode_t mode)
+{
+    return ir0_open(path, O_CREAT | O_DIRECTORY, mode);
+}
+
+/* Directory removal */
+static inline int64_t ir0_rmdir(const char *path)
+{
+    return ir0_unlink(path);
+}
+
+/* Network information via /sys filesystem */
+static inline int64_t ir0_netinfo(void)
+{
+    return ir0_open(SYS_NETINFO_PATH, O_RDONLY, 0);
+}
+
+/* Driver listing via /sys filesystem */
+static inline int64_t ir0_lsdrv(void)
+{
+    return ir0_open(SYS_DRIVERS_PATH, O_RDONLY, 0);
+}
+
+/* Audio operations via /dev filesystem */
+static inline int64_t ir0_audio_test(const void *data, size_t size)
+{
+    int fd = ir0_open("/dev/audio", O_WRONLY, 0);
+    if (fd < 0) return fd;
+    int64_t result = ir0_write(fd, data, size);
+    ir0_close(fd);
+    return result;
+}
+
+/* Mouse operations via /dev filesystem */
+static inline int64_t ir0_mouse_test(void *buf, size_t size)
+{
+    int fd = ir0_open("/dev/mouse", O_RDONLY, 0);
+    if (fd < 0) return fd;
+    int64_t result = ir0_read(fd, buf, size);
+    ir0_close(fd);
+    return result;
+}
+
+/* Kernel messages via /dev filesystem */
+static inline int64_t ir0_dmesg(void)
+{
+    return ir0_open("/dev/kmsg", O_RDONLY, 0);
+}
+
+/* Network operations via /dev filesystem */
+static inline int64_t ir0_ping(const char *host)
+{
+    int fd = ir0_open("/dev/net", O_WRONLY, 0);
+    if (fd < 0) return fd;
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "ping %s", host);
+    int64_t result = ir0_write(fd, cmd, strlen(cmd));
+    ir0_close(fd);
+    return result;
+}
+
+static inline int64_t ir0_ifconfig(const char *config)
+{
+    int fd = ir0_open("/dev/net", O_WRONLY, 0);
+    if (fd < 0) return fd;
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "ifconfig %s", config);
+    int64_t result = ir0_write(fd, cmd, strlen(cmd));
+    ir0_close(fd);
+    return result;
+}
+
+/* Disk operations via /dev filesystem */
+static inline int64_t ir0_df(void)
+{
+    return ir0_open("/dev/disk", O_RDONLY, 0);
+}
+
+/* Memory allocation via mmap */
+static inline void *ir0_malloc_test(size_t size)
+{
+    return ir0_mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+}
+
+/* Parent PID via /proc filesystem */
+static inline int64_t ir0_getppid(void)
+{
+    int fd = ir0_open("/proc/self/status", O_RDONLY, 0);
+    if (fd < 0) return fd;
+    
+    char buf[1024];
+    int64_t bytes = ir0_read(fd, buf, sizeof(buf) - 1);
+    ir0_close(fd);
+    
+    if (bytes <= 0) return -1;
+    buf[bytes] = '\0';
+    
+    /* Parse PPid from /proc/self/status */
+    char *ppid_line = strstr(buf, "PPid:");
+    if (!ppid_line) return -1;
+    
+    return atoi(ppid_line + 6);  /* Skip "PPid:" */
+}
+
+#endif /* _IR0_SYSCALL_H */
