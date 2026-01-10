@@ -19,7 +19,7 @@
 #include <ir0/driver.h>
 #include <kernel/process.h>
 #include <kernel/syscalls.h>
-#include <config.h>
+#include <ir0/version.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
 #include <arch/common/arch_portable.h>
@@ -199,7 +199,7 @@ static int proc_netinfo_read(char *buf, size_t count)
 
     size_t off = 0;
     int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "NAME\tMTU\tFLAGS\tMAC\n");
+                     "NAME MTU FLAGS MAC\n");
     if (n < 0)
         return -1;
     if (n >= (int)(count - off))
@@ -222,7 +222,7 @@ static int proc_netinfo_read(char *buf, size_t count)
             snprintf(flags, sizeof(flags), "-");
 
         n = snprintf(buf + off, count - off,
-                     "%s\t%u\t%s\t%02x:%02x:%02x:%02x:%02x:%02x\n",
+                     "%s %u %s %02x:%02x:%02x:%02x:%02x:%02x\n",
                      dev->name ? dev->name : "",
                      (unsigned)dev->mtu,
                      flags,
@@ -310,13 +310,18 @@ int proc_meminfo_read(char *buf, size_t count)
     uint64_t used = get_memory_usage();
     uint64_t free = total - used;
     
+    /* Convert to kilobytes */
+    uint64_t total_kb = total / 1024;
+    uint64_t free_kb = free / 1024;
+    uint64_t used_kb = used / 1024;
+    
     int len = snprintf(buf, count,
-        "MemTotal: %lu kB\n"
-        "MemFree:  %lu kB\n"
-        "MemUsed:  %lu kB\n",
-        total / 1024,
-        free / 1024,
-        used / 1024
+        "MemTotal: %llu kB\n"
+        "MemFree:  %llu kB\n"
+        "MemUsed:  %llu kB\n",
+        (unsigned long long)total_kb,
+        (unsigned long long)free_kb,
+        (unsigned long long)used_kb
     );
     
     /* snprintf returns number of characters that would be written (excluding null terminator)
@@ -429,7 +434,7 @@ int proc_uptime_read(char *buf, size_t count)
     /* Convert to seconds */
     uint64_t uptime = get_system_time() / 1000;
     
-    int len = snprintf(buf, count, "%lu.00\n", uptime);
+    int len = snprintf(buf, count, "%llu.00\n", (unsigned long long)uptime);
     if (len < 0)
         return -1;
     if (len >= (int)count)
@@ -451,11 +456,17 @@ int proc_version_read(char *buf, size_t count)
     /* Initialize buffer to zero */
     memset(buf, 0, count);
     
+    /* Use centralized version from version.h */
+    /* Format matches Linux: "Linux version X.Y.Z (user@host) (compiler) (date)" */
+    /* For IR0: "IR0 version X.Y.Z (built DATE TIME by user@host with compiler)" */
     int len = snprintf(buf, count,
-        "IR0 version %s (built %s %s)\n",
+        "IR0 version %s (built %s %s by %s@%s with %s)\n",
         IR0_VERSION_STRING,
-        __DATE__,
-        __TIME__
+        IR0_BUILD_DATE,
+        IR0_BUILD_TIME,
+        IR0_BUILD_USER,
+        IR0_BUILD_HOST,
+        IR0_BUILD_CC
     );
     
     if (len < 0)
