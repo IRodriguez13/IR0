@@ -123,7 +123,7 @@ void arch_io_write32(arch_addr_t addr, uint32_t value);
 void arch_cpu_halt(void);
 
 /**
- * Get CPU ID
+ * Get CPU ID (APIC ID)
  */
 uint32_t arch_get_cpu_id(void);
 
@@ -131,6 +131,22 @@ uint32_t arch_get_cpu_id(void);
  * Get number of CPUs
  */
 uint32_t arch_get_cpu_count(void);
+
+/**
+ * Get CPU vendor string
+ * @vendor_buf: Buffer to store vendor string (must be at least 13 bytes)
+ * Returns: 0 on success, -1 on failure
+ */
+int arch_get_cpu_vendor(char *vendor_buf);
+
+/**
+ * Get CPU signature (family, model, stepping)
+ * @family: Output for CPU family
+ * @model: Output for CPU model
+ * @stepping: Output for CPU stepping
+ * Returns: 0 on success, -1 on failure
+ */
+int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping);
 
 /**
  * Switch to user mode (if supported)

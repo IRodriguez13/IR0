@@ -41,7 +41,8 @@ static struct {
 
 static const char* lang_to_string(ir0_driver_lang_t lang)
 {
-    switch (lang) {
+    switch (lang) 
+    {
         case IR0_DRIVER_LANG_C:    return "C";
         case IR0_DRIVER_LANG_CPP:  return "C++";
         case IR0_DRIVER_LANG_RUST: return "Rust";
@@ -51,7 +52,8 @@ static const char* lang_to_string(ir0_driver_lang_t lang)
 
 static const char* state_to_string(ir0_driver_state_t state)
 {
-    switch (state) {
+    switch (state) 
+    {
         case IR0_DRIVER_STATE_UNREGISTERED: return "Unregistered";
         case IR0_DRIVER_STATE_REGISTERED:   return "Registered";
         case IR0_DRIVER_STATE_INITIALIZED:  return "Initialized";
@@ -63,17 +65,20 @@ static const char* state_to_string(ir0_driver_state_t state)
 
 static int validate_driver_info(const ir0_driver_info_t* info)
 {
-    if (!info) {
+    if (!info) 
+    {
         LOG_ERROR("DriverRegistry", "Driver info is NULL");
         return 0;
     }
     
-    if (!info->name || strlen(info->name) == 0) {
+    if (!info->name || strlen(info->name) == 0) 
+    {
         LOG_ERROR("DriverRegistry", "Driver name is NULL or empty");
         return 0;
     }
     
-    if (strlen(info->name) > 64) {
+    if (strlen(info->name) > 64) 
+    {
         LOG_ERROR_FMT("DriverRegistry", "Driver name too long: %s", info->name);
         return 0;
     }
@@ -83,13 +88,15 @@ static int validate_driver_info(const ir0_driver_info_t* info)
 
 static int validate_driver_ops(const ir0_driver_ops_t* ops)
 {
-    if (!ops) {
+    if (!ops) 
+    {
         LOG_ERROR("DriverRegistry", "Driver ops is NULL");
         return 0;
     }
     
     /* At least init function is required */
-    if (!ops->init) {
+    if (!ops->init) 
+    {
         LOG_ERROR("DriverRegistry", "Driver must have init function");
         return 0;
     }
@@ -102,8 +109,10 @@ static ir0_driver_t* find_driver_by_name(const char* name)
     if (!name) return NULL;
     
     ir0_driver_t* current = driver_registry.drivers;
-    while (current) {
-        if (strcmp(current->info.name, name) == 0) {
+    while (current) 
+    {
+        if (strcmp(current->info.name, name) == 0) 
+        {
             return current;
         }
         current = current->next;
@@ -116,7 +125,8 @@ static ir0_driver_t* find_driver_by_name(const char* name)
 
 void ir0_driver_registry_init(void)
 {
-    if (driver_registry.initialized) {
+    if (driver_registry.initialized) 
+    {
         LOG_WARNING("DriverRegistry", "Driver registry already initialized");
         return;
     }
@@ -271,7 +281,8 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
 
 int32_t ir0_unregister_driver(ir0_driver_t* driver)
 {
-    if (!driver) {
+    if (!driver) 
+    {
         LOG_ERROR("DriverRegistry", "Cannot unregister NULL driver");
         return IR0_DRIVER_ERR_INVAL;
     }
@@ -280,31 +291,39 @@ int32_t ir0_unregister_driver(ir0_driver_t* driver)
     ir0_driver_t* current = driver_registry.drivers;
     ir0_driver_t* prev = NULL;
     
-    while (current) {
-        if (current == driver) {
+    while (current) 
+    {
+        if (current == driver) 
+        {
             /* Call shutdown if available */
-            if (driver->ops.shutdown) {
+            if (driver->ops.shutdown) 
+            {
                 LOG_INFO_FMT("DriverRegistry", "Shutting down driver: %s", driver->info.name);
                 driver->ops.shutdown();
             }
             
             /* Remove from list */
-            if (prev) {
+            if (prev) 
+            {
                 prev->next = driver->next;
-            } else {
+            } else 
+            {
                 driver_registry.drivers = driver->next;
             }
             
             /* Free allocated memory */
             if (driver->info.name) kfree((void*)driver->info.name);
             
-            if (driver->info.version && strcmp(driver->info.version, "1.0") != 0) {
+            if (driver->info.version && strcmp(driver->info.version, "1.0") != 0) 
+            {
                 kfree((void*)driver->info.version);
             }
-            if (driver->info.author && strcmp(driver->info.author, "Unknown") != 0) {
+            if (driver->info.author && strcmp(driver->info.author, "Unknown") != 0) 
+            {
                 kfree((void*)driver->info.author);
             }
-            if (driver->info.description && strlen(driver->info.description) > 0) {
+            if (driver->info.description && strlen(driver->info.description) > 0) 
+            {
                 kfree((void*)driver->info.description);
             }
             kfree(driver);
@@ -379,7 +398,7 @@ int ir0_driver_list_to_buffer(char *buf, size_t count)
 
     size_t off = 0;
     int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "NAME\tVERSION\tLANG\tSTATE\tDESC\n");
+                     "NAME VERSION LANG STATE DESC\n");
     if (n < 0)
         return -1;
     if (n >= (int)(count - off))
@@ -393,7 +412,7 @@ int ir0_driver_list_to_buffer(char *buf, size_t count)
         const char *state = state_to_string(current->state);
 
         n = snprintf(buf + off, count - off,
-                     "%s\t%s\t%s\t%s\t%s\n",
+                     "%s %s %s %s %s\n",
                      current->info.name ? current->info.name : "",
                      current->info.version ? current->info.version : "",
                      lang ? lang : "",
