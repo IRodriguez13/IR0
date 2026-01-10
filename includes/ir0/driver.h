@@ -112,6 +112,8 @@ ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver);
  */
 void ir0_driver_list_all(void);
 
+int ir0_driver_list_to_buffer(char *buf, size_t count);
+
 /**
  * Initialize the driver registry subsystem
  * Called during kernel boot

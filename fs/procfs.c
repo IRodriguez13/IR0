@@ -13,6 +13,8 @@
 #include <ir0/vga.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ir0/net.h>
+#include <ir0/driver.h>
 #include <kernel/process.h>
 #include <kernel/syscalls.h>
 #include <config.h>
@@ -22,13 +24,33 @@
 /* External functions */
 extern uint64_t get_system_time(void);
 
-/* Simple implementation of get_process_fd_table for procfs use */
-static fd_entry_t *get_process_fd_table(void)
+static pid_t proc_fd_pid_map[1000];
+static int proc_fd_pid_map_init = 0;
+
+static void proc_fd_pid_map_ensure_init(void)
 {
-    extern process_t *current_process;
-    if (!current_process)
-        return NULL;
-    return current_process->fd_table;
+    if (proc_fd_pid_map_init)
+        return;
+    for (int i = 0; i < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])); i++)
+        proc_fd_pid_map[i] = -1;
+    proc_fd_pid_map_init = 1;
+}
+
+static void proc_set_pid_for_fd(int fd, pid_t pid)
+{
+    proc_fd_pid_map_ensure_init();
+    int idx = fd - 1000;
+    if (idx >= 0 && idx < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])))
+        proc_fd_pid_map[idx] = pid;
+}
+
+static pid_t proc_get_pid_for_fd(int fd)
+{
+    proc_fd_pid_map_ensure_init();
+    int idx = fd - 1000;
+    if (idx >= 0 && idx < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])))
+        return proc_fd_pid_map[idx];
+    return -1;
 }
 static uint64_t get_memory_usage(void)
 {
@@ -40,6 +62,108 @@ static uint64_t get_total_memory(void)
 {
     // TODO: Get from memory manager
     return 16 * 1024 * 1024;  // 16MB total for now
+}
+
+static int proc_ps_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "PID\tPPID\tSTATE\tNAME\n");
+    if (n < 0)
+        return -1;
+    off += (size_t)n;
+
+    process_t *p = process_list;
+    while (p && off < count)
+    {
+        const char *state_str;
+        switch (p->state)
+        {
+        case PROCESS_READY:
+            state_str = "R";
+            break;
+        case PROCESS_RUNNING:
+            state_str = "R";
+            break;
+        case PROCESS_BLOCKED:
+            state_str = "S";
+            break;
+        case PROCESS_ZOMBIE:
+            state_str = "Z";
+            break;
+        default:
+            state_str = "?";
+            break;
+        }
+
+        n = snprintf(buf + off, count - off,
+                     "%d\t%d\t%s\t%s\n",
+                     (int)p->task.pid,
+                     (int)p->ppid,
+                     state_str,
+                     p->comm[0] ? p->comm : "(none)");
+        if (n < 0)
+            break;
+        off += (size_t)n;
+        p = p->next;
+    }
+
+    return (off < count) ? (int)off : (int)count;
+}
+
+static int proc_netinfo_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+
+    struct net_device *dev = net_get_devices();
+    if (!dev)
+        return snprintf(buf, count, "No network devices\n");
+
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "NAME\tMTU\tFLAGS\tMAC\n");
+    if (n < 0)
+        return -1;
+    off += (size_t)n;
+
+    while (dev && off < count)
+    {
+        char flags[32];
+        size_t foff = 0;
+        flags[0] = '\0';
+
+        if (dev->flags & IFF_UP)
+            foff += (size_t)snprintf(flags + foff, (foff < sizeof(flags)) ? (sizeof(flags) - foff) : 0, "UP");
+        if (dev->flags & IFF_RUNNING)
+            foff += (size_t)snprintf(flags + foff, (foff < sizeof(flags)) ? (sizeof(flags) - foff) : 0, "%sRUNNING", (foff > 0) ? "," : "");
+        if (dev->flags & IFF_BROADCAST)
+            foff += (size_t)snprintf(flags + foff, (foff < sizeof(flags)) ? (sizeof(flags) - foff) : 0, "%sBROADCAST", (foff > 0) ? "," : "");
+        if (foff == 0)
+            snprintf(flags, sizeof(flags), "-");
+
+        n = snprintf(buf + off, count - off,
+                     "%s\t%u\t%s\t%02x:%02x:%02x:%02x:%02x:%02x\n",
+                     dev->name ? dev->name : "",
+                     (unsigned)dev->mtu,
+                     flags,
+                     (unsigned)dev->mac[0], (unsigned)dev->mac[1], (unsigned)dev->mac[2],
+                     (unsigned)dev->mac[3], (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
+        if (n < 0)
+            break;
+        off += (size_t)n;
+        dev = dev->next;
+    }
+
+    return (off < count) ? (int)off : (int)count;
+}
+
+static int proc_drivers_read(char *buf, size_t count)
+{
+    return ir0_driver_list_to_buffer(buf, count);
 }
 
 /* Check if path is in /proc */
@@ -183,6 +307,12 @@ static int proc_file_read(const char *filename, char *buf, size_t count)
 {
     if (strcmp(filename, "meminfo") == 0) {
         return proc_meminfo_read(buf, count);
+    } else if (strcmp(filename, "ps") == 0) {
+        return proc_ps_read(buf, count);
+    } else if (strcmp(filename, "netinfo") == 0) {
+        return proc_netinfo_read(buf, count);
+    } else if (strcmp(filename, "drivers") == 0) {
+        return proc_drivers_read(buf, count);
     } else if (strcmp(filename, "status") == 0) {
         return proc_status_read(buf, count, -1);  // Current process
     } else if (strcmp(filename, "uptime") == 0) {
@@ -206,12 +336,11 @@ int proc_open(const char *path, int flags)
     
     // Check if file exists and return special positive fd
     if (strcmp(filename, "meminfo") == 0) return 1000;
+    if (strcmp(filename, "ps") == 0) return 1004;
+    if (strcmp(filename, "netinfo") == 0) return 1005;
+    if (strcmp(filename, "drivers") == 0) return 1006;
     if (strcmp(filename, "status") == 0) {
-        // Store PID in fd_table for later use
-        fd_entry_t *fd_table = get_process_fd_table();
-        if (fd_table) {
-            fd_table[1001].offset = pid;  // Abuse offset field to store PID
-        }
+        proc_set_pid_for_fd(1001, pid);
         return 1001;
     }
     if (strcmp(filename, "uptime") == 0) return 1002;
@@ -228,10 +357,11 @@ int proc_read(int fd, char *buf, size_t count)
     
     switch (fd) {
         case 1000: return proc_meminfo_read(buf, count);
+        case 1004: return proc_ps_read(buf, count);
+        case 1005: return proc_netinfo_read(buf, count);
+        case 1006: return proc_drivers_read(buf, count);
         case 1001: {
-            // Get stored PID from fd_table
-            fd_entry_t *fd_table = get_process_fd_table();
-            pid_t pid = fd_table ? fd_table[1001].offset : -1;
+            pid_t pid = proc_get_pid_for_fd(1001);
             return proc_status_read(buf, count, pid);
         }
         case 1002: return proc_uptime_read(buf, count);
@@ -260,6 +390,9 @@ int proc_stat(const char *path, stat_t *st)
     
     // Check if file exists
     if (strcmp(filename, "meminfo") == 0 ||
+        strcmp(filename, "ps") == 0 ||
+        strcmp(filename, "netinfo") == 0 ||
+        strcmp(filename, "drivers") == 0 ||
         strcmp(filename, "status") == 0 ||
         strcmp(filename, "uptime") == 0 ||
         strcmp(filename, "version") == 0) {

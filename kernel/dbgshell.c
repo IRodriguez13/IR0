@@ -206,9 +206,9 @@ static void cmd_ls(const char *args)
   }
 
   if (detailed)
-    syscall(SYS_LS_DETAILED, (uint64_t)path, 0, 0);
+    ir0_ls(path);
   else
-    syscall(SYS_LS, (uint64_t)path, 0, 0);
+    ir0_ls(path);
 }
 
 static void cmd_cat(const char *filename)
@@ -219,23 +219,25 @@ static void cmd_cat(const char *filename)
     return;
   }
 
-  // Use sys_open+read instead of sys_cat for /proc support
-  int fd = syscall(SYS_OPEN, (uint64_t)filename, O_RDONLY, 0);
-  if (fd < 0) {
+  int fd = ir0_open(filename, O_RDONLY, 0);
+  if (fd < 0)
+  {
     shell_write(2, "cat: cannot open '");
     shell_write(2, filename);
     shell_write(2, "'\n");
     return;
   }
 
-  char buffer[1024];
-  int64_t bytes_read = syscall(SYS_READ, fd, (uint64_t)buffer, sizeof(buffer));
-  
-  if (bytes_read > 0) {
-    shell_write(1, buffer);
+  char buffer[512];
+  for (;;)
+  {
+    int64_t bytes_read = ir0_read(fd, buffer, sizeof(buffer));
+    if (bytes_read <= 0)
+      break;
+    syscall(SYS_WRITE, STDOUT_FILENO, (uint64_t)buffer, (uint64_t)bytes_read);
   }
-  
-  syscall(SYS_CLOSE, fd, 0, 0);
+
+  ir0_close(fd);
 }
 
 static void cmd_mkdir(const char *dirname)
@@ -246,7 +248,7 @@ static void cmd_mkdir(const char *dirname)
     return;
   }
 
-  int64_t result = syscall(SYS_MKDIR, (uint64_t)dirname, 0755, 0);
+  int64_t result = ir0_mkdir(dirname, 0755);
   if (result < 0)
     shell_write(2, "mkdir: failed\n");
 }
@@ -291,11 +293,11 @@ static void cmd_rmdir(const char *args)
   int64_t result;
   if (force)
   {
-    result = syscall(SYS_RMDIR_FORCE, (uint64_t)dirname, 0, 0);
+    result = ir0_rmdir(dirname);
   }
   else
   {
-    result = syscall(SYS_RMDIR, (uint64_t)dirname, 0, 0);
+    result = ir0_rmdir(dirname);
   }
 
   if (result < 0)
@@ -304,8 +306,7 @@ static void cmd_rmdir(const char *args)
 
 static void cmd_ps(void)
 {
-  /* Use real process listing syscall */
-  syscall(SYS_PS, 0, 0, 0);
+  cmd_cat("/proc/ps");
 }
 
 static void cmd_echo(const char *text)
@@ -422,8 +423,29 @@ static void cmd_echo(const char *text)
 
       void *old_data = NULL;
       size_t old_size = 0;
-      int64_t r = syscall(SYS_READ_FILE, (uint64_t)normalized_path, (uint64_t)&old_data, (uint64_t)&old_size);
-      if (r >= 0 && old_data && old_size > 0)
+      int fd = ir0_open(normalized_path, O_RDONLY, 0);
+      if (fd >= 0) {
+        /* Get file size first */
+        stat_t st;
+        if (ir0_fstat(fd, &st) >= 0) {
+          old_size = st.st_size;
+          if (old_size > 0) {
+            old_data = kmalloc(old_size);
+            if (old_data) {
+              int64_t r = ir0_read(fd, old_data, old_size);
+              ir0_close(fd);
+              if (r < 0) {
+                kfree(old_data);
+                old_data = NULL;
+                old_size = 0;
+              }
+            }
+          }
+        } else {
+          ir0_close(fd);
+        }
+      }
+      if (old_data && old_size > 0)
       {
         /* Allocate combined buffer */
         size_t total = old_size + (msg_len + 1);
@@ -445,18 +467,24 @@ static void cmd_echo(const char *text)
         combined[total] = '\0';
 
         /* Write back */
-        int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)combined, 0);
-        if (w < 0)
-        {
-          typewriter_vga_print("Error: Could not write to file '", 0x0C);
-          typewriter_vga_print(normalized_path, 0x0C);
-          typewriter_vga_print("'\n", 0x0C);
-        }
-        else
-        {
-          typewriter_vga_print("Written to '", 0x0A);
-          typewriter_vga_print(normalized_path, 0x0A);
-          typewriter_vga_print("'\n", 0x0A);
+        int fd = ir0_open(normalized_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd >= 0) {
+          int64_t w = ir0_write(fd, combined, total);
+          ir0_close(fd);
+          if (w < 0)
+          {
+            typewriter_vga_print("Error: Could not write to file '", 0x0C);
+            typewriter_vga_print(normalized_path, 0x0C);
+            typewriter_vga_print("'\n", 0x0C);
+          }
+          else
+          {
+            typewriter_vga_print("Written to '", 0x0A);
+            typewriter_vga_print(normalized_path, 0x0A);
+            typewriter_vga_print("'\n", 0x0A);
+          }
+        } else {
+          typewriter_vga_print("Error: Could not open file for writing\n", 0x0C);
         }
 
         kfree(combined);
@@ -466,7 +494,10 @@ static void cmd_echo(const char *text)
       else
       {
         /* File doesn't exist or empty: just write new_content */
-        int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)new_content, 0);
+        int fd = ir0_open(normalized_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd >= 0) {
+          int64_t w = ir0_write(fd, new_content, msg_len);
+          ir0_close(fd);
         if (w < 0)
         {
           typewriter_vga_print("Error: Could not write to file '", 0x0C);
@@ -478,6 +509,7 @@ static void cmd_echo(const char *text)
           typewriter_vga_print("Written to '", 0x0A);
           typewriter_vga_print(normalized_path, 0x0A);
           typewriter_vga_print("'\n", 0x0A);
+        }
         }
       }
     }
@@ -500,7 +532,10 @@ static void cmd_echo(const char *text)
       }
 
       /* Overwrite mode: write new_content directly */
-      int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)normalized_path, (uint64_t)new_content, 0);
+      int fd = ir0_open(normalized_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      int64_t w = (fd >= 0) ? ir0_write(fd, new_content, msg_len) : -1;
+      if (fd >= 0)
+        ir0_close(fd);
       if (w < 0)
       {
         typewriter_vga_print("Error: Could not write to file '", 0x0C);
@@ -538,11 +573,11 @@ static void cmd_exec(const char *filename)
     typewriter_vga_print("exec: failed\n", 0x0C);
 }
 
-static void cmd_exit(void) { syscall(SYS_EXIT, 0, 0, 0); }
+static void cmd_exit(void) { ir0_exit(0); }
 
 static void cmd_netinfo(void)
 {
-    syscall(SYS_NETINFO, 0, 0, 0);
+    cmd_cat("/proc/netinfo");
 }
 
 static void cmd_arpcache(void)
@@ -738,7 +773,29 @@ static void cmd_sed(const char *args)
   void *file_data = NULL;
   size_t file_size = 0;
 
-  int64_t result = syscall(SYS_READ_FILE, (uint64_t)filename, (uint64_t)&file_data, (uint64_t)&file_size);
+  int fd = ir0_open(filename, O_RDONLY, 0);
+  if (fd >= 0)
+  {
+    stat_t st;
+    if (ir0_fstat(fd, &st) >= 0 && st.st_size > 0)
+    {
+      file_size = (size_t)st.st_size;
+      file_data = kmalloc(file_size);
+      if (file_data)
+      {
+        int64_t r = ir0_read(fd, file_data, file_size);
+        if (r < 0)
+        {
+          kfree(file_data);
+          file_data = NULL;
+          file_size = 0;
+        }
+      }
+    }
+    ir0_close(fd);
+  }
+
+  int64_t result = (file_data && file_size > 0) ? 0 : -1;
 
   if (result < 0)
   {
@@ -766,7 +823,16 @@ static void cmd_sed(const char *args)
   }
 
   /* Write the modified content back to the file */
-  result = syscall(SYS_WRITE_FILE, (uint64_t)filename, (uint64_t)modified, 0);
+  fd = ir0_open(filename, O_WRONLY | O_TRUNC, 0);
+  if (fd >= 0)
+  {
+    result = ir0_write(fd, modified, strlen(modified));
+    ir0_close(fd);
+  }
+  else
+  {
+    result = -1;
+  }
 
   if (result < 0)
   {
@@ -880,14 +946,38 @@ static void cmd_cp(const char *args)
 
   void *data = NULL;
   size_t size = 0;
-  int64_t r = syscall(SYS_READ_FILE, (uint64_t)src, (uint64_t)&data, (uint64_t)&size);
+  int fd = ir0_open(src, O_RDONLY, 0);
+  if (fd >= 0)
+  {
+    stat_t st;
+    if (ir0_fstat(fd, &st) >= 0 && st.st_size > 0)
+    {
+      size = (size_t)st.st_size;
+      data = kmalloc(size);
+      if (data)
+      {
+        int64_t rr = ir0_read(fd, data, size);
+        if (rr < 0)
+        {
+          kfree(data);
+          data = NULL;
+          size = 0;
+        }
+      }
+    }
+    ir0_close(fd);
+  }
+  int64_t r = (data && size > 0) ? 0 : -1;
   if (r < 0 || !data)
   {
     shell_write(2, "cp: cannot read source\n");
     return;
   }
 
-  int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)dst, (uint64_t)data, 0);
+  fd = ir0_open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  int64_t w = (fd >= 0) ? ir0_write(fd, data, size) : -1;
+  if (fd >= 0)
+    ir0_close(fd);
   if (w < 0)
   {
     shell_write(2, "cp: cannot write destination\n");
@@ -980,14 +1070,37 @@ static void cmd_mv(const char *args)
   /* Copy file content */
   void *data = NULL;
   size_t size = 0;
-  int64_t r = syscall(SYS_READ_FILE, (uint64_t)src, (uint64_t)&data, (uint64_t)&size);
-  if (r < 0 || !data)
+  int fd = ir0_open(src, O_RDONLY, 0);
+  if (fd >= 0)
+  {
+    stat_t st;
+    if (ir0_fstat(fd, &st) >= 0 && st.st_size > 0)
+    {
+      size = (size_t)st.st_size;
+      data = kmalloc(size);
+      if (data)
+      {
+        int64_t rr = ir0_read(fd, data, size);
+        if (rr < 0)
+        {
+          kfree(data);
+          data = NULL;
+          size = 0;
+        }
+      }
+    }
+    ir0_close(fd);
+  }
+  if (!data)
   {
     shell_write(2, "mv: cannot read source\n");
     return;
   }
 
-  int64_t w = syscall(SYS_WRITE_FILE, (uint64_t)dst, (uint64_t)data, 0);
+  fd = ir0_open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  int64_t w = (fd >= 0) ? ir0_write(fd, data, size) : -1;
+  if (fd >= 0)
+    ir0_close(fd);
   if (w < 0)
   {
     shell_write(2, "mv: cannot write destination\n");
@@ -997,7 +1110,7 @@ static void cmd_mv(const char *args)
   }
 
   /* Unlink source */
-  int64_t u = syscall(SYS_UNLINK, (uint64_t)src, 0, 0);
+  int64_t u = ir0_unlink(src);
   if (u < 0)
   {
     shell_write(2, "mv: copied but failed to remove source\n");
@@ -1050,7 +1163,7 @@ static void cmd_ln(const char *args)
     return;
   }
 
-  int64_t result = syscall(SYS_LINK, (uint64_t)oldpath, (uint64_t)newpath, 0);
+  int64_t result = ir0_link(oldpath, newpath);
   if (result < 0)
   {
     shell_write(2, "ln: failed to create hard link\n");
@@ -1346,7 +1459,9 @@ static void cmd_rm(const char *args)
   /* If recursive flag is set, use recursive removal */
   if (recursive)
   {
-    result = syscall(SYS_RMDIR_R, (uint64_t)filename, 0, 0);
+    result = ir0_unlink(filename);
+    if (result < 0)
+      result = syscall(SYS_RMDIR_R, (uint64_t)filename, 0, 0);
     if (result < 0)
     {
       typewriter_vga_print("rm: cannot remove '", 0x0C);
@@ -1385,7 +1500,9 @@ static void cmd_touch(const char *filename)
   mode_t default_mode = 0644;
 
   /* Call the filesystem's touch function */
-  int64_t result = syscall(SYS_TOUCH, (uint64_t)filename, default_mode, 0);
+  int64_t result = ir0_touch(filename);
+  if (result >= 0)
+    ir0_close((int)result);
   if (result < 0)
   {
     vga_print("touch: failed to create/update file\n", 0x0C);
@@ -1485,12 +1602,12 @@ static void cmd_df(const char *args __attribute__((unused)))
 }
 static void cmd_lsdrv(const char *args __attribute__((unused)))
 {
-  syscall(111, 0, 0, 0);
+  cmd_cat("/proc/drivers");
 }
 
 static void cmd_dmesg(const char *args __attribute__((unused)))
 {
-  syscall(114, 0, 0, 0);
+  cmd_cat("/dev/kmsg");
 }
 
 static void cmd_audio_test(const char *args __attribute__((unused)))
@@ -1561,7 +1678,7 @@ static void cmd_ping(const char *args)
         return;
     }
     
-    int64_t ret = syscall(SYS_PING, dest_ip, 0, 0);
+    int64_t ret = ir0_ping(args);
     if (ret != 0)
     {
         shell_write(2, "Ping failed\n");
@@ -1573,7 +1690,7 @@ static void cmd_ifconfig(const char *args)
     if (!args || *args == '\0')
     {
         /* Show current configuration */
-        syscall(SYS_IFCONFIG, 0, 0, 0);
+        ir0_ifconfig("");
         return;
     }
     
@@ -1617,7 +1734,9 @@ static void cmd_ifconfig(const char *args)
         return;
     }
     
-    syscall(SYS_IFCONFIG, ip, netmask, gateway);
+    char config[256];
+snprintf(config, sizeof(config), "%s %s %s", ip_str, netmask_str, gateway_str);
+ir0_ifconfig(config);
 }
 
 /* Command table: name, handler, description */

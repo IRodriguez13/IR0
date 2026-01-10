@@ -12,6 +12,7 @@
 #define O_CREAT     0x0100  /* Create if nonexistent */
 #define O_EXCL      0x0200  /* Error if file exists */
 #define O_TRUNC     0x0400  /* Truncate to zero length */
+#define O_DIRECTORY 0x0200000  /* Must be a directory */
 
 /* Seek types */
 #define SEEK_SET    0       /* Set file offset to offset */
