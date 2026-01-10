@@ -10,6 +10,8 @@
 #include "procfs.h"
 #include <ir0/stat.h>
 #include <ir0/memory/kmem.h>
+#include <ir0/memory/pmm.h>
+#include <ir0/memory/allocator.h>
 #include <ir0/vga.h>
 #include <string.h>
 #include <stdlib.h>
@@ -20,13 +22,15 @@
 #include <config.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
+#include <arch/common/arch_portable.h>
 
 /* External functions */
 extern uint64_t get_system_time(void);
 
 static pid_t proc_fd_pid_map[1000];
 static int proc_fd_pid_map_init = 0;
-static off_t proc_fd_offset_map[1000];  // Track offsets for /proc files
+/* Track offsets for /proc files */
+static off_t proc_fd_offset_map[1000];
 static int proc_fd_offset_map_init = 0;
 
 static void proc_fd_pid_map_ensure_init(void)
@@ -63,16 +67,58 @@ static pid_t proc_get_pid_for_fd(int fd)
         return proc_fd_pid_map[idx];
     return -1;
 }
+/**
+ * get_memory_usage - Get total memory used by kernel
+ *
+ * Returns: Total memory used in bytes (physical frames + heap)
+ */
 static uint64_t get_memory_usage(void)
 {
-    // TODO: Implement proper memory tracking
-    return 8 * 1024 * 1024;  // 8MB used for now
+    size_t total_frames = 0;
+    size_t used_frames = 0;
+    size_t heap_total = 0;
+    size_t heap_used = 0;
+    uint64_t total_used = 0;
+    
+    /* Get physical memory statistics */
+    pmm_stats(&total_frames, &used_frames, NULL);
+    
+    /* Get heap allocator statistics */
+    alloc_stats(&heap_total, &heap_used, NULL);
+    
+    /* Calculate total used memory:
+     * - Physical frames: used_frames * 4KB per frame
+     * - Heap: heap_used bytes
+     */
+    total_used = ((uint64_t)used_frames * 4096) + (uint64_t)heap_used;
+    
+    return total_used;
 }
 
+/**
+ * get_total_memory - Get total available memory
+ *
+ * Returns: Total memory available in bytes (physical frames + heap)
+ */
 static uint64_t get_total_memory(void)
 {
-    // TODO: Get from memory manager
-    return 16 * 1024 * 1024;  // 16MB total for now
+    size_t total_frames = 0;
+    size_t heap_total = 0;
+    uint64_t total = 0;
+    
+    /* Get physical memory statistics */
+    pmm_stats(&total_frames, NULL, NULL);
+    
+    /* Get heap allocator statistics */
+    alloc_stats(&heap_total, NULL, NULL);
+    
+    /* Calculate total available memory:
+     * - Physical frames: total_frames * 4KB per frame
+     * - Heap: heap_total bytes
+     */
+    total = ((uint64_t)total_frames * 4096) + (uint64_t)heap_total;
+    
+    return total;
 }
 
 static int proc_ps_read(char *buf, size_t count)
@@ -85,7 +131,7 @@ static int proc_ps_read(char *buf, size_t count)
 
     size_t off = 0;
     int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "PID\tPPID\tSTATE\tNAME\n");
+                     "PID PPID STATE NAME\n");
     if (n < 0)
         return -1;
     if (n >= (int)(count - off))
@@ -116,7 +162,7 @@ static int proc_ps_read(char *buf, size_t count)
         }
 
         n = snprintf(buf + off, count - off,
-                     "%d\t%d\t%s\t%s\n",
+                     "%d %d %s %s\n",
                      (int)p->task.pid,
                      (int)p->ppid,
                      state_str,
@@ -214,30 +260,39 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
     if (!is_proc_path(path))
         return NULL;
     
-    const char *after_proc = path + 6;  // Skip "/proc/"
+    /* Skip "/proc/" prefix */
+    const char *after_proc = path + 6;
     
-    // Check if it's /proc/[pid]/status
-    if (strncmp(after_proc, "status", 6) == 0) {
-        // It's /proc/status (current process)
-        *pid_out = -1;  // Special value for current process
+    /* Check if it's /proc/status (current process) */
+    if (strncmp(after_proc, "status", 6) == 0)
+    {
+        /* It's /proc/status (current process) */
+        *pid_out = -1;  /* Special value for current process */
         return "status";
     }
     
-    // Check if it's /proc/[pid]/status
+    /* Check if it's /proc/[pid]/status or /proc/[pid]/cmdline */
     char *slash = strchr(after_proc, '/');
-    if (slash && strncmp(slash + 1, "status", 6) == 0) {
-        // Extract PID from before the slash
+    if (slash)
+    {
+        /* Extract PID from before the slash */
         char pid_str[16];
-        int pid_len = slash - after_proc;
-        if (pid_len < sizeof(pid_str) - 1) {
+        size_t pid_len = (size_t)(slash - after_proc);
+        if (pid_len < sizeof(pid_str) - 1)
+        {
             strncpy(pid_str, after_proc, pid_len);
             pid_str[pid_len] = '\0';
             *pid_out = atoi(pid_str);
-            return "status";
+            
+            /* Check what file it is */
+            if (strncmp(slash + 1, "status", 6) == 0)
+                return "status";
+            else if (strncmp(slash + 1, "cmdline", 7) == 0)
+                return "cmdline";
         }
     }
     
-    // Regular /proc files
+    /* Regular /proc files */
     *pid_out = -1;
     return after_proc;
 }
@@ -291,10 +346,12 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
     
     process_t *proc = NULL;
     
-    if (pid == -1) {
+    if (pid == -1)
+    {
         /* /proc/status - current process */
         proc = current_process;
-    } else {
+    } else
+    {
         /* /proc/[pid]/status - specific process */
         proc = process_find_by_pid(pid);
     }
@@ -314,21 +371,32 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
     }
     
     const char *state_str;
-    switch (proc->state) {
-        case PROCESS_READY: state_str = "R"; break;
-        case PROCESS_RUNNING: state_str = "R"; break;
-        case PROCESS_BLOCKED: state_str = "S"; break;
-        case PROCESS_ZOMBIE: state_str = "Z"; break;
-        default: state_str = "?"; break;
+    switch (proc->state)
+    {
+        case PROCESS_READY:
+            state_str = "R";
+            break;
+        case PROCESS_RUNNING:
+            state_str = "R";
+            break;
+        case PROCESS_BLOCKED:
+            state_str = "S";
+            break;
+        case PROCESS_ZOMBIE:
+            state_str = "Z";
+            break;
+        default:
+            state_str = "?";
+            break;
     }
     
     int len = snprintf(buf, count,
-        "Name:\t%s\n"
-        "State:\t%s\n"
-        "Pid:\t%d\n"
-        "PPid:\t%d\n"
-        "Uid:\t%d\n"
-        "Gid:\t%d\n",
+        "Name: %s\n"
+        "State: %s\n"
+        "Pid: %d\n"
+        "PPid: %d\n"
+        "Uid: %d\n"
+        "Gid: %d\n",
         proc->comm,
         state_str,
         proc->task.pid,
@@ -358,7 +426,8 @@ int proc_uptime_read(char *buf, size_t count)
     /* Initialize buffer to zero */
     memset(buf, 0, count);
     
-    uint64_t uptime = get_system_time() / 1000;  /* Convert to seconds */
+    /* Convert to seconds */
+    uint64_t uptime = get_system_time() / 1000;
     
     int len = snprintf(buf, count, "%lu.00\n", uptime);
     if (len < 0)
@@ -401,26 +470,271 @@ int proc_version_read(char *buf, size_t count)
     return len;
 }
 
+/* Generate /proc/cpuinfo content */
+int proc_cpuinfo_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    /* Initialize buffer to zero */
+    memset(buf, 0, count);
+    
+    uint32_t cpu_id = arch_get_cpu_id();
+    uint32_t cpu_count = arch_get_cpu_count();
+    const char *arch_name = arch_get_name();
+    
+    /* Get architecture bits */
+    uint32_t arch_bits = 64;
+#ifdef __x86_64__
+    arch_bits = 64;
+#elif defined(__i386__)
+    arch_bits = 32;
+#elif defined(__aarch64__)
+    arch_bits = 64;
+#elif defined(__arm__)
+    arch_bits = 32;
+#endif
+    
+    /* Get CPU vendor string */
+    char vendor_str[13] = {0};
+    extern int arch_get_cpu_vendor(char *vendor_buf);
+    if (arch_get_cpu_vendor(vendor_str) < 0)
+    {
+        strncpy(vendor_str, "Unknown", sizeof(vendor_str) - 1);
+    }
+    
+    /* Get CPU family, model, stepping */
+    uint32_t family = 0;
+    uint32_t model = 0;
+    uint32_t stepping = 0;
+    extern int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping);
+    arch_get_cpu_signature(&family, &model, &stepping);
+    
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+        "processor: %u\n"
+        "vendor_id: %s\n"
+        "cpu family: %u\n"
+        "model: %u\n"
+        "model name: %s\n"
+        "stepping: %u\n",
+        cpu_id,
+        vendor_str,
+        family,
+        model,
+        arch_name ? arch_name : "x86-64",
+        stepping);
+    
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+    
+    /* Add additional info */
+    n = snprintf(buf + off, count - off,
+        "cpu MHz: Unknown\n"
+        "cache size: Unknown\n"
+        "physical id: 0\n"
+        "siblings: %u\n"
+        "core id: 0\n"
+        "cpu cores: 1\n"
+        "apicid: %u\n"
+        "initial apicid: %u\n"
+        "fpu: yes\n"
+        "fpu_exception: yes\n"
+        "cpuid level: 1\n"
+        "wp: yes\n"
+        "flags: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2\n"
+        "bogomips: Unknown\n"
+        "clflush size: 64\n"
+        "cache_alignment: 64\n"
+        "address sizes: %ubits physical, %ubits virtual\n",
+        cpu_count,
+        cpu_id,
+        cpu_id,
+        arch_bits,
+        arch_bits);
+    
+    if (n > 0 && n < (int)(count - off))
+        off += (size_t)n;
+    
+    /* Ensure null termination */
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
+/* Generate /proc/loadavg content */
+int proc_loadavg_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    /* Initialize buffer to zero */
+    memset(buf, 0, count);
+    
+    /* Count running and ready processes */
+    size_t running = 0;
+    size_t ready = 0;
+    process_t *p = process_list;
+    
+    while (p)
+    {
+        if (p->state == PROCESS_RUNNING)
+            running++;
+        else if (p->state == PROCESS_READY)
+            ready++;
+        p = p->next;
+    }
+    
+    /* Simple load calculation: running processes + 0.5 * ready processes */
+    /* Format: 1min 5min 15min running/total last_pid */
+    int len = snprintf(buf, count,
+        "%.2f %.2f %.2f %zu/%zu %d\n",
+        (double)running + (double)ready * 0.5,
+        (double)running + (double)ready * 0.4,
+        (double)running + (double)ready * 0.3,
+        running,
+        running + ready,
+        current_process ? (int)current_process->task.pid : 0
+    );
+    
+    if (len < 0)
+        return -1;
+    if (len >= (int)count)
+    {
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
+    
+    buf[len] = '\0';
+    return len;
+}
+
+/* Generate /proc/filesystems content */
+int proc_filesystems_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    /* Initialize buffer to zero */
+    memset(buf, 0, count);
+    
+    size_t off = 0;
+    /* Virtual filesystems (nodev) */
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "nodev proc\n"
+                     "nodev devfs\n"
+                     "nodev ramfs\n"
+                     "nodev tmpfs\n");
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+    
+    /* Physical filesystems (with devices) */
+    n = snprintf(buf + off, count - off, "minix\n");
+    if (n > 0 && n < (int)(count - off))
+    {
+        off += (size_t)n;
+    }
+    
+    /* Ensure null termination */
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
+/* Generate /proc/[pid]/cmdline content */
+int proc_cmdline_read(char *buf, size_t count, pid_t pid)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    /* Initialize buffer to zero */
+    memset(buf, 0, count);
+    
+    process_t *proc = NULL;
+    
+    if (pid == -1)
+    {
+        /* Current process */
+        proc = current_process;
+    } else
+    {
+        /* Specific process */
+        proc = process_find_by_pid(pid);
+    }
+    
+    if (!proc)
+    {
+        /* No such process */
+        return -1;
+    }
+    
+    /* Get command name from process */
+    /* In a real system, cmdline would contain full command line arguments */
+    /* For now, we just return the process name */
+    int len = snprintf(buf, count, "%s", proc->comm[0] ? proc->comm : "(none)");
+    
+    if (len < 0)
+        return -1;
+    if (len >= (int)count)
+    {
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
+    
+    buf[len] = '\0';
+    return len;
+}
+
 /* Handle /proc file read */
 static int proc_file_read(const char *filename, char *buf, size_t count)
 {
-    if (strcmp(filename, "meminfo") == 0) {
+    if (strcmp(filename, "meminfo") == 0)
+    {
         return proc_meminfo_read(buf, count);
-    } else if (strcmp(filename, "ps") == 0) {
+    } else if (strcmp(filename, "ps") == 0)
+    {
         return proc_ps_read(buf, count);
-    } else if (strcmp(filename, "netinfo") == 0) {
+    } else if (strcmp(filename, "netinfo") == 0)
+    {
         return proc_netinfo_read(buf, count);
-    } else if (strcmp(filename, "drivers") == 0) {
+    } else if (strcmp(filename, "drivers") == 0)
+    {
         return proc_drivers_read(buf, count);
-    } else if (strcmp(filename, "status") == 0) {
-        return proc_status_read(buf, count, -1);  // Current process
-    } else if (strcmp(filename, "uptime") == 0) {
+    } else if (strcmp(filename, "status") == 0)
+    {
+        /* Current process */
+        return proc_status_read(buf, count, -1);
+    } else if (strcmp(filename, "uptime") == 0)
+    {
         return proc_uptime_read(buf, count);
-    } else if (strcmp(filename, "version") == 0) {
+    } else if (strcmp(filename, "version") == 0)
+    {
         return proc_version_read(buf, count);
+    } else if (strcmp(filename, "cpuinfo") == 0)
+    {
+        return proc_cpuinfo_read(buf, count);
+    } else if (strcmp(filename, "loadavg") == 0)
+    {
+        return proc_loadavg_read(buf, count);
+    } else if (strcmp(filename, "filesystems") == 0)
+    {
+        return proc_filesystems_read(buf, count);
+    } else if (strcmp(filename, "cmdline") == 0)
+    {
+        /* Current process */
+        return proc_cmdline_read(buf, count, -1);
     }
     
-    return -1;  // File not found
+    /* File not found */
+    return -1;
 }
 
 /* Get offset for /proc fd */
@@ -451,7 +765,8 @@ static void proc_reset_offset(int fd)
 /* Open /proc file - returns special positive fd, stores PID in fd_table */
 int proc_open(const char *path, int flags)
 {
-    (void)flags;  // Read-only for now
+    /* Read-only for now */
+    (void)flags;
     
     pid_t pid;
     const char *filename = proc_parse_path(path, &pid);
@@ -459,8 +774,9 @@ int proc_open(const char *path, int flags)
         return -1;
     
     int fd = -1;
-    // Check if file exists and return special positive fd
-    if (strcmp(filename, "meminfo") == 0) {
+    /* Check if file exists and return special positive fd */
+    if (strcmp(filename, "meminfo") == 0)
+    {
         fd = 1000;
     } else if (strcmp(filename, "ps") == 0) {
         fd = 1004;
@@ -468,18 +784,36 @@ int proc_open(const char *path, int flags)
         fd = 1005;
     } else if (strcmp(filename, "drivers") == 0) {
         fd = 1006;
-    } else if (strcmp(filename, "status") == 0) {
+    } else if (strcmp(filename, "status") == 0)
+    {
         proc_set_pid_for_fd(1001, pid);
         fd = 1001;
-    } else if (strcmp(filename, "uptime") == 0) {
+    } else if (strcmp(filename, "uptime") == 0)
+    {
         fd = 1002;
-    } else if (strcmp(filename, "version") == 0) {
+    } else if (strcmp(filename, "version") == 0)
+    {
         fd = 1003;
-    } else {
-        return -1;  // File not found
+    } else if (strcmp(filename, "cpuinfo") == 0)
+    {
+        fd = 1007;
+    } else if (strcmp(filename, "loadavg") == 0)
+    {
+        fd = 1008;
+    } else if (strcmp(filename, "filesystems") == 0)
+    {
+        fd = 1009;
+    } else if (strcmp(filename, "cmdline") == 0)
+    {
+        proc_set_pid_for_fd(1010, pid);
+        fd = 1010;
+    } else
+    {
+        /* File not found */
+        return -1;
     }
     
-    // Reset offset when opening
+    /* Reset offset when opening */
     proc_reset_offset(fd);
     return fd;
 }
@@ -496,31 +830,48 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
     int full_size = 0;
     
     /* Generate full content based on fd */
-    switch (fd) {
-        case 1000: 
+    switch (fd)
+    {
+        case 1000:
             full_size = proc_meminfo_read(proc_buffer, sizeof(proc_buffer));
             break;
-        case 1004: 
+        case 1004:
             full_size = proc_ps_read(proc_buffer, sizeof(proc_buffer));
             break;
-        case 1005: 
+        case 1005:
             full_size = proc_netinfo_read(proc_buffer, sizeof(proc_buffer));
             break;
-        case 1006: 
+        case 1006:
             full_size = proc_drivers_read(proc_buffer, sizeof(proc_buffer));
             break;
-        case 1001: {
+        case 1001:
+        {
             pid_t pid = proc_get_pid_for_fd(1001);
             full_size = proc_status_read(proc_buffer, sizeof(proc_buffer), pid);
             break;
         }
-        case 1002: 
+        case 1002:
             full_size = proc_uptime_read(proc_buffer, sizeof(proc_buffer));
             break;
-        case 1003: 
+        case 1003:
             full_size = proc_version_read(proc_buffer, sizeof(proc_buffer));
             break;
-        default: 
+        case 1007:
+            full_size = proc_cpuinfo_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1008:
+            full_size = proc_loadavg_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1009:
+            full_size = proc_filesystems_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1010:
+        {
+            pid_t pid = proc_get_pid_for_fd(1010);
+            full_size = proc_cmdline_read(proc_buffer, sizeof(proc_buffer), pid);
+            break;
+        }
+        default:
             return -1;
     }
     
@@ -559,8 +910,11 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
 /* Write to /proc file (not implemented) */
 int proc_write(int fd, const char *buf, size_t count)
 {
-    (void)fd; (void)buf; (void)count;
-    return -1;  // Read-only for now
+    (void)fd;
+    (void)buf;
+    (void)count;
+    /* Read-only for now */
+    return -1;
 }
 
 /* Get stat for /proc file */
@@ -574,24 +928,33 @@ int proc_stat(const char *path, stat_t *st)
     if (!filename)
         return -1;
     
-    // Check if file exists
+    /* Check if file exists */
     if (strcmp(filename, "meminfo") == 0 ||
         strcmp(filename, "ps") == 0 ||
         strcmp(filename, "netinfo") == 0 ||
         strcmp(filename, "drivers") == 0 ||
         strcmp(filename, "status") == 0 ||
         strcmp(filename, "uptime") == 0 ||
-        strcmp(filename, "version") == 0) {
+        strcmp(filename, "version") == 0 ||
+        strcmp(filename, "cpuinfo") == 0 ||
+        strcmp(filename, "loadavg") == 0 ||
+        strcmp(filename, "filesystems") == 0 ||
+        strcmp(filename, "cmdline") == 0) {
         
         memset(st, 0, sizeof(stat_t));
-        st->st_mode = S_IFREG | 0444;  // Regular file, read-only
+        /* Regular file, read-only */
+        st->st_mode = S_IFREG | 0444;
         st->st_nlink = 1;
-        st->st_uid = 0;  // root
-        st->st_gid = 0;  // root
-        st->st_size = 1024;  // Approximate size
+        /* root user */
+        st->st_uid = 0;
+        /* root group */
+        st->st_gid = 0;
+        /* Approximate size */
+        st->st_size = 1024;
         
         return 0;
     }
     
-    return -1;  // File not found
+    /* File not found */
+    return -1;
 }

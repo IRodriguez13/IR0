@@ -35,7 +35,6 @@ int64_t dev_null_write(devfs_entry_t *entry, const void *buf, size_t count, off_
     return count;  // Accepts all data, discards it
 }
 
-// ============ ZERO DEVICE ============
 int64_t dev_zero_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)offset;
@@ -46,7 +45,7 @@ int64_t dev_zero_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
 int64_t dev_zero_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)buf; (void)offset;
-    return count;  // Discard data like /dev/null
+    return count; 
 }
 
 int64_t dev_console_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
@@ -69,7 +68,6 @@ int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, o
     return count;
 }
 
-// ============ KERNEL MESSAGE DEVICE ============
 static char kmsg_buffer[4096];
 static size_t kmsg_head = 0;
 static size_t kmsg_tail = 0;
@@ -105,7 +103,6 @@ int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
     return read_count;
 }
 
-// ============ AUDIO DEVICE ============
 int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)offset;
@@ -140,7 +137,6 @@ int64_t dev_audio_read(devfs_entry_t *entry, void *buf, size_t count, off_t offs
     return 0;  // Audio input not implemented yet
 }
 
-// ============ MOUSE DEVICE ============
 int64_t dev_mouse_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)offset;
@@ -169,7 +165,6 @@ int64_t dev_mouse_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
     return 0;
 }
 
-// ============ NETWORK DEVICE ============
 int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)offset;
@@ -205,7 +200,6 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
     return 0;
 }
 
-// ============ DISK DEVICE ============
 int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry;
@@ -236,7 +230,6 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
     return 0;
 }
 
-// ============ DEVICE OPERATIONS TABLES ============
 static const devfs_ops_t null_ops = {
     .read = dev_null_read,
     .write = dev_null_write,
@@ -280,7 +273,6 @@ static const devfs_ops_t disk_ops = {
     .ioctl = dev_disk_ioctl,
 };
 
-// ============ DEVICE NODE DEFINITIONS ============
 devfs_node_t dev_null = {
     .entry = { .name = "null", .mode = 0666, .device_id = 1 },
     .ops = &null_ops,
@@ -335,7 +327,6 @@ devfs_node_t dev_disk = {
     .ref_count = 0
 };
 
-// ============ DEVFS MANAGEMENT ============
 int devfs_init(void)
 {
     // Register standard devices
