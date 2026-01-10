@@ -92,7 +92,8 @@ void rr_schedule_next(void)
 	}
 
 	/* Normal context switch */
-	if (prev && next) {
+	if (prev && next) 
+	{
 		switch_context_x64(&prev->task, &next->task);
 	}
 }

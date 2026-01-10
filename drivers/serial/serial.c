@@ -131,3 +131,20 @@ void serial_print_hex32(uint32_t val)
     buf[8] = '\0';
     serial_print(buf);
 }
+
+/**
+ * serial_print_hex64 - print a 64-bit hex value to the serial port
+ */
+void serial_print_hex64(uint64_t val)
+{
+    char buf[17];
+    const char *hex = "0123456789ABCDEF";
+
+    for (int i = 15; i >= 0; i--)
+    {
+        buf[i] = hex[val & 0xF];
+        val >>= 4;
+    }
+    buf[16] = '\0';
+    serial_print(buf);
+}

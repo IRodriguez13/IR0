@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2025  Iván Rodriguez
@@ -14,60 +14,70 @@
 #include <stdint.h>
 #include <string.h>
 #include <ir0/vga.h>
-#include <ir0/types.h>  
+#include <ir0/types.h>
+#include <ir0/memory/kmem.h>
+#include <kernel/rr_sched.h>
 #include "pit/pit.h"
 #include "clock_system.h"
 
-// Global clock state
+/* Global clock state */
 static clock_state_t clock_state;
 
-//                          MAIN CLOCK SYSTEM FUNCTIONS
+/*                          MAIN CLOCK SYSTEM FUNCTIONS */
 
 int clock_system_init(void)
 {    
-    // Initialize clock state
+    /* Initialize clock state */
     memset(&clock_state, 0, sizeof(clock_state_t));
     clock_state.initialized = 0;
     clock_state.tick_count = 0;
     clock_state.uptime_seconds = 0;
     clock_state.uptime_milliseconds = 0;
     clock_state.time_resolution = CLOCK_RESOLUTION_MS;
-    clock_state.timer_frequency = 1000; // 1kHz default
+    clock_state.timer_frequency = 1000; /* 1kHz default */
     clock_state.timer_ticks_per_second = 1000;
     
-    // Initialize time tracking
+    /* Initialize time tracking */
     clock_state.boot_time = 0;
     clock_state.current_time = 0;
     clock_state.timezone_offset = 0;
     
-    // Initialize timer sources
+    /* Initialize timer sources */
     clock_state.pit_enabled = 0;
     clock_state.hpet_enabled = 0;
     clock_state.lapic_enabled = 0;
     clock_state.active_timer = CLOCK_TIMER_NONE;
     
-    // Initialize PIT
+    /* Initialize scheduler integration (10 ticks per quantum for 10ms time slice at 1kHz) */
+    clock_state.scheduler_tick_counter = 0;
+    clock_state.scheduler_ticks_per_quantum = 10;
+    
+    /* Initialize alarm system */
+    clock_state.alarms = NULL;
+    clock_state.alarm_count = 0;
+    
+    /* Initialize PIT */
     extern void init_PIT(uint32_t frequency);
-    init_PIT(1000); // 1kHz timer
+    init_PIT(1000); /* 1kHz timer */
     clock_state.pit_enabled = 1;
     clock_state.active_timer = CLOCK_TIMER_PIT;
     
-    // Mark as initialized
+    /* Mark as initialized */
     clock_state.initialized = 1;
     print_success("Clock system initialized successfully with PIT\n");
     return 0;
 }
 
-// Wrapper function for compatibility
+/* Wrapper function for compatibility */
 void init_clock(void)
 {
     clock_system_init();
 }
 
-// Timer detection
+/* Timer detection */
 clock_timer_t detect_best_clock(void)
 {
-    // For now, return PIT as default
+    /* For now, return PIT as default */
     return CLOCK_TIMER_PIT;
 }
 
@@ -76,7 +86,7 @@ clock_timer_t get_current_timer_type(void)
     return clock_state.active_timer;
 }
 
-// Time functions
+/* Time functions */
 uint64_t clock_get_uptime_seconds(void)
 {
     return clock_state.uptime_seconds;
@@ -103,7 +113,7 @@ int clock_set_current_time(time_t time)
     return 0;
 }
 
-// Timezone functions
+/* Timezone functions */
 int clock_set_timezone_offset(int32_t offset_seconds)
 {
     clock_state.timezone_offset = offset_seconds;
@@ -115,7 +125,7 @@ int32_t clock_get_timezone_offset(void)
     return clock_state.timezone_offset;
 }
 
-// Timer information
+/* Timer information */
 clock_timer_t clock_get_active_timer(void)
 {
     return clock_state.active_timer;
@@ -126,10 +136,10 @@ uint32_t clock_get_timer_frequency(void)
     return clock_state.timer_frequency;
 }
 
-// Sleep functions
+/* Sleep functions */
 int clock_sleep(uint32_t milliseconds)
 {
-    // Simple implementation using ticks
+    /* Simple implementation using ticks */
     uint32_t ticks = (milliseconds * clock_state.timer_frequency) / 1000;
     return clock_sleep_ticks(ticks);
 }
@@ -139,23 +149,118 @@ int clock_sleep_ticks(uint32_t ticks)
     uint32_t start_ticks = clock_state.tick_count;
     while ((clock_state.tick_count - start_ticks) < ticks) 
     {
-        // Wait for ticks to increment
+        /* Wait for ticks to increment */
         __asm__ volatile("hlt");
     }
     return 0;
 }
 
-// Alarm functions
+/* Alarm functions */
 int clock_set_alarm(uint32_t seconds, clock_alarm_callback_t callback, void *data)
 {
-    // TODO: Implement alarm system
-    (void)seconds;
-    (void)callback;
-    (void)data;
-    return -1;
+    if (!callback || seconds == 0)
+    {
+        return -1;
+    }
+    
+    /* Calculate trigger time (in milliseconds) */
+    uint64_t current_time = clock_get_uptime_milliseconds();
+    uint64_t trigger_time = current_time + (seconds * 1000);
+    
+    /* Allocate alarm structure */
+    clock_alarm_t *alarm = kmalloc(sizeof(clock_alarm_t));
+    if (!alarm)
+    {
+        return -1;
+    }
+    
+    /* Initialize alarm */
+    alarm->trigger_time = trigger_time;
+    alarm->callback = callback;
+    alarm->data = data;
+    alarm->active = 1;
+    
+    /* Add to alarm list (sorted by trigger time) */
+    clock_alarm_t **current = &clock_state.alarms;
+    while (*current && (*current)->trigger_time < trigger_time)
+    {
+        current = &(*current)->next;
+    }
+    
+    alarm->next = *current;
+    *current = alarm;
+    clock_state.alarm_count++;
+    
+    return 0;
 }
 
-// Statistics
+/* Internal function to check and fire alarms */
+static void clock_check_alarms(void)
+{
+    if (!clock_state.alarms)
+    {
+        return;
+    }
+    
+    uint64_t current_time = clock_get_uptime_milliseconds();
+    clock_alarm_t *current = clock_state.alarms;
+    clock_alarm_t *prev = NULL;
+    
+    while (current)
+    {
+        if (!current->active)
+        {
+            /* Remove inactive alarm */
+            clock_alarm_t *next = current->next;
+            if (prev)
+            {
+                prev->next = next;
+            }
+            else
+            {
+                clock_state.alarms = next;
+            }
+            kfree(current);
+            current = next;
+            clock_state.alarm_count--;
+            continue;
+        }
+        
+        if (current->trigger_time <= current_time)
+        {
+            /* Fire alarm */
+            clock_alarm_callback_t callback = current->callback;
+            void *data = current->data;
+            
+            /* Remove alarm before calling callback (to allow re-adding) */
+            clock_alarm_t *next = current->next;
+            if (prev)
+            {
+                prev->next = next;
+            }
+            else
+            {
+                clock_state.alarms = next;
+            }
+            kfree(current);
+            current = next;
+            clock_state.alarm_count--;
+            
+            /* Call callback */
+            if (callback)
+            {
+                callback(data);
+            }
+        }
+        else
+        {
+            /* Alarms are sorted, so we can stop here */
+            break;
+        }
+    }
+}
+
+/* Statistics */
 int clock_get_stats(clock_stats_t *stats)
 {
     if (!stats) 
@@ -231,7 +336,7 @@ void clock_print_stats(void)
     print(" seconds\n");
 }
 
-// Tick handler (called from interrupt)
+/* Tick handler (called from interrupt) */
 void clock_tick(void)
 {
     if (!clock_state.initialized) 
@@ -239,37 +344,34 @@ void clock_tick(void)
         return;
     }
     
-    // Increment tick count
+    /* Increment tick count */
     clock_state.tick_count++;
     
-    // Update uptime
+    /* Update uptime */
     clock_state.uptime_milliseconds++;
     if (clock_state.uptime_milliseconds >= 1000) 
     {
         clock_state.uptime_milliseconds = 0;
         clock_state.uptime_seconds++;
+        
+        /* Update current time (increment by 1 second when milliseconds wrap) */
+        clock_state.current_time++;
     }
     
-    // Update current time
-    clock_state.current_time++;
+    /* Check and fire alarms */
+    clock_check_alarms();
     
-    // Debug: Log every 10000 ticks (~10 seconds) to serial only (not VGA)
-    if ((clock_state.tick_count % 10000) == 0)
+    /* Scheduler integration: call scheduler every N ticks */
+    clock_state.scheduler_tick_counter++;
+    if (clock_state.scheduler_tick_counter >= clock_state.scheduler_ticks_per_quantum)
     {
-        extern void serial_print(const char *);
-        extern void print_uint32(uint32_t);
-        serial_print("[CLOCK] Tick #");
-        print_uint32((uint32_t)clock_state.tick_count);
-        serial_print(", uptime_ms=");
-        print_uint32((uint32_t)clock_get_uptime_milliseconds());
-        serial_print("\n");
+        clock_state.scheduler_tick_counter = 0;
+        /* Call scheduler to switch processes */
+        rr_schedule_next();
     }
-    
-    // TODO: Call scheduler tick if scheduler is running
-    // TODO: Handle time events
 }
 
-// SYSTEM TIME FUNCTIONS
+/* SYSTEM TIME FUNCTIONS */
 
 uint64_t get_system_time(void)
 {
@@ -278,7 +380,47 @@ uint64_t get_system_time(void)
         return 0;
     }
     
-    return clock_state.current_time;
+    /* Return uptime in milliseconds (used by /proc/uptime and other subsystems) */
+    return clock_get_uptime_milliseconds();
+}
+
+/* Additional utility functions */
+
+/* Get time since boot in seconds */
+uint64_t clock_get_boot_time(void)
+{
+    return clock_state.boot_time;
+}
+
+/* Set scheduler quantum (ticks per quantum) */
+int clock_set_scheduler_quantum(uint32_t ticks)
+{
+    if (ticks == 0)
+    {
+        return -1;
+    }
+    clock_state.scheduler_ticks_per_quantum = ticks;
+    return 0;
+}
+
+/* Get scheduler quantum */
+uint32_t clock_get_scheduler_quantum(void)
+{
+    return clock_state.scheduler_ticks_per_quantum;
+}
+
+/* Cancel all alarms */
+void clock_cancel_all_alarms(void)
+{
+    clock_alarm_t *current = clock_state.alarms;
+    while (current)
+    {
+        clock_alarm_t *next = current->next;
+        kfree(current);
+        current = next;
+    }
+    clock_state.alarms = NULL;
+    clock_state.alarm_count = 0;
 }
 
 

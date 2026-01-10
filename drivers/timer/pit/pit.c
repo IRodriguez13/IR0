@@ -61,13 +61,6 @@ void increment_pit_ticks(void)
     extern void clock_tick(void);
     clock_tick();
     
-    /* Debug: Log every 10000 ticks (~10 seconds) to serial only (not VGA) */
-    if ((ticks % 10000) == 0)
-    {
-        extern void serial_print(const char *);
-        serial_print("[PIT] Timer tick #");
-        serial_print("\n");
-    }
 }
 
 /* Initialize PIC (Programmable Interrupt Controller) */
