@@ -132,35 +132,42 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
                                    const ir0_driver_ops_t* ops)
 {
     /* Validate inputs */
-    if (!validate_driver_info(info)) {
+    if (!validate_driver_info(info)) 
+    {
         return NULL;
     }
     
-    if (!validate_driver_ops(ops)) {
+    if (!validate_driver_ops(ops)) 
+    {
         return NULL;
     }
     
     /* Check if registry is initialized */
-    if (!driver_registry.initialized) {
+    if (!driver_registry.initialized) 
+    {
         LOG_WARNING("DriverRegistry", "Driver registry not initialized, initializing now");
         ir0_driver_registry_init();
     }
     
     /* Check if driver already exists */
-    if (find_driver_by_name(info->name)) {
+    if (find_driver_by_name(info->name)) 
+    {
         LOG_ERROR_FMT("DriverRegistry", "Driver '%s' already registered", info->name);
         return NULL;
     }
     
     /* Check driver limit */
-    if (driver_registry.count >= MAX_DRIVERS) {
+    if (driver_registry.count >= MAX_DRIVERS) 
+    {
         LOG_ERROR_FMT("DriverRegistry", "Maximum number of drivers (%d) reached", MAX_DRIVERS);
         return NULL;
     }
     
     /* Allocate driver structure */
     ir0_driver_t* driver = (ir0_driver_t*)kmalloc(sizeof(ir0_driver_t));
-    if (!driver) {
+    
+    if (!driver) 
+    {
         LOG_ERROR_FMT("DriverRegistry", "Failed to allocate memory for driver '%s'", info->name);
         return NULL;
     }
@@ -168,39 +175,54 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
     /* Allocate and copy driver name (persistent storage) */
     size_t name_len = strlen(info->name) + 1;
     char* name_copy = (char*)kmalloc(name_len);
-    if (!name_copy) {
+    
+    if (!name_copy) 
+    {
         kfree(driver);
         LOG_ERROR("DriverRegistry", "Failed to allocate memory for driver name");
         return NULL;
     }
+    
     memcpy(name_copy, info->name, name_len);
     
     /* Copy version if provided */
     char* version_copy = NULL;
-    if (info->version) {
+    
+    if (info->version) 
+    {
         size_t version_len = strlen(info->version) + 1;
         version_copy = (char*)kmalloc(version_len);
-        if (version_copy) {
+    
+        if (version_copy) 
+        {
             memcpy(version_copy, info->version, version_len);
         }
     }
     
     /* Copy author if provided */
     char* author_copy = NULL;
-    if (info->author) {
+    
+    if (info->author) 
+    {
         size_t author_len = strlen(info->author) + 1;
         author_copy = (char*)kmalloc(author_len);
-        if (author_copy) {
+    
+        if (author_copy) 
+        {
             memcpy(author_copy, info->author, author_len);
         }
     }
     
     /* Copy description if provided */
     char* desc_copy = NULL;
-    if (info->description) {
+    
+    if (info->description) 
+    {
         size_t desc_len = strlen(info->description) + 1;
         desc_copy = (char*)kmalloc(desc_len);
-        if (desc_copy) {
+     
+        if (desc_copy) 
+        {
             memcpy(desc_copy, info->description, desc_len);
         }
     }
@@ -228,14 +250,17 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
              lang_to_string(driver->info.language));
     
     /* Call driver init function */
-    if (driver->ops.init) {
+    if (driver->ops.init) 
+    {
         LOG_INFO_FMT("DriverRegistry", "Initializing driver: %s", driver->info.name);
         int32_t result = driver->ops.init();
         
-        if (result == 0) {
+        if (result == 0) 
+        {
             driver->state = IR0_DRIVER_STATE_INITIALIZED;
             LOG_INFO_FMT("DriverRegistry", "Driver '%s' initialized successfully", driver->info.name);
-        } else {
+        } else 
+        {
             driver->state = IR0_DRIVER_STATE_FAILED;
             LOG_ERROR_FMT("DriverRegistry", "Driver '%s' initialization failed: %d", driver->info.name, result);
         }
@@ -272,6 +297,7 @@ int32_t ir0_unregister_driver(ir0_driver_t* driver)
             
             /* Free allocated memory */
             if (driver->info.name) kfree((void*)driver->info.name);
+            
             if (driver->info.version && strcmp(driver->info.version, "1.0") != 0) {
                 kfree((void*)driver->info.version);
             }
@@ -304,14 +330,14 @@ ir0_driver_t* ir0_find_driver(const char* name)
 
 ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver)
 {
-    if (!driver) {
+    if (!driver) 
+    {
         return IR0_DRIVER_STATE_UNREGISTERED;
     }
     
     return driver->state;
 }
 
-/* DEBUG/UTILITY FUNCTIONS */
 
 /**
  * List all registered drivers (for debugging)
@@ -323,7 +349,8 @@ void ir0_driver_list_all(void)
     ir0_driver_t* current = driver_registry.drivers;
     int index = 1;
     
-    while (current) {
+    while (current) 
+    {
         LOG_INFO_FMT("DriverRegistry", "%d. %s (v%s) - %s [%s] - State: %s",
                 index,
                 current->info.name,
@@ -336,7 +363,8 @@ void ir0_driver_list_all(void)
         index++;
     }
     
-    if (driver_registry.count == 0) {
+    if (driver_registry.count == 0) 
+    {
         LOG_INFO("DriverRegistry", "No drivers registered");
     }
 }

@@ -1,6 +1,6 @@
 # IR0 Kernel
 
-IR0 is a monolithic operating system kernel designed for x86-64 architecture, focusing on modularity, multi-language support (C, C++, Rust), and POSIX compliance.
+IR0 is a monolithic operating system kernel designed for x86-64 architecture, focusing on modularity, multi-language support (C, C++, Rust), POSIX compliance, and extensibility. The kernel provides a complete operating system foundation with process management, virtual file system, hardware drivers, and networking capabilities.
 
 ## System Architecture
 
@@ -32,8 +32,11 @@ graph TD
 
         subgraph "Virtual File System (VFS)"
             Minix["Minix FS Driver"]
+            RAMFS["RAMFS Driver"]
             VFS["VFS Abstraction Layer"]
+            VFSMount["Mount Point Resolution"]
             DevFS["Device Nodes"]
+            ProcFS["/proc Virtual FS"]
         end
 
         subgraph "Network Stack (Beta)"
@@ -47,6 +50,8 @@ graph TD
             Timer["PIT / HPET / LAPIC"]
             Storage["ATA Disk Driver"]
             IO["PS/2 Keyboard & Mouse"]
+            Speaker["PC Speaker Driver"]
+            DriverReg["Driver Registry"]
         end
     end
 
@@ -331,30 +336,43 @@ Or run directly:
 - Kernel and user space separation
 
 ### Process Management
-- Process state management (NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD)
-- Multiple scheduler algorithms (CFS, Priority-based, Round-Robin)
-- Context switching implementation
-- Process tree hierarchy
+- **Complete process lifecycle**: create, run, terminate, wait
+- **Process states**: READY, RUNNING, BLOCKED, ZOMBIE
+- **Scheduler**: Round-Robin with configurable quantum
+- **Context switching**: Assembly-optimized x86-64 implementation
+- **Process tree hierarchy**: Parent-child relationships with waitpid support
+- **Memory isolation**: Ring 0 (kernel) and Ring 3 (user) separation
+- **ELF loader**: Basic ELF binary loading for user programs
+- **Init system**: PID 1 process with service management
 
 ### System Calls
-- POSIX-compatible system call interface
-- Process control (fork, exec, exit, wait, getpid)
-- File operations (open, close, read, write, lseek)
-- Memory management (brk, mmap, munmap, mprotect)
-- Time operations (time, gettimeofday, sleep, usleep)
+- **POSIX-compatible system call interface** via INT 0x80
+- **Process management**: fork, exec, exit, waitpid, getpid, getppid, spawn
+- **File operations**: open, close, read, write, lseek, dup2, creat
+- **Directory operations**: mkdir, rmdir, chdir, getcwd, unlink, link
+- **File system**: stat, fstat, mount, chmod, touch, append
+- **Memory management**: brk, sbrk, mmap, munmap, mprotect
+- **System information**: ps, df, lsblk, whoami, ls
+- **Networking**: ping, ifconfig (IPv4 configuration)
 
 ### Virtual File System
-- VFS abstraction layer
-- MINIX filesystem support
-- RAM filesystem for boot files
-- Mount point management
+- VFS abstraction layer with mount point resolution
+- Multiple filesystem support (MINIX, RAMFS)
+- Mount point management for multiple filesystems
+- Virtual filesystems: `/proc` (meminfo, ps, netinfo, drivers, status, uptime, version)
+- Device filesystem (`/dev`) support
+- Path resolution across mounted filesystems
 
 ### Hardware Drivers
-- PS/2 keyboard and mouse drivers
-- ATA storage driver with DMA support
-- RTL8139 Network Interface Card (NIC) driver
-- VGA display driver
-- Timer drivers (PIT, HPET, LAPIC)
+- **Input/Output**: PS/2 keyboard and mouse drivers, PC Speaker driver
+- **Storage**: ATA/IDE disk driver with DMA support, partition management
+- **Network**: RTL8139 and Intel e1000 Ethernet NIC drivers
+- **Audio**: Sound Blaster 16 driver, Adlib OPL2 driver
+- **Video**: VGA text mode driver, VBE graphics driver
+- **Timers**: PIT (Programmable Interval Timer), HPET (High Precision Event Timer), LAPIC (Local APIC Timer), RTC (Real Time Clock)
+- **Serial**: COM1/COM2 serial port driver for debugging
+- **DMA**: 8-channel DMA controller support
+- **Driver Registry**: Unified driver registration system supporting C, C++, and Rust drivers
 
 ### Networking (Under Development)
 - Ethernet frame handling
@@ -368,10 +386,15 @@ Or run directly:
 - TSS configuration
 
 ### Interactive Shell
-- Command-line interface
-- Built-in commands (help, info, version, ps, meminfo)
-- System integration
-- Basic authentication framework
+- **Full-featured command-line interface** (33+ commands)
+- **File operations**: ls, cat, cp, mv, mkdir, rmdir, rm, cd, pwd, touch, chmod, chown, ln
+- **System information**: ps, df, lsblk, whoami, netinfo, arpcache
+- **Process management**: exec
+- **Networking**: ping, ifconfig
+- **Text processing**: echo, sed
+- **Driver management**: lsdrv, dmesg
+- **Hardware testing**: audio_test, mouse_test
+- **System utilities**: clear, help, exit, type, mount
 
 ## Architecture
 
@@ -436,8 +459,11 @@ graph TD
 
         subgraph "Sistema de Archivos Virtual (VFS)"
             Minix["Driver Minix FS"]
+            RAMFS["Driver RAMFS"]
             VFS["Capa de Abstracción VFS"]
+            VFSMount["Resolución de Mount Points"]
             DevFS["Nodos de Dispositivo"]
+            ProcFS["/proc Virtual FS"]
         end
 
         subgraph "Pila de Red (Beta)"
@@ -451,6 +477,8 @@ graph TD
             Timer["PIT / HPET / LAPIC"]
             Storage["Driver de Disco ATA"]
             IO["Teclado y Ratón PS/2"]
+            Speaker["Driver PC Speaker"]
+            DriverReg["Registro de Drivers"]
         end
     end
 
@@ -461,11 +489,16 @@ graph TD
     Syscall --> Proc
     Syscall --> Kalloc
     VFS --> Minix
+    VFS --> RAMFS
+    VFS --> ProcFS
+    VFS --> VFSMount
     VFS --> Storage
     Proc --> Sched
     Sched --> IDT
     RTL8139 --> ARP
     ARP --> IPv4
+    IO --> DriverReg
+    Speaker --> DriverReg
 ```
 
 
@@ -651,17 +684,24 @@ O ejecutar directamente:
 - Separación de espacio de kernel y usuario
 
 ### Gestión de Procesos
-- Gestión de estados de proceso (NEW, READY, RUNNING, SLEEPING, STOPPED, ZOMBIE, DEAD)
-- Múltiples algoritmos de planificación (CFS, basado en prioridad, Round-Robin)
-- Implementación de cambio de contexto
-- Jerarquía de árbol de procesos
+- **Ciclo de vida completo de procesos**: crear, ejecutar, terminar, esperar
+- **Estados de proceso**: READY, RUNNING, BLOCKED, ZOMBIE
+- **Planificador**: Round-Robin con quantum configurable
+- **Cambio de contexto**: Implementación optimizada en assembly x86-64
+- **Jerarquía de árbol de procesos**: Relaciones padre-hijo con soporte waitpid
+- **Aislamiento de memoria**: Separación Ring 0 (kernel) y Ring 3 (usuario)
+- **Cargador ELF**: Carga básica de binarios ELF para programas de usuario
+- **Sistema init**: Proceso PID 1 con gestión de servicios
 
 ### Llamadas al Sistema
-- Interfaz de llamadas al sistema compatible con POSIX
-- Control de procesos (fork, exec, exit, wait, getpid)
-- Operaciones de archivo (open, close, read, write, lseek)
-- Gestión de memoria (brk, mmap, munmap, mprotect)
-- Operaciones de tiempo (time, gettimeofday, sleep, usleep)
+- **Interfaz de llamadas al sistema compatible con POSIX** vía INT 0x80
+- **Gestión de procesos**: fork, exec, exit, waitpid, getpid, getppid, spawn
+- **Operaciones de archivo**: open, close, read, write, lseek, dup2, creat
+- **Operaciones de directorio**: mkdir, rmdir, chdir, getcwd, unlink, link
+- **Sistema de archivos**: stat, fstat, mount, chmod, touch, append
+- **Gestión de memoria**: brk, sbrk, mmap, munmap, mprotect
+- **Información del sistema**: ps, df, lsblk, whoami, ls
+- **Redes**: ping, ifconfig (configuración IPv4)
 
 ### Sistema de Archivos Virtual
 - Capa de abstracción VFS
@@ -670,11 +710,15 @@ O ejecutar directamente:
 - Gestión de puntos de montaje
 
 ### Controladores de Hardware
-- Controladores de teclado y ratón PS/2
-- Controlador de almacenamiento ATA con soporte DMA
-- Controlador de tarjeta de red RTL8139 (NIC)
-- Controlador de pantalla VGA
-- Controladores de temporizador (PIT, HPET, LAPIC)
+- **Entrada/Salida**: Controladores de teclado y ratón PS/2, controlador de altavoz PC
+- **Almacenamiento**: Controlador de disco ATA/IDE con soporte DMA, gestión de particiones
+- **Red**: Controladores Ethernet RTL8139 e Intel e1000
+- **Audio**: Controlador Sound Blaster 16, controlador Adlib OPL2
+- **Video**: Controlador de modo texto VGA, controlador gráfico VBE
+- **Temporizadores**: PIT (Programmable Interval Timer), HPET (High Precision Event Timer), LAPIC (Local APIC Timer), RTC (Real Time Clock)
+- **Serial**: Controlador de puerto serie COM1/COM2 para depuración
+- **DMA**: Soporte para controlador DMA de 8 canales
+- **Registro de Controladores**: Sistema unificado de registro de controladores con soporte para C, C++ y Rust
 
 ### Redes (En Desarrollo)
 - Manejo de tramas Ethernet
@@ -688,10 +732,15 @@ O ejecutar directamente:
 - Configuración de TSS
 
 ### Shell Interactivo
-- Interfaz de línea de comandos
-- Comandos integrados (help, info, version, ps, meminfo)
-- Integración con el sistema
-- Marco básico de autenticación
+- **Interfaz de línea de comandos completa** (33+ comandos)
+- **Operaciones de archivo**: ls, cat, cp, mv, mkdir, rmdir, rm, cd, pwd, touch, chmod, chown, ln
+- **Información del sistema**: ps, df, lsblk, whoami, netinfo, arpcache
+- **Gestión de procesos**: exec
+- **Redes**: ping, ifconfig
+- **Procesamiento de texto**: echo, sed
+- **Gestión de controladores**: lsdrv, dmesg
+- **Pruebas de hardware**: audio_test, mouse_test
+- **Utilidades del sistema**: clear, help, exit, type, mount
 
 ## Arquitectura
 

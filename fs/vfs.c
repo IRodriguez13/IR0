@@ -149,13 +149,15 @@ static int build_path(char *dest, size_t dest_size, const char *dir, const char 
   return 0;
 }
 
-
 // Lista de filesystems registrados
 static struct filesystem_type *filesystems = NULL;
 
 // Root filesystem
 static struct vfs_superblock *root_sb = NULL;
 static struct vfs_inode *root_inode = NULL;
+
+// Mount points list
+static struct mount_point *mount_points = NULL;
 
 int register_filesystem(struct filesystem_type *fs)
 {
@@ -185,24 +187,169 @@ int unregister_filesystem(struct filesystem_type *fs)
   return -1;
 }
 
+/* Find mount point for a given path */
+struct mount_point *vfs_find_mount_point(const char *path)
+{
+  if (!path)
+    return NULL;
+
+  struct mount_point *mp = mount_points;
+  size_t path_len = strlen(path);
+  size_t longest_match = 0;
+  struct mount_point *best_match = NULL;
+
+  /* Find longest matching mount point */
+  while (mp)
+  {
+    size_t mp_len = strlen(mp->path);
+
+    /* Check if path starts with mount point path */
+    if (strncmp(path, mp->path, mp_len) == 0)
+    {
+      /* Exact match or path separator after mount point */
+      if (mp_len == path_len || path[mp_len] == '/' || mp->path[mp_len - 1] == '/')
+      {
+        if (mp_len > longest_match)
+        {
+          longest_match = mp_len;
+          best_match = mp;
+        }
+      }
+    }
+    mp = mp->next;
+  }
+
+  return best_match;
+}
+
+/* Add mount point */
+int vfs_add_mount_point(const char *path, const char *dev,
+                        struct vfs_superblock *sb, struct vfs_inode *root,
+                        struct filesystem_type *fs_type)
+{
+  if (!path || !sb || !root || !fs_type)
+    return -1;
+
+  /* Check if mount point already exists */
+  if (vfs_find_mount_point(path))
+  {
+    return -1; /* Already mounted */
+  }
+
+  struct mount_point *mp = kmalloc(sizeof(struct mount_point));
+  if (!mp)
+    return -1;
+
+  strncpy(mp->path, path, sizeof(mp->path) - 1);
+  mp->path[sizeof(mp->path) - 1] = '\0';
+
+  if (dev)
+  {
+    strncpy(mp->dev, dev, sizeof(mp->dev) - 1);
+    mp->dev[sizeof(mp->dev) - 1] = '\0';
+  }
+  else
+  {
+    mp->dev[0] = '\0';
+  }
+
+  mp->sb = sb;
+  mp->mount_root = root;
+  mp->fs_type = fs_type;
+  mp->next = mount_points;
+  mount_points = mp;
+
+  return 0;
+}
+
+/* Remove mount point */
+int vfs_remove_mount_point(const char *path)
+{
+  if (!path)
+    return -1;
+
+  struct mount_point **p = &mount_points;
+  while (*p)
+  {
+    if (strcmp((*p)->path, path) == 0)
+    {
+      struct mount_point *to_free = *p;
+      *p = (*p)->next;
+      kfree(to_free);
+      return 0;
+    }
+    p = &(*p)->next;
+  }
+  return -1;
+}
+
 struct vfs_inode *vfs_path_lookup(const char *path)
 {
   if (!path || !root_inode)
     return NULL;
 
-  // Handle root directory
+  /* Handle root directory */
   if (strcmp(path, "/") == 0)
   {
     return root_inode;
   }
 
-  // Use MINIX filesystem for path lookup
+  /* Check if path is on a mounted filesystem */
+  struct mount_point *mp = vfs_find_mount_point(path);
+
+  if (mp)
+  {
+    /* Path is on a mounted filesystem */
+    size_t mp_len = strlen(mp->path);
+    const char *remaining_path = path + mp_len;
+
+    /* Skip leading slashes */
+    while (*remaining_path == '/')
+      remaining_path++;
+
+    /* If path is exactly the mount point, return mount root */
+    if (*remaining_path == '\0')
+    {
+      return mp->mount_root;
+    }
+
+    /* Otherwise, use the mounted filesystem's lookup */
+    /* For now, delegate to MINIX if it's a MINIX mount */
+    if (strcmp(mp->fs_type->name, "minix") == 0)
+    {
+      /* Build full path for MINIX lookup */
+      /* MINIX expects absolute paths, so use root + remaining */
+      if (!minix_fs_is_working())
+        return NULL;
+
+      minix_inode_t *minix_inode = minix_fs_find_inode(remaining_path);
+      if (!minix_inode)
+        return NULL;
+
+      static struct vfs_inode vfs_inode_wrapper;
+      vfs_inode_wrapper.i_ino = minix_fs_get_inode_number(remaining_path);
+      vfs_inode_wrapper.i_mode = minix_inode->i_mode;
+      vfs_inode_wrapper.i_size = minix_inode->i_size;
+      vfs_inode_wrapper.i_sb = mp->sb;
+      vfs_inode_wrapper.i_private = minix_inode;
+      vfs_inode_wrapper.i_op = mp->mount_root->i_op;
+      vfs_inode_wrapper.i_fop = mp->mount_root->i_fop;
+
+      return &vfs_inode_wrapper;
+    }
+
+    /* For other filesystems, return mount root for now */
+    /* TODO: Implement proper lookup for other filesystems */
+    return mp->mount_root;
+  }
+
+  /* Default: Use root filesystem (MINIX) */
   if (!minix_fs_is_working())
   {
     return NULL;
   }
 
-  // Find inode using MINIX filesystem
+  /* Find inode using MINIX filesystem */
   uint16_t inode_num = minix_fs_get_inode_number(path);
   if (inode_num == 0)
   {
@@ -215,17 +362,13 @@ struct vfs_inode *vfs_path_lookup(const char *path)
     return NULL;
   }
 
-  // Convert MINIX inode to VFS inode
-  // For now, create a temporary VFS inode wrapper
-  // In a full implementation, we'd cache these properly
+  /* Convert MINIX inode to VFS inode */
   static struct vfs_inode vfs_inode_wrapper;
-  vfs_inode_wrapper.i_ino = inode_num;  // Use inode number from get_inode_number
+  vfs_inode_wrapper.i_ino = inode_num;
   vfs_inode_wrapper.i_mode = minix_inode->i_mode;
   vfs_inode_wrapper.i_size = minix_inode->i_size;
   vfs_inode_wrapper.i_sb = root_inode->i_sb;
   vfs_inode_wrapper.i_private = minix_inode;
-  
-  // Use root inode's operations (MINIX filesystem)
   vfs_inode_wrapper.i_op = root_inode->i_op;
   vfs_inode_wrapper.i_fop = root_inode->i_fop;
 
@@ -234,20 +377,21 @@ struct vfs_inode *vfs_path_lookup(const char *path)
 
 int vfs_init(void)
 {
-  // Inicializar lista de filesystems
+  /* Inicializar lista de filesystems */
   filesystems = NULL;
   root_sb = NULL;
   root_inode = NULL;
+  mount_points = NULL;
 
   return 0;
 }
 
 int vfs_mount(const char *dev, const char *mountpoint, const char *fstype)
 {
-  if (!fstype)
+  if (!fstype || !mountpoint)
     return -1;
 
-  // Buscar el tipo de filesystem
+  /* Buscar el tipo de filesystem */
   struct filesystem_type *fs_type = filesystems;
   while (fs_type)
   {
@@ -259,10 +403,40 @@ int vfs_mount(const char *dev, const char *mountpoint, const char *fstype)
   }
 
   if (!fs_type)
-    return -1; // Filesystem no encontrado
+    return -1; /* Filesystem no encontrado */
 
-  // Montar el filesystem
-  return fs_type->mount(dev, mountpoint);
+  /* Montar el filesystem (llama a la función mount específica) */
+  int ret = fs_type->mount(dev, mountpoint);
+  if (ret != 0)
+    return ret;
+
+  /* Para el root filesystem, ya está configurado en root_sb/root_inode */
+  if (strcmp(mountpoint, "/") == 0)
+  {
+    /* Root mount ya está manejado en minix_mount() */
+    /* Agregar como mount point también */
+    return vfs_add_mount_point("/", dev ? dev : "root", root_sb, root_inode, fs_type);
+  }
+
+  /* Para otros mount points, necesitamos obtener el superblock y root inode */
+  /* Por ahora, solo MINIX soporta esto - otros FS necesitan implementar mount() */
+  if (strcmp(fstype, "minix") == 0)
+  {
+    /* Para MINIX en mount points no-root, usamos el mismo root_sb por ahora */
+    /* TODO: Implementar múltiples instancias de MINIX filesystems */
+    struct vfs_inode *mount_root = kmalloc(sizeof(struct vfs_inode));
+    if (!mount_root)
+      return -1;
+
+    /* Copiar estructura del root inode */
+    memcpy(mount_root, root_inode, sizeof(struct vfs_inode));
+
+    /* Agregar mount point */
+    return vfs_add_mount_point(mountpoint, dev ? dev : "none", root_sb, mount_root, fs_type);
+  }
+
+  /* Otros filesystems necesitan implementar mount() correctamente */
+  return 0;
 }
 
 int vfs_open(const char *path, int flags, struct vfs_file **file)
@@ -383,7 +557,7 @@ int vfs_link(const char *oldpath, const char *newpath)
 {
   if (!oldpath || !newpath)
     return -1;
-  
+
   return minix_fs_link(oldpath, newpath);
 }
 
@@ -405,7 +579,7 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
   }
 
   // Normalize path: ensure it starts with /
-  char normalized_path[256];  // Reduced from 512 to prevent stack overflow
+  char normalized_path[256]; // Reduced from 512 to prevent stack overflow
   if (path[0] != '/')
   {
     normalized_path[0] = '/';
@@ -448,7 +622,7 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
   }
 
   // Read directory contents (reduced buffer size)
-  vfs_dirent_t entries[32];  // Reduced from 64 to prevent stack overflow
+  vfs_dirent_t entries[32]; // Reduced from 64 to prevent stack overflow
   int entry_count = vfs_readdir(normalized_path, entries, 32);
 
   if (entry_count < 0)
@@ -475,7 +649,7 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
     }
 
     // Build full path (reduced buffer size)
-    char full_path[256];  // Reduced from 512 to prevent stack overflow
+    char full_path[256]; // Reduced from 512 to prevent stack overflow
     if (build_path(full_path, sizeof(full_path), normalized_path, entries[i].name) != 0)
     {
       continue; // Skip if path too long
@@ -707,7 +881,6 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
 
   print("MINIX_MOUNT: Mount completed successfully\n");
   return 0;
-
 }
 
 // Removed duplicate minix_fs_type definition
@@ -756,6 +929,13 @@ int vfs_init_with_minix(void)
   {
     print("VFS: ERROR - root_inode is still NULL\n");
     return -1;
+  }
+
+  /* Agregar root mount point */
+  ret = vfs_add_mount_point("/", "/dev/hda", root_sb, root_inode, &minix_fs_type);
+  if (ret != 0)
+  {
+    print("VFS: WARNING - Could not add root mount point\n");
   }
 
   extern int vfs_mkdir(const char *path, int mode);

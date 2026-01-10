@@ -182,6 +182,7 @@ INTERRUPT_OBJS = \
 DRIVER_OBJS = \
     drivers/IO/ps2.o \
     drivers/IO/ps2_mouse.o \
+    drivers/IO/pc_speaker.o \
     drivers/audio/sound_blaster.o \
     drivers/audio/adlib.o \
     drivers/dma/dma.o \
