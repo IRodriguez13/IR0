@@ -7,66 +7,88 @@ IR0 is a monolithic operating system kernel designed for x86-64 architecture, fo
 The IR0 architecture is built upon a modular monolithic design, where core services reside in Ring 0, providing a robust interface for Ring 3 user applications.
 
 ```mermaid
-graph TD
-    subgraph "User Space (Ring 3)"
-        INIT["Init Process"]
-        Shell["Baash Shell"]
-        Libc["ILibc (Standard IR0 C Library)"]
+graph TB
+    subgraph UserSpace["User Space (Ring 3)"]
         Apps["User Applications"]
+        Shell["Interactive Shell"]
+        Init["Init Process (PID 1)"]
     end
 
-    subgraph "System Call Interface"
-        Syscall["Syscall Dispatcher (int 0x80)"]
+    subgraph SyscallLayer["System Call Interface"]
+        Syscall["Syscall Dispatcher<br/>(INT 0x80)"]
     end
 
-    subgraph "Kernel Space (Ring 0)"
-        subgraph "Process Management"
+    subgraph KernelCore["Kernel Core (Ring 0)"]
+        subgraph ProcessMgmt["Process Management"]
+            Proc["Process Lifecycle<br/>(Fork/Exec/Wait)"]
             Sched["Round Robin Scheduler"]
-            Proc["Process Lifecycle (Fork/Exec)"]
         end
-
-        subgraph "Memory Management"
-            Paging["Paging (Identity Map)"]
-            Kalloc["Kmalloc (Static/Dynamic Heap)"]
+        
+        subgraph MemMgmt["Memory Management"]
+            Paging["Paging"]
+            Kalloc["Heap Allocator<br/>(kmalloc/kfree)"]
+            PMM["Physical Memory Manager"]
         end
-
-        subgraph "Virtual File System (VFS)"
-            Minix["Minix FS Driver"]
-            RAMFS["RAMFS Driver"]
-            VFS["VFS Abstraction Layer"]
-            VFSMount["Mount Point Resolution"]
-            DevFS["Device Nodes"]
-            ProcFS["/proc Virtual FS"]
+        
+        subgraph VFSSystem["Virtual File System"]
+            VFS["VFS Layer"]
+            MinixFS["Minix FS"]
+            RAMFS["RAMFS"]
+            ProcFS["/proc Filesystem"]
+            DevFS["/dev Filesystem"]
         end
-
-        subgraph "Network Stack (Beta)"
+        
+        subgraph Network["Network Stack"]
+            NetCore["Network Core"]
             ARP["ARP Protocol"]
-            IPv4["IPv4 Layer"]
+            IPv4["IPv4 Protocol"]
             RTL8139["RTL8139 Driver"]
         end
-
-        subgraph "Hardware Abstraction Layer"
-            IDT["IDT / PIC / Exceptions"]
-            Timer["PIT / HPET / LAPIC"]
-            Storage["ATA Disk Driver"]
-            IO["PS/2 Keyboard & Mouse"]
-            Speaker["PC Speaker Driver"]
-            DriverReg["Driver Registry"]
+        
+        subgraph Drivers["Device Drivers"]
+            DriverReg["Driver Registry<br/>(C/C++/Rust)"]
+            Storage["ATA/IDE Storage"]
+            Input["PS/2 Keyboard/Mouse"]
+            Audio["Audio Drivers"]
+            Serial["Serial Port"]
+            Timer["Timers (PIT/HPET/LAPIC)"]
+        end
+        
+        subgraph Interrupts["Interrupt System"]
+            IDT["IDT Setup"]
+            PIC["PIC Controller"]
+            ISR["Interrupt Handlers"]
         end
     end
 
-    Shell --> Libc
-    INIT --> Shell
-    Libc --> Syscall
-    Syscall --> VFS
-    Syscall --> Proc
-    Syscall --> Kalloc
-    VFS --> Minix
-    VFS --> Storage
-    Proc --> Sched
-    Sched --> IDT
-    RTL8139 --> ARP
-    ARP --> IPv4
+    Apps -->|syscalls| Syscall
+    Shell -->|syscalls| Syscall
+    Init -->|spawns| Shell
+    
+    Syscall --> ProcessMgmt
+    Syscall --> MemMgmt
+    Syscall --> VFSSystem
+    
+    ProcessMgmt --> Sched
+    Sched --> Interrupts
+    
+    VFSSystem --> MinixFS
+    VFSSystem --> RAMFS
+    VFSSystem --> ProcFS
+    VFSSystem --> Storage
+    
+    Network --> NetCore
+    NetCore --> ARP
+    NetCore --> IPv4
+    IPv4 --> RTL8139
+    
+    Drivers --> DriverReg
+    Storage --> DriverReg
+    Input --> DriverReg
+    Audio --> DriverReg
+    
+    Interrupts --> Drivers
+    Interrupts --> Timer
 ```
 
 
@@ -224,24 +246,9 @@ make unibuild-win drivers/serial/serial.c drivers/dma/dma.c
 make unibuild-clean FILE=<file>
 ```
 
-### Driver Management
-
-The build system provides specific commands to compile, link, and clean drivers on demand. This allows for modular development and testing of drivers in different languages.
-
-**Compilation and Linking:**
-
-*   `make load-driver rust`: Compiles and links all registered Rust drivers.
-*   `make load-driver cpp`: Compiles and links all registered C++ drivers.
-*   `make load-driver rust cpp`: Compiles and links both Rust and C++ drivers simultaneously.
-
-**Cleaning Driver Objects:**
-
-*   `make unload-driver rust`: Removes compiled objects for Rust drivers.
-*   `make unload-driver cpp`: Removes compiled objects for C++ drivers.
-
 ### Multi-Language Development
 
-IR0 supports kernel development in C, C++, and Rust. Each language has a specific role and build requirements.
+IR0 supports kernel development in C, C++, and Rust. Each language has a specific role and build requirements. The kernel provides a unified driver registry system that allows drivers written in any of these languages to be registered and initialized at boot time.
 
 #### C (Primary Language)
 *   **Role**: Kernel core, memory management, and critical system drivers.
@@ -249,34 +256,57 @@ IR0 supports kernel development in C, C++, and Rust. Each language has a specifi
 *   **Compilation**: `make unibuild <file.c>`
 
 #### C++ (Advanced Components)
-*   **Role**: Complex kernel components, schedulers, and abstractions requiring object-oriented features.
+*   **Role**: Complex kernel components and abstractions requiring object-oriented features.
 *   **Setup**: Requires `g++` compiler.
 *   **Compilation**: `make unibuild-cpp <file.cpp>`
 *   **Runtime Support**: The kernel includes a minimal C++ runtime (`compat.cpp`) supporting:
     *   Global `new` and `delete` operators (mapped to kernel `kmalloc`/`kfree`).
     *   Pure virtual functions.
     *   Static initialization guards.
+*   **Freestanding Environment**: C++ drivers run in a freestanding environment without standard library dependencies.
 
-#### Rust (Modern Drivers)
-*   **Role**: New device drivers (Network, Storage, USB) focusing on memory safety.
+#### Rust (Device Drivers)
+*   **Role**: Device drivers focusing on memory safety and modern language features.
 *   **Setup**: Requires Rust Nightly toolchain for `build-std` support.
     ```bash
     rustup toolchain install nightly
     rustup component add rust-src --toolchain nightly
-    rustup target add x86_64-unknown-none
     ```
+    The kernel uses a custom bare-metal target (`x86_64-ir0-kernel`) defined in `rust/x86_64-ir0-kernel.json`. The build system handles target configuration automatically.
 *   **Compilation**: `make unibuild-rust <file.rs>`
     *   Uses `cargo` with `-Z build-std=core` to compile the standard library for the bare-metal target.
+    *   Requires `no_std` environment with FFI bindings to kernel functions.
+*   **Integration**: Rust drivers link statically into the kernel binary and register through the driver registry system.
+
+#### Driver Registry System
+
+All drivers (C, C++, and Rust) are registered through the unified driver registry (`ir0_driver_registry`). The registry provides:
+*   Driver registration and initialization at boot time
+*   Language-agnostic driver interface
+*   Driver lifecycle management (registered, initialized, running)
+*   Driver information querying (name, version, language, author)
+
+Drivers register themselves during kernel initialization by providing driver information and operation callbacks.
+
+#### Extern Drivers 
+
+The kernel includes optional extern drivers to demonstrate multi-language integration. These drivers are disabled by default and are intended for testing and development purposes only.
+
+**Enabling extern drivers:**
+```bash
+make en-ext-drv  # Enable for next build
+make ir0         # Build kernel with extern drivers
+```
+
+**Disabling extern drivers:**
+```bash
+make dis-ext-drv  # Disable extern drivers
+make ir0          # Build kernel without extern drivers
+```
+
+When enabled, the extern drivers (Rust and C++) will be compiled, linked into the kernel, and automatically registered during boot initialization.
 
 For detailed API documentation and development guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
-
-### Test Drivers
-
-The kernel includes example drivers to verify the multi-language build system.
-
-*   `make test-driver-cpp`: Compiles the C++ example driver.
-*   `make test-drivers`: Compiles all example drivers.
-*   `make test-drivers-clean`: Removes example driver objects.
 
 
 ### Creating Virtual Disk
@@ -338,7 +368,7 @@ Or run directly:
 ### Process Management
 - **Complete process lifecycle**: create, run, terminate, wait
 - **Process states**: READY, RUNNING, BLOCKED, ZOMBIE
-- **Scheduler**: Round-Robin with configurable quantum
+- **Scheduler**: Round-Robin scheduler with configurable time quantum
 - **Context switching**: Assembly-optimized x86-64 implementation
 - **Process tree hierarchy**: Parent-child relationships with waitpid support
 - **Memory isolation**: Ring 0 (kernel) and Ring 3 (user) separation
@@ -435,70 +465,87 @@ La arquitectura de IR0 se basa en un diseño monolítico modular, donde los serv
 
 ```mermaid
 graph TD
-    subgraph "Espacio de Usuario (Ring 3)"
-        INIT["Proceso Init"]
-        Shell["Bash/Yell Shell"]
-        Libc["IR0 Libc (Biblioteca C Estándar)"]
+    subgraph UserSpace["Espacio de Usuario (Ring 3)"]
         Apps["Aplicaciones de Usuario"]
+        Shell["Shell Interactivo"]
+        Init["Proceso Init (PID 1)"]
     end
 
-    subgraph "Interfaz de Llamadas al Sistema"
-        Syscall["Despachador de Syscalls (int 0x80)"]
+    subgraph SyscallLayer["Interfaz de Llamadas al Sistema"]
+        Syscall["Despachador de Syscalls<br/>(INT 0x80)"]
     end
 
-    subgraph "Espacio de Kernel (Ring 0)"
-        subgraph "Gestión de Procesos"
+    subgraph KernelCore["Núcleo del Kernel (Ring 0)"]
+        subgraph ProcessMgmt["Gestión de Procesos"]
+            Proc["Ciclo de Vida<br/>(Fork/Exec/Wait)"]
             Sched["Planificador Round Robin"]
-            Proc["Ciclo de Vida de Procesos (Fork/Exec)"]
         end
-
-        subgraph "Gestión de Memoria"
-            Paging["Paginación (Mapeo de Identidad)"]
-            Kalloc["Kmalloc (Heap Estático/Dinámico)"]
+        
+        subgraph MemMgmt["Gestión de Memoria"]
+            Paging["Paginación"]
+            Kalloc["Asignador de Heap<br/>(kmalloc/kfree)"]
+            PMM["Administrador de Memoria Física"]
         end
-
-        subgraph "Sistema de Archivos Virtual (VFS)"
-            Minix["Driver Minix FS"]
-            RAMFS["Driver RAMFS"]
-            VFS["Capa de Abstracción VFS"]
-            VFSMount["Resolución de Mount Points"]
-            DevFS["Nodos de Dispositivo"]
-            ProcFS["/proc Virtual FS"]
+        
+        subgraph VFSSystem["Sistema de Archivos Virtual"]
+            VFS["Capa VFS"]
+            MinixFS["Minix FS"]
+            RAMFS["RAMFS"]
+            ProcFS["Sistema de Archivos /proc"]
+            DevFS["Sistema de Archivos /dev"]
         end
-
-        subgraph "Pila de Red (Beta)"
+        
+        subgraph Network["Pila de Red"]
+            NetCore["Núcleo de Red"]
             ARP["Protocolo ARP"]
-            IPv4["Capa IPv4"]
+            IPv4["Protocolo IPv4"]
             RTL8139["Driver RTL8139"]
         end
-
-        subgraph "Capa de Abstracción de Hardware"
-            IDT["IDT / PIC / Excepciones"]
-            Timer["PIT / HPET / LAPIC"]
-            Storage["Driver de Disco ATA"]
-            IO["Teclado y Ratón PS/2"]
-            Speaker["Driver PC Speaker"]
-            DriverReg["Registro de Drivers"]
+        
+        subgraph Drivers["Controladores de Dispositivos"]
+            DriverReg["Registro de Drivers<br/>(C/C++/Rust)"]
+            Storage["Almacenamiento ATA/IDE"]
+            Input["Teclado/Ratón PS/2"]
+            Audio["Controladores de Audio"]
+            Serial["Puerto Serial"]
+            Timer["Temporizadores (PIT/HPET/LAPIC)"]
+        end
+        
+        subgraph Interrupts["Sistema de Interrupciones"]
+            IDT["Configuración IDT"]
+            PIC["Controlador PIC"]
+            ISR["Manejadores de Interrupciones"]
         end
     end
 
-    Shell --> Libc
-    INIT --> Shell
-    Libc --> Syscall
-    Syscall --> VFS
-    Syscall --> Proc
-    Syscall --> Kalloc
-    VFS --> Minix
-    VFS --> RAMFS
-    VFS --> ProcFS
-    VFS --> VFSMount
-    VFS --> Storage
-    Proc --> Sched
-    Sched --> IDT
-    RTL8139 --> ARP
-    ARP --> IPv4
-    IO --> DriverReg
-    Speaker --> DriverReg
+    Apps -->|syscalls| Syscall
+    Shell -->|syscalls| Syscall
+    Init -->|inicia| Shell
+    
+    Syscall --> ProcessMgmt
+    Syscall --> MemMgmt
+    Syscall --> VFSSystem
+    
+    ProcessMgmt --> Sched
+    Sched --> Interrupts
+    
+    VFSSystem --> MinixFS
+    VFSSystem --> RAMFS
+    VFSSystem --> ProcFS
+    VFSSystem --> Storage
+    
+    Network --> NetCore
+    NetCore --> ARP
+    NetCore --> IPv4
+    IPv4 --> RTL8139
+    
+    Drivers --> DriverReg
+    Storage --> DriverReg
+    Input --> DriverReg
+    Audio --> DriverReg
+    
+    Interrupts --> Drivers
+    Interrupts --> Timer
 ```
 
 
