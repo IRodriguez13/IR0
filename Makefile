@@ -472,6 +472,11 @@ help:
 	@echo "  make delete-disk      Delete virtual disk for MINIX FS"
 	@echo "  make help             Show this help"
 	@echo ""
+	@echo "🔌 Example Drivers (Multi-Language):"
+	@echo "  make en-ext-drv       Enable example drivers for next build"
+	@echo "  make dis-ext-drv      Disable example drivers"
+	@echo "  Note: Example drivers are optional and disabled by default"
+	@echo ""
 	@echo "🔨 Unibuild - Isolated Compilation:"
 	@echo "  C files (can compile multiple at once):"
 	@echo "    make unibuild <file1.c> [file2.c] ..."
@@ -497,12 +502,6 @@ help:
 	@echo "    make unibuild-cpp-win cpp/examples/cpp_example.cpp"
 	@echo ""
 	@echo "  Note: You can also use FILE=\"file1 file2\" syntax"
-	@echo ""
-	@echo "🦀 Test Drivers (Multi-Language):"
-	@echo "  make test-drivers     Compile all test drivers (Rust + C++)"
-	@echo "  make test-driver-rust Compile Rust test driver"
-	@echo "  make test-driver-cpp  Compile C++ test driver"
-	@echo "  make test-drivers-clean  Clean test driver objects"
 	@echo ""
 	@echo "💡 Quick start: make run"
 	@echo ""
@@ -659,7 +658,8 @@ test-drivers: test-driver-rust test-driver-cpp
 	@echo "✓ C++ driver:   $(CPP_TEST_OBJ)"
 	@echo ""
 	@echo "Note: These are standalone objects. To include in kernel build:"
-	@echo "      make enable-example-drivers && make ir0"
+	@echo "      make en-ext-drv && make ir0"
+	@echo "      make dis-ext-drv && make ir0"
 	@echo ""
 
 # Clean test driver objects
@@ -678,46 +678,13 @@ test-drivers-clean:
 		echo "✓ All test driver objects cleaned"; \
 	fi
 
-# -------------------------------------------------------------------
-# Load drivers on demand (convenient wrapper)
-# Usage examples:
-#   make load-driver rust          # compile and link all Rust drivers
-#   make load-driver cpp           # compile and link all C++ drivers
-#   make load-driver rust cpp      # compile and link both
-# The arguments are parsed from MAKECMDGOALS
-
-load-driver: $(if $(filter rust,$(MAKECMDGOALS)),load-driver-rust) $(if $(filter cpp,$(MAKECMDGOALS)),load-driver-cpp)
-	@echo "Selected drivers have been compiled and linked."
-
-load-driver-rust:
-	$(MAKE) test-driver-rust
-
-load-driver-cpp:
-	$(MAKE) test-driver-cpp
-
-# Unload drivers (clean objects)
-# Usage: make unload-driver rust cpp
-unload-driver: $(if $(filter rust,$(MAKECMDGOALS)),unload-driver-rust) $(if $(filter cpp,$(MAKECMDGOALS)),unload-driver-cpp)
-	@echo "Selected drivers have been cleaned."
-
-unload-driver-rust:
-	$(MAKE) test-drivers-clean RUST_ONLY=1
-
-unload-driver-cpp:
-	$(MAKE) test-drivers-clean CPP_ONLY=1
-
-# Prevent make from treating the arguments as separate targets
-rust:
-	@:
-
-cpp:
-	@:
 
 # PHONY TARGETS
 
 .PHONY: all clean run run-nodisk run-console debug create-disk help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
         ir0 windows win windows-clean win-clean deptest \
+        en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean
 
 # Include dependency files
