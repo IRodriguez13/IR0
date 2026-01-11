@@ -332,13 +332,23 @@ kernel-x64.iso: kernel-x64.bin
 
 # Create a raw disk image used by QEMU. If you want a persistent filesystem
 # you can format and populate this image separately. This target will
-# create a 64 MiB raw disk image if it doesn't already exist.
+# create a raw disk image if it doesn't already exist.
+# Supports filesystem selection via FS=minix|fat32|ext4 and size via SIZE=MB (legacy)
+# For new usage, use: make create-disk [filesystem] [size]
 disk.img:
 	@if [ -f $@ ]; then \
 		echo "  DISK    $@ already exists"; \
 	else \
 		echo "  DISK    creating $@ using scripts/create_disk.sh"; \
-		./scripts/create_disk.sh; \
+		if [ -n "$(FS)" ]; then \
+			if [ -n "$(SIZE)" ]; then \
+				./scripts/create_disk.sh $(FS) $(SIZE) --output $@; \
+			else \
+				./scripts/create_disk.sh $(FS) --output $@; \
+			fi; \
+		else \
+			./scripts/create_disk.sh --output $@; \
+		fi; \
 	fi
 	@echo "✓ Disk image ready: $@"
 
@@ -368,7 +378,7 @@ run: kernel-x64.iso disk.img
 
 # Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
 run-debug: kernel-x64.iso disk.img
-	@echo "🐛 Running IR0 Kernel with debug output and all supported hardware..."
+	@echo "Running IR0 Kernel with debug output and all supported hardware..."
 	@echo "   Hardware: RTL8139, e1000, SB16, ATA/IDE, Serial, PS/2, VGA"
 	@echo "Serial output will appear in this terminal"
 	@echo "QEMU GUI will open in separate window"
@@ -406,28 +416,81 @@ debug: kernel-x64.iso disk.img
 		$(QEMU_DISPLAY) \
 		-d int,cpu_reset,guest_errors $(QEMU_LOG_FILE)
 
-# Run with minimal hardware (only essentials for testing)
-run-minimal: kernel-x64.iso disk.img
-	@echo "Running IR0 Kernel (minimal hardware)..."
-	@echo "   Hardware: RTL8139 only, ATA/IDE, Serial"
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
-		-netdev user,id=net0 -device rtl8139,netdev=net0 \
-		$(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY) \
-		$(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
-
 # Create disk image (wrapper for scripts/create_disk.sh)
-create-disk: disk.img
-	@echo "Disk image is ready: disk.img"
+# Usage: make create-disk [filesystem] [size]
+# Examples:
+#   make create-disk              # Create 200MB MINIX disk (default)
+#   make create-disk minix 500    # Create 500MB MINIX disk
+#   make create-disk fat32        # Create FAT32 disk (default size)
+#   make create-disk fat32 500    # Create 500MB FAT32 disk
+#   make create-disk ext4 1000    # Create 1GB ext4 disk
+#   make create-disk hints        # Show help
+create-disk:
+	@ARGS="$(filter-out $@,$(MAKECMDGOALS))"; \
+	if [ -z "$$ARGS" ]; then \
+		./scripts/create_disk.sh; \
+	elif [ "$$ARGS" = "hints" ] || [ "$$ARGS" = "help" ]; then \
+		./scripts/create_disk.sh --help; \
+	else \
+		./scripts/create_disk.sh $$ARGS; \
+	fi
+	@if [ "$$ARGS" != "hints" ] && [ "$$ARGS" != "help" ]; then \
+		echo "Disk image is ready: disk.img"; \
+	fi
 
 # Delete disk image (useful to reset persistent disk for QEMU)
+# Usage: make delete-disk [filesystem] [filename]
+# Examples:
+#   make delete-disk              # Delete disk.img (default)
+#   make delete-disk minix        # Delete disk.img
+#   make delete-disk fat32        # Delete fat32.img
+#   make delete-disk fat32 fat32.img  # Delete fat32.img explicitly
 delete-disk:
-	@if [ -f disk.img ]; then \
-		rm -f disk.img; \
-		echo "✓ Disk image removed: disk.img"; \
+	@ARGS="$(filter-out $@,$(MAKECMDGOALS))"; \
+	if [ -z "$$ARGS" ]; then \
+		./scripts/delete_disk.sh; \
 	else \
-		echo "  Disk image not found: disk.img"; \
+		./scripts/delete_disk.sh $$ARGS; \
+	fi
+
+# Load Init binary into virtual disk
+# Usage: make load-init [filesystem] [disk_image] [init_binary]
+# Defaults: filesystem=auto-detect, disk_image=disk.img, init_binary=setup/pid1/init
+# Supported filesystems: minix, fat32, ext4
+# Note: Requires root privileges (mounts filesystem)
+# Examples:
+#   sudo make load-init                    # Auto-detect, use disk.img
+#   sudo make load-init fat32              # Use fat32.img
+#   sudo make load-init fat32 fat32.img    # Explicit filesystem and disk
+#   make load-init hints                   # Show help
+load-init:
+	@ARGS="$(filter-out $@,$(MAKECMDGOALS))"; \
+	if [ -z "$$ARGS" ]; then \
+		./scripts/load_init.sh; \
+	elif [ "$$ARGS" = "hints" ] || [ "$$ARGS" = "help" ]; then \
+		./scripts/load_init.sh --help; \
+	else \
+		./scripts/load_init.sh $$ARGS; \
+	fi
+
+# Remove Init binary from virtual disk
+# Usage: make remove-init [filesystem] [disk_image]
+# Defaults: filesystem=auto-detect, disk_image=disk.img
+# Supported filesystems: minix, fat32, ext4
+# Note: Requires root privileges (mounts filesystem)
+# Examples:
+#   sudo make remove-init                  # Auto-detect, use disk.img
+#   sudo make remove-init fat32            # Use fat32.img
+#   sudo make remove-init fat32 fat32.img  # Explicit filesystem and disk
+#   make remove-init hints                 # Show help
+remove-init:
+	@ARGS="$(filter-out $@,$(MAKECMDGOALS))"; \
+	if [ -z "$$ARGS" ]; then \
+		./scripts/remove_init.sh; \
+	elif [ "$$ARGS" = "hints" ] || [ "$$ARGS" = "help" ]; then \
+		./scripts/remove_init.sh --help; \
+	else \
+		./scripts/remove_init.sh $$ARGS; \
 	fi
 
 # CLEAN
@@ -447,37 +510,41 @@ clean:
 
 help:
 	@echo "╔════════════════════════════════════════════════════════════╗"
-	@echo "║       IR0 KERNEL - BUILD SYSTEM (x86-64 ONLY)             ║"
+	@echo "║               IR0 KERNEL - BUILD SYSTEM                    ║"
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
-	@echo "📦 Build:"
-	@echo "  make ir0              Build kernel ISO + userspace programs"
+	@echo "Build:"
+	@echo "  make ir0              Build kernel ISO"
 	@echo "  make ir0 windows      Build kernel for Windows (cross-compile)"
 	@echo "  make ir0 win          Alias for 'make ir0 windows'"
 	@echo "  make clean            Clean all build artifacts"
 	@echo "  make windows-clean    Clean Windows build artifacts"
-	@echo "  make userspace-programs  Build only userspace programs"
-	@echo "  make userspace-clean     Clean only userspace programs"
 	@echo ""
-	@echo "🚀 Run:"
-	@echo "  make run-kernel       Run with GUI + disk (recommended)"
+	@echo "Run:"
+	@echo "  make run              Run with GUI + disk (recommended)"
 	@echo "  make run-debug        Run with GUI + serial debug output"
 	@echo "  make debug            Quick debug - serial output only"
 	@echo "  make run-nodisk       Run without disk"
 	@echo "  make run-console      Run in console mode"
 	@echo ""
-	@echo "🔧 Utilities:"
+	@echo "Utilities:"
+	@echo "  make menuconfig       Kernel configuration menu (experimental)"
 	@echo "  make deptest          Check all dependencies (run this first!)"
-	@echo "  make create-disk      Create virtual disk for MINIX FS"
-	@echo "  make delete-disk      Delete virtual disk for MINIX FS"
+	@echo "  make create-disk      Create virtual disk (MINIX by default)"
+	@echo "  make create-disk hints  Show create-disk help"
+	@echo "  make delete-disk      Delete virtual disk"
+	@echo "  make load-init        Load Init binary into disk (requires sudo)"
+	@echo "  make load-init hints  Show load-init help"
+	@echo "  make remove-init      Remove Init binary from disk (requires sudo)"
+	@echo "  make remove-init hints  Show remove-init help"
 	@echo "  make help             Show this help"
 	@echo ""
-	@echo "🔌 Example Drivers (Multi-Language):"
+	@echo "Extern Drivers (Multi-Language):"
 	@echo "  make en-ext-drv       Enable example drivers for next build"
 	@echo "  make dis-ext-drv      Disable example drivers"
-	@echo "  Note: Example drivers are optional and disabled by default"
+	@echo "  Note: Extern drivers are optional and disabled by default"
 	@echo ""
-	@echo "🔨 Unibuild - Isolated Compilation:"
+	@echo "Unibuild - Isolated Compilation:"
 	@echo "  C files (can compile multiple at once):"
 	@echo "    make unibuild <file1.c> [file2.c] ..."
 	@echo "    make unibuild-win <file1.c> [file2.c] ...     (Windows)"
@@ -491,7 +558,7 @@ help:
 	@echo "    make unibuild-rust-win <file1.rs> [file2.rs] ...   (Windows)"
 	@echo ""
 	@echo "  Clean:"
-	@echo "    make unibuild-clean FILE=<file>"
+	@echo "    make unibuild-clean <file>"
 	@echo ""
 	@echo "  Examples:"
 	@echo "    make unibuild fs/ramfs.c"
@@ -501,9 +568,9 @@ help:
 	@echo "    make unibuild-win drivers/IO/ps2.c"
 	@echo "    make unibuild-cpp-win cpp/examples/cpp_example.cpp"
 	@echo ""
-	@echo "  Note: You can also use FILE=\"file1 file2\" syntax"
+	@echo "  Note: You can also use \"file1 file2\" syntax"
 	@echo ""
-	@echo "💡 Quick start: make run"
+	@echo "Quick start: make run"
 	@echo ""
 
 # DEPENDENCY TEST
@@ -525,7 +592,7 @@ unibuild:
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild <file1.c> [file2.c] ..."; \
-		echo "   Or: make unibuild FILE=\"<file1.c> <file2.c>\""; \
+		echo "   Or: make unibuild \"<file1.c>  <file2.c>\""; \
 		echo "Example: make unibuild fs/ramfs.c"; \
 		echo "Example: make unibuild fs/ramfs.c fs/vfs.c"; \
 		exit 1; \
@@ -538,7 +605,7 @@ unibuild-cpp:
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-cpp <file1.cpp> [file2.cpp] ..."; \
-		echo "   Or: make unibuild-cpp FILE=\"<file1.cpp> <file2.cpp>\""; \
+		echo "   Or: make unibuild-cpp \"<file1.cpp> <file2.cpp>\""; \
 		echo "Example: make unibuild-cpp cpp/examples/cpp_example.cpp"; \
 		exit 1; \
 	fi; \
@@ -550,7 +617,7 @@ unibuild-rust:
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-rust <file1.rs> [file2.rs] ..."; \
-		echo "   Or: make unibuild-rust FILE=\"<file1.rs> <file2.rs>\""; \
+		echo "   Or: make unibuild-rust \"<file1.rs> <file2.rs>\""; \
 		echo "Example: make unibuild-rust rust/drivers/rust_example_driver.rs"; \
 		exit 1; \
 	fi; \
@@ -562,7 +629,7 @@ unibuild-win:
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-win <file1.c> [file2.c] ..."; \
-		echo "   Or: make unibuild-win FILE=\"<file1.c> <file2.c>\""; \
+		echo "   Or: make unibuild-win \"<file1.c> <file2.c>\""; \
 		echo "Example: make unibuild-win drivers/IO/ps2.c"; \
 		exit 1; \
 	fi; \
@@ -574,7 +641,7 @@ unibuild-cpp-win:
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-cpp-win <file1.cpp> [file2.cpp] ..."; \
-		echo "   Or: make unibuild-cpp-win FILE=\"<file1.cpp> <file2.cpp>\""; \
+		echo "   Or: make unibuild-cpp-win \"<file1.cpp> <file2.cpp>\""; \
 		echo "Example: make unibuild-cpp-win cpp/examples/cpp_example.cpp"; \
 		exit 1; \
 	fi; \
@@ -586,7 +653,7 @@ unibuild-rust-win:
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-rust-win <file1.rs> [file2.rs] ..."; \
-		echo "   Or: make unibuild-rust-win FILE=\"<file1.rs> <file2.rs>\""; \
+		echo "   Or: make unibuild-rust-win \"<file1.rs> <file2.rs>\""; \
 		echo "Example: make unibuild-rust-win rust/drivers/rust_example_driver.rs"; \
 		exit 1; \
 	fi; \
@@ -599,8 +666,8 @@ unibuild-rust-win:
 unibuild-clean:
 	@if [ -z "$(FILE)" ]; then \
 		echo "Error: FILE parameter required"; \
-		echo "Usage: make unibuild-clean FILE=<source_file>"; \
-		echo "Example: make unibuild-clean FILE=fs/ramfs.c"; \
+		echo "Usage: make unibuild-clean <source_file>"; \
+		echo "Example: make unibuild-clean fs/ramfs.c"; \
 		exit 1; \
 	fi
 	@$(KERNEL_ROOT)/scripts/unibuild-clean.sh "$(FILE)"
@@ -681,7 +748,7 @@ test-drivers-clean:
 
 # PHONY TARGETS
 
-.PHONY: all clean run run-nodisk run-console debug create-disk help \
+.PHONY: all clean run run-nodisk run-console debug create-disk delete-disk load-init remove-init help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
         ir0 windows win windows-clean win-clean deptest \
         en-ext-drv dis-ext-drv \
