@@ -211,7 +211,9 @@ DRIVER_OBJS = \
     drivers/storage/ata_helpers.o \
     drivers/storage/fs_types.o \
 	drivers/video/vbe.o \
-	drivers/video/typewriter.o
+	drivers/video/typewriter.o \
+	drivers/init_drv.o \
+	$(MULTILANG_DRIVER_SUPPORT_OBJ)
 
 FS_OBJS = \
     fs/vfs.o \
@@ -250,9 +252,26 @@ SETUP_OBJS =
 CPP_OBJS = \
 	cpp/runtime/compat.o
 
+# Multi-language driver objects (Rust and C++) - Optional, only included if enabled
+RUST_DRIVER_OBJS = 
+CPP_DRIVER_OBJS = 
+MULTILANG_DRIVER_SUPPORT_OBJ = 
+
+# Include example drivers only if KERNEL_ENABLE_EXAMPLE_DRIVERS is enabled
+# These are test/example drivers and should not be compiled by default
+-include .example_drivers_enabled
+ifeq ($(ENABLE_EXAMPLE_DRIVERS),1)
+RUST_DRIVER_OBJS += rust/drivers/rust_simple_driver.o
+CPP_DRIVER_OBJS += cpp/examples/cpp_example.o
+MULTILANG_DRIVER_SUPPORT_OBJ += drivers/multilang_drivers.o
+# Pass flag to compiler to enable driver registration in code
+CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=1
+endif
+
 # All objects
 ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
-           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS) $(CPP_OBJS) $(NET_OBJS)
+           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS) \
+           $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) $(NET_OBJS)
 
 # BUILD RULES
 
@@ -275,6 +294,11 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
 		-mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
 		-nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin \
 		-I./cpp/include $(CFLAGS) -c $< -o $@
+
+# Compile Rust files (using unibuild script)
+%.o: %.rs
+	@echo "  RUST    $<"
+	@$(KERNEL_ROOT)/scripts/unibuild.sh -rust $<
 
 # Compile ASM files
 %.o: %.asm
@@ -416,6 +440,7 @@ clean:
 	@find . -name "*.iso" -type f -delete
 	@rm -rf iso/
 	@rm -f qemu_debug.log
+	@rm -f .example_drivers_enabled
 	@echo "✓ Clean complete"
 
 # HELP
@@ -581,9 +606,7 @@ unibuild-clean:
 	fi
 	@$(KERNEL_ROOT)/scripts/unibuild-clean.sh "$(FILE)"
 
-# ============================================================================
-# TEST DRIVERS - MULTI-LANGUAGE EXAMPLES
-# ============================================================================
+# TEST DRIVERS - MULTI-LANGUAGE EXAMPLES (OPTIONAL)
 
 # Rust test driver
 RUST_TEST_DRIVER = rust/drivers/rust_example_driver.rs
@@ -592,6 +615,16 @@ RUST_TEST_OBJ = rust/drivers/rust_example_driver.o
 # C++ test driver
 CPP_TEST_DRIVER = cpp/examples/cpp_example.cpp
 CPP_TEST_OBJ = cpp/examples/cpp_example.o
+
+# Enable example drivers for next build
+en-ext-drv:
+	@echo "ENABLE_EXAMPLE_DRIVERS=1" > .example_drivers_enabled
+	@echo "✓ Example drivers enabled - will be compiled on next build"
+
+# Disable example drivers
+dis-ext-drv:
+	@rm -f .example_drivers_enabled
+	@echo "✓ Example drivers disabled - will not be compiled"
 
 # Compile Rust test driver using unibuild
 test-driver-rust: $(RUST_TEST_DRIVER)
@@ -615,7 +648,7 @@ test-driver-cpp: $(CPP_TEST_DRIVER)
 		exit 1; \
 	fi
 
-# Compile all test drivers
+# Compile all test drivers (standalone compilation, not included in kernel)
 test-drivers: test-driver-rust test-driver-cpp
 	@echo ""
 	@echo "╔════════════════════════════════════════════════════════════╗"
@@ -624,6 +657,9 @@ test-drivers: test-driver-rust test-driver-cpp
 	@echo ""
 	@echo "✓ Rust driver:  $(RUST_TEST_OBJ)"
 	@echo "✓ C++ driver:   $(CPP_TEST_OBJ)"
+	@echo ""
+	@echo "Note: These are standalone objects. To include in kernel build:"
+	@echo "      make enable-example-drivers && make ir0"
 	@echo ""
 
 # Clean test driver objects
