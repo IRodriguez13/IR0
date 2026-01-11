@@ -49,6 +49,22 @@
  */
 #define KERNEL_DEBUG_SHELL 1
 
+/*
+ * KERNEL_ENABLE_EXAMPLE_DRIVERS
+ * Enable multi-language example drivers registration in kernel
+ * 
+ * This flag is automatically set by the Makefile when drivers are enabled.
+ * Default: 0 (disabled)
+ * 
+ * To enable: make en-ext-drv && make ir0
+ * The Makefile will automatically pass -DKERNEL_ENABLE_EXAMPLE_DRIVERS=1
+ * 
+ * Note: This flag controls both compilation and runtime registration
+ */
+#ifndef KERNEL_ENABLE_EXAMPLE_DRIVERS
+#define KERNEL_ENABLE_EXAMPLE_DRIVERS 0
+#endif
+
 /* COMPATIBILITY - Keep existing definitions                                 */
 
 /* These are included for backward compatibility with includes/ir0/config.h */
