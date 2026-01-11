@@ -224,7 +224,7 @@ make unibuild-cpp-win cpp/examples/cpp_example.cpp
 make unibuild-rust-win rust/drivers/rust_example_driver.rs
 
 # Multiple files
-make unibuild-win drivers/serial/serial.c drivers/dma/dma.c
+make unibuild-win drivers/serial/serial.c  drivers/dma/dma.c
 ```
 
 #### Available Targets
@@ -243,7 +243,7 @@ make unibuild-win drivers/serial/serial.c drivers/dma/dma.c
 #### Cleaning Compiled Files
 
 ```bash
-make unibuild-clean FILE=<file>
+make unibuild-clean <file>
 ```
 
 ### Multi-Language Development
@@ -309,21 +309,7 @@ When enabled, the extern drivers (Rust and C++) will be compiled, linked into th
 For detailed API documentation and development guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
 
-### Creating Virtual Disk
-
-The virtual disk is created automatically during build. To create it manually:
-
-```bash
-make create-disk
-```
-
-To remove the virtual disk:
-
-```bash
-make delete-disk
-```
-
-### Cleaning Build Artifacts
+### Virtual Disk Management
 
 To clean all compiled objects and binaries:
 
@@ -643,7 +629,7 @@ make unibuild drivers/IO/ps2.c
 O usando la sintaxis tradicional:
 
 ```bash
-make unibuild FILE=drivers/IO/ps2.c
+make unibuild drivers/IO/ps2.c
 ```
 
 **Compilación Cruzada para Múltiples Plataformas:**
@@ -664,29 +650,191 @@ make unibuild -rust kernel/module.rs    # Soporte Rust (planificado)
 Esto compila el archivo especificado sin compilar todo el kernel. Se pueden compilar múltiples archivos a la vez:
 
 ```bash
-make unibuild fs/vfs.c fs/ramfs.c
-make unibuild -win drivers/serial/serial.c drivers/dma/dma.c
+make unibuild fs/vfs.c  fs/ramfs.c
+make unibuild -win drivers/serial/serial.c  drivers/dma/dma.c
 ```
 
 Para limpiar un archivo compilado individual:
 
 ```bash
-make unibuild-clean FILE=drivers/IO/ps2.c
+make unibuild-clean drivers/IO/ps2.c
 ```
 
-### Creación de Disco Virtual
+### Gestión de Discos Virtuales
 
-El disco virtual se crea automáticamente durante la compilación. Para crearlo manualmente:
+El disco virtual se crea automáticamente durante la compilación. El sistema de gestión de discos soporta múltiples sistemas de archivos e incluye validaciones de seguridad para proteger el sistema host.
+
+**Crear Discos Virtuales:**
 
 ```bash
-make create-disk
+make create-disk                    # Crear disco MINIX de 200MB (por defecto)
+make create-disk fat32              # Crear disco FAT32 (500MB por defecto)
+make create-disk fat32 500          # Crear disco FAT32 de 500MB
+make create-disk ext4 1000          # Crear disco ext4 de 1GB
+make create-disk hints              # Mostrar ayuda y opciones disponibles
 ```
 
-Para eliminar el disco virtual:
+El comando `create-disk` soporta argumentos posicionales:
+- **Primer argumento**: Tipo de sistema de archivos (minix, fat32, ext4, etc.)
+- **Segundo argumento** (opcional): Tamaño del disco en MB
+
+Tamaños por defecto según sistema de archivos:
+- MINIX: 200MB
+- FAT32: 500MB
+- ext4: 1000MB
+
+**Eliminar Discos Virtuales:**
 
 ```bash
-make delete-disk
+make delete-disk                    # Eliminar disk.img (disco MINIX por defecto)
+make delete-disk fat32              # Eliminar fat32.img
+make delete-disk minix disk.img     # Eliminar disk.img explícitamente
 ```
+
+El comando `delete-disk` acepta:
+- **Sin argumentos**: Elimina el archivo por defecto `disk.img`
+- **Nombre del sistema de archivos**: Elimina el archivo por defecto específico (ej: `fat32.img`)
+- **Sistema de archivos y nombre de archivo**: Elimina el archivo especificado explícitamente
+
+Para obtener ayuda adicional sobre los comandos de gestión de discos:
+
+```bash
+make create-disk hints              # Mostrar ayuda de create-disk
+make delete-disk                    # delete-disk no tiene hints, pero acepta los mismos argumentos
+```
+
+**Gestión del Proceso Init:**
+
+El kernel IR0 soporta la carga del proceso Init (PID 1) desde el sistema de archivos del disco virtual. El binario de Init debe compilarse en un repositorio separado y colocarse en `setup/pid1/init` antes de cargarlo en el disco.
+
+**Cargar Init en el disco:**
+
+```bash
+sudo make load-init                    # Auto-detectar filesystem, usar disk.img
+sudo make load-init fat32              # Cargar Init en fat32.img
+sudo make load-init fat32 fat32.img    # Especificar filesystem y disco explícitamente
+sudo make load-init fat32 fat32.img /path/to/init  # Especificar todos los parámetros
+make load-init hints                   # Mostrar ayuda y opciones disponibles
+```
+
+El comando `load-init`:
+- Monta el sistema de archivos del disco virtual (requiere privilegios root)
+- Crea el directorio `/sbin` si no existe
+- Copia el binario desde `setup/pid1/init` a `/sbin/init` en el disco
+- Soporta auto-detección del tipo de filesystem desde el nombre del archivo
+- Soporta minix, fat32 y ext4
+
+**Remover Init del disco:**
+
+```bash
+sudo make remove-init                  # Auto-detectar filesystem, usar disk.img
+sudo make remove-init fat32            # Remover Init de fat32.img
+sudo make remove-init fat32 fat32.img  # Especificar filesystem y disco explícitamente
+make remove-init hints                 # Mostrar ayuda y opciones disponibles
+```
+
+El comando `remove-init`:
+- Monta el sistema de archivos del disco virtual (requiere privilegios root)
+- Elimina `/sbin/init` del disco
+- Preserva el directorio `/sbin` para futuros usos
+- Soporta auto-detección del tipo de filesystem
+
+**Nota importante**: Si el disco no está formateado, el script formateará automáticamente el filesystem antes de cargar Init. Esto elimina la necesidad de arrancar el kernel una vez antes de usar `load-init`.
+
+**Características de Seguridad**: Tanto el script de creación como el de eliminación incluyen validación exhaustiva ejecutada **antes** de cualquier operación en disco. La validación previene:
+- Operaciones en dispositivos de bloque (`/dev/*`)
+- Operaciones en directorios del sistema (`/etc`, `/boot`, `/usr`, etc.)
+- Ataques de path traversal (secuencias `..`)
+
+Estas protecciones garantizan que el sistema host permanezca seguro durante las operaciones de gestión de imágenes de disco.
+
+
+The virtual disk is automatically created during the build process. The disk management system supports multiple filesystems and includes security validations to protect the host system.
+
+#### Creating Virtual Disks
+
+Create a virtual disk manually:
+
+```bash
+make create-disk                    # Create 200MB MINIX disk (default)
+make create-disk fat32              # Create FAT32 disk (500MB default)
+make create-disk fat32 500          # Create 500MB FAT32 disk
+make create-disk ext4 1000          # Create 1GB ext4 disk
+make create-disk hints              # Show help and available options
+```
+
+The `create-disk` command supports positional arguments:
+- **First argument**: Filesystem type (minix, fat32, ext4, etc.)
+- **Second argument** (optional): Disk size in MB
+
+Default filesystem sizes:
+- MINIX: 200MB
+- FAT32: 500MB
+- ext4: 1000MB
+
+**Security Features**: The disk creation script includes comprehensive validation to prevent accidental operations on system devices or critical directories. All validations execute **before** any disk write operations.
+
+#### Deleting Virtual Disks
+
+Delete virtual disks using the same filesystem-based syntax:
+
+```bash
+make delete-disk                    # Delete disk.img (default MINIX disk)
+make delete-disk fat32              # Delete fat32.img
+make delete-disk minix disk.img     # Delete disk.img explicitly
+```
+
+The `delete-disk` command accepts:
+- **No arguments**: Deletes the default `disk.img` file
+- **Filesystem name**: Deletes the filesystem-specific default file (e.g., `fat32.img`)
+- **Filesystem and filename**: Deletes the specified file explicitly
+
+For additional help on disk management commands:
+
+```bash
+make create-disk hints              # Show create-disk help
+make delete-disk                    # delete-disk uses the same syntax as create-disk
+```
+
+#### Init Process Management
+
+The IR0 kernel supports loading the Init process (PID 1) from the virtual disk filesystem. The Init binary must be compiled in a separate repository and placed at `setup/pid1/init` before loading it into the disk.
+
+**Loading Init into the disk:**
+
+```bash
+sudo make load-init                    # Auto-detect filesystem, use disk.img
+sudo make load-init fat32              # Load Init into fat32.img
+sudo make load-init fat32 fat32.img    # Explicitly specify filesystem and disk
+sudo make load-init fat32 fat32.img /path/to/init  # Specify all parameters
+make load-init hints                   # Show help and available options
+```
+
+The `load-init` command:
+- Mounts the virtual disk filesystem (requires root privileges)
+- Creates the `/sbin` directory if it doesn't exist
+- Copies the binary from `setup/pid1/init` to `/sbin/init` on the disk
+- Supports auto-detection of filesystem type from filename
+- Supports minix, fat32, and ext4 filesystems
+
+**Removing Init from the disk:**
+
+```bash
+sudo make remove-init                  # Auto-detect filesystem, use disk.img
+sudo make remove-init fat32            # Remove Init from fat32.img
+sudo make remove-init fat32 fat32.img  # Explicitly specify filesystem and disk
+make remove-init hints                 # Show help and available options
+```
+
+The `remove-init` command:
+- Mounts the virtual disk filesystem (requires root privileges)
+- Removes `/sbin/init` from the disk
+- Preserves the `/sbin` directory for future use
+- Supports auto-detection of filesystem type
+
+**Important note**: If the disk is not formatted, the script will automatically format the filesystem before loading Init. This eliminates the need to boot the kernel once before using `load-init`.
+
+Both commands use the same security validations as disk creation to prevent dangerous operations.
 
 ### Limpieza de Artefactos de Compilación
 
