@@ -13,7 +13,7 @@
 *iso-x86-64/boot
 *iso-x86-64/boot
 *.txt
-disk.img
+*.img
 .aider*
 iso-x86-64-desktop/boot/grub/grub.cfg
 iso/boot/grub/grub.cfg
