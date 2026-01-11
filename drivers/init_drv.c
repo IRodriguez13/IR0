@@ -27,7 +27,7 @@ void drivers_init(void)
     log_subsystem_ok("DRIVER_REGISTRY");
 
     /* Register multi-language example drivers (optional, for testing) */
-#ifdef KERNEL_ENABLE_EXAMPLE_DRIVERS
+#if KERNEL_ENABLE_EXAMPLE_DRIVERS
     register_multilang_example_drivers();
     log_subsystem_ok("MULTI_LANG_DRIVERS");
 #endif
