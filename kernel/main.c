@@ -31,6 +31,7 @@
 #include <kernel/elf_loader.h>
 #include <drivers/timer/clock_system.h>
 #include <interrupt/arch/pic.h>
+#include <drivers/init_drv.h>
 
 /* Include kernel header with all function declarations */
 #include "kernel.h"
@@ -104,6 +105,9 @@ void kmain(void)
 
     /* Initialize core subsystems first (need heap for registration) */
     heap_init();
+    
+    /* Initialize driver subsystem (includes driver registry and multi-language drivers) */
+    drivers_init();
     
     /* Initialize Physical Memory Manager (PMM)
      * Manage physical frames in the 32MB region (8MB-32MB)

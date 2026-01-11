@@ -19,3 +19,4 @@ iso-x86-64-desktop/boot/grub/grub.cfg
 iso/boot/grub/grub.cfg
 .config
 .build_number
+.example_drivers_enabled
