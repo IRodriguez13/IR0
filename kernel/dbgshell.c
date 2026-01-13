@@ -1676,7 +1676,14 @@ static void uint64_to_str(uint64_t num, char *str)
   *str = '\0';
 }
 
-static void cmd_lsblk(const char *args)
+static void cmd_lsblk(const char *args __attribute__((unused)))
+{
+  // Use /proc/blockdevices filesystem interface (polymorphic file access)
+  cmd_cat("/proc/blockdevices");
+}
+
+/* DEPRECATED: Old implementation - kept for reference */
+static void cmd_lsblk_old(const char *args)
 {
   (void)args; // Unused parameter
 
@@ -1738,7 +1745,8 @@ static void cmd_lsblk(const char *args)
 
 static void cmd_df(const char *args __attribute__((unused)))
 {
-  syscall(95, 0, 0, 0);
+  // Use /dev/disk filesystem interface (polymorphic file access)
+  cmd_cat("/dev/disk");
 }
 static void cmd_lsdrv(const char *args __attribute__((unused)))
 {

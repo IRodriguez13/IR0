@@ -189,7 +189,8 @@ int64_t sys_read(int fd, void *buf, size_t count)
       }
     }
 
-    return (int64_t)bytes_read; // Return 0 if no data available
+    /* Return 0 if no data available */
+    return (int64_t)bytes_read;
   }
 
   /* Handle regular file descriptors */
@@ -228,7 +229,8 @@ int64_t sys_getppid(void)
 {
   if (!current_process)
     return -ESRCH;
-  return 0; // No parent tracking yet
+  /* No parent tracking yet */
+  return 0;
 }
 
 int64_t sys_ls(const char *pathname)
@@ -266,23 +268,24 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
 
 int64_t sys_ps(void)
 {
-  /* Use /proc filesystem - show current process status */
-  // For now, show current process via /proc/status
-  int fd = sys_open("/proc/status", O_RDONLY, 0);
+  /* DEPRECATED: Use 'cat /proc/ps' instead of this syscall */
+  /* Maintained for backward compatibility */
+  /* Use /proc filesystem - show process list */
+  int fd = sys_open("/proc/ps", O_RDONLY, 0);
   if (fd < 0) {
     return -1;
   }
   
-  char buffer[1024];
+  char buffer[4096];
   int64_t bytes = sys_read(fd, buffer, sizeof(buffer) - 1);
   sys_close(fd);
   
   if (bytes > 0) {
+    buffer[bytes] = '\0';
     sys_write(STDOUT_FILENO, buffer, bytes);
-    sys_write(STDOUT_FILENO, "\n", 1);
   }
   
-  return 0;
+  return bytes > 0 ? 0 : -1;
 }
 
 int64_t sys_touch(const char *pathname)
@@ -291,7 +294,8 @@ int64_t sys_touch(const char *pathname)
     return -EFAULT;
 
   if (minix_fs_is_working())
-    return minix_fs_touch(pathname, 0644);  // Default mode
+    /* Default mode */
+    return minix_fs_touch(pathname, 0644);
 
   sys_write(STDERR_FILENO, "Error: filesystem not ready\n", 29);
   return -1;
@@ -374,7 +378,8 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
 }
 
 /* Get current user information */
-int64_t sys_whoami(void) {
+int64_t sys_whoami(void)
+{
   if (!current_process)
     return -ESRCH;
 
@@ -410,62 +415,27 @@ int64_t sys_append(const char *path, const char *content, size_t count)
 
 int64_t sys_df(void)
 {
+  /* DEPRECATED: Use 'cat /dev/disk' instead of this syscall */
+  /* Maintained for backward compatibility */
   if (!current_process)
     return -ESRCH;
 
-  typewriter_vga_print("Filesystem          Size\n", 0x0F);
-  typewriter_vga_print("----------------------------------\n", 0x07);
-
-  int found_drives = 0;
-  for (uint8_t i = 0; i < 4; i++)
-  {
-    if (!ata_drive_present(i))
-      continue;
-
-    found_drives++;
-    char devname[16];
-    int len = snprintf(devname, sizeof(devname), "/dev/hd%c", 'a' + i);
-    if (len < 0 || len >= (int)sizeof(devname))
-      continue;
-
-    /* ata_get_size() returns size in 512-byte sectors */
-    uint64_t size = ata_get_size(i);
-    if (size == 0)
-    {
-      char line[64];
-      snprintf(line, sizeof(line), "%-20s (empty)\n", devname);
-      typewriter_vga_print(line, 0x0E);
-      continue;
-    }
-
-    char size_str[32];
-    /* Same calculation as lsblk: sectors / (2 * 1024 * 1024) = GB */
-    uint64_t size_gb = size / (2 * 1024 * 1024);
-    if (size_gb > 0)
-    {
-      len = snprintf(size_str, sizeof(size_str), "%lluG", size_gb);
-    }
-    else
-    {
-      /* sectors / (2 * 1024) = MB */
-      uint64_t size_mb = size / (2 * 1024);
-      len = snprintf(size_str, sizeof(size_str), "%lluM", size_mb);
-    }
-
-    if (len > 0 && len < (int)sizeof(size_str))
-    {
-      char line[64];
-      snprintf(line, sizeof(line), "%-20s %s\n", devname, size_str);
-      typewriter_vga_print(line, 0x0F);
-    }
+  /* Use /dev/disk filesystem interface */
+  int fd = sys_open("/dev/disk", O_RDONLY, 0);
+  if (fd < 0) {
+    return -1;
   }
-
-  if (found_drives == 0)
-  {
-    typewriter_vga_print("No drives detected\n", 0x0E);
+  
+  char buffer[1024];
+  int64_t bytes = sys_read(fd, buffer, sizeof(buffer) - 1);
+  sys_close(fd);
+  
+  if (bytes > 0) {
+    buffer[bytes] = '\0';
+    sys_write(STDOUT_FILENO, buffer, bytes);
   }
-
-  return 0;
+  
+  return bytes > 0 ? 0 : -1;
 }
 
 int64_t sys_link(const char *oldpath, const char *newpath)
@@ -478,6 +448,32 @@ int64_t sys_link(const char *oldpath, const char *newpath)
 }
 
 int64_t sys_lsblk(void)
+{
+  /* DEPRECATED: Use 'cat /proc/blockdevices' instead of this syscall */
+  /* Maintained for backward compatibility */
+  if (!current_process)
+    return -ESRCH;
+
+  /* Use /proc/blockdevices filesystem interface */
+  int fd = sys_open("/proc/blockdevices", O_RDONLY, 0);
+  if (fd < 0) {
+    return -1;
+  }
+  
+  char buffer[2048];
+  int64_t bytes = sys_read(fd, buffer, sizeof(buffer) - 1);
+  sys_close(fd);
+  
+  if (bytes > 0) {
+    buffer[bytes] = '\0';
+    sys_write(STDOUT_FILENO, buffer, bytes);
+  }
+  
+  return bytes > 0 ? 0 : -1;
+}
+
+/* DEPRECATED: Old implementation - kept for reference */
+int64_t sys_lsblk_old(void)
 {
   if (!current_process)
     return -ESRCH;
@@ -513,7 +509,9 @@ int64_t sys_lsblk(void)
     uint8_t first_sector[512];
     if (ata_read_sectors(drive, 0, 1, first_sector) == 0) {
       /* Detect partition table type and handle accordingly */
-      if (first_sector[450] == 0xEE) { // GPT signature check
+      /* GPT signature check */
+      if (first_sector[450] == 0xEE)
+      {
         /* GPT handling will be implemented later */
         continue;
       }
@@ -684,7 +682,8 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   int fd = -1;
   for (int i = 3; i < MAX_FDS_PER_PROCESS;
        i++)
-  { // Start from 3 (after stdin/stdout/stderr)
+  {
+    /* Start from 3 (after stdin/stdout/stderr) */
     if (!fd_table[i].in_use)
     {
       fd = i;
@@ -693,7 +692,8 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   }
 
   if (fd == -1)
-    return -EMFILE; // Too many open files
+    /* Too many open files */
+    return -EMFILE;
 
   /* Open file using VFS layer to get real file handle */
   struct vfs_file *vfs_file = NULL;
@@ -1032,7 +1032,8 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
   (void)addr;
   (void)prot;
   (void)fd;
-  (void)offset; // Ignore for now
+  /* Ignore for now */
+  (void)offset;
 
   /* Debug output to serial */
   serial_print("SERIAL: mmap: entering syscall\n");

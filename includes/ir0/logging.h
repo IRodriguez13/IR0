@@ -44,8 +44,8 @@ void logging_set_level(log_level_t level);
 log_level_t logging_get_level(void);
 
 /* LOG BUFFER ACCESS (FOR DMESG/JOURNALCTL-LIKE FUNCTIONALITY) */ 
-void logging_print_buffer(void);  // Print all logs in buffer
-size_t logging_get_buffer_size(void);  // Get number of log entries in buffer
+void logging_print_buffer(void);  /* Print all logs in buffer */
+size_t logging_get_buffer_size(void);  /* Get number of log entries in buffer */
 
 /* LOGGING MACROS */ 
 
