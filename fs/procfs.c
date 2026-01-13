@@ -24,9 +24,6 @@
 #include <drivers/timer/clock_system.h>
 #include <arch/common/arch_portable.h>
 
-/* External functions */
-extern uint64_t get_system_time(void);
-
 static pid_t proc_fd_pid_map[1000];
 static int proc_fd_pid_map_init = 0;
 /* Track offsets for /proc files */
@@ -624,6 +621,77 @@ int proc_loadavg_read(char *buf, size_t count)
     return len;
 }
 
+/* Generate /proc/blockdevices content (lsblk-like output) */
+int proc_blockdevices_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    memset(buf, 0, count);
+    
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "NAME        MAJ:MIN   SIZE (bytes)    MODEL\n");
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+    
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                 "------------------------------------------------\n");
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+    
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        if (!ata_drive_present(i))
+            continue;
+        
+        uint64_t size = ata_get_size(i);
+        const char *model = ata_get_model(i);
+        const char *serial = ata_get_serial(i);
+        
+        /* Format: hda  MAJ:MIN   SIZE     MODEL (SERIAL) */
+        char num_str[32];
+        char *p = num_str;
+        uint64_t tmp = size / (2 * 1024 * 1024); /* Convert to GB */
+        if (tmp == 0) {
+            *p++ = '0';
+        } else {
+            char rev[32];
+            int idx = 0;
+            while (tmp > 0) {
+                rev[idx++] = '0' + (tmp % 10);
+                tmp /= 10;
+            }
+            while (idx > 0)
+                *p++ = rev[--idx];
+        }
+        *p = '\0';
+        
+        char name_buf[8];
+        snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + i);
+        
+        n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "%-12s %3d:0   %5sG %s (%s)\n",
+                     name_buf, i, num_str, model, serial);
+        if (n < 0)
+            return -1;
+        if (n >= (int)(count - off))
+            n = (int)(count - off) - 1;
+        off += (size_t)n;
+    }
+    
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
 /* Generate /proc/filesystems content */
 int proc_filesystems_read(char *buf, size_t count)
 {
@@ -688,8 +756,6 @@ int proc_cmdline_read(char *buf, size_t count, pid_t pid)
     }
     
     /* Get command name from process */
-    /* In a real system, cmdline would contain full command line arguments */
-    /* For now, we just return the process name */
     int len = snprintf(buf, count, "%s", proc->comm[0] ? proc->comm : "(none)");
     
     if (len < 0)
@@ -742,6 +808,9 @@ static int proc_file_read(const char *filename, char *buf, size_t count)
     {
         /* Current process */
         return proc_cmdline_read(buf, count, -1);
+    } else if (strcmp(filename, "blockdevices") == 0)
+    {
+        return proc_blockdevices_read(buf, count);
     }
     
     /* File not found */
@@ -818,6 +887,9 @@ int proc_open(const char *path, int flags)
     {
         proc_set_pid_for_fd(1010, pid);
         fd = 1010;
+    } else if (strcmp(filename, "blockdevices") == 0)
+    {
+        fd = 1011;
     } else
     {
         /* File not found */
@@ -882,6 +954,9 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
             full_size = proc_cmdline_read(proc_buffer, sizeof(proc_buffer), pid);
             break;
         }
+        case 1011:
+            full_size = proc_blockdevices_read(proc_buffer, sizeof(proc_buffer));
+            break;
         default:
             return -1;
     }
@@ -950,7 +1025,8 @@ int proc_stat(const char *path, stat_t *st)
         strcmp(filename, "cpuinfo") == 0 ||
         strcmp(filename, "loadavg") == 0 ||
         strcmp(filename, "filesystems") == 0 ||
-        strcmp(filename, "cmdline") == 0) {
+        strcmp(filename, "cmdline") == 0 ||
+        strcmp(filename, "blockdevices") == 0) {
         
         memset(st, 0, sizeof(stat_t));
         /* Regular file, read-only */

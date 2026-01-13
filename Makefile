@@ -2,8 +2,9 @@
 
 KERNEL_ROOT := $(CURDIR)
 
-# Architecture: x86-64 only
-ARCH := x86-64
+# Default architecture (can be overridden with arch= parameter)
+# Supported: x86-64, x86-32, arm64, arm32
+ARCH ?= x86-64
 
 # Build target
 BUILD_TARGET := desktop
@@ -162,12 +163,17 @@ KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
     kernel/process.o \
-	kernel/rr_sched.o \
     kernel/task.o \
     kernel/syscalls.o \
     kernel/dbgshell.o \
     kernel/elf_loader.o \
     kernel/driver_registry.o
+
+# Scheduler - Select which scheduler to compile
+# Uncomment the scheduler you want to use and comment out the others
+KERNEL_OBJS += kernel/rr_sched.o
+# KERNEL_OBJS += kernel/cfs_sched.o
+# KERNEL_OBJS += kernel/priority_sched.o
 
 MEMORY_OBJS = \
 	includes/ir0/memory/allocator.o \
@@ -305,6 +311,32 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
 	@echo "  ASM     $<"
 	@$(ASM) $(ASMFLAGS) $< -o $@
 
+# Flexible parameter system
+ifeq ($(MAKECMDGOALS),auto)
+    PARALLEL_JOBS := $(shell nproc)
+    MAKEOVERRIDES := $(filter-out auto,$(MAKEOVERRIDES))
+    .NOTPARALLEL:
+endif
+
+ifdef arch
+    ifeq ($(arch),x86-64)
+        ARCH := x86-64
+        # x86-64 specific flags
+    else ifeq ($(arch),x86-32)
+        ARCH := x86-32
+        # x86-32 specific flags
+    else ifeq ($(arch),arm64)
+        ARCH := arm64
+        # ARM64 specific flags
+    else ifeq ($(arch),arm32)
+        ARCH := arm32
+        # ARM32 specific flags
+    else
+        $(error Unsupported architecture: $(arch). Supported: x86-64, x86-32, arm64, arm32)
+    endif
+    CFLAGS += -DARCH_$(shell echo $(ARCH) | tr 'a-z' 'A-Z')
+endif
+
 # Link kernel
 kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 	@echo "  LD      $@"
@@ -352,8 +384,49 @@ disk.img:
 	fi
 	@echo "✓ Disk image ready: $@"
 
+# ============================================
+# BUILD CONFIGURATION
+# ============================================
+
+# Default values
+PARALLEL_JOBS ?= 1
+# ARCH is already set at the top of the file
+
+# Enable parallel builds if auto is specified
+ifneq (,$(filter auto,$(MAKECMDGOALS)))
+    PARALLEL_JOBS := $(shell nproc)
+    MAKEOVERRIDES := $(filter-out auto,$(MAKEOVERRIDES))
+    .NOTPARALLEL:
+endif
+
+
+# Process architecture parameter (if specified)
+ifdef arch
+    ifeq ($(filter $(arch),x86-64 x86-32 arm64 arm32),)
+        $(error Unsupported architecture: $(arch). Supported: x86-64, x86-32, arm64, arm32)
+    endif
+    ARCH := $(arch)
+    CFLAGS += -DARCH_$(shell echo $(ARCH) | tr 'a-z' 'A-Z')
+else
+    # Default to x86-64 if not specified
+    ARCH := x86-64
+    CFLAGS += -DARCH_X86_64
+endif
+
+# ============================================
+# BUILD TARGETS
+# ============================================
+
 # Default target
 ir0: kernel-x64.iso
+
+# Build using all available CPU cores
+ir0-auto: auto
+	@# This is now just a compatibility alias
+
+# Auto build target (used by ir0-auto for compatibility)
+.PHONY: auto
+auto: ir0
 
 # Windows build target
 windows win:
@@ -750,7 +823,7 @@ test-drivers-clean:
 
 .PHONY: all clean run run-nodisk run-console debug create-disk delete-disk load-init remove-init help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
-        ir0 windows win windows-clean win-clean deptest \
+        ir0 ir0-auto auto windows win windows-clean win-clean deptest \
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean
 

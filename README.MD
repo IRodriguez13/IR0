@@ -373,11 +373,11 @@ Or run directly:
 
 ### Virtual File System
 - VFS abstraction layer with mount point resolution
-- Multiple filesystem support (MINIX, RAMFS)
+- Multiple filesystem support (MINIX, RAMFS, TMPFS)
 - Mount point management for multiple filesystems
-- Virtual filesystems: `/proc` (meminfo, ps, netinfo, drivers, status, uptime, version)
-- Device filesystem (`/dev`) support
+- Virtual filesystems: `/proc`, `/dev`, RAMFS, TMPFS
 - Path resolution across mounted filesystems
+- **See [VIRTUAL_FILESYSTEMS.md](VIRTUAL_FILESYSTEMS.md) for detailed documentation**
 
 ### Hardware Drivers
 - **Input/Output**: PS/2 keyboard and mouse drivers, PC Speaker driver
@@ -900,9 +900,10 @@ O ejecutar directamente:
 
 ### Sistema de Archivos Virtual
 - Capa de abstracción VFS
-- Soporte para sistema de archivos MINIX
-- Sistema de archivos RAM para archivos de arranque
+- Soporte para sistemas de archivos MINIX, RAMFS, TMPFS
 - Gestión de puntos de montaje
+- Filesystems virtuales: `/proc`, `/dev`, RAMFS, TMPFS
+- **Ver [VIRTUAL_FILESYSTEMS.md](VIRTUAL_FILESYSTEMS.md) para documentación detallada**
 
 ### Controladores de Hardware
 - **Entrada/Salida**: Controladores de teclado y ratón PS/2, controlador de altavoz PC
