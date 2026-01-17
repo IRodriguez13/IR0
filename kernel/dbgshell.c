@@ -526,7 +526,8 @@ static void cmd_echo(const char *text)
         kfree(new_content);
         return;
       }
-      strcpy(normalized_path, fname_start);
+      strncpy(normalized_path, fname_start, sizeof(normalized_path) - 1);
+      normalized_path[sizeof(normalized_path) - 1] = '\0';
     }
     else
     {
@@ -539,7 +540,8 @@ static void cmd_echo(const char *text)
         return;
       }
       normalized_path[0] = '/';
-      strcpy(normalized_path + 1, fname_start);
+      strncpy(normalized_path + 1, fname_start, sizeof(normalized_path) - 2);
+      normalized_path[sizeof(normalized_path) - 1] = '\0';
     }
 
     /* If append requested, read existing file and concatenate */
@@ -991,7 +993,15 @@ static void cmd_sed(const char *args)
     typewriter_vga_print("'\n", 0x0A);
   }
 
-  /* TODO: Free memory (need kfree syscall or memory management) */
+  /* Memory cleanup: In kernel mode, kmalloc/kfree are available.
+   * file_data and modified are allocated with kmalloc and should be freed.
+   * However, since this is a debug shell command, memory will be reclaimed
+   * on process termination. For production use, uncomment the following:
+   * if (file_data) kfree(file_data);
+   * if (modified && modified != file_data) kfree(modified);
+   */
+  if (file_data) kfree(file_data);
+  if (modified && modified != file_data) kfree(modified);
 }
 
 static void cmd_type(const char *mode)
@@ -1197,7 +1207,8 @@ static void cmd_mv(const char *args)
       return;
     }
     
-    strcpy(target_path, dst);
+    strncpy(target_path, dst, sizeof(target_path) - 1);
+    target_path[sizeof(target_path) - 1] = '\0';
     if (dst[dst_len - 1] != '/')
     {
       target_path[dst_len] = '/';
@@ -1682,67 +1693,6 @@ static void cmd_lsblk(const char *args __attribute__((unused)))
   cmd_cat("/proc/blockdevices");
 }
 
-/* DEPRECATED: Old implementation - kept for reference */
-static void cmd_lsblk_old(const char *args)
-{
-  (void)args; // Unused parameter
-
-  /* Print header */
-  typewriter_vga_print("NAME        MAJ:MIN   SIZE (bytes)    MODEL\n", 0x0F);
-  typewriter_vga_print("------------------------------------------------\n", 0x07);
-
-  /* Check each possible ATA device (0-3) */
-  for (uint8_t i = 0; i < 4; i++)
-  {
-    ata_device_info_t info;
-
-    /* Get device info */
-    if (!ata_get_device_info(i, &info))
-    {
-      continue; // Skip if device not present
-    }
-
-    char name[8];
-
-    /* Generate device name (hda, hdb, etc.) */
-    name[0] = 'h';
-    name[1] = 'd' + i;
-    name[2] = '\0';
-
-    /* Print device name */
-    typewriter_vga_print(name, 0x0F);
-    typewriter_vga_print("         ", 0x0F);
-
-    /* Print major:minor */
-    char num_buf[16];
-    itoa(i, num_buf, 10);
-    typewriter_vga_print(num_buf, 0x0F);
-    typewriter_vga_print(":0", 0x0F);
-    typewriter_vga_print("       ", 0x0F);
-
-    /* Print size in bytes */
-    char size_buf[32];
-    uint64_to_str(info.capacity_bytes, size_buf);
-    typewriter_vga_print(size_buf, 0x0A);
-
-    /* Add some padding for alignment */
-    int pad = 15 - strlen(size_buf);
-    while (pad-- > 0)
-    {
-      typewriter_vga_print(" ", 0x0A);
-    }
-
-    /* Print model if available */
-    if (info.model[0] != '\0')
-    {
-      typewriter_vga_print("  ", 0x0F);
-      typewriter_vga_print(info.model, 0x0F);
-    }
-
-    typewriter_vga_print("\n", 0x0F);
-  }
-}
-
 static void cmd_df(const char *args __attribute__((unused)))
 {
   // Use /dev/disk filesystem interface (polymorphic file access)
@@ -1760,12 +1710,16 @@ static void cmd_dmesg(const char *args __attribute__((unused)))
 
 static void cmd_audio_test(const char *args __attribute__((unused)))
 {
-  syscall(112, 0, 0, 0);
+  /* Use /dev/audio filesystem interface (polymorphic file access) */
+  typewriter_vga_print("Audio device info:\n", 0x0F);
+  cmd_cat("/dev/audio");
 }
 
 static void cmd_mouse_test(const char *args __attribute__((unused)))
 {
-  syscall(113, 0, 0, 0);
+  /* Use /dev/mouse filesystem interface (polymorphic file access) */
+  typewriter_vga_print("Mouse device info:\n", 0x0F);
+  cmd_cat("/dev/mouse");
 }
 
 /* Parse IP address from string (e.g., "192.168.1.1") */

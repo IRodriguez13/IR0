@@ -29,8 +29,12 @@ void rr_add_process(process_t *proc)
 
 	node = kmalloc(sizeof(rr_task_t));
 	if (!node)
+	{
+		BUG_ON(1); /* Out of memory in scheduler */
 		return;
+	}
 
+	BUG_ON(!proc); /* Invalid process parameter */
 	node->process = proc;
 	node->next = NULL;
 
@@ -66,6 +70,8 @@ void rr_schedule_next(void)
 		rr_current = rr_current->next ? rr_current->next : rr_head;
 
 	next = rr_current->process;
+	BUG_ON(!next); /* Scheduler node should always have process */
+
 	if (!next)
 		return;
 

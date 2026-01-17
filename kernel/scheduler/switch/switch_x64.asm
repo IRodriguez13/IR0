@@ -3,7 +3,7 @@ global switch_context_x64
 section .text
 
 switch_context_x64:
-    ; Guardar todos los registros
+    ; Save all registers
     push rbp
     mov rbp, rsp
     push r15
@@ -12,26 +12,26 @@ switch_context_x64:
     push r12
     push rbx
     
-    ; Log: Inicio del cambio de contexto
-    mov r15, rdi  ; Contexto actual
-    mov r14, rsi  ; Nuevo contexto
+    ; Log: Context switch start
+    mov r15, rdi  ; Current context
+    mov r14, rsi  ; New context
     
-    ; Verificar punteros nulos
+    ; Check for null pointers
     test r15, r15
     jz .done
     test r14, r14
     jz .done
      
-    ; 1. Guardar contexto actual
+    ; 1. Save current context
     mov [r15 + 0x00], rax
     mov [r15 + 0x08], rbx
     mov [r15 + 0x10], rcx
     mov [r15 + 0x18], rdx
     mov [r15 + 0x20], rsi
     mov rax, r15
-    mov [r15 + 0x28], rax  ; Guardar puntero a la estructura
+    mov [r15 + 0x28], rax  ; Save pointer to structure
     
-    ; Guardar registros restantes
+    ; Save remaining registers
     mov [r15 + 0x30], r8
     mov [r15 + 0x38], r9
     mov [r15 + 0x40], r10
@@ -40,19 +40,19 @@ switch_context_x64:
     mov [r15 + 0x58], r13
     mov [r15 + 0x60], r14
     
-    ; Guardar rsp y rbp
+    ; Save rsp and rbp
     mov [r15 + 0x70], rsp
     mov [r15 + 0x78], rbp
     
-    ; Guardar RIP (dirección de retorno)
-    mov rax, [rsp + 8*7]  ; Saltar los registros guardados
+    ; Save RIP (return address)
+    mov rax, [rsp + 8*7]  ; Skip saved registers
     mov [r15 + 0x80], rax
     
-    ; Guardar RFLAGS
+    ; Save RFLAGS
     pushfq
     pop qword [r15 + 0x88]
     
-    ; Guardar registros de segmento
+    ; Save segment registers
     mov ax, cs
     mov [r15 + 0x90], ax
     mov ax, ds
@@ -66,16 +66,16 @@ switch_context_x64:
     mov ax, ss
     mov [r15 + 0x9A], ax
     
-    ; Guardar CR3
+    ; Save CR3
     mov rax, cr3
     mov [r15 + 0xB0], rax
     
     
-    ; Cargar CR3 (cambio de espacio de direcciones)
+    ; Load CR3 (address space change)
     mov rax, [r14 + 0xB0]
     mov cr3, rax
     
-    ; Cargar registros de segmento
+    ; Load segment registers
     mov ax, [r14 + 0x9A]  ; SS
     mov ss, ax
     mov ax, [r14 + 0x92]  ; DS
@@ -87,14 +87,14 @@ switch_context_x64:
     mov ax, [r14 + 0x98]  ; GS
     mov gs, ax
     
-    ; Cargar registros de propósito general
+    ; Load general purpose registers
     mov rax, [r14 + 0x00]
     mov rbx, [r14 + 0x08]
     mov rcx, [r14 + 0x10]
     mov rdx, [r14 + 0x18]
     mov rsi, [r14 + 0x20]
     
-    ; Cargar registros adicionales
+    ; Load additional registers
     mov r8,  [r14 + 0x30]
     mov r9,  [r14 + 0x38]
     mov r10, [r14 + 0x40]
@@ -102,29 +102,29 @@ switch_context_x64:
     mov r12, [r14 + 0x50]
     mov r13, [r14 + 0x58]
     
-    ; Cargar RSP y RBP
+    ; Load RSP and RBP
     mov rsp, [r14 + 0x70]
     mov rbp, [r14 + 0x78]
     
-    ; Cargar RFLAGS
+    ; Load RFLAGS
     push qword [r14 + 0x88]
     popfq
     
-    ; Preparar pila para iretq
+    ; Prepare stack for iretq
     push qword [r14 + 0x9A]  ; SS
     push rsp                 ; RSP
     push qword [r14 + 0x88]  ; RFLAGS
     push qword [r14 + 0x90]  ; CS
     push qword [r14 + 0x80]  ; RIP
     
-    ; Cargar RDI (último registro a restaurar)
+    ; Load RDI (last register to restore)
     mov rdi, [r14 + 0x28]
       
-    ; Retornar al nuevo contexto
+    ; Return to new context
     iretq
 
 .done:
-    ; Limpiar pila y retornar
+    ; Clean stack and return
     pop rbx
     pop r12
     pop r13

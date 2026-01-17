@@ -47,6 +47,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/procfs.h>
 #include <ir0/devfs.h>
+#include <ir0/signals.h>
 
 /* Forward declaration */
 static fd_entry_t *get_process_fd_table(void);
@@ -76,12 +77,12 @@ int64_t sys_exit(int exit_code)
   current_process->exit_code = exit_code;
   current_process->state = PROCESS_ZOMBIE;
 
-  /* Llamar al scheduler para pasar a otro proceso */
+  /* Call scheduler to switch to another process */
   rr_schedule_next();
 
-  panicex("You left the shell succesfully! but you should't do that!", RUNNING_OUT_PROCESS, "SYSCALLS.C", 75, "sys_exit");
+  panicex("Process exited successfully but this should not happen in kernel mode", RUNNING_OUT_PROCESS, __FILE__, __LINE__, __func__);
 
-  /* Nunca debería volver aquí */
+  /* Should never return here */
   return 0;
 }
 
@@ -92,12 +93,20 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   if (!buf || count == 0)
     return 0;
 
+  /* Validate user buffer for regular files */
+  char kernel_buf[4096];
+  const char *str = NULL;
+  size_t copy_size = (count < sizeof(kernel_buf)) ? count : sizeof(kernel_buf);
+  
   if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
   {
-    const char *str = (const char *)buf;
+    /* For console, copy from user space */
+    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+      return -EFAULT;
+    str = kernel_buf;
     uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
     /* Use typewriter VGA effect for console output */
-    for (size_t i = 0; i < count && i < 1024; i++)
+    for (size_t i = 0; i < copy_size && i < 1024; i++)
     {
       if (str[i] == '\n')
         typewriter_vga_print("\n", color);
@@ -117,7 +126,11 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     devfs_node_t *node = devfs_find_node_by_id(device_id);
     if (!node || !node->ops || !node->ops->write)
       return -EBADF;
-    return node->ops->write(&node->entry, buf, count, 0);
+    
+    /* Copy from user space for device writes */
+    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+      return -EFAULT;
+    return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
   }
 
   /* Handle regular file descriptors */
@@ -129,11 +142,15 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   if (!check_file_access(fd_table[fd].path, ACCESS_WRITE, current_process))
     return -EACCES;
 
+  /* Copy from user space for regular file writes */
+  if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+    return -EFAULT;
+
   /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)
   {
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-    int ret = vfs_write(vfs_file, (const char *)buf, count);
+    int ret = vfs_write(vfs_file, kernel_buf, copy_size);
     if (ret >= 0)
     {
       fd_table[fd].offset = vfs_file->f_pos;
@@ -154,9 +171,14 @@ int64_t sys_read(int fd, void *buf, size_t count)
 
   /* Handle /proc file descriptors (special positive numbers) */
   if (fd >= 1000 && fd <= 1999) {
+    char kernel_read_buf[4096];
+    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
     off_t offset = proc_get_offset(fd);
-    int ret = proc_read(fd, (char*)buf, count, offset);
+    int ret = proc_read(fd, kernel_read_buf, read_size, offset);
     if (ret > 0) {
+      /* Copy to user space */
+      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
+        return -EFAULT;
       proc_set_offset(fd, offset + ret);
     }
     return ret;
@@ -165,18 +187,26 @@ int64_t sys_read(int fd, void *buf, size_t count)
   /* Handle /dev file descriptors (special positive numbers) */
   if (fd >= 2000 && fd <= 2999)
   {
+    char kernel_read_buf[4096];
+    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
     ensure_devfs_init();
     uint32_t device_id = (uint32_t)(fd - 2000);
     devfs_node_t *node = devfs_find_node_by_id(device_id);
     if (!node || !node->ops || !node->ops->read)
       return -EBADF;
-    return node->ops->read(&node->entry, buf, count, 0);
+    int ret = node->ops->read(&node->entry, kernel_read_buf, read_size, 0);
+    if (ret > 0) {
+      /* Copy to user space */
+      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
+        return -EFAULT;
+    }
+    return ret;
   }
 
   if (fd == STDIN_FILENO)
   {
     /* Read from keyboard buffer - NON-BLOCKING */
-    char *buffer = (char *)buf;
+    char kernel_read_buf[256];
     size_t bytes_read = 0;
 
     /* Only read if there's data available */
@@ -185,12 +215,21 @@ int64_t sys_read(int fd, void *buf, size_t count)
       char c = keyboard_buffer_get();
       if (c != 0)
       {
-        buffer[bytes_read++] = c;
+        kernel_read_buf[bytes_read++] = c;
       }
     }
 
+    /* Copy to user space */
+    if (bytes_read > 0)
+    {
+      size_t copy_len = (bytes_read < count) ? bytes_read : count;
+      if (copy_to_user(buf, kernel_read_buf, copy_len) != 0)
+        return -EFAULT;
+      return (int64_t)copy_len;
+    }
+
     /* Return 0 if no data available */
-    return (int64_t)bytes_read;
+    return 0;
   }
 
   /* Handle regular file descriptors */
@@ -205,10 +244,15 @@ int64_t sys_read(int fd, void *buf, size_t count)
   /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)
   {
+    char kernel_read_buf[4096];
+    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-    int ret = vfs_read(vfs_file, (char *)buf, count);
+    int ret = vfs_read(vfs_file, kernel_read_buf, read_size);
     if (ret >= 0)
     {
+      /* Copy to user space */
+      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
+        return -EFAULT;
       fd_table[fd].offset = vfs_file->f_pos;
       return ret;
     }
@@ -413,31 +457,6 @@ int64_t sys_append(const char *path, const char *content, size_t count)
   return vfs_append(path, content, count);
 }
 
-int64_t sys_df(void)
-{
-  /* DEPRECATED: Use 'cat /dev/disk' instead of this syscall */
-  /* Maintained for backward compatibility */
-  if (!current_process)
-    return -ESRCH;
-
-  /* Use /dev/disk filesystem interface */
-  int fd = sys_open("/dev/disk", O_RDONLY, 0);
-  if (fd < 0) {
-    return -1;
-  }
-  
-  char buffer[1024];
-  int64_t bytes = sys_read(fd, buffer, sizeof(buffer) - 1);
-  sys_close(fd);
-  
-  if (bytes > 0) {
-    buffer[bytes] = '\0';
-    sys_write(STDOUT_FILENO, buffer, bytes);
-  }
-  
-  return bytes > 0 ? 0 : -1;
-}
-
 int64_t sys_link(const char *oldpath, const char *newpath)
 {
   if (!current_process || !oldpath || !newpath)
@@ -447,100 +466,7 @@ int64_t sys_link(const char *oldpath, const char *newpath)
   return vfs_link(oldpath, newpath);
 }
 
-int64_t sys_lsblk(void)
-{
-  /* DEPRECATED: Use 'cat /proc/blockdevices' instead of this syscall */
-  /* Maintained for backward compatibility */
-  if (!current_process)
-    return -ESRCH;
-
-  /* Use /proc/blockdevices filesystem interface */
-  int fd = sys_open("/proc/blockdevices", O_RDONLY, 0);
-  if (fd < 0) {
-    return -1;
-  }
-  
-  char buffer[2048];
-  int64_t bytes = sys_read(fd, buffer, sizeof(buffer) - 1);
-  sys_close(fd);
-  
-  if (bytes > 0) {
-    buffer[bytes] = '\0';
-    sys_write(STDOUT_FILENO, buffer, bytes);
-  }
-  
-  return bytes > 0 ? 0 : -1;
-}
-
 /* DEPRECATED: Old implementation - kept for reference */
-int64_t sys_lsblk_old(void)
-{
-  if (!current_process)
-    return -ESRCH;
-    
-  uint8_t drives[4] = {0};
-  int drive_count = 0;
-  
-  for (uint8_t i = 0; i < 4; i++) {
-    if (ata_drive_present(i)) {
-      drives[drive_count++] = i;
-    }
-  }
-
-  sys_write(1, "NAME MAJ:MIN SIZE MODEL\n", 23);
-
-  /* For each drive */
-  for (int i = 0; i < drive_count; i++) {
-    uint8_t drive = drives[i];
-    char info[256];
-    int len = 0;
-    
-    uint64_t size = ata_get_size(drive);
-    const char *model = ata_get_model(drive);
-    const char *serial = ata_get_serial(drive);
-    
-    /* Format basic info */
-    len = snprintf(info, sizeof(info), "hd%c  %3d:0   %5lluG %s (%s)\n", 
-                   'a' + drive, drive, size / (2 * 1024 * 1024), model, serial);
-    
-    sys_write(1, info, len);
-
-    /* Read first sector to check partition table type */
-    uint8_t first_sector[512];
-    if (ata_read_sectors(drive, 0, 1, first_sector) == 0) {
-      /* Detect partition table type and handle accordingly */
-      /* GPT signature check */
-      if (first_sector[450] == 0xEE)
-      {
-        /* GPT handling will be implemented later */
-        continue;
-      }
-
-      /* Check MBR signature */
-      if (first_sector[510] == 0x55 && first_sector[511] == 0xAA) {
-        /* Process MBR partition entries */
-        for (int j = 0; j < 4; j++) {
-          /* Partition entry offset calculation */
-          int entry_offset = 446 + (j * 16);
-          uint8_t system_id = first_sector[entry_offset + 4];
-          uint32_t total_sectors;
-
-          memcpy(&total_sectors, &first_sector[entry_offset + 12], 4);
-
-          if (system_id != 0) {
-            len = snprintf(info, sizeof(info), "└─hd%c%d %3d:%-3d %5uG %s\n",
-                         'a' + drive, j + 1, drive, j + 1,
-                         total_sectors / (2 * 1024 * 1024),
-                         get_fs_type(system_id));
-            sys_write(1, info, len);
-          }
-        }
-      }
-    }
-  }
-
-  return 0;
-}
 
 int64_t sys_creat(const char *pathname, mode_t mode)
 {
@@ -927,6 +853,33 @@ int64_t sys_waitpid(pid_t pid, int *status, int options)
   return sys_wait4(pid, status, options, NULL);
 }
 
+/**
+ * sys_kill - Send a signal to a process
+ * @pid: Target process ID
+ * @signal: Signal number to send
+ *
+ * Returns: 0 on success, -1 on error
+ */
+int64_t sys_kill(pid_t pid, int signal)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  /* Validate signal number */
+  if (signal < 0 || signal >= _NSIG)
+    return -EINVAL;
+
+  /* Can't send signal to PID 0 or negative */
+  if (pid <= 0)
+    return -EINVAL;
+
+  /* Send signal to target process */
+  if (send_signal(pid, signal) != 0)
+    return -ESRCH; /* Process not found */
+
+  return 0;
+}
+
 int64_t sys_kernel_info(void *info_buffer, size_t buffer_size)
 {
   if (!current_process || !info_buffer)
@@ -1226,45 +1179,6 @@ int64_t sys_rmdir_recursive(const char *pathname)
 }
 
 
-int64_t sys_audio_test(void)
-{
-    if (sb16_is_available())
-    {
-        /* Just initialize speaker as a test or play a beep if implemented */
-        sb16_speaker_on();
-        print("AUDIO: SB16 Speaker toggled ON\n");
-        return 0;
-    }
-    print("AUDIO: Sound Blaster not available\n");
-    return -1;
-}
-
-int64_t sys_mouse_test(void)
-{
-    if (ps2_mouse_is_available())
-    {
-        ps2_mouse_state_t *st = ps2_mouse_get_state();
-        print("MOUSE: Status: Initialized\n");
-        print("MOUSE: Pos: (");
-        char buf[16];
-        itoa((int)st->x, buf, 10);
-        print(buf);
-        print(", ");
-        itoa((int)st->y, buf, 10);
-        print(buf);
-        print(")\n");
-        print("MOUSE: Buttons: L=");
-        print(st->left_button ? "1" : "0");
-        print(" R=");
-        print(st->right_button ? "1" : "0");
-        print(" M=");
-        print(st->middle_button ? "1" : "0");
-        print("\n");
-        return 0;
-    }
-    print("MOUSE: PS/2 Mouse not available\n");
-    return -1;
-}
 
 int64_t sys_ping(ip4_addr_t dest_ip)
 {
@@ -1305,6 +1219,7 @@ int64_t sys_ping(ip4_addr_t dest_ip)
     else
     {
         print("PING: Failed to send Echo Request\n");
+        serial_print("[SYSCALL] ERROR - PING: Failed to send Echo Request\n");
         return -1;
     }
 }
@@ -1478,24 +1393,18 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                      (const char *)arg3);
   case 91:
     return sys_append((const char *)arg1, (const char *)arg2, (size_t)arg3);
-  case 92:
-    return sys_lsblk();
   case 94:
     return sys_whoami();
-  case 95:
-    return sys_df();
   case 100:
     return sys_chmod((const char *)arg1, (mode_t)arg2);
   case 101:
     return sys_link((const char *)arg1, (const char *)arg2);
-  case 112:
-    return sys_audio_test();
-  case 113:
-    return sys_mouse_test();
   case 115:
     return sys_ping((ip4_addr_t)arg1);
   case 116:
     return sys_ifconfig((ip4_addr_t)arg1, (ip4_addr_t)arg2, (ip4_addr_t)arg3);
+  case 117:
+    return sys_kill((pid_t)arg1, (int)arg2);
   default:
     print("UNKNOWN_SYSCALL");
     print("\n");

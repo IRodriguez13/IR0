@@ -299,6 +299,42 @@ void cpu_wait(void)
 #endif
 }
 
+/**
+ * Architecture-specific early initialization wrapper
+ * Calls the appropriate architecture implementation
+ */
+void arch_early_init(void)
+{
+#if defined(__x86_64__) || defined(__amd64__)
+    /* x86-64 specific early init */
+    extern void arch_early_init_x86_64(void);
+    arch_early_init_x86_64();
+#elif defined(__aarch64__)
+    /* ARM64 early init - to be implemented */
+    /* For now, do nothing */
+#else
+    #error "Unsupported architecture for arch_early_init()"
+#endif
+}
+
+/**
+ * Architecture-specific interrupt initialization wrapper
+ * Calls the appropriate architecture implementation
+ */
+void arch_interrupt_init(void)
+{
+#if defined(__x86_64__) || defined(__amd64__)
+    /* x86-64 specific interrupt init */
+    extern void arch_interrupt_init_x86_64(void);
+    arch_interrupt_init_x86_64();
+#elif defined(__aarch64__)
+    /* ARM64 interrupt init - to be implemented */
+    /* For now, do nothing */
+#else
+    #error "Unsupported architecture for arch_interrupt_init()"
+#endif
+}
+
 // ===============================================================================
 // FUNCIONES DE DIVISIÓN 64-BIT (para resolver referencias indefinidas)
 // ===============================================================================

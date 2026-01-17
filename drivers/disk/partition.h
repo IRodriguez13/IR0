@@ -52,9 +52,29 @@ typedef struct {
     uint16_t name[36];  // UTF-16LE
 } __attribute__((packed)) gpt_partition_entry_t;
 
+// Unified partition information structure
+typedef struct {
+    uint8_t disk_id;
+    uint8_t partition_number;
+    uint8_t is_gpt;
+    uint8_t system_id;  // For MBR partitions
+    uint64_t start_lba;
+    uint64_t end_lba;
+    uint64_t total_sectors;
+    uint8_t type_guid[16];  // For GPT partitions
+    uint8_t unique_guid[16];  // For GPT partitions
+    uint8_t bootable;  // For MBR partitions
+} partition_info_t;
+
+#define MAX_PARTITIONS_PER_DISK 128
+#define MAX_DISKS 4
+#define MAX_TOTAL_PARTITIONS (MAX_PARTITIONS_PER_DISK * MAX_DISKS)
+
 // Function declarations
 int read_partition_table(uint8_t disk_id);
 int is_gpt_disk(uint8_t disk_id);
 const char* get_partition_type(uint8_t system_id);
+int get_partition_count(uint8_t disk_id);
+int get_partition_info(uint8_t disk_id, uint8_t partition_num, partition_info_t *info);
 
 #endif

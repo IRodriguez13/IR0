@@ -27,7 +27,7 @@ typedef struct fd_entry
 	char path[256];
 	int flags;
 	void *vfs_file;
-	uint64_t offset; // Agregado para manejar desplazamientos
+	uint64_t offset; /* File offset for seek operations */
 } fd_entry_t;
 
 /* Process execution mode */
@@ -125,6 +125,9 @@ process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 
 uint64_t create_process_page_directory(void);
 void process_init_fd_table(process_t *process);
+
+/* Process lifecycle management */
+void process_reap_zombies(process_t *parent); /* Reap zombie children (used by init) */
 
 
 extern process_t *current_process;

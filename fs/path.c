@@ -77,7 +77,8 @@ int normalize_path(const char *src, char *dest, size_t size)
         if (pos + comp_len >= size)
             return -1;
 
-        strcpy(dest + pos, comp);
+        strncpy(dest + pos, comp, size - pos - 1);
+        dest[size - 1] = '\0';
         pos += comp_len;
     }
 
@@ -111,7 +112,8 @@ int join_paths(const char *base, const char *rel, char *dest, size_t size)
     if (base_len + 1 + rel_len >= sizeof(combined))
         return -1;
 
-    strcpy(combined, base);
+    strncpy(combined, base, sizeof(combined) - 1);
+    combined[sizeof(combined) - 1] = '\0';
     if (combined[base_len - 1] != '/')
     {
         combined[base_len] = '/';

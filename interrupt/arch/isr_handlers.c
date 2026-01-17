@@ -15,7 +15,9 @@
 #include "pic.h"
 #include "io.h"
 #include <ir0/vga.h>
+#include <ir0/signals.h>
 #include <kernel/rr_sched.h>
+#include <kernel/process.h>
 #include <drivers/net/rtl8139.h>
 
 /* Declaraciones externas para el nuevo driver de teclado */
@@ -30,9 +32,62 @@ void isr_handler64(uint64_t interrupt_number)
     /* Manejar excepciones del CPU (0-31) */
     if (interrupt_number < 32)
     {
-        print("Excepción CPU #");
-        print_int32(interrupt_number);
-        print("\n");
+        process_t *current = process_get_current();
+        int signal_to_send = 0;
+
+        /* Map CPU exceptions to signals to prevent system hangs */
+        switch (interrupt_number)
+        {
+            case 0:  /* Divide by Zero */
+                signal_to_send = SIGFPE;
+                break;
+            case 4:  /* Overflow */
+                signal_to_send = SIGFPE;
+                break;
+            case 6:  /* Invalid Opcode */
+                signal_to_send = SIGILL;
+                break;
+            case 8:  /* Double Fault - severe error */
+                signal_to_send = SIGSEGV;
+                break;
+            case 11: /* Segment Not Present */
+                signal_to_send = SIGSEGV;
+                break;
+            case 13: /* General Protection Fault */
+                signal_to_send = SIGSEGV;
+                break;
+            case 14: /* Page Fault */
+                signal_to_send = SIGSEGV;
+                break;
+            case 19: /* SIMD FPU Exception */
+                signal_to_send = SIGFPE;
+                break;
+            default:
+                /* For other exceptions, use SIGSEGV as safe default */
+                signal_to_send = SIGSEGV;
+                break;
+        }
+
+        /* Send signal to current process if it exists */
+        if (current && signal_to_send != 0)
+        {
+#if DEBUG_PROCESS
+            print("Excepción CPU #");
+            print_int32(interrupt_number);
+            print(" -> SIG");
+            print_int32(signal_to_send);
+            print("\n");
+#endif
+            send_signal(current->task.pid, signal_to_send);
+            /* Signal will be handled by scheduler on next context switch */
+        }
+        else
+        {
+            /* No process context or in kernel - print error */
+            print("Excepción CPU #");
+            print_int32(interrupt_number);
+            print(" (sin proceso)\n");
+        }
 
         /* Para excepciones, NO enviar EOI */
         return;

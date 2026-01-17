@@ -95,10 +95,9 @@ typedef enum {
 #define STDOUT_FILENO  1
 #define STDERR_FILENO  2
 
-/* Access modes for permission checking */
-#define ACCESS_READ    0x1
-#define ACCESS_WRITE   0x2
-#define ACCESS_EXECUTE 0x4
+/* Access modes for permission checking - use definitions from permissions.h */
+#include <ir0/permissions.h>
+#define ACCESS_EXECUTE ACCESS_EXEC
 
 /* Memory protection flags for mmap */
 #define PROT_READ     0x1
