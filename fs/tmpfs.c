@@ -85,7 +85,8 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
 
     root_inode->mode = S_IFDIR | 0755;
     root_inode->is_dir = true;
-    strcpy(root_inode->name, "/");
+    strncpy(root_inode->name, "/", TMPFS_MAX_NAME_LEN);
+    root_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
     root_inode->parent = NULL;
     tmpfs_root->root = root_inode;
     tmpfs_root->next_ino = 1; /* Root is inode 1 */

@@ -200,8 +200,15 @@ void arch_dump_registers(void);
 
 /**
  * Early architecture initialization
+ * Sets up core architecture features (GDT/TSS for x86, etc.)
  */
 void arch_early_init(void);
+
+/**
+ * Initialize architecture-specific interrupt system
+ * Sets up interrupt tables and controllers (IDT/PIC for x86, GIC for ARM, etc.)
+ */
+void arch_interrupt_init(void);
 
 /**
  * Late architecture initialization

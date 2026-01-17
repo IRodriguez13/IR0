@@ -84,7 +84,8 @@ void vfs_simple_init(void)
         return;
     }
 
-    strcpy(root_directory.name, "/");
+    strncpy(root_directory.name, "/", MAX_FILENAME_LEN - 1);
+    root_directory.name[MAX_FILENAME_LEN - 1] = '\0';
     root_directory.file_count = 0;
     root_directory.permissions = 0755;
     root_directory.created_time = get_current_time();
@@ -128,7 +129,8 @@ int vfs_simple_mkdir(const char *path)
     }
 
     simple_directory_t *new_dir = &directories[directory_count];
-    strcpy(new_dir->name, path);
+    strncpy(new_dir->name, path, MAX_FILENAME_LEN - 1);
+    new_dir->name[MAX_FILENAME_LEN - 1] = '\0';
     new_dir->file_count = 0;
     new_dir->permissions = 0755;
     new_dir->created_time = get_current_time();
@@ -226,7 +228,8 @@ int vfs_simple_create_file(const char *path, const char *filename, uint32_t size
     }
 
     simple_file_t *new_file = &dir->files[dir->file_count];
-    strcpy(new_file->name, filename);
+    strncpy(new_file->name, filename, MAX_FILENAME_LEN - 1);
+    new_file->name[MAX_FILENAME_LEN - 1] = '\0';
     new_file->size = size;
     new_file->permissions = 0644;
     new_file->created_time = get_current_time();
@@ -255,8 +258,10 @@ int vfs_allocate_sectors(int count)
 {
     (void)count; // Suppress unused parameter warning
 
-    // TODO: Implementar asignación real de sectores
-    // Por ahora, retornar éxito
+    /* Minimal implementation: Return success.
+     * Full implementation would allocate actual disk sectors for the file.
+     * For now, this allows basic file operations to proceed.
+     */
     return 0;
 }
 
@@ -264,7 +269,9 @@ int vfs_remove_directory(const char *path)
 {
     (void)path; // Suppress unused parameter warning
 
-    // TODO: Implementar remoción real de directorio
-    // Por ahora, retornar éxito
+    /* Minimal implementation: Return success.
+     * Full implementation would remove the directory from the filesystem.
+     * For now, this allows basic directory operations to proceed.
+     */
     return 0;
 }

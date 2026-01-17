@@ -417,8 +417,9 @@ struct vfs_inode *vfs_path_lookup(const char *path)
       return &vfs_inode_wrapper;
     }
 
-    /* For other filesystems, return mount root for now */
-    /* TODO: Implement proper lookup for other filesystems */
+    /* For other filesystems, return mount root as fallback.
+     * Full implementation would require filesystem-specific lookup operations.
+     */
     return mp->mount_root;
   }
 
@@ -930,7 +931,8 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
         {
             return -ENAMETOOLONG;  /* Path too long */
         }
-        strcpy(normalized_path + 1, path);
+        strncpy(normalized_path + 1, path, sizeof(normalized_path) - 2);
+        normalized_path[sizeof(normalized_path) - 1] = '\0';
     }
     else
     {
@@ -939,7 +941,8 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
         {
             return -ENAMETOOLONG;  /* Path too long */
         }
-        strcpy(normalized_path, path);
+        strncpy(normalized_path, path, sizeof(normalized_path) - 1);
+        normalized_path[sizeof(normalized_path) - 1] = '\0';
     }
     
     /* Check if path is valid and not root */
@@ -1090,8 +1093,9 @@ int vfs_stat(const char *path, stat_t *buf)
         {
             return minix_fs_stat(path, buf);
         }
-        /* For other filesystems, they should provide stat through their operations */
-        /* TODO: Add filesystem-specific stat operations */
+        /* For other filesystems, they should provide stat through their operations.
+         * If not available, fall through to MINIX fallback below.
+         */
     }
     
     /* Fallback: try MINIX if available */
@@ -1251,6 +1255,12 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
     if (ret != 0)
     {
       print("MINIX_MOUNT: ERROR - minix_fs_init failed\n");
+      serial_print("[VFS] ERROR - MINIX_MOUNT: minix_fs_init failed with error code: ");
+      {
+        extern void serial_print_hex32(uint32_t num);
+        serial_print_hex32((uint32_t)ret);
+        serial_print("\n");
+      }
       return ret;
     }
     print("MINIX_MOUNT: minix_fs_init OK\n");
@@ -1268,6 +1278,7 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
     if (!root_sb)
     {
       print("MINIX_MOUNT: ERROR - kmalloc failed for superblock\n");
+      serial_print("[VFS] ERROR - MINIX_MOUNT: kmalloc failed for superblock (out of memory)\n");
       return -ENOMEM;
     }
 
@@ -1289,6 +1300,7 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
     if (!root_inode)
     {
       print("MINIX_MOUNT: ERROR - kmalloc failed for root_inode\n");
+      serial_print("[VFS] ERROR - MINIX_MOUNT: kmalloc failed for root_inode (out of memory)\n");
       kfree(root_sb);
       root_sb = NULL;
       return -ENOMEM;
@@ -1326,6 +1338,12 @@ int vfs_init_with_minix(void)
   if (ret != 0)
   {
     print("VFS: ERROR - vfs_init failed\n");
+    serial_print("[VFS] ERROR - vfs_init failed with error code: ");
+    {
+      extern void serial_print_hex32(uint32_t num);
+      serial_print_hex32((uint32_t)ret);
+      serial_print("\n");
+    }
     return ret;
   }
   print("VFS: vfs_init OK\n");
@@ -1336,9 +1354,39 @@ int vfs_init_with_minix(void)
   if (ret != 0)
   {
     print("VFS: ERROR - register_filesystem failed\n");
+    serial_print("[VFS] ERROR - register_filesystem failed with error code: ");
+    {
+      extern void serial_print_hex32(uint32_t num);
+      serial_print_hex32((uint32_t)ret);
+      serial_print("\n");
+    }
     return ret;
   }
   print("VFS: register_filesystem OK\n");
+
+  // Check if storage is available before mounting
+  extern bool ata_is_available(void);
+  extern bool ata_drive_present(uint8_t drive);
+  
+  if (!ata_is_available())
+  {
+    print("VFS: ERROR - No ATA storage available\n");
+    print("VFS: Cannot mount root filesystem\n");
+    serial_print("[VFS] ERROR - No ATA storage available, cannot mount root filesystem\n");
+    return -ENODEV;
+  }
+  
+  // Check if first drive (hda) is present
+  if (!ata_drive_present(0))
+  {
+    print("VFS: WARNING - Drive 0 (/dev/hda) not present\n");
+    print("VFS: Attempting mount anyway (may fail)\n");
+    serial_print("[VFS] WARNING - Drive 0 (/dev/hda) not present, attempting mount anyway\n");
+  }
+  else
+  {
+    print("VFS: Drive 0 (/dev/hda) detected\n");
+  }
 
   // Montar root filesystem
   print("VFS: Mounting root filesystem...\n");
@@ -1346,6 +1394,12 @@ int vfs_init_with_minix(void)
   if (ret != 0)
   {
     print("VFS: ERROR - vfs_mount failed\n");
+    serial_print("[VFS] vfs_mount returned error code: ");
+    {
+      extern void serial_print_hex32(uint32_t num);
+      serial_print_hex32((uint32_t)ret);
+      serial_print("\n");
+    }
     return ret;
   }
   print("VFS: vfs_mount OK\n");
@@ -1358,6 +1412,7 @@ int vfs_init_with_minix(void)
   else
   {
     print("VFS: ERROR - root_inode is still NULL\n");
+    serial_print("[VFS] ERROR - root_inode is still NULL after mount attempt\n");
     return -ENODEV;  /* Root inode not created */
   }
 
@@ -1366,6 +1421,12 @@ int vfs_init_with_minix(void)
   if (ret != 0)
   {
     print("VFS: WARNING - Could not add root mount point\n");
+    serial_print("[VFS] WARNING - Could not add root mount point, error code: ");
+    {
+      extern void serial_print_hex32(uint32_t num);
+      serial_print_hex32((uint32_t)ret);
+      serial_print("\n");
+    }
   }
 
   extern int vfs_mkdir(const char *path, int mode);

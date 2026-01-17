@@ -62,12 +62,10 @@ typedef uint32_t mode_t;
 
 /* EXTERNAL DECLARATIONS (for syscalls)                                     */
 
-/* ATA driver functions */
-extern bool ata_drive_present(uint8_t drive);
+/* ATA driver functions - declarations moved to ata.h to avoid type conflicts */
 extern uint64_t ata_get_size(uint8_t drive);
 extern const char* ata_get_model(uint8_t drive);
 extern const char* ata_get_serial(uint8_t drive);
-extern bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t count, void *buffer);
 extern const char* get_fs_type(uint8_t system_id);
 
 #endif /* _IR0_ERRNO_H */

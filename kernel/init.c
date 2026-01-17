@@ -72,7 +72,8 @@ int start_init_process(void)
 	init->page_directory = (uint64_t *)init->task.cr3;
 
 	/* Initialize current working directory */
-	strcpy(init->cwd, "/");
+	strncpy(init->cwd, "/", sizeof(init->cwd) - 1);
+	init->cwd[sizeof(init->cwd) - 1] = '\0';
 	
 	/* Set process command name */
 	strncpy(init->comm, "debshell", sizeof(init->comm) - 1);

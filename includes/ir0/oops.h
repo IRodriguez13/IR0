@@ -1,15 +1,15 @@
 #pragma once
 
 
-// Niveles de panic semánticos
+/* Semantic panic levels */
 typedef enum
 {
-    PANIC_KERNEL_BUG = 0, // Bug en kernel code
-    PANIC_HARDWARE_FAULT = 1, // Hardware malfunction
-    PANIC_OUT_OF_MEMORY = 2,  // System out of memory
-    PANIC_STACK_OVERFLOW = 3, // Stack corruption
-    PANIC_ASSERT_FAILED= 4,   // Assertion failure
-    PANIC_MEM = 5,            // Memory operation error (null ptr, invalid access, etc.)
+    PANIC_KERNEL_BUG = 0,      /* Bug in kernel code */
+    PANIC_HARDWARE_FAULT = 1,  /* Hardware malfunction */
+    PANIC_OUT_OF_MEMORY = 2,   /* System out of memory */
+    PANIC_STACK_OVERFLOW = 3,  /* Stack corruption */
+    PANIC_ASSERT_FAILED = 4,   /* Assertion failure */
+    PANIC_MEM = 5,             /* Memory operation error (null ptr, invalid access, etc.) */
     TESTING = 6,
     RUNNING_OUT_PROCESS = 7
 } panic_level_t;
