@@ -1,5 +1,7 @@
 # Virtual Filesystems in IR0 Kernel
 
+This document provides detailed information about the pseudo-filesystems (virtual filesystems) implemented in the IR0 kernel. For complete filesystem subsystem documentation, see `FILESYSTEM.md`.
+
 IR0 Kernel implements several virtual filesystems that provide access to kernel information and devices through the standard file interface. These filesystems follow the Unix philosophy of "everything is a file."
 
 ## Available Virtual Filesystems

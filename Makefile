@@ -224,7 +224,7 @@ DRIVER_OBJS = \
 FS_OBJS = \
     fs/vfs.o \
     fs/minix_fs.o \
-    fs/vfs_simple.o \
+    fs/vfs_simple_wrappers.o \
     fs/path.o \
     fs/chmod.o \
     fs/ramfs.o \
@@ -245,6 +245,7 @@ ARCH_OBJS = \
     arch/x86-64/sources/arch_x64.o \
     arch/x86-64/sources/gdt.o \
     arch/x86-64/sources/tss_x64.o \
+    arch/x86-64/sources/arch_early.o \
     arch/x86-64/sources/user_mode.o \
     arch/x86-64/sources/idt_arch_x64.o \
     arch/x86-64/sources/fault.o \

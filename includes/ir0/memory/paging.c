@@ -255,7 +255,16 @@ int copy_process_memory(struct process *parent, struct process *child)
     (void)parent;  /* Unused for now */
     (void)child;   /* Unused for now */
     
-    /* TODO: Implement full eager copy */
-    
+    /* Minimal implementation: Return success to allow process creation.
+     * Full implementation would:
+     * - Walk parent's page tables
+     * - Identify user pages (PAGE_USER flag set)
+     * - Allocate frames with pmm_alloc_frame()
+     * - Copy 4096 bytes per page
+     * - Map in child's page directory
+     * 
+     * WARNING: Child currently shares parent's memory space (not isolated!)
+     * This is acceptable for testing but must be fixed for production.
+     */
     return 0;  /* Stub: pretend success */
 }

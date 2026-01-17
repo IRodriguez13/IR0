@@ -14,6 +14,7 @@
 #include <ir0/memory/allocator.h>
 #include <ir0/vga.h>
 #include <string.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <ir0/net.h>
 #include <ir0/driver.h>
@@ -23,6 +24,9 @@
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
 #include <arch/common/arch_portable.h>
+#include <drivers/disk/partition.h>
+#include <drivers/storage/ata.h>
+#include <fs/vfs.h>
 
 static pid_t proc_fd_pid_map[1000];
 static int proc_fd_pid_map_init = 0;
@@ -263,7 +267,6 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
     /* Check if it's /proc/status (current process) */
     if (strncmp(after_proc, "status", 6) == 0)
     {
-        /* It's /proc/status (current process) */
         *pid_out = -1;  /* Special value for current process */
         return "status";
     }
@@ -728,6 +731,398 @@ int proc_filesystems_read(char *buf, size_t count)
     return (int)off;
 }
 
+/* Generate /proc/partitions content */
+int proc_partitions_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    memset(buf, 0, count);
+    
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "major minor  #blocks  name\n");
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+    
+    /* Iterate through all disks and their partitions */
+    for (uint8_t disk_id = 0; disk_id < MAX_DISKS; disk_id++)
+    {
+        int part_count = get_partition_count(disk_id);
+        if (part_count <= 0)
+            continue;
+        
+        for (int part_num = 0; part_num < part_count; part_num++)
+        {
+            partition_info_t part_info;
+            if (get_partition_info(disk_id, part_num, &part_info) != 0)
+                continue;
+            
+            /* Format: major minor blocks name */
+            char name_buf[16];
+            snprintf(name_buf, sizeof(name_buf), "hd%c%d", 'a' + disk_id, part_num + 1);
+            
+            uint64_t blocks = part_info.total_sectors; /* sectors are 512-byte blocks */
+            
+            /* Convert blocks to string manually */
+            char blocks_str[32];
+            char *p = blocks_str;
+            uint64_t tmp = blocks;
+            if (tmp == 0)
+            {
+                *p++ = '0';
+            }
+            else
+            {
+                char rev[32];
+                int idx = 0;
+                while (tmp > 0)
+                {
+                    rev[idx++] = '0' + (tmp % 10);
+                    tmp /= 10;
+                }
+                while (idx > 0)
+                    *p++ = rev[--idx];
+            }
+            *p = '\0';
+            
+            n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "%3d %6d %9s %s\n",
+                         (int)disk_id, part_num + 1, blocks_str, name_buf);
+            if (n < 0)
+                break;
+            if (n >= (int)(count - off))
+                n = (int)(count - off) - 1;
+            off += (size_t)n;
+        }
+    }
+    
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
+/* Generate /proc/mounts content */
+int proc_mounts_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    memset(buf, 0, count);
+    
+    size_t off = 0;
+    
+    /* Try common mount points */
+    const char *common_paths[] = { "/", "/tmp", "/proc", "/dev" };
+    
+    for (size_t i = 0; i < sizeof(common_paths) / sizeof(common_paths[0]); i++)
+    {
+        struct mount_point *mp = vfs_find_mount_point(common_paths[i]);
+        if (mp)
+        {
+            int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                             "%s %s %s rw 0 0\n",
+                             (mp->dev[0] != '\0') ? mp->dev : "none",
+                             mp->path,
+                             mp->fs_type ? mp->fs_type->name : "unknown");
+            if (n > 0 && n < (int)(count - off))
+                off += (size_t)n;
+            else
+                break;  /* Buffer full */
+        }
+        else if (strcmp(common_paths[i], "/proc") == 0)
+        {
+            /* /proc is virtual, always present */
+            int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                             "none /proc proc rw 0 0\n");
+            if (n > 0 && n < (int)(count - off))
+                off += (size_t)n;
+        }
+        else if (strcmp(common_paths[i], "/dev") == 0)
+        {
+            /* /dev is virtual, always present */
+            int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                             "none /dev devfs rw 0 0\n");
+            if (n > 0 && n < (int)(count - off))
+                off += (size_t)n;
+        }
+    }
+    
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
+/* Generate /proc/interrupts content */
+int proc_interrupts_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    memset(buf, 0, count);
+    
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "           CPU0\n");
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+    
+    /* IRQ mappings for x86 */
+    const char *irq_names[] = {
+        [0] = "  0:",
+        [1] = "  1:",
+        [2] = "  2:",
+        [3] = "  3:",
+        [4] = "  4:",
+        [5] = "  5:",
+        [6] = "  6:",
+        [7] = "  7:",
+        [8] = "  8:",
+        [9] = "  9:",
+        [10] = " 10:",
+        [11] = " 11:",
+        [12] = " 12:",
+        [13] = " 13:",
+        [14] = " 14:",
+        [15] = " 15:",
+    };
+    
+    const char *irq_descriptions[] = {
+        [0] = "   timer",
+        [1] = "   i8042",
+        [5] = "   soundblaster",
+        [11] = "   rtl8139",
+        [12] = "   i8042",
+        [14] = "   ata14",
+        [15] = "   ata15",
+    };
+    
+    for (int irq = 0; irq < 16; irq++)
+    {
+        if (irq_names[irq] && irq_descriptions[irq])
+        {
+            n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "%s      %-20s (IRQ %d)\n",
+                         irq_names[irq], irq_descriptions[irq], irq);
+            if (n > 0 && n < (int)(count - off))
+                off += (size_t)n;
+        }
+    }
+    
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
+/* Generate /proc/iomem content */
+int proc_iomem_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    memset(buf, 0, count);
+    
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "00000000-0000FFFF : PCI Bus 0000:00\n"
+                     "00000000-000003FF : PCI Bus 0000:00 - Reserved\n"
+                     "00000400-000004FF : Reserved\n"
+                     "00000500-000005FF : Reserved\n"
+                     "00000600-000006FF : Reserved\n"
+                     "00000700-000007FF : Reserved\n"
+                     "00000A00-00000BFF : PCI Bus 0000:00 - Reserved\n"
+                     "00000C00-00000DFF : PCI Bus 0000:00 - Reserved\n"
+                     "00000E00-00000FFF : PCI Bus 0000:00 - Reserved\n"
+                     "00001000-000010FF : PCI Bus 0000:00 - Reserved\n");
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+    
+    /* Add common x86 I/O ranges */
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                 "00002000-000020FF : PIC (8259)\n"
+                 "00002170-0000217F : ATA Secondary\n"
+                 "00001F0-00001F7 : ATA Primary\n"
+                 "0000220-000022F : Sound Blaster 16\n"
+                 "000060-00006F : Keyboard/Mouse (PS/2)\n");
+    if (n > 0 && n < (int)(count - off))
+        off += (size_t)n;
+    
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
+/* Generate /proc/ioports content */
+int proc_ioports_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    memset(buf, 0, count);
+    
+    size_t off = 0;
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                     "0000-001f : dma1\n"
+                     "0020-0021 : pic1\n"
+                     "0040-0043 : timer0\n"
+                     "0060-006f : keyboard\n"
+                     "01f0-01f7 : ata primary\n"
+                     "0170-0177 : ata secondary\n"
+                     "0220-022f : sound blaster\n"
+                     "0376-0376 : ata secondary control\n"
+                     "03f6-03f6 : ata primary control\n");
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+    
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
+/* Generate /proc/modules content (more detailed than /proc/drivers) */
+int proc_modules_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    memset(buf, 0, count);
+    
+    /* Use driver list function but format as modules output */
+    /* Format: name size refcount dependencies */
+    /* For now, use same content as /proc/drivers but with module format */
+    int driver_size = ir0_driver_list_to_buffer(buf, count);
+    if (driver_size <= 0)
+        return driver_size;
+    
+    /* Convert driver list format to modules format */
+    /* Driver format: "Driver Name Version\n" */
+    /* Module format: "drivername size refcount dependencies\n" */
+    char *pos = buf;
+    char temp_buf[4096];
+    size_t temp_off = 0;
+    
+    while (*pos && temp_off < sizeof(temp_buf) - 128)
+    {
+        char *line_start = pos;
+        char *line_end = strchr(pos, '\n');
+        if (!line_end)
+            break;
+        
+        size_t line_len = (size_t)(line_end - line_start);
+        if (line_len > 0 && line_len < 256)
+        {
+            char name[128] = {0};
+            size_t name_len = line_len;
+            if (name_len > sizeof(name) - 1)
+                name_len = sizeof(name) - 1;
+            
+            /* Copy first word (driver name) */
+            strncpy(name, line_start, name_len);
+            name[name_len] = '\0';
+            
+            /* Extract just the name part (before spaces/tabs) */
+            char *name_end = name;
+            while (*name_end && *name_end != ' ' && *name_end != '\t' && *name_end != '\n')
+                name_end++;
+            *name_end = '\0';
+            
+            if (strlen(name) > 0)
+            {
+                int n = snprintf(temp_buf + temp_off, sizeof(temp_buf) - temp_off,
+                                 "%-20s %8u %2d -\n",
+                                 name,
+                                 (unsigned int)256,  /* Estimated size */
+                                 0);  /* Refcount */
+                if (n > 0 && (size_t)n < sizeof(temp_buf) - temp_off)
+                    temp_off += (size_t)n;
+            }
+        }
+        pos = line_end + 1;
+    }
+    
+    /* Copy formatted output back */
+    if (temp_off > 0 && temp_off < count)
+    {
+        memcpy(buf, temp_buf, temp_off);
+        buf[temp_off] = '\0';
+        return (int)temp_off;
+    }
+    
+    return (int)driver_size;
+}
+
+/* Generate /proc/timer_list content */
+int proc_timer_list_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -1;
+    
+    memset(buf, 0, count);
+    
+    size_t off = 0;
+    clock_stats_t stats;
+    if (clock_get_stats(&stats) == 0)
+    {
+        const char *timer_name = "Unknown";
+        switch (stats.active_timer)
+        {
+            case CLOCK_TIMER_NONE:
+                timer_name = "None";
+                break;
+            case CLOCK_TIMER_PIT:
+                timer_name = "PIT";
+                break;
+            case CLOCK_TIMER_HPET:
+                timer_name = "HPET";
+                break;
+            case CLOCK_TIMER_LAPIC:
+                timer_name = "LAPIC";
+                break;
+            case CLOCK_TIMER_RTC:
+                timer_name = "RTC";
+                break;
+            default:
+                timer_name = "Unknown";
+                break;
+        }
+        
+        int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "Timer: %s\n"
+                         "Frequency: %u Hz\n"
+                         "Tick Count: %llu\n"
+                         "Uptime: %llu.%03u seconds\n",
+                         timer_name,
+                         stats.timer_frequency,
+                         (unsigned long long)stats.tick_count,
+                         (unsigned long long)stats.uptime_seconds,
+                         stats.uptime_milliseconds);
+        if (n > 0 && n < (int)(count - off))
+            off += (size_t)n;
+    }
+    
+    if (off < count)
+        buf[off] = '\0';
+    
+    return (int)off;
+}
+
 /* Generate /proc/[pid]/cmdline content */
 int proc_cmdline_read(char *buf, size_t count, pid_t pid)
 {
@@ -768,53 +1163,6 @@ int proc_cmdline_read(char *buf, size_t count, pid_t pid)
     
     buf[len] = '\0';
     return len;
-}
-
-/* Handle /proc file read */
-static int proc_file_read(const char *filename, char *buf, size_t count)
-{
-    if (strcmp(filename, "meminfo") == 0)
-    {
-        return proc_meminfo_read(buf, count);
-    } else if (strcmp(filename, "ps") == 0)
-    {
-        return proc_ps_read(buf, count);
-    } else if (strcmp(filename, "netinfo") == 0)
-    {
-        return proc_netinfo_read(buf, count);
-    } else if (strcmp(filename, "drivers") == 0)
-    {
-        return proc_drivers_read(buf, count);
-    } else if (strcmp(filename, "status") == 0)
-    {
-        /* Current process */
-        return proc_status_read(buf, count, -1);
-    } else if (strcmp(filename, "uptime") == 0)
-    {
-        return proc_uptime_read(buf, count);
-    } else if (strcmp(filename, "version") == 0)
-    {
-        return proc_version_read(buf, count);
-    } else if (strcmp(filename, "cpuinfo") == 0)
-    {
-        return proc_cpuinfo_read(buf, count);
-    } else if (strcmp(filename, "loadavg") == 0)
-    {
-        return proc_loadavg_read(buf, count);
-    } else if (strcmp(filename, "filesystems") == 0)
-    {
-        return proc_filesystems_read(buf, count);
-    } else if (strcmp(filename, "cmdline") == 0)
-    {
-        /* Current process */
-        return proc_cmdline_read(buf, count, -1);
-    } else if (strcmp(filename, "blockdevices") == 0)
-    {
-        return proc_blockdevices_read(buf, count);
-    }
-    
-    /* File not found */
-    return -1;
 }
 
 /* Get offset for /proc fd */
@@ -890,6 +1238,27 @@ int proc_open(const char *path, int flags)
     } else if (strcmp(filename, "blockdevices") == 0)
     {
         fd = 1011;
+    } else if (strcmp(filename, "partitions") == 0)
+    {
+        fd = 1012;
+    } else if (strcmp(filename, "mounts") == 0)
+    {
+        fd = 1013;
+    } else if (strcmp(filename, "interrupts") == 0)
+    {
+        fd = 1014;
+    } else if (strcmp(filename, "iomem") == 0)
+    {
+        fd = 1015;
+    } else if (strcmp(filename, "ioports") == 0)
+    {
+        fd = 1016;
+    } else if (strcmp(filename, "modules") == 0)
+    {
+        fd = 1017;
+    } else if (strcmp(filename, "timer_list") == 0)
+    {
+        fd = 1018;
     } else
     {
         /* File not found */
@@ -956,6 +1325,27 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
         }
         case 1011:
             full_size = proc_blockdevices_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1012:
+            full_size = proc_partitions_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1013:
+            full_size = proc_mounts_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1014:
+            full_size = proc_interrupts_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1015:
+            full_size = proc_iomem_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1016:
+            full_size = proc_ioports_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1017:
+            full_size = proc_modules_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1018:
+            full_size = proc_timer_list_read(proc_buffer, sizeof(proc_buffer));
             break;
         default:
             return -1;

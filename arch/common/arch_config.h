@@ -4,6 +4,7 @@
 // ARCHITECTURE DETECTION
 // ===============================================================================
 
+#ifndef ARCH_X86_64
 #if defined(__x86_64__) || defined(__amd64__)
     #define ARCH_X86_64
     #define ARCH_NAME "x86-64"
@@ -54,7 +55,8 @@
     
 #else
     #error "ISA not supported"
-#endif
+#endif /* ARCH_X86_64 check */
+#endif /* Architecture detection */
 
 // ===============================================================================
 // ARCHITECTURE-SPECIFIC FEATURES

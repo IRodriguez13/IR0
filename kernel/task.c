@@ -20,26 +20,26 @@
 #include <ir0/memory/kmem.h>
 
 /* =============================================================================== */
-/* VARIABLES GLOBALES */
+/* GLOBAL VARIABLES */
 /* =============================================================================== */
 
 task_t *idle_task = NULL;
 static uint32_t next_pid = 1;
 static task_t *task_list = NULL;
 
-/* Variable global para la tarea actualmente ejecutándose */
+/* Global variable for currently running task */
 task_t *current_running_task = NULL;
 
 
-/* Función que ejecuta el idle task - simplemente hace HLT */
+/* Function that runs the idle task - simply executes HLT */
 void idle_task_function(void *arg)
 {
-    (void)arg; // Evitar warning de parámetro no usado
+    (void)arg; /* Avoid unused parameter warning */
 
-    /* Función simple que solo hace HLT */
+    /* Simple function that just executes HLT */
     cpu_wait();
 
-    /* Si llega acá, a hacer noni. */
+    /* If we get here, do nothing (should not happen) */
     cpu_relax();
 }
 
@@ -58,7 +58,7 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
 
     memset(task, 0, sizeof(task_t));
 
-    /* Setup básico */
+    /* Basic setup */
     task->pid = next_pid++;
     task->priority = priority;
     task->nice = nice;
@@ -68,29 +68,29 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
     task->entry = entry;
     task->entry_arg = arg;
 
-    /* Setup correcto del stack para x86-64 */
+    /* Correct stack setup for x86-64 */
     uint64_t *stack_ptr = (uint64_t *)((uintptr_t)stack + DEFAULT_STACK_SIZE);
 
-    /* Alinear a 16 bytes (ABI x86-64) */
+    /* Align to 16 bytes (x86-64 ABI) */
     stack_ptr = (uint64_t *)((uintptr_t)stack_ptr & ~0xF);
 
-    /* Setup stack frame que switch_context_x64 espera */
-    *--stack_ptr = 0; // User SS (if needed)
+    /* Setup stack frame that switch_context_x64 expects */
+    *--stack_ptr = 0; /* User SS (if needed) */
     uint64_t user_rsp = (uint64_t)stack_ptr + 16;
-    *--stack_ptr = user_rsp;        // User RSP
-    *--stack_ptr = 0x202;           // RFLAGS (IF=1)
-    *--stack_ptr = 0x08;            // Kernel CS
-    *--stack_ptr = (uint64_t)entry; // RIP - donde saltar
+    *--stack_ptr = user_rsp;        /* User RSP */
+    *--stack_ptr = 0x202;           /* RFLAGS (IF=1) */
+    *--stack_ptr = 0x08;            /* Kernel CS */
+    *--stack_ptr = (uint64_t)entry; /* RIP - jump target */
 
-    /* El assembly switch_context_x64 restaurará estos registros */
+    /* Assembly switch_context_x64 will restore these registers */
     task->rsp = (uint64_t)stack_ptr;
     task->rbp = 0;
-    task->rip = (uint64_t)entry; // Punto de entrada
-    task->rflags = 0x202;        // Interrupts enabled
-    task->cs = 0x08;             // Kernel code segment
-    task->ss = 0x10;             // Kernel data segment
+    task->rip = (uint64_t)entry; /* Entry point */
+    task->rflags = 0x202;        /* Interrupts enabled */
+    task->cs = 0x08;             /* Kernel code segment */
+    task->ss = 0x10;             /* Kernel data segment */
 
-    /* Agregar a lista global */
+    /* Add to global list */
     task->next = task_list;
     task_list = task;
 
@@ -104,17 +104,17 @@ void destroy_task(task_t *task)
         return;
     }
 
-    /* Marcar como terminada */
+    /* Mark as terminated */
     task->state = TASK_TERMINATED;
 
-    /* Liberar stack */
+    /* Free stack */
     if (task->stack_base)
     {
         kfree(task->stack_base);
         task->stack_base = NULL;
     }
 
-    /* Remover de lista global */
+    /* Remove from global list */
     if (task_list == task)
     {
         task_list = task->next;
@@ -132,7 +132,7 @@ void destroy_task(task_t *task)
         }
     }
 
-    /* Liberar estructura */
+    /* Free structure */
     kfree(task);
 }
 
@@ -196,7 +196,7 @@ void task_get_info(task_t *task)
 }
 
 
-/* Función de test task que hace algo útil */
+/* Test task function that does something useful */
 void test_task_function(void *arg)
 {
     int task_id = (int)(uintptr_t)arg;

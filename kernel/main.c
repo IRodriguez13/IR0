@@ -25,6 +25,7 @@
 #include <ir0/memory/pmm.h>
 #include <ir0/net.h>
 #include <init.h>
+#include <arch/common/arch_portable.h>
 #include <arch/x86-64/sources/user_mode.h>
 #include <rr_sched.h>
 #include <config.h>
@@ -96,9 +97,8 @@ static void init_all_drivers(void)
 
 void kmain(void)
 {
-    /* Initialize GDT and TSS first */
-    gdt_install();
-    setup_tss();
+    /* Initialize architecture-specific early features (GDT, TSS, etc.) */
+    arch_early_init();
 
     /* Banner */
     print("IR0 Kernel v0.0.1 Boot routine\n");
@@ -124,6 +124,18 @@ void kmain(void)
     /* Initialize all hardware drivers */
     init_all_drivers();
 
+    /* Check disk availability before initializing filesystem */
+    extern bool ata_is_available(void);
+    if (!ata_is_available())
+    {
+        serial_print("[BOOT] WARNING: No ATA storage detected\n");
+        serial_print("[BOOT] Filesystem initialization may fail\n");
+    }
+    else
+    {
+        serial_print("[BOOT] ATA storage detected, proceeding with filesystem init\n");
+    }
+
     /* Initialize filesystem */
     vfs_init_with_minix();
     log_subsystem_ok("FILESYSTEM");
@@ -139,12 +151,11 @@ void kmain(void)
     syscalls_init();
     log_subsystem_ok("SYSCALLS");
 
-    /* Set up interrupts */
-    idt_init64();
-    idt_load64();
-    pic_remap64();
+    /* Initialize architecture-specific interrupt system (IDT, PIC, etc.) */
+    arch_interrupt_init();
 
-    __asm__ volatile("sti");
+    /* Enable interrupts globally */
+    arch_enable_interrupts();
     serial_print("[BOOT] Interrupts enabled globally (sti)\n");
 
     log_subsystem_ok("INTERRUPTS");

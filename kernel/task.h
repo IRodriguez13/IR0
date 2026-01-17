@@ -5,16 +5,16 @@
 
 typedef enum
 {
-    TASK_READY,     // 0, listo para ejecutar
-    TASK_RUNNING,   // 1 en ejecución
-    TASK_BLOCKED,   // 2 esperando IO, mutex, etc
-    TASK_TERMINATED // proceso terminado
+    TASK_READY,     /* Ready to execute */
+    TASK_RUNNING,   /* Currently executing */
+    TASK_BLOCKED,   /* Waiting for IO, mutex, etc */
+    TASK_TERMINATED /* Process terminated */
 } task_state_t;
 
 /*
-Estructura de proceso extendida para soportar múltiples schedulers
-Todos los registros que manejo en 32/64 bits
-*/
+ * Extended process structure to support multiple schedulers
+ * All registers handled in 32/64 bits
+ */
 
 typedef struct task
 {

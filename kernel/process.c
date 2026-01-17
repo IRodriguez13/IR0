@@ -12,6 +12,8 @@
 #include <ir0/memory/paging.h>
 #include <drivers/serial/serial.h>
 #include <ir0/permissions.h>
+#include <ir0/signals.h>
+#include <ir0/oops.h>
 #include <string.h>
 
 
@@ -68,6 +70,8 @@ process_t *process_create(void (*entry)(void))
 	if (!proc)
 		return NULL;
 
+	BUG_ON(proc == NULL); /* Should never happen after kmalloc check */
+
 	memset(proc, 0, sizeof(process_t));
 
 	/* Basic process setup */
@@ -84,7 +88,8 @@ process_t *process_create(void (*entry)(void))
 	proc->umask = 0022;
 
 	/* Initialize current working directory */
-	strcpy(proc->cwd, "/");
+	strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
+	proc->cwd[sizeof(proc->cwd) - 1] = '\0';
 	
 	/* Initialize command name */
 	strncpy(proc->comm, "process", sizeof(proc->comm) - 1);
@@ -96,6 +101,7 @@ process_t *process_create(void (*entry)(void))
 	if (!proc->stack_start)
 	{
 		kfree(proc);
+		BUG_ON(1); /* Out of memory for process stack */
 		return NULL;
 	}
 
@@ -136,6 +142,8 @@ pid_t process_spawn(void (*entry)(void), const char *name)
 	if (!proc)
 		return -1;
 
+	BUG_ON(!proc); /* kmalloc failed */
+
 	memset(proc, 0, sizeof(process_t));
 
 	/* Basic process setup */
@@ -149,6 +157,7 @@ pid_t process_spawn(void (*entry)(void), const char *name)
 	if (!proc->page_directory)
 	{
 		kfree(proc);
+		BUG_ON(1); /* Failed to create page directory */
 		return -1;
 	}
 	proc->task.cr3 = (uint64_t)proc->page_directory;
@@ -160,14 +169,16 @@ pid_t process_spawn(void (*entry)(void), const char *name)
 		proc->euid = current_process->euid;
 		proc->egid = current_process->egid;
 		proc->umask = current_process->umask;
-		strcpy(proc->cwd, current_process->cwd);
+		strncpy(proc->cwd, current_process->cwd, sizeof(proc->cwd) - 1);
+		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
 	} else {
 		proc->uid = ROOT_UID;
 		proc->gid = ROOT_GID;
 		proc->euid = ROOT_UID;
 		proc->egid = ROOT_GID;
 		proc->umask = DEFAULT_UMASK;
-		strcpy(proc->cwd, "/");
+		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
+		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
 	}
 	
 	/* Set command name */
@@ -249,15 +260,142 @@ process_t *process_find_by_pid(pid_t pid)
 	return NULL; /* Not found */
 }
 
+/**
+ * process_reparent_children - Reparent all children to init (PID 1)
+ * @dying_parent: Process that is about to exit
+ *
+ * When a parent process dies, all its children become orphans.
+ * This function reparents them to init (PID 1) so they don't become zombies.
+ */
+static void process_reparent_children(process_t *dying_parent)
+{
+	process_t *child;
+	process_t *init;
+	
+	if (!dying_parent)
+		return;
+	
+	/* Find init process (PID 1) */
+	init = process_find_by_pid(1);
+	if (!init)
+	{
+		/* No init process - this is a critical error */
+		BUG_ON(1); /* Init process must exist */
+		return;
+	}
+	
+	/* Find all children of dying parent */
+	child = process_list;
+	while (child)
+	{
+		if (child->ppid == dying_parent->task.pid)
+		{
+			/* Reparent to init */
+			child->ppid = 1;
+#if DEBUG_PROCESS
+			serial_print("[PROCESS] Reparented child PID ");
+			serial_print_hex32((uint32_t)child->task.pid);
+			serial_print(" to init (PID 1)\n");
+#endif
+		}
+		child = child->next;
+	}
+}
+
+/**
+ * process_reap_zombies - Automatically reap zombie children of a process
+ * @parent: Parent process
+ *
+ * When a process exits, clean up any zombie children that were waiting for it.
+ * Also used by init to periodically clean up zombies.
+ */
+void process_reap_zombies(process_t *parent)
+{
+	process_t *child;
+	process_t *prev;
+	process_t *next;
+	
+	if (!parent)
+		return;
+	
+	child = process_list;
+	prev = NULL;
+	
+	while (child)
+	{
+		next = child->next;
+		
+		/* Check if this is a zombie child of the parent */
+		if (child->ppid == parent->task.pid && child->state == PROCESS_ZOMBIE)
+		{
+#if DEBUG_PROCESS
+			serial_print("[PROCESS] Auto-reaping zombie child PID ");
+			serial_print_hex32((uint32_t)child->task.pid);
+			serial_print("\n");
+#endif
+			
+			/* Remove from process list */
+			if (prev)
+			{
+				prev->next = child->next;
+			}
+			else
+			{
+				process_list = child->next;
+			}
+			
+			/* Free zombie process */
+			kfree(child);
+		}
+		else
+		{
+			prev = child;
+		}
+		
+		child = next;
+	}
+}
+
 void process_exit(int code)
 {
-	if (!current_process)
+	process_t *dying = current_process;
+	process_t *parent;
+	
+	if (!dying)
 		return;
 
-	current_process->state = PROCESS_ZOMBIE;
-	current_process->exit_code = code;
+	/* Before becoming a zombie:
+	 * 1. Reparent all children to init (PID 1) to avoid orphaned processes
+	 * 2. Clean up any zombie children we were waiting for
+	 */
+	process_reap_zombies(dying);
+	process_reparent_children(dying);
 
-	/* Halt until reaped by parent */
+	/* Mark as zombie */
+	dying->state = PROCESS_ZOMBIE;
+	dying->exit_code = code;
+
+	/* Send SIGCHLD to parent process if it exists */
+	if (dying->ppid > 0)
+	{
+		parent = process_find_by_pid(dying->ppid);
+		if (parent && parent->state != PROCESS_ZOMBIE)
+		{
+			send_signal(parent->task.pid, SIGCHLD);
+		}
+		else if (!parent || parent->state == PROCESS_ZOMBIE)
+		{
+			/* Parent is dead or zombie - reparent to init and send SIGCHLD to init */
+			dying->ppid = 1;
+			parent = process_find_by_pid(1);
+			if (parent)
+			{
+				send_signal(parent->task.pid, SIGCHLD);
+			}
+		}
+	}
+
+	/* Halt until reaped by parent (or init if parent is dead) */
 	for (;;)
 		__asm__ volatile("hlt");
 }
@@ -269,13 +407,16 @@ int process_wait(pid_t pid, int *status)
 	process_t *prev;
 	pid_t ret;
 
+	BUG_ON(!current_process); /* Must have current process */
+
 	for(;;)
 	{
 		p = process_list;
 		while (p)
 		{
-			/* Both pids are now of type pid_t (int32_t) */
-			if ((uint32_t)p->task.pid == (uint32_t)pid && (uint32_t)p->ppid == (uint32_t)current_process->task.pid) // Conversión explícita
+			/* Check if this is a child process we're waiting for */
+			BUG_ON(!p); /* Process list corruption */
+			if (p->task.pid == pid && p->ppid == current_process->task.pid)
 			{
 				if (p->state == PROCESS_ZOMBIE)
 				{

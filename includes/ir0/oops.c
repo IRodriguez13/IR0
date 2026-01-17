@@ -1,5 +1,6 @@
 #include "oops.h"
 #include <ir0/vga.h>
+#include <drivers/serial/serial.h>
 
 #define Interrupts_off asm volatile("cli")
 #define Cpu_Sleep asm volatile("hlt")
@@ -37,6 +38,27 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
 
     Interrupts_off;
 
+    /* Log panic to serial first (for debugging) */
+    serial_print("\n========================================\n");
+    serial_print("KERNEL PANIC\n");
+    serial_print("========================================\n");
+    serial_print("Type: ");
+    serial_print(panic_level_names[level]);
+    serial_print("\n");
+    serial_print("File: ");
+    serial_print(file ? file : "unknown");
+    serial_print("\n");
+    serial_print("Line: ");
+    serial_print_hex32((uint32_t)line);
+    serial_print("\n");
+    serial_print("Caller: ");
+    serial_print(caller ? caller : "unknown");
+    serial_print("\n");
+    serial_print("Message: ");
+    serial_print(message ? message : "no message");
+    serial_print("\n");
+    serial_print("========================================\n");
+
     clear_screen();
     print_colored("     ╔════════════════════════════════════════════════════════╗\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     print_colored("     ║                                                        ║\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
@@ -70,20 +92,20 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     dump_stack_trace();
 
 
-    /*Little message before going to bed*/ 
+    /* Final message before halting */ 
     print_colored("\n                          ═══ OOPS, SYSTEM HALTED ═══\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("\n Safe to power off or reboot - Es seguro apagar o reiniciar el equipo.\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
+    print_colored("\n Safe to power off or reboot.\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
 
     goto sleep;
 
     sleep:
-        cpu_relax(); // zzzz
+        cpu_relax(); /* System halted - CPU in sleep mode */
 }
 
 void dump_registers()
 {
 #ifdef __x86_64__
-    /* Versión 64-bit */
+    /* 64-bit version */
     uint64_t rax, rbx, rcx, rdx, rsi, rdi, rsp, rbp;
     uint64_t rflags;
 
