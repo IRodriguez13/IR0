@@ -15,7 +15,7 @@
 #include <string.h>
 #include <ir0/vga.h>
 #include <ir0/types.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <kernel/rr_sched.h>
 #include "pit/pit.h"
 #include "clock_system.h"
@@ -74,10 +74,37 @@ void init_clock(void)
     clock_system_init();
 }
 
-/* Timer detection */
+/* Timer detection - prioritize higher precision timers */
 clock_timer_t detect_best_clock(void)
 {
-    /* For now, return PIT as default */
+    /* Try to detect best available timer in order of preference:
+     * 1. LAPIC timer (best precision, per-CPU, ~1MHz)
+     * 2. HPET (high precision, system-wide, sub-microsecond)
+     * 3. PIT (fallback, always available, ~1.19MHz but less precise)
+     */
+    
+    /* Check if LAPIC timer is available */
+    extern int lapic_available(void);
+    if (lapic_available())
+    {
+        clock_state.lapic_enabled = 1;
+        clock_state.active_timer = CLOCK_TIMER_LAPIC;
+        return CLOCK_TIMER_LAPIC;
+    }
+    
+    /* Check if HPET is available by trying to find HPET table */
+    extern void *find_hpet_table(void);
+    void *hpet_table = find_hpet_table();
+    if (hpet_table != NULL)
+    {
+        clock_state.hpet_enabled = 1;
+        clock_state.active_timer = CLOCK_TIMER_HPET;
+        return CLOCK_TIMER_HPET;
+    }
+    
+    /* Fall back to PIT (always available on x86) */
+    clock_state.pit_enabled = 1;
+    clock_state.active_timer = CLOCK_TIMER_PIT;
     return CLOCK_TIMER_PIT;
 }
 

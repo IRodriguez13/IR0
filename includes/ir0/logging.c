@@ -5,7 +5,7 @@
 #include <stdarg.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 
 /* LOG BUFFER CONFIGURATION */
 #define LOG_BUFFER_MAX_ENTRIES 1024  // Maximum number of log entries to store

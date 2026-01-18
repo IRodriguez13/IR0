@@ -68,6 +68,7 @@ CFLAGS += $(CFLAGS_TARGET)
 CFLAGS += -I$(KERNEL_ROOT)
 CFLAGS += -I$(KERNEL_ROOT)/includes
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
+CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
 CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include
 CFLAGS += -I$(KERNEL_ROOT)/include
@@ -75,7 +76,7 @@ CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/drivers
 CFLAGS += -I$(KERNEL_ROOT)/fs
 CFLAGS += -I$(KERNEL_ROOT)/interrupt
-CFLAGS += -I$(KERNEL_ROOT)/memory
+CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/scheduler
 CFLAGS += -I$(KERNEL_ROOT)/includesnel
 
@@ -122,8 +123,20 @@ QEMU_LOG_FILE = -D qemu_debug.log
 
 # Hardware soportado por IR0 Kernel (configuración completa)
 # Network: RTL8139 y e1000 (Intel)
+# User-mode networking: permite TCP/UDP pero ICMP saliente está limitado
+# LIMITACIONES: No permite ping desde host a guest, ICMP saliente limitado
+# Para mejor soporte de ping, usar TAP networking (ver QEMU_NET_RTL8139_TAP)
 QEMU_NET_RTL8139 = -netdev user,id=net0 -device rtl8139,netdev=net0
 # QEMU_NET_E1000 = -netdev user,id=net1 -device e1000,netdev=net1
+
+# TAP networking: Permite ping bidireccional (requiere permisos root y bridge configurado)
+# Uso: 1) Crear bridge: sudo ip link add br0 type bridge
+#      2) Agregar interfaz física: sudo ip link set eth0 master br0 (o wlan0)
+#      3) Crear TAP: sudo ip tuntap add tap0 mode tap
+#      4) Agregar TAP al bridge: sudo ip link set tap0 master br0
+#      5) Activar interfaces: sudo ip link set br0 up && sudo ip link set tap0 up
+#      6) Usar: make run-tap (o cambiar QEMU_NET_ALL a usar QEMU_NET_RTL8139_TAP)
+QEMU_NET_RTL8139_TAP = -netdev tap,id=net0,ifname=tap0,script=no,downscript=no -device rtl8139,netdev=net0
 QEMU_NET_ALL = $(QEMU_NET_RTL8139) $(QEMU_NET_E1000)
 
 # Audio: Sound Blaster 16 y Adlib OPL2 (sintaxis moderna QEMU)
@@ -176,10 +189,10 @@ KERNEL_OBJS += kernel/rr_sched.o
 # KERNEL_OBJS += kernel/priority_sched.o
 
 MEMORY_OBJS = \
-	includes/ir0/memory/allocator.o \
-	includes/ir0/memory/paging.o \
-	includes/ir0/memory/pmm.o \
-	includes/ir0/memory/kmem.o
+	mm/allocator.o \
+	mm/paging.o \
+	mm/pmm.o \
+	mm/kmem.o
 
 LIB_OBJS = \
     includes/ir0/vga.o \
@@ -239,7 +252,9 @@ NET_OBJS = \
     net/net.o \
     net/arp.o \
     net/ip.o \
-    net/icmp.o
+    net/icmp.o \
+    net/udp.o \
+    net/dns.o
 
 ARCH_OBJS = \
     arch/x86-64/sources/arch_x64.o \
@@ -480,6 +495,32 @@ run-console: kernel-x64.iso disk.img
 		-m 512M -no-reboot -no-shutdown \
 		$(QEMU_NGRAPHIC)
 
+# Run with TAP networking (permite ping bidireccional, requiere root y bridge configurado)
+# NOTA: Requiere configuración previa del bridge y TAP (ver NETWORKING_SETUP.md)
+# Pasos previos:
+#   1. sudo ip link add br0 type bridge
+#   2. sudo ip link set eth0 master br0  (reemplaza eth0 con tu interfaz)
+#   3. sudo ip tuntap add tap0 mode tap
+#   4. sudo ip link set tap0 master br0
+#   5. sudo ip link set br0 up && sudo ip link set tap0 up
+run-tap: kernel-x64.iso disk.img
+	@echo "🚀 Running IR0 Kernel with TAP networking (full ICMP support)..."
+	@echo "   Hardware: RTL8139, ATA/IDE, Serial, PS/2, VGA (audio disabled)"
+	@echo "   ⚠️  Requires: root permissions and TAP interface configured"
+	@if [ ! -c /dev/net/tun ]; then \
+		echo "ERROR: TUN/TAP device not available. Install: sudo modprobe tun"; \
+		exit 1; \
+	fi
+	@echo "   📝 Building kernel with TAP networking support (auto-configure IP)..."
+	@$(MAKE) clean-net 2>/dev/null || true
+	@$(MAKE) CFLAGS="$(CFLAGS) -DIR0_TAP_NETWORKING" ir0
+	@echo "   🎮 Starting QEMU (audio disabled to avoid ALSA errors)..."
+	sudo qemu-system-x86_64 -cdrom kernel-x64.iso \
+		$(QEMU_NET_RTL8139_TAP) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) \
+		-m 512M -no-reboot -no-shutdown \
+		$(QEMU_DISPLAY) \
+		$(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
+
 # Debug mode (detailed QEMU logging) - ALL IR0 SUPPORTED HARDWARE
 debug: kernel-x64.iso disk.img
 	@echo "Running IR0 Kernel (debug) with all supported hardware..."
@@ -571,14 +612,15 @@ remove-init:
 
 clean:
 	@echo "Cleaning build artifacts..."
+	@echo "Clean done."
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
 	@find . -name "*.bin" -type f -delete
-	@find . -name "*.iso" -type f -delete
-	@rm -rf iso/
-	@rm -f qemu_debug.log
-	@rm -f .example_drivers_enabled
-	@echo "✓ Clean complete"
+
+# Clean only network objects to force recompilation with TAP flag
+clean-net:
+	@echo "Cleaning network objects for TAP rebuild..."
+	@rm -f net/*.o
 
 # HELP
 

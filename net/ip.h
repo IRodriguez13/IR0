@@ -56,6 +56,10 @@ void ip_receive_handler(struct net_device *dev, const void *data,
                         size_t len, void *priv);
 ip4_addr_t ip_get_last_src_addr(void);  /* Get source IP from last received packet */
 
+/* Routing API */
+int ip_route_add(ip4_addr_t dest_network, ip4_addr_t netmask, ip4_addr_t gateway);
+int ip_route_del(ip4_addr_t dest_network, ip4_addr_t netmask);
+
 /* IP Address Utilities */
 static inline ip4_addr_t ip_make_addr(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 {
@@ -64,11 +68,23 @@ static inline ip4_addr_t ip_make_addr(uint8_t a, uint8_t b, uint8_t c, uint8_t d
 
 static inline void ip_format_addr(ip4_addr_t ip, char *buf, size_t buf_len)
 {
-    /* Format: "XXX.XXX.XXX.XXX" */
-    /* Simplified: just print to serial for now */
-    (void)ip;
-    (void)buf;
-    (void)buf_len;
+    /* Format IP address as "XXX.XXX.XXX.XXX" string
+     * @ip: IP address in network byte order
+     * @buf: Output buffer for formatted string
+     * @buf_len: Size of output buffer (must be at least 16 bytes)
+     */
+    if (!buf || buf_len < 16)
+        return;
+    
+    /* Extract bytes from IP address (network byte order) */
+    uint8_t b1 = (ip >> 24) & 0xFF;
+    uint8_t b2 = (ip >> 16) & 0xFF;
+    uint8_t b3 = (ip >> 8) & 0xFF;
+    uint8_t b4 = ip & 0xFF;
+    
+    /* Format as "XXX.XXX.XXX.XXX" */
+    extern int snprintf(char *str, size_t size, const char *format, ...);
+    snprintf(buf, buf_len, "%d.%d.%d.%d", b1, b2, b3, b4);
 }
 
 /* IP Checksum Calculation */

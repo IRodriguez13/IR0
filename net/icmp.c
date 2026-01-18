@@ -13,9 +13,10 @@
 
 #include "icmp.h"
 #include "ip.h"
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
+#include <drivers/timer/clock_system.h>
 #include <string.h>
 
 /* Macros for IP address formatting (matching ARP/IP) */
@@ -29,10 +30,32 @@
 /* ICMP Protocol registration */
 static struct net_protocol icmp_proto;
 
+/* ICMP Echo tracking: track pending ping requests to match replies */
+struct icmp_pending_echo {
+    uint16_t id;
+    uint16_t seq;
+    ip4_addr_t dest_ip;
+    uint64_t timestamp;  /* When request was sent */
+    struct icmp_pending_echo *next;
+};
+
+static struct icmp_pending_echo *pending_echos = NULL;
+
+/* Timeout for pending echo requests (10 seconds) */
+#define ICMP_ECHO_TIMEOUT_MS 10000
+
 /**
- * icmp_checksum - Calculate ICMP checksum
- * @data: Pointer to ICMP packet data
- * @len: Length of ICMP packet
+ * icmp_checksum - Calculate ICMP packet checksum (RFC 792)
+ *
+ * ICMP uses the same Internet checksum algorithm as IP (RFC 1071). The checksum
+ * covers the entire ICMP message (header + payload). This provides error detection
+ * for ICMP packets, which are used for network diagnostics and error reporting.
+ *
+ * The algorithm is identical to ip_checksum(): sum all 16-bit words, fold to
+ * 16 bits, take one's complement. See ip_checksum() for detailed explanation.
+ *
+ * @data: Pointer to ICMP packet data (header + payload)
+ * @len: Length of ICMP packet in bytes
  * @return: 16-bit checksum in network byte order
  */
 uint16_t icmp_checksum(const void *data, size_t len)
@@ -64,11 +87,23 @@ uint16_t icmp_checksum(const void *data, size_t len)
 }
 
 /**
- * icmp_receive_handler - Handle incoming ICMP packets
+ * icmp_receive_handler - Process incoming ICMP packets
+ *
+ * ICMP (Internet Control Message Protocol) is used for error reporting and
+ * network diagnostics. Common ICMP message types include:
+ *
+ *   - Echo Request/Reply (ping): Network connectivity testing
+ *   - Destination Unreachable: Routing errors, host unreachable
+ *   - Time Exceeded: TTL expired (traceroute uses this)
+ *
+ * This function validates incoming ICMP packets and dispatches them to
+ * appropriate handlers based on message type. Currently, we handle Echo
+ * Request (respond with Echo Reply) and log other message types.
+ *
  * @dev: Network device that received the packet
- * @data: Pointer to ICMP packet data
+ * @data: Pointer to ICMP packet (after IP header)
  * @len: Length of ICMP packet
- * @priv: Private data (unused)
+ * @priv: Private data (unused, provided for protocol handler signature)
  */
 void icmp_receive_handler(struct net_device *dev, const void *data, 
                            size_t len, void *priv)
@@ -83,7 +118,10 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
 
     const struct icmp_header *icmp = (const struct icmp_header *)data;
 
-    /* Verify checksum */
+    /* Verify ICMP checksum to detect corruption. We temporarily zero the
+     * checksum field, recalculate, then restore. If the received checksum
+     * matches our calculation, the packet is valid. If not, we drop it.
+     */
     uint16_t received_checksum = icmp->checksum;
     struct icmp_header *icmp_mutable = (struct icmp_header *)data;
     icmp_mutable->checksum = 0;
@@ -96,6 +134,11 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
         return;
     }
 
+    /* Extract message type and code. The type identifies the ICMP message
+     * category (Echo Request, Destination Unreachable, etc.). The code
+     * provides additional detail within that category (e.g., different
+     * reasons for "destination unreachable").
+     */
     uint8_t type = icmp->type;
     uint8_t code = icmp->code;
 
@@ -106,9 +149,18 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
     {
         case ICMP_TYPE_ECHO_REQUEST:
         {
+            /* Echo Request (ping request): respond with Echo Reply (ping reply).
+             * The Echo Request/Reply mechanism is used by the ping utility to
+             * test network connectivity. We copy the entire packet (including
+             * any payload data), change the type to Echo Reply, recalculate
+             * the checksum, and send it back to the source.
+             */
             LOG_INFO("ICMP", "Echo Request received, sending Echo Reply");
 
-            /* Allocate reply packet */
+            /* Allocate buffer for reply. We use the same length as the request
+             * to preserve any payload data (ping often includes timestamps or
+             * other data in the payload for round-trip time calculation).
+             */
             uint8_t *reply = kmalloc(len);
             if (!reply)
             {
@@ -116,17 +168,27 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                 return;
             }
 
-            /* Copy original packet */
+            /* Copy original packet: header and payload. We'll modify the header
+             * fields (type, code, checksum) but preserve the rest, including
+             * the echo identifier and sequence number, which the requester uses
+             * to match replies to requests.
+             */
             memcpy(reply, data, len);
 
             struct icmp_header *reply_icmp = (struct icmp_header *)reply;
 
-            /* Change type to Echo Reply */
+            /* Modify header for Echo Reply. Type changes from ECHO_REQUEST (8)
+             * to ECHO_REPLY (0). Code is always 0 for echo messages. We zero
+             * the checksum before recalculating (checksum field must be 0 during
+             * calculation).
+             */
             reply_icmp->type = ICMP_TYPE_ECHO_REPLY;
             reply_icmp->code = 0;
             reply_icmp->checksum = 0;
 
-            /* Recalculate checksum */
+            /* Recalculate checksum. Since we changed the type field, the checksum
+             * must be recalculated. The payload and other fields remain unchanged.
+             */
             reply_icmp->checksum = icmp_checksum(reply, len);
 
             /* Get source IP from IP layer */
@@ -155,26 +217,105 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
 
         case ICMP_TYPE_ECHO_REPLY:
         {
-            LOG_INFO_FMT("ICMP", "Echo Reply received: id=%d, seq=%d",
-                         (int)ntohs(icmp->un.echo.id),
-                         (int)ntohs(icmp->un.echo.seq));
+            /* Echo Reply received: match it to a pending request */
+            uint16_t id = ntohs(icmp->un.echo.id);
+            uint16_t seq = ntohs(icmp->un.echo.seq);
+            
+            /* Get source IP to match with pending echo */
+            ip4_addr_t src_ip = ip_get_last_src_addr();
+            
+            LOG_INFO_FMT("ICMP", "Echo Reply received: id=%d, seq=%d, src=" IP4_FMT,
+                         (int)id, (int)seq, IP4_ARGS(ntohl(src_ip)));
+            
+            /* Search for matching pending echo request */
+            struct icmp_pending_echo *echo = pending_echos;
+            struct icmp_pending_echo *prev = NULL;
+            uint64_t now = clock_get_uptime_milliseconds();
+            
+            while (echo)
+            {
+                /* Remove expired entries */
+                if (now - echo->timestamp > ICMP_ECHO_TIMEOUT_MS)
+                {
+                    struct icmp_pending_echo *next = echo->next;
+                    if (prev)
+                        prev->next = next;
+                    else
+                        pending_echos = next;
+                    
+                    LOG_INFO_FMT("ICMP", "Removed expired echo: id=%d, seq=%d",
+                                (int)echo->id, (int)echo->seq);
+                    kfree(echo);
+                    echo = next;
+                    continue;
+                }
+                
+                /* Check if this reply matches the pending echo */
+                if (echo->id == id && echo->seq == seq && echo->dest_ip == src_ip)
+                {
+                    /* Match found! Calculate round-trip time */
+                    uint64_t rtt = now - echo->timestamp;
+                    
+                    LOG_INFO_FMT("ICMP", "Echo Reply matched: id=%d, seq=%d, RTT=%d ms",
+                                (int)id, (int)seq, (int)rtt);
+                    
+                    /* Remove from pending list */
+                    if (prev)
+                        prev->next = echo->next;
+                    else
+                        pending_echos = echo->next;
+                    
+                    kfree(echo);
+                    break;
+                }
+                
+                prev = echo;
+                echo = echo->next;
+            }
+            
+            if (!echo)
+            {
+                LOG_INFO_FMT("ICMP", "Echo Reply id=%d, seq=%d not matched to any pending request",
+                            (int)id, (int)seq);
+            }
             break;
         }
 
         case ICMP_TYPE_DEST_UNREACH:
         {
+            /* Destination Unreachable: indicates a routing or delivery problem.
+             * Common codes include:
+             *   0: Network unreachable (no route to network)
+             *   1: Host unreachable (host not on network)
+             *   3: Port unreachable (UDP/TCP port not open)
+             *
+             * This is useful for network diagnostics. A full implementation might
+             * trigger retransmission in upper-layer protocols or notify the
+             * application that initiated the failed connection.
+             */
             LOG_WARNING_FMT("ICMP", "Destination Unreachable: code=%d", (int)code);
             break;
         }
 
         case ICMP_TYPE_TIME_EXCEEDED:
         {
+            /* Time Exceeded: TTL (Time To Live) expired during routing. This
+             * happens when a packet's TTL reaches zero before reaching its
+             * destination, often due to routing loops or the destination being
+             * too many hops away. The traceroute utility uses this message type
+             * to discover the path packets take through the network.
+             */
             LOG_WARNING_FMT("ICMP", "Time Exceeded: code=%d", (int)code);
             break;
         }
 
         default:
         {
+            /* Unhandled ICMP message type. ICMP has many message types we don't
+             * implement (Redirect, Parameter Problem, Timestamp, etc.). For
+             * now, we just log them. A full implementation might handle more
+             * types for better network diagnostics and error reporting.
+             */
             LOG_INFO_FMT("ICMP", "Unhandled ICMP message type: %d", (int)type);
             break;
         }
@@ -182,13 +323,24 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
 }
 
 /**
- * icmp_send_echo_request - Send an ICMP Echo Request (ping)
+ * icmp_send_echo_request - Send an ICMP Echo Request (ping packet)
+ *
+ * This function constructs and sends an ICMP Echo Request message, which is
+ * the packet type used by the ping utility to test network connectivity.
+ * The request includes an identifier and sequence number to help match replies
+ * to requests, and optional payload data (often used for timing or identification).
+ *
+ * The identifier is typically the process ID or a unique value that identifies
+ * the ping instance. The sequence number increments for each ping packet sent,
+ * allowing multiple ping packets to be distinguished. Both values are echoed
+ * back in the Echo Reply, allowing the sender to match replies to requests.
+ *
  * @dev: Network device to send on
- * @dest_ip: Destination IP address
- * @id: Echo identifier
- * @seq: Echo sequence number
- * @data: Optional data payload
- * @len: Data payload length
+ * @dest_ip: Destination IP address (in network byte order)
+ * @id: Echo identifier (helps match replies to requests, e.g., process ID)
+ * @seq: Echo sequence number (increments per packet)
+ * @data: Optional payload data (can be NULL if len is 0)
+ * @len: Payload data length in bytes (0 if no payload)
  * @return: 0 on success, -1 on error
  */
 int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip, 
@@ -197,8 +349,19 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     if (!dev)
         return -1;
 
-    /* ICMP Echo Request structure */
-    size_t icmp_len = sizeof(struct icmp_header) + len;
+    /* ICMP Echo Request structure.
+     * If no payload provided, add minimum payload to ensure packet meets
+     * Ethernet minimum frame size requirement (64 bytes total). This helps
+     * avoid packets being dropped by routers/switches that enforce minimum sizes.
+     */
+    size_t actual_payload_len = len;
+    if (len == 0)
+    {
+        /* Add default 32-byte payload (total packet will be ~64 bytes: 14 Eth + 20 IP + 8 ICMP + 32 payload = 74) */
+        actual_payload_len = 32;
+    }
+    
+    size_t icmp_len = sizeof(struct icmp_header) + actual_payload_len;
     uint8_t *icmp_packet = kmalloc(icmp_len);
     if (!icmp_packet)
         return -1;
@@ -212,10 +375,19 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     icmp->un.echo.id = htons(id);
     icmp->un.echo.seq = htons(seq);
 
-    /* Copy payload data if provided */
+    /* Copy payload data if provided, otherwise use default payload */
     if (data && len > 0)
     {
         memcpy(icmp_packet + sizeof(struct icmp_header), data, len);
+    }
+    else if (len == 0)
+    {
+        /* Add default payload: timestamp data to help with RTT calculation */
+        uint32_t timestamp = (uint32_t)clock_get_uptime_milliseconds();
+        memcpy(icmp_packet + sizeof(struct icmp_header), &timestamp, sizeof(timestamp));
+        /* Pad to 32 bytes with zeros */
+        memset(icmp_packet + sizeof(struct icmp_header) + sizeof(timestamp), 0, 
+               32 - sizeof(timestamp));
     }
 
     /* Calculate checksum */
@@ -224,6 +396,20 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     LOG_INFO_FMT("ICMP", "Sending Echo Request to " IP4_FMT " (id=%d, seq=%d)",
                  IP4_ARGS(ntohl(dest_ip)),
                  (int)id, (int)seq);
+
+    /* Track this echo request so we can match the reply */
+    struct icmp_pending_echo *pending = kmalloc(sizeof(struct icmp_pending_echo));
+    if (pending)
+    {
+        pending->id = id;
+        pending->seq = seq;
+        pending->dest_ip = dest_ip;
+        pending->timestamp = clock_get_uptime_milliseconds();
+        pending->next = pending_echos;
+        pending_echos = pending;
+        
+        LOG_INFO_FMT("ICMP", "Tracking echo request: id=%d, seq=%d", (int)id, (int)seq);
+    }
 
     /* Send via IP layer */
     int ret = ip_send(dev, dest_ip, IPPROTO_ICMP, icmp_packet, icmp_len);

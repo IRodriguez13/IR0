@@ -2,7 +2,7 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c99
-INCLUDES = -I../includes -I../includes/ir0 -I../memory
+INCLUDES = -I../includes -I../includes/ir0 -I../mm
 
 # Source files
 VFS_SOURCES = vfs.c vfs_simple_wrappers.c

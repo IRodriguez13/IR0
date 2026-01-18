@@ -7,9 +7,9 @@
  */
 
 #include "syscalls.h"
-#include "syscalls_internal.h"
 #include "process.h"
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
+#include <ir0/validation.h>
 #include <string.h>
 
 /* Error codes */
@@ -21,7 +21,7 @@ typedef uint32_t mode_t;
 
 int64_t safe_sys_write(int fd, const void *buf, size_t count)
 {
-	if (!buf || count == 0)
+	if (VALIDATE_BUFFER(buf, count) != 0)
 		return -EINVAL;
 
 	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
@@ -32,7 +32,7 @@ int64_t safe_sys_write(int fd, const void *buf, size_t count)
 
 int64_t safe_sys_read(int fd, void *buf, size_t count)
 {
-	if (!buf || count == 0)
+	if (VALIDATE_BUFFER(buf, count) != 0)
 		return -EINVAL;
 
 	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
@@ -43,7 +43,7 @@ int64_t safe_sys_read(int fd, void *buf, size_t count)
 
 int64_t safe_sys_open(const char *pathname, int flags, mode_t mode)
 {
-	if (!pathname || strlen(pathname) == 0)
+	if (VALIDATE_STRING(pathname) != 0)
 		return -EINVAL;
 
 	if (strlen(pathname) > 255)
@@ -55,7 +55,7 @@ int64_t safe_sys_open(const char *pathname, int flags, mode_t mode)
 
 int64_t safe_sys_mkdir(const char *pathname, mode_t mode)
 {
-	if (!pathname || strlen(pathname) == 0)
+	if (VALIDATE_STRING(pathname) != 0)
 		return -EINVAL;
 
 	if (strlen(pathname) > 255)

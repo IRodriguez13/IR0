@@ -8,7 +8,7 @@
  */
 
 #include "pipe.h"
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <string.h>
 #include <drivers/serial/serial.h>
 #include <config.h>

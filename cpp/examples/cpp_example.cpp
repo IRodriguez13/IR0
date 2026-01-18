@@ -14,7 +14,7 @@
 #include <cpp/include/compat.h>
 
 extern "C" {
-    #include <ir0/memory/kmem.h>
+    #include <ir0/kmem.h>
     #include <ir0/logging.h>
     #include <ir0/driver.h>
 }
@@ -194,7 +194,7 @@ static ExampleComponent* g_component = nullptr;
 // C INTERFACE (for kernel integration)
 
 extern "C" {
-    #include <ir0/memory/kmem.h>
+    #include <ir0/kmem.h>
     #include <ir0/logging.h>
     #include <ir0/driver.h>
     #include <ir0/vga.h>  // For print_success

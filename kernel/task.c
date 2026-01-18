@@ -16,8 +16,8 @@
 #include <ir0/oops.h>
 #include <arch_interface.h>
 #include <string.h>
-#include <memory/allocator.h>
-#include <ir0/memory/kmem.h>
+#include <mm/allocator.h>
+#include <ir0/kmem.h>
 
 /* =============================================================================== */
 /* GLOBAL VARIABLES */

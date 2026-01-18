@@ -46,8 +46,8 @@ COMMON_CFLAGS += -Wall -Wextra -O1 -MMD -MP
 
 # Include paths
 INCLUDE_PATHS := -I$(ROOT_DIR)/includes -I$(ROOT_DIR)/includes/ir0 -I$(ROOT_DIR)/arch/common
-INCLUDE_PATHS += -I$(ROOT_DIR)/arch/$(ARCH_DIR)/include -I$(ROOT_DIR)/setup -I$(ROOT_DIR)/memory
-INCLUDE_PATHS += -I$(ROOT_DIR)/memory/arch/$(ARCH_DIR) -I$(ROOT_DIR)/interrupt -I$(ROOT_DIR)/drivers
+INCLUDE_PATHS += -I$(ROOT_DIR)/arch/$(ARCH_DIR)/include -I$(ROOT_DIR)/setup -I$(ROOT_DIR)/mm
+INCLUDE_PATHS += -I$(ROOT_DIR)/mm/arch/$(ARCH_DIR) -I$(ROOT_DIR)/interrupt -I$(ROOT_DIR)/drivers
 INCLUDE_PATHS += -I$(ROOT_DIR)/fs -I$(ROOT_DIR)/kernel -I$(ROOT_DIR)/examples
 
 # Combine flags

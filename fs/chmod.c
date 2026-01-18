@@ -1,7 +1,7 @@
 #include "chmod.h"
 #include <fs/vfs.h>
 #include <fs/minix_fs.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <string.h>
 
 /**

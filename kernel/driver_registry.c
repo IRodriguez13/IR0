@@ -12,7 +12,7 @@
  */
 
 #include <ir0/driver.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/validation.h>
 #include <string.h>
@@ -390,7 +390,7 @@ void ir0_driver_list_all(void)
 
 int ir0_driver_list_to_buffer(char *buf, size_t count)
 {
-    if (!buf || count == 0)
+    if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
 
     /* Initialize buffer to zero */

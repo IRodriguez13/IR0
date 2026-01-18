@@ -12,7 +12,7 @@
  */
 
 #include "arp.h"
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
@@ -26,18 +26,40 @@
     (int)((ip >> 8) & 0xFF), \
     (int)(ip & 0xFF)
 
-/* ARP Cache timeout (in milliseconds) */
+/* ARP Cache timeout: entries expire after 5 minutes. This matches typical
+ * Linux behavior - ARP cache entries are considered stale after a few minutes
+ * to handle cases where hosts change MAC addresses or move to different
+ * networks. Expired entries are automatically removed during lookup.
+ */
 #define ARP_CACHE_TIMEOUT_MS (5 * 60 * 1000)  /* 5 minutes */
 
-/* ARP Resolution timeout (in milliseconds) */
-#define ARP_RESOLVE_TIMEOUT_MS 2000  /* 2 seconds */
-#define ARP_RESOLVE_RETRIES 3        /* 3 attempts */
+/* ARP Resolution parameters: when we need to resolve an IP address and it's
+ * not in the cache, we send an ARP request and wait for a reply. We retry
+ * up to 3 times with a 2 second timeout per attempt, giving us up to 6 seconds
+ * total wait time. This is reasonable for local network resolution.
+ */
+#define ARP_RESOLVE_TIMEOUT_MS 2000  /* 2 seconds per attempt */
+#define ARP_RESOLVE_RETRIES 3        /* 3 attempts before giving up */
 
-/* ARP Cache */
+/* ARP Cache: a simple linked list of IP-to-MAC mappings. This is a basic
+ * implementation - production systems might use a hash table for O(1) lookups,
+ * but for small networks (typical home/office), linear search is acceptable.
+ * The cache is updated automatically when ARP packets arrive (requests or replies).
+ */
 static struct arp_cache_entry *arp_cache = NULL;
 
-/* Our IP address (should be configured per interface, simplified for now) */
-static ip4_addr_t my_ip = 0;
+/* Our IP addresses: track IP per network interface.
+ * We maintain a linked list mapping net_device -> IP address.
+ * This allows multiple NICs with different IP addresses.
+ */
+struct arp_interface_ip {
+    struct net_device *dev;
+    ip4_addr_t ip;
+    struct arp_interface_ip *next;
+};
+
+static struct arp_interface_ip *interface_ips = NULL;
+static ip4_addr_t my_ip = 0;  /* Default IP (backward compatibility) */
 
 /* ARP Protocol registration */
 static struct net_protocol arp_proto;
@@ -46,11 +68,23 @@ static struct net_protocol arp_proto;
 static const uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 /**
- * arp_receive_handler - Handle incoming ARP packets
+ * arp_receive_handler - Process incoming ARP packets (requests and replies)
+ *
+ * This function is called by the networking layer when an ARP packet arrives.
+ * ARP (Address Resolution Protocol) is used to map IP addresses to MAC addresses
+ * on a local network. The protocol has two message types:
+ *
+ *   - ARP Request: "Who has IP X? Tell me." (broadcast to all hosts)
+ *   - ARP Reply: "I have IP X, my MAC is Y." (unicast to requester)
+ *
+ * When we receive an ARP request for our IP, we send a reply. For any ARP packet
+ * (request or reply), we update our ARP cache with the sender's IP/MAC mapping.
+ * This opportunistic caching helps populate the cache without explicit requests.
+ *
  * @dev: Network device that received the packet
- * @data: Pointer to ARP packet data
+ * @data: Pointer to ARP packet (after Ethernet header)
  * @len: Length of ARP packet
- * @priv: Private data (unused)
+ * @priv: Private data (unused, provided for protocol handler signature)
  */
 static void arp_receive_handler(struct net_device *dev, const void *data, 
                                  size_t len, void *priv)
@@ -65,7 +99,11 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
     
     const struct arp_header *arp = (const struct arp_header *)data;
     
-    /* Validate ARP packet */
+    /* Validate ARP packet format. ARP was designed to work with different
+     * hardware and protocol types (not just Ethernet/IP), so we must verify
+     * we're dealing with Ethernet hardware and IPv4 protocol. The length fields
+     * must match: 6 bytes for MAC addresses, 4 bytes for IPv4 addresses.
+     */
     if (ntohs(arp->hw_type) != ARP_HW_TYPE_ETHERNET ||
         ntohs(arp->proto_type) != ARP_PROTO_TYPE_IPV4 ||
         arp->hw_len != 6 ||
@@ -76,7 +114,11 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
     }
     
     uint16_t opcode = ntohs(arp->opcode);
-    /* Keep IPs in network byte order for comparisons and cache operations */
+    
+    /* Keep IPs in network byte order for comparisons and cache operations.
+     * The ARP header stores IPs in network byte order (big-endian), and we
+     * maintain them that way in the cache to avoid conversion overhead.
+     */
     ip4_addr_t sender_ip = arp->sender_ip;  /* Already in network byte order */
     ip4_addr_t target_ip = arp->target_ip;  /* Already in network byte order */
     
@@ -90,11 +132,30 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
     {
         LOG_INFO("ARP", "ARP Request received");
         
-        /* Update ARP cache with sender information */
+        /* Opportunistic cache update: even if the request isn't for us, we
+         * learn the sender's IP/MAC mapping. This helps populate our cache
+         * passively - we don't need to send our own requests for every host
+         * we see on the network. This is a standard ARP optimization.
+         */
         arp_cache_add(sender_ip, arp->sender_mac);
         
-        /* Check if request is for us */
-        if (target_ip == my_ip)
+        /* Check if the ARP request is asking for our IP address on this interface.
+         * We check both the interface-specific IP and the default IP (for backward
+         * compatibility).
+         */
+        ip4_addr_t interface_ip = 0;
+        struct arp_interface_ip *if_ip = interface_ips;
+        while (if_ip)
+        {
+            if (if_ip->dev == dev)
+            {
+                interface_ip = if_ip->ip;
+                break;
+            }
+            if_ip = if_ip->next;
+        }
+        
+        if (target_ip == interface_ip || target_ip == my_ip)
         {
             LOG_INFO("ARP", "ARP Request is for us, sending reply");
             
@@ -110,10 +171,9 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
             reply->proto_len = 4;
             reply->opcode = htons(ARP_OP_REPLY);
             
-            /* Sender (us) */
+            /* Sender (us): use interface-specific IP if available, else default */
             memcpy(reply->sender_mac, dev->mac, 6);
-            /* my_ip is already in network byte order */
-            reply->sender_ip = my_ip;
+            reply->sender_ip = (interface_ip != 0) ? interface_ip : my_ip;
             
             /* Target (request sender) */
             memcpy(reply->target_mac, arp->sender_mac, 6);
@@ -180,9 +240,19 @@ int arp_init(void)
 }
 
 /**
- * arp_lookup - Look up MAC address for given IP in ARP cache
- * @ip: IP address to look up
- * @return: ARP cache entry or NULL if not found
+ * arp_lookup - Look up MAC address for a given IP in the ARP cache
+ *
+ * This function searches the ARP cache for an IP-to-MAC mapping. During the
+ * search, it also performs cache maintenance by removing expired entries
+ * (entries older than ARP_CACHE_TIMEOUT_MS). This lazy expiration keeps the
+ * cache clean without needing a separate cleanup thread.
+ *
+ * The function uses linear search through a linked list. For small networks,
+ * this is efficient enough. For larger networks with many entries, a hash table
+ * would provide O(1) lookups instead of O(n).
+ *
+ * @ip: IP address to look up (in network byte order)
+ * @return: ARP cache entry if found and valid, NULL if not found or expired
  */
 struct arp_cache_entry *arp_lookup(ip4_addr_t ip)
 {
@@ -192,7 +262,10 @@ struct arp_cache_entry *arp_lookup(ip4_addr_t ip)
     
     while (entry)
     {
-        /* Check if entry has expired */
+        /* Check if entry has expired. We do lazy expiration - expired entries
+         * are removed during lookup rather than by a separate cleanup thread.
+         * This is simpler and avoids needing timers or background tasks.
+         */
         if (now - entry->timestamp > ARP_CACHE_TIMEOUT_MS)
         {
             /* Remove expired entry */
@@ -223,18 +296,35 @@ struct arp_cache_entry *arp_lookup(ip4_addr_t ip)
 }
 
 /**
- * arp_cache_add - Add or update entry in ARP cache
- * @ip: IP address
- * @mac: MAC address
+ * arp_cache_add - Add or update an entry in the ARP cache
+ *
+ * This function maintains the ARP cache by adding new entries or updating
+ * existing ones. If an entry for the IP already exists, it's updated with
+ * the new MAC address and timestamp (this handles cases where a host changes
+ * its MAC address or we receive updated information). If no entry exists,
+ * a new one is created and added to the front of the list.
+ *
+ * The cache is updated automatically whenever we receive ARP packets (requests
+ * or replies), allowing us to build up knowledge of the network passively.
+ * This is called opportunistic caching - we learn mappings without explicitly
+ * requesting them.
+ *
+ * @ip: IP address (in network byte order)
+ * @mac: MAC address (6 bytes)
  */
 void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
 {
-    /* Check if entry already exists */
+    /* Check if entry already exists. arp_lookup() will return NULL if the
+     * entry doesn't exist or has expired. If it exists, we update it rather
+     * than creating a duplicate.
+     */
     struct arp_cache_entry *entry = arp_lookup(ip);
     
     if (entry)
     {
-        /* Update existing entry */
+        /* Update existing entry: MAC address might have changed (host moved,
+         * NIC replaced), or timestamp needs refreshing to prevent expiration.
+         */
         memcpy(entry->mac, mac, 6);
         entry->timestamp = clock_get_uptime_milliseconds();
         LOG_INFO_FMT("ARP", "Updated ARP cache entry for IP " IP4_FMT, IP4_ARGS(ntohl(ip)));
@@ -307,15 +397,63 @@ void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
 }
 
 /**
- * arp_resolve - Resolve IP address to MAC address
- * @dev: Network device to use
- * @ip: IP address to resolve
- * @mac: Buffer to store MAC address (6 bytes)
- * @return: 0 on success, -1 on error
+ * arp_resolve - Resolve an IP address to a MAC address
+ *
+ * This is the main ARP resolution function used by the IP layer when it needs
+ * to send a packet to a specific IP address. The resolution process:
+ *
+ *   1. Check ARP cache (fast path - most common case)
+ *   2. If not cached, send ARP request and wait for reply
+ *   3. Retry up to ARP_RESOLVE_RETRIES times with timeout per attempt
+ *   4. Update cache and return MAC on success
+ *
+ * The function blocks until resolution completes or all retries are exhausted.
+ * During the wait, it polls the network driver to ensure received packets
+ * (including ARP replies) are processed promptly, since we might be waiting
+ * for an interrupt-driven packet arrival.
+ *
+ * @dev: Network device to use for sending ARP requests
+ * @ip: IP address to resolve (in network byte order)
+ * @mac: Buffer to store resolved MAC address (6 bytes)
+ * @return: 0 on success, -1 if resolution fails after all retries
  */
 int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
 {
-    /* Check ARP cache first */
+    /* Don't try to resolve our own IP address - use our MAC directly */
+    extern ip4_addr_t ip_local_addr;
+    
+    /* Check if this is our interface-specific IP */
+    ip4_addr_t interface_ip = 0;
+    if (dev)
+    {
+        extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
+        if (arp_get_interface_ip(dev, &interface_ip) == 0 && ip == interface_ip)
+        {
+            /* This is our interface IP, use our MAC */
+            memcpy(mac, dev->mac, 6);
+            LOG_INFO_FMT("ARP", "IP " IP4_FMT " is our interface IP, using our MAC", IP4_ARGS(ntohl(ip)));
+            return 0;
+        }
+    }
+    
+    /* Check if this is our default IP */
+    if (ip == my_ip || ip == ip_local_addr)
+    {
+        /* This is our own IP, use our MAC */
+        if (dev)
+        {
+            memcpy(mac, dev->mac, 6);
+            LOG_INFO_FMT("ARP", "IP " IP4_FMT " is our own IP, using our MAC", IP4_ARGS(ntohl(ip)));
+            return 0;
+        }
+        return -1;  /* No device, can't get MAC */
+    }
+    
+    /* Fast path: check ARP cache first. Most resolutions will hit the cache
+     * since we opportunistically update it when ARP packets arrive. This
+     * avoids sending unnecessary ARP requests for hosts we've recently
+     * communicated with.
+     */
     struct arp_cache_entry *entry = arp_lookup(ip);
     if (entry)
     {
@@ -324,7 +462,11 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
         return 0;
     }
     
-    /* Not in cache, try to resolve with timeout and retries */
+    /* Cache miss: need to send ARP request and wait for reply. This is the
+     * slow path - we'll block here for up to (ARP_RESOLVE_TIMEOUT_MS * ARP_RESOLVE_RETRIES)
+     * milliseconds waiting for a response. We poll the network driver during
+     * the wait to ensure ARP replies are processed promptly.
+     */
     LOG_INFO_FMT("ARP", "IP " IP4_FMT " not in cache, attempting resolution", IP4_ARGS(ntohl(ip)));
     
     for (int retry = 0; retry < ARP_RESOLVE_RETRIES; retry++)
@@ -517,12 +659,78 @@ void arp_print_cache(void)
 }
 
 /**
- * arp_set_my_ip - Update ARP's IP address (synchronize with IP layer)
+ * arp_set_my_ip - Update ARP's default IP address (synchronize with IP layer)
  * @ip: New IP address in network byte order
  */
 void arp_set_my_ip(ip4_addr_t ip)
 {
     my_ip = ip;
-    LOG_INFO_FMT("ARP", "Updated ARP IP address to " IP4_FMT, IP4_ARGS(ntohl(ip)));
+    LOG_INFO_FMT("ARP", "Updated ARP default IP address to " IP4_FMT, IP4_ARGS(ntohl(ip)));
+}
+
+/**
+ * arp_set_interface_ip - Set IP address for a specific network interface
+ * @dev: Network device
+ * @ip: IP address in network byte order
+ * @return: 0 on success, -1 on error
+ */
+int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
+{
+    if (!dev)
+        return -1;
+    
+    /* Check if interface already has an IP */
+    struct arp_interface_ip *if_ip = interface_ips;
+    while (if_ip)
+    {
+        if (if_ip->dev == dev)
+        {
+            /* Update existing IP */
+            if_ip->ip = ip;
+            LOG_INFO_FMT("ARP", "Updated IP for interface %s: " IP4_FMT,
+                        dev->name, IP4_ARGS(ntohl(ip)));
+            return 0;
+        }
+        if_ip = if_ip->next;
+    }
+    
+    /* Create new interface IP entry */
+    if_ip = kmalloc(sizeof(struct arp_interface_ip));
+    if (!if_ip)
+        return -1;
+    
+    if_ip->dev = dev;
+    if_ip->ip = ip;
+    if_ip->next = interface_ips;
+    interface_ips = if_ip;
+    
+    LOG_INFO_FMT("ARP", "Set IP for interface %s: " IP4_FMT,
+                dev->name, IP4_ARGS(ntohl(ip)));
+    return 0;
+}
+
+/**
+ * arp_get_interface_ip - Get IP address for a specific network interface
+ * @dev: Network device
+ * @ip: Output parameter for IP address
+ * @return: 0 on success, -1 if interface has no IP
+ */
+int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip)
+{
+    if (!dev || !ip)
+        return -1;
+    
+    struct arp_interface_ip *if_ip = interface_ips;
+    while (if_ip)
+    {
+        if (if_ip->dev == dev)
+        {
+            *ip = if_ip->ip;
+            return 0;
+        }
+        if_ip = if_ip->next;
+    }
+    
+    return -1;
 }
 

@@ -131,3 +131,18 @@ int vfs_file_exists(const char *pathname);
 int vfs_directory_exists(const char *pathname);
 int vfs_allocate_sectors(int count);
 int vfs_remove_directory(const char *path);
+
+/* Utility functions for file loading */
+/**
+ * vfs_read_file - Read entire file into memory
+ * @path: Path to file to read
+ * @data: Pointer to store allocated buffer (caller must free with kfree)
+ * @size: Pointer to store file size
+ *
+ * This function reads an entire file from the filesystem into a
+ * single buffer. Useful for loading executable files (ELF) or
+ * configuration files.
+ *
+ * Returns: 0 on success, -1 on error
+ */
+int vfs_read_file(const char *path, void **data, size_t *size);
