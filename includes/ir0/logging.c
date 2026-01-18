@@ -231,20 +231,7 @@ void log_message(log_level_t level, const char *component, const char *message)
         }
     }
 
-    /* Only print to VGA for WARN, ERROR, and FATAL levels to reduce clutter */
-    /* INFO and DEBUG go only to serial */
-    if (level >= LOG_LEVEL_WARN)
-    {
-        print_timestamp();
-        print("[");
-        print(get_level_string(level));
-        print("] [");
-        print(component);
-        print("] ");
-        print(message);
-        print("\n");
-    }
-
+    /* All logs go to serial only - VGA output disabled for cleaner output */
     /* Always output to serial for debugging (with timestamp) */
     serial_print_timestamp();
     serial_print("[");
@@ -280,10 +267,6 @@ void log_fatal(const char *component, const char *message)
 {
     log_message(LOG_LEVEL_FATAL, component, message);
 }
-
-/* =============================================================================== */
-/* FORMATTED LOGGING FUNCTIONS */
-/* =============================================================================== */
 
 void log_debug_fmt(const char *component, const char *format, ...)
 {

@@ -376,25 +376,51 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
         {
             extern ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip);
             extern ip4_addr_t ip_gateway;
+            extern void LOG_INFO_FMT(const char *component, const char *fmt, ...);
             
-            /* Use QEMU's default DNS (10.0.2.3) or gateway as fallback */
-            ip4_addr_t dns_server = htonl((10 << 24) | (0 << 16) | (2 << 8) | 3);
+#ifdef IR0_TAP_NETWORKING
+            /* TAP networking: Use Google DNS (8.8.8.8) directly
+             * The gateway (192.168.100.1) is not a DNS server, so we use 8.8.8.8 directly
+             */
+            ip4_addr_t dns_server = htonl((8 << 24) | (8 << 16) | (8 << 8) | 8);  /* 8.8.8.8 */
+            LOG_INFO_FMT("DEVNET", "Attempting DNS resolution for '%s' using 8.8.8.8", hostname);
+            dest_ip = dns_resolve(hostname, dns_server);
+#else
+            /* QEMU user-mode: Use QEMU's default DNS (10.0.2.3) */
+            ip4_addr_t dns_server = htonl((10 << 24) | (0 << 16) | (2 << 8) | 3);  /* 10.0.2.3 */
+            LOG_INFO_FMT("DEVNET", "Attempting DNS resolution for '%s' using 10.0.2.3", hostname);
+            
+            /* In QEMU user-mode, try gateway first (10.0.2.2) as it might forward DNS */
             if (ip_gateway != 0)
             {
-                /* Try gateway first, then QEMU DNS */
+                LOG_INFO_FMT("DEVNET", "Trying DNS via gateway first");
                 dest_ip = dns_resolve(hostname, ip_gateway);
                 if (dest_ip == 0)
+                {
+                    LOG_INFO_FMT("DEVNET", "Gateway DNS failed, trying direct DNS server");
                     dest_ip = dns_resolve(hostname, dns_server);
+                }
+                else
+                {
+                    LOG_INFO_FMT("DEVNET", "DNS resolution via gateway successful");
+                }
             }
             else
             {
+                LOG_INFO_FMT("DEVNET", "No gateway, using direct DNS server");
                 dest_ip = dns_resolve(hostname, dns_server);
             }
+#endif
             
             if (dest_ip == 0)
             {
                 /* DNS resolution failed */
+                LOG_INFO_FMT("DEVNET", "DNS resolution failed for '%s'", hostname);
                 return -1;
+            }
+            else
+            {
+                LOG_INFO_FMT("DEVNET", "DNS resolution successful: '%s' -> resolved IP", hostname);
             }
         }
         
