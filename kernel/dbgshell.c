@@ -10,7 +10,7 @@
 #include <drivers/video/typewriter.h>
 #include <ir0/syscall.h>
 #include <ir0/fcntl.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <ir0/vga.h>
 #include <ir0/types.h>
 #include <stddef.h>
@@ -22,9 +22,10 @@
 #include <ir0/chmod.h>
 #include <drivers/storage/ata.h>
 #include <drivers/storage/fs_types.h>
-#include "kernel/syscalls.h" // Ensure SYS_GET_BLOCK_DEVICES is included
+#include "kernel/syscalls.h"
 #include <ir0/net.h>
 #include <ir0/version.h>
+#include <net/arp.h>
 
 /* kernel/shell.c: use public headers for functions (kmem/string) */
 
@@ -724,16 +725,21 @@ static void cmd_netinfo(void)
 
 static void cmd_arpcache(void)
 {
-    /* Note: This command runs in user space, so we cannot directly
-     * access kernel memory like arp_cache. For now, just show a message.
-     * To properly implement this, we would need a syscall that returns
-     * the ARP cache entries.
+    /* Display ARP cache entries directly from kernel
+     * Since dbgshell runs in kernel mode, we can access kernel functions directly
      */
+    extern void arp_print_cache(void);
+    
     shell_write(1, "ARP Cache:\n");
     shell_write(1, "==========\n");
-    shell_write(1, "  ARP cache information is available via serial output.\n");
-    shell_write(1, "  Check serial logs for ARP cache entries.\n");
-    shell_write(1, "  (To implement proper display, add a syscall for ARP cache)\n");
+    
+    /* Call kernel function to print ARP cache to serial/log
+     * Note: Output goes to serial/log, not directly to shell output
+     * For full implementation, would need to capture output and format for shell
+     */
+    arp_print_cache();
+    
+    shell_write(1, "\n(ARP cache entries logged to serial output)\n");
 }
 
 /* Helper function to perform text substitution */
@@ -1610,9 +1616,10 @@ static void cmd_rm(const char *args)
   /* If recursive flag is set, use recursive removal */
   if (recursive)
   {
-    result = ir0_unlink(filename);
+    /* Try rmdir first (for directories), then unlink (for files) */
+    result = ir0_rmdir(filename);
     if (result < 0)
-      result = syscall(SYS_RMDIR_R, (uint64_t)filename, 0, 0);
+      result = ir0_unlink(filename);
     if (result < 0)
     {
       typewriter_vga_print("rm: cannot remove '", 0x0C);
@@ -1622,8 +1629,10 @@ static void cmd_rm(const char *args)
   }
   else
   {
-    /* Try to remove as file */
-    result = syscall(SYS_UNLINK, (uint64_t)filename, 0, 0);
+    /* Try to remove as file first, then as directory */
+    result = ir0_unlink(filename);
+    if (result < 0)
+      result = ir0_rmdir(filename);
     if (result < 0)
     {
       typewriter_vga_print("rm: cannot remove '", 0x0C);
@@ -1647,9 +1656,6 @@ static void cmd_touch(const char *filename)
     return;
   }
 
-  /* Use default file permissions (0644 = rw-r--r--) */
-  mode_t default_mode = 0644;
-
   /* Call the filesystem's touch function */
   int64_t result = ir0_touch(filename);
   if (result >= 0)
@@ -1658,33 +1664,6 @@ static void cmd_touch(const char *filename)
   {
     vga_print("touch: failed to create/update file\n", 0x0C);
   }
-}
-
-/* Helper function to convert number to string */
-static void uint64_to_str(uint64_t num, char *str)
-{
-  char tmp[32];
-  char *p = tmp;
-
-  if (num == 0)
-  {
-    *p++ = '0';
-  }
-  else
-  {
-    while (num > 0)
-    {
-      *p++ = '0' + (num % 10);
-      num /= 10;
-    }
-  }
-
-  /* Reverse the string */
-  while (p > tmp)
-  {
-    *str++ = *--p;
-  }
-  *str = '\0';
 }
 
 static void cmd_lsblk(const char *args __attribute__((unused)))
@@ -1768,22 +1747,22 @@ static void cmd_ping(const char *args)
 {
     if (!args || *args == '\0')
     {
-        shell_write(2, "Usage: ping <IP_ADDRESS>\n");
+        shell_write(2, "Usage: ping <IP_ADDRESS_OR_HOSTNAME>\n");
         shell_write(2, "Example: ping 192.168.1.1\n");
+        shell_write(2, "Example: ping www.google.com\n");
         return;
     }
     
-    ip4_addr_t dest_ip = parse_ip(args);
-    if (dest_ip == 0)
-    {
-        shell_write(2, "Invalid IP address format. Use: XXX.XXX.XXX.XXX\n");
-        return;
-    }
-    
+    /* Use /dev/net filesystem - it will handle DNS resolution if needed */
     int64_t ret = ir0_ping(args);
-    if (ret != 0)
+    if (ret < 0)
     {
-        shell_write(2, "Ping failed\n");
+        shell_write(2, "ping: failed to send ICMP echo request\n");
+        shell_write(2, "Note: If using hostname, ensure DNS is configured\n");
+    }
+    else
+    {
+        shell_write(1, "ping: ICMP echo request sent\n");
     }
 }
 
@@ -1826,19 +1805,36 @@ static void cmd_ifconfig(const char *args)
         }
     }
     
-    ip4_addr_t ip = parse_ip(ip_str);
-    ip4_addr_t netmask = netmask_str ? parse_ip(netmask_str) : 0;
-    ip4_addr_t gateway = gateway_str ? parse_ip(gateway_str) : 0;
-    
-    if (ip == 0 && ip_str[0] != '\0')
+    /* Validate IP address if provided */
+    if (ip_str[0] != '\0')
     {
-        shell_write(2, "Invalid IP address format\n");
-        return;
+        ip4_addr_t ip = parse_ip(ip_str);
+        if (ip == 0)
+        {
+            shell_write(2, "Invalid IP address format\n");
+            return;
+        }
     }
     
+    /* Build configuration string for /dev/net filesystem */
     char config[256];
-snprintf(config, sizeof(config), "%s %s %s", ip_str, netmask_str, gateway_str);
-ir0_ifconfig(config);
+    snprintf(config, sizeof(config), "%s", ip_str ? ip_str : "");
+    if (netmask_str && netmask_str[0] != '\0')
+    {
+        size_t len = strlen(config);
+        snprintf(config + len, sizeof(config) - len, " %s", netmask_str);
+    }
+    if (gateway_str && gateway_str[0] != '\0')
+    {
+        size_t len = strlen(config);
+        snprintf(config + len, sizeof(config) - len, " %s", gateway_str);
+    }
+    
+    int64_t ret = ir0_ifconfig(config);
+    if (ret < 0)
+    {
+        shell_write(2, "ifconfig: failed to configure network\n");
+    }
 }
 
 /* Command table: name, handler, description */
@@ -1882,7 +1878,7 @@ static const struct shell_cmd commands[] = {
     {"touch", cmd_touch, "touch FILE", "Create empty file or update timestamp"},
     {"netinfo", (void (*)(const char *))cmd_netinfo, "netinfo", "Display network interface information"},
     {"arpcache", (void (*)(const char *))cmd_arpcache, "arpcache", "Display ARP cache"},
-    {"ping", cmd_ping, "ping <IP>", "Send ICMP Echo Request (ping) to IP address"},
+    {"ping", cmd_ping, "ping <IP|HOSTNAME>", "Send ICMP Echo Request (ping) to IP address or hostname"},
     {"ifconfig", cmd_ifconfig, "ifconfig [IP] [NETMASK] [GATEWAY]", "Configure or display network interface"},
     {"uname", cmd_uname, "uname [-a|-s|-r|-v|-m|-p|-i|-o]", "Print system information"},
 };

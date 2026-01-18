@@ -66,9 +66,15 @@ void increment_pit_ticks(void)
 /* Initialize PIC (Programmable Interrupt Controller) */
 void init_pic(void)
 {
-    /* Save current masks (not used for now) */
-    (void)inb(PIC1_DATA); /* Read current mask1 */
-    (void)inb(PIC2_DATA); /* Read current mask2 */
+    /* Read current interrupt masks to save state
+     * Note: Saved masks could be used to restore PIC state on shutdown
+     * or to preserve existing interrupt configuration
+     * Current implementation discards them for simplicity
+     */
+    uint8_t saved_mask1 = inb(PIC1_DATA); /* Read current mask1 */
+    uint8_t saved_mask2 = inb(PIC2_DATA); /* Read current mask2 */
+    (void)saved_mask1; /* Not used currently - could be stored for restoration */
+    (void)saved_mask2; /* Not used currently - could be stored for restoration */
 
     /* Initially disable all interrupts */
     outb(PIC1_DATA, 0xFF);

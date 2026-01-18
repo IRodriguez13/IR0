@@ -19,7 +19,7 @@
 #include <ir0/stat.h>
 #include <drivers/video/typewriter.h>
 #include <ir0/serial.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <kernel/process.h>
 #include <string.h>
 

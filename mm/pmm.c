@@ -9,7 +9,7 @@
  */
 
 #include "pmm.h"
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <drivers/serial/serial.h>
 #include <config.h>
 

@@ -115,6 +115,56 @@
     } while(0)
 
 /**
+ * VALIDATE_BUFFER - Validates buffer and returns error code if invalid
+ * Returns -1 if buf is NULL or count is 0 (for functions that return int)
+ */
+#define VALIDATE_BUFFER(buf, count) \
+    ({ \
+        int __ret = 0; \
+        if (unlikely(!(buf) || (count) == 0)) \
+            __ret = -1; \
+        __ret; \
+    })
+
+/**
+ * VALIDATE_BUFFER_PTR - Validates buffer and returns error code if invalid
+ * Returns NULL if buf is NULL or count is 0 (for functions that return pointer)
+ */
+#define VALIDATE_BUFFER_PTR(buf, count) \
+    ({ \
+        void *__ret = NULL; \
+        if (unlikely(!(buf) || (count) == 0)) \
+            __ret = NULL; \
+        else \
+            __ret = (void *)1; /* Non-NULL indicates valid */ \
+        __ret; \
+    })
+
+/**
+ * VALIDATE_STRING - Validates string pointer and non-empty
+ * Returns -1 if string is NULL or empty
+ */
+#define VALIDATE_STRING(str) \
+    ({ \
+        int __ret = 0; \
+        if (unlikely(!(str) || *(str) == '\0')) \
+            __ret = -1; \
+        __ret; \
+    })
+
+/**
+ * VALIDATE_CALLBACK - Validates callback function pointer
+ * Returns -1 if callback is NULL
+ */
+#define VALIDATE_CALLBACK(cb) \
+    ({ \
+        int __ret = 0; \
+        if (unlikely(!(cb))) \
+            __ret = -1; \
+        __ret; \
+    })
+
+/**
  * VERIFY - Runtime assertion that doesn't get compiled out
  * Unlike ASSERT, this always runs even in release builds
  */

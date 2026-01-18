@@ -14,16 +14,15 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include "process.h"
+#include "rr_sched.h"
+#include <fs/vfs.h>
+#include <drivers/serial/serial.h>
 
 /* Compiler optimization hints */
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
-
-/* External functions */
-extern void serial_print(const char *str);
-extern void serial_print_hex32(uint32_t num);
 
 /* Use external strstr from string.h */
 
@@ -231,8 +230,27 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     return process;
 }
 
-/* Main ELF loader function */
-int elf_load_and_execute(const char *path)
+/**
+ * kexecve - Load and execute ELF binary (kernel-level exec)
+ * @path: Path to ELF executable file
+ *
+ * This function loads an ELF binary from the filesystem, creates a process,
+ * maps the segments into memory, and schedules the process for execution.
+ * This is the kernel-level equivalent of execve() syscall.
+ *
+ * Algorithm:
+ * 1. Read ELF file from filesystem via VFS
+ * 2. Validate ELF header (magic, architecture, type)
+ * 3. Create process structure with proper page directory
+ * 4. Load ELF segments into memory at virtual addresses
+ * 5. Set up entry point, stack, and registers
+ * 6. Add process to scheduler for execution
+ *
+ * Returns: 0 on success, -1 on error
+ *
+ * Thread safety: NOT thread-safe - should be called from process context
+ */
+int kexecve(const char *path)
 {
     serial_print("SERIAL: ELF: ========================================\n");
     serial_print("SERIAL: ELF: Loading ELF file: ");
@@ -240,7 +258,6 @@ int elf_load_and_execute(const char *path)
     serial_print("\n");
 
     /* Step 1: Read the ELF file from filesystem */
-    extern int vfs_read_file(const char *path, void **data, size_t *size);
     void *file_data = NULL;
     size_t file_size = 0;
 
@@ -284,7 +301,6 @@ int elf_load_and_execute(const char *path)
     }
 
     /* Step 5: Add process to scheduler */
-    extern void rr_add_process(process_t * proc);
     rr_add_process(process);
     serial_print("SERIAL: ELF: Process added to scheduler\n");
 

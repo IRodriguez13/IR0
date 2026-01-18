@@ -6,8 +6,8 @@
  */
 
 #include "devfs.h"
-#include <ir0/memory/allocator.h>
-#include <ir0/memory/kmem.h>
+#include <mm/allocator.h>
+#include <ir0/kmem.h>
 #include <ir0/vga.h>
 #include <ir0/logging.h>
 #include <ir0/keyboard.h>
@@ -18,6 +18,7 @@
 #include <net/rtl8139.h>
 #include <net/ip.h>
 #include <net/icmp.h>
+#include <net/dns.h>
 #include <kernel/syscalls.h>
 #include <drivers/storage/ata.h>
 #include <string.h>
@@ -316,11 +317,296 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
     /* Parse network commands (ping, ifconfig, etc.) */
     if (strncmp(cmd, "ping ", 5) == 0)
     {
-        /* Send ping */
+        /* Parse IP address or hostname from command */
+        const char *host_str = cmd + 5;
+        while (*host_str == ' ' || *host_str == '\t')
+            host_str++;
+        
+        /* Extract hostname/IP string (terminate at whitespace) */
+        char hostname[256];
+        size_t hostname_len = 0;
+        const char *p = host_str;
+        while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && hostname_len < sizeof(hostname) - 1)
+        {
+            hostname[hostname_len++] = *p++;
+        }
+        hostname[hostname_len] = '\0';
+        
+        /* Try to parse as IP address first */
+        ip4_addr_t dest_ip = 0;
+        {
+            uint8_t octets[4] = {0, 0, 0, 0};
+            int octet_idx = 0;
+            int value = 0;
+            p = hostname;
+            
+            while (*p && octet_idx < 4)
+            {
+                if (*p >= '0' && *p <= '9')
+                {
+                    value = value * 10 + (*p - '0');
+                    if (value > 255)
+                        break;
+                }
+                else if (*p == '.')
+                {
+                    if (octet_idx >= 4)
+                        break;
+                    octets[octet_idx++] = (uint8_t)value;
+                    value = 0;
+                }
+                else
+                {
+                    /* Not an IP, might be a hostname */
+                    dest_ip = 0;
+                    break;
+                }
+                p++;
+            }
+            
+            if (octet_idx == 3 && value <= 255 && *p == '\0')
+            {
+                octets[octet_idx] = (uint8_t)value;
+                dest_ip = htonl((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]);
+            }
+        }
+        
+        /* If not an IP address, try DNS resolution */
+        if (dest_ip == 0)
+        {
+            extern ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip);
+            extern ip4_addr_t ip_gateway;
+            
+            /* Use QEMU's default DNS (10.0.2.3) or gateway as fallback */
+            ip4_addr_t dns_server = htonl((10 << 24) | (0 << 16) | (2 << 8) | 3);
+            if (ip_gateway != 0)
+            {
+                /* Try gateway first, then QEMU DNS */
+                dest_ip = dns_resolve(hostname, ip_gateway);
+                if (dest_ip == 0)
+                    dest_ip = dns_resolve(hostname, dns_server);
+            }
+            else
+            {
+                dest_ip = dns_resolve(hostname, dns_server);
+            }
+            
+            if (dest_ip == 0)
+            {
+                /* DNS resolution failed */
+                return -1;
+            }
+        }
+        
+        /* Send ping via ioctl */
+        return dev_net_ioctl(entry, NET_SEND_PING, &dest_ip);
     }
     else if (strncmp(cmd, "ifconfig", 8) == 0)
     {
-        /* Configure interface */
+        /* Parse ifconfig command: "ifconfig <ip> [netmask] [gateway]" */
+        const char *config_str = cmd + 8;  /* Skip "ifconfig" */
+        while (*config_str == ' ' || *config_str == '\t')
+            config_str++;
+        
+        if (*config_str == '\0' || *config_str == '\n')
+        {
+            /* No arguments: show current config via ioctl */
+            typedef struct {
+                ip4_addr_t *ip;
+                ip4_addr_t *netmask;
+                ip4_addr_t *gateway;
+            } net_config_t;
+            
+            ip4_addr_t ip, netmask, gateway;
+            net_config_t config = { &ip, &netmask, &gateway };
+            
+            if (dev_net_ioctl(entry, NET_GET_CONFIG, &config) == 0)
+            {
+                /* Format and display configuration */
+                extern int snprintf(char *str, size_t size, const char *format, ...);
+                char buf[256];
+                
+                /* Format IP addresses */
+                uint32_t ip_h = ntohl(ip);
+                uint32_t netmask_h = ntohl(netmask);
+                uint32_t gateway_h = ntohl(gateway);
+                
+                snprintf(buf, sizeof(buf), 
+                        "IP: %d.%d.%d.%d\n"
+                        "Netmask: %d.%d.%d.%d\n"
+                        "Gateway: %d.%d.%d.%d\n",
+                        (int)((ip_h >> 24) & 0xFF), (int)((ip_h >> 16) & 0xFF),
+                        (int)((ip_h >> 8) & 0xFF), (int)(ip_h & 0xFF),
+                        (int)((netmask_h >> 24) & 0xFF), (int)((netmask_h >> 16) & 0xFF),
+                        (int)((netmask_h >> 8) & 0xFF), (int)(netmask_h & 0xFF),
+                        (int)((gateway_h >> 24) & 0xFF), (int)((gateway_h >> 16) & 0xFF),
+                        (int)((gateway_h >> 8) & 0xFF), (int)(gateway_h & 0xFF));
+                
+                /* Write to stdout */
+                extern void typewriter_vga_print(const char *str, uint8_t color);
+                typewriter_vga_print(buf, 0x0F);
+            }
+        }
+        else
+        {
+            /* Parse IP, netmask, gateway */
+            char config_copy[256];
+            size_t i = 0;
+            const char *p = config_str;
+            while (i < sizeof(config_copy) - 1 && *p && *p != '\n' && *p != '\r')
+                config_copy[i++] = *p++;
+            config_copy[i] = '\0';
+            
+            /* Parse IP address */
+            char *ip_str = config_copy;
+            char *netmask_str = NULL;
+            char *gateway_str = NULL;
+            
+            /* Find netmask */
+            char *q = ip_str;
+            while (*q && *q != ' ' && *q != '\t')
+                q++;
+            if (*q)
+            {
+                *q++ = '\0';
+                netmask_str = q;
+                while (*netmask_str == ' ' || *netmask_str == '\t')
+                    netmask_str++;
+                
+                /* Find gateway */
+                q = netmask_str;
+                while (*q && *q != ' ' && *q != '\t')
+                    q++;
+                if (*q)
+                {
+                    *q++ = '\0';
+                    gateway_str = q;
+                    while (*gateway_str == ' ' || *gateway_str == '\t')
+                        gateway_str++;
+                    if (*gateway_str == '\0')
+                        gateway_str = NULL;
+                }
+                
+                /* Check if netmask is empty */
+                if (netmask_str[0] == '\0')
+                    netmask_str = NULL;
+            }
+            
+            /* Parse IP addresses */
+            uint8_t ip_octets[4] = {0};
+            uint8_t netmask_octets[4] = {0};
+            uint8_t gateway_octets[4] = {0};
+            
+            /* Parse IP */
+            int octet_idx = 0;
+            int value = 0;
+            const char *parse_ptr = ip_str;
+            while (*parse_ptr && octet_idx < 4)
+            {
+                if (*parse_ptr >= '0' && *parse_ptr <= '9')
+                {
+                    value = value * 10 + (*parse_ptr - '0');
+                    if (value > 255)
+                        return -1;
+                }
+                else if (*parse_ptr == '.')
+                {
+                    ip_octets[octet_idx++] = (uint8_t)value;
+                    value = 0;
+                }
+                else
+                    return -1;
+                parse_ptr++;
+            }
+            if (octet_idx == 3)
+                ip_octets[octet_idx] = (uint8_t)value;
+            else
+                return -1;
+            
+            ip4_addr_t new_ip = htonl((ip_octets[0] << 24) | (ip_octets[1] << 16) | 
+                                      (ip_octets[2] << 8) | ip_octets[3]);
+            ip4_addr_t new_netmask = 0;
+            ip4_addr_t new_gateway = 0;
+            
+            /* Parse netmask if provided */
+            if (netmask_str)
+            {
+                octet_idx = 0;
+                value = 0;
+                parse_ptr = netmask_str;
+                while (*parse_ptr && octet_idx < 4)
+                {
+                    if (*parse_ptr >= '0' && *parse_ptr <= '9')
+                    {
+                        value = value * 10 + (*parse_ptr - '0');
+                        if (value > 255)
+                            return -1;
+                    }
+                    else if (*parse_ptr == '.')
+                    {
+                        netmask_octets[octet_idx++] = (uint8_t)value;
+                        value = 0;
+                    }
+                    else
+                        return -1;
+                    parse_ptr++;
+                }
+                if (octet_idx == 3)
+                    netmask_octets[octet_idx] = (uint8_t)value;
+                else
+                    return -1;
+                
+                new_netmask = htonl((netmask_octets[0] << 24) | (netmask_octets[1] << 16) | 
+                                    (netmask_octets[2] << 8) | netmask_octets[3]);
+            }
+            
+            /* Parse gateway if provided */
+            if (gateway_str)
+            {
+                octet_idx = 0;
+                value = 0;
+                parse_ptr = gateway_str;
+                while (*parse_ptr && octet_idx < 4)
+                {
+                    if (*parse_ptr >= '0' && *parse_ptr <= '9')
+                    {
+                        value = value * 10 + (*parse_ptr - '0');
+                        if (value > 255)
+                            return -1;
+                    }
+                    else if (*parse_ptr == '.')
+                    {
+                        gateway_octets[octet_idx++] = (uint8_t)value;
+                        value = 0;
+                    }
+                    else
+                        return -1;
+                    parse_ptr++;
+                }
+                if (octet_idx == 3)
+                    gateway_octets[octet_idx] = (uint8_t)value;
+                else
+                    return -1;
+                
+                new_gateway = htonl((gateway_octets[0] << 24) | (gateway_octets[1] << 16) | 
+                                    (gateway_octets[2] << 8) | gateway_octets[3]);
+            }
+            
+            /* Set configuration via ioctl */
+            typedef struct {
+                ip4_addr_t ip;
+                ip4_addr_t netmask;
+                ip4_addr_t gateway;
+            } net_set_config_t;
+            
+            net_set_config_t config = {
+                .ip = new_ip,
+                .netmask = new_netmask,
+                .gateway = new_gateway
+            };
+            
+            return dev_net_ioctl(entry, NET_SET_CONFIG, &config);
+        }
     }
     
     return count;
@@ -353,10 +639,9 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 {
                     extern int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
                                                       uint16_t id, uint16_t seq, const void *data, size_t len);
-                    extern pid_t sys_getpid(void);
                     
                     /* Use process ID as identifier, sequence 0 */
-                    pid_t pid = sys_getpid();
+                    pid_t pid = (pid_t)sys_getpid();
                     uint16_t id = (uint16_t)(pid & 0xFFFF);
                     uint16_t seq = 0;
                     
@@ -430,21 +715,25 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry;
-    (void)offset;  /* For now, always return from start */
     
     /* Generate df-like output: Filesystem          Size */
+    /* Support offset for seeking within output */
     char output[1024];
-    size_t off = 0;
+    size_t output_len = 0;
     
-    int n = snprintf(output + off, sizeof(output) - off,
+    /* Validate offset */
+    if (offset < 0)
+        return -1;
+    
+    int n = snprintf(output + output_len, sizeof(output) - output_len,
                      "Filesystem          Size\n");
-    if (n > 0 && (size_t)n < sizeof(output) - off)
-        off += (size_t)n;
+    if (n > 0 && (size_t)n < sizeof(output) - output_len)
+        output_len += (size_t)n;
     
-    n = snprintf(output + off, sizeof(output) - off,
+    n = snprintf(output + output_len, sizeof(output) - output_len,
                  "----------------------------------\n");
-    if (n > 0 && (size_t)n < sizeof(output) - off)
-        off += (size_t)n;
+    if (n > 0 && (size_t)n < sizeof(output) - output_len)
+        output_len += (size_t)n;
     
     int found_drives = 0;
     for (uint8_t i = 0; i < 4; i++)
@@ -462,13 +751,13 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         uint64_t size = ata_get_size(i);
         if (size == 0)
         {
-            n = snprintf(output + off, sizeof(output) - off,
+            n = snprintf(output + output_len, sizeof(output) - output_len,
                         "%-20s (empty)\n", devname);
         }
         else
         {
             char size_str[32];
-            /* Same calculation as sys_df: sectors / (2 * 1024 * 1024) = GB */
+            /* Same calculation: sectors / (2 * 1024 * 1024) = GB */
             uint64_t size_gb = size / (2 * 1024 * 1024);
             if (size_gb > 0)
             {
@@ -524,7 +813,7 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
             
             if (len > 0 && len < (int)sizeof(size_str))
             {
-                n = snprintf(output + off, sizeof(output) - off,
+                n = snprintf(output + output_len, sizeof(output) - output_len,
                             "%-20s %s\n", devname, size_str);
             }
             else
@@ -533,23 +822,32 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
             }
         }
         
-        if (n > 0 && (size_t)n < sizeof(output) - off)
-            off += (size_t)n;
+        if (n > 0 && (size_t)n < sizeof(output) - output_len)
+            output_len += (size_t)n;
     }
     
     if (found_drives == 0)
     {
-        n = snprintf(output + off, sizeof(output) - off,
+        n = snprintf(output + output_len, sizeof(output) - output_len,
                     "No drives detected\n");
-        if (n > 0 && (size_t)n < sizeof(output) - off)
-            off += (size_t)n;
+        if (n > 0 && (size_t)n < sizeof(output) - output_len)
+            output_len += (size_t)n;
+    }
+    
+    /* Support offset: skip bytes if offset is beyond start */
+    size_t start_pos = (size_t)offset;
+    if (start_pos >= output_len)
+    {
+        /* Offset beyond end of output - return empty */
+        return 0;
     }
     
     /* Copy to user buffer (respecting offset and count) */
-    size_t copy_size = (off < count) ? off : count;
+    size_t available = output_len - start_pos;
+    size_t copy_size = (available < count) ? available : count;
     if (copy_size > 0)
     {
-        memcpy(buf, output, copy_size);
+        memcpy(buf, output + start_pos, copy_size);
     }
     
     return (int64_t)copy_size;
@@ -683,8 +981,33 @@ int64_t dev_random_write(devfs_entry_t *entry, const void *buf, size_t count, of
 
 int64_t dev_urandom_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
-    /* /dev/urandom uses same implementation as /dev/random for now */
-    return dev_random_read(entry, buf, count, offset);
+    (void)entry; (void)offset;
+    
+    /* /dev/urandom: Non-blocking random number generator
+     * Unlike /dev/random which may block when entropy is low,
+     * /dev/urandom never blocks and continues generating pseudo-random data.
+     * 
+     * In this implementation, both use the same LCG-based generator,
+     * but /dev/urandom explicitly never blocks and always returns immediately.
+     */
+    
+    /* Initialize seed with timer if not set */
+    if (random_seed == 0)
+    {
+        extern uint64_t clock_get_uptime_milliseconds(void);
+        random_seed = (uint32_t)(clock_get_uptime_milliseconds() & 0xFFFFFFFF);
+    }
+    
+    /* Fill buffer with random bytes - non-blocking, always succeeds */
+    uint8_t *buffer = (uint8_t *)buf;
+    for (size_t i = 0; i < count; i++)
+    {
+        /* Use LCG with different multiplier for urandom to differentiate streams */
+        random_seed = (random_seed * 1664525 + 1013904223) & 0x7FFFFFFF;
+        buffer[i] = (uint8_t)(random_seed & 0xFF);
+    }
+    
+    return (int64_t)count;
 }
 
 int64_t dev_urandom_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)

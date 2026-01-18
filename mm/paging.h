@@ -1,15 +1,8 @@
-// ===============================================================================
-// IR0 KERNEL - SIMPLE X64 PAGING SYSTEM
-// ===============================================================================
-
 #pragma once
 
 #include <stdint.h>
 #include <stddef.h>
 
-// ===============================================================================
-// PAGE FLAGS
-// ===============================================================================
 
 #define PAGE_PRESENT 0x1
 #define PAGE_RW 0x2
@@ -21,17 +14,11 @@
 #define PAGE_SIZE_2MB_FLAG 0x80
 #define PAGE_GLOBAL 0x100
 
-// ===============================================================================
-// PAGE SIZES
-// ===============================================================================
 
 #define PAGE_SIZE_4KB (4 * 1024)
 #define PAGE_SIZE_2MB (2 * 1024 * 1024)
 #define PAGE_SIZE_1GB (1024 * 1024 * 1024)
 
-// ===============================================================================
-// PAGING FUNCTIONS
-// ===============================================================================
 
 /**
  * Setup identity mapping for 16MB using 2MB pages
@@ -76,9 +63,6 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
  */
 int unmap_page(uint64_t virt_addr);
 
-// ===============================================================================
-// USER MEMORY MAPPING FUNCTIONS
-// ===============================================================================
 
 // Mapear página de usuario con permisos U/S=1
 int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags);
@@ -86,9 +70,6 @@ int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flag
 // Mapear región de memoria de usuario
 int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags);
 
-// ===============================================================================
-// DEBUG FUNCTIONS
-// ===============================================================================
 
 /**
  * Print current paging status
@@ -115,9 +96,6 @@ void test_page_fault_protection(void);
  * Only call AFTER paging is completely configured
  */
 void verify_paging_setup_safe(void);
-// ===============================================================================
-// PROCESS PAGE DIRECTORY MANAGEMENT
-// ===============================================================================
 
 // Forward declaration for process_t
 struct process;

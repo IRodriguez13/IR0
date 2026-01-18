@@ -95,6 +95,7 @@ endif
 CFLAGS += -I$(KERNEL_ROOT)
 CFLAGS += -I$(KERNEL_ROOT)/includes
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
+CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
 CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include
 CFLAGS += -I$(KERNEL_ROOT)/include
@@ -102,7 +103,7 @@ CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/drivers
 CFLAGS += -I$(KERNEL_ROOT)/fs
 CFLAGS += -I$(KERNEL_ROOT)/interrupt
-CFLAGS += -I$(KERNEL_ROOT)/memory
+CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/scheduler
 
 
@@ -141,9 +142,9 @@ KERNEL_OBJS = \
     kernel/user.o
 
 MEMORY_OBJS = \
-	includes/ir0/memory/allocator.o \
-	includes/ir0/memory/paging.o \
-	includes/ir0/memory/kmem.o
+	mm/allocator.o \
+	mm/paging.o \
+	mm/kmem.o
 
 LIB_OBJS = \
     includes/ir0/vga.o \

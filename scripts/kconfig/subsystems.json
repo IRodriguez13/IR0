@@ -30,10 +30,10 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "includes/ir0/memory/allocator.c",
-          "includes/ir0/memory/paging.c",
-          "includes/ir0/memory/kmem.c",
-          "includes/ir0/memory/pmm.c"
+          "mm/allocator.c",
+          "mm/paging.c",
+          "mm/kmem.c",
+          "mm/pmm.c"
         ],
         "arm32": []
       },

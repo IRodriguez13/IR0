@@ -14,52 +14,51 @@
 typedef uint32_t mode_t;
 
 /**
- * POSIX Minimal Syscalls
+ * POSIX-compliant System Call Numbers
  * 
- * Reduced to essential syscalls.
+ * This enum contains only standard POSIX syscalls, following the
+ * principle of "everything is a file" where possible. Custom operations
+ * should be accessed through /proc, /dev, or /sys filesystems instead
+ * of custom syscalls.
+ * 
+ * Numbers follow standard POSIX/Linux syscall conventions for compatibility.
  */
 typedef enum {
+    /* Process management - POSIX */
     SYS_EXIT = 0,
-    SYS_WRITE = 1,
+    SYS_FORK = 1,
     SYS_READ = 2,
-    SYS_GETPID = 3,
-    SYS_GETPPID = 4,
-    SYS_LS = 5,
-    SYS_MKDIR = 6,
-    SYS_PS = 7,
-    SYS_TOUCH = 10,
-    SYS_RM = 11,
-    SYS_FORK = 12,
-    SYS_WAITPID = 13,
-    SYS_LSEEK = 19,
-    SYS_RMDIR = 40,
-    SYS_MALLOC_TEST = 50,
-    SYS_BRK = 51,
-    SYS_SBRK = 52,
-    SYS_MMAP = 53,
-    SYS_MUNMAP = 54,
-    SYS_MPROTECT = 55,
-    SYS_EXEC = 56,
-    SYS_FSTAT = 57,
-    SYS_STAT = 58,
-    SYS_OPEN = 59,
-    SYS_CLOSE = 60,
-    SYS_LS_DETAILED = 61,
-    SYS_CREAT = 62,
-    SYS_DUP2 = 63,
-    SYS_GETCWD = 79,
-    SYS_CHDIR = 80,
-    SYS_UNLINK = 87,
-    SYS_RMDIR_R = 88,
-    SYS_RMDIR_FORCE = 89,
-    SYS_MOUNT = 90,
-    SYS_DF = 95,
-    SYS_CHMOD = 100,
-    SYS_LINK = 101,
-    SYS_AUDIO_TEST = 112,
-    SYS_MOUSE_TEST = 113,
-    SYS_PING = 115,
-    SYS_IFCONFIG = 116,
+    SYS_WRITE = 3,
+    SYS_OPEN = 4,
+    SYS_CLOSE = 5,
+    SYS_WAITPID = 6,
+    SYS_CREAT = 7,      /* POSIX but deprecated, use open(O_CREAT) */
+    SYS_LINK = 8,
+    SYS_UNLINK = 9,
+    SYS_EXEC = 10,      /* execve in POSIX */
+    SYS_CHDIR = 11,
+    SYS_GETPID = 12,
+    SYS_MOUNT = 13,     /* Linux-specific but essential for filesystems */
+    
+    /* File operations - POSIX */
+    SYS_MKDIR = 14,
+    SYS_RMDIR = 15,
+    SYS_CHMOD = 16,
+    SYS_LSEEK = 17,
+    SYS_GETCWD = 18,
+    SYS_STAT = 19,
+    SYS_FSTAT = 20,
+    SYS_DUP2 = 21,
+    
+    /* Memory management - POSIX */
+    SYS_BRK = 22,       /* Legacy but POSIX-compliant */
+    SYS_MMAP = 23,
+    SYS_MUNMAP = 24,
+    SYS_MPROTECT = 25,
+    
+    /* Process info - POSIX */
+    SYS_GETPPID = 26,
+    SYS_KILL = 27,      /* Signal handling - POSIX */
 } syscall_num_t;
 
 /* Virtual filesystem paths for file operations */
@@ -235,10 +234,8 @@ static inline int64_t ir0_fstat(int fd, stat_t *buf)
 }
 
 /* Memory management */
-static inline void *ir0_sbrk(intptr_t increment)
-{
-    return (void *)syscall1(SYS_SBRK, increment);
-}
+/* sbrk is implemented as a wrapper around brk in userspace libraries */
+/* POSIX does not require sbrk as a syscall - it's typically a library function */
 
 static inline int64_t ir0_brk(void *addr)
 {

@@ -224,6 +224,7 @@ def generate_makefile(config_file, subsystems_json, arch, kernel_root, output_pa
         f.write("CFLAGS += -I$(KERNEL_ROOT)\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/includes\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/includes/ir0\n")
+        f.write("CFLAGS += -I$(KERNEL_ROOT)/mm\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/arch/common\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/include\n")
@@ -231,7 +232,7 @@ def generate_makefile(config_file, subsystems_json, arch, kernel_root, output_pa
         f.write("CFLAGS += -I$(KERNEL_ROOT)/drivers\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/fs\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/interrupt\n")
-        f.write("CFLAGS += -I$(KERNEL_ROOT)/memory\n")
+        f.write("CFLAGS += -I$(KERNEL_ROOT)/mm\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/scheduler\n\n")
         
         # Object files

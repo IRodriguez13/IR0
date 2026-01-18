@@ -13,10 +13,6 @@
 #include <logging.h>
 #include <panic/panic.h>
 #include <validation.h>
-
-// ===============================================================================
-// ARCHITECTURE INCLUDES
-// ===============================================================================
 #include <arch_interface.h>
 #include <arch_portable.h>
 #include <idt.h>
@@ -32,9 +28,6 @@
     // #include <arch/arm-32/paging.h>  // TODO: Implement
 #endif
 
-// ===============================================================================
-// MEMORY MANAGEMENT INCLUDES
-// ===============================================================================
 #if ENABLE_BUMP_ALLOCATOR
     #include <bump_allocator.h>
 #endif
@@ -55,19 +48,12 @@
     #include <paging_x64.h>
 #endif
 
-// ===============================================================================
-// INTERRUPT SYSTEM INCLUDES
-// ===============================================================================
 #include <idt.h>
 #include <pic.h>
 
 #if ENABLE_KEYBOARD_DRIVER
     // #include <keyboard.h>  // TODO: Fix include path
 #endif
-
-// ===============================================================================
-// DRIVER INCLUDES
-// ===============================================================================
 
 // Timer drivers
 #if ENABLE_TIMER_DRIVERS
@@ -88,18 +74,10 @@
 #endif
 
 
-// ===============================================================================
-// FILE SYSTEM INCLUDES
-// ===============================================================================
-// #include <vfs_simple.h>  // TODO: Fix include path
-
 #if ENABLE_VFS
     // #include <vfs.h>  // TODO: Fix include path
 #endif
 
-// ===============================================================================
-// KERNEL SUBSYSTEM INCLUDES
-// ===============================================================================
 
 // Process management
 #if ENABLE_PROCESS_MANAGEMENT

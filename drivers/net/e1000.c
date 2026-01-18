@@ -15,8 +15,8 @@
 #include <ir0/net.h>
 #include <stdbool.h>
 #include <interrupt/arch/io.h>
-#include <ir0/memory/allocator.h>
-#include <ir0/memory/kmem.h>
+#include <mm/allocator.h>
+#include <ir0/kmem.h>
 #include <drivers/serial/serial.h>
 #include <string.h>
 #include <ir0/driver.h>
@@ -155,7 +155,11 @@ static int32_t e1000_hw_init(void)
     e1000_mmio_phys_base = (uint64_t)(bar0 & ~0xF);
     LOG_INFO_FMT("e1000", "MMIO Physical Base address: 0x%lx", e1000_mmio_phys_base);
 
-    /* Map MMIO to virtual address (identity map for now, assuming it's already mapped) */
+    /* Map MMIO to virtual address (identity map)
+     * In x86-64, physical addresses below 4GB are identity mapped at boot
+     * For addresses above 4GB, would need explicit page table mapping
+     * Current implementation assumes MMIO is in identity-mapped region
+     */
     e1000_mmio_base = (volatile uint32_t *)(uintptr_t)e1000_mmio_phys_base;
 
     /* Enable PCI Bus Mastering and Memory Space */

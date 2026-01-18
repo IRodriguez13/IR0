@@ -649,7 +649,7 @@ Create `kernel/scheduler/advanced_scheduler.cpp`:
 #include <cpp/include/compat.h>
 
 extern "C" {
-    #include <ir0/memory/kmem.h>
+    #include <ir0/kmem.h>
     #include <ir0/print.h>
     #include <ir0/critical.h>
 }

@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <ir0/vga.h>
-#include <includes/ir0/memory/paging.h>
-#include <includes/ir0/memory/kmem.h>
+#include <mm/paging.h>
+#include <ir0/kmem.h>
 #include <ir0/oops.h>
 
 
