@@ -256,8 +256,15 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                     /* Match found! Calculate round-trip time */
                     uint64_t rtt = now - echo->timestamp;
                     
-                    LOG_INFO_FMT("ICMP", "Echo Reply matched: id=%d, seq=%d, RTT=%d ms",
-                                (int)id, (int)seq, (int)rtt);
+                    /* Get TTL for logging */
+                    extern uint8_t ip_get_last_ttl(void);
+                    uint8_t ttl = ip_get_last_ttl();
+                    size_t payload_bytes = len - sizeof(struct icmp_header);
+                    
+                    /* Log the ping response with Linux-style format for serial debugging */
+                    /* Note: VGA output should be handled by dbgshell/userspace, not by ICMP layer */
+                    LOG_INFO_FMT("ICMP", "%d bytes from " IP4_FMT ": icmp_seq=%d ttl=%d time=%d ms",
+                                (int)payload_bytes, IP4_ARGS(ntohl(src_ip)), (int)seq, (int)ttl, (int)rtt);
                     
                     /* Remove from pending list */
                     if (prev)

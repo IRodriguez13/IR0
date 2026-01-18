@@ -38,6 +38,7 @@ typedef struct
 
 static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries);
 static int build_path(char *dest, size_t dest_size, const char *dir, const char *name);
+static int check_directory_path_permissions(const char *path);
 
 [[maybe_unused]] static void format_timestamp(uint32_t timestamp, char *buffer, size_t buffer_size)
 {
@@ -542,6 +543,15 @@ int vfs_open(const char *path, int flags, struct vfs_file **file)
     /* Check if current process exists */
     if (!current_process)
         return -ESRCH;
+    
+    /* Check execute permission on all intermediate directories in the path.
+     * In Unix, you need execute permission on each directory in the path to
+     * access files within them. For example, to access /home/user/file.txt,
+     * you need execute permission on /, /home, and /home/user.
+     */
+    int dir_check = check_directory_path_permissions(path);
+    if (dir_check != 0)
+        return dir_check;
     
     /* Check permissions before opening */
     int access_mode = flags_to_access_mode(flags);
@@ -1140,6 +1150,21 @@ static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries)
     if (ret != 0)
         return ret;
     
+    /* Check if current process exists */
+    if (!current_process)
+        return -ESRCH;
+    
+    /* Check execute permission on directory before reading it.
+     * In Unix, you need execute permission on a directory to:
+     * - Enter the directory (cd)
+     * - Access files within it (even if you have read permission)
+     * - List its contents (readdir)
+     */
+    if (!check_file_access(path, ACCESS_EXEC, current_process))
+    {
+        return -EACCES;  /* Permission denied - no execute permission on directory */
+    }
+    
     /* Get filesystem for this path */
     struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
     
@@ -1191,9 +1216,9 @@ static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries)
     for (int j = 0; j < num_entries && entry_count < max_entries; j++)
     {
       if (minix_entries[j].inode == 0)
-      {
+      
         continue;
-      }
+      
 
       strncpy(entries[entry_count].name, minix_entries[j].name, sizeof(entries[entry_count].name) - 1);
       entries[entry_count].name[sizeof(entries[entry_count].name) - 1] = '\0';
@@ -1204,6 +1229,85 @@ static int vfs_readdir(const char *path, vfs_dirent_t *entries, int max_entries)
   }
 
   return entry_count;
+}
+
+/**
+ * check_directory_path_permissions - Check execute permission on all intermediate directories
+ * @path: Full path to file/directory (e.g., "/home/user/file.txt")
+ *
+ * In Unix, to access a file, you need execute permission on every directory
+ * in the path. For example, to access /home/user/file.txt, you need execute
+ * permission on /, /home, and /home/user.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+static int check_directory_path_permissions(const char *path)
+{
+    if (!path || !current_process)
+        return -EINVAL;
+    
+    /* Root can access everything */
+    if (is_root(current_process))
+        return 0;
+    
+    /* Handle root directory - always accessible */
+    if (strcmp(path, "/") == 0)
+        return 0;
+    
+    /* Build path components and check each directory */
+    char dir_path[256];
+    size_t path_len = strlen(path);
+    
+    if (path_len >= sizeof(dir_path))
+        return -ENAMETOOLONG;
+    
+    /* Start from root */
+    strncpy(dir_path, "/", sizeof(dir_path) - 1);
+    dir_path[sizeof(dir_path) - 1] = '\0';
+    
+    /* Skip leading slash */
+    const char *p = path + 1;
+    
+    /* Process each component */
+    while (*p)
+    {
+        /* Find next slash or end of string */
+        const char *next_slash = strchr(p, '/');
+        
+        if (next_slash)
+        {
+            /* Component is a directory - check permission */
+            size_t component_len = (size_t)(next_slash - p);
+            size_t dir_path_len = strlen(dir_path);
+            
+            /* Build full directory path */
+            if (dir_path_len + 1 + component_len >= sizeof(dir_path))
+                return -ENAMETOOLONG;
+            
+            /* Add component to path (unless root) */
+            if (dir_path_len > 1 && dir_path[dir_path_len - 1] != '/')
+                strncat(dir_path, "/", sizeof(dir_path) - strlen(dir_path) - 1);
+            
+            strncat(dir_path, p, component_len);
+            dir_path[sizeof(dir_path) - 1] = '\0';
+            
+            /* Check execute permission on this directory */
+            if (!check_file_access(dir_path, ACCESS_EXEC, current_process))
+            {
+                return -EACCES;  /* Permission denied - no execute permission on directory */
+            }
+            
+            /* Move to next component */
+            p = next_slash + 1;
+        }
+        else
+        {
+            /* Last component (file or final directory) - we've already checked all parent dirs */
+            break;
+        }
+    }
+    
+    return 0;
 }
 
 int vfs_ls_with_stat(const char *path)
@@ -1265,16 +1369,13 @@ static struct filesystem_type minix_fs_type =
 // Mount function para MINIX
 static int minix_mount(const char *dev_name __attribute__((unused)), const char *dir_name __attribute__((unused)))
 {
-  print("MINIX_MOUNT: Starting mount process...\n");
 
   // Inicializar MINIX filesystem si no está funcionando
   if (!minix_fs_is_working())
   {
-    print("MINIX_MOUNT: MINIX FS not working, initializing...\n");
     int ret = minix_fs_init();
     if (ret != 0)
     {
-      print("MINIX_MOUNT: ERROR - minix_fs_init failed\n");
       serial_print("[VFS] ERROR - MINIX_MOUNT: minix_fs_init failed with error code: ");
       {
         extern void serial_print_hex32(uint32_t num);

@@ -125,3 +125,6 @@ void net_receive(struct net_device *dev, const void *data, size_t len);
 
 /* Network Stack Initialization */
 int init_net_stack(void);
+
+/* Network Polling (for receiving packets when not actively waiting) */
+void net_poll(void);

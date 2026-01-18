@@ -16,6 +16,7 @@
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
+#include <drivers/timer/clock_system.h>
 #include "arp.h"
 #include <string.h>
 
@@ -43,6 +44,7 @@ static struct net_protocol ip_proto;
 /* Temporary storage for source IP when calling upper layer handlers */
 /* This is used to pass source IP to ICMP for Echo Reply */
 static ip4_addr_t ip_last_src_addr = 0;
+static uint8_t ip_last_ttl = 0;
 
 /* Broadcast IP address */
 static const ip4_addr_t broadcast_ip = 0xFFFFFFFF; /* 255.255.255.255 */
@@ -218,9 +220,19 @@ void ip_receive_handler(struct net_device *dev, const void *data,
     
     if (!is_for_us)
     {
-        /* Not for us, silently drop */
+        /* Not for us - log for debugging to see if packets are being dropped */
+        extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
+        ip4_addr_t interface_ip = 0;
+        arp_get_interface_ip(dev, &interface_ip);
+        LOG_INFO_FMT("IP", "Dropping packet: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ")", 
+                     IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)), 
+                     IP4_ARGS(ntohl(interface_ip)));
         return;
     }
+    
+    /* Log that we accepted the packet for debugging */
+    LOG_DEBUG_FMT("IP", "Packet accepted: dest=" IP4_FMT " matches local=" IP4_FMT,
+                  IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)));
 
     /* Check if packet is fragmented */
     uint16_t frag_offset = IP_FRAG_OFFSET(ip);
@@ -386,8 +398,47 @@ void ip_receive_handler(struct net_device *dev, const void *data,
                  IP4_ARGS(ntohl(src_ip)),
                  IP4_ARGS(ntohl(dest_ip)));
 
-    /* Store source IP for upper layer handlers (e.g., ICMP Echo Reply) */
+    /* Store source IP and TTL for upper layer handlers (e.g., ICMP Echo Reply) */
     ip_last_src_addr = src_ip;
+    ip_last_ttl = ip->ttl;
+
+    /* Enhanced logging for ICMP packets to debug Echo Reply issues */
+    if (protocol == IPPROTO_ICMP && len >= header_len + 4)
+    {
+        const uint8_t *icmp_data = (const uint8_t *)data + header_len;
+        uint8_t icmp_type = icmp_data[0];
+        uint8_t icmp_code = icmp_data[1];
+        extern void serial_print(const char *);
+        extern void serial_print_hex32(uint32_t);
+        extern char *itoa(int, char*, int);
+        serial_print("[IP] RX ICMP: type=");
+        char type_str[16];
+        itoa((int)icmp_type, type_str, 10);
+        serial_print(type_str);
+        serial_print(" code=");
+        char code_str[16];
+        itoa((int)icmp_code, code_str, 10);
+        serial_print(code_str);
+        if (icmp_type == 0)
+        {
+            serial_print(" (ECHO_REPLY)");
+            /* Dump ICMP header for Echo Reply */
+            if (len >= header_len + 8)
+            {
+                uint16_t icmp_id = (icmp_data[4] << 8) | icmp_data[5];
+                uint16_t icmp_seq = (icmp_data[6] << 8) | icmp_data[7];
+                serial_print(" id=");
+                char id_str[16];
+                itoa((int)icmp_id, id_str, 10);
+                serial_print(id_str);
+                serial_print(" seq=");
+                char seq_str[16];
+                itoa((int)icmp_seq, seq_str, 10);
+                serial_print(seq_str);
+            }
+        }
+        serial_print("\n");
+    }
 
     /* Look up protocol handler by IP protocol number */
     struct net_protocol *proto = net_find_protocol_by_ipproto(protocol);
@@ -718,6 +769,21 @@ int ip_init(void)
     
     /* Synchronize ARP's IP address */
     arp_set_my_ip(ip_local_addr);
+    
+    /* Configure interface IP for all registered network devices */
+    extern struct net_device *net_get_devices(void);
+    struct net_device *dev = net_get_devices();
+    extern int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip);
+    
+    while (dev)
+    {
+        if (arp_set_interface_ip(dev, ip_local_addr) == 0)
+        {
+            LOG_INFO_FMT("IP", "Configured interface IP " IP4_FMT " for device %s",
+                        IP4_ARGS(ntohl(ip_local_addr)), dev->name);
+        }
+        dev = dev->next;
+    }
 
     LOG_INFO_FMT("IP", "Initializing IPv4 with address " IP4_FMT, IP4_ARGS(ntohl(ip_local_addr)));
 
@@ -748,6 +814,17 @@ int ip_init(void)
 ip4_addr_t ip_get_last_src_addr(void)
 {
     return ip_last_src_addr;
+}
+
+/**
+ * ip_get_last_ttl - Get TTL from last received packet
+ * This is used by upper layer protocols (e.g., ICMP) to get the TTL
+ * for displaying ping statistics in Linux-like format.
+ * @return: TTL value (0-255)
+ */
+uint8_t ip_get_last_ttl(void)
+{
+    return ip_last_ttl;
 }
 
 /**

@@ -533,3 +533,23 @@ int init_net_stack(void)
     LOG_INFO("NET", "Network stack initialized successfully");
     return 0;
 }
+
+/**
+ * net_poll - Poll network devices for incoming packets
+ * 
+ * This function should be called periodically to ensure the kernel receives
+ * incoming packets even when not actively waiting for responses. This is
+ * necessary because the polling mechanism only activates when waiting for
+ * specific responses (e.g., ARP replies).
+ * 
+ * This function polls all registered network devices to check for incoming
+ * packets. It should be called from a periodic timer or main loop.
+ */
+void net_poll(void)
+{
+    /* Poll RTL8139 driver for incoming packets */
+    extern void rtl8139_poll(void);
+    rtl8139_poll();
+    
+    /* Future: Add polling for other network drivers (e1000, etc.) here */
+}

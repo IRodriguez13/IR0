@@ -164,6 +164,9 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     (void)dev;
     (void)src_port;
     
+    LOG_INFO_FMT("DNS", "DNS response received from " IP4_FMT " port %d, len=%d", 
+                 IP4_ARGS(ntohl(src_ip)), (int)src_port, (int)len);
+    
     if (len < sizeof(struct dns_header))
     {
         LOG_WARNING("DNS", "DNS response too short");
@@ -362,6 +365,8 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     }
     
     /* Send DNS query */
+    LOG_INFO_FMT("DNS", "Sending DNS query to " IP4_FMT " port %d", 
+                 IP4_ARGS(ntohl(dns_server_ip)), DNS_PORT);
     int ret = udp_send(dev, dns_server_ip, dns_client_port, DNS_PORT, query_buf, query_len);
     if (ret != 0)
     {
@@ -371,6 +376,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
         kfree(query);
         return 0;
     }
+    LOG_INFO("DNS", "DNS query sent successfully, waiting for response...");
     
     /* Wait for response with timeout. We poll the network card periodically
      * to check for incoming DNS responses. The polling is necessary because
@@ -379,7 +385,9 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     uint64_t start_time = clock_get_uptime_milliseconds();
     uint64_t timeout_ms = DNS_DEFAULT_TIMEOUT_MS;
     uint64_t last_poll_time = start_time;
+    uint64_t last_log_time = start_time;
     const uint64_t poll_interval_ms = 10;  /* Poll every 10ms to balance responsiveness and CPU usage */
+    const uint64_t log_interval_ms = 1000;  /* Log every 1 second to show progress */
     
     while (1)
     {
@@ -405,11 +413,21 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
             break;
         }
         
-        /* Poll network card periodically (every poll_interval_ms) */
+        /* Log progress every second */
+        if (current_time - last_log_time >= log_interval_ms)
+        {
+            LOG_INFO_FMT("DNS", "Still waiting for DNS response for %s (%d ms elapsed, timeout in %d ms)",
+                        domain_name, (int)elapsed, (int)(timeout_ms - elapsed));
+            last_log_time = current_time;
+        }
+        
+        /* Poll network stack periodically (every poll_interval_ms)
+         * This processes packets through the full stack: Ethernet -> IP -> UDP -> DNS
+         */
         if (current_time - last_poll_time >= poll_interval_ms)
         {
-            extern void rtl8139_poll(void);
-            rtl8139_poll();
+            extern void net_poll(void);
+            net_poll();
             last_poll_time = current_time;
         }
         

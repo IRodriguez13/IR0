@@ -440,9 +440,6 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
     
     (void)dev;
 
-    LOG_INFO_FMT("RTL8139", "netdev_send: data=%p, len=%d (0x%x)", 
-                 data, (int)len, (unsigned int)len);
-    
     /* CRITICAL: Validate len IMMEDIATELY - if corrupted, abort */
     if (len > RTL8139_MAX_TX_SIZE || len == 0 || len > 2000)
     {
@@ -502,25 +499,116 @@ static void rtl8139_process_rx_packets(void)
     
     int packet_count = 0;
     /* Process packets from our read offset to current write pointer */
-    while (rtl8139_rx_read_offset != current_write)
+    /* Safety limit: process at most 64 packets per call to prevent infinite loops */
+    int max_packets = 64;
+    while (rtl8139_rx_read_offset != current_write && max_packets-- > 0)
     {
+        /* Safety check: ensure read_offset is within buffer bounds */
+        if (rtl8139_rx_read_offset >= RTL8139_RX_BUF_SIZE)
+        {
+            LOG_ERROR_FMT("RTL8139", "RX read_offset out of bounds: %d >= %d", 
+                         rtl8139_rx_read_offset, RTL8139_RX_BUF_SIZE);
+            /* Reset to safe position */
+            rtl8139_rx_read_offset = current_write & (RTL8139_RX_BUF_SIZE - 1);
+            break;
+        }
+        
         /* Read packet header (4 bytes: status, length) */
         uint16_t status = *((uint16_t *)(rtl8139_rx_buffer + rtl8139_rx_read_offset));
         uint16_t length = *((uint16_t *)(rtl8139_rx_buffer + rtl8139_rx_read_offset + 2));
         
-        /* Check if packet is valid */
-        if (length == 0 || length > RTL8139_RX_BUF_SIZE)
+        /* CRITICAL: Check OWN bit (bit 0 of status). 
+         * If not set, no valid packet at this offset - stop processing.
+         * This prevents reading garbage from the ring buffer.
+         */
+        if (!(status & 0x01))
+        {
+            /* No valid packet at this offset - stop processing */
             break;
+        }
+        
+        /* CRITICAL: Log raw RX header BEFORE any processing for debugging */
+        extern void serial_print(const char *);
+        extern void serial_print_hex32(uint32_t);
+        extern char *itoa(int, char*, int);
+        serial_print("[RTL8139] RX raw: status=0x");
+        char status_str[16];
+        char length_str[16];
+        itoa((int)status, status_str, 16);
+        serial_print(status_str);
+        serial_print(" length=");
+        itoa((int)length, length_str, 10);
+        serial_print(length_str);
+        serial_print(" offset=");
+        char offset_str[16];
+        itoa((int)rtl8139_rx_read_offset, offset_str, 10);
+        serial_print(offset_str);
+        serial_print("\n");
+        
+        /* CRITICAL: In RTL8139, the 'length' field is the size of:
+         *   - Ethernet frame
+         *   - CRC (4 bytes)
+         * It does NOT include the 4-byte header (status + length) we just read.
+         * To get the Ethernet frame size (without CRC), we subtract 4 bytes.
+         * If length < 4, the packet is invalid (must at least have CRC).
+         */
+        if (length < 4)
+        {
+            LOG_WARNING_FMT("RTL8139", "Invalid RX length (too small): %d (must be >= 4), discarding packet", length);
+            /* Discard this packet and continue - don't abort RX processing */
+            /* Move to next packet using correct formula (even for invalid packets) */
+            uint16_t raw_length = length;
+            rtl8139_rx_read_offset = (rtl8139_rx_read_offset + raw_length + 4 + 3) & ~3;
+            rtl8139_rx_read_offset %= RTL8139_RX_BUF_SIZE;
+            continue;
+        }
+        
+        /* Calculate Ethernet frame length (subtract 4-byte CRC).
+         * 'length' includes frame + CRC, so we remove CRC to get frame size.
+         */
+        uint16_t packet_len = length - 4;
+        
+        /* Check if packet length is valid */
+        if (packet_len == 0 || packet_len > RTL8139_RX_BUF_SIZE)
+        {
+            LOG_WARNING_FMT("RTL8139", "Invalid packet length after header subtraction: raw_len=%d, pkt_len=%d, discarding", 
+                           length, packet_len);
+            /* Discard this packet and continue - don't abort RX processing */
+            /* Move read_offset to next packet using correct formula */
+            uint16_t raw_length = length;
+            rtl8139_rx_read_offset = (rtl8139_rx_read_offset + raw_length + 4 + 3) & ~3;
+            rtl8139_rx_read_offset %= RTL8139_RX_BUF_SIZE;
+            continue;
+        }
+        
+        /* Safety check: ensure packet data fits within buffer (handle wrap) */
+        /* Use correct formula: raw_length + 4 + 3, then round */
+        uint16_t next_offset = (rtl8139_rx_read_offset + length + 4 + 3) & ~3;
+        
+        /* Check if packet would wrap around buffer boundary */
+        if (next_offset > RTL8139_RX_BUF_SIZE)
+        {
+            /* Packet wraps around - this is normal for circular buffer
+             * We'll handle it in the wrap-around logic below
+             * For now, just ensure we don't read past buffer end
+             */
+            if (rtl8139_rx_read_offset + 4 > RTL8139_RX_BUF_SIZE)
+            {
+                LOG_WARNING_FMT("RTL8139", "Packet header wraps around buffer (read_offset=%d, size=%d)", 
+                               rtl8139_rx_read_offset, RTL8139_RX_BUF_SIZE);
+                /* Reset read offset to avoid infinite loop */
+                rtl8139_rx_read_offset = current_write & (RTL8139_RX_BUF_SIZE - 1);
+                break;
+            }
+        }
         
         /* Check if packet is OK */
         if (status & RTL8139_RX_STAT_ROK)
         {
             /* Packet data starts after 4-byte header (status + length) */
-            /* The 'length' field contains the Ethernet frame size (NOT including the 4-byte header) */
             void *packet_data = rtl8139_rx_buffer + rtl8139_rx_read_offset + 4;
-            size_t packet_len = length; /* length already excludes the 4-byte header */
             
-            LOG_DEBUG_FMT("RTL8139", "Packet #%d: status=0x%04x, length=%d, data_len=%d",
+            LOG_DEBUG_FMT("RTL8139", "Packet #%d: status=0x%04x, raw_length=%d, packet_len=%d",
                          packet_count, status, length, packet_len);
             
             if (packet_len > 0 && packet_len <= 1518) /* Valid Ethernet frame size */
@@ -554,14 +642,21 @@ static void rtl8139_process_rx_packets(void)
             LOG_WARNING_FMT("RTL8139", "Packet with bad status: 0x%04x, length=%d", status, length);
         }
         
-        /* Move to next packet (packets are 4-byte aligned) */
-        /* Total packet size = 4 bytes (header) + length bytes (frame) */
-        /* Round up to 4-byte boundary */
-        rtl8139_rx_read_offset += ((4 + length + 3) & ~3);
+        /* CRITICAL: Move to next packet with correct alignment.
+         * In RTL8139, the 'length' field is:
+         *   - Ethernet frame + CRC (4 bytes)
+         *   It does NOT include the 4-byte header (status + length).
+         * 
+         * Formula: rx_offset = (rx_offset + length + 4 + 3) & ~3
+         *   - length = frame + CRC (e.g., 68 bytes for ARP: 64 frame + 4 CRC)
+         *   - +4 = 4-byte header we already read (status + length)
+         *   - (+ 3) & ~3 = round to 4-byte boundary
+         */
+        uint16_t raw_length = length;  /* length = frame + CRC (does NOT include header) */
+        rtl8139_rx_read_offset = (rtl8139_rx_read_offset + raw_length + 4 + 3) & ~3;
         
         /* Wrap around if needed */
-        if (rtl8139_rx_read_offset >= RTL8139_RX_BUF_SIZE)
-            rtl8139_rx_read_offset -= RTL8139_RX_BUF_SIZE;
+        rtl8139_rx_read_offset %= RTL8139_RX_BUF_SIZE;
     }
     
     /* Update CAPR to acknowledge processed packets
@@ -605,11 +700,22 @@ void rtl8139_handle_interrupt(void)
     if (isr & RTL8139_INT_ROK)
     {
         LOG_DEBUG("RTL8139", "RX interrupt detected, processing packets...");
+        /* Process packets BEFORE clearing ISR to avoid race conditions */
         rtl8139_process_rx_packets();
     }
     else if (isr != 0)
     {
-        LOG_DEBUG("RTL8139", "Interrupt without RX (ISR does not have ROK bit set)");
+        /* Log non-RX interrupts for debugging */
+        if (isr & RTL8139_INT_RER)
+            LOG_DEBUG("RTL8139", "RX error interrupt");
+        if (isr & RTL8139_INT_RXOVW)
+            LOG_WARNING("RTL8139", "RX buffer overflow interrupt");
+        if (isr & RTL8139_INT_TER)
+            LOG_DEBUG("RTL8139", "TX error interrupt");
+        if (isr & RTL8139_INT_PUN)
+            LOG_DEBUG("RTL8139", "Packet underrun interrupt");
+        if (isr & RTL8139_INT_FIFOOVW)
+            LOG_WARNING("RTL8139", "FIFO overflow interrupt");
     }
     
     /* Check for transmit interrupt (optional, for TX completion) */
@@ -624,8 +730,18 @@ void rtl8139_handle_interrupt(void)
     /* Hardware might complete TX without generating interrupt */
     rtl8139_check_tx_completion();
     
-    /* Clear interrupt status by writing back ISR */
+    /* CRITICAL: Clear interrupt status by writing back ISR
+     * This must be done AFTER processing to ensure we don't miss interrupts
+     */
     outw(rtl8139_io_base + RTL8139_REG_ISR, isr);
+    
+    /* Verify ISR was cleared (for debugging) */
+    uint16_t isr_after = inw(rtl8139_io_base + RTL8139_REG_ISR);
+    if ((isr_after & RTL8139_INT_ROK) && (isr & RTL8139_INT_ROK))
+    {
+        /* ISR still set after clearing - this shouldn't happen but log it */
+        LOG_WARNING_FMT("RTL8139", "ISR still set after clearing (was=0x%04x, now=0x%04x)", isr, isr_after);
+    }
 }
 
 /**
