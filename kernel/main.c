@@ -180,6 +180,13 @@ void kmain(void)
 
     for (;;)
     {
+        /* Poll network devices for incoming packets
+         * This is necessary because interrupts may not be working correctly,
+         * and we need to receive packets even when not actively waiting for responses.
+         */
+        extern void net_poll(void);
+        net_poll();
+        
         /* Fallback if something goes wrong */
         __asm__ volatile("hlt");
     }

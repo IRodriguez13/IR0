@@ -1028,6 +1028,15 @@ int64_t sys_chdir(const char *pathname)
   if (ret < 0 || !S_ISDIR(st.st_mode))
     return -EFAULT;
 
+  /* Check execute permission on directory before changing to it.
+   * In Unix, you need execute permission on a directory to enter it (cd).
+   */
+  extern bool check_file_access(const char *path, int mode, const struct process *process);
+  if (!check_file_access(new_path, ACCESS_EXEC, current_process))
+  {
+    return -EACCES;  /* Permission denied - no execute permission on directory */
+  }
+
   /* Update current working directory */
   strncpy(current_process->cwd, new_path, sizeof(current_process->cwd) - 1);
   current_process->cwd[sizeof(current_process->cwd) - 1] = '\0';

@@ -55,6 +55,7 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
 void ip_receive_handler(struct net_device *dev, const void *data, 
                         size_t len, void *priv);
 ip4_addr_t ip_get_last_src_addr(void);  /* Get source IP from last received packet */
+uint8_t ip_get_last_ttl(void);          /* Get TTL from last received packet */
 
 /* Routing API */
 int ip_route_add(ip4_addr_t dest_network, ip4_addr_t netmask, ip4_addr_t gateway);

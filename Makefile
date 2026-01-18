@@ -456,14 +456,27 @@ windows-clean win-clean:
 # QEMU COMMANDS
 
 # Run with GUI and disk (default) - ALL IR0 SUPPORTED HARDWARE
+# Note: This target does NOT call clean-net or rebuild with special flags
+# It simply runs the existing kernel ISO. Use 'make run-tap' for TAP networking.
 run: kernel-x64.iso disk.img
 	@echo "🚀 Running IR0 Kernel with all supported hardware..."
 	@echo "   Hardware: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2, VGA"
+	@# Check if we can write to qemu_debug.log (skip if owned by root or not writable)
+	@QEMU_LOG_OPTION=""; \
+	if [ -f qemu_debug.log ] && [ ! -w qemu_debug.log ]; then \
+		echo "   ⚠️  qemu_debug.log not writable (owned by root?), skipping log file"; \
+		QEMU_LOG_OPTION=""; \
+	elif touch qemu_debug.log 2>/dev/null; then \
+		QEMU_LOG_OPTION="$(QEMU_LOG_FILE)"; \
+		rm -f qemu_debug.log; \
+	else \
+		QEMU_LOG_OPTION=""; \
+	fi
 	qemu-system-x86_64 -cdrom kernel-x64.iso \
 		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
 		$(QEMU_DISPLAY) \
-		$(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
+		$(QEMU_DEBUG_GUEST) $$QEMU_LOG_OPTION
 
 # Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
 run-debug: kernel-x64.iso disk.img

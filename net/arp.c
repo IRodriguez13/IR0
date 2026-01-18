@@ -155,6 +155,10 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
             if_ip = if_ip->next;
         }
         
+        /* Log IPs for debugging */
+        LOG_INFO_FMT("ARP", "ARP Request check: target=" IP4_FMT ", my_ip=" IP4_FMT ", interface_ip=" IP4_FMT,
+                     IP4_ARGS(ntohl(target_ip)), IP4_ARGS(ntohl(my_ip)), IP4_ARGS(ntohl(interface_ip)));
+        
         if (target_ip == interface_ip || target_ip == my_ip)
         {
             LOG_INFO("ARP", "ARP Request is for us, sending reply");
