@@ -14,8 +14,8 @@
 #include "dbgshell.h"
 #include "rr_sched.h"
 #include <drivers/video/typewriter.h>
-#include <ir0/memory/kmem.h>
-#include <ir0/memory/paging.h>
+#include <ir0/kmem.h>
+#include <mm/paging.h>
 #include <ir0/permissions.h>
 #include <string.h>
 

@@ -19,7 +19,7 @@
  */
 
 #include <ir0/compat.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <ir0/oops.h>
 
 #ifdef __cplusplus

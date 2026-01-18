@@ -446,6 +446,7 @@ int kconfig_generate_makefile(const char *config_file, const char *subsystems_js
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/includes\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/includes/ir0\n");
+    fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/mm\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/arch/common\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/include\n");
@@ -453,7 +454,7 @@ int kconfig_generate_makefile(const char *config_file, const char *subsystems_js
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/drivers\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/fs\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/interrupt\n");
-    fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/memory\n");
+    fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/mm\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/scheduler\n\n");
     
     /* Collect all object files from selected subsystems */

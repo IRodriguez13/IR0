@@ -8,7 +8,7 @@
  */
 
 #include "vfs.h"
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <string.h>
 #include <stddef.h>
 #include <stdint.h>

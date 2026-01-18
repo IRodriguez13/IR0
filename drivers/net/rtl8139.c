@@ -15,8 +15,8 @@
 #include "rtl8139.h"
 #include <stdbool.h>
 #include <interrupt/arch/io.h>
-#include <ir0/memory/allocator.h>
-#include <ir0/memory/kmem.h>
+#include <mm/allocator.h>
+#include <ir0/kmem.h>
 #include <drivers/serial/serial.h>
 #include <string.h>
 #include <ir0/driver.h>
@@ -645,10 +645,13 @@ void rtl8139_poll(void)
     /* Check interrupt status register to see if there are packets */
     uint16_t isr = inw(rtl8139_io_base + RTL8139_REG_ISR);
     
-    /* Debug: Log polling activity (only occasionally to avoid spam) */
+    /* Debug: Log polling activity (only occasionally to avoid spam)
+     * We log every 500 polls instead of 50 to reduce console spam.
+     * If ISR shows activity or packets arrive, we'll see it in other logs.
+     */
     static int poll_count = 0;
     poll_count++;
-    if ((poll_count % 50) == 0)  /* Log every 50th poll */
+    if ((poll_count % 500) == 0)  /* Log every 500th poll to reduce spam */
     {
         extern void serial_print(const char *);
         extern void serial_print_hex32(uint32_t);

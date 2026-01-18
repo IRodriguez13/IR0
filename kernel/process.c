@@ -8,8 +8,8 @@
 
 #include "process.h"
 #include "rr_sched.h"
-#include <ir0/memory/kmem.h>
-#include <ir0/memory/paging.h>
+#include <ir0/kmem.h>
+#include <mm/paging.h>
 #include <drivers/serial/serial.h>
 #include <ir0/permissions.h>
 #include <ir0/signals.h>
@@ -150,7 +150,27 @@ pid_t process_spawn(void (*entry)(void), const char *name)
 	proc->task.pid = next_pid++;
 	proc->ppid = current_process ? current_process->task.pid : 1;
 	proc->state = PROCESS_READY;
-	proc->mode = KERNEL_MODE; /* Default to kernel mode for now */
+	
+	/* Detect execution mode based on entry point address
+	 * Kernel mode: entry points in kernel space (< 4MB or in kernel range)
+	 * User mode: entry points in user space (>= 4MB, typically ELF binaries)
+	 * 
+	 * User space typically starts at 0x400000 (4MB) in x86-64
+	 * Kernel space is below this (0x0 - 0x400000)
+	 */
+	const uintptr_t USER_SPACE_START = 0x00400000UL;  /* 4MB */
+	const uintptr_t entry_addr = (uintptr_t)entry;
+	
+	if (entry_addr >= USER_SPACE_START)
+	{
+		/* Entry point is in user space - set user mode */
+		proc->mode = USER_MODE;
+	}
+	else
+	{
+		/* Entry point is in kernel space - set kernel mode */
+		proc->mode = KERNEL_MODE;
+	}
 	
 	/* Create new page directory */
 	proc->page_directory = (uint64_t *)create_process_page_directory();
@@ -395,9 +415,26 @@ void process_exit(int code)
 		}
 	}
 
-	/* Halt until reaped by parent (or init if parent is dead) */
-	for (;;)
-		__asm__ volatile("hlt");
+	/* Remove process from scheduler - it should no longer be scheduled.
+	 * The process structure remains in memory as a zombie until reaped
+	 * by the parent (via wait()), but it will not consume CPU time.
+	 */
+	rr_remove_process(dying);
+	
+	/* Clear current_process if this is the current process.
+	 * The scheduler will switch to another process.
+	 */
+	if (current_process == dying)
+		current_process = NULL;
+	
+	/* Switch to another process - this will never return to this code.
+	 * The zombie process remains in memory with its exit code for the
+	 * parent to retrieve via wait().
+	 */
+	rr_schedule_next();
+	
+	/* Should never reach here - if we do, something is wrong */
+	panic("process_exit: returned from scheduler");
 }
 
 

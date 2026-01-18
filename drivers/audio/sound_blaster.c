@@ -18,7 +18,7 @@
 #include <arch/common/arch_interface.h>
 #include <interrupt/arch/io.h>
 #include <drivers/dma/dma.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <drivers/timer/pit/pit.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>

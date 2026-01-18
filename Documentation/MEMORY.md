@@ -20,8 +20,8 @@ The PMM manages physical memory frames (4KB pages) using a bitmap-based allocato
 
 ### Location
 
-- Header: `includes/ir0/memory/pmm.h`
-- Implementation: `includes/ir0/memory/pmm.c`
+- Header: `mm/pmm.h`
+- Implementation: `mm/pmm.c`
 
 ### Initialization
 
@@ -93,8 +93,8 @@ The heap allocator provides dynamic memory allocation for kernel code using a fr
 
 ### Location
 
-- Header: `includes/ir0/memory/kmem.h`
-- Implementation: `includes/ir0/memory/allocator.c`
+- Header: `includes/ir0/kmem.h`
+- Implementation: `mm/allocator.c`
 
 ### Initialization
 
@@ -183,8 +183,8 @@ The paging system provides virtual memory management and process isolation throu
 
 ### Location
 
-- Header: `includes/ir0/memory/paging.h`
-- Implementation: `includes/ir0/memory/paging.c`
+- Header: `mm/paging.h`
+- Implementation: `mm/paging.c`
 
 ### Page Sizes
 

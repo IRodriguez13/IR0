@@ -10,8 +10,8 @@
  * File: kmem.c
  * Description: Kernel heap allocator with automatic debug tracking
  */
-#include "kmem.h"
-#include <ir0/memory/allocator.h>
+#include <ir0/kmem.h>
+#include <mm/allocator.h>
 #include <ir0/oops.h>
 #include <config.h>
 
@@ -135,8 +135,11 @@ void *__kmalloc_checked(size_t size, const char *file, int line, const char *cal
 void __kfree_checked(void *ptr, const char *file, int line, const char *caller)
 {
 	if (unlikely(!ptr)) {
-		/* Linux allows free(NULL), but we can warn about it */
-		/* For now, we'll allow it silently like the original implementation */
+		/* Linux allows free(NULL) - it's a no-op
+		 * This is POSIX-compliant behavior: free(NULL) does nothing
+		 * We allow it silently for compatibility and to avoid breaking code
+		 * that relies on this behavior
+		 */
 		return;
 	}
 

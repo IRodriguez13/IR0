@@ -21,8 +21,8 @@
 #include <drivers/audio/sound_blaster.h>
 #include <drivers/audio/adlib.h>
 #include <drivers/serial/serial.h>
-#include <ir0/memory/kmem.h>
-#include <ir0/memory/pmm.h>
+#include <ir0/kmem.h>
+#include <mm/pmm.h>
 #include <ir0/net.h>
 #include <init.h>
 #include <arch/common/arch_portable.h>
@@ -144,7 +144,11 @@ void kmain(void)
     process_init();
     log_subsystem_ok("PROCESSES");
 
-    /* Initialize scheduler (using Round Robin for now) */
+    /* Initialize scheduler (Round Robin scheduler)
+     * Round Robin provides fair time-sharing among processes
+     * Alternative schedulers (CFS, Priority) are available but not activated
+     * See kernel/scheduler/ for scheduler implementations
+     */
     clock_system_init();
 
     /* Initialize system calls */
@@ -167,7 +171,7 @@ void kmain(void)
     log_subsystem_ok("DEBUG_SHELL");
 #else
     serial_print("SERIAL: kmain: Loading userspace init...\n");
-    if (elf_load_and_execute("/sbin/init") < 0) 
+    if (kexecve("/sbin/init") < 0) 
     {
         serial_print("SERIAL: kmain: FAILED to load /sbin/init, falling back to debug shell\n");
         panic("Failed to load /sbin/init");

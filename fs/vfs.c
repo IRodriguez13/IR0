@@ -15,8 +15,8 @@
 #include "vfs.h"
 #include "minix_fs.h"
 #include <kernel/process.h>
-#include <ir0/memory/allocator.h>
-#include <ir0/memory/paging.h>
+#include <mm/allocator.h>
+#include <mm/paging.h>
 #include <string.h>
 #include <kernel/rr_sched.h>
 #include <stdarg.h>
@@ -25,7 +25,7 @@
 #include <ir0/permissions.h>
 #include <ir0/errno.h>
 #include <serial.h>
-#include <memory/kmem.h>
+#include <ir0/kmem.h>
 #include <ir0/vga.h>
 
 /* Forward declarations and types */
@@ -393,7 +393,7 @@ struct vfs_inode *vfs_path_lookup(const char *path)
     }
 
     /* Otherwise, use the mounted filesystem's lookup */
-    /* For now, delegate to MINIX if it's a MINIX mount */
+    /* Currently support MINIX - can be extended to support other filesystems */
     if (strcmp(mp->fs_type->name, "minix") == 0)
     {
       /* Build full path for MINIX lookup */
@@ -666,10 +666,30 @@ int vfs_write(struct vfs_file *file, const char *buf, size_t count)
     if (!current_process)
         return -ESRCH;
     
-    /* Get file path from inode for permission check */
-    /* For now, we trust that if file was opened with write flags,
-     * it was already checked in vfs_open() */
-    /* Future improvement: store path in vfs_file for better permission checking */
+    /* Validate write permissions:
+     * 1. File must have been opened with write flags (O_WRONLY or O_RDWR)
+     * 2. Inode must allow write access
+     * 3. Process must have write permission
+     */
+    
+    /* Check if file was opened with write flags */
+    if (!(file->f_flags & (O_WRONLY | O_RDWR)))
+    {
+        return -EBADF; /* File not opened for writing */
+    }
+    
+    /* Check inode permissions - at minimum, inode should exist */
+    if (!file->f_inode)
+    {
+        return -EINVAL;
+    }
+    
+    /* Note: Full permission checking would require:
+     * - Storing file path in vfs_file structure
+     * - Checking file system permissions (mode bits)
+     * - Checking process UID/GID against file UID/GID
+     * For now, we validate basic flags and inode existence
+     */
     
     /* Call filesystem-specific write */
     if (file->f_inode->i_fop && file->f_inode->i_fop->write)

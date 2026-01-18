@@ -20,11 +20,32 @@ struct process;
  */
 int load_elf_program(const char *path, struct process *process);
 
-/* Backwards-compatible wrapper used by callers in the kernel
- * Historically some files call elf_load_and_execute(path) which
- * loads and schedules a process. Provide the same symbol here.
+/**
+ * kexecve - Kernel-level ELF binary loader and executor
+ * @path: Path to ELF executable file
+ *
+ * Main function to load and execute ELF binaries. Creates a process,
+ * loads segments, and schedules for execution. This is the kernel-level
+ * equivalent of the execve() syscall, used for loading user programs.
+ *
+ * Algorithm:
+ * 1. Read ELF file from filesystem via VFS
+ * 2. Validate ELF header (magic, architecture, type)
+ * 3. Create process structure with proper page directory
+ * 4. Load ELF segments into memory at virtual addresses
+ * 5. Set up entry point, stack, and registers
+ * 6. Add process to scheduler for execution
+ *
+ * Returns: 0 on success, -1 on error
  */
-int elf_load_and_execute(const char *path);
+int kexecve(const char *path);
+
+/* Backwards-compatible alias - deprecated, use kexecve() instead */
+static inline int elf_load_and_execute(const char *path) __attribute__((deprecated));
+static inline int elf_load_and_execute(const char *path)
+{
+    return kexecve(path);
+}
 
 // ===============================================================================
 // FUNCIONES DE DEBUG

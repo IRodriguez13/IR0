@@ -310,8 +310,10 @@ void arch_early_init(void)
     extern void arch_early_init_x86_64(void);
     arch_early_init_x86_64();
 #elif defined(__aarch64__)
-    /* ARM64 early init - to be implemented */
-    /* For now, do nothing */
+    /* ARM64 early init - architecture not yet supported
+     * TODO: Implement ARM64-specific early initialization
+     * Required: MMU setup, exception vectors, device tree parsing
+     */
 #else
     #error "Unsupported architecture for arch_early_init()"
 #endif
@@ -328,8 +330,10 @@ void arch_interrupt_init(void)
     extern void arch_interrupt_init_x86_64(void);
     arch_interrupt_init_x86_64();
 #elif defined(__aarch64__)
-    /* ARM64 interrupt init - to be implemented */
-    /* For now, do nothing */
+    /* ARM64 interrupt init - architecture not yet supported
+     * TODO: Implement ARM64-specific interrupt initialization
+     * Required: GIC setup, exception vectors, interrupt routing
+     */
 #else
     #error "Unsupported architecture for arch_interrupt_init()"
 #endif

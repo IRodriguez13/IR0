@@ -17,4 +17,5 @@ typedef struct rr_task
 } rr_task_t;
 
 void rr_add_process(process_t *proc);
+void rr_remove_process(process_t *proc);
 void rr_schedule_next(void);

@@ -56,5 +56,7 @@ struct arp_cache_entry *arp_lookup(ip4_addr_t ip);
 void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac);
 void arp_send_request(struct net_device *dev, ip4_addr_t target_ip);
 void arp_print_cache(void);
-void arp_set_my_ip(ip4_addr_t ip);  /* Update ARP's IP address (sync with IP layer) */
+void arp_set_my_ip(ip4_addr_t ip);  /* Update ARP's default IP address (sync with IP layer) */
+int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip);  /* Set IP per interface */
+int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip);  /* Get IP for interface */
 

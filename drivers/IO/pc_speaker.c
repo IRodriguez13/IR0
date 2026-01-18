@@ -10,7 +10,7 @@
 #include "pc_speaker.h"
 #include <ir0/driver.h>
 #include <ir0/logging.h>
-#include <ir0/memory/kmem.h>
+#include <ir0/kmem.h>
 #include <arch/common/arch_interface.h>
 
 /* PC Speaker ports */

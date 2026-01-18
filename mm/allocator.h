@@ -29,7 +29,7 @@ void alloc_init(void);
 // Allocate memory
 void *alloc(size_t size);
 
-// Free memory (no-op for now, we use bump allocation)
+// Free memory (coalesces adjacent free blocks for efficient reuse)
 void alloc_free(void *ptr);
 
 // Get stats

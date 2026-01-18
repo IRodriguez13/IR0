@@ -4,10 +4,11 @@
 #include <ir0/oops.h>
 #include "paging.h"
 #include <string.h>
-#include "allocator.h"
+#include <mm/allocator.h>
 #include <kernel/process.h>
-#include <ir0/memory/kmem.h>
-#include <ir0/memory/pmm.h>
+#include <ir0/kmem.h>
+#include <mm/pmm.h>
+#include <ir0/validation.h>
 
 /* Page directory for identity mapping (used by setup functions) */
 __attribute__((aligned(4096))) static uint64_t PD[512];
@@ -236,35 +237,120 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
  * @parent: Parent process
  * @child: Child process
  *
- * STUB IMPLEMENTATION: Allows fork() to compile and run
- *
- * TODO: Full implementation requires:
- * - Walking parent's page tables
- * - Identifying user pages (PAGE_USER flag set)
- * - Allocating frames with pmm_alloc_frame()
- * - Copying 4096 bytes per page
- * - Mapping in child's page directory
- *
- * For now, return success to allow testing.
- * WARNING: Child will share parent's memory space (not isolated!)
- *
- * Returns: 0 on success (stub always succeeds)
+ * BASIC IMPLEMENTATION: Copies user-space pages from parent to child.
+ * 
+ * Implementation notes:
+ * - Walks parent's page tables to find user pages (PAGE_USER flag)
+ * - Allocates new frames for child using pmm_alloc_frame()
+ * - Copies PAGE_SIZE_4KB bytes per page
+ * - Maps pages in child's page directory
+ * 
+ * LIMITATIONS:
+ * - Only handles user-space pages (kernel pages are shared)
+ * - Assumes 4KB pages only (no 2MB pages)
+ * - Does not handle Copy-on-Write (COW) - full copy performed
+ * - No error recovery if frame allocation fails mid-copy
+ * 
+ * Returns: 0 on success, -1 on failure
  */
 int copy_process_memory(struct process *parent, struct process *child)
 {
-    (void)parent;  /* Unused for now */
-    (void)child;   /* Unused for now */
+    if (!parent || !child)
+        return -1;
     
-    /* Minimal implementation: Return success to allow process creation.
-     * Full implementation would:
-     * - Walk parent's page tables
-     * - Identify user pages (PAGE_USER flag set)
-     * - Allocate frames with pmm_alloc_frame()
-     * - Copy 4096 bytes per page
-     * - Map in child's page directory
-     * 
-     * WARNING: Child currently shares parent's memory space (not isolated!)
-     * This is acceptable for testing but must be fixed for production.
-     */
-    return 0;  /* Stub: pretend success */
+    if (!parent->page_directory || !child->page_directory)
+        return -1;
+    
+    uint64_t *parent_pml4 = parent->page_directory;
+    uint64_t *child_pml4 = child->page_directory;
+    
+    /* Walk parent's page tables to find user pages */
+    /* User space typically starts at 0x400000 (4MB) in x86-64 */
+    /* We scan a limited range: 0x400000 to 0x1000000 (4MB to 16MB) */
+    const uint64_t USER_START = 0x400000;
+    const uint64_t USER_END = 0x1000000;
+    
+    /* Temporarily switch to parent's page directory to read pages */
+    uint64_t old_cr3 = get_current_page_directory();
+    load_page_directory((uint64_t)parent_pml4);
+    
+    for (uint64_t virt_addr = USER_START; virt_addr < USER_END; virt_addr += PAGE_SIZE_4KB)
+    {
+        /* Extract page table indices */
+        size_t pml4_index = (virt_addr >> 39) & 0x1FF;
+        size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
+        size_t pd_index = (virt_addr >> 21) & 0x1FF;
+        size_t pt_index = (virt_addr >> 12) & 0x1FF;
+        
+        /* Walk parent's page tables */
+        if (!(parent_pml4[pml4_index] & PAGE_PRESENT))
+            continue;
+        
+        uint64_t *pdpt = get_existing_table(parent_pml4, pml4_index);
+        if (!pdpt)
+            continue;
+        
+        if (!(pdpt[pdpt_index] & PAGE_PRESENT))
+            continue;
+        
+        uint64_t *pd = get_existing_table(pdpt, pdpt_index);
+        if (!pd)
+            continue;
+        
+        if (!(pd[pd_index] & PAGE_PRESENT))
+            continue;
+        
+        uint64_t *pt = get_existing_table(pd, pd_index);
+        if (!pt)
+            continue;
+        
+        /* Check if page is present and is user page */
+        uint64_t page_entry = pt[pt_index];
+        if (!(page_entry & PAGE_PRESENT))
+            continue;
+        
+        if (!(page_entry & PAGE_USER))
+            continue; /* Skip kernel pages */
+        
+        /* Get physical address of parent page */
+        uint64_t parent_phys = page_entry & ~0xFFF;
+        
+        /* Allocate new frame for child */
+        uint64_t child_phys = pmm_alloc_frame();
+        if (!child_phys)
+        {
+            /* Restore CR3 and return error */
+            load_page_directory(old_cr3);
+            return -1;
+        }
+        
+        /* Copy page content (identity mapped, so we can access physical directly) */
+        void *parent_page = (void *)parent_phys;
+        void *child_page = (void *)child_phys;
+        memcpy(child_page, parent_page, PAGE_SIZE_4KB);
+        
+        /* Get page flags (preserve all except global flag) */
+        uint64_t flags = page_entry & 0xFFF;
+        flags &= ~PAGE_GLOBAL; /* Don't mark child pages as global */
+        
+        /* Switch to child's page directory and map the page */
+        load_page_directory((uint64_t)child_pml4);
+        
+        /* Create page tables in child if needed (simplified - assumes they exist) */
+        /* Map the copied page in child's address space */
+        if (map_user_page(virt_addr, child_phys, flags) != 0)
+        {
+            pmm_free_frame(child_phys);
+            load_page_directory(old_cr3);
+            return -1;
+        }
+        
+        /* Switch back to parent's directory for next iteration */
+        load_page_directory((uint64_t)parent_pml4);
+    }
+    
+    /* Restore original CR3 */
+    load_page_directory(old_cr3);
+    
+    return 0;
 }

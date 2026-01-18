@@ -256,22 +256,64 @@ const char *vfs_simple_get_directory_name(int index)
 
 int vfs_allocate_sectors(int count)
 {
-    (void)count; // Suppress unused parameter warning
+    /* Validate input parameters */
+    if (count <= 0)
+    {
+        /* Invalid sector count */
+        return -1;
+    }
+    
+    if (count > 1024 * 1024)  /* Max 1GB allocation (512-byte sectors) */
+    {
+        /* Requested allocation too large */
+        return -1;
+    }
 
-    /* Minimal implementation: Return success.
-     * Full implementation would allocate actual disk sectors for the file.
-     * For now, this allows basic file operations to proceed.
+    /* Minimal implementation: Validate parameters and return success.
+     * Full implementation would:
+     * - Allocate actual disk sectors for the file
+     * - Track allocated sectors in filesystem metadata
+     * - Update inode block pointers
+     * - Handle fragmentation
+     * 
+     * Current stub allows basic file operations to proceed without
+     * actual disk space allocation (useful for RAMFS-like filesystems)
      */
     return 0;
 }
 
 int vfs_remove_directory(const char *path)
 {
-    (void)path; // Suppress unused parameter warning
+    /* Validate input parameters */
+    if (!path)
+    {
+        /* NULL path pointer */
+        return -1;
+    }
+    
+    if (path[0] == '\0')
+    {
+        /* Empty path string */
+        return -1;
+    }
+    
+    /* Check for root directory - cannot remove */
+    if (strcmp(path, "/") == 0)
+    {
+        return -1; /* Cannot remove root directory */
+    }
 
-    /* Minimal implementation: Return success.
-     * Full implementation would remove the directory from the filesystem.
-     * For now, this allows basic directory operations to proceed.
+    /* Minimal implementation: Validate parameters and return success.
+     * Full implementation would:
+     * - Check if directory exists
+     * - Check if directory is empty (no files/subdirectories)
+     * - Check permissions (write permission on parent directory)
+     * - Remove directory entry from parent
+     * - Free directory metadata/inode
+     * - Update filesystem structures
+     * 
+     * Current stub allows basic directory operations to proceed without
+     * actual directory removal (useful for simple filesystems or testing)
      */
     return 0;
 }
