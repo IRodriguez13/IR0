@@ -254,104 +254,33 @@ void ir0_generic_init(void)
 }
 #endif
 
-// ===============================================================================
-// FUNCIONES DE INICIALIZACIÓN (STUBS - A IMPLEMENTAR)
-// ===============================================================================
+// NOTA: Estas funciones son stubs para futuras implementaciones.
+// Actualmente el kernel inicializa los subsistemas directamente en kmain().
+// Estas funciones se usarán cuando se implemente el sistema de estrategias completo.
 
-// Funciones de inicialización de subsistemas
-void ir0_init_gui(void)
-{
-    // TODO: Implementar inicialización de GUI
-}
+// Funciones de inicialización de subsistemas (stubs - no implementadas)
+// Estas funciones se llaman desde las estrategias pero actualmente no hacen nada.
+// El kernel actual inicializa todo directamente en kmain() sin usar este sistema.
 
-void ir0_init_audio(void)
-{
-    // TODO: Implementar inicialización de audio
-}
+static inline void ir0_init_gui(void) { /* TODO: Implementar cuando se agregue GUI */ }
+static inline void ir0_init_audio(void) { /* TODO: Implementar cuando se agregue audio */ }
+static inline void ir0_init_usb(void) { /* TODO: Implementar cuando se agregue USB */ }
+static inline void ir0_init_networking(void) { /* TODO: Implementar cuando se use sistema de estrategias */ }
+static inline void ir0_init_multimedia(void) { /* TODO: Implementar cuando se agregue multimedia */ }
+static inline void ir0_init_printing(void) { /* TODO: Implementar cuando se agregue printing */ }
+static inline void ir0_init_ssl(void) { /* TODO: Implementar cuando se agregue SSL */ }
+static inline void ir0_init_docker_runtime(void) { /* TODO: Implementar cuando se agregue Docker */ }
+static inline void ir0_init_virtualization(void) { /* TODO: Implementar cuando se agregue virtualización */ }
+static inline void ir0_init_network_security(void) { /* TODO: Implementar cuando se agregue seguridad de red */ }
+static inline void ir0_init_lapic_timer(void) { /* TODO: Implementar cuando se agregue LAPIC timer */ }
+static inline void ir0_init_low_power_mode(void) { /* TODO: Implementar cuando se agregue modo de baja potencia */ }
+static inline void ir0_init_network_lightweight(void) { /* TODO: Implementar cuando se agregue networking ligero */ }
+static inline void ir0_init_sensor_interface(void) { /* TODO: Implementar cuando se agregue interfaz de sensores */ }
+static inline void ir0_init_power_management(void) { /* TODO: Implementar cuando se agregue gestión de energía */ }
+static inline void ir0_init_minimal_timer(void) { /* TODO: Implementar cuando se agregue timer mínimo */ }
+static inline void ir0_init_basic_io(void) { /* TODO: Implementar cuando se agregue I/O básico */ }
+static inline void ir0_init_basic_subsystems(void) { /* TODO: Implementar cuando se agregue subsistemas básicos */ }
 
-void ir0_init_usb(void)
-{
-    // TODO: Implementar inicialización de USB
-}
-
-void ir0_init_networking(void)
-{
-    // TODO: Implementar inicialización de networking
-}
-
-void ir0_init_multimedia(void)
-{
-    // TODO: Implementar inicialización de multimedia
-}
-
-void ir0_init_printing(void)
-{
-    // TODO: Implementar inicialización de printing
-}
-
-void ir0_init_ssl(void)
-{
-    // TODO: Implementar inicialización de SSL
-}
-
-void ir0_init_docker_runtime(void)
-{
-    // TODO: Implementar inicialización de Docker runtime
-}
-
-void ir0_init_virtualization(void)
-{
-    // TODO: Implementar inicialización de virtualización
-}
-
-void ir0_init_network_security(void)
-{
-    // TODO: Implementar inicialización de seguridad de red
-}
-
-void ir0_init_lapic_timer(void)
-{
-    // TODO: Implementar inicialización de timer LAPIC
-}
-
-void ir0_init_low_power_mode(void)
-{
-    // TODO: Implementar inicialización de modo de baja potencia
-}
-
-void ir0_init_network_lightweight(void)
-{
-    // TODO: Implementar inicialización de networking ligero
-}
-
-void ir0_init_sensor_interface(void)
-{
-    // TODO: Implementar inicialización de interfaz de sensores
-}
-
-void ir0_init_power_management(void)
-{
-    // TODO: Implementar inicialización de gestión de energía
-}
-
-void ir0_init_minimal_timer(void)
-{
-    // TODO: Implementar inicialización de timer mínimo
-}
-
-void ir0_init_basic_io(void)
-{
-    // TODO: Implementar inicialización de I/O básico
-}
-
-void ir0_init_basic_subsystems(void)
-{
-    // TODO: Implementar inicialización de subsistemas básicos
-}
-
-// ===============================================================================
-// FUNCIONES DE CONFIGURACIÓN
-// ===============================================================================
 
 // Obtener información de la estrategia actual
 const char *ir0_get_strategy_name(void);

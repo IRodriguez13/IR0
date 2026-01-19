@@ -16,6 +16,7 @@
 #include <ir0/net.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 
 /* IPv4 Header Structure (RFC 791) */
 struct ip_header
@@ -84,7 +85,7 @@ static inline void ip_format_addr(ip4_addr_t ip, char *buf, size_t buf_len)
     uint8_t b4 = ip & 0xFF;
     
     /* Format as "XXX.XXX.XXX.XXX" */
-    extern int snprintf(char *str, size_t size, const char *format, ...);
+    /* Note: snprintf is declared in <string.h> */
     snprintf(buf, buf_len, "%d.%d.%d.%d", b1, b2, b3, b4);
 }
 

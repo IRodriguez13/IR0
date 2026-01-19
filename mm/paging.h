@@ -59,6 +59,25 @@ int is_paging_enabled(void);
 int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
 
 /**
+ * Map a virtual address to a physical address in a specific page directory
+ * @pml4: PML4 table address (page directory)
+ * @virt_addr: Virtual address to map
+ * @phys_addr: Physical address to map to
+ * @flags: Page flags (PAGE_USER, PAGE_RW, etc.)
+ * Returns: 0 on success, -1 on failure
+ */
+int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
+
+/**
+ * Check if a virtual address is mapped in a page directory
+ * @pml4: PML4 table address (page directory)
+ * @virt_addr: Virtual address to check
+ * @flags_out: Optional output for page flags (can be NULL)
+ * Returns: 1 if mapped, 0 if not mapped, -1 on error
+ */
+int is_page_mapped_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t *flags_out);
+
+/**
  * Unmap a virtual address
  */
 int unmap_page(uint64_t virt_addr);
@@ -67,8 +86,11 @@ int unmap_page(uint64_t virt_addr);
 // Mapear página de usuario con permisos U/S=1
 int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags);
 
-// Mapear región de memoria de usuario
+// Mapear región de memoria de usuario (en page directory actual)
 int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags);
+
+// Mapear región de memoria de usuario en un page directory específico
+int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t size, uint64_t flags);
 
 
 /**

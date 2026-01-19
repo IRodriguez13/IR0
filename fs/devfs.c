@@ -19,9 +19,11 @@
 #include <net/ip.h>
 #include <net/icmp.h>
 #include <net/dns.h>
+#include <ir0/net.h>
 #include <kernel/syscalls.h>
 #include <drivers/storage/ata.h>
 #include <string.h>
+#include <drivers/timer/clock_system.h>
 
 /* Device registry */
 #define MAX_DEV_NODES 64
@@ -374,9 +376,6 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
         /* If not an IP address, try DNS resolution */
         if (dest_ip == 0)
         {
-            extern ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip);
-            extern ip4_addr_t ip_gateway;
-            extern void LOG_INFO_FMT(const char *component, const char *fmt, ...);
             
 #ifdef IR0_TAP_NETWORKING
             /* TAP networking: Use Google DNS (8.8.8.8) directly
@@ -449,7 +448,6 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
             if (dev_net_ioctl(entry, NET_GET_CONFIG, &config) == 0)
             {
                 /* Format and display configuration */
-                extern int snprintf(char *str, size_t size, const char *format, ...);
                 char buf[256];
                 
                 /* Format IP addresses */
@@ -640,8 +638,67 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
 
 int64_t dev_net_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)buf; (void)count; (void)offset;
-    /* Network status reading not implemented yet */
+    (void)entry; (void)offset;
+    
+    if (!buf || count == 0)
+        return 0;
+    
+    /* Poll network to process incoming packets before checking for results
+     * This ensures that ICMP replies are processed even during the wait loop
+     */
+    net_poll();
+    
+    /* Read ping result if available */
+    /* Format: "success:1 rtt:12 ttl:64 payload:32 ip:192.168.100.1" or "success:0" if no response */
+    
+    int64_t pid = sys_getpid();
+    uint16_t id = (uint16_t)(pid & 0xFFFF);
+    uint16_t seq = 0;
+    
+    uint64_t rtt = 0;
+    uint8_t ttl = 0;
+    size_t payload_bytes = 0;
+    ip4_addr_t reply_ip = 0;
+    
+    char result_buf[256];
+    int len = 0;
+    
+    if (icmp_get_echo_result(id, seq, &rtt, &ttl, &payload_bytes, &reply_ip))
+    {
+        /* Format result as text for POSIX read() */
+        uint32_t ip = ntohl(reply_ip);
+        uint8_t ip1 = (ip >> 24) & 0xFF;
+        uint8_t ip2 = (ip >> 16) & 0xFF;
+        uint8_t ip3 = (ip >> 8) & 0xFF;
+        uint8_t ip4 = ip & 0xFF;
+        
+        char rtt_str[16], ttl_str[16], bytes_str[16];
+        char ip1_str[16], ip2_str[16], ip3_str[16], ip4_str[16];
+        
+        itoa((int)rtt, rtt_str, 10);
+        itoa((int)ttl, ttl_str, 10);
+        itoa((int)payload_bytes, bytes_str, 10);
+        itoa((int)ip1, ip1_str, 10);
+        itoa((int)ip2, ip2_str, 10);
+        itoa((int)ip3, ip3_str, 10);
+        itoa((int)ip4, ip4_str, 10);
+        
+        len = snprintf(result_buf, sizeof(result_buf), 
+                      "success:1 rtt:%s ttl:%s payload:%s ip:%s.%s.%s.%s\n",
+                      rtt_str, ttl_str, bytes_str, ip1_str, ip2_str, ip3_str, ip4_str);
+    }
+    else
+    {
+        /* No result yet - return empty */
+        return 0;
+    }
+    
+    if (len > 0 && len <= (int)count)
+    {
+        memcpy(buf, result_buf, len);
+        return len;
+    }
+    
     return 0;
 }
 
@@ -658,13 +715,10 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
             {
                 /* arg points to ip4_addr_t */
                 ip4_addr_t dest_ip = *(ip4_addr_t *)arg;
-                extern struct net_device *net_get_devices(void);
                 struct net_device *dev = net_get_devices();
                 
                 if (dev)
                 {
-                    extern int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
-                                                      uint16_t id, uint16_t seq, const void *data, size_t len);
                     
                     /* Use process ID as identifier, sequence 0 */
                     pid_t pid = (pid_t)sys_getpid();
@@ -687,10 +741,6 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                     ip4_addr_t *netmask;
                     ip4_addr_t *gateway;
                 } net_config_t;
-                
-                extern ip4_addr_t ip_local_addr;
-                extern ip4_addr_t ip_netmask;
-                extern ip4_addr_t ip_gateway;
                 
                 net_config_t *config = (net_config_t *)arg;
                 if (config)
@@ -716,11 +766,6 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                     ip4_addr_t gateway;
                 } net_config_t;
                 
-                extern ip4_addr_t ip_local_addr;
-                extern ip4_addr_t ip_netmask;
-                extern ip4_addr_t ip_gateway;
-                extern void arp_set_my_ip(ip4_addr_t ip);
-                
                 net_config_t *config = (net_config_t *)arg;
                 if (config)
                 {
@@ -729,6 +774,38 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                     ip_gateway = config->gateway;
                     arp_set_my_ip(config->ip);  /* Update ARP cache */
                     return 0;
+                }
+            }
+            return -1;
+            
+        case NET_GET_PING_RESULT:
+            if (arg)
+            {
+                /* arg points to: { int success; uint64_t rtt; uint8_t ttl; size_t payload_bytes; ip4_addr_t reply_ip; } */
+                struct ping_result *result = (struct ping_result *)arg;
+                if (!result)
+                    return -1;
+                
+                extern bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out, 
+                                                  uint8_t *ttl_out, size_t *payload_bytes_out, 
+                                                  ip4_addr_t *reply_ip_out);
+                
+                /* Get PID to use as ICMP ID (matches NET_SEND_PING behavior) */
+                pid_t pid = (pid_t)sys_getpid();
+                uint16_t id = (uint16_t)(pid & 0xFFFF);
+                uint16_t seq = 0;
+                
+                /* Try to get echo result */
+                if (icmp_get_echo_result(id, seq, &result->rtt, &result->ttl, 
+                                        &result->payload_bytes, &result->reply_ip))
+                {
+                    result->success = 1;
+                    return 0;
+                }
+                else
+                {
+                    result->success = 0;
+                    return 0;  /* Still pending, but not an error */
                 }
             }
             return -1;
@@ -984,7 +1061,6 @@ int64_t dev_random_read(devfs_entry_t *entry, void *buf, size_t count, off_t off
     /* Initialize seed with timer if not set */
     if (random_seed == 0)
     {
-        extern uint64_t clock_get_uptime_milliseconds(void);
         random_seed = (uint32_t)(clock_get_uptime_milliseconds() & 0xFFFFFFFF);
     }
     
@@ -1020,7 +1096,6 @@ int64_t dev_urandom_read(devfs_entry_t *entry, void *buf, size_t count, off_t of
     /* Initialize seed with timer if not set */
     if (random_seed == 0)
     {
-        extern uint64_t clock_get_uptime_milliseconds(void);
         random_seed = (uint32_t)(clock_get_uptime_milliseconds() & 0xFFFFFFFF);
     }
     

@@ -25,8 +25,11 @@
 #include <ir0/permissions.h>
 #include <ir0/errno.h>
 #include <serial.h>
+#include <drivers/serial/serial.h>
 #include <ir0/kmem.h>
 #include <ir0/vga.h>
+#include <kernel/syscalls.h>
+#include <drivers/storage/ata.h>
 
 /* Forward declarations and types */
 typedef struct
@@ -185,7 +188,7 @@ static int flags_to_access_mode(int flags)
     return mode;
 }
 
-/* Validate path string */
+/* Validate path string - enhanced security checks */
 static int validate_path(const char *path)
 {
     if (!path)
@@ -197,6 +200,60 @@ static int validate_path(const char *path)
     
     if (len >= MAX_PATH_LENGTH)
         return -ENAMETOOLONG;
+    
+    /* Security checks: prevent dangerous path patterns */
+    const char *p = path;
+    int dot_count = 0;
+    int slash_count = 0;
+    
+    /* Check for consecutive slashes (//) - normalize later but reject now */
+    while (*p)
+    {
+        if (*p == '/')
+        {
+            slash_count++;
+            if (slash_count > 1)
+            {
+                /* Multiple consecutive slashes - reject for security */
+                return -EINVAL;
+            }
+        }
+        else
+        {
+            slash_count = 0;
+        }
+        
+        /* Check for parent directory traversal (..) */
+        if (*p == '.')
+        {
+            dot_count++;
+            if (dot_count >= 2 && (p[1] == '/' || p[1] == '\0'))
+            {
+                /* Dangerous: .. found - could traverse outside allowed directories */
+                /* Note: We still allow single . for current directory */
+                return -EACCES;
+            }
+        }
+        else
+        {
+            dot_count = 0;
+        }
+        
+        /* Reject control characters and null bytes in path */
+        if (*p < 0x20 || *p == 0x7F)
+        {
+            return -EINVAL;
+        }
+        
+        p++;
+    }
+    
+    /* Ensure path starts with / (absolute path) or doesn't contain .. at start */
+    if (path[0] != '/' && (len >= 2 && path[0] == '.' && path[1] == '.'))
+    {
+        /* Relative path with .. at start - reject for security */
+        return -EACCES;
+    }
     
     return 0;
 }
@@ -937,7 +994,6 @@ int vfs_link(const char *oldpath, const char *newpath)
 /* Internal recursive function with depth limit to prevent stack overflow */
 static int vfs_rmdir_recursive_internal(const char *path, int depth)
 {
-    extern int64_t sys_write(int fd, const void *buf, size_t count);
     
     /* Limit recursion depth to prevent stack overflow (max 32 levels) */
     if (depth > 32)
@@ -1378,7 +1434,6 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
     {
       serial_print("[VFS] ERROR - MINIX_MOUNT: minix_fs_init failed with error code: ");
       {
-        extern void serial_print_hex32(uint32_t num);
         serial_print_hex32((uint32_t)ret);
         serial_print("\n");
       }
@@ -1451,7 +1506,6 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
 // Initialize VFS with MINIX filesystem
 int vfs_init_with_minix(void)
 {
-  extern void print(const char *str);
 
   // Inicializar VFS
   print("VFS: Initializing VFS...\n");
@@ -1461,7 +1515,6 @@ int vfs_init_with_minix(void)
     print("VFS: ERROR - vfs_init failed\n");
     serial_print("[VFS] ERROR - vfs_init failed with error code: ");
     {
-      extern void serial_print_hex32(uint32_t num);
       serial_print_hex32((uint32_t)ret);
       serial_print("\n");
     }
@@ -1477,7 +1530,6 @@ int vfs_init_with_minix(void)
     print("VFS: ERROR - register_filesystem failed\n");
     serial_print("[VFS] ERROR - register_filesystem failed with error code: ");
     {
-      extern void serial_print_hex32(uint32_t num);
       serial_print_hex32((uint32_t)ret);
       serial_print("\n");
     }
@@ -1486,8 +1538,6 @@ int vfs_init_with_minix(void)
   print("VFS: register_filesystem OK\n");
 
   // Check if storage is available before mounting
-  extern bool ata_is_available(void);
-  extern bool ata_drive_present(uint8_t drive);
   
   if (!ata_is_available())
   {
@@ -1517,7 +1567,6 @@ int vfs_init_with_minix(void)
     print("VFS: ERROR - vfs_mount failed\n");
     serial_print("[VFS] vfs_mount returned error code: ");
     {
-      extern void serial_print_hex32(uint32_t num);
       serial_print_hex32((uint32_t)ret);
       serial_print("\n");
     }
@@ -1544,13 +1593,10 @@ int vfs_init_with_minix(void)
     print("VFS: WARNING - Could not add root mount point\n");
     serial_print("[VFS] WARNING - Could not add root mount point, error code: ");
     {
-      extern void serial_print_hex32(uint32_t num);
       serial_print_hex32((uint32_t)ret);
       serial_print("\n");
     }
   }
-
-  extern int vfs_mkdir(const char *path, int mode);
 
   return 0;
 }

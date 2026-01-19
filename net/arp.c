@@ -84,7 +84,7 @@ static const uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
  * @dev: Network device that received the packet
  * @data: Pointer to ARP packet (after Ethernet header)
  * @len: Length of ARP packet
- * @priv: Private data (unused, provided for protocol handler signature)
+ * @priv: Private data (unused, provided for protocol handler signature compatibility)
  */
 static void arp_receive_handler(struct net_device *dev, const void *data, 
                                  size_t len, void *priv)

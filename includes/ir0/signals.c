@@ -10,7 +10,11 @@
 #include "signals.h"
 #include <kernel/process.h>
 #include <drivers/serial/serial.h>
+#include <ir0/copy_user.h>
+#include <mm/paging.h>
+#include <ir0/kmem.h>
 #include <config.h>
+#include <string.h>
 
 /**
  * send_signal - Send signal to process
@@ -191,6 +195,192 @@ void handle_signals(void)
         current->signal_pending &= ~SIGNAL_MASK(SIGCHLD);
     }
 
-    /* SIGALRM, SIGUSR1, SIGUSR2 - user signals (clear but don't handle yet) */
-    current->signal_pending &= ~(SIGNAL_MASK(SIGALRM) | SIGNAL_MASK(SIGUSR1) | SIGNAL_MASK(SIGUSR2) | SIGNAL_MASK(SIGTRAP));
+    /* Check for signals with userspace handlers */
+    for (int sig = 1; sig < _NSIG; sig++)
+    {
+        if (current->signal_pending & SIGNAL_MASK(sig))
+        {
+            /* Check if signal is ignored */
+            if (current->signal_ignored & SIGNAL_MASK(sig))
+            {
+                current->signal_pending &= ~SIGNAL_MASK(sig);
+                continue;
+            }
+            
+            /* Check if signal is blocked */
+            if (current->signal_mask & SIGNAL_MASK(sig))
+            {
+                continue; /* Don't deliver blocked signals */
+            }
+            
+            /* Check if there's a userspace handler */
+            if (current->signal_handlers[sig] && 
+                current->signal_handlers[sig] != SIG_DFL &&
+                current->signal_handlers[sig] != SIG_IGN)
+            {
+                /* Call userspace handler */
+                void (*handler)(int) = current->signal_handlers[sig];
+                
+                /* Validate handler is in userspace */
+                if (is_user_address((void *)handler, sizeof(void *)))
+                {
+#if DEBUG_PROCESS
+                    serial_print("[SIGNAL] Setting up signal frame for signal ");
+                    serial_print_hex32((uint32_t)sig);
+                    serial_print("\n");
+#endif
+                    /* Only setup signal frame for USER_MODE processes */
+                    if (current->mode == USER_MODE)
+                    {
+                        /* Save current context */
+                        struct sigcontext *ctx = kmalloc(sizeof(struct sigcontext));
+                        if (!ctx)
+                        {
+                            /* Out of memory - fall back to default handler */
+                            current->signal_handlers[sig] = SIG_DFL;
+                            current->signal_pending &= ~SIGNAL_MASK(sig);
+                            continue;
+                        }
+                        
+                        /* Save CPU state from task structure */
+                        ctx->r15 = current->task.r15;
+                        ctx->r14 = current->task.r14;
+                        ctx->r13 = current->task.r13;
+                        ctx->r12 = current->task.r12;
+                        ctx->rbp = current->task.rbp;
+                        ctx->rbx = current->task.rbx;
+                        ctx->r11 = current->task.r11;
+                        ctx->r10 = current->task.r10;
+                        ctx->r9 = current->task.r9;
+                        ctx->r8 = current->task.r8;
+                        ctx->rax = current->task.rax;
+                        ctx->rcx = current->task.rcx;
+                        ctx->rdx = current->task.rdx;
+                        ctx->rsi = current->task.rsi;
+                        ctx->rdi = current->task.rdi;
+                        ctx->orig_rax = 0;  /* orig_rax not stored in task_t - set to 0 */
+                        ctx->rip = current->task.rip;
+                        ctx->cs = current->task.cs;
+                        ctx->rflags = current->task.rflags;
+                        ctx->rsp = current->task.rsp;
+                        ctx->ss = current->task.ss;
+                        
+                        /* Store saved context in process */
+                        current->saved_context = ctx;
+                        
+                        /* Allocate signal frame on userspace stack */
+                        uint64_t frame_addr = current->task.rsp - sizeof(struct sigframe);
+                        frame_addr &= ~0xF;  /* Align to 16 bytes (ABI requirement) */
+                        
+                        /* Ensure frame is in userspace */
+                        if (frame_addr < 0x400000UL || frame_addr > 0x7FFFFFFFFFFFUL)
+                        {
+                            /* Invalid stack - fall back to default handler */
+                            kfree(ctx);
+                            current->saved_context = NULL;
+                            current->signal_handlers[sig] = SIG_DFL;
+                            current->signal_pending &= ~SIGNAL_MASK(sig);
+                            continue;
+                        }
+                        
+                        /* Setup signal frame */
+                        struct sigframe frame;
+                        frame.handler = handler;
+                        frame.signum = sig;
+                        frame.ctx = *ctx;
+                        
+                        /* Copy frame to userspace stack */
+                        uint64_t old_cr3 = get_current_page_directory();
+                        load_page_directory((uint64_t)current->page_directory);
+                        memcpy((void *)frame_addr, &frame, sizeof(struct sigframe));
+                        load_page_directory(old_cr3);
+                        
+                        /* Modify task state to invoke handler */
+                        current->task.rsp = frame_addr;
+                        current->task.rip = (uint64_t)handler;  /* Jump to handler */
+                        current->task.rdi = sig;  /* First argument: signal number */
+                        /* RSI/RDX/RCX/R8/R9 = 0 (other args, unused for signal handlers) */
+                        
+                        /* Clear signal before calling handler */
+                        current->signal_pending &= ~SIGNAL_MASK(sig);
+                        
+#if DEBUG_PROCESS
+                        serial_print("[SIGNAL] Signal frame set up, handler will be called\n");
+#endif
+                        /* Handler will be invoked on next context switch */
+                        /* When handler returns, it will call sigreturn() syscall */
+                    }
+                    else
+                    {
+                        /* KERNEL_MODE: call directly (for dbgshell) */
+                        current->signal_pending &= ~SIGNAL_MASK(sig);
+                        handler(sig);
+                    }
+                }
+                else
+                {
+                    /* Invalid handler address - use default */
+                    current->signal_handlers[sig] = SIG_DFL;
+                    current->signal_pending &= ~SIGNAL_MASK(sig);
+                }
+            }
+        }
+    }
+    
+    /* SIGALRM, SIGUSR1, SIGUSR2, SIGTRAP - handled above or default */
+}
+
+/**
+ * register_signal_handler - Register a signal handler for current process
+ */
+int register_signal_handler(int signal, void (*handler)(int))
+{
+    if (signal < 1 || signal >= _NSIG)
+        return -1;
+    
+    /* Signals that cannot be caught */
+    if (signal == SIGKILL || signal == SIGSTOP)
+        return -1;
+    
+    process_t *current = process_get_current();
+    if (!current)
+        return -1;
+    
+    /* Validate handler is in userspace (for USER_MODE processes) */
+    if (current->mode == USER_MODE && handler != SIG_DFL && handler != SIG_IGN)
+    {
+        if (!is_user_address((void *)handler, sizeof(void *)))
+        {
+            return -1; /* Invalid handler address */
+        }
+    }
+    
+    current->signal_handlers[signal] = handler;
+    
+    /* If handler is SIG_IGN, add to ignored mask */
+    if (handler == SIG_IGN)
+    {
+        current->signal_ignored |= SIGNAL_MASK(signal);
+    }
+    else
+    {
+        current->signal_ignored &= ~SIGNAL_MASK(signal);
+    }
+    
+    return 0;
+}
+
+/**
+ * signal_ignore - Ignore a signal for current process
+ */
+int signal_ignore(int signal)
+{
+    if (signal < 1 || signal >= _NSIG)
+        return -1;
+    
+    /* Signals that cannot be ignored */
+    if (signal == SIGKILL || signal == SIGSTOP)
+        return -1;
+    
+    return register_signal_handler(signal, SIG_IGN);
 }
