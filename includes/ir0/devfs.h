@@ -93,6 +93,7 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
 #define NET_SEND_PING       0x3001
 #define NET_GET_CONFIG      0x3002
 #define NET_SET_CONFIG      0x3003
+#define NET_GET_PING_RESULT 0x3004
 
 #define DISK_READ_SECTOR    0x4001
 #define DISK_WRITE_SECTOR   0x4002

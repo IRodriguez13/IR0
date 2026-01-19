@@ -24,6 +24,8 @@
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <ir0/net.h>
+#include <includes/ir0/net.h>
+#include <drivers/storage/ata.h>
 #include <init.h>
 #include <arch/common/arch_portable.h>
 #include <arch/x86-64/sources/user_mode.h>
@@ -125,7 +127,6 @@ void kmain(void)
     init_all_drivers();
 
     /* Check disk availability before initializing filesystem */
-    extern bool ata_is_available(void);
     if (!ata_is_available())
     {
         serial_print("[BOOT] WARNING: No ATA storage detected\n");
@@ -184,7 +185,6 @@ void kmain(void)
          * This is necessary because interrupts may not be working correctly,
          * and we need to receive packets even when not actively waiting for responses.
          */
-        extern void net_poll(void);
         net_poll();
         
         /* Fallback if something goes wrong */

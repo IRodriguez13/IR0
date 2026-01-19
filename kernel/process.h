@@ -12,12 +12,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <kernel/scheduler/task.h>
-
-/* ========================================================================== */
-/* PUBLIC TYPES                                                               */
-/* ========================================================================== */
-
-#include <ir0/types.h>  // For standard types
+#include <ir0/signals.h>  
+#include <ir0/types.h> 
 
 #define MAX_FDS_PER_PROCESS 32
 
@@ -28,6 +24,8 @@ typedef struct fd_entry
 	int flags;
 	void *vfs_file;
 	uint64_t offset; /* File offset for seek operations */
+	bool is_pipe;  /* 1 if this fd is a pipe */
+	int pipe_end;  /* 0 = read end, 1 = write end */
 } fd_entry_t;
 
 /* Process execution mode */
@@ -82,6 +80,11 @@ typedef struct process
 	
 	/* Signal management */
 	uint32_t signal_pending; /* Bitmask of pending signals */
+	/* Signal handlers (function pointers to userspace handlers) */
+	void (*signal_handlers[_NSIG])(int);  /* Array of signal handler functions */
+	uint32_t signal_mask;  /* Mask of signals to block */
+	uint32_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
+	struct sigcontext *saved_context;  /* Saved context before signal handler (for sigreturn) */
 } process_t;
 
 /* PUBLIC MACROS - Register accessors                                        */
@@ -106,12 +109,14 @@ typedef struct process
 
 
 void process_init(void);
-pid_t process_fork(void);
 void process_exit(int code);
 int process_wait(pid_t pid, int *status);
 
-/* Simple spawn process - deterministic alternative to fork */
-pid_t process_spawn(void (*entry)(void), const char *name);
+/* IR0 PHILOSOPHY: Only spawn() creates processes - total simplicity */
+pid_t spawn(void (*entry)(void), const char *name);
+
+/* Fork exists only for POSIX syscall compatibility - uses spawn() internally */
+pid_t process_fork(void);
 
 
 pid_t process_get_pid(void);

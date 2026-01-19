@@ -128,3 +128,12 @@ int init_net_stack(void);
 
 /* Network Polling (for receiving packets when not actively waiting) */
 void net_poll(void);
+
+/* Ping result structure for syscalls */
+struct ping_result {
+    int success;          /* 1 if ping succeeded, 0 if failed */
+    uint64_t rtt;         /* Round-trip time in milliseconds */
+    uint8_t ttl;          /* TTL from reply */
+    size_t payload_bytes; /* Payload size in reply */
+    ip4_addr_t reply_ip;  /* IP address that replied */
+};

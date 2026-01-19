@@ -16,6 +16,7 @@
 #include <ir0/net.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 /* ICMP Message Types (RFC 792) */
 #define ICMP_TYPE_ECHO_REPLY     0
@@ -69,4 +70,9 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
 
 /* ICMP Checksum Calculation */
 uint16_t icmp_checksum(const void *data, size_t len);
+
+/* ICMP Echo Result API (for dbgshell) */
+bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out, 
+                          uint8_t *ttl_out, size_t *payload_bytes_out, 
+                          ip4_addr_t *reply_ip_out);
 

@@ -36,6 +36,11 @@ struct icmp_pending_echo {
     uint16_t seq;
     ip4_addr_t dest_ip;
     uint64_t timestamp;  /* When request was sent */
+    bool resolved;       /* True when reply received */
+    uint64_t rtt;        /* Round-trip time in milliseconds */
+    uint8_t ttl;         /* TTL from reply */
+    size_t payload_bytes; /* Payload size in reply */
+    ip4_addr_t reply_ip; /* IP address that replied */
     struct icmp_pending_echo *next;
 };
 
@@ -103,7 +108,7 @@ uint16_t icmp_checksum(const void *data, size_t len)
  * @dev: Network device that received the packet
  * @data: Pointer to ICMP packet (after IP header)
  * @len: Length of ICMP packet
- * @priv: Private data (unused, provided for protocol handler signature)
+ * @priv: Private data (unused, provided for protocol handler signature compatibility)
  */
 void icmp_receive_handler(struct net_device *dev, const void *data, 
                            size_t len, void *priv)
@@ -261,18 +266,21 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                     uint8_t ttl = ip_get_last_ttl();
                     size_t payload_bytes = len - sizeof(struct icmp_header);
                     
+                    /* Store reply information for dbgshell to access */
+                    echo->resolved = true;
+                    echo->rtt = rtt;
+                    echo->ttl = ttl;
+                    echo->payload_bytes = payload_bytes;
+                    echo->reply_ip = src_ip;
+                    
                     /* Log the ping response with Linux-style format for serial debugging */
                     /* Note: VGA output should be handled by dbgshell/userspace, not by ICMP layer */
                     LOG_INFO_FMT("ICMP", "%d bytes from " IP4_FMT ": icmp_seq=%d ttl=%d time=%d ms",
                                 (int)payload_bytes, IP4_ARGS(ntohl(src_ip)), (int)seq, (int)ttl, (int)rtt);
                     
-                    /* Remove from pending list */
-                    if (prev)
-                        prev->next = echo->next;
-                    else
-                        pending_echos = echo->next;
-                    
-                    kfree(echo);
+                    /* Don't remove from pending list yet - let dbgshell read it first
+                     * It will be removed when dbgshell calls icmp_get_echo_result()
+                     */
                     break;
                 }
                 
@@ -412,6 +420,11 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
         pending->seq = seq;
         pending->dest_ip = dest_ip;
         pending->timestamp = clock_get_uptime_milliseconds();
+        pending->resolved = false;
+        pending->rtt = 0;
+        pending->ttl = 0;
+        pending->payload_bytes = 0;
+        pending->reply_ip = 0;
         pending->next = pending_echos;
         pending_echos = pending;
         
@@ -423,6 +436,71 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
 
     kfree(icmp_packet);
     return ret;
+}
+
+/**
+ * icmp_get_echo_result - Get result of a pending echo request (for dbgshell)
+ * This function allows dbgshell to check if a ping has received a response
+ * and get the result data to display it.
+ * 
+ * @id: ICMP echo ID
+ * @seq: ICMP echo sequence number
+ * @rtt_out: Output parameter for round-trip time (milliseconds)
+ * @ttl_out: Output parameter for TTL
+ * @payload_bytes_out: Output parameter for payload size
+ * @reply_ip_out: Output parameter for reply IP address
+ * @return: true if reply received, false if still pending or not found
+ */
+bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out, 
+                          uint8_t *ttl_out, size_t *payload_bytes_out, 
+                          ip4_addr_t *reply_ip_out)
+{
+    if (!rtt_out || !ttl_out || !payload_bytes_out || !reply_ip_out)
+        return false;
+    
+    struct icmp_pending_echo *echo = pending_echos;
+    
+    while (echo)
+    {
+        if (echo->id == id && echo->seq == seq)
+        {
+            if (echo->resolved)
+            {
+                *rtt_out = echo->rtt;
+                *ttl_out = echo->ttl;
+                *payload_bytes_out = echo->payload_bytes;
+                *reply_ip_out = echo->reply_ip;
+                
+                /* Remove from pending list now that dbgshell has read it */
+                struct icmp_pending_echo *prev = NULL;
+                struct icmp_pending_echo *curr = pending_echos;
+                while (curr && curr != echo)
+                {
+                    prev = curr;
+                    curr = curr->next;
+                }
+                if (curr == echo)
+                {
+                    if (prev)
+                        prev->next = echo->next;
+                    else
+                        pending_echos = echo->next;
+                    kfree(echo);
+                }
+                
+                return true;
+            }
+            else
+            {
+                /* Still pending */
+                return false;
+            }
+        }
+        echo = echo->next;
+    }
+    
+    /* Not found */
+    return false;
 }
 
 /**

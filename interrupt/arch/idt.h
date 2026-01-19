@@ -32,6 +32,7 @@ void idt_init32(void);
 void idt_init64(void);
 void idt_load32(void);
 void idt_load64(void);
+void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags);  /* Set IDT gate for 64-bit */
 
 // Handlers de interrupciones
 void isr_handler32(uint32_t interrupt_number);

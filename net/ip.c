@@ -152,7 +152,7 @@ uint16_t ip_checksum(const void *data, size_t len)
  * @dev: Network device that received the packet
  * @data: Pointer to IP packet data
  * @len: Length of IP packet
- * @priv: Private data (unused)
+ * @priv: Private data (unused, provided for protocol handler signature compatibility)
  */
 void ip_receive_handler(struct net_device *dev, const void *data, 
                         size_t len, void *priv)

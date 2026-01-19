@@ -625,10 +625,12 @@ remove-init:
 
 clean:
 	@echo "Cleaning build artifacts..."
-	@echo "Clean done."
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
 	@find . -name "*.bin" -type f -delete
+	@rm -f kernel-x64.iso
+	@rm -rf iso
+	@echo "Clean done."
 
 # Clean only network objects to force recompilation with TAP flag
 clean-net:

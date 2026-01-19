@@ -15,6 +15,7 @@
 #include <ir0/signals.h>
 #include <ir0/oops.h>
 #include <string.h>
+#include <stddef.h>
 
 
 static pid_t next_pid = 2;
@@ -62,76 +63,16 @@ process_t *get_process_list(void)
 
 
 
-process_t *process_create(void (*entry)(void))
-{
-	process_t *proc;
-	
-	proc = kmalloc(sizeof(process_t));
-	if (!proc)
-		return NULL;
-
-	BUG_ON(proc == NULL); /* Should never happen after kmalloc check */
-
-	memset(proc, 0, sizeof(process_t));
-
-	/* Basic process setup */
-	proc->task.pid = next_pid++;
-	proc->ppid = 0;
-	proc->state = PROCESS_READY;
-	proc->page_directory = (uint64_t *)get_current_page_directory();
-
-	/* User and permissions - default to root */
-	proc->uid = 0;
-	proc->gid = 0;
-	proc->euid = 0;
-	proc->egid = 0;
-	proc->umask = 0022;
-
-	/* Initialize current working directory */
-	strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
-	proc->cwd[sizeof(proc->cwd) - 1] = '\0';
-	
-	/* Initialize command name */
-	strncpy(proc->comm, "process", sizeof(proc->comm) - 1);
-	proc->comm[sizeof(proc->comm) - 1] = '\0';
-
-	/* Create stack */
-	proc->stack_size = 0x2000;
-	proc->stack_start = (uint64_t)kmalloc(proc->stack_size);
-	if (!proc->stack_start)
-	{
-		kfree(proc);
-		BUG_ON(1); /* Out of memory for process stack */
-		return NULL;
-	}
-
-	memset((void *)proc->stack_start, 0, proc->stack_size);
-
-	/* Setup task registers */
-	proc->task.rip = (uint64_t)entry;
-	proc->task.rsp = proc->stack_start + proc->stack_size - 16;
-	proc->task.rbp = proc->task.rsp;
-	proc->task.rflags = 0x202;
-	proc->task.cs = 0x1B;
-	proc->task.ss = 0x23;
-	proc->task.ds = 0x23;
-	proc->task.es = 0x23;
-	proc->task.fs = 0x23;
-	proc->task.gs = 0x23;
-	proc->task.cr3 = get_current_page_directory();
-
-	/* Insert into global process list */
-	proc->next = process_list;
-	process_list = proc;
-
-	/* Add to scheduler */
-	rr_add_process(proc);
-
-	return proc;
-}
-
-/* Simple spawn process - deterministic alternative to fork */
-pid_t process_spawn(void (*entry)(void), const char *name)
+/* 
+ * spawn() - Create a new process (IR0's ONLY process creation method)
+ * 
+ * IR0 PHILOSOPHY: Total simplicity
+ * Only spawn() creates processes. No fork(), no clone(), no other methods.
+ * This maintains total simplicity in process creation.
+ * 
+ * process_fork() exists only for POSIX syscall compatibility and uses spawn() internally.
+ */
+pid_t spawn(void (*entry)(void), const char *name)
 {
 	process_t *proc;
 	
@@ -205,21 +146,52 @@ pid_t process_spawn(void (*entry)(void), const char *name)
 	strncpy(proc->comm, name, sizeof(proc->comm) - 1);
 	proc->comm[sizeof(proc->comm) - 1] = '\0';
 
-	/* Create stack */
-	proc->stack_size = 0x2000;
-	proc->stack_start = (uint64_t)kmalloc(proc->stack_size);
-	if (!proc->stack_start)
+	/* Create user stack in userspace (only for USER_MODE processes) */
+	if (proc->mode == USER_MODE)
 	{
-		kfree(proc);
-		return -1;
+		/* User stack in userspace: 8KB at 0x7FFFF000 (high user address) */
+		proc->stack_size = 0x2000;  /* 8KB */
+		proc->stack_start = 0x7FFFF000UL;  /* High user address, aligned to page */
+		
+		/* Temporarily switch to process page directory to map stack */
+		uint64_t old_cr3 = get_current_page_directory();
+		load_page_directory((uint64_t)proc->page_directory);
+		
+		/* Map user stack with RW permissions */
+		if (map_user_region_in_directory(proc->page_directory, proc->stack_start, proc->stack_size, PAGE_RW) != 0)
+		{
+			load_page_directory(old_cr3);  /* Restore original CR3 */
+			kfree(proc);
+			return -1;
+		}
+		
+		/* Zero out the stack */
+		memset((void *)proc->stack_start, 0, proc->stack_size);
+		
+		/* Restore original page directory */
+		load_page_directory(old_cr3);
+		
+		/* Setup stack pointer at top of stack (stack grows down) */
+		proc->task.rsp = proc->stack_start + proc->stack_size - 16;
+		proc->task.rbp = proc->task.rsp;
 	}
-
-	memset((void *)proc->stack_start, 0, proc->stack_size);
+	else
+	{
+		/* Kernel mode: allocate from kernel heap (existing behavior) */
+		proc->stack_size = 0x2000;
+		proc->stack_start = (uint64_t)kmalloc(proc->stack_size);
+		if (!proc->stack_start)
+		{
+			kfree(proc);
+			return -1;
+		}
+		memset((void *)proc->stack_start, 0, proc->stack_size);
+		proc->task.rsp = proc->stack_start + proc->stack_size - 16;
+		proc->task.rbp = proc->task.rsp;
+	}
 
 	/* Setup task registers for clean start */
 	proc->task.rip = (uint64_t)entry;
-	proc->task.rsp = proc->stack_start + proc->stack_size - 16;
-	proc->task.rbp = proc->task.rsp;
 	proc->task.rflags = 0x202;
 	proc->task.cs = 0x1B;
 	proc->task.ss = 0x23;
@@ -231,31 +203,48 @@ pid_t process_spawn(void (*entry)(void), const char *name)
 	/* Initialize file descriptor table */
 	process_init_fd_table(proc);
 
+	/* Initialize signal handlers to default */
+	proc->signal_pending = 0;
+	proc->signal_mask = 0;
+	proc->signal_ignored = 0;
+	proc->saved_context = NULL;
+	for (int i = 0; i < _NSIG; i++)
+	{
+		proc->signal_handlers[i] = SIG_DFL;
+	}
+
 	/* Add to scheduler */
 	rr_add_process(proc);
 
 	return proc->task.pid;
 }
 
-/* Dummy entry point for spawned processes when no specific function is provided */
-static void spawn_dummy_entry(void)
+/* Dummy entry that immediately exits - child process behavior for fork() */
+static void fork_child_entry(void)
 {
-	/* Process just exits immediately - this is for sys_fork compatibility */
 	process_exit(0);
 }
 
-
+/* 
+ * process_fork() - Fork syscall compatibility (uses spawn internally)
+ * 
+ * NOTE: IR0 only uses spawn() for process creation.
+ * This function exists only for POSIX fork() syscall compatibility.
+ * It uses spawn() internally, maintaining simplicity.
+ */
 pid_t process_fork(void)
 {
-	/* Use spawn internally - much simpler and deterministic */
+	/* IR0 philosophy: only spawn() creates processes
+	 * This function exists solely for sys_fork() compatibility
+	 * It uses spawn() internally to maintain simplicity
+	 */
 	if (!current_process)
 		return -1;
 	
-	/* For sys_fork compatibility, we spawn a process that immediately exits
-	 * This maintains the syscall interface while using spawn internally */
-	pid_t child_pid = process_spawn(spawn_dummy_entry, "fork_child");
+	/* Use spawn internally - only spawn creates processes in IR0 */
+	pid_t child_pid = spawn(fork_child_entry, "fork_child");
 	
-	/* Set return value for parent (child gets 0 from spawn_dummy_entry) */
+	/* Set return value for parent (child gets 0 from fork_child_entry) */
 	if (child_pid > 0) {
 		current_process->task.rax = child_pid;
 	}
@@ -510,9 +499,28 @@ uint64_t create_process_page_directory(void)
 	kernel_cr3 = get_current_page_directory();
 	kernel_pml4 = (uint64_t *)kernel_cr3;
 
-	/* Copy entire kernel mapping (includes low 32MB and high kernel) */
-	for (i = 0; i < 512; i++)
-		pml4[i] = kernel_pml4[i];
+	/* Copy ONLY kernel space mappings (not user space)
+	 * In x86-64 canonical addressing:
+	 * - User space: virtual addresses 0x0000000000000000 - 0x00007FFFFFFFFFFF (PML4 indices 0-255)
+	 * - Kernel space: virtual addresses 0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF (PML4 indices 256-511)
+	 * 
+	 * We only copy kernel space (indices 256-511) to prevent user processes from
+	 * accessing kernel memory. User space entries start empty.
+	 */
+	for (i = 256; i < 512; i++)
+	{
+		if (kernel_pml4[i] & PAGE_PRESENT)
+			pml4[i] = kernel_pml4[i];
+	}
+
+	/* Also copy identity mappings for low memory if needed (kernel boot code) */
+	/* Copy first entry if it maps kernel initialization code (0-2MB typically) */
+	if (kernel_pml4[0] & PAGE_PRESENT)
+	{
+		/* Only copy if it's a kernel mapping (no PAGE_USER flag) */
+		if (!(kernel_pml4[0] & PAGE_USER))
+			pml4[0] = kernel_pml4[0];
+	}
 
 	return (uint64_t)pml4;
 }
