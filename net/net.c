@@ -301,11 +301,17 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
         /* No handler registered for this EtherType. This is normal for:
          * - Unknown protocols
          * - Frames not intended for this system
-         * - Protocols not yet implemented (TCP, UDP might fall here)
+         * - Protocols not yet implemented (TCP might fall here, but UDP is implemented)
+         * 
+         * Note: We silently drop these frames as they're not for us or not supported.
+         * Excessive logging would spam the serial output.
          */
+        /* Log only in debug mode to avoid spam */
+        #ifdef NET_DEBUG
         serial_print("NET: No handler registered for EtherType 0x");
         serial_print_hex32(type);
         serial_print("\n");
+        #endif
     }
 }
 

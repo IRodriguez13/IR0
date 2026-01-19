@@ -111,7 +111,7 @@ uint16_t udp_checksum(const void *data, size_t len, ip4_addr_t src_ip, ip4_addr_
  * @dev: Network device that received the packet
  * @data: Pointer to UDP packet (after IP header)
  * @len: Length of UDP packet
- * @priv: Private data (unused)
+ * @priv: Private data (unused, provided for protocol handler signature compatibility)
  */
 void udp_receive_handler(struct net_device *dev, const void *data, size_t len, void *priv)
 {

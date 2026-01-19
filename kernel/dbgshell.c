@@ -26,6 +26,7 @@
 #include <ir0/net.h>
 #include <ir0/version.h>
 #include <net/arp.h>
+#include <ir0/net.h>
 
 /* kernel/shell.c: use public headers for functions (kmem/string) */
 
@@ -728,7 +729,6 @@ static void cmd_arpcache(void)
     /* Display ARP cache entries directly from kernel
      * Since dbgshell runs in kernel mode, we can access kernel functions directly
      */
-    extern void arp_print_cache(void);
     
     shell_write(1, "ARP Cache:\n");
     shell_write(1, "==========\n");

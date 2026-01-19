@@ -43,10 +43,15 @@
 #include <ir0/errno.h>
 #include <ir0/copy_user.h>
 #include <ir0/permissions.h>
+#include <ir0/chmod.h>
 #include <ir0/fcntl.h>
 #include <ir0/procfs.h>
 #include <ir0/devfs.h>
 #include <ir0/signals.h>
+#include <ir0/pipe.h>
+#include <interrupt/arch/idt.h>
+#include <mm/paging.h>
+#include <fs/vfs.h>
 
 /* Forward declarations */
 static fd_entry_t *get_process_fd_table(void);
@@ -66,6 +71,50 @@ static void ensure_devfs_init(void)
 static int is_dev_path(const char *path)
 {
   return path && strncmp(path, "/dev/", 5) == 0;
+}
+
+/**
+ * validate_userspace_string - Validate that a string argument is in userspace
+ * @str: String pointer to validate
+ * @max_len: Maximum expected string length
+ * Returns: 0 if valid, -EFAULT if invalid
+ */
+static int validate_userspace_string(const char *str, size_t max_len)
+{
+  if (!current_process)
+    return -ESRCH;
+  
+  /* KERNEL_MODE bypass (dbgshell) */
+  if (current_process->mode == KERNEL_MODE)
+    return 0;
+  
+  /* USER_MODE: validate string is in userspace */
+  if (!is_user_address(str, max_len))
+    return -EFAULT;
+  
+  return 0;
+}
+
+/**
+ * validate_userspace_buffer - Validate that a buffer argument is in userspace
+ * @buf: Buffer pointer to validate
+ * @size: Size of buffer
+ * Returns: 0 if valid, -EFAULT if invalid
+ */
+static int validate_userspace_buffer(const void *buf, size_t size)
+{
+  if (!current_process)
+    return -ESRCH;
+  
+  /* KERNEL_MODE bypass (dbgshell) */
+  if (current_process->mode == KERNEL_MODE)
+    return 0;
+  
+  /* USER_MODE: validate buffer is in userspace */
+  if (!is_user_address(buf, size))
+    return -EFAULT;
+  
+  return 0;
 }
 
 
@@ -137,6 +186,34 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   fd_entry_t *fd_table = get_process_fd_table();
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
+
+  /* Check if this is a pipe */
+  if (fd_table[fd].is_pipe)
+  {
+    /* Write to pipe */
+    pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
+    if (!pipe)
+      return -EBADF;
+
+    /* Validate it's the write end */
+    if (fd_table[fd].pipe_end != 1)
+      return -EBADF; /* Can't write to read end */
+
+    /* Copy from user space */
+    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+      return -EFAULT;
+
+    /* Write to pipe */
+    int ret = pipe_write(pipe, kernel_buf, copy_size);
+    if (ret >= 0)
+    {
+      return ret;
+    }
+    /* If pipe is full, return EPIPE or partial write */
+    if (ret == -1)
+      return -EPIPE; /* Broken pipe or full */
+    return ret;
+  }
 
   /* Check write permissions */
   if (!check_file_access(fd_table[fd].path, ACCESS_WRITE, current_process))
@@ -237,6 +314,33 @@ int64_t sys_read(int fd, void *buf, size_t count)
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
 
+  /* Check if this is a pipe */
+  if (fd_table[fd].is_pipe)
+  {
+    /* Read from pipe */
+    pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
+    if (!pipe)
+      return -EBADF;
+
+    /* Validate it's the read end */
+    if (fd_table[fd].pipe_end != 0)
+      return -EBADF; /* Can't read from write end */
+
+    char kernel_read_buf[PAGE_SIZE_4KB];
+    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
+    
+    /* Read from pipe */
+    int ret = pipe_read(pipe, kernel_read_buf, read_size);
+    if (ret >= 0)
+    {
+      /* Copy to user space */
+      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
+        return -EFAULT;
+      return ret;
+    }
+    return ret;
+  }
+
   /* Check read permissions */
   if (!check_file_access(fd_table[fd].path, ACCESS_READ, current_process))
     return -EACCES;
@@ -284,6 +388,12 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
   if (!pathname)
     return -EFAULT;
 
+  /* Validate pathname is in userspace (for USER_MODE processes) */
+  if (current_process->mode == USER_MODE && !is_user_address(pathname, 256))
+  {
+    return -EFAULT;
+  }
+
   /* Use VFS layer with proper mode */
   return vfs_mkdir(pathname, (int)mode);
 }
@@ -295,6 +405,12 @@ int64_t sys_exec(const char *pathname,
   serial_print("SERIAL: sys_exec called\n");
 
   if (!current_process || !pathname)
+  {
+    return -EFAULT;
+  }
+
+  /* Validate pathname is in userspace (for USER_MODE processes) */
+  if (current_process->mode == USER_MODE && !is_user_address(pathname, 256))
   {
     return -EFAULT;
   }
@@ -313,6 +429,14 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     return -ESRCH;
 
   if (!dev || !mountpoint)
+    return -EFAULT;
+
+  /* Validate arguments are in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(dev, 256) != 0)
+    return -EFAULT;
+  if (validate_userspace_string(mountpoint, 256) != 0)
+    return -EFAULT;
+  if (fstype && validate_userspace_string(fstype, 32) != 0)
     return -EFAULT;
 
   /* Validate device path */
@@ -360,14 +484,23 @@ int64_t sys_chmod(const char *path, mode_t mode)
   if (!current_process || !path)
     return -EFAULT;
 
+  /* Validate path is in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(path, 256) != 0)
+    return -EFAULT;
+
   /* Call chmod through VFS layer */
-  extern int chmod(const char *path, mode_t mode);
   return chmod(path, mode);
 }
 
 int64_t sys_link(const char *oldpath, const char *newpath)
 {
   if (!current_process || !oldpath || !newpath)
+    return -EFAULT;
+
+  /* Validate arguments are in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(oldpath, 256) != 0)
+    return -EFAULT;
+  if (validate_userspace_string(newpath, 256) != 0)
     return -EFAULT;
 
   /* Call link through VFS layer */
@@ -409,6 +542,10 @@ int64_t sys_rmdir(const char *pathname)
   if (!current_process || !pathname)
     return -EFAULT;
 
+  /* Validate pathname is in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
   /* Use VFS layer for POSIX-compliant directory removal */
   return vfs_rmdir_recursive(pathname);
 }
@@ -433,6 +570,10 @@ static fd_entry_t *get_process_fd_table(void)
 int64_t sys_fstat(int fd, stat_t *buf)
 {
   if (!current_process || !buf)
+    return -EFAULT;
+
+  /* Validate buffer is in userspace (for USER_MODE processes) */
+  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
     return -EFAULT;
 
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
@@ -466,10 +607,16 @@ int64_t sys_fstat(int fd, stat_t *buf)
 /* Open file and return file descriptor */
 int64_t sys_open(const char *pathname, int flags, mode_t mode)
 {
-  (void)mode; /* Mode handling not implemented yet */
-
-  if (!current_process || !pathname)
+  if (!current_process)
+    return -ESRCH;
+  if (!pathname)
     return -EFAULT;
+
+  /* Validate pathname is in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  (void)mode; /* Mode handling not implemented yet */
 
   /* Handle /proc filesystem on-demand */
   if (is_proc_path(pathname)) {
@@ -553,15 +700,25 @@ int64_t sys_close(int fd)
   if (fd >= 2000 && fd <= 2999)
     return 0;
 
-  /* Close VFS file if it exists */
-  if (fd_table[fd].vfs_file)
+  /* Check if this is a pipe */
+  if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
   {
+    /* Close pipe end - this decrements ref_count */
+    pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
+    pipe_close(pipe);
+    fd_table[fd].vfs_file = NULL;
+  }
+  else if (fd_table[fd].vfs_file)
+  {
+    /* Close VFS file if it exists */
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
     vfs_close(vfs_file);
     fd_table[fd].vfs_file = NULL;
   }
 
   fd_table[fd].in_use = false;
+  fd_table[fd].is_pipe = false;
+  fd_table[fd].pipe_end = -1;
   fd_table[fd].path[0] = '\0';
   fd_table[fd].flags = 0;
   fd_table[fd].offset = 0;
@@ -705,6 +862,12 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   if (!current_process || !pathname || !buf)
     return -EFAULT;
 
+  /* Validate arguments are in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
+    return -EFAULT;
+
   /* Handle /proc filesystem */
   if (is_proc_path(pathname)) {
     return proc_stat(pathname, buf);
@@ -714,11 +877,21 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   return vfs_stat(pathname, buf);
 }
 
+/**
+ * sys_fork - Fork process (POSIX fork syscall)
+ * 
+ * NOTE: IR0 only uses spawn() for process creation.
+ * This syscall exists for POSIX compatibility but uses spawn() internally.
+ * 
+ * Returns: Child PID in parent, 0 in child (via process_fork)
+ */
 int64_t sys_fork(void)
 {
   if (!current_process)
     return -ESRCH;
 
+  /* IR0 philosophy: only spawn() creates processes
+   * process_fork() uses spawn() internally for syscall compatibility */
   return process_fork();
 }
 
@@ -766,6 +939,199 @@ int64_t sys_kill(pid_t pid, int signal)
   return 0;
 }
 
+/**
+ * sys_sigaction - Set signal action (POSIX sigaction)
+ * @signum: Signal number
+ * @act: New signal action (can be NULL)
+ * @oldact: Old signal action (can be NULL, output)
+ *
+ * Returns: 0 on success, -1 on error
+ */
+int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  /* Validate signal number */
+  if (signum < 1 || signum >= _NSIG)
+    return -EINVAL;
+
+  /* Signals that cannot be caught */
+  if (signum == SIGKILL || signum == SIGSTOP)
+    return -EINVAL;
+
+  /* Save old action if requested */
+  if (oldact)
+  {
+    /* Validate oldact is in userspace (for USER_MODE processes) */
+    if (validate_userspace_buffer(oldact, sizeof(struct sigaction)) != 0)
+      return -EFAULT;
+
+    oldact->sa_handler = current_process->signal_handlers[signum];
+    oldact->sa_mask = current_process->signal_mask;
+    oldact->sa_flags = 0; /* Flags not yet implemented */
+  }
+
+  /* Set new action if provided */
+  if (act)
+  {
+    /* Validate act is in userspace (for USER_MODE processes) */
+    if (validate_userspace_buffer((const void *)act, sizeof(struct sigaction)) != 0)
+      return -EFAULT;
+
+    /* Register new handler */
+    if (register_signal_handler(signum, act->sa_handler) != 0)
+      return -EFAULT;
+
+    /* Update signal mask (blocked signals during handler execution) */
+    current_process->signal_mask = act->sa_mask;
+  }
+
+  return 0;
+}
+
+/**
+ * sys_sigreturn - Return from signal handler (POSIX sigreturn)
+ * @ctx: Signal context to restore (from signal frame)
+ *
+ * Restores CPU state saved before signal handler was invoked.
+ * This allows the process to resume execution after handling a signal.
+ *
+ * Returns: Never returns normally (restores context and resumes execution)
+ */
+int64_t sys_sigreturn(struct sigcontext *ctx)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  /* Validate context is in userspace (for USER_MODE processes) */
+  if (current_process->mode == USER_MODE)
+  {
+    if (!ctx || validate_userspace_buffer(ctx, sizeof(struct sigcontext)) != 0)
+      return -EFAULT;
+    
+    /* Restore context from saved context or from argument */
+    struct sigcontext *restore_ctx = current_process->saved_context;
+    if (!restore_ctx)
+    {
+      /* No saved context - use argument */
+      restore_ctx = ctx;
+    }
+    
+    /* Restore CPU state from context */
+    current_process->task.r15 = restore_ctx->r15;
+    current_process->task.r14 = restore_ctx->r14;
+    current_process->task.r13 = restore_ctx->r13;
+    current_process->task.r12 = restore_ctx->r12;
+    current_process->task.rbp = restore_ctx->rbp;
+    current_process->task.rbx = restore_ctx->rbx;
+    current_process->task.r11 = restore_ctx->r11;
+    current_process->task.r10 = restore_ctx->r10;
+    current_process->task.r9 = restore_ctx->r9;
+    current_process->task.r8 = restore_ctx->r8;
+    current_process->task.rax = restore_ctx->rax;
+    current_process->task.rcx = restore_ctx->rcx;
+    current_process->task.rdx = restore_ctx->rdx;
+    current_process->task.rsi = restore_ctx->rsi;
+    current_process->task.rdi = restore_ctx->rdi;
+    /* orig_rax not stored in task_t - not needed for context restoration */
+    current_process->task.rip = restore_ctx->rip;
+    current_process->task.cs = restore_ctx->cs;
+    current_process->task.rflags = restore_ctx->rflags;
+    current_process->task.rsp = restore_ctx->rsp;
+    current_process->task.ss = restore_ctx->ss;
+    
+    /* Free saved context */
+    if (current_process->saved_context)
+    {
+      kfree(current_process->saved_context);
+      current_process->saved_context = NULL;
+    }
+    
+    /* Process will resume at restored RIP on next context switch */
+    return 0;  /* Should not be reached, but return 0 for safety */
+  }
+  
+  /* KERNEL_MODE: no-op */
+  return 0;
+}
+
+/**
+ * sys_pipe - Create a pipe (POSIX pipe syscall)
+ * @pipefd: Array of 2 file descriptors [read_fd, write_fd] (output)
+ *
+ * Returns: 0 on success, -1 on error
+ */
+int64_t sys_pipe(int pipefd[2])
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (!pipefd)
+    return -EFAULT;
+
+  /* Validate pipefd is in userspace (for USER_MODE processes) */
+  if (validate_userspace_buffer(pipefd, sizeof(int) * 2) != 0)
+    return -EFAULT;
+
+  /* Create pipe using existing pipe implementation */
+  pipe_t *pipe = pipe_create();
+  if (!pipe)
+    return -ENOMEM; /* Out of memory */
+
+  /* Find two free file descriptors */
+  fd_entry_t *fd_table = get_process_fd_table();
+  int read_fd = -1, write_fd = -1;
+
+  for (int i = 3; i < MAX_FDS_PER_PROCESS; i++)
+  {
+    if (!fd_table[i].in_use)
+    {
+      if (read_fd == -1)
+        read_fd = i;
+      else if (write_fd == -1)
+      {
+        write_fd = i;
+        break;
+      }
+    }
+  }
+
+  if (read_fd == -1 || write_fd == -1)
+  {
+    pipe_close(pipe); /* Clean up pipe on failure */
+    return -EMFILE; /* Too many open files */
+  }
+
+  /* Initialize read fd */
+  fd_table[read_fd].in_use = 1;
+  /* fd is the array index, no need to store it */
+  strncpy(fd_table[read_fd].path, "/dev/pipe", sizeof(fd_table[read_fd].path) - 1);
+  fd_table[read_fd].path[sizeof(fd_table[read_fd].path) - 1] = '\0';
+  fd_table[read_fd].offset = 0;
+  fd_table[read_fd].flags = O_RDONLY;
+  fd_table[read_fd].vfs_file = (void *)pipe;  /* Store pipe pointer */
+  fd_table[read_fd].is_pipe = 1;  /* Mark as pipe */
+  fd_table[read_fd].pipe_end = 0;  /* 0 = read end */
+
+  /* Initialize write fd */
+  fd_table[write_fd].in_use = 1;
+  /* fd is the array index, no need to store it */
+  strncpy(fd_table[write_fd].path, "/dev/pipe", sizeof(fd_table[write_fd].path) - 1);
+  fd_table[write_fd].path[sizeof(fd_table[write_fd].path) - 1] = '\0';
+  fd_table[write_fd].offset = 0;
+  fd_table[write_fd].flags = O_WRONLY;
+  fd_table[write_fd].vfs_file = (void *)pipe;  /* Store pipe pointer (shared) */
+  fd_table[write_fd].is_pipe = 1;  /* Mark as pipe */
+  fd_table[write_fd].pipe_end = 1;  /* 1 = write end */
+
+  /* Return file descriptors to userspace */
+  pipefd[0] = read_fd;
+  pipefd[1] = write_fd;
+
+  return 0;
+}
+
 int64_t sys_brk(void *addr)
 {
   if (!current_process)
@@ -775,14 +1141,55 @@ int64_t sys_brk(void *addr)
   if (!addr)
     return (int64_t)current_process->heap_end;
 
-  /* Validate new break address */
-  if (addr < (void *)current_process->heap_start ||
-      addr > (void *)((char *)current_process->heap_start + 0x10000000))
+  /* Validate new break address is in userspace */
+  if (!is_user_address(addr, 0))
     return -EFAULT;
 
+  uintptr_t new_brk = (uintptr_t)addr;
+  uintptr_t current_brk = current_process->heap_end;
+  
+  /* Initialize heap_start if not set */
+  if (current_process->heap_start == 0)
+  {
+    /* Start heap at 32MB (0x2000000) - after code/stack */
+    current_process->heap_start = 0x2000000UL;
+    current_process->heap_end = current_process->heap_start;
+    current_brk = current_process->heap_end;
+  }
+
+  /* Validate new break is within reasonable range */
+  if (new_brk < current_process->heap_start ||
+      new_brk > (current_process->heap_start + 0x10000000))  /* 256MB max heap */
+    return -EFAULT;
+
+  /* If expanding heap, map new pages */
+  if (new_brk > current_brk)
+  {
+    /* Align to page boundary */
+    uintptr_t start_page = (current_brk + 0xFFF) & ~0xFFF;
+    uintptr_t end_page = (new_brk + 0xFFF) & ~0xFFF;
+    size_t size_to_map = end_page - start_page;
+    
+    if (size_to_map > 0)
+    {
+      /* Map new heap pages in process page directory */
+      extern int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t size, uint64_t flags);
+      if (map_user_region_in_directory(current_process->page_directory, start_page, size_to_map, PAGE_RW) != 0)
+      {
+        /* Failed to map - return current break */
+        return (int64_t)current_process->heap_end;
+      }
+    }
+  }
+  /* If shrinking heap, unmap pages (optional - for now just update break) */
+  else if (new_brk < current_brk)
+  {
+    /* TODO: Unmap pages if needed (for now just update break) */
+  }
+
   /* Set new break */
-  current_process->heap_end = (uint64_t)addr;
-  return (int64_t)addr;
+  current_process->heap_end = new_brk;
+  return (int64_t)new_brk;
 }
 
 /* sbrk is typically implemented as a userspace library function using brk */
@@ -865,8 +1272,6 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
     return (void *)-1;
   }
 
-  sys_write(1, "mmap: allocating memory\n", 24);
-
   /* Align length to page boundary */
   length = (length + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
 
@@ -874,65 +1279,81 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
    * - If addr is NULL: Kernel chooses address
    * - If addr is provided: Try to use it if valid and page-aligned
    * - If MAP_FIXED is set (future): Must use exact address
-   * For now, we honor hints but allow kernel to override
    */
-  void *real_addr = NULL;
+  uintptr_t virt_addr = 0;
+  uintptr_t hint_addr = (uintptr_t)addr;
   
   /* Check if hint address is provided and valid */
   if (addr != NULL)
   {
     /* Address must be page-aligned */
-    uintptr_t hint_addr = (uintptr_t)addr;
-    if ((hint_addr & (PAGE_SIZE_4KB - 1)) == 0)
+    if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
     {
-      /* Check if hint is in reasonable range (user space: 4MB to 3GB) */
-      const uintptr_t USER_SPACE_START = 0x00400000UL;  /* 4MB */
-      const uintptr_t USER_SPACE_END   = 0xC0000000UL;  /* 3GB */
-      
-      if (hint_addr >= USER_SPACE_START && hint_addr < USER_SPACE_END)
-      {
-        /* Hint is valid - try to allocate near the hint address
-         * Store hint in mapping entry for tracking
-         * Note: Full implementation would actually map at hint_addr in page tables
-         */
-        real_addr = kmalloc(length);
-        if (real_addr)
-        {
-          /* Store hint address in mapping entry for future page table mapping
-           * In a full implementation, we would:
-           * 1. Allocate physical frame
-           * 2. Map it at hint_addr in process page tables
-           * 3. Store mapping entry with hint_addr as virtual address
-           * For now, we use allocated address but document the hint
-           */
-        }
-      }
+      serial_print("SERIAL: mmap: address hint not page-aligned\n");
+      return (void *)-1;
     }
+    
+    /* Check if hint is in valid userspace range */
+    if (!is_user_address(addr, length))
+    {
+      serial_print("SERIAL: mmap: address hint not in userspace\n");
+      return (void *)-1;
+    }
+    
+    /* Check if address range is already mapped */
+    int mapped = is_page_mapped_in_directory(current_process->page_directory, hint_addr, NULL);
+    if (mapped == 1)
+    {
+      serial_print("SERIAL: mmap: address range already mapped\n");
+      return (void *)-1;  /* Address already in use */
+    }
+    
+    virt_addr = hint_addr;
   }
-  
-  /* If no hint or hint was invalid, kernel chooses */
-  if (!real_addr)
+  else
   {
-    real_addr = kmalloc(length);
+    /* Kernel chooses address - start from 128MB (after heap) */
+    virt_addr = 0x8000000UL;  /* 128MB */
+    /* TODO: Find unused address range (for now use fixed start) */
   }
-  
-  if (!real_addr)
+
+  /* Determine page flags from protection flags */
+  uint64_t page_flags = PAGE_USER;  /* Always user mode */
+  if (prot & PROT_READ)
+    page_flags |= 0;  /* Read is default */
+  if (prot & PROT_WRITE)
+    page_flags |= PAGE_RW;
+  if (prot & PROT_EXEC)
+    page_flags |= 0;  /* TODO: Add PAGE_EXEC flag if needed */
+
+  /* Map pages in process page directory */
+  if (map_user_region_in_directory(current_process->page_directory, virt_addr, length, page_flags) != 0)
   {
+    serial_print("SERIAL: mmap: failed to map pages\n");
     return (void *)-1;
   }
-  
-  /* Zero memory for anonymous mappings (as per POSIX) */
-  memset(real_addr, 0, length);
+
+  /* Zero memory for anonymous mappings (as per POSIX)
+   * We must switch to process page directory to write to userspace
+   */
+  uint64_t old_cr3 = get_current_page_directory();
+  load_page_directory((uint64_t)current_process->page_directory);
+  memset((void *)virt_addr, 0, length);
+  load_page_directory(old_cr3);  /* Restore kernel CR3 */
 
   /* Create mapping entry */
   struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
   if (!region)
   {
-    kfree(real_addr);
+      /* Failed to allocate region entry - unmap pages */
+      for (uintptr_t page = virt_addr; page < virt_addr + length; page += PAGE_SIZE_4KB)
+    {
+      unmap_page(page);
+    }
     return (void *)-1;
   }
 
-  region->addr = real_addr;
+  region->addr = (void *)virt_addr;
   region->hint_addr = addr;  /* Store hint for future reference */
   region->length = length;
   region->prot = prot;  /* Store protection flags for mprotect */
@@ -940,7 +1361,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
   region->next = mmap_list;
   mmap_list = region;
 
-  return real_addr;
+  return (void *)virt_addr;
 }
 
 int sys_munmap(void *addr, size_t length)
@@ -948,19 +1369,36 @@ int sys_munmap(void *addr, size_t length)
   if (!current_process || !addr || length == 0)
     return -1;
 
+  /* Validate address is in userspace */
+  if (!is_user_address(addr, length))
+    return -EFAULT;
+
+  /* Align to page boundaries */
+  uintptr_t start_page = (uintptr_t)addr & ~0xFFF;
+  size_t aligned_length = ((length + 0xFFF) & ~0xFFF);
+
   /* Find the mapping */
   struct mmap_region *current = mmap_list;
   struct mmap_region *prev = NULL;
 
   while (current)
   {
-    if (current->addr == addr && current->length == length)
+    uintptr_t mapping_start = (uintptr_t)current->addr & ~0xFFF;
+    uintptr_t mapping_end = mapping_start + ((current->length + 0xFFF) & ~0xFFF);
+    
+    if (start_page >= mapping_start && (start_page + aligned_length) <= mapping_end)
     {
       /* Remove from list */
       if (prev)
         prev->next = current->next;
       else
         mmap_list = current->next;
+
+      /* Unmap pages in process page directory */
+      for (uintptr_t page = start_page; page < start_page + aligned_length; page += PAGE_SIZE_4KB)
+      {
+        unmap_page(page);
+      }
 
       /* Free the mapping structure */
       kfree(current);
@@ -970,7 +1408,7 @@ int sys_munmap(void *addr, size_t length)
     current = current->next;
   }
 
-  return -1; // Not found
+  return -1; /* Not found */
 }
 
 int sys_mprotect(void *addr, size_t len, int prot)
@@ -1004,6 +1442,10 @@ int64_t sys_chdir(const char *pathname)
   if (!current_process || !pathname)
     return -EFAULT;
 
+  /* Validate pathname is in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
   /* Validate path length */
   size_t len = strlen(pathname);
   if (len == 0 || len >= 256)
@@ -1031,7 +1473,6 @@ int64_t sys_chdir(const char *pathname)
   /* Check execute permission on directory before changing to it.
    * In Unix, you need execute permission on a directory to enter it (cd).
    */
-  extern bool check_file_access(const char *path, int mode, const struct process *process);
   if (!check_file_access(new_path, ACCESS_EXEC, current_process))
   {
     return -EACCES;  /* Permission denied - no execute permission on directory */
@@ -1049,6 +1490,10 @@ int64_t sys_getcwd(char *buf, size_t size)
   if (!current_process || !buf || size == 0)
     return -EFAULT;
 
+  /* Validate buffer is in userspace (for USER_MODE processes) */
+  if (validate_userspace_buffer(buf, size) != 0)
+    return -EFAULT;
+
   size_t len = strlen(current_process->cwd);
   if (len >= size)
     return -EFAULT;
@@ -1061,7 +1506,11 @@ int64_t sys_getcwd(char *buf, size_t size)
 
 int64_t sys_unlink(const char *pathname)
 {
-  if (!pathname)
+  if (!current_process || !pathname)
+    return -EFAULT;
+
+  /* Validate pathname is in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
   /* Call VFS unlink function */
@@ -1089,11 +1538,8 @@ void syscalls_init(void)
   serial_print("\n");
 
   /* Register syscall interrupt handler */
-  extern void syscall_entry_asm(void);
-  extern void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel,
-                             uint8_t flags);
-
   /* IDT entry 0x80 for syscalls (DPL=3 for user mode) */
+  extern void syscall_entry_asm(void);  /* Assembly function (from asm), must remain extern */
   idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE);
 }
 
@@ -1171,6 +1617,12 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_getppid();
   case SYS_KILL:
     return sys_kill((pid_t)arg1, (int)arg2);
+  case SYS_SIGACTION:
+    return sys_sigaction((int)arg1, (const struct sigaction *)arg2, (struct sigaction *)arg3);
+  case SYS_PIPE:
+    return sys_pipe((int *)arg1);
+  case SYS_SIGRETURN:
+    return sys_sigreturn((struct sigcontext *)arg1);
   default:
     /* Unknown syscall - return ENOSYS (function not implemented) */
     return -ENOSYS;

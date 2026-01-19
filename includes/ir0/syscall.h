@@ -59,6 +59,9 @@ typedef enum {
     /* Process info - POSIX */
     SYS_GETPPID = 26,
     SYS_KILL = 27,      /* Signal handling - POSIX */
+    SYS_SIGACTION = 28, /* Signal action - POSIX */
+    SYS_PIPE = 29,      /* Pipe creation - POSIX */
+    SYS_SIGRETURN = 30, /* Return from signal handler - POSIX */
 } syscall_num_t;
 
 /* Virtual filesystem paths for file operations */

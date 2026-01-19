@@ -89,6 +89,47 @@ int is_paging_enabled(void)
 }
 
 /**
+ * Check if a virtual address is mapped in a page directory
+ * @pml4: PML4 table address (page directory)
+ * @virt_addr: Virtual address to check
+ * @flags_out: Optional output for page flags (can be NULL)
+ * Returns: 1 if mapped, 0 if not mapped, -1 on error
+ */
+int is_page_mapped_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t *flags_out)
+{
+    if (!pml4)
+        return -1;
+    
+    /* Extract indices from virtual address */
+    size_t pml4_index = (virt_addr >> 39) & 0x1FF;
+    size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
+    size_t pd_index = (virt_addr >> 21) & 0x1FF;
+    size_t pt_index = (virt_addr >> 12) & 0x1FF;
+    
+    /* Walk page tables */
+    if (!(pml4[pml4_index] & PAGE_PRESENT))
+        return 0;
+    
+    uint64_t *pdpt = (uint64_t *)(pml4[pml4_index] & ~0xFFF);
+    if (!(pdpt[pdpt_index] & PAGE_PRESENT))
+        return 0;
+    
+    uint64_t *pd = (uint64_t *)(pdpt[pdpt_index] & ~0xFFF);
+    if (!(pd[pd_index] & PAGE_PRESENT))
+        return 0;
+    
+    uint64_t *pt = (uint64_t *)(pd[pd_index] & ~0xFFF);
+    if (!(pt[pt_index] & PAGE_PRESENT))
+        return 0;
+    
+    /* Page is mapped */
+    if (flags_out)
+        *flags_out = pt[pt_index] & 0xFFF;
+    
+    return 1;
+}
+
+/**
  * Simple page table getter - only returns existing tables
  * NO dynamic allocation to avoid complexity
  */
@@ -110,32 +151,85 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
 }
 
 /**
- * Map a single 4KB page - SIMPLIFIED
- * Only works with existing page tables from boot
- * NO dynamic allocation
+ * Allocate a new page table if it doesn't exist
+ * Returns physical address of the table, or 0 on failure
  */
-int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
+static uint64_t alloc_page_table(void)
 {
-    /* Get current CR3 (PML4 address) */
-    uint64_t cr3 = get_current_page_directory();
-    uint64_t *pml4 = (uint64_t *)cr3;
+    void *page = kmalloc(4096);
+    if (!page)
+        return 0;
+    
+    /* Zero out the page */
+    memset(page, 0, 4096);
+    
+    /* Return physical address (identity mapped for now) */
+    return (uint64_t)page;
+}
 
+/**
+ * Get or create a page table at the specified level
+ * @pml4: PML4 table address
+ * @index: Index into the table
+ * @create: If 1, create the table if it doesn't exist
+ * Returns: Virtual address of the table (NULL if not present and create=0)
+ */
+static uint64_t *get_or_create_table(uint64_t *pml4, size_t index, int create)
+{
+    if (!(pml4[index] & PAGE_PRESENT))
+    {
+        if (!create)
+            return NULL;
+        
+        /* Allocate new table */
+        uint64_t phys_addr = alloc_page_table();
+        if (phys_addr == 0)
+            return NULL;
+        
+        /* Map the table */
+        pml4[index] = phys_addr | PAGE_PRESENT | PAGE_RW;
+        return (uint64_t *)phys_addr;  /* Identity mapped */
+    }
+    
+    /* Check if it's a huge page */
+    if (pml4[index] & (1ULL << 7))
+        return NULL;
+    
+    /* Return physical address (identity mapped) */
+    return (uint64_t *)(pml4[index] & ~0xFFF);
+}
+
+/**
+ * Map a single 4KB page in a specific page directory
+ * @pml4: PML4 table address (page directory)
+ * @virt_addr: Virtual address to map
+ * @phys_addr: Physical address to map to
+ * @flags: Page flags (PAGE_USER, PAGE_RW, etc.)
+ * Returns: 0 on success, -1 on failure
+ */
+int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
+{
+    if (!pml4)
+        return -1;
+    
     /* Extract indices from virtual address */
     size_t pml4_index = (virt_addr >> 39) & 0x1FF;
     size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
     size_t pd_index = (virt_addr >> 21) & 0x1FF;
     size_t pt_index = (virt_addr >> 12) & 0x1FF;
 
-    /* Walk existing page tables ONLY */
-    uint64_t *pdpt = get_existing_table(pml4, pml4_index);
+    /* Get or create PDPT */
+    uint64_t *pdpt = get_or_create_table(pml4, pml4_index, 1);
     if (!pdpt)
         return -1;
 
-    uint64_t *pd = get_existing_table(pdpt, pdpt_index);
+    /* Get or create PD */
+    uint64_t *pd = get_or_create_table(pdpt, pdpt_index, 1);
     if (!pd)
         return -1;
 
-    uint64_t *pt = get_existing_table(pd, pd_index);
+    /* Get or create PT */
+    uint64_t *pt = get_or_create_table(pd, pd_index, 1);
     if (!pt)
         return -1;
 
@@ -146,6 +240,20 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
     __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
 
     return 0;
+}
+
+/**
+ * Map a single 4KB page - SIMPLIFIED
+ * Only works with existing page tables from boot
+ * NO dynamic allocation (uses current CR3)
+ */
+int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
+{
+    /* Get current CR3 (PML4 address) */
+    uint64_t cr3 = get_current_page_directory();
+    uint64_t *pml4 = (uint64_t *)cr3;
+    
+    return map_page_in_directory(pml4, virt_addr, phys_addr, flags);
 }
 
 /**
@@ -196,9 +304,20 @@ int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flag
     return map_page(virtual_addr, physical_addr, flags);
 }
 
-/* Map user memory region */
+/* Map user memory region in current page directory */
 int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
 {
+    uint64_t cr3 = get_current_page_directory();
+    uint64_t *pml4 = (uint64_t *)cr3;
+    return map_user_region_in_directory(pml4, virtual_start, size, flags);
+}
+
+/* Map user memory region in a specific page directory */
+int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t size, uint64_t flags)
+{
+    if (!pml4)
+        return -1;
+    
     /* Align to 4KB */
     virtual_start &= ~0xFFF;
     size = (size + 0xFFF) & ~0xFFF;
@@ -220,8 +339,8 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
             return -1;
         }
 
-        /* Map the page */
-        if (map_page(virt_addr, phys_addr, flags) != 0)
+        /* Map the page in the specified directory */
+        if (map_page_in_directory(pml4, virt_addr, phys_addr, flags) != 0)
         {
             panic("Failed to map page");
             pmm_free_frame(phys_addr); /* Free frame on mapping failure */
