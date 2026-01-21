@@ -266,13 +266,73 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
     struct eth_header *eth = (struct eth_header *)data;
     uint16_t type = ntohs(eth->type);
 
-    LOG_INFO_FMT("NET", "Received packet on %s: len=%d, type=0x%04x, src_mac=%02x:%02x:%02x:%02x:%02x:%02x, dst_mac=%02x:%02x:%02x:%02x:%02x:%02x",
+    /* Check if packet is broadcast or for our MAC */
+    bool is_broadcast = (eth->dest[0] == 0xFF && eth->dest[1] == 0xFF && 
+                         eth->dest[2] == 0xFF && eth->dest[3] == 0xFF && 
+                         eth->dest[4] == 0xFF && eth->dest[5] == 0xFF);
+    
+    /* Check if packet is multicast (not broadcast, but multicast MAC) */
+    bool is_multicast = !is_broadcast && (eth->dest[0] & 0x01) == 0x01;
+    
+    bool is_for_us = is_broadcast || 
+                     (memcmp(eth->dest, dev->mac, 6) == 0);
+    
+    /* FILTER: Drop multicast packets early if they're not for us and not ARP/IP protocols we handle.
+     * This prevents spam from mDNS, SSDP, IPv6 neighbor discovery, etc.
+     * We only process:
+     *   - Broadcast packets (for ARP requests)
+     *   - Unicast packets for our MAC
+     *   - ARP packets (even multicast, as some systems use multicast for ARP)
+     */
+    if (is_multicast && !is_for_us && type != ETHERTYPE_ARP)
+    {
+        /* Drop multicast IPv6 and non-ARP multicast IPv4 silently */
+        /* Log only occasionally to avoid spam (every 100th packet) */
+        static int multicast_drop_count = 0;
+        multicast_drop_count++;
+        if ((multicast_drop_count % 100) == 0)
+        {
+            LOG_DEBUG_FMT("NET", "Dropped %d multicast packets (mDNS/SSDP/IPv6 ND)", multicast_drop_count);
+        }
+        return;
+    }
+    
+    /* Log all packets that we're actually processing, but mark if they're for us or broadcast */
+    LOG_INFO_FMT("NET", "Received packet on %s: len=%d, type=0x%04x, src_mac=%02x:%02x:%02x:%02x:%02x:%02x, dst_mac=%02x:%02x:%02x:%02x:%02x:%02x, broadcast=%d, multicast=%d, for_us=%d",
                  dev->name, (int)len, type,
                  eth->src[0], eth->src[1], eth->src[2], eth->src[3], eth->src[4], eth->src[5],
-                 eth->dest[0], eth->dest[1], eth->dest[2], eth->dest[3], eth->dest[4], eth->dest[5]);
+                 eth->dest[0], eth->dest[1], eth->dest[2], eth->dest[3], eth->dest[4], eth->dest[5],
+                 is_broadcast ? 1 : 0, is_multicast ? 1 : 0, is_for_us ? 1 : 0);
+    
+    /* CRITICAL: Process ALL ARP packets, not just broadcast ones.
+     * Some systems send unicast ARP requests or ARP replies might be unicast.
+     * We need to process all ARP traffic to respond correctly.
+     */
+    if (type == ETHERTYPE_ARP)
+    {
+        if (is_broadcast)
+        {
+            LOG_INFO("NET", "Received broadcast ARP packet - processing");
+        }
+        else
+        {
+            LOG_INFO("NET", "Received unicast ARP packet - processing");
+        }
+    }
+    else if (!is_for_us && type != ETHERTYPE_ARP)
+    {
+        /* For non-ARP packets not for us, we'll still log but note they're being dropped */
+        /* This helps debug connectivity issues */
+        LOG_DEBUG_FMT("NET", "Packet not for us (not broadcast, not our MAC) - will be dropped by protocol handler");
+    }
 
     /* Look up protocol handler by EtherType. Protocols register themselves
      * during initialization (e.g., ARP registers for ETHERTYPE_ARP).
+     * 
+     * CRITICAL: Process ALL packets that arrive, regardless of destination MAC.
+     * This ensures we receive broadcast ARP requests even if MAC filtering
+     * might otherwise drop them. The protocol handlers will determine if
+     * the packet is actually for us.
      */
     struct net_protocol *proto = net_find_protocol_by_ethertype(type);
     if (proto && proto->handler)
@@ -298,6 +358,12 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
     }
     else
     {
+        /* CRITICAL: Log ARP packets even if handler not found (shouldn't happen) */
+        if (type == ETHERTYPE_ARP)
+        {
+            LOG_ERROR_FMT("NET", "ARP packet received but NO HANDLER FOUND! EtherType=0x%04x", type);
+            LOG_ERROR("NET", "This should never happen - ARP protocol should be registered!");
+        }
         /* No handler registered for this EtherType. This is normal for:
          * - Unknown protocols
          * - Frames not intended for this system

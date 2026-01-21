@@ -40,10 +40,52 @@ struct super_operations {
   int (*delete_inode)(struct vfs_inode *inode);
 };
 
+/**
+ * Filesystem operations structure
+ * 
+ * Decouples VFS from specific filesystem implementations.
+ * Each filesystem (MINIX, TMPFS, FAT, etc.) implements these operations,
+ * and VFS calls them without knowing which filesystem it is.
+ * 
+ * This follows Linux's pattern but simplified:
+ * - Linux: super_operations + inode_operations + file_operations (3 structures)
+ * - IR0: filesystem_operations (1 unified structure)
+ * 
+ * Why unified?
+ * - Simpler to understand and implement
+ * - Path-based abstraction (no dentry cache complexity)
+ * - Still fully scalable - can add any filesystem
+ * - Each filesystem only needs to implement what it supports (NULL for unsupported)
+ */
+struct vfs_dirent_readdir;
+
+struct filesystem_operations {
+    /* Path-based operations (VFS-level abstraction) */
+    int (*stat)(const char *path, stat_t *buf);
+    int (*mkdir)(const char *path, mode_t mode);
+    int (*create_file)(const char *path, mode_t mode);
+    int (*unlink)(const char *path);
+    int (*rmdir)(const char *path);
+    int (*readdir)(const char *path, struct vfs_dirent_readdir *entries, int max_entries);
+    int (*read_file)(const char *path, void *buf, size_t count, size_t *read_count, off_t offset);
+    int (*write_file)(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset);
+    struct vfs_inode *(*lookup)(const char *path);
+    uint32_t (*get_inode_number)(const char *path);
+    int (*ls)(const char *path, bool detailed);
+    
+    /* Inode-based operations (lower-level, filesystem-specific) */
+    int (*link)(const char *oldpath, const char *newpath);
+    
+    /* Filesystem availability check */
+    bool (*is_available)(void);
+    bool (*is_working)(void);
+};
+
 // Tipo de filesystem
 struct filesystem_type {
   const char *name;
   int (*mount)(const char *dev_name, const char *dir_name);
+  struct filesystem_operations *ops;  /* Operaciones del filesystem */
   struct filesystem_type *next;
 };
 
@@ -92,6 +134,13 @@ int vfs_write(struct vfs_file *file, const char *buf, size_t count);
 int vfs_append(const char *path, const char *buf, size_t count);
 int vfs_close(struct vfs_file *file);
 int vfs_ls(const char *path);
+/* Forward declaration - vfs_readdir uses internal vfs_dirent_t type */
+struct vfs_dirent_readdir {
+  char name[256];
+  uint16_t inode;
+  uint8_t type;
+};
+int vfs_readdir(const char *path, struct vfs_dirent_readdir *entries, int max_entries);
 int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);
 int vfs_link(const char *oldpath, const char *newpath);

@@ -2,7 +2,7 @@
 #include "pic.h"
 #include "io.h"
 #include <ir0/vga.h>
-#include <kernel/dbgshell.h>
+#include <debug_bins/dbgshell.h>
 
 // Forward declarations
 void wakeup_from_idle(void);

@@ -18,12 +18,11 @@
 #include <ir0/vga.h>
 #include <ir0/stat.h>
 #include <drivers/video/typewriter.h>
-#include <ir0/serial.h>
+#include <drivers/serial/serial.h>
 #include <ir0/kmem.h>
 #include <kernel/process.h>
+#include <debug_bins/dbgshell.h>
 #include <string.h>
-
-extern int cursor_pos;
 
 // Error code definitions
 #define ENOENT 2   // No such file or directory
@@ -231,14 +230,10 @@ void minix_free_zone(uint32_t zone_num)
   }
 }
 
-// ===============================================================================
-// INODE FUNCTIONS
-// ===============================================================================
+
 
 static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
 {
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
 
   if (inode_num == 0 || inode_num >= MINIX_MAX_INODES || !inode)
   {
@@ -276,9 +271,7 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
     return -1;
   }
 
-  // Calcular posición del inode en el disco
-  // Para MINIX: inode table starts after superblock + bitmaps
-  // Block layout: 0=boot, 1=super, 2=imap, 3=zmap, 4=inodes, 5+=data
+
   uint32_t inode_table_start =
       2 + minix_fs.superblock.s_imap_blocks + minix_fs.superblock.s_zmap_blocks;
   uint32_t inode_block =
@@ -1008,7 +1001,10 @@ bool minix_fs_is_available(void)
   return ata_is_available();
 }
 
-bool minix_fs_is_working(void) { return minix_fs.initialized; }
+bool minix_fs_is_working(void)
+{
+    return minix_fs.initialized;
+}
 
 int minix_fs_init(void)
 {
@@ -1436,9 +1432,6 @@ static void uint32_to_str(uint32_t num, char *buf, size_t buf_size)
 
 int minix_fs_ls(const char *path, bool detailed)
 {
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
-
   serial_print("SERIAL: minix_fs_ls called for path: ");
   serial_print(path ? path : "NULL");
   serial_print("\n");
@@ -1696,8 +1689,6 @@ int minix_fs_cat(const char *path)
 
 int minix_fs_write_file(const char *path, const char *content)
 {
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
 
   serial_print("SERIAL: minix_fs_write_file called\n");
 
@@ -1728,7 +1719,6 @@ int minix_fs_write_file(const char *path, const char *content)
   // Verificar que el disco esté disponible
   if (!ata_is_available())
   {
-    extern void serial_print(const char *str);
     serial_print("SERIAL: write: disk not available\n");
     return -EIO;
   }
@@ -1742,7 +1732,6 @@ int minix_fs_write_file(const char *path, const char *content)
     // El archivo no existe, crearlo primero
     if (minix_fs_touch(path, 0644) != 0)
     {
-      extern void serial_print(const char *str);
       serial_print("SERIAL: Error: Could not create file ");
       serial_print(path);
       serial_print("\n");
@@ -1761,7 +1750,6 @@ int minix_fs_write_file(const char *path, const char *content)
   minix_inode_t file_inode;
   if (minix_read_inode(inode_num, &file_inode) != 0)
   {
-    extern void serial_print(const char *str);
     serial_print("SERIAL: Error: Could not read inode from disk\n");
     return -1;
   }
@@ -1769,7 +1757,6 @@ int minix_fs_write_file(const char *path, const char *content)
   // Verificar que es un archivo regular, no un directorio
   if (file_inode.i_mode & MINIX_IFDIR)
   {
-    extern void serial_print(const char *str);
     serial_print("SERIAL: Error: Cannot write to directory\n");
     return -1;
   }
@@ -1780,8 +1767,6 @@ int minix_fs_write_file(const char *path, const char *content)
   // Verificar que no exceda el tamaño máximo de archivo
   if (content_size > MINIX_BLOCK_SIZE * 7)
   {
-    extern void serial_print(const char *str);
-    extern void serial_print_hex32(uint32_t num);
     serial_print("SERIAL: Error: Content too large (max ");
     serial_print_hex32(MINIX_BLOCK_SIZE * 7);
     serial_print(" bytes)\n");
@@ -1800,7 +1785,6 @@ int minix_fs_write_file(const char *path, const char *content)
   uint32_t new_zone = minix_alloc_zone();
   if (new_zone == 0)
   {
-    extern void serial_print(const char *str);
     serial_print("SERIAL: Error: No free zones available\n");
     return -1;
   }
@@ -1824,7 +1808,6 @@ int minix_fs_write_file(const char *path, const char *content)
   {
     // Si falla la escritura, liberar la zona asignada
     minix_free_zone(new_zone);
-    extern void serial_print(const char *str);
     serial_print("SERIAL: Error: Could not write block to disk\n");
     return -1;
   }
@@ -1846,15 +1829,12 @@ int minix_fs_write_file(const char *path, const char *content)
   {
     // Si falla escribir el inode, intentar liberar la zona (aunque el archivo quedará inconsistente)
     minix_free_zone(new_zone);
-    extern void serial_print(const char *str);
     serial_print("SERIAL: Error: Could not update inode\n");
     return -1;
   }
 
   serial_print("SERIAL: write_file: after write_inode\n");
 
-  extern void serial_print(const char *str);
-  extern void serial_print_hex32(uint32_t num);
   serial_print("SERIAL: File '");
   serial_print(path);
   serial_print("' written successfully (");

@@ -95,7 +95,7 @@ elif [ "$LANGUAGE" = "cpp" ]; then
             CXXFLAGS="-m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics"
             CXXFLAGS="$CXXFLAGS -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2"
             CXXFLAGS="$CXXFLAGS -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
-            CXXFLAGS="$CXXFLAGS -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast"
+            # Note: Removed -Wno-pointer-to-int-cast flags to catch real issues
             echo "Using MinGW G++ for Windows cross-compilation"
         else
             echo "Error: MinGW G++ cross-compiler not found"
@@ -133,7 +133,7 @@ elif [ "$BUILD_MODE" = "win" ]; then
         ASM="nasm"
         ASMFLAGS="-f win64"
         CFLAGS="-m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
-        CFLAGS="$CFLAGS -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast"
+        # Note: Removed -Wno-pointer-to-int-cast flags to catch real issues
         export USE_MINGW=1
     else
         echo "Error: MinGW cross-compiler not found"
@@ -157,7 +157,7 @@ elif [ -n "$USE_MINGW" ] && command -v x86_64-w64-mingw32-gcc > /dev/null 2>&1; 
     ASM="nasm"
     ASMFLAGS="-f win64"
     CFLAGS="-m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
-    CFLAGS="$CFLAGS -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast"
+    # Note: Removed -Wno-pointer-to-int-cast flags to catch real issues
 else
     # Native Linux (default)
     CC="gcc"

@@ -24,7 +24,7 @@
 /* =============================================================================== */
 
 task_t *idle_task = NULL;
-static uint32_t next_pid = 1;
+static pid_t next_pid = 1;
 static task_t *task_list = NULL;
 
 /* Global variable for currently running task */
@@ -234,9 +234,9 @@ task_t *get_task_list(void)
     return task_list;
 }
 
-uint32_t get_task_count(void)
+pid_t get_task_count(void)
 {
-    uint32_t count = 0;
+    pid_t count = 0;
     task_t *current = task_list;
 
     while (current)

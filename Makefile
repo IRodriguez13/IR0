@@ -178,9 +178,35 @@ KERNEL_OBJS = \
     kernel/process.o \
     kernel/task.o \
     kernel/syscalls.o \
-    kernel/dbgshell.o \
+    debug_bins/dbgshell.o \
     kernel/elf_loader.o \
-    kernel/driver_registry.o
+    kernel/driver_registry.o \
+    kernel/ipc.o \
+    debug_bins/debug_bins_registry.o \
+    debug_bins/cmd_ls.o \
+    debug_bins/cmd_cd.o \
+    debug_bins/cmd_pwd.o \
+    debug_bins/cmd_cat.o \
+    debug_bins/cmd_mkdir.o \
+    debug_bins/cmd_rm.o \
+    debug_bins/cmd_rmdir.o \
+    debug_bins/cmd_touch.o \
+    debug_bins/cmd_cp.o \
+    debug_bins/cmd_mv.o \
+    debug_bins/cmd_ln.o \
+    debug_bins/cmd_echo.o \
+    debug_bins/cmd_exec.o \
+    debug_bins/cmd_sed.o \
+    debug_bins/cmd_mount.o \
+    debug_bins/cmd_chmod.o \
+    debug_bins/cmd_chown.o \
+    debug_bins/cmd_ps.o \
+    debug_bins/cmd_df.o \
+    debug_bins/cmd_dmesg.o \
+    debug_bins/cmd_ping.o \
+    debug_bins/cmd_uname.o \
+    debug_bins/cmd_lsblk.o \
+    debug_bins/cmd_lsdrv.o
 
 # Scheduler - Select which scheduler to compile
 # Uncomment the scheduler you want to use and comment out the others
@@ -231,6 +257,10 @@ DRIVER_OBJS = \
     drivers/storage/fs_types.o \
 	drivers/video/vbe.o \
 	drivers/video/typewriter.o \
+	drivers/bluetooth/hci_uart.o \
+	drivers/bluetooth/hci_core.o \
+	drivers/bluetooth/bt_device.o \
+	drivers/bluetooth/bluetooth_init.o \
 	drivers/init_drv.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
 
@@ -241,9 +271,11 @@ FS_OBJS = \
     fs/path.o \
     fs/chmod.o \
     fs/ramfs.o \
+    fs/tmpfs.o \
     fs/permissions.o \
     fs/procfs.o \
-    fs/devfs.o
+    fs/devfs.o \
+    fs/sysfs.o
 
 DISK_OBJS = \
     drivers/disk/partition.o

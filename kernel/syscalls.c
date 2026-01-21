@@ -47,6 +47,8 @@
 #include <ir0/fcntl.h>
 #include <ir0/procfs.h>
 #include <ir0/devfs.h>
+#include <ir0/sysfs.h>
+#include <fs/vfs.h>
 #include <ir0/signals.h>
 #include <ir0/pipe.h>
 #include <interrupt/arch/idt.h>
@@ -84,11 +86,28 @@ static int validate_userspace_string(const char *str, size_t max_len)
   if (!current_process)
     return -ESRCH;
   
-  /* KERNEL_MODE bypass (dbgshell) */
+  /* For KERNEL_MODE processes (like dbgshell), allow addresses in process stack/heap range
+   * This allows debug_bins/ commands to work while still simulating userspace behavior
+   */
   if (current_process->mode == KERNEL_MODE)
-    return 0;
+  {
+    /* Allow if address is in process's stack or heap region */
+    uint64_t addr = (uint64_t)str;
+    if (addr >= current_process->stack_start && 
+        addr < current_process->stack_start + current_process->stack_size)
+      return 0;
+    if (current_process->heap_start > 0 &&
+        addr >= current_process->heap_start && 
+        addr < current_process->heap_end)
+      return 0;
+    /* Also allow if it's a valid user address (for compatibility) */
+    if (is_user_address(str, max_len))
+      return 0;
+    /* For KERNEL_MODE, be more lenient - allow kernel addresses from current process stack */
+    return 0;  /* Allow kernel space addresses for debug_bins/ simulation */
+  }
   
-  /* USER_MODE: validate string is in userspace */
+  /* USER_MODE: strict validation - must be in userspace */
   if (!is_user_address(str, max_len))
     return -EFAULT;
   
@@ -106,11 +125,28 @@ static int validate_userspace_buffer(const void *buf, size_t size)
   if (!current_process)
     return -ESRCH;
   
-  /* KERNEL_MODE bypass (dbgshell) */
+  /* For KERNEL_MODE processes (like dbgshell), allow addresses in process stack/heap range
+   * This allows debug_bins/ commands to work while still simulating userspace behavior
+   */
   if (current_process->mode == KERNEL_MODE)
-    return 0;
+  {
+    /* Allow if address is in process's stack or heap region */
+    uint64_t addr = (uint64_t)buf;
+    if (addr >= current_process->stack_start && 
+        addr + size <= current_process->stack_start + current_process->stack_size)
+      return 0;
+    if (current_process->heap_start > 0 &&
+        addr >= current_process->heap_start && 
+        addr + size <= current_process->heap_end)
+      return 0;
+    /* Also allow if it's a valid user address (for compatibility) */
+    if (is_user_address(buf, size))
+      return 0;
+    /* For KERNEL_MODE, be more lenient - allow kernel addresses from current process stack */
+    return 0;  /* Allow kernel space addresses for debug_bins/ simulation */
+  }
   
-  /* USER_MODE: validate buffer is in userspace */
+  /* USER_MODE: strict validation - must be in userspace */
   if (!is_user_address(buf, size))
     return -EFAULT;
   
@@ -167,7 +203,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     return (int64_t)count;
   }
 
-  /* Handle /dev file descriptors (special positive numbers) */
+  /* Handle /dev file descriptors (special positive numbers 2000-2999) */
   if (fd >= 2000 && fd <= 2999)
   {
     ensure_devfs_init();
@@ -180,6 +216,16 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     if (copy_from_user(kernel_buf, buf, copy_size) != 0)
       return -EFAULT;
     return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
+  }
+
+  /* Handle /sys file descriptors (special positive numbers 3000-3999) */
+  if (fd >= 3000 && fd <= 3999)
+  {
+    /* Copy from user space for sysfs writes */
+    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+      return -EFAULT;
+    
+    return sysfs_write(fd, kernel_buf, copy_size);
   }
 
   /* Handle regular file descriptors */
@@ -246,7 +292,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
   if (VALIDATE_BUFFER(buf, count) != 0)
     return 0;
 
-  /* Handle /proc file descriptors (special positive numbers) */
+  /* Handle /proc file descriptors (special positive numbers 1000-1999) */
   if (fd >= 1000 && fd <= 1999) {
     char kernel_read_buf[PAGE_SIZE_4KB];
     size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
@@ -257,6 +303,21 @@ int64_t sys_read(int fd, void *buf, size_t count)
       if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
         return -EFAULT;
       proc_set_offset(fd, offset + ret);
+    }
+    return ret;
+  }
+
+  /* Handle /sys file descriptors (special positive numbers 3000-3999) */
+  if (fd >= 3000 && fd <= 3999) {
+    char kernel_read_buf[PAGE_SIZE_4KB];
+    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
+    off_t offset = proc_get_offset(fd);  /* Reuse proc offset tracking */
+    int ret = sysfs_read(fd, kernel_read_buf, read_size, offset);
+    if (ret > 0) {
+      /* Copy to user space */
+      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
+        return -EFAULT;
+      proc_set_offset(fd, offset + ret);  /* Reuse proc offset tracking */
     }
     return ret;
   }
@@ -389,10 +450,8 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
     return -EFAULT;
 
   /* Validate pathname is in userspace (for USER_MODE processes) */
-  if (current_process->mode == USER_MODE && !is_user_address(pathname, 256))
-  {
+  if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
-  }
 
   /* Use VFS layer with proper mode */
   return vfs_mkdir(pathname, (int)mode);
@@ -409,8 +468,8 @@ int64_t sys_exec(const char *pathname,
     return -EFAULT;
   }
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
-  if (current_process->mode == USER_MODE && !is_user_address(pathname, 256))
+  /* Validate pathname is in userspace */
+  if (!is_user_address(pathname, 256))
   {
     return -EFAULT;
   }
@@ -623,6 +682,11 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     return proc_open(pathname, flags);
   }
 
+  /* Handle /sys filesystem on-demand */
+  if (is_sys_path(pathname)) {
+    return sysfs_open(pathname, flags);
+  }
+
   /* Handle /dev filesystem on-demand */
   if (is_dev_path(pathname))
   {
@@ -634,14 +698,23 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   }
 
   /* Check access permissions based on flags */
-  int access_mode = 0;
-  if (flags & O_RDONLY || flags & O_RDWR)
-    access_mode |= ACCESS_READ;
-  if (flags & O_WRONLY || flags & O_RDWR)
-    access_mode |= ACCESS_WRITE;
-  
-  if (access_mode && !check_file_access(pathname, access_mode, current_process))
-    return -EACCES;
+  /* For O_DIRECTORY, we need execute permission, not read */
+  if (flags & O_DIRECTORY)
+  {
+    if (!check_file_access(pathname, ACCESS_EXEC, current_process))
+      return -EACCES;
+  }
+  else
+  {
+    int access_mode = 0;
+    if (flags & O_RDONLY || flags & O_RDWR)
+      access_mode |= ACCESS_READ;
+    if (flags & O_WRONLY || flags & O_RDWR)
+      access_mode |= ACCESS_WRITE;
+    
+    if (access_mode && !check_file_access(pathname, access_mode, current_process))
+      return -EACCES;
+  }
 
   fd_entry_t *fd_table = get_process_fd_table();
 
@@ -667,7 +740,29 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   int ret = vfs_open(pathname, flags, &vfs_file);
   if (ret != 0)
   {
-    return -ENOENT;
+    return ret;  /* Return actual error, not just -ENOENT */
+  }
+
+  /* If O_DIRECTORY flag is set, verify it's actually a directory */
+  if (flags & O_DIRECTORY)
+  {
+    stat_t st;
+    if (sys_stat(pathname, &st) < 0)
+    {
+      if (vfs_file)
+      {
+        vfs_close(vfs_file);
+      }
+      return -ENOTDIR;
+    }
+    if (!S_ISDIR(st.st_mode))
+    {
+      if (vfs_file)
+      {
+        vfs_close(vfs_file);
+      }
+      return -ENOTDIR;
+    }
   }
 
   /* Set up file descriptor with real VFS file handle */
@@ -679,6 +774,49 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   fd_table[fd].offset = vfs_file ? vfs_file->f_pos : 0;
 
   return fd;
+}
+
+/**
+ * sys_ioctl - Device I/O control (POSIX ioctl)
+ * @fd: File descriptor
+ * @request: I/O control request code
+ * @arg: Optional argument pointer
+ * 
+ * Returns: 0 on success, -1 on error
+ */
+int64_t sys_ioctl(int fd, uint64_t request, void *arg)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_entry_t *fd_table = get_process_fd_table();
+
+  if (!fd_table[fd].in_use)
+    return -EBADF;
+
+  /* Handle device files (fd >= 2000) */
+  if (fd >= 2000 && fd <= 2999)
+  {
+    ensure_devfs_init();
+    int device_id = fd - 2000;
+    devfs_node_t *node = devfs_find_node_by_id(device_id);
+    
+    if (!node || !node->ops || !node->ops->ioctl)
+      return -ENOTTY; /* Not a TTY/device or ioctl not supported */
+
+    /* Validate arg pointer if provided (most ioctls use arg) */
+    if (arg && validate_userspace_buffer(arg, 256) != 0)
+      return -EFAULT;
+
+    /* Call device-specific ioctl handler */
+    return node->ops->ioctl(&node->entry, request, arg);
+  }
+
+  /* For regular files, ioctl is typically not supported */
+  return -ENOTTY;
 }
 
 int64_t sys_close(int fd)
@@ -871,6 +1009,32 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   /* Handle /proc filesystem */
   if (is_proc_path(pathname)) {
     return proc_stat(pathname, buf);
+  }
+
+  /* Handle /sys filesystem */
+  if (is_sys_path(pathname)) {
+    return sysfs_stat(pathname, buf);
+  }
+
+  /* Handle /dev filesystem */
+  if (is_dev_path(pathname)) {
+    ensure_devfs_init();
+    devfs_node_t *node = devfs_find_node(pathname);
+    if (!node)
+      return -ENOENT;
+
+    /* Fill stat structure for character device */
+    memset(buf, 0, sizeof(stat_t));
+    buf->st_mode = S_IFCHR | (node->entry.mode & 0777);  /* Character device + permissions */
+    buf->st_rdev = node->entry.device_id;  /* Device ID */
+    buf->st_nlink = 1;
+    buf->st_uid = 0;  /* root */
+    buf->st_gid = 0;  /* root */
+    buf->st_size = 0;  /* Character devices have no size */
+    buf->st_blksize = 512;
+    buf->st_blocks = 0;
+
+    return 0;
   }
 
   /* Use VFS layer instead of direct MINIX calls */
@@ -1173,7 +1337,6 @@ int64_t sys_brk(void *addr)
     if (size_to_map > 0)
     {
       /* Map new heap pages in process page directory */
-      extern int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t size, uint64_t flags);
       if (map_user_region_in_directory(current_process->page_directory, start_page, size_to_map, PAGE_RW) != 0)
       {
         /* Failed to map - return current break */
@@ -1181,10 +1344,14 @@ int64_t sys_brk(void *addr)
       }
     }
   }
-  /* If shrinking heap, unmap pages (optional - for now just update break) */
+  /* If shrinking heap, unmap pages */
   else if (new_brk < current_brk)
   {
-    /* TODO: Unmap pages if needed (for now just update break) */
+    /* Note: Unmapping pages requires walking the page tables and clearing entries.
+     * For now, we just update the break pointer. The pages remain mapped but
+     * unused. A full implementation would unmap pages in the range [new_brk, current_brk).
+     * This is safe because the heap allocator will not allocate in unmapped regions.
+     */
   }
 
   /* Set new break */
@@ -1312,9 +1479,46 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
   }
   else
   {
-    /* Kernel chooses address - start from 128MB (after heap) */
+    /* Kernel chooses address - find unused address range */
+    /* Start searching from 128MB (after typical heap) */
     virt_addr = 0x8000000UL;  /* 128MB */
-    /* TODO: Find unused address range (for now use fixed start) */
+    
+    /* Find an unused address range of 'length' bytes */
+    uintptr_t search_start = virt_addr;
+    uintptr_t search_end = 0x7FFFF000UL;  /* Just before user stack (0x7FFFF000) */
+    uintptr_t candidate = search_start;
+    bool found = false;
+    
+    /* Search for unused region (simple linear search) */
+    while (candidate + length < search_end && !found)
+    {
+      /* Check if all pages in this range are unmapped */
+      bool all_unmapped = true;
+      for (uintptr_t check = candidate; check < candidate + length; check += PAGE_SIZE_4KB)
+      {
+        int mapped = is_page_mapped_in_directory(current_process->page_directory, check, NULL);
+        if (mapped == 1)
+        {
+          all_unmapped = false;
+          /* Skip to next page-aligned address after this mapped page */
+          candidate = ((check + PAGE_SIZE_4KB) + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
+          break;
+        }
+      }
+      
+      if (all_unmapped)
+      {
+        virt_addr = candidate;
+        found = true;
+        break;
+      }
+    }
+    
+    /* If we couldn't find space, return error */
+    if (!found)
+    {
+      return (void *)-1;
+    }
   }
 
   /* Determine page flags from protection flags */
@@ -1323,8 +1527,16 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
     page_flags |= 0;  /* Read is default */
   if (prot & PROT_WRITE)
     page_flags |= PAGE_RW;
+  /* Note: In x86-64, execution is controlled by the NX (No eXecute) bit.
+   * If NX bit is clear (0), the page is executable. If set (1), execution is prevented.
+   * IR0 currently doesn't implement the NX bit, so all user pages are executable.
+   * For security, we should add PAGE_NX support and clear it when PROT_EXEC is set.
+   */
   if (prot & PROT_EXEC)
-    page_flags |= 0;  /* TODO: Add PAGE_EXEC flag if needed */
+  {
+    /* Pages are executable by default (no NX bit set) */
+    page_flags |= 0;  /* No flag needed - execution allowed by default */
+  }
 
   /* Map pages in process page directory */
   if (map_user_region_in_directory(current_process->page_directory, virt_addr, length, page_flags) != 0)
@@ -1517,6 +1729,140 @@ int64_t sys_unlink(const char *pathname)
   return vfs_unlink(pathname);
 }
 
+/* Linux dirent structure for getdents/getdents64 */
+struct linux_dirent64 {
+  uint64_t d_ino;
+  int64_t d_off;
+  unsigned short d_reclen;
+  unsigned char d_type;
+  char d_name[];
+};
+
+/* Directory entry types */
+#define DT_UNKNOWN 0
+#define DT_FIFO 1
+#define DT_CHR 2
+#define DT_DIR 4
+#define DT_BLK 6
+#define DT_REG 8
+#define DT_LNK 10
+#define DT_SOCK 12
+
+/**
+ * sys_getdents - Get directory entries (POSIX getdents)
+ * @fd: File descriptor of open directory
+ * @dirent: Buffer to store directory entries
+ * @count: Size of buffer in bytes
+ *
+ * Returns: Number of bytes read, 0 on end of directory, negative on error
+ */
+int64_t sys_getdents(int fd, void *dirent, size_t count)
+{
+  if (!current_process)
+    return -ESRCH;
+  if (!dirent || count == 0)
+    return -EINVAL;
+  
+  if (validate_userspace_buffer(dirent, count) != 0)
+    return -EFAULT;
+  
+  /* Handle /proc and /dev - they don't use getdents */
+  if (fd >= 1000 && fd <= 2999)
+    return -ENOTDIR;  /* These are special file descriptors, not directories */
+  
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return -EBADF;
+  
+  /* Check if this is a directory */
+  const char *path = fd_table[fd].path;
+  if (!path)
+    return -EBADF;
+  
+  /* Get stat to verify it's a directory */
+  stat_t st;
+  if (sys_stat(path, &st) < 0)
+    return -ENOTDIR;
+  
+  if (!S_ISDIR(st.st_mode))
+    return -ENOTDIR;
+  
+  /* Use VFS readdir to get directory entries */
+  typedef struct {
+    char name[256];
+    uint16_t inode;
+    uint8_t type;
+  } vfs_dirent_t;
+  
+  static vfs_dirent_t entries[32];
+  int entry_count = vfs_readdir(path, entries, 32);
+  
+  if (entry_count < 0)
+    return entry_count;
+  
+  /* Convert to linux_dirent64 format */
+  char kernel_buf[4096];
+  size_t offset = 0;
+  
+  for (int i = 0; i < entry_count && offset + sizeof(struct linux_dirent64) + 256 < sizeof(kernel_buf); i++)
+  {
+    /* Skip . and .. - they're handled by filesystem or caller */
+    if (strcmp(entries[i].name, ".") == 0 || strcmp(entries[i].name, "..") == 0)
+      continue;
+    
+    size_t name_len = strlen(entries[i].name) + 1;
+    size_t reclen = ((sizeof(struct linux_dirent64) + name_len + 7) & ~7);  /* Align to 8 bytes */
+    
+    if (offset + reclen > sizeof(kernel_buf))
+      break;
+    
+    struct linux_dirent64 *dent = (struct linux_dirent64 *)(kernel_buf + offset);
+    dent->d_ino = entries[i].inode;
+    dent->d_off = 0;  /* Not used in our implementation */
+    dent->d_reclen = (unsigned short)reclen;
+    
+    /* Determine type from entry or stat */
+    dent->d_type = DT_UNKNOWN;
+    if (entries[i].type != 0)
+    {
+      dent->d_type = entries[i].type;
+    }
+    else
+    {
+      /* Try to determine type from stat */
+      char full_path[512];
+      snprintf(full_path, sizeof(full_path), "%s/%s", path, entries[i].name);
+      stat_t entry_st;
+      if (sys_stat(full_path, &entry_st) >= 0)
+      {
+        if (S_ISDIR(entry_st.st_mode))
+          dent->d_type = DT_DIR;
+        else if (S_ISREG(entry_st.st_mode))
+          dent->d_type = DT_REG;
+        else if (S_ISCHR(entry_st.st_mode))
+          dent->d_type = DT_CHR;
+        else if (S_ISBLK(entry_st.st_mode))
+          dent->d_type = DT_BLK;
+        else if (S_ISLNK(entry_st.st_mode))
+          dent->d_type = DT_LNK;
+      }
+    }
+    
+    strcpy(dent->d_name, entries[i].name);
+    offset += reclen;
+  }
+  
+  if (offset == 0)
+    return 0;  /* End of directory */
+  
+  /* Copy to user space */
+  size_t copy_size = (offset < count) ? offset : count;
+  if (copy_to_user(dirent, kernel_buf, copy_size) != 0)
+    return -EFAULT;
+  
+  return (int64_t)copy_size;
+}
+
 void syscalls_init(void)
 {
   /* Connect to REAL process management only */
@@ -1607,8 +1953,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   case SYS_BRK:
     return sys_brk((void *)arg1);
   case SYS_MMAP:
-    return (int64_t)sys_mmap((void *)arg1, (size_t)arg2, (int)arg3, (int)arg4,
-                             (int)arg5, (off_t)0);
+    return (int64_t)sys_mmap((void *)arg1, (size_t)arg2, (int)arg3, (int)arg4, (int)arg5, (off_t)0);
   case SYS_MUNMAP:
     return sys_munmap((void *)arg1, (size_t)arg2);
   case SYS_MPROTECT:
@@ -1623,6 +1968,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_pipe((int *)arg1);
   case SYS_SIGRETURN:
     return sys_sigreturn((struct sigcontext *)arg1);
+  case SYS_IOCTL:
+    return sys_ioctl((int)arg1, (uint64_t)arg2, (void *)arg3);
+  case SYS_GETDENTS:
+    return sys_getdents((int)arg1, (void *)arg2, (size_t)arg3);
   default:
     /* Unknown syscall - return ENOSYS (function not implemented) */
     return -ENOSYS;

@@ -16,6 +16,7 @@
 #include <drivers/audio/sound_blaster.h>
 #include <drivers/IO/ps2_mouse.h>
 #include <net/rtl8139.h>
+#include <net/arp.h>
 #include <net/ip.h>
 #include <net/icmp.h>
 #include <net/dns.h>
@@ -24,6 +25,8 @@
 #include <drivers/storage/ata.h>
 #include <string.h>
 #include <drivers/timer/clock_system.h>
+#include "kernel/ipc.h"
+#include "drivers/bluetooth/bt_device.h"
 
 /* Device registry */
 #define MAX_DEV_NODES 64
@@ -467,7 +470,6 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
                         (int)((gateway_h >> 8) & 0xFF), (int)(gateway_h & 0xFF));
                 
                 /* Write to stdout */
-                extern void typewriter_vga_print(const char *str, uint8_t color);
                 typewriter_vga_print(buf, 0x0F);
             }
         }
@@ -785,10 +787,6 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 struct ping_result *result = (struct ping_result *)arg;
                 if (!result)
                     return -1;
-                
-                extern bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out, 
-                                                  uint8_t *ttl_out, size_t *payload_bytes_out, 
-                                                  ip4_addr_t *reply_ip_out);
                 
                 /* Get PID to use as ICMP ID (matches NET_SEND_PING behavior) */
                 pid_t pid = (pid_t)sys_getpid();
@@ -1193,6 +1191,161 @@ static const devfs_ops_t full_ops = {
     .write = dev_full_write,
 };
 
+/* IPC device operations */
+int64_t dev_ipc_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)offset;
+    
+    /* Extract channel ID from driver_data (set in open/ioctl) */
+    ipc_channel_t *channel = (ipc_channel_t *)entry->driver_data;
+    if (!channel)
+        return -1;
+    
+    /* Read from IPC channel (blocking) */
+    return ipc_channel_read(channel, buf, count);
+}
+
+int64_t dev_ipc_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)offset;
+    
+    /* Extract channel ID from driver_data (set in open/ioctl) */
+    ipc_channel_t *channel = (ipc_channel_t *)entry->driver_data;
+    if (!channel)
+        return -1;
+    
+    /* Write to IPC channel (blocking) */
+    return ipc_channel_write(channel, buf, count);
+}
+
+int64_t dev_ipc_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+{
+    if (!entry)
+        return -1;
+    
+    switch (request)
+    {
+        case IPC_CREATE_CHANNEL:
+            if (arg) {
+                /* arg points to uint32_t *channel_id (input/output) */
+                uint32_t *channel_id_ptr = (uint32_t *)arg;
+                uint32_t channel_id = *channel_id_ptr;
+                
+                /* If channel_id is 0, allocate a new one */
+                if (channel_id == 0) {
+                    channel_id = ipc_allocate_channel_id();
+                }
+                
+                /* Get or create channel */
+                ipc_channel_t *channel = ipc_channel_get_or_create(channel_id);
+                if (!channel)
+                    return -1;
+                
+                /* Store channel pointer in driver_data */
+                entry->driver_data = (void *)channel;
+                
+                /* Return channel ID */
+                *channel_id_ptr = channel_id;
+                
+                /* Increment reference count */
+                ipc_channel_ref(channel);
+                
+                return 0;
+            }
+            return -1;
+            
+        case IPC_DESTROY_CHANNEL:
+            if (entry->driver_data) {
+                ipc_channel_t *channel = (ipc_channel_t *)entry->driver_data;
+                ipc_channel_unref(channel);
+                entry->driver_data = NULL;
+                return 0;
+            }
+            return -1;
+            
+        case IPC_GET_CHANNEL_ID:
+            if (arg && entry->driver_data) {
+                ipc_channel_t *channel = (ipc_channel_t *)entry->driver_data;
+                uint32_t *channel_id_ptr = (uint32_t *)arg;
+                *channel_id_ptr = channel->id;
+                return 0;
+            }
+            return -1;
+            
+        default:
+            return -1;
+    }
+}
+
+int64_t dev_ipc_open(devfs_entry_t *entry, int flags)
+{
+    (void)entry; (void)flags;
+    /* Channel will be created/opened via ioctl */
+    return 0;
+}
+
+int64_t dev_ipc_close(devfs_entry_t *entry)
+{
+    if (!entry)
+        return -1;
+    
+    /* If channel was opened, release reference */
+    if (entry->driver_data) {
+        ipc_channel_t *channel = (ipc_channel_t *)entry->driver_data;
+        ipc_channel_unref(channel);
+        entry->driver_data = NULL;
+    }
+    
+    return 0;
+}
+
+static const devfs_ops_t ipc_ops = {
+    .read = dev_ipc_read,
+    .write = dev_ipc_write,
+    .ioctl = dev_ipc_ioctl,
+    .open = dev_ipc_open,
+    .close = dev_ipc_close,
+};
+
+/* Bluetooth HCI device operations */
+int64_t dev_bluetooth_hci_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)offset;
+    return bt_hci_read((char *)buf, count);
+}
+
+int64_t dev_bluetooth_hci_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)offset;
+    return bt_hci_write((const char *)buf, count);
+}
+
+int64_t dev_bluetooth_hci_open(devfs_entry_t *entry, int flags)
+{
+    (void)entry; (void)flags;
+    return bt_hci_open();
+}
+
+int64_t dev_bluetooth_hci_close(devfs_entry_t *entry)
+{
+    (void)entry;
+    return bt_hci_close();
+}
+
+int64_t dev_bluetooth_hci_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+{
+    (void)entry;
+    return bt_hci_ioctl((unsigned int)request, (unsigned long)arg);
+}
+
+static const devfs_ops_t bluetooth_hci_ops = {
+    .read = dev_bluetooth_hci_read,
+    .write = dev_bluetooth_hci_write,
+    .open = dev_bluetooth_hci_open,
+    .close = dev_bluetooth_hci_close,
+    .ioctl = dev_bluetooth_hci_ioctl
+};
+
 devfs_node_t dev_null = {
     .entry = { .name = "null", .mode = 0666, .device_id = 1 },
     .ops = &null_ops,
@@ -1265,6 +1418,18 @@ devfs_node_t dev_full = {
     .ref_count = 0
 };
 
+devfs_node_t dev_ipc = {
+    .entry = { .name = "ipc", .mode = 0666, .device_id = 13 },
+    .ops = &ipc_ops,
+    .ref_count = 0
+};
+
+devfs_node_t dev_bluetooth_hci0 = {
+    .entry = { .name = "bluetooth/hci0", .mode = 0660, .device_id = 14 },
+    .ops = &bluetooth_hci_ops,
+    .ref_count = 0
+};
+
 int devfs_init(void)
 {
     /* Register standard devices */
@@ -1280,6 +1445,8 @@ int devfs_init(void)
     dev_nodes[num_dev_nodes++] = &dev_random;
     dev_nodes[num_dev_nodes++] = &dev_urandom;
     dev_nodes[num_dev_nodes++] = &dev_full;
+    dev_nodes[num_dev_nodes++] = &dev_ipc;
+    dev_nodes[num_dev_nodes++] = &dev_bluetooth_hci0;
     
     return 0;
 }

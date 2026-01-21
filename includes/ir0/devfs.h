@@ -98,3 +98,7 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
 #define DISK_READ_SECTOR    0x4001
 #define DISK_WRITE_SECTOR   0x4002
 #define DISK_GET_GEOMETRY   0x4003
+
+#define IPC_CREATE_CHANNEL  0x5001
+#define IPC_DESTROY_CHANNEL 0x5002
+#define IPC_GET_CHANNEL_ID  0x5003

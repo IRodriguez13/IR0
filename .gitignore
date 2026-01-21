@@ -11,7 +11,7 @@
 *.elf
 *.raw
 *iso-x86-64/boot
-*iso-x86-64/boot
+*.old
 *.txt
 *.img
 .aider*

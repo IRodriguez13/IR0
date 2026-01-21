@@ -88,7 +88,7 @@ else
     # Cross-compiling from Linux - suppress warnings about pointer casts
     # Note: Some kernel code with inline assembly may not compile correctly
     # when cross-compiling to Windows PE format
-    CFLAGS += -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
+    # Removed -Wno-pointer-to-int-cast flags to catch real issues
 endif
 
 # Include paths
