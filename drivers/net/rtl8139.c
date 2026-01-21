@@ -520,10 +520,25 @@ static void rtl8139_process_rx_packets(void)
         /* CRITICAL: Check OWN bit (bit 0 of status). 
          * If not set, no valid packet at this offset - stop processing.
          * This prevents reading garbage from the ring buffer.
+         * 
+         * Also check that status is reasonable (not corrupted data).
+         * Valid status should have bit 0 set (OWN) and reasonable upper bits.
          */
         if (!(status & 0x01))
         {
             /* No valid packet at this offset - stop processing */
+            /* Log only if status looks like garbage (might indicate buffer corruption) */
+            if (status != 0x0000 && status != 0xFFFF)
+            {
+                /* This might indicate buffer corruption or misalignment - log once */
+                static bool logged_garbage_status = false;
+                if (!logged_garbage_status)
+                {
+                    LOG_WARNING_FMT("RTL8139", "Found invalid status (no OWN bit): 0x%04x at offset %d - buffer may be misaligned",
+                                   status, rtl8139_rx_read_offset);
+                    logged_garbage_status = true;
+                }
+            }
             break;
         }
         

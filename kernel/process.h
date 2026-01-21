@@ -112,8 +112,13 @@ void process_init(void);
 void process_exit(int code);
 int process_wait(pid_t pid, int *status);
 
-/* IR0 PHILOSOPHY: Only spawn() creates processes - total simplicity */
-pid_t spawn(void (*entry)(void), const char *name);
+/* IR0 PHILOSOPHY: Only spawn() creates processes - total simplicity
+ * Mode must be explicitly specified - no magic address detection */
+pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode);
+
+/* Convenience wrappers for explicit mode specification */
+pid_t spawn_user(void (*entry)(void), const char *name);
+pid_t spawn_kernel(void (*entry)(void), const char *name);
 
 /* Fork exists only for POSIX syscall compatibility - uses spawn() internally */
 pid_t process_fork(void);

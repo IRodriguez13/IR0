@@ -62,6 +62,8 @@ typedef enum {
     SYS_SIGACTION = 28, /* Signal action - POSIX */
     SYS_PIPE = 29,      /* Pipe creation - POSIX */
     SYS_SIGRETURN = 30, /* Return from signal handler - POSIX */
+    SYS_IOCTL = 31,     /* Device I/O control - POSIX */
+    SYS_GETDENTS = 32,  /* Get directory entries - Linux/POSIX */
 } syscall_num_t;
 
 /* Virtual filesystem paths for file operations */
@@ -223,6 +225,11 @@ static inline int64_t ir0_write(int fd, const void *buf, size_t count)
 static inline int64_t ir0_lseek(int fd, off_t offset, int whence)
 {
     return syscall3(SYS_LSEEK, fd, offset, whence);
+}
+
+static inline int64_t ir0_ioctl(int fd, uint64_t request, void *arg)
+{
+    return syscall3(SYS_IOCTL, fd, request, (int64_t)arg);
 }
 
 /* File status */

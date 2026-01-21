@@ -1,6 +1,39 @@
 # IR0 Kernel
 
-IR0 is a monolithic operating system kernel designed for x86-64 architecture, focusing on modularity, multi-language support (C, C++, Rust), POSIX compliance, and extensibility. The kernel provides a complete operating system foundation with process management, virtual file system, hardware drivers, and networking capabilities.
+IR0 is a modern monolithic operating system kernel designed for x86-64 architecture, focusing on modularity, multi-language support (C, C++, Rust), POSIX compliance, and extensibility. With over **33,000 lines of code** across **224 files**, IR0 provides a complete operating system foundation featuring advanced memory management, comprehensive process control, virtual file system, hardware drivers, and integrated networking capabilities.
+
+## Recent Major Updates
+
+### 🔥 **Bluetooth Integration Complete**
+- **HCI (Host Controller Interface)** implementation with UART transport
+- **Device discovery and management** with inquiry/scan capabilities  
+- **Event-driven architecture** for real-time Bluetooth communication
+- **Device driver integration** through unified driver registry
+- **User-space interface** via `/dev/bluetooth` with ioctl controls
+
+### 🚀 **Multi-Language Driver System**
+- **Native support** for drivers written in C, C++, and Rust
+- **Unified driver registry** with automatic initialization
+- **Cross-compilation support** for all languages to Windows targets
+- **Runtime integration** with kernel memory management and interrupts
+
+### 🛡️ **Enhanced Security & Validation**
+- **Comprehensive path validation** preventing traversal attacks
+- **Buffer overflow protection** in network and filesystem code
+- **Secure disk management** with host system protection
+- **Memory safety improvements** in allocator and paging systems
+
+### 📁 **Advanced Virtual File System**
+- **Multiple filesystem support**: MINIX, RAMFS, TMPFS, ProcFS, DevFS, SysFS
+- **Dynamic mount system** with cross-filesystem path resolution
+- **POSIX-compliant operations** with full permission model
+- **Real-time process information** via `/proc` filesystem
+
+### 🌐 **Production-Ready Networking**
+- **Complete TCP/IP stack** with Ethernet, ARP, IPv4, ICMP, UDP
+- **Hardware driver support**: RTL8139 and Intel e1000 NICs
+- **Network configuration tools**: ifconfig, ping, netinfo
+- **TAP networking support** for development and testing
 
 ## System Architecture
 
@@ -346,71 +379,76 @@ Or run directly:
 ## Kernel Features
 
 ### Memory Management
-- Paging with identity mapping
-- Heap allocator (kmalloc/kfree)
-- Physical memory bitmap management
-- Kernel and user space separation
+- **Advanced heap allocator** with boundary tags and O(1) coalescing
+- **Complete paging system** with identity mapping and demand paging
+- **Physical memory manager** with bitmap-based allocation
+- **Ring 0/Ring 3 separation** with proper privilege isolation
+- **Memory protection** with page-level access controls
 
 ### Process Management
-- **Complete process lifecycle**: create, run, terminate, wait
-- **Process states**: READY, RUNNING, BLOCKED, ZOMBIE
-- **Scheduler**: Round-Robin scheduler with configurable time quantum
-- **Context switching**: Assembly-optimized x86-64 implementation
-- **Process tree hierarchy**: Parent-child relationships with waitpid support
-- **Memory isolation**: Ring 0 (kernel) and Ring 3 (user) separation
-- **ELF loader**: Basic ELF binary loading for user programs
-- **Init system**: PID 1 process with service management
+- **Complete process lifecycle**: create, run, terminate, wait with POSIX semantics
+- **Process states**: READY, RUNNING, BLOCKED, ZOMBIE with proper transitions
+- **Round-Robin scheduler** with configurable time quantum and preemption
+- **Context switching**: Assembly-optimized x86-64 implementation with full register preservation
+- **Process tree hierarchy**: Parent-child relationships with automatic reparenting
+- **ELF loader**: Complete ELF64 binary loading with proper memory mapping
+- **Init system**: PID 1 process with service management capabilities
 
 ### System Calls
-- **POSIX-compatible system call interface** via INT 0x80
+- **POSIX-compatible system call interface** via INT 0x80 with full ABI compliance
 - **Process management**: fork, exec, exit, waitpid, getpid, getppid, spawn
-- **File operations**: open, close, read, write, lseek, dup2, creat
+- **File operations**: open, close, read, write, lseek, dup2, creat with proper error handling
 - **Directory operations**: mkdir, rmdir, chdir, getcwd, unlink, link
-- **File system**: stat, fstat, mount, chmod, touch, append
-- **Memory management**: brk, sbrk, mmap, munmap, mprotect
-- **System information**: ps, df, lsblk, whoami, ls
-- **Networking**: ping, ifconfig (IPv4 configuration)
+- **File system**: stat, fstat, mount, chmod, touch, append with permission validation
+- **Memory management**: brk, sbrk, mmap, munmap, mprotect with security checks
+- **System information**: ps, df, lsblk, whoami, ls with real-time data
+- **Networking**: ping, ifconfig with IPv4 configuration and diagnostics
 
 ### Virtual File System
-- VFS abstraction layer with mount point resolution
-- Multiple filesystem support (MINIX, RAMFS, TMPFS)
-- Mount point management for multiple filesystems
-- Virtual filesystems: `/proc`, `/dev`, RAMFS, TMPFS
-- Path resolution across mounted filesystems
-- **See [VIRTUAL_FILESYSTEMS.md](VIRTUAL_FILESYSTEMS.md) for detailed documentation**
+- **VFS abstraction layer** with mount point resolution across multiple filesystems
+- **Multiple filesystem support**: MINIX (primary), RAMFS (memory), TMPFS (temporary)
+- **Virtual filesystems**: `/proc` (process info), `/dev` (devices), `/sys` (kernel info)
+- **Dynamic mount management** with proper unmounting and cleanup
+- **Path resolution engine** that traverses mounted filesystems seamlessly
+- **Security validation** preventing path traversal and buffer overflow attacks
+- **See [VIRTUAL_FILESYSTEMS.md](Documentation/VIRTUAL_FILESYSTEMS.md) for detailed documentation**
 
 ### Hardware Drivers
-- **Input/Output**: PS/2 keyboard and mouse drivers, PC Speaker driver
-- **Storage**: ATA/IDE disk driver with DMA support, partition management
-- **Network**: RTL8139 and Intel e1000 Ethernet NIC drivers
-- **Audio**: Sound Blaster 16 driver, Adlib OPL2 driver
-- **Video**: VGA text mode driver, VBE graphics driver
+- **Input/Output**: PS/2 keyboard and mouse drivers with interrupt handling, PC Speaker driver
+- **Storage**: ATA/IDE disk driver with DMA support and partition management
+- **Network**: RTL8139 and Intel e1000 Ethernet NIC drivers with full TCP/IP integration
+- **Audio**: Sound Blaster 16 driver with PCM support, Adlib OPL2 driver for FM synthesis
+- **Video**: VGA text mode driver with color support, VBE graphics driver (basic)
 - **Timers**: PIT (Programmable Interval Timer), HPET (High Precision Event Timer), LAPIC (Local APIC Timer), RTC (Real Time Clock)
-- **Serial**: COM1/COM2 serial port driver for debugging
-- **DMA**: 8-channel DMA controller support
+- **Serial**: COM1/COM2 serial port driver for debugging and communication
+- **Bluetooth**: Complete HCI implementation with device discovery and management
+- **DMA**: 8-channel DMA controller support for high-speed data transfer
 - **Driver Registry**: Unified driver registration system supporting C, C++, and Rust drivers
 
-### Networking (Under Development)
-- Ethernet frame handling
-- ARP (Address Resolution Protocol)
-- IPv4 protocol foundation
+### Networking
+- **Complete TCP/IP stack** with layered architecture (Ethernet → IP → Transport)
+- **Protocol support**: Ethernet frame handling, ARP (Address Resolution Protocol), IPv4 with routing
+- **Transport protocols**: ICMP (ping, diagnostics), UDP (basic implementation)
+- **Network drivers**: RTL8139 and Intel e1000 with interrupt-driven I/O
+- **Configuration tools**: ifconfig for interface management, ping for connectivity testing
+- **Development support**: TAP networking for advanced testing scenarios
 
 ### Interrupt System
-- Complete IDT setup
-- PIC configuration
-- Exception handling
-- TSS configuration
+- **Complete IDT setup** with proper exception and interrupt handling
+- **PIC configuration** with IRQ masking and priority management
+- **Exception handling** for CPU faults with signal delivery to processes
+- **TSS configuration** for proper privilege level transitions
 
 ### Interactive Shell
-- **Full-featured command-line interface** (33+ commands)
+- **Full-featured command-line interface** with 33+ built-in commands
 - **File operations**: ls, cat, cp, mv, mkdir, rmdir, rm, cd, pwd, touch, chmod, chown, ln
-- **System information**: ps, df, lsblk, whoami, netinfo, arpcache
-- **Process management**: exec
-- **Networking**: ping, ifconfig
-- **Text processing**: echo, sed
-- **Driver management**: lsdrv, dmesg
-- **Hardware testing**: audio_test, mouse_test
-- **System utilities**: clear, help, exit, type, mount
+- **System information**: ps (process list), df (disk usage), lsblk (block devices), whoami, netinfo, arpcache
+- **Process management**: exec for program execution
+- **Networking**: ping for connectivity testing, ifconfig for network configuration
+- **Text processing**: echo with variable expansion, sed for stream editing
+- **Driver management**: lsdrv (list drivers), dmesg (kernel messages)
+- **Hardware testing**: audio_test, mouse_test for driver validation
+- **System utilities**: clear, help, exit, type, mount for filesystem management
 
 ## Architecture
 
@@ -443,7 +481,40 @@ This project is licensed under the GNU General Public License v3.0. See the LICE
 
 # IR0 Kernel (Español)
 
-IR0 es un kernel de sistema operativo monolítico diseñado para arquitectura x86-64, con un enfoque en la modularidad, soporte multilenguaje (C, C++, Rust) y cumplimiento de estándares POSIX.
+IR0 es un kernel de sistema operativo monolítico moderno diseñado para arquitectura x86-64, con un enfoque en la modularidad, soporte multilenguaje (C, C++, Rust) y cumplimiento de estándares POSIX. Con más de **33,000 líneas de código** distribuidas en **224 archivos**, IR0 proporciona una base completa de sistema operativo con gestión avanzada de memoria, control integral de procesos, sistema de archivos virtual, controladores de hardware y capacidades de red integradas.
+
+## Actualizaciones Principales Recientes
+
+### 🔥 **Integración Bluetooth Completa**
+- **Implementación HCI (Host Controller Interface)** con transporte UART
+- **Descubrimiento y gestión de dispositivos** con capacidades de inquiry/scan
+- **Arquitectura basada en eventos** para comunicación Bluetooth en tiempo real
+- **Integración de controladores** a través del registro unificado de drivers
+- **Interfaz de espacio de usuario** vía `/dev/bluetooth` con controles ioctl
+
+### 🚀 **Sistema de Drivers Multilenguaje**
+- **Soporte nativo** para drivers escritos en C, C++ y Rust
+- **Registro unificado de drivers** con inicialización automática
+- **Soporte de cross-compilación** para todos los lenguajes a targets Windows
+- **Integración en tiempo de ejecución** con gestión de memoria del kernel e interrupciones
+
+### 🛡️ **Seguridad y Validación Mejoradas**
+- **Validación integral de paths** previniendo ataques de traversal
+- **Protección contra buffer overflow** en código de red y filesystem
+- **Gestión segura de discos** con protección del sistema host
+- **Mejoras de seguridad de memoria** en allocator y sistemas de paginación
+
+### 📁 **Sistema de Archivos Virtual Avanzado**
+- **Soporte para múltiples filesystems**: MINIX, RAMFS, TMPFS, ProcFS, DevFS, SysFS
+- **Sistema de montaje dinámico** con resolución de paths cross-filesystem
+- **Operaciones compatibles con POSIX** con modelo completo de permisos
+- **Información de procesos en tiempo real** vía filesystem `/proc`
+
+### 🌐 **Networking Listo para Producción**
+- **Stack TCP/IP completo** con Ethernet, ARP, IPv4, ICMP, UDP
+- **Soporte de drivers de hardware**: NICs RTL8139 e Intel e1000
+- **Herramientas de configuración de red**: ifconfig, ping, netinfo
+- **Soporte de networking TAP** para desarrollo y testing
 
 ## Arquitectura del Sistema
 

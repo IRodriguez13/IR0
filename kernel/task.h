@@ -2,6 +2,7 @@
 #pragma once
 #include <stdint.h>
 #include <ir0/vga.h>
+#include <ir0/types.h>
 
 typedef enum
 {
@@ -55,7 +56,7 @@ typedef struct task
     uint64_t dr6;      // +0xE0: Debug Register 6
     uint64_t dr7;      // +0xE8: Debug Register 7
 
-    uint32_t pid;       // Process ID único
+    pid_t pid;       // Process ID único
     uint8_t priority;   // Prioridad (0-255, mayor número = mayor prioridad)
     task_state_t state; // Estado actual del proceso
     struct task *next;  // Puntero al siguiente proceso (lista circular)
@@ -144,7 +145,7 @@ task_t *get_idle_task(void);
 task_t *get_task_list(void);
 
 // Obtener número de tareas activas
-uint32_t get_task_count(void);
+pid_t get_task_count(void);
 
 
 // Declaración de create_test_tasks

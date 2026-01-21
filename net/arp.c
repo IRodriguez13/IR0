@@ -127,6 +127,9 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
     LOG_INFO_FMT("ARP", "Sender MAC: %02x:%02x:%02x:%02x:%02x:%02x",
                  arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
                  arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
+    LOG_INFO_FMT("ARP", "Target MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+                 arp->target_mac[0], arp->target_mac[1], arp->target_mac[2],
+                 arp->target_mac[3], arp->target_mac[4], arp->target_mac[5]);
     
     if (opcode == ARP_OP_REQUEST)
     {
@@ -155,13 +158,20 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
             if_ip = if_ip->next;
         }
         
-        /* Log IPs for debugging */
+        /* Log IPs for debugging - CRITICAL for debugging ARP replies */
         LOG_INFO_FMT("ARP", "ARP Request check: target=" IP4_FMT ", my_ip=" IP4_FMT ", interface_ip=" IP4_FMT,
                      IP4_ARGS(ntohl(target_ip)), IP4_ARGS(ntohl(my_ip)), IP4_ARGS(ntohl(interface_ip)));
+        LOG_INFO_FMT("ARP", "Device: %s, target matches my_ip=%d, target matches interface_ip=%d",
+                     dev->name ? dev->name : "unknown",
+                     (target_ip == my_ip) ? 1 : 0,
+                     (target_ip == interface_ip) ? 1 : 0);
         
         if (target_ip == interface_ip || target_ip == my_ip)
         {
             LOG_INFO("ARP", "ARP Request is for us, sending reply");
+            LOG_INFO_FMT("ARP", "Using sender_ip=" IP4_FMT " in reply, our IP will be " IP4_FMT,
+                         IP4_ARGS(ntohl(arp->sender_ip)), 
+                         IP4_ARGS(ntohl((interface_ip != 0) ? interface_ip : my_ip)));
             
             /* Send ARP Reply */
             struct arp_header *reply = (struct arp_header *)kmalloc(sizeof(struct arp_header));
@@ -541,12 +551,12 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
                 break;
             }
             
-            /* CRITICAL: Poll network card for received packets */
-            /* This is necessary because interrupts may not be working properly */
-            /* Include rtl8139.h at top of file for this function */
+            /* CRITICAL: Poll network stack for received packets */
+            /* This processes packets through the full stack: Ethernet -> IP -> ARP */
+            /* Using net_poll() instead of rtl8139_poll() ensures full stack processing */
             {
-                extern void rtl8139_poll(void);
-                rtl8139_poll();
+                extern void net_poll(void);
+                net_poll();
             }
             
             /* Check if entry appeared in cache (ARP reply received) */

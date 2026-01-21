@@ -148,3 +148,33 @@ void serial_print_hex64(uint64_t val)
     buf[16] = '\0';
     serial_print(buf);
 }
+
+/**
+ * serial_is_receive_ready - check if receiver has data
+ *
+ * Returns true if data is available in receiver buffer.
+ */
+static int serial_is_receive_ready(void)
+{
+    /* Check Line Status Register bit 0 (Data Ready) */
+    return inb(SERIAL_PORT_COM1 + SERIAL_LINE_STATUS_REG) & 0x01;
+}
+
+/**
+ * serial_read_char - read a character from the serial port
+ *
+ * Blocks until data is available.
+ * 
+ * Returns: Character read from serial port
+ */
+char serial_read_char(void)
+{
+    /* Wait for data to be available */
+    while (serial_is_receive_ready() == 0)
+    {
+        /* Wait for receiver buffer to have data */
+    }
+
+    /* Read character from data register */
+    return (char)inb(SERIAL_PORT_COM1 + SERIAL_DATA_REG);
+}

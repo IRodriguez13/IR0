@@ -13,11 +13,12 @@
  */
 
 #include "ip.h"
+#include "arp.h"
+#include "net.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
-#include "arp.h"
 #include <string.h>
 
 /* IP Configuration (default values) */
@@ -210,7 +211,6 @@ void ip_receive_handler(struct net_device *dev, const void *data,
     bool is_for_us = (dest_ip == ip_local_addr || dest_ip == broadcast_ip);
     if (!is_for_us)
     {
-        extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
         ip4_addr_t interface_ip;
         if (arp_get_interface_ip(dev, &interface_ip) == 0 && dest_ip == interface_ip)
         {
@@ -220,13 +220,42 @@ void ip_receive_handler(struct net_device *dev, const void *data,
     
     if (!is_for_us)
     {
-        /* Not for us - log for debugging to see if packets are being dropped */
-        extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
-        ip4_addr_t interface_ip = 0;
-        arp_get_interface_ip(dev, &interface_ip);
-        LOG_INFO_FMT("IP", "Dropping packet: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ")", 
-                     IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)), 
-                     IP4_ARGS(ntohl(interface_ip)));
+        /* Not for us - check if it's multicast (common spam: mDNS, SSDP, etc.) */
+        /* Multicast IPs: 224.0.0.0/4 (224.0.0.0 to 239.255.255.255) */
+        uint8_t first_octet = (ntohl(dest_ip) >> 24) & 0xFF;
+        bool is_multicast_ip = (first_octet >= 224 && first_octet <= 239);
+        
+        /* Only log non-multicast drops (multicast spam is normal) */
+        if (!is_multicast_ip)
+        {
+            ip4_addr_t interface_ip = 0;
+            arp_get_interface_ip(dev, &interface_ip);
+            
+            /* CRITICAL: Always log drops of ICMP Echo Replies (ping responses) */
+            /* This helps debug why ping to 8.8.8.8 isn't working */
+            bool is_icmp_reply = false;
+            uint8_t protocol_check = ip->protocol;
+            if (protocol_check == IPPROTO_ICMP && len >= header_len + 4)
+            {
+                const uint8_t *icmp_data = (const uint8_t *)data + header_len;
+                uint8_t icmp_type = icmp_data[0];
+                is_icmp_reply = (icmp_type == 0); /* ICMP_TYPE_ECHO_REPLY */
+            }
+            
+            if (is_icmp_reply)
+            {
+                LOG_WARNING_FMT("IP", "DROPPING ICMP Echo Reply: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ") - This may explain why ping to external IPs fails!",
+                               IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)), 
+                               IP4_ARGS(ntohl(interface_ip)));
+            }
+            else
+            {
+                LOG_DEBUG_FMT("IP", "Dropping packet: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ")", 
+                             IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)), 
+                             IP4_ARGS(ntohl(interface_ip)));
+            }
+        }
+        /* Multicast packets are dropped silently to reduce log spam */
         return;
     }
     
@@ -397,6 +426,19 @@ void ip_receive_handler(struct net_device *dev, const void *data,
                  (int)protocol,
                  IP4_ARGS(ntohl(src_ip)),
                  IP4_ARGS(ntohl(dest_ip)));
+    
+    /* CRITICAL: Log ICMP Echo Replies from external IPs (e.g., 8.8.8.8) */
+    /* This helps debug why ping responses aren't being processed */
+    if (protocol == IPPROTO_ICMP && len >= header_len + 4)
+    {
+        const uint8_t *icmp_data = (const uint8_t *)data + header_len;
+        uint8_t icmp_type = icmp_data[0];
+        if (icmp_type == 0) /* ICMP_TYPE_ECHO_REPLY */
+        {
+            LOG_INFO_FMT("IP", "ICMP Echo Reply received from " IP4_FMT " to " IP4_FMT " - checking if for us",
+                        IP4_ARGS(ntohl(src_ip)), IP4_ARGS(ntohl(dest_ip)));
+        }
+    }
 
     /* Store source IP and TTL for upper layer handlers (e.g., ICMP Echo Reply) */
     ip_last_src_addr = src_ip;
@@ -408,9 +450,6 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         const uint8_t *icmp_data = (const uint8_t *)data + header_len;
         uint8_t icmp_type = icmp_data[0];
         uint8_t icmp_code = icmp_data[1];
-        extern void serial_print(const char *);
-        extern void serial_print_hex32(uint32_t);
-        extern char *itoa(int, char*, int);
         serial_print("[IP] RX ICMP: type=");
         char type_str[16];
         itoa((int)icmp_type, type_str, 10);
@@ -503,7 +542,6 @@ static int ip_send_fragment(struct net_device *dev, ip4_addr_t dest_ip,
     ip->checksum = 0;
     /* Source IP: use interface-specific IP if available, else default */
     ip4_addr_t src_ip = ip_local_addr;
-    extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
     ip4_addr_t interface_ip;
     if (arp_get_interface_ip(dev, &interface_ip) == 0)
     {
@@ -548,7 +586,6 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
     
     /* Don't send packets to our own IP - this shouldn't happen, but if it does, drop */
     ip4_addr_t src_ip = ip_local_addr;
-    extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
     ip4_addr_t interface_ip;
     if (arp_get_interface_ip(dev, &interface_ip) == 0)
     {
@@ -646,7 +683,6 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
         ip->checksum = 0;                /* Zero for checksum calculation */
         /* Source IP: use interface-specific IP if available, else default */
         ip4_addr_t src_ip = ip_local_addr;
-        extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
         ip4_addr_t interface_ip;
         if (arp_get_interface_ip(dev, &interface_ip) == 0)
         {
@@ -736,7 +772,6 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
  */
 int ip_init(void)
 {
-    extern void arp_set_my_ip(ip4_addr_t ip);
     
     /* Set default IP configuration based on network mode.
      * 
@@ -771,9 +806,7 @@ int ip_init(void)
     arp_set_my_ip(ip_local_addr);
     
     /* Configure interface IP for all registered network devices */
-    extern struct net_device *net_get_devices(void);
     struct net_device *dev = net_get_devices();
-    extern int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip);
     
     while (dev)
     {

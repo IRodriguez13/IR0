@@ -15,6 +15,7 @@
 #include <ir0/logging.h>
 #include <config.h>
 #include <drivers/multilang_drivers.h>
+#include "bluetooth/bluetooth_init.h"
 
 /**
  * Initialize multi-language driver subsystem
@@ -25,6 +26,13 @@ void drivers_init(void)
     /* Initialize driver registry */
     ir0_driver_registry_init();
     log_subsystem_ok("DRIVER_REGISTRY");
+
+    /* Register Bluetooth subsystem */
+    if (bluetooth_register_driver() == 0) {
+        LOG_INFO("KERNEL", "Bluetooth subsystem registered successfully");
+    } else {
+        LOG_WARNING("KERNEL", "Bluetooth subsystem registration failed");
+    }
 
     /* Register multi-language example drivers (optional, for testing) */
 #if KERNEL_ENABLE_EXAMPLE_DRIVERS
