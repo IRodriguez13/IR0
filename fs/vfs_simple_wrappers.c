@@ -6,7 +6,10 @@
 #include <ir0/stat.h>
 #include <string.h>
 
-void vfs_simple_init(void) { vfs_init(); }
+void vfs_simple_init(void)
+{
+    vfs_init();
+}
 
 int vfs_simple_mkdir(const char *path)
 {
@@ -36,7 +39,6 @@ int vfs_simple_create_file(const char *path, const char *filename, uint32_t size
     {
         snprintf(full, sizeof(full), "%s/%s", path, filename);
     }
-    extern int minix_fs_touch(const char *path, mode_t mode);
     return minix_fs_touch(full, 0644);
 }
 
@@ -79,4 +81,7 @@ int vfs_allocate_sectors(int count)
     (void)count;
     return 0;
 }
-int vfs_remove_directory(const char *path) { return vfs_rmdir_recursive(path); }
+int vfs_remove_directory(const char *path)
+{
+    return vfs_rmdir_recursive(path);
+}

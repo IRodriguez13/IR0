@@ -11,7 +11,7 @@
  */
 
 #include "process.h"
-#include "dbgshell.h"
+#include "debug_bins/dbgshell.h"
 #include "rr_sched.h"
 #include <drivers/video/typewriter.h>
 #include <ir0/kmem.h>

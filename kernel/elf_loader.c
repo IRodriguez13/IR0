@@ -216,7 +216,8 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
 
     /* Create user process using spawn (creates isolated page directory) */
     /* Use dummy entry that will be overridden with ELF entry point */
-    pid_t pid = spawn(elf_dummy_entry, basename);
+    /* ELF binaries always run in USER_MODE */
+    pid_t pid = spawn_user(elf_dummy_entry, basename);
     if (pid < 0)
     {
         serial_print("SERIAL: ELF: Failed to create process\n");

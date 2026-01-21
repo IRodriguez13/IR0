@@ -24,7 +24,6 @@
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <ir0/net.h>
-#include <includes/ir0/net.h>
 #include <drivers/storage/ata.h>
 #include <init.h>
 #include <arch/common/arch_portable.h>
@@ -35,6 +34,7 @@
 #include <drivers/timer/clock_system.h>
 #include <interrupt/arch/pic.h>
 #include <drivers/init_drv.h>
+#include "ipc.h"
 
 /* Include kernel header with all function declarations */
 #include "kernel.h"
@@ -144,6 +144,10 @@ void kmain(void)
     /* Initialize process management */
     process_init();
     log_subsystem_ok("PROCESSES");
+    
+    /* Initialize IPC subsystem */
+    ipc_init();
+    log_subsystem_ok("IPC");
 
     /* Initialize scheduler (Round Robin scheduler)
      * Round Robin provides fair time-sharing among processes
@@ -186,8 +190,7 @@ void kmain(void)
          * and we need to receive packets even when not actively waiting for responses.
          */
         net_poll();
-        
-        /* Fallback if something goes wrong */
+        /* Yield CPU to allow other processes to run */
         __asm__ volatile("hlt");
     }
 }

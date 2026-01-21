@@ -29,10 +29,8 @@
 #include <fs/vfs.h>
 #include <ir0/validation.h>
 #include <mm/paging.h>
+#include "drivers/bluetooth/bt_device.h"
 
-/* ============================================================================
- * CONSTANTS
- * ============================================================================ */
 
 #define PROC_BUFFER_SIZE           4096    /* Standard proc buffer size */
 #define PROC_FD_MAP_SIZE           1000    /* Max file descriptors tracked */
@@ -1280,6 +1278,12 @@ int proc_open(const char *path, int flags)
     } else if (strcmp(filename, "timer_list") == 0)
     {
         fd = 1018;
+    } else if (strcmp(filename, "bluetooth/devices") == 0)
+    {
+        fd = 1019;
+    } else if (strcmp(filename, "bluetooth/scan") == 0)
+    {
+        fd = 1020;
     } else
     {
         /* File not found */
@@ -1367,6 +1371,14 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
             break;
         case 1018:
             full_size = proc_timer_list_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1019:
+            /* /proc/bluetooth/devices */
+            full_size = bt_proc_devices_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1020:
+            /* /proc/bluetooth/scan */
+            full_size = bt_proc_scan_read(proc_buffer, sizeof(proc_buffer));
             break;
         default:
             return -1;
@@ -1493,6 +1505,35 @@ int proc_write(int fd, const char *buf, size_t count)
         
         /* Return number of bytes "written" (acknowledged) */
         return (int)count;
+    }
+    
+    /* Handle /proc/bluetooth/scan - Bluetooth scan control */
+    if (strcmp(path, "bluetooth/scan") == 0)
+    {
+        /* Parse command from buffer */
+        char cmd_buf[64];
+        size_t copy_len = (count < sizeof(cmd_buf) - 1) ? count : (sizeof(cmd_buf) - 1);
+        memcpy(cmd_buf, buf, copy_len);
+        cmd_buf[copy_len] = '\0';
+        
+        /* Remove trailing whitespace/newlines */
+        while (copy_len > 0 && (cmd_buf[copy_len - 1] == '\n' || 
+                                cmd_buf[copy_len - 1] == '\r' ||
+                                cmd_buf[copy_len - 1] == ' '))
+        {
+            copy_len--;
+            cmd_buf[copy_len] = '\0';
+        }
+        
+        /* Process Bluetooth scan commands */
+        extern int bt_proc_scan_write(const char *command);
+        int result = bt_proc_scan_write(cmd_buf);
+        
+        if (result < 0) {
+            return result; /* Error from Bluetooth subsystem */
+        }
+        
+        return (int)count; /* Success */
     }
     
     /* All other /proc entries are read-only */

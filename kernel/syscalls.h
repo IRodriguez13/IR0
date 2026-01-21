@@ -42,6 +42,7 @@ int64_t sys_close(int fd);
 int64_t sys_lseek(int fd, off_t offset, int whence);
 int64_t sys_dup2(int oldfd, int newfd);
 int64_t sys_creat(const char *pathname, mode_t mode);
+int64_t sys_ioctl(int fd, uint64_t request, void *arg);
 
 /* File system operations */
 int64_t sys_stat(const char *pathname, stat_t *buf);
@@ -54,6 +55,7 @@ int64_t sys_unlink(const char *pathname);
 int64_t sys_link(const char *oldpath, const char *newpath);
 int64_t sys_chmod(const char *path, mode_t mode);
 int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype);
+int64_t sys_getdents(int fd, void *dirent, size_t count);
 
 /* Memory management */
 int64_t sys_brk(void *addr);

@@ -16,6 +16,7 @@
 #include <ir0/oops.h>
 #include <string.h>
 #include <stddef.h>
+#include <ir0/errno.h>
 
 
 static pid_t next_pid = 2;
@@ -66,13 +67,18 @@ process_t *get_process_list(void)
 /* 
  * spawn() - Create a new process (IR0's ONLY process creation method)
  * 
- * IR0 PHILOSOPHY: Total simplicity
+ * IR0 PHILOSOPHY: Total simplicity with explicit mode specification
  * Only spawn() creates processes. No fork(), no clone(), no other methods.
- * This maintains total simplicity in process creation.
+ * Mode must be explicitly specified - no magic address detection.
+ * 
+ * This avoids fragile heuristics based on memory layout that could:
+ * - Break if layout changes
+ * - Allow user code to run in kernel mode
+ * - Create hard-to-track bugs
  * 
  * process_fork() exists only for POSIX syscall compatibility and uses spawn() internally.
  */
-pid_t spawn(void (*entry)(void), const char *name)
+pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 {
 	process_t *proc;
 	
@@ -80,10 +86,10 @@ pid_t spawn(void (*entry)(void), const char *name)
 		return -1;
 	
 	proc = kmalloc(sizeof(process_t));
-	if (!proc)
-		return -1;
-
-	BUG_ON(!proc); /* kmalloc failed */
+	if (!proc) {
+		serial_print("[ERROR] Failed to allocate process structure\n");
+		return -ENOMEM;
+	}
 
 	memset(proc, 0, sizeof(process_t));
 
@@ -92,34 +98,16 @@ pid_t spawn(void (*entry)(void), const char *name)
 	proc->ppid = current_process ? current_process->task.pid : 1;
 	proc->state = PROCESS_READY;
 	
-	/* Detect execution mode based on entry point address
-	 * Kernel mode: entry points in kernel space (< 4MB or in kernel range)
-	 * User mode: entry points in user space (>= 4MB, typically ELF binaries)
-	 * 
-	 * User space typically starts at 0x400000 (4MB) in x86-64
-	 * Kernel space is below this (0x0 - 0x400000)
-	 */
-	const uintptr_t USER_SPACE_START = 0x00400000UL;  /* 4MB */
-	const uintptr_t entry_addr = (uintptr_t)entry;
-	
-	if (entry_addr >= USER_SPACE_START)
-	{
-		/* Entry point is in user space - set user mode */
-		proc->mode = USER_MODE;
-	}
-	else
-	{
-		/* Entry point is in kernel space - set kernel mode */
-		proc->mode = KERNEL_MODE;
-	}
+	/* Explicit mode specification - no magic address detection */
+	proc->mode = mode;
 	
 	/* Create new page directory */
 	proc->page_directory = (uint64_t *)create_process_page_directory();
 	if (!proc->page_directory)
 	{
+		serial_print("[ERROR] Failed to create page directory for process\n");
 		kfree(proc);
-		BUG_ON(1); /* Failed to create page directory */
-		return -1;
+		return -ENOMEM;
 	}
 	proc->task.cr3 = (uint64_t)proc->page_directory;
 
@@ -213,10 +201,26 @@ pid_t spawn(void (*entry)(void), const char *name)
 		proc->signal_handlers[i] = SIG_DFL;
 	}
 
+	/* Add to process list */
+	proc->next = process_list;
+	process_list = proc;
+
 	/* Add to scheduler */
 	rr_add_process(proc);
 
 	return proc->task.pid;
+}
+
+/* Convenience wrapper for user-mode processes */
+pid_t spawn_user(void (*entry)(void), const char *name)
+{
+	return spawn(entry, name, USER_MODE);
+}
+
+/* Convenience wrapper for kernel-mode processes */
+pid_t spawn_kernel(void (*entry)(void), const char *name)
+{
+	return spawn(entry, name, KERNEL_MODE);
 }
 
 /* Dummy entry that immediately exits - child process behavior for fork() */
@@ -241,8 +245,10 @@ pid_t process_fork(void)
 	if (!current_process)
 		return -1;
 	
-	/* Use spawn internally - only spawn creates processes in IR0 */
-	pid_t child_pid = spawn(fork_child_entry, "fork_child");
+	/* Use spawn internally - only spawn creates processes in IR0
+	 * Fork inherits parent's mode (if parent is kernel mode, child is kernel mode) */
+	process_mode_t child_mode = current_process ? current_process->mode : KERNEL_MODE;
+	pid_t child_pid = spawn(fork_child_entry, "fork_child", child_mode);
 	
 	/* Set return value for parent (child gets 0 from fork_child_entry) */
 	if (child_pid > 0) {
@@ -288,8 +294,10 @@ static void process_reparent_children(process_t *dying_parent)
 	init = process_find_by_pid(1);
 	if (!init)
 	{
-		/* No init process - this is a critical error */
-		BUG_ON(1); /* Init process must exist */
+		/* No init process - this is a critical system error */
+		serial_print("[CRITICAL] Init process (PID 1) not found during reparenting\n");
+		serial_print("[CRITICAL] System integrity compromised - orphaned processes detected\n");
+		/* Continue execution but log the critical error */
 		return;
 	}
 	
@@ -433,15 +441,23 @@ int process_wait(pid_t pid, int *status)
 	process_t *prev;
 	pid_t ret;
 
-	BUG_ON(!current_process); /* Must have current process */
+	if (!current_process) {
+		serial_print("[ERROR] process_wait called without current process context\n");
+		return -ESRCH;
+	}
 
 	for(;;)
 	{
 		p = process_list;
 		while (p)
 		{
+			/* Validate process pointer to detect corruption */
+			if (!p) {
+				serial_print("[ERROR] Process list corruption detected in waitpid\n");
+				return -EFAULT;
+			}
+			
 			/* Check if this is a child process we're waiting for */
-			BUG_ON(!p); /* Process list corruption */
 			if (p->task.pid == pid && p->ppid == current_process->task.pid)
 			{
 				if (p->state == PROCESS_ZOMBIE)

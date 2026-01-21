@@ -13,8 +13,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <ir0/stat.h>
-#include <ir0/types.h>  
-#include <kernel/process.h>
+#include <ir0/types.h>
+
+/* Forward declaration - pid_t is defined in types.h */
+typedef int32_t pid_t;
 
 /* /proc entry types */
 typedef enum {
