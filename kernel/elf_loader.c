@@ -11,16 +11,19 @@
  * Description: ELF binary loader for user programs with segment loading and process creation
  */
 
+#include "process.h"
+#include "rr_sched.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 #include <ir0/kmem.h>
-#include "process.h"
-#include "rr_sched.h"
 #include <fs/vfs.h>
 #include <drivers/serial/serial.h>
 #include <mm/paging.h>
 #include <mm/pmm.h>
+#include <ir0/copy_user.h>
+#include <ir0/oops.h>
+#include <errno.h>
 
 /* Compiler optimization hints */
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -191,8 +194,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
 static void elf_dummy_entry(void)
 {
     /* This should never be called as we override RIP */
-    while (1)
-        ;
+    panic("ELF dummy entry should never be called :)\n");
 }
 
 /* Create a new process for the ELF program */
@@ -262,8 +264,229 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
 }
 
 /**
+ * elf_setup_stack - Initialize stack with argc, argv, envp (x86-64 ABI)
+ * @process: Process to set up stack for
+ * @argv: Command line arguments (NULL-terminated)
+ * @envp: Environment variables (NULL-terminated)
+ * 
+ * Sets up the stack according to x86-64 ABI:
+ * - argc at bottom of stack
+ * - argv[] array (pointers, NULL-terminated)
+ * - envp[] array (pointers, NULL-terminated)
+ * - Argument strings
+ * - Environment strings
+ * 
+ * Registers will be set by context switch:
+ * - rdi = argc
+ * - rsi = argv
+ * - rdx = envp
+ */
+static int elf_setup_stack(process_t *process, char *const argv[], char *const envp[])
+{
+    if (!process || process->mode != USER_MODE)
+        return -1;
+    
+    /* Count arguments */
+    int argc = 0;
+    if (argv)
+    {
+        while (argv[argc])
+            argc++;
+    }
+    
+    /* Count environment variables */
+    int envc = 0;
+    if (envp)
+    {
+        while (envp[envc])
+            envc++;
+    }
+    
+    /* Calculate total stack size needed */
+    size_t strings_size = 0;
+    
+    /* Calculate argv strings size */
+    for (int i = 0; i < argc; i++)
+    {
+        if (argv[i])
+            strings_size += strlen(argv[i]) + 1;
+    }
+    
+    /* Calculate envp strings size */
+    for (int i = 0; i < envc; i++)
+    {
+        if (envp[i])
+            strings_size += strlen(envp[i]) + 1;
+    }
+    
+    /* Total size: argv[] + envp[] + strings + alignment */
+    /* Note: argc is NOT on stack, only in rdi register (x86-64 ABI) */
+    size_t stack_size = (argc + 1) * sizeof(uint64_t) +        /* argv[] + NULL */
+                       (envc + 1) * sizeof(uint64_t) +        /* envp[] + NULL */
+                       strings_size +                         /* strings */
+                       16;                                    /* alignment */
+    
+    /* Leave 256 bytes margin for safety */
+    size_t stack_margin = 256;
+    if (stack_size > (process->stack_size - stack_margin))
+    {
+        serial_print("SERIAL: ELF: ERROR - Stack too small for arguments (need ");
+        serial_print_hex32((uint32_t)stack_size);
+        serial_print(" bytes, have ");
+        serial_print_hex32((uint32_t)process->stack_size);
+        serial_print(")\n");
+        return -ENOMEM;
+    }
+    
+    /* Switch to process page directory temporarily */
+    uint64_t old_cr3 = get_current_page_directory();
+    load_page_directory((uint64_t)process->page_directory);
+    
+    /* Build stack from bottom to top (stack grows down) */
+    uint64_t stack_bottom = process->stack_start;
+    uint64_t stack_top = process->stack_start + process->stack_size;
+    uint64_t stack_ptr = stack_top - 16;  /* Start with alignment */
+    
+    /* Write strings first (they go at the top) */
+    uint64_t *argv_ptrs = (uint64_t *)kmalloc((argc + 1) * sizeof(uint64_t));
+    uint64_t *envp_ptrs = (uint64_t *)kmalloc((envc + 1) * sizeof(uint64_t));
+    
+    if (!argv_ptrs || !envp_ptrs)
+    {
+        load_page_directory(old_cr3);
+        if (argv_ptrs) kfree(argv_ptrs);
+        if (envp_ptrs) kfree(envp_ptrs);
+        return -1;
+    }
+    
+    /* Write argv strings */
+    stack_ptr -= strings_size;
+    uint64_t strings_base = stack_ptr;
+    uint64_t current_string_ptr = strings_base;
+    
+    for (int i = 0; i < argc; i++)
+    {
+        if (argv[i])
+        {
+            size_t len = strlen(argv[i]) + 1;
+            if (copy_to_user((void *)current_string_ptr, argv[i], len) != 0)
+            {
+                load_page_directory(old_cr3);
+                kfree(argv_ptrs);
+                kfree(envp_ptrs);
+                return -1;
+            }
+            argv_ptrs[i] = current_string_ptr;
+            current_string_ptr += len;
+        }
+    }
+    
+    /* Write envp strings */
+    for (int i = 0; i < envc; i++)
+    {
+        if (envp[i])
+        {
+            size_t len = strlen(envp[i]) + 1;
+            if (copy_to_user((void *)current_string_ptr, envp[i], len) != 0)
+            {
+                load_page_directory(old_cr3);
+                kfree(argv_ptrs);
+                kfree(envp_ptrs);
+                return -1;
+            }
+            envp_ptrs[i] = current_string_ptr;
+            current_string_ptr += len;
+        }
+    }
+    
+    /* Write envp[] array */
+    stack_ptr = stack_top - 16;
+    stack_ptr -= (envc + 1) * sizeof(uint64_t);
+    uint64_t envp_array = stack_ptr;
+    
+    for (int i = 0; i < envc; i++)
+    {
+        uint64_t ptr = envp_ptrs[i];
+        if (copy_to_user((void *)stack_ptr, &ptr, sizeof(uint64_t)) != 0)
+        {
+            load_page_directory(old_cr3);
+            kfree(argv_ptrs);
+            kfree(envp_ptrs);
+            return -1;
+        }
+        stack_ptr += sizeof(uint64_t);
+    }
+    
+    /* NULL terminator for envp */
+    uint64_t zero = 0;
+    if (copy_to_user((void *)stack_ptr, &zero, sizeof(uint64_t)) != 0)
+    {
+        load_page_directory(old_cr3);
+        kfree(argv_ptrs);
+        kfree(envp_ptrs);
+        return -1;
+    }
+    stack_ptr += sizeof(uint64_t);
+    
+    /* Write argv[] array */
+    stack_ptr -= (argc + 1) * sizeof(uint64_t);
+    uint64_t argv_array = stack_ptr;
+    
+    for (int i = 0; i < argc; i++)
+    {
+        uint64_t ptr = argv_ptrs[i];
+        if (copy_to_user((void *)stack_ptr, &ptr, sizeof(uint64_t)) != 0)
+        {
+            load_page_directory(old_cr3);
+            kfree(argv_ptrs);
+            kfree(envp_ptrs);
+            return -1;
+        }
+        stack_ptr += sizeof(uint64_t);
+    }
+    
+    /* NULL terminator for argv */
+    if (copy_to_user((void *)stack_ptr, &zero, sizeof(uint64_t)) != 0)
+    {
+        load_page_directory(old_cr3);
+        kfree(argv_ptrs);
+        kfree(envp_ptrs);
+        return -1;
+    }
+    stack_ptr += sizeof(uint64_t);
+    
+    /* Set stack pointer to bottom of argument arrays (16-byte aligned) */
+    /* According to x86-64 ABI, argc is NOT on stack, only in rdi register */
+    process->task.rsp = stack_ptr;
+    process->task.rbp = stack_ptr;
+    
+    /* Set registers for x86-64 ABI: rdi=argc, rsi=argv, rdx=envp */
+    process->task.rdi = (uint64_t)argc;
+    process->task.rsi = argv_array;
+    process->task.rdx = envp_array;
+    
+    /* Restore page directory */
+    load_page_directory(old_cr3);
+    
+    kfree(argv_ptrs);
+    kfree(envp_ptrs);
+    
+    serial_print("SERIAL: ELF: Stack initialized: argc=");
+    serial_print_hex32(argc);
+    serial_print(", argv=");
+    serial_print_hex32((uint32_t)argv_array);
+    serial_print(", envp=");
+    serial_print_hex32((uint32_t)envp_array);
+    serial_print("\n");
+    
+    return 0;
+}
+
+/**
  * kexecve - Load and execute ELF binary (kernel-level exec)
  * @path: Path to ELF executable file
+ * @argv: Command line arguments (NULL-terminated, can be NULL)
+ * @envp: Environment variables (NULL-terminated, can be NULL)
  *
  * This function loads an ELF binary from the filesystem, creates a process,
  * maps the segments into memory, and schedules the process for execution.
@@ -274,14 +497,14 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
  * 2. Validate ELF header (magic, architecture, type)
  * 3. Create process structure with proper page directory
  * 4. Load ELF segments into memory at virtual addresses
- * 5. Set up entry point, stack, and registers
+ * 5. Set up entry point, stack with argc/argv/envp, and registers
  * 6. Add process to scheduler for execution
  *
- * Returns: 0 on success, -1 on error
+ * Returns: Process PID on success, -1 on error
  *
  * Thread safety: NOT thread-safe - should be called from process context
  */
-int kexecve(const char *path)
+int kexecve(const char *path, char *const argv[], char *const envp[])
 {
     serial_print("SERIAL: ELF: ========================================\n");
     serial_print("SERIAL: ELF: Loading ELF file: ");
@@ -331,11 +554,18 @@ int kexecve(const char *path)
         return -1;
     }
 
-    /* Step 5: Add process to scheduler */
+    /* Step 5: Set up stack with argc/argv/envp */
+    if (elf_setup_stack(process, argv, envp) != 0)
+    {
+        serial_print("SERIAL: ELF: WARNING - Failed to set up stack arguments, continuing anyway\n");
+        /* Continue even if stack setup fails - some binaries don't need args */
+    }
+
+    /* Step 6: Add process to scheduler */
     rr_add_process(process);
     serial_print("SERIAL: ELF: Process added to scheduler\n");
 
-    /* Step 6: Clean up file data */
+    /* Step 7: Clean up file data */
     kfree(file_data);
 
     serial_print("SERIAL: ELF: SUCCESS - Program loaded and scheduled for execution\n");

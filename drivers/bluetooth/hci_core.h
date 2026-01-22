@@ -1,10 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel - Bluetooth HCI Core Layer
+ * IR0 Kernel - Bluetooth HCI Core
  * Copyright (C) 2025  Iván Rodriguez
  *
- * HCI (Host Controller Interface) core functionality
- * Implements basic HCI commands and event handling
+ * HCI Core layer for Bluetooth device management
  */
 
 #pragma once
@@ -12,159 +11,141 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include "hci_uart.h"
 
-/* HCI Command Opcodes (OGF | OCF) */
-#define HCI_OP_RESET                    0x0C03
-#define HCI_OP_READ_BD_ADDR             0x1009
-#define HCI_OP_SET_EVENT_MASK           0x0C01
-#define HCI_OP_INQUIRY                  0x0401
-#define HCI_OP_INQUIRY_CANCEL           0x0402
-#define HCI_OP_REMOTE_NAME_REQUEST      0x0419
-#define HCI_OP_CREATE_CONN              0x0405
-#define HCI_OP_DISCONNECT               0x0406
-#define HCI_OP_ACCEPT_CONN_REQ          0x0409
+/* HCI Opcodes */
+#define HCI_OPCODE_RESET                   0x0c03
+#define HCI_OPCODE_READ_BD_ADDR            0x1009
+#define HCI_OPCODE_SET_EVENT_MASK          0x0c01
+#define HCI_OPCODE_INQUIRY                 0x0401
+#define HCI_OPCODE_INQUIRY_CANCEL          0x0402
+#define HCI_OPCODE_REMOTE_NAME_REQUEST     0x0419
 
 /* HCI Event Codes */
-#define HCI_EV_COMMAND_COMPLETE         0x0E
-#define HCI_EV_COMMAND_STATUS           0x0F
-#define HCI_EV_INQUIRY_RESULT           0x02
-#define HCI_EV_CONN_COMPLETE            0x03
-#define HCI_EV_DISCONN_COMPLETE         0x05
-#define HCI_EV_REMOTE_NAME              0x07
+#define HCI_EVENT_COMMAND_COMPLETE          0x0e
+#define HCI_EVENT_COMMAND_STATUS            0x0f
+#define HCI_EVENT_INQUIRY_RESULT            0x02
+#define HCI_EVENT_INQUIRY_COMPLETE          0x01
+#define HCI_EVENT_REMOTE_NAME_REQUEST_COMPLETE 0x07
 
 /* HCI Status Codes */
-#define HCI_SUCCESS                     0x00
-#define HCI_UNKNOWN_COMMAND             0x01
-#define HCI_NO_CONNECTION               0x02
-#define HCI_HARDWARE_FAILURE            0x03
-#define HCI_PAGE_TIMEOUT                0x04
+#define HCI_STATUS_SUCCESS                 0x00
 
-/* Maximum devices we can discover */
-#define MAX_BT_DEVICES                  16
+/* Bluetooth Device Address (6 bytes) */
+typedef uint8_t bd_addr_t[6];
 
-/* Bluetooth Device Address length */
-#define BD_ADDR_LEN                     6
-
-/* Device name maximum length */
-#define BT_NAME_MAX                     248
-
-/* HCI Device structure */
-struct hci_device {
-    uint8_t bd_addr[BD_ADDR_LEN];    /* Local Bluetooth address */
-    bool initialized;                 /* Initialization status */
-    struct hci_uart *transport;      /* UART transport layer */
-    bool scanning;                    /* Currently scanning */
-    uint8_t scan_duration;           /* Scan duration in seconds */
+/* Bluetooth Device Structure */
+struct bluetooth_device {
+    bd_addr_t bd_addr;      /* Bluetooth Device Address */
+    char name[248];         /* Device name (max 248 chars) */
+    uint8_t device_class[3]; /* Device class */
+    int8_t rssi;            /* Signal strength */
+    bool discovered;        /* Discovery status */
+    uint32_t last_seen;     /* Timestamp */
 };
 
-/* Discovered Bluetooth device */
-struct bluetooth_device {
-    uint8_t bd_addr[BD_ADDR_LEN];    /* Device Bluetooth address */
-    char name[BT_NAME_MAX];          /* Device name */
-    uint8_t device_class[3];         /* Device class */
-    int8_t rssi;                     /* Signal strength */
-    bool discovered;                 /* Discovery status */
-    bool name_resolved;              /* Name resolution status */
+/* HCI Device Structure */
+struct hci_device {
+    bd_addr_t bd_addr;      /* Local BD_ADDR */
+    bool initialized;       /* Initialization status */
+    bool scanning;          /* Inquiry scan in progress */
 };
 
 /**
- * hci_init - Initialize HCI core
- * @uart_base: UART base address for transport
- * 
- * Initializes HCI core layer and underlying transport.
+ * hci_core_init - Initialize HCI core
  * 
  * Returns: 0 on success, negative error code on failure
  */
-int hci_init(uint16_t uart_base);
+int hci_core_init(void);
 
 /**
  * hci_reset - Send HCI Reset command
- * @hdev: HCI device instance
  * 
- * Resets the Bluetooth controller to default state.
+ * Resets the Bluetooth controller.
  * 
  * Returns: 0 on success, negative error code on failure
  */
-int hci_reset(struct hci_device *hdev);
+int hci_reset(void);
 
 /**
- * hci_read_bd_addr - Read local Bluetooth address
- * @hdev: HCI device instance
- * @addr: Buffer to store BD address (6 bytes)
+ * hci_read_bd_addr - Read Bluetooth Device Address
+ * @addr: Buffer to store BD_ADDR (6 bytes)
  * 
  * Reads the local Bluetooth device address.
  * 
  * Returns: 0 on success, negative error code on failure
  */
-int hci_read_bd_addr(struct hci_device *hdev, uint8_t *addr);
+int hci_read_bd_addr(bd_addr_t addr);
+
+/**
+ * hci_set_event_mask - Set HCI event mask
+ * @mask: 8-byte event mask
+ * 
+ * Sets which events the controller should report.
+ * 
+ * Returns: 0 on success, negative error code on failure
+ */
+int hci_set_event_mask(const uint8_t *mask);
 
 /**
  * hci_inquiry - Start device discovery
- * @hdev: HCI device instance
- * @duration: Inquiry duration (1.28s units, max 61.44s)
+ * @duration: Inquiry duration in units of 1.28s (1-61)
  * @num_responses: Maximum number of responses (0 = unlimited)
  * 
- * Starts scanning for nearby Bluetooth devices.
+ * Starts Bluetooth device discovery/inquiry.
  * 
  * Returns: 0 on success, negative error code on failure
  */
-int hci_inquiry(struct hci_device *hdev, uint8_t duration, uint8_t num_responses);
+int hci_inquiry(uint8_t duration, uint8_t num_responses);
 
 /**
- * hci_inquiry_cancel - Cancel ongoing device discovery
- * @hdev: HCI device instance
+ * hci_inquiry_cancel - Cancel device discovery
  * 
- * Cancels ongoing inquiry operation.
+ * Cancels ongoing inquiry scan.
  * 
  * Returns: 0 on success, negative error code on failure
  */
-int hci_inquiry_cancel(struct hci_device *hdev);
+int hci_inquiry_cancel(void);
 
 /**
  * hci_remote_name_request - Request remote device name
- * @hdev: HCI device instance
- * @bd_addr: Target device address
+ * @bd_addr: Bluetooth address of remote device
  * 
- * Requests the name of a remote Bluetooth device.
+ * Requests the friendly name of a remote device.
  * 
  * Returns: 0 on success, negative error code on failure
  */
-int hci_remote_name_request(struct hci_device *hdev, const uint8_t *bd_addr);
+int hci_remote_name_request(const bd_addr_t bd_addr);
 
 /**
- * hci_process_events - Process incoming HCI events
- * @hdev: HCI device instance
+ * hci_get_discovered_devices - Get list of discovered devices
+ * @devices: Buffer to store device list
+ * @max_devices: Maximum number of devices to return
  * 
- * Processes any pending HCI events from the controller.
- * Should be called periodically or from interrupt handler.
- * 
- * Returns: Number of events processed, negative on error
+ * Returns: Number of discovered devices, negative error on failure
  */
-int hci_process_events(struct hci_device *hdev);
+int hci_get_discovered_devices(struct bluetooth_device *devices, int max_devices);
 
 /**
  * hci_get_device - Get HCI device instance
  * 
- * Returns: Pointer to HCI device instance, NULL if not initialized
+ * Returns: Pointer to HCI device, NULL if not initialized
  */
 struct hci_device *hci_get_device(void);
 
 /**
- * hci_get_discovered_devices - Get array of discovered devices
+ * hci_process_events - Process pending HCI events
  * 
- * Returns: Pointer to discovered devices array
- */
-struct bluetooth_device *hci_get_discovered_devices(void);
-
-/**
- * hci_get_discovered_count - Get number of discovered devices
+ * Should be called periodically to process incoming events.
  * 
- * Returns: Number of discovered devices
+ * Returns: Number of events processed
  */
-int hci_get_discovered_count(void);
+int hci_process_events(void);
 
 /**
  * hci_clear_discovered_devices - Clear discovered devices list
+ * 
+ * Removes all discovered devices from the internal list.
+ * 
+ * Returns: 0 on success, negative error on failure
  */
-void hci_clear_discovered_devices(void);
+int hci_clear_discovered_devices(void);

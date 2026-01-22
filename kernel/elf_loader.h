@@ -23,6 +23,8 @@ int load_elf_program(const char *path, struct process *process);
 /**
  * kexecve - Kernel-level ELF binary loader and executor
  * @path: Path to ELF executable file
+ * @argv: Array of command line arguments (NULL-terminated)
+ * @envp: Array of environment variables (NULL-terminated)
  *
  * Main function to load and execute ELF binaries. Creates a process,
  * loads segments, and schedules for execution. This is the kernel-level
@@ -33,18 +35,18 @@ int load_elf_program(const char *path, struct process *process);
  * 2. Validate ELF header (magic, architecture, type)
  * 3. Create process structure with proper page directory
  * 4. Load ELF segments into memory at virtual addresses
- * 5. Set up entry point, stack, and registers
+ * 5. Set up entry point, stack with argc/argv/envp, and registers
  * 6. Add process to scheduler for execution
  *
- * Returns: 0 on success, -1 on error
+ * Returns: Process PID on success, -1 on error
  */
-int kexecve(const char *path);
+int kexecve(const char *path, char *const argv[], char *const envp[]);
 
 /* Backwards-compatible alias - deprecated, use kexecve() instead */
 static inline int elf_load_and_execute(const char *path) __attribute__((deprecated));
 static inline int elf_load_and_execute(const char *path)
 {
-    return kexecve(path);
+    return kexecve(path, NULL, NULL);
 }
 
 // ===============================================================================

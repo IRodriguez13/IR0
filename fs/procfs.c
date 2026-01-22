@@ -521,7 +521,6 @@ int proc_cpuinfo_read(char *buf, size_t count)
     
     /* Get CPU vendor string */
     char vendor_str[13] = {0};
-    extern int arch_get_cpu_vendor(char *vendor_buf);
     if (arch_get_cpu_vendor(vendor_str) < 0)
     {
         strncpy(vendor_str, "Unknown", sizeof(vendor_str) - 1);
@@ -531,7 +530,6 @@ int proc_cpuinfo_read(char *buf, size_t count)
     uint32_t family = 0;
     uint32_t model = 0;
     uint32_t stepping = 0;
-    extern int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping);
     arch_get_cpu_signature(&family, &model, &stepping);
     
     size_t off = 0;
@@ -1278,16 +1276,30 @@ int proc_open(const char *path, int flags)
     } else if (strcmp(filename, "timer_list") == 0)
     {
         fd = 1018;
-    } else if (strcmp(filename, "bluetooth/devices") == 0)
-    {
-        fd = 1019;
-    } else if (strcmp(filename, "bluetooth/scan") == 0)
-    {
-        fd = 1020;
     } else
     {
-        /* File not found */
-        return -1;
+        /* Check for bluetooth subdirectory */
+        if (strncmp(filename, "bluetooth/", 10) == 0)
+        {
+            const char *bt_file = filename + 10;
+            if (strcmp(bt_file, "devices") == 0)
+            {
+                fd = 1019;
+            }
+            else if (strcmp(bt_file, "scan") == 0)
+            {
+                fd = 1020;
+            }
+            else
+            {
+                return -1;
+            }
+        }
+        else
+        {
+            /* File not found */
+            return -1;
+        }
     }
     
     /* Reset offset when opening */
@@ -1440,10 +1452,7 @@ int proc_write(int fd, const char *buf, size_t count)
     if (count == 0)
         return 0;
     
-    /* Get current process to access fd_table
-     * current_process is declared in kernel/process.h
-     */
-    extern process_t *current_process;
+    /* Get current process to access fd_table */
     if (!current_process)
         return -ESRCH;
     
@@ -1526,7 +1535,6 @@ int proc_write(int fd, const char *buf, size_t count)
         }
         
         /* Process Bluetooth scan commands */
-        extern int bt_proc_scan_write(const char *command);
         int result = bt_proc_scan_write(cmd_buf);
         
         if (result < 0) {

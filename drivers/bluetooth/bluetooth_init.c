@@ -83,16 +83,12 @@ int bluetooth_init(void)
         return ret;
     }
     
-    /* Reset the HCI controller */
-    struct hci_device *hci_dev = hci_get_device();
-    if (hci_dev) {
-        ret = hci_reset(hci_dev);
-        if (ret < 0) {
-            LOG_WARNING("BLUETOOTH", "HCI reset failed, continuing anyway");
-        } else {
-            LOG_INFO("BLUETOOTH", "HCI controller reset successful");
-        }
-    }
+    /* Skip HCI reset during boot to avoid blocking
+     * The clock system may not be fully initialized yet, and we don't want
+     * to wait for hardware that may not exist (like in QEMU).
+     * HCI reset will happen on first open of /dev/bluetooth/hci0
+     */
+    LOG_INFO("BLUETOOTH", "HCI reset deferred until first device open");
     
     bluetooth_initialized = true;
     
@@ -173,7 +169,10 @@ int bluetooth_get_status(char *buffer, size_t size)
     }
     
     /* Device discovery status */
-    int device_count = hci_get_discovered_count();
+    struct bluetooth_device devices[32];
+    int device_count = hci_get_discovered_devices(devices, 32);
+    if (device_count < 0)
+        device_count = 0;
     written = snprintf(buffer + offset, size - offset,
                       "  Discovered Devices: %d\n",
                       device_count);

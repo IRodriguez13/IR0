@@ -159,15 +159,17 @@ int64_t sys_exit(int exit_code)
   if (!current_process)
     return -ESRCH;
 
-  current_process->exit_code = exit_code;
-  current_process->state = PROCESS_ZOMBIE;
+  /* Use process_exit() for complete cleanup:
+   * - Reparents children to init
+   * - Reaps zombie children
+   * - Sends SIGCHLD to parent
+   * - Removes from scheduler
+   * - Switches to another process
+   * This function never returns */
+  process_exit(exit_code);
 
-  /* Call scheduler to switch to another process */
-  rr_schedule_next();
-
-  panicex("Process exited successfully but this should not happen in kernel mode", RUNNING_OUT_PROCESS, __FILE__, __LINE__, __func__);
-
-  /* Should never return here */
+  /* Should never reach here - process_exit() switches context */
+  panicex("sys_exit: process_exit() returned (should not happen)", RUNNING_OUT_PROCESS, __FILE__, __LINE__, __func__);
   return 0;
 }
 
@@ -458,8 +460,8 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
 }
 
 int64_t sys_exec(const char *pathname,
-                 char *const argv[] __attribute__((unused)),
-                 char *const envp[] __attribute__((unused)))
+                 char *const argv[],
+                 char *const envp[])
 {
   serial_print("SERIAL: sys_exec called\n");
 
@@ -474,12 +476,84 @@ int64_t sys_exec(const char *pathname,
     return -EFAULT;
   }
 
-  /* Load and execute ELF binary using kernel-level exec
-   * This replaces the current process image with the new ELF binary.
-   * Currently simple implementation - full ELF support with sections,
-   * dynamic linking, and proper process setup would be added later.
-   */
-  return kexecve(pathname);
+  /* Validate argv and envp if provided */
+  if (argv && !is_user_address(argv, sizeof(char *) * 256))
+  {
+    return -EFAULT;
+  }
+  
+  if (envp && !is_user_address(envp, sizeof(char *) * 256))
+  {
+    return -EFAULT;
+  }
+
+  /* Copy argv and envp from userspace if provided */
+  char *kernel_argv[256] = {NULL};
+  char *kernel_envp[256] = {NULL};
+  
+  if (argv)
+  {
+    /* Copy argv array */
+    char *user_argv[256];
+    if (copy_from_user(user_argv, argv, sizeof(char *) * 256) != 0)
+      return -EFAULT;
+    
+    /* Copy each argv string */
+    for (int i = 0; i < 256 && user_argv[i]; i++)
+    {
+      char *arg_str = (char *)kmalloc(256);
+      if (!arg_str)
+        break;
+      if (copy_from_user(arg_str, user_argv[i], 256) == 0)
+        kernel_argv[i] = arg_str;
+      else
+      {
+        kfree(arg_str);
+        break;
+      }
+    }
+  }
+  
+  if (envp)
+  {
+    /* Copy envp array */
+    char *user_envp[256];
+    if (copy_from_user(user_envp, envp, sizeof(char *) * 256) != 0)
+    {
+      /* Clean up argv on error */
+      for (int i = 0; i < 256 && kernel_argv[i]; i++)
+        kfree(kernel_argv[i]);
+      return -EFAULT;
+    }
+    
+    /* Copy each envp string */
+    for (int i = 0; i < 256 && user_envp[i]; i++)
+    {
+      char *env_str = (char *)kmalloc(256);
+      if (!env_str)
+        break;
+      if (copy_from_user(env_str, user_envp[i], 256) == 0)
+        kernel_envp[i] = env_str;
+      else
+      {
+        kfree(env_str);
+        break;
+      }
+    }
+  }
+
+  /* Load and execute ELF binary using kernel-level exec */
+  int64_t result = kexecve(pathname, 
+                           argv ? (char *const *)kernel_argv : NULL,
+                           envp ? (char *const *)kernel_envp : NULL);
+
+  /* Clean up copied strings */
+  for (int i = 0; i < 256 && kernel_argv[i]; i++)
+    kfree(kernel_argv[i]);
+  for (int i = 0; i < 256 && kernel_envp[i]; i++)
+    kfree(kernel_envp[i]);
+
+  return result;
 }
 
 int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
