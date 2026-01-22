@@ -101,3 +101,5 @@ bool hci_uart_is_data_available(void);
  */
 struct hci_uart *hci_uart_get_instance(void);
 
+
+

@@ -4,32 +4,32 @@ IR0 is a modern monolithic operating system kernel designed for x86-64 architect
 
 ## Recent Major Updates
 
-### 🔥 **Bluetooth Integration Complete**
-- **HCI (Host Controller Interface)** implementation with UART transport
-- **Device discovery and management** with inquiry/scan capabilities  
-- **Event-driven architecture** for real-time Bluetooth communication
-- **Device driver integration** through unified driver registry
-- **User-space interface** via `/dev/bluetooth` with ioctl controls
+### **Bluetooth Experimental (In Progress)**
+- **HCI (Host Controller Interface)** UART transport layer implemented
+- **H4 protocol** support for Bluetooth communication
+- **Phase 1 Complete**: Basic HCI transport over UART (COM1)
+- **Coming Next**: HCI Core commands, device discovery, filesystem integration
+- **Experimental feature**: Requires physical Bluetooth-UART adapter (HC-05, HC-06, or USB-UART dongle)
 
-### 🚀 **Multi-Language Driver System**
+### **Multi-Language Driver System**
 - **Native support** for drivers written in C, C++, and Rust
 - **Unified driver registry** with automatic initialization
 - **Cross-compilation support** for all languages to Windows targets
 - **Runtime integration** with kernel memory management and interrupts
 
-### 🛡️ **Enhanced Security & Validation**
+### **Enhanced Security & Validation**
 - **Comprehensive path validation** preventing traversal attacks
 - **Buffer overflow protection** in network and filesystem code
 - **Secure disk management** with host system protection
 - **Memory safety improvements** in allocator and paging systems
 
-### 📁 **Advanced Virtual File System**
+### **Advanced Virtual File System**
 - **Multiple filesystem support**: MINIX, RAMFS, TMPFS, ProcFS, DevFS, SysFS
 - **Dynamic mount system** with cross-filesystem path resolution
 - **POSIX-compliant operations** with full permission model
 - **Real-time process information** via `/proc` filesystem
 
-### 🌐 **Production-Ready Networking**
+### **Production-Ready Networking**
 - **Complete TCP/IP stack** with Ethernet, ARP, IPv4, ICMP, UDP
 - **Hardware driver support**: RTL8139 and Intel e1000 NICs
 - **Network configuration tools**: ifconfig, ping, netinfo
@@ -485,32 +485,32 @@ IR0 es un kernel de sistema operativo monolítico moderno diseñado para arquite
 
 ## Actualizaciones Principales Recientes
 
-### 🔥 **Integración Bluetooth Completa**
+### **Integración Bluetooth Experimental**
 - **Implementación HCI (Host Controller Interface)** con transporte UART
-- **Descubrimiento y gestión de dispositivos** con capacidades de inquiry/scan
-- **Arquitectura basada en eventos** para comunicación Bluetooth en tiempo real
-- **Integración de controladores** a través del registro unificado de drivers
-- **Interfaz de espacio de usuario** vía `/dev/bluetooth` con controles ioctl
+- **Fase 1 completada**: Capa de transporte HCI básica sobre UART (COM1)
+- **Protocolo H4**: Soporte para framing de paquetes Bluetooth
+- **En desarrollo**: Comandos HCI Core, descubrimiento de dispositivos, integración con filesystem
+- **Característica experimental**: Requiere adaptador Bluetooth-UART físico (HC-05, HC-06, o dongle USB-UART)
 
-### 🚀 **Sistema de Drivers Multilenguaje**
+### **Sistema de Drivers Multilenguaje**
 - **Soporte nativo** para drivers escritos en C, C++ y Rust
 - **Registro unificado de drivers** con inicialización automática
 - **Soporte de cross-compilación** para todos los lenguajes a targets Windows
 - **Integración en tiempo de ejecución** con gestión de memoria del kernel e interrupciones
 
-### 🛡️ **Seguridad y Validación Mejoradas**
+### **Seguridad y Validación Mejoradas**
 - **Validación integral de paths** previniendo ataques de traversal
 - **Protección contra buffer overflow** en código de red y filesystem
 - **Gestión segura de discos** con protección del sistema host
 - **Mejoras de seguridad de memoria** en allocator y sistemas de paginación
 
-### 📁 **Sistema de Archivos Virtual Avanzado**
+### **Sistema de Archivos Virtual Avanzado**
 - **Soporte para múltiples filesystems**: MINIX, RAMFS, TMPFS, ProcFS, DevFS, SysFS
 - **Sistema de montaje dinámico** con resolución de paths cross-filesystem
 - **Operaciones compatibles con POSIX** con modelo completo de permisos
 - **Información de procesos en tiempo real** vía filesystem `/proc`
 
-### 🌐 **Networking Listo para Producción**
+### **Networking Listo para Producción**
 - **Stack TCP/IP completo** con Ethernet, ARP, IPv4, ICMP, UDP
 - **Soporte de drivers de hardware**: NICs RTL8139 e Intel e1000
 - **Herramientas de configuración de red**: ifconfig, ping, netinfo
@@ -987,10 +987,18 @@ O ejecutar directamente:
 - **DMA**: Soporte para controlador DMA de 8 canales
 - **Registro de Controladores**: Sistema unificado de registro de controladores con soporte para C, C++ y Rust
 
-### Redes (En Desarrollo)
-- Manejo de tramas Ethernet
-- Protocolo ARP (Address Resolution Protocol)
-- Base del protocolo IPv4
+### Redes
+- **Stack TCP/IP completo**: Ethernet, ARP, IPv4, ICMP, UDP
+- **Controladores hardware**: RTL8139 e Intel e1000
+- **Herramientas**: ping, ifconfig, netinfo
+- **Soporte TAP**: Networking avanzado para desarrollo
+
+### Bluetooth Experimental
+- **HCI Transport**: Capa de transporte HCI sobre UART (COM1)
+- **Protocolo H4**: Framing de paquetes Bluetooth
+- **Estado**: Fase 1 completada (transporte básico)
+- **Requisitos**: Adaptador Bluetooth-UART (HC-05, HC-06, o USB-UART)
+- **Próximas fases**: HCI Core, descubrimiento de dispositivos, integración con `/dev` y `/proc`
 
 ### Sistema de Interrupciones
 - Configuración completa de IDT
@@ -1038,6 +1046,7 @@ Documentación adicional disponible en el repositorio:
 - Instalación: `setup/docs/INSTALL.md`
 - Configuración: `setup/docs/CONFIGURATION_SYSTEM_README.md`
 - Sistema de Inclusión: `setup/docs/INCLUDE_SYSTEM_GUIDE.md`
+
 
 ## Licencia
 

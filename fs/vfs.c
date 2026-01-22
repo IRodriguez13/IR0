@@ -1135,7 +1135,7 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
   }
 
   /* Read directory contents (reduced buffer size) */
-  vfs_dirent_t entries[32]; // Reduced from 64 to prevent stack overflow
+  struct vfs_dirent_readdir entries[32]; // Reduced from 64 to prevent stack overflow
   int entry_count = vfs_readdir(normalized_path, entries, 32);
 
     if (entry_count < 0)
@@ -1549,25 +1549,9 @@ static struct filesystem_operations minix_fs_ops = {
 /**
  * TMPFS filesystem operations
  * 
- * Implements filesystem_operations interface for TMPFS filesystem.
- * All operations are path-based, decoupling VFS from TMPFS internals.
+ * Note: TMPFS filesystem operations are defined in tmpfs.c
+ * as they need to be exported for registration.
  */
-static struct filesystem_operations tmpfs_fs_ops = {
-    .stat = tmpfs_stat,
-    .mkdir = tmpfs_mkdir,
-    .create_file = tmpfs_create_file,
-    .unlink = tmpfs_unlink,
-    .rmdir = tmpfs_rmdir,
-    .readdir = tmpfs_readdir,
-    .read_file = tmpfs_read_file,
-    .write_file = tmpfs_write_file,
-    .lookup = (struct vfs_inode *(*)(const char *))tmpfs_find_inode,
-    .get_inode_number = tmpfs_get_inode_number,
-    .ls = NULL,  /* TMPFS doesn't have ls, use readdir */
-    .link = NULL,  /* TMPFS doesn't support links yet */
-    .is_available = tmpfs_is_available,
-    .is_working = tmpfs_is_available,
-};
 
 /* Operaciones de archivo para MINIX - Implementadas via syscalls */
 static struct file_operations minix_file_ops = {

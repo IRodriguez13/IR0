@@ -11,11 +11,9 @@
 #include <stdint.h>
 #include <ir0/kmem.h>
 #include <string.h>
-#include <errno.h>
-
-/* Forward declarations for arch functions */
-extern uint8_t inb(uint16_t port);
-extern void outb(uint16_t port, uint8_t value);
+#include <ir0/errno.h>
+#include <arch/common/arch_interface.h>
+#include <arch/common/arch_interface.h>
 
 /* HCI UART instance */
 static struct hci_uart *hci_uart_instance = NULL;
