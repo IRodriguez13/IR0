@@ -176,7 +176,7 @@ void kmain(void)
     log_subsystem_ok("DEBUG_SHELL");
 #else
     serial_print("SERIAL: kmain: Loading userspace init...\n");
-    if (kexecve("/sbin/init") < 0) 
+    if (kexecve("/sbin/init", NULL, NULL) < 0) 
     {
         serial_print("SERIAL: kmain: FAILED to load /sbin/init, falling back to debug shell\n");
         panic("Failed to load /sbin/init");
