@@ -6,6 +6,7 @@
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
 #include <ir0/kmem.h>
+#include <stddef.h>
 
 /* LOG BUFFER CONFIGURATION */
 #define LOG_BUFFER_MAX_ENTRIES 1024  // Maximum number of log entries to store
@@ -507,4 +508,90 @@ void logging_print_buffer(void)
 size_t logging_get_buffer_size(void)
 {
     return log_buffer_count;
+}
+
+/*
+ * uint64_to_dec - Write decimal string of value into buf, null-terminated.
+ * Returns length written (excluding null). Does not write past buf_size-1.
+ */
+static size_t uint64_to_dec(char *buf, size_t buf_size, uint64_t value)
+{
+    char tmp[24];
+    size_t i = 0;
+    if (value == 0)
+    {
+        tmp[i++] = '0';
+    }
+    else
+    {
+        while (value && i < sizeof(tmp) - 1)
+        {
+            tmp[i++] = (char)('0' + (value % 10));
+            value /= 10;
+        }
+    }
+    size_t len = i;
+    if (len >= buf_size)
+        len = buf_size - 1;
+    for (size_t j = 0; j < len; j++)
+        buf[j] = tmp[len - 1 - j];
+    buf[len] = '\0';
+    return len;
+}
+
+/**
+ * logging_read_buffer - Fill buffer with formatted log entries (for /proc/kmsg)
+ * @buf: Output buffer
+ * @size: Size of buf
+ * @return: Number of bytes written, or negative on error
+ *
+ * Same format as logging_print_buffer but written to buf for read() syscall.
+ */
+int logging_read_buffer(char *buf, size_t size)
+{
+    if (!buf || size == 0)
+        return -1;
+    if (!log_buffer)
+    {
+        size_t n = 0;
+        if (size > 1)
+            n = (size_t)snprintf(buf, size, "Log buffer not allocated\n");
+        return (int)n;
+    }
+    if (log_buffer_count == 0)
+    {
+        size_t n = 0;
+        if (size > 1)
+            n = (size_t)snprintf(buf, size, "No log entries (buffer empty)\n");
+        return (int)n;
+    }
+
+    size_t start_idx;
+    size_t count = log_buffer_count;
+
+    if (log_buffer_wrapped)
+        start_idx = log_buffer_head;
+    else
+        start_idx = 0;
+
+    size_t off = 0;
+    for (size_t i = 0; i < count && off < size; i++)
+    {
+        size_t idx = (start_idx + i) % LOG_BUFFER_MAX_ENTRIES;
+        log_entry_t *entry = &log_buffer[idx];
+
+        uint64_t seconds = entry->timestamp_ms / 1000;
+        uint32_t ms = (uint32_t)(entry->timestamp_ms % 1000);
+        char sec_buf[24];
+        uint64_to_dec(sec_buf, sizeof(sec_buf), seconds);
+
+        int n = snprintf(buf + off, off < size ? size - off : 0,
+            "[%s.%03u] [%s] [%s] %s\n",
+            sec_buf, ms, get_level_string(entry->level),
+            entry->component, entry->message);
+        if (n <= 0)
+            break;
+        off += (size_t)n;
+    }
+    return (int)off;
 }

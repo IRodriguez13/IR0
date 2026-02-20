@@ -28,9 +28,16 @@
 #include <ir0/version.h>
 #include <string.h>
 #include <errno.h>
+#include "drivers/bluetooth/bt_sysfs.h"
 
 /* Forward declarations for functions we use */
 extern bool ata_drive_present(uint8_t drive);
+
+/* /sys/class/bluetooth/ - Bluetooth topology (adapter + neighbors + sessions as files) */
+#define SYS_BT_HCI0_ADDRESS    30
+#define SYS_BT_HCI0_STATE      31
+#define SYS_BT_TOPOLOGY_NEIGH  32
+#define SYS_BT_SESSIONS        33
 
 #define SYS_BUFFER_SIZE 4096
 #define SYS_FD_BASE 3000  /* sysfs uses FD range 3000-3999 */
@@ -366,6 +373,22 @@ int sysfs_open(const char *path, int flags)
     {
         fd = SYS_FD_BASE + 20;
     }
+    else if (strcmp(sys_path, "class/bluetooth/hci0/address") == 0)
+    {
+        fd = SYS_FD_BASE + SYS_BT_HCI0_ADDRESS;
+    }
+    else if (strcmp(sys_path, "class/bluetooth/hci0/state") == 0)
+    {
+        fd = SYS_FD_BASE + SYS_BT_HCI0_STATE;
+    }
+    else if (strcmp(sys_path, "class/bluetooth/topology/neighbors") == 0)
+    {
+        fd = SYS_FD_BASE + SYS_BT_TOPOLOGY_NEIGH;
+    }
+    else if (strcmp(sys_path, "class/bluetooth/sessions") == 0)
+    {
+        fd = SYS_FD_BASE + SYS_BT_SESSIONS;
+    }
     else
     {
         return -1;  /* File not found */
@@ -415,6 +438,18 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
             break;
         case 20:
             full_size = sys_devices_block_read(sys_buffer, sizeof(sys_buffer));
+            break;
+        case SYS_BT_HCI0_ADDRESS:
+            full_size = bt_sysfs_hci0_address_read(sys_buffer, sizeof(sys_buffer));
+            break;
+        case SYS_BT_HCI0_STATE:
+            full_size = bt_sysfs_hci0_state_read(sys_buffer, sizeof(sys_buffer));
+            break;
+        case SYS_BT_TOPOLOGY_NEIGH:
+            full_size = bt_sysfs_topology_neighbors_read(sys_buffer, sizeof(sys_buffer));
+            break;
+        case SYS_BT_SESSIONS:
+            full_size = bt_sysfs_sessions_read(sys_buffer, sizeof(sys_buffer));
             break;
         default:
             return -1;
@@ -486,7 +521,11 @@ int sysfs_stat(const char *path, stat_t *st)
         strcmp(sys_path, "devices/system") == 0 ||
         strcmp(sys_path, "devices/system/cpu0") == 0 ||
         strcmp(sys_path, "devices/system/cpu0/online") == 0 ||
-        strcmp(sys_path, "devices/block") == 0)
+        strcmp(sys_path, "devices/block") == 0 ||
+        strcmp(sys_path, "class/bluetooth/hci0/address") == 0 ||
+        strcmp(sys_path, "class/bluetooth/hci0/state") == 0 ||
+        strcmp(sys_path, "class/bluetooth/topology/neighbors") == 0 ||
+        strcmp(sys_path, "class/bluetooth/sessions") == 0)
     {
         memset(st, 0, sizeof(stat_t));
         st->st_mode = S_IFREG | 0644;  /* Regular file, readable by all */

@@ -43,6 +43,9 @@ void typewriter_print_uint32(uint32_t num);
 void typewriter_vga_print(const char *str, uint8_t color);
 void typewriter_vga_print_char(char c, uint8_t color);
 
+/* Console scroll (Page Up/Down); delta > 0 = scroll up (older), delta < 0 = scroll down (newer) */
+void typewriter_console_scroll(int delta);
+
 /* Enable/disable for specific contexts */
 void typewriter_enable_for_commands(int enable);
 int typewriter_is_enabled_for_commands(void);

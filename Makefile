@@ -206,7 +206,9 @@ KERNEL_OBJS = \
     debug_bins/cmd_ping.o \
     debug_bins/cmd_uname.o \
     debug_bins/cmd_lsblk.o \
-    debug_bins/cmd_lsdrv.o
+    debug_bins/cmd_lsdrv.o \
+    debug_bins/cmd_lsblue.o \
+    debug_bins/cmd_blue.o
 
 # Scheduler - Select which scheduler to compile
 # Uncomment the scheduler you want to use and comment out the others
@@ -260,6 +262,7 @@ DRIVER_OBJS = \
 	drivers/bluetooth/hci_uart.o \
 	drivers/bluetooth/hci_core.o \
 	drivers/bluetooth/bt_device.o \
+	drivers/bluetooth/bt_sysfs.o \
 	drivers/bluetooth/bluetooth_init.o \
 	drivers/init_drv.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)

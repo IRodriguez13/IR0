@@ -205,6 +205,14 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     return (int64_t)count;
   }
 
+  /* Handle /proc file descriptors (special positive numbers 1000-1999) */
+  if (fd >= 1000 && fd <= 1999)
+  {
+    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+      return -EFAULT;
+    return proc_write(fd, kernel_buf, copy_size);
+  }
+
   /* Handle /dev file descriptors (special positive numbers 2000-2999) */
   if (fd >= 2000 && fd <= 2999)
   {
@@ -2046,6 +2054,12 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_ioctl((int)arg1, (uint64_t)arg2, (void *)arg3);
   case SYS_GETDENTS:
     return sys_getdents((int)arg1, (void *)arg2, (size_t)arg3);
+  case SYS_CONSOLE_SCROLL:
+  {
+    int delta = (int)arg1;
+    typewriter_console_scroll(delta);
+    return 0;
+  }
   default:
     /* Unknown syscall - return ENOSYS (function not implemented) */
     return -ENOSYS;

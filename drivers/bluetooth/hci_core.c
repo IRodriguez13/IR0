@@ -9,6 +9,7 @@
 #include "hci_core.h"
 #include "hci_uart.h"
 #include <ir0/kmem.h>
+#include <ir0/logging.h>
 #include <string.h>
 #include <ir0/errno.h>
 #include <errno.h>
@@ -246,22 +247,18 @@ int hci_reset(void)
     if (len < 0)
         return len;
     
-    /* Send command */
+    LOG_INFO("BLUETOOTH", "HCI Reset command sent");
     int ret = hci_uart_send_command(cmd_buf, (size_t)len);
     if (ret < 0)
         return ret;
-    
-    /* Wait for command complete with very short timeout
-     * Use very short timeout during boot to avoid blocking if no hardware present
-     * 100ms is enough to detect if hardware responds quickly
-     */
-    ret = hci_wait_for_event(HCI_EVENT_COMMAND_COMPLETE, 100);  /* 100ms timeout - quick fail if no hardware */
+
+    ret = hci_wait_for_event(HCI_EVENT_COMMAND_COMPLETE, 100);
     if (ret < 0)
     {
-        /* Timeout is OK during boot - hardware may not be present */
+        LOG_INFO("BLUETOOTH", "HCI Reset: no reply (timeout or no hardware)");
         return ret;
     }
-    
+    LOG_INFO("BLUETOOTH", "HCI Reset complete");
     return 0;
 }
 
@@ -364,12 +361,10 @@ int hci_inquiry(uint8_t duration, uint8_t num_responses)
     int ret = hci_uart_send_command(cmd_buf, (size_t)len);
     if (ret < 0)
         return ret;
-    
+
     hci_dev->scanning = true;
-    
-    /* Process events asynchronously - scanning will continue */
+    LOG_INFO_FMT("BLUETOOTH", "Inquiry started (duration=%u*1.28s, max_responses=%u)", (unsigned)duration, (unsigned)num_responses);
     hci_process_events();
-    
     return 0;
 }
 
@@ -380,23 +375,25 @@ int hci_inquiry_cancel(void)
 {
     if (!hci_dev)
         return -ENODEV;
-    
+
     if (!hci_dev->scanning)
-        return 0;  /* Not scanning */
-    
+        return 0;
+
     uint8_t cmd_buf[3];
     int len = hci_build_command_packet(HCI_OPCODE_INQUIRY_CANCEL, NULL, 0, cmd_buf, sizeof(cmd_buf));
     if (len < 0)
         return len;
-    
+
     int ret = hci_uart_send_command(cmd_buf, (size_t)len);
     if (ret < 0)
         return ret;
-    
+
     ret = hci_wait_for_event(HCI_EVENT_COMMAND_COMPLETE, 5000);
     if (ret == 0)
+    {
         hci_dev->scanning = false;
-    
+        LOG_INFO("BLUETOOTH", "Inquiry cancelled");
+    }
     return ret;
 }
 
@@ -518,6 +515,7 @@ int hci_process_events(void)
         if (event_code == HCI_EVENT_INQUIRY_COMPLETE)
         {
             hci_dev->scanning = false;
+            LOG_INFO_FMT("BLUETOOTH", "Inquiry complete, %d device(s) found", num_discovered_devices);
         }
         /* Handle inquiry result (already handled in hci_wait_for_event) */
         else if (event_code == HCI_EVENT_INQUIRY_RESULT)

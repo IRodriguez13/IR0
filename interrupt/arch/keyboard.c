@@ -25,6 +25,8 @@ static int wake_requested = 0;
 // Estado de teclas modificadoras
 static int shift_pressed = 0;
 static int ctrl_pressed = 0;
+/* Extended scancode prefix (0xE0); next byte may be Page Up/Down etc. */
+static int ext_scancode = 0;
 
 // Tabla de scancodes básica (solo caracteres imprimibles)
 static const char scancode_to_ascii[] = {
@@ -140,9 +142,42 @@ void keyboard_buffer_clear(void)
 }
 #endif
 
+/*
+ * Escape sequences for shell: ESC + 0x01 = scroll up (Page Up), ESC + 0x02 = scroll down (Page Down).
+ * Shell uses only syscalls; on reading these it calls SYS_CONSOLE_SCROLL.
+ */
+#define KEY_ESC_SCROLL_UP   0x01
+#define KEY_ESC_SCROLL_DOWN 0x02
+
 void keyboard_handler64(void) 
 {
     uint8_t scancode = inb(0x60);
+    
+    if (scancode == 0xE0)
+    {
+        ext_scancode = 1;
+        outb(0x20, 0x20);
+        return;
+    }
+    if (ext_scancode)
+    {
+        ext_scancode = 0;
+        if (scancode < 0x80)
+        {
+            if (scancode == 0x49) /* Page Up */
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_SCROLL_UP);
+            }
+            else if (scancode == 0x51) /* Page Down */
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_SCROLL_DOWN);
+            }
+        }
+        outb(0x20, 0x20);
+        return;
+    }
     
     if (scancode == 0x2A || scancode == 0x36) 
     {
@@ -150,7 +185,6 @@ void keyboard_handler64(void)
     }
     else if (scancode == 0xAA || scancode == 0xB6) 
     {
-        // Left Shift (0xAA) o Right Shift (0xB6) liberado
         shift_pressed = 0;
     }
     else if (scancode < 0x80) 
@@ -162,7 +196,6 @@ void keyboard_handler64(void)
         }
     }
     
-    // Send EOI to PIC
     outb(0x20, 0x20);
 }
 
