@@ -30,7 +30,7 @@
 #include <ir0/validation.h>
 #include <mm/paging.h>
 #include "drivers/bluetooth/bt_device.h"
-
+#include <ir0/logging.h>
 
 #define PROC_BUFFER_SIZE           4096    /* Standard proc buffer size */
 #define PROC_FD_MAP_SIZE           1000    /* Max file descriptors tracked */
@@ -494,44 +494,86 @@ int proc_version_read(char *buf, size_t count)
     return len;
 }
 
-/* Generate /proc/cpuinfo content */
+/*
+ * Build "flags" line from CPUID.1 EDX/ECX (silicon feature bits).
+ * Each (bit, name) is appended when the bit is set.
+ */
+static void proc_cpuinfo_flags_from_cpuid(uint32_t edx, uint32_t ecx, char *out, size_t out_size)
+{
+    static const struct { uint32_t bit; const char *name; } edx_flags[] = {
+        { 0, "fpu" }, { 1, "vme" }, { 2, "de" }, { 3, "pse" }, { 4, "tsc" },
+        { 5, "msr" }, { 6, "pae" }, { 7, "mce" }, { 8, "cx8" }, { 9, "apic" },
+        { 10, "sep" }, { 11, "mtrr" }, { 12, "pge" }, { 13, "mca" }, { 15, "cmov" },
+        { 16, "pat" }, { 17, "pse36" }, { 19, "clflush" }, { 23, "mmx" },
+        { 24, "fxsr" }, { 25, "sse" }, { 26, "sse2" }, { 28, "htt" }, { 29, "tm" },
+        { 31, "pbe" }
+    };
+    static const struct { uint32_t bit; const char *name; } ecx_flags[] = {
+        { 0, "sse3" }, { 1, "pclmulqdq" }, { 9, "ssse3" }, { 12, "fma" },
+        { 13, "cx16" }, { 19, "sse4_1" }, { 20, "sse4_2" }, { 21, "x2apic" },
+        { 22, "movbe" }, { 23, "popcnt" }, { 25, "aes" }, { 26, "xsave" },
+        { 28, "avx" }, { 29, "f16c" }, { 30, "rdrand" }, { 31, "hypervisor" }
+    };
+    size_t len = 0;
+    out[0] = '\0';
+    for (size_t i = 0; i < sizeof(edx_flags)/sizeof(edx_flags[0]) && len < out_size - 8; i++)
+    {
+        if (edx & (1U << edx_flags[i].bit))
+        {
+            if (len > 0) { out[len++] = ' '; out[len] = '\0'; }
+            len += (size_t)snprintf(out + len, out_size - len, "%s", edx_flags[i].name);
+        }
+    }
+    for (size_t i = 0; i < sizeof(ecx_flags)/sizeof(ecx_flags[0]) && len < out_size - 8; i++)
+    {
+        if (ecx & (1U << ecx_flags[i].bit))
+        {
+            if (len > 0) { out[len++] = ' '; out[len] = '\0'; }
+            len += (size_t)snprintf(out + len, out_size - len, "%s", ecx_flags[i].name);
+        }
+    }
+}
+
+/* Generate /proc/cpuinfo content - all fields from silicon (CPUID) where available */
 int proc_cpuinfo_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
-    /* Initialize buffer to zero */
+
     memset(buf, 0, count);
-    
+
     uint32_t cpu_id = arch_get_cpu_id();
     uint32_t cpu_count = arch_get_cpu_count();
-    const char *arch_name = arch_get_name();
-    
-    /* Get architecture bits */
-    uint32_t arch_bits = 64;
-#ifdef __x86_64__
-    arch_bits = 64;
-#elif defined(__i386__)
-    arch_bits = 32;
-#elif defined(__aarch64__)
-    arch_bits = 64;
-#elif defined(__arm__)
-    arch_bits = 32;
-#endif
-    
-    /* Get CPU vendor string */
+
     char vendor_str[13] = {0};
     if (arch_get_cpu_vendor(vendor_str) < 0)
-    {
         strncpy(vendor_str, "Unknown", sizeof(vendor_str) - 1);
-    }
-    
-    /* Get CPU family, model, stepping */
-    uint32_t family = 0;
-    uint32_t model = 0;
-    uint32_t stepping = 0;
+
+    uint32_t family = 0, model = 0, stepping = 0;
     arch_get_cpu_signature(&family, &model, &stepping);
-    
+
+    char model_name[49] = {0};
+    if (arch_get_cpu_brand_string(model_name, sizeof(model_name)) < 0)
+        strncpy(model_name, arch_get_name() ? arch_get_name() : "Unknown", sizeof(model_name) - 1);
+
+    uint32_t max_leaf = 0;
+    arch_get_cpuid_max_leaf(&max_leaf);
+
+    uint32_t feat_edx = 0, feat_ecx = 0;
+    arch_get_cpu_feature_bits(&feat_edx, &feat_ecx);
+
+    char flags_buf[512];
+    proc_cpuinfo_flags_from_cpuid(feat_edx, feat_ecx, flags_buf, sizeof(flags_buf));
+
+    uint32_t clflush_sz = arch_get_cpu_clflush_size();
+    if (clflush_sz == 0)
+        clflush_sz = 64;
+
+    uint32_t arch_bits = 64;
+#if defined(__i386__)
+    arch_bits = 32;
+#endif
+
     size_t off = 0;
     int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
         "processor: %u\n"
@@ -539,22 +581,7 @@ int proc_cpuinfo_read(char *buf, size_t count)
         "cpu family: %u\n"
         "model: %u\n"
         "model name: %s\n"
-        "stepping: %u\n",
-        cpu_id,
-        vendor_str,
-        family,
-        model,
-        arch_name ? arch_name : "x86-64",
-        stepping);
-    
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-    
-    /* Add additional info */
-    n = snprintf(buf + off, count - off,
+        "stepping: %u\n"
         "cpu MHz: Unknown\n"
         "cache size: Unknown\n"
         "physical id: 0\n"
@@ -565,26 +592,36 @@ int proc_cpuinfo_read(char *buf, size_t count)
         "initial apicid: %u\n"
         "fpu: yes\n"
         "fpu_exception: yes\n"
-        "cpuid level: 1\n"
+        "cpuid level: %u\n"
         "wp: yes\n"
-        "flags: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2\n"
+        "flags: %s\n"
         "bogomips: Unknown\n"
-        "clflush size: 64\n"
-        "cache_alignment: 64\n"
+        "clflush size: %u\n"
+        "cache_alignment: %u\n"
         "address sizes: %ubits physical, %ubits virtual\n",
+        cpu_id,
+        vendor_str,
+        family,
+        model,
+        model_name,
+        stepping,
         cpu_count,
         cpu_id,
         cpu_id,
+        max_leaf,
+        flags_buf,
+        clflush_sz,
+        clflush_sz,
         arch_bits,
         arch_bits);
-    
-    if (n > 0 && n < (int)(count - off))
-        off += (size_t)n;
-    
-    /* Ensure null termination */
+
+    if (n < 0)
+        return -1;
+    if ((size_t)n >= count)
+        n = (int)count - 1;
+    off = (size_t)n;
     if (off < count)
         buf[off] = '\0';
-    
     return (int)off;
 }
 
@@ -1276,6 +1313,9 @@ int proc_open(const char *path, int flags)
     } else if (strcmp(filename, "timer_list") == 0)
     {
         fd = 1018;
+    } else if (strcmp(filename, "kmsg") == 0)
+    {
+        fd = 1021;
     } else
     {
         /* Check for bluetooth subdirectory */
@@ -1392,6 +1432,25 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
             /* /proc/bluetooth/scan */
             full_size = bt_proc_scan_read(proc_buffer, sizeof(proc_buffer));
             break;
+        case 1021:
+            /*
+             * /proc/kmsg - kernel log buffer. Dump only to serial, not to VGA.
+             * read() returns 0 bytes so dmesg/cat produce no console output.
+             */
+            full_size = logging_read_buffer(proc_buffer, sizeof(proc_buffer));
+            if (full_size > 0 && offset == 0)
+            {
+                serial_print("\n--- dmesg/kmsg dump ---\n");
+                for (int i = 0; i < full_size; i++)
+                {
+                    if (proc_buffer[i] == '\n')
+                        serial_putchar('\r');
+                    serial_putchar(proc_buffer[i]);
+                }
+                serial_print("--- end dmesg/kmsg ---\n");
+            }
+            full_size = 0;
+            break;
         default:
             return -1;
     }
@@ -1440,6 +1499,7 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
  *
  * Currently supported writable entries:
  * - /proc/sys/ entries (basic support)
+ * - /proc/bluetooth/scan (Bluetooth scan control)
  *
  * Returns: Number of bytes written on success, negative error code on failure
  */
@@ -1447,105 +1507,108 @@ int proc_write(int fd, const char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
-    /* Basic validation: ensure buffer is null-terminated or has valid data */
+
     if (count == 0)
         return 0;
-    
-    /* Get current process to access fd_table */
-    if (!current_process)
-        return -ESRCH;
-    
-    /* Validate fd range */
-    if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+
+    if (fd < 1000)
         return -EBADF;
-    
-    /* Get path from file descriptor table */
-    const char *path = NULL;
-    if (current_process->fd_table[fd].in_use)
+
+    switch (fd)
     {
-        path = current_process->fd_table[fd].path;
+        case 1020:
+            /* /proc/bluetooth/scan - Bluetooth scan control */
+            {
+                char cmd_buf[64];
+                size_t copy_len = (count < sizeof(cmd_buf) - 1) ? count : (sizeof(cmd_buf) - 1);
+                memcpy(cmd_buf, buf, copy_len);
+                cmd_buf[copy_len] = '\0';
+
+                while (copy_len > 0 && (cmd_buf[copy_len - 1] == '\n' ||
+                                        cmd_buf[copy_len - 1] == '\r' ||
+                                        cmd_buf[copy_len - 1] == ' '))
+                {
+                    copy_len--;
+                    cmd_buf[copy_len] = '\0';
+                }
+
+                int result = bt_proc_scan_write(cmd_buf);
+                if (result < 0)
+                    return result;
+                return (int)count;
+            }
+        
+        default:
+            /* Try to handle /proc/sys/ entries by checking path from fd_table */
+            {
+                /* Get current process to access fd_table */
+                if (!current_process)
+                    return -ESRCH;
+                
+                /* Validate fd range */
+                if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+                    return -EBADF;
+                
+                /* Get path from file descriptor table */
+                const char *path = NULL;
+                if (current_process->fd_table[fd].in_use)
+                {
+                    path = current_process->fd_table[fd].path;
+                }
+                
+                /* If no path available, entry is read-only */
+                if (!path || strncmp(path, "/proc/", 6) != 0)
+                {
+                    return -EACCES; /* Not a /proc entry or invalid fd */
+                }
+                
+                /* Parse path to determine which entry is being written */
+                path += 6; /* Skip "/proc/" prefix */
+                
+                /* Handle /proc/sys/ entries - system configuration */
+                if (strncmp(path, "sys/", 4) == 0)
+                {
+                    /* Basic support for /proc/sys/ writes
+                     * This is a simplified implementation - full support would
+                     * require parsing the full path and routing to appropriate handlers
+                     */
+                    path += 4; /* Skip "sys/" prefix */
+                    
+                    /* For now, just acknowledge the write attempt
+                     * Future enhancement: Parse full path and update kernel parameters
+                     * Example: /proc/sys/kernel/panic_on_oops -> update panic handler
+                     * Example: /proc/sys/vm/swappiness -> update memory management
+                     */
+                    
+                    /* Truncate buffer to ensure null termination for parsing */
+                    char value_buf[256];
+                    size_t copy_len = (count < sizeof(value_buf) - 1) ? count : (sizeof(value_buf) - 1);
+                    memcpy(value_buf, buf, copy_len);
+                    value_buf[copy_len] = '\0';
+                    
+                    /* Remove trailing whitespace/newlines */
+                    while (copy_len > 0 && (value_buf[copy_len - 1] == '\n' || 
+                                            value_buf[copy_len - 1] == '\r' ||
+                                            value_buf[copy_len - 1] == ' '))
+                    {
+                        copy_len--;
+                        value_buf[copy_len] = '\0';
+                    }
+                    
+                    /* Basic implementation: just log the write attempt
+                     * Full implementation would parse path and apply changes
+                     */
+                    (void)path; /* Path available for future parsing */
+                    (void)value_buf; /* Value available for future processing */
+                    
+                    /* Return number of bytes "written" (acknowledged) */
+                    return (int)count;
+                }
+                
+                /* All other /proc entries are read-only */
+                return -EACCES; /* Permission denied - entry is read-only */
+            }
     }
-    
-    /* If no path available, check if this is a /proc fd */
-    if (!path || strncmp(path, "/proc/", 6) != 0)
-    {
-        return -EACCES; /* Not a /proc entry or invalid fd */
-    }
-    
-    /* Parse path to determine which entry is being written */
-    path += 6; /* Skip "/proc/" prefix */
-    
-    /* Handle /proc/sys/ entries - system configuration */
-    if (strncmp(path, "sys/", 4) == 0)
-    {
-        /* Basic support for /proc/sys/ writes
-         * This is a simplified implementation - full support would
-         * require parsing the full path and routing to appropriate handlers
-         */
-        path += 4; /* Skip "sys/" prefix */
-        
-        /* For now, just acknowledge the write attempt
-         * Future enhancement: Parse full path and update kernel parameters
-         * Example: /proc/sys/kernel/panic_on_oops -> update panic handler
-         * Example: /proc/sys/vm/swappiness -> update memory management
-         */
-        
-        /* Truncate buffer to ensure null termination for parsing */
-        char value_buf[256];
-        size_t copy_len = (count < sizeof(value_buf) - 1) ? count : (sizeof(value_buf) - 1);
-        memcpy(value_buf, buf, copy_len);
-        value_buf[copy_len] = '\0';
-        
-        /* Remove trailing whitespace/newlines */
-        while (copy_len > 0 && (value_buf[copy_len - 1] == '\n' || 
-                                value_buf[copy_len - 1] == '\r' ||
-                                value_buf[copy_len - 1] == ' '))
-        {
-            copy_len--;
-            value_buf[copy_len] = '\0';
-        }
-        
-        /* Basic implementation: just log the write attempt
-         * Full implementation would parse path and apply changes
-         */
-        (void)path; /* Path available for future parsing */
-        (void)value_buf; /* Value available for future processing */
-        
-        /* Return number of bytes "written" (acknowledged) */
-        return (int)count;
-    }
-    
-    /* Handle /proc/bluetooth/scan - Bluetooth scan control */
-    if (strcmp(path, "bluetooth/scan") == 0)
-    {
-        /* Parse command from buffer */
-        char cmd_buf[64];
-        size_t copy_len = (count < sizeof(cmd_buf) - 1) ? count : (sizeof(cmd_buf) - 1);
-        memcpy(cmd_buf, buf, copy_len);
-        cmd_buf[copy_len] = '\0';
-        
-        /* Remove trailing whitespace/newlines */
-        while (copy_len > 0 && (cmd_buf[copy_len - 1] == '\n' || 
-                                cmd_buf[copy_len - 1] == '\r' ||
-                                cmd_buf[copy_len - 1] == ' '))
-        {
-            copy_len--;
-            cmd_buf[copy_len] = '\0';
-        }
-        
-        /* Process Bluetooth scan commands */
-        int result = bt_proc_scan_write(cmd_buf);
-        
-        if (result < 0) {
-            return result; /* Error from Bluetooth subsystem */
-        }
-        
-        return (int)count; /* Success */
-    }
-    
-    /* All other /proc entries are read-only */
-    return -EACCES; /* Permission denied - entry is read-only */
 }
 
 /* Get stat for /proc file */

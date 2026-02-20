@@ -149,6 +149,28 @@ int arch_get_cpu_vendor(char *vendor_buf);
 int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping);
 
 /**
+ * Get CPUID maximum leaf (EAX from CPUID.0)
+ */
+int arch_get_cpuid_max_leaf(uint32_t *max_leaf);
+
+/**
+ * Get CPU brand string from silicon (CPUID 0x80000002-0x80000004)
+ * @buf: Buffer, at least 49 bytes
+ * @size: Buffer size
+ */
+int arch_get_cpu_brand_string(char *buf, size_t size);
+
+/**
+ * Get CPU feature bits from CPUID.1 (EDX, ECX)
+ */
+int arch_get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx);
+
+/**
+ * Get CLFLUSH line size in bytes (from CPUID.1)
+ */
+uint32_t arch_get_cpu_clflush_size(void);
+
+/**
  * Switch to user mode (if supported)
  */
 void arch_switch_to_user(arch_addr_t entry, arch_addr_t stack);

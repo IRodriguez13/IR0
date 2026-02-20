@@ -13,8 +13,8 @@ static int cmd_dmesg_handler(int argc, char **argv)
     (void)argc;
     (void)argv;
     
-    /* dmesg is just cat /dev/kmsg */
-    char *cat_argv[] = {"cat", "/dev/kmsg", NULL};
+    /* dmesg is cat /proc/kmsg (kernel log buffer, includes boot logs) */
+    char *cat_argv[] = {"cat", "/proc/kmsg", NULL};
     extern struct debug_command cmd_cat;
     return cmd_cat.handler(2, cat_argv);
 }

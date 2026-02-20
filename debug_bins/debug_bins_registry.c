@@ -33,6 +33,8 @@ extern struct debug_command cmd_ping;
 extern struct debug_command cmd_uname;
 extern struct debug_command cmd_lsblk;
 extern struct debug_command cmd_lsdrv;
+extern struct debug_command cmd_lsblue;
+extern struct debug_command cmd_blue;
 extern struct debug_command cmd_mkswap;
 extern struct debug_command cmd_swapon;
 extern struct debug_command cmd_swapoff;
@@ -63,6 +65,8 @@ struct debug_command *debug_commands[] = {
     &cmd_uname,
     &cmd_lsblk,
     &cmd_lsdrv,
+    &cmd_lsblue,
+    &cmd_blue,
     NULL  /* Terminador */
 };
 

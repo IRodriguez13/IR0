@@ -1,6 +1,7 @@
 #include "arch_interface.h"
 #include <arch/common/arch_portable.h>
 #include <ir0/oops.h>
+#include <stddef.h>
 #include <string.h>
 
 // Detect MinGW-w64 cross-compilation
@@ -274,6 +275,101 @@ int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping
     if (model) *model = 0;
     if (stepping) *stepping = 0;
     return -1;
+}
+
+/**
+ * Get CPUID maximum leaf (EAX from CPUID.0)
+ * @max_leaf: Output for maximum supported leaf
+ * Returns: 0 on success, -1 on failure
+ */
+int arch_get_cpuid_max_leaf(uint32_t *max_leaf)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint32_t eax, ebx, ecx, edx;
+    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    if (max_leaf)
+        *max_leaf = eax;
+    return 0;
+#else
+    if (max_leaf)
+        *max_leaf = 0;
+    return -1;
+#endif
+}
+
+/**
+ * Get CPU brand string from CPUID (leaves 0x80000002-0x80000004)
+ * @buf: Output buffer (at least 49 bytes recommended)
+ * @size: Buffer size
+ * Returns: 0 on success, -1 if not supported or failure
+ */
+int arch_get_cpu_brand_string(char *buf, size_t size)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    if (!buf || size < 49)
+        return -1;
+    uint32_t eax, ebx, ecx, edx;
+    cpuid(0x80000000U, 0, &eax, &ebx, &ecx, &edx);
+    if (eax < 0x80000004U)
+        return -1;
+    uint32_t *u = (uint32_t *)buf;
+    cpuid(0x80000002U, 0, &u[0], &u[1], &u[2], &u[3]);
+    cpuid(0x80000003U, 0, &u[4], &u[5], &u[6], &u[7]);
+    cpuid(0x80000004U, 0, &u[8], &u[9], &u[10], &u[11]);
+    buf[48] = '\0';
+    /* Trim trailing spaces */
+    for (int i = 47; i >= 0 && (buf[i] == ' ' || buf[i] == '\0'); i--)
+        buf[i] = '\0';
+    return 0;
+#else
+    (void)buf;
+    (void)size;
+    return -1;
+#endif
+}
+
+/**
+ * Get CPU feature bits from CPUID.1 (EDX and ECX)
+ * @out_edx: Output for EDX feature flags (NULL allowed)
+ * @out_ecx: Output for ECX feature flags (NULL allowed)
+ * Returns: 0 on success, -1 on failure
+ */
+int arch_get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint32_t eax, ebx, ecx, edx;
+    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    if (eax < 1)
+        return -1;
+    cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    if (out_edx)
+        *out_edx = edx;
+    if (out_ecx)
+        *out_ecx = ecx;
+    return 0;
+#else
+    if (out_edx) *out_edx = 0;
+    if (out_ecx) *out_ecx = 0;
+    return -1;
+#endif
+}
+
+/**
+ * Get CLFLUSH line size from CPUID.1 EBX bits 15:8 (units: 8 bytes)
+ * Returns: size in bytes, or 0 if not reported
+ */
+uint32_t arch_get_cpu_clflush_size(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint32_t eax, ebx, ecx, edx;
+    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    if (eax < 1)
+        return 0;
+    cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    return ((ebx >> 8) & 0xFF) * 8;
+#else
+    return 0;
+#endif
 }
 
 void outb(uint16_t port, uint8_t value)

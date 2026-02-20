@@ -46,6 +46,7 @@ log_level_t logging_get_level(void);
 /* LOG BUFFER ACCESS (FOR DMESG/JOURNALCTL-LIKE FUNCTIONALITY) */ 
 void logging_print_buffer(void);  /* Print all logs in buffer */
 size_t logging_get_buffer_size(void);  /* Get number of log entries in buffer */
+int logging_read_buffer(char *buf, size_t size);  /* Fill buf with formatted log (for /proc/kmsg read) */
 
 /* LOGGING MACROS */ 
 

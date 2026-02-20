@@ -64,6 +64,7 @@ typedef enum {
     SYS_SIGRETURN = 30, /* Return from signal handler - POSIX */
     SYS_IOCTL = 31,     /* Device I/O control - POSIX */
     SYS_GETDENTS = 32,  /* Get directory entries - Linux/POSIX */
+    SYS_CONSOLE_SCROLL = 33,  /* Console scrollback (Page Up/Down); arg1 = delta lines */
 } syscall_num_t;
 
 /* Virtual filesystem paths for file operations */
@@ -377,10 +378,10 @@ static inline int64_t ir0_mouse_test(void *buf, size_t size)
     return result;
 }
 
-/* Kernel messages via /dev filesystem */
+/* Kernel log buffer (boot logs, dmesg) via /proc */
 static inline int64_t ir0_dmesg(void)
 {
-    return ir0_open("/dev/kmsg", O_RDONLY, 0);
+    return ir0_open("/proc/kmsg", O_RDONLY, 0);
 }
 
 /* Network operations via /dev filesystem */

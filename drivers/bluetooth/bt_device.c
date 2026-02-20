@@ -10,6 +10,7 @@
 #include "hci_core.h"
 #include "hci_uart.h"
 #include <ir0/kmem.h>
+#include <ir0/logging.h>
 #include <string.h>
 #include <ir0/errno.h>
 #include <drivers/timer/clock_system.h>
@@ -425,24 +426,31 @@ int bt_proc_scan_write(const char *command)
     if (strncmp(command, "start", 5) == 0)
     {
         if (bt_manager->scan_active)
+        {
+            LOG_INFO("BLUETOOTH", "Scan already active");
             return -EBUSY;
-        
+        }
         int ret = hci_inquiry(8, 0);
         if (ret == 0)
         {
             bt_manager->scan_active = 1;
             bt_manager->scan_start_time = bt_get_uptime_ms();
+            LOG_INFO("BLUETOOTH", "Scan started (inquiry 8*1.28s, max responses unlimited)");
         }
+        else
+            LOG_ERROR("BLUETOOTH", "Scan start failed");
         return ret;
     }
     else if (strncmp(command, "stop", 4) == 0)
     {
         if (!bt_manager->scan_active)
             return 0;
-        
         int ret = hci_inquiry_cancel();
         if (ret == 0)
+        {
             bt_manager->scan_active = 0;
+            LOG_INFO("BLUETOOTH", "Scan stopped");
+        }
         return ret;
     }
     
