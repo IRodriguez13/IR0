@@ -239,28 +239,36 @@ void shell_entry(void)
         {
             char c;
             int64_t n = syscall(SYS_READ, 0, (uint64_t)&c, 1);
-            
             if (n <= 0)
                 continue;
-            
+            /* Scroll keys: ESC + 0x01 = Page Up, ESC + 0x02 = Page Down (syscall only) */
+            if (c == 0x1B)
+            {
+                n = syscall(SYS_READ, 0, (uint64_t)&c, 1);
+                if (n > 0 && c == 0x01)
+                    syscall(SYS_CONSOLE_SCROLL, 1, 0, 0);
+                else if (n > 0 && c == 0x02)
+                    syscall(SYS_CONSOLE_SCROLL, -1, 0, 0);
+                continue;
+            }
             if (c == '\n')
             {
-                vga_putchar('\n', 0x0F);  /* Echo to VGA */
+                vga_putchar('\n', 0x0F);
                 input[input_pos] = '\0';
                 break;
             }
-            else if (c == '\b' || c == 127)  /* Backspace */
+            else if (c == '\b' || c == 127)
             {
                 if (input_pos > 0)
                 {
                     input_pos--;
-                    vga_putchar('\b', 0x0F);  /* Echo to VGA */
+                    vga_putchar('\b', 0x0F);
                 }
             }
-            else if (c >= 32 && c < 127 && input_pos < 255)  /* Printable ASCII */
+            else if (c >= 32 && c < 127 && input_pos < 255)
             {
                 input[input_pos++] = c;
-                vga_putchar(c, 0x0F);  /* Echo to VGA */
+                vga_putchar(c, 0x0F);
             }
         }
         

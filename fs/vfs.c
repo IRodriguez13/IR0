@@ -782,57 +782,30 @@ int vfs_read(struct vfs_file *file, char *buf, size_t count)
 
 int vfs_write(struct vfs_file *file, const char *buf, size_t count)
 {
-    /* Validate inputs */
     if (!file)
         return -EBADF;
-    
     if (!buf)
         return -EFAULT;
-    
     if (count == 0)
         return 0;
-    
-    /* Check if file was opened for writing */
+
     int accmode = file->f_flags & O_ACCMODE;
     if (accmode == O_RDONLY)
         return -EBADF;
-    
-    /* Check write permission */
+
     if (!current_process)
         return -ESRCH;
-    
-    /* Validate write permissions:
-     * 1. File must have been opened with write flags (O_WRONLY or O_RDWR)
-     * 2. Inode must allow write access
-     * 3. Process must have write permission
-     */
-    
-    /* Check if file was opened with write flags */
+
     if (!(file->f_flags & (O_WRONLY | O_RDWR)))
-    {
-        return -EBADF; /* File not opened for writing */
-    }
-    
-    /* Check inode permissions - at minimum, inode should exist */
+        return -EBADF;
+
     if (!file->f_inode)
-    {
         return -EINVAL;
-    }
-    
-    /* Note: Full permission checking would require:
-     * - Storing file path in vfs_file structure
-     * - Checking file system permissions (mode bits)
-     * - Checking process UID/GID against file UID/GID
-     * For now, we validate basic flags and inode existence
-     */
-    
-    /* Call filesystem-specific write */
-    if (file->f_inode->i_fop && file->f_inode->i_fop->write)
-    {
-        return file->f_inode->i_fop->write(file, buf, count);
-    }
-    
-    return -ENOSYS;
+
+    if (!file->f_inode->i_fop || !file->f_inode->i_fop->write)
+        return -ENOSYS;
+
+    return file->f_inode->i_fop->write(file, buf, count);
 }
 
 int vfs_append(const char *path, const char *buf, size_t count)

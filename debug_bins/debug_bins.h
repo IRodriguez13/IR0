@@ -5,6 +5,12 @@
  *
  * Header común para comandos de debug shell.
  * Cada comando es un módulo independiente que solo usa syscalls.
+ *
+ * Regla de uso: los handlers deben comportarse como userspace.
+ * - I/O solo vía syscalls (SYS_OPEN, SYS_READ, SYS_WRITE, SYS_CLOSE).
+ * - No llamar a funciones internas del kernel (p.ej. bt_sysfs_*, hci_*);
+ *   si el binario se ejecutara en ring 3 daría GPF.
+ * - Leer/escribir solo a través de /proc, /sys, /dev con open/read/write/close.
  */
 
 #ifndef _DEBUG_BINS_H
