@@ -10,7 +10,8 @@
 
 #include <ir0/types.h>
 #include <stddef.h>
-#include <kernel/process.h> 
+#include <kernel/process.h>
+#include <ir0/poll.h>
 
 /* Forward declarations */
 struct stat;
@@ -54,8 +55,11 @@ int64_t sys_getcwd(char *buf, size_t size);
 int64_t sys_unlink(const char *pathname);
 int64_t sys_link(const char *oldpath, const char *newpath);
 int64_t sys_chmod(const char *path, mode_t mode);
+int64_t sys_chown(const char *path, uid_t owner, gid_t group);
 int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype);
 int64_t sys_getdents(int fd, void *dirent, size_t count);
+int64_t sys_poll(struct pollfd *fds, unsigned int nfds, int timeout_ms);
+int64_t sys_pipe(int pipefd[2]);
 
 /* Memory management */
 int64_t sys_brk(void *addr);
@@ -67,3 +71,6 @@ int sys_mprotect(void *addr, size_t len, int prot);
 void syscalls_init(void);
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 			 uint64_t arg3, uint64_t arg4, uint64_t arg5);
+
+/* Poll: desbloquea procesos que esperan en poll() cuando hay datos o timeout */
+void poll_wake_check(void);

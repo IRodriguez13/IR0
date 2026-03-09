@@ -16,15 +16,9 @@
 #include <ir0/logging.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <drivers/IO/ps2_mouse.h>
-#include <drivers/IO/pc_speaker.h>
-#include <drivers/audio/sound_blaster.h>
-#include <drivers/audio/adlib.h>
 #include <drivers/serial/serial.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
-#include <ir0/net.h>
-#include <drivers/storage/ata.h>
 #include <init.h>
 #include <arch/common/arch_portable.h>
 #include <arch/x86-64/sources/user_mode.h>
@@ -32,72 +26,15 @@
 #include <config.h>
 #include <kernel/elf_loader.h>
 #include <drivers/timer/clock_system.h>
-#include <interrupt/arch/pic.h>
 #include <drivers/init_drv.h>
+#include <drivers/storage/block_dev.h>
 #include "ipc.h"
+#include "syscalls.h"
 
 /* Include kernel header with all function declarations */
 #include "kernel.h"
 
-/**
- * init_all_drivers - Initialize all hardware drivers
- * 
- * This function initializes all hardware drivers in the correct order
- * and logs the initialization process via serial output.
- */
-static void init_all_drivers(void)
-{
-    serial_print("[DRIVERS] Initializing all hardware drivers...\n");
-    
-    /* Initialize PS/2 controller and keyboard */
-    serial_print("[DRIVERS] Initializing PS/2 controller and keyboard...\n");
-    ps2_init();
-    keyboard_init();
-    /* Enable keyboard IRQ */
-    pic_unmask_irq(1);
-    log_subsystem_ok("PS2_KEYBOARD");
-    serial_print("[DRIVERS] PS/2 keyboard initialized\n");
-    
-    /* Initialize PS/2 mouse */
-    serial_print("[DRIVERS] Initializing PS/2 mouse...\n");
-    ps2_mouse_init();
-    log_subsystem_ok("PS2_MOUSE");
-    serial_print("[DRIVERS] PS/2 mouse initialized\n");
-    
-    /* Initialize PC Speaker */
-    serial_print("[DRIVERS] Initializing PC Speaker...\n");
-    pc_speaker_init();
-    log_subsystem_ok("PC_SPEAKER");
-    serial_print("[DRIVERS] PC Speaker initialized\n");
-    
-    /* Initialize audio drivers */
-    serial_print("[DRIVERS] Initializing audio drivers...\n");
-    sb16_init();
-    log_subsystem_ok("AUDIO_SB16");
-    serial_print("[DRIVERS] Sound Blaster 16 initialized\n");
-    
-    adlib_init();
-    log_subsystem_ok("AUDIO_ADLIB");
-    serial_print("[DRIVERS] Adlib OPL2 initialized\n");
-    
-    /* Initialize storage */
-    serial_print("[DRIVERS] Initializing storage drivers...\n");
-    ata_init();
-    log_subsystem_ok("STORAGE");
-    serial_print("[DRIVERS] ATA/IDE storage initialized\n");
-    
-    /* Initialize network stack (drivers + protocols) */
-    serial_print("[DRIVERS] Initializing network stack...\n");
-    init_net_stack();
-    /* Enable RTL8139 IRQ */
-    pic_unmask_irq(11);
-    log_subsystem_ok("NETWORK_STACK");
-    serial_print("[DRIVERS] Network stack initialized\n");
-    
-    serial_print("[DRIVERS] All drivers initialized successfully\n");
-}
-
-void kmain(void)
+void kmain(uint32_t multiboot_info)
 {
     /* Initialize architecture-specific early features (GDT, TSS, etc.) */
     arch_early_init();
@@ -107,6 +44,14 @@ void kmain(void)
 
     /* Initialize core subsystems first (need heap for registration) */
     heap_init();
+
+    /* VBE framebuffer from Multiboot (OSDev). Requires gfxpayload in grub.cfg. */
+    {
+        extern int vbe_init_from_multiboot(uint32_t);
+        extern int vbe_init(void);
+        if (vbe_init_from_multiboot(multiboot_info) != 0)
+            vbe_init();  /* Fallback: VGA text mode for /dev/fb0 */
+    }
     
     /* Initialize driver subsystem (includes driver registry and multi-language drivers) */
     drivers_init();
@@ -126,15 +71,15 @@ void kmain(void)
     /* Initialize all hardware drivers */
     init_all_drivers();
 
-    /* Check disk availability before initializing filesystem */
-    if (!ata_is_available())
+    /* Check block device availability before filesystem init */
+    if (!block_dev_is_present("hda"))
     {
-        serial_print("[BOOT] WARNING: No ATA storage detected\n");
+        serial_print("[BOOT] WARNING: No block device hda detected\n");
         serial_print("[BOOT] Filesystem initialization may fail\n");
     }
     else
     {
-        serial_print("[BOOT] ATA storage detected, proceeding with filesystem init\n");
+        serial_print("[BOOT] Block device hda detected, proceeding with filesystem init\n");
     }
 
     /* Initialize filesystem */
@@ -169,12 +114,22 @@ void kmain(void)
 
     log_subsystem_ok("INTERRUPTS");
 
-    /* panic("Test"); Just for testing */
+    /*
+     * Executor al estilo KUnit: tests in-kernel al arranque (kernel-x64-test.bin).
+     * Los tests que necesitan proceso se marcan SKIP si current_process == NULL.
+     */
+    {
+        extern void kernel_test_run_all(void) __attribute__((weak));
+        if (kernel_test_run_all)
+            kernel_test_run_all();
+    }
 
 #if KERNEL_DEBUG_SHELL
+    /* Init de test: shell integrada como PID 1. No es el init real (/sbin/init). */
     start_init_process();
     log_subsystem_ok("DEBUG_SHELL");
 #else
+    /* Init real: cargar /sbin/init desde el filesystem */
     serial_print("SERIAL: kmain: Loading userspace init...\n");
     if (kexecve("/sbin/init", NULL, NULL) < 0) 
     {
@@ -185,12 +140,13 @@ void kmain(void)
 
     for (;;)
     {
-        /* Poll network devices for incoming packets
-         * This is necessary because interrupts may not be working correctly,
-         * and we need to receive packets even when not actively waiting for responses.
-         */
+        /* Poll network devices for incoming packets */
         net_poll();
-        /* Yield CPU to allow other processes to run */
+        /* Process Bluetooth HCI events (inquiry results, etc.) so devices
+         * appear during scan without needing to read /proc/bluetooth/devices */
+        bluetooth_poll();
+        /* Despertar procesos bloqueados en poll() cuando hay datos o timeout */
+        poll_wake_check();
         __asm__ volatile("hlt");
     }
 }

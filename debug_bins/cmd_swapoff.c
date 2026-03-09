@@ -9,7 +9,6 @@
 #include "debug_bins.h"
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
-#include <ir0/ioctl.h>
 #include <string.h>
 
 /* IOCTL command for swap deactivation */
@@ -42,16 +41,13 @@ static int cmd_swapoff_handler(int argc, char **argv)
     if (argc == 2 && strcmp(argv[1], "-a") == 0) {
         debug_writeln("Disabling all swap files...");
         
-        /* Open the swap control device */
-        int ctl_fd = sys_open("/dev/swap", O_RDWR, 0);
+        int ctl_fd = (int)ir0_open("/dev/swap", O_RDWR, 0);
         if (ctl_fd < 0) {
             debug_writeln_err("Error: Failed to open swap control device");
             return 1;
         }
-        
-        /* Deactivate all swap files */
-        int ret = sys_ioctl(ctl_fd, SWAPFS_IOCTL_DEACTIVATE, 1); /* 1 = deactivate all */
-        sys_close(ctl_fd);
+        int ret = (int)ir0_ioctl(ctl_fd, SWAPFS_IOCTL_DEACTIVATE, (void *)1);
+        ir0_close(ctl_fd);
         
         if (ret < 0) {
             debug_write_err("Error: Failed to disable swap: ");
@@ -74,21 +70,16 @@ static int cmd_swapoff_handler(int argc, char **argv)
     debug_write("Disabling swap on: ");
     debug_writeln(swap_file);
     
-    // Open the swap control device
-    int ctl_fd = sys_open("/dev/swap", O_RDWR, 0);
+    int ctl_fd = (int)ir0_open("/dev/swap", O_RDWR, 0);
     if (ctl_fd < 0) {
         debug_writeln_err("Error: Failed to open swap control device");
         return 1;
     }
-    
-    // Prepare the deactivation argument
     swapfs_activate_args_t deactivate_arg;
     strncpy(deactivate_arg.path, swap_file, sizeof(deactivate_arg.path) - 1);
     deactivate_arg.path[sizeof(deactivate_arg.path) - 1] = '\0';
-    
-    // Use ioctl to deactivate the swap file
-    int ret = sys_ioctl(ctl_fd, SWAPFS_IOCTL_DEACTIVATE, (unsigned long)&deactivate_arg);
-    sys_close(ctl_fd);
+    int ret = (int)ir0_ioctl(ctl_fd, SWAPFS_IOCTL_DEACTIVATE, &deactivate_arg);
+    ir0_close(ctl_fd);
     
     if (ret < 0) {
         debug_write_err("Error: Failed to disable swap: ");

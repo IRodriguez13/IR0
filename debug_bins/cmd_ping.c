@@ -8,11 +8,25 @@
 
 #include "debug_bins.h"
 #include <ir0/fcntl.h>
+#include <ir0/poll.h>
+#include <ir0/syscall.h>
 #include <string.h>
 #include <stdbool.h>
 
-/* ntohl is already defined in ir0/net.h */
-/* Note: This command uses ONLY syscalls - no kernel function calls */
+/* Solo syscalls: ioctl a /dev/net. Constantes/estructura locales (sin incluir ir0/net.h). */
+#define NET_GET_PING_RESULT  0x3004
+#define ntohl(n) (((((uint32_t)(n) & 0x000000FFU) << 24) | \
+                   ((((uint32_t)(n) & 0x0000FF00U) << 8)) | \
+                   ((((uint32_t)(n) & 0x00FF0000U) >> 8)) | \
+                   ((((uint32_t)(n) & 0xFF000000U) >> 24))))
+
+struct ping_result {
+    int success;
+    uint64_t rtt;
+    uint8_t ttl;
+    size_t payload_bytes;
+    uint32_t reply_ip;
+};
 
 static int cmd_ping_handler(int argc, char **argv)
 {
@@ -51,19 +65,18 @@ static int cmd_ping_handler(int argc, char **argv)
         return 1;
     }
     
-    /* Wait for response using ioctl */
+    /* Wait for response using poll + ioctl */
     struct ping_result result;
     bool got_response = false;
-    int timeout_attempts = 5000;
+    int timeout_attempts = 50;
     int attempt = 0;
+    struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
     
-    /* Poll network periodically while waiting for response */
-    /* Note: In real userspace, this would be done via select/poll syscall on /dev/net */
-    /* For now, we simulate by using a small delay - network will be polled by kernel main loop */
     while (attempt < timeout_attempts && !got_response)
     {
-        /* TODO: Use select/poll syscall on /dev/net when implemented */
-        /* For now, rely on kernel's background network polling */
+        int64_t poll_ret = syscall(SYS_POLL, (uint64_t)&pfd, 1, 100);
+        if (poll_ret < 0)
+            break;
         
         /* Check for ping result via ioctl */
         int64_t ioctl_ret = syscall(SYS_IOCTL, fd, NET_GET_PING_RESULT, (uint64_t)&result);
@@ -107,10 +120,6 @@ static int cmd_ping_handler(int argc, char **argv)
         }
         
         attempt++;
-        
-        /* Delay to allow network processing */
-        volatile int delay = 10000;
-        while (delay-- > 0) { /* busy-wait delay */ }
     }
     
     syscall(SYS_CLOSE, fd, 0, 0);

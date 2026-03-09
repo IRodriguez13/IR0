@@ -22,6 +22,7 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/oops.h>  /* For ASSERT and panicex */
+#include <kernel/resource_registry.h>
 
 /* Global driver state */
 static uint16_t rtl8139_io_base = 0;
@@ -224,6 +225,8 @@ static int32_t rtl8139_hw_init(void)
     uint32_t pci_int_line = pci_config_read(bus, slot, 0, PCI_REG_INTERRUPT_LINE);
     uint8_t irq = (uint8_t)(pci_int_line & 0xFF);
     LOG_INFO_FMT("RTL8139", "PCI Interrupt Line (IRQ): %d", (int)irq);
+    resource_register_irq(irq, "rtl8139");
+    resource_register_ioport(rtl8139_io_base, (uint16_t)(rtl8139_io_base + 0x40), "rtl8139");
 
     /* Read Link Status (REAL DATA) */
     uint8_t msr = inb(rtl8139_io_base + RTL8139_REG_MSR);

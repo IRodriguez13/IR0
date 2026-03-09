@@ -1,18 +1,18 @@
-// vfs.h - Virtual File System minimalista
+/* vfs.h - Minimalist Virtual File System */
 #pragma once
 
 #include <ir0/stat.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <ir0/syscall.h> // Para off_t
+#include <ir0/syscall.h>  /* For off_t */
 
 // Forward declarations
 struct vfs_inode;
 struct vfs_file;
 struct vfs_dentry;
 
-// Operaciones de archivo
+/* File operations */
 struct file_operations {
   int (*open)(struct vfs_inode *inode, struct vfs_file *file);
   int (*read)(struct vfs_file *file, char *buf, size_t count);
@@ -23,7 +23,7 @@ struct file_operations {
                  int (*filldir)(void *, const char *, int, long, uint64_t,  unsigned));
 };
 
-// Operaciones de inode
+/* Inode operations */
 struct inode_operations {
   int (*lookup)(struct vfs_inode *dir, const char *name,
                 struct vfs_inode **result);
@@ -33,7 +33,7 @@ struct inode_operations {
   int (*getattr)(struct vfs_inode *inode, stat_t *stat);
 };
 
-// Operaciones de superblock
+/* Superblock operations */
 struct super_operations {
   int (*read_inode)(struct vfs_inode *inode, uint32_t ino);
   int (*write_inode)(struct vfs_inode *inode);
@@ -75,6 +75,7 @@ struct filesystem_operations {
     
     /* Inode-based operations (lower-level, filesystem-specific) */
     int (*link)(const char *oldpath, const char *newpath);
+    int (*chown)(const char *path, uid_t owner, gid_t group);
     
     /* Filesystem availability check */
     bool (*is_available)(void);
@@ -128,11 +129,12 @@ struct vfs_file {
 // VFS API
 int vfs_init(void);
 int vfs_mount(const char *dev, const char *mountpoint, const char *fstype);
-int vfs_open(const char *path, int flags, struct vfs_file **file);
+int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **file);
 int vfs_read(struct vfs_file *file, char *buf, size_t count);
 int vfs_write(struct vfs_file *file, const char *buf, size_t count);
 int vfs_append(const char *path, const char *buf, size_t count);
 int vfs_close(struct vfs_file *file);
+off_t vfs_lseek(struct vfs_file *file, off_t offset, int whence);
 int vfs_ls(const char *path);
 /* Forward declaration - vfs_readdir uses internal vfs_dirent_t type */
 struct vfs_dirent_readdir {
@@ -146,23 +148,24 @@ int vfs_unlink(const char *path);
 int vfs_link(const char *oldpath, const char *newpath);
 int vfs_rmdir_recursive(const char *path);
 int vfs_stat(const char *path, stat_t *buf);
+int vfs_chown(const char *path, uid_t owner, gid_t group);
 int vfs_ls_with_stat(const char *path);
 
-// Registro de filesystems
+/* Filesystem registration */
 int register_filesystem(struct filesystem_type *fs);
 int unregister_filesystem(struct filesystem_type *fs);
 
-// Lookup de paths
+/* Path lookup */
 struct vfs_inode *vfs_path_lookup(const char *path);
 
-// Mount point management
+/* Mount point management */
 struct mount_point *vfs_find_mount_point(const char *path);
 int vfs_add_mount_point(const char *path, const char *dev, 
                         struct vfs_superblock *sb, struct vfs_inode *root,
                         struct filesystem_type *fs_type);
 int vfs_remove_mount_point(const char *path);
 
-// MINIX filesystem integration
+/* MINIX filesystem integration */
 int vfs_init_with_minix(void);
 
 /* Compatibility wrappers (previously in vfs_simple.h):

@@ -4,7 +4,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Initialize VBE framebuffer
+/* Initialize from Multiboot info (call early, pass ebx). Returns 0 on success. */
+int vbe_init_from_multiboot(uint32_t multiboot_info);
+
+/* Fallback init (VGA text mode if no multiboot fb) */
 int vbe_init(void);
 
 // Clear screen with color
@@ -19,8 +22,16 @@ void vbe_putchar(uint32_t x, uint32_t y, char c, uint32_t fg, uint32_t bg);
 // Print string at coordinates
 void vbe_print_at(uint32_t x, uint32_t y, const char *str, uint32_t fg, uint32_t bg);
 
-// Get framebuffer information
+/* Get framebuffer information */
 bool vbe_get_info(uint32_t *width, uint32_t *height, uint32_t *bpp);
+
+/* Get pitch (bytes per line) and raw framebuffer pointer */
+uint32_t vbe_get_pitch(void);
+uint8_t *vbe_get_fb(void);
+
+/* For mmap: physical address and size (page-aligned) */
+uint32_t vbe_get_fb_phys(void);
+uint32_t vbe_get_fb_size(void);
 
 // Check if VBE is available
 bool vbe_is_available(void);

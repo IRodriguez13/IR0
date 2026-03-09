@@ -8,6 +8,7 @@
  */
 
 #include "procfs.h"
+#include "swapfs.h"
 #include <ir0/stat.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
@@ -29,6 +30,7 @@
 #include <fs/vfs.h>
 #include <ir0/validation.h>
 #include <mm/paging.h>
+#include <kernel/resource_registry.h>
 #include "drivers/bluetooth/bt_device.h"
 #include <ir0/logging.h>
 
@@ -135,125 +137,76 @@ static uint64_t get_total_memory(void)
     return total;
 }
 
+/*
+ * /proc/ps: raw data only, one line per process, tab-separated.
+ * pid\tppid\tstate\tname
+ * Frontend (ps) does formatting.
+ */
 static int proc_ps_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-
     size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "PID PPID STATE NAME\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-
     process_t *p = process_list;
     while (p && off < count - 1)
     {
         const char *state_str;
         switch (p->state)
         {
-        case PROCESS_READY:
-            state_str = "R";
-            break;
-        case PROCESS_RUNNING:
-            state_str = "R";
-            break;
-        case PROCESS_BLOCKED:
-            state_str = "S";
-            break;
-        case PROCESS_ZOMBIE:
-            state_str = "Z";
-            break;
-        default:
-            state_str = "?";
-            break;
+        case PROCESS_READY:   state_str = "R"; break;
+        case PROCESS_RUNNING: state_str = "R"; break;
+        case PROCESS_BLOCKED: state_str = "S"; break;
+        case PROCESS_ZOMBIE:  state_str = "Z"; break;
+        default:              state_str = "?"; break;
         }
-
-        n = snprintf(buf + off, count - off,
-                     "%d %d %s %s\n",
-                     (int)p->task.pid,
-                     (int)p->ppid,
-                     state_str,
-                     p->comm[0] ? p->comm : "(none)");
-        if (n < 0)
-            break;
-        if (n >= (int)(count - off))
-            n = (int)(count - off) - 1;
+        const char *name = p->comm[0] ? p->comm : "(none)";
+        int n = snprintf(buf + off, count - off,
+                         "%d\t%d\t%s\t%s\n",
+                         (int)p->task.pid, (int)p->ppid, state_str, name);
+        if (n < 0) break;
+        if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
         p = p->next;
     }
-
-    /* Ensure null termination */
-    if (off < count)
-        buf[off] = '\0';
-
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }
 
+/*
+ * /proc/netinfo: raw data only, one line per interface, tab-separated.
+ * name\tmtu\tflags\tmac (mac as xx:xx:xx:xx:xx:xx)
+ * Frontend (e.g. ifconfig/netinfo) does formatting.
+ */
 static int proc_netinfo_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-
     struct net_device *dev = net_get_devices();
     if (!dev)
-    {
-        int n = snprintf(buf, count, "No network devices\n");
-        return (n < 0 || n >= (int)count) ? (int)count - 1 : n;
-    }
-
+        return 0;
     size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "NAME MTU FLAGS MAC\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-
     while (dev && off < count - 1)
     {
         char flags[32];
         size_t foff = 0;
         flags[0] = '\0';
-
-        if (dev->flags & IFF_UP)
-            foff += (size_t)snprintf(flags + foff, (foff < sizeof(flags)) ? (sizeof(flags) - foff) : 0, "UP");
-        if (dev->flags & IFF_RUNNING)
-            foff += (size_t)snprintf(flags + foff, (foff < sizeof(flags)) ? (sizeof(flags) - foff) : 0, "%sRUNNING", (foff > 0) ? "," : "");
-        if (dev->flags & IFF_BROADCAST)
-            foff += (size_t)snprintf(flags + foff, (foff < sizeof(flags)) ? (sizeof(flags) - foff) : 0, "%sBROADCAST", (foff > 0) ? "," : "");
-        if (foff == 0)
-            snprintf(flags, sizeof(flags), "-");
-
-        n = snprintf(buf + off, count - off,
-                     "%s %u %s %02x:%02x:%02x:%02x:%02x:%02x\n",
-                     dev->name ? dev->name : "",
-                     (unsigned)dev->mtu,
-                     flags,
-                     (unsigned)dev->mac[0], (unsigned)dev->mac[1], (unsigned)dev->mac[2],
-                     (unsigned)dev->mac[3], (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
-        if (n < 0)
-            break;
-        if (n >= (int)(count - off))
-            n = (int)(count - off) - 1;
+        if (dev->flags & IFF_UP) foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "UP");
+        if (dev->flags & IFF_RUNNING) foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "%sRUNNING", foff ? "," : "");
+        if (dev->flags & IFF_BROADCAST) foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "%sBROADCAST", foff ? "," : "");
+        if (foff == 0) snprintf(flags, sizeof(flags), "-");
+        int n = snprintf(buf + off, count - off,
+                         "%s\t%u\t%s\t%02x:%02x:%02x:%02x:%02x:%02x\n",
+                         dev->name ? dev->name : "", (unsigned)dev->mtu, flags,
+                         (unsigned)dev->mac[0], (unsigned)dev->mac[1], (unsigned)dev->mac[2],
+                         (unsigned)dev->mac[3], (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
+        if (n < 0) break;
+        if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
         dev = dev->next;
     }
-
-    /* Ensure null termination */
-    if (off < count)
-        buf[off] = '\0';
-
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }
 
@@ -310,186 +263,79 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
     return after_proc;
 }
 
-/* Generate /proc/meminfo content */
+/* /proc/meminfo: raw data only. One line: total_kb\tfree_kb\tused_kb */
 int proc_meminfo_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-    
     uint64_t total = get_total_memory();
     uint64_t used = get_memory_usage();
     uint64_t free = total - used;
-    
-    /* Convert to kilobytes */
     uint64_t total_kb = total / BYTES_PER_KB;
     uint64_t free_kb = free / BYTES_PER_KB;
     uint64_t used_kb = used / BYTES_PER_KB;
-    
-    int len = snprintf(buf, count,
-        "MemTotal: %llu kB\n"
-        "MemFree:  %llu kB\n"
-        "MemUsed:  %llu kB\n",
-        (unsigned long long)total_kb,
-        (unsigned long long)free_kb,
-        (unsigned long long)used_kb
-    );
-    
-    /* snprintf returns number of characters that would be written (excluding null terminator)
-     * If it's >= count, it means the string was truncated */
-    if (len < 0)
-        return -1;
-    if (len >= (int)count)
-    {
-        /* Buffer was truncated, ensure null termination */
-        buf[count - 1] = '\0';
-        return (int)(count - 1);
-    }
-    
-    /* Ensure null termination */
+    int len = snprintf(buf, count, "%llu\t%llu\t%llu\n",
+                       (unsigned long long)total_kb,
+                       (unsigned long long)free_kb,
+                       (unsigned long long)used_kb);
+    if (len < 0) return -1;
+    if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     buf[len] = '\0';
     return len;
 }
 
-/* Generate /proc/[pid]/status content */
+/* /proc/[pid]/status: raw data only. One line: name\tstate\tpid\tppid\tuid\tgid */
 int proc_status_read(char *buf, size_t count, pid_t pid)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-    
-    process_t *proc = NULL;
-    
-    if (pid == -1)
-    {
-        /* /proc/status - current process */
-        proc = current_process;
-    } else
-    {
-        /* /proc/[pid]/status - specific process */
-        proc = process_find_by_pid(pid);
-    }
-    
+    process_t *proc = (pid == -1) ? current_process : process_find_by_pid(pid);
     if (!proc)
-    {
-        int len = snprintf(buf, count, "No such process\n");
-        if (len < 0)
-            return -1;
-        if (len >= (int)count)
-        {
-            buf[count - 1] = '\0';
-            return (int)(count - 1);
-        }
-        buf[len] = '\0';
-        return len;
+        return 0;
+    const char *state_str = "?";
+    switch (proc->state) {
+        case PROCESS_READY:   state_str = "R"; break;
+        case PROCESS_RUNNING: state_str = "R"; break;
+        case PROCESS_BLOCKED: state_str = "S"; break;
+        case PROCESS_ZOMBIE:  state_str = "Z"; break;
     }
-    
-    const char *state_str;
-    switch (proc->state)
-    {
-        case PROCESS_READY:
-            state_str = "R";
-            break;
-        case PROCESS_RUNNING:
-            state_str = "R";
-            break;
-        case PROCESS_BLOCKED:
-            state_str = "S";
-            break;
-        case PROCESS_ZOMBIE:
-            state_str = "Z";
-            break;
-        default:
-            state_str = "?";
-            break;
-    }
-    
-    int len = snprintf(buf, count,
-        "Name: %s\n"
-        "State: %s\n"
-        "Pid: %d\n"
-        "PPid: %d\n"
-        "Uid: %d\n"
-        "Gid: %d\n",
-        proc->comm,
-        state_str,
-        proc->task.pid,
-        proc->ppid,
-        proc->uid,
-        proc->gid
-    );
-    
-    if (len < 0)
-        return -1;
-    if (len >= (int)count)
-    {
-        buf[count - 1] = '\0';
-        return (int)(count - 1);
-    }
-    
+    int len = snprintf(buf, count, "%s\t%s\t%d\t%d\t%d\t%d\n",
+                       proc->comm[0] ? proc->comm : "(none)",
+                       state_str, (int)proc->task.pid, (int)proc->ppid,
+                       (int)proc->uid, (int)proc->gid);
+    if (len < 0) return -1;
+    if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     buf[len] = '\0';
     return len;
 }
 
-/* Generate /proc/uptime content */
+/* /proc/uptime: raw data only. One line: uptime_sec */
 int proc_uptime_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-    
-    /* Convert to seconds */
     uint64_t uptime = get_system_time() / 1000;
-    
-    int len = snprintf(buf, count, "%llu.00\n", (unsigned long long)uptime);
-    if (len < 0)
-        return -1;
-    if (len >= (int)count)
-    {
-        buf[count - 1] = '\0';
-        return (int)(count - 1);
-    }
-    
+    int len = snprintf(buf, count, "%llu\n", (unsigned long long)uptime);
+    if (len < 0) return -1;
+    if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     buf[len] = '\0';
     return len;
 }
 
-/* Generate /proc/version content */
+/* /proc/version: raw data only. One line: version\tdate\ttime\tuser\thost\tcompiler */
 int proc_version_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-    
-    /* Use centralized version from version.h */
-    /* Format matches Linux: "Linux version X.Y.Z (user@host) (compiler) (date)" */
-    /* For IR0: "IR0 version X.Y.Z (built DATE TIME by user@host with compiler)" */
-    int len = snprintf(buf, count,
-        "IR0 version %s (built %s %s by %s@%s with %s)\n",
-        IR0_VERSION_STRING,
-        IR0_BUILD_DATE,
-        IR0_BUILD_TIME,
-        IR0_BUILD_USER,
-        IR0_BUILD_HOST,
-        IR0_BUILD_CC
-    );
-    
-    if (len < 0)
-        return -1;
-    if (len >= (int)count)
-    {
-        buf[count - 1] = '\0';
-        return (int)(count - 1);
-    }
-    
+    int len = snprintf(buf, count, "%s\t%s\t%s\t%s\t%s\t%s\n",
+                       IR0_VERSION_STRING, IR0_BUILD_DATE, IR0_BUILD_TIME,
+                       IR0_BUILD_USER, IR0_BUILD_HOST, IR0_BUILD_CC);
+    if (len < 0) return -1;
+    if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     buf[len] = '\0';
     return len;
 }
@@ -574,605 +420,383 @@ int proc_cpuinfo_read(char *buf, size_t count)
     arch_bits = 32;
 #endif
 
+    /* Raw: one line per field, key\tvalue */
     size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-        "processor: %u\n"
-        "vendor_id: %s\n"
-        "cpu family: %u\n"
-        "model: %u\n"
-        "model name: %s\n"
-        "stepping: %u\n"
-        "cpu MHz: Unknown\n"
-        "cache size: Unknown\n"
-        "physical id: 0\n"
-        "siblings: %u\n"
-        "core id: 0\n"
-        "cpu cores: 1\n"
-        "apicid: %u\n"
-        "initial apicid: %u\n"
-        "fpu: yes\n"
-        "fpu_exception: yes\n"
-        "cpuid level: %u\n"
-        "wp: yes\n"
-        "flags: %s\n"
-        "bogomips: Unknown\n"
-        "clflush size: %u\n"
-        "cache_alignment: %u\n"
-        "address sizes: %ubits physical, %ubits virtual\n",
-        cpu_id,
-        vendor_str,
-        family,
-        model,
-        model_name,
-        stepping,
-        cpu_count,
-        cpu_id,
-        cpu_id,
-        max_leaf,
-        flags_buf,
-        clflush_sz,
-        clflush_sz,
-        arch_bits,
-        arch_bits);
-
-    if (n < 0)
-        return -1;
-    if ((size_t)n >= count)
-        n = (int)count - 1;
-    off = (size_t)n;
-    if (off < count)
-        buf[off] = '\0';
+    char t[64];
+    int n;
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "processor\t%u\n", cpu_id); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "vendor_id\t%s\n", vendor_str); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "cpu family\t%u\nmodel\t%u\n", family, model); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "model name\t%s\nstepping\t%u\n", model_name, stepping); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "siblings\t%u\napicid\t%u\ncpuid level\t%u\n", cpu_count, cpu_id, max_leaf); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "flags\t%s\nclflush size\t%u\n", flags_buf, clflush_sz); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    snprintf(t, sizeof(t), "%ubits physical, %ubits virtual", arch_bits, arch_bits);
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "address sizes\t%s\n", t); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }
 
-/* Generate /proc/loadavg content */
+/* /proc/loadavg: raw data only. One line: load1\tload5\tload15\trunning\ttotal\tlast_pid */
 int proc_loadavg_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-    
-    /* Count running and ready processes */
-    size_t running = 0;
-    size_t ready = 0;
+    size_t running = 0, ready = 0;
     process_t *p = process_list;
-    
-    while (p)
-    {
-        if (p->state == PROCESS_RUNNING)
-            running++;
-        else if (p->state == PROCESS_READY)
-            ready++;
+    while (p) {
+        if (p->state == PROCESS_RUNNING) running++;
+        else if (p->state == PROCESS_READY) ready++;
         p = p->next;
     }
-    
-    /* Simple load calculation: running processes + 0.5 * ready processes */
-    /* Format: 1min 5min 15min running/total last_pid */
-    int len = snprintf(buf, count,
-        "%.2f %.2f %.2f %zu/%zu %d\n",
-        (double)running + (double)ready * 0.5,
-        (double)running + (double)ready * 0.4,
-        (double)running + (double)ready * 0.3,
-        running,
-        running + ready,
-        current_process ? (int)current_process->task.pid : 0
-    );
-    
-    if (len < 0)
-        return -1;
-    if (len >= (int)count)
-    {
-        buf[count - 1] = '\0';
-        return (int)(count - 1);
-    }
-    
+    double load1 = (double)running + (double)ready * 0.5;
+    double load5 = (double)running + (double)ready * 0.4;
+    double load15 = (double)running + (double)ready * 0.3;
+    int last_pid = current_process ? (int)current_process->task.pid : 0;
+    int len = snprintf(buf, count, "%.2f\t%.2f\t%.2f\t%zu\t%zu\t%d\n",
+                       load1, load5, load15, running, running + ready, last_pid);
+    if (len < 0) return -1;
+    if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     buf[len] = '\0';
     return len;
 }
 
-/* Generate /proc/blockdevices content (lsblk-like output) */
+/*
+ * Format size in sectors (512B) to string in G or M; *len receives length.
+ */
+static void proc_format_size(uint64_t sectors, char *out, size_t out_size, int *len)
+{
+    (void)out_size;
+    uint64_t bytes = sectors * 512;
+    uint64_t mb = bytes / (BYTES_PER_KB * BYTES_PER_KB);
+    uint64_t gb = mb / 1024;
+    uint64_t val = (gb > 0) ? gb : mb;
+    char *p = out;
+    if (val == 0)
+        *p++ = '0';
+    else
+    {
+        char rev[24];
+        int idx = 0;
+        while (val > 0) { rev[idx++] = '0' + (val % 10); val /= 10; }
+        while (idx > 0) *p++ = rev[--idx];
+    }
+    *p++ = (gb > 0) ? 'G' : 'M';
+    *p = '\0';
+    *len = (int)(p - out);
+}
+
+/*
+ * /proc/blockdevices: raw data (tab-separated).
+ * One line per device: type\tname\tmaj\tmin\tsectors\tsize_human\tmodel\tserial
+ * type = "disk" | "part". size_human = human-readable (e.g. 128M, 1G).
+ */
 int proc_blockdevices_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
     memset(buf, 0, count);
-    
     size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "NAME        MAJ:MIN   SIZE (bytes)    MODEL\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-    
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                 "------------------------------------------------\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-    
     for (uint8_t i = 0; i < 4; i++)
     {
         if (!ata_drive_present(i))
             continue;
-        
         uint64_t size = ata_get_size(i);
         const char *model = ata_get_model(i);
         const char *serial = ata_get_serial(i);
-        
-        /* Format: hda  MAJ:MIN   SIZE     MODEL (SERIAL) */
-        char num_str[32];
-        char *p = num_str;
-        uint64_t tmp = size / (2 * BYTES_PER_KB * BYTES_PER_KB); /* Convert to GB */
-        if (tmp == 0) {
-            *p++ = '0';
-        } else {
-            char rev[32];
-            int idx = 0;
-            while (tmp > 0) {
-                rev[idx++] = '0' + (tmp % 10);
-                tmp /= 10;
-            }
-            while (idx > 0)
-                *p++ = rev[--idx];
-        }
-        *p = '\0';
-        
+        if (!model || !*model) model = "-";
+        if (!serial || !*serial) serial = "-";
         char name_buf[8];
-        snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + i);
-        
-        n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "%-12s %3d:0   %5sG %s (%s)\n",
-                     name_buf, i, num_str, model, serial);
-        if (n < 0)
-            return -1;
-        if (n >= (int)(count - off))
-            n = (int)(count - off) - 1;
+        char size_human[16];
+        int sh_len;
+        proc_format_size(size, size_human, sizeof(size_human), &sh_len);
+        snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + (int)i);
+        int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "disk\t%s\t%u\t%u\t%llu\t%s\t%s\t%s\n",
+                         name_buf, (unsigned)i, 0u, (unsigned long long)size,
+                         size_human, model, serial);
+        if (n < 0) return -1;
+        if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
+        int part_count = get_partition_count(i);
+        for (int part_num = 0; part_num < part_count && off < count; part_num++)
+        {
+            partition_info_t part_info;
+            if (get_partition_info(i, part_num, &part_info) != 0)
+                continue;
+            char part_name[12];
+            char part_size_human[16];
+            int psh_len;
+            proc_format_size(part_info.total_sectors, part_size_human, sizeof(part_size_human), &psh_len);
+            snprintf(part_name, sizeof(part_name), "hd%c%d", 'a' + (int)i, part_num + 1);
+            n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "part\t%s\t%u\t%u\t%llu\t%s\t-\t-\n",
+                         part_name, (unsigned)i, (unsigned)(part_num + 1),
+                         (unsigned long long)part_info.total_sectors, part_size_human);
+            if (n < 0) break;
+            if (n >= (int)(count - off)) n = (int)(count - off) - 1;
+            off += (size_t)n;
+        }
     }
-    
-    if (off < count)
-        buf[off] = '\0';
-    
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }
 
-/* Generate /proc/filesystems content */
+/* /proc/filesystems: raw data only. One line per fs: type\tname (type=nodev or empty) */
 int proc_filesystems_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-    
     size_t off = 0;
-    /* Virtual filesystems (nodev) */
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "nodev proc\n"
-                     "nodev devfs\n"
-                     "nodev ramfs\n"
-                     "nodev tmpfs\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-    
-    /* Physical filesystems (with devices) */
-    n = snprintf(buf + off, count - off, "minix\n");
-    if (n > 0 && n < (int)(count - off))
+    const char *lines[] = { "nodev\tproc", "nodev\tdevfs", "nodev\tramfs", "nodev\ttmpfs", "\tminix" };
+    for (size_t i = 0; i < sizeof(lines)/sizeof(lines[0]) && off < count; i++)
     {
+        int n = snprintf(buf + off, (off < count) ? (count - off) : 0, "%s\n", lines[i]);
+        if (n <= 0 || n >= (int)(count - off)) break;
         off += (size_t)n;
     }
-    
-    /* Ensure null termination */
-    if (off < count)
-        buf[off] = '\0';
-    
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }
 
-/* Generate /proc/partitions content */
+/* /proc/partitions: raw data only. One line per device: major\tminor\tblocks_1k\tname */
 int proc_partitions_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
     memset(buf, 0, count);
-    
     size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "major minor  #blocks  name\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-    
-    /* Iterate through all disks and their partitions */
     for (uint8_t disk_id = 0; disk_id < MAX_DISKS; disk_id++)
     {
-        int part_count = get_partition_count(disk_id);
-        if (part_count <= 0)
+        if (!ata_drive_present(disk_id))
             continue;
-        
+        uint64_t disk_blocks_1k = ata_get_size(disk_id) / 2;
+        char name_buf[16];
+        snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + disk_id);
+        int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "%u\t%u\t%llu\t%s\n",
+                         (unsigned)disk_id, 0u, (unsigned long long)disk_blocks_1k, name_buf);
+        if (n < 0) break;
+        if (n >= (int)(count - off)) n = (int)(count - off) - 1;
+        off += (size_t)n;
+        int part_count = get_partition_count(disk_id);
         for (int part_num = 0; part_num < part_count; part_num++)
         {
             partition_info_t part_info;
             if (get_partition_info(disk_id, part_num, &part_info) != 0)
                 continue;
-            
-            /* Format: major minor blocks name */
-            char name_buf[16];
+            uint64_t part_blocks_1k = part_info.total_sectors / 2;
             snprintf(name_buf, sizeof(name_buf), "hd%c%d", 'a' + disk_id, part_num + 1);
-            
-            uint64_t blocks = part_info.total_sectors; /* sectors are BYTES_PER_SECTOR-byte blocks */
-            
-            /* Convert blocks to string manually */
-            char blocks_str[32];
-            char *p = blocks_str;
-            uint64_t tmp = blocks;
-            if (tmp == 0)
-            {
-                *p++ = '0';
-            }
-            else
-            {
-                char rev[32];
-                int idx = 0;
-                while (tmp > 0)
-                {
-                    rev[idx++] = '0' + (tmp % 10);
-                    tmp /= 10;
-                }
-                while (idx > 0)
-                    *p++ = rev[--idx];
-            }
-            *p = '\0';
-            
             n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "%3d %6d %9s %s\n",
-                         (int)disk_id, part_num + 1, blocks_str, name_buf);
-            if (n < 0)
-                break;
-            if (n >= (int)(count - off))
-                n = (int)(count - off) - 1;
+                         "%u\t%u\t%llu\t%s\n",
+                         (unsigned)disk_id, (unsigned)(part_num + 1),
+                         (unsigned long long)part_blocks_1k, name_buf);
+            if (n < 0) break;
+            if (n >= (int)(count - off)) n = (int)(count - off) - 1;
             off += (size_t)n;
         }
     }
-    
-    if (off < count)
-        buf[off] = '\0';
-    
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }
 
-/* Generate /proc/mounts content */
+/* /proc/swaps: raw data. One line per swap: path\ttype\tsize_kb\tused_kb\tpriority */
+int proc_swaps_read(char *buf, size_t count)
+{
+    if (VALIDATE_BUFFER(buf, count) != 0)
+        return -1;
+    memset(buf, 0, count);
+    swapfs_list_t list;
+    if (swapfs_get_active_list(&list) != 0)
+        return 0;
+    size_t off = 0;
+    for (uint32_t i = 0; i < list.count && off < count; i++)
+    {
+        uint64_t size_kb = (uint64_t)list.entries[i].total_pages * 4;
+        uint64_t used_kb = (uint64_t)list.entries[i].used_pages * 4;
+        int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "%s\tfile\t%llu\t%llu\t-1\n",
+                         list.entries[i].path,
+                         (unsigned long long)size_kb,
+                         (unsigned long long)used_kb);
+        if (n <= 0 || n >= (int)(count - off))
+            break;
+        off += (size_t)n;
+    }
+    if (off < count)
+        buf[off] = '\0';
+    return (int)off;
+}
+
+/* /proc/mounts: raw data only. One line per mount: device\tmountpoint\tfstype\toptions */
 int proc_mounts_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
     memset(buf, 0, count);
-    
     size_t off = 0;
-    
-    /* Try common mount points */
     const char *common_paths[] = { "/", "/tmp", "/proc", "/dev" };
-    
     for (size_t i = 0; i < sizeof(common_paths) / sizeof(common_paths[0]); i++)
     {
         struct mount_point *mp = vfs_find_mount_point(common_paths[i]);
+        const char *dev = "none", *path = NULL, *fstype = "unknown";
         if (mp)
         {
-            int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                             "%s %s %s rw 0 0\n",
-                             (mp->dev[0] != '\0') ? mp->dev : "none",
-                             mp->path,
-                             mp->fs_type ? mp->fs_type->name : "unknown");
-            if (n > 0 && n < (int)(count - off))
-                off += (size_t)n;
-            else
-                break;  /* Buffer full */
+            dev = (mp->dev[0] != '\0') ? mp->dev : "none";
+            path = mp->path;
+            fstype = mp->fs_type ? mp->fs_type->name : "unknown";
         }
         else if (strcmp(common_paths[i], "/proc") == 0)
-        {
-            /* /proc is virtual, always present */
-            int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                             "none /proc proc rw 0 0\n");
-            if (n > 0 && n < (int)(count - off))
-                off += (size_t)n;
-        }
+            { path = "/proc"; fstype = "proc"; }
         else if (strcmp(common_paths[i], "/dev") == 0)
-        {
-            /* /dev is virtual, always present */
-            int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                             "none /dev devfs rw 0 0\n");
-            if (n > 0 && n < (int)(count - off))
-                off += (size_t)n;
-        }
+            { path = "/dev"; fstype = "devfs"; }
+        if (!path)
+            continue;
+        int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "%s\t%s\t%s\trw\n", dev, path, fstype);
+        if (n <= 0 || n >= (int)(count - off)) break;
+        off += (size_t)n;
     }
-    
-    if (off < count)
-        buf[off] = '\0';
-    
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }
 
-/* Generate /proc/interrupts content */
+/*
+ * Generate /proc/interrupts content from resource registry only.
+ * Data comes from drivers that registered their IRQ (silicon/hardware).
+ */
+struct irq_collect_ctx {
+    char *buf;
+    size_t count;
+    size_t off;
+    uint8_t irqs[16];
+    const char *names[16];
+    int n;
+};
+
+static int irq_collect_cb(uint8_t irq, const char *name, void *ctx)
+{
+    struct irq_collect_ctx *c = (struct irq_collect_ctx *)ctx;
+    if (c->n < 16)
+    {
+        c->irqs[c->n] = irq;
+        c->names[c->n] = name;
+        c->n++;
+    }
+    return 0;
+}
+
+/* /proc/interrupts: raw data only. One line per IRQ: irq\tname */
 int proc_interrupts_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
     memset(buf, 0, count);
-    
+    struct irq_collect_ctx ctx = { .buf = buf, .count = count, .off = 0, .n = 0 };
+    resource_foreach_irq(irq_collect_cb, &ctx);
     size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "           CPU0\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-    
-    /* IRQ mappings for x86 */
-    const char *irq_names[] = {
-        [0] = "  0:",
-        [1] = "  1:",
-        [2] = "  2:",
-        [3] = "  3:",
-        [4] = "  4:",
-        [5] = "  5:",
-        [6] = "  6:",
-        [7] = "  7:",
-        [8] = "  8:",
-        [9] = "  9:",
-        [10] = " 10:",
-        [11] = " 11:",
-        [12] = " 12:",
-        [13] = " 13:",
-        [14] = " 14:",
-        [15] = " 15:",
-    };
-    
-    const char *irq_descriptions[] = {
-        [0] = "   timer",
-        [1] = "   i8042",
-        [5] = "   soundblaster",
-        [11] = "   rtl8139",
-        [12] = "   i8042",
-        [14] = "   ata14",
-        [15] = "   ata15",
-    };
-    
-    for (int irq = 0; irq < 16; irq++)
+    uint8_t order[16];
+    for (int i = 0; i < ctx.n; i++) order[i] = (uint8_t)i;
+    for (int i = 0; i < ctx.n - 1; i++)
+        for (int j = i + 1; j < ctx.n; j++)
+            if (ctx.irqs[order[i]] > ctx.irqs[order[j]])
+                { uint8_t t = order[i]; order[i] = order[j]; order[j] = t; }
+    for (int i = 0; i < ctx.n && off < count; i++)
     {
-        if (irq_names[irq] && irq_descriptions[irq])
-        {
-            n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "%s      %-20s (IRQ %d)\n",
-                         irq_names[irq], irq_descriptions[irq], irq);
-            if (n > 0 && n < (int)(count - off))
-                off += (size_t)n;
-        }
+        int idx = order[i];
+        int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "%u\t%s\n", (unsigned)ctx.irqs[idx], ctx.names[idx]);
+        if (n <= 0 || n >= (int)(count - off)) break;
+        off += (size_t)n;
     }
-    
-    if (off < count)
-        buf[off] = '\0';
-    
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }
 
-/* Generate /proc/iomem content */
+/*
+ * Generate /proc/iomem content (physical memory map).
+ * System RAM size from PMM; no I/O ports here (they belong in /proc/ioports).
+ */
+/* /proc/iomem: raw data only. One line per region: start\tend\tname */
 int proc_iomem_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
     memset(buf, 0, count);
-    
-    size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "00000000-0000FFFF : PCI Bus 0000:00\n"
-                     "00000000-000003FF : PCI Bus 0000:00 - Reserved\n"
-                     "00000400-000004FF : Reserved\n"
-                     "00000500-000005FF : Reserved\n"
-                     "00000600-000006FF : Reserved\n"
-                     "00000700-000007FF : Reserved\n"
-                     "00000A00-00000BFF : PCI Bus 0000:00 - Reserved\n"
-                     "00000C00-00000DFF : PCI Bus 0000:00 - Reserved\n"
-                     "00000E00-00000FFF : PCI Bus 0000:00 - Reserved\n"
-                     "00001000-000010FF : PCI Bus 0000:00 - Reserved\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-    
-    /* Add common x86 I/O ranges */
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                 "00002000-000020FF : PIC (8259)\n"
-                 "00002170-0000217F : ATA Secondary\n"
-                 "00001F0-00001F7 : ATA Primary\n"
-                 "0000220-000022F : Sound Blaster 16\n"
-                 "000060-00006F : Keyboard/Mouse (PS/2)\n");
-    if (n > 0 && n < (int)(count - off))
-        off += (size_t)n;
-    
-    if (off < count)
-        buf[off] = '\0';
-    
-    return (int)off;
+    size_t total_frames = 0;
+    pmm_stats(&total_frames, NULL, NULL);
+    uint64_t ram_end = (uint64_t)total_frames * PAGE_SIZE_4KB;
+    if (ram_end > 0) ram_end--;
+    int n = snprintf(buf, count, "0\t%llu\tSystem RAM\n", (unsigned long long)ram_end);
+    if (n < 0) return -1;
+    if (n >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
+    return n;
 }
 
-/* Generate /proc/ioports content */
+/*
+ * Generate /proc/ioports content from resource registry only.
+ * Ranges and names come from drivers that registered their ports (silicon/hardware).
+ */
+struct ioport_ctx {
+    char *buf;
+    size_t count;
+    size_t off;
+};
+
+/* Raw: start\tend\tname per line */
+static int ioport_cb(uint16_t start, uint16_t end, const char *name, void *ctx)
+{
+    struct ioport_ctx *c = (struct ioport_ctx *)ctx;
+    int n = snprintf(c->buf + c->off, (c->off < c->count) ? (c->count - c->off) : 0,
+                     "%u\t%u\t%s\n", (unsigned)start, (unsigned)end, name);
+    if (n > 0 && (size_t)n < c->count - c->off) { c->off += (size_t)n; return 0; }
+    return 1;
+}
+
 int proc_ioports_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
     memset(buf, 0, count);
-    
-    size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "0000-001f : dma1\n"
-                     "0020-0021 : pic1\n"
-                     "0040-0043 : timer0\n"
-                     "0060-006f : keyboard\n"
-                     "01f0-01f7 : ata primary\n"
-                     "0170-0177 : ata secondary\n"
-                     "0220-022f : sound blaster\n"
-                     "0376-0376 : ata secondary control\n"
-                     "03f6-03f6 : ata primary control\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-    
-    if (off < count)
-        buf[off] = '\0';
-    
-    return (int)off;
+    struct ioport_ctx ctx = { .buf = buf, .count = count, .off = 0 };
+    resource_foreach_ioport(ioport_cb, &ctx);
+    if (ctx.off < count)
+        buf[ctx.off] = '\0';
+    return (int)ctx.off;
 }
 
-/* Generate /proc/modules content (more detailed than /proc/drivers) */
+/* /proc/modules: raw data only. Same as drivers: name\tversion\tlang\tstate\tdescription */
 int proc_modules_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
-        return -1;
-    
-    memset(buf, 0, count);
-    
-    /* Generate /proc/modules output in Linux-compatible format
-     * Format: name size refcount dependencies
-     * Converts driver information to module format
-     * 
-     * Note: Size and refcount are estimated since we don't track
-     * module loading/unloading separately from driver registration
-     */
-    int driver_size = ir0_driver_list_to_buffer(buf, count);
-    if (driver_size <= 0)
-        return driver_size;
-    
-    /* Convert driver list format to modules format */
-    /* Driver format: "Driver Name Version\n" */
-    /* Module format: "drivername size refcount dependencies\n" */
-    char *pos = buf;
-    char temp_buf[PROC_BUFFER_SIZE];
-    size_t temp_off = 0;
-    
-    while (*pos && temp_off < sizeof(temp_buf) - 128)
-    {
-        char *line_start = pos;
-        char *line_end = strchr(pos, '\n');
-        if (!line_end)
-            break;
-        
-        size_t line_len = (size_t)(line_end - line_start);
-        if (line_len > 0 && line_len < PROC_LINE_MAX_LEN)
-        {
-            char name[128] = {0};
-            size_t name_len = line_len;
-            if (name_len > sizeof(name) - 1)
-                name_len = sizeof(name) - 1;
-            
-            /* Copy first word (driver name) */
-            strncpy(name, line_start, name_len);
-            name[name_len] = '\0';
-            
-            /* Extract just the name part (before spaces/tabs) */
-            char *name_end = name;
-            while (*name_end && *name_end != ' ' && *name_end != '\t' && *name_end != '\n')
-                name_end++;
-            *name_end = '\0';
-            
-            if (strlen(name) > 0)
-            {
-                int n = snprintf(temp_buf + temp_off, sizeof(temp_buf) - temp_off,
-                                 "%-20s %8u %2d -\n",
-                                 name,
-                                 (unsigned int)PROC_ESTIMATED_ENTRY_SIZE,  /* Estimated size */
-                                 0);  /* Refcount */
-                if (n > 0 && (size_t)n < sizeof(temp_buf) - temp_off)
-                    temp_off += (size_t)n;
-            }
-        }
-        pos = line_end + 1;
-    }
-    
-    /* Copy formatted output back */
-    if (temp_off > 0 && temp_off < count)
-    {
-        memcpy(buf, temp_buf, temp_off);
-        buf[temp_off] = '\0';
-        return (int)temp_off;
-    }
-    
-    return (int)driver_size;
+    return ir0_driver_list_to_buffer(buf, count);
 }
 
-/* Generate /proc/timer_list content */
+/* /proc/timer_list: raw data only. One line: timer\tname\tfrequency\ttick_count\tuptime_sec\tuptime_ms */
 int proc_timer_list_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    
     memset(buf, 0, count);
-    
-    size_t off = 0;
     clock_stats_t stats;
-    if (clock_get_stats(&stats) == 0)
-    {
-        const char *timer_name = "Unknown";
-        switch (stats.active_timer)
-        {
-            case CLOCK_TIMER_NONE:
-                timer_name = "None";
-                break;
-            case CLOCK_TIMER_PIT:
-                timer_name = "PIT";
-                break;
-            case CLOCK_TIMER_HPET:
-                timer_name = "HPET";
-                break;
-            case CLOCK_TIMER_LAPIC:
-                timer_name = "LAPIC";
-                break;
-            case CLOCK_TIMER_RTC:
-                timer_name = "RTC";
-                break;
-            default:
-                timer_name = "Unknown";
-                break;
-        }
-        
-        int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "Timer: %s\n"
-                         "Frequency: %u Hz\n"
-                         "Tick Count: %llu\n"
-                         "Uptime: %llu.%03u seconds\n",
-                         timer_name,
-                         stats.timer_frequency,
-                         (unsigned long long)stats.tick_count,
-                         (unsigned long long)stats.uptime_seconds,
-                         stats.uptime_milliseconds);
-        if (n > 0 && n < (int)(count - off))
-            off += (size_t)n;
+    if (clock_get_stats(&stats) != 0)
+        return 0;
+    const char *timer_name = "Unknown";
+    switch (stats.active_timer) {
+        case CLOCK_TIMER_NONE: timer_name = "None"; break;
+        case CLOCK_TIMER_PIT:  timer_name = "PIT"; break;
+        case CLOCK_TIMER_HPET:  timer_name = "HPET"; break;
+        case CLOCK_TIMER_LAPIC: timer_name = "LAPIC"; break;
+        case CLOCK_TIMER_RTC:  timer_name = "RTC"; break;
     }
-    
-    if (off < count)
-        buf[off] = '\0';
-    
-    return (int)off;
+    int n = snprintf(buf, count, "%s\t%u\t%llu\t%llu\t%u\n",
+                     timer_name, stats.timer_frequency,
+                     (unsigned long long)stats.tick_count,
+                     (unsigned long long)stats.uptime_seconds,
+                     stats.uptime_milliseconds);
+    if (n < 0) return -1;
+    if (n >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
+    return n;
 }
 
 /* Generate /proc/[pid]/cmdline content */
@@ -1316,6 +940,9 @@ int proc_open(const char *path, int flags)
     } else if (strcmp(filename, "kmsg") == 0)
     {
         fd = 1021;
+    } else if (strcmp(filename, "swaps") == 0)
+    {
+        fd = 1022;
     } else
     {
         /* Check for bluetooth subdirectory */
@@ -1431,6 +1058,9 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
         case 1020:
             /* /proc/bluetooth/scan */
             full_size = bt_proc_scan_read(proc_buffer, sizeof(proc_buffer));
+            break;
+        case 1022:
+            full_size = proc_swaps_read(proc_buffer, sizeof(proc_buffer));
             break;
         case 1021:
             /*

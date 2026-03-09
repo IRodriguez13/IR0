@@ -121,6 +121,19 @@ void bluetooth_cleanup(void)
 }
 
 /**
+ * bluetooth_poll - Process pending HCI events
+ *
+ * Llamado desde el bucle principal para drenar la UART y procesar Inquiry Result
+ * durante el scan; si no se llama, los dispositivos descubiertos no aparecen.
+ */
+void bluetooth_poll(void)
+{
+    if (!bluetooth_initialized)
+        return;
+    hci_process_events();
+}
+
+/**
  * bluetooth_is_initialized - Check if Bluetooth is initialized
  */
 bool bluetooth_is_initialized(void)

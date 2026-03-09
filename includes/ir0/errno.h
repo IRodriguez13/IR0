@@ -49,6 +49,7 @@
 #define ELOOP   40  /* Too many symbolic links encountered */
 #define ENAMETOOLONG 36  /* File name too long */
 #define ENOSYS  38  /* Function not implemented */
+#define ENOTSUPP 95  /* Operation not supported */
 
 /* STANDARD FILE DESCRIPTORS                                                */
 

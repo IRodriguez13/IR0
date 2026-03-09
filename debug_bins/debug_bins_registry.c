@@ -34,10 +34,17 @@ extern struct debug_command cmd_uname;
 extern struct debug_command cmd_lsblk;
 extern struct debug_command cmd_lsdrv;
 extern struct debug_command cmd_lsblue;
+extern struct debug_command cmd_bluestart;
 extern struct debug_command cmd_blue;
 extern struct debug_command cmd_mkswap;
 extern struct debug_command cmd_swapon;
 extern struct debug_command cmd_swapoff;
+extern struct debug_command cmd_free;
+extern struct debug_command cmd_uptime;
+extern struct debug_command cmd_lshw;
+#ifdef IR0_KERNEL_TESTS
+extern struct debug_command cmd_ktest;
+#endif
 
 /* Tabla de comandos disponibles (solo comandos Unix reales) */
 struct debug_command *debug_commands[] = {
@@ -66,7 +73,14 @@ struct debug_command *debug_commands[] = {
     &cmd_lsblk,
     &cmd_lsdrv,
     &cmd_lsblue,
+    &cmd_bluestart,
     &cmd_blue,
+    &cmd_free,
+    &cmd_uptime,
+    &cmd_lshw,
+#ifdef IR0_KERNEL_TESTS
+    &cmd_ktest,
+#endif
     NULL  /* Terminador */
 };
 

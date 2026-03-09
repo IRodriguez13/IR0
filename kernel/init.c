@@ -1,13 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * IR0 Kernel - Init Process (PID 1)
+ * IR0 Kernel - Init de test (PID 1 cuando KERNEL_DEBUG_SHELL=1)
  * Copyright (C) 2025 Iván Rodriguez
  *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- * 
- * First userspace process, runs the shell
+ * No es el init real. El init real es /sbin/init, que se carga cuando
+ * KERNEL_DEBUG_SHELL=0 en config.h (kexecve("/sbin/init", ...) desde kmain).
+ * Este proceso solo existe en modo test/debug y arranca la shell integrada.
  */
 
 #include "process.h"
@@ -19,8 +17,10 @@
 #include <ir0/permissions.h>
 #include <string.h>
 
-
-
+/*
+ * init_1 — Entrada del init de test (debug shell como PID 1).
+ * Solo usado cuando KERNEL_DEBUG_SHELL=1.
+ */
 void init_1(void)
 {
 	/* Initialize typewriter effect */
@@ -33,7 +33,7 @@ void init_1(void)
 		shell_entry();
 }
 
-/*                                                START INIT 1 PROCESS                                                         */
+/*                                                START INIT DE TEST (debug shell como PID 1)                         */
 
 int start_init_process(void)
 {

@@ -14,10 +14,10 @@
 /* MEMORY SUBSYSTEM DEBUG FLAGS                                              */
 
 /* Memory Allocator Debug */
-#define DEBUG_MEMORY_ALLOCATOR 1      /* Enable allocator debug output */
-#define DEBUG_MEMORY_COALESCING 1     /* Track coalescing operations */
-#define DEBUG_MEMORY_STATS 1          /* Show allocation statistics */
-#define DEBUG_PMM 1                   /* Physical memory manager debug */
+#define DEBUG_MEMORY_ALLOCATOR 0      /* Enable allocator debug output */
+#define DEBUG_MEMORY_COALESCING 0     /* Track coalescing operations */
+#define DEBUG_MEMORY_STATS 0          /* Show allocation statistics */
+#define DEBUG_PMM 0                   /* Physical memory manager debug */
 
 
 /* Paging Debug */
@@ -42,12 +42,20 @@
 
 /* KERNEL BEHAVIOR CONFIGURATION                                             */
 
-/* 
+/*
  * KERNEL_DEBUG_SHELL
- * 1: Use the built-in kernel shell (init_1)
- * 0: Load and execute /bin/init from the filesystem
+ * 1: Test init — use integrated shell as PID 1 (init_1 / debshell). Not the real init.
+ * 0: Real init — load and execute /sbin/init from the filesystem.
  */
 #define KERNEL_DEBUG_SHELL 1
+
+/*
+ * IR0_KERNEL_TESTS
+ * Include in-kernel test suite and cmd_ktest in debug shell.
+ * Default: undefined (make ir0) - tests not linked.
+ * Makefile sets -DIR0_KERNEL_TESTS=1 for kernel-x64-test.bin / make tests.
+ * See Makefile target kernel-x64-test.bin.
+ */
 
 /*
  * KERNEL_ENABLE_EXAMPLE_DRIVERS
@@ -104,10 +112,10 @@
 #define TIMER_FREQUENCY 1000  // 1000 Hz timer
 
 /* FEATURE FLAGS */
-#define ENABLE_SMP 0          // Symmetric multiprocessing (not implemented)
-#define ENABLE_NETWORKING 0   // Network stack (not implemented)
-#define ENABLE_GRAPHICS 0     // Graphics subsystem (basic VGA only)
-#define ENABLE_SOUND 1        // Sound Blaster support
-#define ENABLE_USB 0          // USB support (not implemented)
+#define ENABLE_SMP 0          /* Symmetric multiprocessing (not implemented) */
+#define ENABLE_NETWORKING 1   /* Network stack (IP, ICMP, UDP, ARP, DNS, RTL8139, e1000) */
+#define ENABLE_GRAPHICS 1     /* Graphics subsystem (VGA, VBE) */
+#define ENABLE_SOUND 1        /* Sound Blaster support */
+#define ENABLE_USB 0          /* USB support (not implemented) */
 
 #endif /* _IR0_KERNEL_CONFIG_H */

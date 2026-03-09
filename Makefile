@@ -181,6 +181,8 @@ KERNEL_OBJS = \
     debug_bins/dbgshell.o \
     kernel/elf_loader.o \
     kernel/driver_registry.o \
+    kernel/driver_layer.o \
+    kernel/resource_registry.o \
     kernel/ipc.o \
     debug_bins/debug_bins_registry.o \
     debug_bins/cmd_ls.o \
@@ -208,7 +210,36 @@ KERNEL_OBJS = \
     debug_bins/cmd_lsblk.o \
     debug_bins/cmd_lsdrv.o \
     debug_bins/cmd_lsblue.o \
+    debug_bins/cmd_bluestart.o \
+    debug_bins/cmd_free.o \
+    debug_bins/cmd_uptime.o \
+    debug_bins/cmd_lshw.o \
     debug_bins/cmd_blue.o
+
+# debug_bins_registry_test.o: misma fuente que debug_bins_registry.o pero con IR0_KERNEL_TESTS=1
+# Evita que make reutilice un .o compilado para tests al hacer make ir0 (y viceversa)
+debug_bins/debug_bins_registry_test.o: debug_bins/debug_bins_registry.c
+	@echo "  CC      $< (IR0_KERNEL_TESTS=1)"
+	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \
+		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
+		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
+		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
+		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
+		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
+		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
+		-c $< -o $@
+
+# In-kernel test suite y comando ktest: solo se enlazan en kernel-x64-test.bin (make tests)
+KERNEL_TEST_OBJS = debug_bins/debug_bins_registry_test.o \
+	debug_bins/cmd_ktest.o \
+	kernel/test/test_runner.o \
+	kernel/test/test_syscall.o \
+	kernel/test/test_procfs.o \
+	kernel/test/test_process.o \
+	kernel/test/test_resource_registry.o \
+	kernel/test/test_allocator.o \
+	kernel/test/test_path.o \
+	kernel/test/test_string.o
 
 # Scheduler - Select which scheduler to compile
 # Uncomment the scheduler you want to use and comment out the others
@@ -256,6 +287,8 @@ DRIVER_OBJS = \
     drivers/timer/lapic/lapic.o \
     drivers/storage/ata.o \
     drivers/storage/ata_helpers.o \
+    drivers/storage/block_dev.o \
+    drivers/storage/ata_block.o \
     drivers/storage/fs_types.o \
 	drivers/video/vbe.o \
 	drivers/video/typewriter.o \
@@ -278,7 +311,9 @@ FS_OBJS = \
     fs/permissions.o \
     fs/procfs.o \
     fs/devfs.o \
-    fs/sysfs.o
+    fs/sysfs.o \
+    fs/swapfs.o \
+    fs/swapfs_device.o
 
 DISK_OBJS = \
     drivers/disk/partition.o
@@ -325,10 +360,16 @@ MULTILANG_DRIVER_SUPPORT_OBJ += drivers/multilang_drivers.o
 CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=1
 endif
 
-# All objects
+# All objects (kernel sin tests in-kernel)
 ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) $(NET_OBJS)
+
+# Objetos para kernel con tests in-kernel (make tests / kernel-tests)
+# Excluir debug_bins_registry.o y usar debug_bins_registry_test.o (compilado con IR0_KERNEL_TESTS=1)
+ALL_OBJS_TEST = $(filter-out debug_bins/debug_bins_registry.o,$(KERNEL_OBJS)) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+                $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(SETUP_OBJS) $(DISK_OBJS) \
+                $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) $(NET_OBJS)
 
 # BUILD RULES
 
@@ -412,6 +453,24 @@ kernel-x64.iso: kernel-x64.bin
 	@echo "Running grub-mkrescue (will print errors if it fails)..."
 	@grub-mkrescue -o $@ iso
 	@echo "✓ ISO created: $@"
+
+# Kernel con tests in-kernel (solo al hacer make tests / kernel-tests)
+# config.h documents IR0_KERNEL_TESTS; Makefile ensures it for this target
+kernel-x64-test.bin: CFLAGS += -DIR0_KERNEL_TESTS=1
+kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
+	@echo "  LD      $@ (with in-kernel tests)"
+	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS_TEST)
+	@echo "✓ Kernel (test) linked: $@"
+
+kernel-x64-test.iso: kernel-x64-test.bin
+	@echo "  ISO     $@"
+	@rm -rf iso_test
+	@mkdir -p iso_test/boot/grub
+	@cp arch/x86-64/grub.cfg iso_test/boot/grub/
+	@cp kernel-x64-test.bin iso_test/boot/kernel-x64.bin
+	@grub-mkrescue -o $@ iso_test
+	@rm -rf iso_test
+	@echo "✓ ISO (test) created: $@"
 
 # Create a raw disk image used by QEMU. If you want a persistent filesystem
 # you can format and populate this image separately. This target will
@@ -579,6 +638,18 @@ debug: kernel-x64.iso disk.img
 		$(QEMU_DISPLAY) \
 		-d int,cpu_reset,guest_errors $(QEMU_LOG_FILE)
 
+# QEMU con servidor GDB: inspección de memoria, breakpoints, single-step.
+# En otra terminal: gdb -ex 'target remote :1234' -ex 'symbol-file kernel-x64.bin' kernel-x64.bin
+run-gdb: kernel-x64.iso disk.img
+	@echo "  GDB     QEMU waiting for GDB on localhost:1234"
+	@echo "          In another terminal run:"
+	@echo "            gdb -ex 'target remote :1234' -ex 'symbol-file kernel-x64.bin' kernel-x64.bin"
+	@echo "          Then (gdb) break kmain  and  (gdb) continue"
+	qemu-system-x86_64 -cdrom kernel-x64.iso \
+		$(QEMU_SERIAL_COM1) -drive file=disk.img,format=raw,if=ide,index=0 \
+		-m 512M -no-reboot -no-shutdown -display none -net none \
+		-s -S
+
 # Create disk image (wrapper for scripts/create_disk.sh)
 # Usage: make create-disk [filesystem] [size]
 # Examples:
@@ -663,11 +734,63 @@ clean:
 	@find . -name "*.o" -type f -delete
 	@find . -name "*.d" -type f -delete
 	@find . -name "*.bin" -type f -delete
-	@rm -f kernel-x64.iso
-	@rm -rf iso
+	@rm -f kernel-x64.iso kernel-x64-test.iso
+	@rm -rf iso iso_test
+	@$(MAKE) -C tests/kernel_memsafe clean 2>/dev/null || true
 	@echo "Clean done."
 
-# Clean only network objects to force recompilation with TAP flag
+# TEST SUITE — Compila todos los artefactos de test (estilo kernels de producción).
+# - Código kernel en host para Valgrind (make kernel-memsafe)
+# - Kernel con tests in-kernel (ktest) para make kernel-tests
+# - Análisis del binario (make kernel-analyze)
+tests: kernel-x64-test.bin
+	@echo "  TEST    Building kernel-memsafe (kernel code under Valgrind)..."
+	@$(MAKE) -C tests/kernel_memsafe KERNEL_ROOT=$(KERNEL_ROOT) all
+	@echo "✓ Tests built: tests/kernel_memsafe/ir0_kernel_memsafe, kernel-x64-test.bin"
+
+# Valgrind sobre código del kernel compilado para host (resource_registry, etc.)
+kernel-memsafe:
+	@echo "  KERNEL-MEMSAFE  Building kernel code for host and running Valgrind..."
+	@$(MAKE) -C tests/kernel_memsafe KERNEL_ROOT=$(KERNEL_ROOT) memsafe
+	@echo "✓ kernel-memsafe passed"
+
+# Batería in-kernel al estilo KUnit: tests se ejecutan al arranque (no dependen de la shell).
+# QEMU headless, sin red. El kernel (kernel-x64-test.bin) llama kernel_test_run_all() en boot.
+kernel-tests: kernel-x64-test.iso disk.img
+	@echo "  KTEST   Running in-kernel test suite at boot (KUnit-style)..."
+	@timeout 40 $(QEMU) -cdrom kernel-x64-test.iso -drive file=disk.img,format=raw,if=ide,index=0 -serial stdio -display none -m 128M -no-reboot -net none 2>&1 | tee /tmp/ktest.log; \
+	grep -q "All .* test(s) passed" /tmp/ktest.log && ! grep -q "Some tests FAILED" /tmp/ktest.log && ! grep -q "not ok " /tmp/ktest.log; \
+	if [ $$? -eq 0 ]; then echo "✓ kernel-tests passed"; exit 0; else echo "✗ kernel-tests FAILED"; exit 1; fi
+
+# Análisis del binario del kernel: size, secciones, símbolos críticos. Sirve para regresión y salud.
+# Usa kernel-x64-test.bin (siempre enlazable); comprueba kmain y kernel_test_run_all.
+kernel-analyze: kernel-x64-test.bin
+	@echo "  ANALYZE kernel-x64-test.bin"
+	@echo "----------------------------------------"
+	@size kernel-x64-test.bin
+	@echo "----------------------------------------"
+	@echo "Sections:"
+	@readelf -S kernel-x64-test.bin | head -1
+	@readelf -S kernel-x64-test.bin | grep -E "\.text|\.data|\.bss|\.rodata"
+	@echo "----------------------------------------"
+	@echo "Entry / critical symbols:"
+	@nm kernel-x64-test.bin 2>/dev/null | grep -E ' [Tt] kmain$$' || true
+	@nm kernel-x64-test.bin 2>/dev/null | grep -E ' [TtWw] kernel_test_run_all$$' || true
+	@UNDEF=$$(nm -u kernel-x64-test.bin 2>/dev/null | wc -l); echo "Undefined symbols: $$UNDEF"
+	@echo "----------------------------------------"
+	@if nm kernel-x64-test.bin 2>/dev/null | grep -q ' [Tt] kmain$$'; then echo "✓ kernel-analyze passed (kmain present)"; else echo "✗ kernel-analyze FAILED (kmain not found)"; exit 1; fi
+	@if nm kernel-x64-test.bin 2>/dev/null | grep -qE ' [TtWw] kernel_test_run_all$$'; then echo "✓ kernel_test_run_all present"; fi
+
+# Salud del sistema: ejecuta toda la batería (kernel-analyze, kernel-memsafe, kernel-tests).
+# Útil para CI o comprobar que el árbol está sano antes de un commit.
+health: kernel-analyze
+	@echo ""
+	@echo "  HEALTH  Running full test suite..."
+	@$(MAKE) kernel-memsafe && $(MAKE) kernel-tests
+	@echo ""
+	@echo "✓ health passed (kernel-analyze, kernel-memsafe, kernel-tests)"
+
+# Clean only network objects
 clean-net:
 	@echo "Cleaning network objects for TAP rebuild..."
 	@rm -f net/*.o
@@ -696,6 +819,12 @@ help:
 	@echo "Utilities:"
 	@echo "  make menuconfig       Kernel configuration menu (experimental)"
 	@echo "  make deptest          Check all dependencies (run this first!)"
+	@echo "  make tests            Build all test artifacts (tests/, kernel with ktest)"
+	@echo "  make kernel-memsafe   Run Valgrind over kernel code (tests/kernel_memsafe)"
+	@echo "  make kernel-tests     Run in-kernel test suite in QEMU (kernel-x64-test.iso)"
+	@echo "  make kernel-analyze   Analyze kernel binary (size, sections, symbols; checks kmain)"
+	@echo "  make health           Full health check: kernel-analyze + kernel-memsafe + kernel-tests"
+	@echo "  make run-gdb          Run QEMU waiting for GDB (localhost:1234)"
 	@echo "  make create-disk      Create virtual disk (MINIX by default)"
 	@echo "  make create-disk hints  Show create-disk help"
 	@echo "  make delete-disk      Delete virtual disk"
@@ -914,11 +1043,12 @@ test-drivers-clean:
 
 # PHONY TARGETS
 
-.PHONY: all clean run run-nodisk run-console debug create-disk delete-disk load-init remove-init help \
+.PHONY: all clean run run-nodisk run-console run-gdb debug create-disk delete-disk load-init remove-init help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
         ir0 ir0-auto auto windows win windows-clean win-clean deptest \
         en-ext-drv dis-ext-drv \
-        test-driver-rust test-driver-cpp test-drivers test-drivers-clean
+        test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
+        tests test-run memsafe kernel-memsafe kernel-tests
 
 # Include dependency files
 -include $(ALL_OBJS:.o=.d)
