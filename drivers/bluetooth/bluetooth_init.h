@@ -57,3 +57,12 @@ int bluetooth_get_status(char *buffer, size_t size);
  * Returns: 0 on success, negative error code on failure
  */
 int bluetooth_register_driver(void);
+
+/**
+ * bluetooth_poll - Process pending HCI events (inquiry results, etc.)
+ *
+ * Debe llamarse periódicamente desde el bucle principal del kernel para que
+ * durante un scan se procesen los eventos Inquiry Result y se vean los
+ * dispositivos descubiertos en los logs y en /proc/bluetooth/devices.
+ */
+void bluetooth_poll(void);

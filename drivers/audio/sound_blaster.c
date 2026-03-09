@@ -22,6 +22,7 @@
 #include <drivers/timer/pit/pit.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
+#include <kernel/resource_registry.h>
 
 /* Global Sound Blaster state */
 static sb16_state_t sb16_state = {0};
@@ -79,6 +80,7 @@ static int32_t sb16_hw_init(void)
     sb16_set_master_volume(SB16_MIXER_VOL_MEDIUM);
 
     sb16_state.initialized = true;
+    resource_register_ioport(SB16_BASE_PORT, SB16_ACK_16BIT, "sound blaster");
     return 0;
 }
 
@@ -212,4 +214,78 @@ void sb16_speaker_on(void)
 void sb16_speaker_off(void)
 {
     sb16_dsp_write(SB16_DSP_SPEAKER_OFF);
+}
+
+/*
+ * sb16_setup_dma_8bit - Configure DMA channel 1 for 8-bit playback.
+ * Buffer must be below 16MB physical (kernel heap is identity-mapped).
+ */
+void sb16_setup_dma_8bit(uint32_t buffer_addr, uint16_t length)
+{
+    dma_disable_channel(SB16_DMA_8BIT);
+    dma_setup_channel(SB16_DMA_8BIT, buffer_addr, length, false);
+    dma_enable_channel(SB16_DMA_8BIT);
+}
+
+/*
+ * sb16_create_sample - Allocate buffer, copy PCM data, fill sample struct.
+ * Caller's data is copied; buffer stays valid until sb16_destroy_sample.
+ */
+int sb16_create_sample(sb16_sample_t *sample, uint8_t *data, uint32_t size,
+                       uint32_t sample_rate, uint8_t channels, uint8_t bits_per_sample)
+{
+    if (!sample || !data || size == 0)
+        return -1;
+    uint8_t *buf = (uint8_t *)kmalloc(size);
+    if (!buf)
+        return -1;
+    memcpy(buf, data, size);
+    sample->data = buf;
+    sample->size = size;
+    sample->sample_rate = sample_rate;
+    sample->channels = channels;
+    sample->bits_per_sample = bits_per_sample;
+    sample->format = (bits_per_sample == 16) ? SB16_FORMAT_16BIT_MONO : SB16_FORMAT_8BIT_MONO;
+    sample->is_playing = false;
+    return 0;
+}
+
+void sb16_destroy_sample(sb16_sample_t *sample)
+{
+    if (sample && sample->data)
+    {
+        kfree(sample->data);
+        sample->data = NULL;
+    }
+}
+
+/*
+ * sb16_play_sample - Play PCM via DMA. Blocks until transfer starts.
+ * Uses 8-bit mono; sample_rate sets DSP time constant.
+ */
+int sb16_play_sample(sb16_sample_t *sample)
+{
+    if (!sample || !sample->data || sample->size == 0)
+        return -1;
+    if (sample->size > 0xFFFE)
+        return -1;  /* DMA 8-bit max ~64KB */
+    sb16_speaker_on();
+    /* Time constant: 256 - 1000000/sample_rate. 22050 Hz -> 211 */
+    uint32_t sr = sample->sample_rate;
+    if (sr < 4000) sr = 4000;
+    if (sr > 45454) sr = 45454;
+    uint8_t tc = (uint8_t)(256 - (1000000 / sr));
+    if (!sb16_dsp_write(SB16_DSP_SET_TIME_CONST) || !sb16_dsp_write(tc))
+        return -1;
+    /* 8-bit single-cycle DMA: 0x14, length low, length high */
+    uint16_t len = (uint16_t)sample->size;
+    if (!sb16_dsp_write(SB16_DSP_PLAY_8BIT))
+        return -1;
+    if (!sb16_dsp_write(len & 0xFF) || !sb16_dsp_write((len >> 8) & 0xFF))
+        return -1;
+    /* Physical address (identity-mapped kernel heap) */
+    uint32_t phys = (uint32_t)(uintptr_t)sample->data;
+    sb16_setup_dma_8bit(phys, len);
+    sample->is_playing = true;
+    return 0;
 }

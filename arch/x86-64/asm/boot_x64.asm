@@ -95,6 +95,9 @@ modo_64bit:
     ; Stack in mapped range
     mov rsp, 0x8FF00
 
+    ; Pass multiboot info (ebx) to kmain as first arg (rdi)
+    mov edi, ebx
+
     ; jump to kernel
     call kmain
 

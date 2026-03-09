@@ -18,6 +18,7 @@
 #include <arch/common/arch_interface.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
+#include <kernel/resource_registry.h>
 
 /* Internal hardware initialization function */
 static int32_t ps2_hw_init(void)
@@ -64,6 +65,10 @@ static int32_t ps2_hw_init(void)
     config |= PS2_CFG_INT1;  /* Enable IRQ1 */
     outb(PS2_COMMAND_PORT, PS2_CMD_WRITE_CONFIG);
     outb(PS2_DATA_PORT, config);
+
+    resource_register_irq(1, "i8042");
+    resource_register_irq(12, "i8042");
+    resource_register_ioport(PS2_DATA_PORT, 0x6F, "keyboard");
     
     return 0;
 }

@@ -20,7 +20,6 @@ static int cmd_echo_handler(int argc, char **argv)
     
     /* Check for redirection: >> or > */
     int redir_append = 0;
-    int redir_overwrite = 0;
     const char *filename = NULL;
     int last_arg = argc;
     
@@ -36,7 +35,6 @@ static int cmd_echo_handler(int argc, char **argv)
         }
         else if (argv[i][0] == '>' && strlen(argv[i]) == 1 && i + 1 < argc)
         {
-            redir_overwrite = 1;
             filename = argv[i + 1];
             last_arg = i;
             break;

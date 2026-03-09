@@ -1,133 +1,93 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: cmd_mkswap.c
- * Description: mkswap command - Create swap files
+ * IR0 Kernel - Debug Binary: mkswap
+ * Crear archivo de swap usando solo syscalls (open/ioctl/close a /dev/swap).
  */
 
-#include "dbgshell.h"
-#include <fs/swapfs.h>
-#include <ir0/vga.h>
+#include "debug_bins.h"
+#include <ir0/errno.h>
+#include <ir0/fcntl.h>
 #include <string.h>
 #include <stdlib.h>
 
-/**
- * cmd_mkswap - Create a swap file
- * @argc: Number of arguments
- * @argv: Argument array
- * 
- * Usage: mkswap <file> [size_mb]
- * 
- * If size_mb is not specified, defaults to 64 MB.
- * 
- * Returns: 0 on success, non-zero on error
- */
-int cmd_mkswap(int argc, char **argv)
+/* IOCTL /dev/swap (sin incluir fs/swapfs.h). */
+#define SWAPFS_IOCTL_CREATE  0x5301
+
+static int cmd_mkswap_handler(int argc, char **argv)
 {
-    if (argc < 2) {
-        print_colored("Usage: mkswap <file> [size_mb]\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-        print_colored("       Default size is 64 MB if not specified\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
+    if (argc < 2)
+    {
+        debug_writeln_err("Usage: mkswap <file> [size_mb]");
+        debug_writeln_err("       Default size is 64 MB if not specified");
         return 1;
     }
-    
+
     const char *swap_file = argv[1];
-    size_t size_mb = 64;  /* Default size */
-    
-    /* Parse size if provided */
-    if (argc >= 3) {
-        /* Simple atoi implementation for size parsing */
-        const char *size_str = argv[2];
+    size_t size_mb = 64;
+
+    if (argc >= 3)
+    {
+        const char *p = argv[2];
         size_mb = 0;
-        
-        while (*size_str >= '0' && *size_str <= '9') {
-            size_mb = size_mb * 10 + (*size_str - '0');
-            size_str++;
-        }
-        
-        if (size_mb == 0) {
-            print_colored("Error: Invalid size specified\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+        while (*p >= '0' && *p <= '9')
+            size_mb = size_mb * 10 + (size_t)(*p++ - '0');
+        if (size_mb == 0)
+        {
+            debug_writeln_err("mkswap: Invalid size specified");
             return 1;
         }
-        
-        if (size_mb > 1024) {
-            print_colored("Error: Maximum swap file size is 1024 MB\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
+        if (size_mb > 1024)
+        {
+            debug_writeln_err("mkswap: Maximum swap file size is 1024 MB");
             return 1;
         }
     }
-    
-    print_colored("Creating swap file: ", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored(swap_file, VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_colored(" (", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_int64(size_mb);
-    print_colored(" MB)\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    
-    print_colored("This may take a moment...\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    
-    int ret = swapfs_create_swap_file(swap_file, size_mb);
-    if (ret < 0) {
-        print_colored("Error: Failed to create swap file ", VGA_COLOR_RED, VGA_COLOR_BLACK);
-        print_colored(swap_file, VGA_COLOR_RED, VGA_COLOR_BLACK);
-        
-        switch (ret) {
-            case -ENODEV:
-                print_colored(" (SwapFS not initialized)\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-                break;
-            case -EINVAL:
-                print_colored(" (Invalid parameters)\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-                break;
-            case -EEXIST:
-                print_colored(" (File already exists as swap file)\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-                break;
-            case -ENOSPC:
-                print_colored(" (No space left on device)\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-                break;
-            case -EIO:
-                print_colored(" (I/O error)\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-                break;
-            case -EACCES:
-                print_colored(" (Permission denied)\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-                break;
-            default:
-                print_colored(" (Unknown error: ");
-                print_int32(ret);
-                print_colored(")\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-                break;
+
+    debug_write("Creating swap file: ");
+    debug_writeln(swap_file);
+
+    int ctl_fd = (int)ir0_open("/dev/swap", O_RDWR, 0);
+    if (ctl_fd < 0)
+    {
+        debug_writeln_err("mkswap: cannot open /dev/swap");
+        return 1;
+    }
+
+    struct { char path[256]; size_t size_mb; } args;
+    size_t i = 0;
+    while (swap_file[i] && i < sizeof(args.path) - 1)
+        args.path[i] = swap_file[i++];
+    args.path[i] = '\0';
+    args.size_mb = size_mb;
+
+    int ret = (int)ir0_ioctl(ctl_fd, SWAPFS_IOCTL_CREATE, &args);
+    ir0_close(ctl_fd);
+
+    if (ret < 0)
+    {
+        debug_write_err("mkswap: failed ");
+        switch (-ret)
+        {
+            case ENODEV: debug_writeln_err("(SwapFS not initialized)"); break;
+            case EINVAL: debug_writeln_err("(Invalid parameters)"); break;
+            case EEXIST: debug_writeln_err("(File already exists as swap)"); break;
+            case ENOSPC: debug_writeln_err("(No space left)"); break;
+            case EIO:    debug_writeln_err("(I/O error)"); break;
+            case EACCES: debug_writeln_err("(Permission denied)"); break;
+            default:     debug_writeln_err("(unknown error)"); break;
         }
         return 1;
     }
-    
-    print_colored("Swap file created successfully\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
-    
-    /* Calculate and display some statistics */
-    uint32_t total_pages = (size_mb * 1024 * 1024 - sizeof(swapfs_header_t)) / 4096;
-    
-    print_colored("Swap file details:\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored("  File: ", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_colored(swap_file, VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_colored("\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    
-    print_colored("  Size: ", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_int64(size_mb);
-    print_colored(" MB (", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    print_int32(total_pages);
-    print_colored(" pages)\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    
-    print_colored("  Page size: 4096 bytes\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-    
-    print_colored("\nTo enable this swap file, use: swapon ", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    print_colored(swap_file, VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_colored("\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-    
+
+    debug_writeln("Swap file created successfully.");
+    debug_write("To enable: swapon ");
+    debug_writeln(swap_file);
     return 0;
 }
 
 struct debug_command cmd_mkswap = {
     .name = "mkswap",
-    .handler = cmd_mkswap,
+    .handler = cmd_mkswap_handler,
+    .usage = "mkswap <file> [size_mb]",
+    .description = "Create swap file"
 };

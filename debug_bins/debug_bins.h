@@ -20,13 +20,13 @@
 #include <string.h>
 #include <ir0/syscall.h>
 #include <ir0/fcntl.h>
-#include <ir0/devfs.h>
 #include <ir0/version.h>
 
-/* Network types (without functions) - commands should only use syscalls */
-#include <ir0/net.h>
-/* Remove net_poll from accessible functions - commands must use syscalls only */
-#undef net_poll
+/*
+ * Los comandos de debug NO incluyen cabeceras del kernel (fs, kernel, ir0/devfs.h, ir0/net.h).
+ * Solo usan syscalls (SYS_OPEN, SYS_READ, SYS_WRITE, SYS_CLOSE, SYS_IOCTL, etc.) o los wrappers
+ * ir0_open, ir0_close, ir0_read, ir0_write, ir0_ioctl de ir0/syscall.h.
+ */
 
 /**
  * Tipo de función handler para comandos

@@ -19,13 +19,18 @@
 #include <ir0/copy_user.h>
 #include <string.h>
 
-/* Device operations structure */
-static const struct file_operations swapfs_fops = {
-    .open = swapfs_device_open,
-    .close = swapfs_device_close,
-    .read = swapfs_device_read,
-    .write = swapfs_device_write,
-    .ioctl = swapfs_device_ioctl
+static int64_t swapfs_dev_open(devfs_entry_t *entry, int flags);
+static int64_t swapfs_dev_close(devfs_entry_t *entry);
+static int64_t swapfs_dev_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
+static int64_t swapfs_dev_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
+static int64_t swapfs_dev_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
+
+static const devfs_ops_t swapfs_ops = {
+    .open = swapfs_dev_open,
+    .close = swapfs_dev_close,
+    .read = swapfs_dev_read,
+    .write = swapfs_dev_write,
+    .ioctl = swapfs_dev_ioctl
 };
 
 /**
@@ -39,7 +44,7 @@ static const struct file_operations swapfs_fops = {
 int swapfs_device_init(void)
 {
     /* Register /dev/swap character device */
-    int ret = devfs_register_device("swap", DEVFS_TYPE_CHAR, 0600, &swapfs_fops);
+    int ret = devfs_register_device("swap", &swapfs_ops, 0600);
     if (ret < 0) {
         serial_print("[SWAPFS] Failed to register /dev/swap device\n");
         return ret;
@@ -51,49 +56,29 @@ int swapfs_device_init(void)
     return 0;
 }
 
-/**
- * swapfs_device_open - Open /dev/swap device
- * @path: Device path (should be "/dev/swap")
- * @flags: Open flags
- * 
- * Returns: File descriptor on success, negative error code on failure
- */
-int swapfs_device_open(const char *path, int flags)
+static int64_t swapfs_dev_open(devfs_entry_t *entry, int flags)
 {
-    (void)path;   /* Unused parameter */
-    (void)flags;  /* Unused parameter */
-    
+    (void)entry;
+    (void)flags;
     LOG_DEBUG("SWAPFS", "SwapFS device opened");
     return 0;
 }
 
-/**
- * swapfs_device_close - Close /dev/swap device
- * @fd: File descriptor
- * 
- * Returns: 0 on success, negative error code on failure
- */
-int swapfs_device_close(int fd)
+static int64_t swapfs_dev_close(devfs_entry_t *entry)
 {
-    (void)fd;  /* Unused parameter */
-    
+    (void)entry;
     LOG_DEBUG("SWAPFS", "SwapFS device closed");
     return 0;
 }
 
 /**
- * swapfs_device_read - Read from /dev/swap device
- * @fd: File descriptor
- * @buf: Buffer to read into
- * @count: Number of bytes to read
- * 
- * Reading from /dev/swap returns current swap statistics in text format.
- * 
- * Returns: Number of bytes read, or negative error code on failure
+ * swapfs_dev_read - Read from /dev/swap device
+ * Returns current swap statistics in text format.
  */
-ssize_t swapfs_device_read(int fd, void *buf, size_t count)
+static int64_t swapfs_dev_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
-    (void)fd;  /* Unused parameter */
+    (void)entry;
+    (void)offset;
     
     if (!buf || count == 0) {
         return -EINVAL;
@@ -140,54 +125,39 @@ ssize_t swapfs_device_read(int fd, void *buf, size_t count)
         return -EFAULT;
     }
     
-    return (ssize_t)copy_len;
+    return (int64_t)copy_len;
 }
 
-/**
- * swapfs_device_write - Write to /dev/swap device
- * @fd: File descriptor
- * @buf: Buffer to write from
- * @count: Number of bytes to write
- * 
- * Writing to /dev/swap is not supported.
- * 
- * Returns: -ENOSYS (not supported)
- */
-ssize_t swapfs_device_write(int fd, const void *buf, size_t count)
+static int64_t swapfs_dev_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
-    (void)fd;    /* Unused parameter */
-    (void)buf;   /* Unused parameter */
-    (void)count; /* Unused parameter */
-    
-    return -ENOSYS;  /* Write not supported */
+    (void)entry;
+    (void)buf;
+    (void)count;
+    (void)offset;
+    return -ENOSYS;
 }
 
-/**
- * swapfs_device_ioctl - IOCTL operations for /dev/swap device
- * @fd: File descriptor
- * @cmd: IOCTL command
- * @arg: Command argument
- * 
- * Supports various SwapFS management operations via IOCTL.
- * 
- * Returns: 0 on success, negative error code on failure
- */
-int swapfs_device_ioctl(int fd, unsigned int cmd, unsigned long arg)
+static int64_t swapfs_dev_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
-    (void)fd;  /* Unused parameter */
-    
+    (void)entry;
+    unsigned int cmd = (unsigned int)request;
+    unsigned long arg_val = (unsigned long)(uintptr_t)arg;
+
     switch (cmd) {
         case SWAPFS_IOCTL_CREATE: {
             swapfs_create_args_t args;
             
             /* Copy arguments from user space */
-            if (copy_from_user(&args, (void *)arg, sizeof(args)) != 0) {
+            if (copy_from_user(&args, (void *)arg_val, sizeof(args)) != 0) {
                 return -EFAULT;
             }
             
-            /* Validate path */
-            if (strnlen(args.path, sizeof(args.path)) >= sizeof(args.path)) {
-                return -EINVAL;
+            /* Validate path is null-terminated */
+            {
+                size_t plen = 0;
+                while (plen < sizeof(args.path) && args.path[plen]) plen++;
+                if (plen >= sizeof(args.path))
+                    return -EINVAL;
             }
             
             /* Validate size */
@@ -205,13 +175,16 @@ int swapfs_device_ioctl(int fd, unsigned int cmd, unsigned long arg)
             swapfs_activate_args_t args;
             
             /* Copy arguments from user space */
-            if (copy_from_user(&args, (void *)arg, sizeof(args)) != 0) {
+            if (copy_from_user(&args, (void *)arg_val, sizeof(args)) != 0) {
                 return -EFAULT;
             }
             
-            /* Validate path */
-            if (strnlen(args.path, sizeof(args.path)) >= sizeof(args.path)) {
-                return -EINVAL;
+            /* Validate path is null-terminated */
+            {
+                size_t plen = 0;
+                while (plen < sizeof(args.path) && args.path[plen]) plen++;
+                if (plen >= sizeof(args.path))
+                    return -EINVAL;
             }
             
             LOG_INFO_FMT("SWAPFS", "Activating swap file: %s", args.path);
@@ -223,13 +196,16 @@ int swapfs_device_ioctl(int fd, unsigned int cmd, unsigned long arg)
             swapfs_activate_args_t args;  /* Same structure as activate */
             
             /* Copy arguments from user space */
-            if (copy_from_user(&args, (void *)arg, sizeof(args)) != 0) {
+            if (copy_from_user(&args, (void *)arg_val, sizeof(args)) != 0) {
                 return -EFAULT;
             }
             
-            /* Validate path */
-            if (strnlen(args.path, sizeof(args.path)) >= sizeof(args.path)) {
-                return -EINVAL;
+            /* Validate path is null-terminated */
+            {
+                size_t plen = 0;
+                while (plen < sizeof(args.path) && args.path[plen]) plen++;
+                if (plen >= sizeof(args.path))
+                    return -EINVAL;
             }
             
             LOG_INFO_FMT("SWAPFS", "Deactivating swap file: %s", args.path);
@@ -247,7 +223,7 @@ int swapfs_device_ioctl(int fd, unsigned int cmd, unsigned long arg)
             }
             
             /* Copy statistics to user space */
-            if (copy_to_user((void *)arg, &stats, sizeof(stats)) != 0) {
+            if (copy_to_user((void *)arg_val, &stats, sizeof(stats)) != 0) {
                 return -EFAULT;
             }
             
@@ -255,37 +231,17 @@ int swapfs_device_ioctl(int fd, unsigned int cmd, unsigned long arg)
         }
         
         case SWAPFS_IOCTL_LIST: {
-            /* TODO: Implement list of active swap files */
-            LOG_WARNING("SWAPFS", "SWAPFS_IOCTL_LIST not yet implemented");
-            return -ENOSYS;
+            swapfs_list_t list;
+            int ret = swapfs_get_active_list(&list);
+            if (ret < 0)
+                return ret;
+            if (copy_to_user((void *)arg_val, &list, sizeof(list)) != 0)
+                return -EFAULT;
+            return 0;
         }
         
         default:
             LOG_WARNING_FMT("SWAPFS", "Unknown IOCTL command: 0x%X", cmd);
             return -ENOTTY;
     }
-}
-
-/* Helper function for snprintf (simplified version) */
-static int snprintf(char *buf, size_t size, const char *fmt, ...)
-{
-    /* This is a simplified implementation for the specific format strings we use */
-    /* In a real implementation, you'd want a full printf implementation */
-    
-    if (!buf || size == 0) {
-        return -1;
-    }
-    
-    /* For now, just copy a basic message */
-    const char *basic_msg = "SwapFS Statistics: [Basic implementation - full stats via IOCTL]\n";
-    size_t msg_len = strlen(basic_msg);
-    
-    if (msg_len >= size) {
-        msg_len = size - 1;
-    }
-    
-    memcpy(buf, basic_msg, msg_len);
-    buf[msg_len] = '\0';
-    
-    return (int)msg_len;
 }

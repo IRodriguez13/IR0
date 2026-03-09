@@ -42,10 +42,11 @@ extern devfs_node_t dev_net;
 extern devfs_node_t dev_disk;
 extern devfs_node_t dev_kmsg;
 
-// Device filesystem management
+/* Device filesystem management */
 int devfs_init(void);
 devfs_node_t *devfs_find_node(const char *path);
 devfs_node_t *devfs_find_node_by_id(uint32_t device_id);
+int devfs_register_node(devfs_node_t *node);
 int devfs_register_device(const char *name, const devfs_ops_t *ops, uint32_t mode);
 int devfs_unregister_device(const char *name);
 
@@ -86,6 +87,15 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
 #define AUDIO_GET_VOLUME    0x1002
 #define AUDIO_PLAY          0x1003
 #define AUDIO_STOP          0x1004
+#define AUDIO_SET_FORMAT    0x1005
+#define AUDIO_GET_FORMAT    0x1006
+
+/* PCM format for Doom compatibility (11025 Hz, 8-bit mono default) */
+struct audio_format {
+    uint32_t sample_rate;   /* 4000-45454 Hz, Doom uses 11025 */
+    uint8_t channels;      /* 1=mono, 2=stereo */
+    uint8_t bits_per_sample; /* 8 or 16 */
+};
 
 #define MOUSE_GET_STATE     0x2001
 #define MOUSE_SET_SENSITIVITY 0x2002
@@ -102,3 +112,44 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
 #define IPC_CREATE_CHANNEL  0x5001
 #define IPC_DESTROY_CHANNEL 0x5002
 #define IPC_GET_CHANNEL_ID  0x5003
+
+/* Framebuffer (OSDev /dev/fb0, Linux-compatible ioctl) */
+#define FBIOGET_VSCREENINFO 0x6001
+struct fb_var_screeninfo {
+    uint32_t xres;           /* visible resolution */
+    uint32_t yres;
+    uint32_t xres_virtual;
+    uint32_t yres_virtual;
+    uint32_t xoffset;
+    uint32_t yoffset;
+    uint32_t bits_per_pixel;
+    uint32_t grayscale;
+    uint32_t red;
+    uint32_t green;
+    uint32_t blue;
+    uint32_t transp;
+    uint32_t nonstd;
+    uint32_t activate;
+    uint32_t height;
+    uint32_t width;
+    uint32_t accel_flags;
+    uint32_t pixclock;
+    uint32_t left_margin;
+    uint32_t right_margin;
+    uint32_t upper_margin;
+    uint32_t lower_margin;
+    uint32_t hsync_len;
+    uint32_t vsync_len;
+    uint32_t sync;
+    uint32_t vmode;
+    uint32_t rotate;
+    uint32_t colorspace;
+};
+
+/* Minimal fb info for IR0 (subset of above) */
+struct fb_info_min {
+    uint32_t width;
+    uint32_t height;
+    uint32_t bpp;
+    uint32_t pitch;
+};

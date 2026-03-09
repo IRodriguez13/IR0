@@ -97,7 +97,7 @@ static int cmd_lsblue_handler(int argc, char **argv)
     if (nr <= 0)
     {
         debug_write("ADAPTER  ADDRESS             NAME                 STATE       RSSI\n");
-        debug_write("(no neighbors; run: echo start > /proc/bluetooth/scan then wait and cat /proc/bluetooth/devices)\n");
+        debug_write("(no neighbors; run: bluestart, then wait and lsblue or cat /proc/bluetooth/devices)\n");
         return 0;
     }
 

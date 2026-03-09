@@ -17,6 +17,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* DMA Controller 1 (8-bit) Port range for resource registry */
+#define DMA1_PORT_START     0x00
+#define DMA1_PORT_END       0x0F
+
 /* DMA Controller 1 (8-bit) Ports */
 #define DMA1_COMMAND_REG    0x08
 #define DMA1_STATUS_REG     0x08

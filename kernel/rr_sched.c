@@ -246,8 +246,8 @@ void rr_schedule_next(void)
 	{
 		next = rr_current->process;
 		
-		/* Skip zombies - they should not be scheduled */
-		if (next && next->state != PROCESS_ZOMBIE)
+		/* Skip zombies and blocked (e.g. waiting in poll) */
+		if (next && next->state != PROCESS_ZOMBIE && next->state != PROCESS_BLOCKED)
 		{
 			/* Found a runnable process */
 			break;
@@ -259,7 +259,7 @@ void rr_schedule_next(void)
 	}
 	
 	/* If no runnable process found, return */
-	if (!rr_current || !next || next->state == PROCESS_ZOMBIE)
+	if (!rr_current || !next || next->state == PROCESS_ZOMBIE || next->state == PROCESS_BLOCKED)
 	{
 		/* No runnable processes - halt CPU */
 		current_process = NULL;

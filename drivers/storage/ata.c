@@ -12,10 +12,12 @@
  */
 
 #include "ata.h"
+#include <drivers/disk/partition.h>
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <string.h>
 #include <arch/common/arch_interface.h>
+#include <kernel/resource_registry.h>
 
 // Global variables
 bool ata_drives_present[4] = {false, false, false, false};
@@ -149,10 +151,27 @@ void ata_init(void)
         ata_reset_drive(i);
     }
     
-    // Try to identify drives
-    for (int i = 0; i < 4; i++) 
+    /* Try to identify drives */
+    for (int i = 0; i < 4; i++)
     {
         ata_drives_present[i] = ata_identify_drive(i);
+    }
+    /* Read partition table on each present drive (MBR/GPT) */
+    for (int i = 0; i < 4; i++)
+    {
+        if (ata_drives_present[i])
+            read_partition_table((uint8_t)i);
+    }
+
+    if (ata_drives_present[0] || ata_drives_present[1])
+    {
+        resource_register_irq(14, "ata14");
+        resource_register_ioport(ATA_PRIMARY_DATA, ATA_PRIMARY_COMMAND, "ata primary");
+    }
+    if (ata_drives_present[2] || ata_drives_present[3])
+    {
+        resource_register_irq(15, "ata15");
+        resource_register_ioport(ATA_SECONDARY_DATA, ATA_SECONDARY_COMMAND, "ata secondary");
     }
 }
 

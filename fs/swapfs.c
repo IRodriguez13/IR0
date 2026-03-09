@@ -12,9 +12,11 @@
  */
 
 #include "swapfs.h"
+#include <ir0/fcntl.h>
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
+#include <drivers/timer/clock_system.h>
 #include <fs/vfs.h>
 #include <string.h>
 #include <ir0/devfs.h>
@@ -101,12 +103,13 @@ int swapfs_create_swap_file(const char *path, size_t size_mb)
     }
     
     /* Create the swap file */
-    int fd = vfs_open(path, O_CREAT | O_RDWR, 0600);
-    if (fd < 0) {
+    struct vfs_file *file = NULL;
+    int ret = vfs_open(path, O_CREAT | O_RDWR, 0600, &file);
+    if (ret != 0 || !file) {
         serial_print("[SWAPFS] Failed to create swap file: ");
         serial_print(path);
         serial_print("\n");
-        return fd;
+        return ret ? ret : -EIO;
     }
     
     /* Initialize swap file header */
@@ -118,13 +121,13 @@ int swapfs_create_swap_file(const char *path, size_t size_mb)
     header.total_pages = total_pages;
     header.used_pages = 0;
     header.free_pages = total_pages;
-    header.created_time = 0;  /* TODO: Get current time */
+    header.created_time = clock_get_uptime_milliseconds();
     header.last_access = 0;
     
     /* Write header to file */
-    ssize_t written = vfs_write(fd, &header, sizeof(header));
-    if (written != sizeof(header)) {
-        vfs_close(fd);
+    ssize_t written = vfs_write(file, (const char *)&header, sizeof(header));
+    if (written != (ssize_t)sizeof(header)) {
+        vfs_close(file);
         vfs_unlink(path);  /* Clean up on failure */
         return -EIO;
     }
@@ -134,15 +137,15 @@ int swapfs_create_swap_file(const char *path, size_t size_mb)
     memset(zero_page, 0, sizeof(zero_page));
     
     for (uint32_t i = 0; i < total_pages; i++) {
-        written = vfs_write(fd, zero_page, sizeof(zero_page));
-        if (written != sizeof(zero_page)) {
-            vfs_close(fd);
+        written = vfs_write(file, zero_page, sizeof(zero_page));
+        if (written != (ssize_t)sizeof(zero_page)) {
+            vfs_close(file);
             vfs_unlink(path);
             return -EIO;
         }
     }
     
-    vfs_close(fd);
+    vfs_close(file);
     
     LOG_INFO_FMT("SWAPFS", "Created swap file: %s (%zu MB, %u pages)", 
                  path, size_mb, total_pages);
@@ -197,16 +200,16 @@ int swapfs_activate_swap_file(const char *path)
     strncpy(swap_file->path, path, sizeof(swap_file->path) - 1);
     
     /* Open the swap file */
-    swap_file->fd = vfs_open(path, O_RDWR, 0);
-    if (swap_file->fd < 0) {
+    int ret = vfs_open(path, O_RDWR, 0, &swap_file->file);
+    if (ret != 0 || !swap_file->file) {
         kfree(swap_file);
-        return swap_file->fd;
+        return ret ? ret : -EIO;
     }
     
     /* Read and validate header */
-    int ret = read_swap_header(swap_file);
+    ret = read_swap_header(swap_file);
     if (ret < 0) {
-        vfs_close(swap_file->fd);
+        vfs_close(swap_file->file);
         kfree(swap_file);
         return ret;
     }
@@ -215,7 +218,7 @@ int swapfs_activate_swap_file(const char *path)
     size_t bitmap_bytes = (swap_file->header.total_pages + 7) / 8;
     swap_file->bitmap = kmalloc(bitmap_bytes);
     if (!swap_file->bitmap) {
-        vfs_close(swap_file->fd);
+        vfs_close(swap_file->file);
         kfree(swap_file);
         return -ENOMEM;
     }
@@ -295,7 +298,7 @@ int swapfs_deactivate_swap_file(const char *path)
     swapfs_state.stats.used_swap_size -= swap_file->header.used_pages * SWAPFS_PAGE_SIZE;
     
     /* Close file and free resources */
-    vfs_close(swap_file->fd);
+    vfs_close(swap_file->file);
     kfree(swap_file->bitmap);
     kfree(swap_file);
     
@@ -343,13 +346,13 @@ int swapfs_swap_out_page(uint64_t virtual_addr, void *page_data, uint32_t *swap_
     off_t offset = sizeof(swapfs_header_t) + (page_index * SWAPFS_PAGE_SIZE);
     
     /* Seek to the correct position */
-    if (vfs_lseek(swap_file->fd, offset, SEEK_SET) != offset) {
+    if (vfs_lseek(swap_file->file, offset, SEEK_SET) != (off_t)offset) {
         free_swap_page_internal(swap_file, page_index);
         return -EIO;
     }
     
     /* Write page data to swap file */
-    ssize_t written = vfs_write(swap_file->fd, page_data, SWAPFS_PAGE_SIZE);
+    ssize_t written = vfs_write(swap_file->file, (const char *)page_data, SWAPFS_PAGE_SIZE);
     if (written != SWAPFS_PAGE_SIZE) {
         free_swap_page_internal(swap_file, page_index);
         return -EIO;
@@ -382,6 +385,30 @@ int swapfs_get_stats(swapfs_stats_t *stats)
     }
     
     memcpy(stats, &swapfs_state.stats, sizeof(swapfs_stats_t));
+    return 0;
+}
+
+/**
+ * swapfs_get_active_list - Get list of active swap files
+ * @list: Output buffer for swap list
+ * Returns: 0 on success, negative on error
+ */
+int swapfs_get_active_list(swapfs_list_t *list)
+{
+    if (!swapfs_state.initialized || !list) {
+        return -EINVAL;
+    }
+    memset(list, 0, sizeof(swapfs_list_t));
+    swapfs_file_t *cur = swapfs_state.swap_files;
+    while (cur && list->count < SWAPFS_MAX_SWAP_FILES) {
+        strncpy(list->entries[list->count].path, cur->path, 255);
+        list->entries[list->count].path[255] = '\0';
+        list->entries[list->count].total_pages = cur->header.total_pages;
+        list->entries[list->count].used_pages = cur->header.used_pages;
+        list->entries[list->count].free_pages = cur->header.free_pages;
+        list->count++;
+        cur = cur->next;
+    }
     return 0;
 }
 
@@ -451,12 +478,12 @@ static int write_swap_header(swapfs_file_t *swap_file)
     }
     
     /* Seek to beginning of file */
-    if (vfs_lseek(swap_file->fd, 0, SEEK_SET) != 0) {
+    if (vfs_lseek(swap_file->file, 0, SEEK_SET) != 0) {
         return -EIO;
     }
     
     /* Write header */
-    ssize_t written = vfs_write(swap_file->fd, &swap_file->header, sizeof(swap_file->header));
+    ssize_t written = vfs_write(swap_file->file, (const char *)&swap_file->header, sizeof(swap_file->header));
     if (written != sizeof(swap_file->header)) {
         return -EIO;
     }
@@ -471,12 +498,12 @@ static int read_swap_header(swapfs_file_t *swap_file)
     }
     
     /* Seek to beginning of file */
-    if (vfs_lseek(swap_file->fd, 0, SEEK_SET) != 0) {
+    if (vfs_lseek(swap_file->file, 0, SEEK_SET) != 0) {
         return -EIO;
     }
     
     /* Read header */
-    ssize_t read_bytes = vfs_read(swap_file->fd, &swap_file->header, sizeof(swap_file->header));
+    ssize_t read_bytes = vfs_read(swap_file->file, (char *)&swap_file->header, sizeof(swap_file->header));
     if (read_bytes != sizeof(swap_file->header)) {
         return -EIO;
     }
@@ -487,7 +514,7 @@ static int read_swap_header(swapfs_file_t *swap_file)
     }
     
     if (swap_file->header.version != SWAPFS_VERSION) {
-        return -ENOTSUP;
+        return -ENOSYS;
     }
     
     if (swap_file->header.page_size != SWAPFS_PAGE_SIZE) {

@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <ir0/errno.h>
+#include <ir0/types.h>  /* ssize_t */
 
 /* SwapFS Configuration */
 #define SWAPFS_MAX_SWAP_FILES    4
@@ -46,8 +47,9 @@ typedef struct {
 } __attribute__((packed)) swapfs_page_entry_t;
 
 /* Swap file descriptor */
+struct vfs_file;
 typedef struct swapfs_file {
-    int fd;                      /* File descriptor for swap file */
+    struct vfs_file *file;      /* VFS file handle for swap file */
     char path[256];              /* Path to swap file */
     swapfs_header_t header;      /* Swap file header */
     uint8_t *bitmap;             /* Page allocation bitmap */
@@ -72,6 +74,18 @@ typedef struct {
 #define SWAPFS_PAGE_LOCKED       0x04
 #define SWAPFS_PAGE_COMPRESSED   0x08
 
+typedef struct {
+    char path[256];
+    uint32_t total_pages;
+    uint32_t used_pages;
+    uint32_t free_pages;
+} swapfs_list_entry_t;
+
+typedef struct {
+    uint32_t count;
+    swapfs_list_entry_t entries[SWAPFS_MAX_SWAP_FILES];
+} swapfs_list_t;
+
 /* SwapFS operations */
 int swapfs_init(void);
 int swapfs_create_swap_file(const char *path, size_t size_mb);
@@ -81,6 +95,7 @@ int swapfs_swap_out_page(uint64_t virtual_addr, void *page_data, uint32_t *swap_
 int swapfs_swap_in_page(uint32_t swap_id, void *page_data, uint64_t *virtual_addr);
 int swapfs_free_swap_page(uint32_t swap_id);
 int swapfs_get_stats(swapfs_stats_t *stats);
+int swapfs_get_active_list(swapfs_list_t *list);
 
 /* Device interface functions */
 int swapfs_device_init(void);

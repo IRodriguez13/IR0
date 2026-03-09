@@ -8,13 +8,13 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: vfs.c
- * Description: Virtual File System abstraction layer with MINIX filesystem
- * integration
+ * Description: Virtual File System abstraction layer (FS-agnostic)
  */
 
 #include "vfs.h"
 #include "minix_fs.h"
 #include "tmpfs.h"
+#include <ir0/logging.h>
 #include <kernel/process.h>
 #include <mm/allocator.h>
 #include <mm/paging.h>
@@ -30,7 +30,7 @@
 #include <ir0/kmem.h>
 #include <ir0/vga.h>
 #include <kernel/syscalls.h>
-#include <drivers/storage/ata.h>
+#include <drivers/storage/block_dev.h>
 
 /* Forward declarations and types */
 typedef struct
@@ -164,6 +164,17 @@ static struct filesystem_type *filesystems = NULL;
 static struct vfs_superblock *root_sb = NULL;
 static struct vfs_inode *root_inode = NULL;
 
+void vfs_set_root(struct vfs_superblock *sb, struct vfs_inode *inode)
+{
+	root_sb = sb;
+	root_inode = inode;
+}
+
+struct vfs_superblock *vfs_get_root_sb(void)
+{
+	return root_sb;
+}
+
 /* Mount points list */
 static struct mount_point *mount_points = NULL;
 
@@ -202,52 +213,21 @@ static int validate_path(const char *path)
     if (len >= MAX_PATH_LENGTH)
         return -ENAMETOOLONG;
     
-    /* Security checks: prevent dangerous path patterns */
     const char *p = path;
-    int dot_count = 0;
-    int slash_count = 0;
     int component_length = 0;
     
-    /* Check for consecutive slashes (//) - normalize later but reject now */
+    /* Linux-style: allow .. and // - filesystem normalizes during lookup */
     while (*p)
     {
         if (*p == '/')
         {
-            slash_count++;
-            if (slash_count > 1)
-            {
-                /* Multiple consecutive slashes - reject for security */
-                return -EINVAL;
-            }
-            /* Reset component length counter */
             component_length = 0;
         }
         else
         {
-            slash_count = 0;
             component_length++;
-            
-            /* Check for excessively long path components */
             if (component_length > 255)
-            {
                 return -ENAMETOOLONG;
-            }
-        }
-        
-        /* Check for parent directory traversal (..) */
-        if (*p == '.')
-        {
-            dot_count++;
-            if (dot_count >= 2 && (p[1] == '/' || p[1] == '\0'))
-            {
-                /* Dangerous: .. found - could traverse outside allowed directories */
-                /* Note: We still allow single . for current directory */
-                return -EACCES;
-            }
-        }
-        else
-        {
-            dot_count = 0;
         }
         
         /* Reject control characters, null bytes, and dangerous characters in path */
@@ -264,20 +244,6 @@ static int validate_path(const char *path)
         
         p++;
     }
-    
-    /* Ensure path starts with / (absolute path) or doesn't contain .. at start */
-    if (path[0] != '/' && (len >= 2 && path[0] == '.' && path[1] == '.'))
-    {
-        /* Relative path with .. at start - reject for security */
-        return -EACCES;
-    }
-    
-    /* Additional check: reject paths ending with .. */
-    if (len >= 2 && path[len-2] == '.' && path[len-1] == '.')
-    {
-        return -EACCES;
-    }
-    
     return 0;
 }
 
@@ -369,8 +335,8 @@ int vfs_add_mount_point(const char *path, const char *dev,
                         struct vfs_superblock *sb, struct vfs_inode *root,
                         struct filesystem_type *fs_type)
 {
-    /* Validate inputs */
-    if (!path || !sb || !root || !fs_type)
+    /* Validate inputs (sb may be NULL for FS that don't use superblock, e.g. tmpfs) */
+    if (!path || !root || !fs_type)
         return -EINVAL;
     
     /* Validate path */
@@ -509,45 +475,35 @@ struct vfs_inode *vfs_path_lookup(const char *path)
     return mp->mount_root;
   }
 
-  /* Default: Use root filesystem (MINIX) */
-  if (!minix_fs_is_working())
+  /*
+   * No mount point: use root FS if set (e.g. root not yet in mount table).
+   * Agnóstico al tipo de FS.
+   */
+  if (root_sb && root_sb->s_type && root_sb->s_type->ops && root_sb->s_type->ops->lookup)
   {
-    return NULL;
+    struct vfs_inode *inode = root_sb->s_type->ops->lookup(path);
+    if (inode)
+    {
+      inode->i_sb = root_sb;
+      inode->i_op = root_inode ? root_inode->i_op : NULL;
+      inode->i_fop = root_inode ? root_inode->i_fop : NULL;
+      return inode;
+    }
   }
-
-  /* Find inode using MINIX filesystem */
-  uint16_t inode_num = minix_fs_get_inode_number(path);
-  if (inode_num == 0)
-  {
-    return NULL;
-  }
-
-  minix_inode_t *minix_inode = minix_fs_find_inode(path);
-  if (!minix_inode)
-  {
-    return NULL;
-  }
-
-  /* Convert MINIX inode to VFS inode */
-  static struct vfs_inode vfs_inode_wrapper;
-  vfs_inode_wrapper.i_ino = inode_num;
-  vfs_inode_wrapper.i_mode = minix_inode->i_mode;
-  vfs_inode_wrapper.i_size = minix_inode->i_size;
-  vfs_inode_wrapper.i_sb = root_inode->i_sb;
-  vfs_inode_wrapper.i_private = minix_inode;
-  vfs_inode_wrapper.i_op = root_inode->i_op;
-  vfs_inode_wrapper.i_fop = root_inode->i_fop;
-
-  return &vfs_inode_wrapper;
+  return NULL;
 }
+
+static void vfs_register_builtin_filesystems(void);
 
 int vfs_init(void)
 {
-  /* Inicializar lista de filesystems */
+  /* Initialize filesystem list */
   filesystems = NULL;
   root_sb = NULL;
   root_inode = NULL;
   mount_points = NULL;
+
+  vfs_register_builtin_filesystems();
 
   return 0;
 }
@@ -586,55 +542,24 @@ int vfs_mount(const char *dev, const char *mountpoint, const char *fstype)
     if (!fs_type)
         return -ENODEV;  /* Filesystem not found */
 
-    /* Montar el filesystem (llama a la función mount específica) */
+    /*
+     * Mount the filesystem. Each FS's mount() is responsible for:
+     * - Root ("/"): create sb/inode, call vfs_set_root(sb, inode)
+     * - Non-root: create sb/inode, call vfs_add_mount_point()
+     */
     int mount_ret = fs_type->mount(dev, mountpoint);
     if (mount_ret != 0)
         return mount_ret;
 
-  if (strcmp(mountpoint, "/") == 0)
-  {
-    return vfs_add_mount_point("/", dev ? dev : "root", root_sb, root_inode, fs_type);
-  }
+    /* Root mount: VFS adds the mount point (mount already set root_sb/root_inode) */
+    if (strcmp(mountpoint, "/") == 0)
+        return vfs_add_mount_point("/", dev ? dev : "root", root_sb, root_inode, fs_type);
 
-
-    /* For filesystems other than root, create mount root inode */
-    /* Support MINIX and TMPFS for non-root mounts */
-    if (strcmp(fstype, "minix") == 0)
-    {
-        struct vfs_inode *mount_root = kmalloc(sizeof(struct vfs_inode));
-        if (!mount_root)
-            return -ENOMEM;
-        
-        /* Copy structure from root inode */
-        memcpy(mount_root, root_inode, sizeof(struct vfs_inode));
-        
-        return vfs_add_mount_point(mountpoint, dev ? dev : "none", root_sb, mount_root, fs_type);
-    }
-    else if (strcmp(fstype, "tmpfs") == 0)
-    {
-        /* TMPFS mount - create mount root inode */
-        struct vfs_inode *mount_root = kmalloc(sizeof(struct vfs_inode));
-        if (!mount_root)
-            return -ENOMEM;
-        
-        /* Initialize TMPFS mount root inode */
-        mount_root->i_ino = 1;  /* TMPFS root is always inode 1 */
-        mount_root->i_mode = S_IFDIR | 0755;
-        mount_root->i_size = 0;
-        mount_root->i_sb = NULL;  /* TMPFS doesn't use superblock in the same way */
-        mount_root->i_private = NULL;  /* Will be set by tmpfs lookup */
-        mount_root->i_op = NULL;
-        mount_root->i_fop = NULL;
-        
-        return vfs_add_mount_point(mountpoint, dev ? dev : "none", NULL, mount_root, fs_type);
-    }
-    
-    /* For other filesystem types, filesystem-specific mount should handle mount point */
-    /* If mount succeeded but no mount point was added, assume it's OK */
+    /* Non-root: mount() must have called vfs_add_mount_point */
     return 0;
 }
 
-int vfs_open(const char *path, int flags, struct vfs_file **file)
+int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **file)
 {
     /* Validate inputs */
     int ret = validate_path(path);
@@ -699,9 +624,7 @@ int vfs_open(const char *path, int flags, struct vfs_file **file)
             struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
             if (fs && fs->ops && fs->ops->create_file)
             {
-                mode_t file_mode = (mode_t)(flags & 0777);  /* Extract mode from flags or use default */
-                if (file_mode == 0)
-                    file_mode = 0644;  /* Default mode */
+                mode_t file_mode = mode ? (mode & 0777) : 0644;
                 
                 int create_ret = fs->ops->create_file(path, file_mode);
                 if (create_ret != 0)
@@ -823,7 +746,7 @@ int vfs_append(const char *path, const char *buf, size_t count)
     
     /* Open file with append mode (vfs_open will check permissions) */
     struct vfs_file *file;
-    ret = vfs_open(path, O_WRONLY | O_APPEND, &file);
+    ret = vfs_open(path, O_WRONLY | O_APPEND, 0, &file);
     if (ret != 0)
         return ret;
     
@@ -859,6 +782,15 @@ int vfs_close(struct vfs_file *file)
     return ret;
 }
 
+off_t vfs_lseek(struct vfs_file *file, off_t offset, int whence)
+{
+    if (!file)
+        return -EBADF;
+    if (!file->f_inode->i_fop || !file->f_inode->i_fop->seek)
+        return -ENOSYS;
+    return file->f_inode->i_fop->seek(file, offset, whence);
+}
+
 int vfs_ls(const char *path)
 {
     /* Validate input */
@@ -871,17 +803,8 @@ int vfs_ls(const char *path)
     
     /* Use filesystem-specific ls operation if available */
     if (fs && fs->ops && fs->ops->ls)
-    {
         return fs->ops->ls(path, false);
-    }
-    
-    /* Fallback: try MINIX if available */
-    if (minix_fs_is_working())
-    {
-        return minix_fs_ls(path, false);
-    }
-    
-    return -ENODEV;  /* No filesystem available */
+    return -ENOSYS;
 }
 
 int vfs_mkdir(const char *path, int mode)
@@ -931,12 +854,8 @@ int vfs_mkdir(const char *path, int mode)
     /* Delegate to filesystem-specific implementation */
     struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
     if (fs && fs->ops && fs->ops->mkdir)
-    {
         return fs->ops->mkdir(path, (mode_t)mode);
-    }
-    
-    /* Fallback to MINIX */
-    return minix_fs_mkdir(path, (mode_t)mode);
+    return -ENOSYS;
 }
 
 int vfs_unlink(const char *path)
@@ -989,12 +908,8 @@ int vfs_unlink(const char *path)
     /* Delegate to filesystem-specific implementation */
     struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
     if (fs && fs->ops && fs->ops->unlink)
-    {
         return fs->ops->unlink(path);
-    }
-    
-    /* Fallback to MINIX */
-    return minix_fs_rm(path);
+    return -ENOSYS;
 }
 
 int vfs_link(const char *oldpath, const char *newpath)
@@ -1043,7 +958,10 @@ int vfs_link(const char *oldpath, const char *newpath)
         return -EEXIST;
     
     /* Delegate to filesystem-specific implementation */
-    return minix_fs_link(oldpath, newpath);
+    struct filesystem_type *fs = vfs_get_filesystem_for_path(oldpath);
+    if (fs && fs->ops && fs->ops->link)
+        return fs->ops->link(oldpath, newpath);
+    return -ENOSYS;
 }
 
 /* Internal recursive function with depth limit to prevent stack overflow */
@@ -1114,8 +1032,10 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
     if (entry_count < 0)
     {
         /* Error reading directory, but it exists - try to remove it anyway */
-        /* This might happen if directory is already empty or corrupted */
-        return minix_fs_rmdir(normalized_path);
+        struct filesystem_type *fs = vfs_get_filesystem_for_path(normalized_path);
+        if (fs && fs->ops && fs->ops->rmdir)
+            return fs->ops->rmdir(normalized_path);
+        return entry_count;
     }
 
   /* Recursively delete all entries */
@@ -1175,7 +1095,10 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
   }
 
   /* Finally, remove the now-empty directory */
-  return minix_fs_rmdir(normalized_path);
+  struct filesystem_type *fs = vfs_get_filesystem_for_path(normalized_path);
+  if (fs && fs->ops && fs->ops->rmdir)
+    return fs->ops->rmdir(normalized_path);
+  return -ENOSYS;
 }
 
 int vfs_rmdir_recursive(const char *path)
@@ -1203,33 +1126,42 @@ static struct filesystem_type *vfs_get_filesystem_for_path(const char *path)
 
 int vfs_stat(const char *path, stat_t *buf)
 {
-    /* Validate inputs */
     if (!path || !buf)
     {
         return -EINVAL;
     }
-    
-    /* Validate path */
+
+    int ret = validate_path(path);
+    if (ret != 0)
+    {
+        log_debug_fmt("VFS", "stat('%s') validate_path=%d", path, ret);
+        return ret;
+    }
+
+    struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
+    if (!fs || !fs->ops || !fs->ops->stat)
+    {
+        log_debug_fmt("VFS", "stat('%s') no fs/stat fs=%p", path, (void *)fs);
+        return -ENODEV;
+    }
+
+    ret = fs->ops->stat(path, buf);
+    if (strcmp(path, "/") == 0)
+        log_info_fmt("VFS", "stat('%s') -> %d mode=0x%x", path, ret, ret == 0 ? buf->st_mode : 0);
+    return ret;
+}
+
+int vfs_chown(const char *path, uid_t owner, gid_t group)
+{
+    if (!path)
+        return -EINVAL;
     int ret = validate_path(path);
     if (ret != 0)
         return ret;
-    
-    /* Get filesystem for this path */
     struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
-    
-    /* Route stat request through VFS layer to appropriate filesystem */
-    if (fs && fs->ops && fs->ops->stat)
-    {
-        return fs->ops->stat(path, buf);
-    }
-    
-    /* Fallback: try MINIX if available */
-    if (minix_fs_is_working())
-    {
-        return minix_fs_stat(path, buf);
-    }
-    
-    return -ENODEV;  /* No filesystem available */
+    if (fs && fs->ops && fs->ops->chown)
+        return fs->ops->chown(path, owner, group);
+    return -ENOSYS;
 }
 
 int vfs_readdir(const char *path, struct vfs_dirent_readdir *entries, int max_entries)
@@ -1265,68 +1197,8 @@ int vfs_readdir(const char *path, struct vfs_dirent_readdir *entries, int max_en
     
     /* Use filesystem-specific readdir if available */
     if (fs && fs->ops && fs->ops->readdir)
-    {
         return fs->ops->readdir(path, entries, max_entries);
-    }
-    
-    /* Fallback to MINIX if available */
-    if (!minix_fs_is_working())
-    {
-        return -ENODEV;  /* Filesystem not available */
-    }
-
-    /* Get directory inode */
-    minix_inode_t *dir_inode = minix_fs_find_inode(path);
-    if (!dir_inode)
-    {
-        return -ENOENT;  /* Path not found */
-    }
-    
-    if (!minix_is_dir(dir_inode))
-    {
-        return -ENOTDIR;  /* Not a directory */
-    }
-
-  int entry_count = 0;
-
-  for (int i = 0; i < 7 && entry_count < max_entries; i++)
-  {
-    if (dir_inode->i_zone[i] == 0)
-    {
-      continue;
-    }
-
-    uint8_t block_buffer[MINIX_BLOCK_SIZE];
-    if (minix_read_block(dir_inode->i_zone[i], block_buffer) != 0)
-    {
-      continue;
-    }
-
-    typedef struct
-    {
-      uint16_t inode;
-      char name[14];
-    } minix_dir_entry_t;
-
-    minix_dir_entry_t *minix_entries = (minix_dir_entry_t *)block_buffer;
-    int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
-
-    for (int j = 0; j < num_entries && entry_count < max_entries; j++)
-    {
-      if (minix_entries[j].inode == 0)
-      
-        continue;
-      
-
-      strncpy(entries[entry_count].name, minix_entries[j].name, sizeof(entries[entry_count].name) - 1);
-      entries[entry_count].name[sizeof(entries[entry_count].name) - 1] = '\0';
-      entries[entry_count].inode = minix_entries[j].inode;
-      entries[entry_count].type = 0;
-      entry_count++;
-    }
-  }
-
-  return entry_count;
+    return -ENOSYS;
 }
 
 /**
@@ -1420,229 +1292,27 @@ int vfs_ls_with_stat(const char *path)
     
     /* Use filesystem-specific ls operation if available */
     if (fs && fs->ops && fs->ops->ls)
-    {
         return fs->ops->ls(path, true);
-    }
-    
-    /* Fallback: try MINIX if available */
-    if (minix_fs_is_working())
-    {
-        return minix_fs_ls(path, true);
-    }
-    
-    return -ENODEV;  /* No filesystem available */
-}
-
-/* Forward declarations */
-static int minix_mount(const char *dev_name, const char *dir_name);
-static struct vfs_inode *minix_lookup_wrapper(const char *path);
-
-/**
- * minix_lookup_wrapper - Convert MINIX lookup result to VFS inode
- * @path: Path to look up
- * 
- * Wrapper function that converts MINIX filesystem lookup result
- * into a VFS inode structure.
- * 
- * Returns: VFS inode on success, NULL on failure
- */
-static struct vfs_inode *minix_lookup_wrapper(const char *path)
-{
-    static struct vfs_inode vfs_inode_wrapper;
-    minix_inode_t *minix_inode = minix_fs_find_inode(path);
-    if (!minix_inode)
-        return NULL;
-    
-    vfs_inode_wrapper.i_ino = minix_fs_get_inode_number(path);
-    vfs_inode_wrapper.i_mode = minix_inode->i_mode;
-    vfs_inode_wrapper.i_size = minix_inode->i_size;
-    vfs_inode_wrapper.i_private = minix_inode;
-    return &vfs_inode_wrapper;
+    return -ENOSYS;
 }
 
 /**
- * MINIX filesystem operations
- * 
- * Implements filesystem_operations interface for MINIX filesystem.
- * All operations are path-based, decoupling VFS from MINIX internals.
+ * vfs_register_builtin_filesystems - Registra los sistemas de archivos incluidos
+ *
+ * MINIX se auto-registra en minix_fs.c; TMPFS se registra aquí.
+ * Añadir nuevos fs implica extender esta función o registrar en su módulo.
  */
-static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
+static void vfs_register_builtin_filesystems(void)
 {
-    void *data = NULL;
-    size_t size = 0;
-    int ret = minix_fs_read_file(path, &data, &size);
-    if (ret != 0 || !data)
-        return ret;
-    
-    /* Copy data respecting offset */
-    if (offset < 0 || (size_t)offset >= size)
-    {
-        if (read_count) *read_count = 0;
-        kfree(data);
-        return 0;  /* EOF */
-    }
-    
-    size_t available = size - (size_t)offset;
-    size_t to_read = (count < available) ? count : available;
-    memcpy(buf, (uint8_t *)data + offset, to_read);
-    
-    if (read_count) *read_count = to_read;
-    kfree(data);
-    return 0;
+	minix_fs_register();
+	tmpfs_register();
 }
-
-static int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
-{
-    /* MINIX write is simple - write entire buffer */
-    (void)offset;  /* MINIX doesn't support offset writes via this interface yet */
-    const char *str = (const char *)buf;
-    int ret = minix_fs_write_file(path, str);
-    if (ret == 0 && written_count)
-        *written_count = count;
-    return ret;
-}
-
-static struct filesystem_operations minix_fs_ops = {
-    .stat = minix_fs_stat,
-    .mkdir = minix_fs_mkdir,
-    .create_file = minix_fs_touch,
-    .unlink = minix_fs_rm,
-    .rmdir = minix_fs_rmdir,
-    .readdir = NULL,  /* MINIX uses minix_fs_ls internally */
-    .read_file = minix_fs_read_file_wrapper,
-    .write_file = minix_fs_write_file_wrapper,
-    .lookup = minix_lookup_wrapper,
-    .get_inode_number = (uint32_t (*)(const char *))minix_fs_get_inode_number,
-    .ls = minix_fs_ls,
-    .link = minix_fs_link,
-    .is_available = minix_fs_is_available,
-    .is_working = minix_fs_is_working,
-};
-
-/**
- * TMPFS filesystem operations
- * 
- * Note: TMPFS filesystem operations are defined in tmpfs.c
- * as they need to be exported for registration.
- */
-
-/* Operaciones de archivo para MINIX - Implementadas via syscalls */
-static struct file_operations minix_file_ops = {
-    .open = NULL,  /* Implementado via sys_open */
-    .read = NULL,  /* Implementado via sys_read */
-    .write = NULL, /* Implementado via sys_write */
-    .close = NULL, /* Implementado via sys_close */
-};
-
-/* Operaciones de inode para MINIX - Implementadas via syscalls */
-static struct inode_operations minix_inode_ops = {
-    .lookup = NULL, /* Implementado via minix_fs_find_inode */
-    .create = NULL, /* Implementado via sys_creat/sys_touch */
-    .mkdir = NULL,  /* Implementado via sys_mkdir */
-    .unlink = NULL, /* Implementado via sys_unlink */
-};
-
-/* Operaciones de superblock para MINIX - Implementadas via MINIX FS */
-static struct super_operations minix_super_ops = {
-    .read_inode = NULL,   /* Implementado via minix_fs_find_inode */
-    .write_inode = NULL,  /* Implementado via minix_fs_write_file */
-    .delete_inode = NULL, /* Implementado via minix_fs_rm */
-};
-
-/* MINIX filesystem type definition */
-static struct filesystem_type minix_fs_type = {
-    .name = "minix",
-    .mount = minix_mount,
-    .ops = &minix_fs_ops,
-    .next = NULL
-};
-
-/* Mount function para MINIX */
-static int minix_mount(const char *dev_name __attribute__((unused)), const char *dir_name __attribute__((unused)))
-{
-
-  /* Inicializar MINIX filesystem si no está funcionando */
-  if (!minix_fs_is_working())
-  {
-    int ret = minix_fs_init();
-    if (ret != 0)
-    {
-      serial_print("[VFS] ERROR - MINIX_MOUNT: minix_fs_init failed with error code: ");
-      {
-        serial_print_hex32((uint32_t)ret);
-        serial_print("\n");
-      }
-      return ret;
-    }
-    print("MINIX_MOUNT: minix_fs_init OK\n");
-  }
-  else
-  {
-    print("MINIX_MOUNT: MINIX FS already working\n");
-  }
-
-  /* Crear superblock si no existe */
-  if (!root_sb)
-  {
-    print("MINIX_MOUNT: Creating superblock...\n");
-    root_sb = kmalloc(sizeof(struct vfs_superblock));
-    if (!root_sb)
-    {
-      print("MINIX_MOUNT: ERROR - kmalloc failed for superblock\n");
-      serial_print("[VFS] ERROR - MINIX_MOUNT: kmalloc failed for superblock (out of memory)\n");
-      return -ENOMEM;
-    }
-
-    root_sb->s_op = &minix_super_ops;
-    root_sb->s_type = &minix_fs_type; /* Asignar el tipo correcto */
-    root_sb->s_fs_info = NULL;        /* Datos específicos de MINIX */
-    print("MINIX_MOUNT: Superblock created OK\n");
-  }
-  else
-  {
-    print("MINIX_MOUNT: Superblock already exists\n");
-  }
-
-  /* Crear root inode si no existe */
-  if (!root_inode)
-  {
-    print("MINIX_MOUNT: Creating root inode...\n");
-    root_inode = kmalloc(sizeof(struct vfs_inode));
-    if (!root_inode)
-    {
-      print("MINIX_MOUNT: ERROR - kmalloc failed for root_inode\n");
-      serial_print("[VFS] ERROR - MINIX_MOUNT: kmalloc failed for root_inode (out of memory)\n");
-      kfree(root_sb);
-      root_sb = NULL;
-      return -ENOMEM;
-    }
-
-    root_inode->i_ino = 1;               /* Root inode number */
-    root_inode->i_mode = 0040755;        /* Directory with 755 permissions */
-    root_inode->i_size = 0;              /* Directory size */
-    root_inode->i_op = &minix_inode_ops; /* Inode operations */
-    root_inode->i_fop = &minix_file_ops; /* File operations */
-    root_inode->i_sb = root_sb;          /* Superblock reference */
-    root_inode->i_private = NULL;        /* No private data */
-
-    serial_print("MINIX_MOUNT: Root inode CREATED SUCCESSFULLY\n");
-  }
-  else
-  {
-    serial_print("MINIX_MOUNT: Root inode already exists\n");
-  }
-
-  print("MINIX_MOUNT: Mount completed successfully\n");
-  return 0;
-}
-
-/* Removed duplicate minix_fs_type definition */
 
 /* Initialize VFS with MINIX filesystem */
 int vfs_init_with_minix(void)
 {
 
-  /* Inicializar VFS */
+  /* Initialize VFS */
   print("VFS: Initializing VFS...\n");
   int ret = vfs_init();
   if (ret != 0)
@@ -1655,60 +1325,18 @@ int vfs_init_with_minix(void)
     }
     return ret;
   }
-  print("VFS: vfs_init OK\n");
+  print("VFS: vfs_init OK (builtin filesystems registered)\n");
 
-  /* Registrar MINIX filesystem */
-  print("VFS: Registering MINIX filesystem...\n");
-  ret = register_filesystem(&minix_fs_type);
-  if (ret != 0)
+  /* Check if root block device (hda) is available */
+  if (!block_dev_is_present("hda"))
   {
-    print("VFS: ERROR - register_filesystem failed\n");
-    serial_print("[VFS] ERROR - register_filesystem failed with error code: ");
-    {
-      serial_print_hex32((uint32_t)ret);
-      serial_print("\n");
-    }
-    return ret;
-  }
-  print("VFS: register_filesystem OK\n");
-
-  /* Registrar TMPFS filesystem */
-  print("VFS: Registering TMPFS filesystem...\n");
-  ret = tmpfs_register();
-  if (ret != 0)
-  {
-    print("VFS: WARNING - tmpfs_register failed (non-critical)\n");
-    serial_print("[VFS] WARNING - tmpfs_register failed\n");
-    /* Don't fail initialization if TMPFS registration fails */
-  }
-  else
-  {
-    print("VFS: TMPFS registered OK\n");
-  }
-
-  /* Check if storage is available before mounting */
-  
-  if (!ata_is_available())
-  {
-    print("VFS: ERROR - No ATA storage available\n");
+    print("VFS: ERROR - No block device hda available\n");
     print("VFS: Cannot mount root filesystem\n");
-    serial_print("[VFS] ERROR - No ATA storage available, cannot mount root filesystem\n");
+    serial_print("[VFS] ERROR - No block device hda available, cannot mount root\n");
     return -ENODEV;
   }
-  
-  /* Check if first drive (hda) is present */
-  if (!ata_drive_present(0))
-  {
-    print("VFS: WARNING - Drive 0 (/dev/hda) not present\n");
-    print("VFS: Attempting mount anyway (may fail)\n");
-    serial_print("[VFS] WARNING - Drive 0 (/dev/hda) not present, attempting mount anyway\n");
-  }
-  else
-  {
-    print("VFS: Drive 0 (/dev/hda) detected\n");
-  }
 
-  /* Montar root filesystem */
+  /* Mount root filesystem */
   print("VFS: Mounting root filesystem...\n");
   ret = vfs_mount("/dev/hda", "/", "minix");
   if (ret != 0)
@@ -1723,7 +1351,7 @@ int vfs_init_with_minix(void)
   }
   print("VFS: vfs_mount OK\n");
 
-  /* Verificar que root_inode se creó */
+  /* Verify root_inode was created */
   if (root_inode)
   {
     print("VFS: root_inode created successfully\n");
@@ -1735,54 +1363,55 @@ int vfs_init_with_minix(void)
     return -ENODEV;  /* Root inode not created */
   }
 
-  /* Agregar root mount point */
-  ret = vfs_add_mount_point("/", "/dev/hda", root_sb, root_inode, &minix_fs_type);
-  if (ret != 0)
-  {
-    print("VFS: WARNING - Could not add root mount point\n");
-    serial_print("[VFS] WARNING - Could not add root mount point, error code: ");
-    {
-      serial_print_hex32((uint32_t)ret);
-      serial_print("\n");
-    }
-  }
-
+  /*
+   * Root mount point is already added by vfs_mount() when mountpoint is "/".
+   * Do not call vfs_add_mount_point again here (would fail with EBUSY).
+   */
   return 0;
 }
 
 /**
  * Read entire file into memory - for ELF loader
- * This is a utility function that reads a complete file into a buffer
+ * Routes to the filesystem that owns the path.
+ *
+ * Returns: 0 on success, -1 on error
  */
 int vfs_read_file(const char *path, void **data, size_t *size)
 {
-  if (!path || !data || !size)
+  if (!path || !data || !size || path[0] != '/')
+    return -1;
+
+  struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
+  if (!fs || !fs->ops || !fs->ops->read_file || !fs->ops->stat)
+    return -1;
+
+  stat_t st;
+  if (fs->ops->stat(path, &st) != 0)
+    return -1;
+
+  size_t file_size = (size_t)st.st_size;
+  if (file_size == 0)
   {
+    *data = NULL;
+    *size = 0;
+    return 0;
+  }
+
+  void *buf = kmalloc(file_size);
+  if (!buf)
+    return -1;
+
+  size_t read_count = 0;
+  int ret = fs->ops->read_file(path, buf, file_size, &read_count, 0);
+  if (ret != 0)
+  {
+    kfree(buf);
     return -1;
   }
 
-  /* VFS layer implementation - route to appropriate filesystem
-   * Determine filesystem type based on path or mount table
-   */
-
-  /* Check if path starts with root */
-  if (path[0] != '/')
-  {
-    return -1; /* Invalid path */
-  }
-
-  /* Route to MINIX filesystem (primary filesystem) */
-  int result = minix_fs_read_file(path, data, size);
-
-  if (result == 0)
-  {
-    /* File read successfully through VFS */
-    serial_print("VFS: File read successfully: ");
-    serial_print(path);
-    serial_print("\n");
-  }
-
-  return result;
+  *data = buf;
+  *size = read_count;
+  return 0;
 }
 
 /**

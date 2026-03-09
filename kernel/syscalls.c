@@ -51,7 +51,10 @@
 #include <fs/vfs.h>
 #include <ir0/signals.h>
 #include <ir0/pipe.h>
+#include <ir0/poll.h>
 #include <interrupt/arch/idt.h>
+#include <drivers/video/vbe.h>
+#include <drivers/timer/clock_system.h>
 #include <mm/paging.h>
 #include <fs/vfs.h>
 
@@ -177,8 +180,10 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 {
   if (!current_process)
     return -ESRCH;
-  if (VALIDATE_BUFFER(buf, count) != 0)
-    return 0;
+  if (count == 0)
+    return 0;  /* POSIX: write with count 0 returns 0 */
+  if (!buf)
+    return -EFAULT;
 
   /* Validate user buffer for regular files */
   char kernel_buf[PAGE_SIZE_4KB];
@@ -299,8 +304,10 @@ int64_t sys_read(int fd, void *buf, size_t count)
 {
   if (!current_process)
     return -ESRCH;
-  if (VALIDATE_BUFFER(buf, count) != 0)
-    return 0;
+  if (count == 0)
+    return 0;  /* POSIX: read with count 0 returns 0 */
+  if (!buf)
+    return -EFAULT;
 
   /* Handle /proc file descriptors (special positive numbers 1000-1999) */
   if (fd >= 1000 && fd <= 1999) {
@@ -478,10 +485,23 @@ int64_t sys_exec(const char *pathname,
     return -EFAULT;
   }
 
-  /* Validate pathname is in userspace */
-  if (!is_user_address(pathname, 256))
-  {
+  if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
+
+  /* Unix-style: resolve relative paths against cwd before loading */
+  char resolved_path[256];
+  const char *path_to_use = pathname;
+  if (!is_absolute_path(pathname))
+  {
+    if (join_paths(current_process->cwd, pathname, resolved_path, sizeof(resolved_path)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved_path;
+  }
+  else
+  {
+    if (normalize_path(pathname, resolved_path, sizeof(resolved_path)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved_path;
   }
 
   /* Validate argv and envp if provided */
@@ -550,8 +570,7 @@ int64_t sys_exec(const char *pathname,
     }
   }
 
-  /* Load and execute ELF binary using kernel-level exec */
-  int64_t result = kexecve(pathname, 
+  int64_t result = kexecve(path_to_use,
                            argv ? (char *const *)kernel_argv : NULL,
                            envp ? (char *const *)kernel_envp : NULL);
 
@@ -633,6 +652,15 @@ int64_t sys_chmod(const char *path, mode_t mode)
   return chmod(path, mode);
 }
 
+int64_t sys_chown(const char *path, uid_t owner, gid_t group)
+{
+  if (!current_process || !path)
+    return -EFAULT;
+  if (validate_userspace_string(path, 256) != 0)
+    return -EFAULT;
+  return vfs_chown(path, owner, group);
+}
+
 int64_t sys_link(const char *oldpath, const char *newpath)
 {
   if (!current_process || !oldpath || !newpath)
@@ -708,6 +736,206 @@ static fd_entry_t *get_process_fd_table(void)
   return current_process->fd_table;
 }
 
+/* poll(2): esperar eventos en fd. Bloquea hasta que haya datos o timeout.      */
+
+#define MAX_POLL_WAITERS  16
+#define MAX_POLL_NFDS     32
+
+struct poll_waiter {
+  process_t *proc;
+  struct pollfd *user_fds;
+  unsigned int nfds;
+  struct pollfd *kfds;
+  uint64_t timeout_expire;
+  int woken;
+  int ready_count;
+};
+
+static struct poll_waiter poll_waiters[MAX_POLL_WAITERS];
+static unsigned int poll_waiter_count = 0;
+
+/**
+ * fd_can_read - Comprueba si el fd tiene datos para leer (sin bloquear).
+ */
+static int fd_can_read(int fd)
+{
+  if (fd == 0)
+    return keyboard_buffer_has_data() ? 1 : 0;
+  if (fd == 1 || fd == 2)
+    return 0;
+  if (fd >= 1000 && fd <= 1999)
+    return 1;
+  if (fd >= 2000 && fd <= 2999)
+    return 1;
+  if (fd >= 3000 && fd <= 3999)
+    return 1;
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return 0;
+  if (fd_table[fd].is_pipe && fd_table[fd].pipe_end == 0) {
+    pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
+    return (pipe && pipe->count > 0) ? 1 : 0;
+  }
+  if (fd_table[fd].flags & (O_RDONLY | O_RDWR))
+    return 1;
+  return 0;
+}
+
+/**
+ * fd_can_write - Comprueba si se puede escribir en el fd.
+ */
+static int fd_can_write(int fd)
+{
+  if (fd == 0)
+    return 0;
+  if (fd == 1 || fd == 2)
+    return 1;
+  if (fd >= 1000 && fd <= 1999)
+    return 0;
+  if (fd >= 2000 && fd <= 2999)
+    return 1;
+  if (fd >= 3000 && fd <= 3999)
+    return 0;
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return 0;
+  if (fd_table[fd].is_pipe && fd_table[fd].pipe_end == 1) {
+    pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
+    return (pipe && pipe->count < PIPE_SIZE) ? 1 : 0;
+  }
+  if (fd_table[fd].flags & (O_WRONLY | O_RDWR))
+    return 1;
+  return 0;
+}
+
+/**
+ * poll_check_ready - Rellena revents y devuelve cuántos fd tienen eventos.
+ */
+static int poll_check_ready(struct pollfd *fds, unsigned int nfds)
+{
+  int count = 0;
+  unsigned int i;
+  for (i = 0; i < nfds; i++) {
+    fds[i].revents = 0;
+    if (fds[i].fd < 0)
+      continue;
+    if ((fds[i].events & POLLIN) && fd_can_read(fds[i].fd))
+      fds[i].revents |= POLLIN;
+    if ((fds[i].events & POLLOUT) && fd_can_write(fds[i].fd))
+      fds[i].revents |= POLLOUT;
+    if (fds[i].revents)
+      count++;
+  }
+  return count;
+}
+
+int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
+{
+  if (!current_process)
+    return -ESRCH;
+  if (!user_fds)
+    return -EFAULT;
+  if (nfds == 0 || nfds > MAX_POLL_NFDS)
+    return -EINVAL;
+  if (validate_userspace_buffer(user_fds, nfds * sizeof(struct pollfd)) != 0)
+    return -EFAULT;
+
+  struct pollfd *kfds = (struct pollfd *)kmalloc(nfds * sizeof(struct pollfd));
+  if (!kfds)
+    return -ENOMEM;
+  if (copy_from_user(kfds, user_fds, nfds * sizeof(struct pollfd)) != 0) {
+    kfree(kfds);
+    return -EFAULT;
+  }
+
+  int ready = poll_check_ready(kfds, nfds);
+  if (ready > 0 || timeout_ms == 0) {
+    if (copy_to_user(user_fds, kfds, nfds * sizeof(struct pollfd)) != 0) {
+      kfree(kfds);
+      return -EFAULT;
+    }
+    kfree(kfds);
+    return ready;
+  }
+
+  if (timeout_ms > 0 && poll_waiter_count >= MAX_POLL_WAITERS) {
+    kfree(kfds);
+    return -EAGAIN;
+  }
+
+  uint64_t now = clock_get_uptime_milliseconds();
+  uint64_t expire = (timeout_ms < 0) ? (uint64_t)-1 : (now + (uint64_t)timeout_ms);
+
+  struct poll_waiter *w = NULL;
+  unsigned int i;
+  for (i = 0; i < MAX_POLL_WAITERS; i++) {
+    if (!poll_waiters[i].proc) {
+      w = &poll_waiters[i];
+      if (i >= poll_waiter_count)
+        poll_waiter_count = i + 1;
+      break;
+    }
+  }
+  if (!w) {
+    kfree(kfds);
+    return -EAGAIN;
+  }
+  w->proc = current_process;
+  w->user_fds = user_fds;
+  w->nfds = nfds;
+  w->kfds = kfds;
+  w->timeout_expire = expire;
+  w->woken = 0;
+  w->ready_count = 0;
+  current_process->poll_waiter = w;
+
+  current_process->state = PROCESS_BLOCKED;
+  rr_schedule_next();
+
+  /* Vuelta del scheduler: despertados por poll_wake_check */
+  w = (struct poll_waiter *)current_process->poll_waiter;
+  current_process->poll_waiter = NULL;
+  if (w) {
+    ready = w->ready_count;
+    kfree(w->kfds);
+    w->proc = NULL;
+    w->kfds = NULL;
+    w->user_fds = NULL;
+    w->nfds = 0;
+    w->woken = 0;
+    w->ready_count = 0;
+  }
+  return (int64_t)ready;
+}
+
+/**
+ * poll_wake_check - Revisar waiters de poll; despertar si hay datos o timeout.
+ * Llamar desde el bucle principal (main.c) tras net_poll/bluetooth_poll.
+ */
+void poll_wake_check(void)
+{
+  uint64_t now = clock_get_uptime_milliseconds();
+  unsigned int i;
+  for (i = 0; i < MAX_POLL_WAITERS; i++) {
+    
+    struct poll_waiter *w = &poll_waiters[i];
+    
+    if (!w->proc)
+      continue;
+    current_process = w->proc;
+    int ready = poll_check_ready(w->kfds, w->nfds);
+    int timeout = (w->timeout_expire != (uint64_t)-1 && now >= w->timeout_expire);
+    if (ready > 0 || timeout) {
+      w->ready_count = ready;
+      w->woken = 1;
+      if (copy_to_user(w->user_fds, w->kfds, w->nfds * sizeof(struct pollfd)) != 0)
+        w->ready_count = -1;
+      w->proc->state = PROCESS_READY;
+    }
+  }
+  current_process = NULL;
+}
+
 int64_t sys_fstat(int fd, stat_t *buf)
 {
   if (!current_process || !buf)
@@ -757,8 +985,6 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  (void)mode; /* Mode handling not implemented yet */
-
   /* Handle /proc filesystem on-demand */
   if (is_proc_path(pathname)) {
     return proc_open(pathname, flags);
@@ -779,11 +1005,26 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     return 2000 + (int64_t)node->entry.device_id;
   }
 
+  /* Linux-style: resolve relative paths against cwd before VFS */
+  char resolved_path[256];
+  const char *path_to_use = pathname;
+  if (!is_absolute_path(pathname))
+  {
+    if (join_paths(current_process->cwd, pathname, resolved_path, sizeof(resolved_path)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved_path;
+  }
+  else
+  {
+    if (normalize_path(pathname, resolved_path, sizeof(resolved_path)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved_path;
+  }
+
   /* Check access permissions based on flags */
-  /* For O_DIRECTORY, we need execute permission, not read */
   if (flags & O_DIRECTORY)
   {
-    if (!check_file_access(pathname, ACCESS_EXEC, current_process))
+    if (!check_file_access(path_to_use, ACCESS_EXEC, current_process))
       return -EACCES;
   }
   else
@@ -793,19 +1034,15 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
       access_mode |= ACCESS_READ;
     if (flags & O_WRONLY || flags & O_RDWR)
       access_mode |= ACCESS_WRITE;
-    
-    if (access_mode && !check_file_access(pathname, access_mode, current_process))
+    if (access_mode && !check_file_access(path_to_use, access_mode, current_process))
       return -EACCES;
   }
 
   fd_entry_t *fd_table = get_process_fd_table();
 
-  /* Find free file descriptor */
   int fd = -1;
-  for (int i = 3; i < MAX_FDS_PER_PROCESS;
-       i++)
+  for (int i = 3; i < MAX_FDS_PER_PROCESS; i++)
   {
-    /* Start from 3 (after stdin/stdout/stderr) */
     if (!fd_table[i].in_use)
     {
       fd = i;
@@ -814,22 +1051,19 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   }
 
   if (fd == -1)
-    /* Too many open files */
     return -EMFILE;
 
-  /* Open file using VFS layer to get real file handle */
   struct vfs_file *vfs_file = NULL;
-  int ret = vfs_open(pathname, flags, &vfs_file);
+  int ret = vfs_open(path_to_use, flags, mode, &vfs_file);
   if (ret != 0)
   {
     return ret;  /* Return actual error, not just -ENOENT */
   }
 
-  /* If O_DIRECTORY flag is set, verify it's actually a directory */
   if (flags & O_DIRECTORY)
   {
     stat_t st;
-    if (sys_stat(pathname, &st) < 0)
+    if (sys_stat(path_to_use, &st) < 0)
     {
       if (vfs_file)
       {
@@ -849,7 +1083,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
 
   /* Set up file descriptor with real VFS file handle */
   fd_table[fd].in_use = true;
-  strncpy(fd_table[fd].path, pathname, sizeof(fd_table[fd].path) - 1);
+  strncpy(fd_table[fd].path, path_to_use, sizeof(fd_table[fd].path) - 1);
   fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
   fd_table[fd].flags = flags;
   fd_table[fd].vfs_file = vfs_file;
@@ -871,15 +1105,7 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
   if (!current_process)
     return -ESRCH;
 
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
-    return -EBADF;
-
-  fd_entry_t *fd_table = get_process_fd_table();
-
-  if (!fd_table[fd].in_use)
-    return -EBADF;
-
-  /* Handle device files (fd >= 2000) */
+  /* Handle device files (fd 2000-2999) before fd_table bounds check */
   if (fd >= 2000 && fd <= 2999)
   {
     ensure_devfs_init();
@@ -897,7 +1123,13 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
     return node->ops->ioctl(&node->entry, request, arg);
   }
 
-  /* For regular files, ioctl is typically not supported */
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table[fd].in_use)
+    return -EBADF;
+
   return -ENOTTY;
 }
 
@@ -906,19 +1138,23 @@ int64_t sys_close(int fd)
   if (!current_process)
     return -ESRCH;
 
+  /* Handle special fd ranges before fd_table bounds check */
+  if (fd >= 2000 && fd <= 2999)
+    return 0;  /* /dev devices: no per-fd state to release */
+  if (fd >= 1000 && fd <= 1999)
+    return 0;  /* /proc */
+  if (fd >= 3000 && fd <= 3999)
+    return 0;  /* /sys */
+
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
     return -EBADF;
 
   fd_entry_t *fd_table = get_process_fd_table();
-
   if (!fd_table[fd].in_use)
     return -EBADF;
 
   if (fd <= 2)
     return -EBADF;
-
-  if (fd >= 2000 && fd <= 2999)
-    return 0;
 
   /* Check if this is a pipe */
   if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
@@ -950,6 +1186,10 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
 {
   if (!current_process)
     return -ESRCH;
+
+  /* Special fd ranges: lseek not supported */
+  if (fd >= 1000 && fd <= 3999)
+    return -ESPIPE;
 
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
     return -EBADF;
@@ -1072,6 +1312,8 @@ int64_t sys_dup2(int oldfd, int newfd)
   fd_table[newfd].flags = fd_table[oldfd].flags;
   fd_table[newfd].offset = fd_table[oldfd].offset;
   fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+  fd_table[newfd].is_pipe = fd_table[oldfd].is_pipe;
+  fd_table[newfd].pipe_end = fd_table[oldfd].pipe_end;
 
   return newfd;
 }
@@ -1105,22 +1347,34 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
     if (!node)
       return -ENOENT;
 
-    /* Fill stat structure for character device */
     memset(buf, 0, sizeof(stat_t));
-    buf->st_mode = S_IFCHR | (node->entry.mode & 0777);  /* Character device + permissions */
-    buf->st_rdev = node->entry.device_id;  /* Device ID */
+    buf->st_mode = S_IFCHR | (node->entry.mode & 0777);
+    buf->st_rdev = node->entry.device_id;
     buf->st_nlink = 1;
-    buf->st_uid = 0;  /* root */
-    buf->st_gid = 0;  /* root */
-    buf->st_size = 0;  /* Character devices have no size */
+    buf->st_uid = 0;
+    buf->st_gid = 0;
+    buf->st_size = 0;
     buf->st_blksize = 512;
     buf->st_blocks = 0;
-
     return 0;
   }
 
-  /* Use VFS layer instead of direct MINIX calls */
-  return vfs_stat(pathname, buf);
+  /* Linux-style: resolve relative paths against cwd for VFS */
+  char resolved[256];
+  const char *path_to_use = pathname;
+  if (!is_absolute_path(pathname))
+  {
+    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+  else
+  {
+    if (normalize_path(pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+  return vfs_stat(path_to_use, buf);
 }
 
 /**
@@ -1138,7 +1392,7 @@ int64_t sys_fork(void)
 
   /* IR0 philosophy: only spawn() creates processes
    * process_fork() uses spawn() internally for syscall compatibility */
-  return process_fork();
+  return fork();
 }
 
 
@@ -1515,8 +1769,101 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
       return (void *)-1;
     }
     
-    /* File-based mapping not yet fully implemented */
-    /* For now, still only support anonymous mappings */
+    /*
+     * mmap of /dev/fb0 (fd 2000 + device_id 15 = 2015)
+     * Maps framebuffer physical memory into userspace for efficient access.
+     */
+    if (fd >= 2000 && fd <= 2999)
+    {
+      uint32_t device_id = (uint32_t)(fd - 2000);
+      if (device_id == 15 && vbe_is_available())
+      {
+        uint32_t fb_phys = vbe_get_fb_phys();
+        uint32_t fb_size = vbe_get_fb_size();
+        if (fb_phys == 0 || fb_size == 0)
+          return (void *)-1;
+        
+        /* Align length to page boundary, cap at framebuffer size */
+        size_t map_len = length;
+        if (map_len > fb_size)
+          map_len = fb_size;
+        map_len = (map_len + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
+        
+        uintptr_t virt_addr = 0;
+        if (addr != NULL)
+        {
+          uintptr_t hint_addr = (uintptr_t)addr;
+          if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
+            return (void *)-1;
+          if (!is_user_address(addr, map_len))
+            return (void *)-1;
+          int mapped = is_page_mapped_in_directory(current_process->page_directory, hint_addr, NULL);
+          if (mapped == 1)
+            return (void *)-1;
+          virt_addr = hint_addr;
+        }
+        else
+        {
+          uintptr_t search_start = 0x8000000UL;
+          uintptr_t search_end = 0x7FFFF000UL;
+          uintptr_t candidate = search_start;
+          bool found = false;
+          while (candidate + map_len < search_end && !found)
+          {
+            bool all_unmapped = true;
+            for (uintptr_t check = candidate; check < candidate + map_len; check += PAGE_SIZE_4KB)
+            {
+              int m = is_page_mapped_in_directory(current_process->page_directory, check, NULL);
+              if (m == 1)
+              {
+                all_unmapped = false;
+                candidate = ((check + PAGE_SIZE_4KB) + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
+                break;
+              }
+            }
+            if (all_unmapped)
+            {
+              virt_addr = candidate;
+              found = true;
+            }
+          }
+          if (!found)
+            return (void *)-1;
+        }
+        
+        uint64_t page_flags = PAGE_USER | PAGE_RW;
+        for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
+        {
+          uintptr_t v = virt_addr + off;
+          uintptr_t p = fb_phys + off;
+          if (map_page_in_directory(current_process->page_directory, v, p, page_flags) != 0)
+          {
+            /* Rollback: unmap already mapped pages */
+            for (size_t r = 0; r < off; r += PAGE_SIZE_4KB)
+              unmap_page(virt_addr + r);
+            return (void *)-1;
+          }
+        }
+        
+        struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
+        if (!region)
+        {
+          for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
+            unmap_page(virt_addr + off);
+          return (void *)-1;
+        }
+        region->addr = (void *)virt_addr;
+        region->hint_addr = addr;
+        region->length = map_len;
+        region->prot = prot;
+        region->flags = flags;
+        region->next = mmap_list;
+        mmap_list = region;
+        return (void *)virt_addr;
+      }
+    }
+    
+    /* File-based mapping not yet implemented for other files */
     serial_print("SERIAL: mmap: file-based mapping not yet implemented\n");
     return (void *)-1;
   }
@@ -1870,13 +2217,7 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
     return -ENOTDIR;
   
   /* Use VFS readdir to get directory entries */
-  typedef struct {
-    char name[256];
-    uint16_t inode;
-    uint8_t type;
-  } vfs_dirent_t;
-  
-  static vfs_dirent_t entries[32];
+  static struct vfs_dirent_readdir entries[32];
   int entry_count = vfs_readdir(path, entries, 32);
   
   if (entry_count < 0)
@@ -1884,21 +2225,23 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
   
   /* Convert to linux_dirent64 format */
   char kernel_buf[4096];
-  size_t offset = 0;
+  size_t buf_offset = 0;
   
-  for (int i = 0; i < entry_count && offset + sizeof(struct linux_dirent64) + 256 < sizeof(kernel_buf); i++)
+  for (int i = 0; i < entry_count && buf_offset + sizeof(struct linux_dirent64) + 256 < sizeof(kernel_buf); i++)
   {
-    /* Skip . and .. - they're handled by filesystem or caller */
     if (strcmp(entries[i].name, ".") == 0 || strcmp(entries[i].name, "..") == 0)
       continue;
-    
+
     size_t name_len = strlen(entries[i].name) + 1;
+    /* POSIX: dirent name cannot contain '/' or invalid length (Linux verify_dirent_name) */
+    if (name_len <= 1 || name_len >= 256 || strchr(entries[i].name, '/'))
+      continue;  /* Skip corrupt entry, show rest */
     size_t reclen = ((sizeof(struct linux_dirent64) + name_len + 7) & ~7);  /* Align to 8 bytes */
     
-    if (offset + reclen > sizeof(kernel_buf))
+    if (buf_offset + reclen > sizeof(kernel_buf))
       break;
     
-    struct linux_dirent64 *dent = (struct linux_dirent64 *)(kernel_buf + offset);
+    struct linux_dirent64 *dent = (struct linux_dirent64 *)(kernel_buf + buf_offset);
     dent->d_ino = entries[i].inode;
     dent->d_off = 0;  /* Not used in our implementation */
     dent->d_reclen = (unsigned short)reclen;
@@ -1913,7 +2256,11 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
     {
       /* Try to determine type from stat */
       char full_path[512];
-      snprintf(full_path, sizeof(full_path), "%s/%s", path, entries[i].name);
+      size_t path_len = strlen(path);
+      if (path_len > 0 && path[path_len - 1] == '/')
+        snprintf(full_path, sizeof(full_path), "%s%s", path, entries[i].name);
+      else
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entries[i].name);
       stat_t entry_st;
       if (sys_stat(full_path, &entry_st) >= 0)
       {
@@ -1931,17 +2278,21 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
     }
     
     strcpy(dent->d_name, entries[i].name);
-    offset += reclen;
+    buf_offset += reclen;
   }
   
-  if (offset == 0)
+  /* Use fd offset as read cursor - return 0 when all entries already returned */
+  size_t read_offset = (size_t)fd_table[fd].offset;
+  if (read_offset >= buf_offset)
     return 0;  /* End of directory */
   
-  /* Copy to user space */
-  size_t copy_size = (offset < count) ? offset : count;
-  if (copy_to_user(dirent, kernel_buf, copy_size) != 0)
+  /* Copy next chunk to user space */
+  size_t remaining = buf_offset - read_offset;
+  size_t copy_size = (remaining < count) ? remaining : count;
+  if (copy_to_user(dirent, kernel_buf + read_offset, copy_size) != 0)
     return -EFAULT;
   
+  fd_table[fd].offset = read_offset + copy_size;
   return (int64_t)copy_size;
 }
 
@@ -2022,6 +2373,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     return sys_rmdir((const char *)arg1);
   case SYS_CHMOD:
     return sys_chmod((const char *)arg1, (mode_t)arg2);
+  case SYS_CHOWN:
+    return sys_chown((const char *)arg1, (uid_t)arg2, (gid_t)arg3);
   case SYS_LSEEK:
     return sys_lseek((int)arg1, (off_t)arg2, (int)arg3);
   case SYS_GETCWD:
@@ -2060,6 +2413,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     typewriter_console_scroll(delta);
     return 0;
   }
+  case SYS_POLL:
+    return sys_poll((struct pollfd *)arg1, (unsigned int)arg2, (int)arg3);
   default:
     /* Unknown syscall - return ENOSYS (function not implemented) */
     return -ENOSYS;
