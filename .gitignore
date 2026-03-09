@@ -20,3 +20,9 @@ iso/boot/grub/grub.cfg
 .config
 .build_number
 .example_drivers_enabled
+AGENTS.md
+
+# Test artifacts (make tests / make health)
+tests/host/ir0_test_suite
+tests/kernel_memsafe/ir0_kernel_memsafe
+/tmp/ktest.log

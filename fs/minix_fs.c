@@ -13,10 +13,14 @@
  */
 
 #include "minix_fs.h"
-#include <drivers/storage/ata.h>
+#include "vfs.h"
+#include <ir0/logging.h>
+#include <drivers/storage/block_dev.h>
+#include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
 #include <ir0/vga.h>
 #include <ir0/stat.h>
+#include <ir0/errno.h>
 #include <drivers/video/typewriter.h>
 #include <drivers/serial/serial.h>
 #include <ir0/kmem.h>
@@ -51,27 +55,27 @@ static minix_fs_info_t minix_fs;
 
 int minix_read_block(uint32_t block_num, void *buffer)
 {
-  uint32_t lba = block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
+  uint32_t lba = block_num * 2; /* 2 sectores de 512 bytes = 1 bloque de 1024 bytes */
   uint8_t num_sectors = 2;
 
-  bool success = ata_read_sectors(0, lba, num_sectors, buffer);
+  bool success = block_dev_read_sectors("hda", lba, num_sectors, buffer);
 
   if (!success)
     return -1;
-  
+
   return 0;
 }
 
 int minix_write_block(uint32_t block_num, const void *buffer)
 {
-  uint32_t lba = block_num * 2; // 2 sectores de 512 bytes = 1 bloque de 1024 bytes
+  uint32_t lba = block_num * 2; /* 2 sectores de 512 bytes = 1 bloque de 1024 bytes */
   uint8_t num_sectors = 2;
 
-  bool success = ata_write_sectors(0, lba, num_sectors, buffer);
+  bool success = block_dev_write_sectors("hda", lba, num_sectors, buffer);
 
   if (!success)
     return -1;
-    
+
   return 0;
 }
 
@@ -253,21 +257,13 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
   // Validate superblock values before using them
   if (minix_fs.superblock.s_magic != MINIX_SUPER_MAGIC)
   {
-    serial_print("SERIAL: minix_read_inode: invalid superblock magic=");
-    serial_print_hex32(minix_fs.superblock.s_magic);
-    serial_print(" expected=");
-    serial_print_hex32(MINIX_SUPER_MAGIC);
-    serial_print("\n");
+    log_debug_fmt("MINIX", "read_inode: invalid magic=0x%x", minix_fs.superblock.s_magic);
     return -1;
   }
-
   if (minix_fs.superblock.s_imap_blocks == 0 || minix_fs.superblock.s_zmap_blocks == 0)
   {
-    serial_print("SERIAL: minix_read_inode: invalid bitmap blocks - imap=");
-    serial_print_hex32(minix_fs.superblock.s_imap_blocks);
-    serial_print(" zmap=");
-    serial_print_hex32(minix_fs.superblock.s_zmap_blocks);
-    serial_print("\n");
+    log_debug_fmt("MINIX", "read_inode: invalid bitmaps imap=%u zmap=%u",
+                  minix_fs.superblock.s_imap_blocks, minix_fs.superblock.s_zmap_blocks);
     return -1;
   }
 
@@ -280,35 +276,15 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
   uint32_t inode_offset =
       ((inode_num - 1) * sizeof(minix_inode_t)) % MINIX_BLOCK_SIZE;
 
-  serial_print("SERIAL: minix_read_inode: inode_num=");
-  serial_print_hex32(inode_num);
-  serial_print(" table_start=");
-  serial_print_hex32(inode_table_start);
-  serial_print(" block=");
-  serial_print_hex32(inode_block);
-  serial_print(" offset=");
-  serial_print_hex32(inode_offset);
-  serial_print("\n");
-
   uint8_t block_buffer[MINIX_BLOCK_SIZE];
   int result = minix_read_block(inode_block, block_buffer);
   if (result != 0)
   {
-    serial_print("SERIAL: minix_read_inode: minix_read_block failed with result=");
-    serial_print_hex32((uint32_t)result);
-    serial_print("\n");
+    log_debug_fmt("MINIX", "read_inode: read_block failed ino=%u", inode_num);
     return -1;
   }
 
-  // Copiar inode del buffer
   kmemcpy(inode, block_buffer + inode_offset, sizeof(minix_inode_t));
-
-  serial_print("SERIAL: minix_read_inode: SUCCESS - inode mode=");
-  serial_print_hex32(inode->i_mode);
-  serial_print(" size=");
-  serial_print_hex32(inode->i_size);
-  serial_print("\n");
-
   return 0;
 }
 
@@ -402,23 +378,14 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   }
   if (kstrcmp(pathname, "/") == 0)
   {
-    serial_print("SERIAL: minix_fs_find_inode: looking up root directory\n");
-    
-    // Always read from disk to ensure we have the latest version
     int read_result = minix_read_inode(MINIX_ROOT_INODE, &cached_root_inode);
     if (read_result == 0)
     {
-      serial_print("SERIAL: minix_fs_find_inode: root inode read successfully\n");
       root_inode_cached = true;
       kmemcpy(&result_inode, &cached_root_inode, sizeof(minix_inode_t));
       return &result_inode;
     }
-    else
-    {
-      serial_print("SERIAL: minix_fs_find_inode: FAILED to read root inode, error=");
-      serial_print_hex32((uint32_t)read_result);
-      serial_print("\n");
-    }
+    log_debug_fmt("MINIX", "find_inode('/') read failed=%d", read_result);
     return NULL;
   }
 
@@ -997,8 +964,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
 
 bool minix_fs_is_available(void)
 {
-  // Verificar si el driver ATA está disponible
-  return ata_is_available();
+  return block_dev_is_present("hda");
 }
 
 bool minix_fs_is_working(void)
@@ -1008,16 +974,19 @@ bool minix_fs_is_working(void)
 
 int minix_fs_init(void)
 {
-  // FORCE REAL DISK USAGE - In QEMU, disk is always available
+  /* FORCE REAL DISK USAGE - In QEMU, disk is always available */
 
-  // Read superblock from disk
-  if (minix_read_block(1, &minix_fs.superblock) != 0)
+  /* Read superblock from disk (block-sized buffer to avoid overflow) */
+  uint8_t block_buffer[MINIX_BLOCK_SIZE];
+  if (minix_read_block(1, block_buffer) != 0)
   {
-    // Can't read - format disk
+    log_debug_fmt("MINIX", "superblock read failed, formatting");
     return minix_fs_format();
   }
+  kmemcpy(&minix_fs.superblock, block_buffer, sizeof(minix_superblock_t));
+  log_info_fmt("MINIX", "superblock read OK magic=0x%x", minix_fs.superblock.s_magic);
 
-  // Check magic number
+  /* Check magic number */
   if (minix_fs.superblock.s_magic != MINIX_SUPER_MAGIC)
   {
     // Invalid - format disk
@@ -1057,12 +1026,14 @@ int minix_fs_init(void)
   minix_fs.initialized = true; // Temporary set to allow read_inode to work
   if (minix_read_inode(MINIX_ROOT_INODE, &root_inode_check) != 0 || root_inode_check.i_mode == 0)
   {
-    serial_print("SERIAL: minix_fs_init: Root inode corrupt (mode=0), forcing format!\n");
+    log_warn_fmt("MINIX", "root inode corrupt (mode=0x%x), forcing format", root_inode_check.i_mode);
     minix_fs.initialized = false;
     return minix_fs_format();
   }
+  log_info_fmt("MINIX", "root inode OK mode=0x%x (dir=%d)", root_inode_check.i_mode,
+               (root_inode_check.i_mode & MINIX_IFDIR) ? 1 : 0);
 
-  // Valid filesystem found
+  /* Valid filesystem found */
   minix_fs.initialized = true;
   root_inode_cached = false; // Reset cache
   return 0;
@@ -1082,10 +1053,13 @@ int minix_fs_format(void)
   minix_fs.superblock.s_firstdatazone =
       5; // Block layout: 0=boot, 1=super, 2=imap, 3=zmap, 4=inodes, 5+=data
   minix_fs.superblock.s_log_zone_size = 0;
-  minix_fs.superblock.s_max_size = 1048576; // 1MB max file size
+  minix_fs.superblock.s_max_size = 1048576; /* 1MB max file size */
 
-  // Escribir superblock
-  if (minix_write_block(1, &minix_fs.superblock) != 0)
+  /* Write superblock (block-sized to match on-disk layout) */
+  uint8_t sb_block[MINIX_BLOCK_SIZE];
+  kmemset(sb_block, 0, sizeof(sb_block));
+  kmemcpy(sb_block, &minix_fs.superblock, sizeof(minix_superblock_t));
+  if (minix_write_block(1, sb_block) != 0)
   {
     return -1;
   }
@@ -1114,12 +1088,13 @@ int minix_fs_format(void)
   // In MINIX bitmap: bit 1 is inode 1, bit 0 is unused or reserved
   minix_fs.inode_bitmap[0] = 0x02; // Bit 1 = inode 1
 
-  // Calculate block offsets for bitmaps and inode table
+  /* Calculate block offsets for bitmaps and inode table */
   uint32_t imap_block = 2;
   uint32_t zmap_block = 2 + minix_fs.superblock.s_imap_blocks;
   uint32_t inode_table_block = zmap_block + minix_fs.superblock.s_zmap_blocks;
+  (void)inode_table_block;  /* Reserved for inode table writes */
 
-  // Write bitmaps to disk
+  /* Write bitmaps to disk */
   if (minix_write_block(imap_block, minix_fs.inode_bitmap) != 0)
   {
     return -1;
@@ -1246,7 +1221,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -1;
   }
 
-  if (!ata_is_available())
+  if (!block_dev_is_present("hda"))
   {
     return -EIO; // Error real - no hay disco disponible
   }
@@ -1590,7 +1565,7 @@ int minix_fs_cat(const char *path)
     return -1;
   }
 
-  if (!ata_is_available())
+  if (!block_dev_is_present("hda"))
   {
     typewriter_vga_print("cat: disk not available\n", 0x0C);
     return -EIO;
@@ -1717,7 +1692,7 @@ int minix_fs_write_file(const char *path, const char *content)
   serial_print("\n");
 
   // Verificar que el disco esté disponible
-  if (!ata_is_available())
+  if (!block_dev_is_present("hda"))
   {
     serial_print("SERIAL: write: disk not available\n");
     return -EIO;
@@ -1872,7 +1847,7 @@ int minix_fs_touch(const char *path, mode_t mode)
     return -1;
   }
 
-  if (!ata_is_available())
+  if (!block_dev_is_present("hda"))
   {
     typewriter_vga_print("Error: Disk not available\n", 0x0C);
     return -EIO;
@@ -2177,18 +2152,16 @@ int minix_fs_link(const char *oldpath, const char *newpath)
 
 // Removed unused function uint32_to_str
 
-// This function ensures the disk has a valid MINIX filesystem
-// If not, it creates one with a basic root directory
 int minix_fs_ensure_valid(void)
 {
-  // Try to read superblock
-  if (minix_read_block(1, &minix_fs.superblock) != 0)
+  uint8_t block_buffer[MINIX_BLOCK_SIZE];
+  if (minix_read_block(1, block_buffer) != 0)
   {
-    // Can't read - format disk
     return minix_fs_format();
   }
+  kmemcpy(&minix_fs.superblock, block_buffer, sizeof(minix_superblock_t));
 
-  // Check magic number
+  /* Check magic number */
   if (minix_fs.superblock.s_magic != MINIX_SUPER_MAGIC)
   {
     // Invalid - format disk
@@ -2582,17 +2555,19 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
 {
   if (!minix_fs.initialized || !pathname || !buf)
   {
+    log_debug_fmt("MINIX", "stat('%s') rejected: init=%d", pathname ? pathname : "(null)",
+                  minix_fs.initialized);
     return -1;
   }
 
-  // Find the inode for this path
   minix_inode_t *inode = minix_fs_find_inode(pathname);
   if (!inode)
   {
-    return -1; // File not found
+    log_debug_fmt("MINIX", "stat('%s') inode not found", pathname);
+    return -1;
   }
 
-  // Get inode number
+  /* Get inode number */
   uint16_t inode_num = minix_fs_get_inode_number(pathname);
 
   // Fill stat structure with UNIX-compatible information
@@ -2611,5 +2586,213 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
   // directly
   buf->st_mode = inode->i_mode;
 
+  if (kstrcmp(pathname, "/") == 0)
+    log_info_fmt("MINIX", "stat('%s') OK ino=%u mode=0x%x", pathname, inode_num, buf->st_mode);
   return 0;
+}
+
+/*
+ * minix_fs_chown - Change file owner and group
+ * @path: Path to file
+ * @owner: New owner UID, or (uid_t)-1 to leave unchanged
+ * @group: New group GID, or (gid_t)-1 to leave unchanged
+ * Returns: 0 on success, negative on error
+ */
+int minix_fs_chown(const char *path, uid_t owner, gid_t group)
+{
+  minix_inode_t *inode = minix_fs_find_inode(path);
+  if (!inode)
+    return -ENOENT;
+
+  uint16_t inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0)
+    return -ENOENT;
+
+  minix_inode_t inode_copy;
+  kmemcpy(&inode_copy, inode, sizeof(minix_inode_t));
+
+  if (owner != (uid_t)-1)
+    inode_copy.i_uid = (uint16_t)owner;
+  if (group != (gid_t)-1)
+    inode_copy.i_gid = (uint8_t)group;
+
+  return minix_fs_write_inode(inode_num, &inode_copy);
+}
+
+
+static struct vfs_inode *minix_lookup_wrapper(const char *path)
+{
+	static struct vfs_inode vfs_inode_wrapper;
+	minix_inode_t *minix_inode = minix_fs_find_inode(path);
+	if (!minix_inode)
+		return NULL;
+	vfs_inode_wrapper.i_ino = minix_fs_get_inode_number(path);
+	vfs_inode_wrapper.i_mode = minix_inode->i_mode;
+	vfs_inode_wrapper.i_size = minix_inode->i_size;
+	vfs_inode_wrapper.i_private = minix_inode;
+	return &vfs_inode_wrapper;
+}
+
+static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
+{
+	void *data = NULL;
+	size_t size = 0;
+	int ret = minix_fs_read_file(path, &data, &size);
+	if (ret != 0 || !data)
+		return ret;
+	if (offset < 0 || (size_t)offset >= size) {
+		if (read_count) *read_count = 0;
+		kfree(data);
+		return 0;
+	}
+	size_t available = size - (size_t)offset;
+	size_t to_read = (count < available) ? count : available;
+	memcpy(buf, (uint8_t *)data + offset, to_read);
+	if (read_count) *read_count = to_read;
+	kfree(data);
+	return 0;
+}
+
+static int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
+{
+	(void)offset;
+	int ret = minix_fs_write_file(path, (const char *)buf);
+	if (ret == 0 && written_count)
+		*written_count = count;
+	return ret;
+}
+
+static uint32_t minix_get_inode_number_wrapper(const char *path)
+{
+	return (uint32_t)minix_fs_get_inode_number(path);
+}
+
+/*
+ * minix_fs_readdir - Read directory entries for VFS readdir
+ */
+static int minix_fs_readdir(const char *path, struct vfs_dirent_readdir *entries, int max_entries)
+{
+	minix_inode_t *dir_inode = minix_fs_find_inode(path);
+	if (!dir_inode)
+		return -ENOENT;
+	if (!minix_is_dir(dir_inode))
+		return -ENOTDIR;
+
+	int entry_count = 0;
+	
+  for (int i = 0; i < 7 && entry_count < max_entries; i++) {
+		
+    if (dir_inode->i_zone[i] == 0)
+			continue;
+		uint8_t block_buffer[MINIX_BLOCK_SIZE];
+		
+    if (minix_read_block(dir_inode->i_zone[i], block_buffer) != 0)
+			continue;
+		
+    minix_dir_entry_t *minix_entries = (minix_dir_entry_t *)block_buffer;
+		
+    int num_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
+
+		for (int j = 0; j < num_entries && entry_count < max_entries; j++) {
+			if (minix_entries[j].inode == 0)
+				continue;
+	
+  		strncpy(entries[entry_count].name, minix_entries[j].name,
+				sizeof(entries[entry_count].name) - 1);
+			entries[entry_count].name[sizeof(entries[entry_count].name) - 1] = '\0';
+			entries[entry_count].inode = minix_entries[j].inode;
+			entries[entry_count].type = 0;
+			entry_count++;
+		}
+	}
+	return entry_count;
+}
+
+static struct file_operations minix_file_ops = {
+	.open = NULL,
+	.read = NULL,
+	.write = NULL,
+	.close = NULL,
+};
+
+static struct inode_operations minix_inode_ops = {
+	.lookup = NULL,
+	.create = NULL,
+	.mkdir = NULL,
+	.unlink = NULL,
+};
+
+static struct super_operations minix_super_ops = {
+	.read_inode = NULL,
+	.write_inode = NULL,
+	.delete_inode = NULL,
+};
+
+static struct filesystem_operations minix_fs_ops = {
+	.stat = minix_fs_stat,
+	.mkdir = minix_fs_mkdir,
+	.create_file = minix_fs_touch,
+	.unlink = minix_fs_rm,
+	.rmdir = minix_fs_rmdir,
+	.readdir = minix_fs_readdir,
+	.read_file = minix_fs_read_file_wrapper,
+	.write_file = minix_fs_write_file_wrapper,
+	.lookup = minix_lookup_wrapper,
+	.get_inode_number = minix_get_inode_number_wrapper,
+	.ls = minix_fs_ls,
+	.link = minix_fs_link,
+	.chown = minix_fs_chown,
+	.is_available = minix_fs_is_available,
+	.is_working = minix_fs_is_working,
+};
+
+static struct filesystem_type minix_fs_type;
+
+static int minix_mount(const char *dev_name __attribute__((unused)), const char *dir_name)
+{
+	/* MINIX only supports root mount */
+	if (!dir_name || strcmp(dir_name, "/") != 0)
+		return -ENOTSUPP;
+
+	if (!minix_fs_is_working()) {
+		int ret = minix_fs_init();
+		if (ret != 0) {
+			serial_print("[VFS] ERROR - MINIX_MOUNT: minix_fs_init failed\n");
+			return ret;
+		}
+	}
+
+	if (!vfs_get_root_sb()) 
+  {
+		struct vfs_superblock *sb = kmalloc(sizeof(struct vfs_superblock));
+		if (!sb)
+			return -ENOMEM;
+		struct vfs_inode *inode = kmalloc(sizeof(struct vfs_inode));
+		if (!inode) {
+			kfree(sb);
+			return -ENOMEM;
+		}
+		sb->s_op = &minix_super_ops;
+		sb->s_type = &minix_fs_type;
+		sb->s_fs_info = NULL;
+		inode->i_ino = 1;
+		inode->i_mode = 0040755;
+		inode->i_size = 0;
+		inode->i_op = &minix_inode_ops;
+		inode->i_fop = &minix_file_ops;
+		inode->i_sb = sb;
+		inode->i_private = NULL;
+		vfs_set_root(sb, inode);
+	}
+
+	return 0;
+}
+
+int minix_fs_register(void)
+{
+	minix_fs_type.name = "minix";
+	minix_fs_type.mount = minix_mount;
+	minix_fs_type.ops = &minix_fs_ops;
+	minix_fs_type.next = NULL;
+	return register_filesystem(&minix_fs_type);
 }

@@ -8,6 +8,7 @@
 #include <ir0/stat.h>
 #include <ir0/types.h>
 #include <ir0/fcntl.h>
+#include <ir0/poll.h>
 #include <string.h>
 
 /* Basic types */
@@ -65,6 +66,8 @@ typedef enum {
     SYS_IOCTL = 31,     /* Device I/O control - POSIX */
     SYS_GETDENTS = 32,  /* Get directory entries - Linux/POSIX */
     SYS_CONSOLE_SCROLL = 33,  /* Console scrollback (Page Up/Down); arg1 = delta lines */
+    SYS_POLL = 34,      /* Wait for events on file descriptors */
+    SYS_CHOWN = 35,     /* Change file owner and group - POSIX */
 } syscall_num_t;
 
 /* Virtual filesystem paths for file operations */
@@ -82,6 +85,7 @@ typedef enum {
 #define DEV_NET            "/dev/net"
 #define DEV_DISK           "/dev/disk"
 #define DEV_KMSG           "/dev/kmsg"
+#define DEV_FB0            "/dev/fb0"
 
 /* Process information files in /proc */
 #define PROC_STATUS        "/proc/self/status"
@@ -346,6 +350,12 @@ static inline int64_t ir0_rmdir(const char *path)
     return ir0_unlink(path);
 }
 
+/* poll - Wait for events on file descriptors */
+static inline int64_t ir0_poll(struct pollfd *fds, unsigned int nfds, int timeout_ms)
+{
+    return syscall3(SYS_POLL, (int64_t)fds, (int64_t)nfds, (int64_t)timeout_ms);
+}
+
 /* Network information via /sys filesystem */
 static inline int64_t ir0_netinfo(void)
 {
@@ -432,11 +442,17 @@ static inline int64_t ir0_getppid(void)
     if (bytes <= 0) return -1;
     buf[bytes] = '\0';
     
-    /* Parse PPid from /proc/self/status */
-    char *ppid_line = strstr(buf, "PPid:");
-    if (!ppid_line) return -1;
-    
-    return atoi(ppid_line + 6);  /* Skip "PPid:" */
+    /* Parse PPid from raw /proc/self/status: name\tstate\tpid\tppid\tuid\tgid */
+    char *p = buf;
+    int field = 0;
+    while (*p && field < 4)
+    {
+        if (field == 3)
+            return atoi(p);
+        if (*p == '\t') field++;
+        p++;
+    }
+    return -1;
 }
 
 #endif /* _IR0_SYSCALL_H */

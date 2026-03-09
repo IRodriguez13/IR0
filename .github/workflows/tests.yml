@@ -1,0 +1,38 @@
+# Test and health check: kernel-analyze, host tests, memsafe, kernel-memsafe, kernel-tests
+name: Tests
+
+on:
+  push:
+    branches: [main, mainline, master]
+  pull_request:
+    branches: [main, mainline, master]
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc make nasm \
+            grub-pc-bin grub-common xorriso \
+            qemu-system-x86 valgrind
+
+      - name: Build test artifacts
+        run: make tests
+
+      - name: Kernel binary analysis
+        run: make kernel-analyze
+
+      - name: Kernel code under Valgrind (kernel-memsafe)
+        run: make kernel-memsafe
+
+      - name: Create disk image for QEMU
+        run: dd if=/dev/zero of=disk.img bs=1M count=200
+
+      - name: In-kernel tests (QEMU boot)
+        run: make kernel-tests
+        timeout-minutes: 2

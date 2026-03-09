@@ -29,6 +29,7 @@
 #include <string.h>
 #include <errno.h>
 #include "drivers/bluetooth/bt_sysfs.h"
+#include <drivers/disk/partition.h>
 
 /* Forward declarations for functions we use */
 extern bool ata_drive_present(uint8_t drive);
@@ -300,33 +301,37 @@ static int sys_devices_cpu0_online_write(const char *buf, size_t count)
     return -EINVAL;
 }
 
-/* Generate /sys/devices/block content */
+/*
+ * Generate /sys/devices/block content.
+ * Lists only present ATA disks (hda, hdb, hdc, hdd) and their partitions (hdX1, ...).
+ */
 static int sys_devices_block_read(char *buf, size_t count)
 {
     if (!buf || count == 0)
         return -EINVAL;
-    
     memset(buf, 0, count);
-    
     size_t off = 0;
-    
-    /* List block devices (ATA drives) */
     for (uint8_t i = 0; i < 4; i++)
     {
         if (!ata_drive_present(i))
             continue;
-        
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "hda%c\n", 'a' + i);
-        if (n > 0 && n < (int)(count - off))
-            off += (size_t)n;
-        else
+                         "hd%c\n", 'a' + (int)i);
+        if (n <= 0 || n >= (int)(count - off))
             break;
+        off += (size_t)n;
+        int part_count = get_partition_count(i);
+        for (int p = 0; p < part_count && off < count; p++)
+        {
+            n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+                         "hd%c%d\n", 'a' + (int)i, p + 1);
+            if (n <= 0 || n >= (int)(count - off))
+                break;
+            off += (size_t)n;
+        }
     }
-    
     if (off < count)
         buf[off] = '\0';
-    
     return (int)off;
 }
 

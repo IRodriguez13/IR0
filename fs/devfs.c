@@ -23,15 +23,45 @@
 #include <ir0/net.h>
 #include <kernel/syscalls.h>
 #include <drivers/storage/ata.h>
+#include <drivers/disk/partition.h>
 #include <string.h>
 #include <drivers/timer/clock_system.h>
 #include "kernel/ipc.h"
 #include "drivers/bluetooth/bt_device.h"
+#include <drivers/video/vbe.h>
+#include <ir0/copy_user.h>
 
 /* Device registry */
 #define MAX_DEV_NODES 64
 static devfs_node_t *dev_nodes[MAX_DEV_NODES];
 static int num_dev_nodes = 0;
+
+/*
+ * Disk/partition device IDs: 20 = hda, 21 = hdb, 22 = hdc, 23 = hdd (whole disk);
+ * 24 = hda1, 25 = hda2, ... 27 = hda4, 28 = hdb1, ... 39 = hdd4.
+ */
+#define DEVFS_DISK_AGGREGATE_ID  9
+#define DEVFS_DISK_BASE_ID      20
+#define DEVFS_DISK_STRIDE       4
+
+static void devfs_decode_disk_device_id(uint32_t device_id, uint8_t *disk_id_out, uint8_t *part_out)
+{
+    if (device_id < DEVFS_DISK_BASE_ID || device_id > DEVFS_DISK_BASE_ID + 19)
+    {
+        *disk_id_out = 0;
+        *part_out = 0;
+        return;
+    }
+    if (device_id < DEVFS_DISK_BASE_ID + 4)
+    {
+        *disk_id_out = (uint8_t)(device_id - DEVFS_DISK_BASE_ID);
+        *part_out = 0;
+        return;
+    }
+    uint32_t idx = device_id - DEVFS_DISK_BASE_ID - 4;
+    *disk_id_out = (uint8_t)(idx / 4);
+    *part_out = (uint8_t)(idx % 4 + 1);
+}
 
 int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
@@ -150,26 +180,38 @@ int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
     return (int64_t)read_count;
 }
 
+/*
+ * PCM format state for /dev/audio. Default: Doom-compatible 11025 Hz, 8-bit mono.
+ * Use ioctl(AUDIO_SET_FORMAT) before write() to change.
+ */
+static struct audio_format audio_pcm_format = {
+    .sample_rate = 11025,
+    .channels = 1,
+    .bits_per_sample = 8
+};
+
 int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)offset;
+    (void)entry;
+    (void)offset;
     
     if (!sb16_is_available())
     {
         /* Sound Blaster not available, accept data but don't process */
         return (int64_t)count;
     }
+    if (!buf || count == 0)
+        return (int64_t)count;
     
-    /* Ensure speaker is on for audio output */
-    sb16_speaker_on();
-    
-    /* Note: Audio playback via write() requires properly formatted PCM samples.
-     * For raw PCM audio, the format should be specified via ioctl(AUDIO_SET_FORMAT)
-     * before writing. The current implementation accepts data but doesn't play
-     * it automatically - use ioctl(AUDIO_PLAY) after writing sample data, or
-     * format the data according to sb16_sample_t and use sb16_play_sample() directly.
-     */
-    return (int64_t)count;
+    sb16_sample_t sample;
+    if (sb16_create_sample(&sample, (uint8_t *)buf, (uint32_t)count,
+                           audio_pcm_format.sample_rate,
+                           audio_pcm_format.channels,
+                           audio_pcm_format.bits_per_sample) != 0)
+        return -1;
+    int ret = sb16_play_sample(&sample);
+    sb16_destroy_sample(&sample);
+    return (ret == 0) ? (int64_t)count : -1;
 }
 
 int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
@@ -223,9 +265,32 @@ int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
         case AUDIO_STOP:
             /* Stop playback by turning off speaker */
             sb16_speaker_off();
-            /* Optionally reset DSP to fully stop any ongoing transfer */
-            /* sb16_reset_dsp(); */  /* Too aggressive, may require re-initialization */
             return 0;
+            
+        case AUDIO_SET_FORMAT:
+            if (arg)
+            {
+                struct audio_format fmt;
+                if (copy_from_user(&fmt, arg, sizeof(fmt)) != 0)
+                    return -1;
+                /* SB16 8-bit mono: 4000-45454 Hz. Doom uses 11025. */
+                if (fmt.sample_rate < 4000 || fmt.sample_rate > 45454)
+                    return -1;
+                if (fmt.channels != 1 || fmt.bits_per_sample != 8)
+                    return -1;  /* 16-bit/stereo not yet implemented */
+                audio_pcm_format = fmt;
+                return 0;
+            }
+            return -1;
+            
+        case AUDIO_GET_FORMAT:
+            if (arg)
+            {
+                if (copy_to_user(arg, &audio_pcm_format, sizeof(audio_pcm_format)) != 0)
+                    return -1;
+                return 0;
+            }
+            return -1;
             
         default:
             return -1;  /* Invalid request */
@@ -688,20 +753,70 @@ int64_t dev_net_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset
         len = snprintf(result_buf, sizeof(result_buf), 
                       "success:1 rtt:%s ttl:%s payload:%s ip:%s.%s.%s.%s\n",
                       rtt_str, ttl_str, bytes_str, ip1_str, ip2_str, ip3_str, ip4_str);
-    }
-    else
-    {
-        /* No result yet - return empty */
-        return 0;
-    }
-    
-    if (len > 0 && len <= (int)count)
-    {
-        memcpy(buf, result_buf, len);
-        return len;
+        if (len > 0 && len <= (int)count)
+        {
+            memcpy(buf, result_buf, (size_t)len);
+            return len;
+        }
+        return (int)count;
     }
     
-    return 0;
+    /*
+     * No ping result: return real network data (interfaces + IP config)
+     * so that read(/dev/net) always exposes current state.
+     */
+    {
+        char *out = (char *)buf;
+        size_t out_len = count;
+        size_t off = 0;
+        struct net_device *dev = net_get_devices();
+        int n;
+        n = snprintf(out + off, (off < out_len) ? (out_len - off) : 0,
+                     "NAME MTU FLAGS MAC\n");
+        if (n > 0 && (size_t)n < out_len - off)
+            off += (size_t)n;
+        while (dev && off < out_len - 1)
+        {
+            char flags[32];
+            size_t foff = 0;
+            flags[0] = '\0';
+            if (dev->flags & IFF_UP)
+                foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "UP");
+            if (dev->flags & IFF_RUNNING)
+                foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "%sRUNNING", foff ? "," : "");
+            if (dev->flags & IFF_BROADCAST)
+                foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "%sBROADCAST", foff ? "," : "");
+            if (foff == 0)
+                snprintf(flags, sizeof(flags), "-");
+            n = snprintf(out + off, out_len - off, "%s %u %s %02x:%02x:%02x:%02x:%02x:%02x\n",
+                         dev->name ? dev->name : "", (unsigned)dev->mtu, flags,
+                         (unsigned)dev->mac[0], (unsigned)dev->mac[1], (unsigned)dev->mac[2],
+                         (unsigned)dev->mac[3], (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
+            if (n <= 0 || (size_t)n >= out_len - off)
+                break;
+            off += (size_t)n;
+            dev = dev->next;
+        }
+        if (off < out_len)
+        {
+            uint32_t ip_h = ntohl(ip_local_addr);
+            uint32_t nm_h = ntohl(ip_netmask);
+            uint32_t gw_h = ntohl(ip_gateway);
+            n = snprintf(out + off, out_len - off,
+                         "IP %u.%u.%u.%u Netmask %u.%u.%u.%u Gateway %u.%u.%u.%u\n",
+                         (unsigned)((ip_h >> 24) & 0xFF), (unsigned)((ip_h >> 16) & 0xFF),
+                         (unsigned)((ip_h >> 8) & 0xFF), (unsigned)(ip_h & 0xFF),
+                         (unsigned)((nm_h >> 24) & 0xFF), (unsigned)((nm_h >> 16) & 0xFF),
+                         (unsigned)((nm_h >> 8) & 0xFF), (unsigned)(nm_h & 0xFF),
+                         (unsigned)((gw_h >> 24) & 0xFF), (unsigned)((gw_h >> 16) & 0xFF),
+                         (unsigned)((gw_h >> 8) & 0xFF), (unsigned)(gw_h & 0xFF));
+            if (n > 0 && (size_t)n < out_len - off)
+                off += (size_t)n;
+        }
+        if (off < out_len)
+            out[off] = '\0';
+        return off > 0 ? (int64_t)off : 0;
+    }
 }
 
 int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
@@ -815,7 +930,55 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 
 int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
-    (void)entry;
+    if (!buf)
+        return -1;
+    if (entry->device_id != DEVFS_DISK_AGGREGATE_ID)
+    {
+        uint8_t disk_id, part;
+        devfs_decode_disk_device_id(entry->device_id, &disk_id, &part);
+        if (!ata_drive_present(disk_id))
+            return -ENODEV;
+        if (offset < 0)
+            return -1;
+        uint64_t sector_off = (uint64_t)((unsigned long)offset / 512);
+        size_t num_sectors = (count + 511) / 512;
+        if (num_sectors == 0)
+            return 0;
+        uint64_t start_lba = sector_off;
+        if (part != 0)
+        {
+            partition_info_t info;
+            if (get_partition_info(disk_id, (uint8_t)(part - 1), &info) != 0)
+                return -ENODEV;
+            if (sector_off >= info.total_sectors)
+                return 0;
+            start_lba = info.start_lba + sector_off;
+            if (num_sectors > info.total_sectors - sector_off)
+                num_sectors = (size_t)(info.total_sectors - sector_off);
+        }
+        else
+        {
+            uint64_t disk_sectors = ata_get_size(disk_id);
+            if (sector_off >= disk_sectors)
+                return 0;
+            if (sector_off + num_sectors > disk_sectors)
+                num_sectors = (size_t)(disk_sectors - sector_off);
+        }
+        char *dst = (char *)buf;
+        size_t bytes_done = 0;
+        while (num_sectors > 0)
+        {
+            uint8_t n = (num_sectors > 255) ? 255 : (uint8_t)num_sectors;
+            if (!ata_read_sectors(disk_id, (uint32_t)start_lba, n, dst))
+                return (int64_t)bytes_done;
+            bytes_done += (size_t)n * 512;
+            start_lba += n;
+            num_sectors -= n;
+            dst += (size_t)n * 512;
+        }
+        return (int64_t)((bytes_done < count) ? bytes_done : count);
+    }
+    /* Aggregate /dev/disk: generate listing */
     
     /* Generate df-like output: Filesystem          Size */
     /* Support offset for seeking within output */
@@ -956,35 +1119,95 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
 
 int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)buf; (void)offset;
-    /* Write to disk at offset */
-    return count;
+    if (entry->device_id == DEVFS_DISK_AGGREGATE_ID)
+        return count;
+    if (!buf)
+        return -1;
+    uint8_t disk_id, part;
+    devfs_decode_disk_device_id(entry->device_id, &disk_id, &part);
+    if (!ata_drive_present(disk_id))
+        return -ENODEV;
+    if (offset < 0)
+        return -1;
+    uint64_t sector_off = (uint64_t)((unsigned long)offset / 512);
+    size_t num_sectors = (count + 511) / 512;
+    if (num_sectors == 0)
+        return 0;
+    uint64_t start_lba = sector_off;
+    if (part != 0)
+    {
+        partition_info_t info;
+        if (get_partition_info(disk_id, (uint8_t)(part - 1), &info) != 0)
+            return -ENODEV;
+        if (sector_off >= info.total_sectors)
+            return 0;
+        start_lba = info.start_lba + sector_off;
+        if (num_sectors > info.total_sectors - sector_off)
+            num_sectors = (size_t)(info.total_sectors - sector_off);
+    }
+    else
+    {
+        uint64_t disk_sectors = ata_get_size(disk_id);
+        if (sector_off >= disk_sectors)
+            return 0;
+        if (sector_off + num_sectors > disk_sectors)
+            num_sectors = (size_t)(disk_sectors - sector_off);
+    }
+    const char *src = (const char *)buf;
+    size_t bytes_done = 0;
+    while (num_sectors > 0)
+    {
+        uint8_t n = (num_sectors > 255) ? 255 : (uint8_t)num_sectors;
+        if (!ata_write_sectors(disk_id, (uint32_t)start_lba, n, src))
+            return (int64_t)bytes_done;
+        bytes_done += (size_t)n * 512;
+        start_lba += n;
+        num_sectors -= n;
+        src += (size_t)n * 512;
+    }
+    return (int64_t)((bytes_done < count) ? bytes_done : count);
 }
 
 int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
-    (void)entry;
+    uint8_t disk_id = 0;
+    uint8_t part = 0;
+    uint64_t part_start_lba = 0;
+    uint64_t part_sectors = 0;
+    if (entry->device_id >= DEVFS_DISK_BASE_ID && entry->device_id <= DEVFS_DISK_BASE_ID + 19)
+    {
+        devfs_decode_disk_device_id(entry->device_id, &disk_id, &part);
+        if (!ata_drive_present(disk_id))
+            return -ENODEV;
+        if (part != 0)
+        {
+            partition_info_t info;
+            if (get_partition_info(disk_id, (uint8_t)(part - 1), &info) != 0)
+                return -ENODEV;
+            part_start_lba = info.start_lba;
+            part_sectors = info.total_sectors;
+        }
+    }
     
     switch (request)
     {
         case DISK_READ_SECTOR:
             if (arg)
             {
-                /* arg points to a structure: { uint8_t drive; uint32_t lba; void *buffer; } */
-                /* For simplicity, we'll use a simpler approach */
                 typedef struct {
                     uint8_t drive;
                     uint32_t lba;
                     void *buffer;
                 } disk_sector_req_t;
-                
                 disk_sector_req_t *req = (disk_sector_req_t *)arg;
-                if (req && req->buffer && ata_drive_present(req->drive))
+                if (req && req->buffer)
                 {
-                    if (ata_read_sectors(req->drive, req->lba, 1, req->buffer))
-                    {
-                        return 512;  /* Return bytes read */
-                    }
+                    uint8_t d = (entry->device_id >= DEVFS_DISK_BASE_ID) ? disk_id : req->drive;
+                    uint32_t lba = (uint32_t)req->lba;
+                    if (part != 0)
+                        lba = (uint32_t)(part_start_lba + req->lba);
+                    if (ata_drive_present(d) && ata_read_sectors(d, lba, 1, req->buffer))
+                        return 512;
                 }
             }
             return -1;
@@ -997,14 +1220,15 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                     uint32_t lba;
                     const void *buffer;
                 } disk_sector_req_t;
-                
                 disk_sector_req_t *req = (disk_sector_req_t *)arg;
-                if (req && req->buffer && ata_drive_present(req->drive))
+                if (req && req->buffer)
                 {
-                    if (ata_write_sectors(req->drive, req->lba, 1, req->buffer))
-                    {
-                        return 512;  /* Return bytes written */
-                    }
+                    uint8_t d = (entry->device_id >= DEVFS_DISK_BASE_ID) ? disk_id : req->drive;
+                    uint32_t lba = (uint32_t)req->lba;
+                    if (part != 0)
+                        lba = (uint32_t)(part_start_lba + req->lba);
+                    if (ata_drive_present(d) && ata_write_sectors(d, lba, 1, req->buffer))
+                        return 512;
                 }
             }
             return -1;
@@ -1012,28 +1236,29 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
         case DISK_GET_GEOMETRY:
             if (arg)
             {
-                /* arg points to: { uint8_t drive; uint64_t *size_sectors; uint64_t *size_bytes; } */
                 typedef struct {
                     uint8_t drive;
                     uint64_t *size_sectors;
                     uint64_t *size_bytes;
                 } disk_geometry_t;
-                
                 disk_geometry_t *geom = (disk_geometry_t *)arg;
-                if (geom && ata_drive_present(geom->drive))
+                if (geom)
                 {
-                    uint64_t sectors = ata_get_size(geom->drive);
+                    uint8_t d = (entry->device_id >= DEVFS_DISK_BASE_ID) ? disk_id : geom->drive;
+                    if (!ata_drive_present(d))
+                        return -1;
+                    uint64_t sectors = (part != 0) ? part_sectors : ata_get_size(d);
                     if (geom->size_sectors)
                         *geom->size_sectors = sectors;
                     if (geom->size_bytes)
-                        *geom->size_bytes = sectors * 512;  /* 512 bytes per sector */
+                        *geom->size_bytes = sectors * 512;
                     return 0;
                 }
             }
             return -1;
             
         default:
-            return -1;  /* Invalid request */
+            return -1;
     }
 }
 
@@ -1074,8 +1299,16 @@ int64_t dev_random_read(devfs_entry_t *entry, void *buf, size_t count, off_t off
 
 int64_t dev_random_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)buf; (void)count; (void)offset;
-    /* /dev/random accepts writes to update entropy pool (not implemented) */
+    (void)entry; (void)offset;
+    /*
+     * /dev/random accepts writes to add entropy to the pool.
+     * Mix written bytes with random_seed via XOR and LCG feedback.
+     */
+    const uint8_t *p = (const uint8_t *)buf;
+    for (size_t i = 0; i < count; i++) {
+        random_seed ^= (uint32_t)p[i] << (i % 24);
+        random_seed = (random_seed * 1103515245 + 12345) & 0x7FFFFFFF;
+    }
     return (int64_t)count;
 }
 
@@ -1189,6 +1422,68 @@ static const devfs_ops_t urandom_ops = {
 static const devfs_ops_t full_ops = {
     .read = dev_full_read,
     .write = dev_full_write,
+};
+
+/*
+ * /dev/fb0 - Framebuffer (OSDev / Linux fbdev)
+ * write: copy pixels to framebuffer
+ * ioctl(FBIOGET_VSCREENINFO): get width, height, bpp, pitch
+ */
+static int64_t dev_fb0_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)buf; (void)count; (void)offset;
+    return 0;
+}
+
+static int64_t dev_fb0_write_simple(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)offset;
+    uint8_t *fb = vbe_get_fb();
+    uint32_t pitch = vbe_get_pitch();
+    uint32_t w = 0, h = 0;
+    if (!vbe_is_available() || !fb || !pitch)
+        return -ENODEV;
+    vbe_get_info(&w, &h, NULL);
+    uint32_t size = pitch * h;
+    if (count > size)
+        count = size;
+    memcpy(fb, buf, count);
+    return (int64_t)count;
+}
+
+static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+{
+    (void)entry;
+    if (!vbe_is_available())
+        return -ENODEV;
+    if (request == FBIOGET_VSCREENINFO && arg)
+    {
+        struct fb_var_screeninfo info;
+        uint32_t w = 0, h = 0, bpp = 0;
+        vbe_get_info(&w, &h, &bpp);
+        memset(&info, 0, sizeof(info));
+        info.xres = w;
+        info.yres = h;
+        info.xres_virtual = w;
+        info.yres_virtual = h;
+        info.bits_per_pixel = bpp;
+        if (copy_to_user(arg, &info, sizeof(info)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+    return -EINVAL;
+}
+
+static const devfs_ops_t fb0_ops = {
+    .read = dev_fb0_read,
+    .write = dev_fb0_write_simple,
+    .ioctl = dev_fb0_ioctl,
+};
+
+static devfs_node_t dev_fb0 = {
+    .entry = { .name = "fb0", .mode = 0660, .device_id = 15 },
+    .ops = &fb0_ops,
+    .ref_count = 0,
 };
 
 /* IPC device operations */
@@ -1400,6 +1695,17 @@ devfs_node_t dev_disk = {
     .ref_count = 0
 };
 
+/* Per-disk and per-partition block devices: /dev/hda, /dev/hda1, ... /dev/hdd4 */
+static const char *const devfs_block_names[] = {
+    "hda", "hdb", "hdc", "hdd",
+    "hda1", "hda2", "hda3", "hda4",
+    "hdb1", "hdb2", "hdb3", "hdb4",
+    "hdc1", "hdc2", "hdc3", "hdc4",
+    "hdd1", "hdd2", "hdd3", "hdd4"
+};
+#define NUM_BLOCK_DISK_NODES (sizeof(devfs_block_names) / sizeof(devfs_block_names[0]))
+static devfs_node_t dev_block_nodes[NUM_BLOCK_DISK_NODES];
+
 devfs_node_t dev_random = {
     .entry = { .name = "random", .mode = 0644, .device_id = 10 },
     .ops = &random_ops,
@@ -1430,24 +1736,48 @@ devfs_node_t dev_bluetooth_hci0 = {
     .ref_count = 0
 };
 
+/**
+ * devfs_register_node - Registra un nodo pre-asignado en devfs
+ * @node: Nodo con entry y ops ya configurados
+ *
+ * Para dispositivos con struct estática. Para dispositivos dinámicos usar
+ * devfs_register_device.
+ */
+int devfs_register_node(devfs_node_t *node)
+{
+    if (!node || num_dev_nodes >= MAX_DEV_NODES)
+        return -1;
+    dev_nodes[num_dev_nodes++] = node;
+    return 0;
+}
+
 int devfs_init(void)
 {
-    /* Register standard devices */
-    dev_nodes[num_dev_nodes++] = &dev_null;
-    dev_nodes[num_dev_nodes++] = &dev_zero;
-    dev_nodes[num_dev_nodes++] = &dev_console;
-    dev_nodes[num_dev_nodes++] = &dev_tty;
-    dev_nodes[num_dev_nodes++] = &dev_kmsg;
-    dev_nodes[num_dev_nodes++] = &dev_audio;
-    dev_nodes[num_dev_nodes++] = &dev_mouse;
-    dev_nodes[num_dev_nodes++] = &dev_net;
-    dev_nodes[num_dev_nodes++] = &dev_disk;
-    dev_nodes[num_dev_nodes++] = &dev_random;
-    dev_nodes[num_dev_nodes++] = &dev_urandom;
-    dev_nodes[num_dev_nodes++] = &dev_full;
-    dev_nodes[num_dev_nodes++] = &dev_ipc;
-    dev_nodes[num_dev_nodes++] = &dev_bluetooth_hci0;
-    
+    devfs_register_node(&dev_null);
+    devfs_register_node(&dev_zero);
+    devfs_register_node(&dev_console);
+    devfs_register_node(&dev_tty);
+    devfs_register_node(&dev_kmsg);
+    devfs_register_node(&dev_audio);
+    devfs_register_node(&dev_mouse);
+    devfs_register_node(&dev_net);
+    devfs_register_node(&dev_disk);
+    for (size_t i = 0; i < NUM_BLOCK_DISK_NODES; i++)
+    {
+        dev_block_nodes[i].entry.name = devfs_block_names[i];
+        dev_block_nodes[i].entry.mode = 0660;
+        dev_block_nodes[i].entry.device_id = (uint32_t)(DEVFS_DISK_BASE_ID + (uint32_t)i);
+        dev_block_nodes[i].ops = &disk_ops;
+        dev_block_nodes[i].ref_count = 0;
+        devfs_register_node(&dev_block_nodes[i]);
+    }
+    devfs_register_node(&dev_random);
+    devfs_register_node(&dev_urandom);
+    devfs_register_node(&dev_full);
+    devfs_register_node(&dev_fb0);
+    devfs_register_node(&dev_ipc);
+    devfs_register_node(&dev_bluetooth_hci0);
+
     return 0;
 }
 

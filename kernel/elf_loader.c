@@ -343,7 +343,6 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     load_page_directory((uint64_t)process->page_directory);
     
     /* Build stack from bottom to top (stack grows down) */
-    uint64_t stack_bottom = process->stack_start;
     uint64_t stack_top = process->stack_start + process->stack_size;
     uint64_t stack_ptr = stack_top - 16;  /* Start with alignment */
     

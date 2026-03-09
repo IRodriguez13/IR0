@@ -388,47 +388,34 @@ void ir0_driver_list_all(void)
     }
 }
 
+/*
+ * Raw data only: one line per driver, tab-separated.
+ * name\tversion\tlang\tstate\tdescription
+ * Frontend (lsdrv) does formatting.
+ */
 int ir0_driver_list_to_buffer(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-
-    /* Initialize buffer to zero */
     memset(buf, 0, count);
-
     size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "NAME VERSION LANG STATE DESC\n");
-    if (n < 0)
-        return -1;
-    if (n >= (int)(count - off))
-        n = (int)(count - off) - 1;
-    off += (size_t)n;
-
     ir0_driver_t *current = driver_registry.drivers;
     while (current && off < count - 1)
     {
         const char *lang = lang_to_string(current->info.language);
         const char *state = state_to_string(current->state);
-
-        n = snprintf(buf + off, count - off,
-                     "%s %s %s %s %s\n",
-                     current->info.name ? current->info.name : "",
-                     current->info.version ? current->info.version : "",
-                     lang ? lang : "",
-                     state ? state : "",
-                     current->info.description ? current->info.description : "");
-        if (n < 0)
-            break;
-        if (n >= (int)(count - off))
-            n = (int)(count - off) - 1;
+        int n = snprintf(buf + off, count - off,
+                         "%s\t%s\t%s\t%s\t%s\n",
+                         current->info.name ? current->info.name : "",
+                         current->info.version ? current->info.version : "",
+                         lang ? lang : "",
+                         state ? state : "",
+                         current->info.description ? current->info.description : "");
+        if (n < 0) break;
+        if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
         current = current->next;
     }
-
-    /* Ensure null termination */
-    if (off < count)
-        buf[off] = '\0';
-
+    if (off < count) buf[off] = '\0';
     return (int)off;
 }

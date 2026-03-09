@@ -21,6 +21,7 @@
 #include <arch/x86-64/sources/arch_x64.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
+#include <kernel/resource_registry.h>
 
 /* Driver registration structures */
 static int32_t pit_hw_init(void)
@@ -99,6 +100,8 @@ void init_pic(void)
     /* Stable mode: Keep all interrupts disabled */
     outb(PIC1_DATA, 0xFF); /* PIC1: All disabled */
     outb(PIC2_DATA, 0xFF); /* PIC2: All disabled */
+
+    resource_register_ioport(PIC1_COMMAND, PIC1_DATA, "pic1");
 }
 
 void init_PIT(uint32_t frequency)
@@ -121,4 +124,7 @@ void init_PIT(uint32_t frequency)
     uint8_t mask = inb(PIC1_DATA);
     mask &= ~(1 << 0); /* Enable IRQ 0 (timer) */
     outb(PIC1_DATA, mask);
+
+    resource_register_irq(0, "timer");
+    resource_register_ioport(PIT_REG_CHAN0, PIT_REG_COMMAND, "timer0");
 }

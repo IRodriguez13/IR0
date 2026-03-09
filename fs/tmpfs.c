@@ -259,6 +259,8 @@ static tmpfs_inode_t *tmpfs_lookup_inode(tmpfs_data_t *tmpfs, const char *rel_pa
     return current;
 }
 
+static struct filesystem_type *tmpfs_fs_type_ptr;
+
 static int tmpfs_mount(const char *dev_name __attribute__((unused)),
                        const char *dir_name)
 {
@@ -298,16 +300,47 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
     
     /* Add to instances */
     tmpfs_instances[num_tmpfs_instances++] = tmpfs;
-    
+
+    /*
+     * Create VFS root inode and register mount point.
+     * TMPFS does not use superblock; sb is NULL.
+     */
+    struct vfs_inode *mount_root = (struct vfs_inode *)kmalloc(sizeof(struct vfs_inode));
+    if (!mount_root)
+    {
+        tmpfs_instances[--num_tmpfs_instances] = NULL;
+        kfree(tmpfs);
+        return -ENOMEM;
+    }
+    mount_root->i_ino = 1;
+    mount_root->i_mode = S_IFDIR | 0755;
+    mount_root->i_size = 0;
+    mount_root->i_op = NULL;
+    mount_root->i_fop = NULL;
+    mount_root->i_sb = NULL;
+    mount_root->i_private = root_inode;
+
+    if (!tmpfs_fs_type_ptr)
+        return -EINVAL;
+    int ret = vfs_add_mount_point(dir_name, dev_name ? dev_name : "none",
+                                  NULL, mount_root, tmpfs_fs_type_ptr);
+    if (ret != 0)
+    {
+        kfree(mount_root);
+        tmpfs_instances[--num_tmpfs_instances] = NULL;
+        kfree(tmpfs);
+        return ret;
+    }
+
     print("TMPFS: Mounted successfully at ");
     print(dir_name);
     print("\n");
-    
+
     return 0;
 }
 
-/* TMPFS filesystem operations - exported for VFS */
-struct filesystem_operations tmpfs_fs_ops = {
+/* TMPFS filesystem operations */
+static struct filesystem_operations tmpfs_fs_ops = {
     .stat = tmpfs_stat,
     .mkdir = tmpfs_mkdir,
     .create_file = tmpfs_create_file,
@@ -318,8 +351,8 @@ struct filesystem_operations tmpfs_fs_ops = {
     .write_file = tmpfs_write_file,
     .lookup = (struct vfs_inode *(*)(const char *))tmpfs_find_inode,
     .get_inode_number = tmpfs_get_inode_number,
-    .ls = NULL,  /* TMPFS doesn't have ls, use readdir */
-    .link = NULL,  /* TMPFS doesn't support links yet */
+    .ls = NULL,
+    .link = NULL,
     .is_available = tmpfs_is_available,
     .is_working = tmpfs_is_available,
 };
@@ -333,6 +366,7 @@ static struct filesystem_type tmpfs_fs_type = {
 
 int tmpfs_register(void)
 {
+    tmpfs_fs_type_ptr = &tmpfs_fs_type;
     return register_filesystem(&tmpfs_fs_type);
 }
 

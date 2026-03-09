@@ -15,6 +15,7 @@ typedef uint32_t uid_t;
 typedef uint32_t gid_t;
 typedef int64_t blksize_t;
 typedef int64_t blkcnt_t;
+typedef int64_t ssize_t;
 
 // File type and permission bits (from stat.h)
 #define S_IFMT   0170000  // File type mask

@@ -213,9 +213,64 @@ static void execute_command(const char *cmd)
         return;
     }
     
-    /* TODO: Implement proper pipe support (redirect stdout of first to stdin of second) */
-    execute_single_command(first_cmd);
-    execute_single_command(second_cmd);
+    /*
+     * Implement pipe: cmd1 | cmd2
+     * Create pipe, fork left child (stdout -> pipe write), fork right child
+     * (stdin <- pipe read), wait for both.
+     */
+    int pipefd[2];
+    if (syscall(SYS_PIPE, (uint64_t)pipefd, 0, 0) != 0)
+    {
+        write_stderr("pipe() failed\n");
+        return;
+    }
+    
+    int pid_left = syscall(SYS_FORK, 0, 0, 0);
+    if (pid_left < 0)
+    {
+        write_stderr("fork() failed\n");
+        syscall(SYS_CLOSE, pipefd[0], 0, 0);
+        syscall(SYS_CLOSE, pipefd[1], 0, 0);
+        return;
+    }
+    
+    if (pid_left == 0)
+    {
+        /* Left child: redirect stdout to pipe write end */
+        syscall(SYS_DUP2, pipefd[1], 1, 0);
+        syscall(SYS_CLOSE, pipefd[0], 0, 0);
+        syscall(SYS_CLOSE, pipefd[1], 0, 0);
+        execute_single_command(first_cmd);
+        syscall(SYS_EXIT, 0, 0, 0);
+        __builtin_unreachable();
+    }
+    
+    int pid_right = syscall(SYS_FORK, 0, 0, 0);
+    if (pid_right < 0)
+    {
+        syscall(SYS_CLOSE, pipefd[0], 0, 0);
+        syscall(SYS_CLOSE, pipefd[1], 0, 0);
+        syscall(SYS_WAITPID, pid_left, 0, 0);
+        write_stderr("fork() failed\n");
+        return;
+    }
+    
+    if (pid_right == 0)
+    {
+        /* Right child: redirect stdin from pipe read end */
+        syscall(SYS_DUP2, pipefd[0], 0, 0);
+        syscall(SYS_CLOSE, pipefd[0], 0, 0);
+        syscall(SYS_CLOSE, pipefd[1], 0, 0);
+        execute_single_command(second_cmd);
+        syscall(SYS_EXIT, 0, 0, 0);
+        __builtin_unreachable();
+    }
+    
+    /* Parent: close pipe ends and wait for both children */
+    syscall(SYS_CLOSE, pipefd[0], 0, 0);
+    syscall(SYS_CLOSE, pipefd[1], 0, 0);
+    syscall(SYS_WAITPID, pid_left, 0, 0);
+    syscall(SYS_WAITPID, pid_right, 0, 0);
 }
 
 /* Main shell entry point */

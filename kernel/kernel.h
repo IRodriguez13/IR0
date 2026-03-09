@@ -12,8 +12,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-// Main kernel entry point
-void kmain(void);
+/* Main kernel entry point. multiboot_info is physical addr of Multiboot info (ebx), may be 0. */
+void kmain(uint32_t multiboot_info);
 
 // Core subsystem initialization functions
 void gdt_install(void);

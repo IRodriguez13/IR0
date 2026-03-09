@@ -78,6 +78,9 @@ typedef struct process
 	/* Process command name (for ps) */
 	char comm[16]; /* Process command name (max 15 chars + null) */
 	
+	/* Poll: waiter activo mientras el proceso está bloqueado en poll() */
+	void *poll_waiter;
+
 	/* Signal management */
 	uint32_t signal_pending; /* Bitmask of pending signals */
 	/* Signal handlers (function pointers to userspace handlers) */
@@ -121,7 +124,7 @@ pid_t spawn_user(void (*entry)(void), const char *name);
 pid_t spawn_kernel(void (*entry)(void), const char *name);
 
 /* Fork exists only for POSIX syscall compatibility - uses spawn() internally */
-pid_t process_fork(void);
+pid_t fork(void);
 
 
 pid_t process_get_pid(void);

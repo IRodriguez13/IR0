@@ -199,6 +199,10 @@ static int hci_wait_for_event(uint8_t expected_event, uint32_t timeout_ms)
                     }
                     
                     num_discovered_devices++;
+                    LOG_INFO_FMT("BLUETOOTH", "Device discovered: %02X:%02X:%02X:%02X:%02X:%02X (RSSI %d)",
+                                dev->bd_addr[0], dev->bd_addr[1], dev->bd_addr[2],
+                                dev->bd_addr[3], dev->bd_addr[4], dev->bd_addr[5],
+                                (int)dev->rssi);
                 }
             }
         }
@@ -551,6 +555,10 @@ int hci_process_events(void)
                         dev->rssi = (int8_t)params[param_len - 1];
                     
                     num_discovered_devices++;
+                    LOG_INFO_FMT("BLUETOOTH", "Device discovered: %02X:%02X:%02X:%02X:%02X:%02X (RSSI %d)",
+                                dev->bd_addr[0], dev->bd_addr[1], dev->bd_addr[2],
+                                dev->bd_addr[3], dev->bd_addr[4], dev->bd_addr[5],
+                                (int)dev->rssi);
                 }
             }
         }

@@ -20,8 +20,8 @@ void page_fault_handler_x64(uint64_t *stack)
     int not_present = !(errcode & 1);  /* Page not present */
     int write = errcode & 2;            /* Write access */
     int user = errcode & 4;             /* User mode access */
-    int reserved = errcode & 8;         /* Reserved bit set */
-    int instruction_fetch = errcode & 16; /* Instruction fetch */
+    (void)(errcode & 8);               /* Reserved bit (unused) */
+    (void)(errcode & 16);              /* Instruction fetch (unused) */
 
     /* Validate fault address is in userspace range (only for user mode faults) */
     const uint64_t USER_SPACE_START = 0x00400000UL;  /* 4MB */
@@ -29,7 +29,9 @@ void page_fault_handler_x64(uint64_t *stack)
     
     if (user && not_present)
     {
-        /* Validate fault address is in valid userspace range */
+        /* Validate fault address is in valid userspace range.
+     * Includes null pointer (0): access to 0 triggers SIGSEGV.
+     */
         if (fault_addr < USER_SPACE_START || fault_addr > USER_SPACE_END)
         {
             /* Invalid userspace address - send SIGSEGV to process */

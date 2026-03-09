@@ -19,10 +19,18 @@
  * This includes:
  * - Driver registry initialization
  * - Multi-language driver registration (if enabled)
- * 
+ *
  * Must be called after heap_init() and before hardware driver initialization
  */
 void drivers_init(void);
+
+/**
+ * init_all_drivers - Inicializa todos los drivers de hardware
+ *
+ * Usa el registro central de drivers. Los drivers se inicializan en orden
+ * y registran sus recursos (IRQ, I/O ports). Llamar tras drivers_init().
+ */
+void init_all_drivers(void);
 
 #endif /* IR0_DRIVERS_INIT_DRV_H */
 

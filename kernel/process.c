@@ -236,7 +236,7 @@ static void fork_child_entry(void)
  * This function exists only for POSIX fork() syscall compatibility.
  * It uses spawn() internally, maintaining simplicity.
  */
-pid_t process_fork(void)
+pid_t fork(void)
 {
 	/* IR0 philosophy: only spawn() creates processes
 	 * This function exists solely for sys_fork() compatibility
