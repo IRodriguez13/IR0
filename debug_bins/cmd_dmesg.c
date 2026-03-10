@@ -16,7 +16,12 @@ static int cmd_dmesg_handler(int argc, char **argv)
     /* dmesg is cat /proc/kmsg (kernel log buffer, includes boot logs) */
     char *cat_argv[] = {"cat", "/proc/kmsg", NULL};
     extern struct debug_command cmd_cat;
-    return cmd_cat.handler(2, cat_argv);
+    int ret = cmd_cat.handler(2, cat_argv);
+    if (ret == 0)
+        debug_serial_ok("dmesg");
+    else
+        debug_serial_fail("dmesg", "cat");
+    return ret;
 }
 
 struct debug_command cmd_dmesg = {

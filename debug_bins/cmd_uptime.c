@@ -24,6 +24,7 @@ static int cmd_uptime_handler(int argc, char **argv)
     if (fd < 0)
     {
         debug_writeln_err("uptime: cannot open /proc/uptime");
+        debug_serial_fail("uptime", "open");
         return -1;
     }
     char buf[BUF_SIZE];
@@ -32,6 +33,7 @@ static int cmd_uptime_handler(int argc, char **argv)
     if (nr <= 0)
     {
         debug_writeln(" 0:00:00 up 0 min");
+        debug_serial_ok("uptime");
         return 0;
     }
     buf[nr] = '\0';
@@ -42,6 +44,7 @@ static int cmd_uptime_handler(int argc, char **argv)
     char line[80];
     snprintf(line, sizeof(line), " %lu:%02lu:%02lu up %lu min\n", h, m, s, (unsigned long)(sec / 60));
     debug_write(line);
+    debug_serial_ok("uptime");
     return 0;
 }
 

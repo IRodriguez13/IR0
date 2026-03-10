@@ -86,6 +86,9 @@ int start_init_process(void)
 	init->egid = ROOT_GID;
 	init->umask = DEFAULT_UMASK;
 
+	/* Initialize fd table (stdin/stdout/stderr) */
+	process_init_fd_table(init);
+
 	/* Add to scheduler and start */
 	rr_add_process(init);
 	rr_schedule_next();

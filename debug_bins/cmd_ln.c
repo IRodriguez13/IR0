@@ -13,6 +13,7 @@ static int cmd_ln_handler(int argc, char **argv)
     if (argc < 3)
     {
         debug_write_err("Usage: ln <oldpath> <newpath>\n");
+        debug_serial_fail("ln", "usage");
         return 1;
     }
     
@@ -24,9 +25,11 @@ static int cmd_ln_handler(int argc, char **argv)
     if (result < 0)
     {
         debug_write_err("ln: failed\n");
+        debug_serial_fail("ln", "link");
         return 1;
     }
     
+    debug_serial_ok("ln");
     return 0;
 }
 

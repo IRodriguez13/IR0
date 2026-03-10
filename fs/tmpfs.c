@@ -322,6 +322,15 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
 
     if (!tmpfs_fs_type_ptr)
         return -EINVAL;
+
+    /* Root mount: set root and let vfs_mount add the mount point */
+    if (strcmp(dir_name, "/") == 0)
+    {
+        vfs_set_root(NULL, mount_root);
+        print("TMPFS: Mounted as root (fallback)\n");
+        return 0;
+    }
+
     int ret = vfs_add_mount_point(dir_name, dev_name ? dev_name : "none",
                                   NULL, mount_root, tmpfs_fs_type_ptr);
     if (ret != 0)

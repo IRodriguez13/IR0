@@ -14,6 +14,14 @@
 
 #include "syscalls.h"
 #include "process.h"
+#include <ir0/bits/syscall_linux.h>
+#include <ir0/utsname.h>
+#include <ir0/sysinfo.h>
+#include <ir0/resource.h>
+#include <mm/pmm.h>
+#include <mm/allocator.h>
+#include <drivers/timer/clock_system.h>
+#include <config.h>
 #include <ir0/version.h>
 #include <drivers/serial/serial.h>
 #include <drivers/video/typewriter.h>
@@ -52,17 +60,27 @@
 #include <ir0/signals.h>
 #include <ir0/pipe.h>
 #include <ir0/poll.h>
+#include <ir0/time.h>
 #include <interrupt/arch/idt.h>
 #include <drivers/video/vbe.h>
 #include <drivers/timer/clock_system.h>
+#include <drivers/timer/rtc/rtc.h>
 #include <mm/paging.h>
 #include <fs/vfs.h>
 
 /* Forward declarations */
 static fd_entry_t *get_process_fd_table(void);
 int64_t sys_unlink(const char *pathname);
+static void init_syscall_table(void);
 
 static int devfs_initialized = 0;
+
+/*
+ * read(0) bloqueante: procesos esperando teclado.
+ * Se despiertan desde stdin_wake_check en el main loop.
+ */
+#define MAX_STDIN_WAITERS 8
+static process_t *stdin_waiters[MAX_STDIN_WAITERS];
 
 static void ensure_devfs_init(void)
 {
@@ -360,30 +378,27 @@ int64_t sys_read(int fd, void *buf, size_t count)
 
   if (fd == STDIN_FILENO)
   {
-    /* Read from keyboard buffer - NON-BLOCKING */
+    /* Read from keyboard buffer - NON-BLOCKING (shell polls in loop) */
     char kernel_read_buf[256];
     size_t bytes_read = 0;
 
-    /* Only read if there's data available */
-    if (keyboard_buffer_has_data())
+    if (!keyboard_buffer_has_data())
+      return 0;
+
+    /* Read available bytes (up to count) */
+    while (bytes_read < count && keyboard_buffer_has_data())
     {
       char c = keyboard_buffer_get();
       if (c != 0)
-      {
         kernel_read_buf[bytes_read++] = c;
-      }
     }
 
-    /* Copy to user space */
     if (bytes_read > 0)
     {
-      size_t copy_len = (bytes_read < count) ? bytes_read : count;
-      if (copy_to_user(buf, kernel_read_buf, copy_len) != 0)
+      if (copy_to_user(buf, kernel_read_buf, bytes_read) != 0)
         return -EFAULT;
-      return (int64_t)copy_len;
+      return (int64_t)bytes_read;
     }
-
-    /* Return 0 if no data available */
     return 0;
   }
 
@@ -470,8 +485,23 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  /* Use VFS layer with proper mode */
-  return vfs_mkdir(pathname, (int)mode);
+  /* Resolve relative paths against cwd (same as open/stat) */
+  char resolved[256];
+  const char *path_to_use = pathname;
+  if (!is_absolute_path(pathname))
+  {
+    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+  else
+  {
+    if (normalize_path(pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+
+  return vfs_mkdir(path_to_use, (int)mode);
 }
 
 int64_t sys_exec(const char *pathname,
@@ -639,7 +669,7 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   return ret;
 }
 
-int64_t sys_chmod(const char *path, mode_t mode) 
+int64_t sys_chmod(const char *path, mode_t mode)
 {
   if (!current_process || !path)
     return -EFAULT;
@@ -648,8 +678,23 @@ int64_t sys_chmod(const char *path, mode_t mode)
   if (validate_userspace_string(path, 256) != 0)
     return -EFAULT;
 
-  /* Call chmod through VFS layer */
-  return chmod(path, mode);
+  /* Resolve relative paths against cwd */
+  char resolved[256];
+  const char *path_to_use = path;
+  if (!is_absolute_path(path))
+  {
+    if (join_paths(current_process->cwd, path, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+  else
+  {
+    if (normalize_path(path, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+
+  return chmod(path_to_use, mode);
 }
 
 int64_t sys_chown(const char *path, uid_t owner, gid_t group)
@@ -658,7 +703,24 @@ int64_t sys_chown(const char *path, uid_t owner, gid_t group)
     return -EFAULT;
   if (validate_userspace_string(path, 256) != 0)
     return -EFAULT;
-  return vfs_chown(path, owner, group);
+
+  /* Resolve relative paths against cwd */
+  char resolved[256];
+  const char *path_to_use = path;
+  if (!is_absolute_path(path))
+  {
+    if (join_paths(current_process->cwd, path, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+  else
+  {
+    if (normalize_path(path, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+
+  return vfs_chown(path_to_use, owner, group);
 }
 
 int64_t sys_link(const char *oldpath, const char *newpath)
@@ -674,6 +736,414 @@ int64_t sys_link(const char *oldpath, const char *newpath)
 
   /* Call link through VFS layer */
   return vfs_link(oldpath, newpath);
+}
+
+/**
+ * sys_rename - Rename/move file (POSIX)
+ * @oldpath: Source path
+ * @newpath: Destination path
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int64_t sys_rename(const char *oldpath, const char *newpath)
+{
+  if (!current_process || !oldpath || !newpath)
+    return -EFAULT;
+
+  if (validate_userspace_string(oldpath, 256) != 0)
+    return -EFAULT;
+  if (validate_userspace_string(newpath, 256) != 0)
+    return -EFAULT;
+
+  char old_resolved[256], new_resolved[256];
+  const char *old_use = oldpath;
+  const char *new_use = newpath;
+
+  if (!is_absolute_path(oldpath))
+  {
+    if (join_paths(current_process->cwd, oldpath, old_resolved, sizeof(old_resolved)) != 0)
+      return -ENAMETOOLONG;
+    old_use = old_resolved;
+  }
+  else if (normalize_path(oldpath, old_resolved, sizeof(old_resolved)) == 0)
+  {
+    old_use = old_resolved;
+  }
+
+  if (!is_absolute_path(newpath))
+  {
+    if (join_paths(current_process->cwd, newpath, new_resolved, sizeof(new_resolved)) != 0)
+      return -ENAMETOOLONG;
+    new_use = new_resolved;
+  }
+  else if (normalize_path(newpath, new_resolved, sizeof(new_resolved)) == 0)
+  {
+    new_use = new_resolved;
+  }
+
+  return vfs_rename(old_use, new_use);
+}
+
+/**
+ * sys_uname - Get system information (POSIX/Linux)
+ * @buf: struct utsname buffer
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int64_t sys_uname(struct utsname *buf)
+{
+  if (!current_process || !buf)
+    return -EFAULT;
+
+  if (validate_userspace_buffer(buf, sizeof(struct utsname)) != 0)
+    return -EFAULT;
+
+  memset(buf, 0, sizeof(struct utsname));
+  strncpy(buf->sysname, "IR0", _UTSNAME_LENGTH - 1);
+  strncpy(buf->nodename, IR0_BUILD_HOST, _UTSNAME_LENGTH - 1);
+  strncpy(buf->release, IR0_VERSION_STRING, _UTSNAME_LENGTH - 1);
+  strncpy(buf->version, IR0_BUILD_INFO, _UTSNAME_LENGTH - 1);
+  strncpy(buf->machine, "x86_64", _UTSNAME_LENGTH - 1);
+  return 0;
+}
+
+/**
+ * sys_access - Check file access (POSIX)
+ * @pathname: Path to check
+ * @mode: F_OK, R_OK, W_OK, X_OK
+ *
+ * Returns: 0 if accessible, negative error code on failure
+ */
+int64_t sys_access(const char *pathname, int mode)
+{
+  if (!current_process || !pathname)
+    return -EFAULT;
+
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  char resolved[256];
+  const char *path_to_use = pathname;
+  if (!is_absolute_path(pathname))
+  {
+    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+  else if (normalize_path(pathname, resolved, sizeof(resolved)) == 0)
+  {
+    path_to_use = resolved;
+  }
+
+  stat_t st;
+  int stat_ok = 0;
+  if (is_proc_path(path_to_use))
+    stat_ok = (proc_stat(path_to_use, &st) == 0);
+  else if (is_sys_path(path_to_use))
+    stat_ok = (sysfs_stat(path_to_use, &st) == 0);
+  else if (is_dev_path(path_to_use))
+  {
+    ensure_devfs_init();
+    stat_ok = (devfs_find_node(path_to_use) != NULL);
+  }
+  else
+    stat_ok = (vfs_stat(path_to_use, &st) == 0);
+
+  if (!stat_ok)
+    return -ENOENT;
+
+  if (mode == 0) /* F_OK */
+    return 0;
+
+  int access_mode = 0;
+  if (mode & 4) access_mode |= ACCESS_READ;   /* R_OK */
+  if (mode & 2) access_mode |= ACCESS_WRITE; /* W_OK */
+  if (mode & 1) access_mode |= ACCESS_EXEC;  /* X_OK */
+
+  if (access_mode && !check_file_access(path_to_use, access_mode, current_process))
+    return -EACCES;
+  return 0;
+}
+
+/**
+ * sys_dup - Duplicate file descriptor to lowest free fd
+ *
+ * Returns: new fd on success, negative error code on failure
+ */
+int64_t sys_dup(int oldfd)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (oldfd < 0 || oldfd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table || !fd_table[oldfd].in_use)
+    return -EBADF;
+
+  for (int i = 0; i < MAX_FDS_PER_PROCESS; i++)
+  {
+    if (!fd_table[i].in_use)
+      return sys_dup2(oldfd, i);
+  }
+  return -EMFILE;
+}
+
+/**
+ * sys_pread64 - Read at offset without changing file position (OSDev-style)
+ * Uses lseek/read/restore for VFS files.
+ */
+int64_t sys_pread64(int fd, void *buf, size_t count, off_t offset)
+{
+  if (offset < 0)
+    return -EINVAL;
+
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return -EBADF;
+
+  if (fd_table[fd].is_pipe || fd == STDIN_FILENO || fd >= 2000)
+    return -ESPIPE;
+
+  if (is_proc_path(fd_table[fd].path) || is_sys_path(fd_table[fd].path) || is_dev_path(fd_table[fd].path))
+    return -ESPIPE;
+
+  if (!fd_table[fd].vfs_file)
+    return -ESPIPE;
+
+  struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
+  off_t saved_pos = vfs_file->f_pos;
+  vfs_lseek(vfs_file, offset, SEEK_SET);
+  char kernel_buf[4096];
+  size_t to_read = (count < sizeof(kernel_buf)) ? count : sizeof(kernel_buf);
+  int ret = vfs_read(vfs_file, kernel_buf, to_read);
+  vfs_lseek(vfs_file, saved_pos, SEEK_SET);
+  if (ret < 0)
+    return ret;
+  if (ret > 0 && copy_to_user(buf, kernel_buf, (size_t)ret) != 0)
+    return -EFAULT;
+  return ret;
+}
+
+/**
+ * sys_pwrite64 - Write at offset without changing file position (OSDev-style)
+ */
+int64_t sys_pwrite64(int fd, const void *buf, size_t count, off_t offset)
+{
+  if (offset < 0)
+    return -EINVAL;
+
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return -EBADF;
+
+  if (fd_table[fd].is_pipe || fd == STDOUT_FILENO || fd == STDERR_FILENO || fd >= 2000)
+    return -ESPIPE;
+
+  if (is_proc_path(fd_table[fd].path) || is_sys_path(fd_table[fd].path) || is_dev_path(fd_table[fd].path))
+    return -ESPIPE;
+
+  if (!fd_table[fd].vfs_file)
+    return -ESPIPE;
+
+  if (!check_file_access(fd_table[fd].path, ACCESS_WRITE, current_process))
+    return -EACCES;
+
+  char kernel_buf[4096];
+  size_t to_write = (count < sizeof(kernel_buf)) ? count : sizeof(kernel_buf);
+  if (copy_from_user(kernel_buf, buf, to_write) != 0)
+    return -EFAULT;
+
+  struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
+  off_t saved_pos = vfs_file->f_pos;
+  vfs_lseek(vfs_file, offset, SEEK_SET);
+  int ret = vfs_write(vfs_file, kernel_buf, to_write);
+  vfs_lseek(vfs_file, saved_pos, SEEK_SET);
+  if (ret < 0)
+    return ret;
+  fd_table[fd].offset = vfs_file->f_pos;
+  return ret;
+}
+
+/**
+ * sys_fcntl - File control (OSDev-style minimal: F_DUPFD, F_GETFD, F_SETFD, F_GETFL, F_SETFL)
+ */
+int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
+{
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return -EBADF;
+
+  switch (cmd)
+  {
+  case F_DUPFD:
+  {
+    int minfd = (int)arg;
+    if (minfd < 0 || minfd >= MAX_FDS_PER_PROCESS)
+      return -EINVAL;
+    for (int i = minfd; i < MAX_FDS_PER_PROCESS; i++)
+      if (!fd_table[i].in_use)
+      {
+        int64_t r = sys_dup2(fd, i);
+        if (r >= 0)
+          fd_table[i].fd_flags &= ~FD_CLOEXEC;  /* POSIX: new fd has FD_CLOEXEC cleared */
+        return r;
+      }
+    return -EMFILE;
+  }
+  case F_GETFD:
+    return (fd_table[fd].fd_flags & FD_CLOEXEC) ? FD_CLOEXEC : 0;
+  case F_SETFD:
+    fd_table[fd].fd_flags = (uint8_t)((arg & FD_CLOEXEC) ? FD_CLOEXEC : 0);
+    return 0;
+  case F_GETFL:
+    return (fd_table[fd].flags & (O_RDONLY | O_WRONLY | O_RDWR | O_APPEND | O_NONBLOCK));
+  case F_SETFL:
+  {
+    int settable = O_APPEND | O_NONBLOCK;
+    fd_table[fd].flags = (fd_table[fd].flags & ~settable) | ((int)arg & settable);
+    return 0;
+  }
+  default:
+    return -EINVAL;
+  }
+}
+
+/**
+ * sys_truncate - Truncate file by path (stub: -ENOTSUPP for now)
+ */
+int64_t sys_truncate(const char *pathname, off_t length)
+{
+  (void)pathname;
+  (void)length;
+  return -ENOTSUPP;
+}
+
+/**
+ * sys_ftruncate - Truncate file by fd (stub: -ENOTSUPP for now)
+ */
+int64_t sys_ftruncate(int fd, off_t length)
+{
+  (void)fd;
+  (void)length;
+  return -ENOTSUPP;
+}
+
+/**
+ * sys_rt_sigprocmask - Signal mask (OSDev-style)
+ */
+int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset, size_t sigsetsize)
+{
+  if (how < 0 || how > 2)
+    return -EINVAL;
+  if (set == NULL && oldset == NULL)
+    return 0;
+
+  if (set && validate_userspace_buffer(set, sigsetsize) != 0)
+    return -EFAULT;
+  if (oldset && validate_userspace_buffer(oldset, sigsetsize) != 0)
+    return -EFAULT;
+
+  if (oldset)
+  {
+    sigset_t mask = current_process->signal_mask;
+    if (copy_to_user(oldset, &mask, sigsetsize) != 0)
+      return -EFAULT;
+  }
+
+  if (set)
+  {
+    sigset_t new_set;
+    if (copy_from_user(&new_set, set, sigsetsize) != 0)
+      return -EFAULT;
+    new_set &= ~(SIGNAL_MASK(SIGKILL) | SIGNAL_MASK(SIGSTOP));
+    switch (how)
+    {
+    case SIG_BLOCK:
+      current_process->signal_mask |= new_set;
+      break;
+    case SIG_UNBLOCK:
+      current_process->signal_mask &= ~new_set;
+      break;
+    case SIG_SETMASK:
+      current_process->signal_mask = new_set;
+      break;
+    default:
+      return -EINVAL;
+    }
+  }
+  return 0;
+}
+
+/**
+ * sys_sysinfo - System information (OSDev-style)
+ */
+int64_t sys_sysinfo(struct sysinfo *info)
+{
+  if (!current_process || !info)
+    return -EFAULT;
+  if (validate_userspace_buffer(info, sizeof(struct sysinfo)) != 0)
+    return -EFAULT;
+
+  memset(info, 0, sizeof(struct sysinfo));
+  info->uptime = (unsigned long)(clock_get_uptime_milliseconds() / 1000);
+  {
+    size_t total_frames = 0, free_frames = 0, heap_total = 0, heap_used = 0;
+    pmm_stats(&total_frames, NULL, &free_frames);
+    alloc_stats(&heap_total, &heap_used, NULL);
+    info->totalram = ((unsigned long)total_frames * 4096) + (unsigned long)heap_total;
+    info->freeram = ((unsigned long)free_frames * 4096) + (unsigned long)(heap_total - heap_used);
+  }
+  {
+    int n = 0;
+    for (process_t *p = get_process_list(); p; p = p->next) n++;
+    info->procs = (unsigned short)n;
+  }
+  info->mem_unit = 1;
+  return 0;
+}
+
+/**
+ * sys_getrlimit - Resource limits (stub: return RLIM_INFINITY)
+ */
+int64_t sys_getrlimit(int resource, struct rlimit *rlim)
+{
+  (void)resource;
+  if (!current_process || !rlim)
+    return -EFAULT;
+  if (validate_userspace_buffer(rlim, sizeof(struct rlimit)) != 0)
+    return -EFAULT;
+  {
+    struct rlimit lim;
+    lim.rlim_cur = RLIMIT_INFINITY;
+    lim.rlim_max = RLIMIT_INFINITY;
+    if (copy_to_user(rlim, &lim, sizeof(lim)) != 0)
+      return -EFAULT;
+  }
+  return 0;
+}
+
+/**
+ * sys_getrusage - Resource usage (stub: zeros)
+ */
+int64_t sys_getrusage(int who, struct rusage *r_usage)
+{
+  (void)who;
+  if (!current_process || !r_usage)
+    return -EFAULT;
+  if (validate_userspace_buffer(r_usage, sizeof(struct rusage)) != 0)
+    return -EFAULT;
+  memset(r_usage, 0, sizeof(struct rusage));
+  return 0;
+}
+
+/**
+ * sys_lstat - Same as stat (no symlinks yet)
+ */
+int64_t sys_lstat(const char *pathname, stat_t *buf)
+{
+  return sys_stat(pathname, buf);
 }
 
 /**
@@ -702,7 +1172,8 @@ int64_t sys_creat(const char *pathname, mode_t mode)
  * sys_rmdir - Remove directory (POSIX)
  * @pathname: Path to directory to remove
  *
- * POSIX-compliant rmdir syscall. Uses VFS layer for filesystem abstraction.
+ * POSIX: only removes empty directories (ENOTEMPTY if non-empty).
+ * Avoids vfs_rmdir_recursive to prevent VM hang on disk I/O.
  *
  * Returns: 0 on success, negative error code on failure
  */
@@ -715,8 +1186,24 @@ int64_t sys_rmdir(const char *pathname)
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  /* Use VFS layer for POSIX-compliant directory removal */
-  return vfs_rmdir_recursive(pathname);
+  /* Resolve relative paths against cwd */
+  char resolved[256];
+  const char *path_to_use = pathname;
+  if (!is_absolute_path(pathname))
+  {
+    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+  else
+  {
+    if (normalize_path(pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+
+  /* POSIX rmdir: only empty dirs. Recursive delete done in userspace (rm -d). */
+  return vfs_rmdir(path_to_use);
 }
 
 static fd_entry_t *get_process_fd_table(void)
@@ -753,6 +1240,18 @@ struct poll_waiter {
 
 static struct poll_waiter poll_waiters[MAX_POLL_WAITERS];
 static unsigned int poll_waiter_count = 0;
+
+/*
+ * nanosleep(2) waiters - OSDev Time And Date
+ * Block process until wake_time_ms; poll_wake_check wakes them.
+ */
+#define MAX_SLEEP_WAITERS 16
+struct sleep_waiter {
+    process_t *proc;
+    uint64_t wake_time_ms;
+};
+
+static struct sleep_waiter sleep_waiters[MAX_SLEEP_WAITERS];
 
 /**
  * fd_can_read - Comprueba si el fd tiene datos para leer (sin bloquear).
@@ -934,6 +1433,163 @@ void poll_wake_check(void)
     }
   }
   current_process = NULL;
+}
+
+/**
+ * stdin_wake_check - Wake processes blocked on read(0) when keyboard has data.
+ * Called from main loop.
+ */
+void stdin_wake_check(void)
+{
+  if (!keyboard_buffer_has_data())
+    return;
+  for (int i = 0; i < MAX_STDIN_WAITERS; i++)
+  {
+    if (stdin_waiters[i])
+    {
+      stdin_waiters[i]->state = PROCESS_READY;
+      stdin_waiters[i] = NULL;
+    }
+  }
+}
+
+/**
+ * sleep_wake_check - Wake processes whose nanosleep has expired.
+ * Called from main loop (OSDev Time And Date).
+ */
+void sleep_wake_check(void)
+{
+  uint64_t now = clock_get_uptime_milliseconds();
+  for (unsigned int i = 0; i < MAX_SLEEP_WAITERS; i++)
+  {
+    struct sleep_waiter *w = &sleep_waiters[i];
+    if (!w->proc)
+      continue;
+    if (now >= w->wake_time_ms)
+    {
+      w->proc->state = PROCESS_READY;
+      w->proc = NULL;
+    }
+  }
+}
+
+/**
+ * sys_nanosleep - Sleep for specified time (POSIX, OSDev Time And Date)
+ * @req: Requested sleep duration (seconds + nanoseconds)
+ * @rem: Remaining time if interrupted (optional, can be NULL)
+ *
+ * Blocks the process until the requested time has elapsed.
+ * Resolution is limited to clock tick (~1ms). EINTR not yet implemented.
+ */
+int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem)
+{
+  if (!current_process || !req)
+    return -EFAULT;
+  if (validate_userspace_buffer((void *)req, sizeof(struct timespec)) != 0)
+    return -EFAULT;
+  if (rem && validate_userspace_buffer(rem, sizeof(struct timespec)) != 0)
+    return -EFAULT;
+
+  /* Convert to milliseconds; clamp tv_nsec to 0-999999999 */
+  int64_t sec = req->tv_sec;
+  long nsec = req->tv_nsec;
+  if (sec < 0 || nsec < 0 || nsec > 999999999)
+    return -EINVAL;
+
+  uint64_t ms = (uint64_t)sec * 1000UL + (uint64_t)(nsec / 1000000);
+  if (ms == 0)
+    return 0;
+
+  /* Find free slot */
+  struct sleep_waiter *w = NULL;
+  for (unsigned int i = 0; i < MAX_SLEEP_WAITERS; i++)
+  {
+    if (!sleep_waiters[i].proc)
+    {
+      w = &sleep_waiters[i];
+      break;
+    }
+  }
+  if (!w)
+    return -EAGAIN;
+
+  uint64_t now = clock_get_uptime_milliseconds();
+  w->proc = current_process;
+  w->wake_time_ms = now + ms;
+
+  current_process->state = PROCESS_BLOCKED;
+  rr_schedule_next();
+
+  /* Woken by sleep_wake_check */
+  w->proc = NULL;
+  if (rem)
+  {
+    rem->tv_sec = 0;
+    rem->tv_nsec = 0;
+  }
+  return 0;
+}
+
+/*
+ * rtc_time_to_unix - Convert RTC date/time to Unix timestamp (seconds since 1970-01-01 UTC).
+ * Simplified: assumes UTC, no leap seconds.
+ */
+static time_t rtc_time_to_unix(const rtc_time_t *rt)
+{
+  uint16_t year = (rt->century > 0 && rt->century < 100) ?
+      (rt->century * 100 + rt->year) : (2000 + rt->year);
+  if (year < 1970)
+    year = 1970;
+
+  /* Days per month (non-leap) */
+  static const int days_in_month[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+  int leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 1 : 0;
+
+  /* Days from 1970 to start of year */
+  time_t days = 0;
+  for (uint16_t y = 1970; y < year; y++)
+    days += 365 + ((y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 1 : 0);
+
+  /* Days in current year before month */
+  for (int m = 1; m < (int)rt->month && m <= 12; m++)
+    days += days_in_month[m - 1] + (m == 2 ? leap : 0);
+
+  days += (rt->day > 0 && rt->day <= 31) ? (rt->day - 1) : 0;
+
+  return (time_t)days * 86400 +
+      (rt->hour < 24 ? rt->hour : 0) * 3600 +
+      (rt->minute < 60 ? rt->minute : 0) * 60 +
+      (rt->second < 60 ? rt->second : 0);
+}
+
+/**
+ * sys_gettimeofday - Get current time (POSIX, OSDev Time And Date)
+ * @tv: Output timeval (seconds + microseconds since 1970-01-01 UTC)
+ * @tz: Timezone (ignored, for compatibility)
+ *
+ * Uses RTC for wall-clock time. Falls back to uptime if RTC unavailable.
+ */
+int64_t sys_gettimeofday(struct timeval *tv, void *tz)
+{
+  (void)tz;
+  if (!current_process || !tv)
+    return -EFAULT;
+  if (validate_userspace_buffer(tv, sizeof(struct timeval)) != 0)
+    return -EFAULT;
+
+  rtc_time_t rt;
+  if (rtc_read_time(&rt) == 0)
+  {
+    tv->tv_sec = rtc_time_to_unix(&rt);
+    tv->tv_usec = 0;  /* RTC has 1-second resolution */
+    return 0;
+  }
+
+  /* Fallback: uptime since boot */
+  uint64_t uptime_ms = clock_get_uptime_milliseconds();
+  tv->tv_sec = (time_t)(uptime_ms / 1000);
+  tv->tv_usec = (suseconds_t)((uptime_ms % 1000) * 1000);
+  return 0;
 }
 
 int64_t sys_fstat(int fd, stat_t *buf)
@@ -1303,6 +1959,7 @@ int64_t sys_dup2(int oldfd, int newfd)
     fd_table[newfd].in_use = false;
     fd_table[newfd].path[0] = '\0';
     fd_table[newfd].flags = 0;
+    fd_table[newfd].fd_flags = 0;
     fd_table[newfd].offset = 0;
   }
 
@@ -1310,6 +1967,7 @@ int64_t sys_dup2(int oldfd, int newfd)
   strncpy(fd_table[newfd].path, fd_table[oldfd].path, sizeof(fd_table[newfd].path) - 1);
   fd_table[newfd].path[sizeof(fd_table[newfd].path) - 1] = '\0';
   fd_table[newfd].flags = fd_table[oldfd].flags;
+  fd_table[newfd].fd_flags = fd_table[oldfd].fd_flags;
   fd_table[newfd].offset = fd_table[oldfd].offset;
   fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
   fd_table[newfd].is_pipe = fd_table[oldfd].is_pipe;
@@ -1722,8 +2380,7 @@ struct mmap_region
 
 static struct mmap_region *mmap_list = NULL;
 
-void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
-               off_t offset)
+void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
   /* addr: Hint for placement (may be ignored if MAP_FIXED not set)
    * prot: Protection flags (PROT_READ, PROT_WRITE, PROT_EXEC)
@@ -2154,8 +2811,23 @@ int64_t sys_unlink(const char *pathname)
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  /* Call VFS unlink function */
-  return vfs_unlink(pathname);
+  /* Resolve relative paths against cwd */
+  char resolved[256];
+  const char *path_to_use = pathname;
+  if (!is_absolute_path(pathname))
+  {
+    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+  else
+  {
+    if (normalize_path(pathname, resolved, sizeof(resolved)) != 0)
+      return -ENAMETOOLONG;
+    path_to_use = resolved;
+  }
+
+  return vfs_unlink(path_to_use);
 }
 
 /* Linux dirent structure for getdents/getdents64 */
@@ -2195,10 +2867,17 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
   if (validate_userspace_buffer(dirent, count) != 0)
     return -EFAULT;
   
-  /* Handle /proc and /dev - they don't use getdents */
+  /* Handle /proc/pid directory - OSDev-style getdents */
+  if (fd == 1150 || fd == 1151)
+  {
+    int64_t ret = proc_getdents(fd, dirent, count);
+    return ret;
+  }
+
+  /* Other /proc and /dev - they don't use getdents */
   if (fd >= 1000 && fd <= 2999)
     return -ENOTDIR;  /* These are special file descriptors, not directories */
-  
+
   fd_entry_t *fd_table = get_process_fd_table();
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
@@ -2298,6 +2977,7 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
 
 void syscalls_init(void)
 {
+  init_syscall_table();
   /* Connect to REAL process management only */
   serial_print("SERIAL: syscalls_init: using REAL process management\n");
 
@@ -2322,101 +3002,170 @@ void syscalls_init(void)
   idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE);
 }
 
+/* Stub for unimplemented syscalls (musl ABI compatibility) */
+static int64_t sys_nosys(uint64_t a1, uint64_t a2, uint64_t a3,
+                         uint64_t a4, uint64_t a5, uint64_t a6)
+{
+  (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6;
+  return -ENOSYS;
+}
+
+/* Syscall handler type: 6 args for Linux ABI (arg6 for mmap, etc.) */
+typedef int64_t (*syscall_handler_t)(uint64_t, uint64_t, uint64_t,
+                                     uint64_t, uint64_t, uint64_t);
+
+/* Wrappers to adapt IR0 handlers to uniform 6-arg signature */
+#define WRAP1(h, cast1) \
+  static int64_t wrap_##h(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) { \
+    (void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return h((cast1)a1); }
+#define WRAP2(h, c1, c2) \
+  static int64_t wrap_##h(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) { \
+    (void)a3;(void)a4;(void)a5;(void)a6; return h((c1)a1, (c2)a2); }
+#define WRAP3(h, c1, c2, c3) \
+  static int64_t wrap_##h(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) { \
+    (void)a4;(void)a5;(void)a6; return h((c1)a1, (c2)a2, (c3)a3); }
+#define WRAP4(h, c1, c2, c3, c4) \
+  static int64_t wrap_##h(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) { \
+    (void)a5;(void)a6; return h((c1)a1, (c2)a2, (c3)a3, (c4)a4); }
+#define WRAP5(h, c1, c2, c3, c4, c5) \
+  static int64_t wrap_##h(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) { \
+    (void)a6; return h((c1)a1, (c2)a2, (c3)a3, (c4)a4, (c5)a5); }
+#define WRAP6(h, c1, c2, c3, c4, c5, c6) \
+  static int64_t wrap_##h(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) { \
+    return (int64_t)h((c1)a1, (c2)a2, (c3)a3, (c4)a4, (c5)a5, (c6)a6); }
+
+WRAP1(sys_exit, int)
+WRAP3(sys_read, int, void *, size_t)
+WRAP3(sys_write, int, const void *, size_t)
+WRAP3(sys_open, const char *, int, mode_t)
+WRAP1(sys_close, int)
+WRAP3(sys_waitpid, pid_t, int *, int)
+WRAP2(sys_link, const char *, const char *)
+WRAP2(sys_rename, const char *, const char *)
+WRAP1(sys_unlink, const char *)
+WRAP1(sys_uname, struct utsname *)
+WRAP2(sys_access, const char *, int)
+WRAP1(sys_dup, int)
+WRAP3(sys_exec, const char *, char *const *, char *const *)
+WRAP1(sys_chdir, const char *)
+WRAP3(sys_mount, const char *, const char *, const char *)
+WRAP2(sys_mkdir, const char *, mode_t)
+WRAP1(sys_rmdir, const char *)
+WRAP2(sys_chmod, const char *, mode_t)
+WRAP3(sys_chown, const char *, uid_t, gid_t)
+WRAP3(sys_lseek, int, off_t, int)
+WRAP2(sys_getcwd, char *, size_t)
+WRAP2(sys_stat, const char *, stat_t *)
+WRAP2(sys_fstat, int, stat_t *)
+WRAP2(sys_dup2, int, int)
+WRAP1(sys_brk, void *)
+WRAP6(sys_mmap, void *, size_t, int, int, int, off_t)
+WRAP2(sys_munmap, void *, size_t)
+WRAP3(sys_mprotect, void *, size_t, int)
+WRAP2(sys_kill, pid_t, int)
+WRAP3(sys_sigaction, int, const struct sigaction *, struct sigaction *)
+WRAP1(sys_pipe, int *)
+WRAP1(sys_sigreturn, struct sigcontext *)
+WRAP3(sys_ioctl, int, uint64_t, void *)
+WRAP3(sys_getdents, int, void *, size_t)
+WRAP3(sys_poll, struct pollfd *, unsigned int, int)
+WRAP2(sys_nanosleep, const struct timespec *, struct timespec *)
+WRAP2(sys_gettimeofday, struct timeval *, void *)
+
+#undef WRAP1
+#undef WRAP2
+#undef WRAP3
+#undef WRAP4
+#undef WRAP5
+#undef WRAP6
+
+/* WRAP0 for no-arg handlers */
+static int64_t wrap_sys_fork(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_fork(); }
+static int64_t wrap_sys_getpid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getpid(); }
+static int64_t wrap_sys_getppid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getppid(); }
+
+/* Console scroll: IR0 custom syscall */
+static int64_t wrap_console_scroll(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
+  typewriter_console_scroll((int)a1);
+  return 0;
+}
+
+/* Syscall table: Linux x86-64 numbers -> handlers */
+static syscall_handler_t syscall_table_rw[__NR_syscall_max];
+
+static void init_syscall_table(void)
+{
+  for (size_t i = 0; i < __NR_syscall_max; i++)
+    syscall_table_rw[i] = sys_nosys;
+
+  /* Implemented syscalls - Linux numbers */
+  syscall_table_rw[__NR_read]           = wrap_sys_read;
+  syscall_table_rw[__NR_write]          = wrap_sys_write;
+  syscall_table_rw[__NR_open]           = wrap_sys_open;
+  syscall_table_rw[__NR_close]          = wrap_sys_close;
+  syscall_table_rw[__NR_stat]           = wrap_sys_stat;
+  syscall_table_rw[__NR_fstat]          = wrap_sys_fstat;
+  syscall_table_rw[__NR_poll]           = wrap_sys_poll;
+  syscall_table_rw[__NR_lseek]          = wrap_sys_lseek;
+  syscall_table_rw[__NR_mmap]           = wrap_sys_mmap;
+  syscall_table_rw[__NR_mprotect]       = wrap_sys_mprotect;
+  syscall_table_rw[__NR_munmap]         = wrap_sys_munmap;
+  syscall_table_rw[__NR_brk]            = wrap_sys_brk;
+  syscall_table_rw[__NR_rt_sigaction]   = wrap_sys_sigaction;
+  syscall_table_rw[__NR_rt_sigreturn]   = wrap_sys_sigreturn;
+  syscall_table_rw[__NR_ioctl]          = wrap_sys_ioctl;
+  syscall_table_rw[__NR_pipe]           = wrap_sys_pipe;
+  syscall_table_rw[__NR_dup2]           = wrap_sys_dup2;
+  syscall_table_rw[__NR_nanosleep]      = wrap_sys_nanosleep;
+  syscall_table_rw[__NR_getpid]         = wrap_sys_getpid;
+  syscall_table_rw[__NR_fork]          = wrap_sys_fork;
+  syscall_table_rw[__NR_execve]        = wrap_sys_exec;
+  syscall_table_rw[__NR_exit]           = wrap_sys_exit;
+  syscall_table_rw[__NR_wait4]          = wrap_sys_waitpid;
+  syscall_table_rw[__NR_kill]           = wrap_sys_kill;
+  syscall_table_rw[__NR_getdents]       = wrap_sys_getdents;
+  syscall_table_rw[__NR_getcwd]         = wrap_sys_getcwd;
+  syscall_table_rw[__NR_chdir]          = wrap_sys_chdir;
+  syscall_table_rw[__NR_mkdir]          = wrap_sys_mkdir;
+  syscall_table_rw[__NR_rmdir]          = wrap_sys_rmdir;
+  syscall_table_rw[__NR_link]           = wrap_sys_link;
+  syscall_table_rw[__NR_rename]         = wrap_sys_rename;
+  syscall_table_rw[__NR_unlink]         = wrap_sys_unlink;
+  syscall_table_rw[__NR_uname]          = wrap_sys_uname;
+  syscall_table_rw[__NR_access]         = wrap_sys_access;
+  syscall_table_rw[__NR_dup]            = wrap_sys_dup;
+  syscall_table_rw[__NR_chmod]         = wrap_sys_chmod;
+  syscall_table_rw[__NR_chown]          = wrap_sys_chown;
+  syscall_table_rw[__NR_gettimeofday]   = wrap_sys_gettimeofday;
+  syscall_table_rw[__NR_getppid]        = wrap_sys_getppid;
+  syscall_table_rw[__NR_mount]          = wrap_sys_mount;
+  syscall_table_rw[__NR_exit_group]     = wrap_sys_exit;
+  syscall_table_rw[__NR_console_scroll]  = wrap_console_scroll;
+
+  /* Stubs (return -ENOSYS): pread64, pwrite64, readv, writev, rt_sigprocmask,
+   * getitimer, alarm, setitimer, socket, connect, accept, sendto, recvfrom,
+   * clone, fcntl, truncate, ftruncate, symlink, readlink, getrlimit, getrusage,
+   * sysinfo, lstat, etc. */
+}
+
 /* Syscall dispatcher called from assembly */
 /**
- * syscall_dispatch - Dispatch system call to appropriate handler
- * @syscall_num: System call number (from syscall_num_t enum)
- * @arg1-arg5: System call arguments
+ * syscall_dispatch - Dispatch system call via table (Linux/musl ABI)
+ * @syscall_num: Linux x86-64 syscall number
+ * @arg1-arg5: System call arguments (arg6 not yet passed from asm)
  *
- * This function routes POSIX-compliant system calls to their handlers.
- * Uses enum values instead of hardcoded numbers for type safety and clarity.
- *
- * Returns: System call return value, or -ENOSYS for unknown syscall
+ * Returns: System call return value, or -ENOSYS for unknown/unimplemented
  */
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                          uint64_t arg3, uint64_t arg4, uint64_t arg5)
 {
-  /* Use enum values for type safety - compiler will catch typos */
-  switch (syscall_num)
-  {
-  case SYS_EXIT:
-    return sys_exit((int)arg1);
-  case SYS_FORK:
-    return sys_fork();
-  case SYS_READ:
-    return sys_read((int)arg1, (void *)arg2, (size_t)arg3);
-  case SYS_WRITE:
-    return sys_write((int)arg1, (const void *)arg2, (size_t)arg3);
-  case SYS_OPEN:
-    return sys_open((const char *)arg1, (int)arg2, (mode_t)arg3);
-  case SYS_CLOSE:
-    return sys_close((int)arg1);
-  case SYS_WAITPID:
-    return sys_waitpid((pid_t)arg1, (int *)arg2, (int)arg3);
-  case SYS_CREAT:
-    return sys_creat((const char *)arg1, (mode_t)arg2);
-  case SYS_LINK:
-    return sys_link((const char *)arg1, (const char *)arg2);
-  case SYS_UNLINK:
-    return sys_unlink((const char *)arg1);
-  case SYS_EXEC:
-    return sys_exec((const char *)arg1, (char *const *)arg2, (char *const *)arg3);
-  case SYS_CHDIR:
-    return sys_chdir((const char *)arg1);
-  case SYS_GETPID:
-    return sys_getpid();
-  case SYS_MOUNT:
-    return sys_mount((const char *)arg1, (const char *)arg2, (const char *)arg3);
-  case SYS_MKDIR:
-    return sys_mkdir((const char *)arg1, (mode_t)arg2);
-  case SYS_RMDIR:
-    return sys_rmdir((const char *)arg1);
-  case SYS_CHMOD:
-    return sys_chmod((const char *)arg1, (mode_t)arg2);
-  case SYS_CHOWN:
-    return sys_chown((const char *)arg1, (uid_t)arg2, (gid_t)arg3);
-  case SYS_LSEEK:
-    return sys_lseek((int)arg1, (off_t)arg2, (int)arg3);
-  case SYS_GETCWD:
-    return sys_getcwd((char *)arg1, (size_t)arg2);
-  case SYS_STAT:
-    return sys_stat((const char *)arg1, (stat_t *)arg2);
-  case SYS_FSTAT:
-    return sys_fstat((int)arg1, (stat_t *)arg2);
-  case SYS_DUP2:
-    return sys_dup2((int)arg1, (int)arg2);
-  case SYS_BRK:
-    return sys_brk((void *)arg1);
-  case SYS_MMAP:
-    return (int64_t)sys_mmap((void *)arg1, (size_t)arg2, (int)arg3, (int)arg4, (int)arg5, (off_t)0);
-  case SYS_MUNMAP:
-    return sys_munmap((void *)arg1, (size_t)arg2);
-  case SYS_MPROTECT:
-    return sys_mprotect((void *)arg1, (size_t)arg2, (int)arg3);
-  case SYS_GETPPID:
-    return sys_getppid();
-  case SYS_KILL:
-    return sys_kill((pid_t)arg1, (int)arg2);
-  case SYS_SIGACTION:
-    return sys_sigaction((int)arg1, (const struct sigaction *)arg2, (struct sigaction *)arg3);
-  case SYS_PIPE:
-    return sys_pipe((int *)arg1);
-  case SYS_SIGRETURN:
-    return sys_sigreturn((struct sigcontext *)arg1);
-  case SYS_IOCTL:
-    return sys_ioctl((int)arg1, (uint64_t)arg2, (void *)arg3);
-  case SYS_GETDENTS:
-    return sys_getdents((int)arg1, (void *)arg2, (size_t)arg3);
-  case SYS_CONSOLE_SCROLL:
-  {
-    int delta = (int)arg1;
-    typewriter_console_scroll(delta);
-    return 0;
-  }
-  case SYS_POLL:
-    return sys_poll((struct pollfd *)arg1, (unsigned int)arg2, (int)arg3);
-  default:
-    /* Unknown syscall - return ENOSYS (function not implemented) */
+  if (syscall_num >= __NR_syscall_max)
     return -ENOSYS;
-  }
+
+  syscall_handler_t handler = syscall_table_rw[syscall_num];
+  return handler(arg1, arg2, arg3, arg4, arg5, 0);
 }

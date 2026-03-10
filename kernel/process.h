@@ -21,7 +21,8 @@ typedef struct fd_entry
 {
 	bool in_use;
 	char path[256];
-	int flags;
+	int flags;       /* Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.) */
+	uint8_t fd_flags; /* FD_CLOEXEC etc. */
 	void *vfs_file;
 	uint64_t offset; /* File offset for seek operations */
 	bool is_pipe;  /* 1 if this fd is a pipe */

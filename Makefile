@@ -178,6 +178,7 @@ KERNEL_OBJS = \
     kernel/process.o \
     kernel/task.o \
     kernel/syscalls.o \
+    kernel/input_events.o \
     debug_bins/dbgshell.o \
     kernel/elf_loader.o \
     kernel/driver_registry.o \
@@ -213,6 +214,7 @@ KERNEL_OBJS = \
     debug_bins/cmd_bluestart.o \
     debug_bins/cmd_free.o \
     debug_bins/cmd_uptime.o \
+    debug_bins/cmd_date.o \
     debug_bins/cmd_lshw.o \
     debug_bins/cmd_blue.o
 
@@ -291,6 +293,8 @@ DRIVER_OBJS = \
     drivers/storage/ata_block.o \
     drivers/storage/fs_types.o \
 	drivers/video/vbe.o \
+	drivers/video/console.o \
+	drivers/video/console_font.o \
 	drivers/video/typewriter.o \
 	drivers/bluetooth/hci_uart.o \
 	drivers/bluetooth/hci_core.o \
@@ -324,6 +328,7 @@ NET_OBJS = \
     net/ip.o \
     net/icmp.o \
     net/udp.o \
+    net/tcp.o \
     net/dns.o
 
 ARCH_OBJS = \
@@ -444,7 +449,7 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 	fi
 
 # Create ISO
-kernel-x64.iso: kernel-x64.bin
+kernel-x64.iso: kernel-x64.bin arch/x86-64/grub.cfg
 	@echo "  ISO     $@"
 	@rm -rf iso
 	@mkdir -p iso/boot/grub
@@ -462,7 +467,7 @@ kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
 	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS_TEST)
 	@echo "✓ Kernel (test) linked: $@"
 
-kernel-x64-test.iso: kernel-x64-test.bin
+kernel-x64-test.iso: kernel-x64-test.bin arch/x86-64/grub.cfg
 	@echo "  ISO     $@"
 	@rm -rf iso_test
 	@mkdir -p iso_test/boot/grub

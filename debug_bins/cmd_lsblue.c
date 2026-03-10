@@ -87,6 +87,7 @@ static int cmd_lsblue_handler(int argc, char **argv)
     {
         debug_write_err("lsblue: cannot open /sys/class/bluetooth/topology/neighbors\n");
         debug_write_err("(Bluetooth subsystem may not be initialized or no scan done)\n");
+        debug_serial_fail("lsblue", "open");
         return 1;
     }
 
@@ -98,6 +99,7 @@ static int cmd_lsblue_handler(int argc, char **argv)
     {
         debug_write("ADAPTER  ADDRESS             NAME                 STATE       RSSI\n");
         debug_write("(no neighbors; run: bluestart, then wait and lsblue or cat /proc/bluetooth/devices)\n");
+        debug_serial_ok("lsblue");
         return 0;
     }
 
@@ -128,6 +130,7 @@ static int cmd_lsblue_handler(int argc, char **argv)
         print_neighbor_line(line, adapter);
     }
 
+    debug_serial_ok("lsblue");
     return 0;
 }
 

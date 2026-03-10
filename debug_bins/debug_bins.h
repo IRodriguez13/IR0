@@ -20,13 +20,111 @@
 #include <string.h>
 #include <ir0/syscall.h>
 #include <ir0/fcntl.h>
+#include <ir0/errno.h>
 #include <ir0/version.h>
+
+/**
+ * debug_strerror - Return errno string (OSDev perror-style, syscall-only compatible)
+ * Used by debug bins to print human-readable errors like "Directory not empty"
+ */
+static inline const char *debug_strerror(int err)
+{
+    int e = (err < 0) ? -err : err;
+    switch (e)
+    {
+        case ENOENT:   return "No such file or directory";
+        case EACCES:   return "Permission denied";
+        case EEXIST:   return "File exists";
+        case ENOTDIR:  return "Not a directory";
+        case EISDIR:   return "Is a directory";
+        case ENOTEMPTY: return "Directory not empty";
+        case EINVAL:   return "Invalid argument";
+        case ENAMETOOLONG: return "File name too long";
+        case ENOSPC:   return "No space left on device";
+        case EROFS:    return "Read-only file system";
+        case EFAULT:   return "Bad address";
+        case ESRCH:    return "No such process";
+        case EBADF:    return "Bad file descriptor";
+        case ENODEV:   return "No such device";
+        case ENOSYS:   return "Function not implemented";
+        default:       return "Unknown error";
+    }
+}
+
+/**
+ * Helper para escribir a stdout (fd=1)
+ */
+static inline void debug_write(const char *str)
+{
+    if (str)
+        syscall(SYS_WRITE, 1, (uint64_t)str, (uint64_t)strlen(str));
+}
+
+/**
+ * Helper para escribir a stderr (fd=2)
+ */
+static inline void debug_write_err(const char *str)
+{
+    if (str)
+        syscall(SYS_WRITE, 2, (uint64_t)str, (uint64_t)strlen(str));
+}
+
+/**
+ * debug_perror - Print "cmd: path: errstr" to stderr (OSDev perror-style)
+ */
+static inline void debug_perror(const char *cmd, const char *path, int err)
+{
+    debug_write_err(cmd);
+    debug_write_err(": ");
+    if (path && path[0])
+    {
+        debug_write_err(path);
+        debug_write_err(": ");
+    }
+    debug_write_err(debug_strerror(err));
+    debug_write_err("\n");
+}
 
 /*
  * Los comandos de debug NO incluyen cabeceras del kernel (fs, kernel, ir0/devfs.h, ir0/net.h).
  * Solo usan syscalls (SYS_OPEN, SYS_READ, SYS_WRITE, SYS_CLOSE, SYS_IOCTL, etc.) o los wrappers
  * ir0_open, ir0_close, ir0_read, ir0_write, ir0_ioctl de ir0/syscall.h.
+ *
+ * Debug serial: write a /dev/serial vía syscalls (el kernel envía a COM1).
  */
+static inline void debug_serial_log(const char *cmd, const char *status, const char *reason)
+{
+    int fd = (int)syscall(SYS_OPEN, (uint64_t)"/dev/serial", O_WRONLY, 0);
+    if (fd >= 0)
+    {
+        char buf[128];
+        int n;
+        if (reason && reason[0])
+            n = snprintf(buf, sizeof(buf), "[DBG] %s: %s %s\n", cmd, status, reason);
+        else
+            n = snprintf(buf, sizeof(buf), "[DBG] %s: %s\n", cmd, status);
+        if (n > 0 && n < (int)sizeof(buf))
+            syscall(SYS_WRITE, (uint64_t)fd, (uint64_t)buf, (uint64_t)(size_t)n);
+        syscall(SYS_CLOSE, (uint64_t)fd, 0, 0);
+    }
+}
+
+#define debug_serial_ok(cmd) debug_serial_log(cmd, "OK", NULL)
+#define debug_serial_fail(cmd, reason) debug_serial_log(cmd, "FAIL", reason)
+
+/**
+ * debug_serial_fail_err - Log fallo con código errno (ej: err=17 EEXIST)
+ */
+static inline void debug_serial_fail_err(const char *cmd, const char *reason, int err)
+{
+    char err_str[48];
+    int e = (err < 0) ? -err : err;
+    if (reason && reason[0])
+        snprintf(err_str, sizeof(err_str), "%s err=%d", reason, e);
+    else
+        snprintf(err_str, sizeof(err_str), "err=%d", e);
+    debug_serial_log(cmd, "FAIL", err_str);
+}
 
 /**
  * Tipo de función handler para comandos
@@ -45,28 +143,6 @@ struct debug_command {
     const char *usage;          /* Uso: "ls [-l] [DIR]" */
     const char *description;    /* Descripción corta */
 };
-
-/**
- * Helper para escribir a stdout (fd=1)
- */
-static inline void debug_write(const char *str)
-{
-    if (str)
-    {
-        syscall(SYS_WRITE, 1, (uint64_t)str, (uint64_t)strlen(str));
-    }
-}
-
-/**
- * Helper para escribir a stderr (fd=2)
- */
-static inline void debug_write_err(const char *str)
-{
-    if (str)
-    {
-        syscall(SYS_WRITE, 2, (uint64_t)str, (uint64_t)strlen(str));
-    }
-}
 
 /**
  * Helper para escribir línea completa (con \n)

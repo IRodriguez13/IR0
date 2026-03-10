@@ -16,6 +16,7 @@ static int cmd_chown_handler(int argc, char **argv)
     if (argc < 3)
     {
         debug_write_err("Usage: chown USER[:GROUP] PATH\n");
+        debug_serial_fail("chown", "usage");
         return 1;
     }
     
@@ -45,9 +46,11 @@ static int cmd_chown_handler(int argc, char **argv)
     int64_t ret = syscall(SYS_CHOWN, (uint64_t)path, owner, group);
     if (ret < 0)
     {
-        debug_write_err("chown: failed\n");
+        debug_perror("chown", path, (int)ret);
+        debug_serial_fail_err("chown", "syscall", (int)(-ret));
         return 1;
     }
+    debug_serial_ok("chown");
     return 0;
 }
 

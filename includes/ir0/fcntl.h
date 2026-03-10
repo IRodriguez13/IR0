@@ -9,10 +9,21 @@
 
 /* File status flags */
 #define O_APPEND    0x0008  /* Append mode */
+#define O_NONBLOCK  0x0800  /* Non-blocking mode */
 #define O_CREAT     0x0100  /* Create if nonexistent */
 #define O_EXCL      0x0200  /* Error if file exists */
 #define O_TRUNC     0x0400  /* Truncate to zero length */
 #define O_DIRECTORY 0x0200000  /* Must be a directory */
+#define O_CLOEXEC   0x80000  /* Close on exec (for open) */
+
+/* fcntl commands (OSDev/Linux) */
+#define F_DUPFD         0   /* Duplicate fd to lowest >= arg */
+#define F_GETFD         1   /* Get fd flags (FD_CLOEXEC) */
+#define F_SETFD         2   /* Set fd flags */
+#define F_GETFL         3   /* Get file status flags */
+#define F_SETFL         4   /* Set file status flags */
+
+#define FD_CLOEXEC      1   /* Close-on-exec flag */
 
 /* Seek types */
 #define SEEK_SET    0       /* Set file offset to offset */

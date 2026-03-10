@@ -73,30 +73,8 @@ static int cmd_ls_handler(int argc, char **argv)
     int fd = syscall(SYS_OPEN, (uint64_t)path, O_RDONLY | O_DIRECTORY, 0);
     if (fd < 0)
     {
-        debug_write_err("ls: cannot access '");
-        debug_write_err(path);
-        debug_write_err("': ");
-        
-        /* Print error message based on error code */
-        int err = -fd;
-        if (err == ENOENT)
-            debug_write_err("No such file or directory");
-        else if (err == EACCES)
-            debug_write_err("Permission denied");
-        else if (err == ENOTDIR)
-            debug_write_err("Not a directory");
-        else if (err == EFAULT)
-            debug_write_err("Invalid address");
-        else if (err == ESRCH)
-            debug_write_err("No such process");
-        else
-        {
-            /* Print numeric error code */
-            char err_buf[32];
-            snprintf(err_buf, sizeof(err_buf), "Error %d", err);
-            debug_write_err(err_buf);
-        }
-        debug_write_err("\n");
+        debug_perror("ls", path, (int)fd);
+        debug_serial_fail_err("ls", "open", (int)(-fd));
         return 1;
     }
     
@@ -123,7 +101,11 @@ static int cmd_ls_handler(int argc, char **argv)
             {
                 /* Get stat for detailed info */
                 char full_path[512];
-                int len = snprintf(full_path, sizeof(full_path), "%s/%s", path, dent->d_name);
+                int len;
+                if (path[0] == '/' && path[1] == '\0')
+                    len = snprintf(full_path, sizeof(full_path), "/%s", dent->d_name);
+                else
+                    len = snprintf(full_path, sizeof(full_path), "%s/%s", path, dent->d_name);
                 if (len > 0 && len < (int)sizeof(full_path))
                 {
                     stat_t st;
@@ -131,22 +113,24 @@ static int cmd_ls_handler(int argc, char **argv)
                     
                     if (stat_result >= 0)
                     {
-                        /* Format: mode links uid gid size name */
-                        char mode_str[11] = "----------";
-                        if (S_ISDIR(st.st_mode)) mode_str[0] = 'd';
-                        if (S_ISREG(st.st_mode)) mode_str[0] = '-';
-                        if (S_ISCHR(st.st_mode)) mode_str[0] = 'c';
-                        if (S_ISBLK(st.st_mode)) mode_str[0] = 'b';
-                        if (S_ISLNK(st.st_mode)) mode_str[0] = 'l';
-                        if (st.st_mode & S_IRUSR) mode_str[1] = 'r';
-                        if (st.st_mode & S_IWUSR) mode_str[2] = 'w';
-                        if (st.st_mode & S_IXUSR) mode_str[3] = 'x';
-                        if (st.st_mode & S_IRGRP) mode_str[4] = 'r';
-                        if (st.st_mode & S_IWGRP) mode_str[5] = 'w';
-                        if (st.st_mode & S_IXGRP) mode_str[6] = 'x';
-                        if (st.st_mode & S_IROTH) mode_str[7] = 'r';
-                        if (st.st_mode & S_IWOTH) mode_str[8] = 'w';
-                        if (st.st_mode & S_IXOTH) mode_str[9] = 'x';
+                        /* Format: mode links uid gid size name (Unix rwxrwxrwx) */
+                        char mode_str[12];
+                        mode_str[0] = S_ISDIR(st.st_mode) ? 'd' :
+                                      S_ISREG(st.st_mode) ? '-' :
+                                      S_ISCHR(st.st_mode) ? 'c' :
+                                      S_ISBLK(st.st_mode) ? 'b' :
+                                      S_ISLNK(st.st_mode) ? 'l' :
+                                      S_ISSOCK(st.st_mode) ? 's' : '-';
+                        mode_str[1]  = (st.st_mode & S_IRUSR) ? 'r' : '-';
+                        mode_str[2]  = (st.st_mode & S_IWUSR) ? 'w' : '-';
+                        mode_str[3]  = (st.st_mode & S_IXUSR) ? 'x' : '-';
+                        mode_str[4]  = (st.st_mode & S_IRGRP) ? 'r' : '-';
+                        mode_str[5]  = (st.st_mode & S_IWGRP) ? 'w' : '-';
+                        mode_str[6]  = (st.st_mode & S_IXGRP) ? 'x' : '-';
+                        mode_str[7]  = (st.st_mode & S_IROTH) ? 'r' : '-';
+                        mode_str[8]  = (st.st_mode & S_IWOTH) ? 'w' : '-';
+                        mode_str[9]  = (st.st_mode & S_IXOTH) ? 'x' : '-';
+                        mode_str[10] = '\0';
                         
                         char line[256];
                         int line_len = snprintf(line, sizeof(line), "%s %u %u %u %llu %s\n",
@@ -189,9 +173,11 @@ static int cmd_ls_handler(int argc, char **argv)
     if (bytes_read < 0)
     {
         debug_write_err("ls: error reading directory\n");
+        debug_serial_fail("ls", "readdir");
         return 1;
     }
     
+    debug_serial_ok("ls");
     return 0;
 }
 

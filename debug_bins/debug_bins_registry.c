@@ -41,6 +41,7 @@ extern struct debug_command cmd_swapon;
 extern struct debug_command cmd_swapoff;
 extern struct debug_command cmd_free;
 extern struct debug_command cmd_uptime;
+extern struct debug_command cmd_date;
 extern struct debug_command cmd_lshw;
 #ifdef IR0_KERNEL_TESTS
 extern struct debug_command cmd_ktest;
@@ -77,6 +78,7 @@ struct debug_command *debug_commands[] = {
     &cmd_blue,
     &cmd_free,
     &cmd_uptime,
+    &cmd_date,
     &cmd_lshw,
 #ifdef IR0_KERNEL_TESTS
     &cmd_ktest,

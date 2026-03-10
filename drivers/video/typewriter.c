@@ -6,6 +6,7 @@
  */
 
 #include "typewriter.h"
+#include "console.h"
 #include <ir0/vga.h>
 #include <stdint.h>
 
@@ -55,17 +56,19 @@ static void redraw_from_scrollback(void)
     for (int row = 0; row < VGA_HEIGHT; row++)
     {
         int line_idx = first_line + row;
-        uint16_t *dest = (uint16_t *)&VGA_BUFFER[row * VGA_WIDTH];
         if (line_idx < 0)
         {
             for (int col = 0; col < VGA_WIDTH; col++)
-                dest[col] = (scrollback_color << 8) | ' ';
+                console_put_cell(row, col, ' ', scrollback_color);
         }
         else
         {
             size_t buf_idx = (size_t)line_idx % SCROLLBACK_LINES;
             for (int col = 0; col < VGA_WIDTH; col++)
-                dest[col] = scrollback[buf_idx][col];
+            {
+                uint16_t cell = scrollback[buf_idx][col];
+                console_put_cell(row, col, (char)(cell & 0xFF), (uint8_t)(cell >> 8));
+            }
         }
     }
     if (scroll_offset == 0)
@@ -241,7 +244,7 @@ void typewriter_vga_print_char(char c, uint8_t color)
         }
     }
 
-    /* VGA update: use cursor_pos only (original behavior), do not overwrite cursor_pos from scrollback */
+    /* Console update: use cursor_pos only (original behavior), do not overwrite cursor_pos from scrollback */
     if (scroll_offset == 0)
     {
         if (c == '\n')
@@ -249,10 +252,7 @@ void typewriter_vga_print_char(char c, uint8_t color)
             cursor_pos = (cursor_pos / VGA_WIDTH + 1) * VGA_WIDTH;
             if (cursor_pos >= VGA_WIDTH * VGA_HEIGHT)
             {
-                for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++)
-                    VGA_BUFFER[i] = VGA_BUFFER[i + VGA_WIDTH];
-                for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++)
-                    VGA_BUFFER[i] = (color << 8) | ' ';
+                console_scroll_up(color);
                 cursor_pos = (VGA_HEIGHT - 1) * VGA_WIDTH;
             }
         }
@@ -261,19 +261,16 @@ void typewriter_vga_print_char(char c, uint8_t color)
             if (cursor_pos > 0)
             {
                 cursor_pos--;
-                VGA_BUFFER[cursor_pos] = (color << 8) | ' ';
+                console_put_cell(cursor_pos / VGA_WIDTH, cursor_pos % VGA_WIDTH, ' ', color);
             }
         }
         else
         {
-            VGA_BUFFER[cursor_pos] = (color << 8) | (uint8_t)c;
+            console_put_cell(cursor_pos / VGA_WIDTH, cursor_pos % VGA_WIDTH, c, color);
             cursor_pos++;
             if (cursor_pos >= VGA_WIDTH * VGA_HEIGHT)
             {
-                for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++)
-                    VGA_BUFFER[i] = VGA_BUFFER[i + VGA_WIDTH];
-                for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++)
-                    VGA_BUFFER[i] = (color << 8) | ' ';
+                console_scroll_up(color);
                 cursor_pos = (VGA_HEIGHT - 1) * VGA_WIDTH;
             }
         }

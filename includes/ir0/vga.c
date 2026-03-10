@@ -1,9 +1,16 @@
 #include "vga.h"
+#include <drivers/video/console.h>
+
+/*
+ * Cursor compartido entre print() y typewriter/shell.
+ * Permite salida coherente cuando kernel y shell escriben a la misma consola.
+ */
+int cursor_pos = 0;
 
 /* Variables globales para trackear posición */
 static int cursor_x = 0;
 static int cursor_y = 0;
-static unsigned char current_color = 0x0F; // Blanco sobre negro
+static unsigned char current_color = 0x0F; /* Blanco sobre negro */
 
 /* Función para crear atributo de color */
 unsigned char make_color(unsigned char fg, unsigned char bg)
@@ -11,38 +18,55 @@ unsigned char make_color(unsigned char fg, unsigned char bg)
     return fg | bg << 4;
 }
 
-/* Función para poner un carácter en posición específica */
+/*
+ * putchar_at - Escribe carácter en (x,y).
+ * Usa consola (framebuffer) o VGA según backend activo.
+ */
 void putchar_at(char c, unsigned char color, int x, int y)
 {
-    unsigned short *vga = (unsigned short *)VGA_MEMORY;
-    int index = y * VGA_WIDTH + x;
-    vga[index] = (unsigned short)c | (unsigned short)color << 8;
+    if (console_use_framebuffer())
+    {
+        console_put_cell(y, x, c, color);
+        return;
+    }
+    {
+        unsigned short *vga = (unsigned short *)VGA_MEMORY;
+        int index = y * VGA_WIDTH + x;
+        vga[index] = (unsigned short)c | (unsigned short)color << 8;
+    }
 }
 
 /* Scroll screen up by one line */
 void scroll()
 {
-    unsigned short *vga = (unsigned short *)VGA_MEMORY;
-
-    /* Mover todas las líneas una posición arriba */
-    for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++)
+    if (console_use_framebuffer())
     {
-        vga[i] = vga[i + VGA_WIDTH];
+        console_scroll_up(current_color);
+        cursor_y = VGA_HEIGHT - 1;
+        cursor_pos = cursor_y * VGA_WIDTH + cursor_x;
+        return;
     }
-
-    /* Limpiar la última línea */
-    for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++)
     {
-        vga[i] = make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK) << 8 | ' ';
-    }
+        unsigned short *vga = (unsigned short *)VGA_MEMORY;
 
-    cursor_y = VGA_HEIGHT - 1;
+        for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++)
+            vga[i] = vga[i + VGA_WIDTH];
+
+        for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++)
+            vga[i] = make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK) << 8 | ' ';
+
+        cursor_y = VGA_HEIGHT - 1;
+    }
 }
 
 /* Función para poner un carácter (con cursor automático) */
 void putchar(char c)
 {
-    if (c == '\n') // el famoso "salto de línea"
+    /* Sincronizar desde cursor_pos cuando typewriter/shell escribió antes */
+    cursor_x = cursor_pos % VGA_WIDTH;
+    cursor_y = cursor_pos / VGA_WIDTH;
+
+    if (c == '\n') /* salto de línea */
     {
         cursor_x = 0;
         cursor_y++;
@@ -80,6 +104,8 @@ void putchar(char c)
     {
         scroll();
     }
+
+    cursor_pos = cursor_y * VGA_WIDTH + cursor_x;
 }
 
 void print(const char *str)
@@ -103,16 +129,25 @@ void print_colored(const char *str, unsigned char fg, unsigned char bg)
 
 void clear_screen()
 {
-    unsigned short *vga = (unsigned short *)VGA_MEMORY;
-    unsigned short blank = make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK) << 8 | ' ';
-
-    for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++)
+    if (console_use_framebuffer())
     {
-        vga[i] = blank;
+        console_clear(make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK));
+        cursor_x = 0;
+        cursor_y = 0;
+        cursor_pos = 0;
+        return;
     }
+    {
+        unsigned short *vga = (unsigned short *)VGA_MEMORY;
+        unsigned short blank = make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK) << 8 | ' ';
 
-    cursor_x = 0;
-    cursor_y = 0;
+        for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++)
+            vga[i] = blank;
+
+        cursor_x = 0;
+        cursor_y = 0;
+        cursor_pos = 0;
+    }
 }
 
 /* Función para printf básico (sin implementar aquí, pero la idea) */
@@ -122,6 +157,7 @@ void set_cursor_pos(int x, int y)
     {
         cursor_x = x;
         cursor_y = y;
+        cursor_pos = y * VGA_WIDTH + x;
     }
 }
 
