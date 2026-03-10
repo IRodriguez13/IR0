@@ -34,6 +34,7 @@ static int cmd_swapoff_handler(int argc, char **argv)
     if (argc < 2) {
         debug_writeln_err("Usage: swapoff <file>");
         debug_writeln_err("       swapoff -a (disable all)");
+        debug_serial_fail("swapoff", "usage");
         return 1;
     }
     
@@ -57,10 +58,12 @@ static int cmd_swapoff_handler(int argc, char **argv)
                 case EBUSY:  debug_writeln_err("Swap in use, cannot deactivate"); break;
                 default:     debug_writeln_err("Unknown error"); break;
             }
+            debug_serial_fail("swapoff", "ioctl_all");
             return 1;
         }
         
         debug_writeln("All swap files disabled successfully");
+        debug_serial_ok("swapoff");
         return 0;
     }
     
@@ -73,6 +76,7 @@ static int cmd_swapoff_handler(int argc, char **argv)
     int ctl_fd = (int)ir0_open("/dev/swap", O_RDWR, 0);
     if (ctl_fd < 0) {
         debug_writeln_err("Error: Failed to open swap control device");
+        debug_serial_fail("swapoff", "open");
         return 1;
     }
     swapfs_activate_args_t deactivate_arg;
@@ -92,10 +96,12 @@ static int cmd_swapoff_handler(int argc, char **argv)
             case EPERM:  debug_writeln_err("Permission denied"); break;
             default:     debug_writeln_err("Unknown error"); break;
         }
+        debug_serial_fail("swapoff", "ioctl");
         return 1;
     }
     
     debug_writeln("Swap disabled successfully");
+    debug_serial_ok("swapoff");
     return 0;
 }
 

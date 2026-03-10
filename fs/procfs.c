@@ -10,12 +10,13 @@
 #include "procfs.h"
 #include "swapfs.h"
 #include <ir0/stat.h>
+#include <ir0/fcntl.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <mm/allocator.h>
 #include <ir0/vga.h>
 #include <string.h>
-#include <errno.h>
+#include <ir0/errno.h>
 #include <stdlib.h>
 #include <ir0/net.h>
 #include <ir0/driver.h>
@@ -36,6 +37,7 @@
 
 #define PROC_BUFFER_SIZE           4096    /* Standard proc buffer size */
 #define PROC_FD_MAP_SIZE           1000    /* Max file descriptors tracked */
+#define PROC_OFFSET_MAP_SIZE       2000    /* procfs 1000-1999 + sysfs 3000-3999 */
 #define PROC_LINE_MAX_LEN          256     /* Max line length for parsing */
 #define PROC_ESTIMATED_ENTRY_SIZE  256     /* Estimated entry size for formatting */
 #define PROC_DEFAULT_FILE_SIZE     1024    /* Default file size for stat */
@@ -45,8 +47,8 @@
 
 static pid_t proc_fd_pid_map[1000];
 static int proc_fd_pid_map_init = 0;
-/* Track offsets for /proc files */
-static off_t proc_fd_offset_map[1000];
+/* Track offsets for /proc and /sys files (proc 1000-1999, sys 3000-3999) */
+static off_t proc_fd_offset_map[PROC_OFFSET_MAP_SIZE];
 static int proc_fd_offset_map_init = 0;
 
 static void proc_fd_pid_map_ensure_init(void)
@@ -139,7 +141,7 @@ static uint64_t get_total_memory(void)
 
 /*
  * /proc/ps: raw data only, one line per process, tab-separated.
- * pid\tppid\tstate\tname
+ * pid\tppid\tstate\tuid\tname (OSDev-style: PID PPID S UID CMD)
  * Frontend (ps) does formatting.
  */
 static int proc_ps_read(char *buf, size_t count)
@@ -162,8 +164,9 @@ static int proc_ps_read(char *buf, size_t count)
         }
         const char *name = p->comm[0] ? p->comm : "(none)";
         int n = snprintf(buf + off, count - off,
-                         "%d\t%d\t%s\t%s\n",
-                         (int)p->task.pid, (int)p->ppid, state_str, name);
+                         "%d\t%d\t%s\t%u\t%s\n",
+                         (int)p->task.pid, (int)p->ppid, state_str,
+                         (unsigned)p->uid, name);
         if (n < 0) break;
         if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
@@ -221,27 +224,57 @@ bool is_proc_path(const char *path)
     return path && strncmp(path, "/proc/", 6) == 0;
 }
 
-/* Parse /proc path - returns entry name after /proc/, extracts PID if present */
+/* Parse /proc path - returns entry name after /proc/, extracts PID if present.
+ * Supports OSDev-style /proc/pid/N/status and legacy /proc/N/status */
 static const char *proc_parse_path(const char *path, pid_t *pid_out)
 {
     if (!is_proc_path(path))
         return NULL;
-    
+
     /* Skip "/proc/" prefix */
     const char *after_proc = path + 6;
-    
+
     /* Check if it's /proc/status (current process) */
     if (strncmp(after_proc, "status", 6) == 0)
     {
-        *pid_out = -1;  /* Special value for current process */
+        *pid_out = -1;
         return "status";
     }
-    
-    /* Check if it's /proc/[pid]/status or /proc/[pid]/cmdline */
+
+    /* OSDev-style: /proc/pid or /proc/pid/N or /proc/pid/N/status */
+    if (strncmp(after_proc, "pid", 3) == 0 && (after_proc[3] == '\0' || after_proc[3] == '/'))
+    {
+        if (after_proc[3] == '\0')
+        {
+            *pid_out = -1;
+            return "pid_dir";
+        }
+        /* pid/123 or pid/123/status or pid/123/cmdline */
+        const char *rest = after_proc + 4;
+        char *slash = strchr(rest, '/');
+        if (!slash)
+        {
+            *pid_out = atoi(rest);
+            return "pid_subdir";
+        }
+        char pid_str[16];
+        size_t pid_len = (size_t)(slash - rest);
+        if (pid_len >= sizeof(pid_str))
+            return NULL;
+        strncpy(pid_str, rest, pid_len);
+        pid_str[pid_len] = '\0';
+        *pid_out = atoi(pid_str);
+        if (strncmp(slash + 1, "status", 6) == 0)
+            return "status";
+        if (strncmp(slash + 1, "cmdline", 7) == 0)
+            return "cmdline";
+        return NULL;
+    }
+
+    /* Legacy: /proc/[pid]/status or /proc/[pid]/cmdline */
     char *slash = strchr(after_proc, '/');
     if (slash)
     {
-        /* Extract PID from before the slash */
         char pid_str[16];
         size_t pid_len = (size_t)(slash - after_proc);
         if (pid_len < sizeof(pid_str) - 1)
@@ -249,15 +282,14 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
             strncpy(pid_str, after_proc, pid_len);
             pid_str[pid_len] = '\0';
             *pid_out = atoi(pid_str);
-            
-            /* Check what file it is */
+
             if (strncmp(slash + 1, "status", 6) == 0)
                 return "status";
-            else if (strncmp(slash + 1, "cmdline", 7) == 0)
+            if (strncmp(slash + 1, "cmdline", 7) == 0)
                 return "cmdline";
         }
     }
-    
+
     /* Regular /proc files */
     *pid_out = -1;
     return after_proc;
@@ -841,21 +873,100 @@ int proc_cmdline_read(char *buf, size_t count, pid_t pid)
     return len;
 }
 
-/* Get offset for /proc fd */
+/* Get offset for /proc (1000-1999) or /sys (3000-3999) fd */
 off_t proc_get_offset(int fd)
 {
     proc_fd_offset_map_ensure_init();
-    int idx = fd - 1000;
+    int idx = -1;
+    if (fd >= 1000 && fd <= 1999)
+        idx = fd - 1000;
+    else if (fd >= 3000 && fd <= 3999)
+        idx = 1000 + (fd - 3000);
     if (idx >= 0 && idx < (int)(sizeof(proc_fd_offset_map) / sizeof(proc_fd_offset_map[0])))
         return proc_fd_offset_map[idx];
     return 0;
 }
 
-/* Set offset for /proc fd */
+/* linux_dirent64 for proc_getdents (matches sys_getdents) */
+struct proc_dirent64 {
+    uint64_t d_ino;
+    int64_t d_off;
+    unsigned short d_reclen;
+    unsigned char d_type;
+    char d_name[];
+};
+#define PROC_DT_DIR 4
+#define PROC_DT_REG 8
+
+/* /proc/pid directory getdents - OSDev-style */
+int proc_getdents(int fd, void *dirent_buf, size_t count)
+{
+    if (!dirent_buf || count == 0)
+        return -EINVAL;
+
+    /* fd 1150 = /proc/pid (list PIDs), fd 1151 = /proc/pid/N (list status, cmdline) */
+    if (fd == 1150)
+    {
+        process_t *p = process_list;
+        size_t buf_offset = 0;
+        int ino = 1;
+        while (p && buf_offset + sizeof(struct proc_dirent64) + 16 < count)
+        {
+            char pid_str[16];
+            int n = snprintf(pid_str, sizeof(pid_str), "%d", (int)p->task.pid);
+            if (n <= 0 || n >= (int)sizeof(pid_str))
+                break;
+            size_t name_len = (size_t)n + 1;
+            size_t reclen = (sizeof(struct proc_dirent64) + name_len + 7) & ~7;
+            if (buf_offset + reclen > count)
+                break;
+            struct proc_dirent64 *dent = (struct proc_dirent64 *)((char *)dirent_buf + buf_offset);
+            dent->d_ino = (uint64_t)p->task.pid;
+            dent->d_off = 0;
+            dent->d_reclen = (unsigned short)reclen;
+            dent->d_type = PROC_DT_DIR;
+            memcpy(dent->d_name, pid_str, name_len);
+            buf_offset += reclen;
+            ino++;
+            p = p->next;
+        }
+        return (int)buf_offset;
+    }
+    if (fd == 1151)
+    {
+        pid_t pid = proc_get_pid_for_fd(1151);
+        if (pid < 0 || !process_find_by_pid(pid))
+            return -ENOENT;
+        size_t buf_offset = 0;
+        const char *entries[] = { "status", "cmdline", NULL };
+        for (int i = 0; entries[i] && buf_offset + sizeof(struct proc_dirent64) + 16 < count; i++)
+        {
+            size_t name_len = strlen(entries[i]) + 1;
+            size_t reclen = (sizeof(struct proc_dirent64) + name_len + 7) & ~7;
+            if (buf_offset + reclen > count)
+                break;
+            struct proc_dirent64 *dent = (struct proc_dirent64 *)((char *)dirent_buf + buf_offset);
+            dent->d_ino = (uint64_t)(i + 1);
+            dent->d_off = 0;
+            dent->d_reclen = (unsigned short)reclen;
+            dent->d_type = PROC_DT_REG;
+            memcpy(dent->d_name, entries[i], name_len);
+            buf_offset += reclen;
+        }
+        return (int)buf_offset;
+    }
+    return -EBADF;
+}
+
+/* Set offset for /proc (1000-1999) or /sys (3000-3999) fd */
 void proc_set_offset(int fd, off_t offset)
 {
     proc_fd_offset_map_ensure_init();
-    int idx = fd - 1000;
+    int idx = -1;
+    if (fd >= 1000 && fd <= 1999)
+        idx = fd - 1000;
+    else if (fd >= 3000 && fd <= 3999)
+        idx = 1000 + (fd - 3000);
     if (idx >= 0 && idx < (int)(sizeof(proc_fd_offset_map) / sizeof(proc_fd_offset_map[0])))
         proc_fd_offset_map[idx] = offset;
 }
@@ -872,13 +983,30 @@ int proc_open(const char *path, int flags)
     /* Currently read-only: procfs is primarily for reading system information
       * Write support could be added for /proc/sys/ knobs in the future
      */
-    (void)flags; /* O_WRONLY, O_RDWR flags ignored for now */
-    
+    (void)flags; /* O_WRONLY, O_RDWR ignored for now; O_DIRECTORY used for pid dirs */
+
     pid_t pid;
     const char *filename = proc_parse_path(path, &pid);
     if (!filename)
         return -1;
-    
+
+    /* OSDev-style /proc/pid directory: requires O_DIRECTORY */
+    if (strcmp(filename, "pid_dir") == 0)
+    {
+        if (!(flags & O_DIRECTORY))
+            return -ENOTDIR;
+        return 1150;  /* proc_getdents will list PIDs */
+    }
+    if (strcmp(filename, "pid_subdir") == 0)
+    {
+        if (!(flags & O_DIRECTORY))
+            return -ENOTDIR;
+        if (!process_find_by_pid(pid))
+            return -ENOENT;
+        proc_set_pid_for_fd(1151, pid);
+        return 1151;  /* proc_getdents will list status, cmdline */
+    }
+
     int fd = -1;
     /* Check if file exists and return special positive fd */
     if (strcmp(filename, "meminfo") == 0)
@@ -1252,6 +1380,18 @@ int proc_stat(const char *path, stat_t *st)
     if (!filename)
         return -1;
     
+    /* Check if directory (OSDev-style /proc/pid) */
+    if (strcmp(filename, "pid_dir") == 0 || strcmp(filename, "pid_subdir") == 0)
+    {
+        memset(st, 0, sizeof(stat_t));
+        st->st_mode = S_IFDIR | 0555;
+        st->st_nlink = 2;
+        st->st_uid = 0;
+        st->st_gid = 0;
+        st->st_size = 0;
+        return 0;
+    }
+
     /* Check if file exists */
     if (strcmp(filename, "meminfo") == 0 ||
         strcmp(filename, "ps") == 0 ||

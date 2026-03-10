@@ -18,6 +18,7 @@
 #include <ir0/kmem.h>
 #include <kernel/rr_sched.h>
 #include "pit/pit.h"
+#include "rtc/rtc.h"
 #include "clock_system.h"
 
 /* Global clock state */
@@ -61,7 +62,11 @@ int clock_system_init(void)
     init_PIT(1000); /* 1kHz timer */
     clock_state.pit_enabled = 1;
     clock_state.active_timer = CLOCK_TIMER_PIT;
-    
+
+    /* Initialize RTC for gettimeofday (wall-clock time) */
+    if (rtc_init() == 0)
+        clock_state.current_time = 0;  /* Will be read from RTC on first gettimeofday */
+
     /* Mark as initialized */
     clock_state.initialized = 1;
     print_success("Clock system initialized successfully with PIT\n");

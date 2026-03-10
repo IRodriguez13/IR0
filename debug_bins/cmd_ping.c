@@ -35,6 +35,7 @@ static int cmd_ping_handler(int argc, char **argv)
         debug_write_err("Usage: ping <IP_ADDRESS_OR_HOSTNAME>\n");
         debug_write_err("Example: ping 192.168.1.1\n");
         debug_write_err("Example: ping www.google.com\n");
+        debug_serial_fail("ping", "usage");
         return 1;
     }
     
@@ -46,6 +47,7 @@ static int cmd_ping_handler(int argc, char **argv)
     {
         debug_write_err("ping: failed to send ICMP echo request\n");
         debug_write_err("Note: If using hostname, ensure DNS is configured\n");
+        debug_serial_fail("ping", "send");
         return 1;
     }
     
@@ -62,6 +64,7 @@ static int cmd_ping_handler(int argc, char **argv)
     if (fd < 0)
     {
         debug_write_err("ping: failed to open /dev/net\n");
+        debug_serial_fail("ping", "open");
         return 1;
     }
     
@@ -127,9 +130,11 @@ static int cmd_ping_handler(int argc, char **argv)
     if (!got_response)
     {
         debug_write_err("ping: Request timeout (no response received)\n");
+        debug_serial_fail("ping", "timeout");
         return 1;
     }
     
+    debug_serial_ok("ping");
     return 0;
 }
 

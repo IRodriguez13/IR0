@@ -146,7 +146,9 @@ int vfs_readdir(const char *path, struct vfs_dirent_readdir *entries, int max_en
 int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);
 int vfs_link(const char *oldpath, const char *newpath);
-int vfs_rmdir_recursive(const char *path);
+int vfs_rename(const char *oldpath, const char *newpath);
+int vfs_rmdir(const char *path);           /* POSIX: only empty dirs */
+int vfs_rmdir_recursive(const char *path); /* Extended: recursive (debug) */
 int vfs_stat(const char *path, stat_t *buf);
 int vfs_chown(const char *path, uid_t owner, gid_t group);
 int vfs_ls_with_stat(const char *path);
@@ -158,7 +160,8 @@ int unregister_filesystem(struct filesystem_type *fs);
 /* Path lookup */
 struct vfs_inode *vfs_path_lookup(const char *path);
 
-/* Mount point management */
+/* Root and mount point management */
+void vfs_set_root(struct vfs_superblock *sb, struct vfs_inode *inode);
 struct mount_point *vfs_find_mount_point(const char *path);
 int vfs_add_mount_point(const char *path, const char *dev, 
                         struct vfs_superblock *sb, struct vfs_inode *root,

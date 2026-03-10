@@ -27,6 +27,7 @@ static int cmd_swapon_handler(int argc, char **argv)
 {
     if (argc < 2) {
         debug_writeln_err("Usage: swapon <file>");
+        debug_serial_fail("swapon", "usage");
         return 1;
     }
 
@@ -39,6 +40,7 @@ static int cmd_swapon_handler(int argc, char **argv)
     int ctl_fd = (int)ir0_open("/dev/swap", O_RDWR, 0);
     if (ctl_fd < 0) {
         debug_writeln_err("Error: Failed to open swap control device");
+        debug_serial_fail("swapon", "open");
         return 1;
     }
 
@@ -60,7 +62,10 @@ static int cmd_swapon_handler(int argc, char **argv)
         }
     } else {
         debug_writeln("Swap enabled successfully");
+        debug_serial_ok("swapon");
     }
+    if (ret < 0)
+        debug_serial_fail("swapon", "ioctl");
 
     ir0_close(ctl_fd);
     return ret < 0 ? 1 : 0;

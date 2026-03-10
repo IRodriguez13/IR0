@@ -25,6 +25,7 @@ static int cmd_bluestart_handler(int argc, char **argv)
     if (fd < 0)
     {
         debug_writeln_err("bluestart: cannot open " SCAN_PATH);
+        debug_serial_fail("bluestart", "open");
         return 1;
     }
 
@@ -35,10 +36,12 @@ static int cmd_bluestart_handler(int argc, char **argv)
     if (n != (int64_t)len)
     {
         debug_writeln_err("bluestart: failed to write start");
+        debug_serial_fail("bluestart", "write");
         return 1;
     }
 
     debug_writeln("Bluetooth scan started.");
+    debug_serial_ok("bluestart");
     return 0;
 }
 

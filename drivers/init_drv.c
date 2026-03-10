@@ -84,6 +84,8 @@ void init_all_drivers(void)
 
     pic_unmask_irq(1);
     log_subsystem_ok("PS2_KEYBOARD");
+    pic_unmask_irq(12);
+    log_subsystem_ok("PS2_MOUSE");
     pic_unmask_irq(11);
     log_subsystem_ok("NETWORK_STACK");
     resource_register_ioport(DMA1_PORT_START, DMA1_PORT_END, "dma1");

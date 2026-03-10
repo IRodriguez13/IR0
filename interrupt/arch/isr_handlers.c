@@ -119,6 +119,13 @@ void isr_handler64(uint64_t interrupt_number)
             keyboard_handler64();
             break;
 
+        case 12: /* PS/2 Mouse */
+        {
+            extern void ps2_mouse_handle_interrupt(void);
+            ps2_mouse_handle_interrupt();
+            break;
+        }
+
         case 11: /* RTL8139 Network Card */
             rtl8139_handle_interrupt();
             break;

@@ -28,8 +28,12 @@
 #include <drivers/timer/clock_system.h>
 #include <drivers/init_drv.h>
 #include <drivers/storage/block_dev.h>
+#include <drivers/video/vbe.h>
+#include <ir0/multiboot.h>
 #include "ipc.h"
 #include "syscalls.h"
+#include <ir0/net.h>
+#include <drivers/bluetooth/bluetooth_init.h>
 
 /* Include kernel header with all function declarations */
 #include "kernel.h"
@@ -39,19 +43,28 @@ void kmain(uint32_t multiboot_info)
     /* Initialize architecture-specific early features (GDT, TSS, etc.) */
     arch_early_init();
 
-    /* Banner */
-    print("IR0 Kernel v0.0.1 Boot routine\n");
-
-    /* Initialize core subsystems first (need heap for registration) */
+    /* Initialize core subsystems first (need heap for VBE mapping) */
     heap_init();
 
-    /* VBE framebuffer from Multiboot (OSDev). Requires gfxpayload in grub.cfg. */
+    /*
+     * VBE framebuffer from Multiboot. Must run before first print() so
+     * that print() uses framebuffer when gfxpayload=1024x768x32 in grub.
+     */
     {
         extern int vbe_init_from_multiboot(uint32_t);
         extern int vbe_init(void);
         if (vbe_init_from_multiboot(multiboot_info) != 0)
             vbe_init();  /* Fallback: VGA text mode for /dev/fb0 */
+        extern void console_init(void);
+        extern void console_clear(uint8_t);
+        extern int console_use_framebuffer(void);
+        console_init();
+        if (console_use_framebuffer())
+            console_clear(0x0F);  /* Black background, ready for text */
     }
+
+    /* Banner (now uses framebuffer if available) */
+    print("IR0 Kernel v0.0.1 Boot routine\n");
     
     /* Initialize driver subsystem (includes driver registry and multi-language drivers) */
     drivers_init();
@@ -65,6 +78,49 @@ void kmain(uint32_t multiboot_info)
     
     logging_init();
     serial_init();
+
+    /*
+     * Log console mode for debugging (serial now available).
+     * If framebuffer init failed, dump multiboot info to diagnose.
+     */
+    {
+        extern int console_use_framebuffer(void);
+        uint32_t w = 0, h = 0, bpp = 0;
+        if (console_use_framebuffer() && vbe_get_info(&w, &h, &bpp))
+        {
+            log_info_fmt("BOOT", "Console: framebuffer %ux%ux%u", (unsigned)w, (unsigned)h, (unsigned)bpp);
+        }
+        else
+        {
+            serial_print("[BOOT] Console: VGA text (80x25)");
+            if (vbe_is_available())
+                serial_print(" [vbe fallback - may not be visible in graphics mode]");
+            serial_print("\n");
+            serial_print("[BOOT] vbe_fail_reason=");
+            serial_print_hex32((uint32_t)vbe_fail_reason);
+            serial_print(" (1=mb_null 2=no_fb 3=bad_dims 4=map_fail)\n");
+            /* Diagnose: why did vbe_init_from_multiboot fail? */
+            if (multiboot_info)
+            {
+                const struct multiboot_info *mb = (const struct multiboot_info *)(uintptr_t)multiboot_info;
+                serial_print("[BOOT] Multiboot flags=0x");
+                serial_print_hex32(mb->flags);
+                serial_print(" (bit12=FB:");
+                serial_print((mb->flags & (1u << 12)) ? "1" : "0");
+                serial_print(") addr=0x");
+                serial_print_hex32((uint32_t)(mb->framebuffer_addr & 0xFFFFFFFF));
+                serial_print(" w=");
+                serial_print_hex32(mb->framebuffer_width);
+                serial_print(" h=");
+                serial_print_hex32(mb->framebuffer_height);
+                serial_print(" bpp=");
+                serial_print_hex32(mb->framebuffer_bpp);
+                serial_print("\n");
+            }
+            else
+                serial_print("[BOOT] Multiboot info is NULL\n");
+        }
+    }
 
     log_subsystem_ok("CORE");
 
@@ -147,6 +203,10 @@ void kmain(uint32_t multiboot_info)
         bluetooth_poll();
         /* Despertar procesos bloqueados en poll() cuando hay datos o timeout */
         poll_wake_check();
+        /* Despertar procesos bloqueados en nanosleep() cuando expira el tiempo */
+        sleep_wake_check();
+        /* Despertar procesos bloqueados en read(0) cuando hay tecla */
+        stdin_wake_check();
         __asm__ volatile("hlt");
     }
 }

@@ -77,6 +77,7 @@ static int cmd_lsblk_handler(int argc, char **argv)
     if (fd < 0)
     {
         debug_writeln_err("lsblk: cannot open /proc/blockdevices");
+        debug_serial_fail("lsblk", "open");
         return -1;
     }
 
@@ -86,6 +87,7 @@ static int cmd_lsblk_handler(int argc, char **argv)
     if (nr <= 0)
     {
         debug_writeln("NAME      MAJ:MIN SIZE  MODEL");
+        debug_serial_ok("lsblk");
         return 0;
     }
     buf[nr] = '\0';
@@ -129,6 +131,7 @@ static int cmd_lsblk_handler(int argc, char **argv)
         }
         p = eol + 1;
     }
+    debug_serial_ok("lsblk");
     return 0;
 }
 

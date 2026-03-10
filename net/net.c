@@ -34,6 +34,7 @@
 #include "ip.h"
 #include "icmp.h"
 #include "udp.h"
+#include "tcp.h"
 #include "dns.h"
 #include <ir0/net.h>
 #include <ir0/kmem.h>
@@ -593,6 +594,12 @@ int init_net_stack(void)
     if (udp_init() != 0)
     {
         LOG_ERROR("NET", "Failed to initialize UDP protocol");
+        return -1;
+    }
+    
+    if (tcp_init() != 0)
+    {
+        LOG_ERROR("NET", "Failed to initialize TCP protocol");
         return -1;
     }
     

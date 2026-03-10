@@ -30,6 +30,8 @@
 #include <errno.h>
 #include "drivers/bluetooth/bt_sysfs.h"
 #include <drivers/disk/partition.h>
+#include <drivers/video/console.h>
+#include <drivers/video/vbe.h>
 
 /* Forward declarations for functions we use */
 extern bool ata_drive_present(uint8_t drive);
@@ -39,6 +41,7 @@ extern bool ata_drive_present(uint8_t drive);
 #define SYS_BT_HCI0_STATE      31
 #define SYS_BT_TOPOLOGY_NEIGH  32
 #define SYS_BT_SESSIONS        33
+#define SYS_CONSOLE_MODE       40
 
 #define SYS_BUFFER_SIZE 4096
 #define SYS_FD_BASE 3000  /* sysfs uses FD range 3000-3999 */
@@ -203,6 +206,40 @@ static int sys_kernel_max_processes_write(const char *buf, size_t count)
     
     sys_max_processes = new_value;
     return (int)count;
+}
+
+/**
+ * sys_console_mode_read - Read console backend from /sys/console/mode
+ * Returns "framebuffer WxH" or "vga" for verification
+ */
+static int sys_console_mode_read(char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return -EINVAL;
+
+    memset(buf, 0, count);
+
+    int len;
+    if (console_use_framebuffer())
+    {
+        uint32_t w, h, bpp;
+        if (vbe_get_info(&w, &h, &bpp))
+            len = snprintf(buf, count, "framebuffer %ux%ux%u\n", (unsigned)w, (unsigned)h, (unsigned)bpp);
+        else
+            len = snprintf(buf, count, "framebuffer\n");
+    }
+    else
+    {
+        len = snprintf(buf, count, "vga\n");
+    }
+    if (len < 0)
+        return -1;
+    if (len >= (int)count)
+    {
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
+    return len;
 }
 
 /* Generate /sys/devices/system content */
@@ -394,6 +431,10 @@ int sysfs_open(const char *path, int flags)
     {
         fd = SYS_FD_BASE + SYS_BT_SESSIONS;
     }
+    else if (strcmp(sys_path, "console/mode") == 0)
+    {
+        fd = SYS_FD_BASE + SYS_CONSOLE_MODE;
+    }
     else
     {
         return -1;  /* File not found */
@@ -455,6 +496,9 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
             break;
         case SYS_BT_SESSIONS:
             full_size = bt_sysfs_sessions_read(sys_buffer, sizeof(sys_buffer));
+            break;
+        case SYS_CONSOLE_MODE:
+            full_size = sys_console_mode_read(sys_buffer, sizeof(sys_buffer));
             break;
         default:
             return -1;
@@ -527,6 +571,7 @@ int sysfs_stat(const char *path, stat_t *st)
         strcmp(sys_path, "devices/system/cpu0") == 0 ||
         strcmp(sys_path, "devices/system/cpu0/online") == 0 ||
         strcmp(sys_path, "devices/block") == 0 ||
+        strcmp(sys_path, "console/mode") == 0 ||
         strcmp(sys_path, "class/bluetooth/hci0/address") == 0 ||
         strcmp(sys_path, "class/bluetooth/hci0/state") == 0 ||
         strcmp(sys_path, "class/bluetooth/topology/neighbors") == 0 ||

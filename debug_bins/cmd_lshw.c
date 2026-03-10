@@ -173,6 +173,7 @@ static int cmd_lshw_handler(int argc, char **argv)
         }
     }
 
+    debug_serial_ok("lshw");
     return 0;
 }
 

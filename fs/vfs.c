@@ -14,6 +14,7 @@
 #include "vfs.h"
 #include "minix_fs.h"
 #include "tmpfs.h"
+#include <ir0/path.h>
 #include <ir0/logging.h>
 #include <kernel/process.h>
 #include <mm/allocator.h>
@@ -809,10 +810,16 @@ int vfs_ls(const char *path)
 
 int vfs_mkdir(const char *path, int mode)
 {
+    (void)mode;
     /* Validate inputs */
     int ret = validate_path(path);
     if (ret != 0)
+    {
+        serial_print("[VFS] mkdir validate_path failed err=");
+        serial_print_hex32((uint32_t)(-ret));
+        serial_print("\n");
         return ret;
+    }
     
     /* Check if current process exists */
     if (!current_process)
@@ -833,7 +840,12 @@ int vfs_mkdir(const char *path, int mode)
         
         /* Check write permission on parent directory */
         if (!check_file_access(parent_path, 0x2, current_process))  /* ACCESS_WRITE */
+        {
+            serial_print("[VFS] mkdir EACCES parent=");
+            serial_print(parent_path);
+            serial_print("\n");
             return -EACCES;
+        }
     }
     else if (strcmp(path, "/") == 0)
     {
@@ -841,20 +853,40 @@ int vfs_mkdir(const char *path, int mode)
         return -EEXIST;
     }
     
-    /* Check if directory already exists */
+    /*
+     * Check if path already exists.
+     * POSIX: both "exists as dir" and "exists as file" return EEXIST.
+     * ENOTDIR is only for path prefix components (e.g. mkdir a/b when a is a file).
+     * If st_mode has no valid file type bits (S_IFMT), treat as non-existent (FS bug).
+     */
     stat_t st;
     if (vfs_stat(path, &st) == 0)
     {
-        if (S_ISDIR(st.st_mode))
-            return -EEXIST;
-        else
-            return -ENOTDIR;
+        if ((st.st_mode & S_IFMT) == 0)
+        {
+            goto delegate_mkdir;
+        }
+        return -EEXIST;
     }
+
+delegate_mkdir:
     
     /* Delegate to filesystem-specific implementation */
     struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
     if (fs && fs->ops && fs->ops->mkdir)
-        return fs->ops->mkdir(path, (mode_t)mode);
+    {
+        int mkdir_ret = fs->ops->mkdir(path, (mode_t)mode);
+        if (mkdir_ret != 0)
+        {
+            serial_print("[VFS] mkdir('");
+            serial_print(path);
+            serial_print("') failed err=");
+            serial_print_hex32((uint32_t)(-mkdir_ret));
+            serial_print("\n");
+        }
+        return mkdir_ret;
+    }
+    serial_print("[VFS] mkdir: no fs or mkdir op\n");
     return -ENOSYS;
 }
 
@@ -964,45 +996,132 @@ int vfs_link(const char *oldpath, const char *newpath)
     return -ENOSYS;
 }
 
+int vfs_rename(const char *oldpath, const char *newpath)
+{
+    int ret = validate_path(oldpath);
+    if (ret != 0)
+        return ret;
+    ret = validate_path(newpath);
+    if (ret != 0)
+        return ret;
+
+    if (!current_process)
+        return -ESRCH;
+
+    stat_t st_old;
+    if (vfs_stat(oldpath, &st_old) != 0)
+        return -ENOENT;
+
+    if (S_ISDIR(st_old.st_mode))
+        return -EISDIR; /* rename of directories not yet supported */
+
+    if (!check_file_access(oldpath, ACCESS_READ | ACCESS_WRITE, current_process))
+        return -EACCES;
+
+    /* Check write permission on parent of newpath */
+    char parent_path[256];
+    const char *last_slash = strrchr(newpath, '/');
+    if (last_slash && last_slash != newpath)
+    {
+        size_t parent_len = (size_t)(last_slash - newpath);
+        if (parent_len >= sizeof(parent_path))
+            return -ENAMETOOLONG;
+        strncpy(parent_path, newpath, parent_len);
+        parent_path[parent_len] = '\0';
+        if (!check_file_access(parent_path, ACCESS_WRITE, current_process))
+            return -EACCES;
+    }
+
+    struct filesystem_type *fs_old = vfs_get_filesystem_for_path(oldpath);
+    struct filesystem_type *fs_new = vfs_get_filesystem_for_path(newpath);
+
+    if (fs_old != fs_new)
+        return -EXDEV; /* Cross-filesystem rename not supported */
+
+    stat_t st_new;
+    if (vfs_stat(newpath, &st_new) == 0)
+    {
+        if (S_ISDIR(st_new.st_mode))
+            return -EISDIR;
+        if (vfs_unlink(newpath) != 0)
+            return -EACCES;
+    }
+
+    if (fs_old && fs_old->ops && fs_old->ops->link)
+    {
+        ret = fs_old->ops->link(oldpath, newpath);
+        if (ret != 0)
+            return ret;
+        return vfs_unlink(oldpath);
+    }
+    return -ENOSYS;
+}
+
+/* vfs_rmdir - POSIX: remove empty directory only (OSDev-style, no recursion) */
+int vfs_rmdir(const char *path)
+{
+    int ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+
+    /* Normalize path (trailing slash, ., ..) for consistent lookup */
+    char normalized[256];
+    if (normalize_path(path, normalized, sizeof(normalized)) != 0)
+        return -ENAMETOOLONG;
+    path = normalized;
+
+    if (strcmp(path, "/") == 0)
+        return -EPERM;
+
+    stat_t st;
+    if (vfs_stat(path, &st) != 0)
+        return -ENOENT;
+    if (!S_ISDIR(st.st_mode))
+        return -ENOTDIR;
+
+    struct filesystem_type *fs = vfs_get_filesystem_for_path(path);
+    if (fs && fs->ops && fs->ops->rmdir)
+        return fs->ops->rmdir(path);
+    return -ENOSYS;
+}
+
 /* Internal recursive function with depth limit to prevent stack overflow */
 static int vfs_rmdir_recursive_internal(const char *path, int depth)
 {
-    
     /* Limit recursion depth to prevent stack overflow (max 32 levels) */
     if (depth > 32)
     {
         sys_write(2, "rm: recursion depth limit exceeded\n", 35);
         return -ELOOP;
     }
-    
+
     /* Validate path */
     int ret = validate_path(path);
     if (ret != 0)
         return ret;
-    
-    /* Normalize path: ensure it starts with / */
-    char normalized_path[256];  /* Reduced from 512 to prevent stack overflow */
+
+    /* Normalize path: resolve . and .., ensure canonical form (OSDev-style) */
+    char normalized_path[256];
+    char work[256];
     if (path[0] != '/')
     {
-        normalized_path[0] = '/';
+        work[0] = '/';
         size_t len = strlen(path);
-        if (len >= sizeof(normalized_path) - 1)
-        {
-            return -ENAMETOOLONG;  /* Path too long */
-        }
-        strncpy(normalized_path + 1, path, sizeof(normalized_path) - 2);
-        normalized_path[sizeof(normalized_path) - 1] = '\0';
+        if (len >= sizeof(work) - 1)
+            return -ENAMETOOLONG;
+        strncpy(work + 1, path, sizeof(work) - 2);
+        work[sizeof(work) - 1] = '\0';
     }
     else
     {
         size_t len = strlen(path);
-        if (len >= sizeof(normalized_path))
-        {
-            return -ENAMETOOLONG;  /* Path too long */
-        }
-        strncpy(normalized_path, path, sizeof(normalized_path) - 1);
-        normalized_path[sizeof(normalized_path) - 1] = '\0';
+        if (len >= sizeof(work))
+            return -ENAMETOOLONG;
+        strncpy(work, path, sizeof(work) - 1);
+        work[sizeof(work) - 1] = '\0';
     }
+    if (normalize_path(work, normalized_path, sizeof(normalized_path)) != 0)
+        return -ENAMETOOLONG;
     
     /* Check if path is valid and not root */
     if (normalized_path[0] == '\0' || (normalized_path[0] == '/' && normalized_path[1] == '\0'))
@@ -1061,20 +1180,49 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
       continue; // Skip if path too long
     }
 
-    /* Prevent infinite recursion - check if we're trying to delete parent */
-    if (strcmp(full_path, normalized_path) == 0)
+    /* Normalize path to resolve ".." and "." - prevents infinite loop / root delete */
+    char resolved_path[256];
+    if (normalize_path(full_path, resolved_path, sizeof(resolved_path)) != 0)
+    {
+      continue;
+    }
+
+    /* Never delete root - critical safety check */
+    if (resolved_path[0] == '/' && resolved_path[1] == '\0')
+    {
+      continue;
+    }
+
+    /* Prevent infinite recursion - never recurse into parent (..) or self (.) */
+    if (strcmp(resolved_path, normalized_path) == 0)
+    {
+      continue;
+    }
+
+    /* Skip if resolved_path is a parent of normalized_path (going up the tree) */
+    size_t rlen = strlen(resolved_path);
+    size_t nlen = strlen(normalized_path);
+    if (rlen < nlen && strncmp(normalized_path, resolved_path, rlen) == 0 &&
+        normalized_path[rlen] == '/')
+    {
+      continue;
+    }
+
+    /* resolved_path must be a child of normalized_path: /foo/bar under /foo */
+    if (rlen <= nlen || strncmp(resolved_path, normalized_path, nlen) != 0 ||
+        resolved_path[nlen] != '/')
     {
       continue;
     }
 
     /* Check if it's a directory */
     stat_t entry_st;
-    if (vfs_stat(full_path, &entry_st) == 0)
+    if (vfs_stat(resolved_path, &entry_st) == 0)
     {
       if (S_ISDIR(entry_st.st_mode))
       {
         /* Recursively delete subdirectory with increased depth */
-        if (vfs_rmdir_recursive_internal(full_path, depth + 1) != 0)
+        if (vfs_rmdir_recursive_internal(resolved_path, depth + 1) != 0)
         {
           /* Don't fail completely, just log and continue
            * Some entries might have been deleted already
@@ -1085,7 +1233,7 @@ static int vfs_rmdir_recursive_internal(const char *path, int depth)
       else
       {
         /* Delete file */
-        if (vfs_unlink(full_path) != 0)
+        if (vfs_unlink(resolved_path) != 0)
         {
           /* Don't fail completely, just log and continue */
           continue;
@@ -1336,20 +1484,28 @@ int vfs_init_with_minix(void)
     return -ENODEV;
   }
 
-  /* Mount root filesystem */
+  /* Mount root filesystem (MINIX on block device) */
   print("VFS: Mounting root filesystem...\n");
   ret = vfs_mount("/dev/hda", "/", "minix");
   if (ret != 0)
   {
-    print("VFS: ERROR - vfs_mount failed\n");
-    serial_print("[VFS] vfs_mount returned error code: ");
+    print("VFS: MINIX mount failed, falling back to tmpfs root\n");
+    serial_print("[VFS] MINIX mount failed, using tmpfs fallback\n");
+
+    /* Fallback: tmpfs as root (OSDev-style: ramfs always works) */
+    ret = vfs_mount("none", "/", "tmpfs");
+    if (ret != 0)
     {
-      serial_print_hex32((uint32_t)ret);
-      serial_print("\n");
+      print("VFS: ERROR - tmpfs fallback also failed\n");
+      serial_print("[VFS] tmpfs fallback failed\n");
+      return ret;
     }
-    return ret;
+    print("VFS: tmpfs root mounted (fallback)\n");
   }
-  print("VFS: vfs_mount OK\n");
+  else
+  {
+    print("VFS: vfs_mount OK (MINIX)\n");
+  }
 
   /* Verify root_inode was created */
   if (root_inode)

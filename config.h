@@ -39,6 +39,7 @@
 
 #define DEBUG_SYSCALLS 0              /* All syscall invocations */
 #define DEBUG_SYSCALL_PARAMS 0        /* Detailed syscall parameters */
+#define DEBUG_KEYBOARD 0               /* Serial log each stdin read */
 
 /* KERNEL BEHAVIOR CONFIGURATION                                             */
 

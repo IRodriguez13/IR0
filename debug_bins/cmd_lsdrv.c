@@ -21,6 +21,7 @@ static int cmd_lsdrv_handler(int argc, char **argv)
     if (fd < 0)
     {
         debug_writeln_err("lsdrv: cannot open /proc/drivers");
+        debug_serial_fail("lsdrv", "open");
         return -1;
     }
 
@@ -30,6 +31,7 @@ static int cmd_lsdrv_handler(int argc, char **argv)
     if (nr <= 0)
     {
         debug_writeln("NAME     VERSION LANG STATE DESC");
+        debug_serial_ok("lsdrv");
         return 0;
     }
     buf[nr] = '\0';
@@ -74,6 +76,7 @@ static int cmd_lsdrv_handler(int argc, char **argv)
         }
         p = eol + 1;
     }
+    debug_serial_ok("lsdrv");
     return 0;
 }
 

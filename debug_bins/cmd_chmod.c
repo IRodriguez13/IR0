@@ -30,6 +30,7 @@ static int cmd_chmod_handler(int argc, char **argv)
     if (argc < 3)
     {
         debug_write_err("Usage: chmod MODE PATH\n");
+        debug_serial_fail("chmod", "usage");
         return 1;
     }
     
@@ -40,6 +41,7 @@ static int cmd_chmod_handler(int argc, char **argv)
     if (mode < 0)
     {
         debug_write_err("chmod: invalid mode\n");
+        debug_serial_fail("chmod", "parse");
         return 1;
     }
     
@@ -47,10 +49,12 @@ static int cmd_chmod_handler(int argc, char **argv)
     int64_t result = syscall(SYS_CHMOD, (uint64_t)path, (uint64_t)mode, 0);
     if (result < 0)
     {
-        debug_write_err("chmod: failed\n");
+        debug_perror("chmod", path, (int)result);
+        debug_serial_fail_err("chmod", "syscall", (int)(-result));
         return 1;
     }
     
+    debug_serial_ok("chmod");
     return 0;
 }
 

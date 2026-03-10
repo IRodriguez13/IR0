@@ -1,137 +1,106 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * IR0 Kernel - Debug Shell (Minimal Executor)
+ * IR0 Kernel - Debug Shell (OSDev-inspired)
  * Copyright (C) 2025 Iván Rodriguez
  *
- * Minimal debug shell that executes commands from debug_bins/
- * All I/O operations use syscalls only (simulates ring 3 behavior)
+ * Debug shell that executes commands from debug_bins/.
+ * Runs in kernel mode; all I/O via syscalls (SYS_READ, SYS_WRITE).
+ * Inspired by OSDev shell but adapted for kernel-mode + syscall-direct usage.
  */
 
 #include "dbgshell.h"
 #include "debug_bins.h"
 #include <ir0/syscall.h>
 #include <ir0/fcntl.h>
+#include <drivers/video/console.h>
+#include <drivers/video/typewriter.h>
+#include <ir0/vga.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 
-/* VGA helpers (used by other kernel components) */
-#define VGA_WIDTH 80
-#define VGA_HEIGHT 25
-#define VGA_BUFFER ((volatile uint16_t *)0xB8000)
+#define PROMPT "> "
+#define INPUT_MAX 255
+#define BATCH_READ 32
 
-int cursor_pos = 0;
-
-static void vga_putchar(char c, uint8_t color)
-{
-    if (c == '\n')
-    {
-        cursor_pos = (cursor_pos / VGA_WIDTH + 1) * VGA_WIDTH;
-        if (cursor_pos >= VGA_WIDTH * VGA_HEIGHT)
-        {
-            /* Scroll screen */
-            for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++)
-                VGA_BUFFER[i] = VGA_BUFFER[i + VGA_WIDTH];
-            for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++)
-                VGA_BUFFER[i] = 0x0F20;
-            cursor_pos = (VGA_HEIGHT - 1) * VGA_WIDTH;
-        }
-    }
-    else if (c == '\b')
-    {
-        if (cursor_pos > 0)
-        {
-            cursor_pos--;
-            VGA_BUFFER[cursor_pos] = (color << 8) | ' ';
-        }
-    }
-    else
-    {
-        VGA_BUFFER[cursor_pos] = (color << 8) | c;
-        cursor_pos++;
-        if (cursor_pos >= VGA_WIDTH * VGA_HEIGHT)
-        {
-            /* Scroll screen */
-            for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++)
-                VGA_BUFFER[i] = VGA_BUFFER[i + VGA_WIDTH];
-            for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++)
-                VGA_BUFFER[i] = 0x0F20;
-            cursor_pos = (VGA_HEIGHT - 1) * VGA_WIDTH;
-        }
-    }
-}
-
-void vga_print(const char *str, uint8_t color)
-{
-    while (*str)
-        vga_putchar(*str++, color);
-}
-
-static void vga_clear(void)
-{
-    for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++)
-        VGA_BUFFER[i] = 0x0F20;
-    cursor_pos = 0;
-}
-
-void cmd_clear(void)
-{
-    vga_clear();
-    /* Show banner after clear - using syscalls */
-    const char *banner = "IR0 DebShell v0.0.1 pre-release 1\nType 'help' for available commands\n\n";
-    syscall(SYS_WRITE, 1, (uint64_t)banner, strlen(banner));
-}
-
-/* Helper to write to stdout using syscall */
+/* Write to stdout (fd 1) - all output goes through typewriter for consistent cursor */
 static void write_stdout(const char *str)
 {
     if (str)
-    {
         syscall(SYS_WRITE, 1, (uint64_t)str, strlen(str));
-    }
 }
 
-/* Helper to write to stderr using syscall */
+/* Write to stderr (fd 2) */
 static void write_stderr(const char *str)
 {
     if (str)
-    {
         syscall(SYS_WRITE, 2, (uint64_t)str, strlen(str));
-    }
 }
 
-/* Execute a single command using debug_bins/ */
+/* Echo single char to stdout - keeps typewriter/cursor in sync (OSDev-style) */
+static void echo_char(char c)
+{
+    syscall(SYS_WRITE, 1, (uint64_t)&c, 1);
+}
+
+/* Sanitize input: remove control chars except tab, newline, carriage return (OSDev) */
+static void sanitize_line(char *line)
+{
+    char *read = line;
+    char *write = line;
+
+    while (*read)
+    {
+        if ((*read >= 0x20 && *read < 0x7F) || *read == '\t' || *read == '\n' || *read == '\r')
+            *write++ = *read;
+        read++;
+    }
+    *write = '\0';
+}
+
+/* Check if line is empty or whitespace-only (OSDev) */
+static bool is_empty_line(const char *line)
+{
+    while (*line)
+    {
+        if (*line != ' ' && *line != '\t' && *line != '\n' && *line != '\r')
+            return false;
+        line++;
+    }
+    return true;
+}
+
+/* Parse args to argc/argv - wrapper for debug_parse_args */
+static int parse_args(char *line, int *argc_out, char **argv_out, int max_args)
+{
+    return debug_parse_args(line, argc_out, argv_out, max_args);
+}
+
+/* Execute a single command */
 static void execute_single_command(const char *cmd_line)
 {
     if (!cmd_line || cmd_line[0] == '\0')
         return;
-    
+
     char buf[512];
     size_t i = 0;
     const char *p = cmd_line;
-    
-    /* Copy command line, stop at newline or pipe */
+
     while (i < sizeof(buf) - 1 && *p && *p != '\n' && *p != '|')
         buf[i++] = *p++;
     buf[i] = '\0';
-    
-    /* Parse arguments to argc/argv format */
-    char *argv[64];
+
     int argc = 0;
-    if (debug_parse_args(buf, &argc, argv, 64) < 0 || argc == 0)
-    {
+    char *argv[64];
+    if (parse_args(buf, &argc, argv, 64) < 0 || argc == 0)
         return;
-    }
-    
+
     const char *cmd_name = argv[0];
-    
-    /* Special built-in commands (shell functionality, not user commands) */
+
     if (strcmp(cmd_name, "help") == 0)
     {
         write_stdout("IR0 DebShell - Available commands:\n");
-        write_stdout("  (All commands are loaded from debug_bins/)\n\n");
-        
-        /* List all registered commands - use extern from registry */
+        write_stdout("  (All commands from debug_bins/)\n\n");
         extern struct debug_command *debug_commands[];
         for (int i = 0; debug_commands[i] != NULL; i++)
         {
@@ -140,91 +109,82 @@ static void execute_single_command(const char *cmd_line)
                               debug_commands[i]->usage,
                               debug_commands[i]->description);
             if (len > 0 && len < (int)sizeof(line))
-            {
                 write_stdout(line);
-            }
         }
         return;
     }
-    
+
     if (strcmp(cmd_name, "clear") == 0)
     {
         cmd_clear();
         return;
     }
-    
+
     if (strcmp(cmd_name, "exit") == 0)
     {
-        /* Exit shell using syscall */
         syscall(SYS_EXIT, 0, 0, 0);
         __builtin_unreachable();
     }
-    
-    /* Try to find command in debug_bins/ */
+
     struct debug_command *cmd = debug_find_command(cmd_name);
     if (cmd)
     {
-        /* Execute command using syscalls only (simulates ring 3) */
-        int result = cmd->handler(argc, argv);
-        (void)result;  /* Return code can be used later for error handling */
+        cmd->handler(argc, argv);
         return;
     }
-    
-    /* Command not found */
+
     write_stderr("Unknown command: ");
     write_stderr(cmd_name);
     write_stderr("\nType 'help' for available commands\n");
 }
 
-/* Execute command (handles pipes if needed) */
+/* Execute command (handles pipes) */
 static void execute_command(const char *cmd)
 {
     if (!cmd || *cmd == '\0')
         return;
-    
+
     char cmd_copy[512];
     size_t len = 0;
     const char *src = cmd;
     while (len < sizeof(cmd_copy) - 1 && *src && *src != '\n')
         cmd_copy[len++] = *src++;
     cmd_copy[len] = '\0';
-    
-    /* Simple pipe support (can be enhanced later) */
+
+    sanitize_line(cmd_copy);
+
+    if (is_empty_line(cmd_copy))
+        return;
+
     char *pipe_pos = strchr(cmd_copy, '|');
     if (!pipe_pos)
     {
         execute_single_command(cmd_copy);
         return;
     }
-    
+
     *pipe_pos = '\0';
     char *first_cmd = cmd_copy;
     char *second_cmd = pipe_pos + 1;
-    
-    /* Skip whitespace */
+
     while (*first_cmd == ' ' || *first_cmd == '\t')
         first_cmd++;
     while (*second_cmd == ' ' || *second_cmd == '\t')
         second_cmd++;
-    
+
     if (*first_cmd == '\0' || *second_cmd == '\0')
     {
         write_stderr("Invalid pipe syntax\n");
         return;
     }
-    
-    /*
-     * Implement pipe: cmd1 | cmd2
-     * Create pipe, fork left child (stdout -> pipe write), fork right child
-     * (stdin <- pipe read), wait for both.
-     */
+
     int pipefd[2];
     if (syscall(SYS_PIPE, (uint64_t)pipefd, 0, 0) != 0)
     {
         write_stderr("pipe() failed\n");
         return;
     }
-    
+
     int pid_left = syscall(SYS_FORK, 0, 0, 0);
     if (pid_left < 0)
     {
@@ -233,10 +193,9 @@ static void execute_command(const char *cmd)
         syscall(SYS_CLOSE, pipefd[1], 0, 0);
         return;
     }
-    
+
     if (pid_left == 0)
     {
-        /* Left child: redirect stdout to pipe write end */
         syscall(SYS_DUP2, pipefd[1], 1, 0);
         syscall(SYS_CLOSE, pipefd[0], 0, 0);
         syscall(SYS_CLOSE, pipefd[1], 0, 0);
@@ -244,7 +203,7 @@ static void execute_command(const char *cmd)
         syscall(SYS_EXIT, 0, 0, 0);
         __builtin_unreachable();
     }
-    
+
     int pid_right = syscall(SYS_FORK, 0, 0, 0);
     if (pid_right < 0)
     {
@@ -254,10 +213,9 @@ static void execute_command(const char *cmd)
         write_stderr("fork() failed\n");
         return;
     }
-    
+
     if (pid_right == 0)
     {
-        /* Right child: redirect stdin from pipe read end */
         syscall(SYS_DUP2, pipefd[0], 0, 0);
         syscall(SYS_CLOSE, pipefd[0], 0, 0);
         syscall(SYS_CLOSE, pipefd[1], 0, 0);
@@ -265,70 +223,88 @@ static void execute_command(const char *cmd)
         syscall(SYS_EXIT, 0, 0, 0);
         __builtin_unreachable();
     }
-    
-    /* Parent: close pipe ends and wait for both children */
+
     syscall(SYS_CLOSE, pipefd[0], 0, 0);
     syscall(SYS_CLOSE, pipefd[1], 0, 0);
     syscall(SYS_WAITPID, pid_left, 0, 0);
     syscall(SYS_WAITPID, pid_right, 0, 0);
 }
 
-/* Main shell entry point */
+void cmd_clear(void)
+{
+    console_clear(0x0F);
+    extern int cursor_pos;
+    cursor_pos = 0;
+    write_stdout("IR0 DebShell v0.0.1\nType 'help' for commands\n\n");
+}
+
+void vga_print(const char *str, uint8_t color)
+{
+    if (!str)
+        return;
+    typewriter_vga_print(str, color);
+}
+
 void shell_entry(void)
 {
-    char input[256];
+    char input[INPUT_MAX + 1];
     int input_pos = 0;
-    
-    vga_clear();
-    write_stdout("IR0 DebShell v0.0.1 pre-release 1\n");
-    write_stdout("Type 'help' for available commands\n\n");
-    
+
+    cmd_clear();
+
     for (;;)
     {
-        /* Print prompt using syscall */
-        write_stdout("~$ ");
-        
-        /* Read input character by character using syscalls */
+        write_stdout(PROMPT);
+
         input_pos = 0;
+        input[0] = '\0';
+
         while (1)
         {
-            char c;
-            int64_t n = syscall(SYS_READ, 0, (uint64_t)&c, 1);
+            char buf[BATCH_READ];
+            int64_t n = syscall(SYS_READ, 0, (uint64_t)buf, sizeof(buf));
             if (n <= 0)
                 continue;
-            /* Scroll keys: ESC + 0x01 = Page Up, ESC + 0x02 = Page Down (syscall only) */
-            if (c == 0x1B)
+
+            for (int i = 0; i < n; i++)
             {
-                n = syscall(SYS_READ, 0, (uint64_t)&c, 1);
-                if (n > 0 && c == 0x01)
-                    syscall(SYS_CONSOLE_SCROLL, 1, 0, 0);
-                else if (n > 0 && c == 0x02)
-                    syscall(SYS_CONSOLE_SCROLL, -1, 0, 0);
-                continue;
-            }
-            if (c == '\n')
-            {
-                vga_putchar('\n', 0x0F);
-                input[input_pos] = '\0';
-                break;
-            }
-            else if (c == '\b' || c == 127)
-            {
-                if (input_pos > 0)
+                char c = buf[i];
+
+                if (c == 0x1B && i + 1 < n)
                 {
-                    input_pos--;
-                    vga_putchar('\b', 0x0F);
+                    if (buf[i + 1] == 0x01)
+                        syscall(SYS_CONSOLE_SCROLL, 1, 0, 0);
+                    else if (buf[i + 1] == 0x02)
+                        syscall(SYS_CONSOLE_SCROLL, -1, 0, 0);
+                    i++;
+                    continue;
+                }
+                if (c == 0x1B)
+                    continue;
+
+                if (c == '\n')
+                {
+                    echo_char('\n');
+                    input[input_pos] = '\0';
+                    goto line_done;
+                }
+
+                if (c == '\b' || c == 127)
+                {
+                    if (input_pos > 0)
+                    {
+                        input_pos--;
+                        echo_char('\b');
+                    }
+                }
+                else if (c >= 32 && c < 127 && input_pos < INPUT_MAX)
+                {
+                    input[input_pos++] = c;
+                    echo_char(c);
                 }
             }
-            else if (c >= 32 && c < 127 && input_pos < 255)
-            {
-                input[input_pos++] = c;
-                vga_putchar(c, 0x0F);
-            }
         }
-        
-        /* Execute command */
+line_done:
         execute_command(input);
     }
 }
-

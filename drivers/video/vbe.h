@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* Diagnostic: 0=ok, 1=mb_null, 2=no_fb_flag, 3=bad_dims, 4=map_page_failed */
+extern int vbe_fail_reason;
+
 /* Initialize from Multiboot info (call early, pass ebx). Returns 0 on success. */
 int vbe_init_from_multiboot(uint32_t multiboot_info);
 
@@ -35,6 +38,12 @@ uint32_t vbe_get_fb_size(void);
 
 // Check if VBE is available
 bool vbe_is_available(void);
+
+/*
+ * vbe_rgb_to_pixel - Convert R,G,B (0-255) to framebuffer pixel format.
+ * Uses multiboot color_info for correct BGR/RGB layout.
+ */
+uint32_t vbe_rgb_to_pixel(uint8_t r, uint8_t g, uint8_t b);
 
 // Color macros (RGB)
 #define VBE_RGB(r, g, b) (((r) << 16) | ((g) << 8) | (b))
