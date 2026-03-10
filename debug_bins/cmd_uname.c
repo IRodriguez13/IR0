@@ -97,9 +97,11 @@ static int cmd_uname_handler(int argc, char **argv)
         debug_write_err(option);
         debug_write_err("\n");
         debug_write_err("Try 'uname --help' for more information\n");
+        debug_serial_fail("uname", "option");
         return 1;
     }
     
+    debug_serial_ok("uname");
     return 0;
 }
 

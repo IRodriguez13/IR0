@@ -19,6 +19,7 @@ static int cmd_mkswap_handler(int argc, char **argv)
     {
         debug_writeln_err("Usage: mkswap <file> [size_mb]");
         debug_writeln_err("       Default size is 64 MB if not specified");
+        debug_serial_fail("mkswap", "usage");
         return 1;
     }
 
@@ -34,11 +35,13 @@ static int cmd_mkswap_handler(int argc, char **argv)
         if (size_mb == 0)
         {
             debug_writeln_err("mkswap: Invalid size specified");
+            debug_serial_fail("mkswap", "size");
             return 1;
         }
         if (size_mb > 1024)
         {
             debug_writeln_err("mkswap: Maximum swap file size is 1024 MB");
+            debug_serial_fail("mkswap", "size_max");
             return 1;
         }
     }
@@ -50,6 +53,7 @@ static int cmd_mkswap_handler(int argc, char **argv)
     if (ctl_fd < 0)
     {
         debug_writeln_err("mkswap: cannot open /dev/swap");
+        debug_serial_fail("mkswap", "open");
         return 1;
     }
 
@@ -76,10 +80,12 @@ static int cmd_mkswap_handler(int argc, char **argv)
             case EACCES: debug_writeln_err("(Permission denied)"); break;
             default:     debug_writeln_err("(unknown error)"); break;
         }
+        debug_serial_fail("mkswap", "ioctl");
         return 1;
     }
 
     debug_writeln("Swap file created successfully.");
+    debug_serial_ok("mkswap");
     debug_write("To enable: swapon ");
     debug_writeln(swap_file);
     return 0;

@@ -45,6 +45,9 @@ int proc_stat(const char *path, stat_t *st);
 off_t proc_get_offset(int fd);
 void proc_set_offset(int fd, off_t offset);
 
+/* /proc/pid directory */
+int proc_getdents(int fd, void *dirent_buf, size_t count);
+
 /* /proc entry generators */
 int proc_meminfo_read(char *buf, size_t count);
 int proc_status_read(char *buf, size_t count, pid_t pid);

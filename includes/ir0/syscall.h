@@ -9,66 +9,68 @@
 #include <ir0/types.h>
 #include <ir0/fcntl.h>
 #include <ir0/poll.h>
+#include <ir0/time.h>
 #include <string.h>
 
 /* Basic types */
 typedef uint32_t mode_t;
 
 /**
- * POSIX-compliant System Call Numbers
- * 
- * This enum contains only standard POSIX syscalls, following the
- * principle of "everything is a file" where possible. Custom operations
- * should be accessed through /proc, /dev, or /sys filesystems instead
- * of custom syscalls.
- * 
- * Numbers follow standard POSIX/Linux syscall conventions for compatibility.
+ * POSIX-compliant System Call Numbers (Linux/musl ABI)
+ *
+ * Numbers follow Linux x86-64 syscall conventions for musl compatibility.
+ * See <ir0/bits/syscall_linux.h> for __NR_* definitions.
  */
-typedef enum {
-    /* Process management - POSIX */
-    SYS_EXIT = 0,
-    SYS_FORK = 1,
-    SYS_READ = 2,
-    SYS_WRITE = 3,
-    SYS_OPEN = 4,
-    SYS_CLOSE = 5,
-    SYS_WAITPID = 6,
-    SYS_CREAT = 7,      /* POSIX but deprecated, use open(O_CREAT) */
-    SYS_LINK = 8,
-    SYS_UNLINK = 9,
-    SYS_EXEC = 10,      /* execve in POSIX */
-    SYS_CHDIR = 11,
-    SYS_GETPID = 12,
-    SYS_MOUNT = 13,     /* Linux-specific but essential for filesystems */
-    
-    /* File operations - POSIX */
-    SYS_MKDIR = 14,
-    SYS_RMDIR = 15,
-    SYS_CHMOD = 16,
-    SYS_LSEEK = 17,
-    SYS_GETCWD = 18,
-    SYS_STAT = 19,
-    SYS_FSTAT = 20,
-    SYS_DUP2 = 21,
-    
-    /* Memory management - POSIX */
-    SYS_BRK = 22,       /* Legacy but POSIX-compliant */
-    SYS_MMAP = 23,
-    SYS_MUNMAP = 24,
-    SYS_MPROTECT = 25,
-    
-    /* Process info - POSIX */
-    SYS_GETPPID = 26,
-    SYS_KILL = 27,      /* Signal handling - POSIX */
-    SYS_SIGACTION = 28, /* Signal action - POSIX */
-    SYS_PIPE = 29,      /* Pipe creation - POSIX */
-    SYS_SIGRETURN = 30, /* Return from signal handler - POSIX */
-    SYS_IOCTL = 31,     /* Device I/O control - POSIX */
-    SYS_GETDENTS = 32,  /* Get directory entries - Linux/POSIX */
-    SYS_CONSOLE_SCROLL = 33,  /* Console scrollback (Page Up/Down); arg1 = delta lines */
-    SYS_POLL = 34,      /* Wait for events on file descriptors */
-    SYS_CHOWN = 35,     /* Change file owner and group - POSIX */
-} syscall_num_t;
+#include <ir0/bits/syscall_linux.h>
+
+/* Map SYS_* to Linux __NR_* for backward compatibility */
+#define SYS_READ         __NR_read
+#define SYS_WRITE        __NR_write
+#define SYS_OPEN         __NR_open
+#define SYS_CLOSE        __NR_close
+#define SYS_STAT         __NR_stat
+#define SYS_FSTAT        __NR_fstat
+#define SYS_LSTAT        __NR_lstat
+#define SYS_POLL         __NR_poll
+#define SYS_LSEEK        __NR_lseek
+#define SYS_MMAP         __NR_mmap
+#define SYS_MPROTECT     __NR_mprotect
+#define SYS_MUNMAP       __NR_munmap
+#define SYS_BRK          __NR_brk
+#define SYS_SIGACTION    __NR_rt_sigaction
+#define SYS_SIGRETURN    __NR_rt_sigreturn
+#define SYS_IOCTL        __NR_ioctl
+#define SYS_PIPE         __NR_pipe
+#define SYS_DUP2         __NR_dup2
+#define SYS_NANOSLEEP    __NR_nanosleep
+#define SYS_GETPID       __NR_getpid
+#define SYS_EXEC         __NR_execve
+#define SYS_EXIT         __NR_exit
+#define SYS_WAITPID      __NR_wait4
+#define SYS_KILL         __NR_kill
+#define SYS_GETCWD       __NR_getcwd
+#define SYS_CHDIR        __NR_chdir
+#define SYS_MKDIR        __NR_mkdir
+#define SYS_RMDIR        __NR_rmdir
+#define SYS_LINK         __NR_link
+#define SYS_UNLINK       __NR_unlink
+#define SYS_RENAME       __NR_rename
+#define SYS_ACCESS       __NR_access
+#define SYS_DUP          __NR_dup
+#define SYS_UNAME        __NR_uname
+#define SYS_CHMOD        __NR_chmod
+#define SYS_CHOWN        __NR_chown
+#define SYS_GETTIMEOFDAY __NR_gettimeofday
+#define SYS_GETPPID      __NR_getppid
+#define SYS_GETDENTS     __NR_getdents
+#define SYS_MOUNT        __NR_mount
+#define SYS_FORK         __NR_fork
+#define SYS_CONSOLE_SCROLL __NR_console_scroll
+
+/* creat: use open(O_CREAT|O_WRONLY|O_TRUNC, mode) - no separate Linux syscall */
+#define SYS_CREAT        __NR_open
+
+typedef int syscall_num_t;
 
 /* Virtual filesystem paths for file operations */
 #define VFS_PROC_PATH     "/proc"
@@ -86,6 +88,7 @@ typedef enum {
 #define DEV_DISK           "/dev/disk"
 #define DEV_KMSG           "/dev/kmsg"
 #define DEV_FB0            "/dev/fb0"
+#define DEV_EVENTS0        "/dev/events0"
 
 /* Process information files in /proc */
 #define PROC_STATUS        "/proc/self/status"
@@ -201,6 +204,15 @@ static inline int64_t ir0_exec(const char *path)
     return syscall1(SYS_EXEC, (int64_t)path);
 }
 
+/**
+ * ir0_execve - Execute program with argv/envp (POSIX execve)
+ * For Doom: argv = {"doom", "doom1.wad", NULL}, envp = {NULL}
+ */
+static inline int64_t ir0_execve(const char *path, char *const argv[], char *const envp[])
+{
+    return syscall3(SYS_EXEC, (int64_t)path, (int64_t)argv, (int64_t)envp);
+}
+
 static inline int64_t ir0_waitpid(int64_t pid, int *status)
 {
     return syscall2(SYS_WAITPID, pid, (int64_t)status);
@@ -210,6 +222,12 @@ static inline int64_t ir0_waitpid(int64_t pid, int *status)
 static inline int64_t ir0_open(const char *pathname, int flags, mode_t mode)
 {
     return syscall3(SYS_OPEN, (int64_t)pathname, flags, mode);
+}
+
+/* creat: deprecated POSIX; use open(O_CREAT|O_WRONLY|O_TRUNC, mode) */
+static inline int64_t ir0_creat(const char *pathname, mode_t mode)
+{
+    return syscall3(SYS_OPEN, (int64_t)pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
 static inline int64_t ir0_close(int fd)
@@ -300,6 +318,21 @@ static inline int64_t ir0_link(const char *oldpath, const char *newpath)
     return syscall2(SYS_LINK, (int64_t)oldpath, (int64_t)newpath);
 }
 
+static inline int64_t ir0_rename(const char *oldpath, const char *newpath)
+{
+    return syscall2(SYS_RENAME, (int64_t)oldpath, (int64_t)newpath);
+}
+
+static inline int64_t ir0_access(const char *pathname, int mode)
+{
+    return syscall2(SYS_ACCESS, (int64_t)pathname, mode);
+}
+
+static inline int64_t ir0_dup(int oldfd)
+{
+    return syscall1(SYS_DUP, oldfd);
+}
+
 /* Advanced I/O */
 static inline int64_t ir0_dup2(int oldfd, int newfd)
 {
@@ -338,22 +371,34 @@ static inline int64_t ir0_rm(const char *path)
     return ir0_unlink(path);
 }
 
-/* Directory creation */
+/* Directory creation (POSIX mkdir - use SYS_MKDIR directly, like OSDev) */
 static inline int64_t ir0_mkdir(const char *path, mode_t mode)
 {
-    return ir0_open(path, O_CREAT | O_DIRECTORY, mode);
+    return syscall2(SYS_MKDIR, (int64_t)path, (int64_t)mode);
 }
 
-/* Directory removal */
+/* Directory removal (POSIX rmdir - removes empty dir only) */
 static inline int64_t ir0_rmdir(const char *path)
 {
-    return ir0_unlink(path);
+    return syscall1(SYS_RMDIR, (int64_t)path);
 }
 
 /* poll - Wait for events on file descriptors */
 static inline int64_t ir0_poll(struct pollfd *fds, unsigned int nfds, int timeout_ms)
 {
     return syscall3(SYS_POLL, (int64_t)fds, (int64_t)nfds, (int64_t)timeout_ms);
+}
+
+/* nanosleep - Sleep for specified time (POSIX, OSDev Time And Date) */
+static inline int64_t ir0_nanosleep(const struct timespec *req, struct timespec *rem)
+{
+    return syscall2(SYS_NANOSLEEP, (int64_t)req, (int64_t)rem);
+}
+
+/* gettimeofday - Get current time (POSIX, OSDev Time And Date) */
+static inline int64_t ir0_gettimeofday(struct timeval *tv, void *tz)
+{
+    return syscall2(SYS_GETTIMEOFDAY, (int64_t)tv, (int64_t)tz);
 }
 
 /* Network information via /sys filesystem */

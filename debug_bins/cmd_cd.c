@@ -21,10 +21,12 @@ static int cmd_cd_handler(int argc, char **argv)
     int64_t result = syscall(SYS_CHDIR, (uint64_t)dirname, 0, 0);
     if (result < 0)
     {
-        debug_write_err("cd: failed\n");
+        debug_perror("cd", dirname, (int)result);
+        debug_serial_fail_err("cd", "chdir", (int)(-result));
         return 1;
     }
     
+    debug_serial_ok("cd");
     return 0;
 }
 

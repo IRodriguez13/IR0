@@ -23,7 +23,7 @@ static int read_and_print(const char *path)
         debug_write_err("blue: cannot open ");
         debug_write_err(path);
         debug_write_err("\n");
-        return 1;
+        return 1;  /* Caller logs via cmd_blue_handler */
     }
     char buf[BUF_SIZE];
     int64_t nr = ir0_read(fd, buf, sizeof(buf) - 1);
@@ -41,6 +41,7 @@ static int cmd_blue_handler(int argc, char **argv)
     if (argc < 2)
     {
         debug_write_err("Usage: blue adapter | session | neigh\n");
+        debug_serial_fail("blue", "usage");
         return 1;
     }
 
@@ -49,22 +50,38 @@ static int cmd_blue_handler(int argc, char **argv)
     {
         debug_write("1: hci0:\n   address: ");
         if (read_and_print("/sys/class/bluetooth/hci0/address") != 0)
+        {
+            debug_serial_fail("blue", "open");
             return 1;
+        }
         debug_write("   state: ");
-        return read_and_print("/sys/class/bluetooth/hci0/state");
+        if (read_and_print("/sys/class/bluetooth/hci0/state") != 0)
+        {
+            debug_serial_fail("blue", "open");
+            return 1;
+        }
+        debug_serial_ok("blue");
+        return 0;
     }
     if (strcmp(sub, "session") == 0)
     {
-        return read_and_print("/sys/class/bluetooth/sessions");
+        int r = read_and_print("/sys/class/bluetooth/sessions");
+        if (r == 0) debug_serial_ok("blue");
+        else debug_serial_fail("blue", "open");
+        return r;
     }
     if (strcmp(sub, "neigh") == 0)
     {
-        return read_and_print("/sys/class/bluetooth/topology/neighbors");
+        int r = read_and_print("/sys/class/bluetooth/topology/neighbors");
+        if (r == 0) debug_serial_ok("blue");
+        else debug_serial_fail("blue", "open");
+        return r;
     }
 
     debug_write_err("blue: unknown subcommand '");
     debug_write_err(sub);
     debug_write_err("'\n");
+    debug_serial_fail("blue", "subcmd");
     return 1;
 }
 

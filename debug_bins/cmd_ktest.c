@@ -14,6 +14,7 @@ static int cmd_ktest_handler(int argc, char **argv)
 	(void)argv;
 	debug_writeln("[ktest] Running kernel test suite...");
 	kernel_test_run_all();
+	debug_serial_ok("ktest");
 	return 0;
 }
 

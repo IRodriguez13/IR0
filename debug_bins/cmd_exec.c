@@ -13,6 +13,7 @@ static int cmd_exec_handler(int argc, char **argv)
     if (argc < 2)
     {
         debug_write_err("Usage: exec <filename>\n");
+        debug_serial_fail("exec", "usage");
         return 1;
     }
     
@@ -23,10 +24,12 @@ static int cmd_exec_handler(int argc, char **argv)
     if (result < 0)
     {
         debug_write_err("exec: failed\n");
+        debug_serial_fail("exec", "kexecve");
         return 1;
     }
     
-    /* Should not reach here if exec succeeds */
+    /* Should not reach here if exec succeeds (spawn returns PID) */
+    debug_serial_ok("exec");
     return 0;
 }
 

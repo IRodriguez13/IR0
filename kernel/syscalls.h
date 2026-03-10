@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <kernel/process.h>
 #include <ir0/poll.h>
+#include <ir0/time.h>
 
 /* Forward declarations */
 struct stat;
@@ -60,6 +61,8 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype);
 int64_t sys_getdents(int fd, void *dirent, size_t count);
 int64_t sys_poll(struct pollfd *fds, unsigned int nfds, int timeout_ms);
 int64_t sys_pipe(int pipefd[2]);
+int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem);
+int64_t sys_gettimeofday(struct timeval *tv, void *tz);
 
 /* Memory management */
 int64_t sys_brk(void *addr);
@@ -74,3 +77,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 
 /* Poll: desbloquea procesos que esperan en poll() cuando hay datos o timeout */
 void poll_wake_check(void);
+/* nanosleep: desbloquea procesos cuyo tiempo de sueño ha expirado */
+void sleep_wake_check(void);
+/* read(0): desbloquea procesos esperando teclado cuando hay datos */
+void stdin_wake_check(void);

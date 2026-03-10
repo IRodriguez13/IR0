@@ -44,6 +44,14 @@
 /* Maximum signal number */
 #define _NSIG 32
 
+/* sigset_t - signal set for rt_sigprocmask (Linux: 64-bit mask) */
+typedef uint64_t sigset_t;
+
+/* rt_sigprocmask how argument */
+#define SIG_BLOCK     0  /* Add signals to mask */
+#define SIG_UNBLOCK   1  /* Remove signals from mask */
+#define SIG_SETMASK   2  /* Replace mask */
+
 /* Special signal handler values */
 #define SIG_DFL ((void (*)(int))0)  /* Default handler */
 #define SIG_IGN ((void (*)(int))1)  /* Ignore signal */

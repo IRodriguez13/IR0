@@ -18,6 +18,7 @@ static int cmd_mount_handler(int argc, char **argv)
         if (fd < 0)
         {
             debug_writeln_err("mount: cannot open /proc/mounts");
+            debug_serial_fail("mount", "open_proc");
             return -1;
         }
         char buf[MOUNT_BUF_SIZE];
@@ -55,11 +56,13 @@ static int cmd_mount_handler(int argc, char **argv)
             }
             p = eol + 1;
         }
+        debug_serial_ok("mount");
         return 0;
     }
     if (argc < 3)
     {
         debug_write_err("Usage: mount [DEV MOUNTPOINT [fstype]]\n");
+        debug_serial_fail("mount", "usage");
         return 1;
     }
     const char *dev = argv[1];
@@ -70,8 +73,10 @@ static int cmd_mount_handler(int argc, char **argv)
     if (result < 0)
     {
         debug_write_err("mount: failed\n");
+        debug_serial_fail("mount", "vfs");
         return 1;
     }
+    debug_serial_ok("mount");
     return 0;
 }
 

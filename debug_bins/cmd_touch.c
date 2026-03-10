@@ -14,6 +14,7 @@ static int cmd_touch_handler(int argc, char **argv)
     if (argc < 2)
     {
         debug_write_err("Usage: touch FILE\n");
+        debug_serial_fail("touch", "usage");
         return 1;
     }
     
@@ -23,11 +24,13 @@ static int cmd_touch_handler(int argc, char **argv)
     int fd = syscall(SYS_OPEN, (uint64_t)filename, O_WRONLY | O_CREAT, 0644);
     if (fd < 0)
     {
-        debug_write_err("touch: failed\n");
+        debug_perror("touch", filename, (int)fd);
+        debug_serial_fail_err("touch", "open", (int)(-fd));
         return 1;
     }
     
     syscall(SYS_CLOSE, fd, 0, 0);
+    debug_serial_ok("touch");
     return 0;
 }
 

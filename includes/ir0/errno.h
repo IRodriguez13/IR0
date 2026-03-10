@@ -50,6 +50,7 @@
 #define ENAMETOOLONG 36  /* File name too long */
 #define ENOSYS  38  /* Function not implemented */
 #define ENOTSUPP 95  /* Operation not supported */
+#define ENOTEMPTY 39 /* Directory not empty (Linux errno 39) */
 
 /* STANDARD FILE DESCRIPTORS                                                */
 

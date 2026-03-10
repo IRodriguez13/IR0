@@ -258,11 +258,14 @@ void rr_schedule_next(void)
 		attempts++;
 	}
 	
-	/* If no runnable process found, return */
+	/* If no runnable process found (e.g. all blocked on read/poll) */
 	if (!rr_current || !next || next->state == PROCESS_ZOMBIE || next->state == PROCESS_BLOCKED)
 	{
-		/* No runnable processes - halt CPU */
-		current_process = NULL;
+		/*
+		 * HLT until interrupt (keyboard, timer). Caller (e.g. sys_read) will
+		 * retry. Do NOT set current_process = NULL - we return to the caller
+		 * which is still in prev's context; prev must remain current.
+		 */
 		__asm__ volatile("hlt");
 		return;
 	}

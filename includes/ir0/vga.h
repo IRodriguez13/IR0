@@ -7,10 +7,13 @@
 #define LOG_ERR(msg)   print_error("[X] " msg "\n")
 
 
-// Configuración VGA Text Mode
+/* Cursor compartido para salida coherente entre print() y typewriter/shell */
+extern int cursor_pos;
+
+/* Configuración VGA Text Mode */
 #define VGA_WIDTH  80
 #define VGA_HEIGHT 25
-#define VGA_MEMORY 0xB8000  // Dirección de memoria VGA donde escribimos en pantalla
+#define VGA_MEMORY 0xB8000  /* Dirección de memoria VGA donde escribimos en pantalla */
 
 // Paleta de colores VGA (16 colores predefinidos)
 #define VGA_COLOR_BLACK      0

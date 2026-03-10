@@ -12,12 +12,17 @@
 ; */
 
 ; Multiboot header
+; flags bit 2 = request graphics mode (mode_type, width, height, depth)
 
 section .multiboot
 align 4
     dd 0x1BADB002               ; Magic
-    dd 0x00                     ; Flags
-    dd -(0x1BADB002 + 0x00)     ; Checksum
+    dd 0x04                     ; Flags: bit 2 = graphics mode
+    dd -(0x1BADB002 + 0x04)      ; Checksum
+    dd 0                         ; mode_type: 0 = linear graphics
+    dd 1024                      ; width (pixels)
+    dd 768                       ; height (pixels)
+    dd 32                        ; depth (bpp)
 
 
 ; Stack
@@ -107,16 +112,28 @@ modo_64bit:
     jmp .halt
 
 ; page tables in early boot
+; Framebuffer: GRUB puts it at 0xFD000000 (e.g. 1280x800x32 = 4MB).
+; 0xFD000000: PML4=0, PDP=3, PD=0x1E8. Map 2x2MB pages.
 section .data
 align 4096
 pml4_minimal:
-    dq pdp_minimal + 0x7  ; Present + RW + User
+    dq pdp_minimal + 0x7   ; Present + RW + User
     times 511 dq 0
 
 align 4096
 pdp_minimal:
-    dq pd_minimal + 0x7   ; Present + RW + User
-    times 511 dq 0
+    dq pd_minimal + 0x7   ; Present + RW + User (0-2MB)
+    dq 0
+    dq 0
+    dq pd_fb + 0x7        ; Present + RW + User (framebuffer 0xFD000000, PDP idx 3)
+    times 508 dq 0
+
+align 4096
+pd_fb:
+    times 0x1E8 dq 0
+    dq 0xFD000000 + 0x87   ; 2MB page at 0xFD000000
+    dq 0xFD200000 + 0x87   ; 2MB page at 0xFD200000 (4MB total)
+    times (511 - 0x1E9) dq 0
 
 align 4096
 pd_minimal:

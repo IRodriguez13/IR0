@@ -48,7 +48,7 @@ typedef struct minix_superblock
 } minix_superblock_t;
 
 
-#define MINIX_IFMT 00170000  // Tipo de archivo
+#define MINIX_IFMT 0170000   /* File type mask (POSIX-compatible) */
 #define MINIX_IFDIR 0040000  // Directorio
 #define MINIX_IFCHR 0020000  // Dispositivo de caracteres
 #define MINIX_IFBLK 0060000  // Dispositivo de bloques

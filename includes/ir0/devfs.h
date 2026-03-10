@@ -114,7 +114,8 @@ struct audio_format {
 #define IPC_GET_CHANNEL_ID  0x5003
 
 /* Framebuffer (OSDev /dev/fb0, Linux-compatible ioctl) */
-#define FBIOGET_VSCREENINFO 0x6001
+#define FBIOGET_VSCREENINFO 0x4600  /* Linux uapi/fb.h */
+#define FBIOGET_FSCREENINFO 0x4602
 struct fb_var_screeninfo {
     uint32_t xres;           /* visible resolution */
     uint32_t yres;
@@ -145,6 +146,29 @@ struct fb_var_screeninfo {
     uint32_t rotate;
     uint32_t colorspace;
 };
+
+/* Linux fb_fix_screeninfo (for mmap: line_length, smem_len) */
+struct fb_fix_screeninfo {
+    char id[16];
+    unsigned long smem_start;
+    uint32_t smem_len;
+    uint32_t type;
+    uint32_t type_aux;
+    uint32_t visual;
+    uint16_t xpanstep;
+    uint16_t ypanstep;
+    uint16_t ywrapstep;
+    uint32_t line_length;
+    unsigned long mmio_start;
+    uint32_t mmio_len;
+    uint32_t accel;
+    uint16_t capabilities;
+    uint16_t reserved[2];
+};
+
+#define FB_TYPE_PACKED_PIXELS 0
+#define FB_VISUAL_TRUECOLOR 2
+#define FB_ACCEL_NONE 0
 
 /* Minimal fb info for IR0 (subset of above) */
 struct fb_info_min {

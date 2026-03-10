@@ -16,7 +16,12 @@ static int cmd_df_handler(int argc, char **argv)
     /* df is just cat /dev/disk */
     char *cat_argv[] = {"cat", "/dev/disk", NULL};
     extern struct debug_command cmd_cat;
-    return cmd_cat.handler(2, cat_argv);
+    int ret = cmd_cat.handler(2, cat_argv);
+    if (ret == 0)
+        debug_serial_ok("df");
+    else
+        debug_serial_fail("df", "cat");
+    return ret;
 }
 
 struct debug_command cmd_df = {

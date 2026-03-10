@@ -20,11 +20,13 @@ static int cmd_pwd_handler(int argc, char **argv)
     {
         debug_write(cwd);
         debug_write("\n");
+        debug_serial_ok("pwd");
         return 0;
     }
     else
     {
         debug_write_err("pwd: failed\n");
+        debug_serial_fail("pwd", "getcwd");
         return 1;
     }
 }

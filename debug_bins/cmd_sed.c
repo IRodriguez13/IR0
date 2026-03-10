@@ -15,6 +15,7 @@ static int cmd_sed_handler(int argc, char **argv)
     if (argc < 3)
     {
         debug_write_err("Usage: sed 's/OLD/NEW/' FILE\n");
+        debug_serial_fail("sed", "usage");
         return 1;
     }
     
@@ -25,6 +26,7 @@ static int cmd_sed_handler(int argc, char **argv)
     if (cmd[0] != 's' || cmd[1] != '/')
     {
         debug_write_err("sed: only 's/OLD/NEW/' substitution supported\n");
+        debug_serial_fail("sed", "syntax");
         return 1;
     }
     
@@ -33,6 +35,7 @@ static int cmd_sed_handler(int argc, char **argv)
     if (!slash)
     {
         debug_write_err("sed: invalid substitution syntax\n");
+        debug_serial_fail("sed", "syntax");
         return 1;
     }
     
@@ -41,6 +44,7 @@ static int cmd_sed_handler(int argc, char **argv)
     if (!end_slash)
     {
         debug_write_err("sed: invalid substitution syntax\n");
+        debug_serial_fail("sed", "syntax");
         return 1;
     }
     
@@ -51,6 +55,7 @@ static int cmd_sed_handler(int argc, char **argv)
     if (old_len == 0 || old_len >= 256 || new_len >= 256)
     {
         debug_write_err("sed: string too long\n");
+        debug_serial_fail("sed", "length");
         return 1;
     }
     
@@ -66,6 +71,7 @@ static int cmd_sed_handler(int argc, char **argv)
     if (fd < 0)
     {
         debug_write_err("sed: cannot open file\n");
+        debug_serial_fail("sed", "open");
         return 1;
     }
     
@@ -76,6 +82,7 @@ static int cmd_sed_handler(int argc, char **argv)
     if (bytes_read < 0)
     {
         debug_write_err("sed: read failed\n");
+        debug_serial_fail("sed", "read");
         return 1;
     }
     
@@ -108,6 +115,7 @@ static int cmd_sed_handler(int argc, char **argv)
         }
     }
     
+    debug_serial_ok("sed");
     return 0;
 }
 

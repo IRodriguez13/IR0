@@ -30,6 +30,8 @@
 #include "drivers/bluetooth/bt_device.h"
 #include <drivers/video/vbe.h>
 #include <ir0/copy_user.h>
+#include <ir0/input.h>
+#include <drivers/serial/serial.h>
 
 /* Device registry */
 #define MAX_DEV_NODES 64
@@ -1471,6 +1473,23 @@ static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
             return -EFAULT;
         return 0;
     }
+    if (request == FBIOGET_FSCREENINFO && arg)
+    {
+        struct fb_fix_screeninfo fix;
+        uint32_t w = 0, h = 0, bpp = 0;
+        vbe_get_info(&w, &h, &bpp);
+        memset(&fix, 0, sizeof(fix));
+        strncpy(fix.id, "IR0 VBE", sizeof(fix.id) - 1);
+        fix.smem_start = vbe_get_fb_phys();
+        fix.smem_len = vbe_get_fb_size();
+        fix.type = FB_TYPE_PACKED_PIXELS;
+        fix.visual = FB_VISUAL_TRUECOLOR;
+        fix.line_length = vbe_get_pitch();
+        fix.accel = FB_ACCEL_NONE;
+        if (copy_to_user(arg, &fix, sizeof(fix)) != 0)
+            return -EFAULT;
+        return 0;
+    }
     return -EINVAL;
 }
 
@@ -1483,6 +1502,71 @@ static const devfs_ops_t fb0_ops = {
 static devfs_node_t dev_fb0 = {
     .entry = { .name = "fb0", .mode = 0660, .device_id = 15 },
     .ops = &fb0_ops,
+    .ref_count = 0,
+};
+
+/*
+ * /dev/events0 - Linux evdev input events (keyboard for Doom)
+ * read: struct input_event (type, code, value)
+ */
+static int64_t dev_events0_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)offset;
+    if (count < sizeof(struct input_event))
+        return 0;
+    struct input_event ev_buf[16];
+    size_t max_ev = count / sizeof(struct input_event);
+    if (max_ev > 16)
+        max_ev = 16;
+    size_t n = input_event_read(ev_buf, max_ev);
+    if (n == 0)
+        return 0;
+    size_t bytes = n * sizeof(struct input_event);
+    if (copy_to_user(buf, ev_buf, bytes) != 0)
+        return -EFAULT;
+    return (int64_t)bytes;
+}
+
+static const devfs_ops_t events0_ops = {
+    .read = dev_events0_read,
+    .write = NULL,
+    .ioctl = NULL,
+};
+
+static devfs_node_t dev_events0 = {
+    .entry = { .name = "events0", .mode = 0660, .device_id = 16 },
+    .ops = &events0_ops,
+    .ref_count = 0,
+};
+
+/*
+ * /dev/serial - Write-only debug output to COM1 (for debug bins via syscalls)
+ */
+static int64_t dev_serial_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)buf; (void)count; (void)offset;
+    return 0;
+}
+
+static int64_t dev_serial_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
+{
+    (void)entry; (void)offset;
+    if (!buf)
+        return -EFAULT;
+    const char *p = (const char *)buf;
+    for (size_t i = 0; i < count; i++)
+        serial_putchar(p[i]);
+    return (int64_t)count;
+}
+
+static const devfs_ops_t serial_ops = {
+    .read = dev_serial_read,
+    .write = dev_serial_write,
+};
+
+static devfs_node_t dev_serial = {
+    .entry = { .name = "serial", .mode = 0220, .device_id = 19 },
+    .ops = &serial_ops,
     .ref_count = 0,
 };
 
@@ -1665,6 +1749,25 @@ devfs_node_t dev_tty = {
     .ref_count = 0
 };
 
+/* Alias de /dev/console para consistencia POSIX */
+devfs_node_t dev_stdin = {
+    .entry = { .name = "stdin", .mode = 0620, .device_id = 16 },
+    .ops = &console_ops,
+    .ref_count = 0
+};
+
+devfs_node_t dev_stdout = {
+    .entry = { .name = "stdout", .mode = 0620, .device_id = 17 },
+    .ops = &console_ops,
+    .ref_count = 0
+};
+
+devfs_node_t dev_stderr = {
+    .entry = { .name = "stderr", .mode = 0620, .device_id = 18 },
+    .ops = &console_ops,
+    .ref_count = 0
+};
+
 devfs_node_t dev_kmsg = {
     .entry = { .name = "kmsg", .mode = 0600, .device_id = 5 },
     .ops = &kmsg_ops,
@@ -1757,6 +1860,9 @@ int devfs_init(void)
     devfs_register_node(&dev_zero);
     devfs_register_node(&dev_console);
     devfs_register_node(&dev_tty);
+    devfs_register_node(&dev_stdin);
+    devfs_register_node(&dev_stdout);
+    devfs_register_node(&dev_stderr);
     devfs_register_node(&dev_kmsg);
     devfs_register_node(&dev_audio);
     devfs_register_node(&dev_mouse);
@@ -1775,6 +1881,8 @@ int devfs_init(void)
     devfs_register_node(&dev_urandom);
     devfs_register_node(&dev_full);
     devfs_register_node(&dev_fb0);
+    devfs_register_node(&dev_events0);
+    devfs_register_node(&dev_serial);
     devfs_register_node(&dev_ipc);
     devfs_register_node(&dev_bluetooth_hci0);
 

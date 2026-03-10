@@ -24,6 +24,7 @@ static int cmd_free_handler(int argc, char **argv)
     if (fd < 0)
     {
         debug_writeln_err("free: cannot open /proc/meminfo");
+        debug_serial_fail("free", "open");
         return -1;
     }
     char buf[BUF_SIZE];
@@ -48,6 +49,7 @@ static int cmd_free_handler(int argc, char **argv)
     snprintf(line, sizeof(line), "Mem:           %10llu %10llu %10llu\n",
              total, free_kb, used);
     debug_write(line);
+    debug_serial_ok("free");
     return 0;
 }
 

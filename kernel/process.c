@@ -11,6 +11,7 @@
 #include <ir0/kmem.h>
 #include <mm/paging.h>
 #include <drivers/serial/serial.h>
+#include <drivers/video/vbe.h>
 #include <ir0/permissions.h>
 #include <ir0/signals.h>
 #include <ir0/oops.h>
@@ -538,6 +539,23 @@ uint64_t create_process_page_directory(void)
 			pml4[0] = kernel_pml4[0];
 	}
 
+	/*
+	 * Explicitly map framebuffer into process so console output is visible.
+	 * Framebuffer is often above 32MB (e.g. 0xFD000000) and may not be
+	 * in the copied low-memory mapping.
+	 */
+	if (vbe_is_available() && vbe_get_fb_phys() != 0)
+	{
+		uint32_t fb_phys = vbe_get_fb_phys();
+		uint32_t fb_size = vbe_get_fb_size();
+		for (uint32_t off = 0; off < fb_size; off += 4096)
+		{
+			uint64_t p = fb_phys + off;
+			if (map_page_in_directory(pml4, p, p, PAGE_PRESENT | PAGE_RW) != 0)
+				break;
+		}
+	}
+
 	return (uint64_t)pml4;
 }
 
@@ -554,6 +572,7 @@ void process_init_fd_table(process_t *process)
 		process->fd_table[i].in_use = false;
 		process->fd_table[i].path[0] = '\0';
 		process->fd_table[i].flags = 0;
+		process->fd_table[i].fd_flags = 0;
 		process->fd_table[i].offset = 0;
 		process->fd_table[i].vfs_file = NULL;
 	}
