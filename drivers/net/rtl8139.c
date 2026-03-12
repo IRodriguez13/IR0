@@ -344,13 +344,10 @@ void rtl8139_send(void *data, size_t len)
 
 /**
  * rtl8139_check_tx_completion - Check if any TX descriptors have completed
-
-/**
- * rtl8139_check_tx_completion - Check if any TX descriptors have completed
- * 
+ *
  * This function checks all TX descriptors and updates the in-flight counter
  * when hardware finishes DMA (OWN bit changes from 1 to 0).
- * 
+ *
  * CRITICAL: This should be called periodically (from interrupt handler or polling)
  * to ensure the in-flight counter stays accurate.
  */
