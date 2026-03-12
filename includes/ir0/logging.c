@@ -52,35 +52,6 @@ static const char *get_level_string(log_level_t level)
     }
 }
 
-/* Helper function to format and print timestamp to VGA */
-static void print_timestamp(void)
-{
-    uint64_t uptime_ms = 0;
-    
-    /* Get uptime if clock system is initialized */
-    /* clock_system_init() is called after logging_init(), so initially this will be 0 */
-    /* Once clock is initialized, timestamps will be accurate */
-    uptime_ms = clock_get_uptime_milliseconds();
-    
-    /* Format: [SSSS.mmm] where S = seconds, m = milliseconds */
-    uint64_t seconds = uptime_ms / 1000;
-    uint32_t milliseconds = (uint32_t)(uptime_ms % 1000);
-    
-    print("[");
-    print_uint64(seconds);
-    print(".");
-    
-    /* Print milliseconds with leading zeros (3 digits) */
-    char ms_str[4];
-    ms_str[0] = '0' + (char)((milliseconds / 100) % 10);
-    ms_str[1] = '0' + (char)((milliseconds / 10) % 10);
-    ms_str[2] = '0' + (char)(milliseconds % 10);
-    ms_str[3] = '\0';
-    
-    print(ms_str);
-    print("] ");
-}
-
 /* Helper function to format and print timestamp to serial */
 static void serial_print_timestamp(void)
 {

@@ -70,16 +70,17 @@ uint16_t udp_checksum(const void *data, size_t len, ip4_addr_t src_ip, ip4_addr_
     pseudo_header.protocol = IPPROTO_UDP;
     pseudo_header.length = htons((uint16_t)len);
     
-    /* Sum pseudo-header */
-    const uint16_t *words = (const uint16_t *)&pseudo_header;
+    /* Sum pseudo-header (copy to aligned buffer to avoid -Waddress-of-packed-member) */
+    uint16_t aligned_pseudo[sizeof(pseudo_header) / 2];
+    memcpy(aligned_pseudo, &pseudo_header, sizeof(pseudo_header));
     uint32_t sum = 0;
-    for (size_t i = 0; i < sizeof(pseudo_header) / 2; i++)
+    for (size_t i = 0; i < sizeof(aligned_pseudo) / sizeof(aligned_pseudo[0]); i++)
     {
-        sum += ntohs(words[i]);
+        sum += ntohs(aligned_pseudo[i]);
     }
     
     /* Sum UDP packet */
-    words = (const uint16_t *)data;
+    const uint16_t *words = (const uint16_t *)data;
     for (size_t i = 0; i < len / 2; i++)
     {
         sum += ntohs(words[i]);

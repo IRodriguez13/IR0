@@ -68,7 +68,7 @@ static int32_t speaker_driver_init(void)
 }
 
 /* Play beep at specified frequency */
-static int32_t speaker_driver_beep(void *buf, size_t len)
+static int32_t speaker_driver_beep(const void *buf, size_t len)
 {
     if (!speaker_initialized)
     {
@@ -83,7 +83,7 @@ static int32_t speaker_driver_beep(void *buf, size_t len)
     }
 
     /* Extract frequency from buffer */
-    uint16_t frequency = *(uint16_t *)buf;
+    uint16_t frequency = *(const uint16_t *)buf;
 
     if (frequency == 0)
     {
