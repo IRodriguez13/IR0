@@ -48,8 +48,9 @@ int start_init_process(void)
 	/* Setup init process */
 	init->task.pid = 1;
 	init->task.rip = (uint64_t)init_1;
-	init->task.rsp = 0x1000000 + 0x1000 - 8;
-	init->task.rbp = 0x1000000 + 0x1000;
+	/* Pila 16 KiB: los comandos debug_bins acumulan buffers locales (ls, rm, etc.) */
+	init->task.rsp = 0x1000000 + 0x4000 - 8;
+	init->task.rbp = 0x1000000 + 0x4000;
 	init->task.rflags = 0x202;
 	init->task.cs = 0x1B;
 	init->task.ss = 0x23;
@@ -68,7 +69,7 @@ int start_init_process(void)
 	init->ppid = 1;
 	init->state = PROCESS_READY;
 	init->stack_start = 0x1000000;
-	init->stack_size = 0x1000;
+	init->stack_size = 0x4000;
 	init->page_directory = (uint64_t *)init->task.cr3;
 
 	/* Initialize current working directory */

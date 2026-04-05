@@ -532,6 +532,9 @@ endif
 # BUILD TARGETS
 # ============================================
 
+# Objetivo principal: warnings como errores (replica CI / toolchains estrictos).
+ir0: CFLAGS += -Werror
+
 # Default target
 ir0: kernel-x64.iso
 

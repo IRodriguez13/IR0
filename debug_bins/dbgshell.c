@@ -306,5 +306,10 @@ void shell_entry(void)
         }
 line_done:
         execute_command(input);
+        /*
+         * Tras cada línea, descartar descriptores >2 para que un fallo de
+         * close en un comando no agote la tabla antes del siguiente.
+         */
+        debug_shell_sweep_open_fds();
     }
 }
