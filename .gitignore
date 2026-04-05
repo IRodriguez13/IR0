@@ -1,4 +1,6 @@
 /.vscode
+/third-party
+/build
 *.o
 *.P
 *.so

@@ -30,6 +30,69 @@ struct linux_dirent64 {
 
 #define MAX_RECURSE_DEPTH 64
 
+/*
+ * Formato tipo ls -l: permisos rwxrwxrwx (sin sticky; suficiente para depurar).
+ */
+static void rm_fmt_rwx(char rwx[10], uint32_t mode)
+{
+    rwx[0] = (mode & S_IRUSR) ? 'r' : '-';
+    rwx[1] = (mode & S_IWUSR) ? 'w' : '-';
+    rwx[2] = (mode & S_IXUSR) ? 'x' : '-';
+    rwx[3] = (mode & S_IRGRP) ? 'r' : '-';
+    rwx[4] = (mode & S_IWGRP) ? 'w' : '-';
+    rwx[5] = (mode & S_IXGRP) ? 'x' : '-';
+    rwx[6] = (mode & S_IROTH) ? 'r' : '-';
+    rwx[7] = (mode & S_IWOTH) ? 'w' : '-';
+    rwx[8] = (mode & S_IXOTH) ? 'x' : '-';
+    rwx[9] = '\0';
+}
+
+static char rm_type_char(uint32_t mode)
+{
+    if (S_ISDIR(mode))
+        return 'd';
+    if (S_ISREG(mode))
+        return '-';
+    if (S_ISCHR(mode))
+        return 'c';
+    if (S_ISBLK(mode))
+        return 'b';
+    if (S_ISLNK(mode))
+        return 'l';
+    if (S_ISSOCK(mode))
+        return 's';
+    return '?';
+}
+
+static void rm_debug_log_stat_line(const char *phase, const char *path, const stat_t *st)
+{
+    char rwx[10];
+    char line[256];
+    uint32_t m = (uint32_t)st->st_mode;
+
+    rm_fmt_rwx(rwx, m);
+    snprintf(line, sizeof(line),
+             "[DBG] rm: %s path='%s' st_mode=0x%x type=%c perms=%s isdir=%d ino=%u nlink=%u\n",
+             phase, path ? path : "?", m, rm_type_char(m), rwx,
+             S_ISDIR(m) ? 1 : 0, (unsigned)st->st_ino, (unsigned)st->st_nlink);
+    debug_serial_raw(line);
+}
+
+static void rm_debug_log_stat_refresh(const char *phase, const char *path)
+{
+    stat_t st;
+    char line[256];
+
+    if (ir0_stat(path, &st) < 0)
+    {
+        snprintf(line, sizeof(line), "[DBG] rm: %s path='%s' stat_failed\n",
+                 phase, path ? path : "?");
+        debug_serial_raw(line);
+        return;
+    }
+    rm_debug_log_stat_line(phase, path, &st);
+}
+
 /**
  * rm_recursive_impl - Depth-first recursive delete (userspace, OSDev-style)
  * Uses only open/getdents/stat/unlink/rmdir - no kernel recursion.
@@ -137,8 +200,13 @@ static int cmd_rm_handler(int argc, char **argv)
     }
 
     int64_t result;
+    stat_t st;
+    int st_ok = (ir0_stat(path, &st) == 0);
+
     if (force_dir)
         result = rm_recursive_impl(path, 0);
+    else if (st_ok && S_ISDIR(st.st_mode))
+        result = ir0_rmdir(path);
     else
     {
         result = ir0_unlink(path);
@@ -149,6 +217,14 @@ static int cmd_rm_handler(int argc, char **argv)
     if (result < 0)
     {
         debug_perror("rm", path, (int)result);
+        if (st_ok)
+            rm_debug_log_stat_line("stat@antes", path, &st);
+        rm_debug_log_stat_refresh("stat@despues", path);
+        if (result == -ENOTDIR && st_ok && S_ISDIR(st.st_mode))
+        {
+            debug_serial_raw(
+                "[DBG] rm: diag stat decia directorio pero rmdir devolvio ENOTDIR (revisar MINIX/VFS)\n");
+        }
         if (result == -ENOTEMPTY)
             debug_write_err("Hint: Use 'rm -d DIR' to remove non-empty directory\n");
         debug_serial_fail_err("rm", "remove", (int)(-result));

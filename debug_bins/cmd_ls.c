@@ -78,8 +78,11 @@ static int cmd_ls_handler(int argc, char **argv)
         return 1;
     }
     
-    /* Read directory entries using POSIX getdents */
-    char dirent_buf[4096];
+    /*
+     * Buffer pequeño: el init del DebShell usa pila de pocos KiB; 4096 bytes
+     * aquí desbordaba la pila y podía corromper el heap (p.ej. fd_table → EMFILE).
+     */
+    char dirent_buf[1024];
     int64_t bytes_read;
     
     while ((bytes_read = syscall(SYS_GETDENTS, fd, (uint64_t)dirent_buf, sizeof(dirent_buf))) > 0)

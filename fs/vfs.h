@@ -162,6 +162,7 @@ struct vfs_inode *vfs_path_lookup(const char *path);
 
 /* Root and mount point management */
 void vfs_set_root(struct vfs_superblock *sb, struct vfs_inode *inode);
+struct vfs_superblock *vfs_get_root_sb(void);
 struct mount_point *vfs_find_mount_point(const char *path);
 int vfs_add_mount_point(const char *path, const char *dev, 
                         struct vfs_superblock *sb, struct vfs_inode *root,
