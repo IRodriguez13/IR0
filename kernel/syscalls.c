@@ -1209,17 +1209,11 @@ int64_t sys_rmdir(const char *pathname)
 static fd_entry_t *get_process_fd_table(void)
 {
   if (!current_process)
-  {
     return NULL;
-  }
-
-  static bool initialized = false;
-  if (!initialized)
-  {
-    process_init_fd_table(current_process);
-    initialized = true;
-  }
-
+  /*
+   * La tabla se inicializa en spawn() y en start_init_process(); no usar un
+   * flag estático global (rompía si el primer syscall no era del proceso init).
+   */
   return current_process->fd_table;
 }
 
@@ -1954,13 +1948,33 @@ int64_t sys_dup2(int oldfd, int newfd)
   if (!fd_table[oldfd].in_use)
     return -EBADF;
 
-  if (fd_table[newfd].in_use && newfd > 2)
+  if (fd_table[newfd].in_use && newfd != oldfd)
   {
+    /*
+     * Liberar el ocupante anterior; sin vfs_close se fugaban struct vfs_file y
+     * los slots quedaban mal contabilizados (EMFILE tras varios open/dup2).
+     */
+    if (newfd > 2)
+    {
+      if (fd_table[newfd].is_pipe && fd_table[newfd].vfs_file)
+      {
+        pipe_t *p = (pipe_t *)fd_table[newfd].vfs_file;
+        pipe_close(p);
+        fd_table[newfd].vfs_file = NULL;
+      }
+      else if (fd_table[newfd].vfs_file)
+      {
+        vfs_close((struct vfs_file *)fd_table[newfd].vfs_file);
+        fd_table[newfd].vfs_file = NULL;
+      }
+    }
     fd_table[newfd].in_use = false;
     fd_table[newfd].path[0] = '\0';
     fd_table[newfd].flags = 0;
     fd_table[newfd].fd_flags = 0;
     fd_table[newfd].offset = 0;
+    fd_table[newfd].is_pipe = false;
+    fd_table[newfd].pipe_end = -1;
   }
 
   fd_table[newfd].in_use = true;

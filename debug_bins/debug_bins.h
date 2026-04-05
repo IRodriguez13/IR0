@@ -109,8 +109,43 @@ static inline void debug_serial_log(const char *cmd, const char *status, const c
     }
 }
 
+/*
+ * Escribe una línea completa a /dev/serial (p.ej. diagnóstico con modo/permisos).
+ * El texto debe incluir \n si se desea salto de línea.
+ */
+static inline void debug_serial_raw(const char *msg)
+{
+    size_t n;
+
+    if (!msg)
+        return;
+    n = strlen(msg);
+    if (n == 0)
+        return;
+    {
+        int fd = (int)syscall(SYS_OPEN, (uint64_t)"/dev/serial", O_WRONLY, 0);
+        if (fd < 0)
+            return;
+        syscall(SYS_WRITE, (uint64_t)fd, (uint64_t)msg, (uint64_t)n);
+        syscall(SYS_CLOSE, (uint64_t)fd, 0, 0);
+    }
+}
+
 #define debug_serial_ok(cmd) debug_serial_log(cmd, "OK", NULL)
 #define debug_serial_fail(cmd, reason) debug_serial_log(cmd, "FAIL", reason)
+
+/*
+ * Cierra fd 3 .. N-1 ignorando errores. El DebShell corre todo en un solo
+ * proceso; si un comando deja un descriptor abierto, el siguiente falla con
+ * EMFILE al abrir (p.ej. ls → rm). Debe alinearse con MAX_FDS_PER_PROCESS.
+ */
+#define DEBUG_SHELL_FD_TABLE_CAP 64
+
+static inline void debug_shell_sweep_open_fds(void)
+{
+    for (int i = 3; i < DEBUG_SHELL_FD_TABLE_CAP; i++)
+        syscall(SYS_CLOSE, (uint64_t)i, 0, 0);
+}
 
 /**
  * debug_serial_fail_err - Log fallo con código errno (ej: err=17 EEXIST)

@@ -15,7 +15,7 @@
 #include <ir0/signals.h>  
 #include <ir0/types.h> 
 
-#define MAX_FDS_PER_PROCESS 32
+#define MAX_FDS_PER_PROCESS 64
 
 typedef struct fd_entry
 {

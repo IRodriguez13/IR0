@@ -1929,7 +1929,7 @@ int minix_fs_rm(const char *path)
     char error_msg[256];
     snprintf(error_msg, sizeof(error_msg), "rm: '%s': Is a directory\n", path);
     typewriter_vga_print(error_msg, 0x0C);
-    return -1;
+    return -EISDIR;
   }
 
   char parent_path[256];

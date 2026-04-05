@@ -120,6 +120,12 @@ static inline uint16_t minix_get_oth_perms(const minix_inode_t *inode)
 bool minix_fs_is_available(void);
 bool minix_fs_is_working(void);
 
+/*
+ * Registra el tipo de filesystem MINIX en el VFS (llamado desde vfs.c al
+ * inicializar los builtins).
+ */
+int minix_fs_register(void);
+
 // Filesystem operations
 int minix_fs_init(void);
 int minix_fs_format(void);
