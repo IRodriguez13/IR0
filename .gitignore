@@ -14,15 +14,31 @@
 *.raw
 *iso-x86-64/boot
 *.old
-*.txt
 *.img
 .aider*
 iso-x86-64-desktop/boot/grub/grub.cfg
 iso/boot/grub/grub.cfg
+iso/
+iso_test/
 .config
 .build_number
+.build_number_inc
 .example_drivers_enabled
 AGENTS.md
+
+# Menuconfig / Kconfig generated headers
+include/generated/
+setup/generated/
+
+# Python (menuconfig helpers, local tooling)
+__pycache__/
+*.pyc
+
+# Dev tooling artifacts
+*.map
+*.disasm
+*.su
+compile_commands.json
 
 # Test artifacts (make tests / make health)
 tests/host/ir0_test_suite
