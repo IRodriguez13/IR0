@@ -35,8 +35,8 @@ int clock_system_init(void)
     clock_state.uptime_seconds = 0;
     clock_state.uptime_milliseconds = 0;
     clock_state.time_resolution = CLOCK_RESOLUTION_MS;
-    clock_state.timer_frequency = 1000; /* 1kHz default */
-    clock_state.timer_ticks_per_second = 1000;
+    clock_state.timer_frequency = CONFIG_TICK_RATE_HZ;
+    clock_state.timer_ticks_per_second = CONFIG_TICK_RATE_HZ;
     
     /* Initialize time tracking */
     clock_state.boot_time = 0;
@@ -49,9 +49,11 @@ int clock_system_init(void)
     clock_state.lapic_enabled = 0;
     clock_state.active_timer = CLOCK_TIMER_NONE;
     
-    /* Initialize scheduler integration (10 ticks per quantum for 10ms time slice at 1kHz) */
+    /* Initialize scheduler integration for ~10ms quantum. */
     clock_state.scheduler_tick_counter = 0;
-    clock_state.scheduler_ticks_per_quantum = 10;
+    clock_state.scheduler_ticks_per_quantum = (CONFIG_TICK_RATE_HZ / 100);
+    if (clock_state.scheduler_ticks_per_quantum == 0)
+        clock_state.scheduler_ticks_per_quantum = 1;
     
     /* Initialize alarm system */
     clock_state.alarms = NULL;
@@ -59,7 +61,7 @@ int clock_system_init(void)
     
     /* Initialize PIT */
     extern void init_PIT(uint32_t frequency);
-    init_PIT(1000); /* 1kHz timer */
+    init_PIT(CONFIG_TICK_RATE_HZ);
     clock_state.pit_enabled = 1;
     clock_state.active_timer = CLOCK_TIMER_PIT;
 

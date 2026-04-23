@@ -24,6 +24,13 @@ menu "General"
           Frequency of the PIT timer interrupt. Higher values give finer
           scheduling granularity at the cost of more IRQ overhead.
 
+    config ENABLE_EXAMPLE_DRIVERS
+        bool "Enable example external drivers (C++/Rust)"
+        default n
+        help
+          Build and register optional sample drivers used for multi-language
+          integration testing. Keep disabled for production-like builds.
+
 endmenu
 
 menu "Networking"
@@ -80,6 +87,44 @@ menu "Graphics"
 
 endmenu
 
+menu "Tooling"
+
+    config TOOL_AUTO_RUN_DEPTEST
+        bool "Run deptest automatically before 'make ir0'"
+        default n
+        help
+          When enabled, 'make ir0' executes dependency checks first.
+          Useful for new contributors or CI-like local flows.
+
+    config TOOL_DEFAULT_DISK_FS
+        int "Default filesystem for create-disk (0=minix,1=fat32,2=ext4)"
+        range 0 2
+        default 0
+        help
+          Select which filesystem create-disk uses when no arguments
+          are passed to the make target.
+
+    config TOOL_DEFAULT_DISK_SIZE_MB
+        int "Default disk size for create-disk (MB)"
+        range 64 8192
+        default 200
+        help
+          Disk size used by create-disk when no explicit size is passed.
+
+    config TOOL_UNIBUILD_DEFAULT_FILES
+        string "Default files for unibuild targets (space-separated)"
+        help
+          Optional default files used by unibuild targets when no positional
+          file arguments are provided. Example: fs/vfs.c fs/path.c
+
+    config TOOL_UNIBUILD_EXCLUDE_FILE
+        string "Exclude one file from unibuild target file list"
+        help
+          If set, this exact file path is removed from unibuild target input
+          before invoking scripts/unibuild.sh.
+
+endmenu
+
 menu "Debugging"
 
     config DEBUG_MEMORY_ALLOCATOR
@@ -88,6 +133,14 @@ menu "Debugging"
 
     config DEBUG_PMM
         bool "Physical memory manager debug output"
+        default n
+
+    config DEBUG_MEMORY_COALESCING
+        bool "Allocator coalescing debug output"
+        default n
+
+    config DEBUG_MEMORY_STATS
+        bool "Allocator statistics debug output"
         default n
 
     config DEBUG_PAGING
@@ -106,12 +159,24 @@ menu "Debugging"
         bool "Scheduler debug output"
         default n
 
+    config DEBUG_FORK
+        bool "Fork path debug output"
+        default n
+
     config DEBUG_VFS
         bool "VFS operations debug output"
         default n
 
+    config DEBUG_FS_MOUNT
+        bool "Filesystem mount/unmount debug output"
+        default n
+
     config DEBUG_SYSCALLS
         bool "Syscall invocations debug output"
+        default n
+
+    config DEBUG_SYSCALL_PARAMS
+        bool "Detailed syscall parameter debug output"
         default n
 
     config DEBUG_KEYBOARD

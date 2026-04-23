@@ -25,32 +25,88 @@
 /* MEMORY SUBSYSTEM DEBUG FLAGS                                              */
 
 /* Memory Allocator Debug */
-#define DEBUG_MEMORY_ALLOCATOR 0      /* Enable allocator debug output */
-#define DEBUG_MEMORY_COALESCING 0     /* Track coalescing operations */
-#define DEBUG_MEMORY_STATS 0          /* Show allocation statistics */
-#define DEBUG_PMM 0                   /* Physical memory manager debug */
+#if defined(CONFIG_DEBUG_MEMORY_ALLOCATOR) && CONFIG_DEBUG_MEMORY_ALLOCATOR
+#define DEBUG_MEMORY_ALLOCATOR 1
+#else
+#define DEBUG_MEMORY_ALLOCATOR 0
+#endif
+#if defined(CONFIG_DEBUG_MEMORY_COALESCING) && CONFIG_DEBUG_MEMORY_COALESCING
+#define DEBUG_MEMORY_COALESCING 1
+#else
+#define DEBUG_MEMORY_COALESCING 0
+#endif
+#if defined(CONFIG_DEBUG_MEMORY_STATS) && CONFIG_DEBUG_MEMORY_STATS
+#define DEBUG_MEMORY_STATS 1
+#else
+#define DEBUG_MEMORY_STATS 0
+#endif
+#if defined(CONFIG_DEBUG_PMM) && CONFIG_DEBUG_PMM
+#define DEBUG_PMM 1
+#else
+#define DEBUG_PMM 0
+#endif
 
 
 /* Paging Debug */
-#define DEBUG_PAGING 0                /* Paging operations */
-#define DEBUG_PAGE_FAULTS 0           /* Page fault handling */
+#if defined(CONFIG_DEBUG_PAGING) && CONFIG_DEBUG_PAGING
+#define DEBUG_PAGING 1                /* Paging operations */
+#else
+#define DEBUG_PAGING 0
+#endif
+#if defined(CONFIG_DEBUG_PAGE_FAULTS) && CONFIG_DEBUG_PAGE_FAULTS
+#define DEBUG_PAGE_FAULTS 1           /* Page fault handling */
+#else
+#define DEBUG_PAGE_FAULTS 0
+#endif
 
 /* PROCESS SUBSYSTEM DEBUG FLAGS                                             */
 
-#define DEBUG_PROCESS 0               /* Process creation/destruction */
-#define DEBUG_SCHEDULER 0             /* Scheduler decisions */
-#define DEBUG_FORK 0                  /* Fork operations */
+#if defined(CONFIG_DEBUG_PROCESS) && CONFIG_DEBUG_PROCESS
+#define DEBUG_PROCESS 1               /* Process creation/destruction */
+#else
+#define DEBUG_PROCESS 0
+#endif
+#if defined(CONFIG_DEBUG_SCHEDULER) && CONFIG_DEBUG_SCHEDULER
+#define DEBUG_SCHEDULER 1             /* Scheduler decisions */
+#else
+#define DEBUG_SCHEDULER 0
+#endif
+#if defined(CONFIG_DEBUG_FORK) && CONFIG_DEBUG_FORK
+#define DEBUG_FORK 1                  /* Fork operations */
+#else
+#define DEBUG_FORK 0
+#endif
 
 /* FILESYSTEM DEBUG FLAGS                                                    */
 
-#define DEBUG_VFS 0                   /* VFS operations */
-#define DEBUG_FS_MOUNT 0              /* Mount/unmount operations */
+#if defined(CONFIG_DEBUG_VFS) && CONFIG_DEBUG_VFS
+#define DEBUG_VFS 1                   /* VFS operations */
+#else
+#define DEBUG_VFS 0
+#endif
+#if defined(CONFIG_DEBUG_FS_MOUNT) && CONFIG_DEBUG_FS_MOUNT
+#define DEBUG_FS_MOUNT 1              /* Mount/unmount operations */
+#else
+#define DEBUG_FS_MOUNT 0
+#endif
 
 /* SYSCALL DEBUG FLAGS                                                       */
 
-#define DEBUG_SYSCALLS 0              /* All syscall invocations */
-#define DEBUG_SYSCALL_PARAMS 0        /* Detailed syscall parameters */
-#define DEBUG_KEYBOARD 0               /* Serial log each stdin read */
+#if defined(CONFIG_DEBUG_SYSCALLS) && CONFIG_DEBUG_SYSCALLS
+#define DEBUG_SYSCALLS 1              /* All syscall invocations */
+#else
+#define DEBUG_SYSCALLS 0
+#endif
+#if defined(CONFIG_DEBUG_SYSCALL_PARAMS) && CONFIG_DEBUG_SYSCALL_PARAMS
+#define DEBUG_SYSCALL_PARAMS 1        /* Detailed syscall parameters */
+#else
+#define DEBUG_SYSCALL_PARAMS 0
+#endif
+#if defined(CONFIG_DEBUG_KEYBOARD) && CONFIG_DEBUG_KEYBOARD
+#define DEBUG_KEYBOARD 1              /* Serial log each stdin read */
+#else
+#define DEBUG_KEYBOARD 0
+#endif
 
 /* KERNEL BEHAVIOR CONFIGURATION                                             */
 
@@ -65,6 +121,10 @@
 #define KERNEL_DEBUG_SHELL 1
 #else
 #define KERNEL_DEBUG_SHELL CONFIG_KERNEL_DEBUG_SHELL
+#endif
+
+#ifndef CONFIG_TICK_RATE_HZ
+#define CONFIG_TICK_RATE_HZ 1000
 #endif
 
 /*
@@ -150,7 +210,7 @@
 /* HARDWARE LIMITS */
 #define MAX_CPUS 8
 #define MAX_IRQ_HANDLERS 256
-#define TIMER_FREQUENCY 1000  // 1000 Hz timer
+#define TIMER_FREQUENCY CONFIG_TICK_RATE_HZ
 
 /* FEATURE FLAGS — CONFIG_ENABLE_* from Makefile / autoconf take precedence.
  * When building without menuconfig, everything defaults to enabled.              */
@@ -176,6 +236,10 @@
 
 #ifndef CONFIG_ENABLE_BLUETOOTH
 #define CONFIG_ENABLE_BLUETOOTH 1
+#endif
+
+#ifndef CONFIG_ENABLE_EXAMPLE_DRIVERS
+#define CONFIG_ENABLE_EXAMPLE_DRIVERS 0
 #endif
 
 /* Legacy aliases for code that still uses the old names */
