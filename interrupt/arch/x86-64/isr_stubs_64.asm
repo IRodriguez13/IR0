@@ -1,6 +1,8 @@
 ; Stubs de interrupción para x86-64
 ; Cada stub guarda el número de interrupción y llama al handler común
 
+BITS 64
+
 extern isr_handler64
 
 ; Macro para stubs sin código de error
@@ -101,6 +103,7 @@ isr_common_stub_64:
 
     ; Llamar al handler C
     mov rdi, qword [rsp + 120]  ; Obtener número de interrupción del stack
+    lea rsi, [rsp + 120]        ; Pasar puntero a [int_no, errcode, ...]
     call isr_handler64
 
     ; Restaurar todos los registros

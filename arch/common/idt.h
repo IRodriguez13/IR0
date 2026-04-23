@@ -34,27 +34,6 @@ typedef struct
 void idt_arch_set_gate_64(int n, uintptr_t handler, uint8_t flags);
 #define idt_set_gate(n, handler, flags) idt_arch_set_gate_64(n, handler, flags)
 
-#elif defined(__i386__) || defined(__i486__) || defined(__i586__) || defined(__i686__)
-// ===== ARQUITECTURA 32-BIT =====
-typedef struct
-{
-    uint16_t offset_low;  // Bits 0-15 del offset
-    uint16_t selector;    // Selector de segmento
-    uint8_t zero;         // Siempre 0 en x86-32
-    uint8_t type_attr;    // Tipo y atributos
-    uint16_t offset_high; // Bits 16-31 del offset
-} __attribute__((packed)) idt_entry_t;
-
-typedef struct
-{
-    uint16_t limit;
-    uint32_t base; // 32-bit address
-} __attribute__((packed)) idt_ptr_t;
-
-// Función específica para 32-bit
-void idt_arch_set_gate_32(int n, uintptr_t handler, uint8_t flags);
-#define idt_set_gate(n, handler, flags) idt_arch_set_gate_32(n, handler, flags)
-
 #else
 #error "Arquitectura no soportada para IDT"
 #endif

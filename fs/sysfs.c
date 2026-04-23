@@ -24,11 +24,13 @@
 #include <ir0/stat.h>
 #include <ir0/kmem.h>
 #include <ir0/vga.h>
-#include <ir0/driver.h>
 #include <ir0/version.h>
 #include <string.h>
 #include <errno.h>
+#include <config.h>
+#if CONFIG_ENABLE_BLUETOOTH
 #include "drivers/bluetooth/bt_sysfs.h"
+#endif
 #include <drivers/disk/partition.h>
 #include <drivers/video/console.h>
 #include <drivers/video/vbe.h>
@@ -415,6 +417,7 @@ int sysfs_open(const char *path, int flags)
     {
         fd = SYS_FD_BASE + 20;
     }
+#if CONFIG_ENABLE_BLUETOOTH
     else if (strcmp(sys_path, "class/bluetooth/hci0/address") == 0)
     {
         fd = SYS_FD_BASE + SYS_BT_HCI0_ADDRESS;
@@ -431,6 +434,7 @@ int sysfs_open(const char *path, int flags)
     {
         fd = SYS_FD_BASE + SYS_BT_SESSIONS;
     }
+#endif
     else if (strcmp(sys_path, "console/mode") == 0)
     {
         fd = SYS_FD_BASE + SYS_CONSOLE_MODE;
@@ -485,6 +489,7 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
         case 20:
             full_size = sys_devices_block_read(sys_buffer, sizeof(sys_buffer));
             break;
+#if CONFIG_ENABLE_BLUETOOTH
         case SYS_BT_HCI0_ADDRESS:
             full_size = bt_sysfs_hci0_address_read(sys_buffer, sizeof(sys_buffer));
             break;
@@ -497,6 +502,7 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
         case SYS_BT_SESSIONS:
             full_size = bt_sysfs_sessions_read(sys_buffer, sizeof(sys_buffer));
             break;
+#endif
         case SYS_CONSOLE_MODE:
             full_size = sys_console_mode_read(sys_buffer, sizeof(sys_buffer));
             break;
@@ -571,11 +577,13 @@ int sysfs_stat(const char *path, stat_t *st)
         strcmp(sys_path, "devices/system/cpu0") == 0 ||
         strcmp(sys_path, "devices/system/cpu0/online") == 0 ||
         strcmp(sys_path, "devices/block") == 0 ||
-        strcmp(sys_path, "console/mode") == 0 ||
+#if CONFIG_ENABLE_BLUETOOTH
         strcmp(sys_path, "class/bluetooth/hci0/address") == 0 ||
         strcmp(sys_path, "class/bluetooth/hci0/state") == 0 ||
         strcmp(sys_path, "class/bluetooth/topology/neighbors") == 0 ||
-        strcmp(sys_path, "class/bluetooth/sessions") == 0)
+        strcmp(sys_path, "class/bluetooth/sessions") == 0 ||
+#endif
+        strcmp(sys_path, "console/mode") == 0)
     {
         memset(st, 0, sizeof(stat_t));
         st->st_mode = S_IFREG | 0644;  /* Regular file, readable by all */

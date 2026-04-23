@@ -2,96 +2,39 @@
 #include "io.h"
 #include <ir0/vga.h>
 
-// Remapear PIC para 32-bit - usar archivo modular
-#ifdef __x86_64__
-// Para 64-bit, usar implementación local
-void pic_remap32(void)
-{
-    uint8_t a1, a2;
-    (void)a1;
-    (void)a2; // Variables not used in this implementation
-
-    // Guardar máscaras originales
-    a1 = inb(PIC1_DATA);
-    a2 = inb(PIC2_DATA);
-
-    // Inicializar PIC1
-    outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
-    io_wait();
-    outb(PIC1_DATA, 0x20); // Vector offset 0x20 (32)
-    io_wait();
-    outb(PIC1_DATA, 0x04); // PIC2 en IRQ2
-    io_wait();
-    outb(PIC1_DATA, ICW4_8086);
-    io_wait();
-
-    // Inicializar PIC2
-    outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
-    io_wait();
-    outb(PIC2_DATA, 0x28); // Vector offset 0x28 (40)
-    io_wait();
-    outb(PIC2_DATA, 0x02); // Cascada
-    io_wait();
-    outb(PIC2_DATA, ICW4_8086);
-    io_wait();
-
-    // Configurar máscaras: habilitar solo timer (IRQ0) y teclado (IRQ1)
-    // Máscara PIC1: 0xFC = 11111100 (habilitar IRQ0 y IRQ1, deshabilitar resto)
-    // Máscara PIC2: 0xFF = 11111111 (deshabilitar todos)
-    outb(PIC1_DATA, 0xFC);
-    outb(PIC2_DATA, 0xFF);
-}
-
-// Enviar EOI para 32-bit
-void pic_send_eoi32(uint8_t irq)
-{
-    if (irq >= 8)
-    {
-        outb(PIC2_COMMAND, PIC_EOI);
-    }
-    outb(PIC1_COMMAND, PIC_EOI);
-}
-#endif
-
-// Remapear PIC para 64-bit
+/*
+ * pic_remap64 - Remap PIC vectors to IRQ_BASE_MASTER..IRQ_BASE_SLAVE+7
+ * and mask all IRQs.
+ *
+ * After this call every IRQ is masked. Drivers/subsystems unmask
+ * individual lines via pic_unmask_irq() once the IDT is ready.
+ */
 void pic_remap64(void)
 {
-    uint8_t a1, a2;
-    (void)a1;
-    (void)a2; // Variables not used in this implementation
-
-    // Guardar máscaras originales
-    a1 = inb(PIC1_DATA);
-    a2 = inb(PIC2_DATA);
-
-    // Inicializar PIC1
-    outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
+    outb(PIC1_COMMAND, PIC_ICW1_INIT);
     io_wait();
-    outb(PIC1_DATA, 0x20); // Vector offset 0x20 (32)
+    outb(PIC1_DATA, IRQ_BASE_MASTER);
     io_wait();
-    outb(PIC1_DATA, 0x04); // PIC2 en IRQ2
+    outb(PIC1_DATA, PIC_ICW3_MASTER);
     io_wait();
-    outb(PIC1_DATA, ICW4_8086);
+    outb(PIC1_DATA, PIC_ICW4_8086);
     io_wait();
 
-    // Inicializar PIC2
-    outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
+    outb(PIC2_COMMAND, PIC_ICW1_INIT);
     io_wait();
-    outb(PIC2_DATA, 0x28); // Vector offset 0x28 (40)
+    outb(PIC2_DATA, IRQ_BASE_SLAVE);
     io_wait();
-    outb(PIC2_DATA, 0x02); // Cascada
+    outb(PIC2_DATA, PIC_ICW3_SLAVE);
     io_wait();
-    outb(PIC2_DATA, ICW4_8086);
+    outb(PIC2_DATA, PIC_ICW4_8086);
     io_wait();
 
-    // Configurar máscaras: habilitar solo timer (IRQ0) y teclado (IRQ1)
-    // Máscara PIC1: 0xFC = 11111100 (habilitar IRQ0 y IRQ1, deshabilitar resto)
-    // Máscara PIC2: 0xFF = 11111111 (deshabilitar todos)
-    outb(PIC1_DATA, 0xFC);
+    /* Start with all IRQs masked; callers unmask as needed */
+    outb(PIC1_DATA, 0xFF);
     outb(PIC2_DATA, 0xFF);
 }
 
-// Enviar EOI para 64-bit
+/* Send EOI (64-bit PIC) */
 void pic_send_eoi64(uint8_t irq)
 {
     if (irq >= 8)
@@ -101,7 +44,7 @@ void pic_send_eoi64(uint8_t irq)
     outb(PIC1_COMMAND, PIC_EOI);
 }
 
-// Enmascarar IRQ
+/* Mask one IRQ line */
 void pic_mask_irq(uint8_t irq)
 {
     uint16_t port;
@@ -121,7 +64,7 @@ void pic_mask_irq(uint8_t irq)
     outb(port, value);
 }
 
-// Desenmascarar IRQ
+/* Unmask one IRQ line */
 void pic_unmask_irq(uint8_t irq)
 {
     uint16_t port;

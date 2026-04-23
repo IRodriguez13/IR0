@@ -128,6 +128,18 @@ void *__kmalloc_checked(size_t size, const char *file, int line, const char *cal
 	return ptr;
 }
 
+/*
+ * kmalloc_try - Like kmalloc but returns NULL on invalid size, overflow, or OOM.
+ */
+void *kmalloc_try(size_t size)
+{
+	if (unlikely(size == 0))
+		return NULL;
+	if (unlikely(size > SIMPLE_HEAP_SIZE))
+		return NULL;
+	return __kmalloc_impl(size);
+}
+
 /**
  * __kfree_checked - Checked wrapper for kfree with automatic debug tracking
  * Validates parameters and calls implementation

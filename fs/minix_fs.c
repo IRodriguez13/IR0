@@ -36,6 +36,9 @@
 #define MINIX_MAX_ZONES 1024
 #define MINIX_ZONE_SIZE 1024
 
+/* Number of direct zone pointers in a MINIX inode (i_zone[0]..[6]) */
+#define MINIX_DIRECT_ZONES 7
+
 typedef struct minix_fs_info
 {
   minix_superblock_t superblock;
@@ -72,17 +75,6 @@ int minix_write_block(uint32_t block_num, const void *buffer)
     return -1;
 
   return 0;
-}
-
-[[maybe_unused]] static bool minix_is_inode_free(uint32_t inode_num)
-{
-  if (inode_num >= MINIX_MAX_INODES)
-    return false;
-
-  uint32_t byte = inode_num / 8;
-  uint32_t bit = inode_num % 8;
-
-  return !(minix_fs.inode_bitmap[byte] & (1 << bit));
 }
 
 void minix_mark_inode_used(uint32_t inode_num)
@@ -283,38 +275,6 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
   return 0;
 }
 
-static int __attribute__((unused))
-minix_write_inode(uint32_t inode_num, const minix_inode_t *inode)
-{
-  if (inode_num == 0 || inode_num >= MINIX_MAX_INODES || !inode)
-  {
-    return -1;
-  }
-
-  // Calcular posición del inode en el disco
-  // Block layout: 0=boot, 1=super, 2=imap, 3=zmap, 4=inodes, 5+=data
-  uint32_t inode_table_start = 2 + minix_fs.superblock.s_imap_blocks + minix_fs.superblock.s_zmap_blocks;
-  uint32_t inode_block = inode_table_start +
-                         (inode_num * sizeof(minix_inode_t)) / MINIX_BLOCK_SIZE;
-  uint32_t inode_offset =
-      (inode_num * sizeof(minix_inode_t)) % MINIX_BLOCK_SIZE;
-
-  uint8_t block_buffer[MINIX_BLOCK_SIZE];
-  int result = minix_read_block(inode_block, block_buffer);
-  if (result != 0)
-  {
-    return -1;
-  }
-
-  // Copiar inode al buffer
-  kmemcpy(block_buffer + inode_offset, inode, sizeof(minix_inode_t));
-
-  // Escribir bloque de vuelta al disco
-  result = minix_write_block(inode_block, block_buffer);
-
-  return result;
-}
-
 uint32_t minix_alloc_inode(void)
 {
   for (uint32_t i = 1; i < MINIX_MAX_INODES; i++)
@@ -330,31 +290,6 @@ uint32_t minix_alloc_inode(void)
   }
 
   return 0; // No hay inodes libres
-}
-
-// Helper function to format file permissions in rwxr-xr-x format
-[[maybe_unused]] static void format_permissions(uint16_t mode, char *buffer)
-{
-  // File type
-  buffer[0] = (mode & MINIX_IFDIR) ? 'd' : '-';
-
-  // User permissions
-  buffer[1] = (mode & MINIX_IRUSR) ? 'r' : '-';
-  buffer[2] = (mode & MINIX_IWUSR) ? 'w' : '-';
-  buffer[3] = (mode & MINIX_IXUSR) ? 'x' : '-';
-
-  // Group permissions
-  buffer[4] = (mode & MINIX_IRGRP) ? 'r' : '-';
-  buffer[5] = (mode & MINIX_IWGRP) ? 'w' : '-';
-  buffer[6] = (mode & MINIX_IXGRP) ? 'x' : '-';
-
-  // Other permissions
-  buffer[7] = (mode & MINIX_IROTH) ? 'r' : '-';
-  buffer[8] = (mode & MINIX_IWOTH) ? 'w' : '-';
-  buffer[9] = (mode & MINIX_IXOTH) ? 'x' : '-';
-
-  buffer[10] = ' ';  // Space after permissions
-  buffer[11] = '\0'; // Null terminator
 }
 
 // Global static inodes to avoid memory issues
@@ -385,7 +320,7 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   }
 
   // Parsear el path
-  char path_copy[256];
+  char path_copy[VFS_PATH_MAX];
   kstrncpy(path_copy, pathname, sizeof(path_copy) - 1);
   path_copy[sizeof(path_copy) - 1] = '\0';
 
@@ -478,7 +413,7 @@ uint16_t minix_fs_get_inode_number(const char *pathname)
   }
 
   // Parsear el path
-  char path_copy[256];
+  char path_copy[VFS_PATH_MAX];
   kstrncpy(path_copy, pathname, sizeof(path_copy) - 1);
   path_copy[sizeof(path_copy) - 1] = '\0';
 
@@ -565,7 +500,7 @@ uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode,
   }
 
   // Leer todas las zonas del directorio
-  for (int i = 0; i < 7; i++)
+  for (int i = 0; i < MINIX_DIRECT_ZONES; i++)
   {
     if (dir_inode->i_zone[i] == 0)
     {
@@ -759,7 +694,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
   }
 
   // Try to find a free entry in existing zones
-  for (int zone_index = 0; zone_index < 7; zone_index++)
+  for (int zone_index = 0; zone_index < MINIX_DIRECT_ZONES; zone_index++)
   {
     if (parent_inode->i_zone[zone_index] == 0)
     {
@@ -817,7 +752,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
   }
 
   // No space in existing zones, allocate a new one
-  for (int zone_index = 0; zone_index < 7; zone_index++)
+  for (int zone_index = 0; zone_index < MINIX_DIRECT_ZONES; zone_index++)
   {
     if (parent_inode->i_zone[zone_index] == 0)
     {
@@ -855,7 +790,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
     }
   }
 
-  return 0;
+  return -1;
 }
 
 /**
@@ -872,7 +807,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
   }
 
   // Search for the entry in all directory zones
-  for (int zone_idx = 0; zone_idx < 7; zone_idx++)
+  for (int zone_idx = 0; zone_idx < MINIX_DIRECT_ZONES; zone_idx++)
   {
     uint32_t zone = parent_inode->i_zone[zone_idx];
     if (zone == 0)
@@ -1220,7 +1155,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -EIO;
   }
 
-  char parent_path[256];
+  char parent_path[VFS_PATH_MAX];
   char dirname[64];
 
   if (minix_fs_split_path(path, parent_path, dirname) != 0)
@@ -1382,7 +1317,7 @@ int minix_fs_ls(const char *path, bool detailed)
   minix_inode_t *dir_inode = minix_fs_find_inode(path);
   if (!dir_inode)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "ls: cannot access '%s': No such file or directory\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -ENOENT;
@@ -1390,7 +1325,7 @@ int minix_fs_ls(const char *path, bool detailed)
 
   if (!(dir_inode->i_mode & MINIX_IFDIR))
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "ls: cannot access '%s': Not a directory\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -1406,7 +1341,7 @@ int minix_fs_ls(const char *path, bool detailed)
 
   int total_entries_printed = 0;
 
-  for (int i = 0; i < 7; i++)
+  for (int i = 0; i < MINIX_DIRECT_ZONES; i++)
   {
     uint32_t zone = dir_inode_copy.i_zone[i];
     if (zone == 0)
@@ -1481,7 +1416,7 @@ int minix_fs_ls(const char *path, bool detailed)
       }
       else
       {
-        char line[256];
+        char line[VFS_PATH_MAX];
         int len = snprintf(line, sizeof(line), "%s\n", safe_name);
         
         serial_print("SERIAL: minix_fs_ls: printing line: '");
@@ -1530,7 +1465,7 @@ int minix_fs_cat(const char *path)
   uint16_t inode_num = minix_fs_get_inode_number(path);
   if (inode_num == 0)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "cat: '%s': No such file\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -1545,7 +1480,7 @@ int minix_fs_cat(const char *path)
 
   if (file_inode_data.i_mode & MINIX_IFDIR)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "cat: '%s': Is a directory\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -1555,7 +1490,7 @@ int minix_fs_cat(const char *path)
   uint32_t bytes_read = 0;
   char output_buffer[MINIX_BLOCK_SIZE + 1];
 
-  for (int i = 0; i < 7 && bytes_read < file_size; i++)
+  for (int i = 0; i < MINIX_DIRECT_ZONES && bytes_read < file_size; i++)
   {
     if (file_inode_data.i_zone[i] == 0)
     {
@@ -1696,10 +1631,10 @@ int minix_fs_write_file(const char *path, const char *content)
   uint32_t content_size = kstrlen(content);
 
   // Verificar que no exceda el tamaño máximo de archivo
-  if (content_size > MINIX_BLOCK_SIZE * 7)
+  if (content_size > MINIX_BLOCK_SIZE * MINIX_DIRECT_ZONES)
   {
     serial_print("SERIAL: Error: Content too large (max ");
-    serial_print_hex32(MINIX_BLOCK_SIZE * 7);
+    serial_print_hex32(MINIX_BLOCK_SIZE * MINIX_DIRECT_ZONES);
     serial_print(" bytes)\n");
     return -1;
   }
@@ -1823,7 +1758,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   }
 
   // Parse path to get parent directory and filename
-  char parent_path[256] = {0};
+  char parent_path[VFS_PATH_MAX] = {0};
   char filename[64] = {0};
 
   if (minix_fs_split_path(path, parent_path, filename) != 0)
@@ -1918,7 +1853,7 @@ int minix_fs_rm(const char *path)
   minix_inode_t *file_inode = minix_fs_find_inode(path);
   if (!file_inode)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "rm: '%s': No such file\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -1926,13 +1861,13 @@ int minix_fs_rm(const char *path)
 
   if (file_inode->i_mode & MINIX_IFDIR)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "rm: '%s': Is a directory\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -EISDIR;
   }
 
-  char parent_path[256];
+  char parent_path[VFS_PATH_MAX];
   char filename[64];
 
   if (minix_fs_split_path(path, parent_path, filename) != 0)
@@ -2003,7 +1938,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   minix_inode_t *old_inode = minix_fs_find_inode(oldpath);
   if (!old_inode)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "ln: '%s': No such file\n", oldpath);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -2019,7 +1954,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   // Check if new path already exists
   if (minix_fs_find_inode(newpath) != NULL)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "ln: '%s': File exists\n", newpath);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -2034,7 +1969,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   }
 
   // Split new path into parent directory and filename
-  char parent_path[256];
+  char parent_path[VFS_PATH_MAX];
   char filename[64];
   if (minix_fs_split_path(newpath, parent_path, filename) != 0)
   {
@@ -2046,7 +1981,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
   if (!parent_inode)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "ln: '%s': No such directory\n", parent_path);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -2089,9 +2024,6 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   return 0;
 }
 
-// Removed unused function format_permissions
-
-// Removed unused function uint32_to_str
 
 int minix_fs_ensure_valid(void)
 {
@@ -2154,7 +2086,7 @@ int minix_fs_rmdir(const char *path)
   // Check if directory is empty (only . and .. allowed)
   bool is_empty = true;
 
-  for (int i = 0; i < 7 && is_empty; i++)
+  for (int i = 0; i < MINIX_DIRECT_ZONES && is_empty; i++)
   {
     uint32_t zone = dir_inode.i_zone[i];
     if (zone == 0)
@@ -2193,7 +2125,7 @@ int minix_fs_rmdir(const char *path)
   if (!is_empty)
     return -ENOTEMPTY;
 
-  char parent_path[256] = {0};
+  char parent_path[VFS_PATH_MAX] = {0};
   char dirname[64] = {0};
 
   if (minix_fs_split_path(path, parent_path, dirname) != 0)
@@ -2210,7 +2142,7 @@ int minix_fs_rmdir(const char *path)
     return -EIO;
 
   /* Free all zones used by the directory */
-  for (int i = 0; i < 7; i++)
+  for (int i = 0; i < MINIX_DIRECT_ZONES; i++)
   {
     if (dir_inode.i_zone[i] != 0)
     {
@@ -2264,7 +2196,7 @@ int minix_fs_rmdir_force(const char *path)
   uint16_t dir_inode_num = minix_fs_get_inode_number(path);
   if (dir_inode_num == 0)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "rmdir: '%s': No such file or directory\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -2274,7 +2206,7 @@ int minix_fs_rmdir_force(const char *path)
   minix_inode_t dir_inode;
   if (minix_read_inode(dir_inode_num, &dir_inode) != 0)
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "rmdir: '%s': Could not read inode\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -2282,7 +2214,7 @@ int minix_fs_rmdir_force(const char *path)
 
   if (!(dir_inode.i_mode & MINIX_IFDIR))
   {
-    char error_msg[256];
+    char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "rmdir: '%s': Not a directory\n", path);
     typewriter_vga_print(error_msg, 0x0C);
     return -1;
@@ -2290,7 +2222,7 @@ int minix_fs_rmdir_force(const char *path)
 
   // Skip empty check - force removal
 
-  char parent_path[256] = {0};
+  char parent_path[VFS_PATH_MAX] = {0};
   char dirname[64] = {0};
 
   if (minix_fs_split_path(path, parent_path, dirname) != 0)
@@ -2316,7 +2248,7 @@ int minix_fs_rmdir_force(const char *path)
   }
 
   // Free all zones used by the directory
-  for (int i = 0; i < 7; i++)
+  for (int i = 0; i < MINIX_DIRECT_ZONES; i++)
   {
     if (dir_inode.i_zone[i] != 0)
     {
@@ -2393,7 +2325,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   size_t bytes_read = 0;
 
   // Read direct zones (first 7 zones)
-  for (int i = 0; i < 7 && bytes_read < *size; i++)
+  for (int i = 0; i < MINIX_DIRECT_ZONES && bytes_read < *size; i++)
   {
     if (inode.i_zone[i] == 0)
     {
@@ -2529,19 +2461,6 @@ int minix_fs_chown(const char *path, uid_t owner, gid_t group)
 }
 
 
-static struct vfs_inode *minix_lookup_wrapper(const char *path)
-{
-	static struct vfs_inode vfs_inode_wrapper;
-	minix_inode_t *minix_inode = minix_fs_find_inode(path);
-	if (!minix_inode)
-		return NULL;
-	vfs_inode_wrapper.i_ino = minix_fs_get_inode_number(path);
-	vfs_inode_wrapper.i_mode = minix_inode->i_mode;
-	vfs_inode_wrapper.i_size = minix_inode->i_size;
-	vfs_inode_wrapper.i_private = minix_inode;
-	return &vfs_inode_wrapper;
-}
-
 static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
 {
 	void *data = NULL;
@@ -2564,22 +2483,18 @@ static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count,
 
 static int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
 {
-	(void)offset;
+	if (offset != 0)
+		return -1;
 	int ret = minix_fs_write_file(path, (const char *)buf);
 	if (ret == 0 && written_count)
 		*written_count = count;
 	return ret;
 }
 
-static uint32_t minix_get_inode_number_wrapper(const char *path)
-{
-	return (uint32_t)minix_fs_get_inode_number(path);
-}
-
 /*
  * minix_fs_readdir - Read directory entries for VFS readdir
  */
-static int minix_fs_readdir(const char *path, struct vfs_dirent_readdir *entries, int max_entries)
+static int minix_fs_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
 {
 	minix_inode_t *dir_inode = minix_fs_find_inode(path);
 	if (!dir_inode)
@@ -2589,7 +2504,7 @@ static int minix_fs_readdir(const char *path, struct vfs_dirent_readdir *entries
 
 	int entry_count = 0;
 	
-  for (int i = 0; i < 7 && entry_count < max_entries; i++) {
+  for (int i = 0; i < MINIX_DIRECT_ZONES && entry_count < max_entries; i++) {
 		
     if (dir_inode->i_zone[i] == 0)
 			continue;
@@ -2609,57 +2524,63 @@ static int minix_fs_readdir(const char *path, struct vfs_dirent_readdir *entries
   		strncpy(entries[entry_count].name, minix_entries[j].name,
 				sizeof(entries[entry_count].name) - 1);
 			entries[entry_count].name[sizeof(entries[entry_count].name) - 1] = '\0';
-			entries[entry_count].inode = minix_entries[j].inode;
-			entries[entry_count].type = 0;
+
+			minix_inode_t target_inode;
+			if (minix_read_inode(minix_entries[j].inode, &target_inode) != 0) {
+				entries[entry_count].type = DT_UNKNOWN;
+			} else if (minix_is_dir(&target_inode)) {
+				entries[entry_count].type = DT_DIR;
+			} else if (minix_is_reg(&target_inode)) {
+				entries[entry_count].type = DT_REG;
+			} else {
+				entries[entry_count].type = DT_UNKNOWN;
+			}
 			entry_count++;
 		}
 	}
 	return entry_count;
 }
 
-static struct file_operations minix_file_ops = {
-	.open = NULL,
-	.read = NULL,
-	.write = NULL,
-	.close = NULL,
-};
+/*
+ * minix_fs_chmod - VFS chmod: keep inode type bits, apply new permission mask.
+ */
+static int minix_fs_chmod(const char *path, mode_t mode)
+{
+	minix_inode_t *inode_ptr = minix_fs_find_inode(path);
+	if (!inode_ptr)
+		return -ENOENT;
 
-static struct inode_operations minix_inode_ops = {
-	.lookup = NULL,
-	.create = NULL,
-	.mkdir = NULL,
-	.unlink = NULL,
-};
+	uint16_t inode_num = minix_fs_get_inode_number(path);
+	if (inode_num == 0)
+		return -ENOENT;
 
-static struct super_operations minix_super_ops = {
-	.read_inode = NULL,
-	.write_inode = NULL,
-	.delete_inode = NULL,
-};
+	minix_inode_t inode;
+	kmemcpy(&inode, inode_ptr, sizeof(minix_inode_t));
 
-static struct filesystem_operations minix_fs_ops = {
-	.stat = minix_fs_stat,
-	.mkdir = minix_fs_mkdir,
-	.create_file = minix_fs_touch,
-	.unlink = minix_fs_rm,
-	.rmdir = minix_fs_rmdir,
+	inode.i_mode = (uint16_t)((inode.i_mode & (uint16_t)~07777) |
+				  ((uint16_t)mode & 07777));
+
+	return minix_fs_write_inode(inode_num, &inode);
+}
+
+static struct vfs_ops minix_fs_ops = {
+	.stat    = minix_fs_stat,
+	.mkdir   = minix_fs_mkdir,
+	.create  = minix_fs_touch,
+	.unlink  = minix_fs_rm,
+	.rmdir   = minix_fs_rmdir,
 	.readdir = minix_fs_readdir,
-	.read_file = minix_fs_read_file_wrapper,
-	.write_file = minix_fs_write_file_wrapper,
-	.lookup = minix_lookup_wrapper,
-	.get_inode_number = minix_get_inode_number_wrapper,
-	.ls = minix_fs_ls,
-	.link = minix_fs_link,
-	.chown = minix_fs_chown,
-	.is_available = minix_fs_is_available,
-	.is_working = minix_fs_is_working,
+	.read    = minix_fs_read_file_wrapper,
+	.write   = minix_fs_write_file_wrapper,
+	.link    = minix_fs_link,
+	.chown   = minix_fs_chown,
+	.chmod   = minix_fs_chmod,
 };
 
-static struct filesystem_type minix_fs_type;
+static struct vfs_fstype minix_fs_type;
 
 static int minix_mount(const char *dev_name __attribute__((unused)), const char *dir_name)
 {
-	/* MINIX only supports root mount */
 	if (!dir_name || strcmp(dir_name, "/") != 0)
 		return -ENOTSUPP;
 
@@ -2670,38 +2591,14 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
 			return ret;
 		}
 	}
-
-	if (!vfs_get_root_sb()) 
-  {
-		struct vfs_superblock *sb = kmalloc(sizeof(struct vfs_superblock));
-		if (!sb)
-			return -ENOMEM;
-		struct vfs_inode *inode = kmalloc(sizeof(struct vfs_inode));
-		if (!inode) {
-			kfree(sb);
-			return -ENOMEM;
-		}
-		sb->s_op = &minix_super_ops;
-		sb->s_type = &minix_fs_type;
-		sb->s_fs_info = NULL;
-		inode->i_ino = 1;
-		inode->i_mode = 0040755;
-		inode->i_size = 0;
-		inode->i_op = &minix_inode_ops;
-		inode->i_fop = &minix_file_ops;
-		inode->i_sb = sb;
-		inode->i_private = NULL;
-		vfs_set_root(sb, inode);
-	}
-
 	return 0;
 }
 
 int minix_fs_register(void)
 {
-	minix_fs_type.name = "minix";
+	minix_fs_type.name  = "minix";
+	minix_fs_type.ops   = &minix_fs_ops;
 	minix_fs_type.mount = minix_mount;
-	minix_fs_type.ops = &minix_fs_ops;
-	minix_fs_type.next = NULL;
-	return register_filesystem(&minix_fs_type);
+	minix_fs_type.next  = NULL;
+	return vfs_register_fs(&minix_fs_type);
 }

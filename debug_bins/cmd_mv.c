@@ -11,86 +11,116 @@
 
 static int cmd_mv_handler(int argc, char **argv)
 {
+    char msg[384];
+
     if (argc < 3)
     {
         debug_write_err("Usage: mv <src> <dst>\n");
         debug_serial_fail("mv", "usage");
-        return 1;
+        return -1;
     }
-    
+
     const char *src = argv[1];
     const char *dst = argv[2];
-    
+
     /* Try rename first (POSIX, works within same filesystem) */
     int64_t result = ir0_rename(src, dst);
     if (result == 0)
     {
+        snprintf(msg, sizeof(msg), "mv: renamed '%s' -> '%s'\n", src, dst);
+        debug_write(msg);
         debug_serial_ok("mv");
         return 0;
     }
-    
+
     /* If rename fails, do copy + unlink */
-    /* Open source */
-    int src_fd = syscall(SYS_OPEN, (uint64_t)src, O_RDONLY, 0);
+    int src_fd = (int)syscall(SYS_OPEN, (uint64_t)src, O_RDONLY, 0);
     if (src_fd < 0)
     {
         debug_perror("mv", src, (int)src_fd);
         debug_serial_fail_err("mv", "open_src", (int)(-src_fd));
-        return 1;
+        return -1;
     }
-    
-    /* Get size */
+
     stat_t st;
-    int64_t stat_result = syscall(SYS_FSTAT, src_fd, (uint64_t)&st, 0);
-    if (stat_result < 0 || st.st_size <= 0)
+    int64_t stat_result = syscall(SYS_FSTAT, (uint64_t)src_fd, (uint64_t)&st, 0);
+    if (stat_result < 0)
     {
-        syscall(SYS_CLOSE, src_fd, 0, 0);
+        syscall(SYS_CLOSE, (uint64_t)src_fd, 0, 0);
         debug_perror("mv", src, (int)stat_result);
         debug_serial_fail_err("mv", "fstat", (int)(-stat_result));
-        return 1;
+        return -1;
     }
-    
-    /* Read source */
-    char buffer[4096];
-    int64_t bytes_read = syscall(SYS_READ, src_fd, (uint64_t)buffer,
-                                 (st.st_size < (off_t)sizeof(buffer)) ? (size_t)st.st_size : sizeof(buffer));
-    syscall(SYS_CLOSE, src_fd, 0, 0);
-    
-    if (bytes_read < 0)
+    if (st.st_size < 0)
     {
-        debug_perror("mv", src, (int)bytes_read);
-        debug_serial_fail_err("mv", "read", (int)(-bytes_read));
-        return 1;
+        syscall(SYS_CLOSE, (uint64_t)src_fd, 0, 0);
+        debug_perror("mv", src, EINVAL);
+        debug_serial_fail_err("mv", "fstat_bad_size", EINVAL);
+        return -1;
     }
-    
-    /* Write destination */
-    int dst_fd = syscall(SYS_OPEN, (uint64_t)dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    int dst_fd = (int)syscall(SYS_OPEN, (uint64_t)dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (dst_fd < 0)
     {
+        syscall(SYS_CLOSE, (uint64_t)src_fd, 0, 0);
         debug_perror("mv", dst, (int)dst_fd);
         debug_serial_fail_err("mv", "open_dst", (int)(-dst_fd));
-        return 1;
+        return -1;
     }
-    
-    int64_t bytes_written = syscall(SYS_WRITE, dst_fd, (uint64_t)buffer, (size_t)bytes_read);
-    syscall(SYS_CLOSE, dst_fd, 0, 0);
-    
-    if (bytes_written < 0 || bytes_written != bytes_read)
+
+    char buffer[4096];
+    size_t total_copied = 0;
+    size_t remaining = (size_t)st.st_size;
+
+    while (remaining > 0)
     {
-        debug_perror("mv", dst, (int)bytes_written);
-        debug_serial_fail_err("mv", "write", bytes_written < 0 ? (int)(-bytes_written) : (int)EIO);
-        return 1;
+        size_t to_read = (remaining < sizeof(buffer)) ? remaining : sizeof(buffer);
+        int64_t bytes_read = syscall(SYS_READ, (uint64_t)src_fd, (uint64_t)buffer, to_read);
+
+        if (bytes_read < 0)
+        {
+            debug_perror("mv", src, (int)bytes_read);
+            syscall(SYS_CLOSE, (uint64_t)src_fd, 0, 0);
+            syscall(SYS_CLOSE, (uint64_t)dst_fd, 0, 0);
+            debug_serial_fail_err("mv", "read", (int)(-bytes_read));
+            return -1;
+        }
+        if (bytes_read == 0)
+            break;
+
+        int64_t bytes_written = syscall(SYS_WRITE, (uint64_t)dst_fd, (uint64_t)buffer, (size_t)bytes_read);
+        if (bytes_written < 0 || bytes_written != bytes_read)
+        {
+            debug_perror("mv", dst, (int)bytes_written);
+            syscall(SYS_CLOSE, (uint64_t)src_fd, 0, 0);
+            syscall(SYS_CLOSE, (uint64_t)dst_fd, 0, 0);
+            debug_serial_fail_err("mv", "write", bytes_written < 0 ? (int)(-bytes_written) : (int)EIO);
+            return -1;
+        }
+        total_copied += (size_t)bytes_read;
+        remaining -= (size_t)bytes_read;
     }
-    
-    /* Unlink source */
+
+    syscall(SYS_CLOSE, (uint64_t)src_fd, 0, 0);
+    syscall(SYS_CLOSE, (uint64_t)dst_fd, 0, 0);
+
+    if (total_copied != (size_t)st.st_size)
+    {
+        debug_write_err("mv: incomplete copy\n");
+        debug_serial_fail("mv", "incomplete");
+        return -1;
+    }
+
     int64_t unlink_result = syscall(SYS_UNLINK, (uint64_t)src, 0, 0);
     if (unlink_result < 0)
     {
         debug_perror("mv", src, (int)unlink_result);
         debug_serial_fail_err("mv", "unlink", (int)(-unlink_result));
-        return 1;
+        return -1;
     }
-    
+
+    snprintf(msg, sizeof(msg), "mv: moved '%s' -> '%s'\n", src, dst);
+    debug_write(msg);
     debug_serial_ok("mv");
     return 0;
 }
@@ -101,8 +131,3 @@ struct debug_command cmd_mv = {
     .usage = "mv SRC DST",
     .description = "Move (rename) file"
 };
-
-
-
-
-

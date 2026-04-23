@@ -12,16 +12,14 @@
 #include "debug_bins.h"
 #include <ir0/syscall.h>
 #include <ir0/fcntl.h>
-#include <drivers/video/console.h>
-#include <drivers/video/typewriter.h>
-#include <ir0/vga.h>
+#include <ir0/time.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 
-#define PROMPT "> "
 #define INPUT_MAX 255
 #define BATCH_READ 32
+#define EMPTY_READ_SPIN_MAX 100
 
 /* Write to stdout (fd 1) - all output goes through typewriter for consistent cursor */
 static void write_stdout(const char *str)
@@ -35,6 +33,25 @@ static void write_stderr(const char *str)
 {
     if (str)
         syscall(SYS_WRITE, 2, (uint64_t)str, strlen(str));
+}
+
+/*
+ * Bash-style prompt: ir0:<cwd>$  when getcwd works, else ir0$ .
+ * Keeps cwd in the kernel-provided buffer (bounded by sizeof cwd).
+ */
+static void print_prompt(void)
+{
+    char cwd[256];
+    int64_t r = syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0);
+
+    if (r >= 0)
+    {
+        write_stdout("ir0:");
+        write_stdout(cwd);
+        write_stdout("$ ");
+    }
+    else
+        write_stdout("ir0$ ");
 }
 
 /* Echo single char to stdout - keeps typewriter/cursor in sync (OSDev-style) */
@@ -129,7 +146,17 @@ static void execute_single_command(const char *cmd_line)
     struct debug_command *cmd = debug_find_command(cmd_name);
     if (cmd)
     {
-        cmd->handler(argc, argv);
+        int ret = cmd->handler(argc, argv);
+
+        if (ret != 0)
+        {
+            char eb[160];
+            int len = snprintf(eb, sizeof(eb), "ir0: %s: failed (exit %d)\n",
+                               cmd_name, ret);
+
+            if (len > 0 && len < (int)sizeof(eb))
+                write_stderr(eb);
+        }
         return;
     }
 
@@ -232,17 +259,23 @@ static void execute_command(const char *cmd)
 
 void cmd_clear(void)
 {
-    console_clear(0x0F);
-    extern int cursor_pos;
-    cursor_pos = 0;
+    /*
+     * Clear via ANSI on stdout (fd 1) so the shell stays on the syscall
+     * write path like other debug_bins output.
+     */
+    static const char ansi_home_clear[] = "\033[2J\033[H";
+
+    syscall(SYS_WRITE, 1, (uint64_t)ansi_home_clear,
+            sizeof(ansi_home_clear) - 1);
     write_stdout("IR0 DebShell v0.0.1\nType 'help' for commands\n\n");
 }
 
 void vga_print(const char *str, uint8_t color)
 {
+    (void)color;
     if (!str)
         return;
-    typewriter_vga_print(str, color);
+    write_stdout(str);
 }
 
 void shell_entry(void)
@@ -254,53 +287,74 @@ void shell_entry(void)
 
     for (;;)
     {
-        write_stdout(PROMPT);
+        print_prompt();
 
         input_pos = 0;
         input[0] = '\0';
 
-        while (1)
         {
-            char buf[BATCH_READ];
-            int64_t n = syscall(SYS_READ, 0, (uint64_t)buf, sizeof(buf));
-            if (n <= 0)
-                continue;
+            int empty_reads = 0;
 
-            for (int i = 0; i < n; i++)
+            while (1)
             {
-                char c = buf[i];
+                char buf[BATCH_READ];
+                int64_t n = syscall(SYS_READ, 0, (uint64_t)buf, sizeof(buf));
 
-                if (c == 0x1B && i + 1 < n)
+                if (n <= 0)
                 {
-                    if (buf[i + 1] == 0x01)
-                        syscall(SYS_CONSOLE_SCROLL, 1, 0, 0);
-                    else if (buf[i + 1] == 0x02)
-                        syscall(SYS_CONSOLE_SCROLL, -1, 0, 0);
-                    i++;
-                    continue;
-                }
-                if (c == 0x1B)
-                    continue;
-
-                if (c == '\n')
-                {
-                    echo_char('\n');
-                    input[input_pos] = '\0';
-                    goto line_done;
-                }
-
-                if (c == '\b' || c == 127)
-                {
-                    if (input_pos > 0)
+                    empty_reads++;
+                    if (empty_reads >= EMPTY_READ_SPIN_MAX)
                     {
-                        input_pos--;
-                        echo_char('\b');
+                        struct timespec ts;
+
+                        ts.tv_sec = 0;
+                        ts.tv_nsec = 10000000L; /* 10 ms */
+                        (void)ir0_nanosleep(&ts, NULL);
+                        empty_reads = 0;
                     }
+                    continue;
                 }
-                else if (c >= 32 && c < 127 && input_pos < INPUT_MAX)
+
+                empty_reads = 0;
+
+                for (int i = 0; i < n; i++)
                 {
-                    input[input_pos++] = c;
-                    echo_char(c);
+                    char c = buf[i];
+
+                    if (c == 0x1B && i + 1 < n)
+                    {
+                        if (buf[i + 1] == 0x01)
+                            syscall(SYS_CONSOLE_SCROLL, 1, 0, 0);
+                        else if (buf[i + 1] == 0x02)
+                            syscall(SYS_CONSOLE_SCROLL, -1, 0, 0);
+                        else if (buf[i + 1] == 0x03)
+                            cmd_clear();
+                        i++;
+                        continue;
+                    }
+                    if (c == 0x1B)
+                        continue;
+
+                    if (c == '\n')
+                    {
+                        echo_char('\n');
+                        input[input_pos] = '\0';
+                        goto line_done;
+                    }
+
+                    if (c == '\b' || c == 127)
+                    {
+                        if (input_pos > 0)
+                        {
+                            input_pos--;
+                            echo_char('\b');
+                        }
+                    }
+                    else if (c >= 32 && c < 127 && input_pos < INPUT_MAX)
+                    {
+                        input[input_pos++] = c;
+                        echo_char(c);
+                    }
                 }
             }
         }

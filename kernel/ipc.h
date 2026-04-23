@@ -45,7 +45,6 @@ void wait_queue_init(wait_queue_t *wq);
 void wait_queue_add(wait_queue_t *wq, process_t *proc);
 process_t *wait_queue_wake_one(wait_queue_t *wq);
 void wait_queue_wake_all(wait_queue_t *wq);
-bool wait_queue_empty(wait_queue_t *wq);
 
 
 
@@ -57,8 +56,7 @@ typedef struct semaphore {
 
 /* Semaphore operations */
 void semaphore_init(semaphore_t *sem, int initial_count);
-void semaphore_down(semaphore_t *sem);  /* Block if count == 0 */
-void semaphore_up(semaphore_t *sem);    /* Increment and wake one */
+void semaphore_up(semaphore_t *sem);
 
 
 

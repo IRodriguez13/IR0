@@ -15,6 +15,7 @@ static int cmd_echo_handler(int argc, char **argv)
     if (argc < 2)
     {
         debug_write("\n");
+        debug_serial_ok("echo");
         return 0;
     }
     
@@ -66,7 +67,7 @@ static int cmd_echo_handler(int argc, char **argv)
             debug_write_err("echo: cannot open file '");
             debug_write_err(filename);
             debug_write_err("'\n");
-            debug_serial_fail("echo", "open");
+            debug_serial_fail_err("echo", "open", (int)(-fd));
             return 1;
         }
         
@@ -77,7 +78,7 @@ static int cmd_echo_handler(int argc, char **argv)
         if (result < 0)
         {
             debug_write_err("echo: write failed\n");
-            debug_serial_fail("echo", "write");
+            debug_serial_fail_err("echo", "write", (int)(-result));
             return 1;
         }
     }

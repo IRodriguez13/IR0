@@ -14,10 +14,10 @@
  * hardware network drivers (Layer 2 - Data Link) with network protocols
  * (Layer 3+ - Network and above). The design follows a layered architecture:
  *
- *   Layer 1 (Physical): Hardware NICs (RTL8139, e1000 drivers)
+ *   Layer 1 (Physical): Hardware NICs (RTL8139 driver)
  *   Layer 2 (Data Link): Ethernet frames, MAC addressing
  *   Layer 3 (Network): IP protocol (IPv4)
- *   Layer 4+ (Transport/Application): ICMP, TCP, UDP
+ *   Layer 4+ (Transport/Application): ICMP, UDP (DNS client over UDP)
  *
  * The abstraction provides:
  * - Device registration: NICs register themselves as net_device structures
@@ -34,14 +34,12 @@
 #include "ip.h"
 #include "icmp.h"
 #include "udp.h"
-#include "tcp.h"
 #include "dns.h"
 #include <ir0/net.h>
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
 #include <drivers/net/rtl8139.h>
-#include <drivers/net/e1000.h>
 #include <string.h>
 
 /* Global device and protocol lists. These linked lists maintain all registered
@@ -165,6 +163,12 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
     {
         LOG_ERROR_FMT("NET", "net_send: Invalid parameters (dev=%p, send=%p, payload=%p, len=%d, mtu=%d)",
                      dev, dev ? dev->send : NULL, payload, (int)len, dev ? (int)dev->mtu : 0);
+        return -1;
+    }
+
+    if (!dest_mac)
+    {
+        serial_print("NET: net_send: NULL destination MAC\n");
         return -1;
     }
 
@@ -368,7 +372,7 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
         /* No handler registered for this EtherType. This is normal for:
          * - Unknown protocols
          * - Frames not intended for this system
-         * - Protocols not yet implemented (TCP might fall here, but UDP is implemented)
+         * - Protocols not registered for this EtherType (e.g. unknown L2 types)
          * 
          * Note: We silently drop these frames as they're not for us or not supported.
          * Excessive logging would spam the serial output.
@@ -398,7 +402,7 @@ struct net_device *net_get_devices(void)
  *
  * Protocols can register for either:
  *   - Layer 2 (EtherType): ARP, IP register via ethertype field
- *   - Layer 3+ (IP protocol): ICMP, TCP, UDP register via ipproto field
+ *   - Layer 3+ (IP protocol): ICMP and UDP register via ipproto field
  *
  * The protocol structure must persist for the lifetime of the protocol. This
  * function is idempotent: registering the same protocol twice is a no-op.
@@ -513,15 +517,14 @@ struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype)
  *
  * This function searches for a protocol handler registered for a specific IP
  * protocol number. Used by the IP layer (ip_receive_handler) to route incoming
- * IP packets to upper-layer protocols like ICMP, TCP, or UDP. IP protocol
- * numbers identify what type of data is in the IP payload.
+ * IP packets to upper-layer protocols (this stack: ICMP and UDP). IP
+ * protocol numbers identify what type of data is in the IP payload.
  *
- * Common protocol numbers:
+ * Common protocol numbers (IANA; IR0 implements 1 and 17 only):
  *   - 1: ICMP (Internet Control Message Protocol)
- *   - 6: TCP (Transmission Control Protocol)
  *   - 17: UDP (User Datagram Protocol)
  *
- * @ipproto: IP protocol number (e.g., IPPROTO_ICMP=1, IPPROTO_TCP=6, IPPROTO_UDP=17)
+ * @ipproto: IP protocol number (e.g., IPPROTO_ICMP=1, IPPROTO_UDP=17)
  * @return: Protocol structure if found, NULL otherwise
  */
 struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto)
@@ -543,7 +546,7 @@ struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto)
  * subsystem. It must be called during kernel boot before any network operations
  * can be performed. The initialization order is critical:
  *
- *   1. Network drivers (RTL8139, e1000): Register hardware devices
+ *   1. Network driver (RTL8139): Register hardware device
  *   2. ARP protocol: Must initialize before IP (IP needs ARP for MAC resolution)
  *   3. IP protocol: Must initialize before ICMP (ICMP is carried over IP)
  *   4. ICMP protocol: Depends on IP for packet delivery
@@ -566,7 +569,6 @@ int init_net_stack(void)
      * gracefully return without registering devices.
      */
     rtl8139_init();
-    e1000_init();
     
     /* Initialize network protocols in dependency order. ARP must come before
      * IP because IP uses ARP to resolve MAC addresses. IP must come before
@@ -597,12 +599,6 @@ int init_net_stack(void)
         return -1;
     }
     
-    if (tcp_init() != 0)
-    {
-        LOG_ERROR("NET", "Failed to initialize TCP protocol");
-        return -1;
-    }
-    
     if (dns_init() != 0)
     {
         LOG_ERROR("NET", "Failed to initialize DNS client");
@@ -629,6 +625,4 @@ void net_poll(void)
     /* Poll RTL8139 driver for incoming packets */
     extern void rtl8139_poll(void);
     rtl8139_poll();
-    
-    /* Future: Add polling for other network drivers (e1000, etc.) here */
 }

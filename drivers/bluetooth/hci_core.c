@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <drivers/timer/clock_system.h>
 #include <stdint.h>
+#include <drivers/serial/serial.h>
 
 /* Helper: Get uptime in milliseconds */
 static uint32_t hci_get_uptime_ms(void)
@@ -218,7 +219,7 @@ int hci_core_init(void)
         return 0;  /* Already initialized */
     
     /* Initialize HCI UART transport */
-    int ret = hci_uart_init(0x3F8);  /* COM1 */
+    int ret = hci_uart_init(SERIAL_PORT_COM1);
     if (ret < 0)
         return ret;
     

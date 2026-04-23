@@ -402,20 +402,10 @@ void clock_tick(void)
         rr_schedule_next();
     }
     
-    /* Network polling: poll network devices periodically for incoming packets.
-     * This is necessary because interrupts may not be working correctly in QEMU,
-     * and we need to receive packets even when not actively waiting for responses.
-     * Poll every 100 ticks (10 times per second at 1kHz) to balance responsiveness
-     * and CPU usage.
+    /*
+     * Do not poll network stacks from IRQ0 context.
+     * Networking is polled from the main loop where IRQ latency is unaffected.
      */
-    static uint32_t network_poll_counter = 0;
-    network_poll_counter++;
-    if (network_poll_counter >= 100)  /* Poll 10 times per second */
-    {
-        network_poll_counter = 0;
-        extern void net_poll(void);
-        net_poll();
-    }
 }
 
 /* SYSTEM TIME FUNCTIONS */

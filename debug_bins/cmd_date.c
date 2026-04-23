@@ -5,7 +5,6 @@
  */
 #include "debug_bins.h"
 #include <ir0/time.h>
-#include <stdlib.h>
 
 /* Días por mes (no bisiesto) */
 static const int days_in_month[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };

@@ -1,36 +1,50 @@
 #include "idt.h"
 #include "pic.h"
 #include "io.h"
+
+/* PS/2 keyboard controller: data port (scancode byte read) */
+#define PS2_DATA_PORT 0x60
+#include <config.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
-#include <debug_bins/dbgshell.h>
 
 /* Forward declarations */
 void wakeup_from_idle(void);
 void stdin_wake_check(void);
+static void keyboard_buffer_add(char c);
 
-// Buffer de teclado simple
-#define KEYBOARD_BUFFER_SIZE 256
-static char keyboard_buffer[KEYBOARD_BUFFER_SIZE];
+/*
+ * Kernel-side ring for stdin; separate from the shared userspace layout in
+ * config.h (KEYBOARD_BUFFER_*).
+ */
+#define KERNEL_KBD_RING_SIZE 256
+static char keyboard_buffer[KERNEL_KBD_RING_SIZE];
 static int keyboard_buffer_head = 0;
 static int keyboard_buffer_tail = 0;
 
-// Buffer compartido con Ring 3 (shell)
-#define SHARED_KEYBOARD_BUFFER_ADDR 0x500000
-volatile char *shared_keyboard_buffer = (volatile char *)SHARED_KEYBOARD_BUFFER_ADDR;
-volatile int *shared_keyboard_buffer_pos = (volatile int *)(SHARED_KEYBOARD_BUFFER_ADDR + 256);
+volatile char *shared_keyboard_buffer = (volatile char *)KEYBOARD_BUFFER_ADDR;
+volatile int *shared_keyboard_buffer_pos =
+    (volatile int *)(KEYBOARD_BUFFER_ADDR + KEYBOARD_BUFFER_SIZE);
 
-// Sistema de despertar del idle
+/* Idle wake coordination */
 static int system_in_idle_mode = 0;
 static int wake_requested = 0;
 
-// Estado de teclas modificadoras
 static int shift_pressed = 0;
 static int ctrl_pressed = 0;
 /* Extended scancode prefix (0xE0); next byte may be Page Up/Down etc. */
 static int ext_scancode = 0;
 
-// Tabla de scancodes básica (solo caracteres imprimibles)
+/*
+ * Escape sequences for shell: ESC + 0x01 = scroll up (Page Up), ESC + 0x02
+ * = scroll down (Page Down), ESC + 0x03 = request clear (Ctrl+L).
+ * Shell uses only syscalls; scroll reads call SYS_CONSOLE_SCROLL.
+ */
+#define KEY_ESC_SCROLL_UP     0x01
+#define KEY_ESC_SCROLL_DOWN   0x02
+#define KEY_ESC_CLEAR_SCREEN  0x03
+
+/* Basic scancode -> ASCII (printable subset) */
 static const char scancode_to_ascii[] = {
     0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  // 0-7
     '7',  '8',  '9',  '0',  '-',  '=',  0,    0,    // 8-15 (backspace, tab - manejados por separado)
@@ -79,7 +93,7 @@ static const uint16_t ext_scancode_to_keycode[256] = {
     [0x5B] = KEY_LEFTMETA, [0x5C] = KEY_RIGHTMETA,
 };
 
-// Tabla de scancodes con Shift presionado
+/* Scancode table with Shift held */
 static const char scancode_to_ascii_shift[] = {
     0,    0,    '!',  '@',  '#',  '$',  '%',  '^',  // 0-7
     '&',  '*',  '(',  ')',  '_',  '+',  0,    0,    // 8-15
@@ -94,45 +108,46 @@ static const char scancode_to_ascii_shift[] = {
     0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
 };
 
-char translate_scancode(uint8_t sc) 
+char translate_scancode(uint8_t sc)
 {
-    switch (sc) 
+    switch (sc)
     {
-        case 0x0E: return '\b';  // Backspace
-        case 0x0F: return '\t';  // Tab
-        case 0x1C: return '\n';  // Enter
-        case 0x39: return ' ';   // Space
-        
-        case 0x1D: ctrl_pressed = 1; return 0;  // Left/Right Ctrl press
-        case 0x9D: ctrl_pressed = 0; return 0;  // Left/Right Ctrl release
-        
-        case 0x26:
-            if (!ctrl_pressed) 
-            {
-                return 'l';      
-            }
-            else
-            {
-                cmd_clear();
-                ctrl_pressed = 0;
-                return 0;
-            }
-                        
-        default:
-            
-            
-            if (sc < sizeof(scancode_to_ascii)) 
-            {
-                if (shift_pressed) 
-                {
-                    return scancode_to_ascii_shift[sc];
-                }
-                else 
-                {
-                    return scancode_to_ascii[sc];
-                }
-            }
-            return 0;
+    case 0x0E:
+        return '\b'; /* Backspace */
+    case 0x0F:
+        return '\t'; /* Tab */
+    case 0x1C:
+        return '\n'; /* Enter */
+    case 0x39:
+        return ' '; /* Space */
+
+    case 0x1D:
+        ctrl_pressed = 1;
+        return 0;
+    case 0x9D:
+        ctrl_pressed = 0;
+        return 0;
+
+    /*
+     * Ctrl+L: shell clears via ESC + KEY_ESC_CLEAR_SCREEN (same pattern as
+     * Page Up/Down); IRQ path does not call into the debug shell.
+     */
+    case 0x26:
+        if (!ctrl_pressed)
+            return 'l';
+        keyboard_buffer_add(0x1B);
+        keyboard_buffer_add((char)KEY_ESC_CLEAR_SCREEN);
+        ctrl_pressed = 0;
+        return 0;
+
+    default:
+        if (sc < sizeof(scancode_to_ascii))
+        {
+            if (shift_pressed)
+                return scancode_to_ascii_shift[sc];
+            return scancode_to_ascii[sc];
+        }
+        return 0;
     }
 }
 
@@ -140,7 +155,7 @@ char translate_scancode(uint8_t sc)
 
 static void keyboard_buffer_add(char c)
 {
-    int next = (keyboard_buffer_head + 1) % KEYBOARD_BUFFER_SIZE;
+    int next = (keyboard_buffer_head + 1) % KERNEL_KBD_RING_SIZE;
     if (next != keyboard_buffer_tail) 
     {
         keyboard_buffer[keyboard_buffer_head] = c;
@@ -160,7 +175,7 @@ char keyboard_buffer_get(void)
 
 
     char c = keyboard_buffer[keyboard_buffer_tail];
-    keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KEYBOARD_BUFFER_SIZE;
+    keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KERNEL_KBD_RING_SIZE;
     return c;
 }
 
@@ -178,21 +193,13 @@ void keyboard_buffer_clear(void)
 }
 #endif
 
-/*
- * Escape sequences for shell: ESC + 0x01 = scroll up (Page Up), ESC + 0x02 = scroll down (Page Down).
- * Shell uses only syscalls; on reading these it calls SYS_CONSOLE_SCROLL.
- */
-#define KEY_ESC_SCROLL_UP   0x01
-#define KEY_ESC_SCROLL_DOWN 0x02
-
 void keyboard_handler64(void) 
 {
-    uint8_t scancode = inb(0x60);
+    uint8_t scancode = inb(PS2_DATA_PORT);
     
     if (scancode == 0xE0)
     {
         ext_scancode = 1;
-        outb(0x20, 0x20);
         return;
     }
     if (ext_scancode)
@@ -203,19 +210,18 @@ void keyboard_handler64(void)
             input_event_push(EV_KEY, kc, (scancode < 0x80) ? 1 : 0);
         if (scancode < 0x80)
         {
-            if (scancode == 0x49) /* Page Up */
+            if (scancode == 0x49)
             {
                 keyboard_buffer_add(0x1B);
                 keyboard_buffer_add(KEY_ESC_SCROLL_UP);
             }
-            else if (scancode == 0x51) /* Page Down */
+            else if (scancode == 0x51)
             {
                 keyboard_buffer_add(0x1B);
                 keyboard_buffer_add(KEY_ESC_SCROLL_DOWN);
             }
         }
         stdin_wake_check();
-        outb(0x20, 0x20);
         return;
     }
 
@@ -234,22 +240,19 @@ void keyboard_handler64(void)
         if (ascii != 0)
             keyboard_buffer_add(ascii);
     }
-    /* Wake processes blocked on read(0) so they see the new data immediately */
     stdin_wake_check();
-    outb(0x20, 0x20);
 }
 
 
 
-// Función para inicializar el teclado
-void keyboard_init(void) 
+/*
+ * keyboard_init - Reset keyboard buffer.
+ * IRQ1 unmasking is done centrally in main.c after PIC remap.
+ */
+void keyboard_init(void)
 {
-    // Limpiar buffer
     keyboard_buffer_head = 0;
     keyboard_buffer_tail = 0;
-    
-    // Habilitar IRQ del teclado (IRQ1)
-    pic_unmask_irq(IRQ_KEYBOARD);
 }
 
 

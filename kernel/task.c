@@ -12,6 +12,7 @@
  */
 
 #include "task.h"
+#include <config.h>
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <arch_interface.h>
@@ -55,10 +56,10 @@ task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t n
 
     memset(task, 0, sizeof(task_t));
 
-    /* Basic setup */
+    /* Basic setup (nice kept in API for compat; no per-task storage) */
     task->pid = next_pid++;
     task->priority = priority;
-    task->nice = nice;
+    (void)nice;
     task->state = TASK_READY;
     task->stack_base = stack;
     task->stack_size = DEFAULT_STACK_SIZE;
@@ -133,22 +134,6 @@ void destroy_task(task_t *task)
     kfree(task);
 }
 
-void task_set_nice(task_t *task, int8_t nice)
-{
-    if (!task)
-    {
-        return;
-    }
-
-    if (nice < MIN_NICE || nice > MAX_NICE)
-    {
-        LOG_WARN("task_set_nice: Invalid nice value");
-        return;
-    }
-
-    task->nice = nice;
-}
-
 void task_get_info(task_t *task)
 {
     if (!task)
@@ -185,10 +170,6 @@ void task_get_info(task_t *task)
 
     print("  Priority: ");
     print_hex_compact(task->priority);
-    print("\n");
-
-    print("  Nice: ");
-    print_hex_compact(task->nice);
     print("\n");
 }
 

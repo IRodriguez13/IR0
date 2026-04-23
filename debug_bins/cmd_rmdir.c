@@ -40,6 +40,13 @@ static int cmd_rmdir_handler(int argc, char **argv)
         return 1;
     }
 
+    {
+        char line[544];
+        int n = snprintf(line, sizeof(line), "rmdir: removed '%s'\n", dirname);
+
+        if (n > 0 && n < (int)sizeof(line))
+            debug_write(line);
+    }
     debug_serial_ok("rmdir");
     return 0;
 }

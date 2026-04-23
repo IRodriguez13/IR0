@@ -127,7 +127,9 @@ static const uint8_t *dns_decode_name(const uint8_t *data, const uint8_t *buf_st
     {
         if ((*ptr & 0xC0) == 0xC0)
         {
-            /* Compression pointer */
+            /* Compression pointer: need two bytes; stay within packet bounds */
+            if (ptr + 1 >= buf_start + buf_len)
+                return NULL;
             uint16_t offset = ((*ptr & 0x3F) << 8) | ptr[1];
             if (offset >= buf_len)
                 return NULL;
@@ -217,24 +219,36 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     const uint8_t *ptr = (const uint8_t *)data + sizeof(struct dns_header);
     
     /* Skip question section */
+    const uint8_t *pkt_end = (const uint8_t *)data + len;
     for (uint16_t i = 0; i < qdcount; i++)
     {
-        /* Skip QNAME */
-        while (*ptr && ptr < (const uint8_t *)data + len)
+        /* Skip QNAME (labels or RFC 1035 name compression) */
+        while (ptr < pkt_end)
         {
-            uint8_t label_len = *ptr++;
-            if ((label_len & 0xC0) == 0xC0)
+            uint8_t c = *ptr;
+            if (c == 0)
             {
                 ptr++;
                 break;
             }
-            ptr += label_len;
+            if ((c & 0xC0) == 0xC0)
+            {
+                /* Compression pointer: prefix octet + offset octet (14-bit offset) */
+                if (ptr + 2 > pkt_end)
+                    return;
+                ptr += 2;
+                break;
+            }
+            uint8_t label_len = c;
+            if (label_len > 63 || ptr + 1 + label_len > pkt_end)
+                return;
+            ptr += 1 + label_len;
         }
-        if (*ptr == 0)
+        if (ptr < pkt_end && *ptr == 0)
             ptr++;
         
         /* Skip QTYPE and QCLASS */
-        if (ptr + 4 > (const uint8_t *)data + len)
+        if (ptr + 4 > pkt_end)
             break;
         ptr += 4;
     }
@@ -242,7 +256,7 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     /* Parse answer section */
     for (uint16_t i = 0; i < ancount; i++)
     {
-        if (ptr >= (const uint8_t *)data + len)
+        if (ptr >= pkt_end)
             break;
         
         /* Skip NAME (may be compressed) */
@@ -253,7 +267,7 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
         ptr = name_end;
         
         /* Read TYPE, CLASS, TTL, RDLENGTH */
-        if (ptr + 10 > (const uint8_t *)data + len)
+        if (ptr + 10 > pkt_end)
             break;
         
         uint16_t type = ntohs(*(uint16_t *)ptr);
@@ -267,9 +281,9 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
         /* If A record, extract IP address */
         if (type == DNS_TYPE_A && class == DNS_CLASS_IN && rdlength == 4)
         {
-            if (ptr + 4 <= (const uint8_t *)data + len)
+            if (ptr + 4 <= pkt_end)
             {
-                query->result = *(ip4_addr_t *)ptr;
+                memcpy(&query->result, ptr, 4);
                 query->resolved = true;
                 
                 LOG_INFO_FMT("DNS", "Resolved %s to " IP4_FMT, name, IP4_ARGS(ntohl(query->result)));
@@ -278,6 +292,8 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
         }
         
         /* Skip RDATA */
+        if (ptr + rdlength > pkt_end)
+            break;
         ptr += rdlength;
     }
     

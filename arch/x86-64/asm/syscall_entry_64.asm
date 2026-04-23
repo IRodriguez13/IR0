@@ -38,17 +38,20 @@ syscall_entry_asm:
     mov ds, ax
     mov es, ax
     
-    ; Setup syscall arguments for C function
-    ; C function expects: (rdi=syscall_num, rsi=arg1, rdx=arg2, rcx=arg3, r8=arg4, r9=arg5)
-    mov rdi, r10    ; syscall number
-    mov rsi, r11    ; arg1
-    mov rdx, r12    ; arg2
-    mov rcx, r13    ; arg3
-    mov r8, r14     ; arg4
-    mov r9, r15     ; arg5
+    ; Setup syscall arguments for C function (Linux x86-64 style layout to C)
+    ; rdi=num, rsi=arg1, rdx=arg2, rcx=arg3, r8=arg4, r9=arg5, stack=arg6
+    sub rsp, 8
+    mov [rsp], r9           ; 7th C param: user syscall arg6 (still in r9)
+    mov rdi, r10          ; syscall number
+    mov rsi, r11          ; arg1
+    mov rdx, r12          ; arg2
+    mov rcx, r13          ; arg3
+    mov r8, r14           ; arg4
+    mov r9, r15           ; arg5
     
     ; Call C dispatcher
     call syscall_dispatch
+    add rsp, 8            ; pop arg6 slot
     
     ; Return value in rax (already set by syscall_dispatch)
     

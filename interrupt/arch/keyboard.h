@@ -2,27 +2,21 @@
 
 #include <stdint.h>
 
-// Constantes del buffer de teclado
-#define KEYBOARD_BUFFER_SIZE 256
+/*
+ * Ring buffer sizing lives in keyboard.c (KERNEL_KBD_RING_SIZE).
+ * Userspace/shared layout: KEYBOARD_BUFFER_ADDR / KEYBOARD_BUFFER_SIZE in config.h.
+ */
 
-// Funciones del buffer de teclado
-void keyboard_buffer_add(char c);
 char keyboard_buffer_get(void);
 int keyboard_buffer_has_data(void);
 void keyboard_buffer_clear(void);
 
-// Handlers de interrupciones
 void keyboard_handler64(void);
-void keyboard_handler32(void);
 
-// Inicialización
 void keyboard_init(void);
 
-// Función de traducción de scancodes
 char translate_scancode(uint8_t sc);
 
-// Sistema de despertar del idle
 void set_idle_mode(int is_idle);
 int is_in_idle_mode(void);
 void wakeup_from_idle(void);
-

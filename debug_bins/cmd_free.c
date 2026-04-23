@@ -5,7 +5,6 @@
  */
 
 #include "debug_bins.h"
-#include <stdlib.h>
 
 #define BUF_SIZE 256
 

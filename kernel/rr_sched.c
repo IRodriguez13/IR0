@@ -24,6 +24,7 @@
 
 #include "process.h"
 #include "rr_sched.h"
+#include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <arch/x86-64/sources/user_mode.h>
@@ -262,11 +263,12 @@ void rr_schedule_next(void)
 	if (!rr_current || !next || next->state == PROCESS_ZOMBIE || next->state == PROCESS_BLOCKED)
 	{
 		/*
-		 * HLT until interrupt (keyboard, timer). Caller (e.g. sys_read) will
-		 * retry. Do NOT set current_process = NULL - we return to the caller
-		 * which is still in prev's context; prev must remain current.
+		 * Never execute HLT here because this function can run from IRQ context
+		 * with IF=0. Halting with interrupts disabled deadlocks the CPU.
+		 *
+		 * Keep current_process unchanged and return to the interrupted context;
+		 * the main idle loop is responsible for HLT in a safe context.
 		 */
-		__asm__ volatile("hlt");
 		return;
 	}
 
@@ -301,19 +303,51 @@ void rr_schedule_next(void)
 	 */
 	handle_signals();
 
-	/* Special handling for first context switch.
-	 * The first switch is unique because we're transitioning from
-	 * kernel mode (where we're currently running) to user mode
-	 * (where the first process will run). This requires special
-	 * CPU state setup (segment selectors, privilege level, etc).
+	/*
+	 * First context switch: no previous task to save.
+	 * For kernel-mode processes (debug shell), stay in ring 0.
+	 * For user-mode processes, transition to ring 3.
 	 */
 	if (first)
 	{
-		first = 0;  /* Mark that we've done the first switch */
-		/* Jump to user mode - never returns */
-		jmp_ring3((void *)next->task.rip);
-		/* If we somehow return (should never happen), panic */
-		panic("Returned from jmp_ring3");
+		first = 0;
+		if (next->mode == KERNEL_MODE)
+		{
+			/*
+			 * Kernel-mode init: switch CR3, set stack, jump.
+			 * iretq with kernel CS/SS keeps us in ring 0.
+			 */
+			uint64_t kds = KERNEL_DATA_SEL;
+			uint64_t kcs = KERNEL_CODE_SEL;
+			__asm__ volatile(
+				"cli\n"
+				"mov %[cr3], %%rax\n"
+				"mov %%rax, %%cr3\n"
+				"mov %w[ds], %%ds\n"
+				"mov %w[ds], %%es\n"
+				"mov %w[ds], %%fs\n"
+				"mov %w[ds], %%gs\n"
+				"pushq %[ds]\n"
+				"pushq %[rsp_val]\n"
+				"pushq %[rflags]\n"
+				"pushq %[cs_val]\n"
+				"pushq %[rip_val]\n"
+				"iretq\n"
+				:
+				: [cr3] "r"(next->task.cr3),
+				  [rsp_val] "r"(next->task.rsp),
+				  [rflags] "r"((uint64_t)RFLAGS_IF),
+				  [rip_val] "r"(next->task.rip),
+				  [ds] "r"(kds),
+				  [cs_val] "r"(kcs)
+				: "rax", "memory"
+			);
+		}
+		else
+		{
+			jmp_ring3((void *)next->task.rip);
+		}
+		panic("Returned from first context switch");
 	}
 
 	/* Normal context switch between processes.

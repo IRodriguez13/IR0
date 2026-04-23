@@ -7,8 +7,6 @@
  */
 
 #include "debug_bins.h"
-#include <ir0/errno.h>
-#include <string.h>
 
 static int cmd_mkdir_handler(int argc, char **argv)
 {
@@ -16,7 +14,7 @@ static int cmd_mkdir_handler(int argc, char **argv)
     {
         debug_write_err("mkdir: expected argument\n");
         debug_serial_fail("mkdir", "usage");
-        return 1;
+        return -1;
     }
 
     const char *dirname = argv[1];
@@ -25,9 +23,12 @@ static int cmd_mkdir_handler(int argc, char **argv)
     {
         debug_perror("mkdir", dirname, (int)result);
         debug_serial_fail_err("mkdir", "vfs", (int)(-result));
-        return 1;
+        return -1;
     }
-    
+
+    debug_write("mkdir: created '");
+    debug_write(dirname);
+    debug_write("'\n");
     debug_serial_ok("mkdir");
     return 0;
 }
@@ -38,4 +39,3 @@ struct debug_command cmd_mkdir = {
     .usage = "mkdir DIR",
     .description = "Create directory"
 };
-

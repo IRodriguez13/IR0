@@ -224,16 +224,9 @@ static void dump_process_context(void)
 static void dump_memory_state(void)
 {
     serial_print("\n--- MEMORY STATE ---\n");
-    
-    /* Try to get allocator statistics - may not be available if memory is corrupted */
-    extern uint32_t free_pages_count; /* From mm/allocator.c */
-    
-    serial_print("Free Pages Count: ");
-    serial_print_hex32(free_pages_count);
-    serial_print("\n");
-    
-    /* Note: Full memory statistics would require accessing allocator internals
-     * which may not be safe during panic. This is a minimal safe dump.
+
+    /* Full heap statistics are not printed here: allocator state may be unsafe
+     * to traverse during panic.
      */
     serial_print("(Full memory statistics may be unavailable due to panic state)\n");
     serial_print("\n");

@@ -166,7 +166,10 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
              * to preserve any payload data (ping often includes timestamps or
              * other data in the payload for round-trip time calculation).
              */
-            uint8_t *reply = kmalloc(len);
+            size_t reply_len = len;
+            if (reply_len > 1500)
+                reply_len = 1500;
+            uint8_t *reply = kmalloc(reply_len);
             if (!reply)
             {
                 LOG_ERROR("ICMP", "Failed to allocate memory for ICMP reply");
@@ -178,7 +181,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
              * the echo identifier and sequence number, which the requester uses
              * to match replies to requests.
              */
-            memcpy(reply, data, len);
+            memcpy(reply, data, reply_len);
 
             struct icmp_header *reply_icmp = (struct icmp_header *)reply;
 
@@ -194,7 +197,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
             /* Recalculate checksum. Since we changed the type field, the checksum
              * must be recalculated. The payload and other fields remain unchanged.
              */
-            reply_icmp->checksum = icmp_checksum(reply, len);
+            reply_icmp->checksum = icmp_checksum(reply, reply_len);
 
             /* Get source IP from IP layer */
             ip4_addr_t src_ip = ip_get_last_src_addr();
@@ -206,7 +209,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
             }
 
             /* Send reply via IP layer */
-            int ret = ip_send(dev, src_ip, IPPROTO_ICMP, reply, len);
+            int ret = ip_send(dev, src_ip, IPPROTO_ICMP, reply, reply_len);
             if (ret != 0)
             {
                 LOG_ERROR("ICMP", "Failed to send ICMP Echo Reply");

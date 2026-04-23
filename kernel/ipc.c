@@ -86,12 +86,6 @@ void wait_queue_wake_all(wait_queue_t *wq)
     wq->tail = NULL;
 }
 
-bool wait_queue_empty(wait_queue_t *wq)
-{
-    return !wq || !wq->head;
-}
-
-
 void semaphore_init(semaphore_t *sem, int initial_count)
 {
     if (!sem)
@@ -99,32 +93,6 @@ void semaphore_init(semaphore_t *sem, int initial_count)
 
     sem->count = initial_count;
     wait_queue_init(&sem->wait_queue);
-}
-
-void semaphore_down(semaphore_t *sem)
-{
-    if (!sem)
-        return;
-
-    /* Spinlock simulation: wait for lock (simple busy-wait for now) */
-    while (sem->count == 0) {
-        if (current_process) {
-            wait_queue_add(&sem->wait_queue, current_process);
-            
-            /* Switch to another process */
-            rr_schedule_next();
-            
-            /* When we wake up, sem->count might be > 0 */
-            if (sem->count > 0)
-                break;
-        } else {
-            /* Kernel context - just busy wait (shouldn't happen) */
-            break;
-        }
-    }
-
-    if (sem->count > 0)
-        sem->count--;
 }
 
 void semaphore_up(semaphore_t *sem)

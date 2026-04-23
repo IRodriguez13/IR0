@@ -24,16 +24,24 @@
 #include <arch/x86-64/sources/user_mode.h>
 #include <rr_sched.h>
 #include <config.h>
+#include <ir0/version.h>
 #include <kernel/elf_loader.h>
 #include <drivers/timer/clock_system.h>
 #include <drivers/init_drv.h>
 #include <drivers/storage/block_dev.h>
+#if CONFIG_ENABLE_VBE
 #include <drivers/video/vbe.h>
+#endif
 #include <ir0/multiboot.h>
 #include "ipc.h"
 #include "syscalls.h"
+#if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
+#include <drivers/net/rtl8139.h>
+#endif
+#if CONFIG_ENABLE_BLUETOOTH
 #include <drivers/bluetooth/bluetooth_init.h>
+#endif
 
 /* Include kernel header with all function declarations */
 #include "kernel.h"
@@ -51,30 +59,32 @@ void kmain(uint32_t multiboot_info)
      * that print() uses framebuffer when gfxpayload=1024x768x32 in grub.
      */
     {
+        extern void console_init(void);
+        extern void console_clear(uint8_t);
+        extern int console_use_framebuffer(void);
+#if CONFIG_ENABLE_VBE
         extern int vbe_init_from_multiboot(uint32_t);
         extern int vbe_init(void);
         if (vbe_init_from_multiboot(multiboot_info) != 0)
             vbe_init();  /* Fallback: VGA text mode for /dev/fb0 */
-        extern void console_init(void);
-        extern void console_clear(uint8_t);
-        extern int console_use_framebuffer(void);
+#endif
         console_init();
         if (console_use_framebuffer())
             console_clear(0x0F);  /* Black background, ready for text */
     }
 
     /* Banner (now uses framebuffer if available) */
-    print("IR0 Kernel v0.0.1 Boot routine\n");
+    print("IR0 Kernel v" IR0_VERSION_STRING " Boot routine\n");
     
     /* Initialize driver subsystem (includes driver registry and multi-language drivers) */
     drivers_init();
     
-    /* Initialize Physical Memory Manager (PMM)
-     * Manage physical frames in the 32MB region (8MB-32MB)
-     * This gives us ~24MB of physical memory frames
-     * 8MB start, 24MB size
+    /*
+     * Physical Memory Manager: manage frames in [32MB, 48MB).
+     * Heap occupies [8MB, 32MB), so PMM must use disjoint memory.
+     * Boot page tables identity-map up to 48MB (24 x 2MB pages).
      */
-    pmm_init(0x800000, 0x1800000);
+    pmm_init(PMM_PHYS_BASE, PMM_PHYS_SIZE);
     
     logging_init();
     serial_init();
@@ -83,6 +93,7 @@ void kmain(uint32_t multiboot_info)
      * Log console mode for debugging (serial now available).
      * If framebuffer init failed, dump multiboot info to diagnose.
      */
+#if CONFIG_ENABLE_VBE
     {
         extern int console_use_framebuffer(void);
         uint32_t w = 0, h = 0, bpp = 0;
@@ -99,7 +110,6 @@ void kmain(uint32_t multiboot_info)
             serial_print("[BOOT] vbe_fail_reason=");
             serial_print_hex32((uint32_t)vbe_fail_reason);
             serial_print(" (1=mb_null 2=no_fb 3=bad_dims 4=map_fail)\n");
-            /* Diagnose: why did vbe_init_from_multiboot fail? */
             if (multiboot_info)
             {
                 const struct multiboot_info *mb = (const struct multiboot_info *)(uintptr_t)multiboot_info;
@@ -121,6 +131,7 @@ void kmain(uint32_t multiboot_info)
                 serial_print("[BOOT] Multiboot info is NULL\n");
         }
     }
+#endif
 
     log_subsystem_ok("CORE");
 
@@ -161,8 +172,29 @@ void kmain(uint32_t multiboot_info)
     syscalls_init();
     log_subsystem_ok("SYSCALLS");
 
-    /* Initialize architecture-specific interrupt system (IDT, PIC, etc.) */
+    /* Initialize architecture-specific interrupt system (IDT, PIC remap) */
     arch_interrupt_init();
+
+    /*
+     * Unmask IRQ lines after PIC is fully initialized.
+     * IRQ2 (cascade) is required for any slave PIC line (8-15) to work.
+     */
+    {
+        extern void pic_unmask_irq(uint8_t irq);
+        pic_unmask_irq(0);   /* Timer (PIT) */
+        pic_unmask_irq(1);   /* Keyboard */
+        pic_unmask_irq(2);   /* Cascade — required for slave IRQs 8-15 */
+#if CONFIG_ENABLE_NETWORKING
+        {
+            int rtl_irq = rtl8139_get_irq_line();
+            if (rtl_irq >= 0 && rtl_irq < 16)
+                pic_unmask_irq((uint8_t)rtl_irq);
+        }
+#endif
+#if CONFIG_ENABLE_MOUSE
+        pic_unmask_irq(12);  /* PS/2 Mouse */
+#endif
+    }
 
     /* Enable interrupts globally */
     arch_enable_interrupts();
@@ -182,8 +214,12 @@ void kmain(uint32_t multiboot_info)
 
 #if KERNEL_DEBUG_SHELL
     /* Init de test: shell integrada como PID 1. No es el init real (/sbin/init). */
-    start_init_process();
-    log_subsystem_ok("DEBUG_SHELL");
+    {
+        int init_ret = start_init_process();
+        if (init_ret < 0)
+            panic("Failed to start debug shell init process");
+        panic("start_init_process returned unexpectedly");
+    }
 #else
     /* Init real: cargar /sbin/init desde el filesystem */
     serial_print("SERIAL: kmain: Loading userspace init...\n");
@@ -196,11 +232,12 @@ void kmain(uint32_t multiboot_info)
 
     for (;;)
     {
-        /* Poll network devices for incoming packets */
+#if CONFIG_ENABLE_NETWORKING
         net_poll();
-        /* Process Bluetooth HCI events (inquiry results, etc.) so devices
-         * appear during scan without needing to read /proc/bluetooth/devices */
+#endif
+#if CONFIG_ENABLE_BLUETOOTH
         bluetooth_poll();
+#endif
         /* Despertar procesos bloqueados en poll() cuando hay datos o timeout */
         poll_wake_check();
         /* Despertar procesos bloqueados en nanosleep() cuando expira el tiempo */

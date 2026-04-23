@@ -13,7 +13,17 @@
 #include <stdbool.h>
 #include <kernel/scheduler/task.h>
 #include <ir0/signals.h>  
-#include <ir0/types.h> 
+#include <ir0/types.h>
+
+#ifndef ECHILD
+#define ECHILD 10 /* No child processes (POSIX; matches ir0/errno.h) */
+#endif
+
+/* waitpid / wait4 options and status inspection (POSIX-style) */
+#define WNOHANG 1
+
+#define WEXITSTATUS(s) (((s) >> 8) & 0xFF)
+#define WIFEXITED(s) (((s) & 0x7F) == 0)
 
 #define MAX_FDS_PER_PROCESS 64
 
@@ -44,14 +54,23 @@ typedef enum
 	PROCESS_ZOMBIE
 } process_state_t;
 
+/* Tracked anonymous/file mmap regions for demand paging and munmap */
+struct mmap_region
+{
+	void *addr;
+	void *hint_addr;
+	size_t length;
+	int prot;
+	int flags;
+	struct mmap_region *next;
+};
+
 typedef struct process
 {
 	task_t task;
-	pid_t ppid;  // Parent process ID (matches task.pid type)
-	struct process *parent;
-	struct process *children;
-	struct process *sibling;
+	pid_t ppid;
 	uint64_t *page_directory;
+	struct mmap_region *mmap_list;
 	uint64_t heap_start;
 	uint64_t heap_end;
 	uint64_t stack_start;
@@ -68,10 +87,6 @@ typedef struct process
 	uint32_t euid;
 	uint32_t egid;
 	uint32_t umask;
-	
-	/* Memory mapping for ELF loader */
-	uintptr_t memory_base;
-	size_t memory_size;
 	
 	/* Current working directory */
 	char cwd[256];
@@ -114,7 +129,7 @@ typedef struct process
 
 void process_init(void);
 void process_exit(int code);
-int process_wait(pid_t pid, int *status);
+int process_wait(pid_t pid, int *status, int options);
 
 /* IR0 PHILOSOPHY: Only spawn() creates processes - total simplicity
  * Mode must be explicitly specified - no magic address detection */
@@ -142,6 +157,7 @@ void process_init_fd_table(process_t *process);
 
 /* Process lifecycle management */
 void process_reap_zombies(process_t *parent); /* Reap zombie children (used by init) */
+void process_destroy(process_t *p);
 
 
 extern process_t *current_process;

@@ -12,6 +12,7 @@
 #include <ir0/kmem.h>
 #include <drivers/serial/serial.h>
 #include <config.h>
+#include <stdint.h>
 
 /* INTERNAL STATE                                                            */
 
@@ -24,6 +25,12 @@ static struct
     size_t used_frames;       /* Number of allocated frames */
     int initialized;          /* Initialization flag */
 } pmm = {0};
+
+/*
+ * Next frame index to try on allocation; wraps. Frees before the hint reset
+ * the hint to 0 so holes below the cursor are not skipped indefinitely.
+ */
+static uint32_t pmm_search_hint;
 
 /* BITMAP OPERATIONS                                                         */
 
@@ -76,6 +83,7 @@ void pmm_init(uintptr_t mem_start, size_t mem_size)
     
     pmm.used_frames = 0;
     pmm.initialized = 1;
+    pmm_search_hint = 0;
 
 #if DEBUG_PMM
     serial_print("[PMM] Initialized\n");
@@ -87,23 +95,26 @@ uintptr_t pmm_alloc_frame(void)
     if (!pmm.initialized)
         return 0;
     
-    /* First-fit: find first free frame */
-    for (size_t i = 0; i < pmm.total_frames; i++)
+    /* First-fit from search hint, then wrap [0, hint) */
+    size_t start = (size_t)pmm_search_hint;
+    if (start >= pmm.total_frames)
+        start = 0;
+
+    for (size_t pass = 0; pass < 2; pass++)
     {
-        if (!bitmap_test(i))
+        size_t i = (pass == 0) ? start : 0;
+        size_t end = (pass == 0) ? pmm.total_frames : start;
+
+        for (; i < end; i++)
         {
-            /* Found free frame - mark as used */
-            bitmap_set(i);
-            pmm.used_frames++;
-            
-            /* Calculate physical address */
-            uintptr_t phys_addr = pmm.mem_start + (i * PMM_FRAME_SIZE);
-            
-#if DEBUG_PMM
-            serial_print("[PMM] Allocated frame\n");
-#endif
-            
-            return phys_addr;
+            if (!bitmap_test(i))
+            {
+                bitmap_set(i);
+                pmm.used_frames++;
+                pmm_search_hint = (uint32_t)((i + 1) % pmm.total_frames);
+
+                return pmm.mem_start + (i * PMM_FRAME_SIZE);
+            }
         }
     }
     
@@ -140,6 +151,9 @@ void pmm_free_frame(uintptr_t phys_addr)
     {
         bitmap_clear(frame_index);
         pmm.used_frames--;
+
+        if (frame_index < (size_t)pmm_search_hint)
+            pmm_search_hint = 0;
         
 #if DEBUG_PMM
         serial_print("[PMM] Freed frame\n");
@@ -151,6 +165,22 @@ void pmm_free_frame(uintptr_t phys_addr)
         serial_print("[PMM] WARN: Double free detected\n");
 #endif
     }
+}
+
+/*
+ * pmm_get_start - Physical address of the first byte in the PMM-managed RAM region.
+ */
+uintptr_t pmm_get_start(void)
+{
+    return pmm.mem_start;
+}
+
+/*
+ * pmm_get_end - Physical address just past the last managed byte (exclusive bound).
+ */
+uintptr_t pmm_get_end(void)
+{
+    return pmm.mem_end;
 }
 
 void pmm_stats(size_t *total_frames, size_t *used_frames, size_t *free_frames)

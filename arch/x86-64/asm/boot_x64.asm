@@ -57,9 +57,10 @@ _start:
 
     ; Long Mode (LME)
 
+    ; IA32_EFER: LME (bit 8) for long mode; NXE (bit 11) before paging so PTE bit 63 is NX
     mov ecx, 0xC0000080         ; IA32_EFER MSR
     rdmsr
-    or eax, 1 << 8              ; bit LME
+    or eax, (1 << 8) | (1 << 11) ; LME + NXE
     wrmsr
 
     ; Config CR3
@@ -67,10 +68,10 @@ _start:
     mov eax, pml4_minimal
     mov cr3, eax
 
-    ; Paging on
+    ; Paging on: CR0.PG (bit 31) and CR0.WP (bit 16) together
 
     mov eax, cr0
-    or eax, 1 << 31             ; CR0.PG
+    or eax, (1 << 31) | (1 << 16) ; PG + WP
     mov cr0, eax
 
     ; GDT load before to replace it in c code.
@@ -131,31 +132,40 @@ pdp_minimal:
 align 4096
 pd_fb:
     times 0x1E8 dq 0
-    dq 0xFD000000 + 0x87   ; 2MB page at 0xFD000000
-    dq 0xFD200000 + 0x87   ; 2MB page at 0xFD200000 (4MB total)
+    dq 0xFD000000 + 0x83   ; 2MB page: Present|RW|PS (no User — kernel only)
+    dq 0xFD200000 + 0x83   ; 2MB page at 0xFD200000 (4MB total)
     times (511 - 0x1E9) dq 0
 
 align 4096
 pd_minimal:
-    
-    ; 0x87 = Present (1) + RW (1) + User (1) + PS (1) = 10000111
-    dq 0x000000 + 0x87
-    dq 0x200000 + 0x87
-    dq 0x400000 + 0x87
-    dq 0x600000 + 0x87
-    dq 0x800000 + 0x87
-    dq 0xA00000 + 0x87
-    dq 0xC00000 + 0x87
-    dq 0xE00000 + 0x87
-    dq 0x1000000 + 0x87
-    dq 0x1200000 + 0x87
-    dq 0x1400000 + 0x87
-    dq 0x1600000 + 0x87
-    dq 0x1800000 + 0x87
-    dq 0x1A00000 + 0x87
-    dq 0x1C00000 + 0x87
-    dq 0x1E00000 + 0x87
-    times 495 dq 0
+    ; 0x83 = Present + RW + PS (2MB pages), no User — identity map is supervisor-only
+    ; 0-32MB: kernel + heap
+    dq 0x0000000 + 0x83
+    dq 0x0200000 + 0x83
+    dq 0x0400000 + 0x83
+    dq 0x0600000 + 0x83
+    dq 0x0800000 + 0x83
+    dq 0x0A00000 + 0x83
+    dq 0x0C00000 + 0x83
+    dq 0x0E00000 + 0x83
+    dq 0x1000000 + 0x83
+    dq 0x1200000 + 0x83
+    dq 0x1400000 + 0x83
+    dq 0x1600000 + 0x83
+    dq 0x1800000 + 0x83
+    dq 0x1A00000 + 0x83
+    dq 0x1C00000 + 0x83
+    dq 0x1E00000 + 0x83
+    ; 32-48MB: PMM physical frame pool
+    dq 0x2000000 + 0x83
+    dq 0x2200000 + 0x83
+    dq 0x2400000 + 0x83
+    dq 0x2600000 + 0x83
+    dq 0x2800000 + 0x83
+    dq 0x2A00000 + 0x83
+    dq 0x2C00000 + 0x83
+    dq 0x2E00000 + 0x83
+    times 487 dq 0
 
 
 align 16
