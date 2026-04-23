@@ -1,216 +1,121 @@
 #
 # IR0 Kernel Configuration
 #
+# This file defines every user-visible configuration symbol.
+# Only subsystems that can actually be compiled out are toggleable;
+# core subsystems (memory, scheduler, VFS, interrupts) are always built.
+#
 
-menu "General Configuration"
+menu "General"
 
-    config LOCALVERSION
-        string "Local version - append to kernel release"
-        default ""
-        help
-          Append an extra string to the end of your kernel version.
-          This will show up when you type uname, for example.
-          The string you set here will be appended after the contents of
-          any files with a filename matching localversion* in your
-          object and source tree, in that order.
-
-endmenu
-
-menu "Processor type and features"
-
-    config ARCH_X86_64
-        bool "x86-64 architecture"
+    config KERNEL_DEBUG_SHELL
+        bool "Use debug shell as init (PID 1)"
         default y
         help
-          This is the processor type of your CPU. This is used to optimize
-          performance. If you have a mixed system, you can select the CPU
-          type that you have.
-
-    config ENABLE_SMP
-        bool "Symmetric Multi-Processing (SMP) support"
-        default n
-        help
-          This enables support for systems with more than one CPU. If you have
-          a system with only one CPU, say N. If you have a system with more
-          than one CPU, say Y.
-
-endmenu
-
-menu "Memory Management"
-
-    config ENABLE_PAGING
-        bool "Paging support"
-        default y
-        help
-          This option enables the kernel to use paging to manage memory.
-          Paging is a memory management scheme that allows the physical
-          address space of a process to be noncontiguous.
-
-    config ENABLE_VM
-        bool "Virtual Memory"
-        default y
-        depends on ENABLE_PAGING
-        help
-          This option enables the virtual memory system, which allows
-          each process to have its own virtual address space.
-
-endmenu
-
-menu "Process Scheduler"
-
-    config ENABLE_SCHEDULER
-        bool "Enable Scheduler"
-        default y
-        help
-          This option enables the kernel's process scheduler. The scheduler
-          is responsible for deciding which runnable process will be executed
-          by the CPU next.
-
-    if ENABLE_SCHEDULER
-
-    config ENABLE_CFS_SCHEDULER
-        bool "CFS Scheduler (Completely Fair Scheduler)"
-        default y
-        help
-          This is the default scheduler used by the kernel. It handles CPU
-          resource allocation for executing processes, with the goal of
-          maximizing overall CPU utilization while maximizing interactive
-          performance.
-
-    config ENABLE_RR_SCHEDULER
-        bool "Round-Robin Scheduler"
-        default n
-        help
-          A simple scheduler that assigns time slices to each process in
-          equal portions and in order, handling all processes without priority.
-          Not currently implemented.
-
-    config ENABLE_PRIORITY_SCHEDULER
-        bool "Priority Scheduler"
-        default n
-        help
-          A priority-based scheduler where each process is assigned a priority
-          and the process with the highest priority is allowed to run first.
-          Not currently implemented.
+          When enabled the kernel boots into the built-in debug shell
+          instead of loading /sbin/init from the filesystem.
+          Disable this only when you have a working userspace init.
 
     config TICK_RATE_HZ
-        int "Timer frequency (Hz)"
+        int "Timer tick rate (Hz)"
         range 100 1000
-        default 100
+        default 1000
         help
-          The frequency of the system timer interrupt, in Hz. Higher values
-          result in better timekeeping precision at the cost of more
-          frequent interrupts and thus higher overhead.
-
-    endif # ENABLE_SCHEDULER
+          Frequency of the PIT timer interrupt. Higher values give finer
+          scheduling granularity at the cost of more IRQ overhead.
 
 endmenu
 
-menu "File Systems"
+menu "Networking"
 
-    config ENABLE_VFS
-        bool "Virtual File System (VFS) support"
+    config ENABLE_NETWORKING
+        bool "IPv4 network stack (ARP, IP, ICMP, UDP, DNS)"
         default y
         help
-          This option provides a unified interface for different file systems.
-          It allows the kernel to support multiple file system types.
-
-    if ENABLE_VFS
-
-    config ENABLE_MINIX_FS
-        bool "Minix file system support"
-        default y
-        help
-          Minix is a simple file system used in the Minix operating system.
-          It's useful for small disks and embedded systems.
-
-    config ENABLE_RAMDISK
-        bool "RAM disk support"
-        default y
-        help
-          Support for RAM disk devices that can be used for temporary storage
-          or as an initial root file system during boot.
-
-    endif # ENABLE_VFS
+          Compile the full network stack (net/) and the RTL8139 NIC driver.
+          Disabling this removes all networking support from the kernel.
 
 endmenu
 
-menu "Device Drivers"
+menu "Sound"
 
-    menu "Character devices"
-
-        config ENABLE_SERIAL_DRIVER
-            bool "Serial port driver"
-            default y
-            help
-              This enables support for serial ports, which can be used for
-              console output and debugging.
-
-        config ENABLE_KEYBOARD_DRIVER
-            bool "Keyboard driver"
-            default y
-            help
-              This enables support for PS/2 keyboards.
-
-    endmenu
-
-    menu "Block devices"
-
-        config ENABLE_ATA_DRIVER
-            bool "ATA disk driver"
-            default y
-            help
-              This enables support for ATA hard disks and ATAPI CD-ROMs.
-
-    endmenu
-
-    menu "Graphics"
-
-        config ENABLE_VGA_DRIVER
-            bool "VGA video driver"
-            default y
-            help
-              This enables support for VGA-compatible video cards.
-
-    endmenu
+    config ENABLE_SOUND
+        bool "Sound subsystem (Sound Blaster 16 + Adlib OPL2)"
+        default y
+        help
+          Compile the Sound Blaster 16 and Adlib OPL2 audio drivers
+          plus the ISA DMA helper used by SB16.
 
 endmenu
 
-menu "Kernel Debugging"
+menu "Bluetooth"
 
-    config ENABLE_DEBUG
-        bool "Kernel debugging"
+    config ENABLE_BLUETOOTH
+        bool "Bluetooth HCI over UART"
         default y
         help
-          This enables kernel debugging features. These features are useful
-          for kernel developers but may impact performance.
+          Compile the Bluetooth HCI-UART transport, device manager,
+          and sysfs/procfs integration.
 
-    if ENABLE_DEBUG
+endmenu
 
-    config DEBUG_LEVEL
-        int "Debug level (0-3)"
-        range 0 3
-        default 1
-        help
-          This sets the verbosity of debug messages in the kernel.
-          0 = No debug messages
-          1 = Critical errors only
-          2 = Warnings and errors
-          3 = Verbose debug output
+menu "Input"
 
-    config DEBUG_SERIAL
-        bool "Enable serial debug output"
+    config ENABLE_MOUSE
+        bool "PS/2 mouse driver"
         default y
         help
-          This enables debug output to the first serial port (COM1).
+          Compile the PS/2 mouse driver. The PS/2 keyboard is always built.
 
-    config DEBUG_ASSERT
-        bool "Enable assertions"
+endmenu
+
+menu "Graphics"
+
+    config ENABLE_VBE
+        bool "VBE framebuffer support"
         default y
         help
-          This enables runtime assertions in the kernel code. Disabling this
-          may improve performance but makes debugging more difficult.
+          Use the VESA BIOS Extensions framebuffer when available
+          (via Multiboot). VGA text-mode console is always compiled.
 
-    endif # ENABLE_DEBUG
+endmenu
+
+menu "Debugging"
+
+    config DEBUG_MEMORY_ALLOCATOR
+        bool "Heap allocator debug output"
+        default n
+
+    config DEBUG_PMM
+        bool "Physical memory manager debug output"
+        default n
+
+    config DEBUG_PAGING
+        bool "Paging operations debug output"
+        default n
+
+    config DEBUG_PAGE_FAULTS
+        bool "Page fault handler debug output"
+        default n
+
+    config DEBUG_PROCESS
+        bool "Process creation/destruction debug"
+        default n
+
+    config DEBUG_SCHEDULER
+        bool "Scheduler debug output"
+        default n
+
+    config DEBUG_VFS
+        bool "VFS operations debug output"
+        default n
+
+    config DEBUG_SYSCALLS
+        bool "Syscall invocations debug output"
+        default n
+
+    config DEBUG_KEYBOARD
+        bool "Keyboard/stdin read debug output"
+        default n
 
 endmenu

@@ -231,6 +231,17 @@ static int cmd_rm_handler(int argc, char **argv)
         return 1;
     }
 
+    {
+        char msg[576];
+        int n;
+
+        if (force_dir)
+            n = snprintf(msg, sizeof(msg), "rm: removed '%s' and contents\n", path);
+        else
+            n = snprintf(msg, sizeof(msg), "rm: removed '%s'\n", path);
+        if (n > 0 && n < (int)sizeof(msg))
+            debug_write(msg);
+    }
     debug_serial_ok("rm");
     return 0;
 }

@@ -21,7 +21,10 @@
 #define RTC_STATUS_B    0x0B
 #define RTC_STATUS_C    0x0C
 
-// RTC status bits
+/* RTC status A: bit 7 = Update In Progress (set while time registers update) */
+#define RTC_STATUS_A_UIP    0x80
+
+/* RTC status B bits */
 #define RTC_STATUS_B_24HOUR 0x02
 #define RTC_STATUS_B_BINARY 0x04
 

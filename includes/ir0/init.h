@@ -27,7 +27,6 @@ extern void syscalls_init(void);
 /* Complex subsystems */
 extern int vfs_init_with_minix(void);
 extern int clock_system_init(void);
-extern int scheduler_cascade_init(void);
 extern int start_init_process(void);
 
 #endif /* _IR0_INIT_H */

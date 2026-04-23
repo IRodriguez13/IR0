@@ -41,6 +41,9 @@
 #define ARP_RESOLVE_TIMEOUT_MS 2000  /* 2 seconds per attempt */
 #define ARP_RESOLVE_RETRIES 3        /* 3 attempts before giving up */
 
+/* Maximum ARP cache entries; oldest (tail) is evicted when full */
+#define MAX_ARP_ENTRIES 64
+
 /* ARP Cache: a simple linked list of IP-to-MAC mappings. This is a basic
  * implementation - production systems might use a hash table for O(1) lookups,
  * but for small networks (typical home/office), linear search is acceptable.
@@ -309,6 +312,28 @@ struct arp_cache_entry *arp_lookup(ip4_addr_t ip)
     return NULL;
 }
 
+/* Remove the tail entry (oldest insert for prepend-only list) */
+static void arp_cache_remove_oldest(void)
+{
+    if (!arp_cache)
+        return;
+
+    if (!arp_cache->next)
+    {
+        kfree(arp_cache);
+        arp_cache = NULL;
+        return;
+    }
+
+    struct arp_cache_entry *prev = arp_cache;
+    while (prev->next->next)
+        prev = prev->next;
+
+    struct arp_cache_entry *tail = prev->next;
+    prev->next = NULL;
+    kfree(tail);
+}
+
 /**
  * arp_cache_add - Add or update an entry in the ARP cache
  *
@@ -343,6 +368,16 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
         entry->timestamp = clock_get_uptime_milliseconds();
         LOG_INFO_FMT("ARP", "Updated ARP cache entry for IP " IP4_FMT, IP4_ARGS(ntohl(ip)));
         return;
+    }
+
+    size_t cache_count = 0;
+    for (struct arp_cache_entry *e = arp_cache; e; e = e->next)
+        cache_count++;
+
+    while (cache_count >= MAX_ARP_ENTRIES)
+    {
+        arp_cache_remove_oldest();
+        cache_count--;
     }
     
     /* Create new entry */
@@ -387,10 +422,16 @@ void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
     request->proto_len = 4;
     request->opcode = htons(ARP_OP_REQUEST);
     
-    /* Sender (us) */
+    /* Sender (us): prefer per-interface IP when configured */
     memcpy(request->sender_mac, dev->mac, 6);
-    /* my_ip is already in network byte order from make_ip4_addr */
-    request->sender_ip = my_ip;
+    {
+        ip4_addr_t sender_ip = my_ip;
+        ip4_addr_t if_ip;
+
+        if (arp_get_interface_ip(dev, &if_ip) == 0)
+            sender_ip = if_ip;
+        request->sender_ip = sender_ip;
+    }
     
     /* Target (unknown MAC, IP to resolve) */
     memset(request->target_mac, 0, 6);

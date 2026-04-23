@@ -114,7 +114,7 @@ int join_paths(const char *base, const char *rel, char *dest, size_t size)
 
     strncpy(combined, base, sizeof(combined) - 1);
     combined[sizeof(combined) - 1] = '\0';
-    if (combined[base_len - 1] != '/')
+    if (base_len > 0 && combined[base_len - 1] != '/')
     {
         combined[base_len] = '/';
         combined[base_len + 1] = '\0';

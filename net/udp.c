@@ -139,15 +139,31 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
     /* Get source IP from IP layer */
     ip4_addr_t src_ip = ip_get_last_src_addr();
     
-    /* Verify checksum (optional in UDP, but we check if present) */
+    /* Verify checksum without relying on mutating the RX buffer (copy when possible) */
     if (udp->checksum != 0)
     {
         uint16_t received_checksum = udp->checksum;
-        struct udp_header *udp_mutable = (struct udp_header *)data;
-        udp_mutable->checksum = 0;
-        uint16_t calculated_checksum = udp_checksum(data, packet_len, src_ip, ip_local_addr);
-        udp_mutable->checksum = received_checksum;
-        
+        ip4_addr_t dest_ip = ip_get_last_dest_addr();
+        uint16_t calculated_checksum;
+        uint8_t *udp_scratch = kmalloc(packet_len);
+
+        if (udp_scratch)
+        {
+            memcpy(udp_scratch, data, packet_len);
+            struct udp_header *udp_verify = (struct udp_header *)udp_scratch;
+            udp_verify->checksum = 0;
+            calculated_checksum = udp_checksum(udp_scratch, packet_len, src_ip, dest_ip);
+            kfree(udp_scratch);
+        }
+        else
+        {
+            /* No scratch buffer: save checksum, verify, then restore RX contents */
+            struct udp_header *udp_mutable = (struct udp_header *)data;
+            udp_mutable->checksum = 0;
+            calculated_checksum = udp_checksum(data, packet_len, src_ip, dest_ip);
+            udp_mutable->checksum = received_checksum;
+        }
+
         if (received_checksum != calculated_checksum)
         {
             LOG_WARNING("UDP", "Checksum mismatch");

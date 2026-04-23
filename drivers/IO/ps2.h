@@ -139,8 +139,8 @@
 #define KEY_EXTENDED     0xE0
 #define KEY_RELEASE      0x80
 
-// Keyboard buffer
-#define KEYBOARD_BUFFER_SIZE 256
+/* PS/2 driver ring size (distinct from config.h KEYBOARD_BUFFER_SIZE) */
+#define PS2_KEYBOARD_BUFFER_SIZE 256
 
 // Function prototypes
 void ps2_init(void);
@@ -164,7 +164,7 @@ bool ps2_has_char(void);
 void ps2_flush_buffer(void);
 
 // Global variables
-extern uint8_t keyboard_buffer[KEYBOARD_BUFFER_SIZE];
+extern uint8_t keyboard_buffer[PS2_KEYBOARD_BUFFER_SIZE];
 extern int keyboard_buffer_head;
 extern int keyboard_buffer_tail;
 extern bool keyboard_shift_pressed;

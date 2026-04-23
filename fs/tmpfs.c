@@ -20,24 +20,12 @@
 #include <ir0/vga.h>
 #include <errno.h>
 #include <string.h>
-#include <string.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <ir0/stat.h>
 #include <ir0/errno.h>
 #include <drivers/timer/clock_system.h>
-
-/* Directory entry types (compatible with getdents) */
-#define DT_UNKNOWN 0
-#define DT_FIFO 1
-#define DT_CHR 2
-#define DT_DIR 4
-#define DT_BLK 6
-#define DT_REG 8
-#define DT_LNK 10
-#define DT_SOCK 12
-#define DT_WHT 14
 
 #define TMPFS_MAX_FILES 128
 #define TMPFS_MAX_FILE_SIZE 65536 /* 64KB max per file */
@@ -49,6 +37,7 @@ typedef struct tmpfs_inode
     uint32_t ino;
     uint16_t mode;
     uint32_t size;
+    size_t data_cap; /* bytes allocated at @data (>= @size after shrink) */
     bool is_dir;
     char name[TMPFS_MAX_NAME_LEN + 1];
     uint8_t *data;
@@ -259,124 +248,69 @@ static tmpfs_inode_t *tmpfs_lookup_inode(tmpfs_data_t *tmpfs, const char *rel_pa
     return current;
 }
 
-static struct filesystem_type *tmpfs_fs_type_ptr;
-
 static int tmpfs_mount(const char *dev_name __attribute__((unused)),
                        const char *dir_name)
 {
     if (!dir_name)
         return -EINVAL;
-    
-    /* Check if already mounted */
+
     if (tmpfs_get_instance(dir_name))
         return 0;
-    
+
     if (num_tmpfs_instances >= TMPFS_MAX_DIRS)
         return -ENOSPC;
-    
+
     tmpfs_data_t *tmpfs = (tmpfs_data_t *)kmalloc(sizeof(tmpfs_data_t));
     if (!tmpfs)
         return -ENOMEM;
-    
+
     memset(tmpfs, 0, sizeof(tmpfs_data_t));
     strncpy(tmpfs->mount_point, dir_name, sizeof(tmpfs->mount_point) - 1);
     tmpfs->mount_point[sizeof(tmpfs->mount_point) - 1] = '\0';
-    
-    /* Create root inode */
+
     tmpfs_inode_t *root_inode = tmpfs_alloc_inode(tmpfs);
-    if (!root_inode)
-    {
+    if (!root_inode) {
         kfree(tmpfs);
         return -ENOMEM;
     }
-    
+
     root_inode->mode = S_IFDIR | 0755;
     root_inode->is_dir = true;
     strncpy(root_inode->name, "/", TMPFS_MAX_NAME_LEN);
     root_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
     root_inode->parent = NULL;
     tmpfs->root = root_inode;
-    tmpfs->next_ino = 1; /* Root is inode 1 */
-    
-    /* Add to instances */
+    tmpfs->next_ino = 1;
+
     tmpfs_instances[num_tmpfs_instances++] = tmpfs;
-
-    /*
-     * Create VFS root inode and register mount point.
-     * TMPFS does not use superblock; sb is NULL.
-     */
-    struct vfs_inode *mount_root = (struct vfs_inode *)kmalloc(sizeof(struct vfs_inode));
-    if (!mount_root)
-    {
-        tmpfs_instances[--num_tmpfs_instances] = NULL;
-        kfree(tmpfs);
-        return -ENOMEM;
-    }
-    mount_root->i_ino = 1;
-    mount_root->i_mode = S_IFDIR | 0755;
-    mount_root->i_size = 0;
-    mount_root->i_op = NULL;
-    mount_root->i_fop = NULL;
-    mount_root->i_sb = NULL;
-    mount_root->i_private = root_inode;
-
-    if (!tmpfs_fs_type_ptr)
-        return -EINVAL;
-
-    /* Root mount: set root and let vfs_mount add the mount point */
-    if (strcmp(dir_name, "/") == 0)
-    {
-        vfs_set_root(NULL, mount_root);
-        print("TMPFS: Mounted as root (fallback)\n");
-        return 0;
-    }
-
-    int ret = vfs_add_mount_point(dir_name, dev_name ? dev_name : "none",
-                                  NULL, mount_root, tmpfs_fs_type_ptr);
-    if (ret != 0)
-    {
-        kfree(mount_root);
-        tmpfs_instances[--num_tmpfs_instances] = NULL;
-        kfree(tmpfs);
-        return ret;
-    }
-
-    print("TMPFS: Mounted successfully at ");
-    print(dir_name);
-    print("\n");
-
     return 0;
 }
 
-/* TMPFS filesystem operations */
-static struct filesystem_operations tmpfs_fs_ops = {
-    .stat = tmpfs_stat,
-    .mkdir = tmpfs_mkdir,
-    .create_file = tmpfs_create_file,
-    .unlink = tmpfs_unlink,
-    .rmdir = tmpfs_rmdir,
+static struct vfs_ops tmpfs_fs_ops = {
+    .stat    = tmpfs_stat,
+    .mkdir   = tmpfs_mkdir,
+    .create  = tmpfs_create_file,
+    .unlink  = tmpfs_unlink,
+    .rmdir   = tmpfs_rmdir,
     .readdir = tmpfs_readdir,
-    .read_file = tmpfs_read_file,
-    .write_file = tmpfs_write_file,
-    .lookup = (struct vfs_inode *(*)(const char *))tmpfs_find_inode,
-    .get_inode_number = tmpfs_get_inode_number,
-    .ls = NULL,
-    .link = NULL,
-    .is_available = tmpfs_is_available,
-    .is_working = tmpfs_is_available,
+    .read    = tmpfs_read_file,
+    .write   = tmpfs_write_file,
+    .link    = NULL,
+    .chown   = NULL,
+    .chmod   = tmpfs_chmod,
+    .truncate = tmpfs_truncate,
 };
 
-static struct filesystem_type tmpfs_fs_type = {
-    .name = "tmpfs",
+static struct vfs_fstype tmpfs_fs_type = {
+    .name  = "tmpfs",
+    .ops   = &tmpfs_fs_ops,
     .mount = tmpfs_mount,
-    .ops = &tmpfs_fs_ops,
-    .next = NULL
+    .next  = NULL,
 };
 
 int tmpfs_register(void)
 {
-    tmpfs_fs_type_ptr = &tmpfs_fs_type;
-    return register_filesystem(&tmpfs_fs_type);
+    return vfs_register_fs(&tmpfs_fs_type);
 }
 
 /* TMPFS API functions for VFS integration */
@@ -598,6 +532,7 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
         
         inode->data = new_data;
         inode->size = new_size;
+        inode->data_cap = new_size;
     }
     
     /* Write data */
@@ -673,31 +608,118 @@ int tmpfs_rmdir(const char *path)
     return 0;
 }
 
-int tmpfs_readdir(const char *path, struct vfs_dirent_readdir *entries, int max_entries)
+/*
+ * tmpfs_chmod - Replace permission bits; keep file type bits in st_mode.
+ */
+int tmpfs_chmod(const char *path, mode_t mode)
 {
-    if (!path || !entries || max_entries <= 0)
+    if (!path)
         return -EINVAL;
-    
+
     tmpfs_inode_t *inode = tmpfs_find_inode(path);
     if (!inode)
         return -ENOENT;
-    
+
+    inode->mode = (uint16_t)(((uint32_t)inode->mode & ~07777U) |
+                 ((uint32_t)mode & 07777U));
+    return 0;
+}
+
+/*
+ * tmpfs_truncate - Set regular file length; extending zero-fills new bytes
+ * when a larger buffer is allocated. Shrinking keeps the backing allocation
+ * but hides bytes beyond @length from readers.
+ */
+int tmpfs_truncate(const char *path, size_t length)
+{
+    if (!path)
+        return -EINVAL;
+
+    tmpfs_inode_t *inode = tmpfs_find_inode(path);
+    if (!inode)
+        return -ENOENT;
+    if (inode->is_dir)
+        return -EISDIR;
+
+    if (length > TMPFS_MAX_FILE_SIZE)
+        return -EFBIG;
+
+    if (length < inode->size) {
+        inode->size = (uint32_t)length;
+        inode->mtime = (time_t)(clock_get_uptime_milliseconds() / 1000);
+        return 0;
+    }
+
+    if (length > inode->size) {
+        /*
+         * Reuse the existing allocation when it already covers @length so
+         * the extended range is zero-filled without a new kmalloc.
+         */
+        if (inode->data && length <= inode->data_cap) {
+            memset(inode->data + inode->size, 0, length - inode->size);
+            inode->size = (uint32_t)length;
+            inode->mtime = (time_t)(clock_get_uptime_milliseconds() / 1000);
+            return 0;
+        }
+
+        uint8_t *new_data = (uint8_t *)kmalloc(length);
+        if (!new_data)
+            return -ENOMEM;
+
+        if (inode->data) {
+            memcpy(new_data, inode->data, inode->size);
+            kfree(inode->data);
+        }
+
+        memset(new_data + inode->size, 0, length - inode->size);
+        inode->data = new_data;
+        inode->size = (uint32_t)length;
+        inode->data_cap = length;
+        inode->mtime = (time_t)(clock_get_uptime_milliseconds() / 1000);
+        return 0;
+    }
+
+    inode->mtime = (time_t)(clock_get_uptime_milliseconds() / 1000);
+    return 0;
+}
+
+int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
+{
+    if (!path || !entries || max_entries <= 0)
+        return -EINVAL;
+
+    tmpfs_inode_t *inode = tmpfs_find_inode(path);
+    if (!inode)
+        return -ENOENT;
+
     if (!inode->is_dir)
         return -ENOTDIR;
-    
+
     int count = 0;
+
+    /* Standard "." and ".." first (DT_DIR), then children */
+    if (count < max_entries) {
+        strncpy(entries[count].name, ".", sizeof(entries[count].name) - 1);
+        entries[count].name[sizeof(entries[count].name) - 1] = '\0';
+        entries[count].type = DT_DIR;
+        count++;
+    }
+    if (count < max_entries) {
+        strncpy(entries[count].name, "..", sizeof(entries[count].name) - 1);
+        entries[count].name[sizeof(entries[count].name) - 1] = '\0';
+        entries[count].type = DT_DIR;
+        count++;
+    }
+
     tmpfs_inode_t *child = inode->children;
-    
-    while (child && count < max_entries)
-    {
+
+    while (child && count < max_entries) {
         strncpy(entries[count].name, child->name, sizeof(entries[count].name) - 1);
         entries[count].name[sizeof(entries[count].name) - 1] = '\0';
-        entries[count].inode = child->ino;
         entries[count].type = child->is_dir ? DT_DIR : DT_REG;
-        
         count++;
         child = child->sibling;
     }
-    
+
     return count;
 }

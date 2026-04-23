@@ -8,7 +8,6 @@
  */
 
 #include "debug_bins.h"
-#include <stdlib.h>
 #include <string.h>
 
 #define LSHW_BUF_SIZE 2048

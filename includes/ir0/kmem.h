@@ -26,6 +26,9 @@ void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *
 void heap_init(void);
 void kmem_stats(void);  /* Print memory statistics (debug only) */
 
+/* Allocation that returns NULL on failure (no panic). */
+void *kmalloc_try(size_t size);
+
 
 
 #ifdef __cplusplus

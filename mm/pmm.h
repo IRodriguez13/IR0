@@ -47,6 +47,13 @@ uintptr_t pmm_alloc_frame(void);
  */
 void pmm_free_frame(uintptr_t phys_addr);
 
+/*
+ * Physical bounds of the region covered by the PMM bitmap (RAM frames only).
+ * Addresses outside [start, end) are not owned by the allocator (e.g. MMIO).
+ */
+uintptr_t pmm_get_start(void);
+uintptr_t pmm_get_end(void);
+
 /**
  * pmm_stats - Get PMM statistics
  * @total_frames: Output for total number of frames

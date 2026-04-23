@@ -144,8 +144,8 @@ void vbe_putpixel(uint32_t x, uint32_t y, uint32_t color)
     
     if (vbe_state.bpp == 32)
     {
-        uint32_t *fb = (uint32_t*)vbe_state.fb;
-        fb[y * vbe_state.width + x] = color;
+        uint8_t *row = (uint8_t *)vbe_state.fb + y * vbe_state.pitch;
+        ((uint32_t *)row)[x] = color;
     }
 }
 

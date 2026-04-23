@@ -8,7 +8,7 @@ SECTIONS
 
     .multiboot : ALIGN(4K)
     {
-        *(.multiboot)
+        KEEP(*(.multiboot))
     }
 
     .text : ALIGN(4K)

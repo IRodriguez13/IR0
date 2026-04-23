@@ -2,141 +2,117 @@ global switch_context_x64
 
 section .text
 
+;
+; switch_context_x64(task_t *current, task_t *new)
+;
+; Save all register state into *current, load from *new, iretq to new task.
+; On null pointers, returns to caller without switching.
+;
+; task_t offsets (from kernel/scheduler/task.h):
+;   0x00 rax, 0x08 rbx, 0x10 rcx, 0x18 rdx, 0x20 rsi, 0x28 rdi,
+;   0x30 r8,  0x38 r9,  0x40 r10, 0x48 r11, 0x50 r12, 0x58 r13,
+;   0x60 r14, 0x68 r15, 0x70 rsp, 0x78 rbp, 0x80 rip, 0x88 rflags,
+;   0x90 cs,  0x92 ds,  0x94 es,  0x96 fs,  0x98 gs,  0x9A ss,
+;   0xB0 cr3
+;
 switch_context_x64:
-    ; Save all registers
-    push rbp
-    mov rbp, rsp
-    push r15
-    push r14
-    push r13
-    push r12
-    push rbx
-    
-    ; Log: Context switch start
-    mov r15, rdi  ; Current context
-    mov r14, rsi  ; New context
-    
-    ; Check for null pointers
-    test r15, r15
-    jz .done
-    test r14, r14
-    jz .done
-     
-    ; 1. Save current context
-    mov [r15 + 0x00], rax
-    mov [r15 + 0x08], rbx
-    mov [r15 + 0x10], rcx
-    mov [r15 + 0x18], rdx
-    mov [r15 + 0x20], rsi
-    mov rax, r15
-    mov [r15 + 0x28], rax  ; Save pointer to structure
-    
-    ; Save remaining registers
-    mov [r15 + 0x30], r8
-    mov [r15 + 0x38], r9
-    mov [r15 + 0x40], r10
-    mov [r15 + 0x48], r11
-    mov [r15 + 0x50], r12
-    mov [r15 + 0x58], r13
-    mov [r15 + 0x60], r14
-    
-    ; Save rsp and rbp
-    mov [r15 + 0x70], rsp
-    mov [r15 + 0x78], rbp
-    
-    ; Save RIP (return address)
-    mov rax, [rsp + 8*7]  ; Skip saved registers
-    mov [r15 + 0x80], rax
-    
-    ; Save RFLAGS
+    test rdi, rdi
+    jz .skip
+    test rsi, rsi
+    jz .skip
+
+    ; ---- Save current context (rdi = &current->task) ----
+
+    mov [rdi + 0x00], rax
+    mov [rdi + 0x08], rbx
+    mov [rdi + 0x10], rcx
+    mov [rdi + 0x18], rdx
+    mov [rdi + 0x20], rsi
+    mov [rdi + 0x28], rdi
+    mov [rdi + 0x30], r8
+    mov [rdi + 0x38], r9
+    mov [rdi + 0x40], r10
+    mov [rdi + 0x48], r11
+    mov [rdi + 0x50], r12
+    mov [rdi + 0x58], r13
+    mov [rdi + 0x60], r14
+    mov [rdi + 0x68], r15
+    mov [rdi + 0x78], rbp
+
+    ; RSP: undo the `call` return-address push to get the caller's RSP
+    lea rax, [rsp + 8]
+    mov [rdi + 0x70], rax
+
+    ; RIP: return address pushed by `call`
+    mov rax, [rsp]
+    mov [rdi + 0x80], rax
+
     pushfq
-    pop qword [r15 + 0x88]
-    
-    ; Save segment registers
+    pop qword [rdi + 0x88]
+
     mov ax, cs
-    mov [r15 + 0x90], ax
+    mov [rdi + 0x90], ax
     mov ax, ds
-    mov [r15 + 0x92], ax
+    mov [rdi + 0x92], ax
     mov ax, es
-    mov [r15 + 0x94], ax
+    mov [rdi + 0x94], ax
     mov ax, fs
-    mov [r15 + 0x96], ax
+    mov [rdi + 0x96], ax
     mov ax, gs
-    mov [r15 + 0x98], ax
+    mov [rdi + 0x98], ax
     mov ax, ss
-    mov [r15 + 0x9A], ax
-    
-    ; Save CR3
+    mov [rdi + 0x9A], ax
+
     mov rax, cr3
-    mov [r15 + 0xB0], rax
-    
-    
-    ; Load CR3 (address space change)
-    mov rax, [r14 + 0xB0]
+    mov [rdi + 0xB0], rax
+
+    ; ---- Load new context (rsi = &new->task) ----
+
+    mov r15, rsi
+
+    mov rax, [r15 + 0xB0]
     mov cr3, rax
-    
-    ; Load segment registers
-    mov ax, [r14 + 0x9A]  ; SS
+
+    mov ax, [r15 + 0x9A]
     mov ss, ax
-    mov ax, [r14 + 0x92]  ; DS
+    mov ax, [r15 + 0x92]
     mov ds, ax
-    mov ax, [r14 + 0x94]  ; ES
+    mov ax, [r15 + 0x94]
     mov es, ax
-    mov ax, [r14 + 0x96]  ; FS
+    mov ax, [r15 + 0x96]
     mov fs, ax
-    mov ax, [r14 + 0x98]  ; GS
+    mov ax, [r15 + 0x98]
     mov gs, ax
-    
-    ; Load general purpose registers
-    mov rax, [r14 + 0x00]
-    mov rbx, [r14 + 0x08]
-    mov rcx, [r14 + 0x10]
-    mov rdx, [r14 + 0x18]
-    mov rsi, [r14 + 0x20]
-    
-    ; Load additional registers
-    mov r8,  [r14 + 0x30]
-    mov r9,  [r14 + 0x38]
-    mov r10, [r14 + 0x40]
-    mov r11, [r14 + 0x48]
-    mov r12, [r14 + 0x50]
-    mov r13, [r14 + 0x58]
-    
-    ; Load RSP and RBP
-    mov rsp, [r14 + 0x70]
-    mov rbp, [r14 + 0x78]
-    
-    ; Load RFLAGS
-    push qword [r14 + 0x88]
-    popfq
-    
-    ; Prepare stack for iretq
-    push qword [r14 + 0x9A]  ; SS
-    push rsp                 ; RSP
-    push qword [r14 + 0x88]  ; RFLAGS
-    push qword [r14 + 0x90]  ; CS
-    push qword [r14 + 0x80]  ; RIP
-    
-    ; Load RDI (last register to restore)
-    mov rdi, [r14 + 0x28]
-      
-    ; Return to new context
+
+    mov rax, [r15 + 0x00]
+    mov rbx, [r15 + 0x08]
+    mov rcx, [r15 + 0x10]
+    mov rdx, [r15 + 0x18]
+    mov rsi, [r15 + 0x20]
+    mov rbp, [r15 + 0x78]
+    mov r8,  [r15 + 0x30]
+    mov r9,  [r15 + 0x38]
+    mov r10, [r15 + 0x40]
+    mov r11, [r15 + 0x48]
+    mov r12, [r15 + 0x50]
+    mov r13, [r15 + 0x58]
+    mov r14, [r15 + 0x60]
+
+    ; Build iretq frame: SS, RSP, RFLAGS, CS, RIP
+    movzx rdi, word [r15 + 0x9A]
+    push rdi
+    push qword [r15 + 0x70]
+    push qword [r15 + 0x88]
+    movzx rdi, word [r15 + 0x90]
+    push rdi
+    push qword [r15 + 0x80]
+
+    mov rdi, [r15 + 0x28]
+    mov r15, [r15 + 0x68]
+
     iretq
 
-.done:
-    ; Clean stack and return
-    pop rbx
-    pop r12
-    pop r13
-    pop r14
-    pop r15
-    pop rbp
-    iretq
-
-section .rodata
-.current_ctx_msg:      db "SERIAL: [CTX] Saving current context for PID: ", 0
-.saved_ctx_msg:        db "SERIAL: [CTX] Context saved for PID: ", 0
-.loading_ctx_msg:      db "SERIAL: [CTX] Loading context for PID: ", 0
-.context_switch_done_msg: db "SERIAL: [CTX] Context switch completed\n", 0
+.skip:
+    ret
 
 section .note.GNU-stack noalloc noexec nowrite progbits

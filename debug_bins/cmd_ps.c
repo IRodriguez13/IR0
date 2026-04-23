@@ -8,7 +8,6 @@
  */
 
 #include "debug_bins.h"
-#include <stdlib.h>
 
 #define PS_BUF_SIZE 2048
 

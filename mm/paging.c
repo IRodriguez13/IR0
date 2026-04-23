@@ -10,35 +10,12 @@
 #include <mm/pmm.h>
 #include <ir0/validation.h>
 
-/* Page directory for identity mapping (used by setup functions) */
-__attribute__((aligned(4096))) static uint64_t PD[512];
-
-
-void setup_paging_identity_16mb()
-{
-
-    for (int i = 1; i < 16; i++) /* Start from 1 (0 already mapped) */
-    {
-        uint64_t phys_addr = i * PAGE_SIZE_2MB;
-        PD[i] = phys_addr | PAGE_PRESENT | PAGE_RW | PAGE_SIZE_2MB_FLAG;
-    }
-
-    /* Map 16 MiB using 2MiB pages: 8 PD entries (2MiB * 8 = 16MiB) */
-    for (int i = 0; i < 8; i++)
-    {
-        uint64_t phys_addr = i * PAGE_SIZE_2MB;
-        PD[i] = phys_addr | PAGE_PRESENT | PAGE_RW | PAGE_SIZE_2MB_FLAG;
-    }
-
-    /* Do NOT reload CR3 - already configured by boot assembly */
-    /* Just expand existing tables */
-}
-
 void enable_paging(void)
 {
     uint64_t cr0;
     asm volatile("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80000000; /* PG bit */
+    /* PG and WP: supervisor respects read-only PTEs */
+    cr0 |= CR0_PG | CR0_WP;
     asm volatile("mov %0, %%cr0" ::"r"(cr0));
 }
 
@@ -52,16 +29,13 @@ void setup_and_enable_paging(void)
     asm volatile("mov %%cr0, %0" : "=r"(cr0));
     asm volatile("mov %%cr4, %0" : "=r"(cr4));
 
-    if (!(cr4 & (1 << 5)))
+    if (!(cr4 & CR4_PAE))
     {
         /* PAE not enabled - critical failure, will triple fault */
         return;
     }
 
-    /* 2. Expand existing tables SILENTLY */
-    setup_paging_identity_16mb();
-
-    /* 4. Verify paging is enabled */
+    /* Verify paging is enabled */
     if (!is_paging_enabled())
     {
         /* Paging not enabled - enable it */
@@ -85,7 +59,7 @@ int is_paging_enabled(void)
 {
     uint64_t cr0;
     asm volatile("mov %%cr0, %0" : "=r"(cr0));
-    return (cr0 & 0x80000000) != 0;
+    return (cr0 & CR0_PG) != 0;
 }
 
 /**
@@ -101,24 +75,24 @@ int is_page_mapped_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t *fl
         return -1;
     
     /* Extract indices from virtual address */
-    size_t pml4_index = (virt_addr >> 39) & 0x1FF;
-    size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
-    size_t pd_index = (virt_addr >> 21) & 0x1FF;
-    size_t pt_index = (virt_addr >> 12) & 0x1FF;
+    size_t pml4_index = (virt_addr >> 39) & PAGE_INDEX_MASK;
+    size_t pdpt_index = (virt_addr >> 30) & PAGE_INDEX_MASK;
+    size_t pd_index = (virt_addr >> 21) & PAGE_INDEX_MASK;
+    size_t pt_index = (virt_addr >> 12) & PAGE_INDEX_MASK;
     
     /* Walk page tables */
     if (!(pml4[pml4_index] & PAGE_PRESENT))
         return 0;
     
-    uint64_t *pdpt = (uint64_t *)(pml4[pml4_index] & ~0xFFF);
+    uint64_t *pdpt = (uint64_t *)(pml4[pml4_index] & PAGE_FRAME_MASK);
     if (!(pdpt[pdpt_index] & PAGE_PRESENT))
         return 0;
     
-    uint64_t *pd = (uint64_t *)(pdpt[pdpt_index] & ~0xFFF);
+    uint64_t *pd = (uint64_t *)(pdpt[pdpt_index] & PAGE_FRAME_MASK);
     if (!(pd[pd_index] & PAGE_PRESENT))
         return 0;
     
-    uint64_t *pt = (uint64_t *)(pd[pd_index] & ~0xFFF);
+    uint64_t *pt = (uint64_t *)(pd[pd_index] & PAGE_FRAME_MASK);
     if (!(pt[pt_index] & PAGE_PRESENT))
         return 0;
     
@@ -127,6 +101,45 @@ int is_page_mapped_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t *fl
         *flags_out = pt[pt_index] & 0xFFF;
     
     return 1;
+}
+
+uint64_t *paging_get_pte(uint64_t *pml4, uintptr_t vaddr)
+{
+    size_t pml4_index;
+    size_t pdpt_index;
+    size_t pd_index;
+    size_t pt_index;
+    uint64_t *pdpt;
+    uint64_t *pd;
+    uint64_t *pt;
+
+    if (!pml4)
+        return NULL;
+
+    pml4_index = ((uint64_t)vaddr >> 39) & PAGE_INDEX_MASK;
+    pdpt_index = ((uint64_t)vaddr >> 30) & PAGE_INDEX_MASK;
+    pd_index = ((uint64_t)vaddr >> 21) & PAGE_INDEX_MASK;
+    pt_index = ((uint64_t)vaddr >> 12) & PAGE_INDEX_MASK;
+
+    if (!(pml4[pml4_index] & PAGE_PRESENT))
+        return NULL;
+    if (pml4[pml4_index] & PAGE_SIZE_2MB_FLAG)
+        return NULL;
+
+    pdpt = (uint64_t *)(pml4[pml4_index] & PAGE_FRAME_MASK);
+    if (!(pdpt[pdpt_index] & PAGE_PRESENT))
+        return NULL;
+    if (pdpt[pdpt_index] & PAGE_SIZE_2MB_FLAG)
+        return NULL;
+
+    pd = (uint64_t *)(pdpt[pdpt_index] & PAGE_FRAME_MASK);
+    if (!(pd[pd_index] & PAGE_PRESENT))
+        return NULL;
+    if (pd[pd_index] & PAGE_SIZE_2MB_FLAG)
+        return NULL;
+
+    pt = (uint64_t *)(pd[pd_index] & PAGE_FRAME_MASK);
+    return &pt[pt_index];
 }
 
 /**
@@ -147,7 +160,7 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
     }
 
     /* Return physical address (identity mapped) */
-    return (uint64_t *)(table[index] & ~0xFFF);
+    return (uint64_t *)(table[index] & PAGE_FRAME_MASK);
 }
 
 /**
@@ -196,7 +209,7 @@ static uint64_t *get_or_create_table(uint64_t *pml4, size_t index, int create)
         return NULL;
     
     /* Return physical address (identity mapped) */
-    return (uint64_t *)(pml4[index] & ~0xFFF);
+    return (uint64_t *)(pml4[index] & PAGE_FRAME_MASK);
 }
 
 /**
@@ -213,10 +226,10 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
         return -1;
     
     /* Extract indices from virtual address */
-    size_t pml4_index = (virt_addr >> 39) & 0x1FF;
-    size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
-    size_t pd_index = (virt_addr >> 21) & 0x1FF;
-    size_t pt_index = (virt_addr >> 12) & 0x1FF;
+    size_t pml4_index = (virt_addr >> 39) & PAGE_INDEX_MASK;
+    size_t pdpt_index = (virt_addr >> 30) & PAGE_INDEX_MASK;
+    size_t pd_index = (virt_addr >> 21) & PAGE_INDEX_MASK;
+    size_t pt_index = (virt_addr >> 12) & PAGE_INDEX_MASK;
 
     /* Get or create PDPT */
     uint64_t *pdpt = get_or_create_table(pml4, pml4_index, 1);
@@ -233,8 +246,19 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
     if (!pt)
         return -1;
 
-    /* Map the page */
-    pt[pt_index] = (phys_addr & ~0xFFF) | (flags & 0xFFF) | PAGE_PRESENT;
+    /* Map the page: low flags from caller; NX unless explicitly executable */
+    {
+        uint64_t entry;
+
+        entry = (phys_addr & PAGE_FRAME_MASK) | (flags & 0xFFF) | PAGE_PRESENT;
+        /*
+         * Data and other non-code mappings: RW without PAGE_EXEC, or any mapping
+         * without PAGE_EXEC, get NX. Code paths pass PAGE_EXEC (e.g. ELF PF_X).
+         */
+        if (!(flags & PAGE_EXEC))
+            entry |= PAGE_NX;
+        pt[pt_index] = entry;
+    }
 
     /* Flush TLB */
     __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
@@ -257,40 +281,70 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
 }
 
 /**
- * Unmap a single 4KB page
+ * Unmap a single 4KB page in the page directory rooted at @pml4.
+ * Safe when CR3 points at a different address space than @pml4.
  */
-int unmap_page(uint64_t virt_addr)
+int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr)
 {
-    /* Get current CR3 (PML4 address) */
-    uint64_t cr3 = get_current_page_directory();
-    uint64_t *pml4 = (uint64_t *)cr3;
+    size_t pml4_index;
+    size_t pdpt_index;
+    size_t pd_index;
+    size_t pt_index;
+    uint64_t *pdpt;
+    uint64_t *pd;
+    uint64_t *pt;
+    uint64_t phys_frame;
 
-    /* Extract indices */
-    size_t pml4_index = (virt_addr >> 39) & 0x1FF;
-    size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
-    size_t pd_index = (virt_addr >> 21) & 0x1FF;
-    size_t pt_index = (virt_addr >> 12) & 0x1FF;
+    if (!pml4)
+        return -1;
 
-    /* Walk page tables to find the page */
+    pml4_index = ((uintptr_t)virt_addr >> 39) & PAGE_INDEX_MASK;
+    pdpt_index = ((uintptr_t)virt_addr >> 30) & PAGE_INDEX_MASK;
+    pd_index = ((uintptr_t)virt_addr >> 21) & PAGE_INDEX_MASK;
+    pt_index = ((uintptr_t)virt_addr >> 12) & PAGE_INDEX_MASK;
+
     if (!(pml4[pml4_index] & PAGE_PRESENT))
         return -1;
-    uint64_t *pdpt = (uint64_t *)(pml4[pml4_index] & ~0xFFF);
+    if (pml4[pml4_index] & PAGE_SIZE_2MB_FLAG)
+        return -1;
+    pdpt = (uint64_t *)(pml4[pml4_index] & PAGE_FRAME_MASK);
 
     if (!(pdpt[pdpt_index] & PAGE_PRESENT))
         return -1;
-    uint64_t *pd = (uint64_t *)(pdpt[pdpt_index] & ~0xFFF);
+    if (pdpt[pdpt_index] & PAGE_SIZE_2MB_FLAG)
+        return -1;
+    pd = (uint64_t *)(pdpt[pdpt_index] & PAGE_FRAME_MASK);
 
     if (!(pd[pd_index] & PAGE_PRESENT))
         return -1;
-    uint64_t *pt = (uint64_t *)(pd[pd_index] & ~0xFFF);
+    if (pd[pd_index] & PAGE_SIZE_2MB_FLAG)
+        return -1;
+    pt = (uint64_t *)(pd[pd_index] & PAGE_FRAME_MASK);
 
-    /* Clear the page table entry */
+    phys_frame = pt[pt_index] & PAGE_FRAME_MASK;
     pt[pt_index] = 0;
 
-    /* Flush TLB */
     __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
 
+    /*
+     * Only return frames that the PMM allocated from RAM. MMIO and other
+     * identity-mapped device pages must not touch the bitmap.
+     */
+    if (phys_frame &&
+        phys_frame >= pmm_get_start() && phys_frame < pmm_get_end())
+        pmm_free_frame(phys_frame);
+
     return 0;
+}
+
+/**
+ * Unmap a single 4KB page in the current address space
+ */
+int unmap_page(uint64_t virt_addr)
+{
+    uint64_t cr3 = get_current_page_directory();
+
+    return unmap_page_in_directory((uint64_t *)cr3, (uintptr_t)virt_addr);
 }
 
 
@@ -319,31 +373,31 @@ int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t
         return -1;
     
     /* Align to 4KB */
-    virtual_start &= ~0xFFF;
-    size = (size + 0xFFF) & ~0xFFF;
+    virtual_start &= (uintptr_t)PAGE_FRAME_MASK;
+    size = (size + 0xFFF) & (size_t)PAGE_FRAME_MASK;
 
     /* Add user flag */
     flags |= PAGE_USER;
 
-    /* Map each page */
+    /* Map each page; on failure, rollback all mappings we made */
     for (size_t offset = 0; offset < size; offset += 0x1000)
     {
         uintptr_t virt_addr = virtual_start + offset;
 
-        /* Allocate physical frame using PMM (correct!) */
         uintptr_t phys_addr = pmm_alloc_frame();
-
         if (phys_addr == 0)
         {
-            panic("Failed to allocate physical frame");
+            /* Rollback: unmap everything we mapped so far */
+            for (size_t rb = 0; rb < offset; rb += 0x1000)
+                unmap_page_in_directory(pml4, virtual_start + rb);
             return -1;
         }
 
-        /* Map the page in the specified directory */
         if (map_page_in_directory(pml4, virt_addr, phys_addr, flags) != 0)
         {
-            panic("Failed to map page");
-            pmm_free_frame(phys_addr); /* Free frame on mapping failure */
+            pmm_free_frame(phys_addr);
+            for (size_t rb = 0; rb < offset; rb += 0x1000)
+                unmap_page_in_directory(pml4, virtual_start + rb);
             return -1;
         }
     }
@@ -351,125 +405,102 @@ int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t
     return 0;
 }
 
-/**
+/*
  * copy_process_memory - Copy memory from parent to child process
  * @parent: Parent process
  * @child: Child process
  *
- * BASIC IMPLEMENTATION: Copies user-space pages from parent to child.
- * 
- * Implementation notes:
- * - Walks parent's page tables to find user pages (PAGE_USER flag)
- * - Allocates new frames for child using pmm_alloc_frame()
- * - Copies PAGE_SIZE_4KB bytes per page
- * - Maps pages in child's page directory
- * 
- * LIMITATIONS:
- * - Only handles user-space pages (kernel pages are shared)
- * - Assumes 4KB pages only (no 2MB pages)
- * - Does not handle Copy-on-Write (COW) - full copy performed
- * - No error recovery if frame allocation fails mid-copy
- * 
+ * Walks PML4 indices 0..255 (user half of the canonical 64-bit space), then
+ * every present 4KB leaf with PAGE_USER in the parent. For each such page,
+ * allocates a fresh frame, copies content (identity-mapped physical access),
+ * and maps it in the child's PML4 via map_page_in_directory (no CR3 dance).
+ *
+ * Same 4KB-only assumption as process_unmap_user_pages_all: huge pages are
+ * skipped. Kernel mappings (no PAGE_USER) are not copied. No COW.
+ *
  * Returns: 0 on success, -1 on failure
  */
 int copy_process_memory(struct process *parent, struct process *child)
 {
+    size_t i4;
+    size_t i3;
+    size_t i2;
+    size_t i1;
+    uint64_t *parent_pml4;
+    uint64_t *child_pml4;
+
     if (!parent || !child)
         return -1;
-    
+
     if (!parent->page_directory || !child->page_directory)
         return -1;
-    
-    uint64_t *parent_pml4 = parent->page_directory;
-    uint64_t *child_pml4 = child->page_directory;
-    
-    /* Walk parent's page tables to find user pages */
-    /* User space typically starts at 0x400000 (4MB) in x86-64 */
-    /* We scan a limited range: 0x400000 to 0x1000000 (4MB to 16MB) */
-    const uint64_t USER_START = 0x400000;
-    const uint64_t USER_END = 0x1000000;
-    
-    /* Temporarily switch to parent's page directory to read pages */
-    uint64_t old_cr3 = get_current_page_directory();
-    load_page_directory((uint64_t)parent_pml4);
-    
-    for (uint64_t virt_addr = USER_START; virt_addr < USER_END; virt_addr += PAGE_SIZE_4KB)
+
+    parent_pml4 = parent->page_directory;
+    child_pml4 = child->page_directory;
+
+    for (i4 = 0; i4 < 256; i4++)
     {
-        /* Extract page table indices */
-        size_t pml4_index = (virt_addr >> 39) & 0x1FF;
-        size_t pdpt_index = (virt_addr >> 30) & 0x1FF;
-        size_t pd_index = (virt_addr >> 21) & 0x1FF;
-        size_t pt_index = (virt_addr >> 12) & 0x1FF;
-        
-        /* Walk parent's page tables */
-        if (!(parent_pml4[pml4_index] & PAGE_PRESENT))
-            continue;
-        
-        uint64_t *pdpt = get_existing_table(parent_pml4, pml4_index);
+        uint64_t *pdpt = get_existing_table(parent_pml4, i4);
+
         if (!pdpt)
             continue;
-        
-        if (!(pdpt[pdpt_index] & PAGE_PRESENT))
-            continue;
-        
-        uint64_t *pd = get_existing_table(pdpt, pdpt_index);
-        if (!pd)
-            continue;
-        
-        if (!(pd[pd_index] & PAGE_PRESENT))
-            continue;
-        
-        uint64_t *pt = get_existing_table(pd, pd_index);
-        if (!pt)
-            continue;
-        
-        /* Check if page is present and is user page */
-        uint64_t page_entry = pt[pt_index];
-        if (!(page_entry & PAGE_PRESENT))
-            continue;
-        
-        if (!(page_entry & PAGE_USER))
-            continue; /* Skip kernel pages */
-        
-        /* Get physical address of parent page */
-        uint64_t parent_phys = page_entry & ~0xFFF;
-        
-        /* Allocate new frame for child */
-        uint64_t child_phys = pmm_alloc_frame();
-        if (!child_phys)
+
+        for (i3 = 0; i3 < 512; i3++)
         {
-            /* Restore CR3 and return error */
-            load_page_directory(old_cr3);
-            return -1;
+            uint64_t *pd = get_existing_table(pdpt, i3);
+
+            if (!pd)
+                continue;
+
+            for (i2 = 0; i2 < 512; i2++)
+            {
+                uint64_t *pt = get_existing_table(pd, i2);
+
+                if (!pt)
+                    continue;
+
+                for (i1 = 0; i1 < 512; i1++)
+                {
+                    uint64_t page_entry = pt[i1];
+                    uint64_t parent_phys;
+                    uint64_t child_phys;
+                    uint64_t flags;
+                    uintptr_t virt_addr;
+
+                    if (!(page_entry & PAGE_PRESENT) ||
+                        !(page_entry & PAGE_USER))
+                        continue;
+
+                    parent_phys = page_entry & PAGE_FRAME_MASK;
+
+                    child_phys = pmm_alloc_frame();
+                    if (!child_phys)
+                        return -1;
+
+                    virt_addr = ((uintptr_t)i4 << 39) |
+                                ((uintptr_t)i3 << 30) |
+                                ((uintptr_t)i2 << 21) |
+                                ((uintptr_t)i1 << 12);
+
+                    memcpy((void *)child_phys, (void *)parent_phys,
+                           PAGE_SIZE_4KB);
+
+                    flags = page_entry & 0xFFF;
+                    flags &= ~PAGE_GLOBAL;
+                    flags |= PAGE_USER;
+                    if (!(page_entry & PAGE_NX))
+                        flags |= PAGE_EXEC;
+
+                    if (map_page_in_directory(child_pml4, virt_addr,
+                                              child_phys, flags) != 0)
+                    {
+                        pmm_free_frame(child_phys);
+                        return -1;
+                    }
+                }
+            }
         }
-        
-        /* Copy page content (identity mapped, so we can access physical directly) */
-        void *parent_page = (void *)parent_phys;
-        void *child_page = (void *)child_phys;
-        memcpy(child_page, parent_page, PAGE_SIZE_4KB);
-        
-        /* Get page flags (preserve all except global flag) */
-        uint64_t flags = page_entry & 0xFFF;
-        flags &= ~PAGE_GLOBAL; /* Don't mark child pages as global */
-        
-        /* Switch to child's page directory and map the page */
-        load_page_directory((uint64_t)child_pml4);
-        
-        /* Create page tables in child if needed (simplified - assumes they exist) */
-        /* Map the copied page in child's address space */
-        if (map_user_page(virt_addr, child_phys, flags) != 0)
-        {
-            pmm_free_frame(child_phys);
-            load_page_directory(old_cr3);
-            return -1;
-        }
-        
-        /* Switch back to parent's directory for next iteration */
-        load_page_directory((uint64_t)parent_pml4);
     }
-    
-    /* Restore original CR3 */
-    load_page_directory(old_cr3);
-    
+
     return 0;
 }

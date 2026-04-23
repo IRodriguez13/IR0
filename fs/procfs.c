@@ -8,20 +8,16 @@
  */
 
 #include "procfs.h"
-#include "swapfs.h"
 #include <ir0/stat.h>
 #include <ir0/fcntl.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <mm/allocator.h>
-#include <ir0/vga.h>
 #include <string.h>
 #include <ir0/errno.h>
-#include <stdlib.h>
 #include <ir0/net.h>
 #include <ir0/driver.h>
 #include <kernel/process.h>
-#include <kernel/syscalls.h>
 #include <ir0/version.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
@@ -29,10 +25,14 @@
 #include <drivers/disk/partition.h>
 #include <drivers/storage/ata.h>
 #include <fs/vfs.h>
+#include <drivers/net/rtl8139.h>
 #include <ir0/validation.h>
 #include <mm/paging.h>
 #include <kernel/resource_registry.h>
+#include <config.h>
+#if CONFIG_ENABLE_BLUETOOTH
 #include "drivers/bluetooth/bt_device.h"
+#endif
 #include <ir0/logging.h>
 
 #define PROC_BUFFER_SIZE           4096    /* Standard proc buffer size */
@@ -213,6 +213,32 @@ static int proc_netinfo_read(char *buf, size_t count)
     return (int)off;
 }
 
+/*
+ * /proc/net/dev: Linux-style summary of RTL8139 counters (single iface eth0).
+ * Header lines mirror common tools that parse Inter-| / face | columns.
+ */
+static int proc_net_dev_read(char *buf, size_t count)
+{
+    if (VALIDATE_BUFFER(buf, count) != 0)
+        return -1;
+    memset(buf, 0, count);
+    uint64_t rxp = 0, txp = 0, rxe = 0, txe = 0;
+    rtl8139_get_stats(&rxp, &txp, &rxe, &txe);
+    int n = snprintf(buf, count,
+                     "Inter-|   Receive                                                |  Transmit\n"
+                     " face |   packets    errs                                        |  packets    errs\n"
+                     "  eth0: %10llu %10llu                                          %10llu %10llu\n",
+                     (unsigned long long)rxp, (unsigned long long)rxe,
+                     (unsigned long long)txp, (unsigned long long)txe);
+    if (n < 0)
+        return -1;
+    if (n >= (int)count) {
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
+    return n;
+}
+
 static int proc_drivers_read(char *buf, size_t count)
 {
     return ir0_driver_list_to_buffer(buf, count);
@@ -224,15 +250,36 @@ bool is_proc_path(const char *path)
     return path && strncmp(path, "/proc/", 6) == 0;
 }
 
-/* Parse /proc path - returns entry name after /proc/, extracts PID if present.
- * Supports OSDev-style /proc/pid/N/status and legacy /proc/N/status */
+/*
+ * Parse /proc path - returns entry name after /proc/, extracts PID if present.
+ * Supports OSDev-style /proc/pid/N/status, legacy /proc/N/status, and
+ * /proc/self/... mapped to the current process PID (Linux-style).
+ */
 static const char *proc_parse_path(const char *path, pid_t *pid_out)
 {
     if (!is_proc_path(path))
         return NULL;
 
+    const char *walk = path;
+    char self_resolved[512];
+
+    /*
+     * Map /proc/self/<rest> to /proc/<current_pid>/<rest> so the rest of the
+     * parser sees a normal numeric PID path.
+     */
+    if (strncmp(path, "/proc/self/", 11) == 0)
+    {
+        if (!current_process)
+            return NULL;
+        int n = snprintf(self_resolved, sizeof(self_resolved), "/proc/%d/%s",
+                         (int)current_process->task.pid, path + 11);
+        if (n < 0 || (size_t)n >= sizeof(self_resolved))
+            return NULL;
+        walk = self_resolved;
+    }
+
     /* Skip "/proc/" prefix */
-    const char *after_proc = path + 6;
+    const char *after_proc = walk + 6;
 
     /* Check if it's /proc/status (current process) */
     if (strncmp(after_proc, "status", 6) == 0)
@@ -633,64 +680,26 @@ int proc_partitions_read(char *buf, size_t count)
     return (int)off;
 }
 
-/* /proc/swaps: raw data. One line per swap: path\ttype\tsize_kb\tused_kb\tpriority */
-int proc_swaps_read(char *buf, size_t count)
-{
-    if (VALIDATE_BUFFER(buf, count) != 0)
-        return -1;
-    memset(buf, 0, count);
-    swapfs_list_t list;
-    if (swapfs_get_active_list(&list) != 0)
-        return 0;
-    size_t off = 0;
-    for (uint32_t i = 0; i < list.count && off < count; i++)
-    {
-        uint64_t size_kb = (uint64_t)list.entries[i].total_pages * 4;
-        uint64_t used_kb = (uint64_t)list.entries[i].used_pages * 4;
-        int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "%s\tfile\t%llu\t%llu\t-1\n",
-                         list.entries[i].path,
-                         (unsigned long long)size_kb,
-                         (unsigned long long)used_kb);
-        if (n <= 0 || n >= (int)(count - off))
-            break;
-        off += (size_t)n;
-    }
-    if (off < count)
-        buf[off] = '\0';
-    return (int)off;
-}
-
-/* /proc/mounts: raw data only. One line per mount: device\tmountpoint\tfstype\toptions */
+/* /proc/mounts: one line per VFS mount — device path fstype rw 0 0 */
 int proc_mounts_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
-    const char *common_paths[] = { "/", "/tmp", "/proc", "/dev" };
-    for (size_t i = 0; i < sizeof(common_paths) / sizeof(common_paths[0]); i++)
-    {
-        struct mount_point *mp = vfs_find_mount_point(common_paths[i]);
-        const char *dev = "none", *path = NULL, *fstype = "unknown";
-        if (mp)
-        {
-            dev = (mp->dev[0] != '\0') ? mp->dev : "none";
-            path = mp->path;
-            fstype = mp->fs_type ? mp->fs_type->name : "unknown";
-        }
-        else if (strcmp(common_paths[i], "/proc") == 0)
-            { path = "/proc"; fstype = "proc"; }
-        else if (strcmp(common_paths[i], "/dev") == 0)
-            { path = "/dev"; fstype = "devfs"; }
-        if (!path)
-            continue;
+
+    for (struct vfs_mount *m = vfs_get_mounts(); m && off < count; m = m->next) {
+        const char *dev = (m->dev[0] != '\0') ? m->dev : "none";
+        const char *fst = (m->fs && m->fs->name) ? m->fs->name : "unknown";
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "%s\t%s\t%s\trw\n", dev, path, fstype);
-        if (n <= 0 || n >= (int)(count - off)) break;
+                         "%s %s %s rw 0 0\n",
+                         dev, m->path, fst);
+        if (n <= 0 || (size_t)n >= count - off)
+            break;
         off += (size_t)n;
     }
-    if (off < count) buf[off] = '\0';
+    if (off < count)
+        buf[off] = '\0';
     return (int)off;
 }
 
@@ -1071,8 +1080,12 @@ int proc_open(const char *path, int flags)
     } else if (strcmp(filename, "swaps") == 0)
     {
         fd = 1022;
+    } else if (strcmp(filename, "net/dev") == 0)
+    {
+        fd = 1023;
     } else
     {
+#if CONFIG_ENABLE_BLUETOOTH
         /* Check for bluetooth subdirectory */
         if (strncmp(filename, "bluetooth/", 10) == 0)
         {
@@ -1091,6 +1104,7 @@ int proc_open(const char *path, int flags)
             }
         }
         else
+#endif
         {
             /* File not found */
             return -1;
@@ -1179,6 +1193,7 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
         case 1018:
             full_size = proc_timer_list_read(proc_buffer, sizeof(proc_buffer));
             break;
+#if CONFIG_ENABLE_BLUETOOTH
         case 1019:
             /* /proc/bluetooth/devices */
             full_size = bt_proc_devices_read(proc_buffer, sizeof(proc_buffer));
@@ -1187,8 +1202,12 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
             /* /proc/bluetooth/scan */
             full_size = bt_proc_scan_read(proc_buffer, sizeof(proc_buffer));
             break;
+#endif
         case 1022:
-            full_size = proc_swaps_read(proc_buffer, sizeof(proc_buffer));
+            full_size = 0;
+            break;
+        case 1023:
+            full_size = proc_net_dev_read(proc_buffer, sizeof(proc_buffer));
             break;
         case 1021:
             /*
@@ -1245,21 +1264,12 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
     return (int)to_read;
 }
 
-/**
+/*
  * proc_write - Write to /proc file entry
- * @fd: File descriptor (used to determine which /proc entry)
- * @buf: Buffer containing data to write
- * @count: Number of bytes to write
  *
- * Implements write support for specific /proc entries. Most /proc entries
- * are read-only, but some entries like /proc/sys/ support writing for
- * system configuration.
- *
- * Currently supported writable entries:
- * - /proc/sys/ entries (basic support)
- * - /proc/bluetooth/scan (Bluetooth scan control)
- *
- * Returns: Number of bytes written on success, negative error code on failure
+ * Most /proc nodes are read-only. Writable paths are explicit (e.g.
+ * /proc/bluetooth/scan). Writes under /proc/sys/ are not implemented and
+ * return -EOPNOTSUPP.
  */
 int proc_write(int fd, const char *buf, size_t count)
 {
@@ -1274,6 +1284,7 @@ int proc_write(int fd, const char *buf, size_t count)
 
     switch (fd)
     {
+#if CONFIG_ENABLE_BLUETOOTH
         case 1020:
             /* /proc/bluetooth/scan - Bluetooth scan control */
             {
@@ -1295,76 +1306,32 @@ int proc_write(int fd, const char *buf, size_t count)
                     return result;
                 return (int)count;
             }
+#endif
         
         default:
-            /* Try to handle /proc/sys/ entries by checking path from fd_table */
+            /*
+             * Resolve path from the opener's fd table; writes under the
+             * proc/sys virtual tree are not supported (no sysctl knobs in-tree).
+             */
             {
-                /* Get current process to access fd_table */
                 if (!current_process)
                     return -ESRCH;
-                
-                /* Validate fd range */
+
                 if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
                     return -EBADF;
-                
-                /* Get path from file descriptor table */
+
                 const char *path = NULL;
                 if (current_process->fd_table[fd].in_use)
-                {
                     path = current_process->fd_table[fd].path;
-                }
-                
-                /* If no path available, entry is read-only */
+
                 if (!path || strncmp(path, "/proc/", 6) != 0)
-                {
-                    return -EACCES; /* Not a /proc entry or invalid fd */
-                }
-                
-                /* Parse path to determine which entry is being written */
-                path += 6; /* Skip "/proc/" prefix */
-                
-                /* Handle /proc/sys/ entries - system configuration */
+                    return -EACCES;
+
+                path += 6;
                 if (strncmp(path, "sys/", 4) == 0)
-                {
-                    /* Basic support for /proc/sys/ writes
-                     * This is a simplified implementation - full support would
-                     * require parsing the full path and routing to appropriate handlers
-                     */
-                    path += 4; /* Skip "sys/" prefix */
-                    
-                    /* For now, just acknowledge the write attempt
-                     * Future enhancement: Parse full path and update kernel parameters
-                     * Example: /proc/sys/kernel/panic_on_oops -> update panic handler
-                     * Example: /proc/sys/vm/swappiness -> update memory management
-                     */
-                    
-                    /* Truncate buffer to ensure null termination for parsing */
-                    char value_buf[256];
-                    size_t copy_len = (count < sizeof(value_buf) - 1) ? count : (sizeof(value_buf) - 1);
-                    memcpy(value_buf, buf, copy_len);
-                    value_buf[copy_len] = '\0';
-                    
-                    /* Remove trailing whitespace/newlines */
-                    while (copy_len > 0 && (value_buf[copy_len - 1] == '\n' || 
-                                            value_buf[copy_len - 1] == '\r' ||
-                                            value_buf[copy_len - 1] == ' '))
-                    {
-                        copy_len--;
-                        value_buf[copy_len] = '\0';
-                    }
-                    
-                    /* Basic implementation: just log the write attempt
-                     * Full implementation would parse path and apply changes
-                     */
-                    (void)path; /* Path available for future parsing */
-                    (void)value_buf; /* Value available for future processing */
-                    
-                    /* Return number of bytes "written" (acknowledged) */
-                    return (int)count;
-                }
-                
-                /* All other /proc entries are read-only */
-                return -EACCES; /* Permission denied - entry is read-only */
+                    return -EOPNOTSUPP;
+
+                return -EACCES;
             }
     }
 }
@@ -1392,7 +1359,10 @@ int proc_stat(const char *path, stat_t *st)
         return 0;
     }
 
-    /* Check if file exists */
+    /*
+     * Regular virtual files: keep in sync with proc_open dispatch (same
+     * basename / bluetooth subtree as open).
+     */
     if (strcmp(filename, "meminfo") == 0 ||
         strcmp(filename, "ps") == 0 ||
         strcmp(filename, "netinfo") == 0 ||
@@ -1404,8 +1374,21 @@ int proc_stat(const char *path, stat_t *st)
         strcmp(filename, "loadavg") == 0 ||
         strcmp(filename, "filesystems") == 0 ||
         strcmp(filename, "cmdline") == 0 ||
-        strcmp(filename, "blockdevices") == 0) {
-        
+        strcmp(filename, "blockdevices") == 0 ||
+        strcmp(filename, "partitions") == 0 ||
+        strcmp(filename, "mounts") == 0 ||
+        strcmp(filename, "interrupts") == 0 ||
+        strcmp(filename, "iomem") == 0 ||
+        strcmp(filename, "ioports") == 0 ||
+        strcmp(filename, "modules") == 0 ||
+        strcmp(filename, "timer_list") == 0 ||
+        strcmp(filename, "kmsg") == 0 ||
+        strcmp(filename, "swaps") == 0 ||
+        strcmp(filename, "net/dev") == 0 ||
+        (strncmp(filename, "bluetooth/", 10) == 0 &&
+         (strcmp(filename + 10, "devices") == 0 ||
+          strcmp(filename + 10, "scan") == 0))) {
+
         memset(st, 0, sizeof(stat_t));
         /* Regular file, read-only */
         st->st_mode = S_IFREG | 0444;

@@ -8,7 +8,6 @@
  */
 
 #include "debug_bins.h"
-#include <stdlib.h>
 
 #define DRV_BUF_SIZE 4096
 

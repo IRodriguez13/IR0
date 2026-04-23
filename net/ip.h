@@ -27,7 +27,7 @@ struct ip_header
     uint16_t id;              /* Identification */
     uint16_t flags_frag_off;  /* Flags (3 bits) + Fragment Offset (13 bits) */
     uint8_t ttl;              /* Time To Live */
-    uint8_t protocol;         /* Protocol (ICMP=1, TCP=6, UDP=17) */
+    uint8_t protocol;         /* Next header (IANA): ICMP=1, UDP=17 in IR0 */
     uint16_t checksum;        /* Header Checksum */
     uint32_t src_addr;        /* Source Address */
     uint32_t dest_addr;       /* Destination Address */
@@ -48,6 +48,7 @@ struct ip_header
 extern ip4_addr_t ip_local_addr;
 extern ip4_addr_t ip_netmask;
 extern ip4_addr_t ip_gateway;
+extern ip4_addr_t ip_last_dest_addr;
 
 /* IP Protocol API */
 int ip_init(void);
@@ -56,6 +57,7 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
 void ip_receive_handler(struct net_device *dev, const void *data, 
                         size_t len, void *priv);
 ip4_addr_t ip_get_last_src_addr(void);  /* Get source IP from last received packet */
+ip4_addr_t ip_get_last_dest_addr(void); /* Get dest IP from last received packet */
 uint8_t ip_get_last_ttl(void);          /* Get TTL from last received packet */
 
 /* Routing API */
@@ -79,10 +81,11 @@ static inline void ip_format_addr(ip4_addr_t ip, char *buf, size_t buf_len)
         return;
     
     /* Extract bytes from IP address (network byte order) */
-    uint8_t b1 = (ip >> 24) & 0xFF;
-    uint8_t b2 = (ip >> 16) & 0xFF;
-    uint8_t b3 = (ip >> 8) & 0xFF;
-    uint8_t b4 = ip & 0xFF;
+    uint32_t host = ntohl(ip);
+    uint8_t b1 = (host >> 24) & 0xFF;
+    uint8_t b2 = (host >> 16) & 0xFF;
+    uint8_t b3 = (host >> 8) & 0xFF;
+    uint8_t b4 = host & 0xFF;
     
     /* Format as "XXX.XXX.XXX.XXX" */
     /* Note: snprintf is declared in <string.h> */

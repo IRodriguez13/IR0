@@ -14,17 +14,27 @@
 #define PAGE_SIZE_2MB_FLAG 0x80
 #define PAGE_GLOBAL 0x100
 
+/* PTE bit 63: no-execute when IA32_EFER.NXE is set (not stored in low 12 bits of API flags) */
+#define PAGE_NX (1ULL << 63)
+/* Software flag for map_page*: page must remain executable (omit PAGE_NX in PTE) */
+#define PAGE_EXEC (1ULL << 52)
+
 
 #define PAGE_SIZE_4KB (4 * 1024)
 #define PAGE_SIZE_2MB (2 * 1024 * 1024)
 #define PAGE_SIZE_1GB (1024 * 1024 * 1024)
 
+/* Physical frame: strip low 12 bits from a table entry or aligned address */
+#define PAGE_FRAME_MASK     (~0xFFFULL)
+/* Nine-bit index into PML4/PDPT/PD/PT (512 entries) */
+#define PAGE_INDEX_MASK     0x1FF
 
-/**
- * Setup identity mapping for 16MB using 2MB pages
- * Maps physical addresses 0-16MB to virtual addresses 0-16MB
- */
-void setup_paging_identity_16mb(void);
+/* CR0: paging and write-protect */
+#define CR0_PG              (1UL << 31)
+#define CR0_WP              (1UL << 16)
+/* CR4: physical address extension (required before long-mode paging) */
+#define CR4_PAE             (1UL << 5)
+
 
 /**
  * Enable paging (sets CR0.PG bit)
@@ -78,48 +88,32 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
 int is_page_mapped_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t *flags_out);
 
 /**
- * Unmap a virtual address
+ * Walk 4-level paging to the PTE for @a vaddr in @a pml4.
+ * Returns NULL if any level is missing or a huge page is encountered.
+ * The returned pointer is valid even when the leaf PTE is not present.
+ */
+uint64_t *paging_get_pte(uint64_t *pml4, uintptr_t vaddr);
+
+/**
+ * Unmap a 4KB page in an explicit page directory (PML4 root).
+ * Does not assume current CR3 matches @pml4.
+ */
+int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr);
+
+/**
+ * Unmap a virtual address in the current address space (current CR3)
  */
 int unmap_page(uint64_t virt_addr);
 
-
-// Mapear página de usuario con permisos U/S=1
+/* Map user page with U/S=1 */
 int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags);
 
-// Mapear región de memoria de usuario (en page directory actual)
+/* Map user region in current page directory */
 int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags);
 
-// Mapear región de memoria de usuario en un page directory específico
+/* Map user region in a specific page directory */
 int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t size, uint64_t flags);
 
-
-/**
- * Print current paging status
- */
-void print_paging_status(void);
-
-/**
- * Dump page tables for debugging
- */
-void dump_page_tables(void);
-
-/**
- * Verify paging system integrity
- */
-int verify_paging_integrity(void);
-
-/**
- * Test page fault protection by accessing unmapped memory
- */
-void test_page_fault_protection(void);
-
-/**
- * Safe post-paging verification (can use print/log)
- * Only call AFTER paging is completely configured
- */
-void verify_paging_setup_safe(void);
-
-// Forward declaration for process_t
 struct process;
 
 /**
@@ -127,12 +121,6 @@ struct process;
  * Returns physical address of the new PML4 table
  */
 uint64_t create_process_page_directory(void);
-
-/**
- * Destroy a process page directory
- * Frees the PML4 table and associated user pages
- */
-void destroy_process_page_directory(uint64_t *pml4);
 
 /**
  * Copy memory from parent process to child process

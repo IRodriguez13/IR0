@@ -7,9 +7,12 @@
  */
 
 #include "process.h"
+#include <config.h>
 #include "rr_sched.h"
 #include <ir0/kmem.h>
+#include <ir0/pipe.h>
 #include <mm/paging.h>
+#include <fs/vfs.h>
 #include <drivers/serial/serial.h>
 #include <drivers/video/vbe.h>
 #include <ir0/permissions.h>
@@ -21,6 +24,72 @@
 
 
 static pid_t next_pid = 2;
+
+/*
+ * Follow one level of the page table hierarchy; returns NULL if the entry is
+ * absent or a huge page (unmap path only supports 4KB walks).
+ */
+static uint64_t *process_pt_child(uint64_t *table, size_t index)
+{
+	if (!(table[index] & PAGE_PRESENT))
+		return NULL;
+	if (table[index] & PAGE_SIZE_2MB_FLAG)
+		return NULL;
+	return (uint64_t *)(table[index] & PAGE_FRAME_MASK);
+}
+
+/*
+ * Drop every present PAGE_USER mapping under PML4 indices 0..255 so PMM
+ * frames are returned and the address space can be discarded safely while
+ * another process is active (CR3 unrelated).
+ */
+static void process_unmap_user_pages_all(uint64_t *pml4)
+{
+	size_t i4;
+	size_t i3;
+	size_t i2;
+	size_t i1;
+
+	if (!pml4)
+		return;
+
+	for (i4 = 0; i4 < 256; i4++)
+	{
+		uint64_t *pdpt = process_pt_child(pml4, i4);
+
+		if (!pdpt)
+			continue;
+
+		for (i3 = 0; i3 < 512; i3++)
+		{
+			uint64_t *pd = process_pt_child(pdpt, i3);
+
+			if (!pd)
+				continue;
+
+			for (i2 = 0; i2 < 512; i2++)
+			{
+				uint64_t *pt = process_pt_child(pd, i2);
+
+				if (!pt)
+					continue;
+
+				for (i1 = 0; i1 < 512; i1++)
+				{
+					uint64_t ent = pt[i1];
+					uintptr_t virt;
+
+					if (!(ent & PAGE_PRESENT) || !(ent & PAGE_USER))
+						continue;
+
+					virt = ((uintptr_t)i4 << 39) | ((uintptr_t)i3 << 30) |
+					       ((uintptr_t)i2 << 21) | ((uintptr_t)i1 << 12);
+					unmap_page_in_directory(pml4, virt);
+				}
+			}
+		}
+	}
+}
 
 
 process_t *current_process = NULL;
@@ -86,7 +155,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	if (!entry || !name)
 		return -1;
 	
-	proc = kmalloc(sizeof(process_t));
+	proc = kmalloc_try(sizeof(process_t));
 	if (!proc) {
 		serial_print("[ERROR] Failed to allocate process structure\n");
 		return -ENOMEM;
@@ -138,9 +207,9 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	/* Create user stack in userspace (only for USER_MODE processes) */
 	if (proc->mode == USER_MODE)
 	{
-		/* User stack in userspace: 8KB at 0x7FFFF000 (high user address) */
-		proc->stack_size = 0x2000;  /* 8KB */
-		proc->stack_start = 0x7FFFF000UL;  /* High user address, aligned to page */
+		/* User stack: [USER_STACK_TOP - USER_STACK_SIZE, USER_STACK_TOP) */
+		proc->stack_size = USER_STACK_SIZE;
+		proc->stack_start = USER_STACK_TOP - USER_STACK_SIZE;
 		
 		/* Temporarily switch to process page directory to map stack */
 		uint64_t old_cr3 = get_current_page_directory();
@@ -160,19 +229,19 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		/* Restore original page directory */
 		load_page_directory(old_cr3);
 		
-		/* Setup stack pointer at top of stack (stack grows down) */
-		proc->task.rsp = proc->stack_start + proc->stack_size - 16;
+		/* Setup stack pointer just below USER_STACK_TOP (stack grows down) */
+		proc->task.rsp = USER_STACK_TOP - 16;
 		proc->task.rbp = proc->task.rsp;
 	}
 	else
 	{
 		/* Kernel mode: allocate from kernel heap (existing behavior) */
 		proc->stack_size = 0x2000;
-		proc->stack_start = (uint64_t)kmalloc(proc->stack_size);
+		proc->stack_start = (uint64_t)kmalloc_try(proc->stack_size);
 		if (!proc->stack_start)
 		{
 			kfree(proc);
-			return -1;
+			return -ENOMEM;
 		}
 		memset((void *)proc->stack_start, 0, proc->stack_size);
 		proc->task.rsp = proc->stack_start + proc->stack_size - 16;
@@ -181,13 +250,25 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 
 	/* Setup task registers for clean start */
 	proc->task.rip = (uint64_t)entry;
-	proc->task.rflags = 0x202;
-	proc->task.cs = 0x1B;
-	proc->task.ss = 0x23;
-	proc->task.ds = 0x23;
-	proc->task.es = 0x23;
-	proc->task.fs = 0x23;
-	proc->task.gs = 0x23;
+	proc->task.rflags = RFLAGS_IF;
+	if (proc->mode == KERNEL_MODE)
+	{
+		proc->task.cs = KERNEL_CODE_SEL;
+		proc->task.ss = KERNEL_DATA_SEL;
+		proc->task.ds = KERNEL_DATA_SEL;
+		proc->task.es = KERNEL_DATA_SEL;
+		proc->task.fs = KERNEL_DATA_SEL;
+		proc->task.gs = KERNEL_DATA_SEL;
+	}
+	else
+	{
+		proc->task.cs = USER_CODE_SEL;
+		proc->task.ss = USER_DATA_SEL;
+		proc->task.ds = USER_DATA_SEL;
+		proc->task.es = USER_DATA_SEL;
+		proc->task.fs = USER_DATA_SEL;
+		proc->task.gs = USER_DATA_SEL;
+	}
 
 	/* Initialize file descriptor table */
 	process_init_fd_table(proc);
@@ -224,38 +305,40 @@ pid_t spawn_kernel(void (*entry)(void), const char *name)
 	return spawn(entry, name, KERNEL_MODE);
 }
 
-/* Dummy entry that immediately exits - child process behavior for fork() */
+/*
+ * Entry for the lightweight child created by fork() below. This is not a
+ * POSIX child: it does not resume at the fork() syscall site with return
+ * value zero, and it does not inherit a duplicated address space.
+ */
 static void fork_child_entry(void)
 {
 	process_exit(0);
 }
 
-/* 
- * process_fork() - Fork syscall compatibility (uses spawn internally)
- * 
- * NOTE: IR0 only uses spawn() for process creation.
- * This function exists only for POSIX fork() syscall compatibility.
- * It uses spawn() internally, maintaining simplicity.
+/*
+ * fork() — kept for syscall wiring and historical callers; not a real fork.
+ *
+ * The debug shell uses SYS_FORK when building pipelines (pipe + two children).
+ * IR0 does not copy the parent address space or duplicate register state at
+ * the syscall boundary. The child is a new task that runs fork_child_entry and
+ * exits immediately. That is intentional given the missing copy-on-write /
+ * address-space machinery; use kexecve for normal program loading.
+ *
+ * The parent receives the new PID as the fork() return value. Expecting full
+ * POSIX fork semantics in user code will not work until address-space copy is
+ * implemented.
  */
 pid_t fork(void)
 {
-	/* IR0 philosophy: only spawn() creates processes
-	 * This function exists solely for sys_fork() compatibility
-	 * It uses spawn() internally to maintain simplicity
-	 */
 	if (!current_process)
 		return -1;
-	
-	/* Use spawn internally - only spawn creates processes in IR0
-	 * Fork inherits parent's mode (if parent is kernel mode, child is kernel mode) */
-	process_mode_t child_mode = current_process ? current_process->mode : KERNEL_MODE;
+
+	process_mode_t child_mode = current_process->mode;
 	pid_t child_pid = spawn(fork_child_entry, "fork_child", child_mode);
-	
-	/* Set return value for parent (child gets 0 from fork_child_entry) */
-	if (child_pid > 0) {
+
+	if (child_pid > 0)
 		current_process->task.rax = child_pid;
-	}
-	
+
 	return child_pid;
 }
 
@@ -363,6 +446,7 @@ void process_reap_zombies(process_t *parent)
 			}
 			
 			/* Free zombie process */
+			process_destroy(child);
 			kfree(child);
 		}
 		else
@@ -436,59 +520,126 @@ void process_exit(int code)
 }
 
 
-int process_wait(pid_t pid, int *status)
+/*
+ * process_destroy - Release per-process resources before freeing a zombie struct.
+ * Closes VFS and pipe handles, clears the FD table, and tears down user mappings
+ * in this process's page directory (not necessarily the active CR3).
+ */
+void process_destroy(process_t *p)
+{
+	int i;
+
+	if (!p)
+		return;
+
+	serial_print("[PROCESS] destroy PID ");
+	serial_print_hex32((uint32_t)p->task.pid);
+	serial_print(" (fd cleanup)\n");
+
+	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
+	{
+		fd_entry_t *e = &p->fd_table[i];
+
+		if (!e->in_use)
+			continue;
+
+		if (i >= 1000 && i <= 3999)
+		{
+			/* /proc, /dev, /sys pseudo-fds: no kernel object to release */
+			goto clear_fd;
+		}
+
+		if (i <= 2)
+			goto clear_fd;
+
+		if (e->is_pipe && e->vfs_file)
+		{
+			pipe_close((pipe_t *)e->vfs_file);
+			e->vfs_file = NULL;
+		}
+		else if (e->vfs_file)
+		{
+			vfs_close((struct vfs_file *)e->vfs_file);
+			e->vfs_file = NULL;
+		}
+
+clear_fd:
+		e->in_use = false;
+		e->is_pipe = false;
+		e->pipe_end = -1;
+		e->path[0] = '\0';
+		e->flags = 0;
+		e->fd_flags = 0;
+		e->offset = 0;
+	}
+
+	/* Unmap all user pages in this process's PML4 (reaper may run under another CR3) */
+	if (p->page_directory)
+		process_unmap_user_pages_all(p->page_directory);
+}
+
+int process_wait(pid_t pid, int *status, int options)
 {
 	process_t *p;
 	process_t *prev;
 	pid_t ret;
+	int found_child;
+	process_t *zombie;
+	/*
+	 * waitpid-style: pid > 0 waits for that child; pid == -1 or pid == 0
+	 * waits for any child of the caller (process groups not implemented).
+	 */
+	const int any_child = (pid == (pid_t)-1 || pid == 0);
 
 	if (!current_process) {
 		serial_print("[ERROR] process_wait called without current process context\n");
 		return -ESRCH;
 	}
 
-	for(;;)
-	{
-		p = process_list;
-		while (p)
-		{
-			/* Validate process pointer to detect corruption */
-			if (!p) {
-				serial_print("[ERROR] Process list corruption detected in waitpid\n");
-				return -EFAULT;
-			}
-			
-			/* Check if this is a child process we're waiting for */
-			if (p->task.pid == pid && p->ppid == current_process->task.pid)
-			{
-				if (p->state == PROCESS_ZOMBIE)
-				{
-					if (status)
-						*status = p->exit_code;
+	for (;;) {
+		found_child = 0;
+		zombie = NULL;
 
-					/* Remove from process list */
-					if (process_list == p)
-					{
-						process_list = p->next;
-					}
-					else
-					{
-						prev = process_list;
-						while (prev->next != p)
-							prev = prev->next;
-						prev->next = p->next;
-					}
+		for (p = process_list; p; p = p->next) {
+			if (p->ppid != current_process->task.pid)
+				continue;
+			if (!any_child && p->task.pid != pid)
+				continue;
 
-					ret = p->task.pid;
-					kfree(p);
-					return ret;
-				}
+			found_child = 1;
+			if (p->state == PROCESS_ZOMBIE) {
+				zombie = p;
 				break;
 			}
-			p = p->next;
 		}
 
-		/* Yield CPU while waiting */
+		if (zombie) {
+			if (status)
+				*status = (zombie->exit_code & 0xFF) << 8;
+
+			/* Remove from process list */
+			if (process_list == zombie)
+				process_list = zombie->next;
+			else {
+				prev = process_list;
+				while (prev->next != zombie)
+					prev = prev->next;
+				prev->next = zombie->next;
+			}
+
+			ret = zombie->task.pid;
+			process_destroy(zombie);
+			kfree(zombie);
+			return ret;
+		}
+
+		if (!found_child)
+			return -ECHILD;
+
+		/* Children exist but none are zombies yet */
+		if (options & WNOHANG)
+			return 0;
+
 		rr_schedule_next();
 	}
 }
@@ -504,7 +655,7 @@ uint64_t create_process_page_directory(void)
 	int i;
 
 	/* Allocate page-aligned memory for PML4 */
-	pml4 = kmalloc(4096 + 4096);
+	pml4 = kmalloc_try(4096 + 4096);
 	if (!pml4)
 		return 0;
 

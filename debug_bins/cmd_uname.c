@@ -28,7 +28,7 @@ static int cmd_uname_handler(int argc, char **argv)
         
         char buffer[512];
         int len = snprintf(buffer, sizeof(buffer),
-                          "IR0 %s %s #%s SMP %s %s %s\n",
+                          "IR0 %s %s #%s UP %s %s %s\n",
                           IR0_BUILD_HOST,
                           IR0_VERSION_STRING,
                           IR0_BUILD_NUMBER,
@@ -54,7 +54,7 @@ static int cmd_uname_handler(int argc, char **argv)
     else if (strcmp(option, "-v") == 0 || strcmp(option, "--kernel-version") == 0)
     {
         char buffer[256];
-        snprintf(buffer, sizeof(buffer), "#%s SMP %s %s by %s@%s\n",
+        snprintf(buffer, sizeof(buffer), "#%s UP %s %s by %s@%s\n",
                 IR0_BUILD_NUMBER,
                 IR0_BUILD_DATE,
                 IR0_BUILD_TIME,

@@ -45,40 +45,27 @@ static struct net_protocol ip_proto;
 /* Temporary storage for source IP when calling upper layer handlers */
 /* This is used to pass source IP to ICMP for Echo Reply */
 static ip4_addr_t ip_last_src_addr = 0;
+/* Destination IP from the last accepted inbound packet (pseudo-header for UDP, etc.) */
+ip4_addr_t ip_last_dest_addr = 0;
 static uint8_t ip_last_ttl = 0;
 
 /* Broadcast IP address */
 static const ip4_addr_t broadcast_ip = 0xFFFFFFFF; /* 255.255.255.255 */
 
 /* IP Fragmentation: Simple fragmentation counter for unique fragment IDs */
-static uint16_t ip_frag_id_counter = 1; /* Start at 1, 0 reserved for "no fragment" */
+static uint16_t ip_frag_id_counter = 1;
 
-/* IP Fragment Reassembly: Track incoming fragments to reassemble them */
-struct ip_fragment {
-    uint16_t id;
-    ip4_addr_t src_ip;
-    ip4_addr_t dest_ip;
-    uint8_t protocol;
-    uint8_t *data;           /* Reassembled packet data */
-    size_t total_len;        /* Total packet length (when complete) */
-    uint32_t received_bits;  /* Bitmap of received fragments (simplified) */
-    uint64_t timestamp;      /* When first fragment arrived */
-    struct ip_fragment *next;
-};
-
-static struct ip_fragment *ip_fragments = NULL;
-#define IP_FRAG_TIMEOUT_MS (30 * 1000)  /* 30 seconds timeout for reassembly */
-#define IP_FRAG_MAX_SIZE 65535          /* Maximum IP packet size */
-
-/**
- * ip_count_bits - Count number of set bits in a 32-bit value
- * Simple implementation since __builtin_popcount() isn't available in kernel
+/*
+ * Inbound IPv4 fragments are dropped: no reassembly buffer. Count drops and
+ * rate-limit serial noise (log every Nth drop).
  */
+static uint64_t ip_rx_frag_dropped;
+#define IP_RX_FRAG_DROP_LOG_EVERY 64U
+
 static int ip_count_bits(uint32_t value)
 {
     int count = 0;
-    while (value)
-    {
+    while (value) {
         count += (value & 1);
         value >>= 1;
     }
@@ -101,7 +88,7 @@ static int ip_count_bits(uint32_t value)
  * filled with the computed value. On receive, we verify by recalculating
  * (including the received checksum) - the result should be 0xFFFF if valid.
  *
- * This is the standard Internet checksum algorithm used by IP, ICMP, UDP, TCP.
+ * This is the standard Internet checksum algorithm used by IP, ICMP, and UDP.
  *
  * @data: Pointer to IP header (or any data to checksum)
  * @len: Length of data in bytes (must be even for optimal performance)
@@ -190,12 +177,25 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         return;
     }
 
-    /* Verify checksum */
+    uint16_t total_len = ntohs(ip->total_len);
+    if (total_len > len || total_len < header_len)
+    {
+        LOG_WARNING("IP", "Total length inconsistent with buffer or header");
+        return;
+    }
+
+    /* Verify checksum without leaving the RX buffer modified (work on a copy) */
     uint16_t received_checksum = ip->checksum;
-    struct ip_header *ip_mutable = (struct ip_header *)data;
-    ip_mutable->checksum = 0;
-    uint16_t calculated_checksum = ip_checksum(data, header_len);
-    ip_mutable->checksum = received_checksum;
+    uint8_t ip_hdr_scratch[60]; /* IPv4 header length is at most 15 * 4 bytes */
+    if (header_len > sizeof(ip_hdr_scratch))
+    {
+        LOG_WARNING("IP", "IP header length exceeds maximum");
+        return;
+    }
+    memcpy(ip_hdr_scratch, data, header_len);
+    struct ip_header *ip_verify = (struct ip_header *)ip_hdr_scratch;
+    ip_verify->checksum = 0;
+    uint16_t calculated_checksum = ip_checksum(ip_hdr_scratch, header_len);
 
     if (received_checksum != calculated_checksum)
     {
@@ -274,150 +274,20 @@ void ip_receive_handler(struct net_device *dev, const void *data,
     
     if (is_fragment)
     {
-        /* Handle fragment reassembly */
-        LOG_INFO_FMT("IP", "Received IP fragment: id=%d, offset=%d, MF=%d",
-                     (int)frag_id, (int)frag_offset, (flags & IP_FLAG_MF) ? 1 : 0);
-        
-        /* Find or create fragment entry */
-        struct ip_fragment *frag_entry = ip_fragments;
-        struct ip_fragment *prev = NULL;
-        uint64_t now = clock_get_uptime_milliseconds();
-        
-        /* Clean up expired fragments */
-        while (frag_entry)
+        (void)frag_id;
+        (void)frag_offset;
+        /*
+         * Fragment reassembly is not implemented; upper layers only see
+         * contiguous payloads after a single IP header.
+         */
+        ip_rx_frag_dropped++;
+        if (ip_rx_frag_dropped == 1U ||
+            (ip_rx_frag_dropped % IP_RX_FRAG_DROP_LOG_EVERY) == 0U)
         {
-            if (now - frag_entry->timestamp > IP_FRAG_TIMEOUT_MS)
-            {
-                struct ip_fragment *next = frag_entry->next;
-                if (prev)
-                    prev->next = next;
-                else
-                    ip_fragments = next;
-                
-                LOG_INFO_FMT("IP", "Removed expired fragment id=%d", (int)frag_entry->id);
-                if (frag_entry->data)
-                    kfree(frag_entry->data);
-                kfree(frag_entry);
-                frag_entry = next;
-                continue;
-            }
-            
-            if (frag_entry->id == frag_id && frag_entry->src_ip == src_ip)
-            {
-                break;
-            }
-            
-            prev = frag_entry;
-            frag_entry = frag_entry->next;
+            serial_print("[IP] dropped IPv4 fragment (no reassembly), total drops=0x");
+            serial_print_hex64(ip_rx_frag_dropped);
+            serial_print("\n");
         }
-        
-        if (!frag_entry)
-        {
-            /* Create new fragment entry */
-            frag_entry = kmalloc(sizeof(struct ip_fragment));
-            if (!frag_entry)
-                return;
-            
-            frag_entry->id = frag_id;
-            frag_entry->src_ip = src_ip;
-            frag_entry->dest_ip = dest_ip;
-            frag_entry->protocol = protocol;
-            frag_entry->data = NULL;
-            frag_entry->total_len = 0;
-            frag_entry->received_bits = 0;
-            frag_entry->timestamp = now;
-            frag_entry->next = ip_fragments;
-            ip_fragments = frag_entry;
-        }
-        
-        /* Copy fragment data */
-        const void *frag_payload = (const uint8_t *)data + header_len;
-        size_t frag_payload_len = len - header_len;
-        
-        if (frag_entry->data == NULL)
-        {
-            /* Allocate buffer for reassembly (maximum IP packet size) */
-            frag_entry->data = kmalloc(IP_FRAG_MAX_SIZE);
-            if (!frag_entry->data)
-            {
-                /* Clean up on failure */
-                if (prev)
-                    prev->next = frag_entry->next;
-                else
-                    ip_fragments = frag_entry->next;
-                kfree(frag_entry);
-                return;
-            }
-            memset(frag_entry->data, 0, IP_FRAG_MAX_SIZE);
-        }
-        
-        /* Copy fragment to correct position */
-        size_t frag_offset_bytes = frag_offset * 8;
-        if (frag_offset_bytes + frag_payload_len > IP_FRAG_MAX_SIZE)
-        {
-            LOG_WARNING("IP", "Fragment offset exceeds maximum packet size");
-            return;
-        }
-        
-        memcpy(frag_entry->data + frag_offset_bytes, frag_payload, frag_payload_len);
-        
-        /* Update total length if this is the last fragment */
-        if (!(flags & IP_FLAG_MF))
-        {
-            frag_entry->total_len = frag_offset_bytes + frag_payload_len + header_len;
-        }
-        
-        /* Mark fragment as received (simplified: just track if we have all fragments) */
-        /* For a complete implementation, we'd track which fragments we have */
-        
-        /* Check if reassembly is complete (simplified: assume complete if MF=0 and we have data) */
-        if (!(flags & IP_FLAG_MF) && frag_entry->total_len > 0)
-        {
-            /* Reassembly complete! Process as normal IP packet */
-            LOG_INFO_FMT("IP", "IP fragment reassembly complete: id=%d, total_len=%d",
-                         (int)frag_id, (int)frag_entry->total_len);
-            
-            /* Reconstruct IP header with original values but new length */
-            uint8_t *reassembled = kmalloc(frag_entry->total_len);
-            if (!reassembled)
-            {
-                if (frag_entry->data)
-                    kfree(frag_entry->data);
-                if (prev)
-                    prev->next = frag_entry->next;
-                else
-                    ip_fragments = frag_entry->next;
-                kfree(frag_entry);
-                return;
-            }
-            
-            /* Copy IP header (use first fragment's header) */
-            memcpy(reassembled, data, header_len);
-            struct ip_header *reassembled_ip = (struct ip_header *)reassembled;
-            reassembled_ip->total_len = htons(frag_entry->total_len);
-            reassembled_ip->flags_frag_off = 0;  /* Clear fragmentation flags */
-            
-            /* Copy reassembled payload */
-            memcpy(reassembled + header_len, frag_entry->data, frag_entry->total_len - header_len);
-            
-            /* Save total length before freeing fragment entry */
-            size_t reassembled_len = frag_entry->total_len;
-            
-            /* Remove fragment entry */
-            if (prev)
-                prev->next = frag_entry->next;
-            else
-                ip_fragments = frag_entry->next;
-            
-            if (frag_entry->data)
-                kfree(frag_entry->data);
-            kfree(frag_entry);
-            
-            /* Process reassembled packet (recursive call) */
-            ip_receive_handler(dev, reassembled, reassembled_len, NULL);
-            kfree(reassembled);
-        }
-        
         return;
     }
 
@@ -440,8 +310,9 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         }
     }
 
-    /* Store source IP and TTL for upper layer handlers (e.g., ICMP Echo Reply) */
+    /* Store source/dest IP and TTL for upper layer handlers (e.g., ICMP, UDP checksum) */
     ip_last_src_addr = src_ip;
+    ip_last_dest_addr = dest_ip;
     ip_last_ttl = ip->ttl;
 
     /* Enhanced logging for ICMP packets to debug Echo Reply issues */
@@ -487,7 +358,7 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         const void *payload = (const uint8_t *)data + header_len;
         size_t payload_len = len - header_len;
 
-        /* Call protocol handler (ICMP, TCP, UDP, etc.) */
+        /* Call protocol handler (ICMP, UDP in this stack) */
         proto->handler(dev, payload, payload_len, proto->priv);
     }
     else
@@ -500,7 +371,7 @@ void ip_receive_handler(struct net_device *dev, const void *data,
  * ip_send - Send an IP packet
  * @dev: Network device to send on
  * @dest_ip: Destination IP address
- * @protocol: IP protocol number (IPPROTO_ICMP, IPPROTO_TCP, IPPROTO_UDP)
+ * @protocol: IP protocol number (IPPROTO_ICMP, IPPROTO_UDP)
  * @payload: Payload data
  * @len: Payload length
  * @return: 0 on success, -1 on error
@@ -574,6 +445,12 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
 {
     if (!dev || !payload)
         return -1;
+
+    if (dev->mtu <= sizeof(struct eth_header) + sizeof(struct ip_header))
+    {
+        serial_print("IP: ip_send: MTU too small for Ethernet and IP headers\n");
+        return -1;
+    }
 
     /* Calculate maximum payload size per fragment.
      * MTU includes Ethernet header (14 bytes), so max IP packet size is
@@ -679,7 +556,7 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
         ip->id = htons(frag_id);  /* Unique fragment ID */
         ip->flags_frag_off = 0;         /* No fragmentation flags (unfragmented packet) */
         ip->ttl = 64;                    /* Time To Live: 64 hops */
-        ip->protocol = protocol;         /* Upper-layer protocol (ICMP, TCP, UDP) */
+        ip->protocol = protocol;         /* Upper-layer protocol (ICMP, UDP) */
         ip->checksum = 0;                /* Zero for checksum calculation */
         /* Source IP: use interface-specific IP if available, else default */
         ip4_addr_t src_ip = ip_local_addr;
@@ -847,6 +724,15 @@ int ip_init(void)
 ip4_addr_t ip_get_last_src_addr(void)
 {
     return ip_last_src_addr;
+}
+
+/**
+ * ip_get_last_dest_addr - Get destination IP from last received packet
+ * Used by UDP (and similar) for pseudo-header checksum verification on RX.
+ */
+ip4_addr_t ip_get_last_dest_addr(void)
+{
+    return ip_last_dest_addr;
 }
 
 /**

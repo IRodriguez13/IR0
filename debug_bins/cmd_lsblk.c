@@ -8,7 +8,6 @@
  */
 
 #include "debug_bins.h"
-#include <stdlib.h>
 
 static unsigned long long parse_ull(const char *s)
 {

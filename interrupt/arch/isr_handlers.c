@@ -16,18 +16,27 @@
 #include "io.h"
 #include <ir0/vga.h>
 #include <ir0/signals.h>
-#include <kernel/rr_sched.h>
+#include <ir0/oops.h>
 #include <kernel/process.h>
 #include <drivers/net/rtl8139.h>
 
 /* Declaraciones externas para el nuevo driver de teclado */
 extern void keyboard_handler64(void);
-extern void keyboard_handler32(void);
 extern void increment_pit_ticks(void);
 #ifdef __x86_64__
 
+extern void page_fault_handler_x64(uint64_t *stack);
+extern int rtl8139_get_irq_line(void);
+
+static int is_user_exception_frame(uint64_t *stack)
+{
+    if (!stack)
+        return 0;
+    return ((stack[3] & 0x3U) == 0x3U);
+}
+
 /* Handler de interrupciones para 64-bit */
-void isr_handler64(uint64_t interrupt_number)
+void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
 {
     /* Manejar excepciones del CPU (0-31) */
     if (interrupt_number < 32)
@@ -35,7 +44,13 @@ void isr_handler64(uint64_t interrupt_number)
         process_t *current = process_get_current();
         int signal_to_send = 0;
 
-        /* Map CPU exceptions to signals to prevent system hangs */
+        if (interrupt_number == 14)
+        {
+            page_fault_handler_x64(stack);
+            return;
+        }
+
+        /* Map CPU exceptions to signals for user-space faults */
         switch (interrupt_number)
         {
             case 0:  /* Divide by Zero */
@@ -63,13 +78,15 @@ void isr_handler64(uint64_t interrupt_number)
                 signal_to_send = SIGFPE;
                 break;
             default:
-                /* For other exceptions, use SIGSEGV as safe default */
                 signal_to_send = SIGSEGV;
                 break;
         }
 
-        /* Send signal to current process if it exists */
-        if (current && signal_to_send != 0)
+        /*
+         * User-mode exceptions are converted to signals.
+         * Kernel exceptions are fatal to avoid endless fault loops.
+         */
+        if (is_user_exception_frame(stack) && current && signal_to_send != 0)
         {
 #if DEBUG_PROCESS
             print("Excepción CPU #");
@@ -79,24 +96,15 @@ void isr_handler64(uint64_t interrupt_number)
             print("\n");
 #endif
             send_signal(current->task.pid, signal_to_send);
-            /* Signal will be handled by scheduler on next context switch */
-        }
-        else
-        {
-            /* No process context or in kernel - print error */
-            print("Excepción CPU #");
-            print_int32(interrupt_number);
-            print(" (sin proceso)\n");
+            return;
         }
 
-        /* Para excepciones, NO enviar EOI */
-        return;
+        panic("Unhandled kernel CPU exception");
     }
 
     /* Manejar syscall (0x80) */
     if (interrupt_number == 128)
     {
-        print("SYSCALL: Interrupción 0x80 recibida\n");
         return;
     }
 
@@ -104,6 +112,7 @@ void isr_handler64(uint64_t interrupt_number)
     if (interrupt_number >= 32 && interrupt_number <= 47)
     {
         uint8_t irq = interrupt_number - 32;
+        int rtl_irq = rtl8139_get_irq_line();
 
         switch (irq)
         {
@@ -126,13 +135,12 @@ void isr_handler64(uint64_t interrupt_number)
             break;
         }
 
-        case 11: /* RTL8139 Network Card */
-            rtl8139_handle_interrupt();
-            break;
-
         default:
             break;
         }
+
+        if (rtl_irq >= 0 && rtl_irq < 16 && rtl_irq == (int)irq)
+            rtl8139_handle_interrupt();
 
         /* Enviar EOI para IRQs */
         pic_send_eoi64(irq);

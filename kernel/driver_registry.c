@@ -358,36 +358,6 @@ ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver)
 }
 
 
-/**
- * List all registered drivers (for debugging)
- */
-void ir0_driver_list_all(void)
-{
-    LOG_INFO_FMT("DriverRegistry", "=== Registered Drivers (%zu) ===", driver_registry.count);
-    
-    ir0_driver_t* current = driver_registry.drivers;
-    int index = 1;
-    
-    while (current) 
-    {
-        LOG_INFO_FMT("DriverRegistry", "%d. %s (v%s) - %s [%s] - State: %s",
-                index,
-                current->info.name,
-                current->info.version,
-                current->info.description,
-                lang_to_string(current->info.language),
-                state_to_string(current->state));
-        
-        current = current->next;
-        index++;
-    }
-    
-    if (driver_registry.count == 0) 
-    {
-        LOG_INFO("DriverRegistry", "No drivers registered");
-    }
-}
-
 /*
  * Raw data only: one line per driver, tab-separated.
  * name\tversion\tlang\tstate\tdescription
