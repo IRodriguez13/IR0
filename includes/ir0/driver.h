@@ -80,8 +80,7 @@ typedef struct ir0_driver ir0_driver_t;
  * @param ops Driver operations
  * @return Driver handle on success, NULL on failure
  */
-ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info, 
-                                   const ir0_driver_ops_t* ops);
+ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,    const ir0_driver_ops_t* ops);
 
 /**
  * Unregister a driver from the kernel
@@ -106,11 +105,6 @@ ir0_driver_t* ir0_find_driver(const char* name);
  * @return Driver state
  */
 ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver);
-
-/**
- * List all registered drivers (for debugging)
- */
-void ir0_driver_list_all(void);
 
 int ir0_driver_list_to_buffer(char *buf, size_t count);
 

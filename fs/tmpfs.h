@@ -12,13 +12,10 @@
 #include <ir0/stat.h>
 #include <ir0/types.h>
 
-/* Forward declaration */
-typedef struct tmpfs_inode tmpfs_inode_t;
+struct vfs_dirent;
 
 /* TMPFS API functions for VFS integration */
 bool tmpfs_is_available(void);
-tmpfs_inode_t *tmpfs_find_inode(const char *path);
-uint32_t tmpfs_get_inode_number(const char *path);
 int tmpfs_stat(const char *path, stat_t *buf);
 int tmpfs_mkdir(const char *path, mode_t mode);
 int tmpfs_create_file(const char *path, mode_t mode);
@@ -26,8 +23,9 @@ int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_coun
 int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset);
 int tmpfs_unlink(const char *path);
 int tmpfs_rmdir(const char *path);
-int tmpfs_readdir(const char *path, struct vfs_dirent_readdir *entries, int max_entries);
+int tmpfs_chmod(const char *path, mode_t mode);
+int tmpfs_truncate(const char *path, size_t length);
+int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries);
 
 /* Filesystem registration */
 int tmpfs_register(void);
-

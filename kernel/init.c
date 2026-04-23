@@ -9,6 +9,7 @@
  */
 
 #include "process.h"
+#include <config.h>
 #include "debug_bins/dbgshell.h"
 #include "rr_sched.h"
 #include <drivers/video/typewriter.h>
@@ -48,16 +49,24 @@ int start_init_process(void)
 	/* Setup init process */
 	init->task.pid = 1;
 	init->task.rip = (uint64_t)init_1;
-	/* Pila 16 KiB: los comandos debug_bins acumulan buffers locales (ls, rm, etc.) */
-	init->task.rsp = 0x1000000 + 0x4000 - 8;
-	init->task.rbp = 0x1000000 + 0x4000;
-	init->task.rflags = 0x202;
-	init->task.cs = 0x1B;
-	init->task.ss = 0x23;
-	init->task.ds = 0x23;
-	init->task.es = 0x23;
-	init->task.fs = 0x23;
-	init->task.gs = 0x23;
+	/*
+	 * Stack 16 KiB at identity-mapped kernel region.
+	 * Debug shell commands accumulate local buffers (ls, rm, etc.).
+	 */
+	init->task.rsp = INIT_DEBUG_STACK_BASE + USER_STACK_SIZE - 16;
+	init->task.rbp = init->task.rsp;
+	init->task.rflags = RFLAGS_IF;
+	/*
+	 * Kernel selectors: the debug shell executes kernel code directly
+	 * (init_1 → shell_entry). Ring 0 is required because boot page tables
+	 * are supervisor-only (no User bit).
+	 */
+	init->task.cs = KERNEL_CODE_SEL;
+	init->task.ss = KERNEL_DATA_SEL;
+	init->task.ds = KERNEL_DATA_SEL;
+	init->task.es = KERNEL_DATA_SEL;
+	init->task.fs = KERNEL_DATA_SEL;
+	init->task.gs = KERNEL_DATA_SEL;
 	init->task.cr3 = create_process_page_directory();
 
 	if (!init->task.cr3)
@@ -66,10 +75,35 @@ int start_init_process(void)
 		return -1;
 	}
 
-	init->ppid = 1;
+	/*
+	 * Ensure low identity mappings are available in init CR3.
+	 * Debug shell stack/call path relies on INIT_DEBUG_STACK_BASE.
+	 */
+	{
+		uint64_t *new_pml4 = (uint64_t *)init->task.cr3;
+		uint64_t *cur_pml4 = (uint64_t *)get_current_page_directory();
+
+		if (cur_pml4 && (cur_pml4[0] & PAGE_PRESENT))
+			new_pml4[0] = cur_pml4[0];
+	}
+
+	/* Map explicit 4KB pages as a fallback if identity mapping is absent. */
+	for (uint64_t off = 0; off < USER_STACK_SIZE; off += 0x1000)
+	{
+		uint64_t va = INIT_DEBUG_STACK_BASE + off;
+		if (map_page_in_directory((uint64_t *)init->task.cr3, va, va,
+					  PAGE_PRESENT | PAGE_RW) != 0)
+		{
+			break;
+		}
+	}
+
+	/* PID 1 is the session leader; parent of init is the kernel (no userspace parent). */
+	init->ppid = 0;
+	init->mode = KERNEL_MODE;
 	init->state = PROCESS_READY;
-	init->stack_start = 0x1000000;
-	init->stack_size = 0x4000;
+	init->stack_start = INIT_DEBUG_STACK_BASE;
+	init->stack_size = USER_STACK_SIZE;
 	init->page_directory = (uint64_t *)init->task.cr3;
 
 	/* Initialize current working directory */

@@ -18,7 +18,7 @@
  */
 pipe_t *pipe_create(void)
 {
-    pipe_t *pipe = kmalloc(sizeof(pipe_t));
+    pipe_t *pipe = kmalloc_try(sizeof(pipe_t));
     if (!pipe)
     {
         return NULL;

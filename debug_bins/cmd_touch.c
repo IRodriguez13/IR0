@@ -13,23 +13,70 @@ static int cmd_touch_handler(int argc, char **argv)
 {
     if (argc < 2)
     {
-        debug_write_err("Usage: touch FILE\n");
+        debug_write_err("touch: expected file argument\n");
         debug_serial_fail("touch", "usage");
-        return 1;
+        return -1;
     }
-    
+
     const char *filename = argv[1];
-    
-    /* Touch: open file with O_CREAT (creates if doesn't exist) */
-    int fd = syscall(SYS_OPEN, (uint64_t)filename, O_WRONLY | O_CREAT, 0644);
+
+    /*
+     * If the file already exists, open(O_WRONLY) succeeds and we only
+     * report an update after a successful close.
+     */
+    int64_t fd = syscall(SYS_OPEN, (uint64_t)filename, O_WRONLY, 0);
+
+    if (fd >= 0)
+    {
+        int64_t cr = ir0_close((int)fd);
+
+        if (cr < 0)
+        {
+            debug_perror("touch", filename, (int)cr);
+            debug_serial_fail_err("touch", "close", (int)(-cr));
+            return -1;
+        }
+        debug_write("touch: updated '");
+        debug_write(filename);
+        debug_write("'\n");
+        debug_serial_ok("touch");
+        return 0;
+    }
+
+    {
+        int open_err = (int)fd;
+        int e = (open_err < 0) ? -open_err : open_err;
+
+        if (e != ENOENT)
+        {
+            debug_perror("touch", filename, open_err);
+            debug_serial_fail_err("touch", "open", e);
+            return -1;
+        }
+    }
+
+    fd = syscall(SYS_OPEN, (uint64_t)filename, O_WRONLY | O_CREAT, 0644);
     if (fd < 0)
     {
         debug_perror("touch", filename, (int)fd);
-        debug_serial_fail_err("touch", "open", (int)(-fd));
-        return 1;
+        debug_serial_fail_err("touch", "open", (int)(-(int)fd));
+        return -1;
     }
-    
-    syscall(SYS_CLOSE, fd, 0, 0);
+
+    {
+        int64_t cr = ir0_close((int)fd);
+
+        if (cr < 0)
+        {
+            debug_perror("touch", filename, (int)cr);
+            debug_serial_fail_err("touch", "close", (int)(-cr));
+            return -1;
+        }
+    }
+
+    debug_write("touch: created '");
+    debug_write(filename);
+    debug_write("'\n");
     debug_serial_ok("touch");
     return 0;
 }
@@ -40,4 +87,3 @@ struct debug_command cmd_touch = {
     .usage = "touch FILE",
     .description = "Create empty file or update timestamp"
 };
-

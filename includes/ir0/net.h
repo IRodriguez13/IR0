@@ -52,11 +52,12 @@ typedef uint32_t ip4_addr_t;
 /* MAC Address type */
 typedef uint8_t mac_addr_t[6];
 
-/* Function to create an IP address from 4 octets */
+/* Function to create an IP address from 4 octets (network byte order) */
 static inline ip4_addr_t make_ip4_addr(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 {
-    /* Returns IPv4 address in network byte order */
-    return (a << 24) | (b << 16) | (c << 8) | d;
+    /* Match ip_make_addr(): host-order octet quad, then htonl for wire order */
+    return htonl(((uint32_t)a << 24) | ((uint32_t)b << 16) |
+                 ((uint32_t)c << 8) | (uint32_t)d);
 }
 
 /* --- Networking Abstraction Layer --- */

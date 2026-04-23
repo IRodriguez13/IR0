@@ -136,6 +136,10 @@ void dma_setup_channel(uint8_t channel, uint32_t addr, uint16_t length, bool is_
      * (count + 1) bytes/words, so we subtract 1 from the desired length.
      * Again, the flip-flop ensures low byte first, then high byte.
      */
+    if (length == 0)
+    {
+        return;
+    }
     length--;
     outb(dma_count_ports[channel], length & 0xFF);         /* Low byte */
     outb(dma_count_ports[channel], (length >> 8) & 0xFF);  /* High byte */

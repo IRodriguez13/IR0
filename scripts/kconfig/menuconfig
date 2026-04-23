@@ -23,7 +23,8 @@ fi
 
 # Run the configuration menu
 echo "Starting configuration menu..."
-python3 tools/kconfig/tkconfig.py
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$SCRIPT_DIR/tkconfig.py"
 
 # Show confirmation message
 echo ""

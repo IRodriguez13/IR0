@@ -12,9 +12,6 @@
 #include <ir0/time.h>
 #include <string.h>
 
-/* Basic types */
-typedef uint32_t mode_t;
-
 /**
  * POSIX-compliant System Call Numbers (Linux/musl ABI)
  *

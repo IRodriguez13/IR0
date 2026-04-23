@@ -26,7 +26,6 @@ void ata_init(void);
 int vfs_init_with_minix(void);
 void process_init(void);
 int clock_system_init(void);
-int scheduler_cascade_init(void);
 void syscalls_init(void);
 void idt_init64(void);
 void idt_load64(void);

@@ -43,7 +43,6 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode);
 int64_t sys_close(int fd);
 int64_t sys_lseek(int fd, off_t offset, int whence);
 int64_t sys_dup2(int oldfd, int newfd);
-int64_t sys_creat(const char *pathname, mode_t mode);
 int64_t sys_ioctl(int fd, uint64_t request, void *arg);
 
 /* File system operations */
@@ -73,7 +72,8 @@ int sys_mprotect(void *addr, size_t len, int prot);
 /* System functions */
 void syscalls_init(void);
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
-			 uint64_t arg3, uint64_t arg4, uint64_t arg5);
+			 uint64_t arg3, uint64_t arg4, uint64_t arg5,
+			 uint64_t arg6);
 
 /* Poll: desbloquea procesos que esperan en poll() cuando hay datos o timeout */
 void poll_wake_check(void);

@@ -86,13 +86,17 @@
 #define RTL8139_TSD_SIZE_MASK   0x1FFF /* Packet size mask */
 #define RTL8139_TSD_OWN         (1 << 13)    /* DMA operation completed */
 #define RTL8139_TSD_ERTX_64     0x00002000 /* Early TX threshold 64 bytes */
+#define RTL8139_TSD_TOK         (1U << 15)   /* Transmit OK (valid when OWN cleared) */
 
 /* Receive Status bits (from packet header) */
 #define RTL8139_RX_STAT_ROK     (1 << 0) /* Receive OK */
 
 /* Public API */
 int rtl8139_init(void);
-void rtl8139_send(void *data, size_t len);
+int rtl8139_send(void *data, size_t len);
 void rtl8139_handle_interrupt(void);
 void rtl8139_poll(void);  /* Poll for received packets (fallback when interrupts don't work) */
+int rtl8139_get_irq_line(void);
 void rtl8139_get_mac(uint8_t mac[6]);
+void rtl8139_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
+                        uint64_t *rx_errs, uint64_t *tx_errs);

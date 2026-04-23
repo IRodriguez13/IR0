@@ -1,24 +1,9 @@
-// arch/x86-64/sources/arch_x64.c - Architecture setup functions
-#include <arch_interface.h>
-#include <ir0/vga.h>
-#include <ir0/oops.h>
-#include "tss_x64.h"
-#include "arch_x64.h"
-#include "gdt.h"
+/* arch/x86-64/sources/arch_x64.c - Architecture setup functions */
 
-// I/O functions are now in arch_interface.h
-
-// Architecture-specific initialization (called from kernel_start.c)
+/*
+ * arch_x64_init is not referenced anywhere in the tree; GDT/TSS install
+ * runs from the active boot path without calling this symbol.
+ */
 void arch_x64_init(void)
 {
-    // Setup mínimo específico de x86-64
-    __asm__ volatile("cli"); // Deshabilitar interrupciones al arrancar
-        
-    // Initialize GDT
-    gdt_install();
-    
-    // Initialize TSS for user mode support
-    setup_tss();
 }
-
-

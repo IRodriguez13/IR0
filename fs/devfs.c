@@ -12,8 +12,11 @@
 #include <ir0/logging.h>
 #include <ir0/keyboard.h>
 #include <ir0/errno.h>
+#include <config.h>
 #include <drivers/video/typewriter.h>
+#if CONFIG_ENABLE_SOUND
 #include <drivers/audio/sound_blaster.h>
+#endif
 #include <drivers/IO/ps2_mouse.h>
 #include <net/rtl8139.h>
 #include <net/arp.h>
@@ -27,7 +30,9 @@
 #include <string.h>
 #include <drivers/timer/clock_system.h>
 #include "kernel/ipc.h"
+#if CONFIG_ENABLE_BLUETOOTH
 #include "drivers/bluetooth/bt_device.h"
+#endif
 #include <drivers/video/vbe.h>
 #include <ir0/copy_user.h>
 #include <ir0/input.h>
@@ -182,6 +187,7 @@ int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
     return (int64_t)read_count;
 }
 
+#if CONFIG_ENABLE_SOUND
 /*
  * PCM format state for /dev/audio. Default: Doom-compatible 11025 Hz, 8-bit mono.
  * Use ioctl(AUDIO_SET_FORMAT) before write() to change.
@@ -191,12 +197,13 @@ static struct audio_format audio_pcm_format = {
     .channels = 1,
     .bits_per_sample = 8
 };
+#endif
 
 int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     (void)entry;
     (void)offset;
-    
+#if CONFIG_ENABLE_SOUND
     if (!sb16_is_available())
     {
         /* Sound Blaster not available, accept data but don't process */
@@ -214,12 +221,16 @@ int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off
     int ret = sb16_play_sample(&sample);
     sb16_destroy_sample(&sample);
     return (ret == 0) ? (int64_t)count : -1;
+#else
+    (void)buf; (void)count;
+    return -ENODEV;
+#endif
 }
 
 int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
     (void)entry;
-    
+#if CONFIG_ENABLE_SOUND
     if (!sb16_is_available())
     {
         return -1;  /* Device not available */
@@ -297,6 +308,10 @@ int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
         default:
             return -1;  /* Invalid request */
     }
+#else
+    (void)request; (void)arg;
+    return -ENODEV;
+#endif
 }
 
 int64_t dev_audio_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
@@ -1565,7 +1580,7 @@ static const devfs_ops_t serial_ops = {
 };
 
 static devfs_node_t dev_serial = {
-    .entry = { .name = "serial", .mode = 0220, .device_id = 19 },
+    .entry = { .name = "serial", .mode = 0220, .device_id = 42 },
     .ops = &serial_ops,
     .ref_count = 0,
 };
@@ -1686,6 +1701,7 @@ static const devfs_ops_t ipc_ops = {
     .close = dev_ipc_close,
 };
 
+#if CONFIG_ENABLE_BLUETOOTH
 /* Bluetooth HCI device operations */
 int64_t dev_bluetooth_hci_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
@@ -1724,6 +1740,7 @@ static const devfs_ops_t bluetooth_hci_ops = {
     .close = dev_bluetooth_hci_close,
     .ioctl = dev_bluetooth_hci_ioctl
 };
+#endif
 
 devfs_node_t dev_null = {
     .entry = { .name = "null", .mode = 0666, .device_id = 1 },
@@ -1749,21 +1766,24 @@ devfs_node_t dev_tty = {
     .ref_count = 0
 };
 
-/* Alias de /dev/console para consistencia POSIX */
+/*
+ * POSIX stream aliases: stdin was 16 and collided with events0 (evdev).
+ * stdin uses 17; stdout/stderr/serial use 40–42 to stay clear of disk IDs 20–39.
+ */
 devfs_node_t dev_stdin = {
-    .entry = { .name = "stdin", .mode = 0620, .device_id = 16 },
+    .entry = { .name = "stdin", .mode = 0620, .device_id = 17 },
     .ops = &console_ops,
     .ref_count = 0
 };
 
 devfs_node_t dev_stdout = {
-    .entry = { .name = "stdout", .mode = 0620, .device_id = 17 },
+    .entry = { .name = "stdout", .mode = 0620, .device_id = 40 },
     .ops = &console_ops,
     .ref_count = 0
 };
 
 devfs_node_t dev_stderr = {
-    .entry = { .name = "stderr", .mode = 0620, .device_id = 18 },
+    .entry = { .name = "stderr", .mode = 0620, .device_id = 41 },
     .ops = &console_ops,
     .ref_count = 0
 };
@@ -1833,11 +1853,13 @@ devfs_node_t dev_ipc = {
     .ref_count = 0
 };
 
+#if CONFIG_ENABLE_BLUETOOTH
 devfs_node_t dev_bluetooth_hci0 = {
     .entry = { .name = "bluetooth/hci0", .mode = 0660, .device_id = 14 },
     .ops = &bluetooth_hci_ops,
     .ref_count = 0
 };
+#endif
 
 /**
  * devfs_register_node - Registra un nodo pre-asignado en devfs
@@ -1884,7 +1906,9 @@ int devfs_init(void)
     devfs_register_node(&dev_events0);
     devfs_register_node(&dev_serial);
     devfs_register_node(&dev_ipc);
+#if CONFIG_ENABLE_BLUETOOTH
     devfs_register_node(&dev_bluetooth_hci0);
+#endif
 
     return 0;
 }

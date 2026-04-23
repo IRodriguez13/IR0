@@ -13,12 +13,7 @@
 
 #include "pit.h"
 #include <ir0/oops.h>
-#include <ir0/vga.h>
 #include <arch_interface.h>
-#include <arch/common/idt.h>
-#include <vga.h>
-#include <kernel/rr_sched.h>
-#include <arch/x86-64/sources/arch_x64.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <kernel/resource_registry.h>
@@ -64,66 +59,22 @@ void increment_pit_ticks(void)
     
 }
 
-/* Initialize PIC (Programmable Interrupt Controller) */
-void init_pic(void)
-{
-    /* Read current interrupt masks to save state
-     * Note: Saved masks could be used to restore PIC state on shutdown
-     * or to preserve existing interrupt configuration
-     * Current implementation discards them for simplicity
-     */
-    uint8_t saved_mask1 = inb(PIC1_DATA); /* Read current mask1 */
-    uint8_t saved_mask2 = inb(PIC2_DATA); /* Read current mask2 */
-    (void)saved_mask1; /* Not used currently - could be stored for restoration */
-    (void)saved_mask2; /* Not used currently - could be stored for restoration */
-
-    /* Initially disable all interrupts */
-    outb(PIC1_DATA, 0xFF);
-    outb(PIC2_DATA, 0xFF);
-
-    /* ICW1: Initialization */
-    outb(PIC1_COMMAND, PIC_ICW1_INIT); /* ICW1 for PIC1 */
-    outb(PIC2_COMMAND, PIC_ICW1_INIT); /* ICW1 for PIC2 */
-
-    /* ICW2: Vector offset */
-    outb(PIC1_DATA, 0x20); /* PIC1: IRQ 0-7 -> INT 0x20-0x27 */
-    outb(PIC2_DATA, 0x28); /* PIC2: IRQ 8-15 -> INT 0x28-0x2F */
-
-    /* ICW3: Cascade */
-    outb(PIC1_DATA, 0x04); /* PIC1: IRQ2 connected to PIC2 */
-    outb(PIC2_DATA, 0x02); /* PIC2: Cascada a IRQ2 de PIC1 */
-
-    /* ICW4: 8086 Mode */
-    outb(PIC1_DATA, PIC_ICW4_8086); /* PIC1: 8086 mode */
-    outb(PIC2_DATA, PIC_ICW4_8086); /* PIC2: 8086 mode */
-
-    /* Stable mode: Keep all interrupts disabled */
-    outb(PIC1_DATA, 0xFF); /* PIC1: All disabled */
-    outb(PIC2_DATA, 0xFF); /* PIC2: All disabled */
-
-    resource_register_ioport(PIC1_COMMAND, PIC1_DATA, "pic1");
-}
-
+/*
+ * init_PIT - Configure PIT channel 0 at the given frequency.
+ *
+ * PIC initialization and IRQ unmasking is handled centrally
+ * by pic_remap64() + pic_unmask_irq() in main.c.
+ */
 void init_PIT(uint32_t frequency)
 {
     LOG_INFO_FMT("PIT", "Registering PIT Timer at %d Hz...", frequency);
     ir0_register_driver(&pit_info, &pit_ops);
 
-    /* Initialize PIC first */
-    init_pic();
-
-    /* Calculate divisor for the desired frequency */
     uint32_t divisor = PIT_BASE_FREC / frequency;
 
-    /* Configure PIT */
-    outb(PIT_REG_COMMAND, PIT_COMMAND_VAL);    /* Command: canal 0, lohi, modo 3 */
-    outb(PIT_REG_CHAN0, divisor & 0xFF);       /* Low byte of divisor */
-    outb(PIT_REG_CHAN0, (divisor >> 8) & 0xFF); /* High byte of divisor */
-
-    /* Enable timer interrupt (IRQ 0) */
-    uint8_t mask = inb(PIC1_DATA);
-    mask &= ~(1 << 0); /* Enable IRQ 0 (timer) */
-    outb(PIC1_DATA, mask);
+    outb(PIT_REG_COMMAND, PIT_COMMAND_VAL);
+    outb(PIT_REG_CHAN0, divisor & 0xFF);
+    outb(PIT_REG_CHAN0, (divisor >> 8) & 0xFF);
 
     resource_register_irq(0, "timer");
     resource_register_ioport(PIT_REG_CHAN0, PIT_REG_COMMAND, "timer0");

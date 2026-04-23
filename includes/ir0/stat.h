@@ -1,8 +1,7 @@
 #ifndef _IR0_STAT_H
 #define _IR0_STAT_H
 
-#include <ir0/types.h>  // For standard types and mode bits
-#include <ir0/types.h> // Incluir types.h para off_t
+#include <ir0/types.h> /* mode_t, off_t, y tipos de stat */
 
 typedef struct stat stat_t;
 

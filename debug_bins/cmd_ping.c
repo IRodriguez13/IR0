@@ -8,25 +8,19 @@
 
 #include "debug_bins.h"
 #include <ir0/fcntl.h>
+#include <ir0/net.h>
 #include <ir0/poll.h>
 #include <ir0/syscall.h>
 #include <string.h>
 #include <stdbool.h>
 
-/* Solo syscalls: ioctl a /dev/net. Constantes/estructura locales (sin incluir ir0/net.h). */
+/*
+ * Private ioctl for /dev/net: copy the last completed ping result into the
+ * caller's buffer (struct ping_result). Must match NET_GET_PING_RESULT in
+ * includes/ir0/devfs.h; duplicated here because debug_bins avoid kernel-only
+ * headers and only use syscalls.
+ */
 #define NET_GET_PING_RESULT  0x3004
-#define ntohl(n) (((((uint32_t)(n) & 0x000000FFU) << 24) | \
-                   ((((uint32_t)(n) & 0x0000FF00U) << 8)) | \
-                   ((((uint32_t)(n) & 0x00FF0000U) >> 8)) | \
-                   ((((uint32_t)(n) & 0xFF000000U) >> 24))))
-
-struct ping_result {
-    int success;
-    uint64_t rtt;
-    uint8_t ttl;
-    size_t payload_bytes;
-    uint32_t reply_ip;
-};
 
 static int cmd_ping_handler(int argc, char **argv)
 {

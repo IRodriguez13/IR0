@@ -25,8 +25,8 @@ static int cmd_pwd_handler(int argc, char **argv)
     }
     else
     {
-        debug_write_err("pwd: failed\n");
-        debug_serial_fail("pwd", "getcwd");
+        debug_perror("pwd", "", (int)result);
+        debug_serial_fail_err("pwd", "getcwd", (int)(-result));
         return 1;
     }
 }

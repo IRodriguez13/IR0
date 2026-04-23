@@ -74,6 +74,12 @@ typedef struct
 #define ET_EXEC 2
 #define PT_LOAD 1
 
+/* Maximum program headers processed per executable (bounds cost and table size) */
+#define ELF_MAX_PHNUM 64
+
+/* Cap argv/envp enumeration so hostile or buggy user stacks cannot unbounded-scan */
+#define ELF_ARG_MAX 256
+
 static int validate_elf_header(const elf64_header_t *header)
 {
     /* Check ELF magic number */
@@ -101,12 +107,32 @@ static int validate_elf_header(const elf64_header_t *header)
 }
 
 /* Load ELF segments into memory at correct virtual addresses */
-static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process_t *process)
+static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t file_size,
+                             process_t *process)
 {
+    uint16_t phnum = header->e_phnum;
+    if (phnum > ELF_MAX_PHNUM)
+        phnum = ELF_MAX_PHNUM;
+
+    if (header->e_phoff > file_size)
+    {
+        serial_print("SERIAL: ELF: Program header table offset out of bounds\n");
+        return -1;
+    }
+
+    {
+        uint64_t ph_bytes = (uint64_t)phnum * sizeof(elf64_phdr_t);
+        if (ph_bytes > (uint64_t)file_size - header->e_phoff)
+        {
+            serial_print("SERIAL: ELF: Program header table extends past file\n");
+            return -1;
+        }
+    }
+
     elf64_phdr_t *phdr = (elf64_phdr_t *)(file_data + header->e_phoff);
 
     serial_print("SERIAL: ELF: Loading ");
-    serial_print_hex32(header->e_phnum);
+    serial_print_hex32(phnum);
     serial_print(" program segments\n");
 
     /* Get process page directory */
@@ -121,10 +147,28 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
     uint64_t old_cr3 = get_current_page_directory();
     load_page_directory((uint64_t)pml4);
 
-    for (int i = 0; i < header->e_phnum; i++)
+    for (int i = 0; i < (int)phnum; i++)
     {
         if (phdr[i].p_type == PT_LOAD)
         {
+            if (phdr[i].p_memsz < phdr[i].p_filesz)
+            {
+                serial_print("SERIAL: ELF: PT_LOAD p_memsz < p_filesz\n");
+                load_page_directory(old_cr3);
+                return -1;
+            }
+
+            if (phdr[i].p_filesz > 0)
+            {
+                if (phdr[i].p_offset > file_size ||
+                    phdr[i].p_filesz > (uint64_t)file_size - phdr[i].p_offset)
+                {
+                    serial_print("SERIAL: ELF: PT_LOAD segment file range out of bounds\n");
+                    load_page_directory(old_cr3);
+                    return -1;
+                }
+            }
+
             serial_print("SERIAL: ELF: Loading segment ");
             serial_print_hex32(i);
             serial_print(" at vaddr 0x");
@@ -145,6 +189,8 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
             uint64_t flags = PAGE_USER;  /* Always user mode */
             if (phdr[i].p_flags & 2)  /* PF_W (writable) */
                 flags |= PAGE_RW;
+            if (phdr[i].p_flags & 1)  /* PF_X (executable) */
+                flags |= PAGE_EXEC;
 
             /* Map user memory region in process page directory */
             if (map_user_region_in_directory(pml4, vaddr_aligned, size_aligned, flags) != 0)
@@ -175,12 +221,6 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, process
                 serial_print("SERIAL: ELF: Zeroed BSS section\n");
             }
 
-            /* Store the mapping info for the process */
-            if (i == 0)
-            {
-                process->memory_base = vaddr;
-                process->memory_size = memsz;
-            }
         }
     }
 
@@ -286,19 +326,19 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     if (!process || process->mode != USER_MODE)
         return -1;
     
-    /* Count arguments */
+    /* Count arguments (cap to ELF_ARG_MAX) */
     int argc = 0;
     if (argv)
     {
-        while (argv[argc])
+        while (argc < ELF_ARG_MAX && argv[argc])
             argc++;
     }
-    
-    /* Count environment variables */
+
+    /* Count environment variables (cap to ELF_ARG_MAX) */
     int envc = 0;
     if (envp)
     {
-        while (envp[envc])
+        while (envc < ELF_ARG_MAX && envp[envc])
             envc++;
     }
     
@@ -497,7 +537,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
  * 3. Create process structure with proper page directory
  * 4. Load ELF segments into memory at virtual addresses
  * 5. Set up entry point, stack with argc/argv/envp, and registers
- * 6. Add process to scheduler for execution
+ * 6. Free the in-kernel ELF buffer (spawn_user already queued the process)
  *
  * Returns: Process PID on success, -1 on error
  *
@@ -546,9 +586,29 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     }
 
     /* Step 4: Load segments into memory */
-    if (elf_load_segments(header, (uint8_t *)file_data, process) != 0)
+    if (elf_load_segments(header, (uint8_t *)file_data, file_size, process) != 0)
     {
         serial_print("SERIAL: ELF: ERROR - Failed to load segments\n");
+        /*
+         * spawn_user() already queued this process; drop it from the scheduler
+         * and free the struct so we do not run a half-loaded image.
+         */
+        rr_remove_process(process);
+        {
+            process_t **pp = &process_list;
+
+            while (*pp)
+            {
+                if (*pp == process)
+                {
+                    *pp = process->next;
+                    break;
+                }
+                pp = &(*pp)->next;
+            }
+        }
+        process_destroy(process);
+        kfree(process);
         kfree(file_data);
         return -1;
     }
@@ -560,11 +620,9 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
         /* Continue even if stack setup fails - some binaries don't need args */
     }
 
-    /* Step 6: Add process to scheduler */
-    rr_add_process(process);
-    serial_print("SERIAL: ELF: Process added to scheduler\n");
+    /* spawn_user() already called rr_add_process(); do not enqueue twice */
 
-    /* Step 7: Clean up file data */
+    /* Step 6: Clean up file data */
     kfree(file_data);
 
     serial_print("SERIAL: ELF: SUCCESS - Program loaded and scheduled for execution\n");
