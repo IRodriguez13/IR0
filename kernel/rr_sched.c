@@ -293,15 +293,15 @@ void rr_schedule_next(void)
 	if (prev && prev->state == PROCESS_RUNNING)
 		prev->state = PROCESS_READY;
 
+	/* Handle pending signals on the outgoing context before switching.
+	 * This keeps signal processing aligned with the process state we are
+	 * about to leave, avoiding delivery on the wrong task.
+	 */
+	if (prev)
+		handle_signals();
+
 	next->state = PROCESS_RUNNING;
 	current_process = next;  /* Update global current process pointer */
-	
-	/* Handle pending signals before context switch.
-	 * Signals must be delivered to the current process context before
-	 * we switch away, otherwise signal handlers won't have access to
-	 * the correct process state (registers, stack, etc).
-	 */
-	handle_signals();
 
 	/*
 	 * First context switch: no previous task to save.
