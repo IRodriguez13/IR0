@@ -35,6 +35,21 @@ fi)
 # the ifneq(…,n) guards below default all subsystems to ON.
 -include .config
 
+# Tooling defaults from menuconfig (.config)
+CONFIG_TOOL_AUTO_RUN_DEPTEST ?= n
+CONFIG_TOOL_DEFAULT_DISK_FS ?= 0
+CONFIG_TOOL_DEFAULT_DISK_SIZE_MB ?= 200
+CONFIG_TOOL_UNIBUILD_DEFAULT_FILES ?=
+CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE ?=
+
+ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),1)
+TOOL_DEFAULT_DISK_FS_NAME := fat32
+else ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),2)
+TOOL_DEFAULT_DISK_FS_NAME := ext4
+else
+TOOL_DEFAULT_DISK_FS_NAME := minix
+endif
+
 # COMPILER CONFIGURATION (x86-64)
 
 # Build tools
@@ -366,30 +381,73 @@ endif
 # Debug flags — only passed when explicitly set to y in .config
 ifeq ($(CONFIG_DEBUG_MEMORY_ALLOCATOR),y)
 CFLAGS += -DCONFIG_DEBUG_MEMORY_ALLOCATOR=1
+else
+CFLAGS += -DCONFIG_DEBUG_MEMORY_ALLOCATOR=0
 endif
 ifeq ($(CONFIG_DEBUG_PMM),y)
 CFLAGS += -DCONFIG_DEBUG_PMM=1
+else
+CFLAGS += -DCONFIG_DEBUG_PMM=0
 endif
 ifeq ($(CONFIG_DEBUG_PAGING),y)
 CFLAGS += -DCONFIG_DEBUG_PAGING=1
+else
+CFLAGS += -DCONFIG_DEBUG_PAGING=0
 endif
 ifeq ($(CONFIG_DEBUG_PAGE_FAULTS),y)
 CFLAGS += -DCONFIG_DEBUG_PAGE_FAULTS=1
+else
+CFLAGS += -DCONFIG_DEBUG_PAGE_FAULTS=0
 endif
 ifeq ($(CONFIG_DEBUG_PROCESS),y)
 CFLAGS += -DCONFIG_DEBUG_PROCESS=1
+else
+CFLAGS += -DCONFIG_DEBUG_PROCESS=0
 endif
 ifeq ($(CONFIG_DEBUG_SCHEDULER),y)
 CFLAGS += -DCONFIG_DEBUG_SCHEDULER=1
+else
+CFLAGS += -DCONFIG_DEBUG_SCHEDULER=0
 endif
 ifeq ($(CONFIG_DEBUG_VFS),y)
 CFLAGS += -DCONFIG_DEBUG_VFS=1
+else
+CFLAGS += -DCONFIG_DEBUG_VFS=0
 endif
 ifeq ($(CONFIG_DEBUG_SYSCALLS),y)
 CFLAGS += -DCONFIG_DEBUG_SYSCALLS=1
+else
+CFLAGS += -DCONFIG_DEBUG_SYSCALLS=0
 endif
 ifeq ($(CONFIG_DEBUG_KEYBOARD),y)
 CFLAGS += -DCONFIG_DEBUG_KEYBOARD=1
+else
+CFLAGS += -DCONFIG_DEBUG_KEYBOARD=0
+endif
+ifeq ($(CONFIG_DEBUG_MEMORY_COALESCING),y)
+CFLAGS += -DCONFIG_DEBUG_MEMORY_COALESCING=1
+else
+CFLAGS += -DCONFIG_DEBUG_MEMORY_COALESCING=0
+endif
+ifeq ($(CONFIG_DEBUG_MEMORY_STATS),y)
+CFLAGS += -DCONFIG_DEBUG_MEMORY_STATS=1
+else
+CFLAGS += -DCONFIG_DEBUG_MEMORY_STATS=0
+endif
+ifeq ($(CONFIG_DEBUG_FORK),y)
+CFLAGS += -DCONFIG_DEBUG_FORK=1
+else
+CFLAGS += -DCONFIG_DEBUG_FORK=0
+endif
+ifeq ($(CONFIG_DEBUG_FS_MOUNT),y)
+CFLAGS += -DCONFIG_DEBUG_FS_MOUNT=1
+else
+CFLAGS += -DCONFIG_DEBUG_FS_MOUNT=0
+endif
+ifeq ($(CONFIG_DEBUG_SYSCALL_PARAMS),y)
+CFLAGS += -DCONFIG_DEBUG_SYSCALL_PARAMS=1
+else
+CFLAGS += -DCONFIG_DEBUG_SYSCALL_PARAMS=0
 endif
 
 # Tick rate (PIT frequency)
@@ -400,6 +458,8 @@ endif
 # Kernel debug shell as PID 1
 ifeq ($(CONFIG_KERNEL_DEBUG_SHELL),y)
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=1
+else
+CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
 endif
 
 ARCH_OBJS = \
@@ -426,12 +486,22 @@ MULTILANG_DRIVER_SUPPORT_OBJ =
 # Include example drivers only if KERNEL_ENABLE_EXAMPLE_DRIVERS is enabled
 # These are test/example drivers and should not be compiled by default
 -include .example_drivers_enabled
-ifeq ($(ENABLE_EXAMPLE_DRIVERS),1)
+ifneq ($(CONFIG_ENABLE_EXAMPLE_DRIVERS),)
+ifeq ($(CONFIG_ENABLE_EXAMPLE_DRIVERS),y)
 RUST_DRIVER_OBJS += rust/drivers/rust_simple_driver.o
 CPP_DRIVER_OBJS += cpp/examples/cpp_example.o
 MULTILANG_DRIVER_SUPPORT_OBJ += drivers/multilang_drivers.o
-# Pass flag to compiler to enable driver registration in code
 CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=1
+else
+CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=0
+endif
+else ifeq ($(ENABLE_EXAMPLE_DRIVERS),1)
+RUST_DRIVER_OBJS += rust/drivers/rust_simple_driver.o
+CPP_DRIVER_OBJS += cpp/examples/cpp_example.o
+MULTILANG_DRIVER_SUPPORT_OBJ += drivers/multilang_drivers.o
+CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=1
+else
+CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=0
 endif
 
 # All objects (kernel sin tests in-kernel)
@@ -579,8 +649,14 @@ endif
 # Objetivo principal: warnings como errores (replica CI / toolchains estrictos).
 ir0: CFLAGS += -Werror
 
+ifeq ($(CONFIG_TOOL_AUTO_RUN_DEPTEST),y)
+IR0_PRECHECK_TARGETS := deptest
+else
+IR0_PRECHECK_TARGETS :=
+endif
+
 # Default target
-ir0: kernel-x64.iso
+ir0: $(IR0_PRECHECK_TARGETS) kernel-x64.iso
 
 # Build using all available CPU cores
 ir0-auto: auto
@@ -739,7 +815,7 @@ run-gdb: kernel-x64.iso disk.img
 create-disk:
 	@ARGS="$(filter-out $@,$(MAKECMDGOALS))"; \
 	if [ -z "$$ARGS" ]; then \
-		./scripts/create_disk.sh; \
+		./scripts/create_disk.sh "$(TOOL_DEFAULT_DISK_FS_NAME)" "$(CONFIG_TOOL_DEFAULT_DISK_SIZE_MB)"; \
 	elif [ "$$ARGS" = "hints" ] || [ "$$ARGS" = "help" ]; then \
 		./scripts/create_disk.sh --help; \
 	else \
@@ -1025,6 +1101,18 @@ endef
 # Standard C compilation (supports multiple files)
 unibuild:
 	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
+		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
+	fi; \
+	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+		FILTERED=""; \
+		for f in $$FILE_ARG; do \
+			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+				FILTERED="$$FILTERED $$f"; \
+			fi; \
+		done; \
+		FILE_ARG="$$FILTERED"; \
+	fi; \
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild <file1.c> [file2.c] ..."; \
@@ -1038,6 +1126,18 @@ unibuild:
 # C++ compilation (supports multiple files)
 unibuild-cpp:
 	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
+		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
+	fi; \
+	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+		FILTERED=""; \
+		for f in $$FILE_ARG; do \
+			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+				FILTERED="$$FILTERED $$f"; \
+			fi; \
+		done; \
+		FILE_ARG="$$FILTERED"; \
+	fi; \
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-cpp <file1.cpp> [file2.cpp] ..."; \
@@ -1050,6 +1150,18 @@ unibuild-cpp:
 # Rust compilation (supports multiple files)
 unibuild-rust:
 	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
+		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
+	fi; \
+	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+		FILTERED=""; \
+		for f in $$FILE_ARG; do \
+			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+				FILTERED="$$FILTERED $$f"; \
+			fi; \
+		done; \
+		FILE_ARG="$$FILTERED"; \
+	fi; \
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-rust <file1.rs> [file2.rs] ..."; \
@@ -1062,6 +1174,18 @@ unibuild-rust:
 # Windows cross-compilation (C, supports multiple files)
 unibuild-win:
 	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
+		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
+	fi; \
+	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+		FILTERED=""; \
+		for f in $$FILE_ARG; do \
+			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+				FILTERED="$$FILTERED $$f"; \
+			fi; \
+		done; \
+		FILE_ARG="$$FILTERED"; \
+	fi; \
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-win <file1.c> [file2.c] ..."; \
@@ -1074,6 +1198,18 @@ unibuild-win:
 # Windows cross-compilation (C++, supports multiple files)
 unibuild-cpp-win:
 	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
+		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
+	fi; \
+	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+		FILTERED=""; \
+		for f in $$FILE_ARG; do \
+			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+				FILTERED="$$FILTERED $$f"; \
+			fi; \
+		done; \
+		FILE_ARG="$$FILTERED"; \
+	fi; \
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-cpp-win <file1.cpp> [file2.cpp] ..."; \
@@ -1086,6 +1222,18 @@ unibuild-cpp-win:
 # Windows cross-compilation (Rust, supports multiple files)
 unibuild-rust-win:
 	@FILE_ARG="$(call get-file-arg)"; \
+	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
+		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
+	fi; \
+	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+		FILTERED=""; \
+		for f in $$FILE_ARG; do \
+			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+				FILTERED="$$FILTERED $$f"; \
+			fi; \
+		done; \
+		FILE_ARG="$$FILTERED"; \
+	fi; \
 	if [ -z "$$FILE_ARG" ]; then \
 		echo "Error: No file specified"; \
 		echo "Usage: make unibuild-rust-win <file1.rs> [file2.rs] ..."; \

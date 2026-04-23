@@ -159,7 +159,7 @@ def save_config(symbols):
                 if s.value == "y":
                     f.write(f"{key}=y\n")
                 else:
-                    f.write(f"# {key} is not set\n")
+                    f.write(f"{key}=n\n")
             else:
                 f.write(f"{key}={s.value}\n")
 
@@ -173,7 +173,7 @@ def save_config(symbols):
                 if s.value == "y":
                     f.write(f"#define {macro} 1\n")
                 else:
-                    f.write(f"/* {macro} is not set */\n")
+                    f.write(f"#define {macro} 0\n")
             elif s.type == "int":
                 f.write(f"#define {macro} {s.value}\n")
             else:
