@@ -1,10 +1,25 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: keyboard.c
+ * Description: IR0 kernel source/header file
+ */
+
 #include "idt.h"
 #include "pic.h"
 #include "io.h"
+#include "keyboard.h"
 
 /* PS/2 keyboard controller: data port (scancode byte read) */
 #define PS2_DATA_PORT 0x60
 #include <config.h>
+#include <ir0/errno.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
 
@@ -34,6 +49,7 @@ static int shift_pressed = 0;
 static int ctrl_pressed = 0;
 /* Extended scancode prefix (0xE0); next byte may be Page Up/Down etc. */
 static int ext_scancode = 0;
+static int current_keyboard_layout = KEYBOARD_LAYOUT_US;
 
 /*
  * Escape sequences for shell: ESC + 0x01 = scroll up (Page Up), ESC + 0x02
@@ -44,8 +60,8 @@ static int ext_scancode = 0;
 #define KEY_ESC_SCROLL_DOWN   0x02
 #define KEY_ESC_CLEAR_SCREEN  0x03
 
-/* Basic scancode -> ASCII (printable subset) */
-static const char scancode_to_ascii[] = {
+/* Basic scancode -> ASCII (printable subset), US layout */
+static const char scancode_to_ascii_us[] = {
     0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  // 0-7
     '7',  '8',  '9',  '0',  '-',  '=',  0,    0,    // 8-15 (backspace, tab - manejados por separado)
     'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',  // 16-23
@@ -93,8 +109,8 @@ static const uint16_t ext_scancode_to_keycode[256] = {
     [0x5B] = KEY_LEFTMETA, [0x5C] = KEY_RIGHTMETA,
 };
 
-/* Scancode table with Shift held */
-static const char scancode_to_ascii_shift[] = {
+/* Scancode table with Shift held, US layout */
+static const char scancode_to_ascii_shift_us[] = {
     0,    0,    '!',  '@',  '#',  '$',  '%',  '^',  // 0-7
     '&',  '*',  '(',  ')',  '_',  '+',  0,    0,    // 8-15
     'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',  // 16-23
@@ -107,6 +123,69 @@ static const char scancode_to_ascii_shift[] = {
     0,    0,    0,    0,    0,    0,    0,    0,    // 72-79
     0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
 };
+
+/* Basic scancode -> ASCII (printable subset), LATAM layout */
+static const char scancode_to_ascii_latam[] = {
+    0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  // 0-7
+    '7',  '8',  '9',  '0',  '\'', 0,    0,    0,    // 8-15
+    'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',  // 16-23
+    'o',  'p',  '\'', '+',  0,    0,    'a',  's',  // 24-31
+    'd',  'f',  'g',  'h',  'j',  'k',  'l',  ';',  // 32-39
+    '\'', '|',  0,    '}',  'z',  'x',  'c',  'v',  // 40-47
+    'b',  'n',  'm',  ',',  '.',  '-',  0,    '*',  // 48-55
+    0,    0,    0,    0,    0,    0,    0,    0,    // 64-71 (F5-F12)
+    0,    0,    0,    0,    0,    0,    0,    0,    // 72-79 (numpad)
+    0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
+};
+
+/* Scancode table with Shift held, LATAM layout (ASCII subset) */
+static const char scancode_to_ascii_shift_latam[] = {
+    0,    0,    '!',  '"',  '#',  '$',  '%',  '&',  // 0-7
+    '/',  '(',  ')',  '=',  '?',  '!',  0,    0,    // 8-15
+    'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',  // 16-23
+    'O',  'P',  '"',  '*',  0,    0,    'A',  'S',  // 24-31
+    'D',  'F',  'G',  'H',  'J',  'K',  'L',  ':',  // 32-39
+    '"',  '~',  0,    '|',  'Z',  'X',  'C',  'V',  // 40-47
+    'B',  'N',  'M',  '<',  '>',  '_',  0,    '*',  // 48-55
+    0,    0,    0,    0,    0,    0,    0,    0,    // 56-63
+    0,    0,    0,    0,    0,    0,    0,    0,    // 64-71
+    0,    0,    0,    0,    0,    0,    0,    0,    // 72-79
+    0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
+};
+
+static const char *keyboard_ascii_table_base(void)
+{
+    if (current_keyboard_layout == KEYBOARD_LAYOUT_LATAM)
+        return scancode_to_ascii_latam;
+    return scancode_to_ascii_us;
+}
+
+static const char *keyboard_ascii_table_shift(void)
+{
+    if (current_keyboard_layout == KEYBOARD_LAYOUT_LATAM)
+        return scancode_to_ascii_shift_latam;
+    return scancode_to_ascii_shift_us;
+}
+
+int keyboard_set_layout(int layout)
+{
+    if (layout != KEYBOARD_LAYOUT_US && layout != KEYBOARD_LAYOUT_LATAM)
+        return -EINVAL;
+    current_keyboard_layout = layout;
+    return 0;
+}
+
+int keyboard_get_layout(void)
+{
+    return current_keyboard_layout;
+}
+
+const char *keyboard_get_layout_name(int layout)
+{
+    if (layout == KEYBOARD_LAYOUT_LATAM)
+        return "latam";
+    return "us";
+}
 
 char translate_scancode(uint8_t sc)
 {
@@ -141,11 +220,13 @@ char translate_scancode(uint8_t sc)
         return 0;
 
     default:
-        if (sc < sizeof(scancode_to_ascii))
+        if (sc < sizeof(scancode_to_ascii_us))
         {
+            const char *base = keyboard_ascii_table_base();
+            const char *shift = keyboard_ascii_table_shift();
             if (shift_pressed)
-                return scancode_to_ascii_shift[sc];
-            return scancode_to_ascii[sc];
+                return shift[sc];
+            return base[sc];
         }
         return 0;
     }
@@ -253,6 +334,10 @@ void keyboard_init(void)
 {
     keyboard_buffer_head = 0;
     keyboard_buffer_tail = 0;
+    if (CONFIG_KEYBOARD_LAYOUT == KEYBOARD_LAYOUT_LATAM)
+        current_keyboard_layout = KEYBOARD_LAYOUT_LATAM;
+    else
+        current_keyboard_layout = KEYBOARD_LAYOUT_US;
 }
 
 

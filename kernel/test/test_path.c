@@ -1,5 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: test_path.c
+ * Description: IR0 kernel source/header file
+ */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
+/**
  * IR0 Kernel - Tests de path (normalize_path, join_paths, is_absolute_path, get_parent_path)
  * Sin proceso; solo lógica de rutas.
  */
