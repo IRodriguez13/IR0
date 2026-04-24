@@ -45,17 +45,24 @@
 #define SECTORS_PER_MB             (2 * 1024)  /* Sectors per megabyte (2*1024*512 = 1MB) */
 
 static pid_t proc_fd_pid_map[1000];
+static pid_t proc_fd_owner_pid_map[1000];
 static int proc_fd_pid_map_init = 0;
 /* Track offsets for /proc and /sys files (proc 1000-1999, sys 3000-3999) */
 static off_t proc_fd_offset_map[PROC_OFFSET_MAP_SIZE];
+static pid_t proc_fd_offset_owner_map[PROC_OFFSET_MAP_SIZE];
 static int proc_fd_offset_map_init = 0;
+
+static void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
 
 static void proc_fd_pid_map_ensure_init(void)
 {
     if (proc_fd_pid_map_init)
         return;
     for (int i = 0; i < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])); i++)
+    {
         proc_fd_pid_map[i] = -1;
+        proc_fd_owner_pid_map[i] = -1;
+    }
     proc_fd_pid_map_init = 1;
 }
 
@@ -64,7 +71,10 @@ static void proc_fd_offset_map_ensure_init(void)
     if (proc_fd_offset_map_init)
         return;
     for (int i = 0; i < (int)(sizeof(proc_fd_offset_map) / sizeof(proc_fd_offset_map[0])); i++)
+    {
         proc_fd_offset_map[i] = 0;
+        proc_fd_offset_owner_map[i] = -1;
+    }
     proc_fd_offset_map_init = 1;
 }
 
@@ -73,15 +83,23 @@ static void proc_set_pid_for_fd(int fd, pid_t pid)
     proc_fd_pid_map_ensure_init();
     int idx = fd - 1000;
     if (idx >= 0 && idx < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])))
+    {
         proc_fd_pid_map[idx] = pid;
+        proc_fd_owner_pid_map[idx] = current_process ? current_process->task.pid : 0;
+    }
 }
 
 static pid_t proc_get_pid_for_fd(int fd)
 {
+    pid_t owner = current_process ? current_process->task.pid : 0;
     proc_fd_pid_map_ensure_init();
     int idx = fd - 1000;
     if (idx >= 0 && idx < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])))
+    {
+        if (proc_fd_owner_pid_map[idx] != owner)
+            return -1;
         return proc_fd_pid_map[idx];
+    }
     return -1;
 }
 /**
@@ -367,10 +385,13 @@ int proc_meminfo_read(char *buf, size_t count)
     uint64_t total_kb = total / BYTES_PER_KB;
     uint64_t free_kb = free / BYTES_PER_KB;
     uint64_t used_kb = used / BYTES_PER_KB;
-    int len = snprintf(buf, count, "%llu\t%llu\t%llu\n",
-                       (unsigned long long)total_kb,
-                       (unsigned long long)free_kb,
-                       (unsigned long long)used_kb);
+    char total_kb_str[24];
+    char free_kb_str[24];
+    char used_kb_str[24];
+    proc_u64_to_dec(total_kb, total_kb_str, sizeof(total_kb_str));
+    proc_u64_to_dec(free_kb, free_kb_str, sizeof(free_kb_str));
+    proc_u64_to_dec(used_kb, used_kb_str, sizeof(used_kb_str));
+    int len = snprintf(buf, count, "%s\t%s\t%s\n", total_kb_str, free_kb_str, used_kb_str);
     if (len < 0) return -1;
     if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     buf[len] = '\0';
@@ -410,7 +431,9 @@ int proc_uptime_read(char *buf, size_t count)
         return -1;
     memset(buf, 0, count);
     uint64_t uptime = get_system_time() / 1000;
-    int len = snprintf(buf, count, "%llu\n", (unsigned long long)uptime);
+    char uptime_str[24];
+    proc_u64_to_dec(uptime, uptime_str, sizeof(uptime_str));
+    int len = snprintf(buf, count, "%s\n", uptime_str);
     if (len < 0) return -1;
     if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     buf[len] = '\0';
@@ -541,16 +564,55 @@ int proc_loadavg_read(char *buf, size_t count)
         else if (p->state == PROCESS_READY) ready++;
         p = p->next;
     }
-    double load1 = (double)running + (double)ready * 0.5;
-    double load5 = (double)running + (double)ready * 0.4;
-    double load15 = (double)running + (double)ready * 0.3;
+    uint32_t load1_x100 = (uint32_t)(running * 100 + ready * 50);
+    uint32_t load5_x100 = (uint32_t)(running * 100 + ready * 40);
+    uint32_t load15_x100 = (uint32_t)(running * 100 + ready * 30);
     int last_pid = current_process ? (int)current_process->task.pid : 0;
-    int len = snprintf(buf, count, "%.2f\t%.2f\t%.2f\t%zu\t%zu\t%d\n",
-                       load1, load5, load15, running, running + ready, last_pid);
+    int len = snprintf(buf, count, "%u.%02u\t%u.%02u\t%u.%02u\t%u\t%u\t%d\n",
+                       load1_x100 / 100, load1_x100 % 100,
+                       load5_x100 / 100, load5_x100 % 100,
+                       load15_x100 / 100, load15_x100 % 100,
+                       (unsigned)running, (unsigned)(running + ready), last_pid);
     if (len < 0) return -1;
     if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     buf[len] = '\0';
     return len;
+}
+
+static void proc_u64_to_dec(uint64_t value, char *out, size_t out_len)
+{
+    char rev[24];
+    size_t idx = 0;
+    size_t pos = 0;
+
+    if (!out || out_len == 0)
+        return;
+
+    if (value == 0)
+    {
+        if (out_len >= 2)
+        {
+            out[0] = '0';
+            out[1] = '\0';
+        }
+        else
+        {
+            out[0] = '\0';
+        }
+        return;
+    }
+
+    while (value > 0 && idx < sizeof(rev))
+    {
+        rev[idx++] = (char)('0' + (value % 10));
+        value /= 10;
+    }
+
+    while (idx > 0 && pos + 1 < out_len)
+    {
+        out[pos++] = rev[--idx];
+    }
+    out[pos] = '\0';
 }
 
 /*
@@ -602,9 +664,11 @@ int proc_blockdevices_read(char *buf, size_t count)
         int sh_len;
         proc_format_size(size, size_human, sizeof(size_human), &sh_len);
         snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + (int)i);
+        char sectors_str[24];
+        proc_u64_to_dec(size, sectors_str, sizeof(sectors_str));
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "disk\t%s\t%u\t%u\t%llu\t%s\t%s\t%s\n",
-                         name_buf, (unsigned)i, 0u, (unsigned long long)size,
+                         "disk\t%s\t%u\t%u\t%s\t%s\t%s\t%s\n",
+                         name_buf, (unsigned)i, 0u, sectors_str,
                          size_human, model, serial);
         if (n < 0) return -1;
         if (n >= (int)(count - off)) n = (int)(count - off) - 1;
@@ -620,10 +684,12 @@ int proc_blockdevices_read(char *buf, size_t count)
             int psh_len;
             proc_format_size(part_info.total_sectors, part_size_human, sizeof(part_size_human), &psh_len);
             snprintf(part_name, sizeof(part_name), "hd%c%d", 'a' + (int)i, part_num + 1);
+            char part_sectors_str[24];
+            proc_u64_to_dec(part_info.total_sectors, part_sectors_str, sizeof(part_sectors_str));
             n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "part\t%s\t%u\t%u\t%llu\t%s\t-\t-\n",
+                         "part\t%s\t%u\t%u\t%s\t%s\t-\t-\n",
                          part_name, (unsigned)i, (unsigned)(part_num + 1),
-                         (unsigned long long)part_info.total_sectors, part_size_human);
+                         part_sectors_str, part_size_human);
             if (n < 0) break;
             if (n >= (int)(count - off)) n = (int)(count - off) - 1;
             off += (size_t)n;
@@ -666,9 +732,11 @@ int proc_partitions_read(char *buf, size_t count)
         uint64_t disk_blocks_1k = block_dev_get_sector_count(disk_name) / 2;
         char name_buf[16];
         snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + disk_id);
+        char disk_blocks_str[24];
+        proc_u64_to_dec(disk_blocks_1k, disk_blocks_str, sizeof(disk_blocks_str));
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "%u\t%u\t%llu\t%s\n",
-                         (unsigned)disk_id, 0u, (unsigned long long)disk_blocks_1k, name_buf);
+                         "%u\t%u\t%s\t%s\n",
+                         (unsigned)disk_id, 0u, disk_blocks_str, name_buf);
         if (n < 0) break;
         if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
@@ -680,10 +748,12 @@ int proc_partitions_read(char *buf, size_t count)
                 continue;
             uint64_t part_blocks_1k = part_info.total_sectors / 2;
             snprintf(name_buf, sizeof(name_buf), "hd%c%d", 'a' + disk_id, part_num + 1);
+            char part_blocks_str[24];
+            proc_u64_to_dec(part_blocks_1k, part_blocks_str, sizeof(part_blocks_str));
             n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "%u\t%u\t%llu\t%s\n",
+                         "%u\t%u\t%s\t%s\n",
                          (unsigned)disk_id, (unsigned)(part_num + 1),
-                         (unsigned long long)part_blocks_1k, name_buf);
+                         part_blocks_str, name_buf);
             if (n < 0) break;
             if (n >= (int)(count - off)) n = (int)(count - off) - 1;
             off += (size_t)n;
@@ -782,7 +852,9 @@ int proc_iomem_read(char *buf, size_t count)
     pmm_stats(&total_frames, NULL, NULL);
     uint64_t ram_end = (uint64_t)total_frames * PAGE_SIZE_4KB;
     if (ram_end > 0) ram_end--;
-    int n = snprintf(buf, count, "0\t%llu\tSystem RAM\n", (unsigned long long)ram_end);
+    char ram_end_str[24];
+    proc_u64_to_dec(ram_end, ram_end_str, sizeof(ram_end_str));
+    int n = snprintf(buf, count, "0\t%s\tSystem RAM\n", ram_end_str);
     if (n < 0) return -1;
     if (n >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
     return n;
@@ -843,10 +915,14 @@ int proc_timer_list_read(char *buf, size_t count)
         case CLOCK_TIMER_LAPIC: timer_name = "LAPIC"; break;
         case CLOCK_TIMER_RTC:  timer_name = "RTC"; break;
     }
-    int n = snprintf(buf, count, "%s\t%u\t%llu\t%llu\t%u\n",
+    char tick_count_str[24];
+    char uptime_sec_str[24];
+    proc_u64_to_dec(stats.tick_count, tick_count_str, sizeof(tick_count_str));
+    proc_u64_to_dec(stats.uptime_seconds, uptime_sec_str, sizeof(uptime_sec_str));
+    int n = snprintf(buf, count, "%s\t%u\t%s\t%s\t%u\n",
                      timer_name, stats.timer_frequency,
-                     (unsigned long long)stats.tick_count,
-                     (unsigned long long)stats.uptime_seconds,
+                     tick_count_str,
+                     uptime_sec_str,
                      stats.uptime_milliseconds);
     if (n < 0) return -1;
     if (n >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
@@ -898,6 +974,7 @@ int proc_cmdline_read(char *buf, size_t count, pid_t pid)
 /* Get offset for /proc (1000-1999) or /sys (3000-3999) fd */
 off_t proc_get_offset(int fd)
 {
+    pid_t owner = current_process ? current_process->task.pid : 0;
     proc_fd_offset_map_ensure_init();
     int idx = -1;
     if (fd >= 1000 && fd <= 1999)
@@ -905,7 +982,11 @@ off_t proc_get_offset(int fd)
     else if (fd >= 3000 && fd <= 3999)
         idx = 1000 + (fd - 3000);
     if (idx >= 0 && idx < (int)(sizeof(proc_fd_offset_map) / sizeof(proc_fd_offset_map[0])))
+    {
+        if (proc_fd_offset_owner_map[idx] != owner)
+            return 0;
         return proc_fd_offset_map[idx];
+    }
     return 0;
 }
 
@@ -983,6 +1064,7 @@ int proc_getdents(int fd, void *dirent_buf, size_t count)
 /* Set offset for /proc (1000-1999) or /sys (3000-3999) fd */
 void proc_set_offset(int fd, off_t offset)
 {
+    pid_t owner = current_process ? current_process->task.pid : 0;
     proc_fd_offset_map_ensure_init();
     int idx = -1;
     if (fd >= 1000 && fd <= 1999)
@@ -990,7 +1072,10 @@ void proc_set_offset(int fd, off_t offset)
     else if (fd >= 3000 && fd <= 3999)
         idx = 1000 + (fd - 3000);
     if (idx >= 0 && idx < (int)(sizeof(proc_fd_offset_map) / sizeof(proc_fd_offset_map[0])))
+    {
         proc_fd_offset_map[idx] = offset;
+        proc_fd_offset_owner_map[idx] = owner;
+    }
 }
 
 /* Reset offset for /proc fd (when reopening) */
@@ -1010,7 +1095,7 @@ int proc_open(const char *path, int flags)
     pid_t pid;
     const char *filename = proc_parse_path(path, &pid);
     if (!filename)
-        return -1;
+        return -ENOENT;
 
     /* OSDev-style /proc/pid directory: requires O_DIRECTORY */
     if (strcmp(filename, "pid_dir") == 0)
@@ -1113,14 +1198,14 @@ int proc_open(const char *path, int flags)
             }
             else
             {
-                return -1;
+                return -ENOENT;
             }
         }
         else
 #endif
         {
             /* File not found */
-            return -1;
+            return -ENOENT;
         }
     }
     
@@ -1242,11 +1327,11 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
             full_size = 0;
             break;
         default:
-            return -1;
+            return -EBADF;
     }
     
     if (full_size < 0)
-        return -1;
+        return (full_size == -1) ? -EIO : full_size;
     
     /* Ensure full_size doesn't exceed buffer size */
     if (full_size > (int)sizeof(proc_buffer))
@@ -1287,7 +1372,7 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
 int proc_write(int fd, const char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
-        return -1;
+        return -EINVAL;
 
     if (count == 0)
         return 0;
@@ -1353,12 +1438,12 @@ int proc_write(int fd, const char *buf, size_t count)
 int proc_stat(const char *path, stat_t *st)
 {
     if (!st || !is_proc_path(path))
-        return -1;
+        return -EINVAL;
     
     pid_t pid;
     const char *filename = proc_parse_path(path, &pid);
     if (!filename)
-        return -1;
+        return -ENOENT;
     
     /* Check if directory (OSDev-style /proc/pid) */
     if (strcmp(filename, "pid_dir") == 0 || strcmp(filename, "pid_subdir") == 0)
@@ -1417,5 +1502,5 @@ int proc_stat(const char *path, stat_t *st)
     }
     
     /* File not found */
-    return -1;
+    return -ENOENT;
 }

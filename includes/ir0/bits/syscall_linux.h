@@ -118,6 +118,7 @@
 
 /* IR0 custom syscalls (outside Linux range) */
 #define __NR_console_scroll   400
+#define __NR_console_clear    401
 
 /* Max syscall number we handle (for table size) */
 #define __NR_syscall_max   450

@@ -2502,7 +2502,7 @@ static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count,
 	size_t size = 0;
 	int ret = minix_fs_read_file(path, &data, &size);
 	if (ret != 0 || !data)
-		return ret;
+		return (ret == -1) ? -EIO : ret;
 	if (offset < 0 || (size_t)offset >= size) {
 		if (read_count) *read_count = 0;
 		kfree(data);
@@ -2519,11 +2519,22 @@ static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count,
 static int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
 {
 	if (offset != 0)
-		return -1;
+		return -EINVAL;
 	int ret = minix_fs_write_file(path, (const char *)buf);
 	if (ret == 0 && written_count)
 		*written_count = count;
-	return ret;
+	return (ret == -1) ? -EIO : ret;
+}
+
+static int minix_fs_truncate_wrapper(const char *path, size_t length)
+{
+	int ret;
+
+	if (length != 0)
+		return -ENOSYS;
+
+	ret = minix_fs_write_file(path, "");
+	return (ret == -1) ? -EIO : ret;
 }
 
 /*
@@ -2607,6 +2618,7 @@ static struct vfs_ops minix_fs_ops = {
 	.readdir = minix_fs_readdir,
 	.read    = minix_fs_read_file_wrapper,
 	.write   = minix_fs_write_file_wrapper,
+	.truncate = minix_fs_truncate_wrapper,
 	.link    = minix_fs_link,
 	.chown   = minix_fs_chown,
 	.chmod   = minix_fs_chmod,

@@ -136,7 +136,9 @@ uint16_t icmp_checksum(const void *data, size_t len)
 void icmp_receive_handler(struct net_device *dev, const void *data, 
                            size_t len, void *priv)
 {
-    (void)priv;
+    const struct ip_rx_context *rx_ctx = (const struct ip_rx_context *)priv;
+    ip4_addr_t src_ip = rx_ctx ? rx_ctx->src_addr : 0;
+    uint8_t rx_ttl = rx_ctx ? rx_ctx->ttl : 0;
 
     if (len < sizeof(struct icmp_header))
     {
@@ -151,10 +153,18 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
      * matches our calculation, the packet is valid. If not, we drop it.
      */
     uint16_t received_checksum = icmp->checksum;
-    struct icmp_header *icmp_mutable = (struct icmp_header *)data;
-    icmp_mutable->checksum = 0;
-    uint16_t calculated_checksum = icmp_checksum(data, len);
-    icmp_mutable->checksum = received_checksum;
+    uint8_t *icmp_scratch = kmalloc(len);
+    uint16_t calculated_checksum;
+
+    if (!icmp_scratch)
+    {
+        LOG_WARNING("ICMP", "No memory to verify checksum");
+        return;
+    }
+    memcpy(icmp_scratch, data, len);
+    ((struct icmp_header *)icmp_scratch)->checksum = 0;
+    calculated_checksum = icmp_checksum(icmp_scratch, len);
+    kfree(icmp_scratch);
 
     if (received_checksum != calculated_checksum)
     {
@@ -222,8 +232,6 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
              */
             reply_icmp->checksum = icmp_checksum(reply, reply_len);
 
-            /* Get source IP from IP layer */
-            ip4_addr_t src_ip = ip_get_last_src_addr();
             if (src_ip == 0)
             {
                 LOG_WARNING("ICMP", "Cannot send Echo Reply: source IP not available");
@@ -251,9 +259,6 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
             /* Echo Reply received: match it to a pending request */
             uint16_t id = ntohs(icmp->un.echo.id);
             uint16_t seq = ntohs(icmp->un.echo.seq);
-            
-            /* Get source IP to match with pending echo */
-            ip4_addr_t src_ip = ip_get_last_src_addr();
             
             LOG_INFO_FMT("ICMP", "Echo Reply received: id=%d, seq=%d, src=" IP4_FMT,
                          (int)id, (int)seq, IP4_ARGS(ntohl(src_ip)));
@@ -289,8 +294,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                     uint64_t rtt = now - echo->timestamp;
                     
                     /* Get TTL for logging */
-                    extern uint8_t ip_get_last_ttl(void);
-                    uint8_t ttl = ip_get_last_ttl();
+                    uint8_t ttl = rx_ttl;
                     size_t payload_bytes = len - sizeof(struct icmp_header);
                     
                     /* Store reply information for dbgshell to access */

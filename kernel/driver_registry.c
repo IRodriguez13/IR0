@@ -163,6 +163,11 @@ void ir0_driver_registry_init(void)
     LOG_INFO("DriverRegistry", "Driver registry initialized");
 }
 
+int ir0_driver_registry_is_initialized(void)
+{
+    return driver_registry.initialized;
+}
+
 ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info, 
                                    const ir0_driver_ops_t* ops)
 {

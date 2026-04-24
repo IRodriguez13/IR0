@@ -84,6 +84,7 @@ static int cmd_ls_handler(int argc, char **argv)
      */
     char dirent_buf[1024];
     int64_t bytes_read;
+    int wrote_simple_entries = 0;
     
     while ((bytes_read = syscall(SYS_GETDENTS, fd, (uint64_t)dirent_buf, sizeof(dirent_buf))) > 0)
     {
@@ -135,11 +136,13 @@ static int cmd_ls_handler(int argc, char **argv)
                         mode_str[9]  = (st.st_mode & S_IXOTH) ? 'x' : '-';
                         mode_str[10] = '\0';
                         
+                        char size_str[32];
                         char line[256];
-                        int line_len = snprintf(line, sizeof(line), "%s %u %u %u %llu %s\n",
+                        debug_u64_to_dec((uint64_t)st.st_size, size_str, sizeof(size_str));
+                        int line_len = snprintf(line, sizeof(line), "%s %u %u %u %s %s\n",
                                               mode_str, (unsigned)st.st_nlink, 
                                               (unsigned)st.st_uid, (unsigned)st.st_gid,
-                                              (unsigned long long)st.st_size,
+                                              size_str,
                                               dent->d_name);
                         if (line_len > 0 && line_len < (int)sizeof(line))
                         {
@@ -159,13 +162,14 @@ static int cmd_ls_handler(int argc, char **argv)
                 /* Simple listing */
                 debug_write(dent->d_name);
                 debug_write("  ");
+                wrote_simple_entries = 1;
             }
             
             offset += dent->d_reclen;
         }
     }
     
-    if (!detailed && bytes_read > 0)
+    if (!detailed && wrote_simple_entries)
     {
         debug_write("\n");
     }

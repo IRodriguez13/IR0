@@ -15,6 +15,18 @@
 
 static ipc_channel_t *ipc_channels = NULL;  /* Linked list of all channels */
 static uint32_t next_channel_id = 1;
+static ipc_channel_t *ipc_channel_find_locked(uint32_t id)
+{
+    ipc_channel_t *channel = ipc_channels;
+
+    while (channel) {
+        if (channel->id == id)
+            return channel;
+        channel = channel->next;
+    }
+    return NULL;
+}
+
 
 static inline uint64_t ipc_irq_save(void)
 {
@@ -99,52 +111,61 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
 process_t *wait_queue_wake_one(wait_queue_t *wq)
 {
     uint64_t irq_flags;
+    wait_queue_node_t *node;
+    process_t *proc;
 
     if (!wq || !wq->head)
         return NULL;
 
     irq_flags = ipc_irq_save();
-    wait_queue_node_t *node = wq->head;
+    node = wq->head;
     wq->head = node->next;
     
     if (!wq->head)
         wq->tail = NULL;
 
-    process_t *proc = node->process;
+    ipc_irq_restore(irq_flags);
+    proc = node->process;
     kfree(node);
 
-    /* Mark process as ready to run */
-    if (proc) {
+    /* Mark process as ready to run outside IRQ-off section. */
+    if (proc)
+    {
         proc->state = PROCESS_READY;
         sched_add_process(proc);
     }
 
-    ipc_irq_restore(irq_flags);
     return proc;
 }
 
 void wait_queue_wake_all(wait_queue_t *wq)
 {
     uint64_t irq_flags;
+    wait_queue_node_t *node;
+    wait_queue_node_t *pending;
 
     if (!wq)
         return;
 
     irq_flags = ipc_irq_save();
-    while (wq->head) {
-        wait_queue_node_t *node = wq->head;
-        wq->head = node->next;
+    pending = wq->head;
+    wq->head = NULL;
+    wq->tail = NULL;
+    ipc_irq_restore(irq_flags);
 
-        if (node->process) {
+    node = pending;
+    while (node)
+    {
+        wait_queue_node_t *next = node->next;
+
+        if (node->process)
+        {
             node->process->state = PROCESS_READY;
             sched_add_process(node->process);
         }
-
         kfree(node);
+        node = next;
     }
-
-    wq->tail = NULL;
-    ipc_irq_restore(irq_flags);
 }
 
 void semaphore_init(semaphore_t *sem, int initial_count)
@@ -286,7 +307,7 @@ ipc_channel_t *ipc_channel_create(uint32_t id)
     wait_queue_init(&channel->read_queue);
     wait_queue_init(&channel->write_queue);
 
-    channel->lock = false;
+    channel->lock = 0;
     channel->ref_count = 0;
     channel->next = NULL;
 
@@ -314,13 +335,10 @@ void ipc_channel_destroy(ipc_channel_t *channel)
 
 ipc_channel_t *ipc_channel_find(uint32_t id)
 {
-    ipc_channel_t *channel = ipc_channels;
-    while (channel) {
-        if (channel->id == id)
-            return channel;
-        channel = channel->next;
-    }
-    return NULL;
+    uint64_t irq_flags = ipc_irq_save();
+    ipc_channel_t *channel = ipc_channel_find_locked(id);
+    ipc_irq_restore(irq_flags);
+    return channel;
 }
 
 /**
@@ -329,45 +347,65 @@ ipc_channel_t *ipc_channel_find(uint32_t id)
  */
 static uint32_t ipc_get_next_available_id(void)
 {
+    uint64_t irq_flags;
     /* Find next available ID by checking if ID exists */
     uint32_t candidate_id = next_channel_id;
     
     /* Try up to 65536 IDs (avoid infinite loop) */
+    irq_flags = ipc_irq_save();
     for (uint32_t attempts = 0; attempts < 65536; attempts++)
     {
-        if (ipc_channel_find(candidate_id) == NULL)
+        if (ipc_channel_find_locked(candidate_id) == NULL)
         {
             /* Found available ID */
             if (candidate_id >= next_channel_id)
             {
                 next_channel_id = candidate_id + 1;
             }
+            ipc_irq_restore(irq_flags);
             return candidate_id;
         }
         candidate_id++;
     }
     
     /* Fallback: return current next_channel_id */
-    return next_channel_id++;
+    candidate_id = next_channel_id++;
+    ipc_irq_restore(irq_flags);
+    return candidate_id;
 }
 
 ipc_channel_t *ipc_channel_get_or_create(uint32_t id)
 {
-    ipc_channel_t *channel = ipc_channel_find(id);
+    ipc_channel_t *channel;
+    uint64_t irq_flags;
     
-    if (!channel) {
-        channel = ipc_channel_create(id);
-        if (channel) {
-            /* Add to global list */
-            channel->next = ipc_channels;
-            ipc_channels = channel;
-            /* Update next_channel_id if this ID is >= current */
-            if (id >= next_channel_id)
-            {
-                next_channel_id = id + 1;
-            }
+    irq_flags = ipc_irq_save();
+    channel = ipc_channel_find_locked(id);
+    ipc_irq_restore(irq_flags);
+    if (channel)
+        return channel;
+
+    channel = ipc_channel_create(id);
+    if (!channel)
+        return NULL;
+
+    irq_flags = ipc_irq_save();
+    {
+        ipc_channel_t *existing = ipc_channel_find_locked(id);
+        if (existing) {
+            ipc_irq_restore(irq_flags);
+            ipc_channel_destroy(channel);
+            return existing;
         }
+
+        /* Add to global list */
+        channel->next = ipc_channels;
+        ipc_channels = channel;
+        /* Update next_channel_id if this ID is >= current */
+        if (id >= next_channel_id)
+            next_channel_id = id + 1;
     }
+    ipc_irq_restore(irq_flags);
 
     return channel;
 }
@@ -379,16 +417,23 @@ uint32_t ipc_allocate_channel_id(void)
 
 void ipc_channel_ref(ipc_channel_t *channel)
 {
+    uint64_t irq_flags;
     if (!channel)
         return;
+    irq_flags = ipc_irq_save();
     channel->ref_count++;
+    ipc_irq_restore(irq_flags);
 }
 
 void ipc_channel_unref(ipc_channel_t *channel)
 {
+    int destroy = 0;
+    uint64_t irq_flags;
+
     if (!channel)
         return;
 
+    irq_flags = ipc_irq_save();
     channel->ref_count--;
 
     /* Auto-destroy when no references left */
@@ -403,9 +448,11 @@ void ipc_channel_unref(ipc_channel_t *channel)
             if (prev)
                 prev->next = channel->next;
         }
-
-        ipc_channel_destroy(channel);
+        destroy = 1;
     }
+    ipc_irq_restore(irq_flags);
+    if (destroy)
+        ipc_channel_destroy(channel);
 }
 
 /* Simple spinlock (busy-wait for now) */
@@ -413,17 +460,18 @@ static void ipc_lock(ipc_channel_t *channel)
 {
     if (!channel)
         return;
-    while (channel->lock) {
-        /* Busy wait */
+    while (__sync_lock_test_and_set(&channel->lock, 1)) {
+#if defined(__x86_64__) || defined(__i386__)
+        __asm__ volatile("pause");
+#endif
     }
-    channel->lock = true;
 }
 
 static void ipc_unlock(ipc_channel_t *channel)
 {
     if (!channel)
         return;
-    channel->lock = false;
+    __sync_lock_release(&channel->lock);
 }
 
 ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)

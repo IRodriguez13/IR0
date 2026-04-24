@@ -366,6 +366,17 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
             return -ENOENT;
     }
 
+    if ((flags & O_TRUNC) && ((flags & O_ACCMODE) != O_RDONLY))
+    {
+        if (!ops->truncate)
+            return -ENOSYS;
+        ret = ops->truncate(path, 0);
+        if (ret == -1)
+            return -EIO;
+        if (ret != 0)
+            return ret;
+    }
+
     struct vfs_file *f = kmalloc_try(sizeof(*f));
     if (!f)
         return -ENOMEM;

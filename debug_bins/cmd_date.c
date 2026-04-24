@@ -64,7 +64,7 @@ static int cmd_date_handler(int argc, char **argv)
     char line[80];
     format_timestamp((time_t)tv.tv_sec, line, sizeof(line));
     size_t len = strlen(line);
-    snprintf(line + len, sizeof(line) - len, ".%06ld UTC\n", (long)tv.tv_usec);
+    snprintf(line + len, sizeof(line) - len, ".%06d UTC\n", (int)tv.tv_usec);
     debug_write(line);
     debug_serial_ok("date");
     return 0;
