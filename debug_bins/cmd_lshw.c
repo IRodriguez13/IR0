@@ -97,8 +97,10 @@ static int cmd_lshw_handler(int argc, char **argv)
         if (*p == '\t') p++;
         unsigned long long free_kb = parse_ull(p);
         (void)free_kb;
+        char total_kb_str[32];
         char line[80];
-        snprintf(line, sizeof(line), "  Memory: %llu kB total\n", total_kb);
+        debug_u64_to_dec((uint64_t)total_kb, total_kb_str, sizeof(total_kb_str));
+        snprintf(line, sizeof(line), "  Memory: %s kB total\n", total_kb_str);
         debug_write(line);
     }
 

@@ -48,7 +48,12 @@ struct ip_header
 extern ip4_addr_t ip_local_addr;
 extern ip4_addr_t ip_netmask;
 extern ip4_addr_t ip_gateway;
-extern ip4_addr_t ip_last_dest_addr;
+struct ip_rx_context
+{
+    ip4_addr_t src_addr;
+    ip4_addr_t dest_addr;
+    uint8_t ttl;
+};
 
 /* IP Protocol API */
 int ip_init(void);
@@ -56,9 +61,6 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
             const void *payload, size_t len);
 void ip_receive_handler(struct net_device *dev, const void *data, 
                         size_t len, void *priv);
-ip4_addr_t ip_get_last_src_addr(void);  /* Get source IP from last received packet */
-ip4_addr_t ip_get_last_dest_addr(void); /* Get dest IP from last received packet */
-uint8_t ip_get_last_ttl(void);          /* Get TTL from last received packet */
 
 /* Routing API */
 int ip_route_add(ip4_addr_t dest_network, ip4_addr_t netmask, ip4_addr_t gateway);

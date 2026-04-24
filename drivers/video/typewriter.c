@@ -94,6 +94,25 @@ void typewriter_console_scroll(int delta)
     redraw_from_scrollback();
 }
 
+void typewriter_console_clear(uint8_t color)
+{
+    extern int cursor_pos;
+    uint16_t blank = ((uint16_t)color << 8) | ' ';
+
+    console_clear(color);
+    scrollback_color = color;
+    scroll_offset = 0;
+    total_lines_written = 0;
+    current_col = 0;
+    cursor_pos = 0;
+
+    for (int i = 0; i < SCROLLBACK_LINES; i++)
+    {
+        for (int c = 0; c < VGA_WIDTH; c++)
+            scrollback[i][c] = blank;
+    }
+}
+
 void typewriter_init(void)
 {
     current_mode = TYPEWRITER_FAST;

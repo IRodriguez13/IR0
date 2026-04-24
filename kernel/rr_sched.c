@@ -352,14 +352,18 @@ void rr_schedule_next(void)
 	 * Previous process: RUNNING -> READY (now eligible for scheduling again)
 	 * Next process: READY -> RUNNING (now executing on CPU)
 	 */
+	int should_handle_signals = 0;
 	if (prev && prev->state == PROCESS_RUNNING)
+	{
+		should_handle_signals = 1;
 		prev->state = PROCESS_READY;
+	}
 
 	/* Handle pending signals on the outgoing context before switching.
 	 * This keeps signal processing aligned with the process state we are
 	 * about to leave, avoiding delivery on the wrong task.
 	 */
-	if (prev)
+	if (should_handle_signals)
 		handle_signals();
 
 	next->state = PROCESS_RUNNING;

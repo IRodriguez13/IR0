@@ -162,6 +162,9 @@ endmenu
 
 menu "Driver Init Selection"
 
+    comment "Only selectable hardware stacks live here."
+    comment "Core boot drivers (serial, timer, interrupt plumbing) are always-on."
+
     config INIT_PS2_CONTROLLER
         bool "Initialize PS/2 controller"
         default y

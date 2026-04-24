@@ -63,6 +63,7 @@
 #define SYS_MOUNT        __NR_mount
 #define SYS_FORK         __NR_fork
 #define SYS_CONSOLE_SCROLL __NR_console_scroll
+#define SYS_CONSOLE_CLEAR __NR_console_clear
 
 /* creat: use open(O_CREAT|O_WRONLY|O_TRUNC, mode) - no separate Linux syscall */
 #define SYS_CREAT        __NR_open

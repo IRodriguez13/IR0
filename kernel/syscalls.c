@@ -23,7 +23,6 @@
 #include <ir0/version.h>
 #include <ir0/serial_io.h>
 #include <ir0/console_backend.h>
-#include <fs/minix_fs.h>
 #include <kernel/elf_loader.h>
 #include <mm/paging.h>
 #include <ir0/kmem.h>
@@ -1402,9 +1401,10 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   else
   {
     int access_mode = 0;
-    if (flags & O_RDONLY || flags & O_RDWR)
+    int accmode = flags & O_ACCMODE;
+    if (accmode == O_RDONLY || accmode == O_RDWR)
       access_mode |= ACCESS_READ;
-    if (flags & O_WRONLY || flags & O_RDWR)
+    if (accmode == O_WRONLY || accmode == O_RDWR)
       access_mode |= ACCESS_WRITE;
     if (access_mode && !check_file_access(path_to_use, access_mode, current_process))
       return -EACCES;
@@ -2888,6 +2888,13 @@ static int64_t wrap_console_scroll(uint64_t a1, uint64_t a2, uint64_t a3, uint64
   return 0;
 }
 
+/* Console clear: IR0 custom syscall */
+static int64_t wrap_console_clear(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
+  console_backend_clear((uint8_t)a1);
+  return 0;
+}
+
 /* Syscall table: Linux x86-64 numbers -> handlers */
 static syscall_handler_t syscall_table_rw[__NR_syscall_max];
 
@@ -2939,6 +2946,7 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_mount]          = wrap_sys_mount;
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit;
   syscall_table_rw[__NR_console_scroll]  = wrap_console_scroll;
+  syscall_table_rw[__NR_console_clear]   = wrap_console_clear;
 
 }
 

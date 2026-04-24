@@ -14,7 +14,7 @@ void console_backend_init(void)
 
 void console_backend_clear(uint8_t color)
 {
-    console_clear(color);
+    typewriter_console_clear(color);
 }
 
 int console_backend_uses_framebuffer(void)

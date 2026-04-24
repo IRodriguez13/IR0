@@ -66,11 +66,15 @@ static int cmd_cat_handler(int argc, char **argv)
         }
         if (bytes_written < bytes_read)
         {
+            char written_str[32];
+            char read_str[32];
             char wbuf[120];
+            debug_u64_to_dec((uint64_t)bytes_written, written_str, sizeof(written_str));
+            debug_u64_to_dec((uint64_t)bytes_read, read_str, sizeof(read_str));
 
             snprintf(wbuf, sizeof(wbuf),
-                     "cat: warning: partial write to stdout (%lld of %lld bytes)\n",
-                     (long long)bytes_written, (long long)bytes_read);
+                     "cat: warning: partial write to stdout (%s of %s bytes)\n",
+                     written_str, read_str);
             debug_write_err(wbuf);
             debug_serial_fail_err("cat", "write_partial", (int)EIO);
             failed = 1;

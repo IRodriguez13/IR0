@@ -52,6 +52,11 @@ def parse_args():
         default="make -s kernel-x64.bin",
         help="Shell build command executed per configuration",
     )
+    parser.add_argument(
+        "--runtime-cmd",
+        default="",
+        help="Optional shell runtime check executed after a successful build",
+    )
     return parser.parse_args()
 
 
@@ -76,6 +81,7 @@ def main():
         return 1
 
     build_cmd = ["bash", "-lc", args.build_cmd]
+    runtime_cmd = ["bash", "-lc", args.runtime_cmd] if args.runtime_cmd else None
     failed = 0
     executed = 0
 
@@ -113,6 +119,13 @@ def main():
         if rc != 0:
             failed += 1
             print("[SIM]   -> build FAILED")
+        elif runtime_cmd:
+            rc = run(runtime_cmd)
+            if rc != 0:
+                failed += 1
+                print("[SIM]   -> runtime FAILED")
+            else:
+                print("[SIM]   -> build OK, runtime OK")
         else:
             print("[SIM]   -> build OK")
         executed += 1
