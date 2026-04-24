@@ -1,5 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: syscall_linux.h
+ * Description: IR0 kernel source/header file
+ */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
+/**
  * IR0 - Linux x86-64 Syscall Numbers (musl ABI compatibility)
  *
  * Numbers from Linux arch/x86/entry/syscalls/syscall_64.tbl
@@ -119,6 +132,8 @@
 /* IR0 custom syscalls (outside Linux range) */
 #define __NR_console_scroll   400
 #define __NR_console_clear    401
+#define __NR_keymap_set       402
+#define __NR_keymap_get       403
 
 /* Max syscall number we handle (for table size) */
 #define __NR_syscall_max   450

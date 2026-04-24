@@ -1,5 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: debug_bins_registry.c
+ * Description: IR0 kernel source/header file
+ */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
+/**
  * IR0 Kernel - Debug Binaries Registry
  * Copyright (C) 2026 Iván Rodriguez
  *
@@ -39,6 +52,7 @@ extern struct debug_command cmd_blue;
 extern struct debug_command cmd_free;
 extern struct debug_command cmd_uptime;
 extern struct debug_command cmd_date;
+extern struct debug_command cmd_keymap;
 extern struct debug_command cmd_lshw;
 #ifdef IR0_KERNEL_TESTS
 extern struct debug_command cmd_ktest;
@@ -76,6 +90,7 @@ struct debug_command *debug_commands[] = {
     &cmd_free,
     &cmd_uptime,
     &cmd_date,
+    &cmd_keymap,
     &cmd_lshw,
 #ifdef IR0_KERNEL_TESTS
     &cmd_ktest,

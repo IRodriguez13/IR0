@@ -1,3 +1,16 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: syscall.h
+ * Description: IR0 kernel source/header file
+ */
+
 #pragma once
 
 #ifndef _IR0_SYSCALL_H
@@ -64,6 +77,8 @@
 #define SYS_FORK         __NR_fork
 #define SYS_CONSOLE_SCROLL __NR_console_scroll
 #define SYS_CONSOLE_CLEAR __NR_console_clear
+#define SYS_KEYMAP_SET   __NR_keymap_set
+#define SYS_KEYMAP_GET   __NR_keymap_get
 
 /* creat: use open(O_CREAT|O_WRONLY|O_TRUNC, mode) - no separate Linux syscall */
 #define SYS_CREAT        __NR_open
