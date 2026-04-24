@@ -190,6 +190,7 @@ struct debug_command {
     debug_command_fn handler;   /* Función handler del comando */
     const char *usage;          /* Uso: "ls [-l] [DIR]" */
     const char *description;    /* Descripción corta */
+    const char *const *flags;   /* Flags soportadas para tab-completion */
 };
 
 /**

@@ -23,6 +23,18 @@
 #include <ir0/version.h>
 #include <string.h>
 
+static const char *const uname_flags[] = {
+    "-a", "--all",
+    "-s", "--kernel-name",
+    "-r", "--kernel-release",
+    "-v", "--kernel-version",
+    "-m", "--machine",
+    "-p", "--processor",
+    "-i", "--hardware-platform",
+    "-h", "--help",
+    NULL
+};
+
 static int cmd_uname_handler(int argc, char **argv)
 {
     const char *option = (argc > 1) ? argv[1] : "-a";
@@ -122,6 +134,7 @@ struct debug_command cmd_uname = {
     .name = "uname",
     .handler = cmd_uname_handler,
     .usage = "uname [-a|-s|-r|-v|-m|-p|-i]",
-    .description = "Print system information"
+    .description = "Print system information",
+    .flags = uname_flags
 };
 

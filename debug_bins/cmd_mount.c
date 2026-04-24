@@ -22,6 +22,10 @@
 
 #define MOUNT_BUF_SIZE 1024
 
+static const char *const mount_flags[] = {
+    NULL
+};
+
 static int cmd_mount_handler(int argc, char **argv)
 {
     if (argc < 2)
@@ -97,6 +101,7 @@ struct debug_command cmd_mount = {
     .name = "mount",
     .handler = cmd_mount_handler,
     .usage = "mount [DEV MOUNTPOINT [fstype]]",
-    .description = "Mount filesystem"
+    .description = "Mount filesystem",
+    .flags = mount_flags
 };
 

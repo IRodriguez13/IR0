@@ -54,6 +54,13 @@
 #define SYS_DUP2         __NR_dup2
 #define SYS_NANOSLEEP    __NR_nanosleep
 #define SYS_GETPID       __NR_getpid
+#define SYS_GETUID       __NR_getuid
+#define SYS_GETEUID      __NR_geteuid
+#define SYS_GETGID       __NR_getgid
+#define SYS_GETEGID      __NR_getegid
+#define SYS_SETUID       __NR_setuid
+#define SYS_SETGID       __NR_setgid
+#define SYS_UMASK        __NR_umask
 #define SYS_EXEC         __NR_execve
 #define SYS_EXIT         __NR_exit
 #define SYS_WAITPID      __NR_wait4
@@ -79,6 +86,7 @@
 #define SYS_CONSOLE_CLEAR __NR_console_clear
 #define SYS_KEYMAP_SET   __NR_keymap_set
 #define SYS_KEYMAP_GET   __NR_keymap_get
+#define SYS_SUDO_AUTH    __NR_sudo_auth
 
 /* creat: use open(O_CREAT|O_WRONLY|O_TRUNC, mode) - no separate Linux syscall */
 #define SYS_CREAT        __NR_open
@@ -302,6 +310,46 @@ static inline int64_t ir0_munmap(void *addr, size_t length)
 static inline int64_t ir0_getpid(void)
 {
     return syscall0(SYS_GETPID);
+}
+
+static inline int64_t ir0_getuid(void)
+{
+    return syscall0(SYS_GETUID);
+}
+
+static inline int64_t ir0_geteuid(void)
+{
+    return syscall0(SYS_GETEUID);
+}
+
+static inline int64_t ir0_getgid(void)
+{
+    return syscall0(SYS_GETGID);
+}
+
+static inline int64_t ir0_getegid(void)
+{
+    return syscall0(SYS_GETEGID);
+}
+
+static inline int64_t ir0_setuid(uid_t uid)
+{
+    return syscall1(SYS_SETUID, (int64_t)uid);
+}
+
+static inline int64_t ir0_setgid(gid_t gid)
+{
+    return syscall1(SYS_SETGID, (int64_t)gid);
+}
+
+static inline int64_t ir0_umask(mode_t mask)
+{
+    return syscall1(SYS_UMASK, (int64_t)mask);
+}
+
+static inline int64_t ir0_sudo_auth(const char *password)
+{
+    return syscall1(SYS_SUDO_AUTH, (int64_t)password);
 }
 
 /* Directory operations */

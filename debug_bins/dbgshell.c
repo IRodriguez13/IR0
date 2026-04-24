@@ -26,6 +26,7 @@
 #include <ir0/syscall.h>
 #include <ir0/fcntl.h>
 #include <ir0/time.h>
+#include <ir0/stat.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -107,6 +108,16 @@ static int parse_args(char *line, int *argc_out, char **argv_out, int max_args)
     return debug_parse_args(line, argc_out, argv_out, max_args);
 }
 
+struct linux_dirent64 {
+    uint64_t d_ino;
+    int64_t d_off;
+    unsigned short d_reclen;
+    unsigned char d_type;
+    char d_name[];
+};
+
+#define DT_DIR 4
+
 static int shell_starts_with(const char *text, const char *prefix)
 {
     while (*prefix)
@@ -115,16 +126,6 @@ static int shell_starts_with(const char *text, const char *prefix)
             return 0;
     }
     return 1;
-}
-
-static int shell_contains_space_or_tab(const char *line, int len)
-{
-    for (int i = 0; i < len; i++)
-    {
-        if (line[i] == ' ' || line[i] == '\t')
-            return 1;
-    }
-    return 0;
 }
 
 static int shell_common_prefix_len(const char *a, const char *b)
@@ -136,7 +137,78 @@ static int shell_common_prefix_len(const char *a, const char *b)
     return n;
 }
 
-static int shell_collect_matches(const char *prefix, const char **out_matches, int max_matches, int list_matches)
+static int shell_is_whitespace(char c)
+{
+    return (c == ' ' || c == '\t' || c == '\n' || c == '\r');
+}
+
+static void shell_get_token_context(const char *input, int input_pos, int *token_start, int *token_index)
+{
+    int in_token = 0;
+    int current_start = input_pos;
+    int idx = 0;
+
+    for (int i = 0; i < input_pos; i++)
+    {
+        if (shell_is_whitespace(input[i]))
+        {
+            if (in_token)
+            {
+                in_token = 0;
+                idx++;
+            }
+        }
+        else if (!in_token)
+        {
+            in_token = 1;
+            current_start = i;
+        }
+    }
+
+    *token_start = in_token ? current_start : input_pos;
+    *token_index = idx;
+}
+
+static int shell_extract_token(const char *input, int start, int end, char *out, int out_sz)
+{
+    int n = end - start;
+    if (n < 0)
+        n = 0;
+    if (n >= out_sz)
+        n = out_sz - 1;
+
+    for (int i = 0; i < n; i++)
+        out[i] = input[start + i];
+    out[n] = '\0';
+    return n;
+}
+
+static int shell_extract_first_token(const char *input, int input_pos, char *out, int out_sz)
+{
+    int start = -1;
+    int end = -1;
+
+    for (int i = 0; i < input_pos; i++)
+    {
+        if (!shell_is_whitespace(input[i]) && start < 0)
+            start = i;
+        if (start >= 0 && shell_is_whitespace(input[i]))
+        {
+            end = i;
+            break;
+        }
+    }
+    if (start < 0)
+    {
+        out[0] = '\0';
+        return 0;
+    }
+    if (end < 0)
+        end = input_pos;
+    return shell_extract_token(input, start, end, out, out_sz);
+}
+
+static int shell_collect_command_matches(const char *prefix, const char **out_matches, int max_matches, int list_matches)
 {
     int count = 0;
     const char *builtins[] = { "help", "clear", "exit", NULL };
@@ -177,30 +249,63 @@ static int shell_collect_matches(const char *prefix, const char **out_matches, i
     return count;
 }
 
-static void shell_try_tab_complete(char *input, int *input_pos)
+static struct debug_command *shell_find_command(const char *name)
 {
-    if (!input || !input_pos || *input_pos <= 0)
-        return;
-    if (shell_contains_space_or_tab(input, *input_pos))
-        return;
+    if (!name || name[0] == '\0')
+        return NULL;
+    return debug_find_command(name);
+}
 
-    char prefix[INPUT_MAX + 1];
-    int prefix_len = *input_pos;
-    if (prefix_len > INPUT_MAX)
-        prefix_len = INPUT_MAX;
+static int shell_collect_flags_matches(const struct debug_command *cmd, const char *prefix, const char **out_matches, int max_matches)
+{
+    int count = 0;
+    if (!cmd || !cmd->flags)
+        return 0;
 
-    memcpy(prefix, input, (size_t)prefix_len);
-    prefix[prefix_len] = '\0';
+    for (int i = 0; cmd->flags[i] != NULL; i++)
+    {
+        if (shell_starts_with(cmd->flags[i], prefix))
+        {
+            if (count < max_matches)
+                out_matches[count] = cmd->flags[i];
+            count++;
+        }
+    }
+    return count;
+}
 
-    const int max_matches = 128;
-    const char *matches[128];
-    int match_count = shell_collect_matches(prefix, matches, max_matches, 0);
+static int shell_collect_value_matches(const char *cmd_name, const char *prefix, const char **out_matches, int max_matches)
+{
+    int count = 0;
+    if (!cmd_name)
+        return 0;
+
+    if (strcmp(cmd_name, "keymap") == 0)
+    {
+        const char *values[] = { "us", "latam", NULL };
+        for (int i = 0; values[i] != NULL; i++)
+        {
+            if (shell_starts_with(values[i], prefix))
+            {
+                if (count < max_matches)
+                    out_matches[count] = values[i];
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+static int shell_complete_from_matches(char *input, int *input_pos, int token_start, const char *token, const char **matches, int match_count, int append_space, int list_on_ambiguous)
+{
+    int token_len = (int)strlen(token);
+    int common_len;
 
     if (match_count <= 0)
-        return;
+        return 0;
 
-    int common_len = (int)strlen(matches[0]);
-    for (int i = 1; i < match_count && i < max_matches; i++)
+    common_len = (int)strlen(matches[0]);
+    for (int i = 1; i < match_count; i++)
     {
         int n = shell_common_prefix_len(matches[0], matches[i]);
         if (n < common_len)
@@ -211,34 +316,229 @@ static void shell_try_tab_complete(char *input, int *input_pos)
     {
         const char *full = matches[0];
         int full_len = (int)strlen(full);
-        for (int i = prefix_len; i < full_len && *input_pos < INPUT_MAX; i++)
+        for (int i = token_len; i < full_len && *input_pos < INPUT_MAX; i++)
         {
             input[(*input_pos)++] = full[i];
             echo_char(full[i]);
         }
-        if (*input_pos < INPUT_MAX)
+        if (append_space && *input_pos < INPUT_MAX)
         {
             input[(*input_pos)++] = ' ';
             echo_char(' ');
         }
         input[*input_pos] = '\0';
-        return;
+        return 1;
     }
 
-    if (common_len > prefix_len)
+    if (common_len > token_len)
     {
-        for (int i = prefix_len; i < common_len && *input_pos < INPUT_MAX; i++)
+        for (int i = token_len; i < common_len && *input_pos < INPUT_MAX; i++)
         {
             input[(*input_pos)++] = matches[0][i];
             echo_char(matches[0][i]);
         }
         input[*input_pos] = '\0';
+        return 1;
+    }
+
+    if (list_on_ambiguous)
+    {
+        write_stdout("\n");
+        for (int i = 0; i < match_count; i++)
+        {
+            write_stdout(matches[i]);
+            write_stdout("  ");
+        }
+        write_stdout("\n");
+        print_prompt();
+        input[*input_pos] = '\0';
+        write_stdout(input);
+    }
+
+    (void)token_start;
+    return 1;
+}
+
+static int shell_path_is_dir(const char *dir_path, const char *name, unsigned char d_type)
+{
+    if (d_type == DT_DIR)
+        return 1;
+    if (d_type != 0)
+        return 0;
+
+    char full[512];
+    stat_t st;
+    int len;
+    if (strcmp(dir_path, "/") == 0)
+        len = snprintf(full, sizeof(full), "/%s", name);
+    else
+        len = snprintf(full, sizeof(full), "%s/%s", dir_path, name);
+    if (len <= 0 || len >= (int)sizeof(full))
+        return 0;
+    if (syscall(SYS_STAT, (uint64_t)full, (uint64_t)&st, 0) < 0)
+        return 0;
+    return S_ISDIR(st.st_mode) ? 1 : 0;
+}
+
+static int shell_complete_path(char *input, int *input_pos, int token_start)
+{
+    char token[INPUT_MAX + 1];
+    char dir_path[256];
+    char base_prefix[256];
+    char name_prefix[256];
+    char cwd[256];
+    const char *matches[128];
+    unsigned char match_types[128];
+    int match_count = 0;
+    int token_len = shell_extract_token(input, token_start, *input_pos, token, sizeof(token));
+    char *slash = strrchr(token, '/');
+
+    if (slash)
+    {
+        int dir_len = (int)(slash - token);
+        if (dir_len == 0)
+        {
+            strcpy(dir_path, "/");
+            strcpy(base_prefix, "/");
+        }
+        else
+        {
+            if (dir_len >= (int)sizeof(dir_path))
+                return 0;
+            memcpy(dir_path, token, (size_t)dir_len);
+            dir_path[dir_len] = '\0';
+            memcpy(base_prefix, token, (size_t)(dir_len + 1));
+            base_prefix[dir_len + 1] = '\0';
+        }
+        snprintf(name_prefix, sizeof(name_prefix), "%s", slash + 1);
+    }
+    else
+    {
+        if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) < 0)
+            strcpy(cwd, "/");
+        snprintf(dir_path, sizeof(dir_path), "%s", cwd);
+        base_prefix[0] = '\0';
+        snprintf(name_prefix, sizeof(name_prefix), "%s", token);
+    }
+
+    int fd = syscall(SYS_OPEN, (uint64_t)dir_path, O_RDONLY | O_DIRECTORY, 0);
+    if (fd < 0)
+        return 0;
+
+    char dirent_buf[1024];
+    int64_t bytes_read;
+    while ((bytes_read = syscall(SYS_GETDENTS, fd, (uint64_t)dirent_buf, sizeof(dirent_buf))) > 0)
+    {
+        size_t offset = 0;
+        while (offset < (size_t)bytes_read && match_count < 128)
+        {
+            struct linux_dirent64 *dent = (struct linux_dirent64 *)(dirent_buf + offset);
+            const char *name = dent->d_name;
+            if (name[0] == '\0')
+            {
+                offset += dent->d_reclen;
+                continue;
+            }
+            if (name[0] == '.' && name_prefix[0] != '.')
+            {
+                offset += dent->d_reclen;
+                continue;
+            }
+            if (shell_starts_with(name, name_prefix))
+            {
+                static char storage[128][256];
+                snprintf(storage[match_count], sizeof(storage[match_count]), "%s%s", base_prefix, name);
+                matches[match_count] = storage[match_count];
+                match_types[match_count] = dent->d_type;
+                match_count++;
+            }
+            offset += dent->d_reclen;
+        }
+    }
+    syscall(SYS_CLOSE, fd, 0, 0);
+
+    if (match_count <= 0)
+        return 0;
+
+    int completed = shell_complete_from_matches(input, input_pos, token_start, token, matches, match_count, 0, 1);
+    if (!completed)
+        return 0;
+
+    if (match_count == 1)
+    {
+        const char *full_match = matches[0];
+        const char *entry_name = strrchr(full_match, '/');
+        if (!entry_name)
+            entry_name = full_match;
+        else
+            entry_name++;
+        if (shell_path_is_dir(dir_path, entry_name, match_types[0]))
+        {
+            if (*input_pos < INPUT_MAX && (*input_pos == 0 || input[*input_pos - 1] != '/'))
+            {
+                input[(*input_pos)++] = '/';
+                echo_char('/');
+                input[*input_pos] = '\0';
+            }
+        }
+        else if (*input_pos < INPUT_MAX)
+        {
+            input[(*input_pos)++] = ' ';
+            echo_char(' ');
+            input[*input_pos] = '\0';
+        }
+    }
+
+    (void)token_len;
+    return 1;
+}
+
+static void shell_try_tab_complete(char *input, int *input_pos)
+{
+    if (!input || !input_pos)
+        return;
+
+    int token_start = 0;
+    int token_index = 0;
+    char token[INPUT_MAX + 1];
+    char cmd_name[INPUT_MAX + 1];
+    const char *matches[128];
+    shell_get_token_context(input, *input_pos, &token_start, &token_index);
+    shell_extract_token(input, token_start, *input_pos, token, sizeof(token));
+
+    if (token_index == 0)
+    {
+        int match_count = shell_collect_command_matches(token, matches, 128, 0);
+        if (match_count <= 0)
+            return;
+        (void)shell_complete_from_matches(input, input_pos, token_start, token, matches, match_count, 1, 1);
         return;
     }
 
-    shell_collect_matches(prefix, matches, max_matches, 1);
-    print_prompt();
-    write_stdout(input);
+    shell_extract_first_token(input, *input_pos, cmd_name, sizeof(cmd_name));
+    struct debug_command *cmd = shell_find_command(cmd_name);
+    if (!cmd)
+        return;
+
+    if (token[0] == '-')
+    {
+        int match_count = shell_collect_flags_matches(cmd, token, matches, 128);
+        if (match_count > 0)
+        {
+            (void)shell_complete_from_matches(input, input_pos, token_start, token, matches, match_count, 1, 1);
+            return;
+        }
+    }
+
+    int value_match_count = shell_collect_value_matches(cmd_name, token, matches, 128);
+    if (value_match_count > 0)
+    {
+        (void)shell_complete_from_matches(input, input_pos, token_start, token, matches, value_match_count, 1, 1);
+        return;
+    }
+
+    if (shell_complete_path(input, input_pos, token_start))
+        return;
 }
 
 /* Execute a single command */

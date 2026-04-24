@@ -1,9 +1,22 @@
-# Documentacion en Espanol
+# Documentacion IR0 en Espanol
 
-Este directorio contiene versiones en espanol de documentacion tecnica de IR0.
+Este directorio contiene traducciones de la documentacion tecnica principal.
 
-## Regla de Mantenimiento
+## Politica
 
-- La documentacion tecnica principal se mantiene en ingles.
-- Las versiones en espanol viven en `Documentation/esp/`.
-- Mantener alineacion funcional con la documentacion principal.
+- La fuente primaria se mantiene en ingles en `Documentation/`.
+- Esta carpeta mantiene el espejo en espanol por archivo.
+- Mantener paridad funcional y evitar texto aspiracional.
+
+## Mapa de Archivos
+
+- `README.md`
+- `TOOLING.md`
+- `FILESYSTEM.md`
+- `VIRTUAL_FILESYSTEMS.md`
+- `DRIVERS.md`
+- `INTERRUPTS.md`
+- `MEMORY.md`
+- `PROCESSES.md`
+- `SCHEDULING.md`
+- `UNIX_DIFFERENCES.md`
