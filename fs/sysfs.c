@@ -25,18 +25,16 @@
 #include <ir0/kmem.h>
 #include <ir0/vga.h>
 #include <ir0/version.h>
+#include <ir0/console_backend.h>
 #include <string.h>
 #include <errno.h>
 #include <config.h>
 #if CONFIG_ENABLE_BLUETOOTH
 #include "drivers/bluetooth/bt_sysfs.h"
 #endif
-#include <drivers/disk/partition.h>
-#include <drivers/video/console.h>
-#include <drivers/video/vbe.h>
-
-/* Forward declarations for functions we use */
-extern bool ata_drive_present(uint8_t drive);
+#include <ir0/partition.h>
+#include <ir0/block_dev.h>
+#include <ir0/video_backend.h>
 
 /* /sys/class/bluetooth/ - Bluetooth topology (adapter + neighbors + sessions as files) */
 #define SYS_BT_HCI0_ADDRESS    30
@@ -222,13 +220,17 @@ static int sys_console_mode_read(char *buf, size_t count)
     memset(buf, 0, count);
 
     int len;
-    if (console_use_framebuffer())
+    if (console_backend_uses_framebuffer())
     {
+#if CONFIG_ENABLE_VBE
         uint32_t w, h, bpp;
-        if (vbe_get_info(&w, &h, &bpp))
+        if (video_backend_get_info(&w, &h, &bpp))
             len = snprintf(buf, count, "framebuffer %ux%ux%u\n", (unsigned)w, (unsigned)h, (unsigned)bpp);
         else
             len = snprintf(buf, count, "framebuffer\n");
+#else
+        len = snprintf(buf, count, "framebuffer\n");
+#endif
     }
     else
     {
@@ -352,10 +354,11 @@ static int sys_devices_block_read(char *buf, size_t count)
     size_t off = 0;
     for (uint8_t i = 0; i < 4; i++)
     {
-        if (!ata_drive_present(i))
+        const char *disk_name = block_dev_legacy_name(i);
+        if (!disk_name || !block_dev_is_present(disk_name))
             continue;
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "hd%c\n", 'a' + (int)i);
+                         "%s\n", disk_name);
         if (n <= 0 || n >= (int)(count - off))
             break;
         off += (size_t)n;

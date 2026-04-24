@@ -12,7 +12,6 @@
  */
 
 #include "ata.h"
-#include <drivers/disk/partition.h>
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <string.h>
@@ -156,13 +155,6 @@ void ata_init(void)
     {
         ata_drives_present[i] = ata_identify_drive(i);
     }
-    /* Read partition table on each present drive (MBR/GPT) */
-    for (int i = 0; i < 4; i++)
-    {
-        if (ata_drives_present[i])
-            read_partition_table((uint8_t)i);
-    }
-
     if (ata_drives_present[0] || ata_drives_present[1])
     {
         resource_register_irq(14, "ata14");

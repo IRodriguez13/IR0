@@ -19,13 +19,12 @@
 #include <ir0/driver.h>
 #include <kernel/process.h>
 #include <ir0/version.h>
-#include <drivers/serial/serial.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/serial_io.h>
+#include <ir0/clock.h>
 #include <arch/common/arch_portable.h>
-#include <drivers/disk/partition.h>
-#include <drivers/storage/ata.h>
+#include <ir0/partition.h>
+#include <ir0/block_dev.h>
 #include <fs/vfs.h>
-#include <drivers/net/rtl8139.h>
 #include <ir0/validation.h>
 #include <mm/paging.h>
 #include <kernel/resource_registry.h>
@@ -183,6 +182,7 @@ static int proc_ps_read(char *buf, size_t count)
  */
 static int proc_netinfo_read(char *buf, size_t count)
 {
+#if CONFIG_ENABLE_NETWORKING
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
     memset(buf, 0, count);
@@ -211,6 +211,12 @@ static int proc_netinfo_read(char *buf, size_t count)
     }
     if (off < count) buf[off] = '\0';
     return (int)off;
+#else
+    if (VALIDATE_BUFFER(buf, count) != 0)
+        return -1;
+    memset(buf, 0, count);
+    return 0;
+#endif
 }
 
 /*
@@ -219,11 +225,12 @@ static int proc_netinfo_read(char *buf, size_t count)
  */
 static int proc_net_dev_read(char *buf, size_t count)
 {
+#if CONFIG_ENABLE_NETWORKING
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
     memset(buf, 0, count);
     uint64_t rxp = 0, txp = 0, rxe = 0, txe = 0;
-    rtl8139_get_stats(&rxp, &txp, &rxe, &txe);
+    net_stack_get_stats(&rxp, &txp, &rxe, &txe);
     int n = snprintf(buf, count,
                      "Inter-|   Receive                                                |  Transmit\n"
                      " face |   packets    errs                                        |  packets    errs\n"
@@ -237,6 +244,12 @@ static int proc_net_dev_read(char *buf, size_t count)
         return (int)(count - 1);
     }
     return n;
+#else
+    if (VALIDATE_BUFFER(buf, count) != 0)
+        return -1;
+    memset(buf, 0, count);
+    return 0;
+#endif
 }
 
 static int proc_drivers_read(char *buf, size_t count)
@@ -578,13 +591,12 @@ int proc_blockdevices_read(char *buf, size_t count)
     size_t off = 0;
     for (uint8_t i = 0; i < 4; i++)
     {
-        if (!ata_drive_present(i))
+        const char *disk_name = block_dev_legacy_name(i);
+        if (!disk_name || !block_dev_is_present(disk_name))
             continue;
-        uint64_t size = ata_get_size(i);
-        const char *model = ata_get_model(i);
-        const char *serial = ata_get_serial(i);
-        if (!model || !*model) model = "-";
-        if (!serial || !*serial) serial = "-";
+        uint64_t size = block_dev_get_sector_count(disk_name);
+        const char *model = "-";
+        const char *serial = "-";
         char name_buf[8];
         char size_human[16];
         int sh_len;
@@ -648,9 +660,10 @@ int proc_partitions_read(char *buf, size_t count)
     size_t off = 0;
     for (uint8_t disk_id = 0; disk_id < MAX_DISKS; disk_id++)
     {
-        if (!ata_drive_present(disk_id))
+        const char *disk_name = block_dev_legacy_name(disk_id);
+        if (!disk_name || !block_dev_is_present(disk_name))
             continue;
-        uint64_t disk_blocks_1k = ata_get_size(disk_id) / 2;
+        uint64_t disk_blocks_1k = block_dev_get_sector_count(disk_name) / 2;
         char name_buf[16];
         snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + disk_id);
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,

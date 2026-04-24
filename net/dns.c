@@ -27,6 +27,7 @@
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
+#include <arch/common/arch_portable.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -71,6 +72,84 @@ static uint16_t dns_query_id_counter = 1;
 static struct net_device *dns_net_dev = NULL;
 static uint16_t dns_client_port = 5353;  /* Ephemeral port for DNS queries */
 static bool dns_handler_registered = false;
+
+static inline uint64_t dns_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint64_t flags;
+    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+#else
+    arch_disable_interrupts();
+    return 0;
+#endif
+}
+
+static inline void dns_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+    (void)flags;
+    arch_enable_interrupts();
+#endif
+}
+
+static struct dns_query_state *dns_pending_find_locked(uint16_t id)
+{
+    struct dns_query_state *query = pending_queries;
+    while (query)
+    {
+        if (query->id == id)
+            return query;
+        query = query->next;
+    }
+    return NULL;
+}
+
+static void dns_pending_add(struct dns_query_state *query)
+{
+    uint64_t flags;
+
+    if (!query)
+        return;
+
+    flags = dns_irq_save();
+    query->next = pending_queries;
+    pending_queries = query;
+    dns_irq_restore(flags);
+}
+
+static void dns_pending_remove_locked(struct dns_query_state *query)
+{
+    struct dns_query_state *prev;
+
+    if (!query)
+        return;
+
+    if (pending_queries == query)
+    {
+        pending_queries = query->next;
+        query->next = NULL;
+        return;
+    }
+
+    prev = pending_queries;
+    while (prev && prev->next != query)
+        prev = prev->next;
+    if (prev)
+    {
+        prev->next = query->next;
+        query->next = NULL;
+    }
+}
+
+static void dns_pending_remove(struct dns_query_state *query)
+{
+    uint64_t flags = dns_irq_save();
+    dns_pending_remove_locked(query);
+    dns_irq_restore(flags);
+}
 
 /* Helper: Encode domain name for DNS (convert "example.com" to length-prefixed format) */
 static size_t dns_encode_name(const char *domain, uint8_t *buf, size_t buf_len)
@@ -198,25 +277,10 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     
     LOG_INFO_FMT("DNS", "DNS response: id=%d, answers=%d", (int)id, (int)ancount);
     
-    /* Find matching query */
-    struct dns_query_state *query = pending_queries;
-    while (query)
-    {
-        if (query->id == id)
-        {
-            break;
-        }
-        query = query->next;
-    }
-    
-    if (!query)
-    {
-        LOG_WARNING_FMT("DNS", "DNS response id=%d not matched", (int)id);
-        return;
-    }
-    
     /* Parse response to find A record */
     const uint8_t *ptr = (const uint8_t *)data + sizeof(struct dns_header);
+    ip4_addr_t resolved_ip = 0;
+    bool found_a_record = false;
     
     /* Skip question section */
     const uint8_t *pkt_end = (const uint8_t *)data + len;
@@ -283,11 +347,10 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
         {
             if (ptr + 4 <= pkt_end)
             {
-                memcpy(&query->result, ptr, 4);
-                query->resolved = true;
-                
-                LOG_INFO_FMT("DNS", "Resolved %s to " IP4_FMT, name, IP4_ARGS(ntohl(query->result)));
-                return;
+                memcpy(&resolved_ip, ptr, 4);
+                found_a_record = true;
+                LOG_INFO_FMT("DNS", "Resolved %s to " IP4_FMT, name, IP4_ARGS(ntohl(resolved_ip)));
+                break;
             }
         }
         
@@ -297,7 +360,25 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
         ptr += rdlength;
     }
     
-    LOG_WARNING("DNS", "No A record found in DNS response");
+    if (!found_a_record)
+    {
+        LOG_WARNING("DNS", "No A record found in DNS response");
+        return;
+    }
+
+    {
+        uint64_t flags = dns_irq_save();
+        struct dns_query_state *query = dns_pending_find_locked(id);
+        if (!query)
+        {
+            dns_irq_restore(flags);
+            LOG_WARNING_FMT("DNS", "DNS response id=%d not matched", (int)id);
+            return;
+        }
+        query->result = resolved_ip;
+        query->resolved = true;
+        dns_irq_restore(flags);
+    }
 }
 
 /**
@@ -328,7 +409,12 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     
     /* DNS Header */
     struct dns_header *header = (struct dns_header *)query_buf;
-    uint16_t query_id = dns_query_id_counter++;
+    uint16_t query_id;
+    {
+        uint64_t flags = dns_irq_save();
+        query_id = dns_query_id_counter++;
+        dns_irq_restore(flags);
+    }
     header->id = htons(query_id);
     header->flags = htons(DNS_FLAG_RD);  /* Recursion Desired */
     header->qdcount = htons(1);          /* One question */
@@ -367,8 +453,8 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     query->result = 0;
     query->timestamp = clock_get_uptime_milliseconds();
     query->resolved = false;
-    query->next = pending_queries;
-    pending_queries = query;
+    query->next = NULL;
+    dns_pending_add(query);
     
     LOG_INFO_FMT("DNS", "Resolving %s via DNS server " IP4_FMT, 
                  domain_name, IP4_ARGS(ntohl(dns_server_ip)));
@@ -376,8 +462,13 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     /* Register handler for DNS responses if not already registered */
     if (!dns_handler_registered)
     {
-        udp_register_handler(dns_client_port, dns_response_handler);
-        dns_handler_registered = true;
+        uint64_t flags = dns_irq_save();
+        if (!dns_handler_registered)
+        {
+            udp_register_handler(dns_client_port, dns_response_handler);
+            dns_handler_registered = true;
+        }
+        dns_irq_restore(flags);
     }
     
     /* Send DNS query */
@@ -388,7 +479,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     {
         LOG_ERROR("DNS", "Failed to send DNS query");
         /* Remove from pending */
-        pending_queries = query->next;
+        dns_pending_remove(query);
         kfree(query);
         return 0;
     }
@@ -442,36 +533,34 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
          */
         if (current_time - last_poll_time >= poll_interval_ms)
         {
-            extern void net_poll(void);
             net_poll();
             last_poll_time = current_time;
         }
         
         /* Check if DNS response arrived */
-        if (query->resolved)
         {
-            ip4_addr_t result = query->result;
-            uint64_t rtt = current_time - start_time;
-            
-            LOG_INFO_FMT("DNS", "DNS resolution successful for %s (RTT: %d ms)", 
-                        domain_name, (int)rtt);
-            
-            /* Remove from pending */
-            if (pending_queries == query)
+            bool resolved_now = false;
+            ip4_addr_t resolved_ip = 0;
+            uint64_t flags = dns_irq_save();
+            if (query->resolved)
             {
-                pending_queries = query->next;
+                resolved_now = true;
+                resolved_ip = query->result;
+                dns_pending_remove_locked(query);
             }
-            else
+            dns_irq_restore(flags);
+
+            if (resolved_now)
             {
-                struct dns_query_state *prev = pending_queries;
-                while (prev && prev->next != query)
-                    prev = prev->next;
-                if (prev)
-                    prev->next = query->next;
+                uint64_t rtt = current_time - start_time;
+                
+                LOG_INFO_FMT("DNS", "DNS resolution successful for %s (RTT: %d ms)", 
+                            domain_name, (int)rtt);
+                
+                kfree(query);
+                
+                return resolved_ip;
             }
-            kfree(query);
-            
-            return result;
         }
         
         /* Small delay to prevent busy-waiting */
@@ -481,18 +570,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     LOG_WARNING_FMT("DNS", "DNS resolution timeout for %s", domain_name);
     
     /* Remove from pending */
-    if (pending_queries == query)
-    {
-        pending_queries = query->next;
-    }
-    else
-    {
-        struct dns_query_state *prev = pending_queries;
-        while (prev && prev->next != query)
-            prev = prev->next;
-        if (prev)
-            prev->next = query->next;
-    }
+    dns_pending_remove(query);
     kfree(query);
     
     return 0;

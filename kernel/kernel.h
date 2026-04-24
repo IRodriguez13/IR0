@@ -24,6 +24,7 @@ void keyboard_init(void);
 void simple_alloc_init(void);
 void ata_init(void);
 int vfs_init_with_minix(void);
+int vfs_init_root(void);
 void process_init(void);
 int clock_system_init(void);
 void syscalls_init(void);

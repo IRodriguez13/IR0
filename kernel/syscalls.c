@@ -18,14 +18,11 @@
 #include <ir0/utsname.h>
 #include <mm/pmm.h>
 #include <mm/allocator.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/clock.h>
 #include <config.h>
 #include <ir0/version.h>
-#include <drivers/serial/serial.h>
-#include <drivers/video/typewriter.h>
-#include <drivers/disk/partition.h>
-#include <drivers/storage/ata.h>
-#include <drivers/storage/fs_types.h>
+#include <ir0/serial_io.h>
+#include <ir0/console_backend.h>
 #include <fs/minix_fs.h>
 #include <kernel/elf_loader.h>
 #include <mm/paging.h>
@@ -33,7 +30,7 @@
 #include <ir0/validation.h>
 #include <ir0/vga.h>
 #include <ir0/stat.h>
-#include <kernel/rr_sched.h>
+#include <kernel/scheduler_api.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -43,8 +40,6 @@
 #include <fs/vfs.h>
 #include <ir0/path.h>
 #include <ir0/driver.h>
-#include <drivers/audio/sound_blaster.h>
-#include <drivers/IO/ps2_mouse.h>
 #include <ir0/errno.h>
 #include <ir0/copy_user.h>
 #include <ir0/permissions.h>
@@ -58,8 +53,8 @@
 #include <ir0/poll.h>
 #include <ir0/time.h>
 #include <interrupt/arch/idt.h>
-#include <drivers/video/vbe.h>
-#include <drivers/timer/rtc/rtc.h>
+#include <ir0/video_backend.h>
+#include <ir0/rtc.h>
 
 /* Pseudo file descriptor ranges (/proc, /dev, /sys) */
 #define FD_PROC_BASE  1000
@@ -214,16 +209,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
       return -EFAULT;
     str = kernel_buf;
     uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
-    /* Use typewriter VGA effect for console output */
-    for (size_t i = 0; i < copy_size; i++)
-    {
-      if (str[i] == '\n')
-        typewriter_vga_print("\n", color);
-      else
-      {
-        typewriter_vga_print_char(str[i], color);
-      }
-    }
+    console_backend_write(str, copy_size, color);
     return (int64_t)copy_size;
   }
 
@@ -311,7 +297,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
       fd_table[fd].offset = vfs_file->pos;
       return ret;
     }
-    return -EIO;
+    return ret;
   }
 
   return -EBADF;
@@ -380,12 +366,13 @@ int64_t sys_read(int fd, void *buf, size_t count)
     /* Read from keyboard buffer - NON-BLOCKING (shell polls in loop) */
     char kernel_read_buf[256];
     size_t bytes_read = 0;
+    size_t max_read = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
 
     if (!keyboard_buffer_has_data())
       return 0;
 
     /* Read available bytes (up to count) */
-    while (bytes_read < count && keyboard_buffer_has_data())
+    while (bytes_read < max_read && keyboard_buffer_has_data())
     {
       char c = keyboard_buffer_get();
       if (c != 0)
@@ -452,7 +439,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
       fd_table[fd].offset = vfs_file->pos;
       return ret;
     }
-    return -EIO;
+    return ret;
   }
 
   return -EBADF;
@@ -624,6 +611,8 @@ int64_t sys_exec(const char *pathname,
 
 int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
 {
+  const char *mount_fstype;
+
   if (!current_process)
     return -ESRCH;
 
@@ -641,38 +630,35 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   /* Validate device path */
   if (dev[0] != '/' || strlen(dev) >= 256) {
     sys_write(STDERR_FILENO, "mount: invalid device path\n", 26);
-    return -EFAULT;
+    return -EINVAL;
   }
 
   /* Validate mountpoint path */
   if (mountpoint[0] != '/' || strlen(mountpoint) >= 256) {
     sys_write(STDERR_FILENO, "mount: invalid mount point\n", 26);
-    return -EFAULT;
+    return -EINVAL;
   }
 
   /* Check if mountpoint exists and is a directory */
   stat_t st;
   if (vfs_stat(mountpoint, &st) < 0) {
     sys_write(STDERR_FILENO, "mount: mount point does not exist\n", 33);
-    return -EFAULT;
+    return -ENOENT;
   }
   if (!S_ISDIR(st.st_mode)) {
     sys_write(STDERR_FILENO, "mount: mount point is not a directory\n", 37);
-    return -EFAULT;
+    return -ENOTDIR;
   }
 
-  /* Use unified VFS mount; fstype may be NULL to autodetect */
-  int ret = vfs_mount(dev, mountpoint, fstype);
+  /* Use configured default filesystem if userspace passes NULL/empty fstype. */
+  mount_fstype = (fstype && *fstype) ? fstype : CONFIG_ROOT_FILESYSTEM;
+  int ret = vfs_mount(dev, mountpoint, mount_fstype);
   if (ret < 0) {
     /* Report specific error */
-    if (!fstype || !*fstype) {
-      sys_write(STDERR_FILENO, "mount: failed to autodetect filesystem type\n", 43);
-    } else {
-      sys_write(STDERR_FILENO, "mount: failed to mount ", 22);
-      sys_write(STDERR_FILENO, fstype, strlen(fstype));
-      sys_write(STDERR_FILENO, " filesystem\n", 12);
-    }
-    return -1;
+    sys_write(STDERR_FILENO, "mount: failed to mount ", 22);
+    sys_write(STDERR_FILENO, mount_fstype, strlen(mount_fstype));
+    sys_write(STDERR_FILENO, " filesystem\n", 12);
+    return ret;
   }
 
   return ret;
@@ -1118,7 +1104,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   current_process->poll_waiter = w;
 
   current_process->state = PROCESS_BLOCKED;
-  rr_schedule_next();
+  sched_schedule_next();
 
   /* Vuelta del scheduler: despertados por poll_wake_check */
   w = (struct poll_waiter *)current_process->poll_waiter;
@@ -1142,6 +1128,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
  */
 void poll_wake_check(void)
 {
+  process_t *saved_current = current_process;
   uint64_t now = clock_get_uptime_milliseconds();
   unsigned int i;
   for (i = 0; i < MAX_POLL_WAITERS; i++) {
@@ -1161,7 +1148,7 @@ void poll_wake_check(void)
       w->proc->state = PROCESS_READY;
     }
   }
-  current_process = NULL;
+  current_process = saved_current;
 }
 
 /**
@@ -1247,7 +1234,7 @@ int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem)
   w->wake_time_ms = now + ms;
 
   current_process->state = PROCESS_BLOCKED;
-  rr_schedule_next();
+  sched_schedule_next();
 
   /* Woken by sleep_wake_check */
   w->proc = NULL;
@@ -2135,6 +2122,7 @@ int64_t sys_brk(void *addr)
 #define PROT_READ 0x1
 #define PROT_WRITE 0x2
 #define PROT_EXEC 0x4
+#define SYSCALL_PTR_ERR(err) ((void *)(intptr_t)(-(err)))
 
 void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
@@ -2156,14 +2144,14 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   if (length == 0)
   {
     serial_print("SERIAL: mmap: zero length\n");
-    return (void *)-1;
+    return SYSCALL_PTR_ERR(EINVAL);
   }
 
   /* Validate protection flags */
   if ((prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
   {
     serial_print("SERIAL: mmap: invalid protection flags\n");
-    return (void *)-1;
+    return SYSCALL_PTR_ERR(EINVAL);
   }
 
   /* Validate offset alignment for file mappings */
@@ -2172,14 +2160,14 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     if (fd < 0)
     {
       serial_print("SERIAL: mmap: file mapping requires valid fd\n");
-      return (void *)-1;
+      return SYSCALL_PTR_ERR(EBADF);
     }
     
     /* Offset must be page-aligned for file mappings */
     if (offset % PAGE_SIZE_4KB != 0)
     {
       serial_print("SERIAL: mmap: offset must be page-aligned\n");
-      return (void *)-1;
+      return SYSCALL_PTR_ERR(EINVAL);
     }
     
     /*
@@ -2189,15 +2177,16 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
     {
       uint32_t device_id = (uint32_t)(fd - FD_DEV_BASE);
-      if (device_id == 15 && vbe_is_available())
+#if CONFIG_ENABLE_VBE
+      if (device_id == 15 && video_backend_is_available())
       {
-        uint32_t fb_phys = vbe_get_fb_phys();
-        uint32_t fb_size = vbe_get_fb_size();
+        uint32_t fb_phys = video_backend_get_fb_phys();
+        uint32_t fb_size = video_backend_get_fb_size();
         if (fb_phys == 0 || fb_size == 0)
-          return (void *)-1;
+          return SYSCALL_PTR_ERR(ENODEV);
 
         if (offset < 0 || (uint64_t)offset >= (uint64_t)fb_size)
-          return (void *)-1;
+          return SYSCALL_PTR_ERR(EINVAL);
 
         uint64_t off_u = (uint64_t)offset;
         uint64_t rem = (uint64_t)fb_size - off_u;
@@ -2207,19 +2196,19 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
           map_len = (size_t)rem;
         map_len = (map_len + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
         if (map_len == 0)
-          return (void *)-1;
+          return SYSCALL_PTR_ERR(EINVAL);
 
         uintptr_t virt_addr = 0;
         if (addr != NULL)
         {
           uintptr_t hint_addr = (uintptr_t)addr;
           if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
-            return (void *)-1;
+            return SYSCALL_PTR_ERR(EINVAL);
           if (!is_user_address(addr, map_len))
-            return (void *)-1;
+            return SYSCALL_PTR_ERR(EFAULT);
           int mapped = is_page_mapped_in_directory(current_process->page_directory, hint_addr, NULL);
           if (mapped == 1)
-            return (void *)-1;
+            return SYSCALL_PTR_ERR(EINVAL);
           virt_addr = hint_addr;
         }
         else
@@ -2248,7 +2237,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
             }
           }
           if (!found)
-            return (void *)-1;
+            return SYSCALL_PTR_ERR(ENOMEM);
         }
         
         uint64_t page_flags = PAGE_USER | PAGE_RW;
@@ -2261,7 +2250,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
             /* Rollback: unmap already mapped pages */
             for (size_t r = 0; r < off; r += PAGE_SIZE_4KB)
               unmap_page_in_directory(current_process->page_directory, virt_addr + r);
-            return (void *)-1;
+            return SYSCALL_PTR_ERR(ENOMEM);
           }
         }
         
@@ -2270,7 +2259,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         {
           for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
             unmap_page_in_directory(current_process->page_directory, virt_addr + off);
-          return (void *)-1;
+          return SYSCALL_PTR_ERR(ENOMEM);
         }
         region->addr = (void *)virt_addr;
         region->hint_addr = addr;
@@ -2281,11 +2270,14 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         current_process->mmap_list = region;
         return (void *)virt_addr;
       }
+#else
+      (void)device_id;
+#endif
     }
     
     /* File-based mapping not yet implemented for other files */
     serial_print("SERIAL: mmap: file-based mapping not yet implemented\n");
-    return (void *)-1;
+    return SYSCALL_PTR_ERR(ENOSYS);
   }
 
   /* Align length to page boundary */
@@ -2306,14 +2298,14 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
     {
       serial_print("SERIAL: mmap: address hint not page-aligned\n");
-      return (void *)-1;
+      return SYSCALL_PTR_ERR(EINVAL);
     }
     
     /* Check if hint is in valid userspace range */
     if (!is_user_address(addr, length))
     {
       serial_print("SERIAL: mmap: address hint not in userspace\n");
-      return (void *)-1;
+      return SYSCALL_PTR_ERR(EFAULT);
     }
     
     /* Check if address range is already mapped */
@@ -2321,7 +2313,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     if (mapped == 1)
     {
       serial_print("SERIAL: mmap: address range already mapped\n");
-      return (void *)-1;  /* Address already in use */
+      return SYSCALL_PTR_ERR(EINVAL);  /* Address already in use */
     }
     
     virt_addr = hint_addr;
@@ -2366,7 +2358,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     /* If we couldn't find space, return error */
     if (!found)
     {
-      return (void *)-1;
+      return SYSCALL_PTR_ERR(ENOMEM);
     }
   }
 
@@ -2383,7 +2375,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   if (map_user_region_in_directory(current_process->page_directory, virt_addr, length, page_flags) != 0)
   {
     serial_print("SERIAL: mmap: failed to map pages\n");
-    return (void *)-1;
+    return SYSCALL_PTR_ERR(ENOMEM);
   }
 
   /* Zero memory for anonymous mappings (as per POSIX)
@@ -2403,7 +2395,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     {
       unmap_page_in_directory(current_process->page_directory, page);
     }
-    return (void *)-1;
+    return SYSCALL_PTR_ERR(ENOMEM);
   }
 
   region->addr = (void *)virt_addr;
@@ -2422,7 +2414,7 @@ int sys_munmap(void *addr, size_t length)
   if (!current_process)
     return -ESRCH;
   if (!addr || length == 0)
-    return -1;
+    return -EINVAL;
 
   /* Validate address is in userspace */
   if (!is_user_address(addr, length))
@@ -2463,7 +2455,7 @@ int sys_munmap(void *addr, size_t length)
     current = current->next;
   }
 
-  return -1; /* Not found */
+  return -EINVAL; /* Not found */
 }
 
 int sys_mprotect(void *addr, size_t len, int prot)
@@ -2477,10 +2469,10 @@ int sys_mprotect(void *addr, size_t len, int prot)
   if (!current_process)
     return -ESRCH;
   if (!addr || len == 0)
-    return -1;
+    return -EINVAL;
 
   if ((prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
-    return -1;
+    return -EINVAL;
 
   if (!is_user_address(addr, len))
     return -EFAULT;
@@ -2519,7 +2511,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
 
         phys = *pte & PAGE_FRAME_MASK;
         if (map_page_in_directory(pml4, page, phys, map_flags) != 0)
-          return -1;
+          return -ENOMEM;
       }
 
       return 0;
@@ -2527,7 +2519,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
     current = current->next;
   }
 
-  return -1; /* Not found */
+  return -EINVAL; /* Not found */
 }
 
 /* ========================================================================== */
@@ -2546,7 +2538,7 @@ int64_t sys_chdir(const char *pathname)
   /* Validate path length */
   size_t len = strlen(pathname);
   if (len == 0 || len >= 256)
-    return -EFAULT;
+    return -EINVAL;
 
   /* Calculate new path */
   char new_path[256];
@@ -2554,11 +2546,11 @@ int64_t sys_chdir(const char *pathname)
   if (is_absolute_path(pathname)) {
     /* Absolute path - just normalize it */
     if (normalize_path(pathname, new_path, sizeof(new_path)) != 0)
-      return -EFAULT;
+      return -ENAMETOOLONG;
   } else {
     /* Relative path - join with current working directory */
     if (join_paths(current_process->cwd, pathname, new_path, sizeof(new_path)) != 0)
-      return -EFAULT;
+      return -ENAMETOOLONG;
   }
 
   /* Verify directory exists */
@@ -2566,7 +2558,7 @@ int64_t sys_chdir(const char *pathname)
   int64_t ret = vfs_stat(new_path, &st);
 
   if (ret < 0)
-    return -EFAULT;
+    return ret;
   if (!S_ISDIR(st.st_mode))
     return -ENOTDIR;
 
@@ -2892,7 +2884,7 @@ static int64_t wrap_sys_getppid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t 
 /* Console scroll: IR0 custom syscall */
 static int64_t wrap_console_scroll(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  typewriter_console_scroll((int)a1);
+  console_backend_scroll((int)a1);
   return 0;
 }
 

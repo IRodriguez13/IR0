@@ -22,22 +22,19 @@
 #include <init.h>
 #include <arch/common/arch_portable.h>
 #include <arch/x86-64/sources/user_mode.h>
-#include <rr_sched.h>
 #include <config.h>
 #include <ir0/version.h>
 #include <kernel/elf_loader.h>
 #include <drivers/timer/clock_system.h>
 #include <drivers/init_drv.h>
 #include <drivers/storage/block_dev.h>
-#if CONFIG_ENABLE_VBE
-#include <drivers/video/vbe.h>
-#endif
+#include <ir0/video_backend.h>
+#include <ir0/console_backend.h>
 #include <ir0/multiboot.h>
 #include "ipc.h"
 #include "syscalls.h"
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
-#include <drivers/net/rtl8139.h>
 #endif
 #if CONFIG_ENABLE_BLUETOOTH
 #include <drivers/bluetooth/bluetooth_init.h>
@@ -48,6 +45,9 @@
 
 void kmain(uint32_t multiboot_info)
 {
+#if !CONFIG_ENABLE_VBE
+    (void)multiboot_info;
+#endif
     /* Initialize architecture-specific early features (GDT, TSS, etc.) */
     arch_early_init();
 
@@ -59,25 +59,17 @@ void kmain(uint32_t multiboot_info)
      * that print() uses framebuffer when gfxpayload=1024x768x32 in grub.
      */
     {
-        extern void console_init(void);
-        extern void console_clear(uint8_t);
-        extern int console_use_framebuffer(void);
 #if CONFIG_ENABLE_VBE
-        extern int vbe_init_from_multiboot(uint32_t);
-        extern int vbe_init(void);
-        if (vbe_init_from_multiboot(multiboot_info) != 0)
-            vbe_init();  /* Fallback: VGA text mode for /dev/fb0 */
+        if (video_backend_init_from_multiboot(multiboot_info) != 0)
+            video_backend_init_fallback();  /* Fallback: VGA text mode for /dev/fb0 */
 #endif
-        console_init();
-        if (console_use_framebuffer())
-            console_clear(0x0F);  /* Black background, ready for text */
+        console_backend_init();
+        if (console_backend_uses_framebuffer())
+            console_backend_clear(0x0F);  /* Black background, ready for text */
     }
 
     /* Banner (now uses framebuffer if available) */
     print("IR0 Kernel v" IR0_VERSION_STRING " Boot routine\n");
-    
-    /* Initialize driver subsystem (includes driver registry and multi-language drivers) */
-    drivers_init();
     
     /*
      * Physical Memory Manager: manage frames in [32MB, 48MB).
@@ -95,20 +87,19 @@ void kmain(uint32_t multiboot_info)
      */
 #if CONFIG_ENABLE_VBE
     {
-        extern int console_use_framebuffer(void);
         uint32_t w = 0, h = 0, bpp = 0;
-        if (console_use_framebuffer() && vbe_get_info(&w, &h, &bpp))
+        if (console_backend_uses_framebuffer() && video_backend_get_info(&w, &h, &bpp))
         {
             log_info_fmt("BOOT", "Console: framebuffer %ux%ux%u", (unsigned)w, (unsigned)h, (unsigned)bpp);
         }
         else
         {
             serial_print("[BOOT] Console: VGA text (80x25)");
-            if (vbe_is_available())
+            if (video_backend_is_available())
                 serial_print(" [vbe fallback - may not be visible in graphics mode]");
             serial_print("\n");
             serial_print("[BOOT] vbe_fail_reason=");
-            serial_print_hex32((uint32_t)vbe_fail_reason);
+            serial_print_hex32((uint32_t)video_backend_fail_reason());
             serial_print(" (1=mb_null 2=no_fb 3=bad_dims 4=map_fail)\n");
             if (multiboot_info)
             {
@@ -138,19 +129,19 @@ void kmain(uint32_t multiboot_info)
     /* Initialize all hardware drivers */
     init_all_drivers();
 
-    /* Check block device availability before filesystem init */
-    if (!block_dev_is_present("hda"))
+    /* Check configured root block device availability before filesystem init */
+    if (!block_dev_is_present(CONFIG_ROOT_BLOCK_DEVICE))
     {
-        serial_print("[BOOT] WARNING: No block device hda detected\n");
+        serial_print("[BOOT] WARNING: Configured root block device not detected\n");
         serial_print("[BOOT] Filesystem initialization may fail\n");
     }
     else
     {
-        serial_print("[BOOT] Block device hda detected, proceeding with filesystem init\n");
+        serial_print("[BOOT] Configured root block device detected, proceeding with filesystem init\n");
     }
 
     /* Initialize filesystem */
-    vfs_init_with_minix();
+    vfs_init_root();
     log_subsystem_ok("FILESYSTEM");
 
     /* Initialize process management */
@@ -180,15 +171,14 @@ void kmain(uint32_t multiboot_info)
      * IRQ2 (cascade) is required for any slave PIC line (8-15) to work.
      */
     {
-        extern void pic_unmask_irq(uint8_t irq);
         pic_unmask_irq(0);   /* Timer (PIT) */
         pic_unmask_irq(1);   /* Keyboard */
         pic_unmask_irq(2);   /* Cascade — required for slave IRQs 8-15 */
 #if CONFIG_ENABLE_NETWORKING
         {
-            int rtl_irq = rtl8139_get_irq_line();
-            if (rtl_irq >= 0 && rtl_irq < 16)
-                pic_unmask_irq((uint8_t)rtl_irq);
+            int net_irq = net_stack_get_irq_line();
+            if (net_irq >= 0 && net_irq < 16)
+                pic_unmask_irq((uint8_t)net_irq);
         }
 #endif
 #if CONFIG_ENABLE_MOUSE
@@ -233,7 +223,7 @@ void kmain(uint32_t multiboot_info)
     for (;;)
     {
 #if CONFIG_ENABLE_NETWORKING
-        net_poll();
+        net_stack_poll();
 #endif
 #if CONFIG_ENABLE_BLUETOOTH
         bluetooth_poll();

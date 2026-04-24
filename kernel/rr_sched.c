@@ -27,14 +27,42 @@
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
+#include <arch/common/arch_portable.h>
 #include <arch/x86-64/sources/user_mode.h>
 #include <ir0/signals.h>
 #include <ir0/context.h>
+#include <stdint.h>
 
 /* Scheduler state - circular queue of runnable processes */
 static rr_task_t *rr_head = NULL;   /* Head of circular queue (first to run) */
 static rr_task_t *rr_tail = NULL;   /* Tail of circular queue (last to run) */
 static rr_task_t *rr_current = NULL; /* Currently running process in queue */
+
+/*
+ * UP scheduler critical sections:
+ * serialize scheduler queue mutations against timer IRQ scheduling.
+ */
+static inline uint64_t rr_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint64_t flags;
+	__asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+	return flags;
+#else
+	arch_disable_interrupts();
+	return 0;
+#endif
+}
+
+static inline void rr_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	__asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+	(void)flags;
+	arch_enable_interrupts();
+#endif
+}
 
 /**
  * rr_add_process - Add a process to the round-robin scheduler
@@ -57,7 +85,9 @@ static rr_task_t *rr_current = NULL; /* Currently running process in queue */
  */
 void rr_add_process(process_t *proc)
 {
+	rr_task_t *scan;
 	rr_task_t *node;
+	uint64_t irq_flags;
 
 	/* Sanity check - prevent adding NULL processes.
 	 * This is a defensive check for API misuse.
@@ -84,11 +114,25 @@ void rr_add_process(process_t *proc)
 	node->process = proc;
 	node->next = NULL;
 
+	irq_flags = rr_irq_save();
+
 	/* Insert into circular queue.
 	 * If queue is empty, initialize head and tail to point to new node.
 	 * Otherwise, append to tail and update tail pointer.
 	 * This maintains FIFO order for fair scheduling.
 	 */
+	for (scan = rr_head; scan; scan = scan->next)
+	{
+		if (scan->process == proc)
+		{
+			/* Process already queued: only ensure READY state. */
+			proc->state = PROCESS_READY;
+			rr_irq_restore(irq_flags);
+			kfree(node);
+			return;
+		}
+	}
+
 	if (!rr_head)
 	{
 		/* First process - initialize queue */
@@ -105,6 +149,7 @@ void rr_add_process(process_t *proc)
 	 * State machine: NEW -> READY -> RUNNING -> READY -> ...
 	 */
 	proc->state = PROCESS_READY;
+	rr_irq_restore(irq_flags);
 }
 
 /**
@@ -130,9 +175,12 @@ void rr_remove_process(process_t *proc)
 {
 	rr_task_t *current;
 	rr_task_t *prev;
+	uint64_t irq_flags;
 	
 	if (!proc)
 		return;
+
+	irq_flags = rr_irq_save();
 	
 	/* Find the scheduler node containing this process */
 	current = rr_head;
@@ -170,6 +218,7 @@ void rr_remove_process(process_t *proc)
 			
 			/* Free scheduler node */
 			kfree(current);
+			rr_irq_restore(irq_flags);
 			return;
 		}
 		
@@ -180,6 +229,8 @@ void rr_remove_process(process_t *proc)
 		if (current == rr_head)
 			break;
 	}
+
+	rr_irq_restore(irq_flags);
 }
 
 /**
@@ -216,13 +267,17 @@ void rr_schedule_next(void)
 {
 	static int first = 1;  /* Track first context switch (kernel->user) */
 	process_t *prev;        /* Process being switched away from */
-	process_t *next;        /* Process being switched to */
+	process_t *next = NULL; /* Process being switched to */
+	uint64_t irq_flags = rr_irq_save();
 
 	/* Early exit if no processes to schedule.
 	 * This can happen during boot before any processes are created.
 	 */
 	if (!rr_head)
+	{
+		rr_irq_restore(irq_flags);
 		return;
+	}
 
 	/* Save reference to current process for state update.
 	 * This is the process we're switching away from.
@@ -269,6 +324,7 @@ void rr_schedule_next(void)
 		 * Keep current_process unchanged and return to the interrupted context;
 		 * the main idle loop is responsible for HLT in a safe context.
 		 */
+		rr_irq_restore(irq_flags);
 		return;
 	}
 
@@ -276,7 +332,10 @@ void rr_schedule_next(void)
 
 	/* Defensive check - should never happen due to BUG_ON above */
 	if (!next)
+	{
+		rr_irq_restore(irq_flags);
 		return;
+	}
 
 	/* Optimization: avoid context switch if same process selected.
 	 * This can happen if only one process is runnable or if the
@@ -284,7 +343,10 @@ void rr_schedule_next(void)
 	 * Context switches are expensive, so we optimize this common case.
 	 */
 	if (!first && prev == next)
+	{
+		rr_irq_restore(irq_flags);
 		return;
+	}
 
 	/* Update process state machine.
 	 * Previous process: RUNNING -> READY (now eligible for scheduling again)
@@ -363,4 +425,6 @@ void rr_schedule_next(void)
 		 */
 		switch_context_x64(&prev->task, &next->task);
 	}
+
+	rr_irq_restore(irq_flags);
 }

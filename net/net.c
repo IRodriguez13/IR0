@@ -39,7 +39,6 @@
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
-#include <drivers/net/rtl8139.h>
 #include <string.h>
 
 /* Global device and protocol lists. These linked lists maintain all registered
@@ -568,7 +567,13 @@ int init_net_stack(void)
      * and set up interrupt handlers. If hardware isn't present, drivers
      * gracefully return without registering devices.
      */
-    rtl8139_init();
+    {
+        extern int net_stack_probe_drivers(void) __attribute__((weak));
+        if (net_stack_probe_drivers && net_stack_probe_drivers() != 0)
+        {
+            LOG_WARNING("NET", "Some network drivers failed to probe");
+        }
+    }
     
     /* Initialize network protocols in dependency order. ARP must come before
      * IP because IP uses ARP to resolve MAC addresses. IP must come before
@@ -622,7 +627,74 @@ int init_net_stack(void)
  */
 void net_poll(void)
 {
-    /* Poll RTL8139 driver for incoming packets */
-    extern void rtl8139_poll(void);
-    rtl8139_poll();
+    struct net_device *dev = devices;
+    while (dev)
+    {
+        if (dev->poll)
+            dev->poll(dev);
+        dev = dev->next;
+    }
+}
+
+void net_stack_poll(void)
+{
+    net_poll();
+}
+
+int net_stack_get_irq_line(void)
+{
+    struct net_device *dev = devices;
+    while (dev)
+    {
+        if (dev->get_irq_line)
+        {
+            int irq = dev->get_irq_line(dev);
+            if (irq >= 0)
+                return irq;
+        }
+        dev = dev->next;
+    }
+    return -1;
+}
+
+int net_stack_handle_irq(uint8_t irq)
+{
+    int handled = 0;
+    struct net_device *dev = devices;
+    while (dev)
+    {
+        if (dev->handle_irq && dev->handle_irq(dev, irq) > 0)
+            handled = 1;
+        dev = dev->next;
+    }
+    return handled;
+}
+
+void net_stack_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
+                         uint64_t *rx_errs, uint64_t *tx_errs)
+{
+    uint64_t rx_total = 0;
+    uint64_t tx_total = 0;
+    uint64_t rx_err_total = 0;
+    uint64_t tx_err_total = 0;
+    struct net_device *dev = devices;
+
+    while (dev)
+    {
+        if (dev->get_stats)
+        {
+            uint64_t drx = 0, dtx = 0, drxe = 0, dtxe = 0;
+            dev->get_stats(dev, &drx, &dtx, &drxe, &dtxe);
+            rx_total += drx;
+            tx_total += dtx;
+            rx_err_total += drxe;
+            tx_err_total += dtxe;
+        }
+        dev = dev->next;
+    }
+
+    if (rx_pkts) *rx_pkts = rx_total;
+    if (tx_pkts) *tx_pkts = tx_total;
+    if (rx_errs) *rx_errs = rx_err_total;
+    if (tx_errs) *tx_errs = tx_err_total;
 }

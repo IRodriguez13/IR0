@@ -10,10 +10,49 @@
 #include <ir0/oops.h>
 #include <ir0/logging.h>
 #include <string.h>
-#include <kernel/rr_sched.h>
+#include <kernel/scheduler_api.h>
+#include <arch/common/arch_portable.h>
 
 static ipc_channel_t *ipc_channels = NULL;  /* Linked list of all channels */
 static uint32_t next_channel_id = 1;
+
+static inline uint64_t ipc_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint64_t flags;
+    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+#else
+    arch_disable_interrupts();
+    return 0;
+#endif
+}
+
+static inline void ipc_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+    (void)flags;
+    arch_enable_interrupts();
+#endif
+}
+
+static bool wait_queue_contains(wait_queue_t *wq, process_t *proc)
+{
+    wait_queue_node_t *curr;
+
+    if (!wq || !proc)
+        return false;
+
+    curr = wq->head;
+    while (curr) {
+        if (curr->process == proc)
+            return true;
+        curr = curr->next;
+    }
+    return false;
+}
 
 
 
@@ -25,6 +64,8 @@ void wait_queue_init(wait_queue_t *wq)
 
 void wait_queue_add(wait_queue_t *wq, process_t *proc)
 {
+    uint64_t irq_flags;
+
     if (!wq || !proc)
         return;
 
@@ -34,6 +75,13 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
 
     node->process = proc;
     node->next = NULL;
+
+    irq_flags = ipc_irq_save();
+    if (wait_queue_contains(wq, proc)) {
+        ipc_irq_restore(irq_flags);
+        kfree(node);
+        return;
+    }
 
     if (!wq->head) {
         wq->head = node;
@@ -45,13 +93,17 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
 
     /* Mark process as blocked */
     proc->state = PROCESS_BLOCKED;
+    ipc_irq_restore(irq_flags);
 }
 
 process_t *wait_queue_wake_one(wait_queue_t *wq)
 {
+    uint64_t irq_flags;
+
     if (!wq || !wq->head)
         return NULL;
 
+    irq_flags = ipc_irq_save();
     wait_queue_node_t *node = wq->head;
     wq->head = node->next;
     
@@ -62,28 +114,37 @@ process_t *wait_queue_wake_one(wait_queue_t *wq)
     kfree(node);
 
     /* Mark process as ready to run */
-    if (proc)
+    if (proc) {
         proc->state = PROCESS_READY;
+        sched_add_process(proc);
+    }
 
+    ipc_irq_restore(irq_flags);
     return proc;
 }
 
 void wait_queue_wake_all(wait_queue_t *wq)
 {
+    uint64_t irq_flags;
+
     if (!wq)
         return;
 
+    irq_flags = ipc_irq_save();
     while (wq->head) {
         wait_queue_node_t *node = wq->head;
         wq->head = node->next;
 
-        if (node->process)
+        if (node->process) {
             node->process->state = PROCESS_READY;
+            sched_add_process(node->process);
+        }
 
         kfree(node);
     }
 
     wq->tail = NULL;
+    ipc_irq_restore(irq_flags);
 }
 
 void semaphore_init(semaphore_t *sem, int initial_count)
@@ -103,11 +164,7 @@ void semaphore_up(semaphore_t *sem)
     sem->count++;
 
     /* Wake up one waiting process */
-    process_t *woken = wait_queue_wake_one(&sem->wait_queue);
-    if (woken) {
-        /* Add to scheduler if not already there */
-        rr_add_process(woken);
-    }
+    wait_queue_wake_one(&sem->wait_queue);
 }
 
 
@@ -383,7 +440,7 @@ ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)
     while (ring_buffer_empty(&channel->rb)) {
         wait_queue_add(&channel->read_queue, current_process);
         
-        rr_schedule_next();
+        sched_schedule_next();
         
         /* Check if we were woken up with data */
         if (!ring_buffer_empty(&channel->rb))
@@ -419,7 +476,7 @@ ssize_t ipc_channel_write(ipc_channel_t *channel, const void *buf, size_t count)
     while (ring_buffer_full(&channel->rb)) {
         wait_queue_add(&channel->write_queue, current_process);
         
-        rr_schedule_next();
+        sched_schedule_next();
         
         /* Check if we were woken up with space */
         if (!ring_buffer_full(&channel->rb))

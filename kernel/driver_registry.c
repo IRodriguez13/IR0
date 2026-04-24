@@ -16,7 +16,7 @@
 #include <ir0/logging.h>
 #include <ir0/validation.h>
 #include <string.h>
-#include <drivers/serial/serial.h>
+#include <stdbool.h>
 
 /* Maximum number of drivers (can be made dynamic) */
 #define MAX_DRIVERS 128
@@ -27,6 +27,10 @@ struct ir0_driver {
     ir0_driver_ops_t ops;
     ir0_driver_state_t state;
     void* private_data;             // Driver-specific data
+    bool owns_name;
+    bool owns_version;
+    bool owns_author;
+    bool owns_description;
     struct ir0_driver* next;        // Linked list
 };
 
@@ -61,6 +65,27 @@ static const char* state_to_string(ir0_driver_state_t state)
         case IR0_DRIVER_STATE_FAILED:       return "Failed";
         default:                            return "Unknown";
     }
+}
+
+static char *dup_driver_field(const char *src, bool *owned_out)
+{
+    size_t len;
+    char *copy;
+
+    if (!owned_out)
+        return NULL;
+
+    *owned_out = false;
+    if (!src)
+        return NULL;
+
+    len = strlen(src) + 1;
+    copy = (char *)kmalloc(len);
+    if (!copy)
+        return NULL;
+    memcpy(copy, src, len);
+    *owned_out = true;
+    return copy;
 }
 
 static int validate_driver_info(const ir0_driver_info_t* info)
@@ -182,66 +207,31 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
         return NULL;
     }
     
-    /* Allocate and copy driver name (persistent storage) */
-    size_t name_len = strlen(info->name) + 1;
-    char* name_copy = (char*)kmalloc(name_len);
-    
-    if (!name_copy) 
+    /* Allocate and copy persistent string fields */
+    char* name_copy = dup_driver_field(info->name, &driver->owns_name);
+    char* version_copy = dup_driver_field(info->version ? info->version : "1.0",
+                                          &driver->owns_version);
+    char* author_copy = dup_driver_field(info->author ? info->author : "Unknown",
+                                         &driver->owns_author);
+    char* desc_copy = dup_driver_field(info->description ? info->description : "",
+                                       &driver->owns_description);
+
+    if (!name_copy || !version_copy || !author_copy || !desc_copy)
     {
+        if (driver->owns_name && name_copy) kfree(name_copy);
+        if (driver->owns_version && version_copy) kfree(version_copy);
+        if (driver->owns_author && author_copy) kfree(author_copy);
+        if (driver->owns_description && desc_copy) kfree(desc_copy);
         kfree(driver);
-        LOG_ERROR("DriverRegistry", "Failed to allocate memory for driver name");
+        LOG_ERROR("DriverRegistry", "Failed to allocate memory for driver metadata");
         return NULL;
-    }
-    
-    memcpy(name_copy, info->name, name_len);
-    
-    /* Copy version if provided */
-    char* version_copy = NULL;
-    
-    if (info->version) 
-    {
-        size_t version_len = strlen(info->version) + 1;
-        version_copy = (char*)kmalloc(version_len);
-    
-        if (version_copy) 
-        {
-            memcpy(version_copy, info->version, version_len);
-        }
-    }
-    
-    /* Copy author if provided */
-    char* author_copy = NULL;
-    
-    if (info->author) 
-    {
-        size_t author_len = strlen(info->author) + 1;
-        author_copy = (char*)kmalloc(author_len);
-    
-        if (author_copy) 
-        {
-            memcpy(author_copy, info->author, author_len);
-        }
-    }
-    
-    /* Copy description if provided */
-    char* desc_copy = NULL;
-    
-    if (info->description) 
-    {
-        size_t desc_len = strlen(info->description) + 1;
-        desc_copy = (char*)kmalloc(desc_len);
-     
-        if (desc_copy) 
-        {
-            memcpy(desc_copy, info->description, desc_len);
-        }
     }
     
     /* Initialize driver structure */
     driver->info.name = name_copy;
-    driver->info.version = version_copy ? version_copy : "1.0";
-    driver->info.author = author_copy ? author_copy : "Unknown";
-    driver->info.description = desc_copy ? desc_copy : "";
+    driver->info.version = version_copy;
+    driver->info.author = author_copy;
+    driver->info.description = desc_copy;
     driver->info.language = info->language;
     driver->ops = *ops;
     driver->state = IR0_DRIVER_STATE_REGISTERED;
@@ -312,20 +302,10 @@ int32_t ir0_unregister_driver(ir0_driver_t* driver)
             }
             
             /* Free allocated memory */
-            if (driver->info.name) kfree((void*)driver->info.name);
-            
-            if (driver->info.version && strcmp(driver->info.version, "1.0") != 0) 
-            {
-                kfree((void*)driver->info.version);
-            }
-            if (driver->info.author && strcmp(driver->info.author, "Unknown") != 0) 
-            {
-                kfree((void*)driver->info.author);
-            }
-            if (driver->info.description && strlen(driver->info.description) > 0) 
-            {
-                kfree((void*)driver->info.description);
-            }
+            if (driver->owns_name && driver->info.name) kfree((void*)driver->info.name);
+            if (driver->owns_version && driver->info.version) kfree((void*)driver->info.version);
+            if (driver->owns_author && driver->info.author) kfree((void*)driver->info.author);
+            if (driver->owns_description && driver->info.description) kfree((void*)driver->info.description);
             kfree(driver);
             
             driver_registry.count--;

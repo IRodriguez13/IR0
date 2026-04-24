@@ -11,7 +11,7 @@
 #include "process.h"
 #include <config.h>
 #include "debug_bins/dbgshell.h"
-#include "rr_sched.h"
+#include "scheduler_api.h"
 #include <drivers/video/typewriter.h>
 #include <ir0/kmem.h>
 #include <mm/paging.h>
@@ -39,6 +39,7 @@ void init_1(void)
 int start_init_process(void)
 {
 	process_t *init;
+	int have_identity_low_map = 0;
 
 	init = kmalloc(sizeof(process_t));
 	if (!init)
@@ -84,17 +85,29 @@ int start_init_process(void)
 		uint64_t *cur_pml4 = (uint64_t *)get_current_page_directory();
 
 		if (cur_pml4 && (cur_pml4[0] & PAGE_PRESENT))
+		{
 			new_pml4[0] = cur_pml4[0];
+			have_identity_low_map = 1;
+		}
 	}
 
-	/* Map explicit 4KB pages as a fallback if identity mapping is absent. */
-	for (uint64_t off = 0; off < USER_STACK_SIZE; off += 0x1000)
+	/*
+	 * Map explicit 4KB pages only if low identity mapping was not inherited.
+	 * If PML4[0] exists, low memory may be mapped with 2MB huge pages and
+	 * forcing 4KB mappings can fail even though the mapping is valid.
+	 */
+	if (!have_identity_low_map)
 	{
-		uint64_t va = INIT_DEBUG_STACK_BASE + off;
-		if (map_page_in_directory((uint64_t *)init->task.cr3, va, va,
-					  PAGE_PRESENT | PAGE_RW) != 0)
+		for (uint64_t off = 0; off < USER_STACK_SIZE; off += 0x1000)
 		{
-			break;
+			uint64_t va = INIT_DEBUG_STACK_BASE + off;
+			if (map_page_in_directory((uint64_t *)init->task.cr3, va, va,
+						  PAGE_PRESENT | PAGE_RW) != 0)
+			{
+				kfree_aligned((void *)init->task.cr3);
+				kfree(init);
+				return -1;
+			}
 		}
 	}
 
@@ -125,8 +138,8 @@ int start_init_process(void)
 	process_init_fd_table(init);
 
 	/* Add to scheduler and start */
-	rr_add_process(init);
-	rr_schedule_next();
+	sched_add_process(init);
+	sched_schedule_next();
 
 	return 0;
 }
