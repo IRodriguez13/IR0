@@ -1,3 +1,16 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2025  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: syscalls.c
+ * Description: IR0 kernel source/header file
+ */
+
 // SPDX-License-Identifier: GPL-3.0-only
 /**
  * IR0 Kernel — Core system software
@@ -2895,6 +2908,17 @@ static int64_t wrap_console_clear(uint64_t a1, uint64_t a2, uint64_t a3, uint64_
   return 0;
 }
 
+/* Keyboard layout set/get: IR0 custom syscalls */
+static int64_t wrap_keymap_set(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
+  return keyboard_set_layout((int)a1);
+}
+
+static int64_t wrap_keymap_get(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
+  return keyboard_get_layout();
+}
+
 /* Syscall table: Linux x86-64 numbers -> handlers */
 static syscall_handler_t syscall_table_rw[__NR_syscall_max];
 
@@ -2947,6 +2971,8 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit;
   syscall_table_rw[__NR_console_scroll]  = wrap_console_scroll;
   syscall_table_rw[__NR_console_clear]   = wrap_console_clear;
+  syscall_table_rw[__NR_keymap_set]      = wrap_keymap_set;
+  syscall_table_rw[__NR_keymap_get]      = wrap_keymap_get;
 
 }
 

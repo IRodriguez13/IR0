@@ -103,6 +103,15 @@ menu "Input"
         help
           Compile the PS/2 mouse driver. The PS/2 keyboard is always built.
 
+    config KEYBOARD_LAYOUT
+        int "Keyboard layout (0=us,1=latam)"
+        range 0 1
+        default 0
+        help
+          Default keyboard layout used by the PS/2 keyboard driver.
+          0 = us
+          1 = latam
+
 endmenu
 
 menu "Storage"

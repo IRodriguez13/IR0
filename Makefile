@@ -229,6 +229,7 @@ KERNEL_OBJS = \
     debug_bins/cmd_free.o \
     debug_bins/cmd_uptime.o \
     debug_bins/cmd_date.o \
+    debug_bins/cmd_keymap.o \
     debug_bins/cmd_lshw.o \
     debug_bins/cmd_blue.o
 
