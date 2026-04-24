@@ -19,7 +19,8 @@
  * Remove file or directory (OSDev-style, syscalls only).
  * - rm FILE: unlink file
  * - rm DIR: rmdir empty dir (POSIX)
- * - rm -d DIR: remove dir and contents (userspace recursive, like POSIX rm -r)
+ * - rm -d DIR: remove empty directory only (POSIX)
+ * - rm -r DIR: remove directory recursively (userspace traversal)
  * - Blocks rm / and rm -d / for safety
  *
  * OSDev approach: kernel only provides unlink + rmdir(empty). Recursive
@@ -164,10 +165,18 @@ static int rm_recursive_impl(const char *path, int depth)
         while (offset < (size_t)bytes_read)
         {
             struct linux_dirent64 *dent = (struct linux_dirent64 *)(dirent_buf + offset);
+            size_t reclen = (size_t)dent->d_reclen;
+
+            if (reclen < sizeof(struct linux_dirent64) || offset + reclen > (size_t)bytes_read)
+            {
+                ret = -EIO;
+                break;
+            }
+
             if (dent->d_name[0] == '.' &&
                 (dent->d_name[1] == '\0' || (dent->d_name[1] == '.' && dent->d_name[2] == '\0')))
             {
-                offset += dent->d_reclen;
+                offset += reclen;
                 continue;
             }
 
@@ -179,13 +188,13 @@ static int rm_recursive_impl(const char *path, int depth)
                 len = snprintf(full_path, sizeof(full_path), "%s/%s", path, dent->d_name);
             if (len <= 0 || len >= (int)sizeof(full_path))
             {
-                offset += dent->d_reclen;
+                offset += reclen;
                 continue;
             }
 
             if (ir0_stat(full_path, &st) < 0)
             {
-                offset += dent->d_reclen;
+                offset += reclen;
                 continue;
             }
             if (S_ISDIR(st.st_mode))
@@ -194,7 +203,7 @@ static int rm_recursive_impl(const char *path, int depth)
                 ret = ir0_unlink(full_path);
             if (ret < 0)
                 break;
-            offset += dent->d_reclen;
+            offset += reclen;
         }
         if (ret < 0)
             break;
@@ -214,93 +223,125 @@ static int cmd_rm_handler(int argc, char **argv)
         return 1;
     }
 
-    int force_dir = 0;  /* -d/-r: remove dir recursively if needed */
-    const char *path = NULL;
+    int remove_empty_dir = 0;
+    int recursive = 0;
+    const char *targets[64];
+    int target_count = 0;
 
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "-r") == 0)
-            force_dir = 1;
+        {
+            if (strcmp(argv[i], "-d") == 0)
+                remove_empty_dir = 1;
+            else
+                recursive = 1;
+        }
+        else if (argv[i][0] == '-')
+        {
+            debug_write_err("rm: unknown option\n");
+            debug_serial_fail("rm", "usage");
+            return 1;
+        }
         else if (argv[i][0] != '-')
-            path = argv[i];
+        {
+            if (target_count < (int)(sizeof(targets) / sizeof(targets[0])))
+                targets[target_count++] = argv[i];
+        }
     }
 
-    if (!path)
+    if (target_count == 0)
     {
         debug_write_err("Usage: rm [-d|-r] <file|dir>\n");
         debug_serial_fail("rm", "usage");
         return 1;
     }
 
-    char normalized_path[512];
-    rm_normalize_path(path, normalized_path, sizeof(normalized_path));
-    const char *target = normalized_path[0] ? normalized_path : path;
-
-    if (target[0] == '/' && (target[1] == '\0' || (target[1] == '.' && target[2] == '\0')))
+    int had_error = 0;
+    for (int t = 0; t < target_count; t++)
     {
-        debug_write_err("rm: cannot remove root directory\n");
-        debug_serial_fail("rm", "root");
-        return 1;
-    }
+        const char *path = targets[t];
+        char normalized_path[512];
+        rm_normalize_path(path, normalized_path, sizeof(normalized_path));
+        const char *target = normalized_path[0] ? normalized_path : path;
 
-    int64_t result;
-    stat_t st;
-    int st_ok = (ir0_stat(target, &st) == 0);
+        if (target[0] == '/' && (target[1] == '\0' || (target[1] == '.' && target[2] == '\0')))
+        {
+            debug_write_err("rm: cannot remove root directory\n");
+            debug_serial_fail("rm", "root");
+            had_error = 1;
+            continue;
+        }
 
-    if (force_dir)
-    {
-        if (st_ok && !S_ISDIR(st.st_mode))
+        int64_t result;
+        stat_t st;
+        int st_ok = (ir0_stat(target, &st) == 0);
+
+        if (recursive)
+        {
+            if (st_ok && !S_ISDIR(st.st_mode))
+            {
+                result = ir0_unlink(target);
+            }
+            else
+            {
+                result = ir0_rmdir(target);
+                if (result == -ENOTEMPTY)
+                    result = rm_recursive_impl(target, 0);
+            }
+        }
+        else if (remove_empty_dir)
+        {
+            if (st_ok && !S_ISDIR(st.st_mode))
+                result = -ENOTDIR;
+            else
+                result = ir0_rmdir(target);
+        }
+        else if (st_ok && S_ISDIR(st.st_mode))
+        {
+            result = ir0_rmdir(target);
+        }
+        else
         {
             result = ir0_unlink(target);
+            if (result < 0)
+                result = ir0_rmdir(target);
         }
-        else
-        {
-            /*
-             * Fast path for empty directories: matches user expectation for
-             * rm -d and avoids getdents traversal when not needed.
-             */
-            result = ir0_rmdir(target);
-            if (result == -ENOTEMPTY)
-                result = rm_recursive_impl(target, 0);
-        }
-    }
-    else if (st_ok && S_ISDIR(st.st_mode))
-        result = ir0_rmdir(target);
-    else
-    {
-        result = ir0_unlink(target);
+
         if (result < 0)
-            result = ir0_rmdir(target);
-    }
-
-    if (result < 0)
-    {
-        debug_perror("rm", target, (int)result);
-        if (st_ok)
-            rm_debug_log_stat_line("stat@antes", target, &st);
-        rm_debug_log_stat_refresh("stat@despues", target);
-        if (result == -ENOTDIR && st_ok && S_ISDIR(st.st_mode))
         {
-            debug_serial_raw(
-                "[DBG] rm: diag stat decia directorio pero rmdir devolvio ENOTDIR (revisar MINIX/VFS)\n");
+            debug_perror("rm", target, (int)result);
+            if (st_ok)
+            rm_debug_log_stat_line("stat@before", target, &st);
+        rm_debug_log_stat_refresh("stat@after", target);
+            if (result == -ENOTDIR && st_ok && S_ISDIR(st.st_mode))
+            {
+                debug_serial_raw(
+                "[DBG] rm: diag stat reported directory but rmdir returned ENOTDIR (check MINIX/VFS)\n");
+            }
+            if (result == -ENOTEMPTY)
+                debug_write_err("Hint: Use 'rm -r DIR' for non-empty directory\n");
+            debug_serial_fail_err("rm", "remove", (int)(-result));
+            had_error = 1;
+            continue;
         }
-        if (result == -ENOTEMPTY)
-            debug_write_err("Hint: Use 'rm -d DIR' or 'rm -r DIR' for non-empty directory\n");
-        debug_serial_fail_err("rm", "remove", (int)(-result));
+
+        {
+            char msg[576];
+            int n;
+
+            if (recursive)
+                n = snprintf(msg, sizeof(msg), "rm: removed '%s' and contents\n", target);
+            else
+                n = snprintf(msg, sizeof(msg), "rm: removed '%s'\n", target);
+            if (n > 0 && n < (int)sizeof(msg))
+                debug_write(msg);
+        }
+    }
+
+    if (had_error)
         return 1;
-    }
 
-    {
-        char msg[576];
-        int n;
-
-        if (force_dir)
-            n = snprintf(msg, sizeof(msg), "rm: removed '%s' and contents\n", target);
-        else
-            n = snprintf(msg, sizeof(msg), "rm: removed '%s'\n", target);
-        if (n > 0 && n < (int)sizeof(msg))
-            debug_write(msg);
-    }
     debug_serial_ok("rm");
     return 0;
 }
@@ -308,7 +349,7 @@ static int cmd_rm_handler(int argc, char **argv)
 struct debug_command cmd_rm = {
     .name = "rm",
     .handler = cmd_rm_handler,
-    .usage = "rm [-d|-r] FILE",
-    .description = "Remove file or directory (-d/-r: recursive dir delete)",
+    .usage = "rm [-d|-r] FILE...",
+    .description = "Remove files; -d empty dir, -r recursive dir delete",
     .flags = rm_flags
 };

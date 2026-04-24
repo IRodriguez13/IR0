@@ -180,6 +180,19 @@ static int validate_userspace_buffer(const void *buf, size_t size)
   return 0;
 }
 
+static int stdio_is_redirected(fd_entry_t *fd_table, int fd)
+{
+  if (!fd_table || fd < STDIN_FILENO || fd > STDERR_FILENO)
+    return 0;
+  if (!fd_table[fd].in_use)
+    return 0;
+  if (fd_table[fd].is_pipe)
+    return 1;
+  if (fd_table[fd].vfs_file)
+    return 1;
+  return 0;
+}
+
 
 int64_t sys_exit(int exit_code)
 {
@@ -214,17 +227,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   const char *str = NULL;
   size_t copy_size = (count < sizeof(kernel_buf)) ? count : sizeof(kernel_buf);
   
-  if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
-  {
-    /* For console, copy from user space */
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    str = kernel_buf;
-    uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
-    console_backend_write(str, copy_size, color);
-    return (int64_t)copy_size;
-  }
-
   /* Handle /proc file descriptors (FD_PROC_BASE .. FD_DEV_BASE) */
   if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
   {
@@ -260,7 +262,21 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 
   /* Handle regular file descriptors */
   fd_entry_t *fd_table = get_process_fd_table();
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+  if (fd >= STDIN_FILENO && fd <= STDERR_FILENO && !stdio_is_redirected(fd_table, fd))
+  {
+    if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
+    {
+      /* Unredirected stdio still goes to console backend. */
+      if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+        return -EFAULT;
+      str = kernel_buf;
+      uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
+      console_backend_write(str, copy_size, color);
+      return (int64_t)copy_size;
+    }
+    return -EBADF;
+  }
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
 
   /* Check if this is a pipe */
@@ -281,13 +297,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 
     /* Write to pipe */
     int ret = pipe_write(pipe, kernel_buf, copy_size);
-    if (ret >= 0)
-    {
-      return ret;
-    }
-    /* If pipe is full, return EPIPE or partial write */
-    if (ret == -1)
-      return -EPIPE; /* Broken pipe or full */
     return ret;
   }
 
@@ -373,9 +382,14 @@ int64_t sys_read(int fd, void *buf, size_t count)
     return ret;
   }
 
-  if (fd == STDIN_FILENO)
+  /* Handle regular file descriptors */
+  fd_entry_t *fd_table = get_process_fd_table();
+  if (fd >= STDIN_FILENO && fd <= STDERR_FILENO && !stdio_is_redirected(fd_table, fd))
   {
-    /* Read from keyboard buffer - NON-BLOCKING (shell polls in loop) */
+    if (fd != STDIN_FILENO)
+      return -EBADF;
+
+    /* Unredirected stdin reads from keyboard buffer (non-blocking). */
     char kernel_read_buf[256];
     size_t bytes_read = 0;
     size_t max_read = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
@@ -383,7 +397,6 @@ int64_t sys_read(int fd, void *buf, size_t count)
     if (!keyboard_buffer_has_data())
       return 0;
 
-    /* Read available bytes (up to count) */
     while (bytes_read < max_read && keyboard_buffer_has_data())
     {
       char c = keyboard_buffer_get();
@@ -399,10 +412,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
     }
     return 0;
   }
-
-  /* Handle regular file descriptors */
-  fd_entry_t *fd_table = get_process_fd_table();
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
 
   /* Check if this is a pipe */
@@ -1096,9 +1106,11 @@ static struct sleep_waiter sleep_waiters[MAX_SLEEP_WAITERS];
  */
 static int fd_can_read(int fd)
 {
-  if (fd == 0)
+  fd_entry_t *fd_table = get_process_fd_table();
+
+  if (fd == STDIN_FILENO && !stdio_is_redirected(fd_table, fd))
     return keyboard_buffer_has_data() ? 1 : 0;
-  if (fd == 1 || fd == 2)
+  if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && !stdio_is_redirected(fd_table, fd))
     return 0;
   if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
     return 1;
@@ -1106,12 +1118,11 @@ static int fd_can_read(int fd)
     return 1;
   if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
     return 1;
-  fd_entry_t *fd_table = get_process_fd_table();
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return 0;
   if (fd_table[fd].is_pipe && fd_table[fd].pipe_end == 0) {
     pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
-    return (pipe && pipe->count > 0) ? 1 : 0;
+    return (pipe && (pipe->count > 0 || pipe->writers <= 0)) ? 1 : 0;
   }
   if (fd_table[fd].flags & (O_RDONLY | O_RDWR))
     return 1;
@@ -1123,9 +1134,11 @@ static int fd_can_read(int fd)
  */
 static int fd_can_write(int fd)
 {
-  if (fd == 0)
+  fd_entry_t *fd_table = get_process_fd_table();
+
+  if (fd == STDIN_FILENO && !stdio_is_redirected(fd_table, fd))
     return 0;
-  if (fd == 1 || fd == 2)
+  if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && !stdio_is_redirected(fd_table, fd))
     return 1;
   if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
     return 0;
@@ -1133,12 +1146,11 @@ static int fd_can_write(int fd)
     return 1;
   if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
     return 0;
-  fd_entry_t *fd_table = get_process_fd_table();
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return 0;
   if (fd_table[fd].is_pipe && fd_table[fd].pipe_end == 1) {
     pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
-    return (pipe && pipe->count < PIPE_SIZE) ? 1 : 0;
+    return (pipe && pipe->readers > 0 && pipe->count < PIPE_SIZE) ? 1 : 0;
   }
   if (fd_table[fd].flags & (O_WRONLY | O_RDWR))
     return 1;
@@ -1657,7 +1669,7 @@ int64_t sys_close(int fd)
   {
     /* Close pipe end - this decrements ref_count */
     pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
-    pipe_close(pipe);
+    pipe_close_end(pipe, fd_table[fd].pipe_end);
     fd_table[fd].vfs_file = NULL;
   }
   else if (fd_table[fd].vfs_file)
@@ -1762,7 +1774,7 @@ int64_t sys_dup2(int oldfd, int newfd)
     {
       pipe_t *p = (pipe_t *)fd_table[newfd].vfs_file;
 
-      pipe_close(p);
+      pipe_close_end(p, fd_table[newfd].pipe_end);
       fd_table[newfd].vfs_file = NULL;
     }
     else if (fd_table[newfd].vfs_file)
@@ -1789,36 +1801,21 @@ int64_t sys_dup2(int oldfd, int newfd)
   fd_table[newfd].pipe_end = fd_table[oldfd].pipe_end;
 
   /*
-   * Regular files: each fd must own its struct vfs_file — vfs_close() kfree()s
-   * the handle, so sharing one pointer across two fds is UAF when either closes.
-   * Pipes: both ends (and dups) share one pipe_t; ref_count is tracked in pipe_close().
+   * Regular files now share one open file description (vfs_file with refcount),
+   * matching Unix dup/dup2 offset-sharing semantics.
+   * Pipes share one pipe_t and keep per-end counts.
    */
   if (fd_table[oldfd].is_pipe)
   {
+    pipe_acquire_end((pipe_t *)fd_table[oldfd].vfs_file, fd_table[oldfd].pipe_end);
     fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
   }
   else if (fd_table[oldfd].vfs_file)
   {
-    struct vfs_file *orig = (struct vfs_file *)fd_table[oldfd].vfs_file;
-    struct vfs_file *dupf = (struct vfs_file *)kmalloc_try(sizeof(*dupf));
+    struct vfs_file *shared = (struct vfs_file *)fd_table[oldfd].vfs_file;
 
-    if (!dupf)
-    {
-      fd_table[newfd].in_use = false;
-      fd_table[newfd].path[0] = '\0';
-      fd_table[newfd].flags = 0;
-      fd_table[newfd].fd_flags = 0;
-      fd_table[newfd].offset = 0;
-      fd_table[newfd].is_pipe = false;
-      fd_table[newfd].pipe_end = -1;
-      fd_table[newfd].vfs_file = NULL;
-      return -ENOMEM;
-    }
-    strncpy(dupf->path, orig->path, sizeof(dupf->path) - 1);
-    dupf->path[sizeof(dupf->path) - 1] = '\0';
-    dupf->pos = orig->pos;
-    dupf->flags = orig->flags;
-    fd_table[newfd].vfs_file = dupf;
+    vfs_file_acquire(shared);
+    fd_table[newfd].vfs_file = shared;
   }
   else
   {
@@ -2106,7 +2103,9 @@ int64_t sys_pipe(int pipefd[2])
 
   if (read_fd == -1 || write_fd == -1)
   {
-    pipe_close(pipe); /* Clean up pipe on failure */
+    /* pipe_create() starts with two refs (read/write ends). */
+    pipe_close_end(pipe, 0);
+    pipe_close_end(pipe, 1);
     return -EMFILE; /* Too many open files */
   }
 
@@ -2154,8 +2153,8 @@ int64_t sys_pipe(int pipefd[2])
       fd_table[write_fd].vfs_file = NULL;
       fd_table[write_fd].is_pipe = 0;
       fd_table[write_fd].pipe_end = -1;
-      pipe_close(pip);
-      pipe_close(pip);
+      pipe_close_end(pip, 0);
+      pipe_close_end(pip, 1);
       return -EFAULT;
     }
   }
@@ -2884,12 +2883,27 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
     return 0;  /* End of directory */
   
   /* Copy next chunk to user space */
-  size_t remaining = buf_offset - read_offset;
-  size_t copy_size = (remaining < count) ? remaining : count;
+  size_t end_offset = read_offset;
+  while (end_offset < buf_offset)
+  {
+    struct linux_dirent64 *dent = (struct linux_dirent64 *)(kernel_buf + end_offset);
+    size_t reclen = (size_t)dent->d_reclen;
+
+    if (reclen < sizeof(struct linux_dirent64) || end_offset + reclen > buf_offset)
+      return -EIO;
+    if ((end_offset + reclen - read_offset) > count)
+      break;
+    end_offset += reclen;
+  }
+
+  if (end_offset == read_offset)
+    return -EINVAL; /* Buffer too small for one complete dirent record */
+
+  size_t copy_size = end_offset - read_offset;
   if (copy_to_user(dirent, kernel_buf + read_offset, copy_size) != 0)
     return -EFAULT;
   
-  fd_table[fd].offset = read_offset + copy_size;
+  fd_table[fd].offset = end_offset;
   return (int64_t)copy_size;
 }
 

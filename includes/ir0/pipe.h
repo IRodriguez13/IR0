@@ -43,6 +43,8 @@ typedef struct pipe
     size_t write_pos;
     size_t count;          /* Number of bytes in buffer */
     int ref_count;         /* Number of open file descriptors */
+    int readers;           /* Number of read ends alive */
+    int writers;           /* Number of write ends alive */
 } pipe_t;
 
 /* ========================================================================== */
@@ -82,6 +84,21 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count);
  *
  * Decrements ref_count, frees pipe if both ends closed
  */
-void pipe_close(pipe_t *pipe);
+void pipe_close_end(pipe_t *pipe, int end);
+
+/**
+ * pipe_acquire - Acquire one extra pipe reference
+ * @pipe: Pipe to acquire
+ *
+ * Increments ref_count when another fd starts pointing to this pipe.
+ */
+void pipe_acquire(pipe_t *pipe);
+
+/**
+ * pipe_acquire_end - Acquire one extra read/write end reference
+ * @pipe: Pipe to acquire
+ * @end: 0 read end, 1 write end
+ */
+void pipe_acquire_end(pipe_t *pipe, int end);
 
 #endif /* _IR0_PIPE_H */
