@@ -16,6 +16,7 @@
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
+#include <arch/common/arch_portable.h>
 #include <string.h>
 
 /* Macros for IP address formatting */
@@ -69,6 +70,52 @@ static struct net_protocol arp_proto;
 
 /* Broadcast MAC address */
 static const uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+static inline uint64_t arp_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint64_t flags;
+    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+#else
+    arch_disable_interrupts();
+    return 0;
+#endif
+}
+
+static inline void arp_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+    (void)flags;
+    arch_enable_interrupts();
+#endif
+}
+
+static int arp_lookup_mac(ip4_addr_t ip, mac_addr_t mac_out)
+{
+    struct arp_cache_entry *entry;
+    uint64_t flags;
+
+    if (!mac_out)
+        return -1;
+
+    flags = arp_irq_save();
+    entry = arp_cache;
+    while (entry)
+    {
+        if (entry->ip == ip)
+        {
+            memcpy(mac_out, entry->mac, 6);
+            arp_irq_restore(flags);
+            return 0;
+        }
+        entry = entry->next;
+    }
+    arp_irq_restore(flags);
+    return -1;
+}
 
 /**
  * arp_receive_handler - Process incoming ARP packets (requests and replies)
@@ -150,15 +197,19 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
          * compatibility).
          */
         ip4_addr_t interface_ip = 0;
-        struct arp_interface_ip *if_ip = interface_ips;
-        while (if_ip)
         {
-            if (if_ip->dev == dev)
+            uint64_t flags = arp_irq_save();
+            struct arp_interface_ip *if_ip = interface_ips;
+            while (if_ip)
             {
-                interface_ip = if_ip->ip;
-                break;
+                if (if_ip->dev == dev)
+                {
+                    interface_ip = if_ip->ip;
+                    break;
+                }
+                if_ip = if_ip->next;
             }
-            if_ip = if_ip->next;
+            arp_irq_restore(flags);
         }
         
         /* Log IPs for debugging - CRITICAL for debugging ARP replies */
@@ -274,6 +325,7 @@ int arp_init(void)
 struct arp_cache_entry *arp_lookup(ip4_addr_t ip)
 {
     uint64_t now = clock_get_uptime_milliseconds();
+    uint64_t flags = arp_irq_save();
     struct arp_cache_entry *entry = arp_cache;
     struct arp_cache_entry *prev = NULL;
     
@@ -302,13 +354,14 @@ struct arp_cache_entry *arp_lookup(ip4_addr_t ip)
         
         if (entry->ip == ip)
         {
+            arp_irq_restore(flags);
             return entry;
         }
         
         prev = entry;
         entry = entry->next;
     }
-    
+    arp_irq_restore(flags);
     return NULL;
 }
 
@@ -353,12 +406,26 @@ static void arp_cache_remove_oldest(void)
  */
 void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
 {
+    uint64_t flags;
+    struct arp_cache_entry *entry;
+    size_t cache_count = 0;
+
+    if (!mac)
+        return;
+
+    flags = arp_irq_save();
     /* Check if entry already exists. arp_lookup() will return NULL if the
      * entry doesn't exist or has expired. If it exists, we update it rather
      * than creating a duplicate.
      */
-    struct arp_cache_entry *entry = arp_lookup(ip);
-    
+    entry = arp_cache;
+    while (entry)
+    {
+        if (entry->ip == ip)
+            break;
+        entry = entry->next;
+    }
+
     if (entry)
     {
         /* Update existing entry: MAC address might have changed (host moved,
@@ -366,11 +433,11 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
          */
         memcpy(entry->mac, mac, 6);
         entry->timestamp = clock_get_uptime_milliseconds();
+        arp_irq_restore(flags);
         LOG_INFO_FMT("ARP", "Updated ARP cache entry for IP " IP4_FMT, IP4_ARGS(ntohl(ip)));
         return;
     }
 
-    size_t cache_count = 0;
     for (struct arp_cache_entry *e = arp_cache; e; e = e->next)
         cache_count++;
 
@@ -384,6 +451,7 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
     entry = (struct arp_cache_entry *)kmalloc(sizeof(struct arp_cache_entry));
     if (!entry)
     {
+        arp_irq_restore(flags);
         LOG_ERROR("ARP", "Failed to allocate ARP cache entry");
         return;
     }
@@ -393,7 +461,7 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
     entry->timestamp = clock_get_uptime_milliseconds();
     entry->next = arp_cache;
     arp_cache = entry;
-    
+    arp_irq_restore(flags);
     LOG_INFO_FMT("ARP", "Added ARP cache entry: IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
                  IP4_ARGS(ntohl(ip)),
                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -509,10 +577,8 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
      * avoids sending unnecessary ARP requests for hosts we've recently
      * communicated with.
      */
-    struct arp_cache_entry *entry = arp_lookup(ip);
-    if (entry)
+    if (arp_lookup_mac(ip, mac) == 0)
     {
-        memcpy(mac, entry->mac, 6);
         LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved from cache", IP4_ARGS(ntohl(ip)));
         return 0;
     }
@@ -596,15 +662,12 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
             /* This processes packets through the full stack: Ethernet -> IP -> ARP */
             /* Using net_poll() instead of rtl8139_poll() ensures full stack processing */
             {
-                extern void net_poll(void);
                 net_poll();
             }
             
             /* Check if entry appeared in cache (ARP reply received) */
-            entry = arp_lookup(ip);
-            if (entry)
+            if (arp_lookup_mac(ip, mac) == 0)
             {
-                memcpy(mac, entry->mac, 6);
                 LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved after %d ms (attempt %d)",
                             IP4_ARGS(ntohl(ip)), (int)elapsed, retry + 1);
                 LOG_INFO_FMT("ARP", "Resolved MAC: %02x:%02x:%02x:%02x:%02x:%02x",
@@ -689,13 +752,17 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
  */
 void arp_print_cache(void)
 {
-    struct arp_cache_entry *entry = arp_cache;
+    uint64_t flags;
+    struct arp_cache_entry *entry;
     int count = 0;
     
     LOG_INFO("ARP", "ARP Cache:");
     
+    flags = arp_irq_save();
+    entry = arp_cache;
     if (!entry)
     {
+        arp_irq_restore(flags);
         LOG_INFO("ARP", "  (cache empty)");
         return;
     }
@@ -709,7 +776,7 @@ void arp_print_cache(void)
                      entry->mac[3], entry->mac[4], entry->mac[5]);
         entry = entry->next;
     }
-    
+    arp_irq_restore(flags);
     LOG_INFO_FMT("ARP", "Total entries: %d", count);
 }
 
@@ -719,7 +786,9 @@ void arp_print_cache(void)
  */
 void arp_set_my_ip(ip4_addr_t ip)
 {
+    uint64_t flags = arp_irq_save();
     my_ip = ip;
+    arp_irq_restore(flags);
     LOG_INFO_FMT("ARP", "Updated ARP default IP address to " IP4_FMT, IP4_ARGS(ntohl(ip)));
 }
 
@@ -731,9 +800,12 @@ void arp_set_my_ip(ip4_addr_t ip)
  */
 int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
 {
+    uint64_t flags;
+
     if (!dev)
         return -1;
-    
+
+    flags = arp_irq_save();
     /* Check if interface already has an IP */
     struct arp_interface_ip *if_ip = interface_ips;
     while (if_ip)
@@ -742,6 +814,7 @@ int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
         {
             /* Update existing IP */
             if_ip->ip = ip;
+            arp_irq_restore(flags);
             LOG_INFO_FMT("ARP", "Updated IP for interface %s: " IP4_FMT,
                         dev->name, IP4_ARGS(ntohl(ip)));
             return 0;
@@ -752,13 +825,16 @@ int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
     /* Create new interface IP entry */
     if_ip = kmalloc(sizeof(struct arp_interface_ip));
     if (!if_ip)
+    {
+        arp_irq_restore(flags);
         return -1;
+    }
     
     if_ip->dev = dev;
     if_ip->ip = ip;
     if_ip->next = interface_ips;
     interface_ips = if_ip;
-    
+    arp_irq_restore(flags);
     LOG_INFO_FMT("ARP", "Set IP for interface %s: " IP4_FMT,
                 dev->name, IP4_ARGS(ntohl(ip)));
     return 0;
@@ -772,20 +848,24 @@ int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
  */
 int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip)
 {
+    uint64_t flags;
+
     if (!dev || !ip)
         return -1;
-    
+
+    flags = arp_irq_save();
     struct arp_interface_ip *if_ip = interface_ips;
     while (if_ip)
     {
         if (if_ip->dev == dev)
         {
             *ip = if_ip->ip;
+            arp_irq_restore(flags);
             return 0;
         }
         if_ip = if_ip->next;
     }
-    
+    arp_irq_restore(flags);
     return -1;
 }
 

@@ -22,11 +22,7 @@ IR0_BUILD_USER := $(shell whoami 2>/dev/null || echo "unknown")
 IR0_BUILD_HOST := $(shell hostname 2>/dev/null || echo "localhost")
 IR0_BUILD_CC := $(shell $(CC) --version 2>/dev/null | head -n1 | cut -d' ' -f1-3 || echo "gcc unknown")
 # Build number - auto-increment on each build
-IR0_BUILD_NUMBER := $(shell if [ -f .build_number ]; then \
-	cat .build_number; \
-else \
-	echo "1" > .build_number && echo "1"; \
-fi)
+IR0_BUILD_NUMBER := $(shell [ -f .build_number ] && cat .build_number || echo "1")
 # Increment build number for next build (only if building kernel target)
 -include .build_number_inc
 
@@ -74,8 +70,17 @@ all: kernel-x64.iso
 menuconfig:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
 
+menuconfig-en:
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set TOOL_MENUCONFIG_LANG=en >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
+
+menuconfig-es:
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set TOOL_MENUCONFIG_LANG=es >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
+
 defconfig:
 	@cp $(KERNEL_ROOT)/setup/defconfig $(KERNEL_ROOT)/.config
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --sync
 	@echo "✓ Default configuration written to .config"
 	@echo "  Run 'make menuconfig' to customize, or 'make ir0' to build."
 
@@ -189,6 +194,11 @@ KERNEL_OBJS = \
     kernel/driver_registry.o \
     kernel/resource_registry.o \
     kernel/ipc.o \
+    kernel/net_compat.o \
+    kernel/scheduler_api.o \
+    kernel/input_backend.o \
+    kernel/video_backend.o \
+    kernel/console_backend.o \
     debug_bins/debug_bins_registry.o \
     debug_bins/cmd_ls.o \
     debug_bins/cmd_cd.o \
@@ -247,11 +257,15 @@ KERNEL_TEST_OBJS = debug_bins/debug_bins_registry_test.o \
 	kernel/test/test_path.o \
 	kernel/test/test_string.o
 
-# Scheduler - Select which scheduler to compile
-# Uncomment the scheduler you want to use and comment out the others
-KERNEL_OBJS += kernel/rr_sched.o
-# KERNEL_OBJS += kernel/cfs_sched.o
-# KERNEL_OBJS += kernel/priority_sched.o
+# Scheduler backend selection from menuconfig
+ifeq ($(CONFIG_SCHEDULER_POLICY),1)
+SCHED_OBJS = kernel/cfs_sched.o
+else ifeq ($(CONFIG_SCHEDULER_POLICY),2)
+SCHED_OBJS = kernel/priority_sched.o
+else
+SCHED_OBJS =
+endif
+KERNEL_OBJS += kernel/rr_sched.o $(SCHED_OBJS)
 
 MEMORY_OBJS = \
 	mm/allocator.o \
@@ -276,8 +290,8 @@ INTERRUPT_OBJS = \
     interrupt/arch/x86-64/isr_stubs_64.o
 
 DRIVER_OBJS = \
+    drivers/driver_bootstrap.o \
     drivers/IO/ps2.o \
-    drivers/IO/pc_speaker.o \
     drivers/serial/serial.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
@@ -285,10 +299,7 @@ DRIVER_OBJS = \
     drivers/timer/hpet/hpet.o \
     drivers/timer/hpet/find_hpet.o \
     drivers/timer/lapic/lapic.o \
-    drivers/storage/ata.o \
-    drivers/storage/ata_helpers.o \
     drivers/storage/block_dev.o \
-    drivers/storage/ata_block.o \
     drivers/storage/fs_types.o \
 	drivers/video/console.o \
 	drivers/video/console_font.o \
@@ -298,14 +309,26 @@ DRIVER_OBJS = \
 
 FS_OBJS = \
     fs/vfs.o \
-    fs/minix_fs.o \
     fs/path.o \
     fs/chmod.o \
-    fs/tmpfs.o \
     fs/permissions.o \
     fs/procfs.o \
     fs/devfs.o \
     fs/sysfs.o
+
+ifneq ($(CONFIG_ENABLE_FS_MINIX),n)
+FS_OBJS += fs/minix_fs.o
+CFLAGS += -DCONFIG_ENABLE_FS_MINIX=1
+else
+CFLAGS += -DCONFIG_ENABLE_FS_MINIX=0
+endif
+
+ifneq ($(CONFIG_ENABLE_FS_TMPFS),n)
+FS_OBJS += fs/tmpfs.o
+CFLAGS += -DCONFIG_ENABLE_FS_TMPFS=1
+else
+CFLAGS += -DCONFIG_ENABLE_FS_TMPFS=0
+endif
 
 DISK_OBJS = \
     drivers/disk/partition.o
@@ -326,7 +349,9 @@ NET_OBJS = \
     net/icmp.o \
     net/udp.o \
     net/dns.o
-NET_DRIVER_OBJS = drivers/net/rtl8139.o
+NET_DRIVER_OBJS = \
+    drivers/net/net_drivers.o \
+    drivers/net/rtl8139.o
 CFLAGS += -DCONFIG_ENABLE_NETWORKING=1
 else
 NET_OBJS =
@@ -369,6 +394,39 @@ MOUSE_OBJS =
 CFLAGS += -DCONFIG_ENABLE_MOUSE=0
 endif
 
+# PC speaker
+ifneq ($(CONFIG_ENABLE_PC_SPEAKER),n)
+PC_SPEAKER_OBJS = drivers/IO/pc_speaker.o
+CFLAGS += -DCONFIG_ENABLE_PC_SPEAKER=1
+else
+PC_SPEAKER_OBJS =
+CFLAGS += -DCONFIG_ENABLE_PC_SPEAKER=0
+endif
+
+# ATA core / block layer
+ifneq ($(CONFIG_ENABLE_STORAGE_ATA),n)
+STORAGE_ATA_OBJS = \
+    drivers/storage/ata.o \
+    drivers/storage/ata_helpers.o
+CFLAGS += -DCONFIG_ENABLE_STORAGE_ATA=1
+else
+STORAGE_ATA_OBJS =
+CFLAGS += -DCONFIG_ENABLE_STORAGE_ATA=0
+endif
+
+ifneq ($(CONFIG_ENABLE_STORAGE_ATA),n)
+ifneq ($(CONFIG_ENABLE_STORAGE_ATA_BLOCK),n)
+STORAGE_ATA_BLOCK_OBJS = drivers/storage/ata_block.o
+CFLAGS += -DCONFIG_ENABLE_STORAGE_ATA_BLOCK=1
+else
+STORAGE_ATA_BLOCK_OBJS =
+CFLAGS += -DCONFIG_ENABLE_STORAGE_ATA_BLOCK=0
+endif
+else
+STORAGE_ATA_BLOCK_OBJS =
+CFLAGS += -DCONFIG_ENABLE_STORAGE_ATA_BLOCK=0
+endif
+
 # VBE framebuffer (VGA text console is always compiled)
 ifneq ($(CONFIG_ENABLE_VBE),n)
 VBE_OBJS = drivers/video/vbe.o
@@ -376,6 +434,48 @@ CFLAGS += -DCONFIG_ENABLE_VBE=1
 else
 VBE_OBJS =
 CFLAGS += -DCONFIG_ENABLE_VBE=0
+endif
+
+# Driver boot init selection flags
+ifneq ($(CONFIG_INIT_PS2_CONTROLLER),n)
+CFLAGS += -DCONFIG_INIT_PS2_CONTROLLER=1
+else
+CFLAGS += -DCONFIG_INIT_PS2_CONTROLLER=0
+endif
+ifneq ($(CONFIG_INIT_PC_SPEAKER),n)
+CFLAGS += -DCONFIG_INIT_PC_SPEAKER=1
+else
+CFLAGS += -DCONFIG_INIT_PC_SPEAKER=0
+endif
+ifneq ($(CONFIG_INIT_STORAGE_ATA),n)
+CFLAGS += -DCONFIG_INIT_STORAGE_ATA=1
+else
+CFLAGS += -DCONFIG_INIT_STORAGE_ATA=0
+endif
+ifneq ($(CONFIG_INIT_STORAGE_ATA_BLOCK),n)
+CFLAGS += -DCONFIG_INIT_STORAGE_ATA_BLOCK=1
+else
+CFLAGS += -DCONFIG_INIT_STORAGE_ATA_BLOCK=0
+endif
+ifneq ($(CONFIG_INIT_SOUND_DRIVERS),n)
+CFLAGS += -DCONFIG_INIT_SOUND_DRIVERS=1
+else
+CFLAGS += -DCONFIG_INIT_SOUND_DRIVERS=0
+endif
+ifneq ($(CONFIG_INIT_MOUSE_DRIVER),n)
+CFLAGS += -DCONFIG_INIT_MOUSE_DRIVER=1
+else
+CFLAGS += -DCONFIG_INIT_MOUSE_DRIVER=0
+endif
+ifneq ($(CONFIG_INIT_NETWORK_STACK),n)
+CFLAGS += -DCONFIG_INIT_NETWORK_STACK=1
+else
+CFLAGS += -DCONFIG_INIT_NETWORK_STACK=0
+endif
+ifneq ($(CONFIG_INIT_BLUETOOTH_DRIVER),n)
+CFLAGS += -DCONFIG_INIT_BLUETOOTH_DRIVER=1
+else
+CFLAGS += -DCONFIG_INIT_BLUETOOTH_DRIVER=0
 endif
 
 # Debug flags — only passed when explicitly set to y in .config
@@ -456,7 +556,7 @@ CFLAGS += -DCONFIG_TICK_RATE_HZ=$(CONFIG_TICK_RATE_HZ)
 endif
 
 # Kernel debug shell as PID 1
-ifeq ($(CONFIG_KERNEL_DEBUG_SHELL),y)
+ifneq ($(CONFIG_KERNEL_DEBUG_SHELL),n)
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=1
 else
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
@@ -509,7 +609,8 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
            $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-           $(MOUSE_OBJS) $(VBE_OBJS)
+           $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
+           $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS)
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
 # Excluir debug_bins_registry.o y usar debug_bins_registry_test.o (compilado con IR0_KERNEL_TESTS=1)
@@ -517,7 +618,16 @@ ALL_OBJS_TEST = $(filter-out debug_bins/debug_bins_registry.o,$(KERNEL_OBJS)) $(
                 $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-                $(MOUSE_OBJS) $(VBE_OBJS)
+                $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
+                $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS)
+
+AUTOCONF_HDR := $(KERNEL_ROOT)/include/generated/autoconf.h
+ifneq ($(wildcard $(KERNEL_ROOT)/.config),)
+$(AUTOCONF_HDR): $(KERNEL_ROOT)/.config
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --sync >/dev/null
+$(ALL_OBJS): $(AUTOCONF_HDR)
+$(ALL_OBJS_TEST): $(AUTOCONF_HDR)
+endif
 
 # BUILD RULES
 
@@ -941,6 +1051,59 @@ health: kernel-analyze
 	@echo ""
 	@echo "✓ health passed (kernel-analyze, kernel-memsafe, kernel-tests)"
 
+# Minimal permanent build matrix for modular configs.
+build-matrix-min:
+	@echo "  MATRIX  defconfig"
+	@$(MAKE) defconfig >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  tiny preset"
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --preset tiny >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  networking disabled"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_NETWORKING=n INIT_NETWORK_STACK=n >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  storage fully disabled"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_STORAGE_ATA=n ENABLE_STORAGE_ATA_BLOCK=n INIT_STORAGE_ATA=n INIT_STORAGE_ATA_BLOCK=n >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  storage core without block layer"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_STORAGE_ATA=y ENABLE_STORAGE_ATA_BLOCK=n INIT_STORAGE_ATA=y INIT_STORAGE_ATA_BLOCK=n >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  tmpfs-only root"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_FS_MINIX=n ENABLE_FS_TMPFS=y ROOT_FILESYSTEM=tmpfs >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  scheduler policy 1"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=1 >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  scheduler policy 2"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=2 >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "✓ build-matrix-min passed"
+
+config-sim:
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/config_sim.py
+
+arch-guard:
+	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
+
+repo-hygiene-guard:
+	@python3 $(KERNEL_ROOT)/scripts/repo_hygiene_guard.py
+
+build-matrix-full:
+	@$(MAKE) -s build-matrix-min
+	@echo "  MATRIX  boolean config simulation (24 cases)"
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/config_sim.py --max-cases 24 --build-cmd "make -s kernel-x64.bin"
+	@echo "  MATRIX  architecture guardrails"
+	@$(MAKE) -s arch-guard
+	@echo "  MATRIX  repository hygiene guardrails"
+	@$(MAKE) -s repo-hygiene-guard
+	@echo "✓ build-matrix-full passed"
+
 # Clean only network objects
 clean-net:
 	@echo "Cleaning network objects for TAP rebuild..."
@@ -1035,6 +1198,8 @@ help:
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make menuconfig       Kernel configuration menu (curses TUI)"
+	@echo "  make menuconfig-en    Open menuconfig with English UI"
+	@echo "  make menuconfig-es    Open menuconfig with Spanish UI"
 	@echo "  make defconfig        Write default .config (all features enabled)"
 	@echo "  make deptest          Check all dependencies (run this first!)"
 	@echo "  make tests            Build all test artifacts (tests/, kernel with ktest)"
@@ -1042,6 +1207,11 @@ help:
 	@echo "  make kernel-tests     Run in-kernel test suite in QEMU (kernel-x64-test.iso)"
 	@echo "  make kernel-analyze   Analyze kernel-x64.bin (size -A, undefined symbols; checks kmain)"
 	@echo "  make health           Full health check: kernel-analyze + kernel-memsafe + kernel-tests"
+	@echo "  make build-matrix-min Build defconfig/tiny/net-off/storage variants"
+	@echo "  make build-matrix-full Extended matrix + arch guard"
+	@echo "  make config-sim       Simulate subsystem on/off combinations"
+	@echo "  make arch-guard       Enforce include/facade architecture constraints"
+	@echo "  make repo-hygiene-guard Enforce tracked-artifact/docs hygiene rules"
 	@echo "  make create-disk      Create virtual disk (MINIX by default)"
 	@echo "  make create-disk hints  Show create-disk help"
 	@echo "  make delete-disk      Delete virtual disk"
@@ -1334,10 +1504,10 @@ test-drivers-clean:
 
 .PHONY: all clean run run-debug run-tap run-nodisk run-console run-gdb debug create-disk delete-disk load-init remove-init help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
-        ir0 ir0-auto auto windows win windows-clean win-clean deptest menuconfig defconfig \
+        ir0 ir0-auto auto windows win windows-clean win-clean deptest menuconfig menuconfig-en menuconfig-es defconfig \
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
-        tests kernel-memsafe kernel-tests kernel-analyze analyze health \
+        tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
         format compile-commands disasm stack-usage clean-net \
         run-ping
 

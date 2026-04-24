@@ -25,7 +25,7 @@
 #include <stdbool.h>
 #include <ir0/stat.h>
 #include <ir0/errno.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/clock.h>
 
 #define TMPFS_MAX_FILES 128
 #define TMPFS_MAX_FILE_SIZE 65536 /* 64KB max per file */
@@ -516,7 +516,7 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
     /* Reallocate if needed */
     if (new_size > inode->size)
     {
-        uint8_t *new_data = (uint8_t *)kmalloc(new_size);
+        uint8_t *new_data = (uint8_t *)kmalloc_try(new_size);
         if (!new_data)
             return -ENOMEM;
         

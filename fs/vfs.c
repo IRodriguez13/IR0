@@ -13,8 +13,12 @@
  */
 
 #include "vfs.h"
+#if CONFIG_ENABLE_FS_MINIX
 #include "minix_fs.h"
+#endif
+#if CONFIG_ENABLE_FS_TMPFS
 #include "tmpfs.h"
+#endif
 #include <ir0/path.h>
 #include <ir0/logging.h>
 #include <ir0/kmem.h>
@@ -22,12 +26,13 @@
 #include <ir0/fcntl.h>
 #include <ir0/permissions.h>
 #include <kernel/process.h>
-#include <drivers/serial/serial.h>
-#include <drivers/storage/block_dev.h>
+#include <ir0/block_dev.h>
 #include <ir0/vga.h>
+#include <config.h>
 #include <string.h>
 
 #define MAX_PATH 256
+#define VFS_READ_FILE_MAX_BYTES (64U * 1024U * 1024U)
 
 /* ------------------------------------------------------------------ */
 /*  Global state                                                       */
@@ -196,8 +201,12 @@ int vfs_init(void)
 {
     fs_types = NULL;
     mounts   = NULL;
+#if CONFIG_ENABLE_FS_MINIX
     minix_fs_register();
+#endif
+#if CONFIG_ENABLE_FS_TMPFS
     tmpfs_register();
+#endif
     return 0;
 }
 
@@ -227,10 +236,6 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     if (!ft)
         return -ENODEV;
 
-    ret = ft->mount(dev, path);
-    if (ret != 0)
-        return ret;
-
     struct vfs_mount *m = kmalloc(sizeof(*m));
     if (!m)
         return -ENOMEM;
@@ -245,12 +250,25 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     }
     m->fs = ft;
     m->next = mounts;
+
+    ret = ft->mount(dev, path);
+    if (ret != 0)
+    {
+        kfree(m);
+        return ret;
+    }
+
     mounts = m;
     return 0;
 }
 
-int vfs_init_with_minix(void)
+int vfs_init_root(void)
 {
+    const char *root_blk = CONFIG_ROOT_BLOCK_DEVICE;
+    const char *root_fs = CONFIG_ROOT_FILESYSTEM;
+    char root_dev_path[64];
+    int can_use_block_dev = 1;
+
     print("VFS: Initializing VFS...\n");
     int ret = vfs_init();
     if (ret != 0) {
@@ -259,25 +277,42 @@ int vfs_init_with_minix(void)
     }
     print("VFS: vfs_init OK (builtin filesystems registered)\n");
 
-    if (!block_dev_is_present("hda")) {
-        print("VFS: ERROR - No block device hda available\n");
+    snprintf(root_dev_path, sizeof(root_dev_path), "/dev/%s", root_blk);
+
+#if !CONFIG_ENABLE_FS_MINIX
+    if (strcmp(root_fs, "minix") == 0)
+        can_use_block_dev = 0;
+#endif
+
+    if (can_use_block_dev && !block_dev_is_present(root_blk)) {
+        print("VFS: ERROR - No block device configured for root available\n");
         return -ENODEV;
     }
 
     print("VFS: Mounting root filesystem...\n");
-    ret = vfs_mount("/dev/hda", "/", "minix");
+    ret = vfs_mount(root_dev_path, "/", root_fs);
     if (ret != 0) {
-        print("VFS: MINIX mount failed, falling back to tmpfs root\n");
+        print("VFS: configured root mount failed, falling back to tmpfs root\n");
+#if CONFIG_ENABLE_FS_TMPFS
         ret = vfs_mount("none", "/", "tmpfs");
         if (ret != 0) {
             print("VFS: ERROR - tmpfs fallback also failed\n");
             return ret;
         }
         print("VFS: tmpfs root mounted (fallback)\n");
+#else
+        print("VFS: ERROR - tmpfs fallback disabled by configuration\n");
+        return ret;
+#endif
     } else {
-        print("VFS: vfs_mount OK (MINIX)\n");
+        print("VFS: vfs_mount OK (configured root)\n");
     }
     return 0;
+}
+
+int vfs_init_with_minix(void)
+{
+    return vfs_init_root();
 }
 
 /* ------------------------------------------------------------------ */
@@ -751,16 +786,21 @@ int vfs_read_file(const char *path, void **data, size_t *size)
     if (ops->stat(path, &st) != 0)
         return -1;
 
+    if (st.st_size < 0)
+        return -EIO;
+
     size_t fsize = (size_t)st.st_size;
+    if (fsize > VFS_READ_FILE_MAX_BYTES)
+        return -EFBIG;
     if (fsize == 0) {
         *data = NULL;
         *size = 0;
         return 0;
     }
 
-    void *buf = kmalloc(fsize);
+    void *buf = kmalloc_try(fsize);
     if (!buf)
-        return -1;
+        return -ENOMEM;
 
     size_t total = 0;
 

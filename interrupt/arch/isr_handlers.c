@@ -19,8 +19,9 @@
 #include <ir0/oops.h>
 #include <kernel/process.h>
 #include <config.h>
+#include <ir0/input_backend.h>
 #if CONFIG_ENABLE_NETWORKING
-#include <drivers/net/rtl8139.h>
+#include <ir0/net.h>
 #endif
 
 /* Declaraciones externas para el nuevo driver de teclado */
@@ -29,9 +30,6 @@ extern void increment_pit_ticks(void);
 #ifdef __x86_64__
 
 extern void page_fault_handler_x64(uint64_t *stack);
-#if CONFIG_ENABLE_NETWORKING
-extern int rtl8139_get_irq_line(void);
-#endif
 
 static int is_user_exception_frame(uint64_t *stack)
 {
@@ -117,9 +115,6 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
     if (interrupt_number >= 32 && interrupt_number <= 47)
     {
         uint8_t irq = interrupt_number - 32;
-#if CONFIG_ENABLE_NETWORKING
-        int rtl_irq = rtl8139_get_irq_line();
-#endif
 
         switch (irq)
         {
@@ -137,8 +132,7 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
 
         case 12: /* PS/2 Mouse */
         {
-            extern void ps2_mouse_handle_interrupt(void);
-            ps2_mouse_handle_interrupt();
+            input_mouse_handle_interrupt();
             break;
         }
 
@@ -146,10 +140,9 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
             break;
         }
 
-        #if CONFIG_ENABLE_NETWORKING
-        if (rtl_irq >= 0 && rtl_irq < 16 && rtl_irq == (int)irq)
-            rtl8139_handle_interrupt();
-        #endif
+#if CONFIG_ENABLE_NETWORKING
+        net_stack_handle_irq(irq);
+#endif
 
         /* Enviar EOI para IRQs */
         pic_send_eoi64(irq);

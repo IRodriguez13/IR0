@@ -8,7 +8,9 @@
 
 #include "console.h"
 #include "console_font.h"
+#if CONFIG_ENABLE_VBE
 #include <drivers/video/vbe.h>
+#endif
 #include <stdbool.h>
 #include <string.h>
 
@@ -42,6 +44,7 @@ static void clear_vga(uint8_t color)
 }
 
 /* VGA 16-color palette (R,G,B 0-255) */
+#if CONFIG_ENABLE_VBE
 static const uint8_t vga_palette_rgb[16][3] = {
     {0, 0, 0}, {0, 0, 170}, {0, 170, 0}, {0, 170, 170},
     {170, 0, 0}, {170, 0, 170}, {170, 85, 0}, {170, 170, 170},
@@ -149,6 +152,25 @@ static void clear_fb(uint8_t color)
     for (size_t i = 0; i < fb_size / 4; i++)
         p[i] = bg_rgb;
 }
+#else
+static void put_cell_fb(int row, int col, char c, uint8_t color)
+{
+    (void)row;
+    (void)col;
+    (void)c;
+    (void)color;
+}
+
+static void scroll_up_fb(uint8_t clear_color)
+{
+    (void)clear_color;
+}
+
+static void clear_fb(uint8_t color)
+{
+    (void)color;
+}
+#endif
 
 void console_put_cell(int row, int col, char c, uint8_t color)
 {
@@ -176,11 +198,15 @@ void console_clear(uint8_t color)
 
 void console_init(void)
 {
+#if CONFIG_ENABLE_VBE
     uint32_t w, h, bpp;
     if (vbe_is_available() && vbe_get_info(&w, &h, &bpp) && bpp == 32 && w >= 640 && h >= 400)
         use_fb = 1;
     else
         use_fb = 0;
+#else
+    use_fb = 0;
+#endif
 }
 
 int console_use_framebuffer(void)

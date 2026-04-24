@@ -24,6 +24,7 @@
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
+#include <arch/common/arch_portable.h>
 #include <string.h>
 
 /* UDP Protocol registration */
@@ -38,6 +39,28 @@ struct udp_port_handler {
 };
 
 static struct udp_port_handler *udp_handlers = NULL;
+
+static inline uint64_t udp_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint64_t flags;
+    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+#else
+    arch_disable_interrupts();
+    return 0;
+#endif
+}
+
+static inline void udp_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+    (void)flags;
+    arch_enable_interrupts();
+#endif
+}
 
 /**
  * udp_checksum - Calculate UDP checksum (pseudo-header + UDP header + data)
@@ -175,22 +198,30 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
                  IP4_ARGS(ntohl(src_ip)), (int)src_port, (int)dest_port, (int)packet_len);
     
     /* Look up handler for destination port */
-    struct udp_port_handler *handler = udp_handlers;
+    struct udp_port_handler *handler = NULL;
+    void (*handler_fn)(struct net_device *, ip4_addr_t, uint16_t, const void *, size_t) = NULL;
+    uint64_t irq_flags = udp_irq_save();
+    handler = udp_handlers;
     while (handler)
     {
         if (handler->port == dest_port)
         {
-            /* Extract payload (after UDP header) */
-            const void *payload = (const uint8_t *)data + sizeof(struct udp_header);
-            size_t payload_len = packet_len - sizeof(struct udp_header);
-            
-            /* Call registered handler */
-            handler->handler(dev, src_ip, src_port, payload, payload_len);
-            return;
+            handler_fn = handler->handler;
+            break;
         }
         handler = handler->next;
     }
-    
+
+    udp_irq_restore(irq_flags);
+    if (handler_fn)
+    {
+        /* Extract payload (after UDP header) */
+        const void *payload = (const uint8_t *)data + sizeof(struct udp_header);
+        size_t payload_len = packet_len - sizeof(struct udp_header);
+        handler_fn(dev, src_ip, src_port, payload, payload_len);
+        return;
+    }
+
     LOG_INFO_FMT("UDP", "No handler registered for port %d", (int)dest_port);
 }
 
@@ -263,6 +294,8 @@ int udp_send(struct net_device *dev, ip4_addr_t dest_ip, uint16_t src_port,
 void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev, ip4_addr_t src_ip,
                                                           uint16_t src_port, const void *data, size_t len))
 {
+    uint64_t irq_flags = udp_irq_save();
+
     /* Check if handler already exists for this port */
     struct udp_port_handler *existing = udp_handlers;
     while (existing)
@@ -271,6 +304,7 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
         {
             /* Update existing handler */
             existing->handler = handler;
+            udp_irq_restore(irq_flags);
             LOG_INFO_FMT("UDP", "Updated handler for port %d", (int)port);
             return;
         }
@@ -280,13 +314,16 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
     /* Create new handler entry */
     struct udp_port_handler *new_handler = kmalloc(sizeof(struct udp_port_handler));
     if (!new_handler)
+    {
+        udp_irq_restore(irq_flags);
         return;
+    }
     
     new_handler->port = port;
     new_handler->handler = handler;
     new_handler->next = udp_handlers;
     udp_handlers = new_handler;
-    
+    udp_irq_restore(irq_flags);
     LOG_INFO_FMT("UDP", "Registered handler for UDP port %d", (int)port);
 }
 

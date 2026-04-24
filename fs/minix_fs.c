@@ -15,18 +15,25 @@
 #include "minix_fs.h"
 #include "vfs.h"
 #include <ir0/logging.h>
-#include <drivers/storage/block_dev.h>
-#include <drivers/serial/serial.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/block_dev.h>
+#include <ir0/serial_io.h>
+#include <ir0/clock.h>
 #include <ir0/vga.h>
 #include <ir0/stat.h>
 #include <ir0/errno.h>
-#include <drivers/video/typewriter.h>
-#include <drivers/serial/serial.h>
+#include <ir0/console_backend.h>
+#include <config.h>
 #include <ir0/kmem.h>
 #include <kernel/process.h>
 #include <debug_bins/dbgshell.h>
 #include <string.h>
+
+#define typewriter_vga_print(msg, color)                                         \
+    do {                                                                         \
+        const char *__msg = (msg);                                               \
+        if (__msg)                                                               \
+            console_backend_write(__msg, strlen(__msg), (uint8_t)(color));       \
+    } while (0)
 
 #define MINIX_SUPER_MAGIC 0x137F
 #define MINIX_MAGIC 0x137F
@@ -51,12 +58,17 @@ typedef struct minix_fs_info
 
 static minix_fs_info_t minix_fs;
 
+static const char *minix_root_device_name(void)
+{
+  return CONFIG_ROOT_BLOCK_DEVICE;
+}
+
 int minix_read_block(uint32_t block_num, void *buffer)
 {
   uint32_t lba = block_num * 2; /* 2 sectores de 512 bytes = 1 bloque de 1024 bytes */
   uint8_t num_sectors = 2;
 
-  bool success = block_dev_read_sectors("hda", lba, num_sectors, buffer);
+  bool success = block_dev_read_sectors(minix_root_device_name(), lba, num_sectors, buffer);
 
   if (!success)
     return -1;
@@ -69,7 +81,7 @@ int minix_write_block(uint32_t block_num, const void *buffer)
   uint32_t lba = block_num * 2; /* 2 sectores de 512 bytes = 1 bloque de 1024 bytes */
   uint8_t num_sectors = 2;
 
-  bool success = block_dev_write_sectors("hda", lba, num_sectors, buffer);
+  bool success = block_dev_write_sectors(minix_root_device_name(), lba, num_sectors, buffer);
 
   if (!success)
     return -1;
@@ -894,7 +906,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
 
 bool minix_fs_is_available(void)
 {
-  return block_dev_is_present("hda");
+  return block_dev_is_present(minix_root_device_name());
 }
 
 bool minix_fs_is_working(void)
@@ -1150,7 +1162,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -EEXIST;
   }
 
-  if (!block_dev_is_present("hda"))
+  if (!block_dev_is_present(minix_root_device_name()))
   {
     return -EIO;
   }
@@ -1199,7 +1211,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   kmemset(&new_inode, 0, sizeof(minix_inode_t));
   
   // Apply umask to mode
-  mode_t effective_mode = mode & ~current_process->umask;
+  mode_t effective_mode = mode & ~(current_process ? current_process->umask : 0);
   new_inode.i_mode = MINIX_IFDIR | (effective_mode & 0777);
   new_inode.i_uid = current_process ? current_process->uid : 0;
   new_inode.i_gid = current_process ? current_process->gid : 0;
@@ -1456,7 +1468,7 @@ int minix_fs_cat(const char *path)
     return -1;
   }
 
-  if (!block_dev_is_present("hda"))
+  if (!block_dev_is_present(minix_root_device_name()))
   {
     typewriter_vga_print("cat: disk not available\n", 0x0C);
     return -EIO;
@@ -1583,7 +1595,7 @@ int minix_fs_write_file(const char *path, const char *content)
   serial_print("\n");
 
   // Verificar que el disco esté disponible
-  if (!block_dev_is_present("hda"))
+  if (!block_dev_is_present(minix_root_device_name()))
   {
     serial_print("SERIAL: write: disk not available\n");
     return -EIO;
@@ -1735,7 +1747,7 @@ int minix_fs_touch(const char *path, mode_t mode)
     return -EINVAL;
   }
 
-  if (!block_dev_is_present("hda"))
+  if (!block_dev_is_present(minix_root_device_name()))
   {
     return -EIO;
   }
@@ -1799,7 +1811,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   minix_inode_t new_inode = {0};
   
   // Apply umask to mode
-  mode_t effective_mode = mode & ~current_process->umask;
+  mode_t effective_mode = mode & ~(current_process ? current_process->umask : 0);
   new_inode.i_mode = MINIX_IFREG | (effective_mode & 0777);         // Regular file with given permissions
   new_inode.i_uid = current_process ? current_process->uid : 0;     // Use current process UID
   new_inode.i_gid = current_process ? current_process->gid : 0;     // Use current process GID
@@ -2287,6 +2299,7 @@ int minix_fs_rmdir_force(const char *path)
  */
 int minix_fs_read_file(const char *path, void **data, size_t *size)
 {
+  const size_t minix_read_max = 64U * 1024U * 1024U;
   if (!path || !data || !size)
   {
     return -1;
@@ -2314,10 +2327,20 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
 
   // Allocate memory for file content
   *size = inode.i_size;
-  *data = kmalloc(*size);
+  if (*size == 0)
+  {
+    *data = NULL;
+    return 0;
+  }
+  if (*size > minix_read_max)
+  {
+    return -EFBIG;
+  }
+
+  *data = kmalloc_try(*size);
   if (!*data)
   {
-    return -1; // Memory allocation failed
+    return -ENOMEM; // Memory allocation failed
   }
 
   // Read file content
@@ -2380,6 +2403,18 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
       kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
       bytes_read += bytes_to_copy;
     }
+  }
+
+  /*
+   * Double-indirect zones are not implemented yet. Report partial coverage
+   * explicitly so callers don't consume truncated data silently.
+   */
+  if (bytes_read < *size)
+  {
+    kfree(*data);
+    *data = NULL;
+    *size = 0;
+    return -EFBIG;
   }
 
   return 0;

@@ -17,6 +17,7 @@
 #include <ir0/logging.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
+#include <arch/common/arch_portable.h>
 #include <string.h>
 
 /* Macros for IP address formatting (matching ARP/IP) */
@@ -48,6 +49,28 @@ static struct icmp_pending_echo *pending_echos = NULL;
 
 /* Timeout for pending echo requests (10 seconds) */
 #define ICMP_ECHO_TIMEOUT_MS 10000
+
+static inline uint64_t icmp_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint64_t flags;
+    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+#else
+    arch_disable_interrupts();
+    return 0;
+#endif
+}
+
+static inline void icmp_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+    (void)flags;
+    arch_enable_interrupts();
+#endif
+}
 
 /**
  * icmp_checksum - Calculate ICMP packet checksum (RFC 792)
@@ -236,6 +259,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                          (int)id, (int)seq, IP4_ARGS(ntohl(src_ip)));
             
             /* Search for matching pending echo request */
+            uint64_t irq_flags = icmp_irq_save();
             struct icmp_pending_echo *echo = pending_echos;
             struct icmp_pending_echo *prev = NULL;
             uint64_t now = clock_get_uptime_milliseconds();
@@ -284,18 +308,21 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                     /* Don't remove from pending list yet - let dbgshell read it first
                      * It will be removed when dbgshell calls icmp_get_echo_result()
                      */
+                    icmp_irq_restore(irq_flags);
                     break;
                 }
                 
                 prev = echo;
                 echo = echo->next;
             }
-            
+
             if (!echo)
             {
                 LOG_INFO_FMT("ICMP", "Echo Reply id=%d, seq=%d not matched to any pending request",
                             (int)id, (int)seq);
             }
+            if (echo == NULL)
+                icmp_irq_restore(irq_flags);
             break;
         }
 
@@ -419,6 +446,7 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     struct icmp_pending_echo *pending = kmalloc(sizeof(struct icmp_pending_echo));
     if (pending)
     {
+        uint64_t irq_flags = icmp_irq_save();
         pending->id = id;
         pending->seq = seq;
         pending->dest_ip = dest_ip;
@@ -430,6 +458,7 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
         pending->reply_ip = 0;
         pending->next = pending_echos;
         pending_echos = pending;
+        icmp_irq_restore(irq_flags);
         
         LOG_INFO_FMT("ICMP", "Tracking echo request: id=%d, seq=%d", (int)id, (int)seq);
     }
@@ -458,9 +487,12 @@ bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out,
                           uint8_t *ttl_out, size_t *payload_bytes_out, 
                           ip4_addr_t *reply_ip_out)
 {
+    uint64_t irq_flags;
+
     if (!rtt_out || !ttl_out || !payload_bytes_out || !reply_ip_out)
         return false;
-    
+
+    irq_flags = icmp_irq_save();
     struct icmp_pending_echo *echo = pending_echos;
     
     while (echo)
@@ -490,18 +522,19 @@ bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out,
                         pending_echos = echo->next;
                     kfree(echo);
                 }
-                
+                icmp_irq_restore(irq_flags);
                 return true;
             }
             else
             {
                 /* Still pending */
+                icmp_irq_restore(irq_flags);
                 return false;
             }
         }
         echo = echo->next;
     }
-    
+    icmp_irq_restore(irq_flags);
     /* Not found */
     return false;
 }

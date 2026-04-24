@@ -74,6 +74,7 @@ int vfs_init(void);
 int vfs_register_fs(struct vfs_fstype *fs);
 int vfs_mount(const char *dev, const char *path, const char *fstype);
 int vfs_init_with_minix(void);
+int vfs_init_root(void);
 
 /* Mount table (single linked list, newest first); NULL if empty */
 struct vfs_mount *vfs_get_mounts(void);

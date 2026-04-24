@@ -11,6 +11,7 @@
  */
 
 #include "init_drv.h"
+#include "driver_bootstrap.h"
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <config.h>
@@ -18,8 +19,12 @@
 #include <drivers/IO/ps2.h>
 #include <interrupt/arch/keyboard.h>
 #include <interrupt/arch/pic.h>
+#if CONFIG_ENABLE_PC_SPEAKER
 #include <drivers/IO/pc_speaker.h>
+#endif
+#if CONFIG_ENABLE_STORAGE_ATA
 #include <drivers/storage/ata.h>
+#endif
 #include <drivers/storage/block_dev.h>
 #include <drivers/serial/serial.h>
 #include <kernel/resource_registry.h>
@@ -34,7 +39,7 @@
 #include <drivers/dma/dma.h>
 #endif
 
-#if CONFIG_ENABLE_BLUETOOTH
+#if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
 #include "bluetooth/bluetooth_init.h"
 #endif
 
@@ -42,16 +47,110 @@
 #include <ir0/net.h>
 #endif
 
+static int g_registry_ready = 0;
+static int g_bootstrap_done = 0;
+
+static int boot_init_ps2_controller(void)
+{
+#if CONFIG_INIT_PS2_CONTROLLER
+    ps2_init();
+#endif
+    return 0;
+}
+
+static int boot_init_keyboard(void)
+{
+#if CONFIG_INIT_PS2_CONTROLLER
+    keyboard_init();
+#endif
+    return 0;
+}
+
+static int boot_init_mouse(void)
+{
+#if CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER
+    ps2_mouse_init();
+#endif
+    return 0;
+}
+
+static int boot_init_pc_speaker(void)
+{
+#if CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER
+    pc_speaker_init();
+#endif
+    return 0;
+}
+
+static int boot_init_sound(void)
+{
+#if CONFIG_ENABLE_SOUND && CONFIG_INIT_SOUND_DRIVERS
+    sb16_init();
+    adlib_init();
+    resource_register_ioport(DMA1_PORT_START, DMA1_PORT_END, "dma1");
+#endif
+    return 0;
+}
+
+static int boot_init_storage_ata(void)
+{
+#if CONFIG_ENABLE_STORAGE_ATA && CONFIG_INIT_STORAGE_ATA
+    ata_init();
+#endif
+    return 0;
+}
+
+static int boot_init_storage_block(void)
+{
+#if CONFIG_ENABLE_STORAGE_ATA_BLOCK && CONFIG_INIT_STORAGE_ATA_BLOCK
+    ata_block_register();
+#endif
+    return 0;
+}
+
+static int boot_init_network(void)
+{
+#if CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK
+    return init_net_stack();
+#else
+    return 0;
+#endif
+}
+
+static void register_bootstrap_plan(void)
+{
+    driver_bootstrap_reset();
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_controller", boot_init_ps2_controller,
+                              CONFIG_INIT_PS2_CONTROLLER);
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_keyboard", boot_init_keyboard,
+                              CONFIG_INIT_PS2_CONTROLLER);
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_mouse", boot_init_mouse,
+                              (CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER));
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "pc_speaker", boot_init_pc_speaker,
+                              (CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER));
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_STORAGE, "ata_core", boot_init_storage_ata,
+                              (CONFIG_ENABLE_STORAGE_ATA && CONFIG_INIT_STORAGE_ATA));
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_STORAGE, "ata_block", boot_init_storage_block,
+                              (CONFIG_ENABLE_STORAGE_ATA_BLOCK && CONFIG_INIT_STORAGE_ATA_BLOCK));
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_AUDIO, "sound_stack", boot_init_sound,
+                              (CONFIG_ENABLE_SOUND && CONFIG_INIT_SOUND_DRIVERS));
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_NETWORK, "network_stack", boot_init_network,
+                              (CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK));
+}
+
 /**
  * Initialize multi-language driver subsystem.
  * Called during kernel boot after heap is initialized.
  */
-void drivers_init(void)
+static void driver_registry_prepare(void)
 {
+    if (g_registry_ready)
+        return;
+
     ir0_driver_registry_init();
     log_subsystem_ok("DRIVER_REGISTRY");
 
-#if CONFIG_ENABLE_BLUETOOTH
+#if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
     if (bluetooth_register_driver() == 0) {
         LOG_INFO("KERNEL", "Bluetooth subsystem registered successfully");
     } else {
@@ -63,6 +162,8 @@ void drivers_init(void)
     register_multilang_example_drivers();
     log_subsystem_ok("MULTI_LANG_DRIVERS");
 #endif
+
+    g_registry_ready = 1;
 }
 
 
@@ -74,35 +175,31 @@ void drivers_init(void)
  */
 void init_all_drivers(void)
 {
-    serial_print("[DRIVERS] Initializing all hardware drivers...\n");
+    if (g_bootstrap_done)
+        return;
 
-    ps2_init();
-    keyboard_init();
-#if CONFIG_ENABLE_MOUSE
-    ps2_mouse_init();
-#endif
-    pc_speaker_init();
-#if CONFIG_ENABLE_SOUND
-    sb16_init();
-    adlib_init();
-#endif
-    ata_init();
-    ata_block_register();
-#if CONFIG_ENABLE_NETWORKING
-    init_net_stack();
-#endif
+    serial_print("[DRIVERS] Initializing all hardware drivers...\n");
+    driver_registry_prepare();
+    register_bootstrap_plan();
+    driver_bootstrap_run_all();
 
     log_subsystem_ok("PS2_KEYBOARD");
-#if CONFIG_ENABLE_MOUSE
+#if CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER
     log_subsystem_ok("PS2_MOUSE");
 #endif
-#if CONFIG_ENABLE_NETWORKING
+#if CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK
     log_subsystem_ok("NETWORK_STACK");
 #endif
-#if CONFIG_ENABLE_SOUND
-    resource_register_ioport(DMA1_PORT_START, DMA1_PORT_END, "dma1");
-#endif
-
+    g_bootstrap_done = 1;
     serial_print("[DRIVERS] All drivers initialized successfully\n");
+}
+
+void drivers_init(void)
+{
+    /*
+     * Compat entrypoint:
+     * keep existing callers working while centralizing all init in init_all_drivers().
+     */
+    init_all_drivers();
 }
 

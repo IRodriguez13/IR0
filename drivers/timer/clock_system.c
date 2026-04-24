@@ -16,7 +16,7 @@
 #include <ir0/vga.h>
 #include <ir0/types.h>
 #include <ir0/kmem.h>
-#include <kernel/rr_sched.h>
+#include <kernel/scheduler_api.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"
 #include "clock_system.h"
@@ -401,7 +401,7 @@ void clock_tick(void)
     {
         clock_state.scheduler_tick_counter = 0;
         /* Call scheduler to switch processes */
-        rr_schedule_next();
+        sched_schedule_next();
     }
     
     /*
