@@ -42,6 +42,12 @@ struct linux_dirent64 {
 #define DT_BLK 6
 #define DT_LNK 10
 
+static const char *const ls_flags[] = {
+    "-l",
+    "-a",
+    NULL
+};
+
 static int cmd_ls_handler(int argc, char **argv)
 {
     const char *path = NULL;
@@ -205,5 +211,6 @@ struct debug_command cmd_ls = {
     .name = "ls",
     .handler = cmd_ls_handler,
     .usage = "ls [-l] [-a] [DIR]",
-    .description = "List directory contents"
+    .description = "List directory contents",
+    .flags = ls_flags
 };

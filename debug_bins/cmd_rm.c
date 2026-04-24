@@ -43,6 +43,12 @@ struct linux_dirent64 {
 
 #define MAX_RECURSE_DEPTH 64
 
+static const char *const rm_flags[] = {
+    "-d",
+    "-r",
+    NULL
+};
+
 static void rm_normalize_path(const char *in, char *out, size_t out_sz)
 {
     size_t len = 0;
@@ -303,5 +309,6 @@ struct debug_command cmd_rm = {
     .name = "rm",
     .handler = cmd_rm_handler,
     .usage = "rm [-d|-r] FILE",
-    .description = "Remove file or directory (-d/-r: recursive dir delete)"
+    .description = "Remove file or directory (-d/-r: recursive dir delete)",
+    .flags = rm_flags
 };

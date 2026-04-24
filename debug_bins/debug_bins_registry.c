@@ -54,6 +54,7 @@ extern struct debug_command cmd_uptime;
 extern struct debug_command cmd_date;
 extern struct debug_command cmd_keymap;
 extern struct debug_command cmd_lshw;
+extern struct debug_command cmd_sudo;
 #ifdef IR0_KERNEL_TESTS
 extern struct debug_command cmd_ktest;
 #endif
@@ -92,6 +93,7 @@ struct debug_command *debug_commands[] = {
     &cmd_date,
     &cmd_keymap,
     &cmd_lshw,
+    &cmd_sudo,
 #ifdef IR0_KERNEL_TESTS
     &cmd_ktest,
 #endif

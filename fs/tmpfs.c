@@ -39,6 +39,8 @@
 #include <ir0/stat.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>
+#include <kernel/process.h>
+#include <ir0/permissions.h>
 
 #define TMPFS_MAX_FILES 128
 #define TMPFS_MAX_FILE_SIZE 65536 /* 64KB max per file */
@@ -49,6 +51,8 @@ typedef struct tmpfs_inode
 {
     uint32_t ino;
     uint16_t mode;
+    uint32_t uid;
+    uint32_t gid;
     uint32_t size;
     size_t data_cap; /* bytes allocated at @data (>= @size after shrink) */
     bool is_dir;
@@ -288,6 +292,8 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
     }
 
     root_inode->mode = S_IFDIR | 0755;
+    root_inode->uid = ROOT_UID;
+    root_inode->gid = ROOT_GID;
     root_inode->is_dir = true;
     strncpy(root_inode->name, "/", TMPFS_MAX_NAME_LEN);
     root_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
@@ -309,7 +315,7 @@ static struct vfs_ops tmpfs_fs_ops = {
     .read    = tmpfs_read_file,
     .write   = tmpfs_write_file,
     .link    = NULL,
-    .chown   = NULL,
+    .chown   = tmpfs_chown,
     .chmod   = tmpfs_chmod,
     .truncate = tmpfs_truncate,
 };
@@ -363,8 +369,8 @@ int tmpfs_stat(const char *path, stat_t *buf)
     buf->st_mode = inode->mode;
     buf->st_size = inode->size;
     buf->st_nlink = 1;
-    buf->st_uid = 0;
-    buf->st_gid = 0;
+    buf->st_uid = inode->uid;
+    buf->st_gid = inode->gid;
     buf->st_mtime = inode->mtime;
     
     return 0;
@@ -413,7 +419,11 @@ int tmpfs_mkdir(const char *path, mode_t mode)
     if (!new_inode)
         return -ENOSPC;
     
-    new_inode->mode = S_IFDIR | (mode & 0777);
+    mode_t umask_value = (mode_t)(current_process ? current_process->umask : DEFAULT_UMASK);
+    mode_t effective_mode = mode & ~umask_value;
+    new_inode->mode = S_IFDIR | (effective_mode & 0777);
+    new_inode->uid = current_process ? current_process->euid : ROOT_UID;
+    new_inode->gid = current_process ? current_process->egid : ROOT_GID;
     new_inode->is_dir = true;
     strncpy(new_inode->name, dirname, TMPFS_MAX_NAME_LEN);
     new_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
@@ -467,7 +477,11 @@ int tmpfs_create_file(const char *path, mode_t mode)
     if (!new_inode)
         return -ENOSPC;
     
-    new_inode->mode = S_IFREG | (mode & 0777);
+    mode_t umask_value = (mode_t)(current_process ? current_process->umask : DEFAULT_UMASK);
+    mode_t effective_mode = mode & ~umask_value;
+    new_inode->mode = S_IFREG | (effective_mode & 0777);
+    new_inode->uid = current_process ? current_process->euid : ROOT_UID;
+    new_inode->gid = current_process ? current_process->egid : ROOT_GID;
     new_inode->is_dir = false;
     new_inode->size = 0;
     new_inode->data = NULL;
@@ -635,6 +649,24 @@ int tmpfs_chmod(const char *path, mode_t mode)
 
     inode->mode = (uint16_t)(((uint32_t)inode->mode & ~07777U) |
                  ((uint32_t)mode & 07777U));
+    return 0;
+}
+
+int tmpfs_chown(const char *path, uid_t owner, gid_t group)
+{
+    if (!path)
+        return -EINVAL;
+
+    tmpfs_inode_t *inode = tmpfs_find_inode(path);
+    if (!inode)
+        return -ENOENT;
+
+    if (owner != (uid_t)-1)
+        inode->uid = (uint32_t)owner;
+    if (group != (gid_t)-1)
+        inode->gid = (uint32_t)group;
+
+    inode->mtime = (time_t)(clock_get_uptime_milliseconds() / 1000);
     return 0;
 }
 

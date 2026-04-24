@@ -231,6 +231,7 @@ KERNEL_OBJS = \
     debug_bins/cmd_date.o \
     debug_bins/cmd_keymap.o \
     debug_bins/cmd_lshw.o \
+    debug_bins/cmd_sudo.o \
     debug_bins/cmd_blue.o
 
 # debug_bins_registry_test.o: misma fuente que debug_bins_registry.o pero con IR0_KERNEL_TESTS=1

@@ -219,7 +219,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
 {
     if (!fstype || !path)
         return -EINVAL;
-    if (current_process && current_process->uid != ROOT_UID)
+    if (current_process && current_process->euid != ROOT_UID)
         return -EPERM;
 
     int ret = validate_path(path);
@@ -745,6 +745,10 @@ int vfs_chown(const char *path, uid_t owner, gid_t group)
     if (!path) return -EINVAL;
     int ret = validate_path(path);
     if (ret != 0) return ret;
+    if (!current_process)
+        return -ESRCH;
+    if (current_process->euid != ROOT_UID)
+        return -EPERM;
 
     struct vfs_ops *ops = ops_for_path(path);
     if (!ops || !ops->chown)
@@ -759,6 +763,16 @@ int vfs_chmod(const char *path, mode_t mode)
     int ret = validate_path(path);
     if (ret != 0)
         return ret;
+    if (!current_process)
+        return -ESRCH;
+
+    stat_t st;
+    ret = vfs_stat(path, &st);
+    if (ret != 0)
+        return ret;
+
+    if (current_process->euid != ROOT_UID && current_process->euid != st.st_uid)
+        return -EPERM;
 
     struct vfs_ops *ops = ops_for_path(path);
     if (!ops || !ops->chmod)

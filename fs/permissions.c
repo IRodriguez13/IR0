@@ -18,6 +18,28 @@
 #include <ir0/stat.h>
 #include <string.h>
 
+struct simple_user_entry {
+    uid_t uid;
+    gid_t gid;
+    const char *name;
+    const char *password;
+};
+
+static const struct simple_user_entry simple_users[] = {
+    { ROOT_UID, ROOT_GID, "root", "root" },
+    { USER_UID, USER_GID, "user", "ir0" },
+};
+
+static const struct simple_user_entry *find_user_by_uid(uid_t uid)
+{
+    for (size_t i = 0; i < (sizeof(simple_users) / sizeof(simple_users[0])); i++)
+    {
+        if (simple_users[i].uid == uid)
+            return &simple_users[i];
+    }
+    return NULL;
+}
+
 /* Initialize simple user system */
 void init_simple_users(void)
 {
@@ -27,19 +49,19 @@ void init_simple_users(void)
 /* Get current process UID */
 uint32_t get_current_uid(void)
 {
-    return current_process ? current_process->uid : ROOT_UID;
+    return current_process ? current_process->euid : ROOT_UID;
 }
 
 /* Get current process GID */
 uint32_t get_current_gid(void)
 {
-    return current_process ? current_process->gid : ROOT_GID;
+    return current_process ? current_process->egid : ROOT_GID;
 }
 
 /* Check if process is root */
 bool is_root(const struct process *process)
 {
-    return process && process->uid == ROOT_UID;
+    return process && process->euid == ROOT_UID;
 }
 
 /* Check file access permissions - Unix style */
@@ -49,7 +71,7 @@ bool check_file_access(const char *path, int mode, const struct process *process
         return false;
 
     /* Root can do everything */
-    if (process->uid == ROOT_UID)
+    if (process->euid == ROOT_UID)
         return true;
 
     /* Get file stats */
@@ -62,7 +84,7 @@ bool check_file_access(const char *path, int mode, const struct process *process
     uint32_t file_gid = st.st_gid;
 
     /* Check owner permissions */
-    if (process->uid == file_uid) {
+    if (process->euid == file_uid) {
         if ((mode & ACCESS_READ) && !(file_mode & S_IRUSR))
             return false;
         if ((mode & ACCESS_WRITE) && !(file_mode & S_IWUSR))
@@ -73,7 +95,7 @@ bool check_file_access(const char *path, int mode, const struct process *process
     }
 
     /* Check group permissions */
-    if (process->gid == file_gid) {
+    if (process->egid == file_gid) {
         if ((mode & ACCESS_READ) && !(file_mode & S_IRGRP))
             return false;
         if ((mode & ACCESS_WRITE) && !(file_mode & S_IWGRP))
@@ -92,4 +114,23 @@ bool check_file_access(const char *path, int mode, const struct process *process
         return false;
 
     return true;
+}
+
+bool user_exists(uid_t uid)
+{
+    return find_user_by_uid(uid) != NULL;
+}
+
+const char *lookup_user_name(uid_t uid)
+{
+    const struct simple_user_entry *entry = find_user_by_uid(uid);
+    return entry ? entry->name : NULL;
+}
+
+int auth_user_password(uid_t uid, const char *password)
+{
+    const struct simple_user_entry *entry = find_user_by_uid(uid);
+    if (!entry || !password)
+        return -1;
+    return strcmp(entry->password, password) == 0 ? 0 : -1;
 }
