@@ -36,6 +36,7 @@ int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_coun
 int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset);
 int tmpfs_unlink(const char *path);
 int tmpfs_rmdir(const char *path);
+int tmpfs_chown(const char *path, uid_t owner, gid_t group);
 int tmpfs_chmod(const char *path, mode_t mode);
 int tmpfs_truncate(const char *path, size_t length);
 int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries);

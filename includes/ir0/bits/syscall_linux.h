@@ -134,6 +134,7 @@
 #define __NR_console_clear    401
 #define __NR_keymap_set       402
 #define __NR_keymap_get       403
+#define __NR_sudo_auth        404
 
 /* Max syscall number we handle (for table size) */
 #define __NR_syscall_max   450

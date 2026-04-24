@@ -38,6 +38,7 @@
 #include <config.h>
 #include <ir0/kmem.h>
 #include <kernel/process.h>
+#include <ir0/permissions.h>
 #include <debug_bins/dbgshell.h>
 #include <string.h>
 
@@ -2489,9 +2490,15 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
  */
 int minix_fs_chown(const char *path, uid_t owner, gid_t group)
 {
+  if (!current_process)
+    return -ESRCH;
+
   minix_inode_t *inode = minix_fs_find_inode(path);
   if (!inode)
     return -ENOENT;
+
+  if (current_process->euid != ROOT_UID)
+    return -EPERM;
 
   uint16_t inode_num = minix_fs_get_inode_number(path);
   if (inode_num == 0)
@@ -2605,9 +2612,15 @@ static int minix_fs_readdir(const char *path, struct vfs_dirent *entries, int ma
  */
 static int minix_fs_chmod(const char *path, mode_t mode)
 {
+	if (!current_process)
+		return -ESRCH;
+
 	minix_inode_t *inode_ptr = minix_fs_find_inode(path);
 	if (!inode_ptr)
 		return -ENOENT;
+
+	if (current_process->euid != ROOT_UID && current_process->euid != inode_ptr->i_uid)
+		return -EPERM;
 
 	uint16_t inode_num = minix_fs_get_inode_number(path);
 	if (inode_num == 0)

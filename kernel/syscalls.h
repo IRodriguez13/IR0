@@ -47,6 +47,14 @@ int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[]);
 int64_t sys_waitpid(pid_t pid, int *status, int options);
 int64_t sys_getpid(void);
 int64_t sys_getppid(void);
+int64_t sys_getuid(void);
+int64_t sys_geteuid(void);
+int64_t sys_getgid(void);
+int64_t sys_getegid(void);
+int64_t sys_setuid(uid_t uid);
+int64_t sys_setgid(gid_t gid);
+int64_t sys_umask(mode_t mask);
+int64_t sys_sudo_auth(const char *password);
 int64_t sys_kill(pid_t pid, int signal);
 
 /* File operations */

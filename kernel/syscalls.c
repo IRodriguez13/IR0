@@ -472,6 +472,106 @@ int64_t sys_getppid(void)
   return (int64_t)current_process->ppid;
 }
 
+int64_t sys_getuid(void)
+{
+  if (!current_process)
+    return -ESRCH;
+  return (int64_t)current_process->uid;
+}
+
+int64_t sys_geteuid(void)
+{
+  if (!current_process)
+    return -ESRCH;
+  return (int64_t)current_process->euid;
+}
+
+int64_t sys_getgid(void)
+{
+  if (!current_process)
+    return -ESRCH;
+  return (int64_t)current_process->gid;
+}
+
+int64_t sys_getegid(void)
+{
+  if (!current_process)
+    return -ESRCH;
+  return (int64_t)current_process->egid;
+}
+
+int64_t sys_setuid(uid_t uid)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (current_process->euid == ROOT_UID)
+  {
+    current_process->uid = (uint32_t)uid;
+    current_process->euid = (uint32_t)uid;
+    return 0;
+  }
+
+  if ((uint32_t)uid == current_process->uid || (uint32_t)uid == current_process->euid)
+  {
+    current_process->euid = (uint32_t)uid;
+    return 0;
+  }
+
+  return -EPERM;
+}
+
+int64_t sys_setgid(gid_t gid)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (current_process->euid == ROOT_UID)
+  {
+    current_process->gid = (uint32_t)gid;
+    current_process->egid = (uint32_t)gid;
+    return 0;
+  }
+
+  if ((uint32_t)gid == current_process->gid || (uint32_t)gid == current_process->egid)
+  {
+    current_process->egid = (uint32_t)gid;
+    return 0;
+  }
+
+  return -EPERM;
+}
+
+int64_t sys_umask(mode_t mask)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  mode_t old = (mode_t)(current_process->umask & 0777U);
+  current_process->umask = (uint32_t)(mask & 0777U);
+  return (int64_t)old;
+}
+
+int64_t sys_sudo_auth(const char *password)
+{
+  if (!current_process || !password)
+    return -EFAULT;
+  if (validate_userspace_string(password, 64) != 0)
+    return -EFAULT;
+
+  if (current_process->euid == ROOT_UID)
+    return 0;
+
+  if (!user_exists(current_process->uid))
+    return -EPERM;
+  if (auth_user_password(current_process->uid, password) != 0)
+    return -EACCES;
+
+  current_process->euid = ROOT_UID;
+  current_process->egid = ROOT_GID;
+  return 0;
+}
+
 int64_t sys_mkdir(const char *pathname, mode_t mode)
 {
   if (!current_process)
@@ -701,6 +801,14 @@ int64_t sys_chmod(const char *path, mode_t mode)
     path_to_use = resolved;
   }
 
+  stat_t st;
+  int sret = vfs_stat(path_to_use, &st);
+  if (sret != 0)
+    return sret;
+
+  if (current_process->euid != ROOT_UID && current_process->euid != st.st_uid)
+    return -EPERM;
+
   return chmod(path_to_use, mode);
 }
 
@@ -726,6 +834,9 @@ int64_t sys_chown(const char *path, uid_t owner, gid_t group)
       return -ENAMETOOLONG;
     path_to_use = resolved;
   }
+
+  if (current_process->euid != ROOT_UID)
+    return -EPERM;
 
   return vfs_chown(path_to_use, owner, group);
 }
@@ -2878,6 +2989,10 @@ WRAP3(sys_getdents, int, void *, size_t)
 WRAP3(sys_poll, struct pollfd *, unsigned int, int)
 WRAP2(sys_nanosleep, const struct timespec *, struct timespec *)
 WRAP2(sys_gettimeofday, struct timeval *, void *)
+WRAP1(sys_setuid, uid_t)
+WRAP1(sys_setgid, gid_t)
+WRAP1(sys_umask, mode_t)
+WRAP1(sys_sudo_auth, const char *)
 
 #undef WRAP1
 #undef WRAP2
@@ -2893,6 +3008,14 @@ static int64_t wrap_sys_getpid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getpid(); }
 static int64_t wrap_sys_getppid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getppid(); }
+static int64_t wrap_sys_getuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getuid(); }
+static int64_t wrap_sys_geteuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_geteuid(); }
+static int64_t wrap_sys_getgid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getgid(); }
+static int64_t wrap_sys_getegid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getegid(); }
 
 /* Console scroll: IR0 custom syscall */
 static int64_t wrap_console_scroll(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
@@ -2947,6 +3070,14 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_dup2]           = wrap_sys_dup2;
   syscall_table_rw[__NR_nanosleep]      = wrap_sys_nanosleep;
   syscall_table_rw[__NR_getpid]         = wrap_sys_getpid;
+  syscall_table_rw[__NR_getuid]         = wrap_sys_getuid;
+  syscall_table_rw[__NR_geteuid]        = wrap_sys_geteuid;
+  syscall_table_rw[__NR_getgid]         = wrap_sys_getgid;
+  syscall_table_rw[__NR_getegid]        = wrap_sys_getegid;
+  syscall_table_rw[__NR_setuid]         = wrap_sys_setuid;
+  syscall_table_rw[__NR_setgid]         = wrap_sys_setgid;
+  syscall_table_rw[__NR_umask]          = wrap_sys_umask;
+  syscall_table_rw[__NR_sudo_auth]      = wrap_sys_sudo_auth;
   syscall_table_rw[__NR_fork]          = wrap_sys_fork;
   syscall_table_rw[__NR_execve]        = wrap_sys_exec;
   syscall_table_rw[__NR_exit]           = wrap_sys_exit;
