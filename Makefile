@@ -199,11 +199,20 @@ KERNEL_OBJS = \
     kernel/input_backend.o \
     kernel/video_backend.o \
     kernel/console_backend.o \
-    debug_bins/debug_bins_registry.o \
+    debug_bins/debug_bins_registry.o
+
+DEBUG_BINS_CORE_OBJS = \
     debug_bins/cmd_ls.o \
     debug_bins/cmd_cd.o \
     debug_bins/cmd_pwd.o \
     debug_bins/cmd_cat.o \
+    debug_bins/cmd_echo.o \
+    debug_bins/cmd_exec.o \
+    debug_bins/cmd_true.o \
+    debug_bins/cmd_false.o \
+    debug_bins/cmd_sleep.o
+
+DEBUG_BINS_FS_OBJS = \
     debug_bins/cmd_mkdir.o \
     debug_bins/cmd_rm.o \
     debug_bins/cmd_rmdir.o \
@@ -211,28 +220,70 @@ KERNEL_OBJS = \
     debug_bins/cmd_cp.o \
     debug_bins/cmd_mv.o \
     debug_bins/cmd_ln.o \
-    debug_bins/cmd_echo.o \
-    debug_bins/cmd_exec.o \
-    debug_bins/cmd_sed.o \
     debug_bins/cmd_mount.o \
     debug_bins/cmd_chmod.o \
     debug_bins/cmd_chown.o \
+    debug_bins/cmd_basename.o \
+    debug_bins/cmd_dirname.o
+
+DEBUG_BINS_TEXT_OBJS = \
+    debug_bins/cmd_sed.o \
+    debug_bins/cmd_wc.o \
+    debug_bins/cmd_head.o \
+    debug_bins/cmd_tail.o
+
+DEBUG_BINS_IDENTITY_OBJS = \
+    debug_bins/cmd_id.o \
+    debug_bins/cmd_whoami.o \
+    debug_bins/cmd_sudo.o
+
+DEBUG_BINS_DIAG_OBJS = \
     debug_bins/cmd_ps.o \
     debug_bins/cmd_df.o \
     debug_bins/cmd_dmesg.o \
-    debug_bins/cmd_ping.o \
     debug_bins/cmd_uname.o \
     debug_bins/cmd_lsblk.o \
     debug_bins/cmd_lsdrv.o \
-    debug_bins/cmd_lsblue.o \
-    debug_bins/cmd_bluestart.o \
     debug_bins/cmd_free.o \
     debug_bins/cmd_uptime.o \
     debug_bins/cmd_date.o \
     debug_bins/cmd_keymap.o \
     debug_bins/cmd_lshw.o \
-    debug_bins/cmd_sudo.o \
+    debug_bins/cmd_stat.o
+
+DEBUG_BINS_NET_OBJS = \
+    debug_bins/cmd_ping.o
+
+DEBUG_BINS_BT_OBJS = \
+    debug_bins/cmd_lsblue.o \
+    debug_bins/cmd_bluestart.o \
     debug_bins/cmd_blue.o
+
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_CORE),n)
+KERNEL_OBJS += $(DEBUG_BINS_CORE_OBJS)
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_FS),n)
+KERNEL_OBJS += $(DEBUG_BINS_FS_OBJS)
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_TEXT),n)
+KERNEL_OBJS += $(DEBUG_BINS_TEXT_OBJS)
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_IDENTITY),n)
+KERNEL_OBJS += $(DEBUG_BINS_IDENTITY_OBJS)
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_DIAG),n)
+KERNEL_OBJS += $(DEBUG_BINS_DIAG_OBJS)
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_NET),n)
+ifneq ($(CONFIG_ENABLE_NETWORKING),n)
+KERNEL_OBJS += $(DEBUG_BINS_NET_OBJS)
+endif
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_BT),n)
+ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
+KERNEL_OBJS += $(DEBUG_BINS_BT_OBJS)
+endif
+endif
 
 # debug_bins_registry_test.o: misma fuente que debug_bins_registry.o pero con IR0_KERNEL_TESTS=1
 # Evita que make reutilice un .o compilado para tests al hacer make ir0 (y viceversa)
@@ -562,6 +613,50 @@ ifneq ($(CONFIG_KERNEL_DEBUG_SHELL),n)
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=1
 else
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
+endif
+
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_CORE),n)
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_CORE=1
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_CORE=0
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_FS),n)
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_FS=1
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_FS=0
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_TEXT),n)
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_TEXT=1
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_TEXT=0
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_IDENTITY),n)
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_IDENTITY=1
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_IDENTITY=0
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_DIAG),n)
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_DIAG=1
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_DIAG=0
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_NET),n)
+ifneq ($(CONFIG_ENABLE_NETWORKING),n)
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=1
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=0
+endif
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=0
+endif
+ifneq ($(CONFIG_DEBUG_BINS_GROUP_BT),n)
+ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=1
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=0
+endif
+else
+CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=0
 endif
 
 ARCH_OBJS = \

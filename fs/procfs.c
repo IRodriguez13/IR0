@@ -251,7 +251,7 @@ static int proc_netinfo_read(char *buf, size_t count)
 }
 
 /*
- * /proc/net/dev: Linux-style summary of RTL8139 counters (single iface eth0).
+ * /proc/net/dev: Linux-style per-interface summary.
  * Header lines mirror common tools that parse Inter-| / face | columns.
  */
 static int proc_net_dev_read(char *buf, size_t count)
@@ -261,11 +261,17 @@ static int proc_net_dev_read(char *buf, size_t count)
         return -1;
     memset(buf, 0, count);
     uint64_t rxp = 0, txp = 0, rxe = 0, txe = 0;
+    const char *ifname = "eth0";
+    struct net_device *dev = net_get_devices();
+    if (dev && dev->name && dev->name[0] != '\0')
+        ifname = dev->name;
+
     net_stack_get_stats(&rxp, &txp, &rxe, &txe);
     int n = snprintf(buf, count,
                      "Inter-|   Receive                                                |  Transmit\n"
                      " face |   packets    errs                                        |  packets    errs\n"
-                     "  eth0: %10llu %10llu                                          %10llu %10llu\n",
+                     "  %s: %10llu %10llu                                          %10llu %10llu\n",
+                     ifname,
                      (unsigned long long)rxp, (unsigned long long)rxe,
                      (unsigned long long)txp, (unsigned long long)txe);
     if (n < 0)

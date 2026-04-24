@@ -67,6 +67,7 @@ struct vfs_file {
     char path[VFS_PATH_MAX];
     off_t pos;
     int flags;
+    int ref_count;
 };
 
 /* Directory entry returned by vfs_readdir */
@@ -98,6 +99,7 @@ int vfs_read(struct vfs_file *f, char *buf, size_t count);
 int vfs_write(struct vfs_file *f, const char *buf, size_t count);
 int vfs_close(struct vfs_file *f);
 off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence);
+void vfs_file_acquire(struct vfs_file *f);
 
 /* Path operations */
 int vfs_stat(const char *path, stat_t *buf);

@@ -62,6 +62,58 @@ menu "General"
 
 endmenu
 
+menu "Debug Binaries"
+
+    config DEBUG_BINS_GROUP_CORE
+        bool "Debug bins core commands"
+        default y
+        help
+          Build core shell-facing commands such as ls/cd/pwd/cat/echo/exec
+          plus tiny process helpers like true/false/sleep.
+
+    config DEBUG_BINS_GROUP_FS
+        bool "Debug bins filesystem commands"
+        default y
+        help
+          Build filesystem management commands: mkdir/rm/rmdir/touch/cp/mv/ln
+          and permission/mount tools such as chmod/chown/mount.
+
+    config DEBUG_BINS_GROUP_TEXT
+        bool "Debug bins text processing commands"
+        default y
+        help
+          Build small text tools such as sed/wc/head/tail.
+
+    config DEBUG_BINS_GROUP_IDENTITY
+        bool "Debug bins identity/privilege commands"
+        default y
+        help
+          Build identity-oriented commands like id/whoami and privilege helper
+          commands such as sudo.
+
+    config DEBUG_BINS_GROUP_DIAG
+        bool "Debug bins diagnostics/system-info commands"
+        default y
+        help
+          Build diagnostics and system-info commands (ps/df/dmesg/free/uptime/
+          date/uname/lsblk/lsdrv/lshw/keymap/stat).
+
+    config DEBUG_BINS_GROUP_NET
+        bool "Debug bins networking commands"
+        default y
+        depends on ENABLE_NETWORKING
+        help
+          Build networking debug bins such as ping.
+
+    config DEBUG_BINS_GROUP_BT
+        bool "Debug bins Bluetooth commands"
+        default y
+        depends on ENABLE_BLUETOOTH
+        help
+          Build Bluetooth-oriented debug bins (lsblue/bluestart/blue).
+
+endmenu
+
 menu "Networking"
 
     config ENABLE_NETWORKING

@@ -1,31 +1,27 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: debug_bins_registry.c
- * Description: IR0 kernel source/header file
- */
-
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
  * IR0 Kernel - Debug Binaries Registry
  * Copyright (C) 2026 Iván Rodriguez
  *
- * Registry de todos los comandos disponibles en debug_bins/
+ * Registry for all commands available in debug_bins/
  */
 
 #include "debug_bins.h"
+#include <config.h>
 
-/* Declaraciones externas de comandos Unix reales */
+/* External declarations for debug commands */
+#if CONFIG_DEBUG_BINS_GROUP_CORE
 extern struct debug_command cmd_ls;
 extern struct debug_command cmd_cd;
 extern struct debug_command cmd_pwd;
 extern struct debug_command cmd_cat;
+extern struct debug_command cmd_echo;
+extern struct debug_command cmd_exec;
+extern struct debug_command cmd_true;
+extern struct debug_command cmd_false;
+extern struct debug_command cmd_sleep;
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_FS
 extern struct debug_command cmd_mkdir;
 extern struct debug_command cmd_rm;
 extern struct debug_command cmd_rmdir;
@@ -33,38 +29,63 @@ extern struct debug_command cmd_touch;
 extern struct debug_command cmd_cp;
 extern struct debug_command cmd_mv;
 extern struct debug_command cmd_ln;
-extern struct debug_command cmd_echo;
-extern struct debug_command cmd_exec;
-extern struct debug_command cmd_sed;
 extern struct debug_command cmd_mount;
 extern struct debug_command cmd_chmod;
 extern struct debug_command cmd_chown;
+extern struct debug_command cmd_basename;
+extern struct debug_command cmd_dirname;
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_DIAG
 extern struct debug_command cmd_ps;
 extern struct debug_command cmd_df;
 extern struct debug_command cmd_dmesg;
-extern struct debug_command cmd_ping;
 extern struct debug_command cmd_uname;
 extern struct debug_command cmd_lsblk;
 extern struct debug_command cmd_lsdrv;
-extern struct debug_command cmd_lsblue;
-extern struct debug_command cmd_bluestart;
-extern struct debug_command cmd_blue;
 extern struct debug_command cmd_free;
 extern struct debug_command cmd_uptime;
 extern struct debug_command cmd_date;
 extern struct debug_command cmd_keymap;
 extern struct debug_command cmd_lshw;
+extern struct debug_command cmd_stat;
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_NET
+extern struct debug_command cmd_ping;
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_BT
+extern struct debug_command cmd_lsblue;
+extern struct debug_command cmd_bluestart;
+extern struct debug_command cmd_blue;
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_IDENTITY
 extern struct debug_command cmd_sudo;
+extern struct debug_command cmd_id;
+extern struct debug_command cmd_whoami;
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_TEXT
+extern struct debug_command cmd_sed;
+extern struct debug_command cmd_wc;
+extern struct debug_command cmd_head;
+extern struct debug_command cmd_tail;
+#endif
 #ifdef IR0_KERNEL_TESTS
 extern struct debug_command cmd_ktest;
 #endif
 
-/* Tabla de comandos disponibles (solo comandos Unix reales) */
+/* Table of available commands */
 struct debug_command *debug_commands[] = {
+#if CONFIG_DEBUG_BINS_GROUP_CORE
     &cmd_ls,
     &cmd_cd,
     &cmd_pwd,
     &cmd_cat,
+    &cmd_echo,
+    &cmd_exec,
+    &cmd_true,
+    &cmd_false,
+    &cmd_sleep,
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_FS
     &cmd_mkdir,
     &cmd_rm,
     &cmd_rmdir,
@@ -72,38 +93,57 @@ struct debug_command *debug_commands[] = {
     &cmd_cp,
     &cmd_mv,
     &cmd_ln,
-    &cmd_echo,
-    &cmd_exec,
-    &cmd_sed,
     &cmd_mount,
     &cmd_chmod,
     &cmd_chown,
+    &cmd_basename,
+    &cmd_dirname,
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_DIAG
     &cmd_ps,
     &cmd_df,
     &cmd_dmesg,
-    &cmd_ping,
     &cmd_uname,
     &cmd_lsblk,
     &cmd_lsdrv,
-    &cmd_lsblue,
-    &cmd_bluestart,
-    &cmd_blue,
     &cmd_free,
     &cmd_uptime,
     &cmd_date,
     &cmd_keymap,
     &cmd_lshw,
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_NET
+    &cmd_ping,
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_BT
+    &cmd_lsblue,
+    &cmd_bluestart,
+    &cmd_blue,
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_IDENTITY
     &cmd_sudo,
+    &cmd_id,
+    &cmd_whoami,
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_TEXT
+    &cmd_sed,
+    &cmd_wc,
+    &cmd_head,
+    &cmd_tail,
+#endif
+#if CONFIG_DEBUG_BINS_GROUP_DIAG
+    &cmd_stat,
+#endif
 #ifdef IR0_KERNEL_TESTS
     &cmd_ktest,
 #endif
-    NULL  /* Terminador */
+    NULL  /* Terminator */
 };
 
 /**
- * debug_find_command - Buscar comando por nombre
- * @name: Nombre del comando
- * @return: Puntero al comando o NULL si no se encuentra
+ * debug_find_command - Find command by name
+ * @name: Command name
+ * @return: Command pointer or NULL if not found
  */
 struct debug_command *debug_find_command(const char *name)
 {
@@ -122,7 +162,7 @@ struct debug_command *debug_find_command(const char *name)
 }
 
 /**
- * Parsear string de argumentos a argc/argv
+ * Parse argument string into argc/argv
  */
 int debug_parse_args(const char *cmd_line, int *argc_out, char **argv_out, int max_args)
 {

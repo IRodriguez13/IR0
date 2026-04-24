@@ -33,33 +33,43 @@ static int cmd_rmdir_handler(int argc, char **argv)
         return 1;
     }
 
-    const char *dirname = argv[1];
-
-    /* Safety: never allow rmdir / */
-    if (dirname[0] == '/' && (dirname[1] == '\0' || (dirname[1] == '.' && dirname[2] == '\0')))
+    int had_error = 0;
+    for (int i = 1; i < argc; i++)
     {
-        debug_write_err("rmdir: cannot remove root directory\n");
-        debug_serial_fail("rmdir", "root");
+        const char *dirname = argv[i];
+
+        /* Safety: never allow rmdir / */
+        if (dirname[0] == '/' && (dirname[1] == '\0' || (dirname[1] == '.' && dirname[2] == '\0')))
+        {
+            debug_write_err("rmdir: cannot remove root directory\n");
+            debug_serial_fail("rmdir", "root");
+            had_error = 1;
+            continue;
+        }
+
+        int64_t result = ir0_rmdir(dirname);
+        if (result < 0)
+        {
+            debug_perror("rmdir", dirname, (int)result);
+            if (result == -ENOTEMPTY)
+                debug_write_err("Hint: Directory must be empty. Remove contents first.\n");
+            debug_serial_fail_err("rmdir", "vfs", (int)(-result));
+            had_error = 1;
+            continue;
+        }
+
+        {
+            char line[544];
+            int n = snprintf(line, sizeof(line), "rmdir: removed '%s'\n", dirname);
+
+            if (n > 0 && n < (int)sizeof(line))
+                debug_write(line);
+        }
+    }
+
+    if (had_error)
         return 1;
-    }
 
-    int64_t result = ir0_rmdir(dirname);
-    if (result < 0)
-    {
-        debug_perror("rmdir", dirname, (int)result);
-        if (result == -ENOTEMPTY)
-            debug_write_err("Hint: Directory must be empty. Remove contents first.\n");
-        debug_serial_fail_err("rmdir", "vfs", (int)(-result));
-        return 1;
-    }
-
-    {
-        char line[544];
-        int n = snprintf(line, sizeof(line), "rmdir: removed '%s'\n", dirname);
-
-        if (n > 0 && n < (int)sizeof(line))
-            debug_write(line);
-    }
     debug_serial_ok("rmdir");
     return 0;
 }
@@ -67,6 +77,6 @@ static int cmd_rmdir_handler(int argc, char **argv)
 struct debug_command cmd_rmdir = {
     .name = "rmdir",
     .handler = cmd_rmdir_handler,
-    .usage = "rmdir DIR",
+    .usage = "rmdir DIR...",
     .description = "Remove directory"
 };

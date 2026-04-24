@@ -60,6 +60,8 @@
 #define SYS_FD_BASE 3000  /* sysfs uses FD range 3000-3999 */
 #define SYS_DEFAULT_FILE_SIZE 256
 
+static char sys_kernel_hostname[64] = "ir0-kernel";
+
 /**
  * Offset tracking for /sys files
  * 
@@ -125,8 +127,7 @@ static int sys_kernel_hostname_read(char *buf, size_t count)
     
     memset(buf, 0, count);
     
-    /* Return kernel hostname (could be configurable) */
-    int len = snprintf(buf, count, "ir0-kernel\n");
+    int len = snprintf(buf, count, "%s\n", sys_kernel_hostname);
     
     if (len < 0)
         return -1;
@@ -137,6 +138,31 @@ static int sys_kernel_hostname_read(char *buf, size_t count)
     }
     
     return len;
+}
+
+static int sys_kernel_hostname_write(const char *buf, size_t count)
+{
+    if (!buf || count == 0)
+        return 0;
+
+    size_t copy_len = (count < sizeof(sys_kernel_hostname) - 1) ? count : (sizeof(sys_kernel_hostname) - 1);
+    memcpy(sys_kernel_hostname, buf, copy_len);
+    sys_kernel_hostname[copy_len] = '\0';
+
+    while (copy_len > 0 &&
+           (sys_kernel_hostname[copy_len - 1] == '\n' ||
+            sys_kernel_hostname[copy_len - 1] == '\r' ||
+            sys_kernel_hostname[copy_len - 1] == ' ' ||
+            sys_kernel_hostname[copy_len - 1] == '\t'))
+    {
+        copy_len--;
+        sys_kernel_hostname[copy_len] = '\0';
+    }
+
+    if (copy_len == 0)
+        return -EINVAL;
+
+    return (int)count;
 }
 
 /**
@@ -566,6 +592,8 @@ int sysfs_write(int fd, const char *buf, size_t count)
     
     switch (sys_fd)
     {
+        case 1:  /* /sys/kernel/hostname */
+            return sys_kernel_hostname_write(buf, count);
         case 2:  /* /sys/kernel/max_processes */
             return sys_kernel_max_processes_write(buf, count);
         case 12:  /* /sys/devices/system/cpu0/online */
@@ -609,7 +637,8 @@ int sysfs_stat(const char *path, stat_t *st)
         st->st_size = SYS_DEFAULT_FILE_SIZE;
         
         /* Writable files have different permissions */
-        if (strcmp(sys_path, "kernel/max_processes") == 0 ||
+        if (strcmp(sys_path, "kernel/hostname") == 0 ||
+            strcmp(sys_path, "kernel/max_processes") == 0 ||
             strcmp(sys_path, "devices/system/cpu0/online") == 0)
         {
             st->st_mode = S_IFREG | 0664;  /* Writable by owner/group */

@@ -22,6 +22,7 @@
 
 #include "pipe.h"
 #include <ir0/kmem.h>
+#include <ir0/errno.h>
 #include <string.h>
 #include <drivers/serial/serial.h>
 #include <config.h>
@@ -42,6 +43,8 @@ pipe_t *pipe_create(void)
     pipe->write_pos = 0;
     pipe->count = 0;
     pipe->ref_count = 2; /* Both read and write ends open */
+    pipe->readers = 1;
+    pipe->writers = 1;
 
 #if DEBUG_PROCESS
     serial_print("[PIPE] Created new pipe\n");
@@ -57,13 +60,15 @@ int pipe_read(pipe_t *pipe, void *buf, size_t count)
 {
     if (!pipe || !buf)
     {
-        return -1;
+        return -EINVAL;
     }
 
     /* No data available */
     if (pipe->count == 0)
     {
-        return 0;
+        if (pipe->writers <= 0)
+            return 0; /* EOF: all writers closed */
+        return -EAGAIN;
     }
 
     /* Read what's available */
@@ -94,13 +99,18 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 {
     if (!pipe || !buf)
     {
-        return -1;
+        return -EINVAL;
+    }
+
+    if (pipe->readers <= 0)
+    {
+        return -EPIPE; /* Broken pipe: no readers */
     }
 
     /* Pipe full */
     if (pipe->count >= PIPE_SIZE)
     {
-        return -1;
+        return -EAGAIN;
     }
 
     /* Write what fits */
@@ -128,11 +138,22 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 /**
  * pipe_close - Close one end of pipe
  */
-void pipe_close(pipe_t *pipe)
+void pipe_close_end(pipe_t *pipe, int end)
 {
     if (!pipe)
     {
         return;
+    }
+
+    if (end == 0)
+    {
+        if (pipe->readers > 0)
+            pipe->readers--;
+    }
+    else if (end == 1)
+    {
+        if (pipe->writers > 0)
+            pipe->writers--;
     }
 
     pipe->ref_count--;
@@ -145,4 +166,34 @@ void pipe_close(pipe_t *pipe)
 #endif
         kfree(pipe);
     }
+}
+
+/**
+ * pipe_acquire - Acquire one extra pipe reference
+ */
+void pipe_acquire(pipe_t *pipe)
+{
+    if (!pipe)
+    {
+        return;
+    }
+
+    pipe->ref_count++;
+}
+
+/**
+ * pipe_acquire_end - Acquire one extra read/write end reference
+ */
+void pipe_acquire_end(pipe_t *pipe, int end)
+{
+    if (!pipe)
+    {
+        return;
+    }
+
+    pipe->ref_count++;
+    if (end == 0)
+        pipe->readers++;
+    else if (end == 1)
+        pipe->writers++;
 }

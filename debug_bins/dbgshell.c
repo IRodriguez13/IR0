@@ -36,6 +36,8 @@
 #define EMPTY_READ_SPIN_MAX 100
 #define SHELL_SCROLL_STEP 12
 
+static uint32_t shell_pipe_seq = 0;
+
 /* Write to stdout (fd 1) - all output goes through typewriter for consistent cursor */
 static void write_stdout(const char *str)
 {
@@ -433,15 +435,22 @@ static int shell_complete_path(char *input, int *input_pos, int token_start)
         while (offset < (size_t)bytes_read && match_count < 128)
         {
             struct linux_dirent64 *dent = (struct linux_dirent64 *)(dirent_buf + offset);
+            size_t reclen = (size_t)dent->d_reclen;
             const char *name = dent->d_name;
+
+            if (reclen < sizeof(struct linux_dirent64) || offset + reclen > (size_t)bytes_read)
+            {
+                syscall(SYS_CLOSE, fd, 0, 0);
+                return 0;
+            }
             if (name[0] == '\0')
             {
-                offset += dent->d_reclen;
+                offset += reclen;
                 continue;
             }
             if (name[0] == '.' && name_prefix[0] != '.')
             {
-                offset += dent->d_reclen;
+                offset += reclen;
                 continue;
             }
             if (shell_starts_with(name, name_prefix))
@@ -452,7 +461,7 @@ static int shell_complete_path(char *input, int *input_pos, int token_start)
                 match_types[match_count] = dent->d_type;
                 match_count++;
             }
-            offset += dent->d_reclen;
+            offset += reclen;
         }
     }
     syscall(SYS_CLOSE, fd, 0, 0);
@@ -638,71 +647,178 @@ static void execute_command(const char *cmd)
         return;
     }
 
-    *pipe_pos = '\0';
-    char *first_cmd = cmd_copy;
-    char *second_cmd = pipe_pos + 1;
-
-    while (*first_cmd == ' ' || *first_cmd == '\t')
-        first_cmd++;
-    while (*second_cmd == ' ' || *second_cmd == '\t')
-        second_cmd++;
-
-    if (*first_cmd == '\0' || *second_cmd == '\0')
+    /*
+     * Current SYS_FORK does not provide full POSIX fork semantics yet.
+     * Emulate multi-stage pipelines in-process using temporary spool files:
+     * cmd1 | cmd2 | cmd3 ... (stages chained through spool fd rewind).
+     */
+    char *stages[16];
+    int stage_count = 0;
+    char *cursor = cmd_copy;
+    while (cursor && stage_count < (int)(sizeof(stages) / sizeof(stages[0])))
     {
-        write_stderr("Invalid pipe syntax\n");
+        char *sep = strchr(cursor, '|');
+        if (sep)
+            *sep = '\0';
+
+        while (*cursor == ' ' || *cursor == '\t')
+            cursor++;
+
+        char *end = cursor + strlen(cursor);
+        while (end > cursor && (end[-1] == ' ' || end[-1] == '\t'))
+        {
+            end[-1] = '\0';
+            end--;
+        }
+
+        if (*cursor == '\0')
+        {
+            write_stderr("Invalid pipe syntax\n");
+            return;
+        }
+
+        stages[stage_count++] = cursor;
+        cursor = sep ? (sep + 1) : NULL;
+    }
+
+    if (cursor != NULL || stage_count < 2)
+    {
+        write_stderr("Too many pipe stages\n");
         return;
     }
 
-    int pipefd[2];
-    if (syscall(SYS_PIPE, (uint64_t)pipefd, 0, 0) != 0)
+    int saved_stdin = syscall(SYS_DUP, 0, 0, 0);
+    int saved_stdout = syscall(SYS_DUP, 1, 0, 0);
+    if (saved_stdin < 0 || saved_stdout < 0)
     {
-        write_stderr("pipe() failed\n");
+        write_stderr("pipe setup failed\n");
+        if (saved_stdin >= 0)
+            syscall(SYS_CLOSE, saved_stdin, 0, 0);
+        if (saved_stdout >= 0)
+            syscall(SYS_CLOSE, saved_stdout, 0, 0);
         return;
     }
 
-    int pid_left = syscall(SYS_FORK, 0, 0, 0);
-    if (pid_left < 0)
+    int input_fd = -1;
+    char input_path[96];
+    int input_path_valid = 0;
+    int had_error = 0;
+    int64_t pid = syscall(SYS_GETPID, 0, 0, 0);
+    char cwd[256];
+    if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) < 0)
+        strcpy(cwd, "/");
+
+    for (int i = 0; i < stage_count; i++)
     {
-        write_stderr("fork() failed\n");
-        syscall(SYS_CLOSE, pipefd[0], 0, 0);
-        syscall(SYS_CLOSE, pipefd[1], 0, 0);
+        int is_last = (i == stage_count - 1);
+        int output_fd = -1;
+        char spool_path[96];
+
+        if (!is_last)
+        {
+            uint32_t seq = ++shell_pipe_seq;
+            int n;
+            if (strcmp(cwd, "/") == 0)
+                n = snprintf(spool_path, sizeof(spool_path), "/.dbgshell_pipe_%lld_%u_%d",
+                             (long long)pid, (unsigned)seq, i);
+            else
+                n = snprintf(spool_path, sizeof(spool_path), "%s/.dbgshell_pipe_%lld_%u_%d",
+                             cwd, (long long)pid, (unsigned)seq, i);
+            if (n > 0 && n < (int)sizeof(spool_path))
+                output_fd = syscall(SYS_OPEN, (uint64_t)spool_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
+            if (output_fd < 0)
+            {
+                n = snprintf(spool_path, sizeof(spool_path), "/tmp/.dbgshell_pipe_%lld_%u_%d",
+                             (long long)pid, (unsigned)seq, i);
+                if (n > 0 && n < (int)sizeof(spool_path))
+                    output_fd = syscall(SYS_OPEN, (uint64_t)spool_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
+            }
+            if (output_fd < 0)
+            {
+                n = snprintf(spool_path, sizeof(spool_path), "/.dbgshell_pipe_%lld_%u_%d",
+                             (long long)pid, (unsigned)seq, i);
+                if (n > 0 && n < (int)sizeof(spool_path))
+                    output_fd = syscall(SYS_OPEN, (uint64_t)spool_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
+            }
+            if (output_fd < 0)
+            {
+                write_stderr("pipe setup failed\n");
+                had_error = 1;
+                break;
+            }
+        }
+
+        if (input_fd >= 0)
+        {
+            if (syscall(SYS_DUP2, input_fd, 0, 0) < 0)
+            {
+                write_stderr("pipe redirection failed\n");
+                if (output_fd >= 0)
+                {
+                    syscall(SYS_CLOSE, output_fd, 0, 0);
+                    syscall(SYS_UNLINK, (uint64_t)spool_path, 0, 0);
+                }
+                had_error = 1;
+                break;
+            }
+        }
+        else
+        {
+            (void)syscall(SYS_DUP2, saved_stdin, 0, 0);
+        }
+
+        if (!is_last)
+        {
+            if (syscall(SYS_DUP2, output_fd, 1, 0) < 0)
+            {
+                write_stderr("pipe redirection failed\n");
+                syscall(SYS_CLOSE, output_fd, 0, 0);
+                syscall(SYS_UNLINK, (uint64_t)spool_path, 0, 0);
+                had_error = 1;
+                break;
+            }
+        }
+        else
+        {
+            (void)syscall(SYS_DUP2, saved_stdout, 1, 0);
+        }
+
+        execute_single_command(stages[i]);
+
+        if (input_fd >= 0)
+        {
+            syscall(SYS_CLOSE, input_fd, 0, 0);
+            input_fd = -1;
+            if (input_path_valid)
+            {
+                syscall(SYS_UNLINK, (uint64_t)input_path, 0, 0);
+                input_path_valid = 0;
+            }
+        }
+
+        if (!is_last)
+        {
+            (void)syscall(SYS_DUP2, saved_stdout, 1, 0);
+            (void)syscall(SYS_LSEEK, output_fd, 0, SEEK_SET);
+            input_fd = output_fd;
+            strncpy(input_path, spool_path, sizeof(input_path) - 1);
+            input_path[sizeof(input_path) - 1] = '\0';
+            input_path_valid = 1;
+        }
+    }
+
+    (void)syscall(SYS_DUP2, saved_stdin, 0, 0);
+    (void)syscall(SYS_DUP2, saved_stdout, 1, 0);
+    syscall(SYS_CLOSE, saved_stdin, 0, 0);
+    syscall(SYS_CLOSE, saved_stdout, 0, 0);
+    if (input_fd >= 0)
+    {
+        syscall(SYS_CLOSE, input_fd, 0, 0);
+        if (input_path_valid)
+            syscall(SYS_UNLINK, (uint64_t)input_path, 0, 0);
+    }
+    if (had_error)
         return;
-    }
-
-    if (pid_left == 0)
-    {
-        syscall(SYS_DUP2, pipefd[1], 1, 0);
-        syscall(SYS_CLOSE, pipefd[0], 0, 0);
-        syscall(SYS_CLOSE, pipefd[1], 0, 0);
-        execute_single_command(first_cmd);
-        syscall(SYS_EXIT, 0, 0, 0);
-        __builtin_unreachable();
-    }
-
-    int pid_right = syscall(SYS_FORK, 0, 0, 0);
-    if (pid_right < 0)
-    {
-        syscall(SYS_CLOSE, pipefd[0], 0, 0);
-        syscall(SYS_CLOSE, pipefd[1], 0, 0);
-        syscall(SYS_WAITPID, pid_left, 0, 0);
-        write_stderr("fork() failed\n");
-        return;
-    }
-
-    if (pid_right == 0)
-    {
-        syscall(SYS_DUP2, pipefd[0], 0, 0);
-        syscall(SYS_CLOSE, pipefd[0], 0, 0);
-        syscall(SYS_CLOSE, pipefd[1], 0, 0);
-        execute_single_command(second_cmd);
-        syscall(SYS_EXIT, 0, 0, 0);
-        __builtin_unreachable();
-    }
-
-    syscall(SYS_CLOSE, pipefd[0], 0, 0);
-    syscall(SYS_CLOSE, pipefd[1], 0, 0);
-    syscall(SYS_WAITPID, pid_left, 0, 0);
-    syscall(SYS_WAITPID, pid_right, 0, 0);
 }
 
 void cmd_clear(void)
@@ -825,8 +941,8 @@ void shell_entry(void)
 line_done:
         execute_command(input);
         /*
-         * Tras cada línea, descartar descriptores >2 para que un fallo de
-         * close en un comando no agote la tabla antes del siguiente.
+         * After each command line, drop descriptors >2 so a leaked fd does not
+         * exhaust the shared table before the next command runs.
          */
         debug_shell_sweep_open_fds();
     }
