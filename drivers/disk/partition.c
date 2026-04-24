@@ -13,8 +13,7 @@
 
 #include "partition.h"
 #include <string.h>
-#include <drivers/storage/ata.h>
-#include <kernel/process.h>
+#include <drivers/storage/block_dev.h>
 
 /**
  * Global partition storage
@@ -39,11 +38,16 @@ static int add_partition_info(const partition_info_t *info);
 int read_partition_table(uint8_t disk_id)
 {
     uint8_t sector[512];
+    const char *disk_name = block_dev_legacy_name(disk_id);
+    if (!disk_name || !block_dev_is_present(disk_name))
+    {
+        return -1;
+    }
 
     /**
      * Read first sector (MBR or GPT Protective MBR)
      */
-    if (ata_read_sectors(disk_id, 0, 1, sector) != 0)
+    if (!block_dev_read_sectors(disk_name, 0, 1, sector))
     {
         return -1;
     }
@@ -106,8 +110,13 @@ int read_partition_table(uint8_t disk_id)
 int is_gpt_disk(uint8_t disk_id)
 {
     uint8_t sector[512];
+    const char *disk_name = block_dev_legacy_name(disk_id);
+    if (!disk_name || !block_dev_is_present(disk_name))
+    {
+        return 0;
+    }
 
-    if (ata_read_sectors(disk_id, 0, 1, sector) != 0)
+    if (!block_dev_read_sectors(disk_name, 0, 1, sector))
     {
         return 0;
     }
@@ -187,8 +196,13 @@ const char *get_partition_type(uint8_t system_id)
 static int read_gpt_header(uint8_t disk_id, gpt_header_t *header)
 {
     uint8_t sector[512];
+    const char *disk_name = block_dev_legacy_name(disk_id);
+    if (!disk_name || !block_dev_is_present(disk_name))
+    {
+        return -1;
+    }
 
-    if (ata_read_sectors(disk_id, 1, 1, sector) != 0)
+    if (!block_dev_read_sectors(disk_name, 1, 1, sector))
     {
         return -1;
     }
@@ -217,12 +231,17 @@ static int read_gpt_header(uint8_t disk_id, gpt_header_t *header)
 static int read_gpt_partitions(uint8_t disk_id, const gpt_header_t *header)
 {
     uint8_t buffer[512];
+    const char *disk_name = block_dev_legacy_name(disk_id);
+    if (!disk_name || !block_dev_is_present(disk_name))
+    {
+        return -1;
+    }
     uint32_t entries_per_sector = 512 / header->size_of_partition_entry;
     uint32_t sectors_to_read = (header->num_partition_entries + entries_per_sector - 1) / entries_per_sector;
 
     for (uint32_t i = 0; i < sectors_to_read; i++)
     {
-        if (ata_read_sectors(disk_id, header->partition_entry_lba + i, 1, buffer) != 0)
+        if (!block_dev_read_sectors(disk_name, (uint32_t)(header->partition_entry_lba + i), 1, buffer))
         {
             return -1;
         }

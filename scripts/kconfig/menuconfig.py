@@ -17,6 +17,47 @@ KCONFIG_PATH = os.path.join(KERNEL_ROOT, "setup", "Kconfig")
 DOT_CONFIG   = os.path.join(KERNEL_ROOT, ".config")
 AUTOCONF_DIR = os.path.join(KERNEL_ROOT, "include", "generated")
 AUTOCONF_H   = os.path.join(AUTOCONF_DIR, "autoconf.h")
+VALID_UI_LANGS = ("en", "es")
+
+I18N = {
+    "en": {
+        "title": " IR0 Kernel Configuration ",
+        "footer": " [Space] Toggle  [Enter] Edit  [S] Save  [D] Defaults  [G] Generic  [T] Tiny  [L] Language  [?] Help  [Q] Quit ",
+        "modified": " [MODIFIED] ",
+        "help_title": " Help ",
+        "symbol": "Symbol",
+        "type": "Type",
+        "default": "Default",
+        "depends": "Depends on",
+        "range": "Range",
+        "saved": "Configuration saved to .config",
+        "preset_generic": "Applied preset: generic",
+        "preset_tiny": "Applied preset: tiny",
+        "save_before_exit": "Save before exit?",
+        "lang_switched": "UI language switched to English",
+    },
+    "es": {
+        "title": " Configuracion del Kernel IR0 ",
+        "footer": " [Espacio] Toggle  [Enter] Editar  [S] Guardar  [D] Defecto  [G] Generic  [T] Tiny  [L] Idioma  [?] Ayuda  [Q] Salir ",
+        "modified": " [MODIFICADO] ",
+        "help_title": " Ayuda ",
+        "symbol": "Simbolo",
+        "type": "Tipo",
+        "default": "Valor por defecto",
+        "depends": "Depende de",
+        "range": "Rango",
+        "saved": "Configuracion guardada en .config",
+        "preset_generic": "Preset aplicado: generic",
+        "preset_tiny": "Preset aplicado: tiny",
+        "save_before_exit": "Guardar antes de salir?",
+        "lang_switched": "Idioma de interfaz cambiado a Espanol",
+    },
+}
+
+
+def tr(lang, key):
+    lang_key = lang if lang in I18N else "en"
+    return I18N[lang_key].get(key, I18N["en"].get(key, key))
 
 # ---------------------------------------------------------------------------
 # Kconfig parser (minimal subset)
@@ -45,6 +86,15 @@ class ConfigSymbol:
             except (TypeError, ValueError):
                 return "0"
         return self.default or ""
+
+
+def normalize_string_value(val):
+    if val is None:
+        return ""
+    sval = val.strip()
+    if len(sval) >= 2 and sval[0] == '"' and sval[-1] == '"':
+        return sval[1:-1]
+    return sval
 
 
 def parse_kconfig(path):
@@ -116,7 +166,10 @@ def parse_kconfig(path):
                 current.prompt = m2.group(1)
         elif stripped.startswith("default"):
             val = stripped.split(None, 1)[1] if len(stripped.split(None, 1)) > 1 else ""
-            current.default = val.strip()
+            if current.type == "string":
+                current.default = normalize_string_value(val)
+            else:
+                current.default = val.strip()
         elif stripped.startswith("depends on"):
             current.depends = stripped.replace("depends on", "").strip()
         elif stripped.startswith("range"):
@@ -144,7 +197,10 @@ def load_dotconfig(symbols):
     for s in symbols:
         key = "CONFIG_" + s.name
         if key in vals:
-            s.value = vals[key]
+            if s.type == "string":
+                s.value = normalize_string_value(vals[key])
+            else:
+                s.value = vals[key]
         else:
             s.value = s.effective_default()
 
@@ -199,6 +255,132 @@ def dep_satisfied(symbols, sym):
         return True
     return dep.value == "y"
 
+
+def sanitize_ui_lang(lang_value):
+    if not lang_value:
+        return "en"
+    lang = str(lang_value).strip().lower()
+    if lang not in VALID_UI_LANGS:
+        return "en"
+    return lang
+
+
+def get_ui_lang(symbols):
+    sym = sym_lookup(symbols, "TOOL_MENUCONFIG_LANG")
+    if not sym:
+        return "en"
+    return sanitize_ui_lang(sym.value)
+
+
+def set_ui_lang(symbols, lang):
+    sym = sym_lookup(symbols, "TOOL_MENUCONFIG_LANG")
+    if sym:
+        sym.value = sanitize_ui_lang(lang)
+
+def enforce_dependencies(symbols):
+    changed = False
+    for sym in symbols:
+        if sym.type == "bool" and sym.value == "y" and not dep_satisfied(symbols, sym):
+            sym.value = "n"
+            changed = True
+    return changed
+
+def set_symbol_value(symbols, assignment):
+    if "=" not in assignment:
+        raise ValueError(f"Invalid --set assignment: {assignment}")
+    key, raw_val = assignment.split("=", 1)
+    key = key.strip()
+    raw_val = raw_val.strip()
+    if key.startswith("CONFIG_"):
+        key = key[len("CONFIG_"):]
+    sym = sym_lookup(symbols, key)
+    if sym is None:
+        raise ValueError(f"Unknown symbol in --set: {key}")
+
+    if sym.type == "bool":
+        if raw_val not in ("y", "n"):
+            raise ValueError(f"Boolean symbol {key} requires y/n")
+        sym.value = raw_val
+    elif sym.type == "int":
+        ival = int(raw_val, 10)
+        if sym.range_lo is not None:
+            ival = max(sym.range_lo, min(sym.range_hi, ival))
+        sym.value = str(ival)
+    else:
+        sym.value = normalize_string_value(raw_val)
+        if key == "TOOL_MENUCONFIG_LANG":
+            sym.value = sanitize_ui_lang(sym.value)
+
+
+def apply_preset(symbols, preset):
+    """Apply a predefined config profile."""
+    values = {}
+    if preset == "generic":
+        values = {
+            "KERNEL_DEBUG_SHELL": "y",
+            "TICK_RATE_HZ": "1000",
+            "SCHEDULER_POLICY": "0",
+            "ROOT_BLOCK_DEVICE": "hda",
+            "ROOT_FILESYSTEM": "minix",
+            "ENABLE_SMP": "n",
+            "ENABLE_NETWORKING": "y",
+            "ENABLE_SOUND": "y",
+            "ENABLE_BLUETOOTH": "y",
+            "ENABLE_MOUSE": "y",
+            "ENABLE_STORAGE_ATA": "y",
+            "ENABLE_STORAGE_ATA_BLOCK": "y",
+            "ENABLE_FS_MINIX": "y",
+            "ENABLE_FS_TMPFS": "y",
+            "ENABLE_PC_SPEAKER": "y",
+            "ENABLE_VBE": "y",
+            "ENABLE_EXAMPLE_DRIVERS": "n",
+            "INIT_PS2_CONTROLLER": "y",
+            "INIT_PC_SPEAKER": "y",
+            "INIT_STORAGE_ATA": "y",
+            "INIT_STORAGE_ATA_BLOCK": "y",
+            "INIT_SOUND_DRIVERS": "y",
+            "INIT_MOUSE_DRIVER": "y",
+            "INIT_NETWORK_STACK": "y",
+            "INIT_BLUETOOTH_DRIVER": "y",
+            "TOOL_DEFAULT_DISK_FS": "0",
+            "TOOL_DEFAULT_DISK_SIZE_MB": "200",
+            "TOOL_AUTO_RUN_DEPTEST": "n",
+            "TOOL_MENUCONFIG_LANG": "en",
+        }
+    elif preset == "tiny":
+        values = {
+            "KERNEL_DEBUG_SHELL": "y",
+            "TICK_RATE_HZ": "250",
+            "SCHEDULER_POLICY": "0",
+            "ROOT_BLOCK_DEVICE": "hda",
+            "ROOT_FILESYSTEM": "minix",
+            "ENABLE_SMP": "n",
+            "ENABLE_NETWORKING": "n",
+            "ENABLE_SOUND": "n",
+            "ENABLE_BLUETOOTH": "n",
+            "ENABLE_MOUSE": "n",
+            "ENABLE_STORAGE_ATA": "y",
+            "ENABLE_STORAGE_ATA_BLOCK": "y",
+            "ENABLE_FS_MINIX": "y",
+            "ENABLE_FS_TMPFS": "y",
+            "ENABLE_PC_SPEAKER": "n",
+            "ENABLE_VBE": "n",
+            "ENABLE_EXAMPLE_DRIVERS": "n",
+            "INIT_PS2_CONTROLLER": "y",
+            "INIT_PC_SPEAKER": "n",
+            "INIT_STORAGE_ATA": "y",
+            "INIT_STORAGE_ATA_BLOCK": "y",
+            "INIT_SOUND_DRIVERS": "n",
+            "INIT_MOUSE_DRIVER": "n",
+            "INIT_NETWORK_STACK": "n",
+            "INIT_BLUETOOTH_DRIVER": "n",
+            "TOOL_MENUCONFIG_LANG": "en",
+        }
+    for sym in symbols:
+        if sym.name in values:
+            sym.value = values[sym.name]
+    enforce_dependencies(symbols)
+
 # ---------------------------------------------------------------------------
 # Curses TUI
 # ---------------------------------------------------------------------------
@@ -218,6 +400,7 @@ def run_menu(stdscr, symbols):
     scroll = 0
     show_help = False
     dirty = False
+    ui_lang = get_ui_lang(symbols)
 
     while True:
         visible = [s for s in symbols if dep_satisfied(symbols, s)]
@@ -227,19 +410,19 @@ def run_menu(stdscr, symbols):
         stdscr.erase()
         h, w = stdscr.getmaxyx()
 
-        title = " IR0 Kernel Configuration "
+        title = tr(ui_lang, "title")
         stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
         stdscr.addstr(0, 0, " " * w)
         stdscr.addstr(0, max(0, (w - len(title)) // 2), title)
         stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
-        footer = " [Space] Toggle  [Enter] Edit  [S] Save  [D] Defaults  [?] Help  [Q] Quit "
+        footer = tr(ui_lang, "footer")
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(h - 1, 0, footer[:w - 1].ljust(w - 1))
         stdscr.attroff(curses.color_pair(1))
 
         if dirty:
-            mod = " [MODIFIED] "
+            mod = tr(ui_lang, "modified")
             stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
             stdscr.addstr(0, w - len(mod) - 1, mod)
             stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
@@ -299,14 +482,14 @@ def run_menu(stdscr, symbols):
         if show_help and cursor < len(visible):
             sym = visible[cursor]
             help_lines = [
-                f"Symbol: CONFIG_{sym.name}",
-                f"Type: {sym.type}",
-                f"Default: {sym.effective_default()}",
+                f"{tr(ui_lang, 'symbol')}: CONFIG_{sym.name}",
+                f"{tr(ui_lang, 'type')}: {sym.type}",
+                f"{tr(ui_lang, 'default')}: {sym.effective_default()}",
             ]
             if sym.depends:
-                help_lines.append(f"Depends on: CONFIG_{sym.depends}")
+                help_lines.append(f"{tr(ui_lang, 'depends')}: CONFIG_{sym.depends}")
             if sym.range_lo is not None:
-                help_lines.append(f"Range: {sym.range_lo}..{sym.range_hi}")
+                help_lines.append(f"{tr(ui_lang, 'range')}: {sym.range_lo}..{sym.range_hi}")
             if sym.help_text.strip():
                 help_lines.append("")
                 help_lines.extend(sym.help_text.strip().split("\n"))
@@ -319,7 +502,7 @@ def run_menu(stdscr, symbols):
             try:
                 win = curses.newwin(box_h, box_w, box_y, box_x)
                 win.box()
-                win.addstr(0, 2, " Help ")
+                win.addstr(0, 2, tr(ui_lang, "help_title"))
                 for i, hl in enumerate(help_lines[:box_h - 2]):
                     win.addstr(i + 1, 1, hl[:box_w - 3])
                 win.refresh()
@@ -373,14 +556,29 @@ def run_menu(stdscr, symbols):
         elif key == ord('s') or key == ord('S'):
             save_config(symbols)
             dirty = False
-            flash_msg(stdscr, "Configuration saved to .config", h, w)
+            flash_msg(stdscr, tr(ui_lang, "saved"), h, w)
         elif key == ord('d') or key == ord('D'):
             for s in symbols:
                 s.value = s.effective_default()
             dirty = True
+        elif key == ord('g') or key == ord('G'):
+            apply_preset(symbols, "generic")
+            ui_lang = get_ui_lang(symbols)
+            dirty = True
+            flash_msg(stdscr, tr(ui_lang, "preset_generic"), h, w)
+        elif key == ord('t') or key == ord('T'):
+            apply_preset(symbols, "tiny")
+            ui_lang = get_ui_lang(symbols)
+            dirty = True
+            flash_msg(stdscr, tr(ui_lang, "preset_tiny"), h, w)
+        elif key == ord('l') or key == ord('L'):
+            ui_lang = "es" if ui_lang == "en" else "en"
+            set_ui_lang(symbols, ui_lang)
+            dirty = True
+            flash_msg(stdscr, tr(ui_lang, "lang_switched"), h, w)
         elif key == ord('q') or key == ord('Q'):
             if dirty:
-                if confirm(stdscr, "Save before exit?", h, w):
+                if confirm(stdscr, tr(ui_lang, "save_before_exit"), h, w):
                     save_config(symbols)
             break
 
@@ -451,6 +649,35 @@ def main():
 
     symbols = parse_kconfig(KCONFIG_PATH)
     load_dotconfig(symbols)
+
+    args = sys.argv[1:]
+    if len(args) > 0 and args[0] == "--sync":
+        enforce_dependencies(symbols)
+        save_config(symbols)
+        print("Synced .config and include/generated/autoconf.h")
+        return
+
+    if len(args) > 1 and args[0] == "--preset":
+        preset_name = args[1].strip().lower()
+        if preset_name not in ("generic", "tiny"):
+            print(f"Unknown preset: {preset_name}", file=sys.stderr)
+            sys.exit(2)
+        apply_preset(symbols, preset_name)
+        save_config(symbols)
+        print(f"Applied preset '{preset_name}' and synced config files")
+        return
+
+    if len(args) > 0 and args[0] == "--set":
+        if len(args) < 2:
+            print("--set requires one or more SYMBOL=value assignments", file=sys.stderr)
+            sys.exit(2)
+        for assignment in args[1:]:
+            set_symbol_value(symbols, assignment)
+        enforce_dependencies(symbols)
+        save_config(symbols)
+        print("Applied explicit symbol assignments and synced config files")
+        return
+
     curses.wrapper(run_menu, symbols)
 
 

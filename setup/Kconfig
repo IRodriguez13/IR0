@@ -24,6 +24,35 @@ menu "General"
           Frequency of the PIT timer interrupt. Higher values give finer
           scheduling granularity at the cost of more IRQ overhead.
 
+    config SCHEDULER_POLICY
+        int "Scheduler policy (0=round-robin,1=cfs,2=priority)"
+        range 0 2
+        default 0
+        help
+          Build-time scheduler selection.
+          0 = round-robin (stable reference)
+          1 = cfs (currently aliases RR backend)
+          2 = priority (currently aliases RR backend)
+
+    config ROOT_BLOCK_DEVICE
+        string "Default root block device name"
+        default "hda"
+        help
+          Logical block device used for root mount attempt.
+
+    config ROOT_FILESYSTEM
+        string "Default root filesystem type"
+        default "minix"
+        help
+          Filesystem type used for root mount attempt.
+
+    config ENABLE_SMP
+        bool "Enable SMP build hooks (experimental)"
+        default n
+        help
+          Enables SMP-oriented compile-time hooks. Runtime SMP support is
+          still work-in-progress.
+
     config ENABLE_EXAMPLE_DRIVERS
         bool "Enable example external drivers (C++/Rust)"
         default n
@@ -76,6 +105,50 @@ menu "Input"
 
 endmenu
 
+menu "Storage"
+
+    config ENABLE_STORAGE_ATA
+        bool "ATA/IDE storage driver"
+        default y
+        help
+          Compile ATA core read/write support.
+
+    config ENABLE_STORAGE_ATA_BLOCK
+        bool "ATA block-device registration layer"
+        default y
+        depends on ENABLE_STORAGE_ATA
+        help
+          Register ATA devices as block devices (hda/hdb/...) for VFS/devfs.
+
+endmenu
+
+menu "Filesystems"
+
+    config ENABLE_FS_MINIX
+        bool "MINIX filesystem driver"
+        default y
+        help
+          Compile MINIX filesystem support (disk-backed root and regular mounts).
+
+    config ENABLE_FS_TMPFS
+        bool "TMPFS filesystem driver"
+        default y
+        help
+          Compile TMPFS in-memory filesystem support.
+          Recommended enabled as fallback root when disk mount fails.
+
+endmenu
+
+menu "Platform Devices"
+
+    config ENABLE_PC_SPEAKER
+        bool "PC speaker driver"
+        default y
+        help
+          Compile the PC speaker driver (port 0x61 + PIT channel 2).
+
+endmenu
+
 menu "Graphics"
 
     config ENABLE_VBE
@@ -84,6 +157,51 @@ menu "Graphics"
         help
           Use the VESA BIOS Extensions framebuffer when available
           (via Multiboot). VGA text-mode console is always compiled.
+
+endmenu
+
+menu "Driver Init Selection"
+
+    config INIT_PS2_CONTROLLER
+        bool "Initialize PS/2 controller"
+        default y
+
+    config INIT_PC_SPEAKER
+        bool "Initialize PC speaker"
+        default y
+        depends on ENABLE_PC_SPEAKER
+
+    config INIT_STORAGE_ATA
+        bool "Initialize ATA core driver"
+        default y
+        depends on ENABLE_STORAGE_ATA
+
+    config INIT_STORAGE_ATA_BLOCK
+        bool "Register ATA block device layer"
+        default y
+        depends on ENABLE_STORAGE_ATA_BLOCK
+        depends on INIT_STORAGE_ATA
+
+    config INIT_SOUND_DRIVERS
+        bool "Initialize sound drivers at boot"
+        default y
+        depends on ENABLE_SOUND
+
+    config INIT_MOUSE_DRIVER
+        bool "Initialize PS/2 mouse driver at boot"
+        default y
+        depends on ENABLE_MOUSE
+        depends on INIT_PS2_CONTROLLER
+
+    config INIT_NETWORK_STACK
+        bool "Initialize network stack at boot"
+        default y
+        depends on ENABLE_NETWORKING
+
+    config INIT_BLUETOOTH_DRIVER
+        bool "Register Bluetooth driver at boot"
+        default y
+        depends on ENABLE_BLUETOOTH
 
 endmenu
 
@@ -122,6 +240,15 @@ menu "Tooling"
         help
           If set, this exact file path is removed from unibuild target input
           before invoking scripts/unibuild.sh.
+
+    config TOOL_MENUCONFIG_LANG
+        string "menuconfig UI language (en/es)"
+        default "en"
+        help
+          Language for menuconfig UI labels and prompts.
+          Supported values are:
+          - en (English)
+          - es (Spanish)
 
 endmenu
 

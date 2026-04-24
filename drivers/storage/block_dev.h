@@ -75,6 +75,26 @@ uint64_t block_dev_get_sector_count(const char *name);
 bool block_dev_is_present(const char *name);
 
 /**
+ * block_dev_count - Número de dispositivos de bloque registrados
+ */
+int block_dev_count(void);
+
+/**
+ * block_dev_name_at - Nombre de dispositivo por índice de registro
+ *
+ * Returns: puntero al nombre o NULL si el índice es inválido.
+ */
+const char *block_dev_name_at(int index);
+
+/**
+ * block_dev_legacy_name - Mapea disk_id legado (0..3) a nombre lógico
+ *
+ * Compatibilidad temporal para rutas que aún usan disk_id estilo ATA.
+ * Returns: "hda"/"hdb"/"hdc"/"hdd" o NULL si disk_id inválido.
+ */
+const char *block_dev_legacy_name(uint8_t disk_id);
+
+/**
  * ata_block_register - Registra los discos ATA en block_dev
  *
  * Llamar tras ata_init(). Registra hda, hdb, hdc, hdd según corresponda.

@@ -22,6 +22,7 @@ struct block_dev_entry {
 
 static struct block_dev_entry s_devs[MAX_BLOCK_DEVS];
 static int s_count;
+static const char *const s_legacy_names[] = {"hda", "hdb", "hdc", "hdd"};
 
 int block_dev_register(const char *name, const block_dev_ops_t *ops, uint8_t dev_id)
 {
@@ -106,4 +107,25 @@ bool block_dev_is_present(const char *name)
 	if (!ops || !ops->is_present)
 		return false;
 	return ops->is_present(dev_id);
+}
+
+int block_dev_count(void)
+{
+	return s_count;
+}
+
+const char *block_dev_name_at(int index)
+{
+	if (index < 0 || index >= s_count)
+		return NULL;
+	if (!s_devs[index].used)
+		return NULL;
+	return s_devs[index].name;
+}
+
+const char *block_dev_legacy_name(uint8_t disk_id)
+{
+	if (disk_id >= (sizeof(s_legacy_names) / sizeof(s_legacy_names[0])))
+		return NULL;
+	return s_legacy_names[disk_id];
 }

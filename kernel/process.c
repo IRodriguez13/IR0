@@ -8,13 +8,13 @@
 
 #include "process.h"
 #include <config.h>
-#include "rr_sched.h"
+#include "scheduler_api.h"
 #include <ir0/kmem.h>
 #include <ir0/pipe.h>
 #include <mm/paging.h>
 #include <fs/vfs.h>
 #include <drivers/serial/serial.h>
-#include <drivers/video/vbe.h>
+#include <ir0/video_backend.h>
 #include <ir0/permissions.h>
 #include <ir0/signals.h>
 #include <ir0/oops.h>
@@ -219,8 +219,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		if (map_user_region_in_directory(proc->page_directory, proc->stack_start, proc->stack_size, PAGE_RW) != 0)
 		{
 			load_page_directory(old_cr3);  /* Restore original CR3 */
-			kfree(proc);
-			return -1;
+			process_unmap_user_pages_all(proc->page_directory);
+			goto fail_proc;
 		}
 		
 		/* Zero out the stack */
@@ -240,8 +240,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->stack_start = (uint64_t)kmalloc_try(proc->stack_size);
 		if (!proc->stack_start)
 		{
-			kfree(proc);
-			return -ENOMEM;
+			process_unmap_user_pages_all(proc->page_directory);
+			goto fail_proc;
 		}
 		memset((void *)proc->stack_start, 0, proc->stack_size);
 		proc->task.rsp = proc->stack_start + proc->stack_size - 16;
@@ -288,9 +288,23 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	process_list = proc;
 
 	/* Add to scheduler */
-	rr_add_process(proc);
+	sched_add_process(proc);
 
 	return proc->task.pid;
+
+fail_proc:
+	if (proc->stack_start && proc->mode == KERNEL_MODE)
+	{
+		kfree((void *)proc->stack_start);
+		proc->stack_start = 0;
+	}
+	if (proc->page_directory)
+	{
+		kfree_aligned(proc->page_directory);
+		proc->page_directory = NULL;
+	}
+	kfree(proc);
+	return -ENOMEM;
 }
 
 /* Convenience wrapper for user-mode processes */
@@ -501,7 +515,7 @@ void process_exit(int code)
 	 * The process structure remains in memory as a zombie until reaped
 	 * by the parent (via wait()), but it will not consume CPU time.
 	 */
-	rr_remove_process(dying);
+	sched_remove_process(dying);
 	
 	/* Clear current_process if this is the current process.
 	 * The scheduler will switch to another process.
@@ -513,7 +527,7 @@ void process_exit(int code)
 	 * The zombie process remains in memory with its exit code for the
 	 * parent to retrieve via wait().
 	 */
-	rr_schedule_next();
+	sched_schedule_next();
 	
 	/* Should never reach here - if we do, something is wrong */
 	panic("process_exit: returned from scheduler");
@@ -528,6 +542,8 @@ void process_exit(int code)
 void process_destroy(process_t *p)
 {
 	int i;
+	struct mmap_region *r;
+	struct mmap_region *next;
 
 	if (!p)
 		return;
@@ -576,6 +592,36 @@ clear_fd:
 	/* Unmap all user pages in this process's PML4 (reaper may run under another CR3) */
 	if (p->page_directory)
 		process_unmap_user_pages_all(p->page_directory);
+
+	/* Drop mmap bookkeeping nodes associated with this process. */
+	r = p->mmap_list;
+	while (r)
+	{
+		next = r->next;
+		kfree(r);
+		r = next;
+	}
+	p->mmap_list = NULL;
+
+	if (p->saved_context)
+	{
+		kfree(p->saved_context);
+		p->saved_context = NULL;
+	}
+
+	if (p->mode == KERNEL_MODE && p->stack_start &&
+	    p->stack_start != INIT_DEBUG_STACK_BASE)
+	{
+		kfree((void *)p->stack_start);
+		p->stack_start = 0;
+		p->stack_size = 0;
+	}
+
+	if (p->page_directory)
+	{
+		kfree_aligned(p->page_directory);
+		p->page_directory = NULL;
+	}
 }
 
 int process_wait(pid_t pid, int *status, int options)
@@ -640,7 +686,7 @@ int process_wait(pid_t pid, int *status, int options)
 		if (options & WNOHANG)
 			return 0;
 
-		rr_schedule_next();
+		sched_schedule_next();
 	}
 }
 
@@ -651,17 +697,12 @@ uint64_t create_process_page_directory(void)
 	uint64_t *pml4;
 	uint64_t kernel_cr3;
 	uint64_t *kernel_pml4;
-	uint64_t pml4_addr;
 	int i;
 
 	/* Allocate page-aligned memory for PML4 */
-	pml4 = kmalloc_try(4096 + 4096);
+	pml4 = kmalloc_aligned(4096, 4096);
 	if (!pml4)
 		return 0;
-
-	/* Align to 4096 bytes */
-	pml4_addr = ((uint64_t)pml4 + 4095) & ~4095ULL;
-	pml4 = (uint64_t *)pml4_addr;
 
 	memset(pml4, 0, 4096);
 	kernel_cr3 = get_current_page_directory();
@@ -695,10 +736,11 @@ uint64_t create_process_page_directory(void)
 	 * Framebuffer is often above 32MB (e.g. 0xFD000000) and may not be
 	 * in the copied low-memory mapping.
 	 */
-	if (vbe_is_available() && vbe_get_fb_phys() != 0)
+#if CONFIG_ENABLE_VBE
+	if (video_backend_is_available() && video_backend_get_fb_phys() != 0)
 	{
-		uint32_t fb_phys = vbe_get_fb_phys();
-		uint32_t fb_size = vbe_get_fb_size();
+		uint32_t fb_phys = video_backend_get_fb_phys();
+		uint32_t fb_size = video_backend_get_fb_size();
 		for (uint32_t off = 0; off < fb_size; off += 4096)
 		{
 			uint64_t p = fb_phys + off;
@@ -706,6 +748,7 @@ uint64_t create_process_page_directory(void)
 				break;
 		}
 	}
+#endif
 
 	return (uint64_t)pml4;
 }

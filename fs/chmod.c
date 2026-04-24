@@ -1,6 +1,6 @@
 #include "chmod.h"
 #include <fs/vfs.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <errno.h>
 #include <string.h>
 

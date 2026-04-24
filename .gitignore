@@ -25,6 +25,7 @@ iso_test/
 .build_number_inc
 .example_drivers_enabled
 AGENTS.md
+/.cursor
 
 # Menuconfig / Kconfig generated headers
 include/generated/

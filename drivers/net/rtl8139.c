@@ -24,6 +24,7 @@
 #include <ir0/oops.h>  /* For ASSERT and panicex */
 #include <kernel/resource_registry.h>
 #include <drivers/timer/clock_system.h>
+#include <arch/common/arch_portable.h>
 #include <config.h>
 
 /*
@@ -41,6 +42,7 @@ static uint8_t *rtl8139_tx_buffers[4] = {NULL, NULL, NULL, NULL}; /* 4 TX descri
 static uint32_t rtl8139_current_tx_descriptor = 0;
 static uint8_t rtl8139_mac[6];
 static uint16_t rtl8139_rx_read_offset = 0; /* Current read offset in RX buffer */
+static volatile uint8_t rtl8139_rx_processing = 0;
 
 /* TX tracking for robust DMA management */
 #define RTL8139_MAX_TX_IN_FLIGHT 4  /* Maximum number of TX packets in flight */
@@ -70,6 +72,48 @@ static struct net_device rtl8139_dev;
 /* Forward declarations */
 static int32_t rtl8139_hw_init(void);
 
+static inline uint64_t rtl8139_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint64_t flags;
+    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+    return flags;
+#else
+    arch_disable_interrupts();
+    return 0;
+#endif
+}
+
+static inline void rtl8139_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+    (void)flags;
+    arch_enable_interrupts();
+#endif
+}
+
+static bool rtl8139_try_enter_rx(void)
+{
+    uint64_t flags = rtl8139_irq_save();
+    if (rtl8139_rx_processing)
+    {
+        rtl8139_irq_restore(flags);
+        return false;
+    }
+    rtl8139_rx_processing = 1;
+    rtl8139_irq_restore(flags);
+    return true;
+}
+
+static void rtl8139_leave_rx(void)
+{
+    uint64_t flags = rtl8139_irq_save();
+    rtl8139_rx_processing = 0;
+    rtl8139_irq_restore(flags);
+}
+
 static ir0_driver_ops_t rtl8139_ops = {
     .init = rtl8139_hw_init,
     .shutdown = NULL
@@ -85,6 +129,11 @@ static ir0_driver_info_t rtl8139_info = {
 
 /* Forward declarations for net_device ops */
 static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len);
+static void rtl8139_netdev_poll(struct net_device *dev);
+static int rtl8139_netdev_get_irq_line(struct net_device *dev);
+static int rtl8139_netdev_handle_irq(struct net_device *dev, uint8_t irq);
+static void rtl8139_netdev_get_stats(struct net_device *dev, uint64_t *rx_pkts, uint64_t *tx_pkts,
+                                     uint64_t *rx_errs, uint64_t *tx_errs);
 
 /* PCI configuration space access */
 static uint32_t pci_config_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
@@ -133,6 +182,7 @@ int rtl8139_init(void)
 static int32_t rtl8139_hw_init(void)
 {
     uint8_t bus, slot;
+    int i;
 
     LOG_INFO("RTL8139", "Searching for device...");
 
@@ -189,6 +239,11 @@ static int32_t rtl8139_hw_init(void)
 
     /* Initialize RX buffer */
     rtl8139_rx_buffer = (uint8_t *)kmalloc(RTL8139_RX_BUF_SIZE + RTL8139_RX_BUF_PADDING);
+    if (!rtl8139_rx_buffer)
+    {
+        LOG_ERROR("RTL8139", "Failed to allocate RX buffer");
+        return -1;
+    }
     memset(rtl8139_rx_buffer, 0, RTL8139_RX_BUF_SIZE + RTL8139_RX_BUF_PADDING);
     outl(rtl8139_io_base + RTL8139_REG_RBSTART, KVA_TO_PHYS(rtl8139_rx_buffer));
     rtl8139_rx_read_offset = 0; /* Initialize read offset */
@@ -199,14 +254,14 @@ static int32_t rtl8139_hw_init(void)
      * 2. Buffers must be in physical memory within first 4GB (RTL8139 is 32-bit PCI)
      * 3. Buffers must remain valid until DMA completes (never freed while in use)
      */
-    for (int i = 0; i < 4; i++)
+    for (i = 0; i < 4; i++)
     {
         /* Allocate TX buffer - kmalloc should return aligned memory, but verify */
         rtl8139_tx_buffers[i] = (uint8_t *)kmalloc(RTL8139_MAX_TX_SIZE);
         if (!rtl8139_tx_buffers[i])
         {
             LOG_ERROR("RTL8139", "Failed to allocate TX buffer");
-            return -1;
+            goto init_fail;
         }
         
         /* Verify alignment (must be 32-bit aligned) */
@@ -214,7 +269,7 @@ static int32_t rtl8139_hw_init(void)
         if (addr % 4 != 0)
         {
             LOG_ERROR_FMT("RTL8139", "TX buffer %d not 32-bit aligned: %p", i, rtl8139_tx_buffers[i]);
-            return -1;
+            goto init_fail;
         }
         
         /* Verify physical address is within 32-bit range (first 4GB) */
@@ -222,7 +277,7 @@ static int32_t rtl8139_hw_init(void)
         if (phys_addr > 0xFFFFFFFF)
         {
             LOG_ERROR_FMT("RTL8139", "TX buffer %d physical address > 4GB: 0x%x", i, phys_addr);
-            return -1;
+            goto init_fail;
         }
         
         /* Register TX buffer PHYSICAL address with hardware */
@@ -289,11 +344,33 @@ static int32_t rtl8139_hw_init(void)
     }
     
     rtl8139_dev.send = rtl8139_netdev_send;
+    rtl8139_dev.poll = rtl8139_netdev_poll;
+    rtl8139_dev.get_irq_line = rtl8139_netdev_get_irq_line;
+    rtl8139_dev.handle_irq = rtl8139_netdev_handle_irq;
+    rtl8139_dev.get_stats = rtl8139_netdev_get_stats;
 
     net_register_device(&rtl8139_dev);
 
     LOG_INFO("RTL8139", "Initialization successful.");
     return 0;
+
+init_fail:
+    for (int j = 0; j < 4; j++)
+    {
+        if (rtl8139_tx_buffers[j])
+        {
+            kfree(rtl8139_tx_buffers[j]);
+            rtl8139_tx_buffers[j] = NULL;
+        }
+    }
+    if (rtl8139_rx_buffer)
+    {
+        kfree(rtl8139_rx_buffer);
+        rtl8139_rx_buffer = NULL;
+    }
+    rtl8139_io_base = 0;
+    rtl8139_irq_line = -1;
+    return -1;
 }
 
 /**
@@ -538,6 +615,35 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
     }
     LOG_INFO("RTL8139", "netdev_send: rtl8139_send returned");
     return 0;
+}
+
+static void rtl8139_netdev_poll(struct net_device *dev)
+{
+    (void)dev;
+    rtl8139_poll();
+}
+
+static int rtl8139_netdev_get_irq_line(struct net_device *dev)
+{
+    (void)dev;
+    return rtl8139_get_irq_line();
+}
+
+static int rtl8139_netdev_handle_irq(struct net_device *dev, uint8_t irq)
+{
+    (void)dev;
+    int line = rtl8139_get_irq_line();
+    if (line < 0 || line >= 16 || line != (int)irq)
+        return 0;
+    rtl8139_handle_interrupt();
+    return 1;
+}
+
+static void rtl8139_netdev_get_stats(struct net_device *dev, uint64_t *rx_pkts, uint64_t *tx_pkts,
+                                     uint64_t *rx_errs, uint64_t *tx_errs)
+{
+    (void)dev;
+    rtl8139_get_stats(rx_pkts, tx_pkts, rx_errs, tx_errs);
 }
 
 /*
@@ -864,9 +970,13 @@ void rtl8139_handle_interrupt(void)
     /* Check for receive interrupt */
     if (isr & RTL8139_INT_ROK)
     {
-        LOG_DEBUG("RTL8139", "RX interrupt detected, processing packets...");
-        /* Process packets BEFORE clearing ISR to avoid race conditions */
-        rtl8139_process_rx_packets();
+        if (rtl8139_try_enter_rx())
+        {
+            LOG_DEBUG("RTL8139", "RX interrupt detected, processing packets...");
+            /* Process packets BEFORE clearing ISR to avoid race conditions */
+            rtl8139_process_rx_packets();
+            rtl8139_leave_rx();
+        }
     }
     else if (isr != 0)
     {
@@ -968,17 +1078,25 @@ void rtl8139_poll(void)
     
     if (isr & RTL8139_INT_ROK)
     {
-        /* Process packets */
-        rtl8139_process_rx_packets();
-        
-        /* Clear interrupt status */
-        outw(rtl8139_io_base + RTL8139_REG_ISR, RTL8139_INT_ROK);
+        if (rtl8139_try_enter_rx())
+        {
+            /* Process packets */
+            rtl8139_process_rx_packets();
+            rtl8139_leave_rx();
+            
+            /* Clear interrupt status */
+            outw(rtl8139_io_base + RTL8139_REG_ISR, RTL8139_INT_ROK);
+        }
     }
     else
     {
         /* Even if ISR doesn't show ROK, check the buffer directly */
         /* Sometimes packets arrive but interrupt doesn't fire */
-        rtl8139_process_rx_packets();
+        if (rtl8139_try_enter_rx())
+        {
+            rtl8139_process_rx_packets();
+            rtl8139_leave_rx();
+        }
     }
     
     /* CRITICAL: Check TX completion during polling */

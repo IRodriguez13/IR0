@@ -78,6 +78,11 @@ struct net_device
 
     /* Driver operations */
     int (*send)(struct net_device *dev, void *data, size_t len);
+    void (*poll)(struct net_device *dev);
+    int (*get_irq_line)(struct net_device *dev);
+    int (*handle_irq)(struct net_device *dev, uint8_t irq);
+    void (*get_stats)(struct net_device *dev, uint64_t *rx_pkts, uint64_t *tx_pkts,
+                      uint64_t *rx_errs, uint64_t *tx_errs);
 
     struct net_device *next;
 };
@@ -129,6 +134,13 @@ int init_net_stack(void);
 
 /* Network Polling (for receiving packets when not actively waiting) */
 void net_poll(void);
+void net_stack_poll(void);
+
+/* Driver-agnostic IRQ and stats helpers for kernel core callsites */
+int net_stack_get_irq_line(void);
+int net_stack_handle_irq(uint8_t irq);
+void net_stack_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
+                         uint64_t *rx_errs, uint64_t *tx_errs);
 
 /* Ping result structure for syscalls */
 struct ping_result {

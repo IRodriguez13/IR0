@@ -8,6 +8,7 @@
 
 #include "block_dev.h"
 #include "ata.h"
+#include <drivers/disk/partition.h>
 #include <string.h>
 
 static const char *ata_names[] = { "hda", "hdb", "hdc", "hdd" };
@@ -55,7 +56,9 @@ static const block_dev_ops_t ata_block_ops = {
 void ata_block_register(void)
 {
 	for (int i = 0; i < 4; i++) {
-		if (ata_drive_present((uint8_t)i))
+		if (ata_drive_present((uint8_t)i)) {
 			block_dev_register(ata_names[i], &ata_block_ops, (uint8_t)i);
+			read_partition_table((uint8_t)i);
+		}
 	}
 }

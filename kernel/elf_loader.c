@@ -12,7 +12,7 @@
  */
 
 #include "process.h"
-#include "rr_sched.h"
+#include "scheduler_api.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -593,7 +593,7 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
          * spawn_user() already queued this process; drop it from the scheduler
          * and free the struct so we do not run a half-loaded image.
          */
-        rr_remove_process(process);
+        sched_remove_process(process);
         {
             process_t **pp = &process_list;
 
@@ -620,7 +620,7 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
         /* Continue even if stack setup fails - some binaries don't need args */
     }
 
-    /* spawn_user() already called rr_add_process(); do not enqueue twice */
+    /* spawn_user() already called sched_add_process(); do not enqueue twice */
 
     /* Step 6: Clean up file data */
     kfree(file_data);

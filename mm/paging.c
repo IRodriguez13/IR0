@@ -1,5 +1,4 @@
 #include <stdint.h>
-#include <ir0/vga.h>
 #include <ir0/logging.h>
 #include <ir0/oops.h>
 #include "paging.h"
