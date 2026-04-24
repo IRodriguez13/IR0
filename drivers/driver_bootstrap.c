@@ -46,6 +46,7 @@ int driver_bootstrap_run_all(void)
 {
     int stage;
     int i;
+    int failures = 0;
 
     for (stage = 0; stage < DRIVER_BOOT_STAGE_MAX; stage++)
     {
@@ -63,10 +64,11 @@ int driver_bootstrap_run_all(void)
             {
                 LOG_WARNING_FMT("DRIVERS", "Boot init failed: %s (%d)",
                                 entry->name, ret);
+                failures++;
             }
         }
     }
 
-    return 0;
+    return (failures == 0) ? 0 : -failures;
 }
 

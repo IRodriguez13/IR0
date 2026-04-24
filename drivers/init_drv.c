@@ -11,7 +11,7 @@
  */
 
 #include "init_drv.h"
-#include "driver_bootstrap.h"
+#include <ir0/driver_bootstrap.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <config.h>
@@ -39,7 +39,7 @@
 #include <drivers/dma/dma.h>
 #endif
 
-#if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
+#if CONFIG_ENABLE_BLUETOOTH
 #include "bluetooth/bluetooth_init.h"
 #endif
 
@@ -117,6 +117,15 @@ static int boot_init_network(void)
 #endif
 }
 
+static int boot_init_bluetooth(void)
+{
+#if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
+    return bluetooth_register_driver();
+#else
+    return 0;
+#endif
+}
+
 static void register_bootstrap_plan(void)
 {
     driver_bootstrap_reset();
@@ -136,6 +145,8 @@ static void register_bootstrap_plan(void)
                               (CONFIG_ENABLE_SOUND && CONFIG_INIT_SOUND_DRIVERS));
     driver_bootstrap_register(DRIVER_BOOT_STAGE_NETWORK, "network_stack", boot_init_network,
                               (CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK));
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_NETWORK, "bluetooth_stack", boot_init_bluetooth,
+                              (CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER));
 }
 
 /**
@@ -147,16 +158,9 @@ static void driver_registry_prepare(void)
     if (g_registry_ready)
         return;
 
-    ir0_driver_registry_init();
+    if (!ir0_driver_registry_is_initialized())
+        ir0_driver_registry_init();
     log_subsystem_ok("DRIVER_REGISTRY");
-
-#if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
-    if (bluetooth_register_driver() == 0) {
-        LOG_INFO("KERNEL", "Bluetooth subsystem registered successfully");
-    } else {
-        LOG_WARNING("KERNEL", "Bluetooth subsystem registration failed");
-    }
-#endif
 
 #if KERNEL_ENABLE_EXAMPLE_DRIVERS
     register_multilang_example_drivers();
@@ -181,7 +185,8 @@ void init_all_drivers(void)
     serial_print("[DRIVERS] Initializing all hardware drivers...\n");
     driver_registry_prepare();
     register_bootstrap_plan();
-    driver_bootstrap_run_all();
+    if (driver_bootstrap_run_all() != 0)
+        LOG_WARNING("DRIVERS", "One or more selectable boot drivers failed");
 
     log_subsystem_ok("PS2_KEYBOARD");
 #if CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER
@@ -189,6 +194,9 @@ void init_all_drivers(void)
 #endif
 #if CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK
     log_subsystem_ok("NETWORK_STACK");
+#endif
+#if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
+    log_subsystem_ok("BLUETOOTH_STACK");
 #endif
     g_bootstrap_done = 1;
     serial_print("[DRIVERS] All drivers initialized successfully\n");

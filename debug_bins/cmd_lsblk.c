@@ -12,6 +12,8 @@
 static unsigned long long parse_ull(const char *s)
 {
     unsigned long long v = 0;
+    while (*s && (*s < '0' || *s > '9'))
+        s++;
     while (*s >= '0' && *s <= '9') { v = v * 10 + (unsigned long long)(*s - '0'); s++; }
     return v;
 }
@@ -33,10 +35,18 @@ static void format_size(unsigned long long sectors, char *out, size_t out_len)
     unsigned long long bytes = sectors * 512;
     unsigned long long mb = bytes / (1024 * 1024);
     unsigned long long gb = mb / 1024;
+    char size_num[32];
+
     if (gb > 0)
-        snprintf(out, out_len, "%lluG", gb);
+    {
+        debug_u64_to_dec((uint64_t)gb, size_num, sizeof(size_num));
+        snprintf(out, out_len, "%sG", size_num);
+    }
     else
-        snprintf(out, out_len, "%lluM", mb);
+    {
+        debug_u64_to_dec((uint64_t)mb, size_num, sizeof(size_num));
+        snprintf(out, out_len, "%sM", size_num);
+    }
 }
 
 /* Parse one line; fields are tab-separated (type name maj min sectors model serial) */
@@ -85,15 +95,15 @@ static int cmd_lsblk_handler(int argc, char **argv)
     syscall(SYS_CLOSE, (uint64_t)fd, 0, 0);
     if (nr <= 0)
     {
-        debug_writeln("NAME      MAJ:MIN SIZE  MODEL");
+        debug_writeln("NAME      TYPE  MAJ:MIN  SIZE   MODEL");
         debug_serial_ok("lsblk");
         return 0;
     }
     buf[nr] = '\0';
 
     /* Header */
-    debug_writeln("NAME      MAJ:MIN SIZE  MODEL");
-    debug_writeln("----------------------------------------");
+    debug_writeln("NAME      TYPE  MAJ:MIN  SIZE   MODEL");
+    debug_writeln("---------------------------------------------------------------");
 
     char size_str[16];
     const char *p = buf;
@@ -115,15 +125,23 @@ static int cmd_lsblk_handler(int argc, char **argv)
                 if (strcmp(line.type, "disk") == 0)
                 {
                     char out[160];
-                    snprintf(out, sizeof(out), "%-9s %u:%-2u  %4s  %s (%s)",
-                             line.name, line.maj, line.min, size_str, line.model, line.serial);
+                    if (line.serial[0] && strcmp(line.serial, "-") != 0)
+                    {
+                        snprintf(out, sizeof(out), "%-9s %-5s %3u:%-3u  %6s  %s (%s)",
+                                 line.name, line.type, line.maj, line.min, size_str, line.model, line.serial);
+                    }
+                    else
+                    {
+                        snprintf(out, sizeof(out), "%-9s %-5s %3u:%-3u  %6s  %s",
+                                 line.name, line.type, line.maj, line.min, size_str, line.model);
+                    }
                     debug_writeln(out);
                 }
                 else
                 {
-                    char out[80];
-                    snprintf(out, sizeof(out), "  %-7s %u:%-2u  %4s",
-                             line.name, line.maj, line.min, size_str);
+                    char out[120];
+                    snprintf(out, sizeof(out), "  %-7s %-5s %3u:%-3u  %6s",
+                             line.name, line.type, line.maj, line.min, size_str);
                     debug_writeln(out);
                 }
             }

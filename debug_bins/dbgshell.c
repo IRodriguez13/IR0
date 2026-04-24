@@ -20,6 +20,7 @@
 #define INPUT_MAX 255
 #define BATCH_READ 32
 #define EMPTY_READ_SPIN_MAX 100
+#define SHELL_SCROLL_STEP 12
 
 /* Write to stdout (fd 1) - all output goes through typewriter for consistent cursor */
 static void write_stdout(const char *str)
@@ -91,6 +92,140 @@ static bool is_empty_line(const char *line)
 static int parse_args(char *line, int *argc_out, char **argv_out, int max_args)
 {
     return debug_parse_args(line, argc_out, argv_out, max_args);
+}
+
+static int shell_starts_with(const char *text, const char *prefix)
+{
+    while (*prefix)
+    {
+        if (*text++ != *prefix++)
+            return 0;
+    }
+    return 1;
+}
+
+static int shell_contains_space_or_tab(const char *line, int len)
+{
+    for (int i = 0; i < len; i++)
+    {
+        if (line[i] == ' ' || line[i] == '\t')
+            return 1;
+    }
+    return 0;
+}
+
+static int shell_common_prefix_len(const char *a, const char *b)
+{
+    int n = 0;
+
+    while (a[n] && b[n] && a[n] == b[n])
+        n++;
+    return n;
+}
+
+static int shell_collect_matches(const char *prefix, const char **out_matches, int max_matches, int list_matches)
+{
+    int count = 0;
+    const char *builtins[] = { "help", "clear", "exit", NULL };
+    extern struct debug_command *debug_commands[];
+
+    for (int i = 0; builtins[i] != NULL; i++)
+    {
+        if (shell_starts_with(builtins[i], prefix))
+        {
+            if (count < max_matches)
+                out_matches[count] = builtins[i];
+            count++;
+        }
+    }
+
+    for (int i = 0; debug_commands[i] != NULL; i++)
+    {
+        const char *name = debug_commands[i]->name;
+        if (shell_starts_with(name, prefix))
+        {
+            if (count < max_matches)
+                out_matches[count] = name;
+            count++;
+        }
+    }
+
+    if (list_matches && count > 1)
+    {
+        write_stdout("\n");
+        for (int i = 0; i < count && i < max_matches; i++)
+        {
+            write_stdout(out_matches[i]);
+            write_stdout("  ");
+        }
+        write_stdout("\n");
+    }
+
+    return count;
+}
+
+static void shell_try_tab_complete(char *input, int *input_pos)
+{
+    if (!input || !input_pos || *input_pos <= 0)
+        return;
+    if (shell_contains_space_or_tab(input, *input_pos))
+        return;
+
+    char prefix[INPUT_MAX + 1];
+    int prefix_len = *input_pos;
+    if (prefix_len > INPUT_MAX)
+        prefix_len = INPUT_MAX;
+
+    memcpy(prefix, input, (size_t)prefix_len);
+    prefix[prefix_len] = '\0';
+
+    const int max_matches = 128;
+    const char *matches[128];
+    int match_count = shell_collect_matches(prefix, matches, max_matches, 0);
+
+    if (match_count <= 0)
+        return;
+
+    int common_len = (int)strlen(matches[0]);
+    for (int i = 1; i < match_count && i < max_matches; i++)
+    {
+        int n = shell_common_prefix_len(matches[0], matches[i]);
+        if (n < common_len)
+            common_len = n;
+    }
+
+    if (match_count == 1)
+    {
+        const char *full = matches[0];
+        int full_len = (int)strlen(full);
+        for (int i = prefix_len; i < full_len && *input_pos < INPUT_MAX; i++)
+        {
+            input[(*input_pos)++] = full[i];
+            echo_char(full[i]);
+        }
+        if (*input_pos < INPUT_MAX)
+        {
+            input[(*input_pos)++] = ' ';
+            echo_char(' ');
+        }
+        input[*input_pos] = '\0';
+        return;
+    }
+
+    if (common_len > prefix_len)
+    {
+        for (int i = prefix_len; i < common_len && *input_pos < INPUT_MAX; i++)
+        {
+            input[(*input_pos)++] = matches[0][i];
+            echo_char(matches[0][i]);
+        }
+        input[*input_pos] = '\0';
+        return;
+    }
+
+    shell_collect_matches(prefix, matches, max_matches, 1);
+    print_prompt();
+    write_stdout(input);
 }
 
 /* Execute a single command */
@@ -259,14 +394,7 @@ static void execute_command(const char *cmd)
 
 void cmd_clear(void)
 {
-    /*
-     * Clear via ANSI on stdout (fd 1) so the shell stays on the syscall
-     * write path like other debug_bins output.
-     */
-    static const char ansi_home_clear[] = "\033[2J\033[H";
-
-    syscall(SYS_WRITE, 1, (uint64_t)ansi_home_clear,
-            sizeof(ansi_home_clear) - 1);
+    (void)syscall(SYS_CONSOLE_CLEAR, 0x0F, 0, 0);
     write_stdout("IR0 DebShell v0.0.1\nType 'help' for commands\n\n");
 }
 
@@ -282,6 +410,7 @@ void shell_entry(void)
 {
     char input[INPUT_MAX + 1];
     int input_pos = 0;
+    int pending_escape = 0;
 
     cmd_clear();
 
@@ -291,6 +420,7 @@ void shell_entry(void)
 
         input_pos = 0;
         input[0] = '\0';
+        pending_escape = 0;
 
         {
             int empty_reads = 0;
@@ -321,25 +451,46 @@ void shell_entry(void)
                 {
                     char c = buf[i];
 
-                    if (c == 0x1B && i + 1 < n)
+                    if (pending_escape)
                     {
-                        if (buf[i + 1] == 0x01)
-                            syscall(SYS_CONSOLE_SCROLL, 1, 0, 0);
-                        else if (buf[i + 1] == 0x02)
-                            syscall(SYS_CONSOLE_SCROLL, -1, 0, 0);
-                        else if (buf[i + 1] == 0x03)
+                        if (c == 0x01)
+                        {
+                            syscall(SYS_CONSOLE_SCROLL, SHELL_SCROLL_STEP, 0, 0);
+                            pending_escape = 0;
+                            continue;
+                        }
+                        else if (c == 0x02)
+                        {
+                            syscall(SYS_CONSOLE_SCROLL, -SHELL_SCROLL_STEP, 0, 0);
+                            pending_escape = 0;
+                            continue;
+                        }
+                        else if (c == 0x03)
+                        {
                             cmd_clear();
-                        i++;
+                            pending_escape = 0;
+                            continue;
+                        }
+                        pending_escape = 0;
+                    }
+
+                    if (c == 0x1B)
+                    {
+                        pending_escape = 1;
                         continue;
                     }
-                    if (c == 0x1B)
-                        continue;
 
-                    if (c == '\n')
+                    if (c == '\n' || c == '\r')
                     {
                         echo_char('\n');
                         input[input_pos] = '\0';
                         goto line_done;
+                    }
+
+                    if (c == '\t')
+                    {
+                        shell_try_tab_complete(input, &input_pos);
+                        continue;
                     }
 
                     if (c == '\b' || c == 127)

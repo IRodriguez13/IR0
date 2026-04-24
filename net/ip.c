@@ -17,6 +17,7 @@
 #include "net.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
+#include <ir0/errno.h>
 #include <drivers/serial/serial.h>
 #include <drivers/timer/clock_system.h>
 #include <string.h>
@@ -42,18 +43,20 @@ static int ip_route_count = 0;
 /* IP Protocol registration */
 static struct net_protocol ip_proto;
 
-/* Temporary storage for source IP when calling upper layer handlers */
-/* This is used to pass source IP to ICMP for Echo Reply */
-static ip4_addr_t ip_last_src_addr = 0;
-/* Destination IP from the last accepted inbound packet (pseudo-header for UDP, etc.) */
-ip4_addr_t ip_last_dest_addr = 0;
-static uint8_t ip_last_ttl = 0;
-
 /* Broadcast IP address */
 static const ip4_addr_t broadcast_ip = 0xFFFFFFFF; /* 255.255.255.255 */
 
 /* IP Fragmentation: Simple fragmentation counter for unique fragment IDs */
 static uint16_t ip_frag_id_counter = 1;
+
+/*
+ * Fragmentation policy contract:
+ * - RX reassembly is currently unsupported, so fragmented inbound datagrams
+ *   are dropped and counted.
+ * - TX fragmentation is enabled to keep large datagrams routable.
+ */
+#define IP_RX_REASSEMBLY_SUPPORTED 0
+#define IP_TX_FRAGMENTATION_ENABLED 1
 
 /*
  * Inbound IPv4 fragments are dropped: no reassembly buffer. Count drops and
@@ -272,7 +275,7 @@ void ip_receive_handler(struct net_device *dev, const void *data,
     /* Extract protocol number */
     uint8_t protocol = ip->protocol;
     
-    if (is_fragment)
+    if (is_fragment && !IP_RX_REASSEMBLY_SUPPORTED)
     {
         (void)frag_id;
         (void)frag_offset;
@@ -309,11 +312,6 @@ void ip_receive_handler(struct net_device *dev, const void *data,
                         IP4_ARGS(ntohl(src_ip)), IP4_ARGS(ntohl(dest_ip)));
         }
     }
-
-    /* Store source/dest IP and TTL for upper layer handlers (e.g., ICMP, UDP checksum) */
-    ip_last_src_addr = src_ip;
-    ip_last_dest_addr = dest_ip;
-    ip_last_ttl = ip->ttl;
 
     /* Enhanced logging for ICMP packets to debug Echo Reply issues */
     if (protocol == IPPROTO_ICMP && len >= header_len + 4)
@@ -357,9 +355,14 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         /* Extract payload (after IP header) */
         const void *payload = (const uint8_t *)data + header_len;
         size_t payload_len = len - header_len;
+        struct ip_rx_context rx_ctx;
+
+        rx_ctx.src_addr = src_ip;
+        rx_ctx.dest_addr = dest_ip;
+        rx_ctx.ttl = ip->ttl;
 
         /* Call protocol handler (ICMP, UDP in this stack) */
-        proto->handler(dev, payload, payload_len, proto->priv);
+        proto->handler(dev, payload, payload_len, &rx_ctx);
     }
     else
     {
@@ -601,7 +604,13 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
         return ret;
     }
     
-    /* Packet is too large, need to fragment */
+    if (!IP_TX_FRAGMENTATION_ENABLED)
+    {
+        LOG_WARNING("IP", "TX packet exceeds MTU and TX fragmentation is disabled");
+        return -EFBIG;
+    }
+
+    /* Packet is too large, fragment according to TX policy */
     LOG_INFO_FMT("IP", "Fragmenting packet: total_len=%d, max_payload=%d", 
                  (int)total_len, (int)max_payload);
     
@@ -713,37 +722,6 @@ int ip_init(void)
 
     LOG_INFO("IP", "IPv4 protocol initialized");
     return 0;
-}
-
-/**
- * ip_get_last_src_addr - Get source IP from last received packet
- * This is used by upper layer protocols (e.g., ICMP) to get the source IP
- * for sending replies.
- * @return: Source IP address in network byte order
- */
-ip4_addr_t ip_get_last_src_addr(void)
-{
-    return ip_last_src_addr;
-}
-
-/**
- * ip_get_last_dest_addr - Get destination IP from last received packet
- * Used by UDP (and similar) for pseudo-header checksum verification on RX.
- */
-ip4_addr_t ip_get_last_dest_addr(void)
-{
-    return ip_last_dest_addr;
-}
-
-/**
- * ip_get_last_ttl - Get TTL from last received packet
- * This is used by upper layer protocols (e.g., ICMP) to get the TTL
- * for displaying ping statistics in Linux-like format.
- * @return: TTL value (0-255)
- */
-uint8_t ip_get_last_ttl(void)
-{
-    return ip_last_ttl;
 }
 
 /**

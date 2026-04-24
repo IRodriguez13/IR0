@@ -24,6 +24,7 @@
 #include <arch/x86-64/sources/user_mode.h>
 #include <config.h>
 #include <ir0/version.h>
+#include <ir0/driver.h>
 #include <kernel/elf_loader.h>
 #include <drivers/timer/clock_system.h>
 #include <drivers/init_drv.h>
@@ -79,6 +80,12 @@ void kmain(uint32_t multiboot_info)
     pmm_init(PMM_PHYS_BASE, PMM_PHYS_SIZE);
     
     logging_init();
+    /*
+     * Core driver policy:
+     * serial/logging/clock/interrupt plumbing is always-on and initialized in
+     * kmain. Selectable hardware stacks are initialized later via init_all_drivers().
+     */
+    ir0_driver_registry_init();
     serial_init();
 
     /*

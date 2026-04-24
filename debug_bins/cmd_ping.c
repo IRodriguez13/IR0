@@ -98,12 +98,15 @@ static int cmd_ping_handler(int argc, char **argv)
             /* Format RTT */
             if (result.rtt < 100)
             {
-                snprintf(rtt_str, sizeof(rtt_str), "%llu", (unsigned long long)result.rtt);
+                debug_u64_to_dec((uint64_t)result.rtt, rtt_str, sizeof(rtt_str));
             }
             else
             {
-                snprintf(rtt_str, sizeof(rtt_str), "%llu.%llu", 
-                        (unsigned long long)(result.rtt / 10), (unsigned long long)(result.rtt % 10));
+                char rtt_int[24];
+                char rtt_frac[24];
+                debug_u64_to_dec((uint64_t)(result.rtt / 10), rtt_int, sizeof(rtt_int));
+                debug_u64_to_dec((uint64_t)(result.rtt % 10), rtt_frac, sizeof(rtt_frac));
+                snprintf(rtt_str, sizeof(rtt_str), "%s.%s", rtt_int, rtt_frac);
             }
             
             int output_len = snprintf(output, sizeof(output),

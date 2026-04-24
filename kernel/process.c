@@ -21,9 +21,32 @@
 #include <string.h>
 #include <stddef.h>
 #include <ir0/errno.h>
+#include <arch/common/arch_portable.h>
 
 
 static pid_t next_pid = 2;
+
+static inline uint64_t process_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint64_t flags;
+	__asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+	return flags;
+#else
+	arch_disable_interrupts();
+	return 0;
+#endif
+}
+
+static inline void process_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	__asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+	(void)flags;
+	arch_enable_interrupts();
+#endif
+}
 
 /*
  * Follow one level of the page table hierarchy; returns NULL if the entry is
@@ -109,7 +132,10 @@ void process_init(void)
 
 pid_t process_get_next_pid(void)
 {
-	return next_pid++;
+	uint64_t irq_flags = process_irq_save();
+	pid_t pid = next_pid++;
+	process_irq_restore(irq_flags);
+	return pid;
 }
 
 process_t *process_get_current(void)
@@ -164,7 +190,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	memset(proc, 0, sizeof(process_t));
 
 	/* Basic process setup */
-	proc->task.pid = next_pid++;
+	proc->task.pid = process_get_next_pid();
 	proc->ppid = current_process ? current_process->task.pid : 1;
 	proc->state = PROCESS_READY;
 	
@@ -284,8 +310,12 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	}
 
 	/* Add to process list */
-	proc->next = process_list;
-	process_list = proc;
+	{
+		uint64_t irq_flags = process_irq_save();
+		proc->next = process_list;
+		process_list = proc;
+		process_irq_restore(irq_flags);
+	}
 
 	/* Add to scheduler */
 	sched_add_process(proc);
@@ -359,18 +389,56 @@ pid_t fork(void)
 /* Find process by PID */
 process_t *process_find_by_pid(pid_t pid)
 {
-	process_t *proc = process_list;
+	process_t *proc;
+	uint64_t irq_flags = process_irq_save();
+
+	proc = process_list;
 	
 	while (proc)
 	{
 		if (proc->task.pid == pid)
 		{
+			process_irq_restore(irq_flags);
 			return proc;
 		}
 		proc = proc->next;
 	}
 	
+	process_irq_restore(irq_flags);
 	return NULL; /* Not found */
+}
+
+int process_remove_from_list(process_t *target)
+{
+	process_t *scan;
+	process_t *prev;
+	uint64_t irq_flags;
+
+	if (!target)
+		return -EINVAL;
+
+	irq_flags = process_irq_save();
+	prev = NULL;
+	scan = process_list;
+
+	while (scan)
+	{
+		if (scan == target)
+		{
+			if (prev)
+				prev->next = scan->next;
+			else
+				process_list = scan->next;
+			scan->next = NULL;
+			process_irq_restore(irq_flags);
+			return 0;
+		}
+		prev = scan;
+		scan = scan->next;
+	}
+
+	process_irq_restore(irq_flags);
+	return -ENOENT;
 }
 
 /**
@@ -427,14 +495,12 @@ static void process_reparent_children(process_t *dying_parent)
 void process_reap_zombies(process_t *parent)
 {
 	process_t *child;
-	process_t *prev;
 	process_t *next;
 	
 	if (!parent)
 		return;
 	
 	child = process_list;
-	prev = NULL;
 	
 	while (child)
 	{
@@ -449,23 +515,16 @@ void process_reap_zombies(process_t *parent)
 			serial_print("\n");
 #endif
 			
-			/* Remove from process list */
-			if (prev)
+			if (process_remove_from_list(child) == 0)
 			{
-				prev->next = child->next;
+				/* Free zombie process */
+				process_destroy(child);
+				kfree(child);
 			}
-			else
-			{
-				process_list = child->next;
-			}
-			
-			/* Free zombie process */
-			process_destroy(child);
-			kfree(child);
 		}
 		else
 		{
-			prev = child;
+			/* Keep scanning siblings. */
 		}
 		
 		child = next;
@@ -516,12 +575,6 @@ void process_exit(int code)
 	 * by the parent (via wait()), but it will not consume CPU time.
 	 */
 	sched_remove_process(dying);
-	
-	/* Clear current_process if this is the current process.
-	 * The scheduler will switch to another process.
-	 */
-	if (current_process == dying)
-		current_process = NULL;
 	
 	/* Switch to another process - this will never return to this code.
 	 * The zombie process remains in memory with its exit code for the
@@ -627,10 +680,10 @@ clear_fd:
 int process_wait(pid_t pid, int *status, int options)
 {
 	process_t *p;
-	process_t *prev;
 	pid_t ret;
 	int found_child;
 	process_t *zombie;
+	uint64_t irq_flags;
 	/*
 	 * waitpid-style: pid > 0 waits for that child; pid == -1 or pid == 0
 	 * waits for any child of the caller (process groups not implemented).
@@ -645,6 +698,7 @@ int process_wait(pid_t pid, int *status, int options)
 	for (;;) {
 		found_child = 0;
 		zombie = NULL;
+		irq_flags = process_irq_save();
 
 		for (p = process_list; p; p = p->next) {
 			if (p->ppid != current_process->task.pid)
@@ -660,18 +714,26 @@ int process_wait(pid_t pid, int *status, int options)
 		}
 
 		if (zombie) {
+			process_t *scan = process_list;
+			process_t *prev = NULL;
+			while (scan) {
+				if (scan == zombie) {
+					if (prev)
+						prev->next = scan->next;
+					else
+						process_list = scan->next;
+					scan->next = NULL;
+					break;
+				}
+				prev = scan;
+				scan = scan->next;
+			}
+		}
+		process_irq_restore(irq_flags);
+
+		if (zombie) {
 			if (status)
 				*status = (zombie->exit_code & 0xFF) << 8;
-
-			/* Remove from process list */
-			if (process_list == zombie)
-				process_list = zombie->next;
-			else {
-				prev = process_list;
-				while (prev->next != zombie)
-					prev = prev->next;
-				prev->next = zombie->next;
-			}
 
 			ret = zombie->task.pid;
 			process_destroy(zombie);

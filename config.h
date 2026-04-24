@@ -297,6 +297,15 @@
 #define CONFIG_INIT_BLUETOOTH_DRIVER CONFIG_ENABLE_BLUETOOTH
 #endif
 
+/*
+ * Driver init policy:
+ * - Core boot drivers are always initialized from kmain.
+ * - Selectable hardware stacks use INIT_* symbols and init_all_drivers().
+ */
+#define CONFIG_DRIVER_CORE_SERIAL 1
+#define CONFIG_DRIVER_CORE_CLOCK 1
+#define CONFIG_DRIVER_CORE_INTERRUPTS 1
+
 /* Legacy aliases for code that still uses the old names */
 #define ENABLE_NETWORKING CONFIG_ENABLE_NETWORKING
 #define ENABLE_GRAPHICS   CONFIG_ENABLE_VBE

@@ -27,7 +27,7 @@
 #include <ir0/version.h>
 #include <ir0/console_backend.h>
 #include <string.h>
-#include <errno.h>
+#include <ir0/errno.h>
 #include <config.h>
 #if CONFIG_ENABLE_BLUETOOTH
 #include "drivers/bluetooth/bt_sysfs.h"
@@ -383,11 +383,11 @@ int sysfs_open(const char *path, int flags)
     (void)flags;  /* Most sysfs files support both read and write */
     
     if (!is_sys_path(path))
-        return -1;
+        return -EINVAL;
     
     const char *sys_path = sys_parse_path(path);
     if (!sys_path)
-        return -1;
+        return -ENOENT;
     
     int fd = -1;
     
@@ -444,7 +444,7 @@ int sysfs_open(const char *path, int flags)
     }
     else
     {
-        return -1;  /* File not found */
+        return -ENOENT;  /* File not found */
     }
     
     /* Reset offset when opening (reuse procfs offset tracking) */
@@ -460,7 +460,7 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
         return 0;
     
     if (fd < SYS_FD_BASE || fd >= SYS_FD_BASE + 1000)
-        return -1;
+        return -EBADF;
     
     static char sys_buffer[SYS_BUFFER_SIZE];
     memset(sys_buffer, 0, sizeof(sys_buffer));
@@ -510,11 +510,11 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
             full_size = sys_console_mode_read(sys_buffer, sizeof(sys_buffer));
             break;
         default:
-            return -1;
+            return -EBADF;
     }
     
     if (full_size < 0)
-        return -1;
+        return (full_size == -1) ? -EIO : full_size;
     
     if (full_size > (int)sizeof(sys_buffer))
         full_size = (int)sizeof(sys_buffer);
@@ -547,7 +547,7 @@ int sysfs_write(int fd, const char *buf, size_t count)
         return 0;
     
     if (fd < SYS_FD_BASE || fd >= SYS_FD_BASE + 1000)
-        return -1;
+        return -EBADF;
     
     int sys_fd = fd - SYS_FD_BASE;
     
@@ -566,11 +566,11 @@ int sysfs_write(int fd, const char *buf, size_t count)
 int sysfs_stat(const char *path, stat_t *st)
 {
     if (!st || !is_sys_path(path))
-        return -1;
+        return -EINVAL;
     
     const char *sys_path = sys_parse_path(path);
     if (!sys_path)
-        return -1;
+        return -ENOENT;
     
     /* Check if file exists */
     if (strcmp(sys_path, "kernel/version") == 0 ||
@@ -605,5 +605,5 @@ int sysfs_stat(const char *path, stat_t *st)
         return 0;
     }
     
-    return -1;  /* File not found */
+    return -ENOENT;  /* File not found */
 }

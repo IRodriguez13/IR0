@@ -1088,6 +1088,16 @@ build-matrix-min:
 config-sim:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/config_sim.py
 
+runtime-net-check:
+	@echo "  RUNTIME  network smoke (QEMU user-net)"
+	@$(MAKE) -s defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/config_sim.py \
+		--symbols ENABLE_NETWORKING,INIT_NETWORK_STACK \
+		--max-cases 2 \
+		--build-cmd "make -s kernel-x64.iso disk.img" \
+		--runtime-cmd "python3 $(KERNEL_ROOT)/scripts/net_runtime_smoke.py --timeout-sec 25"
+	@echo "✓ runtime-net-check passed"
+
 arch-guard:
 	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
 
@@ -1098,11 +1108,17 @@ build-matrix-full:
 	@$(MAKE) -s build-matrix-min
 	@echo "  MATRIX  boolean config simulation (24 cases)"
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/config_sim.py --max-cases 24 --build-cmd "make -s kernel-x64.bin"
+	@echo "  MATRIX  runtime network smoke checks"
+	@$(MAKE) -s runtime-net-check
 	@echo "  MATRIX  architecture guardrails"
 	@$(MAKE) -s arch-guard
 	@echo "  MATRIX  repository hygiene guardrails"
 	@$(MAKE) -s repo-hygiene-guard
 	@echo "✓ build-matrix-full passed"
+
+scale-readiness-gate:
+	@$(MAKE) -s build-matrix-full
+	@echo "✓ scale-readiness-gate passed"
 
 # Clean only network objects
 clean-net:
@@ -1208,7 +1224,9 @@ help:
 	@echo "  make kernel-analyze   Analyze kernel-x64.bin (size -A, undefined symbols; checks kmain)"
 	@echo "  make health           Full health check: kernel-analyze + kernel-memsafe + kernel-tests"
 	@echo "  make build-matrix-min Build defconfig/tiny/net-off/storage variants"
-	@echo "  make build-matrix-full Extended matrix + arch guard"
+	@echo "  make runtime-net-check Runtime network smoke checks (QEMU)"
+	@echo "  make build-matrix-full Extended matrix + runtime + guards"
+	@echo "  make scale-readiness-gate Final stabilization gate"
 	@echo "  make config-sim       Simulate subsystem on/off combinations"
 	@echo "  make arch-guard       Enforce include/facade architecture constraints"
 	@echo "  make repo-hygiene-guard Enforce tracked-artifact/docs hygiene rules"
@@ -1508,6 +1526,7 @@ test-drivers-clean:
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
+        runtime-net-check scale-readiness-gate \
         format compile-commands disasm stack-usage clean-net \
         run-ping
 

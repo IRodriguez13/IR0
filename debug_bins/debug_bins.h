@@ -203,6 +203,51 @@ static inline void debug_writeln_err(const char *str)
     }
 }
 
+/*
+ * Format unsigned 64-bit values as decimal without relying on %lu/%llu,
+ * because kernel vsnprintf supports only plain integer formats.
+ */
+static inline void debug_u64_to_dec(uint64_t value, char *out, size_t out_len)
+{
+    char tmp[32];
+    size_t i = 0;
+    size_t j = 0;
+
+    if (!out || out_len == 0)
+        return;
+
+    if (value == 0)
+    {
+        if (out_len >= 2)
+        {
+            out[0] = '0';
+            out[1] = '\0';
+        }
+        else
+        {
+            out[0] = '\0';
+        }
+        return;
+    }
+
+    while (value != 0 && i < sizeof(tmp))
+    {
+        tmp[i++] = (char)('0' + (value % 10));
+        value /= 10;
+    }
+
+    if (i + 1 > out_len)
+    {
+        i = out_len - 1;
+    }
+
+    while (i > 0)
+    {
+        out[j++] = tmp[--i];
+    }
+    out[j] = '\0';
+}
+
 /**
  * Parsear string de argumentos a argc/argv
  * @cmd_line: Línea de comando completa

@@ -113,6 +113,7 @@ int ir0_driver_list_to_buffer(char *buf, size_t count);
  * Called during kernel boot
  */
 void ir0_driver_registry_init(void);
+int ir0_driver_registry_is_initialized(void);
 
 // SIMPLIFIED REGISTRATION API (for simple drivers)
 

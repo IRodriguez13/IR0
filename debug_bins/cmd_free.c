@@ -11,6 +11,8 @@
 static unsigned long long parse_ull(const char *s)
 {
     unsigned long long v = 0;
+    while (*s && (*s < '0' || *s > '9'))
+        s++;
     while (*s >= '0' && *s <= '9') { v = v * 10 + (unsigned long long)(*s - '0'); s++; }
     return v;
 }
@@ -44,9 +46,16 @@ static int cmd_free_handler(int argc, char **argv)
     while (*p && *p != '\t') p++;
     if (*p == '\t') p++;
     used = parse_ull(p);
+    char total_str[32];
+    char free_str[32];
+    char used_str[32];
     char line[128];
-    snprintf(line, sizeof(line), "Mem:           %10llu %10llu %10llu\n",
-             total, free_kb, used);
+    debug_u64_to_dec((uint64_t)total, total_str, sizeof(total_str));
+    debug_u64_to_dec((uint64_t)free_kb, free_str, sizeof(free_str));
+    debug_u64_to_dec((uint64_t)used, used_str, sizeof(used_str));
+    debug_writeln("              total(kB)    free(kB)    used(kB)");
+    snprintf(line, sizeof(line), "Mem:           %10s %10s %10s\n",
+             total_str, free_str, used_str);
     debug_write(line);
     debug_serial_ok("free");
     return 0;

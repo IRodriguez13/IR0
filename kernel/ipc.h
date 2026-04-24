@@ -94,7 +94,7 @@ typedef struct ipc_channel {
     wait_queue_t read_queue;        /* Processes waiting to read */
     wait_queue_t write_queue;       /* Processes waiting to write */
     
-    bool lock;                      /* Simple spinlock (boolean for now) */
+    volatile uint8_t lock;          /* Channel lock state (0 unlocked, 1 locked) */
     int ref_count;                  /* Reference count (number of open fds) */
     
     struct ipc_channel *next;       /* Linked list */

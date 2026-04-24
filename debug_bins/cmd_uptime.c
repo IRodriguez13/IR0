@@ -11,6 +11,8 @@
 static unsigned long long parse_ull(const char *s)
 {
     unsigned long long v = 0;
+    while (*s && (*s < '0' || *s > '9'))
+        s++;
     while (*s >= '0' && *s <= '9') { v = v * 10 + (unsigned long long)(*s - '0'); s++; }
     return v;
 }
@@ -37,11 +39,11 @@ static int cmd_uptime_handler(int argc, char **argv)
     }
     buf[nr] = '\0';
     unsigned long long sec = parse_ull(buf);
-    unsigned long h = (unsigned long)(sec / 3600);
-    unsigned long m = (unsigned long)((sec % 3600) / 60);
-    unsigned long s = (unsigned long)(sec % 60);
+    unsigned h = (unsigned)(sec / 3600);
+    unsigned m = (unsigned)((sec % 3600) / 60);
+    unsigned s = (unsigned)(sec % 60);
     char line[80];
-    snprintf(line, sizeof(line), " %lu:%02lu:%02lu up %lu min\n", h, m, s, (unsigned long)(sec / 60));
+    snprintf(line, sizeof(line), " %u:%02u:%02u up %u min\n", h, m, s, (unsigned)(sec / 60));
     debug_write(line);
     debug_serial_ok("uptime");
     return 0;

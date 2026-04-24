@@ -594,19 +594,7 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
          * and free the struct so we do not run a half-loaded image.
          */
         sched_remove_process(process);
-        {
-            process_t **pp = &process_list;
-
-            while (*pp)
-            {
-                if (*pp == process)
-                {
-                    *pp = process->next;
-                    break;
-                }
-                pp = &(*pp)->next;
-            }
-        }
+        (void)process_remove_from_list(process);
         process_destroy(process);
         kfree(process);
         kfree(file_data);

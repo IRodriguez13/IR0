@@ -139,7 +139,7 @@ uint16_t udp_checksum(const void *data, size_t len, ip4_addr_t src_ip, ip4_addr_
  */
 void udp_receive_handler(struct net_device *dev, const void *data, size_t len, void *priv)
 {
-    (void)priv;
+    const struct ip_rx_context *rx_ctx = (const struct ip_rx_context *)priv;
     
     if (len < sizeof(struct udp_header))
     {
@@ -160,32 +160,25 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
     }
     
     /* Get source IP from IP layer */
-    ip4_addr_t src_ip = ip_get_last_src_addr();
+    ip4_addr_t src_ip = rx_ctx ? rx_ctx->src_addr : 0;
     
     /* Verify checksum without relying on mutating the RX buffer (copy when possible) */
     if (udp->checksum != 0)
     {
         uint16_t received_checksum = udp->checksum;
-        ip4_addr_t dest_ip = ip_get_last_dest_addr();
+        ip4_addr_t dest_ip = rx_ctx ? rx_ctx->dest_addr : 0;
         uint16_t calculated_checksum;
         uint8_t *udp_scratch = kmalloc(packet_len);
 
-        if (udp_scratch)
+        if (!udp_scratch)
         {
-            memcpy(udp_scratch, data, packet_len);
-            struct udp_header *udp_verify = (struct udp_header *)udp_scratch;
-            udp_verify->checksum = 0;
-            calculated_checksum = udp_checksum(udp_scratch, packet_len, src_ip, dest_ip);
-            kfree(udp_scratch);
+            LOG_WARNING("UDP", "No memory to verify checksum");
+            return;
         }
-        else
-        {
-            /* No scratch buffer: save checksum, verify, then restore RX contents */
-            struct udp_header *udp_mutable = (struct udp_header *)data;
-            udp_mutable->checksum = 0;
-            calculated_checksum = udp_checksum(data, packet_len, src_ip, dest_ip);
-            udp_mutable->checksum = received_checksum;
-        }
+        memcpy(udp_scratch, data, packet_len);
+        ((struct udp_header *)udp_scratch)->checksum = 0;
+        calculated_checksum = udp_checksum(udp_scratch, packet_len, src_ip, dest_ip);
+        kfree(udp_scratch);
 
         if (received_checksum != calculated_checksum)
         {
