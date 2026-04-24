@@ -1,20 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: cmd_ktest.c
- * Description: IR0 kernel source/header file
- */
-
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
  * IR0 Kernel - Debug Binary: ktest
- * Ejecuta la batería de tests in-kernel (syscalls, procfs, process, etc.).
+ * Runs the in-kernel test suite (syscall/procfs/process coverage).
+ *
+ * This command is intentionally test-only and linked only with
+ * IR0_KERNEL_TESTS builds.
  */
 
 #include "debug_bins.h"

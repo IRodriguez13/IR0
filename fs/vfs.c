@@ -385,6 +385,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     f->path[sizeof(f->path) - 1] = '\0';
     f->pos   = 0;
     f->flags = flags;
+    f->ref_count = 1;
     *out = f;
     return 0;
 }
@@ -443,8 +444,18 @@ int vfs_close(struct vfs_file *f)
 {
     if (!f)
         return -EBADF;
-    kfree(f);
+    if (f->ref_count > 0)
+        f->ref_count--;
+    if (f->ref_count <= 0)
+        kfree(f);
     return 0;
+}
+
+void vfs_file_acquire(struct vfs_file *f)
+{
+    if (!f)
+        return;
+    f->ref_count++;
 }
 
 off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence)
@@ -624,6 +635,8 @@ int vfs_rmdir(const char *path)
 {
     int ret = validate_path(path);
     if (ret != 0) return ret;
+    if (!current_process)
+        return -ESRCH;
 
     char norm[MAX_PATH];
     if (normalize_path(path, norm, sizeof(norm)) != 0)
@@ -636,6 +649,17 @@ int vfs_rmdir(const char *path)
         return -ENOENT;
     if (!S_ISDIR(st.st_mode))
         return -ENOTDIR;
+
+    ret = check_dir_traverse(norm);
+    if (ret != 0)
+        return ret;
+
+    char parent[MAX_PATH];
+    if (parent_dir(norm, parent, sizeof(parent)) == 0)
+    {
+        if (!check_file_access(parent, ACCESS_WRITE | ACCESS_EXEC, current_process))
+            return -EACCES;
+    }
 
     struct vfs_ops *ops = ops_for_path(norm);
     if (!ops || !ops->rmdir)

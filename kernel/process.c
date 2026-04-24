@@ -636,7 +636,7 @@ void process_destroy(process_t *p)
 
 		if (e->is_pipe && e->vfs_file)
 		{
-			pipe_close((pipe_t *)e->vfs_file);
+			pipe_close_end((pipe_t *)e->vfs_file, e->pipe_end);
 			e->vfs_file = NULL;
 		}
 		else if (e->vfs_file)

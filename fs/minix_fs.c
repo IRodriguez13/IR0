@@ -8,19 +8,6 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: minix_fs.c
- * Description: IR0 kernel source/header file
- */
-
-// SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: minix_fs.c
  * Description: MINIX filesystem implementation with disk I/O and directory
  * operations
  */
@@ -39,7 +26,6 @@
 #include <ir0/kmem.h>
 #include <kernel/process.h>
 #include <ir0/permissions.h>
-#include <debug_bins/dbgshell.h>
 #include <string.h>
 
 #define typewriter_vga_print(msg, color)                                         \
@@ -1861,19 +1847,19 @@ int minix_fs_rm(const char *path)
   if (!minix_fs.initialized)
   {
     typewriter_vga_print("Error: MINIX filesystem not initialized\n", 0x0C);
-    return -1;
+    return -ENODEV;
   }
 
   if (!path || kstrlen(path) == 0)
   {
     typewriter_vga_print("Error: No file path specified\n", 0x0C);
-    return -1;
+    return -EINVAL;
   }
 
   if (kstrcmp(path, "/") == 0)
   {
     typewriter_vga_print("Error: Cannot remove root directory\n", 0x0C);
-    return -1;
+    return -EPERM;
   }
 
   minix_inode_t *file_inode = minix_fs_find_inode(path);
@@ -1882,7 +1868,7 @@ int minix_fs_rm(const char *path)
     char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "rm: '%s': No such file\n", path);
     typewriter_vga_print(error_msg, 0x0C);
-    return -1;
+    return -ENOENT;
   }
 
   if (file_inode->i_mode & MINIX_IFDIR)
@@ -1899,38 +1885,33 @@ int minix_fs_rm(const char *path)
   if (minix_fs_split_path(path, parent_path, filename) != 0)
   {
     typewriter_vga_print("Error: Invalid path\n", 0x0C);
-    typewriter_vga_print("Error: Invalid path\n", 0x0C);
-    return -1;
+    return -EINVAL;
   }
 
   minix_inode_t *parent_inode = minix_fs_find_inode(parent_path);
   if (!parent_inode)
   {
     typewriter_vga_print("Error: Parent directory not found\n", 0x0C);
-    typewriter_vga_print("Error: Parent directory not found\n", 0x0C);
-    return -1;
+    return -ENOENT;
   }
 
   uint16_t file_inode_num = minix_fs_get_inode_number(path);
   if (file_inode_num == 0)
   {
     typewriter_vga_print("Error: Could not get inode number\n", 0x0C);
-    typewriter_vga_print("Error: Could not get inode number\n", 0x0C);
-    return -1;
+    return -ENOENT;
   }
 
   if (minix_fs_remove_dir_entry(parent_inode, filename) != 0)
   {
     typewriter_vga_print("Error: Could not remove directory entry\n", 0x0C);
-    typewriter_vga_print("Error: Could not remove directory entry\n", 0x0C);
-    return -1;
+    return -EIO;
   }
 
   if (minix_fs_free_inode(file_inode_num) != 0)
   {
     typewriter_vga_print("Error: Could not free inode\n", 0x0C);
-    typewriter_vga_print("Error: Could not free inode\n", 0x0C);
-    return -1;
+    return -EIO;
   }
 
   uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
@@ -1939,7 +1920,7 @@ int minix_fs_rm(const char *path)
     if (minix_fs_write_inode(parent_inode_num, parent_inode) != 0)
     {
       typewriter_vga_print("Warning: Could not update parent directory\n", 0x0C);
-      typewriter_vga_print("Warning: Could not update parent directory\n", 0x0C);
+      return -EIO;
     }
   }
 
@@ -2081,19 +2062,19 @@ int minix_fs_rmdir(const char *path)
   if (!minix_fs.initialized)
   {
     typewriter_vga_print("Error: MINIX filesystem not initialized\n", 0x0C);
-    return -1;
+    return -ENODEV;
   }
 
   if (!path || *path == '\0')
   {
     typewriter_vga_print("Error: No directory path specified\n", 0x0C);
-    return -1;
+    return -EINVAL;
   }
 
   if (kstrcmp(path, "/") == 0)
   {
     typewriter_vga_print("Error: Cannot remove root directory\n", 0x0C);
-    return -1;
+    return -EPERM;
   }
 
   /* Get inode number first */
@@ -2124,7 +2105,7 @@ int minix_fs_rmdir(const char *path)
     if (minix_read_block(zone, block_buffer) != 0)
     {
       typewriter_vga_print("Error: Could not read directory block\n", 0x0C);
-      return -1;
+      return -EIO;
     }
 
     minix_dir_entry_t *entries = (minix_dir_entry_t *)block_buffer;
@@ -2186,7 +2167,8 @@ int minix_fs_rmdir(const char *path)
     if (parent_inode.i_nlinks > 2)
       parent_inode.i_nlinks--;
     parent_inode.i_time = get_system_time();
-    minix_fs_write_inode(parent_inode_num, &parent_inode);  /* Best-effort */
+    if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
+      return -EIO;
   }
 
   return 0;
@@ -2440,21 +2422,23 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
   {
     log_debug_fmt("MINIX", "stat('%s') rejected: init=%d", pathname ? pathname : "(null)",
                   minix_fs.initialized);
-    return -1;
+    if (!minix_fs.initialized)
+      return -ENODEV;
+    return -EINVAL;
   }
 
   minix_inode_t *inode = minix_fs_find_inode(pathname);
   if (!inode)
   {
     log_debug_fmt("MINIX", "stat('%s') inode not found", pathname);
-    return -1;
+    return -ENOENT;
   }
 
   /* Reject inodes with no valid file type (uninitialized/garbage) */
   if ((inode->i_mode & MINIX_IFMT) == 0)
   {
     log_debug_fmt("MINIX", "stat('%s') invalid mode 0x%x", pathname, inode->i_mode);
-    return -1;
+    return -EIO;
   }
 
   /* Get inode number */

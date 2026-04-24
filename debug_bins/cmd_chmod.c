@@ -39,7 +39,7 @@ static int parse_octal_mode(const char *mode_str)
         if (c < '0' || c > '7')
             return -1;
         v = (v << 3) | (c - '0');
-        if (v > 0777)
+        if (v > 07777)
             return -1;
     }
     return v;
@@ -49,33 +49,42 @@ static int cmd_chmod_handler(int argc, char **argv)
 {
     if (argc < 3)
     {
-        debug_write_err("chmod: expected MODE and PATH\n");
+        debug_write_err("chmod: expected MODE and at least one PATH\n");
         debug_serial_fail("chmod", "usage");
         return -1;
     }
 
     const char *mode_str = argv[1];
-    const char *path = argv[2];
 
     int mode = parse_octal_mode(mode_str);
     if (mode < 0)
     {
-        debug_write_err("chmod: invalid mode\n");
+        debug_write_err("chmod: invalid mode (expected octal like 755 or 4755)\n");
         debug_serial_fail("chmod", "parse");
         return -1;
     }
 
-    int64_t result = syscall(SYS_CHMOD, (uint64_t)path, (uint64_t)mode, 0);
-    if (result < 0)
+    int had_error = 0;
+    for (int i = 2; i < argc; i++)
     {
-        debug_perror("chmod", path, (int)result);
-        debug_serial_fail_err("chmod", "chmod", (int)(-result));
-        return -1;
+        const char *path = argv[i];
+        int64_t result = syscall(SYS_CHMOD, (uint64_t)path, (uint64_t)mode, 0);
+        if (result < 0)
+        {
+            debug_perror("chmod", path, (int)result);
+            debug_serial_fail_err("chmod", "chmod", (int)(-result));
+            had_error = 1;
+            continue;
+        }
+
+        debug_write("chmod: mode changed for '");
+        debug_write(path);
+        debug_write("'\n");
     }
 
-    debug_write("chmod: mode changed for '");
-    debug_write(path);
-    debug_write("'\n");
+    if (had_error)
+        return -1;
+
     debug_serial_ok("chmod");
     return 0;
 }
@@ -83,6 +92,6 @@ static int cmd_chmod_handler(int argc, char **argv)
 struct debug_command cmd_chmod = {
     .name = "chmod",
     .handler = cmd_chmod_handler,
-    .usage = "chmod MODE PATH",
+    .usage = "chmod MODE PATH...",
     .description = "Change file mode"
 };

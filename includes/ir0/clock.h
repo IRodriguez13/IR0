@@ -11,10 +11,6 @@
  * Description: IR0 kernel source/header file
  */
 
-// SPDX-License-Identifier: GPL-3.0-only
-#ifndef IR0_CLOCK_H
-#define IR0_CLOCK_H
+#pragma once
 
 #include <drivers/timer/clock_system.h>
-
-#endif /* IR0_CLOCK_H */
