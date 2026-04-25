@@ -145,6 +145,7 @@ void net_stack_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
 /* Ping result structure for syscalls */
 struct ping_result {
     int success;          /* 1 if ping succeeded, 0 if failed */
+    uint16_t seq;         /* ICMP sequence number */
     uint64_t rtt;         /* Round-trip time in milliseconds */
     uint8_t ttl;          /* TTL from reply */
     size_t payload_bytes; /* Payload size in reply */

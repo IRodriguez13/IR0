@@ -125,15 +125,15 @@ static int cmd_route_handler(int argc, char **argv)
     if (route_parse_iface(netdev, iface, sizeof(iface)) != 0)
         strcpy(iface, "eth0");
 
-    if (strstr(devnet, "success:") != NULL && strstr(devnet, " Gateway ") == NULL)
+    if (strstr(devnet, "type=ping_result") != NULL)
     {
         debug_writeln("route: /dev/net reports last ping result; retry for route snapshot");
         return 0;
     }
 
-    if (copy_field_after(devnet, "IP ", ip, sizeof(ip)) != 0 ||
-        copy_field_after(devnet, "Netmask ", mask, sizeof(mask)) != 0 ||
-        copy_field_after(devnet, "Gateway ", gw, sizeof(gw)) != 0)
+    if (copy_field_after(devnet, "ip=", ip, sizeof(ip)) != 0 ||
+        copy_field_after(devnet, "netmask=", mask, sizeof(mask)) != 0 ||
+        copy_field_after(devnet, "gateway=", gw, sizeof(gw)) != 0)
     {
         debug_writeln_err("route: could not parse route fields from /dev/net");
         debug_writeln_err("hint: run ndev to inspect raw net node output");

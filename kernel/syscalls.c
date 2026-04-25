@@ -1114,7 +1114,10 @@ static int fd_can_read(int fd)
   if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
     return 1;
   if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-    return 1;
+  {
+    pid_t pid = current_process ? current_process->task.pid : 0;
+    return devfs_fd_can_read((uint32_t)(fd - FD_DEV_BASE), pid);
+  }
   if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
     return 1;
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)

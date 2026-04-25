@@ -260,34 +260,50 @@ static int proc_net_dev_read(char *buf, size_t count)
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
     memset(buf, 0, count);
-    uint64_t rxp = 0, txp = 0, rxe = 0, txe = 0;
-    const char *ifname = "eth0";
-    struct net_device *dev = net_get_devices();
-    if (dev && dev->name && dev->name[0] != '\0')
-        ifname = dev->name;
-
-    net_stack_get_stats(&rxp, &txp, &rxe, &txe);
-    char rxp_str[24];
-    char rxe_str[24];
-    char txp_str[24];
-    char txe_str[24];
-    proc_u64_to_dec(rxp, rxp_str, sizeof(rxp_str));
-    proc_u64_to_dec(rxe, rxe_str, sizeof(rxe_str));
-    proc_u64_to_dec(txp, txp_str, sizeof(txp_str));
-    proc_u64_to_dec(txe, txe_str, sizeof(txe_str));
+    size_t off = 0;
     int n = snprintf(buf, count,
                      "Inter-|   Receive                                                |  Transmit\n"
-                     " face |   packets    errs                                        |  packets    errs\n"
-                     "  %s: %s %s                                          %s %s\n",
-                     ifname,
-                     rxp_str, rxe_str, txp_str, txe_str);
+                     " face |   packets    errs                                        |  packets    errs\n");
     if (n < 0)
         return -1;
-    if (n >= (int)count) {
+    if ((size_t)n >= count)
+    {
         buf[count - 1] = '\0';
         return (int)(count - 1);
     }
-    return n;
+    off = (size_t)n;
+
+    struct net_device *dev = net_get_devices();
+    while (dev && off < count - 1)
+    {
+        uint64_t rxp = 0, txp = 0, rxe = 0, txe = 0;
+        char rxp_str[24];
+        char rxe_str[24];
+        char txp_str[24];
+        char txe_str[24];
+
+        if (dev->get_stats)
+            dev->get_stats(dev, &rxp, &txp, &rxe, &txe);
+
+        proc_u64_to_dec(rxp, rxp_str, sizeof(rxp_str));
+        proc_u64_to_dec(rxe, rxe_str, sizeof(rxe_str));
+        proc_u64_to_dec(txp, txp_str, sizeof(txp_str));
+        proc_u64_to_dec(txe, txe_str, sizeof(txe_str));
+        n = snprintf(buf + off, count - off, "  %s: %s %s                                          %s %s\n",
+                     (dev->name && dev->name[0] != '\0') ? dev->name : "eth0",
+                     rxp_str, rxe_str, txp_str, txe_str);
+        if (n < 0)
+            return -1;
+        if ((size_t)n >= count - off)
+        {
+            buf[count - 1] = '\0';
+            return (int)(count - 1);
+        }
+        off += (size_t)n;
+        dev = dev->next;
+    }
+
+    return (int)off;
 #else
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;

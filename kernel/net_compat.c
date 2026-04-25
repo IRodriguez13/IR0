@@ -92,6 +92,30 @@ __attribute__((weak)) bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint6
     return false;
 }
 
+__attribute__((weak)) bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out,
+                                                     uint8_t *ttl_out, size_t *payload_bytes_out,
+                                                     ip4_addr_t *reply_ip_out)
+{
+    (void)id;
+    (void)seq_out;
+    (void)rtt_out;
+    (void)ttl_out;
+    (void)payload_bytes_out;
+    (void)reply_ip_out;
+    return false;
+}
+
+__attribute__((weak)) bool icmp_has_ready_echo_result(uint16_t id)
+{
+    (void)id;
+    return false;
+}
+
+__attribute__((weak)) uint16_t icmp_allocate_echo_seq(void)
+{
+    return 1;
+}
+
 __attribute__((weak)) ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
 {
     (void)domain_name;
@@ -102,4 +126,11 @@ __attribute__((weak)) ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t
 __attribute__((weak)) void arp_set_my_ip(ip4_addr_t ip)
 {
     (void)ip;
+}
+
+__attribute__((weak)) int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
+{
+    (void)dev;
+    (void)ip;
+    return -1;
 }

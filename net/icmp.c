@@ -46,9 +46,58 @@ struct icmp_pending_echo {
 };
 
 static struct icmp_pending_echo *pending_echos = NULL;
+static uint16_t icmp_echo_seq_counter = 1;
 
 /* Timeout for pending echo requests (10 seconds) */
 #define ICMP_ECHO_TIMEOUT_MS 10000
+
+static void icmp_pending_remove_locked(struct icmp_pending_echo *prev, struct icmp_pending_echo *entry)
+{
+    if (!entry)
+        return;
+    if (prev)
+        prev->next = entry->next;
+    else
+        pending_echos = entry->next;
+    kfree(entry);
+}
+
+static void icmp_pending_cleanup_expired_locked(uint64_t now)
+{
+    struct icmp_pending_echo *echo = pending_echos;
+    struct icmp_pending_echo *prev = NULL;
+
+    while (echo)
+    {
+        if (now - echo->timestamp > ICMP_ECHO_TIMEOUT_MS)
+        {
+            struct icmp_pending_echo *next = echo->next;
+            icmp_pending_remove_locked(prev, echo);
+            echo = next;
+            continue;
+        }
+        prev = echo;
+        echo = echo->next;
+    }
+}
+
+static void icmp_pending_append_locked(struct icmp_pending_echo *entry)
+{
+    struct icmp_pending_echo *tail;
+
+    if (!entry)
+        return;
+    entry->next = NULL;
+    if (!pending_echos)
+    {
+        pending_echos = entry;
+        return;
+    }
+    tail = pending_echos;
+    while (tail->next)
+        tail = tail->next;
+    tail->next = entry;
+}
 
 static inline uint64_t icmp_irq_save(void)
 {
@@ -266,27 +315,11 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
             /* Search for matching pending echo request */
             uint64_t irq_flags = icmp_irq_save();
             struct icmp_pending_echo *echo = pending_echos;
-            struct icmp_pending_echo *prev = NULL;
             uint64_t now = clock_get_uptime_milliseconds();
-            
+            icmp_pending_cleanup_expired_locked(now);
+            echo = pending_echos;
             while (echo)
             {
-                /* Remove expired entries */
-                if (now - echo->timestamp > ICMP_ECHO_TIMEOUT_MS)
-                {
-                    struct icmp_pending_echo *next = echo->next;
-                    if (prev)
-                        prev->next = next;
-                    else
-                        pending_echos = next;
-                    
-                    LOG_INFO_FMT("ICMP", "Removed expired echo: id=%d, seq=%d",
-                                (int)echo->id, (int)echo->seq);
-                    kfree(echo);
-                    echo = next;
-                    continue;
-                }
-                
                 /* Check if this reply matches the pending echo */
                 if (echo->id == id && echo->seq == seq && echo->dest_ip == src_ip)
                 {
@@ -309,14 +342,11 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                     LOG_INFO_FMT("ICMP", "%d bytes from " IP4_FMT ": icmp_seq=%d ttl=%d time=%d ms",
                                 (int)payload_bytes, IP4_ARGS(ntohl(src_ip)), (int)seq, (int)ttl, (int)rtt);
                     
-                    /* Don't remove from pending list yet - let dbgshell read it first
-                     * It will be removed when dbgshell calls icmp_get_echo_result()
-                     */
+                    /* Keep it pending until userspace consumes via NET_GET_PING_RESULT. */
                     icmp_irq_restore(irq_flags);
                     break;
                 }
                 
-                prev = echo;
                 echo = echo->next;
             }
 
@@ -451,17 +481,19 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     if (pending)
     {
         uint64_t irq_flags = icmp_irq_save();
+        uint64_t now = clock_get_uptime_milliseconds();
+        icmp_pending_cleanup_expired_locked(now);
         pending->id = id;
         pending->seq = seq;
         pending->dest_ip = dest_ip;
-        pending->timestamp = clock_get_uptime_milliseconds();
+        pending->timestamp = now;
         pending->resolved = false;
         pending->rtt = 0;
         pending->ttl = 0;
         pending->payload_bytes = 0;
         pending->reply_ip = 0;
-        pending->next = pending_echos;
-        pending_echos = pending;
+        pending->next = NULL;
+        icmp_pending_append_locked(pending);
         icmp_irq_restore(irq_flags);
         
         LOG_INFO_FMT("ICMP", "Tracking echo request: id=%d, seq=%d", (int)id, (int)seq);
@@ -492,12 +524,16 @@ bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out,
                           ip4_addr_t *reply_ip_out)
 {
     uint64_t irq_flags;
+    uint64_t now;
 
     if (!rtt_out || !ttl_out || !payload_bytes_out || !reply_ip_out)
         return false;
 
     irq_flags = icmp_irq_save();
+    now = clock_get_uptime_milliseconds();
+    icmp_pending_cleanup_expired_locked(now);
     struct icmp_pending_echo *echo = pending_echos;
+    struct icmp_pending_echo *prev = NULL;
     
     while (echo)
     {
@@ -509,23 +545,7 @@ bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out,
                 *ttl_out = echo->ttl;
                 *payload_bytes_out = echo->payload_bytes;
                 *reply_ip_out = echo->reply_ip;
-                
-                /* Remove from pending list now that dbgshell has read it */
-                struct icmp_pending_echo *prev = NULL;
-                struct icmp_pending_echo *curr = pending_echos;
-                while (curr && curr != echo)
-                {
-                    prev = curr;
-                    curr = curr->next;
-                }
-                if (curr == echo)
-                {
-                    if (prev)
-                        prev->next = echo->next;
-                    else
-                        pending_echos = echo->next;
-                    kfree(echo);
-                }
+                icmp_pending_remove_locked(prev, echo);
                 icmp_irq_restore(irq_flags);
                 return true;
             }
@@ -536,11 +556,86 @@ bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out,
                 return false;
             }
         }
+        prev = echo;
         echo = echo->next;
     }
     icmp_irq_restore(irq_flags);
     /* Not found */
     return false;
+}
+
+bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out,
+                               uint8_t *ttl_out, size_t *payload_bytes_out,
+                               ip4_addr_t *reply_ip_out)
+{
+    uint64_t irq_flags;
+    uint64_t now;
+    struct icmp_pending_echo *echo;
+    struct icmp_pending_echo *prev = NULL;
+
+    if (!seq_out || !rtt_out || !ttl_out || !payload_bytes_out || !reply_ip_out)
+        return false;
+
+    irq_flags = icmp_irq_save();
+    now = clock_get_uptime_milliseconds();
+    icmp_pending_cleanup_expired_locked(now);
+    echo = pending_echos;
+
+    while (echo)
+    {
+        if (echo->id == id && echo->resolved)
+        {
+            *seq_out = echo->seq;
+            *rtt_out = echo->rtt;
+            *ttl_out = echo->ttl;
+            *payload_bytes_out = echo->payload_bytes;
+            *reply_ip_out = echo->reply_ip;
+            icmp_pending_remove_locked(prev, echo);
+            icmp_irq_restore(irq_flags);
+            return true;
+        }
+        prev = echo;
+        echo = echo->next;
+    }
+
+    icmp_irq_restore(irq_flags);
+    return false;
+}
+
+bool icmp_has_ready_echo_result(uint16_t id)
+{
+    uint64_t irq_flags;
+    uint64_t now;
+    struct icmp_pending_echo *echo;
+
+    irq_flags = icmp_irq_save();
+    now = clock_get_uptime_milliseconds();
+    icmp_pending_cleanup_expired_locked(now);
+    echo = pending_echos;
+    while (echo)
+    {
+        if (echo->id == id && echo->resolved)
+        {
+            icmp_irq_restore(irq_flags);
+            return true;
+        }
+        echo = echo->next;
+    }
+    icmp_irq_restore(irq_flags);
+    return false;
+}
+
+uint16_t icmp_allocate_echo_seq(void)
+{
+    uint64_t irq_flags;
+    uint16_t seq;
+
+    irq_flags = icmp_irq_save();
+    seq = icmp_echo_seq_counter++;
+    if (icmp_echo_seq_counter == 0)
+        icmp_echo_seq_counter = 1;
+    icmp_irq_restore(irq_flags);
+    return seq;
 }
 
 /**
