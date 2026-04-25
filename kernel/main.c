@@ -213,14 +213,9 @@ void kmain(uint32_t multiboot_info)
     log_subsystem_ok("INTERRUPTS");
 
     /*
-     * Executor al estilo KUnit: tests in-kernel al arranque (kernel-x64-test.bin).
-     * Los tests que necesitan proceso se marcan SKIP si current_process == NULL.
+     * In-kernel tests run from init_1 (process context) when linked.
+     * Calling them here (before init process exists) would force SKIP paths.
      */
-    {
-        extern void kernel_test_run_all(void) __attribute__((weak));
-        if (kernel_test_run_all)
-            kernel_test_run_all();
-    }
 
 #if KERNEL_DEBUG_SHELL
     /* Init de test: shell integrada como PID 1. No es el init real (/sbin/init). */

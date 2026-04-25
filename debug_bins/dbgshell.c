@@ -39,6 +39,30 @@
 
 static uint32_t shell_pipe_seq = 0;
 
+#define SHELL_HISTORY_MAX 32
+#define KEY_ESC_SCROLL_UP     0x01
+#define KEY_ESC_SCROLL_DOWN   0x02
+#define KEY_ESC_CLEAR_SCREEN  0x03
+#define KEY_ESC_HISTORY_UP    0x04
+#define KEY_ESC_HISTORY_DOWN  0x05
+#define KEY_ESC_CURSOR_LEFT   0x06
+#define KEY_ESC_CURSOR_RIGHT  0x07
+#define KEY_ESC_CURSOR_HOME   0x08
+#define KEY_ESC_CURSOR_END    0x09
+#define KEY_ESC_DELETE_CHAR   0x0A
+
+static char shell_history[SHELL_HISTORY_MAX][INPUT_MAX + 1];
+static int shell_history_count = 0;
+static int shell_history_start = 0;
+
+static const char *const shell_help_sections[] = {
+    "shell", "core", "fs", "text", "identity", "diag", "net", "bt", NULL
+};
+
+static const char *const shell_help_flags[] = {
+    "-s", "--section", "--sections", "-h", "--help", NULL
+};
+
 /* Write to stdout (fd 1) - all output goes through typewriter for consistent cursor */
 static void write_stdout(const char *str)
 {
@@ -76,6 +100,120 @@ static void print_prompt(void)
 static void echo_char(char c)
 {
     syscall(SYS_WRITE, 1, (uint64_t)&c, 1);
+}
+
+static void shell_write_nchar(char c, int count)
+{
+    for (int i = 0; i < count; i++)
+        echo_char(c);
+}
+
+static void shell_cursor_left(int *cursor_idx)
+{
+    if (*cursor_idx <= 0)
+        return;
+    echo_char('\b');
+    (*cursor_idx)--;
+}
+
+static void shell_cursor_right(const char *line_buf, int line_len, int *cursor_idx)
+{
+    if (*cursor_idx >= line_len)
+        return;
+    echo_char(line_buf[*cursor_idx]);
+    (*cursor_idx)++;
+}
+
+static void shell_cursor_home(int *cursor_idx)
+{
+    while (*cursor_idx > 0)
+        shell_cursor_left(cursor_idx);
+}
+
+static void shell_cursor_end(const char *line_buf, int line_len, int *cursor_idx)
+{
+    while (*cursor_idx < line_len)
+        shell_cursor_right(line_buf, line_len, cursor_idx);
+}
+
+static void shell_clear_rendered_line(const char *line_buf, int line_len, int *cursor_idx)
+{
+    (void)line_buf;
+    shell_cursor_home(cursor_idx);
+    shell_write_nchar(' ', line_len);
+    shell_write_nchar('\b', line_len);
+}
+
+static void shell_redraw_tail(const char *line_buf, int line_len, int repaint_from, int target_cursor)
+{
+    int tail_len = line_len - repaint_from;
+    if (tail_len < 0)
+        tail_len = 0;
+
+    if (tail_len > 0)
+        syscall(SYS_WRITE, 1, (uint64_t)&line_buf[repaint_from], (uint64_t)tail_len);
+
+    echo_char(' ');
+    shell_write_nchar('\b', tail_len + 1);
+    for (int i = repaint_from; i < target_cursor && i < line_len; i++)
+        echo_char(line_buf[i]);
+}
+
+static void shell_load_line(char *line_buf, int *line_len, int *cursor_idx, const char *src)
+{
+    shell_clear_rendered_line(line_buf, *line_len, cursor_idx);
+
+    if (!src)
+    {
+        line_buf[0] = '\0';
+        *line_len = 0;
+        *cursor_idx = 0;
+        return;
+    }
+
+    int n = (int)strlen(src);
+    if (n > INPUT_MAX)
+        n = INPUT_MAX;
+    memcpy(line_buf, src, (size_t)n);
+    line_buf[n] = '\0';
+    *line_len = n;
+    *cursor_idx = n;
+    if (n > 0)
+        syscall(SYS_WRITE, 1, (uint64_t)line_buf, (uint64_t)n);
+}
+
+static const char *shell_history_get(int logical_idx)
+{
+    if (logical_idx < 0 || logical_idx >= shell_history_count)
+        return NULL;
+    int ring_idx = (shell_history_start + logical_idx) % SHELL_HISTORY_MAX;
+    return shell_history[ring_idx];
+}
+
+static void shell_history_add(const char *line)
+{
+    if (!line || !line[0])
+        return;
+
+    if (shell_history_count > 0)
+    {
+        const char *last = shell_history_get(shell_history_count - 1);
+        if (last && strcmp(last, line) == 0)
+            return;
+    }
+
+    if (shell_history_count < SHELL_HISTORY_MAX)
+    {
+        int idx = (shell_history_start + shell_history_count) % SHELL_HISTORY_MAX;
+        strncpy(shell_history[idx], line, INPUT_MAX);
+        shell_history[idx][INPUT_MAX] = '\0';
+        shell_history_count++;
+        return;
+    }
+
+    strncpy(shell_history[shell_history_start], line, INPUT_MAX);
+    shell_history[shell_history_start][INPUT_MAX] = '\0';
+    shell_history_start = (shell_history_start + 1) % SHELL_HISTORY_MAX;
 }
 
 /* Sanitize input: remove control chars except tab, newline, carriage return (OSDev) */
@@ -282,6 +420,20 @@ static int shell_collect_value_matches(const char *cmd_name, const char *prefix,
     int count = 0;
     if (!cmd_name)
         return 0;
+
+    if (strcmp(cmd_name, "help") == 0)
+    {
+        for (int i = 0; shell_help_sections[i] != NULL; i++)
+        {
+            if (shell_starts_with(shell_help_sections[i], prefix))
+            {
+                if (count < max_matches)
+                    out_matches[count] = shell_help_sections[i];
+                count++;
+            }
+        }
+        return count;
+    }
 
     if (strcmp(cmd_name, "keymap") == 0)
     {
@@ -702,6 +854,33 @@ static void shell_try_tab_complete(char *input, int *input_pos)
     }
 
     shell_extract_first_token(input, *input_pos, cmd_name, sizeof(cmd_name));
+
+    if (strcmp(cmd_name, "help") == 0)
+    {
+        if (token[0] == '-')
+        {
+            int match_count = 0;
+            for (int i = 0; shell_help_flags[i] != NULL && match_count < 128; i++)
+            {
+                if (shell_starts_with(shell_help_flags[i], token))
+                    matches[match_count++] = shell_help_flags[i];
+            }
+            if (match_count > 0)
+            {
+                (void)shell_complete_from_matches(input, input_pos, token_start, token, matches, match_count, 1, 1);
+                return;
+            }
+        }
+
+        int value_match_count = shell_collect_value_matches(cmd_name, token, matches, 128);
+        if (value_match_count > 0)
+        {
+            (void)shell_complete_from_matches(input, input_pos, token_start, token, matches, value_match_count, 1, 1);
+            return;
+        }
+        return;
+    }
+
     struct debug_command *cmd = shell_find_command(cmd_name);
     if (!cmd)
         return;
@@ -727,6 +906,160 @@ static void shell_try_tab_complete(char *input, int *input_pos)
         return;
 }
 
+static int shell_help_section_matches(const char *filter, const char *section)
+{
+    if (!filter || !filter[0])
+        return 1;
+    if (!section)
+        return 0;
+    return strcmp(filter, section) == 0;
+}
+
+static void shell_print_help_sections(void)
+{
+    write_stdout("Help sections:\n");
+    for (int i = 0; shell_help_sections[i] != NULL; i++)
+    {
+        write_stdout("  ");
+        write_stdout(shell_help_sections[i]);
+        write_stdout("\n");
+    }
+}
+
+static void shell_print_help_filtered(const char *section_filter)
+{
+    extern struct debug_command *debug_commands[];
+    int printed = 0;
+
+    write_stdout("IR0 DebShell - Available commands:\n");
+    if (section_filter && section_filter[0])
+    {
+        write_stdout("  section: ");
+        write_stdout(section_filter);
+        write_stdout("\n\n");
+    }
+    else
+    {
+        write_stdout("  (use: help -s <section> or help <section>)\n\n");
+    }
+
+    if (shell_help_section_matches(section_filter, "shell"))
+    {
+        write_stdout("[shell]\n");
+        write_stdout("  help - Show command help (supports sections)\n");
+        write_stdout("  clear - Clear console\n");
+        write_stdout("  exit - Exit shell process\n");
+        printed = 1;
+    }
+
+    for (int i = 0; shell_help_sections[i] != NULL; i++)
+    {
+        const char *sec = shell_help_sections[i];
+        if (strcmp(sec, "shell") == 0)
+            continue;
+        if (!shell_help_section_matches(section_filter, sec))
+            continue;
+
+        int sec_printed = 0;
+        for (int j = 0; debug_commands[j] != NULL; j++)
+        {
+            const char *cmd_sec = debug_command_section(debug_commands[j]->name);
+            if (!cmd_sec || strcmp(cmd_sec, sec) != 0)
+                continue;
+
+            if (!sec_printed)
+            {
+                write_stdout("[");
+                write_stdout(sec);
+                write_stdout("]\n");
+                sec_printed = 1;
+            }
+
+            char line[256];
+            int len = snprintf(line, sizeof(line), "  %s - %s\n",
+                               debug_commands[j]->usage,
+                               debug_commands[j]->description);
+            if (len > 0 && len < (int)sizeof(line))
+                write_stdout(line);
+        }
+        if (sec_printed)
+            printed = 1;
+    }
+
+    if (!printed)
+    {
+        write_stderr("help: no commands found for section '");
+        write_stderr(section_filter ? section_filter : "");
+        write_stderr("'\n");
+    }
+}
+
+static int shell_handle_help(int argc, char **argv)
+{
+    const char *section = NULL;
+
+    if (argc == 1)
+    {
+        shell_print_help_filtered(NULL);
+        return 0;
+    }
+
+    for (int i = 1; i < argc; i++)
+    {
+        const char *arg = argv[i];
+        if (strcmp(arg, "--sections") == 0)
+        {
+            shell_print_help_sections();
+            return 0;
+        }
+        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0)
+        {
+            write_stdout("usage: help [section]\n");
+            write_stdout("       help -s <section>\n");
+            write_stdout("       help --sections\n");
+            return 0;
+        }
+        if (strcmp(arg, "-s") == 0 || strcmp(arg, "--section") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                write_stderr("help: missing section after -s/--section\n");
+                return 1;
+            }
+            section = argv[++i];
+            continue;
+        }
+
+        if (arg[0] == '-')
+        {
+            write_stderr("help: unknown option '");
+            write_stderr(arg);
+            write_stderr("'\n");
+            return 1;
+        }
+
+        if (!section)
+            section = arg;
+        else
+        {
+            write_stderr("help: too many section arguments\n");
+            return 1;
+        }
+    }
+
+    if (section && !debug_is_valid_section(section))
+    {
+        write_stderr("help: unknown section '");
+        write_stderr(section);
+        write_stderr("'\n");
+        write_stderr("hint: run 'help --sections'\n");
+        return 1;
+    }
+
+    shell_print_help_filtered(section);
+    return 0;
+}
+
 /* Execute a single command */
 static void execute_single_command(const char *cmd_line)
 {
@@ -750,18 +1083,7 @@ static void execute_single_command(const char *cmd_line)
 
     if (strcmp(cmd_name, "help") == 0)
     {
-        write_stdout("IR0 DebShell - Available commands:\n");
-        write_stdout("  (All commands from debug_bins/)\n\n");
-        extern struct debug_command *debug_commands[];
-        for (int i = 0; debug_commands[i] != NULL; i++)
-        {
-            char line[256];
-            int len = snprintf(line, sizeof(line), "  %s - %s\n",
-                              debug_commands[i]->usage,
-                              debug_commands[i]->description);
-            if (len > 0 && len < (int)sizeof(line))
-                write_stdout(line);
-        }
+        (void)shell_handle_help(argc, argv);
         return;
     }
 
@@ -1017,8 +1339,9 @@ void vga_print(const char *str, uint8_t color)
 
 void shell_entry(void)
 {
-    char input[INPUT_MAX + 1];
-    int input_pos = 0;
+    char line_buf[INPUT_MAX + 1];
+    int line_len = 0;
+    int cursor_idx = 0;
     int pending_escape = 0;
 
     cmd_clear();
@@ -1027,9 +1350,13 @@ void shell_entry(void)
     {
         print_prompt();
 
-        input_pos = 0;
-        input[0] = '\0';
+        line_len = 0;
+        cursor_idx = 0;
+        line_buf[0] = '\0';
         pending_escape = 0;
+        int history_nav = -1;
+        char history_saved[INPUT_MAX + 1];
+        history_saved[0] = '\0';
 
         {
             int empty_reads = 0;
@@ -1080,6 +1407,83 @@ void shell_entry(void)
                             pending_escape = 0;
                             continue;
                         }
+                        else if (c == KEY_ESC_HISTORY_UP)
+                        {
+                            if (shell_history_count > 0)
+                            {
+                                if (history_nav < 0)
+                                {
+                                    strncpy(history_saved, line_buf, INPUT_MAX);
+                                    history_saved[INPUT_MAX] = '\0';
+                                    history_nav = shell_history_count - 1;
+                                }
+                                else if (history_nav > 0)
+                                {
+                                    history_nav--;
+                                }
+                                const char *entry = shell_history_get(history_nav);
+                                if (entry)
+                                    shell_load_line(line_buf, &line_len, &cursor_idx, entry);
+                            }
+                            pending_escape = 0;
+                            continue;
+                        }
+                        else if (c == KEY_ESC_HISTORY_DOWN)
+                        {
+                            if (history_nav >= 0)
+                            {
+                                if (history_nav < shell_history_count - 1)
+                                {
+                                    history_nav++;
+                                    const char *entry = shell_history_get(history_nav);
+                                    if (entry)
+                                        shell_load_line(line_buf, &line_len, &cursor_idx, entry);
+                                }
+                                else
+                                {
+                                    history_nav = -1;
+                                    shell_load_line(line_buf, &line_len, &cursor_idx, history_saved);
+                                }
+                            }
+                            pending_escape = 0;
+                            continue;
+                        }
+                        else if (c == KEY_ESC_CURSOR_LEFT)
+                        {
+                            shell_cursor_left(&cursor_idx);
+                            pending_escape = 0;
+                            continue;
+                        }
+                        else if (c == KEY_ESC_CURSOR_RIGHT)
+                        {
+                            shell_cursor_right(line_buf, line_len, &cursor_idx);
+                            pending_escape = 0;
+                            continue;
+                        }
+                        else if (c == KEY_ESC_CURSOR_HOME)
+                        {
+                            shell_cursor_home(&cursor_idx);
+                            pending_escape = 0;
+                            continue;
+                        }
+                        else if (c == KEY_ESC_CURSOR_END)
+                        {
+                            shell_cursor_end(line_buf, line_len, &cursor_idx);
+                            pending_escape = 0;
+                            continue;
+                        }
+                        else if (c == KEY_ESC_DELETE_CHAR)
+                        {
+                            if (cursor_idx < line_len)
+                            {
+                                memmove(&line_buf[cursor_idx], &line_buf[cursor_idx + 1], (size_t)(line_len - cursor_idx));
+                                line_len--;
+                                line_buf[line_len] = '\0';
+                                shell_redraw_tail(line_buf, line_len, cursor_idx, cursor_idx);
+                            }
+                            pending_escape = 0;
+                            continue;
+                        }
                         pending_escape = 0;
                     }
 
@@ -1092,34 +1496,78 @@ void shell_entry(void)
                     if (c == '\n' || c == '\r')
                     {
                         echo_char('\n');
-                        input[input_pos] = '\0';
+                        line_buf[line_len] = '\0';
                         goto line_done;
                     }
 
                     if (c == '\t')
                     {
-                        shell_try_tab_complete(input, &input_pos);
+                        shell_cursor_end(line_buf, line_len, &cursor_idx);
+                        int complete_pos = line_len;
+                        shell_try_tab_complete(line_buf, &complete_pos);
+                        line_len = complete_pos;
+                        cursor_idx = line_len;
+                        line_buf[line_len] = '\0';
+                        continue;
+                    }
+
+                    if (c == 0x01) /* Ctrl+A */
+                    {
+                        shell_cursor_home(&cursor_idx);
+                        continue;
+                    }
+
+                    if (c == 0x05) /* Ctrl+E */
+                    {
+                        shell_cursor_end(line_buf, line_len, &cursor_idx);
+                        continue;
+                    }
+
+                    if (c == 0x15) /* Ctrl+U */
+                    {
+                        shell_clear_rendered_line(line_buf, line_len, &cursor_idx);
+                        line_len = 0;
+                        cursor_idx = 0;
+                        line_buf[0] = '\0';
                         continue;
                     }
 
                     if (c == '\b' || c == 127)
                     {
-                        if (input_pos > 0)
+                        if (cursor_idx > 0)
                         {
-                            input_pos--;
                             echo_char('\b');
+                            cursor_idx--;
+                            memmove(&line_buf[cursor_idx], &line_buf[cursor_idx + 1], (size_t)(line_len - cursor_idx));
+                            line_len--;
+                            line_buf[line_len] = '\0';
+                            shell_redraw_tail(line_buf, line_len, cursor_idx, cursor_idx);
                         }
                     }
-                    else if (c >= 32 && c < 127 && input_pos < INPUT_MAX)
+                    else if (c >= 32 && c < 127 && line_len < INPUT_MAX)
                     {
-                        input[input_pos++] = c;
-                        echo_char(c);
+                        memmove(&line_buf[cursor_idx + 1], &line_buf[cursor_idx], (size_t)(line_len - cursor_idx));
+                        line_buf[cursor_idx] = c;
+                        line_len++;
+                        line_buf[line_len] = '\0';
+                        if (cursor_idx == line_len - 1)
+                        {
+                            echo_char(c);
+                        }
+                        else
+                        {
+                            shell_redraw_tail(line_buf, line_len, cursor_idx, cursor_idx + 1);
+                        }
+                        cursor_idx++;
                     }
                 }
             }
         }
 line_done:
-        execute_command(input);
+        if (!is_empty_line(line_buf))
+            shell_history_add(line_buf);
+
+        execute_command(line_buf);
         /*
          * After each command line, drop descriptors >2 so a leaked fd does not
          * exhaust the shared table before the next command runs.

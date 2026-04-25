@@ -23,14 +23,61 @@
 #define MOUNT_BUF_SIZE 1024
 
 static const char *const mount_flags[] = {
+    "-t",
+    "-h",
+    "--help",
     NULL
 };
 
+static int split_ws_fields(char *line, char **fields, int max_fields)
+{
+    int count = 0;
+    char *p = line;
+
+    while (*p && count < max_fields)
+    {
+        while (*p == ' ' || *p == '\t')
+            p++;
+        if (*p == '\0' || *p == '\n')
+            break;
+
+        fields[count++] = p;
+        while (*p && *p != ' ' && *p != '\t' && *p != '\n')
+            p++;
+        if (*p == '\0' || *p == '\n')
+            break;
+        *p++ = '\0';
+    }
+
+    return count;
+}
+
+static void mount_print_usage(void)
+{
+    debug_writeln("usage:");
+    debug_writeln("  mount");
+    debug_writeln("  mount DEV MOUNTPOINT [fstype]");
+    debug_writeln("  mount -t fstype DEV MOUNTPOINT");
+    debug_writeln("");
+    debug_writeln("examples:");
+    debug_writeln("  mount /dev/null /mnt tmpfs");
+    debug_writeln("  mount -t tmpfs /dev/null /mnt");
+    debug_writeln("  mount /dev/simple0 /mnt/simple simplefs");
+    debug_writeln("  mount /dev/fat0 /mnt/fat fat16");
+}
+
 static int cmd_mount_handler(int argc, char **argv)
 {
+    if (argc >= 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0))
+    {
+        mount_print_usage();
+        debug_serial_ok("mount");
+        return 0;
+    }
+
     if (argc < 2)
     {
-        /* List mounts: read raw /proc/mounts (device\tmountpoint\tfstype\toptions) */
+        /* List mounts: read raw /proc/mounts (whitespace-separated fields). */
         int fd = syscall(SYS_OPEN, (uint64_t)"/proc/mounts", 0, 0);
         if (fd < 0)
         {
@@ -50,46 +97,64 @@ static int cmd_mount_handler(int argc, char **argv)
         {
             const char *eol = strchr(p, '\n');
             if (!eol) break;
-            char dev[64], path[64], type[32], opts[32];
-            dev[0] = path[0] = type[0] = opts[0] = '\0';
-            char *cur = (char *)p;
-            char *dst = dev; size_t dlen = sizeof(dev);
-            for (int f = 0; f < 4 && *cur; f++)
+            if (eol > p)
             {
-                if (f == 1) { dst = path; dlen = sizeof(path); }
-                else if (f == 2) { dst = type; dlen = sizeof(type); }
-                else if (f == 3) { dst = opts; dlen = sizeof(opts); }
-                size_t j = 0;
-                while (*cur && *cur != '\t' && *cur != '\n' && j < dlen - 1)
-                    dst[j++] = *cur++;
-                dst[j] = '\0';
-                if (*cur == '\t') cur++;
-            }
-            if (dev[0] || path[0])
-            {
-                char line[160];
-                snprintf(line, sizeof(line), "%-10s on %-11s %-6s %s", dev, path, type, opts);
-                debug_writeln(line);
+                char line_raw[256];
+                char *fields[6] = {0};
+                size_t len = (size_t)(eol - p);
+                if (len >= sizeof(line_raw))
+                    len = sizeof(line_raw) - 1;
+                memcpy(line_raw, p, len);
+                line_raw[len] = '\0';
+
+                int nfields = split_ws_fields(line_raw, fields, 6);
+                if (nfields >= 4)
+                {
+                    char line[160];
+                    snprintf(line, sizeof(line), "%-10s on %-11s %-6s %s",
+                             fields[0], fields[1], fields[2], fields[3]);
+                    debug_writeln(line);
+                }
             }
             p = eol + 1;
         }
         debug_serial_ok("mount");
         return 0;
     }
-    if (argc < 3)
+
+    const char *dev = NULL;
+    const char *mountpoint = NULL;
+    const char *fstype = NULL;
+
+    if (argc >= 5 && strcmp(argv[1], "-t") == 0)
     {
-        debug_write_err("Usage: mount [DEV MOUNTPOINT [fstype]]\n");
+        fstype = argv[2];
+        dev = argv[3];
+        mountpoint = argv[4];
+    }
+    else if (argc >= 3)
+    {
+        dev = argv[1];
+        mountpoint = argv[2];
+        fstype = (argc >= 4) ? argv[3] : NULL;
+    }
+
+    if (!dev || !mountpoint)
+    {
+        mount_print_usage();
         debug_serial_fail("mount", "usage");
         return 1;
     }
-    const char *dev = argv[1];
-    const char *mountpoint = argv[2];
-    const char *fstype = (argc >= 4) ? argv[3] : NULL;
+
     int64_t result = syscall(SYS_MOUNT, (uint64_t)dev, (uint64_t)mountpoint,
                              (uint64_t)(fstype ? fstype : ""));
     if (result < 0)
     {
-        debug_write_err("mount: failed\n");
+        debug_write_err("mount: failed");
+        if (!fstype || fstype[0] == '\0')
+            debug_write_err(" (hint: specify fstype, e.g. tmpfs)");
+        debug_write_err("\n");
+        debug_perror("mount", mountpoint, (int)result);
         debug_serial_fail("mount", "vfs");
         return 1;
     }
@@ -100,8 +165,8 @@ static int cmd_mount_handler(int argc, char **argv)
 struct debug_command cmd_mount = {
     .name = "mount",
     .handler = cmd_mount_handler,
-    .usage = "mount [DEV MOUNTPOINT [fstype]]",
-    .description = "Mount filesystem",
+    .usage = "mount [DEV MOUNTPOINT [fstype] | -t fstype DEV MOUNTPOINT]",
+    .description = "List or mount filesystems",
     .flags = mount_flags
 };
 

@@ -315,6 +315,7 @@ KERNEL_TEST_OBJS = debug_bins/debug_bins_registry_test.o \
 	kernel/test/test_runner.o \
 	kernel/test/test_syscall.o \
 	kernel/test/test_procfs.o \
+	kernel/test/test_debug_contracts.o \
 	kernel/test/test_process.o \
 	kernel/test/test_resource_registry.o \
 	kernel/test/test_allocator.o \
@@ -399,6 +400,20 @@ else
 CFLAGS += -DCONFIG_ENABLE_FS_TMPFS=0
 endif
 
+ifneq ($(CONFIG_ENABLE_FS_SIMPLEFS),n)
+FS_OBJS += fs/simplefs.o
+CFLAGS += -DCONFIG_ENABLE_FS_SIMPLEFS=1
+else
+CFLAGS += -DCONFIG_ENABLE_FS_SIMPLEFS=0
+endif
+
+ifneq ($(CONFIG_ENABLE_FS_FAT16),n)
+FS_OBJS += fs/fat16_fs.o
+CFLAGS += -DCONFIG_ENABLE_FS_FAT16=1
+else
+CFLAGS += -DCONFIG_ENABLE_FS_FAT16=0
+endif
+
 DISK_OBJS = \
     drivers/disk/partition.o
 
@@ -445,6 +460,7 @@ ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
 BLUETOOTH_OBJS = \
     drivers/bluetooth/hci_uart.o \
     drivers/bluetooth/hci_core.o \
+    drivers/bluetooth/bluetooth_iface.o \
     drivers/bluetooth/bt_device.o \
     drivers/bluetooth/bt_sysfs.o \
     drivers/bluetooth/bluetooth_init.o
@@ -818,7 +834,7 @@ kernel-x64-test.iso: kernel-x64-test.bin arch/x86-64/grub.cfg
 # Create a raw disk image used by QEMU. If you want a persistent filesystem
 # you can format and populate this image separately. This target will
 # create a raw disk image if it doesn't already exist.
-# Supports filesystem selection via FS=minix|fat32|ext4 and size via SIZE=MB (legacy)
+# Supports filesystem selection via FS=minix|fat16|fat32|ext4 and size via SIZE=MB (legacy)
 # For new usage, use: make create-disk [filesystem] [size]
 disk.img:
 	@if [ -f $@ ]; then \
@@ -1066,7 +1082,7 @@ delete-disk:
 # Load Init binary into virtual disk
 # Usage: make load-init [filesystem] [disk_image] [init_binary]
 # Defaults: filesystem=auto-detect, disk_image=disk.img, init_binary=setup/pid1/init
-# Supported filesystems: minix, fat32, ext4
+# Supported filesystems: minix, fat16, fat32, ext4
 # Note: Requires root privileges (mounts filesystem)
 # Examples:
 #   sudo make load-init                    # Auto-detect, use disk.img
@@ -1086,7 +1102,7 @@ load-init:
 # Remove Init binary from virtual disk
 # Usage: make remove-init [filesystem] [disk_image]
 # Defaults: filesystem=auto-detect, disk_image=disk.img
-# Supported filesystems: minix, fat32, ext4
+# Supported filesystems: minix, fat16, fat32, ext4
 # Note: Requires root privileges (mounts filesystem)
 # Examples:
 #   sudo make remove-init                  # Auto-detect, use disk.img
@@ -1137,7 +1153,7 @@ kernel-memsafe:
 kernel-tests: kernel-x64-test.iso disk.img
 	@echo "  KTEST   Running in-kernel test suite at boot (KUnit-style)..."
 	@timeout 40 $(QEMU) -cdrom kernel-x64-test.iso -drive file=disk.img,format=raw,if=ide,index=0 -serial stdio -display none -m 128M -no-reboot -net none 2>&1 | tee /tmp/ktest.log; \
-	grep -q "All .* test(s) passed" /tmp/ktest.log && ! grep -q "Some tests FAILED" /tmp/ktest.log && ! grep -q "not ok " /tmp/ktest.log; \
+	grep -q "All .* test(s) passed" /tmp/ktest.log && ! grep -q "Some tests FAILED" /tmp/ktest.log && ! grep -q "not ok " /tmp/ktest.log && ! grep -q "# SKIP need process" /tmp/ktest.log; \
 	if [ $$? -eq 0 ]; then echo "✓ kernel-tests passed"; exit 0; else echo "✗ kernel-tests FAILED"; exit 1; fi
 
 # Análisis del binario del kernel: secciones (size -A), símbolos no definidos, kmain.
@@ -1219,6 +1235,14 @@ runtime-net-check:
 		--runtime-cmd "python3 $(KERNEL_ROOT)/scripts/net_runtime_smoke.py --timeout-sec 25"
 	@echo "✓ runtime-net-check passed"
 
+runtime-mount-check: kernel-tests
+	@echo "  RUNTIME  mount contract smoke (QEMU)"
+	@grep -q "ok .* - mount_proc_contract" /tmp/ktest.log && \
+	 grep -q "ok .* - mount_tmpfs_contract" /tmp/ktest.log && \
+	 grep -q "ok .* - mount_multi_fs_contract" /tmp/ktest.log && \
+	 grep -q "ok .* - mount_longest_prefix_contract" /tmp/ktest.log
+	@echo "✓ runtime-mount-check passed"
+
 arch-guard:
 	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
 
@@ -1231,11 +1255,50 @@ build-matrix-full:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/config_sim.py --max-cases 24 --build-cmd "make -s kernel-x64.bin"
 	@echo "  MATRIX  runtime network smoke checks"
 	@$(MAKE) -s runtime-net-check
+	@echo "  MATRIX  runtime mount smoke checks"
+	@$(MAKE) -s runtime-mount-check
 	@echo "  MATRIX  architecture guardrails"
 	@$(MAKE) -s arch-guard
 	@echo "  MATRIX  repository hygiene guardrails"
 	@$(MAKE) -s repo-hygiene-guard
 	@echo "✓ build-matrix-full passed"
+
+smoke-qemu:
+	@echo "  SMOKE   qemu baseline"
+	@$(MAKE) -s kernel-tests
+	@$(MAKE) -s runtime-net-check
+	@$(MAKE) -s runtime-mount-check
+	@echo "✓ smoke-qemu passed"
+
+smoke-real-hw:
+	@echo "  SMOKE   real hardware checklist"
+	@bash $(KERNEL_ROOT)/tests/smoke/run_real_hw_smoke.sh
+	@echo "✓ smoke-real-hw checklist generated"
+
+smoke-all:
+	@$(MAKE) -s smoke-qemu
+	@$(MAKE) -s smoke-real-hw
+	@echo "✓ smoke-all completed"
+
+roadmap-phase1-stability:
+	@echo "  ROADMAP phase1 stability gates"
+	@$(MAKE) -s kernel-x64.bin
+	@$(MAKE) -s tests
+	@$(MAKE) -s kernel-tests
+	@$(MAKE) -s kernel-memsafe
+	@$(MAKE) -s kernel-analyze
+	@$(MAKE) -s build-matrix-min
+	@$(MAKE) -s arch-guard
+	@echo "✓ roadmap phase1 ready"
+
+roadmap-phase2-driver-expansion: roadmap-phase1-stability
+	@echo "  ROADMAP phase2 driver expansion gate"
+	@$(MAKE) -s runtime-net-check
+	@echo "✓ roadmap phase2 ready (modern net/storage driver work can proceed)"
+
+roadmap-phase3-core-features: roadmap-phase2-driver-expansion
+	@echo "  ROADMAP phase3 core feature gate"
+	@echo "✓ roadmap phase3 ready (network/process semantic expansion can proceed)"
 
 scale-readiness-gate:
 	@$(MAKE) -s build-matrix-full
@@ -1346,7 +1409,14 @@ help:
 	@echo "  make health           Full health check: kernel-analyze + kernel-memsafe + kernel-tests"
 	@echo "  make build-matrix-min Build defconfig/tiny/net-off/storage variants"
 	@echo "  make runtime-net-check Runtime network smoke checks (QEMU)"
+	@echo "  make runtime-mount-check Runtime mount smoke checks (QEMU/ktest)"
 	@echo "  make build-matrix-full Extended matrix + runtime + guards"
+	@echo "  make smoke-qemu       QEMU smoke checklist (kernel-tests + runtime checks)"
+	@echo "  make smoke-real-hw    Real hardware smoke checklist runner"
+	@echo "  make smoke-all        Run qemu smoke + real hardware checklist"
+	@echo "  make roadmap-phase1-stability Baseline stabilization gate"
+	@echo "  make roadmap-phase2-driver-expansion Driver expansion readiness gate"
+	@echo "  make roadmap-phase3-core-features Core feature expansion readiness gate"
 	@echo "  make scale-readiness-gate Final stabilization gate"
 	@echo "  make config-sim       Simulate subsystem on/off combinations"
 	@echo "  make arch-guard       Enforce include/facade architecture constraints"
@@ -1647,7 +1717,9 @@ test-drivers-clean:
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
-        runtime-net-check scale-readiness-gate config-wiring-check \
+        runtime-net-check runtime-mount-check smoke-qemu smoke-real-hw smoke-all \
+        roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
+        scale-readiness-gate config-wiring-check \
         format compile-commands disasm stack-usage clean-net \
         run-ping
 

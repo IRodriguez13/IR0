@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 /* Byte order conversion macros (Big Endian <-> Little Endian) */
 /* IR0 is x86-64 (Little Endian) */
@@ -151,3 +152,24 @@ struct ping_result {
     size_t payload_bytes; /* Payload size in reply */
     ip4_addr_t reply_ip;  /* IP address that replied */
 };
+
+/* Shared IPv4 runtime configuration exposed to networking control paths. */
+extern ip4_addr_t ip_local_addr;
+extern ip4_addr_t ip_netmask;
+extern ip4_addr_t ip_gateway;
+
+/* ICMP helpers used by /dev/net control plane. */
+bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out,
+                               uint8_t *ttl_out, size_t *payload_bytes_out,
+                               ip4_addr_t *reply_ip_out);
+bool icmp_has_ready_echo_result(uint16_t id);
+uint16_t icmp_allocate_echo_seq(void);
+int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
+                           uint16_t id, uint16_t seq, const void *data, size_t len);
+
+/* DNS resolver used by /dev/net ping hostname path. */
+ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip);
+
+/* ARP IP synchronization helpers used by NET_SET_CONFIG. */
+void arp_set_my_ip(ip4_addr_t ip);
+int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip);

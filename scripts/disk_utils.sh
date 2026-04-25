@@ -6,6 +6,7 @@
 # Filesystem-specific defaults for disk sizes
 declare -A FS_DEFAULTS
 FS_DEFAULTS["minix"]="200"
+FS_DEFAULTS["fat16"]="128"
 FS_DEFAULTS["fat32"]="500"
 FS_DEFAULTS["ext4"]="1000"
 
@@ -26,13 +27,16 @@ get_disk_filename() {
 
 # Detect filesystem type from disk filename
 # Usage: detect_filesystem_from_filename filename
-# Returns: filesystem type (minix, fat32, ext4) or empty string
+# Returns: filesystem type (minix, fat16, fat32, ext4) or empty string
 detect_filesystem_from_filename() {
     local filename="$1"
     local basename=$(basename "$filename")
     
     # Check for explicit filesystem in filename
-    if [[ "$basename" == fat32*.img ]] || [[ "$basename" == *fat32*.img ]]; then
+    if [[ "$basename" == fat16*.img ]] || [[ "$basename" == *fat16*.img ]]; then
+        echo "fat16"
+        return 0
+    elif [[ "$basename" == fat32*.img ]] || [[ "$basename" == *fat32*.img ]]; then
         echo "fat32"
         return 0
     elif [[ "$basename" == ext4*.img ]] || [[ "$basename" == *ext4*.img ]]; then
@@ -63,6 +67,9 @@ check_filesystem_support() {
     case "$fs_type" in
         minix)
             mount_type="minix"
+            ;;
+        fat16)
+            mount_type="vfat"
             ;;
         fat32)
             mount_type="vfat"  # FAT32 is mounted as vfat in Linux
@@ -95,6 +102,9 @@ get_mount_type() {
     case "$fs_type" in
         minix)
             echo "minix"
+            ;;
+        fat16)
+            echo "vfat"
             ;;
         fat32)
             echo "vfat"  # FAT32 is mounted as vfat in Linux
@@ -157,6 +167,17 @@ format_disk_if_needed() {
             # Use v1 for compatibility
             if ! "$mkfs_cmd" -1 "$disk_image" 2>/dev/null; then
                 echo "❌ Error: Failed to format MINIX filesystem"
+                return 1
+            fi
+            ;;
+        fat16)
+            mkfs_cmd="mkfs.vfat"
+            if ! command -v "$mkfs_cmd" >/dev/null 2>&1; then
+                echo "❌ Error: $mkfs_cmd not found. Install dosfstools package."
+                return 1
+            fi
+            if ! "$mkfs_cmd" -F 16 -n "IR0FAT16" "$disk_image" 2>/dev/null; then
+                echo "❌ Error: Failed to format FAT16 filesystem"
                 return 1
             fi
             ;;
