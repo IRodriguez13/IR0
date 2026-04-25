@@ -52,13 +52,20 @@ static int ext_scancode = 0;
 static int current_keyboard_layout = KEYBOARD_LAYOUT_US;
 
 /*
- * Escape sequences for shell: ESC + 0x01 = scroll up (Page Up), ESC + 0x02
- * = scroll down (Page Down), ESC + 0x03 = request clear (Ctrl+L).
+ * Escape sequences for shell: ESC + code, where codes are consumed by
+ * debug_bins/dbgshell.c (userspace-like shell via SYS_READ).
  * Shell uses only syscalls; scroll reads call SYS_CONSOLE_SCROLL.
  */
 #define KEY_ESC_SCROLL_UP     0x01
 #define KEY_ESC_SCROLL_DOWN   0x02
 #define KEY_ESC_CLEAR_SCREEN  0x03
+#define KEY_ESC_HISTORY_UP    0x04
+#define KEY_ESC_HISTORY_DOWN  0x05
+#define KEY_ESC_CURSOR_LEFT   0x06
+#define KEY_ESC_CURSOR_RIGHT  0x07
+#define KEY_ESC_CURSOR_HOME   0x08
+#define KEY_ESC_CURSOR_END    0x09
+#define KEY_ESC_DELETE_CHAR   0x0A
 
 /* Basic scancode -> ASCII (printable subset), US layout */
 static const char scancode_to_ascii_us[] = {
@@ -219,6 +226,19 @@ char translate_scancode(uint8_t sc)
         ctrl_pressed = 0;
         return 0;
 
+    case 0x1E:
+        if (ctrl_pressed)
+            return 0x01; /* Ctrl+A */
+        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
+    case 0x12:
+        if (ctrl_pressed)
+            return 0x05; /* Ctrl+E */
+        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
+    case 0x16:
+        if (ctrl_pressed)
+            return 0x15; /* Ctrl+U */
+        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
+
     default:
         if (sc < sizeof(scancode_to_ascii_us))
         {
@@ -291,7 +311,42 @@ void keyboard_handler64(void)
             input_event_push(EV_KEY, kc, (scancode < 0x80) ? 1 : 0);
         if (scancode < 0x80)
         {
-            if (scancode == 0x49)
+            if (scancode == 0x48)
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_HISTORY_UP);
+            }
+            else if (scancode == 0x50)
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_HISTORY_DOWN);
+            }
+            else if (scancode == 0x4B)
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_CURSOR_LEFT);
+            }
+            else if (scancode == 0x4D)
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_CURSOR_RIGHT);
+            }
+            else if (scancode == 0x47)
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_CURSOR_HOME);
+            }
+            else if (scancode == 0x4F)
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_CURSOR_END);
+            }
+            else if (scancode == 0x53)
+            {
+                keyboard_buffer_add(0x1B);
+                keyboard_buffer_add(KEY_ESC_DELETE_CHAR);
+            }
+            else if (scancode == 0x49)
             {
                 keyboard_buffer_add(0x1B);
                 keyboard_buffer_add(KEY_ESC_SCROLL_UP);

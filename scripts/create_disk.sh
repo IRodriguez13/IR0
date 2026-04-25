@@ -3,7 +3,7 @@
 # create_disk.sh - Create virtual disk for IR0 filesystems
 # Usage: create_disk.sh [OPTIONS]
 # Options:
-#   -f, --filesystem FS    Filesystem type (minix, fat32, ext4, etc.) [default: minix]
+#   -f, --filesystem FS    Filesystem type (minix, fat16, fat32, ext4, etc.) [default: minix]
 #   -s, --size SIZE        Disk size in MB [default: 200]
 #   -o, --output FILE      Output disk image filename [default: disk.img]
 #   -h, --help             Show this help message
@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
             echo "Create a virtual disk image for IR0 kernel filesystems."
             echo ""
             echo "Positional arguments:"
-            echo "  FILESYSTEM             Filesystem type (minix, fat32, ext4, etc.) [default: minix]"
+            echo "  FILESYSTEM             Filesystem type (minix, fat16, fat32, ext4, etc.) [default: minix]"
             echo "  SIZE                   Disk size in MB [default: 200, or FS-specific default]"
             echo ""
             echo "Options:"
@@ -56,6 +56,7 @@ while [[ $# -gt 0 ]]; do
             echo "Examples:"
             echo "  ./scripts/create_disk.sh                          # Create 200MB MINIX disk (default)"
             echo "  ./scripts/create_disk.sh minix 500                # Create 500MB MINIX disk"
+            echo "  ./scripts/create_disk.sh fat16                    # Create FAT16 disk (default size)"
             echo "  ./scripts/create_disk.sh fat32                    # Create FAT32 disk (default size)"
             echo "  ./scripts/create_disk.sh fat32 500                # Create 500MB FAT32 disk"
             echo "  ./scripts/create_disk.sh ext4 1000                # Create 1GB ext4 disk"

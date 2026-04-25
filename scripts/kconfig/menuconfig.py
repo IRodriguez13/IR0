@@ -315,6 +315,8 @@ def set_symbol_value(symbols, assignment):
 def apply_preset(symbols, preset):
     """Apply a predefined config profile."""
     values = {}
+    for sym in symbols:
+        sym.value = sym.effective_default()
     if preset == "generic":
         values = {
             "KERNEL_DEBUG_SHELL": "y",
@@ -338,6 +340,8 @@ def apply_preset(symbols, preset):
             "ENABLE_STORAGE_ATA_BLOCK": "y",
             "ENABLE_FS_MINIX": "y",
             "ENABLE_FS_TMPFS": "y",
+            "ENABLE_FS_SIMPLEFS": "y",
+            "ENABLE_FS_FAT16": "y",
             "ENABLE_PC_SPEAKER": "y",
             "ENABLE_VBE": "y",
             "ENABLE_EXAMPLE_DRIVERS": "n",
@@ -377,6 +381,8 @@ def apply_preset(symbols, preset):
             "ENABLE_STORAGE_ATA_BLOCK": "y",
             "ENABLE_FS_MINIX": "y",
             "ENABLE_FS_TMPFS": "y",
+            "ENABLE_FS_SIMPLEFS": "y",
+            "ENABLE_FS_FAT16": "y",
             "ENABLE_PC_SPEAKER": "n",
             "ENABLE_VBE": "n",
             "ENABLE_EXAMPLE_DRIVERS": "n",

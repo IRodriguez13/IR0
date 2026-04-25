@@ -43,7 +43,7 @@
 #include <kernel/resource_registry.h>
 #include <config.h>
 #if CONFIG_ENABLE_BLUETOOTH
-#include "drivers/bluetooth/bt_device.h"
+#include <ir0/bluetooth.h>
 #endif
 #include <ir0/logging.h>
 
@@ -1336,11 +1336,11 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
 #if CONFIG_ENABLE_BLUETOOTH
         case 1019:
             /* /proc/bluetooth/devices */
-            full_size = bt_proc_devices_read(proc_buffer, sizeof(proc_buffer));
+            full_size = ir0_bt_proc_devices_read(proc_buffer, sizeof(proc_buffer));
             break;
         case 1020:
             /* /proc/bluetooth/scan */
-            full_size = bt_proc_scan_read(proc_buffer, sizeof(proc_buffer));
+            full_size = ir0_bt_proc_scan_read(proc_buffer, sizeof(proc_buffer));
             break;
 #endif
         case 1022:
@@ -1441,7 +1441,7 @@ int proc_write(int fd, const char *buf, size_t count)
                     cmd_buf[copy_len] = '\0';
                 }
 
-                int result = bt_proc_scan_write(cmd_buf);
+                int result = ir0_bt_proc_scan_write(cmd_buf);
                 if (result < 0)
                     return result;
                 return (int)count;

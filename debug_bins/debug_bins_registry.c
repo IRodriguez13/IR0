@@ -248,3 +248,80 @@ int debug_parse_args(const char *cmd_line, int *argc_out, char **argv_out, int m
     return 0;
 }
 
+static int debug_name_in_list(const char *name, const char *const *list)
+{
+    if (!name || !list)
+        return 0;
+
+    for (int i = 0; list[i] != NULL; i++)
+    {
+        if (strcmp(name, list[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+const char *debug_command_section(const char *name)
+{
+    static const char *const core_cmds[] = {
+        "ls", "cd", "pwd", "cat", "echo", "exec", "cmp", "which", "true", "false", "sleep", NULL
+    };
+    static const char *const fs_cmds[] = {
+        "mkdir", "rm", "rmdir", "touch", "cp", "mv", "ln", "mount", "chmod", "chown", "basename", "dirname", NULL
+    };
+    static const char *const diag_cmds[] = {
+        "ps", "df", "dmesg", "lsmod", "hostname", "uname", "lsblk", "lsdrv", "free",
+        "uptime", "date", "keymap", "lshw", "stat", NULL
+    };
+    static const char *const net_cmds[] = {
+        "ping", "ndev", "route", "ifconfig", "netstat", NULL
+    };
+    static const char *const bt_cmds[] = {
+        "lsblue", "bluestart", "blue", NULL
+    };
+    static const char *const identity_cmds[] = {
+        "sudo", "id", "whoami", NULL
+    };
+    static const char *const text_cmds[] = {
+        "sed", "cut", "tr", "wc", "head", "tail", NULL
+    };
+
+    if (!name || !name[0])
+        return NULL;
+
+    if (debug_name_in_list(name, core_cmds))
+        return "core";
+    if (debug_name_in_list(name, fs_cmds))
+        return "fs";
+    if (debug_name_in_list(name, diag_cmds))
+        return "diag";
+    if (debug_name_in_list(name, net_cmds))
+        return "net";
+    if (debug_name_in_list(name, bt_cmds))
+        return "bt";
+    if (debug_name_in_list(name, identity_cmds))
+        return "identity";
+    if (debug_name_in_list(name, text_cmds))
+        return "text";
+#ifdef IR0_KERNEL_TESTS
+    if (strcmp(name, "ktest") == 0)
+        return "diag";
+#endif
+    return NULL;
+}
+
+int debug_is_valid_section(const char *section)
+{
+    if (!section || !section[0])
+        return 0;
+
+    return strcmp(section, "core") == 0 ||
+           strcmp(section, "fs") == 0 ||
+           strcmp(section, "diag") == 0 ||
+           strcmp(section, "net") == 0 ||
+           strcmp(section, "bt") == 0 ||
+           strcmp(section, "identity") == 0 ||
+           strcmp(section, "text") == 0 ||
+           strcmp(section, "shell") == 0;
+}
+

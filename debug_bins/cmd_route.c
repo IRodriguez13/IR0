@@ -112,12 +112,22 @@ static int cmd_route_handler(int argc, char **argv)
     rd_devnet = read_text_file("/dev/net", devnet, sizeof(devnet));
     if (rd_devnet < 0)
     {
+        debug_writeln_err("route: networking control node unavailable (/dev/net)");
+        debug_writeln_err("hint: enable networking and ensure net device registration in devfs");
         debug_perror("route", "/dev/net", rd_devnet);
+        return 1;
+    }
+    if (rd_devnet == 0 || devnet[0] == '\0')
+    {
+        debug_writeln_err("route: /dev/net returned no route snapshot");
+        debug_writeln_err("hint: run ndev and check if a link is up");
         return 1;
     }
     rd_netdev = read_text_file("/proc/net/dev", netdev, sizeof(netdev));
     if (rd_netdev < 0)
     {
+        debug_writeln_err("route: interface stats unavailable (/proc/net/dev)");
+        debug_writeln_err("hint: networking may be disabled or no net interface is active");
         debug_perror("route", "/proc/net/dev", rd_netdev);
         return 1;
     }

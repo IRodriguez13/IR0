@@ -32,31 +32,37 @@
 #endif
 #include <ir0/input_backend.h>
 #if CONFIG_ENABLE_NETWORKING
-#include <net/arp.h>
-#include <net/ip.h>
-#include <net/icmp.h>
-#include <net/dns.h>
 #include <ir0/net.h>
 #endif
-#include <kernel/syscalls.h>
 #include <ir0/block_dev.h>
 #include <ir0/partition.h>
 #include <string.h>
 #include <ir0/clock.h>
 #include "kernel/ipc.h"
 #if CONFIG_ENABLE_BLUETOOTH
-#include "drivers/bluetooth/bt_device.h"
+#include <ir0/bluetooth.h>
 #endif
 #include <ir0/video_backend.h>
 #include <ir0/copy_user.h>
 #include <ir0/input.h>
 #include <ir0/serial_io.h>
+#include <kernel/process.h>
+
+static pid_t devfs_current_pid(void)
+{
+    if (!current_process)
+        return 0;
+    return current_process->task.pid;
+}
 
 /* Device registry */
 #define MAX_DEV_NODES 64
 static devfs_node_t *dev_nodes[MAX_DEV_NODES];
 static int num_dev_nodes = 0;
 extern devfs_node_t dev_net;
+extern devfs_node_t dev_console;
+extern devfs_node_t dev_tty;
+extern devfs_node_t dev_stdin;
 
 #if CONFIG_ENABLE_NETWORKING
 static int dev_net_pid_has_ready_ping(pid_t pid)
@@ -72,6 +78,14 @@ static int dev_net_pid_has_ready_ping(pid_t pid)
 
 int devfs_fd_can_read(uint32_t device_id, pid_t pid)
 {
+    if (device_id == dev_console.entry.device_id ||
+        device_id == dev_tty.entry.device_id ||
+        device_id == dev_stdin.entry.device_id)
+    {
+        (void)pid;
+        return keyboard_buffer_has_data() ? 1 : 0;
+    }
+
 #if CONFIG_ENABLE_NETWORKING
     if (device_id == dev_net.entry.device_id)
         return dev_net_pid_has_ready_ping(pid);
@@ -800,7 +814,7 @@ int64_t dev_net_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset
     net_poll();
 
     {
-        pid_t pid = (pid_t)sys_getpid();
+        pid_t pid = devfs_current_pid();
         uint16_t id = (uint16_t)(pid & 0xFFFF);
         uint16_t seq = 0;
         uint64_t rtt = 0;
@@ -918,7 +932,7 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 {
                     
                     /* Use process ID as identifier and a monotonic sequence. */
-                    pid_t pid = (pid_t)sys_getpid();
+                    pid_t pid = devfs_current_pid();
                     uint16_t id = (uint16_t)(pid & 0xFFFF);
                     uint16_t seq = icmp_allocate_echo_seq();
                     
@@ -992,7 +1006,7 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                     return -EINVAL;
                 
                 /* Get PID to use as ICMP ID (matches NET_SEND_PING behavior) */
-                pid_t pid = (pid_t)sys_getpid();
+                pid_t pid = devfs_current_pid();
                 uint16_t id = (uint16_t)(pid & 0xFFFF);
 
                 /* Try to get next completed echo result for this pid. */
@@ -1801,31 +1815,31 @@ static const devfs_ops_t ipc_ops = {
 int64_t dev_bluetooth_hci_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)offset;
-    return bt_hci_read((char *)buf, count);
+    return ir0_bt_hci_read((char *)buf, count);
 }
 
 int64_t dev_bluetooth_hci_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)offset;
-    return bt_hci_write((const char *)buf, count);
+    return ir0_bt_hci_write((const char *)buf, count);
 }
 
 int64_t dev_bluetooth_hci_open(devfs_entry_t *entry, int flags)
 {
     (void)entry; (void)flags;
-    return bt_hci_open();
+    return ir0_bt_hci_open();
 }
 
 int64_t dev_bluetooth_hci_close(devfs_entry_t *entry)
 {
     (void)entry;
-    return bt_hci_close();
+    return ir0_bt_hci_close();
 }
 
 int64_t dev_bluetooth_hci_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
     (void)entry;
-    return bt_hci_ioctl((unsigned int)request, (unsigned long)arg);
+    return ir0_bt_hci_ioctl((unsigned int)request, (unsigned long)arg);
 }
 
 static const devfs_ops_t bluetooth_hci_ops = {

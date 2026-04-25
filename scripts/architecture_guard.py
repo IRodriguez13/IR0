@@ -32,9 +32,10 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "video_backend.h",
     ROOT / "includes" / "ir0" / "input_backend.h",
     ROOT / "includes" / "ir0" / "net.h",
+    ROOT / "includes" / "ir0" / "bluetooth.h",
 ]
 
-DRIVER_INCLUDE_RE = re.compile(r"^\s*#\s*include\s*<drivers/")
+DRIVER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]drivers/')
 
 
 def iter_c_files(base: Path):

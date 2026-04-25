@@ -43,7 +43,7 @@
 #include <ir0/errno.h>
 #include <config.h>
 #if CONFIG_ENABLE_BLUETOOTH
-#include "drivers/bluetooth/bt_sysfs.h"
+#include <ir0/bluetooth.h>
 #endif
 #include <ir0/partition.h>
 #include <ir0/block_dev.h>
@@ -533,16 +533,16 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
             break;
 #if CONFIG_ENABLE_BLUETOOTH
         case SYS_BT_HCI0_ADDRESS:
-            full_size = bt_sysfs_hci0_address_read(sys_buffer, sizeof(sys_buffer));
+            full_size = ir0_bt_sysfs_hci0_address_read(sys_buffer, sizeof(sys_buffer));
             break;
         case SYS_BT_HCI0_STATE:
-            full_size = bt_sysfs_hci0_state_read(sys_buffer, sizeof(sys_buffer));
+            full_size = ir0_bt_sysfs_hci0_state_read(sys_buffer, sizeof(sys_buffer));
             break;
         case SYS_BT_TOPOLOGY_NEIGH:
-            full_size = bt_sysfs_topology_neighbors_read(sys_buffer, sizeof(sys_buffer));
+            full_size = ir0_bt_sysfs_topology_neighbors_read(sys_buffer, sizeof(sys_buffer));
             break;
         case SYS_BT_SESSIONS:
-            full_size = bt_sysfs_sessions_read(sys_buffer, sizeof(sys_buffer));
+            full_size = ir0_bt_sysfs_sessions_read(sys_buffer, sizeof(sys_buffer));
             break;
 #endif
         case SYS_CONSOLE_MODE:

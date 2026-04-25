@@ -29,7 +29,51 @@
 #include <ir0/kmem.h>
 #include <mm/paging.h>
 #include <ir0/permissions.h>
+#include <ir0/errno.h>
+#include <fs/vfs.h>
 #include <string.h>
+
+/*
+ * Build a Unix-like base hierarchy for the debug shell runtime.
+ * This is idempotent: existing directories are kept as-is.
+ */
+static void init_prepare_unix_hierarchy(void)
+{
+	const char *dirs[] = {
+		"/bin",
+		"/sbin",
+		"/etc",
+		"/etc/init.d",
+		"/usr",
+		"/usr/bin",
+		"/usr/sbin",
+		"/usr/lib",
+		"/usr/include",
+		"/var",
+		"/var/log",
+		"/var/tmp",
+		"/var/run",
+		"/home",
+		"/root",
+		"/tmp",
+		"/opt",
+		"/boot",
+		"/srv",
+		"/run",
+		"/mnt",
+		"/mnt/tmp",
+		"/mnt/simple",
+		"/mnt/fat",
+		NULL
+	};
+
+	for (int i = 0; dirs[i] != NULL; i++)
+	{
+		int ret = vfs_mkdir(dirs[i], 0755);
+		if (ret != 0 && ret != -EEXIST)
+			break;
+	}
+}
 
 /*
  * init_1 — Entrada del init de test (debug shell como PID 1).
@@ -37,8 +81,19 @@
  */
 void init_1(void)
 {
+	/*
+	 * If test runner is linked, execute ktests here (PID 1) so
+	 * current_process-dependent tests run in real process context.
+	 */
+	{
+		extern void kernel_test_run_all(void) __attribute__((weak));
+		if (kernel_test_run_all)
+			kernel_test_run_all();
+	}
+
 	/* Initialize typewriter effect */
 	typewriter_init();
+	init_prepare_unix_hierarchy();
 
 	shell_entry();
 

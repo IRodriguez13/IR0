@@ -198,6 +198,20 @@ menu "Filesystems"
           Compile TMPFS in-memory filesystem support.
           Recommended enabled as fallback root when disk mount fails.
 
+    config ENABLE_FS_SIMPLEFS
+        bool "SimpleFS filesystem driver"
+        default y
+        help
+          Compile a minimal low-complexity filesystem backend intended for
+          mount coexistence and scaling validation.
+
+    config ENABLE_FS_FAT16
+        bool "FAT16-like filesystem driver"
+        default y
+        help
+          Compile a minimal FAT16-like backend for mount coexistence tests
+          using coherent mountpoint semantics.
+
 endmenu
 
 menu "Platform Devices"
