@@ -295,25 +295,11 @@ void ip_receive_handler(struct net_device *dev, const void *data,
     }
 
     /* Normal (unfragmented) packet processing */
-    LOG_INFO_FMT("IP", "Received IP packet: protocol=%d, src=" IP4_FMT ", dest=" IP4_FMT,
-                 (int)protocol,
-                 IP4_ARGS(ntohl(src_ip)),
-                 IP4_ARGS(ntohl(dest_ip)));
-    
-    /* CRITICAL: Log ICMP Echo Replies from external IPs (e.g., 8.8.8.8) */
-    /* This helps debug why ping responses aren't being processed */
-    if (protocol == IPPROTO_ICMP && len >= header_len + 4)
-    {
-        const uint8_t *icmp_data = (const uint8_t *)data + header_len;
-        uint8_t icmp_type = icmp_data[0];
-        if (icmp_type == 0) /* ICMP_TYPE_ECHO_REPLY */
-        {
-            LOG_INFO_FMT("IP", "ICMP Echo Reply received from " IP4_FMT " to " IP4_FMT " - checking if for us",
-                        IP4_ARGS(ntohl(src_ip)), IP4_ARGS(ntohl(dest_ip)));
-        }
-    }
+    LOG_DEBUG_FMT("IP", "RX packet: proto=%d src=" IP4_FMT " dst=" IP4_FMT,
+                  (int)protocol, IP4_ARGS(ntohl(src_ip)), IP4_ARGS(ntohl(dest_ip)));
 
-    /* Enhanced logging for ICMP packets to debug Echo Reply issues */
+#if KERNEL_DEBUG
+    /* Enhanced serial-only logging for ICMP diagnostics. */
     if (protocol == IPPROTO_ICMP && len >= header_len + 4)
     {
         const uint8_t *icmp_data = (const uint8_t *)data + header_len;
@@ -347,6 +333,7 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         }
         serial_print("\n");
     }
+#endif
 
     /* Look up protocol handler by IP protocol number */
     struct net_protocol *proto = net_find_protocol_by_ipproto(protocol);
@@ -354,7 +341,7 @@ void ip_receive_handler(struct net_device *dev, const void *data,
     {
         /* Extract payload (after IP header) */
         const void *payload = (const uint8_t *)data + header_len;
-        size_t payload_len = len - header_len;
+        size_t payload_len = (size_t)total_len - header_len;
         struct ip_rx_context rx_ctx;
 
         rx_ctx.src_addr = src_ip;

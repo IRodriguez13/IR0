@@ -42,7 +42,7 @@ static int cmd_ndev_handler(int argc, char **argv)
         debug_writeln("ndev: /dev/net returned no data");
         return 0;
     }
-    if (strstr(buf, "success:") != NULL)
+    if (strstr(buf, "type=ping_result") != NULL)
         debug_writeln("ndev: last ping result");
     else
         debug_writeln("ndev: network device snapshot");
