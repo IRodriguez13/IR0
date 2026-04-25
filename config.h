@@ -29,9 +29,11 @@
  * When building without menuconfig, the file won't exist and
  * the fallback defaults below keep everything enabled.
  */
-#ifdef __has_include
+#if defined(__has_include)
 #if __has_include(<generated/autoconf.h>)
 #include <generated/autoconf.h>
+#elif __has_include(<autoconf.h>)
+#include <autoconf.h>
 #endif
 #endif
 

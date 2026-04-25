@@ -25,7 +25,11 @@
 static int cp_build_temp_path(const char *dst, char *tmp_path, size_t tmp_sz)
 {
     int64_t pid = syscall(SYS_GETPID, 0, 0, 0);
-    int n = snprintf(tmp_path, tmp_sz, "%s.tmp.cp.%lld", dst, (long long)pid);
+    char pid_str[32];
+    uint64_t upid = (pid < 0) ? 0 : (uint64_t)pid;
+
+    debug_u64_to_dec(upid, pid_str, sizeof(pid_str));
+    int n = snprintf(tmp_path, tmp_sz, "%s.tmp.cp.%s", dst, pid_str);
     if (n <= 0 || n >= (int)tmp_sz)
         return -ENAMETOOLONG;
     return 0;

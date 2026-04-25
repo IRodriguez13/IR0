@@ -71,7 +71,7 @@ int minix_read_block(uint32_t block_num, void *buffer)
   bool success = block_dev_read_sectors(minix_root_device_name(), lba, num_sectors, buffer);
 
   if (!success)
-    return -1;
+    return -EIO;
 
   return 0;
 }
@@ -84,7 +84,7 @@ int minix_write_block(uint32_t block_num, const void *buffer)
   bool success = block_dev_write_sectors(minix_root_device_name(), lba, num_sectors, buffer);
 
   if (!success)
-    return -1;
+    return -EIO;
 
   return 0;
 }
@@ -177,7 +177,7 @@ void minix_mark_zone_used(uint32_t zone_num)
   bitmap_block[block_offset] &= ~(1 << bit_index);
 
   // Escribir el bloque actualizado
-  minix_write_block(block_num, bitmap_block);
+  (void)minix_write_block(block_num, bitmap_block);
 }
 
 uint32_t minix_alloc_zone(void)
@@ -550,7 +550,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
 {
   if (!inode || inode_num == 0)
   {
-    return -1;
+    return -EINVAL;
   }
 
   // Calcular la posición del inode en el disco (DEBE SER IGUAL A minix_read_inode)
@@ -577,7 +577,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   if (minix_read_block(inode_block, block_buffer) != 0)
   {
     serial_print("SERIAL: write_inode: failed to read block\n");
-    return -1;
+    return -EIO;
   }
 
   // Copiar el inode al buffer
@@ -587,7 +587,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   if (minix_write_block(inode_block, block_buffer) != 0)
   {
     serial_print("SERIAL: write_inode: failed to write block\n");
-    return -1;
+    return -EIO;
   }
 
   // Invalidate root cache if we wrote the root inode
@@ -604,7 +604,7 @@ int minix_fs_free_inode(uint16_t inode_num)
 {
   if (inode_num == 0 || inode_num > minix_fs.superblock.s_ninodes)
   {
-    return -1;
+    return -EINVAL;
   }
 
   // Calcular la posición en el bitmap de inodes
@@ -613,7 +613,7 @@ int minix_fs_free_inode(uint16_t inode_num)
 
   if (byte_index >= minix_fs.superblock.s_imap_blocks * MINIX_BLOCK_SIZE)
   {
-    return -1;
+    return -EINVAL;
   }
 
   // Leer el bloque del bitmap
@@ -623,7 +623,7 @@ int minix_fs_free_inode(uint16_t inode_num)
   uint8_t bitmap_block[MINIX_BLOCK_SIZE];
   if (minix_read_block(block_num, bitmap_block) != 0)
   {
-    return -1;
+    return -EIO;
   }
 
   // Marcar el inode como libre (bit = 1)
@@ -632,7 +632,7 @@ int minix_fs_free_inode(uint16_t inode_num)
   // Escribir el bloque actualizado
   if (minix_write_block(block_num, bitmap_block) != 0)
   {
-    return -1;
+    return -EIO;
   }
 
   return 0;
@@ -643,7 +643,7 @@ int minix_fs_split_path(const char *pathname, char *parent_path,
 {
   if (!pathname || !parent_path || !filename)
   {
-    return -1;
+    return -EINVAL;
   }
 
   // Encontrar la última barra
@@ -695,14 +695,14 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
 {
   if (!parent_inode || !filename || inode_num == 0 || inode_num >= 65535)
   {
-    return -1; // Invalid parameters
+    return -EINVAL; // Invalid parameters
   }
 
   // Check if filename is too long or empty
   size_t name_len = kstrlen(filename);
   if (name_len == 0 || name_len >= MINIX_NAME_LEN)
   {
-    return -1; // Invalid filename length
+    return -EINVAL; // Invalid filename length
   }
 
   // Try to find a free entry in existing zones
@@ -731,7 +731,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
       // Check for duplicate filename
       if (entries[i].inode != 0 && kstrncmp(entries[i].name, filename, MINIX_NAME_LEN) == 0)
       {
-        return -1; // Entry with this name already exists
+        return -EEXIST; // Entry with this name already exists
       }
 
       // Found a free entry
@@ -748,7 +748,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
         // Write the updated block back
         if (minix_write_block(zone, block_buffer) != 0)
         {
-          return -1; // Failed to write block
+          return -EIO; // Failed to write block
         }
 
         // Update directory size if needed
@@ -772,7 +772,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
       uint32_t new_zone = minix_alloc_zone();
       if (new_zone == 0)
       {
-        return -1; // No free zones
+        return -ENOSPC; // No free zones
       }
 
       // Initialize the new zone with zeros
@@ -791,7 +791,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
       if (minix_write_block(new_zone, block_buffer) != 0)
       {
         minix_free_zone(new_zone); // Clean up
-        return -1;
+        return -EIO;
       }
 
       // Update parent inode
@@ -802,7 +802,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
     }
   }
 
-  return -1;
+  return -ENOSPC;
 }
 
 /**
@@ -815,7 +815,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
 {
   if (!parent_inode || !filename || !*filename)
   {
-    return -1; // Invalid parameters
+    return -EINVAL; // Invalid parameters
   }
 
   // Search for the entry in all directory zones
@@ -860,7 +860,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
       // Write the updated block back
       if (minix_write_block(zone, block_buffer) != 0)
       {
-        return -1; // Failed to write block
+        return -EIO; // Failed to write block
       }
 
       // Update directory size if needed
@@ -897,7 +897,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
     }
   }
 
-  return -1;
+  return -ENOENT;
 }
 
 // ===============================================================================
@@ -1932,13 +1932,13 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   if (!minix_fs.initialized)
   {
     typewriter_vga_print("Error: MINIX filesystem not initialized\n", 0x0C);
-    return -1;
+    return -ENODEV;
   }
 
   if (!oldpath || !newpath || kstrlen(oldpath) == 0 || kstrlen(newpath) == 0)
   {
     typewriter_vga_print("Error: Invalid path specified\n", 0x0C);
-    return -1;
+    return -EINVAL;
   }
 
   // Check if old file exists
@@ -1948,14 +1948,14 @@ int minix_fs_link(const char *oldpath, const char *newpath)
     char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "ln: '%s': No such file\n", oldpath);
     typewriter_vga_print(error_msg, 0x0C);
-    return -1;
+    return -ENOENT;
   }
 
   // Cannot create hard link to a directory
   if (old_inode->i_mode & MINIX_IFDIR)
   {
     typewriter_vga_print("ln: cannot create hard link to directory\n", 0x0C);
-    return -1;
+    return -EPERM;
   }
 
   // Check if new path already exists
@@ -1964,7 +1964,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
     char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "ln: '%s': File exists\n", newpath);
     typewriter_vga_print(error_msg, 0x0C);
-    return -1;
+    return -EEXIST;
   }
 
   // Get the inode number of the old file
@@ -1972,7 +1972,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   if (old_inode_num == 0)
   {
     typewriter_vga_print("Error: Could not get inode number\n", 0x0C);
-    return -1;
+    return -EIO;
   }
 
   // Split new path into parent directory and filename
@@ -1981,7 +1981,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   if (minix_fs_split_path(newpath, parent_path, filename) != 0)
   {
     typewriter_vga_print("Error: Invalid new path\n", 0x0C);
-    return -1;
+    return -EINVAL;
   }
 
   // Get parent directory inode
@@ -1991,21 +1991,21 @@ int minix_fs_link(const char *oldpath, const char *newpath)
     char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "ln: '%s': No such directory\n", parent_path);
     typewriter_vga_print(error_msg, 0x0C);
-    return -1;
+    return -ENOENT;
   }
 
   // Verify parent is a directory
   if (!(parent_inode->i_mode & MINIX_IFDIR))
   {
     typewriter_vga_print("ln: parent is not a directory\n", 0x0C);
-    return -1;
+    return -ENOTDIR;
   }
 
   // Add new directory entry pointing to the old inode
   if (minix_fs_add_dir_entry(parent_inode, filename, old_inode_num) != 0)
   {
     typewriter_vga_print("Error: Could not add directory entry\n", 0x0C);
-    return -1;
+    return -EIO;
   }
 
   // Increment link count on the inode
@@ -2015,7 +2015,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   if (minix_fs_write_inode(old_inode_num, old_inode) != 0)
   {
     typewriter_vga_print("Error: Could not update inode\n", 0x0C);
-    return -1;
+    return -EIO;
   }
 
   // Write updated parent directory
@@ -2298,27 +2298,27 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   const size_t minix_read_max = 64U * 1024U * 1024U;
   if (!path || !data || !size)
   {
-    return -1;
+    return -EINVAL;
   }
 
   // Find the file inode
   uint16_t inode_num = minix_fs_get_inode_number(path);
   if (inode_num == 0)
   {
-    return -1; // File not found
+    return -ENOENT; // File not found
   }
 
   // Read the inode
   minix_inode_t inode;
   if (minix_read_inode(inode_num, &inode) != 0)
   {
-    return -1;
+    return -EIO;
   }
 
   // Check if it's a regular file
   if (!(inode.i_mode & MINIX_IFREG))
   {
-    return -1; // Not a regular file
+    return -EINVAL; // Not a regular file
   }
 
   // Allocate memory for file content
@@ -2355,7 +2355,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
     if (minix_read_block(inode.i_zone[i], block_buffer) != 0)
     {
       kfree(*data);
-      return -1;
+      return -EIO;
     }
 
     size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
@@ -2373,7 +2373,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
     if (minix_read_block(inode.i_zone[7], indirect_buffer) != 0)
     {
       kfree(*data);
-      return -1;
+      return -EIO;
     }
 
     uint16_t *zone_list = (uint16_t *)indirect_buffer;
@@ -2390,7 +2390,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
       if (minix_read_block(zone_list[i], block_buffer) != 0)
       {
         kfree(*data);
-        return -1;
+        return -EIO;
       }
 
       size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
@@ -2505,8 +2505,14 @@ static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count,
 	void *data = NULL;
 	size_t size = 0;
 	int ret = minix_fs_read_file(path, &data, &size);
-	if (ret != 0 || !data)
-		return (ret == -1) ? -EIO : ret;
+	if (ret != 0)
+		return ret;
+	if (!data && size == 0) {
+		if (read_count) *read_count = 0;
+		return 0;
+	}
+	if (!data)
+		return -EIO;
 	if (offset < 0 || (size_t)offset >= size) {
 		if (read_count) *read_count = 0;
 		kfree(data);

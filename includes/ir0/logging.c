@@ -20,6 +20,7 @@
 #include <drivers/timer/clock_system.h>
 #include <ir0/kmem.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* LOG BUFFER CONFIGURATION */
 #define LOG_BUFFER_MAX_ENTRIES 1024  // Maximum number of log entries to store
@@ -45,6 +46,7 @@ static size_t log_buffer_count = 0;   // Number of entries in buffer
 static bool log_buffer_wrapped = false; // True if buffer has wrapped around
 
 /* INTERNAL FUNCTIONS */
+static size_t uint64_to_dec(char *buf, size_t buf_size, uint64_t value);
 
 static const char *get_level_string(log_level_t level)
 {
@@ -379,7 +381,25 @@ void log_filesystem_op(const char *op, const char *path, int result)
 void log_memory_op(const char *op, void *ptr, size_t size, int result)
 {
     char message[256];
-    snprintf(message, sizeof(message), "MEM: %s(ptr=%p, size=%zu) = %d", op, ptr, size, result);
+    char ptr_buf[32];
+    char size_buf[24];
+    uintptr_t ptr_val = (uintptr_t)ptr;
+
+    if (sizeof(uintptr_t) > sizeof(uint32_t))
+    {
+        unsigned hi = (unsigned)((ptr_val >> 32) & 0xFFFFFFFFu);
+        unsigned lo = (unsigned)(ptr_val & 0xFFFFFFFFu);
+        snprintf(ptr_buf, sizeof(ptr_buf), "0x%08x%08x", hi, lo);
+    }
+    else
+    {
+        unsigned lo = (unsigned)(ptr_val & 0xFFFFFFFFu);
+        snprintf(ptr_buf, sizeof(ptr_buf), "0x%08x", lo);
+    }
+
+    uint64_to_dec(size_buf, sizeof(size_buf), (uint64_t)size);
+    snprintf(message, sizeof(message), "MEM: %s(ptr=%s, size=%s) = %d",
+             op ? op : "op", ptr_buf, size_buf, result);
     log_debug("MEMORY", message);
 }
 
