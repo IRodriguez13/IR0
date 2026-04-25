@@ -234,14 +234,30 @@ static int cmd_ifconfig_handler(int argc, char **argv)
     ret_netinfo = read_text_file("/proc/netinfo", netinfo, sizeof(netinfo));
     if (ret_netinfo < 0)
     {
+        debug_writeln_err("ifconfig: networking unavailable (missing /proc/netinfo)");
+        debug_writeln_err("hint: enable CONFIG_ENABLE_NETWORKING and ensure a net driver is initialized");
         debug_perror("ifconfig", "/proc/netinfo", ret_netinfo);
+        return 1;
+    }
+    if (ret_netinfo == 0 || netinfo[0] == '\0')
+    {
+        debug_writeln_err("ifconfig: no interface metadata in /proc/netinfo");
+        debug_writeln_err("hint: networking may be disabled or no interface is registered");
         return 1;
     }
 
     ret_netdev = read_text_file("/proc/net/dev", netdev, sizeof(netdev));
     if (ret_netdev < 0)
     {
+        debug_writeln_err("ifconfig: networking stats unavailable (missing /proc/net/dev)");
+        debug_writeln_err("hint: verify /proc/net/dev support in procfs and active network stack");
         debug_perror("ifconfig", "/proc/net/dev", ret_netdev);
+        return 1;
+    }
+    if (ret_netdev == 0 || netdev[0] == '\0')
+    {
+        debug_writeln_err("ifconfig: no interface statistics in /proc/net/dev");
+        debug_writeln_err("hint: no active network device is currently exporting counters");
         return 1;
     }
 

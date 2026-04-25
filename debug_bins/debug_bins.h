@@ -266,6 +266,8 @@ int debug_parse_args(const char *cmd_line, int *argc_out, char **argv_out, int m
 
 /* Find command by name */
 struct debug_command *debug_find_command(const char *name);
+const char *debug_command_section(const char *name);
+int debug_is_valid_section(const char *section);
 
 #endif /* _DEBUG_BINS_H */
 

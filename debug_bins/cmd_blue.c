@@ -36,6 +36,7 @@ static int read_and_print(const char *path)
         debug_write_err("blue: cannot open ");
         debug_write_err(path);
         debug_write_err("\n");
+        debug_write_err("hint: bluetooth may be disabled, not initialized, or no scan has been executed\n");
         return 1;  /* Caller logs via cmd_blue_handler */
     }
     char buf[BUF_SIZE];

@@ -39,9 +39,23 @@ struct blk_line {
     char name[16];
     unsigned maj, min;
     unsigned long long sectors;
+    char size_human[16];
     char model[64];
     char serial[32];
 };
+
+static unsigned parse_u32(const char *s)
+{
+    unsigned v = 0;
+    while (*s && (*s < '0' || *s > '9'))
+        s++;
+    while (*s >= '0' && *s <= '9')
+    {
+        v = (v * 10u) + (unsigned)(*s - '0');
+        s++;
+    }
+    return v;
+}
 
 static void format_size(unsigned long long sectors, char *out, size_t out_len)
 {
@@ -62,14 +76,14 @@ static void format_size(unsigned long long sectors, char *out, size_t out_len)
     }
 }
 
-/* Parse one line; fields are tab-separated (type name maj min sectors model serial) */
+/* Parse one line; fields are tab-separated (type name maj min sectors size_human model serial) */
 static int parse_line(const char *line, struct blk_line *r)
 {
     const char *p = line;
-    r->type[0] = r->name[0] = r->model[0] = r->serial[0] = '\0';
+    r->type[0] = r->name[0] = r->size_human[0] = r->model[0] = r->serial[0] = '\0';
     r->maj = r->min = 0;
     r->sectors = 0;
-    for (int f = 0; f < 7 && *p; f++)
+    for (int f = 0; f < 8 && *p; f++)
     {
         const char *start = p;
         while (*p && *p != '\t' && *p != '\n') p++;
@@ -79,11 +93,12 @@ static int parse_line(const char *line, struct blk_line *r)
         {
         case 0: len = len < sizeof(r->type) ? len : sizeof(r->type) - 1; memcpy(r->type, start, len); r->type[len] = '\0'; break;
         case 1: len = len < sizeof(r->name) ? len : sizeof(r->name) - 1; memcpy(r->name, start, len); r->name[len] = '\0'; break;
-        case 2: r->maj = (unsigned)atoi(start); break;
-        case 3: r->min = (unsigned)atoi(start); break;
+        case 2: r->maj = parse_u32(start); break;
+        case 3: r->min = parse_u32(start); break;
         case 4: r->sectors = parse_ull(start); break;
-        case 5: len = len < sizeof(r->model) ? len : sizeof(r->model) - 1; memcpy(r->model, start, len); r->model[len] = '\0'; break;
-        case 6: len = len < sizeof(r->serial) ? len : sizeof(r->serial) - 1; memcpy(r->serial, start, len); r->serial[len] = '\0'; break;
+        case 5: len = len < sizeof(r->size_human) ? len : sizeof(r->size_human) - 1; memcpy(r->size_human, start, len); r->size_human[len] = '\0'; break;
+        case 6: len = len < sizeof(r->model) ? len : sizeof(r->model) - 1; memcpy(r->model, start, len); r->model[len] = '\0'; break;
+        case 7: len = len < sizeof(r->serial) ? len : sizeof(r->serial) - 1; memcpy(r->serial, start, len); r->serial[len] = '\0'; break;
         }
         if (*p == '\t') p++;
     }
@@ -134,7 +149,15 @@ static int cmd_lsblk_handler(int argc, char **argv)
             line_buf[len] = '\0';
             if (parse_line(line_buf, &line) == 0)
             {
-                format_size(line.sectors, size_str, sizeof(size_str));
+                if (line.size_human[0] && strcmp(line.size_human, "-") != 0)
+                {
+                    strncpy(size_str, line.size_human, sizeof(size_str) - 1);
+                    size_str[sizeof(size_str) - 1] = '\0';
+                }
+                else
+                {
+                    format_size(line.sectors, size_str, sizeof(size_str));
+                }
                 if (strcmp(line.type, "disk") == 0)
                 {
                     char out[160];

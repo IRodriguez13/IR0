@@ -38,6 +38,7 @@ static int cmd_bluestart_handler(int argc, char **argv)
     if (fd < 0)
     {
         debug_writeln_err("bluestart: cannot open " SCAN_PATH);
+        debug_writeln_err("hint: enable bluetooth and ensure procfs bluetooth scan node is mounted");
         debug_serial_fail("bluestart", "open");
         return 1;
     }

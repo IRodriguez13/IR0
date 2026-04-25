@@ -127,18 +127,19 @@ static int cmd_lshw_handler(int argc, char **argv)
             if (!eol) break;
             if (eol > p)
             {
-                /* type name maj min sectors model serial - we want disk name and model */
-                char type[8], name[16], model[64];
-                type[0] = name[0] = model[0] = '\0';
+                /* type name maj min sectors size_human model serial */
+                char type[8], name[16], model[64], size_human[16];
+                type[0] = name[0] = model[0] = size_human[0] = '\0';
                 const char *cur = p;
-                for (int f = 0; f < 7 && *cur; f++)
+                for (int f = 0; f < 8 && *cur; f++)
                 {
                     const char *start = cur;
                     while (*cur && *cur != '\t' && *cur != '\n') cur++;
                     size_t len = (size_t)(cur - start);
                     if (f == 0) { if (len >= sizeof(type)) len = sizeof(type) - 1; memcpy(type, start, len); type[len] = '\0'; }
                     else if (f == 1) { if (len >= sizeof(name)) len = sizeof(name) - 1; memcpy(name, start, len); name[len] = '\0'; }
-                    else if (f == 5) { if (len >= sizeof(model)) len = sizeof(model) - 1; memcpy(model, start, len); model[len] = '\0'; }
+                    else if (f == 5) { if (len >= sizeof(size_human)) len = sizeof(size_human) - 1; memcpy(size_human, start, len); size_human[len] = '\0'; }
+                    else if (f == 6) { if (len >= sizeof(model)) len = sizeof(model) - 1; memcpy(model, start, len); model[len] = '\0'; }
                     if (*cur == '\t') cur++;
                 }
                 if (type[0] && strcmp(type, "disk") == 0)
@@ -151,6 +152,12 @@ static int cmd_lshw_handler(int argc, char **argv)
                         debug_write(" (");
                         debug_write(model);
                         debug_write(")");
+                    }
+                    if (size_human[0] && strcmp(size_human, "-") != 0)
+                    {
+                        debug_write(" [");
+                        debug_write(size_human);
+                        debug_write("]");
                     }
                     debug_write("\n");
                 }

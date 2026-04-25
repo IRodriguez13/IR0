@@ -38,6 +38,15 @@ extern void ktest_syscall_proc_read(void);
 extern void ktest_syscall_pipe(void);
 extern void ktest_procfs_uptime(void);
 extern void ktest_process_current(void);
+extern void ktest_proc_blockdevices_contract(void);
+extern void ktest_sysfs_hostname_contract(void);
+extern void ktest_proc_netinfo_contract(void);
+extern void ktest_dev_net_contract(void);
+extern void ktest_help_sections_contract(void);
+extern void ktest_mount_proc_contract(void);
+extern void ktest_mount_tmpfs_contract(void);
+extern void ktest_mount_multi_fs_contract(void);
+extern void ktest_mount_longest_prefix_contract(void);
 
 static void (*const ktest_functions[])(void) = {
 	ktest_boot_ok,
@@ -51,6 +60,15 @@ static void (*const ktest_functions[])(void) = {
 	ktest_syscall_pipe,
 	ktest_procfs_uptime,
 	ktest_process_current,
+	ktest_proc_blockdevices_contract,
+	ktest_sysfs_hostname_contract,
+	ktest_proc_netinfo_contract,
+	ktest_dev_net_contract,
+	ktest_help_sections_contract,
+	ktest_mount_proc_contract,
+	ktest_mount_tmpfs_contract,
+	ktest_mount_multi_fs_contract,
+	ktest_mount_longest_prefix_contract,
 	NULL
 };
 
@@ -66,6 +84,15 @@ static const char *const ktest_names[] = {
 	"syscall_pipe",
 	"procfs_uptime",
 	"process_current",
+	"proc_blockdevices_contract",
+	"sysfs_hostname_contract",
+	"proc_netinfo_contract",
+	"dev_net_contract",
+	"help_sections_contract",
+	"mount_proc_contract",
+	"mount_tmpfs_contract",
+	"mount_multi_fs_contract",
+	"mount_longest_prefix_contract",
 	NULL
 };
 
@@ -85,6 +112,15 @@ static const int ktest_needs_process[] = {
 	1,  /* syscall_pipe */
 	1,  /* procfs_uptime */
 	1,  /* process_current */
+	1,  /* proc_blockdevices_contract */
+	1,  /* sysfs_hostname_contract */
+	1,  /* proc_netinfo_contract */
+	1,  /* dev_net_contract */
+	1,  /* help_sections_contract */
+	1,  /* mount_proc_contract */
+	1,  /* mount_tmpfs_contract */
+	1,  /* mount_multi_fs_contract */
+	1,  /* mount_longest_prefix_contract */
 };
 
 static void ktest_print_decimal(uint32_t n)

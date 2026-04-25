@@ -36,3 +36,13 @@ jobs:
       - name: In-kernel tests (QEMU boot)
         run: make kernel-tests
         timeout-minutes: 2
+
+      - name: Runtime mount smoke (QEMU)
+        run: make runtime-mount-check
+        timeout-minutes: 2
+
+      - name: Build matrix (minimal)
+        run: make build-matrix-min
+
+      - name: Architecture guard
+        run: make arch-guard

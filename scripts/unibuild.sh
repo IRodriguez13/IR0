@@ -270,27 +270,53 @@ EOF
                 BUILD_SUCCESS=$?
                 
                 if [ $BUILD_SUCCESS -eq 0 ]; then
-                    # The target filename is complex, find the .a file
-                    TARGET_DIR="$TEMP_PROJECT/target/x86_64-ir0-kernel/release"
-                    RUST_LIB=$(find "$TARGET_DIR" -name "libtemp_rust_build.a" 2>/dev/null | head -1)
+                    # Cargo target dir for JSON targets can vary across toolchains.
+                    TARGET_ROOT="$TEMP_PROJECT/target"
+                    TARGET_DIR=$(ls -d "$TARGET_ROOT"/*/release 2>/dev/null | head -1)
+                    RUST_LIB=""
                     
-                    if [ -f "$RUST_LIB" ]; then
-                        # Copy the static library as .o
+                    if [ -n "$TARGET_DIR" ]; then
+                        # Prefer staticlib artifact.
+                        if [ -f "$TARGET_DIR/libtemp_rust_build.a" ]; then
+                            RUST_LIB="$TARGET_DIR/libtemp_rust_build.a"
+                        fi
+                        if [ -z "$RUST_LIB" ]; then
+                            for candidate in "$TARGET_DIR"/deps/libtemp_rust_build-*.a "$TARGET_DIR"/deps/*.a; do
+                                if [ -f "$candidate" ]; then
+                                    RUST_LIB="$candidate"
+                                    break
+                                fi
+                            done
+                        fi
+                        # Fallback: accept rlib archives when staticlib is not produced.
+                        if [ -z "$RUST_LIB" ]; then
+                            if [ -f "$TARGET_DIR/libtemp_rust_build.rlib" ]; then
+                                RUST_LIB="$TARGET_DIR/libtemp_rust_build.rlib"
+                            fi
+                        fi
+                        if [ -z "$RUST_LIB" ]; then
+                            for candidate in "$TARGET_DIR"/deps/libtemp_rust_build-*.rlib "$TARGET_DIR"/deps/*.rlib; do
+                                if [ -f "$candidate" ]; then
+                                    RUST_LIB="$candidate"
+                                    break
+                                fi
+                            done
+                        fi
+                    fi
+
+                    if [ -n "$RUST_LIB" ] && [ -f "$RUST_LIB" ]; then
+                        # Keep Makefile flow unchanged: output path ends with .o.
                         cd "$KERNEL_ROOT"
                         cp "$RUST_LIB" "$OUTPUT_FILE"
                         echo "  OBJ     $OUTPUT_FILE"
                     else
-                        # Try to find any .a file
-                        RUST_LIB=$(find "$TARGET_DIR" -name "*.a" 2>/dev/null | head -1)
-                        if [ -f "$RUST_LIB" ]; then
-                            cd "$KERNEL_ROOT"
-                            cp "$RUST_LIB" "$OUTPUT_FILE"
-                            echo "  OBJ     $OUTPUT_FILE"
-                        else
-                            echo "Error: Build succeeded but no output library found"
+                        echo "Error: Build succeeded but no output library found"
+                        if [ -n "$TARGET_DIR" ]; then
                             echo "Looked in: $TARGET_DIR"
-                            EXIT_CODE=1
+                        else
+                            echo "Looked in: $TARGET_ROOT/*/release"
                         fi
+                        EXIT_CODE=1
                     fi
                 else
                     echo "$OUTPUT" | grep "error"

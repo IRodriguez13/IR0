@@ -395,7 +395,25 @@ int64_t sys_read(int fd, void *buf, size_t count)
     size_t max_read = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
 
     if (!keyboard_buffer_has_data())
-      return 0;
+    {
+      int slot = -1;
+      for (int i = 0; i < MAX_STDIN_WAITERS; i++)
+      {
+        if (stdin_waiters[i] == NULL)
+        {
+          slot = i;
+          break;
+        }
+      }
+      if (slot >= 0)
+      {
+        stdin_waiters[slot] = current_process;
+        current_process->state = PROCESS_BLOCKED;
+        sched_schedule_next();
+      }
+      if (!keyboard_buffer_has_data())
+        return 0;
+    }
 
     while (bytes_read < max_read && keyboard_buffer_has_data())
     {
@@ -734,6 +752,7 @@ int64_t sys_exec(const char *pathname,
 int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
 {
   const char *mount_fstype;
+  int dev_is_pseudo = 0;
 
   if (!current_process)
     return -ESRCH;
@@ -749,31 +768,38 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   if (fstype && validate_userspace_string(fstype, 32) != 0)
     return -EFAULT;
 
-  /* Validate device path */
-  if (dev[0] != '/' || strlen(dev) >= 256) {
-    sys_write(STDERR_FILENO, "mount: invalid device path\n", 26);
+  /* Use configured default filesystem if userspace passes NULL/empty fstype. */
+  mount_fstype = (fstype && *fstype) ? fstype : CONFIG_ROOT_FILESYSTEM;
+
+  /* tmpfs accepts pseudo device strings for Unix-like parity (e.g. none). */
+  if (strcmp(mount_fstype, "tmpfs") == 0 &&
+      (strcmp(dev, "none") == 0 || strcmp(dev, "tmpfs") == 0))
+  {
+    dev_is_pseudo = 1;
+  }
+
+  /* Validate device path unless pseudo device was allowed. */
+  if (!dev_is_pseudo && (dev[0] != '/' || strlen(dev) >= 256)) {
+    sys_write(STDERR_FILENO, "mount: invalid device path\n", 27);
     return -EINVAL;
   }
 
   /* Validate mountpoint path */
   if (mountpoint[0] != '/' || strlen(mountpoint) >= 256) {
-    sys_write(STDERR_FILENO, "mount: invalid mount point\n", 26);
+    sys_write(STDERR_FILENO, "mount: invalid mount point\n", 27);
     return -EINVAL;
   }
 
   /* Check if mountpoint exists and is a directory */
   stat_t st;
   if (vfs_stat(mountpoint, &st) < 0) {
-    sys_write(STDERR_FILENO, "mount: mount point does not exist\n", 33);
+    sys_write(STDERR_FILENO, "mount: mount point does not exist\n", 34);
     return -ENOENT;
   }
   if (!S_ISDIR(st.st_mode)) {
-    sys_write(STDERR_FILENO, "mount: mount point is not a directory\n", 37);
+    sys_write(STDERR_FILENO, "mount: mount point is not a directory\n", 38);
     return -ENOTDIR;
   }
-
-  /* Use configured default filesystem if userspace passes NULL/empty fstype. */
-  mount_fstype = (fstype && *fstype) ? fstype : CONFIG_ROOT_FILESYSTEM;
   int ret = vfs_mount(dev, mountpoint, mount_fstype);
   if (ret < 0) {
     /* Report specific error */

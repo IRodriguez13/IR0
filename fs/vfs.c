@@ -19,6 +19,12 @@
 #if CONFIG_ENABLE_FS_TMPFS
 #include "tmpfs.h"
 #endif
+#if CONFIG_ENABLE_FS_SIMPLEFS
+#include "simplefs.h"
+#endif
+#if CONFIG_ENABLE_FS_FAT16
+#include "fat16_fs.h"
+#endif
 #include <ir0/path.h>
 #include <ir0/logging.h>
 #include <ir0/kmem.h>
@@ -179,6 +185,22 @@ static int build_path(char *dest, size_t sz, const char *dir, const char *name)
     return 0;
 }
 
+static void normalize_mount_path(const char *in, char *out, size_t out_sz)
+{
+    if (!in || !out || out_sz == 0)
+        return;
+
+    strncpy(out, in, out_sz - 1);
+    out[out_sz - 1] = '\0';
+
+    size_t len = strlen(out);
+    while (len > 1 && out[len - 1] == '/')
+    {
+        out[len - 1] = '\0';
+        len--;
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
@@ -207,6 +229,12 @@ int vfs_init(void)
 #if CONFIG_ENABLE_FS_TMPFS
     tmpfs_register();
 #endif
+#if CONFIG_ENABLE_FS_SIMPLEFS
+    simplefs_register();
+#endif
+#if CONFIG_ENABLE_FS_FAT16
+    fat16_fs_register();
+#endif
     return 0;
 }
 
@@ -217,6 +245,8 @@ struct vfs_mount *vfs_get_mounts(void)
 
 int vfs_mount(const char *dev, const char *path, const char *fstype)
 {
+    char mount_path[MAX_PATH];
+
     if (!fstype || !path)
         return -EINVAL;
     if (current_process && current_process->euid != ROOT_UID)
@@ -225,6 +255,14 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     int ret = validate_path(path);
     if (ret != 0)
         return ret;
+
+    normalize_mount_path(path, mount_path, sizeof(mount_path));
+
+    for (struct vfs_mount *existing = mounts; existing; existing = existing->next)
+    {
+        if (strcmp(existing->path, mount_path) == 0)
+            return -EBUSY;
+    }
 
     struct vfs_fstype *ft = NULL;
     for (struct vfs_fstype *t = fs_types; t; t = t->next) {
@@ -240,7 +278,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     if (!m)
         return -ENOMEM;
 
-    strncpy(m->path, path, sizeof(m->path) - 1);
+    strncpy(m->path, mount_path, sizeof(m->path) - 1);
     m->path[sizeof(m->path) - 1] = '\0';
     if (dev) {
         strncpy(m->dev, dev, sizeof(m->dev) - 1);
@@ -251,7 +289,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     m->fs = ft;
     m->next = mounts;
 
-    ret = ft->mount(dev, path);
+    ret = ft->mount(dev, mount_path);
     if (ret != 0)
     {
         kfree(m);

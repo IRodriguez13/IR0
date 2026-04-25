@@ -399,17 +399,24 @@ int tmpfs_mkdir(const char *path, mode_t mode)
     path_copy[sizeof(path_copy) - 1] = '\0';
     
     char *last_slash = strrchr(path_copy, '/');
+    const char *dirname = NULL;
+    const char *parent_path = NULL;
     if (!last_slash)
-        return -EINVAL;
-    
-    *last_slash = '\0';
-    const char *dirname = last_slash + 1;
+    {
+        dirname = path_copy;
+        parent_path = "/";
+    }
+    else
+    {
+        *last_slash = '\0';
+        dirname = last_slash + 1;
+        parent_path = (path_copy[0] == '\0') ? "/" : path_copy;
+    }
     
     if (strlen(dirname) == 0 || strlen(dirname) > TMPFS_MAX_NAME_LEN)
         return -EINVAL;
     
     /* Find parent */
-    const char *parent_path = (path_copy[0] == '\0') ? "/" : path_copy;
     tmpfs_inode_t *parent = tmpfs_lookup_inode(tmpfs, parent_path);
     if (!parent || !parent->is_dir)
         return -ENOENT;
@@ -457,17 +464,24 @@ int tmpfs_create_file(const char *path, mode_t mode)
     path_copy[sizeof(path_copy) - 1] = '\0';
     
     char *last_slash = strrchr(path_copy, '/');
+    const char *filename = NULL;
+    const char *parent_path = NULL;
     if (!last_slash)
-        return -EINVAL;
-    
-    *last_slash = '\0';
-    const char *filename = last_slash + 1;
+    {
+        filename = path_copy;
+        parent_path = "/";
+    }
+    else
+    {
+        *last_slash = '\0';
+        filename = last_slash + 1;
+        parent_path = (path_copy[0] == '\0') ? "/" : path_copy;
+    }
     
     if (strlen(filename) == 0 || strlen(filename) > TMPFS_MAX_NAME_LEN)
         return -EINVAL;
     
     /* Find parent */
-    const char *parent_path = (path_copy[0] == '\0') ? "/" : path_copy;
     tmpfs_inode_t *parent = tmpfs_lookup_inode(tmpfs, parent_path);
     if (!parent || !parent->is_dir)
         return -ENOENT;
