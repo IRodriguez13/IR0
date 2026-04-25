@@ -98,12 +98,19 @@ static void ls_format_size(uint64_t value, int human_readable, char *out, size_t
     }
 
     if (u == 0)
-        snprintf(out, out_sz, "%llu%s", (unsigned long long)whole, units[u]);
+    {
+        char whole_str[32];
+        debug_u64_to_dec(whole, whole_str, sizeof(whole_str));
+        snprintf(out, out_sz, "%s%s", whole_str, units[u]);
+    }
     else
-        snprintf(out, out_sz, "%llu.%llu%s",
-                 (unsigned long long)whole,
-                 (unsigned long long)frac,
-                 units[u]);
+    {
+        char whole_str[32];
+        char frac_str[8];
+        debug_u64_to_dec(whole, whole_str, sizeof(whole_str));
+        debug_u64_to_dec(frac, frac_str, sizeof(frac_str));
+        snprintf(out, out_sz, "%s.%s%s", whole_str, frac_str, units[u]);
+    }
 }
 
 static char ls_entry_type_suffix(const stat_t *st)

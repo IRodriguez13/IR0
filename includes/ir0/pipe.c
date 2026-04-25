@@ -145,18 +145,30 @@ void pipe_close_end(pipe_t *pipe, int end)
         return;
     }
 
+    if (end != 0 && end != 1)
+    {
+        return;
+    }
+
     if (end == 0)
     {
         if (pipe->readers > 0)
+        {
             pipe->readers--;
+        }
     }
-    else if (end == 1)
+    else
     {
         if (pipe->writers > 0)
+        {
             pipe->writers--;
+        }
     }
 
-    pipe->ref_count--;
+    if (pipe->ref_count > 0)
+    {
+        pipe->ref_count--;
+    }
 
     /* Both ends closed - free pipe */
     if (pipe->ref_count <= 0)
@@ -191,7 +203,13 @@ void pipe_acquire_end(pipe_t *pipe, int end)
         return;
     }
 
+    if (end != 0 && end != 1)
+    {
+        return;
+    }
+
     pipe->ref_count++;
+    
     if (end == 0)
         pipe->readers++;
     else if (end == 1)

@@ -27,6 +27,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/time.h>
 #include <ir0/stat.h>
+#include <config.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -382,6 +383,179 @@ static int shell_path_is_dir(const char *dir_path, const char *name, unsigned ch
     return S_ISDIR(st.st_mode) ? 1 : 0;
 }
 
+struct shell_pseudo_entry
+{
+    const char *path;
+    int is_dir;
+};
+
+static int shell_pseudo_find_entry(const char *path, const struct shell_pseudo_entry *entries, int entry_count)
+{
+    for (int i = 0; i < entry_count; i++)
+    {
+        if (strcmp(entries[i].path, path) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static int shell_try_pseudofs_complete(char *input, int *input_pos, int token_start)
+{
+    static const struct shell_pseudo_entry pseudo_entries[] = {
+        { "/proc/", 1 },
+        { "/proc/pid/", 1 },
+        { "/proc/self/", 1 },
+        { "/proc/meminfo", 0 },
+        { "/proc/ps", 0 },
+        { "/proc/netinfo", 0 },
+        { "/proc/net/", 1 },
+        { "/proc/net/dev", 0 },
+        { "/proc/drivers", 0 },
+        { "/proc/uptime", 0 },
+        { "/proc/version", 0 },
+        { "/proc/cpuinfo", 0 },
+        { "/proc/loadavg", 0 },
+        { "/proc/filesystems", 0 },
+        { "/proc/blockdevices", 0 },
+        { "/proc/partitions", 0 },
+        { "/proc/mounts", 0 },
+        { "/proc/interrupts", 0 },
+        { "/proc/iomem", 0 },
+        { "/proc/ioports", 0 },
+        { "/proc/modules", 0 },
+        { "/proc/timer_list", 0 },
+        { "/proc/kmsg", 0 },
+        { "/proc/swaps", 0 },
+#if CONFIG_ENABLE_BLUETOOTH
+        { "/proc/bluetooth/", 1 },
+        { "/proc/bluetooth/devices", 0 },
+        { "/proc/bluetooth/scan", 0 },
+#endif
+        { "/sys/", 1 },
+        { "/sys/kernel/", 1 },
+        { "/sys/kernel/version", 0 },
+        { "/sys/kernel/hostname", 0 },
+        { "/sys/kernel/max_processes", 0 },
+        { "/sys/devices/", 1 },
+        { "/sys/devices/system", 0 },
+        { "/sys/devices/system/", 1 },
+        { "/sys/devices/system/cpu0", 0 },
+        { "/sys/devices/system/cpu0/", 1 },
+        { "/sys/devices/system/cpu0/online", 0 },
+        { "/sys/devices/block", 0 },
+        { "/sys/console/", 1 },
+        { "/sys/console/mode", 0 },
+#if CONFIG_ENABLE_BLUETOOTH
+        { "/sys/class/", 1 },
+        { "/sys/class/bluetooth/", 1 },
+        { "/sys/class/bluetooth/hci0/", 1 },
+        { "/sys/class/bluetooth/hci0/address", 0 },
+        { "/sys/class/bluetooth/hci0/state", 0 },
+        { "/sys/class/bluetooth/topology/", 1 },
+        { "/sys/class/bluetooth/topology/neighbors", 0 },
+        { "/sys/class/bluetooth/sessions", 0 },
+#endif
+        { "/dev/", 1 },
+        { "/dev/null", 0 },
+        { "/dev/zero", 0 },
+        { "/dev/full", 0 },
+        { "/dev/console", 0 },
+        { "/dev/tty", 0 },
+        { "/dev/stdin", 0 },
+        { "/dev/stdout", 0 },
+        { "/dev/stderr", 0 },
+        { "/dev/serial", 0 },
+        { "/dev/net", 0 },
+        { "/dev/mouse", 0 },
+        { "/dev/audio", 0 },
+        { "/dev/kmsg", 0 },
+        { "/dev/random", 0 },
+        { "/dev/urandom", 0 },
+        { "/dev/ipc", 0 },
+        { "/dev/disk", 0 },
+        { "/dev/fb0", 0 },
+        { "/dev/events0", 0 },
+        { "/dev/bluetooth/", 1 },
+        { "/dev/bluetooth/hci0", 0 },
+        { "/dev/hda", 0 },
+        { "/dev/hda1", 0 },
+        { "/dev/hda2", 0 },
+        { "/dev/hda3", 0 },
+        { "/dev/hda4", 0 },
+        { "/dev/hdb", 0 },
+        { "/dev/hdb1", 0 },
+        { "/dev/hdb2", 0 },
+        { "/dev/hdb3", 0 },
+        { "/dev/hdb4", 0 },
+        { "/dev/hdc", 0 },
+        { "/dev/hdc1", 0 },
+        { "/dev/hdc2", 0 },
+        { "/dev/hdc3", 0 },
+        { "/dev/hdc4", 0 },
+        { "/dev/hdd", 0 },
+        { "/dev/hdd1", 0 },
+        { "/dev/hdd2", 0 },
+        { "/dev/hdd3", 0 },
+        { "/dev/hdd4", 0 },
+    };
+    const int entry_count = (int)(sizeof(pseudo_entries) / sizeof(pseudo_entries[0]));
+    const char *matches[128];
+    char token[INPUT_MAX + 1];
+    int match_count = 0;
+
+    shell_extract_token(input, token_start, *input_pos, token, sizeof(token));
+    if (token[0] != '/')
+        return 0;
+
+    if (!(shell_starts_with("/proc", token) ||
+          shell_starts_with("/sys", token) ||
+          shell_starts_with("/dev", token) ||
+          shell_starts_with(token, "/proc") ||
+          shell_starts_with(token, "/sys") ||
+          shell_starts_with(token, "/dev")))
+    {
+        return 0;
+    }
+
+    for (int i = 0; i < entry_count && match_count < 128; i++)
+    {
+        if (shell_starts_with(pseudo_entries[i].path, token))
+        {
+            matches[match_count++] = pseudo_entries[i].path;
+        }
+    }
+
+    if (match_count <= 0)
+        return 0;
+
+    if (!shell_complete_from_matches(input, input_pos, token_start, token, matches, match_count, 0, 1))
+        return 0;
+
+    if (match_count == 1)
+    {
+        int idx = shell_pseudo_find_entry(matches[0], pseudo_entries, entry_count);
+        int is_dir = (idx >= 0) ? pseudo_entries[idx].is_dir : 0;
+
+        if (is_dir)
+        {
+            if (*input_pos > 0 && input[*input_pos - 1] != '/' && *input_pos < INPUT_MAX)
+            {
+                input[(*input_pos)++] = '/';
+                echo_char('/');
+                input[*input_pos] = '\0';
+            }
+        }
+        else if (*input_pos < INPUT_MAX)
+        {
+            input[(*input_pos)++] = ' ';
+            echo_char(' ');
+            input[*input_pos] = '\0';
+        }
+    }
+
+    return 1;
+}
+
 static int shell_complete_path(char *input, int *input_pos, int token_start)
 {
     char token[INPUT_MAX + 1];
@@ -394,6 +568,9 @@ static int shell_complete_path(char *input, int *input_pos, int token_start)
     int match_count = 0;
     int token_len = shell_extract_token(input, token_start, *input_pos, token, sizeof(token));
     char *slash = strrchr(token, '/');
+
+    if (shell_try_pseudofs_complete(input, input_pos, token_start))
+        return 1;
 
     if (slash)
     {
@@ -704,7 +881,10 @@ static void execute_command(const char *cmd)
     int input_path_valid = 0;
     int had_error = 0;
     int64_t pid = syscall(SYS_GETPID, 0, 0, 0);
+    uint64_t upid = (pid < 0) ? 0 : (uint64_t)pid;
+    char pid_str[32];
     char cwd[256];
+    debug_u64_to_dec(upid, pid_str, sizeof(pid_str));
     if (syscall(SYS_GETCWD, (uint64_t)cwd, sizeof(cwd), 0) < 0)
         strcpy(cwd, "/");
 
@@ -719,24 +899,24 @@ static void execute_command(const char *cmd)
             uint32_t seq = ++shell_pipe_seq;
             int n;
             if (strcmp(cwd, "/") == 0)
-                n = snprintf(spool_path, sizeof(spool_path), "/.dbgshell_pipe_%lld_%u_%d",
-                             (long long)pid, (unsigned)seq, i);
+                n = snprintf(spool_path, sizeof(spool_path), "/.dbgshell_pipe_%s_%u_%d",
+                             pid_str, (unsigned)seq, i);
             else
-                n = snprintf(spool_path, sizeof(spool_path), "%s/.dbgshell_pipe_%lld_%u_%d",
-                             cwd, (long long)pid, (unsigned)seq, i);
+                n = snprintf(spool_path, sizeof(spool_path), "%s/.dbgshell_pipe_%s_%u_%d",
+                             cwd, pid_str, (unsigned)seq, i);
             if (n > 0 && n < (int)sizeof(spool_path))
                 output_fd = syscall(SYS_OPEN, (uint64_t)spool_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
             if (output_fd < 0)
             {
-                n = snprintf(spool_path, sizeof(spool_path), "/tmp/.dbgshell_pipe_%lld_%u_%d",
-                             (long long)pid, (unsigned)seq, i);
+                n = snprintf(spool_path, sizeof(spool_path), "/tmp/.dbgshell_pipe_%s_%u_%d",
+                             pid_str, (unsigned)seq, i);
                 if (n > 0 && n < (int)sizeof(spool_path))
                     output_fd = syscall(SYS_OPEN, (uint64_t)spool_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
             }
             if (output_fd < 0)
             {
-                n = snprintf(spool_path, sizeof(spool_path), "/.dbgshell_pipe_%lld_%u_%d",
-                             (long long)pid, (unsigned)seq, i);
+                n = snprintf(spool_path, sizeof(spool_path), "/.dbgshell_pipe_%s_%u_%d",
+                             pid_str, (unsigned)seq, i);
                 if (n > 0 && n < (int)sizeof(spool_path))
                     output_fd = syscall(SYS_OPEN, (uint64_t)spool_path, O_CREAT | O_TRUNC | O_RDWR, 0600);
             }

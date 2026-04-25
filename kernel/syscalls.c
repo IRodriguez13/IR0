@@ -1087,7 +1087,6 @@ struct poll_waiter {
 };
 
 static struct poll_waiter poll_waiters[MAX_POLL_WAITERS];
-static unsigned int poll_waiter_count = 0;
 
 /*
  * nanosleep(2) waiters - OSDev Time And Date
@@ -1207,11 +1206,6 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
     return ready;
   }
 
-  if (timeout_ms > 0 && poll_waiter_count >= MAX_POLL_WAITERS) {
-    kfree(kfds);
-    return -EAGAIN;
-  }
-
   uint64_t now = clock_get_uptime_milliseconds();
   uint64_t expire = (timeout_ms < 0) ? (uint64_t)-1 : (now + (uint64_t)timeout_ms);
 
@@ -1220,8 +1214,6 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   for (i = 0; i < MAX_POLL_WAITERS; i++) {
     if (!poll_waiters[i].proc) {
       w = &poll_waiters[i];
-      if (i >= poll_waiter_count)
-        poll_waiter_count = i + 1;
       break;
     }
   }
@@ -1279,7 +1271,7 @@ void poll_wake_check(void)
       w->ready_count = ready;
       w->woken = 1;
       if (copy_to_user(w->user_fds, w->kfds, w->nfds * sizeof(struct pollfd)) != 0)
-        w->ready_count = -1;
+        w->ready_count = -EFAULT;
       w->proc->state = PROCESS_READY;
     }
   }
