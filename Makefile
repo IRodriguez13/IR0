@@ -88,6 +88,7 @@ CFLAGS += $(CFLAGS_TARGET)
 
 # Include paths
 CFLAGS += -I$(KERNEL_ROOT)
+CFLAGS += -I$(KERNEL_ROOT)/include
 CFLAGS += -I$(KERNEL_ROOT)/includes
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/mm
@@ -208,6 +209,8 @@ DEBUG_BINS_CORE_OBJS = \
     debug_bins/cmd_cat.o \
     debug_bins/cmd_echo.o \
     debug_bins/cmd_exec.o \
+    debug_bins/cmd_cmp.o \
+    debug_bins/cmd_which.o \
     debug_bins/cmd_true.o \
     debug_bins/cmd_false.o \
     debug_bins/cmd_sleep.o
@@ -228,6 +231,8 @@ DEBUG_BINS_FS_OBJS = \
 
 DEBUG_BINS_TEXT_OBJS = \
     debug_bins/cmd_sed.o \
+    debug_bins/cmd_cut.o \
+    debug_bins/cmd_tr.o \
     debug_bins/cmd_wc.o \
     debug_bins/cmd_head.o \
     debug_bins/cmd_tail.o
@@ -241,6 +246,8 @@ DEBUG_BINS_DIAG_OBJS = \
     debug_bins/cmd_ps.o \
     debug_bins/cmd_df.o \
     debug_bins/cmd_dmesg.o \
+    debug_bins/cmd_lsmod.o \
+    debug_bins/cmd_hostname.o \
     debug_bins/cmd_uname.o \
     debug_bins/cmd_lsblk.o \
     debug_bins/cmd_lsdrv.o \
@@ -252,7 +259,11 @@ DEBUG_BINS_DIAG_OBJS = \
     debug_bins/cmd_stat.o
 
 DEBUG_BINS_NET_OBJS = \
-    debug_bins/cmd_ping.o
+    debug_bins/cmd_ping.o \
+    debug_bins/cmd_ndev.o \
+    debug_bins/cmd_route.o \
+    debug_bins/cmd_ifconfig.o \
+    debug_bins/cmd_netstat.o
 
 DEBUG_BINS_BT_OBJS = \
     debug_bins/cmd_lsblue.o \
@@ -319,6 +330,11 @@ else
 SCHED_OBJS =
 endif
 KERNEL_OBJS += kernel/rr_sched.o $(SCHED_OBJS)
+ifneq ($(CONFIG_SCHEDULER_POLICY),)
+CFLAGS += -DCONFIG_SCHEDULER_POLICY=$(CONFIG_SCHEDULER_POLICY)
+else
+CFLAGS += -DCONFIG_SCHEDULER_POLICY=0
+endif
 
 MEMORY_OBJS = \
 	mm/allocator.o \
@@ -1150,6 +1166,7 @@ health: kernel-analyze
 
 # Minimal permanent build matrix for modular configs.
 build-matrix-min:
+	@$(MAKE) -s config-wiring-check
 	@echo "  MATRIX  defconfig"
 	@$(MAKE) defconfig >/dev/null
 	@$(MAKE) -s kernel-x64.bin >/dev/null
@@ -1184,6 +1201,13 @@ build-matrix-min:
 
 config-sim:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/config_sim.py
+
+config-wiring-check:
+	@if [ -f "$(KERNEL_ROOT)/.config" ] && [ ! -f "$(KERNEL_ROOT)/include/generated/autoconf.h" ]; then \
+		echo "✗ config-wiring-check: include/generated/autoconf.h missing"; \
+		exit 1; \
+	fi
+	@echo "✓ config-wiring-check passed"
 
 runtime-net-check:
 	@echo "  RUNTIME  network smoke (QEMU user-net)"
@@ -1623,7 +1647,7 @@ test-drivers-clean:
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
-        runtime-net-check scale-readiness-gate \
+        runtime-net-check scale-readiness-gate config-wiring-check \
         format compile-commands disasm stack-usage clean-net \
         run-ping
 

@@ -17,6 +17,8 @@ extern struct debug_command cmd_pwd;
 extern struct debug_command cmd_cat;
 extern struct debug_command cmd_echo;
 extern struct debug_command cmd_exec;
+extern struct debug_command cmd_cmp;
+extern struct debug_command cmd_which;
 extern struct debug_command cmd_true;
 extern struct debug_command cmd_false;
 extern struct debug_command cmd_sleep;
@@ -39,6 +41,8 @@ extern struct debug_command cmd_dirname;
 extern struct debug_command cmd_ps;
 extern struct debug_command cmd_df;
 extern struct debug_command cmd_dmesg;
+extern struct debug_command cmd_lsmod;
+extern struct debug_command cmd_hostname;
 extern struct debug_command cmd_uname;
 extern struct debug_command cmd_lsblk;
 extern struct debug_command cmd_lsdrv;
@@ -51,6 +55,10 @@ extern struct debug_command cmd_stat;
 #endif
 #if CONFIG_DEBUG_BINS_GROUP_NET
 extern struct debug_command cmd_ping;
+extern struct debug_command cmd_ndev;
+extern struct debug_command cmd_route;
+extern struct debug_command cmd_ifconfig;
+extern struct debug_command cmd_netstat;
 #endif
 #if CONFIG_DEBUG_BINS_GROUP_BT
 extern struct debug_command cmd_lsblue;
@@ -64,6 +72,8 @@ extern struct debug_command cmd_whoami;
 #endif
 #if CONFIG_DEBUG_BINS_GROUP_TEXT
 extern struct debug_command cmd_sed;
+extern struct debug_command cmd_cut;
+extern struct debug_command cmd_tr;
 extern struct debug_command cmd_wc;
 extern struct debug_command cmd_head;
 extern struct debug_command cmd_tail;
@@ -81,6 +91,8 @@ struct debug_command *debug_commands[] = {
     &cmd_cat,
     &cmd_echo,
     &cmd_exec,
+    &cmd_cmp,
+    &cmd_which,
     &cmd_true,
     &cmd_false,
     &cmd_sleep,
@@ -103,6 +115,8 @@ struct debug_command *debug_commands[] = {
     &cmd_ps,
     &cmd_df,
     &cmd_dmesg,
+    &cmd_lsmod,
+    &cmd_hostname,
     &cmd_uname,
     &cmd_lsblk,
     &cmd_lsdrv,
@@ -114,6 +128,10 @@ struct debug_command *debug_commands[] = {
 #endif
 #if CONFIG_DEBUG_BINS_GROUP_NET
     &cmd_ping,
+    &cmd_ndev,
+    &cmd_route,
+    &cmd_ifconfig,
+    &cmd_netstat,
 #endif
 #if CONFIG_DEBUG_BINS_GROUP_BT
     &cmd_lsblue,
@@ -127,6 +145,8 @@ struct debug_command *debug_commands[] = {
 #endif
 #if CONFIG_DEBUG_BINS_GROUP_TEXT
     &cmd_sed,
+    &cmd_cut,
+    &cmd_tr,
     &cmd_wc,
     &cmd_head,
     &cmd_tail,

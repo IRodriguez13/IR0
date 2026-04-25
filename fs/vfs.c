@@ -808,9 +808,13 @@ int vfs_truncate(const char *path, size_t length)
 {
     if (!path)
         return -EINVAL;
+    if (!current_process)
+        return -ESRCH;
     int ret = validate_path(path);
     if (ret != 0)
         return ret;
+    if (!check_file_access(path, ACCESS_WRITE, current_process))
+        return -EACCES;
 
     struct vfs_ops *ops = ops_for_path(path);
     if (!ops || !ops->truncate)
@@ -818,22 +822,20 @@ int vfs_truncate(const char *path, size_t length)
     return ops->truncate(path, length);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Bulk read                                                          */
-/* ------------------------------------------------------------------ */
 
 int vfs_read_file(const char *path, void **data, size_t *size)
 {
     if (!path || !data || !size || path[0] != '/')
-        return -1;
+        return -EINVAL;
 
     struct vfs_ops *ops = ops_for_path(path);
     if (!ops || !ops->read || !ops->stat)
-        return -1;
+        return -ENOSYS;
 
     stat_t st;
-    if (ops->stat(path, &st) != 0)
-        return -1;
+    int ret = ops->stat(path, &st);
+    if (ret != 0)
+        return ret;
 
     if (st.st_size < 0)
         return -EIO;
@@ -855,12 +857,12 @@ int vfs_read_file(const char *path, void **data, size_t *size)
 
     while (total < fsize) {
         size_t chunk = 0;
-        int ret = ops->read(path, (uint8_t *)buf + total, fsize - total,
-                              &chunk, (off_t)total);
+        ret = ops->read(path, (uint8_t *)buf + total, fsize - total,
+                        &chunk, (off_t)total);
 
         if (ret != 0) {
             kfree(buf);
-            return -EIO;
+            return ret;
         }
         if (chunk == 0) {
             kfree(buf);

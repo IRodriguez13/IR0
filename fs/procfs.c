@@ -267,13 +267,20 @@ static int proc_net_dev_read(char *buf, size_t count)
         ifname = dev->name;
 
     net_stack_get_stats(&rxp, &txp, &rxe, &txe);
+    char rxp_str[24];
+    char rxe_str[24];
+    char txp_str[24];
+    char txe_str[24];
+    proc_u64_to_dec(rxp, rxp_str, sizeof(rxp_str));
+    proc_u64_to_dec(rxe, rxe_str, sizeof(rxe_str));
+    proc_u64_to_dec(txp, txp_str, sizeof(txp_str));
+    proc_u64_to_dec(txe, txe_str, sizeof(txe_str));
     int n = snprintf(buf, count,
                      "Inter-|   Receive                                                |  Transmit\n"
                      " face |   packets    errs                                        |  packets    errs\n"
-                     "  %s: %10llu %10llu                                          %10llu %10llu\n",
+                     "  %s: %s %s                                          %s %s\n",
                      ifname,
-                     (unsigned long long)rxp, (unsigned long long)rxe,
-                     (unsigned long long)txp, (unsigned long long)txe);
+                     rxp_str, rxe_str, txp_str, txe_str);
     if (n < 0)
         return -1;
     if (n >= (int)count) {
