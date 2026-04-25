@@ -199,43 +199,57 @@ static const uint8_t *dns_decode_name(const uint8_t *data, const uint8_t *buf_st
                                       size_t buf_len, char *out, size_t out_len)
 {
     size_t out_pos = 0;
+    const uint8_t *pkt_end = buf_start + buf_len;
     const uint8_t *ptr = data;
+    const uint8_t *consumed = NULL;
     int jumps = 0;
-    
-    while (*ptr && out_pos < out_len - 1 && jumps < 10)
+
+    if (!data || !buf_start || !out || out_len == 0 || data >= pkt_end)
+        return NULL;
+
+    while (ptr < pkt_end && jumps < 32)
     {
+        uint8_t c = *ptr;
+        if (c == 0)
+        {
+            if (!consumed)
+                consumed = ptr + 1;
+            out[out_pos] = '\0';
+            return consumed;
+        }
+
         if ((*ptr & 0xC0) == 0xC0)
         {
-            /* Compression pointer: need two bytes; stay within packet bounds */
             if (ptr + 1 >= buf_start + buf_len)
                 return NULL;
-            uint16_t offset = ((*ptr & 0x3F) << 8) | ptr[1];
+            uint16_t offset = (uint16_t)(((*ptr & 0x3F) << 8) | ptr[1]);
             if (offset >= buf_len)
                 return NULL;
+            if (!consumed)
+                consumed = ptr + 2;
             ptr = buf_start + offset;
             jumps++;
             continue;
         }
-        
-        /* Regular label */
-        uint8_t label_len = *ptr++;
-        if (label_len == 0)
-            break;
-        
-        if (label_len > 63 || out_pos + label_len + 1 >= out_len)
+
+        if ((c & 0xC0) != 0)
             return NULL;
-        
+
+        uint8_t label_len = c;
+        ptr++;
+        if (label_len > 63 || ptr + label_len > pkt_end)
+            return NULL;
+        if (out_pos + (out_pos > 0 ? 1 : 0) + label_len + 1 > out_len)
+            return NULL;
+
         if (out_pos > 0)
             out[out_pos++] = '.';
-        
+
         for (uint8_t i = 0; i < label_len; i++)
-        {
             out[out_pos++] = *ptr++;
-        }
     }
-    
-    out[out_pos] = '\0';
-    return ptr;
+
+    return NULL;
 }
 
 /* DNS response handler */
@@ -286,34 +300,15 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     const uint8_t *pkt_end = (const uint8_t *)data + len;
     for (uint16_t i = 0; i < qdcount; i++)
     {
-        /* Skip QNAME (labels or RFC 1035 name compression) */
-        while (ptr < pkt_end)
-        {
-            uint8_t c = *ptr;
-            if (c == 0)
-            {
-                ptr++;
-                break;
-            }
-            if ((c & 0xC0) == 0xC0)
-            {
-                /* Compression pointer: prefix octet + offset octet (14-bit offset) */
-                if (ptr + 2 > pkt_end)
-                    return;
-                ptr += 2;
-                break;
-            }
-            uint8_t label_len = c;
-            if (label_len > 63 || ptr + 1 + label_len > pkt_end)
-                return;
-            ptr += 1 + label_len;
-        }
-        if (ptr < pkt_end && *ptr == 0)
-            ptr++;
+        char qname[256];
+        const uint8_t *name_end = dns_decode_name(ptr, (const uint8_t *)data, len, qname, sizeof(qname));
+        if (!name_end)
+            return;
+        ptr = name_end;
         
         /* Skip QTYPE and QCLASS */
         if (ptr + 4 > pkt_end)
-            break;
+            return;
         ptr += 4;
     }
     
@@ -495,6 +490,9 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     uint64_t last_log_time = start_time;
     const uint64_t poll_interval_ms = 10;  /* Poll every 10ms to balance responsiveness and CPU usage */
     const uint64_t log_interval_ms = 1000;  /* Log every 1 second to show progress */
+    uint64_t stagnant_loops = 0;
+    uint64_t last_time_sample = start_time;
+    const uint64_t max_stagnant_loops = 50000000ULL;
     
     while (1)
     {
@@ -517,6 +515,23 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
         {
             LOG_WARNING_FMT("DNS", "DNS resolution timeout for %s after %d ms", 
                            domain_name, (int)timeout_ms);
+            break;
+        }
+
+        /*
+         * Failsafe: only trigger if timer value does not advance for a very
+         * long period, to avoid false positives under normal short loops.
+         */
+        if (current_time == last_time_sample)
+            stagnant_loops++;
+        else
+        {
+            stagnant_loops = 0;
+            last_time_sample = current_time;
+        }
+        if (stagnant_loops >= max_stagnant_loops)
+        {
+            LOG_WARNING_FMT("DNS", "DNS resolution aborted by stagnant-time guard for %s", domain_name);
             break;
         }
         

@@ -96,6 +96,8 @@ static inline void arp_irq_restore(uint64_t flags)
 static int arp_lookup_mac(ip4_addr_t ip, mac_addr_t mac_out)
 {
     struct arp_cache_entry *entry;
+    struct arp_cache_entry *prev = NULL;
+    uint64_t now = clock_get_uptime_milliseconds();
     uint64_t flags;
 
     if (!mac_out)
@@ -105,12 +107,24 @@ static int arp_lookup_mac(ip4_addr_t ip, mac_addr_t mac_out)
     entry = arp_cache;
     while (entry)
     {
+        if (now - entry->timestamp > ARP_CACHE_TIMEOUT_MS)
+        {
+            struct arp_cache_entry *next = entry->next;
+            if (prev)
+                prev->next = next;
+            else
+                arp_cache = next;
+            kfree(entry);
+            entry = next;
+            continue;
+        }
         if (entry->ip == ip)
         {
             memcpy(mac_out, entry->mac, 6);
             arp_irq_restore(flags);
             return 0;
         }
+        prev = entry;
         entry = entry->next;
     }
     arp_irq_restore(flags);

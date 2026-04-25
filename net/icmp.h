@@ -75,4 +75,9 @@ uint16_t icmp_checksum(const void *data, size_t len);
 bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out, 
                           uint8_t *ttl_out, size_t *payload_bytes_out, 
                           ip4_addr_t *reply_ip_out);
+bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out,
+                               uint8_t *ttl_out, size_t *payload_bytes_out,
+                               ip4_addr_t *reply_ip_out);
+bool icmp_has_ready_echo_result(uint16_t id);
+uint16_t icmp_allocate_echo_seq(void);
 

@@ -71,6 +71,43 @@ static struct net_device rtl8139_dev;
 
 /* Forward declarations */
 static int32_t rtl8139_hw_init(void);
+static void rtl8139_check_tx_completion(void);
+
+/*
+ * Force-recover TX path when descriptors appear wedged.
+ * This drops any in-flight frames and re-arms all TX descriptors.
+ */
+static void rtl8139_recover_tx_path(void)
+{
+    if (!rtl8139_io_base)
+        return;
+
+    uint8_t cr = inb(rtl8139_io_base + RTL8139_REG_CR);
+    uint8_t rx_enabled = cr & RTL8139_CR_RE;
+
+    /* Temporarily disable TX engine, then re-enable it. */
+    outb(rtl8139_io_base + RTL8139_REG_CR, rx_enabled);
+    outb(rtl8139_io_base + RTL8139_REG_CR, (uint8_t)(rx_enabled | RTL8139_CR_TE));
+
+    for (int i = 0; i < 4; i++)
+    {
+        if (rtl8139_tx_buffers[i])
+        {
+            uint32_t phys_addr = KVA_TO_PHYS(rtl8139_tx_buffers[i]);
+            outl(rtl8139_io_base + RTL8139_REG_TSAD0 + (i * 4), phys_addr);
+        }
+        outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), 0);
+        rtl8139_tx_descriptor_own_state[i] = 0;
+        rtl8139_tx_desc_start_tick[i] = 0;
+        rtl8139_tx_timeout_latched[i] = 0;
+    }
+    rtl8139_tx_in_flight = 0;
+    rtl8139_current_tx_descriptor = 0;
+
+    /* Ack TX interrupts/errors that may have latched. */
+    outw(rtl8139_io_base + RTL8139_REG_ISR, RTL8139_INT_TOK | RTL8139_INT_TER | RTL8139_INT_PUN);
+    LOG_WARNING("RTL8139", "TX path recovered (descriptor ring re-armed)");
+}
 
 static inline uint64_t rtl8139_irq_save(void)
 {
@@ -392,6 +429,9 @@ int rtl8139_send(void *data, size_t len)
         return -1;
     }
     
+    /* Reap TX completions before searching for a free descriptor. */
+    rtl8139_check_tx_completion();
+
     /* Find a free TX descriptor */
     int desc = -1;
     for (int i = 0; i < 4; i++) {
@@ -406,8 +446,21 @@ int rtl8139_send(void *data, size_t len)
     }
     
     if (desc == -1) {
-        /* All descriptors busy */
-        return -1;
+        /*
+         * Descriptors still busy after normal completion check:
+         * perform one recovery pass and retry once.
+         */
+        rtl8139_recover_tx_path();
+        for (int i = 0; i < 4; i++) {
+            uint32_t tsd_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
+            uint32_t tsd = inl(tsd_addr);
+            if (!(tsd & RTL8139_TSD_OWN)) {
+                desc = i;
+                break;
+            }
+        }
+        if (desc == -1)
+            return -1;
     }
     
     /* Get TX buffer for this descriptor */
@@ -507,6 +560,19 @@ static void rtl8139_check_tx_completion(void)
                     rtl8139_counters.tx_errors++;
                     rtl8139_tx_timeout_latched[i] = 1;
                     LOG_WARNING_FMT("RTL8139", "TX descriptor %d stalled >5s (timeout)", i);
+
+                    /*
+                     * Recovery path: drop stale frame and force-release
+                     * descriptor so TX ring cannot deadlock.
+                     */
+                    outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), 0);
+                    rtl8139_tx_descriptor_own_state[i] = 0;
+                    rtl8139_tx_desc_start_tick[i] = 0;
+                    rtl8139_tx_timeout_latched[i] = 0;
+                    if (rtl8139_tx_in_flight > 0)
+                        rtl8139_tx_in_flight--;
+                    LOG_WARNING_FMT("RTL8139", "TX descriptor %d force-released after timeout", i);
+                    continue;
                 }
             }
         }
@@ -607,13 +673,13 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
         return -1;
     }
 
-    LOG_INFO("RTL8139", "netdev_send: Calling rtl8139_send");
+    LOG_DEBUG("RTL8139", "netdev_send: calling rtl8139_send");
     if (rtl8139_send(data, len) != 0)
     {
-        LOG_INFO("RTL8139", "netdev_send: rtl8139_send failed (e.g. all TX descriptors busy)");
+        LOG_DEBUG("RTL8139", "netdev_send: rtl8139_send failed (e.g. all TX descriptors busy)");
         return -1;
     }
-    LOG_INFO("RTL8139", "netdev_send: rtl8139_send returned");
+    LOG_DEBUG("RTL8139", "netdev_send: rtl8139_send returned");
     return 0;
 }
 
@@ -938,7 +1004,7 @@ static void rtl8139_process_rx_packets(void)
     if (packet_count > 0)
     {
         /* Only log if we actually processed packets */
-        LOG_INFO_FMT("RTL8139", "Processed %d packet(s)", packet_count);
+        LOG_DEBUG_FMT("RTL8139", "Processed %d packet(s)", packet_count);
     }
 }
 
