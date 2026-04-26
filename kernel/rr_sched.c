@@ -41,7 +41,9 @@
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <arch/common/arch_portable.h>
+#if defined(ARCH_X86_64) || defined(ARCH_X86)
 #include <arch/x86-64/sources/user_mode.h>
+#endif
 #include <ir0/signals.h>
 #include <ir0/context.h>
 #include <stdint.h>
@@ -390,6 +392,7 @@ void rr_schedule_next(void)
 	if (first)
 	{
 		first = 0;
+#if defined(ARCH_X86_64) || defined(ARCH_X86)
 		if (next->mode == KERNEL_MODE)
 		{
 			/*
@@ -427,12 +430,15 @@ void rr_schedule_next(void)
 			jmp_ring3((void *)next->task.rip);
 		}
 		panic("Returned from first context switch");
+#else
+		panic("First context switch not implemented for this architecture");
+#endif
 	}
 
 	/* Normal context switch between processes.
 	 * Save current process context (registers, stack, etc) and
 	 * restore next process context. This is architecture-specific
-	 * and handled by switch_context_x64().
+	 * and handled by arch_context_switch().
 	 */
 	if (prev && next) 
 	{
@@ -440,7 +446,7 @@ void rr_schedule_next(void)
 		 * Saves prev->task and restores next->task.
 		 * Does not return to this function - returns to next process.
 		 */
-		switch_context_x64(&prev->task, &next->task);
+		arch_context_switch(&prev->task, &next->task);
 	}
 
 	rr_irq_restore(irq_flags);

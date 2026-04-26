@@ -52,6 +52,27 @@ static int split_ws_fields(char *line, char **fields, int max_fields)
     return count;
 }
 
+static void mount_print_key_device_state(const char *path, int open_flags)
+{
+    char line[160];
+    int access_ok = (int)syscall(SYS_ACCESS, (uint64_t)path, 0, 0);
+    int fd = -1;
+
+    if (access_ok == 0)
+    {
+        fd = (int)syscall(SYS_OPEN, (uint64_t)path, (uint64_t)open_flags, 0);
+    }
+
+    snprintf(line, sizeof(line), "%-12s present=%s usable=%s",
+             path,
+             access_ok == 0 ? "yes" : "no",
+             fd >= 0 ? "yes" : "no");
+    debug_writeln(line);
+
+    if (fd >= 0)
+        syscall(SYS_CLOSE, (uint64_t)fd, 0, 0);
+}
+
 static void mount_print_usage(void)
 {
     debug_writeln("usage:");
@@ -62,6 +83,7 @@ static void mount_print_usage(void)
     debug_writeln("examples:");
     debug_writeln("  mount /dev/null /mnt tmpfs");
     debug_writeln("  mount -t tmpfs /dev/null /mnt");
+    debug_writeln("  umount /mnt");
     debug_writeln("  mount /dev/simple0 /mnt/simple simplefs");
     debug_writeln("  mount /dev/fat0 /mnt/fat fat16");
 }
@@ -118,6 +140,53 @@ static int cmd_mount_handler(int argc, char **argv)
             }
             p = eol + 1;
         }
+
+        fd = syscall(SYS_OPEN, (uint64_t)"/proc/filesystems", 0, 0);
+        if (fd >= 0)
+        {
+            nr = syscall(SYS_READ, (uint64_t)fd, (uint64_t)buf, sizeof(buf) - 1);
+            syscall(SYS_CLOSE, (uint64_t)fd, 0, 0);
+            if (nr > 0)
+            {
+                buf[nr] = '\0';
+                debug_writeln("");
+                debug_writeln("available fs types:");
+                debug_writeln("-------------------");
+                p = buf;
+                while (*p)
+                {
+                    const char *eol = strchr(p, '\n');
+                    if (!eol)
+                        break;
+                    if (eol > p)
+                    {
+                        char line_raw[64];
+                        char *fields[3] = {0};
+                        size_t len = (size_t)(eol - p);
+                        if (len >= sizeof(line_raw))
+                            len = sizeof(line_raw) - 1;
+                        memcpy(line_raw, p, len);
+                        line_raw[len] = '\0';
+
+                        if (split_ws_fields(line_raw, fields, 3) >= 1)
+                        {
+                            const char *name = fields[0];
+                            if (strcmp(name, "nodev") == 0 && fields[1])
+                                name = fields[1];
+                            debug_writeln(name);
+                        }
+                    }
+                    p = eol + 1;
+                }
+            }
+        }
+
+        debug_writeln("");
+        debug_writeln("key /dev usability:");
+        debug_writeln("-------------------");
+        mount_print_key_device_state("/dev/net", O_WRONLY);
+        mount_print_key_device_state("/dev/disk", O_RDONLY);
+        mount_print_key_device_state("/dev/audio", O_WRONLY);
         debug_serial_ok("mount");
         return 0;
     }

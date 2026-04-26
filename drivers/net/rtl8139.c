@@ -72,6 +72,7 @@ static struct net_device rtl8139_dev;
 /* Forward declarations */
 static int32_t rtl8139_hw_init(void);
 static void rtl8139_check_tx_completion(void);
+static int rtl8139_find_free_tx_descriptor(void);
 
 /*
  * Force-recover TX path when descriptors appear wedged.
@@ -410,6 +411,27 @@ init_fail:
     return -1;
 }
 
+static int rtl8139_find_free_tx_descriptor(void)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        uint32_t tsd_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
+        uint32_t tsd = inl(tsd_addr);
+        if (!(tsd & RTL8139_TSD_OWN))
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+static void rtl8139_advance_rx_read_offset(uint16_t raw_length)
+{
+    rtl8139_rx_read_offset = (rtl8139_rx_read_offset + raw_length + 4 + 3) & ~3;
+    rtl8139_rx_read_offset %= RTL8139_RX_BUF_SIZE;
+}
+
 /**
  * rtl8139_send - Send data through RTL8139 hardware
  * @data: Pointer to data buffer to send
@@ -423,62 +445,75 @@ init_fail:
  */
 int rtl8139_send(void *data, size_t len)
 {
-    
     /* Basic parameter validation */
-    if (!data || len == 0 || len > RTL8139_MAX_TX_SIZE || !rtl8139_io_base) {
+    if (!data || len == 0 || len > RTL8139_MAX_TX_SIZE || !rtl8139_io_base)
+    {
         return -1;
     }
-    
+
     /* Reap TX completions before searching for a free descriptor. */
     rtl8139_check_tx_completion();
 
     /* Find a free TX descriptor */
-    int desc = -1;
-    for (int i = 0; i < 4; i++) {
-        uint32_t tsd_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
-        uint32_t tsd = inl(tsd_addr);
-        
-        /* Descriptor is free if OWN bit is NOT set */
-        if (!(tsd & RTL8139_TSD_OWN)) {
-            desc = i;
-            break;
+    int desc = rtl8139_find_free_tx_descriptor();
+
+    if (desc == -1)
+    {
+        /*
+         * Descriptor ring may be temporarily full. Re-check completions a few
+         * times before forcing TX recovery, to avoid dropping in-flight frames.
+         */
+        for (int attempt = 0; attempt < 16 && desc == -1; attempt++)
+        {
+            io_wait();
+            rtl8139_check_tx_completion();
+            desc = rtl8139_find_free_tx_descriptor();
         }
     }
-    
-    if (desc == -1) {
+
+    if (desc == -1)
+    {
         /*
          * Descriptors still busy after normal completion check:
          * perform one recovery pass and retry once.
          */
         rtl8139_recover_tx_path();
-        for (int i = 0; i < 4; i++) {
-            uint32_t tsd_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
-            uint32_t tsd = inl(tsd_addr);
-            if (!(tsd & RTL8139_TSD_OWN)) {
-                desc = i;
-                break;
-            }
+
+        /*
+         * Some devices need a short settle window after re-arming TX. Retry a
+         * few reads before failing the send.
+         */
+        for (int attempt = 0; attempt < 16 && desc == -1; attempt++)
+        {
+            io_wait();
+            rtl8139_check_tx_completion();
+            desc = rtl8139_find_free_tx_descriptor();
         }
+
         if (desc == -1)
+        {
+            LOG_DEBUG("RTL8139", "TX busy: descriptor ring still saturated after recovery window");
             return -1;
+        }
     }
-    
+
     /* Get TX buffer for this descriptor */
     void *tx_buf = rtl8139_tx_buffers[desc];
-    if (!tx_buf) {
+    if (!tx_buf)
+    {
         return -1;
     }
-    
+
     /* Copy data to TX buffer */
     memcpy(tx_buf, data, len);
-    
+
     /* Memory barrier to ensure copy completes */
     __asm__ volatile("mfence" ::: "memory");
-    
+
     /* Write TSD to start DMA */
     uint32_t tsd_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (desc * 4);
     uint32_t tsd_value = (uint32_t)len & RTL8139_TSD_SIZE_MASK;
-    
+
 #if KERNEL_DEBUG
     serial_print("[RTL8139] TX: desc=");
     char desc_str[8];
@@ -494,13 +529,13 @@ int rtl8139_send(void *data, size_t len)
     serial_print_hex32(tsd_value);
     serial_print("\n");
 #endif
-    
+
     /* Execute outl - this starts DMA */
     outl((uint16_t)tsd_addr, tsd_value);
-    
+
     /* Memory barrier after I/O */
     __asm__ volatile("mfence" ::: "memory");
-    
+
     /* Update tracking */
     rtl8139_tx_descriptor_own_state[desc] = 1;
     rtl8139_tx_in_flight++;
@@ -674,13 +709,34 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
     }
 
     LOG_DEBUG("RTL8139", "netdev_send: calling rtl8139_send");
-    if (rtl8139_send(data, len) != 0)
+
+    /*
+     * TX descriptor ownership can transiently lag behind completion after
+     * ring recovery. Retry a few times before surfacing a hard send failure.
+     */
+    for (int attempt = 0; attempt < 8; attempt++)
     {
-        LOG_DEBUG("RTL8139", "netdev_send: rtl8139_send failed (e.g. all TX descriptors busy)");
-        return -1;
+        if (rtl8139_send(data, len) == 0)
+        {
+            if (attempt > 0)
+            {
+                LOG_DEBUG_FMT("RTL8139", "netdev_send: TX completed after retry #%d", attempt);
+            }
+            return 0;
+        }
+
+        io_wait();
+        rtl8139_check_tx_completion();
+        if (attempt == 2)
+        {
+            rtl8139_recover_tx_path();
+        }
+
+        LOG_DEBUG_FMT("RTL8139", "netdev_send: retrying TX after busy path (attempt=%d)", attempt + 1);
     }
-    LOG_DEBUG("RTL8139", "netdev_send: rtl8139_send returned");
-    return 0;
+
+    LOG_DEBUG("RTL8139", "netdev_send: rtl8139_send failed after retries");
+    return -1;
 }
 
 static void rtl8139_netdev_poll(struct net_device *dev)
@@ -810,24 +866,6 @@ static void rtl8139_process_rx_packets(void)
          * Also check that status is reasonable (not corrupted data).
          * Valid status should have bit 0 set (OWN) and reasonable upper bits.
          */
-        if (!(status & 0x01))
-        {
-            /* No valid packet at this offset - stop processing */
-            /* Log only if status looks like garbage (might indicate buffer corruption) */
-            if (status != 0x0000 && status != 0xFFFF)
-            {
-                /* This might indicate buffer corruption or misalignment - log once */
-                static bool logged_garbage_status = false;
-                if (!logged_garbage_status)
-                {
-                    LOG_WARNING_FMT("RTL8139", "Found invalid status (no OWN bit): 0x%04x at offset %d - buffer may be misaligned",
-                                   status, rtl8139_rx_read_offset);
-                    logged_garbage_status = true;
-                }
-            }
-            break;
-        }
-        
         /* CRITICAL: Log raw RX header BEFORE any processing for debugging */
 #if KERNEL_DEBUG
         serial_print("[RTL8139] RX raw: status=0x");
@@ -856,11 +894,24 @@ static void rtl8139_process_rx_packets(void)
         {
             rtl8139_counters.rx_errors++;
             LOG_WARNING_FMT("RTL8139", "Invalid RX length (too small): %d (must be >= 4), discarding packet", length);
-            /* Discard this packet and continue - don't abort RX processing */
-            /* Move to next packet using correct formula (even for invalid packets) */
-            uint16_t raw_length = length;
-            rtl8139_rx_read_offset = (rtl8139_rx_read_offset + raw_length + 4 + 3) & ~3;
-            rtl8139_rx_read_offset %= RTL8139_RX_BUF_SIZE;
+            /* Invalid length cannot be advanced safely: resync to current writer. */
+            rtl8139_rx_read_offset = current_write;
+            break;
+        }
+
+        if (length > (RTL8139_RX_BUF_SIZE - 4))
+        {
+            rtl8139_counters.rx_errors++;
+            LOG_WARNING_FMT("RTL8139", "Invalid RX length (too large): %d, resyncing RX ring", length);
+            rtl8139_rx_read_offset = current_write;
+            break;
+        }
+
+        if (!(status & RTL8139_RX_STAT_ROK))
+        {
+            rtl8139_counters.rx_errors++;
+            LOG_WARNING_FMT("RTL8139", "RX status error 0x%04x, skipping frame len=%u", status, (unsigned)length);
+            rtl8139_advance_rx_read_offset(length);
             continue;
         }
         
@@ -875,11 +926,7 @@ static void rtl8139_process_rx_packets(void)
             rtl8139_counters.rx_errors++;
             LOG_WARNING_FMT("RTL8139", "Invalid packet length after header subtraction: raw_len=%d, pkt_len=%d, discarding", 
                            length, packet_len);
-            /* Discard this packet and continue - don't abort RX processing */
-            /* Move read_offset to next packet using correct formula */
-            uint16_t raw_length = length;
-            rtl8139_rx_read_offset = (rtl8139_rx_read_offset + raw_length + 4 + 3) & ~3;
-            rtl8139_rx_read_offset %= RTL8139_RX_BUF_SIZE;
+            rtl8139_advance_rx_read_offset(length);
             continue;
         }
         
@@ -974,12 +1021,6 @@ static void rtl8139_process_rx_packets(void)
                 LOG_WARNING_FMT("RTL8139", "Invalid packet length: %d", packet_len);
             }
         }
-        else
-        {
-            rtl8139_counters.rx_errors++;
-            LOG_WARNING_FMT("RTL8139", "Packet with bad status: 0x%04x, length=%d", status, length);
-        }
-        
         /* CRITICAL: Move to next packet with correct alignment.
          * In RTL8139, the 'length' field is:
          *   - Ethernet frame + CRC (4 bytes)
@@ -990,11 +1031,7 @@ static void rtl8139_process_rx_packets(void)
          *   - +4 = 4-byte header we already read (status + length)
          *   - (+ 3) & ~3 = round to 4-byte boundary
          */
-        uint16_t raw_length = length;  /* length = frame + CRC (does NOT include header) */
-        rtl8139_rx_read_offset = (rtl8139_rx_read_offset + raw_length + 4 + 3) & ~3;
-        
-        /* Wrap around if needed */
-        rtl8139_rx_read_offset %= RTL8139_RX_BUF_SIZE;
+        rtl8139_advance_rx_read_offset(length);
     }
     
     /* Update CAPR to acknowledge processed packets

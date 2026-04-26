@@ -18,6 +18,7 @@ DOT_CONFIG   = os.path.join(KERNEL_ROOT, ".config")
 AUTOCONF_DIR = os.path.join(KERNEL_ROOT, "include", "generated")
 AUTOCONF_H   = os.path.join(AUTOCONF_DIR, "autoconf.h")
 VALID_UI_LANGS = ("en", "es")
+ARCH_SYMBOLS = ("ARCH_X86_64", "ARCH_ARM64")
 
 I18N = {
     "en": {
@@ -171,7 +172,11 @@ def parse_kconfig(path):
             else:
                 current.default = val.strip()
         elif stripped.startswith("depends on"):
-            current.depends = stripped.replace("depends on", "").strip()
+            dep_expr = stripped.replace("depends on", "").strip()
+            if current.depends:
+                current.depends = f"({current.depends}) && ({dep_expr})"
+            else:
+                current.depends = dep_expr
         elif stripped.startswith("range"):
             parts = stripped.split()
             if len(parts) >= 3:
@@ -250,10 +255,50 @@ def sym_lookup(symbols, name):
 def dep_satisfied(symbols, sym):
     if sym.depends is None:
         return True
-    dep = sym_lookup(symbols, sym.depends)
-    if dep is None:
+    expr = sym.depends
+    expr = expr.replace("&&", " and ").replace("||", " or ").replace("!", " not ")
+
+    def _repl(match):
+        token = match.group(0)
+        dep = sym_lookup(symbols, token)
+        if dep is None:
+            return "True"
+        return "True" if dep.value == "y" else "False"
+
+    expr = re.sub(r"\b[A-Z0-9_]+\b", _repl, expr)
+    try:
+        return bool(eval(expr, {"__builtins__": {}}, {}))
+    except Exception:
         return True
-    return dep.value == "y"
+
+
+def set_arch_selection(symbols, selected_name):
+    changed = False
+    for sym in symbols:
+        if sym.name in ARCH_SYMBOLS:
+            desired = "y" if sym.name == selected_name else "n"
+            if sym.value != desired:
+                sym.value = desired
+                changed = True
+    return changed
+
+
+def enforce_arch_choice(symbols):
+    arch_syms = [sym for sym in symbols if sym.name in ARCH_SYMBOLS]
+    if not arch_syms:
+        return False
+
+    changed = False
+    selected = [sym for sym in arch_syms if sym.value == "y"]
+    if len(selected) == 1:
+        return False
+
+    preferred = "ARCH_X86_64"
+    if len(selected) > 1:
+        preferred = selected[0].name
+
+    changed |= set_arch_selection(symbols, preferred)
+    return changed
 
 
 def sanitize_ui_lang(lang_value):
@@ -279,6 +324,7 @@ def set_ui_lang(symbols, lang):
 
 def enforce_dependencies(symbols):
     changed = False
+    changed |= enforce_arch_choice(symbols)
     for sym in symbols:
         if sym.type == "bool" and sym.value == "y" and not dep_satisfied(symbols, sym):
             sym.value = "n"
@@ -300,7 +346,10 @@ def set_symbol_value(symbols, assignment):
     if sym.type == "bool":
         if raw_val not in ("y", "n"):
             raise ValueError(f"Boolean symbol {key} requires y/n")
-        sym.value = raw_val
+        if key in ARCH_SYMBOLS and raw_val == "y":
+            set_arch_selection(symbols, key)
+        else:
+            sym.value = raw_val
     elif sym.type == "int":
         ival = int(raw_val, 10)
         if sym.range_lo is not None:
@@ -320,6 +369,8 @@ def apply_preset(symbols, preset):
     if preset == "generic":
         values = {
             "KERNEL_DEBUG_SHELL": "y",
+            "ARCH_X86_64": "y",
+            "ARCH_ARM64": "n",
             "TICK_RATE_HZ": "1000",
             "SCHEDULER_POLICY": "0",
             "ROOT_BLOCK_DEVICE": "hda",
@@ -333,6 +384,8 @@ def apply_preset(symbols, preset):
             "DEBUG_BINS_GROUP_NET": "y",
             "DEBUG_BINS_GROUP_BT": "y",
             "ENABLE_NETWORKING": "y",
+            "DRV_NIC_RTL8139": "y",
+            "DRV_NIC_E1000": "n",
             "ENABLE_SOUND": "y",
             "ENABLE_BLUETOOTH": "y",
             "ENABLE_MOUSE": "y",
@@ -361,6 +414,8 @@ def apply_preset(symbols, preset):
     elif preset == "tiny":
         values = {
             "KERNEL_DEBUG_SHELL": "y",
+            "ARCH_X86_64": "y",
+            "ARCH_ARM64": "n",
             "TICK_RATE_HZ": "250",
             "SCHEDULER_POLICY": "0",
             "ROOT_BLOCK_DEVICE": "hda",
@@ -374,6 +429,8 @@ def apply_preset(symbols, preset):
             "DEBUG_BINS_GROUP_NET": "n",
             "DEBUG_BINS_GROUP_BT": "n",
             "ENABLE_NETWORKING": "n",
+            "DRV_NIC_RTL8139": "n",
+            "DRV_NIC_E1000": "n",
             "ENABLE_SOUND": "n",
             "ENABLE_BLUETOOTH": "n",
             "ENABLE_MOUSE": "n",
@@ -553,8 +610,12 @@ def run_menu(stdscr, symbols):
             if cursor < len(visible):
                 sym = visible[cursor]
                 if sym.type == "bool":
-                    sym.value = "n" if sym.value == "y" else "y"
-                    dirty = True
+                    if sym.name in ARCH_SYMBOLS:
+                        if sym.value != "y":
+                            dirty |= set_arch_selection(symbols, sym.name)
+                    else:
+                        sym.value = "n" if sym.value == "y" else "y"
+                        dirty = True
                 elif sym.type == "int":
                     val = curses_input(stdscr, f"CONFIG_{sym.name}", sym.value, h, w)
                     if val is not None:
@@ -669,6 +730,7 @@ def main():
 
     symbols = parse_kconfig(KCONFIG_PATH)
     load_dotconfig(symbols)
+    enforce_dependencies(symbols)
 
     args = sys.argv[1:]
     if len(args) > 0 and args[0] == "--sync":

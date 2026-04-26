@@ -32,6 +32,7 @@ extern struct debug_command cmd_cp;
 extern struct debug_command cmd_mv;
 extern struct debug_command cmd_ln;
 extern struct debug_command cmd_mount;
+extern struct debug_command cmd_umount;
 extern struct debug_command cmd_chmod;
 extern struct debug_command cmd_chown;
 extern struct debug_command cmd_basename;
@@ -106,6 +107,7 @@ struct debug_command *debug_commands[] = {
     &cmd_mv,
     &cmd_ln,
     &cmd_mount,
+    &cmd_umount,
     &cmd_chmod,
     &cmd_chown,
     &cmd_basename,
@@ -267,7 +269,7 @@ const char *debug_command_section(const char *name)
         "ls", "cd", "pwd", "cat", "echo", "exec", "cmp", "which", "true", "false", "sleep", NULL
     };
     static const char *const fs_cmds[] = {
-        "mkdir", "rm", "rmdir", "touch", "cp", "mv", "ln", "mount", "chmod", "chown", "basename", "dirname", NULL
+        "mkdir", "rm", "rmdir", "touch", "cp", "mv", "ln", "mount", "umount", "chmod", "chown", "basename", "dirname", NULL
     };
     static const char *const diag_cmds[] = {
         "ps", "df", "dmesg", "lsmod", "hostname", "uname", "lsblk", "lsdrv", "free",

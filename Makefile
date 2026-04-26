@@ -1,9 +1,9 @@
-# IR0 KERNEL MAKEFILE - x86-64 ONLY
+# IR0 KERNEL MAKEFILE - MULTI-ARCH SCAFFOLD (x86-64 + ARM64)
 
 KERNEL_ROOT := $(CURDIR)
 
-# Default architecture (can be overridden with arch=x86-64 only)
-ARCH ?= x86-64
+# Default architecture (resolved after .config load)
+ARCH ?=
 
 CFLAGS_TARGET := -DIR0_DESKTOP
 
@@ -37,6 +37,20 @@ CONFIG_TOOL_DEFAULT_DISK_FS ?= 0
 CONFIG_TOOL_DEFAULT_DISK_SIZE_MB ?= 200
 CONFIG_TOOL_UNIBUILD_DEFAULT_FILES ?=
 CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE ?=
+CONFIG_ARCH_X86_64 ?= y
+CONFIG_ARCH_ARM64 ?= n
+
+ifeq ($(ARCH),)
+ifeq ($(CONFIG_ARCH_ARM64),y)
+ARCH := arm64
+else
+ARCH := x86-64
+endif
+endif
+
+ifdef arch
+ARCH := $(arch)
+endif
 
 ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),1)
 TOOL_DEFAULT_DISK_FS_NAME := fat32
@@ -55,9 +69,20 @@ ASM = nasm
 NASM = nasm
 QEMU = qemu-system-x86_64
 PYTHON = python3
+CROSS_COMPILE_ARM64 ?= aarch64-linux-gnu-
+
+ifeq ($(ARCH),arm64)
+CC = $(CROSS_COMPILE_ARM64)gcc
+LD = $(CROSS_COMPILE_ARM64)ld
+endif
 
 # Flags
-CFLAGS = -m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin
+CFLAGS = -ffreestanding -nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin
+ifeq ($(ARCH),arm64)
+CFLAGS += -mgeneral-regs-only
+else
+CFLAGS += -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+endif
 NASMFLAGS = -f elf64
 
 # Directories
@@ -65,7 +90,13 @@ BUILD_DIR = build
 ISO_DIR = iso
 
 # Targets
-all: kernel-x64.iso
+ifeq ($(ARCH),arm64)
+DEFAULT_BUILD_TARGET := kernel-arm64.bin
+else
+DEFAULT_BUILD_TARGET := kernel-x64.iso
+endif
+
+all: $(DEFAULT_BUILD_TARGET)
 
 menuconfig:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
@@ -93,6 +124,7 @@ CFLAGS += -I$(KERNEL_ROOT)/includes
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
+CFLAGS += -I$(KERNEL_ROOT)/arch/arm64
 CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/drivers
 CFLAGS += -I$(KERNEL_ROOT)/fs
@@ -101,15 +133,26 @@ CFLAGS += -I$(KERNEL_ROOT)/include/generated
 CFLAGS += -MMD -MP
 
 # C++ compile flags (freestanding kernel); matches %.o: %.cpp rule
+ifeq ($(ARCH),arm64)
+CXX_KERNEL_FLAGS = -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \
+	-nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin \
+	-I$(KERNEL_ROOT)/cpp/include
+else
 CXX_KERNEL_FLAGS = -m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \
 	-mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
 	-nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin \
 	-I$(KERNEL_ROOT)/cpp/include
+endif
 CXXFLAGS_COMPILE = $(CXX_KERNEL_FLAGS) $(CFLAGS)
 
 # Assembler and linker flags
 ASMFLAGS = -f elf64
 LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld -Map=kernel-x64.map
+
+ifeq ($(ARCH),arm64)
+ASMFLAGS = -f elf64
+LDFLAGS = -m aarch64elf -T arch/arm64/linker.ld -Map=kernel-arm64.map
+endif
 
 
 # CONFIGURACIÓN QEMU (ABSTRACCIÓN)
@@ -197,6 +240,7 @@ KERNEL_OBJS = \
     kernel/ipc.o \
     kernel/net_compat.o \
     kernel/scheduler_api.o \
+    kernel/scheduler/switch/arch_context_switch.o \
     kernel/input_backend.o \
     kernel/video_backend.o \
     kernel/console_backend.o \
@@ -224,6 +268,7 @@ DEBUG_BINS_FS_OBJS = \
     debug_bins/cmd_mv.o \
     debug_bins/cmd_ln.o \
     debug_bins/cmd_mount.o \
+    debug_bins/cmd_umount.o \
     debug_bins/cmd_chmod.o \
     debug_bins/cmd_chown.o \
     debug_bins/cmd_basename.o \
@@ -432,14 +477,27 @@ NET_OBJS = \
     net/ip.o \
     net/icmp.o \
     net/udp.o \
+    net/dhcp.o \
     net/dns.o
 NET_DRIVER_OBJS = \
-    drivers/net/net_drivers.o \
-    drivers/net/rtl8139.o
+    drivers/net/net_drivers.o
+ifneq ($(CONFIG_DRV_NIC_RTL8139),n)
+ifeq ($(ARCH),x86-64)
+NET_DRIVER_OBJS += drivers/net/rtl8139.o
+CFLAGS += -DCONFIG_DRV_NIC_RTL8139=1
+else
+CFLAGS += -DCONFIG_DRV_NIC_RTL8139=0
+endif
+else
+CFLAGS += -DCONFIG_DRV_NIC_RTL8139=0
+endif
+CFLAGS += -DCONFIG_DRV_NIC_E1000=0
 CFLAGS += -DCONFIG_ENABLE_NETWORKING=1
 else
 NET_OBJS =
 NET_DRIVER_OBJS =
+CFLAGS += -DCONFIG_DRV_NIC_RTL8139=0
+CFLAGS += -DCONFIG_DRV_NIC_E1000=0
 CFLAGS += -DCONFIG_ENABLE_NETWORKING=0
 endif
 
@@ -691,7 +749,10 @@ else
 CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=0
 endif
 
-ARCH_OBJS = \
+ARCH_OBJS_COMMON = \
+    arch/common/arch_interface.o
+
+ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/arch_x64.o \
     arch/x86-64/sources/gdt.o \
     arch/x86-64/sources/tss_x64.o \
@@ -701,8 +762,22 @@ ARCH_OBJS = \
     arch/x86-64/sources/fault.o \
     arch/x86-64/asm/boot_x64.o \
     arch/x86-64/asm/syscall_entry_64.o \
-    arch/common/arch_interface.o \
     kernel/scheduler/switch/switch_x64.o
+
+ARCH_OBJS_ARM64 = \
+    arch/arm64/sources/arch_arm64.o \
+    arch/arm64/sources/arch_early.o \
+    arch/arm64/sources/interrupts.o \
+    arch/arm64/sources/timer.o \
+    arch/arm64/sources/boot_stub.o \
+    arch/arm64/sources/syscall_stub.o \
+    kernel/scheduler/switch/switch_arm64.o
+
+ifeq ($(ARCH),arm64)
+ARCH_OBJS := $(ARCH_OBJS_ARM64)
+else
+ARCH_OBJS := $(ARCH_OBJS_COMMON) $(ARCH_OBJS_X86_64)
+endif
 
 CPP_OBJS = \
 	cpp/runtime/compat.o
@@ -802,6 +877,11 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 		echo "1" > .build_number; \
 	fi
 
+kernel-arm64.bin: $(ARCH_OBJS) arch/arm64/linker.ld
+	@echo "  LD      $@"
+	@$(LD) $(LDFLAGS) -o $@ $(ARCH_OBJS)
+	@echo "✓ Kernel linked: $@"
+
 # Create ISO
 kernel-x64.iso: kernel-x64.bin arch/x86-64/grub.cfg
 	@echo "  ISO     $@"
@@ -869,16 +949,29 @@ ifneq (,$(filter auto,$(MAKECMDGOALS)))
 endif
 
 
-# Process architecture parameter (if specified); x86-64 is the only supported port
-ifdef arch
-    ifneq ($(arch),x86-64)
-        $(error Unsupported architecture: $(arch). Only x86-64 is supported.)
-    endif
-    ARCH := x86-64
-    CFLAGS += -DARCH_X86_64
+# Process architecture parameter and .config selection.
+ifneq ($(filter $(ARCH),x86-64 arm64),$(ARCH))
+$(error Unsupported architecture: $(ARCH). Valid values: x86-64, arm64)
+endif
+
+ifeq ($(CONFIG_ARCH_X86_64),y)
+CFLAGS += -DCONFIG_ARCH_X86_64=1
 else
-    ARCH := x86-64
-    CFLAGS += -DARCH_X86_64
+CFLAGS += -DCONFIG_ARCH_X86_64=0
+endif
+
+ifeq ($(CONFIG_ARCH_ARM64),y)
+CFLAGS += -DCONFIG_ARCH_ARM64=1
+else
+CFLAGS += -DCONFIG_ARCH_ARM64=0
+endif
+
+ifeq ($(ARCH),x86-64)
+CFLAGS += -DARCH_X86_64 -DARCH_X86
+QEMU = qemu-system-x86_64
+else
+CFLAGS += -DARCH_ARM64
+QEMU = qemu-system-aarch64
 endif
 
 # ============================================
@@ -895,7 +988,7 @@ IR0_PRECHECK_TARGETS :=
 endif
 
 # Default target
-ir0: $(IR0_PRECHECK_TARGETS) kernel-x64.iso
+ir0: $(IR0_PRECHECK_TARGETS) $(DEFAULT_BUILD_TARGET)
 
 # Build using all available CPU cores
 ir0-auto: auto
@@ -1128,7 +1221,7 @@ clean:
 	@find . -name "*.bin" -type f -delete
 	@find . -name "*.su" -type f -delete
 	@rm -f kernel-x64.iso kernel-x64-test.iso
-	@rm -f kernel-x64.map kernel-x64.disasm compile_commands.json
+	@rm -f kernel-x64.map kernel-arm64.map kernel-x64.disasm compile_commands.json
 	@rm -rf iso iso_test
 	@$(MAKE) -C tests/kernel_memsafe clean 2>/dev/null || true
 	@echo "Clean done."
@@ -1183,6 +1276,7 @@ health: kernel-analyze
 # Minimal permanent build matrix for modular configs.
 build-matrix-min:
 	@$(MAKE) -s config-wiring-check
+	@$(MAKE) -s arch-config-check
 	@echo "  MATRIX  defconfig"
 	@$(MAKE) defconfig >/dev/null
 	@$(MAKE) -s kernel-x64.bin >/dev/null
@@ -1213,6 +1307,11 @@ build-matrix-min:
 	@$(MAKE) defconfig >/dev/null
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=2 >/dev/null
 	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  arm64 config scaffold"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ARCH_X86_64=n ARCH_ARM64=y DRV_NIC_RTL8139=n DRV_NIC_E1000=n >/dev/null
+	@$(MAKE) -s arch-config-check >/dev/null
+	@$(MAKE) defconfig >/dev/null
 	@echo "✓ build-matrix-min passed"
 
 config-sim:
@@ -1224,6 +1323,17 @@ config-wiring-check:
 		exit 1; \
 	fi
 	@echo "✓ config-wiring-check passed"
+
+arch-config-check:
+	@if [ "$(CONFIG_ARCH_X86_64)" = "y" ] && [ "$(CONFIG_ARCH_ARM64)" = "y" ]; then \
+		echo "✗ arch-config-check: both CONFIG_ARCH_X86_64 and CONFIG_ARCH_ARM64 are enabled"; \
+		exit 1; \
+	fi
+	@if [ "$(CONFIG_ARCH_X86_64)" != "y" ] && [ "$(CONFIG_ARCH_ARM64)" != "y" ]; then \
+		echo "✗ arch-config-check: no architecture selected"; \
+		exit 1; \
+	fi
+	@echo "✓ arch-config-check passed"
 
 runtime-net-check:
 	@echo "  RUNTIME  network smoke (QEMU user-net)"
@@ -1719,7 +1829,7 @@ test-drivers-clean:
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
         runtime-net-check runtime-mount-check smoke-qemu smoke-real-hw smoke-all \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
-        scale-readiness-gate config-wiring-check \
+        scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \
         run-ping
 
