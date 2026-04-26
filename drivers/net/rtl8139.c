@@ -426,6 +426,33 @@ static int rtl8139_find_free_tx_descriptor(void)
     return -1;
 }
 
+static void rtl8139_force_release_busy_tx_descriptors(void)
+{
+    if (!rtl8139_io_base)
+    {
+        return;
+    }
+
+    for (int i = 0; i < 4; i++)
+    {
+        uint32_t reg_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
+        uint32_t tsd = inl(reg_addr);
+        if (tsd & RTL8139_TSD_OWN)
+        {
+            outl((uint16_t)reg_addr, 0);
+            rtl8139_tx_descriptor_own_state[i] = 0;
+            rtl8139_tx_desc_start_tick[i] = 0;
+            rtl8139_tx_timeout_latched[i] = 0;
+            if (rtl8139_tx_in_flight > 0)
+            {
+                rtl8139_tx_in_flight--;
+            }
+            rtl8139_counters.tx_errors++;
+            LOG_WARNING_FMT("RTL8139", "Force-released busy TX descriptor %d", i);
+        }
+    }
+}
+
 static void rtl8139_advance_rx_read_offset(uint16_t raw_length)
 {
     rtl8139_rx_read_offset = (rtl8139_rx_read_offset + raw_length + 4 + 3) & ~3;
@@ -590,11 +617,11 @@ static void rtl8139_check_tx_completion(void)
             if (hz != 0) {
                 uint64_t now = clock_get_tick_count();
                 uint64_t elapsed = now - rtl8139_tx_desc_start_tick[i];
-                if (elapsed > (uint64_t)hz * 5ULL &&
+                if (elapsed > (uint64_t)hz &&
                     !rtl8139_tx_timeout_latched[i]) {
                     rtl8139_counters.tx_errors++;
                     rtl8139_tx_timeout_latched[i] = 1;
-                    LOG_WARNING_FMT("RTL8139", "TX descriptor %d stalled >5s (timeout)", i);
+                    LOG_WARNING_FMT("RTL8139", "TX descriptor %d stalled >1s (timeout)", i);
 
                     /*
                      * Recovery path: drop stale frame and force-release
@@ -733,6 +760,18 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
         }
 
         LOG_DEBUG_FMT("RTL8139", "netdev_send: retrying TX after busy path (attempt=%d)", attempt + 1);
+    }
+
+    /*
+     * Last-resort path for transient OWN wedging: release descriptors that
+     * remain busy and perform one final immediate send attempt.
+     */
+    rtl8139_force_release_busy_tx_descriptors();
+    rtl8139_recover_tx_path();
+    if (rtl8139_send(data, len) == 0)
+    {
+        LOG_WARNING("RTL8139", "netdev_send: TX succeeded after forced descriptor release");
+        return 0;
     }
 
     LOG_DEBUG("RTL8139", "netdev_send: rtl8139_send failed after retries");
@@ -890,6 +929,16 @@ static void rtl8139_process_rx_packets(void)
          * To get the Ethernet frame size (without CRC), we subtract 4 bytes.
          * If length < 4, the packet is invalid (must at least have CRC).
          */
+        /*
+         * A zeroed header usually means the NIC has not finished publishing the
+         * next frame yet. Do not consume or resync here; leave CAPR on the last
+         * fully consumed frame and retry on next poll/IRQ.
+         */
+        if (status == 0x0000 && length == 0)
+        {
+            break;
+        }
+
         if (length < 4)
         {
             rtl8139_counters.rx_errors++;
