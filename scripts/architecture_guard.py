@@ -35,6 +35,14 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "bluetooth.h",
 ]
 
+REQUIRED_ARM64_SCAFFOLD = [
+    ROOT / "arch" / "arm64" / "linker.ld",
+    ROOT / "arch" / "arm64" / "sources" / "boot_stub.c",
+    ROOT / "arch" / "arm64" / "sources" / "arch_early.c",
+    ROOT / "arch" / "arm64" / "sources" / "interrupts.c",
+    ROOT / "arch" / "arm64" / "sources" / "syscall_stub.c",
+]
+
 DRIVER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]drivers/')
 
 
@@ -72,10 +80,20 @@ def check_facades():
     return errors
 
 
+def check_arm64_scaffold():
+    errors = []
+    for p in REQUIRED_ARM64_SCAFFOLD:
+        if not p.exists():
+            rel = p.relative_to(ROOT)
+            errors.append(f"[missing-arm64-scaffold] {rel}")
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
     errors.extend(check_facades())
+    errors.extend(check_arm64_scaffold())
 
     if errors:
         print("[arch-guard] FAILED")

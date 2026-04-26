@@ -18,14 +18,19 @@
  * Keeps net stack core decoupled from concrete NIC implementations.
  */
 
+#include <config.h>
+#if CONFIG_DRV_NIC_RTL8139
 #include <drivers/net/rtl8139.h>
+#endif
 
 int net_stack_probe_drivers(void)
 {
     int ret = 0;
 
+#if CONFIG_DRV_NIC_RTL8139
     if (rtl8139_init() != 0)
         ret = -1;
+#endif
 
     return ret;
 }

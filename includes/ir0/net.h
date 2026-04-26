@@ -53,7 +53,7 @@ typedef uint32_t ip4_addr_t;
 /* MAC Address type */
 typedef uint8_t mac_addr_t[6];
 
-/* Function to create an IP address from 4 octets (network byte order) */
+/* Function to create an IP address frcat om 4 octets (network byte order) */
 static inline ip4_addr_t make_ip4_addr(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 {
     /* Match ip_make_addr(): host-order octet quad, then htonl for wire order */
@@ -132,6 +132,7 @@ void net_receive(struct net_device *dev, const void *data, size_t len);
 
 /* Network Stack Initialization */
 int init_net_stack(void);
+int net_stack_post_irq_init(void);
 
 /* Network Polling (for receiving packets when not actively waiting) */
 void net_poll(void);
@@ -169,6 +170,8 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
 
 /* DNS resolver used by /dev/net ping hostname path. */
 ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip);
+void dns_set_default_server(ip4_addr_t dns_server_ip);
+ip4_addr_t dns_get_default_server(void);
 
 /* ARP IP synchronization helpers used by NET_SET_CONFIG. */
 void arp_set_my_ip(ip4_addr_t ip);

@@ -72,6 +72,7 @@ static uint16_t dns_query_id_counter = 1;
 static struct net_device *dns_net_dev = NULL;
 static uint16_t dns_client_port = 5353;  /* Ephemeral port for DNS queries */
 static bool dns_handler_registered = false;
+static ip4_addr_t dns_default_server = 0;
 
 static inline uint64_t dns_irq_save(void)
 {
@@ -389,6 +390,11 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
         LOG_ERROR("DNS", "DNS not initialized or invalid parameters");
         return 0;
     }
+
+    if (dns_server_ip == 0)
+    {
+        dns_server_ip = dns_get_default_server();
+    }
     
     /* Get network device */
     struct net_device *dev = net_get_devices();
@@ -591,6 +597,27 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     return 0;
 }
 
+void dns_set_default_server(ip4_addr_t dns_server_ip)
+{
+    uint64_t flags = dns_irq_save();
+    dns_default_server = dns_server_ip;
+    dns_irq_restore(flags);
+
+    if (dns_server_ip != 0)
+    {
+        LOG_INFO_FMT("DNS", "Default DNS server set to " IP4_FMT, IP4_ARGS(ntohl(dns_server_ip)));
+    }
+}
+
+ip4_addr_t dns_get_default_server(void)
+{
+    ip4_addr_t server;
+    uint64_t flags = dns_irq_save();
+    server = dns_default_server;
+    dns_irq_restore(flags);
+    return server;
+}
+
 /**
  * dns_init - Initialize DNS client
  * @return: 0 on success, -1 on error
@@ -615,6 +642,9 @@ int dns_init(void)
     {
         dns_net_dev = dev;
     }
+
+    /* Default to QEMU user-mode resolver; DHCP can override at runtime. */
+    dns_set_default_server(htonl((10U << 24) | (0U << 16) | (2U << 8) | 3U));
     
     /* Note: DNS uses the same source port for queries and responses, but our
      * implementation is simplified. In practice, we'd need to match responses

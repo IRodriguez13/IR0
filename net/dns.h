@@ -43,4 +43,6 @@
 /* DNS API */
 int dns_init(void);
 ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip);
+void dns_set_default_server(ip4_addr_t dns_server_ip);
+ip4_addr_t dns_get_default_server(void);
 

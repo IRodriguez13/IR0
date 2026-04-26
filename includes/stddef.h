@@ -29,7 +29,7 @@
 #endif
 
 /* Architecture-dependent size and pointer difference types */
-#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(__aarch64__)
     /* 64-bit architecture */
     typedef unsigned long size_t;
     typedef long ptrdiff_t;

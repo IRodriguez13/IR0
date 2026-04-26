@@ -17,6 +17,7 @@
 
 
 void arch_enable_interrupts(void);
+void arch_disable_interrupts(void);
 
 
 uint8_t inb(uint16_t port);
@@ -32,6 +33,9 @@ const char *arch_get_name(void);
 
 
 void cpu_wait(void);
+void arch_cpu_idle(void);
+void arch_cpu_halt(void);
+void arch_set_boot_params(void *params);
 
 
 

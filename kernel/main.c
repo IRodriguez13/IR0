@@ -34,7 +34,9 @@
 #include <mm/pmm.h>
 #include <init.h>
 #include <arch/common/arch_portable.h>
+#if defined(ARCH_X86_64) || defined(ARCH_X86)
 #include <arch/x86-64/sources/user_mode.h>
+#endif
 #include <config.h>
 #include <ir0/version.h>
 #include <ir0/driver.h>
@@ -63,6 +65,7 @@ void kmain(uint32_t multiboot_info)
     (void)multiboot_info;
 #endif
     /* Initialize architecture-specific early features (GDT, TSS, etc.) */
+    arch_set_boot_params((void *)(uintptr_t)multiboot_info);
     arch_early_init();
 
     /* Initialize core subsystems first (need heap for VBE mapping) */
@@ -180,16 +183,18 @@ void kmain(uint32_t multiboot_info)
     clock_system_init();
 
     /* Initialize system calls */
+    arch_syscall_init();
     syscalls_init();
     log_subsystem_ok("SYSCALLS");
 
     /* Initialize architecture-specific interrupt system (IDT, PIC remap) */
-    arch_interrupt_init();
+    arch_irq_init();
 
     /*
      * Unmask IRQ lines after PIC is fully initialized.
      * IRQ2 (cascade) is required for any slave PIC line (8-15) to work.
      */
+#if defined(ARCH_X86_64) || defined(ARCH_X86)
     {
         pic_unmask_irq(0);   /* Timer (PIT) */
         pic_unmask_irq(1);   /* Keyboard */
@@ -205,6 +210,7 @@ void kmain(uint32_t multiboot_info)
         pic_unmask_irq(12);  /* PS/2 Mouse */
 #endif
     }
+#endif
 
     /* Enable interrupts globally */
     arch_enable_interrupts();
@@ -249,6 +255,6 @@ void kmain(uint32_t multiboot_info)
         sleep_wake_check();
         /* Despertar procesos bloqueados en read(0) cuando hay tecla */
         stdin_wake_check();
-        __asm__ volatile("hlt");
+        arch_cpu_idle();
     }
 }

@@ -748,13 +748,28 @@ int proc_filesystems_read(char *buf, size_t count)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
-    const char *lines[] = { "nodev\tproc", "nodev\tdevfs", "nodev\tramfs", "nodev\ttmpfs", "\tminix" };
-    for (size_t i = 0; i < sizeof(lines)/sizeof(lines[0]) && off < count; i++)
-    {
-        int n = snprintf(buf + off, (off < count) ? (count - off) : 0, "%s\n", lines[i]);
-        if (n <= 0 || n >= (int)(count - off)) break;
-        off += (size_t)n;
-    }
+    int n = snprintf(buf + off, (off < count) ? (count - off) : 0, "nodev\tproc\n");
+    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "nodev\tdevfs\n");
+    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+#if CONFIG_ENABLE_FS_TMPFS
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "nodev\ttmpfs\n");
+    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "nodev\tramfs\n");
+    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+#endif
+#if CONFIG_ENABLE_FS_MINIX
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "\tminix\n");
+    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+#endif
+#if CONFIG_ENABLE_FS_SIMPLEFS
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "\tsimplefs\n");
+    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+#endif
+#if CONFIG_ENABLE_FS_FAT16
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "\tfat16\n");
+    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+#endif
     if (off < count) buf[off] = '\0';
     return (int)off;
 }

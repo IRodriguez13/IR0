@@ -305,6 +305,41 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
     return 0;
 }
 
+static int tmpfs_umount(const char *dir_name)
+{
+    tmpfs_data_t *tmpfs = NULL;
+    int idx = -1;
+
+    if (!dir_name)
+        return -EINVAL;
+
+    for (int i = 0; i < num_tmpfs_instances; i++)
+    {
+        if (tmpfs_instances[i] &&
+            strcmp(tmpfs_instances[i]->mount_point, dir_name) == 0)
+        {
+            idx = i;
+            tmpfs = tmpfs_instances[i];
+            break;
+        }
+    }
+
+    if (!tmpfs)
+        return -ENOENT;
+
+    if (tmpfs->root)
+        tmpfs_free_inode(tmpfs, tmpfs->root);
+
+    kfree(tmpfs);
+
+    for (int i = idx; i < num_tmpfs_instances - 1; i++)
+        tmpfs_instances[i] = tmpfs_instances[i + 1];
+
+    tmpfs_instances[num_tmpfs_instances - 1] = NULL;
+    num_tmpfs_instances--;
+    return 0;
+}
+
 static struct vfs_ops tmpfs_fs_ops = {
     .stat    = tmpfs_stat,
     .mkdir   = tmpfs_mkdir,
@@ -324,6 +359,7 @@ static struct vfs_fstype tmpfs_fs_type = {
     .name  = "tmpfs",
     .ops   = &tmpfs_fs_ops,
     .mount = tmpfs_mount,
+    .umount = tmpfs_umount,
     .next  = NULL,
 };
 

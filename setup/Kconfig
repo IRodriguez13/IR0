@@ -6,6 +6,23 @@
 # core subsystems (memory, scheduler, VFS, interrupts) are always built.
 #
 
+menu "Architecture"
+
+    config ARCH_X86_64
+        bool "Target architecture: x86-64"
+        default y
+        help
+          Build the kernel for x86-64 targets using the current GRUB/Multiboot flow.
+
+    config ARCH_ARM64
+        bool "Target architecture: ARM64 (AArch64)"
+        default n
+        help
+          Build the kernel for ARM64 targets.
+          This port is scaffolded and intended for incremental bring-up.
+
+endmenu
+
 menu "General"
 
     config KERNEL_DEBUG_SHELL
@@ -120,8 +137,22 @@ menu "Networking"
         bool "IPv4 network stack (ARP, IP, ICMP, UDP, DNS)"
         default y
         help
-          Compile the full network stack (net/) and the RTL8139 NIC driver.
+          Compile the full network stack (net/).
           Disabling this removes all networking support from the kernel.
+
+    config DRV_NIC_RTL8139
+        bool "Driver plugin: RTL8139 NIC"
+        default y
+        depends on ENABLE_NETWORKING && ARCH_X86_64
+        help
+          Compile and probe the RTL8139 network interface driver plugin.
+
+    config DRV_NIC_E1000
+        bool "Driver plugin: Intel E1000 NIC (scaffold)"
+        default n
+        depends on ENABLE_NETWORKING && ARCH_X86_64
+        help
+          Reserved plugin switch for future Intel E1000 support.
 
 endmenu
 

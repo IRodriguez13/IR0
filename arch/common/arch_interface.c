@@ -17,6 +17,8 @@
 #include <stddef.h>
 #include <string.h>
 
+static void *g_arch_boot_params = NULL;
+
 // Detect MinGW-w64 cross-compilation
 #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32)
     #define MINGW_BUILD 1
@@ -401,11 +403,33 @@ void outb(uint16_t port, uint8_t value)
 
 void cpu_wait(void)
 {
-#if MINGW_BUILD
+#if defined(__aarch64__)
+    asm volatile("wfi" ::: "memory");
+#elif MINGW_BUILD
     __asm__ __volatile__("hlt" ::: "memory");
 #else
     asm volatile("hlt");
 #endif
+}
+
+void arch_cpu_idle(void)
+{
+    cpu_wait();
+}
+
+void arch_cpu_halt(void)
+{
+    cpu_wait();
+}
+
+void arch_set_boot_params(void *params)
+{
+    g_arch_boot_params = params;
+}
+
+void *arch_get_boot_params(void)
+{
+    return g_arch_boot_params;
 }
 
 /**
@@ -419,7 +443,8 @@ void arch_early_init(void)
     extern void arch_early_init_x86_64(void);
     arch_early_init_x86_64();
 #elif defined(__aarch64__)
-    /* ARM64 early init - not yet implemented */
+    extern void arch_early_init_arm64(void);
+    arch_early_init_arm64();
 #else
     #error "Unsupported architecture for arch_early_init()"
 #endif
@@ -436,10 +461,21 @@ void arch_interrupt_init(void)
     extern void arch_interrupt_init_x86_64(void);
     arch_interrupt_init_x86_64();
 #elif defined(__aarch64__)
-    /* ARM64 interrupt init - not yet implemented */
+    extern void arch_interrupt_init_arm64(void);
+    arch_interrupt_init_arm64();
 #else
     #error "Unsupported architecture for arch_interrupt_init()"
 #endif
+}
+
+void arch_irq_init(void)
+{
+    arch_interrupt_init();
+}
+
+void arch_syscall_init(void)
+{
+    /* x86 syscall entry is initialized via IDT setup; ARM64 wiring is incremental. */
 }
 
 // ===============================================================================

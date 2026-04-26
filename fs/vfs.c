@@ -246,6 +246,7 @@ struct vfs_mount *vfs_get_mounts(void)
 int vfs_mount(const char *dev, const char *path, const char *fstype)
 {
     char mount_path[MAX_PATH];
+    const char *resolved_fstype = fstype;
 
     if (!fstype || !path)
         return -EINVAL;
@@ -258,6 +259,10 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
 
     normalize_mount_path(path, mount_path, sizeof(mount_path));
 
+    /* ramfs is intentionally an alias of tmpfs in IR0 runtime mounts. */
+    if (strcmp(resolved_fstype, "ramfs") == 0)
+        resolved_fstype = "tmpfs";
+
     for (struct vfs_mount *existing = mounts; existing; existing = existing->next)
     {
         if (strcmp(existing->path, mount_path) == 0)
@@ -266,7 +271,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
 
     struct vfs_fstype *ft = NULL;
     for (struct vfs_fstype *t = fs_types; t; t = t->next) {
-        if (strcmp(t->name, fstype) == 0) {
+        if (strcmp(t->name, resolved_fstype) == 0) {
             ft = t;
             break;
         }
@@ -297,6 +302,65 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     }
 
     mounts = m;
+    return 0;
+}
+
+int vfs_umount(const char *path)
+{
+    char mount_path[MAX_PATH];
+    struct vfs_mount *prev = NULL;
+    struct vfs_mount *victim = NULL;
+    int ret;
+
+    if (!path)
+        return -EINVAL;
+    if (current_process && current_process->euid != ROOT_UID)
+        return -EPERM;
+
+    ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+
+    normalize_mount_path(path, mount_path, sizeof(mount_path));
+    if (strcmp(mount_path, "/") == 0)
+        return -EBUSY;
+
+    for (struct vfs_mount *m = mounts; m; m = m->next)
+    {
+        if (strcmp(m->path, mount_path) == 0)
+        {
+            victim = m;
+            break;
+        }
+        prev = m;
+    }
+
+    if (!victim)
+        return -ENOENT;
+
+    for (struct vfs_mount *m = mounts; m; m = m->next)
+    {
+        size_t vlen = strlen(victim->path);
+        if (m == victim)
+            continue;
+        if (strncmp(m->path, victim->path, vlen) == 0 &&
+            m->path[vlen] == '/')
+            return -EBUSY;
+    }
+
+    if (victim->fs && victim->fs->umount)
+    {
+        int ret = victim->fs->umount(victim->path);
+        if (ret != 0)
+            return ret;
+    }
+
+    if (prev)
+        prev->next = victim->next;
+    else
+        mounts = victim->next;
+
+    kfree(victim);
     return 0;
 }
 

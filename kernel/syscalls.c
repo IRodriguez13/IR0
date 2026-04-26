@@ -812,6 +812,35 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   return ret;
 }
 
+int64_t sys_umount(const char *target, int flags)
+{
+  if (!current_process)
+    return -ESRCH;
+  if (!target)
+    return -EFAULT;
+
+  if (validate_userspace_string(target, 256) != 0)
+    return -EFAULT;
+
+  if (flags != 0)
+    return -EINVAL;
+
+  if (target[0] != '/' || strlen(target) >= 256)
+  {
+    sys_write(STDERR_FILENO, "umount: invalid target path\n", 28);
+    return -EINVAL;
+  }
+
+  stat_t st;
+  if (vfs_stat(target, &st) < 0)
+  {
+    sys_write(STDERR_FILENO, "umount: target path does not exist\n", 35);
+    return -ENOENT;
+  }
+
+  return vfs_umount(target);
+}
+
 int64_t sys_chmod(const char *path, mode_t mode)
 {
   if (!current_process || !path)
@@ -3002,6 +3031,7 @@ WRAP1(sys_dup, int)
 WRAP3(sys_exec, const char *, char *const *, char *const *)
 WRAP1(sys_chdir, const char *)
 WRAP3(sys_mount, const char *, const char *, const char *)
+WRAP2(sys_umount, const char *, int)
 WRAP2(sys_mkdir, const char *, mode_t)
 WRAP1(sys_rmdir, const char *)
 WRAP2(sys_chmod, const char *, mode_t)
@@ -3134,6 +3164,7 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_gettimeofday]   = wrap_sys_gettimeofday;
   syscall_table_rw[__NR_getppid]        = wrap_sys_getppid;
   syscall_table_rw[__NR_mount]          = wrap_sys_mount;
+  syscall_table_rw[__NR_umount2]        = wrap_sys_umount;
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit;
   syscall_table_rw[__NR_console_scroll]  = wrap_console_scroll;
   syscall_table_rw[__NR_console_clear]   = wrap_console_clear;
