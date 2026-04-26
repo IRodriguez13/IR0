@@ -19,6 +19,9 @@
 
 /* Context switching functions */
 extern void switch_context_x64(task_t *prev, task_t *next);
+extern void switch_context_arm64(task_t *prev, task_t *next);
+void arch_context_switch(task_t *prev, task_t *next);
 extern uint64_t get_current_page_directory(void);
+uint64_t arch_get_current_page_directory(void);
 
 #endif /* _IR0_CONTEXT_H */

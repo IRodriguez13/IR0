@@ -1,0 +1,95 @@
+IR0 Kernel - Scaling Assessment
+Date: 2026-04-25
+
+Overall verdict
+--------------
+Current state: VERY GOOD.
+
+Reasoning:
+- The kernel now has reproducible multi-mount flows with coherent `/mnt/*` layout.
+- Coexistence of multiple mountable backends is available (`tmpfs`, `simplefs`,
+  `fat16`) with contract tests and runtime gate coverage.
+- Build/config/guardrails remain aligned with architecture constraints.
+
+What is strong today
+--------------------
+1) Configuration and guardrails
+   - Config-driven build and matrix checks are already in place.
+   - Architecture guard enforces key decoupling boundaries.
+
+2) Core subsystem breadth
+   - Process/syscalls/mm/fs/net/drivers are all represented and integrated.
+   - Debug bins provide practical operability for diagnostics.
+
+3) Test posture
+   - In-kernel tests run in process context and reject SKIP in kernel-tests.
+   - Contract tests exist for key proc/sys/dev interfaces.
+
+Residual risks
+--------------
+1) Backend depth
+   - `simplefs`/`fat16` are intentionally minimal in this iteration (focused on
+     mount coexistence and core file I/O semantics).
+2) Long-term persistence hardening
+   - Next step should deepen on-disk format guarantees and recovery semantics.
+3) CI breadth
+   - Current CI is strong for contracts; broader nightly runtime matrix remains
+     recommended for deeper stress coverage.
+
+Mount and filesystem scaling status
+-----------------------------------
+Current capability:
+- Multiple mounts are supported by VFS via longest-prefix dispatch.
+- Coherent mount hierarchy is provisioned (`/mnt`, `/mnt/tmp`, `/mnt/simple`, `/mnt/fat`).
+- Three backends coexist in mountpoints: `tmpfs`, `simplefs`, `fat16`.
+
+What was reinforced in this cycle:
+- Mount command UX now includes practical multi-FS examples.
+- Mountpoint flow and duplicate-mount checks stay deterministic.
+- New mount contracts validate:
+  - `/proc/mounts` baseline and tmpfs flow
+  - multi-FS coexistence (`simplefs` + `fat16`)
+  - longest-prefix resolution with nested mountpoints
+- Runtime gate (`runtime-mount-check`) now enforces those contracts.
+
+Practical mountpoint test flow (recommended)
+-------------------------------------------
+1) mount none /mnt/tmp tmpfs
+2) mount /dev/simple0 /mnt/simple simplefs
+3) mount /dev/fat0 /mnt/fat fat16
+4) create/read files under each mountpoint
+5) run `mount` and verify `/proc/mounts` shows all three entries
+
+This gives a reproducible multi-FS validation path with coherent mountpoints.
+
+Is the kernel ready to scale in features?
+-----------------------------------------
+Yes, with controlled expansion.
+
+Recommended scaling mode:
+- Keep stabilization gates on by default.
+- Add features in vertical slices with contract tests per subsystem.
+- Prefer low-coupling integrations through existing facades and VFS contracts.
+
+Priority roadmap (next)
+-----------------------
+P1) Deepen FAT16/simplefs durability semantics (format/recovery/check tooling).
+P2) Add optional persistent secondary backend with richer directory semantics.
+P3) Expand nightly runtime matrix for stress and long-run regression coverage.
+
+Recommended next feature (single priority)
+------------------------------------------
+Primary recommendation: harden persistent on-disk semantics for the new
+secondary filesystems (starting with consistency checks and recovery routines).
+
+Why:
+- Mount coexistence is now working and validated.
+- The highest leverage for the next jump is durability confidence, not more
+  mount plumbing.
+- This directly reduces risk before adding more advanced core features.
+
+Bottom line
+-----------
+IR0 reached a very good scaling baseline in this iteration.
+The kernel can continue scaling with confidence, keeping contract-driven gates
+and architectural decoupling as non-negotiable constraints.

@@ -33,6 +33,11 @@ __attribute__((weak)) void net_stack_poll(void)
 {
 }
 
+__attribute__((weak)) int net_stack_post_irq_init(void)
+{
+    return 0;
+}
+
 __attribute__((weak)) int net_stack_get_irq_line(void)
 {
     return -1;
@@ -120,6 +125,16 @@ __attribute__((weak)) ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t
 {
     (void)domain_name;
     (void)dns_server_ip;
+    return 0;
+}
+
+__attribute__((weak)) void dns_set_default_server(ip4_addr_t dns_server_ip)
+{
+    (void)dns_server_ip;
+}
+
+__attribute__((weak)) ip4_addr_t dns_get_default_server(void)
+{
     return 0;
 }
 

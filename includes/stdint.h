@@ -51,7 +51,7 @@ typedef uint32_t uint_fast32_t;
 typedef uint64_t uint_fast64_t;
 
 /* Architecture-dependent pointer types */
-#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(__aarch64__)
     /* 64-bit architecture */
     typedef long          intptr_t;
     typedef unsigned long uintptr_t;

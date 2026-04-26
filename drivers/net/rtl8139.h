@@ -84,7 +84,7 @@
 
 /* Transmit Status Descriptor bits */
 #define RTL8139_TSD_SIZE_MASK   0x1FFF /* Packet size mask */
-#define RTL8139_TSD_OWN         (1 << 13)    /* DMA operation completed */
+#define RTL8139_TSD_OWN         (1 << 13)    /* Descriptor owned by NIC (busy) */
 #define RTL8139_TSD_ERTX_64     0x00002000 /* Early TX threshold 64 bytes */
 #define RTL8139_TSD_TOK         (1U << 15)   /* Transmit OK (valid when OWN cleared) */
 

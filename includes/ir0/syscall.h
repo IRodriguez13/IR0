@@ -81,6 +81,7 @@
 #define SYS_GETPPID      __NR_getppid
 #define SYS_GETDENTS     __NR_getdents
 #define SYS_MOUNT        __NR_mount
+#define SYS_UMOUNT       __NR_umount2
 #define SYS_FORK         __NR_fork
 #define SYS_CONSOLE_SCROLL __NR_console_scroll
 #define SYS_CONSOLE_CLEAR __NR_console_clear
@@ -144,61 +145,12 @@ typedef int syscall_num_t;
 #define MAP_ANONYMOUS 0x20
 
 
-/* Low-level syscall interface */
-static inline int64_t syscall0(int64_t num)
-{
-    int64_t sysret;
-    __asm__ volatile(
-        "int $0x80"
-        : "=a"(sysret)
-        : "a"(num)
-        : "memory");
-    return sysret;
-}
-
-static inline int64_t syscall1(int64_t num, int64_t arg1)
-{
-    int64_t result;
-    __asm__ volatile(
-        "int $0x80"
-        : "=a"(result)
-        : "a"(num), "b"(arg1)
-        : "memory");
-    return result;
-}
-
-static inline int64_t syscall2(int64_t num, int64_t arg1, int64_t arg2)
-{
-    int64_t result;
-    __asm__ volatile(
-        "int $0x80"
-        : "=a"(result)
-        : "a"(num), "b"(arg1), "c"(arg2)
-        : "memory");
-    return result;
-}
-
-static inline int64_t syscall3(int64_t num, int64_t arg1, int64_t arg2, int64_t arg3)
-{
-    int64_t result;
-    __asm__ volatile(
-        "int $0x80"
-        : "=a"(result)
-        : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3)
-        : "memory");
-    return result;
-}
-
-static inline int64_t syscall6(int64_t num, int64_t arg1, int64_t arg2, int64_t arg3, int64_t arg4, int64_t arg5, int64_t arg6)
-{
-    int64_t result;
-    __asm__ volatile(
-        "int $0x80"
-        : "=a"(result)
-        : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5), "r"(arg6)
-        : "memory");
-    return result;
-}
+/* Low-level syscall interface (architecture-specific ABI wrappers). */
+#if defined(__aarch64__)
+#include <ir0/syscall_arm64.h>
+#else
+#include <ir0/syscall_x86_64.h>
+#endif
 
 /* Generic syscall */
 static inline int64_t syscall(int64_t num, int64_t arg1, int64_t arg2, int64_t arg3)
@@ -367,6 +319,11 @@ static inline int64_t ir0_chdir(const char *path)
 static inline int64_t ir0_mount(const char *dev, const char *mountpoint, const char *fstype)
 {
     return syscall3(SYS_MOUNT, (int64_t)dev, (int64_t)mountpoint, (int64_t)fstype);
+}
+
+static inline int64_t ir0_umount(const char *target, int flags)
+{
+    return syscall2(SYS_UMOUNT, (int64_t)target, (int64_t)flags);
 }
 
 static inline int64_t ir0_unlink(const char *pathname)

@@ -531,17 +531,28 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
         if (dest_ip == 0)
         {
             
-#ifdef IR0_TAP_NETWORKING
-            /* TAP networking: Use Google DNS (8.8.8.8) directly
-             * The gateway (192.168.100.1) is not a DNS server, so we use 8.8.8.8 directly
+            /*
+             * Prefer runtime DNS from stack configuration (DHCP can update it).
+             * Keep protocol-specific fallbacks for static configurations.
              */
-            ip4_addr_t dns_server = htonl((8 << 24) | (8 << 16) | (8 << 8) | 8);  /* 8.8.8.8 */
-            LOG_INFO_FMT("DEVNET", "Attempting DNS resolution for '%s' using 8.8.8.8", hostname);
-            dest_ip = dns_resolve(hostname, dns_server);
+            ip4_addr_t dns_server = dns_get_default_server();
+            if (dns_server == 0)
+            {
+#ifdef IR0_TAP_NETWORKING
+                dns_server = htonl((8U << 24) | (8U << 16) | (8U << 8) | 8U); /* 8.8.8.8 */
 #else
-            /* QEMU user-mode: Use QEMU's default DNS (10.0.2.3) */
-            ip4_addr_t dns_server = htonl((10 << 24) | (0 << 16) | (2 << 8) | 3);  /* 10.0.2.3 */
-            LOG_INFO_FMT("DEVNET", "Attempting DNS resolution for '%s' using 10.0.2.3", hostname);
+                dns_server = htonl((10U << 24) | (0U << 16) | (2U << 8) | 3U); /* 10.0.2.3 */
+#endif
+            }
+            {
+                uint32_t dns_h = ntohl(dns_server);
+                LOG_INFO_FMT("DEVNET", "Attempting DNS resolution for '%s' using DNS server %d.%d.%d.%d",
+                             hostname,
+                             (int)((dns_h >> 24) & 0xFF),
+                             (int)((dns_h >> 16) & 0xFF),
+                             (int)((dns_h >> 8) & 0xFF),
+                             (int)(dns_h & 0xFF));
+            }
             
             /* In QEMU user-mode, try gateway first (10.0.2.2) as it might forward DNS */
             if (ip_gateway != 0)
@@ -563,7 +574,6 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
                 LOG_INFO_FMT("DEVNET", "No gateway, using direct DNS server");
                 dest_ip = dns_resolve(hostname, dns_server);
             }
-#endif
             
             if (dest_ip == 0)
             {
@@ -582,6 +592,19 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
             int64_t rc = dev_net_ioctl(entry, NET_SEND_PING, &dest_ip);
             return (rc < 0) ? rc : (int64_t)count;
         }
+    }
+    else if (strncmp(cmd, "dhcp", 4) == 0 &&
+             (cmd[4] == '\0' || cmd[4] == '\n' || cmd[4] == '\r' ||
+              cmd[4] == ' ' || cmd[4] == '\t'))
+    {
+        /*
+         * Trigger DHCP only on explicit request from userspace/debug shell.
+         * Boot keeps static network defaults unless this command is invoked.
+         */
+        int ret = net_stack_post_irq_init();
+        if (ret < 0)
+            return ret;
+        return (int64_t)count;
     }
     else if (strncmp(cmd, "ifconfig", 8) == 0)
     {

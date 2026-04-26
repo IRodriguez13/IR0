@@ -34,6 +34,7 @@
 #include "ip.h"
 #include "icmp.h"
 #include "udp.h"
+#include "dhcp.h"
 #include "dns.h"
 #include <ir0/net.h>
 #include <ir0/kmem.h>
@@ -155,8 +156,8 @@ void net_unregister_device(struct net_device *dev)
  */
 int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac, const void *payload, size_t len)
 {
-    LOG_INFO_FMT("NET", "net_send: dev=%p, ethertype=0x%04x, payload=%p, len=%d", 
-                 dev, ethertype, payload, (int)len);
+    LOG_DEBUG_FMT("NET", "net_send: dev=%p, ethertype=0x%04x, payload=%p, len=%d",
+                  dev, ethertype, payload, (int)len);
     
     if (!dev || !dev->send || !payload || len > dev->mtu)
     {
@@ -175,7 +176,7 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
      * Standard Ethernet MTU is 1500 bytes, so frames are typically <= 1514 bytes.
      */
     size_t frame_len = sizeof(struct eth_header) + len;
-    LOG_INFO_FMT("NET", "net_send: Allocating frame buffer, frame_len=%d", (int)frame_len);
+    LOG_DEBUG_FMT("NET", "net_send: Allocating frame buffer, frame_len=%d", (int)frame_len);
     uint8_t *frame = kmalloc(frame_len);
 
     if (!frame)
@@ -183,7 +184,7 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
         LOG_ERROR("NET", "net_send: Failed to allocate frame buffer");
         return -1;
     }
-    LOG_INFO_FMT("NET", "net_send: Frame buffer allocated at %p", frame);
+    LOG_DEBUG_FMT("NET", "net_send: Frame buffer allocated at %p", frame);
 
     /* Fill Ethernet header. The header structure is:
      *   - dest[6]: Destination MAC address
@@ -194,13 +195,13 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
     memcpy(eth->dest, dest_mac, 6);
     memcpy(eth->src, dev->mac, 6);
     eth->type = htons(ethertype);
-    LOG_INFO_FMT("NET", "net_send: Ethernet header filled, copying %d bytes of payload", (int)len);
+    LOG_DEBUG_FMT("NET", "net_send: Ethernet header filled, copying %d bytes of payload", (int)len);
 
     /* Copy payload after Ethernet header. Protocols (IP, ARP) place their
      * packets here. The driver will transmit the entire frame including header.
      */
     memcpy(frame + sizeof(struct eth_header), payload, len);
-    LOG_INFO("NET", "net_send: Payload copied, calling dev->send");
+    LOG_DEBUG("NET", "net_send: Payload copied, calling dev->send");
     
     /* Verify frame length is reasonable before passing to driver.
      * This sanity check prevents buffer overflows if len was corrupted.
@@ -219,14 +220,14 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
      * The frame must be fully transmitted or queued before this returns.
      */
     int ret = dev->send(dev, frame, frame_len);
-    LOG_INFO_FMT("NET", "net_send: dev->send returned %d, freeing frame buffer", ret);
+    LOG_DEBUG_FMT("NET", "net_send: dev->send returned %d, freeing frame buffer", ret);
 
     /* Free frame buffer. The driver must have copied/DMA'd the frame by now.
      * If the driver needs to keep the frame (e.g., for retransmission), it
      * must allocate its own buffer and copy the data.
      */
     kfree(frame);
-    LOG_INFO("NET", "net_send: Frame buffer freed, returning");
+    LOG_DEBUG("NET", "net_send: Frame buffer freed, returning");
     return ret;
 }
 
@@ -549,6 +550,7 @@ struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto)
  *   2. ARP protocol: Must initialize before IP (IP needs ARP for MAC resolution)
  *   3. IP protocol: Must initialize before ICMP (ICMP is carried over IP)
  *   4. ICMP protocol: Depends on IP for packet delivery
+ *   5. DNS defaults: must be available even if DHCP is deferred
  *
  * If any step fails, the function returns an error and the stack is considered
  * uninitialized. Subsequent network operations may fail or panic.
@@ -603,7 +605,7 @@ int init_net_stack(void)
         LOG_ERROR("NET", "Failed to initialize UDP protocol");
         return -1;
     }
-    
+
     if (dns_init() != 0)
     {
         LOG_ERROR("NET", "Failed to initialize DNS client");
@@ -611,6 +613,21 @@ int init_net_stack(void)
     }
     
     LOG_INFO("NET", "Network stack initialized successfully");
+    return 0;
+}
+
+int net_stack_post_irq_init(void)
+{
+    /*
+     * DHCP waits rely on uptime progression. Run this only after clock/IRQ
+     * plumbing is active (kmain calls us right after global sti).
+     */
+    if (dhcp_init() != 0)
+    {
+        LOG_WARNING("NET", "DHCP post-IRQ init failed, keeping static network configuration");
+        return -1;
+    }
+
     return 0;
 }
 

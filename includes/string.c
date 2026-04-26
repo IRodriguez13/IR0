@@ -656,6 +656,29 @@ static int int_to_string(int value, char *str, int base)
     return i;
 }
 
+static int pointer_to_string(uintptr_t value, char *str)
+{
+    const char *hex = "0123456789abcdef";
+    int pos = 0;
+    int started = 0;
+
+    str[pos++] = '0';
+    str[pos++] = 'x';
+
+    for (int nibble = (int)(sizeof(uintptr_t) * 2) - 1; nibble >= 0; nibble--)
+    {
+        uint8_t digit = (uint8_t)((value >> (nibble * 4)) & 0x0FULL);
+        if (digit != 0 || started || nibble == 0)
+        {
+            str[pos++] = hex[digit];
+            started = 1;
+        }
+    }
+
+    str[pos] = '\0';
+    return pos;
+}
+
 int snprintf(char *str, size_t size, const char *format, ...)
 {
     va_list args;
@@ -754,6 +777,23 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
                 }
                 if (len > (int)remaining) len = (int)remaining;
                 memcpy(ptr, num_str, len);
+                ptr += len;
+                remaining -= len;
+                break;
+            }
+            case 'p':
+            {
+                uintptr_t value = (uintptr_t)va_arg(ap, void *);
+                char ptr_str[2 + (sizeof(uintptr_t) * 2) + 1];
+                int len = pointer_to_string(value, ptr_str);
+                while (width > len && remaining > 0)
+                {
+                    *ptr++ = pad;
+                    remaining--;
+                    width--;
+                }
+                if (len > (int)remaining) len = (int)remaining;
+                memcpy(ptr, ptr_str, len);
                 ptr += len;
                 remaining -= len;
                 break;

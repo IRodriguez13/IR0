@@ -51,6 +51,7 @@ struct vfs_fstype {
     const char *name;
     struct vfs_ops *ops;
     int (*mount)(const char *dev, const char *dir);
+    int (*umount)(const char *dir);
     struct vfs_fstype *next;
 };
 
@@ -87,6 +88,7 @@ struct vfs_dirent {
 int vfs_init(void);
 int vfs_register_fs(struct vfs_fstype *fs);
 int vfs_mount(const char *dev, const char *path, const char *fstype);
+int vfs_umount(const char *path);
 int vfs_init_with_minix(void);
 int vfs_init_root(void);
 

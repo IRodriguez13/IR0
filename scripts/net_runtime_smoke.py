@@ -27,6 +27,12 @@ def config_enabled(symbol: str) -> bool:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="IR0 runtime network smoke check")
     parser.add_argument("--timeout-sec", type=int, default=25, help="QEMU timeout in seconds")
+    parser.add_argument("--min-dhcp-events", type=int, default=0,
+                        help="Minimum DHCP progress markers required")
+    parser.add_argument("--max-tx-recoveries", type=int, default=6,
+                        help="Maximum accepted RTL8139 TX recovery warnings")
+    parser.add_argument("--require-dns-init", action="store_true",
+                        help="Fail when DNS init marker is missing")
     return parser.parse_args()
 
 
@@ -96,8 +102,42 @@ def main() -> int:
             print(f"  - {pat}")
         return 1
 
-    if re.search(r"panic|kernel panic", output, flags=re.IGNORECASE):
-        print("[RUNTIME-NET] panic detected during runtime smoke")
+    dhcp_markers = [
+        r"DHCP handshake completed successfully",
+        r"DHCP unavailable, keeping static IPv4 configuration",
+        r"No network device available, skipping DHCP",
+    ]
+    dhcp_events = sum(len(re.findall(pat, output)) for pat in dhcp_markers)
+    if dhcp_events < args.min_dhcp_events:
+        print(f"[RUNTIME-NET] DHCP markers too low: {dhcp_events} < {args.min_dhcp_events}")
+        return 1
+
+    if args.require_dns_init and not re.search(r"Initialized DNS client", output):
+        print("[RUNTIME-NET] missing DNS initialization marker")
+        return 1
+
+    tx_recoveries = len(re.findall(r"TX path recovered", output))
+    if tx_recoveries > args.max_tx_recoveries:
+        print(f"[RUNTIME-NET] excessive TX recoveries: {tx_recoveries} > {args.max_tx_recoveries}")
+        return 1
+
+    hard_fail_patterns = [
+        r"net_send: dev->send returned -1",
+        r"Failed to send IP packet",
+        r"RX read_offset out of bounds",
+        r"panic|kernel panic",
+    ]
+    hard_fails = [pat for pat in hard_fail_patterns if re.search(pat, output, flags=re.IGNORECASE)]
+    if hard_fails:
+        print("[RUNTIME-NET] failure markers detected:")
+        for pat in hard_fails:
+            print(f"  - {pat}")
+        return 1
+
+    icmp_sent = len(re.findall(r"Sending Echo Request", output))
+    icmp_replied = len(re.findall(r"Echo Reply received", output))
+    if icmp_sent > 0 and icmp_replied == 0:
+        print("[RUNTIME-NET] ICMP traffic seen without replies")
         return 1
 
     print("[RUNTIME-NET] runtime smoke passed")

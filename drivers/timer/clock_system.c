@@ -16,6 +16,7 @@
 #include <ir0/vga.h>
 #include <ir0/types.h>
 #include <ir0/kmem.h>
+#include <arch/common/arch_portable.h>
 #include <kernel/scheduler_api.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"
@@ -184,7 +185,7 @@ int clock_sleep_ticks(uint32_t ticks)
     while ((clock_state.tick_count - start_ticks) < ticks) 
     {
         /* Wait for ticks to increment */
-        __asm__ volatile("hlt");
+        arch_cpu_idle();
     }
     return 0;
 }

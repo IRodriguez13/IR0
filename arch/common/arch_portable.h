@@ -75,6 +75,11 @@ size_t arch_get_page_size(void);
 void arch_interrupt_init(void);
 
 /**
+ * Compatibility alias for architecture IRQ initialization.
+ */
+void arch_irq_init(void);
+
+/**
  * Enable interrupts globally
  */
 void arch_enable_interrupts(void);
@@ -134,6 +139,11 @@ void arch_io_write32(arch_addr_t addr, uint32_t value);
  * Halt the CPU (low power mode)
  */
 void arch_cpu_halt(void);
+
+/**
+ * Enter architecture-specific idle wait instruction.
+ */
+void arch_cpu_idle(void);
 
 /**
  * Get CPU ID (APIC ID)
@@ -199,6 +209,11 @@ uint32_t arch_get_cpu_mode(void);
 void arch_timer_init(void);
 
 /**
+ * Initialize architecture-specific syscall entry plumbing.
+ */
+void arch_syscall_init(void);
+
+/**
  * Get current timer value
  */
 uint64_t arch_timer_read(void);
@@ -254,6 +269,11 @@ void arch_late_init(void);
  * Get boot parameters
  */
 void *arch_get_boot_params(void);
+
+/**
+ * Set boot parameters from architecture-specific entry code.
+ */
+void arch_set_boot_params(void *params);
 
 /**
  * Get command line arguments
