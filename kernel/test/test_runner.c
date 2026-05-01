@@ -19,7 +19,7 @@
  */
 
 #include "test/ktest_harness.h"
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include "process.h"
 #include <stddef.h>
 

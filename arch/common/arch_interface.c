@@ -15,7 +15,11 @@
 #include <arch/common/arch_portable.h>
 #include <ir0/oops.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
+#if defined(__x86_64__) || defined(__amd64__)
+#include <interrupt/arch/idt.h>
+#endif
 
 static void *g_arch_boot_params = NULL;
 
@@ -475,7 +479,15 @@ void arch_irq_init(void)
 
 void arch_syscall_init(void)
 {
-    /* x86 syscall entry is initialized via IDT setup; ARM64 wiring is incremental. */
+#if defined(__x86_64__) || defined(__amd64__)
+    /*
+     * IDT gate 0x80: int $0x80 → syscall_entry_asm (ring-3 reachable, DPL=3).
+     * Portable syscall logic lives in kernel/syscalls.c; ISA wiring stays here only.
+     */
+    extern void syscall_entry_asm(void);
+
+    idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE, 0);
+#endif
 }
 
 // ===============================================================================

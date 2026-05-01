@@ -18,8 +18,8 @@
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/errno.h>
-#include <drivers/serial/serial.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/serial_io.h>
+#include <ir0/clock.h>
 #include <string.h>
 
 /* IP Configuration (default values) */

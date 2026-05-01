@@ -27,7 +27,7 @@
 
 #include "allocator.h"
 #include <ir0/kmem.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <ir0/oops.h>
 #include <config.h>
 
@@ -74,14 +74,25 @@ static inline block_header_t *get_prev_block(block_header_t *current)
 {
 	/* Check if we're at the start of heap */
 	if ((void *)current <= allocator.heap_start)
-		return NULL;
+
+	#if DEBUG_MEMORY_ALLOCATOR
+		serial_print("[ALLOC] We're not in heap start");
+	#endif
+
+	return NULL;
 
 	/* Get footer of previous block (just before current header) */
 	block_footer_t *prev_footer = (block_footer_t *)((char *)current - sizeof(block_footer_t));
 
 	/* Validate that prev_footer is within heap bounds */
 	if ((void *)prev_footer < allocator.heap_start)
+
+	#if DEBUG_MEMORY_ALLOCATOR
+		serial_print("[ALLOC] We're not in heap boundaries");
+	#endif
+
 		return NULL;
+
 
 	return get_header_from_footer(prev_footer);
 }
@@ -363,7 +374,7 @@ void alloc_free(void *ptr)
 	block_header_t *block = (block_header_t *)((char *)ptr - sizeof(block_header_t));
 
 	/* Validate block is within heap bounds */
-	if ((void *)block < allocator.heap_start || (void *)block >= allocator.heap_end) 
+	if ((void *)block < allocator.heap_start || (void *)block >= allocator.heap_end)
     {
 		serial_print("[ALLOC] BUG: Out of bounds allocation!!");
 		panicex("Out of bounds allocation", 0, __FILE__, __LINE__, "alloc_free()");
@@ -371,10 +382,10 @@ void alloc_free(void *ptr)
 	}
 
 	/* Detect double-free: block is already on the free list */
-	if (block->is_free) 
+	if (block->is_free)
     {
 		serial_print("[ALLOC] BUG: double-free detected\n");
-		panic("Double free!!! :(");
+		panicex("double-free detected", 0, __FILE__, __LINE__, "alloc_free()");
 		return;
 	}
 

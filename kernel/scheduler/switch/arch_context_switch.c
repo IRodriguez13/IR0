@@ -8,10 +8,18 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: arch_context_switch.c
- * Description: Architecture-dispatched context switch wrappers.
+ * Description: Architecture-dispatched context switch wrappers (ISA stubs are private).
  */
 
-#include <ir0/context.h>
+#include <kernel/scheduler/task.h>
+
+#if defined(ARCH_ARM64)
+extern void switch_context_arm64(task_t *prev, task_t *next);
+#else
+extern void switch_context_x64(task_t *prev, task_t *next);
+#endif
+
+extern uint64_t get_current_page_directory(void);
 
 void arch_context_switch(task_t *prev, task_t *next)
 {

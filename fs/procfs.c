@@ -34,7 +34,7 @@
 #include <ir0/version.h>
 #include <ir0/serial_io.h>
 #include <ir0/clock.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 #include <ir0/partition.h>
 #include <ir0/block_dev.h>
 #include <fs/vfs.h>
@@ -716,21 +716,22 @@ int proc_blockdevices_read(char *buf, size_t count)
         if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
         int part_count = get_partition_count(i);
-        for (int part_num = 0; part_num < part_count && off < count; part_num++)
+        for (int part_idx = 0; part_idx < part_count && off < count; part_idx++)
         {
             partition_info_t part_info;
-            if (get_partition_info(i, part_num, &part_info) != 0)
+            if (partition_nth_on_disk(i, (unsigned)part_idx, &part_info) != 0)
                 continue;
             char part_name[12];
             char part_size_human[16];
             int psh_len;
             proc_format_size(part_info.total_sectors, part_size_human, sizeof(part_size_human), &psh_len);
-            snprintf(part_name, sizeof(part_name), "hd%c%d", 'a' + (int)i, part_num + 1);
+            snprintf(part_name, sizeof(part_name), "hd%c%d", 'a' + (int)i,
+                     (int)part_info.partition_number + 1);
             char part_sectors_str[24];
             proc_u64_to_dec(part_info.total_sectors, part_sectors_str, sizeof(part_sectors_str));
             n = snprintf(buf + off, (off < count) ? (count - off) : 0,
                          "part\t%s\t%u\t%u\t%s\t%s\t-\t-\n",
-                         part_name, (unsigned)i, (unsigned)(part_num + 1),
+                         part_name, (unsigned)i, (unsigned)(part_info.partition_number + 1),
                          part_sectors_str, part_size_human);
             if (n < 0) break;
             if (n >= (int)(count - off)) n = (int)(count - off) - 1;
@@ -798,18 +799,19 @@ int proc_partitions_read(char *buf, size_t count)
         if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
         int part_count = get_partition_count(disk_id);
-        for (int part_num = 0; part_num < part_count; part_num++)
+        for (int part_idx = 0; part_idx < part_count; part_idx++)
         {
             partition_info_t part_info;
-            if (get_partition_info(disk_id, part_num, &part_info) != 0)
+            if (partition_nth_on_disk(disk_id, (unsigned)part_idx, &part_info) != 0)
                 continue;
             uint64_t part_blocks_1k = part_info.total_sectors / 2;
-            snprintf(name_buf, sizeof(name_buf), "hd%c%d", 'a' + disk_id, part_num + 1);
+            snprintf(name_buf, sizeof(name_buf), "hd%c%d", 'a' + disk_id,
+                     (int)part_info.partition_number + 1);
             char part_blocks_str[24];
             proc_u64_to_dec(part_blocks_1k, part_blocks_str, sizeof(part_blocks_str));
             n = snprintf(buf + off, (off < count) ? (count - off) : 0,
                          "%u\t%u\t%s\t%s\n",
-                         (unsigned)disk_id, (unsigned)(part_num + 1),
+                         (unsigned)disk_id, (unsigned)(part_info.partition_number + 1),
                          part_blocks_str, name_buf);
             if (n < 0) break;
             if (n >= (int)(count - off)) n = (int)(count - off) - 1;

@@ -40,7 +40,10 @@ Esta alineado con el Makefile y menuconfig actuales.
 - `make build-matrix-full`: matriz extendida con guards.
 - `make runtime-net-check`: smoke runtime en QEMU para red.
 - `make scale-readiness-gate`: gate de estabilizacion.
-- `make arch-guard`: checks de limites arquitectonicos.
+- `make arch-guard`: comprobaciones de frontera (incluye `fs/` sin `<arch/` directo ni
+  `interrupt/arch` en árboles portables; véase `scripts/architecture_guard.py`).
+- `python3 scripts/kernel_export_digest.py kernel-x64.bin`: SHA-256 de símbolos globales ordenados (`nm`),
+  comparable entre builds con la misma cadena de herramientas (`Documentation/DECOUPLING.md`).
 
 ## Test Harness de Host
 

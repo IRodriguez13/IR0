@@ -20,7 +20,7 @@
 #ifndef _KERNEL_KTEST_HARNESS_H
 #define _KERNEL_KTEST_HARNESS_H
 
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <stdint.h>
 
 extern int _ktest_failed;
