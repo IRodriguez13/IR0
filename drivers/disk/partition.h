@@ -90,4 +90,11 @@ const char* get_partition_type(uint8_t system_id);
 int get_partition_count(uint8_t disk_id);
 int get_partition_info(uint8_t disk_id, uint8_t partition_num, partition_info_t *info);
 
+/*
+ * nth partition on disk in table order (0 .. get_partition_count-1).
+ * Unlike get_partition_info(disk_id, partition_num, ...), ordinal follows
+ * natural iteration over discovered partitions rather than stable table keys.
+ */
+int partition_nth_on_disk(uint8_t disk_id, unsigned ordinal, partition_info_t *info);
+
 #endif

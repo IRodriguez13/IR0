@@ -11,6 +11,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 ## Mapa de Archivos
 
 - `README.md`
+- `DECOUPLING.md`
 - `TOOLING.md`
 - `FILESYSTEM.md`
 - `VIRTUAL_FILESYSTEMS.md`

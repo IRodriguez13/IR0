@@ -8,16 +8,9 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: process.c
- * Description: IR0 kernel source/header file
+ * Description: IR0 kernel Process lifecycle management, fork, exit, wait
  */
 
-/* SPDX-License-Identifier: GPL-3.0-only */
-/*
- * IR0 Kernel - Process Management
- * Copyright (C) 2025 Iván Rodriguez
- *
- * Process lifecycle management, fork, exit, wait
- */
 
 #include "process.h"
 #include <config.h>
@@ -26,7 +19,7 @@
 #include <ir0/pipe.h>
 #include <mm/paging.h>
 #include <fs/vfs.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <ir0/video_backend.h>
 #include <ir0/permissions.h>
 #include <ir0/signals.h>

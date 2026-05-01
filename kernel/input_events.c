@@ -18,7 +18,7 @@
 #include <stddef.h>
 #include <ir0/input.h>
 #include <ir0/time.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/clock.h>
 #include <string.h>
 #include <arch/common/arch_portable.h>
 

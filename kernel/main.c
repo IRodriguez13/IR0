@@ -1,16 +1,3 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: main.c
- * Description: IR0 kernel source/header file
- */
-
 // SPDX-License-Identifier: GPL-3.0-only
 /**
  * IR0 Kernel — Core system software
@@ -22,26 +9,28 @@
  *
  * File: main.c
  * Description: Kernel initialization and user-space transition routines
- */
+*
+*    00000000: 01010011 01101001 01100011 00100000 01110000 01100001  
+*    00000006: 01110010 01110110 01101001 01110011 00100000 01101101  
+*    0000000c: 01100001 01100111 01101110 01100001                    
+* 
+*/
 
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <ir0/logging.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <init.h>
 #include <arch/common/arch_portable.h>
-#if defined(ARCH_X86_64) || defined(ARCH_X86)
-#include <arch/x86-64/sources/user_mode.h>
-#endif
 #include <config.h>
 #include <ir0/version.h>
 #include <ir0/driver.h>
 #include <kernel/elf_loader.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/clock.h>
 #include <drivers/init_drv.h>
 #include <drivers/storage/block_dev.h>
 #include <ir0/video_backend.h>
