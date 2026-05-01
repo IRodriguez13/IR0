@@ -25,8 +25,8 @@
 #include "ip.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
-#include <drivers/serial/serial.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/serial_io.h>
+#include <ir0/clock.h>
 #include <arch/common/arch_portable.h>
 #include <stdbool.h>
 #include <string.h>

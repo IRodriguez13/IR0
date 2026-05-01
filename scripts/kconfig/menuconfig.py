@@ -23,10 +23,10 @@ ARCH_SYMBOLS = ("ARCH_X86_64", "ARCH_ARM64")
 I18N = {
     "en": {
         "title": " IR0 Kernel Configuration ",
-        "footer": " [Space] Toggle  [Enter] Edit  [S] Save  [D] Defaults  [G] Generic  [T] Tiny  [L] Language  [?] Help  [Q] Quit ",
+        "footer": " Space toggle  Enter edit  S save  D defaults  G/T/I/C presets  ' or H presets  ? symbol  L lang  Q quit ",
         "modified": " [MODIFIED] ",
-        "help_title": " Help ",
-        "symbol": "Symbol",
+        "help_title": " Symbol ",
+        "preset_help_title": " Build presets ",
         "type": "Type",
         "default": "Default",
         "depends": "Depends on",
@@ -34,15 +34,18 @@ I18N = {
         "saved": "Configuration saved to .config",
         "preset_generic": "Applied preset: generic",
         "preset_tiny": "Applied preset: tiny",
+        "preset_iot": "Applied preset: IoT / router scaffold",
+        "preset_custom": "Applied preset: defaults (customize freely)",
         "save_before_exit": "Save before exit?",
         "lang_switched": "UI language switched to English",
+        "symbol": "Symbol",
     },
     "es": {
         "title": " Configuracion del Kernel IR0 ",
-        "footer": " [Espacio] Toggle  [Enter] Editar  [S] Guardar  [D] Defecto  [G] Generic  [T] Tiny  [L] Idioma  [?] Ayuda  [Q] Salir ",
+        "footer": " Espacio toggle  Enter editar  S guardar  D defecto  G/T/I/C presets  ' o H presets  ? simbolo  L idioma  Q salir ",
         "modified": " [MODIFICADO] ",
-        "help_title": " Ayuda ",
-        "symbol": "Simbolo",
+        "help_title": " Opcion ",
+        "preset_help_title": " Perfiles de compilacion ",
         "type": "Tipo",
         "default": "Valor por defecto",
         "depends": "Depende de",
@@ -50,9 +53,31 @@ I18N = {
         "saved": "Configuracion guardada en .config",
         "preset_generic": "Preset aplicado: generic",
         "preset_tiny": "Preset aplicado: tiny",
+        "preset_iot": "Preset aplicado: IoT/router (ARM64 scaffold)",
+        "preset_custom": "Preset aplicado: valores por defecto (editar)",
         "save_before_exit": "Guardar antes de salir?",
         "lang_switched": "Idioma de interfaz cambiado a Espanol",
+        "symbol": "Simbolo",
     },
+}
+
+PRESET_HELP_TEXT = {
+    "en": (
+        "Generic — full QEMU/PC profile (IPv4 stack, ATA, TMPFS/minix).\n"
+        "Tiny — minimal footprint: ATA + filesystem bins, networking & BT off.\n"
+        "IoT / router — AArch64 scaffolding + IPv4/BT/USB-friendly defaults, PC VGA/SB16 off.\n"
+        "Custom — every visible symbol reset to effective Kconfig default; edit manually.\n"
+        "Unset .config lines often behave like implicit 'y'; add explicit '=n' to carve features out.\n"
+        "Makefile must honor CONFIG_* for true compile-outs; run `make kernel-x64.bin` + guards after changes.\n"
+    ),
+    "es": (
+        "Generic — perfil PC/QEMU completo (IPv4, ATA, TMPFS/minix).\n"
+        "Tiny — mínimo: ATA + binarios de filesystem, sin red ni bluetooth.\n"
+        "IoT / router — armado AArch64 + IPv4/bluetooth enfocado en embebido; sin video/audio legacy.\n"
+        "Custom — cada símbolo vuelve al default efectivo para editarlo a mano.\n"
+        "Sin entrada en .config muchas opciones equivalen a 'y'; usa '=n' explícito para desactivar.\n"
+        "El Makefile debe respetar CONFIG_* para compilar/descompilar subsistemas; valida build tras cambios.\n"
+    ),
 }
 
 
@@ -363,10 +388,18 @@ def set_symbol_value(symbols, assignment):
 
 def apply_preset(symbols, preset):
     """Apply a predefined config profile."""
+    preset_key = preset.strip().lower()
+
+    if preset_key == "custom":
+        for sym in symbols:
+            sym.value = sym.effective_default()
+        enforce_dependencies(symbols)
+        return
+
     values = {}
     for sym in symbols:
         sym.value = sym.effective_default()
-    if preset == "generic":
+    if preset_key == "generic":
         values = {
             "KERNEL_DEBUG_SHELL": "y",
             "ARCH_X86_64": "y",
@@ -411,7 +444,7 @@ def apply_preset(symbols, preset):
             "TOOL_AUTO_RUN_DEPTEST": "n",
             "TOOL_MENUCONFIG_LANG": "en",
         }
-    elif preset == "tiny":
+    elif preset_key == "tiny":
         values = {
             "KERNEL_DEBUG_SHELL": "y",
             "ARCH_X86_64": "y",
@@ -453,6 +486,48 @@ def apply_preset(symbols, preset):
             "INIT_BLUETOOTH_DRIVER": "n",
             "TOOL_MENUCONFIG_LANG": "en",
         }
+    elif preset_key == "iot":
+        values = {
+            "KERNEL_DEBUG_SHELL": "y",
+            "ARCH_X86_64": "n",
+            "ARCH_ARM64": "y",
+            "TICK_RATE_HZ": "500",
+            "SCHEDULER_POLICY": "0",
+            "ROOT_BLOCK_DEVICE": "hda",
+            "ROOT_FILESYSTEM": "tmpfs",
+            "ENABLE_SMP": "n",
+            "DEBUG_BINS_GROUP_CORE": "y",
+            "DEBUG_BINS_GROUP_FS": "y",
+            "DEBUG_BINS_GROUP_TEXT": "y",
+            "DEBUG_BINS_GROUP_IDENTITY": "y",
+            "DEBUG_BINS_GROUP_DIAG": "y",
+            "DEBUG_BINS_GROUP_NET": "y",
+            "DEBUG_BINS_GROUP_BT": "y",
+            "ENABLE_NETWORKING": "y",
+            "DRV_NIC_RTL8139": "n",
+            "DRV_NIC_E1000": "n",
+            "ENABLE_SOUND": "n",
+            "ENABLE_BLUETOOTH": "y",
+            "ENABLE_MOUSE": "n",
+            "ENABLE_STORAGE_ATA": "y",
+            "ENABLE_STORAGE_ATA_BLOCK": "y",
+            "ENABLE_FS_MINIX": "y",
+            "ENABLE_FS_TMPFS": "y",
+            "ENABLE_FS_SIMPLEFS": "y",
+            "ENABLE_FS_FAT16": "n",
+            "ENABLE_PC_SPEAKER": "n",
+            "ENABLE_VBE": "n",
+            "ENABLE_EXAMPLE_DRIVERS": "n",
+            "INIT_PS2_CONTROLLER": "y",
+            "INIT_PC_SPEAKER": "n",
+            "INIT_STORAGE_ATA": "y",
+            "INIT_STORAGE_ATA_BLOCK": "y",
+            "INIT_SOUND_DRIVERS": "n",
+            "INIT_MOUSE_DRIVER": "n",
+            "INIT_NETWORK_STACK": "y",
+            "INIT_BLUETOOTH_DRIVER": "y",
+            "TOOL_MENUCONFIG_LANG": "en",
+        }
     for sym in symbols:
         if sym.name in values:
             sym.value = values[sym.name]
@@ -476,8 +551,9 @@ def run_menu(stdscr, symbols):
     cursor = 0
     scroll = 0
     show_help = False
-    dirty = False
+    show_preset_help = False
     ui_lang = get_ui_lang(symbols)
+    dirty = False
 
     while True:
         visible = [s for s in symbols if dep_satisfied(symbols, s)]
@@ -586,12 +662,33 @@ def run_menu(stdscr, symbols):
             except curses.error:
                 pass
 
+        if show_preset_help:
+            ph = PRESET_HELP_TEXT.get(ui_lang, PRESET_HELP_TEXT["en"])
+            help_lines = ph.strip().split("\n")
+            box_w = min(72, w - 4)
+            box_h = min(len(help_lines) + 2, h - 4)
+            box_y = max(1, (h - box_h) // 2)
+            box_x = max(1, (w - box_w) // 2)
+            try:
+                win = curses.newwin(box_h, box_w, box_y, box_x)
+                win.box()
+                win.addstr(0, 2, tr(ui_lang, "preset_help_title"))
+                for i, hl in enumerate(help_lines[: box_h - 2]):
+                    win.addstr(i + 1, 1, hl[: box_w - 3])
+                win.refresh()
+            except curses.error:
+                pass
+
         stdscr.refresh()
 
         key = stdscr.getch()
 
         if show_help:
             show_help = False
+            continue
+
+        if show_preset_help:
+            show_preset_help = False
             continue
 
         if key == curses.KEY_UP or key == ord('k'):
@@ -632,8 +729,10 @@ def run_menu(stdscr, symbols):
                     if val is not None:
                         sym.value = val
                         dirty = True
-        elif key == ord('?') or key == ord('h'):
+        elif key == ord('?'):
             show_help = True
+        elif key in (ord("'"), ord("H"), ord("h")):
+            show_preset_help = True
         elif key == ord('s') or key == ord('S'):
             save_config(symbols)
             dirty = False
@@ -652,6 +751,16 @@ def run_menu(stdscr, symbols):
             ui_lang = get_ui_lang(symbols)
             dirty = True
             flash_msg(stdscr, tr(ui_lang, "preset_tiny"), h, w)
+        elif key == ord('i') or key == ord('I'):
+            apply_preset(symbols, "iot")
+            ui_lang = get_ui_lang(symbols)
+            dirty = True
+            flash_msg(stdscr, tr(ui_lang, "preset_iot"), h, w)
+        elif key == ord('c') or key == ord('C'):
+            apply_preset(symbols, "custom")
+            ui_lang = get_ui_lang(symbols)
+            dirty = True
+            flash_msg(stdscr, tr(ui_lang, "preset_custom"), h, w)
         elif key == ord('l') or key == ord('L'):
             ui_lang = "es" if ui_lang == "en" else "en"
             set_ui_lang(symbols, ui_lang)
@@ -741,7 +850,7 @@ def main():
 
     if len(args) > 1 and args[0] == "--preset":
         preset_name = args[1].strip().lower()
-        if preset_name not in ("generic", "tiny"):
+        if preset_name not in ("generic", "tiny", "iot", "custom"):
             print(f"Unknown preset: {preset_name}", file=sys.stderr)
             sys.exit(2)
         apply_preset(symbols, preset_name)

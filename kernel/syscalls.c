@@ -1,16 +1,3 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: syscalls.c
- * Description: IR0 kernel source/header file
- */
-
 // SPDX-License-Identifier: GPL-3.0-only
 /**
  * IR0 Kernel — Core system software
@@ -64,7 +51,6 @@
 #include <ir0/pipe.h>
 #include <ir0/poll.h>
 #include <ir0/time.h>
-#include <interrupt/arch/idt.h>
 #include <ir0/video_backend.h>
 #include <ir0/rtc.h>
 
@@ -2977,11 +2963,6 @@ void syscalls_init(void)
   serial_print("SERIAL: Real process_list = ");
   serial_print_hex32((uint32_t)(uintptr_t)real_list);
   serial_print("\n");
-
-  /* Register syscall interrupt handler */
-  /* IDT entry 0x80 for syscalls (DPL=3 for user mode) */
-  extern void syscall_entry_asm(void);  /* Assembly function (from asm), must remain extern */
-  idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE, 0);
 }
 
 /* Stub for unimplemented syscalls (musl ABI compatibility) */

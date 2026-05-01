@@ -39,7 +39,7 @@
 #include <ir0/net.h>
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <string.h>
 
 /* Global device and protocol lists. These linked lists maintain all registered

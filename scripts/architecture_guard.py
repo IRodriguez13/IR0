@@ -5,6 +5,9 @@ IR0 architecture guardrails.
 Checks:
 1) No direct <drivers/...> includes inside fs/* and kernel/syscalls.c.
 2) Required facade headers for subsystem decoupling exist.
+3) Portable trees (fs/kernel/mm/net) must not include interrupt controller headers
+   (#include <interrupt/arch/...>);
+4) Files under fs/ must not use #include <arch/...>; use includes/ir0/* facades instead.
 """
 
 from pathlib import Path
@@ -24,6 +27,7 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "driver_bootstrap.h",
     ROOT / "includes" / "ir0" / "block_dev.h",
     ROOT / "includes" / "ir0" / "partition.h",
+    ROOT / "includes" / "ir0" / "arch_port.h",
     ROOT / "includes" / "ir0" / "clock.h",
     ROOT / "includes" / "ir0" / "rtc.h",
     ROOT / "includes" / "ir0" / "serial_io.h",
@@ -44,6 +48,19 @@ REQUIRED_ARM64_SCAFFOLD = [
 ]
 
 DRIVER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]drivers/')
+
+# interrupt/* is for hardware backends; portable code uses arch_portable/facades.
+INTERRUPT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]interrupt/arch/')
+
+# fs/ pseudo-VFS layers must route CPU/HW probes through ir0/*.h wrappers.
+FS_DIRECT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]arch/')
+
+PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
+    ROOT / "fs",
+    ROOT / "kernel",
+    ROOT / "mm",
+    ROOT / "net",
+]
 
 
 def iter_c_files(base: Path):
@@ -89,11 +106,47 @@ def check_arm64_scaffold():
     return errors
 
 
+def check_interrupt_arch_portable():
+    errors = []
+    for base in PORTABLE_DIRS_NO_INTERRUPT_ARCH:
+        for fpath in iter_c_files(base):
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, start=1):
+                if INTERRUPT_ARCH_INCLUDE_RE.search(line):
+                    rel = fpath.relative_to(ROOT)
+                    errors.append(
+                        f"[portable-no-interrupt-arch] {rel}:{idx}: {line.strip()}"
+                    )
+    return errors
+
+
+def check_fs_no_direct_arch():
+    errors = []
+    base = ROOT / "fs"
+    for fpath in iter_c_files(base):
+        try:
+            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception as exc:
+            errors.append(f"[read-error] {fpath}: {exc}")
+            continue
+        for idx, line in enumerate(lines, start=1):
+            if FS_DIRECT_ARCH_INCLUDE_RE.search(line):
+                rel = fpath.relative_to(ROOT)
+                errors.append(f"[fs-no-direct-arch] {rel}:{idx}: {line.strip()}")
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
     errors.extend(check_facades())
     errors.extend(check_arm64_scaffold())
+    errors.extend(check_interrupt_arch_portable())
+    errors.extend(check_fs_no_direct_arch())
 
     if errors:
         print("[arch-guard] FAILED")

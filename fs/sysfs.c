@@ -404,8 +404,11 @@ static int sys_devices_block_read(char *buf, size_t count)
         int part_count = get_partition_count(i);
         for (int p = 0; p < part_count && off < count; p++)
         {
+            partition_info_t pinfo;
+            if (partition_nth_on_disk(i, (unsigned)p, &pinfo) != 0)
+                continue;
             n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "hd%c%d\n", 'a' + (int)i, p + 1);
+                         "hd%c%d\n", 'a' + (int)i, (int)pinfo.partition_number + 1);
             if (n <= 0 || n >= (int)(count - off))
                 break;
             off += (size_t)n;

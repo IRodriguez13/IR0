@@ -23,7 +23,7 @@
 
 #include "pmm.h"
 #include <ir0/kmem.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <config.h>
 #include <stdint.h>
 

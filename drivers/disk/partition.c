@@ -363,7 +363,7 @@ int get_partition_info(uint8_t disk_id, uint8_t partition_num, partition_info_t 
      */
     for (uint32_t i = 0; i < partition_count; i++)
     {
-        if (partitions[i].disk_id == disk_id && 
+        if (partitions[i].disk_id == disk_id &&
             partitions[i].partition_number == partition_num)
         {
             *info = partitions[i];
@@ -371,5 +371,26 @@ int get_partition_info(uint8_t disk_id, uint8_t partition_num, partition_info_t 
         }
     }
     
+    return -1;
+}
+
+int partition_nth_on_disk(uint8_t disk_id, unsigned ordinal, partition_info_t *info)
+{
+    if (!info || disk_id >= MAX_DISKS)
+    {
+        return -1;
+    }
+    unsigned seen = 0;
+    for (uint32_t i = 0; i < partition_count; i++)
+    {
+        if (partitions[i].disk_id != disk_id)
+            continue;
+        if (seen == ordinal)
+        {
+            *info = partitions[i];
+            return 0;
+        }
+        seen++;
+    }
     return -1;
 }

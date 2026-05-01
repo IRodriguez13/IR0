@@ -55,8 +55,8 @@ static pid_t devfs_current_pid(void)
     return current_process->task.pid;
 }
 
-/* Device registry */
-#define MAX_DEV_NODES 64
+/* Device registry — room for builtins + dense disk/part topology */
+#define MAX_DEV_NODES 224
 static devfs_node_t *dev_nodes[MAX_DEV_NODES];
 static int num_dev_nodes = 0;
 extern devfs_node_t dev_net;
@@ -96,31 +96,42 @@ int devfs_fd_can_read(uint32_t device_id, pid_t pid)
     return 1;
 }
 
-/*
- * Disk/partition device IDs: 20 = hda, 21 = hdb, 22 = hdc, 23 = hdd (whole disk);
- * 24 = hda1, 25 = hda2, ... 27 = hda4, 28 = hdb1, ... 39 = hdd4.
- */
 #define DEVFS_DISK_AGGREGATE_ID  9
-#define DEVFS_DISK_BASE_ID      20
-#define DEVFS_DISK_STRIDE       4
+#define DEVFS_DISK_BASE_ID       20
 
-static void devfs_decode_disk_device_id(uint32_t device_id, uint8_t *disk_id_out, uint8_t *part_out)
+typedef struct devfs_disk_ctx {
+    uint8_t disk_id;
+    uint8_t is_whole;
+    uint8_t partition_number;
+} devfs_disk_ctx_t;
+
+/*
+ * Resolve whole-disk vs partition extents for disk_ops (/dev/hd*).
+ */
+static int devfs_resolve_disk_geo(const devfs_entry_t *entry, uint8_t *disk_out,
+				  partition_info_t *part_out, int *whole_out)
 {
-    if (device_id < DEVFS_DISK_BASE_ID || device_id > DEVFS_DISK_BASE_ID + 19)
+    if (!entry || entry->device_id == DEVFS_DISK_AGGREGATE_ID)
+        return -ENODEV;
+
+    devfs_disk_ctx_t *cx = entry->driver_data;
+    if (!cx)
+        return -ENODEV;
+
+    *disk_out = cx->disk_id;
+
+    if (cx->is_whole)
     {
-        *disk_id_out = 0;
-        *part_out = 0;
-        return;
+        *whole_out = 1;
+        return 0;
     }
-    if (device_id < DEVFS_DISK_BASE_ID + 4)
-    {
-        *disk_id_out = (uint8_t)(device_id - DEVFS_DISK_BASE_ID);
-        *part_out = 0;
-        return;
-    }
-    uint32_t idx = device_id - DEVFS_DISK_BASE_ID - 4;
-    *disk_id_out = (uint8_t)(idx / 4);
-    *part_out = (uint8_t)(idx % 4 + 1);
+    if (!part_out || !whole_out)
+        return -EINVAL;
+
+    if (get_partition_info(cx->disk_id, cx->partition_number, part_out) != 0)
+        return -ENODEV;
+    *whole_out = 0;
+    return 0;
 }
 
 int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
@@ -1063,8 +1074,12 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         return -1;
     if (entry->device_id != DEVFS_DISK_AGGREGATE_ID)
     {
-        uint8_t disk_id, part;
-        devfs_decode_disk_device_id(entry->device_id, &disk_id, &part);
+        uint8_t disk_id;
+        partition_info_t pinfo;
+        int is_whole = 0;
+
+        if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
+            return -ENODEV;
         const char *disk_name = block_dev_legacy_name(disk_id);
         if (!disk_name || !block_dev_is_present(disk_name))
             return -ENODEV;
@@ -1075,16 +1090,13 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         if (num_sectors == 0)
             return 0;
         uint64_t start_lba = sector_off;
-        if (part != 0)
+        if (!is_whole)
         {
-            partition_info_t info;
-            if (get_partition_info(disk_id, (uint8_t)(part - 1), &info) != 0)
-                return -ENODEV;
-            if (sector_off >= info.total_sectors)
+            if (sector_off >= pinfo.total_sectors)
                 return 0;
-            start_lba = info.start_lba + sector_off;
-            if (num_sectors > info.total_sectors - sector_off)
-                num_sectors = (size_t)(info.total_sectors - sector_off);
+            start_lba = pinfo.start_lba + sector_off;
+            if (num_sectors > pinfo.total_sectors - sector_off)
+                num_sectors = (size_t)(pinfo.total_sectors - sector_off);
         }
         else
         {
@@ -1255,8 +1267,12 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
         return count;
     if (!buf)
         return -1;
-    uint8_t disk_id, part;
-    devfs_decode_disk_device_id(entry->device_id, &disk_id, &part);
+    uint8_t disk_id;
+    partition_info_t pinfo;
+    int is_whole = 0;
+
+    if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
+        return -ENODEV;
     const char *disk_name = block_dev_legacy_name(disk_id);
     if (!disk_name || !block_dev_is_present(disk_name))
         return -ENODEV;
@@ -1267,16 +1283,13 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
     if (num_sectors == 0)
         return 0;
     uint64_t start_lba = sector_off;
-    if (part != 0)
+    if (!is_whole)
     {
-        partition_info_t info;
-        if (get_partition_info(disk_id, (uint8_t)(part - 1), &info) != 0)
-            return -ENODEV;
-        if (sector_off >= info.total_sectors)
+        if (sector_off >= pinfo.total_sectors)
             return 0;
-        start_lba = info.start_lba + sector_off;
-        if (num_sectors > info.total_sectors - sector_off)
-            num_sectors = (size_t)(info.total_sectors - sector_off);
+        start_lba = pinfo.start_lba + sector_off;
+        if (num_sectors > pinfo.total_sectors - sector_off)
+            num_sectors = (size_t)(pinfo.total_sectors - sector_off);
     }
     else
     {
@@ -1304,25 +1317,29 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
 int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
     uint8_t disk_id = 0;
-    uint8_t part = 0;
+    partition_info_t pinfo;
+    memset(&pinfo, 0, sizeof(pinfo));
+
+    int is_whole = 0;
+
     uint64_t part_start_lba = 0;
     uint64_t part_sectors = 0;
-    if (entry->device_id >= DEVFS_DISK_BASE_ID && entry->device_id <= DEVFS_DISK_BASE_ID + 19)
+
+    int have_disk_ctx = (entry &&
+        entry->device_id != DEVFS_DISK_AGGREGATE_ID &&
+        entry->driver_data != NULL);
+
+    if (have_disk_ctx)
     {
-        devfs_decode_disk_device_id(entry->device_id, &disk_id, &part);
-        const char *disk_name = block_dev_legacy_name(disk_id);
-        if (!disk_name || !block_dev_is_present(disk_name))
-            return -ENODEV;
-        if (part != 0)
+        if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
+            have_disk_ctx = 0;
+        else if (!is_whole)
         {
-            partition_info_t info;
-            if (get_partition_info(disk_id, (uint8_t)(part - 1), &info) != 0)
-                return -ENODEV;
-            part_start_lba = info.start_lba;
-            part_sectors = info.total_sectors;
+            part_start_lba = pinfo.start_lba;
+            part_sectors = pinfo.total_sectors;
         }
     }
-    
+
     switch (request)
     {
         case DISK_READ_SECTOR:
@@ -1336,10 +1353,10 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 disk_sector_req_t *req = (disk_sector_req_t *)arg;
                 if (req && req->buffer)
                 {
-                    uint8_t d = (entry->device_id >= DEVFS_DISK_BASE_ID) ? disk_id : req->drive;
+                    uint8_t d = have_disk_ctx ? disk_id : req->drive;
                     const char *disk_name = block_dev_legacy_name(d);
                     uint32_t lba = (uint32_t)req->lba;
-                    if (part != 0)
+                    if (have_disk_ctx && !is_whole)
                         lba = (uint32_t)(part_start_lba + req->lba);
                     if (disk_name && block_dev_is_present(disk_name) &&
                         block_dev_read_sectors(disk_name, lba, 1, req->buffer))
@@ -1347,7 +1364,7 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 }
             }
             return -1;
-            
+
         case DISK_WRITE_SECTOR:
             if (arg)
             {
@@ -1359,10 +1376,10 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 disk_sector_req_t *req = (disk_sector_req_t *)arg;
                 if (req && req->buffer)
                 {
-                    uint8_t d = (entry->device_id >= DEVFS_DISK_BASE_ID) ? disk_id : req->drive;
+                    uint8_t d = have_disk_ctx ? disk_id : req->drive;
                     const char *disk_name = block_dev_legacy_name(d);
                     uint32_t lba = (uint32_t)req->lba;
-                    if (part != 0)
+                    if (have_disk_ctx && !is_whole)
                         lba = (uint32_t)(part_start_lba + req->lba);
                     if (disk_name && block_dev_is_present(disk_name) &&
                         block_dev_write_sectors(disk_name, lba, 1, req->buffer))
@@ -1370,7 +1387,7 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 }
             }
             return -1;
-            
+
         case DISK_GET_GEOMETRY:
             if (arg)
             {
@@ -1382,11 +1399,12 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 disk_geometry_t *geom = (disk_geometry_t *)arg;
                 if (geom)
                 {
-                    uint8_t d = (entry->device_id >= DEVFS_DISK_BASE_ID) ? disk_id : geom->drive;
+                    uint8_t d = have_disk_ctx ? disk_id : geom->drive;
                     const char *disk_name = block_dev_legacy_name(d);
                     if (!disk_name || !block_dev_is_present(disk_name))
                         return -1;
-                    uint64_t sectors = (part != 0) ? part_sectors : block_dev_get_sector_count(disk_name);
+                    uint64_t sectors =
+                        (have_disk_ctx && !is_whole) ? part_sectors : block_dev_get_sector_count(disk_name);
                     if (geom->size_sectors)
                         *geom->size_sectors = sectors;
                     if (geom->size_bytes)
@@ -1395,12 +1413,11 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 }
             }
             return -1;
-            
+
         default:
             return -1;
     }
 }
-
 /**
  * /dev/random and /dev/urandom - Random number generators
  * 
@@ -1950,16 +1967,85 @@ devfs_node_t dev_disk = {
     .ref_count = 0
 };
 
-/* Per-disk and per-partition block devices: /dev/hda, /dev/hda1, ... /dev/hdd4 */
-static const char *const devfs_block_names[] = {
-    "hda", "hdb", "hdc", "hdd",
-    "hda1", "hda2", "hda3", "hda4",
-    "hdb1", "hdb2", "hdb3", "hdb4",
-    "hdc1", "hdc2", "hdc3", "hdc4",
-    "hdd1", "hdd2", "hdd3", "hdd4"
-};
-#define NUM_BLOCK_DISK_NODES (sizeof(devfs_block_names) / sizeof(devfs_block_names[0]))
-static devfs_node_t dev_block_nodes[NUM_BLOCK_DISK_NODES];
+/*
+ * Registers /dev/hda..hdc only when a disk is present, and hdX{N} partitions
+ * only when the partition table exposes them (never a fixed hdX4 grid).
+ */
+
+static devfs_disk_ctx_t disk_ctx_whole_slots[MAX_DISKS];
+static devfs_node_t disk_node_whole_slots[MAX_DISKS];
+
+#define DEV_PART_MAX_NODES 148
+static devfs_disk_ctx_t disk_part_ctx[DEV_PART_MAX_NODES];
+static devfs_node_t disk_part_nodes[DEV_PART_MAX_NODES];
+
+static unsigned disk_part_ctx_used;
+
+static const char *const disk_whole_name[MAX_DISKS] = { "hda", "hdb", "hdc", "hdd" };
+
+static void devfs_register_disk_topology(void)
+{
+    uint32_t next_dyn_dev = DEVFS_DISK_BASE_ID + (uint32_t)MAX_DISKS;
+
+    disk_part_ctx_used = 0;
+    memset(disk_part_ctx, 0, sizeof(disk_part_ctx));
+    memset(disk_part_nodes, 0, sizeof(disk_part_nodes));
+
+    /*
+     * Present whole-disk nodes only (/dev/hda …) — stable IDs remain 20..23.
+     */
+    for (unsigned d = 0; d < (unsigned)MAX_DISKS; d++)
+    {
+        const char *dn = block_dev_legacy_name((uint8_t)d);
+        if (!dn || !block_dev_is_present(dn))
+            continue;
+
+        memset(&disk_ctx_whole_slots[d], 0, sizeof(disk_ctx_whole_slots[d]));
+        disk_ctx_whole_slots[d].disk_id = (uint8_t)d;
+        disk_ctx_whole_slots[d].is_whole = 1;
+        memset(&disk_node_whole_slots[d], 0, sizeof(disk_node_whole_slots[d]));
+        disk_node_whole_slots[d].entry.name = disk_whole_name[d];
+        disk_node_whole_slots[d].entry.mode = 0660;
+        disk_node_whole_slots[d].entry.device_id = (uint32_t)(DEVFS_DISK_BASE_ID + d);
+        disk_node_whole_slots[d].entry.driver_data = &disk_ctx_whole_slots[d];
+        disk_node_whole_slots[d].ops = &disk_ops;
+        devfs_register_node(&disk_node_whole_slots[d]);
+
+        int pc = get_partition_count((uint8_t)d);
+        if (pc <= 0)
+            continue;
+
+        for (unsigned ord = 0; ord < (unsigned)pc; ord++)
+        {
+            partition_info_t pi;
+            if (partition_nth_on_disk((uint8_t)d, ord, &pi) != 0)
+                break;
+            if (disk_part_ctx_used >= DEV_PART_MAX_NODES)
+                return;
+
+            char *nm = kmalloc(28);
+            if (!nm)
+                break;
+            snprintf(nm, 28u, "hd%c%u",
+                     'a' + (int)d, (int)(pi.partition_number + 1u));
+
+            unsigned ix = disk_part_ctx_used;
+            memset(&disk_part_ctx[ix], 0, sizeof(disk_part_ctx[ix]));
+            disk_part_ctx[ix].disk_id = (uint8_t)d;
+            disk_part_ctx[ix].is_whole = 0;
+            disk_part_ctx[ix].partition_number = pi.partition_number;
+
+            memset(&disk_part_nodes[ix], 0, sizeof(disk_part_nodes[ix]));
+            disk_part_nodes[ix].entry.name = nm;
+            disk_part_nodes[ix].entry.mode = 0660;
+            disk_part_nodes[ix].entry.device_id = next_dyn_dev++;
+            disk_part_nodes[ix].entry.driver_data = &disk_part_ctx[ix];
+            disk_part_nodes[ix].ops = &disk_ops;
+            devfs_register_node(&disk_part_nodes[ix]);
+            disk_part_ctx_used++;
+        }
+    }
+}
 
 devfs_node_t dev_random = {
     .entry = { .name = "random", .mode = 0644, .device_id = 10 },
@@ -2022,15 +2108,7 @@ int devfs_init(void)
     devfs_register_node(&dev_mouse);
     devfs_register_node(&dev_net);
     devfs_register_node(&dev_disk);
-    for (size_t i = 0; i < NUM_BLOCK_DISK_NODES; i++)
-    {
-        dev_block_nodes[i].entry.name = devfs_block_names[i];
-        dev_block_nodes[i].entry.mode = 0660;
-        dev_block_nodes[i].entry.device_id = (uint32_t)(DEVFS_DISK_BASE_ID + (uint32_t)i);
-        dev_block_nodes[i].ops = &disk_ops;
-        dev_block_nodes[i].ref_count = 0;
-        devfs_register_node(&dev_block_nodes[i]);
-    }
+    devfs_register_disk_topology();
     devfs_register_node(&dev_random);
     devfs_register_node(&dev_urandom);
     devfs_register_node(&dev_full);

@@ -8,11 +8,10 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: user_mode.h
- * Description: IR0 kernel source/header file
+ * Description: x86-specific optional exports; portable code uses arch_portable.h only.
  */
 
 #pragma once
 #include <stdint.h>
 
-void jmp_ring3(void *entry_point);
 void syscall_handler_c(void);

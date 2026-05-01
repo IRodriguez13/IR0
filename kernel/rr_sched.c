@@ -1,15 +1,3 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: rr_sched.c
- * Description: IR0 kernel source/header file
- */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
@@ -23,12 +11,6 @@
  * process gets an equal time slice. This provides fairness and prevents
  * starvation, making it suitable for general-purpose workloads.
  *
- * Design decisions:
- * - Circular queue (FIFO) for simple O(1) insertion and selection
- * - State machine: READY -> RUNNING -> READY transitions
- * - Signal handling integrated before context switch
- * - Special handling for first context switch (kernel -> user transition)
- *
  * Thread safety:
  * - Called from interrupt context (timer IRQ)
  * - Must be reentrant but not necessarily SMP-safe
@@ -41,9 +23,6 @@
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <arch/common/arch_portable.h>
-#if defined(ARCH_X86_64) || defined(ARCH_X86)
-#include <arch/x86-64/sources/user_mode.h>
-#endif
 #include <ir0/signals.h>
 #include <ir0/context.h>
 #include <stdint.h>
@@ -427,7 +406,8 @@ void rr_schedule_next(void)
 		}
 		else
 		{
-			jmp_ring3((void *)next->task.rip);
+			arch_switch_to_user((arch_addr_t)next->task.rip,
+					      (arch_addr_t)next->task.rsp);
 		}
 		panic("Returned from first context switch");
 #else

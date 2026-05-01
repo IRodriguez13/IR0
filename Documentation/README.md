@@ -11,6 +11,7 @@ The goal is to document implemented behavior first, then known gaps.
 
 ## Documentation Map
 
+- `DECOUPLING.md`: subsystem boundaries, façade map, portable arch conventions, symbol digest.
 - `TOOLING.md`: build, menuconfig flow, validation targets, and runtime checks.
 - `FILESYSTEM.md`: VFS layer, mounted filesystems, permissions path, and policy.
 - `VIRTUAL_FILESYSTEMS.md`: `/proc`, `/dev`, `/sys`, and observable interfaces.
