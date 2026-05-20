@@ -22,8 +22,8 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/oops.h>  /* For ASSERT and panicex */
-#include <kernel/resource_registry.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/resource_registry.h>
+#include <ir0/clock.h>
 #include <arch/common/arch_portable.h>
 #include <config.h>
 

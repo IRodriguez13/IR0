@@ -48,6 +48,7 @@
 #include <ir0/partition.h>
 #include <ir0/block_dev.h>
 #include <ir0/video_backend.h>
+#include <ir0/pseudo_fs.h>
 
 /* /sys/class/bluetooth/ - Bluetooth topology (adapter + neighbors + sessions as files) */
 #define SYS_BT_HCI0_ADDRESS    30
@@ -114,13 +115,9 @@ static int sys_kernel_version_read(char *buf, size_t count)
 }
 
 /**
- * sys_kernel_hostname_read - Read system hostname from /sys/kernel/hostname
- * @buf: Buffer to write hostname
- * @count: Size of buffer
- * 
- * Returns: Number of bytes written on success, negative error on failure
+ * sys_kernel_hostname_read_reg - Hostname read for sysfs and pseudo_fs hooks.
  */
-static int sys_kernel_hostname_read(char *buf, size_t count)
+int sys_kernel_hostname_read_reg(char *buf, size_t count)
 {
     if (!buf || count == 0)
         return -EINVAL;
@@ -140,7 +137,10 @@ static int sys_kernel_hostname_read(char *buf, size_t count)
     return len;
 }
 
-static int sys_kernel_hostname_write(const char *buf, size_t count)
+/**
+ * sys_kernel_hostname_write_reg - Hostname write for sysfs and pseudo_fs hooks.
+ */
+int sys_kernel_hostname_write_reg(const char *buf, size_t count)
 {
     if (!buf || count == 0)
         return 0;
@@ -422,15 +422,28 @@ static int sys_devices_block_read(char *buf, size_t count)
 /* Open /sys file */
 int sysfs_open(const char *path, int flags)
 {
+    int pseudo_fd = -1;
+    int64_t prc;
+
     (void)flags;  /* Most sysfs files support both read and write */
-    
+
     if (!is_sys_path(path))
         return -EINVAL;
-    
+
+    pseudo_fs_nodes_register_all();
+    prc = pseudo_fs_open_path(path, flags, &pseudo_fd);
+    if (prc == 0)
+    {
+        proc_set_offset(pseudo_fd, 0);
+        return pseudo_fd;
+    }
+    if (prc != -ENOENT)
+        return (int)prc;
+
     const char *sys_path = sys_parse_path(path);
     if (!sys_path)
         return -ENOENT;
-    
+
     int fd = -1;
     
     /* Map paths to FD numbers */
@@ -498,9 +511,17 @@ int sysfs_open(const char *path, int flags)
 /* Read from /sys file */
 int sysfs_read(int fd, char *buf, size_t count, off_t offset)
 {
+    int64_t pr;
+
     if (!buf || count == 0)
         return 0;
-    
+
+    if (pseudo_fs_find_by_fd(fd))
+    {
+        pr = pseudo_fs_read_fd(fd, buf, count, offset);
+        return (int)pr;
+    }
+
     if (fd < SYS_FD_BASE || fd >= SYS_FD_BASE + 1000)
         return -EBADF;
     
@@ -517,7 +538,7 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
             full_size = sys_kernel_version_read(sys_buffer, sizeof(sys_buffer));
             break;
         case 1:
-            full_size = sys_kernel_hostname_read(sys_buffer, sizeof(sys_buffer));
+            full_size = sys_kernel_hostname_read_reg(sys_buffer, sizeof(sys_buffer));
             break;
         case 2:
             full_size = sys_kernel_max_processes_read(sys_buffer, sizeof(sys_buffer));
@@ -585,9 +606,17 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
 /* Write to /sys file */
 int sysfs_write(int fd, const char *buf, size_t count)
 {
+    int64_t pw;
+
     if (!buf || count == 0)
         return 0;
-    
+
+    if (pseudo_fs_find_by_fd(fd))
+    {
+        pw = pseudo_fs_write_fd(fd, buf, count);
+        return (int)pw;
+    }
+
     if (fd < SYS_FD_BASE || fd >= SYS_FD_BASE + 1000)
         return -EBADF;
     
@@ -596,7 +625,7 @@ int sysfs_write(int fd, const char *buf, size_t count)
     switch (sys_fd)
     {
         case 1:  /* /sys/kernel/hostname */
-            return sys_kernel_hostname_write(buf, count);
+            return sys_kernel_hostname_write_reg(buf, count);
         case 2:  /* /sys/kernel/max_processes */
             return sys_kernel_max_processes_write(buf, count);
         case 12:  /* /sys/devices/system/cpu0/online */
@@ -609,9 +638,16 @@ int sysfs_write(int fd, const char *buf, size_t count)
 /* Get stat for /sys file */
 int sysfs_stat(const char *path, stat_t *st)
 {
+    const pseudo_fs_entry_t *pf;
+
     if (!st || !is_sys_path(path))
         return -EINVAL;
-    
+
+    pseudo_fs_nodes_register_all();
+    pf = pseudo_fs_lookup(path);
+    if (pf && pf->ops && pf->ops->stat)
+        return pf->ops->stat(pf->ctx, st);
+
     const char *sys_path = sys_parse_path(path);
     if (!sys_path)
         return -ENOENT;

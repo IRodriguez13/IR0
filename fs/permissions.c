@@ -12,10 +12,7 @@
  */
 
 #include "permissions.h"
-#include "process.h"
-#include <fs/vfs.h>
-#include <fs/minix_fs.h>
-#include <ir0/stat.h>
+#include <ir0/credentials.h>
 #include <string.h>
 
 struct simple_user_entry {
@@ -49,42 +46,39 @@ void init_simple_users(void)
 /* Get current process UID */
 uint32_t get_current_uid(void)
 {
-    return current_process ? current_process->euid : ROOT_UID;
+    const struct ir0_task_cred *c;
+
+    c = ir0_current_cred();
+    return c ? (uint32_t)c->euid : ROOT_UID;
 }
 
 /* Get current process GID */
 uint32_t get_current_gid(void)
 {
-    return current_process ? current_process->egid : ROOT_GID;
+    const struct ir0_task_cred *c;
+
+    c = ir0_current_cred();
+    return c ? (uint32_t)c->egid : ROOT_GID;
 }
 
-/* Check if process is root */
-bool is_root(const struct process *process)
+bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid)
 {
-    return process && process->euid == ROOT_UID;
-}
+    uint16_t file_mode;
+    uint32_t file_uid;
+    uint32_t file_gid;
 
-/* Check file access permissions - Unix style */
-bool check_file_access(const char *path, int mode, const struct process *process)
-{
-    if (!path || !process)
+    if (!st)
         return false;
 
-    /* Root can do everything */
-    if (process->euid == ROOT_UID)
+    if (euid == ROOT_UID)
         return true;
 
-    /* Get file stats */
-    stat_t st;
-    if (vfs_stat(path, &st) != 0)
-        return false;
+    file_mode = st->st_mode;
+    file_uid = st->st_uid;
+    file_gid = st->st_gid;
 
-    uint16_t file_mode = st.st_mode;
-    uint32_t file_uid = st.st_uid;
-    uint32_t file_gid = st.st_gid;
-
-    /* Check owner permissions */
-    if (process->euid == file_uid) {
+    if (euid == file_uid)
+    {
         if ((mode & ACCESS_READ) && !(file_mode & S_IRUSR))
             return false;
         if ((mode & ACCESS_WRITE) && !(file_mode & S_IWUSR))
@@ -94,8 +88,8 @@ bool check_file_access(const char *path, int mode, const struct process *process
         return true;
     }
 
-    /* Check group permissions */
-    if (process->egid == file_gid) {
+    if (egid == file_gid)
+    {
         if ((mode & ACCESS_READ) && !(file_mode & S_IRGRP))
             return false;
         if ((mode & ACCESS_WRITE) && !(file_mode & S_IWGRP))
@@ -105,7 +99,6 @@ bool check_file_access(const char *path, int mode, const struct process *process
         return true;
     }
 
-    /* Check other permissions */
     if ((mode & ACCESS_READ) && !(file_mode & S_IROTH))
         return false;
     if ((mode & ACCESS_WRITE) && !(file_mode & S_IWOTH))

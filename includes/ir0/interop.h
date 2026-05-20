@@ -7,20 +7,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: compat.h
- * Description: IR0 kernel source/header file
- */
-
-// SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — C++/Rust Interoperability Header  
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: compat.h
+ * File: interop.h
  * Description: Compatibility layer for multi-language kernel development (C/C++/Rust)
  */
 
@@ -222,7 +209,7 @@ extern "C" {
 /*
  * C EXAMPLE:
  * 
- * #include <ir0/compat.h>
+ * #include <ir0/interop.h>
  * 
  * IR0_API i32 my_driver_init(void) {
  *     // C code
@@ -232,7 +219,7 @@ extern "C" {
  *
  * C++ EXAMPLE:
  * 
- * #include <ir0/compat.h>
+ * #include <ir0/interop.h>
  * 
  * extern "C" i32 my_driver_init() {
  *     // C++ code with classes, templates, etc.

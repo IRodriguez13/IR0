@@ -31,6 +31,9 @@ IR0_BUILD_NUMBER := $(shell [ -f .build_number ] && cat .build_number || echo "1
 # the ifneq(…,n) guards below default all subsystems to ON.
 -include .config
 
+CONFIG_ENABLE_USB_HOST ?= n
+CONFIG_INIT_USB_HOST ?= n
+
 # Tooling defaults from menuconfig (.config)
 CONFIG_TOOL_AUTO_RUN_DEPTEST ?= n
 CONFIG_TOOL_DEFAULT_DISK_FS ?= 0
@@ -119,7 +122,6 @@ CFLAGS += $(CFLAGS_TARGET)
 
 # Include paths
 CFLAGS += -I$(KERNEL_ROOT)
-CFLAGS += -I$(KERNEL_ROOT)/include
 CFLAGS += -I$(KERNEL_ROOT)/includes
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/mm
@@ -129,19 +131,16 @@ CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/drivers
 CFLAGS += -I$(KERNEL_ROOT)/fs
 CFLAGS += -I$(KERNEL_ROOT)/interrupt
-CFLAGS += -I$(KERNEL_ROOT)/include/generated
 CFLAGS += -MMD -MP
 
 # C++ compile flags (freestanding kernel); matches %.o: %.cpp rule
 ifeq ($(ARCH),arm64)
 CXX_KERNEL_FLAGS = -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \
-	-nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin \
-	-I$(KERNEL_ROOT)/cpp/include
+	-nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin
 else
 CXX_KERNEL_FLAGS = -m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \
 	-mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
-	-nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin \
-	-I$(KERNEL_ROOT)/cpp/include
+	-nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin
 endif
 CXXFLAGS_COMPILE = $(CXX_KERNEL_FLAGS) $(CFLAGS)
 
@@ -230,6 +229,7 @@ KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
     kernel/process.o \
+    kernel/credentials.o \
     kernel/task.o \
     kernel/syscalls.o \
     kernel/input_events.o \
@@ -427,6 +427,8 @@ FS_OBJS = \
     fs/path.o \
     fs/chmod.o \
     fs/permissions.o \
+    fs/pseudo_fs_registry.o \
+    fs/pseudo_fs_nodes.o \
     fs/procfs.o \
     fs/devfs.o \
     fs/sysfs.o
@@ -526,6 +528,21 @@ CFLAGS += -DCONFIG_ENABLE_BLUETOOTH=1
 else
 BLUETOOTH_OBJS =
 CFLAGS += -DCONFIG_ENABLE_BLUETOOTH=0
+endif
+
+# USB host scaffold (PCI scan)
+ifneq ($(CONFIG_ENABLE_USB_HOST),n)
+USB_OBJS = drivers/usb/usb_host.o
+CFLAGS += -DCONFIG_ENABLE_USB_HOST=1
+else
+USB_OBJS =
+CFLAGS += -DCONFIG_ENABLE_USB_HOST=0
+endif
+
+ifneq ($(CONFIG_INIT_USB_HOST),n)
+CFLAGS += -DCONFIG_INIT_USB_HOST=1
+else
+CFLAGS += -DCONFIG_INIT_USB_HOST=0
 endif
 
 # PS/2 mouse
@@ -813,7 +830,7 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
            $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-           $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
+           $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
            $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS)
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
@@ -822,10 +839,10 @@ ALL_OBJS_TEST = $(filter-out debug_bins/debug_bins_registry.o,$(KERNEL_OBJS)) $(
                 $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-                $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
+                $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
                 $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS)
 
-AUTOCONF_HDR := $(KERNEL_ROOT)/include/generated/autoconf.h
+AUTOCONF_HDR := $(KERNEL_ROOT)/includes/generated/autoconf.h
 ifneq ($(wildcard $(KERNEL_ROOT)/.config),)
 $(AUTOCONF_HDR): $(KERNEL_ROOT)/.config
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --sync >/dev/null
@@ -1318,8 +1335,8 @@ config-sim:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/config_sim.py
 
 config-wiring-check:
-	@if [ -f "$(KERNEL_ROOT)/.config" ] && [ ! -f "$(KERNEL_ROOT)/include/generated/autoconf.h" ]; then \
-		echo "✗ config-wiring-check: include/generated/autoconf.h missing"; \
+	@if [ -f "$(KERNEL_ROOT)/.config" ] && [ ! -f "$(KERNEL_ROOT)/includes/generated/autoconf.h" ]; then \
+		echo "✗ config-wiring-check: includes/generated/autoconf.h missing"; \
 		exit 1; \
 	fi
 	@echo "✓ config-wiring-check passed"

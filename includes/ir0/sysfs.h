@@ -25,12 +25,19 @@
 #include <ir0/stat.h>
 #include <ir0/types.h>
 
-/* /sys filesystem interface */
+/* /sys filesystem interface
+ *
+ * Legacy note: dispatch matches procfs — FD-based open/read/write in fs/sysfs.c.
+ * Prefer devfs_ops_t-style per-node registration for new sysfs endpoints.
+ */
 bool is_sys_path(const char *path);
 int sysfs_open(const char *path, int flags);
 int sysfs_read(int fd, char *buf, size_t count, off_t offset);
 int sysfs_write(int fd, const char *buf, size_t count);
 int sysfs_stat(const char *path, stat_t *st);
 
+/* Shared implementations registered via pseudo_fs_nodes.c */
+int sys_kernel_hostname_read_reg(char *buf, size_t count);
+int sys_kernel_hostname_write_reg(const char *buf, size_t count);
 
 

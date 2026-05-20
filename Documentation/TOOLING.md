@@ -28,6 +28,9 @@ It is aligned with the current Makefile and menuconfig behavior.
 
 ### Key Config Areas
 
+- **`CONFIG_ENABLE_USB_HOST`** (Makefile / `autoconf.h`): gates compilation of the USB host PCI scan scaffold in `drivers/usb/usb_host.c`. When unset or `n`, `ir0_usb_host_init` is a no-op and `ir0_usb_host_controller_count` stays zero.
+- **`IR0_ENABLE_USB`** (`setup/kernel_config.h`): target-profile macro (Desktop/Server/IoT/…) that enables the higher-level USB *driver class* bundle (`IR0_ENABLE_USB_DRIVER`, storage, HID). It does not by itself pull in the host scaffold; use **`CONFIG_ENABLE_USB_HOST`** when you want the kernel to compile and optionally run the host PCI discovery path (`CONFIG_INIT_USB_HOST` controls early init registration).
+
 - Driver init selection (`CONFIG_INIT_*`).
 - Filesystem selection (`CONFIG_ENABLE_FS_*`).
 - Scheduler policy (`CONFIG_SCHEDULER_POLICY`).

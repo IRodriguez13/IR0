@@ -33,6 +33,8 @@
 #define HCI_PACKET_TYPE_EVENT      0x04
 
 /* HCI UART structure */
+#define HCI_UART_RX_ASM_MAX 260
+
 struct hci_uart {
     uint16_t uart_base;      /* UART base address (COM1 = 0x3F8) */
     bool initialized;        /* Initialization status */
@@ -40,6 +42,9 @@ struct hci_uart {
     uint8_t tx_buffer[1024]; /* Transmit buffer */
     size_t rx_pos;          /* Current RX buffer position */
     size_t tx_pos;          /* Current TX buffer position */
+    uint8_t rx_asm[HCI_UART_RX_ASM_MAX]; /* Partial H4 event reassembly */
+    size_t rx_asm_len;       /* Bytes accumulated in rx_asm */
+    size_t rx_asm_need;      /* Total bytes required for one HCI event frame */
 };
 
 /**

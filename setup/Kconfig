@@ -178,6 +178,17 @@ menu "Bluetooth"
 
 endmenu
 
+menu "USB"
+
+    config ENABLE_USB_HOST
+        bool "USB host controller PCI scan scaffold"
+        default n
+        help
+          Compile USB host PCI discovery scaffold. No controller
+          bring-up or device enumeration yet.
+
+endmenu
+
 menu "Input"
 
     config ENABLE_MOUSE
@@ -311,6 +322,11 @@ menu "Driver Init Selection"
         bool "Register Bluetooth driver at boot"
         default y
         depends on ENABLE_BLUETOOTH
+
+    config INIT_USB_HOST
+        bool "Initialize USB host scaffold at boot"
+        default n
+        depends on ENABLE_USB_HOST
 
 endmenu
 

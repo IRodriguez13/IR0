@@ -116,6 +116,7 @@ typedef struct process
 	void (*signal_handlers[_NSIG])(int);  /* Array of signal handler functions */
 	uint32_t signal_mask;  /* Mask of signals to block */
 	uint32_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
+	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	struct sigcontext *saved_context;  /* Saved context before signal handler (for sigreturn) */
 } process_t;
 

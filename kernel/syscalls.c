@@ -47,12 +47,17 @@
 #include <ir0/procfs.h>
 #include <ir0/devfs.h>
 #include <ir0/sysfs.h>
+#include <ir0/pseudo_fs.h>
 #include <ir0/signals.h>
 #include <ir0/pipe.h>
 #include <ir0/poll.h>
 #include <ir0/time.h>
 #include <ir0/video_backend.h>
 #include <ir0/rtc.h>
+#include <arch/common/arch_portable.h>
+
+#define ARCH_SET_FS 0x1002
+#define ARCH_GET_FS 0x1003
 
 /* Pseudo file descriptor ranges (/proc, /dev, /sys) */
 #define FD_PROC_BASE  1000
@@ -1541,10 +1546,15 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   /* Handle /dev filesystem on-demand */
   if (is_dev_path(pathname))
   {
+    int64_t drc;
+
     ensure_devfs_init();
     devfs_node_t *node = devfs_find_node(pathname);
     if (!node)
       return -ENOENT;
+    drc = devfs_open_node(node, flags);
+    if (drc < 0)
+      return drc;
     return FD_DEV_BASE + (int64_t)node->entry.device_id;
   }
 
@@ -1684,7 +1694,17 @@ int64_t sys_close(int fd)
 
   /* Handle special fd ranges before fd_table bounds check */
   if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-    return 0;  /* /dev devices: no per-fd state to release */
+  {
+    ensure_devfs_init();
+    devfs_node_t *node = devfs_find_node_by_id((uint32_t)(fd - FD_DEV_BASE));
+    if (node)
+      devfs_close_node(node);
+    return 0;
+  }
+
+  if (pseudo_fs_find_by_fd(fd))
+    return pseudo_fs_close_fd(fd);
+
   if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
     return 0;  /* /proc */
   if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
@@ -2028,6 +2048,137 @@ int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction 
   }
 
   return 0;
+}
+
+/*
+ * sys_rt_sigprocmask - Linux rt_sigprocmask(2) subset for musl startup.
+ */
+int64_t sys_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t sigsetsize)
+{
+  uint64_t newmask;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (sigsetsize != sizeof(uint64_t))
+    return -EINVAL;
+
+  if (oldset)
+  {
+    if (validate_userspace_buffer(oldset, sizeof(uint64_t)) != 0)
+      return -EFAULT;
+    newmask = (uint64_t)current_process->signal_mask;
+    if (copy_to_user(oldset, &newmask, sizeof(uint64_t)) != 0)
+      return -EFAULT;
+  }
+
+  if (!set)
+    return 0;
+
+  if (validate_userspace_buffer(set, sizeof(uint64_t)) != 0)
+    return -EFAULT;
+
+  if (copy_from_user(&newmask, set, sizeof(uint64_t)) != 0)
+    return -EFAULT;
+
+  switch (how)
+  {
+  case 0: /* SIG_BLOCK */
+    current_process->signal_mask |= (uint32_t)newmask;
+    break;
+  case 1: /* SIG_UNBLOCK */
+    current_process->signal_mask &= ~(uint32_t)newmask;
+    break;
+  case 2: /* SIG_SETMASK */
+    current_process->signal_mask = (uint32_t)newmask;
+    break;
+  default:
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+/*
+ * sys_arch_prctl - x86-64 arch_prctl(2) subset (ARCH_SET_FS / ARCH_GET_FS).
+ */
+int64_t sys_arch_prctl(int code, unsigned long addr)
+{
+  uint64_t fsbase;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (code == ARCH_SET_FS)
+  {
+    arch_set_fs_base((uint64_t)addr);
+    return 0;
+  }
+
+  if (code == ARCH_GET_FS)
+  {
+    if (addr == 0)
+      return -EINVAL;
+    if (validate_userspace_buffer((void *)(uintptr_t)addr, sizeof(uint64_t)) != 0)
+      return -EFAULT;
+    fsbase = arch_get_fs_base();
+    if (copy_to_user((void *)(uintptr_t)addr, &fsbase, sizeof(uint64_t)) != 0)
+      return -EFAULT;
+    return 0;
+  }
+
+  return -EINVAL;
+}
+
+/*
+ * sys_set_tid_address - Linux set_tid_address(2) stub for musl.
+ */
+int64_t sys_set_tid_address(int *tidptr)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  if (tidptr && validate_userspace_buffer(tidptr, sizeof(int)) != 0)
+    return -EFAULT;
+
+  current_process->set_tid_ptr = tidptr;
+  return (int64_t)current_process->task.pid;
+}
+
+/*
+ * sys_fcntl - Minimal fcntl(2) for musl and libc startup.
+ */
+int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
+{
+  fd_entry_t *fd_table;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table[fd].in_use)
+    return -EBADF;
+
+  switch (cmd)
+  {
+  case F_GETFD:
+    return (fd_table[fd].fd_flags & FD_CLOEXEC) ? FD_CLOEXEC : 0;
+  case F_SETFD:
+    fd_table[fd].fd_flags = (uint8_t)(arg & FD_CLOEXEC);
+    return 0;
+  case F_GETFL:
+    return fd_table[fd].flags;
+  case F_SETFL:
+    fd_table[fd].flags = (int)arg;
+    return 0;
+  case F_DUPFD:
+    return sys_dup2(fd, (int)arg);
+  default:
+    return -EINVAL;
+  }
 }
 
 /**
@@ -3028,6 +3179,10 @@ WRAP2(sys_munmap, void *, size_t)
 WRAP3(sys_mprotect, void *, size_t, int)
 WRAP2(sys_kill, pid_t, int)
 WRAP3(sys_sigaction, int, const struct sigaction *, struct sigaction *)
+WRAP4(sys_rt_sigprocmask, int, const uint64_t *, uint64_t *, size_t)
+WRAP2(sys_arch_prctl, int, unsigned long)
+WRAP1(sys_set_tid_address, int *)
+WRAP3(sys_fcntl, int, int, unsigned long)
 WRAP1(sys_pipe, int *)
 WRAP1(sys_sigreturn, struct sigcontext *)
 WRAP3(sys_ioctl, int, uint64_t, void *)
@@ -3110,7 +3265,9 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_munmap]         = wrap_sys_munmap;
   syscall_table_rw[__NR_brk]            = wrap_sys_brk;
   syscall_table_rw[__NR_rt_sigaction]   = wrap_sys_sigaction;
+  syscall_table_rw[__NR_rt_sigprocmask] = wrap_sys_rt_sigprocmask;
   syscall_table_rw[__NR_rt_sigreturn]   = wrap_sys_sigreturn;
+  syscall_table_rw[__NR_fcntl]            = wrap_sys_fcntl;
   syscall_table_rw[__NR_ioctl]          = wrap_sys_ioctl;
   syscall_table_rw[__NR_pipe]           = wrap_sys_pipe;
   syscall_table_rw[__NR_dup2]           = wrap_sys_dup2;
@@ -3144,6 +3301,8 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_chown]          = wrap_sys_chown;
   syscall_table_rw[__NR_gettimeofday]   = wrap_sys_gettimeofday;
   syscall_table_rw[__NR_getppid]        = wrap_sys_getppid;
+  syscall_table_rw[__NR_arch_prctl]     = wrap_sys_arch_prctl;
+  syscall_table_rw[__NR_set_tid_address] = wrap_sys_set_tid_address;
   syscall_table_rw[__NR_mount]          = wrap_sys_mount;
   syscall_table_rw[__NR_umount2]        = wrap_sys_umount;
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit;

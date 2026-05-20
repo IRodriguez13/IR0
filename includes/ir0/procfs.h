@@ -34,7 +34,13 @@ typedef enum {
     PROC_TYPE_DIR
 } proc_type_t;
 
-/* /proc entry structure */
+/* /proc entry structure
+ *
+ * Legacy note: current dispatch in fs/procfs.c uses FD-based open/read/write
+ * handlers, not a populated proc_entry tree. New endpoints should register
+ * through the internal procfs table helpers in fs/procfs.c until tree dispatch
+ * is unified with devfs_ops_t-style registration.
+ */
 typedef struct proc_entry {
     char name[64];
     proc_type_t type;
@@ -63,3 +69,6 @@ int proc_meminfo_read(char *buf, size_t count);
 int proc_status_read(char *buf, size_t count, pid_t pid);
 int proc_uptime_read(char *buf, size_t count);
 int proc_version_read(char *buf, size_t count);
+int proc_cpuinfo_read(char *buf, size_t count);
+int proc_blockdevices_read(char *buf, size_t count);
+int proc_netinfo_read(char *buf, size_t count);

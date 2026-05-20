@@ -18,7 +18,7 @@
 #include "udp.h"
 #include <ir0/logging.h>
 #include <ir0/clock.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 #include <string.h>
 
 #define DHCP_CLIENT_PORT 68

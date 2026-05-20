@@ -30,7 +30,8 @@
 #include <ir0/errno.h>
 #include <ir0/net.h>
 #include <ir0/driver.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
+#include <ir0/credentials.h>
 #include <ir0/version.h>
 #include <ir0/serial_io.h>
 #include <ir0/clock.h>
@@ -40,8 +41,9 @@
 #include <fs/vfs.h>
 #include <ir0/validation.h>
 #include <mm/paging.h>
-#include <kernel/resource_registry.h>
+#include <ir0/resource_registry.h>
 #include <config.h>
+#include <ir0/pseudo_fs.h>
 #if CONFIG_ENABLE_BLUETOOTH
 #include <ir0/bluetooth.h>
 #endif
@@ -98,13 +100,13 @@ static void proc_set_pid_for_fd(int fd, pid_t pid)
     if (idx >= 0 && idx < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])))
     {
         proc_fd_pid_map[idx] = pid;
-        proc_fd_owner_pid_map[idx] = current_process ? current_process->task.pid : 0;
+        proc_fd_owner_pid_map[idx] = ir0_current_pid();
     }
 }
 
 static pid_t proc_get_pid_for_fd(int fd)
 {
-    pid_t owner = current_process ? current_process->task.pid : 0;
+    pid_t owner = ir0_current_pid();
     proc_fd_pid_map_ensure_init();
     int idx = fd - 1000;
     if (idx >= 0 && idx < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])))
@@ -211,7 +213,7 @@ static int proc_ps_read(char *buf, size_t count)
  * name\tmtu\tflags\tmac (mac as xx:xx:xx:xx:xx:xx)
  * Frontend (e.g. ifconfig/netinfo) does formatting.
  */
-static int proc_netinfo_read(char *buf, size_t count)
+int proc_netinfo_read(char *buf, size_t count)
 {
 #if CONFIG_ENABLE_NETWORKING
     if (VALIDATE_BUFFER(buf, count) != 0)
@@ -1033,7 +1035,7 @@ int proc_cmdline_read(char *buf, size_t count, pid_t pid)
 /* Get offset for /proc (1000-1999) or /sys (3000-3999) fd */
 off_t proc_get_offset(int fd)
 {
-    pid_t owner = current_process ? current_process->task.pid : 0;
+    pid_t owner = ir0_current_pid();
     proc_fd_offset_map_ensure_init();
     int idx = -1;
     if (fd >= 1000 && fd <= 1999)
@@ -1123,7 +1125,7 @@ int proc_getdents(int fd, void *dirent_buf, size_t count)
 /* Set offset for /proc (1000-1999) or /sys (3000-3999) fd */
 void proc_set_offset(int fd, off_t offset)
 {
-    pid_t owner = current_process ? current_process->task.pid : 0;
+    pid_t owner = ir0_current_pid();
     proc_fd_offset_map_ensure_init();
     int idx = -1;
     if (fd >= 1000 && fd <= 1999)
@@ -1150,6 +1152,22 @@ int proc_open(const char *path, int flags)
       * Write support could be added for /proc/sys/ knobs in the future
      */
     (void)flags; /* O_WRONLY, O_RDWR ignored for now; O_DIRECTORY used for pid dirs */
+
+    pseudo_fs_nodes_register_all();
+
+    {
+        int pseudo_fd = -1;
+        int64_t prc;
+
+        prc = pseudo_fs_open_path(path, flags, &pseudo_fd);
+        if (prc == 0)
+        {
+            proc_reset_offset(pseudo_fd);
+            return pseudo_fd;
+        }
+        if (prc != -ENOENT)
+            return (int)prc;
+    }
 
     pid_t pid;
     const char *filename = proc_parse_path(path, &pid);
@@ -1276,9 +1294,17 @@ int proc_open(const char *path, int flags)
 /* Read from /proc file with offset support */
 int proc_read(int fd, char *buf, size_t count, off_t offset)
 {
+    int64_t pbytes;
+
     if (!buf || count == 0)
         return 0;
-    
+
+    if (pseudo_fs_find_by_fd(fd))
+    {
+        pbytes = pseudo_fs_read_fd(fd, buf, count, offset);
+        return (int)pbytes;
+    }
+
     /* Buffer to hold full content - initialize to zero to avoid garbage */
     static char proc_buffer[PROC_BUFFER_SIZE];
     memset(proc_buffer, 0, sizeof(proc_buffer));
@@ -1430,11 +1456,19 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
  */
 int proc_write(int fd, const char *buf, size_t count)
 {
+    int64_t pw;
+
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -EINVAL;
 
     if (count == 0)
         return 0;
+
+    if (pseudo_fs_find_by_fd(fd))
+    {
+        pw = pseudo_fs_write_fd(fd, buf, count);
+        return (int)pw;
+    }
 
     if (fd < 1000)
         return -EBADF;
@@ -1496,11 +1530,23 @@ int proc_write(int fd, const char *buf, size_t count)
 /* Get stat for /proc file */
 int proc_stat(const char *path, stat_t *st)
 {
+    pid_t pid;
+    const char *filename;
+
     if (!st || !is_proc_path(path))
         return -EINVAL;
-    
-    pid_t pid;
-    const char *filename = proc_parse_path(path, &pid);
+
+    pseudo_fs_nodes_register_all();
+
+    {
+        const pseudo_fs_entry_t *pf;
+
+        pf = pseudo_fs_lookup(path);
+        if (pf && pf->ops && pf->ops->stat)
+            return pf->ops->stat(pf->ctx, st);
+    }
+
+    filename = proc_parse_path(path, &pid);
     if (!filename)
         return -ENOENT;
     

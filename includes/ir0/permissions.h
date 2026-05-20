@@ -17,6 +17,8 @@
 #include <stdbool.h>
 #include <ir0/types.h>
 
+#include <ir0/stat.h>
+
 /* Forward declaration */
 struct process;
 
@@ -33,6 +35,9 @@ struct process;
 #define ACCESS_READ    1
 #define ACCESS_WRITE   2
 #define ACCESS_EXEC    4
+
+/* Evaluate Unix permission bits against effective uid/gid */
+bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid);
 
 /* Function declarations */
 bool check_file_access(const char *path, int mode, const struct process *process);

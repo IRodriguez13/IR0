@@ -120,10 +120,9 @@ elif [ "$LANGUAGE" = "cpp" ]; then
     fi
     
     # Add include paths for C++
-    CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/cpp/include"
     CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/includes -I$KERNEL_ROOT -I$KERNEL_ROOT/includes/ir0"
     CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/arch/common -I$KERNEL_ROOT/arch/x86-64/include"
-    CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/include -I$KERNEL_ROOT/kernel"
+    CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/kernel"
     CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/drivers -I$KERNEL_ROOT/fs -I$KERNEL_ROOT/interrupt"
 elif [ "$BUILD_MODE" = "win" ]; then
     # Cross-compilation to Windows using MinGW (C language)
@@ -168,7 +167,7 @@ fi
 
 CFLAGS="$CFLAGS -I./includes -I./ -I./includes/ir0"
 CFLAGS="$CFLAGS -I./arch/common -I./arch/x86-64/include"
-CFLAGS="$CFLAGS -I./include -I./kernel"
+CFLAGS="$CFLAGS -I./kernel"
 CFLAGS="$CFLAGS -I./drivers -I./fs -I./interrupt"
 
 # Process each source file

@@ -227,7 +227,6 @@ def generate_makefile(config_file, subsystems_json, arch, kernel_root, output_pa
         f.write("CFLAGS += -I$(KERNEL_ROOT)/mm\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/arch/common\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include\n")
-        f.write("CFLAGS += -I$(KERNEL_ROOT)/include\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/kernel\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/drivers\n")
         f.write("CFLAGS += -I$(KERNEL_ROOT)/fs\n")
@@ -282,7 +281,7 @@ def generate_makefile(config_file, subsystems_json, arch, kernel_root, output_pa
         f.write("\t@g++ -m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \\\n")
         f.write("\t\t-mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \\\n")
         f.write("\t\t-nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin \\\n")
-        f.write("\t\t-I./cpp/include $(CFLAGS) -c $< -o $@\n\n")
+        f.write("\t\t$(CFLAGS) -c $< -o $@\n\n")
         
         # Compile ASM files
         f.write("# Compile ASM files\n")

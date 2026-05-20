@@ -167,14 +167,22 @@ static int serial_is_receive_ready(void)
  * 
  * Returns: Character read from serial port
  */
+int serial_try_read_char(void)
+{
+    if (serial_is_receive_ready() == 0)
+        return -1;
+
+    return (int)(uint8_t)inb(SERIAL_PORT_COM1 + SERIAL_DATA_REG);
+}
+
 char serial_read_char(void)
 {
-    /* Wait for data to be available */
-    while (serial_is_receive_ready() == 0)
+    int ch;
+
+    while ((ch = serial_try_read_char()) < 0)
     {
         /* Wait for receiver buffer to have data */
     }
 
-    /* Read character from data register */
-    return (char)inb(SERIAL_PORT_COM1 + SERIAL_DATA_REG);
+    return (char)ch;
 }

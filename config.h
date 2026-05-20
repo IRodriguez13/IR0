@@ -234,7 +234,13 @@
 #define CONFIG_ENABLE_SMP 0
 #endif
 #define ENABLE_SMP CONFIG_ENABLE_SMP
-#define ENABLE_USB 0          /* USB support (not implemented) */
+#ifndef CONFIG_ENABLE_USB_HOST
+#define CONFIG_ENABLE_USB_HOST 0
+#endif
+#ifndef CONFIG_INIT_USB_HOST
+#define CONFIG_INIT_USB_HOST 0
+#endif
+#define ENABLE_USB CONFIG_ENABLE_USB_HOST
 
 #ifndef CONFIG_DEBUG_BINS_GROUP_CORE
 #define CONFIG_DEBUG_BINS_GROUP_CORE 1

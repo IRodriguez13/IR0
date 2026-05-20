@@ -80,6 +80,11 @@ void arch_interrupt_init(void);
 void arch_irq_init(void);
 
 /**
+ * Unmask architecture-specific IRQ lines needed for boot devices.
+ */
+void arch_boot_irq_unmask(void);
+
+/**
  * Enable interrupts globally
  */
 void arch_enable_interrupts(void);
@@ -197,6 +202,17 @@ uint32_t arch_get_cpu_clflush_size(void);
  * Switch to user mode (if supported)
  */
 void arch_switch_to_user(arch_addr_t entry, arch_addr_t stack);
+
+/*
+ * arch_set_fs_base - Set x86-64 FS base (TLS) for the running hardware thread.
+ * Used by sys_arch_prctl(ARCH_SET_FS). No-op on non-x86 builds.
+ */
+void arch_set_fs_base(uint64_t base);
+
+/*
+ * arch_get_fs_base - Read x86-64 FS base MSR.
+ */
+uint64_t arch_get_fs_base(void);
 
 /**
  * Get current CPU mode

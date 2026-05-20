@@ -98,7 +98,6 @@ CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
 CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include
-CFLAGS += -I$(KERNEL_ROOT)/include
 CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/drivers
 CFLAGS += -I$(KERNEL_ROOT)/fs

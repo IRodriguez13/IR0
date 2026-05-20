@@ -39,7 +39,7 @@
 #include <ir0/stat.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>
-#include <kernel/process.h>
+#include <ir0/credentials.h>
 #include <ir0/permissions.h>
 
 #define TMPFS_MAX_FILES 128
@@ -461,12 +461,16 @@ int tmpfs_mkdir(const char *path, mode_t mode)
     tmpfs_inode_t *new_inode = tmpfs_alloc_inode(tmpfs);
     if (!new_inode)
         return -ENOSPC;
-    
-    mode_t umask_value = (mode_t)(current_process ? current_process->umask : DEFAULT_UMASK);
-    mode_t effective_mode = mode & ~umask_value;
-    new_inode->mode = S_IFDIR | (effective_mode & 0777);
-    new_inode->uid = current_process ? current_process->euid : ROOT_UID;
-    new_inode->gid = current_process ? current_process->egid : ROOT_GID;
+
+    {
+        const struct ir0_task_cred *cr = ir0_current_cred();
+        mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
+        mode_t effective_mode = mode & ~umask_value;
+
+        new_inode->mode = S_IFDIR | (effective_mode & 0777);
+        new_inode->uid = cr ? cr->euid : ROOT_UID;
+        new_inode->gid = cr ? cr->egid : ROOT_GID;
+    }
     new_inode->is_dir = true;
     strncpy(new_inode->name, dirname, TMPFS_MAX_NAME_LEN);
     new_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
@@ -526,12 +530,16 @@ int tmpfs_create_file(const char *path, mode_t mode)
     tmpfs_inode_t *new_inode = tmpfs_alloc_inode(tmpfs);
     if (!new_inode)
         return -ENOSPC;
-    
-    mode_t umask_value = (mode_t)(current_process ? current_process->umask : DEFAULT_UMASK);
-    mode_t effective_mode = mode & ~umask_value;
-    new_inode->mode = S_IFREG | (effective_mode & 0777);
-    new_inode->uid = current_process ? current_process->euid : ROOT_UID;
-    new_inode->gid = current_process ? current_process->egid : ROOT_GID;
+
+    {
+        const struct ir0_task_cred *cr = ir0_current_cred();
+        mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
+        mode_t effective_mode = mode & ~umask_value;
+
+        new_inode->mode = S_IFREG | (effective_mode & 0777);
+        new_inode->uid = cr ? cr->euid : ROOT_UID;
+        new_inode->gid = cr ? cr->egid : ROOT_GID;
+    }
     new_inode->is_dir = false;
     new_inode->size = 0;
     new_inode->data = NULL;

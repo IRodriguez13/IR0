@@ -127,6 +127,8 @@
 #define __NR_mount        165
 #define __NR_umount2      166
 #define __NR_reboot       169
+#define __NR_arch_prctl   158
+#define __NR_set_tid_address 218
 #define __NR_exit_group   231
 
 /* IR0 custom syscalls (outside Linux range) */

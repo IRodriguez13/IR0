@@ -76,8 +76,14 @@ specific driver implementation file:
 | Video | `vga.h`, `video_backend.h` | Diagnostics, optional UI |
 | Serial (debug) | `serial_io.h` | Logging façade |
 | Syscalls ABI | `syscall*.h`, `copy_user.h` | Arch-specific stubs |
-| Driver model | `driver.h`, `driver_bootstrap.h` | Registry and boot order |
+| Driver model | `driver.h`, `driver_bootstrap.h`, `init_drv.h` | Registry, boot order, `init_all_drivers()` |
+| Scheduler hooks | `scheduler_api.h` | Timer/IRQ paths into `sched_schedule_next()` |
+| Resources | `resource_registry.h` | IRQ / I/O port registration from drivers |
 | VFS-backed devices | `devfs.h`, `procfs.h`, `sysfs.h` | Virtual filesystems |
+| Pseudo-fs registry | `pseudo_fs.h` | Longest-prefix table for `/proc` / `/sys` nodes |
+| Credential helpers | `credentials.h` | **`kernel/credentials.c`** (`ir0_current_cred`, PID, access checks without pulling `kernel/*.h`) |
+| `process_t` / task globals | `process.h` | `/proc`, `mm/paging.c` fork paths needing struct layout |
+| Bluetooth façade | `bluetooth.h` | `ir0_bluetooth_poll`, `ir0_bluetooth_register_driver` without `drivers/bluetooth/*.c` callers |
 
 Some facades are thin includes of concrete headers (`block_dev.h` →
 `drivers/storage/block_dev.h`, `driver_bootstrap.h` → `drivers/driver_bootstrap.h`). Central
@@ -93,11 +99,36 @@ structs only” headers from driver `.c` files.
 | **Filesystems** | `struct vfs_ops`, `vfs_fstype` | Mountable FS plugins (`minix_fs.c`, `tmpfs.c`, `simplefs.c`, …). |
 | **Character devices** | `devfs_ops_t`, `devfs_register_device()` | Per-node read/write/ioctl/open/close in `fs/devfs.c`. |
 | **Bootstrap** | `driver_boot_init_fn`, `driver_bootstrap_register()` | Staged early init wired from `drivers/init_drv.c` with `CONFIG_INIT_*`. |
-| **Resources** | `resource_register_irq`, `resource_register_ioport` | Naming / tracking from drivers upward via `kernel/resource_registry.[ch]`. |
+| **Resources** | `resource_register_irq`, `resource_register_ioport` | Naming / tracking; drivers include [`includes/ir0/resource_registry.h`](../../includes/ir0/resource_registry.h). |
 
-**Proc/sys:** Many pseudo-files use central `strcmp`/`strncmp` dispatch in `proc_open` /
-read paths rather than one global callback table per file. That is workable but duplicates
-machinery; tests must keep **open/read** handlers aligned when adding entries.
+**Preferred patterns for new code**
+
+| Use case | Preferred API |
+|----------|----------------|
+| Optional driver at boot | `driver_boot_init_fn` + `CONFIG_INIT_*` |
+| Block storage | `block_dev_ops_t` registered by name |
+| `/dev` node I/O | `devfs_ops_t` per node |
+| Mountable filesystem | `struct vfs_ops` + fstype registration |
+| Network NIC | `struct net_device` vtable in `ir0/net.h` |
+| Bluetooth to VFS | `ir0_bt_*` facade functions |
+| `/proc` or `/sys` file | FD dispatch in `fs/procfs.c` / `fs/sysfs.c` (legacy) |
+
+**Proc/sys dispatch note:** `proc_entry_t` in [`includes/ir0/procfs.h`](../../includes/ir0/procfs.h) documents a tree-shaped callback model; runtime dispatch remains **FD + switch** in [`fs/procfs.c`](../../fs/procfs.c). Extend internal tables when adding pseudo-files.
+
+**pseudo_fs registry**
+
+`pseudo_fs_register()` / `pseudo_fs_lookup()` ([`includes/ir0/pseudo_fs.h`](../../includes/ir0/pseudo_fs.h),
+[`fs/pseudo_fs_registry.c`](../../fs/pseudo_fs_registry.c)) own the longest-prefix routing for `/proc`
+and `/sys` paths that use the FD table model. Consumers register a stable `pseudo_fs_ops_t` (`read`,
+`write`, `open`, `close`, optional `stat`); lookups run at `open`/read/write time so new nodes stay
+orthogonal to legacy `strncmp` switches where both coexist.
+
+**/dev open/close contract**
+
+`/dev` nodes use `devfs_ops_t`: `open`/`close` are optional hooks on the registry entry (`fs/devfs.c`).
+Callers closing an FD must drive `close` when present so refcounted/stateful devices (`bluetooth/hci0`,
+session-oriented consoles, NIC helpers) remain consistent with POSIX expectations; skips count as ABI
+bugs for multi-open devices.
 
 ## Configuration pipeline
 
@@ -129,16 +160,16 @@ integration, and board-specific drivers (USB stacks would eventually plug in her
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep
 baseline; evolves with refactors):
 
-- **`kernel/`:** many modules use **`arch/common/arch_portable.h`** for IRQ/CPUID/faults; high-level
-  bring-up may still include specific drivers (`init_drv`, block, video) per `main.c` policy.
+- **`kernel/main.c`:** portable boot calls **`arch_boot_irq_unmask()`** after **`arch_irq_init()`**; PIC details live in `arch/common/arch_interface.c`.
 - **`mm/`:** use **`ir0/serial_io.h`** for logging where applicable.
 - **`net/`:** use **`ir0/serial_io.h`** and **`ir0/clock.h`** for diagnostics and time.
 - **`fs/`:** CPU queries go through **`includes/ir0/arch_port.h`** (no direct `<arch/...>` includes).
 - **`includes/ir0/`:** thin facades may still include concrete driver headers (`serial_io.h` →
   `drivers/serial/serial.h`) until split API-only headers exist.
 
-Drivers themselves may include **`kernel/resource_registry.h`**, **`kernel/scheduler_api.h`**,
-and **`arch/common/*`**—expected for IRQ/port registration on PC-class hardware.
+Drivers register IRQ/I/O ports through **`includes/ir0/resource_registry.h`**. They must not pull
+`kernel/*.h` headers directly (`scripts/architecture_guard.py` requires facades); scheduler entry still
+uses **`includes/ir0/scheduler_api.h`**.
 
 ## Assessment: are we on a scalable path?
 
@@ -174,7 +205,7 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
 | `drivers/storage/block_dev.h` | `block_dev_ops_t` |
 | `fs/vfs.h` | `vfs_ops` / fstype registration |
 | `includes/ir0/arch_port.h` | Arch-neutral CPU queries for `fs/` |
-| `scripts/architecture_guard.py` | Driver + interrupt + `fs` arch include policy |
+| `scripts/architecture_guard.py` | Driver + facade + pseudo-fs/bluetooth/block_dev include policy |
 | `scripts/kernel_export_digest.py` | SHA-256 of sorted `nm -g` export list |
 | `Makefile` | `ALL_OBJS`, `ARCH_OBJS`, gated `*_OBJS` |
 

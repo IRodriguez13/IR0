@@ -12,8 +12,14 @@
  */
 
 #include <ir0/bluetooth.h>
+#include "bluetooth_init.h"
 #include "bt_device.h"
 #include "bt_sysfs.h"
+
+int ir0_bluetooth_register_driver(void)
+{
+	return bluetooth_register_driver();
+}
 
 int ir0_bt_proc_devices_read(char *buffer, size_t count)
 {
@@ -73,4 +79,9 @@ int ir0_bt_hci_write(const char *buffer, size_t count)
 int ir0_bt_hci_ioctl(unsigned int cmd, unsigned long arg)
 {
 	return bt_hci_ioctl(cmd, arg);
+}
+
+void ir0_bluetooth_poll(void)
+{
+	bluetooth_poll();
 }

@@ -26,7 +26,6 @@ CFLAGS += -I$(KERNEL_ROOT)/includes
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
 CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include
-CFLAGS += -I$(KERNEL_ROOT)/include
 CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/drivers
 CFLAGS += -I$(KERNEL_ROOT)/fs
@@ -162,7 +161,7 @@ all: $(OBJS)
 	@g++ -m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \
 		-mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
 		-nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin \
-		-I./cpp/include $(CFLAGS) -c $< -o $@
+		$(CFLAGS) -c $< -o $@
 
 # Compile ASM files
 %%.o: %%.asm

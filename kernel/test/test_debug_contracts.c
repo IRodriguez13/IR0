@@ -249,6 +249,47 @@ void ktest_mount_multi_fs_contract(void)
 	KTEST_END();
 }
 
+void ktest_mount_umount_remount_contract(void)
+{
+	KTEST_BEGIN("mount_umount_remount_contract");
+
+	int64_t mk = sys_mkdir("/mnt/um", 0755);
+	KASSERT(mk == 0 || mk == -EEXIST);
+
+	int64_t m1 = sys_mount("/dev/simple0", "/mnt/um", "simplefs");
+	if (m1 == -EBUSY)
+	{
+		(void)sys_umount("/mnt/um", 0);
+		m1 = sys_mount("/dev/simple0", "/mnt/um", "simplefs");
+	}
+	KASSERT_EQ(m1, 0);
+
+	int64_t u = sys_umount("/mnt/um", 0);
+	KASSERT_EQ(u, 0);
+
+	int64_t m2 = sys_mount("/dev/simple0", "/mnt/um", "simplefs");
+	KASSERT_EQ(m2, 0);
+
+	int64_t mk_fat = sys_mkdir("/mnt/umfat", 0755);
+	KASSERT(mk_fat == 0 || mk_fat == -EEXIST);
+
+	int64_t mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16");
+	if (mf1 == -EBUSY)
+	{
+		(void)sys_umount("/mnt/umfat", 0);
+		mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16");
+	}
+	KASSERT_EQ(mf1, 0);
+
+	int64_t uf = sys_umount("/mnt/umfat", 0);
+	KASSERT_EQ(uf, 0);
+
+	int64_t mf2 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16");
+	KASSERT_EQ(mf2, 0);
+
+	KTEST_END();
+}
+
 void ktest_mount_longest_prefix_contract(void)
 {
 	KTEST_BEGIN("mount_longest_prefix_contract");
@@ -294,6 +335,27 @@ void ktest_mount_longest_prefix_contract(void)
 
 	KASSERT(contains_text(outer_buf, "outer-tmpfs"));
 	KASSERT(contains_text(inner_buf, "inner-simplefs"));
+
+	KTEST_END();
+}
+
+void ktest_devfs_hci_open_contract(void)
+{
+	KTEST_BEGIN("devfs_hci_open_contract");
+
+#if CONFIG_ENABLE_BLUETOOTH
+	{
+		int64_t fd = sys_open("/dev/bluetooth/hci0", O_RDONLY, 0);
+		KASSERT_GT(fd, 0);
+		if (fd > 0)
+			sys_close((int)fd);
+	}
+#else
+	{
+		int64_t fd = sys_open("/dev/bluetooth/hci0", O_RDONLY, 0);
+		KASSERT(fd < 0);
+	}
+#endif
 
 	KTEST_END();
 }

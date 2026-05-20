@@ -38,9 +38,9 @@
 #if CONFIG_ENABLE_STORAGE_ATA
 #include <drivers/storage/ata.h>
 #endif
-#include <drivers/storage/block_dev.h>
+#include <ir0/block_dev.h>
 #include <drivers/serial/serial.h>
-#include <kernel/resource_registry.h>
+#include <ir0/resource_registry.h>
 
 #if CONFIG_ENABLE_MOUSE
 #include <drivers/IO/ps2_mouse.h>
@@ -53,7 +53,11 @@
 #endif
 
 #if CONFIG_ENABLE_BLUETOOTH
-#include "bluetooth/bluetooth_init.h"
+#include <ir0/bluetooth.h>
+#endif
+
+#if CONFIG_ENABLE_USB_HOST
+#include <ir0/usb_host.h>
 #endif
 
 #if CONFIG_ENABLE_NETWORKING
@@ -133,7 +137,16 @@ static int boot_init_network(void)
 static int boot_init_bluetooth(void)
 {
 #if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
-    return bluetooth_register_driver();
+    return ir0_bluetooth_register_driver();
+#else
+    return 0;
+#endif
+}
+
+static int boot_init_usb_host(void)
+{
+#if CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST
+    return ir0_usb_host_init();
 #else
     return 0;
 #endif
@@ -160,6 +173,8 @@ static void register_bootstrap_plan(void)
                               (CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK));
     driver_bootstrap_register(DRIVER_BOOT_STAGE_NETWORK, "bluetooth_stack", boot_init_bluetooth,
                               (CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER));
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "usb_host", boot_init_usb_host,
+                              (CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST));
 }
 
 /**
@@ -210,6 +225,9 @@ void init_all_drivers(void)
 #endif
 #if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
     log_subsystem_ok("BLUETOOTH_STACK");
+#endif
+#if CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST
+    log_subsystem_ok("USB_HOST");
 #endif
     g_bootstrap_done = 1;
     serial_print("[DRIVERS] All drivers initialized successfully\n");

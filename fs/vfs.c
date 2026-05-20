@@ -31,7 +31,7 @@
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/permissions.h>
-#include <kernel/process.h>
+#include <ir0/credentials.h>
 #include <ir0/block_dev.h>
 #include <ir0/vga.h>
 #include <config.h>
@@ -115,9 +115,9 @@ static struct vfs_ops *ops_for_path(const char *path)
  */
 static int check_dir_traverse(const char *path)
 {
-    if (!current_process)
+    if (!ir0_current_cred())
         return -EINVAL;
-    if (is_root(current_process))
+    if (ir0_cred_is_root())
         return 0;
     if (strcmp(path, "/") == 0)
         return 0;
@@ -139,7 +139,7 @@ static int check_dir_traverse(const char *path)
         strncat(dir, p, clen);
         dir[sizeof(dir) - 1] = '\0';
 
-        if (!check_file_access(dir, ACCESS_EXEC, current_process))
+        if (!ir0_check_file_access(dir, ACCESS_EXEC))
             return -EACCES;
         p = slash + 1;
     }
@@ -250,7 +250,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
 
     if (!fstype || !path)
         return -EINVAL;
-    if (current_process && current_process->euid != ROOT_UID)
+    if (ir0_current_cred() && !ir0_cred_is_root())
         return -EPERM;
 
     int ret = validate_path(path);
@@ -314,7 +314,7 @@ int vfs_umount(const char *path)
 
     if (!path)
         return -EINVAL;
-    if (current_process && current_process->euid != ROOT_UID)
+    if (ir0_current_cred() && !ir0_cred_is_root())
         return -EPERM;
 
     ret = validate_path(path);
@@ -426,7 +426,8 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     int ret = validate_path(path);
     if (ret != 0) return ret;
     if (!out)     return -EFAULT;
-    if (!current_process) return -ESRCH;
+    if (!ir0_current_cred())
+        return -ESRCH;
 
     ret = check_dir_traverse(path);
     if (ret != 0)
@@ -439,7 +440,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     if (flags & O_CREAT) {
         char parent[MAX_PATH];
         if (parent_dir(path, parent, sizeof(parent)) == 0)
-            if (!check_file_access(parent, 0x2, current_process))
+            if (!ir0_check_file_access(parent, ACCESS_WRITE))
                 return -EACCES;
 
         stat_t st;
@@ -460,7 +461,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
         int accmode = flags & O_ACCMODE;
         if (accmode == O_RDONLY || accmode == O_RDWR) acc |= 0x1;
         if (accmode == O_WRONLY || accmode == O_RDWR) acc |= 0x2;
-        if (!check_file_access(path, acc, current_process))
+        if (!ir0_check_file_access(path, acc))
             return -EACCES;
 
         stat_t st;
@@ -614,12 +615,13 @@ int vfs_mkdir(const char *path, int mode)
 {
     int ret = validate_path(path);
     if (ret != 0) return ret;
-    if (!current_process) return -ESRCH;
+    if (!ir0_current_cred())
+        return -ESRCH;
 
     char parent[MAX_PATH];
     if (parent_dir(path, parent, sizeof(parent)) == 0)
         if (strcmp(parent, "/") != 0)
-            if (!check_file_access(parent, 0x2, current_process))
+            if (!ir0_check_file_access(parent, ACCESS_WRITE))
                 return -EACCES;
 
     if (strcmp(path, "/") == 0)
@@ -639,20 +641,25 @@ int vfs_unlink(const char *path)
 {
     int ret = validate_path(path);
     if (ret != 0) return ret;
-    if (!current_process) return -ESRCH;
-    if (strcmp(path, "/") == 0) return -EPERM;
+    if (!ir0_current_cred())
+        return -ESRCH;
+    if (strcmp(path, "/") == 0)
+        return -EPERM;
 
     stat_t st;
     if (vfs_stat(path, &st) != 0)
         return -ENOENT;
 
-    if (S_ISDIR(st.st_mode)) {
+    if (S_ISDIR(st.st_mode))
+    {
         char parent[MAX_PATH];
         if (parent_dir(path, parent, sizeof(parent)) == 0)
-            if (!check_file_access(parent, 0x2, current_process))
+            if (!ir0_check_file_access(parent, ACCESS_WRITE))
                 return -EACCES;
-    } else {
-        if (!check_file_access(path, 0x2, current_process))
+    }
+    else
+    {
+        if (!ir0_check_file_access(path, ACCESS_WRITE))
             return -EACCES;
     }
 
@@ -668,17 +675,18 @@ int vfs_link(const char *oldpath, const char *newpath)
     if (ret != 0) return ret;
     ret = validate_path(newpath);
     if (ret != 0) return ret;
-    if (!current_process) return -ESRCH;
+    if (!ir0_current_cred())
+        return -ESRCH;
 
     stat_t st;
     if (vfs_stat(oldpath, &st) != 0)
         return -ENOENT;
-    if (!check_file_access(oldpath, 0x1, current_process))
+    if (!ir0_check_file_access(oldpath, ACCESS_READ))
         return -EACCES;
 
     char parent[MAX_PATH];
     if (parent_dir(newpath, parent, sizeof(parent)) == 0)
-        if (!check_file_access(parent, 0x2, current_process))
+        if (!ir0_check_file_access(parent, ACCESS_WRITE))
             return -EACCES;
 
     if (vfs_stat(newpath, &st) == 0)
@@ -696,19 +704,20 @@ int vfs_rename(const char *oldpath, const char *newpath)
     if (ret != 0) return ret;
     ret = validate_path(newpath);
     if (ret != 0) return ret;
-    if (!current_process) return -ESRCH;
+    if (!ir0_current_cred())
+        return -ESRCH;
 
     stat_t st_old;
     if (vfs_stat(oldpath, &st_old) != 0)
         return -ENOENT;
     if (S_ISDIR(st_old.st_mode))
         return -EISDIR;
-    if (!check_file_access(oldpath, ACCESS_READ | ACCESS_WRITE, current_process))
+    if (!ir0_check_file_access(oldpath, ACCESS_READ | ACCESS_WRITE))
         return -EACCES;
 
     char parent[MAX_PATH];
     if (parent_dir(newpath, parent, sizeof(parent)) == 0)
-        if (!check_file_access(parent, ACCESS_WRITE, current_process))
+        if (!ir0_check_file_access(parent, ACCESS_WRITE))
             return -EACCES;
 
     struct vfs_mount *m_old = find_mount(oldpath);
@@ -737,7 +746,7 @@ int vfs_rmdir(const char *path)
 {
     int ret = validate_path(path);
     if (ret != 0) return ret;
-    if (!current_process)
+    if (!ir0_current_cred())
         return -ESRCH;
 
     char norm[MAX_PATH];
@@ -759,7 +768,7 @@ int vfs_rmdir(const char *path)
     char parent[MAX_PATH];
     if (parent_dir(norm, parent, sizeof(parent)) == 0)
     {
-        if (!check_file_access(parent, ACCESS_WRITE | ACCESS_EXEC, current_process))
+        if (!ir0_check_file_access(parent, ACCESS_WRITE | ACCESS_EXEC))
             return -EACCES;
     }
 
@@ -855,9 +864,10 @@ int vfs_readdir(const char *path, struct vfs_dirent *entries, int max)
         return -EINVAL;
     int ret = validate_path(path);
     if (ret != 0) return ret;
-    if (!current_process) return -ESRCH;
+    if (!ir0_current_cred())
+        return -ESRCH;
 
-    if (!check_file_access(path, ACCESS_EXEC, current_process))
+    if (!ir0_check_file_access(path, ACCESS_EXEC))
         return -EACCES;
 
     struct vfs_ops *ops = ops_for_path(path);
@@ -871,9 +881,9 @@ int vfs_chown(const char *path, uid_t owner, gid_t group)
     if (!path) return -EINVAL;
     int ret = validate_path(path);
     if (ret != 0) return ret;
-    if (!current_process)
+    if (!ir0_current_cred())
         return -ESRCH;
-    if (current_process->euid != ROOT_UID)
+    if (!ir0_cred_is_root())
         return -EPERM;
 
     struct vfs_ops *ops = ops_for_path(path);
@@ -889,7 +899,7 @@ int vfs_chmod(const char *path, mode_t mode)
     int ret = validate_path(path);
     if (ret != 0)
         return ret;
-    if (!current_process)
+    if (!ir0_current_cred())
         return -ESRCH;
 
     stat_t st;
@@ -897,7 +907,7 @@ int vfs_chmod(const char *path, mode_t mode)
     if (ret != 0)
         return ret;
 
-    if (current_process->euid != ROOT_UID && current_process->euid != st.st_uid)
+    if (!ir0_cred_is_root() && ir0_current_cred()->euid != st.st_uid)
         return -EPERM;
 
     struct vfs_ops *ops = ops_for_path(path);
@@ -910,12 +920,12 @@ int vfs_truncate(const char *path, size_t length)
 {
     if (!path)
         return -EINVAL;
-    if (!current_process)
+    if (!ir0_current_cred())
         return -ESRCH;
     int ret = validate_path(path);
     if (ret != 0)
         return ret;
-    if (!check_file_access(path, ACCESS_WRITE, current_process))
+    if (!ir0_check_file_access(path, ACCESS_WRITE))
         return -EACCES;
 
     struct vfs_ops *ops = ops_for_path(path);

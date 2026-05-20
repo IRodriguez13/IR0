@@ -91,6 +91,11 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 int sys_munmap(void *addr, size_t length);
 int sys_mprotect(void *addr, size_t len, int prot);
 
+int64_t sys_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_t sigsetsize);
+int64_t sys_arch_prctl(int code, unsigned long addr);
+int64_t sys_set_tid_address(int *tidptr);
+int64_t sys_fcntl(int fd, int cmd, unsigned long arg);
+
 /* System functions */
 void syscalls_init(void);
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,

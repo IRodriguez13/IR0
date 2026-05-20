@@ -38,7 +38,7 @@
 #include <ir0/partition.h>
 #include <string.h>
 #include <ir0/clock.h>
-#include "kernel/ipc.h"
+#include <ir0/ipc.h>
 #if CONFIG_ENABLE_BLUETOOTH
 #include <ir0/bluetooth.h>
 #endif
@@ -46,13 +46,11 @@
 #include <ir0/copy_user.h>
 #include <ir0/input.h>
 #include <ir0/serial_io.h>
-#include <kernel/process.h>
+#include <ir0/credentials.h>
 
 static pid_t devfs_current_pid(void)
 {
-    if (!current_process)
-        return 0;
-    return current_process->task.pid;
+    return ir0_current_pid();
 }
 
 /* Device registry — room for builtins + dense disk/part topology */
@@ -2121,6 +2119,42 @@ int devfs_init(void)
 #endif
 
     return 0;
+}
+
+int64_t devfs_open_node(devfs_node_t *node, int flags)
+{
+    int64_t rc;
+
+    if (!node)
+        return -EINVAL;
+
+    if (node->ops && node->ops->open)
+    {
+        rc = node->ops->open(&node->entry, flags);
+        if (rc < 0)
+            return rc;
+    }
+
+    node->ref_count++;
+    return 0;
+}
+
+int64_t devfs_close_node(devfs_node_t *node)
+{
+    int64_t rc;
+
+    if (!node)
+        return -EINVAL;
+
+    if (node->ref_count == 0)
+        return -EBADF;
+
+    node->ref_count--;
+    rc = 0;
+    if (node->ref_count == 0 && node->ops && node->ops->close)
+        rc = node->ops->close(&node->entry);
+
+    return rc;
 }
 
 devfs_node_t *devfs_find_node(const char *path)
