@@ -47,6 +47,8 @@ extern void ktest_mount_proc_contract(void);
 extern void ktest_mount_tmpfs_contract(void);
 extern void ktest_mount_multi_fs_contract(void);
 extern void ktest_mount_longest_prefix_contract(void);
+extern void ktest_mount_umount_remount_contract(void);
+extern void ktest_devfs_hci_open_contract(void);
 
 static void (*const ktest_functions[])(void) = {
 	ktest_boot_ok,
@@ -69,6 +71,8 @@ static void (*const ktest_functions[])(void) = {
 	ktest_mount_tmpfs_contract,
 	ktest_mount_multi_fs_contract,
 	ktest_mount_longest_prefix_contract,
+	ktest_mount_umount_remount_contract,
+	ktest_devfs_hci_open_contract,
 	NULL
 };
 
@@ -93,6 +97,8 @@ static const char *const ktest_names[] = {
 	"mount_tmpfs_contract",
 	"mount_multi_fs_contract",
 	"mount_longest_prefix_contract",
+	"mount_umount_remount_contract",
+	"devfs_hci_open_contract",
 	NULL
 };
 
@@ -121,6 +127,8 @@ static const int ktest_needs_process[] = {
 	1,  /* mount_tmpfs_contract */
 	1,  /* mount_multi_fs_contract */
 	1,  /* mount_longest_prefix_contract */
+	1,  /* mount_umount_remount_contract */
+	1,  /* devfs_hci_open_contract */
 };
 
 static void ktest_print_decimal(uint32_t n)

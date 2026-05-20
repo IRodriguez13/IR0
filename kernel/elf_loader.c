@@ -80,6 +80,12 @@ typedef struct
 /* Cap argv/envp enumeration so hostile or buggy user stacks cannot unbounded-scan */
 #define ELF_ARG_MAX 256
 
+#define AT_NULL   0
+#define AT_PAGESZ 6
+#define AT_ENTRY  9
+
+#define ELF_AUXV_PAIRS 3
+
 static int validate_elf_header(const elf64_header_t *header)
 {
     /* Check ELF magic number */
@@ -359,12 +365,13 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
             strings_size += strlen(envp[i]) + 1;
     }
     
-    /* Total size: argv[] + envp[] + strings + alignment */
+    /* Total size: argv[] + envp[] + auxv[] + strings + alignment */
     /* Note: argc is NOT on stack, only in rdi register (x86-64 ABI) */
-    size_t stack_size = (argc + 1) * sizeof(uint64_t) +        /* argv[] + NULL */
-                       (envc + 1) * sizeof(uint64_t) +        /* envp[] + NULL */
-                       strings_size +                         /* strings */
-                       16;                                    /* alignment */
+    size_t stack_size = (argc + 1) * sizeof(uint64_t) +
+                       (envc + 1) * sizeof(uint64_t) +
+                       ELF_AUXV_PAIRS * 2 * sizeof(uint64_t) +
+                       strings_size +
+                       16;
     
     /* Leave 256 bytes margin for safety */
     size_t stack_margin = 256;
@@ -381,33 +388,39 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     /* Switch to process page directory temporarily */
     uint64_t old_cr3 = get_current_page_directory();
     load_page_directory((uint64_t)process->page_directory);
-    
-    /* Build stack from bottom to top (stack grows down) */
+
+    /* Layout low to high: argv[] | envp[] | auxv[] | strings */
     uint64_t stack_top = process->stack_start + process->stack_size;
-    uint64_t stack_ptr = stack_top - 16;  /* Start with alignment */
-    
-    /* Write strings first (they go at the top) */
+    uint64_t stack_base = stack_top - stack_size;
+    stack_base &= ~0xFULL;
+
+    uint64_t argv_array = stack_base;
+    uint64_t envp_array = argv_array + (argc + 1) * sizeof(uint64_t);
+    uint64_t auxv_base = envp_array + (envc + 1) * sizeof(uint64_t);
+    uint64_t strings_base = auxv_base + ELF_AUXV_PAIRS * 2 * sizeof(uint64_t);
+
     uint64_t *argv_ptrs = (uint64_t *)kmalloc((argc + 1) * sizeof(uint64_t));
     uint64_t *envp_ptrs = (uint64_t *)kmalloc((envc + 1) * sizeof(uint64_t));
-    
+
     if (!argv_ptrs || !envp_ptrs)
     {
         load_page_directory(old_cr3);
-        if (argv_ptrs) kfree(argv_ptrs);
-        if (envp_ptrs) kfree(envp_ptrs);
+        if (argv_ptrs)
+            kfree(argv_ptrs);
+        if (envp_ptrs)
+            kfree(envp_ptrs);
         return -1;
     }
-    
-    /* Write argv strings */
-    stack_ptr -= strings_size;
-    uint64_t strings_base = stack_ptr;
+
+    /* Copy argv/env strings into userspace */
     uint64_t current_string_ptr = strings_base;
-    
+
     for (int i = 0; i < argc; i++)
     {
         if (argv[i])
         {
             size_t len = strlen(argv[i]) + 1;
+
             if (copy_to_user((void *)current_string_ptr, argv[i], len) != 0)
             {
                 load_page_directory(old_cr3);
@@ -419,13 +432,13 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
             current_string_ptr += len;
         }
     }
-    
-    /* Write envp strings */
+
     for (int i = 0; i < envc; i++)
     {
         if (envp[i])
         {
             size_t len = strlen(envp[i]) + 1;
+
             if (copy_to_user((void *)current_string_ptr, envp[i], len) != 0)
             {
                 load_page_directory(old_cr3);
@@ -437,67 +450,95 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
             current_string_ptr += len;
         }
     }
-    
-    /* Write envp[] array */
-    stack_ptr = stack_top - 16;
-    stack_ptr -= (envc + 1) * sizeof(uint64_t);
-    uint64_t envp_array = stack_ptr;
-    
-    for (int i = 0; i < envc; i++)
-    {
-        uint64_t ptr = envp_ptrs[i];
-        if (copy_to_user((void *)stack_ptr, &ptr, sizeof(uint64_t)) != 0)
-        {
-            load_page_directory(old_cr3);
-            kfree(argv_ptrs);
-            kfree(envp_ptrs);
-            return -1;
-        }
-        stack_ptr += sizeof(uint64_t);
-    }
-    
-    /* NULL terminator for envp */
-    uint64_t zero = 0;
-    if (copy_to_user((void *)stack_ptr, &zero, sizeof(uint64_t)) != 0)
-    {
-        load_page_directory(old_cr3);
-        kfree(argv_ptrs);
-        kfree(envp_ptrs);
-        return -1;
-    }
-    stack_ptr += sizeof(uint64_t);
-    
-    /* Write argv[] array */
-    stack_ptr -= (argc + 1) * sizeof(uint64_t);
-    uint64_t argv_array = stack_ptr;
-    
+
+    /* argv[] */
     for (int i = 0; i < argc; i++)
     {
         uint64_t ptr = argv_ptrs[i];
-        if (copy_to_user((void *)stack_ptr, &ptr, sizeof(uint64_t)) != 0)
+
+        if (copy_to_user((void *)(argv_array + (size_t)i * sizeof(uint64_t)),
+                         &ptr, sizeof(uint64_t)) != 0)
         {
             load_page_directory(old_cr3);
             kfree(argv_ptrs);
             kfree(envp_ptrs);
             return -1;
         }
-        stack_ptr += sizeof(uint64_t);
     }
-    
-    /* NULL terminator for argv */
-    if (copy_to_user((void *)stack_ptr, &zero, sizeof(uint64_t)) != 0)
+
     {
-        load_page_directory(old_cr3);
-        kfree(argv_ptrs);
-        kfree(envp_ptrs);
-        return -1;
+        uint64_t zero = 0;
+
+        if (copy_to_user((void *)(argv_array + (size_t)argc * sizeof(uint64_t)),
+                         &zero, sizeof(uint64_t)) != 0)
+        {
+            load_page_directory(old_cr3);
+            kfree(argv_ptrs);
+            kfree(envp_ptrs);
+            return -1;
+        }
     }
-    stack_ptr += sizeof(uint64_t);
-    
-    /* Set stack pointer to bottom of argument arrays (16-byte aligned) */
-    /* According to x86-64 ABI, argc is NOT on stack, only in rdi register */
-    process->task.rsp = stack_ptr;
-    process->task.rbp = stack_ptr;
+
+    /* envp[] */
+    for (int i = 0; i < envc; i++)
+    {
+        uint64_t ptr = envp_ptrs[i];
+
+        if (copy_to_user((void *)(envp_array + (size_t)i * sizeof(uint64_t)),
+                         &ptr, sizeof(uint64_t)) != 0)
+        {
+            load_page_directory(old_cr3);
+            kfree(argv_ptrs);
+            kfree(envp_ptrs);
+            return -1;
+        }
+    }
+
+    {
+        uint64_t zero = 0;
+
+        if (copy_to_user((void *)(envp_array + (size_t)envc * sizeof(uint64_t)),
+                         &zero, sizeof(uint64_t)) != 0)
+        {
+            load_page_directory(old_cr3);
+            kfree(argv_ptrs);
+            kfree(envp_ptrs);
+            return -1;
+        }
+    }
+
+    /* auxv[] — musl walks past envp NULL to find these */
+    {
+        struct
+        {
+            uint64_t a_type;
+            uint64_t a_val;
+        } auxv[ELF_AUXV_PAIRS] = {
+            { AT_PAGESZ, 4096 },
+            { AT_ENTRY, process->task.rip },
+            { AT_NULL, 0 },
+        };
+        size_t i;
+
+        for (i = 0; i < ELF_AUXV_PAIRS; i++)
+        {
+            uint64_t off = i * 2 * sizeof(uint64_t);
+
+            if (copy_to_user((void *)(auxv_base + off),
+                             &auxv[i].a_type, sizeof(uint64_t)) != 0 ||
+                copy_to_user((void *)(auxv_base + off + sizeof(uint64_t)),
+                             &auxv[i].a_val, sizeof(uint64_t)) != 0)
+            {
+                load_page_directory(old_cr3);
+                kfree(argv_ptrs);
+                kfree(envp_ptrs);
+                return -1;
+            }
+        }
+    }
+
+    process->task.rsp = argv_array;
+    process->task.rbp = argv_array;
     
     /* Set registers for x86-64 ABI: rdi=argc, rsi=argv, rdx=envp */
     process->task.rdi = (uint64_t)argc;

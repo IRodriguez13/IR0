@@ -24,7 +24,7 @@
 #include <ir0/console_backend.h>
 #include <config.h>
 #include <ir0/kmem.h>
-#include <kernel/process.h>
+#include <ir0/credentials.h>
 #include <ir0/permissions.h>
 #include <string.h>
 
@@ -1211,10 +1211,14 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   kmemset(&new_inode, 0, sizeof(minix_inode_t));
   
   // Apply umask to mode
-  mode_t effective_mode = mode & ~(current_process ? current_process->umask : 0);
-  new_inode.i_mode = MINIX_IFDIR | (effective_mode & 0777);
-  new_inode.i_uid = current_process ? current_process->uid : 0;
-  new_inode.i_gid = current_process ? current_process->gid : 0;
+  {
+    const struct ir0_task_cred *cr = ir0_current_cred();
+
+    mode_t effective_mode = mode & ~(cr ? cr->umask : (mode_t)0);
+    new_inode.i_mode = MINIX_IFDIR | (effective_mode & 0777);
+    new_inode.i_uid = cr ? (uint16_t)cr->uid : (uint16_t)0;
+    new_inode.i_gid = cr ? (uint8_t)cr->gid : (uint8_t)0;
+  }
   new_inode.i_size = MINIX_BLOCK_SIZE; // One block for . and ..
   new_inode.i_time = get_system_time();
   new_inode.i_nlinks = 2; // . and ..
@@ -1811,10 +1815,14 @@ int minix_fs_touch(const char *path, mode_t mode)
   minix_inode_t new_inode = {0};
   
   // Apply umask to mode
-  mode_t effective_mode = mode & ~(current_process ? current_process->umask : 0);
-  new_inode.i_mode = MINIX_IFREG | (effective_mode & 0777);         // Regular file with given permissions
-  new_inode.i_uid = current_process ? current_process->uid : 0;     // Use current process UID
-  new_inode.i_gid = current_process ? current_process->gid : 0;     // Use current process GID
+  {
+    const struct ir0_task_cred *cr = ir0_current_cred();
+
+    mode_t effective_mode = mode & ~(cr ? cr->umask : (mode_t)0);
+    new_inode.i_mode = MINIX_IFREG | (effective_mode & 0777);         // Regular file with given permissions
+    new_inode.i_uid = cr ? (uint16_t)cr->uid : (uint16_t)0;     // Use current process UID
+    new_inode.i_gid = cr ? (uint8_t)cr->gid : (uint8_t)0;     // Use current process GID
+  }
   new_inode.i_size = 0;                                   // Empty file
   new_inode.i_time = get_system_time();                   // Current time
   new_inode.i_nlinks = 1;                                 // Single hard link
@@ -2474,14 +2482,14 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
  */
 int minix_fs_chown(const char *path, uid_t owner, gid_t group)
 {
-  if (!current_process)
+  if (!ir0_current_cred())
     return -ESRCH;
 
   minix_inode_t *inode = minix_fs_find_inode(path);
   if (!inode)
     return -ENOENT;
 
-  if (current_process->euid != ROOT_UID)
+  if (!ir0_cred_is_root())
     return -EPERM;
 
   uint16_t inode_num = minix_fs_get_inode_number(path);
@@ -2602,15 +2610,19 @@ static int minix_fs_readdir(const char *path, struct vfs_dirent *entries, int ma
  */
 static int minix_fs_chmod(const char *path, mode_t mode)
 {
-	if (!current_process)
+	if (!ir0_current_cred())
 		return -ESRCH;
 
 	minix_inode_t *inode_ptr = minix_fs_find_inode(path);
 	if (!inode_ptr)
 		return -ENOENT;
 
-	if (current_process->euid != ROOT_UID && current_process->euid != inode_ptr->i_uid)
-		return -EPERM;
+	{
+		const struct ir0_task_cred *cr = ir0_current_cred();
+
+		if (!ir0_cred_is_root() && cr->euid != inode_ptr->i_uid)
+			return -EPERM;
+	}
 
 	uint16_t inode_num = minix_fs_get_inode_number(path);
 	if (inode_num == 0)

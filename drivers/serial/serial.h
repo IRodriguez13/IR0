@@ -62,3 +62,9 @@ void serial_print(const char *str);
 void serial_print_hex32(uint32_t num);
 void serial_print_hex64(uint64_t num);
 char serial_read_char(void);
+
+/*
+ * serial_try_read_char - Non-blocking read from COM1.
+ * Returns 0..255 on success, -1 if no byte is available.
+ */
+int serial_try_read_char(void);

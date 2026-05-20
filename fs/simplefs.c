@@ -18,7 +18,8 @@
 #include <ir0/errno.h>
 #include <ir0/stat.h>
 #include <ir0/clock.h>
-#include <kernel/process.h>
+#include <ir0/block_dev.h>
+#include <ir0/credentials.h>
 #include <ir0/permissions.h>
 #include <string.h>
 
@@ -45,6 +46,7 @@ typedef struct simplefs_entry
 typedef struct simplefs_store
 {
     int in_use;
+    int mount_refcount;
     char fs_name[16];
     char dev[64];
     int strict_83_names;
@@ -143,6 +145,27 @@ static simplefs_store_t *simplefs_find_store(const char *fs_name, const char *de
     return NULL;
 }
 
+static void simplefs_store_release(simplefs_store_t *store)
+{
+    int j;
+
+    if (!store || !store->in_use)
+        return;
+
+    for (j = 0; j < SIMPLEFS_MAX_ENTRIES; j++)
+    {
+        if (!store->entries[j].in_use)
+            continue;
+        if (store->entries[j].data)
+        {
+            kfree(store->entries[j].data);
+            store->entries[j].data = NULL;
+        }
+    }
+
+    memset(store, 0, sizeof(*store));
+}
+
 static simplefs_store_t *simplefs_get_or_create_store(const char *fs_name, const char *dev, int strict_83_names)
 {
     simplefs_store_t *store = simplefs_find_store(fs_name, dev);
@@ -161,6 +184,7 @@ static simplefs_store_t *simplefs_get_or_create_store(const char *fs_name, const
         g_stores[i].fs_name[sizeof(g_stores[i].fs_name) - 1] = '\0';
         strncpy(g_stores[i].dev, dev, sizeof(g_stores[i].dev) - 1);
         g_stores[i].dev[sizeof(g_stores[i].dev) - 1] = '\0';
+        g_stores[i].mount_refcount = 0;
         return &g_stores[i];
     }
     return NULL;
@@ -267,13 +291,79 @@ static simplefs_entry_t *simplefs_alloc_entry(simplefs_store_t *store)
     return NULL;
 }
 
+/*
+ * simplefs_check_block_device - Require ATA block names to be registered.
+ * Virtual backing devices (simple0, fat0, ...) skip this check.
+ */
+static int simplefs_check_block_device(const char *dev)
+{
+    const char *name;
+
+    if (!dev || strcmp(dev, "none") == 0)
+        return 0;
+
+    name = dev;
+    if (strncmp(dev, "/dev/", 5) == 0)
+        name = dev + 5;
+
+    if (strcmp(name, "hda") != 0 && strcmp(name, "hdb") != 0 &&
+        strcmp(name, "hdc") != 0 && strcmp(name, "hdd") != 0)
+        return 0;
+
+    return block_dev_is_present(name) ? 0 : -ENXIO;
+}
+
+static int simplefs_umount_common(const char *fs_name, const char *dir)
+{
+    char mount_norm[256];
+
+    if (!dir || !fs_name)
+        return -EINVAL;
+
+    simplefs_normalize_mount(dir, mount_norm, sizeof(mount_norm));
+
+    for (int i = 0; i < SIMPLEFS_MAX_MOUNTS; i++)
+    {
+        if (!g_mounts[i].in_use)
+            continue;
+        if (strcmp(g_mounts[i].fs_name, fs_name) != 0)
+            continue;
+        if (strcmp(g_mounts[i].mount_path, mount_norm) != 0)
+            continue;
+
+        {
+            simplefs_store_t *stor = g_mounts[i].store;
+
+            g_mounts[i].in_use = 0;
+            g_mounts[i].store = NULL;
+            g_mounts[i].mount_path[0] = '\0';
+
+            if (stor)
+            {
+                if (stor->mount_refcount > 0)
+                    stor->mount_refcount--;
+                if (stor->mount_refcount == 0)
+                    simplefs_store_release(stor);
+            }
+        }
+        return 0;
+    }
+
+    return -EINVAL;
+}
+
 static int simplefs_mount_common(const char *fs_name, const char *dev, const char *dir, int strict_83_names)
 {
     char mount_norm[256];
     simplefs_store_t *store;
+    int blk_rc;
 
     if (!dir || !fs_name)
         return -EINVAL;
+
+    blk_rc = simplefs_check_block_device(dev);
+    if (blk_rc != 0)
+        return blk_rc;
 
     simplefs_normalize_mount(dir, mount_norm, sizeof(mount_norm));
     store = simplefs_get_or_create_store(fs_name, dev ? dev : "none", strict_83_names);
@@ -297,6 +387,8 @@ static int simplefs_mount_common(const char *fs_name, const char *dev, const cha
         g_mounts[i].fs_name[sizeof(g_mounts[i].fs_name) - 1] = '\0';
         strncpy(g_mounts[i].mount_path, mount_norm, sizeof(g_mounts[i].mount_path) - 1);
         g_mounts[i].mount_path[sizeof(g_mounts[i].mount_path) - 1] = '\0';
+        if (store)
+            store->mount_refcount++;
         return 0;
     }
 
@@ -360,7 +452,8 @@ static int simplefs_mkdir_common(const char *fs_name, const char *path, mode_t m
     int rc = 0;
     simplefs_mount_t *mnt;
     simplefs_entry_t *e;
-    mode_t umask_value = (mode_t)(current_process ? current_process->umask : DEFAULT_UMASK);
+    const struct ir0_task_cred *cr = ir0_current_cred();
+    mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
 
     mnt = simplefs_context_mount(fs_name, path, name, &is_root, &rc);
     if (!mnt)
@@ -377,8 +470,8 @@ static int simplefs_mkdir_common(const char *fs_name, const char *path, mode_t m
         return -ENOSPC;
     e->is_dir = 1;
     e->mode = S_IFDIR | ((mode & 0777) & ~umask_value);
-    e->uid = current_process ? current_process->euid : ROOT_UID;
-    e->gid = current_process ? current_process->egid : ROOT_GID;
+    e->uid = cr ? cr->euid : ROOT_UID;
+    e->gid = cr ? cr->egid : ROOT_GID;
     strncpy(e->name, name, sizeof(e->name) - 1);
     e->name[sizeof(e->name) - 1] = '\0';
     return 0;
@@ -391,7 +484,8 @@ static int simplefs_create_common(const char *fs_name, const char *path, mode_t 
     int rc = 0;
     simplefs_mount_t *mnt;
     simplefs_entry_t *e;
-    mode_t umask_value = (mode_t)(current_process ? current_process->umask : DEFAULT_UMASK);
+    const struct ir0_task_cred *cr = ir0_current_cred();
+    mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
 
     mnt = simplefs_context_mount(fs_name, path, name, &is_root, &rc);
     if (!mnt)
@@ -414,8 +508,8 @@ static int simplefs_create_common(const char *fs_name, const char *path, mode_t 
         return -ENOSPC;
     e->is_dir = 0;
     e->mode = S_IFREG | ((mode & 0777) & ~umask_value);
-    e->uid = current_process ? current_process->euid : ROOT_UID;
-    e->gid = current_process ? current_process->egid : ROOT_GID;
+    e->uid = cr ? cr->euid : ROOT_UID;
+    e->gid = cr ? cr->egid : ROOT_GID;
     strncpy(e->name, name, sizeof(e->name) - 1);
     e->name[sizeof(e->name) - 1] = '\0';
     return 0;
@@ -702,6 +796,16 @@ static int simplefs_mount_fat16(const char *dev, const char *dir)
     return simplefs_mount_common("fat16", dev, dir, 1);
 }
 
+static int simplefs_umount_simple(const char *dir)
+{
+    return simplefs_umount_common("simplefs", dir);
+}
+
+static int simplefs_umount_fat16(const char *dir)
+{
+    return simplefs_umount_common("fat16", dir);
+}
+
 #define SIMPLEFS_DEFINE_OPS(prefix, fsName) \
 static int prefix##_stat(const char *path, stat_t *buf) { return simplefs_stat_common(fsName, path, buf); } \
 static int prefix##_mkdir(const char *path, mode_t mode) { return simplefs_mkdir_common(fsName, path, mode); } \
@@ -784,6 +888,8 @@ int simplefs_engine_register(const char *fs_name, int strict_83_names)
     be->type.name = be->fs_name;
     be->type.ops = &be->ops;
     be->type.mount = mount_fn;
+    be->type.umount = (strcmp(fs_name, "fat16") == 0) ?
+                      simplefs_umount_fat16 : simplefs_umount_simple;
     be->type.next = NULL;
     return vfs_register_fs(&be->type);
 }

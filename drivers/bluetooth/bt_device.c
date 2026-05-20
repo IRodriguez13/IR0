@@ -26,7 +26,7 @@
 #include <ir0/logging.h>
 #include <string.h>
 #include <ir0/errno.h>
-#include <drivers/timer/clock_system.h>
+#include <ir0/clock.h>
 #include <stdint.h>
 
 /* Helper: Get uptime in milliseconds */
@@ -85,6 +85,24 @@ void bt_device_cleanup(void)
     }
     
     bt_hci_opened = false;
+}
+
+/**
+ * bt_scan_state_sync - Align proc scan flag with HCI inquiry state
+ */
+void bt_scan_state_sync(void)
+{
+    struct hci_device *hdev;
+
+    if (!bt_manager)
+        return;
+
+    hdev = hci_get_device();
+    if (!hdev)
+        return;
+
+    if (bt_manager->scan_active && !hdev->scanning)
+        bt_manager->scan_active = 0;
 }
 
 /**
@@ -186,15 +204,6 @@ int bt_hci_read(char *buffer, size_t count)
     }
     
     return (int)off;
-    
-    if (bt_manager && bt_manager->scan_active)
-    {
-        return snprintf(buffer, count, "Scanning...\n");
-    }
-    else
-    {
-        return snprintf(buffer, count, "Ready\n");
-    }
 }
 
 /**
@@ -404,6 +413,7 @@ int bt_proc_scan_read(char *buffer, size_t count)
     
     /* Process pending events */
     hci_process_events();
+    bt_scan_state_sync();
     
     if (!bt_manager)
     {
@@ -434,6 +444,13 @@ int bt_proc_scan_write(const char *command)
         int ret = bt_device_init();
         if (ret < 0)
             return ret;
+    }
+
+    {
+        int open_ret = bt_hci_open();
+
+        if (open_ret < 0)
+            return open_ret;
     }
     
     if (strncmp(command, "start", 5) == 0)

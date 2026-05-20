@@ -8,56 +8,112 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: hci_uart.c
- * Description: IR0 kernel source/header file
- */
-
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel - Bluetooth HCI UART Transport Layer Implementation
- * Copyright (C) 2025  Iván Rodriguez
- *
- * Implements H4 protocol for Bluetooth HCI over UART
+ * Description: IR0 kernel Implements H4 protocol for Bluetooth HCI over UART
  */
 
 #include "hci_uart.h"
-#include "../serial/serial.h"
+#include <interrupt/arch/io.h>
 #include <stdint.h>
 #include <ir0/kmem.h>
 #include <string.h>
 #include <ir0/errno.h>
-#include <arch/common/arch_interface.h>
-#include <arch/common/arch_interface.h>
+
+#define SERIAL_LINE_STATUS_REG 5
+#define SERIAL_DATA_REG        0
 
 /* HCI UART instance */
 static struct hci_uart *hci_uart_instance = NULL;
 
-/**
+static int hci_uart_try_read_byte(uint8_t *out)
+{
+    uint16_t base;
+
+    if (!hci_uart_instance || !hci_uart_instance->initialized)
+        return 0;
+
+    base = hci_uart_instance->uart_base;
+
+    if ((inb(base + SERIAL_LINE_STATUS_REG) & 0x01) == 0)
+        return 0;
+
+    *out = (uint8_t)inb(base + SERIAL_DATA_REG);
+    return 1;
+}
+
+static void hci_uart_rx_reset(struct hci_uart *uart)
+{
+    uart->rx_asm_len = 0;
+    uart->rx_asm_need = 0;
+}
+
+/*
+ * Accumulate one HCI event frame (H4 type 0x04 already stripped).
+ * Layout in rx_asm: [event_code][param_len][params...]
+ */
+static int hci_uart_rx_pump(struct hci_uart *uart)
+{
+    while (uart->rx_asm_len < uart->rx_asm_need || uart->rx_asm_need == 0)
+    {
+        uint8_t byte;
+
+        if (!hci_uart_try_read_byte(&byte))
+            break;
+
+        if (uart->rx_asm_need == 0)
+        {
+            if (byte != HCI_PACKET_TYPE_EVENT)
+                continue;
+
+            uart->rx_asm_len = 0;
+            uart->rx_asm_need = 2;
+            continue;
+        }
+
+        if (uart->rx_asm_len >= HCI_UART_RX_ASM_MAX)
+        {
+            hci_uart_rx_reset(uart);
+            return -EINVAL;
+        }
+
+        uart->rx_asm[uart->rx_asm_len++] = byte;
+
+        if (uart->rx_asm_len == 2)
+        {
+            size_t param_len = uart->rx_asm[1];
+            size_t total = 2 + param_len;
+
+            if (total > HCI_UART_RX_ASM_MAX)
+            {
+                hci_uart_rx_reset(uart);
+                return -EINVAL;
+            }
+
+            uart->rx_asm_need = total;
+        }
+    }
+
+    if (uart->rx_asm_need > 0 && uart->rx_asm_len >= uart->rx_asm_need)
+        return 1;
+
+    return 0;
+}
+
+/*
  * hci_uart_init - Initialize HCI UART transport
  */
 int hci_uart_init(uint16_t uart_base)
 {
     if (hci_uart_instance)
-    {
-        /* Already initialized */
         return 0;
-    }
-    
-    /* Allocate HCI UART structure */
+
     hci_uart_instance = (struct hci_uart *)kmalloc(sizeof(struct hci_uart));
     if (!hci_uart_instance)
-    {
         return -ENOMEM;
-    }
-    
+
     memset(hci_uart_instance, 0, sizeof(struct hci_uart));
     hci_uart_instance->uart_base = uart_base;
     hci_uart_instance->initialized = true;
-    hci_uart_instance->rx_pos = 0;
-    hci_uart_instance->tx_pos = 0;
-    
-    /* UART should already be initialized by serial_init() */
-    /* We use COM1 (0x3F8) which is already set up */
-    
+
     return 0;
 }
 
@@ -66,25 +122,20 @@ int hci_uart_init(uint16_t uart_base)
  */
 int hci_uart_send_command(const uint8_t *cmd, size_t len)
 {
+    uint16_t base;
+
     if (!hci_uart_instance || !hci_uart_instance->initialized)
-    {
         return -ENODEV;
-    }
-    
+
     if (!cmd || len == 0)
-    {
         return -EINVAL;
-    }
-    
-    /* Send packet type byte (H4 protocol) */
-    serial_putchar(HCI_PACKET_TYPE_COMMAND);
-    
-    /* Send command data */
+
+    base = hci_uart_instance->uart_base;
+    outb(base + SERIAL_DATA_REG, HCI_PACKET_TYPE_COMMAND);
+
     for (size_t i = 0; i < len; i++)
-    {
-        serial_putchar(cmd[i]);
-    }
-    
+        outb(base + SERIAL_DATA_REG, cmd[i]);
+
     return (int)len;
 }
 
@@ -93,25 +144,20 @@ int hci_uart_send_command(const uint8_t *cmd, size_t len)
  */
 int hci_uart_send_acl(const uint8_t *data, size_t len)
 {
+    uint16_t base;
+
     if (!hci_uart_instance || !hci_uart_instance->initialized)
-    {
         return -ENODEV;
-    }
-    
+
     if (!data || len == 0)
-    {
         return -EINVAL;
-    }
-    
-    /* Send packet type byte (H4 protocol) */
-    serial_putchar(HCI_PACKET_TYPE_ACL_DATA);
-    
-    /* Send ACL data */
+
+    base = hci_uart_instance->uart_base;
+    outb(base + SERIAL_DATA_REG, HCI_PACKET_TYPE_ACL_DATA);
+
     for (size_t i = 0; i < len; i++)
-    {
-        serial_putchar(data[i]);
-    }
-    
+        outb(base + SERIAL_DATA_REG, data[i]);
+
     return (int)len;
 }
 
@@ -120,60 +166,31 @@ int hci_uart_send_acl(const uint8_t *data, size_t len)
  */
 int hci_uart_receive_event(uint8_t *event, size_t max_len)
 {
+    int pump_ret;
+
     if (!hci_uart_instance || !hci_uart_instance->initialized)
-    {
         return -ENODEV;
-    }
-    
+
     if (!event || max_len == 0)
-    {
         return -EINVAL;
-    }
-    
-    /* Check if data is available */
-    if (!hci_uart_is_data_available())
+
+    pump_ret = hci_uart_rx_pump(hci_uart_instance);
+    if (pump_ret < 0)
+        return pump_ret;
+
+    if (pump_ret == 0)
+        return 0;
+
     {
-        return 0;  /* No data available */
+        size_t frame_len = hci_uart_instance->rx_asm_len;
+
+        if (frame_len > max_len)
+            frame_len = max_len;
+
+        memcpy(event, hci_uart_instance->rx_asm, frame_len);
+        hci_uart_rx_reset(hci_uart_instance);
+        return (int)frame_len;
     }
-    
-    /* Read packet type byte (should be 0x04 for events) */
-    uint8_t packet_type = (uint8_t)serial_read_char();
-    if (packet_type != HCI_PACKET_TYPE_EVENT)
-    {
-        /* Wrong packet type, discard */
-        return -EINVAL;
-    }
-    
-    /* Read event code (first byte of event) */
-    if (max_len < 1)
-    {
-        return -EINVAL;
-    }
-    
-    event[0] = (uint8_t)serial_read_char();
-    
-    /* Read parameter length (second byte) */
-    if (max_len < 2)
-    {
-        return 1;  /* Only event code read */
-    }
-    
-    uint8_t param_len = (uint8_t)serial_read_char();
-    event[1] = param_len;
-    
-    /* Read parameters */
-    size_t total_len = 2 + param_len;
-    if (total_len > max_len)
-    {
-        total_len = max_len;
-    }
-    
-    for (size_t i = 2; i < total_len; i++)
-    {
-        event[i] = (uint8_t)serial_read_char();
-    }
-    
-    return (int)total_len;
 }
 
 /**
@@ -182,57 +199,56 @@ int hci_uart_receive_event(uint8_t *event, size_t max_len)
 int hci_uart_receive_acl(uint8_t *data, size_t max_len)
 {
     if (!hci_uart_instance || !hci_uart_instance->initialized)
-    {
         return -ENODEV;
-    }
-    
+
     if (!data || max_len == 0)
-    {
         return -EINVAL;
-    }
-    
-    /* Check if data is available */
+
     if (!hci_uart_is_data_available())
+        return 0;
+
     {
-        return 0;  /* No data available */
+        uint8_t packet_type;
+
+        if (!hci_uart_try_read_byte(&packet_type))
+            return 0;
+
+        if (packet_type != HCI_PACKET_TYPE_ACL_DATA)
+            return -EINVAL;
     }
-    
-    /* Read packet type byte (should be 0x02 for ACL) */
-    uint8_t packet_type = (uint8_t)serial_read_char();
-    if (packet_type != HCI_PACKET_TYPE_ACL_DATA)
-    {
-        /* Wrong packet type, discard */
-        return -EINVAL;
-    }
-    
-    /* ACL packet format: [Handle LSB][Handle MSB + Flags][Length LSB][Length MSB][Data...] */
+
     if (max_len < 4)
-    {
         return -EINVAL;
-    }
-    
-    /* Read ACL header (4 bytes) */
+
     for (int i = 0; i < 4; i++)
     {
-        data[i] = (uint8_t)serial_read_char();
+        uint8_t byte;
+
+        if (!hci_uart_try_read_byte(&byte))
+            return -EAGAIN;
+
+        data[i] = byte;
     }
-    
-    /* Extract data length */
-    uint16_t data_len = data[2] | (data[3] << 8);
-    
-    /* Read ACL data */
-    size_t total_len = 4 + data_len;
-    if (total_len > max_len)
+
     {
-        total_len = max_len;
+        uint16_t data_len = (uint16_t)data[2] | ((uint16_t)data[3] << 8);
+        size_t total_len = 4 + data_len;
+
+        if (total_len > max_len)
+            total_len = max_len;
+
+        for (size_t i = 4; i < total_len; i++)
+        {
+            uint8_t byte;
+
+            if (!hci_uart_try_read_byte(&byte))
+                return -EAGAIN;
+
+            data[i] = byte;
+        }
+
+        return (int)total_len;
     }
-    
-    for (size_t i = 4; i < total_len; i++)
-    {
-        data[i] = (uint8_t)serial_read_char();
-    }
-    
-    return (int)total_len;
 }
 
 /**
@@ -241,16 +257,13 @@ int hci_uart_receive_acl(uint8_t *data, size_t max_len)
 bool hci_uart_is_data_available(void)
 {
     if (!hci_uart_instance || !hci_uart_instance->initialized)
-    {
         return false;
-    }
-    
-    /* Check UART line status register for data available */
-    /* LSR bit 0 = Data Ready */
-    #define SERIAL_PORT_COM1 0x3F8
-    #define SERIAL_LINE_STATUS_REG 5
-    
-    return (inb(SERIAL_PORT_COM1 + SERIAL_LINE_STATUS_REG) & 0x01) != 0;
+
+    if (hci_uart_instance->rx_asm_need > 0 &&
+        hci_uart_instance->rx_asm_len < hci_uart_instance->rx_asm_need)
+        return true;
+
+    return (inb(hci_uart_instance->uart_base + SERIAL_LINE_STATUS_REG) & 0x01) != 0;
 }
 
 /**
@@ -260,4 +273,3 @@ struct hci_uart *hci_uart_get_instance(void)
 {
     return hci_uart_instance;
 }
-

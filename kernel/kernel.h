@@ -8,18 +8,10 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: kernel.h
- * Description: IR0 kernel source/header file
+ * Description: IR0 kernel main kernel entry point and core function declarations
  */
 
 #pragma once
-
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * File: kernel.h
- * Description: Main kernel entry point and core function declarations
- */
 
 #include <stdint.h>
 #include <stddef.h>

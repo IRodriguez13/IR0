@@ -16,6 +16,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+int ir0_bluetooth_register_driver(void);
+
 int ir0_bt_proc_devices_read(char *buffer, size_t count);
 int ir0_bt_proc_scan_read(char *buffer, size_t count);
 int ir0_bt_proc_scan_write(const char *command);
@@ -30,3 +32,8 @@ int ir0_bt_hci_close(void);
 int ir0_bt_hci_read(char *buffer, size_t count);
 int ir0_bt_hci_write(const char *buffer, size_t count);
 int ir0_bt_hci_ioctl(unsigned int cmd, unsigned long arg);
+
+/*
+ * ir0_bluetooth_poll - Process pending HCI events from the main idle loop.
+ */
+void ir0_bluetooth_poll(void);

@@ -462,7 +462,6 @@ int kconfig_generate_makefile(const char *config_file, const char *subsystems_js
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/mm\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/arch/common\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include\n");
-    fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/include\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/kernel\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/drivers\n");
     fprintf(fp, "CFLAGS += -I$(KERNEL_ROOT)/fs\n");
@@ -529,7 +528,7 @@ int kconfig_generate_makefile(const char *config_file, const char *subsystems_js
     fprintf(fp, "\t@g++ -m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \\\n");
     fprintf(fp, "\t\t-mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \\\n");
     fprintf(fp, "\t\t-nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin \\\n");
-    fprintf(fp, "\t\t-I./cpp/include $(CFLAGS) -c $< -o $@\n\n");
+    fprintf(fp, "\t\t$(CFLAGS) -c $< -o $@\n\n");
     
     fprintf(fp, "# Compile ASM files\n");
     fprintf(fp, "%%.o: %%.asm\n");

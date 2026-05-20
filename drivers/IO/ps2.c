@@ -18,7 +18,7 @@
 #include <arch/common/arch_interface.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
-#include <kernel/resource_registry.h>
+#include <ir0/resource_registry.h>
 
 /* Internal hardware initialization function */
 static int32_t ps2_hw_init(void)

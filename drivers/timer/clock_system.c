@@ -17,7 +17,7 @@
 #include <ir0/types.h>
 #include <ir0/kmem.h>
 #include <arch/common/arch_portable.h>
-#include <kernel/scheduler_api.h>
+#include <ir0/scheduler_api.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"
 #include "clock_system.h"

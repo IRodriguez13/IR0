@@ -144,6 +144,7 @@ void bluetooth_poll(void)
     if (!bluetooth_initialized)
         return;
     hci_process_events();
+    bt_scan_state_sync();
 }
 
 /**

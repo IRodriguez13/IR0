@@ -74,6 +74,11 @@ void bt_device_cleanup(void);
  */
 struct bt_device_manager *bt_device_get_manager(void);
 
+/**
+ * bt_scan_state_sync - Align /proc/bluetooth/scan with HCI inquiry state
+ */
+void bt_scan_state_sync(void);
+
 /* Device file operations for /dev/bluetooth/hci0 */
 int bt_hci_open(void);
 int bt_hci_close(void);

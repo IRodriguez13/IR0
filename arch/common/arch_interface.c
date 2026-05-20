@@ -20,6 +20,13 @@
 #if defined(__x86_64__) || defined(__amd64__)
 #include <interrupt/arch/idt.h>
 #endif
+#if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
+#include <config.h>
+#include <interrupt/arch/pic.h>
+#if CONFIG_ENABLE_NETWORKING
+#include <ir0/net.h>
+#endif
+#endif
 
 static void *g_arch_boot_params = NULL;
 
@@ -475,6 +482,30 @@ void arch_interrupt_init(void)
 void arch_irq_init(void)
 {
     arch_interrupt_init();
+}
+
+void arch_boot_irq_unmask(void)
+{
+#if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
+    pic_unmask_irq(0);
+    pic_unmask_irq(1);
+    pic_unmask_irq(2);
+#if CONFIG_ENABLE_NETWORKING
+    {
+        int net_irq = net_stack_get_irq_line();
+
+        if (net_irq >= 0 && net_irq < 16)
+            pic_unmask_irq((uint8_t)net_irq);
+    }
+#endif
+#if CONFIG_ENABLE_MOUSE
+    pic_unmask_irq(12);
+#endif
+#elif defined(__aarch64__)
+    /* ARM64 GIC unmask policy: board-specific bring-up */
+#else
+    #error "Unsupported architecture for arch_boot_irq_unmask()"
+#endif
 }
 
 void arch_syscall_init(void)

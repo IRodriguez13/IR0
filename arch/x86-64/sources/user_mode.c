@@ -65,6 +65,33 @@ void arch_switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
 #endif
 }
 
+#define MSR_IA32_FS_BASE 0xC0000100U
+
+void arch_set_fs_base(uint64_t base)
+{
+#if MINGW_BUILD
+    (void)base;
+#else
+    uint32_t lo = (uint32_t)(base & 0xFFFFFFFFU);
+    uint32_t hi = (uint32_t)(base >> 32);
+
+    __asm__ volatile("wrmsr" : : "c"(MSR_IA32_FS_BASE), "a"(lo), "d"(hi) : "memory");
+#endif
+}
+
+uint64_t arch_get_fs_base(void)
+{
+#if MINGW_BUILD
+    return 0;
+#else
+    uint32_t lo;
+    uint32_t hi;
+
+    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(MSR_IA32_FS_BASE));
+    return ((uint64_t)hi << 32) | (uint64_t)lo;
+#endif
+}
+
 [[maybe_unused]]void syscall_handler_c(void)
 {
 }

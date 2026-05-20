@@ -14,10 +14,10 @@
 #include <stdint.h>
 #include <ir0/logging.h>
 #include <ir0/oops.h>
+#include <ir0/process.h>
 #include "paging.h"
 #include <string.h>
 #include <mm/allocator.h>
-#include <kernel/process.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <ir0/validation.h>

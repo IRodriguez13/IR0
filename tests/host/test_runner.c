@@ -26,10 +26,16 @@ int _ir0_test_pass;
 
 extern void test_harness_smoke(void);
 extern void test_example_asserts(void);
+extern void test_pseudo_fs_register_lookup_read(void);
+extern void test_usb_host_disabled_controller_count(void);
+extern void test_bt_scan_sync_stub(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
 	test_example_asserts,
+	test_pseudo_fs_register_lookup_read,
+	test_usb_host_disabled_controller_count,
+	test_bt_scan_sync_stub,
 	NULL
 };
 

@@ -16,7 +16,7 @@
 #include <arch_interface.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
-#include <kernel/resource_registry.h>
+#include <ir0/resource_registry.h>
 
 /* Driver registration structures */
 static int32_t pit_hw_init(void)

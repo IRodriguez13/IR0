@@ -22,7 +22,7 @@
 #include <drivers/timer/pit/pit.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
-#include <kernel/resource_registry.h>
+#include <ir0/resource_registry.h>
 
 /* Global Sound Blaster state */
 static sb16_state_t sb16_state = {0};

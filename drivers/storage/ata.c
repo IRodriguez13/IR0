@@ -29,7 +29,7 @@
 #include <ir0/oops.h>
 #include <string.h>
 #include <arch/common/arch_interface.h>
-#include <kernel/resource_registry.h>
+#include <ir0/resource_registry.h>
 
 // Global variables
 bool ata_drives_present[4] = {false, false, false, false};

@@ -26,7 +26,7 @@
 
 #include "partition.h"
 #include <string.h>
-#include <drivers/storage/block_dev.h>
+#include <ir0/block_dev.h>
 
 /**
  * Global partition storage
@@ -41,6 +41,56 @@ static uint32_t partition_counts_per_disk[MAX_DISKS] = {0};
 static int read_gpt_header(uint8_t disk_id, gpt_header_t *header);
 static int read_gpt_partitions(uint8_t disk_id, const gpt_header_t *header);
 static int add_partition_info(const partition_info_t *info);
+static int sector0_is_volume_boot_record(const uint8_t *sector);
+static int mbr_entry_is_plausible(const mbr_partition_entry_t *ent);
+
+/**
+ * sector0_is_volume_boot_record - Detect FAT/NTFS VBR mistaken for MBR
+ */
+static int sector0_is_volume_boot_record(const uint8_t *sector)
+{
+    uint16_t bps;
+    uint8_t b0;
+
+    if (sector[510] != 0x55 || sector[511] != 0xAA)
+        return 0;
+
+    b0 = sector[0];
+    if (b0 != 0xEB && b0 != 0xE9)
+        return 0;
+
+    bps = (uint16_t)sector[0x0B] | ((uint16_t)sector[0x0C] << 8);
+    if (bps < 512 || bps > 4096 || (bps & (bps - 1)) != 0)
+        return 0;
+
+    if (memcmp(&sector[0x36], "FAT12   ", 8) == 0)
+        return 1;
+    if (memcmp(&sector[0x36], "FAT16   ", 8) == 0)
+        return 1;
+    if (memcmp(&sector[0x52], "FAT32   ", 8) == 0)
+        return 1;
+    if (memcmp(&sector[0x03], "NTFS    ", 8) == 0)
+        return 1;
+
+    return 0;
+}
+
+/**
+ * mbr_entry_is_plausible - Basic sanity for one MBR primary slot
+ */
+static int mbr_entry_is_plausible(const mbr_partition_entry_t *ent)
+{
+    if (!ent || ent->system_id == 0)
+        return 0;
+
+    if (ent->boot_indicator != 0x00 && ent->boot_indicator != 0x80)
+        return 0;
+
+    if (ent->total_sectors == 0)
+        return 0;
+
+    return 1;
+}
 
 /**
  * read_partition_table - Read and parse partition table (both MBR and GPT)
@@ -87,16 +137,18 @@ int read_partition_table(uint8_t disk_id)
         }
     }
 
+    if (sector0_is_volume_boot_record(sector))
+        return 0;
+
     /**
      * Parse MBR partitions
      */
     for (int i = 0; i < 4; i++)
     {
-        if (mbr->partitions[i].system_id != 0)
+        if (!mbr_entry_is_plausible(&mbr->partitions[i]))
+            continue;
+
         {
-            /**
-             * Store partition info for future use
-             */
             partition_info_t part_info = {0};
             part_info.disk_id = disk_id;
             part_info.partition_number = i;
@@ -279,6 +331,12 @@ static int read_gpt_partitions(uint8_t disk_id, const gpt_header_t *header)
             uint8_t zero_guid[16] = {0};
             if (memcmp(entries[j].type_guid, zero_guid, 16) != 0)
             {
+                if (entries[j].first_lba == 0 && entries[j].last_lba == 0)
+                    continue;
+
+                if (entries[j].first_lba > entries[j].last_lba)
+                    continue;
+
                 /**
                  * Store partition info for future use
                  */

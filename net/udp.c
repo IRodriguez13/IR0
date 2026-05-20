@@ -24,7 +24,7 @@
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/serial_io.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 #include <string.h>
 
 /* UDP Protocol registration */

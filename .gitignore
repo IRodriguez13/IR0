@@ -28,7 +28,7 @@ AGENTS.md
 /.cursor
 
 # Menuconfig / Kconfig generated headers
-include/generated/
+includes/generated/
 setup/generated/
 
 # Python (menuconfig helpers, local tooling)

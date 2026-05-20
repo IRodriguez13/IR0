@@ -24,7 +24,7 @@
  * Description: Reference implementation of a C++ kernel component for IR0
  */
 
-#include <cpp/include/compat.h>
+#include <ir0/interop.h>
 
 extern "C" {
     #include <ir0/kmem.h>

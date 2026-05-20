@@ -19,6 +19,6 @@ menuconfig:
 # Clean generated files
 clean:
 	@echo "  CLEAN   Configuration files"
-	@rm -f ../../.config ../../include/generated/autoconf.h
+	@rm -f ../../.config ../../includes/generated/autoconf.h
 
 .PHONY: all menuconfig clean

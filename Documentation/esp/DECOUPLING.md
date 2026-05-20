@@ -15,14 +15,16 @@ mismo contenido sin mezclar idiomas.
 
 Gran parte de `kernel/`, `mm/` y `net/` enruta ya **serial** y **reloj** vía `ir0/serial_io.h` y
 `ir0/clock.h`. `fs/` usa `ir0/arch_port.h` para consultas de CPU (sin `#include <arch/...>` en el
-fuente). Persisten otras facadas finas y `main.c` con política de arranque que aún referencia
-drivers directos donde hace falta.
+fuente). Persisten backends (`video_backend`, `console_backend`) con includes internos a drivers;
+`kernel/main.c` ya usa `ir0/init_drv.h`, `ir0/block_dev.h` e `ir0/bluetooth.h` en el idle loop.
 
 ## Inventario de fachadas (`includes/ir0/`)
 
 Ver tabla detallada en `Documentation/DECOUPLING.md`. Áreas cubiertas: disco (`block_dev`,
 `partition`), consola (`console_backend`), tiempo (`clock`, `rtc`), red (`net`), entrada,
-vídeo, serial para depuración, modelo de drivers (`driver`, `driver_bootstrap`),
+vídeo, serial para depuración, modelo de drivers (`driver`, `driver_bootstrap`, `init_drv`),
+scheduler (`scheduler_api`), recursos (`resource_registry`), tabla pseudo-fs (`pseudo_fs.h`),
+credenciales (`credentials.h`) y vistas de proceso (`process.h` cuando se necesita `process_t`),
 pseudo-VFS (`devfs`, `procfs`, `sysfs`).
 
 ## Patrones de registro
@@ -31,7 +33,10 @@ pseudo-VFS (`devfs`, `procfs`, `sysfs`).
 - **Bloque:** `block_dev_register` + `block_dev_ops_t`.
 - **Sistemas de archivos:** `vfs_ops` / `vfs_fstype`.
 - **Carácter (/dev):** `devfs_ops_t`.
-- **Arranque por fases:** `driver_bootstrap_register` + `driver_boot_init_fn`.
+- **Arranque:** `init_all_drivers()` vía `includes/ir0/init_drv.h`.
+- **Timer → scheduler:** `includes/ir0/scheduler_api.h` desde `drivers/` (no `kernel/scheduler_api.h`).
+- **Recursos IRQ/puertos:** `includes/ir0/resource_registry.h`.
+- **Bluetooth poll / boot:** `ir0_bluetooth_poll()` y registro opcional (`ir0_bluetooth_register_driver()`) vía `includes/ir0/bluetooth.h`.
 
 ## Estado multi-arquitectura
 
@@ -47,10 +52,35 @@ objetos en ARM64, integración de syscalls/mm/fs y nuevos backends detrás de fa
 Listado cualitativo actualizado en `Documentation/DECOUPLING.md`: `kernel/main.c` (política de
 drivers opcionales), backends de vídeo/entrada, y algunas facadas IR0 que siguen delegando en
 drivers. La comprobación `scripts/architecture_guard.py` rechaza `#include <arch/…>` dentro de `fs/` y
-`#include <interrupt/arch/…>` en `fs/`, `kernel/`, `mm/`, `net/`.
+`#include <interrupt/arch/…>` en `fs/`, `kernel/`, `mm/`, `net/`, así como `kernel/*.h` directo en
+`fs/`, `mm/`, `net/`, `drivers/`, rutas `<bluetooth/…>` fuera de `drivers/bluetooth/`, y `#include <arch/…>`
+en `mm/` y `net/` (usar facelas tipo `ir0/arch_port.h`).
 
-Los drivers que incluyen `kernel/resource_registry.h` o cabeceras `arch/` para IRQ/puertos
-es un acoplamiento esperado para hardware tipo PC.
+| Recursos | `resource_register_irq`, `resource_register_ioport` | Los drivers usan [`includes/ir0/resource_registry.h`](../../includes/ir0/resource_registry.h). |
+
+**Nota proc/sys:** el runtime legacy sigue siendo **FD + switch** en `fs/procfs.c`; la tabla registrada amplía algunos endpoints sin reemplazar todavía el árbol completo.
+
+**Patrones preferidos para código nuevo**
+
+| Caso | API preferida |
+|------|----------------|
+| Driver opcional en boot | `driver_boot_init_fn` + `CONFIG_INIT_*` |
+| Almacenamiento en bloque | `block_dev_ops_t` registrado por nombre |
+| Nodo `/dev` | `devfs_ops_t` por nodo |
+| Filesystem montable | `struct vfs_ops` + fstype |
+| NIC de red | vtable `struct net_device` en `ir0/net.h` |
+| Bluetooth hacia VFS | funciones `ir0_bt_*` |
+| Archivo `/proc` o `/sys` | tabla FD en `fs/procfs.c` / `fs/sysfs.c` (legacy) |
+
+**pseudo_fs registry**
+
+Las rutas `/proc` y `/sys` basadas en la tabla FD pueden registrarse vía [`includes/ir0/pseudo_fs.h`](../../includes/ir0/pseudo_fs.h) y [`fs/pseudo_fs_registry.c`](../../fs/pseudo_fs_registry.c): prefijo más largo, `pseudo_fs_ops_t`, y lookups en open/read/write. Donde coexisten con el modelo legacy (`strncmp` central), nuevos endpoints deben seguir ambos caminos hasta converger.
+
+**/dev contrato open/close**
+
+Los nodos `/dev` usan `devfs_ops_t`; `open`/`close` en el registro son opcionales pero obligatorios semánticamente para dispositivos con estado/refcount (`bluetooth/hci0`, consolas con sesión, NIC). Un `close` omitido ante hook presente cuenta como incoherencia de ABI POSIX-like.
+
+Los drivers registran IRQ/puertos vía [`includes/ir0/resource_registry.h`](../../includes/ir0/resource_registry.h).
 
 ## Composición configuración ↔ build
 

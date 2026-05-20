@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-/**
+/*
  * IR0 Kernel — Core system software
  * Copyright (C) 2025  Iván Rodriguez
  *
@@ -9,12 +9,12 @@
  *
  * File: main.c
  * Description: Kernel initialization and user-space transition routines
-*
-*    00000000: 01010011 01101001 01100011 00100000 01110000 01100001  
-*    00000006: 01110010 01110110 01101001 01110011 00100000 01101101  
-*    0000000c: 01100001 01100111 01101110 01100001                    
-* 
-*/
+ *
+ *    00000000: 01010011 01101001 01100011 00100000 01110000 01100001  
+ *    00000006: 01110010 01110110 01101001 01110011 00100000 01101101  
+ *    0000000c: 01100001 01100111 01101110 01100001                    
+ * 
+ */
 
 #include <ir0/vga.h>
 #include <ir0/oops.h>
@@ -31,18 +31,22 @@
 #include <ir0/driver.h>
 #include <kernel/elf_loader.h>
 #include <ir0/clock.h>
-#include <drivers/init_drv.h>
-#include <drivers/storage/block_dev.h>
+#include <ir0/init_drv.h>
+#include <ir0/block_dev.h>
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
 #include <ir0/multiboot.h>
 #include "ipc.h"
 #include "syscalls.h"
+
 #if CONFIG_ENABLE_NETWORKING
+
 #include <ir0/net.h>
+
 #endif
+
 #if CONFIG_ENABLE_BLUETOOTH
-#include <drivers/bluetooth/bluetooth_init.h>
+#include <ir0/bluetooth.h>
 #endif
 
 /* Include kernel header with all function declarations */
@@ -51,8 +55,11 @@
 void kmain(uint32_t multiboot_info)
 {
 #if !CONFIG_ENABLE_VBE
+
     (void)multiboot_info;
+
 #endif
+
     /* Initialize architecture-specific early features (GDT, TSS, etc.) */
     arch_set_boot_params((void *)(uintptr_t)multiboot_info);
     arch_early_init();
@@ -65,10 +72,14 @@ void kmain(uint32_t multiboot_info)
      * that print() uses framebuffer when gfxpayload=1024x768x32 in grub.
      */
     {
+
 #if CONFIG_ENABLE_VBE
+
         if (video_backend_init_from_multiboot(multiboot_info) != 0)
             video_backend_init_fallback();  /* Fallback: VGA text mode for /dev/fb0 */
+
 #endif
+
         console_backend_init();
         if (console_backend_uses_framebuffer())
             console_backend_clear(0x0F);  /* Black background, ready for text */
@@ -113,6 +124,7 @@ void kmain(uint32_t multiboot_info)
             serial_print("[BOOT] vbe_fail_reason=");
             serial_print_hex32((uint32_t)video_backend_fail_reason());
             serial_print(" (1=mb_null 2=no_fb 3=bad_dims 4=map_fail)\n");
+
             if (multiboot_info)
             {
                 const struct multiboot_info *mb = (const struct multiboot_info *)(uintptr_t)multiboot_info;
@@ -157,6 +169,7 @@ void kmain(uint32_t multiboot_info)
     log_subsystem_ok("FILESYSTEM");
 
     /* Initialize process management */
+
     process_init();
     log_subsystem_ok("PROCESSES");
     
@@ -178,28 +191,7 @@ void kmain(uint32_t multiboot_info)
 
     /* Initialize architecture-specific interrupt system (IDT, PIC remap) */
     arch_irq_init();
-
-    /*
-     * Unmask IRQ lines after PIC is fully initialized.
-     * IRQ2 (cascade) is required for any slave PIC line (8-15) to work.
-     */
-#if defined(ARCH_X86_64) || defined(ARCH_X86)
-    {
-        pic_unmask_irq(0);   /* Timer (PIT) */
-        pic_unmask_irq(1);   /* Keyboard */
-        pic_unmask_irq(2);   /* Cascade — required for slave IRQs 8-15 */
-#if CONFIG_ENABLE_NETWORKING
-        {
-            int net_irq = net_stack_get_irq_line();
-            if (net_irq >= 0 && net_irq < 16)
-                pic_unmask_irq((uint8_t)net_irq);
-        }
-#endif
-#if CONFIG_ENABLE_MOUSE
-        pic_unmask_irq(12);  /* PS/2 Mouse */
-#endif
-    }
-#endif
+    arch_boot_irq_unmask();
 
     /* Enable interrupts globally */
     arch_enable_interrupts();
@@ -236,7 +228,7 @@ void kmain(uint32_t multiboot_info)
         net_stack_poll();
 #endif
 #if CONFIG_ENABLE_BLUETOOTH
-        bluetooth_poll();
+        ir0_bluetooth_poll();
 #endif
         /* Despertar procesos bloqueados en poll() cuando hay datos o timeout */
         poll_wake_check();

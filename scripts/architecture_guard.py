@@ -3,11 +3,15 @@
 IR0 architecture guardrails.
 
 Checks:
-1) No direct <drivers/...> includes inside fs/* and kernel/syscalls.c.
+1) No direct <drivers/...> includes inside fs/* and kernel/syscalls.c (except guarded paths).
 2) Required facade headers for subsystem decoupling exist.
 3) Portable trees (fs/kernel/mm/net) must not include interrupt controller headers
    (#include <interrupt/arch/...>);
 4) Files under fs/ must not use #include <arch/...>; use includes/ir0/* facades instead.
+5) fs/, mm/, net/, drivers/: no #include <kernel/*.h> (no whitelist).
+6) mm/, net/: no #include <arch/...>.
+7) drivers/: no raw #include of drivers/storage/block_dev.h — use ir0/block_dev.h.
+8) Paths outside drivers/bluetooth/ must not #include bluetooth/...
 """
 
 from pathlib import Path
@@ -37,6 +41,12 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "input_backend.h",
     ROOT / "includes" / "ir0" / "net.h",
     ROOT / "includes" / "ir0" / "bluetooth.h",
+    ROOT / "includes" / "ir0" / "usb_host.h",
+    ROOT / "includes" / "ir0" / "resource_registry.h",
+    ROOT / "includes" / "ir0" / "init_drv.h",
+    ROOT / "includes" / "ir0" / "scheduler_api.h",
+    ROOT / "includes" / "ir0" / "pseudo_fs.h",
+    ROOT / "includes" / "ir0" / "credentials.h",
 ]
 
 REQUIRED_ARM64_SCAFFOLD = [
@@ -54,6 +64,43 @@ INTERRUPT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]interrupt/arch/')
 
 # fs/ pseudo-VFS layers must route CPU/HW probes through ir0/*.h wrappers.
 FS_DIRECT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]arch/')
+
+# mm/ and net/ must not pull arch headers directly — use ir0/arch_port.h, etc.
+PORTABLE_MM_NET_ARCH_INCLUDE_RE = re.compile(
+    r'^\s*#\s*include\s*[<"]arch/'
+)
+
+KERNEL_HEADER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]kernel/')
+
+DRIVER_BLOCK_DEV_RAW_INCLUDE_RE = re.compile(
+    r'^\s*#\s*include\s*[<"]drivers/storage/block_dev\.h[>"]'
+)
+
+BLUETOOTH_SUBDIR_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]bluetooth/')
+
+DIRS_BLUETOOTH_INCLUDE_SCAN = [
+    ROOT / "arch",
+    ROOT / "debug_bins",
+    ROOT / "drivers",
+    ROOT / "fs",
+    ROOT / "includes",
+    ROOT / "interrupt",
+    ROOT / "kernel",
+    ROOT / "mm",
+    ROOT / "net",
+]
+
+PORTABLE_DIRS_NO_KERNEL_HEADERS = [
+    ROOT / "fs",
+    ROOT / "net",
+    ROOT / "mm",
+    ROOT / "drivers",
+]
+
+PORTABLE_DIRS_MM_NET_NO_ARCH = [
+    ROOT / "mm",
+    ROOT / "net",
+]
 
 PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
     ROOT / "fs",
@@ -140,6 +187,94 @@ def check_fs_no_direct_arch():
     return errors
 
 
+def check_mm_net_no_arch_includes():
+    errors = []
+    for base in PORTABLE_DIRS_MM_NET_NO_ARCH:
+        for fpath in iter_c_files(base):
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, start=1):
+                if PORTABLE_MM_NET_ARCH_INCLUDE_RE.search(line):
+                    rel = fpath.relative_to(ROOT)
+                    errors.append(
+                        f"[mm-net-no-arch-include] {rel}:{idx}: {line.strip()}"
+                    )
+    return errors
+
+
+def check_portable_trees_no_kernel_headers():
+    errors = []
+    for base in PORTABLE_DIRS_NO_KERNEL_HEADERS:
+        for fpath in iter_c_files(base):
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, start=1):
+                if KERNEL_HEADER_INCLUDE_RE.search(line):
+                    rel = fpath.relative_to(ROOT)
+                    errors.append(
+                        f"[portable-no-kernel-header] {rel}:{idx}: {line.strip()}"
+                    )
+    return errors
+
+
+def check_drivers_ir0_block_dev_only():
+    errors = []
+    base = ROOT / "drivers"
+    for fpath in iter_c_files(base):
+        try:
+            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception as exc:
+            errors.append(f"[read-error] {fpath}: {exc}")
+            continue
+        for idx, line in enumerate(lines, start=1):
+            if DRIVER_BLOCK_DEV_RAW_INCLUDE_RE.search(line):
+                rel = fpath.relative_to(ROOT)
+                errors.append(
+                    f"[driver-block-dev-facade] {rel}:{idx}: {line.strip()}"
+                )
+    return errors
+
+
+def check_bluetooth_subdir_include_policy():
+    errors = []
+    bt_root = ROOT / "drivers" / "bluetooth"
+
+    for scan_root in DIRS_BLUETOOTH_INCLUDE_SCAN:
+        if not scan_root.exists():
+            continue
+        for fpath in iter_c_files(scan_root):
+            allowed_bluetooth_vendor = False
+            try:
+                fpath.relative_to(bt_root)
+                allowed_bluetooth_vendor = True
+            except ValueError:
+                allowed_bluetooth_vendor = False
+
+            # Allow subsystem-local includes inside drivers/bluetooth only.
+            if allowed_bluetooth_vendor:
+                continue
+
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+
+            for idx, line in enumerate(lines, start=1):
+                if BLUETOOTH_SUBDIR_INCLUDE_RE.search(line):
+                    rel = fpath.relative_to(ROOT)
+                    errors.append(
+                        f"[bluetooth-include-scope] {rel}:{idx}: {line.strip()}"
+                    )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -147,6 +282,10 @@ def main():
     errors.extend(check_arm64_scaffold())
     errors.extend(check_interrupt_arch_portable())
     errors.extend(check_fs_no_direct_arch())
+    errors.extend(check_mm_net_no_arch_includes())
+    errors.extend(check_portable_trees_no_kernel_headers())
+    errors.extend(check_drivers_ir0_block_dev_only())
+    errors.extend(check_bluetooth_subdir_include_policy())
 
     if errors:
         print("[arch-guard] FAILED")
