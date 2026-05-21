@@ -23,6 +23,7 @@
 #include <string.h>
 #include <mm/paging.h>
 #include <ir0/kmem.h>
+#include <ir0/resource_registry.h>
 
 /* Diagnostic: reason for vbe_init_from_multiboot failure (0=none, 1=mb_null, 2=no_fb_flag, 3=bad_dims, 4=map_fail) */
 int vbe_fail_reason;
@@ -114,6 +115,9 @@ int vbe_init_from_multiboot(uint32_t mb_info)
         vbe_state.color_info[i] = mb->color_info[i];
     vbe_state.fb = (uint8_t *)(uintptr_t)fb_phys;
     vbe_state.initialized = true;
+
+    resource_register_mmio((uint64_t)fb_phys, (uint64_t)fb_phys + fb_size - 1,
+                           "vbe_fb");
 
     return 0;
 }

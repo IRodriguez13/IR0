@@ -19,6 +19,7 @@
  */
 
 #include "test/ktest_harness.h"
+#include "test/ktest_decl.h"
 #include <ir0/serial_io.h>
 #include "process.h"
 #include <stddef.h>
@@ -26,29 +27,6 @@
 int _ktest_failed;
 int _ktest_count;
 int _ktest_pass;
-
-extern void ktest_boot_ok(void);
-extern void ktest_resource_registry(void);
-extern void ktest_allocator(void);
-extern void ktest_path(void);
-extern void ktest_string(void);
-extern void ktest_syscall_getpid(void);
-extern void ktest_syscall_open_close(void);
-extern void ktest_syscall_proc_read(void);
-extern void ktest_syscall_pipe(void);
-extern void ktest_procfs_uptime(void);
-extern void ktest_process_current(void);
-extern void ktest_proc_blockdevices_contract(void);
-extern void ktest_sysfs_hostname_contract(void);
-extern void ktest_proc_netinfo_contract(void);
-extern void ktest_dev_net_contract(void);
-extern void ktest_help_sections_contract(void);
-extern void ktest_mount_proc_contract(void);
-extern void ktest_mount_tmpfs_contract(void);
-extern void ktest_mount_multi_fs_contract(void);
-extern void ktest_mount_longest_prefix_contract(void);
-extern void ktest_mount_umount_remount_contract(void);
-extern void ktest_devfs_hci_open_contract(void);
 
 static void (*const ktest_functions[])(void) = {
 	ktest_boot_ok,
@@ -61,8 +39,13 @@ static void (*const ktest_functions[])(void) = {
 	ktest_syscall_proc_read,
 	ktest_syscall_pipe,
 	ktest_procfs_uptime,
+	ktest_procfs_pid_status,
 	ktest_process_current,
+	ktest_wait4_status,
 	ktest_proc_blockdevices_contract,
+	ktest_proc_cpuinfo_contract,
+	ktest_proc_version_contract,
+	ktest_proc_uptime_contract,
 	ktest_sysfs_hostname_contract,
 	ktest_proc_netinfo_contract,
 	ktest_dev_net_contract,
@@ -87,8 +70,13 @@ static const char *const ktest_names[] = {
 	"syscall_proc_read",
 	"syscall_pipe",
 	"procfs_uptime",
+	"procfs_pid_status",
 	"process_current",
+	"wait4_status",
 	"proc_blockdevices_contract",
+	"proc_cpuinfo_contract",
+	"proc_version_contract",
+	"proc_uptime_contract",
 	"sysfs_hostname_contract",
 	"proc_netinfo_contract",
 	"dev_net_contract",
@@ -117,8 +105,13 @@ static const int ktest_needs_process[] = {
 	1,  /* syscall_proc_read */
 	1,  /* syscall_pipe */
 	1,  /* procfs_uptime */
+	1,  /* procfs_pid_status */
 	1,  /* process_current */
+	1,  /* wait4_status */
 	1,  /* proc_blockdevices_contract */
+	1,  /* proc_cpuinfo_contract */
+	1,  /* proc_version_contract */
+	1,  /* proc_uptime_contract */
 	1,  /* sysfs_hostname_contract */
 	1,  /* proc_netinfo_contract */
 	1,  /* dev_net_contract */

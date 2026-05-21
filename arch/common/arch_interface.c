@@ -512,12 +512,23 @@ void arch_syscall_init(void)
 {
 #if defined(__x86_64__) || defined(__amd64__)
     /*
-     * IDT gate 0x80: int $0x80 → syscall_entry_asm (ring-3 reachable, DPL=3).
-     * Portable syscall logic lives in kernel/syscalls.c; ISA wiring stays here only.
+     * IDT gate 0x80: int $0x80 → syscall_entry_asm (debug_bins ABI).
+     * MSR LSTAR: syscall insn → syscall_insn_entry_asm (Linux/musl ABI).
      */
     extern void syscall_entry_asm(void);
+    extern void syscall_insn_entry_asm(void);
 
     idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE, 0);
+
+    {
+        uint64_t star = ((uint64_t)0x08 << 32) | ((uint64_t)0x1B << 48);
+        uint64_t lstar = (uint64_t)(uintptr_t)syscall_insn_entry_asm;
+        uint64_t sfmask = (uint64_t)(1 << 9); /* clear IF */
+
+        __asm__ volatile("wrmsr" : : "c"(0xC0000081U), "a"((uint32_t)star), "d"((uint32_t)(star >> 32)) : "memory");
+        __asm__ volatile("wrmsr" : : "c"(0xC0000082U), "a"((uint32_t)lstar), "d"((uint32_t)(lstar >> 32)) : "memory");
+        __asm__ volatile("wrmsr" : : "c"(0xC0000084U), "a"((uint32_t)sfmask), "d"((uint32_t)(sfmask >> 32)) : "memory");
+    }
 #endif
 }
 

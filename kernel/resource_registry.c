@@ -12,6 +12,7 @@
 
 #define MAX_IRQ_ENTRIES    16
 #define MAX_IOPORT_ENTRIES 32
+#define MAX_MMIO_ENTRIES   16
 
 struct irq_entry {
     uint8_t irq;
@@ -24,11 +25,20 @@ struct ioport_entry {
     const char *name;
 };
 
+struct mmio_entry {
+    uint64_t start;
+    uint64_t end;
+    const char *name;
+};
+
 static struct irq_entry s_irq_list[MAX_IRQ_ENTRIES];
 static int s_irq_count;
 
 static struct ioport_entry s_ioport_list[MAX_IOPORT_ENTRIES];
 static int s_ioport_count;
+
+static struct mmio_entry s_mmio_list[MAX_MMIO_ENTRIES];
+static int s_mmio_count;
 
 void resource_register_irq(uint8_t irq, const char *name)
 {
@@ -67,6 +77,27 @@ void resource_foreach_ioport(int (*cb)(uint16_t start, uint16_t end, const char 
     for (int i = 0; i < s_ioport_count; i++)
     {
         if (cb(s_ioport_list[i].start, s_ioport_list[i].end, s_ioport_list[i].name, ctx) != 0)
+            break;
+    }
+}
+
+void resource_register_mmio(uint64_t start, uint64_t end, const char *name)
+{
+    if (!name || s_mmio_count >= MAX_MMIO_ENTRIES)
+        return;
+    s_mmio_list[s_mmio_count].start = start;
+    s_mmio_list[s_mmio_count].end = end;
+    s_mmio_list[s_mmio_count].name = name;
+    s_mmio_count++;
+}
+
+void resource_foreach_mmio(int (*cb)(uint64_t start, uint64_t end, const char *name, void *ctx), void *ctx)
+{
+    if (!cb)
+        return;
+    for (int i = 0; i < s_mmio_count; i++)
+    {
+        if (cb(s_mmio_list[i].start, s_mmio_list[i].end, s_mmio_list[i].name, ctx) != 0)
             break;
     }
 }

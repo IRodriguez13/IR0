@@ -27,7 +27,9 @@
 /*
  * Pull in menuconfig-generated defines when available.
  * When building without menuconfig, the file won't exist and
- * the fallback defaults below keep everything enabled.
+ * the fallback defaults below apply. Optional subsystems (USB,
+ * Bluetooth, networking) default to off, matching Makefile ?= n
+ * when .config is absent.
  */
 #if defined(__has_include)
 #if __has_include(<generated/autoconf.h>)
@@ -228,7 +230,7 @@
 #define TIMER_FREQUENCY CONFIG_TICK_RATE_HZ
 
 /* FEATURE FLAGS — CONFIG_ENABLE_* from Makefile / autoconf take precedence.
- * When building without menuconfig, everything defaults to enabled.              */
+ * When building without menuconfig, optional subsystems default to disabled.     */
 
 #ifndef CONFIG_ENABLE_SMP
 #define CONFIG_ENABLE_SMP 0
@@ -277,7 +279,7 @@
 #endif
 
 #ifndef CONFIG_ENABLE_NETWORKING
-#define CONFIG_ENABLE_NETWORKING 1
+#define CONFIG_ENABLE_NETWORKING 0
 #endif
 #ifndef CONFIG_DRV_NIC_RTL8139
 #define CONFIG_DRV_NIC_RTL8139 CONFIG_ENABLE_NETWORKING
@@ -308,7 +310,7 @@
 #endif
 
 #ifndef CONFIG_ENABLE_BLUETOOTH
-#define CONFIG_ENABLE_BLUETOOTH 1
+#define CONFIG_ENABLE_BLUETOOTH 0
 #endif
 #ifndef CONFIG_ENABLE_STORAGE_ATA
 #define CONFIG_ENABLE_STORAGE_ATA 1

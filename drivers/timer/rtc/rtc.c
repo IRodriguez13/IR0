@@ -15,7 +15,7 @@
 #include <ir0/vga.h>
 #include <string.h>
 #include <stddef.h>
-#include <arch/common/arch_interface.h>
+#include <ir0/arch_port.h>
 
 /* Wait until CMOS is not mid-update (Status A UIP clear). Bounded spin for broken RTC. */
 static void rtc_wait_uip_clear(void)

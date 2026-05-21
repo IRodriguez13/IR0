@@ -19,6 +19,12 @@
 #include "test/ktest_harness.h"
 #include "process.h"
 #include "syscalls.h"
+#include "scheduler_api.h"
+
+static void ktest_wait4_child_entry(void)
+{
+	process_exit(42);
+}
 
 void ktest_boot_ok(void)
 {
@@ -34,5 +40,32 @@ void ktest_process_current(void)
 	KASSERT_GE(current_process->task.pid, 0);
 	int64_t pid = sys_getpid();
 	KASSERT_EQ(pid, (int64_t)current_process->task.pid);
+	KTEST_END();
+}
+
+void ktest_wait4_status(void)
+{
+	pid_t pid;
+	pid_t waited;
+	int status = -1;
+	process_t *child;
+
+	KTEST_BEGIN("wait4_status");
+	pid = spawn_kernel(ktest_wait4_child_entry, "wait4_child");
+	KASSERT_GT(pid, 0);
+
+	/*
+	 * Simulate child exit without driving the scheduler (avoids QEMU hang
+	 * when init is the only runnable task). Exercises zombie reap + status.
+	 */
+	child = process_find_by_pid(pid);
+	KASSERT(child != NULL);
+	child->state = PROCESS_ZOMBIE;
+	child->exit_code = 42;
+	sched_remove_process(child);
+
+	waited = process_wait(pid, &status, 0);
+	KASSERT_EQ(waited, pid);
+	KASSERT_EQ(status, (42 & 0xFF) << 8);
 	KTEST_END();
 }

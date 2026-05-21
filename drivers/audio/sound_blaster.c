@@ -15,7 +15,7 @@
 #include <ir0/vga.h>
 #include <stddef.h>
 #include <string.h>
-#include <arch/common/arch_interface.h>
+#include <ir0/arch_port.h>
 #include <interrupt/arch/io.h>
 #include <drivers/dma/dma.h>
 #include <ir0/kmem.h>

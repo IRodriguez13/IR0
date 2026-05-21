@@ -22,6 +22,10 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <config.h>
+#if CONFIG_ENABLE_MOUSE
+#include <drivers/IO/ps2_mouse.h>
+#endif
 
 typedef struct ir0_mouse_state
 {

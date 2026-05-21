@@ -779,6 +779,7 @@ ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/fault.o \
     arch/x86-64/asm/boot_x64.o \
     arch/x86-64/asm/syscall_entry_64.o \
+    arch/x86-64/asm/syscall_insn_entry_64.o \
     kernel/scheduler/switch/switch_x64.o
 
 ARCH_OBJS_ARM64 = \
@@ -1250,6 +1251,8 @@ clean:
 tests: kernel-x64-test.bin
 	@echo "  TEST    Building kernel-memsafe (kernel code under Valgrind)..."
 	@$(MAKE) -C tests/kernel_memsafe KERNEL_ROOT=$(KERNEL_ROOT) all
+	@echo "  TEST    Running host test suite..."
+	@$(MAKE) -C tests/host run
 	@echo "✓ Tests built: tests/kernel_memsafe/ir0_kernel_memsafe, kernel-x64-test.bin"
 
 # Valgrind sobre código del kernel compilado para host (resource_registry, etc.)
@@ -1329,6 +1332,15 @@ build-matrix-min:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ARCH_X86_64=n ARCH_ARM64=y DRV_NIC_RTL8139=n DRV_NIC_E1000=n >/dev/null
 	@$(MAKE) -s arch-config-check >/dev/null
 	@$(MAKE) defconfig >/dev/null
+	@echo "  MATRIX  USB host enabled"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_USB_HOST=y INIT_USB_HOST=y >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@echo "  MATRIX  Bluetooth disabled"
+	@$(MAKE) defconfig >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n DEBUG_BINS_GROUP_BT=n >/dev/null
+	@$(MAKE) -s kernel-x64.bin >/dev/null
+	@$(MAKE) -s arch-guard
 	@echo "✓ build-matrix-min passed"
 
 config-sim:

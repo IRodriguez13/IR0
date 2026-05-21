@@ -29,9 +29,9 @@ IR0 is a modern monolithic operating system kernel designed for x86-64 architect
 - **POSIX-compliant operations** with full permission model
 - **Real-time process information** via `/proc` filesystem
 
-### **Production-Ready Networking**
-- **Complete TCP/IP stack** with Ethernet, ARP, IPv4, ICMP, UDP
-- **Hardware driver support**: RTL8139 and Intel e1000 NICs
+### **Partial IPv4 Networking**
+- **Partial IPv4 stack**: Ethernet, ARP, IPv4, ICMP, UDP (no TCP yet)
+- **Hardware driver support**: RTL8139 NIC only
 - **Network configuration tools**: ifconfig, ping, netinfo
 - **TAP networking support** for development and testing
 
@@ -416,20 +416,20 @@ Or run directly:
 ### Hardware Drivers
 - **Input/Output**: PS/2 keyboard and mouse drivers with interrupt handling, PC Speaker driver
 - **Storage**: ATA/IDE disk driver with DMA support and partition management
-- **Network**: RTL8139 and Intel e1000 Ethernet NIC drivers with full TCP/IP integration
+- **Network**: RTL8139 Ethernet NIC driver with partial IPv4 stack (ARP, IP, ICMP, UDP; no TCP)
 - **Audio**: Sound Blaster 16 driver with PCM support, Adlib OPL2 driver for FM synthesis
 - **Video**: VGA text mode driver with color support, VBE graphics driver (basic)
 - **Timers**: PIT (Programmable Interval Timer), HPET (High Precision Event Timer), LAPIC (Local APIC Timer), RTC (Real Time Clock)
 - **Serial**: COM1/COM2 serial port driver for debugging and communication
-- **Bluetooth**: Complete HCI implementation with device discovery and management
+- **Bluetooth**: Experimental HCI/UART stack (H4 framing, partial device discovery); not production-ready
 - **DMA**: 8-channel DMA controller support for high-speed data transfer
 - **Driver Registry**: Unified driver registration system supporting C, C++, and Rust drivers
 
 ### Networking
-- **Complete TCP/IP stack** with layered architecture (Ethernet → IP → Transport)
+- **Partial IPv4 stack** with layered architecture (Ethernet → IP → Transport)
 - **Protocol support**: Ethernet frame handling, ARP (Address Resolution Protocol), IPv4 with routing
-- **Transport protocols**: ICMP (ping, diagnostics), UDP (basic implementation)
-- **Network drivers**: RTL8139 and Intel e1000 with interrupt-driven I/O
+- **Transport protocols**: ICMP (ping, diagnostics), UDP (basic implementation); no TCP yet
+- **Network driver**: RTL8139 with interrupt-driven I/O
 - **Configuration tools**: ifconfig for interface management, ping for connectivity testing
 - **Development support**: TAP networking for advanced testing scenarios
 
@@ -510,9 +510,9 @@ IR0 es un kernel de sistema operativo monolítico moderno diseñado para arquite
 - **Operaciones compatibles con POSIX** con modelo completo de permisos
 - **Información de procesos en tiempo real** vía filesystem `/proc`
 
-### **Networking Listo para Producción**
-- **Stack TCP/IP completo** con Ethernet, ARP, IPv4, ICMP, UDP
-- **Soporte de drivers de hardware**: NICs RTL8139 e Intel e1000
+### **Red IPv4 Parcial**
+- **Stack IPv4 parcial** con Ethernet, ARP, IPv4, ICMP, UDP (sin TCP aún)
+- **Soporte de drivers de hardware**: solo NIC RTL8139
 - **Herramientas de configuración de red**: ifconfig, ping, netinfo
 - **Soporte de networking TAP** para desarrollo y testing
 
@@ -979,7 +979,7 @@ O ejecutar directamente:
 ### Controladores de Hardware
 - **Entrada/Salida**: Controladores de teclado y ratón PS/2, controlador de altavoz PC
 - **Almacenamiento**: Controlador de disco ATA/IDE con soporte DMA, gestión de particiones
-- **Red**: Controladores Ethernet RTL8139 e Intel e1000
+- **Red**: Controlador Ethernet RTL8139 (stack IPv4 parcial: ARP, IP, ICMP, UDP; sin TCP)
 - **Audio**: Controlador Sound Blaster 16, controlador Adlib OPL2
 - **Video**: Controlador de modo texto VGA, controlador gráfico VBE
 - **Temporizadores**: PIT (Programmable Interval Timer), HPET (High Precision Event Timer), LAPIC (Local APIC Timer), RTC (Real Time Clock)
@@ -988,8 +988,8 @@ O ejecutar directamente:
 - **Registro de Controladores**: Sistema unificado de registro de controladores con soporte para C, C++ y Rust
 
 ### Redes
-- **Stack TCP/IP completo**: Ethernet, ARP, IPv4, ICMP, UDP
-- **Controladores hardware**: RTL8139 e Intel e1000
+- **Stack IPv4 parcial**: Ethernet, ARP, IPv4, ICMP, UDP (sin TCP)
+- **Controlador hardware**: RTL8139
 - **Herramientas**: ping, ifconfig, netinfo
 - **Soporte TAP**: Networking avanzado para desarrollo
 

@@ -66,9 +66,24 @@ int proc_getdents(int fd, void *dirent_buf, size_t count);
 
 /* /proc entry generators */
 int proc_meminfo_read(char *buf, size_t count);
+int proc_ps_read(char *buf, size_t count);
 int proc_status_read(char *buf, size_t count, pid_t pid);
+int proc_cmdline_read(char *buf, size_t count, pid_t pid);
+const char *proc_resolve_path(const char *path, pid_t *pid_out);
 int proc_uptime_read(char *buf, size_t count);
 int proc_version_read(char *buf, size_t count);
 int proc_cpuinfo_read(char *buf, size_t count);
 int proc_blockdevices_read(char *buf, size_t count);
 int proc_netinfo_read(char *buf, size_t count);
+int proc_drivers_read(char *buf, size_t count);
+int proc_loadavg_read(char *buf, size_t count);
+int proc_filesystems_read(char *buf, size_t count);
+int proc_partitions_read(char *buf, size_t count);
+int proc_interrupts_read(char *buf, size_t count);
+int proc_iomem_read(char *buf, size_t count);
+int proc_ioports_read(char *buf, size_t count);
+int proc_modules_read(char *buf, size_t count);
+int proc_timer_list_read(char *buf, size_t count);
+int proc_net_dev_read(char *buf, size_t count);
+int proc_kmsg_read(char *buf, size_t count);
+int proc_swaps_read(char *buf, size_t count);

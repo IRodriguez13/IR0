@@ -42,24 +42,16 @@
 #include <string.h>
 #include <ir0/errno.h>
 #include <config.h>
-#if CONFIG_ENABLE_BLUETOOTH
-#include <ir0/bluetooth.h>
-#endif
 #include <ir0/partition.h>
 #include <ir0/block_dev.h>
 #include <ir0/video_backend.h>
 #include <ir0/pseudo_fs.h>
-
-/* /sys/class/bluetooth/ - Bluetooth topology (adapter + neighbors + sessions as files) */
-#define SYS_BT_HCI0_ADDRESS    30
-#define SYS_BT_HCI0_STATE      31
-#define SYS_BT_TOPOLOGY_NEIGH  32
-#define SYS_BT_SESSIONS        33
-#define SYS_CONSOLE_MODE       40
+#include <ir0/arch_port.h>
 
 #define SYS_BUFFER_SIZE 4096
 #define SYS_FD_BASE 3000  /* sysfs uses FD range 3000-3999 */
 #define SYS_DEFAULT_FILE_SIZE 256
+#define SYS_MAX_CPUS 16
 
 static char sys_kernel_hostname[64] = "ir0-kernel";
 
@@ -77,16 +69,6 @@ bool is_sys_path(const char *path)
     return path && strncmp(path, "/sys/", 5) == 0;
 }
 
-/* Parse /sys path - returns entry path after /sys/ */
-static const char *sys_parse_path(const char *path)
-{
-    if (!is_sys_path(path))
-        return NULL;
-    
-    /* Skip "/sys/" prefix */
-    return path + 5;
-}
-
 /**
  * sys_kernel_version_read - Read kernel version from /sys/kernel/version
  * @buf: Buffer to write version string
@@ -94,7 +76,7 @@ static const char *sys_parse_path(const char *path)
  * 
  * Returns: Number of bytes written on success, negative error on failure
  */
-static int sys_kernel_version_read(char *buf, size_t count)
+int sys_kernel_version_read_reg(char *buf, size_t count)
 {
     if (!buf || count == 0)
         return -EINVAL;
@@ -179,7 +161,7 @@ static uint32_t sys_max_processes = 1024;
  * 
  * Returns: Number of bytes written on success, negative error on failure
  */
-static int sys_kernel_max_processes_read(char *buf, size_t count)
+int sys_kernel_max_processes_read_reg(char *buf, size_t count)
 {
     if (!buf || count == 0)
         return -EINVAL;
@@ -208,7 +190,7 @@ static int sys_kernel_max_processes_read(char *buf, size_t count)
  * 
  * Returns: Number of bytes written on success, negative error on failure
  */
-static int sys_kernel_max_processes_write(const char *buf, size_t count)
+int sys_kernel_max_processes_write_reg(const char *buf, size_t count)
 {
     if (!buf || count == 0)
         return 0;
@@ -251,7 +233,7 @@ static int sys_kernel_max_processes_write(const char *buf, size_t count)
  * sys_console_mode_read - Read console backend from /sys/console/mode
  * Returns "framebuffer WxH" or "vga" for verification
  */
-static int sys_console_mode_read(char *buf, size_t count)
+int sys_console_mode_read_reg(char *buf, size_t count)
 {
     if (!buf || count == 0)
         return -EINVAL;
@@ -285,59 +267,75 @@ static int sys_console_mode_read(char *buf, size_t count)
     return len;
 }
 
-/* Generate /sys/devices/system content */
-static int sys_devices_system_read(char *buf, size_t count)
+static int sys_devices_cpu_online[SYS_MAX_CPUS] = { 1 };
+
+static uint32_t sys_sysfs_cpu_count(void)
 {
+    uint32_t n = arch_get_cpu_count();
+
+    if (n == 0)
+        n = 1;
+    if (n > SYS_MAX_CPUS)
+        n = SYS_MAX_CPUS;
+    return n;
+}
+
+/* /sys/devices/system — one cpuN entry per logical CPU. */
+int sys_devices_system_read_reg(char *buf, size_t count)
+{
+    uint32_t cpus;
+    size_t off = 0;
+    int n;
+
     if (!buf || count == 0)
         return -EINVAL;
-    
+
     memset(buf, 0, count);
-    
-    size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "cpu0\n");
-    if (n > 0 && n < (int)(count - off))
+    cpus = sys_sysfs_cpu_count();
+    for (uint32_t i = 0; i < cpus && off < count; i++)
+    {
+        n = snprintf(buf + off, (off < count) ? (count - off) : 0, "cpu%u\n", (unsigned)i);
+        if (n <= 0 || n >= (int)(count - off))
+            break;
         off += (size_t)n;
-    
+    }
+
     if (off < count)
         buf[off] = '\0';
-    
     return (int)off;
 }
 
-/* Generate /sys/devices/system/cpu0 content */
-static int sys_devices_cpu0_read(char *buf, size_t count)
+/* /sys/devices/system/cpuN — lists child attributes. */
+int sys_devices_cpu_read_reg(char *buf, size_t count, unsigned cpu)
 {
+    size_t off = 0;
+    int n;
+
     if (!buf || count == 0)
         return -EINVAL;
-    
+    if (cpu >= sys_sysfs_cpu_count())
+        return -EINVAL;
+
     memset(buf, 0, count);
-    
-    /* List CPU properties */
-    size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                     "online\n");
+    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "online\n");
     if (n > 0 && n < (int)(count - off))
         off += (size_t)n;
-    
     if (off < count)
         buf[off] = '\0';
-    
     return (int)off;
 }
 
-/* Generate /sys/devices/system/cpu0/online content (readable/writable) */
-static int sys_devices_cpu0_online = 1;  /* CPU is online by default */
-
-static int sys_devices_cpu0_online_read(char *buf, size_t count)
+int sys_devices_cpu_online_read_reg(char *buf, size_t count, unsigned cpu)
 {
+    int len;
+
     if (!buf || count == 0)
         return -EINVAL;
-    
+    if (cpu >= SYS_MAX_CPUS)
+        return -EINVAL;
+
     memset(buf, 0, count);
-    
-    int len = snprintf(buf, count, "%d\n", sys_devices_cpu0_online);
-    
+    len = snprintf(buf, count, "%d\n", sys_devices_cpu_online[cpu]);
     if (len < 0)
         return -1;
     if (len >= (int)count)
@@ -345,39 +343,42 @@ static int sys_devices_cpu0_online_read(char *buf, size_t count)
         buf[count - 1] = '\0';
         return (int)(count - 1);
     }
-    
     return len;
 }
 
-static int sys_devices_cpu0_online_write(const char *buf, size_t count)
+int sys_devices_cpu_online_write_reg(unsigned cpu, const char *buf, size_t count)
 {
+    char value_buf[32];
+    size_t copy_len;
+
     if (!buf || count == 0)
         return 0;
-    
-    /* Parse 0 or 1 */
-    char value_buf[32];
-    size_t copy_len = (count < sizeof(value_buf) - 1) ? count : (sizeof(value_buf) - 1);
+    if (cpu >= SYS_MAX_CPUS)
+        return -EINVAL;
+
+    copy_len = (count < sizeof(value_buf) - 1) ? count : (sizeof(value_buf) - 1);
     memcpy(value_buf, buf, copy_len);
     value_buf[copy_len] = '\0';
-    
-    /* Remove trailing whitespace */
-    while (copy_len > 0 && (value_buf[copy_len - 1] == '\n' || value_buf[copy_len - 1] == '\r' || value_buf[copy_len - 1] == ' '))
+
+    while (copy_len > 0 && (value_buf[copy_len - 1] == '\n' ||
+                            value_buf[copy_len - 1] == '\r' ||
+                            value_buf[copy_len - 1] == ' '))
     {
         copy_len--;
         value_buf[copy_len] = '\0';
     }
-    
+
     if (copy_len == 1 && value_buf[0] == '0')
     {
-        sys_devices_cpu0_online = 0;
+        sys_devices_cpu_online[cpu] = 0;
         return (int)count;
     }
-    else if (copy_len == 1 && value_buf[0] == '1')
+    if (copy_len == 1 && value_buf[0] == '1')
     {
-        sys_devices_cpu0_online = 1;
+        sys_devices_cpu_online[cpu] = 1;
         return (int)count;
     }
-    
+
     return -EINVAL;
 }
 
@@ -385,7 +386,7 @@ static int sys_devices_cpu0_online_write(const char *buf, size_t count)
  * Generate /sys/devices/block content.
  * Lists only present ATA disks (hda, hdb, hdc, hdd) and their partitions (hdX1, ...).
  */
-static int sys_devices_block_read(char *buf, size_t count)
+int sys_devices_block_read_reg(char *buf, size_t count)
 {
     if (!buf || count == 0)
         return -EINVAL;
@@ -440,72 +441,7 @@ int sysfs_open(const char *path, int flags)
     if (prc != -ENOENT)
         return (int)prc;
 
-    const char *sys_path = sys_parse_path(path);
-    if (!sys_path)
-        return -ENOENT;
-
-    int fd = -1;
-    
-    /* Map paths to FD numbers */
-    if (strcmp(sys_path, "kernel/version") == 0)
-    {
-        fd = SYS_FD_BASE + 0;
-    }
-    else if (strcmp(sys_path, "kernel/hostname") == 0)
-    {
-        fd = SYS_FD_BASE + 1;
-    }
-    else if (strcmp(sys_path, "kernel/max_processes") == 0)
-    {
-        fd = SYS_FD_BASE + 2;
-    }
-    else if (strcmp(sys_path, "devices/system") == 0)
-    {
-        fd = SYS_FD_BASE + 10;
-    }
-    else if (strcmp(sys_path, "devices/system/cpu0") == 0)
-    {
-        fd = SYS_FD_BASE + 11;
-    }
-    else if (strcmp(sys_path, "devices/system/cpu0/online") == 0)
-    {
-        fd = SYS_FD_BASE + 12;
-    }
-    else if (strcmp(sys_path, "devices/block") == 0)
-    {
-        fd = SYS_FD_BASE + 20;
-    }
-#if CONFIG_ENABLE_BLUETOOTH
-    else if (strcmp(sys_path, "class/bluetooth/hci0/address") == 0)
-    {
-        fd = SYS_FD_BASE + SYS_BT_HCI0_ADDRESS;
-    }
-    else if (strcmp(sys_path, "class/bluetooth/hci0/state") == 0)
-    {
-        fd = SYS_FD_BASE + SYS_BT_HCI0_STATE;
-    }
-    else if (strcmp(sys_path, "class/bluetooth/topology/neighbors") == 0)
-    {
-        fd = SYS_FD_BASE + SYS_BT_TOPOLOGY_NEIGH;
-    }
-    else if (strcmp(sys_path, "class/bluetooth/sessions") == 0)
-    {
-        fd = SYS_FD_BASE + SYS_BT_SESSIONS;
-    }
-#endif
-    else if (strcmp(sys_path, "console/mode") == 0)
-    {
-        fd = SYS_FD_BASE + SYS_CONSOLE_MODE;
-    }
-    else
-    {
-        return -ENOENT;  /* File not found */
-    }
-    
-    /* Reset offset when opening (reuse procfs offset tracking) */
-    proc_set_offset(fd, 0);
-    
-    return fd;
+    return -ENOENT;
 }
 
 /* Read from /sys file */
@@ -522,85 +458,7 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
         return (int)pr;
     }
 
-    if (fd < SYS_FD_BASE || fd >= SYS_FD_BASE + 1000)
-        return -EBADF;
-    
-    static char sys_buffer[SYS_BUFFER_SIZE];
-    memset(sys_buffer, 0, sizeof(sys_buffer));
-    int full_size = 0;
-    
-    /* Generate full content based on fd */
-    int sys_fd = fd - SYS_FD_BASE;
-    
-    switch (sys_fd)
-    {
-        case 0:
-            full_size = sys_kernel_version_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        case 1:
-            full_size = sys_kernel_hostname_read_reg(sys_buffer, sizeof(sys_buffer));
-            break;
-        case 2:
-            full_size = sys_kernel_max_processes_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        case 10:
-            full_size = sys_devices_system_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        case 11:
-            full_size = sys_devices_cpu0_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        case 12:
-            full_size = sys_devices_cpu0_online_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        case 20:
-            full_size = sys_devices_block_read(sys_buffer, sizeof(sys_buffer));
-            break;
-#if CONFIG_ENABLE_BLUETOOTH
-        case SYS_BT_HCI0_ADDRESS:
-            full_size = ir0_bt_sysfs_hci0_address_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        case SYS_BT_HCI0_STATE:
-            full_size = ir0_bt_sysfs_hci0_state_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        case SYS_BT_TOPOLOGY_NEIGH:
-            full_size = ir0_bt_sysfs_topology_neighbors_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        case SYS_BT_SESSIONS:
-            full_size = ir0_bt_sysfs_sessions_read(sys_buffer, sizeof(sys_buffer));
-            break;
-#endif
-        case SYS_CONSOLE_MODE:
-            full_size = sys_console_mode_read(sys_buffer, sizeof(sys_buffer));
-            break;
-        default:
-            return -EBADF;
-    }
-    
-    if (full_size < 0)
-        return (full_size == -1) ? -EIO : full_size;
-    
-    if (full_size > (int)sizeof(sys_buffer))
-        full_size = (int)sizeof(sys_buffer);
-    
-    if (full_size < (int)sizeof(sys_buffer))
-        sys_buffer[full_size] = '\0';
-    
-    /* If offset is beyond file size, return 0 (EOF) */
-    if (offset < 0 || offset >= (off_t)full_size)
-        return 0;
-    
-    size_t remaining = (size_t)full_size - (size_t)offset;
-    size_t to_read = (count < remaining) ? count : remaining;
-    
-    if ((size_t)offset + to_read > sizeof(sys_buffer))
-        to_read = sizeof(sys_buffer) - (size_t)offset;
-    
-    if (to_read == 0)
-        return 0;
-    
-    memcpy(buf, sys_buffer + (size_t)offset, to_read);
-    
-    return (int)to_read;
+    return -EBADF;
 }
 
 /* Write to /sys file */
@@ -617,22 +475,7 @@ int sysfs_write(int fd, const char *buf, size_t count)
         return (int)pw;
     }
 
-    if (fd < SYS_FD_BASE || fd >= SYS_FD_BASE + 1000)
-        return -EBADF;
-    
-    int sys_fd = fd - SYS_FD_BASE;
-    
-    switch (sys_fd)
-    {
-        case 1:  /* /sys/kernel/hostname */
-            return sys_kernel_hostname_write_reg(buf, count);
-        case 2:  /* /sys/kernel/max_processes */
-            return sys_kernel_max_processes_write(buf, count);
-        case 12:  /* /sys/devices/system/cpu0/online */
-            return sys_devices_cpu0_online_write(buf, count);
-        default:
-            return -EACCES;  /* Read-only file */
-    }
+    return -EBADF;
 }
 
 /* Get stat for /sys file */
@@ -648,43 +491,5 @@ int sysfs_stat(const char *path, stat_t *st)
     if (pf && pf->ops && pf->ops->stat)
         return pf->ops->stat(pf->ctx, st);
 
-    const char *sys_path = sys_parse_path(path);
-    if (!sys_path)
-        return -ENOENT;
-    
-    /* Check if file exists */
-    if (strcmp(sys_path, "kernel/version") == 0 ||
-        strcmp(sys_path, "kernel/hostname") == 0 ||
-        strcmp(sys_path, "kernel/max_processes") == 0 ||
-        strcmp(sys_path, "devices/system") == 0 ||
-        strcmp(sys_path, "devices/system/cpu0") == 0 ||
-        strcmp(sys_path, "devices/system/cpu0/online") == 0 ||
-        strcmp(sys_path, "devices/block") == 0 ||
-#if CONFIG_ENABLE_BLUETOOTH
-        strcmp(sys_path, "class/bluetooth/hci0/address") == 0 ||
-        strcmp(sys_path, "class/bluetooth/hci0/state") == 0 ||
-        strcmp(sys_path, "class/bluetooth/topology/neighbors") == 0 ||
-        strcmp(sys_path, "class/bluetooth/sessions") == 0 ||
-#endif
-        strcmp(sys_path, "console/mode") == 0)
-    {
-        memset(st, 0, sizeof(stat_t));
-        st->st_mode = S_IFREG | 0644;  /* Regular file, readable by all */
-        st->st_nlink = 1;
-        st->st_uid = 0;
-        st->st_gid = 0;
-        st->st_size = SYS_DEFAULT_FILE_SIZE;
-        
-        /* Writable files have different permissions */
-        if (strcmp(sys_path, "kernel/hostname") == 0 ||
-            strcmp(sys_path, "kernel/max_processes") == 0 ||
-            strcmp(sys_path, "devices/system/cpu0/online") == 0)
-        {
-            st->st_mode = S_IFREG | 0664;  /* Writable by owner/group */
-        }
-        
-        return 0;
-    }
-    
     return -ENOENT;  /* File not found */
 }

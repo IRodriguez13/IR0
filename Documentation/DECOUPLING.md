@@ -30,6 +30,24 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | Context switch | callers use **`arch_context_switch()`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); ISA labels `switch_context_x64` / `switch_context_arm64` remain private to ASM + [`kernel/scheduler/switch/arch_context_switch.c`](../../kernel/scheduler/switch/arch_context_switch.c). |
 | **`fs/`** vs `arch/` | No `#include <arch/...>` in `fs/`; use **`includes/ir0/arch_port.h`** (`scripts/architecture_guard.py` enforces). |
 
+### Architecture guard rules (`scripts/architecture_guard.py`)
+
+| Tag | Scope | Rule |
+|-----|-------|------|
+| `forbidden-include` | `fs/`, `kernel/syscalls.c` | No `#include <drivers/...>` |
+| `missing-facade` | `includes/ir0/` | Required façade headers exist (`arch_port.h`, `mm_port.h`, …) |
+| `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | No `#include <interrupt/arch/...>` |
+| `fs-no-direct-arch` | `fs/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
+| `fs-no-mm-include` | `fs/` | No `#include <mm/...>`; use **`ir0/mm_port.h`** or narrower facades |
+| `mm-net-no-arch-include` | `mm/`, `net/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
+| `portable-no-kernel-header` | `fs/`, `mm/`, `net/`, `drivers/` | No `#include <kernel/...>` |
+| `driver-block-dev-facade` | `drivers/` | No raw `#include <drivers/storage/block_dev.h>`; use **`ir0/block_dev.h`** |
+| `drivers-no-arch` | `drivers/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
+| `kernel-no-driver-include` | `kernel/` (whole tree) | No `#include <drivers/...>` |
+| `kernel-use-arch-port-facade` | `kernel/` | No `#include <arch/common/arch_portable.h>`; use **`ir0/arch_port.h`** |
+| `bluetooth-include-scope` | Outside `drivers/bluetooth/` | No `#include <bluetooth/...>` |
+| `debug-bins-no-test-include` | `debug_bins/` | No `#include "test/..."` except **`debug_bins/cmd_ktest.c`** (`IR0_KERNEL_TESTS`) |
+
 ### Binary stability check
 
 After building **`kernel-x64.bin`**, a SHA‑256 of sorted globally defined symbols (`nm`) is:

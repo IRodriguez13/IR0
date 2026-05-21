@@ -69,3 +69,63 @@ static inline int64_t syscall6(int64_t num, int64_t arg1, int64_t arg2, int64_t 
         : "memory");
     return result;
 }
+
+/* Linux/musl ABI: syscall insn with rdi, rsi, rdx, r10, r8, r9 */
+static inline int64_t syscall_linux0(int64_t num)
+{
+    int64_t ret;
+    __asm__ volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"(num)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline int64_t syscall_linux1(int64_t num, int64_t a1)
+{
+    int64_t ret;
+    __asm__ volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"(num), "D"(a1)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline int64_t syscall_linux2(int64_t num, int64_t a1, int64_t a2)
+{
+    int64_t ret;
+    __asm__ volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"(num), "D"(a1), "S"(a2)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline int64_t syscall_linux3(int64_t num, int64_t a1, int64_t a2, int64_t a3)
+{
+    int64_t ret;
+    __asm__ volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"(num), "D"(a1), "S"(a2), "d"(a3)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline int64_t syscall_linux6(int64_t num, int64_t a1, int64_t a2, int64_t a3,
+                                      int64_t a4, int64_t a5, int64_t a6)
+{
+    int64_t ret;
+    register int64_t r10 __asm__("r10") = a4;
+    register int64_t r8 __asm__("r8") = a5;
+    register int64_t r9 __asm__("r9") = a6;
+    __asm__ volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"(num), "D"(a1), "S"(a2), "d"(a3), "r"(r10), "r"(r8), "r"(r9)
+        : "rcx", "r11", "memory");
+    return ret;
+}

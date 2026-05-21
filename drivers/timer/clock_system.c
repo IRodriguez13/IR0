@@ -16,7 +16,7 @@
 #include <ir0/vga.h>
 #include <ir0/types.h>
 #include <ir0/kmem.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 #include <ir0/scheduler_api.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"

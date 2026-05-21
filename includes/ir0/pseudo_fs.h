@@ -20,7 +20,11 @@
 
 #define PSEUDO_FS_PROC_FD_BASE 1500
 #define PSEUDO_FS_SYS_FD_BASE  3500
+#define PSEUDO_FS_DYN_FD_BASE  1700
 #define PSEUDO_FS_MAX_ENTRIES  64
+#define PSEUDO_FS_MAX_DYNAMIC  16
+
+typedef int (*pseudo_fs_dynamic_match_fn)(const char *full_path, void **out_ctx);
 
 typedef struct pseudo_fs_ops
 {
@@ -42,6 +46,9 @@ typedef struct pseudo_fs_entry
 
 int pseudo_fs_register(const char *mount_prefix, const char *rel_path,
                        const pseudo_fs_ops_t *ops, void *ctx);
+int pseudo_fs_register_dynamic(const char *mount_prefix,
+                               pseudo_fs_dynamic_match_fn match,
+                               const pseudo_fs_ops_t *ops);
 const pseudo_fs_entry_t *pseudo_fs_lookup(const char *full_path);
 const pseudo_fs_entry_t *pseudo_fs_find_by_fd(int fd);
 int pseudo_fs_proc_init(void);
@@ -53,3 +60,4 @@ int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset);
 int64_t pseudo_fs_write_fd(int fd, const char *buf, size_t count);
 int64_t pseudo_fs_open_path(const char *full_path, int flags, int *out_fd);
 int64_t pseudo_fs_close_fd(int fd);
+int pseudo_fs_stat_path(const char *full_path, stat_t *st);

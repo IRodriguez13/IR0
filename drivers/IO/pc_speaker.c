@@ -24,7 +24,7 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/kmem.h>
-#include <arch/common/arch_interface.h>
+#include <ir0/arch_port.h>
 
 /* PC Speaker ports */
 #define PC_SPEAKER_PORT 0x61

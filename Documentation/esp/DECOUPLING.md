@@ -51,10 +51,26 @@ objetos en ARM64, integración de syscalls/mm/fs y nuevos backends detrás de fa
 
 Listado cualitativo actualizado en `Documentation/DECOUPLING.md`: `kernel/main.c` (política de
 drivers opcionales), backends de vídeo/entrada, y algunas facadas IR0 que siguen delegando en
-drivers. La comprobación `scripts/architecture_guard.py` rechaza `#include <arch/…>` dentro de `fs/` y
-`#include <interrupt/arch/…>` en `fs/`, `kernel/`, `mm/`, `net/`, así como `kernel/*.h` directo en
-`fs/`, `mm/`, `net/`, `drivers/`, rutas `<bluetooth/…>` fuera de `drivers/bluetooth/`, y `#include <arch/…>`
-en `mm/` y `net/` (usar facelas tipo `ir0/arch_port.h`).
+drivers. Las reglas ejecutadas por `scripts/architecture_guard.py` están tabuladas en
+`Documentation/DECOUPLING.md` (sección *Architecture guard rules*).
+
+### Reglas del guard de arquitectura (`scripts/architecture_guard.py`)
+
+| Etiqueta | Ámbito | Regla |
+|----------|--------|-------|
+| `forbidden-include` | `fs/`, `kernel/syscalls.c` | Sin `#include <drivers/...>` |
+| `missing-facade` | `includes/ir0/` | Deben existir las fachadas requeridas (`arch_port.h`, `mm_port.h`, …) |
+| `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | Sin `#include <interrupt/arch/...>` |
+| `fs-no-direct-arch` | `fs/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |
+| `fs-no-mm-include` | `fs/` | Sin `#include <mm/...>`; usar **`ir0/mm_port.h`** u otras fachadas |
+| `mm-net-no-arch-include` | `mm/`, `net/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |
+| `portable-no-kernel-header` | `fs/`, `mm/`, `net/`, `drivers/` | Sin `#include <kernel/...>` |
+| `driver-block-dev-facade` | `drivers/` | Sin `#include <drivers/storage/block_dev.h>` crudo; **`ir0/block_dev.h`** |
+| `drivers-no-arch` | `drivers/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |
+| `kernel-no-driver-include` | `kernel/` (árbol completo) | Sin `#include <drivers/...>` |
+| `kernel-use-arch-port-facade` | `kernel/` | Sin `#include <arch/common/arch_portable.h>`; **`ir0/arch_port.h`** |
+| `bluetooth-include-scope` | Fuera de `drivers/bluetooth/` | Sin `#include <bluetooth/...>` |
+| `debug-bins-no-test-include` | `debug_bins/` | Sin `#include "test/..."` salvo **`debug_bins/cmd_ktest.c`** (`IR0_KERNEL_TESTS`) |
 
 | Recursos | `resource_register_irq`, `resource_register_ioport` | Los drivers usan [`includes/ir0/resource_registry.h`](../../includes/ir0/resource_registry.h). |
 

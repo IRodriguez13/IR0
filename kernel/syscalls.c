@@ -54,7 +54,7 @@
 #include <ir0/time.h>
 #include <ir0/video_backend.h>
 #include <ir0/rtc.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
@@ -727,9 +727,20 @@ int64_t sys_exec(const char *pathname,
     }
   }
 
-  int64_t result = kexecve(path_to_use,
-                           argv ? (char *const *)kernel_argv : NULL,
-                           envp ? (char *const *)kernel_envp : NULL);
+  int64_t result;
+
+  if (current_process->mode == USER_MODE)
+  {
+    result = exec_replace_current(path_to_use,
+                                  argv ? (char *const *)kernel_argv : NULL,
+                                  envp ? (char *const *)kernel_envp : NULL);
+  }
+  else
+  {
+    result = kexecve(path_to_use,
+                     argv ? (char *const *)kernel_argv : NULL,
+                     envp ? (char *const *)kernel_envp : NULL);
+  }
 
   /* Clean up copied strings */
   for (int i = 0; i < 256 && kernel_argv[i]; i++)
@@ -1191,7 +1202,10 @@ static int fd_can_write(int fd)
   if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
     return 0;
   if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-    return 1;
+  {
+    pid_t pid = current_process ? current_process->task.pid : 0;
+    return devfs_fd_can_write((uint32_t)(fd - FD_DEV_BASE), pid);
+  }
   if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
     return 0;
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
@@ -1580,6 +1594,37 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     if (!check_file_access(path_to_use, ACCESS_EXEC, current_process))
       return -EACCES;
   }
+  else if (flags & O_CREAT)
+  {
+    stat_t st;
+
+    /*
+     * Non-existent target: check parent directory (search + write).
+     * Existing target: same access rules as a normal open.
+     */
+    if (vfs_stat(path_to_use, &st) != 0)
+    {
+      char parent[256];
+
+      if (get_parent_path(path_to_use, parent, sizeof(parent)) != 0)
+        return -ENAMETOOLONG;
+      if (!check_file_access(parent, ACCESS_EXEC | ACCESS_WRITE, current_process))
+        return -EACCES;
+    }
+    else
+    {
+      int access_mode = 0;
+      int accmode = flags & O_ACCMODE;
+
+      if (accmode == O_RDONLY || accmode == O_RDWR)
+        access_mode |= ACCESS_READ;
+      if (accmode == O_WRONLY || accmode == O_RDWR)
+        access_mode |= ACCESS_WRITE;
+      if (access_mode &&
+          !check_file_access(path_to_use, access_mode, current_process))
+        return -EACCES;
+    }
+  }
   else
   {
     int access_mode = 0;
@@ -1941,17 +1986,34 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
 }
 
 /*
- * sys_fork — wired for Linux __NR_fork; implementation is kernel fork().
- *
- * debug_bins/dbgshell.c issues SYS_FORK for pipe setups. The kernel fork does
- * not duplicate the parent memory map or resume the child at the syscall with
- * rax == 0; see fork() in process.c. Pipelines therefore cannot rely on full
- * POSIX fork+exec semantics until real address-space copy exists.
+ * sys_fork — Linux __NR_fork; duplicates address space via fork() in process.c.
  */
 int64_t sys_fork(void)
 {
   if (!current_process)
     return -ESRCH;
+
+  return fork();
+}
+
+/*
+ * sys_clone — Linux __NR_clone (56). Thread flags (CLONE_THREAD) are unsupported;
+ * otherwise duplicates the address space like fork().
+ */
+int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
+                  int *child_tid, unsigned long tls)
+{
+  (void)stack;
+  (void)parent_tid;
+  (void)child_tid;
+  (void)tls;
+
+  if (!current_process)
+    return -ESRCH;
+
+  /* CLONE_THREAD and other pthread paths need a real thread model */
+  if (flags & 0x00010000UL)
+    return -ENOSYS;
 
   return fork();
 }
@@ -2179,6 +2241,216 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
   default:
     return -EINVAL;
   }
+}
+
+#define AT_FDCWD (-100)
+
+#define FUTEX_WAIT 0
+#define FUTEX_WAKE 1
+
+struct robust_list_head
+{
+  void *list;
+  void *list_op_pending;
+  void *list_op_next;
+};
+
+static int openat_resolve_path(int dirfd, const char *pathname, char *out, size_t out_sz)
+{
+  if (!pathname || !out || out_sz == 0)
+    return -EINVAL;
+
+  if (pathname[0] == '/')
+    return normalize_path(pathname, out, out_sz);
+
+  if (dirfd == AT_FDCWD)
+  {
+    if (!current_process)
+      return -ESRCH;
+    return join_paths(current_process->cwd, pathname, out, out_sz);
+  }
+
+  return -EBADF;
+}
+
+/*
+ * sys_openat - Linux openat(2) subset (AT_FDCWD only).
+ */
+int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode)
+{
+  char resolved[256];
+  const char *path_to_use;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (validate_userspace_string(pathname, sizeof(resolved)) != 0)
+    return -EFAULT;
+
+  if (openat_resolve_path(dirfd, pathname, resolved, sizeof(resolved)) != 0)
+    return -EINVAL;
+
+  path_to_use = resolved;
+  return sys_open(path_to_use, flags, mode);
+}
+
+/*
+ * sys_newfstatat - Linux newfstatat(2) subset.
+ */
+int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
+{
+  char resolved[256];
+  const char *path_to_use;
+
+  (void)flags;
+
+  if (!current_process || !buf)
+    return -EFAULT;
+
+  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
+    return -EFAULT;
+
+  if (validate_userspace_string(pathname, sizeof(resolved)) != 0)
+    return -EFAULT;
+
+  if (openat_resolve_path(dirfd, pathname, resolved, sizeof(resolved)) != 0)
+    return -EINVAL;
+
+  path_to_use = resolved;
+  return sys_stat(path_to_use, buf);
+}
+
+/*
+ * sys_clock_gettime - POSIX clock_gettime(2) subset.
+ */
+int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
+{
+  if (!current_process || !tp)
+    return -EFAULT;
+
+  if (validate_userspace_buffer(tp, sizeof(struct timespec)) != 0)
+    return -EFAULT;
+
+  if (clock_id != 0 && clock_id != 1)
+    return -EINVAL;
+
+  {
+    struct timeval tv;
+
+    if (sys_gettimeofday(&tv, NULL) != 0)
+      return -EIO;
+
+    tp->tv_sec = tv.tv_sec;
+    tp->tv_nsec = (long)(tv.tv_usec * 1000);
+  }
+
+  return 0;
+}
+
+/*
+ * sys_futex - Minimal futex for musl pthread bring-up.
+ */
+int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
+                  int *uaddr2, int val3)
+{
+  (void)timeout;
+  (void)uaddr2;
+  (void)val3;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (uaddr && validate_userspace_buffer(uaddr, sizeof(int)) != 0)
+    return -EFAULT;
+
+  if (op == FUTEX_WAKE)
+    return 0;
+
+  if (op == FUTEX_WAIT)
+  {
+    (void)val;
+    sched_schedule_next();
+    return 0;
+  }
+
+  return -ENOSYS;
+}
+
+/*
+ * sys_getrandom - Non-cryptographic entropy for musl bring-up.
+ */
+int64_t sys_getrandom(void *buf, size_t buflen, unsigned int flags)
+{
+  uint8_t *p;
+  size_t i;
+  uint64_t seed;
+
+  (void)flags;
+
+  if (!current_process || !buf)
+    return -EFAULT;
+
+  if (buflen == 0)
+    return 0;
+
+  if (validate_userspace_buffer(buf, buflen) != 0)
+    return -EFAULT;
+
+  seed = clock_get_uptime_milliseconds() ^
+         ((uint64_t)current_process->task.pid << 32);
+
+  p = (uint8_t *)buf;
+  for (i = 0; i < buflen; i++)
+  {
+    seed = seed * 6364136223846793005ULL + 1;
+    p[i] = (uint8_t)(seed >> 33);
+  }
+
+  return (int64_t)buflen;
+}
+
+/*
+ * sys_set_robust_list - Store robust mutex list head pointer.
+ */
+int64_t sys_set_robust_list(struct robust_list_head *head, size_t len)
+{
+  (void)head;
+  (void)len;
+
+  if (!current_process)
+    return -ESRCH;
+
+  return 0;
+}
+
+/*
+ * sys_prlimit64 - Return generous default rlimits.
+ */
+int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
+                      void *old_limit)
+{
+  (void)new_limit;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (pid != 0 && pid != (pid_t)current_process->task.pid)
+    return -ESRCH;
+
+  if (resource > 15)
+    return -EINVAL;
+
+  if (old_limit)
+  {
+    uint64_t lim[2] = { 0, (uint64_t)-1 };
+
+    if (validate_userspace_buffer(old_limit, 16) != 0)
+      return -EFAULT;
+    if (copy_to_user(old_limit, lim, 16) != 0)
+      return -EFAULT;
+  }
+
+  return 0;
 }
 
 /**
@@ -3183,6 +3455,13 @@ WRAP4(sys_rt_sigprocmask, int, const uint64_t *, uint64_t *, size_t)
 WRAP2(sys_arch_prctl, int, unsigned long)
 WRAP1(sys_set_tid_address, int *)
 WRAP3(sys_fcntl, int, int, unsigned long)
+WRAP4(sys_openat, int, const char *, int, mode_t)
+WRAP4(sys_newfstatat, int, const char *, stat_t *, int)
+WRAP2(sys_clock_gettime, int, struct timespec *)
+WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
+WRAP3(sys_getrandom, void *, size_t, unsigned int)
+WRAP2(sys_set_robust_list, struct robust_list_head *, size_t)
+WRAP4(sys_prlimit64, pid_t, unsigned int, const void *, void *)
 WRAP1(sys_pipe, int *)
 WRAP1(sys_sigreturn, struct sigcontext *)
 WRAP3(sys_ioctl, int, uint64_t, void *)
@@ -3194,6 +3473,7 @@ WRAP1(sys_setuid, uid_t)
 WRAP1(sys_setgid, gid_t)
 WRAP1(sys_umask, mode_t)
 WRAP1(sys_sudo_auth, const char *)
+WRAP5(sys_clone, unsigned long, void *, int *, int *, unsigned long)
 
 #undef WRAP1
 #undef WRAP2
@@ -3281,6 +3561,7 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_setgid]         = wrap_sys_setgid;
   syscall_table_rw[__NR_umask]          = wrap_sys_umask;
   syscall_table_rw[__NR_sudo_auth]      = wrap_sys_sudo_auth;
+  syscall_table_rw[__NR_clone]           = wrap_sys_clone;
   syscall_table_rw[__NR_fork]          = wrap_sys_fork;
   syscall_table_rw[__NR_execve]        = wrap_sys_exec;
   syscall_table_rw[__NR_exit]           = wrap_sys_exit;
@@ -3303,6 +3584,13 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_getppid]        = wrap_sys_getppid;
   syscall_table_rw[__NR_arch_prctl]     = wrap_sys_arch_prctl;
   syscall_table_rw[__NR_set_tid_address] = wrap_sys_set_tid_address;
+  syscall_table_rw[__NR_openat]         = wrap_sys_openat;
+  syscall_table_rw[__NR_newfstatat]     = wrap_sys_newfstatat;
+  syscall_table_rw[__NR_futex]          = wrap_sys_futex;
+  syscall_table_rw[__NR_clock_gettime]  = wrap_sys_clock_gettime;
+  syscall_table_rw[__NR_set_robust_list] = wrap_sys_set_robust_list;
+  syscall_table_rw[__NR_getrandom]      = wrap_sys_getrandom;
+  syscall_table_rw[__NR_prlimit64]      = wrap_sys_prlimit64;
   syscall_table_rw[__NR_mount]          = wrap_sys_mount;
   syscall_table_rw[__NR_umount2]        = wrap_sys_umount;
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit;
@@ -3311,6 +3599,22 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_keymap_set]      = wrap_keymap_set;
   syscall_table_rw[__NR_keymap_get]      = wrap_keymap_get;
 
+  /*
+   * Socket API (__NR_socket .. __NR_getsockopt): no in-kernel socket layer yet.
+   * Explicit ENOSYS so musl and libc probes get a deterministic answer.
+   */
+  {
+    static const unsigned socket_nrs[] = {
+      __NR_socket, __NR_connect, __NR_accept, __NR_sendto, __NR_recvfrom,
+      __NR_sendmsg, __NR_recvmsg, __NR_shutdown, __NR_bind, __NR_listen,
+      __NR_getsockname, __NR_getpeername, __NR_socketpair, __NR_setsockopt,
+      __NR_getsockopt,
+    };
+    size_t si;
+
+    for (si = 0; si < sizeof(socket_nrs) / sizeof(socket_nrs[0]); si++)
+      syscall_table_rw[socket_nrs[si]] = sys_nosys;
+  }
 }
 
 /* Syscall dispatcher called from assembly */

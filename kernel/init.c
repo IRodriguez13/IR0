@@ -25,7 +25,7 @@
 #include <config.h>
 #include "debug_bins/dbgshell.h"
 #include "scheduler_api.h"
-#include <drivers/video/typewriter.h>
+#include <ir0/console_backend.h>
 #include <ir0/kmem.h>
 #include <mm/paging.h>
 #include <ir0/permissions.h>
@@ -92,7 +92,7 @@ void init_1(void)
 	}
 
 	/* Initialize typewriter effect */
-	typewriter_init();
+	console_backend_typewriter_init();
 	init_prepare_unix_hierarchy();
 
 	shell_entry();

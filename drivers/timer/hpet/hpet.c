@@ -12,7 +12,6 @@
  */
 
 #include "hpet.h"
-#include <arch/common/idt.h>
 #include <ir0/oops.h>
 #include <drivers/timer/pit/pit.h> // para outb, inb 
 #include <vga.h>

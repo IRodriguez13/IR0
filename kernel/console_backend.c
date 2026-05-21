@@ -17,12 +17,15 @@
  */
 
 #include <ir0/console_backend.h>
-#include <drivers/video/console.h>
-#include <drivers/video/typewriter.h>
 
 void console_backend_init(void)
 {
     console_init();
+}
+
+void console_backend_typewriter_init(void)
+{
+    typewriter_init();
 }
 
 void console_backend_clear(uint8_t color)

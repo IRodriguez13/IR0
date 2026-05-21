@@ -23,6 +23,8 @@
 #include <mm/pmm.h>
 #include <ir0/copy_user.h>
 #include <ir0/oops.h>
+#include <ir0/arch_port.h>
+#include <config.h>
 #include <errno.h>
 
 /* Compiler optimization hints */
@@ -69,10 +71,9 @@ typedef struct
 #define ELF_MAGIC_3 'F'
 #define ELFCLASS64 2
 #define ET_EXEC 2
+#define ET_DYN  3
 #define PT_LOAD 1
 #define EM_X86_64 0x3e
-#define ET_EXEC 2
-#define PT_LOAD 1
 
 /* Maximum program headers processed per executable (bounds cost and table size) */
 #define ELF_MAX_PHNUM 64
@@ -81,10 +82,25 @@ typedef struct
 #define ELF_ARG_MAX 256
 
 #define AT_NULL   0
+#define AT_PHDR   3
+#define AT_PHENT  4
+#define AT_PHNUM  5
+#define AT_BASE   7
 #define AT_PAGESZ 6
 #define AT_ENTRY  9
+#define AT_UID    11
+#define AT_EUID   12
+#define AT_GID    13
+#define AT_EGID   14
+#define AT_CLKTCK 17
+#define AT_SECURE 23
+#define AT_FLAGS  24
+#define AT_RANDOM 25
+#define PT_PHDR   6
 
-#define ELF_AUXV_PAIRS 3
+#define ELF_AUXV_PAIRS 15
+#define ELF_AT_RANDOM_BYTES 16
+#define AT_CLKTCK_VALUE 100
 
 static int validate_elf_header(const elf64_header_t *header)
 {
@@ -103,13 +119,87 @@ static int validate_elf_header(const elf64_header_t *header)
         return 0;
     }
 
-    /* Check executable type */
-    if (header->e_type != ET_EXEC)
-    {
+    /* ET_EXEC (static) or ET_DYN (PIE) */
+    if (header->e_type != ET_EXEC && header->e_type != ET_DYN)
         return 0;
-    }
 
     return 1;
+}
+
+static uint64_t elf_compute_load_base(const elf64_header_t *header, const uint8_t *file_data)
+{
+    uint16_t phnum = header->e_phnum;
+    uint64_t base = (uint64_t)-1;
+    elf64_phdr_t *phdr;
+    int i;
+
+    if (phnum > ELF_MAX_PHNUM)
+        phnum = ELF_MAX_PHNUM;
+
+    if (header->e_phoff > (uint64_t)-1 || !file_data)
+        return 0;
+
+    phdr = (elf64_phdr_t *)(file_data + header->e_phoff);
+
+    for (i = 0; i < (int)phnum; i++)
+    {
+        if (phdr[i].p_type != PT_LOAD)
+            continue;
+        if (phdr[i].p_vaddr < base)
+            base = phdr[i].p_vaddr;
+    }
+
+    return (base == (uint64_t)-1) ? 0 : base;
+}
+
+static uint64_t elf_compute_at_phdr(const elf64_header_t *header, const uint8_t *file_data)
+{
+    uint16_t phnum = header->e_phnum;
+    elf64_phdr_t *phdr;
+    int i;
+
+    if (phnum > ELF_MAX_PHNUM)
+        phnum = ELF_MAX_PHNUM;
+
+    if (header->e_phoff > (uint64_t)-1 || !file_data)
+        return 0;
+
+    phdr = (elf64_phdr_t *)(file_data + header->e_phoff);
+
+    for (i = 0; i < (int)phnum; i++)
+    {
+        if (phdr[i].p_type == PT_PHDR)
+            return phdr[i].p_vaddr;
+    }
+
+    for (i = 0; i < (int)phnum; i++)
+    {
+        if (phdr[i].p_type != PT_LOAD)
+            continue;
+        if (header->e_phoff >= phdr[i].p_offset &&
+            header->e_phoff < phdr[i].p_offset + phdr[i].p_filesz)
+            return phdr[i].p_vaddr + (header->e_phoff - phdr[i].p_offset);
+    }
+
+    return 0;
+}
+
+static void elf_fill_random_bytes(uint8_t *buf, size_t len)
+{
+    uint64_t tsc;
+    size_t i;
+
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("rdtsc" : "=a"(tsc) : : "rdx");
+#else
+    tsc = 0x5851f42d4c957f2dULL;
+#endif
+
+    for (i = 0; i < len; i++)
+    {
+        tsc = tsc * 6364136223846793005ULL + 1ULL;
+        buf[i] = (uint8_t)(tsc >> 33);
+    }
 }
 
 /* Load ELF segments into memory at correct virtual addresses */
@@ -327,7 +417,9 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
  * - rsi = argv
  * - rdx = envp
  */
-static int elf_setup_stack(process_t *process, char *const argv[], char *const envp[])
+static int elf_setup_stack(process_t *process, char *const argv[], char *const envp[],
+                           const elf64_header_t *header, uint64_t at_phdr,
+                           uint64_t at_base)
 {
     if (!process || process->mode != USER_MODE)
         return -1;
@@ -370,6 +462,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     size_t stack_size = (argc + 1) * sizeof(uint64_t) +
                        (envc + 1) * sizeof(uint64_t) +
                        ELF_AUXV_PAIRS * 2 * sizeof(uint64_t) +
+                       ELF_AT_RANDOM_BYTES +
                        strings_size +
                        16;
     
@@ -397,7 +490,8 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     uint64_t argv_array = stack_base;
     uint64_t envp_array = argv_array + (argc + 1) * sizeof(uint64_t);
     uint64_t auxv_base = envp_array + (envc + 1) * sizeof(uint64_t);
-    uint64_t strings_base = auxv_base + ELF_AUXV_PAIRS * 2 * sizeof(uint64_t);
+    uint64_t random_base = auxv_base + ELF_AUXV_PAIRS * 2 * sizeof(uint64_t);
+    uint64_t strings_base = random_base + ELF_AT_RANDOM_BYTES;
 
     uint64_t *argv_ptrs = (uint64_t *)kmalloc((argc + 1) * sizeof(uint64_t));
     uint64_t *envp_ptrs = (uint64_t *)kmalloc((envc + 1) * sizeof(uint64_t));
@@ -507,14 +601,45 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         }
     }
 
+    /* 16-byte AT_RANDOM seed on stack */
+    {
+        uint8_t random_seed[ELF_AT_RANDOM_BYTES];
+
+        elf_fill_random_bytes(random_seed, sizeof(random_seed));
+        if (copy_to_user((void *)random_base, random_seed, sizeof(random_seed)) != 0)
+        {
+            load_page_directory(old_cr3);
+            kfree(argv_ptrs);
+            kfree(envp_ptrs);
+            return -1;
+        }
+    }
+
     /* auxv[] — musl walks past envp NULL to find these */
     {
+        uint64_t at_secure = 0;
+
+        if (process->uid != process->euid || process->gid != process->egid)
+            at_secure = 1;
+
         struct
         {
             uint64_t a_type;
             uint64_t a_val;
         } auxv[ELF_AUXV_PAIRS] = {
+            { AT_PHDR, at_phdr },
+            { AT_PHENT, header ? header->e_phentsize : 0 },
+            { AT_PHNUM, header ? header->e_phnum : 0 },
+            { AT_UID, process->uid },
+            { AT_EUID, process->euid },
+            { AT_GID, process->gid },
+            { AT_EGID, process->egid },
+            { AT_CLKTCK, AT_CLKTCK_VALUE },
+            { AT_SECURE, at_secure },
+            { AT_FLAGS, 0 },
+            { AT_RANDOM, random_base },
             { AT_PAGESZ, 4096 },
+            { AT_BASE, at_base },
             { AT_ENTRY, process->task.rip },
             { AT_NULL, 0 },
         };
@@ -615,6 +740,8 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     }
 
     elf64_header_t *header = (elf64_header_t *)file_data;
+    uint64_t at_phdr;
+    uint64_t at_base;
     serial_print("SERIAL: ELF: Header validation passed\n");
 
     /* Step 3: Create process first */
@@ -643,7 +770,9 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     }
 
     /* Step 5: Set up stack with argc/argv/envp */
-    if (elf_setup_stack(process, argv, envp) != 0)
+    at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
+    at_base = elf_compute_load_base(header, (uint8_t *)file_data);
+    if (elf_setup_stack(process, argv, envp, header, at_phdr, at_base) != 0)
     {
         serial_print("SERIAL: ELF: WARNING - Failed to set up stack arguments, continuing anyway\n");
         /* Continue even if stack setup fails - some binaries don't need args */
@@ -663,4 +792,120 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     serial_print("SERIAL: ELF: ========================================\n");
 
     return process->task.pid;
+}
+
+/**
+ * exec_replace_current - Replace the current user process image in-place.
+ * @path: Path to ELF executable
+ * @argv: Command line arguments (NULL-terminated, may be NULL)
+ * @envp: Environment variables (NULL-terminated, may be NULL)
+ *
+ * Unmaps the current user address space, reloads ELF segments into the same
+ * process (same PID), sets up a fresh stack/auxv, and jumps to user mode.
+ * Does not return on success.
+ */
+int exec_replace_current(const char *path, char *const argv[], char *const envp[])
+{
+    process_t *proc = current_process;
+    void *file_data = NULL;
+    size_t file_size = 0;
+    elf64_header_t *header;
+    uint64_t at_phdr;
+    uint64_t at_base;
+    uint64_t old_cr3;
+    const char *basename;
+    const char *last_slash;
+    const char *walk;
+
+    if (!proc || proc->mode != USER_MODE || !path)
+        return -1;
+
+    serial_print("SERIAL: ELF: exec_replace_current: ");
+    serial_print(path);
+    serial_print("\n");
+
+    if (vfs_read_file(path, &file_data, &file_size) != 0 || !file_data)
+        return -1;
+
+    if (!validate_elf_header((elf64_header_t *)file_data))
+    {
+        kfree(file_data);
+        return -1;
+    }
+
+    header = (elf64_header_t *)file_data;
+    at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
+    at_base = elf_compute_load_base(header, (uint8_t *)file_data);
+
+    process_unmap_user_address_space(proc);
+
+    while (proc->mmap_list)
+    {
+        struct mmap_region *next = proc->mmap_list->next;
+
+        kfree(proc->mmap_list);
+        proc->mmap_list = next;
+    }
+
+    proc->heap_start = 0;
+    proc->heap_end = 0;
+    proc->stack_size = USER_STACK_SIZE;
+    proc->stack_start = USER_STACK_TOP - USER_STACK_SIZE;
+
+    old_cr3 = get_current_page_directory();
+    load_page_directory((uint64_t)proc->page_directory);
+
+    if (map_user_region_in_directory(proc->page_directory, proc->stack_start,
+                                     proc->stack_size, PAGE_RW) != 0)
+    {
+        load_page_directory(old_cr3);
+        kfree(file_data);
+        return -1;
+    }
+
+    memset((void *)proc->stack_start, 0, proc->stack_size);
+    load_page_directory(old_cr3);
+
+    if (elf_load_segments(header, (uint8_t *)file_data, file_size, proc) != 0)
+    {
+        kfree(file_data);
+        return -1;
+    }
+
+    basename = path;
+    last_slash = path;
+    walk = path;
+    while (*walk)
+    {
+        if (*walk == '/')
+            last_slash = walk + 1;
+        walk++;
+    }
+    basename = last_slash;
+    strncpy(proc->comm, basename, sizeof(proc->comm) - 1);
+    proc->comm[sizeof(proc->comm) - 1] = '\0';
+
+    proc->task.rip = header->e_entry;
+    proc->task.cs = USER_CODE_SEL;
+    proc->task.ss = USER_DATA_SEL;
+    proc->task.ds = USER_DATA_SEL;
+    proc->task.es = USER_DATA_SEL;
+    proc->task.fs = USER_DATA_SEL;
+    proc->task.gs = USER_DATA_SEL;
+    proc->task.rflags = 0x202;
+
+    if (elf_setup_stack(proc, argv, envp, header, at_phdr, at_base) != 0)
+    {
+        kfree(file_data);
+        return -1;
+    }
+
+    kfree(file_data);
+
+    serial_print("SERIAL: ELF: exec_replace success PID ");
+    serial_print_hex32((uint32_t)proc->task.pid);
+    serial_print("\n");
+
+    arch_switch_to_user((arch_addr_t)proc->task.rip, (arch_addr_t)proc->task.rsp);
+    return -1;
 }

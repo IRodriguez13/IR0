@@ -38,6 +38,11 @@ void resource_register_irq(uint8_t irq, const char *name);
 void resource_register_ioport(uint16_t start, uint16_t end, const char *name);
 
 /*
+ * Register a physical MMIO range [start, end] with the name from the driver.
+ */
+void resource_register_mmio(uint64_t start, uint64_t end, const char *name);
+
+/*
  * Iterate registered IRQs. Callback receives (irq, name). Stop if callback returns non-zero.
  */
 void resource_foreach_irq(int (*cb)(uint8_t irq, const char *name, void *ctx), void *ctx);
@@ -46,5 +51,10 @@ void resource_foreach_irq(int (*cb)(uint8_t irq, const char *name, void *ctx), v
  * Iterate registered I/O port ranges. Callback receives (start, end, name). Stop if callback returns non-zero.
  */
 void resource_foreach_ioport(int (*cb)(uint16_t start, uint16_t end, const char *name, void *ctx), void *ctx);
+
+/*
+ * Iterate registered MMIO ranges. Callback receives (start, end, name). Stop if callback returns non-zero.
+ */
+void resource_foreach_mmio(int (*cb)(uint64_t start, uint64_t end, const char *name, void *ctx), void *ctx);
 
 #endif /* KERNEL_RESOURCE_REGISTRY_H */

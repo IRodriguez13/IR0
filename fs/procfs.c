@@ -24,8 +24,7 @@
 #include <ir0/stat.h>
 #include <ir0/fcntl.h>
 #include <ir0/kmem.h>
-#include <mm/pmm.h>
-#include <mm/allocator.h>
+#include <ir0/mm_port.h>
 #include <string.h>
 #include <ir0/errno.h>
 #include <ir0/net.h>
@@ -33,20 +32,15 @@
 #include <ir0/process.h>
 #include <ir0/credentials.h>
 #include <ir0/version.h>
-#include <ir0/serial_io.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <ir0/partition.h>
 #include <ir0/block_dev.h>
 #include <fs/vfs.h>
 #include <ir0/validation.h>
-#include <mm/paging.h>
 #include <ir0/resource_registry.h>
 #include <config.h>
 #include <ir0/pseudo_fs.h>
-#if CONFIG_ENABLE_BLUETOOTH
-#include <ir0/bluetooth.h>
-#endif
 #include <ir0/logging.h>
 
 #define PROC_BUFFER_SIZE           4096    /* Standard proc buffer size */
@@ -176,7 +170,7 @@ static uint64_t get_total_memory(void)
  * pid\tppid\tstate\tuid\tname (OSDev-style: PID PPID S UID CMD)
  * Frontend (ps) does formatting.
  */
-static int proc_ps_read(char *buf, size_t count)
+int proc_ps_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
@@ -256,7 +250,7 @@ int proc_netinfo_read(char *buf, size_t count)
  * /proc/net/dev: Linux-style per-interface summary.
  * Header lines mirror common tools that parse Inter-| / face | columns.
  */
-static int proc_net_dev_read(char *buf, size_t count)
+int proc_net_dev_read(char *buf, size_t count)
 {
 #if CONFIG_ENABLE_NETWORKING
     if (VALIDATE_BUFFER(buf, count) != 0)
@@ -314,7 +308,7 @@ static int proc_net_dev_read(char *buf, size_t count)
 #endif
 }
 
-static int proc_drivers_read(char *buf, size_t count)
+int proc_drivers_read(char *buf, size_t count)
 {
     return ir0_driver_list_to_buffer(buf, count);
 }
@@ -415,6 +409,14 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
     /* Regular /proc files */
     *pid_out = -1;
     return after_proc;
+}
+
+const char *proc_resolve_path(const char *path, pid_t *pid_out)
+{
+    if (!pid_out)
+        return NULL;
+
+    return proc_parse_path(path, pid_out);
 }
 
 /* /proc/meminfo: raw data only. One line: total_kb\tfree_kb\tused_kb */
@@ -901,8 +903,33 @@ int proc_interrupts_read(char *buf, size_t count)
 
 /*
  * Generate /proc/iomem content (physical memory map).
- * System RAM size from PMM; no I/O ports here (they belong in /proc/ioports).
+ * System RAM from PMM; MMIO ranges from resource registry (driver-registered).
  */
+struct iomem_ctx {
+    char *buf;
+    size_t count;
+    size_t off;
+};
+
+static int iomem_mmio_cb(uint64_t start, uint64_t end, const char *name, void *ctx)
+{
+    struct iomem_ctx *c = (struct iomem_ctx *)ctx;
+    char start_str[24];
+    char end_str[24];
+    int n;
+
+    proc_u64_to_dec(start, start_str, sizeof(start_str));
+    proc_u64_to_dec(end, end_str, sizeof(end_str));
+    n = snprintf(c->buf + c->off, (c->off < c->count) ? (c->count - c->off) : 0,
+                 "%s\t%s\t%s\n", start_str, end_str, name);
+    if (n > 0 && (size_t)n < c->count - c->off)
+    {
+        c->off += (size_t)n;
+        return 0;
+    }
+    return 1;
+}
+
 /* /proc/iomem: raw data only. One line per region: start\tend\tname */
 int proc_iomem_read(char *buf, size_t count)
 {
@@ -910,15 +937,74 @@ int proc_iomem_read(char *buf, size_t count)
         return -1;
     memset(buf, 0, count);
     size_t total_frames = 0;
-    pmm_stats(&total_frames, NULL, NULL);
-    uint64_t ram_end = (uint64_t)total_frames * PAGE_SIZE_4KB;
-    if (ram_end > 0) ram_end--;
+    size_t off = 0;
     char ram_end_str[24];
+    uint64_t ram_end;
+    int n;
+
+    pmm_stats(&total_frames, NULL, NULL);
+    ram_end = (uint64_t)total_frames * PAGE_SIZE_4KB;
+    if (ram_end > 0)
+        ram_end--;
     proc_u64_to_dec(ram_end, ram_end_str, sizeof(ram_end_str));
-    int n = snprintf(buf, count, "0\t%s\tSystem RAM\n", ram_end_str);
-    if (n < 0) return -1;
-    if (n >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
+    n = snprintf(buf, count, "0\t%s\tSystem RAM\n", ram_end_str);
+    if (n < 0)
+        return -1;
+    if ((size_t)n >= count)
+    {
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
+    off = (size_t)n;
+
+    {
+        struct iomem_ctx ctx = { .buf = buf, .count = count, .off = off };
+
+        resource_foreach_mmio(iomem_mmio_cb, &ctx);
+        off = ctx.off;
+    }
+
+    if (off < count)
+        buf[off] = '\0';
+    return (int)off;
+}
+
+/* /proc/kmsg: kernel log ring buffer (read-only, no serial side effects). */
+int proc_kmsg_read(char *buf, size_t count)
+{
+    int n;
+
+    if (VALIDATE_BUFFER(buf, count) != 0)
+        return -1;
+    memset(buf, 0, count);
+    n = logging_read_buffer(buf, count);
+    if (n < 0)
+        return -1;
+    if (n >= (int)count)
+    {
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
     return n;
+}
+
+/* /proc/swaps: Linux-style header; empty table when no swap devices. */
+int proc_swaps_read(char *buf, size_t count)
+{
+    static const char hdr[] =
+        "Filename\t\tType\t\tSize\t\tUsed\t\tPriority\n";
+
+    if (VALIDATE_BUFFER(buf, count) != 0)
+        return -1;
+    memset(buf, 0, count);
+    if (count <= sizeof(hdr))
+    {
+        memcpy(buf, hdr, count - 1);
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
+    memcpy(buf, hdr, sizeof(hdr) - 1);
+    return (int)(sizeof(hdr) - 1);
 }
 
 /*
@@ -1158,6 +1244,8 @@ int proc_open(const char *path, int flags)
     {
         int pseudo_fd = -1;
         int64_t prc;
+        pid_t pid;
+        const char *filename;
 
         prc = pseudo_fs_open_path(path, flags, &pseudo_fd);
         if (prc == 0)
@@ -1165,6 +1253,29 @@ int proc_open(const char *path, int flags)
             proc_reset_offset(pseudo_fd);
             return pseudo_fd;
         }
+
+        filename = proc_parse_path(path, &pid);
+        if (filename &&
+            (strcmp(filename, "status") == 0 || strcmp(filename, "cmdline") == 0))
+        {
+            int fd;
+
+            if (strcmp(filename, "status") == 0)
+            {
+                proc_set_pid_for_fd(1001, pid);
+                proc_reset_offset(1001);
+                fd = 1001;
+            }
+            else
+            {
+                proc_set_pid_for_fd(1010, pid);
+                proc_reset_offset(1010);
+                fd = 1010;
+            }
+
+            return fd;
+        }
+
         if (prc != -ENOENT)
             return (int)prc;
     }
@@ -1191,104 +1302,7 @@ int proc_open(const char *path, int flags)
         return 1151;  /* proc_getdents will list status, cmdline */
     }
 
-    int fd = -1;
-    /* Check if file exists and return special positive fd */
-    if (strcmp(filename, "meminfo") == 0)
-    {
-        fd = 1000;
-    } else if (strcmp(filename, "ps") == 0) {
-        fd = 1004;
-    } else if (strcmp(filename, "netinfo") == 0) {
-        fd = 1005;
-    } else if (strcmp(filename, "drivers") == 0) {
-        fd = 1006;
-    } else if (strcmp(filename, "status") == 0)
-    {
-        proc_set_pid_for_fd(1001, pid);
-        fd = 1001;
-    } else if (strcmp(filename, "uptime") == 0)
-    {
-        fd = 1002;
-    } else if (strcmp(filename, "version") == 0)
-    {
-        fd = 1003;
-    } else if (strcmp(filename, "cpuinfo") == 0)
-    {
-        fd = 1007;
-    } else if (strcmp(filename, "loadavg") == 0)
-    {
-        fd = 1008;
-    } else if (strcmp(filename, "filesystems") == 0)
-    {
-        fd = 1009;
-    } else if (strcmp(filename, "cmdline") == 0)
-    {
-        proc_set_pid_for_fd(1010, pid);
-        fd = 1010;
-    } else if (strcmp(filename, "blockdevices") == 0)
-    {
-        fd = 1011;
-    } else if (strcmp(filename, "partitions") == 0)
-    {
-        fd = 1012;
-    } else if (strcmp(filename, "mounts") == 0)
-    {
-        fd = 1013;
-    } else if (strcmp(filename, "interrupts") == 0)
-    {
-        fd = 1014;
-    } else if (strcmp(filename, "iomem") == 0)
-    {
-        fd = 1015;
-    } else if (strcmp(filename, "ioports") == 0)
-    {
-        fd = 1016;
-    } else if (strcmp(filename, "modules") == 0)
-    {
-        fd = 1017;
-    } else if (strcmp(filename, "timer_list") == 0)
-    {
-        fd = 1018;
-    } else if (strcmp(filename, "kmsg") == 0)
-    {
-        fd = 1021;
-    } else if (strcmp(filename, "swaps") == 0)
-    {
-        fd = 1022;
-    } else if (strcmp(filename, "net/dev") == 0)
-    {
-        fd = 1023;
-    } else
-    {
-#if CONFIG_ENABLE_BLUETOOTH
-        /* Check for bluetooth subdirectory */
-        if (strncmp(filename, "bluetooth/", 10) == 0)
-        {
-            const char *bt_file = filename + 10;
-            if (strcmp(bt_file, "devices") == 0)
-            {
-                fd = 1019;
-            }
-            else if (strcmp(bt_file, "scan") == 0)
-            {
-                fd = 1020;
-            }
-            else
-            {
-                return -ENOENT;
-            }
-        }
-        else
-#endif
-        {
-            /* File not found */
-            return -ENOENT;
-        }
-    }
-    
-    /* Reset offset when opening */
-    proc_reset_offset(fd);
-    return fd;
+    return -ENOENT;
 }
 
 /* Read from /proc file with offset support */
@@ -1305,146 +1319,47 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
         return (int)pbytes;
     }
 
-    /* Buffer to hold full content - initialize to zero to avoid garbage */
-    static char proc_buffer[PROC_BUFFER_SIZE];
-    memset(proc_buffer, 0, sizeof(proc_buffer));
-    int full_size = 0;
-    
-    /* Generate full content based on fd */
-    switch (fd)
+    /* Legacy per-pid fds (1001/1010) when dynamic slot unavailable */
     {
-        case 1000:
-            full_size = proc_meminfo_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1004:
-            full_size = proc_ps_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1005:
-            full_size = proc_netinfo_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1006:
-            full_size = proc_drivers_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1001:
+        static char proc_buffer[PROC_BUFFER_SIZE];
+        int full_size = 0;
+
+        memset(proc_buffer, 0, sizeof(proc_buffer));
+
+        switch (fd)
         {
-            pid_t pid = proc_get_pid_for_fd(1001);
-            full_size = proc_status_read(proc_buffer, sizeof(proc_buffer), pid);
-            break;
-        }
-        case 1002:
-            full_size = proc_uptime_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1003:
-            full_size = proc_version_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1007:
-            full_size = proc_cpuinfo_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1008:
-            full_size = proc_loadavg_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1009:
-            full_size = proc_filesystems_read(proc_buffer, sizeof(proc_buffer));
+        case 1001:
+            full_size = proc_status_read(proc_buffer, sizeof(proc_buffer),
+                                         proc_get_pid_for_fd(1001));
             break;
         case 1010:
-        {
-            pid_t pid = proc_get_pid_for_fd(1010);
-            full_size = proc_cmdline_read(proc_buffer, sizeof(proc_buffer), pid);
-            break;
-        }
-        case 1011:
-            full_size = proc_blockdevices_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1012:
-            full_size = proc_partitions_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1013:
-            full_size = proc_mounts_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1014:
-            full_size = proc_interrupts_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1015:
-            full_size = proc_iomem_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1016:
-            full_size = proc_ioports_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1017:
-            full_size = proc_modules_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1018:
-            full_size = proc_timer_list_read(proc_buffer, sizeof(proc_buffer));
-            break;
-#if CONFIG_ENABLE_BLUETOOTH
-        case 1019:
-            /* /proc/bluetooth/devices */
-            full_size = ir0_bt_proc_devices_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1020:
-            /* /proc/bluetooth/scan */
-            full_size = ir0_bt_proc_scan_read(proc_buffer, sizeof(proc_buffer));
-            break;
-#endif
-        case 1022:
-            full_size = 0;
-            break;
-        case 1023:
-            full_size = proc_net_dev_read(proc_buffer, sizeof(proc_buffer));
-            break;
-        case 1021:
-            /*
-             * /proc/kmsg - kernel log buffer. Dump only to serial, not to VGA.
-             * read() returns 0 bytes so dmesg/cat produce no console output.
-             */
-            full_size = logging_read_buffer(proc_buffer, sizeof(proc_buffer));
-            if (full_size > 0 && offset == 0)
-            {
-                serial_print("\n--- dmesg/kmsg dump ---\n");
-                for (int i = 0; i < full_size; i++)
-                {
-                    if (proc_buffer[i] == '\n')
-                        serial_putchar('\r');
-                    serial_putchar(proc_buffer[i]);
-                }
-                serial_print("--- end dmesg/kmsg ---\n");
-            }
-            full_size = 0;
+            full_size = proc_cmdline_read(proc_buffer, sizeof(proc_buffer),
+                                          proc_get_pid_for_fd(1010));
             break;
         default:
             return -EBADF;
+        }
+
+        if (full_size < 0)
+            return (full_size == -1) ? -EIO : full_size;
+
+        if (full_size > (int)sizeof(proc_buffer))
+            full_size = (int)sizeof(proc_buffer);
+
+        if (offset < 0 || offset >= (off_t)full_size)
+            return 0;
+
+        {
+            size_t remaining = (size_t)full_size - (size_t)offset;
+            size_t to_read = (count < remaining) ? count : remaining;
+
+            if (to_read == 0)
+                return 0;
+
+            memcpy(buf, proc_buffer + (size_t)offset, to_read);
+            return (int)to_read;
+        }
     }
-    
-    if (full_size < 0)
-        return (full_size == -1) ? -EIO : full_size;
-    
-    /* Ensure full_size doesn't exceed buffer size */
-    if (full_size > (int)sizeof(proc_buffer))
-        full_size = (int)sizeof(proc_buffer);
-    
-    /* Ensure null termination */
-    if (full_size < (int)sizeof(proc_buffer))
-        proc_buffer[full_size] = '\0';
-    
-    /* If offset is beyond file size, return 0 (EOF) */
-    if (offset < 0 || offset >= (off_t)full_size)
-        return 0;
-    
-    /* Calculate how many bytes we can read */
-    size_t remaining = (size_t)full_size - (size_t)offset;
-    size_t to_read = (count < remaining) ? count : remaining;
-    
-    /* Safety check: ensure we don't exceed buffer bounds */
-    if ((size_t)offset + to_read > sizeof(proc_buffer))
-        to_read = sizeof(proc_buffer) - (size_t)offset;
-    
-    if (to_read == 0)
-        return 0;
-    
-    /* Copy the appropriate portion using memcpy for efficiency and safety */
-    memcpy(buf, proc_buffer + (size_t)offset, to_read);
-    
-    return (int)to_read;
 }
 
 /*
@@ -1475,30 +1390,6 @@ int proc_write(int fd, const char *buf, size_t count)
 
     switch (fd)
     {
-#if CONFIG_ENABLE_BLUETOOTH
-        case 1020:
-            /* /proc/bluetooth/scan - Bluetooth scan control */
-            {
-                char cmd_buf[64];
-                size_t copy_len = (count < sizeof(cmd_buf) - 1) ? count : (sizeof(cmd_buf) - 1);
-                memcpy(cmd_buf, buf, copy_len);
-                cmd_buf[copy_len] = '\0';
-
-                while (copy_len > 0 && (cmd_buf[copy_len - 1] == '\n' ||
-                                        cmd_buf[copy_len - 1] == '\r' ||
-                                        cmd_buf[copy_len - 1] == ' '))
-                {
-                    copy_len--;
-                    cmd_buf[copy_len] = '\0';
-                }
-
-                int result = ir0_bt_proc_scan_write(cmd_buf);
-                if (result < 0)
-                    return result;
-                return (int)count;
-            }
-#endif
-        
         default:
             /*
              * Resolve path from the opener's fd table; writes under the
@@ -1540,10 +1431,17 @@ int proc_stat(const char *path, stat_t *st)
 
     {
         const pseudo_fs_entry_t *pf;
+        int st_rc;
 
         pf = pseudo_fs_lookup(path);
         if (pf && pf->ops && pf->ops->stat)
             return pf->ops->stat(pf->ctx, st);
+
+        st_rc = pseudo_fs_stat_path(path, st);
+        if (st_rc == 0)
+            return 0;
+        if (st_rc != -ENOENT)
+            return st_rc;
     }
 
     filename = proc_parse_path(path, &pid);
@@ -1562,50 +1460,6 @@ int proc_stat(const char *path, stat_t *st)
         return 0;
     }
 
-    /*
-     * Regular virtual files: keep in sync with proc_open dispatch (same
-     * basename / bluetooth subtree as open).
-     */
-    if (strcmp(filename, "meminfo") == 0 ||
-        strcmp(filename, "ps") == 0 ||
-        strcmp(filename, "netinfo") == 0 ||
-        strcmp(filename, "drivers") == 0 ||
-        strcmp(filename, "status") == 0 ||
-        strcmp(filename, "uptime") == 0 ||
-        strcmp(filename, "version") == 0 ||
-        strcmp(filename, "cpuinfo") == 0 ||
-        strcmp(filename, "loadavg") == 0 ||
-        strcmp(filename, "filesystems") == 0 ||
-        strcmp(filename, "cmdline") == 0 ||
-        strcmp(filename, "blockdevices") == 0 ||
-        strcmp(filename, "partitions") == 0 ||
-        strcmp(filename, "mounts") == 0 ||
-        strcmp(filename, "interrupts") == 0 ||
-        strcmp(filename, "iomem") == 0 ||
-        strcmp(filename, "ioports") == 0 ||
-        strcmp(filename, "modules") == 0 ||
-        strcmp(filename, "timer_list") == 0 ||
-        strcmp(filename, "kmsg") == 0 ||
-        strcmp(filename, "swaps") == 0 ||
-        strcmp(filename, "net/dev") == 0 ||
-        (strncmp(filename, "bluetooth/", 10) == 0 &&
-         (strcmp(filename + 10, "devices") == 0 ||
-          strcmp(filename + 10, "scan") == 0))) {
-
-        memset(st, 0, sizeof(stat_t));
-        /* Regular file, read-only */
-        st->st_mode = S_IFREG | 0444;
-        st->st_nlink = 1;
-        /* root user */
-        st->st_uid = 0;
-        /* root group */
-        st->st_gid = 0;
-        /* Approximate size */
-        st->st_size = PROC_DEFAULT_FILE_SIZE;
-        
-        return 0;
-    }
-    
     /* File not found */
     return -ENOENT;
 }

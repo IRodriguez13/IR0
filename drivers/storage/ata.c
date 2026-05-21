@@ -28,7 +28,7 @@
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <string.h>
-#include <arch/common/arch_interface.h>
+#include <ir0/arch_port.h>
 #include <ir0/resource_registry.h>
 
 // Global variables
