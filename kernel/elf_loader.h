@@ -55,6 +55,12 @@ int load_elf_program(const char *path, struct process *process);
  */
 int kexecve(const char *path, char *const argv[], char *const envp[]);
 
+/**
+ * exec_replace_current - Reload ELF into current user process (same PID).
+ * Does not return on success.
+ */
+int exec_replace_current(const char *path, char *const argv[], char *const envp[]);
+
 /* Backwards-compatible alias - deprecated, use kexecve() instead */
 static inline int elf_load_and_execute(const char *path) __attribute__((deprecated));
 static inline int elf_load_and_execute(const char *path)

@@ -77,6 +77,59 @@ void ktest_proc_blockdevices_contract(void)
 	KTEST_END();
 }
 
+void ktest_proc_cpuinfo_contract(void)
+{
+	KTEST_BEGIN("proc_cpuinfo_contract");
+
+	int64_t fd = sys_open("/proc/cpuinfo", O_RDONLY, 0);
+	KASSERT_GT(fd, 0);
+
+	char buf[1024];
+	memset(buf, 0, sizeof(buf));
+	int64_t n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+	KASSERT(contains_text(buf, "vendor_id\t"));
+	KASSERT(contains_text(buf, "model name\t"));
+
+	KTEST_END();
+}
+
+void ktest_proc_version_contract(void)
+{
+	KTEST_BEGIN("proc_version_contract");
+
+	int64_t fd = sys_open("/proc/version", O_RDONLY, 0);
+	KASSERT_GT(fd, 0);
+
+	char buf[256];
+	memset(buf, 0, sizeof(buf));
+	int64_t n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+	KASSERT(buf[0] != '\0');
+	KASSERT(count_tabs(buf) >= 5);
+
+	KTEST_END();
+}
+
+void ktest_proc_uptime_contract(void)
+{
+	KTEST_BEGIN("proc_uptime_contract");
+
+	int64_t fd = sys_open("/proc/uptime", O_RDONLY, 0);
+	KASSERT_GT(fd, 0);
+
+	char buf[64];
+	memset(buf, 0, sizeof(buf));
+	int64_t n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+	KASSERT(buf[0] >= '0' && buf[0] <= '9');
+
+	KTEST_END();
+}
+
 void ktest_sysfs_hostname_contract(void)
 {
 	KTEST_BEGIN("sysfs_hostname_contract");

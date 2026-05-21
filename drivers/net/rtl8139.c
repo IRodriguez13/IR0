@@ -24,7 +24,7 @@
 #include <ir0/oops.h>  /* For ASSERT and panicex */
 #include <ir0/resource_registry.h>
 #include <ir0/clock.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 #include <config.h>
 
 /*

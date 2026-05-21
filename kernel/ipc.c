@@ -24,7 +24,7 @@
 #include <ir0/logging.h>
 #include <string.h>
 #include <kernel/scheduler_api.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 
 static ipc_channel_t *ipc_channels = NULL;  /* Linked list of all channels */
 static uint32_t next_channel_id = 1;

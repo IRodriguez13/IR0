@@ -17,10 +17,6 @@
  */
 
 #include <ir0/video_backend.h>
-#include <config.h>
-#if CONFIG_ENABLE_VBE
-#include <drivers/video/vbe.h>
-#endif
 
 int video_backend_init_from_multiboot(uint32_t multiboot_info)
 {

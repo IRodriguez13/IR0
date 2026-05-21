@@ -27,7 +27,7 @@
  */
 
 #include "dma.h"
-#include <arch/common/arch_interface.h>
+#include <ir0/arch_port.h>
 
 /*
  * Port mappings for the 8237 DMA controllers. These arrays map channel numbers

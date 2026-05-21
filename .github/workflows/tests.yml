@@ -24,6 +24,9 @@ jobs:
       - name: Build test artifacts
         run: make tests
 
+      - name: Host test suite
+        run: make -C tests/host run
+
       - name: Kernel binary analysis
         run: make kernel-analyze
 

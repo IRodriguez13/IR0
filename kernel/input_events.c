@@ -20,7 +20,7 @@
 #include <ir0/time.h>
 #include <ir0/clock.h>
 #include <string.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 
 /* Ring buffer: 64 input_event entries */
 #define INPUT_EVENT_QUEUE_SIZE 64

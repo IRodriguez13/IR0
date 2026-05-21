@@ -14,8 +14,9 @@ KERNEL_CFLAGS = $(BASE_CFLAGS) $(HOST_KERNEL_CPPFLAGS)
 LDFLAGS    =
 
 TEST_SRCS  = test_runner.c test_example.c \
-	test_pseudo_fs_registry.c test_usb_pci_scan.c test_bt_scan_sync.c
-KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o
+	test_pseudo_fs_registry.c test_pseudo_fs_proc_registry.c \
+	test_usb_pci_scan.c test_bt_scan_sync.c
+KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o host_kmem_stub.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -29,11 +30,17 @@ host_pseudo_fs_registry.o: $(KERNEL_ROOT)/fs/pseudo_fs_registry.c
 host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
 	$(CC) $(KERNEL_CFLAGS) -DCONFIG_ENABLE_USB_HOST=0 -c -o $@ $<
 
+host_kmem_stub.o: host_kmem_stub.c
+	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
 test_runner.o: test_runner.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
 test_example.o: test_example.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+test_pseudo_fs_proc_registry.o: test_pseudo_fs_proc_registry.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_pseudo_fs_registry.o: test_pseudo_fs_registry.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<

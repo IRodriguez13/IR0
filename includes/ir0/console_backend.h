@@ -21,9 +21,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <drivers/video/console.h>
+#include <drivers/video/typewriter.h>
+
 void console_backend_init(void);
 void console_backend_clear(uint8_t color);
 int console_backend_uses_framebuffer(void);
 void console_backend_scroll(int lines);
 void console_backend_write(const char *str, size_t len, uint8_t color);
+void console_backend_typewriter_init(void);
 

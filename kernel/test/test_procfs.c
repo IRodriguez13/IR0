@@ -18,6 +18,8 @@
 
 #include "test/ktest_harness.h"
 #include "syscalls.h"
+#include "process.h"
+#include <ir0/procfs.h>
 #include <string.h>
 
 void ktest_procfs_uptime(void)
@@ -31,7 +33,41 @@ void ktest_procfs_uptime(void)
 	sys_close((int)fd);
 	KASSERT_GE(n, 0);
 	KASSERT_GT(n, 0);
-	/* Debe parecer número (uptime segundos) */
 	KASSERT(buf[0] >= '0' && buf[0] <= '9');
+	KTEST_END();
+}
+
+void ktest_procfs_pid_status(void)
+{
+	pid_t pid = -1;
+	const char *name;
+	int fd;
+	char buf[256];
+	int n;
+
+	KTEST_BEGIN("procfs_pid_status");
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	name = proc_resolve_path("/proc/status", &pid);
+	KASSERT(name != NULL);
+	KASSERT(strcmp(name, "status") == 0);
+
+	fd = proc_open("/proc/status", 0);
+	KASSERT_GT(fd, 0);
+
+	memset(buf, 0, sizeof(buf));
+	n = proc_read(fd, buf, sizeof(buf) - 1, 0);
+	KASSERT_GT(n, 0);
+	KASSERT(strstr(buf, "\t") != NULL);
+
+	{
+		int64_t sfd = sys_open("/proc/status", 0, 0);
+		KASSERT_GT(sfd, 0);
+		sys_close((int)sfd);
+	}
 	KTEST_END();
 }

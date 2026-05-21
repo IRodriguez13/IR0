@@ -129,6 +129,13 @@
 #define __NR_reboot       169
 #define __NR_arch_prctl   158
 #define __NR_set_tid_address 218
+#define __NR_futex          202
+#define __NR_clock_gettime   228
+#define __NR_set_robust_list 274
+#define __NR_getrandom       318
+#define __NR_prlimit64       302
+#define __NR_openat          257
+#define __NR_newfstatat      262
 #define __NR_exit_group   231
 
 /* IR0 custom syscalls (outside Linux range) */

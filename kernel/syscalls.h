@@ -43,6 +43,8 @@ typedef struct stat stat_t;
 /* Process management */
 int64_t sys_exit(int exit_code);
 int64_t sys_fork(void);
+int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
+                  int *child_tid, unsigned long tls);
 int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[]);
 int64_t sys_waitpid(pid_t pid, int *status, int options);
 int64_t sys_getpid(void);
@@ -95,6 +97,17 @@ int64_t sys_rt_sigprocmask(int how, const uint64_t *set, uint64_t *oldset, size_
 int64_t sys_arch_prctl(int code, unsigned long addr);
 int64_t sys_set_tid_address(int *tidptr);
 int64_t sys_fcntl(int fd, int cmd, unsigned long arg);
+
+int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode);
+int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags);
+int64_t sys_clock_gettime(int clock_id, struct timespec *tp);
+int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
+                  int *uaddr2, int val3);
+int64_t sys_getrandom(void *buf, size_t buflen, unsigned int flags);
+struct robust_list_head;
+int64_t sys_set_robust_list(struct robust_list_head *head, size_t len);
+int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
+                      void *old_limit);
 
 /* System functions */
 void syscalls_init(void);

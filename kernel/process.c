@@ -27,7 +27,8 @@
 #include <string.h>
 #include <stddef.h>
 #include <ir0/errno.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
+#include <ir0/copy_user.h>
 
 
 static pid_t next_pid = 2;
@@ -118,6 +119,14 @@ static void process_unmap_user_pages_all(uint64_t *pml4)
 			}
 		}
 	}
+}
+
+
+void process_unmap_user_address_space(process_t *p)
+{
+	if (!p)
+		return;
+	process_unmap_user_pages_all(p->page_directory);
 }
 
 
@@ -356,38 +365,181 @@ pid_t spawn_kernel(void (*entry)(void), const char *name)
 }
 
 /*
- * Entry for the lightweight child created by fork() below. This is not a
- * POSIX child: it does not resume at the fork() syscall site with return
- * value zero, and it does not inherit a duplicated address space.
+ * validate_userspace_buffer - Same rules as syscalls.c for wait4 status pointers.
  */
-static void fork_child_entry(void)
+static int validate_userspace_buffer(const void *buf, size_t size)
 {
-	process_exit(0);
+	if (!current_process)
+		return -ESRCH;
+
+	if (current_process->mode == KERNEL_MODE)
+	{
+		uint64_t addr = (uint64_t)buf;
+
+		if (addr >= current_process->stack_start &&
+		    addr + size <= current_process->stack_start + current_process->stack_size)
+			return 0;
+		if (current_process->heap_start > 0 &&
+		    addr >= current_process->heap_start &&
+		    addr + size <= current_process->heap_end)
+			return 0;
+		if (is_user_address(buf, size))
+			return 0;
+		return 0;
+	}
+
+	if (!is_user_address(buf, size))
+		return -EFAULT;
+
+	return 0;
+}
+
+static struct mmap_region *process_clone_mmap_list(struct mmap_region *parent_list)
+{
+	struct mmap_region *head = NULL;
+	struct mmap_region *tail = NULL;
+	struct mmap_region *walk;
+
+	for (walk = parent_list; walk; walk = walk->next)
+	{
+		struct mmap_region *node = kmalloc_try(sizeof(*node));
+
+		if (!node)
+		{
+			while (head)
+			{
+				struct mmap_region *next = head->next;
+
+				kfree(head);
+				head = next;
+			}
+			return NULL;
+		}
+
+		memcpy(node, walk, sizeof(*node));
+		node->next = NULL;
+
+		if (!head)
+			head = node;
+		else
+			tail->next = node;
+		tail = node;
+	}
+
+	return head;
+}
+
+#if defined(__x86_64__) || defined(__amd64__)
+/*
+ * When fork() runs inside the syscall insn handler, user RIP/RFLAGS sit on
+ * the kernel stack below the syscall_dispatch frame.
+ */
+static void fork_fixup_user_syscall_return(process_t *child)
+{
+	uint64_t sp;
+	uint64_t *slot;
+
+	__asm__ volatile("mov %%rsp, %0" : "=r"(sp));
+
+	/* Skip fork's saved rbp and return address. */
+	slot = (uint64_t *)(sp + 16);
+	child->task.rflags = slot[8];
+	child->task.rip = slot[9];
+	child->task.rsp = (uint64_t)(slot + 10);
+	child->task.rax = 0;
+}
+#endif
+
+static void fork_fail(process_t *child)
+{
+	if (!child)
+		return;
+
+	process_unmap_user_pages_all(child->page_directory);
+	if (child->page_directory)
+	{
+		kfree_aligned(child->page_directory);
+		child->page_directory = NULL;
+	}
+
+	while (child->mmap_list)
+	{
+		struct mmap_region *next = child->mmap_list->next;
+
+		kfree(child->mmap_list);
+		child->mmap_list = next;
+	}
+
+	kfree(child);
 }
 
 /*
- * fork() — kept for syscall wiring and historical callers; not a real fork.
+ * fork() - POSIX fork for user and kernel processes.
  *
- * The debug shell uses SYS_FORK when building pipelines (pipe + two children).
- * IR0 does not copy the parent address space or duplicate register state at
- * the syscall boundary. The child is a new task that runs fork_child_entry and
- * exits immediately. That is intentional given the missing copy-on-write /
- * address-space machinery; use kexecve for normal program loading.
- *
- * The parent receives the new PID as the fork() return value. Expecting full
- * POSIX fork semantics in user code will not work until address-space copy is
- * implemented.
+ * Clones the parent process struct and user address space (full copy, no COW),
+ * duplicates the FD table, and arranges for the child to return 0 from fork().
  */
 pid_t fork(void)
 {
-	if (!current_process)
+	process_t *parent = current_process;
+	process_t *child;
+	pid_t child_pid;
+	uint64_t irq_flags;
+
+	if (!parent)
 		return -1;
 
-	process_mode_t child_mode = current_process->mode;
-	pid_t child_pid = spawn(fork_child_entry, "fork_child", child_mode);
+	child = kmalloc_try(sizeof(process_t));
+	if (!child)
+		return -ENOMEM;
 
-	if (child_pid > 0)
-		current_process->task.rax = child_pid;
+	memcpy(child, parent, sizeof(process_t));
+
+	child_pid = process_get_next_pid();
+	child->task.pid = child_pid;
+	child->ppid = parent->task.pid;
+	child->state = PROCESS_READY;
+	child->next = NULL;
+	child->saved_context = NULL;
+	child->poll_waiter = NULL;
+
+	child->page_directory = (uint64_t *)create_process_page_directory();
+	if (!child->page_directory)
+	{
+		kfree(child);
+		return -ENOMEM;
+	}
+	child->task.cr3 = (uint64_t)child->page_directory;
+
+	child->mmap_list = process_clone_mmap_list(parent->mmap_list);
+	if (parent->mmap_list && !child->mmap_list)
+	{
+		kfree_aligned(child->page_directory);
+		kfree(child);
+		return -ENOMEM;
+	}
+
+	if (copy_process_memory(parent, child) != 0)
+	{
+		fork_fail(child);
+		return -ENOMEM;
+	}
+
+	child->task.rax = 0;
+	child->task.cr3 = (uint64_t)child->page_directory;
+	child->task.pid = child_pid;
+
+#if defined(__x86_64__) || defined(__amd64__)
+	if (parent->mode == USER_MODE)
+		fork_fixup_user_syscall_return(child);
+#endif
+
+	irq_flags = process_irq_save();
+	child->next = process_list;
+	process_list = child;
+	process_irq_restore(irq_flags);
+
+	sched_add_process(child);
 
 	return child_pid;
 }
@@ -720,30 +872,50 @@ int process_wait(pid_t pid, int *status, int options)
 		}
 
 		if (zombie) {
-			process_t *scan = process_list;
-			process_t *prev = NULL;
-			while (scan) {
-				if (scan == zombie) {
-					if (prev)
-						prev->next = scan->next;
-					else
-						process_list = scan->next;
-					scan->next = NULL;
-					break;
+			if (status &&
+			    validate_userspace_buffer(status, sizeof(int)) != 0)
+			{
+				process_irq_restore(irq_flags);
+				return -EFAULT;
+			}
+
+			{
+				process_t *scan = process_list;
+				process_t *prev = NULL;
+
+				while (scan)
+				{
+					if (scan == zombie)
+					{
+						if (prev)
+							prev->next = scan->next;
+						else
+							process_list = scan->next;
+						scan->next = NULL;
+						break;
+					}
+					prev = scan;
+					scan = scan->next;
 				}
-				prev = scan;
-				scan = scan->next;
 			}
 		}
 		process_irq_restore(irq_flags);
 
 		if (zombie) {
-			if (status)
-				*status = (zombie->exit_code & 0xFF) << 8;
+			int status_val = (zombie->exit_code & 0xFF) << 8;
 
 			ret = zombie->task.pid;
 			process_destroy(zombie);
 			kfree(zombie);
+
+			if (status)
+			{
+				if (current_process->mode == KERNEL_MODE)
+					*status = status_val;
+				else if (copy_to_user(status, &status_val, sizeof(int)) != 0)
+					return -EFAULT;
+			}
+
 			return ret;
 		}
 

@@ -25,7 +25,7 @@
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <init.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 #include <config.h>
 #include <ir0/version.h>
 #include <ir0/driver.h>

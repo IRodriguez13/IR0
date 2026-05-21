@@ -22,7 +22,7 @@
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
-#include <arch/common/arch_portable.h>
+#include <ir0/arch_port.h>
 #include <ir0/signals.h>
 #include <ir0/context.h>
 #include <stdint.h>

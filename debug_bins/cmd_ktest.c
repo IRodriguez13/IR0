@@ -3,8 +3,13 @@
  * IR0 Kernel - Debug Binary: ktest
  * Runs the in-kernel test suite (syscall/procfs/process coverage).
  *
- * This command is intentionally test-only and linked only with
- * IR0_KERNEL_TESTS builds.
+ * IR0_KERNEL_TESTS guard (Makefile + debug_bins_registry.c):
+ * - Default kernel (make ir0 / kernel-x64.bin): IR0_KERNEL_TESTS is
+ *   undefined; cmd_ktest.o is not linked and the command is not registered.
+ * - Test kernel (make tests / kernel-x64-test.bin): Makefile passes
+ *   -DIR0_KERNEL_TESTS=1, links cmd_ktest.o, and registers cmd_ktest in
+ *   debug_bins_registry_test.o only under #ifdef IR0_KERNEL_TESTS.
+ * - Do not invoke kernel_test_run_all() from non-test builds.
  */
 
 #include "debug_bins.h"

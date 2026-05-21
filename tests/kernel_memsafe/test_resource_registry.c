@@ -22,6 +22,7 @@
 
 static int count_irqs;
 static int count_ioports;
+static int count_mmio;
 
 static int cb_irq(uint8_t irq, const char *name, void *ctx)
 {
@@ -61,8 +62,16 @@ void test_resource_registry(void)
 	KASSERT(count_ioports == 2);
 	KTEST_END();
 
+	KTEST_BEGIN("resource_registry_mmio");
+	resource_register_mmio(0xFEB00000ULL, 0xFEB00FFFULL, "pci_bar0");
+	count_mmio = 0;
+	resource_foreach_mmio(cb_mmio, NULL);
+	KASSERT(count_mmio == 1);
+	KTEST_END();
+
 	KTEST_BEGIN("resource_registry_null_cb");
 	resource_foreach_irq(NULL, NULL);
 	resource_foreach_ioport(NULL, NULL);
+	resource_foreach_mmio(NULL, NULL);
 	KTEST_END();
 }

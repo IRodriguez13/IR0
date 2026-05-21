@@ -8,9 +8,11 @@
  * Portable architecture façade for callers that must not embed
  * `<arch/common/...>` include paths directly (filesystem pseudo-nodes).
  *
- * Delegates to `arch/common/arch_portable.h` for CPU/feature queries.
+ * Delegates to `arch/common/arch_portable.h` for CPU/feature queries and
+ * `arch/common/arch_interface.h` for legacy I/O port helpers used by drivers.
  */
 
 #pragma once
 
 #include <arch/common/arch_portable.h>
+#include <arch/common/arch_interface.h>

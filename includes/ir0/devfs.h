@@ -35,6 +35,8 @@ typedef struct {
     int64_t (*ioctl)(devfs_entry_t *entry, uint64_t request, void *arg);
     int64_t (*open)(devfs_entry_t *entry, int flags);
     int64_t (*close)(devfs_entry_t *entry);
+    int (*can_read)(devfs_entry_t *entry, pid_t pid);
+    int (*can_write)(devfs_entry_t *entry, pid_t pid);
 } devfs_ops_t;
 
 // Device node structure
@@ -63,6 +65,7 @@ int devfs_register_node(devfs_node_t *node);
 int devfs_register_device(const char *name, const devfs_ops_t *ops, uint32_t mode);
 int devfs_unregister_device(const char *name);
 int devfs_fd_can_read(uint32_t device_id, pid_t pid);
+int devfs_fd_can_write(uint32_t device_id, pid_t pid);
 int64_t devfs_open_node(devfs_node_t *node, int flags);
 int64_t devfs_close_node(devfs_node_t *node);
 

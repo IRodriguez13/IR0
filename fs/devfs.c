@@ -19,7 +19,6 @@
  */
 
 #include "devfs.h"
-#include <mm/allocator.h>
 #include <ir0/kmem.h>
 #include <ir0/vga.h>
 #include <ir0/logging.h>
@@ -57,10 +56,8 @@ static pid_t devfs_current_pid(void)
 #define MAX_DEV_NODES 224
 static devfs_node_t *dev_nodes[MAX_DEV_NODES];
 static int num_dev_nodes = 0;
-extern devfs_node_t dev_net;
-extern devfs_node_t dev_console;
-extern devfs_node_t dev_tty;
-extern devfs_node_t dev_stdin;
+
+devfs_node_t *devfs_find_node_by_id(uint32_t device_id);
 
 #if CONFIG_ENABLE_NETWORKING
 static int dev_net_pid_has_ready_ping(pid_t pid)
@@ -74,24 +71,64 @@ static int dev_net_pid_has_ready_ping(pid_t pid)
 }
 #endif
 
-int devfs_fd_can_read(uint32_t device_id, pid_t pid)
+static int devfs_console_can_read(devfs_entry_t *entry, pid_t pid)
 {
-    if (device_id == dev_console.entry.device_id ||
-        device_id == dev_tty.entry.device_id ||
-        device_id == dev_stdin.entry.device_id)
-    {
-        (void)pid;
-        return keyboard_buffer_has_data() ? 1 : 0;
-    }
+    (void)entry;
+    (void)pid;
+    return keyboard_buffer_has_data() ? 1 : 0;
+}
 
 #if CONFIG_ENABLE_NETWORKING
-    if (device_id == dev_net.entry.device_id)
-        return dev_net_pid_has_ready_ping(pid);
-#else
-    (void)device_id;
-    (void)pid;
+static int devfs_net_can_read(devfs_entry_t *entry, pid_t pid)
+{
+    (void)entry;
+    return dev_net_pid_has_ready_ping(pid);
+}
 #endif
+
+static int devfs_serial_can_read(devfs_entry_t *entry, pid_t pid)
+{
+    (void)entry;
+    (void)pid;
+    return 0;
+}
+
+static int devfs_serial_can_write(devfs_entry_t *entry, pid_t pid)
+{
+    (void)entry;
+    (void)pid;
     return 1;
+}
+
+static int devfs_events0_can_write(devfs_entry_t *entry, pid_t pid)
+{
+    (void)entry;
+    (void)pid;
+    return 0;
+}
+
+static int devfs_poll_default(int (*hook)(devfs_entry_t *, pid_t),
+                              devfs_node_t *node, pid_t pid)
+{
+    if (node && node->ops && hook)
+        return hook(&node->entry, pid);
+    return 1;
+}
+
+int devfs_fd_can_read(uint32_t device_id, pid_t pid)
+{
+    devfs_node_t *node = devfs_find_node_by_id(device_id);
+
+    return devfs_poll_default(
+        node && node->ops ? node->ops->can_read : NULL, node, pid);
+}
+
+int devfs_fd_can_write(uint32_t device_id, pid_t pid)
+{
+    devfs_node_t *node = devfs_find_node_by_id(device_id);
+
+    return devfs_poll_default(
+        node && node->ops ? node->ops->can_write : NULL, node, pid);
 }
 
 #define DEVFS_DISK_AGGREGATE_ID  9
@@ -1533,6 +1570,7 @@ static const devfs_ops_t zero_ops = {
 static const devfs_ops_t console_ops = {
     .read = dev_console_read,
     .write = dev_console_write,
+    .can_read = devfs_console_can_read,
 };
 
 static const devfs_ops_t kmsg_ops = {
@@ -1555,6 +1593,9 @@ static const devfs_ops_t net_ops = {
     .read = dev_net_read,
     .write = dev_net_write,
     .ioctl = dev_net_ioctl,
+#if CONFIG_ENABLE_NETWORKING
+    .can_read = devfs_net_can_read,
+#endif
 };
 
 static const devfs_ops_t disk_ops = {
@@ -1693,6 +1734,7 @@ static const devfs_ops_t events0_ops = {
     .read = dev_events0_read,
     .write = NULL,
     .ioctl = NULL,
+    .can_write = devfs_events0_can_write,
 };
 
 static devfs_node_t dev_events0 = {
@@ -1724,6 +1766,8 @@ static int64_t dev_serial_write(devfs_entry_t *entry, const void *buf, size_t co
 static const devfs_ops_t serial_ops = {
     .read = dev_serial_read,
     .write = dev_serial_write,
+    .can_read = devfs_serial_can_read,
+    .can_write = devfs_serial_can_write,
 };
 
 static devfs_node_t dev_serial = {
