@@ -13,6 +13,7 @@
 
 /* kernel/scheduler/task.h - per-task CPU context and scheduler linkage */
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 #include <ir0/types.h>
 
@@ -94,7 +95,7 @@ typedef struct task
     uint16_t gs;       /* +0x98 */
     uint16_t ss;       /* +0x9A */
     uint16_t padding1; /* +0x9C */
-    uint32_t padding2; /* +0x9E */
+    uint16_t padding2; /* +0x9E — must stay 16-bit for switch_x64.asm offsets */
     uint64_t cr0;      /* +0xA0 */
     uint64_t cr2;      /* +0xA8 */
     uint64_t cr3;      /* +0xB0 */
@@ -127,6 +128,12 @@ typedef struct task
     uint64_t last_run_time;
 
 } task_t;
+
+#if defined(__x86_64__) || defined(__amd64__)
+_Static_assert(offsetof(task_t, cr3) == 0xB0, "switch_x64.asm CR3 offset");
+_Static_assert(offsetof(task_t, rip) == 0x80, "switch_x64.asm RIP offset");
+_Static_assert(offsetof(task_t, ss) == 0x9A, "switch_x64.asm SS offset");
+#endif
 
 #define MAX_TASKS 256
 #define DEFAULT_STACK_SIZE (4 * 1024)

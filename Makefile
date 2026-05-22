@@ -722,6 +722,11 @@ else
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
 endif
 
+# Force /sbin/init boot path for userspace smoke ISO (overrides autoconf in config.h)
+ifneq ($(USERSPACE_INIT_BUILD),)
+CFLAGS += -DIR0_USERSPACE_INIT_BOOT=1
+endif
+
 ifneq ($(CONFIG_DEBUG_BINS_GROUP_CORE),n)
 CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_CORE=1
 else
@@ -1210,6 +1215,209 @@ load-init:
 		./scripts/load_init.sh $$ARGS; \
 	fi
 
+# Userspace init smoke binaries (copied to /sbin/init via load-init)
+INIT_SMOKE_SRC = setup/pid1/init_smoke.c
+INIT_MUSL_SRC  = setup/pid1/init_musl.c
+INIT_MINIMAL_SRC = setup/pid1/init_minimal.c
+INIT_SEGV_SMOKE_SRC = setup/pid1/init_segv_smoke.c
+SH_SMOKE_SRC     = setup/pid1/sh_smoke.c
+SEGV_SMOKE_SRC   = setup/pid1/userspace_segv.c
+INIT_SMOKE_BIN   = setup/pid1/init
+SH_SMOKE_BIN     = setup/pid1/sh_smoke
+SEGV_SMOKE_BIN   = setup/pid1/userspace_segv
+MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
+
+build-init-smoke:
+	@echo "  INIT    Building nostdlib ring-3 smoke ($(INIT_SMOKE_BIN))"
+	@$(CC) -nostdlib -static -Os -fno-stack-protector -Wl,-e,_start -Wl,-s,-z,noexecstack \
+		-o $(INIT_SMOKE_BIN) $(INIT_SMOKE_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-smoke OK ($(shell stat -c%s $(INIT_SMOKE_BIN) 2>/dev/null || stat -f%z $(INIT_SMOKE_BIN)) bytes)"
+
+build-init-musl:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building musl static smoke with $(MUSL_CC)"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_MUSL_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-musl OK"
+
+# Minimal PID 1: fork/execve/wait4 (musl); needs /bin/sh on disk for oleada 2 smoke.
+build-init-minimal:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building musl minimal PID1 ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_MINIMAL_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-minimal OK"
+
+# Minimal /bin/sh stub for fork+execve smoke (musl static).
+build-sh-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  SH      Building musl /bin/sh stub ($(SH_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(SH_SMOKE_BIN) $(SH_SMOKE_SRC)
+	@file $(SH_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-sh-smoke OK"
+
+build-init-segv-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building userspace segv PID1 smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_SEGV_SMOKE_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-segv-smoke OK"
+
+build-userspace-segv:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  SEGv    Building /bin/userspace_segv ($(SEGV_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(SEGV_SMOKE_BIN) $(SEGV_SMOKE_SRC)
+	@file $(SEGV_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-userspace-segv OK"
+
+# Kernel ISO booting /sbin/init (CONFIG_KERNEL_DEBUG_SHELL=n)
+kernel-x64-userspace.bin:
+	@rm -f kernel/main.o kernel/process.o kernel/elf_loader.o \
+		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
+		drivers/video/console.o kernel/rr_sched.o
+	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1
+	@cp kernel-x64.bin $@
+	@rm -f kernel/main.o kernel/process.o
+	@$(MAKE) kernel-x64.bin
+	@echo "✓ Kernel (userspace init) copied: $@ (default kernel-x64.bin restored)"
+
+kernel-x64-userspace.iso: kernel-x64-userspace.bin arch/x86-64/grub.cfg
+	@echo "  ISO     $@ (userspace init boot)"
+	@rm -rf iso_userspace
+	@mkdir -p iso_userspace/boot/grub
+	@cp arch/x86-64/grub.cfg iso_userspace/boot/grub/
+	@cp kernel-x64-userspace.bin iso_userspace/boot/kernel-x64.bin
+	@grub-mkrescue -o $@ iso_userspace
+	@rm -rf iso_userspace
+	@echo "✓ ISO (userspace init) created: $@"
+
+# QEMU smoke: ring-3 /sbin/init must print init smoke marker on serial.
+# Requires: build-init-smoke, disk.img with /sbin/init (sudo make load-init).
+smoke-userspace-init: build-init-smoke load-init-with-smoke kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    Creating disk.img..."; \
+		$(MAKE) create-disk; \
+	fi
+	@if [ ! -f $(INIT_SMOKE_BIN) ]; then \
+		echo "✗ $(INIT_SMOKE_BIN) missing — run make build-init-smoke"; \
+		exit 1; \
+	fi
+	@echo "  SMOKE   userspace /sbin/init boot (CONFIG_KERNEL_DEBUG_SHELL=n)..."
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
+		| tee /tmp/userspace-smoke.log || true; \
+	rm -f $$DISK;
+	@if grep -q "init smoke (ring-3) ok" /tmp/userspace-smoke.log; then \
+		echo "✓ smoke-userspace-init passed"; \
+	elif grep -q "Failed to read file from filesystem" /tmp/userspace-smoke.log; then \
+		echo "✗ /sbin/init not on disk.img — run: make load-init-with-smoke"; \
+		exit 1; \
+	else \
+		echo "✗ smoke-userspace-init FAILED"; \
+		exit 1; \
+	fi
+
+load-init-with-smoke: build-init-smoke
+	@./scripts/load_init.sh --inject
+
+load-init-with-musl: build-init-musl
+	@./scripts/load_init.sh --inject disk.img $(INIT_SMOKE_BIN)
+
+# QEMU smoke: musl CRT + TLS + syscall insn ABI.
+smoke-userspace-musl: build-init-musl load-init-with-musl kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    Creating disk.img..."; \
+		$(MAKE) create-disk; \
+	fi
+	@if [ ! -f $(INIT_SMOKE_BIN) ]; then \
+		echo "✗ $(INIT_SMOKE_BIN) missing — run make build-init-musl"; \
+		exit 1; \
+	fi
+	@echo "  SMOKE   musl /sbin/init boot (CONFIG_KERNEL_DEBUG_SHELL=n)..."
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
+		| tee /tmp/userspace-musl-smoke.log || true; \
+	rm -f $$DISK;
+	@if grep -q "IR0: musl init smoke ok" /tmp/userspace-musl-smoke.log; then \
+		echo "✓ smoke-userspace-musl passed"; \
+	elif grep -q "Failed to read file from filesystem" /tmp/userspace-musl-smoke.log; then \
+		echo "✗ /sbin/init not on disk.img — run: make load-init-with-musl"; \
+		exit 1; \
+	else \
+		echo "✗ smoke-userspace-musl FAILED"; \
+		exit 1; \
+	fi
+
+# Inject minimal PID1 + /bin/sh stub on MINIX disk (no mount).
+load-userspace-rootfs: build-init-minimal build-sh-smoke
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    Creating disk.img..."; \
+		$(MAKE) create-disk; \
+	fi
+	@chmod +x scripts/load_userspace_rootfs.sh
+	@./scripts/load_userspace_rootfs.sh disk.img $(INIT_SMOKE_BIN) $(SH_SMOKE_BIN)
+
+# QEMU smoke: PID1 fork+execve /bin/sh in ring 3.
+smoke-userspace-shell: load-userspace-rootfs kernel-x64-userspace.iso
+	@echo "  SMOKE   userspace fork/exec /bin/sh (init_minimal PID1)..."
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
+		| tee /tmp/userspace-shell-smoke.log || true; \
+	rm -f $$DISK;
+	@if grep -q "shell smoke ok" /tmp/userspace-shell-smoke.log; then \
+		echo "✓ smoke-userspace-shell passed"; \
+	elif grep -q "/bin/sh missing" /tmp/userspace-shell-smoke.log; then \
+		echo "✗ /bin/sh not on disk — run: make load-userspace-rootfs"; \
+		exit 1; \
+	else \
+		echo "✗ smoke-userspace-shell FAILED"; \
+		exit 1; \
+	fi
+
+smoke-userspace-segv: build-init-segv-smoke build-userspace-segv kernel-x64-userspace.iso
+	@echo "  SMOKE   userspace #PF -> SIGSEGV (PID1 wait4)..."
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	python3 scripts/inject_init_minix.py $$DISK $(SEGV_SMOKE_BIN) bin/userspace_segv; \
+	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
+		| tee /tmp/userspace-segv-smoke.log || true; \
+	rm -f $$DISK;
+	@if grep -q "\\[PF\\] userspace segv pid=" /tmp/userspace-segv-smoke.log && \
+	    grep -q "\\[PROCESS\\] exit pid=.*code=000000000000008B" /tmp/userspace-segv-smoke.log; then \
+		echo "✓ smoke-userspace-segv passed"; \
+	else \
+		echo "✗ smoke-userspace-segv FAILED"; \
+		exit 1; \
+	fi
+
 # Remove Init binary from virtual disk
 # Usage: make remove-init [filesystem] [disk_image]
 # Defaults: filesystem=auto-detect, disk_image=disk.img
@@ -1565,6 +1773,17 @@ help:
 	@echo "  make delete-disk      Delete virtual disk"
 	@echo "  make load-init        Load Init binary into disk (requires sudo)"
 	@echo "  make load-init hints  Show load-init help"
+	@echo "  make build-init-smoke Build nostdlib /sbin/init smoke binary (setup/pid1/init)"
+	@echo "  make build-init-musl  Build musl static /sbin/init (requires musl-gcc)"
+	@echo "  make load-init-with-smoke  build-init-smoke + sudo load-init"
+	@echo "  make smoke-userspace-init  QEMU boot /sbin/init (CONFIG_KERNEL_DEBUG_SHELL=n)"
+	@echo "  make smoke-userspace-musl  QEMU boot musl /sbin/init (CRT+TLS gate)"
+	@echo "  make smoke-userspace-shell QEMU fork+exec /bin/sh (init_minimal PID1)"
+	@echo "  make smoke-userspace-segv  QEMU userspace #PF -> SIGSEGV wait4 smoke"
+	@echo "  make load-userspace-rootfs  inject /sbin/init + /bin/sh on disk.img"
+	@echo "  make build-sh-smoke         musl static /bin/sh stub for shell smoke"
+	@echo "  make build-userspace-segv   musl static /bin/userspace_segv fault binary"
+	@echo "  make build-init-segv-smoke  musl static PID1 SIGSEGV wait4 validator"
 	@echo "  make remove-init      Remove Init binary from disk (requires sudo)"
 	@echo "  make remove-init hints  Show remove-init help"
 	@echo "  make help             Show this help"
@@ -1856,7 +2075,8 @@ test-drivers-clean:
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
-        runtime-net-check runtime-mount-check smoke-qemu smoke-real-hw smoke-all \
+        runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all \
+        build-init-smoke build-init-musl build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \

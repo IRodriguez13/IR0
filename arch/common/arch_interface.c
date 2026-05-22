@@ -521,9 +521,25 @@ void arch_syscall_init(void)
     idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE, 0);
 
     {
-        uint64_t star = ((uint64_t)0x08 << 32) | ((uint64_t)0x1B << 48);
+        /*
+         * STAR[47:32] = kernel CS selector (0x08, GDT index 1).
+         * STAR[63:48] = user CS GDT byte offset minus 16 (0x18 - 16 = 0x08).
+         * sysret: CS = (base+16)|3 = 0x1B, SS = (base+8)|3 = 0x13 (Linux layout).
+         * Do not store 0x18 here — that yields CS 0x2B and #GP on syscall return.
+         */
+        uint64_t star = ((uint64_t)0x08 << 32) | ((uint64_t)0x08 << 48);
         uint64_t lstar = (uint64_t)(uintptr_t)syscall_insn_entry_asm;
         uint64_t sfmask = (uint64_t)(1 << 9); /* clear IF */
+        uint32_t efer_lo;
+        uint32_t efer_hi;
+
+        /*
+         * IA32_EFER.SCE: required for the syscall instruction (init_smoke,
+         * musl). Boot only enables LME+NXE; enable SCE when syscalls init.
+         */
+        __asm__ volatile("rdmsr" : "=a"(efer_lo), "=d"(efer_hi) : "c"(0xC0000080U));
+        efer_lo |= 1U;
+        __asm__ volatile("wrmsr" : : "c"(0xC0000080U), "a"(efer_lo), "d"(efer_hi) : "memory");
 
         __asm__ volatile("wrmsr" : : "c"(0xC0000081U), "a"((uint32_t)star), "d"((uint32_t)(star >> 32)) : "memory");
         __asm__ volatile("wrmsr" : : "c"(0xC0000082U), "a"((uint32_t)lstar), "d"((uint32_t)(lstar >> 32)) : "memory");

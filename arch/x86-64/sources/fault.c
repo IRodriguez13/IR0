@@ -21,12 +21,28 @@
 #include <string.h>
 #include <mm/pmm.h>
 #include <ir0/signals.h>
+#include <arch/common/arch_portable.h>
+#include <ir0/copy_user.h>
+#include <drivers/serial/serial.h>
 
-/* Deliver SIGSEGV to current process when a user fault is out of bounds */
-static void pf_sigsegv_current(process_t *p)
+/* Deliver SIGSEGV-equivalent termination for a faulting userspace process. */
+static __attribute__((noreturn)) void pf_terminate_userspace(process_t *p,
+							      uint64_t fault_addr,
+							      uint64_t errcode)
 {
-	if (p)
-		send_signal(p->task.pid, 11);
+	if (!p)
+		panic("[PF] userspace fault without process");
+
+	serial_print("[PF] userspace segv pid=");
+	serial_print_hex32((uint32_t)p->task.pid);
+	serial_print(" addr=");
+	serial_print_hex64(fault_addr);
+	serial_print(" err=");
+	serial_print_hex64(errcode);
+	serial_print("\n");
+
+	(void)send_signal(p->task.pid, SIGSEGV);
+	process_exit(128 + SIGSEGV);
 }
 
 /*
@@ -80,19 +96,17 @@ void page_fault_handler_x64(uint64_t *stack)
 		if (fault_addr < USER_SPACE_START || fault_addr > USER_SPACE_END) {
 			current = process_get_current();
 			if (current) {
-				pf_sigsegv_current(current);
-				return;
+				pf_terminate_userspace(current, fault_addr, errcode);
 			}
-			panic("[PF] Invalid userspace address");
+			return;
 		}
 
 		current = process_get_current();
 		if (!current || !current->page_directory)
-			panic("[PF] No process context for user page fault");
+			return;
 
 		if (!pf_fault_in_allowed_user_vma(current, fault_addr)) {
-			pf_sigsegv_current(current);
-			return;
+			pf_terminate_userspace(current, fault_addr, errcode);
 		}
 
 		/* Allocate physical frame using PMM */
@@ -100,10 +114,9 @@ void page_fault_handler_x64(uint64_t *stack)
 
 		if (phys_addr == 0) {
 			if (current) {
-				pf_sigsegv_current(current);
-				return;
+				pf_terminate_userspace(current, fault_addr, errcode);
 			}
-			panic("[PF] No hay memoria física para usuario");
+			return;
 		}
 
 		/* Determine page flags */
@@ -121,10 +134,9 @@ void page_fault_handler_x64(uint64_t *stack)
 					   phys_addr, flags) != 0) {
 			pmm_free_frame(phys_addr);
 			if (current) {
-				pf_sigsegv_current(current);
-				return;
+				pf_terminate_userspace(current, fault_addr, errcode);
 			}
-			panic("[PF] Failed to map user page");
+			return;
 		}
 
 		/*
@@ -146,9 +158,15 @@ void page_fault_handler_x64(uint64_t *stack)
 	if (user && !not_present && write) {
 		current = process_get_current();
 		if (current) {
-			pf_sigsegv_current(current);
-			return;
+			pf_terminate_userspace(current, fault_addr, errcode);
 		}
+	}
+
+	if (user) {
+		current = process_get_current();
+		if (current)
+			pf_terminate_userspace(current, fault_addr, errcode);
+		return;
 	}
 
 	/* Kernel fault, reserved bit set, or other error - fatal */
@@ -163,6 +181,7 @@ void page_fault_handler_x64(uint64_t *stack)
 	print(" user=");
 	print_hex(user);
 	print("\n");
+
 	panic("Unhandled kernel page fault");
 }
 

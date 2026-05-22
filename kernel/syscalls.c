@@ -35,6 +35,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <ir0/oops.h>
+#include <ir0/copy_user.h>
 #include <ir0/keyboard.h>
 #include <fs/vfs.h>
 #include <ir0/path.h>
@@ -483,6 +484,22 @@ int64_t sys_getpid(void)
   return process_pid(current_process);
 }
 
+int64_t sys_gettid(void)
+{
+  pid_t tid;
+
+  if (!current_process)
+    return -ESRCH;
+
+  tid = process_pid(current_process);
+
+  serial_print("GETTID pid=");
+  serial_print_hex32((uint32_t)tid);
+  serial_print("\n");
+
+  return (int64_t)tid;
+}
+
 int64_t sys_getppid(void)
 {
   if (!current_process)
@@ -621,6 +638,20 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
   return vfs_mkdir(path_to_use, (int)mode);
 }
 
+/*
+ * execve(2) contract (Linux x86-64 ABI):
+ *   argv and envp are NULL-terminated arrays of pointers to NUL-terminated
+ *   strings. The kernel MUST NOT perform a bulk fixed-size copy of the
+ *   pointer arrays from userspace, because nothing guarantees that the
+ *   vectors extend up to MAX_ARGS slots; reading past the last NULL can
+ *   cross unmapped pages near the stack top and panic the kernel.
+ *
+ *   This implementation reads pointers one at a time, validating each
+ *   slot is mapped, and returns:
+ *     -EFAULT  on first invalid/unmapped pointer
+ *     -E2BIG   when the limit (MAX_ARGS / MAX_ENV) is exceeded
+ *     0        otherwise
+ */
 int64_t sys_exec(const char *pathname,
                  char *const argv[],
                  char *const envp[])
@@ -651,79 +682,138 @@ int64_t sys_exec(const char *pathname,
     path_to_use = resolved_path;
   }
 
-  /* Validate argv and envp if provided */
-  if (argv && !is_user_address(argv, sizeof(char *) * 256))
-  {
+  /* argv/envp are NULL-terminated vectors; only validate the first slot here.
+   * Per-entry mapped checks happen inside the iteration below.
+   */
+  if (argv && !is_user_address(argv, sizeof(char *)))
     return -EFAULT;
-  }
-  
-  if (envp && !is_user_address(envp, sizeof(char *) * 256))
-  {
+  if (envp && !is_user_address(envp, sizeof(char *)))
     return -EFAULT;
-  }
 
   /* Copy argv and envp from userspace if provided */
   char *kernel_argv[256] = {NULL};
   char *kernel_envp[256] = {NULL};
-  
+  int argc_kept = 0;
+  int envc_kept = 0;
+  int rc_vec = 0;
+
   if (argv)
   {
-    /* Copy argv array */
-    char *user_argv[256];
-    if (copy_from_user(user_argv, argv, sizeof(char *) * 256) != 0)
-      return -EFAULT;
-    
-    /* Copy each argv string */
-    for (int i = 0; i < 256 && user_argv[i]; i++)
+    int i;
+    for (i = 0; i < 256; i++)
     {
+      const void *slot = (const char *)argv + i * sizeof(char *);
+      char *user_ptr = NULL;
+
+      /* Each slot is 8 bytes — within a single page; check mapping for that page. */
+      if (!is_user_address_checked(slot, sizeof(char *), 1))
+      {
+        rc_vec = -EFAULT;
+        break;
+      }
+      if (copy_from_user(&user_ptr, slot, sizeof(char *)) != 0)
+      {
+        rc_vec = -EFAULT;
+        break;
+      }
+      if (user_ptr == NULL)
+        break;  /* end of vector */
+
+      /* Validate string start is mapped (first byte covers its starting page). */
+      if (!is_user_address_checked(user_ptr, 1, 1))
+      {
+        rc_vec = -EFAULT;
+        break;
+      }
+
       char *arg_str = (char *)kmalloc_try(256);
       if (!arg_str)
       {
-        for (int j = 0; j < 256 && kernel_argv[j]; j++)
-          kfree(kernel_argv[j]);
-        return -ENOMEM;
-      }
-      if (copy_from_user(arg_str, user_argv[i], 256) == 0)
-        kernel_argv[i] = arg_str;
-      else
-      {
-        kfree(arg_str);
+        rc_vec = -ENOMEM;
         break;
       }
+      if (copy_from_user(arg_str, user_ptr, 256) != 0)
+      {
+        kfree(arg_str);
+        rc_vec = -EFAULT;
+        break;
+      }
+      arg_str[255] = '\0';  /* force termination in case the user string was 256+ */
+      kernel_argv[i] = arg_str;
+      argc_kept = i + 1;
+    }
+    if (rc_vec)
+    {
+      for (int j = 0; j < argc_kept; j++)
+        kfree(kernel_argv[j]);
+      return rc_vec;
+    }
+    if (i == 256)
+    {
+      for (int j = 0; j < argc_kept; j++)
+        kfree(kernel_argv[j]);
+      return -E2BIG;
     }
   }
-  
+
   if (envp)
   {
-    /* Copy envp array */
-    char *user_envp[256];
-    if (copy_from_user(user_envp, envp, sizeof(char *) * 256) != 0)
+    int i;
+    for (i = 0; i < 256; i++)
     {
-      /* Clean up argv on error */
-      for (int i = 0; i < 256 && kernel_argv[i]; i++)
-        kfree(kernel_argv[i]);
-      return -EFAULT;
-    }
-    
-    /* Copy each envp string */
-    for (int i = 0; i < 256 && user_envp[i]; i++)
-    {
+      const void *slot = (const char *)envp + i * sizeof(char *);
+      char *user_ptr = NULL;
+
+      if (!is_user_address_checked(slot, sizeof(char *), 1))
+      {
+        rc_vec = -EFAULT;
+        break;
+      }
+      if (copy_from_user(&user_ptr, slot, sizeof(char *)) != 0)
+      {
+        rc_vec = -EFAULT;
+        break;
+      }
+      if (user_ptr == NULL)
+        break;
+
+      if (!is_user_address_checked(user_ptr, 1, 1))
+      {
+        rc_vec = -EFAULT;
+        break;
+      }
+
       char *env_str = (char *)kmalloc_try(256);
       if (!env_str)
       {
-        for (int j = 0; j < 256 && kernel_argv[j]; j++)
-          kfree(kernel_argv[j]);
-        for (int j = 0; j < 256 && kernel_envp[j]; j++)
-          kfree(kernel_envp[j]);
-        return -ENOMEM;
-      }
-      if (copy_from_user(env_str, user_envp[i], 256) == 0)
-        kernel_envp[i] = env_str;
-      else
-      {
-        kfree(env_str);
+        rc_vec = -ENOMEM;
         break;
       }
+      if (copy_from_user(env_str, user_ptr, 256) != 0)
+      {
+        kfree(env_str);
+        rc_vec = -EFAULT;
+        break;
+      }
+      env_str[255] = '\0';
+      kernel_envp[i] = env_str;
+      envc_kept = i + 1;
+    }
+    if (rc_vec)
+    {
+      for (int j = 0; j < argc_kept; j++)
+        kfree(kernel_argv[j]);
+      for (int j = 0; j < envc_kept; j++)
+        kfree(kernel_envp[j]);
+      return rc_vec;
+    }
+    if (i == 256)
+    {
+      for (int j = 0; j < argc_kept; j++)
+        kfree(kernel_argv[j]);
+      for (int j = 0; j < envc_kept; j++)
+        kfree(kernel_envp[j]);
+      return -E2BIG;
     }
   }
 
@@ -1990,10 +2080,17 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
  */
 int64_t sys_fork(void)
 {
+  int64_t r;
   if (!current_process)
     return -ESRCH;
 
-  return fork();
+  r = fork();
+  serial_print("FASE8 sys_fork parent=");
+  serial_print_hex32((uint32_t)current_process->task.pid);
+  serial_print(" ret=");
+  serial_print_hex64((uint64_t)r);
+  serial_print("\n");
+  return r;
 }
 
 /*
@@ -2173,6 +2270,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
 
   if (code == ARCH_SET_FS)
   {
+    current_process->fs_base = (uint64_t)addr;
     arch_set_fs_base((uint64_t)addr);
     return 0;
   }
@@ -3487,6 +3585,8 @@ static int64_t wrap_sys_fork(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4,
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_fork(); }
 static int64_t wrap_sys_getpid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getpid(); }
+static int64_t wrap_sys_gettid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_gettid(); }
 static int64_t wrap_sys_getppid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getppid(); }
 static int64_t wrap_sys_getuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
@@ -3553,6 +3653,7 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_dup2]           = wrap_sys_dup2;
   syscall_table_rw[__NR_nanosleep]      = wrap_sys_nanosleep;
   syscall_table_rw[__NR_getpid]         = wrap_sys_getpid;
+  syscall_table_rw[__NR_gettid]         = wrap_sys_gettid;
   syscall_table_rw[__NR_getuid]         = wrap_sys_getuid;
   syscall_table_rw[__NR_geteuid]        = wrap_sys_geteuid;
   syscall_table_rw[__NR_getgid]         = wrap_sys_getgid;
@@ -3618,6 +3719,13 @@ static void init_syscall_table(void)
 }
 
 /* Syscall dispatcher called from assembly */
+#if defined(__x86_64__) || defined(__amd64__)
+static void syscall_capture_user_frame(process_t *p)
+{
+  process_capture_syscall_frame(p);
+}
+#endif
+
 /**
  * syscall_dispatch - Dispatch system call via table (Linux/musl ABI)
  * @syscall_num: Linux x86-64 syscall number
@@ -3629,9 +3737,49 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                          uint64_t arg3, uint64_t arg4, uint64_t arg5,
                          uint64_t arg6)
 {
+  int64_t r;
+  static int fase10_count = 0;
+  pid_t cur_pid = current_process ? current_process->task.pid : 0;
+  int do_trace = (fase10_count < 5 && cur_pid >= 2);
+
+#if defined(__x86_64__) || defined(__amd64__)
+  if (current_process)
+    syscall_capture_user_frame(current_process);
+#endif
+
+  if (do_trace) {
+    extern uint64_t iretq_checkpoint_buf[40];
+    serial_print("FASE10 pre pid=");
+    serial_print_hex32((uint32_t)cur_pid);
+    serial_print(" nr=");
+    serial_print_hex64(syscall_num);
+    serial_print(" irq_ck36=");
+    serial_print_hex64(iretq_checkpoint_buf[36]);
+    serial_print(" irq_pre=");
+    serial_print_hex64(iretq_checkpoint_buf[37]);
+    serial_print(" irq_ck38=");
+    serial_print_hex64(iretq_checkpoint_buf[38]);
+    serial_print(" irq_post=");
+    serial_print_hex64(iretq_checkpoint_buf[39]);
+    serial_print("\n");
+  }
+
   if (syscall_num >= __NR_syscall_max)
     return -ENOSYS;
 
   syscall_handler_t handler = syscall_table_rw[syscall_num];
-  return handler(arg1, arg2, arg3, arg4, arg5, arg6);
+  r = handler(arg1, arg2, arg3, arg4, arg5, arg6);
+
+  if (do_trace) {
+    fase10_count++;
+    serial_print("FASE10 post pid=");
+    serial_print_hex32((uint32_t)cur_pid);
+    serial_print(" nr=");
+    serial_print_hex64(syscall_num);
+    serial_print(" retval=");
+    serial_print_hex64((uint64_t)r);
+    serial_print("\n");
+  }
+
+  return r;
 }

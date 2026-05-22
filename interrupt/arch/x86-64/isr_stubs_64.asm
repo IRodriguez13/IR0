@@ -4,6 +4,20 @@
 BITS 64
 
 extern isr_handler64
+extern iretq_checkpoint_buf
+
+section .bss
+align 8
+global fase28_isr_rsp_after_push
+global fase28_isr_frame_ptr
+global fase28_saved_rip
+global fase28_saved_rsp
+fase28_isr_rsp_after_push:  resq 1
+fase28_isr_frame_ptr:       resq 1
+fase28_saved_rip:           resq 1
+fase28_saved_rsp:           resq 1
+
+section .text
 
 ; Macro para stubs sin código de error
 %macro ISR_NOERRCODE 1
@@ -101,6 +115,21 @@ isr_common_stub_64:
     push r14
     push r15
 
+    ; FASE 28: earliest trap-frame snapshot after final GPR push.
+    ; Layout from current rsp:
+    ;   +0..+112  = saved GPRs (r15..rax)
+    ;   +120      = int_no
+    ;   +128      = errcode
+    ;   +136      = saved RIP
+    ;   +160      = saved RSP (only valid on CPL3->CPL0 transitions)
+    mov [rel fase28_isr_rsp_after_push], rsp
+    lea rax, [rsp + 120]
+    mov [rel fase28_isr_frame_ptr], rax
+    mov rax, [rsp + 136]
+    mov [rel fase28_saved_rip], rax
+    mov rax, [rsp + 160]
+    mov [rel fase28_saved_rsp], rax
+
     ; Llamar al handler C
     mov rdi, qword [rsp + 120]  ; Obtener número de interrupción del stack
     lea rsi, [rsp + 120]        ; Pasar puntero a [int_no, errcode, ...]
@@ -125,6 +154,43 @@ isr_common_stub_64:
 
     ; Limpiar código de error y número de interrupción
     add rsp, 16
+
+    ; Returning to ring 3: normalize SS on iretq frame (sysret uses 0x13).
+    ; Frame at rsp: RIP, CS, RFLAGS, RSP, SS (+0, +8, +16, +24, +32).
+    test byte [rsp + 8], 3
+    jz .kernel_iret
+
+    ; --- FASE 16 PRE: snapshot rax immediately after pop rax, before DS/ES ---
+    push rax
+    push rcx
+    lea rcx, [rel iretq_checkpoint_buf]
+    mov qword [rcx + 288], 0x16A1
+    mov rax, [rsp + 8]
+    mov [rcx + 296], rax
+    pop rcx
+    pop rax
+    ; -------------------------
+
+    mov word [rsp + 32], 0x23
+    ; FASE 16 FIX: preserve rax across DS/ES scratch load (otherwise mov ax,0x23
+    ; clobbers the low16 of the user-visible rax saved/restored by ISR).
+    push rax
+    mov ax, 0x23
+    mov ds, ax
+    mov es, ax
+    pop rax
+
+    ; --- FASE 16 POST: snapshot rax immediately before iretq ---
+    push rax
+    push rcx
+    lea rcx, [rel iretq_checkpoint_buf]
+    mov qword [rcx + 304], 0x16A2
+    mov rax, [rsp + 8]
+    mov [rcx + 312], rax
+    pop rcx
+    pop rax
+    ; -------------------------
+.kernel_iret:
 
     ; Habilitar interrupciones y retornar
     sti

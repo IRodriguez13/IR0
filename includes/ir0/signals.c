@@ -204,8 +204,9 @@ void handle_signals(void)
 #if DEBUG_PROCESS
         serial_print("[SIGNAL] SIGCHLD received (child terminated)\n");
 #endif
-        /* SIGCHLD is informational, parent should handle via wait() */
         current->signal_pending &= ~SIGNAL_MASK(SIGCHLD);
+        if (current->state == PROCESS_BLOCKED)
+            current->state = PROCESS_READY;
     }
 
     /* Check for signals with userspace handlers */

@@ -22,6 +22,29 @@
 #include <mm/pmm.h>
 #include <ir0/validation.h>
 
+/*
+ * Linux mm/x86: pte_pfn(), pud_page() — extract the physical pointer from a
+ * descriptor without software/NX bits (PTE_PFN_MASK).
+ */
+static inline uintptr_t paging_entry_pfn(uint64_t entry)
+{
+    return (uintptr_t)(entry & PAGE_PTE_PFN_MASK);
+}
+
+static inline int paging_entry_large(uint64_t entry)
+{
+    return (entry & PAGE_PRESENT) && (entry & PAGE_SIZE_2MB_FLAG);
+}
+
+static inline uint64_t *paging_entry_table(uint64_t entry)
+{
+    if (!(entry & PAGE_PRESENT))
+        return NULL;
+    if (paging_entry_large(entry))
+        return NULL;
+    return (uint64_t *)paging_entry_pfn(entry);
+}
+
 void enable_paging(void)
 {
     uint64_t cr0;
@@ -91,21 +114,29 @@ int is_page_mapped_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t *fl
     size_t pdpt_index = (virt_addr >> 30) & PAGE_INDEX_MASK;
     size_t pd_index = (virt_addr >> 21) & PAGE_INDEX_MASK;
     size_t pt_index = (virt_addr >> 12) & PAGE_INDEX_MASK;
-    
-    /* Walk page tables */
+    uint64_t *pdpt;
+    uint64_t *pd;
+    uint64_t *pt;
+
     if (!(pml4[pml4_index] & PAGE_PRESENT))
         return 0;
-    
-    uint64_t *pdpt = (uint64_t *)(pml4[pml4_index] & PAGE_FRAME_MASK);
-    if (!(pdpt[pdpt_index] & PAGE_PRESENT))
+    if (paging_entry_large(pml4[pml4_index]))
         return 0;
-    
-    uint64_t *pd = (uint64_t *)(pdpt[pdpt_index] & PAGE_FRAME_MASK);
-    if (!(pd[pd_index] & PAGE_PRESENT))
+
+    pdpt = paging_entry_table(pml4[pml4_index]);
+    if (!pdpt || !(pdpt[pdpt_index] & PAGE_PRESENT))
         return 0;
-    
-    uint64_t *pt = (uint64_t *)(pd[pd_index] & PAGE_FRAME_MASK);
-    if (!(pt[pt_index] & PAGE_PRESENT))
+    if (paging_entry_large(pdpt[pdpt_index]))
+        return 0;
+
+    pd = paging_entry_table(pdpt[pdpt_index]);
+    if (!pd || !(pd[pd_index] & PAGE_PRESENT))
+        return 0;
+    if (paging_entry_large(pd[pd_index]))
+        return 0;
+
+    pt = paging_entry_table(pd[pd_index]);
+    if (!pt || !(pt[pt_index] & PAGE_PRESENT))
         return 0;
     
     /* Page is mapped */
@@ -135,23 +166,117 @@ uint64_t *paging_get_pte(uint64_t *pml4, uintptr_t vaddr)
 
     if (!(pml4[pml4_index] & PAGE_PRESENT))
         return NULL;
-    if (pml4[pml4_index] & PAGE_SIZE_2MB_FLAG)
+    if (paging_entry_large(pml4[pml4_index]))
         return NULL;
 
-    pdpt = (uint64_t *)(pml4[pml4_index] & PAGE_FRAME_MASK);
-    if (!(pdpt[pdpt_index] & PAGE_PRESENT))
+    pdpt = paging_entry_table(pml4[pml4_index]);
+    if (!pdpt || !(pdpt[pdpt_index] & PAGE_PRESENT))
         return NULL;
-    if (pdpt[pdpt_index] & PAGE_SIZE_2MB_FLAG)
-        return NULL;
-
-    pd = (uint64_t *)(pdpt[pdpt_index] & PAGE_FRAME_MASK);
-    if (!(pd[pd_index] & PAGE_PRESENT))
-        return NULL;
-    if (pd[pd_index] & PAGE_SIZE_2MB_FLAG)
+    if (paging_entry_large(pdpt[pdpt_index]))
         return NULL;
 
-    pt = (uint64_t *)(pd[pd_index] & PAGE_FRAME_MASK);
+    pd = paging_entry_table(pdpt[pdpt_index]);
+    if (!pd || !(pd[pd_index] & PAGE_PRESENT))
+        return NULL;
+    if (paging_entry_large(pd[pd_index]))
+        return NULL;
+
+    pt = paging_entry_table(pd[pd_index]);
+    if (!pt)
+        return NULL;
     return &pt[pt_index];
+}
+
+/*
+ * Copy or zero user memory via mapped physical frames while kernel CR3 is
+ * active.  PMM-backed user pages are identity-mapped in the kernel address
+ * space (see boot pd_minimal and PMM_PHYS_BASE).
+ */
+
+/*
+ * FASE 23: snapshot of the last copy_to_user_region_in_directory attempt.
+ *   [0] dst (initial)        [4] last page being processed
+ *   [1] n   (initial)        [5] last pte present (0/1)
+ *   [2] dst + n              [6] last phys frame address
+ *   [3] pml4                 [7] call sequence number
+ */
+uint64_t fase23_copy_region_probe[8];
+static uint64_t fase23_copy_region_seq;
+
+int copy_to_user_region_in_directory(uint64_t *pml4, uintptr_t dst,
+                                     const void *src, size_t n)
+{
+    const uint8_t *s = src;
+    uintptr_t dst0 = dst;
+    size_t n0 = n;
+
+    fase23_copy_region_probe[0] = (uint64_t)dst0;
+    fase23_copy_region_probe[1] = (uint64_t)n0;
+    fase23_copy_region_probe[2] = (uint64_t)(dst0 + n0);
+    fase23_copy_region_probe[3] = (uint64_t)(uintptr_t)pml4;
+    fase23_copy_region_probe[7] = ++fase23_copy_region_seq;
+
+    if (!pml4 || !src)
+        return -1;
+
+    while (n > 0)
+    {
+        uintptr_t page = dst & (uintptr_t)PAGE_FRAME_MASK;
+        uint64_t *pte = paging_get_pte(pml4, page);
+        uintptr_t phys;
+        size_t off;
+        size_t chunk;
+
+        fase23_copy_region_probe[4] = (uint64_t)page;
+        fase23_copy_region_probe[5] = (pte && (*pte & PAGE_PRESENT)) ? 1ULL : 0ULL;
+
+        if (!pte || !(*pte & PAGE_PRESENT))
+            return -1;
+
+        phys = paging_entry_pfn(*pte);
+        fase23_copy_region_probe[6] = (uint64_t)phys;
+        off = dst & 0xFFFU;
+        chunk = (size_t)(0x1000U - off);
+        if (chunk > n)
+            chunk = n;
+
+        memcpy((void *)(phys + off), s, chunk);
+        dst += chunk;
+        s += chunk;
+        n -= chunk;
+    }
+
+    return 0;
+}
+
+int zero_user_region_in_directory(uint64_t *pml4, uintptr_t dst, size_t n)
+{
+    if (!pml4)
+        return -1;
+
+    while (n > 0)
+    {
+        uintptr_t page = dst & (uintptr_t)PAGE_FRAME_MASK;
+        uint64_t *pte = paging_get_pte(pml4, page);
+        uintptr_t phys;
+        size_t off;
+        size_t chunk;
+
+        if (!pte || !(*pte & PAGE_PRESENT))
+            return -1;
+
+        phys = paging_entry_pfn(*pte);
+        off = dst & 0xFFFU;
+        chunk = (size_t)(0x1000U - off);
+        if (chunk > n)
+            chunk = n;
+
+        memset((void *)(phys + off), 0, chunk);
+        dst += chunk;
+        n -= chunk;
+    }
+
+    return 0;
 }
 
 /**
@@ -161,18 +286,12 @@ uint64_t *paging_get_pte(uint64_t *pml4, uintptr_t vaddr)
 static uint64_t *get_existing_table(uint64_t *table, size_t index)
 {
     if (!(table[index] & PAGE_PRESENT))
-    {
-        return NULL; /* Table doesn't exist */
-    }
-
-    /* Check if it's a huge page (2MB) */
-    if (table[index] & (1ULL << 7))
-    {
         return NULL;
-    }
 
-    /* Return physical address (identity mapped) */
-    return (uint64_t *)(table[index] & PAGE_FRAME_MASK);
+    if (paging_entry_large(table[index]))
+        return NULL;
+
+    return paging_entry_table(table[index]);
 }
 
 /**
@@ -181,7 +300,7 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
  */
 static uint64_t alloc_page_table(void)
 {
-    void *page = kmalloc(4096);
+    void *page = kmalloc_aligned(4096, 4096);
     if (!page)
         return 0;
     
@@ -199,29 +318,44 @@ static uint64_t alloc_page_table(void)
  * @create: If 1, create the table if it doesn't exist
  * Returns: Virtual address of the table (NULL if not present and create=0)
  */
-static uint64_t *get_or_create_table(uint64_t *pml4, size_t index, int create)
+static uint64_t *get_or_create_table(uint64_t *parent, size_t index, int create,
+                                     uint64_t map_flags)
 {
-    if (!(pml4[index] & PAGE_PRESENT))
+    uint64_t table_prot = PAGE_PRESENT | PAGE_RW;
+
+    if (map_flags & PAGE_USER)
+        table_prot |= PAGE_USER;
+
+    if (!(parent[index] & PAGE_PRESENT))
     {
+        uint64_t phys_addr;
+
         if (!create)
             return NULL;
-        
-        /* Allocate new table */
-        uint64_t phys_addr = alloc_page_table();
+
+        phys_addr = alloc_page_table();
         if (phys_addr == 0)
             return NULL;
-        
-        /* Map the table */
-        pml4[index] = phys_addr | PAGE_PRESENT | PAGE_RW;
-        return (uint64_t *)phys_addr;  /* Identity mapped */
+
+        /*
+         * Linux: table entries use _KERNPG_TABLE / pgtable flags only — never
+         * NX on non-leaf levels.  PFN via PTE_PFN_MASK.
+         */
+        parent[index] = paging_entry_pfn(phys_addr) | table_prot;
+        return (uint64_t *)paging_entry_pfn(phys_addr);
     }
-    
-    /* Check if it's a huge page */
-    if (pml4[index] & (1ULL << 7))
+
+    if (paging_entry_large(parent[index]))
         return NULL;
-    
-    /* Return physical address (identity mapped) */
-    return (uint64_t *)(pml4[index] & PAGE_FRAME_MASK);
+
+    /*
+     * Propagate PAGE_USER onto existing table levels (e.g. supervisor identity
+     * map created pdpt/pd/pt without U/S).  Linux requires user at all levels.
+     */
+    if (map_flags & PAGE_USER)
+        parent[index] |= PAGE_USER;
+
+    return paging_entry_table(parent[index]);
 }
 
 /**
@@ -244,17 +378,17 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
     size_t pt_index = (virt_addr >> 12) & PAGE_INDEX_MASK;
 
     /* Get or create PDPT */
-    uint64_t *pdpt = get_or_create_table(pml4, pml4_index, 1);
+    uint64_t *pdpt = get_or_create_table(pml4, pml4_index, 1, flags);
     if (!pdpt)
         return -1;
 
     /* Get or create PD */
-    uint64_t *pd = get_or_create_table(pdpt, pdpt_index, 1);
+    uint64_t *pd = get_or_create_table(pdpt, pdpt_index, 1, flags);
     if (!pd)
         return -1;
 
     /* Get or create PT */
-    uint64_t *pt = get_or_create_table(pd, pd_index, 1);
+    uint64_t *pt = get_or_create_table(pd, pd_index, 1, flags);
     if (!pt)
         return -1;
 
@@ -262,7 +396,7 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
     {
         uint64_t entry;
 
-        entry = (phys_addr & PAGE_FRAME_MASK) | (flags & 0xFFF) | PAGE_PRESENT;
+        entry = paging_entry_pfn(phys_addr) | (flags & 0xFFF) | PAGE_PRESENT;
         /*
          * Data and other non-code mappings: RW without PAGE_EXEC, or any mapping
          * without PAGE_EXEC, get NX. Code paths pass PAGE_EXEC (e.g. ELF PF_X).
@@ -272,8 +406,10 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
         pt[pt_index] = entry;
     }
 
-    /* Flush TLB */
-    __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
+    /* Flush TLB — skip invlpg: mapping runs under kernel CR3 and foreign
+     * user VAs may be absent from the active page tables; CR3 reload on
+     * context switch flushes user TLB entries anyway.
+     */
 
     return 0;
 }
@@ -317,23 +453,23 @@ int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr)
 
     if (!(pml4[pml4_index] & PAGE_PRESENT))
         return -1;
-    if (pml4[pml4_index] & PAGE_SIZE_2MB_FLAG)
+    if (paging_entry_large(pml4[pml4_index]))
         return -1;
-    pdpt = (uint64_t *)(pml4[pml4_index] & PAGE_FRAME_MASK);
+    pdpt = paging_entry_table(pml4[pml4_index]);
+    if (!pdpt || !(pdpt[pdpt_index] & PAGE_PRESENT))
+        return -1;
+    if (paging_entry_large(pdpt[pdpt_index]))
+        return -1;
+    pd = paging_entry_table(pdpt[pdpt_index]);
+    if (!pd || !(pd[pd_index] & PAGE_PRESENT))
+        return -1;
+    if (paging_entry_large(pd[pd_index]))
+        return -1;
+    pt = paging_entry_table(pd[pd_index]);
+    if (!pt)
+        return -1;
 
-    if (!(pdpt[pdpt_index] & PAGE_PRESENT))
-        return -1;
-    if (pdpt[pdpt_index] & PAGE_SIZE_2MB_FLAG)
-        return -1;
-    pd = (uint64_t *)(pdpt[pdpt_index] & PAGE_FRAME_MASK);
-
-    if (!(pd[pd_index] & PAGE_PRESENT))
-        return -1;
-    if (pd[pd_index] & PAGE_SIZE_2MB_FLAG)
-        return -1;
-    pt = (uint64_t *)(pd[pd_index] & PAGE_FRAME_MASK);
-
-    phys_frame = pt[pt_index] & PAGE_FRAME_MASK;
+    phys_frame = paging_entry_pfn(pt[pt_index]);
     pt[pt_index] = 0;
 
     __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
@@ -404,6 +540,9 @@ int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t
                 unmap_page_in_directory(pml4, virtual_start + rb);
             return -1;
         }
+
+        /* Linux: clear_highpage() before exposing anonymous user pages */
+        memset((void *)phys_addr, 0, 4096);
 
         if (map_page_in_directory(pml4, virt_addr, phys_addr, flags) != 0)
         {
@@ -483,7 +622,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                         !(page_entry & PAGE_USER))
                         continue;
 
-                    parent_phys = page_entry & PAGE_FRAME_MASK;
+                    parent_phys = paging_entry_pfn(page_entry);
 
                     child_phys = pmm_alloc_frame();
                     if (!child_phys)
@@ -512,6 +651,38 @@ int copy_process_memory(struct process *parent, struct process *child)
                 }
             }
         }
+    }
+
+    return 0;
+}
+
+/*
+ * map_supervisor_identity_low - 4 KiB identity map for kernel low memory
+ *
+ * Boot uses 2 MiB huge pages in PML4[0]; inheriting that tree blocks user
+ * ELF at 0x400000. Each process instead gets fresh 4 KiB supervisor mappings
+ * for the low identity range so timer IRQ (TSS RSP0) and syscall entry can
+ * run with process CR3 loaded (Linux/BSD: kernel always reachable from user mm).
+ */
+int map_supervisor_identity_low(uint64_t *pml4, uint64_t start, uint64_t end)
+{
+    uint64_t va;
+
+    if (!pml4 || end <= start)
+        return -1;
+
+    start &= ~(uint64_t)(PAGE_SIZE_4KB - 1);
+    end = (end + PAGE_SIZE_4KB - 1) & ~(uint64_t)(PAGE_SIZE_4KB - 1);
+
+    for (va = start; va < end; va += PAGE_SIZE_4KB)
+    {
+        /*
+         * IRQ/syscall entry runs kernel text under process CR3; omit NX on
+         * the identity map (Linux keeps kernel text executable in every mm).
+         */
+        if (map_page_in_directory(pml4, va, va,
+                                  PAGE_PRESENT | PAGE_RW | PAGE_EXEC) != 0)
+            return -1;
     }
 
     return 0;

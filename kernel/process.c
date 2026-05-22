@@ -29,6 +29,7 @@
 #include <ir0/errno.h>
 #include <ir0/arch_port.h>
 #include <ir0/copy_user.h>
+#include <config.h>
 
 
 static pid_t next_pid = 2;
@@ -126,6 +127,7 @@ void process_unmap_user_address_space(process_t *p)
 {
 	if (!p)
 		return;
+
 	process_unmap_user_pages_all(p->page_directory);
 }
 
@@ -138,8 +140,14 @@ void process_init(void)
 {
 	current_process = NULL;
 	process_list = NULL;
+#if KERNEL_DEBUG_SHELL
+	/* PID 1 reserved for debug-shell init (start_init_process hardcodes pid 1). */
 	next_pid = 2;
-	
+#else
+	/* First spawned process is /sbin/init (PID 1). */
+	next_pid = 1;
+#endif
+
 	/* Initialize simple user system */
 	init_simple_users();
 }
@@ -156,6 +164,32 @@ pid_t process_get_next_pid(void)
 process_t *process_get_current(void)
 {
 	return current_process;
+}
+
+/*
+ * irq_save_user_frame - Copy user iretq frame from IRQ stack into current task.
+ * @frame: isr_handler64 stack base (int_no, err, RIP, CS, RFLAGS, RSP, SS).
+ */
+void irq_save_user_frame(uint64_t *frame)
+{
+	process_t *p;
+
+	if (!frame)
+		return;
+
+	p = current_process;
+	if (!p || p->mode != USER_MODE)
+		return;
+
+	if ((frame[3] & 3U) != 3U)
+		return;
+
+	p->task.rip = frame[2];
+	p->task.cs = (uint16_t)frame[3];
+	p->task.rflags = frame[4];
+	p->task.rsp = frame[5];
+	p->task.ss = (uint16_t)frame[6];
+	p->irq_frame_saved = 1;
 }
 
 pid_t process_get_pid(void)
@@ -195,6 +229,10 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	
 	if (!entry || !name)
 		return -1;
+
+	serial_print("SERIAL: spawn: begin ");
+	serial_print(name);
+	serial_print("\n");
 	
 	proc = kmalloc_try(sizeof(process_t));
 	if (!proc) {
@@ -206,21 +244,38 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 
 	/* Basic process setup */
 	proc->task.pid = process_get_next_pid();
-	proc->ppid = current_process ? current_process->task.pid : 1;
+	proc->ppid = current_process ? current_process->task.pid : 0;
 	proc->state = PROCESS_READY;
 	
 	/* Explicit mode specification - no magic address detection */
 	proc->mode = mode;
-	
-	/* Create new page directory */
-	proc->page_directory = (uint64_t *)create_process_page_directory();
-	if (!proc->page_directory)
+	proc->owns_page_directory = 1;
+
+	/*
+	 * Kernel idle reuses active kernel CR3 (boot/kmain tables).  Avoids
+	 * remapping ~48MB of supervisor pages on every idle spawn (slow + PMM).
+	 */
+	if (mode == KERNEL_MODE && name && strcmp(name, "idle") == 0)
 	{
-		serial_print("[ERROR] Failed to create page directory for process\n");
-		kfree(proc);
-		return -ENOMEM;
+		uint64_t kcr3 = get_current_page_directory();
+
+		proc->page_directory = (uint64_t *)kcr3;
+		proc->task.cr3 = kcr3;
+		proc->owns_page_directory = 0;
+		serial_print("SERIAL: spawn: kernel CR3 shared (idle)\n");
 	}
-	proc->task.cr3 = (uint64_t)proc->page_directory;
+	else
+	{
+		proc->page_directory = (uint64_t *)create_process_page_directory();
+		if (!proc->page_directory)
+		{
+			serial_print("[ERROR] Failed to create page directory for process\n");
+			kfree(proc);
+			return -ENOMEM;
+		}
+		serial_print("SERIAL: spawn: page directory OK\n");
+		proc->task.cr3 = (uint64_t)proc->page_directory;
+	}
 
 	/* Inherit permissions from current process or default to root */
 	if (current_process) {
@@ -251,25 +306,19 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		/* User stack: [USER_STACK_TOP - USER_STACK_SIZE, USER_STACK_TOP) */
 		proc->stack_size = USER_STACK_SIZE;
 		proc->stack_start = USER_STACK_TOP - USER_STACK_SIZE;
-		
-		/* Temporarily switch to process page directory to map stack */
-		uint64_t old_cr3 = get_current_page_directory();
-		load_page_directory((uint64_t)proc->page_directory);
-		
-		/* Map user stack with RW permissions */
+
+		/*
+		 * Map under kernel CR3: map_user_region_in_directory() allocates page
+		 * tables from the kernel heap and must not run with child CR3 active.
+		 */
 		if (map_user_region_in_directory(proc->page_directory, proc->stack_start, proc->stack_size, PAGE_RW) != 0)
 		{
-			load_page_directory(old_cr3);  /* Restore original CR3 */
+			serial_print("SERIAL: spawn: stack map failed\n");
 			process_unmap_user_pages_all(proc->page_directory);
 			goto fail_proc;
 		}
-		
-		/* Zero out the stack */
-		memset((void *)proc->stack_start, 0, proc->stack_size);
-		
-		/* Restore original page directory */
-		load_page_directory(old_cr3);
-		
+		serial_print("SERIAL: spawn: stack mapped\n");
+
 		/* Setup stack pointer just below USER_STACK_TOP (stack grows down) */
 		proc->task.rsp = USER_STACK_TOP - 16;
 		proc->task.rbp = proc->task.rsp;
@@ -281,7 +330,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->stack_start = (uint64_t)kmalloc_try(proc->stack_size);
 		if (!proc->stack_start)
 		{
-			process_unmap_user_pages_all(proc->page_directory);
+			if (proc->owns_page_directory)
+				process_unmap_user_pages_all(proc->page_directory);
 			goto fail_proc;
 		}
 		memset((void *)proc->stack_start, 0, proc->stack_size);
@@ -343,7 +393,7 @@ fail_proc:
 		kfree((void *)proc->stack_start);
 		proc->stack_start = 0;
 	}
-	if (proc->page_directory)
+	if (proc->page_directory && proc->owns_page_directory)
 	{
 		kfree_aligned(proc->page_directory);
 		proc->page_directory = NULL;
@@ -431,22 +481,127 @@ static struct mmap_region *process_clone_mmap_list(struct mmap_region *parent_li
 
 #if defined(__x86_64__) || defined(__amd64__)
 /*
- * When fork() runs inside the syscall insn handler, user RIP/RFLAGS sit on
- * the kernel stack below the syscall_dispatch frame.
+ * process_capture_syscall_frame - Snapshot user GPRs at syscall dispatch entry.
+ *
+ * Must run before nested C calls (fork, wait4, execve path) clobber the
+ * syscall kernel stack layout (Linux pt_regs at entry).
  */
-static void fork_fixup_user_syscall_return(process_t *child)
+/*
+ * process_capture_syscall_frame_at_entry - Snapshot user frame at syscall insn entry.
+ *
+ * @frame_base: RSP at the arg6 stack slot (see syscall_insn_entry_64.asm).
+ * Must run before syscall_dispatch C prologue runs.
+ */
+void process_capture_syscall_frame_at_entry(uint64_t *frame_base)
 {
-	uint64_t sp;
-	uint64_t *slot;
+	process_t *p = current_process;
+	syscall_user_frame_t *sf;
+	uint64_t sf_rsp_before;
+	extern uint64_t fase30_entry_user_rsp;
+	extern uint64_t user_rsp_save;
 
-	__asm__ volatile("mov %%rsp, %0" : "=r"(sp));
+	if (!frame_base || !p || p->mode != USER_MODE)
+		return;
 
-	/* Skip fork's saved rbp and return address. */
-	slot = (uint64_t *)(sp + 16);
-	child->task.rflags = slot[8];
-	child->task.rip = slot[9];
-	child->task.rsp = (uint64_t)(slot + 10);
-	child->task.rax = 0;
+	sf = &p->syscall_frame;
+	sf_rsp_before = sf->rsp;
+	sf->rip = frame_base[7];
+	sf->rflags = frame_base[6];
+	sf->rsp = frame_base[8];
+	sf->rbx = frame_base[0];
+	sf->rbp = frame_base[1];
+	sf->r12 = frame_base[2];
+	sf->r13 = frame_base[3];
+	sf->r14 = frame_base[4];
+	sf->r15 = frame_base[5];
+
+	if (p->task.pid >= 2)
+	{
+		serial_print("FASE32_CAPTURE saved_rsp=");
+		serial_print_hex64(sf->rsp);
+		serial_print("\n");
+
+		serial_print("FASE30 cap pid=");
+		serial_print_hex32((uint32_t)p->task.pid);
+		serial_print(" entry_user_rsp=");
+		serial_print_hex64(fase30_entry_user_rsp);
+		serial_print(" sf_rsp_before=");
+		serial_print_hex64(sf_rsp_before);
+		serial_print(" sf_rsp_after=");
+		serial_print_hex64(sf->rsp);
+		serial_print(" sysret_rsp_save=");
+		serial_print_hex64(user_rsp_save);
+		serial_print("\n");
+	}
+}
+
+void process_capture_syscall_frame(process_t *p)
+{
+	(void)p;
+}
+
+void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
+                                         uint64_t rax)
+{
+	if (!task || !sf)
+		return;
+
+	task->rip = sf->rip;
+	task->rsp = sf->rsp;
+	task->rflags = sf->rflags | 2ULL;
+	task->rax = rax;
+	task->rbx = sf->rbx;
+	task->rbp = sf->rbp;
+	task->r12 = sf->r12;
+	task->r13 = sf->r13;
+	task->r14 = sf->r14;
+	task->r15 = sf->r15;
+	task->rdi = sf->rdi;
+	task->rsi = sf->rsi;
+	task->rdx = sf->rdx;
+	task->r10 = sf->r10;
+	task->r8 = sf->r8;
+	task->r9 = sf->r9;
+	task->rcx = sf->rip;
+	task->r11 = sf->rflags | 2ULL;
+	task->cs = USER_CODE_SEL;
+	task->ss = USER_DATA_SEL;
+	task->ds = USER_DATA_SEL;
+	task->es = USER_DATA_SEL;
+	task->fs = USER_DATA_SEL;
+	task->gs = USER_DATA_SEL;
+}
+
+static void fork_fixup_user_syscall_return(process_t *parent, process_t *child)
+{
+	extern uint64_t user_rsp_save;
+	uint64_t parent_sf_rsp = parent ? parent->syscall_frame.rsp : 0;
+
+	if (parent && child && child->task.pid >= 2)
+	{
+		serial_print("FASE31_FORK_COPY parent_sf_rsp=");
+		serial_print_hex64(parent_sf_rsp);
+		serial_print(" child_task_rsp_before=");
+		serial_print_hex64(child->task.rsp);
+		serial_print("\n");
+	}
+
+	process_apply_syscall_frame_to_task(&child->task, &parent->syscall_frame, 0);
+
+	if (parent && child && child->task.pid >= 2)
+	{
+		serial_print("FASE30 fork_fixup parent_pid=");
+		serial_print_hex32((uint32_t)parent->task.pid);
+		serial_print(" child_pid=");
+		serial_print_hex32((uint32_t)child->task.pid);
+		serial_print(" parent_sf_rsp=");
+		serial_print_hex64(parent_sf_rsp);
+		serial_print(" child_task_rsp=");
+		serial_print_hex64(child->task.rsp);
+		serial_print(" sysret_rsp_save=");
+		serial_print_hex64(user_rsp_save);
+		serial_print("\n");
+	}
 }
 #endif
 
@@ -502,6 +657,7 @@ pid_t fork(void)
 	child->next = NULL;
 	child->saved_context = NULL;
 	child->poll_waiter = NULL;
+	child->irq_frame_saved = 0;
 
 	child->page_directory = (uint64_t *)create_process_page_directory();
 	if (!child->page_directory)
@@ -509,7 +665,8 @@ pid_t fork(void)
 		kfree(child);
 		return -ENOMEM;
 	}
-	child->task.cr3 = (uint64_t)child->page_directory;
+	child->owns_page_directory = 1;
+	child->task.cr3 = (uint64_t)(uintptr_t)child->page_directory;
 
 	child->mmap_list = process_clone_mmap_list(parent->mmap_list);
 	if (parent->mmap_list && !child->mmap_list)
@@ -526,12 +683,23 @@ pid_t fork(void)
 	}
 
 	child->task.rax = 0;
-	child->task.cr3 = (uint64_t)child->page_directory;
+	child->task.cr3 = (uint64_t)(uintptr_t)child->page_directory;
 	child->task.pid = child_pid;
 
 #if defined(__x86_64__) || defined(__amd64__)
 	if (parent->mode == USER_MODE)
-		fork_fixup_user_syscall_return(child);
+	{
+		fork_fixup_user_syscall_return(parent, child);
+		serial_print("FASE11 fork_fixup child_pid=");
+		serial_print_hex32((uint32_t)child->task.pid);
+		serial_print(" rip=");
+		serial_print_hex64(child->task.rip);
+		serial_print(" rsp=");
+		serial_print_hex64(child->task.rsp);
+		serial_print(" rax=");
+		serial_print_hex64(child->task.rax);
+		serial_print("\n");
+	}
 #endif
 
 	irq_flags = process_irq_save();
@@ -689,13 +857,16 @@ void process_reap_zombies(process_t *parent)
 	}
 }
 
-void process_exit(int code)
+__attribute__((noreturn)) void process_exit(int code)
 {
 	process_t *dying = current_process;
 	process_t *parent;
-	
+
 	if (!dying)
-		return;
+	{
+		for (;;)
+			arch_cpu_idle();
+	}
 
 	/* Before becoming a zombie:
 	 * 1. Reparent all children to init (PID 1) to avoid orphaned processes
@@ -707,6 +878,11 @@ void process_exit(int code)
 	/* Mark as zombie */
 	dying->state = PROCESS_ZOMBIE;
 	dying->exit_code = code;
+	serial_print("[PROCESS] exit pid=");
+	serial_print_hex32((uint32_t)dying->task.pid);
+	serial_print(" code=");
+	serial_print_hex64((uint64_t)(uint32_t)code);
+	serial_print("\n");
 
 	/* Send SIGCHLD to parent process if it exists */
 	if (dying->ppid > 0)
@@ -715,6 +891,8 @@ void process_exit(int code)
 		if (parent && parent->state != PROCESS_ZOMBIE)
 		{
 			send_signal(parent->task.pid, SIGCHLD);
+			if (parent->state == PROCESS_BLOCKED)
+				parent->state = PROCESS_READY;
 		}
 		else if (!parent || parent->state == PROCESS_ZOMBIE)
 		{
@@ -724,6 +902,8 @@ void process_exit(int code)
 			if (parent)
 			{
 				send_signal(parent->task.pid, SIGCHLD);
+				if (parent->state == PROCESS_BLOCKED)
+					parent->state = PROCESS_READY;
 			}
 		}
 	}
@@ -733,15 +913,34 @@ void process_exit(int code)
 	 * by the parent (via wait()), but it will not consume CPU time.
 	 */
 	sched_remove_process(dying);
-	
+
+	/*
+	 * kmain keeps the kernel idle task off the RR queue while PID 1 runs;
+	 * enqueue it again when a user process exits so sched has a fallback.
+	 */
+	{
+		process_t *p;
+
+		for (p = process_list; p; p = p->next)
+		{
+			if (p->mode == KERNEL_MODE && p->state != PROCESS_ZOMBIE &&
+			    strncmp(p->comm, "idle", sizeof(p->comm)) == 0)
+			{
+				sched_add_process(p);
+				break;
+			}
+		}
+	}
+
 	/* Switch to another process - this will never return to this code.
 	 * The zombie process remains in memory with its exit code for the
 	 * parent to retrieve via wait().
 	 */
 	sched_schedule_next();
-	
-	/* Should never reach here - if we do, something is wrong */
-	panic("process_exit: returned from scheduler");
+
+	/* No runnable task: halt forever (must not sysret to exited user context). */
+	for (;;)
+		arch_cpu_idle();
 }
 
 
@@ -801,7 +1000,7 @@ clear_fd:
 	}
 
 	/* Unmap all user pages in this process's PML4 (reaper may run under another CR3) */
-	if (p->page_directory)
+	if (p->page_directory && p->owns_page_directory)
 		process_unmap_user_pages_all(p->page_directory);
 
 	/* Drop mmap bookkeeping nodes associated with this process. */
@@ -828,7 +1027,7 @@ clear_fd:
 		p->stack_size = 0;
 	}
 
-	if (p->page_directory)
+	if (p->page_directory && p->owns_page_directory)
 	{
 		kfree_aligned(p->page_directory);
 		p->page_directory = NULL;
@@ -868,6 +1067,33 @@ int process_wait(pid_t pid, int *status, int options)
 			if (p->state == PROCESS_ZOMBIE) {
 				zombie = p;
 				break;
+			}
+		}
+
+		{
+			static int wait4_dump_done = 0;
+			serial_print("FASE8 wait4 parent=");
+			serial_print_hex32((uint32_t)current_process->task.pid);
+			serial_print(" req_pid=");
+			serial_print_hex64((uint64_t)pid);
+			serial_print(" found=");
+			serial_print_hex32((uint32_t)found_child);
+			serial_print(" zombie=");
+			serial_print_hex64(zombie ? (uint64_t)zombie->task.pid : 0);
+			serial_print("\n");
+
+			if (!wait4_dump_done && current_process->task.pid >= 2) {
+				extern uint64_t iretq_checkpoint_buf[40];
+				wait4_dump_done = 1;
+				serial_print("FASE9A marker=");
+				serial_print_hex64(iretq_checkpoint_buf[32]);
+				serial_print(" task_rax=");
+				serial_print_hex64(iretq_checkpoint_buf[33]);
+				serial_print("\nFASE9A before_ds=");
+				serial_print_hex64(iretq_checkpoint_buf[34]);
+				serial_print(" after_ds=");
+				serial_print_hex64(iretq_checkpoint_buf[35]);
+				serial_print("\n");
 			}
 		}
 
@@ -926,6 +1152,14 @@ int process_wait(pid_t pid, int *status, int options)
 		if (options & WNOHANG)
 			return 0;
 
+		if (current_process->mode == USER_MODE)
+		{
+			process_apply_syscall_frame_to_task(&current_process->task,
+			                                    &current_process->syscall_frame,
+			                                    current_process->task.rax);
+			current_process->irq_frame_saved = 1;
+		}
+		current_process->state = PROCESS_BLOCKED;
 		sched_schedule_next();
 	}
 }
@@ -962,14 +1196,25 @@ uint64_t create_process_page_directory(void)
 			pml4[i] = kernel_pml4[i];
 	}
 
-	/* Also copy identity mappings for low memory if needed (kernel boot code) */
-	/* Copy first entry if it maps kernel initialization code (0-2MB typically) */
-	if (kernel_pml4[0] & PAGE_PRESENT)
+	/*
+	 * Map kernel low memory with 4 KiB supervisor pages so timer IRQ (TSS
+	 * RSP0), syscall handlers, and kernel text/data are reachable under
+	 * process CR3.  Do not cover the user ELF load window (0x400000+): table
+	 * entries without PAGE_USER there block user code fetch (Linux requires
+	 * PAGE_USER on every level for user mappings).
+	 */
 	{
-		/* Only copy if it's a kernel mapping (no PAGE_USER flag) */
-		if (!(kernel_pml4[0] & PAGE_USER))
-			pml4[0] = kernel_pml4[0];
+		uint64_t id_end = PMM_PHYS_BASE + PMM_PHYS_SIZE;
+
+		if (map_supervisor_identity_low(pml4, 0, 0x00400000UL) != 0)
+			return 0;
+		if (map_supervisor_identity_low(pml4, KEYBOARD_BUFFER_ADDR, id_end) != 0)
+			return 0;
 	}
+
+	/*
+	 * Copy canonical kernel-half entries if present (future high-half kernel).
+	 */
 
 	/*
 	 * Explicitly map framebuffer into process so console output is visible.
@@ -979,14 +1224,19 @@ uint64_t create_process_page_directory(void)
 #if CONFIG_ENABLE_VBE
 	if (video_backend_is_available() && video_backend_get_fb_phys() != 0)
 	{
+#if !defined(IR0_USERSPACE_INIT_BOOT) || !IR0_USERSPACE_INIT_BOOT
 		uint32_t fb_phys = video_backend_get_fb_phys();
 		uint32_t fb_size = video_backend_get_fb_size();
+		/* Cap: avoid multi-second page-table walks on large framebuffers at spawn. */
+		if (fb_size > (4U * 1024U * 1024U))
+			fb_size = 4U * 1024U * 1024U;
 		for (uint32_t off = 0; off < fb_size; off += 4096)
 		{
 			uint64_t p = fb_phys + off;
 			if (map_page_in_directory(pml4, p, p, PAGE_PRESENT | PAGE_RW) != 0)
 				break;
 		}
+#endif
 	}
 #endif
 

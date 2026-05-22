@@ -78,11 +78,44 @@ struct mmap_region
 	struct mmap_region *next;
 };
 
+/*
+ * User register snapshot at syscall entry (Linux pt_regs subset).
+ * Captured before dispatch runs nested handlers (fork, wait4, etc.).
+ */
+typedef struct
+{
+	uint64_t rip;
+	uint64_t rflags;
+	uint64_t rsp;
+	uint64_t rbx;
+	uint64_t rbp;
+	uint64_t r12;
+	uint64_t r13;
+	uint64_t r14;
+	uint64_t r15;
+	uint64_t rdi;
+	uint64_t rsi;
+	uint64_t rdx;
+	uint64_t r10;
+	uint64_t r8;
+	uint64_t r9;
+} syscall_user_frame_t;
+
 typedef struct process
 {
 	task_t task;
+	/*
+	 * x86-64 TLS base (MSR IA32_FS_BASE).
+	 * Persisted across context switches because IR0 does not yet save/restore
+	 * FS_BASE in switch_context_x64 / arch_switch_to_user_task_asm. Linux ABI
+	 * (musl, glibc) sets this via arch_prctl(ARCH_SET_FS) on every task.
+	 * The asm restore paths read this field directly via a hard-coded offset
+	 * (guarded by _Static_assert in this file).
+	 */
+	uint64_t fs_base;
 	pid_t ppid;
 	uint64_t *page_directory;
+	uint8_t owns_page_directory; /* 0 = shared kernel CR3 (idle task) */
 	struct mmap_region *mmap_list;
 	uint64_t heap_start;
 	uint64_t heap_end;
@@ -118,7 +151,37 @@ typedef struct process
 	uint32_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	struct sigcontext *saved_context;  /* Saved context before signal handler (for sigreturn) */
+
+	/* Linux syscall insn frame (for fork child / blocked syscall return). */
+	syscall_user_frame_t syscall_frame;
+	uint8_t irq_frame_saved; /* user task regs captured from IRQ stack */
 } process_t;
+
+/*
+ * ASM offset contract: switch_x64.asm restores FS_BASE by reading
+ * [r11 + PROC_FS_BASE_OFFSET]. The asm hard-codes the numeric offset
+ * for portability with NASM; this assert keeps both ends in sync.
+ *
+ * The placeholder forces a compile error showing the real value if it drifts.
+ */
+/*
+ * PROC_FS_BASE_OFFSET (0x258) is hard-coded in switch_x64.asm to load
+ * IA32_FS_BASE before returning to user. Keep both ends in sync.
+ */
+#if defined(__x86_64__) || defined(__amd64__)
+_Static_assert(offsetof(process_t, task) == 0,        "process_t.task must be at offset 0");
+_Static_assert(offsetof(process_t, fs_base) == 0x258, "switch_x64.asm PROC_FS_BASE_OFFSET out of sync");
+#endif
+
+static inline process_t *task_to_process(task_t *task)
+{
+	return (process_t *)((char *)task - offsetof(process_t, task));
+}
+
+static inline const process_t *task_to_process_const(const task_t *task)
+{
+	return (const process_t *)((const char *)task - offsetof(process_t, task));
+}
 
 /* PUBLIC MACROS - Register accessors                                        */
 
@@ -141,8 +204,11 @@ typedef struct process
 #define process_pid(p)    ((p)->task.pid)
 
 
-void process_init(void);
-void process_exit(int code);
+void process_capture_syscall_frame(process_t *p);
+void process_capture_syscall_frame_at_entry(uint64_t *frame_base);
+void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
+                                         uint64_t rax);
+__attribute__((noreturn)) void process_exit(int code);
 int process_wait(pid_t pid, int *status, int options);
 
 /* IR0 PHILOSOPHY: Only spawn() creates processes - total simplicity
@@ -160,6 +226,7 @@ pid_t fork(void);
 pid_t process_get_pid(void);
 pid_t process_get_ppid(void);
 process_t *process_get_current(void);
+void irq_save_user_frame(uint64_t *frame);
 process_t *get_process_list(void);
 pid_t process_get_next_pid(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */

@@ -532,6 +532,50 @@ def apply_preset(symbols, preset):
             "INIT_USB_HOST": "y",
             "TOOL_MENUCONFIG_LANG": "en",
         }
+    elif preset_key == "userspace":
+        values = {
+            "KERNEL_DEBUG_SHELL": "n",
+            "ARCH_X86_64": "y",
+            "ARCH_ARM64": "n",
+            "TICK_RATE_HZ": "1000",
+            "SCHEDULER_POLICY": "0",
+            "ROOT_BLOCK_DEVICE": "hda",
+            "ROOT_FILESYSTEM": "minix",
+            "ENABLE_SMP": "n",
+            "DEBUG_BINS_GROUP_CORE": "n",
+            "DEBUG_BINS_GROUP_FS": "n",
+            "DEBUG_BINS_GROUP_TEXT": "n",
+            "DEBUG_BINS_GROUP_IDENTITY": "n",
+            "DEBUG_BINS_GROUP_DIAG": "n",
+            "DEBUG_BINS_GROUP_NET": "n",
+            "DEBUG_BINS_GROUP_BT": "n",
+            "ENABLE_NETWORKING": "n",
+            "DRV_NIC_RTL8139": "n",
+            "DRV_NIC_E1000": "n",
+            "ENABLE_SOUND": "n",
+            "ENABLE_BLUETOOTH": "n",
+            "ENABLE_MOUSE": "y",
+            "ENABLE_STORAGE_ATA": "y",
+            "ENABLE_STORAGE_ATA_BLOCK": "y",
+            "ENABLE_FS_MINIX": "y",
+            "ENABLE_FS_TMPFS": "y",
+            "ENABLE_FS_SIMPLEFS": "y",
+            "ENABLE_FS_FAT16": "y",
+            "ENABLE_PC_SPEAKER": "n",
+            "ENABLE_VBE": "y",
+            "ENABLE_EXAMPLE_DRIVERS": "n",
+            "INIT_PS2_CONTROLLER": "y",
+            "INIT_PC_SPEAKER": "n",
+            "INIT_STORAGE_ATA": "y",
+            "INIT_STORAGE_ATA_BLOCK": "y",
+            "INIT_SOUND_DRIVERS": "n",
+            "INIT_MOUSE_DRIVER": "y",
+            "INIT_NETWORK_STACK": "n",
+            "INIT_BLUETOOTH_DRIVER": "n",
+            "ENABLE_USB_HOST": "n",
+            "INIT_USB_HOST": "n",
+            "TOOL_MENUCONFIG_LANG": "en",
+        }
     for sym in symbols:
         if sym.name in values:
             sym.value = values[sym.name]
@@ -854,7 +898,7 @@ def main():
 
     if len(args) > 1 and args[0] == "--preset":
         preset_name = args[1].strip().lower()
-        if preset_name not in ("generic", "tiny", "iot", "custom"):
+        if preset_name not in ("generic", "tiny", "iot", "userspace", "custom"):
             print(f"Unknown preset: {preset_name}", file=sys.stderr)
             sys.exit(2)
         apply_preset(symbols, preset_name)

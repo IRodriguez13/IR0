@@ -204,6 +204,13 @@ uint32_t arch_get_cpu_clflush_size(void);
 void arch_switch_to_user(arch_addr_t entry, arch_addr_t stack);
 
 /*
+ * arch_switch_to_user_task - Enter ring 3 with full task register state.
+ * Linux ret_from_fork analogue for syscall-block resume paths.
+ */
+struct task;
+void arch_switch_to_user_task(const struct task *task);
+
+/*
  * arch_set_fs_base - Set x86-64 FS base (TLS) for the running hardware thread.
  * Used by sys_arch_prctl(ARCH_SET_FS). No-op on non-x86 builds.
  */

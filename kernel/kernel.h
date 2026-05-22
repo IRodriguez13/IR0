@@ -41,3 +41,7 @@ int start_init_process(void);
 void serial_init(void);
 void heap_init(void);
 bool sb16_init(void);
+
+/* Kernel idle loop (RR idle process + kmain fallback) */
+void kernel_idle_poll(void);
+void kernel_idle_loop(void);

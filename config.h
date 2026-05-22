@@ -132,12 +132,16 @@
  * 1: Test init — use integrated shell as PID 1 (init_1 / debshell). Not the real init.
  * 0: Real init — load and execute /sbin/init from the filesystem.
  *
- * CONFIG_KERNEL_DEBUG_SHELL from Makefile / autoconf overrides this value.
+ * IR0_USERSPACE_INIT_BOOT (Makefile USERSPACE_INIT_BUILD=1) forces real init for
+ * smoke ISO builds without rewriting .config. Otherwise CONFIG_KERNEL_DEBUG_SHELL
+ * from autoconf/Makefile applies.
  */
-#ifndef CONFIG_KERNEL_DEBUG_SHELL
-#define KERNEL_DEBUG_SHELL 1
-#else
+#if defined(IR0_USERSPACE_INIT_BOOT) && IR0_USERSPACE_INIT_BOOT
+#define KERNEL_DEBUG_SHELL 0
+#elif defined(CONFIG_KERNEL_DEBUG_SHELL)
 #define KERNEL_DEBUG_SHELL CONFIG_KERNEL_DEBUG_SHELL
+#else
+#define KERNEL_DEBUG_SHELL 1
 #endif
 
 #ifndef CONFIG_TICK_RATE_HZ

@@ -239,69 +239,79 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
         return -1;
     }
 
-    /* Temporarily switch to process page directory to map pages */
-    uint64_t old_cr3 = get_current_page_directory();
-    load_page_directory((uint64_t)pml4);
-
+    /*
+     * Phase 1 — map all PT_LOAD regions under kernel CR3.  Page-table
+     * allocation uses the kernel heap and must not run with child CR3 active.
+     */
     for (int i = 0; i < (int)phnum; i++)
     {
-        if (phdr[i].p_type == PT_LOAD)
+        if (phdr[i].p_type != PT_LOAD)
+            continue;
+
+        if (phdr[i].p_memsz < phdr[i].p_filesz)
         {
-            if (phdr[i].p_memsz < phdr[i].p_filesz)
+            serial_print("SERIAL: ELF: PT_LOAD p_memsz < p_filesz\n");
+            return -1;
+        }
+
+        if (phdr[i].p_filesz > 0)
+        {
+            if (phdr[i].p_offset > file_size ||
+                phdr[i].p_filesz > (uint64_t)file_size - phdr[i].p_offset)
             {
-                serial_print("SERIAL: ELF: PT_LOAD p_memsz < p_filesz\n");
-                load_page_directory(old_cr3);
+                serial_print("SERIAL: ELF: PT_LOAD segment file range out of bounds\n");
                 return -1;
             }
+        }
 
-            if (phdr[i].p_filesz > 0)
-            {
-                if (phdr[i].p_offset > file_size ||
-                    phdr[i].p_filesz > (uint64_t)file_size - phdr[i].p_offset)
-                {
-                    serial_print("SERIAL: ELF: PT_LOAD segment file range out of bounds\n");
-                    load_page_directory(old_cr3);
-                    return -1;
-                }
-            }
+        serial_print("SERIAL: ELF: Mapping segment ");
+        serial_print_hex32(i);
+        serial_print(" at vaddr 0x");
+        serial_print_hex32((uint32_t)phdr[i].p_vaddr);
+        serial_print(" size 0x");
+        serial_print_hex32((uint32_t)phdr[i].p_memsz);
+        serial_print("\n");
 
-            serial_print("SERIAL: ELF: Loading segment ");
-            serial_print_hex32(i);
-            serial_print(" at vaddr 0x");
-            serial_print_hex32((uint32_t)phdr[i].p_vaddr);
-            serial_print(" size 0x");
-            serial_print_hex32((uint32_t)phdr[i].p_memsz);
-            serial_print("\n");
-
-            /* Get segment size and virtual address */
+        {
             uint64_t memsz = phdr[i].p_memsz;
             uintptr_t vaddr = phdr[i].p_vaddr;
-            
-            /* Align to page boundaries */
             uintptr_t vaddr_aligned = vaddr & ~0xFFF;
             size_t size_aligned = ((vaddr + memsz + 0xFFF) & ~0xFFF) - vaddr_aligned;
+            uint64_t flags = PAGE_USER;
 
-            /* Determine page flags based on segment flags */
-            uint64_t flags = PAGE_USER;  /* Always user mode */
-            if (phdr[i].p_flags & 2)  /* PF_W (writable) */
+            if (phdr[i].p_flags & 2)
                 flags |= PAGE_RW;
-            if (phdr[i].p_flags & 1)  /* PF_X (executable) */
+            if (phdr[i].p_flags & 1)
                 flags |= PAGE_EXEC;
 
-            /* Map user memory region in process page directory */
             if (map_user_region_in_directory(pml4, vaddr_aligned, size_aligned, flags) != 0)
             {
                 serial_print("SERIAL: ELF: Failed to map user memory region\n");
-                load_page_directory(old_cr3);  /* Restore original CR3 */
                 return -1;
             }
+        }
+    }
 
-            /* Now copy segment data to the mapped virtual addresses */
-            /* We need to access the mapped virtual addresses */
+    /*
+     * Phase 2 — copy segment bytes via physical frames (kernel CR3).
+     */
+    for (int i = 0; i < (int)phnum; i++)
+    {
+        if (phdr[i].p_type != PT_LOAD)
+            continue;
+
+        {
+            uintptr_t vaddr = phdr[i].p_vaddr;
+
             if (phdr[i].p_filesz > 0)
             {
-                /* Copy from file to virtual address */
-                memcpy((void *)vaddr, file_data + phdr[i].p_offset, phdr[i].p_filesz);
+                if (copy_to_user_region_in_directory(pml4, vaddr,
+                        file_data + phdr[i].p_offset,
+                        (size_t)phdr[i].p_filesz) != 0)
+                {
+                    serial_print("SERIAL: ELF: Failed to copy segment data\n");
+                    return -1;
+                }
                 serial_print("SERIAL: ELF: Copied ");
                 serial_print_hex32((uint32_t)phdr[i].p_filesz);
                 serial_print(" bytes from file to vaddr 0x");
@@ -309,19 +319,19 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
                 serial_print("\n");
             }
 
-            /* Zero out BSS section if needed */
             if (phdr[i].p_memsz > phdr[i].p_filesz)
             {
-                memset((void *)(vaddr + phdr[i].p_filesz), 0,
-                       phdr[i].p_memsz - phdr[i].p_filesz);
+                if (zero_user_region_in_directory(pml4,
+                        vaddr + phdr[i].p_filesz,
+                        (size_t)(phdr[i].p_memsz - phdr[i].p_filesz)) != 0)
+                {
+                    serial_print("SERIAL: ELF: Failed to zero BSS\n");
+                    return -1;
+                }
                 serial_print("SERIAL: ELF: Zeroed BSS section\n");
             }
-
         }
     }
-
-    /* Restore original page directory */
-    load_page_directory(old_cr3);
 
     return 0;
 }
@@ -369,6 +379,12 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
         serial_print("SERIAL: ELF: Failed to find created process\n");
         return NULL;
     }
+
+    /*
+     * spawn() enqueues the task; keep it off the run queue until PT_LOAD
+     * segments and stack are fully initialized (timer IRQ may preempt kmain).
+     */
+    sched_remove_process(process);
 
     /* Set up user mode execution */
     /* spawn() already set up the process structure correctly */
@@ -457,9 +473,9 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
             strings_size += strlen(envp[i]) + 1;
     }
     
-    /* Total size: argv[] + envp[] + auxv[] + strings + alignment */
-    /* Note: argc is NOT on stack, only in rdi register (x86-64 ABI) */
-    size_t stack_size = (argc + 1) * sizeof(uint64_t) +
+    /* Total size: argc slot + argv[] + envp[] + auxv[] + strings + alignment */
+    size_t stack_size = sizeof(uint64_t) +
+                       (argc + 1) * sizeof(uint64_t) +
                        (envc + 1) * sizeof(uint64_t) +
                        ELF_AUXV_PAIRS * 2 * sizeof(uint64_t) +
                        ELF_AT_RANDOM_BYTES +
@@ -478,27 +494,12 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         return -ENOMEM;
     }
     
-    /* Switch to process page directory temporarily */
-    uint64_t old_cr3 = get_current_page_directory();
-    load_page_directory((uint64_t)process->page_directory);
-
-    /* Layout low to high: argv[] | envp[] | auxv[] | strings */
-    uint64_t stack_top = process->stack_start + process->stack_size;
-    uint64_t stack_base = stack_top - stack_size;
-    stack_base &= ~0xFULL;
-
-    uint64_t argv_array = stack_base;
-    uint64_t envp_array = argv_array + (argc + 1) * sizeof(uint64_t);
-    uint64_t auxv_base = envp_array + (envc + 1) * sizeof(uint64_t);
-    uint64_t random_base = auxv_base + ELF_AUXV_PAIRS * 2 * sizeof(uint64_t);
-    uint64_t strings_base = random_base + ELF_AT_RANDOM_BYTES;
-
+    /* Switch to process page directory temporarily (after kernel heap allocs) */
     uint64_t *argv_ptrs = (uint64_t *)kmalloc((argc + 1) * sizeof(uint64_t));
     uint64_t *envp_ptrs = (uint64_t *)kmalloc((envc + 1) * sizeof(uint64_t));
 
     if (!argv_ptrs || !envp_ptrs)
     {
-        load_page_directory(old_cr3);
         if (argv_ptrs)
             kfree(argv_ptrs);
         if (envp_ptrs)
@@ -506,8 +507,28 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         return -1;
     }
 
+    uint64_t stack_top = process->stack_start + process->stack_size;
+    uint64_t stack_base = stack_top - stack_size;
+    uint64_t argc_slot;
+    uint64_t argv_array;
+    uint64_t envp_array;
+    uint64_t auxv_base;
+    uint64_t random_base;
+    uint64_t strings_base;
+    uint64_t current_string_ptr;
+    uint64_t *pml4 = process->page_directory;
+
+    stack_base &= ~0xFULL;
+
+    argc_slot = stack_base;
+    argv_array = argc_slot + sizeof(uint64_t);
+    envp_array = argv_array + (argc + 1) * sizeof(uint64_t);
+    auxv_base = envp_array + (envc + 1) * sizeof(uint64_t);
+    random_base = auxv_base + ELF_AUXV_PAIRS * 2 * sizeof(uint64_t);
+    strings_base = random_base + ELF_AT_RANDOM_BYTES;
+
     /* Copy argv/env strings into userspace */
-    uint64_t current_string_ptr = strings_base;
+    current_string_ptr = strings_base;
 
     for (int i = 0; i < argc; i++)
     {
@@ -515,9 +536,9 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             size_t len = strlen(argv[i]) + 1;
 
-            if (copy_to_user((void *)current_string_ptr, argv[i], len) != 0)
+            if (copy_to_user_region_in_directory(pml4, current_string_ptr,
+                                                 argv[i], len) != 0)
             {
-                load_page_directory(old_cr3);
                 kfree(argv_ptrs);
                 kfree(envp_ptrs);
                 return -1;
@@ -533,9 +554,9 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             size_t len = strlen(envp[i]) + 1;
 
-            if (copy_to_user((void *)current_string_ptr, envp[i], len) != 0)
+            if (copy_to_user_region_in_directory(pml4, current_string_ptr,
+                                                 envp[i], len) != 0)
             {
-                load_page_directory(old_cr3);
                 kfree(argv_ptrs);
                 kfree(envp_ptrs);
                 return -1;
@@ -545,15 +566,26 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         }
     }
 
+    /* argc at [RSP+0] per SysV ABI process entry stack contract. */
+    {
+        uint64_t argc_q = (uint64_t)argc;
+        if (copy_to_user_region_in_directory(pml4, argc_slot, &argc_q, sizeof(uint64_t)) != 0)
+        {
+            kfree(argv_ptrs);
+            kfree(envp_ptrs);
+            return -1;
+        }
+    }
+
     /* argv[] */
     for (int i = 0; i < argc; i++)
     {
         uint64_t ptr = argv_ptrs[i];
 
-        if (copy_to_user((void *)(argv_array + (size_t)i * sizeof(uint64_t)),
-                         &ptr, sizeof(uint64_t)) != 0)
+        if (copy_to_user_region_in_directory(pml4,
+                argv_array + (size_t)i * sizeof(uint64_t),
+                &ptr, sizeof(uint64_t)) != 0)
         {
-            load_page_directory(old_cr3);
             kfree(argv_ptrs);
             kfree(envp_ptrs);
             return -1;
@@ -563,10 +595,10 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t zero = 0;
 
-        if (copy_to_user((void *)(argv_array + (size_t)argc * sizeof(uint64_t)),
-                         &zero, sizeof(uint64_t)) != 0)
+        if (copy_to_user_region_in_directory(pml4,
+                argv_array + (size_t)argc * sizeof(uint64_t),
+                &zero, sizeof(uint64_t)) != 0)
         {
-            load_page_directory(old_cr3);
             kfree(argv_ptrs);
             kfree(envp_ptrs);
             return -1;
@@ -578,10 +610,10 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t ptr = envp_ptrs[i];
 
-        if (copy_to_user((void *)(envp_array + (size_t)i * sizeof(uint64_t)),
-                         &ptr, sizeof(uint64_t)) != 0)
+        if (copy_to_user_region_in_directory(pml4,
+                envp_array + (size_t)i * sizeof(uint64_t),
+                &ptr, sizeof(uint64_t)) != 0)
         {
-            load_page_directory(old_cr3);
             kfree(argv_ptrs);
             kfree(envp_ptrs);
             return -1;
@@ -591,10 +623,10 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t zero = 0;
 
-        if (copy_to_user((void *)(envp_array + (size_t)envc * sizeof(uint64_t)),
-                         &zero, sizeof(uint64_t)) != 0)
+        if (copy_to_user_region_in_directory(pml4,
+                envp_array + (size_t)envc * sizeof(uint64_t),
+                &zero, sizeof(uint64_t)) != 0)
         {
-            load_page_directory(old_cr3);
             kfree(argv_ptrs);
             kfree(envp_ptrs);
             return -1;
@@ -606,9 +638,9 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         uint8_t random_seed[ELF_AT_RANDOM_BYTES];
 
         elf_fill_random_bytes(random_seed, sizeof(random_seed));
-        if (copy_to_user((void *)random_base, random_seed, sizeof(random_seed)) != 0)
+        if (copy_to_user_region_in_directory(pml4, random_base, random_seed,
+                                             sizeof(random_seed)) != 0)
         {
-            load_page_directory(old_cr3);
             kfree(argv_ptrs);
             kfree(envp_ptrs);
             return -1;
@@ -649,12 +681,12 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             uint64_t off = i * 2 * sizeof(uint64_t);
 
-            if (copy_to_user((void *)(auxv_base + off),
-                             &auxv[i].a_type, sizeof(uint64_t)) != 0 ||
-                copy_to_user((void *)(auxv_base + off + sizeof(uint64_t)),
-                             &auxv[i].a_val, sizeof(uint64_t)) != 0)
+            if (copy_to_user_region_in_directory(pml4, auxv_base + off,
+                    &auxv[i].a_type, sizeof(uint64_t)) != 0 ||
+                copy_to_user_region_in_directory(pml4,
+                    auxv_base + off + sizeof(uint64_t),
+                    &auxv[i].a_val, sizeof(uint64_t)) != 0)
             {
-                load_page_directory(old_cr3);
                 kfree(argv_ptrs);
                 kfree(envp_ptrs);
                 return -1;
@@ -662,17 +694,14 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         }
     }
 
-    process->task.rsp = argv_array;
-    process->task.rbp = argv_array;
+    process->task.rsp = argc_slot;
+    process->task.rbp = argc_slot;
     
     /* Set registers for x86-64 ABI: rdi=argc, rsi=argv, rdx=envp */
     process->task.rdi = (uint64_t)argc;
     process->task.rsi = argv_array;
     process->task.rdx = envp_array;
-    
-    /* Restore page directory */
-    load_page_directory(old_cr3);
-    
+
     kfree(argv_ptrs);
     kfree(envp_ptrs);
     
@@ -703,7 +732,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
  * 3. Create process structure with proper page directory
  * 4. Load ELF segments into memory at virtual addresses
  * 5. Set up entry point, stack with argc/argv/envp, and registers
- * 6. Free the in-kernel ELF buffer (spawn_user already queued the process)
+ * 6. Free the in-kernel ELF buffer and enqueue the process for execution
  *
  * Returns: Process PID on success, -1 on error
  *
@@ -778,7 +807,7 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
         /* Continue even if stack setup fails - some binaries don't need args */
     }
 
-    /* spawn_user() already called sched_add_process(); do not enqueue twice */
+    sched_add_process(process);
 
     /* Step 6: Clean up file data */
     kfree(file_data);
@@ -812,7 +841,6 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     elf64_header_t *header;
     uint64_t at_phdr;
     uint64_t at_base;
-    uint64_t old_cr3;
     const char *basename;
     const char *last_slash;
     const char *walk;
@@ -852,19 +880,12 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     proc->stack_size = USER_STACK_SIZE;
     proc->stack_start = USER_STACK_TOP - USER_STACK_SIZE;
 
-    old_cr3 = get_current_page_directory();
-    load_page_directory((uint64_t)proc->page_directory);
-
     if (map_user_region_in_directory(proc->page_directory, proc->stack_start,
                                      proc->stack_size, PAGE_RW) != 0)
     {
-        load_page_directory(old_cr3);
         kfree(file_data);
         return -1;
     }
-
-    memset((void *)proc->stack_start, 0, proc->stack_size);
-    load_page_directory(old_cr3);
 
     if (elf_load_segments(header, (uint8_t *)file_data, file_size, proc) != 0)
     {
@@ -904,6 +925,39 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
 
     serial_print("SERIAL: ELF: exec_replace success PID ");
     serial_print_hex32((uint32_t)proc->task.pid);
+    serial_print("\n");
+    serial_print("SERIAL: ELF: exec CR3 active=");
+    serial_print_hex64(get_current_page_directory());
+    serial_print(" task_cr3=");
+    serial_print_hex64(proc->task.cr3);
+    serial_print(" mm_cr3=");
+    serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
+    serial_print("\n");
+
+    /* --- FASE 8A: dump kernel-intent task state pre arch_switch_to_user --- */
+    serial_print("FASE8A pid="); serial_print_hex32((uint32_t)proc->task.pid);
+    serial_print(" rip="); serial_print_hex64(proc->task.rip);
+    serial_print(" rsp="); serial_print_hex64(proc->task.rsp);
+    serial_print(" rflags="); serial_print_hex64(proc->task.rflags);
+    serial_print("\n");
+    serial_print("FASE8A rax="); serial_print_hex64(proc->task.rax);
+    serial_print(" rbx="); serial_print_hex64(proc->task.rbx);
+    serial_print(" rcx="); serial_print_hex64(proc->task.rcx);
+    serial_print(" rdx="); serial_print_hex64(proc->task.rdx);
+    serial_print("\n");
+    serial_print("FASE8A rsi="); serial_print_hex64(proc->task.rsi);
+    serial_print(" rdi="); serial_print_hex64(proc->task.rdi);
+    serial_print(" rbp="); serial_print_hex64(proc->task.rbp);
+    serial_print("\n");
+    serial_print("FASE8A r8="); serial_print_hex64(proc->task.r8);
+    serial_print(" r9="); serial_print_hex64(proc->task.r9);
+    serial_print(" r10="); serial_print_hex64(proc->task.r10);
+    serial_print(" r11="); serial_print_hex64(proc->task.r11);
+    serial_print("\n");
+    serial_print("FASE8A r12="); serial_print_hex64(proc->task.r12);
+    serial_print(" r13="); serial_print_hex64(proc->task.r13);
+    serial_print(" r14="); serial_print_hex64(proc->task.r14);
+    serial_print(" r15="); serial_print_hex64(proc->task.r15);
     serial_print("\n");
 
     arch_switch_to_user((arch_addr_t)proc->task.rip, (arch_addr_t)proc->task.rsp);

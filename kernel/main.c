@@ -38,6 +38,8 @@
 #include <ir0/multiboot.h>
 #include "ipc.h"
 #include "syscalls.h"
+#include "scheduler_api.h"
+#include "process.h"
 
 #if CONFIG_ENABLE_NETWORKING
 
@@ -51,6 +53,36 @@
 
 /* Include kernel header with all function declarations */
 #include "kernel.h"
+
+/*
+ * kernel_idle_poll - Wake blocked tasks and poll optional subsystems.
+ * Shared by the RR idle kernel process and the kmain fallback loop.
+ */
+void kernel_idle_poll(void)
+{
+#if CONFIG_ENABLE_NETWORKING
+	net_stack_poll();
+#endif
+#if CONFIG_ENABLE_BLUETOOTH
+	ir0_bluetooth_poll();
+#endif
+	poll_wake_check();
+	sleep_wake_check();
+	stdin_wake_check();
+}
+
+/*
+ * kernel_idle_loop - Always-runnable kernel task (Linux idle analogue).
+ * Enqueued after /sbin/init so PID 1 runs first; takes over when init exits.
+ */
+void kernel_idle_loop(void)
+{
+	for (;;)
+	{
+		kernel_idle_poll();
+		arch_cpu_idle();
+	}
+}
 
 void kmain(uint32_t multiboot_info)
 {
@@ -213,29 +245,29 @@ void kmain(uint32_t multiboot_info)
         panic("start_init_process returned unexpectedly");
     }
 #else
-    /* Init real: cargar /sbin/init desde el filesystem */
-    serial_print("SERIAL: kmain: Loading userspace init...\n");
-    if (kexecve("/sbin/init", NULL, NULL) < 0) 
+    /* Real init: load /sbin/init from root filesystem and run in ring 3. */
     {
-        serial_print("SERIAL: kmain: FAILED to load /sbin/init, falling back to debug shell\n");
-        panic("Failed to load /sbin/init");
+        pid_t init_pid;
+
+        serial_print("SERIAL: kmain: Loading userspace init...\n");
+        init_pid = kexecve("/sbin/init", NULL, NULL);
+        if (init_pid < 0)
+        {
+            serial_print("SERIAL: kmain: FAILED to load /sbin/init\n");
+            panic("Failed to load /sbin/init");
+        }
+        serial_print("SERIAL: kmain: /sbin/init loaded (PID ");
+        serial_print_hex32((uint32_t)init_pid);
+        serial_print("), scheduling...\n");
+
+        sched_schedule_next();
+        panic("sched_schedule_next returned after userspace init");
     }
 #endif
 
     for (;;)
     {
-#if CONFIG_ENABLE_NETWORKING
-        net_stack_poll();
-#endif
-#if CONFIG_ENABLE_BLUETOOTH
-        ir0_bluetooth_poll();
-#endif
-        /* Despertar procesos bloqueados en poll() cuando hay datos o timeout */
-        poll_wake_check();
-        /* Despertar procesos bloqueados en nanosleep() cuando expira el tiempo */
-        sleep_wake_check();
-        /* Despertar procesos bloqueados en read(0) cuando hay tecla */
-        stdin_wake_check();
+        kernel_idle_poll();
         arch_cpu_idle();
     }
 }

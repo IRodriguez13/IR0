@@ -5,9 +5,10 @@ This directory is intended to hold the compiled Init process binary (PID 1).
 
 Expected Contents:
 ------------------
-- init: The compiled Init binary executable
-  * Should be compiled from a separate repository
-  * Must be a valid ELF binary for x86-64 architecture
+- init: The compiled Init binary executable (not versioned; see .gitignore)
+  * Built in-tree: make build-init-smoke (nostdlib ring-3) or make build-init-musl
+  * Or compiled from an external repository and copied here
+  * Must be a valid static ELF binary for x86-64 architecture
   * Will be copied to /sbin/init on the virtual disk
 
 Usage:

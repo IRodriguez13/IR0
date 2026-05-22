@@ -72,6 +72,11 @@ syscall_entry_asm:
     pop rbx
     add rsp, 8      ; Skip saved rax, use return value instead
     
+    ; iretq restores CS/RIP/RFLAGS/SS/RSP but not DS/ES.
+    mov ax, 0x23
+    mov ds, ax
+    mov es, ax
+
     ; No need to send EOI for syscalls (they are software interrupts)
     
     ; Return to user mode

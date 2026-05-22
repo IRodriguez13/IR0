@@ -406,8 +406,18 @@ void rr_schedule_next(void)
 		}
 		else
 		{
+			/*
+			 * Linux switch_mm(): load the process page tables before
+			 * iretq; otherwise the CPU fetches user RIP under kernel CR3.
+			 */
+			__asm__ volatile(
+				"mov %[cr3], %%rax\n"
+				"mov %%rax, %%cr3\n"
+				:
+				: [cr3] "r"(next->task.cr3)
+				: "rax", "memory");
 			arch_switch_to_user((arch_addr_t)next->task.rip,
-					      (arch_addr_t)next->task.rsp);
+					    (arch_addr_t)next->task.rsp);
 		}
 		panic("Returned from first context switch");
 #else
@@ -422,10 +432,6 @@ void rr_schedule_next(void)
 	 */
 	if (prev && next) 
 	{
-		/* Architecture-specific context switch.
-		 * Saves prev->task and restores next->task.
-		 * Does not return to this function - returns to next process.
-		 */
 		arch_context_switch(&prev->task, &next->task);
 	}
 

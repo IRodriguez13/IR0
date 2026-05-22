@@ -17,6 +17,7 @@
  */
 
 #include <ir0/console_backend.h>
+#include <ir0/serial_io.h>
 
 void console_backend_init(void)
 {
@@ -53,9 +54,16 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
     for (i = 0; i < len; i++)
     {
         if (str[i] == '\n')
+        {
+            serial_putchar('\r');
+            serial_putchar('\n');
             typewriter_vga_print("\n", color);
+        }
         else
+        {
+            serial_putchar(str[i]);
             typewriter_vga_print_char(str[i], color);
+        }
     }
 }
 

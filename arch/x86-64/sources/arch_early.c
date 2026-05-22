@@ -27,6 +27,25 @@
 #include <interrupt/arch/pic.h>
 #include <drivers/serial/serial.h>
 
+/*
+ * arch_enable_sse_x86_64 - Allow SSE/x87 in ring 0/3 (musl CRT uses XMM).
+ * Clears CR0.EM, sets CR0.MP, CR4.OSFXSR and CR4.OSXMMEXCPT.
+ */
+static void arch_enable_sse_x86_64(void)
+{
+	uint64_t cr0;
+	uint64_t cr4;
+
+	__asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+	cr0 &= ~(1ULL << 2);
+	cr0 |= (1ULL << 1);
+	__asm__ volatile("mov %0, %%cr0" : : "r"(cr0) : "memory");
+
+	__asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+	cr4 |= (1ULL << 9) | (1ULL << 10);
+	__asm__ volatile("mov %0, %%cr4" : : "r"(cr4) : "memory");
+}
+
 /**
  * arch_early_init_x86_64 - x86-64 early architecture initialization
  *
@@ -41,6 +60,8 @@ void arch_early_init_x86_64(void)
     
     /* Initialize TSS (Task State Segment) for user mode support */
     setup_tss();
+
+    arch_enable_sse_x86_64();
     
     serial_print("[ARCH] x86-64 early init: GDT and TSS initialized\n");
 }
