@@ -25,7 +25,7 @@
 #include <arch/x86-64/sources/tss_x64.h>
 #include <interrupt/arch/idt.h>
 #include <interrupt/arch/pic.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 
 /*
  * arch_enable_sse_x86_64 - Allow SSE/x87 in ring 0/3 (musl CRT uses XMM).

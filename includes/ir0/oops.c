@@ -13,7 +13,7 @@
 
 #include "oops.h"
 #include <ir0/vga.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <stddef.h>
 #include <stdint.h>
 

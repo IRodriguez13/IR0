@@ -14,7 +14,7 @@
 #include <mm/paging.h>
 #include <string.h>
 #include <config.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 
 /* User space address range (simplified) */
 #define USER_SPACE_START 0x00400000UL  /* 4MB */

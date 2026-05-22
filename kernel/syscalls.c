@@ -2085,11 +2085,6 @@ int64_t sys_fork(void)
     return -ESRCH;
 
   r = fork();
-  serial_print("FASE8 sys_fork parent=");
-  serial_print_hex32((uint32_t)current_process->task.pid);
-  serial_print(" ret=");
-  serial_print_hex64((uint64_t)r);
-  serial_print("\n");
   return r;
 }
 

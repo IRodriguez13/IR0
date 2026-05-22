@@ -23,7 +23,7 @@
 #include <ir0/signals.h>
 #include <arch/common/arch_portable.h>
 #include <ir0/copy_user.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 
 /* Deliver SIGSEGV-equivalent termination for a faulting userspace process. */
 static __attribute__((noreturn)) void pf_terminate_userspace(process_t *p,

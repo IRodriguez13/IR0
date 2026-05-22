@@ -934,32 +934,6 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
     serial_print("\n");
 
-    /* --- FASE 8A: dump kernel-intent task state pre arch_switch_to_user --- */
-    serial_print("FASE8A pid="); serial_print_hex32((uint32_t)proc->task.pid);
-    serial_print(" rip="); serial_print_hex64(proc->task.rip);
-    serial_print(" rsp="); serial_print_hex64(proc->task.rsp);
-    serial_print(" rflags="); serial_print_hex64(proc->task.rflags);
-    serial_print("\n");
-    serial_print("FASE8A rax="); serial_print_hex64(proc->task.rax);
-    serial_print(" rbx="); serial_print_hex64(proc->task.rbx);
-    serial_print(" rcx="); serial_print_hex64(proc->task.rcx);
-    serial_print(" rdx="); serial_print_hex64(proc->task.rdx);
-    serial_print("\n");
-    serial_print("FASE8A rsi="); serial_print_hex64(proc->task.rsi);
-    serial_print(" rdi="); serial_print_hex64(proc->task.rdi);
-    serial_print(" rbp="); serial_print_hex64(proc->task.rbp);
-    serial_print("\n");
-    serial_print("FASE8A r8="); serial_print_hex64(proc->task.r8);
-    serial_print(" r9="); serial_print_hex64(proc->task.r9);
-    serial_print(" r10="); serial_print_hex64(proc->task.r10);
-    serial_print(" r11="); serial_print_hex64(proc->task.r11);
-    serial_print("\n");
-    serial_print("FASE8A r12="); serial_print_hex64(proc->task.r12);
-    serial_print(" r13="); serial_print_hex64(proc->task.r13);
-    serial_print(" r14="); serial_print_hex64(proc->task.r14);
-    serial_print(" r15="); serial_print_hex64(proc->task.r15);
-    serial_print("\n");
-
     arch_switch_to_user((arch_addr_t)proc->task.rip, (arch_addr_t)proc->task.rsp);
     return -1;
 }

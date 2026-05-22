@@ -22,7 +22,7 @@
 
 #include "signals.h"
 #include <kernel/process.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <ir0/copy_user.h>
 #include <mm/paging.h>
 #include <ir0/kmem.h>
