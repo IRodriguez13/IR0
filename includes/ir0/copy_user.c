@@ -125,7 +125,7 @@ int copy_to_user(void *dst, const void *src, size_t n)
 int copy_from_user(void *dst, const void *src, size_t n)
 {
     process_t *current = process_get_current();
-    
+
     /* KERNEL_MODE bypass (dbgshell, embedded init) */
     if (current && current->mode == KERNEL_MODE)
     {

@@ -102,6 +102,42 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
             return;
         }
 
+        /* FASE 23: identify which kernel exception is firing before panicking. */
+        {
+            extern void serial_print(const char *);
+            extern void serial_print_hex64(uint64_t);
+            extern uint64_t fase23_copy_region_probe[8];
+            serial_print("FASE23_KERNEL_EXC vector=");
+            serial_print_hex64(interrupt_number);
+            if (stack)
+            {
+                serial_print(" stk[0]=");
+                serial_print_hex64(stack[0]);
+                serial_print(" stk[1]=");
+                serial_print_hex64(stack[1]);
+                serial_print(" stk[2]=");
+                serial_print_hex64(stack[2]);
+                serial_print(" stk[3]=");
+                serial_print_hex64(stack[3]);
+            }
+            serial_print("\nFASE23_CP_REGION dst=");
+            serial_print_hex64(fase23_copy_region_probe[0]);
+            serial_print(" n=");
+            serial_print_hex64(fase23_copy_region_probe[1]);
+            serial_print(" dst+n=");
+            serial_print_hex64(fase23_copy_region_probe[2]);
+            serial_print(" pml4=");
+            serial_print_hex64(fase23_copy_region_probe[3]);
+            serial_print("\nFASE23_CP_REGION page=");
+            serial_print_hex64(fase23_copy_region_probe[4]);
+            serial_print(" pte_present=");
+            serial_print_hex64(fase23_copy_region_probe[5]);
+            serial_print(" phys=");
+            serial_print_hex64(fase23_copy_region_probe[6]);
+            serial_print(" seq=");
+            serial_print_hex64(fase23_copy_region_probe[7]);
+            serial_print("\n");
+        }
         panic("Unhandled kernel CPU exception");
     }
 
@@ -120,8 +156,7 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
         {
         case 0: /* Timer */
         {
-            /* Increment PIT ticks and update clock system */
-            /* clock_tick() will handle scheduler integration */
+            irq_save_user_frame(stack);
             increment_pit_ticks();
             break;
         }

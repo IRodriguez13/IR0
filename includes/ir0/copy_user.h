@@ -64,4 +64,14 @@ int copy_from_user(void *dst, const void *src, size_t n);
  */
 int is_user_address(const void *addr, size_t size);
 
+/**
+ * is_user_address_checked - Check user address range with optional mapping check
+ * @addr: Address to check
+ * @size: Size of region
+ * @check_mapped: 1 to also verify that pages are present in current page directory
+ *
+ * Returns: 1 if valid (and mapped if requested), 0 otherwise.
+ */
+int is_user_address_checked(const void *addr, size_t size, int check_mapped);
+
 #endif /* _IR0_COPY_USER_H */

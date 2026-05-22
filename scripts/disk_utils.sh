@@ -62,7 +62,7 @@ detect_filesystem_from_filename() {
 check_filesystem_support() {
     local fs_type="$1"
     local mount_type=""
-    
+
     # Map filesystem types to mount types
     case "$fs_type" in
         minix)
@@ -82,15 +82,25 @@ check_filesystem_support() {
             return 1
             ;;
     esac
-    
-    # Check if filesystem is available
-    if ! grep -q "$mount_type" /proc/filesystems 2>/dev/null; then
-        echo "❌ Error: $fs_type filesystem support not available in kernel"
-        echo "   Load module with: sudo modprobe $mount_type"
-        return 1
+
+    # Already registered (native or module loaded)
+    if grep -q "[[:space:]]${mount_type}\$" /proc/filesystems 2>/dev/null; then
+        return 0
     fi
-    
-    return 0
+
+    # Try loading the kernel module (minix/vfat often built as modules)
+    if command -v modprobe >/dev/null 2>&1; then
+        if modprobe "$mount_type" 2>/dev/null; then
+            if grep -q "[[:space:]]${mount_type}\$" /proc/filesystems 2>/dev/null; then
+                return 0
+            fi
+        fi
+    fi
+
+    echo "❌ Error: $fs_type filesystem support not available in kernel"
+    echo "   Try: sudo modprobe $mount_type"
+    echo "   Or use inject (no mount): ./scripts/load_init.sh --inject"
+    return 1
 }
 
 # Get mount type for filesystem

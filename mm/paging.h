@@ -37,8 +37,14 @@
 #define PAGE_SIZE_2MB (2 * 1024 * 1024)
 #define PAGE_SIZE_1GB (1024 * 1024 * 1024)
 
-/* Physical frame: strip low 12 bits from a table entry or aligned address */
+/* Physical frame: align/strip low 12 bits from an address */
 #define PAGE_FRAME_MASK     (~0xFFFULL)
+/*
+ * x86-64 PTE/PMD/PUD/PGD PFN field (Linux PTE_PFN_MASK): bits 51:12 only.
+ * Do NOT use PAGE_FRAME_MASK on table entries — NX (bit 63) would leak into
+ * pointers when walking page tables (see Linux pud_page()/pte_pfn()).
+ */
+#define PAGE_PTE_PFN_MASK   0x000FFFFFFFFFF000ULL
 /* Nine-bit index into PML4/PDPT/PD/PT (512 entries) */
 #define PAGE_INDEX_MASK     0x1FF
 
@@ -126,6 +132,19 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags);
 
 /* Map user region in a specific page directory */
 int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t size, uint64_t flags);
+
+/*
+ * Map a supervisor-only identity region with 4 KiB pages (not boot 2 MiB huge
+ * pages). User mappings added later override overlapping VAs (e.g. ELF at
+ * 0x400000). Required so IRQ/syscall handlers and TSS RSP0 work under
+ * process CR3 while the kernel image lives in low canonical memory.
+ */
+int map_supervisor_identity_low(uint64_t *pml4, uint64_t start, uint64_t end);
+
+/* Copy/zero user VAs via page-table walk (kernel CR3, no user CR3 switch) */
+int copy_to_user_region_in_directory(uint64_t *pml4, uintptr_t dst,
+                                     const void *src, size_t n);
+int zero_user_region_in_directory(uint64_t *pml4, uintptr_t dst, size_t n);
 
 struct process;
 

@@ -401,8 +401,13 @@ void clock_tick(void)
     if (clock_state.scheduler_tick_counter >= clock_state.scheduler_ticks_per_quantum)
     {
         clock_state.scheduler_tick_counter = 0;
-        /* Call scheduler to switch processes */
+        /*
+         * Defer preemption to syscall exit while IRQ iretq frame capture
+         * is still being hardened for multi-process fork paths.
+         */
+#if 0
         sched_schedule_next();
+#endif
     }
     
     /*

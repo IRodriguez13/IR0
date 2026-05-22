@@ -18,6 +18,24 @@ source "$SCRIPT_DIR/disk_utils.sh" 2>/dev/null || {
 FS_TYPE=""
 DISK_IMAGE=""
 INIT_BINARY=""
+USE_INJECT=0
+POSITIONAL=()
+
+for arg in "$@"; do
+    case "$arg" in
+        --inject)
+            USE_INJECT=1
+            ;;
+        -h|--help|help)
+            POSITIONAL=("$arg")
+            break
+            ;;
+        *)
+            POSITIONAL+=("$arg")
+            ;;
+    esac
+done
+set -- "${POSITIONAL[@]}"
 
 # Check for help flag
 if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
@@ -31,6 +49,7 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
     echo "  INIT_BINARY            Path to Init binary [default: setup/pid1/init]"
     echo ""
     echo "Options:"
+    echo "  --inject               Write /sbin/init without mounting (MINIX only, no modprobe)"
     echo "  -h, --help             Show this help message"
     echo ""
     echo "Supported filesystems:"
@@ -145,6 +164,20 @@ if [ ! -x "$INIT_BINARY" ]; then
     }
 fi
 
+# MINIX inject path: no mount, no root (works when minix module is unavailable)
+if [ "$USE_INJECT" = "1" ]; then
+    if [ -z "$FS_TYPE" ]; then
+        FS_TYPE=$(detect_filesystem_from_filename "$DISK_IMAGE")
+    fi
+    if [ "$FS_TYPE" != "minix" ]; then
+        echo "❌ Error: --inject only supports MINIX (detected: ${FS_TYPE:-unknown})"
+        exit 1
+    fi
+    echo "📦 Injecting Init into MINIX image (no mount)..."
+    python3 "$SCRIPT_DIR/inject_init_minix.py" "$DISK_IMAGE" "$INIT_BINARY" || exit 1
+    exit 0
+fi
+
 # Check if running as root (required for mount)
 if [ "$EUID" -ne 0 ]; then
     echo "❌ Error: This script requires root privileges to mount filesystems"
@@ -154,6 +187,11 @@ fi
 
 # Check filesystem support
 if ! check_filesystem_support "$FS_TYPE"; then
+    if [ "$FS_TYPE" = "minix" ]; then
+        echo "⚠️  Falling back to MINIX inject (no mount)..."
+        python3 "$SCRIPT_DIR/inject_init_minix.py" "$DISK_IMAGE" "$INIT_BINARY" || exit 1
+        exit 0
+    fi
     exit 1
 fi
 

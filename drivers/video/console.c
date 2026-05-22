@@ -21,6 +21,7 @@
 
 #include "console.h"
 #include "console_font.h"
+#include <config.h>
 #if CONFIG_ENABLE_VBE
 #include <drivers/video/vbe.h>
 #endif
@@ -212,13 +213,21 @@ void console_clear(uint8_t color)
 void console_init(void)
 {
 #if CONFIG_ENABLE_VBE
-    uint32_t w, h, bpp;
-    if (vbe_is_available() && vbe_get_info(&w, &h, &bpp) && bpp == 32 && w >= 640 && h >= 400)
-        use_fb = 1;
-    else
-        use_fb = 0;
+#if defined(IR0_USERSPACE_INIT_BOOT) && IR0_USERSPACE_INIT_BOOT
+	/*
+	 * Headless userspace smoke (-display none): avoid framebuffer writes
+	 * under process CR3 when fb is not mapped in the child mm.
+	 */
+	use_fb = 0;
 #else
-    use_fb = 0;
+	uint32_t w, h, bpp;
+	if (vbe_is_available() && vbe_get_info(&w, &h, &bpp) && bpp == 32 && w >= 640 && h >= 400)
+		use_fb = 1;
+	else
+		use_fb = 0;
+#endif
+#else
+	use_fb = 0;
 #endif
 }
 

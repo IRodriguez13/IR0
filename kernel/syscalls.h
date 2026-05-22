@@ -48,6 +48,7 @@ int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
 int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[]);
 int64_t sys_waitpid(pid_t pid, int *status, int options);
 int64_t sys_getpid(void);
+int64_t sys_gettid(void);
 int64_t sys_getppid(void);
 int64_t sys_getuid(void);
 int64_t sys_geteuid(void);

@@ -14,6 +14,8 @@
 #include "oops.h"
 #include <ir0/vga.h>
 #include <drivers/serial/serial.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #define Interrupts_off asm volatile("cli")
 #define Cpu_Sleep asm volatile("hlt")
@@ -160,6 +162,22 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     /* Dump CPU state - registers and control registers */
     dump_registers();
 
+    /* IRETQ checkpoint buffer (debug: see kernel/scheduler/switch/switch_x64.asm) */
+    {
+        extern uint64_t iretq_checkpoint_buf[32];
+        size_t k;
+
+        serial_print("\n--- IRETQ CHECKPOINT BUFFER ---\n");
+        for (k = 0; k < 32; k++)
+        {
+            serial_print("ckpt[");
+            serial_print_hex32((uint32_t)k);
+            serial_print("] = ");
+            serial_print_hex64(iretq_checkpoint_buf[k]);
+            serial_print("\n");
+        }
+    }
+
     /* Unwind call stack - shows the execution path that led to panic */
     dump_stack_trace();
 
@@ -169,7 +187,7 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     /* Dump memory state - heap statistics and allocation info */
     dump_memory_state();
 
-    /* Final message before halting */ 
+    /* Final message before halting */
     serial_print("\n========================================\n");
     serial_print("SYSTEM HALTED - Safe to power off or reboot\n");
     serial_print("========================================\n");
