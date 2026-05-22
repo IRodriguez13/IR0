@@ -496,15 +496,11 @@ void process_capture_syscall_frame_at_entry(uint64_t *frame_base)
 {
 	process_t *p = current_process;
 	syscall_user_frame_t *sf;
-	uint64_t sf_rsp_before;
-	extern uint64_t fase30_entry_user_rsp;
-	extern uint64_t user_rsp_save;
 
 	if (!frame_base || !p || p->mode != USER_MODE)
 		return;
 
 	sf = &p->syscall_frame;
-	sf_rsp_before = sf->rsp;
 	sf->rip = frame_base[7];
 	sf->rflags = frame_base[6];
 	sf->rsp = frame_base[8];
@@ -514,25 +510,6 @@ void process_capture_syscall_frame_at_entry(uint64_t *frame_base)
 	sf->r13 = frame_base[3];
 	sf->r14 = frame_base[4];
 	sf->r15 = frame_base[5];
-
-	if (p->task.pid >= 2)
-	{
-		serial_print("FASE32_CAPTURE saved_rsp=");
-		serial_print_hex64(sf->rsp);
-		serial_print("\n");
-
-		serial_print("FASE30 cap pid=");
-		serial_print_hex32((uint32_t)p->task.pid);
-		serial_print(" entry_user_rsp=");
-		serial_print_hex64(fase30_entry_user_rsp);
-		serial_print(" sf_rsp_before=");
-		serial_print_hex64(sf_rsp_before);
-		serial_print(" sf_rsp_after=");
-		serial_print_hex64(sf->rsp);
-		serial_print(" sysret_rsp_save=");
-		serial_print_hex64(user_rsp_save);
-		serial_print("\n");
-	}
 }
 
 void process_capture_syscall_frame(process_t *p)
@@ -574,34 +551,7 @@ void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_
 
 static void fork_fixup_user_syscall_return(process_t *parent, process_t *child)
 {
-	extern uint64_t user_rsp_save;
-	uint64_t parent_sf_rsp = parent ? parent->syscall_frame.rsp : 0;
-
-	if (parent && child && child->task.pid >= 2)
-	{
-		serial_print("FASE31_FORK_COPY parent_sf_rsp=");
-		serial_print_hex64(parent_sf_rsp);
-		serial_print(" child_task_rsp_before=");
-		serial_print_hex64(child->task.rsp);
-		serial_print("\n");
-	}
-
 	process_apply_syscall_frame_to_task(&child->task, &parent->syscall_frame, 0);
-
-	if (parent && child && child->task.pid >= 2)
-	{
-		serial_print("FASE30 fork_fixup parent_pid=");
-		serial_print_hex32((uint32_t)parent->task.pid);
-		serial_print(" child_pid=");
-		serial_print_hex32((uint32_t)child->task.pid);
-		serial_print(" parent_sf_rsp=");
-		serial_print_hex64(parent_sf_rsp);
-		serial_print(" child_task_rsp=");
-		serial_print_hex64(child->task.rsp);
-		serial_print(" sysret_rsp_save=");
-		serial_print_hex64(user_rsp_save);
-		serial_print("\n");
-	}
 }
 #endif
 
@@ -1067,33 +1017,6 @@ int process_wait(pid_t pid, int *status, int options)
 			if (p->state == PROCESS_ZOMBIE) {
 				zombie = p;
 				break;
-			}
-		}
-
-		{
-			static int wait4_dump_done = 0;
-			serial_print("FASE8 wait4 parent=");
-			serial_print_hex32((uint32_t)current_process->task.pid);
-			serial_print(" req_pid=");
-			serial_print_hex64((uint64_t)pid);
-			serial_print(" found=");
-			serial_print_hex32((uint32_t)found_child);
-			serial_print(" zombie=");
-			serial_print_hex64(zombie ? (uint64_t)zombie->task.pid : 0);
-			serial_print("\n");
-
-			if (!wait4_dump_done && current_process->task.pid >= 2) {
-				extern uint64_t iretq_checkpoint_buf[40];
-				wait4_dump_done = 1;
-				serial_print("FASE9A marker=");
-				serial_print_hex64(iretq_checkpoint_buf[32]);
-				serial_print(" task_rax=");
-				serial_print_hex64(iretq_checkpoint_buf[33]);
-				serial_print("\nFASE9A before_ds=");
-				serial_print_hex64(iretq_checkpoint_buf[34]);
-				serial_print(" after_ds=");
-				serial_print_hex64(iretq_checkpoint_buf[35]);
-				serial_print("\n");
 			}
 		}
 

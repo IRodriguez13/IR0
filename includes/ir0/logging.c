@@ -16,7 +16,7 @@
 #include "string.h"
 #include <stdbool.h>
 #include <stdarg.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <drivers/timer/clock_system.h>
 #include <ir0/kmem.h>
 #include <stddef.h>

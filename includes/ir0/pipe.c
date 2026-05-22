@@ -24,7 +24,7 @@
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
 #include <string.h>
-#include <drivers/serial/serial.h>
+#include <ir0/serial_io.h>
 #include <config.h>
 
 /**
