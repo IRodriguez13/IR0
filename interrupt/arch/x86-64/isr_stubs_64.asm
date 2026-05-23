@@ -12,18 +12,75 @@ global fase28_isr_rsp_after_push
 global fase28_isr_frame_ptr
 global fase28_saved_rip
 global fase28_saved_rsp
+global isr_abi_entry_intno
+global isr_abi_entry_has_err
+global isr_abi_entry_rsp
+global isr_abi_entry_qwords
 fase28_isr_rsp_after_push:  resq 1
 fase28_isr_frame_ptr:       resq 1
 fase28_saved_rip:           resq 1
 fase28_saved_rsp:           resq 1
+isr_abi_entry_intno:        resq 1
+isr_abi_entry_has_err:      resq 1
+isr_abi_entry_rsp:          resq 1
+isr_abi_entry_qwords:       resq 16
+
+section .data
+align 8
+isr_abi_saved_rax: dq 0
+isr_abi_saved_rcx: dq 0
 
 section .text
+
+%macro ISR_ABI_SNAPSHOT_ENTRY 2
+    mov [rel isr_abi_saved_rax], rax
+    mov [rel isr_abi_saved_rcx], rcx
+    mov qword [rel isr_abi_entry_intno], %1
+    mov qword [rel isr_abi_entry_has_err], %2
+    mov [rel isr_abi_entry_rsp], rsp
+    mov rcx, rsp
+    mov rax, [rcx + 0]
+    mov [rel isr_abi_entry_qwords + 0], rax
+    mov rax, [rcx + 8]
+    mov [rel isr_abi_entry_qwords + 8], rax
+    mov rax, [rcx + 16]
+    mov [rel isr_abi_entry_qwords + 16], rax
+    mov rax, [rcx + 24]
+    mov [rel isr_abi_entry_qwords + 24], rax
+    mov rax, [rcx + 32]
+    mov [rel isr_abi_entry_qwords + 32], rax
+    mov rax, [rcx + 40]
+    mov [rel isr_abi_entry_qwords + 40], rax
+    mov rax, [rcx + 48]
+    mov [rel isr_abi_entry_qwords + 48], rax
+    mov rax, [rcx + 56]
+    mov [rel isr_abi_entry_qwords + 56], rax
+    mov rax, [rcx + 64]
+    mov [rel isr_abi_entry_qwords + 64], rax
+    mov rax, [rcx + 72]
+    mov [rel isr_abi_entry_qwords + 72], rax
+    mov rax, [rcx + 80]
+    mov [rel isr_abi_entry_qwords + 80], rax
+    mov rax, [rcx + 88]
+    mov [rel isr_abi_entry_qwords + 88], rax
+    mov rax, [rcx + 96]
+    mov [rel isr_abi_entry_qwords + 96], rax
+    mov rax, [rcx + 104]
+    mov [rel isr_abi_entry_qwords + 104], rax
+    mov rax, [rcx + 112]
+    mov [rel isr_abi_entry_qwords + 112], rax
+    mov rax, [rcx + 120]
+    mov [rel isr_abi_entry_qwords + 120], rax
+    mov rax, [rel isr_abi_saved_rax]
+    mov rcx, [rel isr_abi_saved_rcx]
+%endmacro
 
 ; Macro para stubs sin código de error
 %macro ISR_NOERRCODE 1
 global isr%1_64
 isr%1_64:
     cli                     ; Deshabilitar interrupciones
+    ISR_ABI_SNAPSHOT_ENTRY %1, 0
     push qword 0            ; Código de error dummy
     push qword %1           ; Número de interrupción
     jmp isr_common_stub_64  ; Ir al handler común
@@ -34,6 +91,7 @@ isr%1_64:
 global isr%1_64
 isr%1_64:
     cli                     ; Deshabilitar interrupciones
+    ISR_ABI_SNAPSHOT_ENTRY %1, 1
     push qword %1           ; Número de interrupción (el código de error ya está en el stack)
     jmp isr_common_stub_64  ; Ir al handler común
 %endmacro

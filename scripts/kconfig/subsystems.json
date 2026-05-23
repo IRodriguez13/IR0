@@ -13,8 +13,8 @@
           "kernel/task.c",
           "kernel/syscalls.c",
           "kernel/elf_loader.c",
-          "kernel/user.c",
-          "kernel/rr_sched.c",
+          "sched/rr_sched.c",
+          "sched/scheduler_api.c",
           "kernel/driver_registry.c",
           "kernel/dbgshell.c",
           "kernel/process_util.c"
@@ -90,7 +90,7 @@
           "arch/x86-64/asm/boot_x64.asm",
           "arch/x86-64/asm/syscall_entry_64.asm",
           "arch/common/arch_interface.c",
-          "kernel/scheduler/switch/switch_x64.asm"
+          "sched/switch/switch_x64.asm"
         ],
         "arm32": []
       },
@@ -123,8 +123,8 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "kernel/rr_sched.c",
-          "kernel/scheduler/switch/switch_x64.asm"
+          "sched/rr_sched.c",
+          "sched/switch/switch_x64.asm"
         ],
         "arm32": []
       },

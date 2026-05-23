@@ -153,6 +153,19 @@ void *kmalloc_try(size_t size)
 	return __kmalloc_impl(size);
 }
 
+void *kmalloc_aligned_try(size_t size, size_t alignment)
+{
+	if (unlikely(size == 0))
+		return NULL;
+	if (unlikely(alignment == 0))
+		return NULL;
+	if (unlikely((alignment & (alignment - 1)) != 0))
+		return NULL;
+	if (unlikely(size > SIMPLE_HEAP_SIZE))
+		return NULL;
+	return __kmalloc_aligned_impl(size, alignment);
+}
+
 /**
  * __kfree_checked - Checked wrapper for kfree with automatic debug tracking
  * Validates parameters and calls implementation

@@ -14,20 +14,23 @@
 #ifndef _IR0_FCNTL_H
 #define _IR0_FCNTL_H
 
-/* File access modes */
-#define O_RDONLY    0x0000  /* Read only */
-#define O_WRONLY    0x0001  /* Write only */
-#define O_RDWR      0x0002  /* Read and write */
-#define O_ACCMODE   0x0003  /* Mask for file access modes */
+/*
+ * Kernel-internal open flags (IR0_O_*).  Syscall entry translates Linux ABI
+ * via linux_open_flags_to_ir0() in includes/ir0/open_flags.h before VFS.
+ */
+#include <ir0/open_flags.h>
 
-/* File status flags */
-#define O_APPEND    0x0008  /* Append mode */
-#define O_NONBLOCK  0x0800  /* Non-blocking mode */
-#define O_CREAT     0x0100  /* Create if nonexistent */
-#define O_EXCL      0x0200  /* Error if file exists */
-#define O_TRUNC     0x0400  /* Truncate to zero length */
-#define O_DIRECTORY 0x0200000  /* Must be a directory */
-#define O_CLOEXEC   0x80000  /* Close on exec (for open) */
+#define O_RDONLY    IR0_O_RDONLY
+#define O_WRONLY    IR0_O_WRONLY
+#define O_RDWR      IR0_O_RDWR
+#define O_ACCMODE   IR0_O_ACCMODE
+#define O_APPEND    IR0_O_APPEND
+#define O_NONBLOCK  IR0_O_NONBLOCK
+#define O_CREAT     IR0_O_CREAT
+#define O_EXCL      IR0_O_EXCL
+#define O_TRUNC     IR0_O_TRUNC
+#define O_DIRECTORY IR0_O_DIRECTORY
+#define O_CLOEXEC   IR0_O_CLOEXEC
 
 /* fcntl commands (OSDev/Linux) */
 #define F_DUPFD         0   /* Duplicate fd to lowest >= arg */

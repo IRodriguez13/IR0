@@ -92,28 +92,32 @@ int is_user_address(const void *addr, size_t size)
 int copy_to_user(void *dst, const void *src, size_t n)
 {
     process_t *current = process_get_current();
-    
-    /* KERNEL_MODE bypass (dbgshell, embedded init)
-     * No validation needed - we trust kernel code
-     */
+
+    if (n == 0)
+        return 0;
+
+    /* KERNEL_MODE bypass (dbgshell, embedded init) */
     if (current && current->mode == KERNEL_MODE)
     {
         memcpy(dst, src, n);
         return 0;
     }
-    
-    /* USER_MODE validation
-     * Check destination is valid user address
-     */
+
     if (!is_user_address(dst, n))
-    {
-#if DEBUG_SYSCALLS
-        serial_print("[COPY_USER] Invalid destination address\n");
-#endif
         return -EFAULT;
+
+    /*
+     * Walk target process page tables via MM facade — safe under any active
+     * CR3 and fails cleanly on guard/unmapped pages (no kernel #PF panic).
+     */
+    if (current && current->page_directory)
+    {
+        if (copy_to_user_region_in_directory(current->page_directory,
+                                             (uintptr_t)dst, src, n) != 0)
+            return -EFAULT;
+        return 0;
     }
-    
-    /* Safe to copy */
+
     memcpy(dst, src, n);
     return 0;
 }
@@ -126,25 +130,69 @@ int copy_from_user(void *dst, const void *src, size_t n)
 {
     process_t *current = process_get_current();
 
-    /* KERNEL_MODE bypass (dbgshell, embedded init) */
+    if (n == 0)
+        return 0;
+
     if (current && current->mode == KERNEL_MODE)
     {
         memcpy(dst, src, n);
         return 0;
     }
-    
-    /* USER_MODE validation
-     * Check source is valid user address
-     */
+
     if (!is_user_address(src, n))
-    {
-#if DEBUG_SYSCALLS
-        serial_print("[COPY_USER] Invalid source address\n");
-#endif
         return -EFAULT;
+
+    if (current && current->page_directory)
+    {
+        if (copy_from_user_region_in_directory(current->page_directory,
+                                               (uintptr_t)src, dst, n) != 0)
+            return -EFAULT;
+        return 0;
     }
-    
-    /* Safe to copy */
+
     memcpy(dst, src, n);
+    return 0;
+}
+
+int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src)
+{
+    process_t *current = process_get_current();
+    size_t i;
+
+    if (!dst || dst_sz == 0 || !src)
+        return -EFAULT;
+
+    if (current && current->mode == KERNEL_MODE)
+    {
+        size_t n = 0;
+
+        while (n + 1 < dst_sz && ((const char *)src)[n])
+        {
+            dst[n] = ((const char *)src)[n];
+            n++;
+        }
+        dst[n] = '\0';
+        return 0;
+    }
+
+    if (!is_user_address(src, 1))
+        return -EFAULT;
+
+    if (!current || !current->page_directory)
+        return -EFAULT;
+
+    for (i = 0; i + 1 < dst_sz; i++)
+    {
+        char c;
+
+        if (copy_from_user_region_in_directory(current->page_directory,
+                                               (uintptr_t)src + i, &c, 1) != 0)
+            return -EFAULT;
+        dst[i] = c;
+        if (c == '\0')
+            return 0;
+    }
+
+    dst[dst_sz - 1] = '\0';
     return 0;
 }

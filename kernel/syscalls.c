@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -13,6 +13,7 @@
  */
 
 #include "syscalls.h"
+#include "syscalls/fs_syscalls.h"
 #include "process.h"
 #include <ir0/bits/syscall_linux.h>
 #include <ir0/utsname.h>
@@ -29,7 +30,7 @@
 #include <ir0/validation.h>
 #include <ir0/vga.h>
 #include <ir0/stat.h>
-#include <kernel/scheduler_api.h>
+#include <ir0/scheduler_api.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -42,6 +43,10 @@
 #include <ir0/driver.h>
 #include <ir0/errno.h>
 #include <ir0/copy_user.h>
+#include <ir0/path_user.h>
+#include <ir0/uio.h>
+#include <ir0/utimens.h>
+#include <ir0/fase50_debug.h>
 #include <ir0/permissions.h>
 #include <ir0/chmod.h>
 #include <ir0/fcntl.h>
@@ -56,20 +61,18 @@
 #include <ir0/video_backend.h>
 #include <ir0/rtc.h>
 #include <ir0/arch_port.h>
+#include "syscalls/syscalls_glue.h"
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
 
-/* Pseudo file descriptor ranges (/proc, /dev, /sys) */
-#define FD_PROC_BASE  1000
-#define FD_DEV_BASE   2000
-#define FD_SYS_BASE   3000
-#define FD_RANGE_SIZE 1000
-
 /* Forward declarations */
-static fd_entry_t *get_process_fd_table(void);
+fd_entry_t *get_process_fd_table(void);
 int64_t sys_unlink(const char *pathname);
 static void init_syscall_table(void);
+static void fase39_dump_current_vmas(const char *tag);
+static int64_t sys_pipe_install(int pipefd[2], int flags);
+int64_t sys_pipe2(int pipefd[2], int flags);
 
 static int devfs_initialized = 0;
 
@@ -80,7 +83,358 @@ static int devfs_initialized = 0;
 #define MAX_STDIN_WAITERS 8
 static process_t *stdin_waiters[MAX_STDIN_WAITERS];
 
-static void ensure_devfs_init(void)
+#define MAX_PIPE_WAITERS 32
+
+struct pipe_waiter
+{
+	process_t *proc;
+	pipe_t *pipe;
+	int waiting_read;
+};
+
+static struct pipe_waiter pipe_waiters[MAX_PIPE_WAITERS];
+static uint64_t fase48_fd_created;
+static uint64_t fase48_fd_destroyed;
+static uint64_t fase48_blocked_readers;
+static uint64_t fase48_blocked_writers;
+
+static uint64_t fase50_count_open_fds_local(process_t *p)
+{
+#if CONFIG_DEBUG_FASE50
+	uint64_t n = 0;
+	int i;
+
+	if (!p)
+		return 0;
+	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
+	{
+		if (p->fd_table[i].in_use)
+			n++;
+	}
+	return n;
+#else
+	(void)p;
+	return 0;
+#endif
+}
+
+void fase50b_dump_bytes(const char *label, const void *buf, size_t n)
+{
+#if CONFIG_DEBUG_FASE50
+	const uint8_t *b = (const uint8_t *)buf;
+	size_t i;
+
+	serial_print(label ? label : "[FASE50B][BYTES]");
+	serial_print(" n=");
+	serial_print_hex64((uint64_t)n);
+	serial_print(" hex=");
+	for (i = 0; i < n && i < 32; i++)
+	{
+		if (i > 0)
+			serial_print(" ");
+		serial_print_hex64((uint64_t)b[i]);
+	}
+	serial_print(" ascii=");
+	for (i = 0; i < n && i < 32; i++)
+	{
+		char c = (char)b[i];
+
+		if (c >= 32 && c <= 126)
+			serial_putchar(c);
+		else
+			serial_print(".");
+	}
+	serial_print("\n");
+#else
+	(void)label;
+	(void)buf;
+	(void)n;
+#endif
+}
+
+static int fase50b_peek_user(uint64_t *pml4, uintptr_t user_addr,
+			     uint8_t *scratch, size_t n)
+{
+	size_t i;
+
+	if (!pml4 || !scratch || n == 0)
+		return -1;
+
+	for (i = 0; i < n; i++)
+	{
+		uintptr_t page = user_addr & (uintptr_t)PAGE_FRAME_MASK;
+		uint64_t *pte = paging_get_pte(pml4, page);
+		uintptr_t phys;
+		uint8_t byte;
+
+		if (!pte || !(*pte & PAGE_PRESENT))
+			return -1;
+
+		phys = (uintptr_t)(*pte & PAGE_PTE_PFN_MASK);
+		byte = *(const uint8_t *)(phys + (user_addr & 0xFFFU));
+		scratch[i] = byte;
+		user_addr++;
+	}
+	return 0;
+}
+
+static void fase50_trace_syscall_proc(const char *stage, process_t *p)
+{
+#if CONFIG_DEBUG_FASE50
+	serial_print("[FASE50][TRACE] stage=");
+	serial_print(stage ? stage : "(null)");
+	serial_print(" current=");
+	serial_print_hex64((uint64_t)(uintptr_t)current_process);
+	serial_print(" proc=");
+	serial_print_hex64((uint64_t)(uintptr_t)p);
+	serial_print(" pid=");
+	serial_print_hex32(p ? (uint32_t)p->task.pid : 0);
+	serial_print(" state=");
+	serial_print_hex64((uint64_t)(p ? p->state : 0));
+	serial_print(" mm=");
+	serial_print_hex64(p ? (uint64_t)(uintptr_t)p->page_directory : 0);
+	serial_print(" files=");
+	serial_print_hex64(p ? (uint64_t)(uintptr_t)p->fd_table : 0);
+	serial_print(" fds_open=");
+	serial_print_hex64(fase50_count_open_fds_local(p));
+	serial_print(" task_cr3=");
+	serial_print_hex64(p ? p->task.cr3 : 0);
+	serial_print(" active_cr3=");
+	serial_print_hex64(get_current_page_directory());
+	serial_print("\n");
+#else
+	(void)stage;
+	(void)p;
+#endif
+}
+
+void fase48_fd_get_stats(uint64_t *created, uint64_t *destroyed,
+			 uint64_t *blocked_readers, uint64_t *blocked_writers)
+{
+	if (created)
+		*created = fase48_fd_created;
+	if (destroyed)
+		*destroyed = fase48_fd_destroyed;
+	if (blocked_readers)
+		*blocked_readers = fase48_blocked_readers;
+	if (blocked_writers)
+		*blocked_writers = fase48_blocked_writers;
+}
+
+void fase48_note_fd_created(void)
+{
+	fase48_fd_created++;
+}
+
+void fase48_note_fd_destroyed(void)
+{
+	fase48_fd_destroyed++;
+}
+
+int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read)
+{
+	unsigned int i;
+
+	for (i = 0; i < MAX_PIPE_WAITERS; i++)
+	{
+		if (!pipe_waiters[i].proc)
+		{
+			pipe_waiters[i].proc = proc;
+			pipe_waiters[i].pipe = pipe;
+			pipe_waiters[i].waiting_read = waiting_read;
+			if (waiting_read)
+				fase48_blocked_readers++;
+			else
+				fase48_blocked_writers++;
+			if (waiting_read)
+				pipe_fase49_note_read_sleep(pipe);
+			if (proc->mode == USER_MODE)
+			{
+				serial_print("[FASE50B][READ_BLOCK] pid=");
+				serial_print_hex32((uint32_t)proc->task.pid);
+				serial_print(" fd=");
+				serial_print_hex64(proc->syscall_frame.rdi);
+				serial_print(" rsi=");
+				serial_print_hex64(proc->syscall_frame.rsi);
+				serial_print(" rdx=");
+				serial_print_hex64(proc->syscall_frame.rdx);
+				serial_print(" pipe_id=");
+				serial_print_hex64(pipe ? pipe->pipe_id : 0);
+				serial_print("\n");
+				process_arm_blocked_syscall_resume(proc, 0);
+			}
+			proc->state = PROCESS_BLOCKED;
+			sched_schedule_next();
+			if (waiting_read)
+				pipe_fase49_note_read_wake(pipe);
+			pipe_waiters[i].proc = NULL;
+			pipe_waiters[i].pipe = NULL;
+			pipe_waiters[i].waiting_read = 0;
+			return 0;
+		}
+	}
+	return -EAGAIN;
+}
+
+static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
+{
+	char kbuf[PIPE_SIZE];
+	uint8_t user_before[32];
+	uint8_t user_after[32];
+	uintptr_t user_buf;
+	size_t req;
+	int n;
+	int copy_ret;
+	int peek_n;
+
+	if (!proc || !pipe || !proc->irq_frame_saved || pipe->count == 0)
+		return;
+
+	user_buf = (uintptr_t)proc->syscall_frame.rsi;
+	req = proc->syscall_frame.rdx;
+	if (req == 0 || req > sizeof(kbuf))
+		req = sizeof(kbuf);
+
+	serial_print("[FASE50B][PIPE_WAKE] pipe_id=");
+	serial_print_hex64(pipe->pipe_id);
+	serial_print(" target_pid=");
+	serial_print_hex32((uint32_t)proc->task.pid);
+	serial_print(" waiter_pid=");
+	serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
+	serial_print(" saved_fd=");
+	serial_print_hex64(proc->syscall_frame.rdi);
+	serial_print(" saved_rsi=");
+	serial_print_hex64((uint64_t)user_buf);
+	serial_print(" saved_rdx=");
+	serial_print_hex64((uint64_t)req);
+	serial_print(" pipe_bytes=");
+	serial_print_hex64((uint64_t)pipe->count);
+	serial_print(" target_pml4=");
+	serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
+	serial_print(" active_cr3=");
+	serial_print_hex64(get_current_page_directory());
+	serial_print("\n");
+
+	peek_n = (req < (size_t)sizeof(user_before)) ? (int)req : (int)sizeof(user_before);
+	if (fase50b_peek_user(proc->page_directory, user_buf, user_before, (size_t)peek_n) == 0)
+		fase50b_dump_bytes("[FASE50B][PIPE_WAKE] user_before", user_before, (size_t)peek_n);
+
+	n = pipe_read(pipe, kbuf, req);
+	if (n <= 0)
+	{
+		serial_print("[FASE50B][PIPE_WAKE] pipe_read_ret=");
+		serial_print_hex64((uint64_t)(int64_t)n);
+		serial_print("\n");
+		return;
+	}
+
+	fase50b_dump_bytes("[FASE50B][PIPE_WAKE] kbuf", kbuf, (size_t)n);
+
+	if (!proc->page_directory)
+	{
+		serial_print("[FASE50B][CLASSIFY] PIPE_WAKE_COPY_BAD_USERBUF\n");
+		return;
+	}
+
+	copy_ret = copy_to_user_region_in_directory(proc->page_directory, user_buf,
+						      kbuf, (size_t)n);
+	serial_print("[FASE50B][PIPE_WAKE] copy_ret=");
+	serial_print_hex64((uint64_t)(int64_t)copy_ret);
+	serial_print(" copied=");
+	serial_print_hex64((uint64_t)(int64_t)n);
+	serial_print(" resume_rax=");
+	serial_print_hex64((uint64_t)(int64_t)n);
+	serial_print("\n");
+
+	if (copy_ret != 0)
+	{
+		serial_print("[FASE50B][CLASSIFY] PIPE_WAKE_COPY_BAD_USERBUF\n");
+		return;
+	}
+
+	if (fase50b_peek_user(proc->page_directory, user_buf, user_after, (size_t)peek_n) == 0)
+		fase50b_dump_bytes("[FASE50B][PIPE_WAKE] user_after", user_after, (size_t)peek_n);
+
+	proc->syscall_resume_rax = (uint64_t)n;
+	serial_print("[FASE50B][CLASSIFY] PIPE_WAKE_COPY_OK\n");
+}
+
+void pipe_wake_all(pipe_t *pipe)
+{
+	unsigned int i;
+
+	if (!pipe)
+		return;
+
+	for (i = 0; i < MAX_PIPE_WAITERS; i++)
+	{
+		struct pipe_waiter *w = &pipe_waiters[i];
+
+		if (!w->proc || w->pipe != pipe)
+			continue;
+
+		if (w->waiting_read)
+		{
+			if (pipe->count > 0 || pipe->writers <= 0)
+			{
+				pipe_fase49_note_read_wake(pipe);
+				if (w->proc && w->proc->mode == USER_MODE && w->proc->irq_frame_saved)
+					pipe_wake_stage_user_read(w->proc, pipe);
+				w->proc->state = PROCESS_READY;
+				w->proc = NULL;
+				w->pipe = NULL;
+				w->waiting_read = 0;
+			}
+		}
+		else
+		{
+			if (pipe->readers <= 0 || pipe->count < PIPE_SIZE)
+			{
+				pipe_fase49_note_write_wake(pipe);
+				w->proc->state = PROCESS_READY;
+				w->proc = NULL;
+				w->pipe = NULL;
+				w->waiting_read = 0;
+			}
+		}
+	}
+}
+
+void pipe_wake_check(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < MAX_PIPE_WAITERS; i++)
+	{
+		struct pipe_waiter *w = &pipe_waiters[i];
+		pipe_t *pipe;
+
+		if (!w->proc || !w->pipe)
+			continue;
+
+		pipe = w->pipe;
+		if (w->waiting_read)
+		{
+			if (pipe->count > 0 || pipe->writers <= 0)
+			{
+				pipe_fase49_note_read_wake(pipe);
+				if (w->proc && w->proc->mode == USER_MODE && w->proc->irq_frame_saved)
+					pipe_wake_stage_user_read(w->proc, pipe);
+				w->proc->state = PROCESS_READY;
+			}
+		}
+		else
+		{
+			if (pipe->readers <= 0 || pipe->count < PIPE_SIZE)
+			{
+				pipe_fase49_note_write_wake(pipe);
+				w->proc->state = PROCESS_READY;
+			}
+		}
+	}
+}
+
+void ensure_devfs_init(void)
 {
   if (!devfs_initialized)
   {
@@ -100,7 +454,7 @@ static int is_dev_path(const char *path)
  * @max_len: Maximum expected string length
  * Returns: 0 if valid, -EFAULT if invalid
  */
-static int validate_userspace_string(const char *str, size_t max_len)
+int validate_userspace_string(const char *str, size_t max_len)
 {
   if (!current_process)
     return -ESRCH;
@@ -139,7 +493,7 @@ static int validate_userspace_string(const char *str, size_t max_len)
  * @size: Size of buffer
  * Returns: 0 if valid, -EFAULT if invalid
  */
-static int validate_userspace_buffer(const void *buf, size_t size)
+int validate_userspace_buffer(const void *buf, size_t size)
 {
   if (!current_process)
     return -ESRCH;
@@ -172,7 +526,7 @@ static int validate_userspace_buffer(const void *buf, size_t size)
   return 0;
 }
 
-static int stdio_is_redirected(fd_entry_t *fd_table, int fd)
+int stdio_is_redirected(fd_entry_t *fd_table, int fd)
 {
   if (!fd_table || fd < STDIN_FILENO || fd > STDERR_FILENO)
     return 0;
@@ -185,6 +539,56 @@ static int stdio_is_redirected(fd_entry_t *fd_table, int fd)
   return 0;
 }
 
+
+
+int64_t syscalls_read_stdio_stdin(void *buf, size_t count)
+{
+  char kernel_read_buf[256];
+  size_t bytes_read = 0;
+  size_t max_read = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
+
+  if (!current_process || !buf)
+    return -EFAULT;
+
+  if (!keyboard_buffer_has_data())
+  {
+    int slot = -1;
+    int i;
+
+    for (i = 0; i < MAX_STDIN_WAITERS; i++)
+    {
+      if (stdin_waiters[i] == NULL)
+      {
+        slot = i;
+        break;
+      }
+    }
+    if (slot >= 0)
+    {
+      stdin_waiters[slot] = current_process;
+      current_process->state = PROCESS_BLOCKED;
+      sched_schedule_next();
+    }
+    if (!keyboard_buffer_has_data())
+      return 0;
+  }
+
+  while (bytes_read < max_read && keyboard_buffer_has_data())
+  {
+    char c = keyboard_buffer_get();
+
+    if (c != 0)
+      kernel_read_buf[bytes_read++] = c;
+  }
+
+  if (bytes_read > 0)
+  {
+    if (copy_to_user(buf, kernel_read_buf, bytes_read) != 0)
+      return -EFAULT;
+    return (int64_t)bytes_read;
+  }
+  return 0;
+}
 
 int64_t sys_exit(int exit_code)
 {
@@ -205,277 +609,6 @@ int64_t sys_exit(int exit_code)
   return 0;
 }
 
-int64_t sys_write(int fd, const void *buf, size_t count)
-{
-  if (!current_process)
-    return -ESRCH;
-  if (count == 0)
-    return 0;  /* POSIX: write with count 0 returns 0 */
-  if (!buf)
-    return -EFAULT;
-
-  /* Validate user buffer for regular files */
-  char kernel_buf[PAGE_SIZE_4KB];
-  const char *str = NULL;
-  size_t copy_size = (count < sizeof(kernel_buf)) ? count : sizeof(kernel_buf);
-  
-  /* Handle /proc file descriptors (FD_PROC_BASE .. FD_DEV_BASE) */
-  if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
-  {
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    return proc_write(fd, kernel_buf, copy_size);
-  }
-
-  /* Handle /dev file descriptors (FD_DEV_BASE .. FD_SYS_BASE) */
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-  {
-    ensure_devfs_init();
-    uint32_t device_id = (uint32_t)(fd - FD_DEV_BASE);
-    devfs_node_t *node = devfs_find_node_by_id(device_id);
-    if (!node || !node->ops || !node->ops->write)
-      return -EBADF;
-    
-    /* Copy from user space for device writes */
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
-  }
-
-  /* Handle /sys file descriptors (FD_SYS_BASE .. FD_SYS_BASE + FD_RANGE_SIZE) */
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-  {
-    /* Copy from user space for sysfs writes */
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    
-    return sysfs_write(fd, kernel_buf, copy_size);
-  }
-
-  /* Handle regular file descriptors */
-  fd_entry_t *fd_table = get_process_fd_table();
-  if (fd >= STDIN_FILENO && fd <= STDERR_FILENO && !stdio_is_redirected(fd_table, fd))
-  {
-    if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
-    {
-      /* Unredirected stdio still goes to console backend. */
-      if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-        return -EFAULT;
-      str = kernel_buf;
-      uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
-      console_backend_write(str, copy_size, color);
-      return (int64_t)copy_size;
-    }
-    return -EBADF;
-  }
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
-    return -EBADF;
-
-  /* Check if this is a pipe */
-  if (fd_table[fd].is_pipe)
-  {
-    /* Write to pipe */
-    pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
-    if (!pipe)
-      return -EBADF;
-
-    /* Validate it's the write end */
-    if (fd_table[fd].pipe_end != 1)
-      return -EBADF; /* Can't write to read end */
-
-    /* Copy from user space */
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-
-    /* Write to pipe */
-    int ret = pipe_write(pipe, kernel_buf, copy_size);
-    return ret;
-  }
-
-  /* Check write permissions */
-  if (!check_file_access(fd_table[fd].path, ACCESS_WRITE, current_process))
-    return -EACCES;
-
-  /* Copy from user space for regular file writes */
-  if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-    return -EFAULT;
-
-  /* Use VFS file handle if available */
-  if (fd_table[fd].vfs_file)
-  {
-    struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-    int ret = vfs_write(vfs_file, kernel_buf, copy_size);
-    if (ret >= 0)
-    {
-      fd_table[fd].offset = vfs_file->pos;
-      return ret;
-    }
-    return ret;
-  }
-
-  return -EBADF;
-}
-
-int64_t sys_read(int fd, void *buf, size_t count)
-{
-  if (!current_process)
-    return -ESRCH;
-  if (count == 0)
-    return 0;  /* POSIX: read with count 0 returns 0 */
-  if (!buf)
-    return -EFAULT;
-
-  /* Handle /proc file descriptors (FD_PROC_BASE .. FD_DEV_BASE) */
-  if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE) {
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    off_t offset = proc_get_offset(fd);
-    int ret = proc_read(fd, kernel_read_buf, read_size, offset);
-    if (ret > 0) {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-      proc_set_offset(fd, offset + ret);
-    }
-    return ret;
-  }
-
-  /* Handle /sys file descriptors (FD_SYS_BASE .. FD_SYS_BASE + FD_RANGE_SIZE) */
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE) {
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    off_t offset = proc_get_offset(fd);  /* Reuse proc offset tracking */
-    int ret = sysfs_read(fd, kernel_read_buf, read_size, offset);
-    if (ret > 0) {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-      proc_set_offset(fd, offset + ret);  /* Reuse proc offset tracking */
-    }
-    return ret;
-  }
-
-  /* Handle /dev file descriptors (FD_DEV_BASE .. FD_SYS_BASE) */
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-  {
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    ensure_devfs_init();
-    uint32_t device_id = (uint32_t)(fd - FD_DEV_BASE);
-    devfs_node_t *node = devfs_find_node_by_id(device_id);
-    if (!node || !node->ops || !node->ops->read)
-      return -EBADF;
-    int ret = node->ops->read(&node->entry, kernel_read_buf, read_size, 0);
-    if (ret > 0) {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-    }
-    return ret;
-  }
-
-  /* Handle regular file descriptors */
-  fd_entry_t *fd_table = get_process_fd_table();
-  if (fd >= STDIN_FILENO && fd <= STDERR_FILENO && !stdio_is_redirected(fd_table, fd))
-  {
-    if (fd != STDIN_FILENO)
-      return -EBADF;
-
-    /* Unredirected stdin reads from keyboard buffer (non-blocking). */
-    char kernel_read_buf[256];
-    size_t bytes_read = 0;
-    size_t max_read = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-
-    if (!keyboard_buffer_has_data())
-    {
-      int slot = -1;
-      for (int i = 0; i < MAX_STDIN_WAITERS; i++)
-      {
-        if (stdin_waiters[i] == NULL)
-        {
-          slot = i;
-          break;
-        }
-      }
-      if (slot >= 0)
-      {
-        stdin_waiters[slot] = current_process;
-        current_process->state = PROCESS_BLOCKED;
-        sched_schedule_next();
-      }
-      if (!keyboard_buffer_has_data())
-        return 0;
-    }
-
-    while (bytes_read < max_read && keyboard_buffer_has_data())
-    {
-      char c = keyboard_buffer_get();
-      if (c != 0)
-        kernel_read_buf[bytes_read++] = c;
-    }
-
-    if (bytes_read > 0)
-    {
-      if (copy_to_user(buf, kernel_read_buf, bytes_read) != 0)
-        return -EFAULT;
-      return (int64_t)bytes_read;
-    }
-    return 0;
-  }
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
-    return -EBADF;
-
-  /* Check if this is a pipe */
-  if (fd_table[fd].is_pipe)
-  {
-    /* Read from pipe */
-    pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
-    if (!pipe)
-      return -EBADF;
-
-    /* Validate it's the read end */
-    if (fd_table[fd].pipe_end != 0)
-      return -EBADF; /* Can't read from write end */
-
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    
-    /* Read from pipe */
-    int ret = pipe_read(pipe, kernel_read_buf, read_size);
-    if (ret >= 0)
-    {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-      return ret;
-    }
-    return ret;
-  }
-
-  /* Check read permissions */
-  if (!check_file_access(fd_table[fd].path, ACCESS_READ, current_process))
-    return -EACCES;
-
-  /* Use VFS file handle if available */
-  if (fd_table[fd].vfs_file)
-  {
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-    int ret = vfs_read(vfs_file, kernel_read_buf, read_size);
-    if (ret >= 0)
-    {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-      fd_table[fd].offset = vfs_file->pos;
-      return ret;
-    }
-    return ret;
-  }
-
-  return -EBADF;
-}
 
 int64_t sys_getpid(void)
 {
@@ -610,32 +743,23 @@ int64_t sys_sudo_auth(const char *password)
 
 int64_t sys_mkdir(const char *pathname, mode_t mode)
 {
+  char resolved[256];
+  int rc;
+
   if (!current_process)
     return -ESRCH;
   if (!pathname)
     return -EFAULT;
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  /* Resolve relative paths against cwd (same as open/stat) */
-  char resolved[256];
-  const char *path_to_use = pathname;
-  if (!is_absolute_path(pathname))
-  {
-    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else
-  {
-    if (normalize_path(pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                            current_process->cwd);
+  if (rc != 0)
+    return rc;
 
-  return vfs_mkdir(path_to_use, (int)mode);
+  return vfs_mkdir(resolved, (int)mode);
 }
 
 /*
@@ -656,7 +780,9 @@ int64_t sys_exec(const char *pathname,
                  char *const argv[],
                  char *const envp[])
 {
+  int exec_argv_slots_seen = 0;
   serial_print("SERIAL: sys_exec called\n");
+  fase50_trace_syscall_proc("sys_exec-entry", current_process);
 
   if (!current_process || !pathname)
   {
@@ -718,6 +844,7 @@ int64_t sys_exec(const char *pathname,
       }
       if (user_ptr == NULL)
         break;  /* end of vector */
+      exec_argv_slots_seen = i + 1;
 
       /* Validate string start is mapped (first byte covers its starting page). */
       if (!is_user_address_checked(user_ptr, 1, 1))
@@ -754,6 +881,24 @@ int64_t sys_exec(const char *pathname,
         kfree(kernel_argv[j]);
       return -E2BIG;
     }
+  }
+
+  serial_print("[FASE50][EXEC_ARGV] stage=sys_exec-captured pid=");
+  serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
+  serial_print(" path=");
+  serial_print(path_to_use ? path_to_use : "(null)");
+  serial_print(" argc=");
+  serial_print_hex64((uint64_t)argc_kept);
+  serial_print(" argv_slots_seen=");
+  serial_print_hex64((uint64_t)exec_argv_slots_seen);
+  serial_print("\n");
+  for (int i = 0; i < argc_kept && i < 8; i++)
+  {
+    serial_print("[FASE50][EXEC_ARGV] stage=sys_exec-argv idx=");
+    serial_print_hex32((uint32_t)i);
+    serial_print(" str=");
+    serial_print(kernel_argv[i] ? kernel_argv[i] : "(null)");
+    serial_print("\n");
   }
 
   if (envp)
@@ -819,8 +964,35 @@ int64_t sys_exec(const char *pathname,
 
   int64_t result;
 
+  {
+    char user_path_copy[256];
+
+    user_path_copy[0] = '\0';
+    if (copy_from_user(user_path_copy, pathname, sizeof(user_path_copy) - 1) == 0)
+      user_path_copy[sizeof(user_path_copy) - 1] = '\0';
+
+    serial_print("[EXEC_AUDIT][SYSCALL] pid=");
+    serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
+    serial_print(" user_path=");
+    serial_print(user_path_copy[0] ? user_path_copy : "(copy_fail)");
+    serial_print(" resolved_path=");
+    serial_print(path_to_use ? path_to_use : "(null)");
+    serial_print(" argv=");
+    for (int ai = 0; ai < 4; ai++)
+    {
+      if (ai > 0)
+        serial_print(",");
+      if (ai < argc_kept && kernel_argv[ai])
+        serial_print(kernel_argv[ai]);
+      else
+        serial_print("-");
+    }
+    serial_print("\n");
+  }
+
   if (current_process->mode == USER_MODE)
   {
+    fase50_trace_syscall_proc("sys_exec-before-exec_replace_current", current_process);
     result = exec_replace_current(path_to_use,
                                   argv ? (char *const *)kernel_argv : NULL,
                                   envp ? (char *const *)kernel_envp : NULL);
@@ -838,6 +1010,7 @@ int64_t sys_exec(const char *pathname,
   for (int i = 0; i < 256 && kernel_envp[i]; i++)
     kfree(kernel_envp[i]);
 
+  fase50_trace_syscall_proc("sys_exec-return", current_process);
   return result;
 }
 
@@ -1000,17 +1173,29 @@ int64_t sys_chown(const char *path, uid_t owner, gid_t group)
 
 int64_t sys_link(const char *oldpath, const char *newpath)
 {
+  char old_resolved[256];
+  char new_resolved[256];
+  int rc;
+
   if (!current_process || !oldpath || !newpath)
     return -EFAULT;
 
-  /* Validate arguments are in userspace (for USER_MODE processes) */
   if (validate_userspace_string(oldpath, 256) != 0)
     return -EFAULT;
   if (validate_userspace_string(newpath, 256) != 0)
     return -EFAULT;
 
-  /* Call link through VFS layer */
-  return vfs_link(oldpath, newpath);
+  rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
+                             current_process->cwd);
+  if (rc != 0)
+    return rc;
+
+  rc = ir0_resolve_user_path(newpath, new_resolved, sizeof(new_resolved),
+                             current_process->cwd);
+  if (rc != 0)
+    return rc;
+
+  return vfs_link(old_resolved, new_resolved);
 }
 
 /**
@@ -1022,6 +1207,10 @@ int64_t sys_link(const char *oldpath, const char *newpath)
  */
 int64_t sys_rename(const char *oldpath, const char *newpath)
 {
+  char old_resolved[256];
+  char new_resolved[256];
+  int rc;
+
   if (!current_process || !oldpath || !newpath)
     return -EFAULT;
 
@@ -1030,37 +1219,17 @@ int64_t sys_rename(const char *oldpath, const char *newpath)
   if (validate_userspace_string(newpath, 256) != 0)
     return -EFAULT;
 
-  char old_resolved[256], new_resolved[256];
-  const char *old_use = oldpath;
-  const char *new_use = newpath;
+  rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
+                             current_process->cwd);
+  if (rc != 0)
+    return rc;
 
-  if (!is_absolute_path(oldpath))
-  {
-    if (join_paths(current_process->cwd, oldpath, old_resolved, sizeof(old_resolved)) != 0)
-      return -ENAMETOOLONG;
-    old_use = old_resolved;
-  }
-  else
-  {
-    if (normalize_path(oldpath, old_resolved, sizeof(old_resolved)) != 0)
-      return -ENAMETOOLONG;
-    old_use = old_resolved;
-  }
+  rc = ir0_resolve_user_path(newpath, new_resolved, sizeof(new_resolved),
+                             current_process->cwd);
+  if (rc != 0)
+    return rc;
 
-  if (!is_absolute_path(newpath))
-  {
-    if (join_paths(current_process->cwd, newpath, new_resolved, sizeof(new_resolved)) != 0)
-      return -ENAMETOOLONG;
-    new_use = new_resolved;
-  }
-  else
-  {
-    if (normalize_path(newpath, new_resolved, sizeof(new_resolved)) != 0)
-      return -ENAMETOOLONG;
-    new_use = new_resolved;
-  }
-
-  return vfs_rename(old_use, new_use);
+  return vfs_rename(old_resolved, new_resolved);
 }
 
 /**
@@ -1180,34 +1349,24 @@ int64_t sys_dup(int oldfd)
  */
 int64_t sys_rmdir(const char *pathname)
 {
+  char resolved[256];
+  int rc;
+
   if (!current_process || !pathname)
     return -EFAULT;
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  /* Resolve relative paths against cwd */
-  char resolved[256];
-  const char *path_to_use = pathname;
-  if (!is_absolute_path(pathname))
-  {
-    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else
-  {
-    if (normalize_path(pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                            current_process->cwd);
+  if (rc != 0)
+    return rc;
 
-  /* POSIX rmdir: only empty dirs. Recursive delete done in userspace (rm -d). */
-  return vfs_rmdir(path_to_use);
+  return vfs_rmdir(resolved);
 }
 
-static fd_entry_t *get_process_fd_table(void)
+fd_entry_t *get_process_fd_table(void)
 {
   if (!current_process)
     return NULL;
@@ -1588,198 +1747,6 @@ int64_t sys_gettimeofday(struct timeval *tv, void *tz)
   return 0;
 }
 
-int64_t sys_fstat(int fd, stat_t *buf)
-{
-  if (!current_process || !buf)
-    return -EFAULT;
-
-  /* Validate buffer is in userspace (for USER_MODE processes) */
-  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
-    return -EFAULT;
-
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
-    return -EBADF;
-
-  fd_entry_t *fd_table = get_process_fd_table();
-  if (!fd_table[fd].in_use)
-    return -EBADF;
-
-  /* Handle standard file descriptors */
-  if (fd <= 2)
-  {
-    /* Standard streams - fill with basic info */
-    buf->st_dev = 0;
-    buf->st_ino = fd;
-    buf->st_mode = S_IFCHR | S_IRUSR | S_IWUSR;
-    buf->st_nlink = 1;
-    buf->st_uid = 0;
-    buf->st_gid = 0;
-    buf->st_size = 0;
-    buf->st_atime = 0;
-    buf->st_mtime = 0;
-    buf->st_ctime = 0;
-    return 0;
-  }
-
-  /* For regular files, get info from filesystem via VFS */
-  return vfs_stat(fd_table[fd].path, buf);
-}
-
-/* Open file and return file descriptor */
-int64_t sys_open(const char *pathname, int flags, mode_t mode)
-{
-  if (!current_process)
-    return -ESRCH;
-  if (!pathname)
-    return -EFAULT;
-
-  /* Validate pathname is in userspace (for USER_MODE processes) */
-  if (validate_userspace_string(pathname, 256) != 0)
-    return -EFAULT;
-
-  /* Handle /proc filesystem on-demand */
-  if (is_proc_path(pathname)) {
-    return proc_open(pathname, flags);
-  }
-
-  /* Handle /sys filesystem on-demand */
-  if (is_sys_path(pathname)) {
-    return sysfs_open(pathname, flags);
-  }
-
-  /* Handle /dev filesystem on-demand */
-  if (is_dev_path(pathname))
-  {
-    int64_t drc;
-
-    ensure_devfs_init();
-    devfs_node_t *node = devfs_find_node(pathname);
-    if (!node)
-      return -ENOENT;
-    drc = devfs_open_node(node, flags);
-    if (drc < 0)
-      return drc;
-    return FD_DEV_BASE + (int64_t)node->entry.device_id;
-  }
-
-  /* Linux-style: resolve relative paths against cwd before VFS */
-  char resolved_path[256];
-  const char *path_to_use = pathname;
-  if (!is_absolute_path(pathname))
-  {
-    if (join_paths(current_process->cwd, pathname, resolved_path, sizeof(resolved_path)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved_path;
-  }
-  else
-  {
-    if (normalize_path(pathname, resolved_path, sizeof(resolved_path)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved_path;
-  }
-
-  /* Check access permissions based on flags */
-  if (flags & O_DIRECTORY)
-  {
-    if (!check_file_access(path_to_use, ACCESS_EXEC, current_process))
-      return -EACCES;
-  }
-  else if (flags & O_CREAT)
-  {
-    stat_t st;
-
-    /*
-     * Non-existent target: check parent directory (search + write).
-     * Existing target: same access rules as a normal open.
-     */
-    if (vfs_stat(path_to_use, &st) != 0)
-    {
-      char parent[256];
-
-      if (get_parent_path(path_to_use, parent, sizeof(parent)) != 0)
-        return -ENAMETOOLONG;
-      if (!check_file_access(parent, ACCESS_EXEC | ACCESS_WRITE, current_process))
-        return -EACCES;
-    }
-    else
-    {
-      int access_mode = 0;
-      int accmode = flags & O_ACCMODE;
-
-      if (accmode == O_RDONLY || accmode == O_RDWR)
-        access_mode |= ACCESS_READ;
-      if (accmode == O_WRONLY || accmode == O_RDWR)
-        access_mode |= ACCESS_WRITE;
-      if (access_mode &&
-          !check_file_access(path_to_use, access_mode, current_process))
-        return -EACCES;
-    }
-  }
-  else
-  {
-    int access_mode = 0;
-    int accmode = flags & O_ACCMODE;
-    if (accmode == O_RDONLY || accmode == O_RDWR)
-      access_mode |= ACCESS_READ;
-    if (accmode == O_WRONLY || accmode == O_RDWR)
-      access_mode |= ACCESS_WRITE;
-    if (access_mode && !check_file_access(path_to_use, access_mode, current_process))
-      return -EACCES;
-  }
-
-  fd_entry_t *fd_table = get_process_fd_table();
-
-  int fd = -1;
-  for (int i = 3; i < MAX_FDS_PER_PROCESS; i++)
-  {
-    if (!fd_table[i].in_use)
-    {
-      fd = i;
-      break;
-    }
-  }
-
-  if (fd == -1)
-    return -EMFILE;
-
-  struct vfs_file *vfs_file = NULL;
-  int ret = vfs_open(path_to_use, flags, mode, &vfs_file);
-  if (ret != 0)
-  {
-    return ret;  /* Return actual error, not just -ENOENT */
-  }
-
-  if (flags & O_DIRECTORY)
-  {
-    stat_t st;
-    if (sys_stat(path_to_use, &st) < 0)
-    {
-      if (vfs_file)
-      {
-        vfs_close(vfs_file);
-      }
-      return -ENOTDIR;
-    }
-    if (!S_ISDIR(st.st_mode))
-    {
-      if (vfs_file)
-      {
-        vfs_close(vfs_file);
-      }
-      return -ENOTDIR;
-    }
-  }
-
-  /* Set up file descriptor with real VFS file handle */
-  fd_table[fd].in_use = true;
-  strncpy(fd_table[fd].path, path_to_use, sizeof(fd_table[fd].path) - 1);
-  fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
-  fd_table[fd].flags = flags;
-  fd_table[fd].vfs_file = vfs_file;
-  fd_table[fd].offset = vfs_file ? vfs_file->pos : 0;
-
-  return fd;
-}
 
 /**
  * sys_ioctl - Device I/O control (POSIX ioctl)
@@ -1826,8 +1793,6 @@ int64_t sys_close(int fd)
 {
   if (!current_process)
     return -ESRCH;
-
-  /* Handle special fd ranges before fd_table bounds check */
   if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
   {
     ensure_devfs_init();
@@ -1852,21 +1817,24 @@ int64_t sys_close(int fd)
   if (!fd_table[fd].in_use)
     return -EBADF;
 
-  if (fd <= 2)
+  if (fd <= 2 && !fd_table[fd].is_pipe)
     return -EBADF;
 
   /* Check if this is a pipe */
   if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
   {
-    /* Close pipe end - this decrements ref_count */
     pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
+
+    pipe_fase49_fd_trace((uint32_t)current_process->task.pid, fd, pipe,
+			 fd_table[fd].pipe_end, pipe->fd_refs, "CLOSE");
     pipe_close_end(pipe, fd_table[fd].pipe_end);
+    pipe_wake_all(pipe);
     fd_table[fd].vfs_file = NULL;
   }
   else if (fd_table[fd].vfs_file)
   {
-    /* Close VFS file if it exists */
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
+
     vfs_close(vfs_file);
     fd_table[fd].vfs_file = NULL;
   }
@@ -1876,9 +1844,25 @@ int64_t sys_close(int fd)
   fd_table[fd].pipe_end = -1;
   fd_table[fd].path[0] = '\0';
   fd_table[fd].flags = 0;
+  fd_table[fd].fd_flags = 0;
   fd_table[fd].offset = 0;
+  fase48_note_fd_destroyed();
 
   return 0;
+}
+
+int64_t process_close_fd(process_t *proc, int fd)
+{
+  process_t *saved = current_process;
+  int64_t ret;
+
+  if (!proc)
+    return -ESRCH;
+
+  current_process = proc;
+  ret = sys_close(fd);
+  current_process = saved;
+  return ret;
 }
 
 int64_t sys_lseek(int fd, off_t offset, int whence)
@@ -1966,6 +1950,7 @@ int64_t sys_dup2(int oldfd, int newfd)
       pipe_t *p = (pipe_t *)fd_table[newfd].vfs_file;
 
       pipe_close_end(p, fd_table[newfd].pipe_end);
+      pipe_wake_all(p);
       fd_table[newfd].vfs_file = NULL;
     }
     else if (fd_table[newfd].vfs_file)
@@ -1980,6 +1965,7 @@ int64_t sys_dup2(int oldfd, int newfd)
     fd_table[newfd].offset = 0;
     fd_table[newfd].is_pipe = false;
     fd_table[newfd].pipe_end = -1;
+    fase48_note_fd_destroyed();
   }
 
   fd_table[newfd].in_use = true;
@@ -2013,67 +1999,19 @@ int64_t sys_dup2(int oldfd, int newfd)
     fd_table[newfd].vfs_file = NULL;
   }
 
+  if (fd_table[newfd].is_pipe && fd_table[newfd].vfs_file)
+  {
+    pipe_t *pip = (pipe_t *)fd_table[newfd].vfs_file;
+
+    pipe_fase49_fd_trace((uint32_t)current_process->task.pid, newfd, pip,
+			 fd_table[newfd].pipe_end, pip->fd_refs, "DUP2");
+  }
+
+  fase48_note_fd_created();
   return newfd;
 }
 
 /* Helper function to get file stats by path (for ls improvement) */
-int64_t sys_stat(const char *pathname, stat_t *buf)
-{
-  if (!current_process || !pathname || !buf)
-    return -EFAULT;
-
-  /* Validate arguments are in userspace (for USER_MODE processes) */
-  if (validate_userspace_string(pathname, 256) != 0)
-    return -EFAULT;
-  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
-    return -EFAULT;
-
-  /* Handle /proc filesystem */
-  if (is_proc_path(pathname)) {
-    return proc_stat(pathname, buf);
-  }
-
-  /* Handle /sys filesystem */
-  if (is_sys_path(pathname)) {
-    return sysfs_stat(pathname, buf);
-  }
-
-  /* Handle /dev filesystem */
-  if (is_dev_path(pathname)) {
-    ensure_devfs_init();
-    devfs_node_t *node = devfs_find_node(pathname);
-    if (!node)
-      return -ENOENT;
-
-    memset(buf, 0, sizeof(stat_t));
-    buf->st_mode = S_IFCHR | (node->entry.mode & 0777);
-    buf->st_rdev = node->entry.device_id;
-    buf->st_nlink = 1;
-    buf->st_uid = 0;
-    buf->st_gid = 0;
-    buf->st_size = 0;
-    buf->st_blksize = 512;
-    buf->st_blocks = 0;
-    return 0;
-  }
-
-  /* Linux-style: resolve relative paths against cwd for VFS */
-  char resolved[256];
-  const char *path_to_use = pathname;
-  if (!is_absolute_path(pathname))
-  {
-    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else
-  {
-    if (normalize_path(pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  return vfs_stat(path_to_use, buf);
-}
 
 /*
  * sys_fork — Linux __NR_fork; duplicates address space via fork() in process.c.
@@ -2118,7 +2056,29 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
   if (!current_process)
     return -ESRCH;
 
-  return process_wait(pid, status, options);
+  serial_print("[WAIT_EXIT_AUDIT][sys_wait4] entry parent_pid=");
+  serial_print_hex32((uint32_t)current_process->task.pid);
+  serial_print(" wait_pid=");
+  serial_print_hex32((uint32_t)pid);
+  serial_print(" status_ptr=");
+  serial_print_hex64((uint64_t)(uintptr_t)status);
+  serial_print(" options=");
+  serial_print_hex64((uint64_t)(unsigned int)options);
+  serial_print("\n");
+
+  fase50_trace_syscall_proc("sys_wait4-entry", current_process);
+  process_fase46_note_wait(current_process);
+  {
+    int64_t ret = process_wait(pid, status, options);
+
+    serial_print("[WAIT_EXIT_AUDIT][sys_wait4] return parent_pid=");
+    serial_print_hex32((uint32_t)current_process->task.pid);
+    serial_print(" ret=");
+    serial_print_hex64((uint64_t)ret);
+    serial_print("\n");
+    fase50_trace_syscall_proc("sys_wait4-return", current_process);
+    return ret;
+  }
 }
 
 int64_t sys_waitpid(pid_t pid, int *status, int options)
@@ -2336,7 +2296,6 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
   }
 }
 
-#define AT_FDCWD (-100)
 
 #define FUTEX_WAIT 0
 #define FUTEX_WAKE 1
@@ -2348,70 +2307,6 @@ struct robust_list_head
   void *list_op_next;
 };
 
-static int openat_resolve_path(int dirfd, const char *pathname, char *out, size_t out_sz)
-{
-  if (!pathname || !out || out_sz == 0)
-    return -EINVAL;
-
-  if (pathname[0] == '/')
-    return normalize_path(pathname, out, out_sz);
-
-  if (dirfd == AT_FDCWD)
-  {
-    if (!current_process)
-      return -ESRCH;
-    return join_paths(current_process->cwd, pathname, out, out_sz);
-  }
-
-  return -EBADF;
-}
-
-/*
- * sys_openat - Linux openat(2) subset (AT_FDCWD only).
- */
-int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode)
-{
-  char resolved[256];
-  const char *path_to_use;
-
-  if (!current_process)
-    return -ESRCH;
-
-  if (validate_userspace_string(pathname, sizeof(resolved)) != 0)
-    return -EFAULT;
-
-  if (openat_resolve_path(dirfd, pathname, resolved, sizeof(resolved)) != 0)
-    return -EINVAL;
-
-  path_to_use = resolved;
-  return sys_open(path_to_use, flags, mode);
-}
-
-/*
- * sys_newfstatat - Linux newfstatat(2) subset.
- */
-int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
-{
-  char resolved[256];
-  const char *path_to_use;
-
-  (void)flags;
-
-  if (!current_process || !buf)
-    return -EFAULT;
-
-  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
-    return -EFAULT;
-
-  if (validate_userspace_string(pathname, sizeof(resolved)) != 0)
-    return -EFAULT;
-
-  if (openat_resolve_path(dirfd, pathname, resolved, sizeof(resolved)) != 0)
-    return -EINVAL;
-
-  path_to_use = resolved;
-  return sys_stat(path_to_use, buf);
-}
 
 /*
  * sys_clock_gettime - POSIX clock_gettime(2) subset.
@@ -2620,25 +2515,47 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
  */
 int64_t sys_pipe(int pipefd[2])
 {
+  return sys_pipe2(pipefd, 0);
+}
+
+static int64_t sys_pipe_install(int pipefd[2], int flags)
+{
+  pipe_t *pipe;
+  fd_entry_t *fd_table;
+  int read_fd = -1;
+  int write_fd = -1;
+  uint8_t cloexec = 0;
+  int read_fl = O_RDONLY;
+  int write_fl = O_WRONLY;
+
   if (!current_process)
     return -ESRCH;
 
   if (!pipefd)
     return -EFAULT;
 
-  /* Validate pipefd is in userspace (for USER_MODE processes) */
   if (validate_userspace_buffer(pipefd, sizeof(int) * 2) != 0)
     return -EFAULT;
 
-  /* Create pipe using existing pipe implementation */
-  pipe_t *pipe = pipe_create();
+  if (flags & ~(O_NONBLOCK | O_CLOEXEC))
+    return -EINVAL;
+
+  if (flags & O_NONBLOCK)
+  {
+    read_fl |= O_NONBLOCK;
+    write_fl |= O_NONBLOCK;
+  }
+  if (flags & O_CLOEXEC)
+    cloexec = FD_CLOEXEC;
+
+  if (current_process->task.pid == 1)
+    process_fase48_capture_fd_baseline(current_process);
+
+  pipe = pipe_create();
   if (!pipe)
-    return -ENOMEM; /* Out of memory */
+    return -ENOMEM;
 
-  /* Find two free file descriptors */
-  fd_entry_t *fd_table = get_process_fd_table();
-  int read_fd = -1, write_fd = -1;
-
+  fd_table = get_process_fd_table();
   for (int i = 3; i < MAX_FDS_PER_PROCESS; i++)
   {
     if (!fd_table[i].in_use)
@@ -2655,39 +2572,36 @@ int64_t sys_pipe(int pipefd[2])
 
   if (read_fd == -1 || write_fd == -1)
   {
-    /* pipe_create() starts with two refs (read/write ends). */
-    pipe_close_end(pipe, 0);
-    pipe_close_end(pipe, 1);
-    return -EMFILE; /* Too many open files */
+    pipe_abort_unopened(pipe);
+    return -EMFILE;
   }
 
-  /* Initialize read fd */
-  fd_table[read_fd].in_use = 1;
-  /* fd is the array index, no need to store it */
+  fd_table[read_fd].in_use = true;
   strncpy(fd_table[read_fd].path, "/dev/pipe", sizeof(fd_table[read_fd].path) - 1);
   fd_table[read_fd].path[sizeof(fd_table[read_fd].path) - 1] = '\0';
   fd_table[read_fd].offset = 0;
-  fd_table[read_fd].flags = O_RDONLY;
-  fd_table[read_fd].vfs_file = (void *)pipe;  /* Store pipe pointer */
-  fd_table[read_fd].is_pipe = 1;  /* Mark as pipe */
-  fd_table[read_fd].pipe_end = 0;  /* 0 = read end */
+  fd_table[read_fd].flags = read_fl;
+  fd_table[read_fd].fd_flags = cloexec;
+  fd_table[read_fd].vfs_file = (void *)pipe;
+  fd_table[read_fd].is_pipe = true;
+  fd_table[read_fd].pipe_end = 0;
 
-  /* Initialize write fd */
-  fd_table[write_fd].in_use = 1;
-  /* fd is the array index, no need to store it */
+  fd_table[write_fd].in_use = true;
   strncpy(fd_table[write_fd].path, "/dev/pipe", sizeof(fd_table[write_fd].path) - 1);
   fd_table[write_fd].path[sizeof(fd_table[write_fd].path) - 1] = '\0';
   fd_table[write_fd].offset = 0;
-  fd_table[write_fd].flags = O_WRONLY;
-  fd_table[write_fd].vfs_file = (void *)pipe;  /* Store pipe pointer (shared) */
-  fd_table[write_fd].is_pipe = 1;  /* Mark as pipe */
-  fd_table[write_fd].pipe_end = 1;  /* 1 = write end */
+  fd_table[write_fd].flags = write_fl;
+  fd_table[write_fd].fd_flags = cloexec;
+  fd_table[write_fd].vfs_file = (void *)pipe;
+  fd_table[write_fd].is_pipe = true;
+  fd_table[write_fd].pipe_end = 1;
 
-  /*
-   * Return fds via kernel buffer then copy_to_user: avoids writing user memory
-   * directly (required for real ring-3 callers). KERNEL_MODE debug_bins still
-   * work because copy_to_user allows those addresses.
-   */
+  pipe_acquire_end(pipe, 0);
+  pipe_acquire_end(pipe, 1);
+
+  fase48_note_fd_created();
+  fase48_note_fd_created();
+
   {
     int kfd[2];
 
@@ -2697,21 +2611,28 @@ int64_t sys_pipe(int pipefd[2])
     {
       pipe_t *pip = pipe;
 
-      fd_table[read_fd].in_use = 0;
+      fd_table[read_fd].in_use = false;
       fd_table[read_fd].vfs_file = NULL;
-      fd_table[read_fd].is_pipe = 0;
+      fd_table[read_fd].is_pipe = false;
       fd_table[read_fd].pipe_end = -1;
-      fd_table[write_fd].in_use = 0;
+      fd_table[write_fd].in_use = false;
       fd_table[write_fd].vfs_file = NULL;
-      fd_table[write_fd].is_pipe = 0;
+      fd_table[write_fd].is_pipe = false;
       fd_table[write_fd].pipe_end = -1;
       pipe_close_end(pip, 0);
       pipe_close_end(pip, 1);
+      fase48_note_fd_destroyed();
+      fase48_note_fd_destroyed();
       return -EFAULT;
     }
   }
 
   return 0;
+}
+
+int64_t sys_pipe2(int pipefd[2], int flags)
+{
+  return sys_pipe_install(pipefd, flags);
 }
 
 int64_t sys_brk(void *addr)
@@ -2781,6 +2702,7 @@ int64_t sys_brk(void *addr)
 
   /* Set new break */
   current_process->heap_end = new_brk;
+  fase39_dump_current_vmas("brk");
   return (int64_t)new_brk;
 }
 
@@ -2792,41 +2714,265 @@ int64_t sys_brk(void *addr)
 #define MAP_PRIVATE 0x02
 #define MAP_ANONYMOUS 0x20
 #define MAP_SHARED 0x01
+#define MAP_FIXED_AUDIT 0x10
 
 /* Protection flags */
 #define PROT_READ 0x1
 #define PROT_WRITE 0x2
 #define PROT_EXEC 0x4
+#define PROT_NONE 0x0
 #define SYSCALL_PTR_ERR(err) ((void *)(intptr_t)(-(err)))
+#define MMAP_AUDIT_FAILED ((void *)(intptr_t)-1)
+
+static int mmap_audit_ptr_err(void *ret)
+{
+  return ((intptr_t)ret < 0);
+}
+
+static int mmap_audit_errno_from_ret(void *ret)
+{
+  if (!mmap_audit_ptr_err(ret))
+    return 0;
+  return -(int)(intptr_t)ret;
+}
+
+static void mmap_audit_log_pte(const char *tag, uint64_t *pml4, uintptr_t va)
+{
+  uint64_t pte_flags = 0;
+  uint64_t *pte;
+  int mapped;
+
+  if (!pml4)
+    return;
+
+  mapped = is_page_mapped_in_directory(pml4, va, &pte_flags);
+  pte = paging_get_pte(pml4, va);
+
+  serial_print("[MMAP_AUDIT][PTE] tag=");
+  serial_print(tag ? tag : "(null)");
+  serial_print(" va=");
+  serial_print_hex64((uint64_t)va);
+  serial_print(" mapped=");
+  serial_print_hex64((uint64_t)(mapped > 0 ? 1 : 0));
+  serial_print(" present=");
+  serial_print_hex64((uint64_t)(pte && (*pte & PAGE_PRESENT) ? 1 : 0));
+  serial_print(" user=");
+  serial_print_hex64((uint64_t)(pte_flags & PAGE_USER ? 1 : 0));
+  serial_print(" rw=");
+  serial_print_hex64((uint64_t)(pte_flags & PAGE_RW ? 1 : 0));
+  serial_print(" nx=");
+  serial_print_hex64((uint64_t)(pte && (*pte & PAGE_NX) ? 1 : 0));
+  if (pte && (*pte & PAGE_PRESENT))
+  {
+    serial_print(" pfn=");
+    serial_print_hex64((uint64_t)(*pte & PAGE_PTE_PFN_MASK));
+  }
+  serial_print("\n");
+}
+
+static void mmap_audit_log_args(void *addr, size_t length, int prot, int flags,
+                                int fd, off_t offset)
+{
+  serial_print("[MMAP_AUDIT][ARGS] classify=MMAP_ARGS_DECODED pid=");
+  serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
+  serial_print(" comm=");
+  serial_print(current_process ? current_process->comm : "(none)");
+  serial_print(" addr=");
+  serial_print_hex64((uint64_t)(uintptr_t)addr);
+  serial_print(" length=");
+  serial_print_hex64((uint64_t)length);
+  serial_print(" prot=");
+  serial_print_hex64((uint64_t)(unsigned int)prot);
+  serial_print(" flags=");
+  serial_print_hex64((uint64_t)(unsigned int)flags);
+  serial_print(" fd=");
+  serial_print_hex64((uint64_t)(unsigned int)fd);
+  serial_print(" offset=");
+  serial_print_hex64((uint64_t)offset);
+  if (current_process)
+  {
+    serial_print(" caller_rip=");
+    serial_print_hex64(current_process->syscall_frame.rip);
+    serial_print(" caller_rsp=");
+    serial_print_hex64(current_process->syscall_frame.rsp);
+  }
+  serial_print("\n");
+
+  if ((flags & MAP_FIXED_AUDIT) != 0)
+  {
+    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_UNSUPPORTED_FLAGS reason=MAP_FIXED_not_implemented\n");
+  }
+  if ((flags & MAP_SHARED) != 0 && (flags & MAP_PRIVATE) != 0)
+  {
+    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_UNSUPPORTED_FLAGS reason=MAP_SHARED_and_MAP_PRIVATE\n");
+  }
+  if (!(flags & MAP_ANONYMOUS) && fd < 0)
+  {
+    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_UNSUPPORTED_FLAGS reason=file_map_without_fd\n");
+  }
+}
+
+static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_addr,
+                                  size_t length, int vma_inserted, uint64_t *pml4)
+{
+  size_t pages = (length + PAGE_SIZE_4KB - 1) / PAGE_SIZE_4KB;
+  size_t mapped_pages = 0;
+  size_t i;
+
+  serial_print("[MMAP_AUDIT][RET] stage=");
+  serial_print(stage ? stage : "(null)");
+  serial_print(" ret=");
+  serial_print_hex64((uint64_t)(uintptr_t)ret);
+  if (mmap_audit_ptr_err(ret))
+  {
+    serial_print(" errno=");
+    serial_print_hex64((uint64_t)(unsigned int)mmap_audit_errno_from_ret(ret));
+  }
+  else
+  {
+    serial_print(" range=[");
+    serial_print_hex64((uint64_t)virt_addr);
+    serial_print(",");
+    serial_print_hex64((uint64_t)(virt_addr + length));
+    serial_print(") pages=");
+    serial_print_hex64((uint64_t)pages);
+  }
+  serial_print(" vma_inserted=");
+  serial_print_hex64((uint64_t)(unsigned int)vma_inserted);
+  serial_print("\n");
+
+  if (mmap_audit_ptr_err(ret) || !pml4 || virt_addr == 0 || length == 0)
+    return;
+
+  for (i = 0; i < pages; i++)
+  {
+    uintptr_t va = virt_addr + i * PAGE_SIZE_4KB;
+    if (is_page_mapped_in_directory(pml4, va, NULL) == 1)
+      mapped_pages++;
+  }
+
+  serial_print("[MMAP_AUDIT][RET] pte_mapped_pages=");
+  serial_print_hex64((uint64_t)mapped_pages);
+  serial_print(" pte_expected_pages=");
+  serial_print_hex64((uint64_t)pages);
+  serial_print("\n");
+
+  if (mapped_pages == 0)
+  {
+    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_VMA_WITHOUT_PTES\n");
+  }
+  else if (mapped_pages < pages)
+  {
+    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_RET_UNMAPPED_RANGE\n");
+  }
+
+  mmap_audit_log_pte("first", pml4, virt_addr);
+  if (pages > 1)
+    mmap_audit_log_pte("last", pml4, virt_addr + (pages - 1) * PAGE_SIZE_4KB);
+
+  if (pml4)
+  {
+    uint64_t flags_low = 0;
+
+    if (is_page_mapped_in_directory(pml4, virt_addr, &flags_low) == 1)
+    {
+      if (!(flags_low & PAGE_USER))
+      {
+        serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_PTE_PERMISSION_BAD reason=missing_PAGE_USER\n");
+      }
+      if (!(flags_low & PAGE_RW))
+      {
+        serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_PTE_PERMISSION_BAD reason=missing_PAGE_RW\n");
+      }
+    }
+  }
+}
+
+/*
+ * FASE39 diagnostics: dump current process VMAs after brk/mmap/munmap.
+ * Pure observability helper (no policy changes).
+ */
+static void fase39_dump_current_vmas(const char *tag)
+{
+  struct mmap_region *r;
+
+  if (!current_process)
+    return;
+
+  serial_print("[FASE39][VMA] tag=");
+  serial_print(tag ? tag : "(null)");
+  serial_print(" pid=");
+  serial_print_hex32((uint32_t)current_process->task.pid);
+  serial_print(" comm=");
+  serial_print(current_process->comm);
+  serial_print("\n");
+
+  serial_print("[FASE39][VMA] heap [");
+  serial_print_hex64(current_process->heap_start);
+  serial_print(",");
+  serial_print_hex64(current_process->heap_end);
+  serial_print(") backing=anon\n");
+
+  serial_print("[FASE39][VMA] stack [");
+  serial_print_hex64(current_process->stack_start);
+  serial_print(",");
+  serial_print_hex64(current_process->stack_start + current_process->stack_size);
+  serial_print(") backing=stack\n");
+
+  for (r = current_process->mmap_list; r; r = r->next)
+  {
+    serial_print("[FASE39][VMA] mmap [");
+    serial_print_hex64((uint64_t)(uintptr_t)r->addr);
+    serial_print(",");
+    serial_print_hex64((uint64_t)(uintptr_t)r->addr + (uint64_t)r->length);
+    serial_print(") perm=");
+    serial_print((r->prot & PROT_READ) ? "r" : "-");
+    serial_print((r->prot & PROT_WRITE) ? "w" : "-");
+    serial_print((r->prot & PROT_EXEC) ? "x" : "-");
+    serial_print(" type=");
+    serial_print((r->flags & MAP_ANONYMOUS) ? "anon" : "file");
+    serial_print(" backing=");
+    if ((r->flags & MAP_ANONYMOUS) != 0)
+      serial_print("anonymous");
+    else
+      serial_print("fd-backed-or-device");
+    serial_print("\n");
+  }
+}
 
 void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-  /* addr: Hint for placement (may be ignored if MAP_FIXED not set)
-   * prot: Protection flags (PROT_READ, PROT_WRITE, PROT_EXEC)
-   * fd: File descriptor (only used if not MAP_ANONYMOUS)
-   * offset: File offset (only used if not MAP_ANONYMOUS)
-   */
+  void *ret;
+  uintptr_t virt_addr_out = 0;
+  size_t aligned_len = 0;
+  int vma_inserted = 0;
 
-  /* Debug output to serial */
   serial_print("SERIAL: mmap: entering syscall\n");
+  mmap_audit_log_args(addr, length, prot, flags, fd, offset);
 
   if (!current_process)
   {
     serial_print("SERIAL: mmap: no current process\n");
-    return (void *)(intptr_t)-ESRCH;
+    ret = (void *)(intptr_t)-ESRCH;
+    mmap_audit_log_return("no-process", ret, 0, 0, 0, NULL);
+    return ret;
   }
 
   if (length == 0)
   {
     serial_print("SERIAL: mmap: zero length\n");
-    return SYSCALL_PTR_ERR(EINVAL);
+    ret = SYSCALL_PTR_ERR(EINVAL);
+    mmap_audit_log_return("zero-length", ret, 0, 0, 0, current_process->page_directory);
+    return ret;
   }
 
   /* Validate protection flags */
   if ((prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
   {
     serial_print("SERIAL: mmap: invalid protection flags\n");
-    return SYSCALL_PTR_ERR(EINVAL);
+    ret = SYSCALL_PTR_ERR(EINVAL);
+    mmap_audit_log_return("bad-prot", ret, 0, 0, 0, current_process->page_directory);
+    return ret;
   }
 
   /* Validate offset alignment for file mappings */
@@ -2943,6 +3089,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         region->flags = flags;
         region->next = current_process->mmap_list;
         current_process->mmap_list = region;
+        fase39_dump_current_vmas("mmap-fb");
         return (void *)virt_addr;
       }
 #else
@@ -2957,6 +3104,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
   /* Align length to page boundary */
   length = (length + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
+  aligned_len = length;
 
   /* Address hint support:
    * - If addr is NULL: Kernel chooses address
@@ -3050,16 +3198,33 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   if (map_user_region_in_directory(current_process->page_directory, virt_addr, length, page_flags) != 0)
   {
     serial_print("SERIAL: mmap: failed to map pages\n");
-    return SYSCALL_PTR_ERR(ENOMEM);
+    ret = SYSCALL_PTR_ERR(ENOMEM);
+    mmap_audit_log_return("map-failed", ret, virt_addr, aligned_len, 0,
+                          current_process->page_directory);
+    return ret;
   }
 
-  /* Zero memory for anonymous mappings (as per POSIX)
-   * We must switch to process page directory to write to userspace
+  virt_addr_out = virt_addr;
+  mmap_audit_log_pte("post-map", current_process->page_directory, virt_addr);
+
+  /*
+   * Anonymous zero-fill: map_user_region_in_directory() clears each
+   * physical frame via the identity map before installing final PTEs.
+   * Do not memset() through the user VA while PTEs lack PAGE_RW — that
+   * faults in kernel mode on PROT_NONE / read-only mappings.
    */
-  uint64_t old_cr3 = get_current_page_directory();
-  load_page_directory((uint64_t)current_process->page_directory);
-  memset((void *)virt_addr, 0, length);
-  load_page_directory(old_cr3);  /* Restore kernel CR3 */
+  if (prot == PROT_NONE)
+  {
+    serial_print("[MMAP_AUDIT][ZERO] stage=skipped reason=prot_none\n");
+  }
+  else if (prot & PROT_WRITE)
+  {
+    serial_print("[MMAP_AUDIT][ZERO] stage=phys-prezeroed-in-map_user_region\n");
+  }
+  else
+  {
+    serial_print("[MMAP_AUDIT][ZERO] stage=skipped reason=no_prot_write\n");
+  }
 
   /* Create mapping entry */
   struct mmap_region *region = kmalloc_try(sizeof(struct mmap_region));
@@ -3080,12 +3245,20 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   region->flags = flags;
   region->next = current_process->mmap_list;
   current_process->mmap_list = region;
+  vma_inserted = 1;
+  fase39_dump_current_vmas("mmap");
 
-  return (void *)virt_addr;
+  ret = (void *)virt_addr;
+  mmap_audit_log_return("ok", ret, virt_addr_out, aligned_len, vma_inserted,
+                        current_process->page_directory);
+  serial_print("[MMAP_AUDIT][CLASSIFY] BUSYBOX_NEXT_SYSCALL_REACHED stage=mmap-return-ok\n");
+  return ret;
 }
 
 int sys_munmap(void *addr, size_t length)
 {
+  uint64_t unmapped_pages = 0;
+  paging_fase42_checkpoint("munmap-before", (int32_t)process_get_pid());
   if (!current_process)
     return -ESRCH;
   if (!addr || length == 0)
@@ -3119,11 +3292,23 @@ int sys_munmap(void *addr, size_t length)
       /* Unmap pages in process page directory */
       for (uintptr_t page = start_page; page < start_page + aligned_length; page += PAGE_SIZE_4KB)
       {
-        unmap_page_in_directory(current_process->page_directory, page);
+        if (unmap_page_in_directory(current_process->page_directory, page) == 0)
+          unmapped_pages++;
       }
 
       /* Free the mapping structure */
       kfree(current);
+      serial_print("[FASE41][MUNMAP] pid=");
+      serial_print_hex32((uint32_t)current_process->task.pid);
+      serial_print(" start=");
+      serial_print_hex64((uint64_t)start_page);
+      serial_print(" len=");
+      serial_print_hex64((uint64_t)aligned_length);
+      serial_print(" unmapped_pages=");
+      serial_print_hex64(unmapped_pages);
+      serial_print("\n");
+      paging_fase42_checkpoint("munmap-after", (int32_t)current_process->task.pid);
+      fase39_dump_current_vmas("munmap");
       return 0;
     }
     prev = current;
@@ -3254,49 +3439,74 @@ int64_t sys_chdir(const char *pathname)
 
 int64_t sys_getcwd(char *buf, size_t size)
 {
+  size_t len;
+
   if (!current_process || !buf || size == 0)
     return -EFAULT;
 
-  /* Validate buffer is in userspace (for USER_MODE processes) */
   if (validate_userspace_buffer(buf, size) != 0)
     return -EFAULT;
 
-  size_t len = strlen(current_process->cwd);
+  len = strlen(current_process->cwd);
   if (len >= size)
+    return -ERANGE;
+
+  if (copy_to_user(buf, current_process->cwd, len + 1) != 0)
     return -EFAULT;
 
-  strncpy(buf, current_process->cwd, size - 1);
-  buf[size - 1] = '\0';
+  return (int64_t)len;
+}
 
-  return len;
+int64_t sys_utimensat(int dirfd, const char *pathname,
+                      const struct timespec *times, int flags)
+{
+  char resolved[256];
+  struct timespec ktimes[2];
+  int rc;
+
+  if (!current_process || !pathname)
+    return -EFAULT;
+
+  if (dirfd != IR0_AT_FDCWD)
+    return -ENOSYS;
+
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                            current_process->cwd);
+  if (rc != 0)
+    return rc;
+
+  if (times)
+  {
+    if (validate_userspace_buffer(times, sizeof(ktimes)) != 0)
+      return -EFAULT;
+    if (copy_from_user(ktimes, times, sizeof(ktimes)) != 0)
+      return -EFAULT;
+    return ir0_utimensat_path(resolved, ktimes, flags);
+  }
+
+  return ir0_utimensat_path(resolved, NULL, flags);
 }
 
 int64_t sys_unlink(const char *pathname)
 {
+  char resolved[256];
+  int rc;
+
   if (!current_process || !pathname)
     return -EFAULT;
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  /* Resolve relative paths against cwd */
-  char resolved[256];
-  const char *path_to_use = pathname;
-  if (!is_absolute_path(pathname))
-  {
-    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else
-  {
-    if (normalize_path(pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                            current_process->cwd);
+  if (rc != 0)
+    return rc;
 
-  return vfs_unlink(path_to_use);
+  return vfs_unlink(resolved);
 }
 
 /* Linux dirent structure for getdents/getdents64 */
@@ -3516,12 +3726,16 @@ typedef int64_t (*syscall_handler_t)(uint64_t, uint64_t, uint64_t,
 WRAP1(sys_exit, int)
 WRAP3(sys_read, int, void *, size_t)
 WRAP3(sys_write, int, const void *, size_t)
+WRAP3(sys_readv, int, const struct iovec *, int)
+WRAP3(sys_writev, int, const struct iovec *, int)
 WRAP3(sys_open, const char *, int, mode_t)
 WRAP1(sys_close, int)
 WRAP3(sys_waitpid, pid_t, int *, int)
 WRAP2(sys_link, const char *, const char *)
 WRAP2(sys_rename, const char *, const char *)
 WRAP1(sys_unlink, const char *)
+WRAP3(sys_unlinkat, int, const char *, int)
+WRAP4(sys_renameat, int, const char *, int, const char *)
 WRAP1(sys_uname, struct utsname *)
 WRAP2(sys_access, const char *, int)
 WRAP1(sys_dup, int)
@@ -3535,6 +3749,7 @@ WRAP2(sys_chmod, const char *, mode_t)
 WRAP3(sys_chown, const char *, uid_t, gid_t)
 WRAP3(sys_lseek, int, off_t, int)
 WRAP2(sys_getcwd, char *, size_t)
+WRAP4(sys_utimensat, int, const char *, const struct timespec *, int)
 WRAP2(sys_stat, const char *, stat_t *)
 WRAP2(sys_fstat, int, stat_t *)
 WRAP2(sys_dup2, int, int)
@@ -3555,6 +3770,7 @@ WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
 WRAP3(sys_getrandom, void *, size_t, unsigned int)
 WRAP2(sys_set_robust_list, struct robust_list_head *, size_t)
 WRAP4(sys_prlimit64, pid_t, unsigned int, const void *, void *)
+WRAP2(sys_pipe2, int *, int)
 WRAP1(sys_pipe, int *)
 WRAP1(sys_sigreturn, struct sigcontext *)
 WRAP3(sys_ioctl, int, uint64_t, void *)
@@ -3628,10 +3844,13 @@ static void init_syscall_table(void)
 
   /* Implemented syscalls - Linux numbers */
   syscall_table_rw[__NR_read]           = wrap_sys_read;
+  syscall_table_rw[__NR_readv]          = wrap_sys_readv;
   syscall_table_rw[__NR_write]          = wrap_sys_write;
+  syscall_table_rw[__NR_writev]         = wrap_sys_writev;
   syscall_table_rw[__NR_open]           = wrap_sys_open;
   syscall_table_rw[__NR_close]          = wrap_sys_close;
   syscall_table_rw[__NR_stat]           = wrap_sys_stat;
+  syscall_table_rw[__NR_lstat]          = wrap_sys_stat;
   syscall_table_rw[__NR_fstat]          = wrap_sys_fstat;
   syscall_table_rw[__NR_poll]           = wrap_sys_poll;
   syscall_table_rw[__NR_lseek]          = wrap_sys_lseek;
@@ -3645,6 +3864,7 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_fcntl]            = wrap_sys_fcntl;
   syscall_table_rw[__NR_ioctl]          = wrap_sys_ioctl;
   syscall_table_rw[__NR_pipe]           = wrap_sys_pipe;
+  syscall_table_rw[__NR_pipe2]          = wrap_sys_pipe2;
   syscall_table_rw[__NR_dup2]           = wrap_sys_dup2;
   syscall_table_rw[__NR_nanosleep]      = wrap_sys_nanosleep;
   syscall_table_rw[__NR_getpid]         = wrap_sys_getpid;
@@ -3665,12 +3885,15 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_kill]           = wrap_sys_kill;
   syscall_table_rw[__NR_getdents]       = wrap_sys_getdents;
   syscall_table_rw[__NR_getcwd]         = wrap_sys_getcwd;
+  syscall_table_rw[__NR_utimensat]      = wrap_sys_utimensat;
   syscall_table_rw[__NR_chdir]          = wrap_sys_chdir;
   syscall_table_rw[__NR_mkdir]          = wrap_sys_mkdir;
   syscall_table_rw[__NR_rmdir]          = wrap_sys_rmdir;
   syscall_table_rw[__NR_link]           = wrap_sys_link;
   syscall_table_rw[__NR_rename]         = wrap_sys_rename;
   syscall_table_rw[__NR_unlink]         = wrap_sys_unlink;
+  syscall_table_rw[__NR_unlinkat]       = wrap_sys_unlinkat;
+  syscall_table_rw[__NR_renameat]       = wrap_sys_renameat;
   syscall_table_rw[__NR_uname]          = wrap_sys_uname;
   syscall_table_rw[__NR_access]         = wrap_sys_access;
   syscall_table_rw[__NR_dup]            = wrap_sys_dup;
@@ -3740,6 +3963,13 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 #if defined(__x86_64__) || defined(__amd64__)
   if (current_process)
     syscall_capture_user_frame(current_process);
+
+  if (current_process && current_process->mode == USER_MODE)
+  {
+    fork_ret_first_syscall_entry(syscall_num,
+                                 current_process->syscall_frame.rip,
+                                 current_process->syscall_frame.rsp);
+  }
 #endif
 
   if (do_trace) {
@@ -3756,6 +3986,32 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     serial_print_hex64(iretq_checkpoint_buf[38]);
     serial_print(" irq_post=");
     serial_print_hex64(iretq_checkpoint_buf[39]);
+    serial_print(" iret_id_class=");
+    serial_print_hex64(iretq_checkpoint_buf[26]);
+    serial_print(" rsp_pre_pop=");
+    serial_print_hex64(iretq_checkpoint_buf[28]);
+    serial_print(" rsp_pre_iret=");
+    serial_print_hex64(iretq_checkpoint_buf[29]);
+    serial_print(" q0=");
+    serial_print_hex64(iretq_checkpoint_buf[16]);
+    serial_print(" q1=");
+    serial_print_hex64(iretq_checkpoint_buf[17]);
+    serial_print(" q2=");
+    serial_print_hex64(iretq_checkpoint_buf[18]);
+    serial_print(" q3=");
+    serial_print_hex64(iretq_checkpoint_buf[19]);
+    serial_print(" q4=");
+    serial_print_hex64(iretq_checkpoint_buf[20]);
+    serial_print(" q5=");
+    serial_print_hex64(iretq_checkpoint_buf[21]);
+    serial_print(" q6=");
+    serial_print_hex64(iretq_checkpoint_buf[22]);
+    serial_print(" q7=");
+    serial_print_hex64(iretq_checkpoint_buf[23]);
+    serial_print(" q8=");
+    serial_print_hex64(iretq_checkpoint_buf[24]);
+    serial_print(" q9=");
+    serial_print_hex64(iretq_checkpoint_buf[25]);
     serial_print("\n");
   }
 

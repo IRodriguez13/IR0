@@ -69,6 +69,7 @@ void kernel_idle_poll(void)
 	poll_wake_check();
 	sleep_wake_check();
 	stdin_wake_check();
+	pipe_wake_check();
 }
 
 /*

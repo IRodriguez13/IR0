@@ -56,6 +56,13 @@ int copy_to_user(void *dst, const void *src, size_t n);
 int copy_from_user(void *dst, const void *src, size_t n);
 
 /**
+ * copy_from_user_cstring - Copy a NUL-terminated string from userspace.
+ * Stops at NUL or dst_sz-1; does not read past unmapped pages like a fixed
+ * 256-byte copy_from_user would when src sits near USER_STACK_TOP.
+ */
+int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src);
+
+/**
  * is_user_address - Check if address range is valid for user space
  * @addr: Address to check
  * @size: Size of region

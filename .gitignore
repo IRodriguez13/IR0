@@ -45,3 +45,5 @@ compile_commands.json
 tests/host/ir0_test_suite
 tests/kernel_memsafe/ir0_kernel_memsafe
 /tmp/ktest.log
+nohup.out
+interrupt/arch/x86-64/isr_stubs_64.asm

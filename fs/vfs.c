@@ -30,9 +30,11 @@
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
+#include <ir0/open_flags.h>
 #include <ir0/permissions.h>
 #include <ir0/credentials.h>
 #include <ir0/block_dev.h>
+#include <ir0/serial_io.h>
 #include <ir0/vga.h>
 #include <config.h>
 #include <string.h>
@@ -97,6 +99,52 @@ static struct vfs_mount *find_mount(const char *path)
         }
     }
     return best;
+}
+
+static int vfs_exec_audit_active;
+static const char *vfs_exec_audit_path;
+
+void vfs_exec_audit_begin(const char *path)
+{
+    vfs_exec_audit_active = 1;
+    vfs_exec_audit_path = path;
+}
+
+void vfs_exec_audit_end(void)
+{
+    vfs_exec_audit_active = 0;
+    vfs_exec_audit_path = NULL;
+}
+
+int vfs_exec_audit_is_active(void)
+{
+    return vfs_exec_audit_active;
+}
+
+static void vfs_exec_audit_log(const char *stage, const char *path, int ret,
+                               off_t offset, size_t req, size_t got,
+                               uint64_t st_ino, int64_t st_size)
+{
+    if (!vfs_exec_audit_active)
+        return;
+
+    serial_print("[EXEC_AUDIT][VFS] stage=");
+    serial_print(stage ? stage : "?");
+    serial_print(" path=");
+    serial_print(path ? path : "(null)");
+    serial_print(" ret=");
+    serial_print_hex64((uint64_t)(int64_t)ret);
+    serial_print(" offset=");
+    serial_print_hex64((uint64_t)offset);
+    serial_print(" req=");
+    serial_print_hex64((uint64_t)req);
+    serial_print(" got=");
+    serial_print_hex64((uint64_t)got);
+    serial_print(" st_ino=");
+    serial_print_hex64(st_ino);
+    serial_print(" st_size=");
+    serial_print_hex64((uint64_t)st_size);
+    serial_print("\n");
 }
 
 /**
@@ -429,6 +477,12 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     if (!ir0_current_cred())
         return -ESRCH;
 
+    if (!ir0_open_flags_ok_for_vfs(flags))
+    {
+        serial_print("[VFS_OPEN][CLASSIFY] VFS_LINUX_RAW_FLAGS_REJECTED\n");
+        return -EINVAL;
+    }
+
     ret = check_dir_traverse(path);
     if (ret != 0)
         return ret;
@@ -437,30 +491,52 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     if (!ops)
         return -ENODEV;
 
-    if (flags & O_CREAT) {
+    if (flags & IR0_O_CREAT)
+    {
         char parent[MAX_PATH];
+        stat_t st;
+        int target_exists;
+
         if (parent_dir(path, parent, sizeof(parent)) == 0)
+        {
+            if (!ops->stat || ops->stat(parent, &st) != 0)
+                return -ENOENT;
             if (!ir0_check_file_access(parent, ACCESS_WRITE))
                 return -EACCES;
+        }
 
-        stat_t st;
-        if (ops->stat && ops->stat(path, &st) != 0) {
-            if (ops->create) {
+        target_exists = (ops->stat && ops->stat(path, &st) == 0) ? 1 : 0;
+
+        if (!target_exists)
+        {
+            if (ops->create)
+            {
                 mode_t fmode = mode ? (mode & 0777) : 0644;
+
                 ret = ops->create(path, fmode);
                 if (ret != 0)
                     return ret;
-            } else {
+                serial_print("[VFS_OPEN][CLASSIFY] VFS_CREATE_SEMANTICS_GENERIC\n");
+            }
+            else
+            {
                 return -ENOSYS;
             }
-        } else if (flags & O_EXCL) {
+        }
+        else if (flags & IR0_O_EXCL)
+        {
             return -EEXIST;
         }
-    } else {
+    }
+    else
+    {
         int acc = 0;
-        int accmode = flags & O_ACCMODE;
-        if (accmode == O_RDONLY || accmode == O_RDWR) acc |= 0x1;
-        if (accmode == O_WRONLY || accmode == O_RDWR) acc |= 0x2;
+        int accmode = flags & IR0_O_ACCMODE;
+
+        if (accmode == IR0_O_RDONLY || accmode == IR0_O_RDWR)
+            acc |= 0x1;
+        if (accmode == IR0_O_WRONLY || accmode == IR0_O_RDWR)
+            acc |= 0x2;
         if (!ir0_check_file_access(path, acc))
             return -EACCES;
 
@@ -469,15 +545,21 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
             return -ENOENT;
     }
 
-    if ((flags & O_TRUNC) && ((flags & O_ACCMODE) != O_RDONLY))
+    if ((flags & IR0_O_TRUNC) && ((flags & IR0_O_ACCMODE) != IR0_O_RDONLY))
     {
-        if (!ops->truncate)
-            return -ENOSYS;
-        ret = ops->truncate(path, 0);
-        if (ret == -1)
-            return -EIO;
-        if (ret != 0)
-            return ret;
+        stat_t st;
+
+        if (!ops->stat || ops->stat(path, &st) != 0)
+            return -ENOENT;
+        if (S_ISDIR(st.st_mode))
+            return -EISDIR;
+        if (S_ISREG(st.st_mode))
+        {
+            ret = vfs_truncate(path, 0);
+            if (ret != 0)
+                return ret;
+            serial_print("[VFS_OPEN][CLASSIFY] VFS_TRUNCATE_GENERIC\n");
+        }
     }
 
     struct vfs_file *f = kmalloc_try(sizeof(*f));
@@ -498,7 +580,7 @@ int vfs_read(struct vfs_file *f, char *buf, size_t count)
     if (!f)   return -EBADF;
     if (!buf) return -EFAULT;
     if (count == 0) return 0;
-    if ((f->flags & O_ACCMODE) == O_WRONLY)
+    if ((f->flags & IR0_O_ACCMODE) == IR0_O_WRONLY)
         return -EBADF;
 
     struct vfs_ops *ops = ops_for_path(f->path);
@@ -507,6 +589,10 @@ int vfs_read(struct vfs_file *f, char *buf, size_t count)
 
     size_t done = 0;
     int ret = ops->read(f->path, buf, count, &done, f->pos);
+    if (vfs_exec_audit_active)
+    {
+        vfs_exec_audit_log("vfs_read", f->path, ret, f->pos, count, done, 0, -1);
+    }
     if (ret != 0)
         return ret;
     f->pos += (off_t)done;
@@ -518,7 +604,7 @@ int vfs_write(struct vfs_file *f, const char *buf, size_t count)
     if (!f)   return -EBADF;
     if (!buf) return -EFAULT;
     if (count == 0) return 0;
-    if ((f->flags & O_ACCMODE) == O_RDONLY)
+    if ((f->flags & IR0_O_ACCMODE) == IR0_O_RDONLY)
         return -EBADF;
 
     struct vfs_ops *ops = ops_for_path(f->path);
@@ -529,7 +615,7 @@ int vfs_write(struct vfs_file *f, const char *buf, size_t count)
      * O_APPEND: move to end before every write.
      * We grab the current size via stat.
      */
-    if (f->flags & O_APPEND) {
+    if (f->flags & IR0_O_APPEND) {
         stat_t st;
         if (ops->stat && ops->stat(f->path, &st) == 0)
             f->pos = st.st_size;
@@ -934,56 +1020,147 @@ int vfs_truncate(const char *path, size_t length)
     return ops->truncate(path, length);
 }
 
+int vfs_utimens(const char *path, const struct timespec times[2])
+{
+    stat_t st;
+
+    (void)times;
+
+    if (!path)
+        return -EINVAL;
+    if (!ir0_current_cred())
+        return -ESRCH;
+    if (validate_path(path) != 0)
+        return -EINVAL;
+    if (vfs_stat(path, &st) != 0)
+        return -ENOENT;
+    return 0;
+}
+
 
 int vfs_read_file(const char *path, void **data, size_t *size)
 {
-    if (!path || !data || !size || path[0] != '/')
-        return -EINVAL;
-
-    struct vfs_ops *ops = ops_for_path(path);
-    if (!ops || !ops->read || !ops->stat)
-        return -ENOSYS;
-
+    struct vfs_ops *ops;
     stat_t st;
-    int ret = ops->stat(path, &st);
+    int ret;
+    size_t fsize;
+    void *buf;
+    size_t total;
+
+    if (!path || !data || !size || path[0] != '/')
+    {
+        if (vfs_exec_audit_active)
+            vfs_exec_audit_log("read_file_bad_path", path, -EINVAL, 0, 0, 0, 0, -1);
+        return -EINVAL;
+    }
+
+    ops = ops_for_path(path);
+    if (!ops || !ops->read || !ops->stat)
+    {
+        if (vfs_exec_audit_active)
+        {
+            serial_print("[EXEC_AUDIT][VFS] stage=lookup_no_ops path=");
+            serial_print(path);
+            serial_print(" ops=");
+            serial_print_hex64((uint64_t)(uintptr_t)ops);
+            serial_print("\n");
+            vfs_exec_audit_log("lookup_fail", path, -ENOSYS, 0, 0, 0, 0, -1);
+        }
+        return -ENOSYS;
+    }
+
+    if (vfs_exec_audit_active)
+    {
+        serial_print("[EXEC_AUDIT][VFS] stage=lookup_ok path=");
+        serial_print(path);
+        serial_print(" ops=");
+        serial_print_hex64((uint64_t)(uintptr_t)ops);
+        serial_print("\n");
+    }
+
+    ret = ops->stat(path, &st);
     if (ret != 0)
+    {
+        vfs_exec_audit_log("stat_fail", path, ret, 0, 0, 0, 0, -1);
         return ret;
+    }
 
     if (st.st_size < 0)
+    {
+        vfs_exec_audit_log("stat_bad_size", path, -EIO, 0, 0, 0,
+                           (uint64_t)st.st_ino, st.st_size);
         return -EIO;
+    }
 
-    size_t fsize = (size_t)st.st_size;
+    fsize = (size_t)st.st_size;
+    vfs_exec_audit_log("stat_ok", path, 0, 0, 0, 0,
+                       (uint64_t)st.st_ino, st.st_size);
+
     if (fsize > VFS_READ_FILE_MAX_BYTES)
+    {
+        vfs_exec_audit_log("file_too_large", path, -EFBIG, 0, fsize, 0,
+                           (uint64_t)st.st_ino, st.st_size);
         return -EFBIG;
-    if (fsize == 0) {
+    }
+    if (fsize == 0)
+    {
         *data = NULL;
         *size = 0;
+        vfs_exec_audit_log("file_size_zero", path, 0, 0, 0, 0,
+                           (uint64_t)st.st_ino, 0);
         return 0;
     }
 
-    void *buf = kmalloc_try(fsize);
+    buf = kmalloc_try(fsize);
     if (!buf)
+    {
+        vfs_exec_audit_log("kmalloc_fail", path, -ENOMEM, 0, fsize, 0,
+                           (uint64_t)st.st_ino, st.st_size);
         return -ENOMEM;
+    }
 
-    size_t total = 0;
+    total = 0;
 
-    while (total < fsize) {
+    while (total < fsize)
+    {
         size_t chunk = 0;
+
         ret = ops->read(path, (uint8_t *)buf + total, fsize - total,
                         &chunk, (off_t)total);
-
-        if (ret != 0) {
+        if (ret != 0)
+        {
+            vfs_exec_audit_log("read_err", path, ret, (off_t)total,
+                               fsize - total, total,
+                               (uint64_t)st.st_ino, st.st_size);
             kfree(buf);
             return ret;
         }
-        if (chunk == 0) {
+        if (chunk == 0)
+        {
+            vfs_exec_audit_log("read_zero", path, -EIO, (off_t)total,
+                               fsize - total, total,
+                               (uint64_t)st.st_ino, st.st_size);
             kfree(buf);
             return -EIO;
         }
+        vfs_exec_audit_log("read_chunk", path, 0, (off_t)total,
+                           fsize - total, chunk,
+                           (uint64_t)st.st_ino, st.st_size);
         total += chunk;
+    }
+
+    if (total < fsize)
+    {
+        vfs_exec_audit_log("read_short", path, -EIO, (off_t)total,
+                           fsize, total,
+                           (uint64_t)st.st_ino, st.st_size);
+        kfree(buf);
+        return -EIO;
     }
 
     *data = buf;
     *size = total;
+    vfs_exec_audit_log("read_ok", path, 0, 0, fsize, total,
+                       (uint64_t)st.st_ino, st.st_size);
     return 0;
 }

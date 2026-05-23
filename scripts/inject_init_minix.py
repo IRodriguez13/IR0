@@ -4,14 +4,17 @@
 Inject a file into a MINIX v1 disk image without mounting (no minix module).
 
 Usage:
+  inject_init_minix.py --format DISK_IMAGE
   inject_init_minix.py DISK_IMAGE FILE [DEST_PATH]
 
   DEST_PATH: slash-separated path without leading slash (default: sbin/init)
   Examples:
+    inject_init_minix.py --format disk.img
     inject_init_minix.py disk.img setup/pid1/init
     inject_init_minix.py disk.img setup/pid1/sh_smoke bin/sh
 """
 
+import os
 import struct
 import sys
 
@@ -22,6 +25,7 @@ DIR_ENTRY = 16
 MAGIC = 0x137F
 IFDIR = 0o040000
 IFREG = 0o100000
+IFMT = 0o170000
 
 
 def read_block(f, n):
@@ -151,7 +155,7 @@ def alloc_zone(f, sb):
 
 
 def dir_entries(f, inode):
-    if (inode["mode"] & 0o170000) != IFDIR:
+    if (inode["mode"] & IFMT) != IFDIR:
         return []
     z = inode["zones"][0]
     if z == 0:
@@ -190,6 +194,107 @@ def remove_dir_entry(f, sb, dir_inode, dir_num, name):
     return False
 
 
+def audit_entry(source_path, dest_path, source_type, mode, inode_num, size):
+    print(
+        f"MINIX_INJECT source={source_path} dest={dest_path} "
+        f"source_type={source_type} mode=0x{mode:04x} inode={inode_num} size={size}"
+    )
+
+
+def detect_source_type(path):
+    if not os.path.exists(path):
+        return "missing"
+    if os.path.isdir(path):
+        return "directory"
+    if os.path.isfile(path):
+        return "file"
+    return "other"
+
+
+def assert_regular_source(source_path, dest_path):
+    st = detect_source_type(source_path)
+    dest_norm = "/" + dest_path.lstrip("/")
+    if dest_norm == "/bin/busybox":
+        if st != "file":
+            raise SystemExit(
+                f"ROOTFS_BUSYBOX_WRONG_TYPE abort: {dest_norm} must come from a "
+                f"regular file source, got source_type={st} path={source_path!r}"
+            )
+    if st == "missing":
+        raise SystemExit(f"inject abort: source missing: {source_path}")
+    if st == "directory":
+        raise SystemExit(
+            f"inject abort: source is a directory, not a file: {source_path} -> {dest_path}"
+        )
+    if st != "file":
+        raise SystemExit(f"inject abort: unsupported source type {st}: {source_path}")
+
+
+def format_minix_v1(f):
+    """
+    Format blank/raw image as MINIX v1 matching kernel minix_fs_format() layout.
+    """
+    sb = {
+        "ninodes": 64,
+        "nzones": 1024,
+        "imap_blocks": 1,
+        "zmap_blocks": 1,
+        "firstdatazone": 5,
+        "log_zone_size": 0,
+        "max_size": 1048576,
+    }
+    sb_block = bytearray(BLOCK)
+    struct.pack_into(
+        "<6H I H",
+        sb_block,
+        0,
+        sb["ninodes"],
+        sb["nzones"],
+        sb["imap_blocks"],
+        sb["zmap_blocks"],
+        sb["firstdatazone"],
+        sb["log_zone_size"],
+        sb["max_size"],
+        MAGIC,
+    )
+    write_block(f, 1, bytes(sb_block))
+
+    imap = bytearray(BLOCK)
+    imap[0] = 0x02
+    write_block(f, 2, bytes(imap))
+
+    zmap = bytearray(BLOCK)
+    for i in range(BLOCK):
+        zmap[i] = 0xFF
+    zmap[0] &= ~(1 << sb["firstdatazone"])
+    write_block(f, 3, bytes(zmap))
+
+    root_zone = sb["firstdatazone"]
+    root_inode = {
+        "mode": IFDIR | 0o755,
+        "uid": 0,
+        "size": 2 * DIR_ENTRY,
+        "mtime": 0,
+        "gid": 0,
+        "nlinks": 2,
+        "zones": [root_zone] + [0] * 8,
+    }
+    write_inode(f, sb, 1, root_inode)
+
+    root_dir = bytearray(BLOCK)
+    struct.pack_into("<H", root_dir, 0, 1)
+    root_dir[2:3] = b"."
+    struct.pack_into("<H", root_dir, DIR_ENTRY, 1)
+    root_dir[DIR_ENTRY + 2 : DIR_ENTRY + 4] = b".."
+    write_block(f, root_zone, bytes(root_dir))
+
+    print(
+        f"MINIX_FORMAT ok magic=0x{MAGIC:04x} ninodes={sb['ninodes']} "
+        f"nzones={sb['nzones']} firstdatazone={sb['firstdatazone']}"
+    )
+    return sb
+
+
 def add_dir_entry(f, sb, dir_inode, dir_num, name, child_num):
     z = dir_inode["zones"][0]
     raw = bytearray(read_block(f, z))
@@ -207,14 +312,15 @@ def add_dir_entry(f, sb, dir_inode, dir_num, name, child_num):
     raise SystemExit(f"directory full: cannot add {name}")
 
 
-def mkdir(f, sb, parent_num, parent, name):
+def mkdir(f, sb, parent_num, parent, name, parent_prefix):
     existing = find_in_dir(f, sb, parent, name)
     if existing:
         return existing, read_inode(f, sb, existing)
     num = alloc_inode(f, sb)
     zone = alloc_zone(f, sb)
+    mode = IFDIR | 0o755
     child = {
-        "mode": IFDIR | 0o755,
+        "mode": mode,
         "uid": 0,
         "size": 2 * DIR_ENTRY,
         "mtime": 0,
@@ -229,28 +335,74 @@ def mkdir(f, sb, parent_num, parent, name):
     struct.pack_into("<H", block, DIR_ENTRY, parent_num)
     block[DIR_ENTRY + 2 : DIR_ENTRY + 4] = b".."
     write_block(f, zone, bytes(block))
+    audit_entry(
+        "(mkdir)",
+        f"{parent_prefix}/{name}" if parent_prefix != "/" else f"/{name}",
+        "directory",
+        mode,
+        num,
+        child["size"],
+    )
     add_dir_entry(f, sb, parent, parent_num, name, num)
     parent["nlinks"] += 1
     write_inode(f, sb, parent_num, parent)
     return num, child
 
 
-def write_file(f, sb, path_parts, data):
+def prepare_regular_file(f, sb, file_inode, data):
+    zones_needed = (len(data) + BLOCK - 1) // BLOCK
+    max_blocks = 7 + (BLOCK // 2)
+    if zones_needed > max_blocks:
+        raise SystemExit(f"file too large for MINIX v1 ({len(data)} bytes)")
+
+    data_zones = []
+    for c in range(zones_needed):
+        if c < 7 and c < len(file_inode["zones"]) and file_inode["zones"][c]:
+            data_zones.append(file_inode["zones"][c])
+        else:
+            data_zones.append(alloc_zone(f, sb))
+
+    for c, z in enumerate(data_zones):
+        chunk = data[c * BLOCK : (c + 1) * BLOCK]
+        write_block(f, z, chunk.ljust(BLOCK, b"\x00"))
+
+    zones = [0] * 9
+    for c in range(min(7, zones_needed)):
+        zones[c] = data_zones[c]
+    if zones_needed > 7:
+        ind_blk = bytearray(BLOCK)
+        ind_zone = file_inode["zones"][7] if file_inode["zones"][7] else alloc_zone(f, sb)
+        for c in range(7, zones_needed):
+            struct.pack_into("<H", ind_blk, (c - 7) * 2, data_zones[c])
+        write_block(f, ind_zone, bytes(ind_blk))
+        zones[7] = ind_zone
+
+    file_inode["mode"] = IFREG | 0o755
+    file_inode["size"] = len(data)
+    file_inode["zones"] = zones
+    file_inode["nlinks"] = 1
+    return file_inode
+
+
+def write_file(f, sb, path_parts, data, source_path):
     root = read_inode(f, sb, 1)
     cur_num = 1
     cur = root
+    dest_prefix = ""
     for i, part in enumerate(path_parts):
         is_last = i == len(path_parts) - 1
         if is_last:
+            dest_path = "/" + "/".join(path_parts)
             ino = find_in_dir(f, sb, cur, part)
+            new_entry = False
             if ino != 0:
                 existing = read_inode(f, sb, ino)
-                if (existing["mode"] & 0o170000) == IFDIR:
+                if (existing["mode"] & IFMT) == IFDIR:
                     remove_dir_entry(f, sb, cur, cur_num, part)
                     ino = 0
             if ino == 0:
                 ino = alloc_inode(f, sb)
-                add_dir_entry(f, sb, cur, cur_num, part, ino)
+                new_entry = True
                 file_inode = {
                     "mode": IFREG | 0o755,
                     "uid": 0,
@@ -262,7 +414,7 @@ def write_file(f, sb, path_parts, data):
                 }
             else:
                 file_inode = read_inode(f, sb, ino)
-                if (file_inode["mode"] & 0o170000) != IFREG:
+                if (file_inode["mode"] & IFMT) != IFREG:
                     file_inode = {
                         "mode": IFREG | 0o755,
                         "uid": 0,
@@ -272,42 +424,26 @@ def write_file(f, sb, path_parts, data):
                         "nlinks": 1,
                         "zones": [0] * 9,
                     }
-            zones_needed = (len(data) + BLOCK - 1) // BLOCK
-            max_blocks = 7 + (BLOCK // 2)
-            if zones_needed > max_blocks:
-                raise SystemExit(f"file too large for MINIX v1 ({len(data)} bytes)")
 
-            data_zones = []
-            for c in range(zones_needed):
-                if c < 7 and c < len(file_inode["zones"]) and file_inode["zones"][c]:
-                    data_zones.append(file_inode["zones"][c])
-                else:
-                    data_zones.append(alloc_zone(f, sb))
-
-            for c, z in enumerate(data_zones):
-                chunk = data[c * BLOCK : (c + 1) * BLOCK]
-                write_block(f, z, chunk.ljust(BLOCK, b"\x00"))
-
-            zones = [0] * 9
-            for c in range(min(7, zones_needed)):
-                zones[c] = data_zones[c]
-            if zones_needed > 7:
-                ind_blk = bytearray(BLOCK)
-                ind_zone = file_inode["zones"][7] if file_inode["zones"][7] else alloc_zone(f, sb)
-                for c in range(7, zones_needed):
-                    struct.pack_into("<H", ind_blk, (c - 7) * 2, data_zones[c])
-                write_block(f, ind_zone, bytes(ind_blk))
-                zones[7] = ind_zone
-
-            file_inode["mode"] = IFREG | 0o755
-            file_inode["size"] = len(data)
-            file_inode["zones"] = zones
-            file_inode["nlinks"] = 1
+            file_inode = prepare_regular_file(f, sb, file_inode, data)
+            audit_entry(
+                source_path,
+                dest_path,
+                "file",
+                file_inode["mode"],
+                ino,
+                file_inode["size"],
+            )
             write_inode(f, sb, ino, file_inode)
+            if new_entry:
+                add_dir_entry(f, sb, cur, cur_num, part, ino)
             return
+
+        dest_prefix = dest_prefix + "/" + part if dest_prefix else "/" + part
         ino = find_in_dir(f, sb, cur, part)
         if ino == 0:
-            ino, cur = mkdir(f, sb, cur_num, cur, part)
+            parent_audit = dest_prefix.rsplit("/", 1)[0] or "/"
+            ino, cur = mkdir(f, sb, cur_num, cur, part, parent_audit)
             cur_num = ino
         else:
             cur_num = ino
@@ -315,13 +451,28 @@ def write_file(f, sb, path_parts, data):
 
 
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "--format":
+        if len(sys.argv) != 3:
+            print(f"Usage: {sys.argv[0]} --format DISK_IMAGE", file=sys.stderr)
+            sys.exit(1)
+        disk_path = sys.argv[2]
+        with open(disk_path, "r+b") as f:
+            format_minix_v1(f)
+        print(f"✅ Formatted {disk_path} as MINIX v1 (kernel-compatible layout)")
+        return
+
     if len(sys.argv) < 3 or len(sys.argv) > 4:
         print(
-            f"Usage: {sys.argv[0]} DISK_IMAGE FILE [DEST_PATH]",
+            f"Usage: {sys.argv[0]} --format DISK_IMAGE",
+            file=sys.stderr,
+        )
+        print(
+            f"       {sys.argv[0]} DISK_IMAGE FILE [DEST_PATH]",
             file=sys.stderr,
         )
         print("  DEST_PATH default: sbin/init (e.g. bin/sh)", file=sys.stderr)
         sys.exit(1)
+
     disk_path = sys.argv[1]
     file_path = sys.argv[2]
     dest = sys.argv[3] if len(sys.argv) == 4 else "sbin/init"
@@ -329,11 +480,16 @@ def main():
     if not path_parts:
         print("invalid DEST_PATH", file=sys.stderr)
         sys.exit(1)
+
+    assert_regular_source(file_path, dest)
+
     with open(file_path, "rb") as inf:
         data = inf.read()
+
     with open(disk_path, "r+b") as f:
         sb = parse_super(read_block(f, 1))
-        write_file(f, sb, path_parts, data)
+        write_file(f, sb, path_parts, data, file_path)
+
     dest_display = "/" + "/".join(path_parts)
     print(
         f"✅ Injected {file_path} -> {disk_path}:{dest_display} "
