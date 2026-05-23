@@ -15,8 +15,50 @@
 #include <config.h>
 #include <ir0/vga.h>
 #include <ir0/oops.h>
-#include <kernel/scheduler/task.h>
+#include <ir0/serial_io.h>
+#include <sched/task.h>
 #include <arch/common/arch_portable.h>
+
+#define USER_CANON_MIN 0x00400000ULL
+#define USER_CANON_MAX 0x00007FFFFFFFFFFFULL
+
+static int arch_user_va_canonical(uint64_t va)
+{
+    return va >= USER_CANON_MIN && va <= USER_CANON_MAX;
+}
+
+static void arch_audit_iret_frame(const task_t *task)
+{
+    serial_print("[WAIT_EXIT_AUDIT][IRET_CHECK] rip=");
+    serial_print_hex64(task->rip);
+    serial_print(" rsp=");
+    serial_print_hex64(task->rsp);
+    serial_print(" cs=");
+    serial_print_hex64((uint64_t)task->cs);
+    serial_print(" ss=");
+    serial_print_hex64((uint64_t)task->ss);
+    serial_print(" rflags=");
+    serial_print_hex64(task->rflags);
+    serial_print("\n");
+
+    if ((task->cs & 0xFFFFU) != (uint16_t)USER_CODE_SEL ||
+        (task->ss & 0xFFFFU) != (uint16_t)USER_DATA_SEL)
+    {
+        serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_CS_SS\n");
+        panic("arch_switch_to_user_task: invalid CS/SS for ring3 iretq");
+    }
+    if (!arch_user_va_canonical(task->rip))
+    {
+        serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RIP\n");
+        panic("arch_switch_to_user_task: invalid RIP for ring3 iretq");
+    }
+    if (!arch_user_va_canonical(task->rsp))
+    {
+        serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RSP\n");
+        panic("arch_switch_to_user_task: invalid RSP for ring3 iretq");
+    }
+    serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] RETURN_TO_PARENT_OK\n");
+}
 
 /*
  * Detect MinGW-w64 cross-compilation
@@ -79,6 +121,7 @@ void arch_switch_to_user_task(const task_t *task)
     if (!task)
         panic("arch_switch_to_user_task: null task");
 
+    arch_audit_iret_frame(task);
     arch_switch_to_user_task_asm(task);
     panic("Returned from arch_switch_to_user_task unexpectedly");
 #endif

@@ -289,7 +289,12 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
 
 uint32_t minix_alloc_inode(void)
 {
-  for (uint32_t i = 1; i < MINIX_MAX_INODES; i++)
+  uint32_t limit = minix_fs.superblock.s_ninodes;
+
+  if (limit == 0 || limit >= MINIX_MAX_INODES)
+    limit = MINIX_MAX_INODES - 1;
+
+  for (uint32_t i = 1; i <= limit; i++)
   {
     uint32_t byte = i / 8;
     uint32_t bit = i % 8;
@@ -301,18 +306,33 @@ uint32_t minix_alloc_inode(void)
     }
   }
 
-  return 0; // No hay inodes libres
+  return 0;
+}
+
+static int minix_sync_inode_bitmap(void)
+{
+  uint32_t imap_block = 2;
+
+  if (!minix_fs.inode_bitmap)
+    return -EIO;
+  if (minix_write_block(imap_block, minix_fs.inode_bitmap) != 0)
+    return -EIO;
+  return 0;
 }
 
 // Global static inodes to avoid memory issues
 static minix_inode_t cached_root_inode;
 static minix_inode_t cached_result_inode;
 static bool root_inode_cached = false;
+static uint16_t minix_last_resolved_ino;
 
 minix_inode_t *minix_fs_find_inode(const char *pathname)
 {
   // Using typewriter_print for kernel output
   static minix_inode_t result_inode;
+  uint16_t current_inode_num = MINIX_ROOT_INODE;
+
+  minix_last_resolved_ino = 0;
 
   if (!pathname || !minix_fs.initialized)
   {
@@ -325,6 +345,7 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
     {
       root_inode_cached = true;
       kmemcpy(&result_inode, &cached_root_inode, sizeof(minix_inode_t));
+      minix_last_resolved_ino = MINIX_ROOT_INODE;
       return &result_inode;
     }
     log_debug_fmt("MINIX", "find_inode('/') read failed=%d", read_result);
@@ -353,6 +374,7 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
   if (*token == '\0')
   {
      kmemcpy(&cached_result_inode, &current_inode, sizeof(minix_inode_t));
+     minix_last_resolved_ino = current_inode_num;
      return &cached_result_inode;
   }
 
@@ -380,6 +402,8 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
       return NULL;
     }
 
+    current_inode_num = found_inode;
+
     // Leer el inode encontrado
     if (minix_read_inode(found_inode, &current_inode) != 0)
     {
@@ -406,6 +430,7 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
 
   // Retornar una copia estática del inode encontrado
   kmemcpy(&cached_result_inode, &current_inode, sizeof(minix_inode_t));
+  minix_last_resolved_ino = current_inode_num;
 
   return &cached_result_inode;
 }
@@ -413,94 +438,9 @@ minix_inode_t *minix_fs_find_inode(const char *pathname)
 // Función auxiliar para obtener el número de inode de un path
 uint16_t minix_fs_get_inode_number(const char *pathname)
 {
-  if (!pathname || !minix_fs.initialized)
-  {
-    return 0;
-  }
-
-  // Si es el directorio raíz
-  if (kstrcmp(pathname, "/") == 0)
-  {
-    return MINIX_ROOT_INODE;
-  }
-
-  // Parsear el path
-  char path_copy[VFS_PATH_MAX];
-  kstrncpy(path_copy, pathname, sizeof(path_copy) - 1);
-  path_copy[sizeof(path_copy) - 1] = '\0';
-
-  // Empezar desde el inode raíz
-  minix_inode_t current_inode;
-  if (minix_read_inode(MINIX_ROOT_INODE, &current_inode) != 0)
-  {
-    return 0;
-  }
-
-  // Dividir el path en componentes
-  // Simple tokenizer to replace strtok
-  char *token = path_copy;
-  if (*token == '/')
-    token++; // Skip leading slash
-  
-  // Handle trailing slash or empty path after leading slash
-  if (*token == '\0')
-  {
-     return MINIX_ROOT_INODE;
-  }
-
-  char *next = token;
-  while (*next && *next != '/')
-    next++;
-  
-  if (*next == '/')
-    *next++ = '\0';
-  else
-    next = NULL; // End of string
-
-  uint16_t current_inode_num = MINIX_ROOT_INODE;
-
-  while (token != NULL && *token != '\0')
-  {
-    // Verificar que el inode actual es un directorio
-    if (!(current_inode.i_mode & MINIX_IFDIR))
-    {
-      return 0;
-    }
-
-    // Buscar la entrada en el directorio actual
-    uint16_t found_inode = minix_fs_find_dir_entry(&current_inode, token);
-    if (found_inode == 0)
-    {
-      return 0;
-    }
-
-    current_inode_num = found_inode;
-
-    // Leer el inode encontrado
-    if (minix_read_inode(found_inode, &current_inode) != 0)
-    {
-      return 0;
-    }
-
-    // Get next token
-    if (next)
-    {
-      token = next;
-      while (*next && *next != '/')
-        next++;
-      
-      if (*next == '/')
-        *next++ = '\0';
-      else
-        next = NULL; // End of string
-    }
-    else
-    {
-      token = NULL;
-    }
-  }
-
-  return current_inode_num;
+  if (minix_fs_find_inode(pathname))
+    return minix_last_resolved_ino;
+  return 0;
 }
 
 uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode,
@@ -1569,9 +1509,30 @@ int minix_fs_cat(const char *path)
 // FUNCIÓN PARA ESCRIBIR CONTENIDO A ARCHIVOS
 // ===============================================================================
 
-int minix_fs_write_file(const char *path, const char *content)
+static void minix_serial_print_blob(const char *label, const void *content, size_t content_size)
 {
+  char scratch[128];
+  size_t n;
 
+  serial_print(label);
+  if (!content || content_size == 0)
+  {
+    serial_print("(empty)\n");
+    return;
+  }
+  n = content_size;
+  if (n >= sizeof(scratch))
+    n = sizeof(scratch) - 1;
+  kmemcpy(scratch, content, n);
+  scratch[n] = '\0';
+  serial_print(scratch);
+  if (content_size > n)
+    serial_print("...");
+  serial_print("\n");
+}
+
+int minix_fs_write_file_len(const char *path, const void *content, size_t content_size)
+{
   serial_print("SERIAL: minix_fs_write_file called\n");
 
   if (!minix_fs.initialized)
@@ -1586,7 +1547,7 @@ int minix_fs_write_file(const char *path, const char *content)
     return -1;
   }
 
-  if (!content)
+  if (content_size > 0 && !content)
   {
     serial_print("SERIAL: minix_fs_write_file: content is NULL\n");
     return -1;
@@ -1594,9 +1555,7 @@ int minix_fs_write_file(const char *path, const char *content)
 
   serial_print("SERIAL: minix_fs_write_file: path=");
   serial_print(path);
-  serial_print(" content=");
-  serial_print(content);
-  serial_print("\n");
+  minix_serial_print_blob(" content=", content, content_size);
 
   // Verificar que el disco esté disponible
   if (!block_dev_is_present(minix_root_device_name()))
@@ -1643,8 +1602,24 @@ int minix_fs_write_file(const char *path, const char *content)
     return -1;
   }
 
-  // Calcular el tamaño del contenido
-  uint32_t content_size = kstrlen(content);
+  if (content_size == 0)
+  {
+    int zi;
+
+    for (zi = 0; zi < MINIX_DIRECT_ZONES; zi++)
+    {
+      if (file_inode.i_zone[zi] != 0)
+      {
+        minix_free_zone(file_inode.i_zone[zi]);
+        file_inode.i_zone[zi] = 0;
+      }
+    }
+    file_inode.i_size = 0;
+    file_inode.i_time = get_system_time();
+    if (minix_fs_write_inode(inode_num, &file_inode) != 0)
+      return -1;
+    return 0;
+  }
 
   // Verificar que no exceda el tamaño máximo de archivo
   if (content_size > MINIX_BLOCK_SIZE * MINIX_DIRECT_ZONES)
@@ -1726,6 +1701,13 @@ int minix_fs_write_file(const char *path, const char *content)
   return 0;
 }
 
+int minix_fs_write_file(const char *path, const char *content)
+{
+  size_t content_size = content ? kstrlen(content) : 0;
+
+  return minix_fs_write_file_len(path, content, content_size);
+}
+
 /**
  * Creates a new empty file with the specified path and mode.
  * If the file already exists, updates its modification time.
@@ -1736,115 +1718,106 @@ int minix_fs_write_file(const char *path, const char *content)
  */
 int minix_fs_touch(const char *path, mode_t mode)
 {
+  char parent_path[VFS_PATH_MAX];
+  char filename[64];
+  uint16_t existing;
+  uint16_t new_inode_num;
+  minix_inode_t parent_inode;
+  minix_inode_t *parent_inode_ptr;
+  minix_inode_t new_inode;
+
   if (!minix_fs.initialized)
-  {
     return -ENODEV;
-  }
 
   if (!path || *path == '\0')
-  {
     return -EINVAL;
-  }
 
   if (kstrcmp(path, "/") == 0)
-  {
     return -EINVAL;
-  }
 
   if (!block_dev_is_present(minix_root_device_name()))
-  {
     return -EIO;
-  }
 
-  // Check if file already exists
+  /* Check if file already exists */
   minix_inode_t *existing_inode = minix_fs_find_inode(path);
   if (existing_inode)
   {
-    // File exists, just update its timestamp
     existing_inode->i_time = get_system_time();
     uint16_t inode_num = minix_fs_get_inode_number(path);
     if (inode_num != 0)
     {
-      // Make a copy to avoid modifying the static buffer
       minix_inode_t inode_copy;
+
       kmemcpy(&inode_copy, existing_inode, sizeof(minix_inode_t));
       minix_fs_write_inode(inode_num, &inode_copy);
     }
     return 0;
   }
 
-  // Parse path to get parent directory and filename
-  char parent_path[VFS_PATH_MAX] = {0};
-  char filename[64] = {0};
-
   if (minix_fs_split_path(path, parent_path, filename) != 0)
-  {
     return -EINVAL;
-  }
 
-  minix_inode_t parent_inode;
-  minix_inode_t *parent_inode_ptr = minix_fs_find_inode(parent_path);
+  parent_inode_ptr = minix_fs_find_inode(parent_path);
   if (!parent_inode_ptr)
-  {
     return -ENOENT;
-  }
   kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   if (!(parent_inode.i_mode & MINIX_IFDIR))
-  {
     return -ENOTDIR;
-  }
 
   if (kstrlen(filename) >= MINIX_NAME_LEN)
-  {
     return -ENAMETOOLONG;
-  }
 
-  if (minix_fs_find_dir_entry(&parent_inode, filename) != 0)
-  {
+  existing = minix_fs_find_dir_entry(&parent_inode, filename);
+  if (existing != 0)
     return -EEXIST;
-  }
 
-  uint16_t new_inode_num = minix_alloc_inode();
+  new_inode_num = minix_alloc_inode();
   if (new_inode_num == 0)
-  {
     return -ENOSPC;
+
+  if (minix_sync_inode_bitmap() != 0)
+  {
+    minix_fs_free_inode(new_inode_num);
+    return -EIO;
   }
 
-  // Create new file inode
-  minix_inode_t new_inode = {0};
-  
-  // Apply umask to mode
+  kmemset(&new_inode, 0, sizeof(new_inode));
+
+  /* Apply umask to mode */
   {
     const struct ir0_task_cred *cr = ir0_current_cred();
-
     mode_t effective_mode = mode & ~(cr ? cr->umask : (mode_t)0);
-    new_inode.i_mode = MINIX_IFREG | (effective_mode & 0777);         // Regular file with given permissions
-    new_inode.i_uid = cr ? (uint16_t)cr->uid : (uint16_t)0;     // Use current process UID
-    new_inode.i_gid = cr ? (uint8_t)cr->gid : (uint8_t)0;     // Use current process GID
+
+    new_inode.i_mode = MINIX_IFREG | (effective_mode & 0777);
+    new_inode.i_uid = cr ? (uint16_t)cr->uid : (uint16_t)0;
+    new_inode.i_gid = cr ? (uint8_t)cr->gid : (uint8_t)0;
   }
-  new_inode.i_size = 0;                                   // Empty file
-  new_inode.i_time = get_system_time();                   // Current time
-  new_inode.i_nlinks = 1;                                 // Single hard link
-  kmemset(new_inode.i_zone, 0, sizeof(new_inode.i_zone)); // No data blocks allocated yet
+  new_inode.i_size = 0;
+  new_inode.i_time = get_system_time();
+  new_inode.i_nlinks = 1;
+  kmemset(new_inode.i_zone, 0, sizeof(new_inode.i_zone));
 
   if (minix_fs_write_inode(new_inode_num, &new_inode) != 0)
   {
     minix_fs_free_inode(new_inode_num);
+    (void)minix_sync_inode_bitmap();
     return -EIO;
   }
 
   if (minix_fs_add_dir_entry(&parent_inode, filename, new_inode_num) != 0)
   {
     minix_fs_free_inode(new_inode_num);
+    (void)minix_sync_inode_bitmap();
     return -EIO;
   }
 
   parent_inode.i_time = get_system_time();
-  uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
-  if (parent_inode_num != 0)
   {
-    minix_fs_write_inode(parent_inode_num, &parent_inode);
+    uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
+
+    if (parent_inode_num != 0)
+      minix_fs_write_inode(parent_inode_num, &parent_inode);
   }
 
   return 0;
@@ -2309,23 +2282,56 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
     return -EINVAL;
   }
 
-  // Find the file inode
-  uint16_t inode_num = minix_fs_get_inode_number(path);
-  if (inode_num == 0)
+  // Resolve path once (stat and read share the same lookup semantics).
+  minix_inode_t *inode_ref = minix_fs_find_inode(path);
+  if (!inode_ref)
   {
-    return -ENOENT; // File not found
+    if (vfs_exec_audit_is_active())
+    {
+      serial_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_fail path=");
+      serial_print(path);
+      serial_print(" inode=0\n");
+    }
+    return -ENOENT;
   }
 
-  // Read the inode
-  minix_inode_t inode;
-  if (minix_read_inode(inode_num, &inode) != 0)
+  uint16_t inode_num = minix_last_resolved_ino;
+  if (inode_num == 0)
   {
-    return -EIO;
+    if (vfs_exec_audit_is_active())
+    {
+      serial_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_fail path=");
+      serial_print(path);
+      serial_print(" inode=0\n");
+    }
+    return -ENOENT;
   }
+
+  if (vfs_exec_audit_is_active())
+  {
+    serial_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_ok path=");
+    serial_print(path);
+    serial_print(" inode=");
+    serial_print_hex32((uint32_t)inode_num);
+    serial_print("\n");
+  }
+
+  minix_inode_t inode;
+  kmemcpy(&inode, inode_ref, sizeof(inode));
 
   // Check if it's a regular file
   if (!(inode.i_mode & MINIX_IFREG))
   {
+    if (vfs_exec_audit_is_active())
+    {
+      serial_print("[EXEC_AUDIT][MINIX] stage=not_regular mode=");
+      serial_print_hex32((uint32_t)inode.i_mode);
+      serial_print(" ifmt=");
+      serial_print_hex32((uint32_t)(inode.i_mode & MINIX_IFMT));
+      serial_print(" is_dir=");
+      serial_print((inode.i_mode & MINIX_IFMT) == MINIX_IFDIR ? "1" : "0");
+      serial_print("\n");
+    }
     return -EINVAL; // Not a regular file
   }
 
@@ -2334,6 +2340,12 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   if (*size == 0)
   {
     *data = NULL;
+    if (vfs_exec_audit_is_active())
+    {
+      serial_print("[EXEC_AUDIT][MINIX] stage=file_empty inode=");
+      serial_print_hex32((uint32_t)inode_num);
+      serial_print("\n");
+    }
     return 0;
   }
   if (*size > minix_read_max)
@@ -2536,23 +2548,85 @@ static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count,
 
 static int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
 {
+	int ret;
+
 	if (offset != 0)
 		return -EINVAL;
-	int ret = minix_fs_write_file(path, (const char *)buf);
+	ret = minix_fs_write_file_len(path, buf, count);
 	if (ret == 0 && written_count)
 		*written_count = count;
 	return (ret == -1) ? -EIO : ret;
 }
 
-static int minix_fs_truncate_wrapper(const char *path, size_t length)
+static int minix_backend_classified;
+
+/*
+ * minix_create - VFS create backend (path + mode only; no open flags).
+ */
+static int minix_create(const char *path, mode_t mode)
 {
-	int ret;
+  int ret;
 
-	if (length != 0)
-		return -ENOSYS;
+  ret = minix_fs_touch(path, mode);
+  if (ret == 0 && !minix_backend_classified)
+  {
+    minix_backend_classified = 1;
+    serial_print("[MINIX_FS][CLASSIFY] MINIX_BACKEND_ONLY\n");
+  }
+  return ret;
+}
 
-	ret = minix_fs_write_file(path, "");
-	return (ret == -1) ? -EIO : ret;
+/*
+ * minix_truncate - VFS truncate backend (path + length only).
+ */
+static int minix_truncate(const char *path, size_t length)
+{
+  minix_inode_t *inode_ptr;
+  minix_inode_t inode;
+  uint16_t inode_num;
+  int zi;
+  int changed;
+
+  if (length != 0)
+    return -ENOSYS;
+
+  if (!path || !minix_fs.initialized)
+    return -EIO;
+
+  inode_ptr = minix_fs_find_inode(path);
+  if (!inode_ptr)
+    return -ENOENT;
+
+  inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0)
+    return -ENOENT;
+
+  kmemcpy(&inode, inode_ptr, sizeof(inode));
+  if (inode.i_mode & MINIX_IFDIR)
+    return -EISDIR;
+
+  changed = 0;
+  for (zi = 0; zi < MINIX_DIRECT_ZONES; zi++)
+  {
+    if (inode.i_zone[zi] != 0)
+    {
+      minix_free_zone(inode.i_zone[zi]);
+      inode.i_zone[zi] = 0;
+      changed = 1;
+    }
+  }
+
+  if (inode.i_size != 0)
+    changed = 1;
+
+  inode.i_size = 0;
+  if (!changed)
+    return 0;
+
+  inode.i_time = get_system_time();
+  if (minix_fs_write_inode(inode_num, &inode) != 0)
+    return -EIO;
+  return 0;
 }
 
 /*
@@ -2640,13 +2714,13 @@ static int minix_fs_chmod(const char *path, mode_t mode)
 static struct vfs_ops minix_fs_ops = {
 	.stat    = minix_fs_stat,
 	.mkdir   = minix_fs_mkdir,
-	.create  = minix_fs_touch,
+	.create  = minix_create,
 	.unlink  = minix_fs_rm,
 	.rmdir   = minix_fs_rmdir,
 	.readdir = minix_fs_readdir,
 	.read    = minix_fs_read_file_wrapper,
 	.write   = minix_fs_write_file_wrapper,
-	.truncate = minix_fs_truncate_wrapper,
+	.truncate = minix_truncate,
 	.link    = minix_fs_link,
 	.chown   = minix_fs_chown,
 	.chmod   = minix_fs_chmod,

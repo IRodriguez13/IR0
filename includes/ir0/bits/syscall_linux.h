@@ -45,6 +45,7 @@
 #define __NR_writev        20
 #define __NR_access        21
 #define __NR_pipe          22
+#define __NR_pipe2        293
 #define __NR_select        23
 #define __NR_sched_yield   24
 #define __NR_mremap        25
@@ -137,6 +138,9 @@
 #define __NR_prlimit64       302
 #define __NR_openat          257
 #define __NR_newfstatat      262
+#define __NR_unlinkat        263
+#define __NR_renameat        264
+#define __NR_utimensat       280
 #define __NR_exit_group   231
 
 /* IR0 custom syscalls (outside Linux range) */

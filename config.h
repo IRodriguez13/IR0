@@ -194,7 +194,7 @@
 
 /* MEMORY LAYOUT — virtual addresses and segment selectors */
 #define USER_STACK_TOP      0x7FFFF000UL
-#define USER_STACK_SIZE     0x4000
+#define USER_STACK_SIZE     0x10000   /* 64 KiB — musl/BusyBox headroom below guard page */
 #define USER_HEAP_BASE      0x2000000UL
 #define USER_MMAP_START     0x8000000UL
 #define USER_MMAP_END       0x7FFFF000UL

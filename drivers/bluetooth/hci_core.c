@@ -21,6 +21,7 @@
 
 #include "hci_core.h"
 #include "hci_uart.h"
+#include "../serial/serial.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <string.h>

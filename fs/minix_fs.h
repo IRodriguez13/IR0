@@ -146,6 +146,7 @@ int minix_fs_mkdir(const char *path, mode_t mode);
 int minix_fs_ls(const char *path, bool detailed);
 
 int minix_fs_cat(const char *path);
+int minix_fs_write_file_len(const char *path, const void *content, size_t content_size);
 int minix_fs_write_file(const char *path, const char *content);
 int minix_fs_read_file(const char *path, void **data, size_t *size);
 int minix_fs_touch(const char *path, mode_t mode);

@@ -24,6 +24,7 @@
 #include "pmm.h"
 #include <ir0/kmem.h>
 #include <ir0/serial_io.h>
+#include <ir0/process.h>
 #include <config.h>
 #include <stdint.h>
 
@@ -44,6 +45,9 @@ static struct
  * the hint to 0 so holes below the cursor are not skipped indefinitely.
  */
 static uint32_t pmm_search_hint;
+static int32_t *pmm_frame_owner;
+static uint64_t pmm_diag_double_free;
+static uint32_t pmm_diag_events;
 
 /* BITMAP OPERATIONS                                                         */
 
@@ -97,6 +101,14 @@ void pmm_init(uintptr_t mem_start, size_t mem_size)
     pmm.used_frames = 0;
     pmm.initialized = 1;
     pmm_search_hint = 0;
+    pmm_diag_double_free = 0;
+    pmm_diag_events = 0;
+    pmm_frame_owner = kmalloc(pmm.total_frames * sizeof(int32_t));
+    if (pmm_frame_owner)
+    {
+        for (size_t i = 0; i < pmm.total_frames; i++)
+            pmm_frame_owner[i] = -1;
+    }
 
 #if DEBUG_PMM
     serial_print("[PMM] Initialized\n");
@@ -122,9 +134,21 @@ uintptr_t pmm_alloc_frame(void)
         {
             if (!bitmap_test(i))
             {
+                pid_t owner_pid = process_get_pid();
                 bitmap_set(i);
                 pmm.used_frames++;
                 pmm_search_hint = (uint32_t)((i + 1) % pmm.total_frames);
+                if (pmm_frame_owner)
+                    pmm_frame_owner[i] = (int32_t)owner_pid;
+                if (pmm_diag_events < 2048U)
+                {
+                    serial_print("[FASE41][PMM] ALLOC pid=");
+                    serial_print_hex32((uint32_t)owner_pid);
+                    serial_print(" frame=");
+                    serial_print_hex64((uint64_t)(pmm.mem_start + (i * PMM_FRAME_SIZE)));
+                    serial_print("\n");
+                    pmm_diag_events++;
+                }
 
                 return pmm.mem_start + (i * PMM_FRAME_SIZE);
             }
@@ -162,11 +186,23 @@ void pmm_free_frame(uintptr_t phys_addr)
     /* Only free if currently used */
     if (bitmap_test(frame_index))
     {
+        int32_t owner_pid = pmm_frame_owner ? pmm_frame_owner[frame_index] : -1;
         bitmap_clear(frame_index);
         pmm.used_frames--;
+        if (pmm_frame_owner)
+            pmm_frame_owner[frame_index] = -1;
 
         if (frame_index < (size_t)pmm_search_hint)
             pmm_search_hint = 0;
+        if (pmm_diag_events < 2048U)
+        {
+            serial_print("[FASE41][PMM] FREE frame=");
+            serial_print_hex64((uint64_t)phys_addr);
+            serial_print(" owner=");
+            serial_print_hex32((uint32_t)owner_pid);
+            serial_print("\n");
+            pmm_diag_events++;
+        }
         
 #if DEBUG_PMM
         serial_print("[PMM] Freed frame\n");
@@ -174,6 +210,7 @@ void pmm_free_frame(uintptr_t phys_addr)
     }
     else
     {
+        pmm_diag_double_free++;
 #if DEBUG_PMM
         serial_print("[PMM] WARN: Double free detected\n");
 #endif
@@ -215,4 +252,70 @@ void pmm_stats(size_t *total_frames, size_t *used_frames, size_t *free_frames)
     serial_print("  Stats available via debugger\n");
     /* pmm.total_frames, pmm.used_frames available in GDB */
 #endif
+}
+
+void pmm_owner_audit(uint64_t *orphan_frames, uint64_t *double_free,
+                     uint64_t *alive_owner_missing)
+{
+    uint64_t orphan = 0;
+    uint64_t alive_missing = 0;
+
+    if (!pmm.initialized)
+        return;
+
+    if (pmm_frame_owner)
+    {
+        for (size_t i = 0; i < pmm.total_frames; i++)
+        {
+            if (!bitmap_test(i))
+                continue;
+
+            if (pmm_frame_owner[i] < 0)
+            {
+                orphan++;
+                continue;
+            }
+
+            if (pmm_frame_owner[i] > 0 &&
+                process_find_by_pid((pid_t)pmm_frame_owner[i]) == NULL)
+            {
+                alive_missing++;
+            }
+        }
+    }
+
+    if (orphan_frames)
+        *orphan_frames = orphan;
+    if (double_free)
+        *double_free = pmm_diag_double_free;
+    if (alive_owner_missing)
+        *alive_owner_missing = alive_missing;
+}
+
+int pmm_fase47_frame_is_used(size_t frame_index)
+{
+    if (!pmm.initialized || frame_index >= pmm.total_frames)
+        return 0;
+    return bitmap_test(frame_index) ? 1 : 0;
+}
+
+int32_t pmm_fase47_frame_owner(size_t frame_index)
+{
+    if (!pmm.initialized || frame_index >= pmm.total_frames || !pmm_frame_owner)
+        return -1;
+    return pmm_frame_owner[frame_index];
+}
+
+uintptr_t pmm_fase47_frame_phys(size_t frame_index)
+{
+    if (!pmm.initialized || frame_index >= pmm.total_frames)
+        return 0;
+    return pmm.mem_start + (uintptr_t)(frame_index * PMM_FRAME_SIZE);
+}
+
+size_t pmm_fase47_total_frames(void)
+{
+    if (!pmm.initialized)
+        return 0;
+    return pmm.total_frames;
 }

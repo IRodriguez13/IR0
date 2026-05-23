@@ -77,3 +77,17 @@ uintptr_t pmm_get_end(void);
  * Any parameter can be NULL if that stat is not needed.
  */
 void pmm_stats(size_t *total_frames, size_t *used_frames, size_t *free_frames);
+
+/*
+ * FASE41 diagnostics: summarize PMM ownership bookkeeping.
+ * orphan_frames: used bitmap entries without owner tag.
+ * double_free: number of double-free attempts observed.
+ * alive_owner_missing: used frames owned by a PID no longer in process list.
+ */
+void pmm_owner_audit(uint64_t *orphan_frames, uint64_t *double_free,
+                     uint64_t *alive_owner_missing);
+
+int pmm_fase47_frame_is_used(size_t frame_index);
+int32_t pmm_fase47_frame_owner(size_t frame_index);
+uintptr_t pmm_fase47_frame_phys(size_t frame_index);
+size_t pmm_fase47_total_frames(void);

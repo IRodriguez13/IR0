@@ -435,4 +435,12 @@ menu "Debugging"
         bool "Keyboard/stdin read debug output"
         default n
 
+    config DEBUG_ISRABI
+        bool "ISR ABI audit serial noise ([ISRABI] tags)"
+        default n
+
+    config DEBUG_FASE50
+        bool "FASE50 bring-up serial noise ([FASE50*] tags)"
+        default n
+
 endmenu

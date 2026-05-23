@@ -15,7 +15,7 @@
 #ifndef _IR0_CONTEXT_H
 #define _IR0_CONTEXT_H
 
-#include <kernel/scheduler/task.h>
+#include <sched/task.h>
 
 /*
  * Scheduling / MMU accessors visible to portable code; ISA backends stay under

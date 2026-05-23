@@ -1,10 +1,100 @@
 global switch_context_x64
 global iretq_checkpoint_buf
+extern fork_ret_emit_pre_return
+extern fork_ret_pre_regs
+extern fork_flow_set_tf
+extern fork_restore_audit
 
 section .bss
 align 16
 iretq_checkpoint_buf:
     resq 40
+fork_flow_set_tf:
+    resb 1
+
+; fork_restore_audit_t offsets (must match kernel/process.c)
+%define FRA_magic                  0
+%define FRA_task_ptr               8
+%define FRA_rax_slot_addr          16
+%define FRA_rax_slot_mem           24
+%define FRA_rsp_pre_gpr_load       32
+%define FRA_stack_qwords           40
+%define FRA_restore_method         200
+%define FRA_stack_rax_slot_off     208
+%define FRA_live_rax_after_load    216
+%define FRA_live_rbx_after_load    224
+%define FRA_live_rax_after_pr_call 232
+%define FRA_live_rax_pre_iretq     240
+%define FRA_live_rbx_pre_iretq     248
+%define FRA_live_rcx_pre_iretq     256
+%define FRA_live_rdx_pre_iretq     264
+%define FRA_kernel_rsp_pre_iretq   272
+%define FRA_iretq_rip              280
+%define FRA_iretq_rflags           288
+%define FRA_iretq_user_rsp         296
+
+%macro FORK_RESTORE_DUMP_STACK 0
+    push rsi
+    push r10
+    lea rsi, [rel fork_restore_audit]
+    xor r10, r10
+%%fr_dump_loop:
+    cmp r10, 20
+    jge %%fr_dump_done
+    mov rax, [rsp + 16 + r10 * 8]
+    mov [rsi + FRA_stack_qwords + r10 * 8], rax
+    inc r10
+    jmp %%fr_dump_loop
+%%fr_dump_done:
+    pop r10
+    pop rsi
+%endmacro
+
+%macro FORK_RESTORE_SNAP_PRE_IRETQ 0
+    push rsi
+    push r10
+    lea rsi, [rel fork_restore_audit]
+    mov [rsi + FRA_live_rax_pre_iretq], rax
+    mov [rsi + FRA_live_rbx_pre_iretq], rbx
+    mov [rsi + FRA_live_rcx_pre_iretq], rcx
+    mov [rsi + FRA_live_rdx_pre_iretq], rdx
+    mov [rsi + FRA_kernel_rsp_pre_iretq], rsp
+    mov r10, [rsp + 16]
+    mov [rsi + FRA_iretq_rip], r10
+    mov r10, [rsp + 32]
+    mov [rsi + FRA_iretq_rflags], r10
+    mov r10, [rsp + 40]
+    mov [rsi + FRA_iretq_user_rsp], r10
+    pop r10
+    pop rsi
+%endmacro
+
+; Reload user GPRs from task_t after debug epilogue (must not clobber rax et al.).
+%macro FORK_RESTORE_RELOAD_GPRS 0
+    mov r10, [rel fork_restore_audit + FRA_task_ptr]
+    test r10, r10
+    jz %%fr_reload_done
+    mov rax, [r10 + 0x00]
+    mov rbx, [r10 + 0x08]
+    mov rcx, [r10 + 0x10]
+    mov rdx, [r10 + 0x18]
+    mov rbp, [r10 + 0x78]
+    mov r8,  [r10 + 0x30]
+    mov r9,  [r10 + 0x38]
+    mov r12, [r10 + 0x50]
+    mov r13, [r10 + 0x58]
+    mov r14, [r10 + 0x60]
+    mov r15, [r10 + 0x68]
+    push qword [r10 + 0x48]
+    push qword [r10 + 0x40]
+    push qword [r10 + 0x28]
+    push qword [r10 + 0x20]
+    pop rsi
+    pop rdi
+    pop r10
+    pop r11
+%%fr_reload_done:
+%endmacro
 
 section .text
 
@@ -79,10 +169,50 @@ switch_context_x64:
 
     mov r11, rsi
 
-    sub rsp, 8
+    ; CR3 before GPR restore: rax is scratch until task->rax is loaded below.
     mov rax, [r11 + 0xB0]
-    mov [rsp], rax
+    mov cr3, rax
 
+    movzx eax, word [r11 + 0x90]
+    test al, 3
+    jnz .user_iretq_resume
+
+    ; Ring-0 resume (blocked in kernel syscall path): ret to saved RIP/RSP.
+.kernel_ret_resume:
+    mov rax, [r11 + 0x00]
+    mov rbx, [r11 + 0x08]
+    mov rcx, [r11 + 0x10]
+    mov rdx, [r11 + 0x18]
+    mov rsi, [r11 + 0x20]
+    mov rdi, [r11 + 0x28]
+    mov rbp, [r11 + 0x78]
+    mov r8,  [r11 + 0x30]
+    mov r9,  [r11 + 0x38]
+    mov r10, [r11 + 0x40]
+    mov r12, [r11 + 0x50]
+    mov r13, [r11 + 0x58]
+    mov r14, [r11 + 0x60]
+    mov r15, [r11 + 0x68]
+
+    push rax
+    push rcx
+    push rdx
+    mov rax, [r11 + 0x258]
+    mov rdx, rax
+    shr rdx, 32
+    mov ecx, 0xC0000100
+    wrmsr
+    pop rdx
+    pop rcx
+    pop rax
+
+    mov r10, [r11 + 0x80]
+    mov r8, [r11 + 0x48]
+    mov rsp, [r11 + 0x70]
+    mov r11, r8
+    jmp r10
+
+.user_iretq_resume:
     mov rax, [r11 + 0x00]
     mov rbx, [r11 + 0x08]
     mov rcx, [r11 + 0x10]
@@ -112,7 +242,7 @@ switch_context_x64:
     pop rcx
     pop rax
 
-    ; Build iretq frame on kernel CR3; segments reload on iretq (SS) / user entry.
+    ; Build iretq frame on target CR3; segments reload on iretq (SS) / user entry.
     movzx rdi, word [r11 + 0x9A]
     push rdi
     push qword [r11 + 0x70]
@@ -124,8 +254,6 @@ switch_context_x64:
     mov rdi, [r11 + 0x28]
     mov r11, [r11 + 0x48]
 
-    mov rax, [rsp + 40]
-    mov cr3, rax
     iretq
 
 .skip:
@@ -170,6 +298,23 @@ arch_switch_to_user_task_asm:
     mov [rsp], rax
     mov cr3, rax
 
+    ; [FORK_RESTORE] snapshot before GPR load from task_t (not stack pop).
+    push rsi
+    push r10
+    lea rsi, [rel fork_restore_audit]
+    mov qword [rsi + FRA_magic], 0xF010CAFE
+    mov [rsi + FRA_task_ptr], r11
+    lea r10, [r11 + 0x00]
+    mov [rsi + FRA_rax_slot_addr], r10
+    mov r10, [r11 + 0x00]
+    mov [rsi + FRA_rax_slot_mem], r10
+    mov [rsi + FRA_rsp_pre_gpr_load], rsp
+    mov qword [rsi + FRA_restore_method], 1
+    mov qword [rsi + FRA_stack_rax_slot_off], 0xFFFFFFFFFFFFFFFF
+    FORK_RESTORE_DUMP_STACK
+    pop r10
+    pop rsi
+
     mov rax, [r11 + 0x00]
     mov rbx, [r11 + 0x08]
     mov rcx, [r11 + 0x10]
@@ -183,6 +328,13 @@ arch_switch_to_user_task_asm:
     mov r13, [r11 + 0x58]
     mov r14, [r11 + 0x60]
     mov r15, [r11 + 0x68]
+
+    ; [FORK_RESTORE] live GPRs after task_t load.
+    push rsi
+    lea rsi, [rel fork_restore_audit]
+    mov [rsi + FRA_live_rax_after_load], rax
+    mov [rsi + FRA_live_rbx_after_load], rbx
+    pop rsi
 
     ; --- FASE 9A: capture rax around DS/ES load (no new regs, no CR3 touch) ---
     push rax
@@ -239,64 +391,63 @@ arch_switch_to_user_task_asm:
     mov rdi, [r11 + 0x28]
     mov r11, [r11 + 0x48]
 
-    ; --- CHECKPOINT B: snapshot stack-built iretq frame just before iretq ---
-    push rax
-    push rcx
-    lea rax, [rel iretq_checkpoint_buf]
-    mov qword [rax + 64], 0xBBB1
-    mov rcx, [rsp + 16 + 0]
-    mov [rax + 72], rcx
-    mov rcx, [rsp + 16 + 8]
-    mov [rax + 80], rcx
-    mov rcx, [rsp + 16 + 16]
-    mov [rax + 88], rcx
-    mov rcx, [rsp + 16 + 24]
-    mov [rax + 96], rcx
-    mov rcx, [rsp + 16 + 32]
-    mov [rax + 104], rcx
-    mov rcx, [rsp + 16 + 40]
-    mov [rax + 112], rcx
-    pop rcx
-    pop rax
-    ; -------------------------
+    ; [FORK_RET] live GPR dump after task restore, before iretq.
+    push r11
+    push rdi
+    lea rdi, [rel fork_ret_pre_regs]
+    mov [rdi + 0], rax
+    mov [rdi + 8], rcx
+    mov rax, [rsp + 8]
+    mov [rdi + 16], rax
+    mov [rdi + 24], rbx
+    mov [rdi + 32], rbp
+    mov [rdi + 40], r12
+    mov [rdi + 48], r13
+    mov [rdi + 56], r14
+    mov [rdi + 64], r15
+    mov rax, [rsp + 16 + 24]
+    mov [rdi + 72], rax
+    mov rax, [rsp + 16 + 0]
+    mov [rdi + 80], rax
+    pop rdi
+    pop r11
 
-    ; --- FASE 6A PRE: read iretq frame slots BEFORE mov cr3 ---
-    push rax
+    push r15
+    push r14
+    push r13
+    push r12
+    push rbp
+    push rbx
+    push r11
     push rcx
-    lea rax, [rel iretq_checkpoint_buf]
-    mov qword [rax + 128], 0xCCC1
-    mov rcx, [rsp + 16 + 0]
-    mov [rax + 136], rcx
-    mov rcx, [rsp + 16 + 8]
-    mov [rax + 144], rcx
-    mov rcx, [rsp + 16 + 16]
-    mov [rax + 152], rcx
-    mov rcx, [rsp + 16 + 24]
-    mov [rax + 160], rcx
-    mov rcx, [rsp + 16 + 32]
-    mov [rax + 168], rcx
-    pop rcx
+    push rax
+    call fork_ret_emit_pre_return
     pop rax
-    ; -------------------------
+    pop rcx
+    pop r11
+    pop rbx
+    pop rbp
+    pop r12
+    pop r13
+    pop r14
+    pop r15
 
-    ; --- FASE 6A POST: read same slots AFTER mov cr3 (no rsp change) ---
-    push rax
-    push rcx
-    lea rax, [rel iretq_checkpoint_buf]
-    mov qword [rax + 176], 0xDDD1
-    mov rcx, [rsp + 16 + 0]
-    mov [rax + 184], rcx
-    mov rcx, [rsp + 16 + 8]
-    mov [rax + 192], rcx
-    mov rcx, [rsp + 16 + 16]
-    mov [rax + 200], rcx
-    mov rcx, [rsp + 16 + 24]
-    mov [rax + 208], rcx
-    mov rcx, [rsp + 16 + 32]
-    mov [rax + 216], rcx
-    pop rcx
-    pop rax
-    ; -------------------------
+    ; [FORK_RESTORE] live RAX after fork_ret_emit_pre_return call pops.
+    push rsi
+    lea rsi, [rel fork_restore_audit]
+    mov [rsi + FRA_live_rax_after_pr_call], rax
+    pop rsi
+
+    ; Reload user GPRs from task (epilogue must not leave scratch in rax et al.).
+    FORK_RESTORE_RELOAD_GPRS
+
+    ; One-shot TF for fork-flow observation (cleared in #DB handler).
+    cmp byte [rel fork_flow_set_tf], 0
+    je .fork_flow_no_tf
+    or qword [rsp + 16], 0x100
+.fork_flow_no_tf:
+
+    FORK_RESTORE_SNAP_PRE_IRETQ
 
     iretq
 

@@ -11,7 +11,7 @@
  * Description: ARM64 scheduler switch stub for incremental bring-up.
  */
 
-#include <kernel/scheduler/task.h>
+#include <sched/task.h>
 
 void switch_context_arm64(task_t *prev, task_t *next)
 {

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <ir0/stat.h>
+#include <ir0/time.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -95,7 +96,7 @@ int vfs_init_root(void);
 /* Mount table (single linked list, newest first); NULL if empty */
 struct vfs_mount *vfs_get_mounts(void);
 
-/* File operations */
+/* File operations — @flags must be IR0_O_* (see includes/ir0/open_flags.h) */
 int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out);
 int vfs_read(struct vfs_file *f, char *buf, size_t count);
 int vfs_write(struct vfs_file *f, const char *buf, size_t count);
@@ -115,6 +116,12 @@ int vfs_readdir(const char *path, struct vfs_dirent *entries, int max);
 int vfs_chown(const char *path, uid_t owner, gid_t group);
 int vfs_chmod(const char *path, mode_t mode);
 int vfs_truncate(const char *path, size_t length);
+int vfs_utimens(const char *path, const struct timespec times[2]);
 
 /* Bulk read helper (ELF loader, etc.) */
 int vfs_read_file(const char *path, void **data, size_t *size);
+
+/* Exec-loader observational audit (single-threaded). */
+void vfs_exec_audit_begin(const char *path);
+void vfs_exec_audit_end(void);
+int vfs_exec_audit_is_active(void);

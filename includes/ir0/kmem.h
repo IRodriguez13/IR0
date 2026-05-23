@@ -41,6 +41,7 @@ void kmem_stats(void);  /* Print memory statistics (debug only) */
 
 /* Allocation that returns NULL on failure (no panic). */
 void *kmalloc_try(size_t size);
+void *kmalloc_aligned_try(size_t size, size_t alignment);
 
 
 

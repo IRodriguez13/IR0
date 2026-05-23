@@ -144,6 +144,8 @@ int map_supervisor_identity_low(uint64_t *pml4, uint64_t start, uint64_t end);
 /* Copy/zero user VAs via page-table walk (kernel CR3, no user CR3 switch) */
 int copy_to_user_region_in_directory(uint64_t *pml4, uintptr_t dst,
                                      const void *src, size_t n);
+int copy_from_user_region_in_directory(uint64_t *pml4, uintptr_t src,
+                                       void *dst, size_t n);
 int zero_user_region_in_directory(uint64_t *pml4, uintptr_t dst, size_t n);
 
 struct process;
@@ -159,3 +161,24 @@ uint64_t create_process_page_directory(void);
  * Used for fork() implementation
  */
 int copy_process_memory(struct process *parent, struct process *child);
+void paging_reclaim_lower_half_tables(uint64_t *pml4);
+
+/*
+ * FASE42 diagnostics: emit page-table/frame balance counters tagged by phase.
+ */
+void paging_fase42_note_pml4_created(uint64_t pml4_phys);
+void paging_fase42_note_pml4_freed(uint64_t pml4_phys);
+void paging_fase42_checkpoint(const char *tag, int32_t pid);
+void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
+                                      uint64_t mm_created, uint64_t mm_destroyed);
+
+typedef enum
+{
+    FASE43_OOM_BOOT_FATAL = 0,
+    FASE43_OOM_KERNEL_FATAL = 1,
+    FASE43_OOM_USER_RECOVERABLE = 2
+} fase43_oom_class_t;
+
+void paging_fase43_note_oom(const char *site, fase43_oom_class_t cls);
+void paging_fase43_oom_audit(const char *tag);
+fase43_oom_class_t paging_fase43_classify_current(void);

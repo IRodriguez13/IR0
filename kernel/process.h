@@ -24,7 +24,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <kernel/scheduler/task.h>
+#include <sched/task.h>
 #include <ir0/signals.h>  
 #include <ir0/types.h>
 
@@ -66,6 +66,15 @@ typedef enum
 	PROCESS_BLOCKED,
 	PROCESS_ZOMBIE
 } process_state_t;
+
+typedef enum
+{
+	FASE44_PROC_ALIVE = 0,
+	FASE44_PROC_EXITING,
+	FASE44_PROC_ZOMBIE,
+	FASE44_PROC_REAPED,
+	FASE44_PROC_DESTROYED
+} fase44_audit_state_t;
 
 /* Tracked anonymous/file mmap regions for demand paging and munmap */
 struct mmap_region
@@ -154,7 +163,18 @@ typedef struct process
 
 	/* Linux syscall insn frame (for fork child / blocked syscall return). */
 	syscall_user_frame_t syscall_frame;
-	uint8_t irq_frame_saved; /* user task regs captured from IRQ stack */
+	uint64_t syscall_resume_rax;
+	uint8_t irq_frame_saved; /* blocked syscall: resume via arch_switch_to_user_task */
+
+	/* FASE44 lifecycle audit (diagnostic only). */
+	uint8_t fase44_audit_state;
+
+	/* FASE46 per-process convergence audit. */
+	uint32_t fase46_fork_generation;
+	pid_t fase46_fork_parent_pid;
+	uint8_t fase46_entered_userspace;
+	uint8_t fase46_entered_exit;
+	uint8_t fase46_entered_wait;
 } process_t;
 
 /*
@@ -208,6 +228,13 @@ void process_capture_syscall_frame(process_t *p);
 void process_capture_syscall_frame_at_entry(uint64_t *frame_base);
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
                                          uint64_t rax);
+
+void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax);
+void fork_ret_emit_pre_return(void);
+void fork_restore_emit_pre_iretq(void);
+void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw);
+int fork_flow_note_debug_exception(uint64_t *stack);
+void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall);
 __attribute__((noreturn)) void process_exit(int code);
 int process_wait(pid_t pid, int *status, int options);
 
@@ -242,6 +269,31 @@ void process_destroy(process_t *p);
 void process_unmap_user_address_space(process_t *p);
 int process_remove_from_list(process_t *target);
 
+void process_fase43_proc_audit(const char *tag);
+void process_fase43_live_proc_dump(void);
+void process_fase43_note_mm_created(void);
+void process_fase43_note_mm_destroyed(void);
+
+uint64_t process_list_count(void);
+uint64_t process_list_count_user(void);
+void process_fase44_list_checkpoint(const char *tag);
+void process_fase44_live_summary(const char *tag);
+void process_fase44_drain_zombie_children(pid_t ppid);
+
+void process_fase45_fork_audit(const char *tag);
+void process_fase45_summary(const char *tag);
+
+void process_fase46_proc_log(process_t *p, int64_t fork_ret, const char *phase);
+void process_fase46_note_wait(process_t *p);
+void process_fase46_convergence_summary(const char *tag);
+
+void process_fase47_mm_owner_audit(const char *tag);
+
+int64_t process_close_fd(process_t *proc, int fd);
+void process_exec_close_cloexec(process_t *p);
+void process_fase48_capture_fd_baseline(process_t *p);
+void process_fase48_ipc_summary(const char *tag);
+uint64_t process_count_open_fds(process_t *p);
 
 extern process_t *current_process;
 extern process_t *process_list;

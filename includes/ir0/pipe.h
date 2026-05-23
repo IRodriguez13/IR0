@@ -3,19 +3,6 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2025  Iván Rodriguez
  *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: pipe.h
- * Description: IR0 kernel source/header file
- */
-
-// SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
  * File: pipe.h
  * Description: Basic IPC pipes implementation
  */
@@ -26,79 +13,36 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/* ========================================================================== */
-/* PIPE CONSTANTS                                                            */
-/* ========================================================================== */
-
-#define PIPE_SIZE 4096  /* 4KB pipe buffer */
-
-/* ========================================================================== */
-/* PIPE STRUCTURE                                                            */
-/* ========================================================================== */
+#define PIPE_SIZE 4096
 
 typedef struct pipe
 {
-    char buffer[PIPE_SIZE];
-    size_t read_pos;
-    size_t write_pos;
-    size_t count;          /* Number of bytes in buffer */
-    int ref_count;         /* Number of open file descriptors */
-    int readers;           /* Number of read ends alive */
-    int writers;           /* Number of write ends alive */
+	char buffer[PIPE_SIZE];
+	size_t read_pos;
+	size_t write_pos;
+	size_t count;
+	uint64_t pipe_id;
+	int fd_refs;
+	int readers;
+	int writers;
+	int closed_read;
+	int closed_write;
 } pipe_t;
 
-/* ========================================================================== */
-/* FUNCTION DECLARATIONS                                                     */
-/* ========================================================================== */
-
-/**
- * pipe_create - Create a new pipe
- *
- * Returns: Pointer to new pipe, or NULL on failure
- */
 pipe_t *pipe_create(void);
-
-/**
- * pipe_read - Read from pipe
- * @pipe: Pipe to read from
- * @buf: Buffer to read into
- * @count: Maximum bytes to read
- *
- * Returns: Number of bytes read, 0 if empty, -1 on error
- */
 int pipe_read(pipe_t *pipe, void *buf, size_t count);
-
-/**
- * pipe_write - Write to pipe
- * @pipe: Pipe to write to
- * @buf: Buffer to write from
- * @count: Number of bytes to write
- *
- * Returns: Number of bytes written, -1 if full or error
- */
 int pipe_write(pipe_t *pipe, const void *buf, size_t count);
-
-/**
- * pipe_close - Close one end of pipe
- * @pipe: Pipe to close
- *
- * Decrements ref_count, frees pipe if both ends closed
- */
 void pipe_close_end(pipe_t *pipe, int end);
-
-/**
- * pipe_acquire - Acquire one extra pipe reference
- * @pipe: Pipe to acquire
- *
- * Increments ref_count when another fd starts pointing to this pipe.
- */
 void pipe_acquire(pipe_t *pipe);
-
-/**
- * pipe_acquire_end - Acquire one extra read/write end reference
- * @pipe: Pipe to acquire
- * @end: 0 read end, 1 write end
- */
 void pipe_acquire_end(pipe_t *pipe, int end);
+
+void pipe_fase48_get_stats(uint64_t *created, uint64_t *destroyed);
+void pipe_fase49_fd_trace(uint32_t pid, int fd, pipe_t *pipe, int end,
+			  int refcount, const char *op);
+void pipe_fase49_note_read_sleep(pipe_t *pipe);
+void pipe_fase49_note_read_wake(pipe_t *pipe);
+void pipe_fase49_note_write_wake(pipe_t *pipe);
+void pipe_abort_unopened(pipe_t *pipe);
+void pipe_fase49_classify(void);
 
 #endif /* _IR0_PIPE_H */

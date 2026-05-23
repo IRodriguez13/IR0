@@ -23,6 +23,8 @@
 
 #include <ir0/types.h>
 #include <stddef.h>
+#include <ir0/uio.h>
+#include <ir0/time.h>
 #include <kernel/process.h>
 #include <ir0/poll.h>
 #include <ir0/time.h>
@@ -30,6 +32,8 @@
 /* Forward declarations */
 struct stat;
 typedef struct stat stat_t;
+struct pipe;
+typedef struct pipe pipe_t;
 
 
 /**
@@ -63,6 +67,8 @@ int64_t sys_kill(pid_t pid, int signal);
 /* File operations */
 int64_t sys_read(int fd, void *buf, size_t count);
 int64_t sys_write(int fd, const void *buf, size_t count);
+int64_t sys_readv(int fd, const struct iovec *iov, int iovcnt);
+int64_t sys_writev(int fd, const struct iovec *iov, int iovcnt);
 int64_t sys_open(const char *pathname, int flags, mode_t mode);
 int64_t sys_close(int fd);
 int64_t sys_lseek(int fd, off_t offset, int whence);
@@ -76,7 +82,12 @@ int64_t sys_mkdir(const char *pathname, mode_t mode);
 int64_t sys_rmdir(const char *pathname);
 int64_t sys_chdir(const char *pathname);
 int64_t sys_getcwd(char *buf, size_t size);
+int64_t sys_utimensat(int dirfd, const char *pathname,
+                      const struct timespec *times, int flags);
 int64_t sys_unlink(const char *pathname);
+int64_t sys_unlinkat(int dirfd, const char *pathname, int flags);
+int64_t sys_renameat(int olddirfd, const char *oldpath,
+                     int newdirfd, const char *newpath);
 int64_t sys_link(const char *oldpath, const char *newpath);
 int64_t sys_chmod(const char *path, mode_t mode);
 int64_t sys_chown(const char *path, uid_t owner, gid_t group);
@@ -85,6 +96,8 @@ int64_t sys_umount(const char *target, int flags);
 int64_t sys_getdents(int fd, void *dirent, size_t count);
 int64_t sys_poll(struct pollfd *fds, unsigned int nfds, int timeout_ms);
 int64_t sys_pipe(int pipefd[2]);
+int64_t sys_pipe2(int pipefd[2], int flags);
+int64_t sys_dup(int oldfd);
 int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem);
 int64_t sys_gettimeofday(struct timeval *tv, void *tz);
 
@@ -122,3 +135,7 @@ void poll_wake_check(void);
 void sleep_wake_check(void);
 /* read(0): desbloquea procesos esperando teclado cuando hay datos */
 void stdin_wake_check(void);
+void pipe_wake_check(void);
+void pipe_wake_all(pipe_t *pipe);
+void fase48_fd_get_stats(uint64_t *created, uint64_t *destroyed,
+			 uint64_t *blocked_readers, uint64_t *blocked_writers);
