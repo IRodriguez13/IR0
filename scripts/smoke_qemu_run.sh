@@ -1,19 +1,28 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
 #
-# Run QEMU for a userspace smoke, poll serial log, exit fast on pass/fail tags.
-# Harness inits call pause() after success; without early kill smokes wait full timeout.
+# Backward-compatible wrapper around scripts/smoke_autokill.py.
+# Maps legacy --done TAG to --success TAG; forwards exit code (PASS=0, FAIL!=0).
 
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON="${SMOKE_AUTOKILL_PYTHON:-python3}"
+AUTOKILL="$ROOT/scripts/smoke_autokill.py"
+
 log_file=""
-timeout_sec=300
-done_tags=()
-fail_regex='_FAIL_REASON|\[FASE[0-9A-Z]+\]\[FAIL\]|^BUSYBOX_FAIL|^EXEC_ONLY_FAIL'
+timeout_sec=""
+stale_sec=""
+profile=""
+success_mode="all"
+success_tags=()
+fail_patterns=()
+qemu_args=()
 
 usage()
 {
-	echo "usage: $0 --log FILE [--timeout SEC] [--done TAG]... [--fail-regex RE] -- QEMU_ARGS..." >&2
+	echo "usage: $0 --log FILE [--timeout SEC] [--stale-sec SEC] [--profile NAME]" \
+		"[--success-mode all|any] [--done TAG]... [--fail-regex RE]... -- QEMU_ARGS..." >&2
 	exit 2
 }
 
@@ -27,16 +36,29 @@ while [[ $# -gt 0 ]]; do
 		timeout_sec="${2:-}"
 		shift 2
 		;;
+	--stale-sec)
+		stale_sec="${2:-}"
+		shift 2
+		;;
+	--profile)
+		profile="${2:-}"
+		shift 2
+		;;
+	--success-mode)
+		success_mode="${2:-}"
+		shift 2
+		;;
 	--done)
-		done_tags+=("${2:-}")
+		success_tags+=("${2:-}")
 		shift 2
 		;;
 	--fail-regex)
-		fail_regex="${2:-}"
+		fail_patterns+=("${2:-}")
 		shift 2
 		;;
 	--)
 		shift
+		qemu_args=("$@")
 		break
 		;;
 	-h|--help)
@@ -49,52 +71,28 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-if [[ -z "$log_file" ]] || [[ $# -eq 0 ]]; then
+if [[ -z "$log_file" ]] || [[ ${#qemu_args[@]} -eq 0 ]]; then
 	usage
 fi
 
-if [[ ${#done_tags[@]} -eq 0 ]]; then
-	echo "$0: at least one --done TAG is required" >&2
-	exit 2
+cmd=("$PYTHON" "$AUTOKILL" "--log" "$log_file" "--success-mode" "$success_mode")
+
+if [[ -n "$timeout_sec" ]]; then
+	cmd+=("--timeout" "$timeout_sec")
+fi
+if [[ -n "$stale_sec" ]]; then
+	cmd+=("--stale-sec" "$stale_sec")
+fi
+if [[ -n "$profile" ]]; then
+	cmd+=("--profile" "$profile")
 fi
 
-rm -f "$log_file"
-stdbuf -oL -eL "$@" >"$log_file" 2>&1 &
-qpid=$!
-
-reason="timeout"
-start=$SECONDS
-
-while (( SECONDS - start < timeout_sec )); do
-	if ! kill -0 "$qpid" 2>/dev/null; then
-		reason="qemu_exit"
-		break
-	fi
-
-	if [[ -s "$log_file" ]] && grep -qE "$fail_regex" "$log_file"; then
-		reason="fail_tag"
-		break
-	fi
-
-	all_done=1
-	for tag in "${done_tags[@]}"; do
-		if ! grep -qF "$tag" "$log_file" 2>/dev/null; then
-			all_done=0
-			break
-		fi
-	done
-	if [[ "$all_done" -eq 1 ]]; then
-		reason="done_tag"
-		break
-	fi
-
-	sleep 1
+for tag in "${success_tags[@]}"; do
+	cmd+=("--success" "$tag")
+done
+for pat in "${fail_patterns[@]}"; do
+	cmd+=("--fail" "$pat")
 done
 
-if kill -0 "$qpid" 2>/dev/null; then
-	kill "$qpid" 2>/dev/null || true
-fi
-wait "$qpid" 2>/dev/null || true
-
-echo "SMOKE_QEMU_AUTOKILL reason=$reason elapsed=$((SECONDS - start))s log=$log_file"
-exit 0
+cmd+=("--" "${qemu_args[@]}")
+"${cmd[@]}"

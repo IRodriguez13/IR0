@@ -1333,6 +1333,7 @@ DOOM_DISPLAY ?= gtk
 REAL_WAD_PATH ?=
 FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
+# Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
 BUSYBOX_SRC ?= /tmp/busybox-1.36.1
@@ -2068,7 +2069,7 @@ smoke-userspace-fase41-reclaim: build-init-fase41-reclaim build-fase41-true kern
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE41_TRUE_BIN) bin/f41true; \
-	$(SMOKE_QEMU_RUN) --log $(FASE41_RECLAIM_LOG) --timeout 150 --done FASE41_SUMMARY -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE41_RECLAIM_LOG) --timeout 120 --done FASE41_SUMMARY -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2218,7 +2219,7 @@ smoke-fase44-fork-wait-drain: build-init-fase44-fork-wait-drain kernel-x64-users
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE44_FORK_WAIT_DRAIN_LOG) --timeout 240 --done FASE44_FORK_WAIT_DRAIN -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE44_FORK_WAIT_DRAIN_LOG) --timeout 180 --done FASE44_FORK_WAIT_DRAIN -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2261,7 +2262,7 @@ smoke-fase44-init-exit-drain: build-init-fase44-init-exit-drain kernel-x64-users
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE44_INIT_EXIT_DRAIN_LOG) --timeout 150 --done FASE44_INIT_EXIT_DRAIN -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE44_INIT_EXIT_DRAIN_LOG) --timeout 180 --done FASE44_INIT_EXIT_DRAIN -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2282,7 +2283,7 @@ smoke-fase45-fork-rollback-storm: build-init-fase45-fork-rollback-storm kernel-x
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE45_FORK_ROLLBACK_STORM_LOG) --timeout 300 --done FASE45_FORK_ROLLBACK_STORM -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE45_FORK_ROLLBACK_STORM_LOG) --timeout 180 --done FASE45_FORK_ROLLBACK_STORM -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2303,7 +2304,7 @@ smoke-fase45-fork-mem-touch: build-init-fase45-fork-mem-touch kernel-x64-userspa
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE45_FORK_MEM_TOUCH_LOG) --timeout 240 --done FASE45_FORK_MEM_TOUCH -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE45_FORK_MEM_TOUCH_LOG) --timeout 180 --done FASE45_FORK_MEM_TOUCH -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2324,7 +2325,7 @@ smoke-fase46-fork-no-recursion: build-init-fase46-fork-no-recursion kernel-x64-u
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE46_FORK_NO_RECURSE_LOG) --timeout 240 --done FASE46_FORK_NO_RECURSE -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE46_FORK_NO_RECURSE_LOG) --timeout 180 --done FASE46_FORK_NO_RECURSE -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2345,7 +2346,7 @@ smoke-fase46-fork-heap: build-init-fase46-fork-heap kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE46_FORK_HEAP_LOG) --timeout 240 --done FASE46_FORK_HEAP -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE46_FORK_HEAP_LOG) --timeout 180 --done FASE46_FORK_HEAP -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2428,7 +2429,7 @@ smoke-fase50-busybox: build-init-fase50-busybox build-busybox-fase50-min kernel-
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/cat && \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox /bin/cat && \
-	$(SMOKE_QEMU_RUN) --log $(FASE50_BUSYBOX_LOG) --timeout 240 --done FASE50E_NO_REGRESSION -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE50_BUSYBOX_LOG) --profile fase50-busybox --done FASE50E_NO_REGRESSION -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2476,7 +2477,7 @@ smoke-fase50-exec-only: build-init-fase50-exec-only build-busybox-fase50-min ker
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox && \
-	$(SMOKE_QEMU_RUN) --log $(FASE50_EXEC_ONLY_LOG) --timeout 240 \
+	$(SMOKE_QEMU_RUN) --log $(FASE50_EXEC_ONLY_LOG) --profile fase50-exec-only \
 		--done EXEC_ONLY_STABLE_OK --fail-regex 'EXEC_ONLY_FAIL|_FAIL_REASON|\[FASE[0-9A-Z]+\]\[FAIL\]' -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
@@ -2513,7 +2514,7 @@ smoke-fase51-shell: build-init-fase51-shell build-busybox-fase50-min kernel-x64-
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/cat && \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox /bin/cat && \
-	$(SMOKE_QEMU_RUN) --log $(FASE51_SHELL_LOG) --timeout 240 --done DEBUG_FASE51_GATED -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE51_SHELL_LOG) --profile fase51-shell --done DEBUG_FASE51_GATED -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2551,7 +2552,7 @@ smoke-fase52-tcc: build-init-fase52-tcc build-tcc-fase52 kernel-x64-userspace.is
 		python3 scripts/inject_init_minix.py $$DISK "$$f" "$$rel"; \
 	done && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/tcc && \
-	$(SMOKE_QEMU_RUN) --log $(FASE52_TCC_LOG) --timeout 360 --done FASE52_OK -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE52_TCC_LOG) --profile fase52-tcc --done FASE52_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2600,7 +2601,7 @@ smoke-fase53a-fs-dev: build-init-fase53a-fs-dev build-busybox-fase50-min build-t
 		python3 scripts/inject_init_minix.py $$DISK "$$f" "$$rel"; \
 	done && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox /bin/tcc && \
-	$(SMOKE_QEMU_RUN) --log $(FASE53A_FS_DEV_LOG) --timeout 240 --done FASE53A_OK -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE53A_FS_DEV_LOG) --profile fase53a-fs-dev --done FASE53A_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2637,7 +2638,7 @@ smoke-fase53b-posix-pseudofs: build-init-fase53b-posix-pseudofs build-busybox-fa
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox && \
-	$(SMOKE_QEMU_RUN) --log $(FASE53B_POSIX_PSEUDOFS_LOG) --timeout 240 --done FASE53B_OK -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE53B_POSIX_PSEUDOFS_LOG) --profile fase53b-posix --done FASE53B_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2671,7 +2672,7 @@ smoke-fase54a-fbdev: build-init-fase54a-fbdev build-busybox-fase50-min kernel-x6
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox && \
-	$(SMOKE_QEMU_RUN) --log $(FASE54A_FBDEV_LOG) --timeout 240 --done FASE54A_OK -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE54A_FBDEV_LOG) --profile fase54a-fbdev --done FASE54A_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2705,7 +2706,7 @@ smoke-fase54b-input: build-init-fase54b-input kernel-x64-userspace.iso
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
-	$(SMOKE_QEMU_RUN) --log $(FASE54B_INPUT_LOG) --timeout 240 --done FASE54B_OK -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE54B_INPUT_LOG) --profile fase54b-input --done FASE54B_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2738,7 +2739,7 @@ smoke-fase54c-input-deterministic: build-init-fase54c-input-deterministic kernel
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
-	$(SMOKE_QEMU_RUN) --log $(FASE54C_INPUT_DET_LOG) --timeout 240 --done FASE54C_OK -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE54C_INPUT_DET_LOG) --profile fase54c-input-det --done FASE54C_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2873,7 +2874,7 @@ smoke-fase55d-doomgeneric: build-init-fase55d-doomgeneric kernel-x64-userspace.i
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
 	python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/share/doom/doom1.wad && \
-	$(SMOKE_QEMU_RUN) --log $(FASE55D_DOOMGENERIC_LOG) --timeout 240 \
+	$(SMOKE_QEMU_RUN) --log $(FASE55D_DOOMGENERIC_LOG) --profile fase55d-doom \
 		--done FASE55D_DOOMGENERIC_OK --done DOOMGENERIC_FRAME_LOOP_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
