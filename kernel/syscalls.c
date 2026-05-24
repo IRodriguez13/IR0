@@ -533,6 +533,8 @@ int stdio_is_redirected(fd_entry_t *fd_table, int fd)
     return 0;
   if (!fd_table[fd].in_use)
     return 0;
+  if (fd_table[fd].is_devfs)
+    return 1;
   if (fd_table[fd].is_pipe)
     return 1;
   if (fd_table[fd].vfs_file)
@@ -1804,6 +1806,18 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
   if (!fd_table[fd].in_use)
     return -EBADF;
 
+  if (fd_table[fd].is_devfs)
+  {
+    ensure_devfs_init();
+    devfs_node_t *node = devfs_find_node_by_id(fd_table[fd].dev_device_id);
+
+    if (!node || !node->ops || !node->ops->ioctl)
+      return -ENOTTY;
+    if (arg && validate_userspace_buffer(arg, 256) != 0)
+      return -EFAULT;
+    return node->ops->ioctl(&node->entry, request, arg);
+  }
+
   return -ENOTTY;
 }
 
@@ -1837,9 +1851,18 @@ int64_t sys_close(int fd)
 
   {
     int was_pipe = fd_table[fd].is_pipe ? 1 : 0;
+    int was_devfs = fd_table[fd].is_devfs ? 1 : 0;
 
-    if (fd <= 2 && !fd_table[fd].is_pipe)
+    if (fd <= 2 && !was_pipe && !was_devfs && !fd_table[fd].vfs_file)
       return -EBADF;
+
+    if (was_devfs)
+    {
+      devfs_node_t *node = devfs_find_node_by_id(fd_table[fd].dev_device_id);
+
+      if (node)
+        devfs_close_node(node);
+    }
 
     /* Check if this is a pipe */
     if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
@@ -1863,6 +1886,8 @@ int64_t sys_close(int fd)
     fd_table[fd].in_use = false;
     fd_table[fd].is_pipe = false;
     fd_table[fd].pipe_end = -1;
+    fd_table[fd].is_devfs = false;
+    fd_table[fd].dev_device_id = 0;
     fd_table[fd].path[0] = '\0';
     fd_table[fd].flags = 0;
     fd_table[fd].fd_flags = 0;
@@ -1979,6 +2004,13 @@ int64_t sys_dup2(int oldfd, int newfd)
       pipe_wake_all(p);
       fd_table[newfd].vfs_file = NULL;
     }
+    else if (fd_table[newfd].is_devfs)
+    {
+      devfs_node_t *node = devfs_find_node_by_id(fd_table[newfd].dev_device_id);
+
+      if (node)
+        devfs_close_node(node);
+    }
     else if (fd_table[newfd].vfs_file)
     {
       vfs_close((struct vfs_file *)fd_table[newfd].vfs_file);
@@ -1991,6 +2023,8 @@ int64_t sys_dup2(int oldfd, int newfd)
     fd_table[newfd].offset = 0;
     fd_table[newfd].is_pipe = false;
     fd_table[newfd].pipe_end = -1;
+    fd_table[newfd].is_devfs = false;
+    fd_table[newfd].dev_device_id = 0;
     fase48_note_fd_destroyed();
   }
 
@@ -2002,13 +2036,22 @@ int64_t sys_dup2(int oldfd, int newfd)
   fd_table[newfd].offset = fd_table[oldfd].offset;
   fd_table[newfd].is_pipe = fd_table[oldfd].is_pipe;
   fd_table[newfd].pipe_end = fd_table[oldfd].pipe_end;
+  fd_table[newfd].is_devfs = fd_table[oldfd].is_devfs;
+  fd_table[newfd].dev_device_id = fd_table[oldfd].dev_device_id;
 
   /*
    * Regular files now share one open file description (vfs_file with refcount),
    * matching Unix dup/dup2 offset-sharing semantics.
    * Pipes share one pipe_t and keep per-end counts.
    */
-  if (fd_table[oldfd].is_pipe)
+  if (fd_table[oldfd].is_devfs)
+  {
+    devfs_node_t *node = devfs_find_node_by_id(fd_table[oldfd].dev_device_id);
+
+    if (node)
+      node->ref_count++;
+  }
+  else if (fd_table[oldfd].is_pipe)
   {
     pipe_acquire_end((pipe_t *)fd_table[oldfd].vfs_file, fd_table[oldfd].pipe_end);
     fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
@@ -3032,14 +3075,30 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     }
     
     /*
-     * mmap of /dev/fb0 (FD_DEV_BASE + device_id 15 = 2015)
+     * mmap of /dev/fb0 — legacy virtual fd (FD_DEV_BASE + 15) or real devfs fd
+     * (FASE58A: fd_table slot with is_devfs + dev_device_id 15).
      * Maps framebuffer physical memory into userspace for efficient access.
      */
-    if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
     {
-      uint32_t device_id = (uint32_t)(fd - FD_DEV_BASE);
+      bool fb_mmap_legacy = false;
+      bool fb_mmap_devfs = false;
+      uint32_t device_id = UINT32_MAX;
+      fd_entry_t *fd_table = get_process_fd_table();
+
+      if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
+      {
+        device_id = (uint32_t)(fd - FD_DEV_BASE);
+        fb_mmap_legacy = true;
+      }
+      else if (fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+               fd_table && fd_table[fd].in_use && fd_table[fd].is_devfs)
+      {
+        device_id = fd_table[fd].dev_device_id;
+        fb_mmap_devfs = true;
+      }
+
 #if CONFIG_ENABLE_VBE
-      if (device_id == 15)
+      if (device_id == 15U)
       {
         struct ir0_fb_info fb_info;
         uint32_t fb_phys;
@@ -3137,9 +3196,33 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         region->next = current_process->mmap_list;
         current_process->mmap_list = region;
         fase39_dump_current_vmas("mmap-fb");
+        {
+          static int s_fb_mmap_legacy_tag;
+          static int s_fb_mmap_devfs_tag;
+          static int s_fb_mmap_ok_tag;
+
+          if (fb_mmap_legacy && !s_fb_mmap_legacy_tag)
+          {
+            s_fb_mmap_legacy_tag = 1;
+            serial_print("FB_MMAP_LEGACY_FD_OK\n");
+          }
+          if (fb_mmap_devfs && !s_fb_mmap_devfs_tag)
+          {
+            s_fb_mmap_devfs_tag = 1;
+            serial_print("FB_MMAP_DEVFS_FD_OK\n");
+            serial_print("DEVFB0_MMAP_REAL_FD_OK\n");
+          }
+          if (!s_fb_mmap_ok_tag)
+          {
+            s_fb_mmap_ok_tag = 1;
+            serial_print("FASE58C_FBDEV_MMAP_OK\n");
+          }
+        }
         return (void *)virt_addr;
       }
 #else
+      (void)fb_mmap_legacy;
+      (void)fb_mmap_devfs;
       (void)device_id;
 #endif
     }
