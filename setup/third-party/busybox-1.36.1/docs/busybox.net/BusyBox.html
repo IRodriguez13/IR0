@@ -1,0 +1,432 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>BusyBox - The Swiss Army Knife of Embedded Linux</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rev="made" href="mailto:root@localhost" />
+</head>
+
+<body>
+
+
+
+<h1 id="NAME">NAME</h1>
+
+<p>BusyBox - The Swiss Army Knife of Embedded Linux</p>
+
+<h1 id="SYNTAX">SYNTAX</h1>
+
+<pre><code>busybox &lt;applet&gt; [arguments...]  # or
+
+&lt;applet&gt; [arguments...]          # if symlinked</code></pre>
+
+<h1 id="DESCRIPTION">DESCRIPTION</h1>
+
+<p>BusyBox combines tiny versions of many common UNIX utilities into a single small executable. It provides minimalist replacements for most of the utilities you usually find in GNU coreutils, util-linux, etc. The utilities in BusyBox generally have fewer options than their full-featured GNU cousins; however, the options that are included provide the expected functionality and behave very much like their GNU counterparts.</p>
+
+<p>BusyBox has been written with size-optimization and limited resources in mind. It is also extremely modular so you can easily include or exclude commands (or features) at compile time. This makes it easy to customize your embedded systems. To create a working system, just add /dev, /etc, and a Linux kernel. BusyBox provides a fairly complete POSIX environment for any small or embedded system.</p>
+
+<p>BusyBox is extremely configurable. This allows you to include only the components you need, thereby reducing binary size. Run &#39;make config&#39; or &#39;make menuconfig&#39; to select the functionality that you wish to enable. Then run &#39;make&#39; to compile BusyBox using your configuration.</p>
+
+<p>After the compile has finished, you should use &#39;make install&#39; to install BusyBox. This will install the &#39;bin/busybox&#39; binary, in the target directory specified by CONFIG_PREFIX. CONFIG_PREFIX can be set when configuring BusyBox, or you can specify an alternative location at install time (i.e., with a command line like &#39;make CONFIG_PREFIX=/tmp/foo install&#39;). If you enabled any applet installation scheme (either as symlinks or hardlinks), these will also be installed in the location pointed to by CONFIG_PREFIX.</p>
+
+<h1 id="USAGE">USAGE</h1>
+
+<p>BusyBox is a multi-call binary. A multi-call binary is an executable program that performs the same job as more than one utility program. That means there is just a single BusyBox binary, but that single binary acts like a large number of utilities. This allows BusyBox to be smaller since all the built-in utility programs (we call them applets) can share code for many common operations.</p>
+
+<p>You can also invoke BusyBox by issuing a command as an argument on the command line. For example, entering</p>
+
+<pre><code>/bin/busybox ls</code></pre>
+
+<p>will also cause BusyBox to behave as &#39;ls&#39;.</p>
+
+<p>Of course, adding &#39;/bin/busybox&#39; into every command would be painful. So most people will invoke BusyBox using links to the BusyBox binary.</p>
+
+<p>For example, entering</p>
+
+<pre><code>ln -s /bin/busybox ls
+./ls</code></pre>
+
+<p>will cause BusyBox to behave as &#39;ls&#39; (if the &#39;ls&#39; command has been compiled into BusyBox). Generally speaking, you should never need to make all these links yourself, as the BusyBox build system will do this for you when you run the &#39;make install&#39; command.</p>
+
+<p>If you invoke BusyBox with no arguments, it will provide you with a list of the applets that have been compiled into your BusyBox binary.</p>
+
+<h1 id="COMMON-OPTIONS">COMMON OPTIONS</h1>
+
+<p>Most BusyBox applets support the <b>--help</b> argument to provide a terse runtime description of their behavior. If the CONFIG_FEATURE_VERBOSE_USAGE option has been enabled, more detailed usage information will also be available.</p>
+
+<h1 id="COMMANDS">COMMANDS</h1>
+
+<p>Currently available applets include:</p>
+
+<pre><code>ash, cat, cp, echo, false, grep, head, ls, mkdir, mv, pwd, rm,
+rmdir, sh, tail, touch, true</code></pre>
+
+<h1 id="COMMAND-DESCRIPTIONS">COMMAND DESCRIPTIONS</h1>
+
+<dl>
+
+<dt id="ash"><b>ash</b></dt>
+<dd>
+
+<p>ash [-il] [-|+Cabefmnuvx] [-|+o OPT]... [-c &#39;SCRIPT&#39; [ARG0 ARGS] | FILE ARGS | -s ARGS]</p>
+
+</dd>
+<dt id="cat"><b>cat</b></dt>
+<dd>
+
+<p>cat [FILE]...</p>
+
+</dd>
+<dt id="cp"><b>cp</b></dt>
+<dd>
+
+<p>cp [-arPLHpfinlsTu] SOURCE DEST or: cp [-arPLHpfinlsu] SOURCE... { -t DIRECTORY | DIRECTORY }</p>
+
+</dd>
+<dt id="echo"><b>echo</b></dt>
+<dd>
+
+<p>echo [ARG]...</p>
+
+</dd>
+<dt id="grep"><b>grep</b></dt>
+<dd>
+
+<p>grep [-HhnlLoqvsrRiwFE] [-m N] { PATTERN | -e PATTERN... | -f FILE... } [FILE]...</p>
+
+</dd>
+<dt id="head"><b>head</b></dt>
+<dd>
+
+<p>head [OPTIONS] [FILE]...</p>
+
+</dd>
+<dt id="ls"><b>ls</b></dt>
+<dd>
+
+<p>ls [-1AaCxdlins] [FILE]...</p>
+
+</dd>
+<dt id="mkdir"><b>mkdir</b></dt>
+<dd>
+
+<p>mkdir [-m MODE] [-p] DIRECTORY...</p>
+
+</dd>
+<dt id="mv"><b>mv</b></dt>
+<dd>
+
+<p>mv [-finT] SOURCE DEST or: mv [-fin] SOURCE... { -t DIRECTORY | DIRECTORY }</p>
+
+</dd>
+<dt id="pwd"><b>pwd</b></dt>
+<dd>
+
+<p>pwd</p>
+
+</dd>
+<dt id="rm"><b>rm</b></dt>
+<dd>
+
+<p>rm [-irf] FILE...</p>
+
+</dd>
+<dt id="rmdir"><b>rmdir</b></dt>
+<dd>
+
+<p>rmdir [-p] DIRECTORY...</p>
+
+</dd>
+<dt id="sh"><b>sh</b></dt>
+<dd>
+
+<p>sh [-il] [-|+Cabefmnuvx] [-|+o OPT]... [-c &#39;SCRIPT&#39; [ARG0 ARGS] | FILE ARGS | -s ARGS]</p>
+
+</dd>
+<dt id="tail"><b>tail</b></dt>
+<dd>
+
+<p>tail [OPTIONS] [FILE]...</p>
+
+</dd>
+<dt id="touch"><b>touch</b></dt>
+<dd>
+
+<p>touch [-ch] FILE...</p>
+
+</dd>
+</dl>
+
+<h1 id="LIBC-NSS">LIBC NSS</h1>
+
+<p>GNU Libc (glibc) uses the Name Service Switch (NSS) to configure the behavior of the C library for the local environment, and to configure how it reads system data, such as passwords and group information. This is implemented using an /etc/nsswitch.conf configuration file, and using one or more of the /lib/libnss_* libraries. BusyBox tries to avoid using any libc calls that make use of NSS. Some applets however, such as login and su, will use libc functions that require NSS.</p>
+
+<p>If you enable CONFIG_USE_BB_PWD_GRP, BusyBox will use internal functions to directly access the /etc/passwd, /etc/group, and /etc/shadow files without using NSS. This may allow you to run your system without the need for installing any of the NSS configuration files and libraries.</p>
+
+<p>When used with glibc, the BusyBox &#39;networking&#39; applets will similarly require that you install at least some of the glibc NSS stuff (in particular, /etc/nsswitch.conf, /lib/libnss_dns*, /lib/libnss_files*, and /lib/libresolv*).</p>
+
+<p>Shameless Plug: As an alternative, one could use a C library such as uClibc. In addition to making your system significantly smaller, uClibc does not require the use of any NSS support files or libraries.</p>
+
+<h1 id="MAINTAINER">MAINTAINER</h1>
+
+<p>Denis Vlasenko &lt;vda.linux@googlemail.com&gt;</p>
+
+<h1 id="AUTHORS">AUTHORS</h1>
+
+<p>The following people have contributed code to BusyBox whether they know it or not. If you have written code included in BusyBox, you should probably be listed here so you can obtain your bit of eternal glory. If you should be listed here, or the description of what you have done needs more detail, or is incorrect, please send in an update.</p>
+
+<br>
+
+<p>Emanuele Aina &lt;emanuele.aina@tiscali.it&gt;</p>
+
+<pre><code>run-parts</code></pre>
+
+<br>
+
+<p>Erik Andersen &lt;andersen@codepoet.org&gt;</p>
+
+<pre><code>Tons of new stuff, major rewrite of most of the
+core apps, tons of new apps as noted in header files.
+Lots of tedious effort writing these boring docs that
+nobody is going to actually read.</code></pre>
+
+<br>
+
+<p>Laurence Anderson &lt;l.d.anderson@warwick.ac.uk&gt;</p>
+
+<pre><code>rpm2cpio, unzip, get_header_cpio, read_gz interface, rpm</code></pre>
+
+<br>
+
+<p>Jeff Angielski &lt;jeff@theptrgroup.com&gt;</p>
+
+<pre><code>ftpput, ftpget</code></pre>
+
+<br>
+
+<p>Edward Betts &lt;edward@debian.org&gt;</p>
+
+<pre><code>expr, hostid, logname, whoami</code></pre>
+
+<br>
+
+<p>John Beppu &lt;beppu@codepoet.org&gt;</p>
+
+<pre><code>du, nslookup, sort</code></pre>
+
+<br>
+
+<p>Brian Candler &lt;B.Candler@pobox.com&gt;</p>
+
+<pre><code>tiny-ls(ls)</code></pre>
+
+<br>
+
+<p>Randolph Chung &lt;tausq@debian.org&gt;</p>
+
+<pre><code>fbset, ping, hostname</code></pre>
+
+<br>
+
+<p>Dave Cinege &lt;dcinege@psychosis.com&gt;</p>
+
+<pre><code>more(v2), makedevs, dutmp, modularization, auto links file,
+various fixes, Linux Router Project maintenance</code></pre>
+
+<br>
+
+<p>Jordan Crouse &lt;jordan@cosmicpenguin.net&gt;</p>
+
+<pre><code>ipcalc</code></pre>
+
+<br>
+
+<p>Magnus Damm &lt;damm@opensource.se&gt;</p>
+
+<pre><code>tftp client insmod powerpc support</code></pre>
+
+<br>
+
+<p>Larry Doolittle &lt;ldoolitt@recycle.lbl.gov&gt;</p>
+
+<pre><code>pristine source directory compilation, lots of patches and fixes.</code></pre>
+
+<br>
+
+<p>Glenn Engel &lt;glenne@engel.org&gt;</p>
+
+<pre><code>httpd</code></pre>
+
+<br>
+
+<p>Gennady Feldman &lt;gfeldman@gena01.com&gt;</p>
+
+<pre><code>Sysklogd (single threaded syslogd, IPC Circular buffer support,
+logread), various fixes.</code></pre>
+
+<br>
+
+<p>Karl M. Hegbloom &lt;karlheg@debian.org&gt;</p>
+
+<pre><code>cp_mv.c, the test suite, various fixes to utility.c, &amp;c.</code></pre>
+
+<br>
+
+<p>Daniel Jacobowitz &lt;dan@debian.org&gt;</p>
+
+<pre><code>mktemp.c</code></pre>
+
+<br>
+
+<p>Matt Kraai &lt;kraai@alumni.cmu.edu&gt;</p>
+
+<pre><code>documentation, bugfixes, test suite</code></pre>
+
+<br>
+
+<p>Stephan Linz &lt;linz@li-pro.net&gt;</p>
+
+<pre><code>ipcalc, Red Hat equivalence</code></pre>
+
+<br>
+
+<p>John Lombardo &lt;john@deltanet.com&gt;</p>
+
+<pre><code>tr</code></pre>
+
+<br>
+
+<p>Glenn McGrath &lt;bug1@iinet.net.au&gt;</p>
+
+<pre><code>Common unarchiving code and unarchiving applets, ifupdown, ftpgetput,
+nameif, sed, patch, fold, install, uudecode.
+Various bugfixes, review and apply numerous patches.</code></pre>
+
+<br>
+
+<p>Manuel Novoa III &lt;mjn3@codepoet.org&gt;</p>
+
+<pre><code>cat, head, mkfifo, mknod, rmdir, sleep, tee, tty, uniq, usleep, wc, yes,
+mesg, vconfig, make_directory, parse_mode, dirname, mode_string,
+get_last_path_component, simplify_path, and a number trivial libbb routines
+
+also bug fixes, partial rewrites, and size optimizations in
+ash, basename, cal, cmp, cp, df, du, echo, env, ln, logname, md5sum, mkdir,
+mv, realpath, rm, sort, tail, touch, uname, watch, arith, human_readable,
+interface, dutmp, ifconfig, route</code></pre>
+
+<br>
+
+<p>Vladimir Oleynik &lt;dzo@simtreas.ru&gt;</p>
+
+<pre><code>cmdedit; xargs(current), httpd(current);
+ports: ash, crond, fdisk, inetd, stty, traceroute, top;
+locale, various fixes
+and irreconcilable critic of everything not perfect.</code></pre>
+
+<br>
+
+<p>Bruce Perens &lt;bruce@pixar.com&gt;</p>
+
+<pre><code>Original author of BusyBox in 1995, 1996. Some of his code can
+still be found hiding here and there...</code></pre>
+
+<br>
+
+<p>Tim Riker &lt;Tim@Rikers.org&gt;</p>
+
+<pre><code>bug fixes, member of fan club</code></pre>
+
+<br>
+
+<p>Kent Robotti &lt;robotti@metconnect.com&gt;</p>
+
+<pre><code>reset, tons and tons of bug reports and patches.</code></pre>
+
+<br>
+
+<p>Chip Rosenthal &lt;chip@unicom.com&gt;, &lt;crosenth@covad.com&gt;</p>
+
+<pre><code>wget - Contributed by permission of Covad Communications</code></pre>
+
+<br>
+
+<p>Pavel Roskin &lt;proski@gnu.org&gt;</p>
+
+<pre><code>Lots of bugs fixes and patches.</code></pre>
+
+<br>
+
+<p>Gyepi Sam &lt;gyepi@praxis-sw.com&gt;</p>
+
+<pre><code>Remote logging feature for syslogd</code></pre>
+
+<br>
+
+<p>Linus Torvalds &lt;torvalds@transmeta.com&gt;</p>
+
+<pre><code>mkswap, fsck.minix, mkfs.minix</code></pre>
+
+<br>
+
+<p>Mark Whitley &lt;markw@codepoet.org&gt;</p>
+
+<pre><code>grep, sed, cut, xargs(previous),
+style-guide, new-applet-HOWTO, bug fixes, etc.</code></pre>
+
+<br>
+
+<p>Charles P. Wright &lt;cpwright@villagenet.com&gt;</p>
+
+<pre><code>gzip, mini-netcat(nc)</code></pre>
+
+<br>
+
+<p>Enrique Zanardi &lt;ezanardi@ull.es&gt;</p>
+
+<pre><code>tarcat (since removed), loadkmap, various fixes, Debian maintenance</code></pre>
+
+<br>
+
+<p>Tito Ragusa &lt;farmatito@tiscali.it&gt;</p>
+
+<pre><code>devfsd and size optimizations in strings, openvt and deallocvt.</code></pre>
+
+<br>
+
+<p>Paul Fox &lt;pgf@foxharp.boston.ma.us&gt;</p>
+
+<pre><code>vi editing mode for ash, various other patches/fixes</code></pre>
+
+<br>
+
+<p>Roberto A. Foglietta &lt;me@roberto.foglietta.name&gt;</p>
+
+<pre><code>port: dnsd</code></pre>
+
+<br>
+
+<p>Bernhard Reutner-Fischer &lt;rep.dot.nop@gmail.com&gt;</p>
+
+<pre><code>misc</code></pre>
+
+<br>
+
+<p>Mike Frysinger &lt;vapier@gentoo.org&gt;</p>
+
+<pre><code>initial e2fsprogs, printenv, setarch, sum, misc</code></pre>
+
+<br>
+
+<p>Jie Zhang &lt;jie.zhang@analog.com&gt;</p>
+
+<pre><code>fixed two bugs in msh and hush (exitcode of killed processes)</code></pre>
+
+
+</body>
+
+</html>
+
+

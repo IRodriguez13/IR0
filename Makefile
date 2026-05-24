@@ -405,6 +405,7 @@ LIB_OBJS = \
     includes/ir0/open_flags.o \
     includes/ir0/path_user.o \
     includes/ir0/path_routed.o \
+    includes/ir0/console.o \
     includes/ir0/fb.o \
     includes/ir0/input.o \
     includes/ir0/utimens.o \
@@ -435,6 +436,7 @@ DRIVER_OBJS = \
     drivers/storage/fs_types.o \
 	drivers/video/console.o \
 	drivers/video/console_font.o \
+	drivers/video/console_renderer.o \
 	drivers/video/typewriter.o \
 	drivers/init_drv.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)

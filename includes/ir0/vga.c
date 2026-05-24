@@ -12,7 +12,23 @@
  */
 
 #include "vga.h"
+#include <ir0/serial_io.h>
+#include <ir0/console_backend.h>
 #include <drivers/video/console.h>
+
+static int vga_cols(void)
+{
+	if (console_use_framebuffer())
+		return console_get_width();
+	return VGA_WIDTH;
+}
+
+static int vga_rows(void)
+{
+	if (console_use_framebuffer())
+		return console_get_height();
+	return VGA_HEIGHT;
+}
 
 /*
  * Cursor compartido entre print() y typewriter/shell.
@@ -52,11 +68,14 @@ void putchar_at(char c, unsigned char color, int x, int y)
 /* Scroll screen up by one line */
 void scroll()
 {
+    int cols = vga_cols();
+    int rows = vga_rows();
+
     if (console_use_framebuffer())
     {
         console_scroll_up(current_color);
-        cursor_y = VGA_HEIGHT - 1;
-        cursor_pos = cursor_y * VGA_WIDTH + cursor_x;
+        cursor_y = rows - 1;
+        cursor_pos = cursor_y * cols + cursor_x;
         return;
     }
     {
@@ -75,9 +94,22 @@ void scroll()
 /* Función para poner un carácter (con cursor automático) */
 void putchar(char c)
 {
-    /* Sincronizar desde cursor_pos cuando typewriter/shell escribió antes */
-    cursor_x = cursor_pos % VGA_WIDTH;
-    cursor_y = cursor_pos / VGA_WIDTH;
+    int cols = vga_cols();
+    int rows = vga_rows();
+
+    if (c == '\n')
+    {
+        serial_putchar('\r');
+        serial_putchar('\n');
+    }
+    else
+        serial_putchar(c);
+
+    if (!console_backend_printk_to_screen())
+        return;
+
+    cursor_x = cursor_pos % cols;
+    cursor_y = cursor_pos / cols;
 
     if (c == '\n') /* salto de línea */
     {
@@ -106,19 +138,18 @@ void putchar(char c)
     }
 
     /* Nueva línea si llegamos al final, que sería la columna 79 o la 80-1 */
-    if (cursor_x >= VGA_WIDTH)
+    if (cursor_x >= cols)
     {
         cursor_x = 0;
         cursor_y++;
     }
 
-    /* Scroll si llegamos al final de la pantalla */
-    if (cursor_y >= VGA_HEIGHT)
+    if (cursor_y >= rows)
     {
         scroll();
     }
 
-    cursor_pos = cursor_y * VGA_WIDTH + cursor_x;
+    cursor_pos = cursor_y * cols + cursor_x;
 }
 
 void print(const char *str)

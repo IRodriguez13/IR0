@@ -20,8 +20,23 @@
 
 #include "typewriter.h"
 #include "console.h"
+#include "console_renderer.h"
 #include <ir0/vga.h>
 #include <stdint.h>
+
+static int tw_cols(void)
+{
+	if (console_use_framebuffer())
+		return console_get_width();
+	return VGA_WIDTH;
+}
+
+static int tw_rows(void)
+{
+	if (console_use_framebuffer())
+		return console_get_height();
+	return VGA_HEIGHT;
+}
 
 /* VGA Text Mode Constants */
 #define VGA_WIDTH  80
@@ -65,19 +80,22 @@ static void typewriter_delay(uint32_t microseconds)
 static void redraw_from_scrollback(void)
 {
     extern int cursor_pos;
-    int first_line = (int)((long)total_lines_written - (VGA_HEIGHT - 1) - scroll_offset);
-    for (int row = 0; row < VGA_HEIGHT; row++)
+    int cols = tw_cols();
+    int rows = tw_rows();
+    int first_line = (int)((long)total_lines_written - (rows - 1) - scroll_offset);
+
+    for (int row = 0; row < rows; row++)
     {
         int line_idx = first_line + row;
         if (line_idx < 0)
         {
-            for (int col = 0; col < VGA_WIDTH; col++)
+            for (int col = 0; col < cols; col++)
                 console_put_cell(row, col, ' ', scrollback_color);
         }
         else
         {
             size_t buf_idx = (size_t)line_idx % SCROLLBACK_LINES;
-            for (int col = 0; col < VGA_WIDTH; col++)
+            for (int col = 0; col < cols; col++)
             {
                 uint16_t cell = scrollback[buf_idx][col];
                 console_put_cell(row, col, (char)(cell & 0xFF), (uint8_t)(cell >> 8));
@@ -86,17 +104,16 @@ static void redraw_from_scrollback(void)
     }
     if (scroll_offset == 0)
     {
-        int row = (total_lines_written == 0) ? 0 : (total_lines_written < (size_t)VGA_HEIGHT ? (int)total_lines_written : VGA_HEIGHT - 1);
-        cursor_pos = row * VGA_WIDTH + (int)current_col;
+        current_col = (size_t)(cursor_pos % cols);
     }
     else
-        cursor_pos = (VGA_HEIGHT - 1) * VGA_WIDTH + (int)current_col;
+        cursor_pos = (rows - 1) * cols + (int)current_col;
 }
 
 void typewriter_console_scroll(int delta)
 {
-    /* Total lines on screen = total_lines_written (current line index) + 1 */
-    int max_scroll = (int)(total_lines_written + 1) - VGA_HEIGHT;
+    int rows = tw_rows();
+    int max_scroll = (int)(total_lines_written + 1) - rows;
     if (max_scroll < 0)
         max_scroll = 0;
     scroll_offset += delta;
@@ -109,15 +126,13 @@ void typewriter_console_scroll(int delta)
 
 void typewriter_console_clear(uint8_t color)
 {
-    extern int cursor_pos;
     uint16_t blank = ((uint16_t)color << 8) | ' ';
 
-    console_clear(color);
+    console_renderer_reset(color);
     scrollback_color = color;
     scroll_offset = 0;
     total_lines_written = 0;
     current_col = 0;
-    cursor_pos = 0;
 
     for (int i = 0; i < SCROLLBACK_LINES; i++)
     {
@@ -230,14 +245,14 @@ void typewriter_print_uint32(uint32_t num)
     }
 }
 
-/* VGA typewriter functions for shell.
- * VGA and cursor_pos behave like before: we draw at cursor_pos and advance it;
- * we never reset cursor_pos from scrollback state, so shell echo (vga_putchar) is preserved.
- * Scrollback is updated in parallel for Page Up/Down only.
- */
+/* Shell /dev/console output — unified renderer (single cursor_pos). */
 void typewriter_vga_print_char(char c, uint8_t color)
 {
     extern int cursor_pos;
+    int cols = tw_cols();
+    int pos;
+    size_t line_idx;
+
     scrollback_color = color;
 
     if (scroll_offset > 0)
@@ -246,66 +261,39 @@ void typewriter_vga_print_char(char c, uint8_t color)
         redraw_from_scrollback();
     }
 
-    /* Update scrollback for SYS_CONSOLE_SCROLL (Page Up/Down) */
-    {
-        size_t line_idx = total_lines_written % SCROLLBACK_LINES;
-        if (c == '\n')
-        {
-            for (size_t j = current_col; j < (size_t)VGA_WIDTH; j++)
-                scrollback[line_idx][j] = (color << 8) | ' ';
-            total_lines_written++;
-            current_col = 0;
-        }
-        else if (c == '\b')
-        {
-            if (current_col > 0)
-            {
-                current_col--;
-                scrollback[line_idx][current_col] = (color << 8) | ' ';
-            }
-        }
-        else
-        {
-            scrollback[line_idx][current_col] = (color << 8) | (uint8_t)c;
-            current_col++;
-            if (current_col >= (size_t)VGA_WIDTH)
-            {
-                current_col = 0;
-                total_lines_written++;
-            }
-        }
-    }
+    console_renderer_putchar(c, color);
 
-    /* Console update: use cursor_pos only (original behavior), do not overwrite cursor_pos from scrollback */
-    if (scroll_offset == 0)
+    line_idx = total_lines_written % SCROLLBACK_LINES;
+    if (c == '\n')
     {
-        if (c == '\n')
+        size_t j;
+
+        for (j = current_col; j < (size_t)cols && j < VGA_WIDTH; j++)
+            scrollback[line_idx][j] = (color << 8) | ' ';
+        total_lines_written++;
+        current_col = 0;
+    }
+    else if (c == '\b' || c == 127)
+    {
+        current_col = (size_t)(cursor_pos % cols);
+        if (current_col < VGA_WIDTH)
+            scrollback[line_idx][current_col] = (color << 8) | ' ';
+    }
+    else if ((unsigned char)c >= ' ')
+    {
+        pos = cursor_pos - 1;
+        if (pos >= 0)
         {
-            cursor_pos = (cursor_pos / VGA_WIDTH + 1) * VGA_WIDTH;
-            if (cursor_pos >= VGA_WIDTH * VGA_HEIGHT)
-            {
-                console_scroll_up(color);
-                cursor_pos = (VGA_HEIGHT - 1) * VGA_WIDTH;
-            }
+            int sc = pos % cols;
+
+            if (sc >= 0 && sc < VGA_WIDTH)
+                scrollback[line_idx][sc] = (color << 8) | (uint8_t)c;
         }
-        else if (c == '\b')
-        {
-            if (cursor_pos > 0)
-            {
-                cursor_pos--;
-                console_put_cell(cursor_pos / VGA_WIDTH, cursor_pos % VGA_WIDTH, ' ', color);
-            }
-        }
-        else
-        {
-            console_put_cell(cursor_pos / VGA_WIDTH, cursor_pos % VGA_WIDTH, c, color);
-            cursor_pos++;
-            if (cursor_pos >= VGA_WIDTH * VGA_HEIGHT)
-            {
-                console_scroll_up(color);
-                cursor_pos = (VGA_HEIGHT - 1) * VGA_WIDTH;
-            }
-        }
+        current_col = (size_t)(cursor_pos % cols);
+    }
+    else
+    {
+        current_col = (size_t)(cursor_pos % cols);
     }
 
     if (current_mode != TYPEWRITER_DISABLED && command_output_enabled &&
@@ -329,4 +317,14 @@ void typewriter_vga_print(const char *str, uint8_t color)
         typewriter_vga_print_char(*str, color);
         str++;
     }
+}
+
+void typewriter_show_cursor(uint8_t color)
+{
+    console_renderer_show_cursor(color);
+}
+
+int typewriter_cursor_x(void)
+{
+    return console_renderer_get_cursor_x();
 }
