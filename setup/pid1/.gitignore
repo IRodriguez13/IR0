@@ -1,1 +1,2 @@
 init
+musl_arch_prctl_smoke

@@ -29,7 +29,7 @@ DEFAULT_FAIL_RES: list[str] = [
     r"DOUBLE PANIC",
     r"panicex\(",
     r"panic\(",
-    r"#PF.*user|#PF.*userspace|General protection fault",
+    r"GPF_IN_USERSPACE|General protection fault",
     r"\bOOM\b|OOM_CLASS|USER_RECOVERABLE",
     r"FORK_STATE.*FAILED|fork failed|FORK.*FAIL",
     r"\bASSERT\b|assertion failed",
@@ -47,6 +47,11 @@ DEFAULT_FAIL_RES: list[str] = [
 DEFAULT_SUCCESS_TAGS: list[str] = []
 
 PROFILES: dict[str, dict[str, object]] = {
+    "musl-arch-prctl": {
+        "success": ["MUSL_ARCH_PRCTL_OK"],
+        "timeout": 45,
+        "stale_sec": 20,
+    },
     "fase50-busybox": {
         "success": ["FASE50E_NO_REGRESSION"],
         "timeout": 150,
