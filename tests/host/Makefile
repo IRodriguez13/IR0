@@ -15,7 +15,8 @@ LDFLAGS    =
 
 TEST_SRCS  = test_runner.c test_example.c \
 	test_pseudo_fs_registry.c test_pseudo_fs_proc_registry.c \
-	test_usb_pci_scan.c test_bt_scan_sync.c
+	test_usb_pci_scan.c test_bt_scan_sync.c \
+	test_vfs_backend_contract.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o host_kmem_stub.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
@@ -50,6 +51,9 @@ test_usb_pci_scan.o: test_usb_pci_scan.c
 
 test_bt_scan_sync.o: test_bt_scan_sync.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+test_vfs_backend_contract.o: test_vfs_backend_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 $(TEST_BIN): $(TEST_OBJS)
 	$(CC) -o $@ $(TEST_OBJS) $(LDFLAGS)

@@ -20,32 +20,14 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/types.h>
+#include <ir0/vfs_backend.h>
 
 struct vfs_dirent;
 
 #define VFS_PATH_MAX 256
 #define VFS_NAME_MAX 255
 
-/*
- * VFS operations table — every filesystem implements this.
- * All operations are path-based; VFS does not track inodes.
- */
-struct vfs_ops {
-    int (*stat)(const char *path, stat_t *buf);
-    int (*mkdir)(const char *path, mode_t mode);
-    int (*create)(const char *path, mode_t mode);
-    int (*unlink)(const char *path);
-    int (*rmdir)(const char *path);
-    int (*link)(const char *oldpath, const char *newpath);
-    int (*chown)(const char *path, uid_t owner, gid_t group);
-    int (*chmod)(const char *path, mode_t mode);
-    int (*readdir)(const char *path, struct vfs_dirent *entries, int max);
-    int (*read)(const char *path, void *buf, size_t count,
-                size_t *bytes_read, off_t offset);
-    int (*write)(const char *path, const void *buf, size_t count,
-                 size_t *bytes_written, off_t offset);
-    int (*truncate)(const char *path, size_t length);
-};
+/* struct vfs_ops — see includes/ir0/vfs_backend.h */
 
 /* Filesystem type descriptor — one per FS driver */
 struct vfs_fstype {
@@ -100,6 +82,8 @@ struct vfs_mount *vfs_get_mounts(void);
 int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out);
 int vfs_read(struct vfs_file *f, char *buf, size_t count);
 int vfs_write(struct vfs_file *f, const char *buf, size_t count);
+int vfs_pread(struct vfs_file *f, char *buf, size_t count, off_t offset);
+int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset);
 int vfs_close(struct vfs_file *f);
 off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence);
 void vfs_file_acquire(struct vfs_file *f);

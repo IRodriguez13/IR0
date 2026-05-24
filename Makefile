@@ -229,6 +229,7 @@ QEMU_64_FLAGS = -cdrom
 KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
+    kernel/rootfs_base.o \
     kernel/process.o \
     kernel/credentials.o \
     kernel/task.o \
@@ -403,7 +404,14 @@ LIB_OBJS = \
     includes/ir0/copy_user.o \
     includes/ir0/open_flags.o \
     includes/ir0/path_user.o \
+    includes/ir0/path_routed.o \
+    includes/ir0/fb.o \
+    includes/ir0/input.o \
     includes/ir0/utimens.o \
+    includes/ir0/fase51_debug.o \
+    includes/ir0/fase52_debug.o \
+    includes/ir0/exec_read_trace.o \
+    includes/ir0/blockdev.o \
     includes/string.o
 
 INTERRUPT_OBJS = \
@@ -1251,6 +1259,18 @@ INIT_FASE46_FORK_HEAP_SRC = setup/pid1/init_fase46_fork_heap.c
 INIT_FASE48_IPC_SRC = setup/pid1/init_fase48_ipc.c
 INIT_FASE49_PIPE_SRC = setup/pid1/init_fase49_pipe.c
 INIT_FASE50_BUSYBOX_SRC = setup/pid1/init_fase50_busybox.c
+INIT_FASE50_EXEC_ONLY_SRC = setup/pid1/init_fase50_exec_only.c
+INIT_FASE51_SHELL_SRC = setup/pid1/init_fase51_shell.c
+INIT_FASE52_TCC_SRC = setup/pid1/init_fase52_tcc.c
+INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
+INIT_FASE53B_POSIX_PSEUDOFS_SRC = setup/pid1/init_fase53b_posix_pseudofs.c
+INIT_FASE54A_FBDEV_SRC = setup/pid1/init_fase54a_fbdev.c
+INIT_FASE54B_INPUT_SRC = setup/pid1/init_fase54b_input.c
+INIT_FASE54C_INPUT_DET_SRC = setup/pid1/init_fase54c_input_deterministic.c
+INIT_FASE55A_DOOM_PREREQ_SRC = setup/pid1/init_fase55a_doom_prereq.c
+INIT_FASE55B_DOOM_STUB_SRC = setup/doom/doomgeneric_ir0_stub.c
+INIT_FASE55C_TIMING_INPUT_SRC = setup/doom/doomgeneric_ir0_stub.c
+INIT_FASE55D_DOOMGENERIC_SRC = setup/doom/doomgeneric_ir0.c
 INIT_FASE50_PROGRAMS_SRC = setup/pid1/init_fase50_programs.c
 FASE48_CAT_SRC = setup/pid1/fase48_cat.c
 FASE48_ECHO_SRC = setup/pid1/fase48_echo.c
@@ -1290,9 +1310,30 @@ FASE46_FORK_HEAP_LOG = /tmp/userspace-fase46-fork-heap.log
 FASE48_IPC_LOG = /tmp/userspace-fase48-ipc.log
 FASE49_PIPE_LOG = /tmp/userspace-fase49-pipe.log
 FASE50_BUSYBOX_LOG = /tmp/userspace-fase50-busybox.log
+FASE50_EXEC_ONLY_LOG = /tmp/userspace-fase50-exec-only.log
+FASE51_SHELL_LOG = /tmp/userspace-fase51-shell.log
+FASE52_TCC_LOG = /tmp/userspace-fase52-tcc.log
+FASE53A_FS_DEV_LOG = /tmp/userspace-fase53a-fs-dev.log
+FASE53B_POSIX_PSEUDOFS_LOG = /tmp/userspace-fase53b-posix-pseudofs.log
+FASE54A_FBDEV_LOG = /tmp/userspace-fase54a-fbdev.log
+FASE54B_INPUT_LOG = /tmp/userspace-fase54b-input.log
+FASE54C_INPUT_DET_LOG = /tmp/userspace-fase54c-input-deterministic.log
+FASE55A_DOOM_PREREQ_LOG = /tmp/userspace-fase55a-doom-prereq.log
+FASE55B_DOOM_STUB_LOG = /tmp/userspace-fase55b-doom-stub.log
+FASE55C_TIMING_INPUT_LOG = /tmp/userspace-fase55c-timing-input.log
+FASE55D_DOOMGENERIC_LOG = /tmp/userspace-fase55d-doomgeneric.log
+FASE55E_DOOM_BIN = setup/pid1/fase55e_doom_interactive
+FASE55E_DOOM_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
+DOOM_FRAMES ?= 0
+DOOM_FRAME_DUMP_EVERY ?= 0
+DOOM_DISPLAY ?= gtk
+REAL_WAD_PATH ?=
+FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
+SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
 BUSYBOX_SRC ?= /tmp/busybox-1.36.1
+TCC_SRC ?= /tmp/tinycc-fase52
 
 build-init-smoke:
 	@echo "  INIT    Building nostdlib ring-3 smoke ($(INIT_SMOKE_BIN))"
@@ -1641,6 +1682,150 @@ build-init-fase50-busybox:
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-init-fase50-busybox OK"
 
+build-init-fase50-exec-only:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE50 EXEC-only smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE50_EXEC_ONLY_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase50-exec-only OK"
+
+build-init-fase51-shell:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE51 shell smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE51_SHELL_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase51-shell OK"
+
+build-tcc-fase52:
+	@./setup/tcc/build-fase52.sh
+
+build-init-fase52-tcc:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE52 TCC smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE52_TCC_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase52-tcc OK"
+
+build-init-fase53a-fs-dev:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE53A fs/dev smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE53A_FS_DEV_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase53a-fs-dev OK"
+
+build-init-fase53b-posix-pseudofs:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE53B posix/pseudo-fs smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE53B_POSIX_PSEUDOFS_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase53b-posix-pseudofs OK"
+
+build-init-fase54a-fbdev:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE54A fbdev smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE54A_FBDEV_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase54a-fbdev OK"
+
+build-init-fase54b-input:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE54B input smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE54B_INPUT_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase54b-input OK"
+
+build-init-fase54c-input-deterministic:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE54C deterministic input smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE54C_INPUT_DET_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase54c-input-deterministic OK"
+
+build-init-fase55a-doom-prereq:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE55A doom prereq smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE55A_DOOM_PREREQ_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase55a-doom-prereq OK"
+
+build-init-fase55b-doom-stub:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE55B doom stub ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE55B_DOOM_STUB_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase55b-doom-stub OK"
+
+build-init-fase55c-timing-input:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE55C timing+input smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE55C_TIMING_INPUT_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase55c-timing-input OK"
+
+build-init-fase55d-doomgeneric:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FASE55D real doomgeneric ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
+		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
+		-Isetup/doom/upstream/doomgeneric \
+		$(INIT_FASE55D_DOOMGENERIC_SRC) \
+		setup/doom/upstream/doomgeneric/*.c \
+		-o $(INIT_SMOKE_BIN) -lm
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fase55d-doomgeneric OK"
+
+build-fase55e-doom-interactive:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  DOOM    Building FASE55E interactive doomgeneric ($(FASE55E_DOOM_BIN))"
+	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
+		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
+		-DFASE55E_INTERACTIVE=1 \
+		-Isetup/doom/upstream/doomgeneric \
+		$(INIT_FASE55D_DOOMGENERIC_SRC) \
+		setup/doom/upstream/doomgeneric/*.c \
+		-o $(FASE55E_DOOM_BIN) -lm
+	@file $(FASE55E_DOOM_BIN) | grep -q ELF
+	@echo "✓ build-fase55e-doom-interactive OK"
+
 build-init-fase50-programs:
 	@if [ -z "$(MUSL_CC)" ]; then \
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
@@ -1686,10 +1871,10 @@ smoke-userspace-init: build-init-smoke load-init-with-smoke kernel-x64-userspace
 	@echo "  SMOKE   userspace /sbin/init boot (CONFIG_KERNEL_DEBUG_SHELL=n)..."
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
-	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log /tmp/userspace-smoke.log --timeout 90 --done init smoke (ring-3) ok -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
-		| tee /tmp/userspace-smoke.log || true; \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "init smoke (ring-3) ok" /tmp/userspace-smoke.log; then \
 		echo "✓ smoke-userspace-init passed"; \
@@ -1720,10 +1905,10 @@ smoke-userspace-musl: build-init-musl load-init-with-musl kernel-x64-userspace.i
 	@echo "  SMOKE   musl /sbin/init boot (CONFIG_KERNEL_DEBUG_SHELL=n)..."
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
-	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log /tmp/userspace-musl-smoke.log --timeout 90 --done IR0: musl init smoke ok -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
-		| tee /tmp/userspace-musl-smoke.log || true; \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "IR0: musl init smoke ok" /tmp/userspace-musl-smoke.log; then \
 		echo "✓ smoke-userspace-musl passed"; \
@@ -1749,10 +1934,10 @@ smoke-userspace-shell: load-userspace-rootfs kernel-x64-userspace.iso
 	@echo "  SMOKE   userspace fork/exec /bin/sh (init_minimal PID1)..."
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
-	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log /tmp/userspace-shell-smoke.log --timeout 90 --done shell smoke ok -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
-		| tee /tmp/userspace-shell-smoke.log || true; \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "shell smoke ok" /tmp/userspace-shell-smoke.log; then \
 		echo "✓ smoke-userspace-shell passed"; \
@@ -1770,10 +1955,10 @@ smoke-userspace-segv: build-init-segv-smoke build-userspace-segv kernel-x64-user
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(SEGV_SMOKE_BIN) bin/userspace_segv; \
-	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log /tmp/userspace-segv-smoke.log --timeout 90 --done code=000000000000008B -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
-		| tee /tmp/userspace-segv-smoke.log || true; \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "\\[PF\\] userspace segv pid=" /tmp/userspace-segv-smoke.log && \
 	    grep -q "\\[PROCESS\\] exit pid=.*code=000000000000008B" /tmp/userspace-segv-smoke.log; then \
@@ -1792,10 +1977,10 @@ smoke-userspace-heap: build-init-heap-smoke kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(HEAP_SMOKE_LOG) --timeout 90 --done page_present=1 -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
-		| tee $(HEAP_SMOKE_LOG) || true; \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE39_HEAP" $(HEAP_SMOKE_LOG) && \
 	    grep -q "page_present=1" $(HEAP_SMOKE_LOG); then \
@@ -1814,10 +1999,10 @@ smoke-userspace-mmap: build-init-mmap-smoke kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(MMAP_SMOKE_LOG) --timeout 90 --done FASE39_MMAP mapped=1 -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
-		| tee $(MMAP_SMOKE_LOG) || true; \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE39_MMAP mapped=1" $(MMAP_SMOKE_LOG) && \
 	    grep -q "\\[PF\\] userspace segv pid=" $(MMAP_SMOKE_LOG); then \
@@ -1836,10 +2021,10 @@ smoke-userspace-stack-heap-iso: build-init-stack-heap-iso-smoke kernel-x64-users
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 45 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(ISO_SMOKE_LOG) --timeout 90 --done overlap=0 -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none 2>&1 \
-		| tee $(ISO_SMOKE_LOG) || true; \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE39_ISO" $(ISO_SMOKE_LOG) && \
 	    grep -q "overlap=0" $(ISO_SMOKE_LOG); then \
@@ -1858,10 +2043,10 @@ smoke-userspace-fork-mem: build-init-fork-mem-smoke kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 70 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FORK_MEM_SMOKE_LOG) --timeout 120 --done FASE40_SUMMARY -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FORK_MEM_SMOKE_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE40_SUMMARY" $(FORK_MEM_SMOKE_LOG); then \
 		echo "✓ smoke-userspace-fork-mem finished"; \
@@ -1880,10 +2065,10 @@ smoke-userspace-fase41-reclaim: build-init-fase41-reclaim build-fase41-true kern
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE41_TRUE_BIN) bin/f41true; \
-	timeout 90 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE41_RECLAIM_LOG) --timeout 150 --done FASE41_SUMMARY -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE41_RECLAIM_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE41_SUMMARY" $(FASE41_RECLAIM_LOG); then \
 		echo "✓ smoke-userspace-fase41-reclaim finished"; \
@@ -1902,10 +2087,10 @@ smoke-page-table-reclaim: build-init-fase42-pt-reclaim build-fase41-true kernel-
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE41_TRUE_BIN) bin/f41true; \
-	timeout 120 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE42_PT_RECLAIM_LOG) --timeout 180 --done FASE42_PT_RECLAIM -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE42_PT_RECLAIM_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE42_PT_RECLAIM" $(FASE42_PT_RECLAIM_LOG); then \
 		echo "✓ smoke-page-table-reclaim finished"; \
@@ -1924,10 +2109,10 @@ smoke-exec-storm: build-init-fase42-exec-storm build-fase41-true kernel-x64-user
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE41_TRUE_BIN) bin/f41true; \
-	timeout 140 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE42_EXEC_STORM_LOG) --timeout 200 --done FASE42_EXEC_STORM -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE42_EXEC_STORM_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE42_EXEC_STORM" $(FASE42_EXEC_STORM_LOG); then \
 		echo "✓ smoke-exec-storm finished"; \
@@ -1945,10 +2130,10 @@ smoke-fork-exit-storm: build-init-fase42-fork-exit-storm kernel-x64-userspace.is
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 90 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE42_FORK_EXIT_STORM_LOG) --timeout 150 --done FASE42_FORK_EXIT_STORM -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE42_FORK_EXIT_STORM_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE42_FORK_EXIT_STORM" $(FASE42_FORK_EXIT_STORM_LOG); then \
 		echo "✓ smoke-fork-exit-storm finished"; \
@@ -1966,10 +2151,10 @@ smoke-fase43-fork-exit-storm: build-init-fase43-fork-exit-storm kernel-x64-users
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 120 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE43_FORK_EXIT_STORM_LOG) --timeout 180 --done FASE43_FORK_EXIT_STORM -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE43_FORK_EXIT_STORM_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE43_FORK_EXIT_STORM" $(FASE43_FORK_EXIT_STORM_LOG); then \
 		echo "✓ smoke-fase43-fork-exit-storm finished"; \
@@ -1987,10 +2172,10 @@ smoke-fase43-fork-wait-storm: build-init-fase43-fork-wait-storm kernel-x64-users
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 120 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE43_FORK_WAIT_STORM_LOG) --timeout 180 --done FASE43_FORK_WAIT_STORM -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE43_FORK_WAIT_STORM_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE43_FORK_WAIT_STORM" $(FASE43_FORK_WAIT_STORM_LOG); then \
 		echo "✓ smoke-fase43-fork-wait-storm finished"; \
@@ -2009,10 +2194,10 @@ smoke-fase43-exec-loop: build-init-fase43-exec-loop build-fase41-true kernel-x64
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE41_TRUE_BIN) bin/f41true; \
-	timeout 180 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE43_EXEC_LOOP_LOG) --timeout 240 --done FASE43_EXEC_LOOP -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE43_EXEC_LOOP_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE43_EXEC_LOOP" $(FASE43_EXEC_LOOP_LOG); then \
 		echo "✓ smoke-fase43-exec-loop finished"; \
@@ -2030,10 +2215,10 @@ smoke-fase44-fork-wait-drain: build-init-fase44-fork-wait-drain kernel-x64-users
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 180 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE44_FORK_WAIT_DRAIN_LOG) --timeout 240 --done FASE44_FORK_WAIT_DRAIN -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE44_FORK_WAIT_DRAIN_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE44_FORK_WAIT_DRAIN" $(FASE44_FORK_WAIT_DRAIN_LOG); then \
 		echo "✓ smoke-fase44-fork-wait-drain finished"; \
@@ -2052,10 +2237,10 @@ smoke-fase44-exec-drain: build-init-fase44-exec-drain build-fase41-true kernel-x
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE41_TRUE_BIN) bin/f41true; \
-	timeout 240 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE44_EXEC_DRAIN_LOG) --timeout 300 --done FASE44_EXEC_DRAIN -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE44_EXEC_DRAIN_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE44_EXEC_DRAIN" $(FASE44_EXEC_DRAIN_LOG); then \
 		echo "✓ smoke-fase44-exec-drain finished"; \
@@ -2073,10 +2258,10 @@ smoke-fase44-init-exit-drain: build-init-fase44-init-exit-drain kernel-x64-users
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 90 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE44_INIT_EXIT_DRAIN_LOG) --timeout 150 --done FASE44_INIT_EXIT_DRAIN -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE44_INIT_EXIT_DRAIN_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE44_INIT_EXIT_DRAIN" $(FASE44_INIT_EXIT_DRAIN_LOG); then \
 		echo "✓ smoke-fase44-init-exit-drain finished"; \
@@ -2094,10 +2279,10 @@ smoke-fase45-fork-rollback-storm: build-init-fase45-fork-rollback-storm kernel-x
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 240 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE45_FORK_ROLLBACK_STORM_LOG) --timeout 300 --done FASE45_FORK_ROLLBACK_STORM -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE45_FORK_ROLLBACK_STORM_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE45_FORK_ROLLBACK_STORM" $(FASE45_FORK_ROLLBACK_STORM_LOG); then \
 		echo "✓ smoke-fase45-fork-rollback-storm finished"; \
@@ -2115,10 +2300,10 @@ smoke-fase45-fork-mem-touch: build-init-fase45-fork-mem-touch kernel-x64-userspa
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 180 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE45_FORK_MEM_TOUCH_LOG) --timeout 240 --done FASE45_FORK_MEM_TOUCH -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE45_FORK_MEM_TOUCH_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE45_FORK_MEM_TOUCH" $(FASE45_FORK_MEM_TOUCH_LOG); then \
 		echo "✓ smoke-fase45-fork-mem-touch finished"; \
@@ -2136,10 +2321,10 @@ smoke-fase46-fork-no-recursion: build-init-fase46-fork-no-recursion kernel-x64-u
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 180 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE46_FORK_NO_RECURSE_LOG) --timeout 240 --done FASE46_FORK_NO_RECURSE -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE46_FORK_NO_RECURSE_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE46_FORK_NO_RECURSE" $(FASE46_FORK_NO_RECURSE_LOG); then \
 		echo "✓ smoke-fase46-fork-no-recursion finished"; \
@@ -2157,10 +2342,10 @@ smoke-fase46-fork-heap: build-init-fase46-fork-heap kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	timeout 180 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE46_FORK_HEAP_LOG) --timeout 240 --done FASE46_FORK_HEAP -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE46_FORK_HEAP_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE46_FORK_HEAP" $(FASE46_FORK_HEAP_LOG); then \
 		echo "✓ smoke-fase46-fork-heap finished"; \
@@ -2181,10 +2366,10 @@ smoke-fase48-ipc: build-init-fase48-ipc build-fase48-ipc-bins kernel-x64-userspa
 	python3 scripts/inject_init_minix.py $$DISK $(FASE48_CAT_BIN) bin/cat; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE48_ECHO_BIN) bin/echo; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE48_BUSYBOX_BIN) bin/busybox; \
-	timeout 120 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE48_IPC_LOG) --timeout 180 --done ipc_class=IPC_READY -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE48_IPC_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE48_IPC" $(FASE48_IPC_LOG) && \
 	    grep -q "pingpong=OK" $(FASE48_IPC_LOG) && \
@@ -2209,10 +2394,10 @@ smoke-fase49-pipe: build-init-fase49-pipe build-fase48-ipc-bins kernel-x64-users
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE48_CAT_BIN) bin/cat; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE48_ECHO_BIN) bin/echo; \
-	timeout 120 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE49_PIPE_LOG) --timeout 180 --done pipe_class=PIPE_READY -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE49_PIPE_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "FASE49_PIPE" $(FASE49_PIPE_LOG) && \
 	    grep -q "check1=OK" $(FASE49_PIPE_LOG) && \
@@ -2230,23 +2415,34 @@ smoke-fase49-pipe: build-init-fase49-pipe build-fase48-ipc-bins kernel-x64-users
 
 smoke-fase50-busybox: build-init-fase50-busybox build-busybox-fase50-min kernel-x64-userspace.iso
 	@echo "  SMOKE   FASE50 BusyBox (real applets)..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE50_BUSYBOX_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE50 harness — run build-init-fase50-busybox"; exit 1)
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
-	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox && \
-	timeout 120 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/cat && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox /bin/cat && \
+	$(SMOKE_QEMU_RUN) --log $(FASE50_BUSYBOX_LOG) --timeout 240 --done FASE50E_NO_REGRESSION -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE50_BUSYBOX_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
+	@if grep -q "FASE51_" $(FASE50_BUSYBOX_LOG) && \
+	    ! grep -q "FASE50_BUSYBOX_HARNESS_ID" $(FASE50_BUSYBOX_LOG); then \
+		echo "✗ FASE50D_FLAKE_HARNESS_INIT_BIN_COLLISION (FASE51 init in FASE50 log)"; \
+		exit 1; \
+	fi
 	@if grep -q "BUSYBOX_BOOT_OK" $(FASE50_BUSYBOX_LOG) && \
+	    grep -q "FASE50_BUSYBOX_HARNESS_ID" $(FASE50_BUSYBOX_LOG) && \
 	    grep -q "FASE50_BUSYBOX_COREUTILS_MINIMAL_OK" $(FASE50_BUSYBOX_LOG) && \
 	    grep -q "FASE50D_TANDA2_OK" $(FASE50_BUSYBOX_LOG) && \
 	    grep -q "FASE50D_TANDA3_OK" $(FASE50_BUSYBOX_LOG) && \
 	    grep -q "FASE50E_OK" $(FASE50_BUSYBOX_LOG) && \
-	    grep -q "FASE50E_BASELINE_STABLE" $(FASE50_BUSYBOX_LOG); then \
+	    grep -q "FASE50E_BASELINE_STABLE" $(FASE50_BUSYBOX_LOG) && \
+	    grep -q "FASE50E_NO_REGRESSION" $(FASE50_BUSYBOX_LOG); then \
 		echo "✓ smoke-fase50-busybox finished"; \
 	else \
 		echo "✗ smoke-fase50-busybox FAILED"; \
@@ -2256,8 +2452,494 @@ smoke-fase50-busybox: build-init-fase50-busybox build-busybox-fase50-min kernel-
 		if grep -q "\[FASE50D\]\[FAIL\]" $(FASE50_BUSYBOX_LOG); then \
 			grep "\[FASE50D\]\[FAIL\]" $(FASE50_BUSYBOX_LOG); \
 		fi; \
+		if grep -q "\[FASE50D\]\[CLASSIFY\]" $(FASE50_BUSYBOX_LOG); then \
+			echo "--- FASE50D classify ---"; \
+			grep "\[FASE50D\]\[CLASSIFY\]" $(FASE50_BUSYBOX_LOG); \
+		fi; \
+		if grep -q "EXEC_VFS_READ_ERR" $(FASE50_BUSYBOX_LOG); then \
+			echo "--- kernel EXEC_VFS_READ_ERR (minix read flake) ---"; \
+			grep "EXEC_VFS_READ_ERR" $(FASE50_BUSYBOX_LOG) | tail -3; \
+		fi; \
 		exit 1; \
 	fi
+
+smoke-fase50-exec-only: build-init-fase50-exec-only build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE50 EXEC-only (busybox read/exec loop, N=50)..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "EXEC_ONLY_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not EXEC-only harness — run build-init-fase50-exec-only"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox && \
+	$(SMOKE_QEMU_RUN) --log $(FASE50_EXEC_ONLY_LOG) --timeout 240 \
+		--done EXEC_ONLY_STABLE_OK --fail-regex 'EXEC_ONLY_FAIL|_FAIL_REASON|\[FASE[0-9A-Z]+\]\[FAIL\]' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "EXEC_ONLY_STABLE_OK" $(FASE50_EXEC_ONLY_LOG) && \
+	    grep -q "EXEC_ONLY_HARNESS_ID" $(FASE50_EXEC_ONLY_LOG) && \
+	    grep -qE "EXEC_ONLY_N50_STABLE_OK|EXEC_BUSYBOX_READ_STABLE_FIXED" $(FASE50_EXEC_ONLY_LOG); then \
+		echo "✓ smoke-fase50-exec-only finished"; \
+	elif grep -q "EXEC_ONLY_FAIL" $(FASE50_EXEC_ONLY_LOG); then \
+		echo "✗ smoke-fase50-exec-only REPRO (classified)"; \
+		grep "EXEC_ONLY_FAIL" $(FASE50_EXEC_ONLY_LOG) | tail -1; \
+		if grep -q "\[EXEC_ONLY\]\[CLASSIFY\]" $(FASE50_EXEC_ONLY_LOG); then \
+			echo "--- EXEC_ONLY classify ---"; \
+			grep "\[EXEC_ONLY\]\[CLASSIFY\]" $(FASE50_EXEC_ONLY_LOG) | sort -u; \
+		fi; \
+		if grep -q "MINIX_READ_EIO_AT_BLOCK\|DEVICE_READ_FLAKE" $(FASE50_EXEC_ONLY_LOG); then \
+			echo "--- block/device ---"; \
+			grep -E "\[EXEC_ONLY\]\[MINIX\]|\[EXEC_ONLY\]\[DEV\]" $(FASE50_EXEC_ONLY_LOG) | tail -12; \
+		fi; \
+		exit 1; \
+	else \
+		echo "✗ smoke-fase50-exec-only FAILED (harness incomplete)"; \
+		exit 1; \
+	fi
+
+smoke-fase51-shell: build-init-fase51-shell build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE51 BusyBox ash (pipes/redirect/loops)..."
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/cat && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox /bin/cat && \
+	$(SMOKE_QEMU_RUN) --log $(FASE51_SHELL_LOG) --timeout 240 --done DEBUG_FASE51_GATED -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE51_OK" $(FASE51_SHELL_LOG) && \
+	    grep -q "FASE51_PIPE_OK" $(FASE51_SHELL_LOG) && \
+	    grep -q "FASE51_REDIRECT_OK" $(FASE51_SHELL_LOG) && \
+	    grep -q "FASE51_FOR_LOOP_OK" $(FASE51_SHELL_LOG) && \
+	    grep -q "FASE51_CONTROL_FLOW_OK" $(FASE51_SHELL_LOG) && \
+	    grep -q "FASE51_BASELINE_STABLE" $(FASE51_SHELL_LOG) && \
+	    grep -q "DEBUG_FASE51_GATED" $(FASE51_SHELL_LOG); then \
+		echo "✓ smoke-fase51-shell finished"; \
+	else \
+		echo "✗ smoke-fase51-shell FAILED"; \
+		if grep -q "FASE51_FAIL_REASON" $(FASE51_SHELL_LOG); then \
+			grep "FASE51_FAIL_REASON" $(FASE51_SHELL_LOG); \
+		fi; \
+		if grep -q "\[FASE51\]\[FAIL\]" $(FASE51_SHELL_LOG); then \
+			grep "\[FASE51\]\[FAIL\]" $(FASE51_SHELL_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase52-tcc: build-init-fase52-tcc build-tcc-fase52 kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE52 TinyCC bootstrap..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE52_TCC_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE52 harness — run build-init-fase52-tcc"; exit 1)
+	@test -d $(FASE52_TCC_STAGE)/bin || (echo "✗ missing $(FASE52_TCC_STAGE) — run build-tcc-fase52"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	find $(FASE52_TCC_STAGE) -type f | sort | while read -r f; do \
+		rel="$${f#$(FASE52_TCC_STAGE)/}"; \
+		python3 scripts/inject_init_minix.py $$DISK "$$f" "$$rel"; \
+	done && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/tcc && \
+	$(SMOKE_QEMU_RUN) --log $(FASE52_TCC_LOG) --timeout 360 --done FASE52_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE52_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52_TCC_HARNESS_ID" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52_TCC_BOOT_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52B_TCC_STATIC_LINK_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52B_TCC_EXEC_GENERATED_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52B_TCC_STDIO_HELLO_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52B_BASE_LAYOUT_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52C_PRINTF_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52C_MALLOC_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52C_STDIO_FILE_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52C_MULTI_OBJECT_LINK_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52C_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52D_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52D_MEDIUM_PROGRAM_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "FASE52D_LARGE_FILE_PROGRAM_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "VFS_OFFSET_READ_OK\|MINIX_OFFSET_READ_OK" $(FASE52_TCC_LOG) && \
+	    grep -q "LARGE_FILE_RW_OK" $(FASE52_TCC_LOG); then \
+		echo "✓ smoke-fase52-tcc finished"; \
+	elif grep -q "FASE52_FAIL_REASON" $(FASE52_TCC_LOG); then \
+		echo "✗ smoke-fase52-tcc REPRO (classified)"; \
+		grep "FASE52_FAIL_REASON" $(FASE52_TCC_LOG) | tail -1; \
+		grep "\[FASE52\]\[CLASSIFY\]" $(FASE52_TCC_LOG) | sort -u; \
+		exit 1; \
+	else \
+		echo "✗ smoke-fase52-tcc FAILED (harness incomplete)"; \
+		exit 1; \
+	fi
+
+smoke-fase53a-fs-dev: build-init-fase53a-fs-dev build-busybox-fase50-min build-tcc-fase52 kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE53A userspace base (/dev + /tmp + cwd + tcc)..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE53A_FS_DEV_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE53A harness — run build-init-fase53a-fs-dev"; exit 1)
+	@test -d $(FASE52_TCC_STAGE)/bin || (echo "✗ missing $(FASE52_TCC_STAGE) — run build-tcc-fase52"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
+	find $(FASE52_TCC_STAGE) -type f | sort | while read -r f; do \
+		rel="$${f#$(FASE52_TCC_STAGE)/}"; \
+		python3 scripts/inject_init_minix.py $$DISK "$$f" "$$rel"; \
+	done && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox /bin/tcc && \
+	$(SMOKE_QEMU_RUN) --log $(FASE53A_FS_DEV_LOG) --timeout 240 --done FASE53A_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE53A_OK" $(FASE53A_FS_DEV_LOG) && \
+	    grep -q "FASE53A_FS_DEV_HARNESS_ID" $(FASE53A_FS_DEV_LOG) && \
+	    grep -q "FASE53A_ROOTFS_LAYOUT_OK" $(FASE53A_FS_DEV_LOG) && \
+	    grep -q "DEVFS_NULL_OK" $(FASE53A_FS_DEV_LOG) && \
+	    grep -q "DEVFS_ZERO_OK" $(FASE53A_FS_DEV_LOG) && \
+	    grep -q "TMPDIR_OK" $(FASE53A_FS_DEV_LOG) && \
+	    grep -q "CWD_CHDIR_OK" $(FASE53A_FS_DEV_LOG) && \
+	    grep -q "TCC_LAYOUT_NO_REGRESSION" $(FASE53A_FS_DEV_LOG) && \
+	    grep -q "FASE50_51_52_NO_REGRESSION" $(FASE53A_FS_DEV_LOG); then \
+		echo "✓ smoke-fase53a-fs-dev finished"; \
+	else \
+		echo "✗ smoke-fase53a-fs-dev FAILED"; \
+		if grep -q "FASE53A_FAIL_REASON" $(FASE53A_FS_DEV_LOG); then \
+			grep "FASE53A_FAIL_REASON" $(FASE53A_FS_DEV_LOG); \
+		fi; \
+		if grep -q "\[FASE53A\]\[FAIL\]" $(FASE53A_FS_DEV_LOG); then \
+			grep "\[FASE53A\]\[FAIL\]" $(FASE53A_FS_DEV_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase53b-posix-pseudofs: build-init-fase53b-posix-pseudofs build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE53B POSIX pseudo-fs routed path..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE53B_POSIX_PSEUDOFS_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE53B harness — run build-init-fase53b-posix-pseudofs"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox && \
+	$(SMOKE_QEMU_RUN) --log $(FASE53B_POSIX_PSEUDOFS_LOG) --timeout 240 --done FASE53B_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE53B_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
+	    grep -q "FASE53B_POSIX_PSEUDOFS_HARNESS_ID" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
+	    grep -q "FASE53B_ROUTED_PATH_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
+	    grep -q "FASE53B_FACCESSAT_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
+	    grep -q "FASE53B_GETDENTS_CURSOR_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
+	    grep -q "FASE53B_PSEUDOFS_NO_DUP_OK" $(FASE53B_POSIX_PSEUDOFS_LOG); then \
+		echo "✓ smoke-fase53b-posix-pseudofs finished"; \
+	else \
+		echo "✗ smoke-fase53b-posix-pseudofs FAILED"; \
+		if grep -q "FASE53B_FAIL_REASON" $(FASE53B_POSIX_PSEUDOFS_LOG); then \
+			grep "FASE53B_FAIL_REASON" $(FASE53B_POSIX_PSEUDOFS_LOG); \
+		fi; \
+		if grep -q "\[FASE53B\]\[FAIL\]" $(FASE53B_POSIX_PSEUDOFS_LOG); then \
+			grep "\[FASE53B\]\[FAIL\]" $(FASE53B_POSIX_PSEUDOFS_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase54a-fbdev: build-init-fase54a-fbdev build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE54A minimal fbdev slice..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE54A_FBDEV_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE54A harness — run build-init-fase54a-fbdev"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /bin /bin/busybox && \
+	$(SMOKE_QEMU_RUN) --log $(FASE54A_FBDEV_LOG) --timeout 240 --done FASE54A_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE54A_OK" $(FASE54A_FBDEV_LOG) && \
+	    grep -q "FASE54A_FBDEV_HARNESS_ID" $(FASE54A_FBDEV_LOG) && \
+	    grep -q "DEVFS_FB0_OK" $(FASE54A_FBDEV_LOG) && \
+	    ( grep -q "FASE54A_FB_UNAVAILABLE" $(FASE54A_FBDEV_LOG) || \
+	      ( grep -q "FB_FACADE_OK" $(FASE54A_FBDEV_LOG) && \
+	        grep -q "FASE54A_FBDEV_PRESENT" $(FASE54A_FBDEV_LOG) && \
+	        grep -q "FASE54A_FB_GETINFO_OK" $(FASE54A_FBDEV_LOG) && \
+	        grep -q "FASE54A_FB_DRAW_OK" $(FASE54A_FBDEV_LOG) ) ); then \
+		echo "✓ smoke-fase54a-fbdev finished"; \
+	else \
+		echo "✗ smoke-fase54a-fbdev FAILED"; \
+		if grep -q "FASE54A_FAIL_REASON" $(FASE54A_FBDEV_LOG); then \
+			grep "FASE54A_FAIL_REASON" $(FASE54A_FBDEV_LOG); \
+		fi; \
+		if grep -q "\[FASE54A\]\[FAIL\]" $(FASE54A_FBDEV_LOG); then \
+			grep "\[FASE54A\]\[FAIL\]" $(FASE54A_FBDEV_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase54b-input: build-init-fase54b-input kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE54B fbdev + input minimal slice..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE54B_INPUT_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE54B harness — run build-init-fase54b-input"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
+	$(SMOKE_QEMU_RUN) --log $(FASE54B_INPUT_LOG) --timeout 240 --done FASE54B_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE54B_OK" $(FASE54B_INPUT_LOG) && \
+	    grep -q "FASE54B_INPUT_HARNESS_ID" $(FASE54B_INPUT_LOG) && \
+	    grep -q "INPUT_FACADE_OK" $(FASE54B_INPUT_LOG) && \
+	    grep -q "DEVFS_INPUT0_OK" $(FASE54B_INPUT_LOG) && \
+	    ( grep -q "FASE54B_INPUT_UNAVAILABLE" $(FASE54B_INPUT_LOG) || \
+	      ( grep -q "INPUT_EVENT_READ_OK" $(FASE54B_INPUT_LOG) && \
+	        grep -q "FASE54B_FB_INTERACTIVE_OK" $(FASE54B_INPUT_LOG) ) ); then \
+		echo "✓ smoke-fase54b-input finished"; \
+	else \
+		echo "✗ smoke-fase54b-input FAILED"; \
+		if grep -q "FASE54B_FAIL_REASON" $(FASE54B_INPUT_LOG); then \
+			grep "FASE54B_FAIL_REASON" $(FASE54B_INPUT_LOG); \
+		fi; \
+		if grep -q "\[FASE54B\]\[FAIL\]" $(FASE54B_INPUT_LOG); then \
+			grep "\[FASE54B\]\[FAIL\]" $(FASE54B_INPUT_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase54c-input-deterministic: build-init-fase54c-input-deterministic kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE54C deterministic input path..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE54C_INPUT_DETERMINISTIC_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE54C harness — run build-init-fase54c-input-deterministic"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
+	$(SMOKE_QEMU_RUN) --log $(FASE54C_INPUT_DET_LOG) --timeout 240 --done FASE54C_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE54C_OK" $(FASE54C_INPUT_DET_LOG) && \
+	    grep -q "FASE54C_INPUT_DETERMINISTIC_HARNESS_ID" $(FASE54C_INPUT_DET_LOG) && \
+	    grep -q "INPUT_INJECT_TESTHOOK_OK" $(FASE54C_INPUT_DET_LOG) && \
+	    grep -q "DEVFS_EVENTS0_READ_OK" $(FASE54C_INPUT_DET_LOG) && \
+	    grep -q "INPUT_EVENT_READ_OK" $(FASE54C_INPUT_DET_LOG) && \
+	    grep -q "FASE54C_INPUT_DETERMINISTIC_OK" $(FASE54C_INPUT_DET_LOG); then \
+		echo "✓ smoke-fase54c-input-deterministic finished"; \
+	else \
+		echo "✗ smoke-fase54c-input-deterministic FAILED"; \
+		if grep -q "FASE54C_FAIL_REASON" $(FASE54C_INPUT_DET_LOG); then \
+			grep "FASE54C_FAIL_REASON" $(FASE54C_INPUT_DET_LOG); \
+		fi; \
+		if grep -q "\[FASE54C\]\[FAIL\]" $(FASE54C_INPUT_DET_LOG); then \
+			grep "\[FASE54C\]\[FAIL\]" $(FASE54C_INPUT_DET_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase55a-doom-prereq: build-init-fase55a-doom-prereq build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE55A doomgeneric prereq loop..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE55A_DOOM_PREREQ_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE55A harness — run build-init-fase55a-doom-prereq"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) usr/share/doom/doom1.wad && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/share/doom/doom1.wad && \
+	$(SMOKE_QEMU_RUN) --log $(FASE55A_DOOM_PREREQ_LOG) --timeout 120 --done FASE55A_DOOM_PREREQ_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE55A_DOOM_PREREQ_HARNESS_ID" $(FASE55A_DOOM_PREREQ_LOG) && \
+	    grep -q "DOOM_LOOP_FB_OPEN_OK" $(FASE55A_DOOM_PREREQ_LOG) && \
+	    grep -q "DOOM_LOOP_INPUT_OPEN_OK" $(FASE55A_DOOM_PREREQ_LOG) && \
+	    grep -q "DOOM_WAD_READ_OK" $(FASE55A_DOOM_PREREQ_LOG) && \
+	    grep -q "DOOM_FRAME_DRAW_OK" $(FASE55A_DOOM_PREREQ_LOG) && \
+	    grep -q "FASE55A_DOOM_PREREQ_OK" $(FASE55A_DOOM_PREREQ_LOG); then \
+		echo "✓ smoke-fase55a-doom-prereq finished"; \
+	else \
+		echo "✗ smoke-fase55a-doom-prereq FAILED"; \
+		if grep -q "FASE55A_FAIL_REASON" $(FASE55A_DOOM_PREREQ_LOG); then \
+			grep "FASE55A_FAIL_REASON" $(FASE55A_DOOM_PREREQ_LOG); \
+		fi; \
+		if grep -q "\[FASE55A\]\[FAIL\]" $(FASE55A_DOOM_PREREQ_LOG); then \
+			grep "\[FASE55A\]\[FAIL\]" $(FASE55A_DOOM_PREREQ_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase55b-doom-stub: build-init-fase55b-doom-stub build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE55B doomgeneric-style stub..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE55B_DOOM_STUB_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE55B harness — run build-init-fase55b-doom-stub"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) usr/share/doom/doom1.wad && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/share/doom/doom1.wad && \
+	$(SMOKE_QEMU_RUN) --log $(FASE55B_DOOM_STUB_LOG) --timeout 120 --done FASE55B_DOOM_STUB_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE55B_DOOM_STUB_HARNESS_ID" $(FASE55B_DOOM_STUB_LOG) && \
+	    grep -q "DOOM_STUB_FB_OK" $(FASE55B_DOOM_STUB_LOG) && \
+	    grep -q "DOOM_STUB_INPUT_OK" $(FASE55B_DOOM_STUB_LOG) && \
+	    grep -q "DOOM_STUB_WAD_OK" $(FASE55B_DOOM_STUB_LOG) && \
+	    grep -q "DOOM_STUB_FRAME_LOOP_OK" $(FASE55B_DOOM_STUB_LOG) && \
+	    grep -q "FASE55B_DOOM_STUB_OK" $(FASE55B_DOOM_STUB_LOG); then \
+		echo "✓ smoke-fase55b-doom-stub finished"; \
+	else \
+		echo "✗ smoke-fase55b-doom-stub FAILED"; \
+		if grep -q "FASE55B_FAIL_REASON" $(FASE55B_DOOM_STUB_LOG); then \
+			grep "FASE55B_FAIL_REASON" $(FASE55B_DOOM_STUB_LOG); \
+		fi; \
+		if grep -q "\[FASE55B\]\[FAIL\]" $(FASE55B_DOOM_STUB_LOG); then \
+			grep "\[FASE55B\]\[FAIL\]" $(FASE55B_DOOM_STUB_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase55c-timing-input: build-init-fase55c-timing-input build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE55C timed loop + input backend..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE55B_DOOM_STUB_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not FASE55C/55B harness — run build-init-fase55c-timing-input"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) usr/share/doom/doom1.wad && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/share/doom/doom1.wad && \
+	$(SMOKE_QEMU_RUN) --log $(FASE55C_TIMING_INPUT_LOG) --timeout 120 --done FASE55C_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "FASE55C_OK" $(FASE55C_TIMING_INPUT_LOG) && \
+	    grep -q "CLOCK_MONOTONIC_OK" $(FASE55C_TIMING_INPUT_LOG) && \
+	    grep -q "NANOSLEEP_OR_YIELD_OK" $(FASE55C_TIMING_INPUT_LOG) && \
+	    grep -q "INPUT_PS2_CAPS_OK" $(FASE55C_TIMING_INPUT_LOG) && \
+	    grep -q "INPUT_TEST_INJECT_STILL_OK" $(FASE55C_TIMING_INPUT_LOG) && \
+	    grep -q "DOOM_STUB_TIMED_LOOP_OK" $(FASE55C_TIMING_INPUT_LOG); then \
+		echo "✓ smoke-fase55c-timing-input finished"; \
+	else \
+		echo "✗ smoke-fase55c-timing-input FAILED"; \
+		if grep -q "FASE55B_FAIL_REASON" $(FASE55C_TIMING_INPUT_LOG); then \
+			grep "FASE55B_FAIL_REASON" $(FASE55C_TIMING_INPUT_LOG); \
+		fi; \
+		if grep -q "\[FASE55B\]\[FAIL\]" $(FASE55C_TIMING_INPUT_LOG); then \
+			grep "\[FASE55B\]\[FAIL\]" $(FASE55C_TIMING_INPUT_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+smoke-fase55d-doomgeneric: build-init-fase55d-doomgeneric kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE55D doomgeneric real incremental..."
+	@if [ -z "$(REAL_WAD_PATH)" ] || [ ! -f "$(REAL_WAD_PATH)" ]; then \
+		echo "✗ REAL_WAD_PATH must point to a real WAD file"; \
+		echo "  example: make smoke-fase55d-doomgeneric REAL_WAD_PATH=/path/to/doom1.wad"; \
+		exit 1; \
+	fi
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/share/doom/doom1.wad && \
+	$(SMOKE_QEMU_RUN) --log $(FASE55D_DOOMGENERIC_LOG) --timeout 240 \
+		--done FASE55D_DOOMGENERIC_OK --done DOOMGENERIC_FRAME_LOOP_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "DOOMGENERIC_BUILD_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "DOOMGENERIC_WAD_LOAD_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "DOOMGENERIC_INIT_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "DOOMGENERIC_FIRST_FRAME_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "DOOMGENERIC_FRAME_LOOP_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "FASE55D_DOOMGENERIC_OK" $(FASE55D_DOOMGENERIC_LOG); then \
+		echo "LONG_RUNNING_BUT_STABLE"; \
+		echo "FASE55D_DOOMGENERIC_REAL_WAD_OK"; \
+		echo "✓ smoke-fase55d-doomgeneric finished"; \
+	else \
+		if grep -q "DOOMGENERIC_FRAME_LOOP_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+		   grep -q "FASE55D_DOOMGENERIC_OK" $(FASE55D_DOOMGENERIC_LOG); then \
+			echo "LONG_RUNNING_BUT_STABLE"; \
+		fi; \
+		echo "✗ smoke-fase55d-doomgeneric FAILED"; \
+		if grep -q "\[FASE55D\]\[FAIL\]" $(FASE55D_DOOMGENERIC_LOG); then \
+			grep "\[FASE55D\]\[FAIL\]" $(FASE55D_DOOMGENERIC_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
+run-fase55d-doomgeneric-gui: build-fase55e-doom-interactive kernel-x64-userspace.iso
+	@if [ -z "$(REAL_WAD_PATH)" ] || [ ! -f "$(REAL_WAD_PATH)" ]; then \
+		echo "✗ REAL_WAD_PATH must point to a real WAD file"; \
+		echo "  example: make run-fase55d-doomgeneric-gui REAL_WAD_PATH=/path/to/doom1.wad"; \
+		exit 1; \
+	fi
+	@echo "  RUN     FASE55E Doom interactive (DOOM_FRAMES=$(DOOM_FRAMES) dump_every=$(DOOM_FRAME_DUMP_EVERY) display=$(DOOM_DISPLAY))..."
+	@echo "  LOG     serial -> $(FASE55E_DOOM_GUI_LOG)"
+	@echo "  HINT    ESC to quit Doom loop; Ctrl+C QEMU to stop VM"
+	@rm -f $(FASE55E_DOOM_GUI_LOG); \
+	DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	CFG=$$(mktemp /tmp/doom-frames-cfg.XXXXXX); \
+	printf '%s\n%s\n' "$(DOOM_FRAMES)" "$(DOOM_FRAME_DUMP_EVERY)" > $$CFG; \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE55E_DOOM_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
+	python3 scripts/inject_init_minix.py $$DISK $$CFG etc/doom-frames && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/share/doom/doom1.wad /etc/doom-frames && \
+	rm -f $$CFG; \
+	if [ "$(DOOM_DISPLAY)" = "sdl" ]; then \
+		DISP="-display sdl2"; \
+	else \
+		DISP="-display gtk"; \
+	fi; \
+	$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial file:$(FASE55E_DOOM_GUI_LOG) \
+		$$DISP -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+
+smoke-current-fase54b: kernel-x64.bin arch-guard smoke-fase54b-input
+	@echo "FAST_ITERATION_GATES_OK"
+
+smoke-regression-light: kernel-x64.bin arch-guard smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input
+	@echo "FAST_ITERATION_GATES_OK"
+
+smoke-regression-light-fast: kernel-x64.bin arch-guard smoke-fase54c-input-deterministic smoke-fase55b-doom-stub smoke-fase55c-timing-input
+	@echo "FAST_ITERATION_GATES_OK"
+
+smoke-regression-full: kernel-x64.bin arch-guard build-matrix-min smoke-fase50-busybox smoke-fase51-shell smoke-fase52-tcc smoke-fase53a-fs-dev smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input
+	@$(MAKE) -s -C tests/host
+	@echo "FULL_REGRESSION_ON_CLOSE_OK"
 
 smoke-fase50-programs: build-init-fase50-programs build-fase50-hello build-busybox-fase50-min kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then \
@@ -2270,10 +2952,10 @@ smoke-fase50-programs: build-init-fase50-programs build-fase50-hello build-busyb
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_HELLO_BIN) bin/hello-world; \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox; \
-	timeout 120 $(QEMU) -cdrom kernel-x64-userspace.iso \
+	$(SMOKE_QEMU_RUN) --log $(FASE50_PROGRAMS_LOG) --timeout 180 --done USERSPACE_BOOTSTRAP_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none 2>&1 \
-		| tee $(FASE50_PROGRAMS_LOG) || true; \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "PROGRAM=hello-world" $(FASE50_PROGRAMS_LOG) && \
 	    grep -q "PROGRAM=busybox echo" $(FASE50_PROGRAMS_LOG) && \
@@ -2341,7 +3023,9 @@ kernel-memsafe:
 # QEMU headless, sin red. El kernel (kernel-x64-test.bin) llama kernel_test_run_all() en boot.
 kernel-tests: kernel-x64-test.iso disk.img
 	@echo "  KTEST   Running in-kernel test suite at boot (KUnit-style)..."
-	@timeout 40 $(QEMU) -cdrom kernel-x64-test.iso -drive file=disk.img,format=raw,if=ide,index=0 -serial stdio -display none -m 128M -no-reboot -net none 2>&1 | tee /tmp/ktest.log; \
+	@$(SMOKE_QEMU_RUN) --log /tmp/ktest.log --timeout 60 --done "test(s) passed" \
+		--fail-regex 'Some tests FAILED|not ok ' -- \
+		$(QEMU) -cdrom kernel-x64-test.iso -drive file=disk.img,format=raw,if=ide,index=0 -serial stdio -display none -m 128M -no-reboot -net none; \
 	grep -q "All .* test(s) passed" /tmp/ktest.log && ! grep -q "Some tests FAILED" /tmp/ktest.log && ! grep -q "not ok " /tmp/ktest.log && ! grep -q "# SKIP need process" /tmp/ktest.log; \
 	if [ $$? -eq 0 ]; then echo "✓ kernel-tests passed"; exit 0; else echo "✗ kernel-tests FAILED"; exit 1; fi
 
@@ -2943,8 +3627,8 @@ test-drivers-clean:
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
-        runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all \
-        build-init-smoke build-init-musl build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
+        runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
+        build-init-smoke build-init-musl build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \

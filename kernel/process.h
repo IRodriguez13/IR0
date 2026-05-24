@@ -165,6 +165,7 @@ typedef struct process
 	syscall_user_frame_t syscall_frame;
 	uint64_t syscall_resume_rax;
 	uint8_t irq_frame_saved; /* blocked syscall: resume via arch_switch_to_user_task */
+	int *wait_status_ptr;    /* userspace wait4 status word while irq_frame_saved */
 
 	/* FASE44 lifecycle audit (diagnostic only). */
 	uint8_t fase44_audit_state;
@@ -237,6 +238,12 @@ int fork_flow_note_debug_exception(uint64_t *stack);
 void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall);
 __attribute__((noreturn)) void process_exit(int code);
 int process_wait(pid_t pid, int *status, int options);
+
+/*
+ * Reap a zombie child when resuming a blocked wait4 syscall.
+ * Must run after the child has finished process_exit(), before returning to user.
+ */
+void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid);
 
 /* IR0 PHILOSOPHY: Only spawn() creates processes - total simplicity
  * Mode must be explicitly specified - no magic address detection */

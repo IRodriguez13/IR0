@@ -27,9 +27,247 @@
 #include "ata.h"
 #include <ir0/vga.h>
 #include <ir0/oops.h>
+#include <ir0/serial_io.h>
 #include <string.h>
 #include <ir0/arch_port.h>
 #include <ir0/resource_registry.h>
+#include <stdint.h>
+
+#define ATA_WAIT_LOOPS 50000
+#define ATA_MAX_RETRY  3
+
+int vfs_exec_audit_is_active(void);
+
+static uint16_t ata_get_status_port(uint8_t drive);
+static uint16_t ata_get_drive_head_port(uint8_t drive);
+static uint16_t ata_get_sector_count_port(uint8_t drive);
+static uint16_t ata_get_lba_low_port(uint8_t drive);
+static uint16_t ata_get_lba_mid_port(uint8_t drive);
+static uint16_t ata_get_lba_high_port(uint8_t drive);
+static uint16_t ata_get_command_port(uint8_t drive);
+static uint16_t ata_get_port_base(uint8_t drive);
+
+typedef enum
+{
+	ATA_POLL_OK = 0,
+	ATA_POLL_BSY_TIMEOUT,
+	ATA_POLL_DRQ_TIMEOUT,
+	ATA_POLL_ERR,
+	ATA_POLL_DF,
+	ATA_POLL_FLOATING,
+} ata_poll_result_t;
+
+static int ata_single_sector_announced;
+static int ata_multi_sector_warned;
+
+static int ata_trace_on(void)
+{
+	return vfs_exec_audit_is_active();
+}
+
+static void ata_emit_classify(const char *tag)
+{
+	if (!tag)
+		return;
+	serial_print("[EXEC_ONLY][CLASSIFY] ");
+	serial_print(tag);
+	serial_print("\n");
+}
+
+static const char *ata_poll_classify(ata_poll_result_t res)
+{
+	switch (res)
+	{
+	case ATA_POLL_BSY_TIMEOUT:
+		return "ATA_FAIL_BSY_TIMEOUT";
+	case ATA_POLL_DRQ_TIMEOUT:
+		return "ATA_FAIL_DRQ_TIMEOUT";
+	case ATA_POLL_ERR:
+		return "ATA_FAIL_ERR";
+	case ATA_POLL_DF:
+		return "ATA_FAIL_DF";
+	case ATA_POLL_FLOATING:
+		return "ATA_FAIL_FLOATING_BUS";
+	default:
+		return NULL;
+	}
+}
+
+static uint16_t ata_get_error_port(uint8_t drive)
+{
+	return (drive < 2) ? ATA_PRIMARY_ERROR : ATA_SECONDARY_ERROR;
+}
+
+static const char *ata_channel_name(uint8_t drive)
+{
+	return (drive < 2) ? "primary" : "secondary";
+}
+
+static void ata_io_delay(uint8_t drive)
+{
+	uint16_t status_port = ata_get_status_port(drive);
+
+	(void)inb(status_port);
+	(void)inb(status_port);
+	(void)inb(status_port);
+	(void)inb(status_port);
+}
+
+static void ata_trace_status(const char *when, uint8_t drive, uint8_t status)
+{
+	if (!ata_trace_on())
+		return;
+
+	serial_print("[EXEC_ONLY][ATA] when=");
+	serial_print(when ? when : "?");
+	serial_print(" drive=");
+	serial_print_hex32((uint32_t)drive);
+	serial_print(" ch=");
+	serial_print(ata_channel_name(drive));
+	serial_print(" status=0x");
+	serial_print_hex32((uint32_t)status);
+	serial_print(" BSY=");
+	serial_print((status & ATA_STATUS_BSY) ? "1" : "0");
+	serial_print(" DRQ=");
+	serial_print((status & ATA_STATUS_DRQ) ? "1" : "0");
+	serial_print(" ERR=");
+	serial_print((status & ATA_STATUS_ERR) ? "1" : "0");
+	serial_print(" DF=");
+	serial_print((status & ATA_STATUS_DF) ? "1" : "0");
+	serial_print("\n");
+}
+
+static void ata_trace_wait_fail(const char *fn, ata_poll_result_t res,
+				uint8_t drive, int loops, uint8_t status)
+{
+	const char *tag = ata_poll_classify(res);
+
+	serial_print("[EXEC_ONLY][ATA] wait_fail fn=");
+	serial_print(fn ? fn : "?");
+	serial_print(" drive=");
+	serial_print_hex32((uint32_t)drive);
+	serial_print(" loops=");
+	serial_print_hex32((uint32_t)loops);
+	serial_print(" status=0x");
+	serial_print_hex32((uint32_t)status);
+	if (status & ATA_STATUS_ERR)
+	{
+		serial_print(" err_reg=0x");
+		serial_print_hex32((uint32_t)inb(ata_get_error_port(drive)));
+	}
+	serial_print("\n");
+	if (tag)
+		ata_emit_classify(tag);
+}
+
+static ata_poll_result_t ata_poll_not_busy(uint8_t drive, int *loops_out,
+					   uint8_t *status_out)
+{
+	uint16_t status_port = ata_get_status_port(drive);
+	int i;
+
+	for (i = 0; i < ATA_WAIT_LOOPS; i++)
+	{
+		uint8_t status = inb(status_port);
+
+		if (status == 0xFF)
+		{
+			if (loops_out)
+				*loops_out = i;
+			if (status_out)
+				*status_out = status;
+			return ATA_POLL_FLOATING;
+		}
+		if (status & ATA_STATUS_ERR)
+		{
+			if (loops_out)
+				*loops_out = i;
+			if (status_out)
+				*status_out = status;
+			return ATA_POLL_ERR;
+		}
+		if (status & ATA_STATUS_DF)
+		{
+			if (loops_out)
+				*loops_out = i;
+			if (status_out)
+				*status_out = status;
+			return ATA_POLL_DF;
+		}
+		if (!(status & ATA_STATUS_BSY))
+		{
+			if (loops_out)
+				*loops_out = i;
+			if (status_out)
+				*status_out = status;
+			return ATA_POLL_OK;
+		}
+	}
+
+	if (loops_out)
+		*loops_out = ATA_WAIT_LOOPS;
+	if (status_out)
+		*status_out = inb(status_port);
+	return ATA_POLL_BSY_TIMEOUT;
+}
+
+static ata_poll_result_t ata_poll_drq(uint8_t drive, int *loops_out,
+				      uint8_t *status_out)
+{
+	uint16_t status_port = ata_get_status_port(drive);
+	int i;
+
+	for (i = 0; i < ATA_WAIT_LOOPS; i++)
+	{
+		uint8_t status = inb(status_port);
+
+		if (status == 0xFF)
+		{
+			if (loops_out)
+				*loops_out = i;
+			if (status_out)
+				*status_out = status;
+			return ATA_POLL_FLOATING;
+		}
+		if (status & ATA_STATUS_ERR)
+		{
+			if (loops_out)
+				*loops_out = i;
+			if (status_out)
+				*status_out = status;
+			return ATA_POLL_ERR;
+		}
+		if (status & ATA_STATUS_DF)
+		{
+			if (loops_out)
+				*loops_out = i;
+			if (status_out)
+				*status_out = status;
+			return ATA_POLL_DF;
+		}
+		if (status & ATA_STATUS_DRQ)
+		{
+			if (loops_out)
+				*loops_out = i;
+			if (status_out)
+				*status_out = status;
+			return ATA_POLL_OK;
+		}
+	}
+
+	if (loops_out)
+		*loops_out = ATA_WAIT_LOOPS;
+	if (status_out)
+		*status_out = inb(status_port);
+	return ATA_POLL_DRQ_TIMEOUT;
+}
+
+static void ata_recover_after_error(uint8_t drive)
+{
+	(void)inb(ata_get_error_port(drive));
+	ata_io_delay(drive);
+	(void)ata_poll_not_busy(drive, NULL, NULL);
+}
 
 // Global variables
 bool ata_drives_present[4] = {false, false, false, false};
@@ -317,101 +555,164 @@ bool ata_identify_drive(uint8_t drive)
     return true;
 }
 
-bool ata_wait_ready(uint8_t drive) 
+bool ata_wait_ready(uint8_t drive)
 {
-    uint16_t status_port = ata_get_status_port(drive);
-    
-    for (int i = 0; i < 10000; i++) 
-    {
-        uint8_t status = inb(status_port);
-        
-        if (!(status & ATA_STATUS_BSY)) 
-        {
-            return true;
-        }
-    }
-    
-    return false;
+	int loops = 0;
+	uint8_t status = 0;
+	ata_poll_result_t res;
+
+	res = ata_poll_not_busy(drive, &loops, &status);
+	if (res != ATA_POLL_OK)
+	{
+		ata_trace_wait_fail("wait_ready", res, drive, loops, status);
+		return false;
+	}
+	return true;
 }
 
-bool ata_wait_drq(uint8_t drive) 
+bool ata_wait_drq(uint8_t drive)
 {
-    uint16_t status_port = ata_get_status_port(drive);
-    
-    for (int i = 0; i < 10000; i++) 
-    {
-        uint8_t status = inb(status_port);
-        
-        if (status & ATA_STATUS_ERR) 
-        {
-            return false;
-        }
-        
-        if (status & ATA_STATUS_DRQ) 
-        {
-            return true;
-        }
-    }
-    
-    return false;
+	int loops = 0;
+	uint8_t status = 0;
+	ata_poll_result_t res;
+
+	res = ata_poll_drq(drive, &loops, &status);
+	if (res != ATA_POLL_OK)
+	{
+		ata_trace_wait_fail("wait_drq", res, drive, loops, status);
+		return false;
+	}
+	return true;
 }
 
-bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer) 
+static bool ata_read_one_sector_pio(uint8_t drive, uint32_t lba, void *buffer,
+				    uint8_t sector_idx, uint8_t cmd_sectors)
 {
-    
-    if (!ata_drives_present[drive]) 
-    {
-        return false;
-    }
-    
-    uint16_t status_port = ata_get_status_port(drive);
-    (void)status_port; // Variable not used in this implementation
-    uint16_t drive_head_port = ata_get_drive_head_port(drive);
-    uint16_t sector_count_port = ata_get_sector_count_port(drive);
-    uint16_t lba_low_port = ata_get_lba_low_port(drive);
-    uint16_t lba_mid_port = ata_get_lba_mid_port(drive);
-    uint16_t lba_high_port = ata_get_lba_high_port(drive);
-    uint16_t command_port = ata_get_command_port(drive);
-    uint16_t data_port = ata_get_port_base(drive);
-    
-    // Select drive
-    uint8_t drive_select = (drive % 2 == 0) ? ATA_DRIVE_MASTER : ATA_DRIVE_SLAVE;
-    outb(drive_head_port, drive_select | 0x40); // LBA mode
-    
-    // Wait for drive to be ready
-    if (!ata_wait_ready(drive)) 
-    {
-        return false;
-    }
-    
-    // Set up LBA address
-    outb(sector_count_port, num_sectors);
-    outb(lba_low_port, lba & 0xFF);
-    outb(lba_mid_port, (lba >> 8) & 0xFF);
-    outb(lba_high_port, (lba >> 16) & 0xFF);
-    outb(drive_head_port, drive_select | 0x40 | ((lba >> 24) & 0x0F));
-    
-    // Send read command
-    outb(command_port, ATA_CMD_READ_SECTORS);
-    
-    // Read data
-    uint16_t* buffer16 = (uint16_t*)buffer;
-    for (int sector = 0; sector < num_sectors; sector++) 
-    {
-        // Wait for data
-        if (!ata_wait_drq(drive)) 
-        {
-            return false;
-        }
-        
-        // Read sector
-        for (int i = 0; i < 256; i++) 
-        {
-            buffer16[sector * 256 + i] = inw(data_port);
-        }
-    }
-    
-    return true;
+	uint16_t drive_head_port = ata_get_drive_head_port(drive);
+	uint16_t sector_count_port = ata_get_sector_count_port(drive);
+	uint16_t lba_low_port = ata_get_lba_low_port(drive);
+	uint16_t lba_mid_port = ata_get_lba_mid_port(drive);
+	uint16_t lba_high_port = ata_get_lba_high_port(drive);
+	uint16_t command_port = ata_get_command_port(drive);
+	uint16_t data_port = ata_get_port_base(drive);
+	uint8_t drive_select = (drive % 2 == 0) ? ATA_DRIVE_MASTER : ATA_DRIVE_SLAVE;
+	uint16_t *buffer16 = (uint16_t *)buffer;
+	int attempt;
+	uint8_t status;
+
+	for (attempt = 0; attempt < ATA_MAX_RETRY; attempt++)
+	{
+		int loops = 0;
+		ata_poll_result_t poll_res;
+
+		if (attempt > 0)
+			ata_recover_after_error(drive);
+
+		outb(drive_head_port, drive_select | 0x40);
+		ata_io_delay(drive);
+		status = inb(ata_get_status_port(drive));
+		ata_trace_status("after_select", drive, status);
+
+		poll_res = ata_poll_not_busy(drive, &loops, &status);
+		if (poll_res != ATA_POLL_OK)
+		{
+			ata_trace_wait_fail("pre_cmd_ready", poll_res, drive, loops,
+					    status);
+			continue;
+		}
+
+		outb(sector_count_port, cmd_sectors);
+		outb(lba_low_port, lba & 0xFF);
+		outb(lba_mid_port, (lba >> 8) & 0xFF);
+		outb(lba_high_port, (lba >> 16) & 0xFF);
+		outb(drive_head_port, drive_select | 0x40 | ((lba >> 24) & 0x0F));
+		ata_io_delay(drive);
+		status = inb(ata_get_status_port(drive));
+		ata_trace_status("after_lba", drive, status);
+
+		outb(command_port, ATA_CMD_READ_SECTORS);
+		ata_io_delay(drive);
+		status = inb(ata_get_status_port(drive));
+		ata_trace_status("after_cmd", drive, status);
+
+		if (ata_trace_on())
+		{
+			serial_print("[EXEC_ONLY][ATA] read drive=");
+			serial_print_hex32((uint32_t)drive);
+			serial_print(" lba=");
+			serial_print_hex32(lba);
+			serial_print(" sector_idx=");
+			serial_print_hex32((uint32_t)sector_idx);
+			serial_print(" cmd_sectors=");
+			serial_print_hex32((uint32_t)cmd_sectors);
+			serial_print(" attempt=");
+			serial_print_hex32((uint32_t)attempt);
+			serial_print(" buf=");
+			serial_print_hex64((uint64_t)(uintptr_t)buffer);
+			serial_print(" align=");
+			serial_print_hex32((uint32_t)((uintptr_t)buffer & 0xFU));
+			serial_print("\n");
+		}
+
+		poll_res = ata_poll_drq(drive, &loops, &status);
+		if (poll_res != ATA_POLL_OK)
+		{
+			ata_trace_wait_fail("sector_drq", poll_res, drive, loops,
+					    status);
+			continue;
+		}
+
+		for (int i = 0; i < 256; i++)
+			buffer16[i] = inw(data_port);
+
+		poll_res = ata_poll_not_busy(drive, &loops, &status);
+		if (poll_res != ATA_POLL_OK)
+		{
+			ata_trace_wait_fail("post_sector_ready", poll_res, drive,
+					    loops, status);
+			continue;
+		}
+
+		if (attempt > 0)
+			ata_emit_classify("ATA_RETRY_RECOVERED");
+		return true;
+	}
+
+	return false;
+}
+
+bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer)
+{
+	uint8_t s;
+
+	if (!ata_drives_present[drive] || !buffer || num_sectors == 0)
+		return false;
+
+	if (!ata_single_sector_announced)
+	{
+		ata_single_sector_announced = 1;
+		ata_emit_classify("ATA_SINGLE_SECTOR_MODE_FIXED");
+	}
+
+	if (((uintptr_t)buffer & 0x1U) != 0U)
+		ata_emit_classify("ATA_BUFFER_ALIGNMENT_SUSPECT");
+
+	if (num_sectors > 1 && !ata_multi_sector_warned)
+	{
+		ata_multi_sector_warned = 1;
+		ata_emit_classify("ATA_MULTI_SECTOR_UNSAFE");
+	}
+
+	for (s = 0; s < num_sectors; s++)
+	{
+		uint32_t sector_lba = lba + (uint32_t)s;
+		uint8_t *dest = (uint8_t *)buffer + (size_t)s * ATA_SECTOR_SIZE;
+
+		if (!ata_read_one_sector_pio(drive, sector_lba, dest, s, 1))
+			return false;
+	}
+
+	return true;
 }
 
 bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer) 

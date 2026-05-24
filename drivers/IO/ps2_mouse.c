@@ -17,6 +17,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
+#include <ir0/input.h>
 
 /* Global mouse state */
 static ps2_mouse_state_t mouse_state = {0};
@@ -356,10 +357,22 @@ bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet)
 
 void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
 {
+    bool prev_left;
+    bool prev_right;
+    bool prev_middle;
+    bool prev_button4;
+    bool prev_button5;
+
     if (!packet)
     {
         return;
     }
+
+    prev_left = mouse_state.left_button;
+    prev_right = mouse_state.right_button;
+    prev_middle = mouse_state.middle_button;
+    prev_button4 = mouse_state.button4;
+    prev_button5 = mouse_state.button5;
 
     /* Update button states */
     mouse_state.left_button = (packet->flags & PS2_MOUSE_LEFT_BUTTON) != 0;
@@ -399,6 +412,40 @@ void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
     {
         mouse_state.button4 = (packet->extra_buttons & 0x01) != 0;
         mouse_state.button5 = (packet->extra_buttons & 0x02) != 0;
+    }
+
+    if (packet->delta_x != 0)
+    {
+        input_event_push(EV_REL, REL_X, packet->delta_x);
+    }
+    if (packet->delta_y != 0)
+    {
+        input_event_push(EV_REL, REL_Y, -(int32_t)packet->delta_y);
+    }
+    if (packet->delta_wheel != 0)
+    {
+        input_event_push(EV_REL, REL_WHEEL, packet->delta_wheel);
+    }
+
+    if (prev_left != mouse_state.left_button)
+    {
+        input_event_push(EV_KEY, BTN_LEFT, mouse_state.left_button ? 1 : 0);
+    }
+    if (prev_right != mouse_state.right_button)
+    {
+        input_event_push(EV_KEY, BTN_RIGHT, mouse_state.right_button ? 1 : 0);
+    }
+    if (prev_middle != mouse_state.middle_button)
+    {
+        input_event_push(EV_KEY, BTN_MIDDLE, mouse_state.middle_button ? 1 : 0);
+    }
+    if (prev_button4 != mouse_state.button4)
+    {
+        input_event_push(EV_KEY, BTN_SIDE, mouse_state.button4 ? 1 : 0);
+    }
+    if (prev_button5 != mouse_state.button5)
+    {
+        input_event_push(EV_KEY, BTN_EXTRA, mouse_state.button5 ? 1 : 0);
     }
 }
 

@@ -53,6 +53,7 @@
 #define SYS_PIPE         __NR_pipe
 #define SYS_DUP2         __NR_dup2
 #define SYS_NANOSLEEP    __NR_nanosleep
+#define SYS_CLOCK_GETTIME __NR_clock_gettime
 #define SYS_GETPID       __NR_getpid
 #define SYS_GETUID       __NR_getuid
 #define SYS_GETEUID      __NR_geteuid
@@ -411,6 +412,12 @@ static inline int64_t ir0_poll(struct pollfd *fds, unsigned int nfds, int timeou
 static inline int64_t ir0_nanosleep(const struct timespec *req, struct timespec *rem)
 {
     return syscall2(SYS_NANOSLEEP, (int64_t)req, (int64_t)rem);
+}
+
+/* clock_gettime - Get realtime/monotonic time */
+static inline int64_t ir0_clock_gettime(int clock_id, struct timespec *tp)
+{
+    return syscall2(SYS_CLOCK_GETTIME, (int64_t)clock_id, (int64_t)tp);
 }
 
 /* gettimeofday - Get current time (POSIX, OSDev Time And Date) */

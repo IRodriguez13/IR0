@@ -230,16 +230,34 @@ def assert_regular_source(source_path, dest_path):
         raise SystemExit(f"inject abort: unsupported source type {st}: {source_path}")
 
 
-def format_minix_v1(f):
+def zmap_blocks_for(nzones, firstdatazone):
+    data_zones = max(0, nzones - firstdatazone)
+    nbytes = (data_zones + 7) // 8
+    return max(1, (nbytes + BLOCK - 1) // BLOCK)
+
+
+def format_minix_v1(f, ninodes=64, nzones=1024):
     """
     Format blank/raw image as MINIX v1 matching kernel minix_fs_format() layout.
+    firstdatazone accounts for the inode table size (ninodes * 32 bytes).
     """
+    imap_blocks = 1
+    inode_table_blocks = (ninodes * INODE_SIZE + BLOCK - 1) // BLOCK
+    zmap_blocks = 1
+    firstdatazone = 2 + imap_blocks + zmap_blocks + inode_table_blocks
+    for _ in range(8):
+        zmap_blocks = zmap_blocks_for(nzones, firstdatazone)
+        firstdatazone = 2 + imap_blocks + zmap_blocks + inode_table_blocks
+    if firstdatazone >= nzones:
+        raise SystemExit(
+            f"format_minix_v1: firstdatazone={firstdatazone} >= nzones={nzones}"
+        )
     sb = {
-        "ninodes": 64,
-        "nzones": 1024,
-        "imap_blocks": 1,
-        "zmap_blocks": 1,
-        "firstdatazone": 5,
+        "ninodes": ninodes,
+        "nzones": nzones,
+        "imap_blocks": imap_blocks,
+        "zmap_blocks": zmap_blocks,
+        "firstdatazone": firstdatazone,
         "log_zone_size": 0,
         "max_size": 1048576,
     }
@@ -263,11 +281,14 @@ def format_minix_v1(f):
     imap[0] = 0x02
     write_block(f, 2, bytes(imap))
 
-    zmap = bytearray(BLOCK)
-    for i in range(BLOCK):
-        zmap[i] = 0xFF
-    zmap[0] &= ~(1 << sb["firstdatazone"])
-    write_block(f, 3, bytes(zmap))
+    zmap_base = 2 + imap_blocks
+    for blk in range(zmap_blocks):
+        zmap = bytearray(BLOCK)
+        for i in range(BLOCK):
+            zmap[i] = 0xFF
+        if blk == 0:
+            zmap[0] &= ~(1 << 0)
+        write_block(f, zmap_base + blk, bytes(zmap))
 
     root_zone = sb["firstdatazone"]
     root_inode = {
@@ -351,7 +372,8 @@ def mkdir(f, sb, parent_num, parent, name, parent_prefix):
 
 def prepare_regular_file(f, sb, file_inode, data):
     zones_needed = (len(data) + BLOCK - 1) // BLOCK
-    max_blocks = 7 + (BLOCK // 2)
+    entries_per_block = BLOCK // 2
+    max_blocks = 7 + entries_per_block + (entries_per_block * entries_per_block)
     if zones_needed > max_blocks:
         raise SystemExit(f"file too large for MINIX v1 ({len(data)} bytes)")
 
@@ -371,11 +393,34 @@ def prepare_regular_file(f, sb, file_inode, data):
         zones[c] = data_zones[c]
     if zones_needed > 7:
         ind_blk = bytearray(BLOCK)
+        single_count = min(entries_per_block, zones_needed - 7)
         ind_zone = file_inode["zones"][7] if file_inode["zones"][7] else alloc_zone(f, sb)
-        for c in range(7, zones_needed):
-            struct.pack_into("<H", ind_blk, (c - 7) * 2, data_zones[c])
+        for i in range(single_count):
+            struct.pack_into("<H", ind_blk, i * 2, data_zones[7 + i])
         write_block(f, ind_zone, bytes(ind_blk))
         zones[7] = ind_zone
+
+        remaining = zones_needed - 7 - single_count
+        if remaining > 0:
+            dind_blk = bytearray(BLOCK)
+            dind_zone = file_inode["zones"][8] if file_inode["zones"][8] else alloc_zone(f, sb)
+            offset = 7 + single_count
+            block_idx = 0
+
+            while remaining > 0:
+                chunk = min(entries_per_block, remaining)
+                lvl1_blk = bytearray(BLOCK)
+                lvl1_zone = alloc_zone(f, sb)
+                for i in range(chunk):
+                    struct.pack_into("<H", lvl1_blk, i * 2, data_zones[offset + i])
+                write_block(f, lvl1_zone, bytes(lvl1_blk))
+                struct.pack_into("<H", dind_blk, block_idx * 2, lvl1_zone)
+                block_idx += 1
+                offset += chunk
+                remaining -= chunk
+
+            write_block(f, dind_zone, bytes(dind_blk))
+            zones[8] = dind_zone
 
     file_inode["mode"] = IFREG | 0o755
     file_inode["size"] = len(data)
@@ -451,19 +496,33 @@ def write_file(f, sb, path_parts, data, source_path):
 
 
 def main():
-    if len(sys.argv) >= 2 and sys.argv[1] == "--format":
+    if len(sys.argv) >= 2 and sys.argv[1] in ("--format", "--format-large"):
         if len(sys.argv) != 3:
-            print(f"Usage: {sys.argv[0]} --format DISK_IMAGE", file=sys.stderr)
+            print(
+                f"Usage: {sys.argv[0]} --format DISK_IMAGE",
+                file=sys.stderr,
+            )
+            print(
+                f"       {sys.argv[0]} --format-large DISK_IMAGE",
+                file=sys.stderr,
+            )
             sys.exit(1)
         disk_path = sys.argv[2]
         with open(disk_path, "r+b") as f:
-            format_minix_v1(f)
+            if sys.argv[1] == "--format-large":
+                format_minix_v1(f, ninodes=256, nzones=65535)
+            else:
+                format_minix_v1(f)
         print(f"✅ Formatted {disk_path} as MINIX v1 (kernel-compatible layout)")
         return
 
     if len(sys.argv) < 3 or len(sys.argv) > 4:
         print(
             f"Usage: {sys.argv[0]} --format DISK_IMAGE",
+            file=sys.stderr,
+        )
+        print(
+            f"       {sys.argv[0]} --format-large DISK_IMAGE",
             file=sys.stderr,
         )
         print(

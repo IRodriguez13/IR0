@@ -1,0 +1,14 @@
+FASE55D note - future Doom audio path
+====================================
+
+Audio integration is intentionally out of scope for FASE55D.
+
+When Doom audio is enabled in a future phase, the path must stay
+facade/device-model based:
+
+  userspace Doom backend -> /dev/audio -> kernel audio facade/backend -> SB16 driver
+
+Constraints:
+  - No direct coupling from Doom userspace code to kernel driver internals.
+  - Keep the same architectural pattern used for /dev/fb0 and /dev/events0.
+  - Preserve devfs I/O contract boundaries (kernel buffers in backend, usercopy at syscall edge).

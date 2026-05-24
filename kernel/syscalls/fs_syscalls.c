@@ -15,6 +15,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/open_flags.h>
 #include <ir0/path.h>
+#include <ir0/path_routed.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
 #include <ir0/pipe.h>
@@ -27,16 +28,13 @@
 #include <kernel/elf_loader.h>
 #include <kernel/process.h>
 #include <ir0/fase50_debug.h>
+#include <ir0/fase51_debug.h>
+#include <ir0/fase52_debug.h>
 #include <ir0/utimens.h>
 #include <mm/paging.h>
 #include <string.h>
 
 #define AT_REMOVEDIR 0x200
-
-static int is_dev_path(const char *path)
-{
-  return path && strncmp(path, "/dev/", 5) == 0;
-}
 
 static void fase50c_log_open_result(const char *path, int64_t ret, int stage)
 {
@@ -211,6 +209,8 @@ int64_t sys_write(int fd, const void *buf, size_t count)
         }
 #endif
         pipe_wake_all(pipe);
+        fase51_dbg_pipe_rw("write", fd, ret);
+        fase52_dbg_rw("write", fd, ret);
         return ret;
       }
       if (ret == -EPIPE)
@@ -230,21 +230,33 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   if (!check_file_access(fd_table[fd].path, ACCESS_WRITE, current_process))
     return -EACCES;
 
-  /* Copy from user space for regular file writes */
-  if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-    return -EFAULT;
-
   /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)
   {
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-    int ret = vfs_write(vfs_file, kernel_buf, copy_size);
-    if (ret >= 0)
+    size_t total = 0;
+    int ret;
+
+    while (total < count)
     {
-      fd_table[fd].offset = vfs_file->pos;
-      return ret;
+      size_t chunk = count - total;
+
+      if (chunk > sizeof(kernel_buf))
+        chunk = sizeof(kernel_buf);
+      if (copy_from_user(kernel_buf, (const char *)buf + total, chunk) != 0)
+        return total > 0 ? (int64_t)total : -EFAULT;
+      ret = vfs_write(vfs_file, kernel_buf, chunk);
+      if (ret < 0)
+        return total > 0 ? (int64_t)total : ret;
+      if (ret == 0)
+        break;
+      total += (size_t)ret;
+      if ((size_t)ret < chunk)
+        break;
     }
-    return ret;
+    fd_table[fd].offset = vfs_file->pos;
+    fase52_dbg_rw("write", fd, (int)total);
+    return (int64_t)total;
   }
 
   return -EBADF;
@@ -392,6 +404,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
           serial_print_hex64((uint64_t)count);
           serial_print(" ret=0 eof\n");
 #endif
+          fase51_dbg_pipe_rw("read", fd, 0);
           return 0;
         }
         if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
@@ -412,6 +425,8 @@ int64_t sys_read(int fd, void *buf, size_t count)
         serial_print("\n");
         fase50b_dump_bytes("[FASE50B][READ] copied", kernel_read_buf, (size_t)ret);
 #endif
+        fase51_dbg_pipe_rw("read", fd, ret);
+        fase52_dbg_rw("read", fd, ret);
         return ret;
       }
       if (ret != -EAGAIN)
@@ -433,18 +448,30 @@ int64_t sys_read(int fd, void *buf, size_t count)
   if (fd_table[fd].vfs_file)
   {
     char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
     struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-    int ret = vfs_read(vfs_file, kernel_read_buf, read_size);
-    if (ret >= 0)
+    size_t total = 0;
+    int ret;
+
+    while (total < count)
     {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-      fd_table[fd].offset = vfs_file->pos;
-      return ret;
+      size_t chunk = count - total;
+
+      if (chunk > sizeof(kernel_read_buf))
+        chunk = sizeof(kernel_read_buf);
+      ret = vfs_read(vfs_file, kernel_read_buf, chunk);
+      if (ret < 0)
+        return total > 0 ? (int64_t)total : ret;
+      if (ret == 0)
+        break;
+      if (copy_to_user((char *)buf + total, kernel_read_buf, (size_t)ret) != 0)
+        return total > 0 ? (int64_t)total : -EFAULT;
+      total += (size_t)ret;
+      if ((size_t)ret < chunk)
+        break;
     }
-    return ret;
+    fd_table[fd].offset = vfs_file->pos;
+    fase52_dbg_rw("read", fd, (int)total);
+    return (int64_t)total;
   }
 
   return -EBADF;
@@ -532,6 +559,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
 {
   char path_copy[256];
   int ir0_flags;
+  int linux_open_flags = flags;
   size_t plen;
   int64_t open_ret;
 
@@ -589,7 +617,11 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   }
 
   /* Handle /dev filesystem on-demand */
-  if (is_dev_path(path_copy))
+  if (path_copy[0] == '/' &&
+      path_copy[1] == 'd' &&
+      path_copy[2] == 'e' &&
+      path_copy[3] == 'v' &&
+      path_copy[4] == '/')
   {
     int64_t drc;
 
@@ -753,11 +785,14 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
       serial_print("[FASE50C][CLASSIFY] CREATED_AS_WRONG_TYPE\n");
   }
 #endif
+  if (path_to_use && strncmp(path_to_use, "/f51_", 5) == 0)
+    fase51_dbg_open_redirect(path_to_use, linux_open_flags, (int64_t)fd);
+  fase52_dbg_openat(IR0_AT_FDCWD, path_to_use, linux_open_flags, (int64_t)fd);
   return fd;
 }
+
 int64_t sys_stat(const char *pathname, stat_t *buf)
 {
-  char path_copy[256];
   char resolved[256];
   stat_t kst;
   int64_t rc;
@@ -768,45 +803,18 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
     return -EFAULT;
 
-  if (copy_from_user_cstring(path_copy, sizeof(path_copy), pathname) != 0)
-    return -EFAULT;
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                             current_process->cwd);
+  if (rc != 0)
+    return rc;
 
-  if (is_proc_path(path_copy))
-    rc = proc_stat(path_copy, &kst);
-  else if (is_sys_path(path_copy))
-    rc = sysfs_stat(path_copy, &kst);
-  else if (is_dev_path(path_copy))
-  {
-    ensure_devfs_init();
-    devfs_node_t *node = devfs_find_node(path_copy);
-
-    if (!node)
-      return -ENOENT;
-
-    memset(&kst, 0, sizeof(kst));
-    kst.st_mode = S_IFCHR | (node->entry.mode & 0777);
-    kst.st_rdev = node->entry.device_id;
-    kst.st_nlink = 1;
-    kst.st_uid = 0;
-    kst.st_gid = 0;
-    kst.st_size = 0;
-    kst.st_blksize = 512;
-    kst.st_blocks = 0;
-    rc = 0;
-  }
-  else
-  {
-    rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                              current_process->cwd);
-    if (rc != 0)
-      return rc;
-    rc = vfs_stat(resolved, &kst);
-  }
+  rc = ir0_stat_path_routed(resolved, &kst);
 
   if (rc != 0)
     return rc;
   if (copy_to_user(buf, &kst, sizeof(kst)) != 0)
     return -EFAULT;
+  fase52_dbg_stat_path(resolved, 0);
   return 0;
 }
 
@@ -827,7 +835,6 @@ int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode)
  */
 int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
 {
-  char path_copy[256];
   char resolved[256];
   stat_t kst;
   int64_t rc;
@@ -843,40 +850,12 @@ int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
   if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
     return -EFAULT;
 
-  if (copy_from_user_cstring(path_copy, sizeof(path_copy), pathname) != 0)
-    return -EFAULT;
+  rc = ir0_resolve_user_path_at(dirfd, pathname, resolved, sizeof(resolved),
+                                current_process->cwd);
+  if (rc != 0)
+    return rc;
 
-  if (is_proc_path(path_copy))
-    rc = proc_stat(path_copy, &kst);
-  else if (is_sys_path(path_copy))
-    rc = sysfs_stat(path_copy, &kst);
-  else if (is_dev_path(path_copy))
-  {
-    ensure_devfs_init();
-    devfs_node_t *node = devfs_find_node(path_copy);
-
-    if (!node)
-      return -ENOENT;
-
-    memset(&kst, 0, sizeof(kst));
-    kst.st_mode = S_IFCHR | (node->entry.mode & 0777);
-    kst.st_rdev = node->entry.device_id;
-    kst.st_nlink = 1;
-    kst.st_uid = 0;
-    kst.st_gid = 0;
-    kst.st_size = 0;
-    kst.st_blksize = 512;
-    kst.st_blocks = 0;
-    rc = 0;
-  }
-  else
-  {
-    rc = ir0_resolve_user_path_at(dirfd, pathname, resolved, sizeof(resolved),
-                                  current_process->cwd);
-    if (rc != 0)
-      return rc;
-    rc = vfs_stat(resolved, &kst);
-  }
+  rc = ir0_stat_path_routed(resolved, &kst);
 
   if (rc != 0)
     return rc;

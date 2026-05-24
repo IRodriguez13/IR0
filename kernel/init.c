@@ -32,6 +32,7 @@
 #include <ir0/errno.h>
 #include <fs/vfs.h>
 #include <string.h>
+#include "rootfs_base.h"
 
 /*
  * Build a Unix-like base hierarchy for the debug shell runtime.
@@ -40,7 +41,6 @@
 static void init_prepare_unix_hierarchy(void)
 {
 	const char *dirs[] = {
-		"/bin",
 		"/sbin",
 		"/etc",
 		"/etc/init.d",
@@ -48,14 +48,12 @@ static void init_prepare_unix_hierarchy(void)
 		"/usr/bin",
 		"/usr/sbin",
 		"/usr/lib",
-		"/usr/include",
 		"/var",
 		"/var/log",
 		"/var/tmp",
 		"/var/run",
 		"/home",
 		"/root",
-		"/tmp",
 		"/opt",
 		"/boot",
 		"/srv",
@@ -66,6 +64,8 @@ static void init_prepare_unix_hierarchy(void)
 		"/mnt/fat",
 		NULL
 	};
+
+	ir0_rootfs_prepare_userspace_base();
 
 	for (int i = 0; dirs[i] != NULL; i++)
 	{

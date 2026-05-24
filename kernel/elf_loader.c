@@ -1420,6 +1420,11 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
             serial_print(" vfs_ret=");
             serial_print_hex64((uint64_t)(int64_t)vfs_ret);
             serial_print("\n");
+            serial_print("[EXEC_ONLY][LOADER] vfs_read_fail path=");
+            serial_print(path ? path : "(null)");
+            serial_print(" errno=");
+            serial_print_hex64((uint64_t)(int64_t)vfs_ret);
+            serial_print("\n");
             exec_commit_emit("return-vfs_read_fail", (int64_t)vfs_ret, proc,
                              vfs_class ? vfs_class : "EXEC_ABORT_BEFORE_COMMIT");
             return -1;
@@ -1464,8 +1469,19 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     serial_print_hex64((uint64_t)(uintptr_t)proc->fd_table);
     serial_print("\n");
 
-    process_unmap_user_address_space(proc);
-    exec_commit_ctx.unmapped = 1;
+    {
+        size_t used_after_unmap = 0;
+
+        process_unmap_user_address_space(proc);
+        pmm_stats(NULL, &used_after_unmap, NULL);
+        exec_commit_ctx.unmapped = 1;
+        serial_print("[FASE41][EXEC_OLD_AS] pid=");
+        serial_print_hex32((uint32_t)proc->task.pid);
+        serial_print(" used_after_unmap=");
+        serial_print_hex64((uint64_t)used_after_unmap);
+        serial_print(" class=");
+        serial_print("PMM_LEAK_EXEC_OLD_ADDRESS_SPACE_CHECK\n");
+    }
     serial_print("[FASE50][TRACE] stage=exec_replace_current-after-unmap pid=");
     serial_print_hex32((uint32_t)proc->task.pid);
     serial_print(" mm=");

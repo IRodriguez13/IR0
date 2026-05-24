@@ -46,6 +46,8 @@
 #include <ir0/input.h>
 #include <ir0/serial_io.h>
 #include <ir0/credentials.h>
+#include <ir0/fb.h>
+#include "vfs.h"
 
 static pid_t devfs_current_pid(void)
 {
@@ -105,6 +107,13 @@ static int devfs_events0_can_write(devfs_entry_t *entry, pid_t pid)
     (void)entry;
     (void)pid;
     return 0;
+}
+
+static int devfs_events0_can_read(devfs_entry_t *entry, pid_t pid)
+{
+    (void)entry;
+    (void)pid;
+    return ir0_input_poll() ? 1 : 0;
 }
 
 static int devfs_poll_default(int (*hook)(devfs_entry_t *, pid_t),
@@ -1630,76 +1639,66 @@ static int64_t dev_fb0_read(devfs_entry_t *entry, void *buf, size_t count, off_t
     return 0;
 }
 
+static int64_t dev_fb0_open(devfs_entry_t *entry, int flags)
+{
+    (void)entry;
+    (void)flags;
+    if (!ir0_fb_is_available())
+        return -ENODEV;
+    return 0;
+}
+
 static int64_t dev_fb0_write_simple(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
-#if CONFIG_ENABLE_VBE
-    (void)entry; (void)offset;
-    uint8_t *fb = video_backend_get_fb();
-    uint32_t pitch = video_backend_get_pitch();
-    uint32_t w = 0, h = 0;
-    if (!video_backend_is_available() || !fb || !pitch)
-        return -ENODEV;
-    video_backend_get_info(&w, &h, NULL);
-    uint32_t size = pitch * h;
-    if (count > size)
-        count = size;
-    memcpy(fb, buf, count);
-    return (int64_t)count;
-#else
-    (void)entry; (void)buf; (void)count; (void)offset;
-    return -ENODEV;
-#endif
+    (void)entry;
+    return ir0_fb_write_bytes((size_t)offset, buf, count);
 }
 
 static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
-#if CONFIG_ENABLE_VBE
+    struct ir0_fb_info info;
+
     (void)entry;
-    if (!video_backend_is_available())
+    if (!ir0_fb_get_info(&info))
         return -ENODEV;
     if (request == FBIOGET_VSCREENINFO && arg)
     {
-        struct fb_var_screeninfo info;
-        uint32_t w = 0, h = 0, bpp = 0;
-        video_backend_get_info(&w, &h, &bpp);
-        memset(&info, 0, sizeof(info));
-        info.xres = w;
-        info.yres = h;
-        info.xres_virtual = w;
-        info.yres_virtual = h;
-        info.bits_per_pixel = bpp;
-        if (copy_to_user(arg, &info, sizeof(info)) != 0)
+        struct fb_var_screeninfo var_info;
+
+        memset(&var_info, 0, sizeof(var_info));
+        var_info.xres = info.width;
+        var_info.yres = info.height;
+        var_info.xres_virtual = info.width;
+        var_info.yres_virtual = info.height;
+        var_info.bits_per_pixel = info.bpp;
+        if (copy_to_user(arg, &var_info, sizeof(var_info)) != 0)
             return -EFAULT;
         return 0;
     }
     if (request == FBIOGET_FSCREENINFO && arg)
     {
         struct fb_fix_screeninfo fix;
-        uint32_t w = 0, h = 0, bpp = 0;
-        video_backend_get_info(&w, &h, &bpp);
+
         memset(&fix, 0, sizeof(fix));
-        strncpy(fix.id, "IR0 VBE", sizeof(fix.id) - 1);
-        fix.smem_start = video_backend_get_fb_phys();
-        fix.smem_len = video_backend_get_fb_size();
+        strncpy(fix.id, "IR0 FB", sizeof(fix.id) - 1);
+        fix.smem_start = info.fb_phys;
+        fix.smem_len = info.fb_size;
         fix.type = FB_TYPE_PACKED_PIXELS;
         fix.visual = FB_VISUAL_TRUECOLOR;
-        fix.line_length = video_backend_get_pitch();
+        fix.line_length = info.pitch;
         fix.accel = FB_ACCEL_NONE;
         if (copy_to_user(arg, &fix, sizeof(fix)) != 0)
             return -EFAULT;
         return 0;
     }
     return -EINVAL;
-#else
-    (void)entry; (void)request; (void)arg;
-    return -ENODEV;
-#endif
 }
 
 static const devfs_ops_t fb0_ops = {
     .read = dev_fb0_read,
     .write = dev_fb0_write_simple,
     .ioctl = dev_fb0_ioctl,
+    .open = dev_fb0_open,
 };
 
 static devfs_node_t dev_fb0 = {
@@ -1714,26 +1713,83 @@ static devfs_node_t dev_fb0 = {
  */
 static int64_t dev_events0_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)offset;
+    struct input_event ev_buf[16];
+    size_t max_ev;
+    size_t n;
+    size_t i;
+
+    (void)entry;
+    (void)offset;
     if (count < sizeof(struct input_event))
         return 0;
-    struct input_event ev_buf[16];
-    size_t max_ev = count / sizeof(struct input_event);
+
+    max_ev = count / sizeof(struct input_event);
     if (max_ev > 16)
         max_ev = 16;
-    size_t n = input_event_read(ev_buf, max_ev);
+
+    n = 0;
+    for (i = 0; i < max_ev; i++)
+    {
+        struct ir0_input_event ir0_ev;
+        int rc = ir0_input_read_event(&ir0_ev);
+
+        if (rc <= 0)
+            break;
+        ev_buf[i].time.tv_sec = (time_t)(ir0_ev.timestamp_ms / 1000);
+        ev_buf[i].time.tv_usec = (suseconds_t)((ir0_ev.timestamp_ms % 1000) * 1000);
+        ev_buf[i].type = ir0_ev.type;
+        ev_buf[i].code = ir0_ev.code;
+        ev_buf[i].value = ir0_ev.value;
+        n++;
+    }
+
     if (n == 0)
         return 0;
-    size_t bytes = n * sizeof(struct input_event);
-    if (copy_to_user(buf, ev_buf, bytes) != 0)
+
+    {
+        size_t bytes = n * sizeof(struct input_event);
+        memcpy(buf, ev_buf, bytes);
+        return (int64_t)bytes;
+    }
+}
+
+static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+{
+    struct ir0_input_caps caps;
+
+    (void)entry;
+
+    if (request == IR0_INPUT_IOCTL_GET_CAPS)
+    {
+        if (!arg)
+            return -EFAULT;
+        ir0_input_get_caps(&caps);
+        memcpy(arg, &caps, sizeof(caps));
+        return 0;
+    }
+
+    if (request != IR0_INPUT_IOCTL_INJECT)
+        return -EINVAL;
+
+#if CONFIG_TEST_INPUT_INJECT
+    if (!arg)
         return -EFAULT;
-    return (int64_t)bytes;
+
+    {
+        const struct ir0_input_event *ev = (const struct ir0_input_event *)arg;
+        return ir0_input_inject_event(ev->type, ev->code, ev->value);
+    }
+#else
+    (void)arg;
+    return -ENOTTY;
+#endif
 }
 
 static const devfs_ops_t events0_ops = {
     .read = dev_events0_read,
     .write = NULL,
-    .ioctl = NULL,
+    .ioctl = dev_events0_ioctl,
+    .can_read = devfs_events0_can_read,
     .can_write = devfs_events0_can_write,
 };
 
@@ -2217,6 +2273,98 @@ devfs_node_t *devfs_find_node(const char *path)
     }
     
     return NULL;
+}
+
+int devfs_stat_path(const char *path, stat_t *buf)
+{
+    devfs_node_t *node;
+
+    if (!path || !buf)
+        return -EINVAL;
+
+    if (strcmp(path, "/dev") == 0 || strcmp(path, "/dev/") == 0)
+    {
+        memset(buf, 0, sizeof(*buf));
+        buf->st_mode = S_IFDIR | 0755;
+        buf->st_nlink = 2;
+        buf->st_uid = 0;
+        buf->st_gid = 0;
+        buf->st_blksize = 512;
+        return 0;
+    }
+
+    node = devfs_find_node(path);
+    if (!node)
+        return -ENOENT;
+
+    memset(buf, 0, sizeof(*buf));
+    buf->st_mode = S_IFCHR | (node->entry.mode & 0777);
+    buf->st_rdev = node->entry.device_id;
+    buf->st_nlink = 1;
+    buf->st_uid = 0;
+    buf->st_gid = 0;
+    buf->st_blksize = 512;
+    return 0;
+}
+
+int devfs_readdir_root(struct vfs_dirent *entries, int max_entries)
+{
+    int n = 0;
+    int i;
+    int j;
+
+    if (!entries || max_entries <= 0)
+        return -EINVAL;
+
+    memset(entries, 0, (size_t)max_entries * sizeof(struct vfs_dirent));
+
+    strncpy(entries[n].name, ".", sizeof(entries[n].name) - 1);
+    entries[n].type = DT_DIR;
+    n++;
+    if (n >= max_entries)
+        return n;
+
+    strncpy(entries[n].name, "..", sizeof(entries[n].name) - 1);
+    entries[n].type = DT_DIR;
+    n++;
+
+    for (i = 0; i < num_dev_nodes && n < max_entries; i++)
+    {
+        const char *name;
+        char top[VFS_PATH_MAX];
+        const char *slash;
+        size_t len;
+        int exists = 0;
+
+        if (!dev_nodes[i] || !dev_nodes[i]->entry.name)
+            continue;
+
+        name = dev_nodes[i]->entry.name;
+        slash = strchr(name, '/');
+        len = slash ? (size_t)(slash - name) : strlen(name);
+        if (len == 0 || len >= sizeof(top))
+            continue;
+
+        memcpy(top, name, len);
+        top[len] = '\0';
+
+        for (j = 0; j < n; j++)
+        {
+            if (strcmp(entries[j].name, top) == 0)
+            {
+                exists = 1;
+                break;
+            }
+        }
+        if (exists)
+            continue;
+
+        strncpy(entries[n].name, top, sizeof(entries[n].name) - 1);
+        entries[n].type = slash ? DT_DIR : DT_UNKNOWN;
+        n++;
+    }
+
+    return n;
 }
 
 devfs_node_t *devfs_find_node_by_id(uint32_t device_id)

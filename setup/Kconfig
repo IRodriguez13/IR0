@@ -435,12 +435,27 @@ menu "Debugging"
         bool "Keyboard/stdin read debug output"
         default n
 
+    config TEST_INPUT_INJECT
+        bool "Enable deterministic input injection test hook"
+        default n
+        help
+          Enables a gated test-only hook to inject synthetic EV_KEY events
+          through /dev/events0 ioctl for CI and smoke harnesses.
+
     config DEBUG_ISRABI
         bool "ISR ABI audit serial noise ([ISRABI] tags)"
         default n
 
     config DEBUG_FASE50
         bool "FASE50 bring-up serial noise ([FASE50*] tags)"
+        default n
+
+    config DEBUG_FASE51
+        bool "FASE51 shell script bring-up serial noise ([FASE51*] tags)"
+        default n
+
+    config DEBUG_FASE52
+        bool "FASE52 TinyCC bring-up serial noise ([FASE52*] tags)"
         default n
 
 endmenu

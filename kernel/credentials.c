@@ -14,15 +14,25 @@
 #include <kernel/process.h>
 #include <fs/vfs.h>
 #include <ir0/credentials.h>
+#include <ir0/path_routed.h>
 #include <ir0/permissions.h>
 #include <ir0/stat.h>
 
 const struct ir0_task_cred *ir0_current_cred(void)
 {
     static struct ir0_task_cred cred;
+    static struct ir0_task_cred boot_root = {
+        .uid = 0,
+        .gid = 0,
+        .euid = 0,
+        .egid = 0,
+        .umask = 0022,
+        .pid = 0,
+        .cwd = "/",
+    };
 
     if (!current_process)
-        return NULL;
+        return &boot_root;
 
     cred.uid = (uid_t)current_process->uid;
     cred.gid = (gid_t)current_process->gid;
@@ -68,7 +78,7 @@ bool ir0_check_file_access(const char *path, int mode)
     if (!path || !c)
         return false;
 
-    if (vfs_stat(path, &st) != 0)
+    if (ir0_stat_path_routed(path, &st) != 0)
         return false;
 
     return ir0_access_from_stat(&st, mode, c->euid, c->egid);
@@ -81,7 +91,7 @@ bool check_file_access(const char *path, int mode, const struct process *process
     if (!path || !process)
         return false;
 
-    if (vfs_stat(path, &st) != 0)
+    if (ir0_stat_path_routed(path, &st) != 0)
         return false;
 
     return ir0_access_from_stat(&st, mode,
