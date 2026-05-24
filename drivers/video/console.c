@@ -25,6 +25,7 @@
 #if CONFIG_ENABLE_VBE
 #include <drivers/video/vbe.h>
 #endif
+#include <ir0/serial_io.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -211,19 +212,24 @@ void console_clear(uint8_t color)
 void console_init(void)
 {
 #if CONFIG_ENABLE_VBE
-#if defined(IR0_USERSPACE_INIT_BOOT) && IR0_USERSPACE_INIT_BOOT
-	/*
-	 * Headless userspace smoke (-display none): avoid framebuffer writes
-	 * under process CR3 when fb is not mapped in the child mm.
-	 */
-	use_fb = 0;
-#else
 	uint32_t w, h, bpp;
-	if (vbe_is_available() && vbe_get_info(&w, &h, &bpp) && bpp == 32 && w >= 640 && h >= 400)
+
+	use_fb = 0;
+	if (vbe_is_available() && vbe_get_info(&w, &h, &bpp) && bpp == 32 &&
+	    w >= 640 && h >= 400)
+	{
+		int cw = FONT_WIDTH * fb_scale;
+		int ch = FONT_HEIGHT * fb_scale;
+
 		use_fb = 1;
-	else
-		use_fb = 0;
-#endif
+		fb_console_cols = (int)(w / (uint32_t)cw);
+		fb_console_rows = (int)(h / (uint32_t)ch);
+		if (fb_console_cols < CONSOLE_WIDTH)
+			fb_console_cols = CONSOLE_WIDTH;
+		if (fb_console_rows < CONSOLE_HEIGHT)
+			fb_console_rows = CONSOLE_HEIGHT;
+		serial_print("CONSOLE_FB_BACKEND_ENABLED\n");
+	}
 #else
 	use_fb = 0;
 #endif
