@@ -18,6 +18,7 @@
 #include <ir0/signals.h>
 #include <ir0/oops.h>
 #include <ir0/serial_io.h>
+#include <ir0/debug_trap.h>
 #include <kernel/process.h>
 #include <config.h>
 #include <ir0/input_backend.h>
@@ -246,6 +247,22 @@ static int is_user_exception_frame(uint64_t *stack)
 /* Handler de interrupciones para 64-bit */
 void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
 {
+#if defined(__x86_64__) || defined(__amd64__)
+    if (interrupt_number == 1 && stack)
+    {
+        if (is_user_exception_frame(stack))
+        {
+            if (ir0_debug_handle_user_db(stack))
+                return;
+        }
+        else
+        {
+            ir0_debug_handle_kernel_db(stack);
+            return;
+        }
+    }
+#endif
+
     if (interrupt_number < 32 && stack)
         isr_contract_single_check(interrupt_number, stack);
 
@@ -285,12 +302,6 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
     {
         process_t *current = process_get_current();
         int signal_to_send = 0;
-
-#if defined(__x86_64__) || defined(__amd64__)
-        if (interrupt_number == 1 && stack &&
-            fork_flow_note_debug_exception(stack))
-            return;
-#endif
 
         if (interrupt_number == 14)
         {

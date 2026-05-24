@@ -23,6 +23,7 @@
 #include <mm/paging.h>
 #include <mm/pmm.h>
 #include <ir0/copy_user.h>
+#include <ir0/debug_trap.h>
 #include <ir0/oops.h>
 #include <ir0/arch_port.h>
 #include <config.h>
@@ -692,7 +693,7 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     /* Stack is already set up by spawn() at 0x7FFFF000 */
 
     /* Enable interrupts in user mode */
-    process->task.rflags = 0x202; // IF=1, reserved bit=1
+    process->task.rflags = ir0_rflags_sanitize_user(0x202ULL);
 
     serial_print("SERIAL: ELF: Process created with PID ");
     serial_print_hex32(process->task.pid);
@@ -1538,7 +1539,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     proc->task.es = USER_DATA_SEL;
     proc->task.fs = USER_DATA_SEL;
     proc->task.gs = USER_DATA_SEL;
-    proc->task.rflags = 0x202;
+    proc->task.rflags = ir0_rflags_sanitize_user(0x202ULL);
 
     if (elf_setup_stack(proc, argv, envp, header, at_phdr, at_base,
                         "exec_replace_current", path) != 0)

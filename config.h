@@ -94,6 +94,14 @@
 #define DEBUG_FORK 0
 #endif
 
+/* Trap Flag / #DB — off by default; enable only for deliberate tracing. */
+#ifndef IR0_ENABLE_SINGLE_STEP
+#define IR0_ENABLE_SINGLE_STEP 0
+#endif
+#ifndef IR0_ENABLE_FORK_SINGLESTEP_TRACE
+#define IR0_ENABLE_FORK_SINGLESTEP_TRACE 0
+#endif
+
 /* FILESYSTEM DEBUG FLAGS                                                    */
 
 #if defined(CONFIG_DEBUG_VFS) && CONFIG_DEBUG_VFS
