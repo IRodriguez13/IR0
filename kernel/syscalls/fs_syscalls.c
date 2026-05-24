@@ -73,6 +73,61 @@ static void fase50c_log_open_result(const char *path, int64_t ret, int stage)
 #endif
 }
 
+static devfs_node_t *devfs_node_from_fd(int fd)
+{
+  fd_entry_t *fd_table = get_process_fd_table();
+
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+    return NULL;
+  if (!fd_table[fd].is_devfs)
+    return NULL;
+  ensure_devfs_init();
+  return devfs_find_node_by_id(fd_table[fd].dev_device_id);
+}
+
+static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flags)
+{
+  fd_entry_t *fd_table = get_process_fd_table();
+  int fd = -1;
+  int i;
+
+  if (!fd_table || !node || !path)
+    return -EINVAL;
+
+  for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
+  {
+    if (!fd_table[i].in_use)
+    {
+      fd = i;
+      break;
+    }
+  }
+  if (fd < 0)
+    return -EMFILE;
+
+  fd_table[fd].in_use = true;
+  fd_table[fd].is_devfs = true;
+  fd_table[fd].dev_device_id = node->entry.device_id;
+  fd_table[fd].is_pipe = false;
+  fd_table[fd].pipe_end = -1;
+  fd_table[fd].vfs_file = NULL;
+  fd_table[fd].offset = 0;
+  fd_table[fd].flags = ir0_flags;
+  fd_table[fd].fd_flags = 0;
+  strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
+  fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
+
+  serial_print("[VFS][OPEN] path=");
+  serial_print(path);
+  serial_print(" fd=");
+  serial_print_hex64((uint64_t)fd);
+  serial_print(" dev_id=");
+  serial_print_hex32(node->entry.device_id);
+  serial_print("\n");
+
+  return fd;
+}
+
 int64_t sys_write(int fd, const void *buf, size_t count)
 {
   if (!current_process)
@@ -108,6 +163,19 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     if (copy_from_user(kernel_buf, buf, copy_size) != 0)
       return -EFAULT;
     return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
+  }
+
+  {
+    devfs_node_t *node = devfs_node_from_fd(fd);
+
+    if (node)
+    {
+      if (!node->ops || !node->ops->write)
+        return -EBADF;
+      if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+        return -EFAULT;
+      return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
+    }
   }
 
   /* Handle /sys file descriptors (FD_SYS_BASE .. FD_SYS_BASE + FD_RANGE_SIZE) */
@@ -358,6 +426,27 @@ int64_t sys_read(int fd, void *buf, size_t count)
         return -EFAULT;
     }
     return ret;
+  }
+
+  {
+    devfs_node_t *node = devfs_node_from_fd(fd);
+
+    if (node)
+    {
+      char kernel_read_buf[PAGE_SIZE_4KB];
+      size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
+      int ret;
+
+      if (!node->ops || !node->ops->read)
+        return -EBADF;
+      ret = node->ops->read(&node->entry, kernel_read_buf, read_size, 0);
+      if (ret > 0)
+      {
+        if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
+          return -EFAULT;
+      }
+      return ret;
+    }
   }
 
   /* Handle regular file descriptors */
@@ -638,7 +727,13 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
       fase50c_log_open_result(path_copy, drc, 4);
       return drc;
     }
-    open_ret = FD_DEV_BASE + (int64_t)node->entry.device_id;
+    open_ret = devfs_bind_fd_slot(path_copy, node, ir0_flags);
+    if (open_ret < 0)
+    {
+      devfs_close_node(node);
+      fase50c_log_open_result(path_copy, open_ret, 5);
+      return open_ret;
+    }
     fase50c_log_open_result(path_copy, open_ret, 5);
     return open_ret;
   }

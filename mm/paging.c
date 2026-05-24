@@ -15,6 +15,7 @@
 #include <ir0/logging.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
+#include <ir0/debug_runtime.h>
 #include "paging.h"
 #include <string.h>
 #include <mm/allocator.h>
@@ -197,6 +198,12 @@ static const char *fase42_frame_type_name(fase42_frame_type_t t)
 
 static void fase42_log_frame_type(const char *kind, uint64_t frame, fase42_frame_type_t t)
 {
+#if !IR0_DEBUG_PROC
+    (void)kind;
+    (void)frame;
+    (void)t;
+    return;
+#else
     if (fase42_frame_log_events >= 2048U)
         return;
 
@@ -208,6 +215,7 @@ static void fase42_log_frame_type(const char *kind, uint64_t frame, fase42_frame
     serial_print(fase42_frame_type_name(t));
     serial_print("\n");
     fase42_frame_log_events++;
+#endif
 }
 
 static int page_table_is_empty(const uint64_t *table)
@@ -1121,6 +1129,11 @@ void paging_fase42_note_pml4_freed(uint64_t pml4_phys)
 
 void paging_fase42_checkpoint(const char *tag, int32_t pid)
 {
+#if !IR0_DEBUG_PROC
+    (void)tag;
+    (void)pid;
+    return;
+#else
     serial_print("[FASE42][PT_AUDIT] tag=");
     serial_print(tag ? tag : "(null)");
     serial_print(" pid=");
@@ -1160,6 +1173,7 @@ void paging_fase42_checkpoint(const char *tag, int32_t pid)
     serial_print(" kernel_free=");
     serial_print_hex64(fase42_frame_kernel_free);
     serial_print("\n");
+#endif
 }
 
 void paging_fase42_category_stats(uint64_t *user_alloc, uint64_t *user_free,

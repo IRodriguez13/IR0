@@ -14,6 +14,8 @@
 
 #include <ir0/console.h>
 #include <ir0/debug_trap.h>
+#include <ir0/debug_runtime.h>
+#include <ir0/devfs.h>
 #include "process.h"
 #include <config.h>
 #include "scheduler_api.h"
@@ -312,6 +314,10 @@ void process_fase43_note_mm_destroyed(void)
 
 void process_fase43_proc_audit(const char *tag)
 {
+#if !IR0_DEBUG_PROC
+	(void)tag;
+	return;
+#else
 	serial_print("[FASE43][PROC_AUDIT] tag=");
 	serial_print(tag ? tag : "(null)");
 	serial_print(" proc_created=");
@@ -333,10 +339,14 @@ void process_fase43_proc_audit(const char *tag)
 	serial_print(" auto_reap=");
 	serial_print_hex64(fase43_reap_events);
 	serial_print("\n");
+#endif
 }
 
 void process_fase43_live_proc_dump(void)
 {
+#if !IR0_DEBUG_PROC
+	return;
+#else
 	process_t *p;
 	uint64_t live = 0;
 
@@ -363,6 +373,7 @@ void process_fase43_live_proc_dump(void)
 	serial_print("\n");
 	process_fase43_proc_audit("live-proc-dump");
 	paging_fase43_oom_audit("live-proc-dump");
+#endif
 }
 
 static int fase44_baseline_set;
@@ -404,6 +415,11 @@ static uint64_t fase44_ref_count_files(process_t *p)
 
 static void fase44_ref_emit(process_t *p, const char *tag)
 {
+#if !IR0_DEBUG_PROC
+	(void)p;
+	(void)tag;
+	return;
+#else
 	if (!p)
 		return;
 
@@ -418,12 +434,22 @@ static void fase44_ref_emit(process_t *p, const char *tag)
 	serial_print(" ref_threads=1 audit=");
 	serial_print(fase44_audit_name(p->fase44_audit_state));
 	serial_print("\n");
+#endif
 }
 
 static void fase44_destroy_audit(process_t *p, pid_t parent, uint8_t state_before,
 				 uint8_t state_after, int removed_from_list,
 				 const char *tag)
 {
+#if !IR0_DEBUG_PROC
+	(void)p;
+	(void)parent;
+	(void)state_before;
+	(void)state_after;
+	(void)removed_from_list;
+	(void)tag;
+	return;
+#else
 	if (!p)
 		return;
 
@@ -444,15 +470,22 @@ static void fase44_destroy_audit(process_t *p, pid_t parent, uint8_t state_befor
 	serial_print(" had_threads=1 removed_from_list=");
 	serial_print(removed_from_list ? "1" : "0");
 	serial_print("\n");
+#endif
 }
 
 static void fase44_trace(pid_t pid, const char *event)
 {
+#if !IR0_DEBUG_PROC
+	(void)pid;
+	(void)event;
+	return;
+#else
 	serial_print("[FASE44][TRACE] pid=");
 	serial_print_hex32((uint32_t)pid);
 	serial_print(" ");
 	serial_print(event);
 	serial_print("\n");
+#endif
 }
 
 static void fase44_reap_zombie(process_t *child, pid_t parent_pid, const char *tag)
@@ -583,6 +616,11 @@ static void fase50_trace_proc(const char *stage, process_t *p)
 
 static void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 {
+#if !IR0_DEBUG_WAIT
+	(void)tag;
+	(void)p;
+	return;
+#else
 	uint64_t rip;
 	uint64_t rsp;
 	uint16_t cs;
@@ -632,11 +670,18 @@ static void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 	{
 		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_CS_SS\n");
 	}
+#endif
 }
 
 static void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
                                          int parent_state_before)
 {
+#if !IR0_DEBUG_WAIT
+	(void)dying;
+	(void)parent;
+	(void)parent_state_before;
+	return;
+#else
 	serial_print("[WAIT_EXIT_AUDIT][process_exit] child_pid=");
 	serial_print_hex32((uint32_t)dying->task.pid);
 	serial_print(" child_state_before=RUNNING child_state_after=ZOMBIE parent_pid=");
@@ -676,10 +721,16 @@ static void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
 		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] EXIT_FREED_PARENT_RESOURCE "
 		             "note=child_irq_saved_stale_may_misroute_resume\n");
 	}
+#endif
 }
 
 static void wait_exit_audit_process_wait_block(pid_t wait_pid, int *status)
 {
+#if !IR0_DEBUG_WAIT
+	(void)wait_pid;
+	(void)status;
+	return;
+#else
 	if (!current_process)
 		return;
 
@@ -696,10 +747,17 @@ static void wait_exit_audit_process_wait_block(pid_t wait_pid, int *status)
 	serial_print(" rsp=");
 	serial_print_hex64(current_process->syscall_frame.rsp);
 	serial_print("\n");
+#endif
 }
 
 static void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *status)
 {
+#if !IR0_DEBUG_WAIT
+	(void)reaped_pid;
+	(void)status_val;
+	(void)status;
+	return;
+#else
 	if (!current_process)
 		return;
 
@@ -715,6 +773,7 @@ static void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, 
 	serial_print_hex64((uint64_t)(unsigned int)reaped_pid);
 	serial_print("\n");
 	wait_exit_audit_classify_user_frame("parent-after-reap", current_process);
+#endif
 }
 
 static void process_release_fds(process_t *p, const char *pipe_trace_op)
@@ -1170,6 +1229,7 @@ void process_fase44_list_checkpoint(const char *tag)
 		fase44_baseline_set = 1;
 	}
 
+#if IR0_DEBUG_PROC
 	serial_print("[FASE44][LIST] tag=");
 	serial_print(tag ? tag : "(null)");
 	serial_print(" count=");
@@ -1179,6 +1239,7 @@ void process_fase44_list_checkpoint(const char *tag)
 	serial_print(" user_live=");
 	serial_print_hex64(process_list_count_user());
 	serial_print("\n");
+#endif
 
 	if (tag && (strncmp(tag, "wait-after", 10) == 0 ||
 		    strncmp(tag, "drain-zombie-after", 18) == 0))
@@ -2582,6 +2643,13 @@ static int duplicate_fd_table(process_t *parent, process_t *child)
 			continue;
 		if (e->is_pipe && e->vfs_file)
 			pipe_acquire_end((pipe_t *)e->vfs_file, e->pipe_end);
+		else if (e->is_devfs)
+		{
+			devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
+
+			if (node)
+				node->ref_count++;
+		}
 		else if (e->vfs_file)
 			vfs_file_acquire((struct vfs_file *)e->vfs_file);
 	}
@@ -3149,6 +3217,7 @@ void process_destroy(process_t *p)
 	}
 
 	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
+#if IR0_DEBUG_PMM
 	serial_print("[FASE41][RECLAIM] pid=");
 	serial_print_hex32((uint32_t)p->task.pid);
 	serial_print(" pages_owned=");
@@ -3186,6 +3255,7 @@ void process_destroy(process_t *p)
 	serial_print(" alive_owner_missing=");
 	serial_print_hex64(alive_owner_missing);
 	serial_print("\n");
+#endif
 	paging_fase42_checkpoint("destroy-after", (int32_t)p->task.pid);
 	p->fase44_audit_state = FASE44_PROC_DESTROYED;
 	process_fase43_proc_audit("destroy-after");
@@ -3413,6 +3483,8 @@ void process_init_fd_table(process_t *process)
 		process->fd_table[i].fd_flags = 0;
 		process->fd_table[i].offset = 0;
 		process->fd_table[i].vfs_file = NULL;
+		process->fd_table[i].is_devfs = false;
+		process->fd_table[i].dev_device_id = 0;
 	}
 
 	/* Setup standard streams */

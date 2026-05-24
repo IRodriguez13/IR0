@@ -50,6 +50,8 @@ typedef struct fd_entry
 	uint64_t offset; /* File offset for seek operations */
 	bool is_pipe;  /* 1 if this fd is a pipe */
 	int pipe_end;  /* 0 = read end, 1 = write end */
+	bool is_devfs; /* bound to devfs node when true */
+	uint32_t dev_device_id;
 } fd_entry_t;
 
 /* Process execution mode */
