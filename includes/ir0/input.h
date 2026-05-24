@@ -13,7 +13,7 @@
 
 /**
  * IR0 Kernel - Linux evdev-compatible input events
- * For Doom, doomgeneric: read(fd, &input_event, sizeof(input_event))
+ * 
  */
 #pragma once
 
@@ -34,6 +34,18 @@ struct input_event {
 #define EV_KEY  0x01
 #define EV_REL  0x02
 #define EV_ABS  0x03
+
+/* Relative axes (Linux input-event-codes.h subset) */
+#define REL_X      0x00
+#define REL_Y      0x01
+#define REL_WHEEL  0x08
+
+/*
+ * /dev/events0 test hook ioctl (gated by CONFIG_TEST_INPUT_INJECT).
+ * Only used by deterministic smoke/harness code.
+ */
+#define IR0_INPUT_IOCTL_INJECT 0x49520001u
+#define IR0_INPUT_IOCTL_GET_CAPS 0x49520002u
 
 /* Key codes (Linux input-event-codes.h subset for Doom) */
 #define KEY_RESERVED  0
@@ -142,9 +154,47 @@ struct input_event {
 
 #define KEY_MAX        256
 
+/* Mouse buttons (Linux input-event-codes.h subset) */
+#define BTN_LEFT    0x110
+#define BTN_RIGHT   0x111
+#define BTN_MIDDLE  0x112
+#define BTN_SIDE    0x113
+#define BTN_EXTRA   0x114
+
 /* Push event from keyboard IRQ (kernel/input_events.c) */
 void input_event_push(uint16_t type, uint16_t code, int32_t value);
 
 /* Read events (devfs /dev/events0) */
 size_t input_event_read(struct input_event *buf, size_t count);
 int input_event_has_data(void);
+size_t input_event_queue_depth(void);
+
+/*
+ * IR0 input facade (device/provider neutral).
+ * Current provider: keyboard -> /dev/events0 queue.
+ */
+struct ir0_input_event {
+    uint16_t type;
+    uint16_t code;
+    int32_t value;
+    int64_t timestamp_ms;
+};
+
+struct ir0_input_caps {
+    int keyboard;
+    int mouse;
+    int touch;
+    int gamepad;
+    int has_events0;
+    int keyboard_ps2;
+    int mouse_ps2;
+    int event_queue_depth;
+    int supports_key_up_down;
+    int supports_mouse_motion;
+};
+
+int ir0_input_is_available(void);
+int ir0_input_poll(void);
+int ir0_input_read_event(struct ir0_input_event *ev);
+void ir0_input_get_caps(struct ir0_input_caps *caps);
+int ir0_input_inject_event(uint16_t type, uint16_t code, int32_t value);

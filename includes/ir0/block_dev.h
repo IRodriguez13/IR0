@@ -1,20 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: block_dev.h
- * Description: IR0 kernel source/header file
+ * IR0 Kernel — Legacy block_dev name adapter (includes/ir0/blockdev.h).
  */
 
-// SPDX-License-Identifier: GPL-3.0-only
 #ifndef IR0_FACADE_BLOCK_DEV_H
 #define IR0_FACADE_BLOCK_DEV_H
 
+#include <ir0/blockdev.h>
 #include <drivers/storage/block_dev.h>
 
 #endif /* IR0_FACADE_BLOCK_DEV_H */

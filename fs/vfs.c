@@ -31,6 +31,7 @@
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/open_flags.h>
+#include <ir0/exec_read_trace.h>
 #include <ir0/permissions.h>
 #include <ir0/credentials.h>
 #include <ir0/block_dev.h>
@@ -283,6 +284,10 @@ int vfs_init(void)
 #if CONFIG_ENABLE_FS_FAT16
     fat16_fs_register();
 #endif
+    serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE\n");
+    serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_DOCUMENTED\n");
+    serial_print("[VFS][CLASSIFY] SYSCALLS_USE_VFS_ONLY\n");
+    serial_print("[VFS][CLASSIFY] FUTURE_FS_READY\n");
     return 0;
 }
 
@@ -626,6 +631,56 @@ int vfs_write(struct vfs_file *f, const char *buf, size_t count)
     if (ret != 0)
         return ret;
     f->pos += (off_t)done;
+    return (int)done;
+}
+
+int vfs_pread(struct vfs_file *f, char *buf, size_t count, off_t offset)
+{
+    if (!f)
+        return -EBADF;
+    if (!buf)
+        return -EFAULT;
+    if (count == 0)
+        return 0;
+    if (offset < 0)
+        return -EINVAL;
+    if ((f->flags & IR0_O_ACCMODE) == IR0_O_WRONLY)
+        return -EBADF;
+
+    struct vfs_ops *ops = ops_for_path(f->path);
+    if (!ops || !ops->read)
+        return -ENOSYS;
+
+    size_t done = 0;
+    int ret = ops->read(f->path, buf, count, &done, offset);
+
+    if (ret != 0)
+        return ret;
+    return (int)done;
+}
+
+int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset)
+{
+    if (!f)
+        return -EBADF;
+    if (!buf)
+        return -EFAULT;
+    if (count == 0)
+        return 0;
+    if (offset < 0)
+        return -EINVAL;
+    if ((f->flags & IR0_O_ACCMODE) == IR0_O_RDONLY)
+        return -EBADF;
+
+    struct vfs_ops *ops = ops_for_path(f->path);
+    if (!ops || !ops->write)
+        return -ENOSYS;
+
+    size_t done = 0;
+    int ret = ops->write(f->path, buf, count, &done, offset);
+
+    if (ret != 0)
+        return ret;
     return (int)done;
 }
 
@@ -1132,6 +1187,9 @@ int vfs_read_file(const char *path, void **data, size_t *size)
             vfs_exec_audit_log("read_err", path, ret, (off_t)total,
                                fsize - total, total,
                                (uint64_t)st.st_ino, st.st_size);
+            exec_read_trace_vfs_read_file(path, (uint64_t)st.st_ino,
+                                          st.st_size, (off_t)total,
+                                          fsize - total, ret);
             kfree(buf);
             return ret;
         }

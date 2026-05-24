@@ -15,7 +15,7 @@
 #include "minix_fs.h"
 #include "vfs.h"
 #include <ir0/logging.h>
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/serial_io.h>
 #include <ir0/clock.h>
 #include <ir0/vga.h>
@@ -26,6 +26,7 @@
 #include <ir0/kmem.h>
 #include <ir0/credentials.h>
 #include <ir0/permissions.h>
+#include <ir0/exec_read_trace.h>
 #include <string.h>
 
 #define typewriter_vga_print(msg, color)                                         \
@@ -40,7 +41,7 @@
 
 #define MINIX_ROOT_INODE 1
 #define MINIX_MAX_INODES 1024
-#define MINIX_MAX_ZONES 1024
+#define MINIX_MAX_ZONES 65535
 #define MINIX_ZONE_SIZE 1024
 
 /* Number of direct zone pointers in a MINIX inode (i_zone[0]..[6]) */
@@ -57,36 +58,69 @@ typedef struct minix_fs_info
 } minix_fs_info_t;
 
 static minix_fs_info_t minix_fs;
+static dev_t minix_root_dev;
+static int minix_blockdev_classified;
 
-static const char *minix_root_device_name(void)
+static dev_t minix_root_dev_id(void)
 {
-  return CONFIG_ROOT_BLOCK_DEVICE;
+	if (minix_root_dev == 0)
+		minix_root_dev = ir0_block_lookup_by_name(CONFIG_ROOT_BLOCK_DEVICE);
+	return minix_root_dev;
+}
+
+static void minix_emit_blockdev_classify(void)
+{
+	if (minix_blockdev_classified)
+		return;
+	minix_blockdev_classified = 1;
+	serial_print("[MINIX_FS][CLASSIFY] MINIX_USES_BLOCKDEV_FACADE\n");
+}
+
+static bool minix_root_block_present(void)
+{
+	dev_t dev = minix_root_dev_id();
+
+	return dev != 0 && ir0_block_is_present(dev);
 }
 
 int minix_read_block(uint32_t block_num, void *buffer)
 {
-  uint32_t lba = block_num * 2; /* 2 sectores de 512 bytes = 1 bloque de 1024 bytes */
-  uint8_t num_sectors = 2;
+	uint32_t lba = block_num * 2;
+	uint8_t num_sectors = 2;
+	dev_t dev;
+	int ret;
 
-  bool success = block_dev_read_sectors(minix_root_device_name(), lba, num_sectors, buffer);
+	minix_emit_blockdev_classify();
+	dev = minix_root_dev_id();
+	if (dev == 0)
+		return -ENODEV;
 
-  if (!success)
-    return -EIO;
+	ret = ir0_block_read(dev, lba, num_sectors, buffer);
+	exec_read_trace_device_read(lba, num_sectors, ret == 0 ? 1 : 0, buffer);
 
-  return 0;
+	if (ret != 0)
+		return -EIO;
+
+	return 0;
 }
 
 int minix_write_block(uint32_t block_num, const void *buffer)
 {
-  uint32_t lba = block_num * 2; /* 2 sectores de 512 bytes = 1 bloque de 1024 bytes */
-  uint8_t num_sectors = 2;
+	uint32_t lba = block_num * 2;
+	uint8_t num_sectors = 2;
+	dev_t dev;
+	int ret;
 
-  bool success = block_dev_write_sectors(minix_root_device_name(), lba, num_sectors, buffer);
+	minix_emit_blockdev_classify();
+	dev = minix_root_dev_id();
+	if (dev == 0)
+		return -ENODEV;
 
-  if (!success)
-    return -EIO;
+	ret = ir0_block_write(dev, lba, num_sectors, buffer);
+	if (ret != 0)
+		return -EIO;
 
-  return 0;
+	return 0;
 }
 
 void minix_mark_inode_used(uint32_t inode_num)
@@ -182,8 +216,12 @@ void minix_mark_zone_used(uint32_t zone_num)
 
 uint32_t minix_alloc_zone(void)
 {
-  for (uint32_t i = minix_fs.superblock.s_firstdatazone; i < MINIX_MAX_ZONES;
-       i++)
+  uint32_t limit = minix_fs.superblock.s_nzones;
+
+  if (limit == 0 || limit > MINIX_MAX_ZONES)
+    limit = MINIX_MAX_ZONES;
+
+  for (uint32_t i = minix_fs.superblock.s_firstdatazone; i < limit; i++)
   {
     if (minix_is_zone_free(i))
     {
@@ -846,7 +884,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
 
 bool minix_fs_is_available(void)
 {
-  return block_dev_is_present(minix_root_device_name());
+  return minix_root_block_present();
 }
 
 bool minix_fs_is_working(void)
@@ -1102,7 +1140,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -EEXIST;
   }
 
-  if (!block_dev_is_present(minix_root_device_name()))
+  if (!minix_root_block_present())
   {
     return -EIO;
   }
@@ -1412,7 +1450,7 @@ int minix_fs_cat(const char *path)
     return -1;
   }
 
-  if (!block_dev_is_present(minix_root_device_name()))
+  if (!minix_root_block_present())
   {
     typewriter_vga_print("cat: disk not available\n", 0x0C);
     return -EIO;
@@ -1531,8 +1569,685 @@ static void minix_serial_print_blob(const char *label, const void *content, size
   serial_print("\n");
 }
 
+#define MINIX_INDIRECT_ZONES (MINIX_BLOCK_SIZE / (int)sizeof(uint16_t))
+#define MINIX_DINDIRECT_ZONES \
+	((size_t)MINIX_INDIRECT_ZONES * (size_t)MINIX_INDIRECT_ZONES)
+
+static void minix_inode_free_indirect_block(uint32_t ind_zone)
+{
+	int i;
+	uint8_t indirect_buffer[MINIX_BLOCK_SIZE];
+	uint16_t *zone_list;
+
+	if (ind_zone == 0)
+		return;
+
+	if (minix_read_block(ind_zone, indirect_buffer) == 0)
+	{
+		zone_list = (uint16_t *)indirect_buffer;
+		for (i = 0; i < MINIX_INDIRECT_ZONES; i++)
+		{
+			if (zone_list[i] != 0)
+				minix_free_zone((uint32_t)zone_list[i]);
+		}
+	}
+	minix_free_zone(ind_zone);
+}
+
+static void minix_inode_free_direct_zones(minix_inode_t *inode)
+{
+  int zi;
+
+  for (zi = 0; zi < MINIX_DIRECT_ZONES; zi++)
+  {
+    if (inode->i_zone[zi] != 0)
+    {
+      minix_free_zone((uint32_t)inode->i_zone[zi]);
+      inode->i_zone[zi] = 0;
+    }
+  }
+}
+
+static void minix_inode_free_indirect_tree(minix_inode_t *inode)
+{
+	if (inode->i_zone[7] == 0)
+		return;
+
+	minix_inode_free_indirect_block((uint32_t)inode->i_zone[7]);
+	inode->i_zone[7] = 0;
+}
+
+static void minix_inode_free_double_indirect_tree(minix_inode_t *inode)
+{
+	int i;
+	uint8_t dind_buffer[MINIX_BLOCK_SIZE];
+	uint16_t *dind_list;
+	uint32_t dind_zone;
+
+	if (inode->i_zone[8] == 0)
+		return;
+
+	dind_zone = (uint32_t)inode->i_zone[8];
+	if (minix_read_block(dind_zone, dind_buffer) == 0)
+	{
+		dind_list = (uint16_t *)dind_buffer;
+		for (i = 0; i < MINIX_INDIRECT_ZONES; i++)
+		{
+			if (dind_list[i] != 0)
+				minix_inode_free_indirect_block((uint32_t)dind_list[i]);
+		}
+	}
+	minix_free_zone(dind_zone);
+	inode->i_zone[8] = 0;
+}
+
+static void minix_inode_free_all_zones(minix_inode_t *inode)
+{
+	minix_inode_free_direct_zones(inode);
+	minix_inode_free_indirect_tree(inode);
+	minix_inode_free_double_indirect_tree(inode);
+}
+
+static int minix_inode_zone_at(minix_inode_t *inode, uint16_t inode_num,
+                               size_t zone_idx, int allocate,
+                               uint32_t *disk_zone)
+{
+	if (disk_zone)
+		*disk_zone = 0;
+
+	if (zone_idx < (size_t)MINIX_DIRECT_ZONES)
+	{
+		if (inode->i_zone[zone_idx] == 0)
+		{
+			uint32_t new_zone;
+
+			if (!allocate)
+				return 0;
+			new_zone = minix_alloc_zone();
+			if (new_zone == 0)
+				return -ENOSPC;
+			inode->i_zone[zone_idx] = (uint16_t)new_zone;
+			if (minix_fs_write_inode(inode_num, inode) != 0)
+			{
+				minix_free_zone(new_zone);
+				inode->i_zone[zone_idx] = 0;
+				return -EIO;
+			}
+		}
+		if (disk_zone)
+			*disk_zone = (uint32_t)inode->i_zone[zone_idx];
+		return 0;
+	}
+
+	if (zone_idx < (size_t)MINIX_DIRECT_ZONES + (size_t)MINIX_INDIRECT_ZONES)
+	{
+		size_t ind_idx = zone_idx - (size_t)MINIX_DIRECT_ZONES;
+		uint8_t indirect_buffer[MINIX_BLOCK_SIZE];
+		uint16_t *zone_list;
+		uint32_t ind_zone;
+
+		if (inode->i_zone[7] == 0)
+		{
+			if (!allocate)
+				return 0;
+			ind_zone = minix_alloc_zone();
+			if (ind_zone == 0)
+				return -ENOSPC;
+			kmemset(indirect_buffer, 0, MINIX_BLOCK_SIZE);
+			if (minix_write_block(ind_zone, indirect_buffer) != 0)
+			{
+				minix_free_zone(ind_zone);
+				return -EIO;
+			}
+			inode->i_zone[7] = (uint16_t)ind_zone;
+			if (minix_fs_write_inode(inode_num, inode) != 0)
+			{
+				minix_free_zone(ind_zone);
+				inode->i_zone[7] = 0;
+				return -EIO;
+			}
+		}
+		else
+		{
+			ind_zone = (uint32_t)inode->i_zone[7];
+			if (minix_read_block(ind_zone, indirect_buffer) != 0)
+				return allocate ? -EIO : 0;
+		}
+
+		zone_list = (uint16_t *)indirect_buffer;
+		if (zone_list[ind_idx] == 0)
+		{
+			uint32_t new_zone;
+
+			if (!allocate)
+				return 0;
+			new_zone = minix_alloc_zone();
+			if (new_zone == 0)
+				return -ENOSPC;
+			zone_list[ind_idx] = (uint16_t)new_zone;
+			if (minix_write_block(ind_zone, indirect_buffer) != 0)
+			{
+				minix_free_zone(new_zone);
+				return -EIO;
+			}
+		}
+		if (disk_zone)
+			*disk_zone = (uint32_t)zone_list[ind_idx];
+		return 0;
+	}
+
+	{
+		size_t rel = zone_idx - (size_t)MINIX_DIRECT_ZONES -
+		             (size_t)MINIX_INDIRECT_ZONES;
+		size_t dind1;
+		size_t dind2;
+		uint8_t dind_buffer[MINIX_BLOCK_SIZE];
+		uint8_t ind_buffer[MINIX_BLOCK_SIZE];
+		uint16_t *dind_list;
+		uint16_t *ind_list;
+		uint32_t dind_zone;
+		uint32_t ind_zone;
+
+		if (rel >= MINIX_DINDIRECT_ZONES)
+			return -EFBIG;
+
+		dind1 = rel / (size_t)MINIX_INDIRECT_ZONES;
+		dind2 = rel % (size_t)MINIX_INDIRECT_ZONES;
+
+		if (inode->i_zone[8] == 0)
+		{
+			if (!allocate)
+				return 0;
+			dind_zone = minix_alloc_zone();
+			if (dind_zone == 0)
+				return -ENOSPC;
+			kmemset(dind_buffer, 0, MINIX_BLOCK_SIZE);
+			if (minix_write_block(dind_zone, dind_buffer) != 0)
+			{
+				minix_free_zone(dind_zone);
+				return -EIO;
+			}
+			inode->i_zone[8] = (uint16_t)dind_zone;
+			if (minix_fs_write_inode(inode_num, inode) != 0)
+			{
+				minix_free_zone(dind_zone);
+				inode->i_zone[8] = 0;
+				return -EIO;
+			}
+		}
+		else
+		{
+			dind_zone = (uint32_t)inode->i_zone[8];
+			if (minix_read_block(dind_zone, dind_buffer) != 0)
+				return allocate ? -EIO : 0;
+		}
+
+		dind_list = (uint16_t *)dind_buffer;
+		if (dind_list[dind1] == 0)
+		{
+			if (!allocate)
+				return 0;
+			ind_zone = minix_alloc_zone();
+			if (ind_zone == 0)
+				return -ENOSPC;
+			kmemset(ind_buffer, 0, MINIX_BLOCK_SIZE);
+			if (minix_write_block(ind_zone, ind_buffer) != 0)
+			{
+				minix_free_zone(ind_zone);
+				return -EIO;
+			}
+			dind_list[dind1] = (uint16_t)ind_zone;
+			if (minix_write_block(dind_zone, dind_buffer) != 0)
+			{
+				minix_free_zone(ind_zone);
+				return -EIO;
+			}
+		}
+		else
+		{
+			ind_zone = (uint32_t)dind_list[dind1];
+			if (minix_read_block(ind_zone, ind_buffer) != 0)
+				return allocate ? -EIO : 0;
+		}
+
+		ind_list = (uint16_t *)ind_buffer;
+		if (ind_list[dind2] == 0)
+		{
+			uint32_t new_zone;
+
+			if (!allocate)
+				return 0;
+			new_zone = minix_alloc_zone();
+			if (new_zone == 0)
+				return -ENOSPC;
+			ind_list[dind2] = (uint16_t)new_zone;
+			if (minix_write_block(ind_zone, ind_buffer) != 0)
+			{
+				minix_free_zone(new_zone);
+				return -EIO;
+			}
+		}
+		if (disk_zone)
+			*disk_zone = (uint32_t)ind_list[dind2];
+		return 0;
+	}
+}
+
+static int minix_inode_resolve_zone(minix_inode_t *inode, uint16_t inode_num,
+                                    size_t zone_idx, int allocate,
+                                    uint32_t *disk_zone)
+{
+	return minix_inode_zone_at(inode, inode_num, zone_idx, allocate, disk_zone);
+}
+
+static size_t minix_file_zone_count(size_t file_size)
+{
+	if (file_size == 0)
+		return 0;
+	return (file_size + MINIX_BLOCK_SIZE - 1U) / MINIX_BLOCK_SIZE;
+}
+
+static void minix_inode_release_zone_at(minix_inode_t *inode, uint16_t inode_num,
+                                        size_t zone_idx)
+{
+	uint32_t disk_zone;
+
+	if (zone_idx < (size_t)MINIX_DIRECT_ZONES)
+	{
+		if (inode->i_zone[zone_idx] != 0)
+		{
+			minix_free_zone((uint32_t)inode->i_zone[zone_idx]);
+			inode->i_zone[zone_idx] = 0;
+			(void)minix_fs_write_inode(inode_num, inode);
+		}
+		return;
+	}
+
+	if (minix_inode_zone_at(inode, inode_num, zone_idx, 0, &disk_zone) != 0)
+		return;
+	if (disk_zone == 0)
+		return;
+
+	minix_free_zone(disk_zone);
+
+	if (zone_idx < (size_t)MINIX_DIRECT_ZONES + (size_t)MINIX_INDIRECT_ZONES)
+	{
+		size_t ind_idx = zone_idx - (size_t)MINIX_DIRECT_ZONES;
+		uint8_t indirect_buffer[MINIX_BLOCK_SIZE];
+		uint16_t *zone_list;
+		uint32_t ind_zone;
+		int empty;
+		int i;
+
+		if (inode->i_zone[7] == 0)
+			return;
+
+		ind_zone = (uint32_t)inode->i_zone[7];
+		if (minix_read_block(ind_zone, indirect_buffer) != 0)
+			return;
+
+		zone_list = (uint16_t *)indirect_buffer;
+		zone_list[ind_idx] = 0;
+		(void)minix_write_block(ind_zone, indirect_buffer);
+
+		empty = 1;
+		for (i = 0; i < MINIX_INDIRECT_ZONES; i++)
+		{
+			if (zone_list[i] != 0)
+			{
+				empty = 0;
+				break;
+			}
+		}
+		if (empty)
+		{
+			minix_free_zone(ind_zone);
+			inode->i_zone[7] = 0;
+			(void)minix_fs_write_inode(inode_num, inode);
+		}
+		return;
+	}
+
+	{
+		size_t rel = zone_idx - (size_t)MINIX_DIRECT_ZONES -
+		             (size_t)MINIX_INDIRECT_ZONES;
+		size_t dind1 = rel / (size_t)MINIX_INDIRECT_ZONES;
+		size_t dind2 = rel % (size_t)MINIX_INDIRECT_ZONES;
+		uint8_t dind_buffer[MINIX_BLOCK_SIZE];
+		uint8_t ind_buffer[MINIX_BLOCK_SIZE];
+		uint16_t *dind_list;
+		uint16_t *ind_list;
+		uint32_t dind_zone;
+		uint32_t ind_zone;
+		int empty;
+		int i;
+
+		if (inode->i_zone[8] == 0)
+			return;
+
+		dind_zone = (uint32_t)inode->i_zone[8];
+		if (minix_read_block(dind_zone, dind_buffer) != 0)
+			return;
+
+		dind_list = (uint16_t *)dind_buffer;
+		ind_zone = (uint32_t)dind_list[dind1];
+		if (ind_zone == 0)
+			return;
+
+		if (minix_read_block(ind_zone, ind_buffer) != 0)
+			return;
+
+		ind_list = (uint16_t *)ind_buffer;
+		ind_list[dind2] = 0;
+		(void)minix_write_block(ind_zone, ind_buffer);
+
+		empty = 1;
+		for (i = 0; i < MINIX_INDIRECT_ZONES; i++)
+		{
+			if (ind_list[i] != 0)
+			{
+				empty = 0;
+				break;
+			}
+		}
+		if (empty)
+		{
+			minix_free_zone(ind_zone);
+			dind_list[dind1] = 0;
+			(void)minix_write_block(dind_zone, dind_buffer);
+
+			empty = 1;
+			for (i = 0; i < MINIX_INDIRECT_ZONES; i++)
+			{
+				if (dind_list[i] != 0)
+				{
+					empty = 0;
+					break;
+				}
+			}
+			if (empty)
+			{
+				minix_free_zone(dind_zone);
+				inode->i_zone[8] = 0;
+				(void)minix_fs_write_inode(inode_num, inode);
+			}
+		}
+	}
+}
+
+static void minix_inode_truncate_zones(minix_inode_t *inode, uint16_t inode_num,
+                                       size_t old_size, size_t new_size)
+{
+	size_t old_zones;
+	size_t new_zones;
+	size_t zone_idx;
+
+	if (new_size >= old_size)
+		return;
+
+	old_zones = minix_file_zone_count(old_size);
+	new_zones = minix_file_zone_count(new_size);
+
+	for (zone_idx = new_zones; zone_idx < old_zones; zone_idx++)
+		minix_inode_release_zone_at(inode, inode_num, zone_idx);
+}
+
+static int minix_inode_zero_range(minix_inode_t *inode, uint16_t inode_num,
+                                  size_t start, size_t end)
+{
+  size_t pos;
+  uint8_t block_buffer[MINIX_BLOCK_SIZE];
+
+  if (end <= start)
+    return 0;
+
+  pos = start;
+  while (pos < end)
+  {
+    size_t zone_idx = pos / MINIX_BLOCK_SIZE;
+    size_t block_off = pos % MINIX_BLOCK_SIZE;
+    size_t chunk = MINIX_BLOCK_SIZE - block_off;
+    uint32_t disk_zone;
+    int ret;
+
+    if (chunk > end - pos)
+      chunk = end - pos;
+
+    ret = minix_inode_resolve_zone(inode, inode_num, zone_idx, 1, &disk_zone);
+    if (ret != 0)
+      return ret;
+
+    if (block_off == 0 && chunk == MINIX_BLOCK_SIZE)
+    {
+      kmemset(block_buffer, 0, MINIX_BLOCK_SIZE);
+    }
+    else
+    {
+      if (minix_read_block(disk_zone, block_buffer) != 0)
+        kmemset(block_buffer, 0, MINIX_BLOCK_SIZE);
+      kmemset(block_buffer + block_off, 0, chunk);
+    }
+
+    if (minix_write_block(disk_zone, block_buffer) != 0)
+      return -EIO;
+
+    pos += chunk;
+  }
+
+  return 0;
+}
+
+static int minix_offset_read_classified;
+
+static int minix_fs_pread_at(const char *path, void *buf, size_t count,
+                             off_t offset, size_t *read_count)
+{
+  uint16_t inode_num;
+  minix_inode_t file_inode;
+  uint8_t *dst;
+  size_t file_size;
+  size_t to_read;
+  size_t pos;
+  size_t remaining;
+  int ret;
+
+  if (!minix_fs.initialized || !path)
+    return -EINVAL;
+  if (count > 0 && !buf)
+    return -EINVAL;
+  if (count == 0)
+  {
+    if (read_count)
+      *read_count = 0;
+    return 0;
+  }
+  if (offset < 0)
+    return -EINVAL;
+  if (!minix_root_block_present())
+    return -EIO;
+
+  inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0)
+    return -ENOENT;
+
+  if (minix_read_inode(inode_num, &file_inode) != 0)
+    return -EIO;
+
+  if (file_inode.i_mode & MINIX_IFDIR)
+    return -EISDIR;
+
+  file_size = (size_t)file_inode.i_size;
+  if ((size_t)offset >= file_size)
+  {
+    if (read_count)
+      *read_count = 0;
+    return 0;
+  }
+
+  to_read = count;
+  if ((size_t)offset + to_read > file_size)
+    to_read = file_size - (size_t)offset;
+
+  dst = (uint8_t *)buf;
+  pos = (size_t)offset;
+  remaining = to_read;
+
+  while (remaining > 0)
+  {
+    size_t zone_idx = pos / MINIX_BLOCK_SIZE;
+    size_t block_off = pos % MINIX_BLOCK_SIZE;
+    size_t chunk = MINIX_BLOCK_SIZE - block_off;
+    uint32_t disk_zone;
+    uint8_t block_buffer[MINIX_BLOCK_SIZE];
+
+    if (chunk > remaining)
+      chunk = remaining;
+
+    ret = minix_inode_zone_at(&file_inode, inode_num, zone_idx, 0, &disk_zone);
+    if (ret != 0)
+      return ret;
+
+    if (disk_zone == 0)
+    {
+      kmemset(dst, 0, chunk);
+    }
+    else if (block_off == 0 && chunk == MINIX_BLOCK_SIZE)
+    {
+      if (minix_read_block(disk_zone, dst) != 0)
+        return -EIO;
+    }
+    else
+    {
+      if (minix_read_block(disk_zone, block_buffer) != 0)
+        return -EIO;
+      kmemcpy(dst, block_buffer + block_off, chunk);
+    }
+
+    dst += chunk;
+    pos += chunk;
+    remaining -= chunk;
+  }
+
+  if (!minix_offset_read_classified)
+  {
+    minix_offset_read_classified = 1;
+    serial_print("[MINIX_FS][CLASSIFY] MINIX_OFFSET_READ_OK\n");
+    serial_print("[MINIX_FS][CLASSIFY] LARGE_FILE_STREAMING_OK\n");
+    serial_print("[VFS][CLASSIFY] VFS_OFFSET_READ_OK\n");
+    serial_print("[VFS][CLASSIFY] ATA_PRESSURE_REDUCED\n");
+    serial_print("[MINIX_FS][CLASSIFY] VFS_BACKEND_NEUTRAL\n");
+  }
+
+  if (read_count)
+    *read_count = to_read;
+  return 0;
+}
+
+static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
+                              off_t offset, size_t *written_count)
+{
+  uint16_t inode_num;
+  minix_inode_t file_inode;
+  const uint8_t *src;
+  size_t remaining;
+  size_t pos;
+  size_t new_size;
+  int ret;
+
+  if (!minix_fs.initialized || !path)
+    return -EINVAL;
+  if (count > 0 && !buf)
+    return -EINVAL;
+  if (count == 0)
+  {
+    if (written_count)
+      *written_count = 0;
+    return 0;
+  }
+  if (offset < 0)
+    return -EINVAL;
+  if (!minix_root_block_present())
+    return -EIO;
+
+  inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0)
+    return -ENOENT;
+
+  if (minix_read_inode(inode_num, &file_inode) != 0)
+    return -EIO;
+
+  if (file_inode.i_mode & MINIX_IFDIR)
+    return -EISDIR;
+
+  new_size = (size_t)file_inode.i_size;
+  if ((size_t)offset + count > new_size)
+    new_size = (size_t)offset + count;
+  if (new_size > minix_fs.superblock.s_max_size)
+    return -EFBIG;
+
+  if ((size_t)offset > (size_t)file_inode.i_size)
+  {
+    ret = minix_inode_zero_range(&file_inode, inode_num,
+                                 (size_t)file_inode.i_size, (size_t)offset);
+    if (ret != 0)
+      return ret;
+  }
+
+  src = (const uint8_t *)buf;
+  remaining = count;
+  pos = (size_t)offset;
+
+  while (remaining > 0)
+  {
+    size_t zone_idx = pos / MINIX_BLOCK_SIZE;
+    size_t block_off = pos % MINIX_BLOCK_SIZE;
+    size_t chunk = MINIX_BLOCK_SIZE - block_off;
+    uint32_t disk_zone;
+    uint8_t block_buffer[MINIX_BLOCK_SIZE];
+
+    if (chunk > remaining)
+      chunk = remaining;
+
+    ret = minix_inode_resolve_zone(&file_inode, inode_num, zone_idx, 1,
+                                   &disk_zone);
+    if (ret != 0)
+      return ret;
+
+    if (block_off == 0 && chunk == MINIX_BLOCK_SIZE)
+    {
+      if (minix_write_block(disk_zone, src) != 0)
+        return -EIO;
+    }
+    else
+    {
+      if (minix_read_block(disk_zone, block_buffer) != 0)
+        kmemset(block_buffer, 0, MINIX_BLOCK_SIZE);
+      kmemcpy(block_buffer + block_off, src, chunk);
+      if (minix_write_block(disk_zone, block_buffer) != 0)
+        return -EIO;
+    }
+
+    pos += chunk;
+    src += chunk;
+    remaining -= chunk;
+  }
+
+  file_inode.i_size = (uint32_t)new_size;
+  file_inode.i_time = get_system_time();
+  if (minix_fs_write_inode(inode_num, &file_inode) != 0)
+    return -EIO;
+
+  if (written_count)
+    *written_count = count;
+  return 0;
+}
+
 int minix_fs_write_file_len(const char *path, const void *content, size_t content_size)
 {
+  uint16_t inode_num;
+  minix_inode_t file_inode;
+  int ret;
+
   serial_print("SERIAL: minix_fs_write_file called\n");
 
   if (!minix_fs.initialized)
@@ -1557,20 +2272,15 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
   serial_print(path);
   minix_serial_print_blob(" content=", content, content_size);
 
-  // Verificar que el disco esté disponible
-  if (!block_dev_is_present(minix_root_device_name()))
+  if (!minix_root_block_present())
   {
     serial_print("SERIAL: write: disk not available\n");
     return -EIO;
   }
 
-  // Obtener el número de inode primero
-  uint16_t inode_num = minix_fs_get_inode_number(path);
-  bool file_existed = (inode_num != 0);
-
-  if (!file_existed)
+  inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0)
   {
-    // El archivo no existe, crearlo primero
     if (minix_fs_touch(path, 0644) != 0)
     {
       serial_print("SERIAL: Error: Could not create file ");
@@ -1579,23 +2289,17 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
       return -1;
     }
 
-    // Obtener el número de inode del archivo recién creado
     inode_num = minix_fs_get_inode_number(path);
     if (inode_num == 0)
-    {
       return -1;
-    }
   }
 
-  // Leer el inode directamente desde el disco para asegurar que tenemos la versión más reciente
-  minix_inode_t file_inode;
   if (minix_read_inode(inode_num, &file_inode) != 0)
   {
     serial_print("SERIAL: Error: Could not read inode from disk\n");
     return -1;
   }
 
-  // Verificar que es un archivo regular, no un directorio
   if (file_inode.i_mode & MINIX_IFDIR)
   {
     serial_print("SERIAL: Error: Cannot write to directory\n");
@@ -1604,16 +2308,7 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
 
   if (content_size == 0)
   {
-    int zi;
-
-    for (zi = 0; zi < MINIX_DIRECT_ZONES; zi++)
-    {
-      if (file_inode.i_zone[zi] != 0)
-      {
-        minix_free_zone(file_inode.i_zone[zi]);
-        file_inode.i_zone[zi] = 0;
-      }
-    }
+    minix_inode_free_all_zones(&file_inode);
     file_inode.i_size = 0;
     file_inode.i_time = get_system_time();
     if (minix_fs_write_inode(inode_num, &file_inode) != 0)
@@ -1621,81 +2316,19 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
     return 0;
   }
 
-  // Verificar que no exceda el tamaño máximo de archivo
-  if (content_size > MINIX_BLOCK_SIZE * MINIX_DIRECT_ZONES)
-  {
-    serial_print("SERIAL: Error: Content too large (max ");
-    serial_print_hex32(MINIX_BLOCK_SIZE * MINIX_DIRECT_ZONES);
-    serial_print(" bytes)\n");
-    return -1;
-  }
-
-  // Si el archivo ya tenía zonas asignadas, liberarlas primero (sobrescritura completa)
-  if (file_inode.i_zone[0] != 0)
-  {
-    // Liberar la zona existente si vamos a sobrescribir
-    minix_free_zone(file_inode.i_zone[0]);
-    file_inode.i_zone[0] = 0;
-  }
-
-  // Asignar nueva zona para el contenido
-  uint32_t new_zone = minix_alloc_zone();
-  if (new_zone == 0)
-  {
-    serial_print("SERIAL: Error: No free zones available\n");
-    return -1;
-  }
-  file_inode.i_zone[0] = new_zone;
-
-  // Escribir el contenido al bloque
-  uint8_t block_buffer[MINIX_BLOCK_SIZE];
-  kmemset(block_buffer, 0, MINIX_BLOCK_SIZE);
-
-  // Copiar el contenido al buffer
-  uint32_t bytes_to_write = content_size;
-  if (bytes_to_write > MINIX_BLOCK_SIZE)
-  {
-    bytes_to_write = MINIX_BLOCK_SIZE;
-  }
-
-  kmemcpy(block_buffer, content, bytes_to_write);
-
-  // Escribir el bloque al disco
-  if (minix_write_block(new_zone, block_buffer) != 0)
-  {
-    // Si falla la escritura, liberar la zona asignada
-    minix_free_zone(new_zone);
-    serial_print("SERIAL: Error: Could not write block to disk\n");
-    return -1;
-  }
-
-  // Actualizar el tamaño del archivo y timestamp en el inode
-  file_inode.i_size = content_size;
-  file_inode.i_time = get_system_time();
-
-  serial_print("SERIAL: write_file: before write_inode, inode_num=");
-  serial_print_hex32(inode_num);
-  serial_print(" size=");
-  serial_print_hex32(file_inode.i_size);
-  serial_print(" zone=");
-  serial_print_hex32(file_inode.i_zone[0]);
-  serial_print("\n");
-
-  // Escribir el inode actualizado al disco
+  minix_inode_free_all_zones(&file_inode);
+  file_inode.i_size = 0;
   if (minix_fs_write_inode(inode_num, &file_inode) != 0)
-  {
-    // Si falla escribir el inode, intentar liberar la zona (aunque el archivo quedará inconsistente)
-    minix_free_zone(new_zone);
-    serial_print("SERIAL: Error: Could not update inode\n");
     return -1;
-  }
 
-  serial_print("SERIAL: write_file: after write_inode\n");
+  ret = minix_fs_pwrite_at(path, content, content_size, 0, NULL);
+  if (ret != 0)
+    return -1;
 
   serial_print("SERIAL: File '");
   serial_print(path);
   serial_print("' written successfully (");
-  serial_print_hex32(content_size);
+  serial_print_hex32((uint32_t)content_size);
   serial_print(" bytes)\n");
 
   return 0;
@@ -1735,7 +2368,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   if (kstrcmp(path, "/") == 0)
     return -EINVAL;
 
-  if (!block_dev_is_present(minix_root_device_name()))
+  if (!minix_root_block_present())
     return -EIO;
 
   /* Check if file already exists */
@@ -2319,6 +2952,9 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   minix_inode_t inode;
   kmemcpy(&inode, inode_ref, sizeof(inode));
 
+  exec_read_trace_minix_file_begin(path, inode_num, inode.i_mode, inode.i_size);
+  exec_read_trace_minix_zones(inode.i_zone);
+
   // Check if it's a regular file
   if (!(inode.i_mode & MINIX_IFREG))
   {
@@ -2366,23 +3002,48 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   // Read direct zones (first 7 zones)
   for (int i = 0; i < MINIX_DIRECT_ZONES && bytes_read < *size; i++)
   {
+    size_t file_offset = bytes_read;
+    size_t bytes_to_copy;
+
     if (inode.i_zone[i] == 0)
     {
+      if (file_offset < *size)
+      {
+        exec_read_trace_minix_eio("MINIX_ZONE_TABLE_CORRUPTED", "direct_zero",
+                                  i, 0, 0, 0, file_offset, buffer);
+      }
       continue;
     }
 
-    uint8_t block_buffer[MINIX_BLOCK_SIZE];
-    if (minix_read_block(inode.i_zone[i], block_buffer) != 0)
     {
-      kfree(*data);
-      return -EIO;
-    }
+      uint8_t block_buffer[MINIX_BLOCK_SIZE];
+      uint32_t disk_block = (uint32_t)inode.i_zone[i];
+      uint32_t lba = disk_block * 2U;
 
-    size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
-                               ? MINIX_BLOCK_SIZE
-                               : (*size - bytes_read);
-    kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
-    bytes_read += bytes_to_copy;
+      if (minix_read_block(disk_block, block_buffer) != 0)
+      {
+        exec_read_trace_minix_block("direct", i, disk_block, disk_block, lba,
+                                    file_offset, MINIX_BLOCK_SIZE, 0);
+        exec_read_trace_minix_eio("MINIX_READ_EIO_AT_BLOCK", "direct", i,
+                                  disk_block, disk_block, lba, file_offset,
+                                  block_buffer);
+        if (i == MINIX_DIRECT_ZONES - 1 &&
+            *size > (size_t)MINIX_BLOCK_SIZE * (size_t)MINIX_DIRECT_ZONES)
+        {
+          serial_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+        }
+        kfree(*data);
+        return -EIO;
+      }
+
+      bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
+                          ? MINIX_BLOCK_SIZE
+                          : (*size - bytes_read);
+      exec_read_trace_minix_block("direct", i, disk_block, disk_block, lba,
+                                  file_offset, bytes_to_copy, bytes_to_copy);
+      kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+      bytes_read += bytes_to_copy;
+    }
   }
 
   // Handle indirect zones if needed (zone[7] and zone[8])
@@ -2390,47 +3051,151 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   {
     // Single indirect zone
     uint8_t indirect_buffer[MINIX_BLOCK_SIZE];
-    if (minix_read_block(inode.i_zone[7], indirect_buffer) != 0)
+    uint32_t ind_zone = (uint32_t)inode.i_zone[7];
+    uint32_t ind_lba = ind_zone * 2U;
+
+    if (minix_read_block(ind_zone, indirect_buffer) != 0)
+    {
+      exec_read_trace_minix_eio("MINIX_READ_EIO_AT_BLOCK", "indirect_meta", 7,
+                                ind_zone, ind_zone, ind_lba, bytes_read,
+                                indirect_buffer);
+      serial_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+      kfree(*data);
+      return -EIO;
+    }
+
+    {
+      uint16_t *zone_list = (uint16_t *)indirect_buffer;
+      int num_zones = MINIX_BLOCK_SIZE / (int)sizeof(uint16_t);
+
+      for (int i = 0; i < num_zones && bytes_read < *size; i++)
+      {
+        size_t file_offset = bytes_read;
+
+        if (zone_list[i] == 0)
+        {
+          if (file_offset < *size)
+          {
+            exec_read_trace_minix_eio("MINIX_ZONE_TABLE_CORRUPTED",
+                                      "indirect_zero", i, 0, 0, 0,
+                                      file_offset, buffer);
+          }
+          continue;
+        }
+
+        {
+          uint8_t block_buffer[MINIX_BLOCK_SIZE];
+          uint32_t disk_block = (uint32_t)zone_list[i];
+          uint32_t lba = disk_block * 2U;
+          size_t bytes_to_copy;
+
+          if (minix_read_block(disk_block, block_buffer) != 0)
+          {
+            exec_read_trace_minix_block("indirect", i, disk_block, disk_block,
+                                        lba, file_offset, MINIX_BLOCK_SIZE, 0);
+            exec_read_trace_minix_eio("MINIX_READ_EIO_AT_BLOCK", "indirect",
+                                      i, disk_block, disk_block, lba,
+                                      file_offset, block_buffer);
+            kfree(*data);
+            return -EIO;
+          }
+
+          bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
+                              ? MINIX_BLOCK_SIZE
+                              : (*size - bytes_read);
+          exec_read_trace_minix_block("indirect", i, disk_block, disk_block,
+                                      lba, file_offset, bytes_to_copy,
+                                      bytes_to_copy);
+          kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+          bytes_read += bytes_to_copy;
+        }
+      }
+    }
+  }
+  else if (bytes_read < *size && *size > (size_t)MINIX_BLOCK_SIZE *
+                                           (size_t)MINIX_DIRECT_ZONES)
+  {
+    serial_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+  }
+
+  if (bytes_read < *size && inode.i_zone[8] != 0)
+  {
+    uint8_t dind_buffer[MINIX_BLOCK_SIZE];
+    uint16_t *dind_list;
+    uint32_t dind_zone = (uint32_t)inode.i_zone[8];
+    int num_dind = MINIX_INDIRECT_ZONES;
+
+    if (minix_read_block(dind_zone, dind_buffer) != 0)
     {
       kfree(*data);
       return -EIO;
     }
 
-    uint16_t *zone_list = (uint16_t *)indirect_buffer;
-    int num_zones = MINIX_BLOCK_SIZE / sizeof(uint16_t);
-
-    for (int i = 0; i < num_zones && bytes_read < *size; i++)
+    dind_list = (uint16_t *)dind_buffer;
+    for (int d1 = 0; d1 < num_dind && bytes_read < *size; d1++)
     {
-      if (zone_list[i] == 0)
-      {
-        continue;
-      }
+      uint8_t indirect_buffer[MINIX_BLOCK_SIZE];
+      uint16_t *zone_list;
+      uint32_t ind_zone;
+      int num_zones;
 
-      uint8_t block_buffer[MINIX_BLOCK_SIZE];
-      if (minix_read_block(zone_list[i], block_buffer) != 0)
+      if (dind_list[d1] == 0)
+        continue;
+
+      ind_zone = (uint32_t)dind_list[d1];
+      if (minix_read_block(ind_zone, indirect_buffer) != 0)
       {
         kfree(*data);
         return -EIO;
       }
 
-      size_t bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
-                                 ? MINIX_BLOCK_SIZE
-                                 : (*size - bytes_read);
-      kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
-      bytes_read += bytes_to_copy;
+      zone_list = (uint16_t *)indirect_buffer;
+      num_zones = MINIX_BLOCK_SIZE / (int)sizeof(uint16_t);
+      for (int i = 0; i < num_zones && bytes_read < *size; i++)
+      {
+        size_t file_offset = bytes_read;
+
+        if (zone_list[i] == 0)
+          continue;
+
+        {
+          uint8_t block_buffer[MINIX_BLOCK_SIZE];
+          uint32_t disk_block = (uint32_t)zone_list[i];
+          size_t bytes_to_copy;
+
+          if (minix_read_block(disk_block, block_buffer) != 0)
+          {
+            kfree(*data);
+            return -EIO;
+          }
+
+          bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
+                              ? MINIX_BLOCK_SIZE
+                              : (*size - bytes_read);
+          kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+          bytes_read += bytes_to_copy;
+          (void)file_offset;
+        }
+      }
     }
   }
 
   /*
-   * Double-indirect zones are not implemented yet. Report partial coverage
-   * explicitly so callers don't consume truncated data silently.
+   * Double-indirect tail: if still short, report explicitly.
    */
   if (bytes_read < *size)
   {
+    serial_print("[EXEC_ONLY][CLASSIFY] MINIX_OFFSET_SIZE_BUG\n");
     kfree(*data);
     *data = NULL;
     *size = 0;
     return -EFBIG;
+  }
+
+  if (*size > (size_t)MINIX_BLOCK_SIZE * ((size_t)MINIX_DIRECT_ZONES +
+      (size_t)MINIX_INDIRECT_ZONES))
+  {
+    serial_print("[MINIX_FS][CLASSIFY] MINIX_DOUBLE_INDIRECT_OK\n");
   }
 
   return 0;
@@ -2438,6 +3203,9 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
 
 int minix_fs_stat(const char *pathname, stat_t *buf)
 {
+  minix_inode_t inode;
+  uint16_t inode_num;
+
   if (!minix_fs.initialized || !pathname || !buf)
   {
     log_debug_fmt("MINIX", "stat('%s') rejected: init=%d", pathname ? pathname : "(null)",
@@ -2447,38 +3215,39 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
     return -EINVAL;
   }
 
-  minix_inode_t *inode = minix_fs_find_inode(pathname);
-  if (!inode)
+  if (!minix_fs_find_inode(pathname))
   {
     log_debug_fmt("MINIX", "stat('%s') inode not found", pathname);
     return -ENOENT;
   }
 
-  /* Reject inodes with no valid file type (uninitialized/garbage) */
-  if ((inode->i_mode & MINIX_IFMT) == 0)
+  inode_num = minix_fs_get_inode_number(pathname);
+  if (inode_num == 0)
+    return -ENOENT;
+
+  if (minix_read_inode(inode_num, &inode) != 0)
+    return -EIO;
+
+  if ((inode.i_mode & MINIX_IFMT) == 0)
   {
-    log_debug_fmt("MINIX", "stat('%s') invalid mode 0x%x", pathname, inode->i_mode);
+    log_debug_fmt("MINIX", "stat('%s') invalid mode 0x%x", pathname, inode.i_mode);
     return -EIO;
   }
 
-  /* Get inode number */
-  uint16_t inode_num = minix_fs_get_inode_number(pathname);
-
-  // Fill stat structure with UNIX-compatible information
-  buf->st_dev = 0;                 // Device ID (0 for our simple FS)
-  buf->st_ino = inode_num;         // Inode number
-  buf->st_nlink = inode->i_nlinks; // Number of hard links
-  buf->st_uid = inode->i_uid;      // User ID
-  buf->st_gid = inode->i_gid;      // Group ID
-  buf->st_size = inode->i_size;    // File size in bytes
-  buf->st_atime = inode->i_time;   // Access time
-  buf->st_mtime = inode->i_time;   // Modification time
-  buf->st_ctime = inode->i_time;   // Creation time
+  buf->st_dev = 0;
+  buf->st_ino = inode_num;
+  buf->st_nlink = inode.i_nlinks;
+  buf->st_uid = inode.i_uid;
+  buf->st_gid = inode.i_gid;
+  buf->st_size = inode.i_size;
+  buf->st_atime = inode.i_time;
+  buf->st_mtime = inode.i_time;
+  buf->st_ctime = inode.i_time;
 
   // Convert MINIX mode to UNIX mode - simplified approach
   // Since MINIX and UNIX use the same permission bit layout, we can copy
   // directly
-  buf->st_mode = inode->i_mode;
+  buf->st_mode = inode.i_mode;
 
   if (kstrcmp(pathname, "/") == 0)
     log_info_fmt("MINIX", "stat('%s') OK ino=%u mode=0x%x", pathname, inode_num, buf->st_mode);
@@ -2522,40 +3291,24 @@ int minix_fs_chown(const char *path, uid_t owner, gid_t group)
 
 static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
 {
-	void *data = NULL;
-	size_t size = 0;
-	int ret = minix_fs_read_file(path, &data, &size);
+	size_t got = 0;
+	int ret;
+
+	if (offset < 0)
+		return -EINVAL;
+
+	ret = minix_fs_pread_at(path, buf, count, offset, &got);
+	exec_read_trace_vfs_read_file(path, 0, (int64_t)got, offset, count, ret);
 	if (ret != 0)
 		return ret;
-	if (!data && size == 0) {
-		if (read_count) *read_count = 0;
-		return 0;
-	}
-	if (!data)
-		return -EIO;
-	if (offset < 0 || (size_t)offset >= size) {
-		if (read_count) *read_count = 0;
-		kfree(data);
-		return 0;
-	}
-	size_t available = size - (size_t)offset;
-	size_t to_read = (count < available) ? count : available;
-	memcpy(buf, (uint8_t *)data + offset, to_read);
-	if (read_count) *read_count = to_read;
-	kfree(data);
+	if (read_count)
+		*read_count = got;
 	return 0;
 }
 
 static int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
 {
-	int ret;
-
-	if (offset != 0)
-		return -EINVAL;
-	ret = minix_fs_write_file_len(path, buf, count);
-	if (ret == 0 && written_count)
-		*written_count = count;
-	return (ret == -1) ? -EIO : ret;
+	return minix_fs_pwrite_at(path, buf, count, offset, written_count);
 }
 
 static int minix_backend_classified;
@@ -2571,7 +3324,7 @@ static int minix_create(const char *path, mode_t mode)
   if (ret == 0 && !minix_backend_classified)
   {
     minix_backend_classified = 1;
-    serial_print("[MINIX_FS][CLASSIFY] MINIX_BACKEND_ONLY\n");
+    serial_print("[MINIX_FS][CLASSIFY] MINIX_BACKEND_ONLY_CONFIRMED\n");
   }
   return ret;
 }
@@ -2584,14 +3337,14 @@ static int minix_truncate(const char *path, size_t length)
   minix_inode_t *inode_ptr;
   minix_inode_t inode;
   uint16_t inode_num;
-  int zi;
+  size_t old_size;
   int changed;
-
-  if (length != 0)
-    return -ENOSYS;
 
   if (!path || !minix_fs.initialized)
     return -EIO;
+
+  if (length > minix_fs.superblock.s_max_size)
+    return -EFBIG;
 
   inode_ptr = minix_fs_find_inode(path);
   if (!inode_ptr)
@@ -2605,27 +3358,34 @@ static int minix_truncate(const char *path, size_t length)
   if (inode.i_mode & MINIX_IFDIR)
     return -EISDIR;
 
-  changed = 0;
-  for (zi = 0; zi < MINIX_DIRECT_ZONES; zi++)
+  old_size = (size_t)inode.i_size;
+  if (length == old_size)
+    return 0;
+
+  if (length > old_size)
+    return -ENOSYS;
+
+  changed = (length != old_size);
+  if (length == 0)
   {
-    if (inode.i_zone[zi] != 0)
-    {
-      minix_free_zone(inode.i_zone[zi]);
-      inode.i_zone[zi] = 0;
-      changed = 1;
-    }
+    minix_inode_free_all_zones(&inode);
+  }
+  else
+  {
+    minix_inode_truncate_zones(&inode, inode_num, old_size, length);
+    if (minix_read_inode(inode_num, &inode) != 0)
+      return -EIO;
   }
 
-  if (inode.i_size != 0)
-    changed = 1;
-
-  inode.i_size = 0;
+  inode.i_size = (uint32_t)length;
   if (!changed)
     return 0;
 
   inode.i_time = get_system_time();
   if (minix_fs_write_inode(inode_num, &inode) != 0)
     return -EIO;
+
+  serial_print("[MINIX_FS][CLASSIFY] LARGE_FILE_TRUNCATE_OK\n");
   return 0;
 }
 

@@ -91,3 +91,21 @@ int input_event_has_data(void)
 {
     return ev_tail != ev_head;
 }
+
+size_t input_event_queue_depth(void)
+{
+    size_t head;
+    size_t tail;
+    uint64_t irq_flags;
+
+    irq_flags = input_events_irq_save();
+    head = ev_head;
+    tail = ev_tail;
+    input_events_irq_restore(irq_flags);
+
+    if (head >= tail)
+    {
+        return head - tail;
+    }
+    return (INPUT_EVENT_QUEUE_SIZE - tail) + head;
+}

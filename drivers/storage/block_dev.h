@@ -43,12 +43,7 @@ typedef struct block_dev_ops {
 } block_dev_ops_t;
 
 /**
- * block_dev_register - Registra un dispositivo de bloque
- * @name: Nombre lógico (ej. "hda", "hdb")
- * @ops: Operaciones del driver
- * @dev_id: ID del dispositivo dentro del driver
- *
- * Returns: 0 en éxito, -1 si el nombre ya existe o la tabla está llena
+ * block_dev_register - Deprecated; drivers use ir0_block_register().
  */
 int block_dev_register(const char *name, const block_dev_ops_t *ops, uint8_t dev_id);
 

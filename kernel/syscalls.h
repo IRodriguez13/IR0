@@ -85,6 +85,7 @@ int64_t sys_getcwd(char *buf, size_t size);
 int64_t sys_utimensat(int dirfd, const char *pathname,
                       const struct timespec *times, int flags);
 int64_t sys_unlink(const char *pathname);
+int64_t sys_truncate(const char *pathname, off_t length);
 int64_t sys_unlinkat(int dirfd, const char *pathname, int flags);
 int64_t sys_renameat(int olddirfd, const char *oldpath,
                      int newdirfd, const char *newpath);
@@ -94,6 +95,7 @@ int64_t sys_chown(const char *path, uid_t owner, gid_t group);
 int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype);
 int64_t sys_umount(const char *target, int flags);
 int64_t sys_getdents(int fd, void *dirent, size_t count);
+int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags);
 int64_t sys_poll(struct pollfd *fds, unsigned int nfds, int timeout_ms);
 int64_t sys_pipe(int pipefd[2]);
 int64_t sys_pipe2(int pipefd[2], int flags);

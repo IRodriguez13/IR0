@@ -17,9 +17,12 @@
 #include <stddef.h>
 
 #include <ir0/types.h>
+#include <ir0/stat.h>
 
 // Virtual Device Filesystem - /dev
 // Implements Unix "everything is a file" for devices
+
+struct vfs_dirent;
 
 typedef struct {
     const char *name;
@@ -68,6 +71,8 @@ int devfs_fd_can_read(uint32_t device_id, pid_t pid);
 int devfs_fd_can_write(uint32_t device_id, pid_t pid);
 int64_t devfs_open_node(devfs_node_t *node, int flags);
 int64_t devfs_close_node(devfs_node_t *node);
+int devfs_stat_path(const char *path, stat_t *buf);
+int devfs_readdir_root(struct vfs_dirent *entries, int max_entries);
 
 // Standard device implementations
 int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);

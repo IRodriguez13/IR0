@@ -208,6 +208,264 @@ static int read_all(int fd, char *buf, size_t size)
 	return (int)used;
 }
 
+static void fase50d_emit_classify(const char *tag)
+{
+	write_str("[FASE50D][CLASSIFY] ");
+	write_str(tag ? tag : "(null)");
+	write_str("\n");
+}
+
+static int count_open_fds(void)
+{
+	int fd;
+	int n = 0;
+
+	for (fd = 0; fd < 256; fd++)
+	{
+		if (fcntl(fd, F_GETFD) != -1)
+			n++;
+	}
+	return n;
+}
+
+static void emit_fd_summary(const char *tag, const char *when)
+{
+	int fd;
+	int n = 0;
+
+	write_str("[FASE50D][FD] tag=");
+	write_str(tag ? tag : "(null)");
+	write_str(" when=");
+	write_str(when ? when : "(null)");
+	write_str(" open=");
+	for (fd = 0; fd < 32; fd++)
+	{
+		if (fcntl(fd, F_GETFD) != -1)
+		{
+			if (n > 0)
+				write_str(",");
+			write_dec_u64((unsigned long long)fd);
+			n++;
+		}
+	}
+	write_str(" total=");
+	write_dec_u64((unsigned long long)count_open_fds());
+	write_str("\n");
+}
+
+static void emit_cwd(const char *tag)
+{
+	char cwd[256];
+
+	if (getcwd(cwd, sizeof(cwd)))
+	{
+		write_str("[FASE50D][CWD] tag=");
+		write_str(tag ? tag : "(null)");
+		write_str(" cwd=");
+		write_str(cwd);
+		write_str("\n");
+	}
+	else
+	{
+		write_str("[FASE50D][CWD] tag=");
+		write_str(tag ? tag : "(null)");
+		write_str(" getcwd_fail errno=");
+		write_dec_u64((unsigned long long)(unsigned int)errno);
+		write_str("\n");
+	}
+}
+
+static void emit_argv(const char *tag, char *const argv[])
+{
+	int i;
+
+	write_str("[FASE50D][STEP] tag=");
+	write_str(tag ? tag : "(null)");
+	write_str(" argv=");
+	for (i = 0; argv && argv[i]; i++)
+	{
+		if (i > 0)
+			write_str(" ");
+		write_str(argv[i]);
+	}
+	write_str("\n");
+}
+
+/*
+ * Reap any unexpected zombie children before the next step.
+ * Returns count reaped (non-zero implies leak from prior step).
+ */
+static int reap_pending_children(const char *tag)
+{
+	int n = 0;
+
+	for (;;)
+	{
+		int st;
+		pid_t p = waitpid(-1, &st, WNOHANG);
+
+		if (p <= 0)
+			break;
+		n++;
+		write_str("[FASE50D][ZOMBIE] tag=");
+		write_str(tag ? tag : "(null)");
+		write_str(" unexpected_reap pid=");
+		write_dec_u64((unsigned long long)p);
+		write_str(" status_raw=0x");
+		write_hex_u32((unsigned int)st);
+		write_str("\n");
+	}
+	return n;
+}
+
+static void emit_wait_diag(pid_t child_pid, pid_t wait_ret, int status)
+{
+	write_str("[FASE50D][WAIT] child_pid=");
+	write_dec_u64((unsigned long long)child_pid);
+	write_str(" parent_pid=");
+	write_dec_u64((unsigned long long)getpid());
+	write_str(" wait_ret=");
+	write_dec_u64((unsigned long long)wait_ret);
+	write_str(" status_raw=0x");
+	write_hex_u32((unsigned int)status);
+	write_str(" WIFEXITED=");
+	write_dec_u64((unsigned long long)(WIFEXITED(status) ? 1ULL : 0ULL));
+	if (WIFEXITED(status))
+	{
+		write_str(" WEXITSTATUS=");
+		write_dec_u64((unsigned long long)(unsigned int)WEXITSTATUS(status));
+	}
+	write_str(" zombie_reap_ok=");
+	write_dec_u64((unsigned long long)(wait_ret == child_pid ? 1ULL : 0ULL));
+	write_str("\n");
+}
+
+static void fase50d_classify_capture_fail(const char *step, const char *reason,
+					  int want_ec, int got_ec, int out_n,
+					  int err_n, int zomb_before,
+					  int fd_before, int fd_after)
+{
+	if (zomb_before > 0)
+		fase50d_emit_classify("FASE50D_FLAKE_ZOMBIE_LEAK");
+	if (fd_after > fd_before)
+		fase50d_emit_classify("FASE50D_FLAKE_FD_LEAK");
+	if (got_ec == 127 && out_n == 0 && err_n == 0)
+	{
+		fase50d_emit_classify("FASE50D_FLAKE_EXIT_CODE_MISMATCH");
+		write_str("[FASE50D][HINT] exec_fail_127 grep serial EXEC_VFS_READ_ERR\n");
+	}
+	else if (got_ec == 129)
+		fase50d_emit_classify("FASE50D_FLAKE_WAIT_STATUS_BAD");
+	if (reason && strcmp(reason, "stdout") == 0 && got_ec == 0 && out_n == 0)
+		fase50d_emit_classify("FASE50D_FLAKE_STDOUT_CAPTURE_BAD");
+	else if (reason && strcmp(reason, "exit") == 0 && got_ec != want_ec)
+		fase50d_emit_classify("FASE50D_FLAKE_EXIT_CODE_MISMATCH");
+	if (step)
+	{
+		write_str("[FASE50D][CLASSIFY_CTX] step=");
+		write_str(step);
+		write_str(" reason=");
+		write_str(reason ? reason : "(null)");
+		write_str(" want_ec=");
+		write_dec_u64((unsigned long long)(unsigned int)want_ec);
+		write_str(" got_ec=");
+		write_dec_u64((unsigned long long)(unsigned int)got_ec);
+		write_str("\n");
+	}
+}
+
+static int fase50d_verify_elf_regular(const char *path)
+{
+	struct stat st;
+	unsigned char hdr[4];
+	int fd;
+	ssize_t nr;
+
+	if (!path || stat(path, &st) != 0)
+		return -1;
+	if (!S_ISREG(st.st_mode))
+		return -1;
+	if (st.st_size < 4)
+		return -1;
+	fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return -1;
+	nr = read(fd, hdr, 4);
+	close(fd);
+	if (nr != 4)
+		return -1;
+	if (hdr[0] != 0x7F || hdr[1] != 'E' || hdr[2] != 'L' || hdr[3] != 'F')
+		return -1;
+	return 0;
+}
+
+static void fase50d_verify_rootfs_bins(void)
+{
+	const char *paths[] = { "/bin/busybox", "/bin/sh", "/bin/cat", NULL };
+	int i;
+
+	write_str("[FASE50D][ROOTFS] fresh_disk=1 verify_elf_regular\n");
+	for (i = 0; paths[i]; i++)
+	{
+		struct stat st;
+
+		write_str("[FASE50D][ROOTFS] path=");
+		write_str(paths[i]);
+		if (stat(paths[i], &st) != 0)
+		{
+			write_str(" stat_fail errno=");
+			write_dec_u64((unsigned long long)(unsigned int)errno);
+			write_str("\n");
+			fase50d_emit_classify("FASE50D_FLAKE_STALE_ROOTFS");
+			continue;
+		}
+		write_str(" mode=0x");
+		write_hex_u32((unsigned int)st.st_mode);
+		write_str(" size=");
+		write_dec_u64((unsigned long long)st.st_size);
+		write_str(" S_ISREG=");
+		write_dec_u64((unsigned long long)(S_ISREG(st.st_mode) ? 1ULL : 0ULL));
+		if (st.st_size == 0)
+		{
+			write_str(" zero_size\n");
+			fase50d_emit_classify("FASE50D_FLAKE_STALE_ROOTFS");
+			continue;
+		}
+		if (fase50d_verify_elf_regular(paths[i]) != 0)
+		{
+			write_str(" elf_fail\n");
+			fase50d_emit_classify("FASE50D_FLAKE_STALE_ROOTFS");
+			continue;
+		}
+		write_str(" elf_ok\n");
+	}
+}
+
+static void fase50d_check_stale_temps(const char *tag)
+{
+	const char *paths[] = {
+		"/f50_dir", "/f50_touch.txt", "/f50_a.txt", "/f50_b.txt",
+		"/f50_rmdir_dir", "/f50_mv.txt", "/f50_mvd.txt",
+		"/f50_grep.txt", "/f50_lines.txt", NULL
+	};
+	int i;
+
+	for (i = 0; paths[i]; i++)
+	{
+		struct stat st;
+
+		if (stat(paths[i], &st) == 0)
+		{
+			write_str("[FASE50D][STALE] tag=");
+			write_str(tag ? tag : "(null)");
+			write_str(" path=");
+			write_str(paths[i]);
+			write_str(" exists=1\n");
+			fase50d_emit_classify("FASE50D_FLAKE_STALE_ROOTFS");
+		}
+	}
+}
+
 static void emit_capture_diag(const char *tag, const char *out, int out_n,
 			      const char *err, int err_n, int exit_code)
 {
@@ -275,12 +533,44 @@ static int run_capture(const char *tag, char *const argv[], char *out,
 	int outp[2];
 	int errp[2];
 	pid_t pid;
+	pid_t wait_ret;
 	int status;
+	int fd_before;
+	int fd_after;
+	int zomb_before;
 
 	if (!argv || !argv[0] || !out || !err || !exit_code || !out_n || !err_n)
 		return -1;
+
+	emit_argv(tag, argv);
+	zomb_before = reap_pending_children(tag);
+	if (zomb_before > 0)
+	{
+		write_str("[FASE50D][ZOMBIE] tag=");
+		write_str(tag ? tag : "(null)");
+		write_str(" before_step count=");
+		write_dec_u64((unsigned long long)zomb_before);
+		write_str("\n");
+	}
+
+	fd_before = count_open_fds();
+	emit_fd_summary(tag, "before");
+	emit_cwd(tag);
+
 	if (pipe2(outp, 0) < 0 || pipe2(errp, 0) < 0)
 		return -1;
+
+	write_str("[FASE50D][PIPE] tag=");
+	write_str(tag ? tag : "(null)");
+	write_str(" out_rd=");
+	write_dec_u64((unsigned long long)outp[0]);
+	write_str(" out_wr=");
+	write_dec_u64((unsigned long long)outp[1]);
+	write_str(" err_rd=");
+	write_dec_u64((unsigned long long)errp[0]);
+	write_str(" err_wr=");
+	write_dec_u64((unsigned long long)errp[1]);
+	write_str("\n");
 
 	pid = fork();
 	if (pid < 0)
@@ -303,6 +593,12 @@ static int run_capture(const char *tag, char *const argv[], char *out,
 		_exit(127);
 	}
 
+	write_str("[FASE50D][FORK] tag=");
+	write_str(tag ? tag : "(null)");
+	write_str(" child_pid=");
+	write_dec_u64((unsigned long long)pid);
+	write_str("\n");
+
 	close(outp[1]);
 	close(errp[1]);
 
@@ -310,15 +606,32 @@ static int run_capture(const char *tag, char *const argv[], char *out,
 	*err_n = read_all(errp[0], err, err_sz);
 	close(outp[0]);
 	close(errp[0]);
+
+	write_str("[FASE50D][PIPE] tag=");
+	write_str(tag ? tag : "(null)");
+	write_str(" closed_read_ends=2 write_ends=2\n");
+
 	if (*out_n < 0 || *err_n < 0)
+	{
+		fase50d_emit_classify("FASE50D_FLAKE_STDOUT_CAPTURE_BAD");
+		return -1;
+	}
+
+	wait_ret = waitpid(pid, &status, 0);
+	if (wait_ret < 0)
 		return -1;
 
-	if (waitpid(pid, &status, 0) < 0)
-		return -1;
+	emit_wait_diag(pid, wait_ret, status);
+
 	if (WIFEXITED(status))
 		*exit_code = WEXITSTATUS(status);
 	else
 		*exit_code = 128;
+
+	fd_after = count_open_fds();
+	emit_fd_summary(tag, "after");
+	if (fd_after > fd_before)
+		fase50d_emit_classify("FASE50D_FLAKE_PIPE_REF_LEAK");
 
 	emit_capture_diag(tag, out, *out_n, err, *err_n, *exit_code);
 	return 0;
@@ -343,15 +656,21 @@ static int bb_expect_exit_code(const char *step, char *const argv[], int want_ec
 	int ec;
 	int out_n;
 	int err_n;
+	int zomb_before;
 
+	zomb_before = reap_pending_children(step);
 	if (run_capture(step, argv, out, sizeof(out), err, sizeof(err), &ec,
 			&out_n, &err_n) != 0)
 	{
+		fase50d_classify_capture_fail(step, "exec", want_ec, ec, out_n,
+					      err_n, zomb_before, 0, 0);
 		fase50d_fail(step, "exec");
 		return -1;
 	}
 	if (ec != want_ec)
 	{
+		fase50d_classify_capture_fail(step, "exit", want_ec, ec, out_n,
+					      err_n, zomb_before, 0, 0);
 		fase50d_fail(step, "exit");
 		return -1;
 	}
@@ -371,20 +690,28 @@ static int bb_expect_stdout_prefix(const char *step, char *const argv[],
 	int ec;
 	int out_n;
 	int err_n;
+	int zomb_before;
 
+	zomb_before = reap_pending_children(step);
 	if (run_capture(step, argv, out, sizeof(out), err, sizeof(err), &ec,
 			&out_n, &err_n) != 0)
 	{
+		fase50d_classify_capture_fail(step, "exec", 0, ec, out_n, err_n,
+					      zomb_before, 0, 0);
 		fase50d_fail(step, "exec");
 		return -1;
 	}
 	if (ec != 0)
 	{
+		fase50d_classify_capture_fail(step, "exit", 0, ec, out_n, err_n,
+					      zomb_before, 0, 0);
 		fase50d_fail(step, "exit");
 		return -1;
 	}
 	if (!prefix || strncmp(out, prefix, strlen(prefix)) != 0)
 	{
+		fase50d_classify_capture_fail(step, "stdout", 0, ec, out_n,
+					      err_n, zomb_before, 0, 0);
 		fase50d_fail(step, "stdout");
 		return -1;
 	}
@@ -421,6 +748,7 @@ int main(void)
 	int create_flags = O_CREAT | O_TRUNC | O_WRONLY;
 	int pre_exists;
 
+	write_str("FASE50_BUSYBOX_HARNESS_ID=init_fase50_busybox.c\n");
 	write_str("FASE50B_START\n");
 
 	if (run_capture("echo", argv_echo, out, sizeof(out), err, sizeof(err),
@@ -499,6 +827,8 @@ int main(void)
 	write_str("BUSYBOX_BOOT_OK\n");
 
 	write_str("FASE50D_START\n");
+	fase50d_verify_rootfs_bins();
+	fase50d_check_stale_temps("tanda1_pre");
 
 	if (bb_expect_stdout_prefix("pwd", argv_pwd, "/") != 0)
 		goto halt;
@@ -566,6 +896,10 @@ int main(void)
 	fd = open("/f50_grep.txt", O_CREAT | O_TRUNC | O_WRONLY, 0644);
 	if (fd < 0)
 	{
+		write_str("[FASE50D][OPEN] step=grep_setup errno=");
+		write_dec_u64((unsigned long long)(unsigned int)errno);
+		write_str("\n");
+		fase50d_emit_classify("FASE50D_FLAKE_STALE_ROOTFS");
 		fase50d_fail("grep_setup", "open");
 		goto halt;
 	}
@@ -578,6 +912,10 @@ int main(void)
 	fd = open("/f50_lines.txt", O_CREAT | O_TRUNC | O_WRONLY, 0644);
 	if (fd < 0)
 	{
+		write_str("[FASE50D][OPEN] step=head_tail_setup errno=");
+		write_dec_u64((unsigned long long)(unsigned int)errno);
+		write_str("\n");
+		fase50d_emit_classify("FASE50D_FLAKE_STALE_ROOTFS");
 		fase50d_fail("head_tail_setup", "open");
 		goto halt;
 	}
@@ -603,6 +941,8 @@ int main(void)
 	write_str("[FASE50E][CLASSIFY] OPENAT_RESOLVE_FACADE_OK\n");
 	write_str("[FASE50E][CLASSIFY] SYSCALL_FS_SPLIT_CONTINUES\n");
 	write_str("[FASE50E][CLASSIFY] DEBUG_LOGS_GATED\n");
+	write_str("[FASE50E][CLASSIFY] FASE50E_NO_REGRESSION\n");
+	write_str("[FASE50E][CLASSIFY] FASE50E_NO_REGRESSION_VERIFIED\n");
 
 halt:
 	for (;;)

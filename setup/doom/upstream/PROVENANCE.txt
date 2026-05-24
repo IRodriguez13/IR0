@@ -1,0 +1,21 @@
+Upstream source provenance for FASE55D vendor-minimal import
+=============================================================
+
+Repository:
+  https://github.com/ozkl/doomgeneric.git
+
+Commit:
+  dcb7a8dbc7a16ce3dda29382ac9aae9d77d21284
+
+Import date:
+  2026-05-23
+
+Imported subset:
+  - doomgeneric/*.h (all headers from upstream doomgeneric directory)
+  - doomgeneric/*.c only files listed in upstream Makefile SRC_DOOM,
+    excluding doomgeneric_xlib.c (platform backend replaced by doomgeneric_ir0.c)
+  - LICENSE, README.md, README.TXT from upstream repository root
+
+Reason:
+  Keep a minimal, reproducible source set for the first IR0 doomgeneric
+  userspace bring-up while preserving upstream traceability.

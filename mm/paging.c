@@ -1162,6 +1162,24 @@ void paging_fase42_checkpoint(const char *tag, int32_t pid)
     serial_print("\n");
 }
 
+void paging_fase42_category_stats(uint64_t *user_alloc, uint64_t *user_free,
+                                  uint64_t *pt_alloc, uint64_t *pt_free,
+                                  uint64_t *kernel_alloc, uint64_t *kernel_free)
+{
+    if (user_alloc)
+        *user_alloc = fase42_frame_user_alloc;
+    if (user_free)
+        *user_free = fase42_frame_user_free;
+    if (pt_alloc)
+        *pt_alloc = fase42_frame_pt_alloc;
+    if (pt_free)
+        *pt_free = fase42_frame_pt_free;
+    if (kernel_alloc)
+        *kernel_alloc = fase42_frame_kernel_alloc;
+    if (kernel_free)
+        *kernel_free = fase42_frame_kernel_free;
+}
+
 static fase42_frame_type_t paging_fase47_frame_type(uintptr_t phys)
 {
     return fase42_get_frame_type((uint64_t)phys);

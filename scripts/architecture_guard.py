@@ -98,6 +98,12 @@ DEBUG_BINS_TEST_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*"test/')
 
 DEBUG_BINS_KTEST_CMD = ROOT / "debug_bins" / "cmd_ktest.c"
 
+DEVFS_USERCOPY_RE = re.compile(r"\bcopy_(to|from)_user\s*\(")
+DEVFS_USERCOPY_WHITELIST = {
+    "dev_audio_ioctl",
+    "dev_fb0_ioctl",
+}
+
 DIRS_BLUETOOTH_INCLUDE_SCAN = [
     ROOT / "arch",
     ROOT / "debug_bins",
@@ -385,6 +391,34 @@ def check_bluetooth_subdir_include_policy():
     return errors
 
 
+def check_devfs_usercopy_contract():
+    errors = []
+    devfs_path = ROOT / "fs" / "devfs.c"
+    if not devfs_path.exists():
+        return errors
+
+    try:
+        lines = devfs_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception as exc:
+        errors.append(f"[read-error] {devfs_path}: {exc}")
+        return errors
+
+    current_fn = None
+    fn_re = re.compile(r'^\s*(?:static\s+)?(?:inline\s+)?[A-Za-z_][A-Za-z0-9_\s\*]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+
+    for idx, line in enumerate(lines, start=1):
+        m = fn_re.match(line)
+        if m:
+            current_fn = m.group(1)
+        if DEVFS_USERCOPY_RE.search(line):
+            if current_fn not in DEVFS_USERCOPY_WHITELIST:
+                rel = devfs_path.relative_to(ROOT)
+                errors.append(
+                    f"[devfs-io-contract-usercopy] {rel}:{idx}: {line.strip()} (fn={current_fn})"
+                )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -401,6 +435,7 @@ def main():
     errors.extend(check_fs_no_mm_includes())
     errors.extend(check_debug_bins_test_include_policy())
     errors.extend(check_bluetooth_subdir_include_policy())
+    errors.extend(check_devfs_usercopy_contract())
 
     if errors:
         print("[arch-guard] FAILED")
@@ -409,6 +444,7 @@ def main():
         return 1
 
     print("[arch-guard] OK")
+    print("DEVFS_IO_CONTRACT_OK")
     return 0
 
 

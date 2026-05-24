@@ -11,6 +11,7 @@
 /* Linux uapi/fcntl.h */
 #define IR0_AT_FDCWD        (-100)
 #define IR0_AT_SYMLINK_NOFOLLOW 0x100
+#define IR0_AT_EACCESS      0x200
 
 /* Linux uapi/linux/time.h */
 #define IR0_UTIME_NOW       ((1L << 30) - 1L)

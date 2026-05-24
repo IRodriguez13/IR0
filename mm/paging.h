@@ -169,6 +169,9 @@ void paging_reclaim_lower_half_tables(uint64_t *pml4);
 void paging_fase42_note_pml4_created(uint64_t pml4_phys);
 void paging_fase42_note_pml4_freed(uint64_t pml4_phys);
 void paging_fase42_checkpoint(const char *tag, int32_t pid);
+void paging_fase42_category_stats(uint64_t *user_alloc, uint64_t *user_free,
+                                  uint64_t *pt_alloc, uint64_t *pt_free,
+                                  uint64_t *kernel_alloc, uint64_t *kernel_free);
 void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
                                       uint64_t mm_created, uint64_t mm_destroyed);
 

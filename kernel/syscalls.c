@@ -44,9 +44,13 @@
 #include <ir0/errno.h>
 #include <ir0/copy_user.h>
 #include <ir0/path_user.h>
+#include <ir0/path_routed.h>
 #include <ir0/uio.h>
 #include <ir0/utimens.h>
 #include <ir0/fase50_debug.h>
+#include <ir0/fase51_debug.h>
+#include <ir0/fase52_debug.h>
+#include <ir0/fb.h>
 #include <ir0/permissions.h>
 #include <ir0/chmod.h>
 #include <ir0/fcntl.h>
@@ -69,6 +73,7 @@
 /* Forward declarations */
 fd_entry_t *get_process_fd_table(void);
 int64_t sys_unlink(const char *pathname);
+int64_t sys_truncate(const char *pathname, off_t length);
 static void init_syscall_table(void);
 static void fase39_dump_current_vmas(const char *tag);
 static int64_t sys_pipe_install(int pipefd[2], int flags);
@@ -441,11 +446,6 @@ void ensure_devfs_init(void)
     devfs_init();
     devfs_initialized = 1;
   }
-}
-
-static int is_dev_path(const char *path)
-{
-  return path && strncmp(path, "/dev/", 5) == 0;
 }
 
 /**
@@ -901,6 +901,14 @@ int64_t sys_exec(const char *pathname,
     serial_print("\n");
   }
 
+  fase51_dbg_exec_argv(path_to_use,
+                       argc_kept > 0 ? kernel_argv[0] : NULL,
+                       argc_kept > 1 ? kernel_argv[1] : NULL);
+  fase52_dbg_exec_argv(path_to_use,
+                       argc_kept > 0 ? kernel_argv[0] : NULL,
+                       argc_kept > 1 ? kernel_argv[1] : NULL,
+                       envp ? 1ULL : 0ULL);
+
   if (envp)
   {
     int i;
@@ -1264,6 +1272,8 @@ int64_t sys_uname(struct utsname *buf)
  */
 int64_t sys_access(const char *pathname, int mode)
 {
+  int64_t rc;
+
   if (!current_process || !pathname)
     return -EFAULT;
 
@@ -1283,34 +1293,40 @@ int64_t sys_access(const char *pathname, int mode)
     path_to_use = resolved;
   }
 
-  stat_t st;
-  int stat_ok = 0;
-  if (is_proc_path(path_to_use))
-    stat_ok = (proc_stat(path_to_use, &st) == 0);
-  else if (is_sys_path(path_to_use))
-    stat_ok = (sysfs_stat(path_to_use, &st) == 0);
-  else if (is_dev_path(path_to_use))
-  {
-    ensure_devfs_init();
-    stat_ok = (devfs_find_node(path_to_use) != NULL);
-  }
-  else
-    stat_ok = (vfs_stat(path_to_use, &st) == 0);
+  rc = ir0_access_path_routed(path_to_use, mode,
+                              (uid_t)current_process->euid,
+                              (gid_t)current_process->egid);
+  fase52_dbg_access(path_to_use, mode, (int)rc);
+  return rc;
+}
 
-  if (!stat_ok)
-    return -ENOENT;
+int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
+{
+  char resolved[256];
+  int rc;
+  int masked_flags;
 
-  if (mode == 0) /* F_OK */
-    return 0;
+  if (!current_process || !pathname)
+    return -EFAULT;
+  masked_flags = flags & ~(IR0_AT_EACCESS | IR0_AT_SYMLINK_NOFOLLOW);
+  if (masked_flags != 0)
+    return -EINVAL;
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
 
-  int access_mode = 0;
-  if (mode & 4) access_mode |= ACCESS_READ;   /* R_OK */
-  if (mode & 2) access_mode |= ACCESS_WRITE; /* W_OK */
-  if (mode & 1) access_mode |= ACCESS_EXEC;  /* X_OK */
+  rc = ir0_resolve_user_path_at(dirfd, pathname, resolved, sizeof(resolved),
+                                current_process->cwd);
+  if (rc != 0)
+    return rc;
 
-  if (access_mode && !check_file_access(path_to_use, access_mode, current_process))
-    return -EACCES;
-  return 0;
+  /*
+   * IR0 currently evaluates access permissions against effective IDs.
+   * AT_EACCESS is accepted and maps to this same behavior.
+   * AT_SYMLINK_NOFOLLOW is accepted as a no-op because symlinks are not implemented.
+   */
+  return ir0_access_path_routed(resolved, mode,
+                                (uid_t)current_process->euid,
+                                (gid_t)current_process->egid);
 }
 
 /**
@@ -1817,36 +1833,41 @@ int64_t sys_close(int fd)
   if (!fd_table[fd].in_use)
     return -EBADF;
 
-  if (fd <= 2 && !fd_table[fd].is_pipe)
-    return -EBADF;
-
-  /* Check if this is a pipe */
-  if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
   {
-    pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
+    int was_pipe = fd_table[fd].is_pipe ? 1 : 0;
 
-    pipe_fase49_fd_trace((uint32_t)current_process->task.pid, fd, pipe,
-			 fd_table[fd].pipe_end, pipe->fd_refs, "CLOSE");
-    pipe_close_end(pipe, fd_table[fd].pipe_end);
-    pipe_wake_all(pipe);
-    fd_table[fd].vfs_file = NULL;
+    if (fd <= 2 && !fd_table[fd].is_pipe)
+      return -EBADF;
+
+    /* Check if this is a pipe */
+    if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
+    {
+      pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
+
+      pipe_fase49_fd_trace((uint32_t)current_process->task.pid, fd, pipe,
+			   fd_table[fd].pipe_end, pipe->fd_refs, "CLOSE");
+      pipe_close_end(pipe, fd_table[fd].pipe_end);
+      pipe_wake_all(pipe);
+      fd_table[fd].vfs_file = NULL;
+    }
+    else if (fd_table[fd].vfs_file)
+    {
+      struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
+
+      vfs_close(vfs_file);
+      fd_table[fd].vfs_file = NULL;
+    }
+
+    fd_table[fd].in_use = false;
+    fd_table[fd].is_pipe = false;
+    fd_table[fd].pipe_end = -1;
+    fd_table[fd].path[0] = '\0';
+    fd_table[fd].flags = 0;
+    fd_table[fd].fd_flags = 0;
+    fd_table[fd].offset = 0;
+    fase48_note_fd_destroyed();
+    fase51_dbg_close(fd, was_pipe, 0);
   }
-  else if (fd_table[fd].vfs_file)
-  {
-    struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-
-    vfs_close(vfs_file);
-    fd_table[fd].vfs_file = NULL;
-  }
-
-  fd_table[fd].in_use = false;
-  fd_table[fd].is_pipe = false;
-  fd_table[fd].pipe_end = -1;
-  fd_table[fd].path[0] = '\0';
-  fd_table[fd].flags = 0;
-  fd_table[fd].fd_flags = 0;
-  fd_table[fd].offset = 0;
-  fase48_note_fd_destroyed();
 
   return 0;
 }
@@ -1891,6 +1912,7 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     if (new_offset < 0)
       return -EINVAL;
     fd_table[fd].offset = (uint64_t)new_offset;
+    fase52_dbg_lseek(fd, offset, whence, new_offset);
     return new_offset;
   }
 
@@ -1900,6 +1922,7 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     if (result < 0)
       return result;
     fd_table[fd].offset = (uint64_t)result;
+    fase52_dbg_lseek(fd, offset, whence, result);
     return result;
   }
 
@@ -1918,6 +1941,7 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
   if (new_offset < 0)
     return -EINVAL;
   fd_table[fd].offset = (uint64_t)new_offset;
+  fase52_dbg_lseek(fd, offset, whence, new_offset);
   return new_offset;
 }
 
@@ -2008,6 +2032,7 @@ int64_t sys_dup2(int oldfd, int newfd)
   }
 
   fase48_note_fd_created();
+  fase51_dbg_dup2(oldfd, newfd, newfd);
   return newfd;
 }
 
@@ -2077,6 +2102,7 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
     serial_print_hex64((uint64_t)ret);
     serial_print("\n");
     fase50_trace_syscall_proc("sys_wait4-return", current_process);
+    fase51_dbg_wait4((int64_t)pid, ret);
     return ret;
   }
 }
@@ -2313,6 +2339,8 @@ struct robust_list_head
  */
 int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 {
+  uint64_t uptime_ms;
+
   if (!current_process || !tp)
     return -EFAULT;
 
@@ -2321,6 +2349,14 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 
   if (clock_id != 0 && clock_id != 1)
     return -EINVAL;
+
+  if (clock_id == 1)
+  {
+    uptime_ms = clock_get_uptime_milliseconds();
+    tp->tv_sec = (time_t)(uptime_ms / 1000);
+    tp->tv_nsec = (long)((uptime_ms % 1000) * 1000000UL);
+    return 0;
+  }
 
   {
     struct timeval tv;
@@ -2627,6 +2663,7 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
     }
   }
 
+  fase51_dbg_pipe2(read_fd, write_fd, flags, 0);
   return 0;
 }
 
@@ -2703,6 +2740,7 @@ int64_t sys_brk(void *addr)
   /* Set new break */
   current_process->heap_end = new_brk;
   fase39_dump_current_vmas("brk");
+  fase52_dbg_brk(addr, (int64_t)new_brk);
   return (int64_t)new_brk;
 }
 
@@ -2999,10 +3037,17 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     {
       uint32_t device_id = (uint32_t)(fd - FD_DEV_BASE);
 #if CONFIG_ENABLE_VBE
-      if (device_id == 15 && video_backend_is_available())
+      if (device_id == 15)
       {
-        uint32_t fb_phys = video_backend_get_fb_phys();
-        uint32_t fb_size = video_backend_get_fb_size();
+        struct ir0_fb_info fb_info;
+        uint32_t fb_phys;
+        uint32_t fb_size;
+
+        if (!ir0_fb_get_info(&fb_info))
+          return SYSCALL_PTR_ERR(ENODEV);
+
+        fb_phys = fb_info.fb_phys;
+        fb_size = fb_info.fb_size;
         if (fb_phys == 0 || fb_size == 0)
           return SYSCALL_PTR_ERR(ENODEV);
 
@@ -3252,6 +3297,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   mmap_audit_log_return("ok", ret, virt_addr_out, aligned_len, vma_inserted,
                         current_process->page_directory);
   serial_print("[MMAP_AUDIT][CLASSIFY] BUSYBOX_NEXT_SYSCALL_REACHED stage=mmap-return-ok\n");
+  fase52_dbg_mmap(addr, length, prot, flags, fd, offset, ret);
   return ret;
 }
 
@@ -3309,6 +3355,7 @@ int sys_munmap(void *addr, size_t length)
       serial_print("\n");
       paging_fase42_checkpoint("munmap-after", (int32_t)current_process->task.pid);
       fase39_dump_current_vmas("munmap");
+      fase52_dbg_munmap(addr, length, 0);
       return 0;
     }
     prev = current;
@@ -3374,11 +3421,13 @@ int sys_mprotect(void *addr, size_t len, int prot)
           return -ENOMEM;
       }
 
+      fase52_dbg_mprotect(addr, len, prot, 0);
       return 0;
     }
     current = current->next;
   }
 
+  fase52_dbg_mprotect(addr, len, prot, -EINVAL);
   return -EINVAL; /* Not found */
 }
 
@@ -3388,6 +3437,8 @@ int sys_mprotect(void *addr, size_t len, int prot)
 
 int64_t sys_chdir(const char *pathname)
 {
+  int64_t ret;
+
   if (!current_process || !pathname)
     return -EFAULT;
 
@@ -3415,20 +3466,19 @@ int64_t sys_chdir(const char *pathname)
 
   /* Verify directory exists */
   stat_t st;
-  int64_t ret = vfs_stat(new_path, &st);
+  ret = ir0_stat_path_routed(new_path, &st);
 
   if (ret < 0)
     return ret;
   if (!S_ISDIR(st.st_mode))
     return -ENOTDIR;
 
-  /* Check execute permission on directory before changing to it.
-   * In Unix, you need execute permission on a directory to enter it (cd).
-   */
-  if (!check_file_access(new_path, ACCESS_EXEC, current_process))
-  {
-    return -EACCES;  /* Permission denied - no execute permission on directory */
-  }
+  /* In Unix, entering a directory requires execute permission on that path. */
+  ret = ir0_access_path_routed(new_path, 1,
+                               (uid_t)current_process->euid,
+                               (gid_t)current_process->egid);
+  if (ret != 0)
+    return ret;
 
   /* Update current working directory */
   strncpy(current_process->cwd, new_path, sizeof(current_process->cwd) - 1);
@@ -3509,6 +3559,27 @@ int64_t sys_unlink(const char *pathname)
   return vfs_unlink(resolved);
 }
 
+int64_t sys_truncate(const char *pathname, off_t length)
+{
+  char resolved[256];
+  int rc;
+
+  if (!current_process || !pathname)
+    return -EFAULT;
+  if (length < 0)
+    return -EINVAL;
+
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                            current_process->cwd);
+  if (rc != 0)
+    return rc;
+
+  return vfs_truncate(resolved, (size_t)length);
+}
+
 /* Linux dirent structure for getdents/getdents64 */
 struct linux_dirent64 {
   uint64_t d_ino;
@@ -3568,15 +3639,16 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
   
   /* Get stat to verify it's a directory */
   stat_t st;
-  if (sys_stat(path, &st) < 0)
+  if (ir0_stat_path_routed(path, &st) < 0)
     return -ENOTDIR;
   
   if (!S_ISDIR(st.st_mode))
     return -ENOTDIR;
   
-  /* Use VFS readdir to get directory entries */
-  static struct vfs_dirent entries[32];
-  int entry_count = vfs_readdir(path, entries, 32);
+  /* Route readdir through pseudo-fs facade. */
+  struct vfs_dirent entries[64];
+  int entry_count;
+  entry_count = ir0_getdents_path_routed(path, entries, 64);
   
   if (entry_count < 0)
     return entry_count;
@@ -3601,7 +3673,7 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
     
     struct linux_dirent64 *dent = (struct linux_dirent64 *)(kernel_buf + buf_offset);
     dent->d_ino = (uint64_t)(i + 1);
-    dent->d_off = 0;  /* Not used in our implementation */
+    dent->d_off = (int64_t)(buf_offset + reclen);
     dent->d_reclen = (unsigned short)reclen;
     
     /* Determine type from entry or stat */
@@ -3620,7 +3692,7 @@ int64_t sys_getdents(int fd, void *dirent, size_t count)
       else
         snprintf(full_path, sizeof(full_path), "%s/%s", path, entries[i].name);
       stat_t entry_st;
-      if (sys_stat(full_path, &entry_st) >= 0)
+      if (ir0_stat_path_routed(full_path, &entry_st) >= 0)
       {
         if (S_ISDIR(entry_st.st_mode))
           dent->d_type = DT_DIR;
@@ -3733,11 +3805,13 @@ WRAP1(sys_close, int)
 WRAP3(sys_waitpid, pid_t, int *, int)
 WRAP2(sys_link, const char *, const char *)
 WRAP2(sys_rename, const char *, const char *)
+WRAP2(sys_truncate, const char *, off_t)
 WRAP1(sys_unlink, const char *)
 WRAP3(sys_unlinkat, int, const char *, int)
 WRAP4(sys_renameat, int, const char *, int, const char *)
 WRAP1(sys_uname, struct utsname *)
 WRAP2(sys_access, const char *, int)
+WRAP4(sys_faccessat, int, const char *, int, int)
 WRAP1(sys_dup, int)
 WRAP3(sys_exec, const char *, char *const *, char *const *)
 WRAP1(sys_chdir, const char *)
@@ -3892,10 +3966,12 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_link]           = wrap_sys_link;
   syscall_table_rw[__NR_rename]         = wrap_sys_rename;
   syscall_table_rw[__NR_unlink]         = wrap_sys_unlink;
+  syscall_table_rw[__NR_truncate]       = wrap_sys_truncate;
   syscall_table_rw[__NR_unlinkat]       = wrap_sys_unlinkat;
   syscall_table_rw[__NR_renameat]       = wrap_sys_renameat;
   syscall_table_rw[__NR_uname]          = wrap_sys_uname;
   syscall_table_rw[__NR_access]         = wrap_sys_access;
+  syscall_table_rw[__NR_faccessat]      = wrap_sys_faccessat;
   syscall_table_rw[__NR_dup]            = wrap_sys_dup;
   syscall_table_rw[__NR_chmod]         = wrap_sys_chmod;
   syscall_table_rw[__NR_chown]          = wrap_sys_chown;
@@ -3904,6 +3980,7 @@ static void init_syscall_table(void)
   syscall_table_rw[__NR_arch_prctl]     = wrap_sys_arch_prctl;
   syscall_table_rw[__NR_set_tid_address] = wrap_sys_set_tid_address;
   syscall_table_rw[__NR_openat]         = wrap_sys_openat;
+  syscall_table_rw[__NR_getdents64]     = wrap_sys_getdents;
   syscall_table_rw[__NR_newfstatat]     = wrap_sys_newfstatat;
   syscall_table_rw[__NR_futex]          = wrap_sys_futex;
   syscall_table_rw[__NR_clock_gettime]  = wrap_sys_clock_gettime;

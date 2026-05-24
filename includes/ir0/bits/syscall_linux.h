@@ -89,6 +89,7 @@
 #define __NR_truncate      76
 #define __NR_ftruncate     77
 #define __NR_getdents      78
+#define __NR_getdents64   217
 #define __NR_getcwd        79
 #define __NR_chdir         80
 #define __NR_fchdir        81
@@ -137,6 +138,7 @@
 #define __NR_getrandom       318
 #define __NR_prlimit64       302
 #define __NR_openat          257
+#define __NR_faccessat       269
 #define __NR_newfstatat      262
 #define __NR_unlinkat        263
 #define __NR_renameat        264

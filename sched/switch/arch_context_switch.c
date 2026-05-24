@@ -17,6 +17,7 @@
 #include <ir0/serial_io.h>
 #include <config.h>
 #include <mm/paging.h>
+#include <pmm.h>
 
 #if defined(ARCH_ARM64)
 extern void switch_context_arm64(task_t *prev, task_t *next);
@@ -161,8 +162,18 @@ void arch_context_switch(task_t *prev, task_t *next)
         wait_exit_audit_ctx_resume(prev_proc, next_proc, next);
         serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] RESUME_GATE_USES_NEXT_FIXED\n");
         serial_print("[WAIT_EXIT_AUDIT][CTX] resume_path=arch_switch_to_user_task\n");
+        /*
+         * Tear down the zombie child mm only after switching CR3 to the
+         * waiting parent.  Reaping while the exiting child's CR3 is still
+         * active unmaps the running page tables and faults mid-destroy.
+         */
+        if (next && next->cr3)
+            load_page_directory(next->cr3);
+        process_reap_zombie_on_wait_resume(next_proc,
+                                           (pid_t)next_proc->syscall_resume_rax);
         process_apply_syscall_frame_to_task(&next_proc->task, frame,
                                             next_proc->syscall_resume_rax);
+        next_proc->wait_status_ptr = NULL;
         next_proc->irq_frame_saved = 0;
         if (next)
         {

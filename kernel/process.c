@@ -30,6 +30,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/copy_user.h>
 #include <ir0/fcntl.h>
+#include <ir0/fase51_debug.h>
 #include <mm/pmm.h>
 #include <config.h>
 
@@ -2522,6 +2523,7 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	child->saved_context = NULL;
 	child->poll_waiter = NULL;
 	child->irq_frame_saved = 0;
+	child->wait_status_ptr = NULL;
 	child->syscall_resume_rax = 0;
 	child->fase44_audit_state = FASE44_PROC_ALIVE;
 	child->page_directory = NULL;
@@ -2857,6 +2859,79 @@ void process_reap_zombies(process_t *parent)
 	process_fase44_list_checkpoint("reap-zombie-after");
 }
 
+static void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
+{
+	int status_val;
+	int *status_ptr;
+	int copy_ret;
+
+	if (!parent || !child || !parent->irq_frame_saved)
+		return;
+
+	status_val = (child->exit_code & 0xFF) << 8;
+	status_ptr = parent->wait_status_ptr;
+	if (!status_ptr)
+		status_ptr = (int *)(uintptr_t)parent->syscall_frame.rsi;
+
+	copy_ret = -1;
+	if (status_ptr && parent->page_directory &&
+	    validate_userspace_buffer(status_ptr, sizeof(int)) == 0)
+	{
+		copy_ret = copy_to_user_region_in_directory(parent->page_directory,
+							    (uintptr_t)status_ptr,
+							    &status_val,
+							    sizeof(int));
+	}
+
+	fase51_dbg_wait_wake((uint32_t)parent->task.pid, (uint32_t)child->task.pid,
+			     status_ptr, status_val, copy_ret);
+	parent->syscall_resume_rax = (uint64_t)child->task.pid;
+	parent->state = PROCESS_READY;
+}
+
+void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)
+{
+	process_t *child;
+	size_t used_frames_before = 0;
+	size_t used_frames_after = 0;
+
+	if (!parent || child_pid <= 0)
+		return;
+
+	child = process_find_by_pid(child_pid);
+	if (!child || child->state != PROCESS_ZOMBIE ||
+	    child->ppid != parent->task.pid)
+		return;
+
+	pmm_stats(NULL, &used_frames_before, NULL);
+	process_fase43_proc_audit("wait-resume-before-reap");
+	fase44_reap_zombie(child, parent->task.pid, "wait-resume");
+	pmm_stats(NULL, &used_frames_after, NULL);
+	process_fase44_list_checkpoint("wait-resume-after");
+	process_fase43_proc_audit("wait-resume-after-reap");
+	serial_print("[FASE41][WAIT_REAP] parent_pid=");
+	serial_print_hex32((uint32_t)parent->task.pid);
+	serial_print(" child_pid=");
+	serial_print_hex32((uint32_t)child_pid);
+	serial_print(" used_before=");
+	serial_print_hex64((uint64_t)used_frames_before);
+	serial_print(" used_after=");
+	serial_print_hex64((uint64_t)used_frames_after);
+	serial_print(" delta=");
+	if (used_frames_after >= used_frames_before)
+		serial_print_hex64((uint64_t)(used_frames_after - used_frames_before));
+	else
+		serial_print_hex64((uint64_t)(used_frames_before - used_frames_after));
+	serial_print(" sign=");
+	serial_print(used_frames_after <= used_frames_before ? "-" : "+");
+	serial_print("\n");
+	serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] ");
+	serial_print(used_frames_after <= used_frames_before ?
+		     "PMM_RECLAIM_ON_WAIT_OK" : "PMM_RECLAIM_ON_WAIT_PARTIAL");
+	serial_print("\n");
+	paging_fase42_checkpoint("wait-resume-after", (int32_t)parent->task.pid);
+}
+
 __attribute__((noreturn)) void process_exit(int code)
 {
 	process_t *dying = current_process;
@@ -2937,11 +3012,7 @@ __attribute__((noreturn)) void process_exit(int code)
 		{
 			send_signal(parent->task.pid, SIGCHLD);
 			if (parent->state == PROCESS_BLOCKED)
-			{
-				parent->state = PROCESS_READY;
-				if (parent->irq_frame_saved)
-					parent->syscall_resume_rax = (uint64_t)dying->task.pid;
-			}
+				process_wait_wake_blocked_parent(parent, dying);
 		}
 		else if (!parent || parent->state == PROCESS_ZOMBIE)
 		{
@@ -2954,11 +3025,7 @@ __attribute__((noreturn)) void process_exit(int code)
 					parent_state_before = parent->state;
 				send_signal(parent->task.pid, SIGCHLD);
 				if (parent->state == PROCESS_BLOCKED)
-				{
-					parent->state = PROCESS_READY;
-					if (parent->irq_frame_saved)
-						parent->syscall_resume_rax = (uint64_t)dying->task.pid;
-				}
+					process_wait_wake_blocked_parent(parent, dying);
 			}
 		}
 		wait_exit_audit_process_exit(dying, parent, parent_state_before);
@@ -3182,6 +3249,8 @@ int process_wait(pid_t pid, int *status, int options)
 				else if (copy_to_user(status, &status_val, sizeof(int)) != 0)
 					return -EFAULT;
 			}
+			current_process->wait_status_ptr = NULL;
+			current_process->irq_frame_saved = 0;
 			serial_print("[FASE41][WAIT] pid=");
 			serial_print_hex32((uint32_t)current_process->task.pid);
 			serial_print(" child=");
@@ -3219,6 +3288,7 @@ int process_wait(pid_t pid, int *status, int options)
 			                                    &current_process->syscall_frame,
 			                                    0);
 			current_process->syscall_resume_rax = 0;
+			current_process->wait_status_ptr = status;
 			current_process->irq_frame_saved = 1;
 			wait_exit_audit_classify_user_frame("parent-after-wait-arm", current_process);
 		}
