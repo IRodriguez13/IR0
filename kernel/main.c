@@ -36,6 +36,7 @@
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
+#include <ir0/fb.h>
 #include <ir0/multiboot.h>
 #include "ipc.h"
 #include "syscalls.h"
@@ -256,6 +257,7 @@ void kmain(uint32_t multiboot_info)
         pid_t init_pid;
 
         serial_print("SERIAL: kmain: Loading userspace init...\n");
+        ir0_fb_boot_direct_draw();
         ir0_rootfs_prepare_userspace_base();
         init_pid = kexecve("/sbin/init", NULL, NULL);
         if (init_pid < 0)

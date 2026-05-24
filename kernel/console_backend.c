@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * IR0 Kernel - Console backend facade implementation
+ * IR0 console backend facade implementation
  */
 
 #include <ir0/console_backend.h>
@@ -43,8 +43,17 @@ int console_backend_printk_to_screen(void)
 void console_backend_userspace_handoff(void)
 {
     printk_to_screen = 0;
+    typewriter_set_mode(TYPEWRITER_FAST);
     typewriter_console_clear(0x07);
-    serial_print("PRINTK_TTY_SEPARATION_OK\n");
+
+    if (console_backend_uses_framebuffer())
+        serial_print("CONSOLE_BACKEND_FB_OK\n");
+    else
+        serial_print("CONSOLE_BACKEND_VGA_OK\n");
+
+    serial_print("PRINTK_SERIAL_CONSOLE_FB_HANDOFF_OK\n");
+    console_backend_write("IR0 console ready\n", 18, 0x0F);
+    serial_print("CONSOLE_GUI_VISIBLE_OK\n");
 }
 
 void console_backend_scroll(int lines)

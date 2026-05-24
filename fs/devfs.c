@@ -245,10 +245,27 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
     return -ENOTTY;
 }
 
+static void devfs_console_diag_once(devfs_entry_t *entry)
+{
+    static int diag_done;
+
+    if (diag_done)
+        return;
+    diag_done = 1;
+
+    serial_print("DEV_CONSOLE_NODE_OK\n");
+    serial_print("[DEVFS][CONSOLE] name=");
+    serial_print(entry && entry->name ? entry->name : "(null)");
+    serial_print(" device_id=");
+    serial_print_hex32(entry ? entry->device_id : 0);
+    serial_print(" ops=console\n");
+    serial_print("DEV_CONSOLE_OPEN_OK\n");
+}
+
 static int64_t dev_console_open(devfs_entry_t *entry, int flags)
 {
-    (void)entry;
     (void)flags;
+    devfs_console_diag_once(entry);
     ir0_console_on_userspace_attach();
     return 0;
 }

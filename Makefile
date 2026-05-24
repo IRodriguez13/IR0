@@ -134,6 +134,11 @@ CFLAGS += -I$(KERNEL_ROOT)/fs
 CFLAGS += -I$(KERNEL_ROOT)/interrupt
 CFLAGS += -MMD -MP
 
+IR0_DEBUG_PMM ?= 0
+IR0_DEBUG_WAIT ?= 0
+IR0_DEBUG_PROC ?= 0
+CFLAGS += -DIR0_DEBUG_PMM=$(IR0_DEBUG_PMM) -DIR0_DEBUG_WAIT=$(IR0_DEBUG_WAIT) -DIR0_DEBUG_PROC=$(IR0_DEBUG_PROC)
+
 # C++ compile flags (freestanding kernel); matches %.o: %.cpp rule
 ifeq ($(ARCH),arm64)
 CXX_KERNEL_FLAGS = -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics \
@@ -1275,6 +1280,14 @@ INIT_FASE55A_DOOM_PREREQ_SRC = setup/pid1/init_fase55a_doom_prereq.c
 INIT_FASE55B_DOOM_STUB_SRC = setup/doom/doomgeneric_ir0_stub.c
 INIT_FASE55C_TIMING_INPUT_SRC = setup/doom/doomgeneric_ir0_stub.c
 INIT_FASE55D_DOOMGENERIC_SRC = setup/doom/doomgeneric_ir0.c
+INIT_FASE58C_BOOT_HALT_SRC = setup/pid1/init_fase58c_boot_halt.c
+INIT_FASE58C_FBDEV_SRC = setup/pid1/init_fase58c_fbdev.c
+FASE58C_BOOT_BIN = setup/pid1/fase58c_boot_halt
+FASE58C_FBDEV_BIN = setup/pid1/fase58c_fbdev
+FASE58C_DISPLAY ?= gtk
+FASE58C_BOOT_LOG = /tmp/fase58c-boot-gui.log
+FASE58C_FBDEV_LOG = /tmp/fase58c-fbdev-gui.log
+FASE58C_DOOM_LOG = /tmp/fase58c-doom-gui.log
 INIT_FASE50_PROGRAMS_SRC = setup/pid1/init_fase50_programs.c
 FASE48_CAT_SRC = setup/pid1/fase48_cat.c
 FASE48_ECHO_SRC = setup/pid1/fase48_echo.c
@@ -1330,16 +1343,20 @@ FASE55D_DOOMGENERIC_LOG = /tmp/userspace-fase55d-doomgeneric.log
 MUSL_ARCH_PRCTL_LOG = /tmp/userspace-musl-arch-prctl.log
 FASE55E_DOOM_BIN = setup/pid1/fase55e_doom_interactive
 FASE55E_DOOM_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
+IRINIT_SRC = setup/pid1/irinit.c
+IRINIT_BIN = setup/pid1/sbin/irinit
+IRINIT_GUI_LOG = /tmp/userspace-irinit-gui.log
+IRINIT_DISPLAY ?= gtk
 DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
-REAL_WAD_PATH ?=
+REAL_WAD_PATH ?= /home/ivanr013/Escritorio/universal-doom/DOOM1.WAD
 FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
-BUSYBOX_SRC ?= /tmp/busybox-1.36.1
+BUSYBOX_SRC ?= $(KERNEL_ROOT)/setup/third-party/busybox-1.36.1
 TCC_SRC ?= /tmp/tinycc-fase52
 
 build-init-smoke:
@@ -1643,7 +1660,8 @@ build-busybox-fase50-min:
 	fi
 	@if [ ! -d "$(BUSYBOX_SRC)" ] || [ ! -f "$(BUSYBOX_SRC)/Makefile" ]; then \
 		echo "✗ BusyBox source missing at BUSYBOX_SRC=$(BUSYBOX_SRC)"; \
-		echo "  Set BUSYBOX_SRC=/path/to/busybox-<version>"; \
+		echo "  Expected vendored tree: setup/third-party/busybox-1.36.1"; \
+		echo "  Or override: make ... BUSYBOX_SRC=/path/to/busybox-<version>"; \
 		exit 1; \
 	fi
 	@if [ ! -f "$(FASE50_BUSYBOX_CFG)" ]; then \
@@ -1722,6 +1740,17 @@ build-init-fase51-shell:
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-init-fase51-shell OK"
 
+build-irinit:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building irinit PID1 ($(IRINIT_BIN))"
+	@mkdir -p setup/pid1/sbin
+	@$(MUSL_CC) -static -Os -o $(IRINIT_BIN) $(IRINIT_SRC)
+	@file $(IRINIT_BIN) | grep -q ELF
+	@echo "✓ build-irinit OK"
+
 build-tcc-fase52:
 	@./setup/tcc/build-fase52.sh
 
@@ -1764,6 +1793,26 @@ build-init-fase54a-fbdev:
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE54A_FBDEV_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-init-fase54a-fbdev OK"
+
+build-fase58c-boot-halt:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    FASE58C boot-halt probe ($(FASE58C_BOOT_BIN))"
+	@$(MUSL_CC) -static -Os -o $(FASE58C_BOOT_BIN) $(INIT_FASE58C_BOOT_HALT_SRC)
+	@file $(FASE58C_BOOT_BIN) | grep -q ELF
+	@echo "✓ build-fase58c-boot-halt OK"
+
+build-fase58c-fbdev:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    FASE58C fbdev probe ($(FASE58C_FBDEV_BIN))"
+	@$(MUSL_CC) -static -Os -o $(FASE58C_FBDEV_BIN) $(INIT_FASE58C_FBDEV_SRC)
+	@file $(FASE58C_FBDEV_BIN) | grep -q ELF
+	@echo "✓ build-fase58c-fbdev OK"
 
 build-init-fase54b-input:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -2975,6 +3024,139 @@ run-fase55d-doomgeneric-gui: build-fase55e-doom-interactive kernel-x64-userspace
 		$$DISP -m 256M -no-reboot -net none; \
 	rm -f $$DISK
 
+# FASE58C — framebuffer visibility diagnostics (GUI only, no console/process fixes)
+run-fase58c-boot-gui: build-fase58c-boot-halt kernel-x64-userspace.iso
+	@case "$(FASE58C_DISPLAY)" in none|headless) \
+		echo "✗ FASE58C boot GUI blocked: FASE58C_DISPLAY=$(FASE58C_DISPLAY)"; exit 1;; esac
+	@echo "  FASE58C A  kernel RGB bands before userspace (halt init, no FB overwrite)"
+	@echo "  QEMU     display=$(FASE58C_DISPLAY) gfxpayload=1024x768x32 (grub.cfg)"
+	@echo "  LOG      serial -> $(FASE58C_BOOT_LOG)"
+	@echo "  EXPECT   GUI: red/green/blue horizontal bands | serial: FB_BOOT_DIRECT_DRAW_OK"
+	@rm -f $(FASE58C_BOOT_LOG); \
+	DISK=$$(mktemp /tmp/ir0-fase58c-boot.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE58C_BOOT_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init; \
+	if [ "$(FASE58C_DISPLAY)" = "sdl" ]; then \
+		DISP="-display sdl2"; \
+	else \
+		DISP="-display gtk"; \
+	fi; \
+	$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial file:$(FASE58C_BOOT_LOG) \
+		$$DISP -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+
+run-fase58c-fbdev-gui: build-fase58c-fbdev kernel-x64-userspace.iso
+	@case "$(FASE58C_DISPLAY)" in none|headless) \
+		echo "✗ FASE58C fbdev GUI blocked: FASE58C_DISPLAY=$(FASE58C_DISPLAY)"; exit 1;; esac
+	@echo "  FASE58C B  /dev/fb0 mmap draw (cyan/magenta/yellow bands, no Doom/BusyBox/TTY)"
+	@echo "  QEMU     display=$(FASE58C_DISPLAY) gfxpayload=1024x768x32 (grub.cfg)"
+	@echo "  LOG      serial -> $(FASE58C_FBDEV_LOG)"
+	@echo "  EXPECT   GUI: CMY bands | serial: DEVFB0_DRAW_OK"
+	@rm -f $(FASE58C_FBDEV_LOG); \
+	DISK=$$(mktemp /tmp/ir0-fase58c-fbdev.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE58C_FBDEV_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init; \
+	if [ "$(FASE58C_DISPLAY)" = "sdl" ]; then \
+		DISP="-display sdl2"; \
+	else \
+		DISP="-display gtk"; \
+	fi; \
+	$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial file:$(FASE58C_FBDEV_LOG) \
+		$$DISP -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+
+run-fase58c-doom-gui: build-fase55e-doom-interactive kernel-x64-userspace.iso
+	@if [ ! -f "$(REAL_WAD_PATH)" ]; then \
+		echo "✗ REAL_WAD_PATH missing: $(REAL_WAD_PATH)"; exit 1; \
+	fi
+	@case "$(FASE58C_DISPLAY)" in none|headless) \
+		echo "✗ FASE58C doom GUI blocked: FASE58C_DISPLAY=$(FASE58C_DISPLAY)"; exit 1;; esac
+	@echo "  FASE58C C  doomgeneric + $(REAL_WAD_PATH)"
+	@echo "  QEMU     display=$(FASE58C_DISPLAY) (same as run-fase55d-doomgeneric-gui)"
+	@echo "  LOG      serial -> $(FASE58C_DOOM_LOG)"
+	@echo "  EXPECT   GUI: Doom | serial: DOOMGENERIC_WAD_LOAD_OK FIRST_FRAME FRAME_LOOP"
+	@rm -f $(FASE58C_DOOM_LOG); \
+	DISK=$$(mktemp /tmp/ir0-fase58c-doom.XXXXXX.img); \
+	CFG=$$(mktemp /tmp/doom-frames-cfg.XXXXXX); \
+	printf '%s\n%s\n' "$(DOOM_FRAMES)" "$(DOOM_FRAME_DUMP_EVERY)" > $$CFG; \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE55E_DOOM_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
+	python3 scripts/inject_init_minix.py $$DISK $$CFG etc/doom-frames && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/share/doom/doom1.wad /etc/doom-frames && \
+	rm -f $$CFG; \
+	if [ "$(FASE58C_DISPLAY)" = "sdl" ]; then \
+		DISP="-display sdl2"; \
+	else \
+		DISP="-display gtk"; \
+	fi; \
+	$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial file:$(FASE58C_DOOM_LOG) \
+		$$DISP -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+
+check-fase58c-logs:
+	@echo "=== FASE58C A (boot) ==="
+	@if [ -f "$(FASE58C_BOOT_LOG)" ]; then \
+		grep -E 'FB_BOOT_DIRECT_DRAW_OK|\[FB_BOOT\]' "$(FASE58C_BOOT_LOG)" || echo "(no boot tags)"; \
+	else echo "missing $(FASE58C_BOOT_LOG)"; fi
+	@echo "=== FASE58C B (fbdev) ==="
+	@if [ -f "$(FASE58C_FBDEV_LOG)" ]; then \
+		grep -E 'DEVFB0_DRAW_OK|FASE58C_OK|\[FASE58C\]\[FAIL\]' "$(FASE58C_FBDEV_LOG)" || echo "(no fbdev tags)"; \
+	else echo "missing $(FASE58C_FBDEV_LOG)"; fi
+	@echo "=== FASE58C C (doom) ==="
+	@if [ -f "$(FASE58C_DOOM_LOG)" ]; then \
+		grep -E 'DOOMGENERIC_WAD_LOAD_OK|DOOMGENERIC_FIRST_FRAME_OK|DOOMGENERIC_FRAME_LOOP_OK|DOOMGENERIC_FRAMEBUFFER_VISIBLE' "$(FASE58C_DOOM_LOG)" || echo "(no doom tags)"; \
+	else echo "missing $(FASE58C_DOOM_LOG)"; fi
+
+run-irinit-interactive-gui: build-irinit build-busybox-fase50-min build-tcc-fase52 kernel-x64-userspace.iso
+	@echo "  RUN     irinit GUI interactive (BusyBox ash on /dev/console)"
+	@echo "  LOG     serial -> $(IRINIT_GUI_LOG)"
+	@echo "  HINT    click QEMU window to capture keyboard; Ctrl+C to stop"
+	@echo "  HINT    type ls, pwd, echo hi, cat /proc/mounts manually"
+	@rm -f $(IRINIT_GUI_LOG); \
+	DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(IRINIT_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(IRINIT_BIN) sbin/irinit && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
+	find $(FASE52_TCC_STAGE) -type f 2>/dev/null | sort | while read -r f; do \
+		rel="$${f#$(FASE52_TCC_STAGE)/}"; \
+		python3 scripts/inject_init_minix.py $$DISK "$$f" "$$rel"; \
+	done; \
+	if [ -n "$(REAL_WAD_PATH)" ] && [ -f "$(REAL_WAD_PATH)" ]; then \
+		$(MAKE) -s build-fase55e-doom-interactive; \
+		CFG=$$(mktemp /tmp/doom-frames-cfg.XXXXXX); \
+		printf '0\n0\n' > $$CFG; \
+		python3 scripts/inject_init_minix.py $$DISK $(FASE55E_DOOM_BIN) bin/doomgeneric && \
+		python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
+		python3 scripts/inject_init_minix.py $$DISK $$CFG etc/doom-frames && \
+		rm -f $$CFG; \
+	fi; \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/irinit /bin/sh /bin/busybox; \
+	if [ "$(IRINIT_DISPLAY)" = "sdl" ]; then \
+		DISP="-display sdl2"; \
+	else \
+		DISP="-display gtk"; \
+	fi; \
+	$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial file:$(IRINIT_GUI_LOG) \
+		$$DISP -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+
 smoke-current-fase54b: kernel-x64.bin arch-guard smoke-fase54b-input
 	@echo "FAST_ITERATION_GATES_OK"
 
@@ -3334,6 +3516,17 @@ help:
 	@echo "  make run-tap          Run with TAP networking (requires root + bridge)"
 	@echo "  make run-ping         Run with ICMP ping support (user-mode, no TAP)"
 	@echo "  make run-gdb          Run QEMU waiting for GDB (localhost:1234)"
+	@echo "  make run-fase55d-doomgeneric-gui  Doom interactive (default WAD: $(REAL_WAD_PATH))"
+	@echo "  make run-fase58c-boot-gui         FASE58C A: kernel RGB bands (diagnostic)"
+	@echo "  make run-fase58c-fbdev-gui        FASE58C B: /dev/fb0 mmap CMY bands"
+	@echo "  make run-fase58c-doom-gui         FASE58C C: Doom DOOM1.WAD (diagnostic)"
+	@echo "  make check-fase58c-logs           grep serial tags after GUI runs"
+	@echo "  make run-irinit-interactive-gui   irinit + BusyBox ash (bundles Doom if WAD exists)"
+	@echo ""
+	@echo "Debug (off by default; rebuild kernel after change):"
+	@echo "  IR0_DEBUG_PMM=1       FASE41 PMM FREE/RECLAIM traces"
+	@echo "  IR0_DEBUG_WAIT=1      WAIT_EXIT_AUDIT / CTX resume traces"
+	@echo "  IR0_DEBUG_PROC=1      FASE42/43/44 lifecycle traces"
 	@echo ""
 	@echo "Dev Tooling:"
 	@echo "  make format           Format all C/H files with clang-format"
@@ -3677,7 +3870,7 @@ test-drivers-clean:
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
         runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
-        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
+        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \

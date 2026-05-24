@@ -15,6 +15,7 @@
 #include <kernel/process.h>
 #include <ir0/arch_port.h>
 #include <ir0/serial_io.h>
+#include <ir0/debug_runtime.h>
 #include <config.h>
 #include <mm/paging.h>
 #include <pmm.h>
@@ -30,6 +31,12 @@ extern uint64_t get_current_page_directory(void);
 static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_proc,
                                        task_t *next)
 {
+#if !IR0_DEBUG_WAIT
+	(void)prev_proc;
+	(void)next_proc;
+	(void)next;
+	return;
+#else
 	serial_print("[WAIT_EXIT_AUDIT][CTX] prev_pid=");
 	serial_print_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
 	serial_print(" prev_state=");
@@ -104,6 +111,7 @@ static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_pro
 			serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_CS_SS\n");
 		}
 	}
+#endif
 }
 
 void arch_context_switch(task_t *prev, task_t *next)
@@ -148,20 +156,12 @@ void arch_context_switch(task_t *prev, task_t *next)
     if (next_proc && next_proc->irq_frame_saved)
     {
         syscall_user_frame_t *frame = &next_proc->syscall_frame;
-        uint64_t active_cr3_before = get_current_page_directory();
-        uint64_t active_cr3_after_expected = next ? next->cr3 : 0;
-        uint64_t next_task_cr3 = next ? next->cr3 : 0;
-        uint64_t current_before = (uint64_t)(uintptr_t)current_process;
-        uint64_t frame_addr = (uint64_t)(uintptr_t)frame;
-        uint64_t next_proc_addr = (uint64_t)(uintptr_t)next_proc;
-        uint64_t next_proc_end = next_proc_addr + sizeof(process_t);
-        int frame_in_next_proc = (frame_addr >= next_proc_addr && frame_addr < next_proc_end);
-        int frame_in_kernel = (frame_addr < 0x00400000ULL ||
-                               frame_addr > 0x00007FFFFFFFFFFFULL);
 
         wait_exit_audit_ctx_resume(prev_proc, next_proc, next);
+#if IR0_DEBUG_WAIT
         serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] RESUME_GATE_USES_NEXT_FIXED\n");
         serial_print("[WAIT_EXIT_AUDIT][CTX] resume_path=arch_switch_to_user_task\n");
+#endif
         /*
          * Tear down the zombie child mm only after switching CR3 to the
          * waiting parent.  Reaping while the exiting child's CR3 is still
@@ -177,63 +177,79 @@ void arch_context_switch(task_t *prev, task_t *next)
         next_proc->irq_frame_saved = 0;
         if (next)
         {
-            serial_print("[CTX][RESUME] prev_pid=");
-            serial_print_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
-            serial_print(" next_pid=");
-            serial_print_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
-            serial_print(" current=");
-            serial_print_hex64(current_before);
-            serial_print(" active_cr3_before=");
-            serial_print_hex64(active_cr3_before);
-            serial_print(" active_cr3_pre_iret=");
-            serial_print_hex64(get_current_page_directory());
-            serial_print(" active_cr3_after_expected=");
-            serial_print_hex64(active_cr3_after_expected);
-            serial_print(" next_task_cr3=");
-            serial_print_hex64(next_task_cr3);
-            serial_print(" frame=");
-            serial_print_hex64(frame_addr);
-            serial_print(" frame_in_kernel=");
-            serial_print(frame_in_kernel ? "1" : "0");
-            serial_print(" frame_in_next_proc=");
-            serial_print(frame_in_next_proc ? "1" : "0");
-            serial_print(" frame_rip=");
-            serial_print_hex64(frame ? frame->rip : 0);
-            serial_print(" frame_rsp=");
-            serial_print_hex64(frame ? frame->rsp : 0);
-            serial_print(" frame_cs=");
-            serial_print_hex64(next_proc ? next_proc->task.cs : 0);
-            serial_print(" frame_ss=");
-            serial_print_hex64(next_proc ? next_proc->task.ss : 0);
-            serial_print(" frame_rflags=");
-            serial_print_hex64(frame ? frame->rflags : 0);
-            serial_print("\n");
+#if IR0_DEBUG_WAIT
+            {
+                uint64_t active_cr3_before = get_current_page_directory();
+                uint64_t active_cr3_after_expected = next ? next->cr3 : 0;
+                uint64_t next_task_cr3 = next ? next->cr3 : 0;
+                uint64_t current_before = (uint64_t)(uintptr_t)current_process;
+                uint64_t frame_addr = (uint64_t)(uintptr_t)frame;
+                uint64_t next_proc_addr = (uint64_t)(uintptr_t)next_proc;
+                uint64_t next_proc_end = next_proc_addr + sizeof(process_t);
+                int frame_in_next_proc = (frame_addr >= next_proc_addr &&
+                                          frame_addr < next_proc_end);
+                int frame_in_kernel = (frame_addr < 0x00400000ULL ||
+                                       frame_addr > 0x00007FFFFFFFFFFFULL);
 
-            serial_print("[CTX][RESUME_FRAME] rbx=");
-            serial_print_hex64(frame ? frame->rbx : 0);
-            serial_print(" rbp=");
-            serial_print_hex64(frame ? frame->rbp : 0);
-            serial_print(" r12=");
-            serial_print_hex64(frame ? frame->r12 : 0);
-            serial_print(" r13=");
-            serial_print_hex64(frame ? frame->r13 : 0);
-            serial_print(" r14=");
-            serial_print_hex64(frame ? frame->r14 : 0);
-            serial_print(" r15=");
-            serial_print_hex64(frame ? frame->r15 : 0);
-            serial_print(" rdi=");
-            serial_print_hex64(frame ? frame->rdi : 0);
-            serial_print(" rsi=");
-            serial_print_hex64(frame ? frame->rsi : 0);
-            serial_print(" rdx=");
-            serial_print_hex64(frame ? frame->rdx : 0);
-            serial_print(" r10=");
-            serial_print_hex64(frame ? frame->r10 : 0);
-            serial_print(" r8=");
-            serial_print_hex64(frame ? frame->r8 : 0);
-            serial_print(" r9=");
-            serial_print_hex64(frame ? frame->r9 : 0);
-            serial_print("\n");
+                serial_print("[CTX][RESUME] prev_pid=");
+                serial_print_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
+                serial_print(" next_pid=");
+                serial_print_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
+                serial_print(" current=");
+                serial_print_hex64(current_before);
+                serial_print(" active_cr3_before=");
+                serial_print_hex64(active_cr3_before);
+                serial_print(" active_cr3_pre_iret=");
+                serial_print_hex64(get_current_page_directory());
+                serial_print(" active_cr3_after_expected=");
+                serial_print_hex64(active_cr3_after_expected);
+                serial_print(" next_task_cr3=");
+                serial_print_hex64(next_task_cr3);
+                serial_print(" frame=");
+                serial_print_hex64(frame_addr);
+                serial_print(" frame_in_kernel=");
+                serial_print(frame_in_kernel ? "1" : "0");
+                serial_print(" frame_in_next_proc=");
+                serial_print(frame_in_next_proc ? "1" : "0");
+                serial_print(" frame_rip=");
+                serial_print_hex64(frame ? frame->rip : 0);
+                serial_print(" frame_rsp=");
+                serial_print_hex64(frame ? frame->rsp : 0);
+                serial_print(" frame_cs=");
+                serial_print_hex64(next_proc ? next_proc->task.cs : 0);
+                serial_print(" frame_ss=");
+                serial_print_hex64(next_proc ? next_proc->task.ss : 0);
+                serial_print(" frame_rflags=");
+                serial_print_hex64(frame ? frame->rflags : 0);
+                serial_print("\n");
+
+                serial_print("[CTX][RESUME_FRAME] rbx=");
+                serial_print_hex64(frame ? frame->rbx : 0);
+                serial_print(" rbp=");
+                serial_print_hex64(frame ? frame->rbp : 0);
+                serial_print(" r12=");
+                serial_print_hex64(frame ? frame->r12 : 0);
+                serial_print(" r13=");
+                serial_print_hex64(frame ? frame->r13 : 0);
+                serial_print(" r14=");
+                serial_print_hex64(frame ? frame->r14 : 0);
+                serial_print(" r15=");
+                serial_print_hex64(frame ? frame->r15 : 0);
+                serial_print(" rdi=");
+                serial_print_hex64(frame ? frame->rdi : 0);
+                serial_print(" rsi=");
+                serial_print_hex64(frame ? frame->rsi : 0);
+                serial_print(" rdx=");
+                serial_print_hex64(frame ? frame->rdx : 0);
+                serial_print(" r10=");
+                serial_print_hex64(frame ? frame->r10 : 0);
+                serial_print(" r8=");
+                serial_print_hex64(frame ? frame->r8 : 0);
+                serial_print(" r9=");
+                serial_print_hex64(frame ? frame->r9 : 0);
+                serial_print("\n");
+            }
+#endif
 #if CONFIG_DEBUG_FASE50
             serial_print("[FASE50][CTX] stage=arch_context_switch-irq_frame_resume pid=");
             serial_print_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
@@ -244,9 +260,11 @@ void arch_context_switch(task_t *prev, task_t *next)
             serial_print("\n");
 #endif
             arch_switch_to_user_task(next);
+#if IR0_DEBUG_WAIT
             serial_print("[CTX][RESUME] unexpected_return active_cr3_after=");
             serial_print_hex64(get_current_page_directory());
             serial_print("\n");
+#endif
         }
         return;
     }

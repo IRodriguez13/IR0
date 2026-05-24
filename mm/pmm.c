@@ -25,6 +25,7 @@
 #include <ir0/kmem.h>
 #include <ir0/serial_io.h>
 #include <ir0/process.h>
+#include <ir0/debug_runtime.h>
 #include <config.h>
 #include <stdint.h>
 
@@ -140,7 +141,7 @@ uintptr_t pmm_alloc_frame(void)
                 pmm_search_hint = (uint32_t)((i + 1) % pmm.total_frames);
                 if (pmm_frame_owner)
                     pmm_frame_owner[i] = (int32_t)owner_pid;
-                if (pmm_diag_events < 2048U)
+                if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
                 {
                     serial_print("[FASE41][PMM] ALLOC pid=");
                     serial_print_hex32((uint32_t)owner_pid);
@@ -194,7 +195,7 @@ void pmm_free_frame(uintptr_t phys_addr)
 
         if (frame_index < (size_t)pmm_search_hint)
             pmm_search_hint = 0;
-        if (pmm_diag_events < 2048U)
+        if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
         {
             serial_print("[FASE41][PMM] FREE frame=");
             serial_print_hex64((uint64_t)phys_addr);

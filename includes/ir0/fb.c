@@ -5,6 +5,7 @@
 
 #include <ir0/fb.h>
 #include <ir0/errno.h>
+#include <ir0/serial_io.h>
 #include <ir0/video_backend.h>
 #include <string.h>
 
@@ -129,4 +130,46 @@ int ir0_fb_write_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h,
     }
 
     return 0;
+}
+
+void ir0_fb_boot_direct_draw(void)
+{
+    struct ir0_fb_info info;
+    uint32_t third;
+
+    if (!ir0_fb_get_info(&info))
+    {
+        serial_print("[FB_BOOT] unavailable\n");
+        return;
+    }
+
+    serial_print("[FB_BOOT] phys=0x");
+    serial_print_hex32(info.fb_phys);
+    serial_print(" w=");
+    serial_print_hex32(info.width);
+    serial_print(" h=");
+    serial_print_hex32(info.height);
+    serial_print(" bpp=");
+    serial_print_hex32(info.bpp);
+    serial_print(" pitch=");
+    serial_print_hex32(info.pitch);
+    serial_print("\n");
+
+    third = info.height / 3;
+    if (third == 0)
+        third = 1;
+
+    /*
+     * BGR888 32bpp (QEMU multiboot default): byte0=B, byte1=G, byte2=R.
+     * Red   = 0x0000FF00, green = 0x00FF0000, blue = 0x000000FF (LE uint32).
+     */
+    (void)ir0_fb_write_rect(0, 0, info.width, third, 0x0000FF00U);
+    (void)ir0_fb_write_rect(0, third, info.width, third, 0x00FF0000U);
+    if (third * 2 < info.height)
+    {
+        (void)ir0_fb_write_rect(0, third * 2, info.width,
+                                info.height - (third * 2), 0x000000FFU);
+    }
+
+    serial_print("FB_BOOT_DIRECT_DRAW_OK\n");
 }

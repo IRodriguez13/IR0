@@ -11,6 +11,7 @@ vertical slices with smoke gates between each step.
 | `ab9b7c5` | A — panicex/log cleanup | **Merged** |
 | `27680c1` | B-minimal — console/TTY facade | **Merged** |
 | `9b0765d` | C — TF/#DB gating | **Merged** |
+| — | **58A** — `/dev/console` visible + devfs fd binding | **Done** (uncommitted) |
 | — | D — process list sentinel / FASE57L | **Deferred** (see below) |
 | — | E — per-process kstack | **Reference only** — branch `fase57-e-kstack-probe` (do not merge) |
 | — | F — syscall entry / FASE57O sysret | **Next** — branch `fase57-f-syscall-probe` |
@@ -18,6 +19,54 @@ vertical slices with smoke gates between each step.
 Experimental reference preserved on branch `fase57-experimental-broken-arch-prctl`
 (commit `cc55ee5`). Rollback summary on that branch:
 `Documentation/fase57-experimental-rollback-summary.md`.
+
+## Step 58A — `/dev/console` visible and interactive (**done**, pre-F)
+
+Restores interactive BusyBox shell on QEMU GTK without touching syscall entry,
+kstack, wait4, scheduler, or PMM reclaim logic.
+
+### Root cause fixed
+
+`open("/dev/console")` returned virtual fd `2000+device_id`, but `dup2(2003, 0)`
+failed (`sys_dup2` only accepts 0–63). Shell exited immediately; GUI stayed blank.
+
+### Changes
+
+| Area | Files | Notes |
+|------|-------|-------|
+| devfs fd binding | `kernel/syscalls/fs_syscalls.c`, `kernel/syscalls.c`, `kernel/process.h` | `open("/dev/*")` → real `fd_table` slot (`is_devfs`) |
+| Console handoff | `kernel/console_backend.c`, `fs/devfs.c` | FB/VGA text, banner `IR0 console ready` |
+| irinit | `setup/pid1/irinit.c`, `Makefile` | `run-irinit-interactive-gui`; no respawn storm |
+| Debug noise | `includes/ir0/debug_runtime.h`, `mm/pmm.c`, `mm/paging.c`, `kernel/process.c`, `sched/switch/arch_context_switch.c` | Off by default; `IR0_DEBUG_PMM/WAIT/PROC=1` |
+
+### Tags (serial, one-shot where noted)
+
+`DEV_CONSOLE_NODE_OK`, `DEV_CONSOLE_OPEN_OK`, `IRINIT_STDIO_CONSOLE_OK`,
+`TTY_PRESENT_OK`, `CONSOLE_BACKEND_FB_OK` / `CONSOLE_BACKEND_VGA_OK`,
+`PRINTK_SERIAL_CONSOLE_FB_HANDOFF_OK`, `CONSOLE_GUI_VISIBLE_OK`,
+`IRINIT_NO_RESPAWN_STORM_ON_NO_TTY_OK`
+
+### Gates (passed 2025-05-24)
+
+```bash
+make -s kernel-x64.bin && make -s arch-guard
+make -s smoke-fase50-busybox    # PASS
+make -s smoke-fase52-tcc         # PASS
+```
+
+### Manual GUI
+
+```bash
+make run-irinit-interactive-gui REAL_WAD_PATH=/path/to/doom1.wad
+# serial log: /tmp/userspace-irinit-gui.log
+# click QEMU window for keyboard; try: ls, pwd, echo hi
+```
+
+Optional verbose reclaim/wait traces:
+
+```bash
+make kernel-x64.bin IR0_DEBUG_PMM=1 IR0_DEBUG_WAIT=1 IR0_DEBUG_PROC=1
+```
 
 ## Step D — **Deferred** (do not apply before E/F)
 
@@ -146,8 +195,8 @@ TCC profile 180s max, kills on `FASE52_OK` (~170s typical).
 Run after B and C commits and before starting E/F experiments:
 
 ```bash
-export BUSYBOX_SRC="$PWD/setup/third-party/busybox-1.36.1"
 export REAL_WAD_PATH=/path/to/freedoom1.wad   # for Doom smoke
+# BUSYBOX_SRC defaults to setup/third-party/busybox-1.36.1
 
 make -s kernel-x64.bin
 make -s arch-guard
