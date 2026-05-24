@@ -8,6 +8,7 @@
 #include <ir0/vga.h>
 
 static int printk_to_screen = 1;
+static int userspace_gui_first_draw_tag;
 
 void console_backend_init(void)
 {
@@ -67,6 +68,14 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
 
     if (!str)
         return;
+
+    if (!printk_to_screen && console_backend_uses_framebuffer() &&
+        len > 0 && !userspace_gui_first_draw_tag)
+    {
+        userspace_gui_first_draw_tag = 1;
+        serial_print("BUSYBOX_GUI_TEXT_FIRST_DRAW_OK\n");
+        serial_print("ASH_VISIBLE_QEMU_OK\n");
+    }
 
     for (i = 0; i < len; i++)
     {

@@ -12,10 +12,12 @@
  */
 
 #include <stdint.h>
+#include <config.h>
 #include <ir0/logging.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
 #include <ir0/debug_runtime.h>
+#include <ir0/video_backend.h>
 #include "paging.h"
 #include <string.h>
 #include <mm/allocator.h>
@@ -1017,6 +1019,43 @@ int copy_process_memory(struct process *parent, struct process *child)
     return 0;
 }
 
+#if CONFIG_ENABLE_VBE
+/*
+ * Supervisor-only identity map for the linear framebuffer MMIO window.
+ * Syscalls run ring 0 with process CR3; /dev/console FB writes need this
+ * mapping in every process page table (not userspace mmap).
+ */
+static void map_supervisor_framebuffer_mmio(uint64_t *pml4)
+{
+    uint32_t fb_phys;
+    uint32_t fb_size;
+    uint32_t off;
+
+    if (!pml4 || !video_backend_is_available())
+        return;
+
+    fb_phys = video_backend_get_fb_phys();
+    fb_size = video_backend_get_fb_size();
+    if (fb_phys == 0 || fb_size == 0)
+        return;
+    if (fb_size > (4U * 1024U * 1024U))
+        fb_size = 4U * 1024U * 1024U;
+
+    for (off = 0; off < fb_size; off += PAGE_SIZE_4KB)
+    {
+        uint64_t p = (uint64_t)fb_phys + off;
+
+        if (map_page_in_directory(pml4, p, p, PAGE_PRESENT | PAGE_RW) != 0)
+            break;
+    }
+}
+#else
+static void map_supervisor_framebuffer_mmio(uint64_t *pml4)
+{
+    (void)pml4;
+}
+#endif
+
 /*
  * map_supervisor_identity_low - 4 KiB identity map for kernel low memory
  *
@@ -1045,6 +1084,8 @@ int map_supervisor_identity_low(uint64_t *pml4, uint64_t start, uint64_t end)
                                   PAGE_PRESENT | PAGE_RW | PAGE_EXEC) != 0)
             return -1;
     }
+
+    map_supervisor_framebuffer_mmio(pml4);
 
     return 0;
 }
