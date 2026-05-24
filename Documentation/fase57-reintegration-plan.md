@@ -103,40 +103,41 @@ fork-heavy OOM with no syscall benefit until F lands.
 
 ### Step F — `fase57-f-syscall-probe` (rules before any LSTAR/sysret change)
 
-**Mandatory gates for every F iteration (tiered — do not run all heavy smokes every loop):**
-
-| Tier | When | Command |
-|------|------|---------|
-| **Fast** | every F diff | `make smoke-musl-arch-prctl` **or** `make smoke-fase52-tcc` |
-| **Medium** | F touches musl/syscalls broadly | `make smoke-fase50-busybox` |
-| **Pre-merge** | before merge to stable | `make smoke-fase55d-doomgeneric` + full trio |
+**Iteration gate (one smoke):** run **only** full TCC during F exploration.
 
 ```bash
-make -s smoke-musl-arch-prctl    # ~10s — ARCH_SET_FS + write ok + exit_group
-make -s smoke-fase52-tcc         # ~170s — toolchain regression
-make -s smoke-fase50-busybox     # medium gate (not every iteration)
-make -s smoke-fase55d-doomgeneric REAL_WAD_PATH=/path/to/freedoom1.wad  # pre-merge
+make -s smoke-fase52-tcc    # ~170s — sole validation loop for F diffs
 ```
 
-**Stable baseline:** run `smoke-musl-arch-prctl` on `fase57-stable-base` before any F asm
-change; if it passes, that log is the arch_prctl reference.  F regressions must show up
-as FAIL here before BusyBox/Doom.
+Rationale: a broken syscall entry / sysret / musl path fails TCC anyway (fork,
+exec, write, toolchain). Running arch_prctl + BusyBox + Doom on every diff is
+redundant; any regression in the hot path shows up in TCC.
+
+| When | Command |
+|------|---------|
+| **Every F diff** | `make smoke-fase52-tcc` (full harness, `FASE52_OK`) |
+| **Optional ~9s hint** | `make smoke-musl-arch-prctl` — narrow `ARCH_SET_FS` canary only |
+| **Pre-merge to stable** | `make smoke-fase50-busybox` + `make smoke-fase55d-doomgeneric` |
+
+**Stable baselines (`fase57-stable-base`, 2025-05-24):**
+
+- `smoke-musl-arch-prctl` **PASS** (~9s) — documented reference for `arch_prctl`
+- `smoke-fase52-tcc` **PASS** (~170s) — **primary F iteration gate**
 
 **Hard rules:**
 
 1. **No dead kstack on stable** — do not merge E alone; if F requires per-process
    stack, use an explicit **E+F branch**, not infra-only E.
-2. **No syscall entry rewrite without the three smokes above** — BusyBox, TCC,
-   Doom first frame must pass after every F diff.
-3. **`arch_prctl` (musl TLS) is a mandatory gate** for any LSTAR/sysret change —
-   experimental F broke musl static init with #PF on user stack; nostdlib smokes
-   are insufficient.
+2. **No syscall entry rewrite without TCC passing** — full `smoke-fase52-tcc` after
+   every F diff; BusyBox + Doom only pre-merge.
+3. **`arch_prctl` musl** — baseline PASS on stable; TCC subsumes it for iteration
+   (experimental F broke musl via #PF on user stack — TCC or optional arch_prctl
+   smoke will catch regressions).
 4. **F scope:** syscall entry / sysret / user GPR restore only — no FASE57D–P
    traces, `syscall_block`, wait4 rework, or scheduler idle fallback.
 
-**Smoke harness (stable):** `scripts/smoke_autokill.py` — serial-log monitor,
-fail-fast on panic/OOM/`_FAIL_REASON`, PASS on success tag; profiles 150s
-(BusyBox), 180s (TCC), 120s (Doom first frame); max 180s default elsewhere.
+**Smoke harness (stable):** `scripts/smoke_autokill.py` — autokill on success tag;
+TCC profile 180s max, kills on `FASE52_OK` (~170s typical).
 
 ---
 

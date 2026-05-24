@@ -1925,7 +1925,8 @@ smoke-userspace-musl: build-init-musl load-init-with-musl kernel-x64-userspace.i
 	@echo "  SMOKE   musl /sbin/init boot (CONFIG_KERNEL_DEBUG_SHELL=n)..."
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
-	$(SMOKE_QEMU_RUN) --log /tmp/userspace-musl-smoke.log --timeout 90 --done IR0: musl init smoke ok -- \
+	$(SMOKE_QEMU_RUN) --log /tmp/userspace-musl-smoke.log --timeout 90 \
+		--done "IR0: musl init smoke ok" -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
