@@ -1239,6 +1239,7 @@ load-init:
 # Userspace init smoke binaries (copied to /sbin/init via load-init)
 INIT_SMOKE_SRC = setup/pid1/init_smoke.c
 INIT_MUSL_SRC  = setup/pid1/init_musl.c
+MUSL_ARCH_PRCTL_SMOKE_SRC = setup/pid1/musl_arch_prctl_smoke.c
 INIT_MINIMAL_SRC = setup/pid1/init_minimal.c
 INIT_SEGV_SMOKE_SRC = setup/pid1/init_segv_smoke.c
 INIT_HEAP_SMOKE_SRC = setup/pid1/init_heap_smoke.c
@@ -1289,6 +1290,7 @@ FASE41_TRUE_SRC = setup/pid1/fase41_true.c
 SH_SMOKE_SRC     = setup/pid1/sh_smoke.c
 SEGV_SMOKE_SRC   = setup/pid1/userspace_segv.c
 INIT_SMOKE_BIN   = setup/pid1/init
+MUSL_ARCH_PRCTL_BIN = setup/pid1/musl_arch_prctl_smoke
 SH_SMOKE_BIN     = setup/pid1/sh_smoke
 SEGV_SMOKE_BIN   = setup/pid1/userspace_segv
 FASE41_TRUE_BIN  = setup/pid1/f41true
@@ -1325,6 +1327,7 @@ FASE55A_DOOM_PREREQ_LOG = /tmp/userspace-fase55a-doom-prereq.log
 FASE55B_DOOM_STUB_LOG = /tmp/userspace-fase55b-doom-stub.log
 FASE55C_TIMING_INPUT_LOG = /tmp/userspace-fase55c-timing-input.log
 FASE55D_DOOMGENERIC_LOG = /tmp/userspace-fase55d-doomgeneric.log
+MUSL_ARCH_PRCTL_LOG = /tmp/userspace-musl-arch-prctl.log
 FASE55E_DOOM_BIN = setup/pid1/fase55e_doom_interactive
 FASE55E_DOOM_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
 DOOM_FRAMES ?= 0
@@ -1355,6 +1358,19 @@ build-init-musl:
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_MUSL_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-init-musl OK"
+
+# Minimal musl static arch_prctl(ARCH_SET_FS) gate (F probe prerequisite).
+build-musl-arch-prctl-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  MUSL    Building arch_prctl smoke ($(MUSL_ARCH_PRCTL_BIN))"
+	@$(MUSL_CC) -static -Os -o $(MUSL_ARCH_PRCTL_BIN) $(MUSL_ARCH_PRCTL_SMOKE_SRC)
+	@file $(MUSL_ARCH_PRCTL_BIN) | grep -q ELF
+	@strings $(MUSL_ARCH_PRCTL_BIN) 2>/dev/null | grep -q "MUSL_ARCH_PRCTL_OK" || \
+		(echo "✗ arch_prctl smoke missing MUSL_ARCH_PRCTL_OK string"; exit 1)
+	@echo "✓ build-musl-arch-prctl-smoke OK"
 
 # Minimal PID 1: fork/execve/wait4 (musl); needs /bin/sh on disk for oleada 2 smoke.
 build-init-minimal:
@@ -1921,6 +1937,32 @@ smoke-userspace-musl: build-init-musl load-init-with-musl kernel-x64-userspace.i
 		exit 1; \
 	else \
 		echo "✗ smoke-userspace-musl FAILED"; \
+		exit 1; \
+	fi
+
+# QEMU smoke: musl arch_prctl(ARCH_SET_FS) — mandatory gate before F (LSTAR/sysret).
+smoke-musl-arch-prctl: build-musl-arch-prctl-smoke kernel-x64-userspace.iso
+	@echo "  SMOKE   musl arch_prctl minimal (ARCH_SET_FS + write ok + exit_group)..."
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=64 status=none && \
+	python3 scripts/inject_init_minix.py --format $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(MUSL_ARCH_PRCTL_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
+	$(SMOKE_QEMU_RUN) --log $(MUSL_ARCH_PRCTL_LOG) --profile musl-arch-prctl \
+		--done MUSL_ARCH_PRCTL_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "MUSL_ARCH_PRCTL_OK" $(MUSL_ARCH_PRCTL_LOG) && \
+	    grep -qE '(^|[^a-z])ok' $(MUSL_ARCH_PRCTL_LOG); then \
+		echo "✓ smoke-musl-arch-prctl finished"; \
+	else \
+		echo "✗ smoke-musl-arch-prctl FAILED"; \
+		if grep -qE '#PF|General protection|panic' $(MUSL_ARCH_PRCTL_LOG); then \
+			echo "--- arch_prctl fault hints ---"; \
+			grep -E '#PF|General protection|panic|arch_prctl' $(MUSL_ARCH_PRCTL_LOG) | tail -5; \
+		fi; \
 		exit 1; \
 	fi
 
@@ -3334,6 +3376,8 @@ help:
 	@echo "  make load-init-with-smoke  build-init-smoke + sudo load-init"
 	@echo "  make smoke-userspace-init  QEMU boot /sbin/init (CONFIG_KERNEL_DEBUG_SHELL=n)"
 	@echo "  make smoke-userspace-musl  QEMU boot musl /sbin/init (CRT+TLS gate)"
+	@echo "  make smoke-musl-arch-prctl musl ARCH_SET_FS gate (~10s, mandatory before F)"
+	@echo "  make build-musl-arch-prctl-smoke  musl static arch_prctl harness binary"
 	@echo "  make smoke-userspace-shell QEMU fork+exec /bin/sh (init_minimal PID1)"
 	@echo "  make smoke-userspace-segv  QEMU userspace #PF -> SIGSEGV wait4 smoke"
 	@echo "  make load-userspace-rootfs  inject /sbin/init + /bin/sh on disk.img"
@@ -3631,8 +3675,8 @@ test-drivers-clean:
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
-        runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
-        build-init-smoke build-init-musl build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
+        runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
+        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \

@@ -103,14 +103,24 @@ fork-heavy OOM with no syscall benefit until F lands.
 
 ### Step F — `fase57-f-syscall-probe` (rules before any LSTAR/sysret change)
 
-**Mandatory gates for every F iteration:**
+**Mandatory gates for every F iteration (tiered — do not run all heavy smokes every loop):**
+
+| Tier | When | Command |
+|------|------|---------|
+| **Fast** | every F diff | `make smoke-musl-arch-prctl` **or** `make smoke-fase52-tcc` |
+| **Medium** | F touches musl/syscalls broadly | `make smoke-fase50-busybox` |
+| **Pre-merge** | before merge to stable | `make smoke-fase55d-doomgeneric` + full trio |
 
 ```bash
-make -s smoke-fase50-busybox
-make -s smoke-fase52-tcc
-make -s smoke-fase55d-doomgeneric REAL_WAD_PATH=/path/to/freedoom1.wad
-# Plus musl arch_prctl minimal harness (blocker on experimental full path)
+make -s smoke-musl-arch-prctl    # ~10s — ARCH_SET_FS + write ok + exit_group
+make -s smoke-fase52-tcc         # ~170s — toolchain regression
+make -s smoke-fase50-busybox     # medium gate (not every iteration)
+make -s smoke-fase55d-doomgeneric REAL_WAD_PATH=/path/to/freedoom1.wad  # pre-merge
 ```
+
+**Stable baseline:** run `smoke-musl-arch-prctl` on `fase57-stable-base` before any F asm
+change; if it passes, that log is the arch_prctl reference.  F regressions must show up
+as FAIL here before BusyBox/Doom.
 
 **Hard rules:**
 
