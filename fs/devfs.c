@@ -26,6 +26,8 @@
 #include <ir0/errno.h>
 #include <config.h>
 #include <ir0/console_backend.h>
+#include <ir0/console.h>
+#include <ir0/console_backend.h>
 #if CONFIG_ENABLE_SOUND
 #include <ir0/audio_backend.h>
 #endif
@@ -77,7 +79,7 @@ static int devfs_console_can_read(devfs_entry_t *entry, pid_t pid)
 {
     (void)entry;
     (void)pid;
-    return keyboard_buffer_has_data() ? 1 : 0;
+    return ir0_console_poll();
 }
 
 #if CONFIG_ENABLE_NETWORKING
@@ -207,34 +209,55 @@ int64_t dev_zero_write(devfs_entry_t *entry, const void *buf, size_t count, off_
 
 int64_t dev_console_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)offset;
-    char *buffer = (char *)buf;
-    size_t bytes_read = 0;
-    
-    /* Read characters from keyboard buffer */
-    while (bytes_read < count && keyboard_buffer_has_data())
+    (void)entry;
+    (void)offset;
+    return ir0_console_read(buf, count, 0);
+}
+
+static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+{
+    struct ir0_termios termios;
+
+    (void)entry;
+
+    if (request == IR0_CONSOLE_TCGETS)
     {
-        char c = keyboard_buffer_get();
-        if (c != 0)
-        {
-            buffer[bytes_read++] = c;
-        }
-        else
-        {
-            /* No more data available */
-            break;
-        }
+        if (!arg)
+            return -EINVAL;
+        if (ir0_console_fill_termios(&termios) != 0)
+            return -EINVAL;
+        if (copy_to_user(arg, &termios, sizeof(termios)) != 0)
+            return -EFAULT;
+        return 0;
     }
-    
-    return (int64_t)bytes_read;
+
+    if (request == IR0_CONSOLE_TCSETS)
+    {
+        if (!arg)
+            return -EINVAL;
+        if (copy_from_user(&termios, arg, sizeof(termios)) != 0)
+            return -EFAULT;
+        if (ir0_console_set_termios(&termios) != 0)
+            return -EINVAL;
+        return 0;
+    }
+
+    return -ENOTTY;
+}
+
+static int64_t dev_console_open(devfs_entry_t *entry, int flags)
+{
+    (void)entry;
+    (void)flags;
+    ir0_console_on_userspace_attach();
+    return 0;
 }
 
 int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)offset;
-    size_t to_write = (count < 1024) ? count : 1024;
-    console_backend_write((const char *)buf, to_write, 0x0F);
-    return (int64_t)to_write;
+    (void)entry;
+    (void)offset;
+    return ir0_console_write(buf, count, 0x07);
 }
 
 /* Circular buffer for kernel messages */
@@ -1579,6 +1602,8 @@ static const devfs_ops_t zero_ops = {
 static const devfs_ops_t console_ops = {
     .read = dev_console_read,
     .write = dev_console_write,
+    .ioctl = dev_console_ioctl,
+    .open = dev_console_open,
     .can_read = devfs_console_can_read,
 };
 

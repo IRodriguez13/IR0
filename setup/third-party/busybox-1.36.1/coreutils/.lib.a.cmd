@@ -1,0 +1,1 @@
+cmd_coreutils/lib.a := rm -f coreutils/lib.a; ar  rcs coreutils/lib.a coreutils/cat.o coreutils/cp.o coreutils/echo.o coreutils/false.o coreutils/head.o coreutils/ls.o coreutils/mkdir.o coreutils/mv.o coreutils/pwd.o coreutils/rm.o coreutils/rmdir.o coreutils/tail.o coreutils/touch.o coreutils/true.o

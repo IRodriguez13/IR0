@@ -22,11 +22,16 @@
 #include <ir0/errno.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
+#include <ir0/console.h>
+
+#define PS2_STATUS_PORT        0x64
+#define PS2_STATUS_OUTPUT_FULL 0x01
 
 /* Forward declarations */
 void wakeup_from_idle(void);
 void stdin_wake_check(void);
 static void keyboard_buffer_add(char c);
+static void keyboard_feed_scancode(uint8_t scancode);
 
 /*
  * Kernel-side ring for stdin; separate from the shared userspace layout in
@@ -261,6 +266,7 @@ static void keyboard_buffer_add(char c)
     {
         keyboard_buffer[keyboard_buffer_head] = c;
         keyboard_buffer_head = next;
+        ir0_console_input_enqueue(c);
     }
 }
 
@@ -296,8 +302,23 @@ void keyboard_buffer_clear(void)
 
 void keyboard_handler64(void) 
 {
-    uint8_t scancode = inb(PS2_DATA_PORT);
-    
+    for (;;)
+    {
+        uint8_t status = inb(PS2_STATUS_PORT);
+        uint8_t scancode;
+
+        if (!(status & PS2_STATUS_OUTPUT_FULL))
+            break;
+
+        scancode = inb(PS2_DATA_PORT);
+        keyboard_feed_scancode(scancode);
+    }
+
+    stdin_wake_check();
+}
+
+static void keyboard_feed_scancode(uint8_t scancode)
+{
     if (scancode == 0xE0)
     {
         ext_scancode = 1;
@@ -357,7 +378,6 @@ void keyboard_handler64(void)
                 keyboard_buffer_add(KEY_ESC_SCROLL_DOWN);
             }
         }
-        stdin_wake_check();
         return;
     }
 
@@ -376,7 +396,6 @@ void keyboard_handler64(void)
         if (ascii != 0)
             keyboard_buffer_add(ascii);
     }
-    stdin_wake_check();
 }
 
 

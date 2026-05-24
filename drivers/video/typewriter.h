@@ -55,6 +55,8 @@ void typewriter_print_uint32(uint32_t num);
 /* VGA typewriter functions for shell */
 void typewriter_vga_print(const char *str, uint8_t color);
 void typewriter_vga_print_char(char c, uint8_t color);
+void typewriter_show_cursor(uint8_t color);
+int typewriter_cursor_x(void);
 
 /* Console scroll (Page Up/Down); delta > 0 = scroll up (older), delta < 0 = scroll down (newer) */
 void typewriter_console_scroll(int delta);

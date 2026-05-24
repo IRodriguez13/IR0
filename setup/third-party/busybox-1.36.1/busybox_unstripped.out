@@ -1,0 +1,876 @@
+Output of:
+/usr/bin/x86_64-linux-musl-gcc -fno-pie -static -no-pie -o busybox_unstripped -Wl,--sort-common -Wl,--sort-section,alignment -Wl,--gc-sections -Wl,--start-group applets/built-in.o archival/lib.a archival/libarchive/lib.a console-tools/lib.a coreutils/lib.a coreutils/libcoreutils/lib.a debianutils/lib.a klibc-utils/lib.a e2fsprogs/lib.a editors/lib.a findutils/lib.a init/lib.a libbb/lib.a libpwdgrp/lib.a loginutils/lib.a mailutils/lib.a miscutils/lib.a modutils/lib.a networking/lib.a networking/libiproute/lib.a networking/udhcp/lib.a printutils/lib.a procps/lib.a runit/lib.a selinux/lib.a shell/lib.a sysklogd/lib.a util-linux/lib.a util-linux/volume_id/lib.a archival/built-in.o archival/libarchive/built-in.o console-tools/built-in.o coreutils/built-in.o coreutils/libcoreutils/built-in.o debianutils/built-in.o klibc-utils/built-in.o e2fsprogs/built-in.o editors/built-in.o findutils/built-in.o init/built-in.o libbb/built-in.o libpwdgrp/built-in.o loginutils/built-in.o mailutils/built-in.o miscutils/built-in.o modutils/built-in.o networking/built-in.o networking/libiproute/built-in.o networking/udhcp/built-in.o printutils/built-in.o procps/built-in.o runit/built-in.o selinux/built-in.o shell/built-in.o sysklogd/built-in.o util-linux/built-in.o util-linux/volume_id/built-in.o -Wl,--end-group -Wl,--warn-common -Wl,-Map,busybox_unstripped.map -Wl,--verbose
+==========
+GNU ld (GNU Binutils for Ubuntu) 2.42
+  Emulaciones admitidas:
+   elf_x86_64
+   elf32_x86_64
+   elf_i386
+   elf_iamcu
+   i386pep
+   i386pe
+se usa el guión interno del enlazador:
+==================================================
+/* Script for -z combreloc -z separate-code */
+/* Copyright (C) 2014-2024 Free Software Foundation, Inc.
+   Copying and distribution of this script, with or without modification,
+   are permitted in any medium without royalty provided the copyright
+   notice and this notice are preserved.  */
+OUTPUT_FORMAT("elf64-x86-64", "elf64-x86-64",
+	      "elf64-x86-64")
+OUTPUT_ARCH(i386:x86-64)
+ENTRY(_start)
+SEARCH_DIR("=/usr/local/lib/x86_64-linux-gnu"); SEARCH_DIR("=/lib/x86_64-linux-gnu"); SEARCH_DIR("=/usr/lib/x86_64-linux-gnu"); SEARCH_DIR("=/usr/lib/x86_64-linux-gnu64"); SEARCH_DIR("=/usr/local/lib64"); SEARCH_DIR("=/lib64"); SEARCH_DIR("=/usr/lib64"); SEARCH_DIR("=/usr/local/lib"); SEARCH_DIR("=/lib"); SEARCH_DIR("=/usr/lib"); SEARCH_DIR("=/usr/x86_64-linux-gnu/lib64"); SEARCH_DIR("=/usr/x86_64-linux-gnu/lib");
+SECTIONS
+{
+  PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x400000)); . = SEGMENT_START("text-segment", 0x400000) + SIZEOF_HEADERS;
+  .interp         : { *(.interp) }
+  .note.gnu.build-id  : { *(.note.gnu.build-id) }
+  .hash           : { *(.hash) }
+  .gnu.hash       : { *(.gnu.hash) }
+  .dynsym         : { *(.dynsym) }
+  .dynstr         : { *(.dynstr) }
+  .gnu.version    : { *(.gnu.version) }
+  .gnu.version_d  : { *(.gnu.version_d) }
+  .gnu.version_r  : { *(.gnu.version_r) }
+  .rela.dyn       :
+    {
+      *(.rela.init)
+      *(.rela.text .rela.text.* .rela.gnu.linkonce.t.*)
+      *(.rela.fini)
+      *(.rela.rodata .rela.rodata.* .rela.gnu.linkonce.r.*)
+      *(.rela.data .rela.data.* .rela.gnu.linkonce.d.*)
+      *(.rela.tdata .rela.tdata.* .rela.gnu.linkonce.td.*)
+      *(.rela.tbss .rela.tbss.* .rela.gnu.linkonce.tb.*)
+      *(.rela.ctors)
+      *(.rela.dtors)
+      *(.rela.got)
+      *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*)
+      *(.rela.ldata .rela.ldata.* .rela.gnu.linkonce.l.*)
+      *(.rela.lbss .rela.lbss.* .rela.gnu.linkonce.lb.*)
+      *(.rela.lrodata .rela.lrodata.* .rela.gnu.linkonce.lr.*)
+      *(.rela.ifunc)
+    }
+  .rela.plt       :
+    {
+      *(.rela.plt)
+      PROVIDE_HIDDEN (__rela_iplt_start = .);
+      *(.rela.iplt)
+      PROVIDE_HIDDEN (__rela_iplt_end = .);
+    }
+  .relr.dyn : { *(.relr.dyn) }
+  . = ALIGN(CONSTANT (MAXPAGESIZE));
+  .init           :
+  {
+    KEEP (*(SORT_NONE(.init)))
+  }
+  .plt            : { *(.plt) *(.iplt) }
+.plt.got        : { *(.plt.got) }
+.plt.sec        : { *(.plt.sec) }
+  .text           :
+  {
+    *(.text.unlikely .text.*_unlikely .text.unlikely.*)
+    *(.text.exit .text.exit.*)
+    *(.text.startup .text.startup.*)
+    *(.text.hot .text.hot.*)
+    *(SORT(.text.sorted.*))
+    *(.text .stub .text.* .gnu.linkonce.t.*)
+    /* .gnu.warning sections are handled specially by elf.em.  */
+    *(.gnu.warning)
+  }
+  .fini           :
+  {
+    KEEP (*(SORT_NONE(.fini)))
+  }
+  PROVIDE (__etext = .);
+  PROVIDE (_etext = .);
+  PROVIDE (etext = .);
+  . = ALIGN(CONSTANT (MAXPAGESIZE));
+  /* Adjust the address for the rodata segment.  We want to adjust up to
+     the same address within the page on the next page up.  */
+  . = SEGMENT_START("rodata-segment", ALIGN(CONSTANT (MAXPAGESIZE)) + (. & (CONSTANT (MAXPAGESIZE) - 1)));
+  .rodata         : { *(.rodata .rodata.* .gnu.linkonce.r.*) }
+  .rodata1        : { *(.rodata1) }
+  .eh_frame_hdr   : { *(.eh_frame_hdr) *(.eh_frame_entry .eh_frame_entry.*) }
+  .eh_frame       : ONLY_IF_RO { KEEP (*(.eh_frame)) *(.eh_frame.*) }
+  .sframe         : ONLY_IF_RO { *(.sframe) *(.sframe.*) }
+  .gcc_except_table   : ONLY_IF_RO { *(.gcc_except_table .gcc_except_table.*) }
+  .gnu_extab   : ONLY_IF_RO { *(.gnu_extab*) }
+  /* These sections are generated by the Sun/Oracle C++ compiler.  */
+  .exception_ranges   : ONLY_IF_RO { *(.exception_ranges*) }
+  /* Adjust the address for the data segment.  We want to adjust up to
+     the same address within the page on the next page up.  */
+  . = DATA_SEGMENT_ALIGN (CONSTANT (MAXPAGESIZE), CONSTANT (COMMONPAGESIZE));
+  /* Exception handling  */
+  .eh_frame       : ONLY_IF_RW { KEEP (*(.eh_frame)) *(.eh_frame.*) }
+  .sframe         : ONLY_IF_RW { *(.sframe) *(.sframe.*) }
+  .gnu_extab      : ONLY_IF_RW { *(.gnu_extab) }
+  .gcc_except_table   : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) }
+  .exception_ranges   : ONLY_IF_RW { *(.exception_ranges*) }
+  /* Thread Local Storage sections  */
+  .tdata	  :
+   {
+     PROVIDE_HIDDEN (__tdata_start = .);
+     *(.tdata .tdata.* .gnu.linkonce.td.*)
+   }
+  .tbss		  : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) }
+  .preinit_array    :
+  {
+    PROVIDE_HIDDEN (__preinit_array_start = .);
+    KEEP (*(.preinit_array))
+    PROVIDE_HIDDEN (__preinit_array_end = .);
+  }
+  .init_array    :
+  {
+    PROVIDE_HIDDEN (__init_array_start = .);
+    KEEP (*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
+    KEEP (*(.init_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .ctors))
+    PROVIDE_HIDDEN (__init_array_end = .);
+  }
+  .fini_array    :
+  {
+    PROVIDE_HIDDEN (__fini_array_start = .);
+    KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*) SORT_BY_INIT_PRIORITY(.dtors.*)))
+    KEEP (*(.fini_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .dtors))
+    PROVIDE_HIDDEN (__fini_array_end = .);
+  }
+  .ctors          :
+  {
+    /* gcc uses crtbegin.o to find the start of
+       the constructors, so we make sure it is
+       first.  Because this is a wildcard, it
+       doesn't matter if the user does not
+       actually link against crtbegin.o; the
+       linker won't look for a file to match a
+       wildcard.  The wildcard also means that it
+       doesn't matter which directory crtbegin.o
+       is in.  */
+    KEEP (*crtbegin.o(.ctors))
+    KEEP (*crtbegin?.o(.ctors))
+    /* We don't want to include the .ctor section from
+       the crtend.o file until after the sorted ctors.
+       The .ctor section from the crtend file contains the
+       end of ctors marker and it must be last */
+    KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .ctors))
+    KEEP (*(SORT(.ctors.*)))
+    KEEP (*(.ctors))
+  }
+  .dtors          :
+  {
+    KEEP (*crtbegin.o(.dtors))
+    KEEP (*crtbegin?.o(.dtors))
+    KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .dtors))
+    KEEP (*(SORT(.dtors.*)))
+    KEEP (*(.dtors))
+  }
+  .jcr            : { KEEP (*(.jcr)) }
+  .data.rel.ro : { *(.data.rel.ro.local* .gnu.linkonce.d.rel.ro.local.*) *(.data.rel.ro .data.rel.ro.* .gnu.linkonce.d.rel.ro.*) }
+  .dynamic        : { *(.dynamic) }
+  .got            : { *(.got) *(.igot) }
+  . = DATA_SEGMENT_RELRO_END (SIZEOF (.got.plt) >= 24 ? 24 : 0, .);
+  .got.plt        : { *(.got.plt) *(.igot.plt) }
+  .data           :
+  {
+    *(.data .data.* .gnu.linkonce.d.*)
+    SORT(CONSTRUCTORS)
+  }
+  .data1          : { *(.data1) }
+  _edata = .; PROVIDE (edata = .);
+  . = ALIGN(ALIGNOF(NEXT_SECTION));
+  __bss_start = .;
+  .bss            :
+  {
+   *(.dynbss)
+   *(.bss .bss.* .gnu.linkonce.b.*)
+   *(COMMON)
+   /* Align here to ensure that the .bss section occupies space up to
+      _end.  Align after .bss to ensure correct alignment even if the
+      .bss section disappears because there are no input sections.
+      FIXME: Why do we need it? When there is no .bss section, we do not
+      pad the .data section.  */
+   . = ALIGN(. != 0 ? 64 / 8 : 1);
+  }
+  .lbss   :
+  {
+    *(.dynlbss)
+    *(.lbss .lbss.* .gnu.linkonce.lb.*)
+    *(LARGE_COMMON)
+  }
+  . = ALIGN(64 / 8);
+  . = SEGMENT_START("ldata-segment", .);
+  .lrodata   ALIGN(CONSTANT (MAXPAGESIZE)) + (. & (CONSTANT (MAXPAGESIZE) - 1)) :
+  {
+    *(.lrodata .lrodata.* .gnu.linkonce.lr.*)
+  }
+  .ldata   ALIGN(CONSTANT (MAXPAGESIZE)) + (. & (CONSTANT (MAXPAGESIZE) - 1)) :
+  {
+    *(.ldata .ldata.* .gnu.linkonce.l.*)
+    . = ALIGN(. != 0 ? 64 / 8 : 1);
+  }
+  . = ALIGN(64 / 8);
+  _end = .; PROVIDE (end = .);
+  . = DATA_SEGMENT_END (.);
+  /* Stabs debugging sections.  */
+  .stab          0 : { *(.stab) }
+  .stabstr       0 : { *(.stabstr) }
+  .stab.excl     0 : { *(.stab.excl) }
+  .stab.exclstr  0 : { *(.stab.exclstr) }
+  .stab.index    0 : { *(.stab.index) }
+  .stab.indexstr 0 : { *(.stab.indexstr) }
+  .comment 0 (INFO) : { *(.comment); LINKER_VERSION; }
+  .gnu.build.attributes : { *(.gnu.build.attributes .gnu.build.attributes.*) }
+  /* DWARF debug sections.
+     Symbols in the DWARF debugging sections are relative to the beginning
+     of the section so we begin them at 0.  */
+  /* DWARF 1.  */
+  .debug          0 : { *(.debug) }
+  .line           0 : { *(.line) }
+  /* GNU DWARF 1 extensions.  */
+  .debug_srcinfo  0 : { *(.debug_srcinfo) }
+  .debug_sfnames  0 : { *(.debug_sfnames) }
+  /* DWARF 1.1 and DWARF 2.  */
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+  /* DWARF 2.  */
+  .debug_info     0 : { *(.debug_info .gnu.linkonce.wi.*) }
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  .debug_line     0 : { *(.debug_line .debug_line.* .debug_line_end) }
+  .debug_frame    0 : { *(.debug_frame) }
+  .debug_str      0 : { *(.debug_str) }
+  .debug_loc      0 : { *(.debug_loc) }
+  .debug_macinfo  0 : { *(.debug_macinfo) }
+  /* SGI/MIPS DWARF 2 extensions.  */
+  .debug_weaknames 0 : { *(.debug_weaknames) }
+  .debug_funcnames 0 : { *(.debug_funcnames) }
+  .debug_typenames 0 : { *(.debug_typenames) }
+  .debug_varnames  0 : { *(.debug_varnames) }
+  /* DWARF 3.  */
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .debug_ranges   0 : { *(.debug_ranges) }
+  /* DWARF 5.  */
+  .debug_addr     0 : { *(.debug_addr) }
+  .debug_line_str 0 : { *(.debug_line_str) }
+  .debug_loclists 0 : { *(.debug_loclists) }
+  .debug_macro    0 : { *(.debug_macro) }
+  .debug_names    0 : { *(.debug_names) }
+  .debug_rnglists 0 : { *(.debug_rnglists) }
+  .debug_str_offsets 0 : { *(.debug_str_offsets) }
+  .debug_sup      0 : { *(.debug_sup) }
+  .gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }
+  /DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) }
+}
+
+
+==================================================
+/usr/bin/ld: modo elf_x86_64
+tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/Scrt1.o
+/usr/lib/x86_64-linux-musl/Scrt1.o
+tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/crti.o
+/usr/lib/x86_64-linux-musl/crti.o
+tuvo éxito el intento de abrir /usr/lib/gcc/x86_64-linux-gnu/13/crtbeginS.o
+/usr/lib/gcc/x86_64-linux-gnu/13/crtbeginS.o
+tuvo éxito el intento de abrir applets/built-in.o
+applets/built-in.o
+tuvo éxito el intento de abrir archival/lib.a
+archival/lib.a
+tuvo éxito el intento de abrir archival/libarchive/lib.a
+archival/libarchive/lib.a
+tuvo éxito el intento de abrir console-tools/lib.a
+console-tools/lib.a
+tuvo éxito el intento de abrir coreutils/lib.a
+coreutils/lib.a
+tuvo éxito el intento de abrir coreutils/libcoreutils/lib.a
+coreutils/libcoreutils/lib.a
+tuvo éxito el intento de abrir debianutils/lib.a
+debianutils/lib.a
+tuvo éxito el intento de abrir klibc-utils/lib.a
+klibc-utils/lib.a
+tuvo éxito el intento de abrir e2fsprogs/lib.a
+e2fsprogs/lib.a
+tuvo éxito el intento de abrir editors/lib.a
+editors/lib.a
+tuvo éxito el intento de abrir findutils/lib.a
+findutils/lib.a
+tuvo éxito el intento de abrir init/lib.a
+init/lib.a
+tuvo éxito el intento de abrir libbb/lib.a
+libbb/lib.a
+(libbb/lib.a)appletlib.o
+(libbb/lib.a)compare_string_array.o
+(libbb/lib.a)default_error_retval.o
+(libbb/lib.a)get_last_path_component.o
+(libbb/lib.a)last_char_is.o
+(libbb/lib.a)messages.o
+(libbb/lib.a)ptr_to_globals.o
+(libbb/lib.a)vfork_daemon_rexec.o
+(libbb/lib.a)xfunc_die.o
+(libbb/lib.a)xfuncs.o
+(libbb/lib.a)xfuncs_printf.o
+(libbb/lib.a)copyfd.o
+(libbb/lib.a)full_write.o
+(libbb/lib.a)perror_msg.o
+(libbb/lib.a)read.o
+(libbb/lib.a)safe_write.o
+(libbb/lib.a)signals.o
+(libbb/lib.a)time.o
+(libbb/lib.a)verror_msg.o
+(libbb/lib.a)bb_strtonum.o
+tuvo éxito el intento de abrir libpwdgrp/lib.a
+libpwdgrp/lib.a
+tuvo éxito el intento de abrir loginutils/lib.a
+loginutils/lib.a
+tuvo éxito el intento de abrir mailutils/lib.a
+mailutils/lib.a
+tuvo éxito el intento de abrir miscutils/lib.a
+miscutils/lib.a
+tuvo éxito el intento de abrir modutils/lib.a
+modutils/lib.a
+tuvo éxito el intento de abrir networking/lib.a
+networking/lib.a
+tuvo éxito el intento de abrir networking/libiproute/lib.a
+networking/libiproute/lib.a
+tuvo éxito el intento de abrir networking/udhcp/lib.a
+networking/udhcp/lib.a
+tuvo éxito el intento de abrir printutils/lib.a
+printutils/lib.a
+tuvo éxito el intento de abrir procps/lib.a
+procps/lib.a
+tuvo éxito el intento de abrir runit/lib.a
+runit/lib.a
+tuvo éxito el intento de abrir selinux/lib.a
+selinux/lib.a
+tuvo éxito el intento de abrir shell/lib.a
+shell/lib.a
+(shell/lib.a)ash.o
+(shell/lib.a)ash_ptr_hack.o
+(shell/lib.a)shell_common.o
+tuvo éxito el intento de abrir sysklogd/lib.a
+sysklogd/lib.a
+tuvo éxito el intento de abrir util-linux/lib.a
+util-linux/lib.a
+tuvo éxito el intento de abrir util-linux/volume_id/lib.a
+util-linux/volume_id/lib.a
+tuvo éxito el intento de abrir archival/built-in.o
+archival/built-in.o
+tuvo éxito el intento de abrir archival/libarchive/built-in.o
+archival/libarchive/built-in.o
+tuvo éxito el intento de abrir console-tools/built-in.o
+console-tools/built-in.o
+tuvo éxito el intento de abrir coreutils/built-in.o
+coreutils/built-in.o
+tuvo éxito el intento de abrir coreutils/libcoreutils/built-in.o
+coreutils/libcoreutils/built-in.o
+tuvo éxito el intento de abrir debianutils/built-in.o
+debianutils/built-in.o
+tuvo éxito el intento de abrir klibc-utils/built-in.o
+klibc-utils/built-in.o
+tuvo éxito el intento de abrir e2fsprogs/built-in.o
+e2fsprogs/built-in.o
+tuvo éxito el intento de abrir editors/built-in.o
+editors/built-in.o
+tuvo éxito el intento de abrir findutils/built-in.o
+findutils/built-in.o
+tuvo éxito el intento de abrir init/built-in.o
+init/built-in.o
+tuvo éxito el intento de abrir libbb/built-in.o
+libbb/built-in.o
+tuvo éxito el intento de abrir libpwdgrp/built-in.o
+libpwdgrp/built-in.o
+tuvo éxito el intento de abrir loginutils/built-in.o
+loginutils/built-in.o
+tuvo éxito el intento de abrir mailutils/built-in.o
+mailutils/built-in.o
+tuvo éxito el intento de abrir miscutils/built-in.o
+miscutils/built-in.o
+tuvo éxito el intento de abrir modutils/built-in.o
+modutils/built-in.o
+tuvo éxito el intento de abrir networking/built-in.o
+networking/built-in.o
+tuvo éxito el intento de abrir networking/libiproute/built-in.o
+networking/libiproute/built-in.o
+tuvo éxito el intento de abrir networking/udhcp/built-in.o
+networking/udhcp/built-in.o
+tuvo éxito el intento de abrir printutils/built-in.o
+printutils/built-in.o
+tuvo éxito el intento de abrir procps/built-in.o
+procps/built-in.o
+tuvo éxito el intento de abrir runit/built-in.o
+runit/built-in.o
+tuvo éxito el intento de abrir selinux/built-in.o
+selinux/built-in.o
+tuvo éxito el intento de abrir shell/built-in.o
+shell/built-in.o
+tuvo éxito el intento de abrir sysklogd/built-in.o
+sysklogd/built-in.o
+tuvo éxito el intento de abrir util-linux/built-in.o
+util-linux/built-in.o
+tuvo éxito el intento de abrir util-linux/volume_id/built-in.o
+util-linux/volume_id/built-in.o
+archival/lib.a
+archival/libarchive/lib.a
+console-tools/lib.a
+coreutils/lib.a
+(coreutils/lib.a)cat.o
+(coreutils/lib.a)cp.o
+(coreutils/lib.a)echo.o
+(coreutils/lib.a)false.o
+(coreutils/lib.a)head.o
+(coreutils/lib.a)ls.o
+(coreutils/lib.a)mkdir.o
+(coreutils/lib.a)mv.o
+(coreutils/lib.a)pwd.o
+(coreutils/lib.a)rm.o
+(coreutils/lib.a)rmdir.o
+(coreutils/lib.a)tail.o
+(coreutils/lib.a)touch.o
+(coreutils/lib.a)true.o
+coreutils/libcoreutils/lib.a
+(coreutils/libcoreutils/lib.a)cp_mv_stat.o
+debianutils/lib.a
+klibc-utils/lib.a
+e2fsprogs/lib.a
+editors/lib.a
+findutils/lib.a
+(findutils/lib.a)grep.o
+init/lib.a
+libbb/lib.a
+(libbb/lib.a)ask_confirmation.o
+(libbb/lib.a)bb_cat.o
+(libbb/lib.a)common_bufsiz.o
+(libbb/lib.a)concat_path_file.o
+(libbb/lib.a)copy_file.o
+(libbb/lib.a)endofname.o
+(libbb/lib.a)fclose_nonstdin.o
+(libbb/lib.a)fflush_stdout_and_exit.o
+(libbb/lib.a)get_line_from_file.o
+(libbb/lib.a)getopt32.o
+(libbb/lib.a)inode_hash.o
+(libbb/lib.a)llist.o
+(libbb/lib.a)make_directory.o
+(libbb/lib.a)mode_string.o
+(libbb/lib.a)parse_mode.o
+(libbb/lib.a)perror_nomsg_and_die.o
+(libbb/lib.a)printable_string.o
+(libbb/lib.a)read_printf.o
+(libbb/lib.a)recursive_action.o
+(libbb/lib.a)remove_file.o
+(libbb/lib.a)safe_poll.o
+(libbb/lib.a)safe_strncpy.o
+(libbb/lib.a)sysconf.o
+(libbb/lib.a)u_signal_names.o
+(libbb/lib.a)wfopen.o
+(libbb/lib.a)wfopen_input.o
+(libbb/lib.a)xatonum.o
+(libbb/lib.a)xgetcwd.o
+(libbb/lib.a)xreadlink.o
+(libbb/lib.a)xregcomp.o
+(libbb/lib.a)auto_string.o
+(libbb/lib.a)concat_subpath_file.o
+libpwdgrp/lib.a
+loginutils/lib.a
+mailutils/lib.a
+miscutils/lib.a
+modutils/lib.a
+networking/lib.a
+networking/libiproute/lib.a
+networking/udhcp/lib.a
+printutils/lib.a
+procps/lib.a
+runit/lib.a
+selinux/lib.a
+shell/lib.a
+sysklogd/lib.a
+util-linux/lib.a
+util-linux/volume_id/lib.a
+archival/built-in.o
+archival/libarchive/built-in.o
+console-tools/built-in.o
+coreutils/built-in.o
+coreutils/libcoreutils/built-in.o
+debianutils/built-in.o
+klibc-utils/built-in.o
+e2fsprogs/built-in.o
+editors/built-in.o
+findutils/built-in.o
+init/built-in.o
+libbb/built-in.o
+libpwdgrp/built-in.o
+loginutils/built-in.o
+mailutils/built-in.o
+miscutils/built-in.o
+modutils/built-in.o
+networking/built-in.o
+networking/libiproute/built-in.o
+networking/udhcp/built-in.o
+printutils/built-in.o
+procps/built-in.o
+runit/built-in.o
+selinux/built-in.o
+shell/built-in.o
+sysklogd/built-in.o
+util-linux/built-in.o
+util-linux/volume_id/built-in.o
+archival/lib.a
+archival/libarchive/lib.a
+console-tools/lib.a
+coreutils/lib.a
+coreutils/libcoreutils/lib.a
+debianutils/lib.a
+klibc-utils/lib.a
+e2fsprogs/lib.a
+editors/lib.a
+findutils/lib.a
+init/lib.a
+libbb/lib.a
+libpwdgrp/lib.a
+loginutils/lib.a
+mailutils/lib.a
+miscutils/lib.a
+modutils/lib.a
+networking/lib.a
+networking/libiproute/lib.a
+networking/udhcp/lib.a
+printutils/lib.a
+procps/lib.a
+runit/lib.a
+selinux/lib.a
+shell/lib.a
+sysklogd/lib.a
+util-linux/lib.a
+util-linux/volume_id/lib.a
+archival/built-in.o
+archival/libarchive/built-in.o
+console-tools/built-in.o
+coreutils/built-in.o
+coreutils/libcoreutils/built-in.o
+debianutils/built-in.o
+klibc-utils/built-in.o
+e2fsprogs/built-in.o
+editors/built-in.o
+findutils/built-in.o
+init/built-in.o
+libbb/built-in.o
+libpwdgrp/built-in.o
+loginutils/built-in.o
+mailutils/built-in.o
+miscutils/built-in.o
+modutils/built-in.o
+networking/built-in.o
+networking/libiproute/built-in.o
+networking/udhcp/built-in.o
+printutils/built-in.o
+procps/built-in.o
+runit/built-in.o
+selinux/built-in.o
+shell/built-in.o
+sysklogd/built-in.o
+util-linux/built-in.o
+util-linux/volume_id/built-in.o
+tuvo éxito el intento de abrir /usr/lib/gcc/x86_64-linux-gnu/13/libgcc.a
+/usr/lib/gcc/x86_64-linux-gnu/13/libgcc.a
+tuvo éxito el intento de abrir /usr/lib/gcc/x86_64-linux-gnu/13/libgcc_eh.a
+/usr/lib/gcc/x86_64-linux-gnu/13/libgcc_eh.a
+tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
+/usr/lib/x86_64-linux-musl/libc.a
+(/usr/lib/x86_64-linux-musl/libc.a)sysconf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)closedir.lo
+(/usr/lib/x86_64-linux-musl/libc.a)opendir.lo
+(/usr/lib/x86_64-linux-musl/libc.a)readdir.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__environ.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__libc_start_main.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__stack_chk_fail.lo
+(/usr/lib/x86_64-linux-musl/libc.a)clearenv.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getenv.lo
+(/usr/lib/x86_64-linux-musl/libc.a)putenv.lo
+(/usr/lib/x86_64-linux-musl/libc.a)setenv.lo
+(/usr/lib/x86_64-linux-musl/libc.a)unsetenv.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__errno_location.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strerror.lo
+(/usr/lib/x86_64-linux-musl/libc.a)exit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fcntl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)open.lo
+(/usr/lib/x86_64-linux-musl/libc.a)defsysinfo.lo
+(/usr/lib/x86_64-linux-musl/libc.a)libc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)syscall_ret.lo
+(/usr/lib/x86_64-linux-musl/libc.a)chroot.lo
+(/usr/lib/x86_64-linux-musl/libc.a)prctl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)settimeofday.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sysinfo.lo
+(/usr/lib/x86_64-linux-musl/libc.a)utimes.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__lctrans.lo
+(/usr/lib/x86_64-linux-musl/libc.a)calloc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)free.lo
+(/usr/lib/x86_64-linux-musl/libc.a)lite_malloc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)free.lo
+(/usr/lib/x86_64-linux-musl/libc.a)malloc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)realloc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)replaced.lo
+(/usr/lib/x86_64-linux-musl/libc.a)dirname.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getauxval.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getopt.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getrlimit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)ioctl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)realpath.lo
+(/usr/lib/x86_64-linux-musl/libc.a)setrlimit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mmap.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mprotect.lo
+(/usr/lib/x86_64-linux-musl/libc.a)munmap.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mbtowc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)bind.lo
+(/usr/lib/x86_64-linux-musl/libc.a)listen.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sendto.lo
+(/usr/lib/x86_64-linux-musl/libc.a)socket.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getpwent.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getpwent_a.lo
+(/usr/lib/x86_64-linux-musl/libc.a)rand.lo
+(/usr/lib/x86_64-linux-musl/libc.a)execve.lo
+(/usr/lib/x86_64-linux-musl/libc.a)execvp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fork.lo
+(/usr/lib/x86_64-linux-musl/libc.a)waitpid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vfork.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fnmatch.lo
+(/usr/lib/x86_64-linux-musl/libc.a)glob.lo
+(/usr/lib/x86_64-linux-musl/libc.a)regcomp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)regerror.lo
+(/usr/lib/x86_64-linux-musl/libc.a)regexec.lo
+(/usr/lib/x86_64-linux-musl/libc.a)tre-mem.lo
+(/usr/lib/x86_64-linux-musl/libc.a)poll.lo
+(/usr/lib/x86_64-linux-musl/libc.a)longjmp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)setjmp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)block.lo
+(/usr/lib/x86_64-linux-musl/libc.a)raise.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sigaction.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sigaddset.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sigemptyset.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sigfillset.lo
+(/usr/lib/x86_64-linux-musl/libc.a)signal.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sigprocmask.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sigsuspend.lo
+(/usr/lib/x86_64-linux-musl/libc.a)restore.lo
+(/usr/lib/x86_64-linux-musl/libc.a)chmod.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fstat.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fstatat.lo
+(/usr/lib/x86_64-linux-musl/libc.a)futimesat.lo
+(/usr/lib/x86_64-linux-musl/libc.a)lstat.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mkdir.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mknod.lo
+(/usr/lib/x86_64-linux-musl/libc.a)stat.lo
+(/usr/lib/x86_64-linux-musl/libc.a)umask.lo
+(/usr/lib/x86_64-linux-musl/libc.a)utimensat.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__fdopen.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__lockfile.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__stdio_close.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__stdio_read.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__stdio_seek.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__stdio_write.lo
+(/usr/lib/x86_64-linux-musl/libc.a)clearerr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)dprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fclose.lo
+(/usr/lib/x86_64-linux-musl/libc.a)ferror.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fflush.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fileno.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fopen.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fputs.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fwrite.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getc_unlocked.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getline.lo
+(/usr/lib/x86_64-linux-musl/libc.a)ofl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)ofl_add.lo
+(/usr/lib/x86_64-linux-musl/libc.a)printf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)putc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)putc_unlocked.lo
+(/usr/lib/x86_64-linux-musl/libc.a)putchar_unlocked.lo
+(/usr/lib/x86_64-linux-musl/libc.a)puts.lo
+(/usr/lib/x86_64-linux-musl/libc.a)rename.lo
+(/usr/lib/x86_64-linux-musl/libc.a)snprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sscanf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)stderr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)stdin.lo
+(/usr/lib/x86_64-linux-musl/libc.a)stdout.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vasprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vdprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vfprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vsnprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vsprintf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vsscanf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)atoi.lo
+(/usr/lib/x86_64-linux-musl/libc.a)bsearch.lo
+(/usr/lib/x86_64-linux-musl/libc.a)qsort_nr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strtol.lo
+(/usr/lib/x86_64-linux-musl/libc.a)memchr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)memcmp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mempcpy.lo
+(/usr/lib/x86_64-linux-musl/libc.a)stpcpy.lo
+(/usr/lib/x86_64-linux-musl/libc.a)stpncpy.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strcasecmp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strcasestr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strchr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strchrnul.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strcmp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strcpy.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strcspn.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strdup.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strlen.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strncasecmp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strncmp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strncpy.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strndup.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strnlen.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strpbrk.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strrchr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strsep.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strsignal.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strstr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strtok_r.lo
+(/usr/lib/x86_64-linux-musl/libc.a)memcpy.lo
+(/usr/lib/x86_64-linux-musl/libc.a)memmove.lo
+(/usr/lib/x86_64-linux-musl/libc.a)memset.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mkstemp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)tcgetattr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)tcsetattr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__lock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__syscall_cp.lo
+(/usr/lib/x86_64-linux-musl/libc.a)lock_ptc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_rwlock_rdlock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_rwlock_timedrdlock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_rwlock_tryrdlock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_rwlock_unlock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_rwlock_wrlock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_setcancelstate.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_sigmask.lo
+(/usr/lib/x86_64-linux-musl/libc.a)synccall.lo
+(/usr/lib/x86_64-linux-musl/libc.a)clock_settime.lo
+(/usr/lib/x86_64-linux-musl/libc.a)gettimeofday.lo
+(/usr/lib/x86_64-linux-musl/libc.a)localtime.lo
+(/usr/lib/x86_64-linux-musl/libc.a)localtime_r.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mktime.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strftime.lo
+(/usr/lib/x86_64-linux-musl/libc.a)time.lo
+(/usr/lib/x86_64-linux-musl/libc.a)times.lo
+(/usr/lib/x86_64-linux-musl/libc.a)_exit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)access.lo
+(/usr/lib/x86_64-linux-musl/libc.a)chdir.lo
+(/usr/lib/x86_64-linux-musl/libc.a)chown.lo
+(/usr/lib/x86_64-linux-musl/libc.a)close.lo
+(/usr/lib/x86_64-linux-musl/libc.a)dup.lo
+(/usr/lib/x86_64-linux-musl/libc.a)dup2.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fchdir.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getcwd.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getegid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)geteuid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getpid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getppid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getuid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)isatty.lo
+(/usr/lib/x86_64-linux-musl/libc.a)lchown.lo
+(/usr/lib/x86_64-linux-musl/libc.a)link.lo
+(/usr/lib/x86_64-linux-musl/libc.a)lseek.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pipe.lo
+(/usr/lib/x86_64-linux-musl/libc.a)read.lo
+(/usr/lib/x86_64-linux-musl/libc.a)readlink.lo
+(/usr/lib/x86_64-linux-musl/libc.a)rmdir.lo
+(/usr/lib/x86_64-linux-musl/libc.a)setegid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)seteuid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)setgid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)setsid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)setuid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)setxid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sleep.lo
+(/usr/lib/x86_64-linux-musl/libc.a)symlink.lo
+(/usr/lib/x86_64-linux-musl/libc.a)ttyname_r.lo
+(/usr/lib/x86_64-linux-musl/libc.a)unlink.lo
+(/usr/lib/x86_64-linux-musl/libc.a)write.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswalnum.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswalpha.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswctype.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswgraph.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswlower.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswprint.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswpunct.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswspace.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswupper.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswxdigit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)tolower.lo
+(/usr/lib/x86_64-linux-musl/libc.a)towctrans.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__init_tls.lo
+(/usr/lib/x86_64-linux-musl/libc.a)_Exit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)abort_lock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)intscan.lo
+(/usr/lib/x86_64-linux-musl/libc.a)procfdname.lo
+(/usr/lib/x86_64-linux-musl/libc.a)shgetc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)langinfo.lo
+(/usr/lib/x86_64-linux-musl/libc.a)realloc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__fpclassifyl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__signbitl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)frexpl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mremap.lo
+(/usr/lib/x86_64-linux-musl/libc.a)internal.lo
+(/usr/lib/x86_64-linux-musl/libc.a)wctomb.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getpw_a.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getpw_r.lo
+(/usr/lib/x86_64-linux-musl/libc.a)nscd_query.lo
+(/usr/lib/x86_64-linux-musl/libc.a)_Fork.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__fmodeflags.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__overflow.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__stdout_write.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__towrite.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__uflow.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fread.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getdelim.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vfscanf.lo
+(/usr/lib/x86_64-linux-musl/libc.a)qsort.lo
+(/usr/lib/x86_64-linux-musl/libc.a)memrchr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strspn.lo
+(/usr/lib/x86_64-linux-musl/libc.a)wcschr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)wcslen.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mkostemps.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__timedwait.lo
+(/usr/lib/x86_64-linux-musl/libc.a)default_attr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_rwlock_timedwrlock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_rwlock_trywrlock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sem_destroy.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sem_init.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sem_post.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sem_wait.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__set_thread_area.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__secs_to_tm.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__tm_to_secs.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__tz.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__year_to_secs.lo
+(/usr/lib/x86_64-linux-musl/libc.a)clock_gettime.lo
+(/usr/lib/x86_64-linux-musl/libc.a)nanosleep.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswblank.lo
+(/usr/lib/x86_64-linux-musl/libc.a)iswcntrl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)floatscan.lo
+(/usr/lib/x86_64-linux-musl/libc.a)vdso.lo
+(/usr/lib/x86_64-linux-musl/libc.a)copysignl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)scalbn.lo
+(/usr/lib/x86_64-linux-musl/libc.a)scalbnl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fabsl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fmodl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mbrtowc.lo
+(/usr/lib/x86_64-linux-musl/libc.a)mbsinit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)wcrtomb.lo
+(/usr/lib/x86_64-linux-musl/libc.a)connect.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sendmsg.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__stdio_exit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__toread.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__randname.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sem_timedwait.lo
+(/usr/lib/x86_64-linux-musl/libc.a)sem_trywait.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__map_file.lo
+(/usr/lib/x86_64-linux-musl/libc.a)__month_to_secs.lo
+(/usr/lib/x86_64-linux-musl/libc.a)clock_nanosleep.lo
+(/usr/lib/x86_64-linux-musl/libc.a)isblank.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_cleanup_push.lo
+(/usr/lib/x86_64-linux-musl/libc.a)pthread_testcancel.lo
+/usr/lib/gcc/x86_64-linux-gnu/13/libgcc.a
+/usr/lib/gcc/x86_64-linux-gnu/13/libgcc_eh.a
+/usr/lib/x86_64-linux-musl/libc.a
+tuvo éxito el intento de abrir /usr/lib/gcc/x86_64-linux-gnu/13/crtendS.o
+/usr/lib/gcc/x86_64-linux-gnu/13/crtendS.o
+tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/crtn.o
+/usr/lib/x86_64-linux-musl/crtn.o

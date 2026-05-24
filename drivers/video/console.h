@@ -28,6 +28,8 @@
 #define CONSOLE_WIDTH  80
 #define CONSOLE_HEIGHT 25
 
+#define CONSOLE_FB_SCALE_DEFAULT 1
+
 /*
  * console_put_cell - Draw one character cell at (row, col).
  * @row: 0..24
@@ -59,5 +61,9 @@ void console_init(void);
  * console_use_framebuffer - True if using framebuffer backend.
  */
 int console_use_framebuffer(void);
+
+int console_get_width(void);
+int console_get_height(void);
+int console_get_fb_scale(void);
 
 #endif /* CONSOLE_H */

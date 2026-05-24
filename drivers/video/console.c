@@ -29,6 +29,9 @@
 #include <string.h>
 
 static int use_fb = 0;
+static int fb_console_cols = CONSOLE_WIDTH;
+static int fb_console_rows = CONSOLE_HEIGHT;
+static int fb_scale = CONSOLE_FB_SCALE_DEFAULT;
 
 /* VGA: 80x25 text buffer at 0xB8000 */
 #define VGA_BUF ((volatile uint16_t *)0xB8000)
@@ -66,14 +69,9 @@ static const uint8_t vga_palette_rgb[16][3] = {
     {255, 85, 85}, {255, 85, 255}, {255, 255, 85}, {255, 255, 255}
 };
 
-/*
- * Scale factor: 1 = 8x16 pixels/char (compact), 2 = 16x32 (larger).
- */
-#define FB_SCALE 1
-
 static void put_cell_fb(int row, int col, char c, uint8_t color)
 {
-    if (row < 0 || row >= CONSOLE_HEIGHT || col < 0 || col >= CONSOLE_WIDTH)
+    if (row < 0 || row >= fb_console_rows || col < 0 || col >= fb_console_cols)
         return;
 
     uint32_t w, h, bpp;
@@ -94,8 +92,8 @@ static void put_cell_fb(int row, int col, char c, uint8_t color)
         vga_palette_rgb[(color >> 4) & 0x0F][1],
         vga_palette_rgb[(color >> 4) & 0x0F][2]);
 
-    int cw = FONT_WIDTH * FB_SCALE;
-    int ch = FONT_HEIGHT * FB_SCALE;
+    int cw = FONT_WIDTH * fb_scale;
+    int ch = FONT_HEIGHT * fb_scale;
     int px = col * cw;
     int py = row * ch;
 
@@ -108,14 +106,14 @@ static void put_cell_fb(int row, int col, char c, uint8_t color)
     for (int dy = 0; dy < FONT_HEIGHT; dy++)
     {
         uint8_t row_bits = glyph[dy];
-        for (int sy = 0; sy < FB_SCALE; sy++)
+        for (int sy = 0; sy < fb_scale; sy++)
         {
-            uint32_t *line = (uint32_t *)(fb + (py + dy * FB_SCALE + sy) * pitch);
+            uint32_t *line = (uint32_t *)(fb + (py + dy * fb_scale + sy) * pitch);
             for (int dx = 0; dx < FONT_WIDTH; dx++)
             {
                 uint32_t pixel = (row_bits & (0x80 >> dx)) ? fg_rgb : bg_rgb;
-                for (int sx = 0; sx < FB_SCALE; sx++)
-                    line[px + dx * FB_SCALE + sx] = pixel;
+                for (int sx = 0; sx < fb_scale; sx++)
+                    line[px + dx * fb_scale + sx] = pixel;
             }
         }
     }
@@ -135,8 +133,8 @@ static void scroll_up_fb(uint8_t clear_color)
     uint8_t bg = (clear_color >> 4) & 0x0F;
     uint32_t bg_rgb = vbe_rgb_to_pixel(
         vga_palette_rgb[bg][0], vga_palette_rgb[bg][1], vga_palette_rgb[bg][2]);
-    size_t line_bytes = (FONT_HEIGHT * FB_SCALE) * pitch;
-    size_t move_bytes = line_bytes * (CONSOLE_HEIGHT - 1);
+    size_t line_bytes = (FONT_HEIGHT * fb_scale) * pitch;
+    size_t move_bytes = line_bytes * (fb_console_rows - 1);
 
     memmove(fb, fb + line_bytes, move_bytes);
 
@@ -234,4 +232,25 @@ void console_init(void)
 int console_use_framebuffer(void)
 {
     return use_fb;
+}
+
+int console_get_width(void)
+{
+    if (use_fb)
+        return fb_console_cols;
+    return CONSOLE_WIDTH;
+}
+
+int console_get_height(void)
+{
+    if (use_fb)
+        return fb_console_rows;
+    return CONSOLE_HEIGHT;
+}
+
+int console_get_fb_scale(void)
+{
+    if (use_fb)
+        return fb_scale;
+    return 1;
 }

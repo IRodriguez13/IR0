@@ -101,6 +101,7 @@ DEBUG_BINS_KTEST_CMD = ROOT / "debug_bins" / "cmd_ktest.c"
 DEVFS_USERCOPY_RE = re.compile(r"\bcopy_(to|from)_user\s*\(")
 DEVFS_USERCOPY_WHITELIST = {
     "dev_audio_ioctl",
+    "dev_console_ioctl",
     "dev_fb0_ioctl",
 }
 

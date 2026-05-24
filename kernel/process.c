@@ -12,6 +12,7 @@
  */
 
 
+#include <ir0/console.h>
 #include "process.h"
 #include <config.h>
 #include "scheduler_api.h"
@@ -3089,6 +3090,8 @@ void process_destroy(process_t *p)
 	if (!p)
 		return;
 	memset(&reclaim_stats, 0, sizeof(reclaim_stats));
+
+	ir0_console_purge_waiters_for_process(p);
 
 	process_fase46_proc_log(p, -1, "DESTROY");
 	fase44_ref_emit(p, "destroy");

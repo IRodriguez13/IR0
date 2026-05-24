@@ -12,6 +12,7 @@
  * 
  */
 
+#include <ir0/console.h>
 #include "syscalls.h"
 #include "syscalls/fs_syscalls.h"
 #include "process.h"
@@ -1614,6 +1615,7 @@ void stdin_wake_check(void)
 {
   if (!keyboard_buffer_has_data())
     return;
+  ir0_console_wake_readers();
   for (int i = 0; i < MAX_STDIN_WAITERS; i++)
   {
     if (stdin_waiters[i])

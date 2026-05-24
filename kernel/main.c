@@ -35,6 +35,7 @@
 #include <ir0/block_dev.h>
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
+#include <ir0/console.h>
 #include <ir0/multiboot.h>
 #include "ipc.h"
 #include "syscalls.h"
@@ -69,8 +70,11 @@ void kernel_idle_poll(void)
 #endif
 	poll_wake_check();
 	sleep_wake_check();
+	ir0_console_drain_echo();
 	stdin_wake_check();
 	pipe_wake_check();
+	if (ir0_console_take_resched())
+		sched_schedule_next();
 }
 
 /*
@@ -262,6 +266,8 @@ void kmain(uint32_t multiboot_info)
         serial_print("SERIAL: kmain: /sbin/init loaded (PID ");
         serial_print_hex32((uint32_t)init_pid);
         serial_print("), scheduling...\n");
+
+        ir0_console_on_userspace_attach();
 
         sched_schedule_next();
         panic("sched_schedule_next returned after userspace init");
