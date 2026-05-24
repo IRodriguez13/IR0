@@ -13,6 +13,7 @@
 
 
 #include <ir0/console.h>
+#include <ir0/debug_trap.h>
 #include "process.h"
 #include <config.h>
 #include "scheduler_api.h"
@@ -1447,6 +1448,7 @@ void process_init(void)
 {
 	current_process = NULL;
 	process_list = NULL;
+	ir0_debug_trap_init();
 #if KERNEL_DEBUG_SHELL
 	/* PID 1 reserved for debug-shell init (start_init_process hardcodes pid 1). */
 	next_pid = 2;
@@ -1512,7 +1514,7 @@ void irq_save_user_frame(uint64_t *frame)
 #endif
 
 	p->task.rip = frame[2];
-	p->task.rflags = (frame[4] | 2ULL) | RFLAGS_IF;
+	p->task.rflags = ir0_rflags_sanitize_user((frame[4] | 2ULL) | RFLAGS_IF);
 	p->task.rsp = frame[5];
 	if ((frame[3] & 3U) == 3U)
 	{
@@ -1690,7 +1692,10 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 
 	/* Setup task registers for clean start */
 	proc->task.rip = (uint64_t)entry;
-	proc->task.rflags = RFLAGS_IF;
+	if (proc->mode == USER_MODE)
+		proc->task.rflags = ir0_rflags_sanitize_user(RFLAGS_IF);
+	else
+		proc->task.rflags = RFLAGS_IF;
 	if (proc->mode == KERNEL_MODE)
 	{
 		proc->task.cs = KERNEL_CODE_SEL;
@@ -1888,7 +1893,7 @@ void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_
 
 	task->rip = sf->rip;
 	task->rsp = sf->rsp;
-	task->rflags = sf->rflags | 2ULL;
+	task->rflags = ir0_rflags_sanitize_user(sf->rflags | 2ULL);
 	task->rax = rax;
 	task->rbx = sf->rbx;
 	task->rbp = sf->rbp;
@@ -1903,7 +1908,7 @@ void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_
 	task->r8 = sf->r8;
 	task->r9 = sf->r9;
 	task->rcx = sf->rip;
-	task->r11 = sf->rflags | 2ULL;
+	task->r11 = ir0_rflags_sanitize_user(sf->rflags | 2ULL);
 	task->cs = USER_CODE_SEL;
 	task->ss = USER_DATA_SEL;
 	task->ds = USER_DATA_SEL;
@@ -2321,7 +2326,8 @@ void fork_ret_emit_pre_return(void)
 	fork_ret_expect.pre_rax = pre->rax;
 	fork_ret_expect.pre_rip = pre->rip;
 	fork_ret_expect.pre_rsp = pre->rsp;
-	fork_flow_set_tf = 1;
+	if (ir0_debug_fork_singlestep_active())
+		fork_flow_set_tf = 1;
 	fork_restore_audit.pre_return_log_rax = pre->rax;
 
 	serial_print("[FORK_RET][PRE_RETURN] pid=");

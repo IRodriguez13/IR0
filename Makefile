@@ -406,6 +406,7 @@ LIB_OBJS = \
     includes/ir0/path_user.o \
     includes/ir0/path_routed.o \
     includes/ir0/console.o \
+    includes/ir0/debug_trap.o \
     includes/ir0/fb.o \
     includes/ir0/input.o \
     includes/ir0/utimens.o \

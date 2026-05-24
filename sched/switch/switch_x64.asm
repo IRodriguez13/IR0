@@ -283,6 +283,7 @@ arch_switch_to_user_task_asm:
     mov [rax + 24], rcx
     mov rcx, [r11 + 0x88]
     or rcx, 2
+    and rcx, 0xFFFFFFFFFFFFFEFF
     mov [rax + 32], rcx
     mov rcx, [r11 + 0x70]
     mov [rax + 40], rcx
@@ -383,6 +384,7 @@ arch_switch_to_user_task_asm:
     push qword [r11 + 0x70]
     mov rdi, [r11 + 0x88]
     or rdi, 2
+    and rdi, 0xFFFFFFFFFFFFFEFF
     push rdi
     movzx rdi, word [r11 + 0x90]
     push rdi
