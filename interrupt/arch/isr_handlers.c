@@ -168,6 +168,9 @@ static void isr_contract_single_check(uint64_t interrupt_number, uint64_t *stack
     if (!stack || interrupt_number >= 32)
         return;
 
+    if (ir0_panic_in_progress())
+        return;
+
     marker_b = iretq_checkpoint_buf[8];
     expected_rip = iretq_checkpoint_buf[9];
     expected_cs = iretq_checkpoint_buf[10];

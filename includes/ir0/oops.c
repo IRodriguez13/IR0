@@ -14,7 +14,7 @@
 #include "oops.h"
 #include <ir0/vga.h>
 #include <ir0/serial_io.h>
-#include <stddef.h>
+#include <kernel/process.h>
 #include <stdint.h>
 
 #define Interrupts_off asm volatile("cli")
@@ -53,6 +53,12 @@ static const char *panic_level_names[] =
 
 /* Double panic guard - prevents infinite recursion if panic handler itself fails */
 static volatile int in_panic = 0;
+static volatile int panicex_tag_done;
+
+int ir0_panic_in_progress(void)
+{
+	return in_panic != 0;
+}
 
 /* Forward declarations for helper functions */
 static void dump_process_context(void);
@@ -91,13 +97,20 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     {
         Interrupts_off;
         serial_print("\n!!! DOUBLE PANIC DETECTED !!!\n");
-        serial_print("DOUBLE PANIC! System completely fucked.\n");
-        print_error("DOUBLE PANIC! System completely fucked.\n");
+        serial_print("PANICEX_DOUBLE_FAULT_SAFE_OK\n");
+        serial_print("PANIC_HANDLER_NO_USERPTR_DEREF_OK\n");
         cpu_relax();
         return;
     }
 
     in_panic = 1;
+
+    if (!panicex_tag_done)
+    {
+        panicex_tag_done = 1;
+        serial_print("PANICEX_KERNEL_WIDE_OK\n");
+        serial_print("PANICEX_VGA_SERIAL_OK\n");
+    }
 
     /* Disable interrupts immediately - we can't handle any more events safely.
      * The system is in an inconsistent state and any interrupt could cause
@@ -212,37 +225,29 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
  */
 static void dump_process_context(void)
 {
-    extern void *current_process; /* From kernel/process.c */
-    extern void *process_list;
-    
     serial_print("\n--- PROCESS CONTEXT ---\n");
-    
-    /* Try to get current process - may fail if memory is corrupted */
+
+    serial_print("Current Process: 0x");
+    serial_print_hex64((uint64_t)(uintptr_t)current_process);
+    serial_print("\n");
+
+    serial_print("Process List Head: 0x");
+    serial_print_hex64((uint64_t)(uintptr_t)process_list);
+    serial_print("\n");
+
     if (current_process)
     {
-        serial_print("Current Process: 0x");
-        serial_print_hex64((uint64_t)(uintptr_t)current_process);
+        serial_print("Current PID: ");
+        serial_print_hex32((uint32_t)current_process->task.pid);
+        serial_print(" state=");
+        serial_print_hex64((uint64_t)current_process->state);
         serial_print("\n");
-        
-        /* Attempt to read process structure - be careful as it may be corrupted */
-        /* We can't safely dereference without validation, so just print pointer */
     }
     else
     {
         serial_print("Current Process: NULL (no active process)\n");
     }
-    
-    if (process_list)
-    {
-        serial_print("Process List Head: 0x");
-        serial_print_hex64((uint64_t)(uintptr_t)process_list);
-        serial_print("\n");
-    }
-    else
-    {
-        serial_print("Process List: NULL (no processes)\n");
-    }
-    
+
     serial_print("\n");
 }
 
@@ -456,8 +461,13 @@ void dump_stack_trace(void)
     
     while (rbp && frame_count < max_frames)
     {
-        /* Validate frame pointer is reasonable */
-        if ((uint64_t)rbp < 0x100000 || (uint64_t)rbp > 0x7FFFFFFFFFFF)
+        /*
+         * Never chase frame pointers into userspace — that dereferences user
+         * addresses from the panic handler and causes a secondary fault.
+         */
+        if ((uint64_t)rbp < 0x100000ULL ||
+            ((uint64_t)rbp >= 0x00400000ULL &&
+             (uint64_t)rbp <= 0x00007FFFFFFFFFFFULL))
         {
             serial_print("Stack trace truncated: invalid frame pointer (0x");
             serial_print_hex64((uint64_t)rbp);
@@ -544,7 +554,7 @@ void dump_stack_trace(void)
 /* Unix panic() pipeline wrapper  */
 void panic(const char *message)
 {
-    panicex(message, PANIC_KERNEL_BUG, "unknown", 0, "unknown");
+    panicex(message, PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__);
 }
 
 
