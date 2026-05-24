@@ -33,6 +33,7 @@ extern "C" {
 
 void panic(const char *message);
 void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller); /*Panic with more detailed logs*/
+int ir0_panic_in_progress(void);
 void cpu_relax();
 void dump_stack_trace();
 void dump_registers();
@@ -41,6 +42,9 @@ void dump_registers();
 }
 #endif
 
+
+#define PANIC(msg) \
+    panicex((msg), PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__)
 
 // Macros for better panic message tunning
 #define BUG_ON(condition) \

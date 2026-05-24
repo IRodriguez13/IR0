@@ -82,6 +82,9 @@ static void pf_audit_classify(uint64_t *stack, uint64_t fault_addr, uint64_t err
 	int in_vma = 0;
 	int in_userspace_range = 0;
 
+	if (ir0_panic_in_progress())
+		return;
+
 	if (current && current->page_directory)
 	{
 		mapped = is_page_mapped_in_directory(current->page_directory,
@@ -207,6 +210,12 @@ void page_fault_handler_x64(uint64_t *stack)
 
 	asm volatile("mov %%cr2, %0" : "=r"(fault_addr));
 
+	if (ir0_panic_in_progress())
+	{
+		cpu_relax();
+		return;
+	}
+
 	not_present = !(errcode & 1);
 	write = errcode & 2;
 	user = errcode & 4;
@@ -300,6 +309,12 @@ void page_fault_handler_x64(uint64_t *stack)
 	}
 
 	/* Kernel fault, reserved bit set, or other error - fatal */
+	if (ir0_panic_in_progress())
+	{
+		cpu_relax();
+		return;
+	}
+
 	print("[PF] Kernel page fault en ");
 	print_hex(fault_addr);
 	print(" - código: ");
@@ -368,6 +383,9 @@ void gpf_audit_from_isr(uint64_t *stack)
 	uint64_t ckpt_rip = iretq_checkpoint_buf[2];
 	uint64_t ckpt_cs = iretq_checkpoint_buf[3];
 	uint64_t ckpt_rsp = iretq_checkpoint_buf[5];
+
+	if (ir0_panic_in_progress())
+		return;
 
 	serial_print("[GPF_AUDIT][FAULT] err=");
 	serial_print_hex64(errcode);
