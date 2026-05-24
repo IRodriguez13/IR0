@@ -12,8 +12,8 @@ vertical slices with smoke gates between each step.
 | `27680c1` | B-minimal — console/TTY facade | **Merged** |
 | `9b0765d` | C — TF/#DB gating | **Merged** |
 | — | D — process list sentinel / FASE57L | **Deferred** (see below) |
-| — | E — per-process kstack | **Evaluate in isolated branch** |
-| — | F — syscall entry / FASE57O sysret | **Evaluate in isolated branch** |
+| — | E — per-process kstack | **Reference only** — branch `fase57-e-kstack-probe` (do not merge) |
+| — | F — syscall entry / FASE57O sysret | **Next** — branch `fase57-f-syscall-probe` |
 
 Experimental reference preserved on branch `fase57-experimental-broken-arch-prctl`
 (commit `cc55ee5`). Rollback summary on that branch:
@@ -96,9 +96,37 @@ own branch with the baseline gates below.
 | **E** | Per-process kstack (`kstack.c/h`, `process_t` fields, fork/spawn alloc) | MM/syscall stack overlap with F |
 | **F** | `syscall_insn_entry_64.asm`, FASE57O sysret snapshot, user GPR restore | **musl `arch_prctl` blocker** on experimental branch |
 
-E and F were coupled in experimental work; evaluate **E alone** first (no F asm
-changes), then **F alone** (or F on top of E only if E is required). Do not
-pull FASE57D–P traces, `syscall_block`, or wait4 rework into either branch.
+E and F were coupled in experimental work. **E probe verdict (branch
+`fase57-e-kstack-probe`): do not merge dead kstack** — compiles and alloc/canary
+work, but LSTAR still uses global `kernel_syscall_stack`; adds PMM pressure and
+fork-heavy OOM with no syscall benefit until F lands.
+
+### Step F — `fase57-f-syscall-probe` (rules before any LSTAR/sysret change)
+
+**Mandatory gates for every F iteration:**
+
+```bash
+make -s smoke-fase50-busybox
+make -s smoke-fase52-tcc
+make -s smoke-fase55d-doomgeneric REAL_WAD_PATH=/path/to/freedoom1.wad
+# Plus musl arch_prctl minimal harness (blocker on experimental full path)
+```
+
+**Hard rules:**
+
+1. **No dead kstack on stable** — do not merge E alone; if F requires per-process
+   stack, use an explicit **E+F branch**, not infra-only E.
+2. **No syscall entry rewrite without the three smokes above** — BusyBox, TCC,
+   Doom first frame must pass after every F diff.
+3. **`arch_prctl` (musl TLS) is a mandatory gate** for any LSTAR/sysret change —
+   experimental F broke musl static init with #PF on user stack; nostdlib smokes
+   are insufficient.
+4. **F scope:** syscall entry / sysret / user GPR restore only — no FASE57D–P
+   traces, `syscall_block`, wait4 rework, or scheduler idle fallback.
+
+**Smoke harness (stable):** `scripts/smoke_autokill.py` — serial-log monitor,
+fail-fast on panic/OOM/`_FAIL_REASON`, PASS on success tag; profiles 150s
+(BusyBox), 180s (TCC), 120s (Doom first frame); max 180s default elsewhere.
 
 ---
 
