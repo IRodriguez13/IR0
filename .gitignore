@@ -41,6 +41,17 @@ __pycache__/
 *.su
 compile_commands.json
 
+# BusyBox vendored tree build outputs (rebuilt via make build-busybox-fase50-min)
+setup/third-party/busybox-1.36.1/**/*.cmd
+setup/third-party/busybox-1.36.1/**/lib.a
+setup/third-party/busybox-1.36.1/busybox
+setup/third-party/busybox-1.36.1/busybox_unstripped
+setup/third-party/busybox-1.36.1/busybox_unstripped.out
+setup/third-party/busybox-1.36.1/include/autoconf.h
+setup/third-party/busybox-1.36.1/include/applet_tables.h
+setup/third-party/busybox-1.36.1/include/NUM_APPLETS.h
+setup/third-party/busybox-1.36.1/include/usage_compressed.h
+
 # Test artifacts (make tests / make health)
 tests/host/ir0_test_suite
 tests/kernel_memsafe/ir0_kernel_memsafe
