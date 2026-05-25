@@ -5,13 +5,20 @@ IR0 repository hygiene guardrails.
 Checks:
 1) No obviously unnecessary artifacts are tracked.
 2) No compiled binaries or build outputs under setup/pid1 or vendored BusyBox.
-3) Spanish markdown naming/location is constrained to /esp directories.
+3) No forbidden agent Co-authored-by trailers in branch history.
+4) Spanish markdown naming/location is constrained to /esp directories.
 """
 
 from pathlib import Path
 import fnmatch
+import re
 import subprocess
 import sys
+
+FORBIDDEN_AGENT_COAUTHOR_RE = re.compile(
+    r"^Co-authored-by:.*<cursoragent@",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -145,6 +152,44 @@ def is_spanish_named_markdown(path: str) -> bool:
     return stem.endswith("_es") or stem.endswith("-es") or stem.startswith("esp_")
 
 
+def git_head_commits():
+    proc = subprocess.run(
+        ["git", "log", "HEAD", "--format=%H"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "git log failed")
+    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def commits_with_forbidden_agent_coauthor():
+    bad = []
+    for commit in git_head_commits():
+        proc = subprocess.run(
+            ["git", "log", "-1", "--format=%B", commit],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            continue
+        if FORBIDDEN_AGENT_COAUTHOR_RE.search(proc.stdout):
+            oneline = subprocess.run(
+                ["git", "log", "-1", "--oneline", commit],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            label = oneline.stdout.strip() if oneline.returncode == 0 else commit
+            bad.append(label)
+    return bad
+
+
 def main():
     errors = []
 
@@ -170,6 +215,12 @@ def main():
             parts = Path(rel).parts
             if "esp" not in parts:
                 errors.append(f"[spanish-doc-location] {rel} (must live under an /esp directory)")
+
+    try:
+        for label in commits_with_forbidden_agent_coauthor():
+            errors.append(f"[agent-coauthor] {label}")
+    except Exception as exc:
+        errors.append(f"[agent-coauthor-check] {exc}")
 
     if errors:
         print("[repo-hygiene-guard] FAILED")
