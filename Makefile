@@ -1302,7 +1302,8 @@ FASE48_ECHO_BIN = setup/pid1/fase48_echo
 FASE48_BUSYBOX_BIN = setup/pid1/fase48_busybox
 FASE50_HELLO_BIN = setup/pid1/fase50_hello
 FASE50_BUSYBOX_BIN = setup/pid1/fase50_busybox_real
-FASE50_BUSYBOX_CFG = setup/busybox/fase50_minimal.config
+FASE50_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
+FASE58_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
 FASE41_TRUE_SRC = setup/pid1/fase41_true.c
 SH_SMOKE_SRC     = setup/pid1/sh_smoke.c
 SEGV_SMOKE_SRC   = setup/pid1/userspace_segv.c
@@ -1672,7 +1673,7 @@ build-busybox-fase50-min:
 		echo "✗ Missing config fragment $(FASE50_BUSYBOX_CFG)"; \
 		exit 1; \
 	fi
-	@echo "  FASE50  Building minimal static BusyBox from $(BUSYBOX_SRC)"
+	@echo "  FASE50  Building ash+coreutils static BusyBox from $(BUSYBOX_SRC)"
 	@$(MAKE) -C "$(BUSYBOX_SRC)" allnoconfig
 	@CFG="$(BUSYBOX_SRC)/.config"; \
 	while IFS= read -r line; do \
@@ -1703,6 +1704,51 @@ build-busybox-fase50-min:
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
 	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
 	@echo "✓ build-busybox-fase50-min OK"
+
+build-busybox-fase58-plus:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(BUSYBOX_SRC)" ] || [ ! -f "$(BUSYBOX_SRC)/Makefile" ]; then \
+		echo "✗ BusyBox source missing at BUSYBOX_SRC=$(BUSYBOX_SRC)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FASE58_BUSYBOX_CFG)" ]; then \
+		echo "✗ Missing config fragment $(FASE58_BUSYBOX_CFG)"; \
+		exit 1; \
+	fi
+	@echo "  FASE58  Building ash+coreutils BusyBox from $(BUSYBOX_SRC)"
+	@$(MAKE) -C "$(BUSYBOX_SRC)" allnoconfig
+	@CFG="$(BUSYBOX_SRC)/.config"; \
+	while IFS= read -r line; do \
+		case "$$line" in \
+			""|\#*) continue ;; \
+		esac; \
+		sym="$${line%%=*}"; \
+		val="$${line#*=}"; \
+		case "$$val" in \
+			y) \
+				sed -i "s/^# $$sym is not set/$$sym=y/" "$$CFG"; \
+				if ! grep -q "^$$sym=y$$" "$$CFG"; then \
+					if grep -q "^$$sym=" "$$CFG"; then \
+						sed -i "s/^$$sym=.*/$$sym=y/" "$$CFG"; \
+					else \
+						echo "$$sym=y" >> "$$CFG"; \
+					fi; \
+				fi ;; \
+			n) \
+				sed -i "s/^$$sym=.*/# $$sym is not set/" "$$CFG"; \
+				if ! grep -q "^# $$sym is not set$$" "$$CFG"; then \
+					echo "# $$sym is not set" >> "$$CFG"; \
+				fi ;; \
+		esac; \
+	done < "$(FASE58_BUSYBOX_CFG)"
+	@yes "" | $(MAKE) -C "$(BUSYBOX_SRC)" oldconfig >/dev/null
+	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
+	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
+	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@echo "✓ build-busybox-fase58-plus OK (installed to $(FASE50_BUSYBOX_BIN))"
 
 build-fase50-hello:
 	@if [ -z "$(MUSL_CC)" ]; then \
