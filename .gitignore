@@ -52,6 +52,11 @@ setup/third-party/busybox-1.36.1/include/applet_tables.h
 setup/third-party/busybox-1.36.1/include/NUM_APPLETS.h
 setup/third-party/busybox-1.36.1/include/usage_compressed.h
 
+# PID1 / BusyBox local rebuild outputs (make build-irinit / build-busybox-*)
+setup/pid1/fase58l_busybox_smoke
+setup/pid1/fase50_busybox_real
+setup/pid1/sbin/irinit
+
 # Test artifacts (make tests / make health)
 tests/host/ir0_test_suite
 tests/kernel_memsafe/ir0_kernel_memsafe

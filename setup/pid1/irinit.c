@@ -780,7 +780,10 @@ int main(void)
 	write_str("DOOM_AUTOSTART_DISABLED\n");
 	if (getenv("IRINIT_CHILD_REPRO"))
 		irinit_repro_child_tests();
-	write_str("\n[irinit] interactive shell on /dev/console (serial log for debug)\n");
+	write_str("\nIR0 Unix-like userspace\n");
+	write_str("/dev/console ready\n");
+	write_str("type: ls, pwd, cat, doomgeneric\n\n");
+	write_str("IRINIT_MOTD_OK\n");
 	irinit_service_loop();
 #endif
 
