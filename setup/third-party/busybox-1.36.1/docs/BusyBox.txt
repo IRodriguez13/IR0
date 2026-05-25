@@ -76,30 +76,17 @@ COMMON OPTIONS
 COMMANDS
     Currently available applets include:
 
-            ash, basename, cat, clear, cp, dirname, dmesg, echo, false, grep,
-            head, kill, ln, ls, mkdir, mv, printf, ps, pwd, readlink, rm, rmdir,
-            sh, sleep, stat, tail, test, touch, true, uname, wc
+            ash, cat, cp, echo, false, grep, head, ls, mkdir, mv, pwd, rm,
+            rmdir, sh, tail, touch, true
 
 COMMAND DESCRIPTIONS
     ash ash [-il] [-|+Cabefmnuvx] [-|+o OPT]... [-c 'SCRIPT' [ARG0 ARGS] |
         FILE ARGS | -s ARGS]
 
-    basename
-        basename FILE [SUFFIX] | -a FILE... | -s SUFFIX FILE...
-
     cat cat [FILE]...
-
-    clear
-        clear
 
     cp  cp [-arPLHpfinlsTu] SOURCE DEST or: cp [-arPLHpfinlsu] SOURCE... {
         -t DIRECTORY | DIRECTORY }
-
-    dirname
-        dirname FILENAME
-
-    dmesg
-        dmesg [-cr] [-n LEVEL] [-s SIZE]
 
     echo
         echo [ARG]...
@@ -111,11 +98,6 @@ COMMAND DESCRIPTIONS
     head
         head [OPTIONS] [FILE]...
 
-    kill
-        kill [-l] [-SIG] PID...
-
-    ln  ln [-sfnbtv] [-S SUF] TARGET... LINK|DIR
-
     ls  ls [-1AaCxdlins] [FILE]...
 
     mkdir
@@ -124,15 +106,7 @@ COMMAND DESCRIPTIONS
     mv  mv [-finT] SOURCE DEST or: mv [-fin] SOURCE... { -t DIRECTORY |
         DIRECTORY }
 
-    printf
-        printf FORMAT [ARG]...
-
-    ps  ps
-
     pwd pwd
-
-    readlink
-        readlink FILE
 
     rm  rm [-irf] FILE...
 
@@ -142,22 +116,11 @@ COMMAND DESCRIPTIONS
     sh  sh [-il] [-|+Cabefmnuvx] [-|+o OPT]... [-c 'SCRIPT' [ARG0 ARGS] |
         FILE ARGS | -s ARGS]
 
-    sleep
-        sleep N
-
-    stat
-        stat [-lt] FILE...
-
     tail
         tail [OPTIONS] [FILE]...
 
     touch
         touch [-ch] FILE...
-
-    uname
-        uname [-amnrspvio]
-
-    wc  wc [-clwL] [FILE]...
 
 LIBC NSS
     GNU Libc (glibc) uses the Name Service Switch (NSS) to configure the
