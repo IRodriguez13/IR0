@@ -18,7 +18,7 @@
 #include <string.h>
 
 #define IR0_TTY_MAX_READ_WAITERS 8
-#define IR0_TTY_ECHO_COLOR       0x0Fu
+#define IR0_TTY_ECHO_COLOR       0x07u
 #define IR0_TTY_CANON_MAX        256
 
 static process_t *tty_read_waiters[IR0_TTY_MAX_READ_WAITERS];
@@ -509,8 +509,14 @@ int ir0_console_ioctl_winsize(void *user_arg)
 		return -EINVAL;
 	win.ws_row = (uint16_t)ir0_console_term_height();
 	win.ws_col = (uint16_t)ir0_console_term_width();
-	win.ws_xpixel = 0;
-	win.ws_ypixel = 0;
+	{
+		int scale = console_backend_fb_scale();
+
+		if (scale < 1)
+			scale = 1;
+		win.ws_xpixel = (uint16_t)(win.ws_col * 8u * (uint16_t)scale);
+		win.ws_ypixel = (uint16_t)(win.ws_row * 16u * (uint16_t)scale);
+	}
 	if (copy_to_user(user_arg, &win, sizeof(win)) != 0)
 		return -EFAULT;
 	return 0;

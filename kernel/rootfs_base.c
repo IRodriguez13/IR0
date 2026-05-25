@@ -24,11 +24,14 @@ void ir0_rootfs_prepare_userspace_base(void)
 		"/var",
 		"/dev",
 		"/proc",
+		"/etc",
 		"/usr",
 		"/usr/bin",
 		"/usr/include",
 		"/usr/include/bits",
 		"/usr/lib",
+		"/usr/share",
+		"/usr/share/doom",
 		NULL
 	};
 	int i;
@@ -43,4 +46,5 @@ void ir0_rootfs_prepare_userspace_base(void)
 
 	serial_print("[FASE52B][CLASSIFY] FASE52B_BASE_LAYOUT_OK\n");
 	serial_print("[FASE53A][CLASSIFY] FASE53A_ROOTFS_LAYOUT_OK\n");
+	serial_print("[FASE58L][CLASSIFY] FASE58L_ROOTFS_LAYOUT_OK\n");
 }

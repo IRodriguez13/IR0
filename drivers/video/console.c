@@ -3,20 +3,8 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2025  Iván Rodriguez
  *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
  * File: console.c
- * Description: IR0 kernel source/header file
- */
-
-/* SPDX-License-Identifier: GPL-3.0-only */
-/*
- * IR0 Kernel - Console abstraction (VGA + Framebuffer backends)
- * Copyright (C) 2025 Iván Rodriguez
- *
- * Unified console: same API for VGA text (0xB8000) and framebuffer (VBE).
+ * Description: Unified VGA text + VBE framebuffer console (FASE59B aesthetics).
  */
 
 #include "console.h"
@@ -33,202 +21,307 @@ static int use_fb = 0;
 static int fb_console_cols = CONSOLE_WIDTH;
 static int fb_console_rows = CONSOLE_HEIGHT;
 static int fb_scale = CONSOLE_FB_SCALE_DEFAULT;
+static int fb_origin_x;
+static int fb_origin_y;
+static int fb_cell_w;
+static int fb_cell_h;
 
-/* VGA: 80x25 text buffer at 0xB8000 */
 #define VGA_BUF ((volatile uint16_t *)0xB8000)
 
 static void put_cell_vga(int row, int col, char c, uint8_t color)
 {
-    if (row < 0 || row >= CONSOLE_HEIGHT || col < 0 || col >= CONSOLE_WIDTH)
-        return;
-    uint16_t entry = (color << 8) | (uint8_t)c;
-    VGA_BUF[row * CONSOLE_WIDTH + col] = entry;
+	if (row < 0 || row >= CONSOLE_HEIGHT || col < 0 || col >= CONSOLE_WIDTH)
+		return;
+	VGA_BUF[row * CONSOLE_WIDTH + col] = (uint16_t)((color << 8) | (uint8_t)c);
 }
 
 static void scroll_up_vga(uint8_t clear_color)
 {
-    for (int i = 0; i < (CONSOLE_HEIGHT - 1) * CONSOLE_WIDTH; i++)
-        VGA_BUF[i] = VGA_BUF[i + CONSOLE_WIDTH];
-    uint16_t blank = (clear_color << 8) | ' ';
-    for (int i = (CONSOLE_HEIGHT - 1) * CONSOLE_WIDTH; i < CONSOLE_HEIGHT * CONSOLE_WIDTH; i++)
-        VGA_BUF[i] = blank;
+	int i;
+
+	for (i = 0; i < (CONSOLE_HEIGHT - 1) * CONSOLE_WIDTH; i++)
+		VGA_BUF[i] = VGA_BUF[i + CONSOLE_WIDTH];
+	for (i = (CONSOLE_HEIGHT - 1) * CONSOLE_WIDTH; i < CONSOLE_HEIGHT * CONSOLE_WIDTH; i++)
+		VGA_BUF[i] = (uint16_t)((clear_color << 8) | ' ');
 }
 
 static void clear_vga(uint8_t color)
 {
-    uint16_t blank = (color << 8) | ' ';
-    for (int i = 0; i < CONSOLE_WIDTH * CONSOLE_HEIGHT; i++)
-        VGA_BUF[i] = blank;
+	int i;
+
+	for (i = 0; i < CONSOLE_WIDTH * CONSOLE_HEIGHT; i++)
+		VGA_BUF[i] = (uint16_t)((color << 8) | ' ');
 }
 
-/* VGA 16-color palette (R,G,B 0-255) */
 #if CONFIG_ENABLE_VBE
 static const uint8_t vga_palette_rgb[16][3] = {
-    {0, 0, 0}, {0, 0, 170}, {0, 170, 0}, {0, 170, 170},
-    {170, 0, 0}, {170, 0, 170}, {170, 85, 0}, {170, 170, 170},
-    {85, 85, 85}, {85, 85, 255}, {85, 255, 85}, {85, 255, 255},
-    {255, 85, 85}, {255, 85, 255}, {255, 255, 85}, {255, 255, 255}
+	{0, 0, 0}, {0, 0, 170}, {0, 170, 0}, {0, 170, 170},
+	{170, 0, 0}, {170, 0, 170}, {170, 85, 0}, {170, 170, 170},
+	{85, 85, 85}, {85, 85, 255}, {85, 255, 85}, {85, 255, 255},
+	{255, 85, 85}, {255, 85, 255}, {255, 255, 85}, {255, 255, 255}
 };
+
+static uint32_t fb_rgb_from_vga(uint8_t idx)
+{
+	return vbe_rgb_to_pixel(vga_palette_rgb[idx][0],
+				vga_palette_rgb[idx][1],
+				vga_palette_rgb[idx][2]);
+}
+
+static void fb_fill_rect(int x, int y, int w, int h, uint32_t rgb, uint32_t pitch,
+			 uint8_t *fb)
+{
+	int dy;
+	int dx;
+
+	for (dy = 0; dy < h; dy++)
+	{
+		uint32_t *line = (uint32_t *)(fb + (y + dy) * pitch);
+
+		for (dx = 0; dx < w; dx++)
+			line[x + dx] = rgb;
+	}
+}
+
+static void fb_fill_border(uint32_t w, uint32_t h, uint32_t pitch, uint8_t *fb)
+{
+	uint32_t border = fb_rgb_from_vga(CONSOLE_FB_BORDER_COLOR & 0x0F);
+	size_t i;
+	size_t pixels = (pitch * h) / 4;
+	uint32_t *p = (uint32_t *)fb;
+
+	for (i = 0; i < pixels; i++)
+		p[i] = border;
+}
+
+static void fb_clear_console_region(uint8_t color, uint32_t pitch, uint8_t *fb)
+{
+	int pw = fb_console_cols * fb_cell_w;
+	int ph = fb_console_rows * fb_cell_h;
+	uint8_t bg = (color >> 4) & 0x0F;
+	uint32_t bg_rgb = fb_rgb_from_vga(bg);
+
+	fb_fill_rect(fb_origin_x, fb_origin_y, pw, ph, bg_rgb, pitch, fb);
+}
+
+static void fb_compute_layout(uint32_t w, uint32_t h)
+{
+	int pw;
+	int ph;
+
+	fb_console_cols = CONSOLE_WIDTH;
+	fb_console_rows = CONSOLE_HEIGHT;
+	fb_scale = CONSOLE_FB_SCALE_DEFAULT;
+	fb_cell_w = FONT_WIDTH * fb_scale;
+	fb_cell_h = FONT_HEIGHT * fb_scale;
+	pw = fb_console_cols * fb_cell_w;
+	ph = fb_console_rows * fb_cell_h;
+
+	if (pw > (int)w || ph > (int)h)
+	{
+		fb_scale = 1;
+		fb_cell_w = FONT_WIDTH;
+		fb_cell_h = FONT_HEIGHT;
+		pw = fb_console_cols * fb_cell_w;
+		ph = fb_console_rows * fb_cell_h;
+	}
+
+	fb_origin_x = ((int)w - pw) / 2;
+	fb_origin_y = ((int)h - ph) / 2;
+	if (fb_origin_x < 0)
+		fb_origin_x = 0;
+	if (fb_origin_y < 0)
+		fb_origin_y = 0;
+}
 
 static void put_cell_fb(int row, int col, char c, uint8_t color)
 {
-    if (row < 0 || row >= fb_console_rows || col < 0 || col >= fb_console_cols)
-        return;
+	uint32_t w;
+	uint32_t h;
+	uint32_t bpp;
+	uint32_t pitch;
+	uint8_t *fb;
+	uint32_t fg_rgb;
+	uint32_t bg_rgb;
+	int px;
+	int py;
+	unsigned char idx;
+	const unsigned char *glyph;
+	int dy;
+	int sy;
+	int dx;
+	int sx;
 
-    uint32_t w, h, bpp;
-    if (!vbe_get_info(&w, &h, &bpp) || bpp != 32)
-        return;
+	if (row < 0 || row >= fb_console_rows || col < 0 || col >= fb_console_cols)
+		return;
 
-    uint32_t pitch = vbe_get_pitch();
-    uint8_t *fb = vbe_get_fb();
-    if (!fb)
-        return;
+	if (!vbe_get_info(&w, &h, &bpp) || bpp != 32)
+		return;
 
-    uint32_t fg_rgb = vbe_rgb_to_pixel(
-        vga_palette_rgb[color & 0x0F][0],
-        vga_palette_rgb[color & 0x0F][1],
-        vga_palette_rgb[color & 0x0F][2]);
-    uint32_t bg_rgb = vbe_rgb_to_pixel(
-        vga_palette_rgb[(color >> 4) & 0x0F][0],
-        vga_palette_rgb[(color >> 4) & 0x0F][1],
-        vga_palette_rgb[(color >> 4) & 0x0F][2]);
+	pitch = vbe_get_pitch();
+	fb = vbe_get_fb();
+	if (!fb)
+		return;
 
-    int cw = FONT_WIDTH * fb_scale;
-    int ch = FONT_HEIGHT * fb_scale;
-    int px = col * cw;
-    int py = row * ch;
+	fg_rgb = fb_rgb_from_vga(color & 0x0F);
+	bg_rgb = fb_rgb_from_vga((color >> 4) & 0x0F);
+	px = fb_origin_x + col * fb_cell_w;
+	py = fb_origin_y + row * fb_cell_h;
 
-    if (px + cw > (int)w || py + ch > (int)h)
-        return;
+	if (px + fb_cell_w > (int)w || py + fb_cell_h > (int)h)
+		return;
 
-    unsigned char idx = (unsigned char)c;
-    const unsigned char *glyph = font_8x16[idx];
+	idx = (unsigned char)c;
+	glyph = font_8x16[idx];
 
-    for (int dy = 0; dy < FONT_HEIGHT; dy++)
-    {
-        uint8_t row_bits = glyph[dy];
-        for (int sy = 0; sy < fb_scale; sy++)
-        {
-            uint32_t *line = (uint32_t *)(fb + (py + dy * fb_scale + sy) * pitch);
-            for (int dx = 0; dx < FONT_WIDTH; dx++)
-            {
-                uint32_t pixel = (row_bits & (0x80 >> dx)) ? fg_rgb : bg_rgb;
-                for (int sx = 0; sx < fb_scale; sx++)
-                    line[px + dx * fb_scale + sx] = pixel;
-            }
-        }
-    }
+	for (dy = 0; dy < FONT_HEIGHT; dy++)
+	{
+		uint8_t row_bits = glyph[dy];
+
+		for (sy = 0; sy < fb_scale; sy++)
+		{
+			uint32_t *line = (uint32_t *)(fb + (py + dy * fb_scale + sy) * pitch);
+
+			for (dx = 0; dx < FONT_WIDTH; dx++)
+			{
+				uint32_t pixel = (row_bits & (0x80 >> dx)) ? fg_rgb : bg_rgb;
+
+				for (sx = 0; sx < fb_scale; sx++)
+					line[px + dx * fb_scale + sx] = pixel;
+			}
+		}
+	}
 }
 
 static void scroll_up_fb(uint8_t clear_color)
 {
-    uint32_t w, h, bpp;
-    if (!vbe_get_info(&w, &h, &bpp) || bpp != 32)
-        return;
+	uint32_t w;
+	uint32_t h;
+	uint32_t bpp;
+	uint32_t pitch;
+	uint8_t *fb;
+	int pw;
+	int ph;
+	int row;
+	int dy;
+	uint32_t bg_rgb;
 
-    uint32_t pitch = vbe_get_pitch();
-    uint8_t *fb = vbe_get_fb();
-    if (!fb)
-        return;
+	if (!vbe_get_info(&w, &h, &bpp) || bpp != 32)
+		return;
 
-    uint8_t bg = (clear_color >> 4) & 0x0F;
-    uint32_t bg_rgb = vbe_rgb_to_pixel(
-        vga_palette_rgb[bg][0], vga_palette_rgb[bg][1], vga_palette_rgb[bg][2]);
-    size_t line_bytes = (FONT_HEIGHT * fb_scale) * pitch;
-    size_t move_bytes = line_bytes * (fb_console_rows - 1);
+	pitch = vbe_get_pitch();
+	fb = vbe_get_fb();
+	if (!fb)
+		return;
 
-    memmove(fb, fb + line_bytes, move_bytes);
+	pw = fb_console_cols * fb_cell_w;
+	ph = fb_console_rows * fb_cell_h;
+	bg_rgb = fb_rgb_from_vga((clear_color >> 4) & 0x0F);
 
-    uint8_t *clear_start = fb + move_bytes;
-    uint32_t *p = (uint32_t *)clear_start;
-    size_t clear_pixels = (line_bytes / 4);
-    for (size_t i = 0; i < clear_pixels; i++)
-        p[i] = bg_rgb;
+	for (row = 1; row < fb_console_rows; row++)
+	{
+		for (dy = 0; dy < fb_cell_h; dy++)
+		{
+			uint32_t *dst = (uint32_t *)(fb +
+				(fb_origin_y + (row - 1) * fb_cell_h + dy) * pitch) +
+				fb_origin_x;
+			uint32_t *src = (uint32_t *)(fb +
+				(fb_origin_y + row * fb_cell_h + dy) * pitch) +
+				fb_origin_x;
+
+			memmove(dst, src, (size_t)pw * sizeof(uint32_t));
+		}
+	}
+
+	fb_fill_rect(fb_origin_x,
+		     fb_origin_y + (fb_console_rows - 1) * fb_cell_h,
+		     pw, fb_cell_h, bg_rgb, pitch, fb);
 }
 
 static void clear_fb(uint8_t color)
 {
-    uint32_t w, h, bpp;
-    if (!vbe_get_info(&w, &h, &bpp) || bpp != 32)
-        return;
+	uint32_t w;
+	uint32_t h;
+	uint32_t bpp;
+	uint32_t pitch;
+	uint8_t *fb;
 
-    uint32_t pitch = vbe_get_pitch();
-    uint8_t *fb = vbe_get_fb();
-    if (!fb)
-        return;
+	if (!vbe_get_info(&w, &h, &bpp) || bpp != 32)
+		return;
 
-    uint8_t bg = (color >> 4) & 0x0F;
-    uint32_t bg_rgb = vbe_rgb_to_pixel(
-        vga_palette_rgb[bg][0], vga_palette_rgb[bg][1], vga_palette_rgb[bg][2]);
-    size_t fb_size = pitch * h;
-    uint32_t *p = (uint32_t *)fb;
-    for (size_t i = 0; i < fb_size / 4; i++)
-        p[i] = bg_rgb;
+	pitch = vbe_get_pitch();
+	fb = vbe_get_fb();
+	if (!fb)
+		return;
+
+	fb_fill_border(w, h, pitch, fb);
+	fb_clear_console_region(color, pitch, fb);
 }
 #else
 static void put_cell_fb(int row, int col, char c, uint8_t color)
 {
-    (void)row;
-    (void)col;
-    (void)c;
-    (void)color;
+	(void)row;
+	(void)col;
+	(void)c;
+	(void)color;
 }
 
 static void scroll_up_fb(uint8_t clear_color)
 {
-    (void)clear_color;
+	(void)clear_color;
 }
 
 static void clear_fb(uint8_t color)
 {
-    (void)color;
+	(void)color;
 }
 #endif
 
 void console_put_cell(int row, int col, char c, uint8_t color)
 {
-    if (use_fb)
-        put_cell_fb(row, col, c, color);
-    else
-        put_cell_vga(row, col, c, color);
+	if (use_fb)
+		put_cell_fb(row, col, c, color);
+	else
+		put_cell_vga(row, col, c, color);
 }
 
 void console_scroll_up(uint8_t clear_color)
 {
-    if (use_fb)
-        scroll_up_fb(clear_color);
-    else
-        scroll_up_vga(clear_color);
+	if (use_fb)
+		scroll_up_fb(clear_color);
+	else
+		scroll_up_vga(clear_color);
 }
 
 void console_clear(uint8_t color)
 {
-    if (use_fb)
-        clear_fb(color);
-    else
-        clear_vga(color);
+	if (use_fb)
+		clear_fb(color);
+	else
+		clear_vga(color);
 }
 
 void console_init(void)
 {
 #if CONFIG_ENABLE_VBE
-	uint32_t w, h, bpp;
+	uint32_t w;
+	uint32_t h;
+	uint32_t bpp;
 
 	use_fb = 0;
 	if (vbe_is_available() && vbe_get_info(&w, &h, &bpp) && bpp == 32 &&
 	    w >= 640 && h >= 400)
 	{
-		int cw = FONT_WIDTH * fb_scale;
-		int ch = FONT_HEIGHT * fb_scale;
-
 		use_fb = 1;
-		fb_console_cols = (int)(w / (uint32_t)cw);
-		fb_console_rows = (int)(h / (uint32_t)ch);
-		if (fb_console_cols < CONSOLE_WIDTH)
-			fb_console_cols = CONSOLE_WIDTH;
-		if (fb_console_rows < CONSOLE_HEIGHT)
-			fb_console_rows = CONSOLE_HEIGHT;
+		fb_compute_layout(w, h);
 		serial_print("CONSOLE_FB_BACKEND_ENABLED\n");
+		serial_print("FASE59B_CONSOLE_SCALE=");
+		serial_print_hex32((uint32_t)fb_scale);
+		serial_print(" ORIGIN=");
+		serial_print_hex32((uint32_t)fb_origin_x);
+		serial_print(",");
+		serial_print_hex32((uint32_t)fb_origin_y);
+		serial_print(" LOGICAL=80x25\n");
 	}
 #else
 	use_fb = 0;
@@ -237,26 +330,26 @@ void console_init(void)
 
 int console_use_framebuffer(void)
 {
-    return use_fb;
+	return use_fb;
 }
 
 int console_get_width(void)
 {
-    if (use_fb)
-        return fb_console_cols;
-    return CONSOLE_WIDTH;
+	if (use_fb)
+		return fb_console_cols;
+	return CONSOLE_WIDTH;
 }
 
 int console_get_height(void)
 {
-    if (use_fb)
-        return fb_console_rows;
-    return CONSOLE_HEIGHT;
+	if (use_fb)
+		return fb_console_rows;
+	return CONSOLE_HEIGHT;
 }
 
 int console_get_fb_scale(void)
 {
-    if (use_fb)
-        return fb_scale;
-    return 1;
+	if (use_fb)
+		return fb_scale;
+	return 1;
 }

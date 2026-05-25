@@ -187,8 +187,6 @@ Only these tags are emitted after the BusyBox banner (no per-character spam):
 | `ASH_COMMAND_ECHO_OK` | Shell stdout contained `hi` from `echo hi` |
 | `ASH_COMMAND_EXEC_OK` | Shell stdout contained `/` line from `pwd` |
 
-`#UD` faults still log `UD_FAULT_*` tags via `includes/ir0/fase58j_diag.c`.
-
 If you see the prompt but **no** `KBD_USER_POLL_OK` when typing, the guest is
 not receiving keys (QEMU focus or host input), not an echo bug.
 
