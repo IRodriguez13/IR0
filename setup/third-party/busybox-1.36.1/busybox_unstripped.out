@@ -335,6 +335,8 @@ tuvo éxito el intento de abrir printutils/lib.a
 printutils/lib.a
 tuvo éxito el intento de abrir procps/lib.a
 procps/lib.a
+(procps/lib.a)kill.o
+(procps/lib.a)ps.o
 tuvo éxito el intento de abrir runit/lib.a
 runit/lib.a
 tuvo éxito el intento de abrir selinux/lib.a
@@ -348,6 +350,7 @@ tuvo éxito el intento de abrir sysklogd/lib.a
 sysklogd/lib.a
 tuvo éxito el intento de abrir util-linux/lib.a
 util-linux/lib.a
+(util-linux/lib.a)dmesg.o
 tuvo éxito el intento de abrir util-linux/volume_id/lib.a
 util-linux/volume_id/lib.a
 tuvo éxito el intento de abrir archival/built-in.o
@@ -409,21 +412,33 @@ util-linux/volume_id/built-in.o
 archival/lib.a
 archival/libarchive/lib.a
 console-tools/lib.a
+(console-tools/lib.a)clear.o
 coreutils/lib.a
+(coreutils/lib.a)basename.o
 (coreutils/lib.a)cat.o
 (coreutils/lib.a)cp.o
+(coreutils/lib.a)dirname.o
 (coreutils/lib.a)echo.o
 (coreutils/lib.a)false.o
 (coreutils/lib.a)head.o
+(coreutils/lib.a)ln.o
 (coreutils/lib.a)ls.o
 (coreutils/lib.a)mkdir.o
 (coreutils/lib.a)mv.o
+(coreutils/lib.a)printf.o
 (coreutils/lib.a)pwd.o
+(coreutils/lib.a)readlink.o
 (coreutils/lib.a)rm.o
 (coreutils/lib.a)rmdir.o
+(coreutils/lib.a)sleep.o
+(coreutils/lib.a)stat.o
 (coreutils/lib.a)tail.o
+(coreutils/lib.a)test.o
+(coreutils/lib.a)test_ptr_hack.o
 (coreutils/lib.a)touch.o
 (coreutils/lib.a)true.o
+(coreutils/lib.a)uname.o
+(coreutils/lib.a)wc.o
 coreutils/libcoreutils/lib.a
 (coreutils/libcoreutils/lib.a)cp_mv_stat.o
 debianutils/lib.a
@@ -436,6 +451,7 @@ init/lib.a
 libbb/lib.a
 (libbb/lib.a)ask_confirmation.o
 (libbb/lib.a)bb_cat.o
+(libbb/lib.a)bb_getgroups.o
 (libbb/lib.a)common_bufsiz.o
 (libbb/lib.a)concat_path_file.o
 (libbb/lib.a)copy_file.o
@@ -444,18 +460,24 @@ libbb/lib.a
 (libbb/lib.a)fflush_stdout_and_exit.o
 (libbb/lib.a)get_line_from_file.o
 (libbb/lib.a)getopt32.o
+(libbb/lib.a)human_readable.o
 (libbb/lib.a)inode_hash.o
+(libbb/lib.a)isdirectory.o
 (libbb/lib.a)llist.o
 (libbb/lib.a)make_directory.o
 (libbb/lib.a)mode_string.o
 (libbb/lib.a)parse_mode.o
 (libbb/lib.a)perror_nomsg_and_die.o
 (libbb/lib.a)printable_string.o
+(libbb/lib.a)process_escape_sequence.o
+(libbb/lib.a)procps.o
 (libbb/lib.a)read_printf.o
 (libbb/lib.a)recursive_action.o
 (libbb/lib.a)remove_file.o
 (libbb/lib.a)safe_poll.o
 (libbb/lib.a)safe_strncpy.o
+(libbb/lib.a)single_argv.o
+(libbb/lib.a)skip_whitespace.o
 (libbb/lib.a)sysconf.o
 (libbb/lib.a)u_signal_names.o
 (libbb/lib.a)wfopen.o
@@ -463,8 +485,10 @@ libbb/lib.a
 (libbb/lib.a)xatonum.o
 (libbb/lib.a)xgetcwd.o
 (libbb/lib.a)xreadlink.o
+(libbb/lib.a)xrealloc_vector.o
 (libbb/lib.a)xregcomp.o
 (libbb/lib.a)auto_string.o
+(libbb/lib.a)bb_pwd.o
 (libbb/lib.a)concat_subpath_file.o
 libpwdgrp/lib.a
 loginutils/lib.a
@@ -593,6 +617,7 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)libc.lo
 (/usr/lib/x86_64-linux-musl/libc.a)syscall_ret.lo
 (/usr/lib/x86_64-linux-musl/libc.a)chroot.lo
+(/usr/lib/x86_64-linux-musl/libc.a)klogctl.lo
 (/usr/lib/x86_64-linux-musl/libc.a)prctl.lo
 (/usr/lib/x86_64-linux-musl/libc.a)settimeofday.lo
 (/usr/lib/x86_64-linux-musl/libc.a)sysinfo.lo
@@ -612,6 +637,7 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)ioctl.lo
 (/usr/lib/x86_64-linux-musl/libc.a)realpath.lo
 (/usr/lib/x86_64-linux-musl/libc.a)setrlimit.lo
+(/usr/lib/x86_64-linux-musl/libc.a)uname.lo
 (/usr/lib/x86_64-linux-musl/libc.a)mmap.lo
 (/usr/lib/x86_64-linux-musl/libc.a)mprotect.lo
 (/usr/lib/x86_64-linux-musl/libc.a)munmap.lo
@@ -620,6 +646,8 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)listen.lo
 (/usr/lib/x86_64-linux-musl/libc.a)sendto.lo
 (/usr/lib/x86_64-linux-musl/libc.a)socket.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getgrent.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getgrent_a.lo
 (/usr/lib/x86_64-linux-musl/libc.a)getpwent.lo
 (/usr/lib/x86_64-linux-musl/libc.a)getpwent_a.lo
 (/usr/lib/x86_64-linux-musl/libc.a)rand.lo
@@ -638,6 +666,7 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)longjmp.lo
 (/usr/lib/x86_64-linux-musl/libc.a)setjmp.lo
 (/usr/lib/x86_64-linux-musl/libc.a)block.lo
+(/usr/lib/x86_64-linux-musl/libc.a)kill.lo
 (/usr/lib/x86_64-linux-musl/libc.a)raise.lo
 (/usr/lib/x86_64-linux-musl/libc.a)sigaction.lo
 (/usr/lib/x86_64-linux-musl/libc.a)sigaddset.lo
@@ -699,6 +728,7 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)atoi.lo
 (/usr/lib/x86_64-linux-musl/libc.a)bsearch.lo
 (/usr/lib/x86_64-linux-musl/libc.a)qsort_nr.lo
+(/usr/lib/x86_64-linux-musl/libc.a)strtod.lo
 (/usr/lib/x86_64-linux-musl/libc.a)strtol.lo
 (/usr/lib/x86_64-linux-musl/libc.a)memchr.lo
 (/usr/lib/x86_64-linux-musl/libc.a)memcmp.lo
@@ -761,6 +791,8 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)getcwd.lo
 (/usr/lib/x86_64-linux-musl/libc.a)getegid.lo
 (/usr/lib/x86_64-linux-musl/libc.a)geteuid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getgid.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getgroups.lo
 (/usr/lib/x86_64-linux-musl/libc.a)getpid.lo
 (/usr/lib/x86_64-linux-musl/libc.a)getppid.lo
 (/usr/lib/x86_64-linux-musl/libc.a)getuid.lo
@@ -798,6 +830,7 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)__init_tls.lo
 (/usr/lib/x86_64-linux-musl/libc.a)_Exit.lo
 (/usr/lib/x86_64-linux-musl/libc.a)abort_lock.lo
+(/usr/lib/x86_64-linux-musl/libc.a)floatscan.lo
 (/usr/lib/x86_64-linux-musl/libc.a)intscan.lo
 (/usr/lib/x86_64-linux-musl/libc.a)procfdname.lo
 (/usr/lib/x86_64-linux-musl/libc.a)shgetc.lo
@@ -805,10 +838,16 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)realloc.lo
 (/usr/lib/x86_64-linux-musl/libc.a)__fpclassifyl.lo
 (/usr/lib/x86_64-linux-musl/libc.a)__signbitl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)copysignl.lo
 (/usr/lib/x86_64-linux-musl/libc.a)frexpl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)scalbn.lo
+(/usr/lib/x86_64-linux-musl/libc.a)scalbnl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fabsl.lo
+(/usr/lib/x86_64-linux-musl/libc.a)fmodl.lo
 (/usr/lib/x86_64-linux-musl/libc.a)mremap.lo
 (/usr/lib/x86_64-linux-musl/libc.a)internal.lo
 (/usr/lib/x86_64-linux-musl/libc.a)wctomb.lo
+(/usr/lib/x86_64-linux-musl/libc.a)getgr_a.lo
 (/usr/lib/x86_64-linux-musl/libc.a)getpw_a.lo
 (/usr/lib/x86_64-linux-musl/libc.a)getpw_r.lo
 (/usr/lib/x86_64-linux-musl/libc.a)nscd_query.lo
@@ -844,13 +883,7 @@ tuvo éxito el intento de abrir /usr/lib/x86_64-linux-musl/libc.a
 (/usr/lib/x86_64-linux-musl/libc.a)nanosleep.lo
 (/usr/lib/x86_64-linux-musl/libc.a)iswblank.lo
 (/usr/lib/x86_64-linux-musl/libc.a)iswcntrl.lo
-(/usr/lib/x86_64-linux-musl/libc.a)floatscan.lo
 (/usr/lib/x86_64-linux-musl/libc.a)vdso.lo
-(/usr/lib/x86_64-linux-musl/libc.a)copysignl.lo
-(/usr/lib/x86_64-linux-musl/libc.a)scalbn.lo
-(/usr/lib/x86_64-linux-musl/libc.a)scalbnl.lo
-(/usr/lib/x86_64-linux-musl/libc.a)fabsl.lo
-(/usr/lib/x86_64-linux-musl/libc.a)fmodl.lo
 (/usr/lib/x86_64-linux-musl/libc.a)mbrtowc.lo
 (/usr/lib/x86_64-linux-musl/libc.a)mbsinit.lo
 (/usr/lib/x86_64-linux-musl/libc.a)wcrtomb.lo

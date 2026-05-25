@@ -1,4 +1,4 @@
-cmd_libbb/herror_msg.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.herror_msg.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"herror_msg"'  -DKBUILD_MODNAME='"herror_msg"' -c -o libbb/herror_msg.o libbb/herror_msg.c
+cmd_libbb/herror_msg.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.herror_msg.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"herror_msg"'  -DKBUILD_MODNAME='"herror_msg"' -c -o libbb/herror_msg.o libbb/herror_msg.c
 
 deps_libbb/herror_msg.o := \
   libbb/herror_msg.c \

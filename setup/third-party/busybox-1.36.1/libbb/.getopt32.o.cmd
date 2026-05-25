@@ -1,4 +1,4 @@
-cmd_libbb/getopt32.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.getopt32.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"getopt32"'  -DKBUILD_MODNAME='"getopt32"' -c -o libbb/getopt32.o libbb/getopt32.c
+cmd_libbb/getopt32.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.getopt32.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"getopt32"'  -DKBUILD_MODNAME='"getopt32"' -c -o libbb/getopt32.o libbb/getopt32.c
 
 deps_libbb/getopt32.o := \
   libbb/getopt32.c \

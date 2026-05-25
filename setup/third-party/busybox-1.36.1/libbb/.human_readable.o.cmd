@@ -1,4 +1,4 @@
-cmd_libbb/human_readable.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.human_readable.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"human_readable"'  -DKBUILD_MODNAME='"human_readable"' -c -o libbb/human_readable.o libbb/human_readable.c
+cmd_libbb/human_readable.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.human_readable.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"human_readable"'  -DKBUILD_MODNAME='"human_readable"' -c -o libbb/human_readable.o libbb/human_readable.c
 
 deps_libbb/human_readable.o := \
   libbb/human_readable.c \

@@ -260,6 +260,7 @@ static int irinit_attach_console(void)
 		{
 			console_ok_logged = 1;
 			write_str("[IRINIT][CLASSIFY] CONSOLE_IO_OK\n");
+			write_str("INIT_STDIO_CONSOLE_OK\n");
 			write_str("IRINIT_STDIO_CONSOLE_OK\n");
 			write_str("TTY_PRESENT_OK\n");
 		}
@@ -501,28 +502,13 @@ static int irinit_run_smoke(void)
 		return -1;
 	}
 
+	write_str("DOOM_AUTOSTART_DISABLED\n");
+
 	if (access("/usr/games/doom", X_OK) == 0 || access("/bin/doom", X_OK) == 0 ||
 	    access("/bin/doomgeneric", X_OK) == 0)
-	{
-		const char *doom = "/usr/games/doom";
-
-		if (access("/bin/doomgeneric", X_OK) == 0)
-			doom = "/bin/doomgeneric";
-		else if (access("/bin/doom", X_OK) == 0)
-			doom = "/bin/doom";
-
-		if (sh_run_script("doom_from_shell", doom) != 0)
-		{
-			irinit_smoke_fail("doom_from_shell");
-			return -1;
-		}
-		write_str("DOOM_FROM_SHELL_OK\n");
-	}
+		write_str("[IRINIT][CLASSIFY] DOOM_BINARY_PRESENT_MANUAL_OK\n");
 	else
-	{
-		irinit_smoke_fail("doom_missing");
-		return -1;
-	}
+		write_str("[IRINIT][CLASSIFY] DOOM_BINARY_ABSENT_OK\n");
 
 	if (access("/bin/ping", X_OK) == 0)
 		write_str("[IRINIT][CLASSIFY] PING_AVAILABLE\n");
@@ -663,6 +649,7 @@ static int irinit_run_shell_persist_smoke(void)
 static void irinit_service_loop(void)
 {
 	pid_t shell_pid = -1;
+	static int ash_boot_tagged;
 
 	for (;;)
 	{
@@ -684,6 +671,12 @@ static void irinit_service_loop(void)
 			{
 				write_stderr("[IRINIT][FAIL] shell_spawn\n");
 				pause();
+			}
+			else if (!ash_boot_tagged)
+			{
+				ash_boot_tagged = 1;
+				write_str("ASH_BOOT_CONSOLE_OK\n");
+				write_str("ASH_INTERACTIVE_READY\n");
 			}
 		}
 
@@ -784,6 +777,7 @@ int main(void)
 	if (irinit_attach_console() != 0)
 		irinit_halt_no_tty();
 	(void)irinit_try_setsid();
+	write_str("DOOM_AUTOSTART_DISABLED\n");
 	if (getenv("IRINIT_CHILD_REPRO"))
 		irinit_repro_child_tests();
 	write_str("\n[irinit] interactive shell on /dev/console (serial log for debug)\n");

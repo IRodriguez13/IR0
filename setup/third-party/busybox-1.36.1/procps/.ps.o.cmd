@@ -1,4 +1,4 @@
-cmd_procps/ps.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,procps/.ps.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"ps"'  -DKBUILD_MODNAME='"ps"' -c -o procps/ps.o procps/ps.c
+cmd_procps/ps.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,procps/.ps.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"ps"'  -DKBUILD_MODNAME='"ps"' -c -o procps/ps.o procps/ps.c
 
 deps_procps/ps.o := \
   procps/ps.c \

@@ -1,4 +1,4 @@
-cmd_libbb/wfopen_input.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.wfopen_input.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"wfopen_input"'  -DKBUILD_MODNAME='"wfopen_input"' -c -o libbb/wfopen_input.o libbb/wfopen_input.c
+cmd_libbb/wfopen_input.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.wfopen_input.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"wfopen_input"'  -DKBUILD_MODNAME='"wfopen_input"' -c -o libbb/wfopen_input.o libbb/wfopen_input.c
 
 deps_libbb/wfopen_input.o := \
   libbb/wfopen_input.c \

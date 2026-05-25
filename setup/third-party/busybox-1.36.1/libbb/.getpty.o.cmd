@@ -1,4 +1,4 @@
-cmd_libbb/getpty.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.getpty.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"getpty"'  -DKBUILD_MODNAME='"getpty"' -c -o libbb/getpty.o libbb/getpty.c
+cmd_libbb/getpty.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.getpty.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"getpty"'  -DKBUILD_MODNAME='"getpty"' -c -o libbb/getpty.o libbb/getpty.c
 
 deps_libbb/getpty.o := \
   libbb/getpty.c \

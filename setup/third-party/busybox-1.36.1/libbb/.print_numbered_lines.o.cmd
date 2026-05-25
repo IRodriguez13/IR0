@@ -1,4 +1,4 @@
-cmd_libbb/print_numbered_lines.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.print_numbered_lines.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"print_numbered_lines"'  -DKBUILD_MODNAME='"print_numbered_lines"' -c -o libbb/print_numbered_lines.o libbb/print_numbered_lines.c
+cmd_libbb/print_numbered_lines.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.print_numbered_lines.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"print_numbered_lines"'  -DKBUILD_MODNAME='"print_numbered_lines"' -c -o libbb/print_numbered_lines.o libbb/print_numbered_lines.c
 
 deps_libbb/print_numbered_lines.o := \
   libbb/print_numbered_lines.c \

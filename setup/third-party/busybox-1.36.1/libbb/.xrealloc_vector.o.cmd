@@ -1,4 +1,4 @@
-cmd_libbb/xrealloc_vector.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xrealloc_vector.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"xrealloc_vector"'  -DKBUILD_MODNAME='"xrealloc_vector"' -c -o libbb/xrealloc_vector.o libbb/xrealloc_vector.c
+cmd_libbb/xrealloc_vector.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xrealloc_vector.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"xrealloc_vector"'  -DKBUILD_MODNAME='"xrealloc_vector"' -c -o libbb/xrealloc_vector.o libbb/xrealloc_vector.c
 
 deps_libbb/xrealloc_vector.o := \
   libbb/xrealloc_vector.c \

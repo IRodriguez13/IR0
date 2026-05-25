@@ -1,4 +1,4 @@
-cmd_libbb/default_error_retval.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.default_error_retval.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"default_error_retval"'  -DKBUILD_MODNAME='"default_error_retval"' -c -o libbb/default_error_retval.o libbb/default_error_retval.c
+cmd_libbb/default_error_retval.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.default_error_retval.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"default_error_retval"'  -DKBUILD_MODNAME='"default_error_retval"' -c -o libbb/default_error_retval.o libbb/default_error_retval.c
 
 deps_libbb/default_error_retval.o := \
   libbb/default_error_retval.c \

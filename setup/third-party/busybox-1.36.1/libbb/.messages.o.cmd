@@ -1,4 +1,4 @@
-cmd_libbb/messages.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.messages.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"messages"'  -DKBUILD_MODNAME='"messages"' -c -o libbb/messages.o libbb/messages.c
+cmd_libbb/messages.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.messages.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"messages"'  -DKBUILD_MODNAME='"messages"' -c -o libbb/messages.o libbb/messages.c
 
 deps_libbb/messages.o := \
   libbb/messages.c \

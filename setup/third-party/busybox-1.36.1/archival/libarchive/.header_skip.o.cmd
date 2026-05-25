@@ -1,4 +1,4 @@
-cmd_archival/libarchive/header_skip.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.header_skip.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"header_skip"'  -DKBUILD_MODNAME='"header_skip"' -c -o archival/libarchive/header_skip.o archival/libarchive/header_skip.c
+cmd_archival/libarchive/header_skip.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.header_skip.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"header_skip"'  -DKBUILD_MODNAME='"header_skip"' -c -o archival/libarchive/header_skip.o archival/libarchive/header_skip.c
 
 deps_archival/libarchive/header_skip.o := \
   archival/libarchive/header_skip.c \

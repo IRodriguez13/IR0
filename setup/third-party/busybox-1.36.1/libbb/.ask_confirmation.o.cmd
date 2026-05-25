@@ -1,4 +1,4 @@
-cmd_libbb/ask_confirmation.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.ask_confirmation.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"ask_confirmation"'  -DKBUILD_MODNAME='"ask_confirmation"' -c -o libbb/ask_confirmation.o libbb/ask_confirmation.c
+cmd_libbb/ask_confirmation.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.ask_confirmation.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"ask_confirmation"'  -DKBUILD_MODNAME='"ask_confirmation"' -c -o libbb/ask_confirmation.o libbb/ask_confirmation.c
 
 deps_libbb/ask_confirmation.o := \
   libbb/ask_confirmation.c \

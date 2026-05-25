@@ -13,6 +13,7 @@
  */
 
 #include <ir0/console.h>
+#include <ir0/fase58j_diag.h>
 #include "syscalls.h"
 #include "syscalls/fs_syscalls.h"
 #include "process.h"
@@ -26,6 +27,7 @@
 #include <ir0/serial_io.h>
 #include <ir0/console_backend.h>
 #include <kernel/elf_loader.h>
+#include <kernel/kernel.h>
 #include <mm/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/validation.h>
@@ -546,51 +548,19 @@ int stdio_is_redirected(fd_entry_t *fd_table, int fd)
 
 int64_t syscalls_read_stdio_stdin(void *buf, size_t count)
 {
-  char kernel_read_buf[256];
-  size_t bytes_read = 0;
-  size_t max_read = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
+  char kbuf[256];
+  size_t max_read = (count < sizeof(kbuf)) ? count : sizeof(kbuf);
+  int64_t ret;
 
   if (!current_process || !buf)
     return -EFAULT;
 
-  if (!keyboard_buffer_has_data())
-  {
-    int slot = -1;
-    int i;
-
-    for (i = 0; i < MAX_STDIN_WAITERS; i++)
-    {
-      if (stdin_waiters[i] == NULL)
-      {
-        slot = i;
-        break;
-      }
-    }
-    if (slot >= 0)
-    {
-      stdin_waiters[slot] = current_process;
-      current_process->state = PROCESS_BLOCKED;
-      sched_schedule_next();
-    }
-    if (!keyboard_buffer_has_data())
-      return 0;
-  }
-
-  while (bytes_read < max_read && keyboard_buffer_has_data())
-  {
-    char c = keyboard_buffer_get();
-
-    if (c != 0)
-      kernel_read_buf[bytes_read++] = c;
-  }
-
-  if (bytes_read > 0)
-  {
-    if (copy_to_user(buf, kernel_read_buf, bytes_read) != 0)
-      return -EFAULT;
-    return (int64_t)bytes_read;
-  }
-  return 0;
+  ret = ir0_console_read(kbuf, max_read, 0);
+  if (ret <= 0)
+    return ret;
+  if (copy_to_user(buf, kbuf, (size_t)ret) != 0)
+    return -EFAULT;
+  return ret;
 }
 
 int64_t sys_exit(int exit_code)
@@ -1433,7 +1403,7 @@ static int fd_can_read(int fd)
   fd_entry_t *fd_table = get_process_fd_table();
 
   if (fd == STDIN_FILENO && !stdio_is_redirected(fd_table, fd))
-    return keyboard_buffer_has_data() ? 1 : 0;
+    return ir0_console_input_ready() ? 1 : 0;
   if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && !stdio_is_redirected(fd_table, fd))
     return 0;
   if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
@@ -1447,6 +1417,12 @@ static int fd_can_read(int fd)
     return 1;
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return 0;
+  if (fd_table[fd].is_devfs)
+  {
+    pid_t pid = current_process ? current_process->task.pid : 0;
+
+    return devfs_fd_can_read(fd_table[fd].dev_device_id, pid) ? 1 : 0;
+  }
   if (fd_table[fd].is_pipe && fd_table[fd].pipe_end == 0) {
     pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
     return (pipe && (pipe->count > 0 || pipe->writers <= 0)) ? 1 : 0;
@@ -1562,7 +1538,13 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   current_process->poll_waiter = w;
 
   current_process->state = PROCESS_BLOCKED;
-  sched_schedule_next();
+  while (current_process->state == PROCESS_BLOCKED)
+  {
+    sched_schedule_next();
+    if (current_process->state != PROCESS_BLOCKED)
+      break;
+    kernel_idle_poll();
+  }
 
   /* Vuelta del scheduler: despertados por poll_wake_check */
   w = (struct poll_waiter *)current_process->poll_waiter;
@@ -1589,6 +1571,8 @@ void poll_wake_check(void)
   process_t *saved_current = current_process;
   uint64_t now = clock_get_uptime_milliseconds();
   unsigned int i;
+  int woke = 0;
+
   for (i = 0; i < MAX_POLL_WAITERS; i++) {
     
     struct poll_waiter *w = &poll_waiters[i];
@@ -1604,9 +1588,12 @@ void poll_wake_check(void)
       if (copy_to_user(w->user_fds, w->kfds, w->nfds * sizeof(struct pollfd)) != 0)
         w->ready_count = -EFAULT;
       w->proc->state = PROCESS_READY;
+      woke = 1;
     }
   }
   current_process = saved_current;
+  if (woke)
+    sched_schedule_next();
 }
 
 /**
@@ -1615,17 +1602,26 @@ void poll_wake_check(void)
  */
 void stdin_wake_check(void)
 {
-  if (!keyboard_buffer_has_data())
+  int woke_stdin = 0;
+  int woke_tty = 0;
+
+  if (!keyboard_buffer_has_data() && !ir0_console_input_ready())
     return;
-  ir0_console_wake_readers();
+
+  woke_tty = ir0_console_wake_readers();
+
   for (int i = 0; i < MAX_STDIN_WAITERS; i++)
   {
     if (stdin_waiters[i])
     {
       stdin_waiters[i]->state = PROCESS_READY;
       stdin_waiters[i] = NULL;
+      woke_stdin = 1;
     }
   }
+
+  if (woke_stdin || woke_tty)
+    sched_schedule_next();
 }
 
 /**
@@ -4179,6 +4175,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 
   if (syscall_num >= __NR_syscall_max)
     return -ENOSYS;
+
+  ir0_fase58j_note_syscall(syscall_num);
 
   syscall_handler_t handler = syscall_table_rw[syscall_num];
   r = handler(arg1, arg2, arg3, arg4, arg5, arg6);

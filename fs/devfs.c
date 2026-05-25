@@ -27,7 +27,6 @@
 #include <config.h>
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
-#include <ir0/console_backend.h>
 #if CONFIG_ENABLE_SOUND
 #include <ir0/audio_backend.h>
 #endif
@@ -217,6 +216,7 @@ int64_t dev_console_read(devfs_entry_t *entry, void *buf, size_t count, off_t of
 static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
     struct ir0_termios termios;
+    int ret;
 
     (void)entry;
 
@@ -224,23 +224,27 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
     {
         if (!arg)
             return -EINVAL;
-        if (ir0_console_fill_termios(&termios) != 0)
-            return -EINVAL;
+        ret = tty_ioctl_termios_kernel(IR0_CONSOLE_TCGETS, &termios);
+        if (ret != 0)
+            return ret;
         if (copy_to_user(arg, &termios, sizeof(termios)) != 0)
             return -EFAULT;
         return 0;
     }
 
-    if (request == IR0_CONSOLE_TCSETS)
+    if (request == IR0_CONSOLE_TCSETS ||
+        request == IR0_CONSOLE_TCSETSW ||
+        request == IR0_CONSOLE_TCSETSF)
     {
         if (!arg)
             return -EINVAL;
         if (copy_from_user(&termios, arg, sizeof(termios)) != 0)
             return -EFAULT;
-        if (ir0_console_set_termios(&termios) != 0)
-            return -EINVAL;
-        return 0;
+        return tty_ioctl_termios_kernel(request, &termios);
     }
+
+    if (request == IR0_CONSOLE_TIOCGWINSZ)
+        return ir0_console_ioctl_winsize(arg);
 
     return -ENOTTY;
 }
@@ -274,7 +278,7 @@ int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, o
 {
     (void)entry;
     (void)offset;
-    return ir0_console_write(buf, count, 0x07);
+    return ir0_console_write(buf, count, 0x0F);
 }
 
 /* Circular buffer for kernel messages */

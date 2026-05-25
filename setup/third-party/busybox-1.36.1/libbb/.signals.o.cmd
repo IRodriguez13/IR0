@@ -1,4 +1,4 @@
-cmd_libbb/signals.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.signals.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"signals"'  -DKBUILD_MODNAME='"signals"' -c -o libbb/signals.o libbb/signals.c
+cmd_libbb/signals.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.signals.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"signals"'  -DKBUILD_MODNAME='"signals"' -c -o libbb/signals.o libbb/signals.c
 
 deps_libbb/signals.o := \
   libbb/signals.c \

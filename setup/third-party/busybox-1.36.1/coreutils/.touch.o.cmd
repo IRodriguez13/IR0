@@ -1,4 +1,4 @@
-cmd_coreutils/touch.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.touch.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"touch"'  -DKBUILD_MODNAME='"touch"' -c -o coreutils/touch.o coreutils/touch.c
+cmd_coreutils/touch.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.touch.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"touch"'  -DKBUILD_MODNAME='"touch"' -c -o coreutils/touch.o coreutils/touch.c
 
 deps_coreutils/touch.o := \
   coreutils/touch.c \

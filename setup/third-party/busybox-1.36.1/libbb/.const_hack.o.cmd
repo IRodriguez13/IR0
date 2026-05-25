@@ -1,4 +1,4 @@
-cmd_libbb/const_hack.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.const_hack.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"const_hack"'  -DKBUILD_MODNAME='"const_hack"' -c -o libbb/const_hack.o libbb/const_hack.c
+cmd_libbb/const_hack.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.const_hack.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"const_hack"'  -DKBUILD_MODNAME='"const_hack"' -c -o libbb/const_hack.o libbb/const_hack.c
 
 deps_libbb/const_hack.o := \
   libbb/const_hack.c \

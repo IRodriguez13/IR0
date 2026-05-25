@@ -1,4 +1,4 @@
-cmd_coreutils/echo.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.echo.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"echo"'  -DKBUILD_MODNAME='"echo"' -c -o coreutils/echo.o coreutils/echo.c
+cmd_coreutils/echo.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.echo.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"echo"'  -DKBUILD_MODNAME='"echo"' -c -o coreutils/echo.o coreutils/echo.c
 
 deps_coreutils/echo.o := \
   coreutils/echo.c \

@@ -1,4 +1,4 @@
-cmd_libbb/read.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.read.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"read"'  -DKBUILD_MODNAME='"read"' -c -o libbb/read.o libbb/read.c
+cmd_libbb/read.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.read.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"read"'  -DKBUILD_MODNAME='"read"' -c -o libbb/read.o libbb/read.c
 
 deps_libbb/read.o := \
   libbb/read.c \

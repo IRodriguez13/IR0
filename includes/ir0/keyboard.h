@@ -18,6 +18,7 @@
 /* Keyboard buffer functions */
 extern char keyboard_buffer_get(void);
 extern int keyboard_buffer_has_data(void);
+extern void keyboard_buffer_clear(void);
 extern int keyboard_set_layout(int layout);
 extern int keyboard_get_layout(void);
 extern const char *keyboard_get_layout_name(int layout);

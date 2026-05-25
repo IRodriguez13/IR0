@@ -1,4 +1,4 @@
-cmd_libbb/llist.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.llist.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"llist"'  -DKBUILD_MODNAME='"llist"' -c -o libbb/llist.o libbb/llist.c
+cmd_libbb/llist.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.llist.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"llist"'  -DKBUILD_MODNAME='"llist"' -c -o libbb/llist.o libbb/llist.c
 
 deps_libbb/llist.o := \
   libbb/llist.c \

@@ -1,4 +1,4 @@
-cmd_coreutils/libcoreutils/cp_mv_stat.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/libcoreutils/.cp_mv_stat.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"cp_mv_stat"'  -DKBUILD_MODNAME='"cp_mv_stat"' -c -o coreutils/libcoreutils/cp_mv_stat.o coreutils/libcoreutils/cp_mv_stat.c
+cmd_coreutils/libcoreutils/cp_mv_stat.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/libcoreutils/.cp_mv_stat.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"cp_mv_stat"'  -DKBUILD_MODNAME='"cp_mv_stat"' -c -o coreutils/libcoreutils/cp_mv_stat.o coreutils/libcoreutils/cp_mv_stat.c
 
 deps_coreutils/libcoreutils/cp_mv_stat.o := \
   coreutils/libcoreutils/cp_mv_stat.c \

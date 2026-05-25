@@ -1,4 +1,4 @@
-cmd_libbb/bb_do_delay.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.bb_do_delay.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"bb_do_delay"'  -DKBUILD_MODNAME='"bb_do_delay"' -c -o libbb/bb_do_delay.o libbb/bb_do_delay.c
+cmd_libbb/bb_do_delay.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.bb_do_delay.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"bb_do_delay"'  -DKBUILD_MODNAME='"bb_do_delay"' -c -o libbb/bb_do_delay.o libbb/bb_do_delay.c
 
 deps_libbb/bb_do_delay.o := \
   libbb/bb_do_delay.c \

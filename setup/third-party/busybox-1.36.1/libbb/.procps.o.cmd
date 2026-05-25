@@ -1,4 +1,4 @@
-cmd_libbb/procps.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.procps.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"procps"'  -DKBUILD_MODNAME='"procps"' -c -o libbb/procps.o libbb/procps.c
+cmd_libbb/procps.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.procps.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"procps"'  -DKBUILD_MODNAME='"procps"' -c -o libbb/procps.o libbb/procps.c
 
 deps_libbb/procps.o := \
   libbb/procps.c \

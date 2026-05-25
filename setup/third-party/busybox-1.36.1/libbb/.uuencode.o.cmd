@@ -1,4 +1,4 @@
-cmd_libbb/uuencode.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.uuencode.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"uuencode"'  -DKBUILD_MODNAME='"uuencode"' -c -o libbb/uuencode.o libbb/uuencode.c
+cmd_libbb/uuencode.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.uuencode.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"uuencode"'  -DKBUILD_MODNAME='"uuencode"' -c -o libbb/uuencode.o libbb/uuencode.c
 
 deps_libbb/uuencode.o := \
   libbb/uuencode.c \

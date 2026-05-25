@@ -4,6 +4,7 @@
  */
 
 #include <ir0/console_backend.h>
+#include <ir0/console.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
 
@@ -79,7 +80,9 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
 
     for (i = 0; i < len; i++)
     {
-        if (str[i] == '\n')
+        char c = str[i];
+
+        if (c == '\n')
         {
             serial_putchar('\r');
             serial_putchar('\n');
@@ -87,8 +90,8 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
         }
         else
         {
-            serial_putchar(str[i]);
-            typewriter_vga_print_char(str[i], color);
+            serial_putchar(c);
+            typewriter_vga_print_char(c, color);
         }
     }
 }

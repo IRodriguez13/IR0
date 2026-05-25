@@ -1,4 +1,4 @@
-cmd_libbb/last_char_is.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.last_char_is.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"last_char_is"'  -DKBUILD_MODNAME='"last_char_is"' -c -o libbb/last_char_is.o libbb/last_char_is.c
+cmd_libbb/last_char_is.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.last_char_is.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"last_char_is"'  -DKBUILD_MODNAME='"last_char_is"' -c -o libbb/last_char_is.o libbb/last_char_is.c
 
 deps_libbb/last_char_is.o := \
   libbb/last_char_is.c \

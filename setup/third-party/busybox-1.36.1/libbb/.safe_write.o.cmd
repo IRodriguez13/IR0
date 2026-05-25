@@ -1,4 +1,4 @@
-cmd_libbb/safe_write.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.safe_write.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"safe_write"'  -DKBUILD_MODNAME='"safe_write"' -c -o libbb/safe_write.o libbb/safe_write.c
+cmd_libbb/safe_write.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.safe_write.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"safe_write"'  -DKBUILD_MODNAME='"safe_write"' -c -o libbb/safe_write.o libbb/safe_write.c
 
 deps_libbb/safe_write.o := \
   libbb/safe_write.c \

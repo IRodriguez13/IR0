@@ -1,4 +1,4 @@
-cmd_libbb/fflush_stdout_and_exit.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.fflush_stdout_and_exit.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"fflush_stdout_and_exit"'  -DKBUILD_MODNAME='"fflush_stdout_and_exit"' -c -o libbb/fflush_stdout_and_exit.o libbb/fflush_stdout_and_exit.c
+cmd_libbb/fflush_stdout_and_exit.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.fflush_stdout_and_exit.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"fflush_stdout_and_exit"'  -DKBUILD_MODNAME='"fflush_stdout_and_exit"' -c -o libbb/fflush_stdout_and_exit.o libbb/fflush_stdout_and_exit.c
 
 deps_libbb/fflush_stdout_and_exit.o := \
   libbb/fflush_stdout_and_exit.c \

@@ -411,6 +411,9 @@ LIB_OBJS = \
     includes/ir0/path_user.o \
     includes/ir0/path_routed.o \
     includes/ir0/console.o \
+    includes/ir0/ash_smoke.o \
+    includes/ir0/fase58j_diag.o \
+    interrupt/arch/interrupt_diag.o \
     includes/ir0/debug_trap.o \
     includes/ir0/fb.o \
     includes/ir0/input.o \
@@ -1288,6 +1291,8 @@ FASE58C_DISPLAY ?= gtk
 FASE58C_BOOT_LOG = /tmp/fase58c-boot-gui.log
 FASE58C_FBDEV_LOG = /tmp/fase58c-fbdev-gui.log
 FASE58C_DOOM_LOG = /tmp/fase58c-doom-gui.log
+FASE58E_ASH_LOG = /tmp/fase58e-ash-gui.log
+FASE58E_DISPLAY ?= gtk
 INIT_FASE50_PROGRAMS_SRC = setup/pid1/init_fase50_programs.c
 FASE48_CAT_SRC = setup/pid1/fase48_cat.c
 FASE48_ECHO_SRC = setup/pid1/fase48_echo.c
@@ -1298,7 +1303,9 @@ FASE48_ECHO_BIN = setup/pid1/fase48_echo
 FASE48_BUSYBOX_BIN = setup/pid1/fase48_busybox
 FASE50_HELLO_BIN = setup/pid1/fase50_hello
 FASE50_BUSYBOX_BIN = setup/pid1/fase50_busybox_real
-FASE50_BUSYBOX_CFG = setup/busybox/fase50_minimal.config
+FASE50_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
+FASE58_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
+FASE58E_ASH_SMOKE_LOG = /tmp/fase58e-ash-smoke.log
 FASE41_TRUE_SRC = setup/pid1/fase41_true.c
 SH_SMOKE_SRC     = setup/pid1/sh_smoke.c
 SEGV_SMOKE_SRC   = setup/pid1/userspace_segv.c
@@ -1668,7 +1675,7 @@ build-busybox-fase50-min:
 		echo "✗ Missing config fragment $(FASE50_BUSYBOX_CFG)"; \
 		exit 1; \
 	fi
-	@echo "  FASE50  Building minimal static BusyBox from $(BUSYBOX_SRC)"
+	@echo "  FASE50  Building ash+coreutils static BusyBox from $(BUSYBOX_SRC)"
 	@$(MAKE) -C "$(BUSYBOX_SRC)" allnoconfig
 	@CFG="$(BUSYBOX_SRC)/.config"; \
 	while IFS= read -r line; do \
@@ -1699,6 +1706,51 @@ build-busybox-fase50-min:
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
 	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
 	@echo "✓ build-busybox-fase50-min OK"
+
+build-busybox-fase58-plus:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(BUSYBOX_SRC)" ] || [ ! -f "$(BUSYBOX_SRC)/Makefile" ]; then \
+		echo "✗ BusyBox source missing at BUSYBOX_SRC=$(BUSYBOX_SRC)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FASE58_BUSYBOX_CFG)" ]; then \
+		echo "✗ Missing config fragment $(FASE58_BUSYBOX_CFG)"; \
+		exit 1; \
+	fi
+	@echo "  FASE58  Building ash+coreutils BusyBox from $(BUSYBOX_SRC)"
+	@$(MAKE) -C "$(BUSYBOX_SRC)" allnoconfig
+	@CFG="$(BUSYBOX_SRC)/.config"; \
+	while IFS= read -r line; do \
+		case "$$line" in \
+			""|\#*) continue ;; \
+		esac; \
+		sym="$${line%%=*}"; \
+		val="$${line#*=}"; \
+		case "$$val" in \
+			y) \
+				sed -i "s/^# $$sym is not set/$$sym=y/" "$$CFG"; \
+				if ! grep -q "^$$sym=y$$" "$$CFG"; then \
+					if grep -q "^$$sym=" "$$CFG"; then \
+						sed -i "s/^$$sym=.*/$$sym=y/" "$$CFG"; \
+					else \
+						echo "$$sym=y" >> "$$CFG"; \
+					fi; \
+				fi ;; \
+			n) \
+				sed -i "s/^$$sym=.*/# $$sym is not set/" "$$CFG"; \
+				if ! grep -q "^# $$sym is not set$$" "$$CFG"; then \
+					echo "# $$sym is not set" >> "$$CFG"; \
+				fi ;; \
+		esac; \
+	done < "$(FASE58_BUSYBOX_CFG)"
+	@yes "" | $(MAKE) -C "$(BUSYBOX_SRC)" oldconfig >/dev/null
+	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
+	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
+	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@echo "✓ build-busybox-fase58-plus OK (installed to $(FASE50_BUSYBOX_BIN))"
 
 build-fase50-hello:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -3105,6 +3157,60 @@ run-fase58c-doom-gui: build-fase55e-doom-interactive kernel-x64-userspace.iso
 		$$DISP -m 256M -no-reboot -net none; \
 	rm -f $$DISK
 
+# FASE58E — irinit → BusyBox ash on /dev/console (Doom manual from shell only)
+run-fase58e-ash-gui: build-irinit build-busybox-fase50-min kernel-x64-userspace.iso
+	@case "$(FASE58E_DISPLAY)" in none|headless) \
+		echo "✗ FASE58E ash GUI blocked: FASE58E_DISPLAY=$(FASE58E_DISPLAY)"; exit 1;; esac
+	@echo "  FASE58E   boot → ash on /dev/console (DOOM_AUTOSTART_DISABLED)"
+	@echo "  QEMU     display=$(FASE58E_DISPLAY)"
+	@echo "  LOG      serial -> $(FASE58E_ASH_LOG)"
+	@echo "  HINT     click QEMU window; try: ls / pwd / echo hi"
+	@echo "  HINT     Doom manual: doomgeneric /usr/share/doom/doom1.wad"
+	@rm -f $(FASE58E_ASH_LOG); \
+	DISK=$$(mktemp /tmp/ir0-fase58e-ash.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(IRINIT_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
+	if [ -n "$(REAL_WAD_PATH)" ] && [ -f "$(REAL_WAD_PATH)" ]; then \
+		$(MAKE) -s build-fase55e-doom-interactive; \
+		CFG=$$(mktemp /tmp/doom-frames-cfg.XXXXXX); \
+		printf '0\n0\n' > $$CFG; \
+		python3 scripts/inject_init_minix.py $$DISK $(FASE55E_DOOM_BIN) bin/doomgeneric && \
+		python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
+		python3 scripts/inject_init_minix.py $$DISK $$CFG etc/doom-frames && \
+		rm -f $$CFG; \
+	fi; \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/sh /bin/busybox; \
+	if [ "$(FASE58E_DISPLAY)" = "sdl" ]; then \
+		DISP="-display sdl2"; \
+	else \
+		DISP="-display gtk"; \
+	fi; \
+	$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial file:$(FASE58E_ASH_LOG) \
+		$$DISP -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+
+check-fase58e-logs:
+	@echo "=== FASE58E/K (ash GUI + compact smoke tags) ==="
+	@if [ -f "$(FASE58E_ASH_LOG)" ]; then \
+		grep -E 'ASH_INTERACTIVE_READY|DOOM_AUTOSTART_DISABLED|KBD_USER_POLL_OK|TTY_CANON_LINE_READY|SYS_READ_RETURN_OK|ASH_COMMAND_ECHO_OK|ASH_COMMAND_EXEC_OK|UD_FAULT_RIP=' "$(FASE58E_ASH_LOG)" || echo "(no FASE58E/K tags)"; \
+	else echo "missing $(FASE58E_ASH_LOG)"; fi
+	@if [ -f "$(FASE58E_ASH_SMOKE_LOG)" ]; then \
+		echo "=== FASE58E ash smoke ($(FASE58E_ASH_SMOKE_LOG)) ==="; \
+		grep -E 'ASH_INTERACTIVE_READY|KBD_USER_POLL_OK|TTY_CANON_LINE_READY|SYS_READ_RETURN_OK|ASH_COMMAND_ECHO_OK|ASH_COMMAND_EXEC_OK' "$(FASE58E_ASH_SMOKE_LOG)" || echo "(no smoke tags)"; \
+	fi
+
+smoke-fase58e-ash-interactive: build-irinit build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  SMOKE   FASE58E ash interactive (headless + monitor sendkey)..."
+	@chmod +x scripts/smoke_fase58e_ash_interactive.py
+	@python3 scripts/smoke_fase58e_ash_interactive.py --log $(FASE58E_ASH_SMOKE_LOG) --timeout 90 --iso kernel-x64-userspace.iso
+	@echo "  LOG     $(FASE58E_ASH_SMOKE_LOG)"
+	@echo "  HINT    GUI manual: make run-fase58e-ash-gui && make check-fase58e-logs"
+
 check-fase58c-logs:
 	@echo "=== FASE58C A (boot) ==="
 	@if [ -f "$(FASE58C_BOOT_LOG)" ]; then \
@@ -3520,6 +3626,8 @@ help:
 	@echo "  make run-fase58c-boot-gui         FASE58C A: kernel RGB bands (diagnostic)"
 	@echo "  make run-fase58c-fbdev-gui        FASE58C B: /dev/fb0 mmap CMY bands"
 	@echo "  make run-fase58c-doom-gui         FASE58C C: Doom DOOM1.WAD (diagnostic)"
+	@echo "  make run-fase58e-ash-gui          FASE58E: ash interactive (no Doom autostart)"
+	@echo "  make check-fase58e-logs           grep FASE58E serial tags"
 	@echo "  make check-fase58c-logs           grep serial tags after GUI runs"
 	@echo "  make run-irinit-interactive-gui   irinit + BusyBox ash (bundles Doom if WAD exists)"
 	@echo ""
@@ -3870,7 +3978,7 @@ test-drivers-clean:
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
         runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
-        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
+        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs run-fase58e-ash-gui check-fase58e-logs build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \

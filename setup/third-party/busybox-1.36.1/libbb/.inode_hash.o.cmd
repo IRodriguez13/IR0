@@ -1,4 +1,4 @@
-cmd_libbb/inode_hash.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.inode_hash.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"inode_hash"'  -DKBUILD_MODNAME='"inode_hash"' -c -o libbb/inode_hash.o libbb/inode_hash.c
+cmd_libbb/inode_hash.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.inode_hash.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"inode_hash"'  -DKBUILD_MODNAME='"inode_hash"' -c -o libbb/inode_hash.o libbb/inode_hash.c
 
 deps_libbb/inode_hash.o := \
   libbb/inode_hash.c \

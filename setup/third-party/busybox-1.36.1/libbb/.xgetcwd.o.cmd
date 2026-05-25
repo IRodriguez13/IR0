@@ -1,4 +1,4 @@
-cmd_libbb/xgetcwd.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xgetcwd.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"xgetcwd"'  -DKBUILD_MODNAME='"xgetcwd"' -c -o libbb/xgetcwd.o libbb/xgetcwd.c
+cmd_libbb/xgetcwd.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xgetcwd.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"xgetcwd"'  -DKBUILD_MODNAME='"xgetcwd"' -c -o libbb/xgetcwd.o libbb/xgetcwd.c
 
 deps_libbb/xgetcwd.o := \
   libbb/xgetcwd.c \

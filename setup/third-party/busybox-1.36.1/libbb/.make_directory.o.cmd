@@ -1,4 +1,4 @@
-cmd_libbb/make_directory.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.make_directory.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"make_directory"'  -DKBUILD_MODNAME='"make_directory"' -c -o libbb/make_directory.o libbb/make_directory.c
+cmd_libbb/make_directory.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.make_directory.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"make_directory"'  -DKBUILD_MODNAME='"make_directory"' -c -o libbb/make_directory.o libbb/make_directory.c
 
 deps_libbb/make_directory.o := \
   libbb/make_directory.c \

@@ -1,4 +1,4 @@
-cmd_coreutils/tail.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.tail.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"tail"'  -DKBUILD_MODNAME='"tail"' -c -o coreutils/tail.o coreutils/tail.c
+cmd_coreutils/tail.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.tail.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"tail"'  -DKBUILD_MODNAME='"tail"' -c -o coreutils/tail.o coreutils/tail.c
 
 deps_coreutils/tail.o := \
   coreutils/tail.c \

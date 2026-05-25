@@ -1,4 +1,4 @@
-cmd_shell/shell_common.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,shell/.shell_common.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"shell_common"'  -DKBUILD_MODNAME='"shell_common"' -c -o shell/shell_common.o shell/shell_common.c
+cmd_shell/shell_common.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,shell/.shell_common.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"shell_common"'  -DKBUILD_MODNAME='"shell_common"' -c -o shell/shell_common.o shell/shell_common.c
 
 deps_shell/shell_common.o := \
   shell/shell_common.c \

@@ -1,4 +1,4 @@
-cmd_libbb/securetty.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.securetty.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"securetty"'  -DKBUILD_MODNAME='"securetty"' -c -o libbb/securetty.o libbb/securetty.c
+cmd_libbb/securetty.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.securetty.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"securetty"'  -DKBUILD_MODNAME='"securetty"' -c -o libbb/securetty.o libbb/securetty.c
 
 deps_libbb/securetty.o := \
   libbb/securetty.c \

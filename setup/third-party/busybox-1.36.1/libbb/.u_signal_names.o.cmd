@@ -1,4 +1,4 @@
-cmd_libbb/u_signal_names.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.u_signal_names.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"u_signal_names"'  -DKBUILD_MODNAME='"u_signal_names"' -c -o libbb/u_signal_names.o libbb/u_signal_names.c
+cmd_libbb/u_signal_names.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.u_signal_names.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"u_signal_names"'  -DKBUILD_MODNAME='"u_signal_names"' -c -o libbb/u_signal_names.o libbb/u_signal_names.c
 
 deps_libbb/u_signal_names.o := \
   libbb/u_signal_names.c \

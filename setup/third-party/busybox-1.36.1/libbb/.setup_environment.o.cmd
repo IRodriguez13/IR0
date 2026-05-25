@@ -1,4 +1,4 @@
-cmd_libbb/setup_environment.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.setup_environment.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"setup_environment"'  -DKBUILD_MODNAME='"setup_environment"' -c -o libbb/setup_environment.o libbb/setup_environment.c
+cmd_libbb/setup_environment.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.setup_environment.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"setup_environment"'  -DKBUILD_MODNAME='"setup_environment"' -c -o libbb/setup_environment.o libbb/setup_environment.c
 
 deps_libbb/setup_environment.o := \
   libbb/setup_environment.c \

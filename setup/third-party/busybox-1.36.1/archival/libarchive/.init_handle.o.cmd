@@ -1,4 +1,4 @@
-cmd_archival/libarchive/init_handle.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.init_handle.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"init_handle"'  -DKBUILD_MODNAME='"init_handle"' -c -o archival/libarchive/init_handle.o archival/libarchive/init_handle.c
+cmd_archival/libarchive/init_handle.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.init_handle.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"init_handle"'  -DKBUILD_MODNAME='"init_handle"' -c -o archival/libarchive/init_handle.o archival/libarchive/init_handle.c
 
 deps_archival/libarchive/init_handle.o := \
   archival/libarchive/init_handle.c \

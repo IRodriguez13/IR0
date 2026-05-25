@@ -1,4 +1,4 @@
-cmd_libbb/vfork_daemon_rexec.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.vfork_daemon_rexec.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"vfork_daemon_rexec"'  -DKBUILD_MODNAME='"vfork_daemon_rexec"' -c -o libbb/vfork_daemon_rexec.o libbb/vfork_daemon_rexec.c
+cmd_libbb/vfork_daemon_rexec.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.vfork_daemon_rexec.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"vfork_daemon_rexec"'  -DKBUILD_MODNAME='"vfork_daemon_rexec"' -c -o libbb/vfork_daemon_rexec.o libbb/vfork_daemon_rexec.c
 
 deps_libbb/vfork_daemon_rexec.o := \
   libbb/vfork_daemon_rexec.c \

@@ -60,8 +60,9 @@
 
 <p>Currently available applets include:</p>
 
-<pre><code>ash, cat, cp, echo, false, grep, head, ls, mkdir, mv, pwd, rm,
-rmdir, sh, tail, touch, true</code></pre>
+<pre><code>ash, basename, cat, clear, cp, dirname, dmesg, echo, false, grep,
+head, kill, ln, ls, mkdir, mv, printf, ps, pwd, readlink, rm, rmdir,
+sh, sleep, stat, tail, test, touch, true, uname, wc</code></pre>
 
 <h1 id="COMMAND-DESCRIPTIONS">COMMAND DESCRIPTIONS</h1>
 
@@ -73,16 +74,40 @@ rmdir, sh, tail, touch, true</code></pre>
 <p>ash [-il] [-|+Cabefmnuvx] [-|+o OPT]... [-c &#39;SCRIPT&#39; [ARG0 ARGS] | FILE ARGS | -s ARGS]</p>
 
 </dd>
+<dt id="basename"><b>basename</b></dt>
+<dd>
+
+<p>basename FILE [SUFFIX] | -a FILE... | -s SUFFIX FILE...</p>
+
+</dd>
 <dt id="cat"><b>cat</b></dt>
 <dd>
 
 <p>cat [FILE]...</p>
 
 </dd>
+<dt id="clear"><b>clear</b></dt>
+<dd>
+
+<p>clear</p>
+
+</dd>
 <dt id="cp"><b>cp</b></dt>
 <dd>
 
 <p>cp [-arPLHpfinlsTu] SOURCE DEST or: cp [-arPLHpfinlsu] SOURCE... { -t DIRECTORY | DIRECTORY }</p>
+
+</dd>
+<dt id="dirname"><b>dirname</b></dt>
+<dd>
+
+<p>dirname FILENAME</p>
+
+</dd>
+<dt id="dmesg"><b>dmesg</b></dt>
+<dd>
+
+<p>dmesg [-cr] [-n LEVEL] [-s SIZE]</p>
 
 </dd>
 <dt id="echo"><b>echo</b></dt>
@@ -103,6 +128,18 @@ rmdir, sh, tail, touch, true</code></pre>
 <p>head [OPTIONS] [FILE]...</p>
 
 </dd>
+<dt id="kill"><b>kill</b></dt>
+<dd>
+
+<p>kill [-l] [-SIG] PID...</p>
+
+</dd>
+<dt id="ln"><b>ln</b></dt>
+<dd>
+
+<p>ln [-sfnbtv] [-S SUF] TARGET... LINK|DIR</p>
+
+</dd>
 <dt id="ls"><b>ls</b></dt>
 <dd>
 
@@ -121,10 +158,28 @@ rmdir, sh, tail, touch, true</code></pre>
 <p>mv [-finT] SOURCE DEST or: mv [-fin] SOURCE... { -t DIRECTORY | DIRECTORY }</p>
 
 </dd>
+<dt id="printf"><b>printf</b></dt>
+<dd>
+
+<p>printf FORMAT [ARG]...</p>
+
+</dd>
+<dt id="ps"><b>ps</b></dt>
+<dd>
+
+<p>ps</p>
+
+</dd>
 <dt id="pwd"><b>pwd</b></dt>
 <dd>
 
 <p>pwd</p>
+
+</dd>
+<dt id="readlink"><b>readlink</b></dt>
+<dd>
+
+<p>readlink FILE</p>
 
 </dd>
 <dt id="rm"><b>rm</b></dt>
@@ -145,6 +200,18 @@ rmdir, sh, tail, touch, true</code></pre>
 <p>sh [-il] [-|+Cabefmnuvx] [-|+o OPT]... [-c &#39;SCRIPT&#39; [ARG0 ARGS] | FILE ARGS | -s ARGS]</p>
 
 </dd>
+<dt id="sleep"><b>sleep</b></dt>
+<dd>
+
+<p>sleep N</p>
+
+</dd>
+<dt id="stat"><b>stat</b></dt>
+<dd>
+
+<p>stat [-lt] FILE...</p>
+
+</dd>
 <dt id="tail"><b>tail</b></dt>
 <dd>
 
@@ -155,6 +222,18 @@ rmdir, sh, tail, touch, true</code></pre>
 <dd>
 
 <p>touch [-ch] FILE...</p>
+
+</dd>
+<dt id="uname"><b>uname</b></dt>
+<dd>
+
+<p>uname [-amnrspvio]</p>
+
+</dd>
+<dt id="wc"><b>wc</b></dt>
+<dd>
+
+<p>wc [-clwL] [FILE]...</p>
 
 </dd>
 </dl>

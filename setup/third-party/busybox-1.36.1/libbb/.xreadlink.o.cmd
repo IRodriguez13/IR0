@@ -1,4 +1,4 @@
-cmd_libbb/xreadlink.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xreadlink.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"xreadlink"'  -DKBUILD_MODNAME='"xreadlink"' -c -o libbb/xreadlink.o libbb/xreadlink.c
+cmd_libbb/xreadlink.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xreadlink.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"xreadlink"'  -DKBUILD_MODNAME='"xreadlink"' -c -o libbb/xreadlink.o libbb/xreadlink.c
 
 deps_libbb/xreadlink.o := \
   libbb/xreadlink.c \

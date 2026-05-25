@@ -1,4 +1,4 @@
-cmd_libbb/full_write.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.full_write.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"full_write"'  -DKBUILD_MODNAME='"full_write"' -c -o libbb/full_write.o libbb/full_write.c
+cmd_libbb/full_write.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.full_write.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"full_write"'  -DKBUILD_MODNAME='"full_write"' -c -o libbb/full_write.o libbb/full_write.c
 
 deps_libbb/full_write.o := \
   libbb/full_write.c \

@@ -1,4 +1,4 @@
-cmd_libbb/find_pid_by_name.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.find_pid_by_name.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"find_pid_by_name"'  -DKBUILD_MODNAME='"find_pid_by_name"' -c -o libbb/find_pid_by_name.o libbb/find_pid_by_name.c
+cmd_libbb/find_pid_by_name.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.find_pid_by_name.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"find_pid_by_name"'  -DKBUILD_MODNAME='"find_pid_by_name"' -c -o libbb/find_pid_by_name.o libbb/find_pid_by_name.c
 
 deps_libbb/find_pid_by_name.o := \
   libbb/find_pid_by_name.c \

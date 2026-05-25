@@ -1,4 +1,4 @@
-cmd_coreutils/mkdir.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.mkdir.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"mkdir"'  -DKBUILD_MODNAME='"mkdir"' -c -o coreutils/mkdir.o coreutils/mkdir.c
+cmd_coreutils/mkdir.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.mkdir.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"mkdir"'  -DKBUILD_MODNAME='"mkdir"' -c -o coreutils/mkdir.o coreutils/mkdir.c
 
 deps_coreutils/mkdir.o := \
   coreutils/mkdir.c \

@@ -1,4 +1,4 @@
-cmd_coreutils/ls.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.ls.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"ls"'  -DKBUILD_MODNAME='"ls"' -c -o coreutils/ls.o coreutils/ls.c
+cmd_coreutils/ls.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.ls.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"ls"'  -DKBUILD_MODNAME='"ls"' -c -o coreutils/ls.o coreutils/ls.c
 
 deps_coreutils/ls.o := \
   coreutils/ls.c \

@@ -1,4 +1,4 @@
-cmd_libbb/run_shell.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.run_shell.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"run_shell"'  -DKBUILD_MODNAME='"run_shell"' -c -o libbb/run_shell.o libbb/run_shell.c
+cmd_libbb/run_shell.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.run_shell.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"run_shell"'  -DKBUILD_MODNAME='"run_shell"' -c -o libbb/run_shell.o libbb/run_shell.c
 
 deps_libbb/run_shell.o := \
   libbb/run_shell.c \

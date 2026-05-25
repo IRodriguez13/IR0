@@ -1,1 +1,1 @@
-#undef CONFIG_PS
+#define CONFIG_PS 1

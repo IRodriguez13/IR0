@@ -1,4 +1,4 @@
-cmd_coreutils/false.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.false.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"false"'  -DKBUILD_MODNAME='"false"' -c -o coreutils/false.o coreutils/false.c
+cmd_coreutils/false.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.false.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"false"'  -DKBUILD_MODNAME='"false"' -c -o coreutils/false.o coreutils/false.c
 
 deps_coreutils/false.o := \
   coreutils/false.c \

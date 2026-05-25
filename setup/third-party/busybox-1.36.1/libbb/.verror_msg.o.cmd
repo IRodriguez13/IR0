@@ -1,4 +1,4 @@
-cmd_libbb/verror_msg.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.verror_msg.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"verror_msg"'  -DKBUILD_MODNAME='"verror_msg"' -c -o libbb/verror_msg.o libbb/verror_msg.c
+cmd_libbb/verror_msg.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.verror_msg.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"verror_msg"'  -DKBUILD_MODNAME='"verror_msg"' -c -o libbb/verror_msg.o libbb/verror_msg.c
 
 deps_libbb/verror_msg.o := \
   libbb/verror_msg.c \

@@ -1,4 +1,4 @@
-cmd_libbb/endofname.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.endofname.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"endofname"'  -DKBUILD_MODNAME='"endofname"' -c -o libbb/endofname.o libbb/endofname.c
+cmd_libbb/endofname.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.endofname.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"endofname"'  -DKBUILD_MODNAME='"endofname"' -c -o libbb/endofname.o libbb/endofname.c
 
 deps_libbb/endofname.o := \
   libbb/endofname.c \

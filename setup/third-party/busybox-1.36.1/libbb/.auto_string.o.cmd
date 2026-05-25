@@ -1,4 +1,4 @@
-cmd_libbb/auto_string.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.auto_string.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"auto_string"'  -DKBUILD_MODNAME='"auto_string"' -c -o libbb/auto_string.o libbb/auto_string.c
+cmd_libbb/auto_string.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.auto_string.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"auto_string"'  -DKBUILD_MODNAME='"auto_string"' -c -o libbb/auto_string.o libbb/auto_string.c
 
 deps_libbb/auto_string.o := \
   libbb/auto_string.c \

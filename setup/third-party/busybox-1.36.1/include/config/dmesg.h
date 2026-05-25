@@ -1,1 +1,1 @@
-#undef CONFIG_DMESG
+#define CONFIG_DMESG 1

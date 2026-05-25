@@ -1,4 +1,4 @@
-cmd_libbb/get_last_path_component.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.get_last_path_component.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"get_last_path_component"'  -DKBUILD_MODNAME='"get_last_path_component"' -c -o libbb/get_last_path_component.o libbb/get_last_path_component.c
+cmd_libbb/get_last_path_component.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.get_last_path_component.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"get_last_path_component"'  -DKBUILD_MODNAME='"get_last_path_component"' -c -o libbb/get_last_path_component.o libbb/get_last_path_component.c
 
 deps_libbb/get_last_path_component.o := \
   libbb/get_last_path_component.c \
