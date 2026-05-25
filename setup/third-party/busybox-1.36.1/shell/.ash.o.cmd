@@ -1,4 +1,4 @@
-cmd_shell/ash.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,shell/.ash.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"ash"'  -DKBUILD_MODNAME='"ash"' -c -o shell/ash.o shell/ash.c
+cmd_shell/ash.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,shell/.ash.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"ash"'  -DKBUILD_MODNAME='"ash"' -c -o shell/ash.o shell/ash.c
 
 deps_shell/ash.o := \
   shell/ash.c \

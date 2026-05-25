@@ -1,1 +1,1 @@
-#undef CONFIG_READLINK
+#define CONFIG_READLINK 1

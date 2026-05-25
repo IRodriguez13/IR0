@@ -1,4 +1,4 @@
-cmd_coreutils/cat.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.cat.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"cat"'  -DKBUILD_MODNAME='"cat"' -c -o coreutils/cat.o coreutils/cat.c
+cmd_coreutils/cat.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.cat.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"cat"'  -DKBUILD_MODNAME='"cat"' -c -o coreutils/cat.o coreutils/cat.c
 
 deps_coreutils/cat.o := \
   coreutils/cat.c \

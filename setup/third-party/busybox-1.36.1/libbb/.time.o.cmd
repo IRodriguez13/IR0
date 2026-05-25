@@ -1,4 +1,4 @@
-cmd_libbb/time.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.time.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"time"'  -DKBUILD_MODNAME='"time"' -c -o libbb/time.o libbb/time.c
+cmd_libbb/time.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.time.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"time"'  -DKBUILD_MODNAME='"time"' -c -o libbb/time.o libbb/time.c
 
 deps_libbb/time.o := \
   libbb/time.c \

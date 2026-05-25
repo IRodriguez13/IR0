@@ -2,7 +2,7 @@
  * Automatically generated C config: don't edit
  * Busybox version: 1.36.1
  */
-#define AUTOCONF_TIMESTAMP "2026-05-24 19:57:25 -03"
+#define AUTOCONF_TIMESTAMP "2026-05-25 01:16:07 -03"
 
 #define CONFIG_HAVE_DOT_CONFIG 1
 #define ENABLE_HAVE_DOT_CONFIG 1
@@ -828,10 +828,14 @@
 #define ENABLE_FEATURE_HUMAN_READABLE 0
 #define IF_FEATURE_HUMAN_READABLE(...)
 #define IF_NOT_FEATURE_HUMAN_READABLE(...) __VA_ARGS__
-#undef CONFIG_BASENAME
-#define ENABLE_BASENAME 0
-#define IF_BASENAME(...)
-#define IF_NOT_BASENAME(...) __VA_ARGS__
+#define CONFIG_BASENAME 1
+#define ENABLE_BASENAME 1
+#ifdef MAKE_SUID
+# define IF_BASENAME(...) __VA_ARGS__ "CONFIG_BASENAME"
+#else
+# define IF_BASENAME(...) __VA_ARGS__
+#endif
+#define IF_NOT_BASENAME(...)
 #define CONFIG_CAT 1
 #define ENABLE_CAT 1
 #ifdef MAKE_SUID
@@ -952,10 +956,14 @@
 #define ENABLE_FEATURE_SKIP_ROOTFS 0
 #define IF_FEATURE_SKIP_ROOTFS(...)
 #define IF_NOT_FEATURE_SKIP_ROOTFS(...) __VA_ARGS__
-#undef CONFIG_DIRNAME
-#define ENABLE_DIRNAME 0
-#define IF_DIRNAME(...)
-#define IF_NOT_DIRNAME(...) __VA_ARGS__
+#define CONFIG_DIRNAME 1
+#define ENABLE_DIRNAME 1
+#ifdef MAKE_SUID
+# define IF_DIRNAME(...) __VA_ARGS__ "CONFIG_DIRNAME"
+#else
+# define IF_DIRNAME(...) __VA_ARGS__
+#endif
+#define IF_NOT_DIRNAME(...)
 #undef CONFIG_DOS2UNIX
 #define ENABLE_DOS2UNIX 0
 #define IF_DOS2UNIX(...)
@@ -1056,10 +1064,14 @@
 #define ENABLE_LINK 0
 #define IF_LINK(...)
 #define IF_NOT_LINK(...) __VA_ARGS__
-#undef CONFIG_LN
-#define ENABLE_LN 0
-#define IF_LN(...)
-#define IF_NOT_LN(...) __VA_ARGS__
+#define CONFIG_LN 1
+#define ENABLE_LN 1
+#ifdef MAKE_SUID
+# define IF_LN(...) __VA_ARGS__ "CONFIG_LN"
+#else
+# define IF_LN(...) __VA_ARGS__
+#endif
+#define IF_NOT_LN(...)
 #undef CONFIG_LOGNAME
 #define ENABLE_LOGNAME 0
 #define IF_LOGNAME(...)
@@ -1188,10 +1200,14 @@
 #define ENABLE_PRINTENV 0
 #define IF_PRINTENV(...)
 #define IF_NOT_PRINTENV(...) __VA_ARGS__
-#undef CONFIG_PRINTF
-#define ENABLE_PRINTF 0
-#define IF_PRINTF(...)
-#define IF_NOT_PRINTF(...) __VA_ARGS__
+#define CONFIG_PRINTF 1
+#define ENABLE_PRINTF 1
+#ifdef MAKE_SUID
+# define IF_PRINTF(...) __VA_ARGS__ "CONFIG_PRINTF"
+#else
+# define IF_PRINTF(...) __VA_ARGS__
+#endif
+#define IF_NOT_PRINTF(...)
 #define CONFIG_PWD 1
 #define ENABLE_PWD 1
 #ifdef MAKE_SUID
@@ -1200,10 +1216,14 @@
 # define IF_PWD(...) __VA_ARGS__
 #endif
 #define IF_NOT_PWD(...)
-#undef CONFIG_READLINK
-#define ENABLE_READLINK 0
-#define IF_READLINK(...)
-#define IF_NOT_READLINK(...) __VA_ARGS__
+#define CONFIG_READLINK 1
+#define ENABLE_READLINK 1
+#ifdef MAKE_SUID
+# define IF_READLINK(...) __VA_ARGS__ "CONFIG_READLINK"
+#else
+# define IF_READLINK(...) __VA_ARGS__
+#endif
+#define IF_NOT_READLINK(...)
 #undef CONFIG_FEATURE_READLINK_FOLLOW
 #define ENABLE_FEATURE_READLINK_FOLLOW 0
 #define IF_FEATURE_READLINK_FOLLOW(...)
@@ -1240,10 +1260,14 @@
 #define ENABLE_SHUF 0
 #define IF_SHUF(...)
 #define IF_NOT_SHUF(...) __VA_ARGS__
-#undef CONFIG_SLEEP
-#define ENABLE_SLEEP 0
-#define IF_SLEEP(...)
-#define IF_NOT_SLEEP(...) __VA_ARGS__
+#define CONFIG_SLEEP 1
+#define ENABLE_SLEEP 1
+#ifdef MAKE_SUID
+# define IF_SLEEP(...) __VA_ARGS__ "CONFIG_SLEEP"
+#else
+# define IF_SLEEP(...) __VA_ARGS__
+#endif
+#define IF_NOT_SLEEP(...)
 #undef CONFIG_FEATURE_FANCY_SLEEP
 #define ENABLE_FEATURE_FANCY_SLEEP 0
 #define IF_FEATURE_FANCY_SLEEP(...)
@@ -1268,10 +1292,14 @@
 #define ENABLE_FEATURE_SPLIT_FANCY 0
 #define IF_FEATURE_SPLIT_FANCY(...)
 #define IF_NOT_FEATURE_SPLIT_FANCY(...) __VA_ARGS__
-#undef CONFIG_STAT
-#define ENABLE_STAT 0
-#define IF_STAT(...)
-#define IF_NOT_STAT(...) __VA_ARGS__
+#define CONFIG_STAT 1
+#define ENABLE_STAT 1
+#ifdef MAKE_SUID
+# define IF_STAT(...) __VA_ARGS__ "CONFIG_STAT"
+#else
+# define IF_STAT(...) __VA_ARGS__
+#endif
+#define IF_NOT_STAT(...)
 #undef CONFIG_FEATURE_STAT_FORMAT
 #define ENABLE_FEATURE_STAT_FORMAT 0
 #define IF_FEATURE_STAT_FORMAT(...)
@@ -1324,10 +1352,14 @@
 #define ENABLE_FEATURE_TEE_USE_BLOCK_IO 0
 #define IF_FEATURE_TEE_USE_BLOCK_IO(...)
 #define IF_NOT_FEATURE_TEE_USE_BLOCK_IO(...) __VA_ARGS__
-#undef CONFIG_TEST
-#define ENABLE_TEST 0
-#define IF_TEST(...)
-#define IF_NOT_TEST(...) __VA_ARGS__
+#define CONFIG_TEST 1
+#define ENABLE_TEST 1
+#ifdef MAKE_SUID
+# define IF_TEST(...) __VA_ARGS__ "CONFIG_TEST"
+#else
+# define IF_TEST(...) __VA_ARGS__
+#endif
+#define IF_NOT_TEST(...)
 #undef CONFIG_TEST1
 #define ENABLE_TEST1 0
 #define IF_TEST1(...)
@@ -1388,10 +1420,14 @@
 #define ENABLE_TTY 0
 #define IF_TTY(...)
 #define IF_NOT_TTY(...) __VA_ARGS__
-#undef CONFIG_UNAME
-#define ENABLE_UNAME 0
-#define IF_UNAME(...)
-#define IF_NOT_UNAME(...) __VA_ARGS__
+#define CONFIG_UNAME 1
+#define ENABLE_UNAME 1
+#ifdef MAKE_SUID
+# define IF_UNAME(...) __VA_ARGS__ "CONFIG_UNAME"
+#else
+# define IF_UNAME(...) __VA_ARGS__
+#endif
+#define IF_NOT_UNAME(...)
 #define CONFIG_UNAME_OSNAME ""
 #define ENABLE_UNAME_OSNAME 1
 #ifdef MAKE_SUID
@@ -1432,10 +1468,14 @@
 #define ENABLE_UUENCODE 0
 #define IF_UUENCODE(...)
 #define IF_NOT_UUENCODE(...) __VA_ARGS__
-#undef CONFIG_WC
-#define ENABLE_WC 0
-#define IF_WC(...)
-#define IF_NOT_WC(...) __VA_ARGS__
+#define CONFIG_WC 1
+#define ENABLE_WC 1
+#ifdef MAKE_SUID
+# define IF_WC(...) __VA_ARGS__ "CONFIG_WC"
+#else
+# define IF_WC(...) __VA_ARGS__
+#endif
+#define IF_NOT_WC(...)
 #undef CONFIG_FEATURE_WC_LARGE
 #define ENABLE_FEATURE_WC_LARGE 0
 #define IF_FEATURE_WC_LARGE(...)
@@ -1468,10 +1508,14 @@
 #define ENABLE_CHVT 0
 #define IF_CHVT(...)
 #define IF_NOT_CHVT(...) __VA_ARGS__
-#undef CONFIG_CLEAR
-#define ENABLE_CLEAR 0
-#define IF_CLEAR(...)
-#define IF_NOT_CLEAR(...) __VA_ARGS__
+#define CONFIG_CLEAR 1
+#define ENABLE_CLEAR 1
+#ifdef MAKE_SUID
+# define IF_CLEAR(...) __VA_ARGS__ "CONFIG_CLEAR"
+#else
+# define IF_CLEAR(...) __VA_ARGS__
+#endif
+#define IF_NOT_CLEAR(...)
 #undef CONFIG_DEALLOCVT
 #define ENABLE_DEALLOCVT 0
 #define IF_DEALLOCVT(...)
@@ -2348,10 +2392,14 @@
 #define ENABLE_CHRT 0
 #define IF_CHRT(...)
 #define IF_NOT_CHRT(...) __VA_ARGS__
-#undef CONFIG_DMESG
-#define ENABLE_DMESG 0
-#define IF_DMESG(...)
-#define IF_NOT_DMESG(...) __VA_ARGS__
+#define CONFIG_DMESG 1
+#define ENABLE_DMESG 1
+#ifdef MAKE_SUID
+# define IF_DMESG(...) __VA_ARGS__ "CONFIG_DMESG"
+#else
+# define IF_DMESG(...) __VA_ARGS__
+#endif
+#define IF_NOT_DMESG(...)
 #undef CONFIG_FEATURE_DMESG_PRETTY
 #define ENABLE_FEATURE_DMESG_PRETTY 0
 #define IF_FEATURE_DMESG_PRETTY(...)
@@ -4108,10 +4156,14 @@
 #define ENABLE_IOSTAT 0
 #define IF_IOSTAT(...)
 #define IF_NOT_IOSTAT(...) __VA_ARGS__
-#undef CONFIG_KILL
-#define ENABLE_KILL 0
-#define IF_KILL(...)
-#define IF_NOT_KILL(...) __VA_ARGS__
+#define CONFIG_KILL 1
+#define ENABLE_KILL 1
+#ifdef MAKE_SUID
+# define IF_KILL(...) __VA_ARGS__ "CONFIG_KILL"
+#else
+# define IF_KILL(...) __VA_ARGS__
+#endif
+#define IF_NOT_KILL(...)
 #undef CONFIG_KILLALL
 #define ENABLE_KILLALL 0
 #define IF_KILLALL(...)
@@ -4164,10 +4216,14 @@
 #define ENABLE_FEATURE_POWERTOP_INTERACTIVE 0
 #define IF_FEATURE_POWERTOP_INTERACTIVE(...)
 #define IF_NOT_FEATURE_POWERTOP_INTERACTIVE(...) __VA_ARGS__
-#undef CONFIG_PS
-#define ENABLE_PS 0
-#define IF_PS(...)
-#define IF_NOT_PS(...) __VA_ARGS__
+#define CONFIG_PS 1
+#define ENABLE_PS 1
+#ifdef MAKE_SUID
+# define IF_PS(...) __VA_ARGS__ "CONFIG_PS"
+#else
+# define IF_PS(...) __VA_ARGS__
+#endif
+#define IF_NOT_PS(...)
 #undef CONFIG_FEATURE_PS_WIDE
 #define ENABLE_FEATURE_PS_WIDE 0
 #define IF_FEATURE_PS_WIDE(...)

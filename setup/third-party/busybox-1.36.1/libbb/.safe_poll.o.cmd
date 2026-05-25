@@ -1,4 +1,4 @@
-cmd_libbb/safe_poll.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.safe_poll.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"safe_poll"'  -DKBUILD_MODNAME='"safe_poll"' -c -o libbb/safe_poll.o libbb/safe_poll.c
+cmd_libbb/safe_poll.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.safe_poll.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"safe_poll"'  -DKBUILD_MODNAME='"safe_poll"' -c -o libbb/safe_poll.o libbb/safe_poll.c
 
 deps_libbb/safe_poll.o := \
   libbb/safe_poll.c \

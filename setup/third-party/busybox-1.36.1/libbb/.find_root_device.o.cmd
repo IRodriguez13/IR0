@@ -1,4 +1,4 @@
-cmd_libbb/find_root_device.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.find_root_device.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"find_root_device"'  -DKBUILD_MODNAME='"find_root_device"' -c -o libbb/find_root_device.o libbb/find_root_device.c
+cmd_libbb/find_root_device.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.find_root_device.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"find_root_device"'  -DKBUILD_MODNAME='"find_root_device"' -c -o libbb/find_root_device.o libbb/find_root_device.c
 
 deps_libbb/find_root_device.o := \
   libbb/find_root_device.c \

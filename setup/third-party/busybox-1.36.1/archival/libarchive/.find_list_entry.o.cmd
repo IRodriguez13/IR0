@@ -1,4 +1,4 @@
-cmd_archival/libarchive/find_list_entry.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.find_list_entry.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"find_list_entry"'  -DKBUILD_MODNAME='"find_list_entry"' -c -o archival/libarchive/find_list_entry.o archival/libarchive/find_list_entry.c
+cmd_archival/libarchive/find_list_entry.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.find_list_entry.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"find_list_entry"'  -DKBUILD_MODNAME='"find_list_entry"' -c -o archival/libarchive/find_list_entry.o archival/libarchive/find_list_entry.c
 
 deps_archival/libarchive/find_list_entry.o := \
   archival/libarchive/find_list_entry.c \

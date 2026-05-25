@@ -1,4 +1,4 @@
-cmd_libbb/dump.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.dump.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"dump"'  -DKBUILD_MODNAME='"dump"' -c -o libbb/dump.o libbb/dump.c
+cmd_libbb/dump.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.dump.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"dump"'  -DKBUILD_MODNAME='"dump"' -c -o libbb/dump.o libbb/dump.c
 
 deps_libbb/dump.o := \
   libbb/dump.c \

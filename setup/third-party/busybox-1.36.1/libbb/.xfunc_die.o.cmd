@@ -1,4 +1,4 @@
-cmd_libbb/xfunc_die.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xfunc_die.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"xfunc_die"'  -DKBUILD_MODNAME='"xfunc_die"' -c -o libbb/xfunc_die.o libbb/xfunc_die.c
+cmd_libbb/xfunc_die.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xfunc_die.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"xfunc_die"'  -DKBUILD_MODNAME='"xfunc_die"' -c -o libbb/xfunc_die.o libbb/xfunc_die.c
 
 deps_libbb/xfunc_die.o := \
   libbb/xfunc_die.c \

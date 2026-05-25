@@ -1,4 +1,4 @@
-cmd_coreutils/rm.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.rm.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"rm"'  -DKBUILD_MODNAME='"rm"' -c -o coreutils/rm.o coreutils/rm.c
+cmd_coreutils/rm.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.rm.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"rm"'  -DKBUILD_MODNAME='"rm"' -c -o coreutils/rm.o coreutils/rm.c
 
 deps_coreutils/rm.o := \
   coreutils/rm.c \

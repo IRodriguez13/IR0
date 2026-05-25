@@ -1,4 +1,4 @@
-cmd_libbb/chomp.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.chomp.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"chomp"'  -DKBUILD_MODNAME='"chomp"' -c -o libbb/chomp.o libbb/chomp.c
+cmd_libbb/chomp.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.chomp.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"chomp"'  -DKBUILD_MODNAME='"chomp"' -c -o libbb/chomp.o libbb/chomp.c
 
 deps_libbb/chomp.o := \
   libbb/chomp.c \

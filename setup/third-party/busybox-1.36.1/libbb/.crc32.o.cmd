@@ -1,4 +1,4 @@
-cmd_libbb/crc32.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.crc32.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"crc32"'  -DKBUILD_MODNAME='"crc32"' -c -o libbb/crc32.o libbb/crc32.c
+cmd_libbb/crc32.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.crc32.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"crc32"'  -DKBUILD_MODNAME='"crc32"' -c -o libbb/crc32.o libbb/crc32.c
 
 deps_libbb/crc32.o := \
   libbb/crc32.c \

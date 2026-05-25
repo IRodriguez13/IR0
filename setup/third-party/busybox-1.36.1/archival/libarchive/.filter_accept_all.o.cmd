@@ -1,4 +1,4 @@
-cmd_archival/libarchive/filter_accept_all.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.filter_accept_all.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"filter_accept_all"'  -DKBUILD_MODNAME='"filter_accept_all"' -c -o archival/libarchive/filter_accept_all.o archival/libarchive/filter_accept_all.c
+cmd_archival/libarchive/filter_accept_all.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.filter_accept_all.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"filter_accept_all"'  -DKBUILD_MODNAME='"filter_accept_all"' -c -o archival/libarchive/filter_accept_all.o archival/libarchive/filter_accept_all.c
 
 deps_archival/libarchive/filter_accept_all.o := \
   archival/libarchive/filter_accept_all.c \

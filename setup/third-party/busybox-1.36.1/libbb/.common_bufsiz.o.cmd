@@ -1,4 +1,4 @@
-cmd_libbb/common_bufsiz.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.common_bufsiz.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"common_bufsiz"'  -DKBUILD_MODNAME='"common_bufsiz"' -c -o libbb/common_bufsiz.o libbb/common_bufsiz.c
+cmd_libbb/common_bufsiz.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.common_bufsiz.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"common_bufsiz"'  -DKBUILD_MODNAME='"common_bufsiz"' -c -o libbb/common_bufsiz.o libbb/common_bufsiz.c
 
 deps_libbb/common_bufsiz.o := \
   libbb/common_bufsiz.c \

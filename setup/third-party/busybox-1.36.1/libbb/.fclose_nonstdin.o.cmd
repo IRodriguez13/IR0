@@ -1,4 +1,4 @@
-cmd_libbb/fclose_nonstdin.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.fclose_nonstdin.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"fclose_nonstdin"'  -DKBUILD_MODNAME='"fclose_nonstdin"' -c -o libbb/fclose_nonstdin.o libbb/fclose_nonstdin.c
+cmd_libbb/fclose_nonstdin.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.fclose_nonstdin.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"fclose_nonstdin"'  -DKBUILD_MODNAME='"fclose_nonstdin"' -c -o libbb/fclose_nonstdin.o libbb/fclose_nonstdin.c
 
 deps_libbb/fclose_nonstdin.o := \
   libbb/fclose_nonstdin.c \

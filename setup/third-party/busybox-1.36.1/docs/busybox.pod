@@ -81,8 +81,9 @@ been enabled, more detailed usage information will also be available.
 
 Currently available applets include:
 
-	ash, cat, cp, echo, false, grep, head, ls, mkdir, mv, pwd, rm,
-	rmdir, sh, tail, touch, true
+	ash, basename, cat, clear, cp, dirname, dmesg, echo, false, grep,
+	head, kill, ln, ls, mkdir, mv, printf, ps, pwd, readlink, rm, rmdir,
+	sh, sleep, stat, tail, test, touch, true, uname, wc
 
 =head1 COMMAND DESCRIPTIONS
 
@@ -92,14 +93,30 @@ Currently available applets include:
 
 ash [-il] [-|+Cabefmnuvx] [-|+o OPT]... [-c 'SCRIPT' [ARG0 ARGS] | FILE ARGS | -s ARGS]
 
+=item B<basename>
+
+basename FILE [SUFFIX] | -a FILE... | -s SUFFIX FILE...
+
 =item B<cat>
 
 cat [FILE]...
+
+=item B<clear>
+
+clear
 
 =item B<cp>
 
 cp [-arPLHpfinlsTu] SOURCE DEST
 or: cp [-arPLHpfinlsu] SOURCE... { -t DIRECTORY | DIRECTORY }
+
+=item B<dirname>
+
+dirname FILENAME
+
+=item B<dmesg>
+
+dmesg [-cr] [-n LEVEL] [-s SIZE]
 
 =item B<echo>
 
@@ -112,6 +129,14 @@ grep [-HhnlLoqvsrRiwFE] [-m N] { PATTERN | -e PATTERN... | -f FILE... } [FILE]..
 =item B<head>
 
 head [OPTIONS] [FILE]...
+
+=item B<kill>
+
+kill [-l] [-SIG] PID...
+
+=item B<ln>
+
+ln [-sfnbtv] [-S SUF] TARGET... LINK|DIR
 
 =item B<ls>
 
@@ -126,9 +151,21 @@ mkdir [-m MODE] [-p] DIRECTORY...
 mv [-finT] SOURCE DEST
 or: mv [-fin] SOURCE... { -t DIRECTORY | DIRECTORY }
 
+=item B<printf>
+
+printf FORMAT [ARG]...
+
+=item B<ps>
+
+ps
+
 =item B<pwd>
 
 pwd
+
+=item B<readlink>
+
+readlink FILE
 
 =item B<rm>
 
@@ -142,6 +179,14 @@ rmdir [-p] DIRECTORY...
 
 sh [-il] [-|+Cabefmnuvx] [-|+o OPT]... [-c 'SCRIPT' [ARG0 ARGS] | FILE ARGS | -s ARGS]
 
+=item B<sleep>
+
+sleep N
+
+=item B<stat>
+
+stat [-lt] FILE...
+
 =item B<tail>
 
 tail [OPTIONS] [FILE]...
@@ -149,6 +194,14 @@ tail [OPTIONS] [FILE]...
 =item B<touch>
 
 touch [-ch] FILE...
+
+=item B<uname>
+
+uname [-amnrspvio]
+
+=item B<wc>
+
+wc [-clwL] [FILE]...
 
 =back
 

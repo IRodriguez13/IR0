@@ -1,4 +1,4 @@
-cmd_coreutils/uname.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.uname.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"uname"'  -DKBUILD_MODNAME='"uname"' -c -o coreutils/uname.o coreutils/uname.c
+cmd_coreutils/uname.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.uname.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"uname"'  -DKBUILD_MODNAME='"uname"' -c -o coreutils/uname.o coreutils/uname.c
 
 deps_coreutils/uname.o := \
   coreutils/uname.c \

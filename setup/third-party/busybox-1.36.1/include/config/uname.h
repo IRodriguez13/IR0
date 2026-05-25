@@ -1,1 +1,1 @@
-#undef CONFIG_UNAME
+#define CONFIG_UNAME 1

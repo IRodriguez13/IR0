@@ -1,4 +1,4 @@
-cmd_libbb/xfuncs_printf.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xfuncs_printf.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"xfuncs_printf"'  -DKBUILD_MODNAME='"xfuncs_printf"' -c -o libbb/xfuncs_printf.o libbb/xfuncs_printf.c
+cmd_libbb/xfuncs_printf.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xfuncs_printf.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"xfuncs_printf"'  -DKBUILD_MODNAME='"xfuncs_printf"' -c -o libbb/xfuncs_printf.o libbb/xfuncs_printf.c
 
 deps_libbb/xfuncs_printf.o := \
   libbb/xfuncs_printf.c \

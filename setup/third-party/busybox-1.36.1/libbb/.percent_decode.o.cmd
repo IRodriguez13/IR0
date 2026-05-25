@@ -1,4 +1,4 @@
-cmd_libbb/percent_decode.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.percent_decode.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"percent_decode"'  -DKBUILD_MODNAME='"percent_decode"' -c -o libbb/percent_decode.o libbb/percent_decode.c
+cmd_libbb/percent_decode.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.percent_decode.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"percent_decode"'  -DKBUILD_MODNAME='"percent_decode"' -c -o libbb/percent_decode.o libbb/percent_decode.c
 
 deps_libbb/percent_decode.o := \
   libbb/percent_decode.c \

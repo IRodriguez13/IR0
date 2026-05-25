@@ -1,4 +1,4 @@
-cmd_libbb/parse_config.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.parse_config.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"parse_config"'  -DKBUILD_MODNAME='"parse_config"' -c -o libbb/parse_config.o libbb/parse_config.c
+cmd_libbb/parse_config.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.parse_config.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"parse_config"'  -DKBUILD_MODNAME='"parse_config"' -c -o libbb/parse_config.o libbb/parse_config.c
 
 deps_libbb/parse_config.o := \
   libbb/parse_config.c \

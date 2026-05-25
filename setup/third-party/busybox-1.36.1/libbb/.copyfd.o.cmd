@@ -1,4 +1,4 @@
-cmd_libbb/copyfd.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.copyfd.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"copyfd"'  -DKBUILD_MODNAME='"copyfd"' -c -o libbb/copyfd.o libbb/copyfd.c
+cmd_libbb/copyfd.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.copyfd.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"copyfd"'  -DKBUILD_MODNAME='"copyfd"' -c -o libbb/copyfd.o libbb/copyfd.c
 
 deps_libbb/copyfd.o := \
   libbb/copyfd.c \

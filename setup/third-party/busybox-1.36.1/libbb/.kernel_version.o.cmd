@@ -1,4 +1,4 @@
-cmd_libbb/kernel_version.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.kernel_version.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"kernel_version"'  -DKBUILD_MODNAME='"kernel_version"' -c -o libbb/kernel_version.o libbb/kernel_version.c
+cmd_libbb/kernel_version.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.kernel_version.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"kernel_version"'  -DKBUILD_MODNAME='"kernel_version"' -c -o libbb/kernel_version.o libbb/kernel_version.c
 
 deps_libbb/kernel_version.o := \
   libbb/kernel_version.c \

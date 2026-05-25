@@ -1,4 +1,4 @@
-cmd_libbb/hash_md5_sha.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.hash_md5_sha.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"hash_md5_sha"'  -DKBUILD_MODNAME='"hash_md5_sha"' -c -o libbb/hash_md5_sha.o libbb/hash_md5_sha.c
+cmd_libbb/hash_md5_sha.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.hash_md5_sha.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"hash_md5_sha"'  -DKBUILD_MODNAME='"hash_md5_sha"' -c -o libbb/hash_md5_sha.o libbb/hash_md5_sha.c
 
 deps_libbb/hash_md5_sha.o := \
   libbb/hash_md5_sha.c \

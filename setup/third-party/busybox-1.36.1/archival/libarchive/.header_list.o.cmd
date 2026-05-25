@@ -1,4 +1,4 @@
-cmd_archival/libarchive/header_list.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.header_list.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"header_list"'  -DKBUILD_MODNAME='"header_list"' -c -o archival/libarchive/header_list.o archival/libarchive/header_list.c
+cmd_archival/libarchive/header_list.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.header_list.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"header_list"'  -DKBUILD_MODNAME='"header_list"' -c -o archival/libarchive/header_list.o archival/libarchive/header_list.c
 
 deps_archival/libarchive/header_list.o := \
   archival/libarchive/header_list.c \

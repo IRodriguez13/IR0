@@ -1,4 +1,4 @@
-cmd_libbb/compare_string_array.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.compare_string_array.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"compare_string_array"'  -DKBUILD_MODNAME='"compare_string_array"' -c -o libbb/compare_string_array.o libbb/compare_string_array.c
+cmd_libbb/compare_string_array.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.compare_string_array.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"compare_string_array"'  -DKBUILD_MODNAME='"compare_string_array"' -c -o libbb/compare_string_array.o libbb/compare_string_array.c
 
 deps_libbb/compare_string_array.o := \
   libbb/compare_string_array.c \

@@ -1,4 +1,4 @@
-cmd_coreutils/cp.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.cp.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"cp"'  -DKBUILD_MODNAME='"cp"' -c -o coreutils/cp.o coreutils/cp.c
+cmd_coreutils/cp.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.cp.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"cp"'  -DKBUILD_MODNAME='"cp"' -c -o coreutils/cp.o coreutils/cp.c
 
 deps_coreutils/cp.o := \
   coreutils/cp.c \

@@ -1,4 +1,4 @@
-cmd_libbb/replace.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.replace.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"replace"'  -DKBUILD_MODNAME='"replace"' -c -o libbb/replace.o libbb/replace.c
+cmd_libbb/replace.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.replace.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"replace"'  -DKBUILD_MODNAME='"replace"' -c -o libbb/replace.o libbb/replace.c
 
 deps_libbb/replace.o := \
   libbb/replace.c \

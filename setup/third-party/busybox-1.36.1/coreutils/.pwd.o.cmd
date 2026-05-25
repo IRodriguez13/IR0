@@ -1,4 +1,4 @@
-cmd_coreutils/pwd.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.pwd.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"pwd"'  -DKBUILD_MODNAME='"pwd"' -c -o coreutils/pwd.o coreutils/pwd.c
+cmd_coreutils/pwd.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.pwd.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"pwd"'  -DKBUILD_MODNAME='"pwd"' -c -o coreutils/pwd.o coreutils/pwd.c
 
 deps_coreutils/pwd.o := \
   coreutils/pwd.c \

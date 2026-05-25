@@ -1,4 +1,4 @@
-cmd_libbb/warn_ignoring_args.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.warn_ignoring_args.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"warn_ignoring_args"'  -DKBUILD_MODNAME='"warn_ignoring_args"' -c -o libbb/warn_ignoring_args.o libbb/warn_ignoring_args.c
+cmd_libbb/warn_ignoring_args.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.warn_ignoring_args.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"warn_ignoring_args"'  -DKBUILD_MODNAME='"warn_ignoring_args"' -c -o libbb/warn_ignoring_args.o libbb/warn_ignoring_args.c
 
 deps_libbb/warn_ignoring_args.o := \
   libbb/warn_ignoring_args.c \

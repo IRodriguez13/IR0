@@ -1,4 +1,4 @@
-cmd_libbb/change_identity.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.change_identity.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"change_identity"'  -DKBUILD_MODNAME='"change_identity"' -c -o libbb/change_identity.o libbb/change_identity.c
+cmd_libbb/change_identity.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.change_identity.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"change_identity"'  -DKBUILD_MODNAME='"change_identity"' -c -o libbb/change_identity.o libbb/change_identity.c
 
 deps_libbb/change_identity.o := \
   libbb/change_identity.c \

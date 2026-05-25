@@ -1,4 +1,4 @@
-cmd_archival/libarchive/unsafe_symlink_target.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.unsafe_symlink_target.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"unsafe_symlink_target"'  -DKBUILD_MODNAME='"unsafe_symlink_target"' -c -o archival/libarchive/unsafe_symlink_target.o archival/libarchive/unsafe_symlink_target.c
+cmd_archival/libarchive/unsafe_symlink_target.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.unsafe_symlink_target.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"unsafe_symlink_target"'  -DKBUILD_MODNAME='"unsafe_symlink_target"' -c -o archival/libarchive/unsafe_symlink_target.o archival/libarchive/unsafe_symlink_target.c
 
 deps_archival/libarchive/unsafe_symlink_target.o := \
   archival/libarchive/unsafe_symlink_target.c \

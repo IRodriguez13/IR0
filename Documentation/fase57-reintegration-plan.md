@@ -68,6 +68,19 @@ Optional verbose reclaim/wait traces:
 make kernel-x64.bin IR0_DEBUG_PMM=1 IR0_DEBUG_WAIT=1 IR0_DEBUG_PROC=1
 ```
 
+## Step 58E — Interactive ash input on FB console (**done**)
+
+Follow-on to 58A: banner and `#` prompt were visible, but typed input did not
+appear until keyboard poll ran from the TTY block path and echo moved to
+keypress time.
+
+Full write-up: **`Documentation/fase58e-ash-interactive-console.md`**
+
+```bash
+make run-fase58e-ash-gui
+make check-fase58e-logs   # /tmp/fase58e-ash-gui.log
+```
+
 ## Step D — **Deferred** (do not apply before E/F)
 
 ### Decision

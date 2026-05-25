@@ -1,4 +1,4 @@
-cmd_coreutils/rmdir.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.rmdir.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"rmdir"'  -DKBUILD_MODNAME='"rmdir"' -c -o coreutils/rmdir.o coreutils/rmdir.c
+cmd_coreutils/rmdir.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,coreutils/.rmdir.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"rmdir"'  -DKBUILD_MODNAME='"rmdir"' -c -o coreutils/rmdir.o coreutils/rmdir.c
 
 deps_coreutils/rmdir.o := \
   coreutils/rmdir.c \

@@ -19,6 +19,7 @@
 #include <ir0/oops.h>
 #include <ir0/serial_io.h>
 #include <ir0/debug_trap.h>
+#include <ir0/fase58j_diag.h>
 #include <kernel/process.h>
 #include <config.h>
 #include <ir0/input_backend.h>
@@ -324,6 +325,7 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
                 signal_to_send = SIGFPE;
                 break;
             case 6:  /* Invalid Opcode */
+                ir0_fase58j_ud_fault_report(stack);
                 signal_to_send = SIGILL;
                 break;
             case 8:  /* Double Fault - severe error */

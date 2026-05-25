@@ -1,1 +1,1 @@
-#undef CONFIG_LN
+#define CONFIG_LN 1

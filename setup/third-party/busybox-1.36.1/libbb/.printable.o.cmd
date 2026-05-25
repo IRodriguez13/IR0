@@ -1,4 +1,4 @@
-cmd_libbb/printable.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.printable.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"printable"'  -DKBUILD_MODNAME='"printable"' -c -o libbb/printable.o libbb/printable.c
+cmd_libbb/printable.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.printable.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"printable"'  -DKBUILD_MODNAME='"printable"' -c -o libbb/printable.o libbb/printable.c
 
 deps_libbb/printable.o := \
   libbb/printable.c \

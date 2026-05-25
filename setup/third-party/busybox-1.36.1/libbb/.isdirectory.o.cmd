@@ -1,4 +1,4 @@
-cmd_libbb/isdirectory.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.isdirectory.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"isdirectory"'  -DKBUILD_MODNAME='"isdirectory"' -c -o libbb/isdirectory.o libbb/isdirectory.c
+cmd_libbb/isdirectory.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.isdirectory.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"isdirectory"'  -DKBUILD_MODNAME='"isdirectory"' -c -o libbb/isdirectory.o libbb/isdirectory.c
 
 deps_libbb/isdirectory.o := \
   libbb/isdirectory.c \

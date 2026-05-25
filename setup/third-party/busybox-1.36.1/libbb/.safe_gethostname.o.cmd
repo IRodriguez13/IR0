@@ -1,4 +1,4 @@
-cmd_libbb/safe_gethostname.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.safe_gethostname.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"safe_gethostname"'  -DKBUILD_MODNAME='"safe_gethostname"' -c -o libbb/safe_gethostname.o libbb/safe_gethostname.c
+cmd_libbb/safe_gethostname.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.safe_gethostname.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"safe_gethostname"'  -DKBUILD_MODNAME='"safe_gethostname"' -c -o libbb/safe_gethostname.o libbb/safe_gethostname.c
 
 deps_libbb/safe_gethostname.o := \
   libbb/safe_gethostname.c \

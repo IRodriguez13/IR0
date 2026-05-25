@@ -1,4 +1,4 @@
-cmd_libbb/concat_subpath_file.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.concat_subpath_file.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"concat_subpath_file"'  -DKBUILD_MODNAME='"concat_subpath_file"' -c -o libbb/concat_subpath_file.o libbb/concat_subpath_file.c
+cmd_libbb/concat_subpath_file.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.concat_subpath_file.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"concat_subpath_file"'  -DKBUILD_MODNAME='"concat_subpath_file"' -c -o libbb/concat_subpath_file.o libbb/concat_subpath_file.c
 
 deps_libbb/concat_subpath_file.o := \
   libbb/concat_subpath_file.c \

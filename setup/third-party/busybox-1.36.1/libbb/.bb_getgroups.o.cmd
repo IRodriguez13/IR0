@@ -1,4 +1,4 @@
-cmd_libbb/bb_getgroups.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.bb_getgroups.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"bb_getgroups"'  -DKBUILD_MODNAME='"bb_getgroups"' -c -o libbb/bb_getgroups.o libbb/bb_getgroups.c
+cmd_libbb/bb_getgroups.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.bb_getgroups.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"bb_getgroups"'  -DKBUILD_MODNAME='"bb_getgroups"' -c -o libbb/bb_getgroups.o libbb/bb_getgroups.c
 
 deps_libbb/bb_getgroups.o := \
   libbb/bb_getgroups.c \

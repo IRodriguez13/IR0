@@ -1,4 +1,4 @@
-cmd_libbb/simplify_path.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.simplify_path.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"simplify_path"'  -DKBUILD_MODNAME='"simplify_path"' -c -o libbb/simplify_path.o libbb/simplify_path.c
+cmd_libbb/simplify_path.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.simplify_path.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"simplify_path"'  -DKBUILD_MODNAME='"simplify_path"' -c -o libbb/simplify_path.o libbb/simplify_path.c
 
 deps_libbb/simplify_path.o := \
   libbb/simplify_path.c \

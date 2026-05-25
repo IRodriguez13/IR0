@@ -55,7 +55,7 @@
 .\" ========================================================================
 .\"
 .IX Title "BUSYBOX 1"
-.TH BUSYBOX 1 2026-05-24 "version 1.36.1" busybox
+.TH BUSYBOX 1 2026-05-25 "version 1.36.1" busybox
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -141,22 +141,35 @@ been enabled, more detailed usage information will also be available.
 .IX Header "COMMANDS"
 Currently available applets include:
 .PP
-.Vb 2
-\&        ash, cat, cp, echo, false, grep, head, ls, mkdir, mv, pwd, rm,
-\&        rmdir, sh, tail, touch, true
+.Vb 3
+\&        ash, basename, cat, clear, cp, dirname, dmesg, echo, false, grep,
+\&        head, kill, ln, ls, mkdir, mv, printf, ps, pwd, readlink, rm, rmdir,
+\&        sh, sleep, stat, tail, test, touch, true, uname, wc
 .Ve
 .SH "COMMAND DESCRIPTIONS"
 .IX Header "COMMAND DESCRIPTIONS"
 .IP \fBash\fR 4
 .IX Item "ash"
 ash [\-il] [\-|+Cabefmnuvx] [\-|+o OPT]... [\-c 'SCRIPT' [ARG0 ARGS] | FILE ARGS | \-s ARGS]
+.IP \fBbasename\fR 4
+.IX Item "basename"
+basename FILE [SUFFIX] | \-a FILE... | \-s SUFFIX FILE...
 .IP \fBcat\fR 4
 .IX Item "cat"
 cat [FILE]...
+.IP \fBclear\fR 4
+.IX Item "clear"
+clear
 .IP \fBcp\fR 4
 .IX Item "cp"
 cp [\-arPLHpfinlsTu] SOURCE DEST
 or: cp [\-arPLHpfinlsu] SOURCE... { \-t DIRECTORY | DIRECTORY }
+.IP \fBdirname\fR 4
+.IX Item "dirname"
+dirname FILENAME
+.IP \fBdmesg\fR 4
+.IX Item "dmesg"
+dmesg [\-cr] [\-n LEVEL] [\-s SIZE]
 .IP \fBecho\fR 4
 .IX Item "echo"
 echo [ARG]...
@@ -166,6 +179,12 @@ grep [\-HhnlLoqvsrRiwFE] [\-m N] { PATTERN | \-e PATTERN... | \-f FILE... } [FIL
 .IP \fBhead\fR 4
 .IX Item "head"
 head [OPTIONS] [FILE]...
+.IP \fBkill\fR 4
+.IX Item "kill"
+kill [\-l] [\-SIG] PID...
+.IP \fBln\fR 4
+.IX Item "ln"
+ln [\-sfnbtv] [\-S SUF] TARGET... LINK|DIR
 .IP \fBls\fR 4
 .IX Item "ls"
 ls [\-1AaCxdlins] [FILE]...
@@ -176,9 +195,18 @@ mkdir [\-m MODE] [\-p] DIRECTORY...
 .IX Item "mv"
 mv [\-finT] SOURCE DEST
 or: mv [\-fin] SOURCE... { \-t DIRECTORY | DIRECTORY }
+.IP \fBprintf\fR 4
+.IX Item "printf"
+printf FORMAT [ARG]...
+.IP \fBps\fR 4
+.IX Item "ps"
+ps
 .IP \fBpwd\fR 4
 .IX Item "pwd"
 pwd
+.IP \fBreadlink\fR 4
+.IX Item "readlink"
+readlink FILE
 .IP \fBrm\fR 4
 .IX Item "rm"
 rm [\-irf] FILE...
@@ -188,12 +216,24 @@ rmdir [\-p] DIRECTORY...
 .IP \fBsh\fR 4
 .IX Item "sh"
 sh [\-il] [\-|+Cabefmnuvx] [\-|+o OPT]... [\-c 'SCRIPT' [ARG0 ARGS] | FILE ARGS | \-s ARGS]
+.IP \fBsleep\fR 4
+.IX Item "sleep"
+sleep N
+.IP \fBstat\fR 4
+.IX Item "stat"
+stat [\-lt] FILE...
 .IP \fBtail\fR 4
 .IX Item "tail"
 tail [OPTIONS] [FILE]...
 .IP \fBtouch\fR 4
 .IX Item "touch"
 touch [\-ch] FILE...
+.IP \fBuname\fR 4
+.IX Item "uname"
+uname [\-amnrspvio]
+.IP \fBwc\fR 4
+.IX Item "wc"
+wc [\-clwL] [FILE]...
 .SH "LIBC NSS"
 .IX Header "LIBC NSS"
 GNU Libc (glibc) uses the Name Service Switch (NSS) to configure the behavior

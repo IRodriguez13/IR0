@@ -1,4 +1,4 @@
-cmd_libbb/xconnect.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xconnect.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"xconnect"'  -DKBUILD_MODNAME='"xconnect"' -c -o libbb/xconnect.o libbb/xconnect.c
+cmd_libbb/xconnect.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.xconnect.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"xconnect"'  -DKBUILD_MODNAME='"xconnect"' -c -o libbb/xconnect.o libbb/xconnect.c
 
 deps_libbb/xconnect.o := \
   libbb/xconnect.c \

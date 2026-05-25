@@ -1,4 +1,4 @@
-cmd_archival/libarchive/seek_by_jump.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.seek_by_jump.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"seek_by_jump"'  -DKBUILD_MODNAME='"seek_by_jump"' -c -o archival/libarchive/seek_by_jump.o archival/libarchive/seek_by_jump.c
+cmd_archival/libarchive/seek_by_jump.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,archival/libarchive/.seek_by_jump.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"seek_by_jump"'  -DKBUILD_MODNAME='"seek_by_jump"' -c -o archival/libarchive/seek_by_jump.o archival/libarchive/seek_by_jump.c
 
 deps_archival/libarchive/seek_by_jump.o := \
   archival/libarchive/seek_by_jump.c \

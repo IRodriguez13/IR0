@@ -1,4 +1,4 @@
-cmd_libbb/perror_msg.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.perror_msg.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"perror_msg"'  -DKBUILD_MODNAME='"perror_msg"' -c -o libbb/perror_msg.o libbb/perror_msg.c
+cmd_libbb/perror_msg.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.perror_msg.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"perror_msg"'  -DKBUILD_MODNAME='"perror_msg"' -c -o libbb/perror_msg.o libbb/perror_msg.c
 
 deps_libbb/perror_msg.o := \
   libbb/perror_msg.c \

@@ -1,4 +1,4 @@
-cmd_libbb/str_tolower.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.str_tolower.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"str_tolower"'  -DKBUILD_MODNAME='"str_tolower"' -c -o libbb/str_tolower.o libbb/str_tolower.c
+cmd_libbb/str_tolower.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.str_tolower.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"str_tolower"'  -DKBUILD_MODNAME='"str_tolower"' -c -o libbb/str_tolower.o libbb/str_tolower.c
 
 deps_libbb/str_tolower.o := \
   libbb/str_tolower.c \

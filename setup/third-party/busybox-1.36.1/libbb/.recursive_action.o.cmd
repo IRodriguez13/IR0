@@ -1,4 +1,4 @@
-cmd_libbb/recursive_action.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.recursive_action.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"recursive_action"'  -DKBUILD_MODNAME='"recursive_action"' -c -o libbb/recursive_action.o libbb/recursive_action.c
+cmd_libbb/recursive_action.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.recursive_action.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"recursive_action"'  -DKBUILD_MODNAME='"recursive_action"' -c -o libbb/recursive_action.o libbb/recursive_action.c
 
 deps_libbb/recursive_action.o := \
   libbb/recursive_action.c \

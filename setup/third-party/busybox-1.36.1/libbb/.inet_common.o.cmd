@@ -1,4 +1,4 @@
-cmd_libbb/inet_common.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.inet_common.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"inet_common"'  -DKBUILD_MODNAME='"inet_common"' -c -o libbb/inet_common.o libbb/inet_common.c
+cmd_libbb/inet_common.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.inet_common.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"inet_common"'  -DKBUILD_MODNAME='"inet_common"' -c -o libbb/inet_common.o libbb/inet_common.c
 
 deps_libbb/inet_common.o := \
   libbb/inet_common.c \

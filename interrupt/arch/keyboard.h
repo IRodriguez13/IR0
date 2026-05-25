@@ -28,6 +28,7 @@ int keyboard_buffer_has_data(void);
 void keyboard_buffer_clear(void);
 
 void keyboard_handler64(void);
+void keyboard_poll_ps2(void);
 
 void keyboard_init(void);
 

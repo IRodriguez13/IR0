@@ -1,4 +1,4 @@
-cmd_libbb/bb_askpass.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.bb_askpass.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"bb_askpass"'  -DKBUILD_MODNAME='"bb_askpass"' -c -o libbb/bb_askpass.o libbb/bb_askpass.c
+cmd_libbb/bb_askpass.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.bb_askpass.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"bb_askpass"'  -DKBUILD_MODNAME='"bb_askpass"' -c -o libbb/bb_askpass.o libbb/bb_askpass.c
 
 deps_libbb/bb_askpass.o := \
   libbb/bb_askpass.c \

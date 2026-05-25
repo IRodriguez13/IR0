@@ -1,4 +1,4 @@
-cmd_libpwdgrp/uidgid_get.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libpwdgrp/.uidgid_get.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"uidgid_get"'  -DKBUILD_MODNAME='"uidgid_get"' -c -o libpwdgrp/uidgid_get.o libpwdgrp/uidgid_get.c
+cmd_libpwdgrp/uidgid_get.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libpwdgrp/.uidgid_get.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"uidgid_get"'  -DKBUILD_MODNAME='"uidgid_get"' -c -o libpwdgrp/uidgid_get.o libpwdgrp/uidgid_get.c
 
 deps_libpwdgrp/uidgid_get.o := \
   libpwdgrp/uidgid_get.c \

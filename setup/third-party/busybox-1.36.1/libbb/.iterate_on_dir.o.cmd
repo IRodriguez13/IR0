@@ -1,4 +1,4 @@
-cmd_libbb/iterate_on_dir.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.iterate_on_dir.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"iterate_on_dir"'  -DKBUILD_MODNAME='"iterate_on_dir"' -c -o libbb/iterate_on_dir.o libbb/iterate_on_dir.c
+cmd_libbb/iterate_on_dir.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.iterate_on_dir.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"iterate_on_dir"'  -DKBUILD_MODNAME='"iterate_on_dir"' -c -o libbb/iterate_on_dir.o libbb/iterate_on_dir.c
 
 deps_libbb/iterate_on_dir.o := \
   libbb/iterate_on_dir.c \

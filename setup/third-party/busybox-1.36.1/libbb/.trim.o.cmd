@@ -1,4 +1,4 @@
-cmd_libbb/trim.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.trim.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"trim"'  -DKBUILD_MODNAME='"trim"' -c -o libbb/trim.o libbb/trim.c
+cmd_libbb/trim.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.trim.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"trim"'  -DKBUILD_MODNAME='"trim"' -c -o libbb/trim.o libbb/trim.c
 
 deps_libbb/trim.o := \
   libbb/trim.c \

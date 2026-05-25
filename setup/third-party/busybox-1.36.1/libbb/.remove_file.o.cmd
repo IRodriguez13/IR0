@@ -1,4 +1,4 @@
-cmd_libbb/remove_file.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.remove_file.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"remove_file"'  -DKBUILD_MODNAME='"remove_file"' -c -o libbb/remove_file.o libbb/remove_file.c
+cmd_libbb/remove_file.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.remove_file.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"remove_file"'  -DKBUILD_MODNAME='"remove_file"' -c -o libbb/remove_file.o libbb/remove_file.c
 
 deps_libbb/remove_file.o := \
   libbb/remove_file.c \

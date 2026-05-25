@@ -1,4 +1,4 @@
-cmd_libbb/device_open.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.device_open.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie -DIR0_INTERACTIVE_GUI   -DKBUILD_BASENAME='"device_open"'  -DKBUILD_MODNAME='"device_open"' -c -o libbb/device_open.o libbb/device_open.c
+cmd_libbb/device_open.o := /usr/bin/x86_64-linux-musl-gcc -Wp,-MD,libbb/.device_open.o.d  -std=gnu99 -Iinclude -Ilibbb  -include include/autoconf.h -D_GNU_SOURCE -DNDEBUG  -DBB_VER='"1.36.1"' -fno-pie    -DKBUILD_BASENAME='"device_open"'  -DKBUILD_MODNAME='"device_open"' -c -o libbb/device_open.o libbb/device_open.c
 
 deps_libbb/device_open.o := \
   libbb/device_open.c \
