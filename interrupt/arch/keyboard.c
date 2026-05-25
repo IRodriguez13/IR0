@@ -22,6 +22,7 @@
 #include <ir0/errno.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
+#include <ir0/serial_io.h>
 #include <ir0/console.h>
 
 #define PS2_STATUS_PORT        0x64
@@ -262,11 +263,22 @@ char translate_scancode(uint8_t sc)
 static void keyboard_buffer_add(char c)
 {
     int next = (keyboard_buffer_head + 1) % KERNEL_KBD_RING_SIZE;
-    if (next != keyboard_buffer_tail) 
+    static int kbd_ascii_tag;
+
+    ir0_console_keypress(c);
+
+    if (!ir0_console_store_key_in_ring())
+        return;
+
+    if (next != keyboard_buffer_tail)
     {
         keyboard_buffer[keyboard_buffer_head] = c;
         keyboard_buffer_head = next;
-        ir0_console_input_enqueue(c);
+        if (!kbd_ascii_tag && (unsigned char)c >= ' ')
+        {
+            kbd_ascii_tag = 1;
+            serial_print("KBD_ASCII_OK\n");
+        }
     }
 }
 
@@ -300,8 +312,15 @@ void keyboard_buffer_clear(void)
 }
 #endif
 
-void keyboard_handler64(void) 
+/*
+ * Drain the PS/2 controller output buffer (port 0x60).
+ * Safe from IRQ handler and from idle poll — QEMU GTK sometimes delivers
+ * scancodes without raising IRQ1 reliably while ash is blocked.
+ */
+void keyboard_poll_ps2(void)
 {
+    static int kbd_poll_tag;
+
     for (;;)
     {
         uint8_t status = inb(PS2_STATUS_PORT);
@@ -311,9 +330,36 @@ void keyboard_handler64(void)
             break;
 
         scancode = inb(PS2_DATA_PORT);
+        if (!kbd_poll_tag)
+        {
+            kbd_poll_tag = 1;
+            serial_print("KBD_POLL_OK\n");
+        }
+        if (ir0_console_in_userspace())
+        {
+            static int kbd_user_poll_once;
+
+            if (!kbd_user_poll_once)
+            {
+                kbd_user_poll_once = 1;
+                serial_print("KBD_USER_POLL_OK\n");
+            }
+        }
         keyboard_feed_scancode(scancode);
     }
+}
 
+void keyboard_handler64(void)
+{
+    static int kbd_irq_tag;
+
+    if (!kbd_irq_tag)
+    {
+        kbd_irq_tag = 1;
+        serial_print("KBD_IRQ_OK\n");
+    }
+
+    keyboard_poll_ps2();
     stdin_wake_check();
 }
 
@@ -392,7 +438,16 @@ static void keyboard_feed_scancode(uint8_t scancode)
 
     if (scancode < 0x80)
     {
-        char ascii = translate_scancode(scancode);
+        static int kbd_scancode_tag;
+        char ascii;
+
+        if (!kbd_scancode_tag)
+        {
+            kbd_scancode_tag = 1;
+            serial_print("KBD_SCANCODE_OK\n");
+        }
+
+        ascii = translate_scancode(scancode);
         if (ascii != 0)
             keyboard_buffer_add(ascii);
     }

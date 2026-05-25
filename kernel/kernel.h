@@ -26,6 +26,7 @@ void setup_tss(void);
 void logging_init(void);
 void ps2_init(void);
 void keyboard_init(void);
+void keyboard_poll_ps2(void);
 void simple_alloc_init(void);
 void ata_init(void);
 int vfs_init_with_minix(void);
