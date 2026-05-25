@@ -28,8 +28,8 @@ int ir0_resolve_kpath_at(int dirfd, const char *path, char *resolved,
     if (dirfd != IR0_AT_FDCWD)
         return -EBADF;
 
-    if (!cwd)
-        return -EFAULT;
+    if (!cwd || cwd[0] != '/')
+        cwd = "/";
 
     if (join_paths(cwd, path, resolved, resolved_sz) != 0)
         return -ENAMETOOLONG;
