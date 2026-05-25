@@ -278,7 +278,7 @@ int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, o
 {
     (void)entry;
     (void)offset;
-    return ir0_console_write(buf, count, 0x0F);
+    return ir0_console_write(buf, count, 0x07);
 }
 
 /* Circular buffer for kernel messages */
