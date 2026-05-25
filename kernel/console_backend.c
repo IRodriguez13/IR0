@@ -54,7 +54,7 @@ void console_backend_userspace_handoff(void)
         serial_print("CONSOLE_BACKEND_VGA_OK\n");
 
     serial_print("PRINTK_SERIAL_CONSOLE_FB_HANDOFF_OK\n");
-    console_backend_write("IR0 console ready\n", 18, 0x0F);
+    console_backend_write("IR0 console ready\n", 18, 0x07);
     serial_print("CONSOLE_GUI_VISIBLE_OK\n");
 }
 

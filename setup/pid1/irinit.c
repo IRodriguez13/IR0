@@ -286,6 +286,7 @@ static void irinit_halt_no_tty(void)
 static char *irinit_default_env[] = {
 	"PATH=/bin:/sbin:/usr/bin:/usr/games",
 	"HOME=/",
+	"PWD=/",
 	"SHELL=/bin/sh",
 	"IRINIT=1",
 	NULL
@@ -303,6 +304,7 @@ static pid_t irinit_spawn_child(const char *path, char *const argv[], int attach
 		if (attach_console)
 			(void)irinit_attach_console();
 		(void)irinit_try_setsid();
+		(void)chdir("/");
 		execve(path, argv, irinit_default_env);
 		_exit(127);
 	}
@@ -777,10 +779,14 @@ int main(void)
 	if (irinit_attach_console() != 0)
 		irinit_halt_no_tty();
 	(void)irinit_try_setsid();
+	(void)chdir("/");
 	write_str("DOOM_AUTOSTART_DISABLED\n");
 	if (getenv("IRINIT_CHILD_REPRO"))
 		irinit_repro_child_tests();
-	write_str("\n[irinit] interactive shell on /dev/console (serial log for debug)\n");
+	write_str("\nIR0 Unix-like userspace\n");
+	write_str("/dev/console ready\n");
+	write_str("type: ls, pwd, cat, doomgeneric\n\n");
+	write_str("IRINIT_MOTD_OK\n");
 	irinit_service_loop();
 #endif
 

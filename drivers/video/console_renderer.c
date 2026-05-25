@@ -1,12 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * IR0 unified text console renderer — single cursor_pos for /dev/console,
- * TTY echo, and shell write. Minix-style 8x16 cells (scale 1 on fb).
+ * TTY echo, and shell write. Classic 80x25 VT; FB cells scaled (FASE59B).
  */
 
 #include "console_renderer.h"
 #include "console.h"
-#include <ir0/console.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
 #include <stdint.h>
@@ -58,7 +57,45 @@ static void csi_clear_screen(int cols, int rows, uint8_t color)
 			console_put_cell(r, c, ' ', color);
 }
 
-static void csi_apply(char cmd, int cols, int rows, uint8_t color)
+static void sgr_apply(int *params, int count, uint8_t *color)
+{
+	int i;
+
+	if (count == 0)
+	{
+		*color = CONSOLE_RENDERER_COLOR_DEFAULT;
+		return;
+	}
+
+	for (i = 0; i < count; i++)
+	{
+		int p = params[i];
+
+		if (p == 0)
+			*color = CONSOLE_RENDERER_COLOR_DEFAULT;
+		else if (p == 1)
+		{
+			uint8_t fg = *color & 0x0F;
+
+			if (fg < 8)
+				*color = (uint8_t)((*color & 0xF0) | (fg + 8));
+		}
+		else if (p >= 30 && p <= 37)
+			*color = (uint8_t)((*color & 0xF0) | (uint8_t)(p - 30));
+		else if (p >= 90 && p <= 97)
+			*color = (uint8_t)((*color & 0xF0) | (uint8_t)(p - 90 + 8));
+		else if (p >= 40 && p <= 47)
+			*color = (uint8_t)((uint8_t)(p - 40) << 4 | (*color & 0x0F));
+		else if (p == 39)
+			*color = (uint8_t)((CONSOLE_RENDERER_COLOR_DEFAULT & 0x0F) |
+					   (*color & 0xF0));
+		else if (p == 49)
+			*color = (uint8_t)((CONSOLE_RENDERER_COLOR_DEFAULT & 0xF0) |
+					   (*color & 0x0F));
+	}
+}
+
+static void csi_apply(char cmd, int cols, int rows, uint8_t *color)
 {
 	extern int cursor_pos;
 	int n = 1;
@@ -73,6 +110,9 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t color)
 
 	switch (cmd)
 	{
+	case 'm':
+		sgr_apply(csi_params, csi_param_count, color);
+		break;
 	case 'A':
 		if (cursor_pos >= n * cols)
 			cursor_pos -= n * cols;
@@ -85,11 +125,11 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t color)
 
 		if (mode == 2)
 		{
-			csi_clear_screen(cols, rows, color);
+			csi_clear_screen(cols, rows, *color);
 			cursor_pos = 0;
 		}
 		else
-			csi_clear_from_cursor(cols, rows, color);
+			csi_clear_from_cursor(cols, rows, *color);
 		break;
 	}
 	case 'D':
@@ -111,19 +151,19 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t color)
 		if (mode == 2)
 		{
 			for (i = 0; i < cols; i++)
-				console_put_cell(row, i, ' ', color);
+				console_put_cell(row, i, ' ', *color);
 		}
 		else if (mode == 1)
 		{
 			col = cursor_pos % cols;
 			for (i = 0; i <= col; i++)
-				console_put_cell(row, i, ' ', color);
+				console_put_cell(row, i, ' ', *color);
 		}
 		else
 		{
 			col = cursor_pos % cols;
 			for (i = col; i < cols; i++)
-				console_put_cell(row, i, ' ', color);
+				console_put_cell(row, i, ' ', *color);
 		}
 		break;
 	}
@@ -163,7 +203,7 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t color)
 	}
 }
 
-static int csi_feed(char c, int cols, int rows, uint8_t color)
+static int csi_feed(char c, int cols, int rows, uint8_t *color)
 {
 	if (csi_state == CSI_ESC)
 	{
@@ -260,13 +300,19 @@ void console_renderer_putchar(char c, uint8_t color)
 	int rows = render_rows();
 	int row;
 	int col;
+	uint8_t draw;
 
-	render_color = color;
+	(void)color;
+	draw = render_color;
 
-	if (csi_feed(c, cols, rows, color))
+	if (csi_feed(c, cols, rows, &render_color))
+	{
+		draw = render_color;
+		console_renderer_show_cursor(draw);
 		return;
+	}
 
-	render_erase_cursor(cols, rows, color);
+	render_erase_cursor(cols, rows, draw);
 
 	if (c == '\n')
 	{
@@ -274,7 +320,7 @@ void console_renderer_putchar(char c, uint8_t color)
 		cursor_pos = (cursor_pos / cols + 1) * cols;
 		if (cursor_pos >= cols * rows)
 		{
-			console_scroll_up(color);
+			console_scroll_up(draw);
 			cursor_pos = (rows - 1) * cols;
 		}
 	}
@@ -289,7 +335,7 @@ void console_renderer_putchar(char c, uint8_t color)
 			cursor_pos--;
 			row = cursor_pos / cols;
 			col = cursor_pos % cols;
-			console_put_cell(row, col, ' ', color);
+			console_put_cell(row, col, ' ', draw);
 		}
 	}
 	else if (c == '\t')
@@ -303,7 +349,7 @@ void console_renderer_putchar(char c, uint8_t color)
 				cursor_pos = (cursor_pos / cols + 1) * cols;
 				if (cursor_pos >= cols * rows)
 				{
-					console_scroll_up(color);
+					console_scroll_up(draw);
 					cursor_pos = (rows - 1) * cols;
 				}
 			}
@@ -317,14 +363,16 @@ void console_renderer_putchar(char c, uint8_t color)
 	{
 		row = cursor_pos / cols;
 		col = cursor_pos % cols;
-		console_put_cell(row, col, c, color);
+		console_put_cell(row, col, c, draw);
 		cursor_pos++;
 		if (cursor_pos >= cols * rows)
 		{
-			console_scroll_up(color);
+			console_scroll_up(draw);
 			cursor_pos = (rows - 1) * cols;
 		}
 	}
+
+	console_renderer_show_cursor(draw);
 }
 
 void console_renderer_show_cursor(uint8_t color)
@@ -336,22 +384,13 @@ void console_renderer_show_cursor(uint8_t color)
 	int col = cursor_pos % cols;
 	uint8_t cur_color;
 
-	if (ir0_console_in_userspace())
-		return;
-
-	serial_print("FB_CURSOR_POS x=");
-	serial_print_hex32((uint32_t)col);
-	serial_print(" y=");
-	serial_print_hex32((uint32_t)row);
-	serial_print("\n");
-
 	render_erase_cursor(cols, rows, color);
 
 	if (row < 0 || row >= rows || col < 0 || col >= cols)
 		return;
 
 	cur_color = (uint8_t)(((color & 0xF0) >> 4) | ((color & 0x0F) << 4));
-	console_put_cell(row, col, '_', cur_color);
+	console_put_cell(row, col, ' ', cur_color);
 	render_cursor_visible = 1;
 	render_cursor_row = row;
 	render_cursor_col = col;

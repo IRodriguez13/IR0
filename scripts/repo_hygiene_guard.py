@@ -4,7 +4,8 @@ IR0 repository hygiene guardrails.
 
 Checks:
 1) No obviously unnecessary artifacts are tracked.
-2) Spanish markdown naming/location is constrained to /esp directories.
+2) No compiled binaries or build outputs under setup/pid1 or vendored BusyBox.
+3) Spanish markdown naming/location is constrained to /esp directories.
 """
 
 from pathlib import Path
@@ -38,6 +39,96 @@ def git_ls_files():
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
+# Paths where compiled artifacts must never be tracked (sources only).
+COMPILED_ARTIFACT_PREFIXES = (
+    "setup/third-party/busybox-1.36.1/",
+    "setup/pid1/fase52_staging/bin/",
+    "setup/pid1/fase52_staging/lib/",
+)
+
+COMPILED_ARTIFACT_EXACT = {
+    "setup/libkconfig_build.a",
+    "scripts/kconfig/libkconfig_build.a",
+    "setup/pid1/f41true",
+    "setup/pid1/fase48_busybox",
+    "setup/pid1/fase48_cat",
+    "setup/pid1/fase48_echo",
+    "setup/pid1/fase50_busybox_real",
+    "setup/pid1/fase50_hello",
+    "setup/pid1/fase55e_doom_interactive",
+    "setup/pid1/fase58c_boot_halt",
+    "setup/pid1/fase58c_fbdev",
+    "setup/pid1/fase58l_busybox_smoke",
+    "setup/pid1/init",
+    "setup/pid1/musl_arch_prctl_smoke",
+    "setup/pid1/sh_smoke",
+    "setup/pid1/userspace_segv",
+    "setup/pid1/sbin/irinit",
+}
+
+COMPILED_ARTIFACT_SUFFIXES = (
+    ".cmd",
+    ".a",
+)
+
+COMPILED_ARTIFACT_BASENAMES = {
+    "busybox",
+    "busybox_unstripped",
+    "busybox_unstripped.out",
+    "applet_tables",
+    "usage",
+    "usage_pod",
+    "docproc",
+    "fixdep",
+    "split-include",
+    "conf",
+    "autoconf.h",
+    "applet_tables.h",
+    "bbconfigopts.h",
+    "bbconfigopts_bz2.h",
+    "NUM_APPLETS.h",
+    "usage_compressed.h",
+}
+
+
+def is_compiled_artifact(path: str) -> bool:
+    if path in COMPILED_ARTIFACT_EXACT:
+        return True
+
+    name = Path(path).name
+    if name in COMPILED_ARTIFACT_BASENAMES:
+        if path.startswith(COMPILED_ARTIFACT_PREFIXES[0]):
+            return True
+
+    for prefix in COMPILED_ARTIFACT_PREFIXES:
+        if not path.startswith(prefix):
+            continue
+        if prefix in (
+            "setup/pid1/fase52_staging/bin/",
+            "setup/pid1/fase52_staging/lib/",
+        ):
+            return True
+        if path.endswith(COMPILED_ARTIFACT_SUFFIXES):
+            return True
+        if name in COMPILED_ARTIFACT_BASENAMES:
+            return True
+        if "/include/config/" in path and path.startswith(prefix):
+            return True
+
+    if path.startswith("setup/pid1/fase52_staging/usr/lib/") and path.endswith(".a"):
+        return True
+
+    return False
+
+
+def is_elf_executable(path: Path) -> bool:
+    try:
+        data = path.read_bytes()[:4]
+    except OSError:
+        return False
+    return data == b"\x7fELF"
+
+
 def is_forbidden_tracked(path: str) -> bool:
     name = Path(path).name
     for pattern in FORBIDDEN_TRACKED_PATTERNS:
@@ -66,6 +157,14 @@ def main():
     for rel in tracked:
         if is_forbidden_tracked(rel):
             errors.append(f"[tracked-artifact] {rel}")
+
+        if is_compiled_artifact(rel):
+            errors.append(f"[tracked-compiled] {rel}")
+
+        full = ROOT / rel
+        if full.is_file() and is_elf_executable(full):
+            if rel.startswith(("setup/pid1/", "setup/third-party/busybox-1.36.1/")):
+                errors.append(f"[tracked-elf] {rel}")
 
         if is_spanish_named_markdown(rel):
             parts = Path(rel).parts

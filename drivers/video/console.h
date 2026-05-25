@@ -28,7 +28,10 @@
 #define CONSOLE_WIDTH  80
 #define CONSOLE_HEIGHT 25
 
-#define CONSOLE_FB_SCALE_DEFAULT 1
+/* 2x 8x16 glyphs => 16x32 cells; 80x25 @ 2x needs 1280x800 (falls back to 1x). */
+#define CONSOLE_FB_SCALE_DEFAULT 2
+
+#define CONSOLE_FB_BORDER_COLOR 0x00u /* black letterbox */
 
 /*
  * console_put_cell - Draw one character cell at (row, col).

@@ -1707,6 +1707,11 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
 	}
+	if (proc->cwd[0] != '/')
+	{
+		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
+		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
+	}
 	
 	/* Set command name */
 	strncpy(proc->comm, name, sizeof(proc->comm) - 1);

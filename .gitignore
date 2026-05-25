@@ -41,6 +41,52 @@ __pycache__/
 *.su
 compile_commands.json
 
+# BusyBox vendored tree — build outputs only (sources stay tracked)
+setup/third-party/busybox-1.36.1/.config
+setup/third-party/busybox-1.36.1/**/*.cmd
+setup/third-party/busybox-1.36.1/**/lib.a
+setup/third-party/busybox-1.36.1/busybox
+setup/third-party/busybox-1.36.1/busybox_unstripped
+setup/third-party/busybox-1.36.1/busybox_unstripped.out
+setup/third-party/busybox-1.36.1/applets/applet_tables
+setup/third-party/busybox-1.36.1/applets/usage
+setup/third-party/busybox-1.36.1/applets/usage_pod
+setup/third-party/busybox-1.36.1/include/autoconf.h
+setup/third-party/busybox-1.36.1/include/applet_tables.h
+setup/third-party/busybox-1.36.1/include/bbconfigopts.h
+setup/third-party/busybox-1.36.1/include/bbconfigopts_bz2.h
+setup/third-party/busybox-1.36.1/include/NUM_APPLETS.h
+setup/third-party/busybox-1.36.1/include/usage_compressed.h
+setup/third-party/busybox-1.36.1/include/config/
+setup/third-party/busybox-1.36.1/scripts/basic/docproc
+setup/third-party/busybox-1.36.1/scripts/basic/fixdep
+setup/third-party/busybox-1.36.1/scripts/basic/split-include
+setup/third-party/busybox-1.36.1/scripts/kconfig/conf
+
+# Kconfig helper static libs (built locally)
+setup/libkconfig_build.a
+scripts/kconfig/libkconfig_build.a
+
+# PID1 / userspace smoke binaries (built from setup/pid1/*.c via Makefile)
+setup/pid1/f41true
+setup/pid1/fase48_busybox
+setup/pid1/fase48_cat
+setup/pid1/fase48_echo
+setup/pid1/fase50_busybox_real
+setup/pid1/fase50_hello
+setup/pid1/fase55e_doom_interactive
+setup/pid1/fase58c_boot_halt
+setup/pid1/fase58c_fbdev
+setup/pid1/fase58l_busybox_smoke
+setup/pid1/init
+setup/pid1/musl_arch_prctl_smoke
+setup/pid1/sh_smoke
+setup/pid1/userspace_segv
+setup/pid1/sbin/irinit
+setup/pid1/fase52_staging/bin/
+setup/pid1/fase52_staging/lib/
+setup/pid1/fase52_staging/usr/lib/*.a
+
 # Test artifacts (make tests / make health)
 tests/host/ir0_test_suite
 tests/kernel_memsafe/ir0_kernel_memsafe
