@@ -21,6 +21,8 @@ The goal is to document implemented behavior first, then known gaps.
 - `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
 - `SCHEDULING.md`: scheduler selection and current policy implementations.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
+- `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`
+  (QEMU GTK), keyboard poll + TTY echo path, build/run and serial tags.
 
 ## Current Strengths
 

@@ -8,6 +8,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/console.h>
 #include <ir0/console_backend.h>
+#include <ir0/ash_smoke.h>
 #include <ir0/errno.h>
 #include <ir0/keyboard.h>
 #include <drivers/video/console.h>
@@ -246,6 +247,8 @@ void ir0_console_keypress(char c)
 	if (tty_icanon_on())
 	{
 		line_done = tty_canon_feed(nc);
+		if (line_done)
+			ir0_ash_smoke_tty_line_ready();
 	}
 	else if (tty_echo_on())
 		tty_echo_char(nc);
