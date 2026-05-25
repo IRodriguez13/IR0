@@ -3515,6 +3515,16 @@ int sys_mprotect(void *addr, size_t len, int prot)
 /* DIRECTORY OPERATIONS                                                       */
 /* ========================================================================== */
 
+static void process_cwd_ensure_absolute(process_t *proc)
+{
+	if (!proc)
+		return;
+	if (proc->cwd[0] == '/')
+		return;
+	strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
+	proc->cwd[sizeof(proc->cwd) - 1] = '\0';
+}
+
 int64_t sys_chdir(const char *pathname)
 {
   int64_t ret;
@@ -3563,6 +3573,7 @@ int64_t sys_chdir(const char *pathname)
   /* Update current working directory */
   strncpy(current_process->cwd, new_path, sizeof(current_process->cwd) - 1);
   current_process->cwd[sizeof(current_process->cwd) - 1] = '\0';
+  process_cwd_ensure_absolute(current_process);
 
   return 0;
 }
@@ -3576,6 +3587,8 @@ int64_t sys_getcwd(char *buf, size_t size)
 
   if (validate_userspace_buffer(buf, size) != 0)
     return -EFAULT;
+
+  process_cwd_ensure_absolute(current_process);
 
   len = strlen(current_process->cwd);
   if (len >= size)
