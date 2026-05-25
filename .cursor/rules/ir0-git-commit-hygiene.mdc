@@ -1,0 +1,52 @@
+---
+description: Git commits — Signed-off-by required; no agent Co-authored-by attribution
+alwaysApply: true
+---
+
+# Git commit hygiene
+
+## Identity (mandatory)
+
+All commits created or amended by the agent **must** use the maintainer's git identity only:
+
+- **Name:** Iván Ezequiel Rodriguez
+- **Email:** ivanrwcm25@gmail.com
+
+Always pass **`-s`** so the commit includes:
+
+```text
+Signed-off-by: Iván Ezequiel Rodriguez <ivanrwcm25@gmail.com>
+```
+
+Use the repo's configured `user.name` / `user.email` when they match the above; never substitute agent or tool identities.
+
+## Forbidden in commit messages
+
+**Never** add to the commit body or trailers:
+
+- Any `Co-authored-by:` line attributing an AI agent, IDE automation, or third-party tool
+- `Helped-by:`, `Reviewed-by:`, or similar non-maintainer attribution unless the user explicitly asks
+
+If a hook injects an agent `Co-authored-by` trailer, **do not push**. Rewrite the message (e.g. `git filter-repo` message callback, or `git commit-tree` from a plain shell **without** IDE commit hooks) before publishing.
+
+## When creating commits
+
+Prefer **`git commit-tree`** or a plain terminal shell over IDE-integrated commit flows when hooks append agent trailers.
+
+```bash
+git commit -s -m "$(cat <<'EOF'
+Short subject line.
+
+Optional body in complete sentences.
+EOF
+)"
+```
+
+- **Always `-s`** on new commits and on `--amend` when the user requests amend.
+- Plain HEREDOC title + body — no agent trailers.
+- Do not append Co-authored-by “for courtesy” or tool “best practice”.
+- If a hook rejects the commit, fix in a **new** commit per user git rules — do not amend unless the user asks and amend conditions are met.
+
+## Pre-push check
+
+Before any push the agent initiates, scan commit messages in the range for forbidden `Co-authored-by:` agent trailers (`git log --format=%B`).
