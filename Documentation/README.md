@@ -25,6 +25,7 @@ The goal is to document implemented behavior first, then known gaps.
 - `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
 - `SCHEDULING.md`: scheduler selection and current policy implementations.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
+- `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`).
 - `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`
   (QEMU GTK), keyboard poll + TTY echo path, build/run and serial tags.
 
@@ -39,18 +40,29 @@ make ai-dev-rules-install
 
 ## Unified manual pages
 
-Generate and install the manual (interactive — no extra flags):
+Generate and install kernel manuals (interactive — no extra flags):
 
 ```bash
-make mandocs-en    # English: all chapters? then pick if needed
+make mandocs-en    # English: legacy chapters + mandocs internals (IR0-vfs, …)
 make mandocs-es    # Spanish
-man IR0-krnl
+man IR0-krnl       # legacy unified manual
+man IR0-vfs        # subsystem chapter (mandocs initiative)
+man IR0-net        # example: networking stack chapter
 make mandocs-uninstall
 ```
 
+**Mandocs initiative** (code-faithful subsystem chapters):
+
+- English: `Documentation/mandocs/en/`
+- Spanish: `Documentation/mandocs/esp/`
+- Template: `Documentation/mandocs/TEMPLATE.md`
+- Diagrams (Mermaid): `Documentation/mandocs/diagrams/`
+- Index and status: `Documentation/mandocs/en/INDEX.md`
+
 Default install uses `~/.local` (no sudo). System-wide: `sudo MANDOC_PREFIX=/usr/local make mandocs-en`.
 
-Per-chapter pages: `build/mandoc/IR0-krnl-<subsystem>.7`.
+Per-chapter pages: `build/mandoc/<lang>/IR0-krnl-<subsystem>.7` (legacy) and
+`build/mandoc/<lang>/IR0-<subsystem>.7` (mandocs).
 
 ## Current Strengths
 

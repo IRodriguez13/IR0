@@ -312,4 +312,5 @@ No additional visual tuning is documented here; this section describes current b
 
 - [README.md](README.md) — project state and architecture
 - [Documentation/README.md](Documentation/README.md) — subsystem documentation index
+- [Documentation/mandocs/en/INDEX.md](Documentation/mandocs/en/INDEX.md) — internals mandocs (`make mandocs-en`, then `man IR0-vfs`)
 - [LICENSE](LICENSE) — GPL v3

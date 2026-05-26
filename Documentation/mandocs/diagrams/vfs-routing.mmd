@@ -1,0 +1,49 @@
+flowchart TD
+  subgraph userspace [Userspace]
+    APP[open read write stat]
+  end
+
+  subgraph syscall [Syscall layer fs_syscalls.c]
+    OPEN[sys_open]
+    PROC{path under /proc?}
+    SYS{path under /sys?}
+    DEV{path under /dev/?}
+    RESOLVE[ir0_resolve_kpath_at cwd]
+  end
+
+  subgraph pseudo [Pseudo backends]
+    PROCFS[procfs + pseudo_fs_registry]
+    SYSFS[sysfs + pseudo_fs_registry]
+    DEVFS[devfs nodes + ops]
+  end
+
+  subgraph vfs [VFS router fs/vfs.c]
+    VAL[validate_path]
+    MOUNT[find_mount longest prefix]
+    OPS[vfs_ops dispatch]
+  end
+
+  subgraph backends [Mounted backends]
+    MINIX[minix block-backed]
+    TMPFS[tmpfs in-memory]
+    OTHER[simplefs fat16 optional]
+  end
+
+  APP --> OPEN
+  OPEN --> PROC
+  PROC -->|yes| PROCFS
+  PROC -->|no| SYS
+  SYS -->|yes| SYSFS
+  SYS -->|no| DEV
+  DEV -->|yes| DEVFS
+  DEV -->|no| RESOLVE
+  RESOLVE --> VAL
+  VAL --> MOUNT
+  MOUNT --> OPS
+  OPS --> MINIX
+  OPS --> TMPFS
+  OPS --> OTHER
+
+  DEVFS -.->|hardware via facades| HW[drivers video storage input]
+  PROCFS -.->|kernel state| KERN[kernel sched mm drivers]
+  MINIX -.->|LBA| BLOCK[block_dev facade]

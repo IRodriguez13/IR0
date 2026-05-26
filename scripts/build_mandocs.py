@@ -66,6 +66,153 @@ class Chapter:
     english_only: bool = False
 
 
+@dataclass(frozen=True)
+class MandocChapter:
+    slug: str
+    basename: str
+    man_name: str
+    desc_en: str
+    desc_es: str
+
+
+MANDOC_ROOT_DOCS = ROOT / "Documentation" / "mandocs"
+
+MANDOC_CHAPTERS: list[MandocChapter] = [
+    MandocChapter(
+        "vfs",
+        "vfs.md",
+        "IR0-vfs",
+        "Virtual File System — mount router and pseudo-FS syscall paths",
+        "Sistema de ficheros virtual — router de montajes y rutas pseudo en syscalls",
+    ),
+    MandocChapter(
+        "boot",
+        "boot.md",
+        "IR0-boot",
+        "Boot pipeline from GRUB through kmain and userspace handoff",
+        "Pipeline de arranque desde GRUB hasta handoff a userspace",
+    ),
+    MandocChapter(
+        "scheduler",
+        "scheduler.md",
+        "IR0-scheduler",
+        "Scheduler policies, process states, wake/sleep, and timers",
+        "Politicas del planificador, estados, wake/sleep y timers",
+    ),
+    MandocChapter(
+        "memory",
+        "memory.md",
+        "IR0-memory",
+        "Physical memory, paging, allocators, mmap, and ELF mappings",
+        "Memoria fisica, paginacion, allocators, mmap y mapeos ELF",
+    ),
+    MandocChapter(
+        "syscalls",
+        "syscalls.md",
+        "IR0-syscalls",
+        "Syscall ABI, dispatch, copy_user, fd model, and isolation",
+        "ABI de syscalls, dispatch, copy_user, modelo fd y aislamiento",
+    ),
+    MandocChapter(
+        "filesystems",
+        "filesystems.md",
+        "IR0-filesystems",
+        "Backend filesystems: tmpfs, devfs, procfs, sysfs, minix",
+        "Backends de filesystem: tmpfs, devfs, procfs, sysfs, minix",
+    ),
+    MandocChapter(
+        "tty",
+        "tty.md",
+        "IR0-tty",
+        "Console, TTY, keyboard path, line discipline, and devfs nodes",
+        "Consola, TTY, teclado, line discipline y nodos devfs",
+    ),
+    MandocChapter(
+        "drivers",
+        "drivers.md",
+        "IR0-drivers",
+        "Driver registry, bootstrap, and hardware families",
+        "Registro de drivers, bootstrap y familias de hardware",
+    ),
+    MandocChapter(
+        "process",
+        "process.md",
+        "IR0-process",
+        "Process model, fork/spawn, exec, fd inheritance, credentials",
+        "Modelo de proceso, fork/spawn, exec, herencia fd y credenciales",
+    ),
+    MandocChapter(
+        "userspace",
+        "userspace.md",
+        "IR0-userspace",
+        "BusyBox, irinit, musl, TCC, DoomGeneric bootstrap",
+        "BusyBox, irinit, musl, TCC y bootstrap DoomGeneric",
+    ),
+    MandocChapter(
+        "multi-arch",
+        "multi-arch.md",
+        "IR0-multi-arch",
+        "Architecture abstraction, HAL boundaries, and porting",
+        "Abstraccion multi-arquitectura, HAL y porting",
+    ),
+    MandocChapter(
+        "net",
+        "net.md",
+        "IR0-net",
+        "IPv4 stack, RTL8139, /dev/net control path (no POSIX sockets)",
+        "Stack IPv4, RTL8139, control via /dev/net (sin sockets POSIX)",
+    ),
+    MandocChapter(
+        "interrupts",
+        "interrupts.md",
+        "IR0-interrupts",
+        "IDT, PIC, IRQ dispatch, exceptions, and syscall entry",
+        "IDT, PIC, despacho IRQ, excepciones y entrada syscall",
+    ),
+    MandocChapter(
+        "ipc",
+        "ipc.md",
+        "IR0-ipc",
+        "Kernel IPC channels and POSIX pipes",
+        "Canales IPC del kernel y pipes POSIX",
+    ),
+    MandocChapter(
+        "input",
+        "input.md",
+        "IR0-input",
+        "evdev-style input queue, keyboard and PS/2 mouse",
+        "Cola de input estilo evdev, teclado y raton PS/2",
+    ),
+    MandocChapter(
+        "graphics",
+        "graphics.md",
+        "IR0-graphics",
+        "Framebuffer, VBE, /dev/fb0, mmap, and console renderer",
+        "Framebuffer, VBE, /dev/fb0, mmap y console renderer",
+    ),
+    MandocChapter(
+        "debug-bins",
+        "debug-bins.md",
+        "IR0-debug-bins",
+        "In-kernel debug shell and syscall-only commands",
+        "Shell de depuracion in-kernel y comandos solo-syscall",
+    ),
+    MandocChapter(
+        "signals",
+        "signals.md",
+        "IR0-signals",
+        "Signal delivery, handlers, and rt_sig* syscalls",
+        "Entrega de senales, handlers y syscalls rt_sig*",
+    ),
+    MandocChapter(
+        "security",
+        "security.md",
+        "IR0-security",
+        "Credentials, permissions, chmod/chown, and sudo_auth",
+        "Credenciales, permisos, chmod/chown y sudo_auth",
+    ),
+]
+
 CHAPTERS: list[Chapter] = [
     Chapter("overview", "README.md", "Documentation index and map",
             "Indice y mapa de documentacion"),
@@ -349,6 +496,35 @@ def resolve_chapters(explicit: str | None, lang: str) -> list[Chapter]:
     return ask_chapters(lang)
 
 
+def resolve_mandoc_chapter_source(lang: str, chapter: MandocChapter) -> tuple[Path, str]:
+    sub = "esp" if lang == "es" else "en"
+    src = MANDOC_ROOT_DOCS / sub / chapter.basename
+    display = f"Documentation/mandocs/{sub}/{chapter.basename}"
+    if lang == "es" and not src.is_file():
+        en = MANDOC_ROOT_DOCS / "en" / chapter.basename
+        if en.is_file():
+            print(
+                f"warning: no Spanish mandoc for {chapter.basename}, using English",
+                file=sys.stderr,
+            )
+            return en, f"Documentation/mandocs/en/{chapter.basename}"
+    return src, display
+
+
+def read_mandoc_chapter_markdown(lang: str, chapter: MandocChapter) -> str:
+    src, _ = resolve_mandoc_chapter_source(lang, chapter)
+    if not src.is_file():
+        raise FileNotFoundError(f"missing mandoc source: {src}")
+    return src.read_text(encoding="utf-8")
+
+
+def build_mandoc_chapter_page(lang: str, chapter: MandocChapter) -> str:
+    desc = chapter.desc_es if lang == "es" else chapter.desc_en
+    body = md_to_mdoc_body(read_mandoc_chapter_markdown(lang, chapter))
+    header = page_header(chapter.man_name, 7, desc)
+    return "\n".join(header + body) + "\n"
+
+
 def resolve_chapter_source(lang: str, chapter: Chapter) -> tuple[Path, str]:
     """Return (source path, display path string)."""
     if chapter.english_only:
@@ -617,9 +793,7 @@ def installed_page_name(src_name: str, lang: str) -> str:
     """Spanish pages get a -es suffix so EN and ES can coexist in man7."""
     if lang != "es":
         return src_name
-    if src_name == "IR0-krnl.7":
-        return "IR0-krnl-es.7"
-    if src_name.startswith("IR0-krnl-") and src_name.endswith(".7"):
+    if src_name.startswith("IR0-") and src_name.endswith(".7") and not src_name.endswith("-es.7"):
         return src_name[:-2] + "-es.7"
     return src_name
 
@@ -730,6 +904,16 @@ def main() -> int:
         metavar="LIST",
         help="Chapter slugs, numbers, or ranges (e.g. 1,3,tooling,5-7)",
     )
+    parser.add_argument(
+        "--mandoc-only",
+        action="store_true",
+        help="Build only Documentation/mandocs/ chapters (IR0-vfs, …)",
+    )
+    parser.add_argument(
+        "--legacy-only",
+        action="store_true",
+        help="Build only legacy Documentation/*.md chapters",
+    )
     parser.add_argument("--uninstall", action="store_true", help="Remove installed mandoc pages")
     parser.add_argument("--no-lint", action="store_true", help="Skip mandoc render check")
     parser.add_argument(
@@ -761,29 +945,54 @@ def main() -> int:
     if do_install and sys.stdin.isatty():
         print_install_banner(lang, prefix)
 
-    chapters = resolve_chapters(args.chapters, lang)
+    if args.mandoc_only and args.legacy_only:
+        print("error: --mandoc-only and --legacy-only are mutually exclusive", file=sys.stderr)
+        return 1
+
+    build_legacy = not args.mandoc_only
+    build_mandoc = not args.legacy_only
+
+    chapters = resolve_chapters(args.chapters, lang) if build_legacy else []
+    mandoc_chapters = list(MANDOC_CHAPTERS) if build_mandoc else []
+
     out_dir = MANDOC_ROOT / lang
     if out_dir.is_dir():
         for old in out_dir.glob("*.7"):
             old.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
     LAST_LANG_FILE.write_text(lang + "\n", encoding="utf-8")
-    LAST_CHAPTERS_FILE.write_text(",".join(c.slug for c in chapters) + "\n", encoding="utf-8")
+    slug_log = [c.slug for c in chapters] + [c.slug for c in mandoc_chapters]
+    LAST_CHAPTERS_FILE.write_text(",".join(slug_log) + "\n", encoding="utf-8")
 
     print(f"language: {lang} ({'english' if lang == 'en' else 'spanish'})")
-    print(f"chapters: {', '.join(c.slug for c in chapters)}")
+    if chapters:
+        print(f"legacy chapters: {', '.join(c.slug for c in chapters)}")
+    if mandoc_chapters:
+        print(f"mandoc chapters: {', '.join(c.slug for c in mandoc_chapters)}")
 
-    unified = out_dir / "IR0-krnl.7"
-    unified.write_text(build_unified_page(lang, chapters), encoding="utf-8")
-    print(f"wrote {unified.relative_to(ROOT)}")
+    lint_target: Path | None = None
 
-    for chapter in chapters:
-        out = out_dir / f"IR0-krnl-{chapter.slug}.7"
-        out.write_text(build_chapter_page(lang, chapter), encoding="utf-8")
-        print(f"wrote {out.relative_to(ROOT)}")
+    if build_legacy:
+        unified = out_dir / "IR0-krnl.7"
+        unified.write_text(build_unified_page(lang, chapters), encoding="utf-8")
+        print(f"wrote {unified.relative_to(ROOT)}")
+        lint_target = unified
 
-    if not args.no_lint:
-        ok = lint_mdoc(unified, strict=args.strict_lint)
+        for chapter in chapters:
+            out = out_dir / f"IR0-krnl-{chapter.slug}.7"
+            out.write_text(build_chapter_page(lang, chapter), encoding="utf-8")
+            print(f"wrote {out.relative_to(ROOT)}")
+
+    if build_mandoc:
+        for chapter in mandoc_chapters:
+            out = out_dir / f"{chapter.man_name}.7"
+            out.write_text(build_mandoc_chapter_page(lang, chapter), encoding="utf-8")
+            print(f"wrote {out.relative_to(ROOT)}")
+            if lint_target is None:
+                lint_target = out
+
+    if not args.no_lint and lint_target is not None:
+        ok = lint_mdoc(lint_target, strict=args.strict_lint)
         if not ok:
             return 1
 
@@ -805,7 +1014,11 @@ def main() -> int:
         print(ui(lang)["uninstall_hint"])
     else:
         print("")
-        print(f"  man -l {unified}")
+        if lint_target is not None:
+            print(f"  man -l {lint_target}")
+        for chapter in mandoc_chapters:
+            out = out_dir / f"{chapter.man_name}.7"
+            print(f"  man -l {out}")
     print(f"  make mandocs-view")
     return 0
 
