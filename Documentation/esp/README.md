@@ -23,4 +23,9 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `SCHEDULING.md`
 - `UNIX_DIFFERENCES.md`
 
+Capítulos internos del kernel (iniciativa mandocs, espejo bilingüe):
+
+- `../mandocs/esp/INDEX.md` — índice y plan por oleadas
+- `../mandocs/esp/vfs.md` — VFS y enrutamiento (`man IR0-vfs-es` tras `make mandocs-es`)
+
 Reglas para agentes de IA (solo ingles): `Documentation/ai_driven_dev/`.

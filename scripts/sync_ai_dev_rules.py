@@ -121,14 +121,17 @@ def install_rules() -> int:
     RULES_SRC.mkdir(parents=True, exist_ok=True)
     count = 0
     for src in sorted(RULES_DST.glob("*.md")):
-        raw = src.read_text(encoding="utf-8")
-        raw = re.sub(r"^<!--.*?-->\n", "", raw, flags=re.MULTILINE)
-        always = "true" if "alwaysApply: true" in src.read_text(encoding="utf-8") else "false"
-        desc_match = re.search(r"<!-- description: (.*?) -->", src.read_text(encoding="utf-8"))
+        src_text = src.read_text(encoding="utf-8")
+        raw = re.sub(r"^<!--.*?-->\n", "", src_text, flags=re.MULTILINE)
+        always = "true" if "alwaysApply: true" in src_text else "false"
+        desc_match = re.search(r"<!-- description: (.*?) -->", src_text)
         desc = desc_match.group(1) if desc_match else f"IR0 rule {src.stem}"
+        globs_match = re.search(r"<!-- globs: (.*?) -->", src_text)
         body = rewrite_paths_to_cursor(raw)
         meta = {"description": desc, "alwaysApply": always}
-        if src.stem == "kernel-docs-language-policy":
+        if globs_match:
+            meta["globs"] = globs_match.group(1).strip()
+        elif src.stem == "kernel-docs-language-policy":
             meta["globs"] = "**/*.md"
             meta["alwaysApply"] = "false"
         dst = RULES_SRC / f"{src.stem}.mdc"
