@@ -2,7 +2,7 @@
 
 IR0 is a monolithic x86-64 operating system kernel under active development. The tree is organized around narrow interfaces between subsystems, Kconfig-driven feature selection, and deterministic serial diagnostics. It is a research and bring-up codebase, not a general-purpose production OS.
 
-Approximate size of in-tree kernel sources (C, assembly, and Python build tooling), excluding vendored BusyBox and Doom upstream trees: **~61,000 lines** across **~280 files** (measured with `cloc` on the current tree).
+Approximate size of in-tree kernel sources (C, assembly, and Python build tooling), excluding vendored BusyBox and Doom upstream trees: **~61,000 lines** across **~280 files**.
 
 For build steps, QEMU usage, and userspace bootstrap, see **[SETUP.md](SETUP.md)**.
 
@@ -14,7 +14,7 @@ IR0 targets **x86-64** with Multiboot boot, GRUB, ELF64 userspace binaries, and 
 
 **Goals:**
 
-- Monolithic kernel with explicit facades (`includes/ir0/*`) between portable code and arch/drivers
+- Monolithic kernel with explicit facades (`includes/ir0/`*) between portable code and arch/drivers
 - Incremental POSIX/Linux-ABI compatibility for musl-linked userspace (partial, not complete)
 - Repeatable QEMU bring-up with serial logging
 - VFS-backed root on MINIX with block storage via ATA
@@ -25,26 +25,28 @@ IR0 targets **x86-64** with Multiboot boot, GRUB, ELF64 userspace binaries, and 
 
 The following areas are implemented and used in regular builds; maturity varies (see [Limitations](#limitations)).
 
-| Area | Status (honest) |
-|------|-----------------|
-| **Boot / arch** | x86-64 Multiboot, GRUB ISO, identity-mapped paging with NX |
-| **Scheduler** | Round-robin (`CONFIG_SCHEDULER_POLICY=0`); CFS symbol exists but aliases RR |
-| **Processes** | `fork`, `execve`, `wait4`, `exit`; address-space copy on fork (no COW) |
-| **ELF userspace** | ET_EXEC/ET_DYN load for x86-64; userspace init path via `kernel-x64-userspace.iso` |
-| **Syscalls** | ~76 wired Linux x86-64 numbers of 450 slots; remainder return `-ENOSYS` |
-| **Memory** | `brk`, `mmap`/`munmap`/`mprotect`, demand paging; `/dev/fb0` mmap handled specially |
-| **VFS** | MINIX, tmpfs, simplefs, FAT16 registration; path-routed `/proc` and `/sys` |
-| **devfs** | Static device nodes including `/dev/console`, `/dev/fb0`, `/dev/events0`, `/dev/tty*` |
-| **Framebuffer** | VBE linear FB when `CONFIG_ENABLE_VBE=y`; unified VGA + FB text console |
-| **Console / TTY** | Canonical line discipline, PS/2 input, scaled FB renderer (80×25 logical) |
-| **Networking** | RTL8139 driver; IPv4, ARP, ICMP, UDP, DHCP, DNS client — **no TCP**, **no socket syscalls** |
-| **Shell (kernel)** | In-kernel debug shell when `CONFIG_KERNEL_DEBUG_SHELL=y` (default in `defconfig`) |
-| **Shell (userspace)** | BusyBox `ash` via `irinit` on `/dev/console` (see SETUP.md) |
-| **BusyBox** | Vendored 1.36.1; rebuilt locally from `setup/busybox/*.config` (not committed as binaries) |
-| **TCC** | Optional musl-static TinyCC built by `setup/tcc/build-fase52.sh` |
-| **Doom** | doomgeneric port + `/dev/fb0` / input path; requires external IWAD |
-| **Signals** | Basic `rt_sigaction`, `kill`, delivery hook; incomplete flags/semantics |
-| **Permissions** | UID/GID syscalls and simple `access`; not a full Linux credential model |
+
+| Area                  | Status                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| **Boot / arch**       | x86-64 Multiboot, GRUB ISO, identity-mapped paging with NX                                  |
+| **Scheduler**         | Round-robin (`CONFIG_SCHEDULER_POLICY=0`); CFS symbol exists but aliases RR                 |
+| **Processes**         | `fork`, `execve`, `wait4`, `exit`; address-space copy on fork (no COW)                      |
+| **ELF userspace**     | ET_EXEC/ET_DYN load for x86-64; userspace init path via `kernel-x64-userspace.iso`          |
+| **Syscalls**          | ~76 wired Linux x86-64 numbers of 450 slots; remainder return `-ENOSYS`                     |
+| **Memory**            | `brk`, `mmap`/`munmap`/`mprotect`, demand paging; `/dev/fb0` mmap handled specially         |
+| **VFS**               | MINIX, tmpfs, simplefs, FAT16 registration; path-routed `/proc` and `/sys`                  |
+| **devfs**             | Static device nodes including `/dev/console`, `/dev/fb0`, `/dev/events0`, `/dev/tty`*       |
+| **Framebuffer**       | VBE linear FB when `CONFIG_ENABLE_VBE=y`; unified VGA + FB text console                     |
+| **Console / TTY**     | Canonical line discipline, PS/2 input, scaled FB renderer (80×25 logical)                   |
+| **Networking**        | RTL8139 driver; IPv4, ARP, ICMP, UDP, DHCP, DNS client — **no TCP**, **no socket syscalls** |
+| **Shell (kernel)**    | In-kernel debug shell when `CONFIG_KERNEL_DEBUG_SHELL=y` (default in `defconfig`)           |
+| **Shell (userspace)** | BusyBox `ash` via `irinit` on `/dev/console` (see SETUP.md)                                 |
+| **BusyBox**           | Vendored 1.36.1; rebuilt locally from `setup/busybox/*.config` (not committed as binaries)  |
+| **TCC**               | Optional musl-static TinyCC built by `setup/tcc/build-fase52.sh`                            |
+| **Doom**              | doomgeneric port + `/dev/fb0` / input path; requires external IWAD                          |
+| **Signals**           | Basic `rt_sigaction`, `kill`, delivery hook; incomplete flags/semantics                     |
+| **Permissions**       | UID/GID syscalls and simple `access`; not a full Linux credential model                     |
+
 
 ARM64 exists as **Makefile/Kconfig scaffold only** (`kernel-arm64.bin` links arch stubs, not the full kernel).
 
@@ -52,7 +54,7 @@ ARM64 exists as **Makefile/Kconfig scaffold only** (`kernel-arm64.bin` links arc
 
 IR0 favors **narrow, testable boundaries** over implicit coupling:
 
-- **Facades** — Portable code calls `includes/ir0/*` and VFS ops, not driver headers directly (`fs/`, `mm/` avoid `#include <drivers/...>`).
+- **Facades** — Portable code calls `includes/ir0/`* and VFS ops, not driver headers directly (`fs/`, `mm/` avoid `#include <drivers/...>`).
 - **Config-driven selection** — Filesystems, drivers, and scheduler policy come from `setup/Kconfig` / `setup/defconfig`, reflected in `config.h`.
 - **Regression isolation** — Subsystems expose callbacks or tables (VFS `vfs_fstype`, pseudo-fs registry, driver registry) so bring-up can enable one layer at a time.
 - **Deterministic debug** — Serial (`printk`, tagged boot lines) is the primary observability path; many paths log explicit markers for automated checks.
@@ -124,13 +126,15 @@ Dual entry on x86-64: **INT 0x80** (legacy/debug ABI) and **SYSCALL** MSR path (
 
 Validated in-tree (requires musl cross compiler for static userspace builds):
 
-| Component | Role | Build / config |
-|-----------|------|----------------|
-| **BusyBox 1.36.1** | `ash`, coreutils subset | `make build-busybox-fase50-min`; configs under `setup/busybox/` |
-| **irinit** | PID1 launcher | `make build-irinit` → `setup/pid1/sbin/irinit` |
-| **musl** | Static userspace ABI | `x86_64-linux-musl-gcc` or `musl-gcc` |
-| **TinyCC (optional)** | In-guest compiler smoke | `make build-tcc-fase52` |
-| **doomgeneric** | FB + input demo | `make build-fase55e-doom-interactive`; upstream under `setup/doom/upstream/` |
+
+| Component             | Role                    | Build / config                                                               |
+| --------------------- | ----------------------- | ---------------------------------------------------------------------------- |
+| **BusyBox 1.36.1**    | `ash`, coreutils subset | `make build-busybox-fase50-min`; configs under `setup/busybox/`              |
+| **irinit**            | PID1 launcher           | `make build-irinit` → `setup/pid1/sbin/irinit`                               |
+| **musl**              | Static userspace ABI    | `x86_64-linux-musl-gcc` or `musl-gcc`                                        |
+| **TinyCC (optional)** | In-guest compiler smoke | `make build-tcc-fase52`                                                      |
+| **doomgeneric**       | FB + input demo         | `make build-fase55e-doom-interactive`; upstream under `setup/doom/upstream/` |
+
 
 Kernel itself builds with **GCC**, **NASM**, **GNU ld**, **Python 3**, **GRUB** (`grub-mkrescue`), and **QEMU**.
 
