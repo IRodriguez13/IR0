@@ -3,6 +3,8 @@
 This directory describes the current architecture and operational state of IR0.
 The goal is to document implemented behavior first, then known gaps.
 
+**Bootstrap and QEMU usage:** see [SETUP.md](../SETUP.md) at the repository root.
+
 ## Language Policy
 
 - Primary technical documentation is maintained in English in `Documentation/`.
