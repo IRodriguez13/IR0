@@ -13,8 +13,10 @@ The goal is to document implemented behavior first, then known gaps.
 
 ## Documentation Map
 
-- `DECOUPLING.md`: subsystem boundaries, façade map, portable arch conventions, symbol digest.
+- `MAKEFILE.md`: Makefile as central orchestrator — config flow, target taxonomy, wiring rules.
 - `TOOLING.md`: build, menuconfig flow, validation targets, and runtime checks.
+- `ai_driven_dev/`: tracked AI agent rules, skills, and install/sync workflow (see below).
+- `DECOUPLING.md`: subsystem boundaries, façade map, portable arch conventions, symbol digest.
 - `FILESYSTEM.md`: VFS layer, mounted filesystems, permissions path, and policy.
 - `VIRTUAL_FILESYSTEMS.md`: `/proc`, `/dev`, `/sys`, and observable interfaces.
 - `DRIVERS.md`: driver registry, bootstrap flow, and config-gated initialization.
@@ -25,6 +27,30 @@ The goal is to document implemented behavior first, then known gaps.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
 - `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`
   (QEMU GTK), keyboard poll + TTY echo path, build/run and serial tags.
+
+## AI-assisted development
+
+Rules for coding agents live in **`Documentation/ai_driven_dev/`** (tracked in git).
+Local Cursor config under `.cursor/` is gitignored — install with:
+
+```bash
+make ai-dev-rules-install
+```
+
+## Unified manual pages
+
+Generate and install the manual (interactive — no extra flags):
+
+```bash
+make mandocs-en    # English: all chapters? then pick if needed
+make mandocs-es    # Spanish
+man IR0-krnl
+make mandocs-uninstall
+```
+
+Default install uses `~/.local` (no sudo). System-wide: `sudo MANDOC_PREFIX=/usr/local make mandocs-en`.
+
+Per-chapter pages: `build/mandoc/IR0-krnl-<subsystem>.7`.
 
 ## Current Strengths
 

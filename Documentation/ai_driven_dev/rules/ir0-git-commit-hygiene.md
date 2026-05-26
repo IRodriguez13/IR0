@@ -1,7 +1,6 @@
----
-description: Git commits — Signed-off-by required; no agent Co-authored-by attribution
-alwaysApply: true
----
+<!-- IR0 AI dev rule: ir0-git-commit-hygiene -->
+<!-- alwaysApply: true -->
+<!-- description: Git commits — Signed-off-by required; no agent Co-authored-by attribution -->
 
 # Git commit hygiene
 

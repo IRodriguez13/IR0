@@ -48,6 +48,21 @@ It is aligned with the current Makefile and menuconfig behavior.
 - `python3 scripts/kernel_export_digest.py kernel-x64.bin`: SHA-256 of sorted global `nm`
   exports (same-toolchain rebuild comparison); see `Documentation/DECOUPLING.md`.
 
+
+## Documentation Targets
+
+| Target | What it does |
+|--------|----------------|
+| `make mandocs` | Language prompt, then all chapters or custom selection; installs |
+| `make mandocs-en` | English prompts; installs to `~/.local/share/man/man7/` (no sudo) |
+| `make mandocs-es` | Spanish prompts; `man IR0-krnl-es` after install |
+
+System-wide: `sudo MANDOC_PREFIX=/usr/local make mandocs-en`
+
+Uninstall: `make mandocs-uninstall` or `MANDOC_LANG=all make mandocs-uninstall`
+
+- `make ai-dev-rules-install`: copy AI dev rules into gitignored `.cursor/`.
+
 ## Host Test Harness
 
 - `make -C tests/host`: compile host-side tests.

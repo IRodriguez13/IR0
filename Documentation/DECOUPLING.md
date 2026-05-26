@@ -1,8 +1,8 @@
 # Kernel Decoupling Map
 
 This document maps how IR0 separates subsystems, where stable interfaces live, and where
-coupling still exists. It complements `DRIVERS.md`, `TOOLING.md`, and the CTR checklist in
-`.cursor/skills/ctr/SKILL.md`.
+coupling still exists. It complements `DRIVERS.md`, `MAKEFILE.md`, `TOOLING.md`, and the CTR checklist in
+`Documentation/ai_driven_dev/skills/ctr/SKILL.md`.
 
 ## Goals (design intent)
 

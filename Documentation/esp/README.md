@@ -12,6 +12,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 
 - `README.md`
 - `DECOUPLING.md`
+- `MAKEFILE.md`
 - `TOOLING.md`
 - `FILESYSTEM.md`
 - `VIRTUAL_FILESYSTEMS.md`
@@ -21,3 +22,5 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `PROCESSES.md`
 - `SCHEDULING.md`
 - `UNIX_DIFFERENCES.md`
+
+Reglas para agentes de IA (solo ingles): `Documentation/ai_driven_dev/`.
