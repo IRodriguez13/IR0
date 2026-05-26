@@ -3570,6 +3570,36 @@ arch-guard:
 repo-hygiene-guard:
 	@python3 $(KERNEL_ROOT)/scripts/repo_hygiene_guard.py
 
+mandocs:
+	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py
+
+mandocs-en:
+	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py --lang en
+
+mandocs-es:
+	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py --lang es
+
+mandocs-uninstall:
+	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py --uninstall \
+		$(if $(MANDOC_LANG),--lang $(MANDOC_LANG),) \
+		$(if $(MANDOC_PREFIX),--prefix $(MANDOC_PREFIX),)
+
+mandocs-view:
+	@lang=$${MANDOC_LANG:-$$(cat build/mandoc/last-lang 2>/dev/null || echo en)}; \
+	if [ "$$lang" = "es" ] && man -w IR0-krnl-es >/dev/null 2>&1; then \
+		man IR0-krnl-es; \
+	elif man -w IR0-krnl >/dev/null 2>&1; then \
+		man IR0-krnl; \
+	elif [ -f build/mandoc/$$lang/IR0-krnl.7 ]; then \
+		man -l build/mandoc/$$lang/IR0-krnl.7; \
+	else \
+		echo "missing manual — run: make mandocs MANDOC_LANG=$$lang"; \
+		exit 1; \
+	fi
+
+ai-dev-rules-install:
+	@python3 $(KERNEL_ROOT)/scripts/sync_ai_dev_rules.py install
+
 build-matrix-full:
 	@$(MAKE) -s build-matrix-min
 	@echo "  MATRIX  boolean config simulation (24 cases)"
@@ -3756,6 +3786,12 @@ help:
 	@echo "  make config-sim       Simulate subsystem on/off combinations"
 	@echo "  make arch-guard       Enforce include/facade architecture constraints"
 	@echo "  make repo-hygiene-guard Enforce tracked-artifact/docs hygiene rules"
+	@echo "  make mandocs            Interactive: language + chapters, then install"
+	@echo "  make mandocs-en         English prompts, install to ~/.local (no sudo)"
+	@echo "  make mandocs-es         Spanish prompts, install to ~/.local (no sudo)"
+	@echo "  make mandocs-view       View installed manual"
+	@echo "  make mandocs-uninstall  Remove last install (MANDOC_LANG=all for both)"
+	@echo "  make ai-dev-rules-install Install AI dev rules into .cursor/ (local)"
 	@echo "  make create-disk      Create virtual disk (MINIX by default)"
 	@echo "  make create-disk hints  Show create-disk help"
 	@echo "  make delete-disk      Delete virtual disk"
@@ -4064,7 +4100,7 @@ test-drivers-clean:
         ir0 ir0-auto auto windows win windows-clean win-clean deptest menuconfig menuconfig-en menuconfig-es defconfig \
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
-        tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard \
+        tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard mandocs mandocs-en mandocs-es mandocs-view mandocs-uninstall ai-dev-rules-install \
         runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
         build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs run-fase58e-ash-gui check-fase58e-logs smoke-fase58e-ash-interactive build-busybox-fase58-full build-fase58l-busybox-smoke smoke-fase58l-busybox-coreutils build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
