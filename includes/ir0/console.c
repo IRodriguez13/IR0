@@ -1,21 +1,33 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
-/*
- * IR0 console / TTY — minimal line discipline (kernel buffers only).
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
  *
- * User copy in syscall/devfs; this module never touches user pointers.
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: console.c
+ * Description: IR0 kernel source — console
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/copy_user.h>
 #include <ir0/console.h>
+#include <ir0/paging.h>
 #include <ir0/console_backend.h>
 #include <ir0/ash_smoke.h>
+#include <d1_12_read_diag.h>
+#include <d1_16_tty_read_diag.h>
 #include <ir0/errno.h>
 #include <ir0/keyboard.h>
-#include <drivers/video/console.h>
-#include <kernel/kernel.h>
-#include <kernel/process.h>
-#include <sched/scheduler_api.h>
+#include <ir0/video_console.h>
+#include <ir0/kernel.h>
+#include <ir0/process.h>
+#include <ir0/scheduler_api.h>
 #include <string.h>
+
+extern void kernel_idle_poll(void);
 
 #define IR0_TTY_MAX_READ_WAITERS 8
 #define IR0_TTY_ECHO_COLOR       0x07u
@@ -177,6 +189,10 @@ static int tty_canon_feed(char c)
 			canon_readq[canon_readq_len++] = canon_line[i];
 		canon_readq[canon_readq_len++] = '\n';
 		canon_line_len = 0;
+		d1_12_read_diag_tty_line(canon_readq_len - 1, canon_readq,
+					 canon_readq_len);
+		d1_16_tty_line_ready((uintptr_t)(void *)&canon_readq,
+				     canon_readq_len);
 		return 1;
 	}
 
@@ -189,44 +205,193 @@ static int tty_canon_feed(char c)
 	return 0;
 }
 
-static int tty_sleep_for_input(void)
+static void tty_wake_stage_user_read(process_t *proc)
+{
+	char kbuf[IR0_TTY_CANON_MAX + 1];
+	size_t out = 0;
+	uintptr_t user_buf;
+	size_t req;
+	int64_t n;
+
+	if (!proc || proc->mode != USER_MODE || !proc->irq_frame_saved)
+		return;
+	if (canon_readq_pos >= canon_readq_len)
+		return;
+
+	while (out < sizeof(kbuf) && canon_readq_pos < canon_readq_len)
+		tty_canon_drain(kbuf, sizeof(kbuf), &out);
+	if (out == 0)
+		return;
+
+	user_buf = (uintptr_t)proc->syscall_frame.rsi;
+	req = proc->syscall_frame.rdx;
+	if (req > 0 && out > req)
+		out = req;
+	if (!proc->page_directory || user_buf == 0 || out == 0)
+		return;
+
+	if (copy_to_user_region_in_directory(proc->page_directory, user_buf,
+					     kbuf, out) != 0)
+	{
+		proc->syscall_resume_rax = (uint64_t)(-EFAULT);
+		return;
+	}
+
+	n = (int64_t)out;
+	proc->syscall_resume_rax = (uint64_t)n;
+	d1_12_read_diag_kcopy(n, req, kbuf, out);
+	ir0_ash_smoke_read_return(0, n);
+}
+
+static inline uint64_t tty_irq_save(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint64_t flags;
+
+	__asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
+	return flags;
+#else
+	return 0;
+#endif
+}
+
+static inline void tty_irq_restore(uint64_t flags)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	__asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
+#else
+	(void)flags;
+#endif
+}
+
+static int tty_waiter_count(void)
 {
 	int i;
-
-	if (!current_process)
-		return 0;
+	int n = 0;
 
 	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
 	{
-		if (tty_read_waiters[i] == current_process)
-			goto block;
+		if (tty_read_waiters[i])
+			n++;
+	}
+	return n;
+}
+
+static void tty_waiter_remove(process_t *p)
+{
+	int i;
+
+	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
+	{
+		if (tty_read_waiters[i] == p)
+			tty_read_waiters[i] = NULL;
+	}
+}
+
+static int tty_waiter_register(process_t *p)
+{
+	int i;
+
+	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
+	{
+		if (tty_read_waiters[i] == p)
+			return 1;
 	}
 
 	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
 	{
 		if (tty_read_waiters[i] == NULL)
 		{
-			tty_read_waiters[i] = current_process;
-			goto block;
+			tty_read_waiters[i] = p;
+			return 1;
 		}
 	}
 
 	return 0;
+}
 
-block:
-	current_process->state = PROCESS_BLOCKED;
+/*
+ * Linux-like prepare_to_wait: register on the TTY wait queue, re-check the
+ * canonical line under IRQ mask, then block.  Without the re-check, a keyboard
+ * IRQ can complete the line and wake the reader between registration and
+ * PROCESS_BLOCKED, leaving the task blocked with no waiter and data ready.
+ */
+static int tty_sleep_for_input(void)
+{
+	process_t *proc = current_process;
+	uint64_t flags;
+	int blocked_once = 0;
+	int prev_state;
+
+	if (!proc)
+		return 0;
+
+	if (!tty_waiter_register(proc))
+		return 0;
+
+	d1_16_tty_read_block(proc, tty_waiter_count(), "tty_input");
+
 	for (;;)
 	{
+		if (ir0_console_input_ready())
+		{
+			tty_waiter_remove(proc);
+			process_clear_in_thread_syscall_block(proc);
+			d1_16_tty_read_resume(proc, "input_ready");
+			return 1;
+		}
+
+		flags = tty_irq_save();
+		if (ir0_console_input_ready())
+		{
+			tty_irq_restore(flags);
+			tty_waiter_remove(proc);
+			process_clear_in_thread_syscall_block(proc);
+			d1_16_tty_read_resume(proc, "input_ready_irq");
+			return 1;
+		}
+
+		prev_state = proc->state;
+		if (proc->mode == USER_MODE)
+			process_arm_blocked_syscall_resume(proc, 0);
+		if (proc->state != PROCESS_READY)
+		{
+			proc->state = PROCESS_BLOCKED;
+			blocked_once = 1;
+			d1_16_tty_state_transition(proc, prev_state,
+						   PROCESS_BLOCKED);
+		}
+		tty_irq_restore(flags);
+
 		sched_schedule_next();
-		if (current_process->state != PROCESS_BLOCKED)
-			break;
+
+		if (proc->state != PROCESS_BLOCKED)
+		{
+			if (blocked_once)
+				d1_16_tty_state_transition(proc, PROCESS_BLOCKED,
+							   proc->state);
+			tty_waiter_remove(proc);
+			d1_16_tty_read_resume(proc, "woke");
+			return 1;
+		}
+
 		/*
 		 * All tasks blocked: RR has no idle thread yet, so poll PS/2 and
 		 * wake TTY waiters from syscall context (QEMU GTK often skips IRQ1).
 		 */
 		kernel_idle_poll();
+
+		if (ir0_console_input_ready())
+		{
+			prev_state = proc->state;
+			proc->state = PROCESS_READY;
+			d1_16_tty_state_transition(proc, prev_state,
+						   PROCESS_READY);
+			tty_waiter_remove(proc);
+			d1_16_tty_read_resume(proc, "poll_ready");
+			return 1;
+		}
 	}
-	return 1;
 }
 
 void tty_input_char(char c)
@@ -248,7 +413,11 @@ void ir0_console_keypress(char c)
 	{
 		line_done = tty_canon_feed(nc);
 		if (line_done)
+		{
 			ir0_ash_smoke_tty_line_ready();
+			if (ir0_console_wake_readers())
+				sched_schedule_next();
+		}
 	}
 	else if (tty_echo_on())
 		tty_echo_char(nc);
@@ -389,6 +558,8 @@ int ir0_console_wake_readers(void)
 {
 	int i;
 	int woke = 0;
+	int waiters_before = tty_waiter_count();
+	uint32_t last_pid = 0;
 
 	if (!ir0_console_input_ready())
 		return 0;
@@ -398,22 +569,37 @@ int ir0_console_wake_readers(void)
 		if (tty_read_waiters[i])
 		{
 			process_t *reader = tty_read_waiters[i];
+			int prev_state;
 
 			if (reader->state == PROCESS_ZOMBIE)
 			{
 				tty_read_waiters[i] = NULL;
 				continue;
 			}
+			if (reader->mode == USER_MODE && reader->irq_frame_saved)
+				tty_wake_stage_user_read(reader);
+			prev_state = reader->state;
 			reader->state = PROCESS_READY;
+			d1_16_tty_state_transition(reader, prev_state,
+						   PROCESS_READY);
+			last_pid = (uint32_t)reader->task.pid;
 			tty_read_waiters[i] = NULL;
 			woke = 1;
 		}
 	}
 
+	if (woke)
+		d1_16_tty_wake(waiters_before, woke, last_pid);
+
 	return woke;
 }
 
 int ir0_console_take_resched(void)
+{
+	return 0;
+}
+
+int ir0_console_timer_resched_pending(void)
 {
 	return 0;
 }
@@ -474,6 +660,8 @@ int ir0_console_in_userspace(void)
 
 int64_t ir0_console_read(void *kbuf, size_t count, int nonblock)
 {
+	d1_16_tty_read_pre(current_process, 0, nonblock,
+			   (uintptr_t)(void *)&canon_readq);
 	return tty_read_kernel((char *)kbuf, count, nonblock);
 }
 
