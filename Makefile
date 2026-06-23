@@ -124,6 +124,7 @@ CFLAGS += $(CFLAGS_TARGET)
 CFLAGS += -I$(KERNEL_ROOT)
 CFLAGS += -I$(KERNEL_ROOT)/includes
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
+CFLAGS += -I$(KERNEL_ROOT)/ktm/include
 CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
 CFLAGS += -I$(KERNEL_ROOT)/arch/arm64
@@ -246,6 +247,8 @@ KERNEL_OBJS = \
     kernel/driver_registry.o \
     kernel/resource_registry.o \
     kernel/ipc.o \
+    ktm/d1_12_read_diag.o \
+    ktm/d1_16_tty_read_diag.o \
     kernel/net_compat.o \
     sched/scheduler_api.o \
     sched/switch/arch_context_switch.o \
@@ -377,7 +380,8 @@ KERNEL_TEST_OBJS = debug_bins/debug_bins_registry_test.o \
 	kernel/test/test_resource_registry.o \
 	kernel/test/test_allocator.o \
 	kernel/test/test_path.o \
-	kernel/test/test_string.o
+	kernel/test/test_string.o \
+	kernel/test/test_tty_canon_read.o
 
 # Scheduler backend selection from menuconfig
 ifeq ($(CONFIG_SCHEDULER_POLICY),1)

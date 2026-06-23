@@ -40,3 +40,5 @@ void ktest_mount_multi_fs_contract(void);
 void ktest_mount_longest_prefix_contract(void);
 void ktest_mount_umount_remount_contract(void);
 void ktest_devfs_hci_open_contract(void);
+void ktest_tty_canon_read_immediate(void);
+void ktest_tty_canon_block_wake(void);

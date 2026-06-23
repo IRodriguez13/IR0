@@ -56,6 +56,8 @@ static void (*const ktest_functions[])(void) = {
 	ktest_mount_longest_prefix_contract,
 	ktest_mount_umount_remount_contract,
 	ktest_devfs_hci_open_contract,
+	ktest_tty_canon_read_immediate,
+	ktest_tty_canon_block_wake,
 	NULL
 };
 
@@ -87,6 +89,8 @@ static const char *const ktest_names[] = {
 	"mount_longest_prefix_contract",
 	"mount_umount_remount_contract",
 	"devfs_hci_open_contract",
+	"tty_canon_read_immediate",
+	"tty_canon_block_wake",
 	NULL
 };
 
@@ -122,6 +126,8 @@ static const int ktest_needs_process[] = {
 	1,  /* mount_longest_prefix_contract */
 	1,  /* mount_umount_remount_contract */
 	1,  /* devfs_hci_open_contract */
+	1,  /* tty_canon_read_immediate */
+	1,  /* tty_canon_block_wake */
 };
 
 static void ktest_print_decimal(uint32_t n)
