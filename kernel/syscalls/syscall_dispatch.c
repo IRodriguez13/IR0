@@ -111,6 +111,7 @@ WRAP2(sys_symlink, const char *, const char *)
 WRAP3(sys_symlinkat, const char *, int, const char *)
 WRAP2(sys_rename, const char *, const char *)
 WRAP2(sys_truncate, const char *, off_t)
+WRAP2(sys_ftruncate, int, off_t)
 WRAP1(sys_unlink, const char *)
 WRAP3(sys_unlinkat, int, const char *, int)
 WRAP4(sys_renameat, int, const char *, int, const char *)
@@ -314,6 +315,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_rename]         = wrap_sys_rename;
   syscall_table_rw[__NR_unlink]         = wrap_sys_unlink;
   syscall_table_rw[__NR_truncate]       = wrap_sys_truncate;
+  syscall_table_rw[__NR_ftruncate]      = wrap_sys_ftruncate;
   syscall_table_rw[__NR_unlinkat]       = wrap_sys_unlinkat;
   syscall_table_rw[__NR_renameat]       = wrap_sys_renameat;
   syscall_table_rw[__NR_uname]          = wrap_sys_uname;
