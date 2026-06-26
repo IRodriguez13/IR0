@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "report_dir": "build/linux_abi_audit",
+  "contracts": [
+    {
+      "id": "brk",
+      "enabled": true,
+      "title": "Program break (brk)",
+      "status_doc": "VERIFIED",
+      "host_test": "elf_initial_brk_abi",
+      "ktest": "brk_post_exec",
+      "grow_bytes": 4096
+    },
+    {
+      "id": "execve",
+      "enabled": false,
+      "title": "Execute program",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "mmap",
+      "enabled": false,
+      "title": "Memory map",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "munmap",
+      "enabled": false,
+      "title": "Unmap memory",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "mprotect",
+      "enabled": false,
+      "title": "Protect memory",
+      "status_doc": "UNKNOWN"
+    },
+    {
+      "id": "fork",
+      "enabled": false,
+      "title": "Fork process",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "clone",
+      "enabled": false,
+      "title": "Clone thread/process",
+      "status_doc": "UNKNOWN"
+    },
+    {
+      "id": "wait4",
+      "enabled": false,
+      "title": "Wait for child",
+      "status_doc": "LINUX-LIKE"
+    },
+    {
+      "id": "exit",
+      "enabled": false,
+      "title": "Process exit",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "signals",
+      "enabled": false,
+      "title": "Signal delivery/rt_sigaction",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "pipe",
+      "enabled": false,
+      "title": "Pipe IPC",
+      "status_doc": "LINUX-LIKE"
+    },
+    {
+      "id": "dup",
+      "enabled": false,
+      "title": "Duplicate fd",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "poll",
+      "enabled": false,
+      "title": "poll(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "select",
+      "enabled": false,
+      "title": "select(2)",
+      "status_doc": "UNKNOWN"
+    },
+    {
+      "id": "ioctl",
+      "enabled": false,
+      "title": "ioctl",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "read",
+      "enabled": false,
+      "title": "read(2)",
+      "status_doc": "LINUX-LIKE"
+    },
+    {
+      "id": "write",
+      "enabled": false,
+      "title": "write(2)",
+      "status_doc": "LINUX-LIKE"
+    },
+    {
+      "id": "lseek",
+      "enabled": false,
+      "title": "lseek(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "openat",
+      "enabled": false,
+      "title": "openat(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "rename",
+      "enabled": false,
+      "title": "rename(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "unlink",
+      "enabled": false,
+      "title": "unlink(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "stat",
+      "enabled": false,
+      "title": "stat family",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "mount",
+      "enabled": false,
+      "title": "mount(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "umount2",
+      "enabled": false,
+      "title": "umount2(2)",
+      "status_doc": "PARTIAL"
+    }
+  ]
+}
