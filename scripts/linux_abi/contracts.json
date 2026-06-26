@@ -99,9 +99,13 @@
     },
     {
       "id": "read",
-      "enabled": false,
+      "enabled": true,
       "title": "read(2)",
-      "status_doc": "LINUX-LIKE"
+      "status_doc": "LINUX-LIKE",
+      "ktest": "syscall_pipe",
+      "pipe_read_len": 6,
+      "pipe_data_hex": "68656c6c6f0a",
+      "ebadf_errno": 9
     },
     {
       "id": "write",
