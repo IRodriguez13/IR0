@@ -665,6 +665,101 @@ def compare_openat(
     return res
 
 
+S_IFMT = 0o0170000
+S_IFREG = 0o0100000
+
+
+def _mode_type(mode: int | None) -> int | None:
+    if mode is None:
+        return None
+    return mode & S_IFMT
+
+
+def compare_stat(
+    linux: dict,
+    ir0: dict,
+    enoent_errno: int,
+    ebadf_errno: int,
+    host_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="stat", ok=True)
+
+    l_steps = linux.get("audit_steps") or linux.get("strace_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    def check_ok(op: str, need_size: bool, need_reg: bool) -> None:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})")
+            return
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret") != 0:
+                res.ok = False
+                res.divergences.append(f"{label} {op}: ret={step.get('ret')} expected 0")
+            mt = _mode_type(step.get("mode"))
+            if need_reg and mt != S_IFREG:
+                res.ok = False
+                res.divergences.append(f"{label} {op}: mode type 0{mt:o} expected regular file")
+            if need_size and (step.get("size") or 0) <= 0:
+                res.ok = False
+                res.divergences.append(f"{label} {op}: size={step.get('size')} expected >0")
+        l_mt = _mode_type(l_s.get("mode"))
+        i_mt = _mode_type(i_s.get("mode"))
+        if l_mt != i_mt:
+            res.ok = False
+            res.divergences.append(
+                f"{op} mode type mismatch linux=0{l_mt:o} ir0=0{i_mt:o}"
+            )
+        l_nl = l_s.get("nlink")
+        i_nl = i_s.get("nlink")
+        if l_nl is not None and i_nl is not None and l_nl > 0 and i_nl > 0:
+            if l_nl != i_nl:
+                res.notes.append(
+                    f"{op} nlink differs linux={l_nl} ir0={i_nl} (informational)"
+                )
+
+    check_ok("stat_proc", need_size=False, need_reg=False)
+    check_ok("stat_file", need_size=True, need_reg=True)
+    check_ok("fstat_proc", need_size=False, need_reg=False)
+
+    for op, exp_errno in (("stat_noent", enoent_errno), ("fstat_ebadf", ebadf_errno)):
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})")
+            continue
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret") != -1:
+                res.ok = False
+                res.divergences.append(f"{label} {op}: ret={step.get('ret')} expected -1")
+            if step.get("errno") != exp_errno:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: errno={step.get('errno')} expected={exp_errno}"
+                )
+
+    l_proc = _find_step(l_steps, "stat_proc")
+    i_proc = _find_step(i_steps, "stat_proc")
+    if l_proc and i_proc:
+        res.notes.append(
+            f"linux stat_proc mode=0{l_proc.get('mode', 0):o} size={l_proc.get('size')}"
+        )
+        res.notes.append(
+            f"ir0 stat_proc mode=0{i_proc.get('mode', 0):o} size={i_proc.get('size')}"
+        )
+
+    if host_ok is False:
+        res.ok = False
+        res.divergences.append("host test stat_user_abi FAILED")
+    elif host_ok is True:
+        res.notes.append("host test stat_user_abi OK")
+
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",
