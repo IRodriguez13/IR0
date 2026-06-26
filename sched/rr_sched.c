@@ -1,21 +1,16 @@
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: rr_sched.c
+ * Description: IR0 Kernel - Round-Robin Scheduler
+ */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel - Round-Robin Scheduler
- * Copyright (C) 2025 Iván Rodriguez
- *
- * Round-robin process scheduler with fair time-sharing
- *
- * This module implements a simple but effective round-robin scheduling
- * algorithm where processes are organized in a circular queue and each
- * process gets an equal time slice. This provides fairness and prevents
- * starvation, making it suitable for general-purpose workloads.
- *
- * Thread safety:
- * - Called from interrupt context (timer IRQ)
- * - Must be reentrant but not necessarily SMP-safe
- * - Current implementation assumes single CPU
- */
 
 #include "process.h"
 #include "rr_sched.h"
@@ -398,6 +393,11 @@ void rr_schedule_next(void)
 	if (first)
 	{
 		first = 0;
+		/*
+		 * First entry bypasses arch_context_switch(); point the kernel entry
+		 * stacks at this task's private kernel stack before it can syscall.
+		 */
+		arch_set_current_kernel_stack(next);
 #if defined(ARCH_X86_64) || defined(ARCH_X86)
 		if (next->mode == KERNEL_MODE)
 		{
@@ -473,5 +473,52 @@ void rr_schedule_next(void)
 		arch_context_switch(&prev->task, &next->task);
 	}
 
+	rr_irq_restore(irq_flags);
+}
+
+int rr_count_runnable(void)
+{
+	rr_task_t *walk;
+	int count = 0;
+	uint64_t irq_flags;
+
+	if (!rr_head)
+		return 0;
+
+	irq_flags = rr_irq_save();
+	walk = rr_head;
+	do
+	{
+		if (walk->process &&
+		    (walk->process->state == PROCESS_READY ||
+		     walk->process->state == PROCESS_RUNNING))
+			count++;
+		walk = walk->next;
+	} while (walk && walk != rr_head);
+
+	rr_irq_restore(irq_flags);
+	return count;
+}
+
+void rr_promote_process(process_t *proc)
+{
+	rr_task_t *walk;
+	uint64_t irq_flags;
+
+	if (!proc || !rr_head)
+		return;
+
+	irq_flags = rr_irq_save();
+	for (walk = rr_head; walk; walk = walk->next)
+	{
+		if (walk->process == proc)
+		{
+			rr_current = walk;
+			proc->state = PROCESS_READY;
+			break;
+		}
+		if (walk->next == rr_head)
+			break;
+	}
 	rr_irq_restore(irq_flags);
 }

@@ -1,16 +1,20 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2026 Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
- * Thin facade toward `kernel/process.h` (`process_t`, FD tables, PID helpers).
- * Use `credentials.h` for permission checks (`ir0_current_cred`); reach this header
- * when the full task struct is required (e.g. `/proc`, CoW paths in `mm/`).
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: process.h
+ * Description: Process/task public API facade (implementation in kernel/process.c).
+ *              Include as <ir0/process.h>; do not include <kernel/process.h> elsewhere.
  */
 
-#ifndef IR0_FACADE_PROCESS_H
-#define IR0_FACADE_PROCESS_H
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#pragma once
+
 
 #include <kernel/process.h>
 
-#endif /* IR0_FACADE_PROCESS_H */

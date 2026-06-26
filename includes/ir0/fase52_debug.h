@@ -1,10 +1,19 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — FASE52 TCC bring-up serial diagnostics (gated).
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: fase52_debug.h
+ * Description: FASE52 TCC bring-up serial diagnostics (gated)
  */
 
-#ifndef _IR0_FASE52_DEBUG_H
-#define _IR0_FASE52_DEBUG_H
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#pragma once
+
 
 #include <config.h>
 #include <stddef.h>
@@ -29,4 +38,3 @@ void fase52_dbg_access(const char *path, int mode, int64_t ret);
 void fase52_dbg_exec_argv(const char *path, const char *argv0, const char *argv1,
 			  uint64_t env_count);
 
-#endif /* _IR0_FASE52_DEBUG_H */

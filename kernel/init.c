@@ -179,6 +179,18 @@ int start_init_process(void)
 	/* Initialize fd table (stdin/stdout/stderr) */
 	process_init_fd_table(init);
 
+	/*
+	 * Private kernel stack: pid1 starts in KERNEL_MODE (debug shell) but execs
+	 * into the user-mode init (runit), reusing this process_t. It must own a
+	 * private kernel stack before issuing syscalls from ring 3.
+	 */
+	if (process_kernel_stack_alloc(init) != 0)
+	{
+		kfree_aligned((void *)init->task.cr3);
+		kfree(init);
+		return -1;
+	}
+
 	/* Add to scheduler and start */
 	sched_add_process(init);
 	sched_schedule_next();

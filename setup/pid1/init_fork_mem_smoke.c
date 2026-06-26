@@ -1,13 +1,16 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
-/*
- * FASE40 fork memory audit smoke (A/B/C/D).
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
  *
- * Runs in PID1 userspace and reports:
- * - Heap isolation after fork
- * - Stack isolation after fork
- * - mmap(MAP_PRIVATE|ANON) fork semantics
- * - Memory growth / reclaim snapshot from /proc/meminfo
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: init_fork_mem_smoke.c
+ * Description: IR0 kernel source — init fork mem smoke
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <stdint.h>
 #include <unistd.h>

@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -10,6 +9,8 @@
  * File: paging.c
  * Description: IR0 kernel source/header file
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <stdint.h>
 #include <config.h>
@@ -994,7 +995,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                         return -1;
                     }
 
-                    if (fase40_copy_diag_events < 256U)
+                    if (DEBUG_FORK && fase40_copy_diag_events < 256U)
                     {
                         serial_print("[FASE40][COPY] ppid=");
                         serial_print_hex32((uint32_t)parent->task.pid);

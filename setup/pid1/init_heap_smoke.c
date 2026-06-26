@@ -1,14 +1,16 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
-/*
- * FASE39 heap smoke - validate brk/sbrk minimal behavior in ring 3.
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
  *
- * Report fields:
- * - heap_start
- * - heap_end
- * - brk_before
- * - brk_after
- * - page_present (write/read roundtrip on sbrk memory)
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: init_heap_smoke.c
+ * Description: IR0 kernel source — init heap smoke
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <stdint.h>
 #include <unistd.h>
@@ -59,7 +61,7 @@ int main(void)
 		uintptr_t base = brk_before;
 
 		sbrk_ok = 0;
-		if (base < IR0_USER_HEAP_BASE)
+		if (base == 0)
 			base = IR0_USER_HEAP_BASE;
 		p = (unsigned char *)base;
 		brk_target = base + 4096U;
