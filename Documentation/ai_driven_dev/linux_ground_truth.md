@@ -20,12 +20,13 @@ or **exec/fork** semantics for musl/BusyBox/TCC:
 ## Automated audit
 
 ```bash
-# Full audit for all enabled contracts (brk + wait4 + read)
+# Full audit for all enabled contracts (brk + wait4 + read + mmap)
 make linux-abi-audit
 
 # Single contract iteration
 make linux-abi-audit-wait4
 make linux-abi-audit-read
+make linux-abi-audit-mmap
 
 # Report artifacts
 build/linux_abi_audit/report.md
@@ -49,7 +50,7 @@ Evidence columns: **host trace** | **IR0 trace** | **host tests** | **ktests** |
 |----------------|--------|:----------:|:---------:|:----------:|:------:|:-----:|-------|
 | execve | PARTIAL | — | — | — | partial | tier1 | ELF load path; no paired audit yet |
 | brk | VERIFIED | ✓ | ✓ | ✓ | ✓ | partial | `make linux-abi-audit`; probe `scripts/linux_abi/workloads/brk_probe.c` |
-| mmap | PARTIAL | partial | partial | ✓ | ✓ | ✓ | `test_musl_mmap_contract`, `smoke-mm-cow-lazy` |
+| mmap | VERIFIED | ✓ | ✓ | ✓ | ✓ | partial | `make linux-abi-audit-mmap`; anon RW/PROT_NONE/MAP_FIXED/munmap/bad-fd errno; **no file-backed mmap** |
 | munmap | PARTIAL | — | — | — | partial | — | No paired audit |
 | mprotect | UNKNOWN | — | — | — | — | — | |
 | fork | PARTIAL | — | — | — | partial | — | |
@@ -77,10 +78,10 @@ Update **brk** row after each green `make linux-abi-audit`. Enable the next cont
 
 ## Suggested next contracts (priority)
 
-1. **mmap** — anon MAP_PRIVATE grow + `/proc/maps` gap vs IR0 `smoke-mm-cow-lazy`.
-2. **mount** — Linux `strace` for tmpfs/FAT16 vs `smoke-fat16-mount` serial.
-3. **pipe** — `pipe`+`poll` minimal probe (ordering + `EAGAIN`).
-4. **read TTY** (optional) — canon read `echo hi\n` → ret=8 vs D1.13 capture.
+1. **mount** — Linux `strace` for tmpfs/FAT16 vs `smoke-fat16-mount` serial.
+2. **pipe** — `pipe`+`poll` minimal probe (ordering + `EAGAIN`).
+3. **read TTY** (optional) — canon read `echo hi\n` → ret=8 vs D1.13 capture.
+4. **mmap file-backed** — when implemented; audit today covers anon only.
 
 ## Legacy reference captures (D1.13 TTY)
 

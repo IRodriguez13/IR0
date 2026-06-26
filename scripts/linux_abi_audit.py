@@ -20,7 +20,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "linux_abi"))
 
-from compare import CompareResult, compare_brk, compare_read, compare_wait4, render_markdown  # noqa: E402
+from compare import (  # noqa: E402
+    CompareResult,
+    compare_brk,
+    compare_mmap,
+    compare_read,
+    compare_wait4,
+    render_markdown,
+)
 
 
 def load_contracts() -> dict:
@@ -51,6 +58,13 @@ def build_read_probe(report_dir: Path) -> Path:
     return build_static_probe(
         report_dir / "read_probe",
         ROOT / "scripts" / "linux_abi" / "workloads" / "read_probe.c",
+    )
+
+
+def build_mmap_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "mmap_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "mmap_probe.c",
     )
 
 
@@ -319,10 +333,86 @@ def audit_read(report_dir: Path, cfg: dict) -> CompareResult:
     return res
 
 
+def audit_mmap(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "mmap"
+    ir0_dir = report_dir / "ir0" / "mmap"
+    page_size = int(cfg.get("page_size", 4096))
+    none_size = int(cfg.get("none_size", 8192))
+    verify_data_hex = str(cfg.get("verify_data_hex", "4d4d41504f4b0a"))
+    ebadf_errno = int(cfg.get("ebadf_errno", 9))
+    ktest_name = cfg.get("ktest", "mmap_null_placement")
+    ktest_log = Path("/tmp/ktest.log")
+
+    build_mmap_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_mmap.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_mmap.sh"
+
+    ktest_ok = None
+    if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+            errors="replace"
+        ):
+            ktest_ok = True
+            print(f"  NOTE  reusing mmap ktest evidence from {ktest_log}")
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="mmap",
+            ok=False,
+            divergences=["Linux mmap workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        ir0_trace_path = ir0_dir / "trace.json"
+        if ir0_trace_path.is_file():
+            ir0_trace = json.loads(ir0_trace_path.read_text())
+            if len(ir0_trace.get("audit_steps") or []) < 7:
+                return CompareResult(
+                    contract="mmap",
+                    ok=False,
+                    divergences=["IR0 mmap workload script failed"],
+                )
+        else:
+            return CompareResult(
+                contract="mmap",
+                ok=False,
+                divergences=["IR0 mmap workload script failed"],
+            )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    if not (ir0_dir / "trace.json").is_file():
+        ir0_trace = {"audit_steps": []}
+    else:
+        ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = run_ktest_brk(ktest_name)
+
+    res = compare_mmap(
+        linux_trace,
+        ir0_trace,
+        page_size,
+        none_size,
+        verify_data_hex,
+        ebadf_errno,
+        None,
+    )
+    if ktest_ok is False:
+        res.ok = False
+        if f"ktest {ktest_name} FAILED" not in res.divergences:
+            res.divergences.append(f"ktest {ktest_name} FAILED")
+    elif ktest_ok is True and f"ktest {ktest_name} OK" not in res.notes:
+        res.notes.append(f"ktest {ktest_name} OK")
+
+    return res
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
     "read": audit_read,
+    "mmap": audit_mmap,
 }
 
 
