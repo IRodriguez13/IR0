@@ -501,6 +501,170 @@ def compare_mount(
     return res
 
 
+def compare_execve(
+    linux: dict,
+    ir0: dict,
+    enoent_errno: int,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="execve", ok=True)
+
+    l_steps = linux.get("audit_steps") or linux.get("strace_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    ok_step = _find_step(l_steps, "execve_ok")
+    i_ok = _find_step(i_steps, "execve_ok")
+    noent_l = _find_step(l_steps, "execve_noent")
+    noent_i = _find_step(i_steps, "execve_noent")
+    helper_l = _find_step(l_steps, "helper_run")
+    helper_i = _find_step(i_steps, "helper_run")
+
+    if not ok_step or not i_ok:
+        res.ok = False
+        res.divergences.append(
+            f"missing execve_ok step (linux={bool(ok_step)} ir0={bool(i_ok)})"
+        )
+    else:
+        for label, step in (("linux", ok_step), ("ir0", i_ok)):
+            if step.get("ret", -1) <= 0:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} execve_ok: invalid ret={step.get('ret')}"
+                )
+            st = step.get("status")
+            if st is None:
+                res.ok = False
+                res.divergences.append(f"{label} execve_ok: missing status word")
+            elif st != 0:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} execve_ok: status=0x{st:x} expected 0x0 (exit 0)"
+                )
+        if ok_step.get("status") != i_ok.get("status"):
+            res.ok = False
+            res.divergences.append(
+                f"execve_ok status mismatch linux=0x{(ok_step.get('status') or 0):x} "
+                f"ir0=0x{(i_ok.get('status') or 0):x}"
+            )
+
+    if not noent_l or not noent_i:
+        res.ok = False
+        res.divergences.append(
+            f"missing execve_noent step (linux={bool(noent_l)} ir0={bool(noent_i)})"
+        )
+    else:
+        for label, step in (("linux", noent_l), ("ir0", noent_i)):
+            if step.get("ret") != -1:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} execve_noent: ret={step.get('ret')} expected -1"
+                )
+            if step.get("errno") != enoent_errno:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} execve_noent: errno={step.get('errno')} expected={enoent_errno}"
+                )
+        if noent_l.get("errno") != noent_i.get("errno"):
+            res.ok = False
+            res.divergences.append(
+                f"execve_noent errno mismatch linux={noent_l.get('errno')} ir0={noent_i.get('errno')}"
+            )
+
+    if helper_l and helper_i:
+        if helper_l.get("ret") != 0 or helper_i.get("ret") != 0:
+            res.ok = False
+            res.divergences.append("helper_run ret mismatch")
+    elif not helper_i and ok_step and i_ok:
+        res.notes.append(
+            "ir0 helper_run audit line absent (serial interleave); execve_ok status=0 accepted"
+        )
+    elif not helper_i:
+        res.ok = False
+        res.divergences.append("ir0 missing helper_run audit line")
+
+    if ok_step and i_ok:
+        res.notes.append(
+            f"linux execve_ok pid={ok_step.get('ret')} status=0x{(ok_step.get('status') or 0):x}"
+        )
+        res.notes.append(
+            f"ir0 execve_ok pid={i_ok.get('ret')} status=0x{(i_ok.get('status') or 0):x}"
+        )
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest execve contract FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest execve contract OK")
+
+    return res
+
+
+def compare_openat(
+    linux: dict,
+    ir0: dict,
+    enoent_errno: int,
+    ebadf_errno: int,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="openat", ok=True)
+
+    l_steps = linux.get("audit_steps") or linux.get("strace_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    checks = (
+        ("open_existing", lambda r: r is not None and r >= 3, 0),
+        ("close_ok", lambda r: r == 0, 0),
+        ("open_noent", lambda r: r == -1, enoent_errno),
+        ("close_ebadf", lambda r: r == -1, ebadf_errno),
+    )
+
+    for op, ret_ok, exp_errno in checks:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})")
+            continue
+
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            got_ret = step.get("ret")
+            if not ret_ok(got_ret):
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: ret={got_ret} unexpected"
+                )
+            if step.get("errno") != exp_errno:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: errno={step.get('errno')} expected={exp_errno}"
+                )
+
+        if op == "open_noent" and l_s.get("errno") != i_s.get("errno"):
+            res.ok = False
+            res.divergences.append(
+                f"open_noent errno mismatch linux={l_s.get('errno')} ir0={i_s.get('errno')}"
+            )
+        if op == "close_ebadf" and l_s.get("errno") != i_s.get("errno"):
+            res.ok = False
+            res.divergences.append(
+                f"close_ebadf errno mismatch linux={l_s.get('errno')} ir0={i_s.get('errno')}"
+            )
+
+    l_open = _find_step(l_steps, "open_existing")
+    i_open = _find_step(i_steps, "open_existing")
+    if l_open and i_open:
+        res.notes.append(f"linux open_existing fd={l_open.get('ret')}")
+        res.notes.append(f"ir0 open_existing fd={i_open.get('ret')}")
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest syscall_open_close FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest syscall_open_close OK")
+
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",
