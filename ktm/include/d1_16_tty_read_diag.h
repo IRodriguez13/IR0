@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include <config.h>
 #include <stddef.h>
 #include <stdint.h>
 
 struct process;
+
+#if DEBUG_D1_DIAG
 
 void d1_16_tty_read_pre(struct process *p, int fd, int nonblock,
 			uintptr_t tty_ptr);
@@ -27,3 +30,51 @@ void d1_16_tty_wake(int waiters_before, int woke, uint32_t pid);
 void d1_16_tty_read_resume(struct process *p, const char *reason);
 void d1_16_tty_state_transition(struct process *p, int from_state,
 				int to_state);
+
+#else
+
+static inline void d1_16_tty_read_pre(struct process *p, int fd, int nonblock,
+				      uintptr_t tty_ptr)
+{
+	(void)p;
+	(void)fd;
+	(void)nonblock;
+	(void)tty_ptr;
+}
+
+static inline void d1_16_tty_read_block(struct process *p, int waiters,
+					const char *reason)
+{
+	(void)p;
+	(void)waiters;
+	(void)reason;
+}
+
+static inline void d1_16_tty_line_ready(uintptr_t tty_ptr, size_t queued)
+{
+	(void)tty_ptr;
+	(void)queued;
+}
+
+static inline void d1_16_tty_wake(int waiters_before, int woke, uint32_t pid)
+{
+	(void)waiters_before;
+	(void)woke;
+	(void)pid;
+}
+
+static inline void d1_16_tty_read_resume(struct process *p, const char *reason)
+{
+	(void)p;
+	(void)reason;
+}
+
+static inline void d1_16_tty_state_transition(struct process *p, int from_state,
+					      int to_state)
+{
+	(void)p;
+	(void)from_state;
+	(void)to_state;
+}
+
+#endif /* DEBUG_D1_DIAG */

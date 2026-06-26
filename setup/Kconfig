@@ -33,6 +33,13 @@ menu "General"
           instead of loading /sbin/init from the filesystem.
           Disable this only when you have a working userspace init.
 
+    config IR0_SUDO_AUTH_SYSCALL
+        bool "IR0 legacy sudo_auth syscall (debug_bins only)"
+        default n
+        help
+          Enables __NR_sudo_auth (404) for debug_bins/cmd_sudo.c.
+          Production userspace should use setuid binaries and real sudo.
+
     config TICK_RATE_HZ
         int "Timer tick rate (Hz)"
         range 100 1000
@@ -42,14 +49,16 @@ menu "General"
           scheduling granularity at the cost of more IRQ overhead.
 
     config SCHEDULER_POLICY
-        int "Scheduler policy (0=round-robin,1=cfs,2=priority)"
+        int "Scheduler policy (0=RR, 1=Cfs, 2=Priority)"
         range 0 2
         default 0
         help
-          Build-time scheduler selection.
-          0 = round-robin (stable reference)
-          1 = cfs (currently aliases RR backend)
-          2 = priority (currently aliases RR backend)
+          Build-time scheduler backend (make menuconfig → Kernel options).
+          0 = round-robin (stable reference, default)
+          1 = CFS — currently aliases RR; separate runqueue planned
+          2 = priority — currently aliases RR; separate runqueue planned
+          Makefile links sched/scheduler_api.c + policy wrapper; preempt/Tty paths
+          use includes/ir0/scheduler_api.h.
 
     config ROOT_BLOCK_DEVICE
         string "Default root block device name"
@@ -248,11 +257,11 @@ menu "Filesystems"
           mount coexistence and scaling validation.
 
     config ENABLE_FS_FAT16
-        bool "FAT16-like filesystem driver"
+        bool "FAT16 filesystem (on-disk read-only + virtual /dev/fat0)"
         default y
         help
-          Compile a minimal FAT16-like backend for mount coexistence tests
-          using coherent mountpoint semantics.
+          On-disk FAT16 read-only parser for ATA block devices (hda, hda1, …)
+          and a virtual backend at /dev/fat0 delegating to simplefs for mount tests.
 
 endmenu
 
@@ -403,6 +412,34 @@ menu "Debugging"
         bool "Page fault handler debug output"
         default n
 
+    config DEBUG_D1_DIAG
+        bool "D1 bring-up serial diagnostics ([D1.10]/[D1.12]/[D1.16] tags)"
+        default n
+        help
+          Temporary read/TTY/PF forensics used during musl ash bring-up (D1.10–D1.16).
+          Off by default for release builds; enable only when bisecting TTY/read paths.
+
+    config DEBUG_MMAP_AUDIT
+        bool "MMAP audit serial noise ([MMAP_AUDIT]/[FASE39] tags)"
+        default n
+
+    config LAZY_ANON_MMAP
+        bool "Lazy anonymous mmap (VMA reserve, demand-fill on #PF)"
+        default y
+        help
+          When enabled, MAP_ANON mmap inserts a VMA without eager PTE mapping;
+          page faults demand-fill via arch/x86-64/sources/fault.c. Disable to
+          revert to eager map_user_region_in_directory() for bisect.
+
+    config LAZY_BRK_HEAP
+        bool "Lazy brk heap (extend heap_end only, demand-fill on #PF)"
+        default y
+        depends on LAZY_ANON_MMAP
+        help
+          When enabled, brk(2) expansion only advances heap_end without eager
+          PTE mapping; the first touch faults in and demand-fills like lazy mmap.
+          Disable to revert to eager map_user_region_in_directory() on brk grow.
+
     config DEBUG_PROCESS
         bool "Process creation/destruction debug"
         default n
@@ -446,6 +483,10 @@ menu "Debugging"
         bool "ISR ABI audit serial noise ([ISRABI] tags)"
         default n
 
+    config DEBUG_FASE49
+        bool "FASE49 pipe/fd lifecycle serial noise ([FASE49] tags)"
+        default n
+
     config DEBUG_FASE50
         bool "FASE50 bring-up serial noise ([FASE50*] tags)"
         default n
@@ -457,5 +498,46 @@ menu "Debugging"
     config DEBUG_FASE52
         bool "FASE52 TinyCC bring-up serial noise ([FASE52*] tags)"
         default n
+
+    config KTM
+        bool "Kernel Trace Module (KTM) panic/fault classification"
+        default y
+        help
+          Enables KTM context snapshots on panic/fault and panic class tags
+          ([KTM][PANIC_CLASS]). Near-zero runtime cost except on failure paths.
+
+    config KTM_EVENTS
+        bool "KTM compact serial event tags"
+        depends on KTM
+        default y
+        help
+          Emits grep-friendly [KTM][EV] tags on scheduler/TTY/wait milestones.
+          Disable for minimal serial noise; smokes and tier tests keep enabled.
+
+    config KTM_FLIGHT
+        bool "KTM flight recorder (typed ring buffer on panic)"
+        depends on KTM
+        default y
+        help
+          Records the last 256 typed kernel events (syscalls, sched, panic)
+          and dumps them on panic/assert for post-mortem analysis.
+
+    config KTM_PROBE_DIAG
+        bool "KTM musl probe path diagnostics (D1.3 smoke)"
+        depends on KTM
+        default n
+        help
+          Verbose [PROBE] serial timeline for /bin/sh MM/signal syscalls and
+          VMA/PTE dump on user #PF at musl arena. Temporary bring-up aid;
+          disable after D1.3 closes.
+
+    config KTM_MALLOC_FORENSICS
+        bool "KTM mallocng/memmove PF forensics (D1.14)"
+        depends on KTM
+        default n
+        help
+          On musl memmove page faults ([D1.14] tags): dump mapped pages around
+          rdi/rsi, candidate chunk header words, and read correlation. Disable
+          for minimal serial noise after ash smoke is stable.
 
 endmenu
