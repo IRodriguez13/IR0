@@ -406,6 +406,101 @@ def compare_mmap(
     return res
 
 
+def compare_mount(
+    linux: dict,
+    ir0: dict,
+    mount_path: str,
+    mount_noent_path: str,
+    rw_data_hex: str,
+    enoent_errno: int,
+    enodev_errno: int,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="mount", ok=True)
+
+    l_steps = linux.get("audit_steps") or linux.get("strace_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    required_ops = (
+        "mount_tmpfs",
+        "tmpfs_rw",
+        "umount_tmpfs",
+        "mount_noent",
+        "mount_badfs",
+    )
+
+    if len(l_steps) < len(required_ops):
+        res.ok = False
+        res.divergences.append(
+            f"linux trace has {len(l_steps)} mount steps, need >={len(required_ops)}"
+        )
+    if len(i_steps) < len(required_ops):
+        res.ok = False
+        res.divergences.append(
+            f"ir0 trace has {len(i_steps)} mount steps, need >={len(required_ops)}"
+        )
+
+    checks = (
+        ("mount_tmpfs", 0, mount_path, None, None),
+        ("tmpfs_rw", 0, None, rw_data_hex, None),
+        ("umount_tmpfs", 0, mount_path, None, None),
+        ("mount_noent", -1, mount_noent_path, None, enoent_errno),
+        ("mount_badfs", -1, mount_path, None, enodev_errno),
+    )
+
+    for op, exp_ret, exp_path, exp_hex, exp_errno in checks:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})")
+            continue
+
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret") != exp_ret:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: ret={step.get('ret')} expected={exp_ret}"
+                )
+            if exp_path is not None and step.get("path") != exp_path:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: path={step.get('path')} expected={exp_path}"
+                )
+            if exp_hex is not None:
+                got_hex = (step.get("data_hex") or "").lower()
+                if got_hex != exp_hex.lower():
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: data_hex={got_hex} expected={exp_hex}"
+                    )
+            if exp_errno is not None and step.get("errno") != exp_errno:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: errno={step.get('errno')} expected={exp_errno}"
+                )
+
+        if exp_errno is not None and l_s.get("errno") != i_s.get("errno"):
+            res.ok = False
+            res.divergences.append(
+                f"{op} errno mismatch linux={l_s.get('errno')} ir0={i_s.get('errno')}"
+            )
+
+    l_m = _find_step(l_steps, "mount_tmpfs")
+    i_m = _find_step(i_steps, "mount_tmpfs")
+    if l_m and i_m and l_m.get("ret") == 0 and i_m.get("ret") == 0:
+        res.notes.append(f"linux mount_tmpfs ok path={l_m.get('path')}")
+        res.notes.append(f"ir0 mount_tmpfs ok path={i_m.get('path')}")
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest mount_tmpfs_contract FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest mount_tmpfs_contract OK")
+
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",

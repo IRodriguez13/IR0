@@ -150,9 +150,15 @@
     },
     {
       "id": "mount",
-      "enabled": false,
+      "enabled": true,
       "title": "mount(2)",
-      "status_doc": "PARTIAL"
+      "status_doc": "PARTIAL",
+      "ktest": "mount_tmpfs_contract",
+      "mount_path": "/tmp/ir0mnt",
+      "mount_noent_path": "/tmp/ir0mnt_nope",
+      "rw_data_hex": "6d6e746f6b0a",
+      "enoent_errno": 2,
+      "enodev_errno": 19
     },
     {
       "id": "umount2",

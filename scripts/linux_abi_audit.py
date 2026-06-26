@@ -24,6 +24,7 @@ from compare import (  # noqa: E402
     CompareResult,
     compare_brk,
     compare_mmap,
+    compare_mount,
     compare_read,
     compare_wait4,
     render_markdown,
@@ -65,6 +66,13 @@ def build_mmap_probe(report_dir: Path) -> Path:
     return build_static_probe(
         report_dir / "mmap_probe",
         ROOT / "scripts" / "linux_abi" / "workloads" / "mmap_probe.c",
+    )
+
+
+def build_mount_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "mount_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "mount_probe.c",
     )
 
 
@@ -408,11 +416,89 @@ def audit_mmap(report_dir: Path, cfg: dict) -> CompareResult:
     return res
 
 
+def audit_mount(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "mount"
+    ir0_dir = report_dir / "ir0" / "mount"
+    mount_path = str(cfg.get("mount_path", "/tmp/ir0mnt"))
+    mount_noent_path = str(cfg.get("mount_noent_path", "/tmp/ir0mnt_nope"))
+    rw_data_hex = str(cfg.get("rw_data_hex", "6d6e746f6b0a"))
+    enoent_errno = int(cfg.get("enoent_errno", 2))
+    enodev_errno = int(cfg.get("enodev_errno", 19))
+    ktest_name = cfg.get("ktest", "mount_tmpfs_contract")
+    ktest_log = Path("/tmp/ktest.log")
+
+    build_mount_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_mount.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_mount.sh"
+
+    ktest_ok = None
+    if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+            errors="replace"
+        ):
+            ktest_ok = True
+            print(f"  NOTE  reusing mount ktest evidence from {ktest_log}")
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="mount",
+            ok=False,
+            divergences=["Linux mount workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        ir0_trace_path = ir0_dir / "trace.json"
+        if ir0_trace_path.is_file():
+            ir0_trace = json.loads(ir0_trace_path.read_text())
+            if len(ir0_trace.get("audit_steps") or []) < 5:
+                return CompareResult(
+                    contract="mount",
+                    ok=False,
+                    divergences=["IR0 mount workload script failed"],
+                )
+        else:
+            return CompareResult(
+                contract="mount",
+                ok=False,
+                divergences=["IR0 mount workload script failed"],
+            )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    if not (ir0_dir / "trace.json").is_file():
+        ir0_trace = {"audit_steps": []}
+    else:
+        ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = run_ktest_brk(ktest_name)
+
+    res = compare_mount(
+        linux_trace,
+        ir0_trace,
+        mount_path,
+        mount_noent_path,
+        rw_data_hex,
+        enoent_errno,
+        enodev_errno,
+        None,
+    )
+    if ktest_ok is False:
+        res.ok = False
+        if f"ktest {ktest_name} FAILED" not in res.divergences:
+            res.divergences.append(f"ktest {ktest_name} FAILED")
+    elif ktest_ok is True and f"ktest {ktest_name} OK" not in res.notes:
+        res.notes.append(f"ktest {ktest_name} OK")
+
+    return res
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
     "read": audit_read,
     "mmap": audit_mmap,
+    "mount": audit_mount,
 }
 
 
