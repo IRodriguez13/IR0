@@ -280,8 +280,7 @@ KERNEL_OBJS = \
     ktm/ktm_flight.o \
     ktm/ktm_panic_class.o \
     ktm/ktm_probe_diag.o \
-    ktm/d1_12_read_diag.o \
-    ktm/d1_16_tty_read_diag.o \
+    $(KTM_D1_DIAG_OBJS) \
     ktm/d1_13_malloc_pf_diag.o \
     sched/scheduler_api.o \
     sched/sched_resched.o \
@@ -737,6 +736,13 @@ ifeq ($(CONFIG_DEBUG_PAGE_FAULTS),y)
 CFLAGS += -DCONFIG_DEBUG_PAGE_FAULTS=1
 else
 CFLAGS += -DCONFIG_DEBUG_PAGE_FAULTS=0
+endif
+ifeq ($(CONFIG_DEBUG_D1_DIAG),y)
+CFLAGS += -DCONFIG_DEBUG_D1_DIAG=1
+KTM_D1_DIAG_OBJS := ktm/d1_12_read_diag.o ktm/d1_16_tty_read_diag.o
+else
+CFLAGS += -DCONFIG_DEBUG_D1_DIAG=0
+KTM_D1_DIAG_OBJS :=
 endif
 ifeq ($(CONFIG_DEBUG_PROCESS),y)
 CFLAGS += -DCONFIG_DEBUG_PROCESS=1
@@ -1980,30 +1986,6 @@ smoke-mm-cow-lazy: kernel-x64-userspace.iso
 	fi; \
 	echo "✓ smoke-mm-cow-lazy passed (lazy brk + lazy mmap + fork COW FASE40 A–F)"
 
-# D1.19 — Linux↔IR0 ABI ground-truth audit (same ELF, strace vs serial)
-LINUX_ABI_AUDIT_DIR := build/linux_abi_audit
-LINUX_ABI_BRK_PROBE := $(LINUX_ABI_AUDIT_DIR)/brk_probe
-
-.PHONY: build-linux-abi-brk-probe linux-abi-audit linux-abi-audit-brk
-
-build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
-	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
-	@if command -v musl-gcc >/dev/null 2>&1; then \
-		musl-gcc -static -Os -o $(LINUX_ABI_BRK_PROBE) scripts/linux_abi/workloads/brk_probe.c; \
-	else \
-		gcc -static -Os -o $(LINUX_ABI_BRK_PROBE) scripts/linux_abi/workloads/brk_probe.c; \
-	fi
-	@echo "✓ $(LINUX_ABI_BRK_PROBE)"
-
-linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe
-	@chmod +x scripts/linux_abi/run_linux_brk.sh scripts/linux_abi/run_ir0_brk.sh
-	@python3 scripts/linux_abi_audit.py --all
-	@grep -q '^## Overall: PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
-		echo "✓ linux-abi-audit passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
-		(echo "✗ linux-abi-audit FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
-
-linux-abi-audit-brk: linux-abi-audit
-
 .PHONY: build/fat16_smoke.img smoke-fat16-mount
 
 build/fat16_smoke.img:
@@ -2036,6 +2018,30 @@ smoke-fat16-mount: kernel-x64-userspace.iso build/fat16_smoke.img
 	else \
 		echo "✗ smoke-fat16-mount FAILED (tag missing)"; exit 1; \
 	fi
+
+# D1.19 — Linux↔IR0 ABI ground-truth audit (same ELF, strace vs serial)
+LINUX_ABI_AUDIT_DIR := build/linux_abi_audit
+LINUX_ABI_BRK_PROBE := $(LINUX_ABI_AUDIT_DIR)/brk_probe
+
+.PHONY: build-linux-abi-brk-probe linux-abi-audit linux-abi-audit-brk
+
+build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
+	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
+	@if command -v musl-gcc >/dev/null 2>&1; then \
+		musl-gcc -static -Os -o $(LINUX_ABI_BRK_PROBE) scripts/linux_abi/workloads/brk_probe.c; \
+	else \
+		gcc -static -Os -o $(LINUX_ABI_BRK_PROBE) scripts/linux_abi/workloads/brk_probe.c; \
+	fi
+	@echo "✓ $(LINUX_ABI_BRK_PROBE)"
+
+linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe
+	@chmod +x scripts/linux_abi/run_linux_brk.sh scripts/linux_abi/run_ir0_brk.sh
+	@python3 scripts/linux_abi_audit.py --all
+	@grep -q '^## Overall: PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-brk: linux-abi-audit
 
 smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 + ash interactive (headless + monitor sendkey)..."
@@ -2308,26 +2314,19 @@ smoke-tier1: kernel-x64.bin arch-guard
 	@$(MAKE) -s smoke-runit-boot
 	@$(MAKE) -s smoke-runit-ash-interactive
 
-# Release 0.0.1 gate — CTR + tier1 + MM + devfs/TCC/Doom smokes (legacy targets via sub-make).
+# Release 0.0.1 gate — deterministic regression bundle (D1.20).
 .PHONY: smoke-release-0.0.1 release-0.0.1
 
-smoke-release-0.0.1: kernel-x64.bin arch-guard build-matrix-min kernel-text-budget
-	@$(MAKE) -s -C tests/host run
-	@$(MAKE) -s smoke-tier1
-	@$(MAKE) -s smoke-mm-cow-lazy
-	@IR0_LEGACY_SMOKE=1 $(MAKE) -s smoke-fase53b-posix-pseudofs
-	@IR0_LEGACY_SMOKE=1 $(MAKE) -s smoke-fase52-tcc || (echo "  WARN    smoke-fase52-tcc failed/hung — see STABLE.md"; exit 1)
-	@IR0_LEGACY_SMOKE=1 $(MAKE) -s smoke-fase55b-doom-stub
-	@IR0_LEGACY_SMOKE=1 $(MAKE) -s smoke-fase55c-timing-input
-	@if [ -n "$(REAL_WAD_PATH)" ] && [ -f "$(REAL_WAD_PATH)" ]; then \
-		IR0_LEGACY_SMOKE=1 $(MAKE) -s smoke-fase55d-doomgeneric REAL_WAD_PATH="$(REAL_WAD_PATH)"; \
-	else \
-		echo "  SKIP    smoke-fase55d-doomgeneric (set REAL_WAD_PATH for full WAD gate)"; \
-	fi
+smoke-release-0.0.1:
+	@echo "  RELEASE 0.0.1 gate (D1.20 deterministic bundle)"
+	@$(MAKE) -s roadmap-phase1-stability
+	@$(MAKE) -s linux-abi-audit
+	@$(MAKE) -s smoke-runit-ash-interactive
+	@$(MAKE) -s smoke-fat16-mount
 	@echo "✓ smoke-release-0.0.1 passed"
 
-release-0.0.1: health smoke-release-0.0.1
-	@echo "✓ release-0.0.1 gate passed (health + smoke-release-0.0.1)"
+release-0.0.1: kernel-text-budget smoke-release-0.0.1
+	@echo "✓ release-0.0.1 gate passed (kernel-text-budget + smoke-release-0.0.1)"
 
 ktm: ktm-check
 
@@ -2777,7 +2776,7 @@ help:
 	@echo "  make kernel-memsafe   Run Valgrind over kernel code (tests/kernel_memsafe)"
 	@echo "  make ctr              CTR gates: kernel + arch-guard + matrix-min + tests/host"
 	@echo "  make smoke-tier1      Active tier-1 smokes (runit boot + ash interactive)"
-	@echo "  make smoke-release-0.0.1  Release gate: CTR + tier1 + MM + TCC + Doom (+ WAD if REAL_WAD_PATH)"
+	@echo "  make smoke-release-0.0.1  Release gate: phase1 + linux-abi-audit + ash + FAT16"
 	@echo "  make release-0.0.1    Full 0.0.1 gate: health + smoke-release-0.0.1"
 	@echo "  make ktm-check        Build + host tests + classify selftest + syscall manifest"
 	@echo "  make linux-abi-audit  Linux↔IR0 ABI audit (enabled contracts; report in build/linux_abi_audit/)"

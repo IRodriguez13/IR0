@@ -335,6 +335,12 @@ static void pf_d114_memmove_fault_diag(uint64_t *frame, uint64_t fault_addr,
 
 static void pf_audit_classify(uint64_t *stack, uint64_t fault_addr, uint64_t errcode)
 {
+#if !DEBUG_PAGE_FAULTS
+	(void)stack;
+	(void)fault_addr;
+	(void)errcode;
+	return;
+#else
 	process_t *current = process_get_current();
 	int not_present = !(errcode & 1);
 	int write = (errcode & 2) != 0;
@@ -435,6 +441,7 @@ static void pf_audit_classify(uint64_t *stack, uint64_t fault_addr, uint64_t err
 		serial_print_hex64(fault_rip);
 		serial_print("\n");
 	}
+#endif /* DEBUG_PAGE_FAULTS */
 }
 
 /* Try SIGSEGV handler delivery; otherwise terminate (noreturn). */
@@ -492,8 +499,10 @@ void page_fault_handler_x64(uint64_t *stack)
 	insn_fetch = (errcode & 16) != 0;
 
 	pf_audit_classify(stack, fault_addr, errcode);
+#if DEBUG_D1_DIAG
 	pf_d110_stack_adjacent_diag(stack, fault_addr, errcode,
 				    process_get_current());
+#endif
 	pf_d114_memmove_fault_diag(stack, fault_addr, errcode,
 				   process_get_current());
 
@@ -651,6 +660,10 @@ void general_protection_fault_x64(uint64_t error_code, uint64_t rip, uint64_t cs
 
 void gpf_audit_from_isr(uint64_t *stack)
 {
+#if !DEBUG_PAGE_FAULTS
+	(void)stack;
+	return;
+#else
 	process_t *current = process_get_current();
 	uint64_t errcode = stack ? stack[1] : 0;
 	uint64_t fault_rip = stack ? stack[2] : 0;
@@ -710,6 +723,7 @@ void gpf_audit_from_isr(uint64_t *stack)
 	{
 		serial_print("[GPF_AUDIT][CLASSIFY] GPF_IN_USERSPACE\n");
 	}
+#endif /* DEBUG_PAGE_FAULTS */
 }
 
 void invalid_opcode_x64(uint64_t rip)
