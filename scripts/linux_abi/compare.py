@@ -276,6 +276,136 @@ def compare_read(
     return res
 
 
+MMAP_FAILED_RET = 0xFFFFFFFFFFFFFFFF
+
+
+def _mmap_ok(ret: int | None) -> bool:
+    return ret is not None and ret != MMAP_FAILED_RET
+
+
+def compare_mmap(
+    linux: dict,
+    ir0: dict,
+    page_size: int,
+    none_size: int,
+    verify_data_hex: str,
+    ebadf_errno: int,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="mmap", ok=True)
+
+    l_steps = linux.get("audit_steps") or linux.get("strace_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    required_ops = (
+        "mmap_anon_rw",
+        "mmap_verify_rw",
+        "mmap_anon_none",
+        "mmap_fixed",
+        "munmap_rw",
+        "mmap_bad_nanon",
+        "mmap_bad_fd",
+    )
+
+    if len(l_steps) < len(required_ops):
+        res.ok = False
+        res.divergences.append(
+            f"linux trace has {len(l_steps)} mmap steps, need >={len(required_ops)}"
+        )
+    if len(i_steps) < len(required_ops):
+        res.ok = False
+        res.divergences.append(
+            f"ir0 trace has {len(i_steps)} mmap steps, need >={len(required_ops)}"
+        )
+
+    for op in required_ops:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})")
+            continue
+
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            ret = step.get("ret")
+            if op in ("mmap_bad_nanon", "mmap_bad_fd"):
+                if _mmap_ok(ret):
+                    res.ok = False
+                    res.divergences.append(f"{label} {op}: expected MAP_FAILED got 0x{ret:x}")
+                if step.get("errno") != ebadf_errno:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: errno={step.get('errno')} expected={ebadf_errno}"
+                    )
+                continue
+
+            if op == "munmap_rw":
+                if ret != 0:
+                    res.ok = False
+                    res.divergences.append(f"{label} {op}: ret=0x{ret:x} expected 0")
+                continue
+
+            if not _mmap_ok(ret):
+                res.ok = False
+                res.divergences.append(f"{label} {op}: MAP_FAILED errno={step.get('errno')}")
+                continue
+
+            exp_len = page_size if op != "mmap_anon_none" else none_size
+            if step.get("len") != exp_len:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: len={step.get('len')} expected={exp_len}"
+                )
+
+            if op == "mmap_verify_rw":
+                got_hex = (step.get("data_hex") or "").lower()
+                if got_hex != verify_data_hex.lower():
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: data_hex={got_hex} expected={verify_data_hex}"
+                    )
+
+            if op == "mmap_fixed":
+                req = step.get("req", 0)
+                if ret != req:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: ret=0x{ret:x} req=0x{req:x} (MAP_FIXED mismatch)"
+                    )
+
+        if op == "mmap_verify_rw":
+            l_hex = (l_s.get("data_hex") or "").lower()
+            i_hex = (i_s.get("data_hex") or "").lower()
+            if l_hex != i_hex:
+                res.ok = False
+                res.divergences.append(f"{op} data mismatch linux={l_hex} ir0={i_hex}")
+
+        if op in ("mmap_bad_nanon", "mmap_bad_fd"):
+            if l_s.get("errno") != i_s.get("errno"):
+                res.ok = False
+                res.divergences.append(
+                    f"{op} errno mismatch linux={l_s.get('errno')} ir0={i_s.get('errno')}"
+                )
+
+    l_rw = _find_step(l_steps, "mmap_anon_rw")
+    i_rw = _find_step(i_steps, "mmap_anon_rw")
+    if l_rw and i_rw and _mmap_ok(l_rw.get("ret")) and _mmap_ok(i_rw.get("ret")):
+        res.notes.append(
+            f"linux mmap_anon_rw ok len={l_rw.get('len')} (addr not compared)"
+        )
+        res.notes.append(
+            f"ir0 mmap_anon_rw ok len={i_rw.get('len')} ret=0x{i_rw.get('ret'):x}"
+        )
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest mmap_null_placement FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest mmap_null_placement OK")
+
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",

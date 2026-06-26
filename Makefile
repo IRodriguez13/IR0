@@ -2024,9 +2024,12 @@ LINUX_ABI_AUDIT_DIR := build/linux_abi_audit
 LINUX_ABI_BRK_PROBE := $(LINUX_ABI_AUDIT_DIR)/brk_probe
 LINUX_ABI_WAIT4_PROBE := $(LINUX_ABI_AUDIT_DIR)/wait4_probe
 LINUX_ABI_READ_PROBE := $(LINUX_ABI_AUDIT_DIR)/read_probe
+LINUX_ABI_MMAP_PROBE := $(LINUX_ABI_AUDIT_DIR)/mmap_probe
 
 .PHONY: build-linux-abi-brk-probe build-linux-abi-wait4-probe build-linux-abi-read-probe \
-	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read
+	build-linux-abi-mmap-probe \
+	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
+	linux-abi-audit-mmap
 
 build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
 	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
@@ -2055,6 +2058,15 @@ build-linux-abi-read-probe: scripts/linux_abi/workloads/read_probe.c
 	fi
 	@echo "✓ $(LINUX_ABI_READ_PROBE)"
 
+build-linux-abi-mmap-probe: scripts/linux_abi/workloads/mmap_probe.c
+	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
+	@if command -v musl-gcc >/dev/null 2>&1; then \
+		musl-gcc -static -Os -o $(LINUX_ABI_MMAP_PROBE) scripts/linux_abi/workloads/mmap_probe.c; \
+	else \
+		gcc -static -Os -o $(LINUX_ABI_MMAP_PROBE) scripts/linux_abi/workloads/mmap_probe.c; \
+	fi
+	@echo "✓ $(LINUX_ABI_MMAP_PROBE)"
+
 linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe
 	@chmod +x scripts/linux_abi/run_linux_brk.sh scripts/linux_abi/run_ir0_brk.sh
 	@python3 scripts/linux_abi_audit.py --all
@@ -2077,6 +2089,13 @@ linux-abi-audit-read: kernel-x64-userspace.iso build-linux-abi-read-probe
 	@grep -q '^## read — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-read passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-read FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-mmap: kernel-x64-userspace.iso build-linux-abi-mmap-probe
+	@chmod +x scripts/linux_abi/run_linux_mmap.sh scripts/linux_abi/run_ir0_mmap.sh
+	@python3 scripts/linux_abi_audit.py --contract mmap
+	@grep -q '^## mmap — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-mmap passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-mmap FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 + ash interactive (headless + monitor sendkey)..."
@@ -3151,7 +3170,9 @@ test-drivers-clean:
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard mandocs mandocs-en mandocs-es mandocs-view mandocs-uninstall ai-dev-rules-install \
         build-linux-abi-brk-probe build-linux-abi-wait4-probe build-linux-abi-read-probe \
+        build-linux-abi-mmap-probe \
         linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
+        linux-abi-audit-mmap \
         runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
         build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs run-fase58e-ash-gui check-fase58e-logs smoke-fase58e-ash-interactive build-busybox-fase58-full build-fase58l-busybox-smoke smoke-fase58l-busybox-coreutils build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \

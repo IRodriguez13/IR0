@@ -19,9 +19,14 @@
     },
     {
       "id": "mmap",
-      "enabled": false,
+      "enabled": true,
       "title": "Memory map",
-      "status_doc": "PARTIAL"
+      "status_doc": "PARTIAL",
+      "ktest": "mmap_null_placement",
+      "page_size": 4096,
+      "none_size": 8192,
+      "verify_data_hex": "4d4d41504f4b0a",
+      "ebadf_errno": 9
     },
     {
       "id": "munmap",
