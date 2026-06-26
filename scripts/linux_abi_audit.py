@@ -29,6 +29,7 @@ from compare import (  # noqa: E402
     compare_openat,
     compare_read,
     compare_stat,
+    compare_vfs_write,
     compare_wait4,
     render_markdown,
 )
@@ -138,6 +139,13 @@ def build_stat_probe(report_dir: Path) -> Path:
     return build_static_probe(
         report_dir / "stat_probe",
         ROOT / "scripts" / "linux_abi" / "workloads" / "stat_probe.c",
+    )
+
+
+def build_vfs_write_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "vfs_write_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "vfs_write_probe.c",
     )
 
 
@@ -697,6 +705,37 @@ def audit_stat(report_dir: Path, cfg: dict) -> CompareResult:
     return compare_stat(linux_trace, ir0_trace, enoent_errno, ebadf_errno, host_ok)
 
 
+def audit_vfs_write(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "vfs_write"
+    ir0_dir = report_dir / "ir0" / "vfs_write"
+
+    build_vfs_write_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_vfs_write.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_vfs_write.sh"
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="vfs_write",
+            ok=False,
+            divergences=["Linux vfs_write workload script failed"],
+            notes=["bundle_status: BLOCKED"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        return CompareResult(
+            contract="vfs_write",
+            ok=False,
+            divergences=["IR0 vfs_write workload script failed"],
+            notes=["bundle_status: BLOCKED"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    return compare_vfs_write(linux_trace, ir0_trace, cfg)
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
@@ -706,6 +745,7 @@ AUDITORS = {
     "execve": audit_execve,
     "openat": audit_openat,
     "stat": audit_stat,
+    "vfs_write": audit_vfs_write,
 }
 
 

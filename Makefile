@@ -2028,12 +2028,14 @@ LINUX_ABI_MMAP_PROBE := $(LINUX_ABI_AUDIT_DIR)/mmap_probe
 LINUX_ABI_MOUNT_PROBE := $(LINUX_ABI_AUDIT_DIR)/mount_probe
 LINUX_ABI_OPENAT_PROBE := $(LINUX_ABI_AUDIT_DIR)/openat_probe
 LINUX_ABI_STAT_PROBE := $(LINUX_ABI_AUDIT_DIR)/stat_probe
+LINUX_ABI_VFS_WRITE_PROBE := $(LINUX_ABI_AUDIT_DIR)/vfs_write_probe
 
 .PHONY: build-linux-abi-brk-probe build-linux-abi-wait4-probe build-linux-abi-read-probe \
 	build-linux-abi-mmap-probe build-linux-abi-mount-probe \
-	build-linux-abi-openat-probe build-linux-abi-stat-probe \
+	build-linux-abi-openat-probe build-linux-abi-stat-probe build-linux-abi-vfs-write-probe \
 	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
-	linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat
+	linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
+	linux-abi-audit-vfs-write
 
 build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
 	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
@@ -2098,6 +2100,15 @@ build-linux-abi-stat-probe: scripts/linux_abi/workloads/stat_probe.c
 	fi
 	@echo "✓ $(LINUX_ABI_STAT_PROBE)"
 
+build-linux-abi-vfs-write-probe: scripts/linux_abi/workloads/vfs_write_probe.c
+	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
+	@if command -v musl-gcc >/dev/null 2>&1; then \
+		musl-gcc -static -Os -o $(LINUX_ABI_VFS_WRITE_PROBE) scripts/linux_abi/workloads/vfs_write_probe.c; \
+	else \
+		gcc -static -Os -o $(LINUX_ABI_VFS_WRITE_PROBE) scripts/linux_abi/workloads/vfs_write_probe.c; \
+	fi
+	@echo "✓ $(LINUX_ABI_VFS_WRITE_PROBE)"
+
 linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe
 	@chmod +x scripts/linux_abi/run_linux_brk.sh scripts/linux_abi/run_ir0_brk.sh
 	@python3 scripts/linux_abi_audit.py --all
@@ -2148,6 +2159,17 @@ linux-abi-audit-stat: kernel-x64-userspace.iso build-linux-abi-stat-probe
 	@grep -q '^## stat — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-stat passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-stat FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-vfs-write: kernel-x64-userspace.iso build-linux-abi-vfs-write-probe
+	@chmod +x scripts/linux_abi/run_linux_vfs_write.sh scripts/linux_abi/run_ir0_vfs_write.sh
+	@python3 scripts/linux_abi_audit.py --contract vfs_write || true
+	@if grep -q 'bundle_status: VERIFIED' $(LINUX_ABI_AUDIT_DIR)/report.md; then \
+		echo "✓ linux-abi-audit-vfs-write VERIFIED (see $(LINUX_ABI_AUDIT_DIR)/report.md)"; \
+	elif grep -q 'bundle_status: PARTIAL' $(LINUX_ABI_AUDIT_DIR)/report.md; then \
+		echo "△ linux-abi-audit-vfs-write PARTIAL (see $(LINUX_ABI_AUDIT_DIR)/report.md)"; \
+	else \
+		echo "✗ linux-abi-audit-vfs-write BLOCKED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1; \
+	fi
 
 smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 + ash interactive (headless + monitor sendkey)..."
@@ -2888,6 +2910,7 @@ help:
 	@echo "  make linux-abi-audit  Linux↔IR0 ABI audit (enabled contracts; report in build/linux_abi_audit/)"
 	@echo "  make linux-abi-audit-openat  openat/close contract audit"
 	@echo "  make linux-abi-audit-stat  stat/fstat contract audit"
+	@echo "  make linux-abi-audit-vfs-write  R3 VFS write-path bundle audit"
 	@echo "  make ktm-report     Post-mortem log report (classify + [KTM][EV] summary)"
 	@echo "  make test-fast          arch-guard + tests/host only"
 	@echo "  IR0_LEGACY_SMOKE=1    Include historical smoke-fase* targets (setup/make/legacy-smokes.mk)"

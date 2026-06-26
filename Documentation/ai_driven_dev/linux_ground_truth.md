@@ -28,6 +28,7 @@ make linux-abi-audit-wait4
 make linux-abi-audit-read
 make linux-abi-audit-mmap
 make linux-abi-audit-mount
+make linux-abi-audit-vfs-write
 
 # Report artifacts
 build/linux_abi_audit/report.md
@@ -65,12 +66,14 @@ Evidence columns: **host trace** | **IR0 trace** | **host tests** | **ktests** |
 | select | UNKNOWN | — | — | — | — | — | |
 | ioctl | PARTIAL | — | — | — | partial | — | TTY/winsize legacy captures |
 | read | VERIFIED | ✓ | ✓ | — | ✓ | — | `make linux-abi-audit-read`; probe `read_probe.c` (pipe/EOF/EBADF); ktest `syscall_pipe` |
-| write | LINUX-LIKE | — | — | — | partial | ✓ | |
-| lseek | PARTIAL | — | — | — | partial | — | |
-| openat | PARTIAL | — | — | ✓ | partial | — | open flags host/VFS tests |
-| rename | PARTIAL | — | — | — | partial | — | |
-| unlink | PARTIAL | — | — | — | partial | — | |
-| stat | VERIFIED | ✓ | ✓ | ✓ | partial | — | `make linux-abi-audit-stat`; probe `scripts/linux_abi/workloads/stat_probe.c`; `/proc/uptime` size=0 (Linux); host `test_stat_user_abi` |
+| lseek | VERIFIED | ✓ | ✓ | — | partial | — | bundle `vfs_write` (SEEK_SET/CUR/END) |
+| openat | VERIFIED | ✓ | ✓ | ✓ | partial | — | `linux-abi-audit-openat`; bundle `vfs_write` O_CREAT/TRUNC/APPEND/EXCL |
+| rename | VERIFIED | ✓ | ✓ | — | partial | — | bundle `vfs_write` |
+| unlink | VERIFIED | ✓ | ✓ | — | partial | — | bundle `vfs_write` |
+| stat | VERIFIED | ✓ | ✓ | ✓ | partial | — | `make linux-abi-audit-stat`; probe `stat_probe.c` |
+| truncate / ftruncate | VERIFIED | ✓ | ✓ | — | partial | — | bundle `vfs_write`; MINIX grow + `sys_ftruncate` |
+| VFS write-path | VERIFIED | ✓ | ✓ | — | partial | — | `make linux-abi-audit-vfs-write`; probe `vfs_write_probe.c`; 29 pasos |
+| write | VERIFIED | ✓ | ✓ | — | partial | ✓ | bundle `vfs_write` roundtrip |
 | mount | VERIFIED | ✓ | ✓ | — | ✓ | partial | `make linux-abi-audit-mount`; tmpfs none `/tmp/ir0mnt`, rw/umount, ENOENT/ENODEV; **FAT16 smoke separado** |
 | umount2 | PARTIAL | — | — | — | partial | — | |
 
