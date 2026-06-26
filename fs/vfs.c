@@ -1,16 +1,16 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
  *
  * File: vfs.c
  * Description: Minimal path-based VFS — mount table + ops dispatch.
- *
- * Every public operation follows the same pattern:
- *   1. validate path
- *   2. find the longest-matching mount point
- *   3. call mount->fs->ops->xxx(path, ...)
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "vfs.h"
 #if CONFIG_ENABLE_FS_MINIX
@@ -31,12 +31,14 @@
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/open_flags.h>
+#include <ir0/named_fifo.h>
 #include <ir0/exec_read_trace.h>
 #include <ir0/permissions.h>
 #include <ir0/credentials.h>
 #include <ir0/block_dev.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
+#include <ir0/fase50_debug.h>
 #include <config.h>
 #include <string.h>
 
@@ -107,6 +109,16 @@ static const char *vfs_exec_audit_path;
 
 void vfs_exec_audit_begin(const char *path)
 {
+    /*
+     * EXEC-only VFS/MINIX/ATA read tracing is a bring-up diagnostic. Keep it
+     * off in default builds (gated by CONFIG_DEBUG_FASE50) so a passing boot
+     * log is mostly contract tags, not per-sector ATA dumps on every exec.
+     */
+    if (!IR0_FASE50_DBG)
+    {
+        (void)path;
+        return;
+    }
     vfs_exec_audit_active = 1;
     vfs_exec_audit_path = path;
 }
@@ -284,10 +296,13 @@ int vfs_init(void)
 #if CONFIG_ENABLE_FS_FAT16
     fat16_fs_register();
 #endif
-    serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE\n");
-    serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_DOCUMENTED\n");
-    serial_print("[VFS][CLASSIFY] SYSCALLS_USE_VFS_ONLY\n");
-    serial_print("[VFS][CLASSIFY] FUTURE_FS_READY\n");
+    if (DEBUG_VFS)
+    {
+        serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE\n");
+        serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_DOCUMENTED\n");
+        serial_print("[VFS][CLASSIFY] SYSCALLS_USE_VFS_ONLY\n");
+        serial_print("[VFS][CLASSIFY] FUTURE_FS_READY\n");
+    }
     return 0;
 }
 
@@ -484,7 +499,8 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
 
     if (!ir0_open_flags_ok_for_vfs(flags))
     {
-        serial_print("[VFS_OPEN][CLASSIFY] VFS_LINUX_RAW_FLAGS_REJECTED\n");
+        if (DEBUG_VFS)
+            serial_print("[VFS_OPEN][CLASSIFY] VFS_LINUX_RAW_FLAGS_REJECTED\n");
         return -EINVAL;
     }
 
@@ -512,6 +528,14 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
 
         target_exists = (ops->stat && ops->stat(path, &st) == 0) ? 1 : 0;
 
+        if (target_exists && S_ISDIR(st.st_mode) && !(flags & IR0_O_DIRECTORY))
+        {
+            ret = vfs_rmdir_recursive(path);
+            if (ret != 0)
+                return ret;
+            target_exists = 0;
+        }
+
         if (!target_exists)
         {
             if (ops->create)
@@ -519,9 +543,16 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
                 mode_t fmode = mode ? (mode & 0777) : 0644;
 
                 ret = ops->create(path, fmode);
+                if (ret == -EISDIR)
+                {
+                    ret = vfs_rmdir_recursive(path);
+                    if (ret == 0)
+                        ret = ops->create(path, fmode);
+                }
                 if (ret != 0)
                     return ret;
-                serial_print("[VFS_OPEN][CLASSIFY] VFS_CREATE_SEMANTICS_GENERIC\n");
+                if (DEBUG_VFS)
+                    serial_print("[VFS_OPEN][CLASSIFY] VFS_CREATE_SEMANTICS_GENERIC\n");
             }
             else
             {
@@ -537,6 +568,10 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     {
         int acc = 0;
         int accmode = flags & IR0_O_ACCMODE;
+        stat_t st;
+
+        if (!ops->stat || ops->stat(path, &st) != 0)
+            return -ENOENT;
 
         if (accmode == IR0_O_RDONLY || accmode == IR0_O_RDWR)
             acc |= 0x1;
@@ -544,10 +579,6 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
             acc |= 0x2;
         if (!ir0_check_file_access(path, acc))
             return -EACCES;
-
-        stat_t st;
-        if (!ops->stat || ops->stat(path, &st) != 0)
-            return -ENOENT;
     }
 
     if ((flags & IR0_O_TRUNC) && ((flags & IR0_O_ACCMODE) != IR0_O_RDONLY))
@@ -563,7 +594,8 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
             ret = vfs_truncate(path, 0);
             if (ret != 0)
                 return ret;
-            serial_print("[VFS_OPEN][CLASSIFY] VFS_TRUNCATE_GENERIC\n");
+            if (DEBUG_VFS)
+                serial_print("[VFS_OPEN][CLASSIFY] VFS_TRUNCATE_GENERIC\n");
         }
     }
 
@@ -849,10 +881,33 @@ int vfs_rename(const char *oldpath, const char *newpath)
         return -ESRCH;
 
     stat_t st_old;
+    int retry_rename;
+
     if (vfs_stat(oldpath, &st_old) != 0)
         return -ENOENT;
+
+    retry_rename = 0;
     if (S_ISDIR(st_old.st_mode))
-        return -EISDIR;
+    {
+        if (named_fifo_is_runsv_supervise_regular_path(oldpath))
+        {
+            ret = vfs_clear_stale_for_regular_file(oldpath);
+            if (ret != 0)
+                return ret;
+            retry_rename = 1;
+        }
+        else
+            return -EISDIR;
+    }
+
+    if (retry_rename)
+    {
+        if (vfs_stat(oldpath, &st_old) != 0)
+            return -ENOENT;
+        if (S_ISDIR(st_old.st_mode))
+            return -EISDIR;
+    }
+
     if (!ir0_check_file_access(oldpath, ACCESS_READ | ACCESS_WRITE))
         return -EACCES;
 
@@ -867,11 +922,19 @@ int vfs_rename(const char *oldpath, const char *newpath)
         return -EXDEV;
 
     stat_t st_new;
-    if (vfs_stat(newpath, &st_new) == 0) {
+
+    if (vfs_stat(newpath, &st_new) == 0)
+    {
         if (S_ISDIR(st_new.st_mode))
-            return -EISDIR;
-        if (vfs_unlink(newpath) != 0)
+        {
+            ret = vfs_rmdir_recursive(newpath);
+            if (ret != 0)
+                return ret;
+        }
+        else if (vfs_unlink(newpath) != 0)
+        {
             return -EACCES;
+        }
     }
 
     struct vfs_ops *ops = ops_for_path(oldpath);
@@ -997,6 +1060,49 @@ static int rmdir_recursive_impl(const char *path, int depth)
 int vfs_rmdir_recursive(const char *path)
 {
     return rmdir_recursive_impl(path, 0);
+}
+
+/*
+ * vfs_clear_stale_for_regular_file - Remove wrong-type VFS nodes blocking O_CREAT.
+ * Clears empty/non-empty directories and non-regular files so a regular file or
+ * named FIFO can be created at @path (runit supervise/pid.new, mkfifo paths).
+ */
+int vfs_clear_stale_for_regular_file(const char *path)
+{
+    stat_t st;
+    int rc;
+
+    if (!path)
+        return -EINVAL;
+
+    for (;;)
+    {
+        if (vfs_stat(path, &st) != 0)
+            return 0;
+        if (S_ISREG(st.st_mode))
+        {
+            rc = vfs_unlink(path);
+            if (rc == -EISDIR)
+                rc = vfs_rmdir_recursive(path);
+            if (rc != 0)
+                return rc;
+            continue;
+        }
+        if (S_ISFIFO(st.st_mode))
+            return 0;
+        if (S_ISDIR(st.st_mode))
+        {
+            rc = vfs_rmdir_recursive(path);
+            if (rc != 0)
+                return rc;
+            continue;
+        }
+        rc = vfs_unlink(path);
+        if (rc == -EISDIR)
+            rc = vfs_rmdir_recursive(path);
+        if (rc != 0)
+            return rc;
+    }
 }
 
 int vfs_readdir(const char *path, struct vfs_dirent *entries, int max)
