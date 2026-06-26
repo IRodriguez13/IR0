@@ -126,9 +126,13 @@
     },
     {
       "id": "openat",
-      "enabled": false,
-      "title": "openat(2)",
-      "status_doc": "PARTIAL"
+      "enabled": true,
+      "title": "openat(2) + close(2)",
+      "status_doc": "VERIFIED",
+      "ktest": "syscall_open_close",
+      "existing_path": "/proc/uptime",
+      "enoent_errno": 2,
+      "ebadf_errno": 9
     },
     {
       "id": "rename",

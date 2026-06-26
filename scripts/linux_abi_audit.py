@@ -23,8 +23,10 @@ sys.path.insert(0, str(ROOT / "scripts" / "linux_abi"))
 from compare import (  # noqa: E402
     CompareResult,
     compare_brk,
+    compare_execve,
     compare_mmap,
     compare_mount,
+    compare_openat,
     compare_read,
     compare_wait4,
     render_markdown,
@@ -74,6 +76,61 @@ def build_mount_probe(report_dir: Path) -> Path:
         report_dir / "mount_probe",
         ROOT / "scripts" / "linux_abi" / "workloads" / "mount_probe.c",
     )
+
+
+def build_execve_probe(report_dir: Path) -> tuple[Path, Path]:
+    helper = build_static_probe(
+        report_dir / "exec_helper",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "exec_helper.c",
+    )
+    probe_out = report_dir / "execve_probe"
+    probe_src = ROOT / "scripts" / "linux_abi" / "workloads" / "execve_probe.c"
+    musl_cc = "musl-gcc"
+    try:
+        subprocess.run(["musl-gcc", "--version"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        musl_cc = "gcc"
+    helper_path = "/sbin/exec_helper"
+    rc = run_cmd(
+        [
+            musl_cc,
+            "-static",
+            "-Os",
+            f'-DEXEC_HELPER_PATH="{helper_path}"',
+            "-o",
+            str(probe_out),
+            str(probe_src),
+        ]
+    )
+    if rc != 0 or not probe_out.is_file():
+        raise RuntimeError(f"failed to build {probe_out.name} with {musl_cc}")
+    return probe_out, helper
+
+
+def build_openat_probe(report_dir: Path) -> Path:
+    out = report_dir / "openat_probe"
+    src = ROOT / "scripts" / "linux_abi" / "workloads" / "openat_probe.c"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    musl_cc = "musl-gcc"
+    try:
+        subprocess.run(["musl-gcc", "--version"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        musl_cc = "gcc"
+    ir0_path = "/proc/uptime"
+    rc = run_cmd(
+        [
+            musl_cc,
+            "-static",
+            "-Os",
+            f'-DOPEN_EXISTING_PATH="{ir0_path}"',
+            "-o",
+            str(out),
+            str(src),
+        ]
+    )
+    if rc != 0 or not out.is_file():
+        raise RuntimeError(f"failed to build {out.name}")
+    return out
 
 
 def build_static_probe(out: Path, src: Path) -> Path:
@@ -493,12 +550,103 @@ def audit_mount(report_dir: Path, cfg: dict) -> CompareResult:
     return res
 
 
+def audit_execve(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "execve"
+    ir0_dir = report_dir / "ir0" / "execve"
+    enoent_errno = int(cfg.get("enoent_errno", 2))
+    ktest_name = cfg.get("ktest")
+
+    build_execve_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_execve.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_execve.sh"
+
+    ktest_ok = None
+    if ktest_name and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_log = Path("/tmp/ktest.log")
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+            errors="replace"
+        ):
+            ktest_ok = True
+            print(f"  NOTE  reusing execve ktest evidence from {ktest_log}")
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="execve",
+            ok=False,
+            divergences=["Linux execve workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        return CompareResult(
+            contract="execve",
+            ok=False,
+            divergences=["IR0 execve workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None and ktest_name and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = run_ktest_brk(ktest_name)
+
+    return compare_execve(linux_trace, ir0_trace, enoent_errno, ktest_ok)
+
+
+def audit_openat(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "openat"
+    ir0_dir = report_dir / "ir0" / "openat"
+    enoent_errno = int(cfg.get("enoent_errno", 2))
+    ebadf_errno = int(cfg.get("ebadf_errno", 9))
+    ktest_name = cfg.get("ktest", "syscall_open_close")
+    ktest_log = Path("/tmp/ktest.log")
+
+    build_openat_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_openat.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_openat.sh"
+
+    ktest_ok = None
+    if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+            errors="replace"
+        ):
+            ktest_ok = True
+            print(f"  NOTE  reusing openat ktest evidence from {ktest_log}")
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="openat",
+            ok=False,
+            divergences=["Linux openat workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        return CompareResult(
+            contract="openat",
+            ok=False,
+            divergences=["IR0 openat workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = run_ktest_brk(ktest_name)
+
+    return compare_openat(
+        linux_trace, ir0_trace, enoent_errno, ebadf_errno, ktest_ok
+    )
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
     "read": audit_read,
     "mmap": audit_mmap,
     "mount": audit_mount,
+    "execve": audit_execve,
+    "openat": audit_openat,
 }
 
 
