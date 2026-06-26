@@ -34,4 +34,5 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
                       const struct timespec *times, int flags);
 int64_t sys_unlink(const char *pathname);
 int64_t sys_truncate(const char *pathname, off_t length);
+int64_t sys_ftruncate(int fd, off_t length);
 int64_t sys_rmdir(const char *pathname);

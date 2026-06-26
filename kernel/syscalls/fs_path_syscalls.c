@@ -610,3 +610,44 @@ int64_t sys_truncate(const char *pathname, off_t length)
 
   return vfs_truncate(resolved, (size_t)length);
 }
+
+int64_t sys_ftruncate(int fd, off_t length)
+{
+  fd_entry_t *fd_table;
+  const char *path;
+  stat_t st;
+
+  if (!current_process)
+    return -ESRCH;
+  if (length < 0)
+    return -EINVAL;
+
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  /* Pseudo /proc / /sys fds are not path-backed regular files. */
+  if (fd >= FD_PROC_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
+    return -EBADF;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table[fd].in_use)
+    return -EBADF;
+
+  if (fd_table[fd].is_pipe || fd_table[fd].is_socket)
+    return -EBADF;
+
+  if (fd <= 2 && !fd_table[fd].vfs_file && !fd_table[fd].is_devfs)
+    return -EBADF;
+
+  path = fd_table[fd].path;
+  if (!path || path[0] != '/')
+    return -EBADF;
+
+  if (vfs_stat(path, &st) != 0)
+    return -EBADF;
+
+  if (S_ISDIR(st.st_mode))
+    return -EINVAL;
+
+  return vfs_truncate(path, (size_t)length);
+}

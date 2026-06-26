@@ -3482,7 +3482,22 @@ static int minix_truncate(const char *path, size_t length)
     return 0;
 
   if (length > old_size)
-    return -ENOSYS;
+  {
+    int grow_rc;
+
+    grow_rc = minix_inode_zero_range(&inode, inode_num, old_size, length);
+    if (grow_rc != 0)
+      return grow_rc;
+
+    inode.i_size = (uint32_t)length;
+    inode.i_time = get_system_time();
+    if (minix_fs_write_inode(inode_num, &inode) != 0)
+      return -EIO;
+
+    if (DEBUG_VFS)
+      serial_print("[MINIX_FS][CLASSIFY] MINIX_TRUNCATE_GROW_OK\n");
+    return 0;
+  }
 
   changed = (length != old_size);
   if (length == 0)
