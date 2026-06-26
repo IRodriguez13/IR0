@@ -20,13 +20,14 @@ or **exec/fork** semantics for musl/BusyBox/TCC:
 ## Automated audit
 
 ```bash
-# Full audit for all enabled contracts (brk + wait4 + read + mmap)
+# Full audit for all enabled contracts (brk + wait4 + read + mmap + mount)
 make linux-abi-audit
 
 # Single contract iteration
 make linux-abi-audit-wait4
 make linux-abi-audit-read
 make linux-abi-audit-mmap
+make linux-abi-audit-mount
 
 # Report artifacts
 build/linux_abi_audit/report.md
@@ -70,7 +71,7 @@ Evidence columns: **host trace** | **IR0 trace** | **host tests** | **ktests** |
 | rename | PARTIAL | — | — | — | partial | — | |
 | unlink | PARTIAL | — | — | — | partial | — | |
 | stat | PARTIAL | — | — | ✓ | partial | — | `test_stat_user_abi` |
-| mount | PARTIAL | — | — | — | partial | ✓ | tmpfs/FAT16 smokes |
+| mount | VERIFIED | ✓ | ✓ | — | ✓ | partial | `make linux-abi-audit-mount`; tmpfs none `/tmp/ir0mnt`, rw/umount, ENOENT/ENODEV; **FAT16 smoke separado** |
 | umount2 | PARTIAL | — | — | — | partial | — | |
 
 Update **brk** row after each green `make linux-abi-audit`. Enable the next contract in
@@ -78,10 +79,10 @@ Update **brk** row after each green `make linux-abi-audit`. Enable the next cont
 
 ## Suggested next contracts (priority)
 
-1. **mount** — Linux `strace` for tmpfs/FAT16 vs `smoke-fat16-mount` serial.
-2. **pipe** — `pipe`+`poll` minimal probe (ordering + `EAGAIN`).
-3. **read TTY** (optional) — canon read `echo hi\n` → ret=8 vs D1.13 capture.
-4. **mmap file-backed** — when implemented; audit today covers anon only.
+1. **pipe** — `pipe`+`poll` minimal probe (ordering + `EAGAIN`).
+2. **read TTY** (optional) — canon read `echo hi\n` → ret=8 vs D1.13 capture.
+3. **mmap file-backed** — when implemented; audit today covers anon only.
+4. **umount2** — flags edge cases vs Linux.
 
 ## Legacy reference captures (D1.13 TTY)
 
