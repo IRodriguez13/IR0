@@ -48,8 +48,15 @@ static void process_cwd_ensure_absolute(process_t *proc)
 
 int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
 {
+  char mountpoint_resolved[256];
+  char dev_copy[256];
+  char dev_resolved[256];
+  char fstype_buf[32];
+  const char *mount_path;
+  const char *dev_path;
   const char *mount_fstype;
   int dev_is_pseudo = 0;
+  int rc;
 
   if (!current_process)
     return -ESRCH;
@@ -65,25 +72,52 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   if (fstype && validate_userspace_string(fstype, 32) != 0)
     return -EFAULT;
 
-  /* Use configured default filesystem if userspace passes NULL/empty fstype. */
-  mount_fstype = (fstype && *fstype) ? fstype : CONFIG_ROOT_FILESYSTEM;
+  rc = ir0_resolve_user_path(mountpoint, mountpoint_resolved,
+                             sizeof(mountpoint_resolved),
+                             current_process->cwd);
+  if (rc != 0)
+    return rc;
+  mount_path = mountpoint_resolved;
+
+  if (copy_from_user_cstring(dev_copy, sizeof(dev_copy), dev) != 0)
+    return -EFAULT;
+
+  if (fstype)
+  {
+    if (copy_from_user_cstring(fstype_buf, sizeof(fstype_buf), fstype) != 0)
+      return -EFAULT;
+    mount_fstype = fstype_buf[0] ? fstype_buf : CONFIG_ROOT_FILESYSTEM;
+  }
+  else
+  {
+    mount_fstype = CONFIG_ROOT_FILESYSTEM;
+  }
 
   /* tmpfs accepts pseudo device strings for Unix-like parity (e.g. none). */
   if (strcmp(mount_fstype, "tmpfs") == 0 &&
-      (strcmp(dev, "none") == 0 || strcmp(dev, "tmpfs") == 0))
+      (strcmp(dev_copy, "none") == 0 || strcmp(dev_copy, "tmpfs") == 0))
   {
     dev_is_pseudo = 1;
+    dev_path = dev_copy;
+  }
+  else
+  {
+    rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, NULL, dev_copy, dev_resolved,
+                              sizeof(dev_resolved), current_process->cwd);
+    if (rc != 0)
+      return rc;
+    dev_path = dev_resolved;
   }
 
   /* Validate device path unless pseudo device was allowed. */
-  if (!dev_is_pseudo && (dev[0] != '/' || strlen(dev) >= 256))
+  if (!dev_is_pseudo && (dev_path[0] != '/' || strlen(dev_path) >= 256))
   {
     sys_write(STDERR_FILENO, "mount: invalid device path\n", 27);
     return -EINVAL;
   }
 
   /* Validate mountpoint path */
-  if (mountpoint[0] != '/' || strlen(mountpoint) >= 256)
+  if (mount_path[0] != '/' || strlen(mount_path) >= 256)
   {
     sys_write(STDERR_FILENO, "mount: invalid mount point\n", 27);
     return -EINVAL;
@@ -91,7 +125,7 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
 
   /* Check if mountpoint exists and is a directory */
   stat_t st;
-  if (vfs_stat(mountpoint, &st) < 0)
+  if (vfs_stat(mount_path, &st) < 0)
   {
     sys_write(STDERR_FILENO, "mount: mount point does not exist\n", 34);
     return -ENOENT;
@@ -101,24 +135,27 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     sys_write(STDERR_FILENO, "mount: mount point is not a directory\n", 38);
     return -ENOTDIR;
   }
-  int ret = vfs_mount(dev, mountpoint, mount_fstype);
-  if (ret < 0)
+  rc = vfs_mount(dev_path, mount_path, mount_fstype);
+  if (rc < 0)
   {
     /* Report specific error (skip noise for expected EBUSY remount attempts). */
-    if (ret != -EBUSY)
+    if (rc != -EBUSY)
     {
       sys_write(STDERR_FILENO, "mount: failed to mount ", 22);
       sys_write(STDERR_FILENO, mount_fstype, strlen(mount_fstype));
       sys_write(STDERR_FILENO, " filesystem\n", 12);
     }
-    return ret;
+    return rc;
   }
 
-  return ret;
+  return rc;
 }
 
 int64_t sys_umount(const char *target, int flags)
 {
+  char target_resolved[256];
+  int rc;
+
   if (!current_process)
     return -ESRCH;
   if (!target)
@@ -130,20 +167,25 @@ int64_t sys_umount(const char *target, int flags)
   if (flags != 0)
     return -EINVAL;
 
-  if (target[0] != '/' || strlen(target) >= 256)
+  rc = ir0_resolve_user_path(target, target_resolved, sizeof(target_resolved),
+                             current_process->cwd);
+  if (rc != 0)
+    return rc;
+
+  if (target_resolved[0] != '/' || strlen(target_resolved) >= 256)
   {
     sys_write(STDERR_FILENO, "umount: invalid target path\n", 28);
     return -EINVAL;
   }
 
   stat_t st;
-  if (vfs_stat(target, &st) < 0)
+  if (vfs_stat(target_resolved, &st) < 0)
   {
     sys_write(STDERR_FILENO, "umount: target path does not exist\n", 35);
     return -ENOENT;
   }
 
-  return vfs_umount(target);
+  return vfs_umount(target_resolved);
 }
 
 int64_t sys_mkdir(const char *pathname, mode_t mode)
