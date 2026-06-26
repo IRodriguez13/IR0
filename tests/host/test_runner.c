@@ -32,7 +32,9 @@ extern void test_named_fifo_supervise(void);
 extern void test_path_resolve_at(void);
 extern void test_ktm_poll_arch_resume_matrix(void);
 extern void test_musl_mmap_contract(void);
+extern void test_mmap_null_placement(void);
 extern void test_signal_rt_sigaction_abi(void);
+extern void test_elf_initial_brk_abi(void);
 extern void test_musl_cred_abi(void);
 
 static void (*test_functions[])(void) = {
@@ -49,7 +51,9 @@ static void (*test_functions[])(void) = {
 	test_path_resolve_at,
 	test_ktm_poll_arch_resume_matrix,
 	test_musl_mmap_contract,
+	test_mmap_null_placement,
 	test_signal_rt_sigaction_abi,
+	test_elf_initial_brk_abi,
 	test_musl_cred_abi,
 	NULL
 };
