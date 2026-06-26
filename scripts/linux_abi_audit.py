@@ -28,6 +28,7 @@ from compare import (  # noqa: E402
     compare_mount,
     compare_openat,
     compare_read,
+    compare_stat,
     compare_wait4,
     render_markdown,
 )
@@ -133,6 +134,13 @@ def build_openat_probe(report_dir: Path) -> Path:
     return out
 
 
+def build_stat_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "stat_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "stat_probe.c",
+    )
+
+
 def build_static_probe(out: Path, src: Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     musl_cc = "musl-gcc"
@@ -144,6 +152,23 @@ def build_static_probe(out: Path, src: Path) -> Path:
     if rc != 0 or not out.is_file():
         raise RuntimeError(f"failed to build {out.name} with {musl_cc}")
     return out
+
+
+def run_host_stat_test() -> bool | None:
+    if os.environ.get("LINUX_ABI_SKIP_HOST"):
+        return None
+    proc = subprocess.run(
+        ["make", "-s", "-C", "tests/host", "run"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = proc.stdout + proc.stderr
+    m = re.search(r"stat_user_abi\s*\.\.\.\s*(PASS|FAIL)", combined)
+    if m:
+        return m.group(1) == "PASS"
+    return proc.returncode == 0
 
 
 def run_host_brk_test() -> bool | None:
@@ -639,6 +664,39 @@ def audit_openat(report_dir: Path, cfg: dict) -> CompareResult:
     )
 
 
+def audit_stat(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "stat"
+    ir0_dir = report_dir / "ir0" / "stat"
+    enoent_errno = int(cfg.get("enoent_errno", 2))
+    ebadf_errno = int(cfg.get("ebadf_errno", 9))
+
+    build_stat_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_stat.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_stat.sh"
+
+    host_ok = run_host_stat_test()
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="stat",
+            ok=False,
+            divergences=["Linux stat workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        return CompareResult(
+            contract="stat",
+            ok=False,
+            divergences=["IR0 stat workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    return compare_stat(linux_trace, ir0_trace, enoent_errno, ebadf_errno, host_ok)
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
@@ -647,6 +705,7 @@ AUDITORS = {
     "mount": audit_mount,
     "execve": audit_execve,
     "openat": audit_openat,
+    "stat": audit_stat,
 }
 
 

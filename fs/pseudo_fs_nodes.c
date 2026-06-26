@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
@@ -10,6 +9,8 @@
  * File: pseudo_fs_nodes.c
  * Description: Registered /proc and /sys endpoints using pseudo_fs_ops_t.
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/pseudo_fs.h>
 #include <ir0/sysfs.h>
@@ -129,8 +130,9 @@ static int pseudo_default_stat(void *ctx, stat_t *st)
     if (!st)
         return -EINVAL;
     memset(st, 0, sizeof(*st));
-    st->st_mode = 0444;
-    st->st_size = 4096;
+    st->st_mode = S_IFREG | 0444;
+    st->st_nlink = 1;
+    st->st_size = 0;
     return 0;
 }
 
@@ -140,7 +142,8 @@ static int pseudo_writable_stat(void *ctx, stat_t *st)
     if (!st)
         return -EINVAL;
     memset(st, 0, sizeof(*st));
-    st->st_mode = 0664;
+    st->st_mode = S_IFREG | 0664;
+    st->st_nlink = 1;
     st->st_size = 4096;
     return 0;
 }

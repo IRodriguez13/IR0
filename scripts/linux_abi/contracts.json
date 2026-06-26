@@ -148,9 +148,15 @@
     },
     {
       "id": "stat",
-      "enabled": false,
-      "title": "stat family",
-      "status_doc": "PARTIAL"
+      "enabled": true,
+      "title": "stat(2) / fstat(2)",
+      "status_doc": "VERIFIED",
+      "host_test": "stat_user_abi",
+      "proc_path": "/proc/uptime",
+      "file_path": "/sbin/init",
+      "noent_path": "/sbin/noent",
+      "enoent_errno": 2,
+      "ebadf_errno": 9
     },
     {
       "id": "mount",

@@ -923,7 +923,27 @@ int64_t sys_fstat(int fd, stat_t *buf)
   if (validate_userspace_buffer(buf, IR0_USER_STAT_SIZE) != 0)
     return -EFAULT;
 
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0)
+    return -EBADF;
+
+  /*
+   * /proc and /sys pseudo registry fds (1500+, legacy 1001/1010/1150/1151)
+   * are not stored in fd_table; fstat must mirror read/close routing.
+   */
+  if (fd >= FD_PROC_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
+  {
+    rc = pseudo_fs_stat_fd(fd, &kst);
+    if (rc == 0)
+    {
+      if (ir0_copy_stat_to_user(buf, &kst) != 0)
+        return -EFAULT;
+      return 0;
+    }
+    if (rc != -ENOENT)
+      return rc;
+  }
+
+  if (fd >= MAX_FDS_PER_PROCESS)
     return -EBADF;
 
   fd_entry_t *fd_table = get_process_fd_table();

@@ -70,7 +70,7 @@ Evidence columns: **host trace** | **IR0 trace** | **host tests** | **ktests** |
 | openat | PARTIAL | — | — | ✓ | partial | — | open flags host/VFS tests |
 | rename | PARTIAL | — | — | — | partial | — | |
 | unlink | PARTIAL | — | — | — | partial | — | |
-| stat | PARTIAL | — | — | ✓ | partial | — | `test_stat_user_abi` |
+| stat | VERIFIED | ✓ | ✓ | ✓ | partial | — | `make linux-abi-audit-stat`; probe `scripts/linux_abi/workloads/stat_probe.c`; `/proc/uptime` size=0 (Linux); host `test_stat_user_abi` |
 | mount | VERIFIED | ✓ | ✓ | — | ✓ | partial | `make linux-abi-audit-mount`; tmpfs none `/tmp/ir0mnt`, rw/umount, ENOENT/ENODEV; **FAT16 smoke separado** |
 | umount2 | PARTIAL | — | — | — | partial | — | |
 

@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
@@ -11,12 +10,15 @@
  * Description: Registered ops table for /proc and /sys pseudo filesystems.
  */
 
+/* SPDX-License-Identifier: GPL-3.0-only */
+
 #pragma once
 
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/stat.h>
 #include <ir0/types.h>
+#include <ir0/vfs.h>
 
 #define PSEUDO_FS_PROC_FD_BASE 1500
 #define PSEUDO_FS_SYS_FD_BASE  3500
@@ -58,6 +60,11 @@ void pseudo_fs_nodes_register_all(void);
 
 int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset);
 int64_t pseudo_fs_write_fd(int fd, const char *buf, size_t count);
+int pseudo_fs_stat_fd(int fd, stat_t *st);
 int64_t pseudo_fs_open_path(const char *full_path, int flags, int *out_fd);
 int64_t pseudo_fs_close_fd(int fd);
 int pseudo_fs_stat_path(const char *full_path, stat_t *st);
+int pseudo_fs_path_has_children(const char *path);
+int pseudo_fs_collect_registry_children(const char *dir_path,
+                                        struct vfs_dirent *entries,
+                                        int max_entries, int start_n);

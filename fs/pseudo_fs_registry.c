@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
@@ -10,6 +9,8 @@
  * File: pseudo_fs_registry.c
  * Description: Longest-prefix registry for /proc and /sys pseudo-fs endpoints.
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/pseudo_fs.h>
 #include <ir0/errno.h>
@@ -418,6 +419,35 @@ int64_t pseudo_fs_write_fd(int fd, const char *buf, size_t count)
     return entry->ops->write(entry->ctx, buf, count);
 }
 
+int pseudo_fs_stat_fd(int fd, stat_t *st)
+{
+    const pseudo_fs_entry_t *entry;
+    pseudo_fs_dynamic_open_t *dyn;
+
+    if (!st)
+        return -EINVAL;
+
+    dyn = (pseudo_fs_dynamic_open_t *)pseudo_fs_find_dynamic_by_fd(fd);
+    if (dyn)
+    {
+        if (!dyn->ops || !dyn->ops->stat)
+            return -EBADF;
+
+        return dyn->ops->stat(dyn->ctx, st);
+    }
+
+    entry = pseudo_fs_find_by_fd_table(g_proc_entries, g_proc_count, fd);
+    if (!entry)
+        entry = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
+    if (!entry)
+        return -ENOENT;
+
+    if (entry->ops && entry->ops->stat)
+        return entry->ops->stat(entry->ctx, st);
+
+    return pseudo_fs_stat_path(entry->full_path, st);
+}
+
 int pseudo_fs_stat_path(const char *full_path, stat_t *st)
 {
     const pseudo_fs_entry_t *entry;
@@ -554,4 +584,138 @@ int64_t pseudo_fs_close_fd(int fd)
         return entry->ops->close(entry->ctx);
 
     return 0;
+}
+
+static int pseudo_fs_table_has_children(const pseudo_fs_entry_t *table, int count,
+                                        const char *dir_path)
+{
+    char norm[256];
+    size_t plen;
+
+    if (!table || !dir_path)
+        return 0;
+
+    pseudo_fs_normalize(dir_path, norm, sizeof(norm));
+    plen = strlen(norm);
+
+    for (int i = 0; i < count; i++)
+    {
+        const char *rest;
+
+        if (!table[i].in_use)
+            continue;
+
+        if (strncmp(table[i].full_path, norm, plen) != 0)
+            continue;
+
+        rest = table[i].full_path + plen;
+        if (rest[0] == '\0')
+            continue;
+        if (rest[0] != '/')
+            continue;
+
+        rest++;
+        if (rest[0] != '\0')
+            return 1;
+    }
+
+    return 0;
+}
+
+int pseudo_fs_path_has_children(const char *path)
+{
+    if (!path)
+        return 0;
+
+    if (pseudo_fs_table_has_children(g_proc_entries, g_proc_count, path))
+        return 1;
+
+    return pseudo_fs_table_has_children(g_sys_entries, g_sys_count, path);
+}
+
+static int pseudo_fs_dirent_exists(struct vfs_dirent *entries, int n,
+                                   const char *name)
+{
+    for (int i = 0; i < n; i++)
+    {
+        if (strcmp(entries[i].name, name) == 0)
+            return 1;
+    }
+
+    return 0;
+}
+
+int pseudo_fs_collect_registry_children(const char *dir_path,
+                                        struct vfs_dirent *entries,
+                                        int max_entries, int start_n)
+{
+    char norm[256];
+    size_t plen;
+    int n;
+
+    if (!dir_path || !entries || max_entries <= 0 || start_n < 0)
+        return -EINVAL;
+
+    pseudo_fs_normalize(dir_path, norm, sizeof(norm));
+    plen = strlen(norm);
+    n = start_n;
+
+    for (int tbl = 0; tbl < 2; tbl++)
+    {
+        const pseudo_fs_entry_t *table;
+        int count;
+
+        if (tbl == 0)
+        {
+            table = g_proc_entries;
+            count = g_proc_count;
+        }
+        else
+        {
+            table = g_sys_entries;
+            count = g_sys_count;
+        }
+
+        for (int i = 0; i < count && n < max_entries; i++)
+        {
+            const char *rest;
+            const char *slash;
+            char top[VFS_PATH_MAX];
+            size_t len;
+
+            if (!table[i].in_use)
+                continue;
+
+            if (strncmp(table[i].full_path, norm, plen) != 0)
+                continue;
+
+            rest = table[i].full_path + plen;
+            if (rest[0] == '\0')
+                continue;
+            if (rest[0] != '/')
+                continue;
+
+            rest++;
+            if (!rest[0])
+                continue;
+
+            slash = strchr(rest, '/');
+            len = slash ? (size_t)(slash - rest) : strlen(rest);
+            if (len == 0 || len >= sizeof(top))
+                continue;
+
+            memcpy(top, rest, len);
+            top[len] = '\0';
+
+            if (pseudo_fs_dirent_exists(entries, n, top))
+                continue;
+
+            strncpy(entries[n].name, top, sizeof(entries[n].name) - 1);
+            entries[n].name[sizeof(entries[n].name) - 1] = '\0';
+            entries[n].type = slash ? DT_DIR : DT_REG;
+            n++;
+        }
+    }
+
+    return n;
 }
