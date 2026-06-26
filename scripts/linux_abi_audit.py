@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "linux_abi"))
 
-from compare import CompareResult, compare_brk, render_markdown  # noqa: E402
+from compare import CompareResult, compare_brk, compare_wait4, render_markdown  # noqa: E402
 
 
 def load_contracts() -> dict:
@@ -34,18 +34,30 @@ def run_cmd(cmd: list[str], *, cwd: Path | None = None) -> int:
 
 
 def build_brk_probe(report_dir: Path) -> Path:
-    probe = report_dir / "brk_probe"
-    probe.parent.mkdir(parents=True, exist_ok=True)
+    return build_static_probe(
+        report_dir / "brk_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "brk_probe.c",
+    )
+
+
+def build_wait4_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "wait4_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "wait4_probe.c",
+    )
+
+
+def build_static_probe(out: Path, src: Path) -> Path:
+    out.parent.mkdir(parents=True, exist_ok=True)
     musl_cc = "musl-gcc"
     try:
         subprocess.run(["musl-gcc", "--version"], capture_output=True, check=True)
     except (FileNotFoundError, subprocess.CalledProcessError):
         musl_cc = "gcc"
-    src = ROOT / "scripts" / "linux_abi" / "workloads" / "brk_probe.c"
-    rc = run_cmd([musl_cc, "-static", "-Os", "-o", str(probe), str(src)])
-    if rc != 0 or not probe.is_file():
-        raise RuntimeError(f"failed to build brk_probe with {musl_cc}")
-    return probe
+    rc = run_cmd([musl_cc, "-static", "-Os", "-o", str(out), str(src)])
+    if rc != 0 or not out.is_file():
+        raise RuntimeError(f"failed to build {out.name} with {musl_cc}")
+    return out
 
 
 def run_host_brk_test() -> bool | None:
@@ -162,8 +174,74 @@ def audit_brk(report_dir: Path, cfg: dict) -> CompareResult:
     return res
 
 
+def audit_wait4(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "wait4"
+    ir0_dir = report_dir / "ir0" / "wait4"
+    child_exit = int(cfg.get("child_exit_status", 42))
+    ktest_name = cfg.get("ktest", "wait4_status")
+    ktest_log = Path("/tmp/ktest.log")
+
+    build_wait4_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_wait4.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_wait4.sh"
+
+    if os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = None
+    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+        errors="replace"
+    ):
+        ktest_ok = True
+        print(f"  NOTE  reusing wait4 ktest evidence from {ktest_log}")
+    else:
+        ktest_ok = None
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="wait4",
+            ok=False,
+            divergences=["Linux wait4 workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        ir0_trace_path = ir0_dir / "trace.json"
+        if ir0_trace_path.is_file():
+            ir0_trace = json.loads(ir0_trace_path.read_text())
+            if len(ir0_trace.get("audit_steps") or []) < 2:
+                return CompareResult(
+                    contract="wait4",
+                    ok=False,
+                    divergences=["IR0 wait4 workload script failed"],
+                )
+        else:
+            return CompareResult(
+                contract="wait4",
+                ok=False,
+                divergences=["IR0 wait4 workload script failed"],
+            )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    if not (ir0_dir / "trace.json").is_file():
+        ir0_trace = {"audit_steps": []}
+    else:
+        ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None:
+        ktest_ok = run_ktest_brk(ktest_name)
+    res = compare_wait4(linux_trace, ir0_trace, child_exit, None)
+    if ktest_ok is False:
+        res.ok = False
+        if f"ktest {ktest_name} FAILED" not in res.divergences:
+            res.divergences.append(f"ktest {ktest_name} FAILED")
+    elif ktest_ok is True and f"ktest {ktest_name} OK" not in res.notes:
+        res.notes.append(f"ktest {ktest_name} OK")
+
+    return res
+
+
 AUDITORS = {
     "brk": audit_brk,
+    "wait4": audit_wait4,
 }
 
 

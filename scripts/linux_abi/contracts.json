@@ -49,9 +49,11 @@
     },
     {
       "id": "wait4",
-      "enabled": false,
+      "enabled": true,
       "title": "Wait for child",
-      "status_doc": "LINUX-LIKE"
+      "status_doc": "LINUX-LIKE",
+      "ktest": "wait4_status",
+      "child_exit_status": 42
     },
     {
       "id": "exit",
