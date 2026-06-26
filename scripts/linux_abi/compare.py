@@ -110,6 +110,84 @@ def compare_brk(
     return res
 
 
+def _find_step(steps: list[dict], op: str) -> dict | None:
+    for s in steps:
+        if s.get("op") == op:
+            return s
+    return None
+
+
+def compare_wait4(
+    linux: dict,
+    ir0: dict,
+    child_exit_status: int,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="wait4", ok=True)
+    expected_status = child_exit_status << 8
+
+    l_steps = linux.get("audit_steps") or linux.get("strace_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    if len(l_steps) < 2:
+        res.ok = False
+        res.divergences.append("linux trace has fewer than 2 wait4 steps")
+    if len(i_steps) < 2:
+        res.ok = False
+        res.divergences.append("ir0 trace has fewer than 2 wait4 steps")
+
+    if len(l_steps) >= 2 and len(i_steps) >= 2:
+        l_fork = _find_step(l_steps, "fork")
+        l_wait = _find_step(l_steps, "wait4")
+        i_fork = _find_step(i_steps, "fork")
+        i_wait = _find_step(i_steps, "wait4")
+
+        for label, fork_s, wait_s in (
+            ("linux", l_fork, l_wait),
+            ("ir0", i_fork, i_wait),
+        ):
+            if not fork_s or not wait_s:
+                res.ok = False
+                res.divergences.append(f"{label} trace missing fork or wait4 step")
+                continue
+            if fork_s.get("ret", -1) <= 0:
+                res.ok = False
+                res.divergences.append(f"{label} fork invalid ret={fork_s.get('ret')}")
+            if wait_s.get("ret", -1) <= 0:
+                res.ok = False
+                res.divergences.append(f"{label} wait4 invalid ret={wait_s.get('ret')}")
+            if wait_s.get("ret") != fork_s.get("ret"):
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4 pid mismatch: fork={fork_s.get('ret')} wait={wait_s.get('ret')}"
+                )
+            got_status = wait_s.get("status")
+            if got_status is None:
+                res.ok = False
+                res.divergences.append(f"{label} wait4 missing status word")
+            elif got_status != expected_status:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4 status=0x{got_status:x} expected=0x{expected_status:x} (exit={child_exit_status})"
+                )
+
+        if l_fork and l_wait and i_fork and i_wait:
+            res.notes.append(
+                f"linux fork={l_fork.get('ret')} wait4 status=0x{(l_wait.get('status') or 0):x}"
+            )
+            res.notes.append(
+                f"ir0 fork={i_fork.get('ret')} wait4 status=0x{(i_wait.get('status') or 0):x}"
+            )
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest wait4_status FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest wait4_status OK")
+
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",

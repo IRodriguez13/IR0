@@ -2022,8 +2022,10 @@ smoke-fat16-mount: kernel-x64-userspace.iso build/fat16_smoke.img
 # D1.19 — Linux↔IR0 ABI ground-truth audit (same ELF, strace vs serial)
 LINUX_ABI_AUDIT_DIR := build/linux_abi_audit
 LINUX_ABI_BRK_PROBE := $(LINUX_ABI_AUDIT_DIR)/brk_probe
+LINUX_ABI_WAIT4_PROBE := $(LINUX_ABI_AUDIT_DIR)/wait4_probe
 
-.PHONY: build-linux-abi-brk-probe linux-abi-audit linux-abi-audit-brk
+.PHONY: build-linux-abi-brk-probe build-linux-abi-wait4-probe \
+	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4
 
 build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
 	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
@@ -2034,6 +2036,15 @@ build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
 	fi
 	@echo "✓ $(LINUX_ABI_BRK_PROBE)"
 
+build-linux-abi-wait4-probe: scripts/linux_abi/workloads/wait4_probe.c
+	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
+	@if command -v musl-gcc >/dev/null 2>&1; then \
+		musl-gcc -static -Os -o $(LINUX_ABI_WAIT4_PROBE) scripts/linux_abi/workloads/wait4_probe.c; \
+	else \
+		gcc -static -Os -o $(LINUX_ABI_WAIT4_PROBE) scripts/linux_abi/workloads/wait4_probe.c; \
+	fi
+	@echo "✓ $(LINUX_ABI_WAIT4_PROBE)"
+
 linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe
 	@chmod +x scripts/linux_abi/run_linux_brk.sh scripts/linux_abi/run_ir0_brk.sh
 	@python3 scripts/linux_abi_audit.py --all
@@ -2042,6 +2053,13 @@ linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe
 		(echo "✗ linux-abi-audit FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 linux-abi-audit-brk: linux-abi-audit
+
+linux-abi-audit-wait4: kernel-x64-userspace.iso build-linux-abi-wait4-probe
+	@chmod +x scripts/linux_abi/run_linux_wait4.sh scripts/linux_abi/run_ir0_wait4.sh
+	@python3 scripts/linux_abi_audit.py --contract wait4
+	@grep -q '^## wait4 — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-wait4 passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-wait4 FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 + ash interactive (headless + monitor sendkey)..."
@@ -3115,7 +3133,8 @@ test-drivers-clean:
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard mandocs mandocs-en mandocs-es mandocs-view mandocs-uninstall ai-dev-rules-install \
-        build-linux-abi-brk-probe linux-abi-audit linux-abi-audit-brk \
+        build-linux-abi-brk-probe build-linux-abi-wait4-probe \
+        linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 \
         runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
         build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs run-fase58e-ash-gui check-fase58e-logs smoke-fase58e-ash-interactive build-busybox-fase58-full build-fase58l-busybox-smoke smoke-fase58l-busybox-coreutils build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \

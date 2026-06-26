@@ -1,6 +1,6 @@
 # Linux ground truth (musl / BusyBox compatibility)
 
-> **Last verified:** 2026-06-23  
+> **Last verified:** 2026-06-26  
 > **Source of truth:** same ELF as IR0 workloads, Linux `strace`/`gdb`/`/proc/self/maps`,
 > IR0 serial probes (`[LINUX_ABI_AUDIT]`, `[D1.12]`, `[D1.14]`), `includes/ir0/abi/*`,
 > `scripts/linux_abi/contracts.json`
@@ -20,8 +20,11 @@ or **exec/fork** semantics for musl/BusyBox/TCC:
 ## Automated audit
 
 ```bash
-# Full audit for all enabled contracts (today: brk)
+# Full audit for all enabled contracts (brk + wait4)
 make linux-abi-audit
+
+# Single contract iteration
+make linux-abi-audit-wait4
 
 # Report artifacts
 build/linux_abi_audit/report.md
@@ -50,7 +53,7 @@ Evidence columns: **host trace** | **IR0 trace** | **host tests** | **ktests** |
 | mprotect | UNKNOWN | — | — | — | — | — | |
 | fork | PARTIAL | — | — | — | partial | — | |
 | clone | UNKNOWN | — | — | — | — | — | pthread smoke separate |
-| wait4 | LINUX-LIKE | — | — | — | ✓ | — | target-specific reaping ktest |
+| wait4 | VERIFIED | ✓ | ✓ | — | ✓ | — | `make linux-abi-audit-wait4`; probe `scripts/linux_abi/workloads/wait4_probe.c`; ktest `wait4_status` |
 | exit | PARTIAL | — | — | — | partial | — | |
 | signals | PARTIAL | — | — | ✓ | partial | — | `test_signal_rt_sigaction_abi` |
 | pipe | LINUX-LIKE | — | — | ✓ | ✓ | — | host pipe tests |
@@ -73,11 +76,10 @@ Update **brk** row after each green `make linux-abi-audit`. Enable the next cont
 
 ## Suggested next contracts (priority)
 
-1. **wait4** — child reaping errno/status; host trace from minimal `fork`+`wait4` probe.
-2. **mount** — Linux `strace` for tmpfs/FAT16 vs `smoke-fat16-mount` serial.
-3. **mmap** — anon MAP_PRIVATE grow + `/proc/maps` gap vs IR0 `smoke-mm-cow-lazy`.
-4. **read/write** — extend D1.13 PTY capture into automated compare.
-5. **pipe** — `pipe`+`poll` minimal probe (ordering + `EAGAIN`).
+1. **read** — extend D1.13 PTY capture into automated compare.
+2. **mmap** — anon MAP_PRIVATE grow + `/proc/maps` gap vs IR0 `smoke-mm-cow-lazy`.
+3. **mount** — Linux `strace` for tmpfs/FAT16 vs `smoke-fat16-mount` serial.
+4. **pipe** — `pipe`+`poll` minimal probe (ordering + `EAGAIN`).
 
 ## Legacy reference captures (D1.13 TTY)
 
