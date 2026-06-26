@@ -1038,12 +1038,17 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   {
     int access_mode = 0;
     int accmode = flags & O_ACCMODE;
+    stat_t st;
 
     if (accmode == O_RDONLY || accmode == O_RDWR)
       access_mode |= ACCESS_READ;
     if (accmode == O_WRONLY || accmode == O_RDWR)
       access_mode |= ACCESS_WRITE;
-    if (access_mode &&
+    /*
+     * Linux: missing path → ENOENT from lookup, not EACCES from a prior
+     * permission probe on a non-existent inode.
+     */
+    if (access_mode && vfs_stat(path_to_use, &st) == 0 &&
         !check_file_access(path_to_use, access_mode, current_process))
     {
       fase50c_log_open_result(path_to_use, -EACCES, 11);
