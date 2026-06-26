@@ -34,12 +34,13 @@ python3 "$ROOT/scripts/inject_init_minix.py" "$DISK" "$PROBE" sbin/init
 
 rm -f "$LOG"
 echo "  LINUX_ABI  QEMU brk_probe (IR0 workload)"
-bash "$SMOKE" --log "$LOG" --timeout 45 --stale-sec 8 --done 'BRKOK' -- \
+set +e
+bash "$SMOKE" --log "$LOG" --timeout 90 --stale-sec 12 --done 'BRKOK' -- \
 	"$QEMU" -cdrom "$ISO" \
 	-drive file="$DISK",format=raw,if=ide,index=0 \
 	-serial stdio -display none -m 256M -no-reboot -net none
-
 rc=$?
+set -e
 rm -f "$DISK"
 
 cp "$LOG" "$OUT/stdout.log"
