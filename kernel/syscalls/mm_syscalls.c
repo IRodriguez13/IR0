@@ -681,6 +681,26 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
       serial_print("SERIAL: mmap: offset must be page-aligned\n");
       return SYSCALL_PTR_ERR(EINVAL);
     }
+
+    /*
+     * Linux: reject invalid fds before ENOSYS for unimplemented file-backed
+     * mmap. Legacy virtual /dev fds (FD_DEV_BASE..) remain valid for fb0 path.
+     */
+    {
+      fd_entry_t *fd_table = get_process_fd_table();
+      bool fd_valid_legacy = (fd >= FD_DEV_BASE && fd < FD_SYS_BASE);
+      bool fd_valid_open = (fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+                            fd_table && fd_table[fd].in_use);
+
+      if (!fd_valid_legacy && !fd_valid_open)
+      {
+        serial_print("SERIAL: mmap: invalid fd for file-backed mmap\n");
+        ret = SYSCALL_PTR_ERR(EBADF);
+        mmap_audit_log_return("bad-fd", ret, 0, 0, 0,
+                              current_process->page_directory);
+        return ret;
+      }
+    }
     
     /*
      * mmap of /dev/fb0 — legacy virtual fd (FD_DEV_BASE + 15) or real devfs fd
