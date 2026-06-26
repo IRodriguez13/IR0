@@ -760,6 +760,247 @@ def compare_stat(
     return res
 
 
+VFS_WRITE_REQUIRED_OPS = [
+    "setup_wd",
+    "open_creat",
+    "open_excl_eexist",
+    "open_trunc",
+    "write_hello",
+    "open_read",
+    "read_data",
+    "read_eof",
+    "open_append",
+    "write_append",
+    "stat_after_append",
+    "open_lseek",
+    "lseek_set",
+    "read_after_lseek_set",
+    "lseek_cur",
+    "lseek_end",
+    "unlink_ok",
+    "unlink_noent",
+    "unlink_dir",
+    "rename_ok",
+    "rename_overwrite",
+    "rename_noent",
+    "mkdir_ok",
+    "mkdir_eexist",
+    "rmdir_empty",
+    "rmdir_nonempty",
+    "truncate_shrink",
+    "truncate_grow",
+    "ftruncate_shrink",
+]
+
+VFS_WRITE_OPTIONAL_OPS: set[str] = set()
+
+VFS_WRITE_ERROR_OPS = {
+    "open_excl_eexist": "eexist_errno",
+    "unlink_noent": "enoent_errno",
+    "unlink_dir": "eisdir_errno",
+    "rename_noent": "enoent_errno",
+    "mkdir_eexist": "eexist_errno",
+    "rmdir_nonempty": "enotempty_errno",
+}
+
+VFS_WRITE_FD_OPS = {
+    "open_creat",
+    "open_trunc",
+    "open_read",
+    "open_append",
+    "open_lseek",
+}
+
+VFS_WRITE_RET_MATCH_OPS = {
+    "write_hello",
+    "read_data",
+    "read_eof",
+    "write_append",
+    "lseek_set",
+    "read_after_lseek_set",
+    "lseek_cur",
+    "lseek_end",
+    "truncate_shrink",
+    "truncate_grow",
+    "ftruncate_shrink",
+}
+
+VFS_WRITE_DATA_HEX_OPS = {"read_data", "read_after_lseek_set"}
+
+
+def compare_vfs_write(
+    linux: dict,
+    ir0: dict,
+    cfg: dict,
+) -> CompareResult:
+    res = CompareResult(contract="vfs_write", ok=True)
+
+    l_steps = linux.get("audit_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+    optional_ops = set(cfg.get("optional_ops") or VFS_WRITE_OPTIONAL_OPS)
+    enosys_errno = int(cfg.get("enosys_errno", 38))
+
+    def step_table() -> None:
+        res.notes.append("step | op | linux ret/errno | ir0 ret/errno | match")
+        for op in VFS_WRITE_REQUIRED_OPS + sorted(optional_ops):
+            l_s = _find_step(l_steps, op)
+            i_s = _find_step(i_steps, op)
+            if not l_s and not i_s:
+                continue
+            l_txt = (
+                f"{l_s.get('ret')}/{l_s.get('errno')}"
+                if l_s
+                else "missing"
+            )
+            i_txt = (
+                f"{i_s.get('ret')}/{i_s.get('errno')}"
+                if i_s
+                else "missing"
+            )
+            match = "?"
+            if l_s and i_s:
+                if op in VFS_WRITE_ERROR_OPS:
+                    exp = int(cfg.get(VFS_WRITE_ERROR_OPS[op], 2))
+                    match = (
+                        "OK"
+                        if l_s.get("ret") == -1
+                        and i_s.get("ret") == -1
+                        and l_s.get("errno") == exp
+                        and i_s.get("errno") == exp
+                        else "FAIL"
+                    )
+                elif op in VFS_WRITE_FD_OPS:
+                    match = (
+                        "OK"
+                        if (l_s.get("ret") or -1) >= 3
+                        and (i_s.get("ret") or -1) >= 3
+                        else "FAIL"
+                    )
+                elif op in VFS_WRITE_RET_MATCH_OPS:
+                    match = (
+                        "OK"
+                        if l_s.get("ret") == i_s.get("ret")
+                        else "FAIL"
+                    )
+                elif op == "stat_after_append":
+                    match = (
+                        "OK"
+                        if l_s.get("stat_size") == i_s.get("stat_size") == 7
+                        else "FAIL"
+                    )
+                else:
+                    match = (
+                        "OK"
+                        if l_s.get("ret") == i_s.get("ret")
+                        and l_s.get("errno") == i_s.get("errno")
+                        else "FAIL"
+                    )
+            else:
+                match = "MISSING"
+            res.notes.append(f"{op} | {l_txt} | {i_txt} | {match}")
+
+    for op in VFS_WRITE_REQUIRED_OPS:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(
+                f"missing required op={op} (linux={bool(l_s)} ir0={bool(i_s)})"
+            )
+            continue
+
+        if op in VFS_WRITE_ERROR_OPS:
+            exp = int(cfg.get(VFS_WRITE_ERROR_OPS[op], 2))
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                if step.get("ret") != -1:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: ret={step.get('ret')} expected -1"
+                    )
+                if step.get("errno") != exp:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: errno={step.get('errno')} expected={exp}"
+                    )
+            continue
+
+        if op in VFS_WRITE_FD_OPS:
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                if (step.get("ret") or -1) < 3:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: ret={step.get('ret')} expected fd>=3"
+                    )
+            continue
+
+        if op in VFS_WRITE_RET_MATCH_OPS:
+            if l_s.get("ret") != i_s.get("ret"):
+                res.ok = False
+                res.divergences.append(
+                    f"{op} ret mismatch linux={l_s.get('ret')} ir0={i_s.get('ret')}"
+                )
+            if op in VFS_WRITE_DATA_HEX_OPS:
+                l_hex = (l_s.get("data_hex") or "").lower()
+                i_hex = (i_s.get("data_hex") or "").lower()
+                if l_hex != i_hex:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{op} data_hex mismatch linux={l_hex} ir0={i_hex}"
+                    )
+            continue
+
+        if op == "stat_after_append":
+            if l_s.get("stat_size") != 7 or i_s.get("stat_size") != 7:
+                res.ok = False
+                res.divergences.append(
+                    f"stat_after_append size linux={l_s.get('stat_size')} "
+                    f"ir0={i_s.get('stat_size')} expected 7"
+                )
+            continue
+
+        if l_s.get("ret") != i_s.get("ret") or l_s.get("errno") != i_s.get("errno"):
+            res.ok = False
+            res.divergences.append(
+                f"{op} mismatch linux ret={l_s.get('ret')} errno={l_s.get('errno')} "
+                f"ir0 ret={i_s.get('ret')} errno={i_s.get('errno')}"
+            )
+
+    optional_gaps: list[str] = []
+    for op in sorted(optional_ops):
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            optional_gaps.append(f"{op}: missing step")
+            continue
+        if l_s.get("ret") == 0 and i_s.get("ret") == 0:
+            continue
+        if l_s.get("ret") == 0 and i_s.get("ret") == -1 and i_s.get("errno") == enosys_errno:
+            optional_gaps.append(
+                f"{op}: IR0 ENOSYS (documented MINIX/syscall gap)"
+            )
+            continue
+        res.ok = False
+        res.divergences.append(
+            f"{op} optional mismatch linux ret={l_s.get('ret')} "
+            f"ir0 ret={i_s.get('ret')} errno={i_s.get('errno')}"
+        )
+
+    if res.ok and not optional_gaps:
+        res.notes.append("bundle_status: VERIFIED")
+    elif not res.divergences and optional_gaps:
+        res.ok = False
+        res.notes.append("bundle_status: PARTIAL")
+        for gap in optional_gaps:
+            res.notes.append(f"optional_gap: {gap}")
+    elif res.divergences:
+        res.notes.append("bundle_status: BLOCKED")
+    else:
+        res.notes.append("bundle_status: PARTIAL")
+
+    step_table()
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",

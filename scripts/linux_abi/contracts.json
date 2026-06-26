@@ -175,6 +175,19 @@
       "enabled": false,
       "title": "umount2(2)",
       "status_doc": "PARTIAL"
+    },
+    {
+      "id": "vfs_write",
+      "enabled": true,
+      "title": "VFS write-path bundle (R3)",
+      "status_doc": "VERIFIED",
+      "workdir": "/tmp/ir0wtest",
+      "hello_hex": "68656c6c6f0a",
+      "enoent_errno": 2,
+      "eexist_errno": 17,
+      "eisdir_errno": 21,
+      "enotempty_errno": 39,
+      "enosys_errno": 38
     }
   ]
 }
