@@ -188,6 +188,94 @@ def compare_wait4(
     return res
 
 
+def compare_read(
+    linux: dict,
+    ir0: dict,
+    pipe_read_len: int,
+    pipe_data_hex: str,
+    ebadf_errno: int,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="read", ok=True)
+
+    l_steps = linux.get("audit_steps") or linux.get("strace_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    if len(l_steps) < 3:
+        res.ok = False
+        res.divergences.append("linux trace has fewer than 3 read steps")
+    if len(i_steps) < 3:
+        res.ok = False
+        res.divergences.append("ir0 trace has fewer than 3 read steps")
+
+    checks = (
+        ("read_pipe", pipe_read_len, pipe_data_hex, None),
+        ("read_eof", 0, None, None),
+        ("read_ebadf", -1, None, ebadf_errno),
+    )
+
+    for op, exp_ret, exp_hex, exp_errno in checks:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})")
+            continue
+
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            got_ret = step.get("ret")
+            if got_ret != exp_ret:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: ret={got_ret} expected={exp_ret}"
+                )
+            if exp_hex is not None:
+                got_hex = (step.get("data_hex") or "").lower()
+                if got_hex != exp_hex.lower():
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: data_hex={got_hex} expected={exp_hex}"
+                    )
+            if exp_errno is not None:
+                if step.get("errno") != exp_errno:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: errno={step.get('errno')} expected={exp_errno}"
+                    )
+
+        if l_s.get("ret") != i_s.get("ret"):
+            res.ok = False
+            res.divergences.append(
+                f"{op} ret mismatch linux={l_s.get('ret')} ir0={i_s.get('ret')}"
+            )
+        if exp_hex is not None:
+            l_hex = (l_s.get("data_hex") or "").lower()
+            i_hex = (i_s.get("data_hex") or "").lower()
+            if l_hex != i_hex:
+                res.ok = False
+                res.divergences.append(
+                    f"{op} data mismatch linux={l_hex} ir0={i_hex}"
+                )
+
+    l_pipe = _find_step(l_steps, "read_pipe")
+    i_pipe = _find_step(i_steps, "read_pipe")
+    if l_pipe and i_pipe:
+        res.notes.append(
+            f"linux read_pipe ret={l_pipe.get('ret')} data={l_pipe.get('data_hex')}"
+        )
+        res.notes.append(
+            f"ir0 read_pipe ret={i_pipe.get('ret')} data={i_pipe.get('data_hex')}"
+        )
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest syscall_pipe FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest syscall_pipe OK")
+
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",

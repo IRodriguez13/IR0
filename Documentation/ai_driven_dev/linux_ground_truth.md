@@ -20,11 +20,12 @@ or **exec/fork** semantics for musl/BusyBox/TCC:
 ## Automated audit
 
 ```bash
-# Full audit for all enabled contracts (brk + wait4)
+# Full audit for all enabled contracts (brk + wait4 + read)
 make linux-abi-audit
 
 # Single contract iteration
 make linux-abi-audit-wait4
+make linux-abi-audit-read
 
 # Report artifacts
 build/linux_abi_audit/report.md
@@ -61,7 +62,7 @@ Evidence columns: **host trace** | **IR0 trace** | **host tests** | **ktests** |
 | poll | PARTIAL | — | — | ✓ | partial | — | KTM poll matrix host test |
 | select | UNKNOWN | — | — | — | — | — | |
 | ioctl | PARTIAL | — | — | — | partial | — | TTY/winsize legacy captures |
-| read | LINUX-LIKE | partial | partial | ✓ | ✓ | ✓ | D1.13 PTY read path |
+| read | VERIFIED | ✓ | ✓ | — | ✓ | — | `make linux-abi-audit-read`; probe `read_probe.c` (pipe/EOF/EBADF); ktest `syscall_pipe` |
 | write | LINUX-LIKE | — | — | — | partial | ✓ | |
 | lseek | PARTIAL | — | — | — | partial | — | |
 | openat | PARTIAL | — | — | ✓ | partial | — | open flags host/VFS tests |
@@ -76,10 +77,10 @@ Update **brk** row after each green `make linux-abi-audit`. Enable the next cont
 
 ## Suggested next contracts (priority)
 
-1. **read** — extend D1.13 PTY capture into automated compare.
-2. **mmap** — anon MAP_PRIVATE grow + `/proc/maps` gap vs IR0 `smoke-mm-cow-lazy`.
-3. **mount** — Linux `strace` for tmpfs/FAT16 vs `smoke-fat16-mount` serial.
-4. **pipe** — `pipe`+`poll` minimal probe (ordering + `EAGAIN`).
+1. **mmap** — anon MAP_PRIVATE grow + `/proc/maps` gap vs IR0 `smoke-mm-cow-lazy`.
+2. **mount** — Linux `strace` for tmpfs/FAT16 vs `smoke-fat16-mount` serial.
+3. **pipe** — `pipe`+`poll` minimal probe (ordering + `EAGAIN`).
+4. **read TTY** (optional) — canon read `echo hi\n` → ret=8 vs D1.13 capture.
 
 ## Legacy reference captures (D1.13 TTY)
 
