@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -12,19 +11,13 @@
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
-/*
- * IR0 Kernel - Process Management
- * Copyright (C) 2025 Iván Rodriguez
- *
- * Public interface for process management subsystem
- */
 
 #pragma once
 
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <sched/task.h>
+#include <ir0/task.h>
 #include <ir0/signals.h>  
 #include <ir0/types.h>
 
@@ -40,6 +33,12 @@
 
 #define MAX_FDS_PER_PROCESS 64
 
+#ifndef IR0_NGROUPS_MAX
+#define IR0_NGROUPS_MAX 32
+#endif
+
+struct robust_list_head;
+
 typedef struct fd_entry
 {
 	bool in_use;
@@ -52,6 +51,7 @@ typedef struct fd_entry
 	int pipe_end;  /* 0 = read end, 1 = write end */
 	bool is_devfs; /* bound to devfs node when true */
 	uint32_t dev_device_id;
+	bool is_socket; /* bound to sock_udp when true */
 } fd_entry_t;
 
 /* Process execution mode */
@@ -68,15 +68,6 @@ typedef enum
 	PROCESS_BLOCKED,
 	PROCESS_ZOMBIE
 } process_state_t;
-
-typedef enum
-{
-	FASE44_PROC_ALIVE = 0,
-	FASE44_PROC_EXITING,
-	FASE44_PROC_ZOMBIE,
-	FASE44_PROC_REAPED,
-	FASE44_PROC_DESTROYED
-} fase44_audit_state_t;
 
 /* Tracked anonymous/file mmap regions for demand paging and munmap */
 struct mmap_region
@@ -128,6 +119,7 @@ typedef struct process
 	uint64_t *page_directory;
 	uint8_t owns_page_directory; /* 0 = shared kernel CR3 (idle task) */
 	struct mmap_region *mmap_list;
+	uint64_t mmap_base; /* top-down cursor for kernel-chosen mmap(NULL) */
 	uint64_t heap_start;
 	uint64_t heap_end;
 	uint64_t stack_start;
@@ -144,6 +136,10 @@ typedef struct process
 	uint32_t euid;
 	uint32_t egid;
 	uint32_t umask;
+	gid_t groups[IR0_NGROUPS_MAX];
+	uint8_t ngroups;
+	pid_t tgid;
+	struct robust_list_head *robust_list;
 	
 	/* Current working directory */
 	char cwd[256];
@@ -153,6 +149,10 @@ typedef struct process
 	
 	/* Poll: waiter activo mientras el proceso está bloqueado en poll() */
 	void *poll_waiter;
+	uint8_t poll_resume_via_arch;
+	uint8_t clock_wait_armed;
+	uint8_t syscall_interrupted;
+	uint64_t clock_wait_deadline_ms;
 
 	/* Signal management */
 	uint32_t signal_pending; /* Bitmask of pending signals */
@@ -160,6 +160,8 @@ typedef struct process
 	void (*signal_handlers[_NSIG])(int);  /* Array of signal handler functions */
 	uint32_t signal_mask;  /* Mask of signals to block */
 	uint32_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
+	uint32_t signal_sa_flags[_NSIG]; /* Per-signal sa_flags from sigaction */
+	uint32_t signal_sa_mask[_NSIG];  /* Per-signal sa_mask (during handler only) */
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	struct sigcontext *saved_context;  /* Saved context before signal handler (for sigreturn) */
 
@@ -168,16 +170,53 @@ typedef struct process
 	uint64_t syscall_resume_rax;
 	uint8_t irq_frame_saved; /* blocked syscall: resume via arch_switch_to_user_task */
 	int *wait_status_ptr;    /* userspace wait4 status word while irq_frame_saved */
+	/*
+	 * wait4 blocked-syscall contract (D1.17): while irq_frame_saved from wait4,
+	 * wait_target_pid holds the pid argument (>0 specific child; -1/0 any child).
+	 * Wake/resume/reap paths must honour this — never complete wait4(pid>0) for
+	 * another child, even if syscall_resume_rax was stale or mis-set.
+	 */
+	uint8_t wait_blocked;
+	pid_t wait_target_pid;
+	int wait_options;
+	pid_t wait_resume_child_pid;
 
-	/* FASE44 lifecycle audit (diagnostic only). */
-	uint8_t fase44_audit_state;
+	/*
+	 * Child blocked off runqueue until parent completes fork syscall return
+	 * (process_fork_wake_pending at syscall exit; IRQs off until sysret).
+	 */
+	struct process *fork_pending_child;
+	/*
+	 * Parent: rewrite syscall_insn_entry stack slots from syscall_frame once
+	 * after fork (global syscall stack can clobber saves during fork()).
+	 */
+	uint8_t fork_resync_syscall_stack;
 
-	/* FASE46 per-process convergence audit. */
-	uint32_t fase46_fork_generation;
-	pid_t fase46_fork_parent_pid;
-	uint8_t fase46_entered_userspace;
-	uint8_t fase46_entered_exit;
-	uint8_t fase46_entered_wait;
+	/*
+	 * Cooperative in-syscall reschedule (syscall-insn / musl tasks).
+	 * syscall_frame_fresh: this entry captured a valid Linux pt_regs in
+	 *   syscall_frame (set only by process_capture_syscall_frame_at_entry,
+	 *   i.e. the `syscall` insn path; int 0x80 tasks leave it 0).
+	 * coop_resched_resume: the pending resume was armed by a cooperative
+	 *   reschedule (not wait4), so the resume path must skip the zombie reap.
+	 * Both let a time-sliced task resume via its syscall_frame (fresh iretq)
+	 * instead of kernel_ret on the single shared global syscall stack, whose
+	 * frame a peer task's syscall would clobber from the top.
+	 */
+	uint8_t syscall_frame_fresh;
+	uint8_t coop_resched_resume;
+
+	/*
+	 * Per-process kernel stack (see IR0_PROC_KSTACK_SIZE). kstack_base is the
+	 * kmalloc_aligned allocation (freed in process_destroy); kstack_top is the
+	 * 16-byte aligned top loaded into kernel_syscall_stack_top and TSS.rsp0 when
+	 * this task is scheduled. saved_user_rsp shadows the global user_rsp_save
+	 * across context switches so a task resuming an in-kernel block loop restores
+	 * its own user RSP at sysret instead of a peer's clobbered value.
+	 */
+	void *kstack_base;
+	uint64_t kstack_top;
+	uint64_t saved_user_rsp;
 } process_t;
 
 /*
@@ -228,11 +267,22 @@ static inline const process_t *task_to_process_const(const task_t *task)
 
 
 void process_capture_syscall_frame(process_t *p);
-void process_capture_syscall_frame_at_entry(uint64_t *frame_base);
+void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw);
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
                                          uint64_t rax);
+void process_sync_task_user_ip_from_syscall_frame(process_t *p);
+
+void process_restore_user_task_segments(process_t *p);
+
+#if defined(__x86_64__) || defined(__amd64__)
+void process_save_user_context_from_irq_frame(uint64_t *gpr_stack);
+#endif
 
 void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax);
+void process_arm_coop_resched_resume(process_t *p, uint64_t rax);
+void process_clear_in_thread_syscall_block(process_t *p);
+void process_reset_blocked_syscall_state(process_t *p);
+void process_arm_kernel_syscall_sleep(process_t *p);
 void fork_ret_emit_pre_return(void);
 void fork_restore_emit_pre_iretq(void);
 void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw);
@@ -240,6 +290,13 @@ int fork_flow_note_debug_exception(uint64_t *stack);
 void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall);
 __attribute__((noreturn)) void process_exit(int code);
 int process_wait(pid_t pid, int *status, int options);
+
+/*
+ * True when parent is blocked in wait4 and child_pid satisfies the wait target.
+ * Exported for ktests; used by wake/resume/reap paths.
+ */
+int process_wait_child_matches_blocked_target(const process_t *parent,
+					      pid_t child_pid);
 
 /*
  * Reap a zombie child when resuming a blocked wait4 syscall.
@@ -258,6 +315,13 @@ pid_t spawn_kernel(void (*entry)(void), const char *name);
 /* Fork exists only for POSIX syscall compatibility - uses spawn() internally */
 pid_t fork(void);
 
+/*
+ * Enqueue fork_pending_child after parent syscall retval is committed.
+ * Called from syscall_dispatch on fork/clone/vfork exit only.
+ */
+void process_fork_wake_pending(process_t *parent);
+void process_syscall_restore_exit_regs(uint64_t *stack_r9_slot);
+
 
 pid_t process_get_pid(void);
 pid_t process_get_ppid(void);
@@ -274,35 +338,29 @@ void process_init_fd_table(process_t *process);
 
 /* Process lifecycle management */
 void process_reap_zombies(process_t *parent); /* Reap zombie children (used by init) */
+void process_reap_zombie_child(process_t *child);
 void process_destroy(process_t *p);
+
+/*
+ * Per-process kernel stack lifecycle (IR0_PROC_KSTACK_SIZE). alloc returns
+ * 0 on success or a negative errno; free is idempotent (NULL-safe).
+ */
+int process_kernel_stack_alloc(process_t *p);
+void process_kernel_stack_free(process_t *p);
 void process_unmap_user_address_space(process_t *p);
 int process_remove_from_list(process_t *target);
 
-void process_fase43_proc_audit(const char *tag);
-void process_fase43_live_proc_dump(void);
-void process_fase43_note_mm_created(void);
-void process_fase43_note_mm_destroyed(void);
+uint64_t *process_pt_child(uint64_t *table, size_t index);
+void process_fase50_trace_proc(const char *stage, process_t *p);
 
-uint64_t process_list_count(void);
-uint64_t process_list_count_user(void);
-void process_fase44_list_checkpoint(const char *tag);
-void process_fase44_live_summary(const char *tag);
-void process_fase44_drain_zombie_children(pid_t ppid);
-
-void process_fase45_fork_audit(const char *tag);
-void process_fase45_summary(const char *tag);
-
-void process_fase46_proc_log(process_t *p, int64_t fork_ret, const char *phase);
-void process_fase46_note_wait(process_t *p);
-void process_fase46_convergence_summary(const char *tag);
-
-void process_fase47_mm_owner_audit(const char *tag);
+#include "debug/fase_audit.h"
 
 int64_t process_close_fd(process_t *proc, int fd);
 void process_exec_close_cloexec(process_t *p);
-void process_fase48_capture_fd_baseline(process_t *p);
-void process_fase48_ipc_summary(const char *tag);
-uint64_t process_count_open_fds(process_t *p);
+bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t length);
+
+uint64_t process_list_count(void);
+uint64_t process_list_count_user(void);
 
 extern process_t *current_process;
 extern process_t *process_list;

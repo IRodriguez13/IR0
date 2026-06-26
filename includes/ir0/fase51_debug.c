@@ -1,11 +1,20 @@
-// SPDX-License-Identifier: GPL-3.0-only
 /**
- * IR0 Kernel — FASE51 gated serial diagnostics for shell/pipe/redir paths.
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: fase51_debug.c
+ * Description: FASE51 gated serial diagnostics for shell/pipe/redir paths
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "fase51_debug.h"
 #include <ir0/serial_io.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 
 void fase51_dbg_pipe2(int read_fd, int write_fd, int flags, int64_t ret)
 {

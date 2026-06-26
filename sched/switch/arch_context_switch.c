@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -11,13 +10,15 @@
  * Description: Architecture-dispatched context switch wrappers (ISA stubs are private).
  */
 
-#include <sched/task.h>
-#include <kernel/process.h>
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#include <ir0/task.h>
+#include <ir0/process.h>
 #include <ir0/arch_port.h>
 #include <ir0/serial_io.h>
 #include <ir0/debug_runtime.h>
 #include <config.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <pmm.h>
 
 #if defined(ARCH_ARM64)
@@ -27,6 +28,53 @@ extern void switch_context_x64(task_t *prev, task_t *next);
 #endif
 
 extern uint64_t get_current_page_directory(void);
+
+#if !defined(ARCH_ARM64)
+/* asm globals: arch/x86-64/asm/syscall_insn_entry_64.asm */
+extern uint64_t kernel_syscall_stack_top; /* .data: top of syscall-insn stack */
+extern uint64_t user_rsp_save;            /* .bss: user RSP scratch for sysret */
+extern void tss_set_rsp0(uint64_t rsp0);
+
+void arch_set_current_kernel_stack(process_t *p)
+{
+    if (!p || !p->kstack_top)
+        return;
+
+    /* Future syscall-insn entry of this task lands on its private stack. */
+    kernel_syscall_stack_top = p->kstack_top;
+    /* Future CPL3->CPL0 trap (int 0x80 / IRQ from user) likewise. */
+    tss_set_rsp0(p->kstack_top);
+    /*
+     * Restore this task's user-RSP shadow so an in-kernel block loop resumed
+     * via kernel_ret restores its own user RSP at sysret, not a peer's.
+     */
+    user_rsp_save = p->saved_user_rsp;
+}
+#else
+void arch_set_current_kernel_stack(process_t *p)
+{
+    (void)p;
+}
+#endif
+
+static void arch_fixup_user_task_for_iretq(process_t *proc)
+{
+	const syscall_user_frame_t *sf;
+	uint64_t rip;
+
+	if (!proc || proc->mode != USER_MODE)
+		return;
+
+	rip = proc->task.rip;
+	if (rip >= 0x00400000ULL && rip <= 0x00007FFFFFFFFFFFULL)
+		return;
+
+	sf = &proc->syscall_frame;
+	if (sf->rip < 0x00400000ULL || sf->rip > 0x00007FFFFFFFFFFFULL)
+		return;
+
+	process_apply_syscall_frame_to_task(&proc->task, sf, proc->task.rax);
+}
 
 static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_proc,
                                        task_t *next)
@@ -130,6 +178,17 @@ void arch_context_switch(task_t *prev, task_t *next)
     }
 
     prev_proc = prev ? task_to_process(prev) : NULL;
+
+    /*
+     * Per-process kernel stack handoff. Snapshot the outgoing task's live user
+     * RSP shadow, then point the kernel entry stacks (+ user RSP shadow) at the
+     * incoming task. Covers all resume paths below (arch_switch_to_user_task,
+     * kernel_ret, user iretq) since every one funnels through here.
+     */
+    if (prev_proc)
+        prev_proc->saved_user_rsp = user_rsp_save;
+    arch_set_current_kernel_stack(next_proc);
+
 #if CONFIG_DEBUG_FASE50
     serial_print("[FASE50][CTX] stage=arch_context_switch-entry prev=");
     serial_print_hex64((uint64_t)(uintptr_t)prev_proc);
@@ -169,12 +228,39 @@ void arch_context_switch(task_t *prev, task_t *next)
          */
         if (next && next->cr3)
             load_page_directory(next->cr3);
-        process_reap_zombie_on_wait_resume(next_proc,
-                                           (pid_t)next_proc->syscall_resume_rax);
+        /*
+         * Cooperative reschedule resume carries a syscall retval in
+         * syscall_resume_rax, not a child pid — skip the wait4 zombie reap so
+         * a retval that happens to match a zombie pid cannot reap it.
+         */
+        if (!next_proc->coop_resched_resume)
+        {
+            pid_t resume_child = next_proc->wait_resume_child_pid;
+
+            if (resume_child <= 0)
+                resume_child = (pid_t)next_proc->syscall_resume_rax;
+
+            FASE40_D_AUDIT_LOG(
+                serial_print("[FASE40_D_AUDIT][WAIT_RESUME] parent=");
+                serial_print_hex32((uint32_t)next_proc->task.pid);
+                serial_print(" target=");
+                serial_print_hex32((uint32_t)next_proc->wait_target_pid);
+                serial_print(" candidate=");
+                serial_print_hex32((uint32_t)resume_child);
+                serial_print("\n");
+            );
+
+            process_reap_zombie_on_wait_resume(next_proc, resume_child);
+        }
         process_apply_syscall_frame_to_task(&next_proc->task, frame,
                                             next_proc->syscall_resume_rax);
         next_proc->wait_status_ptr = NULL;
+        next_proc->wait_blocked = 0;
+        next_proc->wait_target_pid = 0;
+        next_proc->wait_options = 0;
+        next_proc->wait_resume_child_pid = 0;
         next_proc->irq_frame_saved = 0;
+        next_proc->coop_resched_resume = 0;
         if (next)
         {
 #if IR0_DEBUG_WAIT
@@ -268,6 +354,8 @@ void arch_context_switch(task_t *prev, task_t *next)
         }
         return;
     }
+
+    arch_fixup_user_task_for_iretq(next_proc);
 
 #if CONFIG_DEBUG_FASE50
     serial_print("[FASE50][CTX] stage=arch_context_switch-before-switch_context_x64\n");

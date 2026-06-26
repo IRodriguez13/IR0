@@ -6,20 +6,17 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: fase50_debug.h
- * Description: FASE50 bring-up serial diagnostics (gated)
+ * File: syscall_dispatch.h
+ * Description: IR0 kernel header — syscall dispatch
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
+#include <stdint.h>
 
-#include <config.h>
-
-#if CONFIG_DEBUG_FASE50
-#define IR0_FASE50_DBG 1
-#else
-#define IR0_FASE50_DBG 0
-#endif
-
+void syscall_table_init(void);
+int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
+			 uint64_t arg3, uint64_t arg4, uint64_t arg5,
+			 uint64_t arg6);

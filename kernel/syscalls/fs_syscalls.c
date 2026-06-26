@@ -1,7 +1,16 @@
-// SPDX-License-Identifier: GPL-3.0-only
 /**
- * IR0 Kernel — file I/O syscalls (split from syscalls.c).
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: fs_syscalls.c
+ * Description: file I/O syscalls (split from syscalls.c)
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "../syscalls.h"
 #include "../process.h"
@@ -16,26 +25,227 @@
 #include <ir0/open_flags.h>
 #include <ir0/path.h>
 #include <ir0/path_routed.h>
+#include <ir0/stat_user.h>
+#include <ir0/named_fifo.h>
+#include <ir0/named_symlink.h>
+#include <ir0/supervise_path.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
 #include <ir0/pipe.h>
 #include <ir0/procfs.h>
+#include <ir0/pseudo_fs.h>
 #include <ir0/serial_io.h>
 #include <ir0/ash_smoke.h>
+#include <d1_12_read_diag.h>
 #include <ir0/sysfs.h>
 #include <ir0/uio.h>
 #include <ir0/validation.h>
-#include <fs/vfs.h>
-#include <kernel/elf_loader.h>
-#include <kernel/process.h>
+#include <ir0/vfs.h>
+#include <ir0/elf_loader.h>
+#include <ir0/process.h>
 #include <ir0/fase50_debug.h>
 #include <ir0/fase51_debug.h>
 #include <ir0/fase52_debug.h>
 #include <ir0/utimens.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
+#include <stddef.h>
 #include <string.h>
 
 #define AT_REMOVEDIR 0x200
+
+static int mknod_prepare_fifo_path(char *resolved, size_t resolved_sz)
+{
+  stat_t st;
+  stat_t vst;
+  int rc;
+  int have_named;
+
+  rc = ir0_follow_named_symlinks(resolved, resolved_sz, IR0_SYMLINK_FOLLOW_MAX);
+  if (rc != 0)
+    return rc;
+
+  {
+    char norm[256];
+
+    if (normalize_path(resolved, norm, sizeof(norm)) != 0)
+      return -ENAMETOOLONG;
+    strncpy(resolved, norm, resolved_sz - 1);
+    resolved[resolved_sz - 1] = '\0';
+  }
+
+  have_named = (named_fifo_stat(resolved, &st) == 0);
+  if (have_named && vfs_stat(resolved, &vst) != 0)
+    return 0;
+
+  rc = vfs_clear_stale_for_regular_file(resolved);
+  if (rc != 0)
+    return rc;
+
+  if (vfs_stat(resolved, &st) == 0)
+  {
+    if (S_ISDIR(st.st_mode))
+      rc = vfs_rmdir_recursive(resolved);
+    else
+      rc = vfs_unlink(resolved);
+    if (rc != 0)
+      return rc;
+  }
+
+  return 0;
+}
+
+static void mknod_purge_vfs_shadow(const char *path)
+{
+  stat_t st;
+
+  while (vfs_stat(path, &st) == 0)
+  {
+    if (S_ISDIR(st.st_mode))
+    {
+      if (vfs_rmdir_recursive(path) != 0)
+        break;
+    }
+    else if (vfs_unlink(path) != 0)
+      break;
+  }
+}
+
+static int64_t mknod_create_named_fifo(const char *resolved, mode_t mode)
+{
+  int rc;
+
+  rc = named_fifo_create(resolved, mode);
+  if (rc != 0)
+    return rc;
+
+  mknod_purge_vfs_shadow(resolved);
+  return 0;
+}
+
+static int fs_dirfd_base_path(int dirfd, char *base, size_t base_sz)
+{
+  fd_entry_t *fdt;
+  stat_t st;
+  const char *cwd;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (dirfd == IR0_AT_FDCWD)
+  {
+    cwd = current_process->cwd;
+    if (!cwd || cwd[0] != '/')
+      cwd = "/";
+    strncpy(base, cwd, base_sz - 1);
+    base[base_sz - 1] = '\0';
+    return 0;
+  }
+
+  fdt = get_process_fd_table();
+  if (!fdt || dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS || !fdt[dirfd].in_use)
+    return -EBADF;
+  if (fdt[dirfd].path[0] != '/')
+    return -EBADF;
+  if (ir0_stat_path_routed(fdt[dirfd].path, &st) != 0)
+    return -ENOTDIR;
+  if (!S_ISDIR(st.st_mode))
+    return -ENOTDIR;
+
+  strncpy(base, fdt[dirfd].path, base_sz - 1);
+  base[base_sz - 1] = '\0';
+  return 0;
+}
+
+int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
+                        size_t resolved_sz)
+{
+  char dirpath[256];
+  const char *dfp = NULL;
+  int rc;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (dirfd != IR0_AT_FDCWD)
+  {
+    rc = fs_dirfd_base_path(dirfd, dirpath, sizeof(dirpath));
+    if (rc != 0)
+      return rc;
+    dfp = dirpath;
+  }
+
+  return ir0_resolve_user_path_at(dirfd, dfp, user_path, resolved, resolved_sz,
+                                  current_process->cwd);
+}
+
+static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
+                             size_t bufsiz)
+{
+  char resolved[256];
+  const char *target;
+  size_t len;
+  size_t copy_len;
+  int rc;
+
+  if (!current_process || !pathname || !buf)
+    return -EFAULT;
+  if (bufsiz == 0)
+    return -EINVAL;
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+  if (validate_userspace_buffer(buf, bufsiz) != 0)
+    return -EFAULT;
+
+  rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  target = named_symlink_target(resolved);
+  if (!target)
+  {
+    stat_t st;
+
+    if (vfs_stat(resolved, &st) == 0)
+      return -EINVAL;
+    return -ENOENT;
+  }
+
+  len = strlen(target);
+  copy_len = len;
+  if (copy_len > bufsiz)
+    copy_len = bufsiz;
+  if (copy_to_user(buf, target, copy_len) != 0)
+    return -EFAULT;
+  return (int64_t)len;
+}
+
+static int64_t do_symlinkat(const char *target, int linkdirfd,
+                            const char *linkpath)
+{
+  char link_resolved[256];
+  char target_copy[256];
+  stat_t st;
+  int rc;
+
+  if (!current_process || !target || !linkpath)
+    return -EFAULT;
+  if (copy_from_user_cstring(target_copy, sizeof(target_copy), target) != 0)
+    return -EFAULT;
+  if (validate_userspace_string(linkpath, 256) != 0)
+    return -EFAULT;
+
+  rc = ir0_resolve_path_at(linkdirfd, linkpath, link_resolved,
+                           sizeof(link_resolved));
+  if (rc != 0)
+    return rc;
+
+  if (named_symlink_stat(link_resolved, &st) == 0 ||
+      named_fifo_stat(link_resolved, &st) == 0 ||
+      vfs_stat(link_resolved, &st) == 0)
+    return -EEXIST;
+
+  return named_symlink_create(link_resolved, target_copy);
+}
 
 static void fase50c_log_open_result(const char *path, int64_t ret, int stage)
 {
@@ -89,6 +299,59 @@ static void ash_smoke_write_trace(int fd, const void *data, size_t count)
   ir0_ash_smoke_scan_stdout((const char *)data, count);
 }
 
+static int open_named_fifo_fd(const char *path, int ir0_flags)
+{
+  pipe_t *pipe;
+  fd_entry_t *fd_table;
+  int accmode;
+  int end;
+  int fd = -1;
+  int i;
+
+  pipe = named_fifo_lookup(path);
+  if (!pipe)
+    return -ENOENT;
+
+  accmode = ir0_flags & O_ACCMODE;
+  if (accmode == O_WRONLY)
+    end = 1;
+  else if (accmode == O_RDONLY || accmode == O_RDWR)
+    end = 0;
+  else
+    return -EINVAL;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+    return -ESRCH;
+
+  for (i = 3; i < MAX_FDS_PER_PROCESS; i++)
+  {
+    if (!fd_table[i].in_use)
+    {
+      fd = i;
+      break;
+    }
+  }
+  if (fd < 0)
+    return -EMFILE;
+
+  fd_table[fd].in_use = true;
+  strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
+  fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
+  fd_table[fd].offset = 0;
+  fd_table[fd].flags = ir0_flags;
+  fd_table[fd].fd_flags = (ir0_flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
+  fd_table[fd].vfs_file = (void *)pipe;
+  fd_table[fd].is_pipe = true;
+  fd_table[fd].pipe_end = end;
+  fd_table[fd].is_devfs = false;
+  fd_table[fd].is_socket = false;
+
+  pipe_acquire_end(pipe, end);
+  fase48_note_fd_created();
+  return fd;
+}
+
 static devfs_node_t *devfs_node_from_fd(int fd)
 {
   fd_entry_t *fd_table = get_process_fd_table();
@@ -99,6 +362,39 @@ static devfs_node_t *devfs_node_from_fd(int fd)
     return NULL;
   ensure_devfs_init();
   return devfs_find_node_by_id(fd_table[fd].dev_device_id);
+}
+
+/*
+ * devfs_resolve_read_fd - Bound devfs slot or legacy FD_DEV_BASE virtual fd.
+ * @offset_out: file offset (fd_table when bound; 0 for unbound legacy slot).
+ */
+static devfs_node_t *devfs_resolve_read_fd(int fd, off_t *offset_out)
+{
+  fd_entry_t *fd_table = get_process_fd_table();
+
+  if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table[fd].in_use &&
+      fd_table[fd].is_devfs)
+  {
+    ensure_devfs_init();
+    if (offset_out)
+      *offset_out = fd_table[fd].offset;
+    return devfs_find_node_by_id(fd_table[fd].dev_device_id);
+  }
+
+  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
+  {
+    ensure_devfs_init();
+    if (offset_out)
+    {
+      if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table[fd].in_use)
+        *offset_out = fd_table[fd].offset;
+      else
+        *offset_out = 0;
+    }
+    return devfs_find_node_by_id((uint32_t)(fd - FD_DEV_BASE));
+  }
+
+  return NULL;
 }
 
 static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flags)
@@ -133,13 +429,16 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
   strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
   fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
 
-  serial_print("[VFS][OPEN] path=");
-  serial_print(path);
-  serial_print(" fd=");
-  serial_print_hex64((uint64_t)fd);
-  serial_print(" dev_id=");
-  serial_print_hex32(node->entry.device_id);
-  serial_print("\n");
+  if (DEBUG_VFS)
+  {
+    serial_print("[VFS][OPEN] path=");
+    serial_print(path);
+    serial_print(" fd=");
+    serial_print_hex64((uint64_t)fd);
+    serial_print(" dev_id=");
+    serial_print_hex32(node->entry.device_id);
+    serial_print("\n");
+  }
 
   return fd;
 }
@@ -416,27 +715,11 @@ int64_t sys_read(int fd, void *buf, size_t count)
     return ret;
   }
 
-  /* Handle /dev file descriptors (FD_DEV_BASE .. FD_SYS_BASE) */
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
+  /* /dev: bound fd_table slot or legacy FD_DEV_BASE virtual fd */
   {
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    ensure_devfs_init();
-    uint32_t device_id = (uint32_t)(fd - FD_DEV_BASE);
-    devfs_node_t *node = devfs_find_node_by_id(device_id);
-    if (!node || !node->ops || !node->ops->read)
-      return -EBADF;
-    int ret = node->ops->read(&node->entry, kernel_read_buf, read_size, 0);
-    if (ret > 0) {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-    }
-    return ret;
-  }
-
-  {
-    devfs_node_t *node = devfs_node_from_fd(fd);
+    off_t read_off = 0;
+    devfs_node_t *node = devfs_resolve_read_fd(fd, &read_off);
+    fd_entry_t *fd_table = get_process_fd_table();
 
     if (node)
     {
@@ -446,13 +729,18 @@ int64_t sys_read(int fd, void *buf, size_t count)
 
       if (!node->ops || !node->ops->read)
         return -EBADF;
-      ret = node->ops->read(&node->entry, kernel_read_buf, read_size, 0);
+      ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
       if (ret > 0)
       {
         if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
           return -EFAULT;
+        if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table[fd].in_use)
+          fd_table[fd].offset += ret;
         if (fd == STDIN_FILENO)
+        {
+          d1_12_read_diag_kcopy(ret, count, kernel_read_buf, (size_t)ret);
           ash_smoke_read_trace(fd, ret);
+        }
       }
       else if (fd == STDIN_FILENO)
       {
@@ -626,11 +914,13 @@ int64_t sys_readv(int fd, const struct iovec *iov, int iovcnt)
 
 int64_t sys_fstat(int fd, stat_t *buf)
 {
+  stat_t kst;
+  int64_t rc;
+
   if (!current_process || !buf)
     return -EFAULT;
 
-  /* Validate buffer is in userspace (for USER_MODE processes) */
-  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
+  if (validate_userspace_buffer(buf, IR0_USER_STAT_SIZE) != 0)
     return -EFAULT;
 
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
@@ -640,35 +930,350 @@ int64_t sys_fstat(int fd, stat_t *buf)
   if (!fd_table[fd].in_use)
     return -EBADF;
 
-  /* Handle standard file descriptors */
   if (fd <= 2)
   {
-    /* Standard streams - fill with basic info */
-    buf->st_dev = 0;
-    buf->st_ino = fd;
-    buf->st_mode = S_IFCHR | S_IRUSR | S_IWUSR;
-    buf->st_nlink = 1;
-    buf->st_uid = 0;
-    buf->st_gid = 0;
-    buf->st_size = 0;
-    buf->st_atime = 0;
-    buf->st_mtime = 0;
-    buf->st_ctime = 0;
-    return 0;
+    memset(&kst, 0, sizeof(kst));
+    kst.st_dev = 0;
+    kst.st_ino = (ino_t)fd;
+    kst.st_mode = S_IFCHR | S_IRUSR | S_IWUSR;
+    kst.st_nlink = 1;
+    kst.st_uid = 0;
+    kst.st_gid = 0;
+    kst.st_size = 0;
+    rc = 0;
+  }
+  else
+  {
+    rc = vfs_stat(fd_table[fd].path, &kst);
+    if (rc != 0)
+      return rc;
   }
 
-  /* For regular files, get info from filesystem via VFS */
-  return vfs_stat(fd_table[fd].path, buf);
+  if (ir0_copy_stat_to_user(buf, &kst) != 0)
+    return -EFAULT;
+  return 0;
+}
+
+static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
+                                     int linux_open_flags, mode_t mode,
+                                     int dirfd_dbg)
+{
+  int flags;
+  int64_t open_ret;
+  int path_rc;
+  fd_entry_t *fd_table;
+  int fd;
+  struct vfs_file *vfs_file;
+  int ret;
+
+  if (!path_to_use || path_to_use[0] != '/')
+    return -EINVAL;
+
+  flags = ir0_flags;
+
+  if (!(ir0_flags & O_DIRECTORY))
+  {
+    path_rc = ir0_follow_named_symlinks(path_to_use, 256,
+                                        IR0_SYMLINK_FOLLOW_MAX);
+    if (path_rc != 0)
+      return path_rc;
+  }
+
+  {
+    int prep_rc = ir0_supervise_prepare_open(path_to_use, ir0_flags);
+
+    if (prep_rc != 0)
+      return prep_rc;
+  }
+
+  if (named_fifo_lookup(path_to_use))
+  {
+    open_ret = open_named_fifo_fd(path_to_use, ir0_flags);
+    fase50c_log_open_result(path_to_use, open_ret, 13);
+    return open_ret;
+  }
+
+  if (flags & O_DIRECTORY)
+  {
+    if (!check_file_access(path_to_use, ACCESS_EXEC, current_process))
+    {
+      fase50c_log_open_result(path_to_use, -EACCES, 12);
+      return -EACCES;
+    }
+  }
+  else if (flags & O_CREAT)
+  {
+    stat_t st;
+
+    if (vfs_stat(path_to_use, &st) != 0)
+    {
+      char parent[256];
+
+      if (get_parent_path(path_to_use, parent, sizeof(parent)) != 0)
+        return -ENAMETOOLONG;
+      if (!check_file_access(parent, ACCESS_EXEC | ACCESS_WRITE, current_process))
+      {
+        fase50c_log_open_result(path_to_use, -EACCES, 9);
+        return -EACCES;
+      }
+    }
+    else
+    {
+      int access_mode = 0;
+      int accmode = flags & O_ACCMODE;
+
+      if (accmode == O_RDONLY || accmode == O_RDWR)
+        access_mode |= ACCESS_READ;
+      if (accmode == O_WRONLY || accmode == O_RDWR)
+        access_mode |= ACCESS_WRITE;
+      if (access_mode &&
+          !check_file_access(path_to_use, access_mode, current_process))
+      {
+        fase50c_log_open_result(path_to_use, -EACCES, 10);
+        return -EACCES;
+      }
+    }
+  }
+  else
+  {
+    int access_mode = 0;
+    int accmode = flags & O_ACCMODE;
+
+    if (accmode == O_RDONLY || accmode == O_RDWR)
+      access_mode |= ACCESS_READ;
+    if (accmode == O_WRONLY || accmode == O_RDWR)
+      access_mode |= ACCESS_WRITE;
+    if (access_mode &&
+        !check_file_access(path_to_use, access_mode, current_process))
+    {
+      fase50c_log_open_result(path_to_use, -EACCES, 11);
+      return -EACCES;
+    }
+  }
+
+  fd_table = get_process_fd_table();
+  fd = -1;
+  for (int i = 3; i < MAX_FDS_PER_PROCESS; i++)
+  {
+    if (!fd_table[i].in_use)
+    {
+      fd = i;
+      break;
+    }
+  }
+
+  if (fd == -1)
+  {
+    fase50c_log_open_result(path_to_use, -EMFILE, 6);
+    return -EMFILE;
+  }
+
+  vfs_file = NULL;
+  ret = vfs_open(path_to_use, flags, mode, &vfs_file);
+  if (ret != 0)
+  {
+    fase50c_log_open_result(path_to_use, (int64_t)ret, 7);
+    return ret;
+  }
+
+  if (flags & O_DIRECTORY)
+  {
+    stat_t st;
+
+    if (ir0_stat_path_routed(path_to_use, &st) < 0)
+    {
+      if (vfs_file)
+        vfs_close(vfs_file);
+      return -ENOTDIR;
+    }
+    if (!S_ISDIR(st.st_mode))
+    {
+      if (vfs_file)
+        vfs_close(vfs_file);
+      return -ENOTDIR;
+    }
+  }
+
+  fd_table[fd].in_use = true;
+  strncpy(fd_table[fd].path, path_to_use, sizeof(fd_table[fd].path) - 1);
+  fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
+  fd_table[fd].flags = flags;
+  fd_table[fd].fd_flags = (flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
+  fd_table[fd].vfs_file = vfs_file;
+  if (flags & O_DIRECTORY)
+    fd_table[fd].offset = 0;
+  else
+    fd_table[fd].offset = vfs_file ? vfs_file->pos : 0;
+  fd_table[fd].is_pipe = false;
+  fd_table[fd].is_socket = false;
+  fd_table[fd].is_devfs = false;
+  fd_table[fd].pipe_end = -1;
+  fd_table[fd].dev_device_id = 0;
+  fase48_note_fd_created();
+
+  fase50c_log_open_result(path_to_use, (int64_t)fd, 8);
+#if CONFIG_DEBUG_FASE50
+  if (kstrcmp(path_to_use, "/f50_file.txt") == 0 && fd >= 0)
+  {
+    stat_t pst;
+
+    if (vfs_stat(path_to_use, &pst) == 0 && S_ISREG(pst.st_mode))
+      serial_print("[FASE50C][CLASSIFY] FILE_CREATE_STILL_OK\n");
+    else
+      serial_print("[FASE50C][CLASSIFY] CREATED_AS_WRONG_TYPE\n");
+  }
+#endif
+  if (path_to_use && strncmp(path_to_use, "/f51_", 5) == 0)
+    fase51_dbg_open_redirect(path_to_use, linux_open_flags, (int64_t)fd);
+  fase52_dbg_openat(dirfd_dbg, path_to_use, linux_open_flags, (int64_t)fd);
+  return fd;
+}
+
+static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
+{
+  fd_entry_t *fd_table;
+  stat_t st;
+  int fd;
+
+  if (!path || !current_process)
+    return -EINVAL;
+  if (!(ir0_flags & O_DIRECTORY))
+    return -EISDIR;
+
+  if (ir0_stat_path_routed(path, &st) != 0)
+    return -ENOENT;
+  if (!S_ISDIR(st.st_mode))
+    return -ENOTDIR;
+  if (!check_file_access(path, ACCESS_EXEC, current_process))
+    return -EACCES;
+
+  fd_table = get_process_fd_table();
+  fd = -1;
+  for (int i = 0; i < MAX_FDS_PER_PROCESS; i++)
+  {
+    if (!fd_table[i].in_use)
+    {
+      fd = i;
+      break;
+    }
+  }
+  if (fd < 0)
+    return -EMFILE;
+
+  fd_table[fd].in_use = true;
+  strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
+  fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
+  fd_table[fd].flags = ir0_flags;
+  fd_table[fd].fd_flags = (ir0_flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
+  fd_table[fd].vfs_file = NULL;
+  fd_table[fd].offset = 0;
+  fd_table[fd].is_pipe = false;
+  fd_table[fd].is_socket = false;
+  fd_table[fd].is_devfs = false;
+  fd_table[fd].pipe_end = -1;
+  fd_table[fd].dev_device_id = 0;
+  fase48_note_fd_created();
+  fase50c_log_open_result(path, (int64_t)fd, 5);
+  return fd;
+}
+
+static int64_t devfs_open_resolved_node(const char *path, int ir0_flags)
+{
+  devfs_node_t *node;
+  int64_t drc;
+  int64_t open_ret;
+
+  ensure_devfs_init();
+  node = devfs_find_node(path);
+  if (!node)
+  {
+    fase50c_log_open_result(path, -ENOENT, 3);
+    return -ENOENT;
+  }
+  drc = devfs_open_node(node, ir0_flags);
+  if (drc < 0)
+  {
+    fase50c_log_open_result(path, drc, 4);
+    return drc;
+  }
+  open_ret = devfs_bind_fd_slot(path, node, ir0_flags);
+  if (open_ret < 0)
+  {
+    devfs_close_node(node);
+    fase50c_log_open_result(path, open_ret, 5);
+    return open_ret;
+  }
+  fase50c_log_open_result(path, open_ret, 5);
+  return open_ret;
+}
+
+/*
+ * Route open(2) after path resolution so cwd-relative paths like ./stdin
+ * from /dev reach devfs (same order as openat/stat).
+ */
+static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
+                                        int linux_open_flags, mode_t mode,
+                                        int dirfd_dbg)
+{
+  int64_t open_ret;
+
+  if (is_proc_path(resolved))
+  {
+    if (proc_is_virtual_subdir(resolved))
+    {
+      if (!(ir0_flags & O_DIRECTORY))
+        return -EISDIR;
+      return pseudo_bind_dir_fd(resolved, ir0_flags);
+    }
+    open_ret = proc_open(resolved, ir0_flags);
+    fase50c_log_open_result(resolved, open_ret, 1);
+    return open_ret;
+  }
+
+  if (is_sys_path(resolved))
+  {
+    if (sysfs_is_virtual_subdir(resolved))
+    {
+      if (!(ir0_flags & O_DIRECTORY))
+        return -EISDIR;
+      return pseudo_bind_dir_fd(resolved, ir0_flags);
+    }
+    open_ret = sysfs_open(resolved, ir0_flags);
+    fase50c_log_open_result(resolved, open_ret, 2);
+    return open_ret;
+  }
+
+  if (ir0_is_dev_path(resolved))
+  {
+    if (strcmp(resolved, "/dev") == 0 || strcmp(resolved, "/dev/") == 0 ||
+        devfs_is_virtual_subdir(resolved))
+    {
+      if (!(ir0_flags & O_DIRECTORY))
+        return -EISDIR;
+      ensure_devfs_init();
+      return pseudo_bind_dir_fd(resolved, ir0_flags);
+    }
+    if (strncmp(resolved, "/dev/", 5) == 0)
+    {
+      ensure_devfs_init();
+      return devfs_open_resolved_node(resolved, ir0_flags);
+    }
+    return -ENOENT;
+  }
+
+  return sys_open_vfs_resolved(resolved, ir0_flags, linux_open_flags, mode,
+                               dirfd_dbg);
 }
 
 /* Open file and return file descriptor */
 int64_t sys_open(const char *pathname, int flags, mode_t mode)
 {
   char path_copy[256];
+  char resolved_path[256];
   int ir0_flags;
   int linux_open_flags = flags;
   size_t plen;
-  int64_t open_ret;
+  int path_rc;
 
   if (!current_process)
     return -ESRCH;
@@ -707,201 +1312,13 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   serial_print("\n");
 #endif
 
-  /* Handle /proc filesystem on-demand */
-  if (is_proc_path(path_copy))
-  {
-    open_ret = proc_open(path_copy, ir0_flags);
-    fase50c_log_open_result(path_copy, open_ret, 1);
-    return open_ret;
-  }
-
-  /* Handle /sys filesystem on-demand */
-  if (is_sys_path(path_copy))
-  {
-    open_ret = sysfs_open(path_copy, ir0_flags);
-    fase50c_log_open_result(path_copy, open_ret, 2);
-    return open_ret;
-  }
-
-  /* Handle /dev filesystem on-demand */
-  if (path_copy[0] == '/' &&
-      path_copy[1] == 'd' &&
-      path_copy[2] == 'e' &&
-      path_copy[3] == 'v' &&
-      path_copy[4] == '/')
-  {
-    int64_t drc;
-
-    ensure_devfs_init();
-    devfs_node_t *node = devfs_find_node(path_copy);
-    if (!node)
-    {
-      fase50c_log_open_result(path_copy, -ENOENT, 3);
-      return -ENOENT;
-    }
-    drc = devfs_open_node(node, ir0_flags);
-    if (drc < 0)
-    {
-      fase50c_log_open_result(path_copy, drc, 4);
-      return drc;
-    }
-    open_ret = devfs_bind_fd_slot(path_copy, node, ir0_flags);
-    if (open_ret < 0)
-    {
-      devfs_close_node(node);
-      fase50c_log_open_result(path_copy, open_ret, 5);
-      return open_ret;
-    }
-    fase50c_log_open_result(path_copy, open_ret, 5);
-    return open_ret;
-  }
-
-  /* Resolve against cwd via path facade */
-  char resolved_path[256];
-  const char *path_to_use = path_copy;
-  int path_rc;
-
-  path_rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, path_copy, resolved_path,
+  path_rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, NULL, path_copy, resolved_path,
                                  sizeof(resolved_path), current_process->cwd);
   if (path_rc != 0)
     return path_rc;
-  path_to_use = resolved_path;
 
-  flags = ir0_flags;
-
-  /* Check access permissions based on flags */
-  if (flags & O_DIRECTORY)
-  {
-    if (!check_file_access(path_to_use, ACCESS_EXEC, current_process))
-    {
-      fase50c_log_open_result(path_to_use, -EACCES, 12);
-      return -EACCES;
-    }
-  }
-  else if (flags & O_CREAT)
-  {
-    stat_t st;
-
-    /*
-     * Non-existent target: check parent directory (search + write).
-     * Existing target: same access rules as a normal open.
-     */
-    if (vfs_stat(path_to_use, &st) != 0)
-    {
-      char parent[256];
-
-      if (get_parent_path(path_to_use, parent, sizeof(parent)) != 0)
-        return -ENAMETOOLONG;
-      if (!check_file_access(parent, ACCESS_EXEC | ACCESS_WRITE, current_process))
-      {
-        fase50c_log_open_result(path_to_use, -EACCES, 9);
-        return -EACCES;
-      }
-    }
-    else
-    {
-      int access_mode = 0;
-      int accmode = flags & O_ACCMODE;
-
-      if (accmode == O_RDONLY || accmode == O_RDWR)
-        access_mode |= ACCESS_READ;
-      if (accmode == O_WRONLY || accmode == O_RDWR)
-        access_mode |= ACCESS_WRITE;
-      if (access_mode &&
-          !check_file_access(path_to_use, access_mode, current_process))
-      {
-        fase50c_log_open_result(path_to_use, -EACCES, 10);
-        return -EACCES;
-      }
-    }
-  }
-  else
-  {
-    int access_mode = 0;
-    int accmode = flags & O_ACCMODE;
-    if (accmode == O_RDONLY || accmode == O_RDWR)
-      access_mode |= ACCESS_READ;
-    if (accmode == O_WRONLY || accmode == O_RDWR)
-      access_mode |= ACCESS_WRITE;
-    if (access_mode && !check_file_access(path_to_use, access_mode, current_process))
-    {
-      fase50c_log_open_result(path_to_use, -EACCES, 11);
-      return -EACCES;
-    }
-  }
-
-  fd_entry_t *fd_table = get_process_fd_table();
-
-  int fd = -1;
-  for (int i = 3; i < MAX_FDS_PER_PROCESS; i++)
-  {
-    if (!fd_table[i].in_use)
-    {
-      fd = i;
-      break;
-    }
-  }
-
-  if (fd == -1)
-  {
-    fase50c_log_open_result(path_to_use, -EMFILE, 6);
-    return -EMFILE;
-  }
-
-  struct vfs_file *vfs_file = NULL;
-  int ret = vfs_open(path_to_use, flags, mode, &vfs_file);
-  if (ret != 0)
-  {
-    fase50c_log_open_result(path_to_use, (int64_t)ret, 7);
-    return ret;  /* Return actual error, not just -ENOENT */
-  }
-
-  if (flags & O_DIRECTORY)
-  {
-    stat_t st;
-    if (sys_stat(path_to_use, &st) < 0)
-    {
-      if (vfs_file)
-      {
-        vfs_close(vfs_file);
-      }
-      return -ENOTDIR;
-    }
-    if (!S_ISDIR(st.st_mode))
-    {
-      if (vfs_file)
-      {
-        vfs_close(vfs_file);
-      }
-      return -ENOTDIR;
-    }
-  }
-
-  /* Set up file descriptor with real VFS file handle */
-  fd_table[fd].in_use = true;
-  strncpy(fd_table[fd].path, path_to_use, sizeof(fd_table[fd].path) - 1);
-  fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
-  fd_table[fd].flags = flags;
-  fd_table[fd].vfs_file = vfs_file;
-  fd_table[fd].offset = vfs_file ? vfs_file->pos : 0;
-  fase48_note_fd_created();
-
-  fase50c_log_open_result(path_to_use, (int64_t)fd, 8);
-#if CONFIG_DEBUG_FASE50
-  if (kstrcmp(path_to_use, "/f50_file.txt") == 0 && fd >= 0)
-  {
-    stat_t pst;
-
-    if (vfs_stat(path_to_use, &pst) == 0 && S_ISREG(pst.st_mode))
-      serial_print("[FASE50C][CLASSIFY] FILE_CREATE_STILL_OK\n");
-    else
-      serial_print("[FASE50C][CLASSIFY] CREATED_AS_WRONG_TYPE\n");
-  }
-#endif
-  if (path_to_use && strncmp(path_to_use, "/f51_", 5) == 0)
-    fase51_dbg_open_redirect(path_to_use, linux_open_flags, (int64_t)fd);
-  fase52_dbg_openat(IR0_AT_FDCWD, path_to_use, linux_open_flags, (int64_t)fd);
-  return fd;
+  return sys_open_routed_resolved(resolved_path, ir0_flags, linux_open_flags,
+                                  mode, IR0_AT_FDCWD);
 }
 
 int64_t sys_stat(const char *pathname, stat_t *buf)
@@ -913,7 +1330,7 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   if (!current_process || !pathname || !buf)
     return -EFAULT;
 
-  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
+  if (validate_userspace_buffer(buf, IR0_USER_STAT_SIZE) != 0)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -921,26 +1338,49 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   if (rc != 0)
     return rc;
 
-  rc = ir0_stat_path_routed(resolved, &kst);
+  rc = ir0_stat_path_routed_follow(resolved, &kst);
 
   if (rc != 0)
     return rc;
-  if (copy_to_user(buf, &kst, sizeof(kst)) != 0)
+  if (ir0_copy_stat_to_user(buf, &kst) != 0)
     return -EFAULT;
   fase52_dbg_stat_path(resolved, 0);
   return 0;
 }
 
 /*
- * sys_openat - Linux openat(2) subset (AT_FDCWD only).
+ * sys_openat - Linux openat(2) subset (AT_FDCWD + directory fd).
  */
 int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode)
 {
+  char resolved[256];
+  char path_copy[256];
+  int ir0_flags;
+  int rc;
+
   if (!current_process)
     return -ESRCH;
-  if (dirfd != IR0_AT_FDCWD)
-    return -EBADF;
-  return sys_open(pathname, flags, mode);
+  if (!pathname)
+    return -EFAULT;
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  strncpy(path_copy, resolved, sizeof(path_copy) - 1);
+  path_copy[sizeof(path_copy) - 1] = '\0';
+
+  ir0_flags = linux_open_flags_to_ir0(flags);
+  ir0_open_flags_log_translation(flags, ir0_flags);
+  if (!ir0_open_flags_ok_for_vfs(ir0_flags))
+  {
+    fase50c_log_open_result(path_copy, -EINVAL, 0);
+    return -EINVAL;
+  }
+
+  return sys_open_routed_resolved(resolved, ir0_flags, flags, mode, dirfd);
 }
 
 /*
@@ -952,27 +1392,29 @@ int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
   stat_t kst;
   int64_t rc;
 
-  (void)flags;
-
   if (!current_process || !buf)
     return -EFAULT;
 
-  if (dirfd != IR0_AT_FDCWD)
-    return -ENOSYS;
-
-  if (validate_userspace_buffer(buf, sizeof(stat_t)) != 0)
+  if (validate_userspace_buffer(buf, IR0_USER_STAT_SIZE) != 0)
     return -EFAULT;
 
-  rc = ir0_resolve_user_path_at(dirfd, pathname, resolved, sizeof(resolved),
-                                current_process->cwd);
+  rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
   if (rc != 0)
     return rc;
+
+  if (!(flags & IR0_AT_SYMLINK_NOFOLLOW))
+  {
+    rc = ir0_follow_named_symlinks(resolved, sizeof(resolved),
+                                   IR0_SYMLINK_FOLLOW_MAX);
+    if (rc != 0)
+      return rc;
+  }
 
   rc = ir0_stat_path_routed(resolved, &kst);
 
   if (rc != 0)
     return rc;
-  if (copy_to_user(buf, &kst, sizeof(kst)) != 0)
+  if (ir0_copy_stat_to_user(buf, &kst) != 0)
     return -EFAULT;
   return 0;
 }
@@ -989,14 +1431,29 @@ int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  rc = ir0_resolve_user_path_at(dirfd, pathname, resolved, sizeof(resolved),
-                                current_process->cwd);
+  rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
   if (rc != 0)
     return rc;
 
   if (flags & AT_REMOVEDIR)
-    return vfs_rmdir(resolved);
-  return vfs_unlink(resolved);
+    return vfs_rmdir_recursive(resolved);
+
+  rc = named_symlink_unlink(resolved);
+  if (rc == 0)
+    return 0;
+  if (rc != -ENOENT)
+    return rc;
+
+  rc = named_fifo_unlink(resolved);
+  if (rc == 0)
+    return 0;
+  if (rc != -ENOENT)
+    return rc;
+
+  rc = vfs_unlink(resolved);
+  if (rc == -EISDIR)
+    return vfs_rmdir_recursive(resolved);
+  return rc;
 }
 
 int64_t sys_renameat(int olddirfd, const char *oldpath,
@@ -1013,14 +1470,601 @@ int64_t sys_renameat(int olddirfd, const char *oldpath,
   if (validate_userspace_string(newpath, 256) != 0)
     return -EFAULT;
 
-  rc = ir0_resolve_user_path_at(olddirfd, oldpath, old_resolved,
-                                sizeof(old_resolved), current_process->cwd);
+  rc = ir0_resolve_path_at(olddirfd, oldpath, old_resolved, sizeof(old_resolved));
   if (rc != 0)
     return rc;
-  rc = ir0_resolve_user_path_at(newdirfd, newpath, new_resolved,
-                                sizeof(new_resolved), current_process->cwd);
+  rc = ir0_resolve_path_at(newdirfd, newpath, new_resolved, sizeof(new_resolved));
+  if (rc != 0)
+    return rc;
+
+  (void)named_fifo_unlink(new_resolved);
+  (void)named_symlink_unlink(new_resolved);
+
+  rc = ir0_supervise_prepare_rename(old_resolved);
+  if (rc != 0)
+    return rc;
+  rc = ir0_supervise_prepare_rename(new_resolved);
   if (rc != 0)
     return rc;
 
   return vfs_rename(old_resolved, new_resolved);
+}
+
+int64_t sys_readlink(const char *pathname, char *buf, size_t bufsiz)
+{
+  return do_readlinkat(IR0_AT_FDCWD, pathname, buf, bufsiz);
+}
+
+int64_t sys_readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz)
+{
+  if (dirfd != IR0_AT_FDCWD)
+    return -ENOSYS;
+  return do_readlinkat(dirfd, pathname, buf, bufsiz);
+}
+
+int64_t sys_symlink(const char *target, const char *linkpath)
+{
+  return do_symlinkat(target, IR0_AT_FDCWD, linkpath);
+}
+
+int64_t sys_symlinkat(const char *target, int dirfd, const char *linkpath)
+{
+  if (dirfd != IR0_AT_FDCWD)
+    return -ENOSYS;
+  return do_symlinkat(target, dirfd, linkpath);
+}
+
+int64_t sys_fchmod(int fd, mode_t mode)
+{
+  (void)fd;
+  (void)mode;
+  return -ENOSYS;
+}
+
+int64_t sys_fchown(int fd, uid_t owner, gid_t group)
+{
+  (void)fd;
+  (void)owner;
+  (void)group;
+  return -ENOSYS;
+}
+
+int64_t sys_fchmodat(int dirfd, const char *pathname, mode_t mode, int flags)
+{
+  (void)dirfd;
+  (void)pathname;
+  (void)mode;
+  (void)flags;
+  return -ENOSYS;
+}
+
+int64_t sys_fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group,
+		     int flags)
+{
+  (void)dirfd;
+  (void)pathname;
+  (void)owner;
+  (void)group;
+  (void)flags;
+  return -ENOSYS;
+}
+
+int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
+{
+  char resolved[256];
+  int rc;
+
+  if (!current_process || !pathname)
+    return -EFAULT;
+
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  if ((mode & S_IFMT) != S_IFIFO)
+    return -ENOSYS;
+
+  if (dev != 0)
+    return -EINVAL;
+
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                             current_process->cwd);
+  if (rc != 0)
+    return rc;
+
+  rc = mknod_prepare_fifo_path(resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  return mknod_create_named_fifo(resolved, (mode_t)(mode & 07777));
+}
+
+int64_t sys_mknodat(int dirfd, const char *pathname, unsigned int mode,
+		    unsigned int dev)
+{
+  char resolved[256];
+  int rc;
+
+  if (!current_process || !pathname)
+    return -EFAULT;
+
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  if ((mode & S_IFMT) != S_IFIFO)
+    return -ENOSYS;
+
+  if (dev != 0)
+    return -EINVAL;
+
+  rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  rc = mknod_prepare_fifo_path(resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  return mknod_create_named_fifo(resolved, (mode_t)(mode & 07777));
+}
+
+int64_t sys_flock(int fd, int operation)
+{
+  fd_entry_t *fd_table;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table || !fd_table[fd].in_use)
+    return -EBADF;
+
+  /*
+   * Tier-1 stub: runsv uses LOCK_EX|LOCK_NB on supervise/lock. Full advisory
+   * locking is deferred; single-instance smoke only needs success / -EWOULDBLOCK.
+   */
+  if (operation & LOCK_UN)
+    return 0;
+
+  if ((operation & LOCK_NB) && (operation & (LOCK_EX | LOCK_SH)))
+    return 0;
+
+  if (operation & (LOCK_EX | LOCK_SH))
+    return 0;
+
+  return -EINVAL;
+}
+
+int64_t sys_fchdir(int fd)
+{
+  fd_entry_t *fd_table;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table || !fd_table[fd].in_use)
+    return -EBADF;
+
+  if (fd_table[fd].is_pipe || fd_table[fd].is_socket)
+    return -EBADF;
+
+  if (fd_table[fd].path[0] == '\0')
+    return -EBADF;
+
+  return sys_chdir(fd_table[fd].path);
+}
+
+/* Linux getdents (NR 78) — legacy filldir layout: d_type at reclen-1. */
+struct linux_dirent {
+  uint64_t d_ino;
+  int64_t d_off;
+  unsigned short d_reclen;
+  char d_name[];
+};
+
+#define LINUX_DIRENT_NAME_OFF ((size_t)offsetof(struct linux_dirent, d_name))
+
+/* Linux getdents64 / musl x86_64 struct dirent (NR 217, also IR0 NR 78 for musl). */
+struct linux_dirent64 {
+  uint64_t d_ino;
+  int64_t d_off;
+  unsigned short d_reclen;
+  unsigned char d_type;
+  char d_name[];
+};
+
+#define LINUX_DIRENT64_NAME_OFF ((size_t)offsetof(struct linux_dirent64, d_name))
+
+#define GETDENTS_BATCH_MAX 64
+
+/* Directory entry types (Linux DT_* subset) */
+#define DT_UNKNOWN 0
+#define DT_FIFO 1
+#define DT_CHR 2
+#define DT_DIR 4
+#define DT_BLK 6
+#define DT_REG 8
+#define DT_LNK 10
+#define DT_SOCK 12
+
+static int getdents_skip_name(const char *name)
+{
+  size_t name_len;
+
+  if (!name || name[0] == '\0')
+    return 1;
+  if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+    return 1;
+  if ((unsigned char)name[0] <= ' ')
+    return 1;
+  if (strchr(name, '/'))
+    return 1;
+
+  name_len = strlen(name) + 1;
+  if (name_len <= 1 || name_len >= 256)
+    return 1;
+
+  return 0;
+}
+
+static int getdents_trust_readdir_type(const char *dir_path)
+{
+  if (!dir_path)
+    return 0;
+
+  if (strcmp(dir_path, "/proc") == 0 || strcmp(dir_path, "/proc/") == 0)
+    return 1;
+  if (is_proc_path(dir_path) && proc_is_virtual_subdir(dir_path))
+    return 1;
+
+  if (strcmp(dir_path, "/sys") == 0 || strcmp(dir_path, "/sys/") == 0)
+    return 1;
+  if (is_sys_path(dir_path) && sysfs_is_virtual_subdir(dir_path))
+    return 1;
+
+  if (strcmp(dir_path, "/dev") == 0 || strcmp(dir_path, "/dev/") == 0)
+    return 1;
+  if (ir0_is_dev_path(dir_path) && devfs_is_virtual_subdir(dir_path))
+    return 1;
+
+  return 0;
+}
+
+static void getdents_entry_meta(const char *dir_path, const struct vfs_dirent *ent,
+                                int seq, uint64_t *ino, uint8_t *dtype)
+{
+  char full_path[512];
+  size_t path_len;
+
+  *ino = (uint64_t)(seq + 1);
+  *dtype = ent->type ? ent->type : DT_REG;
+
+  if (ent->type != 0 || getdents_trust_readdir_type(dir_path))
+    return;
+
+  path_len = strlen(dir_path);
+  if (path_len > 0 && dir_path[path_len - 1] == '/')
+    snprintf(full_path, sizeof(full_path), "%s%s", dir_path, ent->name);
+  else
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, ent->name);
+
+  {
+    stat_t entry_st;
+
+    if (ir0_stat_path_routed(full_path, &entry_st) >= 0)
+    {
+      if (entry_st.st_ino)
+        *ino = (uint64_t)entry_st.st_ino;
+      if (S_ISDIR(entry_st.st_mode))
+        *dtype = DT_DIR;
+      else if (S_ISREG(entry_st.st_mode))
+        *dtype = DT_REG;
+      else if (S_ISCHR(entry_st.st_mode))
+        *dtype = DT_CHR;
+      else if (S_ISBLK(entry_st.st_mode))
+        *dtype = DT_BLK;
+      else if (S_ISLNK(entry_st.st_mode))
+        *dtype = DT_LNK;
+      else if (S_ISFIFO(entry_st.st_mode))
+        *dtype = DT_FIFO;
+    }
+  }
+}
+
+static int getdents_visible_count(const struct vfs_dirent *entries, int entry_count)
+{
+  int visible = 0;
+
+  for (int i = 0; i < entry_count; i++)
+  {
+    if (getdents_skip_name(entries[i].name))
+      continue;
+    visible++;
+  }
+
+  return visible;
+}
+
+/* Linux filldir: ALIGN(name_off + strlen(name) + 2, 8) — +2 = NUL + d_type byte. */
+static size_t linux_dirent_reclen(size_t name_len_with_nul)
+{
+  size_t namlen = name_len_with_nul - 1U;
+
+  return (LINUX_DIRENT_NAME_OFF + namlen + 2U + 7U) & ~((size_t)7U);
+}
+
+/* Linux filldir64: ALIGN(name_off + strlen(name) + 1, 8). */
+static size_t linux_dirent64_reclen(size_t name_len_with_nul)
+{
+  size_t namlen = name_len_with_nul - 1U;
+
+  return (LINUX_DIRENT64_NAME_OFF + namlen + 1U + 7U) & ~((size_t)7U);
+}
+
+static const char *fs_fd_resolved_dir_path(int fd, char *buf, size_t bufsz)
+{
+  fd_entry_t *fd_table;
+  const char *path;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||
+      !fd_table[fd].in_use)
+    return NULL;
+
+  path = fd_table[fd].path;
+  if (!path || path[0] == '\0')
+  {
+    struct vfs_file *vf = (struct vfs_file *)fd_table[fd].vfs_file;
+
+    if (vf && vf->path[0] != '\0')
+      path = vf->path;
+    else
+      return NULL;
+  }
+
+  if (is_absolute_path(path))
+  {
+    if (normalize_path(path, buf, bufsz) != 0)
+      return NULL;
+    return buf;
+  }
+
+  {
+    const char *cwd = current_process->cwd;
+
+    if (!cwd || cwd[0] != '/')
+      cwd = "/";
+    if (strcmp(path, ".") == 0)
+    {
+      strncpy(buf, cwd, bufsz - 1);
+      buf[bufsz - 1] = '\0';
+    }
+    else if (join_paths(cwd, path, buf, bufsz) != 0)
+      return NULL;
+  }
+
+  return buf;
+}
+
+static int64_t sys_getdents_common(int fd, void *dirent, size_t count, int legacy_layout)
+{
+  fd_entry_t *fd_table;
+  char resolved_dir[512];
+  const char *dir_path;
+  stat_t st;
+  struct vfs_dirent entries[GETDENTS_BATCH_MAX];
+  int entry_count;
+  int visible_count;
+  size_t start_cookie;
+  size_t returned;
+  size_t user_budget;
+  size_t user_off;
+  char kernel_buf[4096];
+  size_t buf_offset;
+  int64_t copy_size;
+
+  if (!current_process)
+    return -ESRCH;
+  if (!dirent || count == 0)
+    return -EINVAL;
+
+  if (validate_userspace_buffer(dirent, count) != 0)
+    return -EFAULT;
+
+  if (fd == 1150 || fd == 1151)
+    return proc_getdents(fd, dirent, count);
+
+  if (fd >= FD_PROC_BASE && fd < FD_SYS_BASE)
+    return -ENOTDIR;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||
+      !fd_table[fd].in_use)
+    return -EBADF;
+
+  dir_path = fs_fd_resolved_dir_path(fd, resolved_dir, sizeof(resolved_dir));
+  if (!dir_path)
+    return -EBADF;
+
+  if (ir0_stat_path_routed(dir_path, &st) < 0)
+    return -ENOTDIR;
+
+  if (!S_ISDIR(st.st_mode))
+    return -ENOTDIR;
+
+  entry_count = ir0_getdents_path_routed(dir_path, entries, GETDENTS_BATCH_MAX);
+  if (entry_count < 0)
+    return entry_count;
+
+  visible_count = getdents_visible_count(entries, entry_count);
+
+  start_cookie = (size_t)fd_table[fd].offset;
+  if (start_cookie >= (size_t)visible_count)
+    return 0;
+
+  returned = 0;
+  buf_offset = 0;
+
+  {
+    int visible_idx = 0;
+
+    for (int i = 0; i < entry_count; i++)
+    {
+      size_t name_len;
+      size_t reclen;
+      uint64_t ino;
+      uint8_t dtype;
+
+      if (getdents_skip_name(entries[i].name))
+        continue;
+
+      if ((size_t)visible_idx < start_cookie)
+      {
+        visible_idx++;
+        continue;
+      }
+
+      name_len = strlen(entries[i].name) + 1;
+      getdents_entry_meta(dir_path, &entries[i], visible_idx, &ino, &dtype);
+
+      if (legacy_layout)
+        reclen = linux_dirent_reclen(name_len);
+      else
+        reclen = linux_dirent64_reclen(name_len);
+
+      if (buf_offset + reclen > sizeof(kernel_buf))
+        break;
+
+      if (legacy_layout)
+      {
+        struct linux_dirent *dent =
+            (struct linux_dirent *)(kernel_buf + buf_offset);
+
+        memset(dent, 0, reclen);
+        dent->d_ino = ino;
+        dent->d_off = (int64_t)(start_cookie + returned + 1);
+        dent->d_reclen = (unsigned short)reclen;
+        memcpy(dent->d_name, entries[i].name, name_len);
+        ((char *)dent)[reclen - 1U] = (char)dtype;
+      }
+      else
+      {
+        struct linux_dirent64 *dent =
+            (struct linux_dirent64 *)(kernel_buf + buf_offset);
+
+        memset(dent, 0, reclen);
+        dent->d_ino = ino;
+        dent->d_off = (int64_t)(start_cookie + returned + 1);
+        dent->d_reclen = (unsigned short)reclen;
+        dent->d_type = dtype;
+        memcpy(dent->d_name, entries[i].name, name_len);
+      }
+
+      buf_offset += reclen;
+      returned++;
+      visible_idx++;
+    }
+  }
+
+  if (buf_offset == 0)
+    return 0;
+
+  user_budget = count;
+  user_off = 0;
+  while (user_off < buf_offset)
+  {
+    unsigned short dent_reclen;
+    size_t min_reclen;
+
+    if (legacy_layout)
+    {
+      struct linux_dirent *dent =
+          (struct linux_dirent *)(kernel_buf + user_off);
+
+      dent_reclen = dent->d_reclen;
+      min_reclen = LINUX_DIRENT_NAME_OFF + 2U;
+    }
+    else
+    {
+      struct linux_dirent64 *dent =
+          (struct linux_dirent64 *)(kernel_buf + user_off);
+
+      dent_reclen = dent->d_reclen;
+      min_reclen = LINUX_DIRENT64_NAME_OFF + 2U;
+    }
+
+    if ((size_t)dent_reclen < min_reclen ||
+        user_off + (size_t)dent_reclen > buf_offset)
+      return -EIO;
+    if ((size_t)dent_reclen > user_budget)
+      break;
+    user_off += (size_t)dent_reclen;
+    user_budget -= (size_t)dent_reclen;
+  }
+
+  if (user_off == 0)
+    return -EINVAL;
+
+  copy_size = (int64_t)user_off;
+  if (copy_to_user(dirent, kernel_buf, (size_t)copy_size) != 0)
+    return -EFAULT;
+
+  {
+    size_t copied = 0;
+    size_t pos = 0;
+
+    while (pos < user_off)
+    {
+      unsigned short dent_reclen;
+      size_t min_reclen;
+
+      if (legacy_layout)
+      {
+        struct linux_dirent *dent =
+            (struct linux_dirent *)(kernel_buf + pos);
+
+        dent_reclen = dent->d_reclen;
+        min_reclen = LINUX_DIRENT_NAME_OFF + 2U;
+      }
+      else
+      {
+        struct linux_dirent64 *dent =
+            (struct linux_dirent64 *)(kernel_buf + pos);
+
+        dent_reclen = dent->d_reclen;
+        min_reclen = LINUX_DIRENT64_NAME_OFF + 2U;
+      }
+
+      if ((size_t)dent_reclen < min_reclen ||
+          pos + (size_t)dent_reclen > user_off)
+        break;
+      pos += (size_t)dent_reclen;
+      copied++;
+    }
+    fd_table[fd].offset = start_cookie + copied;
+  }
+
+  return copy_size;
+}
+
+int64_t sys_getdents(int fd, void *dirent, size_t count)
+{
+  /*
+   * musl x86_64 readdir(3) issues SYS_getdents (78) but struct dirent matches
+   * linux_dirent64 (d_type before d_name). Emit dirent64 records on NR 78.
+   * Legacy filldir layout is reserved for strict Linux NR 78 consumers via
+   * getdents64-only paths or future compat toggle.
+   */
+  return sys_getdents_common(fd, dirent, count, 0);
+}
+
+int64_t sys_getdents64(int fd, void *dirent, size_t count)
+{
+  return sys_getdents_common(fd, dirent, count, 0);
 }

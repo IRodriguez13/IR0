@@ -1,10 +1,19 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — FASE51 shell bring-up serial diagnostics (gated).
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: fase51_debug.h
+ * Description: FASE51 shell bring-up serial diagnostics (gated)
  */
 
-#ifndef _IR0_FASE51_DEBUG_H
-#define _IR0_FASE51_DEBUG_H
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#pragma once
+
 
 #include <config.h>
 #include <stddef.h>
@@ -26,4 +35,3 @@ void fase51_dbg_exec_argv(const char *path, const char *argv0, const char *argv1
 void fase51_dbg_wait_wake(uint32_t parent_pid, uint32_t child_pid, int *status_ptr,
 			  int status_val, int copy_ret);
 
-#endif /* _IR0_FASE51_DEBUG_H */

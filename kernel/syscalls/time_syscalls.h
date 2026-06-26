@@ -6,20 +6,16 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: fase50_debug.h
- * Description: FASE50 bring-up serial diagnostics (gated)
+ * File: time_syscalls.h
+ * Description: IR0 kernel header — time syscalls
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
+#include <ir0/types.h>
+#include <ir0/time.h>
 
-#include <config.h>
-
-#if CONFIG_DEBUG_FASE50
-#define IR0_FASE50_DBG 1
-#else
-#define IR0_FASE50_DBG 0
-#endif
-
+int64_t sys_gettimeofday(struct timeval *tv, void *tz);
+int64_t sys_clock_gettime(int clock_id, struct timespec *tp);
