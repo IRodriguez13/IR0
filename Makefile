@@ -1304,6 +1304,7 @@ SU_SETUID_SMOKE_SRC = setup/pid1/su_setuid_smoke.c
 INIT_MINIMAL_SRC = setup/pid1/init_minimal.c
 INIT_SEGV_SMOKE_SRC = setup/pid1/init_segv_smoke.c
 INIT_HEAP_SMOKE_SRC = setup/pid1/init_heap_smoke.c
+INIT_FAT16_SMOKE_SRC = setup/pid1/init_fat16_smoke.c
 INIT_MMAP_SMOKE_SRC = setup/pid1/init_mmap_smoke.c
 INIT_STACK_HEAP_ISO_SRC = setup/pid1/init_stack_heap_iso_smoke.c
 INIT_FORK_MEM_SMOKE_SRC = setup/pid1/init_fork_mem_smoke.c
@@ -1380,6 +1381,8 @@ HEAP_SMOKE_LOG   = /tmp/userspace-heap-smoke.log
 MMAP_SMOKE_LOG   = /tmp/userspace-mmap-smoke.log
 ISO_SMOKE_LOG    = /tmp/userspace-stack-heap-iso.log
 FORK_MEM_SMOKE_LOG = /tmp/userspace-fork-mem-smoke.log
+FAT16_SMOKE_IMG  = build/fat16_smoke.img
+FAT16_SMOKE_LOG  = /tmp/fat16-smoke.log
 FASE41_RECLAIM_LOG = /tmp/userspace-fase41-reclaim.log
 FASE42_PT_RECLAIM_LOG = /tmp/userspace-fase42-pt-reclaim.log
 FASE42_EXEC_STORM_LOG = /tmp/userspace-fase42-exec-storm.log
@@ -1543,6 +1546,16 @@ build-init-heap-smoke:
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_HEAP_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-init-heap-smoke OK"
+
+build-init-fat16-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building FAT16 mount/read smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FAT16_SMOKE_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-fat16-smoke OK"
 
 build-init-mmap-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -1990,6 +2003,39 @@ linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe
 		(echo "✗ linux-abi-audit FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 linux-abi-audit-brk: linux-abi-audit
+
+.PHONY: build/fat16_smoke.img smoke-fat16-mount
+
+build/fat16_smoke.img:
+	@chmod +x scripts/create_fat16_smoke_disk.sh
+	@./scripts/create_fat16_smoke_disk.sh $(FAT16_SMOKE_IMG)
+
+# D1.18 — read-only FAT16 on secondary ATA disk (hdb), no MINIX root mutation.
+smoke-fat16-mount: kernel-x64-userspace.iso build/fat16_smoke.img
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    Creating disk.img..."; \
+		$(MAKE) -s disk.img; \
+	fi
+	@echo "  SMOKE   FAT16 mount + read HELLO.TXT on /dev/hdb..."
+	@$(MAKE) -s build-init-fat16-smoke
+	@DISK=$$(mktemp /tmp/ir0-fat16-smoke.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(FAT16_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(FAT16_SMOKE_LOG) --timeout 90 \
+		--done 'FAT16OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-drive file=$(FAT16_SMOKE_IMG),format=raw,if=ide,index=1 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rc=$$?; rm -f $$DISK; \
+	if tr -d '\n\r' < $(FAT16_SMOKE_LOG) | grep -q 'FAT16OK'; then \
+		echo "✓ smoke-fat16-mount passed (hdb FAT16 mount + HELLO.TXT read)"; \
+	elif [ $$rc -ne 0 ]; then \
+		echo "✗ smoke-fat16-mount FAILED (QEMU/autokill)"; exit $$rc; \
+	else \
+		echo "✗ smoke-fat16-mount FAILED (tag missing)"; exit 1; \
+	fi
 
 smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 + ash interactive (headless + monitor sendkey)..."
