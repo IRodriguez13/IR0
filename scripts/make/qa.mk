@@ -757,13 +757,30 @@ LINUX_ABI_MOUNT_PROBE := $(LINUX_ABI_AUDIT_DIR)/mount_probe
 LINUX_ABI_OPENAT_PROBE := $(LINUX_ABI_AUDIT_DIR)/openat_probe
 LINUX_ABI_STAT_PROBE := $(LINUX_ABI_AUDIT_DIR)/stat_probe
 LINUX_ABI_VFS_WRITE_PROBE := $(LINUX_ABI_AUDIT_DIR)/vfs_write_probe
+LINUX_ABI_PROCESS_LIFECYCLE_PROBE := $(LINUX_ABI_AUDIT_DIR)/process_lifecycle_probe
+LINUX_ABI_KILL_SIGTERM_PROBE := $(LINUX_ABI_AUDIT_DIR)/kill_sigterm_probe
+LINUX_ABI_WAIT4_WNOHANG_PROBE := $(LINUX_ABI_AUDIT_DIR)/wait4_wnohang_probe
+LINUX_ABI_EXEC_HELPER := $(CURDIR)/$(LINUX_ABI_AUDIT_DIR)/exec_helper
 
-.PHONY: build-linux-abi-brk-probe build-linux-abi-wait4-probe build-linux-abi-read-probe \
+.PHONY: kernel-x64-userspace.iso-fresh
+
+# Force-rebuild userspace ISO so IR0 ABI runners never use a stale kernel.
+kernel-x64-userspace.iso-fresh:
+	@echo "  ISO     Rebuilding fresh kernel-x64-userspace.iso"
+	@rm -f kernel-x64-userspace.bin kernel-x64-userspace.iso \
+		kernel/main.o kernel/process.o kernel/elf_loader.o \
+		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
+		drivers/video/console.o sched/rr_sched.o includes/ir0/signals.o
+	@$(MAKE) kernel-x64-userspace.iso
+
+
+.PHONY: build-linux-abi-brk-probe build-linux-abi-wait4-probe build-linux-abi-wait4-wnohang-probe build-linux-abi-kill-sigterm-probe build-linux-abi-read-probe \
 	build-linux-abi-mmap-probe build-linux-abi-mount-probe \
 	build-linux-abi-openat-probe build-linux-abi-stat-probe build-linux-abi-vfs-write-probe \
-	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
+	build-linux-abi-process-lifecycle-probe build-linux-abi-kill-sigterm-probe \
+	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-wait4-wnohang linux-abi-audit-kill-sigterm linux-abi-audit-read \
 	linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
-	linux-abi-audit-vfs-write
+	linux-abi-audit-vfs-write linux-abi-audit-process-lifecycle
 
 build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
 	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
@@ -782,6 +799,24 @@ build-linux-abi-wait4-probe: scripts/linux_abi/workloads/wait4_probe.c
 		gcc -static -Os -o $(LINUX_ABI_WAIT4_PROBE) scripts/linux_abi/workloads/wait4_probe.c; \
 	fi
 	@echo "✓ $(LINUX_ABI_WAIT4_PROBE)"
+
+build-linux-abi-wait4-wnohang-probe: scripts/linux_abi/workloads/wait4_wnohang_probe.c
+	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
+	@if command -v musl-gcc >/dev/null 2>&1; then \
+		musl-gcc -static -Os -o $(LINUX_ABI_WAIT4_WNOHANG_PROBE) scripts/linux_abi/workloads/wait4_wnohang_probe.c; \
+	else \
+		gcc -static -Os -o $(LINUX_ABI_WAIT4_WNOHANG_PROBE) scripts/linux_abi/workloads/wait4_wnohang_probe.c; \
+	fi
+	@echo "✓ $(LINUX_ABI_WAIT4_WNOHANG_PROBE)"
+
+build-linux-abi-kill-sigterm-probe: scripts/linux_abi/workloads/kill_sigterm_probe.c
+	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
+	@if command -v musl-gcc >/dev/null 2>&1; then \
+		musl-gcc -static -Os -o $(LINUX_ABI_KILL_SIGTERM_PROBE) scripts/linux_abi/workloads/kill_sigterm_probe.c; \
+	else \
+		gcc -static -Os -o $(LINUX_ABI_KILL_SIGTERM_PROBE) scripts/linux_abi/workloads/kill_sigterm_probe.c; \
+	fi
+	@echo "✓ $(LINUX_ABI_KILL_SIGTERM_PROBE)"
 
 build-linux-abi-read-probe: scripts/linux_abi/workloads/read_probe.c
 	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
@@ -837,6 +872,14 @@ build-linux-abi-vfs-write-probe: scripts/linux_abi/workloads/vfs_write_probe.c
 	fi
 	@echo "✓ $(LINUX_ABI_VFS_WRITE_PROBE)"
 
+build-linux-abi-process-lifecycle-probe: scripts/linux_abi/workloads/process_lifecycle_probe.c scripts/linux_abi/workloads/exec_helper.c
+	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
+	@if command -v musl-gcc >/dev/null 2>&1; then CC=musl-gcc; else CC=gcc; fi; \
+	$$CC -static -Os -o $(LINUX_ABI_AUDIT_DIR)/exec_helper scripts/linux_abi/workloads/exec_helper.c && \
+	$$CC -static -Os -DEXEC_HELPER_PATH=\"$(LINUX_ABI_EXEC_HELPER)\" \
+		-o $(LINUX_ABI_PROCESS_LIFECYCLE_PROBE) scripts/linux_abi/workloads/process_lifecycle_probe.c
+	@echo "✓ $(LINUX_ABI_PROCESS_LIFECYCLE_PROBE)"
+
 verify-minix-rootfs: disk.img
 	@python3 scripts/verify_minix_rootfs.py --gate disk.img \
 		/sbin /sbin/init /bin/sh /bin/busybox || \
@@ -858,6 +901,20 @@ linux-abi-audit-wait4: kernel-x64-userspace.iso build-linux-abi-wait4-probe
 	@grep -q '^## wait4 — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-wait4 passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-wait4 FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-wait4-wnohang: kernel-x64-userspace.iso-fresh build-linux-abi-wait4-wnohang-probe kernel-tests
+	@chmod +x scripts/linux_abi/run_linux_wait4_wnohang.sh scripts/linux_abi/run_ir0_wait4_wnohang.sh
+	@python3 scripts/linux_abi_audit.py --contract wait4_wnohang
+	@grep -q '^## wait4_wnohang — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-wait4-wnohang passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-wait4-wnohang FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-kill-sigterm: kernel-x64-userspace.iso-fresh build-linux-abi-kill-sigterm-probe kernel-tests
+	@chmod +x scripts/linux_abi/run_linux_kill_sigterm.sh scripts/linux_abi/run_ir0_kill_sigterm.sh
+	@python3 scripts/linux_abi_audit.py --contract kill_sigterm
+	@grep -q '^## kill_sigterm — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-kill-sigterm passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-kill-sigterm FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 linux-abi-audit-read: kernel-x64-userspace.iso build-linux-abi-read-probe
 	@chmod +x scripts/linux_abi/run_linux_read.sh scripts/linux_abi/run_ir0_read.sh
@@ -902,8 +959,14 @@ linux-abi-audit-vfs-write: kernel-x64-userspace.iso build-linux-abi-vfs-write-pr
 	elif grep -q 'bundle_status: PARTIAL' $(LINUX_ABI_AUDIT_DIR)/report.md; then \
 		echo "△ linux-abi-audit-vfs-write PARTIAL (see $(LINUX_ABI_AUDIT_DIR)/report.md)"; \
 	else \
-		echo "✗ linux-abi-audit-vfs-write BLOCKED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1; \
+		(echo "✗ linux-abi-audit-vfs-write BLOCKED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1; \
 	fi
+
+linux-abi-audit-process-lifecycle: kernel-x64-userspace.iso build-linux-abi-process-lifecycle-probe
+	@chmod +x scripts/linux_abi/run_linux_process_lifecycle.sh scripts/linux_abi/run_ir0_process_lifecycle.sh
+	@python3 scripts/linux_abi_audit.py --contract process_lifecycle --report-dir $(LINUX_ABI_AUDIT_DIR) && \
+		echo "✓ linux-abi-audit-process-lifecycle passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-process-lifecycle FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 smoke-runit-ash-interactive: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then \
