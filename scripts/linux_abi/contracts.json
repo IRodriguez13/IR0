@@ -193,7 +193,7 @@
       "id": "wait4_wnohang",
       "enabled": true,
       "title": "wait4(WNOHANG) isolated probe",
-      "status_doc": "LINUX-LIKE",
+      "status_doc": "VERIFIED",
       "ktest": "wait4_status",
       "child_exit_status": 5,
       "echild_errno": 10

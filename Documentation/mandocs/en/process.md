@@ -120,6 +120,8 @@ Lifecycle:
 3. Idle process shares kernel CR3 (`owns_page_directory = 0`).
 4. Child returns 0 from fork via `task.rax`; parent gets child pid.
 5. CLOEXEC honored on exec via `process_exec_close_cloexec`.
+6. **`wait4(pid, NULL, …)`** — parent may omit status pointer; kernel still blocks and resumes correctly.
+7. **Blocking `wait4` (options=0)** — blocks with ring-0 CS via `process_arm_kernel_syscall_sleep`; resume must use `switch_context_x64` **kernel_ret** into `process_wait`, not user `iretq` with placeholder `rax=0`.
 
 ## 9. Debugging tips
 
