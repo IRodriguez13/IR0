@@ -769,6 +769,7 @@ kernel-x64-userspace.iso-fresh:
 	@echo "  ISO     Rebuilding fresh kernel-x64-userspace.iso"
 	@rm -f kernel-x64-userspace.bin kernel-x64-userspace.iso \
 		kernel/main.o kernel/process.o kernel/elf_loader.o \
+		kernel/syscalls/process_syscalls.o \
 		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o sched/switch/arch_context_switch.o \
 		includes/ir0/signals.o
