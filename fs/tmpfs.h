@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -12,10 +11,6 @@
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel - TMPFS (Temporary Filesystem) Header
- * Copyright (C) 2025  Iván Rodriguez
- */
 
 #pragma once
 
@@ -35,6 +30,7 @@ int tmpfs_create_file(const char *path, mode_t mode);
 int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_count, off_t offset);
 int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset);
 int tmpfs_unlink(const char *path);
+int tmpfs_link(const char *oldpath, const char *newpath);
 int tmpfs_rmdir(const char *path);
 int tmpfs_chown(const char *path, uid_t owner, gid_t group);
 int tmpfs_chmod(const char *path, mode_t mode);

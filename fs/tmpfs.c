@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -12,20 +11,6 @@
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel - TMPFS (Temporary Filesystem)
- * Copyright (C) 2025  Iván Rodriguez
- *
- * Simple in-memory temporary filesystem similar to Linux tmpfs
- * Perfect for /tmp or other temporary directories
- * 
- * Features:
- * - Hierarchical directory structure
- * - Support for multiple mount points
- * - Maximum 128 files per instance
- * - Maximum 64KB per file
- * - Inode-based structure with parent-child relationships
- */
 
 #include "vfs.h"
 #include "tmpfs.h"
@@ -345,6 +330,7 @@ static struct vfs_ops tmpfs_fs_ops = {
     .mkdir   = tmpfs_mkdir,
     .create  = tmpfs_create_file,
     .unlink  = tmpfs_unlink,
+    .link    = tmpfs_link,
     .rmdir   = tmpfs_rmdir,
     .readdir = tmpfs_readdir,
     .read    = tmpfs_read_file,
@@ -630,6 +616,87 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
     if (written_count)
         *written_count = count;
     
+    return 0;
+}
+
+int tmpfs_link(const char *oldpath, const char *newpath)
+{
+    if (!oldpath || !newpath)
+        return -EINVAL;
+
+    tmpfs_data_t *tmpfs = tmpfs_get_instance_for_path(oldpath);
+    if (!tmpfs || tmpfs_get_instance_for_path(newpath) != tmpfs)
+        return -EXDEV;
+
+    const char *old_rel = tmpfs_get_relative_path(oldpath, tmpfs->mount_point);
+    const char *new_rel = tmpfs_get_relative_path(newpath, tmpfs->mount_point);
+    if (!old_rel || !new_rel)
+        return -EINVAL;
+
+    tmpfs_inode_t *src = tmpfs_lookup_inode(tmpfs, old_rel);
+    if (!src)
+        return -ENOENT;
+    if (src->is_dir)
+        return -EPERM;
+    if (tmpfs_lookup_inode(tmpfs, new_rel))
+        return -EEXIST;
+
+    char path_copy[256];
+    strncpy(path_copy, new_rel, sizeof(path_copy) - 1);
+    path_copy[sizeof(path_copy) - 1] = '\0';
+
+    char *last_slash = strrchr(path_copy, '/');
+    const char *linkname = NULL;
+    const char *parent_path = NULL;
+    if (!last_slash)
+    {
+        linkname = path_copy;
+        parent_path = "/";
+    }
+    else
+    {
+        *last_slash = '\0';
+        linkname = last_slash + 1;
+        parent_path = (path_copy[0] == '\0') ? "/" : path_copy;
+    }
+
+    if (strlen(linkname) == 0 || strlen(linkname) > TMPFS_MAX_NAME_LEN)
+        return -EINVAL;
+
+    tmpfs_inode_t *parent = tmpfs_lookup_inode(tmpfs, parent_path);
+    if (!parent || !parent->is_dir)
+        return -ENOENT;
+
+    tmpfs_inode_t *dst = tmpfs_alloc_inode(tmpfs);
+    if (!dst)
+        return -ENOSPC;
+
+    dst->mode = src->mode;
+    dst->uid = src->uid;
+    dst->gid = src->gid;
+    dst->size = src->size;
+    dst->data_cap = src->data_cap;
+    dst->is_dir = false;
+    dst->mtime = src->mtime;
+    strncpy(dst->name, linkname, TMPFS_MAX_NAME_LEN);
+    dst->name[TMPFS_MAX_NAME_LEN] = '\0';
+    dst->parent = parent;
+    dst->sibling = parent->children;
+    parent->children = dst;
+
+    if (src->size > 0 && src->data)
+    {
+        dst->data = (uint8_t *)kmalloc(src->size);
+        if (!dst->data)
+        {
+            parent->children = dst->sibling;
+            memset(dst, 0, sizeof(tmpfs_inode_t));
+            return -ENOMEM;
+        }
+        memcpy(dst->data, src->data, src->size);
+        tmpfs->total_size += src->size;
+    }
+
     return 0;
 }
 
