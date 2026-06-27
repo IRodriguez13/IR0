@@ -188,6 +188,32 @@
       "eisdir_errno": 21,
       "enotempty_errno": 39,
       "enosys_errno": 38
+    },
+    {
+      "id": "wait4_wnohang",
+      "enabled": true,
+      "title": "wait4(WNOHANG) isolated probe",
+      "status_doc": "LINUX-LIKE",
+      "ktest": "wait4_status",
+      "child_exit_status": 5,
+      "echild_errno": 10
+    },
+    {
+      "id": "process_lifecycle",
+      "enabled": false,
+      "title": "Process lifecycle capability bundle",
+      "status_doc": "LINUX-LIKE",
+      "ktest": "wait4_status",
+      "echild_errno": 10,
+      "enoent_errno": 2
+    },
+    {
+      "id": "kill_sigterm",
+      "enabled": false,
+      "title": "SIGTERM default action and wait status",
+      "status_doc": "LINUX-LIKE",
+      "ktest": "kill_sigterm_wait_status",
+      "expected_status": 15
     }
   ]
 }

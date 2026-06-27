@@ -188,6 +188,179 @@ def compare_wait4(
     return res
 
 
+def compare_wait4_wnohang(
+    linux: dict,
+    ir0: dict,
+    child_exit_status: int,
+    echild_errno: int,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="wait4_wnohang", ok=True)
+    expected_status = child_exit_status << 8
+
+    l_steps = linux.get("audit_steps") or linux.get("strace_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    required_ops = (
+        "fork",
+        "wait4_wnohang_alive",
+        "wait4_block_reap",
+        "wait4_wnohang_echild",
+    )
+
+    for op in required_ops:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(f"missing {op} (linux={bool(l_s)} ir0={bool(i_s)})")
+
+    l_fork = _find_step(l_steps, "fork")
+    i_fork = _find_step(i_steps, "fork")
+    if l_fork and i_fork and l_fork.get("ret") != i_fork.get("ret"):
+        res.notes.append(
+            f"fork pid differs linux={l_fork.get('ret')} ir0={i_fork.get('ret')} (allowed if both >0)"
+        )
+
+    l_wh = _find_step(l_steps, "wait4_wnohang_alive")
+    i_wh = _find_step(i_steps, "wait4_wnohang_alive")
+    if l_wh and i_wh:
+        for label, step in (("linux", l_wh), ("ir0", i_wh)):
+            if step.get("ret") != 0:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_wnohang_alive: ret={step.get('ret')} expected 0"
+                )
+
+    l_reap = _find_step(l_steps, "wait4_block_reap")
+    i_reap = _find_step(i_steps, "wait4_block_reap")
+    if l_reap and i_reap and l_fork and i_fork:
+        for label, step, fork_s in (
+            ("linux", l_reap, l_fork),
+            ("ir0", i_reap, i_fork),
+        ):
+            if step.get("ret", -1) <= 0:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_block_reap: ret={step.get('ret')} expected pid>0"
+                )
+            elif step.get("ret") != fork_s.get("ret"):
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_block_reap: ret={step.get('ret')} expected fork pid={fork_s.get('ret')}"
+                )
+            st = step.get("status")
+            if st != expected_status:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_block_reap: status=0x{(st or 0):x} expected 0x{expected_status:x}"
+                )
+
+    l_ec = _find_step(l_steps, "wait4_wnohang_echild")
+    i_ec = _find_step(i_steps, "wait4_wnohang_echild")
+    if l_ec and i_ec:
+        for label, step in (("linux", l_ec), ("ir0", i_ec)):
+            if step.get("ret") != -1:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_wnohang_echild: ret={step.get('ret')} expected -1"
+                )
+            if step.get("errno") != echild_errno:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_wnohang_echild: errno={step.get('errno')} expected={echild_errno}"
+                )
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest wait4_status FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest wait4_status OK")
+
+    return res
+
+
+def compare_kill_sigterm(
+    linux: dict,
+    ir0: dict,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = CompareResult(contract="kill_sigterm", ok=True)
+    expected_status = 0xF
+
+    l_steps = linux.get("audit_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    l_fork = _find_step(l_steps, "fork")
+    l_kill = _find_step(l_steps, "kill")
+    l_wait = _find_step(l_steps, "kill_sigterm")
+    i_fork = _find_step(i_steps, "fork")
+    i_kill = _find_step(i_steps, "kill")
+    i_wait = _find_step(i_steps, "kill_sigterm")
+
+    for label, fork_s, kill_s, wait_s in (
+        ("linux", l_fork, l_kill, l_wait),
+        ("ir0", i_fork, i_kill, i_wait),
+    ):
+        if not fork_s or not kill_s or not wait_s:
+            res.ok = False
+            res.divergences.append(
+                f"{label} trace missing fork/kill/kill_sigterm "
+                f"(fork={bool(fork_s)} kill={bool(kill_s)} wait={bool(wait_s)})"
+            )
+            continue
+        if fork_s.get("ret", -1) <= 0:
+            res.ok = False
+            res.divergences.append(f"{label} fork invalid ret={fork_s.get('ret')}")
+        if kill_s.get("ret", -1) != 0:
+            res.ok = False
+            res.divergences.append(
+                f"{label} kill ret={kill_s.get('ret')} errno={kill_s.get('errno')} expected 0"
+            )
+        if wait_s.get("ret", -1) <= 0:
+            res.ok = False
+            res.divergences.append(f"{label} wait4 invalid ret={wait_s.get('ret')}")
+        if wait_s.get("ret") != fork_s.get("ret"):
+            res.ok = False
+            res.divergences.append(
+                f"{label} wait pid mismatch: fork={fork_s.get('ret')} wait={wait_s.get('ret')}"
+            )
+        got_status = wait_s.get("status")
+        if got_status is None:
+            res.ok = False
+            res.divergences.append(f"{label} kill_sigterm missing status word")
+        elif (got_status & 0x7F) != 15:
+            res.ok = False
+            res.divergences.append(
+                f"{label} kill_sigterm status=0x{got_status:x} WTERMSIG={(got_status & 0x7F)} expected 15"
+            )
+        elif got_status != expected_status:
+            res.notes.append(
+                f"{label} kill_sigterm raw status=0x{got_status:x} (expected 0x{expected_status:x})"
+            )
+
+    if l_wait and i_wait and (l_wait.get("status") or 0) != (i_wait.get("status") or 0):
+        res.ok = False
+        res.divergences.append(
+            f"kill_sigterm status mismatch linux=0x{(l_wait.get('status') or 0):x} "
+            f"ir0=0x{(i_wait.get('status') or 0):x}"
+        )
+
+    if not linux.get("done_tag"):
+        res.notes.append("linux missing [KILLSIGTERMOK] (audit steps used)")
+    if not ir0.get("done_tag"):
+        res.ok = False
+        res.divergences.append("ir0 missing [KILLSIGTERMOK] smoke tag")
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest kill_sigterm_wait_status FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest kill_sigterm_wait_status OK")
+
+    return res
+
+
 def compare_read(
     linux: dict,
     ir0: dict,
@@ -998,6 +1171,210 @@ def compare_vfs_write(
         res.notes.append("bundle_status: PARTIAL")
 
     step_table()
+    return res
+
+
+PROCESS_LIFECYCLE_REQUIRED_OPS = [
+    "wait4_exit42",
+    "wait4_any",
+    "wait4_wnohang_alive",
+    "wait4_wnohang_reap",
+    "wait4_echild",
+    "execve_ok",
+    "execve_noent",
+    "wait4_exit1",
+    "kill_sigterm",
+    "sigchld_default_wait",
+]
+
+PROCESS_LIFECYCLE_IR0_REPARENT_OPS = [
+    "reparent_mid_wait",
+    "reparent_orphan_wait",
+]
+
+
+def _exit_status(code: int) -> int:
+    return code << 8
+
+
+def compare_process_lifecycle(
+    linux: dict,
+    ir0: dict,
+    cfg: dict,
+) -> CompareResult:
+    res = CompareResult(contract="process_lifecycle", ok=True)
+
+    l_steps = linux.get("audit_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+    echild_errno = int(cfg.get("echild_errno", 10))
+    enoent_errno = int(cfg.get("enoent_errno", 2))
+
+    def check_wait_exit(op: str, exit_code: int) -> None:
+        exp = _exit_status(exit_code)
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(
+                f"missing {op} (linux={bool(l_s)} ir0={bool(i_s)})"
+            )
+            return
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret", -1) <= 0:
+                res.ok = False
+                res.divergences.append(f"{label} {op}: ret={step.get('ret')} expected pid>0")
+            st = step.get("status")
+            if st != exp:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: status=0x{(st or 0):x} expected 0x{exp:x}"
+                )
+        if l_s.get("status") != i_s.get("status"):
+            res.ok = False
+            res.divergences.append(
+                f"{op} status mismatch linux=0x{(l_s.get('status') or 0):x} "
+                f"ir0=0x{(i_s.get('status') or 0):x}"
+            )
+
+    check_wait_exit("wait4_exit42", 42)
+    check_wait_exit("wait4_any", 10)
+    check_wait_exit("wait4_wnohang_reap", 5)
+    check_wait_exit("wait4_exit1", 1)
+    check_wait_exit("sigchld_default_wait", 7)
+
+    l_wh = _find_step(l_steps, "wait4_wnohang_alive")
+    i_wh = _find_step(i_steps, "wait4_wnohang_alive")
+    if not l_wh or not i_wh:
+        res.ok = False
+        res.divergences.append(
+            f"missing wait4_wnohang_alive (linux={bool(l_wh)} ir0={bool(i_wh)})"
+        )
+    else:
+        for label, step in (("linux", l_wh), ("ir0", i_wh)):
+            if step.get("ret") != 0:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_wnohang_alive: ret={step.get('ret')} expected 0"
+                )
+
+    l_ec = _find_step(l_steps, "wait4_echild")
+    i_ec = _find_step(i_steps, "wait4_echild")
+    if not l_ec or not i_ec:
+        res.ok = False
+        res.divergences.append(
+            f"missing wait4_echild (linux={bool(l_ec)} ir0={bool(i_ec)})"
+        )
+    else:
+        for label, step in (("linux", l_ec), ("ir0", i_ec)):
+            if step.get("ret") != -1:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_echild: ret={step.get('ret')} expected -1"
+                )
+            if step.get("errno") != echild_errno:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} wait4_echild: errno={step.get('errno')} expected={echild_errno}"
+                )
+
+    l_ex = _find_step(l_steps, "execve_ok")
+    i_ex = _find_step(i_steps, "execve_ok")
+    if not l_ex or not i_ex:
+        res.ok = False
+        res.divergences.append(
+            f"missing execve_ok (linux={bool(l_ex)} ir0={bool(i_ex)})"
+        )
+    else:
+        for label, step in (("linux", l_ex), ("ir0", i_ex)):
+            if step.get("status") != 0:
+                res.ok = False
+                res.divergences.append(f"{label} execve_ok: status=0x{step.get('status', 0):x} expected 0")
+
+    exp_noent = _exit_status(127)
+    l_ne = _find_step(l_steps, "execve_noent")
+    i_ne = _find_step(i_steps, "execve_noent")
+    if not l_ne or not i_ne:
+        res.ok = False
+        res.divergences.append(
+            f"missing execve_noent (linux={bool(l_ne)} ir0={bool(i_ne)})"
+        )
+    else:
+        for label, step in (("linux", l_ne), ("ir0", i_ne)):
+            if step.get("status") != exp_noent:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} execve_noent: status=0x{(step.get('status') or 0):x} expected 0x{exp_noent:x}"
+                )
+
+    l_ks = _find_step(l_steps, "kill_sigterm")
+    i_ks = _find_step(i_steps, "kill_sigterm")
+    if not l_ks or not i_ks:
+        res.ok = False
+        res.divergences.append(
+            f"missing kill_sigterm (linux={bool(l_ks)} ir0={bool(i_ks)})"
+        )
+    else:
+        for label, step in (("linux", l_ks), ("ir0", i_ks)):
+            st = step.get("status")
+            sig = st & 0x7F if st is not None else -1
+            if sig != 15:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} kill_sigterm: WTERMSIG={sig} expected 15 (SIGTERM)"
+                )
+        if (l_ks.get("status") or 0) != (i_ks.get("status") or 0):
+            res.ok = False
+            res.divergences.append(
+                f"kill_sigterm status mismatch linux=0x{(l_ks.get('status') or 0):x} "
+                f"ir0=0x{(i_ks.get('status') or 0):x}"
+            )
+
+    l_skip = _find_step(l_steps, "reparent_skip")
+    i_skip = _find_step(i_steps, "reparent_skip")
+    if l_skip and l_skip.get("flags") == "not_pid1":
+        res.notes.append("linux reparent_skip (not PID1 host run — expected)")
+    elif not l_skip:
+        check_wait_exit("reparent_mid_wait", 0)
+        check_wait_exit("reparent_orphan_wait", 99)
+
+    if i_skip:
+        res.ok = False
+        res.divergences.append("ir0 reparent_skip — probe must run as PID1 on IR0")
+    else:
+        for op, code in (("reparent_mid_wait", 0), ("reparent_orphan_wait", 99)):
+            i_s = _find_step(i_steps, op)
+            if not i_s:
+                res.ok = False
+                res.divergences.append(f"ir0 missing required {op}")
+                continue
+            exp = _exit_status(code)
+            if i_s.get("status") != exp:
+                res.ok = False
+                res.divergences.append(
+                    f"ir0 {op}: status=0x{(i_s.get('status') or 0):x} expected 0x{exp:x}"
+                )
+
+    missing = []
+    for op in PROCESS_LIFECYCLE_REQUIRED_OPS:
+        if not _find_step(l_steps, op):
+            missing.append(f"linux:{op}")
+        if not _find_step(i_steps, op):
+            missing.append(f"ir0:{op}")
+    if missing:
+        res.notes.append(f"missing ops: {', '.join(missing)}")
+
+    bundle = "VERIFIED" if res.ok else "BLOCKED"
+    res.notes.insert(0, f"bundle_status: {bundle}")
+    if res.divergences:
+        step_order = {op: i for i, op in enumerate(PROCESS_LIFECYCLE_REQUIRED_OPS)}
+        res.divergences.sort(
+            key=lambda d: next(
+                (step_order.get(op, 99) for op in step_order if op in d),
+                99,
+            )
+        )
+        res.notes.insert(1, f"first_divergence: {res.divergences[0]}")
+
     return res
 
 
