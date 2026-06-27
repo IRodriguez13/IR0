@@ -2469,6 +2469,85 @@ int process_wait_child_matches_blocked_target(const process_t *parent,
 	return 1;
 }
 
+int process_child_wait_status_word(const process_t *child)
+{
+	if (!child)
+		return 0;
+	if (child->exit_signal > 0)
+		return child->exit_signal & 0x7f;
+	return (child->exit_code & 0xff) << 8;
+}
+
+static void process_wait_wake_blocked_parent(process_t *parent, process_t *child);
+
+static int process_signal_is_default_fatal(process_t *p, int sig)
+{
+	void (*handler)(int);
+
+	if (!p)
+		return 0;
+	if (sig == SIGKILL)
+		return 1;
+	if (sig != SIGTERM)
+		return 0;
+	if (p->signal_ignored & SIGNAL_MASK(SIGTERM))
+		return 0;
+	handler = p->signal_handlers[SIGTERM];
+	if (handler && handler != SIG_DFL && handler != SIG_IGN)
+		return 0;
+	return 1;
+}
+
+int process_signal_default_kill(process_t *dying, int sig)
+{
+	process_t *parent;
+	int parent_state_before = -1;
+
+	if (!dying || !process_signal_is_default_fatal(dying, sig))
+		return 0;
+
+	dying->irq_frame_saved = 0;
+	process_reap_zombies(dying);
+	process_reparent_children(dying);
+	process_release_fds(dying, "EXIT_CLOSE");
+
+	dying->signal_pending &= ~SIGNAL_MASK(sig);
+	dying->exit_signal = sig;
+	dying->exit_code = 0;
+	dying->state = PROCESS_ZOMBIE;
+	sched_remove_process(dying);
+
+#if IR0_DEBUG_PROC
+	serial_print("[SIGTERM_AUDIT] process_signal_default_kill pid=");
+	serial_print_hex32((uint32_t)dying->task.pid);
+	serial_print(" sig=");
+	serial_print_hex32((uint32_t)sig);
+	serial_print(" wait_status=");
+	serial_print_hex32((uint32_t)process_child_wait_status_word(dying));
+	serial_print("\n");
+#endif
+
+	if (dying->ppid > 0)
+	{
+		parent = process_find_by_pid(dying->ppid);
+		if (parent)
+			parent_state_before = parent->state;
+		if (parent && parent->state != PROCESS_ZOMBIE)
+		{
+			send_signal(parent->task.pid, SIGCHLD);
+			if (parent->state == PROCESS_BLOCKED)
+				process_wait_wake_blocked_parent(parent, dying);
+		}
+		wait_exit_audit_process_exit(dying, parent, parent_state_before);
+	}
+	else
+	{
+		wait_exit_audit_process_exit(dying, NULL, -1);
+	}
+
+	return 1;
+}
+
 static void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 {
 	int status_val;
@@ -2509,7 +2588,7 @@ static void process_wait_wake_blocked_parent(process_t *parent, process_t *child
 		return;
 	}
 
-	status_val = (child->exit_code & 0xFF) << 8;
+	status_val = process_child_wait_status_word(child);
 	status_ptr = parent->wait_status_ptr;
 	if (!status_ptr)
 		status_ptr = (int *)(uintptr_t)parent->syscall_frame.rsi;
@@ -2526,6 +2605,17 @@ static void process_wait_wake_blocked_parent(process_t *parent, process_t *child
 
 	fase51_dbg_wait_wake((uint32_t)parent->task.pid, (uint32_t)child->task.pid,
 			     status_ptr, status_val, copy_ret);
+#if IR0_DEBUG_PROC
+	serial_print("[SIGTERM_AUDIT] wait_wake parent=");
+	serial_print_hex32((uint32_t)parent->task.pid);
+	serial_print(" child=");
+	serial_print_hex32((uint32_t)child->task.pid);
+	serial_print(" status=");
+	serial_print_hex32((uint32_t)status_val);
+	serial_print(" rax=");
+	serial_print_hex32((uint32_t)child->task.pid);
+	serial_print("\n");
+#endif
 	parent->wait_resume_child_pid = child->task.pid;
 	parent->syscall_resume_rax = (uint64_t)child->task.pid;
 	parent->state = PROCESS_READY;
@@ -2651,7 +2741,22 @@ __attribute__((noreturn)) void process_exit(int code)
 
 	/* Mark as zombie */
 	dying->state = PROCESS_ZOMBIE;
-	dying->exit_code = code;
+	if (dying->exit_signal == 0)
+		dying->exit_code = code;
+	else
+		dying->exit_code = 0;
+#if IR0_DEBUG_PROC
+	if (dying->exit_signal > 0)
+	{
+		serial_print("[SIGTERM_AUDIT] process_exit pid=");
+		serial_print_hex32((uint32_t)dying->task.pid);
+		serial_print(" exit_signal=");
+		serial_print_hex32((uint32_t)dying->exit_signal);
+		serial_print(" wait_status=");
+		serial_print_hex32((uint32_t)process_child_wait_status_word(dying));
+		serial_print("\n");
+	}
+#endif
 #if IR0_DEBUG_PROC
 	{
 		fase_proc_audit_t *fa = fase_audit_get(dying, 0);
@@ -2986,7 +3091,7 @@ int process_wait(pid_t pid, int *status, int options)
 				return -EFAULT;
 			}
 
-			status_val = (zombie->exit_code & 0xFF) << 8;
+			status_val = process_child_wait_status_word(zombie);
 			reaped_pid = zombie->task.pid;
 			process_irq_restore(irq_flags);
 

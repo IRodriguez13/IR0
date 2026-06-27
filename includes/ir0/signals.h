@@ -12,18 +12,15 @@
  */
 
 // SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * File: signals.h
- * Description: Basic signal definitions for process management
- */
+
 
 #ifndef _IR0_SIGNALS_H
 #define _IR0_SIGNALS_H
 
 #include <stdint.h>
+#include <stddef.h>
+
+typedef struct process process_t;
 
 
 /* Standard Unix signals - essential set for error handling */
@@ -57,8 +54,13 @@
 /* Maximum signal number */
 #define _NSIG 32
 
-/* sigset_t - signal set for rt_sigprocmask (Linux: 64-bit mask) */
-typedef uint64_t sigset_t;
+/* sigset_t — Linux uapi layout (128 bytes on x86-64). */
+#define _IR0_SIGSET_WORDS 16
+
+typedef struct
+{
+	unsigned long __val[_IR0_SIGSET_WORDS];
+} sigset_t;
 
 /* rt_sigprocmask how argument */
 #define SIG_BLOCK     0  /* Add signals to mask */
@@ -70,13 +72,43 @@ typedef uint64_t sigset_t;
 #define SIG_IGN ((void (*)(int))1)  /* Ignore signal */
 #define SIG_ERR ((void (*)(int))-1) /* Error return */
 
+#define SA_SIGINFO    4
+#define SA_RESETHAND  0x80000000U
+
+#ifndef SIGNAL_DELIVER_LOG
+#define SIGNAL_DELIVER_LOG 1
+#endif
+
+/* Linux uapi si_code for SIGSEGV (subset). */
+#define SEGV_MAPERR   1
+
+/*
+ * siginfo_t — Linux/musl layout (128 bytes on x86-64).
+ * Only fault fields used by D1.2 SIGSEGV delivery.
+ */
+typedef struct
+{
+	int si_signo;
+	int si_errno;
+	int si_code;
+	union
+	{
+		char _pad[128 - 3 * (int)sizeof(int)];
+		struct
+		{
+			void *si_addr;
+		} _sigfault;
+	} _sifields;
+} siginfo_t;
+
 /**
- * struct sigaction - Signal action structure (simplified POSIX sigaction)
+ * struct sigaction — Linux rt_sigaction layout (musl-compatible size).
  */
 struct sigaction {
-    void (*sa_handler)(int);  /* Signal handler function */
-    uint32_t sa_mask;         /* Signals to block during handler execution */
-    int sa_flags;             /* Signal flags (future use) */
+    void (*sa_handler)(int);
+    unsigned long sa_flags;
+    void (*sa_restorer)(void);
+    sigset_t sa_mask;
 };
 
 /**
@@ -133,6 +165,19 @@ int send_signal(int pid, int signal);
  */
 void handle_signals(void);
 
+/*
+ * True when @p has a pending signal that should interrupt pause(2) or run
+ * handle_signals() even if the signal is blocked in signal_mask (default
+ * termination for SIGKILL / SIGTERM).
+ */
+int signals_pause_should_interrupt(process_t *p);
+
+/*
+ * True when handle_signals() should run on context switch to @p (includes
+ * default SIGTERM/SIGKILL even if blocked in signal_mask).
+ */
+int signals_should_handle_on_run(process_t *p);
+
 /**
  * register_signal_handler - Register a signal handler for current process
  * @signal: Signal number
@@ -149,5 +194,40 @@ int register_signal_handler(int signal, void (*handler)(int));
  * Returns: 0 on success, -1 on error
  */
 int signal_ignore(int signal);
+
+/*
+ * Returns 1 if @sig has a deliverable userspace handler (not DFL/IGN/blocked).
+ */
+int signals_has_user_handler(process_t *p, int sig);
+
+/** POSIX exec: reset handlers, mask, pending; drop saved sigreturn context. */
+void signals_reset_on_exec(process_t *p);
+
+/*
+ * Deliver @sig synchronously from a user #PF IRQ @frame (isr_common_stub layout).
+ * @fault_addr is CR2 (stored in siginfo for SA_SIGINFO).
+ * Returns 1 if redirected to handler; 0 if caller should terminate/default.
+ */
+int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
+				   uint64_t fault_addr);
+
+static inline uint32_t ir0_sigset_low32(const sigset_t *set)
+{
+	if (!set)
+		return 0;
+	return (uint32_t)(set->__val[0] & 0xFFFFFFFFUL);
+}
+
+static inline void ir0_sigset_set_low32(sigset_t *set, uint32_t mask)
+{
+	size_t i;
+
+	if (!set)
+		return;
+
+	for (i = 0; i < _IR0_SIGSET_WORDS; i++)
+		set->__val[i] = 0;
+	set->__val[0] = (unsigned long)mask;
+}
 
 #endif /* _IR0_SIGNALS_H */

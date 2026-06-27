@@ -127,6 +127,7 @@ typedef struct process
 	process_state_t state;
 	process_mode_t mode;  /* Execution mode (kernel vs user) */
 	int exit_code;
+	int exit_signal; /* >0 if killed by signal (wait WIFSIGNALED / WTERMSIG) */
 	struct process *next;
 	fd_entry_t fd_table[MAX_FDS_PER_PROCESS];
 	
@@ -297,6 +298,16 @@ int process_wait(pid_t pid, int *status, int options);
  */
 int process_wait_child_matches_blocked_target(const process_t *parent,
 					      pid_t child_pid);
+
+/* Linux wait status word for a zombie (exit << 8 or WTERMSIG). */
+int process_child_wait_status_word(const process_t *child);
+
+/*
+ * Fatal default action for kill(2): SIGKILL always; SIGTERM when not caught or
+ * ignored (signal mask does not defer default terminate). Returns 1 if @target
+ * is now a zombie; caller must request schedule.
+ */
+int process_signal_default_kill(process_t *target, int signal);
 
 /*
  * Reap a zombie child when resuming a blocked wait4 syscall.
