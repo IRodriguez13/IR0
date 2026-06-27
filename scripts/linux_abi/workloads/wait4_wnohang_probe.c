@@ -55,19 +55,33 @@ static void audit_wn(unsigned step, const char *op, long ret, int err, int statu
 	}
 }
 
+static int pipe_sync_write(int fd, char ch)
+{
+	if (write(fd, &ch, 1) != 1)
+		return -1;
+	(void)fsync(fd);
+	return 0;
+}
+
+static int pipe_sync_read(int fd, char *ch)
+{
+	return read(fd, ch, 1) == 1 ? 0 : -1;
+}
+
 int main(void)
 {
 	pid_t pid;
 	int status = 0;
 	long wret;
 	int readyfd[2];
-	int releasefd[2];
+	int exitgofd[2];
+	int exitackfd[2];
 	char ch;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 	setvbuf(stderr, NULL, _IONBF, 0);
 
-	if (pipe(readyfd) != 0 || pipe(releasefd) != 0)
+	if (pipe(readyfd) != 0 || pipe(exitgofd) != 0 || pipe(exitackfd) != 0)
 		return 1;
 
 	pid = fork();
@@ -76,13 +90,18 @@ int main(void)
 		volatile char stack_cow = 0;
 
 		(void)stack_cow;
-		(void)write(readyfd[1], "R", 1);
+		if (pipe_sync_write(readyfd[1], 'R') != 0)
+			_exit(1);
 		(void)close(readyfd[0]);
 		(void)close(readyfd[1]);
-		(void)close(releasefd[1]);
-		if (read(releasefd[0], &ch, 1) != 1)
+		(void)close(exitgofd[1]);
+		(void)close(exitackfd[0]);
+		if (pipe_sync_read(exitgofd[0], &ch) != 0 || ch != 'G')
 			_exit(1);
-		(void)close(releasefd[0]);
+		(void)close(exitgofd[0]);
+		if (pipe_sync_write(exitackfd[1], 'A') != 0)
+			_exit(1);
+		(void)close(exitackfd[1]);
 		_exit(5);
 	}
 	if (pid < 0)
@@ -100,8 +119,9 @@ int main(void)
 	audit_wn(1, "fork", (long)pid, 0, -1);
 
 	(void)close(readyfd[1]);
-	(void)close(releasefd[0]);
-	if (read(readyfd[0], &ch, 1) != 1)
+	(void)close(exitgofd[0]);
+	(void)close(exitackfd[1]);
+	if (pipe_sync_read(readyfd[0], &ch) != 0 || ch != 'R')
 		return 1;
 	(void)close(readyfd[0]);
 
@@ -110,10 +130,13 @@ int main(void)
 	if (wret != 0)
 		return 1;
 
-	ch = 'G';
-	if (write(releasefd[1], &ch, 1) != 1)
+	if (pipe_sync_write(exitgofd[1], 'G') != 0)
 		return 1;
-	(void)close(releasefd[1]);
+	(void)close(exitgofd[1]);
+
+	if (pipe_sync_read(exitackfd[0], &ch) != 0 || ch != 'A')
+		return 1;
+	(void)close(exitackfd[0]);
 
 	wret = (long)syscall(SYS_wait4, (long)pid, &status, 0, NULL);
 	audit_wn(3, "wait4_block_reap", wret, wret < 0 ? errno : 0, status);
