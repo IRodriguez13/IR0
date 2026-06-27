@@ -905,7 +905,11 @@ linux-abi-audit-vfs-write: kernel-x64-userspace.iso build-linux-abi-vfs-write-pr
 		echo "✗ linux-abi-audit-vfs-write BLOCKED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1; \
 	fi
 
-smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace.iso
+smoke-runit-ash-interactive: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    disk.img missing — running load-userspace-runit"; \
+		$(MAKE) -s load-userspace-runit; \
+	fi
 	@echo "  SMOKE   runit PID1 + ash interactive (headless + monitor sendkey)..."
 	@chmod +x scripts/smoke_runit_ash_interactive.py
 	@python3 scripts/smoke_runit_ash_interactive.py --log $(RUNIT_ASH_SMOKE_LOG) --timeout 120 --iso kernel-x64-userspace.iso --disk disk.img

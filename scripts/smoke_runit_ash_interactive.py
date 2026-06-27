@@ -29,7 +29,9 @@ DEFAULT_TIMEOUT = 90
 MONITOR_PORT = 4446
 ECHO_STABILIZE_SEC = 2.0
 ECHO_RETRY_SEC = 12.0
-ECHO_RETRY_MAX = 3
+ECHO_RETRY_FAST_SEC = 2.5
+ECHO_RETRY_MIN_SEC = 1.0
+ECHO_RETRY_MAX = 6
 SENDKEY_DELAY_SEC = 0.12
 PROMPT_AUDIT_DEFER_SEC = 6.0
 SMOKE_ATTEMPTS = 3
@@ -70,6 +72,9 @@ BUSYBOX_CONFIG_PROMPT = re.compile(
 ASH_PROMPT_RE = re.compile(r"(?:^|\n)#\s")
 ASH_PROMPT_STABLE_RE = re.compile(r"(?:^|\n)#\s*KBD_")
 ASH_PROMPT_AUDIT_RE = re.compile(r"(?:^|\n)#\s*\[WAIT_EXIT")
+ECHO_GARBLED_RE = re.compile(
+    r"\bechoo\b|\bcho hi\b|: not found|: Invalid argument"
+)
 
 ECHO_KEYS = ["e", "c", "h", "o", "spc", "h", "i", "ret"]
 
@@ -92,6 +97,16 @@ def ash_ready_for_input(text: str, busybox_seen_at: float, now: float) -> bool:
         if busybox_seen_at <= 0.0 or now - busybox_seen_at < PROMPT_AUDIT_DEFER_SEC:
             return False
     return True
+
+
+def echo_command_failed(text: str) -> bool:
+    if "ASH_COMMAND_ECHO_OK" in text:
+        return False
+    if ECHO_GARBLED_RE.search(text):
+        return True
+    if "SYS_READ_RETURN_OK" in text and not log_has_hi(text):
+        return True
+    return False
 
 
 def normalize_serial_smoke(text: str) -> str:
@@ -144,6 +159,13 @@ def send_keys(port: int, keys: list[str], delay: float = SENDKEY_DELAY_SEC) -> N
         time.sleep(delay)
 
 
+def clear_prompt_line(port: int) -> None:
+    send_keys(port, ["ctrl-u"], delay=0.08)
+    time.sleep(0.35)
+    monitor_send(port, "sendkey ret")
+    time.sleep(0.65)
+
+
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
@@ -175,7 +197,7 @@ def cleanup_stale_qemu(monitor_port: int) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    time.sleep(0.2)
+    time.sleep(0.5)
 
 
 def classify_failure(
@@ -194,6 +216,8 @@ def classify_failure(
     if "SYS_READ_RETURN_OK" not in text:
         return "B) missing SYS_READ_RETURN_OK"
     if "ASH_COMMAND_ECHO_OK" not in text:
+        if ECHO_GARBLED_RE.search(text):
+            return "C) garbled sendkey (echoo / not found) — retry or timing"
         return "C) missing ASH_COMMAND_ECHO_OK"
     if post_success:
         return "D) timeout after success tags (harness)"
@@ -206,7 +230,6 @@ def run_once(args: argparse.Namespace) -> int:
     cleanup_stale_qemu(args.monitor_port)
 
     log_path = Path(args.log)
-    log_path.unlink(missing_ok=True)
     log_path.unlink(missing_ok=True)
 
     iso = Path(args.iso)
@@ -249,6 +272,17 @@ def run_once(args: argparse.Namespace) -> int:
     busybox_seen_at = 0.0
     start = time.monotonic()
 
+    def inject_echo(*, retry: bool = False) -> bool:
+        try:
+            if retry:
+                clear_prompt_line(args.monitor_port)
+            send_keys(args.monitor_port, ECHO_KEYS)
+            return True
+        except OSError as exc:
+            print(f"✗ monitor key injection failed: {exc}")
+            print("  classify: A) QEMU monitor sendkey failed")
+            return False
+
     try:
         while time.monotonic() < deadline:
             if proc.poll() is not None:
@@ -263,7 +297,7 @@ def run_once(args: argparse.Namespace) -> int:
             for pat in FAIL_RES:
                 if pat.search(text):
                     print(f"✗ smoke-runit-ash-interactive FAIL pattern: {pat.pattern}")
-                    print(f"  classify: E) QEMU/harness issue")
+                    print("  classify: G) kernel panic / fault in log")
                     return 1
 
             if pass_satisfied(text):
@@ -277,26 +311,29 @@ def run_once(args: argparse.Namespace) -> int:
 
             if ash_ready_for_input(text, busybox_seen_at, now) and not echo_sent:
                 time.sleep(ECHO_STABILIZE_SEC)
-                try:
-                    send_keys(args.monitor_port, ECHO_KEYS)
+                if inject_echo(retry=False):
                     echo_sent = True
                     echo_sent_at = time.monotonic()
-                except OSError as exc:
-                    print(f"✗ monitor key injection failed: {exc}")
-                    print("  classify: E) QEMU/harness issue")
+                else:
                     return 1
 
             if echo_sent and echo_retries < ECHO_RETRY_MAX and echo_sent_at > 0.0:
-                if time.monotonic() - echo_sent_at >= ECHO_RETRY_SEC:
-                    if "ASH_COMMAND_ECHO_OK" not in text:
-                        try:
-                            send_keys(args.monitor_port, ECHO_KEYS)
-                            echo_retries += 1
-                            echo_sent_at = time.monotonic()
-                        except OSError as exc:
-                            print(f"✗ monitor echo retry failed: {exc}")
-                            print("  classify: E) QEMU/harness issue")
-                            return 1
+                elapsed = time.monotonic() - echo_sent_at
+                if elapsed < ECHO_RETRY_MIN_SEC:
+                    time.sleep(0.15)
+                    continue
+                need_retry = False
+                if echo_command_failed(text):
+                    need_retry = elapsed >= ECHO_RETRY_FAST_SEC
+                elif "ASH_COMMAND_ECHO_OK" not in text:
+                    threshold = ECHO_RETRY_FAST_SEC if "SYS_READ_RETURN_OK" in text else ECHO_RETRY_SEC
+                    need_retry = elapsed >= threshold
+                if need_retry:
+                    if inject_echo(retry=True):
+                        echo_retries += 1
+                        echo_sent_at = time.monotonic()
+                    else:
+                        return 1
 
             time.sleep(0.15)
 
