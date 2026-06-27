@@ -62,6 +62,25 @@ setup/third-party/busybox-1.36.1/scripts/basic/docproc
 setup/third-party/busybox-1.36.1/scripts/basic/fixdep
 setup/third-party/busybox-1.36.1/scripts/basic/split-include
 setup/third-party/busybox-1.36.1/scripts/kconfig/conf
+setup/third-party/busybox-1.36.1/docs/busybox.net/
+
+# Accidental shell redirect artifact (git diff > -)
+/-
+
+# Third-party tarballs (local fetch only; do not commit)
+go1.23.0.linux-amd64.tar.gz
+setup/third-party/runit-*.tar.gz
+
+# runit build outputs
+setup/runit/bin/
+setup/runit/stage-bin/
+setup/runit/stage/
+
+# Smoke binaries (built locally)
+setup/doom/doomgeneric_smoke
+setup/pid1/fase52_harness
+setup/pid1/musl_pthread_smoke
+setup/pid1/su_setuid_smoke
 
 # Kconfig helper static libs (built locally)
 setup/libkconfig_build.a
