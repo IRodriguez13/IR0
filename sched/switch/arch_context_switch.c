@@ -216,11 +216,23 @@ void arch_context_switch(task_t *prev, task_t *next)
     {
         /*
          * wait4 blocked with no reaped child yet — never user-resume with the
-         * placeholder syscall_resume_rax=0 set at block time.
+         * placeholder syscall_resume_rax=0 set at block time (coop_resched must
+         * not bypass this: stale coop + wait_blocked would iret rax=0).
          */
-        if (next_proc->wait_blocked && next_proc->wait_resume_child_pid <= 0 &&
-            !next_proc->coop_resched_resume)
+        if (next_proc->wait_blocked && next_proc->wait_resume_child_pid <= 0)
         {
+            next_proc->irq_frame_saved = 0;
+            next_proc->coop_resched_resume = 0;
+        }
+        else if (!next_proc->coop_resched_resume &&
+                 next_proc->syscall_resume_rax == 0 &&
+                 !(next_proc->wait_blocked &&
+                   next_proc->wait_resume_child_pid > 0))
+        {
+            /*
+             * Stale syscall-frame resume (pipe-read block placeholder, etc.).
+             * Continue in kernel instead of iretq with rax=0.
+             */
             next_proc->irq_frame_saved = 0;
         }
         else
@@ -263,8 +275,16 @@ void arch_context_switch(task_t *prev, task_t *next)
 
             process_reap_zombie_on_wait_resume(next_proc, resume_child);
         }
-        process_apply_syscall_frame_to_task(&next_proc->task, frame,
-                                            next_proc->syscall_resume_rax);
+        {
+            uint64_t resume_rax = next_proc->syscall_resume_rax;
+
+            if (!next_proc->coop_resched_resume && next_proc->wait_blocked &&
+                next_proc->wait_resume_child_pid > 0)
+                resume_rax = (uint64_t)next_proc->wait_resume_child_pid;
+
+            process_apply_syscall_frame_to_task(&next_proc->task, frame,
+                                                resume_rax);
+        }
         next_proc->wait_status_ptr = NULL;
         next_proc->wait_blocked = 0;
         next_proc->wait_target_pid = 0;
