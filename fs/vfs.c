@@ -824,17 +824,10 @@ int vfs_unlink(const char *path)
         return -ENOENT;
 
     if (S_ISDIR(st.st_mode))
-    {
-        char parent[MAX_PATH];
-        if (parent_dir(path, parent, sizeof(parent)) == 0)
-            if (!ir0_check_file_access(parent, ACCESS_WRITE))
-                return -EACCES;
-    }
-    else
-    {
-        if (!ir0_check_file_access(path, ACCESS_WRITE))
-            return -EACCES;
-    }
+        return -EISDIR;
+
+    if (!ir0_check_file_access(path, ACCESS_WRITE))
+        return -EACCES;
 
     struct vfs_ops *ops = ops_for_path(path);
     if (!ops || !ops->unlink)
