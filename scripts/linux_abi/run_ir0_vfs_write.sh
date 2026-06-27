@@ -26,7 +26,8 @@ if [[ ! -f "$ROOT/disk.img" ]]; then
 fi
 
 DISK="$(mktemp /tmp/ir0-linux-abi-vfs-write.XXXXXX.img)"
-cp -f "$ROOT/disk.img" "$DISK"
+truncate -s 200M "$DISK"
+python3 "$ROOT/scripts/inject_init_minix.py" --format-large "$DISK"
 python3 "$ROOT/scripts/inject_init_minix.py" "$DISK" "$PROBE" sbin/init
 
 rm -f "$LOG"
