@@ -110,7 +110,109 @@ def zmap_start(sb):
     return 2 + sb["imap_blocks"]
 
 
+def inode_type(mode):
+    return mode & IFMT
+
+
+def collect_zones_from_inode(f, inode):
+    """Return all data zone numbers referenced by an inode."""
+    zones = set()
+    if (inode["mode"] & IFMT) != IFDIR and (inode["mode"] & IFMT) != IFREG:
+        return zones
+    if inode["zones"][0] == 0 and (inode["mode"] & IFMT) == IFDIR:
+        return zones
+    for zidx in range(7):
+        z = inode["zones"][zidx]
+        if z:
+            zones.add(z)
+    if inode["zones"][7]:
+        ind = read_block(f, inode["zones"][7])
+        for j in range(BLOCK // 2):
+            z, = struct.unpack("<H", ind[j * 2 : j * 2 + 2])
+            if z == 0:
+                break
+            zones.add(z)
+    if inode["zones"][8]:
+        dind = read_block(f, inode["zones"][8])
+        for j in range(BLOCK // 2):
+            z1, = struct.unpack("<H", dind[j * 2 : j * 2 + 2])
+            if z1 == 0:
+                break
+            lvl1 = read_block(f, z1)
+            for k in range(BLOCK // 2):
+                z2, = struct.unpack("<H", lvl1[k * 2 : k * 2 + 2])
+                if z2 == 0:
+                    break
+                zones.add(z2)
+    return zones
+
+
+def collect_used_inodes(f, sb):
+    """Walk the dentry tree and scan the inode table for allocated inodes."""
+    used = set()
+    queue = [1]
+    used.add(1)
+    while queue:
+        num = queue.pop()
+        inode = read_inode(f, sb, num)
+        for child_ino, _name in dir_entries(f, inode):
+            if child_ino == 0 or child_ino > sb["ninodes"]:
+                continue
+            if child_ino not in used:
+                used.add(child_ino)
+                queue.append(child_ino)
+    for n in range(1, sb["ninodes"] + 1):
+        if n in used:
+            continue
+        inode = read_inode(f, sb, n)
+        if inode["mode"] != 0 and inode["nlinks"] > 0:
+            used.add(n)
+    return used
+
+
+def sync_imap_from_tree(f, sb):
+    """Mark every in-use inode in the imap (bit set = allocated)."""
+    used = collect_used_inodes(f, sb)
+    imap = bytearray(read_block(f, imap_block(sb)))
+    for n in used:
+        byte_i = n // 8
+        bit_i = n % 8
+        if byte_i < BLOCK:
+            imap[byte_i] |= 1 << bit_i
+    write_block(f, imap_block(sb), bytes(imap))
+    return used
+
+
+def sync_zmap_from_inodes(f, sb, used_inodes=None):
+    """Mark data zones referenced by used inodes as allocated (bit clear = used)."""
+    if used_inodes is None:
+        used_inodes = collect_used_inodes(f, sb)
+    used_zones = set()
+    for n in used_inodes:
+        inode = read_inode(f, sb, n)
+        used_zones.update(collect_zones_from_inode(f, inode))
+    zmap_blk_base = zmap_start(sb)
+    for zone in used_zones:
+        if zone < sb["firstdatazone"]:
+            continue
+        idx = zone - sb["firstdatazone"]
+        byte_i = idx // 8
+        bit_i = idx % 8
+        zmap_blk = zmap_blk_base + byte_i // BLOCK
+        zoff = byte_i % BLOCK
+        zmap = bytearray(read_block(f, zmap_blk))
+        zmap[zoff] &= ~(1 << bit_i)
+        write_block(f, zmap_blk, bytes(zmap))
+
+
+def sync_bitmaps_from_tree(f, sb):
+    used = sync_imap_from_tree(f, sb)
+    sync_zmap_from_inodes(f, sb, used)
+    return used
+
+
 def alloc_inode(f, sb):
+    sync_imap_from_tree(f, sb)
     imap = read_block(f, imap_block(sb))
     for n in range(1, sb["ninodes"] + 1):
         byte_i = n // 8
@@ -138,6 +240,7 @@ def zone_free(f, sb, zone):
 
 
 def alloc_zone(f, sb):
+    sync_zmap_from_inodes(f, sb)
     zmap_blk_base = zmap_start(sb)
     for zone in range(sb["firstdatazone"], sb["nzones"]):
         if not zone_free(f, sb, zone):
@@ -370,7 +473,7 @@ def mkdir(f, sb, parent_num, parent, name, parent_prefix):
     return num, child
 
 
-def prepare_regular_file(f, sb, file_inode, data):
+def prepare_regular_file(f, sb, file_inode, data, file_mode=0o755):
     zones_needed = (len(data) + BLOCK - 1) // BLOCK
     entries_per_block = BLOCK // 2
     max_blocks = 7 + entries_per_block + (entries_per_block * entries_per_block)
@@ -422,14 +525,14 @@ def prepare_regular_file(f, sb, file_inode, data):
             write_block(f, dind_zone, bytes(dind_blk))
             zones[8] = dind_zone
 
-    file_inode["mode"] = IFREG | 0o755
+    file_inode["mode"] = IFREG | file_mode
     file_inode["size"] = len(data)
     file_inode["zones"] = zones
     file_inode["nlinks"] = 1
     return file_inode
 
 
-def write_file(f, sb, path_parts, data, source_path):
+def write_file(f, sb, path_parts, data, source_path, file_mode=0o755):
     root = read_inode(f, sb, 1)
     cur_num = 1
     cur = root
@@ -449,7 +552,7 @@ def write_file(f, sb, path_parts, data, source_path):
                 ino = alloc_inode(f, sb)
                 new_entry = True
                 file_inode = {
-                    "mode": IFREG | 0o755,
+                    "mode": IFREG | file_mode,
                     "uid": 0,
                     "size": 0,
                     "mtime": 0,
@@ -461,7 +564,7 @@ def write_file(f, sb, path_parts, data, source_path):
                 file_inode = read_inode(f, sb, ino)
                 if (file_inode["mode"] & IFMT) != IFREG:
                     file_inode = {
-                        "mode": IFREG | 0o755,
+                        "mode": IFREG | file_mode,
                         "uid": 0,
                         "size": 0,
                         "mtime": 0,
@@ -470,7 +573,7 @@ def write_file(f, sb, path_parts, data, source_path):
                         "zones": [0] * 9,
                     }
 
-            file_inode = prepare_regular_file(f, sb, file_inode, data)
+            file_inode = prepare_regular_file(f, sb, file_inode, data, file_mode)
             audit_entry(
                 source_path,
                 dest_path,
@@ -496,6 +599,13 @@ def write_file(f, sb, path_parts, data, source_path):
 
 
 def main():
+    file_mode = 0o755
+    argv = sys.argv[:]
+    if "--setuid" in argv:
+        file_mode = 0o4755
+        argv.remove("--setuid")
+    sys.argv = argv
+
     if len(sys.argv) >= 2 and sys.argv[1] in ("--format", "--format-large"):
         if len(sys.argv) != 3:
             print(
@@ -516,7 +626,7 @@ def main():
         print(f"✅ Formatted {disk_path} as MINIX v1 (kernel-compatible layout)")
         return
 
-    if len(sys.argv) < 3 or len(sys.argv) > 4:
+    if len(sys.argv) < 3 or len(sys.argv) > 5:
         print(
             f"Usage: {sys.argv[0]} --format DISK_IMAGE",
             file=sys.stderr,
@@ -526,7 +636,7 @@ def main():
             file=sys.stderr,
         )
         print(
-            f"       {sys.argv[0]} DISK_IMAGE FILE [DEST_PATH]",
+            f"       {sys.argv[0]} [--setuid] DISK_IMAGE FILE [DEST_PATH]",
             file=sys.stderr,
         )
         print("  DEST_PATH default: sbin/init (e.g. bin/sh)", file=sys.stderr)
@@ -547,9 +657,23 @@ def main():
 
     with open(disk_path, "r+b") as f:
         sb = parse_super(read_block(f, 1))
-        write_file(f, sb, path_parts, data, file_path)
+        sync_bitmaps_from_tree(f, sb)
+        write_file(f, sb, path_parts, data, file_path, file_mode)
+        sync_bitmaps_from_tree(f, sb)
 
     dest_display = "/" + "/".join(path_parts)
+    verify_script = os.path.join(os.path.dirname(__file__), "verify_minix_rootfs.py")
+    import subprocess
+
+    verify_paths = [dest_display]
+    if dest_display.startswith("/sbin/") and dest_display != "/sbin":
+        verify_paths.insert(0, "/sbin")
+    rc = subprocess.run(
+        [sys.executable, verify_script, disk_path, *verify_paths],
+        check=False,
+    )
+    if rc.returncode != 0:
+        raise SystemExit(f"post-inject verify failed for {dest_display}")
     print(
         f"✅ Injected {file_path} -> {disk_path}:{dest_display} "
         f"({len(data)} bytes, no mount)"
