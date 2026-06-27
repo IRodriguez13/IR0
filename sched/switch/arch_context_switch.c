@@ -65,6 +65,21 @@ static void arch_fixup_user_task_for_iretq(process_t *proc)
 	if (!proc || proc->mode != USER_MODE)
 		return;
 
+	/*
+	 * wait4 blocked via process_arm_kernel_syscall_sleep: task->cs is ring-0
+	 * and resume must use switch_context_x64 kernel_ret into process_wait,
+	 * not syscall_frame user iretq with placeholder rax=0.
+	 */
+	if (proc->wait_blocked && !proc->irq_frame_saved)
+		return;
+
+	if (proc->wait_target_pid != 0 && proc->wait_resume_child_pid <= 0 &&
+	    !proc->irq_frame_saved)
+		return;
+
+	if ((proc->task.cs & 3u) == 0)
+		return;
+
 	rip = proc->task.rip;
 	if (rip >= 0x00400000ULL && rip <= 0x00007FFFFFFFFFFFULL)
 		return;
@@ -219,21 +234,23 @@ void arch_context_switch(task_t *prev, task_t *next)
          * placeholder syscall_resume_rax=0 set at block time (coop_resched must
          * not bypass this: stale coop + wait_blocked would iret rax=0).
          */
-        if (next_proc->wait_blocked && next_proc->wait_resume_child_pid <= 0)
+        if ((next_proc->wait_blocked || next_proc->wait_target_pid != 0) &&
+            next_proc->wait_resume_child_pid <= 0)
         {
             next_proc->irq_frame_saved = 0;
             next_proc->coop_resched_resume = 0;
         }
-        else if (!next_proc->coop_resched_resume &&
-                 next_proc->syscall_resume_rax == 0 &&
+        else if (next_proc->syscall_resume_rax == 0 &&
                  !(next_proc->wait_blocked &&
                    next_proc->wait_resume_child_pid > 0))
         {
             /*
-             * Stale syscall-frame resume (pipe-read block placeholder, etc.).
-             * Continue in kernel instead of iretq with rax=0.
+             * Stale syscall-frame resume (pipe-read block placeholder, coop
+             * reschedule with rax=0, etc.). Continue in kernel instead of
+             * iretq with rax=0.
              */
             next_proc->irq_frame_saved = 0;
+            next_proc->coop_resched_resume = 0;
         }
         else
         {
@@ -385,6 +402,19 @@ void arch_context_switch(task_t *prev, task_t *next)
         }
         return;
         }
+    }
+
+    /*
+     * wait4 blocked in process_wait (irq_frame_saved=0): re-assert ring-0 before
+     * switch_context so stale user CS / syscall_frame fixup cannot iret rax=0.
+     * wait_target_pid survives longer than wait_blocked if a resume path clears
+     * wait_blocked too early.
+     */
+    if (next_proc && next_proc->wait_target_pid != 0 &&
+        next_proc->wait_resume_child_pid <= 0 && !next_proc->irq_frame_saved)
+    {
+        process_arm_kernel_syscall_sleep(next_proc);
+        next_proc->coop_resched_resume = 0;
     }
 
     arch_fixup_user_task_for_iretq(next_proc);
