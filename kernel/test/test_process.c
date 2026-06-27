@@ -187,6 +187,27 @@ void ktest_wait4_wnohang_specific(void)
 	KTEST_END();
 }
 
+void ktest_wait4_wnohang_echild_after_reap(void)
+{
+	pid_t pid;
+	process_t *child;
+
+	KTEST_BEGIN("wait4_wnohang_echild_after_reap");
+	pid = spawn_kernel(ktest_wait4_child_entry, "echild_after_reap");
+	KASSERT_GT(pid, 0);
+
+	child = process_find_by_pid(pid);
+	KASSERT(child != NULL);
+	child->state = PROCESS_ZOMBIE;
+	child->exit_code = 5;
+	sched_remove_process(child);
+
+	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
+	KASSERT(process_find_by_pid(pid) == NULL);
+	KASSERT_EQ(process_wait(pid, NULL, WNOHANG), -ECHILD);
+	KTEST_END();
+}
+
 void ktest_kill_sigterm_wait_status(void)
 {
 	pid_t pid;

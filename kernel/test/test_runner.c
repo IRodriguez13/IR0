@@ -40,6 +40,7 @@ static void (*const ktest_functions[])(void) = {
 	ktest_wait4_minus_one_reaps_any_child,
 	ktest_wait4_specific_no_leak_after_destroy,
 	ktest_wait4_wnohang_specific,
+	ktest_wait4_wnohang_echild_after_reap,
 	ktest_kill_sigterm_wait_status,
 	ktest_proc_blockdevices_contract,
 	ktest_proc_cpuinfo_contract,
@@ -83,6 +84,7 @@ static const char *const ktest_names[] = {
 	"wait4_minus_one_reaps_any_child",
 	"wait4_specific_no_leak_after_destroy",
 	"wait4_wnohang_specific",
+	"wait4_wnohang_echild_after_reap",
 	"kill_sigterm_wait_status",
 	"proc_blockdevices_contract",
 	"proc_cpuinfo_contract",
@@ -130,6 +132,8 @@ static const int ktest_needs_process[] = {
 	1,  /* wait4_minus_one_reaps_any_child */
 	1,  /* wait4_specific_no_leak_after_destroy */
 	1,  /* wait4_wnohang_specific */
+	1,  /* wait4_wnohang_echild_after_reap */
+	1,  /* kill_sigterm_wait_status */
 	1,  /* proc_blockdevices_contract */
 	1,  /* proc_cpuinfo_contract */
 	1,  /* proc_version_contract */
