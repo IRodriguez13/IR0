@@ -27,10 +27,13 @@ from compare import (  # noqa: E402
     compare_mmap,
     compare_mount,
     compare_openat,
+    compare_process_lifecycle,
+    compare_kill_sigterm,
     compare_read,
     compare_stat,
     compare_vfs_write,
     compare_wait4,
+    compare_wait4_wnohang,
     render_markdown,
 )
 
@@ -56,6 +59,20 @@ def build_wait4_probe(report_dir: Path) -> Path:
     return build_static_probe(
         report_dir / "wait4_probe",
         ROOT / "scripts" / "linux_abi" / "workloads" / "wait4_probe.c",
+    )
+
+
+def build_wait4_wnohang_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "wait4_wnohang_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "wait4_wnohang_probe.c",
+    )
+
+
+def build_kill_sigterm_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "kill_sigterm_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "kill_sigterm_probe.c",
     )
 
 
@@ -736,9 +753,205 @@ def audit_vfs_write(report_dir: Path, cfg: dict) -> CompareResult:
     return compare_vfs_write(linux_trace, ir0_trace, cfg)
 
 
+def build_process_lifecycle_probe(report_dir: Path) -> tuple[Path, Path]:
+    helper = build_static_probe(
+        report_dir / "exec_helper",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "exec_helper.c",
+    )
+    probe_out = report_dir / "process_lifecycle_probe"
+    probe_src = ROOT / "scripts" / "linux_abi" / "workloads" / "process_lifecycle_probe.c"
+    musl_cc = "musl-gcc"
+    try:
+        subprocess.run(["musl-gcc", "--version"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        musl_cc = "gcc"
+    helper_path = str(helper.resolve())
+    rc = run_cmd(
+        [
+            musl_cc,
+            "-static",
+            "-Os",
+            f'-DEXEC_HELPER_PATH="{helper_path}"',
+            "-o",
+            str(probe_out),
+            str(probe_src),
+        ]
+    )
+    if rc != 0 or not probe_out.is_file():
+        raise RuntimeError(f"failed to build {probe_out.name} with {musl_cc}")
+    return probe_out, helper
+
+
+def audit_process_lifecycle(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "process_lifecycle"
+    ir0_dir = report_dir / "ir0" / "process_lifecycle"
+
+    build_process_lifecycle_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_process_lifecycle.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_process_lifecycle.sh"
+
+    ktest_ok: bool | None = None
+    ktest_log = Path(os.environ.get("KTEST_LOG", "/tmp/ktest.log"))
+    ktest_name = cfg.get("ktest", "wait4_status")
+    if ktest_log.is_file() and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = ktest_log.read_text(errors="replace").find(f"[PASS] {ktest_name}") >= 0
+        if ktest_ok:
+            print(f"  NOTE  reusing process_lifecycle ktest evidence from {ktest_log}")
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="process_lifecycle",
+            ok=False,
+            divergences=["Linux process_lifecycle workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        return CompareResult(
+            contract="process_lifecycle",
+            ok=False,
+            divergences=["IR0 process_lifecycle workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    res = compare_process_lifecycle(linux_trace, ir0_trace, cfg)
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append(f"ktest {ktest_name} FAILED")
+    elif ktest_ok is True:
+        res.notes.append(f"ktest {ktest_name} OK")
+    return res
+
+
+    return res
+
+
+def audit_wait4_wnohang(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "wait4_wnohang"
+    ir0_dir = report_dir / "ir0" / "wait4_wnohang"
+    child_exit = int(cfg.get("child_exit_status", 5))
+    echild_errno = int(cfg.get("echild_errno", 10))
+    ktest_name = cfg.get("ktest", "wait4_status")
+    ktest_log = Path(os.environ.get("KTEST_LOG", "/tmp/ktest.log"))
+
+    build_wait4_wnohang_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_wait4_wnohang.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_wait4_wnohang.sh"
+
+    if os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = None
+    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+        errors="replace"
+    ):
+        ktest_ok = True
+        print(f"  NOTE  reusing wait4_wnohang ktest evidence from {ktest_log}")
+    else:
+        ktest_ok = None
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="wait4_wnohang",
+            ok=False,
+            divergences=["Linux wait4_wnohang workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        ir0_trace_path = ir0_dir / "trace.json"
+        if ir0_trace_path.is_file():
+            ir0_trace = json.loads(ir0_trace_path.read_text())
+            ops = {s.get("op") for s in ir0_trace.get("audit_steps") or []}
+            if "wait4_block_reap" not in ops:
+                return CompareResult(
+                    contract="wait4_wnohang",
+                    ok=False,
+                    divergences=["IR0 wait4_wnohang workload script failed"],
+                )
+        else:
+            return CompareResult(
+                contract="wait4_wnohang",
+                ok=False,
+                divergences=["IR0 wait4_wnohang workload script failed"],
+            )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    if not (ir0_dir / "trace.json").is_file():
+        ir0_trace = {"audit_steps": []}
+    else:
+        ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None:
+        ktest_ok = run_ktest_brk(ktest_name)
+    return compare_wait4_wnohang(
+        linux_trace, ir0_trace, child_exit, echild_errno, ktest_ok
+    )
+
+
+def audit_kill_sigterm(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "kill_sigterm"
+    ir0_dir = report_dir / "ir0" / "kill_sigterm"
+    ktest_name = cfg.get("ktest", "kill_sigterm_wait_status")
+    ktest_log = Path("/tmp/ktest.log")
+
+    build_kill_sigterm_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_kill_sigterm.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_kill_sigterm.sh"
+
+    if os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = None
+    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+        errors="replace"
+    ):
+        ktest_ok = True
+        print(f"  NOTE  reusing kill_sigterm ktest evidence from {ktest_log}")
+    else:
+        ktest_ok = None
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="kill_sigterm",
+            ok=False,
+            divergences=["Linux kill_sigterm workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        ir0_trace_path = ir0_dir / "trace.json"
+        if ir0_trace_path.is_file():
+            ir0_trace = json.loads(ir0_trace_path.read_text())
+            steps = ir0_trace.get("audit_steps") or []
+            if not any(s.get("op") == "kill_sigterm" for s in steps):
+                return CompareResult(
+                    contract="kill_sigterm",
+                    ok=False,
+                    divergences=["IR0 kill_sigterm workload script failed"],
+                )
+        else:
+            return CompareResult(
+                contract="kill_sigterm",
+                ok=False,
+                divergences=["IR0 kill_sigterm workload script failed"],
+            )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    if not (ir0_dir / "trace.json").is_file():
+        ir0_trace = {"audit_steps": []}
+    else:
+        ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None:
+        ktest_ok = run_ktest_brk(ktest_name)
+    res = compare_kill_sigterm(linux_trace, ir0_trace, ktest_ok)
+    return res
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
+    "wait4_wnohang": audit_wait4_wnohang,
+    "kill_sigterm": audit_kill_sigterm,
     "read": audit_read,
     "mmap": audit_mmap,
     "mount": audit_mount,
@@ -746,6 +959,7 @@ AUDITORS = {
     "openat": audit_openat,
     "stat": audit_stat,
     "vfs_write": audit_vfs_write,
+    "process_lifecycle": audit_process_lifecycle,
 }
 
 
