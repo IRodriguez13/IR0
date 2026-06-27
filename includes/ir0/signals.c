@@ -1,39 +1,273 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
  * File: signals.c
- * Description: IR0 kernel source/header file
- */
-
-// SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * File: signals.c
  * Description: Basic signal implementation
  */
 
-#include "signals.h"
-#include <kernel/process.h>
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#include <ir0/signals.h>
+#include <ir0/process.h>
+#include <ir0/scheduler_api.h>
 #include <ir0/serial_io.h>
+#include <ir0/debug_runtime.h>
+#include <ir0/clock.h>
 #include <ir0/copy_user.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <ir0/kmem.h>
 #include <config.h>
 #include <string.h>
+
+#include <ir0/paging.h>
+#include <ir0/kmem.h>
+#include <config.h>
+#include <string.h>
+#include <ktm.h>
+
+static void signals_fill_sigcontext_from_frame(struct sigcontext *ctx,
+					       uint64_t *frame)
+{
+	if (!ctx || !frame)
+		return;
+
+	ctx->r15 = frame[-15];
+	ctx->r14 = frame[-14];
+	ctx->r13 = frame[-13];
+	ctx->r12 = frame[-12];
+	ctx->r11 = frame[-11];
+	ctx->r10 = frame[-10];
+	ctx->r9 = frame[-9];
+	ctx->r8 = frame[-8];
+	ctx->rdi = frame[-7];
+	ctx->rsi = frame[-6];
+	ctx->rbp = frame[-5];
+	ctx->rbx = frame[-4];
+	ctx->rdx = frame[-3];
+	ctx->rcx = frame[-2];
+	ctx->rax = frame[-1];
+	ctx->orig_rax = 0;
+	ctx->rip = frame[2];
+	ctx->cs = frame[3];
+	ctx->rflags = frame[4];
+	ctx->rsp = frame[5];
+	ctx->ss = frame[6];
+}
+
+int signals_has_user_handler(process_t *p, int sig)
+{
+	void (*handler)(int);
+
+	if (!p || sig < 1 || sig >= _NSIG)
+		return 0;
+	if (p->signal_ignored & SIGNAL_MASK(sig))
+		return 0;
+	if (p->signal_mask & SIGNAL_MASK(sig))
+		return 0;
+	handler = p->signal_handlers[sig];
+	if (!handler || handler == SIG_DFL || handler == SIG_IGN)
+		return 0;
+	if (p->mode == USER_MODE &&
+	    !is_user_address((void *)handler, sizeof(void *)))
+		return 0;
+	return 1;
+}
+
+int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
+				   uint64_t fault_addr)
+{
+	void (*handler)(int);
+	struct sigcontext *ctx;
+	uint64_t new_rsp;
+	uint64_t info_addr;
+	uint64_t uctx_addr;
+	uint32_t sa_flags;
+	siginfo_t info;
+
+	if (!signals_has_user_handler(p, sig))
+		return 0;
+	if (!frame || p->mode != USER_MODE)
+		return 0;
+
+	handler = p->signal_handlers[sig];
+	sa_flags = p->signal_sa_flags[sig];
+
+	if (p->saved_context)
+	{
+		kfree(p->saved_context);
+		p->saved_context = NULL;
+	}
+
+	ctx = kmalloc(sizeof(*ctx));
+	if (!ctx)
+		return 0;
+
+	signals_fill_sigcontext_from_frame(ctx, frame);
+	p->saved_context = ctx;
+
+	new_rsp = frame[5];
+	if (sa_flags & SA_SIGINFO)
+		new_rsp -= 256;
+	else
+		new_rsp -= 128;
+	new_rsp &= ~0xFULL;
+
+	if (new_rsp < 0x400000UL || new_rsp > 0x7FFFFFFFFFFFUL)
+	{
+		kfree(ctx);
+		p->saved_context = NULL;
+		return 0;
+	}
+
+	info_addr = 0;
+	uctx_addr = 0;
+
+	if (sa_flags & SA_SIGINFO)
+	{
+		uint64_t old_cr3;
+		char uctx_zero[128];
+
+		memset(&info, 0, sizeof(info));
+		info.si_signo = sig;
+		info.si_errno = 0;
+		info.si_code = SEGV_MAPERR;
+		info._sifields._sigfault.si_addr = (void *)(uintptr_t)fault_addr;
+
+		info_addr = new_rsp - 128;
+		uctx_addr = info_addr - 128;
+		info_addr &= ~0xFULL;
+		uctx_addr &= ~0xFULL;
+
+		if (uctx_addr < 0x400000UL)
+		{
+			kfree(ctx);
+			p->saved_context = NULL;
+			return 0;
+		}
+
+		memset(uctx_zero, 0, sizeof(uctx_zero));
+		old_cr3 = get_current_page_directory();
+		load_page_directory((uint64_t)p->page_directory);
+		memcpy((void *)info_addr, &info, sizeof(info));
+		memcpy((void *)uctx_addr, uctx_zero, sizeof(uctx_zero));
+		load_page_directory(old_cr3);
+	}
+
+	frame[2] = (uint64_t)(uintptr_t)handler;
+	frame[5] = new_rsp;
+	frame[-7] = (uint64_t)(uint32_t)sig;
+	if (sa_flags & SA_SIGINFO)
+	{
+		frame[-6] = info_addr;
+		frame[-3] = uctx_addr;
+	}
+	else
+	{
+		frame[-6] = 0;
+		frame[-3] = 0;
+	}
+
+	irq_save_user_frame(frame);
+
+	if (sa_flags & SA_RESETHAND)
+		p->signal_handlers[sig] = SIG_DFL;
+
+	p->signal_pending &= ~SIGNAL_MASK(sig);
+
+#if SIGNAL_DELIVER_LOG
+	serial_print("[SIGNAL][DELIVER] pid=");
+	serial_print_hex32((uint32_t)p->task.pid);
+	serial_print(" sig=");
+	serial_print_hex32((uint32_t)sig);
+	serial_print(" cr2=");
+	serial_print_hex64(fault_addr);
+	serial_print(" rip=");
+	serial_print_hex64(ctx->rip);
+	serial_print(" handler=");
+	serial_print_hex64((uint64_t)(uintptr_t)handler);
+	serial_print(" sa_siginfo=");
+	serial_print_hex32((sa_flags & SA_SIGINFO) ? 1U : 0U);
+	serial_print(" rsp=");
+	serial_print_hex64(new_rsp);
+	serial_print("\n");
+#endif
+
+#if defined(CONFIG_KTM_FLIGHT) && CONFIG_KTM_FLIGHT
+	{
+		uint32_t pid = (uint32_t)p->task.pid;
+
+		KTM_FLIGHT(KTM_FL_PF_USER, pid, (uint32_t)fault_addr,
+			   (uint32_t)(fault_addr >> 32),
+			   (uint32_t)ctx->rip);
+		KTM_FLIGHT(KTM_FL_SIGNAL_DELIVER, (uint32_t)sig, pid,
+			   (uint32_t)(uintptr_t)handler, 0);
+	}
+#endif
+
+	return 1;
+}
+
+void signals_reset_on_exec(process_t *p)
+{
+	int i;
+
+	if (!p)
+		return;
+	if (p->saved_context)
+	{
+		kfree(p->saved_context);
+		p->saved_context = NULL;
+	}
+	p->signal_pending = 0;
+	p->signal_mask = 0;
+	p->signal_ignored = 0;
+	for (i = 0; i < _NSIG; i++)
+	{
+		p->signal_handlers[i] = SIG_DFL;
+		p->signal_sa_flags[i] = 0;
+		p->signal_sa_mask[i] = 0;
+	}
+}
+
+int signals_pause_should_interrupt(process_t *p)
+{
+	if (!p || p->signal_pending == 0)
+		return 0;
+
+	if (p->signal_pending & SIGNAL_MASK(SIGKILL))
+		return 1;
+
+	if ((p->signal_pending & SIGNAL_MASK(SIGTERM)) &&
+	    !(p->signal_ignored & SIGNAL_MASK(SIGTERM)) &&
+	    !signals_has_user_handler(p, SIGTERM))
+		return 1;
+
+	return (p->signal_pending & ~p->signal_mask) != 0;
+}
+
+int signals_should_handle_on_run(process_t *p)
+{
+	if (!p || p->signal_pending == 0)
+		return 0;
+
+	if (p->signal_pending & ~p->signal_mask)
+		return 1;
+
+	return signals_pause_should_interrupt(p);
+}
 
 /**
  * send_signal - Send signal to process
  */
 int send_signal(int pid, int signal)
 {
+    process_t *proc;
+
     /* Validate signal number */
     if (signal < 0 || signal >= _NSIG)
     {
@@ -41,7 +275,7 @@ int send_signal(int pid, int signal)
     }
 
     /* Find target process by PID */
-    process_t *proc = process_find_by_pid(pid);
+    proc = process_find_by_pid(pid);
     if (!proc)
     {
         return -1; /* Process not found */
@@ -49,6 +283,36 @@ int send_signal(int pid, int signal)
 
     /* Set signal bit in pending mask */
     proc->signal_pending |= SIGNAL_MASK(signal);
+
+#if IR0_DEBUG_PROC
+    serial_print("[SIGTERM_AUDIT] send_signal pid=");
+    serial_print_hex32((uint32_t)pid);
+    serial_print(" sig=");
+    serial_print_hex32((uint32_t)signal);
+    serial_print(" pending=");
+    serial_print_hex32(proc->signal_pending);
+    serial_print(" mask=");
+    serial_print_hex32(proc->signal_mask);
+    serial_print(" state=");
+    serial_print_hex32((uint32_t)proc->state);
+    serial_print("\n");
+#endif
+
+    /*
+     * Wake blocked tasks regardless of signal_mask so default actions can run
+     * after schedule (SIGTERM to a child blocked in pause(2)).
+     */
+    if (proc->state == PROCESS_BLOCKED)
+    {
+	proc->state = PROCESS_READY;
+	sched_promote_process(proc);
+	clock_request_sched_resched();
+#if IR0_DEBUG_PROC
+	serial_print("[SIGTERM_AUDIT] wake pid=");
+	serial_print_hex32((uint32_t)pid);
+	serial_print(" state=READY promote=1\n");
+#endif
+    }
 
 #if DEBUG_PROCESS
     serial_print("[SIGNAL] Sent signal to process\n");
@@ -103,56 +367,91 @@ void handle_signals(void)
         return;
     }
 
-    /* Error signals - terminate process immediately (prevent crashes) */
+    /* Error signals — terminate unless a userspace handler is registered */
     if (current->signal_pending & SIGNAL_MASK(SIGSEGV))
     {
+        if (!signals_has_user_handler(current, SIGSEGV))
+        {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGSEGV received (segmentation fault), terminating process\n");
+            serial_print("[SIGNAL] SIGSEGV received (segmentation fault), terminating process\n");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGSEGV);
-        process_exit(139); /* Exit code 139 = 128 + 11 (SIGSEGV) */
-        return;
+            current->signal_pending &= ~SIGNAL_MASK(SIGSEGV);
+            process_exit(139);
+            return;
+        }
     }
 
     if (current->signal_pending & SIGNAL_MASK(SIGFPE))
     {
+        if (!signals_has_user_handler(current, SIGFPE))
+        {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGFPE received (arithmetic error), terminating process\n");
+            serial_print("[SIGNAL] SIGFPE received (arithmetic error), terminating process\n");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGFPE);
-        process_exit(136); /* Exit code 136 = 128 + 8 (SIGFPE) */
-        return;
+            current->signal_pending &= ~SIGNAL_MASK(SIGFPE);
+            process_exit(136);
+            return;
+        }
     }
 
     if (current->signal_pending & SIGNAL_MASK(SIGILL))
     {
+        if (!signals_has_user_handler(current, SIGILL))
+        {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGILL received (illegal instruction), terminating process\n");
+            serial_print("[SIGNAL] SIGILL received (illegal instruction), terminating process\n");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGILL);
-        process_exit(132); /* Exit code 132 = 128 + 4 (SIGILL) */
-        return;
+            current->signal_pending &= ~SIGNAL_MASK(SIGILL);
+            process_exit(132);
+            return;
+        }
     }
 
     if (current->signal_pending & SIGNAL_MASK(SIGBUS))
     {
+        if (!signals_has_user_handler(current, SIGBUS))
+        {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGBUS received (bus error), terminating process\n");
+            serial_print("[SIGNAL] SIGBUS received (bus error), terminating process\n");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGBUS);
-        process_exit(135); /* Exit code 135 = 128 + 7 (SIGBUS) */
-        return;
+            current->signal_pending &= ~SIGNAL_MASK(SIGBUS);
+            process_exit(135);
+            return;
+        }
     }
 
     /* Termination signals */
     if (current->signal_pending & SIGNAL_MASK(SIGTERM))
     {
-#if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGTERM received, terminating process\n");
+#if IR0_DEBUG_PROC
+        serial_print("[SIGTERM_AUDIT] handle_signals SIGTERM pending pid=");
+        serial_print_hex32((uint32_t)current->task.pid);
+        serial_print(" ignored=");
+        serial_print_hex32(current->signal_ignored);
+        serial_print(" mask=");
+        serial_print_hex32(current->signal_mask);
+        serial_print("\n");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGTERM);
-        process_exit(0);
-        return;
+        if (current->signal_ignored & SIGNAL_MASK(SIGTERM))
+        {
+            current->signal_pending &= ~SIGNAL_MASK(SIGTERM);
+            return;
+        }
+        if (!signals_has_user_handler(current, SIGTERM))
+        {
+#if DEBUG_PROCESS
+            serial_print("[SIGNAL] SIGTERM received, terminating process\n");
+#endif
+#if IR0_DEBUG_PROC
+            serial_print("[SIGTERM_AUDIT] default terminate pid=");
+            serial_print_hex32((uint32_t)current->task.pid);
+            serial_print(" exit_signal=15\n");
+#endif
+            current->signal_pending &= ~SIGNAL_MASK(SIGTERM);
+            current->exit_signal = SIGTERM;
+            process_exit(0);
+            return;
+        }
     }
 
     if (current->signal_pending & SIGNAL_MASK(SIGINT))
