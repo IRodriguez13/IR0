@@ -585,6 +585,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
         pipe_wake_all(pipe);
         fase51_dbg_pipe_rw("write", fd, ret);
         fase52_dbg_rw("write", fd, ret);
+        process_clear_in_thread_syscall_block(current_process);
         return ret;
       }
       if (ret == -EPIPE)
@@ -822,6 +823,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
 #endif
         fase51_dbg_pipe_rw("read", fd, ret);
         fase52_dbg_rw("read", fd, ret);
+        process_clear_in_thread_syscall_block(current_process);
         return ret;
       }
       if (ret != -EAGAIN)

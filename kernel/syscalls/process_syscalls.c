@@ -1059,6 +1059,21 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
 
   if (IR0_DEBUG_WAIT)
   {
+    serial_print("[WAIT4_WNOHANG_AUDIT] wait_begin parent=");
+    serial_print_hex32((uint32_t)current_process->task.pid);
+    serial_print(" target=");
+    serial_print_hex32((uint32_t)pid);
+    serial_print(" options=");
+    serial_print_hex32((uint32_t)options);
+    serial_print(" wait_target_pid=");
+    serial_print_hex32((uint32_t)current_process->wait_target_pid);
+    serial_print(" wait_options=");
+    serial_print_hex32((uint32_t)current_process->wait_options);
+    serial_print(" wait_resume_child_pid=");
+    serial_print_hex32((uint32_t)current_process->wait_resume_child_pid);
+    serial_print(" syscall_resume_rax=");
+    serial_print_hex64(current_process->syscall_resume_rax);
+    serial_print("\n");
     serial_print("[WAIT_EXIT_AUDIT][sys_wait4] entry parent_pid=");
     serial_print_hex32((uint32_t)current_process->task.pid);
     serial_print(" wait_pid=");
@@ -1077,8 +1092,22 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
   {
     int64_t ret = process_wait(pid, status, options);
 
+    if (current_process->state != PROCESS_BLOCKED)
+      process_reset_blocked_syscall_state(current_process);
+
     if (IR0_DEBUG_WAIT)
     {
+      serial_print("[WAIT4_WNOHANG_AUDIT] wait_return parent=");
+      serial_print_hex32((uint32_t)current_process->task.pid);
+      serial_print(" ret=");
+      serial_print_hex64((uint64_t)ret);
+      serial_print(" wait_resume_child_pid=");
+      serial_print_hex32((uint32_t)current_process->wait_resume_child_pid);
+      serial_print(" syscall_resume_rax=");
+      serial_print_hex64(current_process->syscall_resume_rax);
+      serial_print(" status_write=");
+      serial_print(ret > 0 ? "yes" : "no");
+      serial_print("\n");
       serial_print("[WAIT_EXIT_AUDIT][sys_wait4] return parent_pid=");
       serial_print_hex32((uint32_t)current_process->task.pid);
       serial_print(" ret=");

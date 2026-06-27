@@ -31,6 +31,7 @@ void ktest_wait4_specific_reaps_requested_child(void);
 void ktest_wait4_minus_one_reaps_any_child(void);
 void ktest_wait4_specific_no_leak_after_destroy(void);
 void ktest_wait4_wnohang_specific(void);
+void ktest_wait4_wnohang_echild_after_reap(void);
 void ktest_kill_sigterm_wait_status(void);
 void ktest_proc_blockdevices_contract(void);
 void ktest_proc_cpuinfo_contract(void);
