@@ -6,7 +6,7 @@
 | Fase IR0 | T1 |
 | Estado | stable |
 | Depende de | scheduler, memory, syscalls, elf_loader |
-| Página man | IR0-process (sección 7) |
+| Página man | ir0-process (sección 7) |
 | Fuentes principales | `kernel/process.c`, `kernel/process.h`, `kernel/elf_loader.c`, `kernel/credentials.c` |
 
 ## 1. Visión general
@@ -121,6 +121,8 @@ Ciclo de vida:
 3. Proceso idle comparte CR3 kernel (`owns_page_directory = 0`).
 4. Hijo retorna 0 desde fork vía `task.rax`; parent obtiene pid del hijo.
 5. CLOEXEC respetado en exec vía `process_exec_close_cloexec`.
+6. **`wait4(pid, NULL, …)`** — el padre puede omitir `status`; el kernel bloquea y reanuda el frame de syscall correctamente.
+7. **`wait4` bloqueante (options=0)** — bloqueo con `process_arm_kernel_syscall_sleep` (CS ring-0); la reanudación debe usar **kernel_ret** de vuelta a `process_wait`, no `iretq` user con `rax=0`. `ret=0` solo con WNOHANG si hay hijos vivos sin zombie.
 
 ## 9. Consejos de depuración
 
