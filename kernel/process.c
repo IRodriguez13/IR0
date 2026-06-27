@@ -2581,10 +2581,16 @@ static void process_wait_wake_blocked_parent(process_t *parent, process_t *child
 		serial_print("\n");
 	);
 
-	/* Kernel-mode wait loop: unblock to re-scan; no syscall frame resume. */
 	if (!parent->irq_frame_saved)
 	{
+		/*
+		 * Blocked via process_arm_kernel_syscall_sleep: keep kernel CS/SS so
+		 * switch_context_x64 resumes with kernel_ret into process_wait, not
+		 * user iretq with stale task.rax (placeholder 0 at block time).
+		 */
 		parent->state = PROCESS_READY;
+		sched_add_process(parent);
+		sched_promote_process(parent);
 		return;
 	}
 
@@ -2619,6 +2625,8 @@ static void process_wait_wake_blocked_parent(process_t *parent, process_t *child
 	parent->wait_resume_child_pid = child->task.pid;
 	parent->syscall_resume_rax = (uint64_t)child->task.pid;
 	parent->state = PROCESS_READY;
+	sched_add_process(parent);
+	sched_promote_process(parent);
 }
 
 void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)
@@ -3121,6 +3129,10 @@ int process_wait(pid_t pid, int *status, int options)
 			current_process->wait_target_pid = 0;
 			current_process->wait_options = 0;
 			current_process->wait_resume_child_pid = 0;
+			current_process->syscall_resume_rax = 0;
+			current_process->coop_resched_resume = 0;
+			current_process->task.rax = (uint64_t)(uint32_t)reaped_pid;
+
 			if (IR0_DEBUG_PROC)
 			{
 				serial_print("[FASE41][WAIT] pid=");
@@ -3151,55 +3163,58 @@ int process_wait(pid_t pid, int *status, int options)
 
 		if (!found_child)
 		{
-			/*
-			 * Linux wait4(WNOHANG): no child with status → 0, not ECHILD.
-			 * ECHILD is for invalid pid / not our child (handled above).
-			 */
-			if (options & WNOHANG)
+			if (IR0_DEBUG_WAIT)
 			{
-				if (IR0_DEBUG_PROC)
-				{
-					serial_print("[FASE41][WAIT] pid=");
-					serial_print_hex32((uint32_t)current_process->task.pid);
-					serial_print(" ret=WNOHANG\n");
-				}
-				return 0;
+				serial_print("[WAIT4_WNOHANG_AUDIT] path=echild parent=");
+				serial_print_hex32((uint32_t)current_process->task.pid);
+				serial_print(" target=");
+				serial_print_hex32((uint32_t)pid);
+				serial_print(" ret=ECHILD\n");
 			}
-
 			if (IR0_DEBUG_PROC)
 			{
 				serial_print("[FASE41][WAIT] pid=");
 				serial_print_hex32((uint32_t)current_process->task.pid);
 				serial_print(" ret=ECHILD\n");
 			}
+			process_reset_blocked_syscall_state(current_process);
 			return -ECHILD;
 		}
 
 		/* Children exist but none are zombies yet */
 		if (options & WNOHANG)
 		{
+			if (IR0_DEBUG_WAIT)
+			{
+				serial_print("[WAIT4_WNOHANG_AUDIT] path=wnohang_alive parent=");
+				serial_print_hex32((uint32_t)current_process->task.pid);
+				serial_print(" target=");
+				serial_print_hex32((uint32_t)pid);
+				serial_print(" ret=0 status_write=no\n");
+			}
 			if (IR0_DEBUG_PROC)
 			{
 				serial_print("[FASE41][WAIT] pid=");
 				serial_print_hex32((uint32_t)current_process->task.pid);
 				serial_print(" ret=WNOHANG\n");
 			}
+			process_reset_blocked_syscall_state(current_process);
 			return 0;
 		}
 
 		if (current_process->mode == USER_MODE)
 		{
 			wait_exit_audit_process_wait_block(pid, status);
-			process_apply_syscall_frame_to_task(&current_process->task,
-			                                    &current_process->syscall_frame,
-			                                    0);
-			current_process->syscall_resume_rax = 0;
 			current_process->wait_status_ptr = status;
 			current_process->wait_blocked = 1;
 			current_process->wait_target_pid = pid;
 			current_process->wait_options = options;
 			current_process->wait_resume_child_pid = 0;
-			current_process->irq_frame_saved = 1;
+			current_process->coop_resched_resume = 0;
+			current_process->syscall_resume_rax = 0;
+			current_process->irq_frame_saved = 0;
+			current_process->task.rax = 0;
+			process_arm_kernel_syscall_sleep(current_process);
 			wait_exit_audit_classify_user_frame("parent-after-wait-arm", current_process);
 		}
 		else
