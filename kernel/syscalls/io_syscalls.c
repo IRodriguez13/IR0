@@ -29,6 +29,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/clock.h>
 #include <ir0/clock_wait.h>
+#include <ir0/signals.h>
 #include <ir0/arch_port.h>
 #include <ir0/paging.h>
 #include <config.h>
@@ -612,8 +613,11 @@ int64_t sys_pause(void)
 
   for (;;)
   {
-    if (current_process->signal_pending & ~current_process->signal_mask)
+    if (signals_pause_should_interrupt(current_process))
+    {
+      handle_signals();
       return -EINTR;
+    }
 
     current_process->state = PROCESS_BLOCKED;
     process_arm_kernel_syscall_sleep(current_process);
