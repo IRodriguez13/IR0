@@ -19,8 +19,12 @@
 #include <ir0/errno.h>
 #include <ir0/process.h>
 #include <ir0/signals.h>
+#include <ir0/scheduler_api.h>
 #include <ir0/permissions.h>
 #include <ir0/clock_wait.h>
+#include <ir0/clock.h>
+#include <ir0/debug_runtime.h>
+#include <ir0/serial_io.h>
 #include <string.h>
 
 #include <ir0/oops.h>
@@ -1115,6 +1119,35 @@ int64_t sys_kill(pid_t pid, int signal)
   /* Send signal to target process */
   if (send_signal(pid, signal) != 0)
     return -ESRCH; /* Process not found */
+
+  if (signal != 0)
+  {
+    process_t *target = process_find_by_pid(pid);
+
+    if (target)
+      (void)process_signal_default_kill(target, signal);
+
+    clock_request_sched_resched();
+  }
+
+#if IR0_DEBUG_PROC
+  {
+    process_t *target = process_find_by_pid(pid);
+
+    if (target)
+    {
+      serial_print("[SIGTERM_AUDIT] sys_kill pid=");
+      serial_print_hex32((uint32_t)pid);
+      serial_print(" sig=");
+      serial_print_hex32((uint32_t)signal);
+      serial_print(" pending=");
+      serial_print_hex32(target->signal_pending);
+      serial_print(" state=");
+      serial_print_hex32((uint32_t)target->state);
+      serial_print("\n");
+    }
+  }
+#endif
 
   return 0;
 }

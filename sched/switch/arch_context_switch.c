@@ -214,6 +214,17 @@ void arch_context_switch(task_t *prev, task_t *next)
      */
     if (next_proc && next_proc->irq_frame_saved)
     {
+        /*
+         * wait4 blocked with no reaped child yet — never user-resume with the
+         * placeholder syscall_resume_rax=0 set at block time.
+         */
+        if (next_proc->wait_blocked && next_proc->wait_resume_child_pid <= 0 &&
+            !next_proc->coop_resched_resume)
+        {
+            next_proc->irq_frame_saved = 0;
+        }
+        else
+        {
         syscall_user_frame_t *frame = &next_proc->syscall_frame;
 
         wait_exit_audit_ctx_resume(prev_proc, next_proc, next);
@@ -353,6 +364,7 @@ void arch_context_switch(task_t *prev, task_t *next)
 #endif
         }
         return;
+        }
     }
 
     arch_fixup_user_task_for_iretq(next_proc);

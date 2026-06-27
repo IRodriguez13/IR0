@@ -16,6 +16,8 @@
 #include "process.h"
 #include "syscalls.h"
 #include <ir0/scheduler_api.h>
+#include <ir0/signals.h>
+#include <ir0/wait.h>
 
 static void ktest_wait4_child_entry(void)
 {
@@ -182,5 +184,47 @@ void ktest_wait4_wnohang_specific(void)
 
 	KASSERT_EQ(process_wait(pid, NULL, WNOHANG), 0);
 	KASSERT(process_find_by_pid(pid) != NULL);
+	KTEST_END();
+}
+
+void ktest_kill_sigterm_wait_status(void)
+{
+	pid_t pid;
+	pid_t waited;
+	int status = -1;
+	process_t *child;
+
+	KTEST_BEGIN("kill_sigterm_wait_status");
+	pid = spawn_kernel(ktest_wait4_child_entry, "sigterm_zombie");
+	KASSERT_GT(pid, 0);
+	child = process_find_by_pid(pid);
+	KASSERT(child != NULL);
+
+	/* Simulate SIGTERM death encoding (same path as handle_signals + wait4). */
+	child->state = PROCESS_ZOMBIE;
+	child->exit_signal = SIGTERM;
+	child->exit_code = 0;
+	sched_remove_process(child);
+
+	waited = process_wait(pid, &status, 0);
+	KASSERT_EQ(waited, pid);
+	KASSERT_EQ(status, 0x000f);
+	KASSERT(WIFSIGNALED(status));
+	KASSERT_EQ(WTERMSIG(status), SIGTERM);
+	KASSERT(process_find_by_pid(pid) == NULL);
+
+	/* send_signal must wake a blocked target with pending SIGTERM. */
+	pid = spawn_kernel(ktest_wait4_child_entry, "sigterm_wake");
+	KASSERT_GT(pid, 0);
+	child = process_find_by_pid(pid);
+	KASSERT(child != NULL);
+	child->state = PROCESS_BLOCKED;
+	KASSERT_EQ(send_signal(pid, SIGTERM), 0);
+	KASSERT_EQ(child->state, PROCESS_READY);
+	KASSERT(child->signal_pending & SIGNAL_MASK(SIGTERM));
+	child->state = PROCESS_ZOMBIE;
+	child->exit_code = 0;
+	sched_remove_process(child);
+	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
 	KTEST_END();
 }

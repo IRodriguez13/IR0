@@ -371,6 +371,11 @@ void rr_schedule_next(void)
 
 	next->state = PROCESS_RUNNING;
 	current_process = next;  /* Update global current process pointer */
+
+	/* Deliver pending signals to the task we are about to run. */
+	if (signals_should_handle_on_run(next))
+		handle_signals();
+
 #if CONFIG_DEBUG_FASE50
 	serial_print("[FASE50][SCHED] stage=rr_schedule_next-picked next=");
 	serial_print_hex64((uint64_t)(uintptr_t)next);

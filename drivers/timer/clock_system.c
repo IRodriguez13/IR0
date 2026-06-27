@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -11,6 +10,8 @@
  * Description: Kernel timer managment subsystem
  */
 
+/* SPDX-License-Identifier: GPL-3.0-only */
+
 #include <stdint.h>
 #include <string.h>
 #include <ir0/vga.h>
@@ -18,6 +19,7 @@
 #include <ir0/kmem.h>
 #include <ir0/arch_port.h>
 #include <ir0/scheduler_api.h>
+#include <ir0/clock_wait.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"
 #include "clock_system.h"
@@ -395,19 +397,17 @@ void clock_tick(void)
     
     /* Check and fire alarms */
     clock_check_alarms();
-    
-    /* Scheduler integration: call scheduler every N ticks */
+
+    /* Timed waits (nanosleep, poll timeout) and poll fd timeouts. */
+    ir0_clock_wait_fire_due(clock_get_uptime_milliseconds());
+    (void)poll_wake_check_nosched();
+
+    /* Scheduler tick accounting (preempt deferred — see sched_resched.c). */
     clock_state.scheduler_tick_counter++;
     if (clock_state.scheduler_tick_counter >= clock_state.scheduler_ticks_per_quantum)
     {
         clock_state.scheduler_tick_counter = 0;
-        /*
-         * Defer preemption to syscall exit while IRQ iretq frame capture
-         * is still being hardened for multi-process fork paths.
-         */
-#if 0
-        sched_schedule_next();
-#endif
+        clock_state.sched_resched_pending = 1;
     }
     
     /*
@@ -452,6 +452,20 @@ int clock_set_scheduler_quantum(uint32_t ticks)
 uint32_t clock_get_scheduler_quantum(void)
 {
     return clock_state.scheduler_ticks_per_quantum;
+}
+
+int clock_take_sched_resched_pending(void)
+{
+    int pending;
+
+    pending = clock_state.sched_resched_pending ? 1 : 0;
+    clock_state.sched_resched_pending = 0;
+    return pending;
+}
+
+void clock_request_sched_resched(void)
+{
+    clock_state.sched_resched_pending = 1;
 }
 
 /* Cancel all alarms */
