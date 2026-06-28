@@ -3,7 +3,7 @@
 """
 FASE58E/K — headless ash interactive smoke with QEMU monitor key injection.
 
-Boots irinit + BusyBox ash, waits for banner + ASH_INTERACTIVE_READY, injects
+Boots runit + BusyBox ash, waits for banner + ASH_INTERACTIVE_READY, injects
   echo hi
   pwd
 via HMP sendkey, validates compact serial tags, then kills QEMU.
@@ -83,26 +83,17 @@ def send_keys(port: int, keys: list[str], delay: float = 0.12) -> None:
 
 
 def build_disk(root: Path) -> Path:
-    irinit = root / "setup/pid1/sbin/irinit"
-    busybox = root / "setup/pid1/fase50_busybox_real"
+    src_disk = root / "disk.img"
 
-    if not irinit.is_file():
-        print(f"✗ missing irinit: {irinit} — run make build-irinit", file=sys.stderr)
-        sys.exit(1)
-    if not busybox.is_file():
-        print(f"✗ missing busybox: {busybox} — run make build-busybox-fase50-min", file=sys.stderr)
+    if not src_disk.is_file():
+        print(
+            f"✗ missing disk: {src_disk} — run make load-userspace-runit",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     disk = Path(tempfile.mktemp(prefix="ir0-fase58e-smoke.", suffix=".img"))
-    subprocess.run(
-        ["dd", "if=/dev/zero", f"of={disk}", "bs=1M", "count=200", "status=none"],
-        check=True,
-    )
-    inject = ["python3", str(root / "scripts/inject_init_minix.py")]
-    subprocess.run(inject + ["--format-large", str(disk)], check=True, cwd=root)
-    subprocess.run(inject + [str(disk), str(irinit), "sbin/init"], check=True, cwd=root)
-    subprocess.run(inject + [str(disk), str(busybox), "bin/busybox"], check=True, cwd=root)
-    subprocess.run(inject + [str(disk), str(busybox), "bin/sh"], check=True, cwd=root)
+    subprocess.run(["cp", "-f", str(src_disk), str(disk)], check=True)
     subprocess.run(
         [
             "python3",
@@ -181,6 +172,7 @@ def main() -> int:
 
             ready = (
                 "ASH_INTERACTIVE_READY" in text
+                and "RUNSV_CONSOLE_START" in text
                 and "BusyBox v" in text
             )
 

@@ -1,0 +1,193 @@
+{
+  "version": 1,
+  "report_dir": "build/linux_abi_audit",
+  "contracts": [
+    {
+      "id": "brk",
+      "enabled": true,
+      "title": "Program break (brk)",
+      "status_doc": "VERIFIED",
+      "host_test": "elf_initial_brk_abi",
+      "ktest": "brk_post_exec",
+      "grow_bytes": 4096
+    },
+    {
+      "id": "execve",
+      "enabled": false,
+      "title": "Execute program",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "mmap",
+      "enabled": true,
+      "title": "Memory map",
+      "status_doc": "PARTIAL",
+      "ktest": "mmap_null_placement",
+      "page_size": 4096,
+      "none_size": 8192,
+      "verify_data_hex": "4d4d41504f4b0a",
+      "ebadf_errno": 9
+    },
+    {
+      "id": "munmap",
+      "enabled": false,
+      "title": "Unmap memory",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "mprotect",
+      "enabled": false,
+      "title": "Protect memory",
+      "status_doc": "UNKNOWN"
+    },
+    {
+      "id": "fork",
+      "enabled": false,
+      "title": "Fork process",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "clone",
+      "enabled": false,
+      "title": "Clone thread/process",
+      "status_doc": "UNKNOWN"
+    },
+    {
+      "id": "wait4",
+      "enabled": true,
+      "title": "Wait for child",
+      "status_doc": "LINUX-LIKE",
+      "ktest": "wait4_status",
+      "child_exit_status": 42
+    },
+    {
+      "id": "exit",
+      "enabled": false,
+      "title": "Process exit",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "signals",
+      "enabled": false,
+      "title": "Signal delivery/rt_sigaction",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "pipe",
+      "enabled": false,
+      "title": "Pipe IPC",
+      "status_doc": "LINUX-LIKE"
+    },
+    {
+      "id": "dup",
+      "enabled": false,
+      "title": "Duplicate fd",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "poll",
+      "enabled": false,
+      "title": "poll(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "select",
+      "enabled": false,
+      "title": "select(2)",
+      "status_doc": "UNKNOWN"
+    },
+    {
+      "id": "ioctl",
+      "enabled": false,
+      "title": "ioctl",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "read",
+      "enabled": true,
+      "title": "read(2)",
+      "status_doc": "LINUX-LIKE",
+      "ktest": "syscall_pipe",
+      "pipe_read_len": 6,
+      "pipe_data_hex": "68656c6c6f0a",
+      "ebadf_errno": 9
+    },
+    {
+      "id": "write",
+      "enabled": false,
+      "title": "write(2)",
+      "status_doc": "LINUX-LIKE"
+    },
+    {
+      "id": "lseek",
+      "enabled": false,
+      "title": "lseek(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "openat",
+      "enabled": true,
+      "title": "openat(2) + close(2)",
+      "status_doc": "VERIFIED",
+      "ktest": "syscall_open_close",
+      "existing_path": "/proc/uptime",
+      "enoent_errno": 2,
+      "ebadf_errno": 9
+    },
+    {
+      "id": "rename",
+      "enabled": false,
+      "title": "rename(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "unlink",
+      "enabled": false,
+      "title": "unlink(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "stat",
+      "enabled": true,
+      "title": "stat(2) / fstat(2)",
+      "status_doc": "VERIFIED",
+      "host_test": "stat_user_abi",
+      "proc_path": "/proc/uptime",
+      "file_path": "/sbin/init",
+      "noent_path": "/sbin/noent",
+      "enoent_errno": 2,
+      "ebadf_errno": 9
+    },
+    {
+      "id": "mount",
+      "enabled": true,
+      "title": "mount(2)",
+      "status_doc": "PARTIAL",
+      "ktest": "mount_tmpfs_contract",
+      "mount_path": "/tmp/ir0mnt",
+      "mount_noent_path": "/tmp/ir0mnt_nope",
+      "rw_data_hex": "6d6e746f6b0a",
+      "enoent_errno": 2,
+      "enodev_errno": 19
+    },
+    {
+      "id": "umount2",
+      "enabled": false,
+      "title": "umount2(2)",
+      "status_doc": "PARTIAL"
+    },
+    {
+      "id": "vfs_write",
+      "enabled": true,
+      "title": "VFS write-path bundle (R3)",
+      "status_doc": "VERIFIED",
+      "workdir": "/tmp/ir0wtest",
+      "hello_hex": "68656c6c6f0a",
+      "enoent_errno": 2,
+      "eexist_errno": 17,
+      "eisdir_errno": 21,
+      "enotempty_errno": 39,
+      "enosys_errno": 38
+    }
+  ]
+}

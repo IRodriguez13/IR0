@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -12,25 +11,17 @@
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
-/*
- * IR0 Kernel - Init de test (PID 1 cuando KERNEL_DEBUG_SHELL=1)
- * Copyright (C) 2025 Iván Rodriguez
- *
- * No es el init real. El init real es /sbin/init, que se carga cuando
- * KERNEL_DEBUG_SHELL=0 en config.h (kexecve("/sbin/init", ...) desde kmain).
- * Este proceso solo existe en modo test/debug y arranca la shell integrada.
- */
 
 #include "process.h"
 #include <config.h>
 #include "debug_bins/dbgshell.h"
-#include "scheduler_api.h"
+#include <ir0/scheduler_api.h>
 #include <ir0/console_backend.h>
 #include <ir0/kmem.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <ir0/permissions.h>
 #include <ir0/errno.h>
-#include <fs/vfs.h>
+#include <ir0/vfs.h>
 #include <string.h>
 #include "rootfs_base.h"
 
@@ -107,7 +98,6 @@ void init_1(void)
 int start_init_process(void)
 {
 	process_t *init;
-	int have_identity_low_map = 0;
 
 	init = kmalloc(sizeof(process_t));
 	if (!init)
@@ -145,37 +135,21 @@ int start_init_process(void)
 	}
 
 	/*
-	 * Ensure low identity mappings are available in init CR3.
-	 * Debug shell stack/call path relies on INIT_DEBUG_STACK_BASE.
+	 * Map the dbgshell kernel stack explicitly. create_process_page_directory()
+	 * already installs 4 KiB supervisor identity below 0x00400000; do not copy
+	 * boot PML4[0] huge pages — that blocks user mmap/brk in the low arena
+	 * (ktests and post-exec heap at 0x453000+).
 	 */
+	for (uint64_t off = 0; off < USER_STACK_SIZE; off += 0x1000)
 	{
-		uint64_t *new_pml4 = (uint64_t *)init->task.cr3;
-		uint64_t *cur_pml4 = (uint64_t *)get_current_page_directory();
+		uint64_t va = INIT_DEBUG_STACK_BASE + off;
 
-		if (cur_pml4 && (cur_pml4[0] & PAGE_PRESENT))
+		if (map_page_in_directory((uint64_t *)init->task.cr3, va, va,
+					  PAGE_PRESENT | PAGE_RW) != 0)
 		{
-			new_pml4[0] = cur_pml4[0];
-			have_identity_low_map = 1;
-		}
-	}
-
-	/*
-	 * Map explicit 4KB pages only if low identity mapping was not inherited.
-	 * If PML4[0] exists, low memory may be mapped with 2MB huge pages and
-	 * forcing 4KB mappings can fail even though the mapping is valid.
-	 */
-	if (!have_identity_low_map)
-	{
-		for (uint64_t off = 0; off < USER_STACK_SIZE; off += 0x1000)
-		{
-			uint64_t va = INIT_DEBUG_STACK_BASE + off;
-			if (map_page_in_directory((uint64_t *)init->task.cr3, va, va,
-						  PAGE_PRESENT | PAGE_RW) != 0)
-			{
-				kfree_aligned((void *)init->task.cr3);
-				kfree(init);
-				return -1;
-			}
+			kfree_aligned((void *)init->task.cr3);
+			kfree(init);
+			return -1;
 		}
 	}
 
@@ -204,6 +178,18 @@ int start_init_process(void)
 
 	/* Initialize fd table (stdin/stdout/stderr) */
 	process_init_fd_table(init);
+
+	/*
+	 * Private kernel stack: pid1 starts in KERNEL_MODE (debug shell) but execs
+	 * into the user-mode init (runit), reusing this process_t. It must own a
+	 * private kernel stack before issuing syscalls from ring 3.
+	 */
+	if (process_kernel_stack_alloc(init) != 0)
+	{
+		kfree_aligned((void *)init->task.cr3);
+		kfree(init);
+		return -1;
+	}
 
 	/* Add to scheduler and start */
 	sched_add_process(init);

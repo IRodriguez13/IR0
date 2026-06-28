@@ -1,28 +1,19 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
  * File: config.h
- * Description: IR0 kernel source/header file
- */
-
-// SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * File: config.h
  * Description: Unified kernel configuration and debug flags
- *              This is the central configuration file for the entire project
  */
 
-#ifndef _IR0_KERNEL_CONFIG_H
-#define _IR0_KERNEL_CONFIG_H
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#pragma once
+
 
 /*
  * Pull in menuconfig-generated defines when available.
@@ -75,6 +66,11 @@
 #else
 #define DEBUG_PAGE_FAULTS 0
 #endif
+#if defined(CONFIG_DEBUG_D1_DIAG) && CONFIG_DEBUG_D1_DIAG
+#define DEBUG_D1_DIAG 1               /* D1.10/D1.12/D1.16 bring-up serial */
+#else
+#define DEBUG_D1_DIAG 0
+#endif
 
 /* PROCESS SUBSYSTEM DEBUG FLAGS                                             */
 
@@ -92,6 +88,27 @@
 #define DEBUG_FORK 1                  /* Fork operations */
 #else
 #define DEBUG_FORK 0
+#endif
+
+/* mmap/VMA audit serial noise ([MMAP_AUDIT]/[FASE39] tags) */
+#if defined(CONFIG_DEBUG_MMAP_AUDIT) && CONFIG_DEBUG_MMAP_AUDIT
+#define DEBUG_MMAP_AUDIT 1
+#else
+#define DEBUG_MMAP_AUDIT 0
+#endif
+
+/* FASE50 exec/open bring-up serial diagnostics ([FASE50]/[EXEC_*]/[IR0_OPEN_ABI]) */
+#if defined(CONFIG_DEBUG_FASE50) && CONFIG_DEBUG_FASE50
+#define DEBUG_FASE50 1
+#else
+#define DEBUG_FASE50 0
+#endif
+
+/* FASE49 pipe/fd lifecycle serial diagnostics ([FASE49] tags) */
+#if defined(CONFIG_DEBUG_FASE49) && CONFIG_DEBUG_FASE49
+#define DEBUG_FASE49 1
+#else
+#define DEBUG_FASE49 0
 #endif
 
 /* Trap Flag / #DB — off by default; enable only for deliberate tracing. */
@@ -199,13 +216,28 @@
 #define DEFAULT_STACK_SIZE (4 * 1024)    // 4KB stack per process
 #define KERNEL_HEAP_SIZE (16 * 1024 * 1024) // 16MB kernel heap
 #define USER_HEAP_MAX_SIZE (256 * 1024 * 1024) // 256MB max per process
+/*
+ * Per-process kernel stack (Linux thread-stack model). Used for both the
+ * syscall-insn entry (kernel_syscall_stack_top) and CPL3->CPL0 transitions
+ * (TSS.rsp0) of that process. A private stack per task means a peer's syscall
+ * can no longer clobber a task parked mid-syscall (poll/pause in-kernel loops),
+ * which a single shared global syscall stack allowed.
+ */
+#define IR0_PROC_KSTACK_SIZE (32 * 1024)
 
 /* MEMORY LAYOUT — virtual addresses and segment selectors */
 #define USER_STACK_TOP      0x7FFFF000UL
 #define USER_STACK_SIZE     0x10000   /* 64 KiB — musl/BusyBox headroom below guard page */
+#define USER_STACK_BASE     (USER_STACK_TOP - USER_STACK_SIZE)
+#define USER_STACK_GUARD    (USER_STACK_BASE - 0x1000UL)
 #define USER_HEAP_BASE      0x2000000UL
 #define USER_MMAP_START     0x8000000UL
-#define USER_MMAP_END       0x7FFFF000UL
+/*
+ * Linux-like separation: anon mmap arena ends at least USER_STACK_MMAP_GAP below
+ * the stack guard page (not flush against guard like pre-D1.15).
+ */
+#define USER_STACK_MMAP_GAP (1UL << 20)  /* 1 MiB */
+#define USER_MMAP_END       (USER_STACK_GUARD - USER_STACK_MMAP_GAP)
 #define INIT_DEBUG_STACK_BASE 0x1000000UL
 
 /*
@@ -389,4 +421,3 @@
 #define ENABLE_GRAPHICS   CONFIG_ENABLE_VBE
 #define ENABLE_SOUND      CONFIG_ENABLE_SOUND
 
-#endif /* _IR0_KERNEL_CONFIG_H */

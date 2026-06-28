@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -12,11 +11,6 @@
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel - Test runner (in-kernel)
- * Estilo KUnit: executor al arranque, resultados por serial.
- * Emite KTAP (Kernel Test Anything Protocol) para parsing estricto.
- */
 
 #include "test/ktest_harness.h"
 #include "test/ktest_decl.h"
@@ -42,6 +36,10 @@ static void (*const ktest_functions[])(void) = {
 	ktest_procfs_pid_status,
 	ktest_process_current,
 	ktest_wait4_status,
+	ktest_wait4_specific_reaps_requested_child,
+	ktest_wait4_minus_one_reaps_any_child,
+	ktest_wait4_specific_no_leak_after_destroy,
+	ktest_wait4_wnohang_specific,
 	ktest_proc_blockdevices_contract,
 	ktest_proc_cpuinfo_contract,
 	ktest_proc_version_contract,
@@ -55,7 +53,14 @@ static void (*const ktest_functions[])(void) = {
 	ktest_mount_multi_fs_contract,
 	ktest_mount_longest_prefix_contract,
 	ktest_mount_umount_remount_contract,
+	ktest_block_hda_read_contract,
+	ktest_cred_access_contract,
 	ktest_devfs_hci_open_contract,
+	ktest_mmap_null_placement,
+	ktest_signal_segv_deliver_irq_frame,
+	ktest_brk_post_exec,
+	ktest_tty_canon_read_immediate,
+	ktest_tty_canon_block_wake,
 	NULL
 };
 
@@ -73,6 +78,10 @@ static const char *const ktest_names[] = {
 	"procfs_pid_status",
 	"process_current",
 	"wait4_status",
+	"wait4_specific_reaps_requested_child",
+	"wait4_minus_one_reaps_any_child",
+	"wait4_specific_no_leak_after_destroy",
+	"wait4_wnohang_specific",
 	"proc_blockdevices_contract",
 	"proc_cpuinfo_contract",
 	"proc_version_contract",
@@ -86,7 +95,14 @@ static const char *const ktest_names[] = {
 	"mount_multi_fs_contract",
 	"mount_longest_prefix_contract",
 	"mount_umount_remount_contract",
+	"block_hda_read_contract",
+	"cred_access_contract",
 	"devfs_hci_open_contract",
+	"mmap_null_placement",
+	"signal_segv_deliver_irq_frame",
+	"brk_post_exec",
+	"tty_canon_read_immediate",
+	"tty_canon_block_wake",
 	NULL
 };
 
@@ -108,6 +124,10 @@ static const int ktest_needs_process[] = {
 	1,  /* procfs_pid_status */
 	1,  /* process_current */
 	1,  /* wait4_status */
+	1,  /* wait4_specific_reaps_requested_child */
+	1,  /* wait4_minus_one_reaps_any_child */
+	1,  /* wait4_specific_no_leak_after_destroy */
+	1,  /* wait4_wnohang_specific */
 	1,  /* proc_blockdevices_contract */
 	1,  /* proc_cpuinfo_contract */
 	1,  /* proc_version_contract */
@@ -121,7 +141,14 @@ static const int ktest_needs_process[] = {
 	1,  /* mount_multi_fs_contract */
 	1,  /* mount_longest_prefix_contract */
 	1,  /* mount_umount_remount_contract */
+	1,  /* block_hda_read_contract */
+	1,  /* cred_access_contract */
 	1,  /* devfs_hci_open_contract */
+	1,  /* mmap_null_placement */
+	1,  /* signal_segv_deliver_irq_frame */
+	1,  /* brk_post_exec */
+	1,  /* tty_canon_read_immediate */
+	1,  /* tty_canon_block_wake */
 };
 
 static void ktest_print_decimal(uint32_t n)

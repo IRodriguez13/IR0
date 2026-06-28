@@ -1,7 +1,6 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -11,28 +10,55 @@
  * Description: IR0 kernel source/header file
  */
 
+/* SPDX-License-Identifier: GPL-3.0-only */
+
 #include <stdint.h>
 #include <config.h>
 #include <ir0/vga.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <string.h>
-#include <mm/pmm.h>
+#include <ir0/pmm.h>
 #include <ir0/signals.h>
 #include <arch/common/arch_portable.h>
 #include <ir0/copy_user.h>
 #include <ir0/serial_io.h>
+#include <ktm.h>
+#include <ktm_probe_diag.h>
+#include <d1_13_malloc_pf_diag.h>
 
 #define PF_USER_SPACE_START 0x00400000UL
 #define PF_USER_SPACE_END   0x00007FFFFFFFFFFFUL
 
+/* mmap(2) protection bits (mirror of includes/ir0/syscall.h). */
+#ifndef PROT_READ
+#define PROT_READ  0x1
+#endif
+#ifndef PROT_WRITE
+#define PROT_WRITE 0x2
+#endif
+#ifndef PROT_EXEC
+#define PROT_EXEC  0x4
+#endif
+
 static int pf_addr_in_heap(process_t *p, uint64_t fa)
 {
+	uint64_t heap_lo;
+
 	if (!p)
 		return 0;
-	return (fa >= USER_HEAP_BASE && fa < p->heap_end);
+
+	/*
+	 * Post-exec heap lives at PT_LOAD brk (often 0x405000+), not USER_HEAP_BASE.
+	 * Demand-fill on first touch after brk/sbrk must honor [heap_start, heap_end).
+	 */
+	heap_lo = (uint64_t)p->heap_start;
+	if (heap_lo == 0)
+		heap_lo = USER_HEAP_BASE;
+
+	return (fa >= heap_lo && fa < (uint64_t)p->heap_end);
 }
 
 static int pf_addr_in_stack(process_t *p, uint64_t fa)
@@ -42,21 +68,26 @@ static int pf_addr_in_stack(process_t *p, uint64_t fa)
 	return (fa >= (USER_STACK_TOP - USER_STACK_SIZE) && fa < USER_STACK_TOP);
 }
 
-static int pf_addr_in_mmap(process_t *p, uint64_t fa)
+static struct mmap_region *pf_mmap_region_for(process_t *p, uint64_t fa)
 {
 	struct mmap_region *r;
 
 	if (!p)
-		return 0;
+		return NULL;
 	for (r = p->mmap_list; r != NULL; r = r->next)
 	{
 		uintptr_t base = (uintptr_t)r->addr;
 		uint64_t end = base + (uint64_t)r->length;
 
 		if (fa >= (uint64_t)base && fa < end)
-			return 1;
+			return r;
 	}
-	return 0;
+	return NULL;
+}
+
+static int pf_addr_in_mmap(process_t *p, uint64_t fa)
+{
+	return pf_mmap_region_for(p, fa) != NULL;
 }
 
 static int pf_addr_in_allowed_vma(process_t *p, uint64_t fa)
@@ -65,8 +96,251 @@ static int pf_addr_in_allowed_vma(process_t *p, uint64_t fa)
 	       pf_addr_in_mmap(p, fa);
 }
 
+/*
+ * D1.10 — stack-adjacent PF diagnostics (no policy change).
+ * GPR layout: frame[-1]=rax .. frame[-6]=rsi frame[-7]=rdi (isr stub).
+ */
+static void pf_d110_stack_adjacent_diag(uint64_t *frame, uint64_t fault_addr,
+					uint64_t errcode, process_t *p)
+{
+	uint64_t rax;
+	uint64_t rcx;
+	uint64_t rdx;
+	uint64_t rbx;
+	uint64_t rbp;
+	uint64_t rsi;
+	uint64_t rdi;
+	uint64_t rip;
+	uint64_t rsp;
+	uint64_t movsq_end;
+	int write_fault;
+	int src_touch;
+	int dst_touch;
+	struct mmap_region *r;
+	struct mmap_region *prev_mmap;
+	struct mmap_region *next_mmap;
+	uint64_t prev_end;
+	uint64_t next_start;
+	uintptr_t stack_lo;
+	uintptr_t stack_hi;
+	uintptr_t guard_lo;
+
+	if (!frame || !p || !(errcode & 4))
+		return;
+
+	stack_lo = (uintptr_t)p->stack_start;
+	stack_hi = (uintptr_t)(p->stack_start + p->stack_size);
+	guard_lo = stack_lo - PAGE_SIZE_4KB;
+
+	if (fault_addr < guard_lo - PAGE_SIZE_4KB ||
+	    fault_addr >= stack_hi + PAGE_SIZE_4KB)
+		return;
+
+	rax = frame[-1];
+	rcx = frame[-2];
+	rdx = frame[-3];
+	rbx = frame[-4];
+	rbp = frame[-5];
+	rsi = frame[-6];
+	rdi = frame[-7];
+	rip = frame[2];
+	rsp = frame[5];
+	write_fault = (errcode & 2) != 0;
+
+	movsq_end = 0;
+	if (rcx > 0)
+		movsq_end = (write_fault ? rdi : rsi) + (rcx * 8ULL);
+
+	src_touch = (fault_addr >= (rsi & ~0xFFFULL) &&
+		       fault_addr < rsi + (rcx ? rcx * 8ULL : 8ULL));
+	dst_touch = (fault_addr >= (rdi & ~0xFFFULL) &&
+		     fault_addr < rdi + (rcx ? rcx * 8ULL : 8ULL));
+
+	serial_print("\n=== [D1.10][PF_STACK_ADJ] ===\n");
+	serial_print("[D1.10][REGS] rip=");
+	serial_print_hex64(rip);
+	serial_print(" rsp=");
+	serial_print_hex64(rsp);
+	serial_print(" rbp=");
+	serial_print_hex64(rbp);
+	serial_print(" rax=");
+	serial_print_hex64(rax);
+	serial_print(" rbx=");
+	serial_print_hex64(rbx);
+	serial_print(" rcx=");
+	serial_print_hex64(rcx);
+	serial_print(" rdx=");
+	serial_print_hex64(rdx);
+	serial_print(" rsi=");
+	serial_print_hex64(rsi);
+	serial_print(" rdi=");
+	serial_print_hex64(rdi);
+	serial_print("\n");
+
+	serial_print("[D1.10][PF] cr2=");
+	serial_print_hex64(fault_addr);
+	serial_print(" err=");
+	serial_print_hex64(errcode);
+	serial_print(" write=");
+	serial_print_hex64(write_fault ? 1 : 0);
+	serial_print(" pid=");
+	serial_print_hex32((uint32_t)p->task.pid);
+	serial_print(" comm=");
+	serial_print(p->comm[0] ? p->comm : "(none)");
+	serial_print("\n");
+
+	if (rip >= 0x4422b0ULL && rip <= 0x442320ULL)
+	{
+		serial_print("[D1.10][REP_MOVSQ] len_qwords=");
+		serial_print_hex64(rcx);
+		serial_print(" len_bytes=");
+		serial_print_hex64(rcx * 8ULL);
+		serial_print(" src=");
+		serial_print_hex64(rsi);
+		serial_print(" dst=");
+		serial_print_hex64(rdi);
+		serial_print(" span_end=");
+		serial_print_hex64(movsq_end);
+		serial_print("\n");
+	}
+
+	serial_print("[D1.10][TOUCH] cr2_match=");
+	if (write_fault)
+		serial_print(dst_touch ? "destination" :
+			     (src_touch ? "source_read_unlikely" : "unknown"));
+	else
+		serial_print(src_touch ? "source" :
+			     (dst_touch ? "dest_write_unlikely" : "unknown"));
+	serial_print(" src_page=");
+	serial_print_hex64(rsi & ~0xFFFULL);
+	serial_print(" dst_page=");
+	serial_print_hex64(rdi & ~0xFFFULL);
+	serial_print("\n");
+
+	serial_print("[D1.10][STACK] base=");
+	serial_print_hex64((uint64_t)stack_lo);
+	serial_print(" top=");
+	serial_print_hex64((uint64_t)stack_hi);
+	serial_print(" guard_below=");
+	serial_print_hex64((uint64_t)guard_lo);
+	serial_print(" pages=");
+	serial_print_hex64((uint64_t)(p->stack_size / PAGE_SIZE_4KB));
+	serial_print(" rsp_free_to_base=");
+	serial_print_hex64(rsp > stack_lo ? rsp - stack_lo : 0);
+	serial_print(" heap_end=");
+	serial_print_hex64(p->heap_end);
+	serial_print(" mmap_base=");
+	serial_print_hex64(p->mmap_base);
+	serial_print("\n");
+
+	serial_print("[D1.10][VMA] stack=[");
+	serial_print_hex64((uint64_t)stack_lo);
+	serial_print(",");
+	serial_print_hex64((uint64_t)stack_hi);
+	serial_print(")\n");
+
+	prev_mmap = NULL;
+	next_mmap = NULL;
+	prev_end = 0;
+	next_start = ~0ULL;
+	for (r = p->mmap_list; r != NULL; r = r->next)
+	{
+		uint64_t start = (uint64_t)(uintptr_t)r->addr;
+		uint64_t end = start + (uint64_t)r->length;
+
+		if (end <= fault_addr && end > prev_end)
+		{
+			prev_end = end;
+			prev_mmap = r;
+		}
+		if (start > fault_addr && start < next_start)
+		{
+			next_start = start;
+			next_mmap = r;
+		}
+		serial_print("[D1.10][VMA] mmap=[");
+		serial_print_hex64(start);
+		serial_print(",");
+		serial_print_hex64(end);
+		serial_print(") prot=");
+		serial_print_hex64((uint64_t)r->prot);
+		serial_print("\n");
+	}
+
+	if (p->heap_end > p->heap_start)
+	{
+		serial_print("[D1.10][VMA] heap=[");
+		serial_print_hex64(p->heap_start);
+		serial_print(",");
+		serial_print_hex64(p->heap_end);
+		serial_print(")\n");
+	}
+
+	if (prev_mmap)
+	{
+		serial_print("[D1.10][VMA] prev_mmap_end=");
+		serial_print_hex64(prev_end);
+		serial_print("\n");
+	}
+	else
+	{
+		serial_print("[D1.10][VMA] prev_mmap_end=none gap_from_prev=");
+		serial_print_hex64(fault_addr - USER_MMAP_END);
+		serial_print("\n");
+	}
+
+	if (next_mmap)
+	{
+		serial_print("[D1.10][VMA] next_mmap_start=");
+		serial_print_hex64(next_start);
+		serial_print("\n");
+	}
+	else
+	{
+		serial_print("[D1.10][VMA] next_mmap_start=none gap_to_stack=");
+		serial_print_hex64(stack_lo - fault_addr);
+		serial_print("\n");
+	}
+
+	serial_print("[D1.10][VMA] guard_gap=[");
+	serial_print_hex64((uint64_t)guard_lo);
+	serial_print(",");
+	serial_print_hex64((uint64_t)stack_lo);
+	serial_print(") unmapped\n");
+	serial_print("=== [D1.10][PF_STACK_ADJ] end ===\n\n");
+}
+
+static void pf_d114_memmove_fault_diag(uint64_t *frame, uint64_t fault_addr,
+				       uint64_t errcode, process_t *p)
+{
+	uint64_t rip;
+	uint64_t rcx;
+	uint64_t rdx;
+	uint64_t rsi;
+	uint64_t rdi;
+
+	if (!frame || !p || !(errcode & 4))
+		return;
+
+	rip = frame[2];
+	if (rip < 0x4422B0ULL || rip > 0x442320ULL)
+		return;
+
+	rcx = frame[-2];
+	rdx = frame[-3];
+	rsi = frame[-6];
+	rdi = frame[-7];
+	d1_13_malloc_pf_diag(p, fault_addr, rip, rdi, rsi, rdx, rcx);
+}
+
 static void pf_audit_classify(uint64_t *stack, uint64_t fault_addr, uint64_t errcode)
 {
+#if !DEBUG_PAGE_FAULTS
+	(void)stack;
+	(void)fault_addr;
+	(void)errcode;
+	return;
+#else
 	process_t *current = process_get_current();
 	int not_present = !(errcode & 1);
 	int write = (errcode & 2) != 0;
@@ -167,13 +441,18 @@ static void pf_audit_classify(uint64_t *stack, uint64_t fault_addr, uint64_t err
 		serial_print_hex64(fault_rip);
 		serial_print("\n");
 	}
+#endif /* DEBUG_PAGE_FAULTS */
 }
 
-/* Deliver SIGSEGV-equivalent termination for a faulting userspace process. */
-static __attribute__((noreturn)) void pf_terminate_userspace(process_t *p,
-							      uint64_t fault_addr,
-							      uint64_t errcode)
+/* Try SIGSEGV handler delivery; otherwise terminate (noreturn). */
+static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
+			 uint64_t errcode)
 {
+	if (signals_deliver_from_irq_frame(p, SIGSEGV, stack, fault_addr))
+		return;
+
+	ktm_probe_diag_pf(p, fault_addr, stack ? stack[2] : 0);
+
 	if (!p)
 		panic("[PF] userspace fault without process");
 
@@ -183,19 +462,16 @@ static __attribute__((noreturn)) void pf_terminate_userspace(process_t *p,
 	serial_print_hex64(fault_addr);
 	serial_print(" err=");
 	serial_print_hex64(errcode);
-	serial_print("\n");
+	serial_print(" handler=");
+	serial_print_hex64((uint64_t)(uintptr_t)p->signal_handlers[SIGSEGV]);
+	serial_print(" proc_mask=");
+	serial_print_hex32(p->signal_mask);
+	serial_print(" ignored=");
+	serial_print_hex32(p->signal_ignored);
+	serial_print(" (no handler)\n");
 
 	(void)send_signal(p->task.pid, SIGSEGV);
 	process_exit(128 + SIGSEGV);
-}
-
-/*
- * Demand-filled pages are only allowed for addresses covered by the
- * process heap (brk), an mmap region, or the user stack.
- */
-static int pf_fault_in_allowed_user_vma(process_t *p, uint64_t fa)
-{
-	return pf_addr_in_allowed_vma(p, fa);
 }
 
 void page_fault_handler_x64(uint64_t *stack)
@@ -223,6 +499,12 @@ void page_fault_handler_x64(uint64_t *stack)
 	insn_fetch = (errcode & 16) != 0;
 
 	pf_audit_classify(stack, fault_addr, errcode);
+#if DEBUG_D1_DIAG
+	pf_d110_stack_adjacent_diag(stack, fault_addr, errcode,
+				    process_get_current());
+#endif
+	pf_d114_memmove_fault_diag(stack, fault_addr, errcode,
+				   process_get_current());
 
 	/* Validate fault address is in userspace range (only for user mode faults) */
 	const uint64_t USER_SPACE_START = PF_USER_SPACE_START;
@@ -235,7 +517,7 @@ void page_fault_handler_x64(uint64_t *stack)
 		if (fault_addr < USER_SPACE_START || fault_addr > USER_SPACE_END) {
 			current = process_get_current();
 			if (current) {
-				pf_terminate_userspace(current, fault_addr, errcode);
+				pf_user_segv(current, stack, fault_addr, errcode);
 			}
 			return;
 		}
@@ -244,8 +526,15 @@ void page_fault_handler_x64(uint64_t *stack)
 		if (!current || !current->page_directory)
 			return;
 
-		if (!pf_fault_in_allowed_user_vma(current, fault_addr)) {
-			pf_terminate_userspace(current, fault_addr, errcode);
+		if (pf_mmap_region_for(current, fault_addr) != NULL) {
+			pf_user_segv(current, stack, fault_addr, errcode);
+			return;
+		}
+
+		if (!pf_addr_in_heap(current, fault_addr) &&
+		    !pf_addr_in_stack(current, fault_addr)) {
+			pf_user_segv(current, stack, fault_addr, errcode);
+			return;
 		}
 
 		/* Allocate physical frame using PMM */
@@ -253,16 +542,15 @@ void page_fault_handler_x64(uint64_t *stack)
 
 		if (phys_addr == 0) {
 			if (current) {
-				pf_terminate_userspace(current, fault_addr, errcode);
+				pf_user_segv(current, stack, fault_addr, errcode);
 			}
 			return;
 		}
 
-		/* Determine page flags */
-		uint64_t flags = PAGE_USER;
-
-		if (write)
-			flags |= PAGE_RW;
+		/*
+		 * Heap/stack only — mmap PTEs come from sys_mmap / sys_mprotect.
+		 */
+		uint64_t flags = PAGE_USER | PAGE_RW;
 		if (insn_fetch)
 			flags |= PAGE_EXEC;
 
@@ -273,7 +561,7 @@ void page_fault_handler_x64(uint64_t *stack)
 					   phys_addr, flags) != 0) {
 			pmm_free_frame(phys_addr);
 			if (current) {
-				pf_terminate_userspace(current, fault_addr, errcode);
+				pf_user_segv(current, stack, fault_addr, errcode);
 			}
 			return;
 		}
@@ -297,14 +585,15 @@ void page_fault_handler_x64(uint64_t *stack)
 	if (user && !not_present && write) {
 		current = process_get_current();
 		if (current) {
-			pf_terminate_userspace(current, fault_addr, errcode);
+			pf_user_segv(current, stack, fault_addr, errcode);
 		}
+		return;
 	}
 
 	if (user) {
 		current = process_get_current();
 		if (current)
-			pf_terminate_userspace(current, fault_addr, errcode);
+			pf_user_segv(current, stack, fault_addr, errcode);
 		return;
 	}
 
@@ -371,6 +660,10 @@ void general_protection_fault_x64(uint64_t error_code, uint64_t rip, uint64_t cs
 
 void gpf_audit_from_isr(uint64_t *stack)
 {
+#if !DEBUG_PAGE_FAULTS
+	(void)stack;
+	return;
+#else
 	process_t *current = process_get_current();
 	uint64_t errcode = stack ? stack[1] : 0;
 	uint64_t fault_rip = stack ? stack[2] : 0;
@@ -430,6 +723,7 @@ void gpf_audit_from_isr(uint64_t *stack)
 	{
 		serial_print("[GPF_AUDIT][CLASSIFY] GPF_IN_USERSPACE\n");
 	}
+#endif /* DEBUG_PAGE_FAULTS */
 }
 
 void invalid_opcode_x64(uint64_t rip)

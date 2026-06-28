@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
@@ -11,10 +10,13 @@
  * Description: Contract tests for proc/sys/dev endpoints consumed by debug_bins.
  */
 
+/* SPDX-License-Identifier: GPL-3.0-only */
+
 #include "test/ktest_harness.h"
 #include "syscalls.h"
 #include "debug_bins/debug_bins.h"
 #include <config.h>
+#include <ir0/block_dev.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <string.h>
@@ -240,7 +242,8 @@ void ktest_mount_tmpfs_contract(void)
 	int64_t bad = sys_mount("none", "/mntkt", "badfs");
 	KASSERT(bad < 0);
 
-	int64_t file_fd = sys_open("/mntkt/mount_probe.txt", O_CREAT | O_RDWR | O_TRUNC, 0644);
+	int64_t file_fd = sys_open("/mntkt/mount_probe.txt",
+				   KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC, 0644);
 	KASSERT_GT(file_fd, 0);
 	const char *msg = "tmpfs-mount-ok";
 	int64_t w = sys_write((int)file_fd, msg, strlen(msg));
@@ -275,14 +278,16 @@ void ktest_mount_multi_fs_contract(void)
 	int64_t mf = sys_mount("/dev/fat0", "/mnt/fat", "fat16");
 	KASSERT(mf == 0 || mf == -EBUSY);
 
-	int64_t sfd = sys_open("/mnt/simple/s1.txt", O_CREAT | O_RDWR | O_TRUNC, 0644);
+	int64_t sfd = sys_open("/mnt/simple/s1.txt",
+			       KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC, 0644);
 	KASSERT_GT(sfd, 0);
 	const char *smsg = "simplefs-ok";
 	int64_t sw = sys_write((int)sfd, smsg, strlen(smsg));
 	KASSERT_GT(sw, 0);
 	sys_close((int)sfd);
 
-	int64_t ffd = sys_open("/mnt/fat/HELLO.TXT", O_CREAT | O_RDWR | O_TRUNC, 0644);
+	int64_t ffd = sys_open("/mnt/fat/HELLO.TXT",
+			       KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC, 0644);
 	KASSERT_GT(ffd, 0);
 	const char *fmsg = "fat16-ok";
 	int64_t fw = sys_write((int)ffd, fmsg, strlen(fmsg));
@@ -359,13 +364,15 @@ void ktest_mount_longest_prefix_contract(void)
 	int64_t ms = sys_mount("/dev/simplelp", "/mnt/lp/sub", "simplefs");
 	KASSERT(ms == 0 || ms == -EBUSY);
 
-	int64_t ofd = sys_open("/mnt/lp/outer.txt", O_CREAT | O_RDWR | O_TRUNC, 0644);
+	int64_t ofd = sys_open("/mnt/lp/outer.txt",
+			       KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC, 0644);
 	KASSERT_GT(ofd, 0);
 	const char *omsg = "outer-tmpfs";
 	KASSERT_GT(sys_write((int)ofd, omsg, strlen(omsg)), 0);
 	sys_close((int)ofd);
 
-	int64_t ifd = sys_open("/mnt/lp/sub/INNER.TXT", O_CREAT | O_RDWR | O_TRUNC, 0644);
+	int64_t ifd = sys_open("/mnt/lp/sub/INNER.TXT",
+			       KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC, 0644);
 	KASSERT_GT(ifd, 0);
 	const char *imsg = "inner-simplefs";
 	KASSERT_GT(sys_write((int)ifd, imsg, strlen(imsg)), 0);
@@ -388,6 +395,28 @@ void ktest_mount_longest_prefix_contract(void)
 
 	KASSERT(contains_text(outer_buf, "outer-tmpfs"));
 	KASSERT(contains_text(inner_buf, "inner-simplefs"));
+
+	KTEST_END();
+}
+
+void ktest_block_hda_read_contract(void)
+{
+	KTEST_BEGIN("block_hda_read_contract");
+
+	KASSERT(block_dev_is_present("hda"));
+	KASSERT_GT(block_dev_get_sector_count("hda"), 0ULL);
+
+	char buf[512];
+	memset(buf, 0, sizeof(buf));
+	KASSERT(block_dev_read_sectors("hda", 0, 1, buf));
+
+	int64_t fd = sys_open("/dev/hda", KTEST_O_RDONLY, 0);
+	KASSERT_GT(fd, 0);
+
+	memset(buf, 0, sizeof(buf));
+	int64_t n = sys_read((int)fd, buf, sizeof(buf));
+	sys_close((int)fd);
+	KASSERT_EQ(n, 512);
 
 	KTEST_END();
 }
