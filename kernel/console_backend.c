@@ -7,6 +7,9 @@
 #include <ir0/console.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
+#include <drivers/video/console_renderer.h>
+
+#define CONSOLE_BACKEND_READY_MSG "IR0 console ready\n"
 
 static int printk_to_screen = 1;
 static int userspace_gui_first_draw_tag;
@@ -46,7 +49,7 @@ void console_backend_userspace_handoff(void)
 {
     printk_to_screen = 0;
     typewriter_set_mode(TYPEWRITER_FAST);
-    typewriter_console_clear(0x07);
+    typewriter_console_clear(CONSOLE_RENDERER_COLOR_DEFAULT);
 
     if (console_backend_uses_framebuffer())
         serial_print("CONSOLE_BACKEND_FB_OK\n");
@@ -54,7 +57,9 @@ void console_backend_userspace_handoff(void)
         serial_print("CONSOLE_BACKEND_VGA_OK\n");
 
     serial_print("PRINTK_SERIAL_CONSOLE_FB_HANDOFF_OK\n");
-    console_backend_write("IR0 console ready\n", 18, 0x07);
+    console_backend_write(CONSOLE_BACKEND_READY_MSG,
+                          sizeof(CONSOLE_BACKEND_READY_MSG) - 1,
+                          CONSOLE_RENDERER_COLOR_DEFAULT);
     serial_print("CONSOLE_GUI_VISIBLE_OK\n");
 }
 
