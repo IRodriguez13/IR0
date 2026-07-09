@@ -75,9 +75,13 @@
     },
     {
       "id": "pipe",
-      "enabled": false,
+      "enabled": true,
       "title": "Pipe IPC",
-      "status_doc": "LINUX-LIKE"
+      "status_doc": "LINUX-LIKE",
+      "ktest": "syscall_pipe",
+      "pipe_read_len": 6,
+      "pipe_data_hex": "68656c6c6f0a",
+      "ebadf_errno": 9
     },
     {
       "id": "dup",
@@ -87,9 +91,30 @@
     },
     {
       "id": "poll",
-      "enabled": false,
+      "enabled": true,
       "title": "poll(2)",
+      "status_doc": "PARTIAL",
+      "ktest": "poll_resume_invariant"
+    },
+    {
+      "id": "nanosleep",
+      "enabled": true,
+      "title": "nanosleep(2)",
       "status_doc": "PARTIAL"
+    },
+    {
+      "id": "getcwd",
+      "enabled": true,
+      "title": "getcwd(2)",
+      "status_doc": "PARTIAL",
+      "expected_path": "/"
+    },
+    {
+      "id": "chdir",
+      "enabled": true,
+      "title": "chdir(2)",
+      "status_doc": "PARTIAL",
+      "target_path": "/"
     },
     {
       "id": "select",
