@@ -11,6 +11,8 @@
 #include <drivers/video/console.h>
 #include <drivers/video/typewriter.h>
 
+#define IR0_CONSOLE_COLOR_DEFAULT 0x07u /* light grey on black */
+
 void console_backend_init(void);
 void console_backend_clear(uint8_t color);
 int console_backend_uses_framebuffer(void);

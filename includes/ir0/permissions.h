@@ -38,6 +38,8 @@ struct process;
 
 /* Evaluate Unix permission bits against effective uid/gid */
 bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid);
+bool ir0_access_from_stat_groups(const stat_t *st, int mode, uid_t euid,
+                                 gid_t egid, const gid_t *groups, int ngroups);
 
 /* Function declarations */
 bool check_file_access(const char *path, int mode, const struct process *process);

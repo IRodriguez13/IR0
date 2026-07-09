@@ -255,10 +255,12 @@ static const uint8_t *dns_decode_name(const uint8_t *data, const uint8_t *buf_st
 
 /* DNS response handler */
 static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
-                                 uint16_t src_port, const void *data, size_t len)
+                                 uint16_t src_port, const void *data, size_t len,
+                                 void *priv)
 {
     (void)dev;
     (void)src_port;
+    (void)priv;
     
     LOG_INFO_FMT("DNS", "DNS response received from " IP4_FMT " port %d, len=%d", 
                  IP4_ARGS(ntohl(src_ip)), (int)src_port, (int)len);
@@ -466,7 +468,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
         uint64_t flags = dns_irq_save();
         if (!dns_handler_registered)
         {
-            udp_register_handler(dns_client_port, dns_response_handler);
+            udp_register_handler(dns_client_port, dns_response_handler, NULL);
             dns_handler_registered = true;
         }
         dns_irq_restore(flags);

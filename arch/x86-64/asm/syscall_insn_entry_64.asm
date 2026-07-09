@@ -137,6 +137,7 @@ syscall_insn_entry_asm:
     ;   [+104]=rflags [+112]=rip [+120]=user_rsp
 
     ; ---- Stage 3: capture user frame (rdi = &rbx in stack) ----
+    mov qword [rel fase29_entry_rip], 0
     lea rdi, [rsp + 56]
     call process_capture_syscall_frame_at_entry
 

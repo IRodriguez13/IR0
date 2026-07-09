@@ -34,7 +34,8 @@ static struct net_protocol udp_proto;
 struct udp_port_handler {
     uint16_t port;
     void (*handler)(struct net_device *dev, ip4_addr_t src_ip, uint16_t src_port,
-                    const void *data, size_t len);
+                    const void *data, size_t len, void *priv);
+    void *priv;
     struct udp_port_handler *next;
 };
 
@@ -192,7 +193,8 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
     
     /* Look up handler for destination port */
     struct udp_port_handler *handler = NULL;
-    void (*handler_fn)(struct net_device *, ip4_addr_t, uint16_t, const void *, size_t) = NULL;
+    void (*handler_fn)(struct net_device *, ip4_addr_t, uint16_t, const void *, size_t, void *) = NULL;
+    void *handler_priv = NULL;
     uint64_t irq_flags = udp_irq_save();
     handler = udp_handlers;
     while (handler)
@@ -200,6 +202,7 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
         if (handler->port == dest_port)
         {
             handler_fn = handler->handler;
+            handler_priv = handler->priv;
             break;
         }
         handler = handler->next;
@@ -211,7 +214,7 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
         /* Extract payload (after UDP header) */
         const void *payload = (const uint8_t *)data + sizeof(struct udp_header);
         size_t payload_len = packet_len - sizeof(struct udp_header);
-        handler_fn(dev, src_ip, src_port, payload, payload_len);
+        handler_fn(dev, src_ip, src_port, payload, payload_len, handler_priv);
         return;
     }
 
@@ -285,7 +288,8 @@ int udp_send(struct net_device *dev, ip4_addr_t dest_ip, uint16_t src_port,
  * @handler: Handler function to call when packets arrive on this port
  */
 void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev, ip4_addr_t src_ip,
-                                                          uint16_t src_port, const void *data, size_t len))
+                                                          uint16_t src_port, const void *data, size_t len,
+                                                          void *priv), void *priv)
 {
     uint64_t irq_flags = udp_irq_save();
 
@@ -297,6 +301,7 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
         {
             /* Update existing handler */
             existing->handler = handler;
+            existing->priv = priv;
             udp_irq_restore(irq_flags);
             LOG_INFO_FMT("UDP", "Updated handler for port %d", (int)port);
             return;
@@ -314,10 +319,33 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
     
     new_handler->port = port;
     new_handler->handler = handler;
+    new_handler->priv = priv;
     new_handler->next = udp_handlers;
     udp_handlers = new_handler;
     udp_irq_restore(irq_flags);
     LOG_INFO_FMT("UDP", "Registered handler for UDP port %d", (int)port);
+}
+
+void udp_unregister_handler(uint16_t port)
+{
+    struct udp_port_handler **pp;
+    uint64_t irq_flags = udp_irq_save();
+
+    for (pp = &udp_handlers; *pp; pp = &(*pp)->next)
+    {
+        if ((*pp)->port == port)
+        {
+            struct udp_port_handler *dead = *pp;
+
+            *pp = dead->next;
+            kfree(dead);
+            udp_irq_restore(irq_flags);
+            LOG_INFO_FMT("UDP", "Unregistered handler for port %d", (int)port);
+            return;
+        }
+    }
+
+    udp_irq_restore(irq_flags);
 }
 
 /**

@@ -1378,6 +1378,143 @@ def compare_process_lifecycle(
     return res
 
 
+def compare_pipe(
+    linux: dict,
+    ir0: dict,
+    pipe_read_len: int,
+    pipe_data_hex: str,
+    ebadf_errno: int,
+    ktest_ok: bool | None,
+) -> CompareResult:
+    res = compare_read(
+        linux, ir0, pipe_read_len, pipe_data_hex, ebadf_errno, ktest_ok
+    )
+    res.contract = "pipe"
+    return res
+
+
+def compare_poll(linux: dict, ir0: dict, ktest_ok: bool | None) -> CompareResult:
+    res = CompareResult(contract="poll", ok=True)
+    l_steps = linux.get("audit_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+    l_s = _find_step(l_steps, "poll_pipe")
+    i_s = _find_step(i_steps, "poll_pipe")
+
+    if not l_s or not i_s:
+        res.ok = False
+        res.divergences.append(
+            f"missing poll_pipe step (linux={bool(l_s)} ir0={bool(i_s)})"
+        )
+        return res
+
+    for label, step in (("linux", l_s), ("ir0", i_s)):
+        if step.get("ret") != 1:
+            res.ok = False
+            res.divergences.append(f"{label} poll_pipe: ret={step.get('ret')} expected=1")
+        revents = step.get("revents")
+        if revents is None or (int(revents) & 1) == 0:
+            res.ok = False
+            res.divergences.append(f"{label} poll_pipe: revents={revents} expected POLLIN")
+
+    if l_s.get("ret") != i_s.get("ret"):
+        res.ok = False
+        res.divergences.append(
+            f"poll_pipe ret mismatch linux={l_s.get('ret')} ir0={i_s.get('ret')}"
+        )
+
+    if ktest_ok is False:
+        res.ok = False
+        res.divergences.append("ktest poll_resume_invariant FAILED")
+    elif ktest_ok is True:
+        res.notes.append("ktest poll_resume_invariant OK")
+
+    return res
+
+
+def compare_nanosleep(linux: dict, ir0: dict) -> CompareResult:
+    res = CompareResult(contract="nanosleep", ok=True)
+    l_s = _find_step(linux.get("audit_steps") or [], "nanosleep_2ms")
+    i_s = _find_step(ir0.get("audit_steps") or [], "nanosleep_2ms")
+
+    if not l_s or not i_s:
+        res.ok = False
+        res.divergences.append(
+            f"missing nanosleep_2ms step (linux={bool(l_s)} ir0={bool(i_s)})"
+        )
+        return res
+
+    for label, step in (("linux", l_s), ("ir0", i_s)):
+        if step.get("ret") != 0:
+            res.ok = False
+            res.divergences.append(
+                f"{label} nanosleep_2ms: ret={step.get('ret')} expected=0"
+            )
+
+    return res
+
+
+def compare_getcwd(linux: dict, ir0: dict, expected_path: str) -> CompareResult:
+    res = CompareResult(contract="getcwd", ok=True)
+    l_s = _find_step(linux.get("audit_steps") or [], "getcwd_root")
+    i_s = _find_step(ir0.get("audit_steps") or [], "getcwd_root")
+
+    if not l_s or not i_s:
+        res.ok = False
+        res.divergences.append(
+            f"missing getcwd_root step (linux={bool(l_s)} ir0={bool(i_s)})"
+        )
+        return res
+
+    for label, step in (("linux", l_s), ("ir0", i_s)):
+        path = step.get("path")
+        if path != expected_path:
+            res.ok = False
+            res.divergences.append(
+                f"{label} getcwd_root: path={path!r} expected={expected_path!r}"
+            )
+        if step.get("errno") != 0:
+            res.ok = False
+            res.divergences.append(f"{label} getcwd_root: errno={step.get('errno')}")
+
+    l_path = l_s.get("path")
+    i_path = i_s.get("path")
+    if l_path != i_path:
+        res.ok = False
+        res.divergences.append(f"getcwd path mismatch linux={l_path!r} ir0={i_path!r}")
+
+    res.notes.append(f"cwd path linux={l_path} ir0={i_path}")
+    return res
+
+
+def compare_chdir(linux: dict, ir0: dict, target_path: str) -> CompareResult:
+    res = CompareResult(contract="chdir", ok=True)
+    l_steps = linux.get("audit_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+    l_ch = _find_step(l_steps, "chdir_target")
+    i_ch = _find_step(i_steps, "chdir_target")
+    l_cw = _find_step(l_steps, "getcwd_after")
+    i_cw = _find_step(i_steps, "getcwd_after")
+
+    if not l_ch or not i_ch or not l_cw or not i_cw:
+        res.ok = False
+        res.divergences.append("missing chdir_target or getcwd_after step")
+        return res
+
+    for label, step in (("linux", l_ch), ("ir0", i_ch)):
+        if step.get("ret") != 0:
+            res.ok = False
+            res.divergences.append(f"{label} chdir_target: ret={step.get('ret')}")
+
+    for label, step in (("linux", l_cw), ("ir0", i_cw)):
+        if step.get("path") != target_path:
+            res.ok = False
+            res.divergences.append(
+                f"{label} getcwd_after: path={step.get('path')!r} expected={target_path!r}"
+            )
+
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",

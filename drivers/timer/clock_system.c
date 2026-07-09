@@ -20,6 +20,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/scheduler_api.h>
 #include <ir0/clock_wait.h>
+#include <ir0/poll.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"
 #include "clock_system.h"

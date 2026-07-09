@@ -72,6 +72,7 @@ int devfs_fd_can_write(uint32_t device_id, pid_t pid);
 int64_t devfs_open_node(devfs_node_t *node, int flags);
 int64_t devfs_close_node(devfs_node_t *node);
 int devfs_stat_path(const char *path, stat_t *buf);
+int devfs_is_virtual_subdir(const char *path);
 int devfs_readdir_root(struct vfs_dirent *entries, int max_entries);
 
 // Standard device implementations

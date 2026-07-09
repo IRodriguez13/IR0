@@ -370,10 +370,11 @@ static int dhcp_parse_options(const uint8_t *opt, size_t opt_len, uint8_t *msg_t
 }
 
 static void dhcp_udp_handler(struct net_device *dev, ip4_addr_t src_ip, uint16_t src_port,
-                             const void *data, size_t len)
+                             const void *data, size_t len, void *priv)
 {
     (void)dev;
     (void)src_ip;
+    (void)priv;
 
     if (!data || len < sizeof(struct dhcp_bootp_header) + 4 || src_port != DHCP_SERVER_PORT)
     {
@@ -575,7 +576,7 @@ int dhcp_init(void)
 
     if (!dhcp_handler_registered)
     {
-        udp_register_handler(DHCP_CLIENT_PORT, dhcp_udp_handler);
+        udp_register_handler(DHCP_CLIENT_PORT, dhcp_udp_handler, NULL);
         dhcp_handler_registered = 1;
     }
 
