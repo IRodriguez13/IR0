@@ -102,7 +102,7 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   }
   else
   {
-    rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, NULL, dev_copy, dev_resolved,
+    rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, dev_copy, dev_resolved,
                               sizeof(dev_resolved), current_process->cwd);
     if (rc != 0)
       return rc;
@@ -393,9 +393,7 @@ int64_t sys_access(const char *pathname, int mode)
 
   rc = ir0_access_path_routed(path_to_use, mode,
                               (uid_t)current_process->euid,
-                              (gid_t)current_process->egid,
-                              current_process->groups,
-                              current_process->ngroups);
+                              (gid_t)current_process->egid);
   fase52_dbg_access(path_to_use, mode, (int)rc);
   return rc;
 }
@@ -425,9 +423,7 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
    */
   return ir0_access_path_routed(resolved, mode,
                                 (uid_t)current_process->euid,
-                                (gid_t)current_process->egid,
-                                current_process->groups,
-                                current_process->ngroups);
+                                (gid_t)current_process->egid);
 }
 
 /**
@@ -502,9 +498,7 @@ int64_t sys_chdir(const char *pathname)
   /* In Unix, entering a directory requires execute permission on that path. */
   ret = ir0_access_path_routed(new_path, 1,
                                (uid_t)current_process->euid,
-                               (gid_t)current_process->egid,
-                               current_process->groups,
-                               current_process->ngroups);
+                               (gid_t)current_process->egid);
   if (ret != 0)
     return ret;
 

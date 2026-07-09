@@ -2353,6 +2353,12 @@ int devfs_stat_path(const char *path, stat_t *buf)
     return 0;
 }
 
+int devfs_is_virtual_subdir(const char *path)
+{
+    (void)path;
+    return 0;
+}
+
 int devfs_readdir_root(struct vfs_dirent *entries, int max_entries)
 {
     int n = 0;

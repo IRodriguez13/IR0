@@ -1428,7 +1428,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
             serial_print("\n");
             exec_commit_emit("return-vfs_read_fail", (int64_t)vfs_ret, proc,
                              vfs_class ? vfs_class : "EXEC_ABORT_BEFORE_COMMIT");
-            return -1;
+            return vfs_ret < 0 ? vfs_ret : -ENOENT;
         }
     }
 

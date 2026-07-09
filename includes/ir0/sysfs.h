@@ -35,6 +35,7 @@ int sysfs_open(const char *path, int flags);
 int sysfs_read(int fd, char *buf, size_t count, off_t offset);
 int sysfs_write(int fd, const char *buf, size_t count);
 int sysfs_stat(const char *path, stat_t *st);
+int sysfs_is_virtual_subdir(const char *path);
 
 /* Shared implementations registered via pseudo_fs_nodes.c */
 int sys_kernel_hostname_read_reg(char *buf, size_t count);

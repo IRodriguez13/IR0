@@ -67,6 +67,7 @@ typedef struct
     /* Scheduler integration */
     uint32_t scheduler_tick_counter;
     uint32_t scheduler_ticks_per_quantum;
+    uint8_t sched_resched_pending;
     
     /* Alarm system */
     struct clock_alarm *alarms;
@@ -133,6 +134,8 @@ void clock_cancel_all_alarms(void);
 /* Scheduler integration */
 int clock_set_scheduler_quantum(uint32_t ticks);
 uint32_t clock_get_scheduler_quantum(void);
+int clock_take_sched_resched_pending(void);
+void clock_request_sched_resched(void);
 
 /* Statistics */
 int clock_get_stats(clock_stats_t *stats);

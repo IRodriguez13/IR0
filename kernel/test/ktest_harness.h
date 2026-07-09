@@ -20,8 +20,20 @@
 #ifndef _KERNEL_KTEST_HARNESS_H
 #define _KERNEL_KTEST_HARNESS_H
 
+#include <ir0/open_flags.h>
 #include <ir0/serial_io.h>
 #include <stdint.h>
+
+/*
+ * In-kernel ktest open flags — sys_open() translates Linux/musl ABI via
+ * linux_open_flags_to_ir0(); do not pass IR0_O_* here.
+ */
+#define KTEST_O_RDONLY  0
+#define KTEST_O_WRONLY  0x0001
+#define KTEST_O_RDWR    0x0002
+#define KTEST_O_CREAT   (int)LINUX_O_CREAT
+#define KTEST_O_TRUNC   (int)LINUX_O_TRUNC
+#define KTEST_O_EXCL    (int)LINUX_O_EXCL
 
 extern int _ktest_failed;
 extern int _ktest_count;

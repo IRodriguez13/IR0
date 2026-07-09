@@ -37,6 +37,7 @@
 #define __NR_brk           12
 #define __NR_rt_sigaction  13
 #define __NR_rt_sigprocmask 14
+#define __NR_rt_sigsuspend 130
 #define __NR_rt_sigreturn  15
 #define __NR_ioctl         16
 #define __NR_pread64        17
@@ -82,7 +83,9 @@
 #define __NR_exit          60
 #define __NR_wait4         61
 #define __NR_kill          62
+#define __NR_tgkill        234
 #define __NR_uname         63
+#define __NR_mknod         133
 #define __NR_fcntl         72
 #define __NR_flock         73
 #define __NR_fsync         74
@@ -114,6 +117,7 @@
 #define __NR_getuid       102
 #define __NR_syslog       103
 #define __NR_getgid       104
+#define __NR_getgroups    115
 #define __NR_setuid       105
 #define __NR_setgid       106
 #define __NR_geteuid      107
@@ -134,11 +138,17 @@
 #define __NR_set_tid_address 218
 #define __NR_futex          202
 #define __NR_clock_gettime   228
-#define __NR_set_robust_list 274
+#define __NR_set_robust_list 273
+#define __NR_get_robust_list 274
 #define __NR_getrandom       318
 #define __NR_prlimit64       302
 #define __NR_openat          257
+#define __NR_mknodat         259
+#define __NR_fchmodat        268
 #define __NR_faccessat       269
+#define __NR_symlinkat       266
+#define __NR_readlinkat      267
+#define __NR_fchownat        260
 #define __NR_newfstatat      262
 #define __NR_unlinkat        263
 #define __NR_renameat        264

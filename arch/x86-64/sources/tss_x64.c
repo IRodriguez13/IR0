@@ -58,3 +58,7 @@ void setup_tss()
     update_gdt_tss((uint64_t)&kernel_tss);
 }
 
+void tss_set_rsp0(uint64_t rsp0)
+{
+    kernel_tss.rsp0 = rsp0;
+}

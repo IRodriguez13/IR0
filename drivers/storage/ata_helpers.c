@@ -25,7 +25,11 @@ bool ata_drive_present(uint8_t drive) {
 
 uint64_t ata_get_size(uint8_t drive) {
     if (drive >= 4 || !ata_drives_present[drive]) return 0;
-    return ata_devices[drive].size;
+    if (ata_devices[drive].size != 0)
+        return ata_devices[drive].size;
+    if (ata_devices[drive].capacity_bytes != 0)
+        return ata_devices[drive].capacity_bytes / (uint64_t)ATA_SECTOR_SIZE;
+    return 0;
 }
 
 const char* ata_get_model(uint8_t drive) {

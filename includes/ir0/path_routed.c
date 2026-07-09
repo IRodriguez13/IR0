@@ -4,8 +4,10 @@
  */
 
 #include <ir0/path_routed.h>
+#include <string.h>
 #include <ir0/devfs.h>
 #include <ir0/errno.h>
+#include <ir0/named_symlink.h>
 #include <ir0/permissions.h>
 #include <ir0/procfs.h>
 #include <ir0/sysfs.h>
@@ -55,6 +57,23 @@ int ir0_stat_path_routed(const char *path, stat_t *st)
     }
 
     return vfs_stat(path, st);
+}
+
+int ir0_stat_path_routed_follow(const char *path, stat_t *st)
+{
+    char resolved[256];
+    int rc;
+
+    if (!path || !st)
+        return -EINVAL;
+
+    strncpy(resolved, path, sizeof(resolved) - 1);
+    resolved[sizeof(resolved) - 1] = '\0';
+    rc = ir0_follow_named_symlinks(resolved, sizeof(resolved),
+                                   IR0_SYMLINK_FOLLOW_MAX);
+    if (rc < 0)
+        return rc;
+    return ir0_stat_path_routed(resolved, st);
 }
 
 int64_t ir0_access_path_routed(const char *resolved_path, int mode,
