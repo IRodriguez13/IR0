@@ -33,4 +33,7 @@ struct pollfd {
 	short revents;
 };
 
+/* Called from timer IRQ: wake poll waiters without scheduling. */
+int poll_wake_check_nosched(void);
+
 #endif

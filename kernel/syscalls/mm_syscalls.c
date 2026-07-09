@@ -340,7 +340,15 @@ int64_t sys_brk(void *addr)
 
 	/* brk(NULL) / brk(0): return current program break (Linux ABI). */
 	if (!addr)
+	{
+		if (current_process->heap_start == 0 &&
+		    current_process->heap_end == 0)
+		{
+			current_process->heap_start = USER_HEAP_BASE;
+			current_process->heap_end = USER_HEAP_BASE;
+		}
 		return (int64_t)current_process->heap_end;
+	}
 
 	if (!is_user_address(addr, 0))
 		return -EFAULT;

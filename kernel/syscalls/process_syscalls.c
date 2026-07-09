@@ -1057,6 +1057,24 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
   if (!current_process)
     return -ESRCH;
 
+  if (current_process->mode == USER_MODE)
+  {
+    pid_t wait_pid = pid;
+    int wait_opts = options;
+
+    /*
+     * Drop stale pipe/poll irq_frame resume state and read wait args from the
+     * pt_regs snapshot (captured before any nested schedule on the shared
+     * syscall stack can clobber the C ABI parameter slots).
+     */
+    process_clear_in_thread_syscall_block(current_process);
+    wait_pid = (pid_t)current_process->syscall_frame.rdi;
+    wait_opts = (int)current_process->syscall_frame.rdx;
+    current_process->wait_options = wait_opts;
+    pid = wait_pid;
+    options = wait_opts;
+  }
+
   if (IR0_DEBUG_WAIT)
   {
     serial_print("[WAIT4_WNOHANG_AUDIT] wait_begin parent=");

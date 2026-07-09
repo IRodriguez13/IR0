@@ -13,9 +13,10 @@
     },
     {
       "id": "execve",
-      "enabled": false,
+      "enabled": true,
       "title": "Execute program",
-      "status_doc": "PARTIAL"
+      "status_doc": "PARTIAL",
+      "enoent_errno": 2
     },
     {
       "id": "mmap",

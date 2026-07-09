@@ -20,7 +20,8 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_vfs_backend_contract.c 	test_stat_user_abi.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
 	test_ktm_sched_contract.c test_musl_cred_abi.c test_musl_mmap_contract.c \
-	test_signal_rt_sigaction_abi.c
+	test_signal_rt_sigaction_abi.c test_mmap_null_placement.c \
+	test_elf_initial_brk_abi.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_kmem_stub.o host_serial_stub.o host_fase48_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o
@@ -95,6 +96,15 @@ test_musl_mmap_contract.o: test_musl_mmap_contract.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_musl_cred_abi.o: test_musl_cred_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_signal_rt_sigaction_abi.o: test_signal_rt_sigaction_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_mmap_null_placement.o: test_mmap_null_placement.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_elf_initial_brk_abi.o: test_elf_initial_brk_abi.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 $(TEST_BIN): $(TEST_OBJS)

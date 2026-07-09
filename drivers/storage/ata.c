@@ -552,6 +552,10 @@ bool ata_identify_drive(uint8_t drive)
         }
     }
 
+    if (ata_devices[drive].capacity_bytes != 0)
+        ata_devices[drive].size =
+            ata_devices[drive].capacity_bytes / (uint64_t)ATA_SECTOR_SIZE;
+
     return true;
 }
 
