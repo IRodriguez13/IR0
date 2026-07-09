@@ -23,10 +23,15 @@ sys.path.insert(0, str(ROOT / "scripts" / "linux_abi"))
 from compare import (  # noqa: E402
     CompareResult,
     compare_brk,
+    compare_chdir,
     compare_execve,
+    compare_getcwd,
     compare_mmap,
     compare_mount,
+    compare_nanosleep,
     compare_openat,
+    compare_pipe,
+    compare_poll,
     compare_process_lifecycle,
     compare_kill_sigterm,
     compare_read,
@@ -164,6 +169,73 @@ def build_vfs_write_probe(report_dir: Path) -> Path:
         report_dir / "vfs_write_probe",
         ROOT / "scripts" / "linux_abi" / "workloads" / "vfs_write_probe.c",
     )
+
+
+def build_poll_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "poll_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "poll_probe.c",
+    )
+
+
+def build_nanosleep_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "nanosleep_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "nanosleep_probe.c",
+    )
+
+
+def build_getcwd_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "getcwd_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "getcwd_probe.c",
+    )
+
+
+def build_chdir_probe(report_dir: Path, target: str) -> Path:
+    out = report_dir / "chdir_probe"
+    src = ROOT / "scripts" / "linux_abi" / "workloads" / "chdir_probe.c"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    musl_cc = "musl-gcc"
+    try:
+        subprocess.run(["musl-gcc", "--version"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        musl_cc = "gcc"
+    rc = run_cmd(
+        [
+            musl_cc,
+            "-static",
+            "-Os",
+            f'-DCHDIR_TARGET="{target}"',
+            "-o",
+            str(out),
+            str(src),
+        ]
+    )
+    if rc != 0 or not out.is_file():
+        raise RuntimeError(f"failed to build {out.name} with {musl_cc}")
+    return out
+
+
+def _run_simple_workloads(
+    contract: str,
+    probe_basename: str,
+    done_tag: str,
+    strace_syscalls: str,
+    linux_dir: Path,
+    ir0_dir: Path,
+) -> bool:
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_workload.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_workload.sh"
+    if run_cmd(
+        ["bash", str(sh_linux), contract, probe_basename, strace_syscalls, str(linux_dir)]
+    ) != 0:
+        return False
+    if run_cmd(
+        ["bash", str(sh_ir0), contract, probe_basename, done_tag, str(ir0_dir)]
+    ) != 0:
+        return False
+    return True
 
 
 def build_static_probe(out: Path, src: Path) -> Path:
@@ -947,12 +1019,177 @@ def audit_kill_sigterm(report_dir: Path, cfg: dict) -> CompareResult:
     return res
 
 
+def audit_pipe(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "pipe"
+    ir0_dir = report_dir / "ir0" / "pipe"
+    pipe_read_len = int(cfg.get("pipe_read_len", 6))
+    pipe_data_hex = str(cfg.get("pipe_data_hex", "68656c6c6f0a"))
+    ebadf_errno = int(cfg.get("ebadf_errno", 9))
+    ktest_name = cfg.get("ktest", "syscall_pipe")
+    ktest_log = Path("/tmp/ktest.log")
+
+    build_read_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_read.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_read.sh"
+
+    ktest_ok = None
+    if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+            errors="replace"
+        ):
+            ktest_ok = True
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="pipe",
+            ok=False,
+            divergences=["Linux pipe workload script failed"],
+        )
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        return CompareResult(
+            contract="pipe",
+            ok=False,
+            divergences=["IR0 pipe workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = run_ktest_brk(ktest_name)
+
+    return compare_pipe(
+        linux_trace,
+        ir0_trace,
+        pipe_read_len,
+        pipe_data_hex,
+        ebadf_errno,
+        ktest_ok,
+    )
+
+
+def audit_poll(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "poll"
+    ir0_dir = report_dir / "ir0" / "poll"
+    ktest_name = cfg.get("ktest", "poll_resume_invariant")
+    ktest_log = Path("/tmp/ktest.log")
+
+    build_poll_probe(report_dir)
+
+    ktest_ok = None
+    if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
+            errors="replace"
+        ):
+            ktest_ok = True
+
+    if not _run_simple_workloads(
+        "poll", "poll_probe", "POLLOK", "poll,pipe,write,close", linux_dir, ir0_dir
+    ):
+        return CompareResult(
+            contract="poll",
+            ok=False,
+            divergences=["poll workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    if ktest_ok is None and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = run_ktest_brk(ktest_name)
+
+    return compare_poll(linux_trace, ir0_trace, ktest_ok)
+
+
+def audit_nanosleep(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "nanosleep"
+    ir0_dir = report_dir / "ir0" / "nanosleep"
+
+    build_nanosleep_probe(report_dir)
+
+    if not _run_simple_workloads(
+        "nanosleep",
+        "nanosleep_probe",
+        "NANOSLEEPOK",
+        "nanosleep",
+        linux_dir,
+        ir0_dir,
+    ):
+        return CompareResult(
+            contract="nanosleep",
+            ok=False,
+            divergences=["nanosleep workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+    return compare_nanosleep(linux_trace, ir0_trace)
+
+
+def audit_getcwd(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "getcwd"
+    ir0_dir = report_dir / "ir0" / "getcwd"
+    expected_path = str(cfg.get("expected_path", "/"))
+
+    build_getcwd_probe(report_dir)
+
+    if not _run_simple_workloads(
+        "getcwd",
+        "getcwd_probe",
+        "GETCWDOK",
+        "getcwd",
+        linux_dir,
+        ir0_dir,
+    ):
+        return CompareResult(
+            contract="getcwd",
+            ok=False,
+            divergences=["getcwd workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+    return compare_getcwd(linux_trace, ir0_trace, expected_path)
+
+
+def audit_chdir(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "chdir"
+    ir0_dir = report_dir / "ir0" / "chdir"
+    target_path = str(cfg.get("target_path", "/"))
+
+    build_chdir_probe(report_dir, target_path)
+
+    if not _run_simple_workloads(
+        "chdir",
+        "chdir_probe",
+        "CHDIROK",
+        "chdir,getcwd",
+        linux_dir,
+        ir0_dir,
+    ):
+        return CompareResult(
+            contract="chdir",
+            ok=False,
+            divergences=["chdir workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+    return compare_chdir(linux_trace, ir0_trace, target_path)
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
     "wait4_wnohang": audit_wait4_wnohang,
     "kill_sigterm": audit_kill_sigterm,
     "read": audit_read,
+    "pipe": audit_pipe,
+    "poll": audit_poll,
+    "nanosleep": audit_nanosleep,
+    "getcwd": audit_getcwd,
+    "chdir": audit_chdir,
     "mmap": audit_mmap,
     "mount": audit_mount,
     "execve": audit_execve,

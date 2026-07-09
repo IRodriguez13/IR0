@@ -2430,7 +2430,7 @@ kernel-x64-userspace-eager.iso: kernel-x64-userspace-eager.bin arch/x86-64/grub.
 	@echo "✓ ISO (userspace init, eager MM bisect) created: $@"
 
 # --- Validation (tooling entry points; historical smokes: IR0_LEGACY_SMOKE=1) ---
-.PHONY: ctr smoke-tier1 test-fast ktm ktm-check ktm-manifest ktm-classify ktm-classify-selftest ktm-report
+.PHONY: ctr smoke-tier1 test-fast agent-fast diag-contract ktm ktm-check ktm-manifest ktm-classify ktm-classify-selftest ktm-report
 
 ctr:
 	@chmod +x scripts/ctr.sh
@@ -2438,6 +2438,14 @@ ctr:
 
 test-fast: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
+
+agent-fast: test-fast kernel-tests
+	@echo "✓ agent-fast OK (host + ktest)"
+
+diag-contract:
+	@chmod +x scripts/ir0-diag.sh
+	@test -n "$(CONTRACT)" || (echo "usage: make diag-contract CONTRACT=poll" >&2; exit 2)
+	@scripts/ir0-diag.sh contract "$(CONTRACT)"
 
 smoke-tier1: kernel-x64.bin arch-guard
 	@$(MAKE) -s smoke-runit-boot
