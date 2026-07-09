@@ -493,3 +493,9 @@ int sysfs_stat(const char *path, stat_t *st)
 
     return -ENOENT;  /* File not found */
 }
+
+int sysfs_is_virtual_subdir(const char *path)
+{
+    (void)path;
+    return 0;
+}

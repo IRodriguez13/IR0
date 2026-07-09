@@ -37,6 +37,7 @@ typedef int64_t ssize_t;
 #define S_IFCHR  0020000  // Character device
 #define S_IFBLK  0060000  // Block device
 #define S_IFLNK  0120000  // Symbolic link
+#define S_IFIFO  0010000  // FIFO/pipe
 #define S_IFSOCK 0140000  // Socket
 
 // File mode bits (from stat.h)

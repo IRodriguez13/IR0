@@ -109,6 +109,28 @@ bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid)
     return true;
 }
 
+bool ir0_access_from_stat_groups(const stat_t *st, int mode, uid_t euid,
+                                 gid_t egid, const gid_t *groups, int ngroups)
+{
+    size_t i;
+
+    if (ir0_access_from_stat(st, mode, euid, egid))
+        return true;
+
+    if (!groups || ngroups <= 0)
+        return false;
+
+    for (i = 0; i < (size_t)ngroups; i++)
+    {
+        if (groups[i] == egid)
+            continue;
+        if (ir0_access_from_stat(st, mode, euid, groups[i]))
+            return true;
+    }
+
+    return false;
+}
+
 bool user_exists(uid_t uid)
 {
     return find_user_by_uid(uid) != NULL;

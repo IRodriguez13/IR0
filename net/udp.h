@@ -33,7 +33,9 @@ int udp_send(struct net_device *dev, ip4_addr_t dest_ip, uint16_t src_port,
 void udp_receive_handler(struct net_device *dev, const void *data,
                          size_t len, void *priv);
 void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev, ip4_addr_t src_ip,
-                                                          uint16_t src_port, const void *data, size_t len));
+                                                          uint16_t src_port, const void *data, size_t len,
+                                                          void *priv), void *priv);
+void udp_unregister_handler(uint16_t port);
 
 /* UDP Checksum Calculation */
 uint16_t udp_checksum(const void *data, size_t len, ip4_addr_t src_ip, ip4_addr_t dest_ip);

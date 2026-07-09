@@ -419,6 +419,19 @@ const char *proc_resolve_path(const char *path, pid_t *pid_out)
     return proc_parse_path(path, pid_out);
 }
 
+int proc_is_virtual_subdir(const char *path)
+{
+    pid_t pid;
+    const char *filename;
+
+    filename = proc_resolve_path(path, &pid);
+    if (!filename)
+        return 0;
+
+    return strcmp(filename, "pid_dir") == 0 ||
+           strcmp(filename, "pid_subdir") == 0;
+}
+
 /* /proc/meminfo: raw data only. One line: total_kb\tfree_kb\tused_kb */
 int proc_meminfo_read(char *buf, size_t count)
 {

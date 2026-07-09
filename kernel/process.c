@@ -1175,7 +1175,7 @@ extern uint64_t fase29_entry_rip;
  * process_capture_syscall_frame_at_entry - Linux SAVE_ALL at syscall entry.
  *
  * @frame_base: RSP at the rbx slot (see syscall_insn_entry_64.asm).
- * @rip_hw: hardware user RIP (rcx at syscall insn); prefer fase29_entry_rip.
+ * @rip_hw: optional hardware user RIP; asm does not pass this today.
  */
 void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw)
 {
@@ -1186,12 +1186,15 @@ void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_h
 		return;
 
 	sf = &p->syscall_frame;
-	if (fase29_entry_rip)
-		sf->rip = fase29_entry_rip;
-	else if (rip_hw)
+	/*
+	 * frame_base[7] is the user RIP (rcx) pushed at this syscall entry.
+	 * fase29_entry_rip is written at the *previous* syscall's sysret and must
+	 * not override the current entry snapshot (breaks fork child iretq).
+	 * rip_hw is not passed from asm today; only use as last resort.
+	 */
+	sf->rip = frame_base[7];
+	if (!sf->rip && rip_hw)
 		sf->rip = rip_hw;
-	else
-		sf->rip = frame_base[7];
 	sf->rflags = frame_base[6];
 	sf->rsp = frame_base[8];
 	sf->rbx = frame_base[0];
@@ -2031,10 +2034,16 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	child->next = NULL;
 	child->saved_context = NULL;
 	child->poll_waiter = NULL;
+	child->poll_resume_via_arch = 0;
 	child->fork_pending_child = NULL;
 	child->fork_resync_syscall_stack = 0;
 	child->irq_frame_saved = 0;
 	child->coop_resched_resume = 0;
+	child->syscall_frame_fresh = 0;
+	child->wait_blocked = 0;
+	child->wait_target_pid = 0;
+	child->wait_options = 0;
+	child->wait_resume_child_pid = 0;
 	child->wait_status_ptr = NULL;
 	child->syscall_resume_rax = 0;
 #if IR0_DEBUG_PROC
@@ -2535,7 +2544,8 @@ int process_signal_default_kill(process_t *dying, int sig)
 		if (parent && parent->state != PROCESS_ZOMBIE)
 		{
 			send_signal(parent->task.pid, SIGCHLD);
-			if (parent->state == PROCESS_BLOCKED)
+			if (parent->state == PROCESS_BLOCKED ||
+			    parent->wait_blocked)
 				process_wait_wake_blocked_parent(parent, dying);
 		}
 		wait_exit_audit_process_exit(dying, parent, parent_state_before);
@@ -2824,7 +2834,8 @@ __attribute__((noreturn)) void process_exit(int code)
 		if (parent && parent->state != PROCESS_ZOMBIE)
 		{
 			send_signal(parent->task.pid, SIGCHLD);
-			if (parent->state == PROCESS_BLOCKED)
+			if (parent->state == PROCESS_BLOCKED ||
+			    parent->wait_blocked)
 				process_wait_wake_blocked_parent(parent, dying);
 		}
 		else if (!parent || parent->state == PROCESS_ZOMBIE)
@@ -3059,17 +3070,27 @@ int process_wait(pid_t pid, int *status, int options)
 		return -ESRCH;
 	}
 
+	/*
+	 * wait_options for USER_MODE is seeded in sys_wait4 from pt_regs (rdx).
+	 * Do not copy from the stack parameter here — it may already be clobbered.
+	 */
+
 	FASE40_D_AUDIT_LOG(
 		serial_print("[FASE40_D_AUDIT][WAIT_BEGIN] parent=");
 		serial_print_hex32((uint32_t)current_process->task.pid);
 		serial_print(" target=");
 		serial_print_hex32((uint32_t)pid);
 		serial_print(" options=");
-		serial_print_hex32((uint32_t)options);
+		serial_print_hex32((uint32_t)(current_process->mode == USER_MODE
+					      ? current_process->wait_options
+					      : (uint32_t)options));
 		serial_print("\n");
 	);
 
 	for (;;) {
+		const int active_opts = (current_process->mode == USER_MODE)
+			? current_process->wait_options
+			: options;
 		found_child = 0;
 		zombie = NULL;
 		irq_flags = process_irq_save();
@@ -3159,10 +3180,9 @@ int process_wait(pid_t pid, int *status, int options)
 			return reaped_pid;
 		}
 
-		process_irq_restore(irq_flags);
-
 		if (!found_child)
 		{
+			process_irq_restore(irq_flags);
 			if (IR0_DEBUG_WAIT)
 			{
 				serial_print("[WAIT4_WNOHANG_AUDIT] path=echild parent=");
@@ -3181,9 +3201,9 @@ int process_wait(pid_t pid, int *status, int options)
 			return -ECHILD;
 		}
 
-		/* Children exist but none are zombies yet */
-		if (options & WNOHANG)
+		if (active_opts & WNOHANG)
 		{
+			process_irq_restore(irq_flags);
 			if (IR0_DEBUG_WAIT)
 			{
 				serial_print("[WAIT4_WNOHANG_AUDIT] path=wnohang_alive parent=");
@@ -3202,28 +3222,57 @@ int process_wait(pid_t pid, int *status, int options)
 			return 0;
 		}
 
+		/*
+		 * Arm wait contract before dropping irq: child exit wake is ignored
+		 * until wait_blocked is set (process_wait_wake_blocked_parent).
+		 */
 		if (current_process->mode == USER_MODE)
 		{
 			wait_exit_audit_process_wait_block(pid, status);
 			current_process->wait_status_ptr = status;
 			current_process->wait_blocked = 1;
 			current_process->wait_target_pid = pid;
-			current_process->wait_options = options;
+			current_process->wait_options = active_opts;
 			current_process->wait_resume_child_pid = 0;
 			current_process->coop_resched_resume = 0;
 			current_process->syscall_resume_rax = 0;
-			current_process->irq_frame_saved = 0;
 			current_process->task.rax = 0;
+			process_arm_blocked_syscall_resume(current_process, 0);
 			process_arm_kernel_syscall_sleep(current_process);
-			wait_exit_audit_classify_user_frame("parent-after-wait-arm", current_process);
+			wait_exit_audit_classify_user_frame("parent-after-wait-arm",
+							    current_process);
 		}
 		else
 		{
 			current_process->wait_blocked = 1;
 			current_process->wait_target_pid = pid;
-			current_process->wait_options = options;
+			current_process->wait_options = active_opts;
 			current_process->wait_resume_child_pid = 0;
 		}
+
+		zombie = NULL;
+		for (p = process_list; p; p = p->next)
+		{
+			if (p->ppid != current_process->task.pid)
+				continue;
+			if (!any_child && p->task.pid != pid)
+				continue;
+			if (p->state == PROCESS_ZOMBIE)
+			{
+				zombie = p;
+				break;
+			}
+		}
+		process_irq_restore(irq_flags);
+		if (zombie)
+			continue;
+
+		/*
+		 * Child exit may have woken us after irq_restore; do not clobber
+		 * READY with BLOCKED (missed wake → stuck with a zombie).
+		 */
+		if (current_process->state == PROCESS_READY)
+			continue;
 
 		FASE40_D_AUDIT_LOG(
 			serial_print("[FASE40_D_AUDIT][WAIT_BLOCK] parent=");
@@ -3234,7 +3283,18 @@ int process_wait(pid_t pid, int *status, int options)
 		);
 
 		current_process->state = PROCESS_BLOCKED;
-		sched_schedule_next();
+		while (current_process->state == PROCESS_BLOCKED)
+		{
+			ir0_clock_wait_service_runqueue();
+			if (current_process->state != PROCESS_BLOCKED)
+				break;
+		}
+		/*
+		 * Stay on kernel CS until process_wait returns; syscall_dispatch
+		 * restores user segments at sysret. Restoring here while still
+		 * inside process_wait lets switch_context user-iret with the
+		 * block-time rax=0 placeholder (wait4_block_reap flake).
+		 */
 	}
 }
 

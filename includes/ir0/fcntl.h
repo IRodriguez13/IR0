@@ -41,6 +41,12 @@
 
 #define FD_CLOEXEC      1   /* Close-on-exec flag */
 
+/* flock(2) operations (Linux uapi) */
+#define LOCK_SH  1
+#define LOCK_EX  2
+#define LOCK_UN  8
+#define LOCK_NB  4
+
 /* Seek types */
 #define SEEK_SET    0       /* Set file offset to offset */
 #define SEEK_CUR    1       /* Set file offset to current plus offset */

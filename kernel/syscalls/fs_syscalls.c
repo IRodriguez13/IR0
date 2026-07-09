@@ -159,22 +159,36 @@ static int fs_dirfd_base_path(int dirfd, char *base, size_t base_sz)
 int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
                         size_t resolved_sz)
 {
+  char path_copy[256];
   char dirpath[256];
-  const char *dfp = NULL;
+  char joined[256];
   int rc;
 
   if (!current_process)
     return -ESRCH;
+  if (!user_path || !resolved || resolved_sz == 0)
+    return -EFAULT;
+  if (copy_from_user_cstring(path_copy, sizeof(path_copy), user_path) != 0)
+    return -EFAULT;
+
+  if (path_copy[0] == '/')
+  {
+    return ir0_resolve_kpath_at(IR0_AT_FDCWD, path_copy, resolved, resolved_sz,
+                                current_process->cwd);
+  }
 
   if (dirfd != IR0_AT_FDCWD)
   {
     rc = fs_dirfd_base_path(dirfd, dirpath, sizeof(dirpath));
     if (rc != 0)
       return rc;
-    dfp = dirpath;
+    if (join_paths(dirpath, path_copy, joined, sizeof(joined)) != 0)
+      return -ENAMETOOLONG;
+    return ir0_resolve_kpath_at(IR0_AT_FDCWD, joined, resolved, resolved_sz,
+                                current_process->cwd);
   }
 
-  return ir0_resolve_user_path_at(dirfd, dfp, user_path, resolved, resolved_sz,
+  return ir0_resolve_user_path_at(dirfd, user_path, resolved, resolved_sz,
                                   current_process->cwd);
 }
 
@@ -1339,7 +1353,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   serial_print("\n");
 #endif
 
-  path_rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, NULL, path_copy, resolved_path,
+  path_rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, path_copy, resolved_path,
                                  sizeof(resolved_path), current_process->cwd);
   if (path_rc != 0)
     return path_rc;

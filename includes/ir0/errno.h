@@ -41,6 +41,7 @@
 #define EFAULT  14  /* Bad address */
 #define ENOTBLK 15  /* Block device required */
 #define EBUSY   16  /* Device or resource busy */
+#define EADDRINUSE 98 /* Address already in use (Linux) */
 #define EEXIST  17  /* File exists */
 #define EXDEV   18  /* Cross-device link */
 #define ENODEV  19  /* No such device */
@@ -57,6 +58,8 @@
 #define EROFS   30  /* Read-only file system */
 #define EMLINK  31  /* Too many links */
 #define EPIPE   32  /* Broken pipe */
+#define EMSGSIZE 90 /* Message too long (Linux) */
+#define ENETUNREACH 101 /* Network unreachable (Linux) */
 #define EDOM    33  /* Math argument out of domain */
 #define ERANGE  34  /* Math result not representable */
 #define ELOOP   40  /* Too many symbolic links encountered */
