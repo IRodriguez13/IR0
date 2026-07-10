@@ -136,6 +136,23 @@ pid_t process_get_next_pid(void)
 	return pid;
 }
 
+
+/*
+ * Early probes may advance next_pid. runit-init requires getpid()==1.
+ * Restore the allocator so the first userspace spawn is PID 1 when free.
+ */
+void process_prepare_pid1_for_init(void)
+{
+	uint64_t irq_flags;
+
+	if (process_find_by_pid(1))
+		return;
+
+	irq_flags = process_irq_save();
+	next_pid = 1;
+	process_irq_restore(irq_flags);
+}
+
 process_t *process_get_current(void)
 {
 	return current_process;

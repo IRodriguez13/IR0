@@ -361,6 +361,7 @@ process_t *process_get_current(void);
 void irq_save_user_frame(uint64_t *frame);
 process_t *get_process_list(void);
 pid_t process_get_next_pid(void);
+void process_prepare_pid1_for_init(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 
 
