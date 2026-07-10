@@ -497,6 +497,20 @@ DRIVER_OBJS = \
 	drivers/init_drv.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
 
+HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
+
+$(HEART_SRC_BLOB): \
+		$(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
+		$(KERNEL_ROOT)/includes/ir0/heart_src_probe.h \
+		$(KERNEL_ROOT)/includes/ir0/pseudo_fs.h \
+		$(KERNEL_ROOT)/includes/ir0/heartfs.h \
+		$(KERNEL_ROOT)/includes/ir0/version.h \
+		$(KERNEL_ROOT)/kernel/syscalls.c
+	@python3 $(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
+		--root $(KERNEL_ROOT) --out $(HEART_SRC_BLOB)
+
+fs/heartfs.o: $(HEART_SRC_BLOB)
+
 FS_OBJS = \
     fs/vfs.o \
     fs/path.o \
@@ -505,6 +519,7 @@ FS_OBJS = \
     fs/passwd_db.o \
     fs/pseudo_fs_registry.o \
     fs/pseudo_fs_nodes.o \
+    fs/heartfs.o \
     fs/procfs.o \
     fs/devfs.o \
     fs/sysfs.o
@@ -1339,6 +1354,7 @@ FASE55D_SMOKE_BIN = setup/doom/doomgeneric_smoke
 RUNIT_STAGE_BIN = setup/runit/stage-bin
 INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
 INIT_FASE53B_POSIX_PSEUDOFS_SRC = setup/pid1/init_fase53b_posix_pseudofs.c
+INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
 INIT_FASE54A_FBDEV_SRC = setup/pid1/init_fase54a_fbdev.c
 INIT_FASE54B_INPUT_SRC = setup/pid1/init_fase54b_input.c
 INIT_FASE54C_INPUT_DET_SRC = setup/pid1/init_fase54c_input_deterministic.c
@@ -1413,6 +1429,7 @@ FASE52_TCC_LOG = /tmp/userspace-fase52-tcc.log
 KERNEL_USERSPACE_ISO ?= kernel-x64-userspace.iso
 FASE53A_FS_DEV_LOG = /tmp/userspace-fase53a-fs-dev.log
 FASE53B_POSIX_PSEUDOFS_LOG = /tmp/userspace-fase53b-posix-pseudofs.log
+HEART_SMOKE_LOG = /tmp/userspace-heart.log
 FASE54A_FBDEV_LOG = /tmp/userspace-fase54a-fbdev.log
 FASE54B_INPUT_LOG = /tmp/userspace-fase54b-input.log
 FASE54C_INPUT_DET_LOG = /tmp/userspace-fase54c-input-deterministic.log
@@ -2306,6 +2323,16 @@ build-init-fase53b-posix-pseudofs:
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE53B_POSIX_PSEUDOFS_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-init-fase53b-posix-pseudofs OK"
+
+build-init-heart-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building /heart smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_HEART_SMOKE_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-heart-smoke OK"
 
 build-init-fase54a-fbdev:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -3312,7 +3339,7 @@ test-drivers-clean:
         linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
         linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
         runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
-        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs run-fase58e-ash-gui check-fase58e-logs smoke-fase58e-ash-interactive build-busybox-fase58-full build-fase58l-busybox-smoke smoke-fase58l-busybox-coreutils build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy load-init-with-smoke load-init-with-musl load-userspace-rootfs \
+        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-heart-smoke build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs run-fase58e-ash-gui check-fase58e-logs smoke-fase58e-ash-interactive build-busybox-fase58-full build-fase58l-busybox-smoke smoke-fase58l-busybox-coreutils build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \

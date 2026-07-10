@@ -27,6 +27,7 @@
 #include <stddef.h>
 #include <ir0/stat.h>
 #include <ir0/types.h>
+#include <ir0/vfs.h>
 
 /* /proc entry types */
 typedef enum {
@@ -61,8 +62,11 @@ int proc_stat(const char *path, stat_t *st);
 off_t proc_get_offset(int fd);
 void proc_set_offset(int fd, off_t offset);
 
-/* /proc/pid directory */
+/* /proc/pid directory — legacy fd-based (deprecated; prefer proc_readdir). */
 int proc_getdents(int fd, void *dirent_buf, size_t count);
+
+/* Path-based readdir for /proc, /proc/pid, /proc/pid/N (vfs_dirent batch). */
+int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries);
 
 /* /proc entry generators */
 int proc_meminfo_read(char *buf, size_t count);

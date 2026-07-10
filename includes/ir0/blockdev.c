@@ -115,7 +115,7 @@ static int ir0_block_io(dev_t dev, uint64_t lba, uint32_t count, void *buf,
 		return -EINVAL;
 	if (write_path && !bd->ops->write)
 		return -EROFS;
-	if (bd->info.flags & IR0_BLOCK_FLAG_READONLY)
+	if (write_path && (bd->info.flags & IR0_BLOCK_FLAG_READONLY))
 		return -EROFS;
 
 	max_io = bd->info.max_sectors_per_io;
@@ -200,3 +200,13 @@ dev_t ir0_block_dev_at(int index)
 		return 0;
 	return ir0_block_slots[index].dev.id;
 }
+
+#ifdef TEST_HOST
+void ir0_block_reset_for_test(void)
+{
+	memset(ir0_block_slots, 0, sizeof(ir0_block_slots));
+	ir0_block_slot_count = 0;
+	ir0_block_next_id = IR0_BLOCKDEV_ID_BASE;
+	ir0_block_facade_classified = 0;
+}
+#endif

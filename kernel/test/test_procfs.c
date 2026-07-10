@@ -41,9 +41,9 @@ void ktest_procfs_pid_status(void)
 {
 	pid_t pid = -1;
 	const char *name;
-	int fd;
+	int64_t fd;
 	char buf[256];
-	int n;
+	int64_t n;
 
 	KTEST_BEGIN("procfs_pid_status");
 	if (!current_process)
@@ -56,18 +56,15 @@ void ktest_procfs_pid_status(void)
 	KASSERT(name != NULL);
 	KASSERT(strcmp(name, "status") == 0);
 
-	fd = proc_open("/proc/status", 0);
+	fd = sys_open("/proc/status", 0, 0);
 	KASSERT_GT(fd, 0);
+	KASSERT(fd < 1000);
 
 	memset(buf, 0, sizeof(buf));
-	n = proc_read(fd, buf, sizeof(buf) - 1, 0);
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
 	KASSERT_GT(n, 0);
 	KASSERT(strstr(buf, "\t") != NULL);
 
-	{
-		int64_t sfd = sys_open("/proc/status", 0, 0);
-		KASSERT_GT(sfd, 0);
-		sys_close((int)sfd);
-	}
 	KTEST_END();
 }

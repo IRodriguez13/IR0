@@ -874,6 +874,37 @@ smoke-fase53b-posix-pseudofs: build-init-fase53b-posix-pseudofs build-busybox-fa
 		exit 1; \
 	fi
 
+smoke-heart: build-init-heart-smoke kernel-x64-userspace.iso
+	@echo "  SMOKE   /heart facade + src..."
+	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "HEART_HARNESS_ID" || \
+		(echo "✗ $(INIT_SMOKE_BIN) is not HEART harness — run build-init-heart-smoke"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=64 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init && \
+	$(SMOKE_QEMU_RUN) --log $(HEART_SMOKE_LOG) --timeout 60 --done HEART_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@if grep -q "HEART_OK" $(HEART_SMOKE_LOG) && \
+	    grep -q "HEART_PROC_MIRROR_OK" $(HEART_SMOKE_LOG) && \
+	    grep -q "HEART_SYS_MIRROR_OK" $(HEART_SMOKE_LOG) && \
+	    grep -q "HEART_KERNEL_META_OK" $(HEART_SMOKE_LOG) && \
+	    grep -q "HEART_SRC_OK" $(HEART_SMOKE_LOG) && \
+	    grep -q "HEART_DUP_OK" $(HEART_SMOKE_LOG); then \
+		echo "✓ smoke-heart finished"; \
+	else \
+		echo "✗ smoke-heart FAILED"; \
+		if grep -q "HEART_FAIL_REASON" $(HEART_SMOKE_LOG); then \
+			grep "HEART_FAIL_REASON" $(HEART_SMOKE_LOG); \
+		fi; \
+		if grep -q "\[HEART\]\[FAIL\]" $(HEART_SMOKE_LOG); then \
+			grep "\[HEART\]\[FAIL\]" $(HEART_SMOKE_LOG); \
+		fi; \
+		exit 1; \
+	fi
+
 smoke-fase54a-fbdev: build-init-fase54a-fbdev build-busybox-fase50-min kernel-x64-userspace.iso
 	@echo "  SMOKE   FASE54A minimal fbdev slice..."
 	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE54A_FBDEV_HARNESS_ID" || \

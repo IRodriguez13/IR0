@@ -20,11 +20,6 @@
 #include <ir0/pipe.h>
 #include "validate_user.h"
 
-#define FD_PROC_BASE  1000
-#define FD_DEV_BASE   2000
-#define FD_SYS_BASE   3000
-#define FD_RANGE_SIZE 1000
-
 fd_entry_t *get_process_fd_table(void);
 void ensure_devfs_init(void);
 int stdio_is_redirected(fd_entry_t *fd_table, int fd);

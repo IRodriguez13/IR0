@@ -16,6 +16,7 @@
 #include <ir0/debug_trap.h>
 #include <ir0/debug_runtime.h>
 #include <ir0/devfs.h>
+#include <ir0/pseudo_fs.h>
 #include "process.h"
 #include <config.h>
 #include <ir0/clock_wait.h>
@@ -467,6 +468,21 @@ static void process_release_fds(process_t *p, const char *pipe_trace_op)
 			if (node)
 				devfs_close_node(node);
 		}
+		else if (e->is_pseudo && e->vfs_file)
+		{
+			pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)e->vfs_file;
+
+			if (bind->refs > 0)
+				bind->refs--;
+			if (bind->refs == 0)
+			{
+				(void)pseudo_fs_release_ops(
+					(const pseudo_fs_ops_t *)bind->ops,
+					bind->ctx, bind->dynamic);
+				kfree(bind);
+			}
+			e->vfs_file = NULL;
+		}
 		else if (e->vfs_file)
 		{
 			vfs_close((struct vfs_file *)e->vfs_file);
@@ -478,6 +494,7 @@ clear_fd:
 		e->is_pipe = false;
 		e->is_socket = false;
 		e->is_devfs = false;
+		e->is_pseudo = false;
 		e->dev_device_id = 0;
 		e->pipe_end = -1;
 		e->path[0] = '\0';
@@ -2117,6 +2134,12 @@ static int duplicate_fd_table(process_t *parent, process_t *child)
 			if (node)
 				node->ref_count++;
 		}
+		else if (e->is_pseudo && e->vfs_file)
+		{
+			pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)e->vfs_file;
+
+			bind->refs++;
+		}
 		else if (e->vfs_file)
 			vfs_file_acquire((struct vfs_file *)e->vfs_file);
 	}
@@ -3408,6 +3431,7 @@ void process_init_fd_table(process_t *process)
 		process->fd_table[i].is_pipe = false;
 		process->fd_table[i].is_socket = false;
 		process->fd_table[i].is_devfs = false;
+		process->fd_table[i].is_pseudo = false;
 		process->fd_table[i].dev_device_id = 0;
 	}
 

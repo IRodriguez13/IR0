@@ -52,7 +52,17 @@ typedef struct fd_entry
 	bool is_devfs; /* bound to devfs node when true */
 	uint32_t dev_device_id;
 	bool is_socket; /* bound to sock_udp when true */
+	bool is_pseudo; /* bound to pseudo_fs ops via vfs_file (pseudo_fd_bind_t) */
 } fd_entry_t;
+
+/* Process-local binding for /proc /sys /heart opens (not global virtual fds). */
+typedef struct pseudo_fd_bind
+{
+	const void *ops; /* const pseudo_fs_ops_t * */
+	void *ctx;
+	int refs;
+	int dynamic;
+} pseudo_fd_bind_t;
 
 /* Process execution mode */
 typedef enum

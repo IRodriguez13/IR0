@@ -22,8 +22,9 @@
 
 #define PSEUDO_FS_PROC_FD_BASE 1500
 #define PSEUDO_FS_SYS_FD_BASE  3500
+#define PSEUDO_FS_HEART_FD_BASE 4500
 #define PSEUDO_FS_DYN_FD_BASE  1700
-#define PSEUDO_FS_MAX_ENTRIES  64
+#define PSEUDO_FS_MAX_ENTRIES  96
 #define PSEUDO_FS_MAX_DYNAMIC  16
 
 typedef int (*pseudo_fs_dynamic_match_fn)(const char *full_path, void **out_ctx);
@@ -64,6 +65,20 @@ int pseudo_fs_stat_fd(int fd, stat_t *st);
 int64_t pseudo_fs_open_path(const char *full_path, int flags, int *out_fd);
 int64_t pseudo_fs_close_fd(int fd);
 int pseudo_fs_stat_path(const char *full_path, stat_t *st);
+
+/*
+ * Acquire ops/ctx for a path without assigning a global virtual fd.
+ * Caller owns the handle until pseudo_fs_release_ops (or process fd close).
+ */
+int64_t pseudo_fs_acquire_path(const char *full_path, int flags,
+			       const pseudo_fs_ops_t **out_ops, void **out_ctx,
+			       int *out_dynamic);
+int64_t pseudo_fs_release_ops(const pseudo_fs_ops_t *ops, void *ctx, int dynamic);
+int64_t pseudo_fs_ops_read(const pseudo_fs_ops_t *ops, void *ctx, char *buf,
+			   size_t count, off_t *offset);
+int64_t pseudo_fs_ops_write(const pseudo_fs_ops_t *ops, void *ctx,
+			    const char *buf, size_t count);
+int pseudo_fs_ops_stat(const pseudo_fs_ops_t *ops, void *ctx, stat_t *st);
 int pseudo_fs_path_has_children(const char *path);
 int pseudo_fs_collect_registry_children(const char *dir_path,
                                         struct vfs_dirent *entries,
