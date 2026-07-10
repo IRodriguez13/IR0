@@ -381,8 +381,8 @@ static devfs_node_t *devfs_node_from_fd(int fd)
 }
 
 /*
- * devfs_resolve_read_fd - Bound devfs slot or legacy FD_DEV_BASE virtual fd.
- * @offset_out: file offset (fd_table when bound; 0 for unbound legacy slot).
+ * devfs_resolve_read_fd - Bound fd_table slot with is_devfs (no virtual FD_DEV).
+ * @offset_out: file offset from fd_table when bound.
  */
 static devfs_node_t *devfs_resolve_read_fd(int fd, off_t *offset_out)
 {
@@ -395,19 +395,6 @@ static devfs_node_t *devfs_resolve_read_fd(int fd, off_t *offset_out)
     if (offset_out)
       *offset_out = fd_table[fd].offset;
     return devfs_find_node_by_id(fd_table[fd].dev_device_id);
-  }
-
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-  {
-    ensure_devfs_init();
-    if (offset_out)
-    {
-      if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table[fd].in_use)
-        *offset_out = fd_table[fd].offset;
-      else
-        *offset_out = 0;
-    }
-    return devfs_find_node_by_id((uint32_t)(fd - FD_DEV_BASE));
   }
 
   return NULL;
@@ -488,21 +475,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     }
   }
 
-  /* Handle /dev file descriptors (FD_DEV_BASE .. FD_SYS_BASE) */
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-  {
-    ensure_devfs_init();
-    uint32_t device_id = (uint32_t)(fd - FD_DEV_BASE);
-    devfs_node_t *node = devfs_find_node_by_id(device_id);
-    if (!node || !node->ops || !node->ops->write)
-      return -EBADF;
-    
-    /* Copy from user space for device writes */
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
-  }
-
   {
     devfs_node_t *node = devfs_node_from_fd(fd);
 
@@ -515,16 +487,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
       ash_smoke_write_trace(fd, kernel_buf, copy_size);
       return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
     }
-  }
-
-  /* Handle /sys file descriptors (FD_SYS_BASE .. FD_SYS_BASE + FD_RANGE_SIZE) */
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-  {
-    /* Copy from user space for sysfs writes */
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    
-    return sysfs_write(fd, kernel_buf, copy_size);
   }
 
   /* Handle regular file descriptors */
@@ -734,21 +696,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
     }
   }
 
-  /* Handle /sys legacy virtual fds (until sysfs fully on fd_table only). */
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE) {
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    off_t offset = proc_get_offset(fd);
-    int ret = sysfs_read(fd, kernel_read_buf, read_size, offset);
-    if (ret > 0) {
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-      proc_set_offset(fd, offset + ret);
-    }
-    return ret;
-  }
-
-  /* /dev: bound fd_table slot or legacy FD_DEV_BASE virtual fd */
+  /* /dev: bound fd_table slot (is_devfs) */
   {
     off_t read_off = 0;
     devfs_node_t *node = devfs_resolve_read_fd(fd, &read_off);
@@ -975,23 +923,6 @@ int64_t sys_fstat(int fd, stat_t *buf)
 	return -EFAULT;
       return 0;
     }
-  }
-
-  /*
-   * Legacy /sys virtual fds (PSEUDO_FS_SYS_FD_BASE+) if any remain.
-   * /proc opens no longer use FD_PROC_BASE.
-   */
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-  {
-    rc = pseudo_fs_stat_fd(fd, &kst);
-    if (rc == 0)
-    {
-      if (ir0_copy_stat_to_user(buf, &kst) != 0)
-        return -EFAULT;
-      return 0;
-    }
-    if (rc != -ENOENT)
-      return rc;
   }
 
   if (fd >= MAX_FDS_PER_PROCESS)
@@ -2047,9 +1978,6 @@ static int64_t sys_getdents_common(int fd, void *dirent, size_t count, int legac
 
   if (validate_userspace_buffer(dirent, count) != 0)
     return -EFAULT;
-
-  if (fd >= FD_PROC_BASE && fd < FD_SYS_BASE)
-    return -ENOTDIR;
 
   fd_table = get_process_fd_table();
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||

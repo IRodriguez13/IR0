@@ -52,6 +52,11 @@ PROFILES: dict[str, dict[str, object]] = {
         "timeout": 45,
         "stale_sec": 20,
     },
+    "musl-pthread": {
+        "success": ["MUSL_PTHREAD_OK"],
+        "timeout": 60,
+        "stale_sec": 20,
+    },
     "fase50-busybox": {
         "success": ["FASE50E_NO_REGRESSION"],
         "timeout": 150,
