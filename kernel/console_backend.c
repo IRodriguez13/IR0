@@ -5,6 +5,8 @@
 
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
+#include <ir0/video_console.h>
+#include <ir0/typewriter.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
 

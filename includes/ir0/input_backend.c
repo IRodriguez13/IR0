@@ -30,6 +30,10 @@
  */
 
 #include <ir0/input_backend.h>
+#include <config.h>
+#if CONFIG_ENABLE_MOUSE
+#include <drivers/IO/ps2_mouse.h>
+#endif
 
 void input_mouse_handle_interrupt(void)
 {

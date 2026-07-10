@@ -14,6 +14,8 @@
 | `/heart` MVP + `/heart/src` blob | `smoke-heart` |
 | ARCH-3: remove `/proc` virtual fds `1001`/`1150`… | board note 2026-07-10 |
 | ARCH-3 residual: drop `FD_SYS`/`FD_DEV` virtual I/O | `agent-fast` + `smoke-tier1` + `smoke-heart` + `smoke-fat16-mount` + `linux-abi-audit-dup` |
+| ARCH process split: `kernel/process/*.c` by ownership | `kernel-x64.bin` + gates below |
+| Seal console/video/input/audio/partition facades | `arch-guard` OK; impl in `includes/ir0/*_backend.c` |
 | Syscall anti-fragmentation policy | `IR0_SYSCALL_PSEUDOFS_MAP.md` |
 | FAT16 read-only QEMU smoke | `smoke-fat16-mount` |
 

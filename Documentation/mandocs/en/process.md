@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | scheduler, memory, syscalls, elf_loader |
 | Man page | IR0-process (section 7) |
-| Primary sources | `kernel/process.c`, `kernel/process.h`, `kernel/elf_loader.c`, `kernel/credentials.c` |
+| Primary sources | `kernel/process/*.c`, `kernel/process.h`, `kernel/elf_loader.c`, `kernel/credentials.c` |
 
 ## 1. Overview
 
@@ -34,10 +34,24 @@ fd table, credentials, cwd, signal state, and mmap list. Creation paths include
 
 | API | File | Use |
 |-----|------|-----|
-| `spawn_user` | process.c + elf_loader | New ELF process |
-| `fork_process_create` | process.c | POSIX fork |
+| `spawn_user` | `process/create.c` + elf_loader | New ELF process |
+| `fork` | `process/fork.c` | POSIX fork |
+| `process_exec_close_cloexec` | `process/exec.c` | CLOEXEC on execve |
+| `process_exit` / `process_destroy` | `process/exit.c` | zombie then reap teardown |
+| `process_wait` / reap | `process/wait.c` | wait4 / reparent |
+| `process_release_fds` | `process/fdtable.c` | FD lifecycle |
+| MM helpers | `process/mm.c` | unmap / PML4 |
+| default-fatal signals | `process/signals.c` | SIGTERM/SIGKILL → exit |
 | `exec_replace_current` | elf_loader.c | execve in-place |
 | `kexecve` | elf_loader.c | Kernel-initiated load |
+
+### Teardown ownership
+
+| Phase | Owner | Releases |
+|-------|-------|----------|
+| `process_exit` | dying task | FDs; reparent; mark zombie — **not** PML4/stack/`process_t` |
+| `process_destroy` | reaper | FDs (idempotent), user pages, page tables, mmap_list, kstack, PML4 |
+| after destroy | reaper | `kfree(process_t)` via `process_reap_zombie_child` |
 
 ## 3. Data flow
 
