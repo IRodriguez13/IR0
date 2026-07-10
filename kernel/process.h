@@ -53,6 +53,7 @@ typedef struct fd_entry
 	uint32_t dev_device_id;
 	bool is_socket; /* bound to sock_udp when true */
 	bool is_pseudo; /* bound to pseudo_fs ops via vfs_file (pseudo_fd_bind_t) */
+	bool is_epoll;  /* vfs_file points at epoll_state */
 } fd_entry_t;
 
 /* Process-local binding for /proc /sys /heart opens (not global virtual fds). */
@@ -157,6 +158,14 @@ typedef struct process
 	
 	/* Process command name (for ps) */
 	char comm[16]; /* Process command name (max 15 chars + null) */
+
+	/* Resource limits (Linux rlimit indices 0..15). */
+#define IR0_RLIM_NLIMITS 16
+	struct
+	{
+		uint64_t rlim_cur;
+		uint64_t rlim_max;
+	} rlimits[IR0_RLIM_NLIMITS];
 	
 	/* Poll: waiter activo mientras el proceso está bloqueado en poll() */
 	void *poll_waiter;
@@ -335,6 +344,8 @@ pid_t spawn_kernel(void (*entry)(void), const char *name);
 
 /* Fork exists only for POSIX syscall compatibility - uses spawn() internally */
 pid_t fork(void);
+pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
+		   int *child_tid, unsigned long tls);
 
 /*
  * Enqueue fork_pending_child after parent syscall retval is committed.

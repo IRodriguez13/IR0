@@ -103,6 +103,7 @@ DEVFS_USERCOPY_WHITELIST = {
     "dev_audio_ioctl",
     "dev_console_ioctl",
     "dev_fb0_ioctl",
+    "dev_pty_ioctl",
 }
 
 DIRS_BLUETOOTH_INCLUDE_SCAN = [

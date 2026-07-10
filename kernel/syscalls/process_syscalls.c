@@ -1067,24 +1067,23 @@ int64_t sys_fork(void)
 }
 
 /*
- * sys_clone — Linux __NR_clone (56). Thread flags (CLONE_THREAD) are unsupported;
- * otherwise duplicates the address space like fork().
+ * sys_clone — Linux __NR_clone (56).
+ * CLONE_THREAD|CLONE_VM: lightweight thread sharing the caller's mm.
+ * Otherwise duplicates the address space like fork().
  */
 int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
                   int *child_tid, unsigned long tls)
 {
+  if (!current_process)
+    return -ESRCH;
+
+  if (flags & 0x00010000UL) /* CLONE_THREAD */
+    return (int64_t)clone_thread(flags, stack, parent_tid, child_tid, tls);
+
   (void)stack;
   (void)parent_tid;
   (void)child_tid;
   (void)tls;
-
-  if (!current_process)
-    return -ESRCH;
-
-  /* CLONE_THREAD and other pthread paths need a real thread model */
-  if (flags & 0x00010000UL)
-    return -ENOSYS;
-
   return fork();
 }
 
@@ -1392,7 +1391,8 @@ int64_t sys_getrandom(void *buf, size_t buflen, unsigned int flags)
 int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
                       void *old_limit)
 {
-  (void)new_limit;
+  process_t *target = current_process;
+  uint64_t lim[2];
 
   if (!current_process)
     return -ESRCH;
@@ -1400,20 +1400,40 @@ int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
   if (pid != 0 && pid != (pid_t)current_process->task.pid)
     return -ESRCH;
 
-  if (resource > 15)
+  if (resource >= IR0_RLIM_NLIMITS)
     return -EINVAL;
 
   if (old_limit)
   {
-    uint64_t lim[2] = { 0, (uint64_t)-1 };
-
     if (validate_userspace_buffer(old_limit, 16) != 0)
       return -EFAULT;
+    lim[0] = target->rlimits[resource].rlim_cur;
+    lim[1] = target->rlimits[resource].rlim_max;
     if (copy_to_user(old_limit, lim, 16) != 0)
       return -EFAULT;
   }
 
+  if (new_limit)
+  {
+    if (validate_userspace_buffer((void *)new_limit, 16) != 0)
+      return -EFAULT;
+    if (copy_from_user(lim, new_limit, 16) != 0)
+      return -EFAULT;
+    if (lim[0] > lim[1])
+      return -EINVAL;
+    if (lim[1] > target->rlimits[resource].rlim_max &&
+	!ir0_cred_is_root())
+      return -EPERM;
+    target->rlimits[resource].rlim_cur = lim[0];
+    target->rlimits[resource].rlim_max = lim[1];
+  }
+
   return 0;
+}
+
+int64_t sys_getrlimit(unsigned int resource, void *rlim)
+{
+  return sys_prlimit64(0, resource, NULL, rlim);
 }
 
 /**

@@ -28,6 +28,7 @@
 #include <ir0/path_routed.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
+#include <ir0/serial_io.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
 #include <ir0/utsname.h>
@@ -186,6 +187,12 @@ int64_t sys_umount(const char *target, int flags)
   }
 
   return vfs_umount(target_resolved);
+}
+
+int64_t sys_sync(void)
+{
+  serial_print("SYSTEM_SYNC_OK\n");
+  return vfs_sync();
 }
 
 int64_t sys_mkdir(const char *pathname, mode_t mode)

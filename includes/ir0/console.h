@@ -17,6 +17,10 @@
 #define IR0_CONSOLE_TCSETSW 0x5403u
 #define IR0_CONSOLE_TCSETSF 0x5404u
 #define IR0_CONSOLE_TIOCGWINSZ 0x5413u
+/* Linux TIOCGPTN — get pty number (_IOR('T', 0x30, unsigned int)) */
+#define IR0_TIOCGPTN 0x80045430u
+/* Linux TIOCSPTLCK — lock/unlock pty (_IOW('T', 0x31, int)); no-op OK */
+#define IR0_TIOCSPTLCK 0x40045431u
 
 typedef unsigned int ir0_tcflag_t;
 typedef unsigned char ir0_cc_t;

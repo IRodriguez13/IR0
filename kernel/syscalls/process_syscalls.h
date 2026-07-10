@@ -72,4 +72,5 @@ int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
 int64_t sys_getrandom(void *buf, size_t buflen, unsigned int flags);
 int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
 		      void *old_limit);
+int64_t sys_getrlimit(unsigned int resource, void *rlim);
 int64_t sys_sigreturn(struct sigcontext *ctx);

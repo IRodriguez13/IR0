@@ -27,6 +27,7 @@
 #include "partition.h"
 #include <string.h>
 #include <ir0/block_dev.h>
+#include <ir0/serial_io.h>
 
 /**
  * Global partition storage
@@ -357,6 +358,7 @@ static int read_gpt_partitions(uint8_t disk_id, const gpt_header_t *header)
         }
     }
 
+    serial_print("GPT_PARTITION_OK\n");
     return 0;
 }
 
