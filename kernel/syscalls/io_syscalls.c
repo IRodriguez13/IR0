@@ -106,10 +106,6 @@ static int fd_can_read_for(process_t *proc, int fd)
     return ir0_console_input_ready() ? 1 : 0;
   if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && !stdio_is_redirected(fd_table, fd))
     return 0;
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-    return devfs_fd_can_read((uint32_t)(fd - FD_DEV_BASE), pid);
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-    return 1;
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return 0;
   if (fd_table[fd].is_pseudo)
@@ -144,13 +140,6 @@ static int fd_can_write(int fd)
     return 0;
   if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && !stdio_is_redirected(fd_table, fd))
     return 1;
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-  {
-    pid_t pid = current_process ? current_process->task.pid : 0;
-    return devfs_fd_can_write((uint32_t)(fd - FD_DEV_BASE), pid);
-  }
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-    return 0;
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return 0;
   if (fd_table[fd].is_pseudo)
@@ -1027,24 +1016,6 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
   if (!current_process)
     return -ESRCH;
 
-  /* Handle device files (FD_DEV_BASE .. FD_SYS_BASE) before fd_table bounds check */
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-  {
-    ensure_devfs_init();
-    int device_id = fd - FD_DEV_BASE;
-    devfs_node_t *node = devfs_find_node_by_id(device_id);
-    
-    if (!node || !node->ops || !node->ops->ioctl)
-      return -ENOTTY; /* Not a TTY/device or ioctl not supported */
-
-    /* Validate arg pointer if provided (most ioctls use arg) */
-    if (arg && validate_userspace_buffer(arg, 256) != 0)
-      return -EFAULT;
-
-    /* Call device-specific ioctl handler */
-    return node->ops->ioctl(&node->entry, request, arg);
-  }
-
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
     return -EBADF;
 
@@ -1071,20 +1042,9 @@ int64_t sys_close(int fd)
 {
   if (!current_process)
     return -ESRCH;
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-  {
-    ensure_devfs_init();
-    devfs_node_t *node = devfs_find_node_by_id((uint32_t)(fd - FD_DEV_BASE));
-    if (node)
-      devfs_close_node(node);
-    return 0;
-  }
 
   if (pseudo_fs_find_by_fd(fd))
     return pseudo_fs_close_fd(fd);
-
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-    return 0;  /* legacy /sys virtual fd */
 
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
     return -EBADF;
@@ -1181,9 +1141,6 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
 {
   if (!current_process)
     return -ESRCH;
-
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-    return -ESPIPE;
 
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
     return -EBADF;

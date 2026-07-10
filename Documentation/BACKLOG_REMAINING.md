@@ -13,6 +13,7 @@
 | `/proc`/`/sys` registry opens → `fd_table` + dup on `/proc/uptime` | `linux-abi-audit-dup` |
 | `/heart` MVP + `/heart/src` blob | `smoke-heart` |
 | ARCH-3: remove `/proc` virtual fds `1001`/`1150`… | board note 2026-07-10 |
+| ARCH-3 residual: drop `FD_SYS`/`FD_DEV` virtual I/O | `agent-fast` + `smoke-tier1` + `smoke-heart` + `smoke-fat16-mount` + `linux-abi-audit-dup` |
 | Syscall anti-fragmentation policy | `IR0_SYSCALL_PSEUDOFS_MAP.md` |
 | FAT16 read-only QEMU smoke | `smoke-fat16-mount` |
 
@@ -27,7 +28,7 @@
 | 10 | AHCI/SATA | **Not started** | `ir0/blockdev` backend |
 | 11 | Host contracts for `ir0_block_*` | **Done** | `tests/host/test_blockdev_facade.c`; RO flag no longer blocks reads |
 | 12 | GPT partition table | **Not started** | `drivers/disk/partition.c` |
-| — | FAT16 **write** | **Blocked** | Re-run `linux-abi-audit-vfs-write` on FAT first |
+| — | FAT16 **write** | **Blocked** (gap known) | First divergence: all mutators → `-EROFS` (`fat16_rofs()` in `fs/fat16_disk.c`). `linux-abi-audit-vfs-write` today is MINIX-only (`run_ir0_vfs_write.sh`). Need FAT-backed runner + PASS before any write impl |
 
 ## P1 — T1 POSIX depth
 
@@ -35,14 +36,14 @@
 |------|--------|
 | `epoll` / `pselect6` | Not started |
 | `prlimit` / `getrlimit` | Not started |
-| Futex robustness / musl pthread join | Partial (smoke clone path) |
+| Futex robustness / musl pthread join | **Blocked** — `smoke-musl-pthread` boots then stalls (no `MUSL_PTHREAD_OK`); harness profile `musl-pthread` added in `smoke_autokill.py`; same hang on `dae46ae` baseline |
 | PTY + `TIOCGWINSZ` / `SIGWINCH` | Not started |
 
 ## P1 residual — pseudo-fs / ABI
 
 | Item | Status |
 |------|--------|
-| Drop remaining `FD_SYS_BASE` / `FD_DEV_BASE` virtual I/O | Open |
+| Drop remaining `FD_SYS_BASE` / `FD_DEV_BASE` virtual I/O | **Done** — I/O solo `fd_table` (`is_devfs` / `is_pseudo`); macros `FD_*_BASE` retirados de `syscalls_glue.h` |
 | More Linux `/proc`/`/sys` nodes via `pseudo_fs_register` | Incremental |
 | Expand `/heart/src` file list | Optional |
 

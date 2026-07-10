@@ -41,9 +41,7 @@ Registry opens install **real** `current_process->fd_table` slots (`is_pseudo` +
 | `proc_open` → `1001`/`1010`/`1150`/`1151` | `pseudo_bind_file_fd` / `pseudo_bind_dir_fd` |
 | `proc_getdents(1150)` | `proc_readdir(path)` via `ir0_getdents_path_routed` |
 | I/O branches on `FD_PROC_BASE` | `is_pseudo` on `fd_table` |
-
-Residual (documented debt): legacy `FD_SYS_BASE` / `FD_DEV_BASE` virtual ranges
-for older `/sys`/`/dev` paths still present in some I/O helpers.
+| Legacy `FD_SYS_BASE` / `FD_DEV_BASE` I/O | **Removed** — `/sys` via `is_pseudo`; `/dev` via `is_devfs` only |
 
 ## Syscall module policy
 

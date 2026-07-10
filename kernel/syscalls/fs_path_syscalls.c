@@ -627,9 +627,6 @@ int64_t sys_ftruncate(int fd, off_t length)
   if (fd_table[fd].is_pseudo)
     return -EBADF;
 
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-    return -EBADF;
-
   if (fd_table[fd].is_pipe || fd_table[fd].is_socket)
     return -EBADF;
 
