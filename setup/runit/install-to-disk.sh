@@ -29,6 +29,7 @@ need_bin "$RUNIT_BIN/runsvdir"
 need_bin "$RUNIT_BIN/runsv"
 need_bin "$STAGE_BIN/runit_stage1"
 need_bin "$STAGE_BIN/runit_stage2"
+need_bin "$STAGE_BIN/runit_stage3"
 need_bin "$STAGE_BIN/runit_console_run"
 need_bin "$STAGE_BIN/runit_logger_run"
 need_bin "$BUSYBOX"
@@ -42,15 +43,20 @@ $INJECT "$DISK" "$RUNIT_BIN/runsv" bin/runsv
 $INJECT "$DISK" "$RUNIT_BIN/sv" bin/sv
 $INJECT "$DISK" "$BUSYBOX" bin/busybox
 $INJECT "$DISK" "$BUSYBOX" bin/sh
+$INJECT "$DISK" "$BUSYBOX" bin/halt
+$INJECT "$DISK" "$BUSYBOX" bin/reboot
+$INJECT "$DISK" "$BUSYBOX" bin/poweroff
+$INJECT "$DISK" "$BUSYBOX" bin/sync
 
 echo "  RUNIT   Injecting stage ELF stubs (exec path has no shebang)..."
 $INJECT "$DISK" "$STAGE_BIN/runit_stage1" etc/runit/1
 $INJECT "$DISK" "$STAGE_BIN/runit_stage2" etc/runit/2
+$INJECT "$DISK" "$STAGE_BIN/runit_stage3" etc/runit/3
 $INJECT "$DISK" "$STAGE_BIN/runit_console_run" etc/runit/sv/console/run
 $INJECT "$DISK" "$STAGE_BIN/runit_logger_run" etc/runit/sv/logger/run
 
 python3 "${ROOT}/scripts/verify_minix_rootfs.py" --gate "$DISK" \
-	/sbin/init /sbin/runit /bin/runsvdir /bin/sh /etc/runit/1 /etc/runit/2 \
+	/sbin/init /sbin/runit /bin/runsvdir /bin/sh /etc/runit/1 /etc/runit/2 /etc/runit/3 \
 	/etc/runit/sv/console/run /etc/runit/sv/logger/run
 
 echo "✓ runit rootfs installed on $DISK"

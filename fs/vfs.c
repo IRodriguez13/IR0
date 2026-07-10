@@ -25,6 +25,9 @@
 #if CONFIG_ENABLE_FS_FAT16
 #include "fat16_fs.h"
 #endif
+#if CONFIG_ENABLE_FS_EXT2
+#include "ext2_disk.h"
+#endif
 #include <ir0/path.h>
 #include <ir0/logging.h>
 #include <ir0/kmem.h>
@@ -36,6 +39,7 @@
 #include <ir0/permissions.h>
 #include <ir0/credentials.h>
 #include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
 #include <ir0/fase50_debug.h>
@@ -296,6 +300,9 @@ int vfs_init(void)
 #if CONFIG_ENABLE_FS_FAT16
     fat16_fs_register();
 #endif
+#if CONFIG_ENABLE_FS_EXT2
+    ext2_fs_register();
+#endif
     if (DEBUG_VFS)
     {
         serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE\n");
@@ -309,6 +316,16 @@ int vfs_init(void)
 struct vfs_mount *vfs_get_mounts(void)
 {
     return mounts;
+}
+
+int vfs_sync(void)
+{
+    /*
+     * Best-effort: flush every registered block device. Per-FS sync hooks
+     * can be added to vfs_ops later; MINIX already writes through on mutate.
+     */
+    ir0_block_flush_all();
+    return 0;
 }
 
 int vfs_mount(const char *dev, const char *path, const char *fstype)

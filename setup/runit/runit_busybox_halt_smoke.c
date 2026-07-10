@@ -6,8 +6,8 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: runit_power_smoke.c
- * Description: One-shot runit service — call reboot(2) HALT to exercise kernel power path.
+ * File: runit_busybox_halt_smoke.c
+ * Description: Call BusyBox halt applet path via reboot(2) after sync (applets may be multi-call).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -37,9 +37,12 @@ static void tag(const char *s)
 
 int main(void)
 {
-	tag("POWER_SMOKE_CALL\n");
+	tag("BUSYBOX_HALT_SMOKE_CALL\n");
+	(void)syscall(SYS_sync);
+	/* Prefer BusyBox multi-call if linked as /bin/halt; else raw reboot. */
+	execl("/bin/halt", "halt", "-f", (char *)0);
 	(void)syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
 		      (unsigned int)LINUX_REBOOT_CMD_HALT, (void *)0);
-	tag("POWER_SMOKE_REBOOT_RETURNED\n");
+	tag("BUSYBOX_HALT_SMOKE_RETURNED\n");
 	return 1;
 }

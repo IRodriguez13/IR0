@@ -25,6 +25,11 @@
 int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms);
 int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
 		   struct timeval *user_tv);
+int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
+			     fd_set *user_e, int timeout_ms, int has_timeout);
+int64_t syscall_sleep_ms_locked(uint64_t ms);
+int fd_can_read_for(process_t *proc, int fd);
+int fd_can_write_for(process_t *proc, int fd);
 int64_t sys_pause(void);
 int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem);
 void poll_wake_check(void);

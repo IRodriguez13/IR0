@@ -273,6 +273,7 @@ KERNEL_OBJS = \
     kernel/syscalls/socket_syscalls.o \
     kernel/syscalls/process_syscalls.o \
     kernel/syscalls/io_syscalls.o \
+    kernel/syscalls/epoll_syscalls.o \
     kernel/syscalls/time_syscalls.o \
     kernel/syscalls/syscall_dispatch.o \
     kernel/sock_udp.o \
@@ -563,6 +564,13 @@ else
 CFLAGS += -DCONFIG_ENABLE_FS_FAT16=0
 endif
 
+ifneq ($(CONFIG_ENABLE_FS_EXT2),n)
+FS_OBJS += fs/ext2_disk.o
+CFLAGS += -DCONFIG_ENABLE_FS_EXT2=1
+else
+CFLAGS += -DCONFIG_ENABLE_FS_EXT2=0
+endif
+
 DISK_OBJS = \
     drivers/disk/partition.o
 
@@ -689,6 +697,8 @@ else
 STORAGE_ATA_BLOCK_OBJS =
 CFLAGS += -DCONFIG_ENABLE_STORAGE_ATA_BLOCK=0
 endif
+
+STORAGE_AHCI_OBJS = drivers/storage/ahci.o
 
 # VBE framebuffer (VGA text console is always compiled)
 ifneq ($(CONFIG_ENABLE_VBE),n)
@@ -889,6 +899,7 @@ ARCH_OBJS_COMMON = \
 
 ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/arch_x64.o \
+    arch/x86-64/sources/platform.o \
     arch/x86-64/sources/gdt.o \
     arch/x86-64/sources/tss_x64.o \
     arch/x86-64/sources/arch_early.o \
@@ -907,6 +918,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/timer.o \
     arch/arm64/sources/boot_stub.o \
     arch/arm64/sources/syscall_stub.o \
+    arch/arm64/sources/platform.o \
     sched/switch/switch_arm64.o
 
 ifeq ($(ARCH),arm64)
@@ -950,7 +962,7 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
            $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
            $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
-           $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS)
+           $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS)
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
 # Excluir debug_bins_registry.o y usar debug_bins_registry_test.o (compilado con IR0_KERNEL_TESTS=1)
@@ -959,7 +971,7 @@ ALL_OBJS_TEST = $(filter-out debug_bins/debug_bins_registry.o,$(KERNEL_OBJS)) $(
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
                 $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
-                $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS)
+                $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS)
 
 AUTOCONF_HDR := $(KERNEL_ROOT)/includes/generated/autoconf.h
 ifneq ($(wildcard $(KERNEL_ROOT)/.config),)
@@ -1981,11 +1993,39 @@ smoke-runit-power: load-userspace-runit kernel-x64-userspace.iso
 	rm -f $$DISK; \
 	if grep -q "RUNIT_STAGE2_OK" $(RUNIT_POWER_SMOKE_LOG) && \
 	    grep -q "POWER_SMOKE_CALL" $(RUNIT_POWER_SMOKE_LOG) && \
+	    grep -q "SYSTEM_SYNC_OK" $(RUNIT_POWER_SMOKE_LOG) && \
 	    grep -q "SYSTEM_SHUTDOWN_HALT" $(RUNIT_POWER_SMOKE_LOG); then \
 		echo "✓ smoke-runit-power passed"; \
 	else \
 		echo "✗ smoke-runit-power FAILED"; \
-		grep -E 'RUNIT_|RUNSV_|POWER_|SYSTEM_SHUTDOWN|KERNEL PANIC|panic' $(RUNIT_POWER_SMOKE_LOG) | tail -40; \
+		grep -E 'RUNIT_|RUNSV_|POWER_|SYSTEM_|KERNEL PANIC|panic' $(RUNIT_POWER_SMOKE_LOG) | tail -40; \
+		exit 1; \
+	fi
+
+# BusyBox halt applet → sys_reboot (requires CONFIG_HALT in fase58 fragment).
+RUNIT_BB_HALT_LOG = /tmp/runit-busybox-halt-smoke.log
+smoke-runit-busybox-halt: load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   runit + BusyBox halt applet..."
+	@DISK=$$(mktemp /tmp/ir0-runit-bb-halt.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	chmod +x setup/runit/inject-smoke-service.sh; \
+	./setup/runit/inject-smoke-service.sh $$DISK bbhalt \
+		setup/runit/stage-bin/runit_busybox_halt_run \
+		setup/runit/stage-bin/runit_busybox_halt_smoke bin/bb-halt; \
+	rm -f $(RUNIT_BB_HALT_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(RUNIT_BB_HALT_LOG) --timeout 60 --stale-sec 20 \
+		--done SYSTEM_SHUTDOWN_HALT -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "BUSYBOX_HALT_SMOKE_CALL" $(RUNIT_BB_HALT_LOG) && \
+	    grep -q "SYSTEM_SYNC_OK" $(RUNIT_BB_HALT_LOG) && \
+	    grep -q "SYSTEM_SHUTDOWN_HALT" $(RUNIT_BB_HALT_LOG); then \
+		echo "✓ smoke-runit-busybox-halt passed"; \
+	else \
+		echo "✗ smoke-runit-busybox-halt FAILED"; \
+		grep -E 'BUSYBOX_|SYSTEM_|RUNIT_|KERNEL PANIC|panic' $(RUNIT_BB_HALT_LOG) | tail -40; \
 		exit 1; \
 	fi
 
@@ -2046,6 +2086,129 @@ smoke-mm-cow-lazy: kernel-x64-userspace.iso
 build/fat16_smoke.img:
 	@chmod +x scripts/create_fat16_smoke_disk.sh
 	@./scripts/create_fat16_smoke_disk.sh $(FAT16_SMOKE_IMG)
+
+# GPT partition parse smoke (secondary IDE disk).
+GPT_SMOKE_IMG = build/gpt_smoke.img
+GPT_SMOKE_LOG = /tmp/gpt-partition-smoke.log
+.PHONY: build/gpt_smoke.img smoke-gpt-partition
+
+build/gpt_smoke.img:
+	@python3 scripts/create_gpt_smoke_disk.py $(GPT_SMOKE_IMG)
+
+smoke-gpt-partition: kernel-x64-userspace.iso build/gpt_smoke.img
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   GPT partition table on hdb..."
+	@DISK=$$(mktemp /tmp/ir0-gpt-smoke.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	rm -f $(GPT_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(GPT_SMOKE_LOG) --timeout 60 --stale-sec 20 \
+		--done GPT_PARTITION_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-drive file=$(GPT_SMOKE_IMG),format=raw,if=ide,index=1 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "GPT_PARTITION_OK" $(GPT_SMOKE_LOG); then \
+		echo "✓ smoke-gpt-partition passed"; \
+	else \
+		echo "✗ smoke-gpt-partition FAILED"; \
+		grep -E 'GPT_|ATA_|PARTITION|panic' $(GPT_SMOKE_LOG) | tail -30; \
+		exit 1; \
+	fi
+
+EXT2_SMOKE_IMG = build/ext2_smoke.img
+EXT2_SMOKE_LOG = /tmp/ext2-smoke.log
+INIT_EXT2_SMOKE_SRC = setup/pid1/init_ext2_smoke.c
+.PHONY: build/ext2_smoke.img smoke-ext2-mount build-init-ext2-smoke
+
+build/ext2_smoke.img:
+	@chmod +x scripts/create_ext2_smoke_disk.sh
+	@./scripts/create_ext2_smoke_disk.sh $(EXT2_SMOKE_IMG)
+
+build-init-ext2-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_EXT2_SMOKE_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-ext2-smoke OK"
+
+smoke-ext2-mount: kernel-x64-userspace.iso build/ext2_smoke.img
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   EXT2 mount + read HELLO.TXT on /dev/hdb..."
+	@$(MAKE) -s build-init-ext2-smoke
+	@DISK=$$(mktemp /tmp/ir0-ext2-smoke.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(EXT2_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(EXT2_SMOKE_LOG) --timeout 90 \
+		--done 'EXT2OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-drive file=$(EXT2_SMOKE_IMG),format=raw,if=ide,index=1 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rc=$$?; rm -f $$DISK; \
+	if tr -d '\n\r' < $(EXT2_SMOKE_LOG) | grep -q 'EXT2OK'; then \
+		echo "✓ smoke-ext2-mount passed"; \
+	elif [ $$rc -ne 0 ]; then \
+		echo "✗ smoke-ext2-mount FAILED (QEMU/autokill)"; exit $$rc; \
+	else \
+		echo "✗ smoke-ext2-mount FAILED (tag missing)"; exit 1; \
+	fi
+
+POSIX_DEPTH_SMOKE_LOG = /tmp/posix-depth-smoke.log
+INIT_POSIX_DEPTH_SMOKE_SRC = setup/pid1/init_posix_depth_smoke.c
+.PHONY: smoke-posix-depth build-init-posix-depth-smoke
+
+build-init-posix-depth-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_POSIX_DEPTH_SMOKE_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-posix-depth-smoke OK"
+
+smoke-posix-depth: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   POSIX depth (prlimit/epoll/pselect/pty)..."
+	@$(MAKE) -s build-init-posix-depth-smoke
+	@DISK=$$(mktemp /tmp/ir0-posix-depth.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(POSIX_DEPTH_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(POSIX_DEPTH_SMOKE_LOG) --timeout 90 \
+		--done 'POSIX_DEPTH_OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rc=$$?; rm -f $$DISK; \
+	if tr -d '\n\r' < $(POSIX_DEPTH_SMOKE_LOG) | grep -q 'POSIX_DEPTH_OK'; then \
+		echo "✓ smoke-posix-depth passed"; \
+	elif [ $$rc -ne 0 ]; then \
+		echo "✗ smoke-posix-depth FAILED (QEMU/autokill)"; exit $$rc; \
+	else \
+		echo "✗ smoke-posix-depth FAILED (tag missing)"; exit 1; \
+	fi
+
+AHCI_SMOKE_LOG = /tmp/ahci-detect-smoke.log
+.PHONY: smoke-ahci-detect
+smoke-ahci-detect: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   AHCI PCI detect..."
+	@DISK=$$(mktemp /tmp/ir0-ahci-smoke.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	rm -f $(AHCI_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(AHCI_SMOKE_LOG) --timeout 45 --stale-sec 15 \
+		--done AHCI_DETECT_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=none,id=disk0 \
+		-device ahci,id=ahci0 \
+		-device ide-hd,drive=disk0,bus=ahci0.0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "AHCI_DETECT_OK" $(AHCI_SMOKE_LOG); then \
+		echo "✓ smoke-ahci-detect passed"; \
+	else \
+		echo "✗ smoke-ahci-detect FAILED"; \
+		grep -E 'AHCI_|panic' $(AHCI_SMOKE_LOG) | tail -20; \
+		exit 1; \
+	fi
 
 # D1.18 — read-only FAT16 on secondary ATA disk (hdb), no MINIX root mutation.
 smoke-fat16-mount: kernel-x64-userspace.iso build/fat16_smoke.img
