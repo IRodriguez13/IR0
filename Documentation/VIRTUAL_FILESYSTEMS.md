@@ -1,6 +1,15 @@
 # IR0 Virtual Filesystems
 
+> **Last verified:** 2026-07-10  
+> **Source of truth:** `fs/procfs.c`, `fs/sysfs.c`, `fs/devfs.c`, `fs/heartfs.c`,  
+> `fs/pseudo_fs_registry.c`, [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md)
+
 This document focuses on pseudo-filesystems exposed through VFS.
+
+## `/heart`
+
+IR0-only unified read-only facade (does **not** replace `/proc` or `/sys`).  
+See [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md) for layout, gates, and ARCH-3 notes.
 
 ## `/proc`
 
@@ -24,7 +33,8 @@ This document focuses on pseudo-filesystems exposed through VFS.
 
 - Data is generated at read time.
 - Numeric formatting was hardened for 64-bit values.
-- Per-process pseudo-fd context tracking avoids cross-process collisions.
+- Opens install real `fd_table` slots (`is_pseudo`); no global virtual fds for new opens.
+- Path-based readdir for `/proc`, `/proc/pid`, `/proc/pid/N` via `proc_readdir()`.
 
 ## `/dev`
 

@@ -66,6 +66,7 @@ FASE55D_SMOKE_BIN = setup/doom/doomgeneric_smoke
 RUNIT_STAGE_BIN = setup/runit/stage-bin
 INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
 INIT_FASE53B_POSIX_PSEUDOFS_SRC = setup/pid1/init_fase53b_posix_pseudofs.c
+INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
 INIT_FASE54A_FBDEV_SRC = setup/pid1/init_fase54a_fbdev.c
 INIT_FASE54B_INPUT_SRC = setup/pid1/init_fase54b_input.c
 INIT_FASE54C_INPUT_DET_SRC = setup/pid1/init_fase54c_input_deterministic.c
@@ -140,6 +141,7 @@ FASE52_TCC_LOG = /tmp/userspace-fase52-tcc.log
 KERNEL_USERSPACE_ISO ?= kernel-x64-userspace.iso
 FASE53A_FS_DEV_LOG = /tmp/userspace-fase53a-fs-dev.log
 FASE53B_POSIX_PSEUDOFS_LOG = /tmp/userspace-fase53b-posix-pseudofs.log
+HEART_SMOKE_LOG = /tmp/userspace-heart.log
 FASE54A_FBDEV_LOG = /tmp/userspace-fase54a-fbdev.log
 FASE54B_INPUT_LOG = /tmp/userspace-fase54b-input.log
 FASE54C_INPUT_DET_LOG = /tmp/userspace-fase54c-input-deterministic.log
@@ -1107,6 +1109,16 @@ build-init-fase53b-posix-pseudofs:
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_FASE53B_POSIX_PSEUDOFS_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-init-fase53b-posix-pseudofs OK"
+
+build-init-heart-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  INIT    Building /heart smoke ($(INIT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_HEART_SMOKE_SRC)
+	@file $(INIT_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-init-heart-smoke OK"
 
 build-init-fase54a-fbdev:
 	@if [ -z "$(MUSL_CC)" ]; then \

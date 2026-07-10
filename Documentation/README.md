@@ -19,6 +19,9 @@ The goal is to document implemented behavior first, then known gaps.
 - `DECOUPLING.md`: subsystem boundaries, façade map, portable arch conventions, symbol digest.
 - `FILESYSTEM.md`: VFS layer, mounted filesystems, permissions path, and policy.
 - `VIRTUAL_FILESYSTEMS.md`: `/proc`, `/dev`, `/sys`, and observable interfaces.
+- `PSEUDO_FS_HEART.md`: registry + `/heart` facade + ARCH-3 fd_table lifecycle.
+- `BACKLOG_REMAINING.md`: honest post-0.0.1 open work (storage, POSIX, residual).
+- `releases/`: ABI board, syscall/pseudo map, 0.0.1 scope and write-path plan.
 - `DRIVERS.md`: driver registry, bootstrap flow, and config-gated initialization.
 - `INTERRUPTS.md`: IDT/PIC path, syscall entry, and exception behavior.
 - `MEMORY.md`: PMM, allocator, paging model, and current limits.

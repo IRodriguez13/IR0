@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/pseudo_fs.h>
+#include <ir0/heartfs.h>
 #include <ir0/sysfs.h>
 #include <ir0/procfs.h>
 #include <ir0/arch_port.h>
@@ -442,6 +443,8 @@ void pseudo_fs_nodes_register_all(void)
                        (void *)(uintptr_t)sys_console_mode_read_reg);
 
     pseudo_fs_register_sys_cpus();
+
+    heart_nodes_register();
 
     g_pseudo_fs_nodes_ready = 1;
 }

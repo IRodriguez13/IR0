@@ -53,27 +53,12 @@
 #define BYTES_PER_SECTOR           512     /* Bytes per disk sector */
 #define SECTORS_PER_MB             (2 * 1024)  /* Sectors per megabyte (2*1024*512 = 1MB) */
 
-static pid_t proc_fd_pid_map[1000];
-static pid_t proc_fd_owner_pid_map[1000];
-static int proc_fd_pid_map_init = 0;
-/* Track offsets for /proc and /sys files (proc 1000-1999, sys 3000-3999) */
+/* Track offsets for legacy /sys virtual fds (3000-3999) and residual maps. */
 static off_t proc_fd_offset_map[PROC_OFFSET_MAP_SIZE];
 static pid_t proc_fd_offset_owner_map[PROC_OFFSET_MAP_SIZE];
 static int proc_fd_offset_map_init = 0;
 
 static void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
-
-static void proc_fd_pid_map_ensure_init(void)
-{
-    if (proc_fd_pid_map_init)
-        return;
-    for (int i = 0; i < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])); i++)
-    {
-        proc_fd_pid_map[i] = -1;
-        proc_fd_owner_pid_map[i] = -1;
-    }
-    proc_fd_pid_map_init = 1;
-}
 
 static void proc_fd_offset_map_ensure_init(void)
 {
@@ -87,30 +72,6 @@ static void proc_fd_offset_map_ensure_init(void)
     proc_fd_offset_map_init = 1;
 }
 
-static void proc_set_pid_for_fd(int fd, pid_t pid)
-{
-    proc_fd_pid_map_ensure_init();
-    int idx = fd - 1000;
-    if (idx >= 0 && idx < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])))
-    {
-        proc_fd_pid_map[idx] = pid;
-        proc_fd_owner_pid_map[idx] = ir0_current_pid();
-    }
-}
-
-static pid_t proc_get_pid_for_fd(int fd)
-{
-    pid_t owner = ir0_current_pid();
-    proc_fd_pid_map_ensure_init();
-    int idx = fd - 1000;
-    if (idx >= 0 && idx < (int)(sizeof(proc_fd_pid_map) / sizeof(proc_fd_pid_map[0])))
-    {
-        if (proc_fd_owner_pid_map[idx] != owner)
-            return -1;
-        return proc_fd_pid_map[idx];
-    }
-    return -1;
-}
 /**
  * get_memory_usage - Get total memory used by kernel
  *
@@ -313,10 +274,14 @@ int proc_drivers_read(char *buf, size_t count)
     return ir0_driver_list_to_buffer(buf, count);
 }
 
-/* Check if path is in /proc */
+/* Check if path is in /proc (mount root or under it). */
 bool is_proc_path(const char *path)
 {
-    return path && strncmp(path, "/proc/", 6) == 0;
+    if (!path)
+        return false;
+    if (strcmp(path, "/proc") == 0 || strcmp(path, "/proc/") == 0)
+        return true;
+    return strncmp(path, "/proc/", 6) == 0;
 }
 
 /*
@@ -1150,74 +1115,84 @@ off_t proc_get_offset(int fd)
     return 0;
 }
 
-/* linux_dirent64 for proc_getdents (matches sys_getdents) */
-struct proc_dirent64 {
-    uint64_t d_ino;
-    int64_t d_off;
-    unsigned short d_reclen;
-    unsigned char d_type;
-    char d_name[];
-};
-#define PROC_DT_DIR 4
-#define PROC_DT_REG 8
-
-/* /proc/pid directory getdents - OSDev-style */
-int proc_getdents(int fd, void *dirent_buf, size_t count)
+static int proc_readdir_add(struct vfs_dirent *entries, int max_entries, int n,
+                            const char *name, uint8_t type)
 {
-    if (!dirent_buf || count == 0)
+    if (n < 0 || n >= max_entries || !name || !name[0])
+        return n;
+
+    strncpy(entries[n].name, name, sizeof(entries[n].name) - 1);
+    entries[n].name[sizeof(entries[n].name) - 1] = '\0';
+    entries[n].type = type;
+    return n + 1;
+}
+
+/*
+ * Path-based readdir for /proc mounts (no virtual fds).
+ * /proc          — registry children + "pid"
+ * /proc/pid      — one dirent per live PID
+ * /proc/pid/N    — status, cmdline
+ */
+int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
+{
+    pid_t pid;
+    const char *filename;
+    int n;
+
+    if (!path || !entries || max_entries <= 0)
         return -EINVAL;
 
-    /* fd 1150 = /proc/pid (list PIDs), fd 1151 = /proc/pid/N (list status, cmdline) */
-    if (fd == 1150)
+    if (strcmp(path, "/proc") == 0 || strcmp(path, "/proc/") == 0)
+    {
+        pseudo_fs_nodes_register_all();
+        n = pseudo_fs_collect_registry_children("/proc", entries, max_entries, 0);
+        if (n < 0)
+            return n;
+        return proc_readdir_add(entries, max_entries, n, "pid", DT_DIR);
+    }
+
+    filename = proc_resolve_path(path, &pid);
+    if (!filename)
+        return -ENOENT;
+
+    if (strcmp(filename, "pid_dir") == 0)
     {
         process_t *p = process_list;
-        size_t buf_offset = 0;
-        int ino = 1;
-        while (p && buf_offset + sizeof(struct proc_dirent64) + 16 < count)
+
+        n = 0;
+        while (p && n < max_entries)
         {
             char pid_str[16];
-            int n = snprintf(pid_str, sizeof(pid_str), "%d", (int)p->task.pid);
-            if (n <= 0 || n >= (int)sizeof(pid_str))
+            int len;
+
+            len = snprintf(pid_str, sizeof(pid_str), "%d", (int)p->task.pid);
+            if (len <= 0 || len >= (int)sizeof(pid_str))
                 break;
-            size_t name_len = (size_t)n + 1;
-            size_t reclen = (sizeof(struct proc_dirent64) + name_len + 7) & ~7;
-            if (buf_offset + reclen > count)
-                break;
-            struct proc_dirent64 *dent = (struct proc_dirent64 *)((char *)dirent_buf + buf_offset);
-            dent->d_ino = (uint64_t)p->task.pid;
-            dent->d_off = 0;
-            dent->d_reclen = (unsigned short)reclen;
-            dent->d_type = PROC_DT_DIR;
-            memcpy(dent->d_name, pid_str, name_len);
-            buf_offset += reclen;
-            ino++;
+            n = proc_readdir_add(entries, max_entries, n, pid_str, DT_DIR);
             p = p->next;
         }
-        return (int)buf_offset;
+        return n;
     }
-    if (fd == 1151)
+
+    if (strcmp(filename, "pid_subdir") == 0)
     {
-        pid_t pid = proc_get_pid_for_fd(1151);
-        if (pid < 0 || !process_find_by_pid(pid))
+        if (!process_find_by_pid(pid))
             return -ENOENT;
-        size_t buf_offset = 0;
-        const char *entries[] = { "status", "cmdline", NULL };
-        for (int i = 0; entries[i] && buf_offset + sizeof(struct proc_dirent64) + 16 < count; i++)
-        {
-            size_t name_len = strlen(entries[i]) + 1;
-            size_t reclen = (sizeof(struct proc_dirent64) + name_len + 7) & ~7;
-            if (buf_offset + reclen > count)
-                break;
-            struct proc_dirent64 *dent = (struct proc_dirent64 *)((char *)dirent_buf + buf_offset);
-            dent->d_ino = (uint64_t)(i + 1);
-            dent->d_off = 0;
-            dent->d_reclen = (unsigned short)reclen;
-            dent->d_type = PROC_DT_REG;
-            memcpy(dent->d_name, entries[i], name_len);
-            buf_offset += reclen;
-        }
-        return (int)buf_offset;
+        n = 0;
+        n = proc_readdir_add(entries, max_entries, n, "status", DT_REG);
+        n = proc_readdir_add(entries, max_entries, n, "cmdline", DT_REG);
+        return n;
     }
+
+    return -ENOTDIR;
+}
+
+/* Legacy fd-based getdents — kept for transitional callers; prefer proc_readdir. */
+int proc_getdents(int fd, void *dirent_buf, size_t count)
+{
+    (void)fd;
+    (void)dirent_buf;
+    (void)count;
     return -EBADF;
 }
 
@@ -1238,87 +1213,35 @@ void proc_set_offset(int fd, off_t offset)
     }
 }
 
-/* Reset offset for /proc fd (when reopening) */
-static void proc_reset_offset(int fd)
-{
-    proc_set_offset(fd, 0);
-}
-
-/* Open /proc file - returns special positive fd, stores PID in fd_table */
+/* Open /proc — no longer assigns global virtual fds (use fd_table binds). */
 int proc_open(const char *path, int flags)
 {
-    /* Currently read-only: procfs is primarily for reading system information
-      * Write support could be added for /proc/sys/ knobs in the future
-     */
-    (void)flags; /* O_WRONLY, O_RDWR ignored for now; O_DIRECTORY used for pid dirs */
+    pid_t pid;
+    const char *filename;
+
+    (void)flags;
+
+    if (!is_proc_path(path))
+        return -EINVAL;
 
     pseudo_fs_nodes_register_all();
 
-    {
-        int pseudo_fd = -1;
-        int64_t prc;
-        pid_t pid;
-        const char *filename;
-
-        prc = pseudo_fs_open_path(path, flags, &pseudo_fd);
-        if (prc == 0)
-        {
-            proc_reset_offset(pseudo_fd);
-            return pseudo_fd;
-        }
-
-        filename = proc_parse_path(path, &pid);
-        if (filename &&
-            (strcmp(filename, "status") == 0 || strcmp(filename, "cmdline") == 0))
-        {
-            int fd;
-
-            if (strcmp(filename, "status") == 0)
-            {
-                proc_set_pid_for_fd(1001, pid);
-                proc_reset_offset(1001);
-                fd = 1001;
-            }
-            else
-            {
-                proc_set_pid_for_fd(1010, pid);
-                proc_reset_offset(1010);
-                fd = 1010;
-            }
-
-            return fd;
-        }
-
-        if (prc != -ENOENT)
-            return (int)prc;
-    }
-
-    pid_t pid;
-    const char *filename = proc_parse_path(path, &pid);
+    filename = proc_parse_path(path, &pid);
     if (!filename)
         return -ENOENT;
 
-    /* OSDev-style /proc/pid directory: requires O_DIRECTORY */
-    if (strcmp(filename, "pid_dir") == 0)
-    {
-        if (!(flags & O_DIRECTORY))
-            return -ENOTDIR;
-        return 1150;  /* proc_getdents will list PIDs */
-    }
-    if (strcmp(filename, "pid_subdir") == 0)
-    {
-        if (!(flags & O_DIRECTORY))
-            return -ENOTDIR;
-        if (!process_find_by_pid(pid))
-            return -ENOENT;
-        proc_set_pid_for_fd(1151, pid);
-        return 1151;  /* proc_getdents will list status, cmdline */
-    }
+    /* Files: opened only via pseudo_bind_file_fd (registry / dynamic). */
+    if (strcmp(filename, "status") == 0 || strcmp(filename, "cmdline") == 0)
+        return -ENOENT;
 
+    if (strcmp(filename, "pid_dir") == 0 || strcmp(filename, "pid_subdir") == 0)
+        return -EISDIR;
+
+    /* Static registry nodes also use bind path, not this helper. */
     return -ENOENT;
 }
 
-/* Read from /proc file with offset support */
+/* Read from /proc file with offset support (legacy virtual fd path). */
 int proc_read(int fd, char *buf, size_t count, off_t offset)
 {
     int64_t pbytes;
@@ -1332,47 +1255,7 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
         return (int)pbytes;
     }
 
-    /* Legacy per-pid fds (1001/1010) when dynamic slot unavailable */
-    {
-        static char proc_buffer[PROC_BUFFER_SIZE];
-        int full_size = 0;
-
-        memset(proc_buffer, 0, sizeof(proc_buffer));
-
-        switch (fd)
-        {
-        case 1001:
-            full_size = proc_status_read(proc_buffer, sizeof(proc_buffer),
-                                         proc_get_pid_for_fd(1001));
-            break;
-        case 1010:
-            full_size = proc_cmdline_read(proc_buffer, sizeof(proc_buffer),
-                                          proc_get_pid_for_fd(1010));
-            break;
-        default:
-            return -EBADF;
-        }
-
-        if (full_size < 0)
-            return (full_size == -1) ? -EIO : full_size;
-
-        if (full_size > (int)sizeof(proc_buffer))
-            full_size = (int)sizeof(proc_buffer);
-
-        if (offset < 0 || offset >= (off_t)full_size)
-            return 0;
-
-        {
-            size_t remaining = (size_t)full_size - (size_t)offset;
-            size_t to_read = (count < remaining) ? count : remaining;
-
-            if (to_read == 0)
-                return 0;
-
-            memcpy(buf, proc_buffer + (size_t)offset, to_read);
-            return (int)to_read;
-        }
-    }
+    return -EBADF;
 }
 
 /*
@@ -1439,6 +1322,14 @@ int proc_stat(const char *path, stat_t *st)
 
     if (!st || !is_proc_path(path))
         return -EINVAL;
+
+    if (strcmp(path, "/proc") == 0 || strcmp(path, "/proc/") == 0)
+    {
+        memset(st, 0, sizeof(stat_t));
+        st->st_mode = S_IFDIR | 0555;
+        st->st_nlink = 2;
+        return 0;
+    }
 
     pseudo_fs_nodes_register_all();
 

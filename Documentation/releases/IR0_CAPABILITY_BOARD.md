@@ -217,7 +217,7 @@ rules (`Documentation/releases/IR0_0.0.1_VFS_WRITE_PLAN.md`).
 | Item | Status | Gate |
 |------|--------|------|
 | Mount + read | VERIFIED | `smoke-fat16-mount` |
-| Write/create/truncate | **BLOCKED** | requires `linux-abi-audit-vfs-write` on FAT16 disk |
+| Write/create/truncate | **BLOCKED** | First gap: `-EROFS` stubs in `fat16_disk_*`; vfs_write audit still MINIX-only — see `IR0_0.0.1_VFS_WRITE_PLAN.md` |
 
 ### EXT2 backend
 

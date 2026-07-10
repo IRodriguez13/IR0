@@ -619,12 +619,12 @@ int64_t sys_ftruncate(int fd, off_t length)
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
     return -EBADF;
 
-  /* Pseudo /proc / /sys fds are not path-backed regular files. */
-  if (fd >= FD_PROC_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-    return -EBADF;
-
   fd_table = get_process_fd_table();
   if (!fd_table[fd].in_use)
+    return -EBADF;
+
+  /* Pseudo /proc|/sys|/heart binds are not truncatable regular files. */
+  if (fd_table[fd].is_pseudo)
     return -EBADF;
 
   if (fd_table[fd].is_pipe || fd_table[fd].is_socket)

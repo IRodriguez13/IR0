@@ -692,15 +692,14 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
     /*
      * Linux: reject invalid fds before ENOSYS for unimplemented file-backed
-     * mmap. Legacy virtual /dev fds (FD_DEV_BASE..) remain valid for fb0 path.
+     * mmap. Only real fd_table slots are valid (devfs /dev/fb0 uses is_devfs).
      */
     {
       fd_entry_t *fd_table = get_process_fd_table();
-      bool fd_valid_legacy = (fd >= FD_DEV_BASE && fd < FD_SYS_BASE);
       bool fd_valid_open = (fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
                             fd_table && fd_table[fd].in_use);
 
-      if (!fd_valid_legacy && !fd_valid_open)
+      if (!fd_valid_open)
       {
         serial_print("SERIAL: mmap: invalid fd for file-backed mmap\n");
         ret = SYSCALL_PTR_ERR(EBADF);
@@ -709,25 +708,18 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         return ret;
       }
     }
-    
+
     /*
-     * mmap of /dev/fb0 — legacy virtual fd (FD_DEV_BASE + 15) or real devfs fd
-     * (FASE58A: fd_table slot with is_devfs + dev_device_id 15).
+     * mmap of /dev/fb0 — real fd_table slot (is_devfs + device_id 15).
      * Maps framebuffer physical memory into userspace for efficient access.
      */
     {
-      bool fb_mmap_legacy = false;
       bool fb_mmap_devfs = false;
       uint32_t device_id = UINT32_MAX;
       fd_entry_t *fd_table = get_process_fd_table();
 
-      if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-      {
-        device_id = (uint32_t)(fd - FD_DEV_BASE);
-        fb_mmap_legacy = true;
-      }
-      else if (fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
-               fd_table && fd_table[fd].in_use && fd_table[fd].is_devfs)
+      if (fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+          fd_table && fd_table[fd].in_use && fd_table[fd].is_devfs)
       {
         device_id = fd_table[fd].dev_device_id;
         fb_mmap_devfs = true;
@@ -833,15 +825,9 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         current_process->mmap_list = region;
         fase39_dump_current_vmas("mmap-fb");
         {
-          static int s_fb_mmap_legacy_tag;
           static int s_fb_mmap_devfs_tag;
           static int s_fb_mmap_ok_tag;
 
-          if (fb_mmap_legacy && !s_fb_mmap_legacy_tag)
-          {
-            s_fb_mmap_legacy_tag = 1;
-            serial_print("FB_MMAP_LEGACY_FD_OK\n");
-          }
           if (fb_mmap_devfs && !s_fb_mmap_devfs_tag)
           {
             s_fb_mmap_devfs_tag = 1;
@@ -857,7 +843,6 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         return (void *)virt_addr;
       }
 #else
-      (void)fb_mmap_legacy;
       (void)fb_mmap_devfs;
       (void)device_id;
 #endif

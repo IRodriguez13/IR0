@@ -34,6 +34,8 @@
 #include <ir0/pipe.h>
 #include <ir0/procfs.h>
 #include <ir0/pseudo_fs.h>
+#include <ir0/heartfs.h>
+#include <ir0/kmem.h>
 #include <ir0/serial_io.h>
 #include <ir0/ash_smoke.h>
 #include <d1_12_read_diag.h>
@@ -379,8 +381,8 @@ static devfs_node_t *devfs_node_from_fd(int fd)
 }
 
 /*
- * devfs_resolve_read_fd - Bound devfs slot or legacy FD_DEV_BASE virtual fd.
- * @offset_out: file offset (fd_table when bound; 0 for unbound legacy slot).
+ * devfs_resolve_read_fd - Bound fd_table slot with is_devfs (no virtual FD_DEV).
+ * @offset_out: file offset from fd_table when bound.
  */
 static devfs_node_t *devfs_resolve_read_fd(int fd, off_t *offset_out)
 {
@@ -393,19 +395,6 @@ static devfs_node_t *devfs_resolve_read_fd(int fd, off_t *offset_out)
     if (offset_out)
       *offset_out = fd_table[fd].offset;
     return devfs_find_node_by_id(fd_table[fd].dev_device_id);
-  }
-
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
-  {
-    ensure_devfs_init();
-    if (offset_out)
-    {
-      if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table[fd].in_use)
-        *offset_out = fd_table[fd].offset;
-      else
-        *offset_out = 0;
-    }
-    return devfs_find_node_by_id((uint32_t)(fd - FD_DEV_BASE));
   }
 
   return NULL;
@@ -470,28 +459,20 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   char kernel_buf[PAGE_SIZE_4KB];
   const char *str = NULL;
   size_t copy_size = (count < sizeof(kernel_buf)) ? count : sizeof(kernel_buf);
-  
-  /* Handle /proc file descriptors (FD_PROC_BASE .. FD_DEV_BASE) */
-  if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
-  {
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    return proc_write(fd, kernel_buf, copy_size);
-  }
 
-  /* Handle /dev file descriptors (FD_DEV_BASE .. FD_SYS_BASE) */
-  if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
+  if (fd >= 0 && fd < MAX_FDS_PER_PROCESS)
   {
-    ensure_devfs_init();
-    uint32_t device_id = (uint32_t)(fd - FD_DEV_BASE);
-    devfs_node_t *node = devfs_find_node_by_id(device_id);
-    if (!node || !node->ops || !node->ops->write)
-      return -EBADF;
-    
-    /* Copy from user space for device writes */
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
+    fd_entry_t *fdt = get_process_fd_table();
+
+    if (fdt && fdt[fd].in_use && fdt[fd].is_pseudo && fdt[fd].vfs_file)
+    {
+      pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fdt[fd].vfs_file;
+
+      if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+	return -EFAULT;
+      return pseudo_fs_ops_write((const pseudo_fs_ops_t *)bind->ops, bind->ctx,
+				kernel_buf, copy_size);
+    }
   }
 
   {
@@ -506,16 +487,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
       ash_smoke_write_trace(fd, kernel_buf, copy_size);
       return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
     }
-  }
-
-  /* Handle /sys file descriptors (FD_SYS_BASE .. FD_SYS_BASE + FD_RANGE_SIZE) */
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-  {
-    /* Copy from user space for sysfs writes */
-    if (copy_from_user(kernel_buf, buf, copy_size) != 0)
-      return -EFAULT;
-    
-    return sysfs_write(fd, kernel_buf, copy_size);
   }
 
   /* Handle regular file descriptors */
@@ -700,37 +671,32 @@ int64_t sys_read(int fd, void *buf, size_t count)
   if (!buf)
     return -EFAULT;
 
-  /* Handle /proc file descriptors (FD_PROC_BASE .. FD_DEV_BASE) */
-  if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE) {
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    off_t offset = proc_get_offset(fd);
-    int ret = proc_read(fd, kernel_read_buf, read_size, offset);
-    if (ret > 0) {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-      proc_set_offset(fd, offset + ret);
+  /* Process-local pseudo_fs binds (/proc|/sys|/heart) — real fd_table slots. */
+  if (fd >= 0 && fd < MAX_FDS_PER_PROCESS)
+  {
+    fd_entry_t *fdt = get_process_fd_table();
+
+    if (fdt && fdt[fd].in_use && fdt[fd].is_pseudo && fdt[fd].vfs_file)
+    {
+      pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fdt[fd].vfs_file;
+      char kernel_read_buf[PAGE_SIZE_4KB];
+      size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
+      off_t off = (off_t)fdt[fd].offset;
+      int64_t ret;
+
+      ret = pseudo_fs_ops_read((const pseudo_fs_ops_t *)bind->ops, bind->ctx,
+			       kernel_read_buf, read_size, &off);
+      if (ret > 0)
+      {
+	if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
+	  return -EFAULT;
+	fdt[fd].offset = (uint64_t)off;
+      }
+      return ret;
     }
-    return ret;
   }
 
-  /* Handle /sys file descriptors (FD_SYS_BASE .. FD_SYS_BASE + FD_RANGE_SIZE) */
-  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE) {
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
-    off_t offset = proc_get_offset(fd);  /* Reuse proc offset tracking */
-    int ret = sysfs_read(fd, kernel_read_buf, read_size, offset);
-    if (ret > 0) {
-      /* Copy to user space */
-      if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
-        return -EFAULT;
-      proc_set_offset(fd, offset + ret);  /* Reuse proc offset tracking */
-    }
-    return ret;
-  }
-
-  /* /dev: bound fd_table slot or legacy FD_DEV_BASE virtual fd */
+  /* /dev: bound fd_table slot (is_devfs) */
   {
     off_t read_off = 0;
     devfs_node_t *node = devfs_resolve_read_fd(fd, &read_off);
@@ -942,21 +908,21 @@ int64_t sys_fstat(int fd, stat_t *buf)
   if (fd < 0)
     return -EBADF;
 
-  /*
-   * /proc and /sys pseudo registry fds (1500+, legacy 1001/1010/1150/1151)
-   * are not stored in fd_table; fstat must mirror read/close routing.
-   */
-  if (fd >= FD_PROC_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
+  if (fd < MAX_FDS_PER_PROCESS)
   {
-    rc = pseudo_fs_stat_fd(fd, &kst);
-    if (rc == 0)
+    fd_entry_t *fdt = get_process_fd_table();
+
+    if (fdt && fdt[fd].in_use && fdt[fd].is_pseudo && fdt[fd].vfs_file)
     {
+      pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fdt[fd].vfs_file;
+
+      rc = pseudo_fs_ops_stat((const pseudo_fs_ops_t *)bind->ops, bind->ctx, &kst);
+      if (rc != 0)
+	return rc;
       if (ir0_copy_stat_to_user(buf, &kst) != 0)
-        return -EFAULT;
+	return -EFAULT;
       return 0;
     }
-    if (rc != -ENOENT)
-      return rc;
   }
 
   if (fd >= MAX_FDS_PER_PROCESS)
@@ -980,7 +946,7 @@ int64_t sys_fstat(int fd, stat_t *buf)
   }
   else
   {
-    rc = vfs_stat(fd_table[fd].path, &kst);
+    rc = ir0_stat_path_routed(fd_table[fd].path, &kst);
     if (rc != 0)
       return rc;
   }
@@ -1211,10 +1177,78 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
   fd_table[fd].is_pipe = false;
   fd_table[fd].is_socket = false;
   fd_table[fd].is_devfs = false;
+  fd_table[fd].is_pseudo = false;
   fd_table[fd].pipe_end = -1;
   fd_table[fd].dev_device_id = 0;
   fase48_note_fd_created();
   fase50c_log_open_result(path, (int64_t)fd, 5);
+  return fd;
+}
+
+/*
+ * Install a registry /proc|/sys|/heart file into the process fd_table.
+ * Returns a real slot index (not PSEUDO_FS_*_FD_BASE).
+ */
+static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
+{
+  fd_entry_t *fd_table;
+  const pseudo_fs_ops_t *ops = NULL;
+  void *ctx = NULL;
+  pseudo_fd_bind_t *bind;
+  int dynamic = 0;
+  int fd;
+  int64_t rc;
+
+  if (!path || !current_process)
+    return -EINVAL;
+
+  pseudo_fs_nodes_register_all();
+  rc = pseudo_fs_acquire_path(path, ir0_flags, &ops, &ctx, &dynamic);
+  if (rc != 0)
+    return rc;
+
+  fd_table = get_process_fd_table();
+  fd = -1;
+  for (int i = 3; i < MAX_FDS_PER_PROCESS; i++)
+  {
+    if (!fd_table[i].in_use)
+    {
+      fd = i;
+      break;
+    }
+  }
+  if (fd < 0)
+  {
+    (void)pseudo_fs_release_ops(ops, ctx, dynamic);
+    return -EMFILE;
+  }
+
+  bind = (pseudo_fd_bind_t *)kmalloc_try(sizeof(*bind));
+  if (!bind)
+  {
+    (void)pseudo_fs_release_ops(ops, ctx, dynamic);
+    return -ENOMEM;
+  }
+  bind->ops = ops;
+  bind->ctx = ctx;
+  bind->refs = 1;
+  bind->dynamic = dynamic;
+
+  fd_table[fd].in_use = true;
+  strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
+  fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
+  fd_table[fd].flags = ir0_flags;
+  fd_table[fd].fd_flags = (ir0_flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
+  fd_table[fd].vfs_file = bind;
+  fd_table[fd].offset = 0;
+  fd_table[fd].is_pipe = false;
+  fd_table[fd].is_socket = false;
+  fd_table[fd].is_devfs = false;
+  fd_table[fd].is_pseudo = true;
+  fd_table[fd].pipe_end = -1;
+  fd_table[fd].dev_device_id = 0;
+  fase48_note_fd_created();
+  fase50c_log_open_result(path, (int64_t)fd, 1);
   return fd;
 }
 
@@ -1260,27 +1294,51 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
 
   if (is_proc_path(resolved))
   {
-    if (proc_is_virtual_subdir(resolved))
+    if (strcmp(resolved, "/proc") == 0 || strcmp(resolved, "/proc/") == 0 ||
+        proc_is_virtual_subdir(resolved))
     {
       if (!(ir0_flags & O_DIRECTORY))
         return -EISDIR;
       return pseudo_bind_dir_fd(resolved, ir0_flags);
     }
-    open_ret = proc_open(resolved, ir0_flags);
+    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
     fase50c_log_open_result(resolved, open_ret, 1);
     return open_ret;
   }
 
   if (is_sys_path(resolved))
   {
-    if (sysfs_is_virtual_subdir(resolved))
+    if (strcmp(resolved, "/sys") == 0 || strcmp(resolved, "/sys/") == 0 ||
+        sysfs_is_virtual_subdir(resolved))
     {
       if (!(ir0_flags & O_DIRECTORY))
         return -EISDIR;
       return pseudo_bind_dir_fd(resolved, ir0_flags);
     }
-    open_ret = sysfs_open(resolved, ir0_flags);
+    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
     fase50c_log_open_result(resolved, open_ret, 2);
+    return open_ret;
+  }
+
+  if (is_heart_path(resolved))
+  {
+    char canon[256];
+
+    heart_nodes_register();
+    if (heart_is_virtual_subdir(resolved))
+    {
+      if (!(ir0_flags & O_DIRECTORY))
+        return -EISDIR;
+      return pseudo_bind_dir_fd(resolved, ir0_flags);
+    }
+    if (heart_alias_canonical(resolved, canon, sizeof(canon)))
+    {
+      open_ret = pseudo_bind_file_fd(canon, ir0_flags);
+      fase50c_log_open_result(resolved, open_ret, 6);
+      return open_ret;
+    }
+    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
+    fase50c_log_open_result(resolved, open_ret, 6);
     return open_ret;
   }
 
@@ -1769,6 +1827,9 @@ static int getdents_trust_readdir_type(const char *dir_path)
   if (is_sys_path(dir_path) && sysfs_is_virtual_subdir(dir_path))
     return 1;
 
+  if (is_heart_path(dir_path) && heart_is_virtual_subdir(dir_path))
+    return 1;
+
   if (strcmp(dir_path, "/dev") == 0 || strcmp(dir_path, "/dev/") == 0)
     return 1;
   if (ir0_is_dev_path(dir_path) && devfs_is_virtual_subdir(dir_path))
@@ -1917,12 +1978,6 @@ static int64_t sys_getdents_common(int fd, void *dirent, size_t count, int legac
 
   if (validate_userspace_buffer(dirent, count) != 0)
     return -EFAULT;
-
-  if (fd == 1150 || fd == 1151)
-    return proc_getdents(fd, dirent, count);
-
-  if (fd >= FD_PROC_BASE && fd < FD_SYS_BASE)
-    return -ENOTDIR;
 
   fd_table = get_process_fd_table();
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||
