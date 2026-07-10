@@ -130,8 +130,15 @@
 #define __NR_getresuid    118
 #define __NR_setresgid    119
 #define __NR_getresgid    120
+#define __NR_epoll_create  213
+#define __NR_epoll_ctl     233
+#define __NR_epoll_wait    232
+#define __NR_epoll_pwait   281
+#define __NR_epoll_create1 291
+#define __NR_pselect6      270
 #define __NR_mount        165
 #define __NR_umount2      166
+#define __NR_sync         162
 #define __NR_reboot       169
 #define __NR_arch_prctl   158
 #define __NR_gettid       186

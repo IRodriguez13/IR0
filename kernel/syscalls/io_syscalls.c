@@ -14,6 +14,7 @@
 
 #include "io_syscalls.h"
 #include "syscalls_glue.h"
+#include "epoll_syscalls.h"
 #include <ir0/syscalls_kernel.h>
 #include <ir0/process.h>
 #include <ir0/copy_user.h>
@@ -77,7 +78,7 @@ static int poll_wake_do(void);
 /*
  * syscall_sleep_ms_locked - Block current task for @ms (kernel-side, no user copy).
  */
-static int64_t syscall_sleep_ms_locked(uint64_t ms)
+int64_t syscall_sleep_ms_locked(uint64_t ms)
 {
 	uint64_t now;
 	int ret;
@@ -97,7 +98,7 @@ static int64_t syscall_sleep_ms_locked(uint64_t ms)
 /**
  * fd_can_read_for - Non-blocking read readiness for @proc's fd table.
  */
-static int fd_can_read_for(process_t *proc, int fd)
+int fd_can_read_for(process_t *proc, int fd)
 {
   fd_entry_t *fd_table = proc ? proc->fd_table : get_process_fd_table();
   pid_t pid = proc ? proc->task.pid : 0;
@@ -153,7 +154,7 @@ static int fd_can_write(int fd)
   return 0;
 }
 
-static int fd_can_write_for(process_t *proc, int fd)
+int fd_can_write_for(process_t *proc, int fd)
 {
 	process_t *saved = current_process;
 	int ret;
@@ -319,19 +320,17 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
 }
 
 /**
- * sys_select - POSIX select(2) via poll readiness checks (tier-1 / libc compat).
- * ARCH_DEBT: move to kernel/syscalls/io_syscalls.c when syscalls.c is split.
+ * io_select_timeout_ms - select(2) core with kernel timeout_ms.
+ * @has_timeout: 0 = infinite wait; 1 = use @timeout_ms (may be 0).
  */
-int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
-                   struct timeval *user_tv)
+int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
+			     fd_set *user_e, int timeout_ms, int has_timeout)
 {
   fd_set kr;
   fd_set kw;
   fd_set ke;
   struct pollfd pfds[MAX_POLL_NFDS];
   unsigned int npoll = 0;
-  int timeout_ms = -1;
-  struct timeval tv;
   uint64_t expire;
   int ready;
   unsigned int i;
@@ -341,8 +340,10 @@ int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
     return -ESRCH;
   if (nfds < 0 || nfds > MAX_POLL_NFDS)
     return -EINVAL;
-  if (!user_r && !user_w && !user_e && !user_tv)
+  if (!user_r && !user_w && !user_e && !has_timeout)
     return -EINVAL;
+  if (!has_timeout)
+    timeout_ms = -1;
 
   IR0_FD_ZERO(&kr);
   IR0_FD_ZERO(&kw);
@@ -369,20 +370,10 @@ int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
     if (copy_from_user(&ke, user_e, sizeof(fd_set)) != 0)
       return -EFAULT;
   }
-  if (user_tv)
-  {
-    if (validate_userspace_buffer(user_tv, sizeof(tv)) != 0)
-      return -EFAULT;
-    if (copy_from_user(&tv, user_tv, sizeof(tv)) != 0)
-      return -EFAULT;
-    if (tv.tv_sec < 0 || tv.tv_usec < 0 || tv.tv_usec >= 1000000)
-      return -EINVAL;
-    timeout_ms = (int)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
-  }
 
   if (nfds == 0)
   {
-    if (!user_tv)
+    if (!has_timeout)
       return -EINVAL;
     if (timeout_ms == 0)
       return 0;
@@ -484,6 +475,32 @@ int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
     return -EFAULT;
 
   return (int64_t)ready;
+}
+
+/**
+ * sys_select - POSIX select(2) via poll readiness checks (tier-1 / libc compat).
+ */
+int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
+                   struct timeval *user_tv)
+{
+  struct timeval tv;
+  int timeout_ms = -1;
+  int has_timeout = 0;
+
+  if (user_tv)
+  {
+    if (validate_userspace_buffer(user_tv, sizeof(tv)) != 0)
+      return -EFAULT;
+    if (copy_from_user(&tv, user_tv, sizeof(tv)) != 0)
+      return -EFAULT;
+    if (tv.tv_sec < 0 || tv.tv_usec < 0 || tv.tv_usec >= 1000000)
+      return -EINVAL;
+    timeout_ms = (int)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
+    has_timeout = 1;
+  }
+
+  return io_select_timeout_ms(nfds, user_r, user_w, user_e, timeout_ms,
+			      has_timeout);
 }
 
 static int poll_wake_do(void)
@@ -1013,6 +1030,9 @@ fd_entry_t *get_process_fd_table(void)
 }
 int64_t sys_ioctl(int fd, uint64_t request, void *arg)
 {
+  /* Linux ioctl cmd is 32-bit; musl may sign-extend into the register. */
+  request = (uint32_t)request;
+
   if (!current_process)
     return -ESRCH;
 
@@ -1030,9 +1050,40 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
 
     if (!node || !node->ops || !node->ops->ioctl)
       return -ENOTTY;
-    if (arg && validate_userspace_buffer(arg, 256) != 0)
-      return -EFAULT;
+    /* Handlers perform sized copy_to/from_user; do not require 256B here
+     * (stack ioctl args near page end would false-fail). */
     return node->ops->ioctl(&node->entry, request, arg);
+  }
+
+  /* Unredirected stdio: console tty ioctls (TIOCGWINSZ / termios). */
+  if (fd >= STDIN_FILENO && fd <= STDERR_FILENO &&
+      !stdio_is_redirected(fd_table, fd))
+  {
+    if (request == IR0_CONSOLE_TIOCGWINSZ)
+      return ir0_console_ioctl_winsize(arg);
+    if (request == IR0_CONSOLE_TCGETS || request == IR0_CONSOLE_TCSETS ||
+	request == IR0_CONSOLE_TCSETSW || request == IR0_CONSOLE_TCSETSF)
+    {
+      struct ir0_termios termios;
+      int ret;
+
+      if (request == IR0_CONSOLE_TCGETS)
+      {
+	if (!arg)
+	  return -EINVAL;
+	ret = tty_ioctl_termios_kernel(IR0_CONSOLE_TCGETS, &termios);
+	if (ret != 0)
+	  return ret;
+	if (copy_to_user(arg, &termios, sizeof(termios)) != 0)
+	  return -EFAULT;
+	return 0;
+      }
+      if (!arg)
+	return -EINVAL;
+      if (copy_from_user(&termios, arg, sizeof(termios)) != 0)
+	return -EFAULT;
+      return tty_ioctl_termios_kernel(request, &termios);
+    }
   }
 
   return -ENOTTY;
@@ -1097,6 +1148,12 @@ int64_t sys_close(int fd)
       sock_udp_release((struct sock_udp *)fd_table[fd].vfs_file);
       fd_table[fd].vfs_file = NULL;
     }
+    else if (fd_table[fd].is_epoll && fd_table[fd].vfs_file)
+    {
+      epoll_release_fd(fd_table[fd].vfs_file);
+      fd_table[fd].vfs_file = NULL;
+      fd_table[fd].is_epoll = false;
+    }
     else if (fd_table[fd].vfs_file)
     {
       struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
@@ -1108,6 +1165,7 @@ int64_t sys_close(int fd)
     fd_table[fd].in_use = false;
     fd_table[fd].is_pipe = false;
     fd_table[fd].is_socket = false;
+    fd_table[fd].is_epoll = false;
     fd_table[fd].pipe_end = -1;
     fd_table[fd].is_devfs = false;
     fd_table[fd].is_pseudo = false;

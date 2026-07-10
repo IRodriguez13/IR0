@@ -5,85 +5,62 @@
 > `scripts/linux_abi/`, Makefile gates. Prefer this file for **what is still open**;  
 > ROADMAP holds history and tier %.
 
-## Closed recently (do not re-open without regression)
+## Closed (do not re-open without regression)
 
 | Item | Evidence |
 |------|----------|
-| Linux ABI cola 0.0.1 (15 + wait4_wnohang + vfs_write) | `IR0_0.0.1_ABI_BOARD.md` |
-| `/proc`/`/sys` registry opens → `fd_table` + dup on `/proc/uptime` | `linux-abi-audit-dup` |
-| `/heart` MVP + `/heart/src` blob | `smoke-heart` |
-| ARCH-3: remove `/proc` virtual fds `1001`/`1150`… | board note 2026-07-10 |
-| ARCH-3 residual: drop `FD_SYS`/`FD_DEV` virtual I/O | `agent-fast` + `smoke-tier1` + `smoke-heart` + `smoke-fat16-mount` + `linux-abi-audit-dup` |
-| ARCH process split: `kernel/process/*.c` by ownership | `kernel-x64.bin` + gates below |
-| Seal console/video/input/audio/partition facades | `arch-guard` OK; impl in `includes/ir0/*_backend.c` |
-| Syscall anti-fragmentation policy | `IR0_SYSCALL_PSEUDOFS_MAP.md` |
-| FAT16 read-only QEMU smoke | `smoke-fat16-mount` |
-| System power MVP (`sys_reboot` + `kernel/power/power_manag`) | `agent-fast` + `smoke-runit-power` |
+| Linux ABI cola 0.0.1 | `IR0_0.0.1_ABI_BOARD.md` |
+| `/proc`/`/sys` → `fd_table` + dup | `linux-abi-audit-dup` |
+| `/heart` MVP | `smoke-heart` |
+| ARCH-3 virtual fds / `FD_SYS`/`FD_DEV` | `agent-fast` + tier1 smokes |
+| Process ownership split + backend facades | `kernel-x64.bin` + `arch-guard` |
+| FAT16 RO + QEMU smoke | `smoke-fat16-mount` |
+| Host `ir0_block_*` contracts | `tests/host/test_blockdev_facade.c` |
+| System power (sync + reboot/halt/poweroff + runit) | `smoke-runit-power`, `smoke-runit-busybox-halt`; `vfs_sync`/`sys_sync`; stage3 stub; BusyBox applets |
+| GPT partition smoke | `smoke-gpt-partition` (`GPT_PARTITION_OK`) |
+| EXT2 read-only mount/read | `smoke-ext2-mount` (`EXT2OK`) |
+| AHCI PCI detect | `smoke-ahci-detect` (`AHCI_DETECT_OK`) |
+| `prlimit64` / `getrlimit` real limits | `smoke-posix-depth` |
+| `epoll` + `pselect6` (poll-backed MVP) | `smoke-posix-depth` |
+| PTY pair + `TIOCGWINSZ` / `TIOCGPTN` | `smoke-posix-depth` (`/dev/ptmx`, `/dev/pts/0`) |
+| musl `CLONE_THREAD` + pthread smoke | `smoke-musl-pthread` (`MUSL_PTHREAD_OK`) |
+| Multi-arch platform split (CPUID/power) | `arch/*/sources/platform.c` + `ir0/platform_ops.h`; `arch-guard` |
 
-## P1 — storage / drivers (current focus)
+## Open — storage / drivers
 
 | # | Item | Status | Next proof |
 |---|------|--------|------------|
-| 6 | `roadmap-phase2-driver-expansion` | Wired | `runtime-net-check` + `runtime-mount-check` |
-| 7 | FAT16 on `block_dev` RO MVP | Done | `fs/fat16_disk.c`, `smoke-fat16-mount` |
-| 8 | FAT16 QEMU smoke | Done | same |
-| 9 | EXT2 read-only | **Not started** | new `fs/ext2/` + vfs_ops |
-| 10 | AHCI/SATA | **Not started** | `ir0/blockdev` backend |
-| 11 | Host contracts for `ir0_block_*` | **Done** | `tests/host/test_blockdev_facade.c`; RO flag no longer blocks reads |
-| 12 | GPT partition table | **Not started** | `drivers/disk/partition.c` |
-| — | FAT16 **write** | **Blocked** (gap known) | First divergence: all mutators → `-EROFS` (`fat16_rofs()` in `fs/fat16_disk.c`). `linux-abi-audit-vfs-write` today is MINIX-only (`run_ir0_vfs_write.sh`). Need FAT-backed runner + PASS before any write impl |
+| — | FAT16 **write** | **Blocked** | FAT-backed `vfs-write` audit PASS first |
+| — | AHCI full `ir0_block_*` I/O | Open | read smoke beyond PCI class detect |
 
-## P1 — T1 POSIX depth
+## Open — T1 POSIX
 
-| Item | Status |
-|------|--------|
-| `epoll` / `pselect6` | Not started |
-| `prlimit` / `getrlimit` | Not started |
-| Futex robustness / musl pthread join | **Blocked** — `smoke-musl-pthread` boots then stalls (no `MUSL_PTHREAD_OK`); harness profile `musl-pthread` added in `smoke_autokill.py`; same hang on `dae46ae` baseline |
-| PTY + `TIOCGWINSZ` / `SIGWINCH` | Not started |
+| Item | Status | Next proof |
+|------|--------|------------|
+| Full musl `pthread_create` (robust list / futex edge) | Open | libc pthread beyond raw `clone` smoke |
+| PTY SIGWINCH / multi-pty | Future | beyond single global pair |
 
-## P1 — system power residual
+## Open — multi-arch consolidation
 
 | Item | Status |
 |------|--------|
-| `sys_reboot` + `kernel_system_shutdown` + `arch_system_*` | **Done** (MVP) — `kernel/power/`, `__NR_reboot` 169 |
-| Best-effort `ir0_block_flush_all` + `ir0_driver_shutdown_all` | **Done** |
-| Full `vfs_sync` / ordered umount before poweroff | Not started |
-| runit stage 3 ordered stop → then reboot | Not started (smoke calls `reboot(2)` from a supervised service) |
-| BusyBox `reboot`/`halt`/`poweroff` applets | Off in `fase58_busybox_defconfig` |
-| CAD real / `RESTART2` string / kexec / suspend | Not started |
-| QEMU clean exit (`isa-debug-exit`) smoke | Not started (`-no-reboot`; PASS = serial tags) |
-| `platform_ops` (QEMU vs PC vs RPi) separate from arch | Not started |
+| Generic TLS/cache facade beyond x86 FS base | Open |
+| VM policy vs PTE walker per arch | Open (W5b) |
+| Trap/context adapters | Open |
+| ARM64 boot functional | Future (explicit oleada) |
 
-## P1 — multi-arch consolidation (before second arch is “easy”)
+## Future / P2 (explicit non-goals for current merges)
 
-| Item | Status |
-|------|--------|
-| Split `arch_interface.c` `#if` matrix → `arch/{x86-64,arm64,riscv64}/platform.c` | Not started |
-| Generic TLS / cache APIs vs x86 FS base / CPUID leafs | Not started |
-| VM policy (`map`/`unmap`/`protect`) vs PTE walker per arch | Not started |
-| Common trap/context adapters | Not started |
-| `platform_ops` vs `arch_ops` (RPi ≠ ARM64 virt) | Not started |
-
-ARM64 remains embryonic; first second architecture is the real dependency-inversion test. RISC-V after ARM64 should be cheaper.
-
-## P1 residual — pseudo-fs / ABI
-
-| Item | Status |
-|------|--------|
-| Drop remaining `FD_SYS_BASE` / `FD_DEV_BASE` virtual I/O | **Done** — I/O solo `fd_table` (`is_devfs` / `is_pseudo`); macros `FD_*_BASE` retirados de `syscalls_glue.h` |
-| More Linux `/proc`/`/sys` nodes via `pseudo_fs_register` | Incremental |
-| Expand `/heart/src` file list | Optional |
-
-## P2 / P3 (after storage phase2 stable)
-
-- TCP stream + `AF_UNIX`
-- Rust/C++ driver platform + modules
-- SMP / CFS
-- T3 WM (out of kernel tree)
+- CAD real, `RESTART2` string, kexec, software suspend
+- QEMU `isa-debug-exit` clean process exit
+- `platform_ops` RPi vs QEMU virt (beyond x86 ACPI/KBC MVP)
+- Extra `/proc`/`/sys` nodes (incremental)
+- Expand `/heart/src` file list
+- TCP / `AF_UNIX`, Rust/C++ drivers, SMP/CFS, T3 WM
 
 ## Explicit non-goals until gates green
 
 - FAT16 rw without FAT-backed vfs-write audit PASS
 - Declaring TCC / Doom “stable” without their smokes green
 - T3 compositor inside the kernel tree
+- ARM64 boot as part of multi-arch consolidation merge

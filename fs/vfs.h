@@ -78,6 +78,9 @@ int vfs_init_root(void);
 /* Mount table (single linked list, newest first); NULL if empty */
 struct vfs_mount *vfs_get_mounts(void);
 
+/* Best-effort sync: flush all registered block devices (FS-level sync later). */
+int vfs_sync(void);
+
 /* File operations — @flags must be IR0_O_* (see includes/ir0/open_flags.h) */
 int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out);
 int vfs_read(struct vfs_file *f, char *buf, size_t count);

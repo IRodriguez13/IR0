@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/clone.h>
 
 #if defined(__x86_64__) || defined(__amd64__)
 /*
@@ -828,6 +829,86 @@ pid_t fork(void)
 	paging_fase42_checkpoint("fork-after", (int32_t)child_pid);
 #endif
 
+	return child_pid;
+}
+
+/*
+ * clone_thread - Minimal CLONE_VM|CLONE_THREAD for musl pthread smoke.
+ * Shares the parent's page directory; child returns 0 on @stack.
+ */
+pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
+		   int *child_tid, unsigned long tls)
+{
+	process_t *parent = current_process;
+	process_t *child;
+	pid_t child_pid;
+	uintptr_t child_sp;
+
+	(void)tls;
+
+	if (!parent)
+		return -ESRCH;
+	if (!(flags & CLONE_THREAD) || !(flags & CLONE_VM))
+		return -EINVAL;
+	if (!stack)
+		return -EINVAL;
+
+	child = fork_process_create(parent, &child_pid);
+	if (!child)
+		return -ENOMEM;
+
+	/* Share address space with parent (do not free on thread exit). */
+	child->page_directory = parent->page_directory;
+	child->owns_page_directory = 0;
+	child->task.cr3 = parent->task.cr3;
+	child->mmap_list = NULL;
+	child->tgid = parent->tgid;
+	/* Keep creator as parent so exit wake targets the right task. */
+	child->ppid = parent->task.pid;
+
+	if (process_duplicate_fd_table(parent, child) != 0)
+	{
+		fork_rollback(child, child_pid, 0);
+		return -ENOMEM;
+	}
+
+	child_sp = (uintptr_t)stack & ~(uintptr_t)0xF;
+	child->task.rax = 0;
+	child->task.pid = child_pid;
+
+#if defined(__x86_64__) || defined(__amd64__)
+	if (parent->mode == USER_MODE)
+	{
+		parent->task.rax = (uint64_t)child_pid;
+		fork_fixup_user_syscall_return(parent, child);
+		child->task.rsp = (uint64_t)child_sp;
+		child->task.rbp = 0;
+		arch_set_fs_base(parent->fs_base);
+	}
+#endif
+
+	if (flags & CLONE_PARENT_SETTID && parent_tid)
+	{
+		int tid = (int)child_pid;
+
+		if (process_validate_userspace_buffer(parent_tid, sizeof(tid)) == 0)
+			(void)copy_to_user(parent_tid, &tid, sizeof(tid));
+	}
+	if (flags & CLONE_CHILD_SETTID && child_tid)
+	{
+		int tid = (int)child_pid;
+
+		if (process_validate_userspace_buffer(child_tid, sizeof(tid)) == 0)
+			(void)copy_to_user(child_tid, &tid, sizeof(tid));
+	}
+
+	if (fork_attach_pending_child(child, parent) != 0)
+	{
+		fork_rollback(child, child_pid, 0);
+		return -ENOMEM;
+	}
+
+	fase_audit_note_proc_created();
 	return child_pid;
 }
 

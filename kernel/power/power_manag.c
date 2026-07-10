@@ -15,9 +15,9 @@
 #include "power_manag.h"
 
 #include <ir0/arch_port.h>
-#include <ir0/blockdev.h>
 #include <ir0/driver.h>
 #include <ir0/serial_io.h>
+#include <ir0/vfs.h>
 
 void kernel_system_shutdown(enum ir0_system_action action)
 {
@@ -36,8 +36,9 @@ void kernel_system_shutdown(enum ir0_system_action action)
 		break;
 	}
 
-	/* Best-effort sync: no full vfs_sync yet; flush registered block devices. */
-	ir0_block_flush_all();
+	serial_print("SYSTEM_SYNC_BEGIN\n");
+	(void)vfs_sync();
+	serial_print("SYSTEM_SYNC_OK\n");
 	ir0_driver_shutdown_all();
 
 	arch_disable_interrupts();
