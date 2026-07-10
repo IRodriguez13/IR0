@@ -24,6 +24,7 @@ from compare import (  # noqa: E402
     CompareResult,
     compare_brk,
     compare_chdir,
+    compare_dup,
     compare_execve,
     compare_getcwd,
     compare_mmap,
@@ -207,6 +208,31 @@ def build_chdir_probe(report_dir: Path, target: str) -> Path:
             "-static",
             "-Os",
             f'-DCHDIR_TARGET="{target}"',
+            "-o",
+            str(out),
+            str(src),
+        ]
+    )
+    if rc != 0 or not out.is_file():
+        raise RuntimeError(f"failed to build {out.name} with {musl_cc}")
+    return out
+
+
+def build_dup_probe(report_dir: Path, existing_path: str) -> Path:
+    out = report_dir / "dup_probe"
+    src = ROOT / "scripts" / "linux_abi" / "workloads" / "dup_probe.c"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    musl_cc = "musl-gcc"
+    try:
+        subprocess.run(["musl-gcc", "--version"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        musl_cc = "gcc"
+    rc = run_cmd(
+        [
+            musl_cc,
+            "-static",
+            "-Os",
+            f'-DDUP_EXISTING_PATH="{existing_path}"',
             "-o",
             str(out),
             str(src),
@@ -1179,6 +1205,33 @@ def audit_chdir(report_dir: Path, cfg: dict) -> CompareResult:
     return compare_chdir(linux_trace, ir0_trace, target_path)
 
 
+def audit_dup(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "dup"
+    ir0_dir = report_dir / "ir0" / "dup"
+    existing_path = str(cfg.get("existing_path", "/proc/uptime"))
+    ebadf_errno = int(cfg.get("ebadf_errno", 9))
+
+    build_dup_probe(report_dir, existing_path)
+
+    if not _run_simple_workloads(
+        "dup",
+        "dup_probe",
+        "DUPOK",
+        "open,dup,dup2,fcntl,close",
+        linux_dir,
+        ir0_dir,
+    ):
+        return CompareResult(
+            contract="dup",
+            ok=False,
+            divergences=["dup workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+    return compare_dup(linux_trace, ir0_trace, ebadf_errno)
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
@@ -1190,6 +1243,7 @@ AUDITORS = {
     "nanosleep": audit_nanosleep,
     "getcwd": audit_getcwd,
     "chdir": audit_chdir,
+    "dup": audit_dup,
     "mmap": audit_mmap,
     "mount": audit_mount,
     "execve": audit_execve,
