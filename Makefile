@@ -1372,6 +1372,9 @@ INIT_FASE50_EXEC_ONLY_SRC = setup/pid1/init_fase50_exec_only.c
 INIT_FASE51_SHELL_SRC = setup/pid1/init_fase51_shell.c
 INIT_FASE52_TCC_SRC = setup/pid1/init_fase52_tcc.c
 FASE52_HARNESS_BIN = setup/pid1/fase52_harness
+INIT_TCC_POWER_HALT_SRC = setup/pid1/init_tcc_power_halt.c
+TCC_POWER_HALT_HARNESS_BIN = setup/pid1/tcc_power_halt_harness
+TCC_POWER_HALT_LOG = /tmp/tcc-power-halt-smoke.log
 FASE55D_SMOKE_BIN = setup/doom/doomgeneric_smoke
 RUNIT_STAGE_BIN = setup/runit/stage-bin
 INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
@@ -2026,6 +2029,60 @@ smoke-runit-busybox-halt: load-userspace-runit kernel-x64-userspace.iso
 	else \
 		echo "✗ smoke-runit-busybox-halt FAILED"; \
 		grep -E 'BUSYBOX_|SYSTEM_|RUNIT_|KERNEL PANIC|panic' $(RUNIT_BB_HALT_LOG) | tail -40; \
+		exit 1; \
+	fi
+
+# TinyCC in guest compiles power_halt.c → /dev/ktm + reboot(HALT).
+build-init-tcc-power-halt:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  HARNESS Building TCC power-halt ($(TCC_POWER_HALT_HARNESS_BIN))"
+	@$(MUSL_CC) -static -Os -o $(TCC_POWER_HALT_HARNESS_BIN) $(INIT_TCC_POWER_HALT_SRC)
+	@file $(TCC_POWER_HALT_HARNESS_BIN) | grep -q ELF
+	@echo "✓ build-init-tcc-power-halt OK"
+
+smoke-tcc-power-halt: build-runit build-init-tcc-power-halt build-tcc-fase52 $(KERNEL_USERSPACE_ISO)
+	@echo "  SMOKE   TCC guest compile → KTM → reboot HALT..."
+	@test -f $(TCC_POWER_HALT_HARNESS_BIN) || (echo "✗ missing harness"; exit 1)
+	@strings $(TCC_POWER_HALT_HARNESS_BIN) 2>/dev/null | grep -q "TCC_POWER_HARNESS_ID" || \
+		(echo "✗ $(TCC_POWER_HALT_HARNESS_BIN) is not TCC power harness"; exit 1)
+	@test -d $(FASE52_TCC_STAGE)/bin || (echo "✗ missing $(FASE52_TCC_STAGE) — run build-tcc-fase52"; exit 1)
+	@test -f $(RUNIT_STAGE_BIN)/runit_tcc_power_run || (echo "✗ missing runit_tcc_power_run — run build-runit"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-tcc-power.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) ./setup/runit/install-to-disk.sh $$DISK && \
+	chmod +x setup/runit/inject-smoke-service.sh && \
+	./setup/runit/inject-smoke-service.sh $$DISK tccpower \
+		$(RUNIT_STAGE_BIN)/runit_tcc_power_run $(TCC_POWER_HALT_HARNESS_BIN) bin/tccph && \
+	find $(FASE52_TCC_STAGE) -type f | sort | while read -r f; do \
+		rel="$${f#$(FASE52_TCC_STAGE)/}"; \
+		python3 scripts/inject_init_minix.py $$DISK "$$f" "$$rel"; \
+	done && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/tccph /bin/tcc \
+		/etc/runit/sv/tccpower/run && \
+	rm -f $(TCC_POWER_HALT_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(TCC_POWER_HALT_LOG) --profile tcc-power-halt \
+		--done SYSTEM_SHUTDOWN_HALT -- \
+		$(QEMU) -cdrom $(KERNEL_USERSPACE_ISO) \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "RUNIT_STAGE2_OK" $(TCC_POWER_HALT_LOG) && \
+	    grep -q "RUNSV_TCC_POWER_START" $(TCC_POWER_HALT_LOG) && \
+	    grep -q "TCC_POWER_LINK_OK" $(TCC_POWER_HALT_LOG) && \
+	    grep -q "POWER_TCC_COMPILE_OK" $(TCC_POWER_HALT_LOG) && \
+	    grep -q "POWER_TCC_HALT_CALL" $(TCC_POWER_HALT_LOG) && \
+	    grep -q "SYSTEM_SYNC_OK" $(TCC_POWER_HALT_LOG) && \
+	    grep -q "SYSTEM_SHUTDOWN_HALT" $(TCC_POWER_HALT_LOG) && \
+	    (grep -q "POWER_TCC_KTM_OK" $(TCC_POWER_HALT_LOG) || \
+	     grep -q "POWER_TCC_KTM_SKIP" $(TCC_POWER_HALT_LOG)); then \
+		echo "✓ smoke-tcc-power-halt passed"; \
+	else \
+		echo "✗ smoke-tcc-power-halt FAILED"; \
+		grep -E 'TCC_POWER_|POWER_TCC_|SYSTEM_|RUNIT_|RUNSV_|KERNEL PANIC|panic' $(TCC_POWER_HALT_LOG) | tail -50; \
 		exit 1; \
 	fi
 
