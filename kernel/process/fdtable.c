@@ -85,6 +85,13 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 			}
 			e->vfs_file = NULL;
 		}
+		else if (e->is_epoll && e->vfs_file)
+		{
+			extern void epoll_release_fd(void *epoll_state);
+
+			epoll_release_fd(e->vfs_file);
+			e->vfs_file = NULL;
+		}
 		else if (e->vfs_file)
 		{
 			vfs_close((struct vfs_file *)e->vfs_file);
@@ -97,6 +104,7 @@ clear_fd:
 		e->is_socket = false;
 		e->is_devfs = false;
 		e->is_pseudo = false;
+		e->is_epoll = false;
 		e->dev_device_id = 0;
 		e->pipe_end = -1;
 		e->path[0] = '\0';
@@ -138,6 +146,10 @@ int process_duplicate_fd_table(process_t *parent, process_t *child)
 
 			bind->refs++;
 		}
+		else if (e->is_epoll)
+		{
+			/* Share epoll interest list with parent (MVP). */
+		}
 		else if (e->vfs_file)
 			vfs_file_acquire((struct vfs_file *)e->vfs_file);
 	}
@@ -165,6 +177,7 @@ void process_init_fd_table(process_t *process)
 		process->fd_table[i].is_socket = false;
 		process->fd_table[i].is_devfs = false;
 		process->fd_table[i].is_pseudo = false;
+		process->fd_table[i].is_epoll = false;
 		process->fd_table[i].dev_device_id = 0;
 	}
 

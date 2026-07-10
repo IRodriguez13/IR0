@@ -59,6 +59,7 @@ echo "  RUNIT   Building IR0 stage/service ELF stubs..."
 mkdir -p "$STAGE_BIN"
 "$CC" -static -Os -o "$STAGE_BIN/runit_stage1" "${ROOT}/setup/runit/runit_stage1.c"
 "$CC" -static -Os -o "$STAGE_BIN/runit_stage2" "${ROOT}/setup/runit/runit_stage2.c"
+"$CC" -static -Os -o "$STAGE_BIN/runit_stage3" "${ROOT}/setup/runit/runit_stage3.c"
 "$CC" -static -Os -o "$STAGE_BIN/runit_console_run" "${ROOT}/setup/runit/runit_console_run.c"
 "$CC" -static -Os -o "$STAGE_BIN/runit_logger_run" "${ROOT}/setup/runit/runit_logger_run.c"
 "$CC" -static -Os \
@@ -72,9 +73,15 @@ mkdir -p "$STAGE_BIN"
 "$CC" -static -Os -o "$STAGE_BIN/runit_fase55d_init" "${ROOT}/setup/runit/runit_fase55d_init.c"
 "$CC" -static -Os -o "$STAGE_BIN/runit_power_smoke" "${ROOT}/setup/runit/runit_power_smoke.c"
 "$CC" -static -Os -o "$STAGE_BIN/runit_power_run" "${ROOT}/setup/runit/runit_power_run.c"
-for bin in runit_stage1 runit_stage2 runit_console_run runit_logger_run \
+"$CC" -static -Os -o "$STAGE_BIN/runit_busybox_halt_smoke" "${ROOT}/setup/runit/runit_busybox_halt_smoke.c"
+"$CC" -static -Os \
+	-DRUNIT_EXEC_PATH='"/bin/bb-halt"' \
+	-DRUNIT_START_TAG='"RUNSV_BUSYBOX_HALT_START\n"' \
+	-o "$STAGE_BIN/runit_busybox_halt_run" "${ROOT}/setup/runit/runit_exec_run.c"
+for bin in runit_stage1 runit_stage2 runit_stage3 runit_console_run runit_logger_run \
 	runit_fase52_run runit_fase55d_run runit_fase55d_init \
-	runit_power_smoke runit_power_run; do
+	runit_power_smoke runit_power_run \
+	runit_busybox_halt_smoke runit_busybox_halt_run; do
 	file "$STAGE_BIN/$bin" | grep -q ELF
 done
 echo "✓ runit stage ELF stubs OK"

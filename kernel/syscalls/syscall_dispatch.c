@@ -22,6 +22,7 @@
 #include "process_syscalls.h"
 #include "io_syscalls.h"
 #include "time_syscalls.h"
+#include "epoll_syscalls.h"
 #include <ir0/bits/syscall_linux.h>
 #include <ir0/signals.h>
 #include <ir0/futex.h>
@@ -165,6 +166,7 @@ WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
 WRAP3(sys_getrandom, void *, size_t, unsigned int)
 WRAP2(sys_set_robust_list, struct robust_list_head *, size_t)
 WRAP4(sys_prlimit64, pid_t, unsigned int, const void *, void *)
+WRAP2(sys_getrlimit, unsigned int, void *)
 WRAP4(sys_reboot, int, int, unsigned int, void *)
 WRAP2(sys_pipe2, int *, int)
 WRAP1(sys_pipe, int *)
@@ -174,8 +176,14 @@ WRAP3(sys_getdents, int, void *, size_t)
 WRAP3(sys_getdents64, int, void *, size_t)
 WRAP3(sys_poll, struct pollfd *, unsigned int, int)
 WRAP5(sys_select, int, fd_set *, fd_set *, fd_set *, struct timeval *)
+WRAP1(sys_epoll_create1, int)
+WRAP4(sys_epoll_ctl, int, int, int, struct epoll_event *)
+WRAP4(sys_epoll_wait, int, struct epoll_event *, int, int)
+WRAP6(sys_epoll_pwait, int, struct epoll_event *, int, int, const void *, size_t)
+WRAP6(sys_pselect6, int, fd_set *, fd_set *, fd_set *, const struct timespec *, const void *)
 WRAP2(sys_nanosleep, const struct timespec *, struct timespec *)
 WRAP0(sys_pause)
+WRAP0(sys_sync)
 WRAP2(sys_gettimeofday, struct timeval *, void *)
 WRAP1(sys_setuid, uid_t)
 WRAP1(sys_setgid, gid_t)
@@ -343,8 +351,16 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_set_robust_list] = wrap_sys_set_robust_list;
   syscall_table_rw[__NR_getrandom]      = wrap_sys_getrandom;
   syscall_table_rw[__NR_prlimit64]      = wrap_sys_prlimit64;
+  syscall_table_rw[__NR_getrlimit]      = wrap_sys_getrlimit;
+  syscall_table_rw[__NR_epoll_create1]  = wrap_sys_epoll_create1;
+  syscall_table_rw[__NR_epoll_create]   = wrap_sys_epoll_create1;
+  syscall_table_rw[__NR_epoll_ctl]      = wrap_sys_epoll_ctl;
+  syscall_table_rw[__NR_epoll_wait]     = wrap_sys_epoll_wait;
+  syscall_table_rw[__NR_epoll_pwait]    = wrap_sys_epoll_pwait;
+  syscall_table_rw[__NR_pselect6]       = wrap_sys_pselect6;
   syscall_table_rw[__NR_mount]          = wrap_sys_mount;
   syscall_table_rw[__NR_umount2]        = wrap_sys_umount;
+  syscall_table_rw[__NR_sync]           = wrap_sys_sync;
   syscall_table_rw[__NR_console_scroll]  = wrap_console_scroll;
   syscall_table_rw[__NR_console_clear]   = wrap_console_clear;
   syscall_table_rw[__NR_keymap_set]      = wrap_keymap_set;

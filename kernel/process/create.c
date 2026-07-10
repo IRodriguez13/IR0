@@ -78,6 +78,23 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 
 	memset(proc, 0, sizeof(process_t));
 
+	/* Default unlimited resource limits (Linux RLIM_INFINITY = ~0ULL). */
+	for (int ri = 0; ri < IR0_RLIM_NLIMITS; ri++)
+	{
+		proc->rlimits[ri].rlim_cur = (uint64_t)-1;
+		proc->rlimits[ri].rlim_max = (uint64_t)-1;
+	}
+	/* Soft NOFILE matches MAX_FDS_PER_PROCESS. */
+	proc->rlimits[7].rlim_cur = MAX_FDS_PER_PROCESS; /* RLIMIT_NOFILE */
+	proc->rlimits[7].rlim_max = MAX_FDS_PER_PROCESS;
+	/* RLIMIT_STACK soft 8 MiB (Linux-like default). */
+	proc->rlimits[3].rlim_cur = 8ULL * 1024ULL * 1024ULL;
+	proc->rlimits[3].rlim_max = (uint64_t)-1;
+	/* RLIMIT_CORE soft 0 (no dump by default). */
+	proc->rlimits[4].rlim_cur = 0;
+	proc->rlimits[4].rlim_max = (uint64_t)-1;
+	/* RLIMIT_AS remains unlimited soft/hard. */
+
 	/* Basic process setup */
 	proc->task.pid = process_get_next_pid();
 	proc->tgid = proc->task.pid;

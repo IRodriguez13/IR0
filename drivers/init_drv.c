@@ -38,6 +38,7 @@
 #if CONFIG_ENABLE_STORAGE_ATA
 #include <drivers/storage/ata.h>
 #endif
+#include <drivers/storage/ahci.h>
 #include <ir0/block_dev.h>
 #include <drivers/serial/serial.h>
 #include <ir0/resource_registry.h>
@@ -122,6 +123,7 @@ static int boot_init_storage_block(void)
 #if CONFIG_ENABLE_STORAGE_ATA_BLOCK && CONFIG_INIT_STORAGE_ATA_BLOCK
     ata_block_register();
 #endif
+    ahci_probe();
     return 0;
 }
 

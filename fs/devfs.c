@@ -1866,6 +1866,234 @@ static devfs_node_t dev_serial = {
     .ref_count = 0,
 };
 
+/*
+ * Minimal PTY pair: /dev/ptmx (master) + /dev/pts/0 (slave).
+ * One global pair; ring buffers each direction; TIOCGWINSZ + TIOCGPTN.
+ */
+#define PTY_BUF_SIZE 1024
+
+struct pty_ring
+{
+	char buf[PTY_BUF_SIZE];
+	unsigned int head;
+	unsigned int tail;
+	unsigned int count;
+};
+
+static struct
+{
+	struct pty_ring m2s;
+	struct pty_ring s2m;
+	int master_open;
+	int slave_open;
+	int locked;
+} g_pty;
+
+static int pty_ring_push(struct pty_ring *r, const char *src, size_t n)
+{
+	size_t i;
+
+	for (i = 0; i < n; i++)
+	{
+		if (r->count >= PTY_BUF_SIZE)
+			break;
+		r->buf[r->head] = src[i];
+		r->head = (r->head + 1) % PTY_BUF_SIZE;
+		r->count++;
+	}
+	return (int)i;
+}
+
+static int pty_ring_pop(struct pty_ring *r, char *dst, size_t n)
+{
+	size_t i;
+
+	for (i = 0; i < n; i++)
+	{
+		if (r->count == 0)
+			break;
+		dst[i] = r->buf[r->tail];
+		r->tail = (r->tail + 1) % PTY_BUF_SIZE;
+		r->count--;
+	}
+	return (int)i;
+}
+
+static int64_t dev_ptmx_open(devfs_entry_t *entry, int flags)
+{
+	(void)entry;
+	(void)flags;
+	if (g_pty.master_open)
+		return -EBUSY;
+	g_pty.master_open = 1;
+	g_pty.locked = 0;
+	return 0;
+}
+
+static int64_t dev_pts_open(devfs_entry_t *entry, int flags)
+{
+	(void)entry;
+	(void)flags;
+	if (g_pty.locked)
+		return -EIO;
+	if (!g_pty.master_open)
+		return -EIO;
+	g_pty.slave_open = 1;
+	return 0;
+}
+
+static int64_t dev_ptmx_close(devfs_entry_t *entry)
+{
+	(void)entry;
+	g_pty.master_open = 0;
+	return 0;
+}
+
+static int64_t dev_pts_close(devfs_entry_t *entry)
+{
+	(void)entry;
+	g_pty.slave_open = 0;
+	return 0;
+}
+
+static int64_t dev_ptmx_read(devfs_entry_t *entry, void *buf, size_t count,
+			     off_t offset)
+{
+	(void)entry;
+	(void)offset;
+	if (!buf)
+		return -EFAULT;
+	return pty_ring_pop(&g_pty.s2m, (char *)buf, count);
+}
+
+static int64_t dev_ptmx_write(devfs_entry_t *entry, const void *buf,
+			      size_t count, off_t offset)
+{
+	(void)entry;
+	(void)offset;
+	if (!buf)
+		return -EFAULT;
+	return pty_ring_push(&g_pty.m2s, (const char *)buf, count);
+}
+
+static int64_t dev_pts_read(devfs_entry_t *entry, void *buf, size_t count,
+			    off_t offset)
+{
+	(void)entry;
+	(void)offset;
+	if (!buf)
+		return -EFAULT;
+	return pty_ring_pop(&g_pty.m2s, (char *)buf, count);
+}
+
+static int64_t dev_pts_write(devfs_entry_t *entry, const void *buf,
+			     size_t count, off_t offset)
+{
+	(void)entry;
+	(void)offset;
+	if (!buf)
+		return -EFAULT;
+	return pty_ring_push(&g_pty.s2m, (const char *)buf, count);
+}
+
+static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+{
+	(void)entry;
+
+	if (request == IR0_CONSOLE_TIOCGWINSZ)
+	{
+		int wret;
+
+		wret = ir0_console_ioctl_winsize(arg);
+		return wret;
+	}
+	if (request == IR0_TIOCGPTN)
+	{
+		unsigned int n = 0;
+
+		if (!arg)
+			return -EINVAL;
+		if (copy_to_user(arg, &n, sizeof(n)) != 0)
+			return -EFAULT;
+		return 0;
+	}
+	if (request == IR0_TIOCSPTLCK)
+	{
+		int lock = 0;
+
+		if (!arg)
+			return -EINVAL;
+		if (copy_from_user(&lock, arg, sizeof(lock)) != 0)
+			return -EFAULT;
+		g_pty.locked = lock ? 1 : 0;
+		return 0;
+	}
+	if (request == IR0_CONSOLE_TCGETS || request == IR0_CONSOLE_TCSETS ||
+	    request == IR0_CONSOLE_TCSETSW || request == IR0_CONSOLE_TCSETSF)
+		return dev_console_ioctl(entry, request, arg);
+	return -ENOTTY;
+}
+
+static int dev_ptmx_can_read(devfs_entry_t *entry, pid_t pid)
+{
+	(void)entry;
+	(void)pid;
+	return g_pty.s2m.count > 0 ? 1 : 0;
+}
+
+static int dev_ptmx_can_write(devfs_entry_t *entry, pid_t pid)
+{
+	(void)entry;
+	(void)pid;
+	return g_pty.m2s.count < PTY_BUF_SIZE ? 1 : 0;
+}
+
+static int dev_pts_can_read(devfs_entry_t *entry, pid_t pid)
+{
+	(void)entry;
+	(void)pid;
+	return g_pty.m2s.count > 0 ? 1 : 0;
+}
+
+static int dev_pts_can_write(devfs_entry_t *entry, pid_t pid)
+{
+	(void)entry;
+	(void)pid;
+	return g_pty.s2m.count < PTY_BUF_SIZE ? 1 : 0;
+}
+
+static const devfs_ops_t ptmx_ops = {
+	.read = dev_ptmx_read,
+	.write = dev_ptmx_write,
+	.ioctl = dev_pty_ioctl,
+	.open = dev_ptmx_open,
+	.close = dev_ptmx_close,
+	.can_read = dev_ptmx_can_read,
+	.can_write = dev_ptmx_can_write,
+};
+
+static const devfs_ops_t pts_ops = {
+	.read = dev_pts_read,
+	.write = dev_pts_write,
+	.ioctl = dev_pty_ioctl,
+	.open = dev_pts_open,
+	.close = dev_pts_close,
+	.can_read = dev_pts_can_read,
+	.can_write = dev_pts_can_write,
+};
+
+static devfs_node_t dev_ptmx = {
+	.entry = { .name = "ptmx", .mode = 0666, .device_id = 43 },
+	.ops = &ptmx_ops,
+	.ref_count = 0,
+};
+
+static devfs_node_t dev_pts0 = {
+	.entry = { .name = "pts/0", .mode = 0620, .device_id = 44 },
+	.ops = &pts_ops,
+	.ref_count = 0,
+};
+
 /* IPC device operations */
 int64_t dev_ipc_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
@@ -2247,6 +2475,8 @@ int devfs_init(void)
     devfs_register_node(&dev_fb0);
     devfs_register_node(&dev_events0);
     devfs_register_node(&dev_serial);
+    devfs_register_node(&dev_ptmx);
+    devfs_register_node(&dev_pts0);
     devfs_register_node(&dev_ipc);
 #if CONFIG_ENABLE_BLUETOOTH
     devfs_register_node(&dev_bluetooth_hci0);
