@@ -128,6 +128,12 @@ int ir0_driver_list_to_buffer(char *buf, size_t count);
 void ir0_driver_registry_init(void);
 int ir0_driver_registry_is_initialized(void);
 
+/**
+ * Call each registered driver's ops.shutdown (best-effort).
+ * Does not unregister or free drivers — used on system poweroff/reboot/halt.
+ */
+void ir0_driver_shutdown_all(void);
+
 // SIMPLIFIED REGISTRATION API (for simple drivers)
 
 /**

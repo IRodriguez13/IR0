@@ -355,6 +355,26 @@ ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver)
     return driver->state;
 }
 
+void ir0_driver_shutdown_all(void)
+{
+    ir0_driver_t *current;
+
+    if (!driver_registry.initialized)
+        return;
+
+    current = driver_registry.drivers;
+    while (current)
+    {
+        if (current->ops.shutdown)
+        {
+            LOG_INFO_FMT("DriverRegistry", "System shutdown: %s",
+                         current->info.name ? current->info.name : "(unnamed)");
+            current->ops.shutdown();
+        }
+        current = current->next;
+    }
+}
+
 
 /*
  * Raw data only: one line per driver, tab-separated.

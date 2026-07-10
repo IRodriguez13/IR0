@@ -5,6 +5,6 @@
 
 Ver el documento en inglés para la tabla completa (storage, POSIX, residual pseudo-fs, P2/P3).
 
-Cerrado reciente: cola ABI 0.0.1, `/heart`, ARCH-3 fds, `smoke-fat16-mount`, host `blockdev`.
+Cerrado reciente: cola ABI 0.0.1, `/heart`, ARCH-3 fds, `smoke-fat16-mount`, host `blockdev`, process split + facades, **system power MVP** (`kernel/power/`, `smoke-runit-power`).
 
-Siguiente foco: EXT2 RO / AHCI / GPT; no FAT16 rw hasta audit vfs-write sobre FAT.
+Siguiente foco: EXT2 RO / AHCI / GPT; residual power (vfs_sync, stage 3 runit, applets BusyBox); consolidación multi-arch antes del port ARM64 real. No FAT16 rw hasta audit vfs-write sobre FAT.

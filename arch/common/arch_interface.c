@@ -433,6 +433,45 @@ void arch_cpu_halt(void)
     cpu_wait();
 }
 
+static void __attribute__((noreturn)) arch_system_halt_loop(void)
+{
+    arch_disable_interrupts();
+    for (;;)
+        cpu_wait();
+}
+
+void arch_system_halt(void)
+{
+    arch_system_halt_loop();
+}
+
+void arch_system_reboot(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    /* Keyboard controller pulse-reset line (common PC / QEMU path). */
+    outb(0x64, 0xFE);
+#endif
+    /* Firmware/PSCI/SBI not wired yet on ARM64 — fall through to halt. */
+    arch_system_halt_loop();
+}
+
+void arch_system_poweroff(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    /*
+     * QEMU/Bochs-style ACPI PM1a_CNT write (port 0x604, SLP_EN | SLP_TYP=5).
+     * Real hardware needs platform_ops; this is the virtualized MVP path.
+     */
+    {
+        uint16_t port = 0x604;
+        uint16_t val = 0x2000;
+
+        __asm__ __volatile__("outw %0, %1" : : "a"(val), "Nd"(port) : "memory");
+    }
+#endif
+    arch_system_halt_loop();
+}
+
 void arch_set_boot_params(void *params)
 {
     g_arch_boot_params = params;

@@ -35,6 +35,9 @@ const char *arch_get_name(void);
 void cpu_wait(void);
 void arch_cpu_idle(void);
 void arch_cpu_halt(void);
+void arch_system_halt(void) __attribute__((noreturn));
+void arch_system_reboot(void) __attribute__((noreturn));
+void arch_system_poweroff(void) __attribute__((noreturn));
 void arch_set_boot_params(void *params);
 
 

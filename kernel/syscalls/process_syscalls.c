@@ -45,6 +45,8 @@
 #include <ir0/arch_port.h>
 #include <ir0/time.h>
 #include <ir0/clock.h>
+#include <ir0/credentials.h>
+#include <ir0/power_manag.h>
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
@@ -634,6 +636,43 @@ int64_t sys_exit_group(int exit_code)
   return sys_exit(exit_code);
 }
 
+int64_t sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg)
+{
+	(void)arg;
+
+	if (!ir0_cred_is_root())
+		return -EPERM;
+
+	if (magic1 != (int)LINUX_REBOOT_MAGIC1 ||
+	    (magic2 != (int)LINUX_REBOOT_MAGIC2 &&
+	     magic2 != (int)LINUX_REBOOT_MAGIC2A &&
+	     magic2 != (int)LINUX_REBOOT_MAGIC2B &&
+	     magic2 != (int)LINUX_REBOOT_MAGIC2C))
+		return -EINVAL;
+
+	switch (cmd)
+	{
+	case LINUX_REBOOT_CMD_CAD_ON:
+	case LINUX_REBOOT_CMD_CAD_OFF:
+		/* CAD not wired yet; accept as no-op like a stub capability. */
+		return 0;
+	case LINUX_REBOOT_CMD_RESTART:
+	case LINUX_REBOOT_CMD_RESTART2:
+		kernel_system_shutdown(IR0_SYSTEM_REBOOT);
+		break;
+	case LINUX_REBOOT_CMD_HALT:
+		kernel_system_shutdown(IR0_SYSTEM_HALT);
+		break;
+	case LINUX_REBOOT_CMD_POWER_OFF:
+		kernel_system_shutdown(IR0_SYSTEM_POWEROFF);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* noreturn paths above */
+	return 0;
+}
 
 int64_t sys_getpid(void)
 {
