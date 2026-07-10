@@ -44,6 +44,7 @@ void process_reset_signals_on_exec(process_t *p);
 
 int64_t sys_exit(int exit_code);
 int64_t sys_exit_group(int exit_code);
+int64_t sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg);
 int64_t sys_getpid(void);
 int64_t sys_gettid(void);
 int64_t sys_getppid(void);

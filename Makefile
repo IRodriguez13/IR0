@@ -263,6 +263,7 @@ KERNEL_OBJS = \
     kernel/debug/fase_audit.o \
     kernel/clock_wait.o \
     kernel/credentials.o \
+    kernel/power/power_manag.o \
     kernel/task.o \
     kernel/syscalls.o \
     kernel/syscalls/fs_syscalls.o \
@@ -1950,7 +1951,7 @@ smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK
-	@if grep -q "RUNIT_STAGE1_OK" $(RUNIT_SMOKE_LOG) && \
+	@	if grep -q "RUNIT_STAGE1_OK" $(RUNIT_SMOKE_LOG) && \
 	    grep -q "RUNIT_STAGE2_OK" $(RUNIT_SMOKE_LOG) && \
 	    grep -q "RUNSV_CONSOLE_START" $(RUNIT_SMOKE_LOG) && \
 	    grep -q "RUNSV_LOGGER_START" $(RUNIT_SMOKE_LOG); then \
@@ -1958,6 +1959,33 @@ smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 	else \
 		echo "✗ smoke-runit-boot FAILED"; \
 		grep -E 'RUNIT_|RUNSV_|KERNEL PANIC|panic' $(RUNIT_SMOKE_LOG) | tail -25; \
+		exit 1; \
+	fi
+
+# System power MVP: runit service calls reboot(2) HALT; PASS = serial tags (QEMU -no-reboot).
+RUNIT_POWER_SMOKE_LOG = /tmp/runit-power-smoke.log
+smoke-runit-power: load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   runit + sys_reboot HALT (power_manag)..."
+	@DISK=$$(mktemp /tmp/ir0-runit-power.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	chmod +x setup/runit/inject-smoke-service.sh; \
+	./setup/runit/inject-smoke-service.sh $$DISK power \
+		setup/runit/stage-bin/runit_power_run \
+		setup/runit/stage-bin/runit_power_smoke bin/power-smoke; \
+	rm -f $(RUNIT_POWER_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(RUNIT_POWER_SMOKE_LOG) --timeout 60 --stale-sec 20 \
+		--done SYSTEM_SHUTDOWN_HALT -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "RUNIT_STAGE2_OK" $(RUNIT_POWER_SMOKE_LOG) && \
+	    grep -q "POWER_SMOKE_CALL" $(RUNIT_POWER_SMOKE_LOG) && \
+	    grep -q "SYSTEM_SHUTDOWN_HALT" $(RUNIT_POWER_SMOKE_LOG); then \
+		echo "✓ smoke-runit-power passed"; \
+	else \
+		echo "✗ smoke-runit-power FAILED"; \
+		grep -E 'RUNIT_|RUNSV_|POWER_|SYSTEM_SHUTDOWN|KERNEL PANIC|panic' $(RUNIT_POWER_SMOKE_LOG) | tail -40; \
 		exit 1; \
 	fi
 
