@@ -165,6 +165,7 @@ WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
 WRAP3(sys_getrandom, void *, size_t, unsigned int)
 WRAP2(sys_set_robust_list, struct robust_list_head *, size_t)
 WRAP4(sys_prlimit64, pid_t, unsigned int, const void *, void *)
+WRAP4(sys_reboot, int, int, unsigned int, void *)
 WRAP2(sys_pipe2, int *, int)
 WRAP1(sys_pipe, int *)
 WRAP1(sys_sigreturn, struct sigcontext *)
@@ -299,6 +300,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_exit]           = wrap_sys_exit;
   syscall_table_rw[__NR_wait4]          = wrap_sys_waitpid;
   syscall_table_rw[__NR_kill]           = wrap_sys_kill;
+  syscall_table_rw[__NR_reboot]         = wrap_sys_reboot;
   syscall_table_rw[__NR_tgkill]         = wrap_sys_tgkill;
   syscall_table_rw[__NR_getdents]       = wrap_sys_getdents;
   syscall_table_rw[__NR_getcwd]         = wrap_sys_getcwd;

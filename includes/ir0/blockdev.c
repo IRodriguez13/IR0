@@ -172,6 +172,19 @@ int ir0_block_flush(dev_t dev)
 	return bd->ops->flush(bd->ctx);
 }
 
+void ir0_block_flush_all(void)
+{
+	int i;
+
+	for (i = 0; i < IR0_BLOCKDEV_MAX; i++)
+	{
+		dev_t id = ir0_block_dev_at(i);
+
+		if (id)
+			(void)ir0_block_flush(id);
+	}
+}
+
 int ir0_block_get_info(dev_t dev, struct ir0_block_info *out)
 {
 	struct ir0_block_device *bd = ir0_block_find(dev);

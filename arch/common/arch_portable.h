@@ -151,6 +151,14 @@ void arch_cpu_halt(void);
 void arch_cpu_idle(void);
 
 /**
+ * Platform final actions after coordinated shutdown (do not return).
+ * Distinct from arch_cpu_idle(): these stop the machine / CPU permanently.
+ */
+void arch_system_halt(void) __attribute__((noreturn));
+void arch_system_reboot(void) __attribute__((noreturn));
+void arch_system_poweroff(void) __attribute__((noreturn));
+
+/**
  * Get CPU ID (APIC ID)
  */
 uint32_t arch_get_cpu_id(void);

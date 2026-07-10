@@ -49,6 +49,7 @@ bool ir0_block_is_present(dev_t dev);
 int ir0_block_read(dev_t dev, uint64_t lba, uint32_t count, void *buf);
 int ir0_block_write(dev_t dev, uint64_t lba, uint32_t count, const void *buf);
 int ir0_block_flush(dev_t dev);
+void ir0_block_flush_all(void);
 int ir0_block_get_info(dev_t dev, struct ir0_block_info *out);
 int ir0_block_count(void);
 const char *ir0_block_name_at(int index);
