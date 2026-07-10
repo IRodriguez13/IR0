@@ -781,8 +781,9 @@ kernel-x64-userspace.iso-fresh:
 	build-linux-abi-openat-probe build-linux-abi-stat-probe build-linux-abi-vfs-write-probe \
 	build-linux-abi-process-lifecycle-probe build-linux-abi-kill-sigterm-probe \
 	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-wait4-wnohang linux-abi-audit-kill-sigterm linux-abi-audit-read \
+	linux-abi-audit-pipe linux-abi-audit-poll linux-abi-audit-nanosleep linux-abi-audit-getcwd linux-abi-audit-chdir \
 	linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
-	linux-abi-audit-vfs-write linux-abi-audit-process-lifecycle
+	linux-abi-audit-execve linux-abi-audit-vfs-write linux-abi-audit-process-lifecycle
 
 build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
 	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
@@ -924,6 +925,48 @@ linux-abi-audit-read: kernel-x64-userspace.iso build-linux-abi-read-probe
 	@grep -q '^## read — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-read passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-read FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-pipe: kernel-x64-userspace.iso build-linux-abi-read-probe
+	@chmod +x scripts/linux_abi/run_linux_read.sh scripts/linux_abi/run_ir0_read.sh
+	@python3 scripts/linux_abi_audit.py --contract pipe
+	@grep -q '^## pipe — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-pipe passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-pipe FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-poll: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_workload.sh scripts/linux_abi/run_ir0_workload.sh
+	@python3 scripts/linux_abi_audit.py --contract poll
+	@grep -q '^## poll — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-poll passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-poll FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-nanosleep: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_workload.sh scripts/linux_abi/run_ir0_workload.sh
+	@python3 scripts/linux_abi_audit.py --contract nanosleep
+	@grep -q '^## nanosleep — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-nanosleep passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-nanosleep FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-getcwd: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_workload.sh scripts/linux_abi/run_ir0_workload.sh
+	@python3 scripts/linux_abi_audit.py --contract getcwd
+	@grep -q '^## getcwd — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-getcwd passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-getcwd FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-chdir: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_workload.sh scripts/linux_abi/run_ir0_workload.sh
+	@python3 scripts/linux_abi_audit.py --contract chdir
+	@grep -q '^## chdir — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-chdir passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-chdir FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-execve: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_execve.sh scripts/linux_abi/run_ir0_execve.sh 2>/dev/null || true
+	@python3 scripts/linux_abi_audit.py --contract execve
+	@grep -q '^## execve — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-execve passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-execve FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 linux-abi-audit-mmap: kernel-x64-userspace.iso build-linux-abi-mmap-probe
 	@chmod +x scripts/linux_abi/run_linux_mmap.sh scripts/linux_abi/run_ir0_mmap.sh
