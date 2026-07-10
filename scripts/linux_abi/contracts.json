@@ -85,9 +85,11 @@
     },
     {
       "id": "dup",
-      "enabled": false,
-      "title": "Duplicate fd",
-      "status_doc": "PARTIAL"
+      "enabled": true,
+      "title": "Duplicate fd (dup/dup2)",
+      "status_doc": "VERIFIED",
+      "existing_path": "/sbin/init",
+      "ebadf_errno": 9
     },
     {
       "id": "poll",

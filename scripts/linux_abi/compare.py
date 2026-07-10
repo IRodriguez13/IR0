@@ -1515,6 +1515,70 @@ def compare_chdir(linux: dict, ir0: dict, target_path: str) -> CompareResult:
     return res
 
 
+def compare_dup(linux: dict, ir0: dict, ebadf_errno: int) -> CompareResult:
+    res = CompareResult(contract="dup", ok=True)
+    l_steps = linux.get("audit_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    required = (
+        ("open_existing", None, None),
+        ("fcntl_set_cloexec", None, None),
+        ("dup_clears_cloexec", None, None),
+        ("dup_getfd", 0, None),
+        ("dup2_clears_cloexec", 20, None),
+        ("dup2_getfd", 0, None),
+        ("dup2_ebadf", -1, ebadf_errno),
+    )
+
+    for op, exp_ret, exp_errno in required:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(
+                f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})"
+            )
+            continue
+
+        if op in ("open_existing", "dup_clears_cloexec"):
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                if step.get("ret", -1) < 0:
+                    res.ok = False
+                    res.divergences.append(f"{label} {op}: ret={step.get('ret')}")
+            continue
+
+        if op == "fcntl_set_cloexec":
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                flags = step.get("ret")
+                if flags is None or (int(flags) & 1) == 0:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: flags={flags} expected FD_CLOEXEC"
+                    )
+            continue
+
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if exp_ret is not None and step.get("ret") != exp_ret:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: ret={step.get('ret')} expected={exp_ret}"
+                )
+            if exp_errno is not None and step.get("errno") != exp_errno:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: errno={step.get('errno')} expected={exp_errno}"
+                )
+
+        if l_s.get("ret") != i_s.get("ret"):
+            res.ok = False
+            res.divergences.append(
+                f"{op} ret mismatch linux={l_s.get('ret')} ir0={i_s.get('ret')}"
+            )
+
+    res.notes.append("dup/dup2 clear FD_CLOEXEC on the new descriptor (Linux man 2 dup)")
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",
