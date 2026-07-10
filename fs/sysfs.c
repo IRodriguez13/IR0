@@ -63,10 +63,14 @@ static char sys_kernel_hostname[64] = "ir0-kernel";
  * but both can use the same tracking mechanism.
  */
 
-/* Check if path is in /sys */
+/* Check if path is in /sys (mount root or under it). */
 bool is_sys_path(const char *path)
 {
-    return path && strncmp(path, "/sys/", 5) == 0;
+    if (!path)
+        return false;
+    if (strcmp(path, "/sys") == 0 || strcmp(path, "/sys/") == 0)
+        return true;
+    return strncmp(path, "/sys/", 5) == 0;
 }
 
 /**
@@ -420,27 +424,15 @@ int sys_devices_block_read_reg(char *buf, size_t count)
     return (int)off;
 }
 
-/* Open /sys file */
+/* Open /sys — no virtual fds; callers must use pseudo_bind_file_fd. */
 int sysfs_open(const char *path, int flags)
 {
-    int pseudo_fd = -1;
-    int64_t prc;
-
-    (void)flags;  /* Most sysfs files support both read and write */
+    (void)flags;
 
     if (!is_sys_path(path))
         return -EINVAL;
 
     pseudo_fs_nodes_register_all();
-    prc = pseudo_fs_open_path(path, flags, &pseudo_fd);
-    if (prc == 0)
-    {
-        proc_set_offset(pseudo_fd, 0);
-        return pseudo_fd;
-    }
-    if (prc != -ENOENT)
-        return (int)prc;
-
     return -ENOENT;
 }
 
@@ -486,16 +478,35 @@ int sysfs_stat(const char *path, stat_t *st)
     if (!st || !is_sys_path(path))
         return -EINVAL;
 
+    if (strcmp(path, "/sys") == 0 || strcmp(path, "/sys/") == 0)
+    {
+        memset(st, 0, sizeof(*st));
+        st->st_mode = S_IFDIR | 0555;
+        st->st_nlink = 2;
+        return 0;
+    }
+
     pseudo_fs_nodes_register_all();
     pf = pseudo_fs_lookup(path);
     if (pf && pf->ops && pf->ops->stat)
         return pf->ops->stat(pf->ctx, st);
+
+    if (pseudo_fs_path_has_children(path))
+    {
+        memset(st, 0, sizeof(*st));
+        st->st_mode = S_IFDIR | 0555;
+        st->st_nlink = 2;
+        return 0;
+    }
 
     return -ENOENT;  /* File not found */
 }
 
 int sysfs_is_virtual_subdir(const char *path)
 {
-    (void)path;
-    return 0;
+    if (!path)
+        return 0;
+    if (strcmp(path, "/sys") == 0 || strcmp(path, "/sys/") == 0)
+        return 1;
+    return pseudo_fs_path_has_children(path);
 }

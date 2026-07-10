@@ -54,4 +54,9 @@ int ir0_block_count(void);
 const char *ir0_block_name_at(int index);
 dev_t ir0_block_dev_at(int index);
 
+#ifdef TEST_HOST
+/* Host-only: clear registry between unit tests. */
+void ir0_block_reset_for_test(void);
+#endif
+
 #endif /* _IR0_BLOCKDEV_H */
