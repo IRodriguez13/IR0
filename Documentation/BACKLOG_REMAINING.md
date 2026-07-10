@@ -18,6 +18,7 @@
 | Seal console/video/input/audio/partition facades | `arch-guard` OK; impl in `includes/ir0/*_backend.c` |
 | Syscall anti-fragmentation policy | `IR0_SYSCALL_PSEUDOFS_MAP.md` |
 | FAT16 read-only QEMU smoke | `smoke-fat16-mount` |
+| System power MVP (`sys_reboot` + `kernel/power/power_manag`) | `agent-fast` + `smoke-runit-power` |
 
 ## P1 — storage / drivers (current focus)
 
@@ -40,6 +41,31 @@
 | `prlimit` / `getrlimit` | Not started |
 | Futex robustness / musl pthread join | **Blocked** — `smoke-musl-pthread` boots then stalls (no `MUSL_PTHREAD_OK`); harness profile `musl-pthread` added in `smoke_autokill.py`; same hang on `dae46ae` baseline |
 | PTY + `TIOCGWINSZ` / `SIGWINCH` | Not started |
+
+## P1 — system power residual
+
+| Item | Status |
+|------|--------|
+| `sys_reboot` + `kernel_system_shutdown` + `arch_system_*` | **Done** (MVP) — `kernel/power/`, `__NR_reboot` 169 |
+| Best-effort `ir0_block_flush_all` + `ir0_driver_shutdown_all` | **Done** |
+| Full `vfs_sync` / ordered umount before poweroff | Not started |
+| runit stage 3 ordered stop → then reboot | Not started (smoke calls `reboot(2)` from a supervised service) |
+| BusyBox `reboot`/`halt`/`poweroff` applets | Off in `fase58_busybox_defconfig` |
+| CAD real / `RESTART2` string / kexec / suspend | Not started |
+| QEMU clean exit (`isa-debug-exit`) smoke | Not started (`-no-reboot`; PASS = serial tags) |
+| `platform_ops` (QEMU vs PC vs RPi) separate from arch | Not started |
+
+## P1 — multi-arch consolidation (before second arch is “easy”)
+
+| Item | Status |
+|------|--------|
+| Split `arch_interface.c` `#if` matrix → `arch/{x86-64,arm64,riscv64}/platform.c` | Not started |
+| Generic TLS / cache APIs vs x86 FS base / CPUID leafs | Not started |
+| VM policy (`map`/`unmap`/`protect`) vs PTE walker per arch | Not started |
+| Common trap/context adapters | Not started |
+| `platform_ops` vs `arch_ops` (RPi ≠ ARM64 virt) | Not started |
+
+ARM64 remains embryonic; first second architecture is the real dependency-inversion test. RISC-V after ARM64 should be cheaper.
 
 ## P1 residual — pseudo-fs / ABI
 
