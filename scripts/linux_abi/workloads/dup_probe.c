@@ -18,9 +18,7 @@
 #include <unistd.h>
 
 #ifndef DUP_EXISTING_PATH
-/* Real VFS path: /proc opens return FD_PROC_BASE+ virtual fds that dup/fcntl
- * do not yet install into the process fd_table (see ARCH note in ABI board). */
-#define DUP_EXISTING_PATH "/sbin/init"
+#define DUP_EXISTING_PATH "/proc/uptime"
 #endif
 
 static void audit_dup(unsigned step, const char *op, long ret, int err)

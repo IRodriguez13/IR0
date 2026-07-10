@@ -21,10 +21,10 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
 	test_ktm_sched_contract.c test_musl_cred_abi.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_mmap_null_placement.c \
-	test_elf_initial_brk_abi.c
+	test_elf_initial_brk_abi.c test_blockdev_facade.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_kmem_stub.o host_serial_stub.o host_fase48_stub.o \
-	host_named_fifo.o host_path.o host_pipe.o
+	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -56,8 +56,14 @@ host_path.o: $(KERNEL_ROOT)/fs/path.c
 host_pipe.o: $(KERNEL_ROOT)/includes/ir0/pipe.c
 	$(CC) $(KERNEL_CFLAGS) -DCONFIG_DEBUG_FASE50=0 -c -o $@ $<
 
+host_blockdev.o: $(KERNEL_ROOT)/includes/ir0/blockdev.c
+	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
+
 test_runner.o: test_runner.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+test_blockdev_facade.o: test_blockdev_facade.c
+	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
 
 test_example.o: test_example.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<

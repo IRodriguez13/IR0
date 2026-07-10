@@ -88,7 +88,7 @@
       "enabled": true,
       "title": "Duplicate fd (dup/dup2)",
       "status_doc": "VERIFIED",
-      "existing_path": "/sbin/init",
+      "existing_path": "/proc/uptime",
       "ebadf_errno": 9
     },
     {

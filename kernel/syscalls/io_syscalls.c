@@ -28,6 +28,7 @@
 #include <ir0/ktm.h>
 #include <ir0/fcntl.h>
 #include <ir0/clock.h>
+#include <ir0/pseudo_fs.h>
 #include <ir0/clock_wait.h>
 #include <ir0/signals.h>
 #include <ir0/arch_port.h>
@@ -105,14 +106,14 @@ static int fd_can_read_for(process_t *proc, int fd)
     return ir0_console_input_ready() ? 1 : 0;
   if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && !stdio_is_redirected(fd_table, fd))
     return 0;
-  if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
-    return 1;
   if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
     return devfs_fd_can_read((uint32_t)(fd - FD_DEV_BASE), pid);
   if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
     return 1;
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return 0;
+  if (fd_table[fd].is_pseudo)
+    return 1;
   if (fd_table[fd].is_devfs)
     return devfs_fd_can_read(fd_table[fd].dev_device_id, pid) ? 1 : 0;
   if (fd_table[fd].is_pipe && fd_table[fd].pipe_end == 0) {
@@ -143,8 +144,6 @@ static int fd_can_write(int fd)
     return 0;
   if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && !stdio_is_redirected(fd_table, fd))
     return 1;
-  if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
-    return 0;
   if (fd >= FD_DEV_BASE && fd < FD_SYS_BASE)
   {
     pid_t pid = current_process ? current_process->task.pid : 0;
@@ -154,6 +153,8 @@ static int fd_can_write(int fd)
     return 0;
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return 0;
+  if (fd_table[fd].is_pseudo)
+    return (fd_table[fd].flags & (O_WRONLY | O_RDWR)) ? 1 : 0;
   if (fd_table[fd].is_pipe && fd_table[fd].pipe_end == 1) {
     pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
     return (pipe && pipe->readers > 0 && pipe->count < PIPE_SIZE) ? 1 : 0;
@@ -1082,10 +1083,8 @@ int64_t sys_close(int fd)
   if (pseudo_fs_find_by_fd(fd))
     return pseudo_fs_close_fd(fd);
 
-  if (fd >= FD_PROC_BASE && fd < FD_DEV_BASE)
-    return 0;  /* /proc */
   if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
-    return 0;  /* /sys */
+    return 0;  /* legacy /sys virtual fd */
 
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
     return -EBADF;
@@ -1108,9 +1107,22 @@ int64_t sys_close(int fd)
       if (node)
         devfs_close_node(node);
     }
+    else if (fd_table[fd].is_pseudo && fd_table[fd].vfs_file)
+    {
+      pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fd_table[fd].vfs_file;
 
+      if (bind->refs > 0)
+	bind->refs--;
+      if (bind->refs == 0)
+      {
+	(void)pseudo_fs_release_ops((const pseudo_fs_ops_t *)bind->ops,
+				    bind->ctx, bind->dynamic);
+	kfree(bind);
+      }
+      fd_table[fd].vfs_file = NULL;
+    }
     /* Check if this is a pipe */
-    if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
+    else if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
     {
       pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
 
@@ -1138,6 +1150,7 @@ int64_t sys_close(int fd)
     fd_table[fd].is_socket = false;
     fd_table[fd].pipe_end = -1;
     fd_table[fd].is_devfs = false;
+    fd_table[fd].is_pseudo = false;
     fd_table[fd].dev_device_id = 0;
     fd_table[fd].path[0] = '\0';
     fd_table[fd].flags = 0;
@@ -1169,7 +1182,7 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
   if (!current_process)
     return -ESRCH;
 
-  if (fd >= FD_PROC_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
+  if (fd >= FD_SYS_BASE && fd < FD_SYS_BASE + FD_RANGE_SIZE)
     return -ESPIPE;
 
   if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
@@ -1178,6 +1191,23 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
   fd_entry_t *fd_table = get_process_fd_table();
   if (!fd_table[fd].in_use)
     return -EBADF;
+
+  /* Pseudo-fs binds use fd_table.offset via sys_read; allow SEEK_SET/CUR. */
+  if (fd_table[fd].is_pseudo)
+  {
+    off_t new_offset;
+
+    if (whence == SEEK_SET)
+      new_offset = offset;
+    else if (whence == SEEK_CUR)
+      new_offset = (off_t)fd_table[fd].offset + offset;
+    else
+      return -ESPIPE;
+    if (new_offset < 0)
+      return -EINVAL;
+    fd_table[fd].offset = (uint64_t)new_offset;
+    return new_offset;
+  }
 
   if (fd <= 2) {
     off_t new_offset;
@@ -1262,6 +1292,20 @@ int64_t sys_dup2(int oldfd, int newfd)
       if (node)
         devfs_close_node(node);
     }
+    else if (fd_table[newfd].is_pseudo && fd_table[newfd].vfs_file)
+    {
+      pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fd_table[newfd].vfs_file;
+
+      if (bind->refs > 0)
+	bind->refs--;
+      if (bind->refs == 0)
+      {
+	(void)pseudo_fs_release_ops((const pseudo_fs_ops_t *)bind->ops,
+				    bind->ctx, bind->dynamic);
+	kfree(bind);
+      }
+      fd_table[newfd].vfs_file = NULL;
+    }
     else if (fd_table[newfd].vfs_file)
     {
       vfs_close((struct vfs_file *)fd_table[newfd].vfs_file);
@@ -1275,6 +1319,8 @@ int64_t sys_dup2(int oldfd, int newfd)
     fd_table[newfd].is_pipe = false;
     fd_table[newfd].pipe_end = -1;
     fd_table[newfd].is_devfs = false;
+    fd_table[newfd].is_pseudo = false;
+    fd_table[newfd].is_socket = false;
     fd_table[newfd].dev_device_id = 0;
     fase48_note_fd_destroyed();
   }
@@ -1293,6 +1339,8 @@ int64_t sys_dup2(int oldfd, int newfd)
   fd_table[newfd].pipe_end = fd_table[oldfd].pipe_end;
   fd_table[newfd].is_devfs = fd_table[oldfd].is_devfs;
   fd_table[newfd].dev_device_id = fd_table[oldfd].dev_device_id;
+  fd_table[newfd].is_pseudo = fd_table[oldfd].is_pseudo;
+  fd_table[newfd].is_socket = fd_table[oldfd].is_socket;
 
   /*
    * Regular files now share one open file description (vfs_file with refcount),
@@ -1310,6 +1358,13 @@ int64_t sys_dup2(int oldfd, int newfd)
   {
     pipe_acquire_end((pipe_t *)fd_table[oldfd].vfs_file, fd_table[oldfd].pipe_end);
     fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+  }
+  else if (fd_table[oldfd].is_pseudo && fd_table[oldfd].vfs_file)
+  {
+    pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fd_table[oldfd].vfs_file;
+
+    bind->refs++;
+    fd_table[newfd].vfs_file = bind;
   }
   else if (fd_table[oldfd].vfs_file)
   {

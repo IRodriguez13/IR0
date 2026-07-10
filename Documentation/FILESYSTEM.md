@@ -1,5 +1,9 @@
 # IR0 Filesystem Architecture
 
+> **Last verified:** 2026-07-10  
+> **Source of truth:** `fs/vfs.c`, `fs/fat16_*.c`, `includes/ir0/blockdev.h`,  
+> [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
+
 IR0 uses a VFS-first design where policy is centralized and backend filesystems
 provide concrete operations.
 
@@ -7,19 +11,19 @@ provide concrete operations.
 
 1. `fs/vfs.c`: path resolution, mount dispatch, open/read/write/chmod/chown flow.
 2. Backend filesystems:
-   - persistent: `minix`
-   - in-memory: `tmpfs`
-   - pseudo: `procfs`, `devfs`, `sysfs`
-3. Storage/network/device drivers accessed through backend APIs, not direct calls.
+   - persistent: `minix`, **FAT16 read-only** (`fs/fat16_disk.c` on block devices)
+   - in-memory: `tmpfs`, virtual `fat0` (simplefs engine)
+   - pseudo: `procfs`, `devfs`, `sysfs`, **`/heart`** (`fs/heartfs.c`)
+3. Storage via `ir0_block_*` facade (`includes/ir0/blockdev.h`); ATA registers backends.
 
 ## Current Filesystem Set
 
-- Root filesystem: selected by config through `vfs_init_root()`.
-- `procfs`: process and kernel runtime information.
-- `devfs`: character/block style device entry points.
-- `sysfs`: structured kernel and subsystem runtime state.
+- Root filesystem: selected by config through `vfs_init_root()` (typically MINIX).
+- `procfs` / `sysfs` / `devfs`: pseudo mounts (registry + fd_table binds).
+- `/heart`: IR0 facade reexporting proc/sys + kernel meta + embedded sources.
 - `tmpfs`: volatile files and directories with uid/gid and umask behavior.
-- `minix`: disk-backed baseline filesystem.
+- `minix`: disk-backed baseline filesystem (rw path audited via vfs-write bundle).
+- `fat16`: on-disk **read-only** MVP (`smoke-fat16-mount` on `/dev/hdb`).
 
 ## Permission Model in Path
 
@@ -44,6 +48,7 @@ provide concrete operations.
 ## Weak Points
 
 - Backend parity is still evolving for advanced Unix semantics.
+- FAT16 write, EXT2, AHCI/NVMe, GPT — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 - Some metadata and edge-case behavior remains hobby-kernel grade.
 - Heavy runtime correctness depends on broad integration testing.
 
