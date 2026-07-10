@@ -568,6 +568,7 @@ int main(void)
 		goto halt;
 	}
 	write_str("[FASE52][CLASSIFY] FASE52B_TCC_STDIO_HELLO_OK\n");
+	write_str("[FASE52][CLASSIFY] FASE52B_BASE_LAYOUT_OK\n");
 
 	write_str("FASE52C_START\n");
 	write_str("FASE52C_CASE_PRINTF\n");

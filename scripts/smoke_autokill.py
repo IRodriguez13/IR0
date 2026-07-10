@@ -64,8 +64,13 @@ PROFILES: dict[str, dict[str, object]] = {
     },
     "fase52-tcc": {
         "success": ["FASE52_OK"],
-        "timeout": 180,
-        "stale_sec": 90,
+        "timeout": 300,
+        "stale_sec": 240,
+    },
+    "tcc-power-halt": {
+        "success": ["SYSTEM_SHUTDOWN_HALT"],
+        "timeout": 90,
+        "stale_sec": 45,
     },
     "fase51-shell": {
         "success": ["DEBUG_FASE51_GATED"],

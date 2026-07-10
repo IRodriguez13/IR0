@@ -60,6 +60,42 @@ typedef struct minix_fs_info
 static minix_fs_info_t minix_fs;
 static dev_t minix_root_dev;
 static int minix_blockdev_classified;
+static int minix_zmap_dirty;
+static uint32_t minix_zmap_search_start;
+
+static size_t minix_zmap_bytes(void)
+{
+	uint16_t blocks = minix_fs.superblock.s_zmap_blocks;
+
+	if (blocks == 0)
+		blocks = 1;
+	return (size_t)blocks * (size_t)MINIX_BLOCK_SIZE;
+}
+
+static int minix_sync_zone_bitmap(void)
+{
+	uint32_t zmap_block;
+	uint16_t blocks;
+	uint16_t b;
+
+	if (!minix_fs.zone_bitmap || !minix_zmap_dirty)
+		return 0;
+
+	blocks = minix_fs.superblock.s_zmap_blocks;
+	if (blocks == 0)
+		return -EIO;
+
+	zmap_block = 2 + minix_fs.superblock.s_imap_blocks;
+	for (b = 0; b < blocks; b++)
+	{
+		if (minix_write_block(zmap_block + b,
+				      minix_fs.zone_bitmap +
+					  (size_t)b * MINIX_BLOCK_SIZE) != 0)
+			return -EIO;
+	}
+	minix_zmap_dirty = 0;
+	return 0;
+}
 
 static dev_t minix_root_dev_id(void)
 {
@@ -147,81 +183,63 @@ void minix_mark_inode_free(uint32_t inode_num)
 
 bool minix_is_zone_free(uint32_t zone_num)
 {
+  uint32_t byte_index;
+  uint32_t bit_index;
+
+  if (!minix_fs.zone_bitmap)
+    return false;
   if (zone_num < minix_fs.superblock.s_firstdatazone ||
       zone_num >= MINIX_MAX_ZONES)
-  {
     return false;
-  }
 
-  // Calcular la posición en el bitmap
-  uint32_t byte_index = (zone_num - minix_fs.superblock.s_firstdatazone) / 8;
-  uint32_t bit_index = (zone_num - minix_fs.superblock.s_firstdatazone) % 8;
-
-  if (byte_index >= minix_fs.superblock.s_zmap_blocks * MINIX_BLOCK_SIZE)
-  {
+  byte_index = (zone_num - minix_fs.superblock.s_firstdatazone) / 8;
+  bit_index = (zone_num - minix_fs.superblock.s_firstdatazone) % 8;
+  if (byte_index >= minix_zmap_bytes())
     return false;
-  }
 
-  // Leer el bloque del bitmap
-  // Zone bitmap starts at block 2 + s_imap_blocks
-  uint32_t zmap_start_block = 2 + minix_fs.superblock.s_imap_blocks;
-  uint32_t block_num = zmap_start_block + byte_index / MINIX_BLOCK_SIZE;
-  uint32_t block_offset = byte_index % MINIX_BLOCK_SIZE;
-
-  uint8_t bitmap_block[MINIX_BLOCK_SIZE];
-  if (minix_read_block(block_num, bitmap_block) != 0)
-  {
-    return false;
-  }
-
-  // Verificar si el bit está libre (1 = libre, 0 = usado)
-  return (bitmap_block[block_offset] & (1 << bit_index)) != 0;
+  /* MINIX: bit 1 = free, bit 0 = used */
+  return (minix_fs.zone_bitmap[byte_index] & (1U << bit_index)) != 0;
 }
 
 void minix_mark_zone_used(uint32_t zone_num)
 {
+  uint32_t byte_index;
+  uint32_t bit_index;
+
+  if (!minix_fs.zone_bitmap)
+    return;
   if (zone_num < minix_fs.superblock.s_firstdatazone ||
       zone_num >= MINIX_MAX_ZONES)
-  {
     return;
-  }
 
-  // Calcular la posición en el bitmap
-  uint32_t byte_index = (zone_num - minix_fs.superblock.s_firstdatazone) / 8;
-  uint32_t bit_index = (zone_num - minix_fs.superblock.s_firstdatazone) % 8;
-
-  if (byte_index >= minix_fs.superblock.s_zmap_blocks * MINIX_BLOCK_SIZE)
-  {
+  byte_index = (zone_num - minix_fs.superblock.s_firstdatazone) / 8;
+  bit_index = (zone_num - minix_fs.superblock.s_firstdatazone) % 8;
+  if (byte_index >= minix_zmap_bytes())
     return;
-  }
 
-  // Leer el bloque del bitmap
-  // Zone bitmap starts at block 2 + s_imap_blocks
-  uint32_t zmap_start_block = 2 + minix_fs.superblock.s_imap_blocks;
-  uint32_t block_num = zmap_start_block + byte_index / MINIX_BLOCK_SIZE;
-  uint32_t block_offset = byte_index % MINIX_BLOCK_SIZE;
-
-  uint8_t bitmap_block[MINIX_BLOCK_SIZE];
-  if (minix_read_block(block_num, bitmap_block) != 0)
-  {
-    return;
-  }
-
-  // Marcar la zona como usada (bit = 0)
-  bitmap_block[block_offset] &= ~(1 << bit_index);
-
-  // Escribir el bloque actualizado
-  (void)minix_write_block(block_num, bitmap_block);
+  minix_fs.zone_bitmap[byte_index] &= ~(1U << bit_index);
+  minix_zmap_dirty = 1;
+  if (zone_num + 1 > minix_zmap_search_start)
+    minix_zmap_search_start = zone_num + 1;
 }
 
 uint32_t minix_alloc_zone(void)
 {
   uint32_t limit = minix_fs.superblock.s_nzones;
+  uint32_t first = minix_fs.superblock.s_firstdatazone;
+  uint32_t start;
+  uint32_t i;
 
   if (limit == 0 || limit > MINIX_MAX_ZONES)
     limit = MINIX_MAX_ZONES;
+  if (first >= limit)
+    return 0;
 
-  for (uint32_t i = minix_fs.superblock.s_firstdatazone; i < limit; i++)
+  start = minix_zmap_search_start;
+  if (start < first || start >= limit)
+    start = first;
+
+  for (i = start; i < limit; i++)
   {
     if (minix_is_zone_free(i))
     {
@@ -229,46 +247,37 @@ uint32_t minix_alloc_zone(void)
       return i;
     }
   }
-  return 0; // No hay zonas libres
+  for (i = first; i < start; i++)
+  {
+    if (minix_is_zone_free(i))
+    {
+      minix_mark_zone_used(i);
+      return i;
+    }
+  }
+  return 0;
 }
 
 void minix_free_zone(uint32_t zone_num)
 {
+  uint32_t byte_index;
+  uint32_t bit_index;
+
+  if (!minix_fs.zone_bitmap)
+    return;
   if (zone_num < minix_fs.superblock.s_firstdatazone ||
       zone_num >= MINIX_MAX_ZONES)
-  {
     return;
-  }
 
-  // Calcular la posición en el bitmap
-  uint32_t byte_index = (zone_num - minix_fs.superblock.s_firstdatazone) / 8;
-  uint32_t bit_index = (zone_num - minix_fs.superblock.s_firstdatazone) % 8;
-
-  if (byte_index >= minix_fs.superblock.s_zmap_blocks * MINIX_BLOCK_SIZE)
-  {
+  byte_index = (zone_num - minix_fs.superblock.s_firstdatazone) / 8;
+  bit_index = (zone_num - minix_fs.superblock.s_firstdatazone) % 8;
+  if (byte_index >= minix_zmap_bytes())
     return;
-  }
 
-  // Leer el bloque del bitmap si no está en memoria
-  // Zone bitmap starts at block 2 + s_imap_blocks
-  uint32_t zmap_start_block = 2 + minix_fs.superblock.s_imap_blocks;
-  uint32_t block_num = zmap_start_block + byte_index / MINIX_BLOCK_SIZE;
-  uint32_t block_offset = byte_index % MINIX_BLOCK_SIZE;
-
-  uint8_t bitmap_block[MINIX_BLOCK_SIZE];
-  if (minix_read_block(block_num, bitmap_block) != 0)
-  {
-    return;
-  }
-
-  // Marcar la zona como libre (bit = 1)
-  bitmap_block[block_offset] |= (1 << bit_index);
-
-  // Escribir el bloque actualizado
-  if (minix_write_block(block_num, bitmap_block) != 0)
-  {
-    return;
-  }
+  minix_fs.zone_bitmap[byte_index] |= (1U << bit_index);
+  minix_zmap_dirty = 1;
+  if (zone_num < minix_zmap_search_start)
+    minix_zmap_search_start = zone_num;
 }
 
 
@@ -542,6 +551,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
       ((inode_num - 1) * sizeof(minix_inode_t)) % MINIX_BLOCK_SIZE;
 
 
+#if DEBUG_VFS
   serial_print("SERIAL: write_inode: inode_num=");
   serial_print_hex32(inode_num);
   serial_print(" block=");
@@ -549,12 +559,15 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   serial_print(" offset=");
   serial_print_hex32(inode_offset);
   serial_print("\n");
+#endif
 
   // Leer el bloque que contiene el inode
   uint8_t block_buffer[MINIX_BLOCK_SIZE];
   if (minix_read_block(inode_block, block_buffer) != 0)
   {
+#if DEBUG_VFS
     serial_print("SERIAL: write_inode: failed to read block\n");
+#endif
     return -EIO;
   }
 
@@ -564,7 +577,9 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   // Escribir el bloque actualizado
   if (minix_write_block(inode_block, block_buffer) != 0)
   {
+#if DEBUG_VFS
     serial_print("SERIAL: write_inode: failed to write block\n");
+#endif
     return -EIO;
   }
 
@@ -574,7 +589,9 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
     root_inode_cached = false;
   }
 
+#if DEBUG_VFS
   serial_print("SERIAL: write_inode: success\n");
+#endif
   return 0;
 }
 
@@ -976,6 +993,8 @@ int minix_fs_init(void)
   // Block 2 is always the first inode bitmap block
   uint32_t imap_block = 2;
   uint32_t zmap_block = 2 + minix_fs.superblock.s_imap_blocks;
+  size_t zmap_bytes;
+  uint16_t zb;
 
   if (!minix_fs.inode_bitmap)
   {
@@ -983,22 +1002,33 @@ int minix_fs_init(void)
     if (!minix_fs.inode_bitmap)
       return -1;
   }
-  if (!minix_fs.zone_bitmap)
+
+  zmap_bytes = minix_zmap_bytes();
+  if (minix_fs.zone_bitmap)
   {
-    minix_fs.zone_bitmap = kmalloc(MINIX_BLOCK_SIZE);
-    if (!minix_fs.zone_bitmap)
-      return -1;
+    kfree(minix_fs.zone_bitmap);
+    minix_fs.zone_bitmap = NULL;
   }
+  minix_fs.zone_bitmap = kmalloc(zmap_bytes);
+  if (!minix_fs.zone_bitmap)
+    return -1;
 
   if (minix_read_block(imap_block, minix_fs.inode_bitmap) != 0)
   {
     return minix_fs_format();
   }
 
-  if (minix_read_block(zmap_block, minix_fs.zone_bitmap) != 0)
+  for (zb = 0; zb < minix_fs.superblock.s_zmap_blocks; zb++)
   {
-    return minix_fs_format();
+    if (minix_read_block(zmap_block + zb,
+                         minix_fs.zone_bitmap +
+                             (size_t)zb * MINIX_BLOCK_SIZE) != 0)
+    {
+      return minix_fs_format();
+    }
   }
+  minix_zmap_dirty = 0;
+  minix_zmap_search_start = minix_fs.superblock.s_firstdatazone;
 
   // Double check root inode - if it's all zeros, the disk is corrupt or uninitialized
   minix_inode_t root_inode_check;
@@ -1355,6 +1385,9 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   {
     return -EIO;
   }
+
+  if (minix_sync_zone_bitmap() != 0)
+    return -EIO;
 
   return 0;
 }
@@ -1749,6 +1782,8 @@ static int minix_inode_zone_at(minix_inode_t *inode, uint16_t inode_num,
                                size_t zone_idx, int allocate,
                                uint32_t *disk_zone)
 {
+	(void)inode_num;
+
 	if (disk_zone)
 		*disk_zone = 0;
 
@@ -1764,12 +1799,7 @@ static int minix_inode_zone_at(minix_inode_t *inode, uint16_t inode_num,
 			if (new_zone == 0)
 				return -ENOSPC;
 			inode->i_zone[zone_idx] = (uint16_t)new_zone;
-			if (minix_fs_write_inode(inode_num, inode) != 0)
-			{
-				minix_free_zone(new_zone);
-				inode->i_zone[zone_idx] = 0;
-				return -EIO;
-			}
+			/* Defer inode sync to caller (Linux dirty-inode style). */
 		}
 		if (disk_zone)
 			*disk_zone = (uint32_t)inode->i_zone[zone_idx];
@@ -1797,12 +1827,6 @@ static int minix_inode_zone_at(minix_inode_t *inode, uint16_t inode_num,
 				return -EIO;
 			}
 			inode->i_zone[7] = (uint16_t)ind_zone;
-			if (minix_fs_write_inode(inode_num, inode) != 0)
-			{
-				minix_free_zone(ind_zone);
-				inode->i_zone[7] = 0;
-				return -EIO;
-			}
 		}
 		else
 		{
@@ -1865,12 +1889,6 @@ static int minix_inode_zone_at(minix_inode_t *inode, uint16_t inode_num,
 				return -EIO;
 			}
 			inode->i_zone[8] = (uint16_t)dind_zone;
-			if (minix_fs_write_inode(inode_num, inode) != 0)
-			{
-				minix_free_zone(dind_zone);
-				inode->i_zone[8] = 0;
-				return -EIO;
-			}
 		}
 		else
 		{
@@ -2225,7 +2243,8 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
     remaining -= chunk;
   }
 
-  if (DEBUG_VFS && !minix_offset_read_classified)
+  /* One-shot smoke classify tags (not DEBUG_VFS spam). */
+  if (!minix_offset_read_classified)
   {
     minix_offset_read_classified = 1;
     serial_print("[MINIX_FS][CLASSIFY] MINIX_OFFSET_READ_OK\n");
@@ -2332,6 +2351,8 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
   file_inode.i_size = (uint32_t)new_size;
   file_inode.i_time = get_system_time();
   if (minix_fs_write_inode(inode_num, &file_inode) != 0)
+    return -EIO;
+  if (minix_sync_zone_bitmap() != 0)
     return -EIO;
 
   if (written_count)
@@ -3493,6 +3514,8 @@ static int minix_truncate(const char *path, size_t length)
     inode.i_time = get_system_time();
     if (minix_fs_write_inode(inode_num, &inode) != 0)
       return -EIO;
+    if (minix_sync_zone_bitmap() != 0)
+      return -EIO;
 
     if (DEBUG_VFS)
       serial_print("[MINIX_FS][CLASSIFY] MINIX_TRUNCATE_GROW_OK\n");
@@ -3517,6 +3540,8 @@ static int minix_truncate(const char *path, size_t length)
 
   inode.i_time = get_system_time();
   if (minix_fs_write_inode(inode_num, &inode) != 0)
+    return -EIO;
+  if (minix_sync_zone_bitmap() != 0)
     return -EIO;
 
   if (DEBUG_VFS)
