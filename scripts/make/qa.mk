@@ -770,7 +770,7 @@ LINUX_ABI_EXEC_HELPER := $(CURDIR)/$(LINUX_ABI_AUDIT_DIR)/exec_helper
 kernel-x64-userspace.iso-fresh:
 	@echo "  ISO     Rebuilding fresh kernel-x64-userspace.iso"
 	@rm -f kernel-x64-userspace.bin kernel-x64-userspace.iso \
-		kernel/main.o kernel/process.o kernel/elf_loader.o \
+		kernel/main.o kernel/process/*.o kernel/elf_loader.o \
 		kernel/syscalls/process_syscalls.o \
 		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o sched/switch/arch_context_switch.o \
@@ -1245,22 +1245,22 @@ build-init-fase50-programs:
 # Kernel ISO booting /sbin/init (CONFIG_KERNEL_DEBUG_SHELL=n)
 # Default: lazy anon mmap + brk (defconfig LAZY_*=y). Bisect: make kernel-x64-userspace-eager.bin
 kernel-x64-userspace.bin:
-	@rm -f kernel/main.o kernel/process.o kernel/elf_loader.o \
+	@rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
 		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o
 	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1
 	@cp kernel-x64.bin $@
-	@rm -f kernel/main.o kernel/process.o
+	@rm -f kernel/main.o kernel/process/*.o
 	@$(MAKE) kernel-x64.bin
 	@echo "✓ Kernel (userspace init, lazy MM) copied: $@"
 
 kernel-x64-userspace-eager.bin:
-	@rm -f kernel/main.o kernel/process.o kernel/elf_loader.o \
+	@rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
 		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o
 	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1 USERSPACE_EAGER_MM=1
 	@cp kernel-x64.bin $@
-	@rm -f kernel/main.o kernel/process.o
+	@rm -f kernel/main.o kernel/process/*.o
 	@$(MAKE) kernel-x64.bin
 	@echo "✓ Kernel (userspace init, eager MM bisect) copied: $@"
 
