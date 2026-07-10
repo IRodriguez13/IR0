@@ -782,7 +782,7 @@ kernel-x64-userspace.iso-fresh:
 	build-linux-abi-process-lifecycle-probe build-linux-abi-kill-sigterm-probe \
 	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-wait4-wnohang linux-abi-audit-kill-sigterm linux-abi-audit-read \
 	linux-abi-audit-pipe linux-abi-audit-poll linux-abi-audit-nanosleep linux-abi-audit-getcwd linux-abi-audit-chdir \
-	linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
+	linux-abi-audit-dup linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
 	linux-abi-audit-execve linux-abi-audit-vfs-write linux-abi-audit-process-lifecycle
 
 build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
@@ -960,6 +960,13 @@ linux-abi-audit-chdir: kernel-x64-userspace.iso
 	@grep -q '^## chdir — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-chdir passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-chdir FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-dup: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_workload.sh scripts/linux_abi/run_ir0_workload.sh
+	@python3 scripts/linux_abi_audit.py --contract dup
+	@grep -q '^## dup — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-dup passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-dup FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 linux-abi-audit-execve: kernel-x64-userspace.iso
 	@chmod +x scripts/linux_abi/run_linux_execve.sh scripts/linux_abi/run_ir0_execve.sh 2>/dev/null || true

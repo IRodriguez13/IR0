@@ -1283,7 +1283,11 @@ int64_t sys_dup2(int oldfd, int newfd)
   strncpy(fd_table[newfd].path, fd_table[oldfd].path, sizeof(fd_table[newfd].path) - 1);
   fd_table[newfd].path[sizeof(fd_table[newfd].path) - 1] = '\0';
   fd_table[newfd].flags = fd_table[oldfd].flags;
-  fd_table[newfd].fd_flags = fd_table[oldfd].fd_flags;
+  /*
+   * Linux dup(2)/dup2(2): the close-on-exec flag for the duplicate is always
+   * cleared (man 2 dup). dup3() is the path that can set O_CLOEXEC atomically.
+   */
+  fd_table[newfd].fd_flags = 0;
   fd_table[newfd].offset = fd_table[oldfd].offset;
   fd_table[newfd].is_pipe = fd_table[oldfd].is_pipe;
   fd_table[newfd].pipe_end = fd_table[oldfd].pipe_end;
@@ -1358,7 +1362,19 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
     fd_table[fd].flags = (int)arg;
     return 0;
   case F_DUPFD:
-    return sys_dup2(fd, (int)arg);
+  {
+    int start = (int)arg;
+    int i;
+
+    if (start < 0 || start >= MAX_FDS_PER_PROCESS)
+      return -EINVAL;
+    for (i = start; i < MAX_FDS_PER_PROCESS; i++)
+    {
+      if (!fd_table[i].in_use)
+        return sys_dup2(fd, i);
+    }
+    return -EMFILE;
+  }
   default:
     return -EINVAL;
   }
