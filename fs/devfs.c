@@ -350,23 +350,18 @@ int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off
     (void)entry;
     (void)offset;
 #if CONFIG_ENABLE_SOUND
-    if (!sb16_is_available())
+    if (!audio_backend_is_available())
     {
         /* Sound Blaster not available, accept data but don't process */
         return (int64_t)count;
     }
     if (!buf || count == 0)
         return (int64_t)count;
-    
-    sb16_sample_t sample;
-    if (sb16_create_sample(&sample, (uint8_t *)buf, (uint32_t)count,
-                           audio_pcm_format.sample_rate,
-                           audio_pcm_format.channels,
-                           audio_pcm_format.bits_per_sample) != 0)
-        return -1;
-    int ret = sb16_play_sample(&sample);
-    sb16_destroy_sample(&sample);
-    return (ret == 0) ? (int64_t)count : -1;
+
+    return (int64_t)audio_backend_play_pcm(buf, count,
+                                           audio_pcm_format.sample_rate,
+                                           audio_pcm_format.channels,
+                                           audio_pcm_format.bits_per_sample);
 #else
     (void)buf; (void)count;
     return -ENODEV;
@@ -377,7 +372,7 @@ int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
     (void)entry;
 #if CONFIG_ENABLE_SOUND
-    if (!sb16_is_available())
+    if (!audio_backend_is_available())
     {
         return -1;  /* Device not available */
     }
@@ -392,7 +387,7 @@ int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                     volume = 100;  /* Clamp to 0-100 */
                 /* Convert 0-100 to 0x00-0xFF mixer value */
                 uint8_t mixer_vol = (volume * 255) / 100;
-                sb16_set_master_volume(mixer_vol);
+                audio_backend_set_master_volume(mixer_vol);
                 return 0;
             }
             return -1;
@@ -400,16 +395,11 @@ int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
         case AUDIO_GET_VOLUME:
             if (arg)
             {
-                /* Read volume from mixer register */
-                /* Note: Mixer register returns two 4-bit values (left/right) */
-                /* We read and combine them, or use the PCM volume */
-                uint8_t mixer_vol = sb16_mixer_read(SB16_MIXER_MASTER_VOL);
+                uint8_t mixer_vol = audio_backend_get_master_volume();
                 /* Mixer value format: bits 7-4 = left, bits 3-0 = right */
-                /* Extract average or use one channel */
                 uint8_t left = (mixer_vol >> 4) & 0x0F;
                 uint8_t right = mixer_vol & 0x0F;
                 uint8_t avg = (left + right) / 2;
-                /* Convert 4-bit (0-15) to 0-100, then scale to 0x00-0xFF equivalent */
                 uint8_t volume = (avg * 100) / 15;
                 *(uint8_t *)arg = volume;
                 return 0;
@@ -417,13 +407,11 @@ int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
             return -1;
             
         case AUDIO_PLAY:
-            /* Speaker should already be on via dev_audio_write */
-            sb16_speaker_on();
+            audio_backend_speaker_on();
             return 0;
             
         case AUDIO_STOP:
-            /* Stop playback by turning off speaker */
-            sb16_speaker_off();
+            audio_backend_speaker_off();
             return 0;
             
         case AUDIO_SET_FORMAT:

@@ -251,7 +251,15 @@ KERNEL_OBJS = \
 	kernel/main.o \
     kernel/init.o \
     kernel/rootfs_base.o \
-    kernel/process.o \
+    kernel/process/core.o \
+    kernel/process/create.o \
+    kernel/process/fork.o \
+    kernel/process/exec.o \
+    kernel/process/exit.o \
+    kernel/process/wait.o \
+    kernel/process/fdtable.o \
+    kernel/process/mm.o \
+    kernel/process/signals.o \
     kernel/debug/fase_audit.o \
     kernel/clock_wait.o \
     kernel/credentials.o \
@@ -285,8 +293,6 @@ KERNEL_OBJS = \
     sched/scheduler_api.o \
     sched/sched_resched.o \
     sched/switch/arch_context_switch.o \
-    kernel/input_backend.o \
-    kernel/video_backend.o \
     kernel/console_backend.o \
     debug_bins/debug_bins_registry.o
 
@@ -469,6 +475,9 @@ LIB_OBJS = \
     includes/ir0/fase52_debug.o \
     includes/ir0/exec_read_trace.o \
     includes/ir0/blockdev.o \
+    includes/ir0/video_backend.o \
+    includes/ir0/input_backend.o \
+    includes/ir0/audio_backend.o \
     includes/string.o
 
 INTERRUPT_OBJS = \
@@ -2459,22 +2468,22 @@ build-init-fase50-programs:
 # Kernel ISO booting /sbin/init (CONFIG_KERNEL_DEBUG_SHELL=n)
 # Default: lazy anon mmap + brk (defconfig LAZY_*=y). Bisect: make kernel-x64-userspace-eager.bin
 kernel-x64-userspace.bin:
-	@rm -f kernel/main.o kernel/process.o kernel/elf_loader.o \
+	@rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
 		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o
 	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1
 	@cp kernel-x64.bin $@
-	@rm -f kernel/main.o kernel/process.o
+	@rm -f kernel/main.o kernel/process/*.o
 	@$(MAKE) kernel-x64.bin
 	@echo "✓ Kernel (userspace init, lazy MM) copied: $@"
 
 kernel-x64-userspace-eager.bin:
-	@rm -f kernel/main.o kernel/process.o kernel/elf_loader.o \
+	@rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
 		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o
 	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1 USERSPACE_EAGER_MM=1
 	@cp kernel-x64.bin $@
-	@rm -f kernel/main.o kernel/process.o
+	@rm -f kernel/main.o kernel/process/*.o
 	@$(MAKE) kernel-x64.bin
 	@echo "✓ Kernel (userspace init, eager MM bisect) copied: $@"
 
