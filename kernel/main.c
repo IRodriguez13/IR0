@@ -254,10 +254,13 @@ void kmain(uint32_t multiboot_info)
     /* Real init: load /sbin/init from root filesystem and run in ring 3. */
     {
         pid_t init_pid;
+        char *argv_init[] = { "/sbin/init", NULL };
 
         serial_print("SERIAL: kmain: Loading userspace init...\n");
         ir0_rootfs_prepare_userspace_base();
-        init_pid = kexecve("/sbin/init", NULL, NULL);
+        /* argv[0] required; runit-init also needs getpid()==1 (see process_prepare_pid1_for_init). */
+        process_prepare_pid1_for_init();
+        init_pid = kexecve("/sbin/init", argv_init, NULL);
         if (init_pid < 0)
         {
             serial_print("SERIAL: kmain: FAILED to load /sbin/init\n");
