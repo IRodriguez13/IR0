@@ -884,17 +884,20 @@ int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t
 }
 
 /*
- * copy_process_memory - Copy memory from parent to child process
+ * copy_process_memory - Share user pages from parent to child (fork COW)
  * @parent: Parent process
  * @child: Child process
  *
  * Walks PML4 indices 0..255 (user half of the canonical 64-bit space), then
  * every present 4KB leaf with PAGE_USER in the parent. For each such page,
- * allocates a fresh frame, copies content (identity-mapped physical access),
- * and maps it in the child's PML4 via map_page_in_directory (no CR3 dance).
+ * shares the physical frame (pmm_frame_get) and maps it in the child.
+ *
+ * Formerly writable pages are marked PAGE_COW and lose PAGE_RW in both
+ * address spaces; the first write faults and breaks COW. Read-only pages
+ * are shared as-is (write still SIGSEGV).
  *
  * Same 4KB-only assumption as process_unmap_user_pages_all: huge pages are
- * skipped. Kernel mappings (no PAGE_USER) are not copied. No COW.
+ * skipped. Kernel mappings (no PAGE_USER) are not copied.
  *
  * Returns: 0 on success, -1 on failure
  */
@@ -941,27 +944,30 @@ int copy_process_memory(struct process *parent, struct process *child)
                 {
                     uint64_t page_entry = pt[i1];
                     uint64_t parent_phys;
-                    uint64_t child_phys;
                     uint64_t flags;
                     uintptr_t virt_addr;
+                    int was_writable;
 
                     if (!(page_entry & PAGE_PRESENT) ||
                         !(page_entry & PAGE_USER))
                         continue;
 
                     parent_phys = paging_entry_pfn(page_entry);
-
-                    child_phys = pmm_alloc_frame();
-                    if (!child_phys)
-                        return -1;
-
                     virt_addr = ((uintptr_t)i4 << 39) |
                                 ((uintptr_t)i3 << 30) |
                                 ((uintptr_t)i2 << 21) |
                                 ((uintptr_t)i1 << 12);
 
-                    memcpy((void *)child_phys, (void *)parent_phys,
-                           PAGE_SIZE_4KB);
+                    was_writable = (page_entry & PAGE_RW) != 0;
+                    if (was_writable)
+                    {
+                        page_entry = (page_entry & ~PAGE_RW) | PAGE_COW;
+                        pt[i1] = page_entry;
+                        __asm__ volatile("invlpg (%0)" ::"r"(virt_addr)
+                                         : "memory");
+                    }
+
+                    pmm_frame_get(parent_phys);
 
                     flags = page_entry & 0xFFF;
                     flags &= ~PAGE_GLOBAL;
@@ -970,9 +976,9 @@ int copy_process_memory(struct process *parent, struct process *child)
                         flags |= PAGE_EXEC;
 
                     if (map_page_in_directory(child_pml4, virt_addr,
-                                              child_phys, flags) != 0)
+                                              parent_phys, flags) != 0)
                     {
-                        pmm_free_frame(child_phys);
+                        pmm_frame_put(parent_phys);
                         return -1;
                     }
 
