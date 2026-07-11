@@ -35,6 +35,7 @@ typedef struct process process_t;
 #define SIGKILL   9   /* Kill process (cannot be caught or ignored) */
 #define SIGTERM  15   /* Termination signal (can be caught) */
 #define SIGINT    2   /* Interrupt from keyboard (Ctrl+C) */
+#define SIGHUP    1   /* Hangup on controlling terminal */
 #define SIGQUIT   3   /* Quit from keyboard (Ctrl+\\) */
 
 /* Process control */
@@ -47,6 +48,7 @@ typedef struct process process_t;
 #define SIGALRM  14   /* Timer signal (from alarm()) */
 #define SIGUSR1  10   /* User-defined signal 1 */
 #define SIGUSR2  12   /* User-defined signal 2 */
+#define SIGWINCH 28   /* Window size change (TTY) */
 
 /* Signal bitmask helpers */
 #define SIGNAL_MASK(sig) (1U << (sig))
@@ -157,6 +159,12 @@ struct sigframe {
  * Returns: 0 on success, -1 on error
  */
 int send_signal(int pid, int signal);
+
+/**
+ * send_signal_pgrp - Deliver @signal to every live process with pgid == @pgid.
+ * Returns count of processes signaled (≥0).
+ */
+int send_signal_pgrp(int32_t pgid, int signal);
 
 /**
  * handle_signals - Check and handle pending signals for current process

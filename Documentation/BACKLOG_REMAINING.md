@@ -31,10 +31,13 @@
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
 | ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` (`arm64_rpi_platform_ops`) |
-| KTM v1 core (events/scenarios/transport) | `make ktm-run` (boot suite pass=8) |
+| KTM v1 core (events/scenarios/transport) | `make ktm-run` (boot suite pass=11) |
 | KTM `/dev/ktm` + libktm-user | `make ktm-userdev-run` (`fork_wait_signal`) |
 | Kernel `[FASE` serial retired | `rg '\[FASE'` = 0; arch-guard `ktm-no-fase` |
 | KTM P0/P1 MM scenarios | `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `mm.page_tables`, `mm.steady_state`, `process.exec`, `process.fork_rollback` in `ktm-run` |
+| KTM-P2 shell/devfs/OOM hook | `vfs.devfs`, `shell.redir`, `mm.oom_class` in `ktm-run` (pass=11) |
+| POSIX-2 SIGHUP on PTY master close | `smoke-posix-sighup-tty` (`PTY_SIGHUP_PGRP`, `POSIX_SIGHUP_TTY_OK`) |
+| PERF-1 `sys_gettid` | removed per-call `GETTID` serial spam |
 | Init reparent without CRITICAL spam | early-return if no children; detach if no init |
 | `fase42_*` → `ir0_mm_*` / `paging_ir0_mm_*` | rename in `mm/paging.*` + callers |
 | ARCH-4 boot serial | `CONFIG_DEBUG_BOOT=n`; verbose `[BOOT]` gated |
@@ -43,25 +46,26 @@
 
 | Item | Next proof |
 |------|------------|
-| FASE→KTM remaining PARTIAL/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — shell/fb/OOM/drain cases (51–55, 43–44) |
+| FASE→KTM remaining PARTIAL/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — drain/fb/TCC (44, 52, 54–55); deep OOM reclaim beyond `mm.oom_class` hook |
 
 ## Next focus — technical debt + KTM parity
 
-Prefer **ARCH/PERF/POSIX** after MM P1 closed:
+Prefer **ARCH** / remaining GAP after POSIX-2 + KTM-P2 MVP:
 
 | Sprint | Gate | Note |
 |--------|------|------|
 | ARCH-3 | lifecycle audit | stream/AHCI/PTY — audited 2026-07-10; no new leak fix required |
 | ARCH-2 | facade audit | `arch-guard` green |
-| PERF-1 | hot paths | deferred — `sys_poll` already blocks via sleep (no spin fix in scope) |
-| POSIX-2 | job control | `setsid`/`setpgid` MVP done; SIGHUP-on-TTY close still PARTIAL |
-| KTM-P2 | `ktm-userdev-run` | shell/fb cases; optional COW A–F userdev |
+| PERF-1 | hot paths | `sys_gettid` spam removed; further hot-path work deferred |
+| POSIX-2 | job control | `setsid`/`setpgid` + SIGHUP-on-TTY close done |
+| KTM-P2 | boot suite | `vfs.devfs` / `shell.redir` / `mm.oom_class` done; fb/userdev COW still open |
 
 ## Future / P2 (dedicated oleadas only)
 
 | Item | Next proof |
 |------|------------|
 | kexec real / S3–S4 / AML `_S5` | beyond PM1a soft-off + ENOSYS stubs |
+| ACPI FADT walk beyond 0–48 MiB | identity-map expand to 256 MiB hung init spawn; needs dedicated map |
 | AHCI NCQ / NVMe | storage oleada |
 | ARM64 userspace / MM | beyond freestanding `kernel-arm64.bin` |
 | TCP Internet / real NIC stream | beyond loopback `sock_stream` |

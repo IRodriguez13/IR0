@@ -109,6 +109,9 @@ void ktm_scenarios_run_boot(void)
 		"mm.vma",
 		"mm.page_tables",
 		"mm.steady_state",
+		"vfs.devfs",
+		"shell.redir",
+		"mm.oom_class",
 		"process.exec",
 		"process.fork_rollback",
 	};
