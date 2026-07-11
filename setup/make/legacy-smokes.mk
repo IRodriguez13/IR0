@@ -892,6 +892,9 @@ smoke-heart: build-init-heart-smoke kernel-x64-userspace.iso
 	    grep -q "HEART_SYS_MIRROR_OK" $(HEART_SMOKE_LOG) && \
 	    grep -q "HEART_KERNEL_META_OK" $(HEART_SMOKE_LOG) && \
 	    grep -q "HEART_SRC_OK" $(HEART_SMOKE_LOG) && \
+	    grep -q "HEART_SRC_EXPAND_OK" $(HEART_SMOKE_LOG) && \
+	    grep -q "HEART_PROC_CMDLINE_OK" $(HEART_SMOKE_LOG) && \
+	    grep -q "HEART_SYS_OSRELEASE_OK" $(HEART_SMOKE_LOG) && \
 	    grep -q "HEART_DUP_OK" $(HEART_SMOKE_LOG); then \
 		echo "✓ smoke-heart finished"; \
 	else \

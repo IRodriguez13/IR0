@@ -41,6 +41,7 @@ int sysfs_is_virtual_subdir(const char *path);
 int sys_kernel_hostname_read_reg(char *buf, size_t count);
 int sys_kernel_hostname_write_reg(const char *buf, size_t count);
 int sys_kernel_version_read_reg(char *buf, size_t count);
+int sys_kernel_osrelease_read_reg(char *buf, size_t count);
 int sys_kernel_max_processes_read_reg(char *buf, size_t count);
 int sys_kernel_max_processes_write_reg(const char *buf, size_t count);
 int sys_console_mode_read_reg(char *buf, size_t count);

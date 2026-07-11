@@ -148,6 +148,39 @@ int main(void)
 	}
 	write_str("HEART_SRC_OK\n");
 
+	fd = open("/heart/src/includes/ir0/sock_stream.h", O_RDONLY);
+	if (fd < 0)
+	{
+		heart_fail("heart_src_sock_stream", "open");
+		return 1;
+	}
+	nb = read_all(fd, src, sizeof(src));
+	close(fd);
+	if (nb < 16 || strstr(src, "sock_stream") == NULL)
+	{
+		heart_fail("heart_src_sock_stream", "content");
+		return 1;
+	}
+	write_str("HEART_SRC_EXPAND_OK\n");
+
+	na = read_path("/proc/cmdline", a, sizeof(a));
+	nb = read_path("/heart/proc/cmdline", b, sizeof(b));
+	if (na < 1 || nb < 1 || strcmp(a, b) != 0 || strstr(a, "console=") == NULL)
+	{
+		heart_fail("mirror_cmdline", "mismatch");
+		return 1;
+	}
+	write_str("HEART_PROC_CMDLINE_OK\n");
+
+	na = read_path("/sys/kernel/osrelease", a, sizeof(a));
+	nb = read_path("/heart/sys/kernel/osrelease", b, sizeof(b));
+	if (na < 1 || nb < 1 || strcmp(a, b) != 0)
+	{
+		heart_fail("mirror_osrelease", "mismatch");
+		return 1;
+	}
+	write_str("HEART_SYS_OSRELEASE_OK\n");
+
 	fd = open("/heart/proc/uptime", O_RDONLY);
 	if (fd < 0)
 	{

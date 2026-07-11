@@ -43,6 +43,16 @@ static int cb_ioport(uint16_t start, uint16_t end, const char *name, void *ctx)
 	return 0;
 }
 
+static int cb_mmio(uint64_t start, uint64_t end, const char *name, void *ctx)
+{
+	(void)start;
+	(void)end;
+	(void)ctx;
+	if (name)
+		count_mmio++;
+	return 0;
+}
+
 void test_resource_registry(void)
 {
 	KTEST_BEGIN("resource_registry_irq");

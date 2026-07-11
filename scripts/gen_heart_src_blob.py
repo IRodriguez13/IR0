@@ -14,6 +14,9 @@ DEFAULT_FILES = [
     "includes/ir0/pseudo_fs.h",
     "includes/ir0/heartfs.h",
     "includes/ir0/version.h",
+    "includes/ir0/sock_stream.h",
+    "includes/ir0/ahci_api.h",
+    "arch/common/arch_portable.h",
     "kernel/syscalls.c",
 ]
 

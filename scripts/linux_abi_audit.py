@@ -851,6 +851,44 @@ def audit_vfs_write(report_dir: Path, cfg: dict) -> CompareResult:
     return compare_vfs_write(linux_trace, ir0_trace, cfg)
 
 
+def audit_vfs_write_fat(report_dir: Path, cfg: dict) -> CompareResult:
+    """Same vfs_write compare, IR0 workload on FAT16 (hdb) instead of MINIX."""
+    linux_dir = report_dir / "linux" / "vfs_write"
+    ir0_dir = report_dir / "ir0" / "vfs_write_fat"
+
+    build_vfs_write_probe(report_dir)
+    build_static_probe(
+        report_dir / "vfs_write_fat_probe",
+        ROOT / "setup" / "pid1" / "init_vfs_write_fat.c",
+    )
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_vfs_write.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_vfs_write_fat.sh"
+
+    if not (linux_dir / "trace.json").exists():
+        if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+            return CompareResult(
+                contract="vfs_write_fat",
+                ok=False,
+                divergences=["Linux vfs_write workload script failed"],
+                notes=["bundle_status: BLOCKED"],
+            )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        return CompareResult(
+            contract="vfs_write_fat",
+            ok=False,
+            divergences=["IR0 vfs_write FAT workload script failed"],
+            notes=["bundle_status: BLOCKED"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+    result = compare_vfs_write(linux_trace, ir0_trace, cfg)
+    result.contract = "vfs_write_fat"
+    return result
+
+
 def build_process_lifecycle_probe(report_dir: Path) -> tuple[Path, Path]:
     helper = build_static_probe(
         report_dir / "exec_helper",
@@ -1250,6 +1288,7 @@ AUDITORS = {
     "openat": audit_openat,
     "stat": audit_stat,
     "vfs_write": audit_vfs_write,
+    "vfs_write_fat": audit_vfs_write_fat,
     "process_lifecycle": audit_process_lifecycle,
 }
 

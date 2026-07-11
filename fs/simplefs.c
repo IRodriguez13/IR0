@@ -951,7 +951,11 @@ int simplefs_engine_register(const char *fs_name, int strict_83_names)
         be->ops.create = fat16mini_create;
         be->ops.unlink = fat16mini_unlink;
         be->ops.rmdir = fat16mini_rmdir;
+#if CONFIG_ENABLE_FS_FAT16
+        be->ops.link = fat16_disk_link;
+#else
         be->ops.link = fat16mini_link;
+#endif
         be->ops.chown = fat16mini_chown;
         be->ops.chmod = fat16mini_chmod;
         be->ops.readdir = fat16mini_readdir;
