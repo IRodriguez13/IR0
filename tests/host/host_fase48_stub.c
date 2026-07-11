@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: host_fase48_stub.c
- * Description: No-op fase48 FD stats stubs for host-linked pipe.c
+ * Description: No-op fase48 FD stats + KTM emit stubs for host-linked pipe.c
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -29,4 +29,15 @@ void fase48_fd_get_stats(uint64_t *created, uint64_t *destroyed,
 		*blocked_readers = 0;
 	if (blocked_writers)
 		*blocked_writers = 0;
+}
+
+void ktm_event_emit4(uint16_t type, uint16_t subsystem,
+		     uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3)
+{
+	(void)type;
+	(void)subsystem;
+	(void)a0;
+	(void)a1;
+	(void)a2;
+	(void)a3;
 }

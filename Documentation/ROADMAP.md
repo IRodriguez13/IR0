@@ -195,18 +195,19 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 4. ~~`smoke-tier1` green~~ — Done.
 5. ~~UDP `socket`/`bind`/`sendto`/`recvfrom`~~ — Done.
 
-### P1-storage — phase2 driver expansion (current focus)
+### P1-storage — phase2 driver expansion (**closed** — `make smoke-p1-storage`)
 
 | # | Item | Notes |
 |---|------|-------|
 | 6 | **`roadmap-phase2-driver-expansion` green** | `runtime-net-check` + `runtime-mount-check` |
-| 7 | **Real FAT16 on `block_dev`** | **MVP read-only** — root readdir + file read; write → `-EROFS`; subdirs/cluster chains basic |
-| 8 | **FAT16 QEMU smoke** | **Done** — `smoke-fat16-mount` (`/dev/hdb`) |
-| 9 | **EXT2 read-only** | New `fs/ext2/` backend behind `vfs_ops` |
-| 10 | **AHCI/SATA** | `ir0/blockdev` registration; research Intel AHCI spec |
-| 11 | **Host contract tests for `block_dev`** | **Done** — `tests/host/test_blockdev_facade.c` (+ RO-flag read fix) |
-| 12 | **GPT partition table** | Extend `drivers/disk/partition.c` beyond MBR |
-| 12b | **`/dev/hda` userspace read** | ~~ktest 0 bytes~~ **Fixed** — `dev_disk_read` + ktest 512-byte contract |
+| 7 | **Real FAT16 on `block_dev`** | **Done** — RO + write audit |
+| 8 | **FAT16 QEMU smoke** | **Done** — `smoke-fat16-mount` |
+| 9 | **EXT2 read-only** | **Done** — `smoke-ext2-mount` |
+| 10 | **AHCI/SATA** | **Done** — `smoke-ahci-read` (+ NCQ F2) |
+| 11 | **Host contract tests for `block_dev`** | **Done** — `tests/host/test_blockdev_facade.c` |
+| 12 | **GPT partition table** | **Done** — `smoke-gpt-partition` |
+| 12b | **`/dev/hda` userspace read** | **Done** |
+| 12c | **NVMe detect+read** | **Done** — `smoke-nvme-read` (F6) |
 
 ### P1-T1 — POSIX hardening (parallel, smaller slices)
 
