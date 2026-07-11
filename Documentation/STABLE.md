@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-07-11  
 > **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
-> commits `f6c71e5` (KTM land), `62cc512` (real fork COW), Future F2–F5 (`71ed5c1`),  
+> merge `56a3f7b` (dev→master: kexec/S3, P1-storage, P1-T1), Future F2–F6,  
 > `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 
 This document is the **single checklist** for what is **stable enough to run and test in QEMU** (serial and GTK UI), what was formerly **in development** and is now closed for **0.0.1**, and what remains **future work** (see [`ROADMAP.md`](ROADMAP.md) P1+).
@@ -13,6 +13,31 @@ Maintainer sign-off (2026-06-26): treat the items below as **done for 0.0.1-rc1*
 full-copied user pages. Real share-on-fork + write-fault break landed in `62cc512`; proof remains
 `make smoke-mm-cow-lazy`. KTM is the canonical in-kernel test plane (`make ktm-run`,
 `make ktm-userdev-run`); see [`ai_driven_dev/ktm.md`](ai_driven_dev/ktm.md).
+
+---
+
+## Merge → `master` — critical product gates (maintainer)
+
+**Policy (2026-07-11):** before merging `dev` → `master`, the software that must **not** regress is
+**TinyCC in-guest** and **Doom-class T2** (fullscreen client path). Those are the product
+unlocks; CTR/`smoke-release-0.0.1` alone are not enough to greenlight a merge.
+
+```bash
+# Product blockers (must PASS)
+make smoke-fase52-tcc              # or smoke-tcc-power-halt when that is the live TCC gate
+make smoke-fase55b-doom-stub       # + smoke-fase55c-timing-input when touching input/fb
+# Full IWAD path when REAL_WAD_PATH is set:
+#   make run-fase55d-doomgeneric-gui   # manual GTK; smoke-fase55d-doomgeneric if wired
+
+# Still required hygiene (not a substitute for TCC/Doom)
+make ctr
+make smoke-tier1
+make smoke-release-0.0.1
+```
+
+If TCC or Doom smokes are red, **do not merge to `master`** even if release/CTR are green.
+Status honesty: TCC may still hang at static link in some QEMU runs — treat a red TCC smoke as
+a merge blocker, not as “optional WARN”.
 
 ---
 
@@ -34,15 +59,28 @@ make smoke-release-0.0.1    # bundle determinista (sin health duplicado)
 
 **`release-0.0.1` añade:** `kernel-text-budget`.
 
-**Fuera del release gate (manual / WARN):**
+**Fuera del release gate D1.20 (pero sí bloquean merge a `master` — ver arriba):**
 
-- `smoke-fase52-tcc` — cuelgue en link estático en QEMU; no declarar TCC stable hasta smoke verde.
-- `smoke-fase55*` Doom — tier-2 opcional; no requerido para 0.0.1-rc1.
+- `smoke-fase52-tcc` / `smoke-tcc-power-halt` — TinyCC in-guest (producto).
+- `smoke-fase55*` Doom — T2 fullscreen path (producto).
 - `IR0_LEGACY_SMOKE=1` fase53b — superseded por ktests + gate D1.20.
 
 Inventario honesto: [`Documentation/releases/IR0_0.0.1_SCOPE.md`](releases/IR0_0.0.1_SCOPE.md).
 
 **Debug release:** `CONFIG_DEBUG_D1_DIAG=n`, `CONFIG_KTM_MALLOC_FORENSICS=n`, `CONFIG_DEBUG_PAGE_FAULTS=n` en defconfig — boot sin tags `[D1.*]` / `[PF_AUDIT]`.
+
+---
+
+## Post-0.0.1 oleada (2026-07-11) — landed on `master`
+
+| Slice | What users get | Proof |
+|-------|----------------|-------|
+| **Storage** | NVMe detect+read; FAT/EXT2/GPT/AHCI bundle | `make smoke-p1-storage` |
+| **Power** | `kexec_load` + reboot loaded path; ACPI `_S3_` soft resume | `smoke-kexec-load`, `smoke-reboot-s3` |
+| **POSIX** | PTY `TIOCSWINSZ` + WINCH queue; epoll/prlimit/robust smokes | `smoke-pty-winsz`, `smoke-epoll-basic`, … |
+| **KTM** | Typed `PIPE_*` events; angular includes | `make ktm-run` (pass=16) |
+
+AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Future items.
 
 ---
 
@@ -53,11 +91,11 @@ Inventario honesto: [`Documentation/releases/IR0_0.0.1_SCOPE.md`](releases/IR0_0
 | **Hardening H1–H6** | **Closed** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Stable** | `make smoke-runit-boot` |
 | **BusyBox ash + applets** | **Stable** | `make smoke-tier1`, `make smoke-runit-ash-interactive`; optional `smoke-fase58l-busybox-coreutils` |
-| **TinyCC in-guest** | **Experimental** | Manual `build-tcc-fase52`; `smoke-fase52-tcc` **no** en release gate |
+| **TinyCC in-guest** | **Merge-critical** | `smoke-fase52-tcc` / `smoke-tcc-power-halt` — **blocker for `master`** |
 | **COW fork** | **Stable** | `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
 | **T1 POSIX slice** | **Stable** | tier1 + musl manifests; cred/pthread/setuid smokes |
-| **T2 graphics path** | **Stable for test** | `/dev/fb0`, `/dev/events0`, mmap; Doom-class stubs |
+| **T2 graphics / Doom** | **Merge-critical** | `/dev/fb0`, `/dev/events0`, mmap; `smoke-fase55b-doom-stub` (+ timing/input) — **blocker for `master`** |
 | **T3 desktop** | **Not in scope** | WM/compositor out of tree — planning only |
 
 ---

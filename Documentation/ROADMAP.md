@@ -414,6 +414,16 @@ make -s build-matrix-min
 make -s -C tests/host run
 ```
 
+### Merge → `master` — product blockers (maintainer)
+
+Per [`STABLE.md`](STABLE.md): **TinyCC** + **Doom T2** must PASS. Do not merge on CTR/release alone.
+
+```bash
+make smoke-fase52-tcc
+make smoke-fase55b-doom-stub
+# plus smoke-fase55c-timing-input when touching fb/input
+```
+
 ### Tier-1 active smokes
 
 ```bash
