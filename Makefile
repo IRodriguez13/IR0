@@ -514,6 +514,7 @@ DRIVER_OBJS = \
     drivers/timer/rtc/rtc.o \
     drivers/timer/hpet/hpet.o \
     drivers/timer/hpet/find_hpet.o \
+    drivers/timer/acpi/acpi_pm.o \
     drivers/timer/lapic/lapic.o \
     drivers/storage/block_dev.o \
     drivers/storage/fs_types.o \
@@ -2457,6 +2458,94 @@ smoke-isa-debug-exit: kernel-x64-userspace.iso
 	else \
 		echo "✗ smoke-isa-debug-exit FAILED"; \
 		grep -E 'ISA_|SHUTDOWN|HALT|REBOOT' $(ISA_DEBUG_EXIT_LOG) | tail -30; exit 1; \
+	fi
+
+.PHONY: smoke-reboot-kexec-enosys build-init-reboot-kexec-enosys
+KEXEC_ENOSYS_LOG = /tmp/reboot-kexec-enosys-smoke.log
+build-init-reboot-kexec-enosys:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_reboot_kexec_enosys_smoke.c
+	@echo "✓ build-init-reboot-kexec-enosys OK"
+
+smoke-reboot-kexec-enosys: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   reboot(KEXEC) → ENOSYS..."
+	@$(MAKE) -s build-init-reboot-kexec-enosys
+	@DISK=$$(mktemp /tmp/ir0-kexec-enosys.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(KEXEC_ENOSYS_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(KEXEC_ENOSYS_LOG) --timeout 45 --stale-sec 15 \
+		--done KEXEC_ENOSYS_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "REBOOT_KEXEC_ENOSYS" $(KEXEC_ENOSYS_LOG) && \
+	    grep -q "KEXEC_ENOSYS_OK" $(KEXEC_ENOSYS_LOG); then \
+		echo "✓ smoke-reboot-kexec-enosys passed"; \
+	else \
+		echo "✗ smoke-reboot-kexec-enosys FAILED"; \
+		grep -E 'KEXEC_|REBOOT_|SUSPEND_|panic' $(KEXEC_ENOSYS_LOG) | tail -30; exit 1; \
+	fi
+
+.PHONY: smoke-reboot-suspend-stub build-init-reboot-suspend-stub
+SUSPEND_STUB_LOG = /tmp/reboot-suspend-stub-smoke.log
+build-init-reboot-suspend-stub:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_reboot_suspend_stub_smoke.c
+	@echo "✓ build-init-reboot-suspend-stub OK"
+
+smoke-reboot-suspend-stub: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   reboot(SW_SUSPEND) stub → ENOSYS..."
+	@$(MAKE) -s build-init-reboot-suspend-stub
+	@DISK=$$(mktemp /tmp/ir0-suspend-stub.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(SUSPEND_STUB_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(SUSPEND_STUB_LOG) --timeout 45 --stale-sec 15 \
+		--done SUSPEND_STUB_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "SYSTEM_SUSPEND_STUB" $(SUSPEND_STUB_LOG) && \
+	    grep -q "SUSPEND_STUB_OK" $(SUSPEND_STUB_LOG); then \
+		echo "✓ smoke-reboot-suspend-stub passed"; \
+	else \
+		echo "✗ smoke-reboot-suspend-stub FAILED"; \
+		grep -E 'SUSPEND_|REBOOT_|panic' $(SUSPEND_STUB_LOG) | tail -30; exit 1; \
+	fi
+
+.PHONY: smoke-posix-setsid build-init-posix-setsid
+POSIX_SETSID_LOG = /tmp/posix-setsid-smoke.log
+build-init-posix-setsid:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_posix_setsid_smoke.c
+	@echo "✓ build-init-posix-setsid OK"
+
+smoke-posix-setsid: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   setsid + setpgid..."
+	@$(MAKE) -s build-init-posix-setsid
+	@DISK=$$(mktemp /tmp/ir0-posix-setsid.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(POSIX_SETSID_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(POSIX_SETSID_LOG) --timeout 45 --stale-sec 15 \
+		--done POSIX_SETSID_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "SETSID_OK" $(POSIX_SETSID_LOG) && \
+	    grep -q "SETPGID_OK" $(POSIX_SETSID_LOG) && \
+	    grep -q "POSIX_SETSID_OK" $(POSIX_SETSID_LOG); then \
+		echo "✓ smoke-posix-setsid passed"; \
+	else \
+		echo "✗ smoke-posix-setsid FAILED"; \
+		grep -E 'SETSID|SETPGID|POSIX_|panic' $(POSIX_SETSID_LOG) | tail -30; exit 1; \
 	fi
 .PHONY: smoke-ahci-detect smoke-ahci-read
 AHCI_SMOKE_LOG = /tmp/ahci-detect-smoke.log

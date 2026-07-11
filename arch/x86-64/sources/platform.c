@@ -14,7 +14,9 @@
 
 #include <arch/common/arch_portable.h>
 #include <arch/common/arch_interface.h>
+#include <ir0/acpi_pm.h>
 #include <ir0/platform_ops.h>
+#include <ir0/serial_io.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -309,6 +311,13 @@ static void __attribute__((noreturn)) x86_platform_halt_loop(void)
 
 static void x86_platform_halt(void)
 {
+	/*
+	 * QEMU isa-debug-exit (iobase 0xf4): write (status << 1) | 1.
+	 * status 0 → guest exit code 1 (QEMU quirk); still terminates cleanly.
+	 * Print the success tag before outb — QEMU exits the VM on the write.
+	 */
+	serial_print("ISA_DEBUG_EXIT_OK\n");
+	outb(0xf4, 0x01);
 	x86_platform_halt_loop();
 }
 
@@ -320,10 +329,8 @@ static void x86_platform_reboot(void)
 
 static void x86_platform_poweroff(void)
 {
-	uint16_t port = 0x604;
-	uint16_t val = 0x2000;
-
-	__asm__ __volatile__("outw %0, %1" : : "a"(val), "Nd"(port) : "memory");
+	/* Always attempts PM1a write (FADT or QEMU 0x604/0xB004 fallback). */
+	(void)ir0_acpi_pm_try_poweroff();
 	x86_platform_halt_loop();
 }
 

@@ -43,8 +43,9 @@ enum ir0_system_action
 };
 
 /**
- * Coordinated shutdown: best-effort block flush, driver .shutdown,
- * disable IRQs, then arch_system_* (does not return).
+ * Coordinated shutdown: best-effort VFS sync, disable IRQs, then arch_system_*
+ * (does not return). Driver .shutdown is skipped so a flaky teardown cannot
+ * block ACPI/QEMU poweroff.
  */
 void kernel_system_shutdown(enum ir0_system_action action)
 	__attribute__((noreturn));
