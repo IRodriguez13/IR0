@@ -19,6 +19,10 @@
 | Host `ir0_block_*` contracts | `tests/host/test_blockdev_facade.c` |
 | System power (sync + reboot/halt/poweroff + runit) | `smoke-runit-power`, `smoke-runit-busybox-halt`, `smoke-runit-busybox-poweroff`, `smoke-runit-busybox-reboot` |
 | ACPI PM1a QEMU poweroff + kexec/suspend ABI stubs | FADT via on-demand map + `ACPI_PM1A_POWEROFF`; stubs `smoke-reboot-kexec-enosys`, `smoke-reboot-suspend-stub` |
+| F2 AHCI NCQ (FPDMA + multi-slot) | `smoke-ahci-read` → `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED` |
+| F3 DSDT `_S5_` SLP_TYP | `ACPI_S5_OK` + PM1a `(typ<<10)\|SLP_EN` |
+| F4 kexec stub reboot | `REBOOT_KEXEC_STUB` via `smoke-reboot-kexec-enosys` |
+| F5 suspend stub success | `SYSTEM_SUSPEND_ENTER` + `SUSPEND_STUB_OK` |
 | POSIX-2 setsid/setpgid + SIGHUP/TTY | `smoke-posix-setsid`, `smoke-posix-sighup-tty` |
 | Real fork COW A–F (HOST) | `make smoke-mm-cow-lazy` (FASE40 A–F) — verified 2026-07-11 |
 | GPT / EXT2 RO / AHCI detect+read + multi | `smoke-gpt-partition`, `smoke-ext2-mount`, `smoke-ahci-read`, `smoke-ahci-multi` |
@@ -45,10 +49,10 @@ _(vacío — solo Future abajo)_
 | # | Item | Next proof |
 |---|------|------------|
 | F1 | ~~ACPI FADT map seguro~~ | **DONE** 2026-07-11 — `ACPI_FADT_MAPPED` + `ACPI_PM1A_POWEROFF` |
-| F2 | AHCI NCQ | smoke AHCI read/multi + NCQ tag |
-| F3 | AML `_S5` / soft-off beyond raw PM1a | poweroff without relying on port guess alone |
-| F4 | kexec mínimo | beyond `-ENOSYS` stub |
-| F5 | Suspend S3 more real | beyond ENOSYS stub |
+| F2 | ~~AHCI NCQ~~ | **DONE** 2026-07-11 — `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED` |
+| F3 | ~~AML `_S5` SLP_TYP~~ | **DONE** 2026-07-11 — `ACPI_S5_OK` + typed PM1a |
+| F4 | ~~kexec mínimo~~ | **DONE** 2026-07-11 — `REBOOT_KEXEC_STUB` (no kexec_load) |
+| F5 | ~~Suspend stub~~ | **DONE** 2026-07-11 — return 0 + `SYSTEM_SUSPEND_ENTER` |
 | F6 | NVMe MVP | detect+read smoke |
 | F7 | ARM64 MM / userspace | beyond freestanding `kernel-arm64.bin` |
 | F8 | TCP Internet / real NIC | beyond loopback |
