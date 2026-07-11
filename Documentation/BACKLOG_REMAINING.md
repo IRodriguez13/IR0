@@ -23,6 +23,9 @@
 | F3 DSDT `_S5_` SLP_TYP | `ACPI_S5_OK` + PM1a `(typ<<10)\|SLP_EN` |
 | F4 kexec stub reboot | `REBOOT_KEXEC_STUB` via `smoke-reboot-kexec-enosys` |
 | F5 suspend stub success | `SYSTEM_SUSPEND_ENTER` + `SUSPEND_STUB_OK` |
+| F6 NVMe detect+read | `smoke-nvme-read` → `NVME_DETECT_OK` + `NVME_READ_OK` |
+| Kernel relative includes hygiene | `<kernel/…>` in syscalls/process; arch-guard `[kernel-include]` |
+| KTM typed `PIPE_*` events | `KTM_EVENT_PIPE_{CREATE,EOF,EPIPE,WAKE}` in `pipe.c` |
 | POSIX-2 setsid/setpgid + SIGHUP/TTY | `smoke-posix-setsid`, `smoke-posix-sighup-tty` |
 | Real fork COW A–F (HOST) | `make smoke-mm-cow-lazy` (FASE40 A–F) — verified 2026-07-11 |
 | GPT / EXT2 RO / AHCI detect+read + multi | `smoke-gpt-partition`, `smoke-ext2-mount`, `smoke-ahci-read`, `smoke-ahci-multi` |
@@ -53,7 +56,7 @@ _(vacío — solo Future abajo)_
 | F3 | ~~AML `_S5` SLP_TYP~~ | **DONE** 2026-07-11 — `ACPI_S5_OK` + typed PM1a |
 | F4 | ~~kexec mínimo~~ | **DONE** 2026-07-11 — `REBOOT_KEXEC_STUB` (no kexec_load) |
 | F5 | ~~Suspend stub~~ | **DONE** 2026-07-11 — return 0 + `SYSTEM_SUSPEND_ENTER` |
-| F6 | NVMe MVP | detect+read smoke |
+| F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
 | F7 | ARM64 MM / userspace | beyond freestanding `kernel-arm64.bin` |
 | F8 | TCP Internet / real NIC | beyond loopback |
 | F9 | SMP / CFS | sched oleada |

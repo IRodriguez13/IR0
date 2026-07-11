@@ -113,7 +113,7 @@ IRQ path:
 
 - AHCI NCQ (FPDMA) landed 2026-07-11 — tags `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED`
   (`smoke-ahci-read`); ACPI soft-off uses FADT + DSDT `_S5_` SLP_TYP (`ACPI_S5_OK`).
-- NVMe MVP — Future F6 (`BACKLOG_REMAINING.md`).
+- NVMe MVP detect+read landed 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`).
 - APIC/LAPIC as primary IRQ demux — partial (LAPIC timer code exists).
 - Hotplug USB storage — host init only at bootstrap today.
 - Driver unload/module model — **not implemented**.

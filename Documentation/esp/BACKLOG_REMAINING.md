@@ -19,7 +19,8 @@ _(vacío)_
 3. ~~F3 AML `_S5` SLP_TYP~~ **hecho** — `ACPI_S5_OK`  
 4. ~~F4 kexec mínimo~~ **hecho** — `REBOOT_KEXEC_STUB` (sin kexec_load)  
 5. ~~F5 Suspend stub~~ **hecho** — `SYSTEM_SUSPEND_ENTER`  
-6. F6 NVMe … F12 Doom/TCC HOST — ver inglés  
+6. ~~F6 NVMe~~ **hecho** — `smoke-nvme-read`  
+7. F7 ARM64 MM … F12 — ver inglés  
 
 ## T3
 

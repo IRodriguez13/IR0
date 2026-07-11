@@ -120,7 +120,8 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | EXT2 read-only | **Stable for test** | `smoke-ext2-mount` |
 | GPT probe | **Stable for test** | `smoke-gpt-partition` |
 | AHCI detect/read/multi + NCQ | **Stable for test** | `smoke-ahci-read` (`AHCI_NCQ_OK` / `UNSUPPORTED`) |
-| NVMe | **Future** | backlog F6 |
+| NVMe detect+read | **Stable for test** | `smoke-nvme-read` |
+| NVMe advanced (MSI, multipath) | **Future** | backlog F7+ |
 
 ### Power / reboot (post-0.0.1)
 

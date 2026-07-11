@@ -120,7 +120,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | EXT2 read-only | Done (test) | `smoke-ext2-mount` |
 | GPT partition probe | Done (test) | `smoke-gpt-partition` |
 | AHCI detect/read/multi + NCQ | Done (test) | `smoke-ahci-read` (`AHCI_NCQ_OK` / `UNSUPPORTED`) |
-| NVMe | Future F6 | See [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md) |
+| NVMe detect+read | Done (test) | `smoke-nvme-read` (`NVME_READ_OK`) |
 
 ### Hardening + release 0.0.1 (2026-06-23)
 

@@ -39,6 +39,7 @@
 #include <drivers/storage/ata.h>
 #endif
 #include <drivers/storage/ahci.h>
+#include <drivers/storage/nvme.h>
 #include <ir0/block_dev.h>
 #include <drivers/serial/serial.h>
 #include <ir0/resource_registry.h>
@@ -124,6 +125,7 @@ static int boot_init_storage_block(void)
     ata_block_register();
 #endif
     ahci_probe();
+    nvme_probe();
     return 0;
 }
 
