@@ -728,10 +728,6 @@ int64_t sys_gettid(void)
 
   tid = process_pid(current_process);
 
-  serial_print("GETTID pid=");
-  serial_print_hex32((uint32_t)tid);
-  serial_print("\n");
-
   return (int64_t)tid;
 }
 

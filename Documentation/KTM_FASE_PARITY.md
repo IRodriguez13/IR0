@@ -20,7 +20,7 @@
 | Mecanismo | Qué cubre |
 |-----------|-----------|
 | Checkpoints | `BOOT_*`, `PROCESS_{CREATE,FORK,EXEC,EXIT,REAP}`, `MM_{MAP,UNMAP,FAULT}`, `SCHED_SWITCH`, `VFS_{MOUNT,UMOUNT}` |
-| Scenarios (boot suite) | `process.lifecycle`, `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `mm.page_tables`, `mm.steady_state`, `process.exec`, `process.fork_rollback` (`make ktm-run`) |
+| Scenarios (boot suite) | `process.lifecycle`, `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `mm.page_tables`, `mm.steady_state`, `vfs.devfs`, `shell.redir`, `mm.oom_class`, `process.exec`, `process.fork_rollback` (`make ktm-run`, pass=11) |
 | Userdev | `/dev/ktm` + `libktm-user` + case `fork_wait_signal` (`make ktm-userdev-run`) |
 | Probes | `mm.frames`, `proc.list` |
 | Invariants | process list + frame bounds |
@@ -38,7 +38,7 @@
 | **40** | Fork COW + `FASE40_SUMMARY` | scenario `mm.cow_fork` + `KTM_CP_PROCESS_FORK` + `smoke-mm-cow-lazy` | COVERED | Real share-on-fork + WP break (`62cc512`/`496b55d`); KTM scenario = frame bound; A–F userspace en `smoke-mm-cow-lazy` |
 | **41** | Exit reclaim / PMM orphan | `process.lifecycle` + `KTM_ASSERT_NO_FRAME_LEAK` | PARTIAL | Leak frames en scenario sintético; reclaim real post-exec sigue en smokes FASE41 |
 | **42** | PT reclaim / frame balance | scenario `mm.page_tables` + `paging_ir0_mm_category_stats` | COVERED | Category alloc≥free in `ktm-run`; deep PT reclaim storms remain `init_fase42_*` smokes |
-| **43** | Proc audit / OOM class | invariants `process.list`; `fase_audit` counters | PARTIAL | Sin serial; falta scenario OOM/recoverable |
+| **43** | Proc audit / OOM class | scenario `mm.oom_class` + `paging_fase43_oom_audit` hook | COVERED | Hook + frame bound en `ktm-run`; reclaim profundo / killer path sigue Future |
 | **44** | Ref/destroy / wait drain | `KTM_CP_PROCESS_REAP` + lifecycle | PARTIAL | Drain storms siguen como init_fase44_* |
 | **45** | Fork rollback | scenario `process.fork_rollback` | COVERED | Alloc+free sin link; assert no process/frame leak |
 | **46** | Fork no-recurse / heap / wait note | `fork_wait_signal` (parcial) | PARTIAL | Heap/no-recurse: GAP scenario |
@@ -57,14 +57,14 @@
 |------|-----------|-------------|--------|-------|
 | **50** | Exec/open ABI bring-up | scenario `process.exec` + `KTM_CP_PROCESS_EXEC` | COVERED | Checkpoint+invariants; argv/env ELF load sigue en ABI audits / smokes |
 | **50B/C** | Pipe RW / open classify | `ipc.pipe_lifecycle` (RW) | PARTIAL | Open classify: GAP `vfs.open` |
-| **51** | Shell / redir / wait wake | — | GAP | Case userdev `shell_redir` o smoke→libktm |
+| **51** | Shell / redir / wait wake | scenario `shell.redir` (pipe stand-in) | COVERED | Redir mínima en boot suite; ash/wait wake real sigue en smokes HOST |
 | **52** | TCC / large file / toolchain | — | GAP / HOST | Mayormente userspace; kernel solo reclaim — scenario opcional |
 
 ### Pseudo-FS / graphics / desktop path (53–58)
 
 | FASE | Intención | Análogo KTM | Estado | Deuda |
 |------|-----------|-------------|--------|-------|
-| **53A/B** | fs/dev + posix pseudofs | — | GAP | Scenarios `vfs.devfs` / `vfs.pseudofs` o ABI audits existentes como evidencia HOST |
+| **53A/B** | fs/dev + posix pseudofs | scenario `vfs.devfs` (`dev_null` open/close) | COVERED (53A) | 53B pseudofs profundo / ABI audits siguen HOST |
 | **54A–C** | fbdev / input | — | GAP | T2 smokes; KTM case opcional |
 | **55A–E** | Doom prereq / stub / doomgeneric | — | GAP / HOST | Fuera de KTM core; tags de producto |
 | **57\*** | Reintegración / GUI paths | — | HOST | Docs `fase57-*`; no kernel `[FASE` |
@@ -76,18 +76,18 @@
 
 | Estado | Cantidad (filas de matriz arriba) |
 |--------|-----------------------------------|
-| COVERED | 39, 40, 42, 45, 47, 48, 49, 50 (kernel gate mínimo) |
-| PARTIAL | 41, 43–44, 46, 50B/C |
-| GAP | 51, 52 (kernel), 53–55 |
+| COVERED | 39, 40, 42, 43 (hook), 45, 47, 48, 49, 50, 51 (redir mínima), 53A |
+| PARTIAL | 41, 44, 46, 50B/C, 53B |
+| GAP | 52 (kernel), 54–55 |
 | HOST | 57–58, parte 52/55 |
 
-**Conclusión:** el **framework** KTM reemplaza el canal FASE en kernel. Los scenarios MM P1 (`mm.vma`, `mm.page_tables`, `mm.steady_state`) más P0 (`mm.cow_fork`, `ipc.pipe_lifecycle`, `process.exec`, `process.fork_rollback`) están en la boot suite de `ktm-run` (pass=8). Quedan PARTIAL/GAP en OOM/drain, shell/TCC/fb y smokes userspace históricos.
+**Conclusión:** el **framework** KTM reemplaza el canal FASE en kernel. Boot suite `ktm-run` = **pass=11** (P0/P1 MM + P2 `vfs.devfs` / `shell.redir` / `mm.oom_class`). Quedan PARTIAL/GAP en drain, TCC/fb y smokes userspace históricos.
 
 ## Gates actuales (no FASE)
 
 ```bash
 rg '\[FASE' kernel mm fs includes/ir0 drivers ktm arch sched --glob '*.{c,h}'  # 0
-make -s ktm-run          # suite pass=8
+make -s ktm-run          # suite pass=11
 make -s ktm-userdev-run
 make -s arch-guard
 ```
@@ -95,6 +95,6 @@ make -s arch-guard
 ## Prioridad restante (P1→P2)
 
 1. **P1** — case userdev COW A–F si se quiere retirar `smoke-mm-cow-lazy`  
-2. **P2** — shell/TCC/fb/input cases vía libktm-user (51–55)  
+2. **P2** — TCC/fb/input cases vía libktm-user (52, 54–55)  
 3. **P2** — events tipados `PIPE_*` (wake/sleep) si hace falta telemetría fina  
-4. **P2** — scenarios OOM/drain (43–44) si se prioriza reclaim profundo
+4. **P2** — drain / reclaim profundo (44) más allá del hook `mm.oom_class`

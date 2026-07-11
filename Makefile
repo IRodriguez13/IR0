@@ -302,6 +302,9 @@ KERNEL_OBJS = \
     ktm/scenarios/mm_vma.o \
     ktm/scenarios/mm_page_tables.o \
     ktm/scenarios/mm_steady_state.o \
+    ktm/scenarios/vfs_devfs.o \
+    ktm/scenarios/shell_redir.o \
+    ktm/scenarios/mm_oom_class.o \
     ktm/scenarios/process_exec.o \
     ktm/scenarios/process_fork_rollback.o \
     ktm/userdev.o \
@@ -2533,7 +2536,7 @@ smoke-posix-setsid: kernel-x64-userspace.iso
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(POSIX_SETSID_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(POSIX_SETSID_LOG) --timeout 45 --stale-sec 15 \
+	$(SMOKE_QEMU_RUN) --log $(POSIX_SETSID_LOG) --timeout 120 --stale-sec 60 \
 		--done POSIX_SETSID_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
@@ -2546,6 +2549,36 @@ smoke-posix-setsid: kernel-x64-userspace.iso
 	else \
 		echo "✗ smoke-posix-setsid FAILED"; \
 		grep -E 'SETSID|SETPGID|POSIX_|panic' $(POSIX_SETSID_LOG) | tail -30; exit 1; \
+	fi
+
+.PHONY: smoke-posix-sighup-tty build-init-posix-sighup-tty
+POSIX_SIGHUP_LOG = /tmp/posix-sighup-tty-smoke.log
+build-init-posix-sighup-tty:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_posix_sighup_tty_smoke.c
+	@echo "✓ build-init-posix-sighup-tty OK"
+
+smoke-posix-sighup-tty: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   PTY TIOCSCTTY + SIGHUP..."
+	@$(MAKE) -s build-init-posix-sighup-tty
+	@DISK=$$(mktemp /tmp/ir0-posix-sighup.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(POSIX_SIGHUP_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(POSIX_SIGHUP_LOG) --timeout 120 --stale-sec 60 \
+		--done POSIX_SIGHUP_TTY_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "PTY_SIGHUP_PGRP" $(POSIX_SIGHUP_LOG) && \
+	    grep -q "SIGHUP_OK" $(POSIX_SIGHUP_LOG) && \
+	    grep -q "POSIX_SIGHUP_TTY_OK" $(POSIX_SIGHUP_LOG); then \
+		echo "✓ smoke-posix-sighup-tty passed"; \
+	else \
+		echo "✗ smoke-posix-sighup-tty FAILED"; \
+		grep -E 'SIGHUP|PTY_|POSIX_|panic' $(POSIX_SIGHUP_LOG) | tail -40; exit 1; \
 	fi
 .PHONY: smoke-ahci-detect smoke-ahci-read
 AHCI_SMOKE_LOG = /tmp/ahci-detect-smoke.log

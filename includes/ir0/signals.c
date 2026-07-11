@@ -247,6 +247,12 @@ int signals_pause_should_interrupt(process_t *p)
 	    !signals_has_user_handler(p, SIGTERM))
 		return 1;
 
+	/* Default-terminate hangup must interrupt pause(2) like SIGTERM. */
+	if ((p->signal_pending & SIGNAL_MASK(SIGHUP)) &&
+	    !(p->signal_ignored & SIGNAL_MASK(SIGHUP)) &&
+	    !signals_has_user_handler(p, SIGHUP))
+		return 1;
+
 	return (p->signal_pending & ~p->signal_mask) != 0;
 }
 
@@ -314,11 +320,37 @@ int send_signal(int pid, int signal)
 #endif
     }
 
+    /*
+     * Immediate default-terminate (SIGTERM/SIGHUP) — same as sys_kill.
+     * Pending-only delivery can miss if the target never re-enters
+     * handle_signals() (e.g. hangup from another task's close path).
+     */
+    if (signal != 0)
+	(void)process_signal_default_kill(proc, signal);
+
 #if DEBUG_PROCESS
     serial_print("[SIGNAL] Sent signal to process\n");
 #endif
 
     return 0;
+}
+
+int send_signal_pgrp(int32_t pgid, int signal)
+{
+	process_t *p;
+	int n = 0;
+
+	if (pgid <= 0 || signal < 0 || signal >= _NSIG)
+		return 0;
+
+	for (p = process_list; p; p = p->next)
+	{
+		if ((int32_t)p->pgid != pgid)
+			continue;
+		if (send_signal((int)p->task.pid, signal) == 0)
+			n++;
+	}
+	return n;
 }
 
 /**
@@ -462,6 +494,22 @@ void handle_signals(void)
         current->signal_pending &= ~SIGNAL_MASK(SIGINT);
         process_exit(130); /* Exit code 130 = 128 + 2 (SIGINT) */
         return;
+    }
+
+    if (current->signal_pending & SIGNAL_MASK(SIGHUP))
+    {
+        if (current->signal_ignored & SIGNAL_MASK(SIGHUP))
+        {
+            current->signal_pending &= ~SIGNAL_MASK(SIGHUP);
+        }
+        else if (!signals_has_user_handler(current, SIGHUP))
+        {
+            serial_print("[SIGNAL] SIGHUP received, terminating process\n");
+            current->signal_pending &= ~SIGNAL_MASK(SIGHUP);
+            current->exit_signal = SIGHUP;
+            process_exit(0);
+            return;
+        }
     }
 
     if (current->signal_pending & SIGNAL_MASK(SIGQUIT))

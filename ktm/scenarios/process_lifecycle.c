@@ -88,6 +88,9 @@ void ktm_scenario_register_mm_cow_fork(void);
 void ktm_scenario_register_mm_vma(void);
 void ktm_scenario_register_mm_page_tables(void);
 void ktm_scenario_register_mm_steady_state(void);
+void ktm_scenario_register_vfs_devfs(void);
+void ktm_scenario_register_shell_redir(void);
+void ktm_scenario_register_mm_oom_class(void);
 void ktm_scenario_register_process_exec(void);
 void ktm_scenario_register_process_fork_rollback(void);
 
@@ -99,6 +102,9 @@ void ktm_scenarios_register_builtins(void)
 	ktm_scenario_register_mm_vma();
 	ktm_scenario_register_mm_page_tables();
 	ktm_scenario_register_mm_steady_state();
+	ktm_scenario_register_vfs_devfs();
+	ktm_scenario_register_shell_redir();
+	ktm_scenario_register_mm_oom_class();
 	ktm_scenario_register_process_exec();
 	ktm_scenario_register_process_fork_rollback();
 }
