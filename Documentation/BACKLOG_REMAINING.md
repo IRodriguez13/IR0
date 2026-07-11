@@ -18,6 +18,8 @@
 | FAT16 RO + QEMU smoke | `smoke-fat16-mount` |
 | Host `ir0_block_*` contracts | `tests/host/test_blockdev_facade.c` |
 | System power (sync + reboot/halt/poweroff + runit) | `smoke-runit-power`, `smoke-runit-busybox-halt`, `smoke-runit-busybox-poweroff`, `smoke-runit-busybox-reboot` |
+| ACPI PM1a QEMU poweroff + kexec/suspend ABI stubs | FADT PM1a via `ir0_acpi_pm_*`; `smoke-reboot-kexec-enosys`, `smoke-reboot-suspend-stub`; poweroff still `smoke-runit-busybox-poweroff` |
+| POSIX-2 setsid/setpgid MVP | `smoke-posix-setsid` (`SETSID_OK` / `SETPGID_OK`) |
 | Real fork COW (share + WP break) | `62cc512` / `496b55d`; `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | GPT / EXT2 RO / AHCI detect+read | `smoke-gpt-partition`, `smoke-ext2-mount`, `smoke-ahci-read` |
 | AHCI dual-port (`sda`+`sdb`) | `smoke-ahci-multi` (`AHCI_MULTI_OK`) |
@@ -49,21 +51,20 @@ Prefer **ARCH/PERF/POSIX** after MM P1 closed:
 
 | Sprint | Gate | Note |
 |--------|------|------|
-| ARCH-3 | lifecycle audit | stream/AHCI/PTY |
-| ARCH-2 | facade audit | keep `arch-guard` green |
-| PERF-1 | hot paths | poll/sleep if evidence |
-| POSIX-2 | job control | sessions / `SIGHUP` |
+| ARCH-3 | lifecycle audit | stream/AHCI/PTY — audited 2026-07-10; no new leak fix required |
+| ARCH-2 | facade audit | `arch-guard` green |
+| PERF-1 | hot paths | deferred — `sys_poll` already blocks via sleep (no spin fix in scope) |
+| POSIX-2 | job control | `setsid`/`setpgid` MVP done; SIGHUP-on-TTY close still PARTIAL |
 | KTM-P2 | `ktm-userdev-run` | shell/fb cases; optional COW A–F userdev |
 
 ## Future / P2 (dedicated oleadas only)
 
 | Item | Next proof |
 |------|------------|
+| kexec real / S3–S4 / AML `_S5` | beyond PM1a soft-off + ENOSYS stubs |
 | AHCI NCQ / NVMe | storage oleada |
-| W10b PTE walker per-arch | after ARM64 MM (not just ARCH_OBJS link) |
 | ARM64 userspace / MM | beyond freestanding `kernel-arm64.bin` |
 | TCP Internet / real NIC stream | beyond loopback `sock_stream` |
-| kexec / software suspend | enormous |
 | Rust/C++ driver ABI definitivo | DRV-* |
 | SMP / CFS completo | sched oleada |
 | T3 WM / compositor / panel | **userspace only** — not in kernel tree |

@@ -558,9 +558,75 @@ int64_t sys_set_robust_list(struct robust_list_head *head, size_t len)
 
 int64_t sys_setsid(void)
 {
+	pid_t pid;
+
 	if (!current_process)
 		return -ESRCH;
-	return (int64_t)current_process->task.pid;
+
+	pid = current_process->task.pid;
+	/* Already a session leader. */
+	if (current_process->sid == pid)
+		return -EPERM;
+
+	current_process->sid = pid;
+	current_process->pgid = pid;
+	return (int64_t)pid;
+}
+
+int64_t sys_setpgid(pid_t pid, pid_t pgid)
+{
+	process_t *target;
+	pid_t self;
+
+	if (!current_process)
+		return -ESRCH;
+
+	self = current_process->task.pid;
+	if (pid == 0)
+		pid = self;
+	if (pgid < 0)
+		return -EINVAL;
+
+	target = process_find_by_pid(pid);
+	if (!target)
+		return -ESRCH;
+
+	/* Only self or a direct child in the same session. */
+	if (target != current_process)
+	{
+		if (target->ppid != self)
+			return -ESRCH;
+		if (target->sid != current_process->sid)
+			return -EPERM;
+	}
+
+	if (pgid == 0)
+		pgid = target->task.pid;
+
+	/* Session leaders cannot leave their process group. */
+	if (target->sid == target->task.pid && pgid != target->task.pid)
+		return -EPERM;
+
+	/* pgid must be an existing group in the same session, or create own. */
+	if (pgid != target->task.pid)
+	{
+		process_t *scan;
+		int found = 0;
+
+		for (scan = process_list; scan; scan = scan->next)
+		{
+			if (scan->pgid == pgid && scan->sid == target->sid)
+			{
+				found = 1;
+				break;
+			}
+		}
+		if (!found)
+			return -EPERM;
+	}
+
+	target->pgid = pgid;
+	return 0;
 }
 
 static uint64_t fase50_count_open_fds_local(process_t *p)
@@ -632,6 +698,12 @@ int64_t sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg)
 	case LINUX_REBOOT_CMD_POWER_OFF:
 		kernel_system_shutdown(IR0_SYSTEM_POWEROFF);
 		break;
+	case LINUX_REBOOT_CMD_KEXEC:
+		serial_print("REBOOT_KEXEC_ENOSYS\n");
+		return -ENOSYS;
+	case LINUX_REBOOT_CMD_SW_SUSPEND:
+		serial_print("SYSTEM_SUSPEND_STUB\n");
+		return -ENOSYS;
 	default:
 		return -EINVAL;
 	}

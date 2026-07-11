@@ -212,6 +212,8 @@ static int64_t wrap_sys_getppid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t 
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getppid(); }
 static int64_t wrap_sys_setsid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_setsid(); }
+static int64_t wrap_sys_setpgid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a3;(void)a4;(void)a5;(void)a6; return sys_setpgid((pid_t)a1, (pid_t)a2); }
 static int64_t wrap_sys_getuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getuid(); }
 static int64_t wrap_sys_geteuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
@@ -342,6 +344,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_gettimeofday]   = wrap_sys_gettimeofday;
   syscall_table_rw[__NR_getppid]        = wrap_sys_getppid;
   syscall_table_rw[__NR_setsid]         = wrap_sys_setsid;
+  syscall_table_rw[__NR_setpgid]        = wrap_sys_setpgid;
   syscall_table_rw[__NR_arch_prctl]     = wrap_sys_arch_prctl;
   syscall_table_rw[__NR_set_tid_address] = wrap_sys_set_tid_address;
   syscall_table_rw[__NR_openat]         = wrap_sys_openat;
