@@ -112,6 +112,10 @@ void ktm_scenarios_run_boot(void)
 		"vfs.devfs",
 		"shell.redir",
 		"mm.oom_class",
+		"process.wait_drain",
+		"graphics.fb",
+		"input.events0",
+		"vfs.open_flags",
 		"process.exec",
 		"process.fork_rollback",
 	};

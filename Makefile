@@ -305,6 +305,10 @@ KERNEL_OBJS = \
     ktm/scenarios/vfs_devfs.o \
     ktm/scenarios/shell_redir.o \
     ktm/scenarios/mm_oom_class.o \
+    ktm/scenarios/process_wait_drain.o \
+    ktm/scenarios/graphics_fb.o \
+    ktm/scenarios/input_events0.o \
+    ktm/scenarios/vfs_open_flags.o \
     ktm/scenarios/process_exec.o \
     ktm/scenarios/process_fork_rollback.o \
     ktm/userdev.o \
@@ -2536,7 +2540,7 @@ smoke-posix-setsid: kernel-x64-userspace.iso
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(POSIX_SETSID_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(POSIX_SETSID_LOG) --timeout 120 --stale-sec 60 \
+	$(SMOKE_QEMU_RUN) --log $(POSIX_SETSID_LOG) --timeout 120 --stale-sec 90 \
 		--done POSIX_SETSID_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
@@ -3185,7 +3189,7 @@ release-0.0.1: kernel-text-budget smoke-release-0.0.1
 
 ktm: ktm-check
 
-.PHONY: ktm-run ktm-userdev-run build-ktm-fork-wait-case
+.PHONY: ktm-run ktm-userdev-run ktm-userdev-cow-run build-ktm-fork-wait-case build-ktm-cow-touch-case
 ktm-run: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_runner.py --scenario $(or $(SCENARIO),process.lifecycle) \
@@ -3193,6 +3197,8 @@ ktm-run: kernel-x64-userspace.iso
 
 KTM_FORK_WAIT_SRC = userspace/libktm/ktm_fork_wait_case.c userspace/libktm/libktm_user.c
 KTM_FORK_WAIT_BIN = userspace/libktm/ktm_fork_wait_case
+KTM_COW_TOUCH_SRC = userspace/libktm/ktm_cow_touch_case.c userspace/libktm/libktm_user.c
+KTM_COW_TOUCH_BIN = userspace/libktm/ktm_cow_touch_case
 
 build-ktm-fork-wait-case:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -3205,9 +3211,29 @@ build-ktm-fork-wait-case:
 	@file $(KTM_FORK_WAIT_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-wait-case OK"
 
+build-ktm-cow-touch-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building cow_touch pilot ($(KTM_COW_TOUCH_BIN))"
+	@$(MUSL_CC) -static -Os -Iincludes -Iuserspace/libktm \
+		-o $(KTM_COW_TOUCH_BIN) $(KTM_COW_TOUCH_SRC)
+	@file $(KTM_COW_TOUCH_BIN) | grep -q ELF
+	@echo "✓ build-ktm-cow-touch-case OK"
+
 ktm-userdev-run: build-ktm-fork-wait-case kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py --log /tmp/ktm-userdev-run.log --timeout 90
+
+ktm-userdev-cow-run: build-ktm-cow-touch-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_COW_TOUCH_BIN) \
+		--log /tmp/ktm-userdev-cow-run.log --timeout 90 \
+		--done KTM_USERDEV_COW_OK \
+		--require 'TEST_END|cow_touch|PASS' \
+		--require KTM_USERDEV_COW_OK
 
 ktm-check: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run

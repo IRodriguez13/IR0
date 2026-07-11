@@ -5,22 +5,20 @@
 
 ## Closed
 
-Ver tabla en el archivo inglés. Incluye power MVP + ACPI PM1a QEMU, stubs
-kexec/suspend (`ENOSYS`), POSIX-2 `setsid`/`setpgid` + SIGHUP/TTY,
-KTM-P1 MM + KTM-P2 (`vfs.devfs` / `shell.redir` / `mm.oom_class`, pass=11),
-PERF-1 `sys_gettid`, applets BusyBox halt/poweroff/reboot, COW real, ARCH-4.
+Ver tabla en el archivo inglés. Incluye power MVP, POSIX-2 setsid/SIGHUP,
+KTM boot pass=15 (drain/fb/events/open_flags + P2 previo), userdev
+`fork_wait_signal` + `cow_touch`, PERF gettid, COW real, ARCH-4.
 
 ## Open
 
 | Ítem | Prueba |
 |------|--------|
-| Paridad FASE→KTM restante (PARTIAL/GAP) | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — drain/fb/TCC |
+| Residual HOST/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — TCC/Doom (52/55), reclaim 41, A–F COW smoke |
 
 ## Siguiente
 
-1. KTM residual: drain (44), fb/input (54), userdev COW A–F opcional  
-2. Future: kexec real, S3–S4, AML `_S5`, NVMe, SMP, T3 userspace  
-3. ACPI FADT más allá del identity map 0–48 MiB (expand map inseguro)
+1. Future: kexec real, S3–S4, AML `_S5`, ACPI map >48 MiB, NVMe, SMP, T3  
+2. Opcional HOST: retirar `smoke-mm-cow-lazy` solo si A–F entra en userdev  
 
 ## Future / P2
 
