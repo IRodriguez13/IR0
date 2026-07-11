@@ -2,17 +2,14 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
  * File: platform.c
- * Description: ARM64 platform stubs (CPUID N/A; PSCI power later).
+ * Description: ARM64 platform ops — QEMU virt default; RPi stub selectable.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <arch/common/arch_portable.h>
+#include <arch/common/arch_interface.h>
 #include <ir0/platform_ops.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -82,30 +79,56 @@ static void __attribute__((noreturn)) arm64_halt_loop(void)
 		cpu_wait();
 }
 
-static void arm64_halt(void)
+static void arm64_virt_halt(void)
 {
 	arm64_halt_loop();
 }
 
-static void arm64_reboot(void)
+static void arm64_virt_reboot(void)
 {
 	/* PSCI SYSTEM_RESET not wired yet. */
 	arm64_halt_loop();
 }
 
-static void arm64_poweroff(void)
+static void arm64_virt_poweroff(void)
 {
 	/* PSCI SYSTEM_OFF not wired yet. */
 	arm64_halt_loop();
 }
 
-static const struct ir0_platform_ops arm64_platform_ops = {
-	.halt = arm64_halt,
-	.reboot = arm64_reboot,
-	.poweroff = arm64_poweroff,
+/* QEMU virt (default). */
+static const struct ir0_platform_ops arm64_virt_ops = {
+	.halt = arm64_virt_halt,
+	.reboot = arm64_virt_reboot,
+	.poweroff = arm64_virt_poweroff,
 };
 
-static const struct ir0_platform_ops *g_platform_ops = &arm64_platform_ops;
+/*
+ * Raspberry Pi stub — same WFI halt until PSCI/mailbox power is wired.
+ * Select with ir0_platform_ops_set(&arm64_rpi_platform_ops) from board init.
+ */
+static void arm64_rpi_halt(void)
+{
+	arm64_halt_loop();
+}
+
+static void arm64_rpi_reboot(void)
+{
+	arm64_halt_loop();
+}
+
+static void arm64_rpi_poweroff(void)
+{
+	arm64_halt_loop();
+}
+
+const struct ir0_platform_ops arm64_rpi_platform_ops = {
+	.halt = arm64_rpi_halt,
+	.reboot = arm64_rpi_reboot,
+	.poweroff = arm64_rpi_poweroff,
+};
+
+static const struct ir0_platform_ops *g_platform_ops = &arm64_virt_ops;
 
 const struct ir0_platform_ops *ir0_platform_ops_get(void)
 {

@@ -1,6 +1,6 @@
 # IR0 Kernel — Consolidated Development Roadmap
 
-> **Last verified:** 2026-07-10 (post `/heart` + ARCH-3 fd unify; see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
+> **Last verified:** 2026-07-11 (post Future F2–F5; see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
 > **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`. README and old docs may lag; **grep the tree before claiming “done”.**
 
 This document consolidates tier goals, completed oleadas, reprioritized backlog (storage before TCP/X11), and **recommended evolution milestones**. **What is stable for QEMU test today** is canonical in [`STABLE.md`](STABLE.md). **Open work only:** [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
@@ -116,8 +116,11 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | VFS mount contracts (proc/tmpfs/multi-fs) | Done | ktests + `runtime-mount-check` |
 | **`block_hda_read_contract`** (512-byte read) | Done | `kernel/test/test_debug_contracts.c`; MBR `0x55AA` optional on raw MINIX `disk.img` |
 | **`/dev/hda` read at offset 0 (QEMU)** | Fixed | `ata_get_size()` + `dev_disk_read`; ktest 512-byte contract |
-| **FAT16 backend** | **On-disk read-only (MVP)** + virtual simplefs | `fs/fat16_disk.c`, `fs/fat16_fs.c` router; `/dev/fat0` → simplefs, `/dev/hda*` → BPB parser |
-| EXT2 / AHCI / NVMe | Not started | See backlog P1-storage |
+| **FAT16 backend** | **On-disk RO + write audit** | `smoke-fat16-mount`; `linux-abi-audit-vfs-write-fat` |
+| EXT2 read-only | Done (test) | `smoke-ext2-mount` |
+| GPT partition probe | Done (test) | `smoke-gpt-partition` |
+| AHCI detect/read/multi + NCQ | Done (test) | `smoke-ahci-read` (`AHCI_NCQ_OK` / `UNSUPPORTED`) |
+| NVMe detect+read | Done (test) | `smoke-nvme-read` (`NVME_READ_OK`) |
 
 ### Hardening + release 0.0.1 (2026-06-23)
 
@@ -192,28 +195,29 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 4. ~~`smoke-tier1` green~~ — Done.
 5. ~~UDP `socket`/`bind`/`sendto`/`recvfrom`~~ — Done.
 
-### P1-storage — phase2 driver expansion (current focus)
+### P1-storage — phase2 driver expansion (**closed** — `make smoke-p1-storage`)
 
 | # | Item | Notes |
 |---|------|-------|
 | 6 | **`roadmap-phase2-driver-expansion` green** | `runtime-net-check` + `runtime-mount-check` |
-| 7 | **Real FAT16 on `block_dev`** | **MVP read-only** — root readdir + file read; write → `-EROFS`; subdirs/cluster chains basic |
-| 8 | **FAT16 QEMU smoke** | **Done** — `smoke-fat16-mount` (`/dev/hdb`) |
-| 9 | **EXT2 read-only** | New `fs/ext2/` backend behind `vfs_ops` |
-| 10 | **AHCI/SATA** | `ir0/blockdev` registration; research Intel AHCI spec |
-| 11 | **Host contract tests for `block_dev`** | **Done** — `tests/host/test_blockdev_facade.c` (+ RO-flag read fix) |
-| 12 | **GPT partition table** | Extend `drivers/disk/partition.c` beyond MBR |
-| 12b | **`/dev/hda` userspace read** | ~~ktest 0 bytes~~ **Fixed** — `dev_disk_read` + ktest 512-byte contract |
+| 7 | **Real FAT16 on `block_dev`** | **Done** — RO + write audit |
+| 8 | **FAT16 QEMU smoke** | **Done** — `smoke-fat16-mount` |
+| 9 | **EXT2 read-only** | **Done** — `smoke-ext2-mount` |
+| 10 | **AHCI/SATA** | **Done** — `smoke-ahci-read` (+ NCQ F2) |
+| 11 | **Host contract tests for `block_dev`** | **Done** — `tests/host/test_blockdev_facade.c` |
+| 12 | **GPT partition table** | **Done** — `smoke-gpt-partition` |
+| 12b | **`/dev/hda` userspace read** | **Done** |
+| 12c | **NVMe detect+read** | **Done** — `smoke-nvme-read` (F6) |
 
-### P1-T1 — POSIX hardening (parallel, smaller slices)
+### P1-T1 — POSIX hardening (**partial close** 2026-07-11)
 
 | # | Item | Notes |
 |---|------|-------|
-| 13 | **`epoll` / `pselect6`** | When busybox/musl blocks |
-| 14 | **`prlimit` / `getrlimit`** | musl pthread / memory limits |
-| 15 | **Futex robustness** | musl `pthread` join/cancel paths |
-| 16 | **Syscall split** | **Done (H1)** — `syscalls.c` 86 L; submodules complete |
-| 17 | **PTY + `TIOCGWINSZ` / `SIGWINCH`** | ncurses, real terminals (easy to forget) |
+| 13 | **`epoll` / `pselect6`** | **Done** — `smoke-epoll-basic` (pselect6 wired) |
+| 14 | **`prlimit` / `getrlimit`** | **Done** — `smoke-prlimit` |
+| 15 | **Futex robustness** | **MVP** — `get_robust_list` + exit wake (`smoke-robust-list`) |
+| 16 | **Syscall split** | **Done (H1)** |
+| 17 | **PTY + `TIOCGWINSZ` / `SIGWINCH`** | **Done** — `TIOCSWINSZ` + `PTY_WINCH_SENT` (`smoke-pty-winsz`) |
 
 ### P2 — arch scale + driver infra
 
@@ -314,7 +318,7 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 
 | Area | Milestones | Notes |
 |------|------------|-------|
-| **P1-storage** | Real FAT16, EXT2 ro, AHCI, NVMe | Before heavy TCP (roadmap decision) |
+| **P1-storage** | FAT16/EXT2/AHCI **done for test**; **NVMe** = F6 | Before heavy Internet NIC (roadmap decision) |
 | **P1-net** | TCP stream, `AF_UNIX` | After storage phase2 stable |
 | **P1-term** | PTY, `TIOCGWINSZ`, `SIGWINCH` | Full ash + terminal clients |
 | **T2** | MAP_SHARED fb0, multitouch input, frame timing | `smoke-fase55b-doom-stub` regression open |

@@ -151,6 +151,8 @@ typedef struct process
 	gid_t groups[IR0_NGROUPS_MAX];
 	uint8_t ngroups;
 	pid_t tgid;
+	pid_t sid;  /* session id (Linux setsid) */
+	pid_t pgid; /* process group id */
 	struct robust_list_head *robust_list;
 	
 	/* Current working directory */
@@ -361,6 +363,7 @@ process_t *process_get_current(void);
 void irq_save_user_frame(uint64_t *frame);
 process_t *get_process_list(void);
 pid_t process_get_next_pid(void);
+void process_prepare_pid1_for_init(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 
 

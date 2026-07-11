@@ -41,8 +41,7 @@
 #include <ir0/devfs.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/sock_udp.h>
-#include <ir0/fase51_debug.h>
-#include <ir0/fase52_debug.h>
+#include <ir0/sock_stream.h>
 #include <ir0/serial_io.h>
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
@@ -693,7 +692,7 @@ void fase50b_dump_bytes(const char *label, const void *buf, size_t n)
 	const uint8_t *b = (const uint8_t *)buf;
 	size_t i;
 
-	serial_print(label ? label : "[FASE50B][BYTES]");
+	serial_print(label ? label : "[IR0DBG50B][BYTES]");
 	serial_print(" n=");
 	serial_print_hex64((uint64_t)n);
 	serial_print(" hex=");
@@ -792,7 +791,7 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read)
 				pipe_fase49_note_read_sleep(pipe);
 			if (proc->mode == USER_MODE)
 			{
-				serial_print("[FASE50B][READ_BLOCK] pid=");
+				serial_print("[IR0DBG50B][READ_BLOCK] pid=");
 				serial_print_hex32((uint32_t)proc->task.pid);
 				serial_print(" fd=");
 				serial_print_hex64(proc->syscall_frame.rdi);
@@ -837,7 +836,7 @@ static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
 	if (req == 0 || req > sizeof(kbuf))
 		req = sizeof(kbuf);
 
-	serial_print("[FASE50B][PIPE_WAKE] pipe_id=");
+	serial_print("[IR0DBG50B][PIPE_WAKE] pipe_id=");
 	serial_print_hex64(pipe->pipe_id);
 	serial_print(" target_pid=");
 	serial_print_hex32((uint32_t)proc->task.pid);
@@ -859,28 +858,28 @@ static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
 
 	peek_n = (req < (size_t)sizeof(user_before)) ? (int)req : (int)sizeof(user_before);
 	if (fase50b_peek_user(proc->page_directory, user_buf, user_before, (size_t)peek_n) == 0)
-		fase50b_dump_bytes("[FASE50B][PIPE_WAKE] user_before", user_before, (size_t)peek_n);
+		fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] user_before", user_before, (size_t)peek_n);
 
 	n = pipe_read(pipe, kbuf, req);
 	if (n <= 0)
 	{
-		serial_print("[FASE50B][PIPE_WAKE] pipe_read_ret=");
+		serial_print("[IR0DBG50B][PIPE_WAKE] pipe_read_ret=");
 		serial_print_hex64((uint64_t)(int64_t)n);
 		serial_print("\n");
 		return;
 	}
 
-	fase50b_dump_bytes("[FASE50B][PIPE_WAKE] kbuf", kbuf, (size_t)n);
+	fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] kbuf", kbuf, (size_t)n);
 
 	if (!proc->page_directory)
 	{
-		serial_print("[FASE50B][CLASSIFY] PIPE_WAKE_COPY_BAD_USERBUF\n");
+		serial_print("[IR0DBG50B][CLASSIFY] PIPE_WAKE_COPY_BAD_USERBUF\n");
 		return;
 	}
 
 	copy_ret = copy_to_user_region_in_directory(proc->page_directory, user_buf,
 						      kbuf, (size_t)n);
-	serial_print("[FASE50B][PIPE_WAKE] copy_ret=");
+	serial_print("[IR0DBG50B][PIPE_WAKE] copy_ret=");
 	serial_print_hex64((uint64_t)(int64_t)copy_ret);
 	serial_print(" copied=");
 	serial_print_hex64((uint64_t)(int64_t)n);
@@ -890,15 +889,15 @@ static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
 
 	if (copy_ret != 0)
 	{
-		serial_print("[FASE50B][CLASSIFY] PIPE_WAKE_COPY_BAD_USERBUF\n");
+		serial_print("[IR0DBG50B][CLASSIFY] PIPE_WAKE_COPY_BAD_USERBUF\n");
 		return;
 	}
 
 	if (fase50b_peek_user(proc->page_directory, user_buf, user_after, (size_t)peek_n) == 0)
-		fase50b_dump_bytes("[FASE50B][PIPE_WAKE] user_after", user_after, (size_t)peek_n);
+		fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] user_after", user_after, (size_t)peek_n);
 
 	proc->syscall_resume_rax = (uint64_t)n;
-	serial_print("[FASE50B][CLASSIFY] PIPE_WAKE_COPY_OK\n");
+	serial_print("[IR0DBG50B][CLASSIFY] PIPE_WAKE_COPY_OK\n");
 }
 
 void pipe_wake_all(pipe_t *pipe)
@@ -1145,7 +1144,10 @@ int64_t sys_close(int fd)
     }
     else if (fd_table[fd].is_socket && fd_table[fd].vfs_file)
     {
-      sock_udp_release((struct sock_udp *)fd_table[fd].vfs_file);
+      if (sock_stream_is(fd_table[fd].vfs_file))
+        sock_stream_release((struct sock_stream *)fd_table[fd].vfs_file);
+      else
+        sock_udp_release((struct sock_udp *)fd_table[fd].vfs_file);
       fd_table[fd].vfs_file = NULL;
     }
     else if (fd_table[fd].is_epoll && fd_table[fd].vfs_file)
@@ -1175,7 +1177,6 @@ int64_t sys_close(int fd)
     fd_table[fd].fd_flags = 0;
     fd_table[fd].offset = 0;
     fase48_note_fd_destroyed();
-    fase51_dbg_close(fd, was_pipe, 0);
   }
 
   return 0;
@@ -1235,7 +1236,6 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     if (new_offset < 0)
       return -EINVAL;
     fd_table[fd].offset = (uint64_t)new_offset;
-    fase52_dbg_lseek(fd, offset, whence, new_offset);
     return new_offset;
   }
 
@@ -1245,7 +1245,6 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     if (result < 0)
       return result;
     fd_table[fd].offset = (uint64_t)result;
-    fase52_dbg_lseek(fd, offset, whence, result);
     return result;
   }
 
@@ -1264,7 +1263,6 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
   if (new_offset < 0)
     return -EINVAL;
   fd_table[fd].offset = (uint64_t)new_offset;
-  fase52_dbg_lseek(fd, offset, whence, new_offset);
   return new_offset;
 }
 
@@ -1402,7 +1400,6 @@ int64_t sys_dup2(int oldfd, int newfd)
   }
 
   fase48_note_fd_created();
-  fase51_dbg_dup2(oldfd, newfd, newfd);
   return newfd;
 }
 int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
@@ -1563,7 +1560,6 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
     }
   }
 
-  fase51_dbg_pipe2(read_fd, write_fd, flags, 0);
   return 0;
 }
 

@@ -12,8 +12,8 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "../syscalls.h"
-#include "../process.h"
+#include <kernel/syscalls.h>
+#include <kernel/process.h>
 #include "fs_syscalls.h"
 #include "syscalls_glue.h"
 #include <config.h>
@@ -45,9 +45,6 @@
 #include <ir0/vfs.h>
 #include <ir0/elf_loader.h>
 #include <ir0/process.h>
-#include <ir0/fase50_debug.h>
-#include <ir0/fase51_debug.h>
-#include <ir0/fase52_debug.h>
 #include <ir0/utimens.h>
 #include <ir0/paging.h>
 #include <stddef.h>
@@ -265,39 +262,9 @@ static int64_t do_symlinkat(const char *target, int linkdirfd,
 
 static void fase50c_log_open_result(const char *path, int64_t ret, int stage)
 {
-#if CONFIG_DEBUG_FASE50
-  const char *tag;
-
-  serial_print("[FASE50C][OPEN] stage=");
-  serial_print_hex64((uint64_t)stage);
-  serial_print(" path=");
-  serial_print(path ? path : "(null)");
-  serial_print(" ret=");
-  serial_print_hex64((uint64_t)ret);
-  serial_print("\n");
-
-  if (!path || strncmp(path, "/f50_", 5) != 0 || ret >= 0)
-    return;
-
-  if (ret == -EINVAL)
-    tag = "FILE_CREATE_FLAKE_FLAGS";
-  else if (ret == -EACCES || ret == -EPERM)
-    tag = "FILE_CREATE_FLAKE_PERMISSION";
-  else if (ret == -EEXIST)
-    tag = "FILE_CREATE_FLAKE_EXISTING_FILE";
-  else if (ret == -EMFILE)
-    tag = "FILE_CREATE_FLAKE_HARNESS_SETUP";
-  else
-    tag = "FILE_CREATE_FLAKE_HARNESS_SETUP";
-
-  serial_print("[FASE50B][OPEN_CLASSIFY] ");
-  serial_print(tag);
-  serial_print("\n");
-#else
   (void)path;
   (void)ret;
   (void)stage;
-#endif
 }
 
 static void ash_smoke_read_trace(int fd, int64_t ret)
@@ -530,46 +497,13 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     if (copy_from_user(kernel_buf, buf, copy_size) != 0)
       return -EFAULT;
 
-#if CONFIG_DEBUG_FASE50
-    if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
-    {
-      serial_print("[FASE50B][WRITE] pid=");
-      serial_print_hex32((uint32_t)current_process->task.pid);
-      serial_print(" fd=");
-      serial_print_hex64((uint64_t)fd);
-      serial_print(" user_buf=");
-      serial_print_hex64((uint64_t)(uintptr_t)buf);
-      serial_print(" count=");
-      serial_print_hex64((uint64_t)copy_size);
-      serial_print(" copied=");
-      serial_print_hex64((uint64_t)copy_size);
-      fase50b_dump_bytes("[FASE50B][WRITE] payload", kernel_buf, copy_size);
-      serial_print("[FASE50B][WRITE] pipe_id=");
-      serial_print_hex64(pipe->pipe_id);
-      serial_print(" end=");
-      serial_print_hex64((uint64_t)fd_table[fd].pipe_end);
-      serial_print(" fd_refs=");
-      serial_print_hex64((uint64_t)pipe->fd_refs);
-      serial_print(" redirected=1\n");
-    }
-#endif
 
     for (;;)
     {
       ret = pipe_write(pipe, kernel_buf, copy_size);
       if (ret >= 0)
       {
-#if CONFIG_DEBUG_FASE50
-        if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
-        {
-          serial_print("[FASE50B][WRITE] pipe_write_ret=");
-          serial_print_hex64((uint64_t)ret);
-          serial_print("\n");
-        }
-#endif
         pipe_wake_all(pipe);
-        fase51_dbg_pipe_rw("write", fd, ret);
-        fase52_dbg_rw("write", fd, ret);
         process_clear_in_thread_syscall_block(current_process);
         return ret;
       }
@@ -615,7 +549,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
         break;
     }
     fd_table[fd].offset = vfs_file->pos;
-    fase52_dbg_rw("write", fd, (int)total);
     return (int64_t)total;
   }
 
@@ -769,40 +702,10 @@ int64_t sys_read(int fd, void *buf, size_t count)
         pipe_wake_all(pipe);
         if (ret == 0)
         {
-#if CONFIG_DEBUG_FASE50
-          serial_print("[FASE50B][READ] pid=");
-          serial_print_hex32((uint32_t)current_process->task.pid);
-          serial_print(" fd=");
-          serial_print_hex64((uint64_t)fd);
-          serial_print(" rsi=");
-          serial_print_hex64((uint64_t)(uintptr_t)buf);
-          serial_print(" count=");
-          serial_print_hex64((uint64_t)count);
-          serial_print(" ret=0 eof\n");
-#endif
-          fase51_dbg_pipe_rw("read", fd, 0);
           return 0;
         }
         if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
           return -EFAULT;
-#if CONFIG_DEBUG_FASE50
-        serial_print("[FASE50B][READ] pid=");
-        serial_print_hex32((uint32_t)current_process->task.pid);
-        serial_print(" fd=");
-        serial_print_hex64((uint64_t)fd);
-        serial_print(" rsi=");
-        serial_print_hex64((uint64_t)(uintptr_t)buf);
-        serial_print(" count=");
-        serial_print_hex64((uint64_t)count);
-        serial_print(" ret=");
-        serial_print_hex64((uint64_t)ret);
-        serial_print(" pipe_id=");
-        serial_print_hex64(pipe->pipe_id);
-        serial_print("\n");
-        fase50b_dump_bytes("[FASE50B][READ] copied", kernel_read_buf, (size_t)ret);
-#endif
-        fase51_dbg_pipe_rw("read", fd, ret);
-        fase52_dbg_rw("read", fd, ret);
         process_clear_in_thread_syscall_block(current_process);
         return ret;
       }
@@ -847,7 +750,6 @@ int64_t sys_read(int fd, void *buf, size_t count)
         break;
     }
     fd_table[fd].offset = vfs_file->pos;
-    fase52_dbg_rw("read", fd, (int)total);
     return (int64_t)total;
   }
 
@@ -1114,25 +1016,13 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   fd_table[fd].is_pipe = false;
   fd_table[fd].is_socket = false;
   fd_table[fd].is_devfs = false;
+  fd_table[fd].is_pseudo = false;
+  fd_table[fd].is_epoll = false;
   fd_table[fd].pipe_end = -1;
   fd_table[fd].dev_device_id = 0;
   fase48_note_fd_created();
 
   fase50c_log_open_result(path_to_use, (int64_t)fd, 8);
-#if CONFIG_DEBUG_FASE50
-  if (kstrcmp(path_to_use, "/f50_file.txt") == 0 && fd >= 0)
-  {
-    stat_t pst;
-
-    if (vfs_stat(path_to_use, &pst) == 0 && S_ISREG(pst.st_mode))
-      serial_print("[FASE50C][CLASSIFY] FILE_CREATE_STILL_OK\n");
-    else
-      serial_print("[FASE50C][CLASSIFY] CREATED_AS_WRONG_TYPE\n");
-  }
-#endif
-  if (path_to_use && strncmp(path_to_use, "/f51_", 5) == 0)
-    fase51_dbg_open_redirect(path_to_use, linux_open_flags, (int64_t)fd);
-  fase52_dbg_openat(dirfd_dbg, path_to_use, linux_open_flags, (int64_t)fd);
   return fd;
 }
 
@@ -1401,15 +1291,6 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     return -EINVAL;
   }
 
-#if CONFIG_DEBUG_FASE50
-  serial_print("[FASE50C][OPEN] pid=");
-  serial_print_hex32((uint32_t)current_process->task.pid);
-  serial_print(" path=");
-  serial_print(path_copy);
-  serial_print(" mode=");
-  serial_print_hex64((uint64_t)mode);
-  serial_print("\n");
-#endif
 
   path_rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, path_copy, resolved_path,
                                  sizeof(resolved_path), current_process->cwd);
@@ -1443,7 +1324,6 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
     return rc;
   if (ir0_copy_stat_to_user(buf, &kst) != 0)
     return -EFAULT;
-  fase52_dbg_stat_path(resolved, 0);
   return 0;
 }
 

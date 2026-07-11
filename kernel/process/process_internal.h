@@ -19,7 +19,7 @@
 #include <ir0/debug_runtime.h>
 #include <ir0/devfs.h>
 #include <ir0/pseudo_fs.h>
-#include "../process.h"
+#include <kernel/process.h>
 #include <config.h>
 #include <ir0/clock_wait.h>
 #include <ir0/scheduler_api.h>
@@ -38,10 +38,10 @@
 #include <ir0/arch_port.h>
 #include <ir0/copy_user.h>
 #include <ir0/fcntl.h>
-#include <ir0/fase51_debug.h>
 #include <ir0/pmm.h>
 #include <ir0/sock_udp.h>
-#include "../syscalls/process_syscalls.h"
+#include <ir0/sock_stream.h>
+#include <kernel/syscalls/process_syscalls.h>
 
 extern void fase48_fd_get_stats(uint64_t *created, uint64_t *destroyed,
 				uint64_t *blocked_readers, uint64_t *blocked_writers);
@@ -121,3 +121,6 @@ void fase40_d_audit_destroy_done(process_t *p,
 
 /* signals.c */
 int process_signal_is_default_fatal(process_t *p, int sig);
+
+/* process_syscalls.c — robust futex list on exit */
+void process_exit_robust_list(process_t *p);

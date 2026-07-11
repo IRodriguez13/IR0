@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE42 smoke-fork-exit-storm
+ * IR0_MM smoke-fork-exit-storm
  * 128 children -> immediate exit -> wait all
  */
 
@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE42_FORK_STORM 128
+#define IR0_MM_FORK_STORM 128
 
 static void write_str(const char *s)
 {
@@ -87,7 +87,7 @@ int main(void)
 	long used_before = read_used_kb();
 	long used_after;
 
-	for (int i = 0; i < FASE42_FORK_STORM; i++)
+	for (int i = 0; i < IR0_MM_FORK_STORM; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
@@ -100,7 +100,7 @@ int main(void)
 	}
 
 	used_after = read_used_kb();
-	write_str("FASE42_FORK_EXIT_STORM children=");
+	write_str("IR0_MM_FORK_EXIT_STORM children=");
 	write_dec_u64((uint64_t)started);
 	write_str(" wait_fail=");
 	write_dec_u64((uint64_t)wait_fail);

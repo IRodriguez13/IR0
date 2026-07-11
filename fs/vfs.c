@@ -42,7 +42,6 @@
 #include <ir0/blockdev.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
-#include <ir0/fase50_debug.h>
 #include <config.h>
 #include <string.h>
 
@@ -113,18 +112,10 @@ static const char *vfs_exec_audit_path;
 
 void vfs_exec_audit_begin(const char *path)
 {
-    /*
-     * EXEC-only VFS/MINIX/ATA read tracing is a bring-up diagnostic. Keep it
-     * off in default builds (gated by CONFIG_DEBUG_FASE50) so a passing boot
-     * log is mostly contract tags, not per-sector ATA dumps on every exec.
-     */
-    if (!IR0_FASE50_DBG)
-    {
-        (void)path;
-        return;
-    }
-    vfs_exec_audit_active = 1;
-    vfs_exec_audit_path = path;
+    /* Legacy FASE50 exec ATA dump retired; KTM covers validation. */
+    (void)path;
+    vfs_exec_audit_active = 0;
+    vfs_exec_audit_path = NULL;
 }
 
 void vfs_exec_audit_end(void)

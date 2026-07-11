@@ -24,7 +24,9 @@ Ver IR0-vfs para el diagrama del router en dos etapas.
 
 | Backend | Router | Almacenamiento | Archivo clave |
 |---------|--------|----------------|---------------|
-| minix | Montaje VFS | Dispositivo de bloque (ATA) | `fs/minix_fs.c` |
+| minix | Montaje VFS | Dispositivo de bloque (ATA/AHCI) | `fs/minix_fs.c` |
+| fat16 | Montaje VFS | Dispositivo de bloque | `fs/fat16_disk.c` |
+| ext2 | Montaje VFS (RO) | Dispositivo de bloque | backend EXT2 |
 | tmpfs | Montaje VFS | Árbol inode RAM | `fs/tmpfs.c` |
 | procfs | Syscall + registry | Texto generado kernel | `fs/procfs.c` |
 | sysfs | Syscall + registry | Estado kernel/driver | `includes/ir0/sysfs.h` |
@@ -117,7 +119,7 @@ Ver IR0-vfs para el diagrama del router en dos etapas.
 ## 10. Hoja de ruta futura
 
 - Registro VFS unificado para proc/dev/sys (hoy: deuda de router dual).
-- ext2/simplefs/fat16 existen como drivers VFS opcionales; no son raíz de producción por defecto.
+- FAT16 (RO + write audit), EXT2 RO, GPT, AHCI(+NCQ) con smokes QEMU; NVMe es Future F6.
 - Modelo de permisos más rico en nodos pseudo (semántica chmod futura).
 - Namespaces de montaje por proceso — **no implementado**.
 

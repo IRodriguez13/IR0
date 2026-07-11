@@ -156,30 +156,6 @@ void process_unmap_user_address_space(process_t *p)
 	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
 	if (IR0_DEBUG_PROC)
 	{
-		serial_print("[FASE41][UNMAP_ALL] pid=");
-		serial_print_hex32((uint32_t)p->task.pid);
-		serial_print(" mapped_pages=");
-		serial_print_hex64(stats.mapped_pages);
-		serial_print(" freed_pages=");
-		serial_print_hex64(stats.freed_pages);
-		serial_print(" missing_pages=");
-		serial_print_hex64(stats.missing_pages);
-		serial_print(" pdpt_present=");
-		serial_print_hex64(stats.pdpt_present);
-		serial_print(" pd_present=");
-		serial_print_hex64(stats.pd_present);
-		serial_print(" pt_present=");
-		serial_print_hex64(stats.pt_present);
-		serial_print(" pt_freed=");
-		serial_print_hex64(stats.pt_freed);
-		serial_print("\n");
-		serial_print("[FASE41][PMM_AUDIT] orphan_frames=");
-		serial_print_hex64(orphan_frames);
-		serial_print(" double_free=");
-		serial_print_hex64(double_free);
-		serial_print(" alive_owner_missing=");
-		serial_print_hex64(alive_owner_missing);
-		serial_print("\n");
 	}
 }
 
@@ -226,7 +202,7 @@ void process_fork_destroy_child_mm(process_t *child)
 
 	process_unmap_user_pages_all(child->page_directory, NULL);
 	paging_reclaim_lower_half_tables(child->page_directory);
-	paging_fase42_note_pml4_freed((uint64_t)(uintptr_t)child->page_directory);
+	paging_ir0_mm_note_pml4_freed((uint64_t)(uintptr_t)child->page_directory);
 	kfree_aligned(child->page_directory);
 	child->page_directory = NULL;
 	child->owns_page_directory = 0;
@@ -335,7 +311,7 @@ uint64_t create_process_page_directory(void)
 	}
 #endif
 
-	paging_fase42_note_pml4_created((uint64_t)(uintptr_t)pml4);
+	paging_ir0_mm_note_pml4_created((uint64_t)(uintptr_t)pml4);
 	process_fase43_note_mm_created();
 	return (uint64_t)pml4;
 }

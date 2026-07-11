@@ -273,19 +273,6 @@ void rr_schedule_next(void)
 	 * This is the process we're switching away from.
 	 */
 	prev = current_process;
-#if CONFIG_DEBUG_FASE50
-	serial_print("[FASE50][SCHED] stage=rr_schedule_next-entry prev=");
-	serial_print_hex64((uint64_t)(uintptr_t)prev);
-	serial_print(" prev_pid=");
-	serial_print_hex32(prev ? (uint32_t)prev->task.pid : 0);
-	serial_print(" prev_state=");
-	serial_print_hex64((uint64_t)(prev ? prev->state : 0));
-	serial_print(" prev_cr3=");
-	serial_print_hex64(prev ? prev->task.cr3 : 0);
-	serial_print(" active_cr3=");
-	serial_print_hex64(arch_get_current_page_directory());
-	serial_print("\n");
-#endif
 
 	/* Round-robin selection: move to next process in circular queue.
 	 * Skip processes that are zombies or not ready to run.
@@ -376,19 +363,6 @@ void rr_schedule_next(void)
 	if (signals_should_handle_on_run(next))
 		handle_signals();
 
-#if CONFIG_DEBUG_FASE50
-	serial_print("[FASE50][SCHED] stage=rr_schedule_next-picked next=");
-	serial_print_hex64((uint64_t)(uintptr_t)next);
-	serial_print(" next_pid=");
-	serial_print_hex32((uint32_t)next->task.pid);
-	serial_print(" next_state=");
-	serial_print_hex64((uint64_t)next->state);
-	serial_print(" next_cr3=");
-	serial_print_hex64(next->task.cr3);
-	serial_print(" current=");
-	serial_print_hex64((uint64_t)(uintptr_t)current_process);
-	serial_print("\n");
-#endif
 
 	/*
 	 * First context switch: no previous task to save.
@@ -464,17 +438,6 @@ void rr_schedule_next(void)
 	 */
 	if (prev && next) 
 	{
-#if CONFIG_DEBUG_FASE50
-		serial_print("[FASE50][SCHED] stage=rr_schedule_next-before-context_switch prev_pid=");
-		serial_print_hex32((uint32_t)prev->task.pid);
-		serial_print(" next_pid=");
-		serial_print_hex32((uint32_t)next->task.pid);
-		serial_print(" prev_state=");
-		serial_print_hex64((uint64_t)prev->state);
-		serial_print(" next_state=");
-		serial_print_hex64((uint64_t)next->state);
-		serial_print("\n");
-#endif
 		arch_context_switch(&prev->task, &next->task);
 	}
 

@@ -234,18 +234,22 @@ void ktest_kill_sigterm_wait_status(void)
 	KASSERT_EQ(WTERMSIG(status), SIGTERM);
 	KASSERT(process_find_by_pid(pid) == NULL);
 
-	/* send_signal must wake a blocked target with pending SIGTERM. */
+	/* send_signal must wake a blocked target; default-fatal may zombie. */
 	pid = spawn_kernel(ktest_wait4_child_entry, "sigterm_wake");
 	KASSERT_GT(pid, 0);
 	child = process_find_by_pid(pid);
 	KASSERT(child != NULL);
 	child->state = PROCESS_BLOCKED;
 	KASSERT_EQ(send_signal(pid, SIGTERM), 0);
-	KASSERT_EQ(child->state, PROCESS_READY);
-	KASSERT(child->signal_pending & SIGNAL_MASK(SIGTERM));
-	child->state = PROCESS_ZOMBIE;
-	child->exit_code = 0;
-	sched_remove_process(child);
+	KASSERT(child->state == PROCESS_READY || child->state == PROCESS_ZOMBIE);
+	if (child->state == PROCESS_READY)
+		KASSERT(child->signal_pending & SIGNAL_MASK(SIGTERM));
+	if (child->state != PROCESS_ZOMBIE)
+	{
+		child->state = PROCESS_ZOMBIE;
+		child->exit_code = 0;
+		sched_remove_process(child);
+	}
 	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
 	KTEST_END();
 }

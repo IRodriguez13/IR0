@@ -14,7 +14,7 @@
 
 #include "syscall_dispatch.h"
 #include "process.h"
-#include "../syscalls.h"
+#include <kernel/syscalls.h>
 #include "fs_syscalls.h"
 #include "fs_path_syscalls.h"
 #include "mm_syscalls.h"
@@ -24,6 +24,7 @@
 #include "time_syscalls.h"
 #include "epoll_syscalls.h"
 #include <ir0/bits/syscall_linux.h>
+#include <ir0/kexec.h>
 #include <ir0/signals.h>
 #include <ir0/futex.h>
 #include <ir0/sock_udp.h>
@@ -92,6 +93,7 @@ static int64_t wrap_sys_mmap(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4,
 WRAP3(sys_socket, int, int, int)
 WRAP3(sys_bind, int, const struct sockaddr *, socklen_t)
 WRAP3(sys_connect, int, const struct sockaddr *, socklen_t)
+WRAP2(sys_listen, int, int)
 WRAP3(sys_accept, int, struct sockaddr *, socklen_t *)
 WRAP6(sys_sendto, int, const void *, size_t, int, const struct sockaddr *, socklen_t)
 WRAP6(sys_recvfrom, int, void *, size_t, int, struct sockaddr *, socklen_t *)
@@ -165,9 +167,11 @@ WRAP2(sys_clock_gettime, int, struct timespec *)
 WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
 WRAP3(sys_getrandom, void *, size_t, unsigned int)
 WRAP2(sys_set_robust_list, struct robust_list_head *, size_t)
+WRAP3(sys_get_robust_list, int, struct robust_list_head **, size_t *)
 WRAP4(sys_prlimit64, pid_t, unsigned int, const void *, void *)
 WRAP2(sys_getrlimit, unsigned int, void *)
 WRAP4(sys_reboot, int, int, unsigned int, void *)
+WRAP4(sys_kexec_load, unsigned long, unsigned long, struct kexec_segment *, unsigned long)
 WRAP2(sys_pipe2, int *, int)
 WRAP1(sys_pipe, int *)
 WRAP1(sys_sigreturn, struct sigcontext *)
@@ -211,6 +215,8 @@ static int64_t wrap_sys_getppid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t 
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getppid(); }
 static int64_t wrap_sys_setsid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_setsid(); }
+static int64_t wrap_sys_setpgid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a3;(void)a4;(void)a5;(void)a6; return sys_setpgid((pid_t)a1, (pid_t)a2); }
 static int64_t wrap_sys_getuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getuid(); }
 static int64_t wrap_sys_geteuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
@@ -309,6 +315,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_wait4]          = wrap_sys_waitpid;
   syscall_table_rw[__NR_kill]           = wrap_sys_kill;
   syscall_table_rw[__NR_reboot]         = wrap_sys_reboot;
+  syscall_table_rw[__NR_kexec_load]     = wrap_sys_kexec_load;
   syscall_table_rw[__NR_tgkill]         = wrap_sys_tgkill;
   syscall_table_rw[__NR_getdents]       = wrap_sys_getdents;
   syscall_table_rw[__NR_getcwd]         = wrap_sys_getcwd;
@@ -341,6 +348,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_gettimeofday]   = wrap_sys_gettimeofday;
   syscall_table_rw[__NR_getppid]        = wrap_sys_getppid;
   syscall_table_rw[__NR_setsid]         = wrap_sys_setsid;
+  syscall_table_rw[__NR_setpgid]        = wrap_sys_setpgid;
   syscall_table_rw[__NR_arch_prctl]     = wrap_sys_arch_prctl;
   syscall_table_rw[__NR_set_tid_address] = wrap_sys_set_tid_address;
   syscall_table_rw[__NR_openat]         = wrap_sys_openat;
@@ -349,6 +357,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_futex]          = wrap_sys_futex;
   syscall_table_rw[__NR_clock_gettime]  = wrap_sys_clock_gettime;
   syscall_table_rw[__NR_set_robust_list] = wrap_sys_set_robust_list;
+  syscall_table_rw[__NR_get_robust_list] = wrap_sys_get_robust_list;
   syscall_table_rw[__NR_getrandom]      = wrap_sys_getrandom;
   syscall_table_rw[__NR_prlimit64]      = wrap_sys_prlimit64;
   syscall_table_rw[__NR_getrlimit]      = wrap_sys_getrlimit;
@@ -371,7 +380,7 @@ void syscall_table_init(void)
    */
   {
     static const unsigned socket_nosys_nrs[] = {
-      __NR_sendmsg, __NR_recvmsg, __NR_shutdown, __NR_listen,
+      __NR_sendmsg, __NR_recvmsg, __NR_shutdown,
       __NR_getsockname, __NR_getpeername, __NR_socketpair, __NR_setsockopt,
       __NR_getsockopt,
     };
@@ -385,6 +394,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_socket]    = wrap_sys_socket;
   syscall_table_rw[__NR_bind]      = wrap_sys_bind;
   syscall_table_rw[__NR_connect]   = wrap_sys_connect;
+  syscall_table_rw[__NR_listen]    = wrap_sys_listen;
   syscall_table_rw[__NR_accept]    = wrap_sys_accept;
   syscall_table_rw[__NR_sendto]    = wrap_sys_sendto;
   syscall_table_rw[__NR_recvfrom]    = wrap_sys_recvfrom;
@@ -430,45 +440,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 
   if (do_trace) {
     extern uint64_t iretq_checkpoint_buf[40];
-    serial_print("FASE10 pre pid=");
-    serial_print_hex32((uint32_t)cur_pid);
-    serial_print(" nr=");
-    serial_print_hex64(syscall_num);
-    serial_print(" irq_ck36=");
-    serial_print_hex64(iretq_checkpoint_buf[36]);
-    serial_print(" irq_pre=");
-    serial_print_hex64(iretq_checkpoint_buf[37]);
-    serial_print(" irq_ck38=");
-    serial_print_hex64(iretq_checkpoint_buf[38]);
-    serial_print(" irq_post=");
-    serial_print_hex64(iretq_checkpoint_buf[39]);
-    serial_print(" iret_id_class=");
-    serial_print_hex64(iretq_checkpoint_buf[26]);
-    serial_print(" rsp_pre_pop=");
-    serial_print_hex64(iretq_checkpoint_buf[28]);
-    serial_print(" rsp_pre_iret=");
-    serial_print_hex64(iretq_checkpoint_buf[29]);
-    serial_print(" q0=");
-    serial_print_hex64(iretq_checkpoint_buf[16]);
-    serial_print(" q1=");
-    serial_print_hex64(iretq_checkpoint_buf[17]);
-    serial_print(" q2=");
-    serial_print_hex64(iretq_checkpoint_buf[18]);
-    serial_print(" q3=");
-    serial_print_hex64(iretq_checkpoint_buf[19]);
-    serial_print(" q4=");
-    serial_print_hex64(iretq_checkpoint_buf[20]);
-    serial_print(" q5=");
-    serial_print_hex64(iretq_checkpoint_buf[21]);
-    serial_print(" q6=");
-    serial_print_hex64(iretq_checkpoint_buf[22]);
-    serial_print(" q7=");
-    serial_print_hex64(iretq_checkpoint_buf[23]);
-    serial_print(" q8=");
-    serial_print_hex64(iretq_checkpoint_buf[24]);
-    serial_print(" q9=");
-    serial_print_hex64(iretq_checkpoint_buf[25]);
-    serial_print("\n");
   }
 
   if (syscall_num >= __NR_syscall_max)
@@ -500,13 +471,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 
   if (do_trace) {
     fase10_count++;
-    serial_print("FASE10 post pid=");
-    serial_print_hex32((uint32_t)cur_pid);
-    serial_print(" nr=");
-    serial_print_hex64(syscall_num);
-    serial_print(" retval=");
-    serial_print_hex64((uint64_t)r);
-    serial_print("\n");
   }
 
   if (syscall_num == __NR_fork || syscall_num == __NR_clone ||

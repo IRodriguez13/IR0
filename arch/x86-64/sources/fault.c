@@ -583,10 +583,59 @@ void page_fault_handler_x64(uint64_t *stack)
 
 	/* Handle write protection fault (page present but not writable) */
 	if (user && !not_present && write) {
+		uint64_t *pte;
+		uint64_t entry;
+		uintptr_t old_phys;
+		uintptr_t new_phys;
+		uint64_t vaddr_aligned;
+		uint64_t map_flags;
+
 		current = process_get_current();
-		if (current) {
-			pf_user_segv(current, stack, fault_addr, errcode);
+		if (!current || !current->page_directory) {
+			return;
 		}
+
+		vaddr_aligned = fault_addr & ~0xFFFUL;
+		pte = paging_get_pte(current->page_directory, vaddr_aligned);
+		if (!pte || !(*pte & PAGE_PRESENT) || !(*pte & PAGE_USER) ||
+		    !(*pte & PAGE_COW) || (*pte & PAGE_RW)) {
+			pf_user_segv(current, stack, fault_addr, errcode);
+			return;
+		}
+
+		entry = *pte;
+		old_phys = (uintptr_t)(entry & PAGE_PTE_PFN_MASK);
+
+		/* Last reference: just re-enable write, clear COW. */
+		if (pmm_frame_refcount(old_phys) <= 1) {
+			*pte = (entry | PAGE_RW) & ~PAGE_COW;
+			__asm__ volatile("invlpg (%0)" ::"r"(vaddr_aligned)
+					 : "memory");
+			return;
+		}
+
+		new_phys = pmm_alloc_frame();
+		if (!new_phys) {
+			pf_user_segv(current, stack, fault_addr, errcode);
+			return;
+		}
+
+		memcpy((void *)new_phys, (void *)old_phys, 0x1000);
+
+		map_flags = (entry & 0xFFF) | PAGE_USER | PAGE_RW;
+		map_flags &= ~(PAGE_COW | PAGE_GLOBAL);
+		if (!(entry & PAGE_NX))
+			map_flags |= PAGE_EXEC;
+
+		if (map_page_in_directory(current->page_directory, vaddr_aligned,
+					  new_phys, map_flags) != 0) {
+			pmm_free_frame(new_phys);
+			pf_user_segv(current, stack, fault_addr, errcode);
+			return;
+		}
+
+		pmm_frame_put(old_phys);
+		__asm__ volatile("invlpg (%0)" ::"r"(vaddr_aligned) : "memory");
 		return;
 	}
 

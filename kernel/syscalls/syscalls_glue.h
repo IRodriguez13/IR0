@@ -24,7 +24,6 @@ fd_entry_t *get_process_fd_table(void);
 void ensure_devfs_init(void);
 int stdio_is_redirected(fd_entry_t *fd_table, int fd);
 int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read);
-void fase50b_dump_bytes(const char *label, const void *buf, size_t n);
 void fase48_note_fd_created(void);
 
 /* Resolve user path against dirfd (Linux openat/fstatat subset). */

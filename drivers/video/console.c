@@ -315,13 +315,6 @@ void console_init(void)
 		use_fb = 1;
 		fb_compute_layout(w, h);
 		serial_print("CONSOLE_FB_BACKEND_ENABLED\n");
-		serial_print("FASE59B_CONSOLE_SCALE=");
-		serial_print_hex32((uint32_t)fb_scale);
-		serial_print(" ORIGIN=");
-		serial_print_hex32((uint32_t)fb_origin_x);
-		serial_print(",");
-		serial_print_hex32((uint32_t)fb_origin_y);
-		serial_print(" LOGICAL=80x25\n");
 	}
 #else
 	use_fb = 0;

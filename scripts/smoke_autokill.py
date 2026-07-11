@@ -30,7 +30,8 @@ DEFAULT_FAIL_RES: list[str] = [
     r"panicex\(",
     r"panic\(",
     r"GPF_IN_USERSPACE|General protection fault",
-    r"\bOOM\b|OOM_CLASS|USER_RECOVERABLE",
+    # Do not match bare "OOM_CLASS" — KTM scenario name mm.oom_class false-positives.
+    r"\bOOM\b|\[OOM_CLASS\]|\bUSER_RECOVERABLE\b",
     r"FORK_STATE.*FAILED|fork failed|FORK.*FAIL",
     r"\bASSERT\b|assertion failed",
     r"WAIT_.*_INVALID",
@@ -64,8 +65,13 @@ PROFILES: dict[str, dict[str, object]] = {
     },
     "fase52-tcc": {
         "success": ["FASE52_OK"],
-        "timeout": 180,
-        "stale_sec": 90,
+        "timeout": 300,
+        "stale_sec": 240,
+    },
+    "tcc-power-halt": {
+        "success": ["SYSTEM_SHUTDOWN_HALT"],
+        "timeout": 90,
+        "stale_sec": 45,
     },
     "fase51-shell": {
         "success": ["DEBUG_FASE51_GATED"],

@@ -22,11 +22,12 @@ int process_signal_is_default_fatal(process_t *p, int sig)
 		return 0;
 	if (sig == SIGKILL)
 		return 1;
-	if (sig != SIGTERM)
+	/* Default action Terminate — same path as sys_kill(SIGTERM). */
+	if (sig != SIGTERM && sig != SIGHUP)
 		return 0;
-	if (p->signal_ignored & SIGNAL_MASK(SIGTERM))
+	if (p->signal_ignored & SIGNAL_MASK(sig))
 		return 0;
-	handler = p->signal_handlers[SIGTERM];
+	handler = p->signal_handlers[sig];
 	if (handler && handler != SIG_DFL && handler != SIG_IGN)
 		return 0;
 	return 1;
@@ -37,7 +38,9 @@ int process_signal_default_kill(process_t *dying, int sig)
 	process_t *parent;
 	int parent_state_before = -1;
 
-	if (!dying || !process_signal_is_default_fatal(dying, sig))
+	if (!dying || dying->state == PROCESS_ZOMBIE)
+		return 0;
+	if (!process_signal_is_default_fatal(dying, sig))
 		return 0;
 
 	dying->irq_frame_saved = 0;

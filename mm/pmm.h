@@ -52,13 +52,28 @@ void pmm_init(uintptr_t mem_start, size_t mem_size);
 uintptr_t pmm_alloc_frame(void);
 
 /**
- * pmm_free_frame - Free a physical frame
+ * pmm_free_frame - Drop one reference to a physical frame
  * @phys_addr: Physical address of frame to free
  *
- * Marks the frame containing phys_addr as free in the bitmap.
- * Address is validated to be within managed memory region.
+ * Equivalent to pmm_frame_put(). The frame returns to the free bitmap only
+ * when its reference count reaches zero (COW-shared pages stay allocated).
  */
 void pmm_free_frame(uintptr_t phys_addr);
+
+/**
+ * pmm_frame_get - Add a reference to an allocated frame (fork COW share).
+ */
+void pmm_frame_get(uintptr_t phys_addr);
+
+/**
+ * pmm_frame_put - Drop a reference; free the frame when the count hits zero.
+ */
+void pmm_frame_put(uintptr_t phys_addr);
+
+/**
+ * pmm_frame_refcount - Current reference count, or 0 if unused/invalid.
+ */
+unsigned pmm_frame_refcount(uintptr_t phys_addr);
 
 /*
  * Physical bounds of the region covered by the PMM bitmap (RAM frames only).

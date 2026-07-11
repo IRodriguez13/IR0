@@ -38,8 +38,22 @@ static struct
  */
 static uint32_t pmm_search_hint;
 static int32_t *pmm_frame_owner;
+static uint16_t *pmm_frame_refs;
 static uint64_t pmm_diag_double_free;
 static uint32_t pmm_diag_events;
+
+static int pmm_frame_index(uintptr_t phys_addr, size_t *out_index)
+{
+	if (!pmm.initialized)
+		return -1;
+	if (phys_addr < pmm.mem_start || phys_addr >= pmm.mem_end)
+		return -1;
+	phys_addr &= ~(PMM_FRAME_SIZE - 1);
+	*out_index = (phys_addr - pmm.mem_start) / PMM_FRAME_SIZE;
+	if (*out_index >= pmm.total_frames)
+		return -1;
+	return 0;
+}
 
 /* BITMAP OPERATIONS                                                         */
 
@@ -101,6 +115,12 @@ void pmm_init(uintptr_t mem_start, size_t mem_size)
         for (size_t i = 0; i < pmm.total_frames; i++)
             pmm_frame_owner[i] = -1;
     }
+    pmm_frame_refs = kmalloc(pmm.total_frames * sizeof(uint16_t));
+    if (pmm_frame_refs)
+    {
+        for (size_t i = 0; i < pmm.total_frames; i++)
+            pmm_frame_refs[i] = 0;
+    }
 
 #if DEBUG_PMM
     serial_print("[PMM] Initialized\n");
@@ -132,13 +152,10 @@ uintptr_t pmm_alloc_frame(void)
                 pmm_search_hint = (uint32_t)((i + 1) % pmm.total_frames);
                 if (pmm_frame_owner)
                     pmm_frame_owner[i] = (int32_t)owner_pid;
+                if (pmm_frame_refs)
+                    pmm_frame_refs[i] = 1;
                 if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
                 {
-                    serial_print("[FASE41][PMM] ALLOC pid=");
-                    serial_print_hex32((uint32_t)owner_pid);
-                    serial_print(" frame=");
-                    serial_print_hex64((uint64_t)(pmm.mem_start + (i * PMM_FRAME_SIZE)));
-                    serial_print("\n");
                     pmm_diag_events++;
                 }
 
@@ -155,58 +172,74 @@ uintptr_t pmm_alloc_frame(void)
     return 0;
 }
 
+void pmm_frame_get(uintptr_t phys_addr)
+{
+	size_t frame_index;
+
+	if (pmm_frame_index(phys_addr, &frame_index) != 0)
+		return;
+	if (!bitmap_test(frame_index) || !pmm_frame_refs)
+		return;
+	if (pmm_frame_refs[frame_index] < 0xFFFF)
+		pmm_frame_refs[frame_index]++;
+}
+
+void pmm_frame_put(uintptr_t phys_addr)
+{
+	size_t frame_index;
+
+	if (pmm_frame_index(phys_addr, &frame_index) != 0)
+	{
+#if DEBUG_PMM
+		serial_print("[PMM] WARN: Invalid address in put\n");
+#endif
+		return;
+	}
+
+	if (!bitmap_test(frame_index))
+	{
+		pmm_diag_double_free++;
+#if DEBUG_PMM
+		serial_print("[PMM] WARN: Double free detected\n");
+#endif
+		return;
+	}
+
+	if (pmm_frame_refs && pmm_frame_refs[frame_index] > 1)
+	{
+		pmm_frame_refs[frame_index]--;
+		return;
+	}
+
+	if (pmm_frame_refs)
+		pmm_frame_refs[frame_index] = 0;
+	bitmap_clear(frame_index);
+	pmm.used_frames--;
+	if (pmm_frame_owner)
+		pmm_frame_owner[frame_index] = -1;
+	if (frame_index < (size_t)pmm_search_hint)
+		pmm_search_hint = 0;
+	if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
+		pmm_diag_events++;
+#if DEBUG_PMM
+	serial_print("[PMM] Freed frame\n");
+#endif
+}
+
+unsigned pmm_frame_refcount(uintptr_t phys_addr)
+{
+	size_t frame_index;
+
+	if (pmm_frame_index(phys_addr, &frame_index) != 0)
+		return 0;
+	if (!bitmap_test(frame_index) || !pmm_frame_refs)
+		return 0;
+	return (unsigned)pmm_frame_refs[frame_index];
+}
+
 void pmm_free_frame(uintptr_t phys_addr)
 {
-    if (!pmm.initialized)
-        return;
-    
-    /* Validate address is within managed region */
-    if (phys_addr < pmm.mem_start || phys_addr >= pmm.mem_end)
-    {
-#if DEBUG_PMM
-        serial_print("[PMM] WARN: Invalid address in free\n");
-#endif
-        return;
-    }
-    
-    /* Align to frame boundary */
-    phys_addr &= ~(PMM_FRAME_SIZE - 1);
-    
-    /* Calculate frame index */
-    size_t frame_index = (phys_addr - pmm.mem_start) / PMM_FRAME_SIZE;
-    
-    /* Only free if currently used */
-    if (bitmap_test(frame_index))
-    {
-        int32_t owner_pid = pmm_frame_owner ? pmm_frame_owner[frame_index] : -1;
-        bitmap_clear(frame_index);
-        pmm.used_frames--;
-        if (pmm_frame_owner)
-            pmm_frame_owner[frame_index] = -1;
-
-        if (frame_index < (size_t)pmm_search_hint)
-            pmm_search_hint = 0;
-        if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
-        {
-            serial_print("[FASE41][PMM] FREE frame=");
-            serial_print_hex64((uint64_t)phys_addr);
-            serial_print(" owner=");
-            serial_print_hex32((uint32_t)owner_pid);
-            serial_print("\n");
-            pmm_diag_events++;
-        }
-        
-#if DEBUG_PMM
-        serial_print("[PMM] Freed frame\n");
-#endif
-    }
-    else
-    {
-        pmm_diag_double_free++;
-#if DEBUG_PMM
-        serial_print("[PMM] WARN: Double free detected\n");
-#endif
-    }
+	pmm_frame_put(phys_addr);
 }
 
 /*

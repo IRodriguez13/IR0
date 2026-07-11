@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE42 smoke-exec-storm
+ * IR0_MM smoke-exec-storm
  * 512x: fork -> exec("/bin/f41true") -> wait
  */
 
@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE42_EXEC_LOOPS 512
+#define IR0_MM_EXEC_LOOPS 512
 
 static void write_str(const char *s)
 {
@@ -87,7 +87,7 @@ int main(void)
 	int wait_fail = 0;
 	char *argv[] = { "/bin/f41true", NULL };
 
-	for (int i = 0; i < FASE42_EXEC_LOOPS; i++)
+	for (int i = 0; i < IR0_MM_EXEC_LOOPS; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
@@ -106,7 +106,7 @@ int main(void)
 	}
 
 	used_after = read_used_kb();
-	write_str("FASE42_EXEC_STORM pages_before=");
+	write_str("IR0_MM_EXEC_STORM pages_before=");
 	write_dec_u64((used_before > 0) ? (uint64_t)(used_before / 4) : 0);
 	write_str(" pages_after=");
 	write_dec_u64((used_after > 0) ? (uint64_t)(used_after / 4) : 0);

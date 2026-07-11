@@ -79,6 +79,7 @@ setup/runit/stage/
 # Smoke binaries (built locally)
 setup/doom/doomgeneric_smoke
 setup/pid1/fase52_harness
+setup/pid1/tcc_power_halt_harness
 setup/pid1/musl_pthread_smoke
 setup/pid1/su_setuid_smoke
 

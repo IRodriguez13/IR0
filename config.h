@@ -79,6 +79,12 @@
 #else
 #define DEBUG_PROCESS 0
 #endif
+
+#if defined(CONFIG_DEBUG_BOOT) && CONFIG_DEBUG_BOOT
+#define DEBUG_BOOT 1                  /* Verbose [BOOT]/serial chatter */
+#else
+#define DEBUG_BOOT 0
+#endif
 #if defined(CONFIG_DEBUG_SCHEDULER) && CONFIG_DEBUG_SCHEDULER
 #define DEBUG_SCHEDULER 1             /* Scheduler decisions */
 #else
@@ -97,19 +103,9 @@
 #define DEBUG_MMAP_AUDIT 0
 #endif
 
-/* FASE50 exec/open bring-up serial diagnostics ([FASE50]/[EXEC_*]/[IR0_OPEN_ABI]) */
-#if defined(CONFIG_DEBUG_FASE50) && CONFIG_DEBUG_FASE50
-#define DEBUG_FASE50 1
-#else
+/* Legacy FASE49/50 Kconfig symbols removed — always off. */
 #define DEBUG_FASE50 0
-#endif
-
-/* FASE49 pipe/fd lifecycle serial diagnostics ([FASE49] tags) */
-#if defined(CONFIG_DEBUG_FASE49) && CONFIG_DEBUG_FASE49
-#define DEBUG_FASE49 1
-#else
 #define DEBUG_FASE49 0
-#endif
 
 /* Trap Flag / #DB — off by default; enable only for deliberate tracing. */
 #ifndef IR0_ENABLE_SINGLE_STEP
