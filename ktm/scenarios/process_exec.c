@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "../ktm_internal.h"
+#include <ktm_internal.h>
 
 static int scenario_process_exec_run(ktm_context_t *ctx)
 {

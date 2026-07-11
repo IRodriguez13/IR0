@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "../ktm_internal.h"
+#include <ktm_internal.h>
 
 extern void paging_ir0_mm_category_stats(uint64_t *user_alloc, uint64_t *user_free,
 					 uint64_t *pt_alloc, uint64_t *pt_free,

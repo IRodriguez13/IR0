@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "../ktm_internal.h"
+#include <ktm_internal.h>
 
 extern void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
 					     uint64_t mm_created, uint64_t mm_destroyed);

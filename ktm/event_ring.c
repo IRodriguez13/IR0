@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "ktm_internal.h"
+#include <ktm_internal.h>
 #include <ktm.h>
 #include <config.h>
 #include <ir0/process.h>

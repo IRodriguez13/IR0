@@ -137,8 +137,9 @@ CFLAGS += $(CFLAGS_TARGET)
 # Include paths
 CFLAGS += -I$(KERNEL_ROOT)
 CFLAGS += -I$(KERNEL_ROOT)/includes
-CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
+# ktm/include before includes/ir0 so <ktm.h> is not shadowed by includes/ir0/ktm.h
 CFLAGS += -I$(KERNEL_ROOT)/ktm/include
+CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
 CFLAGS += -I$(KERNEL_ROOT)/arch/arm64

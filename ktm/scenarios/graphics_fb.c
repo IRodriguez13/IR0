@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "../ktm_internal.h"
+#include <ktm_internal.h>
 #include <ir0/fb.h>
 
 static int scenario_graphics_fb_run(ktm_context_t *ctx)
