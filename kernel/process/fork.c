@@ -739,8 +739,9 @@ static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
 /*
  * fork() - POSIX fork for user and kernel processes.
  *
- * Clones the parent process struct and user address space (full copy, no COW),
- * duplicates the FD table, and arranges for the child to return 0 from fork().
+ * Clones the parent process struct and user address space (share-on-fork COW
+ * via copy_process_memory), duplicates the FD table, and arranges for the
+ * child to return 0 from fork().
  */
 pid_t fork(void)
 {
