@@ -1,8 +1,9 @@
 # IR0 — Stable baseline (release 0.0.1)
 
-> **Last verified:** 2026-07-10  
+> **Last verified:** 2026-07-11  
 > **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
-> commits `f6c71e5` (KTM land), `62cc512` (real fork COW), `Documentation/releases/IR0_0.0.1_SCOPE.md`.
+> commits `f6c71e5` (KTM land), `62cc512` (real fork COW), Future F2–F5 (`71ed5c1`),  
+> `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 
 This document is the **single checklist** for what is **stable enough to run and test in QEMU** (serial and GTK UI), what was formerly **in development** and is now closed for **0.0.1**, and what remains **future work** (see [`ROADMAP.md`](ROADMAP.md) P1+).
 
@@ -115,8 +116,20 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | ATA + `/dev/hda` read | **Stable** | `block_hda_read_contract` ktest |
 | MINIX root on `disk.img` | **Stable** | default boot layout |
 | VFS mount contracts | **Stable** | `runtime-mount-check`, mount ktests |
-| FAT16 on `block_dev` | **Read-only MVP** | `fs/fat16_disk.c`; not full write path |
-| EXT2 / AHCI / NVMe | **Future** | P1-storage |
+| FAT16 on `block_dev` | **Stable (RO + write audit)** | `smoke-fat16-mount`; `linux-abi-audit-vfs-write-fat` |
+| EXT2 read-only | **Stable for test** | `smoke-ext2-mount` |
+| GPT probe | **Stable for test** | `smoke-gpt-partition` |
+| AHCI detect/read/multi + NCQ | **Stable for test** | `smoke-ahci-read` (`AHCI_NCQ_OK` / `UNSUPPORTED`) |
+| NVMe | **Future** | backlog F6 |
+
+### Power / reboot (post-0.0.1)
+
+| Item | Status | Proof |
+|------|--------|-------|
+| reboot/halt/poweroff + BusyBox applets | **Stable for test** | `smoke-runit-busybox-*` |
+| ACPI FADT map + `_S5_` SLP_TYP | **Stable for test** | `ACPI_S5_OK` + `ACPI_PM1A_POWEROFF` |
+| kexec stub (reboot, no load) | **Stub** | `REBOOT_KEXEC_STUB` |
+| SW_SUSPEND stub (return 0) | **Stub** | `SYSTEM_SUSPEND_ENTER` |
 
 ---
 
@@ -217,7 +230,8 @@ After T1-sensitive changes: `make smoke-tier1` or at minimum `make smoke-runit-b
 | WM + panel | T3 — out of kernel tree |
 | SMP, CFS scheduler backend | ROADMAP P2 |
 | Kernel module loader (MOD-*) | ROADMAP P2 |
-| FAT16 write, EXT2 ro, AHCI | ROADMAP P1-storage |
+| NVMe MVP | BACKLOG F6 |
+| kexec_load / real S3 resume | BACKLOG Future P2 |
 | `pthread_create` via musl libc only (no inline clone in smoke) | ROADMAP POSIX-1 |
 | Full PTY / job control | ROADMAP P1-term |
 
