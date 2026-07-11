@@ -1,11 +1,17 @@
 # IR0 — Stable baseline (release 0.0.1)
 
-> **Last verified:** 2026-06-26  
-> **Source of truth:** `make release-0.0.1` (3/3 green on 2026-06-26), `Documentation/releases/IR0_0.0.1_SCOPE.md`, `Makefile` smoke targets, CTR gates.
+> **Last verified:** 2026-07-10  
+> **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
+> commits `f6c71e5` (KTM land), `62cc512` (real fork COW), `Documentation/releases/IR0_0.0.1_SCOPE.md`.
 
 This document is the **single checklist** for what is **stable enough to run and test in QEMU** (serial and GTK UI), what was formerly **in development** and is now closed for **0.0.1**, and what remains **future work** (see [`ROADMAP.md`](ROADMAP.md) P1+).
 
 Maintainer sign-off (2026-06-26): treat the items below as **done for 0.0.1-rc1** after `make release-0.0.1` is green **3/3 consecutivas** (evidencia en `/tmp/release-run-{1,2,3}.log`).
+
+**Honesty note (2026-07-10):** older STABLE/SCOPE text claimed fork COW while the kernel still
+full-copied user pages. Real share-on-fork + write-fault break landed in `62cc512`; proof remains
+`make smoke-mm-cow-lazy`. KTM is the canonical in-kernel test plane (`make ktm-run`,
+`make ktm-userdev-run`); see [`ai_driven_dev/ktm.md`](ai_driven_dev/ktm.md).
 
 ---
 
@@ -74,14 +80,15 @@ These items were tracked as partial, WIP, or hardening backlog. They are **close
 
 | Item | Paths | Proof |
 |------|-------|-------|
-| PMM frame refcount | `mm/pmm.c` | ktests + FASE40 |
-| Fork COW (hybrid) | `mm/paging.c`, `arch/x86-64/sources/fault.c` | `smoke-mm-cow-lazy` |
+| PMM frame refcount | `mm/pmm.c` (`pmm_frame_get`/`put`) | FASE40 + ktests |
+| Fork COW (share + WP break) | `mm/paging.c`, `arch/x86-64/sources/fault.c` | `smoke-mm-cow-lazy` (real since `62cc512`) |
 | Lazy anon `mmap` | `CONFIG_LAZY_ANON_MMAP` | same smoke |
 | Lazy `brk` | `CONFIG_LAZY_BRK_HEAP` | same smoke |
 | ELF PT_LOAD VMA metadata | `kernel/elf_loader.c`, `process_user_vma_prot()` | exec + mmap ktests |
 
-**Not required for 0.0.1:** 2 MiB huge-page COW, optional stack COW (see ROADMAP P2/PERF-2).
+**Not required for 0.0.1:** 2 MiB huge-page COW, file-backed COW, optional stack COW (see ROADMAP P2/PERF-2).
 
+Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 ### Userspace / init
 
 | Item | Paths | Proof |
@@ -130,6 +137,7 @@ Everything in this table was reached in at least one oleada and has a **runnable
 | **T2** | framebuffer `/dev/fb0` | legacy `smoke-fase54a-fbdev`¹ | `make run-fase58c-fbdev-gui` |
 | **T2** | input `/dev/events0` | legacy `smoke-fase54b-input`¹ | keyboard in GTK window |
 | **T2** | Doom-class client stub | legacy `smoke-fase55b-doom-stub`¹ | `make run-fase55d-doomgeneric-gui` |
+| **Dev** | KTM boot + userdev | `make ktm-run`, `make ktm-userdev-run` | — |
 | **Dev** | KTM inventory | `make ktm-check` | — |
 | **Dev** | arch + host contracts | `make arch-guard`, `make -C tests/host run` | — |
 
