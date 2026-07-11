@@ -20,6 +20,7 @@ The goal is to document implemented behavior first, then known gaps.
 - `FILESYSTEM.md`: VFS layer, mounted filesystems, permissions path, and policy.
 - `VIRTUAL_FILESYSTEMS.md`: `/proc`, `/dev`, `/sys`, and observable interfaces.
 - `PSEUDO_FS_HEART.md`: registry + `/heart` facade + ARCH-3 fd_table lifecycle.
+- `STABLE.md`: release 0.0.1 checklist; merge→`master` blockers = TinyCC + Doom T2.
 - `BACKLOG_REMAINING.md`: honest post-0.0.1 open work (storage, POSIX, residual).
 - `KTM_FASE_PARITY.md`: FASE oleada → KTM analogue map (COVERED/PARTIAL/GAP).
 - `ai_driven_dev/ktm.md`: Kernel Test Module facade, Kconfig tiers, `ktm-run` / userdev gates.
