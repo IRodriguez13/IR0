@@ -299,6 +299,7 @@ KERNEL_OBJS = \
     ktm/scenarios/process_lifecycle.o \
     ktm/scenarios/pipe_lifecycle.o \
     ktm/scenarios/mm_cow_fork.o \
+    ktm/scenarios/mm_vma.o \
     ktm/scenarios/process_exec.o \
     ktm/scenarios/process_fork_rollback.o \
     ktm/userdev.o \

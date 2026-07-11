@@ -85,6 +85,7 @@ static const ktm_scenario_t scenario_process_lifecycle = {
 
 void ktm_scenario_register_pipe_lifecycle(void);
 void ktm_scenario_register_mm_cow_fork(void);
+void ktm_scenario_register_mm_vma(void);
 void ktm_scenario_register_process_exec(void);
 void ktm_scenario_register_process_fork_rollback(void);
 
@@ -93,6 +94,7 @@ void ktm_scenarios_register_builtins(void)
 	(void)ktm_scenario_register(&scenario_process_lifecycle);
 	ktm_scenario_register_pipe_lifecycle();
 	ktm_scenario_register_mm_cow_fork();
+	ktm_scenario_register_mm_vma();
 	ktm_scenario_register_process_exec();
 	ktm_scenario_register_process_fork_rollback();
 }
