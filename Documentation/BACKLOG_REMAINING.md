@@ -26,6 +26,7 @@
 | kexec_load MVP | `smoke-kexec-load` → `KEXEC_LOAD_OK` + `REBOOT_KEXEC_LOADED` + `KEXEC_PAYLOAD_OK` |
 | S3 soft resume MVP | `ACPI_S3_OK` + `SYSTEM_S3_ENTER` + `SYSTEM_S3_RESUME_OK` (`smoke-reboot-s3`) |
 | F6 NVMe detect+read | `smoke-nvme-read` → `NVME_DETECT_OK` + `NVME_READ_OK` |
+| P1-storage bundle | `make smoke-p1-storage` (FAT/EXT2/GPT/AHCI/NVMe) |
 | Kernel relative includes hygiene | `<kernel/…>` in syscalls/process; arch-guard `[kernel-include]` |
 | KTM typed `PIPE_*` events | `KTM_EVENT_PIPE_{CREATE,EOF,EPIPE,WAKE}` in `pipe.c` |
 | POSIX-2 setsid/setpgid + SIGHUP/TTY | `smoke-posix-setsid`, `smoke-posix-sighup-tty` |

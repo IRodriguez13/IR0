@@ -3655,6 +3655,16 @@ roadmap-phase2-driver-expansion: roadmap-phase1-stability
 	@$(MAKE) -s runtime-mount-check
 	@echo "✓ roadmap phase2 ready (modern net/storage driver work can proceed)"
 
+.PHONY: smoke-p1-storage
+smoke-p1-storage:
+	@echo "  SMOKE   P1-storage bundle (FAT/EXT2/GPT/AHCI/NVMe)"
+	@$(MAKE) -s smoke-fat16-mount
+	@$(MAKE) -s smoke-ext2-mount
+	@$(MAKE) -s smoke-gpt-partition
+	@$(MAKE) -s smoke-ahci-read
+	@$(MAKE) -s smoke-nvme-read
+	@echo "✓ smoke-p1-storage passed"
+
 roadmap-phase3-core-features: roadmap-phase2-driver-expansion
 	@echo "  ROADMAP phase3 core feature gate"
 	@echo "✓ roadmap phase3 ready (network/process semantic expansion can proceed)"
