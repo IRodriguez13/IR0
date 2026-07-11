@@ -2049,6 +2049,60 @@ smoke-runit-busybox-halt: load-userspace-runit kernel-x64-userspace.iso
 		exit 1; \
 	fi
 
+# BusyBox poweroff applet → sys_reboot(POWER_OFF).
+RUNIT_BB_POWEROFF_LOG = /tmp/runit-busybox-poweroff-smoke.log
+smoke-runit-busybox-poweroff: load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   runit + BusyBox poweroff applet..."
+	@DISK=$$(mktemp /tmp/ir0-runit-bb-pwroff.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	chmod +x setup/runit/inject-smoke-service.sh; \
+	./setup/runit/inject-smoke-service.sh $$DISK bbpwroff \
+		setup/runit/stage-bin/runit_busybox_poweroff_run \
+		setup/runit/stage-bin/runit_busybox_poweroff_smoke bin/bb-pwroff; \
+	rm -f $(RUNIT_BB_POWEROFF_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(RUNIT_BB_POWEROFF_LOG) --timeout 60 --stale-sec 20 \
+		--done SYSTEM_SHUTDOWN_POWEROFF -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "BUSYBOX_POWEROFF_SMOKE_CALL" $(RUNIT_BB_POWEROFF_LOG) && \
+	    grep -q "SYSTEM_SYNC_OK" $(RUNIT_BB_POWEROFF_LOG) && \
+	    grep -q "SYSTEM_SHUTDOWN_POWEROFF" $(RUNIT_BB_POWEROFF_LOG); then \
+		echo "✓ smoke-runit-busybox-poweroff passed"; \
+	else \
+		echo "✗ smoke-runit-busybox-poweroff FAILED"; \
+		grep -E 'BUSYBOX_|SYSTEM_|RUNIT_|KERNEL PANIC|panic' $(RUNIT_BB_POWEROFF_LOG) | tail -40; \
+		exit 1; \
+	fi
+
+# BusyBox reboot applet → sys_reboot(RESTART).
+RUNIT_BB_REBOOT_LOG = /tmp/runit-busybox-reboot-smoke.log
+smoke-runit-busybox-reboot: load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   runit + BusyBox reboot applet..."
+	@DISK=$$(mktemp /tmp/ir0-runit-bb-reboot.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	chmod +x setup/runit/inject-smoke-service.sh; \
+	./setup/runit/inject-smoke-service.sh $$DISK bbreboot \
+		setup/runit/stage-bin/runit_busybox_reboot_run \
+		setup/runit/stage-bin/runit_busybox_reboot_smoke bin/bb-reboot; \
+	rm -f $(RUNIT_BB_REBOOT_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(RUNIT_BB_REBOOT_LOG) --timeout 60 --stale-sec 20 \
+		--done SYSTEM_SHUTDOWN_REBOOT -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "BUSYBOX_REBOOT_SMOKE_CALL" $(RUNIT_BB_REBOOT_LOG) && \
+	    grep -q "SYSTEM_SYNC_OK" $(RUNIT_BB_REBOOT_LOG) && \
+	    grep -q "SYSTEM_SHUTDOWN_REBOOT" $(RUNIT_BB_REBOOT_LOG); then \
+		echo "✓ smoke-runit-busybox-reboot passed"; \
+	else \
+		echo "✗ smoke-runit-busybox-reboot FAILED"; \
+		grep -E 'BUSYBOX_|SYSTEM_|RUNIT_|KERNEL PANIC|panic' $(RUNIT_BB_REBOOT_LOG) | tail -40; \
+		exit 1; \
+	fi
+
 # TinyCC in guest compiles power_halt.c → /dev/ktm + reboot(HALT).
 build-init-tcc-power-halt:
 	@if [ -z "$(MUSL_CC)" ]; then \
