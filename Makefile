@@ -2477,20 +2477,21 @@ build-init-reboot-kexec-enosys:
 
 smoke-reboot-kexec-enosys: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   reboot(KEXEC) → ENOSYS..."
+	@echo "  SMOKE   reboot(KEXEC) → stub reboot..."
 	@$(MAKE) -s build-init-reboot-kexec-enosys
 	@DISK=$$(mktemp /tmp/ir0-kexec-enosys.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(KEXEC_ENOSYS_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(KEXEC_ENOSYS_LOG) --timeout 45 --stale-sec 15 \
-		--done KEXEC_ENOSYS_OK -- \
+		--done REBOOT_KEXEC_STUB -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK; \
-	if grep -q "REBOOT_KEXEC_ENOSYS" $(KEXEC_ENOSYS_LOG) && \
-	    grep -q "KEXEC_ENOSYS_OK" $(KEXEC_ENOSYS_LOG); then \
+	if grep -q "REBOOT_KEXEC_STUB" $(KEXEC_ENOSYS_LOG) && \
+	    grep -q "KEXEC_SMOKE_CALL" $(KEXEC_ENOSYS_LOG) && \
+	    ! grep -q "KEXEC_SMOKE_FAIL" $(KEXEC_ENOSYS_LOG); then \
 		echo "✓ smoke-reboot-kexec-enosys passed"; \
 	else \
 		echo "✗ smoke-reboot-kexec-enosys FAILED"; \
@@ -2506,7 +2507,7 @@ build-init-reboot-suspend-stub:
 
 smoke-reboot-suspend-stub: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   reboot(SW_SUSPEND) stub → ENOSYS..."
+	@echo "  SMOKE   reboot(SW_SUSPEND) stub → success..."
 	@$(MAKE) -s build-init-reboot-suspend-stub
 	@DISK=$$(mktemp /tmp/ir0-suspend-stub.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
@@ -2519,6 +2520,7 @@ smoke-reboot-suspend-stub: kernel-x64-userspace.iso
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK; \
 	if grep -q "SYSTEM_SUSPEND_STUB" $(SUSPEND_STUB_LOG) && \
+	    grep -q "SYSTEM_SUSPEND_ENTER" $(SUSPEND_STUB_LOG) && \
 	    grep -q "SUSPEND_STUB_OK" $(SUSPEND_STUB_LOG); then \
 		echo "✓ smoke-reboot-suspend-stub passed"; \
 	else \
@@ -2624,7 +2626,9 @@ smoke-ahci-read: kernel-x64-userspace.iso
 		-device ide-hd,drive=disk0,bus=ahci0.0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK; \
-	if grep -q "AHCI_READ_OK" $(AHCI_READ_SMOKE_LOG); then \
+	if grep -q "AHCI_READ_OK" $(AHCI_READ_SMOKE_LOG) && \
+	    (grep -q "AHCI_NCQ_OK" $(AHCI_READ_SMOKE_LOG) || \
+	     grep -q "AHCI_NCQ_UNSUPPORTED" $(AHCI_READ_SMOKE_LOG)); then \
 		echo "✓ smoke-ahci-read passed"; \
 	else \
 		echo "✗ smoke-ahci-read FAILED"; \

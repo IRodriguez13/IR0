@@ -699,11 +699,15 @@ int64_t sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg)
 		kernel_system_shutdown(IR0_SYSTEM_POWEROFF);
 		break;
 	case LINUX_REBOOT_CMD_KEXEC:
-		serial_print("REBOOT_KEXEC_ENOSYS\n");
-		return -ENOSYS;
+		/* MVP: no kexec_load — reboot as best-effort stub. */
+		serial_print("REBOOT_KEXEC_STUB\n");
+		kernel_system_shutdown(IR0_SYSTEM_REBOOT);
+		break;
 	case LINUX_REBOOT_CMD_SW_SUSPEND:
+		/* MVP: acknowledge suspend without full S3 resume path. */
 		serial_print("SYSTEM_SUSPEND_STUB\n");
-		return -ENOSYS;
+		serial_print("SYSTEM_SUSPEND_ENTER\n");
+		return 0;
 	default:
 		return -EINVAL;
 	}

@@ -3,12 +3,11 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: init_reboot_kexec_enosys_smoke.c
- * Description: reboot(KEXEC) must return -ENOSYS (stub; no kexec_load).
+ * Description: reboot(KEXEC) stub → REBOOT_KEXEC_STUB then machine reboot.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <errno.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -33,16 +32,10 @@ static void tag(const char *s)
 
 int main(void)
 {
-	long r;
-
 	tag("KEXEC_SMOKE_CALL\n");
-	r = syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
-		    (unsigned int)LINUX_REBOOT_CMD_KEXEC, (void *)0);
-	if (r == -1 && errno == ENOSYS)
-	{
-		tag("KEXEC_ENOSYS_OK\n");
-		return 0;
-	}
+	(void)syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+		      (unsigned int)LINUX_REBOOT_CMD_KEXEC, (void *)0);
+	/* Should not return: kernel reboots after REBOOT_KEXEC_STUB. */
 	tag("KEXEC_SMOKE_FAIL\n");
 	return 1;
 }

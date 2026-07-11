@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: acpi_pm.c
- * Description: Minimal ACPI FADT parse for PM1a/b poweroff (no AML/_S5).
+ * Description: ACPI FADT PM1a/b poweroff + DSDT _S5_ SLP_TYP scan (no full AML).
  *
  * Only walks tables that are either inside the early identity map (0..48MiB)
  * or mapped on demand via 4KiB supervisor identity (no boot-map expand).
@@ -12,7 +12,7 @@
  *
  * References:
  * - UEFI ACPI 6.5 §16 Waking and Sleeping
- * - OSDev ACPI poweroff (PM1a_CNT + SLP_EN)
+ * - OSDev ACPI poweroff (PM1a_CNT + SLP_TYP + SLP_EN; DSDT _S5_ package)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -80,6 +80,9 @@ typedef struct
 
 static uint16_t g_pm1a_cnt;
 static uint16_t g_pm1b_cnt;
+static uint8_t g_slp_typ_a;
+static uint8_t g_slp_typ_b;
+static int g_s5_ok;
 static int g_acpi_pm_ready;
 
 static int acpi_memcmp(const void *a, const void *b, size_t n)
@@ -167,6 +170,83 @@ static void outw_port(uint16_t port, uint16_t val)
 	__asm__ __volatile__("outw %0, %1" : : "a"(val), "Nd"(port) : "memory");
 }
 
+/*
+ * Scan DSDT AML for Name(_S5_, Package(...)) and extract SLP_TYP_a/b.
+ * Pattern from OSDev ACPI Shutdown (byte-prefix 0x0A + PackageOp 0x12).
+ */
+static int acpi_parse_s5_from_dsdt(uint32_t dsdt_phys)
+{
+	acpi_sdt_header_t *hdr;
+	const uint8_t *aml;
+	uint32_t len;
+	uint32_t i;
+
+	g_s5_ok = 0;
+	g_slp_typ_a = 0;
+	g_slp_typ_b = 0;
+
+	if (dsdt_phys == 0)
+		return -1;
+	if (!phys_safe(dsdt_phys, sizeof(*hdr)))
+		return -1;
+	hdr = (acpi_sdt_header_t *)(uintptr_t)dsdt_phys;
+	if (acpi_memcmp(hdr->signature, "DSDT", 4) != 0)
+		return -1;
+	len = hdr->length;
+	if (len < sizeof(*hdr) + 8 || len > ACPI_MAP_MAX_BYTES)
+		return -1;
+	if (!phys_safe(dsdt_phys, len))
+		return -1;
+
+	aml = (const uint8_t *)(uintptr_t)dsdt_phys;
+	for (i = sizeof(*hdr); i + 8 < len; i++)
+	{
+		const uint8_t *s5;
+		uint8_t pkg_lead;
+		uint32_t off;
+		uint8_t typ_a;
+		uint8_t typ_b;
+
+		if (aml[i] != '_' || aml[i + 1] != 'S' || aml[i + 2] != '5' ||
+		    aml[i + 3] != '_')
+			continue;
+
+		s5 = &aml[i];
+		/* NameOp 0x08 immediately before, or '\\' NameOp. */
+		if (!(s5[-1] == 0x08 ||
+		      (i >= 2 && s5[-2] == 0x08 && s5[-1] == '\\')))
+			continue;
+		if (s5[4] != 0x12) /* PackageOp */
+			continue;
+
+		off = 5;
+		pkg_lead = s5[off];
+		off += (uint32_t)(((pkg_lead & 0xC0u) >> 6) + 2);
+		if (i + off >= len)
+			continue;
+
+		if (s5[off] == 0x0A) /* BytePrefix */
+			off++;
+		if (i + off >= len)
+			continue;
+		typ_a = s5[off++];
+		if (i + off >= len)
+			continue;
+		if (s5[off] == 0x0A)
+			off++;
+		if (i + off >= len)
+			continue;
+		typ_b = s5[off];
+
+		g_slp_typ_a = typ_a & 0x07u;
+		g_slp_typ_b = typ_b & 0x07u;
+		g_s5_ok = 1;
+		serial_print("ACPI_S5_OK\n");
+		return 0;
+	}
+	return -1;
+}
+
 static int fadt_accept(uint64_t phys)
 {
 	acpi_fadt_t *fadt;
@@ -193,6 +273,7 @@ static int fadt_accept(uint64_t phys)
 	g_acpi_pm_ready = 1;
 	if (phys >= ACPI_SAFE_PHYS_MAX)
 		serial_print("ACPI_FADT_MAPPED\n");
+	(void)acpi_parse_s5_from_dsdt(fadt->dsdt);
 	return 0;
 }
 
@@ -282,21 +363,26 @@ int ir0_acpi_pm_init(void)
 
 int ir0_acpi_pm_try_poweroff(void)
 {
-	uint16_t val = (uint16_t)(0u | ACPI_SLP_EN);
+	uint16_t val_a;
+	uint16_t val_b;
 
 	(void)ir0_acpi_pm_init();
 	if (g_acpi_pm_ready && g_pm1a_cnt != 0)
 	{
+		val_a = (uint16_t)(((uint16_t)g_slp_typ_a << 10) | ACPI_SLP_EN);
+		val_b = (uint16_t)(((uint16_t)g_slp_typ_b << 10) | ACPI_SLP_EN);
+		if (g_s5_ok)
+			serial_print("ACPI_S5_POWEROFF\n");
 		serial_print("ACPI_PM1A_POWEROFF\n");
-		outw_port(g_pm1a_cnt, val);
+		outw_port(g_pm1a_cnt, val_a);
 		if (g_pm1b_cnt)
-			outw_port(g_pm1b_cnt, val);
+			outw_port(g_pm1b_cnt, val_b);
 		return 0;
 	}
 
 	/* QEMU/Bochs well-known PM1a soft-off ports (no AML). */
 	serial_print("ACPI_PM1A_FALLBACK_604\n");
-	outw_port(0x604, val);
-	outw_port(0xB004, val);
+	outw_port(0x604, (uint16_t)ACPI_SLP_EN);
+	outw_port(0xB004, (uint16_t)ACPI_SLP_EN);
 	return 0;
 }

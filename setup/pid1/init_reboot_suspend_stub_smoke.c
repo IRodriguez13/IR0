@@ -3,12 +3,11 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: init_reboot_suspend_stub_smoke.c
- * Description: reboot(SW_SUSPEND) stub → -ENOSYS + SYSTEM_SUSPEND_STUB.
+ * Description: reboot(SW_SUSPEND) stub → success + SYSTEM_SUSPEND_STUB.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <errno.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -38,7 +37,7 @@ int main(void)
 	tag("SUSPEND_SMOKE_CALL\n");
 	r = syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
 		    (unsigned int)LINUX_REBOOT_CMD_SW_SUSPEND, (void *)0);
-	if (r == -1 && errno == ENOSYS)
+	if (r == 0)
 	{
 		tag("SUSPEND_STUB_OK\n");
 		return 0;

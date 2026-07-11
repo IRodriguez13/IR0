@@ -7,9 +7,9 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: ahci.c
- * Description: AHCI DMA read/write (up to 2 ports) + ir0_block_* DMA read/write + ir0_block_* register.
+ * Description: AHCI DMA/NCQ read/write (up to 2 ports) + ir0_block_* register.
  *
- * Reference: https://wiki.osdev.org/AHCI (HBA port init + READ/WRITE DMA EXT).
+ * Reference: https://wiki.osdev.org/AHCI (HBA port init, DMA EXT, FPDMA NCQ).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -44,12 +44,20 @@
 #define ATA_DEV_DRQ        0x08
 #define ATA_CMD_READ_DMA_EX  0x25
 #define ATA_CMD_WRITE_DMA_EX 0x35
+#define ATA_CMD_READ_FPDMA   0x60
+#define ATA_CMD_WRITE_FPDMA  0x61
 #define ATA_CMD_IDENTIFY     0xEC
 
 #define FIS_TYPE_REG_H2D   0x27
 
 #define AHCI_SECTOR_SIZE   512u
 #define AHCI_ABAR_MAP_PAGES 8u
+#define AHCI_CAP_SNCQ      (1u << 30)
+#define AHCI_CAP_NCS_MASK  0x1F00u
+#define AHCI_CAP_NCS_SHIFT 8
+#define AHCI_CMD_SLOTS     8u
+#define AHCI_CLB_BYTES     1024u
+#define AHCI_CTBA_BYTES    256u
 
 struct hba_port
 {
@@ -185,24 +193,28 @@ static void ahci_pci_write(uint8_t bus, uint8_t slot, uint8_t func,
 }
 
 /* DMA structures: BSS is identity-mapped in low kernel memory. */
-#define AHCI_MAX_SLOTS 2
+#define AHCI_MAX_PORTS 2
 
 struct ahci_slot
 {
 	volatile struct hba_port *port;
 	int ready;
 	int registered;
+	int ncq_ok;
 	uint64_t nsectors;
 	char name[8];
-	uint8_t clb[1024] __attribute__((aligned(1024)));
+	uint8_t clb[AHCI_CLB_BYTES] __attribute__((aligned(1024)));
 	uint8_t fb[256] __attribute__((aligned(256)));
-	uint8_t ctba[256] __attribute__((aligned(128)));
+	uint8_t ctba[AHCI_CMD_SLOTS][AHCI_CTBA_BYTES]
+		__attribute__((aligned(128)));
 	uint8_t io_buf[AHCI_SECTOR_SIZE] __attribute__((aligned(16)));
 	uint8_t ident[AHCI_SECTOR_SIZE] __attribute__((aligned(16)));
 };
 
-static struct ahci_slot ahci_slots[AHCI_MAX_SLOTS];
+static struct ahci_slot ahci_slots[AHCI_MAX_PORTS];
 static int ahci_nslots;
+static int ahci_hba_sncq;
+static int ahci_hba_ncs;
 
 static volatile struct hba_mem *ahci_abar;
 static uintptr_t ahci_abar_phys;
@@ -246,6 +258,8 @@ static int ahci_port_rebase(struct ahci_slot *slot)
 {
 	struct hba_cmd_header *hdr;
 	volatile struct hba_port *port;
+	unsigned i;
+	unsigned nslots;
 
 	if (!slot || !slot->port)
 		return -EINVAL;
@@ -260,13 +274,40 @@ static int ahci_port_rebase(struct ahci_slot *slot)
 	memset(slot->fb, 0, sizeof(slot->fb));
 	memset(slot->ctba, 0, sizeof(slot->ctba));
 
+	nslots = (unsigned)ahci_hba_ncs;
+	if (nslots == 0 || nslots > AHCI_CMD_SLOTS)
+		nslots = AHCI_CMD_SLOTS;
+
 	hdr = (struct hba_cmd_header *)slot->clb;
-	hdr->ctba = (uint32_t)(uintptr_t)slot->ctba;
-	hdr->ctbau = 0;
-	hdr->prdtl = 1;
+	for (i = 0; i < nslots; i++)
+	{
+		hdr[i].ctba = (uint32_t)(uintptr_t)slot->ctba[i];
+		hdr[i].ctbau = 0;
+		hdr[i].prdtl = 1;
+	}
 
 	ahci_start_cmd(port);
 	return 0;
+}
+
+static int ahci_find_cmdslot(volatile struct hba_port *port)
+{
+	uint32_t slots;
+	unsigned i;
+	unsigned nslots;
+
+	if (!port)
+		return -1;
+	nslots = (unsigned)ahci_hba_ncs;
+	if (nslots == 0 || nslots > AHCI_CMD_SLOTS)
+		nslots = 1;
+	slots = port->sact | port->ci;
+	for (i = 0; i < nslots; i++)
+	{
+		if ((slots & (1u << i)) == 0)
+			return (int)i;
+	}
+	return -1;
 }
 
 static int ahci_issue_rw(struct ahci_slot *slot, uint64_t lba, uint32_t count,
@@ -278,6 +319,9 @@ static int ahci_issue_rw(struct ahci_slot *slot, uint64_t lba, uint32_t count,
 	struct fis_reg_h2d *fis;
 	uint32_t spin;
 	uintptr_t phys;
+	int cmdslot;
+	int use_ncq;
+	uint32_t bit;
 
 	if (!slot || !slot->ready || !slot->port || !buf || count == 0 ||
 	    count > 1)
@@ -296,13 +340,20 @@ static int ahci_issue_rw(struct ahci_slot *slot, uint64_t lba, uint32_t count,
 	if (spin >= 1000000)
 		return -EIO;
 
-	hdr = (struct hba_cmd_header *)slot->clb;
+	cmdslot = ahci_find_cmdslot(port);
+	if (cmdslot < 0)
+		return -EBUSY;
+	bit = 1u << (unsigned)cmdslot;
+
+	use_ncq = ahci_hba_sncq && slot->ncq_ok;
+
+	hdr = &((struct hba_cmd_header *)slot->clb)[cmdslot];
 	hdr->cfl = sizeof(struct fis_reg_h2d) / 4;
 	hdr->w = write ? 1 : 0;
 	hdr->prdtl = 1;
 	hdr->prdbc = 0;
 
-	tbl = (struct hba_cmd_tbl *)slot->ctba;
+	tbl = (struct hba_cmd_tbl *)slot->ctba[cmdslot];
 	memset(tbl, 0, sizeof(*tbl));
 	tbl->prdt_entry[0].dba = (uint32_t)phys;
 	tbl->prdt_entry[0].dbau = (uint32_t)(phys >> 32);
@@ -312,27 +363,44 @@ static int ahci_issue_rw(struct ahci_slot *slot, uint64_t lba, uint32_t count,
 	fis = (struct fis_reg_h2d *)tbl->cfis;
 	fis->fis_type = FIS_TYPE_REG_H2D;
 	fis->c = 1;
-	fis->command = write ? ATA_CMD_WRITE_DMA_EX : ATA_CMD_READ_DMA_EX;
+	fis->device = 1u << 6;
 	fis->lba0 = (uint8_t)(lba);
 	fis->lba1 = (uint8_t)(lba >> 8);
 	fis->lba2 = (uint8_t)(lba >> 16);
-	fis->device = 1u << 6;
 	fis->lba3 = (uint8_t)(lba >> 24);
 	fis->lba4 = (uint8_t)(lba >> 32);
 	fis->lba5 = (uint8_t)(lba >> 40);
-	fis->countl = (uint8_t)(count & 0xFF);
-	fis->counth = (uint8_t)((count >> 8) & 0xFF);
 
-	port->ci = 1;
+	if (use_ncq)
+	{
+		fis->command = write ? ATA_CMD_WRITE_FPDMA : ATA_CMD_READ_FPDMA;
+		fis->featurel = (uint8_t)(count & 0xFF);
+		fis->featureh = (uint8_t)((count >> 8) & 0xFF);
+		/* NCQ tag in Sector Count[7:3]. */
+		fis->countl = (uint8_t)(((unsigned)cmdslot & 0x1Fu) << 3);
+		fis->counth = 0;
+		port->sact |= bit;
+		port->ci |= bit;
+	}
+	else
+	{
+		fis->command = write ? ATA_CMD_WRITE_DMA_EX : ATA_CMD_READ_DMA_EX;
+		fis->featurel = 0;
+		fis->featureh = 0;
+		fis->countl = (uint8_t)(count & 0xFF);
+		fis->counth = (uint8_t)((count >> 8) & 0xFF);
+		port->ci = bit;
+	}
+
 	spin = 0;
-	while ((port->ci & 1) && spin < 2000000)
+	while (((port->ci | port->sact) & bit) && spin < 2000000)
 	{
 		if (port->is & (1u << 30))
 			return -EIO;
 		spin++;
 		ahci_delay();
 	}
-	if (port->ci & 1)
+	if ((port->ci | port->sact) & bit)
 		return -EIO;
 	return 0;
 }
@@ -352,13 +420,13 @@ static int ahci_identify(struct ahci_slot *slot)
 	port = slot->port;
 
 	port->is = (uint32_t)-1;
-	hdr = (struct hba_cmd_header *)slot->clb;
+	hdr = &((struct hba_cmd_header *)slot->clb)[0];
 	hdr->cfl = sizeof(struct fis_reg_h2d) / 4;
 	hdr->w = 0;
 	hdr->prdtl = 1;
 	hdr->prdbc = 0;
 
-	tbl = (struct hba_cmd_tbl *)slot->ctba;
+	tbl = (struct hba_cmd_tbl *)slot->ctba[0];
 	memset(tbl, 0, sizeof(*tbl));
 	tbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)slot->ident;
 	tbl->prdt_entry[0].dbau = 0;
@@ -389,6 +457,8 @@ static int ahci_identify(struct ahci_slot *slot)
 		sectors = ((uint64_t)id[103] << 48) | ((uint64_t)id[102] << 32) |
 			  ((uint64_t)id[101] << 16) | id[100];
 	slot->nsectors = sectors ? sectors : 1;
+	/* Word 76 bit 8: NCQ support (ATA ACS / SATA). */
+	slot->ncq_ok = (id[76] & (1u << 8)) ? 1 : 0;
 	return 0;
 }
 
@@ -497,10 +567,13 @@ void ahci_probe(void)
 	uint8_t bus, slot, func;
 	uint32_t bar5, cmd;
 	uint32_t pi;
+	uint32_t cap;
 	int port_idx;
-	static const char *names[AHCI_MAX_SLOTS] = { "sda", "sdb" };
+	static const char *names[AHCI_MAX_PORTS] = { "sda", "sdb" };
 
 	ahci_nslots = 0;
+	ahci_hba_sncq = 0;
+	ahci_hba_ncs = 1;
 	memset(ahci_slots, 0, sizeof(ahci_slots));
 
 	for (bus = 0; bus < 8; bus++)
@@ -566,14 +639,28 @@ void ahci_probe(void)
 					(volatile struct hba_mem *)ahci_abar_phys;
 				ahci_abar->ghc |= AHCI_GHC_AE;
 
+				cap = ahci_abar->cap;
+				ahci_hba_sncq = (cap & AHCI_CAP_SNCQ) ? 1 : 0;
+				ahci_hba_ncs =
+					(int)(((cap & AHCI_CAP_NCS_MASK) >>
+					       AHCI_CAP_NCS_SHIFT) +
+					      1);
+				if (ahci_hba_ncs < 1)
+					ahci_hba_ncs = 1;
+				if (ahci_hba_ncs > (int)AHCI_CMD_SLOTS)
+					ahci_hba_ncs = (int)AHCI_CMD_SLOTS;
+				if (!ahci_hba_sncq)
+					serial_print("AHCI_NCQ_UNSUPPORTED\n");
+
 				pi = ahci_abar->pi;
 				for (port_idx = 0; port_idx < 32; port_idx++)
 				{
 					struct ahci_slot *as;
 					uint32_t ssts;
 					uint32_t det;
+					int saved_ncq;
 
-					if (ahci_nslots >= AHCI_MAX_SLOTS)
+					if (ahci_nslots >= AHCI_MAX_PORTS)
 						break;
 					if (!(pi & (1u << port_idx)))
 						continue;
@@ -596,15 +683,47 @@ void ahci_probe(void)
 					as->ready = 1;
 					ahci_register_block(as);
 					memset(as->io_buf, 0, sizeof(as->io_buf));
+					/* First read via DMA EXT (ncq off). */
+					saved_ncq = as->ncq_ok;
+					as->ncq_ok = 0;
 					if (ahci_backend_read(as, 0, 1,
 							      as->io_buf) == 0)
 					{
 						if (ahci_nslots == 0)
 							serial_print(
 								"AHCI_READ_OK\n");
+						as->ncq_ok = saved_ncq;
+						if (ahci_hba_sncq &&
+						    as->ncq_ok &&
+						    ahci_nslots == 0)
+						{
+							memset(as->io_buf, 0,
+							       sizeof(as->io_buf));
+							if (ahci_backend_read(
+								    as, 0, 1,
+								    as->io_buf) ==
+							    0)
+								serial_print(
+									"AHCI_NCQ_OK\n");
+							else
+							{
+								serial_print(
+									"AHCI_NCQ_FAIL\n");
+								as->ncq_ok = 0;
+							}
+						}
+						else if (ahci_hba_sncq &&
+							 !as->ncq_ok &&
+							 ahci_nslots == 0)
+							serial_print(
+								"AHCI_NCQ_UNSUPPORTED\n");
 					}
 					else
+					{
 						serial_print("AHCI_READ_FAIL\n");
+						as->ncq_ok = 0;
+					}
+
 					ahci_nslots++;
 				}
 				if (ahci_nslots == 0)
