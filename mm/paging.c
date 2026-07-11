@@ -888,13 +888,15 @@ int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t
  * @parent: Parent process
  * @child: Child process
  *
- * Walks PML4 indices 0..255 (user half of the canonical 64-bit space), then
- * every present 4KB leaf with PAGE_USER in the parent. For each such page,
- * shares the physical frame (pmm_frame_get) and maps it in the child.
+ * Two phases so a failed fork never mutates the parent address space:
  *
- * Formerly writable pages are marked PAGE_COW and lose PAGE_RW in both
- * address spaces; the first write faults and breaks COW. Read-only pages
- * are shared as-is (write still SIGSEGV).
+ * 1. Map each present PAGE_USER 4KB leaf into the child (share PFN via
+ *    pmm_frame_get). Child PTEs for formerly writable pages are RO+PAGE_COW.
+ * 2. Only after all child maps succeed, mark the same pages RO+PAGE_COW in
+ *    the parent and invlpg.
+ *
+ * On phase-1 failure the caller runs fork_rollback → destroy child mm (puts
+ * refs). Parent PTEs are unchanged.
  *
  * Same 4KB-only assumption as process_unmap_user_pages_all: huge pages are
  * skipped. Kernel mappings (no PAGE_USER) are not copied.
@@ -919,6 +921,7 @@ int copy_process_memory(struct process *parent, struct process *child)
     parent_pml4 = parent->page_directory;
     child_pml4 = child->page_directory;
 
+    /* Phase 1: share into child only (parent PTEs untouched). */
     for (i4 = 0; i4 < 256; i4++)
     {
         uint64_t *pdpt = get_existing_table(parent_pml4, i4);
@@ -959,21 +962,18 @@ int copy_process_memory(struct process *parent, struct process *child)
                                 ((uintptr_t)i1 << 12);
 
                     was_writable = (page_entry & PAGE_RW) != 0;
-                    if (was_writable)
-                    {
-                        page_entry = (page_entry & ~PAGE_RW) | PAGE_COW;
-                        pt[i1] = page_entry;
-                        __asm__ volatile("invlpg (%0)" ::"r"(virt_addr)
-                                         : "memory");
-                    }
-
-                    pmm_frame_get(parent_phys);
-
                     flags = page_entry & 0xFFF;
                     flags &= ~PAGE_GLOBAL;
                     flags |= PAGE_USER;
+                    if (was_writable)
+                    {
+                        flags &= ~PAGE_RW;
+                        flags |= PAGE_COW;
+                    }
                     if (!(page_entry & PAGE_NX))
                         flags |= PAGE_EXEC;
+
+                    pmm_frame_get(parent_phys);
 
                     if (map_page_in_directory(child_pml4, virt_addr,
                                               parent_phys, flags) != 0)
@@ -983,9 +983,52 @@ int copy_process_memory(struct process *parent, struct process *child)
                     }
 
                     if (DEBUG_FORK && fase40_copy_diag_events < 256U)
-                    {
                         fase40_copy_diag_events++;
-                    }
+                }
+            }
+        }
+    }
+
+    /* Phase 2: mark parent writable pages RO+COW (fork committed). */
+    for (i4 = 0; i4 < 256; i4++)
+    {
+        uint64_t *pdpt = get_existing_table(parent_pml4, i4);
+
+        if (!pdpt)
+            continue;
+
+        for (i3 = 0; i3 < 512; i3++)
+        {
+            uint64_t *pd = get_existing_table(pdpt, i3);
+
+            if (!pd)
+                continue;
+
+            for (i2 = 0; i2 < 512; i2++)
+            {
+                uint64_t *pt = get_existing_table(pd, i2);
+
+                if (!pt)
+                    continue;
+
+                for (i1 = 0; i1 < 512; i1++)
+                {
+                    uint64_t page_entry = pt[i1];
+                    uintptr_t virt_addr;
+
+                    if (!(page_entry & PAGE_PRESENT) ||
+                        !(page_entry & PAGE_USER) ||
+                        !(page_entry & PAGE_RW))
+                        continue;
+
+                    virt_addr = ((uintptr_t)i4 << 39) |
+                                ((uintptr_t)i3 << 30) |
+                                ((uintptr_t)i2 << 21) |
+                                ((uintptr_t)i1 << 12);
+
+                    pt[i1] = (page_entry & ~PAGE_RW) | PAGE_COW;
+                    __asm__ volatile("invlpg (%0)" ::"r"(virt_addr)
+                                     : "memory");
                 }
             }
         }
