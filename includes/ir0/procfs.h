@@ -77,6 +77,7 @@ const char *proc_resolve_path(const char *path, pid_t *pid_out);
 int proc_is_virtual_subdir(const char *path);
 int proc_uptime_read(char *buf, size_t count);
 int proc_version_read(char *buf, size_t count);
+int proc_boot_cmdline_read(char *buf, size_t count);
 int proc_cpuinfo_read(char *buf, size_t count);
 int proc_blockdevices_read(char *buf, size_t count);
 int proc_netinfo_read(char *buf, size_t count);

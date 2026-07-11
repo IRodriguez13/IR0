@@ -479,6 +479,22 @@ int proc_version_read(char *buf, size_t count)
     return len;
 }
 
+/* /proc/cmdline: boot command line visible to userspace (QEMU/default). */
+int proc_boot_cmdline_read(char *buf, size_t count)
+{
+    static const char cmdline[] = "root=/dev/hda console=ttyS0\n";
+    size_t n;
+
+    if (VALIDATE_BUFFER(buf, count) != 0)
+        return -1;
+    n = sizeof(cmdline) - 1;
+    if (n >= count)
+        n = count - 1;
+    memcpy(buf, cmdline, n);
+    buf[n] = '\0';
+    return (int)n;
+}
+
 /*
  * Build "flags" line from CPUID.1 EDX/ECX (silicon feature bits).
  * Each (bit, name) is appended when the bit is set.

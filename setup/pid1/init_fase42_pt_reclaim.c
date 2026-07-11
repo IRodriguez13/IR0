@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE42 smoke-page-table-reclaim
+ * IR0_MM smoke-page-table-reclaim
  * 256x: fork -> mmap(64KB) -> touch -> exec("/bin/f41true") -> wait
  */
 
@@ -10,8 +10,8 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE42_LOOPS 256
-#define FASE42_ALLOC (64 * 1024)
+#define IR0_MM_LOOPS 256
+#define IR0_MM_ALLOC (64 * 1024)
 
 static void write_str(const char *s)
 {
@@ -91,19 +91,19 @@ int main(void)
 	int wait_fail = 0;
 	char *argv[] = { "/bin/f41true", NULL };
 
-	for (int i = 0; i < FASE42_LOOPS; i++)
+	for (int i = 0; i < IR0_MM_LOOPS; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
 		{
 			volatile unsigned char *m =
-				(volatile unsigned char *)mmap(NULL, FASE42_ALLOC,
+				(volatile unsigned char *)mmap(NULL, IR0_MM_ALLOC,
 						       PROT_READ | PROT_WRITE,
 						       MAP_PRIVATE | MAP_ANONYMOUS,
 						       -1, 0);
 			if (m != MAP_FAILED)
 			{
-				for (size_t o = 0; o < FASE42_ALLOC; o += 4096)
+				for (size_t o = 0; o < IR0_MM_ALLOC; o += 4096)
 					m[o] = (unsigned char)(o >> 12);
 			}
 			execve("/bin/f41true", argv, NULL);
@@ -126,7 +126,7 @@ int main(void)
 	}
 
 	used_after = read_used_kb();
-	write_str("FASE42_PT_RECLAIM frames_before=");
+	write_str("IR0_MM_PT_RECLAIM frames_before=");
 	write_dec_u64((used_before > 0) ? (uint64_t)(used_before / 4) : 0);
 	write_str(" frames_peak=");
 	write_dec_u64((used_peak > 0) ? (uint64_t)(used_peak / 4) : 0);
