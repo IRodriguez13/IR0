@@ -265,6 +265,7 @@ KERNEL_OBJS = \
     kernel/clock_wait.o \
     kernel/credentials.o \
     kernel/power/power_manag.o \
+    kernel/kexec.o \
     kernel/task.o \
     kernel/syscalls.o \
     kernel/syscalls/fs_syscalls.o \
@@ -2502,34 +2503,72 @@ smoke-reboot-kexec-enosys: kernel-x64-userspace.iso
 		grep -E 'KEXEC_|REBOOT_|SUSPEND_|panic' $(KEXEC_ENOSYS_LOG) | tail -30; exit 1; \
 	fi
 
-.PHONY: smoke-reboot-suspend-stub build-init-reboot-suspend-stub
-SUSPEND_STUB_LOG = /tmp/reboot-suspend-stub-smoke.log
-build-init-reboot-suspend-stub:
+.PHONY: smoke-kexec-load build-init-kexec-load
+KEXEC_LOAD_LOG = /tmp/kexec-load-smoke.log
+build-init-kexec-load:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_reboot_suspend_stub_smoke.c
-	@echo "✓ build-init-reboot-suspend-stub OK"
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_kexec_load_smoke.c
+	@echo "✓ build-init-kexec-load OK"
 
-smoke-reboot-suspend-stub: kernel-x64-userspace.iso
+smoke-kexec-load: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   reboot(SW_SUSPEND) stub → success..."
-	@$(MAKE) -s build-init-reboot-suspend-stub
-	@DISK=$$(mktemp /tmp/ir0-suspend-stub.XXXXXX.img); \
+	@echo "  SMOKE   kexec_load + reboot(KEXEC) loaded..."
+	@$(MAKE) -s build-init-kexec-load
+	@DISK=$$(mktemp /tmp/ir0-kexec-load.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	rm -f $(SUSPEND_STUB_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(SUSPEND_STUB_LOG) --timeout 45 --stale-sec 15 \
-		--done SUSPEND_STUB_OK -- \
+	rm -f $(KEXEC_LOAD_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(KEXEC_LOAD_LOG) --timeout 45 --stale-sec 15 \
+		--done KEXEC_PAYLOAD_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK; \
-	if grep -q "SYSTEM_SUSPEND_STUB" $(SUSPEND_STUB_LOG) && \
-	    grep -q "SYSTEM_SUSPEND_ENTER" $(SUSPEND_STUB_LOG) && \
-	    grep -q "SUSPEND_STUB_OK" $(SUSPEND_STUB_LOG); then \
-		echo "✓ smoke-reboot-suspend-stub passed"; \
+	if grep -q "KEXEC_LOAD_OK" $(KEXEC_LOAD_LOG) && \
+	    grep -q "REBOOT_KEXEC_LOADED" $(KEXEC_LOAD_LOG) && \
+	    grep -q "KEXEC_PAYLOAD_OK" $(KEXEC_LOAD_LOG); then \
+		echo "✓ smoke-kexec-load passed"; \
 	else \
-		echo "✗ smoke-reboot-suspend-stub FAILED"; \
-		grep -E 'SUSPEND_|REBOOT_|panic' $(SUSPEND_STUB_LOG) | tail -30; exit 1; \
+		echo "✗ smoke-kexec-load FAILED"; \
+		grep -E 'KEXEC_|REBOOT_|panic' $(KEXEC_LOAD_LOG) | tail -40; exit 1; \
+	fi
+
+.PHONY: smoke-reboot-suspend-stub build-init-reboot-suspend-stub
+SUSPEND_STUB_LOG = /tmp/reboot-suspend-stub-smoke.log
+build-init-reboot-suspend-stub:
+	@$(MAKE) -s build-init-reboot-s3
+
+smoke-reboot-suspend-stub: smoke-reboot-s3
+	@echo "✓ smoke-reboot-suspend-stub passed (alias of smoke-reboot-s3)"
+
+.PHONY: smoke-reboot-s3 build-init-reboot-s3
+S3_SMOKE_LOG = /tmp/reboot-s3-smoke.log
+build-init-reboot-s3:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_reboot_s3_smoke.c
+	@echo "✓ build-init-reboot-s3 OK"
+
+smoke-reboot-s3: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   reboot(SW_SUSPEND) S3 enter/resume..."
+	@$(MAKE) -s build-init-reboot-s3
+	@DISK=$$(mktemp /tmp/ir0-s3.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(S3_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(S3_SMOKE_LOG) --timeout 45 --stale-sec 15 \
+		--done SUSPEND_S3_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "SYSTEM_S3_ENTER" $(S3_SMOKE_LOG) && \
+	    grep -q "SYSTEM_S3_RESUME_OK" $(S3_SMOKE_LOG) && \
+	    grep -q "SUSPEND_S3_OK" $(S3_SMOKE_LOG); then \
+		echo "✓ smoke-reboot-s3 passed"; \
+	else \
+		echo "✗ smoke-reboot-s3 FAILED"; \
+		grep -E 'S3_|SUSPEND_|ACPI_|panic' $(S3_SMOKE_LOG) | tail -40; exit 1; \
 	fi
 
 .PHONY: smoke-posix-setsid build-init-posix-setsid

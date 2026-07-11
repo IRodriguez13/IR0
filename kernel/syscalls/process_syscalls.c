@@ -46,6 +46,8 @@
 #include <ir0/credentials.h>
 #include <ir0/power_manag.h>
 #include <ir0/futex.h>
+#include <ir0/kexec.h>
+#include <ir0/acpi_pm.h>
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
@@ -699,14 +701,17 @@ int64_t sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg)
 		kernel_system_shutdown(IR0_SYSTEM_POWEROFF);
 		break;
 	case LINUX_REBOOT_CMD_KEXEC:
-		/* MVP: no kexec_load — reboot as best-effort stub. */
+		if (ir0_kexec_image_loaded())
+		{
+			ir0_kexec_execute();
+			/* Magic payload returns here; soft reboot. */
+			kernel_system_shutdown(IR0_SYSTEM_REBOOT);
+		}
 		serial_print("REBOOT_KEXEC_STUB\n");
 		kernel_system_shutdown(IR0_SYSTEM_REBOOT);
 		break;
 	case LINUX_REBOOT_CMD_SW_SUSPEND:
-		/* MVP: acknowledge suspend without full S3 resume path. */
-		serial_print("SYSTEM_SUSPEND_STUB\n");
-		serial_print("SYSTEM_SUSPEND_ENTER\n");
+		(void)ir0_acpi_pm_try_suspend();
 		return 0;
 	default:
 		return -EINVAL;

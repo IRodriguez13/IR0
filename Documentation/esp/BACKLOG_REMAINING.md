@@ -17,8 +17,8 @@ _(vacío)_
 1. ~~F1 ACPI map seguro~~ **hecho**  
 2. ~~F2 AHCI NCQ~~ **hecho** — `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED`  
 3. ~~F3 AML `_S5` SLP_TYP~~ **hecho** — `ACPI_S5_OK`  
-4. ~~F4 kexec mínimo~~ **hecho** — `REBOOT_KEXEC_STUB` (sin kexec_load)  
-5. ~~F5 Suspend stub~~ **hecho** — `SYSTEM_SUSPEND_ENTER`  
+4. ~~F4 kexec mínimo~~ **hecho** — stub + `kexec_load` MVP (`smoke-kexec-load`)  
+5. ~~F5 Suspend / S3~~ **hecho** — `_S3_` + soft resume (`smoke-reboot-s3`)   
 6. ~~F6 NVMe~~ **hecho** — `smoke-nvme-read`  
 7. F7 ARM64 MM … F12 — ver inglés  
 

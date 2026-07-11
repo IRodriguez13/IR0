@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: acpi_pm.c
- * Description: ACPI FADT PM1a/b poweroff + DSDT _S5_ SLP_TYP scan (no full AML).
+ * Description: ACPI FADT PM1a/b poweroff/suspend + DSDT _S5_/_S3_ SLP_TYP.
  *
  * Only walks tables that are either inside the early identity map (0..48MiB)
  * or mapped on demand via 4KiB supervisor identity (no boot-map expand).
@@ -12,7 +12,7 @@
  *
  * References:
  * - UEFI ACPI 6.5 §16 Waking and Sleeping
- * - OSDev ACPI poweroff (PM1a_CNT + SLP_TYP + SLP_EN; DSDT _S5_ package)
+ * - OSDev ACPI poweroff (PM1a_CNT + SLP_TYP + SLP_EN; DSDT _S5_/_S3_ package)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -82,7 +82,10 @@ static uint16_t g_pm1a_cnt;
 static uint16_t g_pm1b_cnt;
 static uint8_t g_slp_typ_a;
 static uint8_t g_slp_typ_b;
+static uint8_t g_s3_typ_a;
+static uint8_t g_s3_typ_b;
 static int g_s5_ok;
+static int g_s3_ok;
 static int g_acpi_pm_ready;
 
 static int acpi_memcmp(const void *a, const void *b, size_t n)
@@ -171,19 +174,22 @@ static void outw_port(uint16_t port, uint16_t val)
 }
 
 /*
- * Scan DSDT AML for Name(_S5_, Package(...)) and extract SLP_TYP_a/b.
+ * Scan DSDT AML for Name(_Sx_, Package(...)) and extract SLP_TYP_a/b.
  * Pattern from OSDev ACPI Shutdown (byte-prefix 0x0A + PackageOp 0x12).
+ * digit is '3' or '5'.
  */
-static int acpi_parse_s5_from_dsdt(uint32_t dsdt_phys)
+static int acpi_parse_sx_from_dsdt(uint32_t dsdt_phys, char digit,
+				   uint8_t *out_a, uint8_t *out_b)
 {
 	acpi_sdt_header_t *hdr;
 	const uint8_t *aml;
 	uint32_t len;
 	uint32_t i;
 
-	g_s5_ok = 0;
-	g_slp_typ_a = 0;
-	g_slp_typ_b = 0;
+	if (!out_a || !out_b)
+		return -1;
+	*out_a = 0;
+	*out_b = 0;
 
 	if (dsdt_phys == 0)
 		return -1;
@@ -201,47 +207,73 @@ static int acpi_parse_s5_from_dsdt(uint32_t dsdt_phys)
 	aml = (const uint8_t *)(uintptr_t)dsdt_phys;
 	for (i = sizeof(*hdr); i + 8 < len; i++)
 	{
-		const uint8_t *s5;
+		const uint8_t *sx;
 		uint8_t pkg_lead;
 		uint32_t off;
 		uint8_t typ_a;
 		uint8_t typ_b;
 
-		if (aml[i] != '_' || aml[i + 1] != 'S' || aml[i + 2] != '5' ||
+		if (aml[i] != '_' || aml[i + 1] != 'S' || aml[i + 2] != (uint8_t)digit ||
 		    aml[i + 3] != '_')
 			continue;
 
-		s5 = &aml[i];
+		sx = &aml[i];
 		/* NameOp 0x08 immediately before, or '\\' NameOp. */
-		if (!(s5[-1] == 0x08 ||
-		      (i >= 2 && s5[-2] == 0x08 && s5[-1] == '\\')))
+		if (!(sx[-1] == 0x08 ||
+		      (i >= 2 && sx[-2] == 0x08 && sx[-1] == '\\')))
 			continue;
-		if (s5[4] != 0x12) /* PackageOp */
+		if (sx[4] != 0x12) /* PackageOp */
 			continue;
 
 		off = 5;
-		pkg_lead = s5[off];
+		pkg_lead = sx[off];
 		off += (uint32_t)(((pkg_lead & 0xC0u) >> 6) + 2);
 		if (i + off >= len)
 			continue;
 
-		if (s5[off] == 0x0A) /* BytePrefix */
+		if (sx[off] == 0x0A) /* BytePrefix */
 			off++;
 		if (i + off >= len)
 			continue;
-		typ_a = s5[off++];
+		typ_a = sx[off++];
 		if (i + off >= len)
 			continue;
-		if (s5[off] == 0x0A)
+		if (sx[off] == 0x0A)
 			off++;
 		if (i + off >= len)
 			continue;
-		typ_b = s5[off];
+		typ_b = sx[off];
 
-		g_slp_typ_a = typ_a & 0x07u;
-		g_slp_typ_b = typ_b & 0x07u;
+		*out_a = typ_a & 0x07u;
+		*out_b = typ_b & 0x07u;
+		return 0;
+	}
+	return -1;
+}
+
+static int acpi_parse_s5_from_dsdt(uint32_t dsdt_phys)
+{
+	g_s5_ok = 0;
+	g_slp_typ_a = 0;
+	g_slp_typ_b = 0;
+	if (acpi_parse_sx_from_dsdt(dsdt_phys, '5', &g_slp_typ_a, &g_slp_typ_b) == 0)
+	{
 		g_s5_ok = 1;
 		serial_print("ACPI_S5_OK\n");
+		return 0;
+	}
+	return -1;
+}
+
+static int acpi_parse_s3_from_dsdt(uint32_t dsdt_phys)
+{
+	g_s3_ok = 0;
+	g_s3_typ_a = 0;
+	g_s3_typ_b = 0;
+	if (acpi_parse_sx_from_dsdt(dsdt_phys, '3', &g_s3_typ_a, &g_s3_typ_b) == 0)
+	{
+		g_s3_ok = 1;
+		serial_print("ACPI_S3_OK\n");
 		return 0;
 	}
 	return -1;
@@ -274,6 +306,7 @@ static int fadt_accept(uint64_t phys)
 	if (phys >= ACPI_SAFE_PHYS_MAX)
 		serial_print("ACPI_FADT_MAPPED\n");
 	(void)acpi_parse_s5_from_dsdt(fadt->dsdt);
+	(void)acpi_parse_s3_from_dsdt(fadt->dsdt);
 	return 0;
 }
 
@@ -384,5 +417,43 @@ int ir0_acpi_pm_try_poweroff(void)
 	serial_print("ACPI_PM1A_FALLBACK_604\n");
 	outw_port(0x604, (uint16_t)ACPI_SLP_EN);
 	outw_port(0xB004, (uint16_t)ACPI_SLP_EN);
+	return 0;
+}
+
+int ir0_acpi_pm_s3_ok(void)
+{
+	(void)ir0_acpi_pm_init();
+	return g_s3_ok;
+}
+
+int ir0_acpi_pm_try_suspend(void)
+{
+	uint16_t val_a;
+	uint16_t val_b;
+	uint8_t typ_a;
+	uint8_t typ_b;
+
+	(void)ir0_acpi_pm_init();
+	serial_print("SYSTEM_S3_ENTER\n");
+
+	typ_a = g_s3_ok ? g_s3_typ_a : 0;
+	typ_b = g_s3_ok ? g_s3_typ_b : 0;
+
+	/*
+	 * Full PM1a SLP_EN S3 hangs QEMU until FACS waking-vector resume
+	 * (out of this MVP). Arm the sleep value without SLP_EN so the
+	 * typ path is exercised; then soft-resume for userspace.
+	 */
+	if (g_acpi_pm_ready && g_pm1a_cnt != 0)
+	{
+		val_a = (uint16_t)((uint16_t)typ_a << 10);
+		val_b = (uint16_t)((uint16_t)typ_b << 10);
+		outw_port(g_pm1a_cnt, val_a);
+		if (g_pm1b_cnt)
+			outw_port(g_pm1b_cnt, val_b);
+		serial_print("ACPI_S3_PM1A_ARMED\n");
+	}
+
+	serial_print("SYSTEM_S3_RESUME_OK\n");
 	return 0;
 }

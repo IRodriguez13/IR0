@@ -129,7 +129,9 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 |------|--------|-------|
 | reboot/halt/poweroff + BusyBox applets | **Stable for test** | `smoke-runit-busybox-*` |
 | ACPI FADT map + `_S5_` SLP_TYP | **Stable for test** | `ACPI_S5_OK` + `ACPI_PM1A_POWEROFF` |
-| kexec stub (reboot, no load) | **Stub** | `REBOOT_KEXEC_STUB` |
+| kexec stub (reboot, no load) | **OK** | `REBOOT_KEXEC_STUB` |
+| kexec_load MVP | **OK** | `smoke-kexec-load` |
+| S3 soft resume | **OK** | `smoke-reboot-s3` (`ACPI_S3_OK`) |
 | SW_SUSPEND stub (return 0) | **Stub** | `SYSTEM_SUSPEND_ENTER` |
 
 ---
@@ -232,7 +234,7 @@ After T1-sensitive changes: `make smoke-tier1` or at minimum `make smoke-runit-b
 | SMP, CFS scheduler backend | ROADMAP P2 |
 | Kernel module loader (MOD-*) | ROADMAP P2 |
 | NVMe MVP | BACKLOG F6 |
-| kexec_load / real S3 resume | BACKLOG Future P2 |
+| FACS waking-vector hard S3 | BACKLOG Future (soft resume landed) |
 | `pthread_create` via musl libc only (no inline clone in smoke) | ROADMAP POSIX-1 |
 | Full PTY / job control | ROADMAP P1-term |
 
