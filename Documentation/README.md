@@ -28,7 +28,6 @@ The goal is to document implemented behavior first, then known gaps.
 - `DRIVERS.md`: driver registry, bootstrap flow, and config-gated initialization.
 - `INTERRUPTS.md`: IDT/PIC path, syscall entry, and exception behavior.
 - `MEMORY.md`: PMM, allocator, paging, real fork COW + lazy alloc limits.
-- `STABLE.md`: release 0.0.1 stable checklist (COW/KTM honesty notes).
 - `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
 - `SCHEDULING.md`: scheduler selection and current policy implementations.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
