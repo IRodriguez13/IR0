@@ -444,6 +444,13 @@ menu "Debugging"
         bool "Process creation/destruction debug"
         default n
 
+    config DEBUG_BOOT
+        bool "Verbose boot serial chatter ([BOOT]/kmain)"
+        default n
+        help
+          Extra serial lines during kmain bring-up. Keep off for KTM/smoke
+          runs; enable when diagnosing console/VBE/init load.
+
     config DEBUG_SCHEDULER
         bool "Scheduler debug output"
         default n
@@ -481,22 +488,6 @@ menu "Debugging"
 
     config DEBUG_ISRABI
         bool "ISR ABI audit serial noise ([ISRABI] tags)"
-        default n
-
-    config DEBUG_FASE49
-        bool "FASE49 pipe/fd lifecycle serial noise ([FASE49] tags)"
-        default n
-
-    config DEBUG_FASE50
-        bool "FASE50 bring-up serial noise ([FASE50*] tags)"
-        default n
-
-    config DEBUG_FASE51
-        bool "FASE51 shell script bring-up serial noise ([FASE51*] tags)"
-        default n
-
-    config DEBUG_FASE52
-        bool "FASE52 TinyCC bring-up serial noise ([FASE52*] tags)"
         default n
 
     config KTM
@@ -539,5 +530,30 @@ menu "Debugging"
           On musl memmove page faults ([D1.14] tags): dump mapped pages around
           rdi/rsi, candidate chunk header words, and read correlation. Disable
           for minimal serial noise after ash smoke is stable.
+
+    config KTM_TEST
+        bool "KTM scenarios + suite runner (source of truth tests)"
+        depends on KTM
+        default y
+        help
+          Enables process.lifecycle and other KTM scenarios at boot, emitting
+          KTM|… protocol lines for host runners (make ktm-run).
+
+    config KTM_FAULT
+        bool "KTM fault injection API (stub; chaos mode is v2)"
+        depends on KTM
+        default n
+        help
+          Compiles ktm_fault_should_fail / KTM_FAULT_POINT. Keep off in
+          production defconfig until fault points are wired in PMM/kmalloc.
+
+    config KTM_USERDEV
+        bool "KTM /dev/ktm userspace control plane"
+        depends on KTM && KTM_EVENTS
+        default y
+        help
+          Registers /dev/ktm (0600) with ioctl/read/poll for scenarios,
+          snapshots, invariants, and user-reported asserts. Disable in
+          production builds so the node does not exist.
 
 endmenu

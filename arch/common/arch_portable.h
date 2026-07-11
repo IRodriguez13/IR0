@@ -225,6 +225,33 @@ void arch_switch_to_user_task(const struct task *task);
 void arch_set_fs_base(uint64_t base);
 
 /*
+ * arch_set_tls - Portable TLS base install (x86: FS base; other arch: stub).
+ * Prefer this from portable code instead of CPUID/MSR details.
+ */
+static inline void arch_set_tls(uint64_t base)
+{
+	arch_set_fs_base(base);
+}
+
+/*
+ * arch_tls_invalidate - Drop cached TLS view after task switch prep (no-op MSR).
+ */
+static inline void arch_tls_invalidate(void)
+{
+}
+
+/*
+ * W10 multi-arch note (2026-07):
+ * - TLS: use arch_set_tls / arch_tls_invalidate from portable paths (done).
+ * - PTE walker remains in mm/paging.c (shared x86-64); per-arch split is W10b
+ *   when ARM64 MM lands — do not fork walker until a second arch needs it.
+ * - Trap/context: x86-64 IDT + switch_x64.asm stay arch-local; portable code
+ *   uses arch_* facades only (no CPUID in kernel/syscalls).
+ * - F6 (2026-07-10): W10b still deferred — ARM64 build is ARCH_OBJS-only
+ *   (no mm/paging yet); next-proof = ARM64 MM oleada then split walker.
+ */
+
+/*
  * arch_get_fs_base - Read x86-64 FS base MSR.
  */
 uint64_t arch_get_fs_base(void);

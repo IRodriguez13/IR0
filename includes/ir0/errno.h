@@ -42,6 +42,7 @@
 #define ENOTBLK 15  /* Block device required */
 #define EBUSY   16  /* Device or resource busy */
 #define EADDRINUSE 98 /* Address already in use (Linux) */
+#define ECONNREFUSED 111 /* Connection refused (Linux) */
 #define EEXIST  17  /* File exists */
 #define EXDEV   18  /* Cross-device link */
 #define ENODEV  19  /* No such device */

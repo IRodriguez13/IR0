@@ -20,7 +20,6 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 
 	if (!p)
 		return;
-	process_fase50_trace_proc("process_release_fds-begin", p);
 
 	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
 	{
@@ -34,15 +33,8 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 			pipe_t *pip = (pipe_t *)e->vfs_file;
 			int refs_before = pip ? pip->fd_refs : -1;
 
-			if (pipe_trace_op)
-			{
-				pipe_fase49_fd_trace((uint32_t)p->task.pid, i, pip,
-						     e->pipe_end, pip->fd_refs,
-						     pipe_trace_op);
-			}
 			if (DEBUG_FASE50)
 			{
-				serial_print("[FASE50][FDREL] stage=close_pipe pid=");
 				serial_print_hex32((uint32_t)p->task.pid);
 				serial_print(" fd=");
 				serial_print_hex64((uint64_t)i);
@@ -60,7 +52,10 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 			goto clear_fd;
 		else if (e->is_socket && e->vfs_file)
 		{
-			sock_udp_release((struct sock_udp *)e->vfs_file);
+			if (sock_stream_is(e->vfs_file))
+				sock_stream_release((struct sock_stream *)e->vfs_file);
+			else
+				sock_udp_release((struct sock_udp *)e->vfs_file);
 			e->vfs_file = NULL;
 		}
 		else if (e->is_devfs)
@@ -112,7 +107,6 @@ clear_fd:
 		e->fd_flags = 0;
 		e->offset = 0;
 	}
-	process_fase50_trace_proc("process_release_fds-end", p);
 }
 
 int process_duplicate_fd_table(process_t *parent, process_t *child)
@@ -132,7 +126,11 @@ int process_duplicate_fd_table(process_t *parent, process_t *child)
 		if (e->is_pipe && e->vfs_file)
 			pipe_acquire_end((pipe_t *)e->vfs_file, e->pipe_end);
 		else if (e->is_socket && e->vfs_file)
-			sock_udp_acquire((struct sock_udp *)e->vfs_file);
+		{
+			/* Stream sockets are static slots; share without refcount. */
+			if (!sock_stream_is(e->vfs_file))
+				sock_udp_acquire((struct sock_udp *)e->vfs_file);
+		}
 		else if (e->is_devfs)
 		{
 			devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);

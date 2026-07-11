@@ -26,6 +26,11 @@
 #define PAGE_DIRTY 0x40
 #define PAGE_SIZE_2MB_FLAG 0x80
 #define PAGE_GLOBAL 0x100
+/*
+ * Software-available PTE bit 9 (ignored by hardware). Marks a present user
+ * page that was shared read-only at fork and must break on write.
+ */
+#define PAGE_COW 0x200
 
 /* PTE bit 63: no-execute when IA32_EFER.NXE is set (not stored in low 12 bits of API flags) */
 #define PAGE_NX (1ULL << 63)
@@ -164,12 +169,12 @@ int copy_process_memory(struct process *parent, struct process *child);
 void paging_reclaim_lower_half_tables(uint64_t *pml4);
 
 /*
- * FASE42 diagnostics: emit page-table/frame balance counters tagged by phase.
+ * IR0 MM frame/PT bookkeeping: emit page-table/frame balance counters tagged by phase.
  */
-void paging_fase42_note_pml4_created(uint64_t pml4_phys);
-void paging_fase42_note_pml4_freed(uint64_t pml4_phys);
-void paging_fase42_checkpoint(const char *tag, int32_t pid);
-void paging_fase42_category_stats(uint64_t *user_alloc, uint64_t *user_free,
+void paging_ir0_mm_note_pml4_created(uint64_t pml4_phys);
+void paging_ir0_mm_note_pml4_freed(uint64_t pml4_phys);
+void paging_ir0_mm_checkpoint(const char *tag, int32_t pid);
+void paging_ir0_mm_category_stats(uint64_t *user_alloc, uint64_t *user_free,
                                   uint64_t *pt_alloc, uint64_t *pt_free,
                                   uint64_t *kernel_alloc, uint64_t *kernel_free);
 void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,

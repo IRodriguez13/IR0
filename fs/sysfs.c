@@ -100,6 +100,12 @@ int sys_kernel_version_read_reg(char *buf, size_t count)
     return len;
 }
 
+/* /sys/kernel/osrelease — Linux-shaped single-field release string. */
+int sys_kernel_osrelease_read_reg(char *buf, size_t count)
+{
+    return sys_kernel_version_read_reg(buf, count);
+}
+
 /**
  * sys_kernel_hostname_read_reg - Hostname read for sysfs and pseudo_fs hooks.
  */

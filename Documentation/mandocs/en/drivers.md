@@ -31,7 +31,7 @@ portable kernel code.
 ```text
   INPUT     ps2_controller, ps2_keyboard, ps2_mouse
   PLATFORM  pc_speaker, usb_host
-  STORAGE   ata_core, ata_block
+  STORAGE   ata_core, ata_block, ahci (DMA EXT + NCQ FPDMA when CAP.SNCQ)
   AUDIO     sound_stack (SB16, AdLib, DMA)
   NETWORK   network_stack, bluetooth_stack (Kconfig gated)
 ```
@@ -111,6 +111,9 @@ IRQ path:
 
 ## 10. Future roadmap
 
+- AHCI NCQ (FPDMA) landed 2026-07-11 — tags `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED`
+  (`smoke-ahci-read`); ACPI soft-off uses FADT + DSDT `_S5_` SLP_TYP (`ACPI_S5_OK`).
+- NVMe MVP detect+read landed 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`).
 - APIC/LAPIC as primary IRQ demux — partial (LAPIC timer code exists).
 - Hotplug USB storage — host init only at bootstrap today.
 - Driver unload/module model — **not implemented**.

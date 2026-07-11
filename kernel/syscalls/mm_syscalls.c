@@ -26,11 +26,11 @@
 #include <ir0/process.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
+#include <ir0/ktm/checkpoint.h>
 #include <stdbool.h>
 #include <string.h>
 
 #include <ir0/fb.h>
-#include <ir0/fase52_debug.h>
 #include <ir0/validation.h>
 #include <stdint.h>
 
@@ -324,6 +324,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	region->flags = flags;
 	region->next = proc->mmap_list;
 	proc->mmap_list = region;
+	KTM_CHECKPOINT(KTM_CP_MM_MAP);
 
 	serial_print("[MMAP_AUDIT][CLASSIFY] FILE_MMAP_PRIVATE_OK\n");
 	return (void *)virt_addr;
@@ -402,7 +403,6 @@ int64_t sys_brk(void *addr)
 
 	current_process->heap_end = new_brk;
 	fase39_dump_current_vmas("brk");
-	fase52_dbg_brk(addr, (int64_t)new_brk);
 	return (int64_t)new_brk;
 }
 
@@ -590,39 +590,11 @@ static void fase39_dump_current_vmas(const char *tag)
   if (!current_process)
     return;
 
-  serial_print("[FASE39][VMA] tag=");
-  serial_print(tag ? tag : "(null)");
-  serial_print(" pid=");
-  serial_print_hex32((uint32_t)current_process->task.pid);
-  serial_print(" comm=");
-  serial_print(current_process->comm);
-  serial_print("\n");
 
-  serial_print("[FASE39][VMA] heap [");
-  serial_print_hex64(current_process->heap_start);
-  serial_print(",");
-  serial_print_hex64(current_process->heap_end);
-  serial_print(") backing=anon\n");
 
-  serial_print("[FASE39][VMA] stack [");
-  serial_print_hex64(current_process->stack_start);
-  serial_print(",");
-  serial_print_hex64(current_process->stack_start + current_process->stack_size);
-  serial_print(") backing=stack\n");
 
   for (r = current_process->mmap_list; r; r = r->next)
   {
-    serial_print("[FASE39][VMA] mmap [");
-    serial_print_hex64((uint64_t)(uintptr_t)r->addr);
-    serial_print(",");
-    serial_print_hex64((uint64_t)(uintptr_t)r->addr + (uint64_t)r->length);
-    serial_print(") perm=");
-    serial_print((r->prot & PROT_READ) ? "r" : "-");
-    serial_print((r->prot & PROT_WRITE) ? "w" : "-");
-    serial_print((r->prot & PROT_EXEC) ? "x" : "-");
-    serial_print(" type=");
-    serial_print((r->flags & MAP_ANONYMOUS) ? "anon" : "file");
-    serial_print(" backing=");
     if ((r->flags & MAP_ANONYMOUS) != 0)
       serial_print("anonymous");
     else
@@ -823,6 +795,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         region->flags = flags;
         region->next = current_process->mmap_list;
         current_process->mmap_list = region;
+        KTM_CHECKPOINT(KTM_CP_MM_MAP);
         fase39_dump_current_vmas("mmap-fb");
         {
           static int s_fb_mmap_devfs_tag;
@@ -837,7 +810,6 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
           if (!s_fb_mmap_ok_tag)
           {
             s_fb_mmap_ok_tag = 1;
-            serial_print("FASE58C_FBDEV_MMAP_OK\n");
           }
         }
         return (void *)virt_addr;
@@ -1008,6 +980,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   current_process->mmap_list = region;
   vma_inserted = 1;
   virt_addr_out = virt_addr;
+  KTM_CHECKPOINT(KTM_CP_MM_MAP);
   fase39_dump_current_vmas("mmap");
 
   ret = (void *)virt_addr;
@@ -1015,14 +988,13 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
                         current_process->page_directory);
   if (DEBUG_MMAP_AUDIT)
     serial_print("[MMAP_AUDIT][CLASSIFY] BUSYBOX_NEXT_SYSCALL_REACHED stage=mmap-return-ok\n");
-  fase52_dbg_mmap(addr, length, prot, flags, fd, offset, ret);
   return ret;
 }
 
 int sys_munmap(void *addr, size_t length)
 {
   uint64_t unmapped_pages = 0;
-  paging_fase42_checkpoint("munmap-before", (int32_t)process_get_pid());
+  paging_ir0_mm_checkpoint("munmap-before", (int32_t)process_get_pid());
   if (!current_process)
     return -ESRCH;
   if (!addr || length == 0)
@@ -1062,18 +1034,9 @@ int sys_munmap(void *addr, size_t length)
 
       /* Free the mapping structure */
       kfree(current);
-      serial_print("[FASE41][MUNMAP] pid=");
-      serial_print_hex32((uint32_t)current_process->task.pid);
-      serial_print(" start=");
-      serial_print_hex64((uint64_t)start_page);
-      serial_print(" len=");
-      serial_print_hex64((uint64_t)aligned_length);
-      serial_print(" unmapped_pages=");
-      serial_print_hex64(unmapped_pages);
-      serial_print("\n");
-      paging_fase42_checkpoint("munmap-after", (int32_t)current_process->task.pid);
+      KTM_CHECKPOINT(KTM_CP_MM_UNMAP);
+      paging_ir0_mm_checkpoint("munmap-after", (int32_t)current_process->task.pid);
       fase39_dump_current_vmas("munmap");
-      fase52_dbg_munmap(addr, length, 0);
       return 0;
     }
     prev = current;
@@ -1170,12 +1133,10 @@ int sys_mprotect(void *addr, size_t len, int prot)
         __asm__ volatile("invlpg (%0)" ::"r"(page) : "memory");
       }
 
-      fase52_dbg_mprotect(addr, len, prot, 0);
       return 0;
     }
     current = current->next;
   }
 
-  fase52_dbg_mprotect(addr, len, prot, -EINVAL);
   return -EINVAL; /* Not found */
 }

@@ -38,6 +38,9 @@
 #include <ir0/partition.h>
 #include <string.h>
 #include <ir0/clock.h>
+#include <ir0/process.h>
+#include <ir0/signals.h>
+#include <ir0/serial_io.h>
 #include <ir0/ipc.h>
 #if CONFIG_ENABLE_BLUETOOTH
 #include <ir0/bluetooth.h>
@@ -48,6 +51,7 @@
 #include <ir0/serial_io.h>
 #include <ir0/credentials.h>
 #include <ir0/fb.h>
+#include <ir0/ktm/userdev.h>
 #include "vfs.h"
 
 static pid_t devfs_current_pid(void)
@@ -1887,7 +1891,22 @@ static struct
 	int master_open;
 	int slave_open;
 	int locked;
+	int ctty_set;
+	pid_t fg_pgid;
+	pid_t session_sid;
+	struct ir0_winsize winsz;
 } g_pty;
+
+static void pty_hangup_fg(void)
+{
+	if (!g_pty.ctty_set || g_pty.fg_pgid <= 0)
+		return;
+	serial_print("PTY_SIGHUP_PGRP\n");
+	(void)send_signal_pgrp(g_pty.fg_pgid, SIGHUP);
+	g_pty.ctty_set = 0;
+	g_pty.fg_pgid = 0;
+	g_pty.session_sid = 0;
+}
 
 static int pty_ring_push(struct pty_ring *r, const char *src, size_t n)
 {
@@ -1946,6 +1965,8 @@ static int64_t dev_ptmx_close(devfs_entry_t *entry)
 {
 	(void)entry;
 	g_pty.master_open = 0;
+	/* Master close → hangup controlling session (Linux PTY semantics). */
+	pty_hangup_fg();
 	return 0;
 }
 
@@ -2002,10 +2023,41 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 
 	if (request == IR0_CONSOLE_TIOCGWINSZ)
 	{
-		int wret;
+		struct ir0_winsize win;
 
-		wret = ir0_console_ioctl_winsize(arg);
-		return wret;
+		if (!arg)
+			return -EINVAL;
+		if (g_pty.winsz.ws_row != 0 || g_pty.winsz.ws_col != 0)
+			win = g_pty.winsz;
+		else
+		{
+			int wret = ir0_console_ioctl_winsize(arg);
+
+			return wret;
+		}
+		if (copy_to_user(arg, &win, sizeof(win)) != 0)
+			return -EFAULT;
+		return 0;
+	}
+	if (request == IR0_CONSOLE_TIOCSWINSZ)
+	{
+		struct ir0_winsize win;
+
+		if (!arg)
+			return -EINVAL;
+		if (copy_from_user(&win, arg, sizeof(win)) != 0)
+			return -EFAULT;
+		if (win.ws_row == 0 || win.ws_col == 0)
+			return -EINVAL;
+		g_pty.winsz = win;
+		if (g_pty.ctty_set && g_pty.fg_pgid > 0)
+			(void)send_signal_pgrp(g_pty.fg_pgid, SIGWINCH);
+		else if (current_process)
+			(void)send_signal((int)current_process->task.pid, SIGWINCH);
+		serial_print("PTY_WINCH_SENT\n");
+		handle_signals();
+		serial_print("PTY_TIOCSWINSZ_OK\n");
+		return 0;
 	}
 	if (request == IR0_TIOCGPTN)
 	{
@@ -2026,6 +2078,47 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 		if (copy_from_user(&lock, arg, sizeof(lock)) != 0)
 			return -EFAULT;
 		g_pty.locked = lock ? 1 : 0;
+		return 0;
+	}
+	if (request == IR0_TIOCSCTTY)
+	{
+		if (!current_process)
+			return -ESRCH;
+		/* Session leader only (Linux-like). */
+		if (current_process->sid != current_process->task.pid)
+			return -EPERM;
+		g_pty.ctty_set = 1;
+		g_pty.session_sid = current_process->sid;
+		g_pty.fg_pgid = current_process->pgid;
+		serial_print("PTY_TIOCSCTTY_OK\n");
+		return 0;
+	}
+	if (request == IR0_TIOCSPGRP)
+	{
+		pid_t pg;
+
+		if (!arg)
+			return -EINVAL;
+		if (copy_from_user(&pg, arg, sizeof(pg)) != 0)
+			return -EFAULT;
+		if (pg <= 0)
+			return -EINVAL;
+		if (!g_pty.ctty_set)
+			return -ENOTTY;
+		g_pty.fg_pgid = pg;
+		return 0;
+	}
+	if (request == IR0_TIOCGPGRP)
+	{
+		pid_t pg;
+
+		if (!arg)
+			return -EINVAL;
+		if (!g_pty.ctty_set)
+			return -ENOTTY;
+		pg = g_pty.fg_pgid;
+		if (copy_to_user(arg, &pg, sizeof(pg)) != 0)
+			return -EFAULT;
 		return 0;
 	}
 	if (request == IR0_CONSOLE_TCGETS || request == IR0_CONSOLE_TCSETS ||
@@ -2481,6 +2574,7 @@ int devfs_init(void)
 #if CONFIG_ENABLE_BLUETOOTH
     devfs_register_node(&dev_bluetooth_hci0);
 #endif
+    ktm_userdev_register();
 
     return 0;
 }

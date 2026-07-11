@@ -13,6 +13,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/futex.h>
+#include <ir0/copy_user.h>
+#include <ir0/ktm/checkpoint.h>
 
 /*
  * Teardown ownership policy
@@ -33,21 +36,6 @@ void fase40_d_audit_reap_line(const char *stage, process_t *child,
 	if (!child)
 		return;
 
-	serial_print("[FASE40_D_AUDIT][");
-	serial_print(stage);
-	serial_print("] child=");
-	serial_print_hex32((uint32_t)child->task.pid);
-	serial_print(" parent=");
-	serial_print_hex32((uint32_t)parent_pid);
-	serial_print(" removed=");
-	serial_print_hex64((uint64_t)(int64_t)removed);
-	serial_print(" tag=");
-	serial_print(tag ? tag : "?");
-	serial_print(" owns_pml4=");
-	serial_print_hex64(child->owns_page_directory);
-	serial_print(" pml4=");
-	serial_print_hex64((uint64_t)(uintptr_t)child->page_directory);
-	serial_print("\n");
 }
 
 void fase40_d_audit_destroy_done(process_t *p,
@@ -60,19 +48,6 @@ void fase40_d_audit_destroy_done(process_t *p,
 		return;
 
 	pmm_stats(NULL, &used_frames, NULL);
-	serial_print("[FASE40_D_AUDIT][UNMAP_DONE] pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" mapped=");
-	serial_print_hex64(stats->mapped_pages);
-	serial_print(" freed=");
-	serial_print_hex64(stats->freed_pages);
-	serial_print(" missing=");
-	serial_print_hex64(stats->missing_pages);
-	serial_print(" orphan=");
-	serial_print_hex64(orphan_frames);
-	serial_print(" pmm_used=");
-	serial_print_hex64((uint64_t)used_frames);
-	serial_print("\n");
 }
 #endif
 
@@ -91,8 +66,26 @@ __attribute__((noreturn)) void process_exit(int code)
 	}
 	process_fase50_trace_proc("process_exit-entry", dying);
 	dying->irq_frame_saved = 0;
+	process_exit_robust_list(dying);
 	if (IR0_DEBUG_WAIT)
 		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] ZOMBIE_IRQ_SAVED_CLEARED\n");
+
+	/*
+	 * CLONE_CHILD_CLEARTID / set_tid_address: zero the tid word and wake
+	 * joiners (musl pthread_join futex).
+	 */
+	if (dying->set_tid_ptr)
+	{
+		int zero = 0;
+		int *tidptr = dying->set_tid_ptr;
+
+		dying->set_tid_ptr = NULL;
+		if (process_validate_userspace_buffer(tidptr, sizeof(zero)) == 0)
+		{
+			(void)copy_to_user(tidptr, &zero, sizeof(zero));
+			(void)ir0_futex_wake(tidptr, 1);
+		}
+	}
 
 	/* Before becoming a zombie:
 	 * 1. Reparent all children to init (PID 1) to avoid orphaned processes
@@ -119,6 +112,7 @@ __attribute__((noreturn)) void process_exit(int code)
 
 	/* Mark as zombie */
 	dying->state = PROCESS_ZOMBIE;
+	KTM_CHECKPOINT(KTM_CP_PROCESS_EXIT);
 	if (dying->exit_signal == 0)
 		dying->exit_code = code;
 	else
@@ -147,30 +141,14 @@ __attribute__((noreturn)) void process_exit(int code)
 	fase_audit_note_proc_exited();
 	fase_audit_note_proc_zombie();
 #if IR0_DEBUG_PROC
-	paging_fase42_checkpoint("exit-before", (int32_t)dying->task.pid);
+	paging_ir0_mm_checkpoint("exit-before", (int32_t)dying->task.pid);
 #endif
 	for (struct mmap_region *r = dying->mmap_list; r; r = r->next)
 		vmas++;
 	pmm_stats(&total_frames, &used_frames, NULL);
 	if (IR0_DEBUG_PROC)
 	{
-		serial_print("[FASE41][EXIT] pid=");
-		serial_print_hex32((uint32_t)dying->task.pid);
-		serial_print(" vmas=");
-		serial_print_hex64(vmas);
-		serial_print(" used_frames=");
-		serial_print_hex64((uint64_t)used_frames);
-		serial_print(" total_frames=");
-		serial_print_hex64((uint64_t)total_frames);
-		serial_print("\n");
 	}
-#if CONFIG_DEBUG_FASE50
-	serial_print("[PROCESS] exit pid=");
-	serial_print_hex32((uint32_t)dying->task.pid);
-	serial_print(" code=");
-	serial_print_hex64((uint64_t)(uint32_t)code);
-	serial_print("\n");
-#endif
 
 	process_fase43_proc_audit("exit-after");
 #if IR0_DEBUG_PROC
@@ -282,38 +260,15 @@ void process_destroy(process_t *p)
 	fase_audit_note_proc_destroyed();
 	process_fase43_proc_audit("destroy-before");
 
-#if CONFIG_DEBUG_FASE50
-	serial_print("[PROCESS] destroy PID ");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" (fd cleanup)\n");
-#endif
 
 	process_release_fds(p, "DESTROY");
 
-	FASE40_D_AUDIT_LOG(
-		serial_print("[FASE40_D_AUDIT][DESTROY] pid=");
-		serial_print_hex32((uint32_t)p->task.pid);
-		serial_print(" owns_pml4=");
-		serial_print_hex64(p->owns_page_directory);
-		serial_print(" pml4=");
-		serial_print_hex64((uint64_t)(uintptr_t)p->page_directory);
-		serial_print("\n");
-	);
 
 	/* Unmap all user pages in this process's PML4 (reaper may run under another CR3) */
 	if (p->page_directory && p->owns_page_directory)
 		process_unmap_user_pages_all(p->page_directory, &reclaim_stats);
 	else
 	{
-		FASE40_D_AUDIT_LOG(
-			serial_print("[FASE40_D_AUDIT][UNMAP_SKIP] pid=");
-			serial_print_hex32((uint32_t)p->task.pid);
-			serial_print(" owns_pml4=");
-			serial_print_hex64(p->owns_page_directory);
-			serial_print(" pml4=");
-			serial_print_hex64((uint64_t)(uintptr_t)p->page_directory);
-			serial_print("\n");
-		);
 	}
 	if (p->page_directory && p->owns_page_directory)
 		paging_reclaim_lower_half_tables(p->page_directory);
@@ -347,54 +302,16 @@ void process_destroy(process_t *p)
 
 	if (p->page_directory && p->owns_page_directory)
 	{
-		paging_fase42_note_pml4_freed((uint64_t)(uintptr_t)p->page_directory);
+		paging_ir0_mm_note_pml4_freed((uint64_t)(uintptr_t)p->page_directory);
 		kfree_aligned(p->page_directory);
 		p->page_directory = NULL;
 		process_fase43_note_mm_destroyed();
 	}
 
 	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
-	FASE40_D_AUDIT_LOG(fase40_d_audit_destroy_done(p, &reclaim_stats, orphan_frames));
 #if IR0_DEBUG_PMM
-	serial_print("[FASE41][RECLAIM] pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" pages_owned=");
-	serial_print_hex64(reclaim_stats.mapped_pages);
-	serial_print(" pages_freed=");
-	serial_print_hex64(reclaim_stats.freed_pages);
-	serial_print(" missing_pages=");
-	serial_print_hex64(reclaim_stats.missing_pages);
-	serial_print(" delta=");
-	serial_print_hex64(reclaim_stats.mapped_pages - reclaim_stats.freed_pages);
-	serial_print("\n");
-	serial_print("[FASE41][PT] pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" pdpt_present=");
-	serial_print_hex64(reclaim_stats.pdpt_present);
-	serial_print(" pd_present=");
-	serial_print_hex64(reclaim_stats.pd_present);
-	serial_print(" pt_present=");
-	serial_print_hex64(reclaim_stats.pt_present);
-	serial_print(" leaf_present=");
-	serial_print_hex64(reclaim_stats.leaf_present);
-	serial_print(" pdpt_freed=");
-	serial_print_hex64(reclaim_stats.pdpt_freed);
-	serial_print(" pd_freed=");
-	serial_print_hex64(reclaim_stats.pd_freed);
-	serial_print(" pt_freed=");
-	serial_print_hex64(reclaim_stats.pt_freed);
-	serial_print(" leaf_freed=");
-	serial_print_hex64(reclaim_stats.leaf_freed);
-	serial_print("\n");
-	serial_print("[FASE41][PMM_AUDIT] orphan_frames=");
-	serial_print_hex64(orphan_frames);
-	serial_print(" double_free=");
-	serial_print_hex64(double_free);
-	serial_print(" alive_owner_missing=");
-	serial_print_hex64(alive_owner_missing);
-	serial_print("\n");
 #endif
-	paging_fase42_checkpoint("destroy-after", (int32_t)p->task.pid);
+	paging_ir0_mm_checkpoint("destroy-after", (int32_t)p->task.pid);
 	{
 		fase_proc_audit_t *fa = fase_audit_get(p, 0);
 

@@ -773,18 +773,12 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const v
             outw(data_port, buffer16[sector * 256 + i]);
         }
     }
-    
-    // Flush cache
-    outb(command_port, ATA_CMD_FLUSH_CACHE);
-    
-    // Wait for completion
-    bool result = ata_wait_ready(drive);
 
-    if (!result) {
-        extern void serial_print(const char *str);
-        serial_print("SERIAL: ATA_WRITE: TIMEOUT waiting for ready!\n");
-    }
-
-    return result;
+    /*
+     * Do not FLUSH_CACHE after every PIO write — that serializes bulk
+     * MINIX zone growth (FASE52D ~500KB) into multi-minute hangs.
+     * Callers that need durability should use ir0_block_flush / fsync.
+     */
+    return ata_wait_ready(drive);
 }
 

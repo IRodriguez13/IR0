@@ -37,6 +37,7 @@
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
 #include <ir0/multiboot.h>
+#include <ir0/ktm/ktm.h>
 #include "ipc.h"
 #include "syscalls.h"
 #include "scheduler_api.h"
@@ -155,6 +156,7 @@ void kmain(uint32_t multiboot_info)
         }
         else
         {
+#if DEBUG_BOOT
             serial_print("[BOOT] Console: VGA text (80x25)");
             if (video_backend_is_available())
                 serial_print(" [vbe fallback - may not be visible in graphics mode]");
@@ -182,6 +184,7 @@ void kmain(uint32_t multiboot_info)
             }
             else
                 serial_print("[BOOT] Multiboot info is NULL\n");
+#endif
         }
     }
 #endif
@@ -197,10 +200,12 @@ void kmain(uint32_t multiboot_info)
         serial_print("[BOOT] WARNING: Configured root block device not detected\n");
         serial_print("[BOOT] Filesystem initialization may fail\n");
     }
+#if DEBUG_BOOT
     else
     {
         serial_print("[BOOT] Configured root block device detected, proceeding with filesystem init\n");
     }
+#endif
 
     /* Initialize filesystem */
     vfs_init_root();
@@ -233,9 +238,17 @@ void kmain(uint32_t multiboot_info)
 
     /* Enable interrupts globally */
     arch_enable_interrupts();
+#if DEBUG_BOOT
     serial_print("[BOOT] Interrupts enabled globally (sti)\n");
+#endif
 
     log_subsystem_ok("INTERRUPTS");
+
+    ktm_core_init();
+    KTM_CHECKPOINT(KTM_CP_BOOT_READY);
+#if defined(CONFIG_KTM_TEST) && CONFIG_KTM_TEST
+    ktm_scenarios_run_boot();
+#endif
 
     /*
      * In-kernel tests run from init_1 (process context) when linked.
@@ -254,18 +267,25 @@ void kmain(uint32_t multiboot_info)
     /* Real init: load /sbin/init from root filesystem and run in ring 3. */
     {
         pid_t init_pid;
+        char *argv_init[] = { "/sbin/init", NULL };
 
+#if DEBUG_BOOT
         serial_print("SERIAL: kmain: Loading userspace init...\n");
+#endif
         ir0_rootfs_prepare_userspace_base();
-        init_pid = kexecve("/sbin/init", NULL, NULL);
+        /* Linux-like: argv[0] must be present or BusyBox/runit print usage and exit. */
+        process_prepare_pid1_for_init();
+        init_pid = kexecve("/sbin/init", argv_init, NULL);
         if (init_pid < 0)
         {
             serial_print("SERIAL: kmain: FAILED to load /sbin/init\n");
             panic("Failed to load /sbin/init");
         }
+#if DEBUG_BOOT
         serial_print("SERIAL: kmain: /sbin/init loaded (PID ");
         serial_print_hex32((uint32_t)init_pid);
         serial_print("), scheduling...\n");
+#endif
 
         ir0_console_on_userspace_attach();
 

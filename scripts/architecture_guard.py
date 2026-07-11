@@ -53,6 +53,7 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "scheduler_api.h",
     ROOT / "includes" / "ir0" / "pseudo_fs.h",
     ROOT / "includes" / "ir0" / "credentials.h",
+    ROOT / "includes" / "ir0" / "ktm" / "ktm.h",
 ]
 
 REQUIRED_ARM64_SCAFFOLD = [
@@ -411,13 +412,133 @@ def check_devfs_usercopy_contract():
     for idx, line in enumerate(lines, start=1):
         m = fn_re.match(line)
         if m:
-            current_fn = m.group(1)
+            name = m.group(1)
+            if name not in ("if", "while", "for", "switch", "return", "sizeof"):
+                current_fn = name
         if DEVFS_USERCOPY_RE.search(line):
             if current_fn not in DEVFS_USERCOPY_WHITELIST:
                 rel = devfs_path.relative_to(ROOT)
                 errors.append(
                     f"[devfs-io-contract-usercopy] {rel}:{idx}: {line.strip()} (fn={current_fn})"
                 )
+    return errors
+
+
+def check_ktm_core_no_fase():
+    """KTM v1 core must not embed legacy FASE diagnostics."""
+    errors = []
+    roots = [
+        ROOT / "includes" / "ir0" / "ktm",
+        ROOT / "ktm" / "event_ring.c",
+        ROOT / "ktm" / "transport_serial.c",
+        ROOT / "ktm" / "registry.c",
+        ROOT / "ktm" / "snapshot.c",
+        ROOT / "ktm" / "assert.c",
+        ROOT / "ktm" / "checkpoint.c",
+        ROOT / "ktm" / "fault.c",
+        ROOT / "ktm" / "scenario.c",
+        ROOT / "ktm" / "invariant_global.c",
+        ROOT / "ktm" / "scenarios",
+        ROOT / "ktm" / "userdev.c",
+    ]
+    fase_re = re.compile(r"FASE[0-9]|\[FASE")
+    for base in roots:
+        for fpath in iter_c_files(base):
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="replace")
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            if fase_re.search(text):
+                rel = fpath.relative_to(ROOT)
+                errors.append(f"[ktm-no-fase] {rel}: FASE markers forbidden in KTM core")
+    return errors
+
+
+def check_ktm_no_fase_serial():
+    """Forbid any [FASE serial markers in kernel trees (KTM is sole source of truth)."""
+    errors = []
+    fase_re = re.compile(r"\[FASE")
+    scan_roots = [
+        ROOT / "kernel",
+        ROOT / "mm",
+        ROOT / "fs",
+        ROOT / "drivers",
+        ROOT / "includes" / "ir0",
+        ROOT / "ktm",
+        ROOT / "arch",
+        ROOT / "sched",
+    ]
+    for base in scan_roots:
+        if not base.exists():
+            continue
+        for fpath in iter_c_files(base):
+            rel = str(fpath.relative_to(ROOT)).replace("\\", "/")
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="replace")
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            if fase_re.search(text):
+                errors.append(
+                    f"[ktm-no-fase] {rel}: [FASE serial forbidden; use KTM checkpoints/events"
+                )
+    return errors
+
+
+def check_ktm_angle_includes():
+    """KTM sources must use <ktm_…> / <ir0/ktm/…>, not relative or quoted ktm paths."""
+    errors = []
+    bad_re = re.compile(
+        r'^\s*#\s*include\s+("(\.\./)+.*ktm[^"]*"|'
+        r'"ktm_internal\.h"|'
+        r'"\.\./ktm_internal\.h"|'
+        r'<(\.\./)+.*ktm[^>]*>)'
+    )
+    # Also catch facade relative include of ktm/include
+    facade_rel_re = re.compile(
+        r'^\s*#\s*include\s+"(\.\./)+ktm/'
+    )
+    scan = [
+        ROOT / "ktm",
+        ROOT / "includes" / "ir0" / "ktm.h",
+        ROOT / "includes" / "ir0" / "ktm",
+    ]
+    for base in scan:
+        for fpath in iter_c_files(base):
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            rel = fpath.relative_to(ROOT)
+            for idx, line in enumerate(lines, 1):
+                if bad_re.search(line) or facade_rel_re.search(line):
+                    errors.append(
+                        f"[ktm-include] {rel}:{idx}: use <ktm_…> or <ir0/ktm/…> "
+                        f"(no relative/quoted ktm paths): {line.strip()}"
+                    )
+    return errors
+
+
+def check_kernel_no_relative_includes():
+    """kernel/syscalls and kernel/process must not use #include \"../…\"."""
+    errors = []
+    bad_re = re.compile(r'^\s*#\s*include\s+"\.\./')
+    for base in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "process"):
+        for fpath in iter_c_files(base):
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            rel = fpath.relative_to(ROOT)
+            for idx, line in enumerate(lines, 1):
+                if bad_re.search(line):
+                    errors.append(
+                        f"[kernel-include] {rel}:{idx}: use <kernel/…> "
+                        f"(no relative includes): {line.strip()}"
+                    )
     return errors
 
 
@@ -438,6 +559,10 @@ def main():
     errors.extend(check_debug_bins_test_include_policy())
     errors.extend(check_bluetooth_subdir_include_policy())
     errors.extend(check_devfs_usercopy_contract())
+    errors.extend(check_ktm_core_no_fase())
+    errors.extend(check_ktm_no_fase_serial())
+    errors.extend(check_ktm_angle_includes())
+    errors.extend(check_kernel_no_relative_includes())
 
     if errors:
         print("[arch-guard] FAILED")

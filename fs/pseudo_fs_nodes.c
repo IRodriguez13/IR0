@@ -384,6 +384,8 @@ void pseudo_fs_nodes_register_all(void)
                        (void *)(uintptr_t)proc_netinfo_read);
     pseudo_fs_register("/proc", "version", &proc_static_read_ops,
                        (void *)(uintptr_t)proc_version_read);
+    pseudo_fs_register("/proc", "cmdline", &proc_static_read_ops,
+                       (void *)(uintptr_t)proc_boot_cmdline_read);
     pseudo_fs_register("/proc", "uptime", &proc_static_read_ops,
                        (void *)(uintptr_t)proc_uptime_read);
     pseudo_fs_register("/proc", "meminfo", &proc_static_read_ops,
@@ -433,6 +435,8 @@ void pseudo_fs_nodes_register_all(void)
     pseudo_fs_register("/sys", "kernel/hostname", &sys_hostname_ops, NULL);
     pseudo_fs_register("/sys", "kernel/version", &sys_static_read_ops,
                        (void *)(uintptr_t)sys_kernel_version_read_reg);
+    pseudo_fs_register("/sys", "kernel/osrelease", &sys_static_read_ops,
+                       (void *)(uintptr_t)sys_kernel_osrelease_read_reg);
     pseudo_fs_register("/sys", "kernel/max_processes", &sys_max_processes_ops,
                        (void *)(uintptr_t)sys_kernel_max_processes_read_reg);
     pseudo_fs_register("/sys", "devices/system", &sys_static_read_ops,

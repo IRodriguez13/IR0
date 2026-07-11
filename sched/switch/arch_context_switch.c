@@ -222,23 +222,6 @@ void arch_context_switch(task_t *prev, task_t *next)
         }
     }
 
-#if CONFIG_DEBUG_FASE50
-    serial_print("[FASE50][CTX] stage=arch_context_switch-entry prev=");
-    serial_print_hex64((uint64_t)(uintptr_t)prev_proc);
-    serial_print(" prev_pid=");
-    serial_print_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
-    serial_print(" next=");
-    serial_print_hex64((uint64_t)(uintptr_t)next_proc);
-    serial_print(" next_pid=");
-    serial_print_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
-    serial_print(" prev_state=");
-    serial_print_hex64((uint64_t)(prev_proc ? prev_proc->state : 0));
-    serial_print(" next_state=");
-    serial_print_hex64((uint64_t)(next_proc ? next_proc->state : 0));
-    serial_print(" active_cr3=");
-    serial_print_hex64(get_current_page_directory());
-    serial_print("\n");
-#endif
 
     /*
      * Syscall-block resume (wait4): resume the task we are switching TO when
@@ -301,15 +284,6 @@ void arch_context_switch(task_t *prev, task_t *next)
             if (resume_child <= 0)
                 resume_child = (pid_t)next_proc->syscall_resume_rax;
 
-            FASE40_D_AUDIT_LOG(
-                serial_print("[FASE40_D_AUDIT][WAIT_RESUME] parent=");
-                serial_print_hex32((uint32_t)next_proc->task.pid);
-                serial_print(" target=");
-                serial_print_hex32((uint32_t)next_proc->wait_target_pid);
-                serial_print(" candidate=");
-                serial_print_hex32((uint32_t)resume_child);
-                serial_print("\n");
-            );
 
             process_reap_zombie_on_wait_resume(next_proc, resume_child);
         }
@@ -405,15 +379,6 @@ void arch_context_switch(task_t *prev, task_t *next)
                 serial_print("\n");
             }
 #endif
-#if CONFIG_DEBUG_FASE50
-            serial_print("[FASE50][CTX] stage=arch_context_switch-irq_frame_resume pid=");
-            serial_print_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
-            serial_print(" current_pre_iret=");
-            serial_print_hex64((uint64_t)(uintptr_t)current_process);
-            serial_print(" active_cr3_pre_iret=");
-            serial_print_hex64(get_current_page_directory());
-            serial_print("\n");
-#endif
             arch_switch_to_user_task(next);
 #if IR0_DEBUG_WAIT
             serial_print("[CTX][RESUME] unexpected_return active_cr3_after=");
@@ -436,9 +401,6 @@ void arch_context_switch(task_t *prev, task_t *next)
 
     arch_fixup_user_task_for_iretq(next_proc);
 
-#if CONFIG_DEBUG_FASE50
-    serial_print("[FASE50][CTX] stage=arch_context_switch-before-switch_context_x64\n");
-#endif
     switch_context_x64(prev, next);
 #endif
 }

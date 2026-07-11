@@ -128,7 +128,11 @@ Referencia: tabla syscalls x86-64 Linux, musl `arch/x86_64/syscall_arch.h`.
 
 ## 10. Hoja de ruta futura
 
-- Split del monolito: `process_syscalls.c`, `mm_syscalls.c`, `syscall_dispatch.c` (deuda documentada en AGENTS.md).
+- `sys_reboot`: POWER_OFF usa ACPI PM1a + DSDT `_S5_` SLP_TYP si existe;
+  `LINUX_REBOOT_CMD_KEXEC` → `REBOOT_KEXEC_LOADED` si hay `kexec_load`, si no `REBOOT_KEXEC_STUB`;
+  `LINUX_REBOOT_CMD_SW_SUSPEND` → `SYSTEM_S3_ENTER` + soft `SYSTEM_S3_RESUME_OK`.
+- `sys_kexec_load` (246): hasta 4 segmentos en RAM kernel; payload mágico `IR0KEXEC` para smoke.
+- Split del monolito: glue restante en `syscalls.c`; process/mm/io ya partidos.
 - Resolución fd completa `openat`/`*at`.
-- Implementación syscalls socket cuando el stack RTL8139 esté listo para userspace.
+- Expansión de syscalls socket más allá del smoke stream loopback.
 - ARM64: `syscall_entry_arm64` retorna -1 (stub).
