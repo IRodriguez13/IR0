@@ -20,7 +20,17 @@ def main() -> int:
     ap.add_argument("--log", default="/tmp/ktm-userdev-run.log")
     ap.add_argument("--timeout", type=int, default=90)
     ap.add_argument("--init", default=str(ROOT / "userspace/libktm/ktm_fork_wait_case"))
+    ap.add_argument("--done", default="KTM_USERDEV_OK")
+    ap.add_argument(
+        "--require",
+        action="append",
+        default=[],
+        help="Substring that must appear in the log (repeatable)",
+    )
     args = ap.parse_args()
+    require = list(args.require)
+    if not require:
+        require = ["TEST_END|fork_wait_signal|PASS"]
 
     iso = ROOT / "kernel-x64-userspace.iso"
     if not iso.is_file():
@@ -58,7 +68,7 @@ def main() -> int:
             "--timeout",
             str(args.timeout),
             "--done",
-            "KTM_USERDEV_OK",
+            args.done,
             "--",
             qemu,
             "-cdrom",
@@ -84,15 +94,16 @@ def main() -> int:
     text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
     text = text.replace("\0", "").replace("\r", "")
     flat = text.replace("\n", "")
-    if "KTM_USERDEV_OK" not in flat:
-        print("✗ KTM_USERDEV_OK missing", file=sys.stderr)
+    if args.done not in flat:
+        print(f"✗ {args.done} missing", file=sys.stderr)
         for line in text.splitlines():
             if "KTM|" in line or "KTM_" in line:
                 print(line)
         return 1 if rc == 0 else rc
-    if "TEST_END|fork_wait_signal|PASS" not in flat:
-        print("✗ fork_wait_signal did not PASS", file=sys.stderr)
-        return 1
+    for needle in require:
+        if needle not in flat:
+            print(f"✗ required tag missing: {needle}", file=sys.stderr)
+            return 1
     print("✓ ktm-userdev-run OK")
     return 0
 

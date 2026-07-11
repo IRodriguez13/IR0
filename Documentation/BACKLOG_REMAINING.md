@@ -31,11 +31,11 @@
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
 | ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` (`arm64_rpi_platform_ops`) |
-| KTM v1 core (events/scenarios/transport) | `make ktm-run` (boot suite pass=11) |
-| KTM `/dev/ktm` + libktm-user | `make ktm-userdev-run` (`fork_wait_signal`) |
+| KTM v1 core (events/scenarios/transport) | `make ktm-run` (boot suite pass=15) |
+| KTM `/dev/ktm` + libktm-user | `make ktm-userdev-run` (`fork_wait_signal`); `make ktm-userdev-cow-run` (`cow_touch`) |
 | Kernel `[FASE` serial retired | `rg '\[FASE'` = 0; arch-guard `ktm-no-fase` |
 | KTM P0/P1 MM scenarios | `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `mm.page_tables`, `mm.steady_state`, `process.exec`, `process.fork_rollback` in `ktm-run` |
-| KTM-P2 shell/devfs/OOM hook | `vfs.devfs`, `shell.redir`, `mm.oom_class` in `ktm-run` (pass=11) |
+| KTM-P2 shell/devfs/OOM + residual | `vfs.devfs`, `shell.redir`, `mm.oom_class`, `process.wait_drain`, `graphics.fb`, `input.events0`, `vfs.open_flags` (pass=15) |
 | POSIX-2 SIGHUP on PTY master close | `smoke-posix-sighup-tty` (`PTY_SIGHUP_PGRP`, `POSIX_SIGHUP_TTY_OK`) |
 | PERF-1 `sys_gettid` | removed per-call `GETTID` serial spam |
 | Init reparent without CRITICAL spam | early-return if no children; detach if no init |
@@ -46,11 +46,9 @@
 
 | Item | Next proof |
 |------|------------|
-| FASE→KTM remaining PARTIAL/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — drain/fb/TCC (44, 52, 54–55); deep OOM reclaim beyond `mm.oom_class` hook |
+| FASE→KTM HOST/GAP residual | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — TCC/Doom (52/55), reclaim post-exec (41), A–F COW smoke |
 
-## Next focus — technical debt + KTM parity
-
-Prefer **ARCH** / remaining GAP after POSIX-2 + KTM-P2 MVP:
+## Next focus — technical debt
 
 | Sprint | Gate | Note |
 |--------|------|------|
@@ -58,7 +56,7 @@ Prefer **ARCH** / remaining GAP after POSIX-2 + KTM-P2 MVP:
 | ARCH-2 | facade audit | `arch-guard` green |
 | PERF-1 | hot paths | `sys_gettid` spam removed; further hot-path work deferred |
 | POSIX-2 | job control | `setsid`/`setpgid` + SIGHUP-on-TTY close done |
-| KTM-P2 | boot suite | `vfs.devfs` / `shell.redir` / `mm.oom_class` done; fb/userdev COW still open |
+| KTM | boot + userdev | pass=15; `cow_touch` MVP done; A–F COW remains HOST |
 
 ## Future / P2 (dedicated oleadas only)
 
