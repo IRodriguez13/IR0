@@ -12,11 +12,11 @@ en fork, reparent sin CRITICAL, rename `ir0_mm_*`, ARCH-4 `DEBUG_BOOT`.
 
 | Ítem | Prueba |
 |------|--------|
-| Paridad FASE→KTM restante (PARTIAL/GAP) | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — `mm.vma`, `mm.page_tables`, shell/fb |
+| Paridad FASE→KTM restante (PARTIAL/GAP) | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — `mm.page_tables`, `mm.steady_state`, shell/fb |
 
 ## Siguiente — deuda + paridad KTM
 
-1. Scenarios P1 (`mm.page_tables`, `mm.vma`, `mm.steady_state`)  
+1. Scenarios P1 (`mm.page_tables`, `mm.steady_state`; `mm.vma` hecho)  
 2. ARCH-3 / PERF-1 / POSIX-2 (ver inglés)
 
 ## Future / P2

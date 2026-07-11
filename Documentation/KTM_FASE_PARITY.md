@@ -20,7 +20,7 @@
 | Mecanismo | Qué cubre |
 |-----------|-----------|
 | Checkpoints | `BOOT_*`, `PROCESS_{CREATE,FORK,EXEC,EXIT,REAP}`, `MM_{MAP,UNMAP,FAULT}`, `SCHED_SWITCH`, `VFS_{MOUNT,UMOUNT}` |
-| Scenarios (boot suite) | `process.lifecycle`, `ipc.pipe_lifecycle`, `mm.cow_fork`, `process.exec`, `process.fork_rollback` (`make ktm-run`) |
+| Scenarios (boot suite) | `process.lifecycle`, `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `process.exec`, `process.fork_rollback` (`make ktm-run`) |
 | Userdev | `/dev/ktm` + `libktm-user` + case `fork_wait_signal` (`make ktm-userdev-run`) |
 | Probes | `mm.frames`, `proc.list` |
 | Invariants | process list + frame bounds |
@@ -34,7 +34,7 @@
 
 | FASE | Intención histórica | Análogo KTM | Estado | Notas / deuda |
 |------|---------------------|-------------|--------|----------------|
-| **39** | VMA / mmap / brk lazy | `KTM_CP_MM_MAP` / `UNMAP`; smoke userspace `FASE39_*` | PARTIAL | Checkpoint en mmap/munmap; falta scenario `mm.vma` + asserts de VMA |
+| **39** | VMA / mmap / brk lazy | scenario `mm.vma` + `KTM_CP_MM_MAP`/`UNMAP`; lazy still `CONFIG_LAZY_*` + smoke | COVERED | List insert/clone/teardown in `ktm-run`; deep lazy A–F remains userspace smoke |
 | **40** | Fork COW + `FASE40_SUMMARY` | scenario `mm.cow_fork` + `KTM_CP_PROCESS_FORK` + `smoke-mm-cow-lazy` | COVERED | Real share-on-fork + WP break (`62cc512`/`496b55d`); KTM scenario = frame bound; A–F userspace en `smoke-mm-cow-lazy` |
 | **41** | Exit reclaim / PMM orphan | `process.lifecycle` + `KTM_ASSERT_NO_FRAME_LEAK` | PARTIAL | Leak frames en scenario sintético; reclaim real post-exec sigue en smokes FASE41 |
 | **42** | PT reclaim / frame balance | probes `mm.frames`; contadores `ir0_mm_*` / `paging_ir0_mm_*` | PARTIAL | Rename hecho; falta scenario `mm.page_tables` |

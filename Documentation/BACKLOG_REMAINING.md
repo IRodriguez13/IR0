@@ -32,7 +32,7 @@
 | KTM v1 core (events/scenarios/transport) | `make ktm-run` (boot suite pass=5) |
 | KTM `/dev/ktm` + libktm-user | `make ktm-userdev-run` (`fork_wait_signal`) |
 | Kernel `[FASE` serial retired | `rg '\[FASE'` = 0; arch-guard `ktm-no-fase` |
-| KTM P0/P1 scenarios | `ipc.pipe_lifecycle`, `mm.cow_fork`, `process.exec`, `process.fork_rollback` in `ktm-run` |
+| KTM P0/P1 scenarios | `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `process.exec`, `process.fork_rollback` in `ktm-run` |
 | Init reparent without CRITICAL spam | early-return if no children; detach if no init |
 | `fase42_*` → `ir0_mm_*` / `paging_ir0_mm_*` | rename in `mm/paging.*` + callers |
 | ARCH-4 boot serial | `CONFIG_DEBUG_BOOT=n`; verbose `[BOOT]` gated |
@@ -41,7 +41,7 @@
 
 | Item | Next proof |
 |------|------------|
-| FASE→KTM remaining PARTIAL/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — `mm.vma`, `mm.page_tables`, shell/fb cases |
+| FASE→KTM remaining PARTIAL/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — `mm.page_tables`, `mm.steady_state`, shell/fb cases |
 
 ## Next focus — technical debt + KTM parity
 
@@ -49,7 +49,7 @@ Prefer **deeper MM scenarios** then **PERF/POSIX**:
 
 | Sprint | Gate | Note |
 |--------|------|------|
-| KTM-P1 | `ktm-run` + optional userdev | `mm.page_tables`, `mm.vma`, `mm.steady_state` |
+| KTM-P1 | `ktm-run` + optional userdev | `mm.page_tables`, `mm.steady_state` (`mm.vma` done) |
 | ARCH-3 | lifecycle audit | stream/AHCI/PTY |
 | ARCH-2 | facade audit | keep `arch-guard` green |
 | PERF-1 | hot paths | poll/sleep if evidence |
