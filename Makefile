@@ -728,6 +728,7 @@ CFLAGS += -DCONFIG_ENABLE_STORAGE_ATA_BLOCK=0
 endif
 
 STORAGE_AHCI_OBJS = drivers/storage/ahci.o
+STORAGE_NVME_OBJS = drivers/storage/nvme.o
 
 # VBE framebuffer (VGA text console is always compiled)
 ifneq ($(CONFIG_ENABLE_VBE),n)
@@ -992,7 +993,8 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
            $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
            $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
-           $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS)
+           $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
+           $(STORAGE_NVME_OBJS)
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
 # Excluir debug_bins_registry.o y usar debug_bins_registry_test.o (compilado con IR0_KERNEL_TESTS=1)
@@ -1001,7 +1003,8 @@ ALL_OBJS_TEST = $(filter-out debug_bins/debug_bins_registry.o,$(KERNEL_OBJS)) $(
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
                 $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
-                $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS)
+                $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
+           $(STORAGE_NVME_OBJS)
 
 AUTOCONF_HDR := $(KERNEL_ROOT)/includes/generated/autoconf.h
 ifneq ($(wildcard $(KERNEL_ROOT)/.config),)
@@ -2634,6 +2637,30 @@ smoke-ahci-read: kernel-x64-userspace.iso
 	else \
 		echo "✗ smoke-ahci-read FAILED"; \
 		grep -E 'AHCI_|panic' $(AHCI_READ_SMOKE_LOG) | tail -30; \
+		exit 1; \
+	fi
+
+.PHONY: smoke-nvme-read
+NVME_READ_SMOKE_LOG = /tmp/nvme-read-smoke.log
+smoke-nvme-read: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   NVMe block read (LBA0)..."
+	@DISK=$$(mktemp /tmp/ir0-nvme-read.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	rm -f $(NVME_READ_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(NVME_READ_SMOKE_LOG) --timeout 60 --stale-sec 20 \
+		--done NVME_READ_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=none,id=nvme0 \
+		-device nvme,serial=nvme0,drive=nvme0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "NVME_DETECT_OK" $(NVME_READ_SMOKE_LOG) && \
+	    grep -q "NVME_READ_OK" $(NVME_READ_SMOKE_LOG); then \
+		echo "✓ smoke-nvme-read passed"; \
+	else \
+		echo "✗ smoke-nvme-read FAILED"; \
+		grep -E 'NVME_|panic' $(NVME_READ_SMOKE_LOG) | tail -40; \
 		exit 1; \
 	fi
 
