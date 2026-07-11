@@ -26,6 +26,11 @@
 #define PAGE_DIRTY 0x40
 #define PAGE_SIZE_2MB_FLAG 0x80
 #define PAGE_GLOBAL 0x100
+/*
+ * Software-available PTE bit 9 (ignored by hardware). Marks a present user
+ * page that was shared read-only at fork and must break on write.
+ */
+#define PAGE_COW 0x200
 
 /* PTE bit 63: no-execute when IA32_EFER.NXE is set (not stored in low 12 bits of API flags) */
 #define PAGE_NX (1ULL << 63)

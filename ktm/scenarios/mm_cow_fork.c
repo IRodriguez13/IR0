@@ -7,7 +7,8 @@
  *
  * Full userspace COW A–F remains in setup/pid1; this scenario validates
  * kernel-visible fork checkpoint + frame non-explosion after synthetic fork
- * bookkeeping. Deep COW data-plane stays in smoke-mm-cow-lazy until libktm case.
+ * bookkeeping. Deep COW A–F remains in smoke-mm-cow-lazy; this scenario
+ * checks post-fork frame growth stays bounded (real share-on-fork).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
