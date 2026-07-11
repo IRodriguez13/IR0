@@ -172,227 +172,22 @@ static int elf_read_user_cstr_in_directory(uint64_t *pml4, uintptr_t src,
 static void elf_trace_argv_contract(process_t *proc, const char *image_path,
                                     const char *stage)
 {
-#if !CONFIG_DEBUG_FASE50
     (void)proc;
     (void)image_path;
     (void)stage;
     return;
-#else
-    uint64_t argc = 0;
-    uint64_t argv0_ptr = 0;
-    char argv0_buf[128];
-    int argv0_read_ok = 0;
-    int broken = 0;
-
-    if (!proc || !proc->page_directory)
-        return;
-
-    if (elf_read_user_u64(proc->page_directory, (uintptr_t)proc->task.rsp, &argc) != 0)
-        return;
-    if (elf_read_user_u64(proc->page_directory, (uintptr_t)(proc->task.rsp + sizeof(uint64_t)),
-                          &argv0_ptr) != 0)
-        return;
-
-    argv0_buf[0] = '\0';
-    if (argv0_ptr != 0 &&
-        elf_read_user_cstr_in_directory(proc->page_directory, (uintptr_t)argv0_ptr,
-                                        argv0_buf, sizeof(argv0_buf)) == 0)
-    {
-        argv0_read_ok = 1;
-    }
-
-    serial_print("[FASE50][EXEC_ARGV] stage=");
-    serial_print(stage ? stage : "(null)");
-    serial_print(" pid=");
-    serial_print_hex32((uint32_t)proc->task.pid);
-    serial_print(" path=");
-    serial_print(image_path ? image_path : "(null)");
-    serial_print(" argc_stack=");
-    serial_print_hex64(argc);
-    serial_print(" argv0_ptr=");
-    serial_print_hex64(argv0_ptr);
-    serial_print(" argv0=");
-    serial_print(argv0_read_ok ? argv0_buf : "(unreadable)");
-    serial_print("\n");
-
-    if (image_path && strstr(image_path, "/bin/busybox") != NULL &&
-        (argc == 0 || argv0_ptr == 0))
-    {
-        broken = 1;
-    }
-
-    if (broken)
-    {
-        serial_print("[FASE50][CLASSIFY] EXEC_ARGV_CONTRACT_BROKEN pid=");
-        serial_print_hex32((uint32_t)proc->task.pid);
-        serial_print(" path=");
-        serial_print(image_path ? image_path : "(null)");
-        serial_print(" argc_stack=");
-        serial_print_hex64(argc);
-        serial_print(" argv0_ptr=");
-        serial_print_hex64(argv0_ptr);
-        serial_print("\n");
-    }
-#endif
 }
 
 static void elf_trace_entry_stack_layout(process_t *proc, const elf64_header_t *header,
                                          uint64_t at_phdr, uint64_t at_base,
                                          const char *stage)
 {
-#if !CONFIG_DEBUG_FASE50
     (void)proc;
     (void)header;
     (void)at_phdr;
     (void)at_base;
     (void)stage;
     return;
-#else
-    uint8_t dump[256];
-    uint64_t rsp;
-    uint64_t argc = 0;
-    uint64_t argv_base = 0;
-    uint64_t envp_base = 0;
-    uint64_t cursor = 0;
-    int i;
-
-    if (!proc || !proc->page_directory)
-        return;
-
-    rsp = proc->task.rsp;
-    serial_print("[FASE50][EXEC_STACK] stage=");
-    serial_print(stage ? stage : "(null)");
-    serial_print(" pid=");
-    serial_print_hex32((uint32_t)proc->task.pid);
-    serial_print(" entry_elf=");
-    serial_print_hex64(header ? header->e_entry : 0);
-    serial_print(" frame_rip=");
-    serial_print_hex64(proc->syscall_frame.rip);
-    serial_print(" task_rip=");
-    serial_print_hex64(proc->task.rip);
-    serial_print(" rsp=");
-    serial_print_hex64(rsp);
-    serial_print(" rsp_aligned16=");
-    serial_print((rsp & 0xFULL) == 0 ? "1" : "0");
-    serial_print(" at_phdr=");
-    serial_print_hex64(at_phdr);
-    serial_print(" at_base=");
-    serial_print_hex64(at_base);
-    serial_print("\n");
-
-    if (elf_read_user_region_in_directory(proc->page_directory, (uintptr_t)rsp,
-                                          dump, sizeof(dump)) != 0)
-    {
-        serial_print("[FASE50][EXEC_STACK] stage=");
-        serial_print(stage ? stage : "(null)");
-        serial_print(" dump=unmapped\n");
-        return;
-    }
-
-    for (i = 0; i < (int)sizeof(dump); i += 32)
-    {
-        serial_print("[FASE50][EXEC_STACK_DUMP] +");
-        serial_print_hex32((uint32_t)i);
-        serial_print(" ");
-        for (int j = 0; j < 32; j++)
-        {
-            uint8_t b = dump[i + j];
-            static const char hex[] = "0123456789ABCDEF";
-            char out[3];
-            out[0] = hex[(b >> 4) & 0xF];
-            out[1] = hex[b & 0xF];
-            out[2] = '\0';
-            serial_print(out);
-            if ((j & 1) == 1)
-                serial_print(" ");
-        }
-        serial_print("\n");
-    }
-
-    if (elf_read_user_u64(proc->page_directory, (uintptr_t)rsp, &argc) != 0)
-    {
-        serial_print("[FASE50][EXEC_STACK] argc=read_fail\n");
-        return;
-    }
-    if (argc > (uint64_t)(ELF_ARG_MAX * 4))
-    {
-        serial_print("[FASE50][EXEC_STACK] argc_suspicious=");
-        serial_print_hex64(argc);
-        serial_print("\n");
-        return;
-    }
-
-    argv_base = rsp + sizeof(uint64_t);
-    envp_base = argv_base + (argc + 1) * sizeof(uint64_t);
-    cursor = envp_base;
-
-    serial_print("[FASE50][EXEC_STACK] argc=");
-    serial_print_hex64(argc);
-    serial_print(" argv_base=");
-    serial_print_hex64(argv_base);
-    serial_print(" envp_base=");
-    serial_print_hex64(envp_base);
-    serial_print("\n");
-
-    for (i = 0; i < 8; i++)
-    {
-        uint64_t ptr = 0;
-        if (elf_read_user_u64(proc->page_directory,
-                              (uintptr_t)(argv_base + (uint64_t)i * sizeof(uint64_t)),
-                              &ptr) != 0)
-            break;
-        serial_print("[FASE50][EXEC_STACK_ARGV] idx=");
-        serial_print_hex32((uint32_t)i);
-        serial_print(" ptr=");
-        serial_print_hex64(ptr);
-        serial_print("\n");
-        if (ptr == 0)
-            break;
-    }
-
-    for (i = 0; i < 8; i++)
-    {
-        uint64_t ptr = 0;
-        if (elf_read_user_u64(proc->page_directory,
-                              (uintptr_t)(envp_base + (uint64_t)i * sizeof(uint64_t)),
-                              &ptr) != 0)
-            break;
-        serial_print("[FASE50][EXEC_STACK_ENVP] idx=");
-        serial_print_hex32((uint32_t)i);
-        serial_print(" ptr=");
-        serial_print_hex64(ptr);
-        serial_print("\n");
-        cursor += sizeof(uint64_t);
-        if (ptr == 0)
-            break;
-    }
-
-    if ((cursor & 0xFULL) != 0)
-        serial_print("[FASE50][EXEC_STACK] warn=auxv_cursor_unaligned\n");
-
-    for (i = 0; i < 20; i++)
-    {
-        uint64_t a_type = 0;
-        uint64_t a_val = 0;
-        if (elf_read_user_u64(proc->page_directory, (uintptr_t)cursor, &a_type) != 0 ||
-            elf_read_user_u64(proc->page_directory,
-                              (uintptr_t)(cursor + sizeof(uint64_t)),
-                              &a_val) != 0)
-            break;
-
-        serial_print("[FASE50][EXEC_STACK_AUXV] idx=");
-        serial_print_hex32((uint32_t)i);
-        serial_print(" type=");
-        serial_print_hex64(a_type);
-        serial_print(" val=");
-        serial_print_hex64(a_val);
-        serial_print("\n");
-
-        cursor += 2 * sizeof(uint64_t);
-        if (a_type == AT_NULL)
-            break;
-    }
-#endif
 }
 
 static int validate_elf_header(const elf64_header_t *header)
@@ -741,22 +536,8 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         while (argc < ELF_ARG_MAX && argv[argc])
             argc++;
     }
-    serial_print("[FASE50][EXEC_ARGV] stage=stack-builder-enter builder=");
-    serial_print(builder_tag ? builder_tag : "(null)");
-    serial_print(" pid=");
-    serial_print_hex32(process ? (uint32_t)process->task.pid : 0);
-    serial_print(" path=");
-    serial_print(image_path ? image_path : "(null)");
-    serial_print(" argc_in=");
-    serial_print_hex64((uint64_t)argc);
-    serial_print("\n");
     for (int i = 0; i < argc && i < 8; i++)
     {
-        serial_print("[FASE50][EXEC_ARGV] stage=stack-builder-argv idx=");
-        serial_print_hex32((uint32_t)i);
-        serial_print(" str=");
-        serial_print(argv[i] ? argv[i] : "(null)");
-        serial_print("\n");
     }
 
     /* Count environment variables (cap to ELF_ARG_MAX) */
@@ -855,11 +636,6 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
                 return -1;
             }
             argv_ptrs[i] = current_string_ptr;
-            serial_print("[FASE50][EXEC_ARGV] stage=stack-builder-argv-ptr idx=");
-            serial_print_hex32((uint32_t)i);
-            serial_print(" user_dst=");
-            serial_print_hex64(argv_ptrs[i]);
-            serial_print("\n");
             current_string_ptr += len;
         }
     }
@@ -1027,17 +803,6 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     serial_print_hex32((uint32_t)argv_array);
     serial_print(", envp=");
     serial_print_hex32((uint32_t)envp_array);
-    serial_print("\n");
-    serial_print("[FASE50][EXEC_ARGV] stage=stack-builder-final builder=");
-    serial_print(builder_tag ? builder_tag : "(null)");
-    serial_print(" pid=");
-    serial_print_hex32((uint32_t)process->task.pid);
-    serial_print(" path=");
-    serial_print(image_path ? image_path : "(null)");
-    serial_print(" argc_stack=");
-    serial_print_hex64((uint64_t)argc);
-    serial_print(" argv_array=");
-    serial_print_hex64(argv_array);
     serial_print("\n");
     elf_trace_argv_contract(process, image_path, "stack-builder-final");
     elf_trace_entry_stack_layout(process, header, at_phdr, at_base, "elf_setup_stack-final");
@@ -1321,17 +1086,6 @@ static void exec_fail_kill(process_t *proc, int code, const char *point)
 	exec_commit_ctx.fail_point = point;
 	exec_commit_emit(point ? point : "exec_fail_kill", (int64_t)code, proc,
 	                 "EXEC_LOADER_FAIL");
-	serial_print("[FASE50][TRACE] stage=exec_fail_kill pid=");
-	serial_print_hex32(proc ? (uint32_t)proc->task.pid : 0);
-	serial_print(" code=");
-	serial_print_hex64((uint64_t)(uint32_t)code);
-	serial_print(" exit_via=exec_fail_kill explicit=1 signal=0 point=");
-	serial_print(point ? point : "(null)");
-	serial_print(" current=");
-	serial_print_hex64((uint64_t)(uintptr_t)current_process);
-	serial_print(" active_cr3=");
-	serial_print_hex64(get_current_page_directory());
-	serial_print("\n");
 	process_fase43_proc_audit("exec-fail-kill");
 	paging_fase43_oom_audit("exec-fail-kill");
 	process_exit(code);
@@ -1367,22 +1121,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     exec_commit_ctx.task_cr3_entry = proc->task.cr3;
     exec_commit_ctx.active_cr3_entry = get_current_page_directory();
 
-    serial_print("[FASE50][TRACE] stage=exec_replace_current-entry pid=");
-    serial_print_hex32(proc ? (uint32_t)proc->task.pid : 0);
-    serial_print(" proc=");
-    serial_print_hex64((uint64_t)(uintptr_t)proc);
-    serial_print(" mm=");
-    serial_print_hex64(proc ? (uint64_t)(uintptr_t)proc->page_directory : 0);
-    serial_print(" files=");
-    serial_print_hex64(proc ? (uint64_t)(uintptr_t)proc->fd_table : 0);
-    serial_print(" state=");
-    serial_print_hex64((uint64_t)(proc ? proc->state : 0));
-    serial_print(" task_cr3=");
-    serial_print_hex64(proc ? proc->task.cr3 : 0);
-    serial_print(" active_cr3=");
-    serial_print_hex64(get_current_page_directory());
-    serial_print("\n");
-    paging_fase42_checkpoint("exec-before", (int32_t)proc->task.pid);
+    paging_ir0_mm_checkpoint("exec-before", (int32_t)proc->task.pid);
     process_fase44_list_checkpoint("exec-before");
     pmm_stats(&total_frames_before, &used_frames_before, NULL);
     vmas_before = fase41_count_vmas(proc);
@@ -1462,13 +1201,6 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     at_base = elf_compute_load_base(header, (uint8_t *)file_data);
 
     process_exec_close_cloexec(proc);
-    serial_print("[FASE50][TRACE] stage=exec_replace_current-after-cloexec pid=");
-    serial_print_hex32((uint32_t)proc->task.pid);
-    serial_print(" mm=");
-    serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
-    serial_print(" files=");
-    serial_print_hex64((uint64_t)(uintptr_t)proc->fd_table);
-    serial_print("\n");
 
     {
         size_t used_after_unmap = 0;
@@ -1476,20 +1208,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
         process_unmap_user_address_space(proc);
         pmm_stats(NULL, &used_after_unmap, NULL);
         exec_commit_ctx.unmapped = 1;
-        serial_print("[FASE41][EXEC_OLD_AS] pid=");
-        serial_print_hex32((uint32_t)proc->task.pid);
-        serial_print(" used_after_unmap=");
-        serial_print_hex64((uint64_t)used_after_unmap);
-        serial_print(" class=");
-        serial_print("PMM_LEAK_EXEC_OLD_ADDRESS_SPACE_CHECK\n");
     }
-    serial_print("[FASE50][TRACE] stage=exec_replace_current-after-unmap pid=");
-    serial_print_hex32((uint32_t)proc->task.pid);
-    serial_print(" mm=");
-    serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
-    serial_print(" active_cr3=");
-    serial_print_hex64(get_current_page_directory());
-    serial_print("\n");
 
     while (proc->mmap_list)
     {
@@ -1555,20 +1274,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     kfree(file_data);
     pmm_stats(&total_frames_after, &used_frames_after, NULL);
     vmas_after = fase41_count_vmas(proc);
-    serial_print("[FASE41][EXEC_RECLAIM] pid=");
-    serial_print_hex32((uint32_t)proc->task.pid);
-    serial_print(" vmas_before=");
-    serial_print_hex64(vmas_before);
-    serial_print(" vmas_after=");
-    serial_print_hex64(vmas_after);
-    serial_print(" pages_before=");
-    serial_print_hex64((uint64_t)used_frames_before);
-    serial_print(" pages_after=");
-    serial_print_hex64((uint64_t)used_frames_after);
-    serial_print(" total=");
-    serial_print_hex64((uint64_t)total_frames_after);
-    serial_print("\n");
-    paging_fase42_checkpoint("exec-after", (int32_t)proc->task.pid);
+    paging_ir0_mm_checkpoint("exec-after", (int32_t)proc->task.pid);
     process_fase44_list_checkpoint("exec-after");
 
     serial_print("SERIAL: ELF: exec_replace success PID ");
@@ -1580,17 +1286,6 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     serial_print_hex64(proc->task.cr3);
     serial_print(" mm_cr3=");
     serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
-    serial_print("\n");
-    serial_print("[FASE50][TRACE] stage=exec_replace_current-before-userswitch pid=");
-    serial_print_hex32((uint32_t)proc->task.pid);
-    serial_print(" rip=");
-    serial_print_hex64(proc->task.rip);
-    serial_print(" rsp=");
-    serial_print_hex64(proc->task.rsp);
-    serial_print(" task_cr3=");
-    serial_print_hex64(proc->task.cr3);
-    serial_print(" active_cr3=");
-    serial_print_hex64(get_current_page_directory());
     serial_print("\n");
     elf_trace_argv_contract(proc, path, "before-iret");
     elf_trace_entry_stack_layout(proc, header, at_phdr, at_base, "before-userswitch");

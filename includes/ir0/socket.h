@@ -38,3 +38,9 @@ struct sockaddr_in
 	uint32_t sin_addr;
 	uint8_t sin_zero[8];
 };
+
+struct sockaddr_un
+{
+	uint16_t sun_family;
+	char sun_path[108];
+};

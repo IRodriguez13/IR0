@@ -11,10 +11,7 @@
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
 #include <string.h>
-#include <ir0/serial_io.h>
 #include <config.h>
-#include <ir0/fase50_debug.h>
-
 static uint64_t fase48_pipe_created;
 static uint64_t fase48_pipe_destroyed;
 static uint64_t fase49_next_pipe_id = 1;
@@ -24,44 +21,17 @@ static void fase49_pipe_line(pipe_t *pipe, const char *event)
 	if (!pipe || !event)
 		return;
 
-	serial_print("[FASE49][PIPE] event=");
-	serial_print(event);
-	serial_print(" pipe_id=");
-	serial_print_hex64(pipe->pipe_id);
-	serial_print(" readers=");
-	serial_print_hex64((uint64_t)pipe->readers);
-	serial_print(" writers=");
-	serial_print_hex64((uint64_t)pipe->writers);
-	serial_print(" buffer_bytes=");
-	serial_print_hex64((uint64_t)pipe->count);
-	serial_print(" closed_read=");
-	serial_print(pipe->closed_read ? "1" : "0");
-	serial_print(" closed_write=");
-	serial_print(pipe->closed_write ? "1" : "0");
-	serial_print(" fd_refs=");
-	serial_print_hex64((uint64_t)pipe->fd_refs);
-	serial_print("\n");
 }
 
 void pipe_fase49_fd_trace(uint32_t pid, int fd, pipe_t *pipe, int end,
 			  int refcount, const char *op)
 {
-	serial_print("[FASE49][FD] op=");
-	serial_print(op ? op : "(null)");
-	serial_print(" pid=");
-	serial_print_hex32(pid);
-	serial_print(" fd=");
-	serial_print_hex64((uint64_t)fd);
-	serial_print(" object=");
-	if (pipe)
-		serial_print_hex64(pipe->pipe_id);
-	else
-		serial_print("0");
-	serial_print(" end=");
-	serial_print_hex64((uint64_t)end);
-	serial_print(" refcount=");
-	serial_print_hex64((uint64_t)refcount);
-	serial_print("\n");
+	(void)pid;
+	(void)fd;
+	(void)pipe;
+	(void)end;
+	(void)refcount;
+	(void)op;
 }
 
 void pipe_fase48_get_stats(uint64_t *created, uint64_t *destroyed)
@@ -186,42 +156,6 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 
 	if (bytes_written > 0)
 	{
-#if CONFIG_DEBUG_FASE50
-		serial_print("[FASE50B][PIPE_WRITE] pipe_id=");
-		serial_print_hex64(pipe->pipe_id);
-		serial_print(" bytes=");
-		serial_print_hex64((uint64_t)bytes_written);
-		serial_print(" buffer_bytes=");
-		serial_print_hex64((uint64_t)pipe->count);
-		serial_print(" hex=");
-		{
-			size_t di;
-
-			for (di = 0; di < bytes_written && di < 32; di++)
-			{
-				if (di > 0)
-					serial_print(" ");
-				serial_print_hex64((uint64_t)(uint8_t)src[di]);
-			}
-		}
-		serial_print(" ascii=");
-		{
-			size_t di;
-
-			for (di = 0; di < bytes_written && di < 32; di++)
-			{
-				char c = src[di];
-
-				if (c >= 32 && c <= 126)
-					serial_putchar(c);
-				else
-					serial_print(".");
-			}
-		}
-		serial_print("\n");
-		if (bytes_written == 6 && src[0] == 'h' && src[1] == 'e')
-			serial_print("[FASE50B][CLASSIFY] PIPE_WRITE_CONTENT_OK\n");
-#endif
 	}
 
 	return (int)bytes_written;
@@ -303,20 +237,9 @@ void pipe_fase49_classify(void)
 		cls = "PIPE_READY";
 	else
 		cls = "PIPE_REF_LEAK";
-
-	serial_print("[FASE49][CLASS] pipe_created=");
-	serial_print_hex64(created);
-	serial_print(" pipe_destroyed=");
-	serial_print_hex64(destroyed);
-	serial_print(" fd_created=");
-	serial_print_hex64(fd_created);
-	serial_print(" fd_destroyed=");
-	serial_print_hex64(fd_destroyed);
-	serial_print(" blocked_readers=");
-	serial_print_hex64(blocked_readers);
-	serial_print(" blocked_writers=");
-	serial_print_hex64(blocked_writers);
-	serial_print(" pipe_class=");
-	serial_print(cls);
-	serial_print("\n");
+	(void)cls;
+	(void)fd_created;
+	(void)fd_destroyed;
+	(void)blocked_readers;
+	(void)blocked_writers;
 }

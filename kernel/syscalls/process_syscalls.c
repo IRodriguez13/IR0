@@ -32,21 +32,20 @@
 #include <ir0/elf_loader.h>
 #include <ir0/path.h>
 #include <ir0/permissions.h>
-#include <ir0/fase50_debug.h>
-#include <ir0/fase51_debug.h>
-#include <ir0/fase52_debug.h>
 #include <ir0/serial_io.h>
 #include <ir0/kmem.h>
 #include <ir0/validation.h>
 #include <ir0/debug_runtime.h>
 #include <ir0/scheduler_api.h>
 #include <ktm_probe_diag.h>
+#include <ir0/ktm/checkpoint.h>
 #include <config.h>
 #include <ir0/arch_port.h>
 #include <ir0/time.h>
 #include <ir0/clock.h>
 #include <ir0/credentials.h>
 #include <ir0/power_manag.h>
+#include <ir0/futex.h>
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
@@ -566,51 +565,13 @@ int64_t sys_setsid(void)
 
 static uint64_t fase50_count_open_fds_local(process_t *p)
 {
-#if CONFIG_DEBUG_FASE50
-	uint64_t n = 0;
-	int i;
-
-	if (!p)
-		return 0;
-	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
-	{
-		if (p->fd_table[i].in_use)
-			n++;
-	}
-	return n;
-#else
 	(void)p;
 	return 0;
-#endif
 }
 static void fase50_trace_syscall_proc(const char *stage, process_t *p)
 {
-#if CONFIG_DEBUG_FASE50
-	serial_print("[FASE50][TRACE] stage=");
-	serial_print(stage ? stage : "(null)");
-	serial_print(" current=");
-	serial_print_hex64((uint64_t)(uintptr_t)current_process);
-	serial_print(" proc=");
-	serial_print_hex64((uint64_t)(uintptr_t)p);
-	serial_print(" pid=");
-	serial_print_hex32(p ? (uint32_t)p->task.pid : 0);
-	serial_print(" state=");
-	serial_print_hex64((uint64_t)(p ? p->state : 0));
-	serial_print(" mm=");
-	serial_print_hex64(p ? (uint64_t)(uintptr_t)p->page_directory : 0);
-	serial_print(" files=");
-	serial_print_hex64(p ? (uint64_t)(uintptr_t)p->fd_table : 0);
-	serial_print(" fds_open=");
-	serial_print_hex64(fase50_count_open_fds_local(p));
-	serial_print(" task_cr3=");
-	serial_print_hex64(p ? p->task.cr3 : 0);
-	serial_print(" active_cr3=");
-	serial_print_hex64(get_current_page_directory());
-	serial_print("\n");
-#else
 	(void)stage;
 	(void)p;
-#endif
 }
 int64_t sys_exit(int exit_code)
 {
@@ -653,11 +614,16 @@ int64_t sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg)
 	switch (cmd)
 	{
 	case LINUX_REBOOT_CMD_CAD_ON:
+		serial_print("REBOOT_CAD_ON\n");
+		return 0;
 	case LINUX_REBOOT_CMD_CAD_OFF:
-		/* CAD not wired yet; accept as no-op like a stub capability. */
+		serial_print("REBOOT_CAD_OFF\n");
 		return 0;
 	case LINUX_REBOOT_CMD_RESTART:
+		kernel_system_shutdown(IR0_SYSTEM_REBOOT);
+		break;
 	case LINUX_REBOOT_CMD_RESTART2:
+		serial_print("REBOOT_RESTART2\n");
 		kernel_system_shutdown(IR0_SYSTEM_REBOOT);
 		break;
 	case LINUX_REBOOT_CMD_HALT:
@@ -911,35 +877,6 @@ int64_t sys_exec(const char *pathname,
     }
   }
 
-  if (DEBUG_FASE50)
-  {
-    serial_print("[FASE50][EXEC_ARGV] stage=sys_exec-captured pid=");
-    serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
-    serial_print(" path=");
-    serial_print(path_to_use ? path_to_use : "(null)");
-    serial_print(" argc=");
-    serial_print_hex64((uint64_t)argc_kept);
-    serial_print(" argv_slots_seen=");
-    serial_print_hex64((uint64_t)exec_argv_slots_seen);
-    serial_print("\n");
-    for (int i = 0; i < argc_kept && i < 8; i++)
-    {
-      serial_print("[FASE50][EXEC_ARGV] stage=sys_exec-argv idx=");
-      serial_print_hex32((uint32_t)i);
-      serial_print(" str=");
-      serial_print(kernel_argv[i] ? kernel_argv[i] : "(null)");
-      serial_print("\n");
-    }
-  }
-
-  fase51_dbg_exec_argv(path_to_use,
-                       argc_kept > 0 ? kernel_argv[0] : NULL,
-                       argc_kept > 1 ? kernel_argv[1] : NULL);
-  fase52_dbg_exec_argv(path_to_use,
-                       argc_kept > 0 ? kernel_argv[0] : NULL,
-                       argc_kept > 1 ? kernel_argv[1] : NULL,
-                       envp ? 1ULL : 0ULL);
-
   if (envp)
   {
     int i;
@@ -1003,39 +940,11 @@ int64_t sys_exec(const char *pathname,
 
   int64_t result;
 
-  {
-    char user_path_copy[256];
-
-    user_path_copy[0] = '\0';
-    if (copy_from_user(user_path_copy, pathname, sizeof(user_path_copy) - 1) == 0)
-      user_path_copy[sizeof(user_path_copy) - 1] = '\0';
-
-    if (DEBUG_FASE50)
-    {
-      serial_print("[EXEC_AUDIT][SYSCALL] pid=");
-      serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
-      serial_print(" user_path=");
-      serial_print(user_path_copy[0] ? user_path_copy : "(copy_fail)");
-      serial_print(" resolved_path=");
-      serial_print(path_to_use ? path_to_use : "(null)");
-      serial_print(" argv=");
-      for (int ai = 0; ai < 4; ai++)
-      {
-        if (ai > 0)
-          serial_print(",");
-        if (ai < argc_kept && kernel_argv[ai])
-          serial_print(kernel_argv[ai]);
-        else
-          serial_print("-");
-      }
-      serial_print("\n");
-    }
-  }
-
   if (current_process->mode == USER_MODE)
   {
     ktm_probe_diag_execve(current_process, path_to_use);
     fase50_trace_syscall_proc("sys_exec-before-exec_replace_current", current_process);
+    KTM_CHECKPOINT(KTM_CP_PROCESS_EXEC);
     result = exec_replace_current(path_to_use,
                                   argv ? (char *const *)kernel_argv : NULL,
                                   envp ? (char *const *)kernel_envp : NULL);
@@ -1171,7 +1080,6 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
       serial_print("\n");
     }
     fase50_trace_syscall_proc("sys_wait4-return", current_process);
-    fase51_dbg_wait4((int64_t)pid, ret);
     return ret;
   }
 }
@@ -1297,7 +1205,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
   if (code == ARCH_SET_FS)
   {
     current_process->fs_base = (uint64_t)addr;
-    arch_set_fs_base((uint64_t)addr);
+    arch_set_tls((uint64_t)addr);
     return 0;
   }
 
@@ -1333,6 +1241,9 @@ int64_t sys_set_tid_address(int *tidptr)
 int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
                   int *uaddr2, int val3)
 {
+  int cur;
+  int cmd;
+
   (void)timeout;
   (void)uaddr2;
   (void)val3;
@@ -1343,14 +1254,18 @@ int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
   if (uaddr && validate_userspace_buffer(uaddr, sizeof(int)) != 0)
     return -EFAULT;
 
-  if (op == FUTEX_WAKE)
-    return 0;
+  cmd = op & 0x7f; /* strip FUTEX_PRIVATE_FLAG / CLOCK_REALTIME bits */
 
-  if (op == FUTEX_WAIT)
+  if (cmd == FUTEX_WAKE)
+    return (int64_t)ir0_futex_wake(uaddr, val);
+
+  if (cmd == FUTEX_WAIT)
   {
-    (void)val;
-    sched_schedule_next();
-    return 0;
+    if (copy_from_user(&cur, uaddr, sizeof(cur)) != 0)
+      return -EFAULT;
+    if (cur != val)
+      return -EAGAIN;
+    return (int64_t)ir0_futex_wait(current_process, uaddr, val);
   }
 
   return -ENOSYS;

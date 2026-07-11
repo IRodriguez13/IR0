@@ -38,9 +38,9 @@
 #include <ir0/arch_port.h>
 #include <ir0/copy_user.h>
 #include <ir0/fcntl.h>
-#include <ir0/fase51_debug.h>
 #include <ir0/pmm.h>
 #include <ir0/sock_udp.h>
+#include <ir0/sock_stream.h>
 #include "../syscalls/process_syscalls.h"
 
 extern void fase48_fd_get_stats(uint64_t *created, uint64_t *destroyed,

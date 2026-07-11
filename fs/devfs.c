@@ -48,6 +48,7 @@
 #include <ir0/serial_io.h>
 #include <ir0/credentials.h>
 #include <ir0/fb.h>
+#include <ir0/ktm/userdev.h>
 #include "vfs.h"
 
 static pid_t devfs_current_pid(void)
@@ -2481,6 +2482,7 @@ int devfs_init(void)
 #if CONFIG_ENABLE_BLUETOOTH
     devfs_register_node(&dev_bluetooth_hci0);
 #endif
+    ktm_userdev_register();
 
     return 0;
 }
