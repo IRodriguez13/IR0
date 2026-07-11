@@ -140,6 +140,7 @@
 #define __NR_umount2      166
 #define __NR_sync         162
 #define __NR_reboot       169
+#define __NR_kexec_load   246
 #define __NR_arch_prctl   158
 #define __NR_gettid       186
 #define __NR_set_tid_address 218

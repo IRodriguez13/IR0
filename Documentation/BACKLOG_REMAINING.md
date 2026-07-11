@@ -22,7 +22,9 @@
 | F2 AHCI NCQ (FPDMA + multi-slot) | `smoke-ahci-read` → `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED` |
 | F3 DSDT `_S5_` SLP_TYP | `ACPI_S5_OK` + PM1a `(typ<<10)\|SLP_EN` |
 | F4 kexec stub reboot | `REBOOT_KEXEC_STUB` via `smoke-reboot-kexec-enosys` |
-| F5 suspend stub success | `SYSTEM_SUSPEND_ENTER` + `SUSPEND_STUB_OK` |
+| F5 suspend stub success | superseded by S3 soft resume (`smoke-reboot-s3`) |
+| kexec_load MVP | `smoke-kexec-load` → `KEXEC_LOAD_OK` + `REBOOT_KEXEC_LOADED` + `KEXEC_PAYLOAD_OK` |
+| S3 soft resume MVP | `ACPI_S3_OK` + `SYSTEM_S3_ENTER` + `SYSTEM_S3_RESUME_OK` (`smoke-reboot-s3`) |
 | F6 NVMe detect+read | `smoke-nvme-read` → `NVME_DETECT_OK` + `NVME_READ_OK` |
 | Kernel relative includes hygiene | `<kernel/…>` in syscalls/process; arch-guard `[kernel-include]` |
 | KTM typed `PIPE_*` events | `KTM_EVENT_PIPE_{CREATE,EOF,EPIPE,WAKE}` in `pipe.c` |
@@ -54,8 +56,8 @@ _(vacío — solo Future abajo)_
 | F1 | ~~ACPI FADT map seguro~~ | **DONE** 2026-07-11 — `ACPI_FADT_MAPPED` + `ACPI_PM1A_POWEROFF` |
 | F2 | ~~AHCI NCQ~~ | **DONE** 2026-07-11 — `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED` |
 | F3 | ~~AML `_S5` SLP_TYP~~ | **DONE** 2026-07-11 — `ACPI_S5_OK` + typed PM1a |
-| F4 | ~~kexec mínimo~~ | **DONE** 2026-07-11 — `REBOOT_KEXEC_STUB` (no kexec_load) |
-| F5 | ~~Suspend stub~~ | **DONE** 2026-07-11 — return 0 + `SYSTEM_SUSPEND_ENTER` |
+| F4 | ~~kexec mínimo~~ | **DONE** 2026-07-11 — stub + `kexec_load` MVP (`smoke-kexec-load`) |
+| F5 | ~~Suspend / S3~~ | **DONE** 2026-07-11 — `_S3_` + soft resume (`smoke-reboot-s3`; FACS wake deferred) |
 | F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
 | F7 | ARM64 MM / userspace | beyond freestanding `kernel-arm64.bin` |
 | F8 | TCP Internet / real NIC | beyond loopback |
