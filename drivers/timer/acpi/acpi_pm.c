@@ -5,8 +5,10 @@
  * File: acpi_pm.c
  * Description: Minimal ACPI FADT parse for PM1a/b poweroff (no AML/_S5).
  *
- * Only walks tables inside the early identity map (0..48MiB). QEMU often
- * places RSDT/FADT higher; then we fall back to well-known PM1a I/O ports.
+ * Only walks tables that are either inside the early identity map (0..48MiB)
+ * or mapped on demand via 4KiB supervisor identity (no boot-map expand).
+ * QEMU often places RSDT/FADT higher; on-demand map prefers real PM1a over
+ * the 0x604 fallback when tables are reachable.
  *
  * References:
  * - UEFI ACPI 6.5 §16 Waking and Sleeping
@@ -17,6 +19,7 @@
 
 #include <ir0/acpi_pm.h>
 #include <ir0/serial_io.h>
+#include <ir0/paging.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -24,8 +27,11 @@
 #define ACPI_RSDP_SEARCH_START 0x000E0000u
 #define ACPI_RSDP_SEARCH_END   0x00100000u
 #define ACPI_SLP_EN            (1u << 13)
-/* Must match arch/x86-64/asm/boot_x64.asm identity map (0..48MiB). */
+/* Early boot identity map covers 0..48MiB; above that we map on demand. */
 #define ACPI_SAFE_PHYS_MAX     0x03000000ull
+/* Refuse absurd table addresses (QEMU ACPI lives well below 4GiB). */
+#define ACPI_MAP_PHYS_CAP      0x100000000ull
+#define ACPI_MAP_MAX_BYTES     (256u * 1024u)
 
 typedef struct
 {
@@ -101,7 +107,7 @@ static int acpi_checksum_ok(const void *p, size_t n)
 	return sum == 0;
 }
 
-static int phys_safe(uint64_t p, size_t need)
+static int phys_in_early_map(uint64_t p, size_t need)
 {
 	if (p < 0x1000ull)
 		return 0;
@@ -110,6 +116,50 @@ static int phys_safe(uint64_t p, size_t need)
 	if (p + (uint64_t)need > ACPI_SAFE_PHYS_MAX)
 		return 0;
 	return 1;
+}
+
+/*
+ * Map [phys, phys+need) identity into the *current* CR3 (kernel or process).
+ * Used only for ACPI SDT windows above the early 48MiB identity map — does
+ * not expand boot hugepage identity.
+ */
+static int acpi_map_phys_window(uint64_t phys, size_t need)
+{
+	uint64_t cr3;
+	uint64_t *pml4;
+	uint64_t start;
+	uint64_t end;
+	uint64_t va;
+
+	if (need == 0 || need > ACPI_MAP_MAX_BYTES)
+		return -1;
+	if (phys < 0x1000ull || phys + (uint64_t)need < phys)
+		return -1;
+	if (phys + (uint64_t)need > ACPI_MAP_PHYS_CAP)
+		return -1;
+
+	__asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
+	pml4 = (uint64_t *)(uintptr_t)(cr3 & ~0xFFFULL);
+	if (!pml4)
+		return -1;
+
+	start = phys & ~0xFFFULL;
+	end = (phys + (uint64_t)need + 0xFFFULL) & ~0xFFFULL;
+	for (va = start; va < end; va += 0x1000ull)
+	{
+		if (map_page_in_directory(pml4, va, va, PAGE_PRESENT | PAGE_RW) != 0)
+			return -1;
+	}
+	return 0;
+}
+
+static int phys_safe(uint64_t p, size_t need)
+{
+	if (phys_in_early_map(p, need))
+		return 1;
+	if (acpi_map_phys_window(p, need) == 0)
+		return 1;
+	return 0;
 }
 
 static void outw_port(uint16_t port, uint16_t val)
@@ -141,6 +191,8 @@ static int fadt_accept(uint64_t phys)
 	if (fadt->pm1b_cnt_blk != 0 && fadt->pm1b_cnt_blk <= 0xFFFFu)
 		g_pm1b_cnt = (uint16_t)fadt->pm1b_cnt_blk;
 	g_acpi_pm_ready = 1;
+	if (phys >= ACPI_SAFE_PHYS_MAX)
+		serial_print("ACPI_FADT_MAPPED\n");
 	return 0;
 }
 
