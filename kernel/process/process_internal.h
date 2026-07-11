@@ -19,7 +19,7 @@
 #include <ir0/debug_runtime.h>
 #include <ir0/devfs.h>
 #include <ir0/pseudo_fs.h>
-#include "../process.h"
+#include <kernel/process.h>
 #include <config.h>
 #include <ir0/clock_wait.h>
 #include <ir0/scheduler_api.h>
@@ -41,7 +41,7 @@
 #include <ir0/pmm.h>
 #include <ir0/sock_udp.h>
 #include <ir0/sock_stream.h>
-#include "../syscalls/process_syscalls.h"
+#include <kernel/syscalls/process_syscalls.h>
 
 extern void fase48_fd_get_stats(uint64_t *created, uint64_t *destroyed,
 				uint64_t *blocked_readers, uint64_t *blocked_writers);

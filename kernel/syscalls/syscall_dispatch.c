@@ -14,7 +14,7 @@
 
 #include "syscall_dispatch.h"
 #include "process.h"
-#include "../syscalls.h"
+#include <kernel/syscalls.h>
 #include "fs_syscalls.h"
 #include "fs_path_syscalls.h"
 #include "mm_syscalls.h"
