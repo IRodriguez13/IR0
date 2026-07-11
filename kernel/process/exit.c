@@ -66,6 +66,7 @@ __attribute__((noreturn)) void process_exit(int code)
 	}
 	process_fase50_trace_proc("process_exit-entry", dying);
 	dying->irq_frame_saved = 0;
+	process_exit_robust_list(dying);
 	if (IR0_DEBUG_WAIT)
 		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] ZOMBIE_IRQ_SAVED_CLEARED\n");
 

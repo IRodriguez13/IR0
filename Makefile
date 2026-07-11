@@ -2353,11 +2353,97 @@ smoke-pty-winsz: kernel-x64-userspace.iso
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rc=$$?; rm -f $$DISK; \
-	if tr -d '\n\r' < $(PTY_WINSZ_SMOKE_LOG) | grep -q 'PTY_WINSZ_OK'; then \
+	if grep -q 'PTY_WINSZ_OK' $(PTY_WINSZ_SMOKE_LOG) && \
+	   grep -q 'PTY_WINCH_SENT' $(PTY_WINSZ_SMOKE_LOG); then \
 		echo "✓ smoke-pty-winsz passed"; \
 	else \
 		echo "✗ smoke-pty-winsz FAILED"; \
 		grep -E 'PTY_|errno|panic' $(PTY_WINSZ_SMOKE_LOG) | tail -30; exit 1; \
+	fi
+
+.PHONY: smoke-epoll-basic build-init-epoll-basic
+EPOLL_SMOKE_LOG = /tmp/epoll-basic-smoke.log
+build-init-epoll-basic:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_epoll_basic_smoke.c
+	@echo "✓ build-init-epoll-basic OK"
+
+smoke-epoll-basic: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   epoll create/ctl/wait..."
+	@$(MAKE) -s build-init-epoll-basic
+	@DISK=$$(mktemp /tmp/ir0-epoll.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(EPOLL_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(EPOLL_SMOKE_LOG) --timeout 45 --stale-sec 15 \
+		--done EPOLL_BASIC_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "EPOLL_BASIC_OK" $(EPOLL_SMOKE_LOG); then \
+		echo "✓ smoke-epoll-basic passed"; \
+	else \
+		echo "✗ smoke-epoll-basic FAILED"; \
+		grep -E 'EPOLL_|panic' $(EPOLL_SMOKE_LOG) | tail -30; exit 1; \
+	fi
+
+.PHONY: smoke-prlimit build-init-prlimit
+PRLIMIT_SMOKE_LOG = /tmp/prlimit-smoke.log
+build-init-prlimit:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_prlimit_smoke.c
+	@echo "✓ build-init-prlimit OK"
+
+smoke-prlimit: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   prlimit64 RLIMIT_NOFILE..."
+	@$(MAKE) -s build-init-prlimit
+	@DISK=$$(mktemp /tmp/ir0-prlimit.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(PRLIMIT_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(PRLIMIT_SMOKE_LOG) --timeout 45 --stale-sec 15 \
+		--done PRLIMIT_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "PRLIMIT_OK" $(PRLIMIT_SMOKE_LOG); then \
+		echo "✓ smoke-prlimit passed"; \
+	else \
+		echo "✗ smoke-prlimit FAILED"; \
+		grep -E 'PRLIMIT_|panic' $(PRLIMIT_SMOKE_LOG) | tail -30; exit 1; \
+	fi
+
+.PHONY: smoke-robust-list build-init-robust-list
+ROBUST_SMOKE_LOG = /tmp/robust-list-smoke.log
+build-init-robust-list:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_robust_list_smoke.c
+	@echo "✓ build-init-robust-list OK"
+
+smoke-robust-list: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   set/get_robust_list + exit cleanup..."
+	@$(MAKE) -s build-init-robust-list
+	@DISK=$$(mktemp /tmp/ir0-robust.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(ROBUST_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(ROBUST_SMOKE_LOG) --timeout 45 --stale-sec 15 \
+		--done ROBUST_LIST_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "ROBUST_LIST_OK" $(ROBUST_SMOKE_LOG) && \
+	    grep -q "ROBUST_LIST_EXIT_OK" $(ROBUST_SMOKE_LOG); then \
+		echo "✓ smoke-robust-list passed"; \
+	else \
+		echo "✗ smoke-robust-list FAILED"; \
+		grep -E 'ROBUST_|panic' $(ROBUST_SMOKE_LOG) | tail -30; exit 1; \
 	fi
 
 # Minimal ARM64 boot image (UART stub only — full ARCH_OBJS need freestanding libc).

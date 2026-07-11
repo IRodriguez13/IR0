@@ -167,6 +167,7 @@ WRAP2(sys_clock_gettime, int, struct timespec *)
 WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
 WRAP3(sys_getrandom, void *, size_t, unsigned int)
 WRAP2(sys_set_robust_list, struct robust_list_head *, size_t)
+WRAP3(sys_get_robust_list, int, struct robust_list_head **, size_t *)
 WRAP4(sys_prlimit64, pid_t, unsigned int, const void *, void *)
 WRAP2(sys_getrlimit, unsigned int, void *)
 WRAP4(sys_reboot, int, int, unsigned int, void *)
@@ -356,6 +357,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_futex]          = wrap_sys_futex;
   syscall_table_rw[__NR_clock_gettime]  = wrap_sys_clock_gettime;
   syscall_table_rw[__NR_set_robust_list] = wrap_sys_set_robust_list;
+  syscall_table_rw[__NR_get_robust_list] = wrap_sys_get_robust_list;
   syscall_table_rw[__NR_getrandom]      = wrap_sys_getrandom;
   syscall_table_rw[__NR_prlimit64]      = wrap_sys_prlimit64;
   syscall_table_rw[__NR_getrlimit]      = wrap_sys_getrlimit;
