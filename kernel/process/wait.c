@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/ktm/checkpoint.h>
 
 void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 {
@@ -241,22 +242,40 @@ void process_reparent_children(process_t *dying_parent)
 {
 	process_t *child;
 	process_t *init;
-	
+	int has_child = 0;
+
 	if (!dying_parent)
 		return;
-	
-	/* Find init process (PID 1) */
-	init = process_find_by_pid(1);
-	if (!init)
+
+	for (child = process_list; child; child = child->next)
 	{
-		/* No init process - this is a critical system error */
-		serial_print("[CRITICAL] Init process (PID 1) not found during reparenting\n");
-		serial_print("[CRITICAL] System integrity compromised - orphaned processes detected\n");
-		/* Continue execution but log the critical error */
+		if (child->ppid == dying_parent->task.pid && child != dying_parent)
+		{
+			has_child = 1;
+			break;
+		}
+	}
+	if (!has_child)
+		return;
+
+	init = process_find_by_pid(1);
+	if (!init || init == dying_parent)
+	{
+		/*
+		 * No suitable init (early boot, or PID 1 itself exiting).
+		 * Detach orphans rather than CRITICAL-spam; KTM can assert later.
+		 */
+		for (child = process_list; child; child = child->next)
+		{
+			if (child->ppid == dying_parent->task.pid && child != dying_parent)
+			{
+				child->ppid = 0;
+				fase_audit_note_reparent();
+			}
+		}
 		return;
 	}
-	
-	/* Find all children of dying parent */
+
 	child = process_list;
 	while (child)
 	{
@@ -288,17 +307,9 @@ void process_reap_zombie_child(process_t *child)
 		return;
 
 	removed = process_remove_from_list(child);
-	FASE40_D_AUDIT_LOG(fase40_d_audit_reap_line("REAP_CHILD", child, 0, removed,
-						    "reap_zombie_child"));
+	KTM_CHECKPOINT(KTM_CP_PROCESS_REAP);
 	if (removed != 0)
 	{
-		FASE40_D_AUDIT_LOG(
-			serial_print("[FASE40_D_AUDIT][REAP_SKIP_DESTROY] child=");
-			serial_print_hex32((uint32_t)child->task.pid);
-			serial_print(" reason=remove_from_list err=");
-			serial_print_hex64((uint64_t)(int64_t)removed);
-			serial_print("\n");
-		);
 		return;
 	}
 	process_destroy(child);
@@ -381,27 +392,9 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 
 	if (!process_wait_child_matches_blocked_target(parent, child->task.pid))
 	{
-		FASE40_D_AUDIT_LOG(
-			serial_print("[FASE40_D_AUDIT][REAP_SKIP_NOT_TARGET] parent=");
-			serial_print_hex32((uint32_t)parent->task.pid);
-			serial_print(" target=");
-			serial_print_hex32((uint32_t)parent->wait_target_pid);
-			serial_print(" candidate=");
-			serial_print_hex32((uint32_t)child->task.pid);
-			serial_print("\n");
-		);
 		return;
 	}
 
-	FASE40_D_AUDIT_LOG(
-		serial_print("[FASE40_D_AUDIT][CHILD_EXIT] parent=");
-		serial_print_hex32((uint32_t)parent->task.pid);
-		serial_print(" target=");
-		serial_print_hex32((uint32_t)parent->wait_target_pid);
-		serial_print(" child=");
-		serial_print_hex32((uint32_t)child->task.pid);
-		serial_print("\n");
-	);
 
 	if (!parent->irq_frame_saved)
 	{
@@ -431,8 +424,6 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 							    sizeof(int));
 	}
 
-	fase51_dbg_wait_wake((uint32_t)parent->task.pid, (uint32_t)child->task.pid,
-			     status_ptr, status_val, copy_ret);
 #if IR0_DEBUG_PROC
 	serial_print("[SIGTERM_AUDIT] wait_wake parent=");
 	serial_print_hex32((uint32_t)parent->task.pid);
@@ -462,15 +453,6 @@ void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)
 
 	if (!process_wait_child_matches_blocked_target(parent, child_pid))
 	{
-		FASE40_D_AUDIT_LOG(
-			serial_print("[FASE40_D_AUDIT][REAP_SKIP_NOT_TARGET] parent=");
-			serial_print_hex32((uint32_t)parent->task.pid);
-			serial_print(" target=");
-			serial_print_hex32((uint32_t)parent->wait_target_pid);
-			serial_print(" resume_child=");
-			serial_print_hex32((uint32_t)child_pid);
-			serial_print("\n");
-		);
 		return;
 	}
 
@@ -479,40 +461,15 @@ void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)
 	    child->ppid != parent->task.pid)
 		return;
 
-	FASE40_D_AUDIT_LOG(
-		serial_print("[FASE40_D_AUDIT][REAP_MATCH] parent=");
-		serial_print_hex32((uint32_t)parent->task.pid);
-		serial_print(" child=");
-		serial_print_hex32((uint32_t)child_pid);
-		serial_print("\n");
-	);
 
 	pmm_stats(NULL, &used_frames_before, NULL);
 	process_fase43_proc_audit("wait-resume-before-reap");
-	FASE40_D_AUDIT_LOG(
-		serial_print("[FASE40_D_AUDIT][WAIT_RESUME_REAP] parent=");
-		serial_print_hex32((uint32_t)parent->task.pid);
-		serial_print(" child=");
-		serial_print_hex32((uint32_t)child_pid);
-		serial_print(" resume_rax=");
-		serial_print_hex64(parent->syscall_resume_rax);
-		serial_print("\n");
-	);
 	fase_audit_reap_zombie(child, parent->task.pid, "wait-resume");
 	pmm_stats(NULL, &used_frames_after, NULL);
 	process_fase44_list_checkpoint("wait-resume-after");
 	process_fase43_proc_audit("wait-resume-after-reap");
 	if (IR0_DEBUG_PROC)
 	{
-		serial_print("[FASE41][WAIT_REAP] parent_pid=");
-		serial_print_hex32((uint32_t)parent->task.pid);
-		serial_print(" child_pid=");
-		serial_print_hex32((uint32_t)child_pid);
-		serial_print(" used_before=");
-		serial_print_hex64((uint64_t)used_frames_before);
-		serial_print(" used_after=");
-		serial_print_hex64((uint64_t)used_frames_after);
-		serial_print(" delta=");
 		if (used_frames_after >= used_frames_before)
 			serial_print_hex64((uint64_t)(used_frames_after - used_frames_before));
 		else
@@ -525,7 +482,7 @@ void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)
 			     "PMM_RECLAIM_ON_WAIT_OK" : "PMM_RECLAIM_ON_WAIT_PARTIAL");
 		serial_print("\n");
 	}
-	paging_fase42_checkpoint("wait-resume-after", (int32_t)parent->task.pid);
+	paging_ir0_mm_checkpoint("wait-resume-after", (int32_t)parent->task.pid);
 }
 
 int process_wait(pid_t pid, int *status, int options)
@@ -557,18 +514,6 @@ int process_wait(pid_t pid, int *status, int options)
 	 * wait_options for USER_MODE is seeded in sys_wait4 from pt_regs (rdx).
 	 * Do not copy from the stack parameter here — it may already be clobbered.
 	 */
-
-	FASE40_D_AUDIT_LOG(
-		serial_print("[FASE40_D_AUDIT][WAIT_BEGIN] parent=");
-		serial_print_hex32((uint32_t)current_process->task.pid);
-		serial_print(" target=");
-		serial_print_hex32((uint32_t)pid);
-		serial_print(" options=");
-		serial_print_hex32((uint32_t)(current_process->mode == USER_MODE
-					      ? current_process->wait_options
-					      : (uint32_t)options));
-		serial_print("\n");
-	);
 
 	for (;;) {
 		const int active_opts = (current_process->mode == USER_MODE)
@@ -607,13 +552,6 @@ int process_wait(pid_t pid, int *status, int options)
 			reaped_pid = zombie->task.pid;
 			process_irq_restore(irq_flags);
 
-			FASE40_D_AUDIT_LOG(
-				serial_print("[FASE40_D_AUDIT][WAIT_REAP] parent=");
-				serial_print_hex32((uint32_t)current_process->task.pid);
-				serial_print(" child=");
-				serial_print_hex32((uint32_t)reaped_pid);
-				serial_print(" tag=wait\n");
-			);
 			fase_audit_reap_zombie(zombie, current_process->task.pid, "wait");
 			process_fase50_trace_proc("process_wait-after-reap", current_process);
 			wait_exit_audit_process_wait_reap(reaped_pid, status_val, status);
@@ -639,26 +577,8 @@ int process_wait(pid_t pid, int *status, int options)
 
 			if (IR0_DEBUG_PROC)
 			{
-				serial_print("[FASE41][WAIT] pid=");
-				serial_print_hex32((uint32_t)current_process->task.pid);
-				serial_print(" child=");
-				serial_print_hex32((uint32_t)reaped_pid);
-				serial_print(" status=");
-				serial_print_hex64((uint64_t)(uint32_t)status_val);
-				serial_print("\n");
 			}
 
-			FASE40_D_AUDIT_LOG(
-				serial_print("[FASE40_D_AUDIT][WAIT_RETURN] parent=");
-				serial_print_hex32((uint32_t)current_process->task.pid);
-				serial_print(" pid=");
-				serial_print_hex32((uint32_t)reaped_pid);
-				serial_print(" status=");
-				serial_print_hex32((uint32_t)status_val);
-				serial_print(" rax=");
-				serial_print_hex32((uint32_t)reaped_pid);
-				serial_print("\n");
-			);
 
 			return reaped_pid;
 		}
@@ -676,9 +596,6 @@ int process_wait(pid_t pid, int *status, int options)
 			}
 			if (IR0_DEBUG_PROC)
 			{
-				serial_print("[FASE41][WAIT] pid=");
-				serial_print_hex32((uint32_t)current_process->task.pid);
-				serial_print(" ret=ECHILD\n");
 			}
 			process_reset_blocked_syscall_state(current_process);
 			return -ECHILD;
@@ -697,9 +614,6 @@ int process_wait(pid_t pid, int *status, int options)
 			}
 			if (IR0_DEBUG_PROC)
 			{
-				serial_print("[FASE41][WAIT] pid=");
-				serial_print_hex32((uint32_t)current_process->task.pid);
-				serial_print(" ret=WNOHANG\n");
 			}
 			process_reset_blocked_syscall_state(current_process);
 			return 0;
@@ -757,13 +671,6 @@ int process_wait(pid_t pid, int *status, int options)
 		if (current_process->state == PROCESS_READY)
 			continue;
 
-		FASE40_D_AUDIT_LOG(
-			serial_print("[FASE40_D_AUDIT][WAIT_BLOCK] parent=");
-			serial_print_hex32((uint32_t)current_process->task.pid);
-			serial_print(" target=");
-			serial_print_hex32((uint32_t)pid);
-			serial_print("\n");
-		);
 
 		current_process->state = PROCESS_BLOCKED;
 		while (current_process->state == PROCESS_BLOCKED)

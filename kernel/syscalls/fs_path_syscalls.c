@@ -21,7 +21,6 @@
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
-#include <ir0/fase52_debug.h>
 #include <ir0/named_fifo.h>
 #include <ir0/named_symlink.h>
 #include <ir0/path.h>
@@ -401,7 +400,6 @@ int64_t sys_access(const char *pathname, int mode)
   rc = ir0_access_path_routed(path_to_use, mode,
                               (uid_t)current_process->euid,
                               (gid_t)current_process->egid);
-  fase52_dbg_access(path_to_use, mode, (int)rc);
   return rc;
 }
 

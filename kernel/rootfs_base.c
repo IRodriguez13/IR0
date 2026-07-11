@@ -44,7 +44,4 @@ void ir0_rootfs_prepare_userspace_base(void)
 			break;
 	}
 
-	serial_print("[FASE52B][CLASSIFY] FASE52B_BASE_LAYOUT_OK\n");
-	serial_print("[FASE53A][CLASSIFY] FASE53A_ROOTFS_LAYOUT_OK\n");
-	serial_print("[FASE58L][CLASSIFY] FASE58L_ROOTFS_LAYOUT_OK\n");
 }

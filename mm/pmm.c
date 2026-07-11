@@ -134,11 +134,6 @@ uintptr_t pmm_alloc_frame(void)
                     pmm_frame_owner[i] = (int32_t)owner_pid;
                 if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
                 {
-                    serial_print("[FASE41][PMM] ALLOC pid=");
-                    serial_print_hex32((uint32_t)owner_pid);
-                    serial_print(" frame=");
-                    serial_print_hex64((uint64_t)(pmm.mem_start + (i * PMM_FRAME_SIZE)));
-                    serial_print("\n");
                     pmm_diag_events++;
                 }
 
@@ -188,11 +183,6 @@ void pmm_free_frame(uintptr_t phys_addr)
             pmm_search_hint = 0;
         if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
         {
-            serial_print("[FASE41][PMM] FREE frame=");
-            serial_print_hex64((uint64_t)phys_addr);
-            serial_print(" owner=");
-            serial_print_hex32((uint32_t)owner_pid);
-            serial_print("\n");
             pmm_diag_events++;
         }
         

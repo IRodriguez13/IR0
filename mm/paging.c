@@ -26,38 +26,39 @@
 #include <mm/pmm.h>
 #include <ir0/validation.h>
 #include <ir0/serial_io.h>
+#include <ir0/ahci_api.h>
 
 static uint32_t fase40_copy_diag_events;
 
 typedef enum
 {
-    FASE42_FRAME_UNKNOWN = 0,
-    FASE42_FRAME_USER = 1,
-    FASE42_FRAME_PT = 2,
-    FASE42_FRAME_KERNEL = 3
-} fase42_frame_type_t;
+    IR0_MM_FRAME_UNKNOWN = 0,
+    IR0_MM_FRAME_USER = 1,
+    IR0_MM_FRAME_PT = 2,
+    IR0_MM_FRAME_KERNEL = 3
+} ir0_mm_frame_type_t;
 
-static uint64_t fase42_pml4_created;
-static uint64_t fase42_pml4_freed;
-static uint64_t fase42_pdpt_created;
-static uint64_t fase42_pdpt_freed;
-static uint64_t fase42_pd_created;
-static uint64_t fase42_pd_freed;
-static uint64_t fase42_pt_created;
-static uint64_t fase42_pt_freed;
-static uint64_t fase42_leaf_created;
-static uint64_t fase42_leaf_freed;
+static uint64_t ir0_mm_pml4_created;
+static uint64_t ir0_mm_pml4_freed;
+static uint64_t ir0_mm_pdpt_created;
+static uint64_t ir0_mm_pdpt_freed;
+static uint64_t ir0_mm_pd_created;
+static uint64_t ir0_mm_pd_freed;
+static uint64_t ir0_mm_pt_created;
+static uint64_t ir0_mm_pt_freed;
+static uint64_t ir0_mm_leaf_created;
+static uint64_t ir0_mm_leaf_freed;
 
-static uint64_t fase42_frame_user_alloc;
-static uint64_t fase42_frame_user_free;
-static uint64_t fase42_frame_pt_alloc;
-static uint64_t fase42_frame_pt_free;
-static uint64_t fase42_frame_kernel_alloc;
-static uint64_t fase42_frame_kernel_free;
+static uint64_t ir0_mm_frame_user_alloc;
+static uint64_t ir0_mm_frame_user_free;
+static uint64_t ir0_mm_frame_pt_alloc;
+static uint64_t ir0_mm_frame_pt_free;
+static uint64_t ir0_mm_frame_kernel_alloc;
+static uint64_t ir0_mm_frame_kernel_free;
 
-static uint8_t *fase42_frame_type_map;
-static size_t fase42_frame_type_map_frames;
-static uint32_t fase42_frame_log_events;
+static uint8_t *ir0_mm_frame_type_map;
+static size_t ir0_mm_frame_type_map_frames;
+static uint32_t ir0_mm_frame_log_events;
 
 static uint64_t fase43_oom_boot_fatal;
 static uint64_t fase43_oom_kernel_fatal;
@@ -104,24 +105,10 @@ void paging_fase43_note_oom(const char *site, fase43_oom_class_t cls)
         break;
     }
 
-    serial_print("[FASE43][OOM_CLASS] site=");
-    serial_print(site ? site : "(null)");
-    serial_print(" class=");
-    serial_print(fase43_oom_class_name(cls));
-    serial_print("\n");
 }
 
 void paging_fase43_oom_audit(const char *tag)
 {
-    serial_print("[FASE43][OOM_CLASS] tag=");
-    serial_print(tag ? tag : "(null)");
-    serial_print(" boot_fatal=");
-    serial_print_hex64(fase43_oom_boot_fatal);
-    serial_print(" kernel_fatal=");
-    serial_print_hex64(fase43_oom_kernel_fatal);
-    serial_print(" user_recoverable=");
-    serial_print_hex64(fase43_oom_user_recoverable);
-    serial_print("\n");
 }
 
 fase43_oom_class_t paging_fase43_classify_current(void)
@@ -129,27 +116,27 @@ fase43_oom_class_t paging_fase43_classify_current(void)
     return paging_classify_oom();
 }
 
-static int fase42_frame_type_ensure(void)
+static int ir0_mm_frame_type_ensure(void)
 {
     size_t total_frames = 0;
 
-    if (fase42_frame_type_map)
+    if (ir0_mm_frame_type_map)
         return 0;
 
     pmm_stats(&total_frames, NULL, NULL);
     if (total_frames == 0)
         return -1;
 
-    fase42_frame_type_map = kmalloc(total_frames);
-    if (!fase42_frame_type_map)
+    ir0_mm_frame_type_map = kmalloc(total_frames);
+    if (!ir0_mm_frame_type_map)
         return -1;
 
-    memset(fase42_frame_type_map, 0, total_frames);
-    fase42_frame_type_map_frames = total_frames;
+    memset(ir0_mm_frame_type_map, 0, total_frames);
+    ir0_mm_frame_type_map_frames = total_frames;
     return 0;
 }
 
-static long fase42_frame_index(uint64_t phys_addr)
+static long ir0_mm_frame_index(uint64_t phys_addr)
 {
     uintptr_t start = pmm_get_start();
     uintptr_t end = pmm_get_end();
@@ -159,47 +146,48 @@ static long fase42_frame_index(uint64_t phys_addr)
     return (ssize_t)((phys_addr - start) / PAGE_SIZE_4KB);
 }
 
-static fase42_frame_type_t fase42_get_frame_type(uint64_t phys_addr)
+static ir0_mm_frame_type_t ir0_mm_get_frame_type(uint64_t phys_addr)
 {
     long idx;
 
-    if (fase42_frame_type_ensure() != 0)
-        return FASE42_FRAME_UNKNOWN;
+    if (ir0_mm_frame_type_ensure() != 0)
+        return IR0_MM_FRAME_UNKNOWN;
 
-    idx = fase42_frame_index(phys_addr);
-    if (idx < 0 || (size_t)idx >= fase42_frame_type_map_frames)
-        return FASE42_FRAME_UNKNOWN;
-    return (fase42_frame_type_t)fase42_frame_type_map[idx];
+    idx = ir0_mm_frame_index(phys_addr);
+    if (idx < 0 || (size_t)idx >= ir0_mm_frame_type_map_frames)
+        return IR0_MM_FRAME_UNKNOWN;
+    return (ir0_mm_frame_type_t)ir0_mm_frame_type_map[idx];
 }
 
-static void fase42_set_frame_type(uint64_t phys_addr, fase42_frame_type_t t)
+static void ir0_mm_set_frame_type(uint64_t phys_addr, ir0_mm_frame_type_t t)
 {
     long idx;
 
-    if (fase42_frame_type_ensure() != 0)
+    if (ir0_mm_frame_type_ensure() != 0)
         return;
-    idx = fase42_frame_index(phys_addr);
-    if (idx < 0 || (size_t)idx >= fase42_frame_type_map_frames)
+    idx = ir0_mm_frame_index(phys_addr);
+    if (idx < 0 || (size_t)idx >= ir0_mm_frame_type_map_frames)
         return;
-    fase42_frame_type_map[idx] = (uint8_t)t;
+    ir0_mm_frame_type_map[idx] = (uint8_t)t;
 }
 
-static const char *fase42_frame_type_name(fase42_frame_type_t t)
+__attribute__((unused))
+static const char *ir0_mm_frame_type_name(ir0_mm_frame_type_t t)
 {
     switch (t)
     {
-    case FASE42_FRAME_USER:
+    case IR0_MM_FRAME_USER:
         return "FRAME_USER";
-    case FASE42_FRAME_PT:
+    case IR0_MM_FRAME_PT:
         return "FRAME_PT";
-    case FASE42_FRAME_KERNEL:
+    case IR0_MM_FRAME_KERNEL:
         return "FRAME_KERNEL";
     default:
         return "FRAME_UNKNOWN";
     }
 }
 
-static void fase42_log_frame_type(const char *kind, uint64_t frame, fase42_frame_type_t t)
+static void ir0_mm_log_frame_type(const char *kind, uint64_t frame, ir0_mm_frame_type_t t)
 {
 #if !IR0_DEBUG_PROC
     (void)kind;
@@ -207,17 +195,10 @@ static void fase42_log_frame_type(const char *kind, uint64_t frame, fase42_frame
     (void)t;
     return;
 #else
-    if (fase42_frame_log_events >= 2048U)
+    if (ir0_mm_frame_log_events >= 2048U)
         return;
 
-    serial_print("[FASE42][FRAME_TYPE] ");
-    serial_print(kind);
-    serial_print(" frame=");
-    serial_print_hex64(frame);
-    serial_print(" type=");
-    serial_print(fase42_frame_type_name(t));
-    serial_print("\n");
-    fase42_frame_log_events++;
+    ir0_mm_frame_log_events++;
 #endif
 }
 
@@ -231,21 +212,21 @@ static int page_table_is_empty(const uint64_t *table)
     return 1;
 }
 
-static void fase42_free_table_frame(uint64_t frame, int level)
+static void ir0_mm_free_table_frame(uint64_t frame, int level)
 {
     if (!frame)
         return;
 
     if (level == 1)
-        fase42_pdpt_freed++;
+        ir0_mm_pdpt_freed++;
     else if (level == 2)
-        fase42_pd_freed++;
+        ir0_mm_pd_freed++;
     else if (level == 3)
-        fase42_pt_freed++;
+        ir0_mm_pt_freed++;
 
-    fase42_set_frame_type(frame, FASE42_FRAME_UNKNOWN);
-    fase42_frame_pt_free++;
-    fase42_log_frame_type("FREE", frame, FASE42_FRAME_PT);
+    ir0_mm_set_frame_type(frame, IR0_MM_FRAME_UNKNOWN);
+    ir0_mm_frame_pt_free++;
+    ir0_mm_log_frame_type("FREE", frame, IR0_MM_FRAME_PT);
     kfree_aligned((void *)(uintptr_t)frame);
 }
 
@@ -581,20 +562,20 @@ static uint64_t alloc_page_table(int level)
     switch (level)
     {
     case 1:
-        fase42_pdpt_created++;
+        ir0_mm_pdpt_created++;
         break;
     case 2:
-        fase42_pd_created++;
+        ir0_mm_pd_created++;
         break;
     case 3:
-        fase42_pt_created++;
+        ir0_mm_pt_created++;
         break;
     default:
         break;
     }
-    fase42_set_frame_type((uint64_t)(uintptr_t)page, FASE42_FRAME_PT);
-    fase42_frame_pt_alloc++;
-    fase42_log_frame_type("ALLOC", (uint64_t)(uintptr_t)page, FASE42_FRAME_PT);
+    ir0_mm_set_frame_type((uint64_t)(uintptr_t)page, IR0_MM_FRAME_PT);
+    ir0_mm_frame_pt_alloc++;
+    ir0_mm_log_frame_type("ALLOC", (uint64_t)(uintptr_t)page, IR0_MM_FRAME_PT);
 
     /* Return physical address (identity mapped for now) */
     return (uint64_t)page;
@@ -696,19 +677,19 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
             entry |= PAGE_NX;
         pt[pt_index] = entry;
         if (!had_leaf)
-            fase42_leaf_created++;
+            ir0_mm_leaf_created++;
 
         if (flags & PAGE_USER)
         {
-            fase42_set_frame_type(phys_addr, FASE42_FRAME_USER);
-            fase42_frame_user_alloc++;
-            fase42_log_frame_type("ALLOC", phys_addr, FASE42_FRAME_USER);
+            ir0_mm_set_frame_type(phys_addr, IR0_MM_FRAME_USER);
+            ir0_mm_frame_user_alloc++;
+            ir0_mm_log_frame_type("ALLOC", phys_addr, IR0_MM_FRAME_USER);
         }
         else
         {
-            fase42_set_frame_type(phys_addr, FASE42_FRAME_KERNEL);
-            fase42_frame_kernel_alloc++;
-            fase42_log_frame_type("ALLOC", phys_addr, FASE42_FRAME_KERNEL);
+            ir0_mm_set_frame_type(phys_addr, IR0_MM_FRAME_KERNEL);
+            ir0_mm_frame_kernel_alloc++;
+            ir0_mm_log_frame_type("ALLOC", phys_addr, IR0_MM_FRAME_KERNEL);
         }
     }
 
@@ -751,7 +732,7 @@ int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr)
     uint64_t pt_frame;
     uint64_t pd_frame;
     uint64_t pdpt_frame;
-    fase42_frame_type_t freed_type;
+    ir0_mm_frame_type_t freed_type;
 
     if (!pml4)
         return -1;
@@ -784,7 +765,7 @@ int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr)
 
     phys_frame = paging_entry_pfn(pt[pt_index]);
     pt[pt_index] = 0;
-    fase42_leaf_freed++;
+    ir0_mm_leaf_freed++;
 
     __asm__ volatile("invlpg (%0)" ::"r"(virt_addr) : "memory");
 
@@ -795,15 +776,15 @@ int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr)
     if (phys_frame &&
         phys_frame >= pmm_get_start() && phys_frame < pmm_get_end())
     {
-        freed_type = fase42_get_frame_type(phys_frame);
-        if (freed_type == FASE42_FRAME_USER)
-            fase42_frame_user_free++;
-        else if (freed_type == FASE42_FRAME_KERNEL)
-            fase42_frame_kernel_free++;
-        else if (freed_type == FASE42_FRAME_PT)
-            fase42_frame_pt_free++;
-        fase42_set_frame_type(phys_frame, FASE42_FRAME_UNKNOWN);
-        fase42_log_frame_type("FREE", phys_frame, freed_type);
+        freed_type = ir0_mm_get_frame_type(phys_frame);
+        if (freed_type == IR0_MM_FRAME_USER)
+            ir0_mm_frame_user_free++;
+        else if (freed_type == IR0_MM_FRAME_KERNEL)
+            ir0_mm_frame_kernel_free++;
+        else if (freed_type == IR0_MM_FRAME_PT)
+            ir0_mm_frame_pt_free++;
+        ir0_mm_set_frame_type(phys_frame, IR0_MM_FRAME_UNKNOWN);
+        ir0_mm_log_frame_type("FREE", phys_frame, freed_type);
         pmm_free_frame(phys_frame);
     }
 
@@ -811,21 +792,21 @@ int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr)
     {
         pt_frame = paging_entry_pfn(pd[pd_index]);
         pd[pd_index] = 0;
-        fase42_free_table_frame(pt_frame, 3);
+        ir0_mm_free_table_frame(pt_frame, 3);
     }
 
     if (page_table_is_empty(pd))
     {
         pd_frame = paging_entry_pfn(pdpt[pdpt_index]);
         pdpt[pdpt_index] = 0;
-        fase42_free_table_frame(pd_frame, 2);
+        ir0_mm_free_table_frame(pd_frame, 2);
     }
 
     if (pml4_index < 256 && page_table_is_empty(pdpt))
     {
         pdpt_frame = paging_entry_pfn(pml4[pml4_index]);
         pml4[pml4_index] = 0;
-        fase42_free_table_frame(pdpt_frame, 1);
+        ir0_mm_free_table_frame(pdpt_frame, 1);
     }
 
     return 0;
@@ -997,19 +978,6 @@ int copy_process_memory(struct process *parent, struct process *child)
 
                     if (DEBUG_FORK && fase40_copy_diag_events < 256U)
                     {
-                        serial_print("[FASE40][COPY] ppid=");
-                        serial_print_hex32((uint32_t)parent->task.pid);
-                        serial_print(" cpid=");
-                        serial_print_hex32((uint32_t)child->task.pid);
-                        serial_print(" va=");
-                        serial_print_hex64((uint64_t)virt_addr);
-                        serial_print(" parent_pa=");
-                        serial_print_hex64((uint64_t)parent_phys);
-                        serial_print(" child_pa=");
-                        serial_print_hex64((uint64_t)child_phys);
-                        serial_print(" same_phys=");
-                        serial_print((parent_phys == child_phys) ? "1" : "0");
-                        serial_print("\n");
                         fase40_copy_diag_events++;
                     }
                 }
@@ -1087,6 +1055,11 @@ int map_supervisor_identity_low(uint64_t *pml4, uint64_t start, uint64_t end)
     }
 
     map_supervisor_framebuffer_mmio(pml4);
+    /*
+     * AHCI ABAR is high MMIO (not in low identity). Map into every process
+     * CR3 so ir0_block_* DMA setup can touch port registers under syscall.
+     */
+    ahci_map_mmio_in_directory(pml4);
 
     return 0;
 }
@@ -1141,104 +1114,66 @@ void paging_reclaim_lower_half_tables(uint64_t *pml4)
                     pt[i1] = 0;
 
                 pd[i2] = 0;
-                fase42_free_table_frame(paging_entry_pfn(pde), 3);
+                ir0_mm_free_table_frame(paging_entry_pfn(pde), 3);
             }
 
             pdpt[i3] = 0;
-            fase42_free_table_frame(paging_entry_pfn(pdpte), 2);
+            ir0_mm_free_table_frame(paging_entry_pfn(pdpte), 2);
         }
 
         pml4[i4] = 0;
-        fase42_free_table_frame(paging_entry_pfn(pml4e), 1);
+        ir0_mm_free_table_frame(paging_entry_pfn(pml4e), 1);
     }
 }
 
-void paging_fase42_note_pml4_created(uint64_t pml4_phys)
+void paging_ir0_mm_note_pml4_created(uint64_t pml4_phys)
 {
-    fase42_pml4_created++;
-    fase42_set_frame_type(pml4_phys, FASE42_FRAME_PT);
-    fase42_frame_pt_alloc++;
-    fase42_log_frame_type("ALLOC", pml4_phys, FASE42_FRAME_PT);
+    ir0_mm_pml4_created++;
+    ir0_mm_set_frame_type(pml4_phys, IR0_MM_FRAME_PT);
+    ir0_mm_frame_pt_alloc++;
+    ir0_mm_log_frame_type("ALLOC", pml4_phys, IR0_MM_FRAME_PT);
 }
 
-void paging_fase42_note_pml4_freed(uint64_t pml4_phys)
+void paging_ir0_mm_note_pml4_freed(uint64_t pml4_phys)
 {
-    fase42_pml4_freed++;
-    fase42_set_frame_type(pml4_phys, FASE42_FRAME_UNKNOWN);
-    fase42_frame_pt_free++;
-    fase42_log_frame_type("FREE", pml4_phys, FASE42_FRAME_PT);
+    ir0_mm_pml4_freed++;
+    ir0_mm_set_frame_type(pml4_phys, IR0_MM_FRAME_UNKNOWN);
+    ir0_mm_frame_pt_free++;
+    ir0_mm_log_frame_type("FREE", pml4_phys, IR0_MM_FRAME_PT);
 }
 
-void paging_fase42_checkpoint(const char *tag, int32_t pid)
+void paging_ir0_mm_checkpoint(const char *tag, int32_t pid)
 {
 #if !IR0_DEBUG_PROC
     (void)tag;
     (void)pid;
     return;
 #else
-    serial_print("[FASE42][PT_AUDIT] tag=");
-    serial_print(tag ? tag : "(null)");
-    serial_print(" pid=");
-    serial_print_hex32((uint32_t)pid);
-    serial_print(" pml4_created=");
-    serial_print_hex64(fase42_pml4_created);
-    serial_print(" pml4_freed=");
-    serial_print_hex64(fase42_pml4_freed);
-    serial_print(" pdpt_created=");
-    serial_print_hex64(fase42_pdpt_created);
-    serial_print(" pdpt_freed=");
-    serial_print_hex64(fase42_pdpt_freed);
-    serial_print(" pd_created=");
-    serial_print_hex64(fase42_pd_created);
-    serial_print(" pd_freed=");
-    serial_print_hex64(fase42_pd_freed);
-    serial_print(" pt_created=");
-    serial_print_hex64(fase42_pt_created);
-    serial_print(" pt_freed=");
-    serial_print_hex64(fase42_pt_freed);
-    serial_print(" leaf_created=");
-    serial_print_hex64(fase42_leaf_created);
-    serial_print(" leaf_freed=");
-    serial_print_hex64(fase42_leaf_freed);
-    serial_print("\n");
 
-    serial_print("[FASE42][FRAME_BALANCE] user_alloc=");
-    serial_print_hex64(fase42_frame_user_alloc);
-    serial_print(" user_free=");
-    serial_print_hex64(fase42_frame_user_free);
-    serial_print(" pt_alloc=");
-    serial_print_hex64(fase42_frame_pt_alloc);
-    serial_print(" pt_free=");
-    serial_print_hex64(fase42_frame_pt_free);
-    serial_print(" kernel_alloc=");
-    serial_print_hex64(fase42_frame_kernel_alloc);
-    serial_print(" kernel_free=");
-    serial_print_hex64(fase42_frame_kernel_free);
-    serial_print("\n");
 #endif
 }
 
-void paging_fase42_category_stats(uint64_t *user_alloc, uint64_t *user_free,
+void paging_ir0_mm_category_stats(uint64_t *user_alloc, uint64_t *user_free,
                                   uint64_t *pt_alloc, uint64_t *pt_free,
                                   uint64_t *kernel_alloc, uint64_t *kernel_free)
 {
     if (user_alloc)
-        *user_alloc = fase42_frame_user_alloc;
+        *user_alloc = ir0_mm_frame_user_alloc;
     if (user_free)
-        *user_free = fase42_frame_user_free;
+        *user_free = ir0_mm_frame_user_free;
     if (pt_alloc)
-        *pt_alloc = fase42_frame_pt_alloc;
+        *pt_alloc = ir0_mm_frame_pt_alloc;
     if (pt_free)
-        *pt_free = fase42_frame_pt_free;
+        *pt_free = ir0_mm_frame_pt_free;
     if (kernel_alloc)
-        *kernel_alloc = fase42_frame_kernel_alloc;
+        *kernel_alloc = ir0_mm_frame_kernel_alloc;
     if (kernel_free)
-        *kernel_free = fase42_frame_kernel_free;
+        *kernel_free = ir0_mm_frame_kernel_free;
 }
 
-static fase42_frame_type_t paging_fase47_frame_type(uintptr_t phys)
+static ir0_mm_frame_type_t paging_fase47_frame_type(uintptr_t phys)
 {
-    return fase42_get_frame_type((uint64_t)phys);
+    return ir0_mm_get_frame_type((uint64_t)phys);
 }
 
 void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
@@ -1274,7 +1209,7 @@ void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
 
     for (i = 0; i < nframes; i++)
     {
-        fase42_frame_type_t ft;
+        ir0_mm_frame_type_t ft;
         int32_t owner;
         uintptr_t phys;
 
@@ -1285,11 +1220,11 @@ void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
         ft = paging_fase47_frame_type(phys);
         owner = pmm_fase47_frame_owner(i);
 
-        if (ft == FASE42_FRAME_USER)
+        if (ft == IR0_MM_FRAME_USER)
             alive_user_leaf++;
-        else if (ft == FASE42_FRAME_PT)
+        else if (ft == IR0_MM_FRAME_PT)
             alive_page_table++;
-        else if (ft == FASE42_FRAME_KERNEL)
+        else if (ft == IR0_MM_FRAME_KERNEL)
         {
             if (owner > 0)
                 alive_process_struct++;
@@ -1300,97 +1235,27 @@ void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
             alive_unknown++;
     }
 
-    leaf_alive = (fase42_leaf_created >= fase42_leaf_freed) ?
-                 (fase42_leaf_created - fase42_leaf_freed) : 0;
+    leaf_alive = (ir0_mm_leaf_created >= ir0_mm_leaf_freed) ?
+                 (ir0_mm_leaf_created - ir0_mm_leaf_freed) : 0;
     mm_alive = (mm_created >= mm_destroyed) ?
                (mm_created - mm_destroyed) : 0;
 
-    inv_leaf = (fase42_leaf_created == fase42_leaf_freed + leaf_alive);
+    inv_leaf = (ir0_mm_leaf_created == ir0_mm_leaf_freed + leaf_alive);
     inv_mm = (mm_created == mm_destroyed + mm_alive);
     inv_frames = (frames_baseline == 0 ||
                   (uint64_t)used_frames <= (frames_baseline * 110ULL / 100ULL));
 
     pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
 
-    serial_print("[FASE47][FRAME_CLASS] tag=");
-    serial_print(tag ? tag : "(null)");
-    serial_print(" USER_LEAF=");
-    serial_print_hex64(alive_user_leaf);
-    serial_print(" PAGE_TABLE=");
-    serial_print_hex64(alive_page_table);
-    serial_print(" KERNEL_HEAP=");
-    serial_print_hex64(alive_kernel_heap);
-    serial_print(" PROCESS_STRUCT=");
-    serial_print_hex64(alive_process_struct);
-    serial_print(" VMA_META=");
-    serial_print_hex64(alive_vma_meta);
-    serial_print(" FILE_CACHE=");
-    serial_print_hex64(alive_file_cache);
-    serial_print(" UNKNOWN=");
-    serial_print_hex64(alive_unknown);
-    serial_print("\n");
-
-    serial_print("[FASE47][FRAME_CLASS] alive_frames_by_class total=");
-    serial_print_hex64((uint64_t)used_frames);
-    serial_print(" accounted=");
-    serial_print_hex64(alive_user_leaf + alive_page_table + alive_kernel_heap +
-                       alive_process_struct + alive_vma_meta + alive_file_cache +
-                       alive_unknown);
-    serial_print("\n");
-
-    serial_print("[FASE47][MM_LIFECYCLE] tag=");
-    serial_print(tag ? tag : "(null)");
-    serial_print(" mm_created=");
-    serial_print_hex64(mm_created);
-    serial_print(" mm_destroyed=");
-    serial_print_hex64(mm_destroyed);
-    serial_print(" mm_alive=");
-    serial_print_hex64(mm_alive);
-    serial_print(" mm_inv=");
-    serial_print(inv_mm ? "OK" : "FAIL");
-    serial_print("\n");
-
-    serial_print("[FASE47][LEAF_LIFECYCLE] leaf_created=");
-    serial_print_hex64(fase42_leaf_created);
-    serial_print(" leaf_freed=");
-    serial_print_hex64(fase42_leaf_freed);
-    serial_print(" leaf_alive=");
-    serial_print_hex64(leaf_alive);
-    serial_print(" leaf_inv=");
-    serial_print(inv_leaf ? "OK" : "FAIL");
-    serial_print("\n");
-
-    serial_print("[FASE47][PT_LIFECYCLE] pml4_created=");
-    serial_print_hex64(fase42_pml4_created);
-    serial_print(" pml4_freed=");
-    serial_print_hex64(fase42_pml4_freed);
-    serial_print(" pdpt_created=");
-    serial_print_hex64(fase42_pdpt_created);
-    serial_print(" pdpt_freed=");
-    serial_print_hex64(fase42_pdpt_freed);
-    serial_print(" pd_created=");
-    serial_print_hex64(fase42_pd_created);
-    serial_print(" pd_freed=");
-    serial_print_hex64(fase42_pd_freed);
-    serial_print(" pt_created=");
-    serial_print_hex64(fase42_pt_created);
-    serial_print(" pt_freed=");
-    serial_print_hex64(fase42_pt_freed);
-    serial_print("\n");
-
-    serial_print("[FASE47][PMM_OWNERSHIP] orphan=");
-    serial_print_hex64(orphan_frames);
-    serial_print(" double_free=");
-    serial_print_hex64(double_free);
-    serial_print(" alive_owner_missing=");
-    serial_print_hex64(alive_owner_missing);
-    serial_print(" frames_baseline=");
-    serial_print_hex64(frames_baseline);
-    serial_print(" frames_after=");
-    serial_print_hex64((uint64_t)used_frames);
-    serial_print(" frames_ratio_ok=");
-    serial_print(inv_frames ? "1" : "0");
-    serial_print("\n");
+    (void)alive_user_leaf;
+    (void)alive_page_table;
+    (void)alive_kernel_heap;
+    (void)alive_process_struct;
+    (void)alive_vma_meta;
+    (void)alive_file_cache;
+    (void)alive_unknown;
+    (void)double_free;
+    (void)tag;
 
     class_accounting = (!inv_leaf || !inv_mm);
     class_leak = (orphan_frames > 0 || alive_owner_missing > 0 ||
@@ -1408,10 +1273,5 @@ void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
         memory_class = "MEMORY_RESIDENT_EXPECTED";
     else
         memory_class = "MEMORY_RESIDENT_EXPECTED";
-
-    serial_print("[FASE47][CLASS] tag=");
-    serial_print(tag ? tag : "(null)");
-    serial_print(" memory_class=");
-    serial_print(memory_class);
-    serial_print("\n");
+    (void)memory_class;
 }

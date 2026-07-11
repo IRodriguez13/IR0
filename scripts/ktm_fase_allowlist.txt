@@ -1,0 +1,2 @@
+# Legacy FASE serial allowlist retired — KTM is the sole kernel test/diag source.
+# Arch-guard forbids any `[FASE` under kernel/mm/fs/includes/ir0/drivers/ktm/arch/sched.

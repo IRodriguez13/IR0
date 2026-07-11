@@ -39,71 +39,10 @@ uint64_t process_list_count_user(void)
 	return n;
 }
 
-static uint64_t fase50_count_open_fds(process_t *p)
-{
-#if CONFIG_DEBUG_FASE50
-	uint64_t n = 0;
-	int i;
-
-	if (!p)
-		return 0;
-
-	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
-	{
-		if (p->fd_table[i].in_use)
-			n++;
-	}
-	return n;
-#else
-	(void)p;
-	return 0;
-#endif
-}
-
 void process_fase50_trace_proc(const char *stage, process_t *p)
 {
-#if CONFIG_DEBUG_FASE50
-	serial_print("[FASE50][TRACE] stage=");
-	serial_print(stage ? stage : "(null)");
-	serial_print(" current=");
-	serial_print_hex64((uint64_t)(uintptr_t)current_process);
-	serial_print(" proc=");
-	serial_print_hex64((uint64_t)(uintptr_t)p);
-	serial_print(" pid=");
-	serial_print_hex32(p ? (uint32_t)p->task.pid : 0);
-	serial_print(" state=");
-	serial_print(p ? fase_audit_state_name((int)p->state) : "NULL");
-	serial_print(" mm=");
-	serial_print_hex64(p ? (uint64_t)(uintptr_t)p->page_directory : 0);
-	serial_print(" files=");
-	serial_print_hex64(p ? (uint64_t)(uintptr_t)p->fd_table : 0);
-	serial_print(" sf=");
-	serial_print_hex64(p ? (uint64_t)(uintptr_t)&p->syscall_frame : 0);
-	serial_print(" sf_rip=");
-	serial_print_hex64(p ? p->syscall_frame.rip : 0);
-	serial_print(" sf_rsp=");
-	serial_print_hex64(p ? p->syscall_frame.rsp : 0);
-	serial_print(" sf_rflags=");
-	serial_print_hex64(p ? p->syscall_frame.rflags : 0);
-	serial_print(" fds_open=");
-	serial_print_hex64(fase50_count_open_fds(p));
-	serial_print(" task_cr3=");
-	serial_print_hex64(p ? p->task.cr3 : 0);
-	serial_print(" task_rip=");
-	serial_print_hex64(p ? p->task.rip : 0);
-	serial_print(" task_rsp=");
-	serial_print_hex64(p ? p->task.rsp : 0);
-	serial_print(" task_cs=");
-	serial_print_hex64(p ? p->task.cs : 0);
-	serial_print(" task_ss=");
-	serial_print_hex64(p ? p->task.ss : 0);
-	serial_print(" active_cr3=");
-	serial_print_hex64(get_current_page_directory());
-	serial_print("\n");
-#else
 	(void)stage;
 	(void)p;
-#endif
 }
 
 process_t *current_process = NULL;
@@ -136,10 +75,10 @@ pid_t process_get_next_pid(void)
 	return pid;
 }
 
-
 /*
- * Early probes may advance next_pid. runit-init requires getpid()==1.
- * Restore the allocator so the first userspace spawn is PID 1 when free.
+ * KTM boot scenarios (and similar early probes) may advance next_pid.
+ * runit-init / BusyBox init require getpid()==1. Restore the allocator so the
+ * first userspace spawn is PID 1 when that slot is free.
  */
 void process_prepare_pid1_for_init(void)
 {

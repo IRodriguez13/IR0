@@ -14,6 +14,7 @@
 
 #include "process_internal.h"
 #include <ir0/clone.h>
+#include <ir0/ktm/checkpoint.h>
 
 #if defined(__x86_64__) || defined(__amd64__)
 /*
@@ -762,7 +763,7 @@ pid_t fork(void)
 	process_fase43_proc_audit("fork-before");
 	process_fase44_list_checkpoint("fork-before");
 	process_fase45_fork_audit("fork-before");
-	paging_fase42_checkpoint("fork-before", (int32_t)parent->task.pid);
+	paging_ir0_mm_checkpoint("fork-before", (int32_t)parent->task.pid);
 #endif
 
 	child = fork_process_create(parent, &child_pid);
@@ -826,8 +827,9 @@ pid_t fork(void)
 	fase_audit_ref_emit(child, "fork");
 	process_fase44_list_checkpoint("fork-after");
 	process_fase45_fork_audit("fork-after");
-	paging_fase42_checkpoint("fork-after", (int32_t)child_pid);
+	paging_ir0_mm_checkpoint("fork-after", (int32_t)child_pid);
 #endif
+	KTM_CHECKPOINT(KTM_CP_PROCESS_FORK);
 
 	return child_pid;
 }
@@ -866,13 +868,19 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 	/* Keep creator as parent so exit wake targets the right task. */
 	child->ppid = parent->task.pid;
 
+	if (flags & CLONE_SETTLS)
+		child->fs_base = tls;
+	else
+		child->fs_base = parent->fs_base;
+
 	if (process_duplicate_fd_table(parent, child) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
 	}
 
-	child_sp = (uintptr_t)stack & ~(uintptr_t)0xF;
+	child_sp = (uintptr_t)stack;
+	/* Do not re-align: musl __clone already aligned and pushed the thread arg. */
 	child->task.rax = 0;
 	child->task.pid = child_pid;
 
@@ -883,6 +891,7 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 		fork_fixup_user_syscall_return(parent, child);
 		child->task.rsp = (uint64_t)child_sp;
 		child->task.rbp = 0;
+		/* Parent keeps running: restore parent TLS on this CPU. */
 		arch_set_fs_base(parent->fs_base);
 	}
 #endif
@@ -901,6 +910,8 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 		if (process_validate_userspace_buffer(child_tid, sizeof(tid)) == 0)
 			(void)copy_to_user(child_tid, &tid, sizeof(tid));
 	}
+	if (flags & CLONE_CHILD_CLEARTID && child_tid)
+		child->set_tid_ptr = child_tid;
 
 	if (fork_attach_pending_child(child, parent) != 0)
 	{
