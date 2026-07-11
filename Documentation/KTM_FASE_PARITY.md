@@ -20,7 +20,7 @@
 | Mecanismo | Qué cubre |
 |-----------|-----------|
 | Checkpoints | `BOOT_*`, `PROCESS_{CREATE,FORK,EXEC,EXIT,REAP}`, `MM_{MAP,UNMAP,FAULT}`, `SCHED_SWITCH`, `VFS_{MOUNT,UMOUNT}` |
-| Scenarios (boot suite) | `process.lifecycle`, `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `process.exec`, `process.fork_rollback` (`make ktm-run`) |
+| Scenarios (boot suite) | `process.lifecycle`, `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `mm.page_tables`, `mm.steady_state`, `process.exec`, `process.fork_rollback` (`make ktm-run`) |
 | Userdev | `/dev/ktm` + `libktm-user` + case `fork_wait_signal` (`make ktm-userdev-run`) |
 | Probes | `mm.frames`, `proc.list` |
 | Invariants | process list + frame bounds |
@@ -37,12 +37,12 @@
 | **39** | VMA / mmap / brk lazy | scenario `mm.vma` + `KTM_CP_MM_MAP`/`UNMAP`; lazy still `CONFIG_LAZY_*` + smoke | COVERED | List insert/clone/teardown in `ktm-run`; deep lazy A–F remains userspace smoke |
 | **40** | Fork COW + `FASE40_SUMMARY` | scenario `mm.cow_fork` + `KTM_CP_PROCESS_FORK` + `smoke-mm-cow-lazy` | COVERED | Real share-on-fork + WP break (`62cc512`/`496b55d`); KTM scenario = frame bound; A–F userspace en `smoke-mm-cow-lazy` |
 | **41** | Exit reclaim / PMM orphan | `process.lifecycle` + `KTM_ASSERT_NO_FRAME_LEAK` | PARTIAL | Leak frames en scenario sintético; reclaim real post-exec sigue en smokes FASE41 |
-| **42** | PT reclaim / frame balance | probes `mm.frames`; contadores `ir0_mm_*` / `paging_ir0_mm_*` | PARTIAL | Rename hecho; falta scenario `mm.page_tables` |
+| **42** | PT reclaim / frame balance | scenario `mm.page_tables` + `paging_ir0_mm_category_stats` | COVERED | Category alloc≥free in `ktm-run`; deep PT reclaim storms remain `init_fase42_*` smokes |
 | **43** | Proc audit / OOM class | invariants `process.list`; `fase_audit` counters | PARTIAL | Sin serial; falta scenario OOM/recoverable |
 | **44** | Ref/destroy / wait drain | `KTM_CP_PROCESS_REAP` + lifecycle | PARTIAL | Drain storms siguen como init_fase44_* |
 | **45** | Fork rollback | scenario `process.fork_rollback` | COVERED | Alloc+free sin link; assert no process/frame leak |
 | **46** | Fork no-recurse / heap / wait note | `fork_wait_signal` (parcial) | PARTIAL | Heap/no-recurse: GAP scenario |
-| **47** | MM owner / steady-state class | probe frames + audit stub | PARTIAL | Scenario `mm.steady_state` |
+| **47** | MM owner / steady-state class | scenario `mm.steady_state` + `paging_fase47_steady_state_audit` | COVERED | Bounded frame growth in `ktm-run`; deep owner class still fase_audit smokes |
 
 ### IPC / pipes (48–49)
 
@@ -76,25 +76,25 @@
 
 | Estado | Cantidad (filas de matriz arriba) |
 |--------|-----------------------------------|
-| COVERED | 40, 45, 48, 49, 50 (kernel gate mínimo) |
-| PARTIAL | 39, 41–44, 46–47, 50B/C |
+| COVERED | 39, 40, 42, 45, 47, 48, 49, 50 (kernel gate mínimo) |
+| PARTIAL | 41, 43–44, 46, 50B/C |
 | GAP | 51, 52 (kernel), 53–55 |
 | HOST | 57–58, parte 52/55 |
 
-**Conclusión:** el **framework** KTM reemplaza el canal FASE en kernel. Los P0/P1 de paridad de scenarios (`mm.cow_fork`, `ipc.pipe_lifecycle`, `process.exec`, `process.fork_rollback`) están en la boot suite de `ktm-run`. Quedan PARTIAL/GAP en VMA profunda, page-tables, shell/TCC/fb y smokes userspace históricos.
+**Conclusión:** el **framework** KTM reemplaza el canal FASE en kernel. Los scenarios MM P1 (`mm.vma`, `mm.page_tables`, `mm.steady_state`) más P0 (`mm.cow_fork`, `ipc.pipe_lifecycle`, `process.exec`, `process.fork_rollback`) están en la boot suite de `ktm-run` (pass=8). Quedan PARTIAL/GAP en OOM/drain, shell/TCC/fb y smokes userspace históricos.
 
 ## Gates actuales (no FASE)
 
 ```bash
 rg '\[FASE' kernel mm fs includes/ir0 drivers ktm arch sched --glob '*.{c,h}'  # 0
-make -s ktm-run          # suite pass=5
+make -s ktm-run          # suite pass=8
 make -s ktm-userdev-run
 make -s arch-guard
 ```
 
 ## Prioridad restante (P1→P2)
 
-1. **P1** — `mm.page_tables` / `mm.steady_state` / `mm.vma` (39/42/47)  
-2. **P1** — case userdev COW A–F si se quiere retirar `smoke-mm-cow-lazy`  
-3. **P2** — shell/TCC/fb/input cases vía libktm-user (51–55)  
-4. **P2** — events tipados `PIPE_*` (wake/sleep) si hace falta telemetría fina  
+1. **P1** — case userdev COW A–F si se quiere retirar `smoke-mm-cow-lazy`  
+2. **P2** — shell/TCC/fb/input cases vía libktm-user (51–55)  
+3. **P2** — events tipados `PIPE_*` (wake/sleep) si hace falta telemetría fina  
+4. **P2** — scenarios OOM/drain (43–44) si se prioriza reclaim profundo

@@ -29,10 +29,10 @@
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
 | ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` (`arm64_rpi_platform_ops`) |
-| KTM v1 core (events/scenarios/transport) | `make ktm-run` (boot suite pass=5) |
+| KTM v1 core (events/scenarios/transport) | `make ktm-run` (boot suite pass=8) |
 | KTM `/dev/ktm` + libktm-user | `make ktm-userdev-run` (`fork_wait_signal`) |
 | Kernel `[FASE` serial retired | `rg '\[FASE'` = 0; arch-guard `ktm-no-fase` |
-| KTM P0/P1 scenarios | `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `process.exec`, `process.fork_rollback` in `ktm-run` |
+| KTM P0/P1 MM scenarios | `ipc.pipe_lifecycle`, `mm.cow_fork`, `mm.vma`, `mm.page_tables`, `mm.steady_state`, `process.exec`, `process.fork_rollback` in `ktm-run` |
 | Init reparent without CRITICAL spam | early-return if no children; detach if no init |
 | `fase42_*` → `ir0_mm_*` / `paging_ir0_mm_*` | rename in `mm/paging.*` + callers |
 | ARCH-4 boot serial | `CONFIG_DEBUG_BOOT=n`; verbose `[BOOT]` gated |
@@ -41,19 +41,19 @@
 
 | Item | Next proof |
 |------|------------|
-| FASE→KTM remaining PARTIAL/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — `mm.page_tables`, `mm.steady_state`, shell/fb cases |
+| FASE→KTM remaining PARTIAL/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — shell/fb/OOM/drain cases (51–55, 43–44) |
 
 ## Next focus — technical debt + KTM parity
 
-Prefer **deeper MM scenarios** then **PERF/POSIX**:
+Prefer **ARCH/PERF/POSIX** after MM P1 closed:
 
 | Sprint | Gate | Note |
 |--------|------|------|
-| KTM-P1 | `ktm-run` + optional userdev | `mm.page_tables`, `mm.steady_state` (`mm.vma` done) |
 | ARCH-3 | lifecycle audit | stream/AHCI/PTY |
 | ARCH-2 | facade audit | keep `arch-guard` green |
 | PERF-1 | hot paths | poll/sleep if evidence |
 | POSIX-2 | job control | sessions / `SIGHUP` |
+| KTM-P2 | `ktm-userdev-run` | shell/fb cases; optional COW A–F userdev |
 
 ## Future / P2 (dedicated oleadas only)
 

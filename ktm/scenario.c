@@ -107,6 +107,8 @@ void ktm_scenarios_run_boot(void)
 		"ipc.pipe_lifecycle",
 		"mm.cow_fork",
 		"mm.vma",
+		"mm.page_tables",
+		"mm.steady_state",
 		"process.exec",
 		"process.fork_rollback",
 	};

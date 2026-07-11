@@ -6,18 +6,20 @@
 ## Closed
 
 Ver tabla en el archivo inglés. Incluye F1–F7, KTM v1, `/dev/ktm`, retiro de `[FASE`,
-scenarios P0/P1 en `ktm-run`, applets BusyBox `halt`/`poweroff`/`reboot`, COW real
-en fork, reparent sin CRITICAL, rename `ir0_mm_*`, ARCH-4 `DEBUG_BOOT`.
+scenarios P0/P1 MM en `ktm-run` (pass=8: `mm.vma` / `mm.page_tables` / `mm.steady_state`),
+applets BusyBox `halt`/`poweroff`/`reboot`, COW real en fork, reparent sin CRITICAL,
+rename `ir0_mm_*`, ARCH-4 `DEBUG_BOOT`.
+
 ## Open
 
 | Ítem | Prueba |
 |------|--------|
-| Paridad FASE→KTM restante (PARTIAL/GAP) | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — `mm.page_tables`, `mm.steady_state`, shell/fb |
+| Paridad FASE→KTM restante (PARTIAL/GAP) | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — shell/fb/OOM/drain |
 
-## Siguiente — deuda + paridad KTM
+## Siguiente — deuda + sprints
 
-1. Scenarios P1 (`mm.page_tables`, `mm.steady_state`; `mm.vma` hecho)  
-2. ARCH-3 / PERF-1 / POSIX-2 (ver inglés)
+1. ARCH-3 / ARCH-2 / PERF-1 / POSIX-2 (ver inglés)  
+2. KTM-P2: cases userdev shell/fb; COW A–F opcional
 
 ## Future / P2
 
