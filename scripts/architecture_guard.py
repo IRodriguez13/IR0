@@ -521,6 +521,27 @@ def check_ktm_angle_includes():
     return errors
 
 
+def check_kernel_no_relative_includes():
+    """kernel/syscalls and kernel/process must not use #include \"../…\"."""
+    errors = []
+    bad_re = re.compile(r'^\s*#\s*include\s+"\.\./')
+    for base in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "process"):
+        for fpath in iter_c_files(base):
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            rel = fpath.relative_to(ROOT)
+            for idx, line in enumerate(lines, 1):
+                if bad_re.search(line):
+                    errors.append(
+                        f"[kernel-include] {rel}:{idx}: use <kernel/…> "
+                        f"(no relative includes): {line.strip()}"
+                    )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -541,6 +562,7 @@ def main():
     errors.extend(check_ktm_core_no_fase())
     errors.extend(check_ktm_no_fase_serial())
     errors.extend(check_ktm_angle_includes())
+    errors.extend(check_kernel_no_relative_includes())
 
     if errors:
         print("[arch-guard] FAILED")
