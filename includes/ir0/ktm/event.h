@@ -43,7 +43,13 @@ enum ktm_event_type
 
 	KTM_EVENT_CASE_BEGIN = 21,
 	KTM_EVENT_CASE_END,
-	KTM_EVENT_USER_ASSERT
+	KTM_EVENT_USER_ASSERT,
+
+	/* Pipe / IPC typed events (ipc.pipe_lifecycle). */
+	KTM_EVENT_PIPE_CREATE = 30,
+	KTM_EVENT_PIPE_EOF,
+	KTM_EVENT_PIPE_EPIPE,
+	KTM_EVENT_PIPE_WAKE
 };
 
 enum ktm_subsystem

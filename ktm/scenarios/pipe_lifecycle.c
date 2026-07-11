@@ -29,7 +29,7 @@ static int scenario_pipe_lifecycle_run(ktm_context_t *ctx)
 	KTM_REQUIRE(pipe != NULL);
 	pipe_acquire_end(pipe, 0);
 	pipe_acquire_end(pipe, 1);
-	ktm_event_emit4(KTM_EVENT_INFO, KTM_SUBSYS_IPC, pipe->pipe_id, 0, 0, 0);
+	ktm_event_emit4(KTM_EVENT_PIPE_CREATE, KTM_SUBSYS_IPC, pipe->pipe_id, 0, 0, 0);
 
 	n = pipe_write(pipe, payload, sizeof(payload) - 1);
 	KTM_V1_ASSERT_TRUE(n == (int)(sizeof(payload) - 1));
