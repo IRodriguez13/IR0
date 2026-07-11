@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: mm_vma.c
- * Description: KTM scenario — mmap_region list insert/count/teardown (FASE39 intent).
+ * Description: KTM scenario — mmap_region list insert/count/teardown (VMA bookkeeping).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
