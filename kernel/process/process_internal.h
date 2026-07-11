@@ -121,3 +121,6 @@ void fase40_d_audit_destroy_done(process_t *p,
 
 /* signals.c */
 int process_signal_is_default_fatal(process_t *p, int sig);
+
+/* process_syscalls.c — robust futex list on exit */
+void process_exit_robust_list(process_t *p);

@@ -536,8 +536,8 @@ int64_t sys_tgkill(pid_t tgid, pid_t tid, int sig)
 struct robust_list_head
 {
 	void *list;
+	long futex_offset;
 	void *list_op_pending;
-	void *list_op_next;
 };
 
 int64_t sys_set_robust_list(struct robust_list_head *head, size_t len)
@@ -556,6 +556,73 @@ int64_t sys_set_robust_list(struct robust_list_head *head, size_t len)
 
 	current_process->robust_list = head;
 	return 0;
+}
+
+int64_t sys_get_robust_list(int pid, struct robust_list_head **head_ptr,
+			    size_t *len_ptr)
+{
+	process_t *target = current_process;
+	struct robust_list_head *head;
+	size_t len = sizeof(struct robust_list_head);
+
+	if (!current_process)
+		return -ESRCH;
+	if (pid != 0 && pid != (int)current_process->task.pid)
+		return -ESRCH;
+	if (!head_ptr || !len_ptr)
+		return -EFAULT;
+	if (validate_userspace_buffer(head_ptr, sizeof(*head_ptr)) != 0)
+		return -EFAULT;
+	if (validate_userspace_buffer(len_ptr, sizeof(*len_ptr)) != 0)
+		return -EFAULT;
+
+	head = target->robust_list;
+	if (copy_to_user(head_ptr, &head, sizeof(head)) != 0)
+		return -EFAULT;
+	if (copy_to_user(len_ptr, &len, sizeof(len)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+/**
+ * Best-effort robust futex exit: wake one waiter on the pending/list head
+ * word if present (Linux FUTEX_OWNER_DIED subset deferred to full walk).
+ */
+void process_exit_robust_list(process_t *p)
+{
+	struct robust_list_head kh;
+	int *uaddr;
+
+	if (!p || !p->robust_list)
+		return;
+
+	if (p->mode == USER_MODE)
+	{
+		if (validate_userspace_buffer(p->robust_list, sizeof(kh)) != 0)
+		{
+			p->robust_list = NULL;
+			return;
+		}
+		if (copy_from_user(&kh, p->robust_list, sizeof(kh)) != 0)
+		{
+			p->robust_list = NULL;
+			return;
+		}
+	}
+	else
+	{
+		kh = *p->robust_list;
+	}
+
+	uaddr = (int *)kh.list_op_pending;
+	if (!uaddr)
+		uaddr = (int *)kh.list;
+	if (uaddr && p->mode == USER_MODE &&
+	    validate_userspace_buffer(uaddr, sizeof(int)) == 0)
+		(void)ir0_futex_wake(uaddr, 1);
+
+	p->robust_list = NULL;
+	serial_print("ROBUST_LIST_EXIT_OK\n");
 }
 
 int64_t sys_setsid(void)

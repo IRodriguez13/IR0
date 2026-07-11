@@ -209,15 +209,15 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 | 12b | **`/dev/hda` userspace read** | **Done** |
 | 12c | **NVMe detect+read** | **Done** — `smoke-nvme-read` (F6) |
 
-### P1-T1 — POSIX hardening (parallel, smaller slices)
+### P1-T1 — POSIX hardening (**partial close** 2026-07-11)
 
 | # | Item | Notes |
 |---|------|-------|
-| 13 | **`epoll` / `pselect6`** | When busybox/musl blocks |
-| 14 | **`prlimit` / `getrlimit`** | musl pthread / memory limits |
-| 15 | **Futex robustness** | musl `pthread` join/cancel paths |
-| 16 | **Syscall split** | **Done (H1)** — `syscalls.c` 86 L; submodules complete |
-| 17 | **PTY + `TIOCGWINSZ` / `SIGWINCH`** | ncurses, real terminals (easy to forget) |
+| 13 | **`epoll` / `pselect6`** | **Done** — `smoke-epoll-basic` (pselect6 wired) |
+| 14 | **`prlimit` / `getrlimit`** | **Done** — `smoke-prlimit` |
+| 15 | **Futex robustness** | **MVP** — `get_robust_list` + exit wake (`smoke-robust-list`) |
+| 16 | **Syscall split** | **Done (H1)** |
+| 17 | **PTY + `TIOCGWINSZ` / `SIGWINCH`** | **Done** — `TIOCSWINSZ` + `PTY_WINCH_SENT` (`smoke-pty-winsz`) |
 
 ### P2 — arch scale + driver infra
 

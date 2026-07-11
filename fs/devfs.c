@@ -1894,6 +1894,7 @@ static struct
 	int ctty_set;
 	pid_t fg_pgid;
 	pid_t session_sid;
+	struct ir0_winsize winsz;
 } g_pty;
 
 static void pty_hangup_fg(void)
@@ -2022,10 +2023,41 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 
 	if (request == IR0_CONSOLE_TIOCGWINSZ)
 	{
-		int wret;
+		struct ir0_winsize win;
 
-		wret = ir0_console_ioctl_winsize(arg);
-		return wret;
+		if (!arg)
+			return -EINVAL;
+		if (g_pty.winsz.ws_row != 0 || g_pty.winsz.ws_col != 0)
+			win = g_pty.winsz;
+		else
+		{
+			int wret = ir0_console_ioctl_winsize(arg);
+
+			return wret;
+		}
+		if (copy_to_user(arg, &win, sizeof(win)) != 0)
+			return -EFAULT;
+		return 0;
+	}
+	if (request == IR0_CONSOLE_TIOCSWINSZ)
+	{
+		struct ir0_winsize win;
+
+		if (!arg)
+			return -EINVAL;
+		if (copy_from_user(&win, arg, sizeof(win)) != 0)
+			return -EFAULT;
+		if (win.ws_row == 0 || win.ws_col == 0)
+			return -EINVAL;
+		g_pty.winsz = win;
+		if (g_pty.ctty_set && g_pty.fg_pgid > 0)
+			(void)send_signal_pgrp(g_pty.fg_pgid, SIGWINCH);
+		else if (current_process)
+			(void)send_signal((int)current_process->task.pid, SIGWINCH);
+		serial_print("PTY_WINCH_SENT\n");
+		handle_signals();
+		serial_print("PTY_TIOCSWINSZ_OK\n");
+		return 0;
 	}
 	if (request == IR0_TIOCGPTN)
 	{

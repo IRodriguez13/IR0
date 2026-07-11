@@ -37,6 +37,9 @@ int64_t sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid);
 int64_t sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid);
 int64_t sys_tgkill(pid_t tgid, pid_t tid, int sig);
 int64_t sys_set_robust_list(struct robust_list_head *head, size_t len);
+int64_t sys_get_robust_list(int pid, struct robust_list_head **head_ptr,
+			    size_t *len_ptr);
+void process_exit_robust_list(process_t *p);
 int64_t sys_setsid(void);
 int64_t sys_setpgid(pid_t pid, pid_t pgid);
 void process_cred_init_groups(process_t *p);
