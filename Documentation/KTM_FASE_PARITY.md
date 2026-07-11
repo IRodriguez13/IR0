@@ -1,6 +1,6 @@
 # FASE → KTM parity map
 
-> **Última verificación:** 2026-07-10  
+> **Última verificación:** 2026-07-11  
 > **Fuente de verdad:** `includes/ir0/ktm/*`, `ktm/`, `make ktm-run`, `make ktm-userdev-run`,  
 > smokes `setup/pid1/init_fase*`, Makefile targets.  
 > **Política:** el kernel ya no emite `[FASE` (arch-guard). Este documento coteja
@@ -80,7 +80,7 @@
 | PARTIAL | 53B |
 | HOST | 52, 55, 57–58, storms profundos 42/44 |
 
-**Conclusión:** Boot suite `ktm-run` = **pass=16**. Open KTM residual cerrado. Siguiente trabajo = Future (AHCI NCQ → …).
+**Conclusión:** Boot suite `ktm-run` = **pass=16**. Open KTM residual cerrado. Future F1–F5 cerrados; siguiente = **F6 NVMe**.
 
 ## Gates actuales (no FASE)
 
@@ -93,6 +93,6 @@ make -s arch-guard
 
 ## Prioridad restante
 
-1. **Future F2** — AHCI NCQ (ver `BACKLOG_REMAINING.md`)  
+1. **Future F6** — NVMe MVP (ver `BACKLOG_REMAINING.md`)  
 2. HOST opcional — TCC/Doom stable (STABLE.md)  
-3. **P2** — events tipados `PIPE_*` si hace falta telemetría fina
+3. **P2** — events tipados `PIPE_*` si hace falta telemetría fina; kexec_load / S3 resume reales

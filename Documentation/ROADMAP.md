@@ -1,6 +1,6 @@
 # IR0 Kernel — Consolidated Development Roadmap
 
-> **Last verified:** 2026-07-10 (post `/heart` + ARCH-3 fd unify; see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
+> **Last verified:** 2026-07-11 (post Future F2–F5; see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
 > **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`. README and old docs may lag; **grep the tree before claiming “done”.**
 
 This document consolidates tier goals, completed oleadas, reprioritized backlog (storage before TCP/X11), and **recommended evolution milestones**. **What is stable for QEMU test today** is canonical in [`STABLE.md`](STABLE.md). **Open work only:** [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
@@ -116,8 +116,11 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | VFS mount contracts (proc/tmpfs/multi-fs) | Done | ktests + `runtime-mount-check` |
 | **`block_hda_read_contract`** (512-byte read) | Done | `kernel/test/test_debug_contracts.c`; MBR `0x55AA` optional on raw MINIX `disk.img` |
 | **`/dev/hda` read at offset 0 (QEMU)** | Fixed | `ata_get_size()` + `dev_disk_read`; ktest 512-byte contract |
-| **FAT16 backend** | **On-disk read-only (MVP)** + virtual simplefs | `fs/fat16_disk.c`, `fs/fat16_fs.c` router; `/dev/fat0` → simplefs, `/dev/hda*` → BPB parser |
-| EXT2 / AHCI / NVMe | Not started | See backlog P1-storage |
+| **FAT16 backend** | **On-disk RO + write audit** | `smoke-fat16-mount`; `linux-abi-audit-vfs-write-fat` |
+| EXT2 read-only | Done (test) | `smoke-ext2-mount` |
+| GPT partition probe | Done (test) | `smoke-gpt-partition` |
+| AHCI detect/read/multi + NCQ | Done (test) | `smoke-ahci-read` (`AHCI_NCQ_OK` / `UNSUPPORTED`) |
+| NVMe | Future F6 | See [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md) |
 
 ### Hardening + release 0.0.1 (2026-06-23)
 
@@ -314,7 +317,7 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 
 | Area | Milestones | Notes |
 |------|------------|-------|
-| **P1-storage** | Real FAT16, EXT2 ro, AHCI, NVMe | Before heavy TCP (roadmap decision) |
+| **P1-storage** | FAT16/EXT2/AHCI **done for test**; **NVMe** = F6 | Before heavy Internet NIC (roadmap decision) |
 | **P1-net** | TCP stream, `AF_UNIX` | After storage phase2 stable |
 | **P1-term** | PTY, `TIOCGWINSZ`, `SIGWINCH` | Full ash + terminal clients |
 | **T2** | MAP_SHARED fb0, multitouch input, frame timing | `smoke-fase55b-doom-stub` regression open |

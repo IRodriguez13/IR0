@@ -1,8 +1,8 @@
 # IR0 — Baseline estable (release 0.0.1)
 
-> **Última verificación:** 2026-07-10  
+> **Última verificación:** 2026-07-11  
 > **Fuente de verdad:** smokes/`Makefile`, commits `f6c71e5` (KTM), `62cc512` (COW real),  
-> [`../HARDENING.md`](../HARDENING.md), [`../ROADMAP.md`](../ROADMAP.md), gates CTR.
+> Future F2–F5, [`../HARDENING.md`](../HARDENING.md), [`../ROADMAP.md`](../ROADMAP.md), gates CTR.
 
 Checklist único de lo **estable para probar en QEMU** (serial y GTK), lo que **estaba en desarrollo** y quedó **cerrado en 0.0.1**, y lo que sigue siendo **trabajo futuro** ([`ROADMAP.md`](../ROADMAP.md) P1+).
 
@@ -54,7 +54,7 @@ Ver tabla completa en [`../HARDENING.md`](../HARDENING.md). Resumen: split sysca
 ### Storage
 
 - ATA, MINIX root, lectura `/dev/hda` — **estable**
-- FAT16 read-only MVP on-disk — **estable acotado**; EXT2/AHCI — futuro
+- FAT16 RO + write audit, EXT2 RO, GPT, AHCI(+NCQ) — **estable para prueba**; NVMe — Future F6
 
 ---
 
@@ -99,9 +99,11 @@ Ver [`../SETUP.md`](../../SETUP.md) y [`fase58e-ash-interactive-console.md`](fas
 
 ---
 
-## No estable en 0.0.1
+## No estable / stub / Future
 
-TCP stream, AF_UNIX, X11/Wayland, WM, SMP, módulos kernel, FAT16 write, EXT2, AHCI, PTY completo — ver [`ROADMAP.md`](ROADMAP.md).
+NIC Internet, X11/Wayland, WM, SMP, módulos kernel, NVMe, kexec_load real, S3 resume completo — ver [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) y [`../ROADMAP.md`](../ROADMAP.md).
+
+AF_UNIX + TCP loopback ya tienen smoke (`smoke-stream-sock`); PTY winsz / setsid / SIGHUP en hangup están en Closed del backlog.
 
 ---
 

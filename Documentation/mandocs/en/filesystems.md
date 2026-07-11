@@ -23,7 +23,9 @@ See IR0-vfs for the two-stage router diagram.
 
 | Backend | Router | Storage | Key file |
 |---------|--------|---------|----------|
-| minix | VFS mount | Block device (ATA) | `fs/minix_fs.c` |
+| minix | VFS mount | Block device (ATA/AHCI) | `fs/minix_fs.c` |
+| fat16 | VFS mount | Block device | `fs/fat16_disk.c` |
+| ext2 | VFS mount (RO) | Block device | EXT2 backend |
 | tmpfs | VFS mount | RAM inode tree | `fs/tmpfs.c` |
 | procfs | Syscall + registry | Generated kernel text | `fs/procfs.c` |
 | sysfs | Syscall + registry | Kernel/driver state | `includes/ir0/sysfs.h` |
@@ -116,7 +118,7 @@ See IR0-vfs for the two-stage router diagram.
 ## 10. Future roadmap
 
 - Unified VFS registration for proc/dev/sys (today: dual router debt).
-- ext2/simplefs/fat16 exist as optional VFS drivers; not production root default.
+- FAT16 (RO + write audit), EXT2 RO, GPT, AHCI(+NCQ) have QEMU smokes; NVMe is Future F6.
 - Richer permission model on pseudo nodes (future chmod semantics).
 - Process-local mount namespaces — **not implemented**.
 

@@ -31,7 +31,7 @@ El acceso visible para usuario suele ser vía nodos devfs o fachadas en
 ```text
   INPUT     ps2_controller, ps2_keyboard, ps2_mouse
   PLATFORM  pc_speaker, usb_host
-  STORAGE   ata_core, ata_block
+  STORAGE   ata_core, ata_block, ahci (DMA EXT + NCQ FPDMA si CAP.SNCQ)
   AUDIO     sound_stack (SB16, AdLib, DMA)
   NETWORK   network_stack, bluetooth_stack (condicionado Kconfig)
 ```
@@ -111,6 +111,9 @@ Ruta IRQ:
 
 ## 10. Hoja de ruta futura
 
+- AHCI NCQ (FPDMA) aterrizado 2026-07-11 — tags `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED`
+  (`smoke-ahci-read`); soft-off ACPI con FADT + DSDT `_S5_` (`ACPI_S5_OK`).
+- NVMe MVP — Future F6 (`BACKLOG_REMAINING.md`).
 - APIC/LAPIC como demux IRQ primario — parcial (existe código timer LAPIC).
 - Hotplug almacenamiento USB — solo init host en bootstrap hoy.
 - Modelo unload/módulo de driver — **no implementado**.
