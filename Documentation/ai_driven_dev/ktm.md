@@ -1,6 +1,6 @@
 # KTM — Kernel Test / Trace Module
 
-> **Last verified:** 2026-07-10  
+> **Last verified:** 2026-07-11  
 > **Source of truth:** `includes/ir0/ktm/*`, `ktm/`, `make ktm-run`, `make ktm-userdev-run`,  
 > land commit `f6c71e5`, [`KTM_FASE_PARITY.md`](../KTM_FASE_PARITY.md)
 
@@ -17,10 +17,15 @@ serial tags. See the parity map before claiming a FASE oleada is “covered”.
 
 | Layer | Path |
 |-------|------|
-| Public API | `#include <ir0/ktm/ktm.h>` (+ `uapi.h` for userspace) |
+| Public API (kernel) | `#include <ir0/ktm/ktm.h>` or `#include <ktm.h>` via `includes/ir0/ktm.h` |
+| Private KTM helpers | `#include <ktm_internal.h>` (`ktm/include/`; **no** `../` / quoted paths) |
+| Userspace UAPI | `#include <ir0/ktm/uapi.h>` + `/dev/ktm` (`userspace/libktm/`) |
 | Implementation | `ktm/*.c`, `ktm/scenarios/` |
 | Host tooling | `scripts/ktm_runner.py`, `scripts/ktm_userdev_runner.py` |
-| Userspace pilot | `userspace/libktm/` (`ktm_fork_wait_case`) |
+| Userspace pilot | `userspace/libktm/` (`ktm_fork_wait_case`, `ktm_cow_touch_case`) |
+
+arch-guard rule `[ktm-include]` forbids relative/quoted includes into KTM from `ktm/` and `includes/ir0/ktm*`.
+Makefile puts `-Iktm/include` **before** `-Iincludes/ir0` so `<ktm.h>` is not shadowed by the thin facade `includes/ir0/ktm.h`.
 
 ---
 

@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "ktm_internal.h"
+#include <ktm_internal.h>
 #include <config.h>
 
 void ktm_checkpoint_emit(ktm_checkpoint_t cp, const char *file, unsigned line)

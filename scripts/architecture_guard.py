@@ -486,6 +486,41 @@ def check_ktm_no_fase_serial():
     return errors
 
 
+def check_ktm_angle_includes():
+    """KTM sources must use <ktm_…> / <ir0/ktm/…>, not relative or quoted ktm paths."""
+    errors = []
+    bad_re = re.compile(
+        r'^\s*#\s*include\s+("(\.\./)+.*ktm[^"]*"|'
+        r'"ktm_internal\.h"|'
+        r'"\.\./ktm_internal\.h"|'
+        r'<(\.\./)+.*ktm[^>]*>)'
+    )
+    # Also catch facade relative include of ktm/include
+    facade_rel_re = re.compile(
+        r'^\s*#\s*include\s+"(\.\./)+ktm/'
+    )
+    scan = [
+        ROOT / "ktm",
+        ROOT / "includes" / "ir0" / "ktm.h",
+        ROOT / "includes" / "ir0" / "ktm",
+    ]
+    for base in scan:
+        for fpath in iter_c_files(base):
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            rel = fpath.relative_to(ROOT)
+            for idx, line in enumerate(lines, 1):
+                if bad_re.search(line) or facade_rel_re.search(line):
+                    errors.append(
+                        f"[ktm-include] {rel}:{idx}: use <ktm_…> or <ir0/ktm/…> "
+                        f"(no relative/quoted ktm paths): {line.strip()}"
+                    )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -505,6 +540,7 @@ def main():
     errors.extend(check_devfs_usercopy_contract())
     errors.extend(check_ktm_core_no_fase())
     errors.extend(check_ktm_no_fase_serial())
+    errors.extend(check_ktm_angle_includes())
 
     if errors:
         print("[arch-guard] FAILED")

@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "../ktm_internal.h"
+#include <ktm_internal.h>
 #include <ir0/open_flags.h>
 
 static int scenario_vfs_open_flags_run(ktm_context_t *ctx)
