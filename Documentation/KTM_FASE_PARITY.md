@@ -49,7 +49,7 @@
 | FASE | Intención | Análogo KTM | Estado | Deuda |
 |------|-----------|-------------|--------|-------|
 | **48** | pipe2 / FD lifetime | scenario `ipc.pipe_lifecycle` + snapshot | COVERED | Create/RW/close; FD table userspace sigue en smokes pipe2 |
-| **49** | EOF/EPIPE / wake | `ipc.pipe_lifecycle` (EOF + `-EPIPE`) | COVERED | Wake/sleep path sigue en smokes legacy; no events `PIPE_*` tipados aún |
+| **49** | EOF/EPIPE / wake | scenario `ipc.pipe_lifecycle` + `KTM_EVENT_PIPE_*` | COVERED | CREATE/EOF/EPIPE/WAKE tipados en `pipe.c` |
 
 ### Exec / shell / toolchain (50–52)
 
@@ -80,7 +80,7 @@
 | PARTIAL | 53B |
 | HOST | 52, 55, 57–58, storms profundos 42/44 |
 
-**Conclusión:** Boot suite `ktm-run` = **pass=16**. Open KTM residual cerrado. Future F1–F5 cerrados; siguiente = **F6 NVMe**.
+**Conclusión:** Boot suite `ktm-run` = **pass=16**. Open KTM residual cerrado. Future F1–F6 cerrados; siguiente = **F7 ARM64 MM**.
 
 ## Gates actuales (no FASE)
 
@@ -88,11 +88,12 @@
 make -s ktm-run              # suite pass=16
 make -s ktm-userdev-run ktm-userdev-cow-run
 make -s smoke-mm-cow-lazy
+make -s smoke-nvme-read
 make -s arch-guard
 ```
 
 ## Prioridad restante
 
-1. **Future F6** — NVMe MVP (ver `BACKLOG_REMAINING.md`)  
+1. **Future F7** — ARM64 MM / userspace (ver `BACKLOG_REMAINING.md`)  
 2. HOST opcional — TCC/Doom stable (STABLE.md)  
-3. **P2** — events tipados `PIPE_*` si hace falta telemetría fina; kexec_load / S3 resume reales
+3. **P2** — kexec_load / S3 resume reales

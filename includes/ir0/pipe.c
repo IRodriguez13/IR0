@@ -10,6 +10,7 @@
 #include "pipe.h"
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
+#include <ir0/ktm/event.h>
 #include <string.h>
 #include <config.h>
 static uint64_t fase48_pipe_created;
@@ -66,6 +67,7 @@ pipe_t *pipe_create(void)
 	pipe->pipe_id = fase49_next_pipe_id++;
 	fase48_pipe_created++;
 	fase49_pipe_line(pipe, "CREATE");
+	ktm_event_emit4(KTM_EVENT_PIPE_CREATE, KTM_SUBSYS_IPC, pipe->pipe_id, 0, 0, 0);
 	return pipe;
 }
 
@@ -109,6 +111,8 @@ int pipe_read(pipe_t *pipe, void *buf, size_t count)
 		if (pipe->writers <= 0)
 		{
 			fase49_pipe_line(pipe, "EOF");
+			ktm_event_emit4(KTM_EVENT_PIPE_EOF, KTM_SUBSYS_IPC, pipe->pipe_id, 0,
+					0, 0);
 			return 0;
 		}
 		return -EAGAIN;
@@ -135,7 +139,11 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 		return -EINVAL;
 
 	if (pipe->readers <= 0)
+	{
+		ktm_event_emit4(KTM_EVENT_PIPE_EPIPE, KTM_SUBSYS_IPC, pipe->pipe_id, 0, 0,
+				0);
 		return -EPIPE;
+	}
 
 	if (pipe->count >= PIPE_SIZE)
 		return -EAGAIN;
@@ -199,11 +207,17 @@ void pipe_fase49_note_read_sleep(pipe_t *pipe)
 void pipe_fase49_note_read_wake(pipe_t *pipe)
 {
 	fase49_pipe_line(pipe, "READ_WAKE");
+	if (pipe)
+		ktm_event_emit4(KTM_EVENT_PIPE_WAKE, KTM_SUBSYS_IPC, pipe->pipe_id, 0, 0,
+				0);
 }
 
 void pipe_fase49_note_write_wake(pipe_t *pipe)
 {
 	fase49_pipe_line(pipe, "WRITE_WAKE");
+	if (pipe)
+		ktm_event_emit4(KTM_EVENT_PIPE_WAKE, KTM_SUBSYS_IPC, pipe->pipe_id, 1, 0,
+				0);
 }
 
 void pipe_abort_unopened(pipe_t *pipe)
