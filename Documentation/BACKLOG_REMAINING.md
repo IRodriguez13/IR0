@@ -11,56 +11,69 @@
 |------|----------|
 | Linux ABI cola 0.0.1 | `IR0_0.0.1_ABI_BOARD.md` |
 | `/proc`/`/sys` → `fd_table` + dup | `linux-abi-audit-dup` |
-| `/heart` MVP | `smoke-heart` |
+| `/heart` MVP + src expand | `IR0_LEGACY_SMOKE=1 smoke-heart` (`HEART_SRC_EXPAND_OK`, cmdline/osrelease) |
+| `/proc/cmdline` + `/sys/kernel/osrelease` | `smoke-heart` mirrors |
 | ARCH-3 virtual fds / `FD_SYS`/`FD_DEV` | `agent-fast` + tier1 smokes |
 | Process ownership split + backend facades | `kernel-x64.bin` + `arch-guard` |
 | FAT16 RO + QEMU smoke | `smoke-fat16-mount` |
 | Host `ir0_block_*` contracts | `tests/host/test_blockdev_facade.c` |
-| System power (sync + reboot/halt/poweroff + runit) | `smoke-runit-power`, `smoke-runit-busybox-halt`; `vfs_sync`/`sys_sync`; stage3 stub; BusyBox applets |
-| GPT partition smoke | `smoke-gpt-partition` (`GPT_PARTITION_OK`) |
-| EXT2 read-only mount/read | `smoke-ext2-mount` (`EXT2OK`) |
-| AHCI PCI detect | `smoke-ahci-detect` (`AHCI_DETECT_OK`) |
-| `prlimit64` / `getrlimit` real limits | `smoke-posix-depth` |
-| `epoll` + `pselect6` (poll-backed MVP) | `smoke-posix-depth` |
-| PTY pair + `TIOCGWINSZ` / `TIOCGPTN` | `smoke-posix-depth` (`/dev/ptmx`, `/dev/pts/0`) |
-| musl `CLONE_THREAD` + pthread smoke | `smoke-musl-pthread` (`MUSL_PTHREAD_OK`) |
-| Multi-arch platform split (CPUID/power) | `arch/*/sources/platform.c` + `ir0/platform_ops.h`; `arch-guard` |
+| System power (sync + reboot/halt/poweroff + runit) | `smoke-runit-power`, `smoke-runit-busybox-halt`, `smoke-runit-busybox-poweroff`, `smoke-runit-busybox-reboot` |
+| Real fork COW (share + WP break) | `62cc512` / `496b55d`; `make smoke-mm-cow-lazy` (FASE40 A–F) |
+| GPT / EXT2 RO / AHCI detect+read | `smoke-gpt-partition`, `smoke-ext2-mount`, `smoke-ahci-read` |
+| AHCI dual-port (`sda`+`sdb`) | `smoke-ahci-multi` (`AHCI_MULTI_OK`) |
+| FAT16 write + vfs-write audit | `linux-abi-audit-vfs-write-fat` VERIFIED |
+| PTY multi + `TIOCSWINSZ` | `smoke-pty-winsz` |
+| musl pthread libc | `smoke-musl-pthread-libc` |
+| TLS facade (`arch_set_tls`) | `arch_portable.h`; W10b PTE deferred |
+| ARM64 boot stub + `kernel-arm64.bin` link | `smoke-arm64-boot`; `make ARCH=arm64 kernel-arm64.bin` |
+| AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
+| `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
+| ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` (`arm64_rpi_platform_ops`) |
+| KTM v1 core (events/scenarios/transport) | `make ktm-run` (boot suite pass=5) |
+| KTM `/dev/ktm` + libktm-user | `make ktm-userdev-run` (`fork_wait_signal`) |
+| Kernel `[FASE` serial retired | `rg '\[FASE'` = 0; arch-guard `ktm-no-fase` |
+| KTM P0/P1 scenarios | `ipc.pipe_lifecycle`, `mm.cow_fork`, `process.exec`, `process.fork_rollback` in `ktm-run` |
+| Init reparent without CRITICAL spam | early-return if no children; detach if no init |
+| `fase42_*` → `ir0_mm_*` / `paging_ir0_mm_*` | rename in `mm/paging.*` + callers |
+| ARCH-4 boot serial | `CONFIG_DEBUG_BOOT=n`; verbose `[BOOT]` gated |
 
-## Open — storage / drivers
+## Open
 
-| # | Item | Status | Next proof |
-|---|------|--------|------------|
-| — | FAT16 **write** | **Blocked** | FAT-backed `vfs-write` audit PASS first |
-| — | AHCI full `ir0_block_*` I/O | Open | read smoke beyond PCI class detect |
+| Item | Next proof |
+|------|------------|
+| FASE→KTM remaining PARTIAL/GAP | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) — `mm.vma`, `mm.page_tables`, shell/fb cases |
 
-## Open — T1 POSIX
+## Next focus — technical debt + KTM parity
 
-| Item | Status | Next proof |
-|------|--------|------------|
-| Full musl `pthread_create` (robust list / futex edge) | Open | libc pthread beyond raw `clone` smoke |
-| PTY SIGWINCH / multi-pty | Future | beyond single global pair |
+Prefer **deeper MM scenarios** then **PERF/POSIX**:
 
-## Open — multi-arch consolidation
+| Sprint | Gate | Note |
+|--------|------|------|
+| KTM-P1 | `ktm-run` + optional userdev | `mm.page_tables`, `mm.vma`, `mm.steady_state` |
+| ARCH-3 | lifecycle audit | stream/AHCI/PTY |
+| ARCH-2 | facade audit | keep `arch-guard` green |
+| PERF-1 | hot paths | poll/sleep if evidence |
+| POSIX-2 | job control | sessions / `SIGHUP` |
 
-| Item | Status |
-|------|--------|
-| Generic TLS/cache facade beyond x86 FS base | Open |
-| VM policy vs PTE walker per arch | Open (W5b) |
-| Trap/context adapters | Open |
-| ARM64 boot functional | Future (explicit oleada) |
+## Future / P2 (dedicated oleadas only)
 
-## Future / P2 (explicit non-goals for current merges)
+| Item | Next proof |
+|------|------------|
+| AHCI NCQ / NVMe | storage oleada |
+| W10b PTE walker per-arch | after ARM64 MM (not just ARCH_OBJS link) |
+| ARM64 userspace / MM | beyond freestanding `kernel-arm64.bin` |
+| TCP Internet / real NIC stream | beyond loopback `sock_stream` |
+| kexec / software suspend | enormous |
+| Rust/C++ driver ABI definitivo | DRV-* |
+| SMP / CFS completo | sched oleada |
+| T3 WM / compositor / panel | **userspace only** — not in kernel tree |
+| TCC hang / Doom “stable” | STABLE.md optional smokes |
 
-- CAD real, `RESTART2` string, kexec, software suspend
-- QEMU `isa-debug-exit` clean process exit
-- `platform_ops` RPi vs QEMU virt (beyond x86 ACPI/KBC MVP)
-- Extra `/proc`/`/sys` nodes (incremental)
-- Expand `/heart/src` file list
-- TCP / `AF_UNIX`, Rust/C++ drivers, SMP/CFS, T3 WM
+## T3 prep checklist (no WM in kernel)
 
-## Explicit non-goals until gates green
-
-- FAT16 rw without FAT-backed vfs-write audit PASS
-- Declaring TCC / Doom “stable” without their smokes green
-- T3 compositor inside the kernel tree
-- ARM64 boot as part of multi-arch consolidation merge
+| Prerequisite | Status | Evidence |
+|--------------|--------|----------|
+| Stream sockets (local) | OK | `smoke-stream-sock` |
+| Input events | OK (prior) | T2 path |
+| Framebuffer | OK (prior) | T2 path |
+| Kernel-side WM | **Out of scope** | T3 rule |
