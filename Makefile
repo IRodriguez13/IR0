@@ -309,6 +309,7 @@ KERNEL_OBJS = \
     ktm/scenarios/graphics_fb.o \
     ktm/scenarios/input_events0.o \
     ktm/scenarios/vfs_open_flags.o \
+    ktm/scenarios/process_reclaim_exit.o \
     ktm/scenarios/process_exec.o \
     ktm/scenarios/process_fork_rollback.o \
     ktm/userdev.o \
