@@ -116,6 +116,7 @@ void ktm_scenarios_run_boot(void)
 		"graphics.fb",
 		"input.events0",
 		"vfs.open_flags",
+		"process.reclaim_exit",
 		"process.exec",
 		"process.fork_rollback",
 	};
