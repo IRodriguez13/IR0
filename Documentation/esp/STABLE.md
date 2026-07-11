@@ -1,8 +1,8 @@
 # IR0 — Baseline estable (release 0.0.1)
 
 > **Última verificación:** 2026-07-11  
-> **Fuente de verdad:** smokes/`Makefile`, commits `f6c71e5` (KTM), `62cc512` (COW real),  
-> Future F2–F5, [`../HARDENING.md`](../HARDENING.md), [`../ROADMAP.md`](../ROADMAP.md), gates CTR.
+> **Fuente de verdad:** smokes/`Makefile`, merge `56a3f7b` (kexec/S3, P1-storage, P1-T1),  
+> Future F2–F6, [`../HARDENING.md`](../HARDENING.md), [`../ROADMAP.md`](../ROADMAP.md), gates CTR.
 
 Checklist único de lo **estable para probar en QEMU** (serial y GTK), lo que **estaba en desarrollo** y quedó **cerrado en 0.0.1**, y lo que sigue siendo **trabajo futuro** ([`ROADMAP.md`](../ROADMAP.md) P1+).
 
@@ -15,6 +15,20 @@ kernel aún hacía full-copy. El share-on-fork real + break en write fault está
 
 ---
 
+## Merge → `master` — gates de producto (mantenedor)
+
+**Política (2026-07-11):** antes de mergear `dev` → `master`, lo que **no puede romper** es
+**TinyCC in-guest** y el camino **Doom T2**. CTR/`smoke-release-0.0.1` no sustituyen eso.
+
+```bash
+make smoke-fase52-tcc
+make smoke-fase55b-doom-stub
+```
+
+Si TCC o Doom están en rojo → **no merge a `master`**.
+
+---
+
 ## Alcance release 0.0.1
 
 | Área | Estado | Prueba principal |
@@ -22,12 +36,22 @@ kernel aún hacía full-copy. El share-on-fork real + break en write fault está
 | **Hardening H1–H6** | **Cerrado** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Estable** | `make smoke-runit-boot` |
 | **BusyBox ash + applets** | **Estable** | `make smoke-tier1`; opcional `smoke-fase58l-busybox-coreutils` |
-| **TinyCC in-guest** | **Estable** | `make build-tcc-fase52` |
+| **TinyCC in-guest** | **Crítico p/ merge** | `smoke-fase52-tcc` — bloquea `master` |
 | **COW fork** | **Estable** | `make smoke-mm-cow-lazy` |
 | **Lazy alloc** | **Estable** | mismo smoke |
 | **Slice POSIX T1** | **Estable** | manifests tier1/musl; smokes cred/pthread/setuid |
-| **Gráficos T2** | **Estable para prueba** | fb0, events0, mmap; stubs Doom |
+| **Gráficos T2 / Doom** | **Crítico p/ merge** | fb0, events0; `smoke-fase55b-doom-stub` — bloquea `master` |
 | **Escritorio T3** | **Fuera de alcance** | WM fuera del árbol kernel |
+
+---
+
+## Oleada post-0.0.1 (2026-07-11) — en `master`
+
+| Slice | Qué ganás | Prueba |
+|-------|-----------|--------|
+| **Storage** | NVMe detect+read; bundle FAT/EXT2/GPT/AHCI | `make smoke-p1-storage` |
+| **Power** | `kexec_load` + path loaded; `_S3_` soft resume | `smoke-kexec-load`, `smoke-reboot-s3` |
+| **POSIX** | PTY winsz/WINCH; smokes epoll/prlimit/robust | `smoke-pty-winsz`, … |
 
 ---
 

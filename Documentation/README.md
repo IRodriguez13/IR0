@@ -20,6 +20,7 @@ The goal is to document implemented behavior first, then known gaps.
 - `FILESYSTEM.md`: VFS layer, mounted filesystems, permissions path, and policy.
 - `VIRTUAL_FILESYSTEMS.md`: `/proc`, `/dev`, `/sys`, and observable interfaces.
 - `PSEUDO_FS_HEART.md`: registry + `/heart` facade + ARCH-3 fd_table lifecycle.
+- `STABLE.md`: release 0.0.1 checklist; merge→`master` blockers = TinyCC + Doom T2.
 - `BACKLOG_REMAINING.md`: honest post-0.0.1 open work (storage, POSIX, residual).
 - `KTM_FASE_PARITY.md`: FASE oleada → KTM analogue map (COVERED/PARTIAL/GAP).
 - `ai_driven_dev/ktm.md`: Kernel Test Module facade, Kconfig tiers, `ktm-run` / userdev gates.
@@ -27,7 +28,6 @@ The goal is to document implemented behavior first, then known gaps.
 - `DRIVERS.md`: driver registry, bootstrap flow, and config-gated initialization.
 - `INTERRUPTS.md`: IDT/PIC path, syscall entry, and exception behavior.
 - `MEMORY.md`: PMM, allocator, paging, real fork COW + lazy alloc limits.
-- `STABLE.md`: release 0.0.1 stable checklist (COW/KTM honesty notes).
 - `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
 - `SCHEDULING.md`: scheduler selection and current policy implementations.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
