@@ -98,6 +98,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	/* Basic process setup */
 	proc->task.pid = process_get_next_pid();
 	proc->tgid = proc->task.pid;
+	proc->sid = proc->task.pid;
+	proc->pgid = proc->task.pid;
 	proc->ppid = current_process ? current_process->task.pid : 0;
 	proc->state = PROCESS_READY;
 	

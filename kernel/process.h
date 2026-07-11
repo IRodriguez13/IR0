@@ -151,6 +151,8 @@ typedef struct process
 	gid_t groups[IR0_NGROUPS_MAX];
 	uint8_t ngroups;
 	pid_t tgid;
+	pid_t sid;  /* session id (Linux setsid) */
+	pid_t pgid; /* process group id */
 	struct robust_list_head *robust_list;
 	
 	/* Current working directory */
