@@ -79,12 +79,10 @@ PROFILES: dict[str, dict[str, object]] = {
         "stale_sec": 60,
     },
     "fase55d-doom": {
-        "success": [
-            "DOOMGENERIC_FIRST_FRAME_OK",
-            "FASE55D_DOOMGENERIC_OK",
-            "DOOMGENERIC_FRAME_LOOP_OK",
-        ],
-        "success_mode": "any",
+        # Wait for terminal OK tag — FRAME_LOOP alone used to autokill (mode any)
+        # before FASE55D_DOOMGENERIC_OK was flushed → flaky post-grep FAIL.
+        "success": ["FASE55D_DOOMGENERIC_OK"],
+        "success_mode": "all",
         "timeout": 120,
         "stale_sec": 45,
     },

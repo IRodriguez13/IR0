@@ -13,6 +13,11 @@ kernel aún hacía full-copy. El share-on-fork real + break en write fault está
 (`make smoke-mm-cow-lazy`). KTM es el plano de test canónico (`make ktm-run`,
 `make ktm-userdev-run`); ver [`../ai_driven_dev/ktm.md`](../ai_driven_dev/ktm.md).
 
+### Tag prep vs ship (2026-07-12)
+
+- **`v0.0.1-rc2`**: tag prep (gates críticos automáticos). **No** es el release.
+- **Ship 0.0.1**: VM manual del mantenedor **y** applets BusyBox de producto (**BUSY-1/2**).
+
 ---
 
 ## Merge → `master` — gates de producto (mantenedor)
@@ -40,7 +45,7 @@ Si TCC, Doom+WAD o el smoke userspace están en rojo → **no merge a `master`**
 |------|--------|------------------|
 | **Hardening H1–H6** | **Cerrado** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Estable** | `make smoke-runit-boot` |
-| **BusyBox ash + applets** | **Estable** | `make smoke-tier1`; opcional `smoke-fase58l-busybox-coreutils` |
+| **BusyBox ash + applets** | **Parcial** | ash/mínimo vía tier1; **bloquea ship:** manifest BUSY-1 + smoke BUSY-2 |
 | **TinyCC in-guest** | **Crítico p/ merge** | `smoke-tcc-power-halt` — bloquea `master` |
 | **COW fork** | **Estable** | `make smoke-mm-cow-lazy` |
 | **Lazy alloc** | **Estable** | mismo smoke |
