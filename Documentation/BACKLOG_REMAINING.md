@@ -53,7 +53,30 @@
 
 _(vacío — solo Future abajo)_
 
-## Future / P2 (simple → complejo; una oleada a la vez)
+## ARM64 — honest status (2026-07-12)
+
+**What works (freestanding QEMU virt only):**
+
+```text
+UART → identity MMU → VBAR → EL1 SVC → EL0 drop → EL0 SVC → PSCI OFF
+Proof: make smoke-arm64
+```
+
+**What does not exist yet (real port):**
+
+| Gap | Today |
+|-----|--------|
+| Full kernel link | `kernel-arm64.bin` = `ARCH_OBJS` stubs, not `ALL_OBJS` |
+| Syscall dispatch / VFS / MM | x86-only production paths |
+| Context switch | `switch_arm64.c` empty stub |
+| musl / BusyBox / init | no ARM rootfs |
+| GIC / timer / virtio / storage | not wired in boot image |
+| Board beyond QEMU virt | RPi ops stub only |
+
+**Rough maturity:** early CPU privilege bring-up (**not** “ARM port ~done”). Treat F7 as
+closed for that slice; track real port as **F7b** above.
+
+---
 
 | # | Item | Next proof |
 |---|------|------------|
@@ -63,7 +86,8 @@ _(vacío — solo Future abajo)_
 | F4 | ~~kexec mínimo~~ | **DONE** 2026-07-11 — stub + `kexec_load` MVP (`smoke-kexec-load`) |
 | F5 | ~~Suspend / S3~~ | **DONE** 2026-07-11 — `_S3_` + soft resume (`smoke-reboot-s3`; FACS wake deferred) |
 | F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
-| F7 | ARM64 MM / userspace | **F7.1–F7.3 done** (MMU + VBAR/SVC + EL0); next = full userspace link / musl |
+| F7 | ARM64 early bring-up (F7.1–F7.3) | **DONE** `make smoke-arm64` — **not** full port |
+| F7b | ARM64 real port | `ALL_OBJS` link + fault/syscall + musl smoke (multi-oleada) |
 | F8 | TCP Internet / real NIC | beyond loopback |
 | F9 | SMP / CFS | sched oleada |
 | F10 | Rust/C++ driver ABI | DRV-* |
