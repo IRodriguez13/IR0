@@ -1,6 +1,6 @@
 # IR0 — Baseline estable (release 0.0.1)
 
-> **Última verificación:** 2026-07-11  
+> **Última verificación:** 2026-07-12  
 > **Fuente de verdad:** smokes/`Makefile`, merge `56a3f7b` (kexec/S3, P1-storage, P1-T1),  
 > Future F2–F6, [`../HARDENING.md`](../HARDENING.md), [`../ROADMAP.md`](../ROADMAP.md), gates CTR.
 
@@ -17,15 +17,17 @@ kernel aún hacía full-copy. El share-on-fork real + break en write fault está
 
 ## Merge → `master` — gates de producto (mantenedor)
 
-**Política (2026-07-11):** antes de mergear `dev` → `master`, lo que **no puede romper** es
-**TinyCC in-guest** y el camino **Doom T2**. CTR/`smoke-release-0.0.1` no sustituyen eso.
+**Política (2026-07-12):** antes de mergear `dev` → `master`, lo que **no puede romper** es
+**TinyCC in-guest** (compilar y correr), **Doom T2** (stub mínimo) y **userspace amplio**
+(`smoke-posix-depth` o `smoke-tier1`). CTR solo no basta.
 
 ```bash
-make smoke-fase52-tcc
-make smoke-fase55b-doom-stub
+make smoke-tcc-power-halt
+make IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub
+make smoke-posix-depth
 ```
 
-Si TCC o Doom están en rojo → **no merge a `master`**.
+Si TCC, Doom o el smoke userspace están en rojo → **no merge a `master`**.
 
 ---
 
@@ -36,11 +38,12 @@ Si TCC o Doom están en rojo → **no merge a `master`**.
 | **Hardening H1–H6** | **Cerrado** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Estable** | `make smoke-runit-boot` |
 | **BusyBox ash + applets** | **Estable** | `make smoke-tier1`; opcional `smoke-fase58l-busybox-coreutils` |
-| **TinyCC in-guest** | **Crítico p/ merge** | `smoke-fase52-tcc` — bloquea `master` |
+| **TinyCC in-guest** | **Crítico p/ merge** | `smoke-tcc-power-halt` — bloquea `master` |
 | **COW fork** | **Estable** | `make smoke-mm-cow-lazy` |
 | **Lazy alloc** | **Estable** | mismo smoke |
 | **Slice POSIX T1** | **Estable** | manifests tier1/musl; smokes cred/pthread/setuid |
-| **Gráficos T2 / Doom** | **Crítico p/ merge** | fb0, events0; `smoke-fase55b-doom-stub` — bloquea `master` |
+| **Gráficos T2 / Doom** | **Crítico p/ merge** | `IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub` — bloquea `master` |
+| **Userspace amplio** | **Crítico p/ merge** | `smoke-posix-depth` o `smoke-tier1` |
 | **Escritorio T3** | **Fuera de alcance** | WM fuera del árbol kernel |
 
 ---

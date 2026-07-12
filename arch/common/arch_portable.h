@@ -243,13 +243,64 @@ static inline void arch_tls_invalidate(void)
 /*
  * W10 multi-arch note (2026-07):
  * - TLS: use arch_set_tls / arch_tls_invalidate from portable paths (done).
- * - PTE walker remains in mm/paging.c (shared x86-64); per-arch split is W10b
- *   when ARM64 MM lands — do not fork walker until a second arch needs it.
+ * - MM activate / TLB / irq save: use arch_mm_* / arch_tlb_* / arch_irq_save
+ *   (F8-facade-mm). VA indices + PTE decode: arch_mm_va_indices / arch_mm_pte_*
+ *   (Pack C). Table alloc/create path still mostly in mm/paging.c.
  * - Trap/context: x86-64 IDT + switch_x64.asm stay arch-local; portable code
  *   uses arch_* facades only (no CPUID in kernel/syscalls).
- * - F6 (2026-07-10): W10b still deferred — ARM64 build is ARCH_OBJS-only
- *   (no mm/paging yet); next-proof = ARM64 MM oleada then split walker.
  */
+
+/**
+ * Activate address-space root (x86: CR3; ARM64: TTBR0). Neutral name — no ISA in callers.
+ */
+void arch_mm_activate(uintptr_t root);
+
+/** Read current address-space root from hardware. */
+uintptr_t arch_mm_current_root(void);
+
+/** Invalidate one VA in the local TLB. */
+void arch_tlb_invalidate_page(uintptr_t va);
+
+/** Invalidate all non-global TLB entries (local CPU). */
+void arch_tlb_invalidate_all(void);
+
+/**
+ * Save IRQ state and disable IRQs. Restore with arch_irq_restore.
+ * Portable replacement for pushfq/cli copies in kernel/sched.
+ */
+unsigned long arch_irq_save(void);
+
+/** Restore IRQ state from arch_irq_save. */
+void arch_irq_restore(unsigned long flags);
+
+/**
+ * MM control registers behind a neutral API (W10b partial).
+ * ctrl0: x86 CR0; ARM64 SCTLR_EL1 (bit0 M ≈ paging enabled).
+ * ctrl1: x86 CR4; ARM64 reserved/0 until a portable need exists.
+ */
+uint64_t arch_mm_read_ctrl0(void);
+void arch_mm_write_ctrl0(uint64_t value);
+uint64_t arch_mm_read_ctrl1(void);
+
+/**
+ * 4-level VA indices (9 bits each) for 4 KiB granules — x86-64 and aarch64.
+ * idx[0]=L0/PML4, idx[1]=L1/PDPT, idx[2]=L2/PD, idx[3]=L3/PT.
+ */
+void arch_mm_va_indices(uintptr_t va, size_t idx[4]);
+
+/** PTE/table descriptor decode (ISA-local present / large / phys). */
+int arch_mm_pte_present(uint64_t e);
+int arch_mm_pte_large(uint64_t e);
+uintptr_t arch_mm_pte_phys(uint64_t e);
+
+/**
+ * Build non-leaf table PTE (present+RW[+user]; never NX on table levels).
+ * Leaf PTE: present + low 12 flag bits; NX when exec==0 (x86).
+ */
+uint64_t arch_mm_make_table_pte(uintptr_t phys, int user);
+uint64_t arch_mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec);
+/** OR user-accessible bit onto an existing table descriptor. */
+void arch_mm_pte_set_user(uint64_t *e);
 
 /*
  * arch_get_fs_base - Read x86-64 FS base MSR.

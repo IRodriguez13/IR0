@@ -970,7 +970,7 @@ static void exec_commit_emit(const char *point, int64_t errno_val,
 	serial_print(" task_cr3_entry=");
 	serial_print_hex64(exec_commit_ctx.task_cr3_entry);
 	serial_print(" task_cr3_now=");
-	serial_print_hex64(proc ? proc->task.cr3 : 0);
+	serial_print_hex64(proc ? process_mm_root(proc) : 0);
 	serial_print(" active_cr3=");
 	serial_print_hex64(get_current_page_directory());
 	serial_print(" cr3_activate=");
@@ -1118,7 +1118,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
 
     memset(&exec_commit_ctx, 0, sizeof(exec_commit_ctx));
     exec_commit_ctx.mm_entry = (uint64_t)(uintptr_t)proc->page_directory;
-    exec_commit_ctx.task_cr3_entry = proc->task.cr3;
+    exec_commit_ctx.task_cr3_entry = process_mm_root(proc);
     exec_commit_ctx.active_cr3_entry = get_current_page_directory();
 
     paging_ir0_mm_checkpoint("exec-before", (int32_t)proc->task.pid);
@@ -1283,7 +1283,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     serial_print("SERIAL: ELF: exec CR3 active=");
     serial_print_hex64(get_current_page_directory());
     serial_print(" task_cr3=");
-    serial_print_hex64(proc->task.cr3);
+    serial_print_hex64(process_mm_root(proc));
     serial_print(" mm_cr3=");
     serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
     serial_print("\n");

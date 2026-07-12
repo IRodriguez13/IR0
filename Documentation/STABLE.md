@@ -1,6 +1,6 @@
 # IR0 — Stable baseline (release 0.0.1)
 
-> **Last verified:** 2026-07-11  
+> **Last verified:** 2026-07-12  
 > **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
 > merge `56a3f7b` (dev→master: kexec/S3, P1-storage, P1-T1), Future F2–F6,  
 > `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
@@ -18,24 +18,25 @@ full-copied user pages. Real share-on-fork + write-fault break landed in `62cc51
 
 ## Merge → `master` — critical product gates (maintainer)
 
-**Policy (2026-07-11):** before merging `dev` → `master`, the software that must **not** regress is
-**TinyCC in-guest** and **Doom-class T2** (fullscreen client path). Those are the product
-unlocks; CTR/`smoke-release-0.0.1` alone are not enough to greenlight a merge.
+**Policy (2026-07-12):** before merging `dev` → `master`, the software that must **not** regress is
+**TinyCC in-guest** (compile + run), **Doom-class T2** (stub path minimum), and **broader userspace**
+(`smoke-posix-depth` or `smoke-tier1`). CTR/`smoke-release-0.0.1` alone are not enough.
 
 ```bash
-# Product blockers (must PASS)
-make smoke-fase52-tcc              # or smoke-tcc-power-halt when that is the live TCC gate
-make smoke-fase55b-doom-stub       # + smoke-fase55c-timing-input when touching input/fb
+# Product blockers (must PASS) — do not merge to master if any red
+make smoke-tcc-power-halt                    # live TCC gate (link + run + halt)
+make IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub
+make smoke-posix-depth                       # or: make smoke-tier1
 # Full IWAD path when REAL_WAD_PATH is set:
-#   make run-fase55d-doomgeneric-gui   # manual GTK; smoke-fase55d-doomgeneric if wired
+#   make run-fase55d-doomgeneric-gui
 
-# Still required hygiene (not a substitute for TCC/Doom)
+# Still required hygiene (not a substitute for TCC/Doom/userspace)
 make ctr
 make smoke-tier1
 make smoke-release-0.0.1
 ```
 
-If TCC or Doom smokes are red, **do not merge to `master`** even if release/CTR are green.
+If TCC, Doom stub, or the userspace smoke is red, **do not merge to `master`** even if release/CTR are green.
 Status honesty: TCC may still hang at static link in some QEMU runs — treat a red TCC smoke as
 a merge blocker, not as “optional WARN”.
 

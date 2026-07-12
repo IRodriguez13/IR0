@@ -660,7 +660,7 @@ static int fork_child_mm_create(process_t *child)
 	}
 
 	child->owns_page_directory = 1;
-	child->task.cr3 = (uint64_t)(uintptr_t)child->page_directory;
+	process_set_mm_root(child, (uint64_t)(uintptr_t)child->page_directory);
 	fase_audit_fork_state(child->task.pid, "MM_CREATED");
 	return 0;
 }
@@ -798,7 +798,7 @@ pid_t fork(void)
 	}
 
 	child->task.rax = 0;
-	child->task.cr3 = (uint64_t)(uintptr_t)child->page_directory;
+	process_set_mm_root(child, (uint64_t)(uintptr_t)child->page_directory);
 	child->task.pid = child_pid;
 
 #if defined(__x86_64__) || defined(__amd64__)
@@ -863,7 +863,7 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 	/* Share address space with parent (do not free on thread exit). */
 	child->page_directory = parent->page_directory;
 	child->owns_page_directory = 0;
-	child->task.cr3 = parent->task.cr3;
+	process_set_mm_root(child, process_mm_root(parent));
 	child->mmap_list = NULL;
 	child->tgid = parent->tgid;
 	/* Keep creator as parent so exit wake targets the right task. */

@@ -116,7 +116,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		uint64_t kcr3 = get_current_page_directory();
 
 		proc->page_directory = (uint64_t *)kcr3;
-		proc->task.cr3 = kcr3;
+		process_set_mm_root(proc, kcr3);
 		proc->owns_page_directory = 0;
 		serial_print("SERIAL: spawn: kernel CR3 shared (idle)\n");
 	}
@@ -130,7 +130,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 			return -ENOMEM;
 		}
 		serial_print("SERIAL: spawn: page directory OK\n");
-		proc->task.cr3 = (uint64_t)proc->page_directory;
+		process_set_mm_root(proc, (uint64_t)(uintptr_t)proc->page_directory);
 	}
 
 	/* Inherit permissions from current process or default to root */

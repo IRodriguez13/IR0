@@ -126,9 +126,9 @@ int start_init_process(void)
 	init->task.es = KERNEL_DATA_SEL;
 	init->task.fs = KERNEL_DATA_SEL;
 	init->task.gs = KERNEL_DATA_SEL;
-	init->task.cr3 = create_process_page_directory();
+	process_set_mm_root(init, create_process_page_directory());
 
-	if (!init->task.cr3)
+	if (!process_mm_root(init))
 	{
 		kfree(init);
 		return -1;
@@ -144,10 +144,10 @@ int start_init_process(void)
 	{
 		uint64_t va = INIT_DEBUG_STACK_BASE + off;
 
-		if (map_page_in_directory((uint64_t *)init->task.cr3, va, va,
+		if (map_page_in_directory((uint64_t *)(uintptr_t)process_mm_root(init), va, va,
 					  PAGE_PRESENT | PAGE_RW) != 0)
 		{
-			kfree_aligned((void *)init->task.cr3);
+			kfree_aligned((void *)(uintptr_t)process_mm_root(init));
 			kfree(init);
 			return -1;
 		}
@@ -159,7 +159,7 @@ int start_init_process(void)
 	init->state = PROCESS_READY;
 	init->stack_start = INIT_DEBUG_STACK_BASE;
 	init->stack_size = USER_STACK_SIZE;
-	init->page_directory = (uint64_t *)init->task.cr3;
+	init->page_directory = (uint64_t *)(uintptr_t)process_mm_root(init);
 
 	/* Initialize current working directory */
 	strncpy(init->cwd, "/", sizeof(init->cwd) - 1);
@@ -186,7 +186,7 @@ int start_init_process(void)
 	 */
 	if (process_kernel_stack_alloc(init) != 0)
 	{
-		kfree_aligned((void *)init->task.cr3);
+		kfree_aligned((void *)(uintptr_t)process_mm_root(init));
 		kfree(init);
 		return -1;
 	}

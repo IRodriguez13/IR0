@@ -38,6 +38,8 @@ extern void test_elf_initial_brk_abi(void);
 extern void test_musl_cred_abi(void);
 extern void test_blockdev_facade_contract(void);
 extern void test_blockdev_readonly_allows_read(void);
+extern void test_arch_irq_facade_nested(void);
+extern void test_arch_mm_pte_facade(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -59,6 +61,8 @@ static void (*test_functions[])(void) = {
 	test_musl_cred_abi,
 	test_blockdev_facade_contract,
 	test_blockdev_readonly_allows_read,
+	test_arch_irq_facade_nested,
+	test_arch_mm_pte_facade,
 	NULL
 };
 

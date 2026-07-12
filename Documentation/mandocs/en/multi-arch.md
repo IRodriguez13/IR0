@@ -123,13 +123,16 @@ Porting checklist:
 - `make build-matrix-min` — builds arch variants per matrix.
 - `make arch-guard` — facade violations before merge.
 - `arch_get_name()` / `/proc/cpuinfo` for runtime ISA string.
-- arm64 boot: `make smoke-arm64` (boot+mmu+slice+vbar+el0 on QEMU virt).
-- arm64 F7b.1: `make arm64-slice-compile` / `smoke-arm64-slice` (`ARM64_SLICE_OK`).
+- arm64 boot: `make smoke-arm64` (…+syscall+… on QEMU virt, `gic-version=2`).
+- arm64 F7b pack: `make smoke-arm64-port` / `smoke-arm64-gic`.
+- arm64 F7c: `make smoke-arm64-syscall` (`ARM64_EL0_PAGE_OK` + `ARM64_SYSCALL_OK`).
+- arm64 portable compile: `make arm64-portable-compile` (curated objs — **not** `ALL_OBJS`).
 - arm64 scaffold link: `make ARCH=arm64 kernel-arm64.bin` (no full userspace ISO path).
 
 ## 10. Future roadmap
 
-- F7b.2+: PL011 serial facade, TTBR paging facade, then gradual `ALL_OBJS` / musl.
+- Next large pack: ARM PTE/process TTBR or GIC behind `arch_register_irq` — keep
+  portable C free of ISA macros. **ALL_OBJS/musl BLOCKED** at walker + interrupt objs.
 - Remove x86-only `#ifdef` clusters in keyboard/console for true portability.
 - UEFI boot on x86 — GRUB Multiboot only today.
 - RISC-V / x86-32 — **not in tree** (`arch/README.md` may be stale).
