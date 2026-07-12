@@ -13,6 +13,11 @@ SECTIONS
         *(.text.*)
     }
 
+    .vectors : ALIGN(0x800)
+    {
+        KEEP(*(.vectors))
+    }
+
     .rodata : ALIGN(4K)
     {
         *(.rodata)

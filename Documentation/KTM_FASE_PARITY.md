@@ -80,7 +80,7 @@
 | PARTIAL | 53B |
 | HOST | 52, 55, 57–58, storms profundos 42/44 |
 
-**Conclusión:** Boot suite `ktm-run` = **pass=16**. Open KTM residual cerrado. Future F1–F6 cerrados; F7.1 ARM64 early MMU cerrado (`smoke-arm64-mmu`); siguiente = **F7.2 VBAR/SVC/EL0**.
+**Conclusión:** Boot suite `ktm-run` = **pass=16**. Open KTM residual cerrado. Future F1–F6 cerrados; F7.1–F7.2 ARM64 (MMU + VBAR/SVC) cerrados; siguiente = **F7.3 EL0 / userspace**.
 
 ## Gates actuales (no FASE)
 
@@ -94,6 +94,6 @@ make -s arch-guard
 
 ## Prioridad restante
 
-1. **Future F7.2** — ARM64 VBAR/SVC / userspace (ver `BACKLOG_REMAINING.md`)  
+1. **Future F7.3** — ARM64 EL0 / userspace (ver `BACKLOG_REMAINING.md`)  
 2. HOST opcional — TCC/Doom stable (STABLE.md)  
 3. **P2** — kexec_load / S3 resume reales

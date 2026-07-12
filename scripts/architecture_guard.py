@@ -60,6 +60,8 @@ REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "linker.ld",
     ROOT / "arch" / "arm64" / "sources" / "boot_stub.c",
     ROOT / "arch" / "arm64" / "sources" / "mmu_early.c",
+    ROOT / "arch" / "arm64" / "sources" / "exc_early.c",
+    ROOT / "arch" / "arm64" / "sources" / "vectors.S",
     ROOT / "arch" / "arm64" / "sources" / "arch_early.c",
     ROOT / "arch" / "arm64" / "sources" / "interrupts.c",
     ROOT / "arch" / "arm64" / "sources" / "syscall_stub.c",
