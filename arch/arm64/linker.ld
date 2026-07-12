@@ -11,6 +11,7 @@ SECTIONS
         KEEP(*(.text.boot))
         *(.text)
         *(.text.*)
+        *(.text.el0)
     }
 
     .vectors : ALIGN(0x800)

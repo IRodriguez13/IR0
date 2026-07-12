@@ -79,6 +79,13 @@ static void __attribute__((noreturn)) arm64_halt_loop(void)
 		cpu_wait();
 }
 
+static void arm64_psci_hvc(uint64_t fn)
+{
+	register uint64_t x0 __asm__("x0") = fn;
+
+	__asm__ volatile("hvc #0" : "+r"(x0) :: "memory", "x1", "x2", "x3");
+}
+
 static void arm64_virt_halt(void)
 {
 	arm64_halt_loop();
@@ -86,13 +93,15 @@ static void arm64_virt_halt(void)
 
 static void arm64_virt_reboot(void)
 {
-	/* PSCI SYSTEM_RESET not wired yet. */
+	/* PSCI 0.2 SYSTEM_RESET — QEMU virt HVC conduit. */
+	arm64_psci_hvc(0x84000009UL);
 	arm64_halt_loop();
 }
 
 static void arm64_virt_poweroff(void)
 {
-	/* PSCI SYSTEM_OFF not wired yet. */
+	/* PSCI 0.2 SYSTEM_OFF — QEMU virt HVC conduit. */
+	arm64_psci_hvc(0x84000008UL);
 	arm64_halt_loop();
 }
 
