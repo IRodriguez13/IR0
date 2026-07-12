@@ -18,6 +18,7 @@
 #endif
 #if CONFIG_ENABLE_FS_TMPFS
 #include "tmpfs.h"
+#include "hostshare_9p.h"
 #endif
 #if CONFIG_ENABLE_FS_SIMPLEFS
 #include "simplefs.h"
@@ -284,6 +285,7 @@ int vfs_init(void)
 #endif
 #if CONFIG_ENABLE_FS_TMPFS
     tmpfs_register();
+    hostshare_9p_register();
 #endif
 #if CONFIG_ENABLE_FS_SIMPLEFS
     simplefs_register();

@@ -19,15 +19,17 @@ full-copied user pages. Real share-on-fork + write-fault break landed in `62cc51
 ## Merge → `master` — critical product gates (maintainer)
 
 **Policy (2026-07-12):** before merging `dev` → `master`, the software that must **not** regress is
-**TinyCC in-guest** (compile + run), **Doom-class T2** (stub path minimum), and **broader userspace**
-(`smoke-posix-depth` or `smoke-tier1`). CTR/`smoke-release-0.0.1` alone are not enough.
+**TinyCC in-guest** (compile + run), **Doom T2 with real IWAD** (doomgeneric loads WAD + frames),
+and **broader userspace** (`smoke-posix-depth` or `smoke-tier1`). CTR/`smoke-release-0.0.1` alone
+are not enough.
 
 ```bash
 # Product blockers (must PASS) — do not merge to master if any red
 make smoke-tcc-power-halt                    # live TCC gate (link + run + halt)
-make IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub
+# Doom = real WAD (default REAL_WAD_PATH in Makefile; override if needed)
+make IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric
 make smoke-posix-depth                       # or: make smoke-tier1
-# Full IWAD path when REAL_WAD_PATH is set:
+# Interactive GUI (optional):
 #   make run-fase55d-doomgeneric-gui
 
 # Still required hygiene (not a substitute for TCC/Doom/userspace)
@@ -36,7 +38,12 @@ make smoke-tier1
 make smoke-release-0.0.1
 ```
 
-If TCC, Doom stub, or the userspace smoke is red, **do not merge to `master`** even if release/CTR are green.
+Default IWAD: `REAL_WAD_PATH` → `/home/ivanr013/Escritorio/universal-doom/DOOM1.WAD`
+(file must exist on the merge host). Stub `smoke-fase55b-doom-stub` remains a fast regression
+aid, **not** the merge blocker.
+
+If TCC, Doom+WAD (`FASE55D_DOOMGENERIC_OK` / frame loop), or the userspace smoke is red,
+**do not merge to `master`** even if release/CTR are green.
 Status honesty: TCC may still hang at static link in some QEMU runs — treat a red TCC smoke as
 a merge blocker, not as “optional WARN”.
 
@@ -96,8 +103,24 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 | **COW fork** | **Stable** | `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
 | **T1 POSIX slice** | **Stable** | tier1 + musl manifests; cred/pthread/setuid smokes |
-| **T2 graphics / Doom** | **Merge-critical** | `/dev/fb0`, `/dev/events0`, mmap; `smoke-fase55b-doom-stub` (+ timing/input) — **blocker for `master`** |
+| **T2 graphics / Doom** | **Merge-critical** | Real IWAD: `IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric` (`REAL_WAD_PATH`) — **blocker for `master`**; stub 55b = fast aid only |
+| **Local net** | **Stable for test** | `AF_UNIX` + **TCP loopback** — `make smoke-stream-sock` |
+| **Host-share 9p** | **Dev aid** | QEMU `-virtfs` → guest `/mnt/host` — `make smoke-hostshare-9p` (**not** virtiofs/FUSE) |
 | **T3 desktop** | **Not in scope** | WM/compositor out of tree — planning only |
+
+### Version matrix (0.0.1 vs 0.0.2)
+
+| Topic | **0.0.1** (ship) | **0.0.2** (next tag) | Later |
+|-------|------------------|----------------------|-------|
+| Gate D1.20 | `smoke-release-0.0.1` / `release-0.0.1` | keep green | — |
+| Product | TCC + Doom+**IWAD** + posix/tier1 | same blockers | — |
+| Network | AF_UNIX + TCP **loopback** | F8 TCP beyond loopback / NIC / DHCP | — |
+| Host share | virtio-**9p** MVP (`smoke-hostshare-9p`) | optional deepen | virtiofs + FUSE when ready |
+| ARM | bring-up (F7*) — does not block x86 ship | continue port | — |
+| X11 / WM | **out** | userspace after usable net + T2 | never in-kernel T3 |
+| CFS / SMP | **out** | **out** | much later; not with X11 |
+
+Do **not** claim “virtiofs done” for the 9p path.
 
 ---
 
@@ -140,13 +163,21 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | musl static toolchain | `MUSL_CC`, `kernel-x64-userspace.iso` | tier1 smokes |
 | TinyCC | `setup/tcc/build-fase52.sh` | `build-tcc-fase52` |
 
-### Networking (UDP minimum)
+### Networking (UDP + local streams)
 
 | Item | Proof |
 |------|-------|
 | `socket` / `bind` / `sendto` / `recvfrom` / `connect` | tier1 manifest, `runtime-net-check` |
 | UDP `accept` → `-EOPNOTSUPP` | documented in mandocs |
-| **TCP stream** | **Not 0.0.1** — backlog P3 |
+| AF_UNIX + TCP **loopback** `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) — **in 0.0.1** |
+| TCP Internet / real NIC | **0.0.2** (F8) — not required for 0.0.1 |
+
+### Host share (dev aid)
+
+| Item | Proof |
+|------|-------|
+| virtio-9p + VFS fstype `9p` → `/mnt/host` | `make smoke-hostshare-9p` (`HOSTSHARE_9P_OK`, host file visible) |
+| virtiofs / FUSE | **Not implemented** — post-9p when FUSE exists |
 
 ### Storage (phase2 baseline)
 
@@ -191,8 +222,9 @@ Everything in this table was reached in at least one oleada and has a **runnable
 | **T1** | MM COW + lazy | `make smoke-mm-cow-lazy` | — |
 | **T2** | framebuffer `/dev/fb0` | legacy `smoke-fase54a-fbdev`¹ | `make run-fase58c-fbdev-gui` |
 | **T2** | input `/dev/events0` | legacy `smoke-fase54b-input`¹ | keyboard in GTK window |
-| **T2** | Doom-class client stub | legacy `smoke-fase55b-doom-stub`¹ | `make run-fase55d-doomgeneric-gui` |
+| **T2** | Doom + real IWAD | `smoke-fase55d-doomgeneric`¹ | `make run-fase55d-doomgeneric-gui` |
 | **Dev** | KTM boot + userdev | `make ktm-run`, `make ktm-userdev-run` | — |
+| **Dev** | Host-share 9p (KTM artifacts) | `make smoke-hostshare-9p` | — |
 | **Dev** | KTM inventory | `make ktm-check` | — |
 | **Dev** | arch + host contracts | `make arch-guard`, `make -C tests/host run` | — |
 

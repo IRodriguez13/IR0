@@ -152,10 +152,13 @@ Closed for 0.0.1 (re-validate with `make release-0.0.1` or `make smoke-release-0
 
 - Hardening H1–H6
 - runit, musl userspace ISO, BusyBox ash (+ `CONFIG_WHOAMI` in minimal config)
-- devfs open after cwd resolve (`sys_open` → `/dev/*` from `cd /dev; ls`)
-- TinyCC smoke (`smoke-fase52-tcc` in release gate — **P0:** hang at `tcc_static_a0` in QEMU, ver STABLE.md)
+- TinyCC + Doom+**IWAD** + posix — merge blockers in [`STABLE.md`](STABLE.md)
 - COW fork + lazy anon mmap/brk (`smoke-mm-cow-lazy`)
-- T2 test path: fb0, input, `smoke-fase55b-doom-stub` + `smoke-fase55c-timing-input`; full WAD via `REAL_WAD_PATH`
+- AF_UNIX + TCP loopback (`smoke-stream-sock`); host-share virtio-**9p** (`smoke-hostshare-9p`)
+- T2: fb0/input + `smoke-fase55d-doomgeneric` (real WAD); stub 55b = fast aid only
+
+**0.0.2 (next):** F8 TCP beyond loopback / NIC. **Out of 0.0.1:** CFS/SMP, X11/WM, virtiofs+FUSE.
+See version matrix in [`STABLE.md`](STABLE.md). Open Future: [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 
 ---
 
@@ -416,12 +419,12 @@ make -s -C tests/host run
 
 ### Merge → `master` — product blockers (maintainer)
 
-Per [`STABLE.md`](STABLE.md): **TinyCC** + **Doom T2** must PASS. Do not merge on CTR/release alone.
+Per [`STABLE.md`](STABLE.md): **TinyCC** + **Doom+IWAD (55d)** must PASS. Do not merge on CTR/release alone.
 
 ```bash
-make smoke-fase52-tcc
-make smoke-fase55b-doom-stub
-# plus smoke-fase55c-timing-input when touching fb/input
+make smoke-tcc-power-halt
+make IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric
+# stub 55b = fast aid only; plus smoke-fase55c-timing-input when touching fb/input
 ```
 
 ### Tier-1 active smokes
