@@ -34,7 +34,8 @@
 #define PTE_ATTR_SHIFT   2
 #define PTE_AF           (1UL << 10)
 #define PTE_SH_INNER     (3UL << 8)
-#define PTE_AP_RW_EL1    (0UL << 6)
+#define PTE_AP_RW_EL1    (0UL << 6) /* EL1 RW, EL0 none */
+#define PTE_AP_RW_ANY    (1UL << 6) /* EL1+EL0 RW (AP=01) */
 #define PTE_UXN          (1UL << 54)
 
 #define ATTR_DEVICE      0 /* MAIR AttrIdx0 — Device-nGnRnE */
@@ -57,15 +58,20 @@
 static uint64_t l1_table[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t l2_mmio[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 
-static uint64_t pte_block_1g(uint64_t pa, unsigned attr_idx)
+static uint64_t pte_block_1g(uint64_t pa, unsigned attr_idx, uint64_t ap, int uxn)
 {
-	return PTE_TYPE_BLOCK
-	     | ((uint64_t)attr_idx << PTE_ATTR_SHIFT)
-	     | PTE_AP_RW_EL1
-	     | PTE_SH_INNER
-	     | PTE_AF
-	     | PTE_UXN
-	     | (pa & 0x0000FFFFC0000000UL);
+	uint64_t pte = PTE_TYPE_BLOCK
+		     | ((uint64_t)attr_idx << PTE_ATTR_SHIFT)
+		     | ap
+		     | PTE_SH_INNER
+		     | PTE_AF
+		     | (pa & 0x0000FFFFC0000000UL);
+
+	if (uxn)
+	{
+		pte |= PTE_UXN;
+	}
+	return pte;
 }
 
 static uint64_t pte_block_2m(uint64_t pa, unsigned attr_idx)
@@ -106,8 +112,14 @@ static void build_idmap(void)
 	l1_table[L1_INDEX(VIRT_UART_BASE)] = pte_table(l2_pa);
 	l2_mmio[L2_INDEX(VIRT_UART_BASE)] = pte_block_2m(uart_block, ATTR_DEVICE);
 
-	/* DRAM 1 GiB identity block @ 0x40000000 (covers kernel image). */
-	l1_table[L1_INDEX(VIRT_DRAM_BASE)] = pte_block_1g(VIRT_DRAM_BASE, ATTR_NORMAL);
+	/*
+	 * DRAM 1 GiB identity @ 0x40000000.
+	 * AP=EL1-only data; UXN clear so EL0 may execute (F7.3 SVC smoke).
+	 * Note: AP=EL0-RW (AP=01) on this 1GiB block hangs QEMU virt early enable —
+	 * keep EL1-only AP until a finer L2 map is proven.
+	 */
+	l1_table[L1_INDEX(VIRT_DRAM_BASE)] =
+		pte_block_1g(VIRT_DRAM_BASE, ATTR_NORMAL, PTE_AP_RW_EL1, 0);
 }
 
 static void mmu_configure_and_enable(uint64_t ttbr0)

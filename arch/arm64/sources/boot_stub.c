@@ -63,6 +63,7 @@ void boot_main(void)
 	{
 		arm64_exc_trigger_svc();
 		uart_puts("ARM64_SVC_RET_OK\n");
+		arm64_enter_el0(); /* → EL0 SVC → arm64_after_el0 → PSCI OFF */
 	}
 	else
 	{

@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: exc_early.h
- * Description: ARM64 early VBAR install + sync/SVC smoke hooks (F7.2).
+ * Description: ARM64 early VBAR / SVC / EL0 drop hooks (F7.2–F7.3).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -22,3 +22,18 @@ void arm64_exc_trigger_svc(void);
 
 /** C sync handler (Current EL SPx); prints ARM64_VBAR_OK on SVC. */
 void arm64_exc_sync_el1(void);
+
+/** C sync handler (Lower EL AArch64); prints ARM64_EL0_SVC_OK, retargets eret to EL1. */
+void arm64_exc_sync_lower(void);
+
+/** Drop to EL0 (eret); does not return via C. */
+void arm64_enter_el0(void);
+
+/** EL1 continuation after EL0 SVC (printed ARM64_EL0_RET_OK). */
+void arm64_after_el0(void);
+
+/** PSCI SYSTEM_OFF via HVC (QEMU virt). */
+void arm64_psci_system_off(void);
+
+/** PSCI SYSTEM_RESET via HVC (QEMU virt). */
+void arm64_psci_system_reset(void);

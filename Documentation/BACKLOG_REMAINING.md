@@ -39,6 +39,7 @@
 | ARM64 boot stub + `kernel-arm64.bin` link | `smoke-arm64-boot`; `make ARCH=arm64 kernel-arm64.bin` |
 | ARM64 early MMU identity map (F7.1) | `smoke-arm64-mmu` → `ARM64_MMU_OK` (TTBR0 idmap DRAM+UART) |
 | ARM64 VBAR + EL1 SVC (F7.2) | `smoke-arm64-vbar` → `ARM64_VBAR_OK` + `ARM64_SVC_RET_OK` |
+| ARM64 EL0 drop + SVC + PSCI off (F7.3) | `smoke-arm64-el0` / `make smoke-arm64` |
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
 | ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` |
@@ -62,7 +63,7 @@ _(vacío — solo Future abajo)_
 | F4 | ~~kexec mínimo~~ | **DONE** 2026-07-11 — stub + `kexec_load` MVP (`smoke-kexec-load`) |
 | F5 | ~~Suspend / S3~~ | **DONE** 2026-07-11 — `_S3_` + soft resume (`smoke-reboot-s3`; FACS wake deferred) |
 | F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
-| F7 | ARM64 MM / userspace | **F7.1–F7.2 done** (MMU + VBAR/SVC); F7.3+ = EL0 drop / userspace |
+| F7 | ARM64 MM / userspace | **F7.1–F7.3 done** (MMU + VBAR/SVC + EL0); next = full userspace link / musl |
 | F8 | TCP Internet / real NIC | beyond loopback |
 | F9 | SMP / CFS | sched oleada |
 | F10 | Rust/C++ driver ABI | DRV-* |

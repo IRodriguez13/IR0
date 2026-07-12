@@ -21,8 +21,9 @@ _(vacío)_
 5. ~~F5 Suspend / S3~~ **hecho** — `_S3_` + soft resume (`smoke-reboot-s3`)   
 6. ~~F6 NVMe~~ **hecho** — `smoke-nvme-read`  
 7. ~~F7.1 ARM64 early MM~~ **hecho** — `smoke-arm64-mmu`  
-8. ~~F7.2 ARM64 VBAR/SVC~~ **hecho** — `smoke-arm64-vbar`; F7.3+ EL0 — ver inglés  
-9. F8 … F12 — ver inglés  
+8. ~~F7.2 ARM64 VBAR/SVC~~ **hecho** — `smoke-arm64-vbar`  
+9. ~~F7.3 ARM64 EL0 + PSCI~~ **hecho** — `smoke-arm64-el0` / `smoke-arm64`  
+10. F8 … F12 — ver inglés  
 
 ## T3
 
