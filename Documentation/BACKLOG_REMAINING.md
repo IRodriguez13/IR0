@@ -1,6 +1,6 @@
 # IR0 — Post-0.0.1 backlog (honest remaining work)
 
-> **Last verified:** 2026-07-11  
+> **Last verified:** 2026-07-12  
 > **Source of truth:** `Documentation/ROADMAP.md`, code under `fs/`, `drivers/storage/`,  
 > `scripts/linux_abi/`, Makefile gates. Prefer this file for **what is still open**;  
 > ROADMAP holds history and tier %.
@@ -37,6 +37,9 @@
 | musl pthread libc | `smoke-musl-pthread-libc` |
 | TLS facade (`arch_set_tls`) | `arch_portable.h`; W10b PTE deferred |
 | ARM64 boot stub + `kernel-arm64.bin` link | `smoke-arm64-boot`; `make ARCH=arm64 kernel-arm64.bin` |
+| ARM64 early MMU identity map (F7.1) | `smoke-arm64-mmu` → `ARM64_MMU_OK` (TTBR0 idmap DRAM+UART) |
+| ARM64 VBAR + EL1 SVC (F7.2) | `smoke-arm64-vbar` → `ARM64_VBAR_OK` + `ARM64_SVC_RET_OK` |
+| ARM64 EL0 drop + SVC + PSCI off (F7.3) | `smoke-arm64-el0` / `make smoke-arm64` |
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
 | ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` |
@@ -50,7 +53,105 @@
 
 _(vacío — solo Future abajo)_
 
-## Future / P2 (simple → complejo; una oleada a la vez)
+## ARM64 — honest status (2026-07-12)
+
+**What works (freestanding QEMU virt only):**
+
+```text
+UART → identity MMU → VBAR → EL1 SVC → EL0 drop → EL0 SVC → PSCI OFF
+Proof: make smoke-arm64
+```
+
+**What does not exist yet (real port):**
+
+| Gap | Today |
+|-----|--------|
+| Full kernel link | `kernel-arm64.bin` = `ARCH_OBJS` stubs, not `ALL_OBJS` |
+| Syscall dispatch / VFS / MM | x86-only production paths |
+| Context switch | `switch_arm64.c` empty stub |
+| musl / BusyBox / init | no ARM rootfs |
+| GIC / timer / virtio / storage | not wired in boot image |
+| Board beyond QEMU virt | RPi ops stub only |
+
+**Rough maturity:** early CPU privilege bring-up (**not** “ARM port ~done”). Treat F7 as
+closed for that slice; track real port as **F7b** above.
+
+**F7b.1 (2026-07-12):** curated `ARM64_SLICE_OBJS` (`slice_hello`) linked post-MMU →
+`ARM64_SLICE_OK`; `make arm64-slice-compile` also probes `includes/string.c` (compile-only,
+not linked — still pulls oops headers). Not `ALL_OBJS`.
+
+**F7b pack (2026-07-12):** PL011 TU + `serial_io_arm64` + early paging API verify +
+GIC Device map (no IRQ program) + arch timer CNTFRQ/CNTPCT.
+Proof: `make smoke-arm64-port` → `ARM64_PL011_OK` + `ARM64_PAGING_OK` + `ARM64_GIC_MAP_OK`
++ `ARM64_TIMER_OK`. Meta `make smoke-arm64` includes port smoke.
+
+**F7b GIC/IRQ + serial + portable (2026-07-12):** GICv2 Dist/CPU + CNTP PPI30 one-shot
+→ `ARM64_GIC_OK` / `ARM64_TIMER_IRQ_OK` (`smoke-arm64-gic`, QEMU `gic-version=2`); remask
+before EL0. COM1 `serial.o` excluded when `ARCH=arm64`; `serial.c` x86-guarded.
+`make arm64-portable-compile` grows curated objs (`gic_v2`/`timer`/`portable_string`).
+
+**BLOCKED — ALL_OBJS / musl aarch64:** Pack E cleared the **INTERRUPT_OBJS** wall
+(`INTERRUPT_OBJS_ARM64` = `irq_portable_stubs.o`). `make arm64-all-objs-probe` compiles
+`MEMORY_OBJS` OK; **next divergence** = KERNEL_OBJS / drivers (still not linked as
+`kernel-arm64.bin = ALL_OBJS`). **musl aarch64** still **BLOCKED** (SETUP has x86 musl only).
+
+**F8-facade-mm (2026-07-12):** `arch_mm_activate` / `arch_mm_current_root` /
+`arch_tlb_invalidate_*` / `arch_irq_save|restore` in `arch_portable`; x86 + ARM64
+`mm_ops.c`. Portable callers (`mm/paging` wrappers, `mm_syscalls`, `rr_sched`,
+`process_irq_*`) no longer embed `%%cr3`/`invlpg`/`pushfq`. PTE walker still x86
+in `mm/paging.c`. **ALL_OBJS/musl aarch64 still BLOCKED.**
+
+**F8b irq/MM residual sweep (2026-07-12):** Mechanical migration — `pushfq`/`cli`/`popfq`
+→ `arch_irq_save`/`arch_irq_restore` in `kernel/{ipc,input_events,sock_udp}.c`,
+`net/{udp,dns,dhcp,icmp,arp}.c`, `includes/ir0/{named_fifo,console}.c`,
+`drivers/net/rtl8139.c`; `fault.c` → `arch_tlb_invalidate_page`; `acpi_pm.c` →
+`arch_mm_current_root`; `idt_arch_x64` → `arch_mm_activate`. Portable trees have no
+real `__asm__` pushfq/cr3/invlpg (oops diagnostic + walker + process ABI deferred).
+Proof: `kernel-x64.bin` + `arch-guard` + `build-matrix-min` + `tests/host` +
+`smoke-stream-sock` + `smoke-arm64-syscall`. Remaining debt: PTE walker / `%%cr0`/`%%cr4`
+in `mm/paging.c`; `task.cr3` / fork frames / `switch_x64.asm`.
+
+**F7c (2026-07-12):** EL0 Linux-ish SVC ABI (`x8` nr) — getpid/write/exit + one 4 KiB EL0-RW
+page @ `0x42000000`. Proof: `make smoke-arm64-syscall` → `ARM64_EL0_PAGE_OK` +
+`ARM64_WRITE_OK` + `ARM64_SYSCALL_OK`. Not `process_t` / fork / TTBR-per-task.
+
+**F7d nanosleep + Pack A (2026-07-12):** EL0 `nanosleep` (Linux nr 101) busy-wait on CNTPCT;
+tag `ARM64_NANOSLEEP_OK`. Boot IRQ demo + freestanding stubs use `arch_irq_*` (`mm_ops`
+linked in freestanding image). ARCH-5: `tests/host` `arch_irq_facade_nested`. Proof:
+`smoke-arm64-syscall` (+ NANOSLEEP), `tests/host` 20/20, `smoke-mm-cow-lazy`. Remaining:
+walker / process ABI / ALL_OBJS/musl; TCC gate separate (see stab notes).
+
+**Pack B / W10b partial + F7e (2026-07-12):** `arch_mm_read_ctrl0` / `write_ctrl0` / `read_ctrl1`
+(x86 CR0/CR4; ARM SCTLR_EL1 / 0) — `mm/paging.c` no longer embeds `%%cr0`/`%%cr4`. F7e
+`clock_gettime(CLOCK_MONOTONIC)` → `ARM64_CLOCK_GETTIME_OK`. arch-guard
+`[portable-no-isa-asm]` bans pushfq/`%%cr3`/invlpg in portable trees (allowlist `oops.c`).
+Product gates (no master merge this wave): `smoke-tcc-power-halt`,
+`IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub`, `smoke-posix-depth` + CTR/cow/arm64. Remaining:
+PTE walker algorithm still x86 in `mm/paging.c`; process ABI; ALL_OBJS/musl.
+
+**Pack C / walker indices + F7f (2026-07-12):** `arch_mm_va_indices` + `arch_mm_pte_present` /
+`large` / `phys`; walk paths in `paging_get_pte` / `is_page_mapped` / `map_page_in_directory` /
+`unmap_page_in_directory` use facade (no hardcoded `>>39` in those paths). F7f
+`gettimeofday` → `ARM64_GETTIMEOFDAY_OK`. arch-guard also bans `%%cr0`/`%%cr4` asm in portable.
+Proof: cow + arm64-syscall + stream-sock + CTR. Remaining: `get_or_create_table` / full map
+ISA split; process ABI; ALL_OBJS/musl.
+
+**Pack D / PTE encode + F7g (2026-07-12):** `arch_mm_make_table_pte` / `make_leaf_pte` /
+`pte_set_user` used in `get_or_create_table` + leaf `map_page_in_directory`. F7g
+`clock_nanosleep` (nr 115) → `ARM64_CLOCK_NANOSLEEP_OK`. ARCH-5 host:
+`test_arch_mm_pte_facade`. Proof: CTR + `smoke-mm-cow-lazy` + `smoke-arm64-syscall` +
+`smoke-stream-sock`. Remaining: process ABI (`task.cr3` / fork); full ARM walker;
+ALL_OBJS/musl **BLOCKED**. No master merge this wave.
+
+**Pack E / process MM-root + INTERRUPT wall + probe (2026-07-12):**
+`task_mm_root` / `process_mm_root` accessors (field `cr3` @ +0xB0 unchanged for asm).
+`mm/paging.c` residual present-checks → `arch_mm_pte_present`. Makefile
+`INTERRUPT_OBJS_ARM64` = `irq_portable_stubs.o` (no `lidt` / `isr_stubs_64`).
+`make arm64-all-objs-probe`: MEMORY_OBJS compile OK under ARM64_BOOT_CFLAGS;
+**next divergence** = KERNEL_OBJS / drivers (not linked into `kernel-arm64.bin`).
+**musl aarch64** still **BLOCKED** (no cross toolchain in SETUP; x86 musl only).
+
+---
 
 | # | Item | Next proof |
 |---|------|------------|
@@ -60,12 +161,13 @@ _(vacío — solo Future abajo)_
 | F4 | ~~kexec mínimo~~ | **DONE** 2026-07-11 — stub + `kexec_load` MVP (`smoke-kexec-load`) |
 | F5 | ~~Suspend / S3~~ | **DONE** 2026-07-11 — `_S3_` + soft resume (`smoke-reboot-s3`; FACS wake deferred) |
 | F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
-| F7 | ARM64 MM / userspace | beyond freestanding `kernel-arm64.bin` |
+| F7 | ARM64 early bring-up (F7.1–F7.3) | **DONE** `make smoke-arm64` — **not** full port |
+| F7b | ARM64 real port | F7c–F7g + Pack B–E; KERNEL_OBJS link + musl aarch64 **BLOCKED** |
 | F8 | TCP Internet / real NIC | beyond loopback |
 | F9 | SMP / CFS | sched oleada |
 | F10 | Rust/C++ driver ABI | DRV-* |
 | F11 | T3 WM | **userspace only** |
-| F12 | TCC/Doom “stable” | STABLE.md HOST |
+| F12 | TCC/Doom “stable” | STABLE.md — merge master solo con bundle verde |
 
 ## T3 prep checklist (no WM in kernel)
 

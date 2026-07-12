@@ -1,6 +1,6 @@
 # IR0 — Backlog post-0.0.1 (trabajo restante honesto)
 
-> **Última verificación:** 2026-07-11  
+> **Última verificación:** 2026-07-12  
 > Espejo de [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) (inglés canónico).
 
 ## Closed
@@ -20,7 +20,15 @@ _(vacío)_
 4. ~~F4 kexec mínimo~~ **hecho** — stub + `kexec_load` MVP (`smoke-kexec-load`)  
 5. ~~F5 Suspend / S3~~ **hecho** — `_S3_` + soft resume (`smoke-reboot-s3`)   
 6. ~~F6 NVMe~~ **hecho** — `smoke-nvme-read`  
-7. F7 ARM64 MM … F12 — ver inglés  
+7. ~~F7.1 ARM64 early MM~~ **hecho** — `smoke-arm64-mmu`  
+8. ~~F7.2 ARM64 VBAR/SVC~~ **hecho** — `smoke-arm64-vbar`  
+9. ~~F7.3 ARM64 EL0 + PSCI~~ **hecho** — `smoke-arm64-el0` / `smoke-arm64`  
+10. F7b–F7g + Pack B–E (MM-root + INTERRUPT stubs + MEMORY probe) ~~hecho~~ — deuda = KERNEL_OBJS link ARM + musl aarch64 **BLOCKED**  
+11. F8 … F12 — ver inglés; merge `master` solo con bundle TCC+Doom+userspace (STABLE)
+
+## ARM64 — estado honesto
+
+Bring-up freestanding en QEMU virt **sí**; port de OS **no**. Detalle en el inglés.  
 
 ## T3
 

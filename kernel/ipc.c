@@ -43,24 +43,12 @@ static ipc_channel_t *ipc_channel_find_locked(uint32_t id)
 
 static inline uint64_t ipc_irq_save(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
-    uint64_t flags;
-    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
-    return flags;
-#else
-    arch_disable_interrupts();
-    return 0;
-#endif
+	return (uint64_t)arch_irq_save();
 }
 
 static inline void ipc_irq_restore(uint64_t flags)
 {
-#if defined(__x86_64__) || defined(__i386__)
-    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
-#else
-    (void)flags;
-    arch_enable_interrupts();
-#endif
+	arch_irq_restore((unsigned long)flags);
 }
 
 static bool wait_queue_contains(wait_queue_t *wq, process_t *proc)

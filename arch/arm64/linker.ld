@@ -8,8 +8,15 @@ SECTIONS
 
     .text : ALIGN(4K)
     {
+        KEEP(*(.text.boot))
         *(.text)
         *(.text.*)
+        *(.text.el0)
+    }
+
+    .vectors : ALIGN(0x800)
+    {
+        KEEP(*(.vectors))
     }
 
     .rodata : ALIGN(4K)

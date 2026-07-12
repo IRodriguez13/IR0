@@ -26,6 +26,7 @@
 #include <ir0/process.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
+#include <ir0/arch_port.h>
 #include <ir0/ktm/checkpoint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -1111,7 +1112,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
             memset((void *)page, 0, PAGE_SIZE_4KB);
             load_page_directory(old_cr3);
           }
-          __asm__ volatile("invlpg (%0)" ::"r"(page) : "memory");
+          arch_tlb_invalidate_page((uintptr_t)page);
           continue;
         }
 
@@ -1120,17 +1121,11 @@ int sys_mprotect(void *addr, size_t len, int prot)
           return -ENOMEM;
 
         /*
-         * map_page_in_directory() intentionally skips invlpg (it is used to
-         * populate foreign address spaces under kernel CR3). mprotect changes
-         * the permissions of an EXISTING mapping in the CURRENT process, whose
-         * CR3 is active, so a stale TLB entry (e.g. the read-only PROT_NONE
-         * entry musl's mallocng installs before committing a meta page) would
-         * survive and silently drop the subsequent write. Invalidate here:
-         * without it, mallocng metadata corrupts intermittently and musl
-         * readdir loops on a zero d_reclen (runsvdir "unable to stat :
-         * invalid argument" flood).
+         * map_page_in_directory() intentionally skips TLB invalidate (foreign
+         * address spaces under kernel root). mprotect changes permissions of an
+         * EXISTING mapping in the CURRENT process, so flush the local TLB entry.
          */
-        __asm__ volatile("invlpg (%0)" ::"r"(page) : "memory");
+        arch_tlb_invalidate_page((uintptr_t)page);
       }
 
       return 0;

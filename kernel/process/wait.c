@@ -54,7 +54,7 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 	serial_print(" rax=");
 	serial_print_hex64(p->task.rax);
 	serial_print(" cr3=");
-	serial_print_hex64(p->task.cr3);
+	serial_print_hex64(process_mm_root(p));
 	serial_print(" irq_saved=");
 	serial_print_hex64((uint64_t)p->irq_frame_saved);
 	serial_print("\n");
@@ -105,7 +105,7 @@ void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
 		serial_print("[WAIT_EXIT_AUDIT][process_exit] parent_mm=");
 		serial_print_hex64((uint64_t)(uintptr_t)parent->page_directory);
 		serial_print(" parent_cr3=");
-		serial_print_hex64(parent->task.cr3);
+		serial_print_hex64(process_mm_root(parent));
 		serial_print(" parent_files=");
 		serial_print_hex64((uint64_t)(uintptr_t)parent->fd_table);
 		serial_print(" parent_irq_saved=");
