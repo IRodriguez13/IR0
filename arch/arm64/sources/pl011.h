@@ -6,17 +6,14 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: slice_hello.c
- * Description: Minimal post-MMU TU for F7b ARM64_SLICE_OBJS + serial_io proof.
+ * File: pl011.h
+ * Description: QEMU virt PL011 UART0 MMIO helpers (0x09000000).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "slice_hello.h"
+#pragma once
 
-#include <ir0/serial_io.h>
-
-void arm64_slice_after_mmu(void)
-{
-	serial_print("ARM64_SLICE_OK\n");
-}
+void pl011_init(void);
+void pl011_putc(char c);
+void pl011_puts(const char *s);

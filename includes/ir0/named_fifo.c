@@ -17,6 +17,7 @@
 #include <ir0/path.h>
 #include <ir0/pipe.h>
 #include <ir0/types.h>
+#include <ir0/arch_port.h>
 #include <string.h>
 
 #define NAMED_FIFO_MAX 128
@@ -31,28 +32,15 @@ static inline void named_fifo_irq_restore(uint64_t flags)
 {
     (void)flags;
 }
-#elif defined(__x86_64__) || defined(__i386__)
-static inline uint64_t named_fifo_irq_save(void)
-{
-    uint64_t flags;
-
-    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
-    return flags;
-}
-
-static inline void named_fifo_irq_restore(uint64_t flags)
-{
-    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
-}
 #else
 static inline uint64_t named_fifo_irq_save(void)
 {
-    return 0;
+    return (uint64_t)arch_irq_save();
 }
 
 static inline void named_fifo_irq_restore(uint64_t flags)
 {
-    (void)flags;
+    arch_irq_restore((unsigned long)flags);
 }
 #endif
 

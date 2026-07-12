@@ -508,17 +508,26 @@ LIB_OBJS = \
     includes/ir0/audio_backend.o \
     includes/string.o
 
-INTERRUPT_OBJS = \
+INTERRUPT_OBJS_X86_64 = \
     interrupt/arch/idt.o \
     interrupt/arch/pic.o \
     interrupt/arch/isr_handlers.o \
     interrupt/arch/keyboard.o \
     interrupt/arch/x86-64/isr_stubs_64.o
 
+# ARM64: do not pull lidt / isr_stubs_64 — GIC is in ARCH_OBJS.
+INTERRUPT_OBJS_ARM64 = \
+    arch/arm64/sources/irq_portable_stubs.o
+
+ifeq ($(ARCH),arm64)
+INTERRUPT_OBJS := $(INTERRUPT_OBJS_ARM64)
+else
+INTERRUPT_OBJS := $(INTERRUPT_OBJS_X86_64)
+endif
+
 DRIVER_OBJS = \
     drivers/driver_bootstrap.o \
     drivers/IO/ps2.o \
-    drivers/serial/serial.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
     drivers/timer/rtc/rtc.o \
@@ -534,6 +543,11 @@ DRIVER_OBJS = \
 	drivers/video/typewriter.o \
 	drivers/init_drv.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
+
+# COM1 16550 only on x86; ARM64 uses arch/arm64/sources/serial_io_arm64.c (PL011).
+ifneq ($(ARCH),arm64)
+DRIVER_OBJS += drivers/serial/serial.o
+endif
 
 HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
 
@@ -937,6 +951,7 @@ ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/user_mode.o \
     arch/x86-64/sources/idt_arch_x64.o \
     arch/x86-64/sources/fault.o \
+    arch/x86-64/sources/mm_ops.o \
     arch/x86-64/asm/boot_x64.o \
     arch/x86-64/asm/syscall_entry_64.o \
     arch/x86-64/asm/syscall_insn_entry_64.o \
@@ -947,10 +962,16 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/arch_early.o \
     arch/arm64/sources/interrupts.o \
     arch/arm64/sources/timer.o \
+    arch/arm64/sources/mm_ops.o \
+    arch/arm64/sources/pl011.o \
+    arch/arm64/sources/serial_io_arm64.o \
+    arch/arm64/sources/gic_v2.o \
+    arch/arm64/sources/syscall_early.o \
     arch/arm64/sources/boot_stub.o \
     arch/arm64/sources/mmu_early.o \
     arch/arm64/sources/exc_early.o \
     arch/arm64/sources/slice_hello.o \
+    arch/arm64/sources/portable_string.o \
     arch/arm64/sources/vectors.o \
     arch/arm64/sources/syscall_stub.o \
     arch/arm64/sources/platform.o \
@@ -2450,34 +2471,93 @@ smoke-robust-list: kernel-x64-userspace.iso
 		grep -E 'ROBUST_|panic' $(ROBUST_SMOKE_LOG) | tail -30; exit 1; \
 	fi
 
-# Minimal ARM64 boot+MMU+VBAR+slice image (identity map — full ARCH_OBJS need freestanding libc).
-ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -Iarch/arm64/sources
+# Minimal ARM64 boot image (identity map — full ARCH_OBJS need freestanding libc).
+ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 \
+	-I. -Iarch/arm64/sources -Iincludes -Iincludes/ir0
 ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib
-# F7b.1 curated portable objs (not ALL_OBJS). Link path uses slice_hello only.
-ARM64_SLICE_OBJS = arch/arm64/sources/slice_hello.o
+# QEMU virt: pin GICv2 (default may be v3 — freestanding Dist/CPU iface is v2).
+ARM64_QEMU_MACHINE = virt,gic-version=2
+# F7b curated portable objs (not ALL_OBJS).
+ARM64_SLICE_OBJS = \
+	arch/arm64/sources/slice_hello.o \
+	arch/arm64/sources/pl011.o \
+	arch/arm64/sources/serial_io_arm64.o
+ARM64_PORTABLE_OBJS = \
+	$(ARM64_SLICE_OBJS) \
+	arch/arm64/sources/gic_v2.o \
+	arch/arm64/sources/timer.o \
+	arch/arm64/sources/portable_string.o
 .PHONY: kernel-arm64-boot.bin kernel-arm64-mmu.bin kernel-arm64-vbar.bin \
-	kernel-arm64-el0.bin kernel-arm64-slice.bin \
-	arm64-slice-compile \
+	kernel-arm64-el0.bin kernel-arm64-slice.bin kernel-arm64-port.bin \
+	kernel-arm64-gic.bin kernel-arm64-syscall.bin \
+	arm64-slice-compile arm64-portable-compile arm64-all-objs-probe \
 	smoke-arm64-boot smoke-arm64-mmu smoke-arm64-vbar smoke-arm64-el0 \
-	smoke-arm64-slice smoke-arm64
+	smoke-arm64-slice smoke-arm64-port smoke-arm64-gic smoke-arm64-syscall \
+	smoke-arm64-nanosleep smoke-arm64
 arm64-slice-compile:
-	@echo "  CC      ARM64_SLICE_OBJS (F7b.1)"
+	@echo "  CC      ARM64_SLICE_OBJS (F7b)"
 	@for f in $(ARM64_SLICE_OBJS); do \
 		src=$${f%.o}.c; \
 		echo "  CC      $$src"; \
 		aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c $$src -o $$f || exit 1; \
 	done
-	@echo "  CC      includes/string.c (compile-only probe, not linked)"
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -Iincludes -Iincludes/ir0 \
+	@echo "  CC      includes/string.c (compile-only probe, not linked — needs oops.h)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
 		-c includes/string.c -o /tmp/ir0-string-arm64-probe.o
-	@echo "✓ arm64-slice-compile OK (slice_hello + string.c probe)"
+	@echo "✓ arm64-slice-compile OK (slice+pl011+serial_io + string.c probe)"
+
+arm64-portable-compile: arm64-slice-compile
+	@echo "  CC      ARM64_PORTABLE_OBJS (F7b P2 — not ALL_OBJS)"
+	@for f in $(ARM64_PORTABLE_OBJS); do \
+		src=$${f%.o}.c; \
+		echo "  CC      $$src"; \
+		aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c $$src -o $$f || exit 1; \
+	done
+	@echo "  CC      arch/arm64/sources/irq_portable_stubs.c (INTERRUPT_OBJS_ARM64)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/irq_portable_stubs.c \
+		-o arch/arm64/sources/irq_portable_stubs.o
+	@echo "✓ arm64-portable-compile OK (slice+pl011+serial+gic+timer+portable_string+irq stubs)"
+
+# Pack E: probe MEMORY_OBJS for ARCH=arm64 (compile-only). Not a full ALL_OBJS link.
+arm64-all-objs-probe: arm64-portable-compile
+	@echo "  PROBE   arm64-all-objs-probe (MEMORY_OBJS compile-only)"
+	@rm -f /tmp/ir0-arm64-all-objs-probe.log
+	@echo "INTERRUPT_OBJS wall: cleared (irq_portable_stubs replaces lidt/isr_stubs_64)" \
+		> /tmp/ir0-arm64-all-objs-probe.log
+	@fail=0; \
+	for src in mm/allocator.c mm/paging.c mm/pmm.c mm/kmem.c; do \
+		echo "  CC      $$src (probe)"; \
+		if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+			-c $$src -o /tmp/ir0-arm64-probe-$$$$.o >> /tmp/ir0-arm64-all-objs-probe.log 2>&1; then \
+			echo "FIRST_DIVERGENCE: $$src" | tee -a /tmp/ir0-arm64-all-objs-probe.log; \
+			fail=1; \
+			break; \
+		fi; \
+		rm -f /tmp/ir0-arm64-probe-$$$$.o; \
+	done; \
+	if [ $$fail -eq 0 ]; then \
+		echo "MEMORY_OBJS: compile OK under ARM64_BOOT_CFLAGS (not linked into kernel-arm64.bin)" \
+			| tee -a /tmp/ir0-arm64-all-objs-probe.log; \
+		echo "NEXT: KERNEL_OBJS / drivers still BLOCKED; musl aarch64 toolchain absent"; \
+		echo "✓ arm64-all-objs-probe: interrupt wall cleared; MEMORY_OBJS compile OK"; \
+	else \
+		echo "✗ arm64-all-objs-probe: see /tmp/ir0-arm64-all-objs-probe.log"; \
+		tail -40 /tmp/ir0-arm64-all-objs-probe.log; \
+		exit 1; \
+	fi
 
 kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_early.c \
 		arch/arm64/sources/mmu_early.h arch/arm64/sources/exc_early.c \
 		arch/arm64/sources/exc_early.h arch/arm64/sources/slice_hello.c \
-		arch/arm64/sources/slice_hello.h arch/arm64/sources/vectors.S \
+		arch/arm64/sources/slice_hello.h arch/arm64/sources/pl011.c \
+		arch/arm64/sources/pl011.h arch/arm64/sources/serial_io_arm64.c \
+		arch/arm64/sources/timer.c arch/arm64/sources/timer.h \
+		arch/arm64/sources/gic_v2.c arch/arm64/sources/gic_v2.h \
+		arch/arm64/sources/syscall_early.c arch/arm64/sources/syscall_early.h \
+		arch/arm64/sources/mm_ops.c arch/arm64/sources/vectors.S \
 		arch/arm64/linker.ld
-	@echo "  CC      arch/arm64/sources/boot_stub.c (boot+mmu+vbar+el0+slice)"
+	@echo "  CC      arch/arm64/sources/boot_stub.c (F7d nanosleep + irq facade)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/boot_stub.c -o arch/arm64/sources/boot_stub.o
 	@echo "  CC      arch/arm64/sources/mmu_early.c"
@@ -2486,20 +2566,41 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  CC      arch/arm64/sources/exc_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/exc_early.c -o arch/arm64/sources/exc_early.o
+	@echo "  CC      arch/arm64/sources/pl011.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/pl011.c -o arch/arm64/sources/pl011.o
+	@echo "  CC      arch/arm64/sources/serial_io_arm64.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/serial_io_arm64.c -o arch/arm64/sources/serial_io_arm64.o
 	@echo "  CC      arch/arm64/sources/slice_hello.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/slice_hello.c -o arch/arm64/sources/slice_hello.o
+	@echo "  CC      arch/arm64/sources/timer.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/timer.c -o arch/arm64/sources/timer.o
+	@echo "  CC      arch/arm64/sources/gic_v2.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/gic_v2.c -o arch/arm64/sources/gic_v2.o
+	@echo "  CC      arch/arm64/sources/syscall_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/syscall_early.c -o arch/arm64/sources/syscall_early.o
+	@echo "  CC      arch/arm64/sources/mm_ops.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/mm_ops.c -o arch/arm64/sources/mm_ops.o
 	@echo "  AS      arch/arm64/sources/vectors.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/sources/vectors.S -o arch/arm64/sources/vectors.o
 	@echo "  LD      $@"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
 		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
-		arch/arm64/sources/exc_early.o arch/arm64/sources/slice_hello.o \
+		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
+		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
+		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
+		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/vectors.o
 	@echo "✓ $@"
 
-# Alias: same image; smoke looks for post-MMU / VBAR / EL0 / slice tags.
+# Alias: same image; smoke looks for post-MMU / VBAR / EL0 / slice / port tags.
 kernel-arm64-mmu.bin: kernel-arm64-boot.bin
 	@cp -f kernel-arm64-boot.bin $@
 	@echo "✓ $@"
@@ -2516,12 +2617,24 @@ kernel-arm64-slice.bin: kernel-arm64-boot.bin
 	@cp -f kernel-arm64-boot.bin $@
 	@echo "✓ $@"
 
+kernel-arm64-port.bin: kernel-arm64-boot.bin
+	@cp -f kernel-arm64-boot.bin $@
+	@echo "✓ $@"
+
+kernel-arm64-gic.bin: kernel-arm64-boot.bin
+	@cp -f kernel-arm64-boot.bin $@
+	@echo "✓ $@"
+
+kernel-arm64-syscall.bin: kernel-arm64-boot.bin
+	@cp -f kernel-arm64-boot.bin $@
+	@echo "✓ $@"
+
 smoke-arm64-boot: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU virt boot tag..."
 	@rm -f /tmp/arm64-boot-smoke.log
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-boot-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_BOOT_OK -- \
-		qemu-system-aarch64 -M virt -cpu cortex-a53 -m 128M \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-boot.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_BOOT_OK" /tmp/arm64-boot-smoke.log; then \
@@ -2536,7 +2649,7 @@ smoke-arm64-mmu: kernel-arm64-mmu.bin
 	@rm -f /tmp/arm64-mmu-smoke.log
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-mmu-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_MMU_OK -- \
-		qemu-system-aarch64 -M virt -cpu cortex-a53 -m 128M \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-mmu.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_MMU_OK" /tmp/arm64-mmu-smoke.log; then \
@@ -2551,7 +2664,7 @@ smoke-arm64-vbar: kernel-arm64-vbar.bin
 	@rm -f /tmp/arm64-vbar-smoke.log
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-vbar-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_VBAR_OK -- \
-		qemu-system-aarch64 -M virt -cpu cortex-a53 -m 128M \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-vbar.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_VBAR_OK" /tmp/arm64-vbar-smoke.log && \
@@ -2567,7 +2680,7 @@ smoke-arm64-el0: kernel-arm64-el0.bin
 	@rm -f /tmp/arm64-el0-smoke.log
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-el0-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_EL0_RET_OK -- \
-		qemu-system-aarch64 -M virt -cpu cortex-a53 -m 128M \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-el0.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_EL0_DROP" /tmp/arm64-el0-smoke.log && \
@@ -2584,7 +2697,7 @@ smoke-arm64-slice: kernel-arm64-slice.bin arm64-slice-compile
 	@rm -f /tmp/arm64-slice-smoke.log
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-slice-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_SLICE_OK -- \
-		qemu-system-aarch64 -M virt -cpu cortex-a53 -m 128M \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-slice.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_SLICE_OK" /tmp/arm64-slice-smoke.log; then \
@@ -2594,9 +2707,71 @@ smoke-arm64-slice: kernel-arm64-slice.bin arm64-slice-compile
 		tail -50 /tmp/arm64-slice-smoke.log; exit 1; \
 	fi
 
+smoke-arm64-port: kernel-arm64-port.bin arm64-portable-compile
+	@echo "  SMOKE   ARM64 QEMU virt F7b pack (PL011+paging+timer+GIC IRQ)..."
+	@rm -f /tmp/arm64-port-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-port-smoke.log --timeout 20 --stale-sec 8 \
+		--done ARM64_TIMER_IRQ_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-port.bin -nographic -serial mon:stdio \
+		-display none -no-reboot 2>/dev/null || true
+	@if grep -q "ARM64_PL011_OK" /tmp/arm64-port-smoke.log && \
+	   grep -q "ARM64_PAGING_OK" /tmp/arm64-port-smoke.log && \
+	   grep -q "ARM64_GIC_MAP_OK" /tmp/arm64-port-smoke.log && \
+	   grep -q "ARM64_TIMER_OK" /tmp/arm64-port-smoke.log && \
+	   grep -q "ARM64_GIC_OK" /tmp/arm64-port-smoke.log && \
+	   grep -q "ARM64_TIMER_IRQ_OK" /tmp/arm64-port-smoke.log; then \
+		echo "✓ smoke-arm64-port passed"; \
+	else \
+		echo "✗ smoke-arm64-port FAILED"; \
+		tail -60 /tmp/arm64-port-smoke.log; exit 1; \
+	fi
+
+smoke-arm64-gic: kernel-arm64-gic.bin
+	@echo "  SMOKE   ARM64 QEMU virt GICv2 + timer IRQ..."
+	@rm -f /tmp/arm64-gic-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-gic-smoke.log --timeout 20 --stale-sec 8 \
+		--done ARM64_TIMER_IRQ_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-gic.bin -nographic -serial mon:stdio \
+		-display none -no-reboot 2>/dev/null || true
+	@if grep -q "ARM64_GIC_OK" /tmp/arm64-gic-smoke.log && \
+	   grep -q "ARM64_TIMER_IRQ_OK" /tmp/arm64-gic-smoke.log; then \
+		echo "✓ smoke-arm64-gic passed"; \
+	else \
+		echo "✗ smoke-arm64-gic FAILED"; \
+		tail -60 /tmp/arm64-gic-smoke.log; exit 1; \
+	fi
+
+smoke-arm64-syscall: kernel-arm64-syscall.bin
+	@echo "  SMOKE   ARM64 QEMU virt F7d EL0 (getpid+nanosleep+write)..."
+	@rm -f /tmp/arm64-syscall-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-syscall-smoke.log --timeout 20 --stale-sec 8 \
+		--done ARM64_SYSCALL_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
+		-display none -no-reboot 2>/dev/null || true
+	@if grep -q "ARM64_EL0_PAGE_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CLOCK_GETTIME_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_GETTIMEOFDAY_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CLOCK_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_SYSCALL_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_WRITE_OK" /tmp/arm64-syscall-smoke.log; then \
+		echo "✓ smoke-arm64-syscall passed"; \
+	else \
+		echo "✗ smoke-arm64-syscall FAILED"; \
+		tail -60 /tmp/arm64-syscall-smoke.log; exit 1; \
+	fi
+
+.PHONY: smoke-arm64-nanosleep
+smoke-arm64-nanosleep: smoke-arm64-syscall
+	@echo "✓ smoke-arm64-nanosleep (alias of smoke-arm64-syscall + NANOSLEEP tag)"
+
 .PHONY: smoke-arm64
-smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-vbar smoke-arm64-el0
-	@echo "✓ smoke-arm64 (boot+mmu+slice+vbar+el0) passed"
+smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-port \
+	smoke-arm64-gic smoke-arm64-syscall smoke-arm64-vbar smoke-arm64-el0
+	@echo "✓ smoke-arm64 (boot+mmu+slice+port+gic+syscall+vbar+el0) passed"
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
 # (arm64 full kernel-arm64.bin remains available via ARCH=arm64)

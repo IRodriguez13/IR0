@@ -7,10 +7,10 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: mmu_early.c
- * Description: Early ARM64 identity map (TTBR0) for QEMU virt DRAM + PL011 UART.
+ * Description: Early ARM64 identity map (TTBR0) + Device/user page map for QEMU virt.
  *
  * Reference: Linux arm64 head.S idmap/TTBR0 path (simplified — no TTBR1 high map).
- * QEMU virt: DRAM @ 0x40000000, PL011 UART0 @ 0x09000000.
+ * QEMU virt: DRAM @ 0x40000000, PL011 @ 0x09000000, GIC @ 0x08000000.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -19,70 +19,90 @@
 
 #include <stdint.h>
 
-/* Minimal errno for freestanding boot image (no libc / ir0 errno pull-in). */
 #define EINVAL 22
+#define ENODEV 19
 
 #define PAGE_SIZE        4096UL
+#define BLOCK_2M         0x200000UL
 #define PTE_ENTRIES      512UL
 
-/* Descriptor bits (4K granule). */
 #define PTE_VALID        (1UL << 0)
 #define PTE_TABLE        (1UL << 1)
-#define PTE_TYPE_BLOCK   (PTE_VALID)                 /* 0b01 */
-#define PTE_TYPE_TABLE   (PTE_VALID | PTE_TABLE)     /* 0b11 */
+#define PTE_TYPE_BLOCK   (PTE_VALID)
+#define PTE_TYPE_TABLE   (PTE_VALID | PTE_TABLE)
+#define PTE_TYPE_PAGE    (PTE_VALID | PTE_TABLE)
 
 #define PTE_ATTR_SHIFT   2
 #define PTE_AF           (1UL << 10)
 #define PTE_SH_INNER     (3UL << 8)
-#define PTE_AP_RW_EL1    (0UL << 6) /* EL1 RW, EL0 none */
-#define PTE_AP_RW_ANY    (1UL << 6) /* EL1+EL0 RW (AP=01) */
+#define PTE_AP_RW_EL1    (0UL << 6)
+#define PTE_AP_RW_EL0    (1UL << 6)
 #define PTE_UXN          (1UL << 54)
+#define PTE_PXN          (1UL << 53)
 
-#define ATTR_DEVICE      0 /* MAIR AttrIdx0 — Device-nGnRnE */
-#define ATTR_NORMAL      1 /* MAIR AttrIdx1 — Normal WB */
+#define ATTR_DEVICE      0
+#define ATTR_NORMAL      1
 
-/* QEMU virt map. */
 #define VIRT_UART_BASE   0x09000000UL
 #define VIRT_DRAM_BASE   0x40000000UL
+#define VIRT_DRAM_END    (VIRT_DRAM_BASE + 0x40000000UL)
 
-/*
- * 39-bit VA (T0SZ=25): TTBR0 points at L1. Indices:
- *   L1 [38:30], L2 [29:21], L3 [20:12].
- */
 #define L1_INDEX(va)     (((va) >> 30) & 0x1FFUL)
 #define L2_INDEX(va)     (((va) >> 21) & 0x1FFUL)
+#define L3_INDEX(va)     (((va) >> 12) & 0x1FFUL)
 
 #define MAIR_ATTR_DEVICE 0x00UL
-#define MAIR_ATTR_NORMAL 0xffUL /* Outer/Inner Write-Back Non-transient */
+#define MAIR_ATTR_NORMAL 0xffUL
 
 static uint64_t l1_table[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t l2_mmio[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+static uint64_t l2_dram[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+static uint64_t l3_user[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+static int g_mmu_on;
+static int g_dram_split;
+static uint64_t g_user_page_pa;
+static int g_user_page_mapped;
 
-static uint64_t pte_block_1g(uint64_t pa, unsigned attr_idx, uint64_t ap, int uxn)
-{
-	uint64_t pte = PTE_TYPE_BLOCK
-		     | ((uint64_t)attr_idx << PTE_ATTR_SHIFT)
-		     | ap
-		     | PTE_SH_INNER
-		     | PTE_AF
-		     | (pa & 0x0000FFFFC0000000UL);
-
-	if (uxn)
-	{
-		pte |= PTE_UXN;
-	}
-	return pte;
-}
-
-static uint64_t pte_block_2m(uint64_t pa, unsigned attr_idx)
+static uint64_t pte_block_2m_device(uint64_t pa)
 {
 	return PTE_TYPE_BLOCK
-	     | ((uint64_t)attr_idx << PTE_ATTR_SHIFT)
+	     | ((uint64_t)ATTR_DEVICE << PTE_ATTR_SHIFT)
 	     | PTE_AP_RW_EL1
 	     | PTE_SH_INNER
 	     | PTE_AF
 	     | PTE_UXN
 	     | (pa & 0x0000FFFFFFE00000UL);
+}
+
+static uint64_t pte_block_2m_dram_el1(uint64_t pa)
+{
+	/* UXN clear: EL0 may execute kernel text in DRAM (el0_entry). */
+	return PTE_TYPE_BLOCK
+	     | ((uint64_t)ATTR_NORMAL << PTE_ATTR_SHIFT)
+	     | PTE_AP_RW_EL1
+	     | PTE_SH_INNER
+	     | PTE_AF
+	     | (pa & 0x0000FFFFFFE00000UL);
+}
+
+static uint64_t pte_page_4k(uint64_t pa, uint64_t ap, int uxn, int pxn)
+{
+	uint64_t pte = PTE_TYPE_PAGE
+		     | ((uint64_t)ATTR_NORMAL << PTE_ATTR_SHIFT)
+		     | ap
+		     | PTE_SH_INNER
+		     | PTE_AF
+		     | (pa & 0x0000FFFFFFFFF000UL);
+
+	if (uxn)
+	{
+		pte |= PTE_UXN;
+	}
+	if (pxn)
+	{
+		pte |= PTE_PXN;
+	}
+	return pte;
 }
 
 static uint64_t pte_table(uint64_t table_pa)
@@ -100,26 +120,40 @@ static void zero_table(uint64_t *tbl)
 	}
 }
 
+static void tlb_invalidate(void)
+{
+	__asm__ volatile("tlbi vmalle1" ::: "memory");
+	__asm__ volatile("dsb ish" ::: "memory");
+	__asm__ volatile("isb" ::: "memory");
+}
+
 static void build_idmap(void)
 {
-	uint64_t l2_pa = (uint64_t)(uintptr_t)l2_mmio;
-	uint64_t uart_block = VIRT_UART_BASE & ~0x1FFFFFUL; /* 2 MiB align */
+	uint64_t l2_mmio_pa = (uint64_t)(uintptr_t)l2_mmio;
+	uint64_t l2_dram_pa = (uint64_t)(uintptr_t)l2_dram;
+	uint64_t uart_block = VIRT_UART_BASE & ~0x1FFFFFUL;
+	unsigned i;
 
 	zero_table(l1_table);
 	zero_table(l2_mmio);
+	zero_table(l2_dram);
+	zero_table(l3_user);
+	g_dram_split = 1;
+	g_user_page_mapped = 0;
+	g_user_page_pa = 0;
 
-	/* Low 1 GiB: L2 table so UART MMIO can be Device-mapped. */
-	l1_table[L1_INDEX(VIRT_UART_BASE)] = pte_table(l2_pa);
-	l2_mmio[L2_INDEX(VIRT_UART_BASE)] = pte_block_2m(uart_block, ATTR_DEVICE);
+	l1_table[L1_INDEX(VIRT_UART_BASE)] = pte_table(l2_mmio_pa);
+	l2_mmio[L2_INDEX(VIRT_UART_BASE)] = pte_block_2m_device(uart_block);
 
 	/*
-	 * DRAM 1 GiB identity @ 0x40000000.
-	 * AP=EL1-only data; UXN clear so EL0 may execute (F7.3 SVC smoke).
-	 * Note: AP=EL0-RW (AP=01) on this 1GiB block hangs QEMU virt early enable —
-	 * keep EL1-only AP until a finer L2 map is proven.
+	 * DRAM as 512×2 MiB EL1 (UXN clear). Never install EL0 on a 1 GiB block
+	 * (hangs QEMU). arm64_mmu_map_user_page installs one 4K EL0 page via L3.
 	 */
-	l1_table[L1_INDEX(VIRT_DRAM_BASE)] =
-		pte_block_1g(VIRT_DRAM_BASE, ATTR_NORMAL, PTE_AP_RW_EL1, 0);
+	for (i = 0; i < PTE_ENTRIES; i++)
+	{
+		l2_dram[i] = pte_block_2m_dram_el1(VIRT_DRAM_BASE + (uint64_t)i * BLOCK_2M);
+	}
+	l1_table[L1_INDEX(VIRT_DRAM_BASE)] = pte_table(l2_dram_pa);
 }
 
 static void mmu_configure_and_enable(uint64_t ttbr0)
@@ -131,33 +165,25 @@ static void mmu_configure_and_enable(uint64_t ttbr0)
 	mair = (MAIR_ATTR_DEVICE << 0) | (MAIR_ATTR_NORMAL << 8);
 	__asm__ volatile("msr mair_el1, %0" :: "r"(mair) : "memory");
 
-	/*
-	 * T0SZ=25 → 39-bit VA; TG0=4K (0); IRGN/ORGN WB WA (1); SH Inner (3);
-	 * IPS=40-bit (2) enough for virt DRAM.
-	 */
-	tcr = (25UL << 0)   /* T0SZ */
-	    | (0UL << 14)   /* TG0 4K */
-	    | (1UL << 8)    /* IRGN0 WB WA */
-	    | (1UL << 10)   /* ORGN0 WB WA */
-	    | (3UL << 12)   /* SH0 Inner Shareable */
-	    | (2UL << 32);  /* IPS 40 bits */
+	tcr = (25UL << 0)
+	    | (0UL << 14)
+	    | (1UL << 8)
+	    | (1UL << 10)
+	    | (3UL << 12)
+	    | (2UL << 32);
 	__asm__ volatile("msr tcr_el1, %0" :: "r"(tcr) : "memory");
 
 	__asm__ volatile("msr ttbr0_el1, %0" :: "r"(ttbr0) : "memory");
 	__asm__ volatile("isb" ::: "memory");
 
-	/* Invalidate TLB before enabling translations. */
-	__asm__ volatile("tlbi vmalle1" ::: "memory");
-	__asm__ volatile("dsb ish" ::: "memory");
-	__asm__ volatile("isb" ::: "memory");
+	tlb_invalidate();
 
 	__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
-	sctlr |= (1UL << 0);  /* M — MMU */
-	sctlr |= (1UL << 2);  /* C — data cache */
-	sctlr |= (1UL << 12); /* I — instruction cache */
-	/* Clear EE (little-endian) and WXN if set by firmware. */
-	sctlr &= ~(1UL << 25); /* EE */
-	sctlr &= ~(1UL << 19); /* WXN */
+	sctlr |= (1UL << 0);
+	sctlr |= (1UL << 2);
+	sctlr |= (1UL << 12);
+	sctlr &= ~(1UL << 25);
+	sctlr &= ~(1UL << 19);
 	__asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr) : "memory");
 	__asm__ volatile("isb" ::: "memory");
 }
@@ -171,12 +197,131 @@ int arm64_mmu_early_enable(void)
 	el = (el >> 2) & 3UL;
 	if (el != 1UL)
 	{
-		/* QEMU -kernel virt should enter at EL1; refuse other ELs for F7.1. */
 		return -EINVAL;
 	}
 
 	build_idmap();
 	ttbr0 = (uint64_t)(uintptr_t)l1_table;
 	mmu_configure_and_enable(ttbr0);
+	g_mmu_on = 1;
 	return 0;
+}
+
+int arm64_mmu_early_verify(void)
+{
+	uint64_t ttbr0;
+	uint64_t sctlr;
+	uint64_t expect = (uint64_t)(uintptr_t)l1_table;
+
+	if (!g_mmu_on)
+	{
+		return -ENODEV;
+	}
+
+	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr0));
+	__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+
+	if ((ttbr0 & ~0x1UL) != (expect & ~0x1UL))
+	{
+		return -EINVAL;
+	}
+	if ((sctlr & 1UL) == 0)
+	{
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int arm64_mmu_map_device_block(uint64_t pa)
+{
+	uint64_t block = pa & ~0x1FFFFFUL;
+	uint64_t l1_idx = L1_INDEX(block);
+	uint64_t l2_idx = L2_INDEX(block);
+	uint64_t l2_pa = (uint64_t)(uintptr_t)l2_mmio;
+
+	if (!g_mmu_on)
+	{
+		return -ENODEV;
+	}
+
+	if (l1_idx != L1_INDEX(VIRT_UART_BASE))
+	{
+		return -EINVAL;
+	}
+	if ((l1_table[l1_idx] & PTE_TYPE_TABLE) != PTE_TYPE_TABLE)
+	{
+		l1_table[l1_idx] = pte_table(l2_pa);
+	}
+
+	l2_mmio[l2_idx] = pte_block_2m_device(block);
+	tlb_invalidate();
+	return 0;
+}
+
+static int dram_ensure_l2(void)
+{
+	return g_dram_split ? 0 : -EINVAL;
+}
+
+int arm64_mmu_map_user_page(uint64_t pa)
+{
+	uint64_t page = pa & ~(PAGE_SIZE - 1UL);
+	uint64_t l2_idx;
+	uint64_t l3_idx;
+	uint64_t l3_pa = (uint64_t)(uintptr_t)l3_user;
+
+	if (!g_mmu_on)
+	{
+		return -ENODEV;
+	}
+	if (page < VIRT_DRAM_BASE || page >= VIRT_DRAM_END)
+	{
+		return -EINVAL;
+	}
+	if ((page & (PAGE_SIZE - 1UL)) != 0)
+	{
+		return -EINVAL;
+	}
+
+	if (dram_ensure_l2() != 0)
+	{
+		return -EINVAL;
+	}
+
+	l2_idx = L2_INDEX(page);
+	l3_idx = L3_INDEX(page);
+
+	zero_table(l3_user);
+	/* Only the target page is present; rest of the 2 MiB faults if touched. */
+	l3_user[l3_idx] = pte_page_4k(page, PTE_AP_RW_EL0, 1, 1);
+
+	l2_dram[l2_idx] = pte_table(l3_pa);
+	g_user_page_pa = page;
+	g_user_page_mapped = 1;
+	tlb_invalidate();
+	return 0;
+}
+
+int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len)
+{
+	uint64_t end;
+
+	if (!g_user_page_mapped || len == 0 || len > PAGE_SIZE)
+	{
+		return 0;
+	}
+	if (va < g_user_page_pa)
+	{
+		return 0;
+	}
+	end = va + len;
+	if (end < va)
+	{
+		return 0;
+	}
+	if (end > g_user_page_pa + PAGE_SIZE)
+	{
+		return 0;
+	}
+	return 1;
 }

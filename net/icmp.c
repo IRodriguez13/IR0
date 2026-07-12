@@ -101,24 +101,12 @@ static void icmp_pending_append_locked(struct icmp_pending_echo *entry)
 
 static inline uint64_t icmp_irq_save(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
-    uint64_t flags;
-    __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
-    return flags;
-#else
-    arch_disable_interrupts();
-    return 0;
-#endif
+	return (uint64_t)arch_irq_save();
 }
 
 static inline void icmp_irq_restore(uint64_t flags)
 {
-#if defined(__x86_64__) || defined(__i386__)
-    __asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
-#else
-    (void)flags;
-    arch_enable_interrupts();
-#endif
+	arch_irq_restore((unsigned long)flags);
 }
 
 /**

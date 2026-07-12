@@ -34,24 +34,12 @@ static rr_task_t *rr_current = NULL; /* Currently running process in queue */
  */
 static inline uint64_t rr_irq_save(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
-	uint64_t flags;
-	__asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
-	return flags;
-#else
-	arch_disable_interrupts();
-	return 0;
-#endif
+	return (uint64_t)arch_irq_save();
 }
 
 static inline void rr_irq_restore(uint64_t flags)
 {
-#if defined(__x86_64__) || defined(__i386__)
-	__asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
-#else
-	(void)flags;
-	arch_enable_interrupts();
-#endif
+	arch_irq_restore((unsigned long)flags);
 }
 
 /**
@@ -381,15 +369,15 @@ void rr_schedule_next(void)
 		if (next->mode == KERNEL_MODE)
 		{
 			/*
-			 * Kernel-mode init: switch CR3, set stack, jump.
+			 * Kernel-mode init: activate mm root, set stack, jump.
 			 * iretq with kernel CS/SS keeps us in ring 0.
 			 */
 			uint64_t kds = KERNEL_DATA_SEL;
 			uint64_t kcs = KERNEL_CODE_SEL;
+
+			arch_mm_activate((uintptr_t)process_mm_root(next));
 			__asm__ volatile(
 				"cli\n"
-				"mov %[cr3], %%rax\n"
-				"mov %%rax, %%cr3\n"
 				"mov %w[ds], %%ds\n"
 				"mov %w[ds], %%es\n"
 				"mov %w[ds], %%fs\n"
@@ -401,27 +389,18 @@ void rr_schedule_next(void)
 				"pushq %[rip_val]\n"
 				"iretq\n"
 				:
-				: [cr3] "r"(next->task.cr3),
-				  [rsp_val] "r"(next->task.rsp),
+				: [rsp_val] "r"(next->task.rsp),
 				  [rflags] "r"((uint64_t)RFLAGS_IF),
 				  [rip_val] "r"(next->task.rip),
 				  [ds] "r"(kds),
 				  [cs_val] "r"(kcs)
-				: "rax", "memory"
+				: "memory"
 			);
 		}
 		else
 		{
-			/*
-			 * Linux switch_mm(): load the process page tables before
-			 * iretq; otherwise the CPU fetches user RIP under kernel CR3.
-			 */
-			__asm__ volatile(
-				"mov %[cr3], %%rax\n"
-				"mov %%rax, %%cr3\n"
-				:
-				: [cr3] "r"(next->task.cr3)
-				: "rax", "memory");
+			/* Load process page tables before iretq (Linux switch_mm). */
+			arch_mm_activate((uintptr_t)process_mm_root(next));
 			arch_switch_to_user((arch_addr_t)next->task.rip,
 					    (arch_addr_t)next->task.rsp);
 		}

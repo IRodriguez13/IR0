@@ -7,12 +7,16 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: exc_early.c
- * Description: VBAR install, EL1/EL0 SVC handlers, EL0 drop, PSCI HVC (F7.2–F7.3).
+ * Description: VBAR, SVC ABI, IRQ (timer), EL0 drop, PSCI HVC (F7.2–F7c).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "exc_early.h"
+#include "pl011.h"
+#include "gic_v2.h"
+#include "timer.h"
+#include "syscall_early.h"
 
 #include <stdint.h>
 
@@ -32,10 +36,6 @@
 #define PSCI_0_2_FN_SYSTEM_OFF   0x84000008UL
 #define PSCI_0_2_FN_SYSTEM_RESET 0x84000009UL
 
-#define UART0_DR   (*(volatile uint32_t *)0x09000000UL)
-#define UART0_FR   (*(volatile uint32_t *)0x09000018UL)
-#define UART_FR_TXFF (1u << 5)
-
 #define EL0_STACK_SIZE 4096
 
 extern char ir0_el1_vectors[];
@@ -43,21 +43,12 @@ extern void el0_entry(void);
 
 uint8_t el0_stack[EL0_STACK_SIZE] __attribute__((aligned(16)));
 
-static void uart_putc(char c)
-{
-	while (UART0_FR & UART_FR_TXFF)
-	{
-		;
-	}
-	UART0_DR = (uint32_t)(uint8_t)c;
-}
+static volatile int g_timer_irq_seen;
+static int g_el0_svc_tagged;
 
-static void uart_puts(const char *s)
+int arm64_timer_irq_seen(void)
 {
-	while (s && *s)
-	{
-		uart_putc(*s++);
-	}
+	return g_timer_irq_seen;
 }
 
 static void psci_hvc(uint64_t fn)
@@ -69,7 +60,7 @@ static void psci_hvc(uint64_t fn)
 
 void arm64_psci_system_off(void)
 {
-	uart_puts("ARM64_PSCI_OFF\n");
+	pl011_puts("ARM64_PSCI_OFF\n");
 	psci_hvc(PSCI_0_2_FN_SYSTEM_OFF);
 	for (;;)
 	{
@@ -112,39 +103,76 @@ void arm64_exc_sync_el1(void)
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
 	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) == ESR_EC_SVC64)
 	{
-		uart_puts("ARM64_VBAR_OK\n");
+		pl011_puts("ARM64_VBAR_OK\n");
 	}
 	else
 	{
-		uart_puts("ARM64_SYNC_OTHER\n");
+		pl011_puts("ARM64_SYNC_OTHER\n");
 	}
 }
 
-void arm64_exc_sync_lower(void)
+void arm64_exc_irq_el1(void)
+{
+	uint32_t iar = arm64_gic_v2_ack();
+	uint32_t irq = iar & 0x3ffU;
+
+	arch_timer_oneshot_disarm();
+
+	if (irq == ARM64_GIC_PPI_PHYS_TIMER)
+	{
+		if (!g_timer_irq_seen)
+		{
+			g_timer_irq_seen = 1;
+			pl011_puts("ARM64_TIMER_IRQ_OK\n");
+		}
+	}
+
+	if (irq < 1020U)
+	{
+		arm64_gic_v2_eoi(iar);
+	}
+}
+
+void arm64_exc_sync_lower(uint64_t *frame)
 {
 	uint64_t esr;
-	uint64_t elr = (uint64_t)(uintptr_t)arm64_after_el0;
-	uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL1H;
+	int leave = 0;
+	int64_t ret;
 
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
-	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) == ESR_EC_SVC64)
+	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) != ESR_EC_SVC64)
 	{
-		uart_puts("ARM64_EL0_SVC_OK\n");
+		pl011_puts("ARM64_EL0_SYNC_OTHER\n");
+		leave = 1;
 	}
 	else
 	{
-		uart_puts("ARM64_EL0_SYNC_OTHER\n");
+		if (!g_el0_svc_tagged)
+		{
+			g_el0_svc_tagged = 1;
+			pl011_puts("ARM64_EL0_SVC_OK\n");
+		}
+
+		/* frame: x0@0 … x8@8 (pairs of uint64_t). */
+		ret = arm64_syscall_early(frame[8], frame[0], frame[1], frame[2],
+					  frame[3], frame[4], frame[5], &leave);
+		frame[0] = (uint64_t)ret;
 	}
 
-	/* Always return to EL1 continuation (avoid EL0 fault storms). */
-	__asm__ volatile("msr elr_el1, %0" :: "r"(elr) : "memory");
-	__asm__ volatile("msr spsr_el1, %0" :: "r"(spsr) : "memory");
-	__asm__ volatile("isb" ::: "memory");
+	if (leave)
+	{
+		uint64_t elr = (uint64_t)(uintptr_t)arm64_after_el0;
+		uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL1H;
+
+		__asm__ volatile("msr elr_el1, %0" :: "r"(elr) : "memory");
+		__asm__ volatile("msr spsr_el1, %0" :: "r"(spsr) : "memory");
+		__asm__ volatile("isb" ::: "memory");
+	}
 }
 
 void arm64_after_el0(void)
 {
-	uart_puts("ARM64_EL0_RET_OK\n");
+	pl011_puts("ARM64_EL0_RET_OK\n");
 	arm64_psci_system_off();
 }
 
@@ -154,7 +182,7 @@ void arm64_enter_el0(void)
 	uint64_t elr = (uint64_t)(uintptr_t)el0_entry;
 	uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL0T;
 
-	uart_puts("ARM64_EL0_DROP\n");
+	pl011_puts("ARM64_EL0_DROP\n");
 
 	__asm__ volatile(
 		"msr	sp_el0, %0\n"

@@ -15,6 +15,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/console.h>
 #include <ir0/paging.h>
+#include <ir0/arch_port.h>
 #include <ir0/console_backend.h>
 #include <ir0/ash_smoke.h>
 #include <d1_12_read_diag.h>
@@ -245,23 +246,12 @@ static void tty_wake_stage_user_read(process_t *proc)
 
 static inline uint64_t tty_irq_save(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
-	uint64_t flags;
-
-	__asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) :: "memory");
-	return flags;
-#else
-	return 0;
-#endif
+	return (uint64_t)arch_irq_save();
 }
 
 static inline void tty_irq_restore(uint64_t flags)
 {
-#if defined(__x86_64__) || defined(__i386__)
-	__asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
-#else
-	(void)flags;
-#endif
+	arch_irq_restore((unsigned long)flags);
 }
 
 static int tty_waiter_count(void)

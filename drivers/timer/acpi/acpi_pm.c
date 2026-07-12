@@ -20,6 +20,7 @@
 #include <ir0/acpi_pm.h>
 #include <ir0/serial_io.h>
 #include <ir0/paging.h>
+#include <ir0/arch_port.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -144,7 +145,7 @@ static int acpi_map_phys_window(uint64_t phys, size_t need)
 	if (phys + (uint64_t)need > ACPI_MAP_PHYS_CAP)
 		return -1;
 
-	__asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
+	cr3 = (uint64_t)arch_mm_current_root();
 	pml4 = (uint64_t *)(uintptr_t)(cr3 & ~0xFFFULL);
 	if (!pml4)
 		return -1;

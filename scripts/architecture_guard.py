@@ -17,6 +17,8 @@ Checks:
 11) kernel/: no #include <arch/common/arch_portable.h> (use ir0/arch_port.h).
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
 13) debug_bins/: no #include "test/... except debug_bins/cmd_ktest.c (IR0_KERNEL_TESTS).
+14) Portable trees must not embed x86 IRQ/MM asm (pushfq / %%cr0-4 / invlpg);
+    use arch_irq_* / arch_mm_* / arch_tlb_* facades. Allowlist: includes/ir0/oops.c.
 """
 
 from pathlib import Path
@@ -62,6 +64,13 @@ REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "sources" / "mmu_early.c",
     ROOT / "arch" / "arm64" / "sources" / "exc_early.c",
     ROOT / "arch" / "arm64" / "sources" / "slice_hello.c",
+    ROOT / "arch" / "arm64" / "sources" / "pl011.c",
+    ROOT / "arch" / "arm64" / "sources" / "serial_io_arm64.c",
+    ROOT / "arch" / "arm64" / "sources" / "mm_ops.c",
+    ROOT / "arch" / "arm64" / "sources" / "gic_v2.c",
+    ROOT / "arch" / "arm64" / "sources" / "syscall_early.c",
+    ROOT / "arch" / "arm64" / "sources" / "timer.c",
+    ROOT / "arch" / "arm64" / "sources" / "portable_string.c",
     ROOT / "arch" / "arm64" / "sources" / "vectors.S",
     ROOT / "arch" / "arm64" / "sources" / "arch_early.c",
     ROOT / "arch" / "arm64" / "sources" / "interrupts.c",
@@ -546,6 +555,67 @@ def check_kernel_no_relative_includes():
     return errors
 
 
+# Portable C must not embed x86 IRQ/MM asm — facades only (Pack B / F8b).
+PORTABLE_ISA_ASM_RE = re.compile(
+    r"(?:__asm__|asm)\s*(?:volatile)?\s*\([^;]*(?:pushfq|%%cr[034]|invlpg)",
+    re.IGNORECASE,
+)
+PORTABLE_ISA_TREES = (
+    ROOT / "kernel",
+    ROOT / "net",
+    ROOT / "includes" / "ir0",
+    ROOT / "mm",
+    ROOT / "sched",
+    ROOT / "drivers",
+)
+PORTABLE_ISA_ALLOWLIST = {
+    ROOT / "includes" / "ir0" / "oops.c",
+}
+
+
+def _line_is_comment_only(line: str) -> bool:
+    s = line.strip()
+    return (
+        not s
+        or s.startswith("//")
+        or s.startswith("/*")
+        or s.startswith("*")
+        or s.startswith("#")
+    )
+
+
+def check_portable_no_isa_asm():
+    """Fail if portable trees still use pushfq / %%cr3 / invlpg in real asm."""
+    errors = []
+    for base in PORTABLE_ISA_TREES:
+        if not base.is_dir():
+            continue
+        for fpath in iter_c_files(base):
+            if fpath in PORTABLE_ISA_ALLOWLIST:
+                continue
+            # Skip arch-local paths if ever nested under these trees.
+            try:
+                rel = fpath.relative_to(ROOT)
+            except ValueError:
+                continue
+            if "arch/" in str(rel).replace("\\", "/"):
+                continue
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, 1):
+                if _line_is_comment_only(line):
+                    continue
+                if PORTABLE_ISA_ASM_RE.search(line):
+                    errors.append(
+                        f"[portable-no-isa-asm] {rel}:{idx}: use arch_irq_* / "
+                        f"arch_mm_* / arch_tlb_* (no pushfq/%%cr0-4/invlpg): {line.strip()}"
+                    )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -567,6 +637,7 @@ def main():
     errors.extend(check_ktm_no_fase_serial())
     errors.extend(check_ktm_angle_includes())
     errors.extend(check_kernel_no_relative_includes())
+    errors.extend(check_portable_no_isa_asm())
 
     if errors:
         print("[arch-guard] FAILED")

@@ -72,12 +72,12 @@ void enable_paging(void);
 void setup_and_enable_paging(void);
 
 /**
- * Load page directory into CR3
+ * Load page directory root via arch_mm_activate (ISA-neutral).
  */
 void load_page_directory(uint64_t pml4_addr);
 
 /**
- * Get current page directory address from CR3
+ * Get current page directory root via arch_mm_current_root.
  */
 uint64_t get_current_page_directory(void);
 

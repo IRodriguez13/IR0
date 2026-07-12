@@ -609,8 +609,7 @@ void page_fault_handler_x64(uint64_t *stack)
 		/* Last reference: just re-enable write, clear COW. */
 		if (pmm_frame_refcount(old_phys) <= 1) {
 			*pte = (entry | PAGE_RW) & ~PAGE_COW;
-			__asm__ volatile("invlpg (%0)" ::"r"(vaddr_aligned)
-					 : "memory");
+			arch_tlb_invalidate_page((uintptr_t)vaddr_aligned);
 			return;
 		}
 
@@ -635,7 +634,7 @@ void page_fault_handler_x64(uint64_t *stack)
 		}
 
 		pmm_frame_put(old_phys);
-		__asm__ volatile("invlpg (%0)" ::"r"(vaddr_aligned) : "memory");
+		arch_tlb_invalidate_page((uintptr_t)vaddr_aligned);
 		return;
 	}
 
