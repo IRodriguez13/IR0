@@ -262,6 +262,7 @@ smoke-userspace-fork-mem: build-init-fork-mem-smoke kernel-x64-userspace.iso
 	fi
 
 smoke-userspace-fase41-reclaim: build-init-fase41-reclaim build-fase41-true kernel-x64-userspace.iso
+	@echo "  WARN    DEPRECATED: prefer 'make ktm-run' + 'make ktm-userdev-fork-storm-run' (see Documentation/KTM_FASE_INVENTORY.md)"
 	@if [ ! -f disk.img ]; then \
 		echo "  DISK    Creating disk.img..."; \
 		$(MAKE) create-disk; \
@@ -328,6 +329,7 @@ smoke-exec-storm: build-init-fase42-exec-storm build-fase41-true kernel-x64-user
 	fi
 
 smoke-fork-exit-storm: build-init-fase42-fork-exit-storm kernel-x64-userspace.iso
+	@echo "  WARN    DEPRECATED: prefer 'make ktm-userdev-fork-storm-run' (see Documentation/KTM_FASE_INVENTORY.md)"
 	@if [ ! -f disk.img ]; then \
 		echo "  DISK    Creating disk.img..."; \
 		$(MAKE) create-disk; \
@@ -413,6 +415,7 @@ smoke-fase43-exec-loop: build-init-fase43-exec-loop build-fase41-true kernel-x64
 	fi
 
 smoke-fase44-fork-wait-drain: build-init-fase44-fork-wait-drain kernel-x64-userspace.iso
+	@echo "  WARN    DEPRECATED: prefer 'make ktm-userdev-fork-storm-run' (256 drain + KTM asserts; see KTM_FASE_INVENTORY.md)"
 	@if [ ! -f disk.img ]; then \
 		echo "  DISK    Creating disk.img..."; \
 		$(MAKE) create-disk; \

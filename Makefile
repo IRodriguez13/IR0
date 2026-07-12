@@ -1949,7 +1949,8 @@ build-fase58l-busybox-smoke:
 		exit 1; \
 	fi
 	@echo "  INIT    Building FASE58L BusyBox smoke ($(FASE58L_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(FASE58L_SMOKE_BIN) $(FASE58L_SMOKE_SRC)
+	@$(MUSL_CC) -static -Os -Iincludes -Iuserspace/libktm \
+		-o $(FASE58L_SMOKE_BIN) $(FASE58L_SMOKE_SRC) userspace/libktm/libktm_user.c
 	@file $(FASE58L_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-fase58l-busybox-smoke OK"
 
@@ -3690,7 +3691,8 @@ release-0.0.1: kernel-text-budget smoke-release-0.0.1
 
 ktm: ktm-check
 
-.PHONY: ktm-run ktm-userdev-run ktm-userdev-cow-run build-ktm-fork-wait-case build-ktm-cow-touch-case
+.PHONY: ktm-run ktm-userdev-run ktm-userdev-cow-run ktm-userdev-fork-storm-run \
+	build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case
 ktm-run: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_runner.py --scenario $(or $(SCENARIO),process.lifecycle) \
@@ -3700,6 +3702,8 @@ KTM_FORK_WAIT_SRC = userspace/libktm/ktm_fork_wait_case.c userspace/libktm/libkt
 KTM_FORK_WAIT_BIN = userspace/libktm/ktm_fork_wait_case
 KTM_COW_TOUCH_SRC = userspace/libktm/ktm_cow_touch_case.c userspace/libktm/libktm_user.c
 KTM_COW_TOUCH_BIN = userspace/libktm/ktm_cow_touch_case
+KTM_FORK_STORM_SRC = userspace/libktm/ktm_fork_storm_case.c userspace/libktm/libktm_user.c
+KTM_FORK_STORM_BIN = userspace/libktm/ktm_fork_storm_case
 
 build-ktm-fork-wait-case:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -3723,6 +3727,17 @@ build-ktm-cow-touch-case:
 	@file $(KTM_COW_TOUCH_BIN) | grep -q ELF
 	@echo "✓ build-ktm-cow-touch-case OK"
 
+build-ktm-fork-storm-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building fork_exit_storm depth ($(KTM_FORK_STORM_BIN))"
+	@$(MUSL_CC) -static -Os -Iincludes -Iuserspace/libktm \
+		-o $(KTM_FORK_STORM_BIN) $(KTM_FORK_STORM_SRC)
+	@file $(KTM_FORK_STORM_BIN) | grep -q ELF
+	@echo "✓ build-ktm-fork-storm-case OK"
+
 ktm-userdev-run: build-ktm-fork-wait-case kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py --log /tmp/ktm-userdev-run.log --timeout 90
@@ -3735,6 +3750,31 @@ ktm-userdev-cow-run: build-ktm-cow-touch-case kernel-x64-userspace.iso
 		--done KTM_USERDEV_COW_OK \
 		--require 'TEST_END|cow_touch|PASS' \
 		--require KTM_USERDEV_COW_OK
+
+ktm-userdev-fork-storm-run: build-ktm-fork-storm-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_FORK_STORM_BIN) \
+		--log /tmp/ktm-userdev-fork-storm.log --timeout 240 \
+		--done KTM_USERDEV_FORK_STORM_OK \
+		--require 'TEST_END|fork_exit_storm|PASS' \
+		--require KTM_USERDEV_FORK_STORM_OK
+	@echo "✓ ktm-userdev-fork-storm-run (FASE42/44 depth ≥ legacy storms)"
+
+# Same storm + virtio-9p: guest writes /mnt/host/ktm_fork_storm.txt visible on host.
+.PHONY: ktm-userdev-fork-storm-virtfs-run
+ktm-userdev-fork-storm-virtfs-run: build-ktm-fork-storm-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_FORK_STORM_BIN) \
+		--log /tmp/ktm-userdev-fork-storm-virtfs.log --timeout 240 \
+		--done KTM_USERDEV_FORK_STORM_OK \
+		--require 'TEST_END|fork_exit_storm|PASS' \
+		--require KTM_USERDEV_FORK_STORM_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_fork_storm.txt \
+		--host-grep KTM_USERDEV_FORK_STORM_OK
+	@echo "✓ ktm-userdev-fork-storm-virtfs-run (storm + virtio-9p host artifact)"
 
 ktm-check: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run

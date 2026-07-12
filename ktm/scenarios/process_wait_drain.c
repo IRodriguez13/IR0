@@ -13,7 +13,7 @@
 #include <ir0/process.h>
 #include <string.h>
 
-#define WAIT_DRAIN_N 8
+#define WAIT_DRAIN_N 64
 
 extern process_t *process_list;
 extern void process_reap_zombie_child(process_t *child);
