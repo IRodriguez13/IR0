@@ -48,7 +48,10 @@ The following areas are implemented and used in regular builds; maturity varies 
 | **Permissions**       | UID/GID syscalls and simple `access`; not a full Linux credential model                     |
 
 
-ARM64 exists as **Makefile/Kconfig scaffold only** (`kernel-arm64.bin` links arch stubs, not the full kernel).
+ARM64 is **early CPU bring-up only**, not an OS port: QEMU `virt` freestanding image
+(`make smoke-arm64`) proves UART + identity MMU + VBAR/SVC + EL0 drop + PSCI off.
+`kernel-arm64.bin` still links **arch stubs only** — no full `ALL_OBJS`, no musl/BusyBox,
+no sched/VFS/drivers parity with x86-64. See [`Documentation/BACKLOG_REMAINING.md`](Documentation/BACKLOG_REMAINING.md).
 
 ## Design Philosophy
 
@@ -153,7 +156,7 @@ This list is intentional scope documentation, not a backlog promise:
 - **Permissions / capabilities** — No real capability set; `sudo_auth` is IR0-specific.
 - **Userspace maturity** — BusyBox shell is bring-up quality; libc coverage depends on implemented syscalls.
 - **Bluetooth** — HCI/UART experimental; not a stable desktop feature.
-- **ARM64** — Scaffold only.
+- **ARM64** — Early bring-up on QEMU virt (`smoke-arm64`); **not** a finished port (no full kernel link / musl).
 - **C++/Rust drivers** — Example drivers disabled in default config.
 
 See also [Documentation/UNIX_DIFFERENCES.md](Documentation/UNIX_DIFFERENCES.md) for ABI and semantic gaps.

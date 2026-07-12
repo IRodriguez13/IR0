@@ -165,14 +165,14 @@ pattern); treat explicit `n` as the compile-out signal.
 
 | Aspect | x86-64 | ARM64 |
 |--------|--------|-------|
-| **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64.bin` links **only `$(ARCH_OBJS)`** (scaffold). |
-| **Boot** | Multiboot path in `arch/x86-64/asm/boot_x64.asm` into kernel bring-up. | `arch/arm64/sources/boot_stub.c` provides `_start`; minimal stub behavior. |
+| **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64.bin` links **only `$(ARCH_OBJS)`** (stubs + early bring-up). |
+| **Boot** | Multiboot → full kernel bring-up. | Freestanding `boot_stub` + `mmu_early` + VBAR/EL0 (`make smoke-arm64`). |
+| **Userspace** | musl / BusyBox / TCC / Doom on x86. | **None** in the ARM image (EL0 SVC smoke only). |
+| **Maturity** | Production ISA for 0.0.1. | **≪10% of a real port** — CPU privilege path only. |
 
-So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 today is an
-architecture **scaffold**, not parity with the x86 kernel link. Stabilizing ARM for real
-bring-up implies growing `ALL_OBJS` (or equivalent) for `ARCH=arm64`, syscall/mm/fs
-integration, and board-specific drivers (USB stacks would eventually plug in here).
-
+So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 F7.1–F7.3 closed
+**early EL1/EL0 bring-up** on QEMU virt; they did **not** deliver OS parity. A real port still
+needs `ALL_OBJS` (or equivalent) for `ARCH=arm64`, fault/syscall/mm/fs/sched, and a rootfs.
 ## Known upward coupling (not via `includes/ir0/` alone)
 
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep
@@ -200,9 +200,9 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
 1. **`kernel/` and `net/`:** reduce remaining direct `arch_portable` surface where a narrower façade
    helps testing (optional split of “CPU info” vs “I/O port” APIs).
 2. **Facades that include drivers:** optionally split **API-only** headers from `.c`.
-3. **ARM64:** `kernel-arm64.bin` still links **only** `$(ARCH_OBJS)`; full parity with the x86 image
-   requires linking portable `$(ALL_OBJS)` once MMU/syscall/fault paths are complete—no change to
-   this document until that wiring lands.
+3. **ARM64:** freestanding bring-up exists (`smoke-arm64`); `kernel-arm64.bin` still links
+   **only** `$(ARCH_OBJS)`. Full parity with the x86 image remains future work — no change
+   claiming “port done” until that wiring + musl smoke land.
 
 ## Testing and menuconfig ergonomics
 
