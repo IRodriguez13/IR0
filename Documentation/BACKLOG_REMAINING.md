@@ -48,7 +48,7 @@
 | KTM userdev | `ktm-userdev-run`, `ktm-userdev-cow-run` |
 | Kernel `[FASE` serial retired | arch-guard `ktm-no-fase` |
 | PERF-1 `sys_gettid` | no per-call GETTID spam |
-| FASE→KTM Open residual | 41 reclaim MVP + COW A–F verified; 52/55 = HOST only |
+| FASE→KTM Open residual | 41/42/44 depth → `ktm-userdev-fork-storm-run` SUB; 52/55/58 HOST+KTM; exec/init-exit 44 HOST |
 
 ## Open
 

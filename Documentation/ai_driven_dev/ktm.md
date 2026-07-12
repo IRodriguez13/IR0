@@ -45,16 +45,23 @@ Makefile puts `-Iktm/include` **before** `-Iincludes/ir0` so `<ktm.h>` is not sh
 ## Gates
 
 ```bash
-make -s ktm-run              # boot suite: lifecycle, pipe, cow_fork, exec, fork_rollback
+make -s ktm-run              # boot suite: lifecycle, pipe, cow_fork, exec, fork_rollback, …
 make -s ktm-userdev-run      # fork_wait_signal via /dev/ktm
+make -s ktm-userdev-fork-storm-run  # real fork depth (≥ wait_drain/reclaim boot)
+make -s ktm-userdev-fork-storm-virtfs-run  # same + virtio-9p artifact on host
+make -s smoke-hostshare-9p   # virtio-9p MVP (/mnt/host)
 make -s arch-guard           # forbids [FASE in kernel trees
 ```
 
+**Virtio for testing:** QEMU `-virtfs` / virtio-9p mounts a host directory at guest `/mnt/host`.
+KTM cases may write result files there (`ktm_fork_storm.txt`); the host runner checks the file
+without scraping serial alone. Not virtiofs/FUSE.
 **`mm.cow_fork` scenario:** process/frame bookkeeping after fork (bounded frame growth).
 Deep COW data-plane (FASE40 A–F) remains `make smoke-mm-cow-lazy` — see
 [`mandocs/en/mm.md`](../mandocs/en/mm.md).
 
-FASE oleada → KTM coverage: **[`KTM_FASE_PARITY.md`](../KTM_FASE_PARITY.md)**.
+FASE oleada → KTM coverage: **[`KTM_FASE_PARITY.md`](../KTM_FASE_PARITY.md)**;
+target inventory: **[`KTM_FASE_INVENTORY.md`](../KTM_FASE_INVENTORY.md)**.
 
 ---
 

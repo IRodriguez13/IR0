@@ -10,6 +10,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "libktm_user.h"
+
 static void write_str(const char *s)
 {
 	size_t n = 0;
@@ -180,6 +182,7 @@ static int expect_stdout_has(const char *step, char *const argv[],
 
 int main(void)
 {
+	int kfd = -1;
 	char *argv_echo[] = { "/bin/busybox", "echo", "hi", NULL };
 	char *argv_pwd[] = { "/bin/busybox", "pwd", NULL };
 	char *argv_ls[] = { "/bin/busybox", "ls", "/", NULL };
@@ -191,6 +194,10 @@ int main(void)
 
 	write_str("FASE58L_HARNESS_ID=fase58l_busybox_smoke.c\n");
 	write_str("FASE58L_START\n");
+
+	kfd = ktm_open();
+	if (kfd >= 0)
+		(void)ktm_case_begin(kfd, "busybox_coreutils");
 
 	if (expect_stdout_has("echo", argv_echo, "hi", "FASE58L_ECHO_OK") != 0)
 		goto fail;
@@ -216,12 +223,28 @@ int main(void)
 	if (expect_ok_tag("ps", argv_ps, "FASE58L_PS_OK") != 0)
 		write_str("FASE58L_PS_SKIP\n");
 
+	if (kfd >= 0)
+	{
+		(void)ktm_checkpoint(kfd, "applets_ok");
+		(void)ktm_assert_true(kfd, "coreutils_pass", 1);
+		(void)ktm_case_end(kfd, "busybox_coreutils", 0);
+		ktm_close(kfd);
+		write_str("KTM_BUSYBOX_COREUTILS_OK\n");
+	}
+	else
+		write_str("KTM_BUSYBOX_COREUTILS_SKIP\n");
+
 	write_str("FASE58L_OK\n");
 	for (;;)
 		pause();
 	return 0;
 
 fail:
+	if (kfd >= 0)
+	{
+		(void)ktm_case_end(kfd, "busybox_coreutils", 1);
+		ktm_close(kfd);
+	}
 	write_str("FASE58L_FAIL\n");
 	for (;;)
 		pause();
