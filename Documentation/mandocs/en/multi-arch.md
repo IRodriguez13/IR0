@@ -13,8 +13,9 @@
 
 IR0 separates portable kernel code from architecture backends under `arch/`.
 **x86-64** is the production target (ISO, musl userspace, full syscall path).
-**arm64** has linker scripts, early init, identity-map MMU (F7.1), and scaffold
-sources but syscall entry and context switch are **stubs** — not boot-to-userspace ready.
+**arm64** has linker scripts, early identity-map MMU (F7.1), VBAR/SVC EL1
+(F7.2), and scaffold sources but context switch / EL0 are **stubs** — not
+boot-to-userspace ready.
 
 ## 2. Internal architecture
 
@@ -23,7 +24,7 @@ sources but syscall entry and context switch are **stubs** — not boot-to-users
 | Portable facade | `includes/ir0/arch_port.h` | CPU queries, IRQ enable, port I/O facade |
 | Common interface | `arch/common/arch_interface.c` | Cross-arch dispatch |
 | x86-64 | `arch/x86-64/` | boot, IDT, PIC, user mode, syscalls |
-| arm64 | `arch/arm64/sources/` | boot_stub, mmu_early (F7.1), interrupts scaffold |
+| arm64 | `arch/arm64/sources/` | boot_stub, mmu_early, vectors/exc_early (F7.2), scaffold |
 | Context switch | `sched/switch/switch_x64.asm`, `switch_arm64.c` | per-ISA |
 | Config | `setup/Kconfig`, `ARCH=` in Makefile | object selection |
 
@@ -52,8 +53,9 @@ sources but syscall entry and context switch are **stubs** — not boot-to-users
 **arm64 (current):**
 
 ```text
-  _start → ARM64_BOOT_OK → arm64_mmu_early_enable → ARM64_MMU_OK → WFI
-  syscall_entry_arm64 → returns -1 (stub)
+  _start → ARM64_BOOT_OK → MMU → ARM64_MMU_OK
+        → VBAR install → svc #0 → ARM64_VBAR_OK → eret → ARM64_SVC_RET_OK → WFI
+  syscall_entry_arm64 → returns -1 (stub; full dispatch not wired)
   switch_arm64.c → empty stub
 ```
 
@@ -122,12 +124,12 @@ Porting checklist:
 - `make build-matrix-min` — builds arch variants per matrix.
 - `make arch-guard` — facade violations before merge.
 - `arch_get_name()` / `/proc/cpuinfo` for runtime ISA string.
-- arm64 boot: `make smoke-arm64-boot` / `make smoke-arm64-mmu` (QEMU virt; UART tags).
+- arm64 boot: `make smoke-arm64-boot` / `smoke-arm64-mmu` / `smoke-arm64-vbar` (QEMU virt).
 - arm64 scaffold link: `make ARCH=arm64 kernel-arm64.bin` (no full userspace ISO path).
 
 ## 10. Future roadmap
 
-- F7.2+: arm64 VBAR/SVC + context switch + userspace boot (beyond identity MMU).
+- F7.3+: arm64 EL0 drop + context switch + userspace boot.
 - Remove x86-only `#ifdef` clusters in keyboard/console for true portability.
 - UEFI boot on x86 — GRUB Multiboot only today.
 - RISC-V / x86-32 — **not in tree** (`arch/README.md` may be stale).

@@ -15,6 +15,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "mmu_early.h"
+#include "exc_early.h"
 
 #include <stdint.h>
 
@@ -55,8 +56,20 @@ void boot_main(void)
 	else
 	{
 		uart_puts("ARM64_MMU_FAIL\n");
+		goto idle;
 	}
 
+	if (arm64_vbar_early_install() == 0)
+	{
+		arm64_exc_trigger_svc();
+		uart_puts("ARM64_SVC_RET_OK\n");
+	}
+	else
+	{
+		uart_puts("ARM64_VBAR_FAIL\n");
+	}
+
+idle:
 	for (;;)
 	{
 		__asm__ volatile("wfi" ::: "memory");
