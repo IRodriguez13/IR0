@@ -41,6 +41,7 @@
 | ARM64 VBAR + EL1 SVC (F7.2) | `smoke-arm64-vbar` → `ARM64_VBAR_OK` + `ARM64_SVC_RET_OK` |
 | ARM64 EL0 drop + SVC + PSCI off (F7.3) | `smoke-arm64-el0` / `make smoke-arm64` |
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
+| Host-share virtio-9p (QEMU `-virtfs`) | `smoke-hostshare-9p` (`HOSTSHARE_9P_OK` / `KTM_HOSTSHARE_OK`) |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
 | ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` |
 | KTM boot suite | `make ktm-run` (pass=16 incl. `process.reclaim_exit`) |
@@ -155,6 +156,7 @@ ALL_OBJS/musl **BLOCKED**. No master merge this wave.
 
 | # | Item | Next proof |
 |---|------|------------|
+| F0 | ~~Host-share virtio-9p~~ | **DONE** 2026-07-12 — `smoke-hostshare-9p` (guest `/mnt/host` → host dir; **not** virtiofs/FUSE) |
 | F1 | ~~ACPI FADT map seguro~~ | **DONE** 2026-07-11 — `ACPI_FADT_MAPPED` + `ACPI_PM1A_POWEROFF` |
 | F2 | ~~AHCI NCQ~~ | **DONE** 2026-07-11 — `AHCI_NCQ_OK` / `AHCI_NCQ_UNSUPPORTED` |
 | F3 | ~~AML `_S5` SLP_TYP~~ | **DONE** 2026-07-11 — `ACPI_S5_OK` + typed PM1a |
@@ -163,11 +165,11 @@ ALL_OBJS/musl **BLOCKED**. No master merge this wave.
 | F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
 | F7 | ARM64 early bring-up (F7.1–F7.3) | **DONE** `make smoke-arm64` — **not** full port |
 | F7b | ARM64 real port | F7c–F7g + Pack B–E; KERNEL_OBJS link + musl aarch64 **BLOCKED** |
-| F8 | TCP Internet / real NIC | beyond loopback |
-| F9 | SMP / CFS | sched oleada |
+| F8 | TCP Internet / real NIC (**0.0.2**) | beyond loopback; rtl8139 path + DHCP/route smoke |
+| F9 | SMP / CFS | **much later** — not coupled to UI/X11 |
 | F10 | Rust/C++ driver ABI | DRV-* |
-| F11 | T3 WM | **userspace only** |
-| F12 | TCC/Doom “stable” | STABLE.md — merge master solo con bundle verde |
+| F11 | T3 WM / X11 userspace | **userspace only**, after usable net + T2; not with SMP |
+| F12 | TCC/Doom “stable” | STABLE.md — merge master solo con bundle verde (Doom=**55d IWAD**) |
 
 ## T3 prep checklist (no WM in kernel)
 

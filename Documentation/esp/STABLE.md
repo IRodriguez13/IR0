@@ -18,16 +18,19 @@ kernel aún hacía full-copy. El share-on-fork real + break en write fault está
 ## Merge → `master` — gates de producto (mantenedor)
 
 **Política (2026-07-12):** antes de mergear `dev` → `master`, lo que **no puede romper** es
-**TinyCC in-guest** (compilar y correr), **Doom T2** (stub mínimo) y **userspace amplio**
-(`smoke-posix-depth` o `smoke-tier1`). CTR solo no basta.
+**TinyCC in-guest** (compilar y correr), **Doom T2 con IWAD real** (doomgeneric carga WAD + frames)
+y **userspace amplio** (`smoke-posix-depth` o `smoke-tier1`). CTR solo no basta.
 
 ```bash
 make smoke-tcc-power-halt
-make IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub
+make IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric   # REAL_WAD_PATH por defecto en Makefile
 make smoke-posix-depth
 ```
 
-Si TCC, Doom o el smoke userspace están en rojo → **no merge a `master`**.
+IWAD local por defecto: `/home/ivanr013/Escritorio/universal-doom/DOOM1.WAD`.
+El stub `smoke-fase55b-doom-stub` es ayuda rápida, **no** bloquea merge.
+
+Si TCC, Doom+WAD o el smoke userspace están en rojo → **no merge a `master`**.
 
 ---
 
@@ -42,9 +45,22 @@ Si TCC, Doom o el smoke userspace están en rojo → **no merge a `master`**.
 | **COW fork** | **Estable** | `make smoke-mm-cow-lazy` |
 | **Lazy alloc** | **Estable** | mismo smoke |
 | **Slice POSIX T1** | **Estable** | manifests tier1/musl; smokes cred/pthread/setuid |
-| **Gráficos T2 / Doom** | **Crítico p/ merge** | `IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub` — bloquea `master` |
+| **Gráficos T2 / Doom** | **Crítico p/ merge** | `IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric` (IWAD) — bloquea `master` |
 | **Userspace amplio** | **Crítico p/ merge** | `smoke-posix-depth` o `smoke-tier1` |
+| **Red local** | **Estable p/ prueba** | AF_UNIX + TCP loopback — `smoke-stream-sock` |
+| **Host-share 9p** | **Ayuda de desarrollo** | `smoke-hostshare-9p` (no es virtiofs) |
 | **Escritorio T3** | **Fuera de alcance** | WM fuera del árbol kernel |
+
+### Matriz 0.0.1 vs 0.0.2
+
+| Tema | **0.0.1** | **0.0.2** | Más tarde |
+|------|-----------|-----------|-----------|
+| Gate D1.20 | `release-0.0.1` | mantener verde | — |
+| Producto | TCC + Doom+**IWAD** + posix | mismos blockers | — |
+| Red | AF_UNIX + TCP loopback | F8 Internet/NIC | — |
+| Host share | virtio-**9p** MVP | profundizar opcional | virtiofs+FUSE |
+| X11 / WM | fuera | userspace post-red+T2 | T3 no in-kernel |
+| CFS / SMP | fuera | fuera | mucho más tarde |
 
 ---
 
@@ -76,12 +92,19 @@ Ver tabla completa en [`../HARDENING.md`](../HARDENING.md). Resumen: split sysca
 
 ### Red
 
-- UDP POSIX mínimo — **estable**; TCP stream — **no 0.0.1**
+- UDP POSIX mínimo — **estable**
+- AF_UNIX + TCP **loopback** — **en 0.0.1** (`smoke-stream-sock`)
+- TCP Internet / NIC real — **0.0.2** (F8)
+
+### Host-share (ayuda de desarrollo)
+
+- virtio-9p (`-virtfs`) → `/mnt/host` — `make smoke-hostshare-9p`
+- No confundir con virtiofs/FUSE (aún no)
 
 ### Storage
 
 - ATA, MINIX root, lectura `/dev/hda` — **estable**
-- FAT16 RO + write audit, EXT2 RO, GPT, AHCI(+NCQ) — **estable para prueba**; NVMe — Future F6
+- FAT16 RO + write audit, EXT2 RO, GPT, AHCI(+NCQ) — **estable para prueba**; NVMe — Closed F6
 
 ---
 
@@ -95,6 +118,7 @@ Ver tabla completa en [`../HARDENING.md`](../HARDENING.md). Resumen: split sysca
 | T1 | COW + lazy | `make smoke-mm-cow-lazy` | — |
 | T2 | fb0 / input | smokes legacy FASE54¹ | `run-fase58c-fbdev-gui`, Doom GUI |
 | Dev | KTM + host | `make ktm-check`, `tests/host` | — |
+| Dev | Host-share 9p | `make smoke-hostshare-9p` | — |
 
 ¹ `IR0_LEGACY_SMOKE=1` para smokes históricos FASE54/55.
 
@@ -128,9 +152,7 @@ Ver [`../SETUP.md`](../../SETUP.md) y [`fase58e-ash-interactive-console.md`](fas
 
 ## No estable / stub / Future
 
-NIC Internet, X11/Wayland, WM, SMP, módulos kernel, NVMe, kexec_load real, S3 resume completo — ver [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) y [`../ROADMAP.md`](../ROADMAP.md).
-
-AF_UNIX + TCP loopback ya tienen smoke (`smoke-stream-sock`); PTY winsz / setsid / SIGHUP en hangup están en Closed del backlog.
+TCP Internet (F8 / **0.0.2**), X11/Wayland, WM, SMP/CFS, módulos kernel — ver [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md). Host-share **9p** ya tiene smoke; virtiofs+FUSE sigue Future.
 
 ---
 

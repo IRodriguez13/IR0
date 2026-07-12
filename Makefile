@@ -542,6 +542,7 @@ DRIVER_OBJS = \
 	drivers/video/console_renderer.o \
 	drivers/video/typewriter.o \
 	drivers/init_drv.o \
+	drivers/virtio/virtio_9p.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
 
 # COM1 16550 only on x86; ARM64 uses arch/arm64/sources/serial_io_arm64.c (PL011).
@@ -577,7 +578,8 @@ FS_OBJS = \
     fs/heartfs.o \
     fs/procfs.o \
     fs/devfs.o \
-    fs/sysfs.o
+    fs/sysfs.o \
+    fs/hostshare_9p.o
 
 ifneq ($(CONFIG_ENABLE_FS_MINIX),n)
 FS_OBJS += fs/minix_fs.o
@@ -2774,11 +2776,50 @@ smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-port
 	@echo "✓ smoke-arm64 (boot+mmu+slice+port+gic+syscall+vbar+el0) passed"
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
+.PHONY: smoke-hostshare-9p build-init-hostshare-9p-smoke
 # (arm64 full kernel-arm64.bin remains available via ARCH=arm64)
 build-init-stream-sock-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_stream_sock_smoke.c
 	@echo "✓ build-init-stream-sock-smoke OK"
+
+build-init-hostshare-9p-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_hostshare_9p_smoke.c
+	@echo "✓ build-init-hostshare-9p-smoke OK"
+
+HOSTSHARE_9P_SMOKE_LOG = /tmp/hostshare-9p-smoke.log
+smoke-hostshare-9p: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   virtio-9p host share (QEMU -virtfs → /mnt/host)..."
+	@$(MAKE) -s build-init-hostshare-9p-smoke
+	@SHARE=$$(mktemp -d /tmp/ir0-hostshare.XXXXXX); \
+	DISK=$$(mktemp /tmp/ir0-hostshare.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(HOSTSHARE_9P_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(HOSTSHARE_9P_SMOKE_LOG) --timeout 60 \
+		--done 'HOSTSHARE_9P_OK' --done 'KTM_HOSTSHARE_OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-fsdev local,id=ir0fs,path=$$SHARE,security_model=none \
+		-device virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "HOSTSHARE_9P_READY" $(HOSTSHARE_9P_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_9P_OK" $(HOSTSHARE_9P_SMOKE_LOG) && \
+	   grep -q "KTM_HOSTSHARE_OK" $(HOSTSHARE_9P_SMOKE_LOG) && \
+	   test -f $$SHARE/ktm_hostshare.txt && \
+	   grep -q "KTM_HOSTSHARE_OK" $$SHARE/ktm_hostshare.txt; then \
+		echo "✓ smoke-hostshare-9p passed (guest write visible on host)"; \
+		rm -rf $$SHARE; \
+	else \
+		echo "✗ smoke-hostshare-9p FAILED"; \
+		echo "--- share ---"; ls -la $$SHARE 2>/dev/null; \
+		grep -E 'HOSTSHARE_|KTM_|panic|MOUNT' $(HOSTSHARE_9P_SMOKE_LOG) | tail -50; \
+		rm -rf $$SHARE; \
+		exit 1; \
+	fi
 
 STREAM_SOCK_SMOKE_LOG = /tmp/stream-sock-smoke.log
 smoke-stream-sock: kernel-x64-userspace.iso
