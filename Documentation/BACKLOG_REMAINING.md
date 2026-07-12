@@ -37,6 +37,7 @@
 | musl pthread libc | `smoke-musl-pthread-libc` |
 | TLS facade (`arch_set_tls`) | `arch_portable.h`; W10b PTE deferred |
 | ARM64 boot stub + `kernel-arm64.bin` link | `smoke-arm64-boot`; `make ARCH=arm64 kernel-arm64.bin` |
+| ARM64 early MMU identity map (F7.1) | `smoke-arm64-mmu` → `ARM64_MMU_OK` (TTBR0 idmap DRAM+UART) |
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
 | ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` |
@@ -60,7 +61,7 @@ _(vacío — solo Future abajo)_
 | F4 | ~~kexec mínimo~~ | **DONE** 2026-07-11 — stub + `kexec_load` MVP (`smoke-kexec-load`) |
 | F5 | ~~Suspend / S3~~ | **DONE** 2026-07-11 — `_S3_` + soft resume (`smoke-reboot-s3`; FACS wake deferred) |
 | F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
-| F7 | ARM64 MM / userspace | beyond freestanding `kernel-arm64.bin` |
+| F7 | ARM64 MM / userspace | **F7.1 done** (`smoke-arm64-mmu`); F7.2+ = VBAR/SVC/EL0 |
 | F8 | TCP Internet / real NIC | beyond loopback |
 | F9 | SMP / CFS | sched oleada |
 | F10 | Rust/C++ driver ABI | DRV-* |
