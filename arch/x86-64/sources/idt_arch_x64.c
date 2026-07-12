@@ -11,7 +11,8 @@
  * Description: IR0 kernel source/header file
  */
 
-#include <arch/common/idt.h> 
+#include <arch/common/idt.h>
+#include <arch/common/arch_portable.h>
 
 extern idt_entry_t idt[256];
 
@@ -27,9 +28,7 @@ void idt_arch_set_gate_64(int n, uintptr_t handler, uint8_t flags)
     idt[n].zero = 0;                                         // Reservado
 }
 
-// Función de paginación para 64-bit (cuando la implementes)
 void paging_set_cpu_64(uint64_t page_directory)
 {
-    // Para 64-bit: usar PML4 en lugar de page directory
-    asm volatile("mov %0, %%cr3" ::"r"(page_directory));
+    arch_mm_activate((uintptr_t)page_directory);
 }

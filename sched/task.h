@@ -153,6 +153,21 @@ _Static_assert(offsetof(task_t, ss) == 0x9A, "switch_x64.asm SS offset");
 #define task_is_blocked(t) ((t)->state == TASK_BLOCKED)
 #define task_is_terminated(t) ((t)->state == TASK_TERMINATED)
 
+/*
+ * ISA-neutral accessors for the page-table root (x86 CR3 / ARM TTBR0).
+ * The struct field remains `cr3` at +0xB0 for switch_x64.asm ABI.
+ */
+static inline uint64_t task_mm_root(const task_t *t)
+{
+	return t ? t->cr3 : 0;
+}
+
+static inline void task_set_mm_root(task_t *t, uint64_t root)
+{
+	if (t)
+		t->cr3 = root;
+}
+
 task_t *create_task(void (*entry)(void *), void *arg, uint8_t priority, int8_t nice);
 void destroy_task(task_t *task);
 void task_get_info(task_t *task);

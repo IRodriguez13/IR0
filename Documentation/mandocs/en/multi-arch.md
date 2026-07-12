@@ -13,8 +13,9 @@
 
 IR0 separates portable kernel code from architecture backends under `arch/`.
 **x86-64** is the production target (ISO, musl userspace, full syscall path).
-**arm64** has linker scripts, early init, and scaffold sources but syscall entry
-and context switch are **stubs** — not boot-to-userspace ready.
+**arm64** has early identity-map MMU (F7.1), VBAR/SVC EL1 (F7.2), EL0 drop +
+lower-EL SVC + PSCI SYSTEM_OFF (F7.3). Context switch / full kernel link /
+musl userspace remain **out of the freestanding boot image**.
 
 ## 2. Internal architecture
 
@@ -23,7 +24,7 @@ and context switch are **stubs** — not boot-to-userspace ready.
 | Portable facade | `includes/ir0/arch_port.h` | CPU queries, IRQ enable, port I/O facade |
 | Common interface | `arch/common/arch_interface.c` | Cross-arch dispatch |
 | x86-64 | `arch/x86-64/` | boot, IDT, PIC, user mode, syscalls |
-| arm64 | `arch/arm64/sources/` | boot_stub, interrupts scaffold |
+| arm64 | `arch/arm64/sources/` | boot_stub, mmu_early, vectors/exc_early (F7.2), scaffold |
 | Context switch | `sched/switch/switch_x64.asm`, `switch_arm64.c` | per-ISA |
 | Config | `setup/Kconfig`, `ARCH=` in Makefile | object selection |
 
@@ -52,8 +53,9 @@ and context switch are **stubs** — not boot-to-userspace ready.
 **arm64 (current):**
 
 ```text
-  syscall_entry_arm64 → returns -1 (stub)
-  switch_arm64.c → empty stub
+  _start → BOOT_OK → MMU_OK → VBAR → EL1 svc → SVC_RET_OK
+        → EL0_DROP → EL0 svc → EL0_SVC_OK → EL0_RET_OK → PSCI_OFF
+  switch_arm64.c → empty stub (full sched not in boot image)
 ```
 
 ## 4. Responsibilities
@@ -121,11 +123,16 @@ Porting checklist:
 - `make build-matrix-min` — builds arch variants per matrix.
 - `make arch-guard` — facade violations before merge.
 - `arch_get_name()` / `/proc/cpuinfo` for runtime ISA string.
-- arm64 build: `make ARCH=arm64 kernel-arm64.bin` (no full userspace ISO path).
+- arm64 boot: `make smoke-arm64` (…+syscall+… on QEMU virt, `gic-version=2`).
+- arm64 F7b pack: `make smoke-arm64-port` / `smoke-arm64-gic`.
+- arm64 F7c: `make smoke-arm64-syscall` (`ARM64_EL0_PAGE_OK` + `ARM64_SYSCALL_OK`).
+- arm64 portable compile: `make arm64-portable-compile` (curated objs — **not** `ALL_OBJS`).
+- arm64 scaffold link: `make ARCH=arm64 kernel-arm64.bin` (no full userspace ISO path).
 
 ## 10. Future roadmap
 
-- Complete arm64 syscall + context switch + userspace boot.
+- Next large pack: ARM PTE/process TTBR or GIC behind `arch_register_irq` — keep
+  portable C free of ISA macros. **ALL_OBJS/musl BLOCKED** at walker + interrupt objs.
 - Remove x86-only `#ifdef` clusters in keyboard/console for true portability.
 - UEFI boot on x86 — GRUB Multiboot only today.
 - RISC-V / x86-32 — **not in tree** (`arch/README.md` may be stale).

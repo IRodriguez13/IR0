@@ -267,6 +267,17 @@ static inline const process_t *task_to_process_const(const task_t *task)
 	return (const process_t *)((const char *)task - offsetof(process_t, task));
 }
 
+static inline uint64_t process_mm_root(const process_t *p)
+{
+	return p ? task_mm_root(&p->task) : 0;
+}
+
+static inline void process_set_mm_root(process_t *p, uint64_t root)
+{
+	if (p)
+		task_set_mm_root(&p->task, root);
+}
+
 /* PUBLIC MACROS - Register accessors                                        */
 
 #define process_rax(p)    ((p)->task.rax)

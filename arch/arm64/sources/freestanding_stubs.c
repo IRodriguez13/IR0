@@ -8,17 +8,23 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <arch/common/arch_portable.h>
+
 #include <stddef.h>
 #include <stdint.h>
 
 void arch_disable_interrupts(void)
 {
-	__asm__ volatile("msr daifset, #0xf" ::: "memory");
+	(void)arch_irq_save();
 }
 
 void arch_enable_interrupts(void)
 {
-	__asm__ volatile("msr daifclr, #0xf" ::: "memory");
+	unsigned long daif;
+
+	__asm__ volatile("mrs %0, daif" : "=r"(daif));
+	daif &= ~(1UL << 7);
+	__asm__ volatile("msr daif, %0" :: "r"(daif) : "memory");
 }
 
 void cpu_wait(void)

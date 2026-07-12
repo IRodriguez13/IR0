@@ -41,12 +41,11 @@ pseudo-VFS (`devfs`, `procfs`, `sysfs`).
 ## Estado multi-arquitectura
 
 - **x86-64:** `kernel-x64.bin` enlaza **`$(ALL_OBJS)`**: kernel completo (Multiboot, etc.).
-- **ARM64:** `kernel-arm64.bin` enlaza **solo `$(ARCH_OBJS)`**: andamiaje (`boot_stub`, stubs);
-  no equivale al kernel completo enlazado en x86-64.
+- **ARM64:** bring-up temprano en QEMU virt (`make smoke-arm64`: MMU + VBAR + EL0 + PSCI).
+  `kernel-arm64.bin` sigue enlazando **solo `$(ARCH_OBJS)`** — **no** es un port terminado
+  (sin musl/BusyBox/sched/VFS parity). Orden de magnitud: privilegio CPU, no OS.
 
-Objetivos futuros (USB, ARM estable, arranque en x86 y ARM) requieren ampliar el cierre de
-objetos en ARM64, integración de syscalls/mm/fs y nuevos backends detrás de facelas y Kconfig.
-
+Objetivos de port real: `ALL_OBJS` en ARM64, fault/syscall/mm/fs/sched, rootfs.
 ## Fugas conocidas de acoplamiento
 
 Listado cualitativo actualizado en `Documentation/DECOUPLING.md`: `kernel/main.c` (política de

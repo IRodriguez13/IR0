@@ -49,7 +49,7 @@ void ktm_ctx_snapshot(const process_t *p, const char *reason)
 	serial_print(" cs=");
 	serial_print_hex64((uint64_t)p->task.cs);
 	serial_print(" cr3=");
-	serial_print_hex64(p->task.cr3);
+	serial_print_hex64(process_mm_root(p));
 	serial_print("\n");
 }
 
