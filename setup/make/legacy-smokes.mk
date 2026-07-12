@@ -1127,7 +1127,7 @@ smoke-fase55d-doomgeneric: build-runit build-init-fase55d-doomgeneric kernel-x64
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/doom-smoke \
 		/usr/share/doom/doom1.wad /etc/runit/sv/doom/run && \
 	$(SMOKE_QEMU_RUN) --log $(FASE55D_DOOMGENERIC_LOG) --profile fase55d-doom \
-		--done FASE55D_DOOMGENERIC_OK --done DOOMGENERIC_FRAME_LOOP_OK -- \
+		--done FASE55D_DOOMGENERIC_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \

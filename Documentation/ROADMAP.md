@@ -238,8 +238,10 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 
 | # | Item | Notes |
 |---|------|-------|
-| 17b | **Full ash + required applets in rootfs** | Manifest (mount, ls, cat, su, …) — **BUSY-*** |
-| 17c | **Applet smoke** | Proof as rootfs subset grows |
+| 17b | **Full ash + required applets in rootfs** | Manifest (mount, ls, cat, su, …) — **BUSY-1**; **blocks 0.0.1 ship** |
+| 17c | **Applet smoke** | **BUSY-2** — proof as rootfs subset grows; **blocks 0.0.1 ship** |
+
+Tag `v0.0.1-rc2` does **not** close BUSY-*; ship needs maintainer VM + BUSY-1/2.
 
 ### P3 — network + desktop (after P1-storage stable)
 

@@ -14,6 +14,15 @@ full-copied user pages. Real share-on-fork + write-fault break landed in `62cc51
 `make smoke-mm-cow-lazy`. KTM is the canonical in-kernel test plane (`make ktm-run`,
 `make ktm-userdev-run`); see [`ai_driven_dev/ktm.md`](ai_driven_dev/ktm.md).
 
+### Tag prep vs release ship (2026-07-12)
+
+| Artifact | Meaning |
+|----------|---------|
+| **`v0.0.1-rc2`** | Pre-release **tag prep**: critical automated gates green (TCC, Doom+IWAD, posix, hostshare, arch-guard). **Not** a shipped release. |
+| **Release 0.0.1 ship** | Maintainer only: **manual QEMU/VM** walkthrough “listo” **and** BusyBox product applets path (**BUSY-1** manifest + **BUSY-2** smoke) green. |
+
+Do **not** treat `v0.0.1-rc2` (or earlier `rc1`/`pre.1`) as “0.0.1 done”. Final git tag `v0.0.1` waits on ship criteria above.
+
 ---
 
 ## Merge → `master` — critical product gates (maintainer)
@@ -98,7 +107,7 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 |------|--------|---------------|
 | **Hardening H1–H6** | **Closed** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Stable** | `make smoke-runit-boot` |
-| **BusyBox ash + applets** | **Stable** | `make smoke-tier1`, `make smoke-runit-ash-interactive`; optional `smoke-fase58l-busybox-coreutils` |
+| **BusyBox ash + applets** | **Partial** | Minimal/subset OK via `smoke-tier1` / ash; **ship blocker:** product **manifest** (BUSY-1) + applet smoke (BUSY-2) — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md). Optional probe: `smoke-fase58l-busybox-coreutils` |
 | **TinyCC in-guest** | **Merge-critical** | `smoke-fase52-tcc` / `smoke-tcc-power-halt` — **blocker for `master`** |
 | **COW fork** | **Stable** | `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
@@ -158,7 +167,8 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 |------|-------|-------|
 | runit PID1 | `setup/pid1/`, `load-userspace-runit` | `smoke-runit-boot` |
 | BusyBox minimal | `setup/busybox/fase58_busybox.config`, `build-busybox-fase50-min` | `smoke-tier1` |
-| BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional smoke |
+| BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional smoke — **not** ship gate |
+| BusyBox product manifest | **Open BUSY-1 / BUSY-2** | Required applets in rootfs + smoke — **blocks 0.0.1 ship** |
 | Interactive ash on FB console | `includes/ir0/console.c`, TTY echo | [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.md) |
 | musl static toolchain | `MUSL_CC`, `kernel-x64-userspace.iso` | tier1 smokes |
 | TinyCC | `setup/tcc/build-fase52.sh` | `build-tcc-fase52` |

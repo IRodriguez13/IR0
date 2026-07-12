@@ -52,7 +52,13 @@
 
 ## Open
 
-_(vacío — solo Future abajo)_
+| Item | Blocks | Next proof |
+|------|--------|------------|
+| **BUSY-1** product applet manifest | **0.0.1 ship** | Versioned list (e.g. `setup/busybox/required_applets.txt`) + rootfs install (`load-userspace-runit` / tier1 disk) — not “every upstream BusyBox applet” |
+| **BUSY-2** applet smoke | **0.0.1 ship** | Harness ∩ manifest → `BUSYBOX_MANIFEST_OK` (extend/replace `smoke-fase58l-busybox-coreutils`) |
+| Maintainer manual VM | **0.0.1 ship** | Interactive QEMU GTK / serial checklist after BUSY-* |
+
+Tag `v0.0.1-rc2` = automated critical gates only; does **not** close Open above.
 
 ## ARM64 — honest status (2026-07-12)
 
@@ -170,6 +176,7 @@ ALL_OBJS/musl **BLOCKED**. No master merge this wave.
 | F10 | Rust/C++ driver ABI | DRV-* |
 | F11 | T3 WM / X11 userspace | **userspace only**, after usable net + T2; not with SMP |
 | F12 | TCC/Doom “stable” | STABLE.md — merge master solo con bundle verde (Doom=**55d IWAD**) |
+| F13 | BusyBox product applets (**BUSY-1/2**) | **Ship blocker 0.0.1** — Open table above; ROADMAP P2-T1 |
 
 ## T3 prep checklist (no WM in kernel)
 
