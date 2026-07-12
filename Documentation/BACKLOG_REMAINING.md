@@ -76,6 +76,10 @@ Proof: make smoke-arm64
 **Rough maturity:** early CPU privilege bring-up (**not** “ARM port ~done”). Treat F7 as
 closed for that slice; track real port as **F7b** above.
 
+**F7b.1 (2026-07-12):** curated `ARM64_SLICE_OBJS` (`slice_hello`) linked post-MMU →
+`ARM64_SLICE_OK`; `make arm64-slice-compile` also probes `includes/string.c` (compile-only,
+not linked — still pulls oops headers). Not `ALL_OBJS`.
+
 ---
 
 | # | Item | Next proof |
@@ -87,7 +91,7 @@ closed for that slice; track real port as **F7b** above.
 | F5 | ~~Suspend / S3~~ | **DONE** 2026-07-11 — `_S3_` + soft resume (`smoke-reboot-s3`; FACS wake deferred) |
 | F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
 | F7 | ARM64 early bring-up (F7.1–F7.3) | **DONE** `make smoke-arm64` — **not** full port |
-| F7b | ARM64 real port | `ALL_OBJS` link + fault/syscall + musl smoke (multi-oleada) |
+| F7b | ARM64 real port | **F7b.1 done** (`arm64-slice-compile` + `smoke-arm64-slice`); next = PL011 facade / paging |
 | F8 | TCP Internet / real NIC | beyond loopback |
 | F9 | SMP / CFS | sched oleada |
 | F10 | Rust/C++ driver ABI | DRV-* |

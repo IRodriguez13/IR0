@@ -23,7 +23,7 @@ _(vacío)_
 7. ~~F7.1 ARM64 early MM~~ **hecho** — `smoke-arm64-mmu`  
 8. ~~F7.2 ARM64 VBAR/SVC~~ **hecho** — `smoke-arm64-vbar`  
 9. ~~F7.3 ARM64 EL0 + PSCI~~ **hecho** — `smoke-arm64-el0` / `smoke-arm64`  
-10. F7b port ARM64 real (`ALL_OBJS` + musl) — ver inglés  
+10. F7b.1 slice compile+link ~~hecho~~ — `smoke-arm64-slice`; F7b.2+ PL011/paging — ver inglés  
 11. F8 … F12 — ver inglés
 
 ## ARM64 — estado honesto

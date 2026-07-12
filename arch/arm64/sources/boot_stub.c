@@ -16,6 +16,7 @@
 
 #include "mmu_early.h"
 #include "exc_early.h"
+#include "slice_hello.h"
 
 #include <stdint.h>
 
@@ -52,6 +53,7 @@ void boot_main(void)
 	if (arm64_mmu_early_enable() == 0)
 	{
 		uart_puts("ARM64_MMU_OK\n");
+		arm64_slice_after_mmu();
 	}
 	else
 	{

@@ -950,6 +950,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/boot_stub.o \
     arch/arm64/sources/mmu_early.o \
     arch/arm64/sources/exc_early.o \
+    arch/arm64/sources/slice_hello.o \
     arch/arm64/sources/vectors.o \
     arch/arm64/sources/syscall_stub.o \
     arch/arm64/sources/platform.o \
@@ -2449,17 +2450,34 @@ smoke-robust-list: kernel-x64-userspace.iso
 		grep -E 'ROBUST_|panic' $(ROBUST_SMOKE_LOG) | tail -30; exit 1; \
 	fi
 
-# Minimal ARM64 boot+MMU+VBAR image (identity map — full ARCH_OBJS need freestanding libc).
+# Minimal ARM64 boot+MMU+VBAR+slice image (identity map — full ARCH_OBJS need freestanding libc).
 ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -Iarch/arm64/sources
 ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib
+# F7b.1 curated portable objs (not ALL_OBJS). Link path uses slice_hello only.
+ARM64_SLICE_OBJS = arch/arm64/sources/slice_hello.o
 .PHONY: kernel-arm64-boot.bin kernel-arm64-mmu.bin kernel-arm64-vbar.bin \
-	kernel-arm64-el0.bin \
-	smoke-arm64-boot smoke-arm64-mmu smoke-arm64-vbar smoke-arm64-el0
+	kernel-arm64-el0.bin kernel-arm64-slice.bin \
+	arm64-slice-compile \
+	smoke-arm64-boot smoke-arm64-mmu smoke-arm64-vbar smoke-arm64-el0 \
+	smoke-arm64-slice smoke-arm64
+arm64-slice-compile:
+	@echo "  CC      ARM64_SLICE_OBJS (F7b.1)"
+	@for f in $(ARM64_SLICE_OBJS); do \
+		src=$${f%.o}.c; \
+		echo "  CC      $$src"; \
+		aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c $$src -o $$f || exit 1; \
+	done
+	@echo "  CC      includes/string.c (compile-only probe, not linked)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -Iincludes -Iincludes/ir0 \
+		-c includes/string.c -o /tmp/ir0-string-arm64-probe.o
+	@echo "✓ arm64-slice-compile OK (slice_hello + string.c probe)"
+
 kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_early.c \
 		arch/arm64/sources/mmu_early.h arch/arm64/sources/exc_early.c \
-		arch/arm64/sources/exc_early.h arch/arm64/sources/vectors.S \
+		arch/arm64/sources/exc_early.h arch/arm64/sources/slice_hello.c \
+		arch/arm64/sources/slice_hello.h arch/arm64/sources/vectors.S \
 		arch/arm64/linker.ld
-	@echo "  CC      arch/arm64/sources/boot_stub.c (boot+mmu+vbar+el0)"
+	@echo "  CC      arch/arm64/sources/boot_stub.c (boot+mmu+vbar+el0+slice)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/boot_stub.c -o arch/arm64/sources/boot_stub.o
 	@echo "  CC      arch/arm64/sources/mmu_early.c"
@@ -2468,16 +2486,20 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  CC      arch/arm64/sources/exc_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/exc_early.c -o arch/arm64/sources/exc_early.o
+	@echo "  CC      arch/arm64/sources/slice_hello.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/slice_hello.c -o arch/arm64/sources/slice_hello.o
 	@echo "  AS      arch/arm64/sources/vectors.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/sources/vectors.S -o arch/arm64/sources/vectors.o
 	@echo "  LD      $@"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
 		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
-		arch/arm64/sources/exc_early.o arch/arm64/sources/vectors.o
+		arch/arm64/sources/exc_early.o arch/arm64/sources/slice_hello.o \
+		arch/arm64/sources/vectors.o
 	@echo "✓ $@"
 
-# Alias: same image; smoke looks for post-MMU / VBAR / EL0 tags.
+# Alias: same image; smoke looks for post-MMU / VBAR / EL0 / slice tags.
 kernel-arm64-mmu.bin: kernel-arm64-boot.bin
 	@cp -f kernel-arm64-boot.bin $@
 	@echo "✓ $@"
@@ -2487,6 +2509,10 @@ kernel-arm64-vbar.bin: kernel-arm64-boot.bin
 	@echo "✓ $@"
 
 kernel-arm64-el0.bin: kernel-arm64-boot.bin
+	@cp -f kernel-arm64-boot.bin $@
+	@echo "✓ $@"
+
+kernel-arm64-slice.bin: kernel-arm64-boot.bin
 	@cp -f kernel-arm64-boot.bin $@
 	@echo "✓ $@"
 
@@ -2553,9 +2579,24 @@ smoke-arm64-el0: kernel-arm64-el0.bin
 		tail -50 /tmp/arm64-el0-smoke.log; exit 1; \
 	fi
 
+smoke-arm64-slice: kernel-arm64-slice.bin arm64-slice-compile
+	@echo "  SMOKE   ARM64 QEMU virt F7b.1 portable slice..."
+	@rm -f /tmp/arm64-slice-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-slice-smoke.log --timeout 20 --stale-sec 8 \
+		--done ARM64_SLICE_OK -- \
+		qemu-system-aarch64 -M virt -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-slice.bin -nographic -serial mon:stdio \
+		-display none -no-reboot 2>/dev/null || true
+	@if grep -q "ARM64_SLICE_OK" /tmp/arm64-slice-smoke.log; then \
+		echo "✓ smoke-arm64-slice passed"; \
+	else \
+		echo "✗ smoke-arm64-slice FAILED"; \
+		tail -50 /tmp/arm64-slice-smoke.log; exit 1; \
+	fi
+
 .PHONY: smoke-arm64
-smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-vbar smoke-arm64-el0
-	@echo "✓ smoke-arm64 (boot+mmu+vbar+el0) passed"
+smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-vbar smoke-arm64-el0
+	@echo "✓ smoke-arm64 (boot+mmu+slice+vbar+el0) passed"
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
 # (arm64 full kernel-arm64.bin remains available via ARCH=arm64)
