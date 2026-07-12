@@ -948,6 +948,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/interrupts.o \
     arch/arm64/sources/timer.o \
     arch/arm64/sources/boot_stub.o \
+    arch/arm64/sources/mmu_early.o \
     arch/arm64/sources/syscall_stub.o \
     arch/arm64/sources/platform.o \
     arch/arm64/sources/freestanding_stubs.o \
@@ -2446,14 +2447,25 @@ smoke-robust-list: kernel-x64-userspace.iso
 		grep -E 'ROBUST_|panic' $(ROBUST_SMOKE_LOG) | tail -30; exit 1; \
 	fi
 
-# Minimal ARM64 boot image (UART stub only — full ARCH_OBJS need freestanding libc).
-.PHONY: kernel-arm64-boot.bin smoke-arm64-boot
-kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/linker.ld
-	@echo "  CC      arch/arm64/sources/boot_stub.c (boot-only)"
-	@aarch64-linux-gnu-gcc -ffreestanding -nostdlib -fno-builtin -O2 -c \
+# Minimal ARM64 boot+MMU image (identity map — full ARCH_OBJS need freestanding libc).
+ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -Iarch/arm64/sources
+.PHONY: kernel-arm64-boot.bin kernel-arm64-mmu.bin smoke-arm64-boot smoke-arm64-mmu
+kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_early.c \
+		arch/arm64/sources/mmu_early.h arch/arm64/linker.ld
+	@echo "  CC      arch/arm64/sources/boot_stub.c (boot+mmu)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/boot_stub.c -o arch/arm64/sources/boot_stub.o
+	@echo "  CC      arch/arm64/sources/mmu_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/mmu_early.c -o arch/arm64/sources/mmu_early.o
 	@echo "  LD      $@"
-	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ arch/arm64/sources/boot_stub.o
+	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
+		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o
+	@echo "✓ $@"
+
+# Alias: same image; smoke looks for post-MMU tag.
+kernel-arm64-mmu.bin: kernel-arm64-boot.bin
+	@cp -f kernel-arm64-boot.bin $@
 	@echo "✓ $@"
 
 smoke-arm64-boot: kernel-arm64-boot.bin
@@ -2469,6 +2481,21 @@ smoke-arm64-boot: kernel-arm64-boot.bin
 	else \
 		echo "✗ smoke-arm64-boot FAILED"; \
 		tail -30 /tmp/arm64-boot-smoke.log; exit 1; \
+	fi
+
+smoke-arm64-mmu: kernel-arm64-mmu.bin
+	@echo "  SMOKE   ARM64 QEMU virt early MMU tag..."
+	@rm -f /tmp/arm64-mmu-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-mmu-smoke.log --timeout 20 --stale-sec 8 \
+		--done ARM64_MMU_OK -- \
+		qemu-system-aarch64 -M virt -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-mmu.bin -nographic -serial mon:stdio \
+		-display none -no-reboot 2>/dev/null || true
+	@if grep -q "ARM64_MMU_OK" /tmp/arm64-mmu-smoke.log; then \
+		echo "✓ smoke-arm64-mmu passed"; \
+	else \
+		echo "✗ smoke-arm64-mmu FAILED"; \
+		tail -40 /tmp/arm64-mmu-smoke.log; exit 1; \
 	fi
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
