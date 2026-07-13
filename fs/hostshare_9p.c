@@ -34,8 +34,9 @@ static const char *rel_of(const char *path)
 
 static int hs_stat(const char *path, stat_t *buf)
 {
-	char tmp[256];
-	int n;
+	uint64_t size = 0;
+	uint32_t mode = 0;
+	int rc;
 	const char *rel = rel_of(path);
 
 	if (!buf)
@@ -48,12 +49,16 @@ static int hs_stat(const char *path, stat_t *buf)
 		buf->st_mode = S_IFDIR | 0755;
 		return 0;
 	}
-	n = virtio_9p_read_file(rel, tmp, sizeof(tmp));
-	if (n < 0)
-		return n;
+	rc = virtio_9p_stat_file(rel, &size, &mode);
+	if (rc < 0)
+		return rc;
 	memset(buf, 0, sizeof(*buf));
-	buf->st_mode = S_IFREG | 0644;
-	buf->st_size = (off_t)n;
+	/* Hostshare payloads are executables; keep write bit for result files. */
+	if (mode != 0)
+		buf->st_mode = (mode_t)mode;
+	else
+		buf->st_mode = S_IFREG | 0755;
+	buf->st_size = (off_t)size;
 	return 0;
 }
 
@@ -69,28 +74,19 @@ static int hs_create(const char *path, mode_t mode)
 static int hs_read(const char *path, void *buf, size_t count, size_t *bytes_read,
 		   off_t offset)
 {
-	char tmp[4096];
-	int n;
+	size_t got = 0;
+	int rc;
 	const char *rel = rel_of(path);
 
 	if (!rel || !rel[0])
 		return -EISDIR;
 	if (offset < 0)
 		return -EINVAL;
-	n = virtio_9p_read_file(rel, tmp, sizeof(tmp));
-	if (n < 0)
-		return n;
-	if (offset >= n)
-	{
-		if (bytes_read)
-			*bytes_read = 0;
-		return 0;
-	}
-	if ((size_t)(n - offset) < count)
-		count = (size_t)(n - offset);
-	memcpy(buf, tmp + offset, count);
+	rc = virtio_9p_read_at(rel, buf, count, (uint64_t)offset, &got);
+	if (rc < 0)
+		return rc;
 	if (bytes_read)
-		*bytes_read = count;
+		*bytes_read = got;
 	return 0;
 }
 

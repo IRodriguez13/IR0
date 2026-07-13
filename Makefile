@@ -2828,6 +2828,7 @@ smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-port
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
 .PHONY: smoke-hostshare-9p build-init-hostshare-9p-smoke
+.PHONY: smoke-hostshare-exec build-init-hostshare-exec
 # (arm64 full kernel-arm64.bin remains available via ARCH=arm64)
 build-init-stream-sock-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
@@ -2838,6 +2839,28 @@ build-init-hostshare-9p-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_hostshare_9p_smoke.c
 	@echo "✓ build-init-hostshare-9p-smoke OK"
+
+HOSTSHARE_EXEC_STUB = setup/pid1/init_hostshare_exec
+build-init-hostshare-exec:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@echo "  INIT    Building hostshare exec stub ($(HOSTSHARE_EXEC_STUB))"
+	@$(MUSL_CC) -static -Os -o $(HOSTSHARE_EXEC_STUB) setup/pid1/init_hostshare_exec.c
+	@file $(HOSTSHARE_EXEC_STUB) | grep -q ELF
+	@echo "✓ build-init-hostshare-exec OK"
+
+HOSTSHARE_EXEC_SMOKE_LOG = /tmp/hostshare-exec-smoke.log
+smoke-hostshare-exec: build-init-hostshare-exec build-ktm-fork-wait-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   hostshare exec (stub + /mnt/host/ir0_payload)..."
+	@python3 scripts/ktm_userdev_runner.py \
+		--stub $(HOSTSHARE_EXEC_STUB) \
+		--init $(KTM_FORK_WAIT_BIN) \
+		--log $(HOSTSHARE_EXEC_SMOKE_LOG) --timeout 120 \
+		--done KTM_USERDEV_OK \
+		--require HOSTSHARE_EXEC_MOUNT_OK \
+		--require 'TEST_END|fork_wait_signal|PASS' \
+		--require KTM_USERDEV_OK
+	@echo "✓ smoke-hostshare-exec passed (9p payload exec)"
 
 HOSTSHARE_9P_SMOKE_LOG = /tmp/hostshare-9p-smoke.log
 smoke-hostshare-9p: kernel-x64-userspace.iso
@@ -3791,6 +3814,13 @@ KTM_TCP_GUEST_BIN = $(KTM_USERDEV_DIR)/ktm_tcp_guest_case
 KTM_TCP_WIRE_SRC = $(KTM_USERDEV_DIR)/ktm_tcp_wire_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_TCP_WIRE_BIN = $(KTM_USERDEV_DIR)/ktm_tcp_wire_case
 
+# All userdev pilots run via hostshare stub + share payload (virtio-9p).
+build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
+	build-ktm-exec-drain-case build-ktm-reap-drain-case \
+	build-ktm-init-exit-drain-case build-ktm-posix-pseudofs-case \
+	build-ktm-input-det-case build-ktm-nic-reach-case \
+	build-ktm-tcp-guest-case build-ktm-tcp-wire-case: build-init-hostshare-exec
+
 build-ktm-fork-wait-case:
 	@if [ -z "$(MUSL_CC)" ]; then \
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
@@ -3824,11 +3854,11 @@ build-ktm-fork-storm-case:
 	@file $(KTM_FORK_STORM_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-storm-case OK"
 
-ktm-userdev-run: build-ktm-fork-wait-case kernel-x64-userspace.iso
+ktm-userdev-run: build-ktm-fork-wait-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py --log /tmp/ktm-userdev-run.log --timeout 90
 
-ktm-userdev-cow-run: build-ktm-cow-touch-case kernel-x64-userspace.iso
+ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_COW_TOUCH_BIN) \

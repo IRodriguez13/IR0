@@ -13,8 +13,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/mount.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -72,32 +70,10 @@ static int exec_drain_batch(int n, int *started, int *fork_fail, int *exec_fail,
 
 static void try_hostshare_report(int ok)
 {
-	const char *payload;
-	int fd;
-	ssize_t n;
-
-	(void)mkdir("/mnt", 0755);
-	(void)mkdir("/mnt/host", 0755);
-	if (mount("ir0share", "/mnt/host", "9p", 0, NULL) != 0)
-	{
-		say("KTM_HOSTSHARE_SKIP\n");
-		return;
-	}
-	say("KTM_HOSTSHARE_MOUNT_OK\n");
-	payload = ok ? "KTM_USERDEV_EXEC_DRAIN_OK\n" : "KTM_USERDEV_EXEC_DRAIN_FAIL\n";
-	fd = open("/mnt/host/ktm_exec_drain.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	if (fd < 0)
-	{
-		say("KTM_HOSTSHARE_WRITE_SKIP\n");
-		return;
-	}
-	n = write(fd, payload, strlen(payload));
-	(void)close(fd);
-	if (n == (ssize_t)strlen(payload))
-		say("KTM_HOSTSHARE_REPORT_OK\n");
-	else
-		say("KTM_HOSTSHARE_WRITE_SKIP\n");
+	const char *payload = ok ? "KTM_USERDEV_EXEC_DRAIN_OK\n" : "KTM_USERDEV_EXEC_DRAIN_FAIL\n";
+	(void)ktm_hostshare_report("ktm_exec_drain.txt", payload);
 }
+
 
 int main(void)
 {

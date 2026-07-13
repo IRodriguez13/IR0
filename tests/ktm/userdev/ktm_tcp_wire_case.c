@@ -15,9 +15,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/mount.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include "libktm_user.h"
@@ -62,32 +60,10 @@ static int test_tcp_wire(void)
 
 static void try_hostshare_report(int ok)
 {
-	const char *payload;
-	int fd;
-	ssize_t n;
-
-	(void)mkdir("/mnt", 0755);
-	(void)mkdir("/mnt/host", 0755);
-	if (mount("ir0share", "/mnt/host", "9p", 0, NULL) != 0)
-	{
-		say("KTM_HOSTSHARE_SKIP\n");
-		return;
-	}
-	say("KTM_HOSTSHARE_MOUNT_OK\n");
-	payload = ok ? "F8_TCP_WIRE_OK\n" : "F8_TCP_WIRE_FAIL\n";
-	fd = open("/mnt/host/ktm_tcp_wire.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	if (fd < 0)
-	{
-		say("KTM_HOSTSHARE_WRITE_SKIP\n");
-		return;
-	}
-	n = write(fd, payload, strlen(payload));
-	(void)close(fd);
-	if (n == (ssize_t)strlen(payload))
-		say("KTM_HOSTSHARE_REPORT_OK\n");
-	else
-		say("KTM_HOSTSHARE_WRITE_SKIP\n");
+	const char *payload = ok ? "F8_TCP_WIRE_OK\n" : "F8_TCP_WIRE_FAIL\n";
+	(void)ktm_hostshare_report("ktm_tcp_wire.txt", payload);
 }
+
 
 int main(void)
 {

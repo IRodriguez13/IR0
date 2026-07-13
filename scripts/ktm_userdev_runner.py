@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Host runner for KTM /dev/ktm userspace pilots (optional virtio-9p host share)."""
+"""Host runner for KTM /dev/ktm userspace pilots via virtio-9p payload exec."""
 
 from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,13 +14,26 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_STUB = ROOT / "setup/pid1/init_hostshare_exec"
+PAYLOAD_NAME = "ir0_payload"
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Run IR0 KTM userdev pilot via QEMU")
+    ap = argparse.ArgumentParser(
+        description="Run IR0 KTM userdev pilot: stub on disk + payload on virtio-9p"
+    )
     ap.add_argument("--log", default="/tmp/ktm-userdev-run.log")
     ap.add_argument("--timeout", type=int, default=90)
-    ap.add_argument("--init", default=str(ROOT / "tests/ktm/userdev/ktm_fork_wait_case"))
+    ap.add_argument(
+        "--init",
+        default=str(ROOT / "tests/ktm/userdev/ktm_fork_wait_case"),
+        help="Userspace payload ELF (placed on share as ir0_payload)",
+    )
+    ap.add_argument(
+        "--stub",
+        default=str(DEFAULT_STUB),
+        help="MINIX /sbin/init stub that mounts 9p and execve payload",
+    )
     ap.add_argument("--done", default="KTM_USERDEV_OK")
     ap.add_argument(
         "--require",
@@ -30,12 +44,12 @@ def main() -> int:
     ap.add_argument(
         "--share",
         default="",
-        help="Host directory for QEMU virtio-9p (mount_tag=ir0share). Empty = no virtfs.",
+        help="Host directory for QEMU virtio-9p (mount_tag=ir0share).",
     )
     ap.add_argument(
         "--host-file",
         default="",
-        help="Relative path under --share that must exist after the smoke (e.g. ktm_fork_storm.txt)",
+        help="Relative path under share that must exist after the smoke",
     )
     ap.add_argument(
         "--host-grep",
@@ -47,13 +61,18 @@ def main() -> int:
         action="append",
         default=[],
         metavar="SRC:DEST",
-        help="Inject host file SRC into disk as DEST (e.g. setup/pid1/f41true:bin/f41true)",
+        help="Extra inject into MINIX disk (not the payload)",
     )
     ap.add_argument(
         "--qemu-arg",
         action="append",
         default=[],
-        help="Extra QEMU argument after -drive (repeatable; e.g. --qemu-arg -netdev --qemu-arg user,id=net0)",
+        help="Extra QEMU argument after -drive (repeatable)",
+    )
+    ap.add_argument(
+        "--legacy-disk-init",
+        action="store_true",
+        help="Inject --init as /sbin/init (old path; no share payload)",
     )
     args = ap.parse_args()
     require = list(args.require)
@@ -65,9 +84,14 @@ def main() -> int:
         print(f"✗ missing {iso}; build kernel-x64-userspace.iso first", file=sys.stderr)
         return 2
 
-    init_bin = Path(args.init)
-    if not init_bin.is_file():
-        print(f"✗ missing init {init_bin}; build first", file=sys.stderr)
+    payload_bin = Path(args.init)
+    if not payload_bin.is_file():
+        print(f"✗ missing payload {payload_bin}; build first", file=sys.stderr)
+        return 2
+
+    stub_bin = Path(args.stub)
+    if not args.legacy_disk_init and not stub_bin.is_file():
+        print(f"✗ missing stub {stub_bin}; make build-init-hostshare-exec", file=sys.stderr)
         return 2
 
     injects: list[tuple[Path, str]] = []
@@ -98,9 +122,13 @@ def main() -> int:
     if args.share:
         share_dir = Path(args.share)
         share_dir.mkdir(parents=True, exist_ok=True)
-    elif args.host_file:
+    else:
         share_dir = Path(tempfile.mkdtemp(prefix="ir0-ktm-share-"))
         own_share = True
+
+    if not args.legacy_disk_init:
+        shutil.copy2(payload_bin, share_dir / PAYLOAD_NAME)
+        os.chmod(share_dir / PAYLOAD_NAME, 0o755)
 
     log = Path(args.log)
     if log.exists():
@@ -109,8 +137,9 @@ def main() -> int:
     disk = Path(tempfile.mktemp(prefix="ir0-ktm-userdev-", suffix=".img"))
     try:
         subprocess.check_call(["cp", "-f", str(base), str(disk)], cwd=str(ROOT))
+        disk_init = payload_bin if args.legacy_disk_init else stub_bin
         subprocess.check_call(
-            ["python3", "scripts/inject_init_minix.py", str(disk), str(init_bin), "sbin/init"],
+            ["python3", "scripts/inject_init_minix.py", str(disk), str(disk_init), "sbin/init"],
             cwd=str(ROOT),
         )
         for src, dest in injects:
@@ -135,14 +164,11 @@ def main() -> int:
             str(iso),
             "-drive",
             f"file={disk},format=raw,if=ide,index=0",
+            "-fsdev",
+            f"local,id=ir0fs,path={share_dir},security_model=none",
+            "-device",
+            "virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on",
         ]
-        if share_dir is not None:
-            cmd += [
-                "-fsdev",
-                f"local,id=ir0fs,path={share_dir},security_model=none",
-                "-device",
-                "virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on",
-            ]
         if args.qemu_arg:
             cmd += list(args.qemu_arg)
         has_netdev = any("netdev" in a for a in (args.qemu_arg or []))
@@ -157,7 +183,8 @@ def main() -> int:
         ]
         if not has_netdev:
             cmd += ["-net", "none"]
-        print(f"  KTM-USERDEV-RUN log={log}" + (f" share={share_dir}" if share_dir else ""))
+        mode = "legacy-disk-init" if args.legacy_disk_init else f"share-payload={PAYLOAD_NAME}"
+        print(f"  KTM-USERDEV-RUN log={log} share={share_dir} ({mode})")
         rc = subprocess.call(cmd, cwd=str(ROOT))
     finally:
         if disk.exists():
@@ -169,7 +196,7 @@ def main() -> int:
     if args.done not in flat:
         print(f"✗ {args.done} missing", file=sys.stderr)
         for line in text.splitlines():
-            if "KTM|" in line or "KTM_" in line:
+            if "KTM|" in line or "KTM_" in line or "HOSTSHARE_" in line:
                 print(line)
         if own_share and share_dir and share_dir.exists():
             subprocess.call(["rm", "-rf", str(share_dir)])

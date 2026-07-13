@@ -42,6 +42,7 @@
 | ARM64 EL0 drop + SVC + PSCI off (F7.3) | `smoke-arm64-el0` / `make smoke-arm64` |
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | Host-share virtio-9p (QEMU `-virtfs`) | `smoke-hostshare-9p` (`HOSTSHARE_9P_OK` / `KTM_HOSTSHARE_OK`) |
+| Host-share exec (stub + `ir0_payload`) | `smoke-hostshare-exec` (`HOSTSHARE_EXEC_MOUNT_OK` + case done tag) |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
 | ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` |
 | KTM boot suite | `make ktm-run` (pass=16 incl. `process.reclaim_exit`) |
@@ -65,6 +66,15 @@
 | **F8-3** minimal wire TCP | `net/tcp.c` SYN/SYN-ACK/ACK + PSH; `sock_stream` wire path; `make smoke-tcp-wire` → `F8_TCP_WIRE_OK` + host listener `WIRETCP` |
 
 Slice: connect+one-shot send to QEMU gateway **10.0.2.2:8888** (no retransmit/full stack). Not 0.0.1 ship gate.
+
+## Closed this wave (2026-07-12) — Host-share exec + F8 harden + FAT ship note
+
+| Item | Proof |
+|------|-------|
+| 9p ELF-sized I/O | `virtio_9p_stat_file` / chunked `virtio_9p_read_file`; `hs_stat`/`hs_read` |
+| Stub + KTM share-payload | `init_hostshare_exec`; runner default; `make smoke-hostshare-exec` |
+| F8 harden | NET RX `LOG_DEBUG`; FIN\|ACK + bounded poll; `smoke-nic-reach` / `smoke-tcp-guest` / `smoke-tcp-wire` green |
+| FAT + MINIX ship | MINIX = root; FAT16 = secondary (`smoke-fat16-mount`); **no** FAT-as-root |
 
 ## Closed this wave (2026-07-12) — BUSY-1/2
 

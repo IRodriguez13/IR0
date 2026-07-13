@@ -13,7 +13,15 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/mount.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
+static void ktm_say(const char *s)
+{
+	if (s)
+		(void)write(1, s, strlen(s));
+}
 
 int ktm_open(void)
 {
@@ -132,4 +140,56 @@ int ktm_get_caps(int fd, ktm_user_caps_t *out)
 int ktm_reset(int fd)
 {
 	return ioctl(fd, KTM_IOC_RESET, 0);
+}
+
+int ktm_hostshare_report(const char *relpath, const char *payload)
+{
+	char path[160];
+	int fd;
+	ssize_t n;
+	size_t plen;
+	int mounted_here = 0;
+
+	if (!relpath || !payload || relpath[0] == '\0' || relpath[0] == '/')
+	{
+		ktm_say("KTM_HOSTSHARE_SKIP\n");
+		return -1;
+	}
+
+	(void)mkdir("/mnt", 0755);
+	(void)mkdir("/mnt/host", 0755);
+
+	if (mount("ir0share", "/mnt/host", "9p", 0, NULL) == 0)
+	{
+		mounted_here = 1;
+		ktm_say("KTM_HOSTSHARE_MOUNT_OK\n");
+	}
+	/* Else: stub may already have mounted /mnt/host — try write anyway. */
+
+	if (strlen(relpath) >= sizeof(path) - sizeof("/mnt/host/"))
+	{
+		ktm_say("KTM_HOSTSHARE_WRITE_SKIP\n");
+		return -1;
+	}
+	memcpy(path, "/mnt/host/", 10);
+	memcpy(path + 10, relpath, strlen(relpath) + 1);
+
+	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd < 0)
+	{
+		ktm_say("KTM_HOSTSHARE_SKIP\n");
+		return -1;
+	}
+	plen = strlen(payload);
+	n = write(fd, payload, plen);
+	(void)close(fd);
+	(void)mounted_here;
+
+	if (n == (ssize_t)plen)
+	{
+		ktm_say("KTM_HOSTSHARE_REPORT_OK\n");
+		return 0;
+	}
+	ktm_say("KTM_HOSTSHARE_WRITE_SKIP\n");
+	return -1;
 }

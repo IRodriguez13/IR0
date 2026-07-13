@@ -103,10 +103,12 @@ Ioctls: `KTM_IOC_RUN_SCENARIO`, `RUN_INVARIANTS`, `TAKE_SNAPSHOT`, `RESET`,
 `GET_CAPS`, `USER_EVENT` (ver `uapi.h`).
 
 Piloto nuevo: `tests/ktm/userdev/ktm_*_case.c` + target `build-ktm-*-case` /
-`ktm-userdev-*-run`. Runner: `scripts/ktm_userdev_runner.py` (soporta virtio-9p y
-`--qemu-arg` para NIC).
+`ktm-userdev-*-run`. Runner: `scripts/ktm_userdev_runner.py` — por defecto stub
+`init_hostshare_exec` en disco + payload `ir0_payload` en virtio-9p
+(`make smoke-hostshare-exec`); `--legacy-disk-init` para el path antiguo.
 
 ```bash
+make -s smoke-hostshare-exec
 make -s ktm-userdev-run
 make -s smoke-tcp-wire
 ```

@@ -55,6 +55,8 @@
 #define P9_RLOPEN   13
 #define P9_TLCREATE 14
 #define P9_RLCREATE 15
+#define P9_TGETATTR 24
+#define P9_RGETATTR 25
 #define P9_TVERSION 100
 #define P9_RVERSION 101
 #define P9_TATTACH  104
@@ -69,6 +71,11 @@
 #define P9_TCLUNK   120
 #define P9_RCLUNK   121
 
+/* 9P2000.L getattr masks (Linux include/net/9p/9p.h) */
+#define P9_STATS_MODE  0x00000001ULL
+#define P9_STATS_SIZE  0x00000200ULL
+#define P9_STATS_BASIC 0x000007ffULL
+
 /* 9P2000.L open flags (match Linux O_* / P9_DOTL_*) */
 #define P9_DOTL_RDONLY 0x00000000u
 #define P9_DOTL_WRONLY 0x00000001u
@@ -79,6 +86,7 @@
 #define V9P_QUEUE_MAX  128
 #define V9P_BUF_SIZE   8192
 #define V9P_MSIZE      8192
+#define V9P_READ_CHUNK 4096u
 
 struct vring_desc
 {
@@ -209,6 +217,13 @@ static uint32_t p9_get32(uint8_t **p)
 		     ((uint32_t)(*p)[2] << 16) | ((uint32_t)(*p)[3] << 24);
 	*p += 4;
 	return v;
+}
+
+static uint64_t p9_get64(uint8_t **p)
+{
+	uint64_t lo = p9_get32(p);
+	uint64_t hi = p9_get32(p);
+	return lo | (hi << 32);
 }
 
 static int v9p_exchange(uint32_t req_len, uint32_t *resp_len)
@@ -446,6 +461,54 @@ static int v9p_read(uint32_t fid, uint64_t offset, void *data, uint32_t count, u
 	return 0;
 }
 
+static int v9p_getattr(uint32_t fid, uint64_t request_mask, uint32_t *mode_out,
+		       uint64_t *size_out)
+{
+	uint8_t body[16];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
+	uint64_t valid;
+	uint32_t mode;
+	uint64_t size;
+	int rc;
+
+	/* Tgetattr: fid[4] request_mask[8] */
+	p9_put32(&p, fid);
+	p9_put64(&p, request_mask);
+	rc = v9p_rpc(P9_TGETATTR, body, (uint32_t)(p - body), P9_RGETATTR, &rb, &rblen);
+	if (rc < 0)
+		return rc;
+	/* Rgetattr: valid[8] qid[13] mode[4] uid[4] gid[4] nlink[8] rdev[8] size[8] … */
+	if (rblen < 8 + 13 + 4 + 4 + 4 + 8 + 8 + 8)
+		return -EIO;
+	valid = p9_get64(&rb);
+	rb += 13; /* skip qid */
+	mode = p9_get32(&rb);
+	rb += 4 + 4; /* uid gid */
+	rb += 8 + 8; /* nlink rdev */
+	size = p9_get64(&rb);
+	(void)valid;
+	if (mode_out)
+		*mode_out = mode;
+	if (size_out)
+		*size_out = size;
+	return 0;
+}
+
+static const char *v9p_flat_name(const char *relpath)
+{
+	const char *name = relpath;
+
+	if (!name)
+		return NULL;
+	while (*name == '/')
+		name++;
+	if (!name[0] || strchr(name, '/'))
+		return NULL;
+	return name;
+}
+
 static int find_virtio_9p(uint8_t *bus, uint8_t *slot)
 {
 	uint16_t b;
@@ -592,18 +655,45 @@ int virtio_9p_ready(void)
 	return g_ready;
 }
 
+int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_out)
+{
+	uint32_t fid = 4;
+	const char *name;
+	uint32_t mode = 0;
+	uint64_t size = 0;
+	int rc;
+
+	if (!g_ready || !relpath)
+		return -EINVAL;
+	name = v9p_flat_name(relpath);
+	if (!name)
+		return -EINVAL;
+
+	rc = v9p_walk(g_root_fid, fid, name);
+	if (rc < 0)
+		return rc;
+	rc = v9p_getattr(fid, P9_STATS_BASIC, &mode, &size);
+	(void)v9p_clunk(fid);
+	if (rc < 0)
+		return rc;
+	if (size_out)
+		*size_out = size;
+	if (mode_out)
+		*mode_out = mode;
+	return 0;
+}
+
 int virtio_9p_write_file(const char *relpath, const void *buf, size_t len)
 {
 	uint32_t fid = 2;
 	uint32_t written = 0;
 	int rc;
-	const char *name = relpath;
+	const char *name;
 
 	if (!g_ready || !relpath || !buf)
 		return -EINVAL;
-	while (*name == '/')
-		name++;
-	if (!name[0] || strchr(name, '/'))
+	name = v9p_flat_name(relpath);
+	if (!name)
 		return -EINVAL; /* MVP: single-component path only */
 
 	rc = v9p_walk(g_root_fid, fid, name);
@@ -642,15 +732,15 @@ int virtio_9p_write_file(const char *relpath, const void *buf, size_t len)
 int virtio_9p_read_file(const char *relpath, void *buf, size_t maxlen)
 {
 	uint32_t fid = 3;
-	uint32_t got = 0;
+	uint64_t off = 0;
+	size_t total = 0;
 	int rc;
-	const char *name = relpath;
+	const char *name;
 
 	if (!g_ready || !relpath || !buf)
 		return -EINVAL;
-	while (*name == '/')
-		name++;
-	if (!name[0] || strchr(name, '/'))
+	name = v9p_flat_name(relpath);
+	if (!name)
 		return -EINVAL;
 
 	rc = v9p_walk(g_root_fid, fid, name);
@@ -662,9 +752,84 @@ int virtio_9p_read_file(const char *relpath, void *buf, size_t maxlen)
 		(void)v9p_clunk(fid);
 		return rc;
 	}
-	rc = v9p_read(fid, 0, buf, (uint32_t)maxlen, &got);
+
+	while (total < maxlen)
+	{
+		uint32_t want;
+		uint32_t got = 0;
+
+		want = (uint32_t)(maxlen - total);
+		if (want > V9P_READ_CHUNK)
+			want = V9P_READ_CHUNK;
+		rc = v9p_read(fid, off, (uint8_t *)buf + total, want, &got);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+		if (got == 0)
+			break;
+		total += got;
+		off += got;
+		if (got < want)
+			break;
+	}
+
 	(void)v9p_clunk(fid);
+	if (total > (size_t)0x7fffffff)
+		return -EFBIG;
+	return (int)total;
+}
+
+int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t offset,
+		      size_t *got_out)
+{
+	uint32_t fid = 5;
+	uint64_t off = offset;
+	size_t total = 0;
+	int rc;
+	const char *name;
+
+	if (!g_ready || !relpath || !buf)
+		return -EINVAL;
+	name = v9p_flat_name(relpath);
+	if (!name)
+		return -EINVAL;
+
+	rc = v9p_walk(g_root_fid, fid, name);
 	if (rc < 0)
 		return rc;
-	return (int)got;
+	rc = v9p_lopen(fid, P9_DOTL_RDONLY);
+	if (rc < 0)
+	{
+		(void)v9p_clunk(fid);
+		return rc;
+	}
+
+	while (total < count)
+	{
+		uint32_t want;
+		uint32_t got = 0;
+
+		want = (uint32_t)(count - total);
+		if (want > V9P_READ_CHUNK)
+			want = V9P_READ_CHUNK;
+		rc = v9p_read(fid, off, (uint8_t *)buf + total, want, &got);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+		if (got == 0)
+			break;
+		total += got;
+		off += got;
+		if (got < want)
+			break;
+	}
+
+	(void)v9p_clunk(fid);
+	if (got_out)
+		*got_out = total;
+	return 0;
 }
