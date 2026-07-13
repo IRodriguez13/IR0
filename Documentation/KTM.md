@@ -243,18 +243,23 @@ Reference pilots: `ktm_fork_wait_case.c`, `ktm_tcp_wire_case.c`,
 
 ```bash
 make build-ktm-fork-wait-case
-make ktm-userdev-run                 # injects binary as /sbin/init
+make build-init-hostshare-exec       # stub PID1: mount 9p + execve payload
+make smoke-hostshare-exec            # stub on disk + fork_wait as ir0_payload
+make ktm-userdev-run                 # default: stub init + share payload
 make ktm-userdev-fork-storm-virtfs-run
 make smoke-tcp-wire                  # F8-3 alias → tcp_wire virtfs run
 ```
 
-`scripts/ktm_userdev_runner.py`:
+`scripts/ktm_userdev_runner.py` (default **share-payload** path):
 
-- Copies `disk.img`, injects `--init` with `scripts/inject_init_minix.py`.
-- Optional virtio-9p share (`--host-file` auto-creates a temp share dir).
-- Extra QEMU args via repeated `--qemu-arg` (e.g. `-netdev` / `rtl8139`); if any arg
-  contains `netdev`, the runner **does not** append `-net none`.
-- Autokills on `--done` tag; checks `--require` substrings and optional host file.
+- Copies `disk.img`, injects **stub** `setup/pid1/init_hostshare_exec` as `/sbin/init`.
+- Copies `--init` ELF to the virtio-9p share as **`ir0_payload`** (flat name).
+- Always attaches `-fsdev` / `virtio-9p-pci` (`mount_tag=ir0share`).
+- Stub mounts `/mnt/host` and `execve("/mnt/host/ir0_payload")`.
+- Cases report via `ktm_hostshare_report()` (tolerates share already mounted).
+- `--legacy-disk-init` restores old inject-`--init`-as-`/sbin/init` behavior.
+- Extra QEMU args via `--qemu-arg`; if any arg contains `netdev`, no `-net none`.
+- Autokills on `--done`; checks `--require` and optional `--host-file` / `--host-grep`.
 
 ---
 
@@ -285,7 +290,8 @@ python3 scripts/ktm_log_classify.py /tmp/some.log
 ```
 
 Deep COW data-plane remains `make smoke-mm-cow-lazy` (not replaced by `mm.cow_fork`
-bookkeeping scenario). Host-share MVP: `make smoke-hostshare-9p`.
+bookkeeping scenario). Host-share: `make smoke-hostshare-9p` (MVP read) and
+`make smoke-hostshare-exec` (stub + payload exec).
 
 ---
 

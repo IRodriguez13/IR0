@@ -2,6 +2,7 @@
 
 > **Last verified:** 2026-07-12  
 > **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
+> hostshare-exec + F8 harden + FAT secondary ship note,  
 > merge `56a3f7b` (dev→master: kexec/S3, P1-storage, P1-T1), Future F2–F6,  
 > `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 
@@ -114,7 +115,7 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 | **T1 POSIX slice** | **Stable** | tier1 + musl manifests; cred/pthread/setuid smokes |
 | **T2 graphics / Doom** | **Merge-critical** | Real IWAD: `IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric` (`REAL_WAD_PATH`) — **blocker for `master`**; stub 55b = fast aid only |
 | **Local net** | **Stable for test** | `AF_UNIX` + **TCP loopback** — `make smoke-stream-sock` |
-| **Host-share 9p** | **Dev aid** | QEMU `-virtfs` → guest `/mnt/host` — `make smoke-hostshare-9p` (**not** virtiofs/FUSE) |
+| **Host-share 9p** | **Dev aid** | QEMU `-virtfs` → guest `/mnt/host` — `make smoke-hostshare-9p`; ELF exec via share — `make smoke-hostshare-exec` (**not** virtiofs/FUSE) |
 | **T3 desktop** | **Not in scope** | WM/compositor out of tree — planning only |
 
 ### Version matrix (0.0.1 vs 0.0.2)
@@ -124,7 +125,7 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 | Gate D1.20 | `smoke-release-0.0.1` / `release-0.0.1` | keep green | — |
 | Product | TCC + Doom+**IWAD** + posix/tier1 | same blockers | — |
 | Network | AF_UNIX + TCP **loopback** + guest IP | F8-1 NIC (`smoke-nic-reach`); F8-2 guest TCP (`smoke-tcp-guest`) | wire TCP Internet |
-| Host share | virtio-**9p** MVP (`smoke-hostshare-9p`) | optional deepen | virtiofs + FUSE when ready |
+| Host share | virtio-**9p** MVP + exec (`smoke-hostshare-9p`, `smoke-hostshare-exec`) | subdirs / more FS ops | virtiofs + FUSE when ready |
 | ARM | bring-up (F7*) — does not block x86 ship | continue port | — |
 | X11 / WM | **out** | userspace after usable net + T2 | never in-kernel T3 |
 | CFS / SMP | **out** | **out** | much later; not with X11 |
@@ -182,13 +183,15 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | AF_UNIX + TCP **loopback** `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) — **in 0.0.1** |
 | NIC reach (rtl8139 + `/dev/net`) | **F8-1 PARTIAL** — `make smoke-nic-reach` (`F8_NIC_REACH_OK`) |
 | TCP guest IP (10.0.2.15 stream) | **F8-2 PARTIAL** — `make smoke-tcp-guest` (`F8_TCP_GUEST_OK`) |
-| TCP Internet / wire NIC | **F8-3 PARTIAL** — `make smoke-tcp-wire` (`F8_TCP_WIRE_OK`); minimal SYN/PSH slice in `net/tcp.c`; not required for 0.0.1 |
+| TCP Internet / wire NIC | **F8-3 PARTIAL** — `make smoke-tcp-wire` (`F8_TCP_WIRE_OK`); SYN/PSH + best-effort FIN\|ACK; NET RX traces at DEBUG; not required for 0.0.1 |
 
 ### Host share (dev aid)
 
 | Item | Proof |
 |------|-------|
 | virtio-9p + VFS fstype `9p` → `/mnt/host` | `make smoke-hostshare-9p` (`HOSTSHARE_9P_OK`, host file visible) |
+| 9p getattr + chunked read (ELF-sized) | `virtio_9p_stat_file` / `virtio_9p_read_file`; `hs_stat`/`hs_read` |
+| Exec payload from share | `make smoke-hostshare-exec` — stub `init_hostshare_exec` mounts `ir0share`, `execve(/mnt/host/ir0_payload)` |
 | virtiofs / FUSE | **Not implemented** — post-9p when FUSE exists |
 
 ### Storage (phase2 baseline)
@@ -196,9 +199,9 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | Item | Status | Notes |
 |------|--------|-------|
 | ATA + `/dev/hda` read | **Stable** | `block_hda_read_contract` ktest |
-| MINIX root on `disk.img` | **Stable** | default boot layout |
+| MINIX root on `disk.img` | **Stable** | **Ship root FS** — default boot layout |
 | VFS mount contracts | **Stable** | `runtime-mount-check`, mount ktests |
-| FAT16 on `block_dev` | **Stable (RO + write audit)** | `smoke-fat16-mount`; `linux-abi-audit-vfs-write-fat` |
+| FAT16 on `block_dev` | **Stable (secondary)** | Montable on `/dev/hdb`; `smoke-fat16-mount` in release gate; write audit `linux-abi-audit-vfs-write-fat`; **not** FAT-as-root in 0.0.1 |
 | EXT2 read-only | **Stable for test** | `smoke-ext2-mount` |
 | GPT probe | **Stable for test** | `smoke-gpt-partition` |
 | AHCI detect/read/multi + NCQ | **Stable for test** | `smoke-ahci-read` (`AHCI_NCQ_OK` / `UNSUPPORTED`) |
@@ -236,7 +239,7 @@ Everything in this table was reached in at least one oleada and has a **runnable
 | **T2** | input `/dev/events0` | legacy `smoke-fase54b-input`¹ | keyboard in GTK window |
 | **T2** | Doom + real IWAD | `smoke-fase55d-doomgeneric`¹ | `make run-fase55d-doomgeneric-gui` |
 | **Dev** | KTM boot + userdev | `make ktm-run`, `make ktm-userdev-run` | — |
-| **Dev** | Host-share 9p (KTM artifacts) | `make smoke-hostshare-9p` | — |
+| **Dev** | Host-share 9p (KTM artifacts + exec) | `make smoke-hostshare-9p` / `smoke-hostshare-exec` | — |
 | **Dev** | KTM inventory | `make ktm-check` | — |
 | **Dev** | arch + host contracts | `make arch-guard`, `make -C tests/host run` | — |
 

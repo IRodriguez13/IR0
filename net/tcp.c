@@ -270,14 +270,20 @@ void tcp_wire_close(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 {
 	struct net_device *dev;
 	struct tcp_header hdr;
+	unsigned i;
 
 	dev = net_get_devices();
 	if (!dev)
 		return;
 
+	/* Best-effort FIN|ACK; no full teardown state machine (0.0.2). */
 	tcp_build_header(&hdr, local_port, peer_port, seq, ack_peer,
 			 TCP_FLAG_FIN | TCP_FLAG_ACK);
 	(void)tcp_send_raw(dev, peer_ip, &hdr, NULL, 0);
+
+	/* Bounded poll only — do not spin on wall-clock (can stall if ticks lag). */
+	for (i = 0; i < 64U; i++)
+		net_stack_poll();
 }
 
 void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,

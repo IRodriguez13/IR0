@@ -28,3 +28,10 @@ int ktm_run_invariants(int fd, uint32_t mask);
 int ktm_run_scenario(int fd, const char *name, int32_t *result_out);
 int ktm_get_caps(int fd, ktm_user_caps_t *out);
 int ktm_reset(int fd);
+
+/*
+ * Write a short result file under virtio-9p /mnt/host/<relpath>.
+ * Tolerates share already mounted by init_hostshare_exec stub (no remount).
+ * Prints KTM_HOSTSHARE_REPORT_OK on success.
+ */
+int ktm_hostshare_report(const char *relpath, const char *payload);

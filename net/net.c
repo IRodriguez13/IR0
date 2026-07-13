@@ -303,8 +303,8 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
         return;
     }
     
-    /* Log all packets that we're actually processing, but mark if they're for us or broadcast */
-    LOG_INFO_FMT("NET", "Received packet on %s: len=%d, type=0x%04x, src_mac=%02x:%02x:%02x:%02x:%02x:%02x, dst_mac=%02x:%02x:%02x:%02x:%02x:%02x, broadcast=%d, multicast=%d, for_us=%d",
+    /* Hot path: keep packet traces at DEBUG to avoid serial spam (F8 smokes). */
+    LOG_DEBUG_FMT("NET", "Received packet on %s: len=%d, type=0x%04x, src_mac=%02x:%02x:%02x:%02x:%02x:%02x, dst_mac=%02x:%02x:%02x:%02x:%02x:%02x, broadcast=%d, multicast=%d, for_us=%d",
                  dev->name, (int)len, type,
                  eth->src[0], eth->src[1], eth->src[2], eth->src[3], eth->src[4], eth->src[5],
                  eth->dest[0], eth->dest[1], eth->dest[2], eth->dest[3], eth->dest[4], eth->dest[5],
@@ -318,11 +318,11 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
     {
         if (is_broadcast)
         {
-            LOG_INFO("NET", "Received broadcast ARP packet - processing");
+            LOG_DEBUG("NET", "Received broadcast ARP packet - processing");
         }
         else
         {
-            LOG_INFO("NET", "Received unicast ARP packet - processing");
+            LOG_DEBUG("NET", "Received unicast ARP packet - processing");
         }
     }
     else if (!is_for_us && type != ETHERTYPE_ARP)
@@ -343,7 +343,7 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
     struct net_protocol *proto = net_find_protocol_by_ethertype(type);
     if (proto && proto->handler)
     {
-        LOG_INFO_FMT("NET", "Found protocol handler: %s", proto->name);
+        LOG_DEBUG_FMT("NET", "Found protocol handler: %s", proto->name);
         
         /* Extract payload: skip Ethernet header (14 bytes), pass rest to protocol.
          * The protocol handler will parse its own header (IP, ARP, etc.).
@@ -351,7 +351,7 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
         const void *payload = (const uint8_t *)data + sizeof(struct eth_header);
         size_t payload_len = len - sizeof(struct eth_header);
         
-        LOG_INFO_FMT("NET", "Calling protocol handler %s with payload_len=%d", proto->name, (int)payload_len);
+        LOG_DEBUG_FMT("NET", "Calling protocol handler %s with payload_len=%d", proto->name, (int)payload_len);
         
         /* Call protocol handler. The handler receives:
          *   - dev: Network device (for sending replies if needed)
@@ -360,7 +360,7 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
          *   - proto->priv: Protocol-specific private data (can be NULL)
          */
         proto->handler(dev, payload, payload_len, proto->priv);
-        LOG_INFO_FMT("NET", "Protocol handler %s returned", proto->name);
+        LOG_DEBUG_FMT("NET", "Protocol handler %s returned", proto->name);
     }
     else
     {

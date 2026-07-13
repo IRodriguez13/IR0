@@ -82,6 +82,8 @@ setup/pid1/fase52_harness
 setup/pid1/tcc_power_halt_harness
 setup/pid1/musl_pthread_smoke
 setup/pid1/su_setuid_smoke
+setup/pid1/init_hostshare_exec
+setup/pid1/musl_pthread_libc_smoke
 
 # Kconfig helper static libs (built locally)
 setup/libkconfig_build.a
@@ -110,6 +112,8 @@ setup/pid1/fase52_staging/usr/lib/*.a
 # Test artifacts (make tests / make health)
 tests/host/ir0_test_suite
 tests/kernel_memsafe/ir0_kernel_memsafe
+tests/ktm/userdev/ktm_*_case
+!tests/ktm/userdev/ktm_*_case.c
 /tmp/ktest.log
 nohup.out
 interrupt/arch/x86-64/isr_stubs_64.asm

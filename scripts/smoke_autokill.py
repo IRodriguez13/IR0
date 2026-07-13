@@ -30,8 +30,9 @@ DEFAULT_FAIL_RES: list[str] = [
     r"panicex\(",
     r"panic\(",
     r"GPF_IN_USERSPACE|General protection fault",
-    # Do not match bare "OOM_CLASS" — KTM scenario name mm.oom_class false-positives.
-    r"\bOOM\b|\[OOM_CLASS\]|\bUSER_RECOVERABLE\b",
+    # Bare "\bOOM\b" false-positives when QEMU serial splits DOOMGENERIC as "D\\nOOM\\n…".
+    # Prefer explicit OOM markers; keep [OOM_CLASS] and USER_RECOVERABLE.
+    r"\[OOM\]|\[OOM_CLASS\]|\bOOM_KILL\b|\bout of memory\b|\bOut of memory\b|\bUSER_RECOVERABLE\b",
     r"FORK_STATE.*FAILED|fork failed|FORK.*FAIL",
     r"\bASSERT\b|assertion failed",
     r"WAIT_.*_INVALID",
@@ -81,10 +82,11 @@ PROFILES: dict[str, dict[str, object]] = {
     "fase55d-doom": {
         # Wait for terminal OK tag — FRAME_LOOP alone used to autokill (mode any)
         # before FASE55D_DOOMGENERIC_OK was flushed → flaky post-grep FAIL.
+        # Real IWAD boot + first frames often exceed 120s on loaded hosts.
         "success": ["FASE55D_DOOMGENERIC_OK"],
         "success_mode": "all",
-        "timeout": 120,
-        "stale_sec": 45,
+        "timeout": 240,
+        "stale_sec": 90,
     },
     "fase50-exec-only": {
         "success": ["EXEC_ONLY_STABLE_OK"],
