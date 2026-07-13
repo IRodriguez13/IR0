@@ -78,5 +78,6 @@ Uninstall: `make mandocs-uninstall` or `MANDOC_LANG=all make mandocs-uninstall`
 
 - Runtime validation is still scenario-based, not exhaustive.
 - Some advanced features are guarded by MVP-level policy.
-- CI-style coverage depends on local execution discipline.
+- CI-style coverage is **local** (`make health`, CTR gates, KTM/smokes). GitHub Actions
+  no longer runs the heavy `Tests` workflow; optional `Update LOC` is manual only.
 

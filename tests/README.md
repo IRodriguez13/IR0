@@ -2,7 +2,7 @@
 
 El directorio `tests/` centraliza todo lo que compila y ejecuta tests. El kernel **solo incluye los tests in-kernel** cuando se construye con `make tests` (se genera `kernel-x64-test.bin` / `kernel-x64-test.iso`). El kernel por defecto (`make ir0`) no lleva el comando `ktest` ni la batería in-kernel.
 
-**Para CI / GitHub:** el workflow `.github/workflows/tests.yml` ejecuta `make tests`, `make kernel-analyze`, `make kernel-memsafe`, `make kernel-tests`, `make build-matrix-min` y `make arch-guard`. Un push o PR a `main`/`mainline`/`master` dispara la batería completa.
+**GitHub Actions:** el workflow gordo `Tests` fue **retirado** (ruido rojo en `master`). La batería se corre **en local** (`make tests`, `make kernel-tests`, `make arch-guard`, smokes KTM). El único workflow opcional es `Update LOC` (`workflow_dispatch`, best-effort).
 
 ## Resumen rápido
 
@@ -19,6 +19,7 @@ El directorio `tests/` centraliza todo lo que compila y ejecuta tests. El kernel
 ## Estructura de `tests/`
 
 - **tests/kernel_memsafe/** — Código del kernel compilado para el host (con dependencias mínimas/stubs) y ejecutado bajo Valgrind para comprobar estado de memoria en esas rutas.
+- **tests/ktm/** — Escenarios in-kernel KTM (`scenarios/`), pilotos userspace (`userdev/`) y helper `lib/`; ver `tests/ktm/README.md`. Internals del módulo en `ktm/`.
 - **kernel/test/** — Tests que se compilan **dentro** del kernel. Se ejecutan **al arranque** en kernel-x64-test.bin (estilo KUnit) o con el comando `ktest` en la shell. Solo se enlazan al hacer `make tests` / `make kernel-tests`.
 
 ## Tests in-kernel al estilo KUnit (producción)
