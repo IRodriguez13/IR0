@@ -10,6 +10,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "libktm_user.h"
+
 static void write_str(const char *s)
 {
 	size_t n = 0;
@@ -180,25 +182,39 @@ static int expect_stdout_has(const char *step, char *const argv[],
 
 int main(void)
 {
+	int kfd = -1;
 	char *argv_echo[] = { "/bin/busybox", "echo", "hi", NULL };
+	char *argv_echo_path[] = { "/bin/echo", "hi", NULL };
 	char *argv_pwd[] = { "/bin/busybox", "pwd", NULL };
 	char *argv_ls[] = { "/bin/busybox", "ls", "/", NULL };
+	char *argv_ls_path[] = { "/bin/ls", "/", NULL };
 	char *argv_touch[] = { "/bin/busybox", "touch", "/tmp/a", NULL };
 	char *argv_write[] = { "/bin/sh", "-c", "echo hi > /tmp/a", NULL };
 	char *argv_cat[] = { "/bin/busybox", "cat", "/tmp/a", NULL };
+	char *argv_cat_path[] = { "/bin/cat", "/tmp/a", NULL };
 	char *argv_uname[] = { "/bin/busybox", "uname", NULL };
 	char *argv_ps[] = { "/bin/busybox", "ps", NULL };
 
 	write_str("FASE58L_HARNESS_ID=fase58l_busybox_smoke.c\n");
 	write_str("FASE58L_START\n");
 
+	kfd = ktm_open();
+	if (kfd >= 0)
+		(void)ktm_case_begin(kfd, "busybox_coreutils");
+
 	if (expect_stdout_has("echo", argv_echo, "hi", "FASE58L_ECHO_OK") != 0)
+		goto fail;
+
+	if (expect_stdout_has("echo_path", argv_echo_path, "hi", "FASE58L_ECHO_PATH_OK") != 0)
 		goto fail;
 
 	if (expect_ok_tag("pwd", argv_pwd, "FASE58L_PWD_OK") != 0)
 		goto fail;
 
 	if (expect_ok_tag("ls", argv_ls, "FASE58L_LS_ROOT_OK") != 0)
+		goto fail;
+
+	if (expect_ok_tag("ls_path", argv_ls_path, "FASE58L_LS_PATH_OK") != 0)
 		goto fail;
 
 	if (expect_ok_tag("touch", argv_touch, "FASE58L_TOUCH_OK") != 0)
@@ -210,18 +226,38 @@ int main(void)
 	if (expect_stdout_has("cat", argv_cat, "hi", "FASE58L_CAT_OK") != 0)
 		goto fail;
 
+	if (expect_stdout_has("cat_path", argv_cat_path, "hi", "FASE58L_CAT_PATH_OK") != 0)
+		goto fail;
+
 	if (expect_ok_tag("uname", argv_uname, "FASE58L_UNAME_OK") != 0)
 		goto fail;
 
 	if (expect_ok_tag("ps", argv_ps, "FASE58L_PS_OK") != 0)
 		write_str("FASE58L_PS_SKIP\n");
 
+	if (kfd >= 0)
+	{
+		(void)ktm_checkpoint(kfd, "applets_ok");
+		(void)ktm_assert_true(kfd, "coreutils_pass", 1);
+		(void)ktm_case_end(kfd, "busybox_coreutils", 0);
+		ktm_close(kfd);
+		write_str("KTM_BUSYBOX_COREUTILS_OK\n");
+	}
+	else
+		write_str("KTM_BUSYBOX_COREUTILS_SKIP\n");
+
+	write_str("BUSYBOX_MANIFEST_OK\n");
 	write_str("FASE58L_OK\n");
 	for (;;)
 		pause();
 	return 0;
 
 fail:
+	if (kfd >= 0)
+	{
+		(void)ktm_case_end(kfd, "busybox_coreutils", 1);
+		ktm_close(kfd);
+	}
 	write_str("FASE58L_FAIL\n");
 	for (;;)
 		pause();

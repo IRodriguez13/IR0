@@ -2651,6 +2651,17 @@ int devfs_stat_path(const char *path, stat_t *buf)
         return 0;
     }
 
+    if (devfs_is_virtual_subdir(path))
+    {
+        memset(buf, 0, sizeof(*buf));
+        buf->st_mode = S_IFDIR | 0755;
+        buf->st_nlink = 2;
+        buf->st_uid = 0;
+        buf->st_gid = 0;
+        buf->st_blksize = 512;
+        return 0;
+    }
+
     node = devfs_find_node(path);
     if (!node)
         return -ENOENT;
@@ -2665,10 +2676,87 @@ int devfs_stat_path(const char *path, stat_t *buf)
     return 0;
 }
 
+static const char *devfs_virtual_subdir_prefix(const char *path)
+{
+    if (!path)
+        return NULL;
+
+    if (strcmp(path, "/dev/pts") == 0 || strcmp(path, "/dev/pts/") == 0)
+        return "pts";
+    if (strcmp(path, "/dev/bluetooth") == 0 ||
+        strcmp(path, "/dev/bluetooth/") == 0)
+        return "bluetooth";
+
+    return NULL;
+}
+
 int devfs_is_virtual_subdir(const char *path)
 {
-    (void)path;
-    return 0;
+    return devfs_virtual_subdir_prefix(path) != NULL;
+}
+
+int devfs_readdir_subdir(const char *path, struct vfs_dirent *entries,
+                         int max_entries)
+{
+    const char *prefix;
+    size_t prefix_len;
+    int n = 0;
+    int i;
+    int j;
+
+    prefix = devfs_virtual_subdir_prefix(path);
+    if (!prefix || !entries || max_entries <= 0)
+        return -EINVAL;
+
+    prefix_len = strlen(prefix);
+    memset(entries, 0, (size_t)max_entries * sizeof(struct vfs_dirent));
+
+    strncpy(entries[n].name, ".", sizeof(entries[n].name) - 1);
+    entries[n].type = DT_DIR;
+    n++;
+    if (n >= max_entries)
+        return n;
+
+    strncpy(entries[n].name, "..", sizeof(entries[n].name) - 1);
+    entries[n].type = DT_DIR;
+    n++;
+
+    for (i = 0; i < num_dev_nodes && n < max_entries; i++)
+    {
+        const char *name;
+        const char *leaf;
+        const char *slash;
+        int exists = 0;
+
+        if (!dev_nodes[i] || !dev_nodes[i]->entry.name)
+            continue;
+
+        name = dev_nodes[i]->entry.name;
+        if (strncmp(name, prefix, prefix_len) != 0 || name[prefix_len] != '/')
+            continue;
+
+        leaf = name + prefix_len + 1;
+        slash = strchr(leaf, '/');
+        if (slash)
+            continue;
+
+        for (j = 0; j < n; j++)
+        {
+            if (strcmp(entries[j].name, leaf) == 0)
+            {
+                exists = 1;
+                break;
+            }
+        }
+        if (exists)
+            continue;
+
+        strncpy(entries[n].name, leaf, sizeof(entries[n].name) - 1);
+        entries[n].type = DT_UNKNOWN;
+        n++;
+    }
+
+    return n;
 }
 
 int devfs_readdir_root(struct vfs_dirent *entries, int max_entries)

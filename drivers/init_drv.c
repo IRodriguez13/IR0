@@ -62,6 +62,8 @@
 #include <ir0/usb_host.h>
 #endif
 
+#include <ir0/virtio_9p.h>
+
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
 #endif
@@ -156,6 +158,13 @@ static int boot_init_usb_host(void)
 #endif
 }
 
+static int boot_init_hostshare_9p(void)
+{
+	/* Optional: absent without QEMU -virtfs; non-fatal for normal boots. */
+	(void)virtio_9p_init();
+	return 0;
+}
+
 static void register_bootstrap_plan(void)
 {
     driver_bootstrap_reset();
@@ -167,6 +176,8 @@ static void register_bootstrap_plan(void)
                               (CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER));
     driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "pc_speaker", boot_init_pc_speaker,
                               (CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER));
+    driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "hostshare_9p", boot_init_hostshare_9p,
+			      1);
     driver_bootstrap_register(DRIVER_BOOT_STAGE_STORAGE, "ata_core", boot_init_storage_ata,
                               (CONFIG_ENABLE_STORAGE_ATA && CONFIG_INIT_STORAGE_ATA));
     driver_bootstrap_register(DRIVER_BOOT_STAGE_STORAGE, "ata_block", boot_init_storage_block,

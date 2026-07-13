@@ -525,6 +525,8 @@ build-busybox-fase50-min:
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
 	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@chmod +x scripts/busybox_check_manifest.sh
+	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
 	@echo "✓ build-busybox-fase50-min OK"
 
 build-busybox-fase58-plus:
@@ -546,6 +548,8 @@ build-busybox-fase58-plus:
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
 	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@chmod +x scripts/busybox_check_manifest.sh
+	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
 	@echo "✓ build-busybox-fase58-plus OK (installed to $(FASE50_BUSYBOX_BIN))"
 
 build-busybox-fase58-full:
@@ -567,6 +571,8 @@ build-busybox-fase58-full:
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
 	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@chmod +x scripts/busybox_check_manifest.sh
+	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
 	@echo "✓ build-busybox-fase58-full OK (installed to $(FASE50_BUSYBOX_BIN))"
 
 build-fase58l-busybox-smoke:
@@ -575,7 +581,8 @@ build-fase58l-busybox-smoke:
 		exit 1; \
 	fi
 	@echo "  INIT    Building FASE58L BusyBox smoke ($(FASE58L_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(FASE58L_SMOKE_BIN) $(FASE58L_SMOKE_SRC)
+	@$(MUSL_CC) -static -Os -Iincludes -Itests/ktm/lib \
+		-o $(FASE58L_SMOKE_BIN) $(FASE58L_SMOKE_SRC) tests/ktm/lib/libktm_user.c
 	@file $(FASE58L_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-fase58l-busybox-smoke OK"
 

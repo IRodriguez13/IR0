@@ -298,22 +298,22 @@ KERNEL_OBJS = \
     ktm/fault.o \
     ktm/invariant_global.o \
     ktm/scenario.o \
-    ktm/scenarios/process_lifecycle.o \
-    ktm/scenarios/pipe_lifecycle.o \
-    ktm/scenarios/mm_cow_fork.o \
-    ktm/scenarios/mm_vma.o \
-    ktm/scenarios/mm_page_tables.o \
-    ktm/scenarios/mm_steady_state.o \
-    ktm/scenarios/vfs_devfs.o \
-    ktm/scenarios/shell_redir.o \
-    ktm/scenarios/mm_oom_class.o \
-    ktm/scenarios/process_wait_drain.o \
-    ktm/scenarios/graphics_fb.o \
-    ktm/scenarios/input_events0.o \
-    ktm/scenarios/vfs_open_flags.o \
-    ktm/scenarios/process_reclaim_exit.o \
-    ktm/scenarios/process_exec.o \
-    ktm/scenarios/process_fork_rollback.o \
+    tests/ktm/scenarios/process_lifecycle.o \
+    tests/ktm/scenarios/pipe_lifecycle.o \
+    tests/ktm/scenarios/mm_cow_fork.o \
+    tests/ktm/scenarios/mm_vma.o \
+    tests/ktm/scenarios/mm_page_tables.o \
+    tests/ktm/scenarios/mm_steady_state.o \
+    tests/ktm/scenarios/vfs_devfs.o \
+    tests/ktm/scenarios/shell_redir.o \
+    tests/ktm/scenarios/mm_oom_class.o \
+    tests/ktm/scenarios/process_wait_drain.o \
+    tests/ktm/scenarios/graphics_fb.o \
+    tests/ktm/scenarios/input_events0.o \
+    tests/ktm/scenarios/vfs_open_flags.o \
+    tests/ktm/scenarios/process_reclaim_exit.o \
+    tests/ktm/scenarios/process_exec.o \
+    tests/ktm/scenarios/process_fork_rollback.o \
     ktm/userdev.o \
     ktm/ktm_flight.o \
     ktm/ktm_panic_class.o \
@@ -542,6 +542,7 @@ DRIVER_OBJS = \
 	drivers/video/console_renderer.o \
 	drivers/video/typewriter.o \
 	drivers/init_drv.o \
+	drivers/virtio/virtio_9p.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
 
 # COM1 16550 only on x86; ARM64 uses arch/arm64/sources/serial_io_arm64.c (PL011).
@@ -577,7 +578,8 @@ FS_OBJS = \
     fs/heartfs.o \
     fs/procfs.o \
     fs/devfs.o \
-    fs/sysfs.o
+    fs/sysfs.o \
+    fs/hostshare_9p.o
 
 ifneq ($(CONFIG_ENABLE_FS_MINIX),n)
 FS_OBJS += fs/minix_fs.o
@@ -633,6 +635,7 @@ NET_OBJS = \
     net/ip.o \
     net/icmp.o \
     net/udp.o \
+    net/tcp.o \
     net/dhcp.o \
     net/dns.o
 NET_DRIVER_OBJS = \
@@ -1897,6 +1900,8 @@ build-busybox-fase50-min:
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
 	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@chmod +x scripts/busybox_check_manifest.sh
+	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
 	@echo "✓ build-busybox-fase50-min OK"
 
 build-busybox-fase58-plus:
@@ -1918,6 +1923,8 @@ build-busybox-fase58-plus:
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
 	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@chmod +x scripts/busybox_check_manifest.sh
+	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
 	@echo "✓ build-busybox-fase58-plus OK (installed to $(FASE50_BUSYBOX_BIN))"
 
 build-busybox-fase58-full:
@@ -1939,6 +1946,8 @@ build-busybox-fase58-full:
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
 	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@chmod +x scripts/busybox_check_manifest.sh
+	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
 	@echo "✓ build-busybox-fase58-full OK (installed to $(FASE50_BUSYBOX_BIN))"
 
 build-fase58l-busybox-smoke:
@@ -1947,9 +1956,39 @@ build-fase58l-busybox-smoke:
 		exit 1; \
 	fi
 	@echo "  INIT    Building FASE58L BusyBox smoke ($(FASE58L_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(FASE58L_SMOKE_BIN) $(FASE58L_SMOKE_SRC)
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(FASE58L_SMOKE_BIN) $(FASE58L_SMOKE_SRC) $(KTM_USERDEV_LIB_SRC)
 	@file $(FASE58L_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-fase58l-busybox-smoke OK"
+
+# BUSY-2 ship gate (not behind IR0_LEGACY_SMOKE)
+BUSYBOX_MANIFEST_SMOKE_LOG ?= /tmp/busybox-manifest-smoke.log
+smoke-busybox-manifest: build-fase58l-busybox-smoke build-busybox-fase58-plus kernel-x64-userspace.iso
+	@echo "  SMOKE   BUSY-2 product applet manifest..."
+	@strings $(FASE58L_SMOKE_BIN) 2>/dev/null | grep -q "FASE58L_HARNESS_ID" || \
+		(echo "✗ $(FASE58L_SMOKE_BIN) is not FASE58L harness — run build-fase58l-busybox-smoke"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-busy-manifest-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE58L_SMOKE_BIN) sbin/init && \
+	chmod +x scripts/busybox_inject_manifest.sh && \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) scripts/busybox_inject_manifest.sh $$DISK $(FASE50_BUSYBOX_BIN) && \
+	$(SMOKE_QEMU_RUN) --log $(BUSYBOX_MANIFEST_SMOKE_LOG) --timeout 90 --done BUSYBOX_MANIFEST_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+	@if grep -q "BUSYBOX_MANIFEST_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
+	    grep -q "FASE58L_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
+	    grep -q "FASE58L_ECHO_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
+	    grep -q "FASE58L_LS_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
+	    grep -q "FASE58L_CAT_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG); then \
+		echo "✓ smoke-busybox-manifest finished"; \
+	else \
+		echo "✗ smoke-busybox-manifest FAILED"; \
+		grep -E 'FASE58L_|BUSYBOX_|KERNEL PANIC' $(BUSYBOX_MANIFEST_SMOKE_LOG) | tail -30; \
+		exit 1; \
+	fi
 
 build-fase50-hello:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -2537,10 +2576,24 @@ arm64-all-objs-probe: arm64-portable-compile
 		rm -f /tmp/ir0-arm64-probe-$$$$.o; \
 	done; \
 	if [ $$fail -eq 0 ]; then \
-		echo "MEMORY_OBJS: compile OK under ARM64_BOOT_CFLAGS (not linked into kernel-arm64.bin)" \
+		for src in kernel/main.c includes/ir0/open_flags.c; do \
+			echo "  CC      $$src (KERNEL probe)"; \
+			if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+				-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+				-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
+				-c $$src -o /tmp/ir0-arm64-probe-$$$$.o >> /tmp/ir0-arm64-all-objs-probe.log 2>&1; then \
+				echo "FIRST_DIVERGENCE: $$src" | tee -a /tmp/ir0-arm64-all-objs-probe.log; \
+				fail=1; \
+				break; \
+			fi; \
+			rm -f /tmp/ir0-arm64-probe-$$$$.o; \
+		done; \
+	fi; \
+	if [ $$fail -eq 0 ]; then \
+		echo "MEMORY_OBJS+KERNEL sample: compile OK under ARM64_BOOT_CFLAGS (not linked)" \
 			| tee -a /tmp/ir0-arm64-all-objs-probe.log; \
-		echo "NEXT: KERNEL_OBJS / drivers still BLOCKED; musl aarch64 toolchain absent"; \
-		echo "✓ arm64-all-objs-probe: interrupt wall cleared; MEMORY_OBJS compile OK"; \
+		echo "NEXT: full KERNEL_OBJS / drivers link + musl aarch64 still BLOCKED"; \
+		echo "✓ arm64-all-objs-probe: interrupt wall cleared; probe compile OK"; \
 	else \
 		echo "✗ arm64-all-objs-probe: see /tmp/ir0-arm64-all-objs-probe.log"; \
 		tail -40 /tmp/ir0-arm64-all-objs-probe.log; \
@@ -2774,11 +2827,73 @@ smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-port
 	@echo "✓ smoke-arm64 (boot+mmu+slice+port+gic+syscall+vbar+el0) passed"
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
+.PHONY: smoke-hostshare-9p build-init-hostshare-9p-smoke
+.PHONY: smoke-hostshare-exec build-init-hostshare-exec
 # (arm64 full kernel-arm64.bin remains available via ARCH=arm64)
 build-init-stream-sock-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_stream_sock_smoke.c
 	@echo "✓ build-init-stream-sock-smoke OK"
+
+build-init-hostshare-9p-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_hostshare_9p_smoke.c
+	@echo "✓ build-init-hostshare-9p-smoke OK"
+
+HOSTSHARE_EXEC_STUB = setup/pid1/init_hostshare_exec
+build-init-hostshare-exec:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@echo "  INIT    Building hostshare exec stub ($(HOSTSHARE_EXEC_STUB))"
+	@$(MUSL_CC) -static -Os -o $(HOSTSHARE_EXEC_STUB) setup/pid1/init_hostshare_exec.c
+	@file $(HOSTSHARE_EXEC_STUB) | grep -q ELF
+	@echo "✓ build-init-hostshare-exec OK"
+
+HOSTSHARE_EXEC_SMOKE_LOG = /tmp/hostshare-exec-smoke.log
+smoke-hostshare-exec: build-init-hostshare-exec build-ktm-fork-wait-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   hostshare exec (stub + /mnt/host/ir0_payload)..."
+	@python3 scripts/ktm_userdev_runner.py \
+		--stub $(HOSTSHARE_EXEC_STUB) \
+		--init $(KTM_FORK_WAIT_BIN) \
+		--log $(HOSTSHARE_EXEC_SMOKE_LOG) --timeout 120 \
+		--done KTM_USERDEV_OK \
+		--require HOSTSHARE_EXEC_MOUNT_OK \
+		--require 'TEST_END|fork_wait_signal|PASS' \
+		--require KTM_USERDEV_OK
+	@echo "✓ smoke-hostshare-exec passed (9p payload exec)"
+
+HOSTSHARE_9P_SMOKE_LOG = /tmp/hostshare-9p-smoke.log
+smoke-hostshare-9p: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   virtio-9p host share (QEMU -virtfs → /mnt/host)..."
+	@$(MAKE) -s build-init-hostshare-9p-smoke
+	@SHARE=$$(mktemp -d /tmp/ir0-hostshare.XXXXXX); \
+	DISK=$$(mktemp /tmp/ir0-hostshare.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(HOSTSHARE_9P_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(HOSTSHARE_9P_SMOKE_LOG) --timeout 60 \
+		--done 'HOSTSHARE_9P_OK' --done 'KTM_HOSTSHARE_OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-fsdev local,id=ir0fs,path=$$SHARE,security_model=none \
+		-device virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "HOSTSHARE_9P_READY" $(HOSTSHARE_9P_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_9P_OK" $(HOSTSHARE_9P_SMOKE_LOG) && \
+	   grep -q "KTM_HOSTSHARE_OK" $(HOSTSHARE_9P_SMOKE_LOG) && \
+	   test -f $$SHARE/ktm_hostshare.txt && \
+	   grep -q "KTM_HOSTSHARE_OK" $$SHARE/ktm_hostshare.txt; then \
+		echo "✓ smoke-hostshare-9p passed (guest write visible on host)"; \
+		rm -rf $$SHARE; \
+	else \
+		echo "✗ smoke-hostshare-9p FAILED"; \
+		echo "--- share ---"; ls -la $$SHARE 2>/dev/null; \
+		grep -E 'HOSTSHARE_|KTM_|panic|MOUNT' $(HOSTSHARE_9P_SMOKE_LOG) | tail -50; \
+		rm -rf $$SHARE; \
+		exit 1; \
+	fi
 
 STREAM_SOCK_SMOKE_LOG = /tmp/stream-sock-smoke.log
 smoke-stream-sock: kernel-x64-userspace.iso
@@ -3649,16 +3764,62 @@ release-0.0.1: kernel-text-budget smoke-release-0.0.1
 
 ktm: ktm-check
 
-.PHONY: ktm-run ktm-userdev-run ktm-userdev-cow-run build-ktm-fork-wait-case build-ktm-cow-touch-case
+.PHONY: ktm-run ktm-userdev-run ktm-userdev-cow-run ktm-userdev-fork-storm-run \
+	ktm-userdev-fork-storm-virtfs-run \
+	ktm-userdev-exec-drain-run ktm-userdev-exec-drain-virtfs-run \
+	ktm-userdev-reap-drain-run ktm-userdev-reap-drain-virtfs-run \
+	ktm-userdev-init-exit-drain-run ktm-userdev-init-exit-drain-virtfs-run \
+	ktm-userdev-posix-pseudofs-run ktm-userdev-posix-pseudofs-virtfs-run \
+	ktm-userdev-input-det-run ktm-userdev-input-det-virtfs-run \
+	ktm-userdev-nic-reach-run ktm-userdev-nic-reach-virtfs-run smoke-nic-reach \
+	ktm-userdev-tcp-guest-run ktm-userdev-tcp-guest-virtfs-run smoke-tcp-guest \
+	ktm-userdev-tcp-wire-run ktm-userdev-tcp-wire-virtfs-run smoke-tcp-wire \
+	build-ktm-tcp-wire-case \
+	build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
+	build-ktm-exec-drain-case build-ktm-reap-drain-case \
+	build-ktm-init-exit-drain-case \
+	build-ktm-posix-pseudofs-case build-ktm-input-det-case build-ktm-nic-reach-case \
+	build-ktm-tcp-guest-case
 ktm-run: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_runner.py --scenario $(or $(SCENARIO),process.lifecycle) \
 		--log /tmp/ktm-run.log --timeout 60
 
-KTM_FORK_WAIT_SRC = userspace/libktm/ktm_fork_wait_case.c userspace/libktm/libktm_user.c
-KTM_FORK_WAIT_BIN = userspace/libktm/ktm_fork_wait_case
-KTM_COW_TOUCH_SRC = userspace/libktm/ktm_cow_touch_case.c userspace/libktm/libktm_user.c
-KTM_COW_TOUCH_BIN = userspace/libktm/ktm_cow_touch_case
+KTM_TESTS_DIR = tests/ktm
+KTM_USERDEV_LIB = $(KTM_TESTS_DIR)/lib
+KTM_USERDEV_DIR = $(KTM_TESTS_DIR)/userdev
+KTM_USERDEV_MUSL_FLAGS = -static -Os -Iincludes -I$(KTM_USERDEV_LIB)
+KTM_USERDEV_LIB_SRC = $(KTM_USERDEV_LIB)/libktm_user.c
+
+KTM_FORK_WAIT_SRC = $(KTM_USERDEV_DIR)/ktm_fork_wait_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_FORK_WAIT_BIN = $(KTM_USERDEV_DIR)/ktm_fork_wait_case
+KTM_COW_TOUCH_SRC = $(KTM_USERDEV_DIR)/ktm_cow_touch_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_COW_TOUCH_BIN = $(KTM_USERDEV_DIR)/ktm_cow_touch_case
+KTM_FORK_STORM_SRC = $(KTM_USERDEV_DIR)/ktm_fork_storm_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_FORK_STORM_BIN = $(KTM_USERDEV_DIR)/ktm_fork_storm_case
+KTM_EXEC_DRAIN_SRC = $(KTM_USERDEV_DIR)/ktm_exec_drain_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_EXEC_DRAIN_BIN = $(KTM_USERDEV_DIR)/ktm_exec_drain_case
+KTM_REAP_DRAIN_SRC = $(KTM_USERDEV_DIR)/ktm_reap_drain_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_REAP_DRAIN_BIN = $(KTM_USERDEV_DIR)/ktm_reap_drain_case
+KTM_INIT_EXIT_DRAIN_SRC = $(KTM_USERDEV_DIR)/ktm_init_exit_drain_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_INIT_EXIT_DRAIN_BIN = $(KTM_USERDEV_DIR)/ktm_init_exit_drain_case
+KTM_POSIX_PSEUDOFS_SRC = $(KTM_USERDEV_DIR)/ktm_posix_pseudofs_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_POSIX_PSEUDOFS_BIN = $(KTM_USERDEV_DIR)/ktm_posix_pseudofs_case
+KTM_INPUT_DET_SRC = $(KTM_USERDEV_DIR)/ktm_input_det_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_INPUT_DET_BIN = $(KTM_USERDEV_DIR)/ktm_input_det_case
+KTM_NIC_REACH_SRC = $(KTM_USERDEV_DIR)/ktm_nic_reach_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_NIC_REACH_BIN = $(KTM_USERDEV_DIR)/ktm_nic_reach_case
+KTM_TCP_GUEST_SRC = $(KTM_USERDEV_DIR)/ktm_tcp_guest_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_TCP_GUEST_BIN = $(KTM_USERDEV_DIR)/ktm_tcp_guest_case
+KTM_TCP_WIRE_SRC = $(KTM_USERDEV_DIR)/ktm_tcp_wire_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_TCP_WIRE_BIN = $(KTM_USERDEV_DIR)/ktm_tcp_wire_case
+
+# All userdev pilots run via hostshare stub + share payload (virtio-9p).
+build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
+	build-ktm-exec-drain-case build-ktm-reap-drain-case \
+	build-ktm-init-exit-drain-case build-ktm-posix-pseudofs-case \
+	build-ktm-input-det-case build-ktm-nic-reach-case \
+	build-ktm-tcp-guest-case build-ktm-tcp-wire-case: build-init-hostshare-exec
 
 build-ktm-fork-wait-case:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -3666,7 +3827,7 @@ build-ktm-fork-wait-case:
 		exit 1; \
 	fi
 	@echo "  KTM     Building fork_wait_signal pilot ($(KTM_FORK_WAIT_BIN))"
-	@$(MUSL_CC) -static -Os -Iincludes -Iuserspace/libktm \
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
 		-o $(KTM_FORK_WAIT_BIN) $(KTM_FORK_WAIT_SRC)
 	@file $(KTM_FORK_WAIT_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-wait-case OK"
@@ -3677,16 +3838,27 @@ build-ktm-cow-touch-case:
 		exit 1; \
 	fi
 	@echo "  KTM     Building cow_touch pilot ($(KTM_COW_TOUCH_BIN))"
-	@$(MUSL_CC) -static -Os -Iincludes -Iuserspace/libktm \
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
 		-o $(KTM_COW_TOUCH_BIN) $(KTM_COW_TOUCH_SRC)
 	@file $(KTM_COW_TOUCH_BIN) | grep -q ELF
 	@echo "✓ build-ktm-cow-touch-case OK"
 
-ktm-userdev-run: build-ktm-fork-wait-case kernel-x64-userspace.iso
+build-ktm-fork-storm-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building fork_exit_storm depth ($(KTM_FORK_STORM_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_FORK_STORM_BIN) $(KTM_FORK_STORM_SRC)
+	@file $(KTM_FORK_STORM_BIN) | grep -q ELF
+	@echo "✓ build-ktm-fork-storm-case OK"
+
+ktm-userdev-run: build-ktm-fork-wait-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py --log /tmp/ktm-userdev-run.log --timeout 90
 
-ktm-userdev-cow-run: build-ktm-cow-touch-case kernel-x64-userspace.iso
+ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_COW_TOUCH_BIN) \
@@ -3694,6 +3866,358 @@ ktm-userdev-cow-run: build-ktm-cow-touch-case kernel-x64-userspace.iso
 		--done KTM_USERDEV_COW_OK \
 		--require 'TEST_END|cow_touch|PASS' \
 		--require KTM_USERDEV_COW_OK
+
+ktm-userdev-fork-storm-run: build-ktm-fork-storm-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_FORK_STORM_BIN) \
+		--log /tmp/ktm-userdev-fork-storm.log --timeout 240 \
+		--done KTM_USERDEV_FORK_STORM_OK \
+		--require 'TEST_END|fork_exit_storm|PASS' \
+		--require KTM_USERDEV_FORK_STORM_OK
+	@echo "✓ ktm-userdev-fork-storm-run (FASE42/44 depth ≥ legacy storms)"
+
+# Same storm + virtio-9p: guest writes /mnt/host/ktm_fork_storm.txt visible on host.
+.PHONY: ktm-userdev-fork-storm-virtfs-run
+ktm-userdev-fork-storm-virtfs-run: build-ktm-fork-storm-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_FORK_STORM_BIN) \
+		--log /tmp/ktm-userdev-fork-storm-virtfs.log --timeout 240 \
+		--done KTM_USERDEV_FORK_STORM_OK \
+		--require 'TEST_END|fork_exit_storm|PASS' \
+		--require KTM_USERDEV_FORK_STORM_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_fork_storm.txt \
+		--host-grep KTM_USERDEV_FORK_STORM_OK
+	@echo "✓ ktm-userdev-fork-storm-virtfs-run (storm + virtio-9p host artifact)"
+
+build-ktm-exec-drain-case: build-fase41-true
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building exec_drain (FASE44) ($(KTM_EXEC_DRAIN_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_EXEC_DRAIN_BIN) $(KTM_EXEC_DRAIN_SRC)
+	@file $(KTM_EXEC_DRAIN_BIN) | grep -q ELF
+	@echo "✓ build-ktm-exec-drain-case OK"
+
+build-ktm-reap-drain-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building reap_drain (FASE44 init-exit analogue) ($(KTM_REAP_DRAIN_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_REAP_DRAIN_BIN) $(KTM_REAP_DRAIN_SRC)
+	@file $(KTM_REAP_DRAIN_BIN) | grep -q ELF
+	@echo "✓ build-ktm-reap-drain-case OK"
+
+build-ktm-init-exit-drain-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building init_exit_drain (FASE44 PID1 _exit) ($(KTM_INIT_EXIT_DRAIN_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_INIT_EXIT_DRAIN_BIN) $(KTM_INIT_EXIT_DRAIN_SRC)
+	@file $(KTM_INIT_EXIT_DRAIN_BIN) | grep -q ELF
+	@echo "✓ build-ktm-init-exit-drain-case OK"
+
+ktm-userdev-exec-drain-run: build-ktm-exec-drain-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_EXEC_DRAIN_BIN) \
+		--inject $(FASE41_TRUE_BIN):bin/f41true \
+		--log /tmp/ktm-userdev-exec-drain.log --timeout 240 \
+		--done KTM_USERDEV_EXEC_DRAIN_OK \
+		--require 'TEST_END|exec_drain|PASS' \
+		--require KTM_USERDEV_EXEC_DRAIN_OK
+	@echo "✓ ktm-userdev-exec-drain-run (FASE44 exec-drain → KTM)"
+
+ktm-userdev-exec-drain-virtfs-run: build-ktm-exec-drain-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_EXEC_DRAIN_BIN) \
+		--inject $(FASE41_TRUE_BIN):bin/f41true \
+		--log /tmp/ktm-userdev-exec-drain-virtfs.log --timeout 240 \
+		--done KTM_USERDEV_EXEC_DRAIN_OK \
+		--require 'TEST_END|exec_drain|PASS' \
+		--require KTM_USERDEV_EXEC_DRAIN_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_exec_drain.txt \
+		--host-grep KTM_USERDEV_EXEC_DRAIN_OK
+	@echo "✓ ktm-userdev-exec-drain-virtfs-run (exec-drain + virtio-9p)"
+
+ktm-userdev-reap-drain-run: build-ktm-reap-drain-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_REAP_DRAIN_BIN) \
+		--log /tmp/ktm-userdev-reap-drain.log --timeout 120 \
+		--done KTM_USERDEV_REAP_DRAIN_OK \
+		--require 'TEST_END|reap_drain|PASS' \
+		--require KTM_USERDEV_REAP_DRAIN_OK
+	@echo "✓ ktm-userdev-reap-drain-run (FASE44 reap-drain → KTM)"
+
+ktm-userdev-reap-drain-virtfs-run: build-ktm-reap-drain-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_REAP_DRAIN_BIN) \
+		--log /tmp/ktm-userdev-reap-drain-virtfs.log --timeout 120 \
+		--done KTM_USERDEV_REAP_DRAIN_OK \
+		--require 'TEST_END|reap_drain|PASS' \
+		--require KTM_USERDEV_REAP_DRAIN_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_reap_drain.txt \
+		--host-grep KTM_USERDEV_REAP_DRAIN_OK
+	@echo "✓ ktm-userdev-reap-drain-virtfs-run (reap-drain + virtio-9p)"
+
+ktm-userdev-init-exit-drain-run: build-ktm-init-exit-drain-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_INIT_EXIT_DRAIN_BIN) \
+		--log /tmp/ktm-userdev-init-exit-drain.log --timeout 120 \
+		--done KTM_INIT_EXIT_DRAIN_OK \
+		--require 'TEST_END|init_exit_drain|PASS' \
+		--require KTM_INIT_EXIT_DRAIN_OK \
+		--require FASE44_INIT_EXIT_DRAIN
+	@echo "✓ ktm-userdev-init-exit-drain-run (FASE44 PID1 _exit → KTM)"
+
+ktm-userdev-init-exit-drain-virtfs-run: build-ktm-init-exit-drain-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_INIT_EXIT_DRAIN_BIN) \
+		--log /tmp/ktm-userdev-init-exit-drain-virtfs.log --timeout 120 \
+		--done KTM_INIT_EXIT_DRAIN_OK \
+		--require 'TEST_END|init_exit_drain|PASS' \
+		--require KTM_INIT_EXIT_DRAIN_OK \
+		--require FASE44_INIT_EXIT_DRAIN \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_init_exit_drain.txt \
+		--host-grep KTM_INIT_EXIT_DRAIN_OK
+	@echo "✓ ktm-userdev-init-exit-drain-virtfs-run (PID1 _exit + virtio-9p)"
+
+build-ktm-posix-pseudofs-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building posix_pseudofs (FASE53B) ($(KTM_POSIX_PSEUDOFS_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_POSIX_PSEUDOFS_BIN) $(KTM_POSIX_PSEUDOFS_SRC)
+	@file $(KTM_POSIX_PSEUDOFS_BIN) | grep -q ELF
+	@echo "✓ build-ktm-posix-pseudofs-case OK"
+
+build-ktm-input-det-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building input_det (FASE54C) ($(KTM_INPUT_DET_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_INPUT_DET_BIN) $(KTM_INPUT_DET_SRC)
+	@file $(KTM_INPUT_DET_BIN) | grep -q ELF
+	@echo "✓ build-ktm-input-det-case OK"
+
+build-ktm-nic-reach-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building nic_reach (F8-1) ($(KTM_NIC_REACH_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_NIC_REACH_BIN) $(KTM_NIC_REACH_SRC)
+	@file $(KTM_NIC_REACH_BIN) | grep -q ELF
+	@echo "✓ build-ktm-nic-reach-case OK"
+
+build-ktm-tcp-guest-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building tcp_guest (F8-2) ($(KTM_TCP_GUEST_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_TCP_GUEST_BIN) $(KTM_TCP_GUEST_SRC)
+	@file $(KTM_TCP_GUEST_BIN) | grep -q ELF
+	@echo "✓ build-ktm-tcp-guest-case OK"
+
+ktm-userdev-posix-pseudofs-run: build-ktm-posix-pseudofs-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_POSIX_PSEUDOFS_BIN) \
+		--log /tmp/ktm-userdev-posix-pseudofs.log --timeout 120 \
+		--done KTM_USERDEV_POSIX_PSEUDOFS_OK \
+		--require 'TEST_END|posix_pseudofs|PASS' \
+		--require KTM_USERDEV_POSIX_PSEUDOFS_OK \
+		--require KTM_GETDENTS_DEV_CURSOR_OK
+	@echo "✓ ktm-userdev-posix-pseudofs-run (FASE53B → KTM)"
+
+ktm-userdev-posix-pseudofs-virtfs-run: build-ktm-posix-pseudofs-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_POSIX_PSEUDOFS_BIN) \
+		--log /tmp/ktm-userdev-posix-pseudofs-virtfs.log --timeout 120 \
+		--done KTM_USERDEV_POSIX_PSEUDOFS_OK \
+		--require 'TEST_END|posix_pseudofs|PASS' \
+		--require KTM_USERDEV_POSIX_PSEUDOFS_OK \
+		--require KTM_GETDENTS_DEV_CURSOR_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_posix_pseudofs.txt \
+		--host-grep KTM_USERDEV_POSIX_PSEUDOFS_OK
+	@echo "✓ ktm-userdev-posix-pseudofs-virtfs-run (53B + virtio-9p)"
+
+ktm-userdev-input-det-run: build-ktm-input-det-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_INPUT_DET_BIN) \
+		--log /tmp/ktm-userdev-input-det.log --timeout 120 \
+		--done KTM_USERDEV_INPUT_DET_OK \
+		--require 'TEST_END|input_det|PASS' \
+		--require KTM_USERDEV_INPUT_DET_OK
+	@echo "✓ ktm-userdev-input-det-run (FASE54C → KTM)"
+
+ktm-userdev-input-det-virtfs-run: build-ktm-input-det-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_INPUT_DET_BIN) \
+		--log /tmp/ktm-userdev-input-det-virtfs.log --timeout 120 \
+		--done KTM_USERDEV_INPUT_DET_OK \
+		--require 'TEST_END|input_det|PASS' \
+		--require KTM_USERDEV_INPUT_DET_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_input_det.txt \
+		--host-grep KTM_USERDEV_INPUT_DET_OK
+	@echo "✓ ktm-userdev-input-det-virtfs-run (54C + virtio-9p)"
+
+ktm-userdev-nic-reach-run: build-ktm-nic-reach-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_NIC_REACH_BIN) \
+		--log /tmp/ktm-userdev-nic-reach.log --timeout 120 \
+		--done F8_NIC_REACH_OK \
+		--require 'TEST_END|nic_reach|PASS' \
+		--require F8_NIC_REACH_OK \
+		--qemu-arg=-netdev --qemu-arg=user,id=net0 \
+		--qemu-arg=-device --qemu-arg=rtl8139,netdev=net0
+	@echo "✓ ktm-userdev-nic-reach-run (F8-1 NIC probe)"
+
+ktm-userdev-nic-reach-virtfs-run: build-ktm-nic-reach-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_NIC_REACH_BIN) \
+		--log /tmp/ktm-userdev-nic-reach-virtfs.log --timeout 120 \
+		--done F8_NIC_REACH_OK \
+		--require 'TEST_END|nic_reach|PASS' \
+		--require F8_NIC_REACH_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_nic_reach.txt \
+		--host-grep F8_NIC_REACH_OK \
+		--qemu-arg=-netdev --qemu-arg=user,id=net0 \
+		--qemu-arg=-device --qemu-arg=rtl8139,netdev=net0
+	@echo "✓ ktm-userdev-nic-reach-virtfs-run (F8-1 + virtio-9p)"
+
+# Alias ship/docs name for F8-1
+smoke-nic-reach: ktm-userdev-nic-reach-virtfs-run
+
+ktm-userdev-tcp-guest-run: build-ktm-tcp-guest-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_TCP_GUEST_BIN) \
+		--log /tmp/ktm-userdev-tcp-guest.log --timeout 120 \
+		--done F8_TCP_GUEST_OK \
+		--require 'TEST_END|tcp_guest|PASS' \
+		--require F8_TCP_GUEST_OK \
+		--require F8_TCP_GUEST_SENDRECV_OK
+	@echo "✓ ktm-userdev-tcp-guest-run (F8-2 guest TCP)"
+
+ktm-userdev-tcp-guest-virtfs-run: build-ktm-tcp-guest-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_TCP_GUEST_BIN) \
+		--log /tmp/ktm-userdev-tcp-guest-virtfs.log --timeout 120 \
+		--done F8_TCP_GUEST_OK \
+		--require 'TEST_END|tcp_guest|PASS' \
+		--require F8_TCP_GUEST_OK \
+		--require F8_TCP_GUEST_SENDRECV_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_tcp_guest.txt \
+		--host-grep F8_TCP_GUEST_OK
+	@echo "✓ ktm-userdev-tcp-guest-virtfs-run (F8-2 + virtio-9p)"
+
+# Alias ship/docs name for F8-2
+smoke-tcp-guest: ktm-userdev-tcp-guest-virtfs-run
+
+build-ktm-tcp-wire-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building tcp_wire (F8-3) ($(KTM_TCP_WIRE_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_TCP_WIRE_BIN) $(KTM_TCP_WIRE_SRC)
+	@file $(KTM_TCP_WIRE_BIN) | grep -q ELF
+	@echo "✓ build-ktm-tcp-wire-case OK"
+
+F8_TCP_WIRE_HOST_OK = /tmp/f8-tcp-wire-host.ok
+F8_TCP_WIRE_NETDEV = user,id=net0
+
+ktm-userdev-tcp-wire-virtfs-run: build-ktm-tcp-wire-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@rm -f $(F8_TCP_WIRE_HOST_OK)
+	@python3 scripts/tcp_wire_host_listener.py --port 8888 --expect WIRETCP \
+		--timeout 60 --out $(F8_TCP_WIRE_HOST_OK) & \
+	LPID=$$!; sleep 1; \
+	RC=0; \
+	python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_TCP_WIRE_BIN) \
+		--log /tmp/ktm-userdev-tcp-wire-virtfs.log --timeout 180 \
+		--done F8_TCP_WIRE_OK \
+		--require 'TEST_END|tcp_wire|PASS' \
+		--require F8_TCP_WIRE_OK \
+		--require F8_TCP_WIRE_CONNECT_OK \
+		--require F8_TCP_WIRE_SENDRECV_OK \
+		--require KTM_HOSTSHARE_REPORT_OK \
+		--host-file ktm_tcp_wire.txt \
+		--host-grep F8_TCP_WIRE_OK \
+		--qemu-arg=-netdev --qemu-arg=$(F8_TCP_WIRE_NETDEV) \
+		--qemu-arg=-device --qemu-arg=rtl8139,netdev=net0 \
+		|| RC=$$?; \
+	kill $$LPID 2>/dev/null || true; wait $$LPID 2>/dev/null || true; \
+	if [ ! -f $(F8_TCP_WIRE_HOST_OK) ]; then \
+		echo "✗ F8-3 host listener did not receive WIRETCP"; \
+		exit 1; \
+	fi; \
+	exit $$RC
+	@echo "✓ ktm-userdev-tcp-wire-virtfs-run (F8-3 wire TCP guest→host 10.0.2.2:8888)"
+
+ktm-userdev-tcp-wire-run: build-ktm-tcp-wire-case kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@rm -f $(F8_TCP_WIRE_HOST_OK)
+	@python3 scripts/tcp_wire_host_listener.py --port 8888 --expect WIRETCP \
+		--timeout 60 --out $(F8_TCP_WIRE_HOST_OK) & \
+	LPID=$$!; sleep 1; \
+	RC=0; \
+	python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_TCP_WIRE_BIN) \
+		--log /tmp/ktm-userdev-tcp-wire.log --timeout 180 \
+		--done F8_TCP_WIRE_OK \
+		--require 'TEST_END|tcp_wire|PASS' \
+		--require F8_TCP_WIRE_OK \
+		--require F8_TCP_WIRE_CONNECT_OK \
+		--require F8_TCP_WIRE_SENDRECV_OK \
+		--qemu-arg=-netdev --qemu-arg=$(F8_TCP_WIRE_NETDEV) \
+		--qemu-arg=-device --qemu-arg=rtl8139,netdev=net0 \
+		|| RC=$$?; \
+	kill $$LPID 2>/dev/null || true; wait $$LPID 2>/dev/null || true; \
+	if [ ! -f $(F8_TCP_WIRE_HOST_OK) ]; then \
+		echo "✗ F8-3 host listener did not receive WIRETCP"; \
+		exit 1; \
+	fi; \
+	exit $$RC
+	@echo "✓ ktm-userdev-tcp-wire-run (F8-3 wire TCP)"
+
+smoke-tcp-wire: ktm-userdev-tcp-wire-virtfs-run
 
 ktm-check: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
@@ -4153,6 +4677,7 @@ help:
 	@echo "  make run-fase58e-ash-gui          FASE58E: ash interactive (no Doom autostart)"
 	@echo "  make check-fase58e-logs           grep FASE58E serial tags"
 	@echo "  make smoke-fase58l-busybox-coreutils  FASE58L: full BusyBox coreutils smoke"
+	@echo "  make smoke-busybox-manifest           BUSY-2: product applet manifest ship gate"
 	@echo "  make run-irinit-interactive-gui   irinit + BusyBox ash (bundles Doom if WAD exists)"
 	@echo ""
 	@echo "Debug (off by default; rebuild kernel after change):"
@@ -4529,7 +5054,7 @@ test-drivers-clean:
         linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
         linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
         runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-fase53b-posix-pseudofs smoke-fase54a-fbdev smoke-fase54b-input smoke-fase54c-input-deterministic smoke-fase55a-doom-prereq smoke-fase55b-doom-stub smoke-fase55c-timing-input smoke-fase55d-doomgeneric smoke-current-fase54b smoke-regression-light smoke-regression-light-fast smoke-regression-full \
-        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-heart-smoke build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs run-fase58e-ash-gui check-fase58e-logs smoke-fase58e-ash-interactive build-busybox-fase58-full build-fase58l-busybox-smoke smoke-fase58l-busybox-coreutils build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy load-init-with-smoke load-init-with-musl load-userspace-rootfs \
+        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-fase53b-posix-pseudofs build-init-heart-smoke build-init-fase54a-fbdev build-init-fase54b-input build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq build-init-fase55b-doom-stub build-init-fase55c-timing-input build-init-fase55d-doomgeneric build-fase55e-doom-interactive run-fase55d-doomgeneric-gui build-fase58c-boot-halt build-fase58c-fbdev run-fase58c-boot-gui run-fase58c-fbdev-gui run-fase58c-doom-gui check-fase58c-logs run-fase58e-ash-gui check-fase58e-logs         smoke-fase58e-ash-interactive build-busybox-fase58-full build-fase58l-busybox-smoke smoke-fase58l-busybox-coreutils smoke-busybox-manifest build-irinit run-irinit-interactive-gui kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy load-init-with-smoke load-init-with-musl load-userspace-rootfs \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \

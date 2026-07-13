@@ -130,6 +130,12 @@ int ir0_getdents_path_routed(const char *path, struct vfs_dirent *entries,
         return devfs_readdir_root(entries, max_entries);
     }
 
+    if (ir0_is_dev_path(path) && devfs_is_virtual_subdir(path))
+    {
+        ensure_devfs_init();
+        return devfs_readdir_subdir(path, entries, max_entries);
+    }
+
     if (is_heart_path(path))
         return heart_getdents(path, entries, max_entries);
 

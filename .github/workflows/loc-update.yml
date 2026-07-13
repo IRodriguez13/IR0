@@ -1,62 +1,50 @@
+# Optional LOC telemetry for the ir0-loc dashboard (Render).
+# Manual only — does not run on push/PR (avoids red CI noise).
 name: Update LOC
 
 on:
-  push:
-    branches: [mainline]
+  workflow_dispatch:
 
 jobs:
   contar-lineas:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - run: sudo apt-get install -y cloc
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends cloc
 
-      # Count lines including Rust (.rs) and C++ (.cpp) files for multi-language kernel
-      - run: |
+      - name: Count LOC
+        run: |
           echo "Counting lines of code (C, C++, Rust, ASM)..."
           cloc --json \
-               --include-lang=C,C++,Rust,"Assembly" \
+               --include-lang=C,C++,"Assembly",Rust \
                --by-file-by-lang \
                . > loc.json
           echo "LOC count complete"
 
+      - name: Ping LOC API
+        run: |
+          curl -sS --max-time 20 https://ir0-loc.onrender.com/ || true
+          sleep 5
 
-      # 🔹 Paso de ping para despertar la API
-      - run: |
-          echo "Ping a la API para despertar el server..."
-          curl -s https://ir0-loc.onrender.com/ || true
-          sleep 14
-
-      # 🔹 Paso de POST del loc.json
-      - run: |
-          echo "Enviando loc.json a la API..."
-          curl -X POST https://ir0-loc.onrender.com/api/loc \
+      - name: POST loc.json
+        run: |
+          curl -sS --max-time 60 -X POST https://ir0-loc.onrender.com/api/loc \
                -H "Content-Type: application/json" \
-               -d @loc.json
+               -d @loc.json || true
 
-      # 🔹 Obtener contribuidores del repositorio
       - name: Fetch and send contributors
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Obteniendo contribuidores del repositorio..."
-          
-          # Obtener owner y repo del contexto de GitHub
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.event.repository.name }}"
-          
-          # Hacer GET a la API de GitHub para obtener contribuidores
-          curl -s -H "Authorization: token $GITHUB_TOKEN" \
-               -H "Accept: application/vnd.github.v3+json" \
-               "https://api.github.com/repos/IRodriguez13/IR0/contributors" \
-               > contributors.json
-          
-          echo "Contribuidores obtenidos, enviando al endpoint Flask..."
-          
-          # Enviar JSON de contribuidores al endpoint Flask
-          curl -X POST https://ir0-loc.onrender.com/api/contributors \
+          curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+               -H "Accept: application/vnd.github+json" \
+               "https://api.github.com/repos/${OWNER}/${REPO}/contributors" \
+               > contributors.json || true
+          curl -sS --max-time 60 -X POST https://ir0-loc.onrender.com/api/contributors \
                -H "Content-Type: application/json" \
-               -d @contributors.json
-          
-          echo "✓ Contribuidores enviados exitosamente"
+               -d @contributors.json || true
+          echo "LOC telemetry step finished (best-effort)"
