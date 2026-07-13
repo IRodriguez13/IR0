@@ -646,13 +646,40 @@ int main(void)
         }
         end_ms = DG_GetTicksMs();
 
-        write_str("DOOMGENERIC_FRAME_LOOP_OK\n");
-        if (end_ms > start_ms && (end_ms - start_ms) > 60000u)
-        {
-            write_str("LONG_RUNNING_BUT_STABLE\n");
-        }
-        write_str("FASE55D_DOOMGENERIC_OK\n");
-    }
+		write_str("DOOMGENERIC_FRAME_LOOP_OK\n");
+		if (end_ms > start_ms && (end_ms - start_ms) > 60000u)
+		{
+			write_str("LONG_RUNNING_BUT_STABLE\n");
+		}
+		write_str("FASE55D_DOOMGENERIC_OK\n");
+		/* Optional KTM product case (inline ioctl — avoid kernel -Iincludes). */
+		{
+			int kfd = open("/dev/ktm", O_RDWR);
+			if (kfd >= 0)
+			{
+				/* KTM_IOC_USER_EVENT = 0x4B07; CASE_BEGIN=21 CASE_END=22 */
+				struct
+				{
+					unsigned type;
+					unsigned subsystem;
+					unsigned long long arg0, arg1, arg2, arg3;
+					char name[64];
+				} ev;
+				memset(&ev, 0, sizeof(ev));
+				ev.type = 21u;
+				ev.subsystem = 7u;
+				memcpy(ev.name, "doomgeneric_55d", 16);
+				(void)ioctl(kfd, 0x4B07u, &ev);
+				ev.type = 22u;
+				ev.arg0 = 0;
+				(void)ioctl(kfd, 0x4B07u, &ev);
+				(void)close(kfd);
+				write_str("KTM_DOOM_55D_OK\n");
+			}
+			else
+				write_str("KTM_DOOM_55D_SKIP\n");
+		}
+	}
 #endif
 
     if (g_fd_input >= 0)

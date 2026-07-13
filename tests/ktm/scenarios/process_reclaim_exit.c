@@ -13,7 +13,7 @@
 #include <ir0/process.h>
 #include <string.h>
 
-#define RECLAIM_ROUNDS 16
+#define RECLAIM_ROUNDS 64
 
 extern process_t *process_list;
 extern void process_reap_zombie_child(process_t *child);

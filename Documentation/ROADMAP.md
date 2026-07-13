@@ -152,10 +152,13 @@ Closed for 0.0.1 (re-validate with `make release-0.0.1` or `make smoke-release-0
 
 - Hardening H1–H6
 - runit, musl userspace ISO, BusyBox ash (+ `CONFIG_WHOAMI` in minimal config)
-- devfs open after cwd resolve (`sys_open` → `/dev/*` from `cd /dev; ls`)
-- TinyCC smoke (`smoke-fase52-tcc` in release gate — **P0:** hang at `tcc_static_a0` in QEMU, ver STABLE.md)
+- TinyCC + Doom+**IWAD** + posix — merge blockers in [`STABLE.md`](STABLE.md)
 - COW fork + lazy anon mmap/brk (`smoke-mm-cow-lazy`)
-- T2 test path: fb0, input, `smoke-fase55b-doom-stub` + `smoke-fase55c-timing-input`; full WAD via `REAL_WAD_PATH`
+- AF_UNIX + TCP loopback (`smoke-stream-sock`); host-share virtio-**9p** (`smoke-hostshare-9p`)
+- T2: fb0/input + `smoke-fase55d-doomgeneric` (real WAD); stub 55b = fast aid only
+
+**0.0.2 (next):** F8 TCP beyond loopback / NIC. **Out of 0.0.1:** CFS/SMP, X11/WM, virtiofs+FUSE.
+See version matrix in [`STABLE.md`](STABLE.md). Open Future: [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 
 ---
 
@@ -235,8 +238,10 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 
 | # | Item | Notes |
 |---|------|-------|
-| 17b | **Full ash + required applets in rootfs** | Manifest (mount, ls, cat, su, …) — **BUSY-*** |
-| 17c | **Applet smoke** | Proof as rootfs subset grows |
+| 17b | **Full ash + required applets in rootfs** | **BUSY-1 DONE** — `setup/busybox/required_applets.txt` + inject on runit disk |
+| 17c | **Applet smoke** | **BUSY-2 DONE** — `make smoke-busybox-manifest` → `BUSYBOX_MANIFEST_OK` |
+
+Tag `v0.0.1-rc2` closed automated product gates except maintainer **manual VM** for final ship.
 
 ### P3 — network + desktop (after P1-storage stable)
 
@@ -286,11 +291,11 @@ driver platform (static ABI, then modules) → P1-storage → TCP/T2 → T3 prep
 
 | ID | Milestone | Why | Paths / proof |
 |----|-----------|-----|---------------|
-| **BUSY-1** | ash + essential applets in production rootfs | runit scripts, mount workflows, dev without host tools | `setup/third-party/busybox-1.36.1`, `setup/busybox/`, `scripts/inject_init_minix.py` |
-| **BUSY-2** | Required-applet manifest | Avoid “smoke passes” with minimal subset only | New script + smoke executing N applets |
+| **BUSY-1** | ash + essential applets in production rootfs | **Done** — `required_applets.txt` + `busybox_inject_manifest.sh` | `setup/busybox/`, `setup/runit/install-to-disk.sh` |
+| **BUSY-2** | Required-applet manifest smoke | **Done** — `smoke-busybox-manifest` | `setup/pid1/fase58l_busybox_smoke.c` |
 | **BUSY-3** | Broader applet parity with minimal Linux embed | Operational parity for tier1 POSIX | BusyBox Kconfig + rootfs size budget |
 
-Today: `smoke-tier1` proves interactive ash; many applets are not on the smoke disk image.
+Today: `smoke-busybox-manifest` proves product applets on disk (`BUSYBOX_MANIFEST_OK`); `smoke-tier1` covers interactive ash.
 
 ### Kernel modules — dynamic loader and modprobe
 
@@ -416,12 +421,12 @@ make -s -C tests/host run
 
 ### Merge → `master` — product blockers (maintainer)
 
-Per [`STABLE.md`](STABLE.md): **TinyCC** + **Doom T2** must PASS. Do not merge on CTR/release alone.
+Per [`STABLE.md`](STABLE.md): **TinyCC** + **Doom+IWAD (55d)** must PASS. Do not merge on CTR/release alone.
 
 ```bash
-make smoke-fase52-tcc
-make smoke-fase55b-doom-stub
-# plus smoke-fase55c-timing-input when touching fb/input
+make smoke-tcc-power-halt
+make IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric
+# stub 55b = fast aid only; plus smoke-fase55c-timing-input when touching fb/input
 ```
 
 ### Tier-1 active smokes

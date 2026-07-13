@@ -48,9 +48,12 @@ int ir0_open_flags_ok_for_vfs(int flags)
         return 0;
 
     /*
-     * Linux O_DIRECTORY (0x20000) vs IR0_O_DIRECTORY (0x200000).
+     * Linux O_DIRECTORY (0x10000) vs IR0_O_DIRECTORY (0x200000).
+     * O_LARGEFILE (0x8000) is musl noise on x86-64 — ignore.
      */
     if ((f & LINUX_O_DIRECTORY) && !(f & IR0_O_DIRECTORY))
+        return 0;
+    if (f & LINUX_O_NOFOLLOW)
         return 0;
 
     /*
@@ -82,6 +85,12 @@ void ir0_open_flags_log_translation(int linux_raw, int ir0_flags)
         serial_print(" IR0_O_EXCL");
     if (ir0_flags & IR0_O_APPEND)
         serial_print(" IR0_O_APPEND");
+    if (ir0_flags & IR0_O_NONBLOCK)
+        serial_print(" IR0_O_NONBLOCK");
+    if (ir0_flags & IR0_O_DIRECTORY)
+        serial_print(" IR0_O_DIRECTORY");
+    if (ir0_flags & IR0_O_CLOEXEC)
+        serial_print(" IR0_O_CLOEXEC");
     if ((ir0_flags & IR0_O_ACCMODE) == IR0_O_WRONLY)
         serial_print(" IR0_O_WRONLY");
     else if ((ir0_flags & IR0_O_ACCMODE) == IR0_O_RDWR)

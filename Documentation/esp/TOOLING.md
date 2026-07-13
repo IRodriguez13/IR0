@@ -60,4 +60,5 @@ Esta alineado con el Makefile y menuconfig actuales.
 
 - La validacion runtime aun es por escenarios, no exhaustiva.
 - Algunas features avanzadas siguen con politica MVP.
-- La cobertura tipo CI depende de disciplina de ejecucion local.
+- La cobertura tipo CI es **local** (`make health`, gates CTR, KTM/smokes). GitHub Actions
+  ya no corre el workflow pesado `Tests`; `Update LOC` es solo manual.

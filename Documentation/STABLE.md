@@ -2,6 +2,7 @@
 
 > **Last verified:** 2026-07-12  
 > **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
+> hostshare-exec + F8 harden + FAT secondary ship note,  
 > merge `56a3f7b` (dev→master: kexec/S3, P1-storage, P1-T1), Future F2–F6,  
 > `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 
@@ -14,20 +15,31 @@ full-copied user pages. Real share-on-fork + write-fault break landed in `62cc51
 `make smoke-mm-cow-lazy`. KTM is the canonical in-kernel test plane (`make ktm-run`,
 `make ktm-userdev-run`); see [`ai_driven_dev/ktm.md`](ai_driven_dev/ktm.md).
 
+### Tag prep vs release ship (2026-07-12)
+
+| Artifact | Meaning |
+|----------|---------|
+| **`v0.0.1-rc2`** | Pre-release **tag prep**: critical automated gates green (TCC, Doom+IWAD, posix, hostshare, arch-guard). **Not** a shipped release. |
+| **Release 0.0.1 ship** | Maintainer only: **manual QEMU/VM** walkthrough “listo”. Automated BusyBox product path (**BUSY-1** manifest + **BUSY-2** `smoke-busybox-manifest`) is green. |
+
+Do **not** treat `v0.0.1-rc2` (or earlier `rc1`/`pre.1`) as “0.0.1 done”. Final git tag `v0.0.1` waits on ship criteria above.
+
 ---
 
 ## Merge → `master` — critical product gates (maintainer)
 
 **Policy (2026-07-12):** before merging `dev` → `master`, the software that must **not** regress is
-**TinyCC in-guest** (compile + run), **Doom-class T2** (stub path minimum), and **broader userspace**
-(`smoke-posix-depth` or `smoke-tier1`). CTR/`smoke-release-0.0.1` alone are not enough.
+**TinyCC in-guest** (compile + run), **Doom T2 with real IWAD** (doomgeneric loads WAD + frames),
+and **broader userspace** (`smoke-posix-depth` or `smoke-tier1`). CTR/`smoke-release-0.0.1` alone
+are not enough.
 
 ```bash
 # Product blockers (must PASS) — do not merge to master if any red
 make smoke-tcc-power-halt                    # live TCC gate (link + run + halt)
-make IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub
+# Doom = real WAD (default REAL_WAD_PATH in Makefile; override if needed)
+make IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric
 make smoke-posix-depth                       # or: make smoke-tier1
-# Full IWAD path when REAL_WAD_PATH is set:
+# Interactive GUI (optional):
 #   make run-fase55d-doomgeneric-gui
 
 # Still required hygiene (not a substitute for TCC/Doom/userspace)
@@ -36,7 +48,12 @@ make smoke-tier1
 make smoke-release-0.0.1
 ```
 
-If TCC, Doom stub, or the userspace smoke is red, **do not merge to `master`** even if release/CTR are green.
+Default IWAD: `REAL_WAD_PATH` → `/home/ivanr013/Escritorio/universal-doom/DOOM1.WAD`
+(file must exist on the merge host). Stub `smoke-fase55b-doom-stub` remains a fast regression
+aid, **not** the merge blocker.
+
+If TCC, Doom+WAD (`FASE55D_DOOMGENERIC_OK` / frame loop), or the userspace smoke is red,
+**do not merge to `master`** even if release/CTR are green.
 Status honesty: TCC may still hang at static link in some QEMU runs — treat a red TCC smoke as
 a merge blocker, not as “optional WARN”.
 
@@ -91,13 +108,29 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 |------|--------|---------------|
 | **Hardening H1–H6** | **Closed** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Stable** | `make smoke-runit-boot` |
-| **BusyBox ash + applets** | **Stable** | `make smoke-tier1`, `make smoke-runit-ash-interactive`; optional `smoke-fase58l-busybox-coreutils` |
+| **BusyBox ash + applets** | **Stable (product)** | Manifest [`setup/busybox/required_applets.txt`](../setup/busybox/required_applets.txt); rootfs inject via `busybox_inject_manifest.sh`; ship smoke: `make smoke-busybox-manifest` (`BUSYBOX_MANIFEST_OK`). Extended probe: `smoke-fase58l-busybox-coreutils` |
 | **TinyCC in-guest** | **Merge-critical** | `smoke-fase52-tcc` / `smoke-tcc-power-halt` — **blocker for `master`** |
 | **COW fork** | **Stable** | `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
 | **T1 POSIX slice** | **Stable** | tier1 + musl manifests; cred/pthread/setuid smokes |
-| **T2 graphics / Doom** | **Merge-critical** | `/dev/fb0`, `/dev/events0`, mmap; `smoke-fase55b-doom-stub` (+ timing/input) — **blocker for `master`** |
+| **T2 graphics / Doom** | **Merge-critical** | Real IWAD: `IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric` (`REAL_WAD_PATH`) — **blocker for `master`**; stub 55b = fast aid only |
+| **Local net** | **Stable for test** | `AF_UNIX` + **TCP loopback** — `make smoke-stream-sock` |
+| **Host-share 9p** | **Dev aid** | QEMU `-virtfs` → guest `/mnt/host` — `make smoke-hostshare-9p`; ELF exec via share — `make smoke-hostshare-exec` (**not** virtiofs/FUSE) |
 | **T3 desktop** | **Not in scope** | WM/compositor out of tree — planning only |
+
+### Version matrix (0.0.1 vs 0.0.2)
+
+| Topic | **0.0.1** (ship) | **0.0.2** (next tag) | Later |
+|-------|------------------|----------------------|-------|
+| Gate D1.20 | `smoke-release-0.0.1` / `release-0.0.1` | keep green | — |
+| Product | TCC + Doom+**IWAD** + posix/tier1 | same blockers | — |
+| Network | AF_UNIX + TCP **loopback** + guest IP | F8-1 NIC (`smoke-nic-reach`); F8-2 guest TCP (`smoke-tcp-guest`) | wire TCP Internet |
+| Host share | virtio-**9p** MVP + exec (`smoke-hostshare-9p`, `smoke-hostshare-exec`) | subdirs / more FS ops | virtiofs + FUSE when ready |
+| ARM | bring-up (F7*) — does not block x86 ship | continue port | — |
+| X11 / WM | **out** | userspace after usable net + T2 | never in-kernel T3 |
+| CFS / SMP | **out** | **out** | much later; not with X11 |
+
+Do **not** claim “virtiofs done” for the 9p path.
 
 ---
 
@@ -135,27 +168,40 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 |------|-------|-------|
 | runit PID1 | `setup/pid1/`, `load-userspace-runit` | `smoke-runit-boot` |
 | BusyBox minimal | `setup/busybox/fase58_busybox.config`, `build-busybox-fase50-min` | `smoke-tier1` |
-| BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional smoke |
+| BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional extended probe |
+| BusyBox product manifest | **BUSY-1 / BUSY-2 Closed** | `required_applets.txt` + `smoke-busybox-manifest` (`BUSYBOX_MANIFEST_OK`) |
 | Interactive ash on FB console | `includes/ir0/console.c`, TTY echo | [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.md) |
 | musl static toolchain | `MUSL_CC`, `kernel-x64-userspace.iso` | tier1 smokes |
 | TinyCC | `setup/tcc/build-fase52.sh` | `build-tcc-fase52` |
 
-### Networking (UDP minimum)
+### Networking (UDP + local streams)
 
 | Item | Proof |
 |------|-------|
 | `socket` / `bind` / `sendto` / `recvfrom` / `connect` | tier1 manifest, `runtime-net-check` |
 | UDP `accept` → `-EOPNOTSUPP` | documented in mandocs |
-| **TCP stream** | **Not 0.0.1** — backlog P3 |
+| AF_UNIX + TCP **loopback** `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) — **in 0.0.1** |
+| NIC reach (rtl8139 + `/dev/net`) | **F8-1 PARTIAL** — `make smoke-nic-reach` (`F8_NIC_REACH_OK`) |
+| TCP guest IP (10.0.2.15 stream) | **F8-2 PARTIAL** — `make smoke-tcp-guest` (`F8_TCP_GUEST_OK`) |
+| TCP Internet / wire NIC | **F8-3 PARTIAL** — `make smoke-tcp-wire` (`F8_TCP_WIRE_OK`); SYN/PSH + best-effort FIN\|ACK; NET RX traces at DEBUG; not required for 0.0.1 |
+
+### Host share (dev aid)
+
+| Item | Proof |
+|------|-------|
+| virtio-9p + VFS fstype `9p` → `/mnt/host` | `make smoke-hostshare-9p` (`HOSTSHARE_9P_OK`, host file visible) |
+| 9p getattr + chunked read (ELF-sized) | `virtio_9p_stat_file` / `virtio_9p_read_file`; `hs_stat`/`hs_read` |
+| Exec payload from share | `make smoke-hostshare-exec` — stub `init_hostshare_exec` mounts `ir0share`, `execve(/mnt/host/ir0_payload)` |
+| virtiofs / FUSE | **Not implemented** — post-9p when FUSE exists |
 
 ### Storage (phase2 baseline)
 
 | Item | Status | Notes |
 |------|--------|-------|
 | ATA + `/dev/hda` read | **Stable** | `block_hda_read_contract` ktest |
-| MINIX root on `disk.img` | **Stable** | default boot layout |
+| MINIX root on `disk.img` | **Stable** | **Ship root FS** — default boot layout |
 | VFS mount contracts | **Stable** | `runtime-mount-check`, mount ktests |
-| FAT16 on `block_dev` | **Stable (RO + write audit)** | `smoke-fat16-mount`; `linux-abi-audit-vfs-write-fat` |
+| FAT16 on `block_dev` | **Stable (secondary)** | Montable on `/dev/hdb`; `smoke-fat16-mount` in release gate; write audit `linux-abi-audit-vfs-write-fat`; **not** FAT-as-root in 0.0.1 |
 | EXT2 read-only | **Stable for test** | `smoke-ext2-mount` |
 | GPT probe | **Stable for test** | `smoke-gpt-partition` |
 | AHCI detect/read/multi + NCQ | **Stable for test** | `smoke-ahci-read` (`AHCI_NCQ_OK` / `UNSUPPORTED`) |
@@ -191,8 +237,9 @@ Everything in this table was reached in at least one oleada and has a **runnable
 | **T1** | MM COW + lazy | `make smoke-mm-cow-lazy` | — |
 | **T2** | framebuffer `/dev/fb0` | legacy `smoke-fase54a-fbdev`¹ | `make run-fase58c-fbdev-gui` |
 | **T2** | input `/dev/events0` | legacy `smoke-fase54b-input`¹ | keyboard in GTK window |
-| **T2** | Doom-class client stub | legacy `smoke-fase55b-doom-stub`¹ | `make run-fase55d-doomgeneric-gui` |
+| **T2** | Doom + real IWAD | `smoke-fase55d-doomgeneric`¹ | `make run-fase55d-doomgeneric-gui` |
 | **Dev** | KTM boot + userdev | `make ktm-run`, `make ktm-userdev-run` | — |
+| **Dev** | Host-share 9p (KTM artifacts + exec) | `make smoke-hostshare-9p` / `smoke-hostshare-exec` | — |
 | **Dev** | KTM inventory | `make ktm-check` | — |
 | **Dev** | arch + host contracts | `make arch-guard`, `make -C tests/host run` | — |
 
@@ -235,7 +282,10 @@ Details: [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.
 | `make run-fase58c-fbdev-gui` | Framebuffer probe on `/dev/fb0` |
 | `make run-fase55d-doomgeneric-gui` | doomgeneric stub (needs IWAD + inject — see SETUP) |
 
-### Headless regression (CI-style)
+### Headless regression (local — no GitHub Actions gate)
+
+Automated validation is **local** (the old GitHub `Tests` workflow was removed to
+stop permanent red noise on `master`). Run before merge:
 
 ```bash
 make smoke-tier1              # runit-boot + ash-interactive (automated)

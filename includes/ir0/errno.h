@@ -61,6 +61,7 @@
 #define EPIPE   32  /* Broken pipe */
 #define EMSGSIZE 90 /* Message too long (Linux) */
 #define ENETUNREACH 101 /* Network unreachable (Linux) */
+#define ETIMEDOUT   110 /* Connection timed out (Linux) */
 #define EDOM    33  /* Math argument out of domain */
 #define ERANGE  34  /* Math result not representable */
 #define ELOOP   40  /* Too many symbolic links encountered */
