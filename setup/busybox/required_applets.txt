@@ -1,0 +1,57 @@
+# IR0 0.0.1 product BusyBox applet manifest (BUSY-1).
+# One applet name per line. Comments (#) and blank lines ignored.
+# Must be ⊆ `busybox --list` of the product build (fase58_busybox.config).
+# No su/mount until kernel + config support is stable.
+
+# Shell / power
+ash
+sh
+halt
+reboot
+poweroff
+sync
+
+# Coreutils — file / directory
+echo
+cat
+ls
+pwd
+mkdir
+rmdir
+rm
+cp
+mv
+touch
+ln
+readlink
+stat
+chmod
+basename
+dirname
+
+# Coreutils — text / filters
+grep
+head
+tail
+wc
+sort
+uniq
+
+# Coreutils — misc
+true
+false
+uname
+test
+printf
+env
+sleep
+clear
+which
+
+# Inspection / process / terminal (best-effort in guest; smoke may SKIP)
+find
+dmesg
+ps
+kill
+stty
+reset

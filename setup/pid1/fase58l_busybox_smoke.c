@@ -184,11 +184,14 @@ int main(void)
 {
 	int kfd = -1;
 	char *argv_echo[] = { "/bin/busybox", "echo", "hi", NULL };
+	char *argv_echo_path[] = { "/bin/echo", "hi", NULL };
 	char *argv_pwd[] = { "/bin/busybox", "pwd", NULL };
 	char *argv_ls[] = { "/bin/busybox", "ls", "/", NULL };
+	char *argv_ls_path[] = { "/bin/ls", "/", NULL };
 	char *argv_touch[] = { "/bin/busybox", "touch", "/tmp/a", NULL };
 	char *argv_write[] = { "/bin/sh", "-c", "echo hi > /tmp/a", NULL };
 	char *argv_cat[] = { "/bin/busybox", "cat", "/tmp/a", NULL };
+	char *argv_cat_path[] = { "/bin/cat", "/tmp/a", NULL };
 	char *argv_uname[] = { "/bin/busybox", "uname", NULL };
 	char *argv_ps[] = { "/bin/busybox", "ps", NULL };
 
@@ -202,10 +205,16 @@ int main(void)
 	if (expect_stdout_has("echo", argv_echo, "hi", "FASE58L_ECHO_OK") != 0)
 		goto fail;
 
+	if (expect_stdout_has("echo_path", argv_echo_path, "hi", "FASE58L_ECHO_PATH_OK") != 0)
+		goto fail;
+
 	if (expect_ok_tag("pwd", argv_pwd, "FASE58L_PWD_OK") != 0)
 		goto fail;
 
 	if (expect_ok_tag("ls", argv_ls, "FASE58L_LS_ROOT_OK") != 0)
+		goto fail;
+
+	if (expect_ok_tag("ls_path", argv_ls_path, "FASE58L_LS_PATH_OK") != 0)
 		goto fail;
 
 	if (expect_ok_tag("touch", argv_touch, "FASE58L_TOUCH_OK") != 0)
@@ -215,6 +224,9 @@ int main(void)
 		goto fail;
 
 	if (expect_stdout_has("cat", argv_cat, "hi", "FASE58L_CAT_OK") != 0)
+		goto fail;
+
+	if (expect_stdout_has("cat_path", argv_cat_path, "hi", "FASE58L_CAT_PATH_OK") != 0)
 		goto fail;
 
 	if (expect_ok_tag("uname", argv_uname, "FASE58L_UNAME_OK") != 0)
@@ -234,6 +246,7 @@ int main(void)
 	else
 		write_str("KTM_BUSYBOX_COREUTILS_SKIP\n");
 
+	write_str("BUSYBOX_MANIFEST_OK\n");
 	write_str("FASE58L_OK\n");
 	for (;;)
 		pause();
