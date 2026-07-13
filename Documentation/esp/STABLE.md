@@ -16,7 +16,7 @@ kernel aún hacía full-copy. El share-on-fork real + break en write fault está
 ### Tag prep vs ship (2026-07-12)
 
 - **`v0.0.1-rc2`**: tag prep (gates críticos automáticos). **No** es el release.
-- **Ship 0.0.1**: VM manual del mantenedor **y** applets BusyBox de producto (**BUSY-1/2**).
+- **Ship 0.0.1**: VM manual del mantenedor. BusyBox producto (**BUSY-1/2**) cerrado con `smoke-busybox-manifest`.
 
 ---
 
@@ -45,7 +45,7 @@ Si TCC, Doom+WAD o el smoke userspace están en rojo → **no merge a `master`**
 |------|--------|------------------|
 | **Hardening H1–H6** | **Cerrado** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Estable** | `make smoke-runit-boot` |
-| **BusyBox ash + applets** | **Parcial** | ash/mínimo vía tier1; **bloquea ship:** manifest BUSY-1 + smoke BUSY-2 |
+| **BusyBox ash + applets** | **Estable (producto)** | Manifest `setup/busybox/required_applets.txt`; `make smoke-busybox-manifest` → `BUSYBOX_MANIFEST_OK` |
 | **TinyCC in-guest** | **Crítico p/ merge** | `smoke-tcc-power-halt` — bloquea `master` |
 | **COW fork** | **Estable** | `make smoke-mm-cow-lazy` |
 | **Lazy alloc** | **Estable** | mismo smoke |

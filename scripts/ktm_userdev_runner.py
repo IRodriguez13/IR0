@@ -19,7 +19,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Run IR0 KTM userdev pilot via QEMU")
     ap.add_argument("--log", default="/tmp/ktm-userdev-run.log")
     ap.add_argument("--timeout", type=int, default=90)
-    ap.add_argument("--init", default=str(ROOT / "userspace/libktm/ktm_fork_wait_case"))
+    ap.add_argument("--init", default=str(ROOT / "tests/ktm/userdev/ktm_fork_wait_case"))
     ap.add_argument("--done", default="KTM_USERDEV_OK")
     ap.add_argument(
         "--require",
@@ -42,6 +42,19 @@ def main() -> int:
         default="",
         help="Substring that must appear in --host-file after the smoke",
     )
+    ap.add_argument(
+        "--inject",
+        action="append",
+        default=[],
+        metavar="SRC:DEST",
+        help="Inject host file SRC into disk as DEST (e.g. setup/pid1/f41true:bin/f41true)",
+    )
+    ap.add_argument(
+        "--qemu-arg",
+        action="append",
+        default=[],
+        help="Extra QEMU argument after -drive (repeatable; e.g. --qemu-arg -netdev --qemu-arg user,id=net0)",
+    )
     args = ap.parse_args()
     require = list(args.require)
     if not require:
@@ -56,6 +69,24 @@ def main() -> int:
     if not init_bin.is_file():
         print(f"✗ missing init {init_bin}; build first", file=sys.stderr)
         return 2
+
+    injects: list[tuple[Path, str]] = []
+    for spec in args.inject:
+        if ":" not in spec:
+            print(f"✗ --inject expects SRC:DEST, got {spec!r}", file=sys.stderr)
+            return 2
+        src_s, dest = spec.split(":", 1)
+        src = Path(src_s)
+        if not src.is_file():
+            src = ROOT / src_s
+        if not src.is_file():
+            print(f"✗ --inject missing source: {src_s}", file=sys.stderr)
+            return 2
+        dest = dest.lstrip("/")
+        if not dest:
+            print(f"✗ --inject empty DEST in {spec!r}", file=sys.stderr)
+            return 2
+        injects.append((src, dest))
 
     base = ROOT / "disk.img"
     if not base.is_file():
@@ -82,6 +113,11 @@ def main() -> int:
             ["python3", "scripts/inject_init_minix.py", str(disk), str(init_bin), "sbin/init"],
             cwd=str(ROOT),
         )
+        for src, dest in injects:
+            subprocess.check_call(
+                ["python3", "scripts/inject_init_minix.py", str(disk), str(src), dest],
+                cwd=str(ROOT),
+            )
 
         smoke = ROOT / "scripts" / "smoke_qemu_run.sh"
         qemu = os.environ.get("QEMU", "qemu-system-x86_64")
@@ -107,6 +143,9 @@ def main() -> int:
                 "-device",
                 "virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on",
             ]
+        if args.qemu_arg:
+            cmd += list(args.qemu_arg)
+        has_netdev = any("netdev" in a for a in (args.qemu_arg or []))
         cmd += [
             "-serial",
             "stdio",
@@ -115,9 +154,9 @@ def main() -> int:
             "-m",
             "256M",
             "-no-reboot",
-            "-net",
-            "none",
         ]
+        if not has_netdev:
+            cmd += ["-net", "none"]
         print(f"  KTM-USERDEV-RUN log={log}" + (f" share={share_dir}" if share_dir else ""))
         rc = subprocess.call(cmd, cwd=str(ROOT))
     finally:

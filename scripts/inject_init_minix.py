@@ -5,13 +5,16 @@ Inject a file into a MINIX v1 disk image without mounting (no minix module).
 
 Usage:
   inject_init_minix.py --format DISK_IMAGE
-  inject_init_minix.py DISK_IMAGE FILE [DEST_PATH]
+  inject_init_minix.py --format-large DISK_IMAGE
+  inject_init_minix.py [--setuid] DISK_IMAGE FILE [DEST_PATH]
+  inject_init_minix.py --hardlink DISK_IMAGE EXISTING_DEST NEW_DEST
 
   DEST_PATH: slash-separated path without leading slash (default: sbin/init)
   Examples:
     inject_init_minix.py --format disk.img
     inject_init_minix.py disk.img setup/pid1/init
     inject_init_minix.py disk.img setup/pid1/sh_smoke bin/sh
+    inject_init_minix.py --hardlink disk.img bin/busybox bin/ls
 """
 
 import os
@@ -598,6 +601,73 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755):
             cur = read_inode(f, sb, ino)
 
 
+def resolve_path_inode(f, sb, path_parts):
+    """Return (inode_num, inode_dict) for an existing path, or (0, None)."""
+    if not path_parts:
+        return 1, read_inode(f, sb, 1)
+    cur_num = 1
+    cur = read_inode(f, sb, 1)
+    for i, part in enumerate(path_parts):
+        ino = find_in_dir(f, sb, cur, part)
+        if ino == 0:
+            return 0, None
+        if i == len(path_parts) - 1:
+            return ino, read_inode(f, sb, ino)
+        cur_num = ino
+        cur = read_inode(f, sb, ino)
+    return 0, None
+
+
+def hardlink_path(f, sb, existing_parts, new_parts):
+    """Add NEW_PATH as another directory entry for EXISTING_PATH's inode."""
+    src_ino, src = resolve_path_inode(f, sb, existing_parts)
+    if src_ino == 0 or src is None:
+        raise SystemExit(
+            "hardlink source missing: /" + "/".join(existing_parts)
+        )
+    if (src["mode"] & IFMT) != IFREG:
+        raise SystemExit(
+            "hardlink source not a regular file: /" + "/".join(existing_parts)
+        )
+
+    cur_num = 1
+    cur = read_inode(f, sb, 1)
+    dest_prefix = ""
+    for i, part in enumerate(new_parts):
+        is_last = i == len(new_parts) - 1
+        if is_last:
+            existing = find_in_dir(f, sb, cur, part)
+            if existing != 0:
+                if existing == src_ino:
+                    return src_ino
+                raise SystemExit(
+                    "hardlink dest already exists: /" + "/".join(new_parts)
+                )
+            add_dir_entry(f, sb, cur, cur_num, part, src_ino)
+            src["nlinks"] = min(255, src["nlinks"] + 1)
+            write_inode(f, sb, src_ino, src)
+            audit_entry(
+                "/" + "/".join(existing_parts),
+                "/" + "/".join(new_parts),
+                "hardlink",
+                src["mode"],
+                src_ino,
+                src["size"],
+            )
+            return src_ino
+
+        dest_prefix = dest_prefix + "/" + part if dest_prefix else "/" + part
+        ino = find_in_dir(f, sb, cur, part)
+        if ino == 0:
+            parent_audit = dest_prefix.rsplit("/", 1)[0] or "/"
+            ino, cur = mkdir(f, sb, cur_num, cur, part, parent_audit)
+            cur_num = ino
+        else:
+            cur_num = ino
+            cur = read_inode(f, sb, ino)
+    raise SystemExit("hardlink: empty NEW_DEST")
+
+
 def main():
     file_mode = 0o755
     argv = sys.argv[:]
@@ -626,6 +696,29 @@ def main():
         print(f"✅ Formatted {disk_path} as MINIX v1 (kernel-compatible layout)")
         return
 
+    if len(sys.argv) >= 2 and sys.argv[1] == "--hardlink":
+        if len(sys.argv) != 5:
+            print(
+                f"Usage: {sys.argv[0]} --hardlink DISK_IMAGE EXISTING_DEST NEW_DEST",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        disk_path = sys.argv[2]
+        existing_parts = [p for p in sys.argv[3].split("/") if p]
+        new_parts = [p for p in sys.argv[4].split("/") if p]
+        if not existing_parts or not new_parts:
+            print("invalid hardlink paths", file=sys.stderr)
+            sys.exit(1)
+        with open(disk_path, "r+b") as f:
+            sb = parse_super(read_block(f, 1))
+            sync_bitmaps_from_tree(f, sb)
+            hardlink_path(f, sb, existing_parts, new_parts)
+            sync_bitmaps_from_tree(f, sb)
+        dest_display = "/" + "/".join(new_parts)
+        src_display = "/" + "/".join(existing_parts)
+        print(f"✅ Hardlinked {src_display} -> {disk_path}:{dest_display}")
+        return
+
     if len(sys.argv) < 3 or len(sys.argv) > 5:
         print(
             f"Usage: {sys.argv[0]} --format DISK_IMAGE",
@@ -637,6 +730,10 @@ def main():
         )
         print(
             f"       {sys.argv[0]} [--setuid] DISK_IMAGE FILE [DEST_PATH]",
+            file=sys.stderr,
+        )
+        print(
+            f"       {sys.argv[0]} --hardlink DISK_IMAGE EXISTING_DEST NEW_DEST",
             file=sys.stderr,
         )
         print("  DEST_PATH default: sbin/init (e.g. bin/sh)", file=sys.stderr)
