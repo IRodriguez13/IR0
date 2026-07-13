@@ -23,7 +23,7 @@
 |-----------|-----------|
 | Checkpoints | `BOOT_*`, `PROCESS_{CREATE,FORK,EXEC,EXIT,REAP}`, `MM_{MAP,UNMAP,FAULT}`, `SCHED_SWITCH`, `VFS_{MOUNT,UMOUNT}` |
 | Scenarios (boot suite) | 16 scenarios — wait_drain **N=64**, reclaim_exit **64** rounds, page_tables + churn 32 |
-| Userdev | `fork_wait_signal`, `cow_touch`, **`fork_exit_storm`** (64+32 real fork/wait + KTM asserts) |
+| Userdev | `fork_wait_signal`, `cow_touch`, **`fork_exit_storm`**, **`exec_drain`**, **`reap_drain`**, **`init_exit_drain`** |
 | Probes | `mm.frames`, `proc.list` |
 | Product tags | `POWER_TCC_KTM_OK`, `KTM_DOOM_55D_OK`, `KTM_BUSYBOX_COREUTILS_OK` |
 | Transport | líneas `KTM|…` + `KTM_SUITE_OK` / `KTM_USERDEV_*_OK` |
@@ -41,7 +41,7 @@
 | **41** | Exit reclaim / PMM orphan | `process.reclaim_exit` (64) + `ktm-userdev-fork-storm-run` | COVERED+SUB | Legacy `smoke-userspace-fase41-reclaim` deprecated |
 | **42** | PT reclaim / fork storm | `mm.page_tables` (+churn) + fork storm 64 | COVERED+SUB | Legacy `smoke-fork-exit-storm` deprecated |
 | **43** | Proc audit / OOM class | scenario `mm.oom_class` | COVERED | Deep killer path Future |
-| **44** | Ref/destroy / wait drain | `process.wait_drain` (64) + storm drain 32 | COVERED+SUB | Legacy 512 optional; exec/init-exit drain still HOST |
+| **44** | Ref/destroy / wait drain | `process.wait_drain` (64) + storm + **exec_drain** / **reap_drain** / **init_exit_drain** | COVERED+SUB | Legacy optional; PID1 `_exit` = `ktm-userdev-init-exit-drain-virtfs-run` |
 | **45** | Fork rollback | scenario `process.fork_rollback` | COVERED | |
 | **46** | Fork no-recurse / heap / wait | `fork_wait_signal` userdev | COVERED (mínimo) | |
 | **47** | MM owner / steady-state | scenario `mm.steady_state` | COVERED | |
@@ -65,11 +65,11 @@
 
 | FASE | Intención | Análogo KTM | Estado | Deuda |
 |------|-----------|-------------|--------|-------|
-| **53A/B** | fs/dev + posix | `vfs.devfs` | COVERED (53A) | 53B HOST |
-| **54A–C** | fbdev / input | `graphics.fb` + `input.events0` | COVERED (54A/B) | 54C HOST |
+| **53A/B** | fs/dev + posix | `vfs.devfs` + **`posix_pseudofs` userdev** | COVERED+SUB | 53B → `ktm-userdev-posix-pseudofs-virtfs-run` |
+| **54A–C** | fbdev / input | `graphics.fb` + `input.events0` + **`input_det`** | COVERED+SUB | 54C → `ktm-userdev-input-det-virtfs-run` |
 | **55A–E** | Doom | `smoke-fase55d` + `KTM_DOOM_55D_OK` | HOST+KTM | Product WAD |
-| **57\*** | GUI paths | — | HOST | |
-| **58\*** | BusyBox ash / coreutils | `KTM_BUSYBOX_COREUTILS_OK` on 58l | HOST+KTM | BUSY-1/2 ship |
+| **57\*** | GUI / reintegration paths | — | HOST | Docs only; no KTM case this wave |
+| **58\*** | BusyBox ash / coreutils | `KTM_BUSYBOX_COREUTILS_OK` + `BUSYBOX_MANIFEST_OK` | HOST+KTM | BUSY-1/2 **Closed** |
 
 ---
 
@@ -79,18 +79,22 @@
 |--------|-------|
 | COVERED / COVERED+SUB | 39–51 kernel intent; 41/42/44 fork depth SUB |
 | HOST+KTM | 52 TCC, 55 Doom, 58 BusyBox instrumented |
-| HOST residual | 44 exec/init-exit, 53B, 54C, 57 |
+| HOST residual | **57 GUI** only; product HOST+KTM paths |
 
 **Gates:**
 
 ```bash
 make -s ktm-run
 make -s ktm-userdev-run ktm-userdev-cow-run ktm-userdev-fork-storm-run
+make -s ktm-userdev-exec-drain-virtfs-run ktm-userdev-reap-drain-virtfs-run
+make -s ktm-userdev-init-exit-drain-virtfs-run
 make -s arch-guard
 ```
 
-## Prioridad restante
+## Prioridad restante (agente — sin VM mantenedor)
 
-1. BUSY-1/2 + VM manual (ship 0.0.1)  
-2. Deprecate remaining HOST-only FASE44 exec/init after KTM cases exist  
-3. F8 TCP / ARM64 full link
+1. ARM64 full `ALL_OBJS` link + musl aarch64 — **BLOCKED** (toolchain / KERNEL_OBJS)
+2. F8 TCP hardening (retransmit, listen, FIN/RST) — **0.0.2** follow-on to F8-3 slice
+3. virtiofs+FUSE — Future (9p remains ship host-share)
+
+Mantainer manual VM (ship 0.0.1) is **out of agent backlog** — tracked only under Open in `BACKLOG_REMAINING.md`.

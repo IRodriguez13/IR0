@@ -48,17 +48,34 @@
 | KTM userdev | `ktm-userdev-run`, `ktm-userdev-cow-run` |
 | Kernel `[FASE` serial retired | arch-guard `ktm-no-fase` |
 | PERF-1 `sys_gettid` | no per-call GETTID spam |
-| FASE→KTM Open residual | 41/42/44 depth → `ktm-userdev-fork-storm-run` SUB; 52/55/58 HOST+KTM; exec/init-exit 44 HOST |
+| FASE→KTM Open residual | 41/42/44 fork+exec_drain+reap_drain+**init_exit_drain** SUB; 52/55/58 HOST+KTM; **57 GUI** HOST |
 
 ## Open
 
 | Item | Blocks | Next proof |
 |------|--------|------------|
-| **BUSY-1** product applet manifest | **0.0.1 ship** | Versioned list (e.g. `setup/busybox/required_applets.txt`) + rootfs install (`load-userspace-runit` / tier1 disk) — not “every upstream BusyBox applet” |
-| **BUSY-2** applet smoke | **0.0.1 ship** | Harness ∩ manifest → `BUSYBOX_MANIFEST_OK` (extend/replace `smoke-fase58l-busybox-coreutils`) |
-| Maintainer manual VM | **0.0.1 ship** | Interactive QEMU GTK / serial checklist after BUSY-* |
+| Maintainer manual VM (**mantenedor only**) | **0.0.1 ship** | Interactive QEMU GTK / serial — **not agent backlog** |
+| ARM64 `ALL_OBJS` + musl aarch64 | F7b port | Cross toolchain + KERNEL_OBJS link |
+| virtiofs + FUSE | Future host-share | Guest FUSE; 9p remains ship path |
 
-Tag `v0.0.1-rc2` = automated critical gates only; does **not** close Open above.
+## Closed this wave (2026-07-12) — F8-3 wire TCP
+
+| Item | Proof |
+|------|-------|
+| **F8-3** minimal wire TCP | `net/tcp.c` SYN/SYN-ACK/ACK + PSH; `sock_stream` wire path; `make smoke-tcp-wire` → `F8_TCP_WIRE_OK` + host listener `WIRETCP` |
+
+Slice: connect+one-shot send to QEMU gateway **10.0.2.2:8888** (no retransmit/full stack). Not 0.0.1 ship gate.
+
+## Closed this wave (2026-07-12) — BUSY-1/2
+
+| Item | Proof |
+|------|-------|
+| **BUSY-1** product applet manifest | `setup/busybox/required_applets.txt` + `scripts/busybox_inject_manifest.sh` on runit disk (`load-userspace-runit`) |
+| **BUSY-2** applet smoke | `make smoke-busybox-manifest` → `BUSYBOX_MANIFEST_OK` (also `smoke-fase58l-busybox-coreutils`) |
+
+virtiofs/FUSE remains **Future** (no guest FUSE). Host-share remains virtio-**9p**.
+
+Tag `v0.0.1-rc2` = automated critical gates only; **ship** still needs Maintainer manual VM above.
 
 ## ARM64 — honest status (2026-07-12)
 
@@ -99,8 +116,9 @@ before EL0. COM1 `serial.o` excluded when `ARCH=arm64`; `serial.c` x86-guarded.
 
 **BLOCKED — ALL_OBJS / musl aarch64:** Pack E cleared the **INTERRUPT_OBJS** wall
 (`INTERRUPT_OBJS_ARM64` = `irq_portable_stubs.o`). `make arm64-all-objs-probe` compiles
-`MEMORY_OBJS` OK; **next divergence** = KERNEL_OBJS / drivers (still not linked as
-`kernel-arm64.bin = ALL_OBJS`). **musl aarch64** still **BLOCKED** (SETUP has x86 musl only).
+`MEMORY_OBJS` + sample **`kernel/main.c`** / **`open_flags.c`** OK; **next divergence** =
+full KERNEL_OBJS / drivers (still not linked as `kernel-arm64.bin = ALL_OBJS`).
+**musl aarch64** still **BLOCKED** (SETUP has x86 musl only).
 
 **F8-facade-mm (2026-07-12):** `arch_mm_activate` / `arch_mm_current_root` /
 `arch_tlb_invalidate_*` / `arch_irq_save|restore` in `arch_portable`; x86 + ARM64
@@ -171,12 +189,12 @@ ALL_OBJS/musl **BLOCKED**. No master merge this wave.
 | F6 | ~~NVMe MVP~~ | **DONE** 2026-07-11 — `smoke-nvme-read` (`NVME_READ_OK`) |
 | F7 | ARM64 early bring-up (F7.1–F7.3) | **DONE** `make smoke-arm64` — **not** full port |
 | F7b | ARM64 real port | F7c–F7g + Pack B–E; KERNEL_OBJS link + musl aarch64 **BLOCKED** |
-| F8 | TCP Internet / real NIC (**0.0.2**) | beyond loopback; rtl8139 path + DHCP/route smoke |
+| F8 | TCP Internet / real NIC (**0.0.2**) | F8-1/F8-2/F8-3 **PARTIAL** — `smoke-nic-reach`, `smoke-tcp-guest`, `smoke-tcp-wire`; no full TCP stack (retransmit, listen, teardown) |
 | F9 | SMP / CFS | **much later** — not coupled to UI/X11 |
 | F10 | Rust/C++ driver ABI | DRV-* |
 | F11 | T3 WM / X11 userspace | **userspace only**, after usable net + T2; not with SMP |
 | F12 | TCC/Doom “stable” | STABLE.md — merge master solo con bundle verde (Doom=**55d IWAD**) |
-| F13 | BusyBox product applets (**BUSY-1/2**) | **Ship blocker 0.0.1** — Open table above; ROADMAP P2-T1 |
+| F13 | BusyBox product applets (**BUSY-1/2**) | **DONE** 2026-07-12 — `smoke-busybox-manifest` (`BUSYBOX_MANIFEST_OK`); ship still needs maintainer VM |
 
 ## T3 prep checklist (no WM in kernel)
 

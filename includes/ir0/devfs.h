@@ -74,6 +74,8 @@ int64_t devfs_close_node(devfs_node_t *node);
 int devfs_stat_path(const char *path, stat_t *buf);
 int devfs_is_virtual_subdir(const char *path);
 int devfs_readdir_root(struct vfs_dirent *entries, int max_entries);
+int devfs_readdir_subdir(const char *path, struct vfs_dirent *entries,
+                         int max_entries);
 
 // Standard device implementations
 int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);

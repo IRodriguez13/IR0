@@ -18,12 +18,17 @@ Classification for migration (plan FASE→KTM ≥ exigente):
 | smoke-userspace-fase41-reclaim | 41 | B→SUB | `ktm-run` `process.reclaim_exit` + `ktm-userdev-fork-storm-run` | Storm depth in userdev |
 | smoke-fase42-* (fork/pt/exec) | 42 | B→SUB | `ktm-userdev-fork-storm-run` + `mm.page_tables` | PT counters still boot |
 | smoke-fase44-fork-wait-drain | 44 | B→SUB | `ktm-userdev-fork-storm-run` (64+32 + KTM) | Legacy 512 optional |
-| smoke-fase44-exec/init-exit | 44 | B | still HOST depth | Next oleada |
+| smoke-fase44-exec-drain | 44 | B→SUB | `ktm-userdev-exec-drain-virtfs-run` | 64× fork+exec+f41true + 9p |
+| smoke-fase44-init-exit-drain | 44 | B→SUB | `ktm-userdev-init-exit-drain-virtfs-run` | PID1 `_exit` covered in userdev |
 | smoke-fase50* / 51 | 50–51 | A | `ktm-run` exec/shell/open | Legacy bring-up |
 | smoke-fase52-tcc / tcc-power | 52 | C | `smoke-tcc-power-halt` + KTM case | Product |
-| smoke-fase53* | 53 | A/C | `vfs.devfs` + HOST pseudofs | Mixed |
-| smoke-fase54* | 54 | A/C | `graphics.fb` / `input.events0` | 54C HOST |
+| smoke-fase53a / 53b | 53 | A/B→SUB | `vfs.devfs` + `ktm-userdev-posix-pseudofs-virtfs-run` | 53B COVERED (getdents + access) |
+| smoke-fase54a/b/c | 54 | A/B→SUB | `graphics.fb` / `input.events0` + `ktm-userdev-input-det-virtfs-run` | 54C SUB |
 | smoke-fase55* | 55 | C | `smoke-fase55d-doomgeneric` + KTM | Product WAD |
-| smoke-fase58* | 58 | C | ash/BUSY + KTM when available | BUSY-1/2 ship |
+| (no smoke-fase57) | 57 | HOST | — | GUI/reintegration docs only |
+| smoke-fase58* / smoke-busybox-manifest | 58 | C | ash/BUSY + KTM | BUSY-1/2 **Closed** |
+| smoke-nic-reach | F8-1 | C | `ktm-userdev-nic-reach-virtfs-run` | NIC probe |
+| smoke-tcp-guest | F8-2 | C | `ktm-userdev-tcp-guest-virtfs-run` | Guest IP TCP send/recv |
+| smoke-tcp-wire | F8-3 | C | `ktm-userdev-tcp-wire-virtfs-run` | Wire TCP guest→host 10.0.2.2:8888 |
 
 Deprecation policy: print warning on legacy target; do not delete for one oleada of grace.

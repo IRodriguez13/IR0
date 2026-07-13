@@ -39,6 +39,11 @@ static int scenario_vfs_open_flags_run(ktm_context_t *ctx)
 	KTM_V1_ASSERT_TRUE((ir0 & IR0_O_APPEND) != 0);
 	KTM_V1_ASSERT_TRUE(ir0_open_flags_ok_for_vfs(ir0));
 
+	ir0 = linux_open_flags_to_ir0((int)LINUX_O_DIRECTORY |
+				      (int)LINUX_O_LARGEFILE);
+	KTM_V1_ASSERT_TRUE((ir0 & IR0_O_DIRECTORY) != 0);
+	KTM_V1_ASSERT_TRUE(ir0_open_flags_ok_for_vfs(ir0));
+
 	/* Raw Linux CREAT bit must not leak as IR0-safe without translation. */
 	KTM_V1_ASSERT_TRUE(!ir0_open_flags_ok_for_vfs((int)LINUX_O_CREAT));
 

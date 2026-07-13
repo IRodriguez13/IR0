@@ -437,6 +437,7 @@ smoke-fase44-fork-wait-drain: build-init-fase44-fork-wait-drain kernel-x64-users
 	fi
 
 smoke-fase44-exec-drain: build-init-fase44-exec-drain build-fase41-true kernel-x64-userspace.iso
+	@echo "  WARN    DEPRECATED: prefer 'make ktm-userdev-exec-drain-virtfs-run' (see Documentation/KTM_FASE_INVENTORY.md)"
 	@if [ ! -f disk.img ]; then \
 		echo "  DISK    Creating disk.img..."; \
 		$(MAKE) create-disk; \
@@ -459,6 +460,7 @@ smoke-fase44-exec-drain: build-init-fase44-exec-drain build-fase41-true kernel-x
 	fi
 
 smoke-fase44-init-exit-drain: build-init-fase44-init-exit-drain kernel-x64-userspace.iso
+	@echo "  WARN    DEPRECATED: prefer 'make ktm-userdev-init-exit-drain-virtfs-run'"
 	@if [ ! -f disk.img ]; then \
 		echo "  DISK    Creating disk.img..."; \
 		$(MAKE) create-disk; \
@@ -841,6 +843,7 @@ smoke-fase53a-fs-dev: build-init-fase53a-fs-dev build-busybox-fase50-min build-t
 	fi
 
 smoke-fase53b-posix-pseudofs: build-init-fase53b-posix-pseudofs build-busybox-fase50-min kernel-x64-userspace.iso
+	@echo "  WARN    DEPRECATED: prefer 'make ktm-userdev-posix-pseudofs-virtfs-run'"
 	@echo "  SMOKE   FASE53B POSIX pseudo-fs routed path..."
 	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE53B_POSIX_PSEUDOFS_HARNESS_ID" || \
 		(echo "✗ $(INIT_SMOKE_BIN) is not FASE53B harness — run build-init-fase53b-posix-pseudofs"; exit 1)
@@ -861,9 +864,6 @@ smoke-fase53b-posix-pseudofs: build-init-fase53b-posix-pseudofs build-busybox-fa
 	    grep -q "FASE53B_ROUTED_PATH_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
 	    grep -q "FASE53B_FACCESSAT_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
 	    grep -q "FASE53B_GETDENTS_CURSOR_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
-	    grep -q "FASE53B_LS_DEV_CWD_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
-	    grep -q "FASE53B_LS_PROC_CWD_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
-	    grep -q "FASE53B_LS_SYS_CWD_OK" $(FASE53B_POSIX_PSEUDOFS_LOG) && \
 	    grep -q "FASE53B_PSEUDOFS_NO_DUP_OK" $(FASE53B_POSIX_PSEUDOFS_LOG); then \
 		echo "✓ smoke-fase53b-posix-pseudofs finished"; \
 	else \
@@ -979,6 +979,7 @@ smoke-fase54b-input: build-init-fase54b-input kernel-x64-userspace.iso
 	fi
 
 smoke-fase54c-input-deterministic: build-init-fase54c-input-deterministic kernel-x64-userspace.iso
+	@echo "  WARN    DEPRECATED: prefer 'make ktm-userdev-input-det-virtfs-run'"
 	@echo "  SMOKE   FASE54C deterministic input path..."
 	@strings $(INIT_SMOKE_BIN) 2>/dev/null | grep -q "FASE54C_INPUT_DETERMINISTIC_HARNESS_ID" || \
 		(echo "✗ $(INIT_SMOKE_BIN) is not FASE54C harness — run build-init-fase54c-input-deterministic"; exit 1)
@@ -1288,9 +1289,8 @@ smoke-fase58l-busybox-coreutils: build-fase58l-busybox-smoke build-busybox-fase5
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(FASE58L_SMOKE_BIN) sbin/init && \
-	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
-	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
-	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/sh /bin/busybox && \
+	chmod +x scripts/busybox_inject_manifest.sh && \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) scripts/busybox_inject_manifest.sh $$DISK $(FASE50_BUSYBOX_BIN) && \
 	$(SMOKE_QEMU_RUN) --log $(FASE58L_SMOKE_LOG) --timeout 90 --done FASE58L_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
@@ -1298,15 +1298,48 @@ smoke-fase58l-busybox-coreutils: build-fase58l-busybox-smoke build-busybox-fase5
 	rm -f $$DISK
 	@if grep -q "FASE58L_OK" $(FASE58L_SMOKE_LOG) && \
 	    grep -q "FASE58L_ECHO_OK" $(FASE58L_SMOKE_LOG) && \
+	    grep -q "FASE58L_ECHO_PATH_OK" $(FASE58L_SMOKE_LOG) && \
 	    grep -q "FASE58L_PWD_OK" $(FASE58L_SMOKE_LOG) && \
 	    grep -q "FASE58L_LS_ROOT_OK" $(FASE58L_SMOKE_LOG) && \
+	    grep -q "FASE58L_LS_PATH_OK" $(FASE58L_SMOKE_LOG) && \
 	    grep -q "FASE58L_TOUCH_OK" $(FASE58L_SMOKE_LOG) && \
 	    grep -q "FASE58L_CAT_OK" $(FASE58L_SMOKE_LOG) && \
-	    grep -q "FASE58L_UNAME_OK" $(FASE58L_SMOKE_LOG); then \
+	    grep -q "FASE58L_CAT_PATH_OK" $(FASE58L_SMOKE_LOG) && \
+	    grep -q "FASE58L_UNAME_OK" $(FASE58L_SMOKE_LOG) && \
+	    grep -q "BUSYBOX_MANIFEST_OK" $(FASE58L_SMOKE_LOG); then \
 		echo "✓ smoke-fase58l-busybox-coreutils finished"; \
 	else \
 		echo "✗ smoke-fase58l-busybox-coreutils FAILED"; \
-		grep -E 'FASE58L_|BUSYBOX_FAIL|KERNEL PANIC' $(FASE58L_SMOKE_LOG) | tail -20; \
+		grep -E 'FASE58L_|BUSYBOX_|KERNEL PANIC' $(FASE58L_SMOKE_LOG) | tail -30; \
+		exit 1; \
+	fi
+
+# BUSY-2 ship gate: product config (fase58) + manifest inject + BUSYBOX_MANIFEST_OK
+BUSYBOX_MANIFEST_SMOKE_LOG = /tmp/busybox-manifest-smoke.log
+smoke-busybox-manifest: build-fase58l-busybox-smoke build-busybox-fase58-plus kernel-x64-userspace.iso
+	@echo "  SMOKE   BUSY-2 product applet manifest..."
+	@strings $(FASE58L_SMOKE_BIN) 2>/dev/null | grep -q "FASE58L_HARNESS_ID" || \
+		(echo "✗ $(FASE58L_SMOKE_BIN) is not FASE58L harness — run build-fase58l-busybox-smoke"; exit 1)
+	@DISK=$$(mktemp /tmp/ir0-busy-manifest-disk.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(FASE58L_SMOKE_BIN) sbin/init && \
+	chmod +x scripts/busybox_inject_manifest.sh && \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) scripts/busybox_inject_manifest.sh $$DISK $(FASE50_BUSYBOX_BIN) && \
+	$(SMOKE_QEMU_RUN) --log $(BUSYBOX_MANIFEST_SMOKE_LOG) --timeout 90 --done BUSYBOX_MANIFEST_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+	@if grep -q "BUSYBOX_MANIFEST_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
+	    grep -q "FASE58L_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
+	    grep -q "FASE58L_ECHO_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
+	    grep -q "FASE58L_LS_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
+	    grep -q "FASE58L_CAT_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG); then \
+		echo "✓ smoke-busybox-manifest finished"; \
+	else \
+		echo "✗ smoke-busybox-manifest FAILED"; \
+		grep -E 'FASE58L_|BUSYBOX_|KERNEL PANIC' $(BUSYBOX_MANIFEST_SMOKE_LOG) | tail -30; \
 		exit 1; \
 	fi
 

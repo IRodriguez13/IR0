@@ -19,7 +19,7 @@ full-copied user pages. Real share-on-fork + write-fault break landed in `62cc51
 | Artifact | Meaning |
 |----------|---------|
 | **`v0.0.1-rc2`** | Pre-release **tag prep**: critical automated gates green (TCC, Doom+IWAD, posix, hostshare, arch-guard). **Not** a shipped release. |
-| **Release 0.0.1 ship** | Maintainer only: **manual QEMU/VM** walkthrough “listo” **and** BusyBox product applets path (**BUSY-1** manifest + **BUSY-2** smoke) green. |
+| **Release 0.0.1 ship** | Maintainer only: **manual QEMU/VM** walkthrough “listo”. Automated BusyBox product path (**BUSY-1** manifest + **BUSY-2** `smoke-busybox-manifest`) is green. |
 
 Do **not** treat `v0.0.1-rc2` (or earlier `rc1`/`pre.1`) as “0.0.1 done”. Final git tag `v0.0.1` waits on ship criteria above.
 
@@ -107,7 +107,7 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 |------|--------|---------------|
 | **Hardening H1–H6** | **Closed** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Stable** | `make smoke-runit-boot` |
-| **BusyBox ash + applets** | **Partial** | Minimal/subset OK via `smoke-tier1` / ash; **ship blocker:** product **manifest** (BUSY-1) + applet smoke (BUSY-2) — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md). Optional probe: `smoke-fase58l-busybox-coreutils` |
+| **BusyBox ash + applets** | **Stable (product)** | Manifest [`setup/busybox/required_applets.txt`](../setup/busybox/required_applets.txt); rootfs inject via `busybox_inject_manifest.sh`; ship smoke: `make smoke-busybox-manifest` (`BUSYBOX_MANIFEST_OK`). Extended probe: `smoke-fase58l-busybox-coreutils` |
 | **TinyCC in-guest** | **Merge-critical** | `smoke-fase52-tcc` / `smoke-tcc-power-halt` — **blocker for `master`** |
 | **COW fork** | **Stable** | `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
@@ -123,7 +123,7 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 |-------|------------------|----------------------|-------|
 | Gate D1.20 | `smoke-release-0.0.1` / `release-0.0.1` | keep green | — |
 | Product | TCC + Doom+**IWAD** + posix/tier1 | same blockers | — |
-| Network | AF_UNIX + TCP **loopback** | F8 TCP beyond loopback / NIC / DHCP | — |
+| Network | AF_UNIX + TCP **loopback** + guest IP | F8-1 NIC (`smoke-nic-reach`); F8-2 guest TCP (`smoke-tcp-guest`) | wire TCP Internet |
 | Host share | virtio-**9p** MVP (`smoke-hostshare-9p`) | optional deepen | virtiofs + FUSE when ready |
 | ARM | bring-up (F7*) — does not block x86 ship | continue port | — |
 | X11 / WM | **out** | userspace after usable net + T2 | never in-kernel T3 |
@@ -167,8 +167,8 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 |------|-------|-------|
 | runit PID1 | `setup/pid1/`, `load-userspace-runit` | `smoke-runit-boot` |
 | BusyBox minimal | `setup/busybox/fase58_busybox.config`, `build-busybox-fase50-min` | `smoke-tier1` |
-| BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional smoke — **not** ship gate |
-| BusyBox product manifest | **Open BUSY-1 / BUSY-2** | Required applets in rootfs + smoke — **blocks 0.0.1 ship** |
+| BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional extended probe |
+| BusyBox product manifest | **BUSY-1 / BUSY-2 Closed** | `required_applets.txt` + `smoke-busybox-manifest` (`BUSYBOX_MANIFEST_OK`) |
 | Interactive ash on FB console | `includes/ir0/console.c`, TTY echo | [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.md) |
 | musl static toolchain | `MUSL_CC`, `kernel-x64-userspace.iso` | tier1 smokes |
 | TinyCC | `setup/tcc/build-fase52.sh` | `build-tcc-fase52` |
@@ -180,7 +180,9 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | `socket` / `bind` / `sendto` / `recvfrom` / `connect` | tier1 manifest, `runtime-net-check` |
 | UDP `accept` → `-EOPNOTSUPP` | documented in mandocs |
 | AF_UNIX + TCP **loopback** `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) — **in 0.0.1** |
-| TCP Internet / real NIC | **0.0.2** (F8) — not required for 0.0.1 |
+| NIC reach (rtl8139 + `/dev/net`) | **F8-1 PARTIAL** — `make smoke-nic-reach` (`F8_NIC_REACH_OK`) |
+| TCP guest IP (10.0.2.15 stream) | **F8-2 PARTIAL** — `make smoke-tcp-guest` (`F8_TCP_GUEST_OK`) |
+| TCP Internet / wire NIC | **F8-3 PARTIAL** — `make smoke-tcp-wire` (`F8_TCP_WIRE_OK`); minimal SYN/PSH slice in `net/tcp.c`; not required for 0.0.1 |
 
 ### Host share (dev aid)
 
@@ -277,7 +279,10 @@ Details: [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.
 | `make run-fase58c-fbdev-gui` | Framebuffer probe on `/dev/fb0` |
 | `make run-fase55d-doomgeneric-gui` | doomgeneric stub (needs IWAD + inject — see SETUP) |
 
-### Headless regression (CI-style)
+### Headless regression (local — no GitHub Actions gate)
+
+Automated validation is **local** (the old GitHub `Tests` workflow was removed to
+stop permanent red noise on `master`). Run before merge:
 
 ```bash
 make smoke-tier1              # runit-boot + ash-interactive (automated)

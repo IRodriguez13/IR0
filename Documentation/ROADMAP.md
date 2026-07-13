@@ -238,10 +238,10 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 
 | # | Item | Notes |
 |---|------|-------|
-| 17b | **Full ash + required applets in rootfs** | Manifest (mount, ls, cat, su, …) — **BUSY-1**; **blocks 0.0.1 ship** |
-| 17c | **Applet smoke** | **BUSY-2** — proof as rootfs subset grows; **blocks 0.0.1 ship** |
+| 17b | **Full ash + required applets in rootfs** | **BUSY-1 DONE** — `setup/busybox/required_applets.txt` + inject on runit disk |
+| 17c | **Applet smoke** | **BUSY-2 DONE** — `make smoke-busybox-manifest` → `BUSYBOX_MANIFEST_OK` |
 
-Tag `v0.0.1-rc2` does **not** close BUSY-*; ship needs maintainer VM + BUSY-1/2.
+Tag `v0.0.1-rc2` closed automated product gates except maintainer **manual VM** for final ship.
 
 ### P3 — network + desktop (after P1-storage stable)
 
@@ -291,11 +291,11 @@ driver platform (static ABI, then modules) → P1-storage → TCP/T2 → T3 prep
 
 | ID | Milestone | Why | Paths / proof |
 |----|-----------|-----|---------------|
-| **BUSY-1** | ash + essential applets in production rootfs | runit scripts, mount workflows, dev without host tools | `setup/third-party/busybox-1.36.1`, `setup/busybox/`, `scripts/inject_init_minix.py` |
-| **BUSY-2** | Required-applet manifest | Avoid “smoke passes” with minimal subset only | New script + smoke executing N applets |
+| **BUSY-1** | ash + essential applets in production rootfs | **Done** — `required_applets.txt` + `busybox_inject_manifest.sh` | `setup/busybox/`, `setup/runit/install-to-disk.sh` |
+| **BUSY-2** | Required-applet manifest smoke | **Done** — `smoke-busybox-manifest` | `setup/pid1/fase58l_busybox_smoke.c` |
 | **BUSY-3** | Broader applet parity with minimal Linux embed | Operational parity for tier1 POSIX | BusyBox Kconfig + rootfs size budget |
 
-Today: `smoke-tier1` proves interactive ash; many applets are not on the smoke disk image.
+Today: `smoke-busybox-manifest` proves product applets on disk (`BUSYBOX_MANIFEST_OK`); `smoke-tier1` covers interactive ash.
 
 ### Kernel modules — dynamic loader and modprobe
 

@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: sock_stream.c
- * Description: AF_UNIX pathname + TCP 127.0.0.1 loopback stream MVP.
+ * Description: AF_UNIX pathname + TCP loopback + guest-net (10.0.2.x) stream MVP.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -12,7 +12,12 @@
 #include <ir0/types.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
+#include <config.h>
 #include <string.h>
+
+#if CONFIG_ENABLE_NETWORKING
+#include "tcp.h"
+#endif
 
 #define SS_BUF 4096
 #define SS_MAX 16
@@ -39,6 +44,13 @@ struct sock_stream
 	unsigned head;
 	unsigned tail;
 	unsigned count;
+	uint8_t wire_tcp;
+	uint8_t _wire_pad;
+	uint16_t wire_local_port;
+	uint32_t wire_peer_ip;
+	uint16_t wire_peer_port;
+	uint32_t wire_seq;
+	uint32_t wire_ack;
 	uint8_t magic;
 };
 
@@ -83,6 +95,13 @@ void sock_stream_release(struct sock_stream *s)
 {
 	if (!s || !s->in_use)
 		return;
+#if CONFIG_ENABLE_NETWORKING
+	if (s->wire_tcp)
+	{
+		tcp_wire_close((ip4_addr_t)s->wire_peer_ip, s->wire_peer_port,
+			       s->wire_local_port, s->wire_seq, s->wire_ack);
+	}
+#endif
 	if (s->peer && s->peer->peer == s)
 		s->peer->peer = NULL;
 	memset(s, 0, sizeof(*s));
@@ -179,6 +198,43 @@ int sock_stream_bind_inet(struct sock_stream *s, uint16_t port)
 	return 0;
 }
 
+static int sock_stream_inet_addr_allowed(uint32_t addr)
+{
+	uint8_t o0;
+	uint8_t o1;
+	uint8_t o2;
+
+	if (addr == 0 || addr == 0x0100007fu || addr == 0x7f000001u)
+		return 1;
+
+	o0 = (uint8_t)(addr & 0xffu);
+	o1 = (uint8_t)((addr >> 8) & 0xffu);
+	o2 = (uint8_t)((addr >> 16) & 0xffu);
+	if (o0 == 10 && o1 == 0 && o2 == 2)
+		return 1;
+
+	o0 = (uint8_t)((addr >> 24) & 0xffu);
+	o1 = (uint8_t)((addr >> 16) & 0xffu);
+	o2 = (uint8_t)((addr >> 8) & 0xffu);
+	if (o0 == 10 && o1 == 0 && o2 == 2)
+		return 1;
+
+	return 0;
+}
+
+static int sock_stream_is_local_listener(uint16_t port)
+{
+	int i;
+
+	for (i = 0; i < SS_MAX; i++)
+	{
+		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_INET &&
+		    g_socks[i].state == SS_LISTEN && g_socks[i].port == port)
+			return 1;
+	}
+	return 0;
+}
+
 int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port)
 {
 	int i;
@@ -187,9 +243,35 @@ int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port
 
 	if (!s)
 		return -EINVAL;
-	/* Loopback only (127.0.0.1 network order 0x0100007f or host 0x7f000001). */
-	if (addr != 0x0100007fu && addr != 0x7f000001u && addr != 0)
+	if (!sock_stream_inet_addr_allowed(addr))
 		return -ECONNREFUSED;
+
+	if (!sock_stream_is_local_listener(port))
+	{
+#if CONFIG_ENABLE_NETWORKING
+		uint16_t lport;
+		uint32_t seq;
+		uint32_t ack;
+		int ret;
+
+		ret = tcp_wire_connect((ip4_addr_t)addr, port, &lport, &seq, &ack);
+		if (ret < 0)
+			return ret;
+		s->wire_tcp = 1;
+		s->wire_local_port = lport;
+		s->wire_peer_ip = addr;
+		s->wire_peer_port = port;
+		s->wire_seq = seq;
+		s->wire_ack = ack;
+		s->port = lport;
+		s->state = SS_CONNECTED;
+		s->peer = NULL;
+		return 0;
+#else
+		return -ECONNREFUSED;
+#endif
+	}
+
 	for (i = 0; i < SS_MAX; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_INET &&
@@ -221,6 +303,17 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 
 	if (!s || s->state != SS_CONNECTED || !buf)
 		return -EINVAL;
+
+#if CONFIG_ENABLE_NETWORKING
+	if (s->wire_tcp)
+	{
+		int ret = tcp_wire_send((ip4_addr_t)s->wire_peer_ip, s->wire_peer_port,
+					s->wire_local_port, &s->wire_seq, s->wire_ack,
+					buf, len);
+		return (ret < 0) ? ret : (ssize_t)ret;
+	}
+#endif
+
 	peer = s->peer;
 	if (!peer)
 		return -EPIPE;
