@@ -10,6 +10,7 @@ RUNIT_BIN="${ROOT}/setup/runit/bin"
 STAGE_BIN="${ROOT}/setup/runit/stage-bin"
 BUSYBOX="${FASE50_BUSYBOX_BIN:-${ROOT}/setup/pid1/fase50_busybox_real}"
 INJECT="python3 ${ROOT}/scripts/inject_init_minix.py"
+MANIFEST="${BUSYBOX_MANIFEST:-${ROOT}/setup/busybox/required_applets.txt}"
 
 if [ ! -f "$DISK" ]; then
 	echo "✗ missing disk: $DISK" >&2
@@ -41,12 +42,9 @@ $INJECT "$DISK" "$RUNIT_BIN/runit-init" bin/runit-init
 $INJECT "$DISK" "$RUNIT_BIN/runsvdir" bin/runsvdir
 $INJECT "$DISK" "$RUNIT_BIN/runsv" bin/runsv
 $INJECT "$DISK" "$RUNIT_BIN/sv" bin/sv
-$INJECT "$DISK" "$BUSYBOX" bin/busybox
-$INJECT "$DISK" "$BUSYBOX" bin/sh
-$INJECT "$DISK" "$BUSYBOX" bin/halt
-$INJECT "$DISK" "$BUSYBOX" bin/reboot
-$INJECT "$DISK" "$BUSYBOX" bin/poweroff
-$INJECT "$DISK" "$BUSYBOX" bin/sync
+
+chmod +x "${ROOT}/scripts/busybox_inject_manifest.sh"
+FASE50_BUSYBOX_BIN="$BUSYBOX" "${ROOT}/scripts/busybox_inject_manifest.sh" "$DISK" "$BUSYBOX" "$MANIFEST"
 
 echo "  RUNIT   Injecting stage ELF stubs (exec path has no shebang)..."
 $INJECT "$DISK" "$STAGE_BIN/runit_stage1" etc/runit/1
@@ -56,7 +54,8 @@ $INJECT "$DISK" "$STAGE_BIN/runit_console_run" etc/runit/sv/console/run
 $INJECT "$DISK" "$STAGE_BIN/runit_logger_run" etc/runit/sv/logger/run
 
 python3 "${ROOT}/scripts/verify_minix_rootfs.py" --gate "$DISK" \
-	/sbin/init /sbin/runit /bin/runsvdir /bin/sh /etc/runit/1 /etc/runit/2 /etc/runit/3 \
+	/sbin/init /sbin/runit /bin/runsvdir /bin/sh /bin/busybox \
+	/etc/runit/1 /etc/runit/2 /etc/runit/3 \
 	/etc/runit/sv/console/run /etc/runit/sv/logger/run
 
 echo "✓ runit rootfs installed on $DISK"
