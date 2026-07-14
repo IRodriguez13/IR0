@@ -18,6 +18,7 @@
 #include <ir0/serial_io.h>
 #include <sched/task.h>
 #include <arch/common/arch_portable.h>
+#include <ir0/process.h>
 
 #define USER_CANON_MIN 0x00400000ULL
 #define USER_CANON_MAX 0x00007FFFFFFFFFFFULL
@@ -124,6 +125,54 @@ void arch_switch_to_user_task(const task_t *task)
     arch_audit_iret_frame(task);
     arch_switch_to_user_task_asm(task);
     panic("Returned from arch_switch_to_user_task unexpectedly");
+#endif
+}
+
+void arch_first_context_switch(struct process *next)
+{
+	process_t *p = (process_t *)next;
+
+	if (!p)
+		panic("arch_first_context_switch: null process");
+
+#if MINGW_BUILD
+	(void)p;
+	panic("arch_first_context_switch not supported in Windows build");
+#else
+	if (p->mode == KERNEL_MODE)
+	{
+		uint64_t kds = KERNEL_DATA_SEL;
+		uint64_t kcs = KERNEL_CODE_SEL;
+
+		arch_mm_activate((uintptr_t)process_mm_root(p));
+		__asm__ volatile(
+			"cli\n"
+			"mov %w[ds], %%ds\n"
+			"mov %w[ds], %%es\n"
+			"mov %w[ds], %%fs\n"
+			"mov %w[ds], %%gs\n"
+			"pushq %[ds]\n"
+			"pushq %[rsp_val]\n"
+			"pushq %[rflags]\n"
+			"pushq %[cs_val]\n"
+			"pushq %[rip_val]\n"
+			"iretq\n"
+			:
+			: [rsp_val] "r"(p->task.rsp),
+			  [rflags] "r"((uint64_t)RFLAGS_IF),
+			  [rip_val] "r"(p->task.rip),
+			  [ds] "r"(kds),
+			  [cs_val] "r"(kcs)
+			: "memory"
+		);
+	}
+	else
+	{
+		arch_mm_activate((uintptr_t)process_mm_root(p));
+		arch_switch_to_user((arch_addr_t)p->task.rip,
+				    (arch_addr_t)p->task.rsp);
+	}
+	panic("Returned from arch_first_context_switch unexpectedly");
 #endif
 }
 

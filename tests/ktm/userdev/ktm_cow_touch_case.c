@@ -103,6 +103,11 @@ int main(void)
 		fails++;
 	else
 	{
+		/* COW may grow used_frames; only assert process count / zombies. */
+		(void)ktm_assert_true(fd, "no_process_leak",
+				      ktm_snapshot_no_process_leak(&before, &after) == 0);
+		if (ktm_snapshot_no_process_leak(&before, &after) != 0)
+			fails++;
 		(void)ktm_assert_true(fd, "no_zombie_growth",
 				      after.zombies <= before.zombies);
 		if (after.zombies > before.zombies)

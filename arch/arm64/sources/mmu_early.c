@@ -17,6 +17,7 @@
 
 #include "mmu_early.h"
 
+#include <arch/common/arch_portable.h>
 #include <stdint.h>
 
 #define EINVAL 22
@@ -55,13 +56,17 @@
 #define MAIR_ATTR_NORMAL 0xffUL
 
 static uint64_t l1_table[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+static uint64_t l1_table_b[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t l2_mmio[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t l2_dram[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
-static uint64_t l3_user[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+#define L3_POOL_MAX 32
+static uint64_t l3_pool[L3_POOL_MAX][PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+static int l3_pool_l2[L3_POOL_MAX]; /* L2 index owning this L3, or -1 */
 static int g_mmu_on;
 static int g_dram_split;
-static uint64_t g_user_page_pa;
-static int g_user_page_mapped;
+#define USER_PAGE_MAX 2048
+static uint64_t g_user_pages[USER_PAGE_MAX];
+static unsigned g_user_page_count;
 
 static uint64_t pte_block_2m_device(uint64_t pa)
 {
@@ -137,10 +142,17 @@ static void build_idmap(void)
 	zero_table(l1_table);
 	zero_table(l2_mmio);
 	zero_table(l2_dram);
-	zero_table(l3_user);
+	{
+		unsigned p;
+
+		for (p = 0; p < L3_POOL_MAX; p++)
+		{
+			zero_table(l3_pool[p]);
+			l3_pool_l2[p] = -1;
+		}
+	}
 	g_dram_split = 1;
-	g_user_page_mapped = 0;
-	g_user_page_pa = 0;
+	g_user_page_count = 0;
 
 	l1_table[L1_INDEX(VIRT_UART_BASE)] = pte_table(l2_mmio_pa);
 	l2_mmio[L2_INDEX(VIRT_UART_BASE)] = pte_block_2m_device(uart_block);
@@ -232,6 +244,54 @@ int arm64_mmu_early_verify(void)
 	return 0;
 }
 
+int arm64_mmu_ttbr_dual_smoke(void)
+{
+	unsigned i;
+	uint64_t ttbr;
+	uint64_t root_a = (uint64_t)(uintptr_t)l1_table;
+	uint64_t root_b = (uint64_t)(uintptr_t)l1_table_b;
+	volatile uint32_t *probe;
+
+	if (!g_mmu_on)
+		return -ENODEV;
+
+	arm64_mmu_clone_root_b();
+
+	arch_mm_activate((uintptr_t)root_b);
+	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr));
+	if ((ttbr & ~0x1UL) != (root_b & ~0x1UL))
+		return -EINVAL;
+
+	/* Touch DRAM under the new TTBR0 (identity map still valid). */
+	probe = (volatile uint32_t *)(uintptr_t)VIRT_DRAM_BASE;
+	(void)*probe;
+
+	arch_mm_activate((uintptr_t)root_a);
+	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr));
+	if ((ttbr & ~0x1UL) != (root_a & ~0x1UL))
+		return -EINVAL;
+
+	return 0;
+}
+
+void arm64_mmu_clone_root_b(void)
+{
+	unsigned i;
+
+	for (i = 0; i < PTE_ENTRIES; i++)
+		l1_table_b[i] = l1_table[i];
+}
+
+uint64_t arm64_mmu_root_a(void)
+{
+	return (uint64_t)(uintptr_t)l1_table;
+}
+
+uint64_t arm64_mmu_root_b(void)
+{
+	return (uint64_t)(uintptr_t)l1_table_b;
+}
+
 int arm64_mmu_map_device_block(uint64_t pa)
 {
 	uint64_t block = pa & ~0x1FFFFFUL;
@@ -263,65 +323,107 @@ static int dram_ensure_l2(void)
 	return g_dram_split ? 0 : -EINVAL;
 }
 
-int arm64_mmu_map_user_page(uint64_t pa)
+static uint64_t *l3_table_for_l2(uint64_t l2_idx)
+{
+	unsigned i;
+	int free_slot = -1;
+
+	for (i = 0; i < L3_POOL_MAX; i++)
+	{
+		if (l3_pool_l2[i] == (int)l2_idx)
+			return l3_pool[i];
+		if (free_slot < 0 && l3_pool_l2[i] < 0)
+			free_slot = (int)i;
+	}
+	if (free_slot < 0)
+		return NULL;
+	l3_pool_l2[free_slot] = (int)l2_idx;
+	zero_table(l3_pool[free_slot]);
+	return l3_pool[free_slot];
+}
+
+static int user_page_note(uint64_t page)
+{
+	unsigned i;
+
+	for (i = 0; i < g_user_page_count; i++)
+	{
+		if (g_user_pages[i] == page)
+			return 0;
+	}
+	if (g_user_page_count >= USER_PAGE_MAX)
+		return -EINVAL;
+	g_user_pages[g_user_page_count++] = page;
+	return 0;
+}
+
+int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
 {
 	uint64_t page = pa & ~(PAGE_SIZE - 1UL);
 	uint64_t l2_idx;
 	uint64_t l3_idx;
-	uint64_t l3_pa = (uint64_t)(uintptr_t)l3_user;
+	uint64_t *l3;
+	uint64_t l3_pa;
+	int uxn = exec_el0 ? 0 : 1;
 
 	if (!g_mmu_on)
-	{
 		return -ENODEV;
-	}
 	if (page < VIRT_DRAM_BASE || page >= VIRT_DRAM_END)
-	{
 		return -EINVAL;
-	}
-	if ((page & (PAGE_SIZE - 1UL)) != 0)
-	{
-		return -EINVAL;
-	}
-
 	if (dram_ensure_l2() != 0)
-	{
 		return -EINVAL;
-	}
 
 	l2_idx = L2_INDEX(page);
 	l3_idx = L3_INDEX(page);
+	l3 = l3_table_for_l2(l2_idx);
+	if (!l3)
+		return -EINVAL;
 
-	zero_table(l3_user);
-	/* Only the target page is present; rest of the 2 MiB faults if touched. */
-	l3_user[l3_idx] = pte_page_4k(page, PTE_AP_RW_EL0, 1, 1);
+	l3_pa = (uint64_t)(uintptr_t)l3;
+	/* First split of this 2 MiB block: install L3 table. */
+	if ((l2_dram[l2_idx] & PTE_TYPE_TABLE) != PTE_TYPE_TABLE ||
+	    (l2_dram[l2_idx] & 0x0000FFFFFFFFF000UL) != (l3_pa & 0x0000FFFFFFFFF000UL))
+	{
+		l2_dram[l2_idx] = pte_table(l3_pa);
+	}
 
-	l2_dram[l2_idx] = pte_table(l3_pa);
-	g_user_page_pa = page;
-	g_user_page_mapped = 1;
+	l3[l3_idx] = pte_page_4k(page, PTE_AP_RW_EL0, uxn, 1);
+	if (user_page_note(page) != 0)
+		return -EINVAL;
 	tlb_invalidate();
 	return 0;
+}
+
+int arm64_mmu_map_user_page(uint64_t pa)
+{
+	return arm64_mmu_map_user_page_flags(pa, 0);
 }
 
 int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len)
 {
 	uint64_t end;
+	uint64_t page;
+	unsigned i;
+	int found;
 
-	if (!g_user_page_mapped || len == 0 || len > PAGE_SIZE)
-	{
+	if (g_user_page_count == 0 || len == 0)
 		return 0;
-	}
-	if (va < g_user_page_pa)
-	{
+	if (va + len < va)
 		return 0;
-	}
 	end = va + len;
-	if (end < va)
+	for (page = va & ~(PAGE_SIZE - 1UL); page < end; page += PAGE_SIZE)
 	{
-		return 0;
-	}
-	if (end > g_user_page_pa + PAGE_SIZE)
-	{
-		return 0;
+		found = 0;
+		for (i = 0; i < g_user_page_count; i++)
+		{
+			if (g_user_pages[i] == page)
+			{
+				found = 1;
+				break;
+			}
+		}
+		if (!found)
+			return 0;
 	}
 	return 1;
 }

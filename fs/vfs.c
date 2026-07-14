@@ -874,6 +874,40 @@ int vfs_link(const char *oldpath, const char *newpath)
     return ops->link(oldpath, newpath);
 }
 
+int vfs_symlink(const char *target, const char *linkpath)
+{
+    int ret;
+    struct vfs_ops *ops;
+
+    if (!target || !linkpath)
+        return -EINVAL;
+    ret = validate_path(linkpath);
+    if (ret != 0)
+        return ret;
+    if (!ir0_current_cred())
+        return -ESRCH;
+    ops = ops_for_path(linkpath);
+    if (!ops || !ops->symlink)
+        return -ENOSYS;
+    return ops->symlink(target, linkpath);
+}
+
+int vfs_readlink(const char *path, char *buf, size_t buflen)
+{
+    int ret;
+    struct vfs_ops *ops;
+
+    if (!path || !buf || buflen == 0)
+        return -EINVAL;
+    ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+    ops = ops_for_path(path);
+    if (!ops || !ops->readlink)
+        return -ENOSYS;
+    return ops->readlink(path, buf, buflen);
+}
+
 int vfs_rename(const char *oldpath, const char *newpath)
 {
     int ret = validate_path(oldpath);
@@ -941,7 +975,11 @@ int vfs_rename(const char *oldpath, const char *newpath)
     }
 
     struct vfs_ops *ops = ops_for_path(oldpath);
-    if (!ops || !ops->link)
+    if (!ops)
+        return -ENOSYS;
+    if (ops->rename)
+        return ops->rename(oldpath, newpath);
+    if (!ops->link)
         return -ENOSYS;
     ret = ops->link(oldpath, newpath);
     if (ret != 0)

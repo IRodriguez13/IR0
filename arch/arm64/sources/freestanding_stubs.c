@@ -32,6 +32,13 @@ void cpu_wait(void)
 	__asm__ volatile("wfi" ::: "memory");
 }
 
+void panic(const char *msg)
+{
+	(void)msg;
+	for (;;)
+		__asm__ volatile("wfi" ::: "memory");
+}
+
 char *strncpy(char *dst, const char *src, size_t n)
 {
 	size_t i;

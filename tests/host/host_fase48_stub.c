@@ -41,3 +41,11 @@ void ktm_event_emit4(uint16_t type, uint16_t subsystem,
 	(void)a2;
 	(void)a3;
 }
+
+#include <stdbool.h>
+
+bool ktm_fault_should_fail(const char *name)
+{
+	(void)name;
+	return false;
+}

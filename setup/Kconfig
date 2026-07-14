@@ -51,12 +51,13 @@ menu "General"
     config SCHEDULER_POLICY
         int "Scheduler policy (0=RR, 1=Cfs, 2=Priority)"
         range 0 2
-        default 0
+        default 2
         help
           Build-time scheduler backend (make menuconfig → Kernel options).
-          0 = round-robin (stable reference, default)
-          1 = CFS — currently aliases RR; separate runqueue planned
-          2 = priority — currently aliases RR; separate runqueue planned
+          0 = round-robin (stable reference)
+          1 = CFS — currently aliases RR; real CFS is long-term
+          2 = priority bands (default) — fixed bands with RR within band;
+              better than RR for future SMP prep; not CFS
           Makefile links sched/scheduler_api.c + policy wrapper; preempt/Tty paths
           use includes/ir0/scheduler_api.h.
 
@@ -540,12 +541,14 @@ menu "Debugging"
           KTM|… protocol lines for host runners (make ktm-run).
 
     config KTM_FAULT
-        bool "KTM fault injection API (stub; chaos mode is v2)"
+        bool "KTM fault injection API (wired points: pipe/sock/fork/kmem)"
         depends on KTM
         default n
         help
-          Compiles ktm_fault_should_fail / KTM_FAULT_POINT. Keep off in
-          production defconfig until fault points are wired in PMM/kmalloc.
+          Compiles ktm_fault_should_fail and named hit points
+          (pipe.create, sock.create, process.fork_alloc, kmem.alloc).
+          Inactive until /dev/ktm CONFIG_FAULT arms a slot. Enable for
+          smoke-ktm-fault / developer kernels; leave off for lean builds.
 
     config KTM_USERDEV
         bool "KTM /dev/ktm userspace control plane"

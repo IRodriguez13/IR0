@@ -15,8 +15,7 @@
 /*
  * IR0 Kernel - Scheduler backend API
  *
- * For now RR is the only implementation. This file centralizes callsites so
- * policy selection can evolve without touching core subsystems.
+ * Build-time policy: 0=RR, 1=CFS (alias RR), 2=priority bands.
  */
 
 #include "scheduler_api.h"

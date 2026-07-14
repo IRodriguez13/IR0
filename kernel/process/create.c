@@ -102,7 +102,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	proc->pgid = proc->task.pid;
 	proc->ppid = current_process ? current_process->task.pid : 0;
 	proc->state = PROCESS_READY;
-	
+	proc->sched_prio = IR0_SCHED_PRIO_DEFAULT;
+
 	/* Explicit mode specification - no magic address detection */
 	proc->mode = mode;
 	proc->owns_page_directory = 1;

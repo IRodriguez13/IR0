@@ -55,8 +55,26 @@
 #define P9_RLOPEN   13
 #define P9_TLCREATE 14
 #define P9_RLCREATE 15
+#define P9_TSYMLINK 16
+#define P9_RSYMLINK 17
+#define P9_TRENAME  20
+#define P9_RRENAME  21
+#define P9_TREADLINK 22
+#define P9_RREADLINK 23
 #define P9_TGETATTR 24
 #define P9_RGETATTR 25
+#define P9_TSETATTR 26
+#define P9_RSETATTR 27
+#define P9_TREADDIR 40
+#define P9_RREADDIR 41
+#define P9_TLINK    70
+#define P9_RLINK    71
+#define P9_TMKDIR   72
+#define P9_RMKDIR   73
+#define P9_TRENAMEAT 74
+#define P9_RRENAMEAT 75
+#define P9_TUNLINKAT 76
+#define P9_RUNLINKAT 77
 #define P9_TVERSION 100
 #define P9_RVERSION 101
 #define P9_TATTACH  104
@@ -71,17 +89,22 @@
 #define P9_TCLUNK   120
 #define P9_RCLUNK   121
 
-/* 9P2000.L getattr masks (Linux include/net/9p/9p.h) */
+/* 9P2000.L getattr / setattr (Linux include/net/9p/9p.h) */
 #define P9_STATS_MODE  0x00000001ULL
 #define P9_STATS_SIZE  0x00000200ULL
 #define P9_STATS_BASIC 0x000007ffULL
+#define P9_ATTR_SIZE   (1u << 3)
 
-/* 9P2000.L open flags (match Linux O_* / P9_DOTL_*) */
+/* 9P2000.L open / unlinkat flags */
 #define P9_DOTL_RDONLY 0x00000000u
 #define P9_DOTL_WRONLY 0x00000001u
 #define P9_DOTL_RDWR   0x00000002u
 #define P9_DOTL_CREAT  0x00000040u
 #define P9_DOTL_TRUNC  0x00000200u
+#define P9_DOTL_DIRECTORY 0x00010000u
+#define P9_DOTL_AT_REMOVEDIR 0x200u
+
+#define P9_QTDIR 0x80u
 
 #define V9P_QUEUE_MAX  128
 #define V9P_BUF_SIZE   8192
@@ -305,7 +328,18 @@ static int v9p_rpc(uint8_t type, uint8_t *body, uint32_t body_len,
 	(void)rtag;
 	g_p9_tag++;
 
-	if (rtype == P9_RERROR || rtype == P9_RLERROR)
+	if (rtype == P9_RLERROR)
+	{
+		uint32_t ecode;
+
+		if (resp_len < 11)
+			return -EIO;
+		ecode = p9_get32(&rp);
+		if (ecode == 0 || ecode > 255)
+			return -EIO;
+		return -(int)ecode;
+	}
+	if (rtype == P9_RERROR)
 		return -EIO;
 	if (rtype != expect_type)
 		return -EIO;
@@ -376,6 +410,107 @@ static int v9p_walk(uint32_t fid, uint32_t newfid, const char *name)
 		p9_put16(&p, 0);
 	}
 	return v9p_rpc(P9_TWALK, body, (uint32_t)(p - body), P9_RWALK, &rb, &rblen);
+}
+
+/*
+ * Walk a relative path (may contain '/') from the share root into @newfid.
+ * Rejects empty components, "." and ".." (MVP: no parent traversal).
+ */
+static int v9p_walk_path(uint32_t newfid, const char *relpath)
+{
+	char path[256];
+	char *p;
+	char *slash;
+	int rc;
+	int started = 0;
+
+	if (!relpath)
+		return -EINVAL;
+	while (*relpath == '/')
+		relpath++;
+	if (!relpath[0])
+		return v9p_walk(g_root_fid, newfid, NULL);
+
+	if (strlen(relpath) >= sizeof(path))
+		return -ENAMETOOLONG;
+	memcpy(path, relpath, strlen(relpath) + 1);
+
+	p = path;
+	while (*p)
+	{
+		while (*p == '/')
+			p++;
+		if (!*p)
+			break;
+		slash = strchr(p, '/');
+		if (slash)
+			*slash = '\0';
+		if (!p[0] || strcmp(p, ".") == 0 || strcmp(p, "..") == 0)
+			return -EINVAL;
+
+		if (!started)
+		{
+			rc = v9p_walk(g_root_fid, newfid, p);
+			started = 1;
+		}
+		else
+			rc = v9p_walk(newfid, newfid, p);
+		if (rc < 0)
+		{
+			/*
+			 * 9P2000: Twalk with newfid==fid that fails mid-path leaves
+			 * the fid undefined — clunk before returning.
+			 */
+			if (started)
+				(void)v9p_clunk(newfid);
+			return rc;
+		}
+		if (!slash)
+			break;
+		p = slash + 1;
+	}
+
+	if (!started)
+		return v9p_walk(g_root_fid, newfid, NULL);
+	return 0;
+}
+
+/* Split "a/b/c" into parent "a/b" and base "c". Parent may be empty. */
+static int v9p_split_parent_base(const char *relpath, char *parent, size_t psz,
+				 char *base, size_t bsz)
+{
+	const char *start;
+	const char *slash;
+	size_t blen;
+	size_t plen;
+
+	if (!relpath || !parent || !base || psz == 0 || bsz == 0)
+		return -EINVAL;
+	start = relpath;
+	while (*start == '/')
+		start++;
+	if (!start[0])
+		return -EINVAL;
+	slash = strrchr(start, '/');
+	if (!slash)
+	{
+		parent[0] = '\0';
+		blen = strlen(start);
+		if (blen >= bsz)
+			return -ENAMETOOLONG;
+		memcpy(base, start, blen + 1);
+		return 0;
+	}
+	plen = (size_t)(slash - start);
+	blen = strlen(slash + 1);
+	if (plen >= psz || blen == 0 || blen >= bsz)
+		return -ENAMETOOLONG;
+	memcpy(parent, start, plen);
+	parent[plen] = '\0';
+	memcpy(base, slash + 1, blen + 1);
+	if (strcmp(base, ".") == 0 || strcmp(base, "..") == 0)
+		return -EINVAL;
+	return 0;
 }
 
 static int v9p_lopen(uint32_t fid, uint32_t flags)
@@ -496,17 +631,645 @@ static int v9p_getattr(uint32_t fid, uint64_t request_mask, uint32_t *mode_out,
 	return 0;
 }
 
-static const char *v9p_flat_name(const char *relpath)
+static int v9p_mkdir(uint32_t dfid, const char *name, uint32_t mode, uint32_t gid)
 {
-	const char *name = relpath;
+	uint8_t body[128];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
 
-	if (!name)
-		return NULL;
-	while (*name == '/')
-		name++;
-	if (!name[0] || strchr(name, '/'))
-		return NULL;
-	return name;
+	/* Tmkdir: dfid, name, mode, gid — Linux "dsdg" */
+	p9_put32(&p, dfid);
+	p9_putstr(&p, name);
+	p9_put32(&p, mode);
+	p9_put32(&p, gid);
+	return v9p_rpc(P9_TMKDIR, body, (uint32_t)(p - body), P9_RMKDIR, &rb, &rblen);
+}
+
+static int v9p_unlinkat(uint32_t dfid, const char *name, uint32_t flags)
+{
+	uint8_t body[128];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
+
+	/* Tunlinkat: dfid, name, flags — Linux "dsd" */
+	p9_put32(&p, dfid);
+	p9_putstr(&p, name);
+	p9_put32(&p, flags);
+	return v9p_rpc(P9_TUNLINKAT, body, (uint32_t)(p - body), P9_RUNLINKAT, &rb,
+			&rblen);
+}
+
+static int v9p_renameat(uint32_t olddirfid, const char *oldname, uint32_t newdirfid,
+			const char *newname)
+{
+	uint8_t body[256];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
+
+	/* Trenameat: olddirfid, oldname, newdirfid, newname — Linux "dsds" */
+	p9_put32(&p, olddirfid);
+	p9_putstr(&p, oldname);
+	p9_put32(&p, newdirfid);
+	p9_putstr(&p, newname);
+	return v9p_rpc(P9_TRENAMEAT, body, (uint32_t)(p - body), P9_RRENAMEAT, &rb,
+			&rblen);
+}
+
+static int v9p_link(uint32_t dfid, uint32_t fid, const char *name)
+{
+	uint8_t body[128];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
+
+	/* Tlink: dfid, fid, name — Linux "dds" */
+	p9_put32(&p, dfid);
+	p9_put32(&p, fid);
+	p9_putstr(&p, name);
+	return v9p_rpc(P9_TLINK, body, (uint32_t)(p - body), P9_RLINK, &rb, &rblen);
+}
+
+static int v9p_readdir(uint32_t fid, uint64_t offset, void *data, uint32_t count,
+		       uint32_t *got)
+{
+	uint8_t body[24];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
+	uint32_t n;
+	int rc;
+
+	/* Treaddir: fid, offset, count — same shape as Tread */
+	p9_put32(&p, fid);
+	p9_put64(&p, offset);
+	p9_put32(&p, count);
+	rc = v9p_rpc(P9_TREADDIR, body, (uint32_t)(p - body), P9_RREADDIR, &rb, &rblen);
+	if (rc < 0)
+		return rc;
+	if (rblen < 4)
+		return -EIO;
+	n = p9_get32(&rb);
+	if (n > count)
+		n = count;
+	if (n && data)
+		memcpy(data, rb, n);
+	if (got)
+		*got = n;
+	return 0;
+}
+
+static int v9p_setattr_size(uint32_t fid, uint64_t size)
+{
+	uint8_t body[64];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
+
+	/* Tsetattr: fid + iattr_dotl (valid, mode, uid, gid, size, times…) */
+	p9_put32(&p, fid);
+	p9_put32(&p, P9_ATTR_SIZE);
+	p9_put32(&p, 0); /* mode */
+	p9_put32(&p, 0); /* uid */
+	p9_put32(&p, 0); /* gid */
+	p9_put64(&p, size);
+	p9_put64(&p, 0);
+	p9_put64(&p, 0);
+	p9_put64(&p, 0);
+	p9_put64(&p, 0);
+	return v9p_rpc(P9_TSETATTR, body, (uint32_t)(p - body), P9_RSETATTR, &rb, &rblen);
+}
+
+int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_out)
+{
+	uint32_t fid = 4;
+	uint32_t mode = 0;
+	uint64_t size = 0;
+	int rc;
+
+	if (!g_ready || !relpath)
+		return -EINVAL;
+
+	rc = v9p_walk_path(fid, relpath);
+	if (rc < 0)
+		return rc;
+	rc = v9p_getattr(fid, P9_STATS_BASIC, &mode, &size);
+	(void)v9p_clunk(fid);
+	if (rc < 0)
+		return rc;
+	if (size_out)
+		*size_out = size;
+	if (mode_out)
+		*mode_out = mode;
+	return 0;
+}
+
+int virtio_9p_write_at(const char *relpath, const void *buf, size_t len, uint64_t offset)
+{
+	uint32_t fid = 2;
+	uint32_t written = 0;
+	int rc;
+	char parent[240];
+	char base[64];
+	size_t done = 0;
+
+	if (!g_ready || !relpath || (!buf && len > 0))
+		return -EINVAL;
+	rc = v9p_split_parent_base(relpath, parent, sizeof(parent), base, sizeof(base));
+	if (rc < 0)
+		return rc;
+
+	rc = v9p_walk_path(fid, relpath);
+	if (rc == 0)
+	{
+		rc = v9p_lopen(fid, P9_DOTL_WRONLY);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+	}
+	else
+	{
+		(void)v9p_clunk(fid);
+		rc = v9p_walk_path(fid, parent);
+		if (rc < 0)
+			return rc;
+		rc = v9p_lcreate(fid, base, P9_DOTL_WRONLY, 0666u, 0u);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+	}
+
+	while (done < len)
+	{
+		uint32_t chunk = (uint32_t)(len - done);
+
+		if (chunk > V9P_READ_CHUNK)
+			chunk = V9P_READ_CHUNK;
+		written = 0;
+		rc = v9p_write(fid, offset + done, (const uint8_t *)buf + done, chunk,
+			       &written);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+		if (written == 0)
+		{
+			(void)v9p_clunk(fid);
+			return -EIO;
+		}
+		done += written;
+	}
+
+	(void)v9p_clunk(fid);
+	return 0;
+}
+
+int virtio_9p_write_file(const char *relpath, const void *buf, size_t len)
+{
+	uint32_t fid = 2;
+	int rc;
+	char parent[240];
+	char base[64];
+
+	if (!g_ready || !relpath || (!buf && len > 0))
+		return -EINVAL;
+	rc = v9p_split_parent_base(relpath, parent, sizeof(parent), base, sizeof(base));
+	if (rc < 0)
+		return rc;
+
+	rc = v9p_walk_path(fid, relpath);
+	if (rc == 0)
+	{
+		rc = v9p_lopen(fid, P9_DOTL_WRONLY | P9_DOTL_TRUNC);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+	}
+	else
+	{
+		(void)v9p_clunk(fid);
+		rc = v9p_walk_path(fid, parent);
+		if (rc < 0)
+			return rc;
+		rc = v9p_lcreate(fid, base, P9_DOTL_WRONLY, 0666u, 0u);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+	}
+
+	if (len > 0)
+	{
+		uint32_t written = 0;
+		size_t done = 0;
+
+		while (done < len)
+		{
+			uint32_t chunk = (uint32_t)(len - done);
+
+			if (chunk > V9P_READ_CHUNK)
+				chunk = V9P_READ_CHUNK;
+			written = 0;
+			rc = v9p_write(fid, done, (const uint8_t *)buf + done, chunk,
+				       &written);
+			if (rc < 0)
+			{
+				(void)v9p_clunk(fid);
+				return rc;
+			}
+			if (written == 0)
+			{
+				(void)v9p_clunk(fid);
+				return -EIO;
+			}
+			done += written;
+		}
+	}
+
+	(void)v9p_clunk(fid);
+	return 0;
+}
+
+int virtio_9p_truncate(const char *relpath, uint64_t length)
+{
+	uint32_t fid = 11;
+	int rc;
+
+	if (!g_ready || !relpath)
+		return -EINVAL;
+	rc = v9p_walk_path(fid, relpath);
+	if (rc < 0)
+		return rc;
+	rc = v9p_setattr_size(fid, length);
+	(void)v9p_clunk(fid);
+	return rc;
+}
+
+int virtio_9p_mkdir(const char *relpath, uint32_t mode)
+{
+	uint32_t fid = 6;
+	char parent[240];
+	char base[64];
+	int rc;
+
+	if (!g_ready || !relpath || !relpath[0])
+		return -EINVAL;
+	rc = v9p_split_parent_base(relpath, parent, sizeof(parent), base, sizeof(base));
+	if (rc < 0)
+		return rc;
+	rc = v9p_walk_path(fid, parent);
+	if (rc < 0)
+		return rc;
+	rc = v9p_mkdir(fid, base, mode ? mode : 0755u, 0u);
+	(void)v9p_clunk(fid);
+	return rc;
+}
+
+int virtio_9p_unlink(const char *relpath, int is_dir)
+{
+	uint32_t fid = 6;
+	char parent[240];
+	char base[64];
+	int rc;
+	uint32_t flags = is_dir ? P9_DOTL_AT_REMOVEDIR : 0u;
+
+	if (!g_ready || !relpath || !relpath[0])
+		return -EINVAL;
+	rc = v9p_split_parent_base(relpath, parent, sizeof(parent), base, sizeof(base));
+	if (rc < 0)
+		return rc;
+	rc = v9p_walk_path(fid, parent);
+	if (rc < 0)
+		return rc;
+	rc = v9p_unlinkat(fid, base, flags);
+	(void)v9p_clunk(fid);
+	return rc;
+}
+
+int virtio_9p_rename(const char *oldpath, const char *newpath)
+{
+	uint32_t olddir = 7;
+	uint32_t newdir = 8;
+	char old_parent[240];
+	char old_base[64];
+	char new_parent[240];
+	char new_base[64];
+	int rc;
+
+	if (!g_ready || !oldpath || !newpath)
+		return -EINVAL;
+	rc = v9p_split_parent_base(oldpath, old_parent, sizeof(old_parent), old_base,
+				   sizeof(old_base));
+	if (rc < 0)
+		return rc;
+	rc = v9p_split_parent_base(newpath, new_parent, sizeof(new_parent), new_base,
+				   sizeof(new_base));
+	if (rc < 0)
+		return rc;
+	rc = v9p_walk_path(olddir, old_parent);
+	if (rc < 0)
+		return rc;
+	rc = v9p_walk_path(newdir, new_parent);
+	if (rc < 0)
+	{
+		(void)v9p_clunk(olddir);
+		return rc;
+	}
+	rc = v9p_renameat(olddir, old_base, newdir, new_base);
+	(void)v9p_clunk(olddir);
+	(void)v9p_clunk(newdir);
+	return rc;
+}
+
+int virtio_9p_link(const char *oldpath, const char *newpath)
+{
+	uint32_t src = 10;
+	uint32_t dstdir = 6;
+	char new_parent[240];
+	char new_base[64];
+	int rc;
+
+	if (!g_ready || !oldpath || !newpath)
+		return -EINVAL;
+	rc = v9p_split_parent_base(newpath, new_parent, sizeof(new_parent), new_base,
+				   sizeof(new_base));
+	if (rc < 0)
+		return rc;
+	rc = v9p_walk_path(src, oldpath);
+	if (rc < 0)
+		return rc;
+	rc = v9p_walk_path(dstdir, new_parent);
+	if (rc < 0)
+	{
+		(void)v9p_clunk(src);
+		return rc;
+	}
+	rc = v9p_link(dstdir, src, new_base);
+	(void)v9p_clunk(src);
+	(void)v9p_clunk(dstdir);
+	return rc;
+}
+
+int virtio_9p_symlink(const char *linkpath, const char *target)
+{
+	uint32_t fid = 12;
+	char parent[240];
+	char base[64];
+	uint8_t body[384];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
+	int rc;
+
+	if (!g_ready || !linkpath || !target || !linkpath[0] || !target[0])
+		return -EINVAL;
+	rc = v9p_split_parent_base(linkpath, parent, sizeof(parent), base, sizeof(base));
+	if (rc < 0)
+		return rc;
+	rc = v9p_walk_path(fid, parent);
+	if (rc < 0)
+		return rc;
+	/* Tsymlink: dfid, name, symtgt, gid — Linux "dssg" */
+	p9_put32(&p, fid);
+	p9_putstr(&p, base);
+	p9_putstr(&p, target);
+	p9_put32(&p, 0);
+	rc = v9p_rpc(P9_TSYMLINK, body, (uint32_t)(p - body), P9_RSYMLINK, &rb, &rblen);
+	(void)v9p_clunk(fid);
+	return rc;
+}
+
+int virtio_9p_readlink(const char *relpath, char *buf, size_t buflen)
+{
+	uint32_t fid = 13;
+	uint8_t body[8];
+	uint8_t *p = body;
+	uint8_t *rb;
+	uint32_t rblen;
+	uint16_t n;
+	int rc;
+
+	if (!g_ready || !relpath || !buf || buflen == 0)
+		return -EINVAL;
+	rc = v9p_walk_path(fid, relpath);
+	if (rc < 0)
+		return rc;
+	p9_put32(&p, fid);
+	rc = v9p_rpc(P9_TREADLINK, body, (uint32_t)(p - body), P9_RREADLINK, &rb, &rblen);
+	if (rc < 0)
+	{
+		(void)v9p_clunk(fid);
+		return rc;
+	}
+	if (rblen < 2)
+	{
+		(void)v9p_clunk(fid);
+		return -EIO;
+	}
+	n = p9_get16(&rb);
+	if ((uint32_t)(2 + n) > rblen)
+	{
+		(void)v9p_clunk(fid);
+		return -EIO;
+	}
+	if (n >= buflen)
+		n = (uint16_t)(buflen - 1);
+	memcpy(buf, rb, n);
+	buf[n] = '\0';
+	(void)v9p_clunk(fid);
+	return (int)n;
+}
+
+int virtio_9p_readdir(const char *relpath, virtio_9p_dirent_t *entries, int max)
+{
+	uint32_t fid = 9;
+	uint64_t off = 0;
+	uint8_t buf[V9P_READ_CHUNK];
+	int n = 0;
+	int rc;
+
+	if (!g_ready || !entries || max <= 0)
+		return -EINVAL;
+
+	rc = v9p_walk_path(fid, relpath ? relpath : "");
+	if (rc < 0)
+		return rc;
+	rc = v9p_lopen(fid, P9_DOTL_RDONLY | P9_DOTL_DIRECTORY);
+	if (rc < 0)
+	{
+		/* Some servers accept plain RDONLY on dirs */
+		rc = v9p_lopen(fid, P9_DOTL_RDONLY);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+	}
+
+	while (n < max)
+	{
+		uint32_t got = 0;
+		uint8_t *p;
+		uint8_t *end;
+
+		rc = v9p_readdir(fid, off, buf, sizeof(buf), &got);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+		if (got == 0)
+			break;
+
+		p = buf;
+		end = buf + got;
+		while (p + 13 + 8 + 1 + 2 <= end && n < max)
+		{
+			uint8_t qtype;
+			uint64_t next_off;
+			uint8_t dtype;
+			uint16_t namelen;
+
+			qtype = p[0];
+			p += 13; /* qid */
+			next_off = p9_get64(&p);
+			dtype = p9_get8(&p);
+			namelen = p9_get16(&p);
+			if (p + namelen > end)
+				break;
+			if (namelen > 0 && namelen < sizeof(entries[n].name))
+			{
+				memcpy(entries[n].name, p, namelen);
+				entries[n].name[namelen] = '\0';
+				if (!(namelen == 1 && entries[n].name[0] == '.') &&
+				    !(namelen == 2 && entries[n].name[0] == '.' &&
+				      entries[n].name[1] == '.'))
+				{
+					if (qtype & P9_QTDIR)
+						entries[n].type = 4;
+					else if (dtype == 4)
+						entries[n].type = 4;
+					else
+						entries[n].type = 8;
+					n++;
+				}
+			}
+			p += namelen;
+			off = next_off;
+		}
+		if (got < sizeof(buf))
+			break;
+	}
+
+	(void)v9p_clunk(fid);
+	return n;
+}
+
+int virtio_9p_read_file(const char *relpath, void *buf, size_t maxlen)
+{
+	uint32_t fid = 3;
+	uint64_t off = 0;
+	size_t total = 0;
+	int rc;
+
+	if (!g_ready || !relpath || !buf)
+		return -EINVAL;
+
+	rc = v9p_walk_path(fid, relpath);
+	if (rc < 0)
+		return rc;
+	rc = v9p_lopen(fid, P9_DOTL_RDONLY);
+	if (rc < 0)
+	{
+		(void)v9p_clunk(fid);
+		return rc;
+	}
+
+	while (total < maxlen)
+	{
+		uint32_t want;
+		uint32_t got = 0;
+
+		want = (uint32_t)(maxlen - total);
+		if (want > V9P_READ_CHUNK)
+			want = V9P_READ_CHUNK;
+		rc = v9p_read(fid, off, (uint8_t *)buf + total, want, &got);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+		if (got == 0)
+			break;
+		total += got;
+		off += got;
+		if (got < want)
+			break;
+	}
+
+	(void)v9p_clunk(fid);
+	if (total > (size_t)0x7fffffff)
+		return -EFBIG;
+	return (int)total;
+}
+
+int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t offset,
+		      size_t *got_out)
+{
+	uint32_t fid = 5;
+	uint64_t off = offset;
+	size_t total = 0;
+	int rc;
+
+	if (!g_ready || !relpath || !buf)
+		return -EINVAL;
+
+	rc = v9p_walk_path(fid, relpath);
+	if (rc < 0)
+		return rc;
+	rc = v9p_lopen(fid, P9_DOTL_RDONLY);
+	if (rc < 0)
+	{
+		(void)v9p_clunk(fid);
+		return rc;
+	}
+
+	while (total < count)
+	{
+		uint32_t want;
+		uint32_t got = 0;
+
+		want = (uint32_t)(count - total);
+		if (want > V9P_READ_CHUNK)
+			want = V9P_READ_CHUNK;
+		rc = v9p_read(fid, off, (uint8_t *)buf + total, want, &got);
+		if (rc < 0)
+		{
+			(void)v9p_clunk(fid);
+			return rc;
+		}
+		if (got == 0)
+			break;
+		total += got;
+		off += got;
+		if (got < want)
+			break;
+	}
+
+	(void)v9p_clunk(fid);
+	if (got_out)
+		*got_out = total;
+	return 0;
 }
 
 static int find_virtio_9p(uint8_t *bus, uint8_t *slot)
@@ -655,181 +1418,3 @@ int virtio_9p_ready(void)
 	return g_ready;
 }
 
-int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_out)
-{
-	uint32_t fid = 4;
-	const char *name;
-	uint32_t mode = 0;
-	uint64_t size = 0;
-	int rc;
-
-	if (!g_ready || !relpath)
-		return -EINVAL;
-	name = v9p_flat_name(relpath);
-	if (!name)
-		return -EINVAL;
-
-	rc = v9p_walk(g_root_fid, fid, name);
-	if (rc < 0)
-		return rc;
-	rc = v9p_getattr(fid, P9_STATS_BASIC, &mode, &size);
-	(void)v9p_clunk(fid);
-	if (rc < 0)
-		return rc;
-	if (size_out)
-		*size_out = size;
-	if (mode_out)
-		*mode_out = mode;
-	return 0;
-}
-
-int virtio_9p_write_file(const char *relpath, const void *buf, size_t len)
-{
-	uint32_t fid = 2;
-	uint32_t written = 0;
-	int rc;
-	const char *name;
-
-	if (!g_ready || !relpath || !buf)
-		return -EINVAL;
-	name = v9p_flat_name(relpath);
-	if (!name)
-		return -EINVAL; /* MVP: single-component path only */
-
-	rc = v9p_walk(g_root_fid, fid, name);
-	if (rc == 0)
-	{
-		rc = v9p_lopen(fid, P9_DOTL_WRONLY | P9_DOTL_TRUNC);
-		if (rc < 0)
-		{
-			(void)v9p_clunk(fid);
-			return rc;
-		}
-	}
-	else
-	{
-		/* clone root fid, then Tlcreate */
-		rc = v9p_walk(g_root_fid, fid, NULL);
-		if (rc < 0)
-			return rc;
-		rc = v9p_lcreate(fid, name, P9_DOTL_WRONLY, 0666u, 0u);
-		if (rc < 0)
-		{
-			(void)v9p_clunk(fid);
-			return rc;
-		}
-	}
-
-	rc = v9p_write(fid, 0, buf, (uint32_t)len, &written);
-	(void)v9p_clunk(fid);
-	if (rc < 0)
-		return rc;
-	if (written != (uint32_t)len)
-		return -EIO;
-	return 0;
-}
-
-int virtio_9p_read_file(const char *relpath, void *buf, size_t maxlen)
-{
-	uint32_t fid = 3;
-	uint64_t off = 0;
-	size_t total = 0;
-	int rc;
-	const char *name;
-
-	if (!g_ready || !relpath || !buf)
-		return -EINVAL;
-	name = v9p_flat_name(relpath);
-	if (!name)
-		return -EINVAL;
-
-	rc = v9p_walk(g_root_fid, fid, name);
-	if (rc < 0)
-		return rc;
-	rc = v9p_lopen(fid, P9_DOTL_RDONLY);
-	if (rc < 0)
-	{
-		(void)v9p_clunk(fid);
-		return rc;
-	}
-
-	while (total < maxlen)
-	{
-		uint32_t want;
-		uint32_t got = 0;
-
-		want = (uint32_t)(maxlen - total);
-		if (want > V9P_READ_CHUNK)
-			want = V9P_READ_CHUNK;
-		rc = v9p_read(fid, off, (uint8_t *)buf + total, want, &got);
-		if (rc < 0)
-		{
-			(void)v9p_clunk(fid);
-			return rc;
-		}
-		if (got == 0)
-			break;
-		total += got;
-		off += got;
-		if (got < want)
-			break;
-	}
-
-	(void)v9p_clunk(fid);
-	if (total > (size_t)0x7fffffff)
-		return -EFBIG;
-	return (int)total;
-}
-
-int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t offset,
-		      size_t *got_out)
-{
-	uint32_t fid = 5;
-	uint64_t off = offset;
-	size_t total = 0;
-	int rc;
-	const char *name;
-
-	if (!g_ready || !relpath || !buf)
-		return -EINVAL;
-	name = v9p_flat_name(relpath);
-	if (!name)
-		return -EINVAL;
-
-	rc = v9p_walk(g_root_fid, fid, name);
-	if (rc < 0)
-		return rc;
-	rc = v9p_lopen(fid, P9_DOTL_RDONLY);
-	if (rc < 0)
-	{
-		(void)v9p_clunk(fid);
-		return rc;
-	}
-
-	while (total < count)
-	{
-		uint32_t want;
-		uint32_t got = 0;
-
-		want = (uint32_t)(count - total);
-		if (want > V9P_READ_CHUNK)
-			want = V9P_READ_CHUNK;
-		rc = v9p_read(fid, off, (uint8_t *)buf + total, want, &got);
-		if (rc < 0)
-		{
-			(void)v9p_clunk(fid);
-			return rc;
-		}
-		if (got == 0)
-			break;
-		total += got;
-		off += got;
-		if (got < want)
-			break;
-	}
-
-	(void)v9p_clunk(fid);
-	if (got_out)
-		*got_out = total;
-	return 0;
-}

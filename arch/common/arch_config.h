@@ -43,7 +43,9 @@
     #define ARCH_PAGING_METHOD "x86_paging"
     
 #elif defined(__aarch64__)
+#ifndef ARCH_ARM64
     #define ARCH_ARM64
+#endif
     #define ARCH_NAME "ARM-64"
     #define ARCH_BITS 64
     #define ARCH_LITTLE_ENDIAN 1
@@ -55,7 +57,9 @@
     #define ARCH_PAGING_METHOD "arm_paging"
     
 #elif defined(__arm__)
+#ifndef ARCH_ARM32
     #define ARCH_ARM32
+#endif
     #define ARCH_NAME "ARM-32"
     #define ARCH_BITS 32
     #define ARCH_LITTLE_ENDIAN 1
