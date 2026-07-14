@@ -34,6 +34,17 @@ struct vfs_ops {
 	int (*unlink)(const char *path);
 	int (*rmdir)(const char *path);
 	int (*link)(const char *oldpath, const char *newpath);
+	/*
+	 * Atomic rename within the same mount when the backend supports it
+	 * (e.g. 9P TRENAMEAT). If NULL, vfs_rename falls back to link+unlink.
+	 */
+	int (*rename)(const char *oldpath, const char *newpath);
+	int (*symlink)(const char *target, const char *linkpath);
+	/*
+	 * Copy symlink target into @buf (NUL-terminated). Return bytes that
+	 * would be needed excluding NUL (POSIX readlink style), or -errno.
+	 */
+	int (*readlink)(const char *path, char *buf, size_t buflen);
 	int (*chown)(const char *path, uid_t owner, gid_t group);
 	int (*chmod)(const char *path, mode_t mode);
 	int (*readdir)(const char *path, struct vfs_dirent *entries, int max);

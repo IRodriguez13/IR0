@@ -29,6 +29,34 @@ int ktm_run_scenario(int fd, const char *name, int32_t *result_out);
 int ktm_get_caps(int fd, ktm_user_caps_t *out);
 int ktm_reset(int fd);
 
+/* Arm a named fault point (requires KTM_CAP_FAULT). Modes: KTM_FAULT_MODE_*. */
+int ktm_config_fault(int fd, const char *name, uint32_t mode, uint32_t value,
+		     uint32_t seed);
+
+/*
+ * Pure snapshot delta helpers (no ioctl). Return 0 if no leak growth.
+ * processes: after.processes <= before.processes
+ * frames: after.used_frames <= before.used_frames
+ * pipes: after.pipes <= before.pipes
+ */
+int ktm_snapshot_no_process_leak(const ktm_ioc_snapshot_t *before,
+				 const ktm_ioc_snapshot_t *after);
+int ktm_snapshot_no_frame_leak(const ktm_ioc_snapshot_t *before,
+			       const ktm_ioc_snapshot_t *after);
+int ktm_snapshot_no_pipe_leak(const ktm_ioc_snapshot_t *before,
+			      const ktm_ioc_snapshot_t *after);
+
+/* Fill signed deltas (after - before). Returns -1 on null args. */
+int ktm_snapshot_delta(const ktm_ioc_snapshot_t *before,
+		       const ktm_ioc_snapshot_t *after,
+		       ktm_ioc_snapshot_t *delta_out);
+
+/*
+ * Take after snapshot, assert no process/frame/pipe leak via /dev/ktm USER_ASSERT.
+ * Returns number of failed checks (0 = OK).
+ */
+int ktm_assert_no_leaks(int fd, const ktm_ioc_snapshot_t *before);
+
 /*
  * Write a short result file under virtio-9p /mnt/host/<relpath>.
  * Tolerates share already mounted by init_hostshare_exec stub (no remount).

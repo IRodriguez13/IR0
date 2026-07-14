@@ -2,12 +2,12 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.1 |
+| Versión | 0.2 |
 | Fase IR0 | T0 |
 | Estado | stable |
 | Depende de | memory, syscalls, filesystems |
 | Página man | IR0-vfs (sección 7) |
-| Fuentes principales | `fs/vfs.c`, `fs/vfs.h`, `includes/ir0/vfs_backend.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
+| Fuentes principales | `fs/vfs.c`, `fs/vfs.h`, `includes/ir0/vfs_backend.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
 
 ## 1. Visión general
 
@@ -43,9 +43,15 @@ Estado global en `fs/vfs.c`:
 
 ### Contrato de backend (`includes/ir0/vfs_backend.h`)
 
-Los backends implementan solo operaciones por ruta. Devuelven **0 en éxito**,
-**errno negativo** en fallo. No deben invocar syscalls ni depender de un workload
-concreto de userspace.
+Los backends implementan solo operaciones por ruta: `stat`, `mkdir`, `create`,
+`read`, `write`, `truncate`, `readdir`, `rename`, `symlink`, `readlink`, etc.
+Devuelven **0 en éxito**, **errno negativo** en fallo. No deben invocar syscalls
+ni depender de un workload concreto de userspace.
+
+Ops opcionales pueden ser `NULL`. `vfs_symlink` / `vfs_readlink` llaman a
+`vfs_ops.symlink` / `vfs_ops.readlink` si existen; si no, las syscalls pueden
+caer a `named_symlink_*` (tabla in-kernel path→target) en montajes sin symlink
+nativo.
 
 ### Drivers registrados (`vfs_init`)
 
@@ -53,6 +59,7 @@ Registro condicionado por Kconfig en `vfs_init()`:
 
 - `minix` — root en disco (predeterminado en defconfig)
 - `tmpfs` — árbol en RAM (alias `ramfs` al montar)
+- `9p` — virtio-9p hostshare (`fs/hostshare_9p.c`)
 - `simplefs`, `fat16` — backends opcionales experimentales
 
 Los árboles pseudo (`procfs`, `devfs`, `sysfs`) **no** son montajes `vfs_fstype`
@@ -211,6 +218,7 @@ Ver mapa ASCII de la sección 3 y `Documentation/mandocs/diagrams/vfs-routing.mm
 5. **ramfs es tmpfs** — alias en `vfs_mount`.
 6. **Aislamiento fd proc** — contexto pseudo-fd por proceso.
 7. **errno negativo** — VFS y backends no devuelven códigos de error positivos.
+8. **Dispatch symlink** — preferir backend `symlink`/`readlink`; si no, fallback `named_symlink_*` desde `fs_syscalls.c`.
 
 ## 9. Consejos de depuración
 

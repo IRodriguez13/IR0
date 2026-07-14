@@ -2,12 +2,12 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1 |
+| Version | 0.2 |
 | IR0 phase | T0 |
 | Status | stable |
 | Depends on | memory, syscalls, filesystems |
 | Man page | IR0-vfs (section 7) |
-| Primary sources | `fs/vfs.c`, `fs/vfs.h`, `includes/ir0/vfs_backend.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
+| Primary sources | `fs/vfs.c`, `fs/vfs.h`, `includes/ir0/vfs_backend.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
 
 ## 1. Overview
 
@@ -44,8 +44,14 @@ Global state in `fs/vfs.c`:
 ### Backend contract (`includes/ir0/vfs_backend.h`)
 
 Backends implement path operations only: `stat`, `mkdir`, `create`, `read`, `write`,
-`truncate`, `readdir`, etc. Return **0 on success**, **negative errno** on failure.
-They must not call syscalls or depend on a specific userspace workload.
+`truncate`, `readdir`, `rename`, `symlink`, `readlink`, etc. Return **0 on success**,
+**negative errno** on failure. They must not call syscalls or depend on a specific
+userspace workload.
+
+Optional ops may be `NULL`. `vfs_symlink` / `vfs_readlink` call
+`vfs_ops.symlink` / `vfs_ops.readlink` when present; otherwise syscalls may fall
+back to `named_symlink_*` (in-kernel path→target table) for mounts without native
+symlink support.
 
 ### Registered block/in-memory drivers (`vfs_init`)
 
@@ -53,6 +59,7 @@ Config-gated registration in `vfs_init()`:
 
 - `minix` — disk-backed root (default in defconfig)
 - `tmpfs` — in-memory tree (also serves `ramfs` alias on mount)
+- `9p` — virtio-9p hostshare (`fs/hostshare_9p.c`)
 - `simplefs`, `fat16` — optional experimental backends
 
 Pseudo trees (`procfs`, `devfs`, `sysfs`) are **not** full `vfs_fstype` mounts in
@@ -210,6 +217,7 @@ See section 3 ASCII map and `Documentation/mandocs/diagrams/vfs-routing.mmd`.
 5. **ramfs is tmpfs** — `vfs_mount(..., "ramfs")` resolves to tmpfs driver.
 6. **Proc fd isolation** — per-process pseudo-fd context avoids cross-process collisions (see procfs chapter when available).
 7. **Negative errno throughout** — VFS and backends do not return positive error codes.
+8. **Symlink dispatch** — prefer backend `symlink`/`readlink`; else `named_symlink_*` fallback from `fs_syscalls.c`.
 
 ## 9. Debugging tips
 

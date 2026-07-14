@@ -78,6 +78,12 @@ typedef struct ktm_user_fault
 	uint32_t seed;
 } ktm_user_fault_t;
 
+/* Match ktm_fault_mode_t in ir0/ktm/fault.h */
+#define KTM_FAULT_MODE_ONCE         1u
+#define KTM_FAULT_MODE_AFTER_N      2u
+#define KTM_FAULT_MODE_EVERY_N      3u
+#define KTM_FAULT_MODE_PROBABILITY  4u
+
 typedef struct ktm_user_caps
 {
 	uint32_t version;

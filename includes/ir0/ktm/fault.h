@@ -26,12 +26,12 @@ void ktm_fault_seed(uint32_t seed);
 int ktm_fault_configure(const char *name, ktm_fault_mode_t mode, uint32_t value);
 bool ktm_fault_should_fail(const char *name);
 
+/*
+ * Named fault points (call sites check the bool). Inactive when CONFIG_KTM_FAULT
+ * is off or no matching ioctl-armed slot.
+ */
 #if defined(CONFIG_KTM_FAULT) && CONFIG_KTM_FAULT
-#define KTM_FAULT_POINT(name) \
-	do { \
-		if (ktm_fault_should_fail(name)) \
-			; \
-	} while (0)
+#define KTM_FAULT_HIT(name) ktm_fault_should_fail(name)
 #else
-#define KTM_FAULT_POINT(name) do { } while (0)
+#define KTM_FAULT_HIT(name) (0)
 #endif

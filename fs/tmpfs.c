@@ -335,7 +335,6 @@ static struct vfs_ops tmpfs_fs_ops = {
     .readdir = tmpfs_readdir,
     .read    = tmpfs_read_file,
     .write   = tmpfs_write_file,
-    .link    = NULL,
     .chown   = tmpfs_chown,
     .chmod   = tmpfs_chmod,
     .truncate = tmpfs_truncate,

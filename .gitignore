@@ -117,3 +117,4 @@ tests/ktm/userdev/ktm_*_case
 /tmp/ktest.log
 nohup.out
 interrupt/arch/x86-64/isr_stubs_64.asm
+toolchain/

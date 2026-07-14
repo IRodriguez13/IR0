@@ -99,6 +99,8 @@ int vfs_rmdir(const char *path);
 int vfs_rmdir_recursive(const char *path);
 int vfs_link(const char *oldpath, const char *newpath);
 int vfs_rename(const char *oldpath, const char *newpath);
+int vfs_symlink(const char *target, const char *linkpath);
+int vfs_readlink(const char *path, char *buf, size_t buflen);
 int vfs_readdir(const char *path, struct vfs_dirent *entries, int max);
 int vfs_chown(const char *path, uid_t owner, gid_t group);
 int vfs_chmod(const char *path, mode_t mode);

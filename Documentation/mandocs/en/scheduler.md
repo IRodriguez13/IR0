@@ -2,41 +2,48 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1 |
+| Version | 0.2 |
 | IR0 phase | T0 |
 | Status | stable |
 | Depends on | process, memory |
 | Man page | IR0-scheduler (section 7) |
-| Primary sources | `sched/scheduler_api.c`, `sched/rr_sched.c`, `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c`, `kernel/main.c` |
+| Primary sources | `sched/scheduler_api.c`, `sched/priority_sched.c`, `sched/rr_sched.c`, `arch/common/arch_portable.h` (`arch_first_context_switch`), `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
 
 ## 1. Overview
 
 IR0 schedules runnable processes through a config-selected policy facade.
-Default build uses **round-robin** (`CONFIG_SCHEDULER_POLICY=0`). CFS and priority
-backends compile but are not the default. Scheduling is **single-CPU** oriented;
-timer-driven preemption is currently disabled in the PIT handler.
+Default defconfig uses **priority bands** (`CONFIG_SCHEDULER_POLICY=2`).
+Round-robin (`0`) and CFS-alias-RR (`1`) remain available. Scheduling is
+**single-CPU** oriented; timer-driven preemption is currently disabled in the
+PIT handler.
+
+The first transfer into a newly runnable task goes through
+`arch_first_context_switch(next)` (x86: `user_mode.c`; ARM: `first_switch.c`).
+Portable RR/priority code must **not** embed `iretq` / ISA entry frames.
 
 ## 2. Internal architecture
 
 | Piece | Role |
 |-------|------|
 | `scheduler_api.c` | Dispatch to active policy backend |
-| `rr_sched.c` | Circular FIFO queue (`rr_head`, `rr_current`) |
+| `priority_sched.c` | Default bands when `CONFIG_SCHEDULER_POLICY=2` |
+| `rr_sched.c` | Circular FIFO queue; shared pick helpers |
 | `rr_task_t` | `{ process_t *process; rr_task_t *next }` |
 | `process_t::state` | `READY`, `RUNNING`, `BLOCKED`, `ZOMBIE` |
 | `task_t` | ASM-visible context (CR3, RIP, RSP, segments) at offset 0 of `process_t` |
-| `arch_context_switch.c` | Chooses `switch_context_x64` vs syscall-resume path |
+| `arch_first_context_switch` | First user/kernel entry (arch-owned) |
+| `arch_context_switch.c` | Later switches → `switch_context_x64` / ARM path |
 | `switch_x64.asm` | Saves GPRs, CR3, user `iretq` frame |
 
 ## 3. Data flow
 
-**`sched_schedule_next()` (RR):**
+**`sched_schedule_next()` (policy backend):**
 
 1. CLI (IRQ-safe).
 2. If queue empty → return (idle loop handles HLT).
-3. Advance `rr_current` circularly; skip `ZOMBIE` and `BLOCKED` (max 100 tries).
+3. Pick next runnable; skip `ZOMBIE` and `BLOCKED`.
 4. Mark prev `RUNNING→READY`, next `READY→RUNNING`; `current_process = next`.
-5. First switch: load CR3; user → `arch_switch_to_user`; kernel task → inline iretq.
+5. First switch: load address space; call `arch_first_context_switch(next)`.
 6. Later: `arch_context_switch(&prev->task, &next->task)`.
 
 **Wake paths (set `PROCESS_READY`, may call `sched_schedule_next`):**
@@ -58,14 +65,16 @@ timer-driven preemption is currently disabled in the PIT handler.
 ## 4. Responsibilities
 
 - Scheduler picks next runnable task; does not implement syscall blocking.
-- Blocked processes stay off RR queue until wake sets `PROCESS_READY`.
+- Blocked processes stay off the run queue until wake sets `PROCESS_READY`.
 - Idle kernel task (`comm "idle"`) re-enqueued on user exit; kept off queue while PID1 runs (see `process.c` comments).
+- Arch owns first-entry and context-switch ISA details.
 
 ## 5. Subsystem boundaries
 
-- Must not `HLT` inside `rr_schedule_next` (IF=0 in IRQ context).
+- Must not `HLT` inside schedule-next (IF=0 in IRQ context).
 - Context switch ASM owns `task_t` layout; changing offsets requires ASM update.
 - Portable code calls `sched_schedule_next()` via `includes/ir0/scheduler_api.h`.
+- No inline `iretq` in `rr_sched.c` / priority backends.
 
 ## 6. Relations to other subsystems
 
@@ -74,20 +83,20 @@ timer-driven preemption is currently disabled in the PIT handler.
 | Process | `sched_add_process` / `sched_remove_process` on spawn/exit |
 | Syscalls | Block in handler; wake from idle poll |
 | Timer | PIT quantum counting (preemption hook disabled) |
-| Arch | `switch_context_x64`, `arch_switch_to_user` |
+| Arch | `arch_first_context_switch`, `switch_context_x64` / ARM |
 
 ## 7. Visual maps
 
 ```text
        ┌─────────────┐
-       │ RR queue    │◄── sched_add_process
+       │ run queue   │◄── sched_add_process
        └──────┬──────┘
               │ sched_schedule_next
               ▼
-       ┌─────────────┐     ┌──────────────────┐
-       │ RUNNING     │────►│ switch_context   │
-       └─────────────┘     │ _x64 / sysret    │
-              ▲            └──────────────────┘
+       ┌─────────────┐     ┌──────────────────────────┐
+       │ RUNNING     │────►│ arch_first_context_switch│
+       └─────────────┘     │ / arch_context_switch    │
+              ▲            └──────────────────────────┘
               │ wake
        ┌──────┴──────┐
        │ BLOCKED     │
@@ -102,16 +111,16 @@ State transitions:
     └──── wake ────────┘                │
     ▲                                     │
     └─────────── wake ────────────────────┘
-  RUNNING ──exit──► ZOMBIE (skipped by RR)
+  RUNNING ──exit──► ZOMBIE (skipped by picker)
 ```
 
 ## 8. Important invariants
 
 1. `process_t` begins with embedded `task_t` at offset 0.
 2. Duplicate `sched_add_process` is idempotent (marks READY, frees duplicate node).
-3. RR remove is O(n) linked-list walk.
-4. Zombie tasks are skipped when picking next.
-5. Timer IRQ must not preempt until `#if 0` block is enabled and tested.
+3. Zombie tasks are skipped when picking next.
+4. Timer IRQ must not preempt until `#if 0` block is enabled and tested.
+5. First entry always goes through the arch facade (no portable iretq).
 
 ## 9. Debugging tips
 
@@ -119,11 +128,12 @@ Tags: `[FASE50][SCHED]`, `[FASE50][CTX]`, `[WAIT_EXIT_AUDIT]` (`IR0_DEBUG_WAIT`)
 
 - If system hangs with runnable tasks: check all tasks stuck in `BLOCKED`.
 - If no preemption: expected — timer path disabled; only explicit `sched_schedule_next`.
+- Confirm policy string via scheduler API (`"priority"` when policy=2).
 - ktest/host: scheduler-related tests under `kernel/test/` when enabled.
 
 ## 10. Future roadmap
 
 - Re-enable timer quantum preemption in `clock_tick_handler`.
 - SMP run queues and per-CPU `current_process` — **not implemented**.
-- CFS/priority policies need feature parity before default switch.
+- CFS true fair scheduler (today policy 1 aliases RR).
 - Work-conserving idle vs HLT tradeoff in `kernel_idle_poll`.

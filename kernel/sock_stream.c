@@ -12,6 +12,7 @@
 #include <ir0/types.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
+#include <ir0/ktm/fault.h>
 #include <config.h>
 #include <string.h>
 
@@ -76,6 +77,9 @@ struct sock_stream *sock_stream_create(int family)
 {
 	int i;
 
+	if (KTM_FAULT_HIT("sock.create"))
+		return NULL;
+
 	for (i = 0; i < SS_MAX; i++)
 	{
 		if (!g_socks[i].in_use)
@@ -96,8 +100,15 @@ void sock_stream_release(struct sock_stream *s)
 	if (!s || !s->in_use)
 		return;
 #if CONFIG_ENABLE_NETWORKING
+	if (s->family == IR0_AF_INET && s->state == SS_LISTEN && s->port != 0)
+		tcp_wire_listen_unregister(s->port);
 	if (s->wire_tcp)
 	{
+		uint32_t ack = tcp_wire_peer_ack((ip4_addr_t)s->wire_peer_ip,
+						 s->wire_peer_port,
+						 s->wire_local_port);
+		if (ack)
+			s->wire_ack = ack;
 		tcp_wire_close((ip4_addr_t)s->wire_peer_ip, s->wire_peer_port,
 			       s->wire_local_port, s->wire_seq, s->wire_ack);
 	}
@@ -133,6 +144,18 @@ int sock_stream_listen(struct sock_stream *s, int backlog)
 	if (!s || s->state != SS_BOUND)
 		return -EINVAL;
 	s->state = SS_LISTEN;
+#if CONFIG_ENABLE_NETWORKING
+	if (s->family == IR0_AF_INET && s->port != 0)
+	{
+		int ret = tcp_wire_listen_register(s->port);
+
+		if (ret < 0)
+		{
+			s->state = SS_BOUND;
+			return ret;
+		}
+	}
+#endif
 	return 0;
 }
 
@@ -175,10 +198,42 @@ struct sock_stream *sock_stream_accept(struct sock_stream *s)
 	if (!s || s->state != SS_LISTEN)
 		return NULL;
 	child = s->peer;
-	if (!child || child->state != SS_CONNECTED)
-		return NULL;
-	s->peer = NULL;
-	return child;
+	if (child && child->state == SS_CONNECTED)
+	{
+		s->peer = NULL;
+		return child;
+	}
+#if CONFIG_ENABLE_NETWORKING
+	if (s->family == IR0_AF_INET && s->port != 0)
+	{
+		ip4_addr_t peer_ip;
+		uint16_t peer_port;
+		uint16_t local_port;
+		uint32_t seq;
+		uint32_t ack;
+		int ret;
+
+		net_stack_poll();
+		ret = tcp_wire_accept_take(s->port, &peer_ip, &peer_port,
+					   &local_port, &seq, &ack);
+		if (ret < 0)
+			return NULL;
+		child = sock_stream_create(IR0_AF_INET);
+		if (!child)
+			return NULL;
+		child->state = SS_CONNECTED;
+		child->wire_tcp = 1;
+		child->wire_peer_ip = (uint32_t)peer_ip;
+		child->wire_peer_port = peer_port;
+		child->wire_local_port = local_port;
+		child->wire_seq = seq;
+		child->wire_ack = ack;
+		child->port = local_port;
+		child->listener = s;
+		return child;
+	}
+#endif
+	return NULL;
 }
 
 int sock_stream_bind_inet(struct sock_stream *s, uint16_t port)
@@ -307,6 +362,11 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 #if CONFIG_ENABLE_NETWORKING
 	if (s->wire_tcp)
 	{
+		uint32_t ack = tcp_wire_peer_ack((ip4_addr_t)s->wire_peer_ip,
+						 s->wire_peer_port,
+						 s->wire_local_port);
+		if (ack)
+			s->wire_ack = ack;
 		int ret = tcp_wire_send((ip4_addr_t)s->wire_peer_ip, s->wire_peer_port,
 					s->wire_local_port, &s->wire_seq, s->wire_ack,
 					buf, len);
@@ -335,6 +395,26 @@ ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)
 
 	if (!s || s->state != SS_CONNECTED || !buf)
 		return -EINVAL;
+
+#if CONFIG_ENABLE_NETWORKING
+	if (s->wire_tcp)
+	{
+		int ret;
+		uint32_t ack;
+
+		net_stack_poll();
+		ack = tcp_wire_peer_ack((ip4_addr_t)s->wire_peer_ip,
+					s->wire_peer_port, s->wire_local_port);
+		if (ack)
+			s->wire_ack = ack;
+		ret = tcp_wire_recv((ip4_addr_t)s->wire_peer_ip, s->wire_peer_port,
+				   s->wire_local_port, buf, len);
+		if (ret < 0)
+			return ret;
+		return (ssize_t)ret;
+	}
+#endif
+
 	for (i = 0; i < len; i++)
 	{
 		if (s->count == 0)
