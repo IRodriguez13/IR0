@@ -220,12 +220,21 @@ void kmain(uint32_t multiboot_info)
     ipc_init();
     log_subsystem_ok("IPC");
 
-    /* Initialize scheduler (Round Robin scheduler)
-     * Round Robin provides fair time-sharing among processes
-     * Alternative schedulers (CFS, Priority) are available but not activated
-     * See kernel/scheduler/ for scheduler implementations
-     */
+    /* Scheduler tick + policy backend (see CONFIG_SCHEDULER_POLICY). */
     clock_system_init();
+#if CONFIG_SCHEDULER_POLICY == 2
+    {
+	extern int priority_sched_selftest(void);
+
+	if (priority_sched_selftest() == 0)
+		serial_print("SCHED_PRIO_OK\n");
+	else
+		serial_print("SCHED_PRIO_FAIL\n");
+    }
+#endif
+    serial_print("SCHED_POLICY=");
+    serial_print(sched_active_policy_name());
+    serial_print("\n");
 
     /* Initialize system calls */
     arch_syscall_init();

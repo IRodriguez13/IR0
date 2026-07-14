@@ -2,22 +2,24 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.1 |
+| Versión | 0.2 |
 | Fase IR0 | T0 |
 | Estado | stable |
 | Depende de | drivers, interrupts, syscalls |
 | Página man | IR0-net (sección 7) |
-| Fuentes principales | `net/net.c`, `net/{arp,ip,icmp,udp,dhcp,dns}.c`, `drivers/net/rtl8139.c`, `fs/devfs.c`, `kernel/syscalls.c` |
+| Fuentes principales | `net/net.c`, `net/tcp.c`, `net/{arp,ip,icmp,udp,dhcp,dns}.c`, `kernel/sock_stream.c`, `drivers/net/rtl8139.c`, `fs/devfs.c` |
 
 ## 1. Visión general
 
-IR0 implementa una pila IPv4 en el kernel (Ethernet → ARP → IP → ICMP/UDP) con un
-único driver de NIC (RTL8139). Userspace y las herramientas de depuración acceden
-a la pila mediante `/dev/net` y nodos proc — **no** mediante syscalls socket POSIX
-(éstas devuelven `ENOSYS`).
+IR0 implementa una pila IPv4 en el kernel (Ethernet → ARP → IP → ICMP/UDP/TCP
+wire) con un único driver de NIC (RTL8139). Control y depuración siguen usando
+`/dev/net` y nodos proc. Además, **AF_INET `SOCK_STREAM`** está cableado vía
+`kernel/sock_stream.c` a un camino mínimo **TCP wire** en `net/tcp.c`
+(`tcp_wire_connect` / listen / accept / send / recv / close).
 
-Este capítulo documenta el comportamiento implementado hoy: cliente DHCP/DNS,
-comandos de texto en `/dev/net`, y polling en idle. La capa socket no existe.
+No es una pila TCP completa: sin retransmisión, sin ventana/congestión, sin
+reensamblado fuera de orden. El teardown es FIN/ACK honesto + EOF en guest
+(`recv` devuelve 0 tras FIN del peer y RX drenado).
 
 ## 2. Arquitectura interna
 
@@ -28,12 +30,14 @@ comandos de texto en `/dev/net`, y polling en idle. La capa socket no existe.
 | L3 | `net/ip.c` | TX/RX IPv4, tabla de rutas (16 rutas), fragmentación TX |
 | ICMP | `net/icmp.c` | Echo request/reply, lista pendiente de ping |
 | UDP | `net/udp.c` | Handlers de puerto para DHCP/DNS |
+| TCP wire | `net/tcp.c` | Handshake SYN/ACK, payload, teardown FIN/ACK, listeners inbound |
+| Stream sockets | `kernel/sock_stream.c` | AF_INET SOCK_STREAM → `tcp_wire_*` |
 | DHCP/DNS | `net/dhcp.c`, `net/dns.c` | Cliente DHCP únicamente; resolvedor DNS registro A |
 | NIC | `drivers/net/rtl8139.c` | Probe, anillo TX/RX, hook IRQ |
 | Control | `fs/devfs.c` | `/dev/net` device_id 8, ioctl 0x3001–0x3004 |
 
-Fachada: `includes/ir0/net.h`. Con `CONFIG_ENABLE_NETWORKING=0`, `kernel/net_compat.c`
-proporciona stubs débiles.
+Fachada: `includes/ir0/net.h`, `net/tcp.h`. Con `CONFIG_ENABLE_NETWORKING=0`,
+`kernel/net_compat.c` proporciona stubs débiles.
 
 ## 3. Flujo de datos
 
@@ -52,49 +56,70 @@ proporciona stubs débiles.
 ```text
   write /dev/net "ping host"
        → dev_net_write → icmp_send_echo_request
-       → ip_send → arp_resolve → net_send (cabecera Ethernet)
+       → ip_send → arp_resolve → net_send (Ethernet hdr)
        → rtl8139_send
+```
+
+**AF_INET stream (cliente → host):**
+
+```text
+  socket/connect/send/recv/close
+       → sock_stream_* → tcp_wire_connect / send / recv / close
+       → IP/Ethernet → RTL8139
+  Peer FIN → inbound.peer_fin → tcp_wire_recv retorna 0 (EOF)
+  RX vacío sin FIN → -EAGAIN
+```
+
+**AF_INET stream (listen):**
+
+```text
+  bind/listen → tcp_wire_listen_register(port)
+  accept → tcp_wire_accept_take (SYN → SYN-ACK → inbound taken)
+  recv payload → tcp_wire_recv
+  peer shutdown(WR) → FIN → ACK → recv EOF (0)
 ```
 
 **RX:**
 
 ```text
-  IRQ RTL8139 o net_stack_poll()
+  RTL8139 IRQ o net_stack_poll()
        → net_receive → demux EtherType
-       → handler ARP O ip_receive → handlers ICMP/UDP
+       → handler ARP O ip_receive → handlers ICMP/UDP/TCP wire
 ```
 
-**Idle:** `kernel_idle_poll()` → `net_stack_poll()` por cada dispositivo registrado.
+**Idle:** `kernel_idle_poll()` → `net_stack_poll()` por dispositivo registrado.
 
-Mapa ASCII:
+ASCII:
 
 ```text
-  app/debug_bin ──► /dev/net ──► ICMP/DNS ──► IP ──► ARP ──► net_send
-                                                      │
-  IRQ RTL8139 ◄───────────────────────────────────────┘
+  app ──► sock_stream / /dev/net ──► TCP/ICMP/DNS ──► IP ──► ARP ──► net_send
+                                                                    │
+  RTL8139 IRQ ◄─────────────────────────────────────────────────────┘
        │
-       └──► net_receive ──► handlers de protocolo
+       └──► net_receive ──► protocol handlers
 ```
 
 ## 4. Responsabilidades
 
-- Los drivers registran `net_device` con MTU (predeterminado 1500) y ops send/poll/IRQ.
-- Los protocolos registran handlers; `net_receive` desmultiplexa.
-- `/dev/net` parsea comandos de texto (ping, dhcp, ifconfig) y la API ioctl.
-- Los debug_bins (`ping`, `ifconfig`, `route`, `netstat`) usan solo syscalls.
+- Los drivers registran `net_device` con MTU (1500) y ops send/poll/IRQ.
+- Los protocolos registran handlers; `net_receive` demultiplexa.
+- `/dev/net` parsea comandos de texto (ping, dhcp, ifconfig) e ioctl.
+- `sock_stream` posee estado listen/accept/connect; `tcp_wire_*` los segmentos.
+- debug_bins (`ping`, `ifconfig`, `route`, `netstat`) usan solo syscalls.
 
 ## 5. Límites del subsistema
 
 - `net/` usa `includes/ir0/*`; sin `#include <drivers/...>` directo desde árboles portables.
-- No hay capa socket en el kernel; la tabla de syscalls enlaza todos los `__NR_socket*` a `sys_nosys`.
-- Las listas device/protocol asumen registro antes de habilitar interrupciones (sin locks).
+- TCP wire es un camino **mínimo** para smokes y AF_INET STREAM — no paridad BSD sockets.
+- Listas device/protocol asumen registro antes de habilitar IRQs (sin locks).
 
-## 6. Relación con otros subsistemas
+## 6. Relaciones con otros subsistemas
 
 | Vecino | Interacción |
 |--------|-------------|
-| Drivers | RTL8139 etapa bootstrap NETWORK |
+| Drivers | RTL8139 bootstrap etapa NETWORK |
 | Interrupts | `net_stack_handle_irq` desde ISR |
+| Syscalls | socket/bind/listen/accept/connect/send/recv → sock_stream |
 | devfs | ops y poll de `/dev/net` |
 | procfs | `/proc/netinfo`, `/proc/net/dev` |
 | debug_bins | `cmd_ping.c`, `cmd_ifconfig.c`, etc. |
@@ -102,34 +127,39 @@ Mapa ASCII:
 ## 7. Mapas visuales
 
 ```text
-  ┌─────────────┐     ┌──────────┐     ┌─────────┐
-  │ /dev/net    │────►│ IP/ICMP  │────►│ RTL8139 │
-  │ debug_bins  │     │ ARP/UDP  │     │  NIC    │
-  └─────────────┘     └──────────┘     └─────────┘
+  ┌──────────────┐     ┌──────────┐     ┌─────────┐
+  │ sock_stream  │────►│ TCP wire │────►│ RTL8139 │
+  │ /dev/net     │     │ IP/ICMP  │     │  NIC    │
+  │ debug_bins   │     │ ARP/UDP  │     └─────────┘
+  └──────────────┘     └──────────┘
          │                  ▲
          └──── lectura snapshot/proc ────┘
 ```
 
 ## 8. Invariantes importantes
 
-1. `net_send` rechaza `len > dev->mtu`; tope de sanidad de trama 2000 bytes.
-2. Sin reensamblado de fragmentos IP entrantes (`IP_RX_REASSEMBLY_SUPPORTED 0`).
-3. Tramas multicast no-ARP descartadas pronto en `net_receive`.
-4. La identidad de ping usa `(pid & 0xFFFF)` para emparejar echo ICMP.
-5. Solo RTL8139 en probe por defecto; define E1000 existe pero no está cableado.
+1. `net_send` rechaza `len > dev->mtu`; tope de sanity 2000 bytes.
+2. Sin reensamblado de fragmentos IP inbound (`IP_RX_REASSEMBLY_SUPPORTED 0`).
+3. Frames multicast no-ARP se descartan temprano en `net_receive`.
+4. Identidad de ping usa `(pid & 0xFFFF)` para matching ICMP echo.
+5. Solo RTL8139 en probe por defecto; E1000 definido pero no cableado.
+6. `tcp_wire_recv`: drenado + `peer_fin` → 0; drenado + !fin → `-EAGAIN`.
+7. `tcp_wire_close` emite FIN|ACK; ACK del peer vía `tcp_wire_peer_ack`.
 
 ## 9. Consejos de depuración
 
 - Tags: `NET:`, `LOG_*("IP")`, `RTL8139`, `[BOOT]` desenmascarado IRQ red.
+- Smoke listen: `F8_TCP_LISTEN_BOUND_OK`, `ACCEPT_OK`, `EOF_OK`, `F8_TCP_LISTEN_OK`.
+- Smoke cliente: `F8_TCP_WIRE_OK` (`make smoke-tcp-wire`).
+- Helper host: `scripts/tcp_wire_host_connector.py` (payload + `shutdown(SHUT_WR)`).
 - `ndev` / lectura de `/dev/net` para snapshot.
-- `ping` vía debug shell o write a `/dev/net`.
 - Compilar con `CONFIG_ENABLE_NETWORKING=y`; QEMU `-device rtl8139`.
 
 ## 10. Roadmap futuro
 
-- **TCP** — no implementado (`IPPROTO_TCP` sin uso).
+- **Retransmisión / RTO / ventana / congestión** — no implementado.
 - **IPv6** — descartado en L2.
-- **Syscalls socket** — todos `ENOSYS`.
+- **API BSD sockets completa** (options, OOB, MSG_*) — solo AF_INET STREAM parcial.
 - **DHCP automático al arranque** — IP estática hasta comando `dhcp` explícito.
 - Driver E1000 fuera del path de probe.
 

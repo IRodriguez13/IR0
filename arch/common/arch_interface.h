@@ -48,9 +48,13 @@ void arch_set_boot_params(void *params);
 #elif defined(__i386__) || defined(__i486__) || defined(__i586__) || defined(__i686__)
 #define ARCH_X86_32
 #elif defined(__aarch64__)
+#ifndef ARCH_ARM64
 #define ARCH_ARM64
+#endif
 #elif defined(__arm__)
+#ifndef ARCH_ARM32
 #define ARCH_ARM32
+#endif
 #else
 #error "Arquitectura no soportada en arch_interface.h"
 #endif

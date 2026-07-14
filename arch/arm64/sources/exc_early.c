@@ -17,6 +17,11 @@
 #include "gic_v2.h"
 #include "timer.h"
 #include "syscall_early.h"
+#include "elf_load_early.h"
+#include "rr_early.h"
+
+#include <ir0/process.h>
+#include <sched/rr_sched.h>
 
 #include <stdint.h>
 
@@ -45,6 +50,10 @@ uint8_t el0_stack[EL0_STACK_SIZE] __attribute__((aligned(16)));
 
 static volatile int g_timer_irq_seen;
 static int g_el0_svc_tagged;
+
+extern process_t *current_process;
+
+#define RR_TICK_ONESHOT_TICKS 10000U
 
 int arm64_timer_irq_seen(void)
 {
@@ -125,6 +134,16 @@ void arm64_exc_irq_el1(void)
 			g_timer_irq_seen = 1;
 			pl011_puts("ARM64_TIMER_IRQ_OK\n");
 		}
+
+		if (arm64_rr_tick_sched_active())
+		{
+			process_t *before = current_process;
+
+			rr_schedule_next();
+			/* Re-arm only when the IRQ handler resumes (no context switch). */
+			if (current_process == before)
+				arch_timer_oneshot_arm(RR_TICK_ONESHOT_TICKS);
+		}
 	}
 
 	if (irq < 1020U)
@@ -161,8 +180,15 @@ void arm64_exc_sync_lower(uint64_t *frame)
 
 	if (leave)
 	{
-		uint64_t elr = (uint64_t)(uintptr_t)arm64_after_el0;
+		uint64_t elr;
 		uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL1H;
+
+		if (arm64_musl_mode())
+			elr = (uint64_t)(uintptr_t)arm64_after_musl;
+		else if (arm64_busybox_mode())
+			elr = (uint64_t)(uintptr_t)arm64_after_busybox;
+		else
+			elr = (uint64_t)(uintptr_t)arm64_after_el0;
 
 		__asm__ volatile("msr elr_el1, %0" :: "r"(elr) : "memory");
 		__asm__ volatile("msr spsr_el1, %0" :: "r"(spsr) : "memory");

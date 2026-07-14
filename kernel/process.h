@@ -239,7 +239,24 @@ typedef struct process
 	void *kstack_base;
 	uint64_t kstack_top;
 	uint64_t saved_user_rsp;
+
+	/*
+	 * Priority-band scheduler (CONFIG_SCHEDULER_POLICY==2): 0 = lowest,
+	 * IR0_SCHED_PRIO_MAX = highest. RR and CFS-alias backends ignore this.
+	 * Placed after ASM-critical fields so PROC_FS_BASE_OFFSET stays stable.
+	 */
+	int sched_prio;
 } process_t;
+
+#ifndef IR0_SCHED_PRIO_BANDS
+#define IR0_SCHED_PRIO_BANDS 8
+#endif
+#ifndef IR0_SCHED_PRIO_DEFAULT
+#define IR0_SCHED_PRIO_DEFAULT 4
+#endif
+#ifndef IR0_SCHED_PRIO_MAX
+#define IR0_SCHED_PRIO_MAX (IR0_SCHED_PRIO_BANDS - 1)
+#endif
 
 /*
  * ASM offset contract: switch_x64.asm restores FS_BASE by reading

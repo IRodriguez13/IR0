@@ -36,3 +36,6 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 
 /** Nonzero after successful getpid+write (for ARM64_SYSCALL_OK). */
 int arm64_syscall_smoke_ok(void);
+
+/** Reset BusyBox EL0 brk/mmap bump before entering the applet. */
+void arm64_syscall_reset_busybox_heap(void);

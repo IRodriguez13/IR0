@@ -195,6 +195,7 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
                              size_t bufsiz)
 {
   char resolved[256];
+  char kbuf[256];
   const char *target;
   size_t len;
   size_t copy_len;
@@ -211,6 +212,20 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
   if (rc != 0)
+    return rc;
+
+  rc = vfs_readlink(resolved, kbuf, sizeof(kbuf));
+  if (rc >= 0)
+  {
+    len = (size_t)rc;
+    copy_len = len;
+    if (copy_len > bufsiz)
+      copy_len = bufsiz;
+    if (copy_to_user(buf, kbuf, copy_len) != 0)
+      return -EFAULT;
+    return (int64_t)len;
+  }
+  if (rc != -ENOSYS && rc != -ENOENT && rc != -EINVAL)
     return rc;
 
   target = named_symlink_target(resolved);
@@ -256,6 +271,12 @@ static int64_t do_symlinkat(const char *target, int linkdirfd,
       named_fifo_stat(link_resolved, &st) == 0 ||
       vfs_stat(link_resolved, &st) == 0)
     return -EEXIST;
+
+  rc = vfs_symlink(target_copy, link_resolved);
+  if (rc == 0)
+    return 0;
+  if (rc != -ENOSYS)
+    return rc;
 
   return named_symlink_create(link_resolved, target_copy);
 }

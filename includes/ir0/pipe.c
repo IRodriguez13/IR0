@@ -11,6 +11,7 @@
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
 #include <ir0/ktm/event.h>
+#include <ir0/ktm/fault.h>
 #include <string.h>
 #include <config.h>
 static uint64_t fase48_pipe_created;
@@ -58,8 +59,12 @@ static void pipe_try_free(pipe_t *pipe, const char *event)
 
 pipe_t *pipe_create(void)
 {
-	pipe_t *pipe = kmalloc_try(sizeof(pipe_t));
+	pipe_t *pipe;
 
+	if (KTM_FAULT_HIT("pipe.create"))
+		return NULL;
+
+	pipe = kmalloc_try(sizeof(pipe_t));
 	if (!pipe)
 		return NULL;
 

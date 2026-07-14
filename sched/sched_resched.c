@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "scheduler_api.h"
+#include <config.h>
 #include <ir0/console.h>
 #include <ir0/process.h>
 #include <ir0/arch_port.h>
@@ -51,20 +52,28 @@ static int sched_irq_may_preempt(uint64_t *gpr_stack)
 	return 0;
 }
 
+#if CONFIG_SCHEDULER_POLICY == 2
+#include "priority_sched.h"
+#else
 #include "rr_sched.h"
+#endif
 
-/*
- * Runnable count and promote follow the active runqueue. CFS/priority backends
- * alias RR today; when they diverge, add policy-specific helpers behind this API.
- */
 int sched_count_runnable(void)
 {
+#if CONFIG_SCHEDULER_POLICY == 2
+	return priority_count_runnable();
+#else
 	return rr_count_runnable();
+#endif
 }
 
 void sched_promote_process(process_t *proc)
 {
+#if CONFIG_SCHEDULER_POLICY == 2
+	priority_promote_process(proc);
+#else
 	rr_promote_process(proc);
+#endif
 }
 
 void sched_try_preempt_blocked(void)

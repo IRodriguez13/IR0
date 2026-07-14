@@ -142,6 +142,102 @@ int ktm_reset(int fd)
 	return ioctl(fd, KTM_IOC_RESET, 0);
 }
 
+int ktm_config_fault(int fd, const char *name, uint32_t mode, uint32_t value,
+		     uint32_t seed)
+{
+	ktm_user_fault_t fault;
+
+	memset(&fault, 0, sizeof(fault));
+	if (name)
+	{
+		strncpy(fault.name, name, sizeof(fault.name) - 1);
+		fault.name[sizeof(fault.name) - 1] = '\0';
+	}
+	fault.mode = mode;
+	fault.value = value;
+	fault.seed = seed;
+	return ioctl(fd, KTM_IOC_CONFIG_FAULT, &fault);
+}
+
+int ktm_snapshot_no_process_leak(const ktm_ioc_snapshot_t *before,
+				 const ktm_ioc_snapshot_t *after)
+{
+	if (!before || !after)
+		return -1;
+	return (after->processes <= before->processes) ? 0 : -1;
+}
+
+int ktm_snapshot_no_frame_leak(const ktm_ioc_snapshot_t *before,
+			       const ktm_ioc_snapshot_t *after)
+{
+	if (!before || !after)
+		return -1;
+	return (after->used_frames <= before->used_frames) ? 0 : -1;
+}
+
+int ktm_snapshot_no_pipe_leak(const ktm_ioc_snapshot_t *before,
+			      const ktm_ioc_snapshot_t *after)
+{
+	if (!before || !after)
+		return -1;
+	return (after->pipes <= before->pipes) ? 0 : -1;
+}
+
+int ktm_snapshot_delta(const ktm_ioc_snapshot_t *before,
+		       const ktm_ioc_snapshot_t *after,
+		       ktm_ioc_snapshot_t *delta_out)
+{
+	if (!before || !after || !delta_out)
+		return -1;
+	memset(delta_out, 0, sizeof(*delta_out));
+	delta_out->total_frames = after->total_frames - before->total_frames;
+	delta_out->used_frames = after->used_frames - before->used_frames;
+	delta_out->free_frames = after->free_frames - before->free_frames;
+	delta_out->processes = after->processes - before->processes;
+	delta_out->zombies = after->zombies - before->zombies;
+	delta_out->open_fds = after->open_fds - before->open_fds;
+	delta_out->pipes = after->pipes - before->pipes;
+	return 0;
+}
+
+int ktm_assert_no_leaks(int fd, const ktm_ioc_snapshot_t *before)
+{
+	ktm_ioc_snapshot_t after;
+	ktm_ioc_snapshot_t delta;
+	int fails = 0;
+
+	if (!before)
+		return 1;
+	if (ktm_snapshot_request(fd, &after) != 0)
+		return 1;
+	if (ktm_snapshot_delta(before, &after, &delta) != 0)
+		return 1;
+	(void)ktm_assert_eq_u64(fd, "delta_processes", 0, delta.processes);
+	(void)ktm_assert_eq_u64(fd, "delta_pipes", 0, delta.pipes);
+	if (ktm_snapshot_no_process_leak(before, &after) != 0)
+	{
+		(void)ktm_assert_true(fd, "no_process_leak", 0);
+		fails++;
+	}
+	else
+		(void)ktm_assert_true(fd, "no_process_leak", 1);
+	if (ktm_snapshot_no_frame_leak(before, &after) != 0)
+	{
+		(void)ktm_assert_true(fd, "no_frame_leak", 0);
+		fails++;
+	}
+	else
+		(void)ktm_assert_true(fd, "no_frame_leak", 1);
+	if (ktm_snapshot_no_pipe_leak(before, &after) != 0)
+	{
+		(void)ktm_assert_true(fd, "no_pipe_leak", 0);
+		fails++;
+	}
+	else
+		(void)ktm_assert_true(fd, "no_pipe_leak", 1);
+	return fails;
+}
+
 int ktm_hostshare_report(const char *relpath, const char *payload)
 {
 	char path[160];

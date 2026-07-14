@@ -219,6 +219,14 @@ struct task;
 void arch_switch_to_user_task(const struct task *task);
 
 /*
+ * arch_first_context_switch - First transfer from idle/boot into @next.
+ * Does not return on success (iretq / EL drop / cooperative switch).
+ * ISA details live in arch backends; portable sched must not embed iretq.
+ */
+struct process;
+void arch_first_context_switch(struct process *next);
+
+/*
  * arch_set_fs_base - Set x86-64 FS base (TLS) for the running hardware thread.
  * Used by sys_arch_prctl(ARCH_SET_FS). No-op on non-x86 builds.
  */

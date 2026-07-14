@@ -15,8 +15,8 @@
 /*
  * IR0 Kernel - CFS scheduler compatibility backend
  *
- * Current implementation aliases round-robin scheduler behavior while keeping
- * a stable API surface for future CFS implementation.
+ * Long-term target. Current implementation aliases round-robin while keeping
+ * a stable API surface; do not treat POLICY=1 as a real CFS runqueue.
  */
 
 #include "cfs_sched.h"

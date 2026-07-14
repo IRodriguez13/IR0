@@ -15,6 +15,7 @@
 #include "process_internal.h"
 #include <ir0/clone.h>
 #include <ir0/ktm/checkpoint.h>
+#include <ir0/ktm/fault.h>
 
 #if defined(__x86_64__) || defined(__amd64__)
 /*
@@ -591,6 +592,9 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	pid_t child_pid;
 
 	if (!parent || !child_pid_out)
+		return NULL;
+
+	if (KTM_FAULT_HIT("process.fork_alloc"))
 		return NULL;
 
 	child = kmalloc_try(sizeof(process_t));
