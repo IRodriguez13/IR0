@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.2 |
+| Versión | 0.3 |
 | Fase IR0 | T0–T2 (transversal) |
 | Estado | stable |
 | Página man | (solo navegación — usar `IR0-<slug>` por subsistema) |
@@ -11,6 +11,10 @@
 
 Documentación bilingüe fiel al código en `Documentation/mandocs/`.
 Estudiar IR0 desde el sistema: `man IR0-vfs-es`, `man IR0-net-es`, etc.
+
+**Nota de oleada (0.3):** documentados AF_INET TCP wire + teardown FIN/EOF; ARM
+F7h–F7j process/TTBR freestanding; symlink virtio-9p; planificador priority por
+defecto; fachada `arch_first_context_switch`.
 
 ## Índice de capítulos
 

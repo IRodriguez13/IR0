@@ -117,8 +117,8 @@ MANDOC_CHAPTERS: list[MandocChapter] = [
         "filesystems",
         "filesystems.md",
         "IR0-filesystems",
-        "Backend filesystems: tmpfs, devfs, procfs, sysfs, minix",
-        "Backends de filesystem: tmpfs, devfs, procfs, sysfs, minix",
+        "Backend filesystems: tmpfs, minix, virtio-9p hostshare, proc/dev/sys",
+        "Backends FS: tmpfs, minix, virtio-9p hostshare, proc/dev/sys",
     ),
     MandocChapter(
         "tty",
@@ -159,8 +159,8 @@ MANDOC_CHAPTERS: list[MandocChapter] = [
         "net",
         "net.md",
         "IR0-net",
-        "IPv4 stack, RTL8139, /dev/net control path (no POSIX sockets)",
-        "Stack IPv4, RTL8139, control via /dev/net (sin sockets POSIX)",
+        "IPv4 stack, RTL8139, /dev/net, AF_INET sock_stream TCP wire",
+        "Stack IPv4, RTL8139, /dev/net, AF_INET sock_stream TCP wire",
     ),
     MandocChapter(
         "interrupts",

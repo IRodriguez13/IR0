@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2 |
+| Version | 0.3 |
 | IR0 phase | T0–T2 (cross-cutting) |
 | Status | stable |
 | Man page | (navigation only — use per-subsystem `IR0-<slug>` pages) |
@@ -11,6 +11,10 @@
 
 Bilingual, code-faithful kernel documentation under `Documentation/mandocs/`.
 Study IR0 from inside the running system via `man IR0-vfs`, `man IR0-net`, etc.
+
+**Oleada note (0.3):** documented AF_INET TCP wire + FIN/EOF teardown; ARM F7h–F7j
+process/TTBR freestanding; virtio-9p symlink; priority scheduler default;
+`arch_first_context_switch` facade.
 
 ## Chapter index
 

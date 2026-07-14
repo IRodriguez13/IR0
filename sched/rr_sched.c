@@ -212,215 +212,102 @@ void rr_remove_process(process_t *proc)
 }
 
 /**
- * rr_schedule_next - Select and switch to next process in round-robin order
+ * sched_context_switch_to - Perform context switch to an already-selected task
+ * @next: Runnable process chosen by the active scheduler backend
  *
- * This is the core scheduling function called from the timer interrupt
- * handler. It implements round-robin scheduling by selecting the next
- * process in the circular queue and performing a context switch.
- *
- * Algorithm:
- * 1. Check if any processes are runnable (queue not empty)
- * 2. Select next process in round-robin fashion (circular traversal)
- * 3. Avoid unnecessary context switches (same process selected)
- * 4. Update process states (prev: RUNNING -> READY, next: READY -> RUNNING)
- * 5. Handle pending signals (before switching away from current process)
- * 6. Perform context switch:
- *    - First switch: Special kernel->user transition
- *    - Subsequent switches: Normal process-to-process switch
- *
- * Complexity: O(1) - constant time selection and switch
- *
- * Thread safety:
- * - Called from interrupt context (timer IRQ)
- * - Must not sleep or block
- * - Assumes interrupts are disabled during critical sections
- *
- * Side effects:
- * - Modifies current_process global
- * - Updates process states
- * - May trigger signal handlers
- * - Performs CPU context switch (does not return to caller)
+ * Shared by RR and priority-band backends. Caller must not hold a private
+ * irq-save across this call; this function saves/restores IRQs itself.
  */
-void rr_schedule_next(void)
+void sched_context_switch_to(process_t *next)
 {
-	static int first = 1;  /* Track first context switch (kernel->user) */
-	process_t *prev;        /* Process being switched away from */
-	process_t *next = NULL; /* Process being switched to */
-	uint64_t irq_flags = rr_irq_save();
+	static int first = 1; /* Track first context switch (kernel->user) */
+	process_t *prev;
+	uint64_t irq_flags;
+	int should_handle_signals = 0;
 
-	/* Early exit if no processes to schedule.
-	 * This can happen during boot before any processes are created.
-	 */
-	if (!rr_head)
-	{
-		rr_irq_restore(irq_flags);
+	if (!next)
 		return;
-	}
 
-	/* Save reference to current process for state update.
-	 * This is the process we're switching away from.
-	 */
+	irq_flags = rr_irq_save();
 	prev = current_process;
 
-	/* Round-robin selection: move to next process in circular queue.
-	 * Skip processes that are zombies or not ready to run.
-	 * If no current selection, start at head (first process).
-	 * Otherwise, advance to next node, wrapping to head if at tail.
-	 * This ensures fair time-sharing among all processes.
-	 */
-	if (!rr_current)
-		rr_current = rr_head;  /* First selection - start at head */
-	else
-		rr_current = rr_current->next ? rr_current->next : rr_head;  /* Wrap around */
-
-	/* Skip zombies and processes not ready to run */
-	int attempts = 0;
-	const int max_attempts = 100;  /* Prevent infinite loop */
-	while (rr_current && attempts < max_attempts)
-	{
-		next = rr_current->process;
-		
-		/* Skip zombies and blocked (e.g. waiting in poll) */
-		if (next && next->state != PROCESS_ZOMBIE && next->state != PROCESS_BLOCKED)
-		{
-			/* Found a runnable process */
-			break;
-		}
-		
-		/* Move to next process */
-		rr_current = rr_current->next ? rr_current->next : rr_head;
-		attempts++;
-	}
-	
-	/* If no runnable process found (e.g. all blocked on read/poll) */
-	if (!rr_current || !next || next->state == PROCESS_ZOMBIE || next->state == PROCESS_BLOCKED)
-	{
-		/*
-		 * Never execute HLT here because this function can run from IRQ context
-		 * with IF=0. Halting with interrupts disabled deadlocks the CPU.
-		 *
-		 * Keep current_process unchanged and return to the interrupted context;
-		 * the main idle loop is responsible for HLT in a safe context.
-		 */
-		rr_irq_restore(irq_flags);
-		return;
-	}
-
-	BUG_ON(!next); /* Scheduler invariant: nodes must have valid process */
-
-	/* Defensive check - should never happen due to BUG_ON above */
-	if (!next)
-	{
-		rr_irq_restore(irq_flags);
-		return;
-	}
-
-	/* Optimization: avoid context switch if same process selected.
-	 * This can happen if only one process is runnable or if the
-	 * scheduler is called multiple times before a timer tick.
-	 * Context switches are expensive, so we optimize this common case.
-	 */
 	if (!first && prev == next)
 	{
 		rr_irq_restore(irq_flags);
 		return;
 	}
 
-	/* Update process state machine.
-	 * Previous process: RUNNING -> READY (now eligible for scheduling again)
-	 * Next process: READY -> RUNNING (now executing on CPU)
-	 */
-	int should_handle_signals = 0;
 	if (prev && prev->state == PROCESS_RUNNING)
 	{
 		should_handle_signals = 1;
 		prev->state = PROCESS_READY;
 	}
 
-	/* Handle pending signals on the outgoing context before switching.
-	 * This keeps signal processing aligned with the process state we are
-	 * about to leave, avoiding delivery on the wrong task.
-	 */
 	if (should_handle_signals)
 		handle_signals();
 
 	next->state = PROCESS_RUNNING;
-	current_process = next;  /* Update global current process pointer */
+	current_process = next;
 
-	/* Deliver pending signals to the task we are about to run. */
 	if (signals_should_handle_on_run(next))
 		handle_signals();
 
-
-	/*
-	 * First context switch: no previous task to save.
-	 * For kernel-mode processes (debug shell), stay in ring 0.
-	 * For user-mode processes, transition to ring 3.
-	 */
 	if (first)
 	{
 		first = 0;
-		/*
-		 * First entry bypasses arch_context_switch(); point the kernel entry
-		 * stacks at this task's private kernel stack before it can syscall.
-		 */
 		arch_set_current_kernel_stack(next);
-#if defined(ARCH_X86_64) || defined(ARCH_X86)
-		if (next->mode == KERNEL_MODE)
-		{
-			/*
-			 * Kernel-mode init: activate mm root, set stack, jump.
-			 * iretq with kernel CS/SS keeps us in ring 0.
-			 */
-			uint64_t kds = KERNEL_DATA_SEL;
-			uint64_t kcs = KERNEL_CODE_SEL;
-
-			arch_mm_activate((uintptr_t)process_mm_root(next));
-			__asm__ volatile(
-				"cli\n"
-				"mov %w[ds], %%ds\n"
-				"mov %w[ds], %%es\n"
-				"mov %w[ds], %%fs\n"
-				"mov %w[ds], %%gs\n"
-				"pushq %[ds]\n"
-				"pushq %[rsp_val]\n"
-				"pushq %[rflags]\n"
-				"pushq %[cs_val]\n"
-				"pushq %[rip_val]\n"
-				"iretq\n"
-				:
-				: [rsp_val] "r"(next->task.rsp),
-				  [rflags] "r"((uint64_t)RFLAGS_IF),
-				  [rip_val] "r"(next->task.rip),
-				  [ds] "r"(kds),
-				  [cs_val] "r"(kcs)
-				: "memory"
-			);
-		}
-		else
-		{
-			/* Load process page tables before iretq (Linux switch_mm). */
-			arch_mm_activate((uintptr_t)process_mm_root(next));
-			arch_switch_to_user((arch_addr_t)next->task.rip,
-					    (arch_addr_t)next->task.rsp);
-		}
+		arch_first_context_switch(next);
 		panic("Returned from first context switch");
-#else
-		panic("First context switch not implemented for this architecture");
-#endif
 	}
 
-	/* Normal context switch between processes.
-	 * Save current process context (registers, stack, etc) and
-	 * restore next process context. This is architecture-specific
-	 * and handled by arch_context_switch().
-	 */
-	if (prev && next) 
-	{
+	if (prev && next)
 		arch_context_switch(&prev->task, &next->task);
-	}
 
 	rr_irq_restore(irq_flags);
+}
+
+/**
+ * rr_schedule_next - Select and switch to next process in round-robin order
+ */
+void rr_schedule_next(void)
+{
+	process_t *next = NULL;
+	uint64_t irq_flags = rr_irq_save();
+	int attempts = 0;
+	const int max_attempts = 100;
+
+	if (!rr_head)
+	{
+		rr_irq_restore(irq_flags);
+		return;
+	}
+
+	if (!rr_current)
+		rr_current = rr_head;
+	else
+		rr_current = rr_current->next ? rr_current->next : rr_head;
+
+	while (rr_current && attempts < max_attempts)
+	{
+		next = rr_current->process;
+
+		if (next && next->state != PROCESS_ZOMBIE && next->state != PROCESS_BLOCKED)
+			break;
+
+		rr_current = rr_current->next ? rr_current->next : rr_head;
+		attempts++;
+	}
+
+	if (!rr_current || !next || next->state == PROCESS_ZOMBIE ||
+	    next->state == PROCESS_BLOCKED)
+	{
+		rr_irq_restore(irq_flags);
+		return;
+	}
+
+	BUG_ON(!next);
+	rr_irq_restore(irq_flags);
+	sched_context_switch_to(next);
 }
 
 int rr_count_runnable(void)

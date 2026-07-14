@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: boot_stub.c
- * Description: ARM64 QEMU virt early boot — PL011, MMU, GIC IRQ, F7c EL0 syscall.
+ * Description: ARM64 QEMU virt early boot — PL011, MMU, GIC, F7h switch, F7c EL0.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -18,9 +18,20 @@
 #include "pl011.h"
 #include "timer.h"
 #include "gic_v2.h"
+#include "switch_early.h"
+#include "process_early.h"
+#include "elf_load_early.h"
+#include "rr_early.h"
+#include "virtio_blk_early.h"
+#include "virtio_net_early.h"
 
 #include <arch/common/arch_portable.h>
+#include <ir0/virtio_mmio.h>
 #include <stdint.h>
+
+void __attribute__((weak)) arm64_all_objs_mark(void)
+{
+}
 
 #define BOOT_STACK_SIZE 4096
 #define VIRT_GIC_DIST   0x08000000UL
@@ -91,6 +102,7 @@ void boot_main(void)
 {
 	pl011_init();
 	pl011_puts("ARM64_BOOT_OK\n");
+	arm64_all_objs_mark();
 
 	if (arm64_mmu_early_enable() != 0)
 	{
@@ -152,7 +164,34 @@ void boot_main(void)
 
 	arm64_exc_trigger_svc();
 	pl011_puts("ARM64_SVC_RET_OK\n");
-	arm64_enter_el0(); /* → getpid/write/exit → arm64_after_el0 → PSCI */
+
+	arm64_switch_early_smoke();
+
+	if (arm64_mmu_ttbr_dual_smoke() == 0)
+	{
+		pl011_puts("ARM64_TTBR_B_OK\n");
+		pl011_puts("ARM64_TTBR_SWITCH_OK\n");
+	}
+	else
+	{
+		pl011_puts("ARM64_TTBR_SWITCH_FAIL\n");
+	}
+
+	(void)arm64_process_ttbr_smoke();
+	(void)arm64_fork_exec_smoke();
+	(void)arm64_process_t_switch_smoke();
+	(void)arm64_rr_sched_smoke();
+
+	/* Virtio-mmio (QEMU -device virtio-*-device); tags fail soft if absent. */
+	if (arm64_virtio_mmio_probe() == 0)
+	{
+		(void)arm64_virtio_blk_smoke();
+		(void)arm64_virtio_net_smoke();
+	}
+
+	/* Musl hello EL0 (noreturn on success via eret → after_musl → enter_el0). */
+	if (arm64_musl_hello_el0() != 0)
+		arm64_enter_el0();
 
 idle:
 	for (;;)

@@ -27,12 +27,22 @@ sudo apt install build-essential nasm qemu-system-x86 grub-pc-bin python3
 
 | Tool | Purpose |
 |------|---------|
-| `x86_64-linux-musl-gcc` or `musl-gcc` | Static musl binaries |
+| `x86_64-linux-musl-gcc` or `musl-gcc` | Static musl binaries (x86-64 userspace) |
+| `aarch64-linux-musl-gcc` (optional) | Cross musl for aarch64 hello / future ARM userspace |
 
 ```bash
 sudo apt install musl-tools
 # or set MUSL_CC=/path/to/x86_64-linux-musl-gcc
+
+# aarch64 musl cross (repo-local under toolchain/, gitignored binaries):
+./scripts/setup_musl_aarch64.sh
+# or: make setup-musl-aarch64 && make musl-aarch64-hello
+# Override: MUSL_CC_AARCH64=/path/to/aarch64-linux-musl-gcc
 ```
+
+This installs a prebuilt `aarch64-linux-musl` toolchain (default from musl.cc) into
+`toolchain/aarch64-linux-musl/`. It does **not** run IR0 ARM userspace yet — only
+proves the cross compiler can produce a static aarch64 ELF (`make smoke-musl-aarch64-toolchain`).
 
 ### Optional
 

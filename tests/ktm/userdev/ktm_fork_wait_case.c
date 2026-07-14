@@ -34,7 +34,7 @@ int main(void)
 	pid_t pid;
 	int status = -1;
 	ktm_user_caps_t caps;
-	ktm_ioc_snapshot_t before, after;
+	ktm_ioc_snapshot_t before;
 	int32_t scen_rc = -1;
 
 	fd = ktm_open();
@@ -103,15 +103,7 @@ int main(void)
 	if (ktm_run_invariants(fd, KTM_INV_PROCESS | KTM_INV_FRAMES) != 0)
 		fails++;
 
-	if (ktm_snapshot_request(fd, &after) != 0)
-		fails++;
-	else
-	{
-		(void)ktm_assert_true(fd, "no_zombie_growth",
-				      after.zombies <= before.zombies);
-		if (after.zombies > before.zombies)
-			fails++;
-	}
+	fails += ktm_assert_no_leaks(fd, &before);
 
 	if (ktm_run_scenario(fd, "process.lifecycle", &scen_rc) != 0 || scen_rc != 0)
 	{

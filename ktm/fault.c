@@ -80,8 +80,37 @@ bool ktm_fault_should_fail(const char *name)
 		case KTM_FAULT_AFTER_N:
 			if (g_faults[i].hits > g_faults[i].value)
 			{
+				ktm_event_emit4(KTM_EVENT_FAULT_INJECTED, KTM_SUBSYS_CORE,
+						0, 0, 0, 0);
 				ktm_transport_emit("FAULT_INJECTED", name, "after_n");
 				return true;
+			}
+			return false;
+		case KTM_FAULT_EVERY_N:
+			if (g_faults[i].value == 0)
+				return false;
+			if ((g_faults[i].hits % g_faults[i].value) == 0)
+			{
+				ktm_event_emit4(KTM_EVENT_FAULT_INJECTED, KTM_SUBSYS_CORE,
+						0, 0, 0, 0);
+				ktm_transport_emit("FAULT_INJECTED", name, "every_n");
+				return true;
+			}
+			return false;
+		case KTM_FAULT_PROBABILITY:
+			/* value = percent 1..100; LCG using seed. */
+			{
+				uint32_t r;
+
+				g_seed = g_seed * 1664525u + 1013904223u;
+				r = (g_seed >> 16) % 100u;
+				if (r < g_faults[i].value && g_faults[i].value > 0)
+				{
+					ktm_event_emit4(KTM_EVENT_FAULT_INJECTED,
+							KTM_SUBSYS_CORE, 0, 0, 0, 0);
+					ktm_transport_emit("FAULT_INJECTED", name, "prob");
+					return true;
+				}
 			}
 			return false;
 		default:

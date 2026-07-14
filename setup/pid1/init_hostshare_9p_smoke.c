@@ -1,5 +1,6 @@
 /**
  * IR0 — virtio-9p host share smoke (QEMU -virtfs → /mnt/host)
+ * Exercises flat file + one subdirectory path.
  */
 /* SPDX-License-Identifier: GPL-3.0-only */
 
@@ -14,6 +15,7 @@
 int main(void)
 {
 	const char *payload = "KTM_HOSTSHARE_OK\n";
+	const char *subdir_payload = "HOSTSHARE_9P_SUBDIR_OK\n";
 	int fd;
 	ssize_t n;
 
@@ -41,6 +43,21 @@ int main(void)
 		return 4;
 	}
 
+	fd = open("/mnt/host/subdir/ktm_hostshare.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd < 0)
+	{
+		printf("HOSTSHARE_9P_SUBDIR_OPEN_FAIL errno=%d\n", errno);
+		return 5;
+	}
+	n = write(fd, subdir_payload, strlen(subdir_payload));
+	close(fd);
+	if (n != (ssize_t)strlen(subdir_payload))
+	{
+		printf("HOSTSHARE_9P_SUBDIR_WRITE_FAIL n=%zd\n", n);
+		return 6;
+	}
+
+	printf("HOSTSHARE_9P_SUBDIR_OK\n");
 	printf("HOSTSHARE_9P_OK\n");
 	printf("KTM_HOSTSHARE_OK\n");
 	fflush(stdout);

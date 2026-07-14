@@ -979,7 +979,37 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/syscall_stub.o \
     arch/arm64/sources/platform.o \
     arch/arm64/sources/freestanding_stubs.o \
-    sched/switch/switch_arm64.o
+    arch/arm64/sources/switch_early_asm.o \
+    arch/arm64/sources/switch_early.o \
+    arch/arm64/sources/process_early.o \
+    arch/arm64/sources/elf_load_early.o \
+    arch/arm64/sources/hello_embed.o \
+    arch/arm64/sources/busybox_load_early.o \
+    arch/arm64/sources/rootfs_early.o \
+    arch/arm64/sources/busybox_embed.o \
+    arch/arm64/sources/rr_early.o \
+    arch/arm64/sources/rr_early_stubs.o \
+    arch/arm64/sources/virtio_blk_early.o \
+    arch/arm64/sources/virtio_net_early.o \
+    drivers/virtio/virtio_mmio.o \
+    arch/arm64/sources/first_switch.o \
+    build/arm64-boot/rr_sched.o \
+    build/arm64-boot/switch_arm64.o
+
+build/arm64-boot/rr_sched.o: sched/rr_sched.c
+	@mkdir -p build/arm64-boot
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c sched/rr_sched.c -o build/arm64-boot/rr_sched.o
+
+build/arm64-boot/switch_arm64.o: sched/switch/switch_arm64.c
+	@mkdir -p build/arm64-boot
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/sched \
+		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+		-I$(KERNEL_ROOT)/arch/common \
+		-c sched/switch/switch_arm64.c -o build/arm64-boot/switch_arm64.o
 
 ifeq ($(ARCH),arm64)
 ARCH_OBJS := $(ARCH_OBJS_ARM64)
@@ -1071,6 +1101,22 @@ endif
 %.o: %.asm
 	@echo "  ASM     $<"
 	@$(ASM) $(ASMFLAGS) $< -o $@
+
+ifeq ($(ARCH),arm64)
+%.o: %.S
+	@echo "  AS      $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# switch_early.S → switch_early_asm.o (avoid clash with switch_early.c)
+arch/arm64/sources/hello_embed.o: arch/arm64/sources/hello_embed.S $(MUSL_AARCH64_HELLO)
+	@$(MAKE) -s musl-aarch64-hello
+	@echo "  AS      $<"
+	@$(CC) $(CFLAGS) -c arch/arm64/sources/hello_embed.S -o $@
+
+arch/arm64/sources/switch_early_asm.o: arch/arm64/sources/switch_early.S
+	@echo "  AS      $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+endif
 
 
 # Link kernel
@@ -1548,8 +1594,55 @@ FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
+MUSL_CC_AARCH64 ?= $(shell \
+	command -v aarch64-linux-musl-gcc 2>/dev/null || \
+	(test -x $(KERNEL_ROOT)/toolchain/aarch64-linux-musl/bin/aarch64-linux-musl-gcc && \
+		echo $(KERNEL_ROOT)/toolchain/aarch64-linux-musl/bin/aarch64-linux-musl-gcc) || \
+	(test -x $(KERNEL_ROOT)/toolchain/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc && \
+		echo $(KERNEL_ROOT)/toolchain/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc) || \
+	true)
+MUSL_AARCH64_HELLO = $(KERNEL_ROOT)/build/hello_aarch64
 BUSYBOX_SRC ?= $(KERNEL_ROOT)/setup/third-party/busybox-1.36.1
 TCC_SRC ?= /tmp/tinycc-fase52
+
+.PHONY: setup-musl-aarch64 musl-aarch64-hello smoke-musl-aarch64-toolchain
+setup-musl-aarch64:
+	@bash $(KERNEL_ROOT)/scripts/setup_musl_aarch64.sh
+
+musl-aarch64-hello: setup-musl-aarch64
+	@if [ -z "$(MUSL_CC_AARCH64)" ] || [ ! -x "$(MUSL_CC_AARCH64)" ]; then \
+		echo "✗ MUSL_CC_AARCH64 missing after setup"; exit 1; \
+	fi
+	@mkdir -p $(KERNEL_ROOT)/build
+	@echo "  CC      hello_aarch64 with $(MUSL_CC_AARCH64)"
+	@$(MUSL_CC_AARCH64) -static -fno-pie -no-pie -Os \
+		-Wl,-Ttext-segment=0x43000000 \
+		-o $(MUSL_AARCH64_HELLO) \
+		$(KERNEL_ROOT)/setup/pid1/hello_aarch64.c
+	@file $(MUSL_AARCH64_HELLO) | grep -qi 'aarch64'
+	@file $(MUSL_AARCH64_HELLO) | grep -qi 'static'
+	@echo "✓ musl-aarch64-hello → $(MUSL_AARCH64_HELLO) (ET_EXEC @ 0x43000000)"
+
+.PHONY: busybox-aarch64-min
+BUSYBOX_AARCH64 = $(KERNEL_ROOT)/build/busybox_aarch64
+busybox-aarch64-min: setup-musl-aarch64
+	@mkdir -p $(KERNEL_ROOT)/build
+	@if [ -x "$(BUSYBOX_AARCH64)" ] && file "$(BUSYBOX_AARCH64)" | grep -qi aarch64; then \
+		echo "✓ busybox-aarch64-min already present: $(BUSYBOX_AARCH64)"; \
+	elif [ -x "$(BUSYBOX_SRC)/busybox_unstripped" ]; then \
+		cp -f "$(BUSYBOX_SRC)/busybox_unstripped" "$(BUSYBOX_AARCH64)"; \
+		aarch64-linux-gnu-strip "$(BUSYBOX_AARCH64)" 2>/dev/null || true; \
+		echo "✓ busybox-aarch64-min ← busybox_unstripped"; \
+	else \
+		echo "✗ build BusyBox aarch64 first (see oleada notes)"; exit 1; \
+	fi
+	@file $(BUSYBOX_AARCH64) | grep -qi aarch64
+	@echo "✓ busybox-aarch64-min → $(BUSYBOX_AARCH64)"
+
+smoke-musl-aarch64-toolchain: musl-aarch64-hello
+	@file $(MUSL_AARCH64_HELLO) | grep -qi 'ELF'
+	@echo "IR0_MUSL_AARCH64_TOOLCHAIN_OK"
+	@echo "✓ smoke-musl-aarch64-toolchain passed"
 
 build-init-smoke:
 	@echo "  INIT    Building nostdlib ring-3 smoke ($(INIT_SMOKE_BIN))"
@@ -2511,9 +2604,9 @@ smoke-robust-list: kernel-x64-userspace.iso
 	fi
 
 # Minimal ARM64 boot image (identity map — full ARCH_OBJS need freestanding libc).
-ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 \
+ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
 	-I. -Iarch/arm64/sources -Iincludes -Iincludes/ir0
-ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib
+ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib -mgeneral-regs-only
 # QEMU virt: pin GICv2 (default may be v3 — freestanding Dist/CPU iface is v2).
 ARM64_QEMU_MACHINE = virt,gic-version=2
 # F7b curated portable objs (not ALL_OBJS).
@@ -2576,11 +2669,19 @@ arm64-all-objs-probe: arm64-portable-compile
 		rm -f /tmp/ir0-arm64-probe-$$$$.o; \
 	done; \
 	if [ $$fail -eq 0 ]; then \
-		for src in kernel/main.c includes/ir0/open_flags.c; do \
+		for src in kernel/main.c includes/ir0/open_flags.c \
+			kernel/errno.c kernel/credentials.c \
+			sched/switch/switch_arm64.c \
+			kernel/clock_wait.c kernel/driver_registry.c \
+			includes/ir0/copy_user.c \
+			includes/ir0/logging.c kernel/futex.c \
+			kernel/net_compat.c kernel/task.c; do \
 			echo "  CC      $$src (KERNEL probe)"; \
 			if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 				-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+				-I$(KERNEL_ROOT)/arch/common \
 				-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
+				-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
 				-c $$src -o /tmp/ir0-arm64-probe-$$$$.o >> /tmp/ir0-arm64-all-objs-probe.log 2>&1; then \
 				echo "FIRST_DIVERGENCE: $$src" | tee -a /tmp/ir0-arm64-all-objs-probe.log; \
 				fail=1; \
@@ -2590,9 +2691,9 @@ arm64-all-objs-probe: arm64-portable-compile
 		done; \
 	fi; \
 	if [ $$fail -eq 0 ]; then \
-		echo "MEMORY_OBJS+KERNEL sample: compile OK under ARM64_BOOT_CFLAGS (not linked)" \
+		echo "MEMORY_OBJS+KERNEL sample(+errno/cred/switch/clock/drv/copy_user/logging/futex/net_compat/task): compile OK (not linked)" \
 			| tee -a /tmp/ir0-arm64-all-objs-probe.log; \
-		echo "NEXT: full KERNEL_OBJS / drivers link + musl aarch64 still BLOCKED"; \
+		echo "NEXT: make ARCH=arm64 kernel-arm64-all.bin (portable ALL link; x86 drivers still out)"; \
 		echo "✓ arm64-all-objs-probe: interrupt wall cleared; probe compile OK"; \
 	else \
 		echo "✗ arm64-all-objs-probe: see /tmp/ir0-arm64-all-objs-probe.log"; \
@@ -2609,9 +2710,27 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/gic_v2.c arch/arm64/sources/gic_v2.h \
 		arch/arm64/sources/syscall_early.c arch/arm64/sources/syscall_early.h \
 		arch/arm64/sources/mm_ops.c arch/arm64/sources/vectors.S \
-		arch/arm64/linker.ld
-	@echo "  CC      arch/arm64/sources/boot_stub.c (F7d nanosleep + irq facade)"
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/switch_early.c arch/arm64/sources/switch_early.h \
+		arch/arm64/sources/switch_early.S \
+		arch/arm64/sources/process_early.c arch/arm64/sources/process_early.h \
+		arch/arm64/sources/elf_load_early.c arch/arm64/sources/elf_load_early.h \
+		arch/arm64/sources/hello_embed.S \
+		arch/arm64/sources/busybox_embed.S \
+		arch/arm64/sources/busybox_load_early.c \
+		arch/arm64/sources/rootfs_early.c arch/arm64/sources/rootfs_early.h \
+		arch/arm64/sources/rr_early.c arch/arm64/sources/rr_early.h \
+		arch/arm64/sources/rr_early_stubs.c \
+		arch/arm64/sources/virtio_blk_early.c arch/arm64/sources/virtio_blk_early.h \
+		arch/arm64/sources/virtio_net_early.c arch/arm64/sources/virtio_net_early.h \
+		drivers/virtio/virtio_mmio.c includes/ir0/virtio_mmio.h \
+		includes/ir0/blockdev.c includes/ir0/blockdev.h \
+		sched/rr_sched.c sched/switch/switch_arm64.c sched/task.h \
+		$(MUSL_AARCH64_HELLO) build/busybox_aarch64 arch/arm64/linker.ld
+	@$(MAKE) -s musl-aarch64-hello
+	@$(MAKE) -s busybox-aarch64-min
+	@echo "  CC      arch/arm64/sources/boot_stub.c (F7j process+TTBR+musl+RR+bb+virtio)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c \
 		arch/arm64/sources/boot_stub.c -o arch/arm64/sources/boot_stub.o
 	@echo "  CC      arch/arm64/sources/mmu_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
@@ -2640,9 +2759,74 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  CC      arch/arm64/sources/mm_ops.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/mm_ops.c -o arch/arm64/sources/mm_ops.o
+	@echo "  CC      arch/arm64/sources/switch_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/switch_early.c -o arch/arm64/sources/switch_early.o
+	@echo "  CC      arch/arm64/sources/process_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/sched \
+		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+		-c arch/arm64/sources/process_early.c -o arch/arm64/sources/process_early.o
+	@echo "  CC      sched/rr_sched.c"
+	@mkdir -p build/arm64-boot
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c sched/rr_sched.c -o build/arm64-boot/rr_sched.o
+	@echo "  CC      sched/switch/switch_arm64.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/sched \
+		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+		-I$(KERNEL_ROOT)/arch/common \
+		-c sched/switch/switch_arm64.c -o build/arm64-boot/switch_arm64.o
+	@echo "  CC      arch/arm64/sources/rr_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c arch/arm64/sources/rr_early.c -o arch/arm64/sources/rr_early.o
+	@echo "  CC      arch/arm64/sources/rr_early_stubs.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c arch/arm64/sources/rr_early_stubs.c -o arch/arm64/sources/rr_early_stubs.o
+	@echo "  CC      arch/arm64/sources/elf_load_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/elf_load_early.c -o arch/arm64/sources/elf_load_early.o
+	@echo "  CC      arch/arm64/sources/busybox_load_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/busybox_load_early.c -o arch/arm64/sources/busybox_load_early.o
+	@echo "  CC      arch/arm64/sources/rootfs_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/rootfs_early.c -o arch/arm64/sources/rootfs_early.o
+	@echo "  CC      drivers/virtio/virtio_mmio.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c \
+		drivers/virtio/virtio_mmio.c -o drivers/virtio/virtio_mmio.o
+	@echo "  CC      includes/ir0/blockdev.c (portable facade)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c \
+		includes/ir0/blockdev.c -o build/arm64-boot/blockdev.o
+	@echo "  CC      arch/arm64/sources/virtio_blk_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c \
+		arch/arm64/sources/virtio_blk_early.c -o arch/arm64/sources/virtio_blk_early.o
+	@echo "  CC      arch/arm64/sources/virtio_net_early.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c \
+		arch/arm64/sources/virtio_net_early.c -o arch/arm64/sources/virtio_net_early.o
+	@echo "  AS      arch/arm64/sources/hello_embed.S"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
+		arch/arm64/sources/hello_embed.S -o arch/arm64/sources/hello_embed.o
+	@echo "  AS      arch/arm64/sources/busybox_embed.S"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
+		arch/arm64/sources/busybox_embed.S -o arch/arm64/sources/busybox_embed.o
 	@echo "  AS      arch/arm64/sources/vectors.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/sources/vectors.S -o arch/arm64/sources/vectors.o
+	@echo "  AS      arch/arm64/sources/switch_early.S"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
+		arch/arm64/sources/switch_early.S -o arch/arm64/sources/switch_early_asm.o
 	@echo "  LD      $@"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
 		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
@@ -2650,6 +2834,17 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
 		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
+		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
+		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
+		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
+		arch/arm64/sources/rr_early_stubs.o \
+		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
+		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/busybox_embed.o \
+		drivers/virtio/virtio_mmio.o \
+		build/arm64-boot/blockdev.o \
+		arch/arm64/sources/virtio_blk_early.o \
+		arch/arm64/sources/virtio_net_early.o \
 		arch/arm64/sources/vectors.o
 	@echo "✓ $@"
 
@@ -2681,6 +2876,136 @@ kernel-arm64-gic.bin: kernel-arm64-boot.bin
 kernel-arm64-syscall.bin: kernel-arm64-boot.bin
 	@cp -f kernel-arm64-boot.bin $@
 	@echo "✓ $@"
+
+# Honest min link: MEMORY_OBJS + KERNEL sample + freestanding ARCH (+ stubs).
+# Does NOT claim product ALL_OBJS (x86 ATA/RTL8139/VBE remain excluded).
+.PHONY: kernel-arm64-min.bin
+kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c \
+		arch/arm64/sources/freestanding_stubs.c
+	@echo "  CC      ARM64_MIN MEMORY+KERNEL sample"
+	@mkdir -p build/arm64-min
+	@fail=0; \
+	for src in mm/allocator.c mm/paging.c mm/pmm.c mm/kmem.c \
+		kernel/errno.c includes/ir0/open_flags.c; do \
+		base=$$(basename $$src .c); \
+		echo "  CC      $$src (min)"; \
+		if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+			-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+			-I$(KERNEL_ROOT)/arch/common \
+			-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
+			-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
+			-c $$src -o build/arm64-min/$$base.o; then \
+			echo "✗ compile $$src"; fail=1; break; \
+		fi; \
+	done; \
+	if [ $$fail -ne 0 ]; then exit 1; fi
+	@echo "  CC      arch/arm64/sources/min_link_stubs.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/min_link_stubs.c -o build/arm64-min/min_link_stubs.o
+	@echo "  LD      $@ (boot + MEMORY sample — not ALL_OBJS)"
+	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
+		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
+		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
+		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
+		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
+		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
+		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
+		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
+		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
+		arch/arm64/sources/rr_early_stubs.o \
+		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
+		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/busybox_embed.o \
+		drivers/virtio/virtio_mmio.o \
+		build/arm64-boot/blockdev.o \
+		arch/arm64/sources/virtio_blk_early.o \
+		arch/arm64/sources/virtio_net_early.o \
+		arch/arm64/sources/vectors.o \
+		build/arm64-min/allocator.o build/arm64-min/paging.o \
+		build/arm64-min/pmm.o build/arm64-min/kmem.o \
+		build/arm64-min/errno.o build/arm64-min/open_flags.o \
+		build/arm64-min/min_link_stubs.o \
+		--defsym ARM64_MIN_LINK_MARKER=1
+	@echo "✓ $@ (MEMORY+KERNEL sample+ARCH freestanding linked; drivers ALL_OBJS still BLOCKED)"
+
+# ALL_OBJS_ARM64: MEMORY + portable KERNEL sample + LIB strings + mark (no x86 drivers).
+# FS/NET/logging/futex full link remains probe-only / BLOCKED (pulls snprintf/sched).
+.PHONY: kernel-arm64-all.bin
+kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c \
+		arch/arm64/sources/all_objs_mark.c arch/arm64/sources/portable_string.c
+	@echo "  CC      ARM64_ALL portable objs (not x86 drivers)"
+	@mkdir -p build/arm64-all
+	@rm -f /tmp/ir0-arm64-all-link.log
+	@fail=0; \
+	for src in mm/allocator.c mm/paging.c mm/pmm.c mm/kmem.c \
+		kernel/errno.c \
+		includes/ir0/open_flags.c \
+		arch/arm64/sources/portable_string.c; do \
+		base=$$(basename $$src .c); \
+		echo "  CC      $$src (all)"; \
+		if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+			-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+			-I$(KERNEL_ROOT)/arch/common \
+			-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
+			-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
+			-c $$src -o build/arm64-all/$$base.o 2>>/tmp/ir0-arm64-all-link.log; then \
+			echo "✗ compile $$src"; cat /tmp/ir0-arm64-all-link.log | tail -20; exit 1; \
+		fi; \
+	done
+	@echo "  CC      arch/arm64/sources/min_link_stubs.c (all)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/min_link_stubs.c -o build/arm64-all/min_link_stubs.o
+	@echo "  CC      arch/arm64/sources/all_objs_mark.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/all_objs_mark.c -o build/arm64-all/all_objs_mark.o
+	@# Provide libc string aliases used by portable kernel TUs
+	@echo "  CC      build/arm64-all/string_aliases.c"
+	@printf '%s\n' \
+		'#include <stddef.h>' \
+		'size_t arm64_portable_strlen(const char *s);' \
+		'void *arm64_portable_memcpy(void *d, const void *s, size_t n);' \
+		'size_t strlen(const char *s) { return arm64_portable_strlen(s); }' \
+		'int strcmp(const char *a, const char *b) {' \
+		'  while (*a && *a == *b) { a++; b++; } return (unsigned char)*a - (unsigned char)*b; }' \
+		'int strncmp(const char *a, const char *b, size_t n) {' \
+		'  while (n && *a && *a == *b) { a++; b++; n--; }' \
+		'  if (!n) return 0; return (unsigned char)*a - (unsigned char)*b; }' \
+		'char *strncpy(char *d, const char *s, size_t n) {' \
+		'  size_t i; for (i = 0; i < n && s[i]; i++) d[i] = s[i];' \
+		'  for (; i < n; i++) d[i] = 0; return d; }' \
+		'void *memcpy(void *d, const void *s, size_t n) { return arm64_portable_memcpy(d, s, n); }' \
+		'void *memset(void *d, int c, size_t n) {' \
+		'  unsigned char *p = d; while (n--) *p++ = (unsigned char)c; return d; }' \
+		> build/arm64-all/string_aliases.c
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		build/arm64-all/string_aliases.c -o build/arm64-all/string_aliases.o
+	@echo "  LD      $@ (portable ALL — no x86 drivers)"
+	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
+		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
+		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
+		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
+		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
+		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
+		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
+		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
+		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
+		arch/arm64/sources/rr_early_stubs.o \
+		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
+		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/busybox_embed.o \
+		drivers/virtio/virtio_mmio.o \
+		build/arm64-boot/blockdev.o \
+		arch/arm64/sources/virtio_blk_early.o \
+		arch/arm64/sources/virtio_net_early.o \
+		arch/arm64/sources/vectors.o \
+		build/arm64-all/allocator.o build/arm64-all/paging.o \
+		build/arm64-all/pmm.o build/arm64-all/kmem.o \
+		build/arm64-all/errno.o \
+		build/arm64-all/open_flags.o \
+		build/arm64-all/portable_string.o \
+		build/arm64-all/string_aliases.o \
+		build/arm64-all/min_link_stubs.o build/arm64-all/all_objs_mark.o
+	@echo "✓ $@ (ALL_OBJS_ARM64 portable link; ATA/RTL/VBE/ISA still BLOCKED)"
 
 smoke-arm64-boot: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU virt boot tag..."
@@ -2805,21 +3130,87 @@ smoke-arm64-syscall: kernel-arm64-syscall.bin
 		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_EL0_PAGE_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_SWITCH_B" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_TTBR_B_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_TTBR_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PROCESS_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PROCESS_TTBR_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_FORK_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_EXEC_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PROCESS_T_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_RR_SCHED_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_RR_TICK_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_MUSL_LOAD_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_MUSL_HELLO_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_BUSYBOX_LOAD_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_BUSYBOX_EL0_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_ROOTFS_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_BUSYBOX_INIT_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_CLOCK_GETTIME_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_GETTIMEOFDAY_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_CLOCK_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_SYSCALL_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_WRITE_OK" /tmp/arm64-syscall-smoke.log; then \
-		echo "✓ smoke-arm64-syscall passed"; \
+		echo "✓ smoke-arm64-syscall passed (incl. F7h/F7i/F7j + fork/exec + musl + process_t)"; \
 	else \
 		echo "✗ smoke-arm64-syscall FAILED"; \
 		tail -60 /tmp/arm64-syscall-smoke.log; exit 1; \
 	fi
 
-.PHONY: smoke-arm64-nanosleep
+.PHONY: smoke-arm64-virtio-blk smoke-arm64-virtio-net
+ARM64_VIRTIO_DISK ?= /tmp/ir0-arm64-virtio-blk.img
+smoke-arm64-virtio-blk: kernel-arm64-syscall.bin
+	@echo "  SMOKE   ARM64 virtio-mmio + virtio-blk..."
+	@dd if=/dev/zero of=$(ARM64_VIRTIO_DISK) bs=1M count=4 status=none
+	@rm -f /tmp/arm64-virtio-blk-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-virtio-blk-smoke.log --timeout 25 --stale-sec 10 \
+		--done ARM64_BLOCKDEV_FACADE_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
+		-global virtio-mmio.force-legacy=false \
+		-drive if=none,file=$(ARM64_VIRTIO_DISK),format=raw,id=hd0 \
+		-device virtio-blk-device,drive=hd0 \
+		-display none -no-reboot 2>/dev/null || true
+	@if grep -q "ARM64_VIRTIO_MMIO_OK" /tmp/arm64-virtio-blk-smoke.log && \
+	   grep -q "ARM64_VIRTIO_BLK_OK" /tmp/arm64-virtio-blk-smoke.log && \
+	   grep -q "\\[BLOCKDEV\\]\\[CLASSIFY\\] BLOCKDEV_FACADE_OK" /tmp/arm64-virtio-blk-smoke.log && \
+	   grep -q "ARM64_BLOCKDEV_FACADE_OK" /tmp/arm64-virtio-blk-smoke.log; then \
+		echo "✓ smoke-arm64-virtio-blk passed (virtio + portable ir0_block facade)"; \
+	else \
+		echo "✗ smoke-arm64-virtio-blk FAILED"; \
+		tail -80 /tmp/arm64-virtio-blk-smoke.log; exit 1; \
+	fi
+
+smoke-arm64-virtio-net: kernel-arm64-syscall.bin
+	@echo "  SMOKE   ARM64 virtio-mmio + virtio-net..."
+	@rm -f /tmp/arm64-virtio-net-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-virtio-net-smoke.log --timeout 25 --stale-sec 10 \
+		--done ARM64_VIRTIO_NET_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
+		-global virtio-mmio.force-legacy=false \
+		-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+		-display none -no-reboot 2>/dev/null || true
+	@if grep -q "ARM64_VIRTIO_MMIO_OK" /tmp/arm64-virtio-net-smoke.log && \
+	   grep -q "ARM64_VIRTIO_NET_OK" /tmp/arm64-virtio-net-smoke.log; then \
+		echo "✓ smoke-arm64-virtio-net passed"; \
+	else \
+		echo "✗ smoke-arm64-virtio-net FAILED"; \
+		tail -80 /tmp/arm64-virtio-net-smoke.log; exit 1; \
+	fi
+
+.PHONY: smoke-arm64-nanosleep smoke-arm64-switch
 smoke-arm64-nanosleep: smoke-arm64-syscall
 	@echo "✓ smoke-arm64-nanosleep (alias of smoke-arm64-syscall + NANOSLEEP tag)"
+
+smoke-arm64-switch: smoke-arm64-syscall
+	@echo "✓ smoke-arm64-switch (alias — F7h/F7i tags in smoke-arm64-syscall)"
+
+.PHONY: smoke-arm64-ttbr
+smoke-arm64-ttbr: smoke-arm64-syscall
+	@echo "✓ smoke-arm64-ttbr (alias — F7i TTBR tags in smoke-arm64-syscall)"
 
 .PHONY: smoke-arm64
 smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-port \
@@ -2828,6 +3219,7 @@ smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-port
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
 .PHONY: smoke-hostshare-9p build-init-hostshare-9p-smoke
+.PHONY: smoke-hostshare-tree build-init-hostshare-tree-smoke
 .PHONY: smoke-hostshare-exec build-init-hostshare-exec
 # (arm64 full kernel-arm64.bin remains available via ARCH=arm64)
 build-init-stream-sock-smoke:
@@ -2839,6 +3231,51 @@ build-init-hostshare-9p-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_hostshare_9p_smoke.c
 	@echo "✓ build-init-hostshare-9p-smoke OK"
+
+build-init-hostshare-tree-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_hostshare_tree_smoke.c
+	@echo "✓ build-init-hostshare-tree-smoke OK"
+
+HOSTSHARE_TREE_SMOKE_LOG = /tmp/hostshare-tree-smoke.log
+smoke-hostshare-tree: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   virtio-9p tree (mkdir/readdir/write-at/rename/symlink/unlink)..."
+	@$(MAKE) -s build-init-hostshare-tree-smoke
+	@SHARE=$$(mktemp -d /tmp/ir0-hostshare-tree.XXXXXX); \
+	DISK=$$(mktemp /tmp/ir0-hostshare-tree.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(HOSTSHARE_TREE_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(HOSTSHARE_TREE_SMOKE_LOG) --timeout 90 \
+		--done 'HOSTSHARE_TREE_OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-fsdev local,id=ir0fs,path=$$SHARE,security_model=none \
+		-device virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "HOSTSHARE_TREE_MKDIR_OK" $(HOSTSHARE_TREE_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_TREE_WRITE_OK" $(HOSTSHARE_TREE_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_TREE_READ_OK" $(HOSTSHARE_TREE_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_TREE_READDIR_OK" $(HOSTSHARE_TREE_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_TREE_RENAME_OK" $(HOSTSHARE_TREE_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_SYMLINK_OK" $(HOSTSHARE_TREE_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_TREE_UNLINK_OK" $(HOSTSHARE_TREE_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_TREE_OK" $(HOSTSHARE_TREE_SMOKE_LOG) && \
+	   test -f $$SHARE/tree_done.txt && \
+	   grep -q "HOSTSHARE_TREE_OK" $$SHARE/tree_done.txt && \
+	   test -L $$SHARE/symlink_probe && \
+	   ! test -d $$SHARE/a; then \
+		echo "✓ smoke-hostshare-tree passed (guest tree ops + symlink + host marker)"; \
+		rm -rf $$SHARE; \
+	else \
+		echo "✗ smoke-hostshare-tree FAILED"; \
+		echo "--- share ---"; ls -laR $$SHARE 2>/dev/null; \
+		grep -E 'HOSTSHARE_TREE_|panic|MOUNT' $(HOSTSHARE_TREE_SMOKE_LOG) | tail -60; \
+		rm -rf $$SHARE; \
+		exit 1; \
+	fi
 
 HOSTSHARE_EXEC_STUB = setup/pid1/init_hostshare_exec
 build-init-hostshare-exec:
@@ -2868,6 +3305,7 @@ smoke-hostshare-9p: kernel-x64-userspace.iso
 	@echo "  SMOKE   virtio-9p host share (QEMU -virtfs → /mnt/host)..."
 	@$(MAKE) -s build-init-hostshare-9p-smoke
 	@SHARE=$$(mktemp -d /tmp/ir0-hostshare.XXXXXX); \
+	mkdir -p $$SHARE/subdir; \
 	DISK=$$(mktemp /tmp/ir0-hostshare.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
@@ -2881,15 +3319,18 @@ smoke-hostshare-9p: kernel-x64-userspace.iso
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK; \
 	if grep -q "HOSTSHARE_9P_READY" $(HOSTSHARE_9P_SMOKE_LOG) && \
+	   grep -q "HOSTSHARE_9P_SUBDIR_OK" $(HOSTSHARE_9P_SMOKE_LOG) && \
 	   grep -q "HOSTSHARE_9P_OK" $(HOSTSHARE_9P_SMOKE_LOG) && \
 	   grep -q "KTM_HOSTSHARE_OK" $(HOSTSHARE_9P_SMOKE_LOG) && \
 	   test -f $$SHARE/ktm_hostshare.txt && \
-	   grep -q "KTM_HOSTSHARE_OK" $$SHARE/ktm_hostshare.txt; then \
-		echo "✓ smoke-hostshare-9p passed (guest write visible on host)"; \
+	   grep -q "KTM_HOSTSHARE_OK" $$SHARE/ktm_hostshare.txt && \
+	   test -f $$SHARE/subdir/ktm_hostshare.txt && \
+	   grep -q "HOSTSHARE_9P_SUBDIR_OK" $$SHARE/subdir/ktm_hostshare.txt; then \
+		echo "✓ smoke-hostshare-9p passed (flat + subdir write visible on host)"; \
 		rm -rf $$SHARE; \
 	else \
 		echo "✗ smoke-hostshare-9p FAILED"; \
-		echo "--- share ---"; ls -la $$SHARE 2>/dev/null; \
+		echo "--- share ---"; ls -laR $$SHARE 2>/dev/null; \
 		grep -E 'HOSTSHARE_|KTM_|panic|MOUNT' $(HOSTSHARE_9P_SMOKE_LOG) | tail -50; \
 		rm -rf $$SHARE; \
 		exit 1; \
@@ -3072,6 +3513,29 @@ smoke-reboot-s3: kernel-x64-userspace.iso
 	else \
 		echo "✗ smoke-reboot-s3 FAILED"; \
 		grep -E 'S3_|SUSPEND_|ACPI_|panic' $(S3_SMOKE_LOG) | tail -40; exit 1; \
+	fi
+
+.PHONY: smoke-sched-prio
+SCHED_PRIO_LOG = /tmp/sched-prio-smoke.log
+smoke-sched-prio: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   priority-band scheduler selftest (POLICY=2)..."
+	@DISK=$$(mktemp /tmp/ir0-sched-prio.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	rm -f $(SCHED_PRIO_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(SCHED_PRIO_LOG) --timeout 90 --stale-sec 60 \
+		--done SCHED_PRIO_OK -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "SCHED_PRIO_OK" $(SCHED_PRIO_LOG) && \
+	    grep -q "SCHED_POLICY=priority" $(SCHED_PRIO_LOG) && \
+	    ! grep -q "SCHED_PRIO_FAIL" $(SCHED_PRIO_LOG); then \
+		echo "✓ smoke-sched-prio passed"; \
+	else \
+		echo "✗ smoke-sched-prio FAILED"; \
+		grep -E 'SCHED_|panic' $(SCHED_PRIO_LOG) | tail -40; exit 1; \
 	fi
 
 .PHONY: smoke-posix-setsid build-init-posix-setsid
@@ -3774,6 +4238,7 @@ ktm: ktm-check
 	ktm-userdev-nic-reach-run ktm-userdev-nic-reach-virtfs-run smoke-nic-reach \
 	ktm-userdev-tcp-guest-run ktm-userdev-tcp-guest-virtfs-run smoke-tcp-guest \
 	ktm-userdev-tcp-wire-run ktm-userdev-tcp-wire-virtfs-run smoke-tcp-wire \
+	ktm-userdev-fault-pipe-run smoke-ktm-fault build-ktm-fault-pipe-case \
 	build-ktm-tcp-wire-case \
 	build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-exec-drain-case build-ktm-reap-drain-case \
@@ -3813,13 +4278,16 @@ KTM_TCP_GUEST_SRC = $(KTM_USERDEV_DIR)/ktm_tcp_guest_case.c $(KTM_USERDEV_LIB_SR
 KTM_TCP_GUEST_BIN = $(KTM_USERDEV_DIR)/ktm_tcp_guest_case
 KTM_TCP_WIRE_SRC = $(KTM_USERDEV_DIR)/ktm_tcp_wire_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_TCP_WIRE_BIN = $(KTM_USERDEV_DIR)/ktm_tcp_wire_case
+KTM_FAULT_PIPE_SRC = $(KTM_USERDEV_DIR)/ktm_fault_pipe_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_FAULT_PIPE_BIN = $(KTM_USERDEV_DIR)/ktm_fault_pipe_case
 
 # All userdev pilots run via hostshare stub + share payload (virtio-9p).
 build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-exec-drain-case build-ktm-reap-drain-case \
 	build-ktm-init-exit-drain-case build-ktm-posix-pseudofs-case \
 	build-ktm-input-det-case build-ktm-nic-reach-case \
-	build-ktm-tcp-guest-case build-ktm-tcp-wire-case: build-init-hostshare-exec
+	build-ktm-tcp-guest-case build-ktm-tcp-wire-case \
+	build-ktm-fault-pipe-case: build-init-hostshare-exec
 
 build-ktm-fork-wait-case:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -3854,9 +4322,35 @@ build-ktm-fork-storm-case:
 	@file $(KTM_FORK_STORM_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-storm-case OK"
 
+build-ktm-fault-pipe-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building fault_pipe pilot ($(KTM_FAULT_PIPE_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_FAULT_PIPE_BIN) $(KTM_FAULT_PIPE_SRC)
+	@file $(KTM_FAULT_PIPE_BIN) | grep -q ELF
+	@echo "✓ build-ktm-fault-pipe-case OK"
+
 ktm-userdev-run: build-ktm-fork-wait-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py --log /tmp/ktm-userdev-run.log --timeout 90
+
+ktm-userdev-fault-pipe-run: build-ktm-fault-pipe-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_FAULT_PIPE_BIN) \
+		--log /tmp/ktm-userdev-fault-pipe.log --timeout 90 \
+		--done KTM_FAULT_PIPE_OK \
+		--require 'TEST_END|fault_pipe|PASS' \
+		--require KTM_FAULT_PIPE_OK \
+		--require KTM_SNAPSHOT_DELTA_OK \
+		--require KTM_FAULT_PIPE_ENOMEM_OK \
+		--require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-fault-pipe-run (pipe.create fault injection)"
+
+smoke-ktm-fault: ktm-userdev-fault-pipe-run
 
 ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
@@ -3867,7 +4361,7 @@ ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x
 		--require 'TEST_END|cow_touch|PASS' \
 		--require KTM_USERDEV_COW_OK
 
-ktm-userdev-fork-storm-run: build-ktm-fork-storm-case kernel-x64-userspace.iso
+ktm-userdev-fork-storm-run: build-ktm-fork-storm-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FORK_STORM_BIN) \
@@ -3875,11 +4369,11 @@ ktm-userdev-fork-storm-run: build-ktm-fork-storm-case kernel-x64-userspace.iso
 		--done KTM_USERDEV_FORK_STORM_OK \
 		--require 'TEST_END|fork_exit_storm|PASS' \
 		--require KTM_USERDEV_FORK_STORM_OK
-	@echo "✓ ktm-userdev-fork-storm-run (FASE42/44 depth ≥ legacy storms)"
+	@echo "✓ ktm-userdev-fork-storm-run (FASE42/44 depth ≥ legacy storms; share payload)"
 
 # Same storm + virtio-9p: guest writes /mnt/host/ktm_fork_storm.txt visible on host.
 .PHONY: ktm-userdev-fork-storm-virtfs-run
-ktm-userdev-fork-storm-virtfs-run: build-ktm-fork-storm-case kernel-x64-userspace.iso
+ktm-userdev-fork-storm-virtfs-run: build-ktm-fork-storm-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FORK_STORM_BIN) \
@@ -3925,7 +4419,7 @@ build-ktm-init-exit-drain-case:
 	@file $(KTM_INIT_EXIT_DRAIN_BIN) | grep -q ELF
 	@echo "✓ build-ktm-init-exit-drain-case OK"
 
-ktm-userdev-exec-drain-run: build-ktm-exec-drain-case kernel-x64-userspace.iso
+ktm-userdev-exec-drain-run: build-ktm-exec-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_EXEC_DRAIN_BIN) \
@@ -3934,9 +4428,9 @@ ktm-userdev-exec-drain-run: build-ktm-exec-drain-case kernel-x64-userspace.iso
 		--done KTM_USERDEV_EXEC_DRAIN_OK \
 		--require 'TEST_END|exec_drain|PASS' \
 		--require KTM_USERDEV_EXEC_DRAIN_OK
-	@echo "✓ ktm-userdev-exec-drain-run (FASE44 exec-drain → KTM)"
+	@echo "✓ ktm-userdev-exec-drain-run (FASE44 exec-drain → KTM; share payload)"
 
-ktm-userdev-exec-drain-virtfs-run: build-ktm-exec-drain-case kernel-x64-userspace.iso
+ktm-userdev-exec-drain-virtfs-run: build-ktm-exec-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_EXEC_DRAIN_BIN) \
@@ -3950,7 +4444,7 @@ ktm-userdev-exec-drain-virtfs-run: build-ktm-exec-drain-case kernel-x64-userspac
 		--host-grep KTM_USERDEV_EXEC_DRAIN_OK
 	@echo "✓ ktm-userdev-exec-drain-virtfs-run (exec-drain + virtio-9p)"
 
-ktm-userdev-reap-drain-run: build-ktm-reap-drain-case kernel-x64-userspace.iso
+ktm-userdev-reap-drain-run: build-ktm-reap-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_REAP_DRAIN_BIN) \
@@ -3958,9 +4452,9 @@ ktm-userdev-reap-drain-run: build-ktm-reap-drain-case kernel-x64-userspace.iso
 		--done KTM_USERDEV_REAP_DRAIN_OK \
 		--require 'TEST_END|reap_drain|PASS' \
 		--require KTM_USERDEV_REAP_DRAIN_OK
-	@echo "✓ ktm-userdev-reap-drain-run (FASE44 reap-drain → KTM)"
+	@echo "✓ ktm-userdev-reap-drain-run (FASE44 reap-drain → KTM; share payload)"
 
-ktm-userdev-reap-drain-virtfs-run: build-ktm-reap-drain-case kernel-x64-userspace.iso
+ktm-userdev-reap-drain-virtfs-run: build-ktm-reap-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_REAP_DRAIN_BIN) \
@@ -3973,7 +4467,7 @@ ktm-userdev-reap-drain-virtfs-run: build-ktm-reap-drain-case kernel-x64-userspac
 		--host-grep KTM_USERDEV_REAP_DRAIN_OK
 	@echo "✓ ktm-userdev-reap-drain-virtfs-run (reap-drain + virtio-9p)"
 
-ktm-userdev-init-exit-drain-run: build-ktm-init-exit-drain-case kernel-x64-userspace.iso
+ktm-userdev-init-exit-drain-run: build-ktm-init-exit-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_INIT_EXIT_DRAIN_BIN) \
@@ -3984,7 +4478,7 @@ ktm-userdev-init-exit-drain-run: build-ktm-init-exit-drain-case kernel-x64-users
 		--require FASE44_INIT_EXIT_DRAIN
 	@echo "✓ ktm-userdev-init-exit-drain-run (FASE44 PID1 _exit → KTM)"
 
-ktm-userdev-init-exit-drain-virtfs-run: build-ktm-init-exit-drain-case kernel-x64-userspace.iso
+ktm-userdev-init-exit-drain-virtfs-run: build-ktm-init-exit-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_INIT_EXIT_DRAIN_BIN) \
@@ -4042,7 +4536,7 @@ build-ktm-tcp-guest-case:
 	@file $(KTM_TCP_GUEST_BIN) | grep -q ELF
 	@echo "✓ build-ktm-tcp-guest-case OK"
 
-ktm-userdev-posix-pseudofs-run: build-ktm-posix-pseudofs-case kernel-x64-userspace.iso
+ktm-userdev-posix-pseudofs-run: build-ktm-posix-pseudofs-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_POSIX_PSEUDOFS_BIN) \
@@ -4053,7 +4547,7 @@ ktm-userdev-posix-pseudofs-run: build-ktm-posix-pseudofs-case kernel-x64-userspa
 		--require KTM_GETDENTS_DEV_CURSOR_OK
 	@echo "✓ ktm-userdev-posix-pseudofs-run (FASE53B → KTM)"
 
-ktm-userdev-posix-pseudofs-virtfs-run: build-ktm-posix-pseudofs-case kernel-x64-userspace.iso
+ktm-userdev-posix-pseudofs-virtfs-run: build-ktm-posix-pseudofs-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_POSIX_PSEUDOFS_BIN) \
@@ -4067,7 +4561,7 @@ ktm-userdev-posix-pseudofs-virtfs-run: build-ktm-posix-pseudofs-case kernel-x64-
 		--host-grep KTM_USERDEV_POSIX_PSEUDOFS_OK
 	@echo "✓ ktm-userdev-posix-pseudofs-virtfs-run (53B + virtio-9p)"
 
-ktm-userdev-input-det-run: build-ktm-input-det-case kernel-x64-userspace.iso
+ktm-userdev-input-det-run: build-ktm-input-det-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_INPUT_DET_BIN) \
@@ -4077,7 +4571,7 @@ ktm-userdev-input-det-run: build-ktm-input-det-case kernel-x64-userspace.iso
 		--require KTM_USERDEV_INPUT_DET_OK
 	@echo "✓ ktm-userdev-input-det-run (FASE54C → KTM)"
 
-ktm-userdev-input-det-virtfs-run: build-ktm-input-det-case kernel-x64-userspace.iso
+ktm-userdev-input-det-virtfs-run: build-ktm-input-det-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_INPUT_DET_BIN) \
@@ -4090,7 +4584,7 @@ ktm-userdev-input-det-virtfs-run: build-ktm-input-det-case kernel-x64-userspace.
 		--host-grep KTM_USERDEV_INPUT_DET_OK
 	@echo "✓ ktm-userdev-input-det-virtfs-run (54C + virtio-9p)"
 
-ktm-userdev-nic-reach-run: build-ktm-nic-reach-case kernel-x64-userspace.iso
+ktm-userdev-nic-reach-run: build-ktm-nic-reach-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_NIC_REACH_BIN) \
@@ -4102,7 +4596,7 @@ ktm-userdev-nic-reach-run: build-ktm-nic-reach-case kernel-x64-userspace.iso
 		--qemu-arg=-device --qemu-arg=rtl8139,netdev=net0
 	@echo "✓ ktm-userdev-nic-reach-run (F8-1 NIC probe)"
 
-ktm-userdev-nic-reach-virtfs-run: build-ktm-nic-reach-case kernel-x64-userspace.iso
+ktm-userdev-nic-reach-virtfs-run: build-ktm-nic-reach-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_NIC_REACH_BIN) \
@@ -4120,7 +4614,7 @@ ktm-userdev-nic-reach-virtfs-run: build-ktm-nic-reach-case kernel-x64-userspace.
 # Alias ship/docs name for F8-1
 smoke-nic-reach: ktm-userdev-nic-reach-virtfs-run
 
-ktm-userdev-tcp-guest-run: build-ktm-tcp-guest-case kernel-x64-userspace.iso
+ktm-userdev-tcp-guest-run: build-ktm-tcp-guest-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_TCP_GUEST_BIN) \
@@ -4131,7 +4625,7 @@ ktm-userdev-tcp-guest-run: build-ktm-tcp-guest-case kernel-x64-userspace.iso
 		--require F8_TCP_GUEST_SENDRECV_OK
 	@echo "✓ ktm-userdev-tcp-guest-run (F8-2 guest TCP)"
 
-ktm-userdev-tcp-guest-virtfs-run: build-ktm-tcp-guest-case kernel-x64-userspace.iso
+ktm-userdev-tcp-guest-virtfs-run: build-ktm-tcp-guest-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_TCP_GUEST_BIN) \
@@ -4162,7 +4656,7 @@ build-ktm-tcp-wire-case:
 F8_TCP_WIRE_HOST_OK = /tmp/f8-tcp-wire-host.ok
 F8_TCP_WIRE_NETDEV = user,id=net0
 
-ktm-userdev-tcp-wire-virtfs-run: build-ktm-tcp-wire-case kernel-x64-userspace.iso
+ktm-userdev-tcp-wire-virtfs-run: build-ktm-tcp-wire-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@rm -f $(F8_TCP_WIRE_HOST_OK)
 	@python3 scripts/tcp_wire_host_listener.py --port 8888 --expect WIRETCP \
@@ -4177,6 +4671,12 @@ ktm-userdev-tcp-wire-virtfs-run: build-ktm-tcp-wire-case kernel-x64-userspace.is
 		--require F8_TCP_WIRE_OK \
 		--require F8_TCP_WIRE_CONNECT_OK \
 		--require F8_TCP_WIRE_SENDRECV_OK \
+		--require F8_TCP_WIRE_REXMIT_OK \
+		--require F8_TCP_WIRE_WINDOW_OK \
+		--require F8_TCP_WIRE_CWND_OK \
+		--require F8_TCP_WIRE_DUPACK_OK \
+		--require F8_TCP_WIRE_SACK_OK \
+		--require F8_TCP_WIRE_RENO_RECOVERY_OK \
 		--require KTM_HOSTSHARE_REPORT_OK \
 		--host-file ktm_tcp_wire.txt \
 		--host-grep F8_TCP_WIRE_OK \
@@ -4191,7 +4691,7 @@ ktm-userdev-tcp-wire-virtfs-run: build-ktm-tcp-wire-case kernel-x64-userspace.is
 	exit $$RC
 	@echo "✓ ktm-userdev-tcp-wire-virtfs-run (F8-3 wire TCP guest→host 10.0.2.2:8888)"
 
-ktm-userdev-tcp-wire-run: build-ktm-tcp-wire-case kernel-x64-userspace.iso
+ktm-userdev-tcp-wire-run: build-ktm-tcp-wire-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@rm -f $(F8_TCP_WIRE_HOST_OK)
 	@python3 scripts/tcp_wire_host_listener.py --port 8888 --expect WIRETCP \
@@ -4206,6 +4706,12 @@ ktm-userdev-tcp-wire-run: build-ktm-tcp-wire-case kernel-x64-userspace.iso
 		--require F8_TCP_WIRE_OK \
 		--require F8_TCP_WIRE_CONNECT_OK \
 		--require F8_TCP_WIRE_SENDRECV_OK \
+		--require F8_TCP_WIRE_REXMIT_OK \
+		--require F8_TCP_WIRE_WINDOW_OK \
+		--require F8_TCP_WIRE_CWND_OK \
+		--require F8_TCP_WIRE_DUPACK_OK \
+		--require F8_TCP_WIRE_SACK_OK \
+		--require F8_TCP_WIRE_RENO_RECOVERY_OK \
 		--qemu-arg=-netdev --qemu-arg=$(F8_TCP_WIRE_NETDEV) \
 		--qemu-arg=-device --qemu-arg=rtl8139,netdev=net0 \
 		|| RC=$$?; \
@@ -4218,6 +4724,49 @@ ktm-userdev-tcp-wire-run: build-ktm-tcp-wire-case kernel-x64-userspace.iso
 	@echo "✓ ktm-userdev-tcp-wire-run (F8-3 wire TCP)"
 
 smoke-tcp-wire: ktm-userdev-tcp-wire-virtfs-run
+
+.PHONY: smoke-tcp-listen build-init-tcp-listen-smoke
+F8_TCP_LISTEN_HOST_OK = /tmp/f8-tcp-listen-host.ok
+F8_TCP_LISTEN_SMOKE_LOG = /tmp/tcp-listen-smoke.log
+F8_TCP_LISTEN_HOSTPORT = 18777
+F8_TCP_LISTEN_NETDEV = user,id=net0,hostfwd=tcp::$(F8_TCP_LISTEN_HOSTPORT)-:7777
+
+build-init-tcp-listen-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_tcp_listen_smoke.c
+	@echo "✓ build-init-tcp-listen-smoke OK"
+
+smoke-tcp-listen: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   F8 wire TCP listen+accept (host→guest :7777)..."
+	@$(MAKE) -s build-init-tcp-listen-smoke
+	@DISK=$$(mktemp /tmp/ir0-tcp-listen.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(F8_TCP_LISTEN_HOST_OK) $(F8_TCP_LISTEN_SMOKE_LOG); \
+	python3 scripts/tcp_wire_host_connector.py --port $(F8_TCP_LISTEN_HOSTPORT) \
+		--payload 'LISTENOK\n' --timeout 75 --out $(F8_TCP_LISTEN_HOST_OK) & \
+	HPID=$$!; \
+	$(SMOKE_QEMU_RUN) --log $(F8_TCP_LISTEN_SMOKE_LOG) --timeout 90 \
+		--done 'F8_TCP_LISTEN_OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-netdev $(F8_TCP_LISTEN_NETDEV) \
+		-device rtl8139,netdev=net0 \
+		-serial stdio -display none -m 256M -no-reboot || true; \
+	kill $$HPID 2>/dev/null || true; wait $$HPID 2>/dev/null || true; \
+	rm -f $$DISK; \
+	if grep -q "F8_TCP_LISTEN_BOUND_OK" $(F8_TCP_LISTEN_SMOKE_LOG) && \
+	   grep -q "F8_TCP_LISTEN_ACCEPT_OK" $(F8_TCP_LISTEN_SMOKE_LOG) && \
+	   grep -q "F8_TCP_LISTEN_EOF_OK" $(F8_TCP_LISTEN_SMOKE_LOG) && \
+	   grep -q "F8_TCP_LISTEN_OK" $(F8_TCP_LISTEN_SMOKE_LOG) && \
+	   test -f $(F8_TCP_LISTEN_HOST_OK); then \
+		echo "✓ smoke-tcp-listen passed (guest accept/recv/EOF + host connector)"; \
+	else \
+		echo "✗ smoke-tcp-listen FAILED"; \
+		grep -E 'F8_TCP_LISTEN_|panic' $(F8_TCP_LISTEN_SMOKE_LOG) | tail -60; \
+		exit 1; \
+	fi
 
 ktm-check: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run

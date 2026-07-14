@@ -32,3 +32,11 @@ typedef struct rr_task
 void rr_add_process(process_t *proc);
 void rr_remove_process(process_t *proc);
 void rr_schedule_next(void);
+int rr_count_runnable(void);
+void rr_promote_process(process_t *proc);
+
+/*
+ * Shared context-switch path after a backend has selected @next.
+ * Used by RR and by the priority-band scheduler (not a runqueue API).
+ */
+void sched_context_switch_to(process_t *next);

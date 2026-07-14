@@ -26,6 +26,7 @@
 #include <ir0/kmem.h>
 #include <mm/allocator.h>
 #include <ir0/oops.h>
+#include <ir0/ktm/fault.h>
 #include <config.h>
 
 /* Compiler optimization hints */
@@ -149,6 +150,8 @@ void *kmalloc_try(size_t size)
 	if (unlikely(size == 0))
 		return NULL;
 	if (unlikely(size > SIMPLE_HEAP_SIZE))
+		return NULL;
+	if (KTM_FAULT_HIT("kmem.alloc"))
 		return NULL;
 	return __kmalloc_impl(size);
 }
