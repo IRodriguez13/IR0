@@ -19,7 +19,7 @@
 #include <ir0/errno.h>
 #include <ir0/process.h>
 #include <ir0/signals.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/permissions.h>
 #include <ir0/clock_wait.h>
 #include <ir0/clock.h>
@@ -36,7 +36,7 @@
 #include <ir0/kmem.h>
 #include <ir0/validation.h>
 #include <ir0/debug_runtime.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ktm_probe_diag.h>
 #include <ir0/ktm/checkpoint.h>
 #include <config.h>

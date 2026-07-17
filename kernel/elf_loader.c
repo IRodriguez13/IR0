@@ -12,7 +12,7 @@
  */
 
 #include "process.h"
-#include "scheduler_api.h"
+#include <ir0/sched.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>

@@ -23,5 +23,6 @@
  */
 void arch_context_switch(task_t *prev, task_t *next);
 uint64_t arch_get_current_page_directory(void);
+void arch_set_current_kernel_stack(struct process *p);
 
 #endif /* _IR0_CONTEXT_H */

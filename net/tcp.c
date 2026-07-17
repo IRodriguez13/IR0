@@ -17,7 +17,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/net.h>
 #include <ir0/errno.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <string.h>
 
 #define TCP_WIRE_TIMEOUT_MS 5000U
@@ -711,7 +711,7 @@ static void tcp_out_run_recovery_selftest(struct net_device *dev, ip4_addr_t pee
 		if (g_out.in_recovery && !g_out.reno_recovery_ok_logged)
 		{
 			g_out.reno_recovery_ok_logged = 1;
-			serial_print("F8_TCP_WIRE_RENO_RECOVERY_OK\n");
+			klog_print("F8_TCP_WIRE_RENO_RECOVERY_OK\n");
 		}
 	}
 
@@ -1120,7 +1120,7 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	{
 		g_out.window_ok_logged = 1;
 		tcp_irq_restore(f);
-		serial_print("F8_TCP_WIRE_WINDOW_OK\n");
+		klog_print("F8_TCP_WIRE_WINDOW_OK\n");
 	}
 	else
 		tcp_irq_restore(f);
@@ -1207,11 +1207,11 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 					g_out.reno_recovery_print_pending = 0;
 				tcp_irq_restore(f);
 				if (print_dup)
-					serial_print("F8_TCP_WIRE_DUPACK_OK\n");
+					klog_print("F8_TCP_WIRE_DUPACK_OK\n");
 				if (print_sack)
-					serial_print("F8_TCP_WIRE_SACK_OK\n");
+					klog_print("F8_TCP_WIRE_SACK_OK\n");
 				if (print_reno)
-					serial_print("F8_TCP_WIRE_RENO_RECOVERY_OK\n");
+					klog_print("F8_TCP_WIRE_RENO_RECOVERY_OK\n");
 			}
 		}
 		tcp_busy_wait_ms(1);
@@ -1225,7 +1225,7 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	{
 		g_out.rexmit_ok_logged = 1;
 		tcp_irq_restore(f);
-		serial_print("F8_TCP_WIRE_REXMIT_OK\n");
+		klog_print("F8_TCP_WIRE_REXMIT_OK\n");
 	}
 	else
 		tcp_irq_restore(f);
@@ -1435,9 +1435,9 @@ void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,
 				g_out.sack_print_pending = 0;
 			tcp_irq_restore(f);
 			if (print_cwnd)
-				serial_print("F8_TCP_WIRE_CWND_OK\n");
+				klog_print("F8_TCP_WIRE_CWND_OK\n");
 			if (print_sack)
-				serial_print("F8_TCP_WIRE_SACK_OK\n");
+				klog_print("F8_TCP_WIRE_SACK_OK\n");
 		}
 		/* Still allow inbound handler if this were a listen sock — not for client. */
 		return;

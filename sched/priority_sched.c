@@ -13,11 +13,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "priority_sched.h"
-#include "rr_sched.h"
+#include "sched_ops.h"
+#include "sched_switch.h"
 #include <ir0/arch_port.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
-#include <ir0/serial_io.h>
 #include <string.h>
 
 typedef struct prio_task
@@ -299,3 +299,11 @@ int priority_sched_selftest(void)
 		return -1;
 	return 0;
 }
+
+const struct ir0_sched_ops ir0_priority_sched_ops = {
+	.add = priority_add_process,
+	.remove = priority_remove_process,
+	.schedule_next = priority_schedule_next,
+	.count_runnable = priority_count_runnable,
+	.promote = priority_promote_process,
+};

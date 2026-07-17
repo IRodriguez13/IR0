@@ -55,6 +55,21 @@ int ir0_block_count(void);
 const char *ir0_block_name_at(int index);
 dev_t ir0_block_dev_at(int index);
 
+/** Map legacy ATA-style disk_id 0..3 → "hda"/"hdb"/"hdc"/"hdd". */
+const char *ir0_block_legacy_name(uint8_t disk_id);
+
+/** Nonzero if a device with @name is registered. */
+int ir0_block_name_is_present(const char *name);
+
+/** Sector count by device name (0 if missing). */
+uint64_t ir0_block_sector_count_by_name(const char *name);
+
+/** Read/write by name; returns 0 on success, negative errno on failure. */
+int ir0_block_read_by_name(const char *name, uint64_t lba, uint32_t count,
+			   void *buf);
+int ir0_block_write_by_name(const char *name, uint64_t lba, uint32_t count,
+			    const void *buf);
+
 #ifdef TEST_HOST
 /* Host-only: clear registry between unit tests. */
 void ir0_block_reset_for_test(void);

@@ -15,7 +15,7 @@
 #include <ir0/task.h>
 #include <ir0/process.h>
 #include <ir0/arch_port.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <ir0/debug_runtime.h>
 #include <config.h>
 #include <ir0/paging.h>
@@ -100,39 +100,39 @@ static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_pro
 	(void)next;
 	return;
 #else
-	serial_print("[WAIT_EXIT_AUDIT][CTX] prev_pid=");
-	serial_print_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
-	serial_print(" prev_state=");
-	serial_print_hex64(prev_proc ? (uint64_t)prev_proc->state : 0);
-	serial_print(" prev_irq_saved=");
-	serial_print_hex64(prev_proc ? (uint64_t)prev_proc->irq_frame_saved : 0);
-	serial_print(" next_pid=");
-	serial_print_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
-	serial_print(" next_state=");
-	serial_print_hex64(next_proc ? (uint64_t)next_proc->state : 0);
-	serial_print(" next_irq_saved=");
-	serial_print_hex64(next_proc ? (uint64_t)next_proc->irq_frame_saved : 0);
-	serial_print(" next_cr3=");
-	serial_print_hex64(next ? task_mm_root(next) : 0);
-	serial_print(" active_cr3=");
-	serial_print_hex64(get_current_page_directory());
-	serial_print("\n");
+	klog_print("[WAIT_EXIT_AUDIT][CTX] prev_pid=");
+	klog_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
+	klog_print(" prev_state=");
+	klog_hex64(prev_proc ? (uint64_t)prev_proc->state : 0);
+	klog_print(" prev_irq_saved=");
+	klog_hex64(prev_proc ? (uint64_t)prev_proc->irq_frame_saved : 0);
+	klog_print(" next_pid=");
+	klog_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
+	klog_print(" next_state=");
+	klog_hex64(next_proc ? (uint64_t)next_proc->state : 0);
+	klog_print(" next_irq_saved=");
+	klog_hex64(next_proc ? (uint64_t)next_proc->irq_frame_saved : 0);
+	klog_print(" next_cr3=");
+	klog_hex64(next ? task_mm_root(next) : 0);
+	klog_print(" active_cr3=");
+	klog_hex64(get_current_page_directory());
+	klog_print("\n");
 
 	if (prev_proc && prev_proc->state == PROCESS_ZOMBIE)
 	{
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] SCHED_SELECTED_ZOMBIE "
+		klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] SCHED_SELECTED_ZOMBIE "
 		             "note=prev_is_zombie_on_switch\n");
 	}
 	if (prev_proc && prev_proc->irq_frame_saved &&
 	    (!next_proc || next_proc->state != PROCESS_BLOCKED))
 	{
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] WAITPID_PARENT_CONTEXT_CORRUPT "
+		klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] WAITPID_PARENT_CONTEXT_CORRUPT "
 		             "reason=prev_irq_saved_but_next_not_blocked\n");
 	}
 	if (prev_proc && prev_proc->irq_frame_saved && next_proc &&
 	    next_proc->irq_frame_saved == 0)
 	{
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] WAITPID_PARENT_CONTEXT_CORRUPT "
+		klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] WAITPID_PARENT_CONTEXT_CORRUPT "
 		             "reason=resume_triggered_by_prev_irq_not_next\n");
 	}
 
@@ -143,35 +143,35 @@ static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_pro
 		uint16_t cs = next_proc->task.cs;
 		uint16_t ss = next_proc->task.ss;
 
-		serial_print("[WAIT_EXIT_AUDIT][CTX] next_user_frame rip=");
-		serial_print_hex64(rip);
-		serial_print(" rsp=");
-		serial_print_hex64(rsp);
-		serial_print(" cs=");
-		serial_print_hex64((uint64_t)cs);
-		serial_print(" ss=");
-		serial_print_hex64((uint64_t)ss);
-		serial_print(" rflags=");
-		serial_print_hex64(next_proc->task.rflags);
-		serial_print(" rax=");
-		serial_print_hex64(next_proc->task.rax);
-		serial_print("\n");
+		klog_print("[WAIT_EXIT_AUDIT][CTX] next_user_frame rip=");
+		klog_hex64(rip);
+		klog_print(" rsp=");
+		klog_hex64(rsp);
+		klog_print(" cs=");
+		klog_hex64((uint64_t)cs);
+		klog_print(" ss=");
+		klog_hex64((uint64_t)ss);
+		klog_print(" rflags=");
+		klog_hex64(next_proc->task.rflags);
+		klog_print(" rax=");
+		klog_hex64(next_proc->task.rax);
+		klog_print("\n");
 
 		if (task_mm_root(next) == 0 && next_proc->page_directory)
 		{
-			serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_CR3_BAD reason=task_cr3_zero\n");
+			klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_CR3_BAD reason=task_cr3_zero\n");
 		}
 		if (rip < 0x00400000ULL || rip > 0x00007FFFFFFFFFFFULL)
 		{
-			serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RIP\n");
+			klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RIP\n");
 		}
 		if (rsp < 0x00400000ULL || rsp > 0x00007FFFFFFFFFFFULL)
 		{
-			serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RSP\n");
+			klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RSP\n");
 		}
 		if (cs != (uint16_t)USER_CODE_SEL || ss != (uint16_t)USER_DATA_SEL)
 		{
-			serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_CS_SS\n");
+			klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_CS_SS\n");
 		}
 	}
 #endif
@@ -262,8 +262,8 @@ void arch_context_switch(task_t *prev, task_t *next)
 
         wait_exit_audit_ctx_resume(prev_proc, next_proc, next);
 #if IR0_DEBUG_WAIT
-        serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] RESUME_GATE_USES_NEXT_FIXED\n");
-        serial_print("[WAIT_EXIT_AUDIT][CTX] resume_path=arch_switch_to_user_task\n");
+        klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] RESUME_GATE_USES_NEXT_FIXED\n");
+        klog_print("[WAIT_EXIT_AUDIT][CTX] resume_path=arch_switch_to_user_task\n");
 #endif
         /*
          * Tear down the zombie child mm only after switching CR3 to the
@@ -320,70 +320,70 @@ void arch_context_switch(task_t *prev, task_t *next)
                 int frame_in_kernel = (frame_addr < 0x00400000ULL ||
                                        frame_addr > 0x00007FFFFFFFFFFFULL);
 
-                serial_print("[CTX][RESUME] prev_pid=");
-                serial_print_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
-                serial_print(" next_pid=");
-                serial_print_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
-                serial_print(" current=");
-                serial_print_hex64(current_before);
-                serial_print(" active_cr3_before=");
-                serial_print_hex64(active_cr3_before);
-                serial_print(" active_cr3_pre_iret=");
-                serial_print_hex64(get_current_page_directory());
-                serial_print(" active_cr3_after_expected=");
-                serial_print_hex64(active_cr3_after_expected);
-                serial_print(" next_task_cr3=");
-                serial_print_hex64(next_task_cr3);
-                serial_print(" frame=");
-                serial_print_hex64(frame_addr);
-                serial_print(" frame_in_kernel=");
-                serial_print(frame_in_kernel ? "1" : "0");
-                serial_print(" frame_in_next_proc=");
-                serial_print(frame_in_next_proc ? "1" : "0");
-                serial_print(" frame_rip=");
-                serial_print_hex64(frame ? frame->rip : 0);
-                serial_print(" frame_rsp=");
-                serial_print_hex64(frame ? frame->rsp : 0);
-                serial_print(" frame_cs=");
-                serial_print_hex64(next_proc ? next_proc->task.cs : 0);
-                serial_print(" frame_ss=");
-                serial_print_hex64(next_proc ? next_proc->task.ss : 0);
-                serial_print(" frame_rflags=");
-                serial_print_hex64(frame ? frame->rflags : 0);
-                serial_print("\n");
+                klog_print("[CTX][RESUME] prev_pid=");
+                klog_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
+                klog_print(" next_pid=");
+                klog_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
+                klog_print(" current=");
+                klog_hex64(current_before);
+                klog_print(" active_cr3_before=");
+                klog_hex64(active_cr3_before);
+                klog_print(" active_cr3_pre_iret=");
+                klog_hex64(get_current_page_directory());
+                klog_print(" active_cr3_after_expected=");
+                klog_hex64(active_cr3_after_expected);
+                klog_print(" next_task_cr3=");
+                klog_hex64(next_task_cr3);
+                klog_print(" frame=");
+                klog_hex64(frame_addr);
+                klog_print(" frame_in_kernel=");
+                klog_print(frame_in_kernel ? "1" : "0");
+                klog_print(" frame_in_next_proc=");
+                klog_print(frame_in_next_proc ? "1" : "0");
+                klog_print(" frame_rip=");
+                klog_hex64(frame ? frame->rip : 0);
+                klog_print(" frame_rsp=");
+                klog_hex64(frame ? frame->rsp : 0);
+                klog_print(" frame_cs=");
+                klog_hex64(next_proc ? next_proc->task.cs : 0);
+                klog_print(" frame_ss=");
+                klog_hex64(next_proc ? next_proc->task.ss : 0);
+                klog_print(" frame_rflags=");
+                klog_hex64(frame ? frame->rflags : 0);
+                klog_print("\n");
 
-                serial_print("[CTX][RESUME_FRAME] rbx=");
-                serial_print_hex64(frame ? frame->rbx : 0);
-                serial_print(" rbp=");
-                serial_print_hex64(frame ? frame->rbp : 0);
-                serial_print(" r12=");
-                serial_print_hex64(frame ? frame->r12 : 0);
-                serial_print(" r13=");
-                serial_print_hex64(frame ? frame->r13 : 0);
-                serial_print(" r14=");
-                serial_print_hex64(frame ? frame->r14 : 0);
-                serial_print(" r15=");
-                serial_print_hex64(frame ? frame->r15 : 0);
-                serial_print(" rdi=");
-                serial_print_hex64(frame ? frame->rdi : 0);
-                serial_print(" rsi=");
-                serial_print_hex64(frame ? frame->rsi : 0);
-                serial_print(" rdx=");
-                serial_print_hex64(frame ? frame->rdx : 0);
-                serial_print(" r10=");
-                serial_print_hex64(frame ? frame->r10 : 0);
-                serial_print(" r8=");
-                serial_print_hex64(frame ? frame->r8 : 0);
-                serial_print(" r9=");
-                serial_print_hex64(frame ? frame->r9 : 0);
-                serial_print("\n");
+                klog_print("[CTX][RESUME_FRAME] rbx=");
+                klog_hex64(frame ? frame->rbx : 0);
+                klog_print(" rbp=");
+                klog_hex64(frame ? frame->rbp : 0);
+                klog_print(" r12=");
+                klog_hex64(frame ? frame->r12 : 0);
+                klog_print(" r13=");
+                klog_hex64(frame ? frame->r13 : 0);
+                klog_print(" r14=");
+                klog_hex64(frame ? frame->r14 : 0);
+                klog_print(" r15=");
+                klog_hex64(frame ? frame->r15 : 0);
+                klog_print(" rdi=");
+                klog_hex64(frame ? frame->rdi : 0);
+                klog_print(" rsi=");
+                klog_hex64(frame ? frame->rsi : 0);
+                klog_print(" rdx=");
+                klog_hex64(frame ? frame->rdx : 0);
+                klog_print(" r10=");
+                klog_hex64(frame ? frame->r10 : 0);
+                klog_print(" r8=");
+                klog_hex64(frame ? frame->r8 : 0);
+                klog_print(" r9=");
+                klog_hex64(frame ? frame->r9 : 0);
+                klog_print("\n");
             }
 #endif
             arch_switch_to_user_task(next);
 #if IR0_DEBUG_WAIT
-            serial_print("[CTX][RESUME] unexpected_return active_cr3_after=");
-            serial_print_hex64(get_current_page_directory());
-            serial_print("\n");
+            klog_print("[CTX][RESUME] unexpected_return active_cr3_after=");
+            klog_hex64(get_current_page_directory());
+            klog_print("\n");
 #endif
         }
         return;

@@ -8,7 +8,7 @@
  */
 
 #include <sched/task.h>
-#include <arch/common/arch_portable.h>
+#include <stdint.h>
 
 extern void arm64_cpu_switch(void *prev_ctx, void *next_ctx);
 extern void arm64_cpu_switch_mm(void *prev_ctx, void *next_ctx, uint64_t next_ttbr);

@@ -1,16 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: init_drv.h
- * Description: Facade for staged hardware driver bootstrap
+ * IR0 Kernel — Driver initialization facade (opaque; no drivers/ include).
  */
 
 #pragma once
 
-#include <drivers/init_drv.h>
+/**
+ * Initialize driver registry / multi-language registration.
+ * Call after heap_init() and before hardware driver init.
+ */
+void drivers_init(void);
+
+/**
+ * Initialize all registered hardware drivers (IRQ/I/O registration).
+ * Call after drivers_init().
+ */
+void init_all_drivers(void);

@@ -320,7 +320,8 @@ KERNEL_OBJS = \
     ktm/ktm_probe_diag.o \
     $(KTM_D1_DIAG_OBJS) \
     ktm/d1_13_malloc_pf_diag.o \
-    sched/scheduler_api.o \
+    sched/sched.o \
+    sched/sched_switch.o \
     sched/sched_resched.o \
     sched/switch/arch_context_switch.o \
     kernel/console_backend.o \
@@ -460,15 +461,14 @@ KERNEL_TEST_OBJS = debug_bins/debug_bins_registry_test.o \
 	ktm/ktm_sched_gate.o \
 	ktm/ktm_resched_trace.o
 
-# Scheduler backend selection from menuconfig
-ifeq ($(CONFIG_SCHEDULER_POLICY),1)
-SCHED_OBJS = sched/cfs_sched.o
-else ifeq ($(CONFIG_SCHEDULER_POLICY),2)
-SCHED_OBJS = sched/priority_sched.o
+# Scheduler backend selection from menuconfig (ops via <ir0/sched.h>).
+# Policy 1 (CFS) is an honest RR alias — same backend object, different policy name.
+ifeq ($(CONFIG_SCHEDULER_POLICY),2)
+SCHED_BACKEND_OBJS = sched/priority_sched.o
 else
-SCHED_OBJS =
+SCHED_BACKEND_OBJS = sched/rr_sched.o
 endif
-KERNEL_OBJS += sched/rr_sched.o $(SCHED_OBJS)
+KERNEL_OBJS += $(SCHED_BACKEND_OBJS)
 ifneq ($(CONFIG_SCHEDULER_POLICY),)
 CFLAGS += -DCONFIG_SCHEDULER_POLICY=$(CONFIG_SCHEDULER_POLICY)
 else
@@ -503,6 +503,8 @@ LIB_OBJS = \
     includes/ir0/utimens.o \
     includes/ir0/exec_read_trace.o \
     includes/ir0/blockdev.o \
+    includes/ir0/mm_port.o \
+    includes/ir0/klog.o \
     includes/ir0/video_backend.o \
     includes/ir0/input_backend.o \
     includes/ir0/audio_backend.o \
@@ -2518,33 +2520,12 @@ smoke-pty-winsz: kernel-x64-userspace.iso
 		grep -E 'PTY_|errno|panic' $(PTY_WINSZ_SMOKE_LOG) | tail -30; exit 1; \
 	fi
 
-.PHONY: smoke-epoll-basic build-init-epoll-basic
+.PHONY: build-init-epoll-basic
 EPOLL_SMOKE_LOG = /tmp/epoll-basic-smoke.log
 build-init-epoll-basic:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_epoll_basic_smoke.c
-	@echo "✓ build-init-epoll-basic OK"
-
-smoke-epoll-basic: kernel-x64-userspace.iso
-	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   epoll create/ctl/wait..."
-	@$(MAKE) -s build-init-epoll-basic
-	@DISK=$$(mktemp /tmp/ir0-epoll.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	rm -f $(EPOLL_SMOKE_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(EPOLL_SMOKE_LOG) --timeout 45 --stale-sec 15 \
-		--done EPOLL_BASIC_OK -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none; \
-	rm -f $$DISK; \
-	if grep -q "EPOLL_BASIC_OK" $(EPOLL_SMOKE_LOG); then \
-		echo "✓ smoke-epoll-basic passed"; \
-	else \
-		echo "✗ smoke-epoll-basic FAILED"; \
-		grep -E 'EPOLL_|panic' $(EPOLL_SMOKE_LOG) | tail -30; exit 1; \
-	fi
+	@echo "✓ build-init-epoll-basic OK (legacy inject; prefer ktm-userdev-epoll-run)"
 
 .PHONY: smoke-prlimit build-init-prlimit
 PRLIMIT_SMOKE_LOG = /tmp/prlimit-smoke.log
@@ -3337,29 +3318,8 @@ smoke-hostshare-9p: kernel-x64-userspace.iso
 	fi
 
 STREAM_SOCK_SMOKE_LOG = /tmp/stream-sock-smoke.log
-smoke-stream-sock: kernel-x64-userspace.iso
-	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   AF_UNIX + TCP loopback streams..."
-	@$(MAKE) -s build-init-stream-sock-smoke
-	@DISK=$$(mktemp /tmp/ir0-stream-sock.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	rm -f $(STREAM_SOCK_SMOKE_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(STREAM_SOCK_SMOKE_LOG) --timeout 60 \
-		--done 'STREAM_SOCK_OK' -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none; \
-	rm -f $$DISK; \
-	if grep -q "STREAM_SOCK_OK" $(STREAM_SOCK_SMOKE_LOG); then \
-		echo "✓ smoke-stream-sock passed"; \
-		if grep -q "STREAM_SENDRECV_OK" $(STREAM_SOCK_SMOKE_LOG); then \
-			echo "✓ STREAM_SENDRECV_OK"; \
-		fi; \
-	else \
-		echo "✗ smoke-stream-sock FAILED"; \
-		grep -E 'STREAM_|errno|panic' $(STREAM_SOCK_SMOKE_LOG) | tail -40; exit 1; \
-	fi
+# Legacy serial inject kept as build-init-stream-sock-smoke only;
+# smoke-stream-sock aliases to ktm-userdev-stream-sock-run (see KTM targets).
 
 .PHONY: smoke-ahci-multi
 AHCI_MULTI_SMOKE_LOG = /tmp/ahci-multi-smoke.log
@@ -4239,6 +4199,8 @@ ktm: ktm-check
 	ktm-userdev-tcp-guest-run ktm-userdev-tcp-guest-virtfs-run smoke-tcp-guest \
 	ktm-userdev-tcp-wire-run ktm-userdev-tcp-wire-virtfs-run smoke-tcp-wire \
 	ktm-userdev-fault-pipe-run smoke-ktm-fault build-ktm-fault-pipe-case \
+	ktm-userdev-epoll-run build-ktm-epoll-case smoke-epoll-basic \
+	ktm-userdev-stream-sock-run build-ktm-stream-sock-case smoke-stream-sock \
 	build-ktm-tcp-wire-case \
 	build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-exec-drain-case build-ktm-reap-drain-case \
@@ -4253,7 +4215,8 @@ ktm-run: kernel-x64-userspace.iso
 KTM_TESTS_DIR = tests/ktm
 KTM_USERDEV_LIB = $(KTM_TESTS_DIR)/lib
 KTM_USERDEV_DIR = $(KTM_TESTS_DIR)/userdev
-KTM_USERDEV_MUSL_FLAGS = -static -Os -Iincludes -I$(KTM_USERDEV_LIB)
+# -idirafter includes: musl stdint/sys win; still finds <ir0/...> uapi (avoid -Iincludes shadow).
+KTM_USERDEV_MUSL_FLAGS = -static -Os -I$(KTM_USERDEV_LIB) -idirafter includes
 KTM_USERDEV_LIB_SRC = $(KTM_USERDEV_LIB)/libktm_user.c
 
 KTM_FORK_WAIT_SRC = $(KTM_USERDEV_DIR)/ktm_fork_wait_case.c $(KTM_USERDEV_LIB_SRC)
@@ -4280,6 +4243,10 @@ KTM_TCP_WIRE_SRC = $(KTM_USERDEV_DIR)/ktm_tcp_wire_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_TCP_WIRE_BIN = $(KTM_USERDEV_DIR)/ktm_tcp_wire_case
 KTM_FAULT_PIPE_SRC = $(KTM_USERDEV_DIR)/ktm_fault_pipe_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_FAULT_PIPE_BIN = $(KTM_USERDEV_DIR)/ktm_fault_pipe_case
+KTM_EPOLL_SRC = $(KTM_USERDEV_DIR)/ktm_epoll_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_EPOLL_BIN = $(KTM_USERDEV_DIR)/ktm_epoll_case
+KTM_STREAM_SOCK_SRC = $(KTM_USERDEV_DIR)/ktm_stream_sock_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_STREAM_SOCK_BIN = $(KTM_USERDEV_DIR)/ktm_stream_sock_case
 
 # All userdev pilots run via hostshare stub + share payload (virtio-9p).
 build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
@@ -4287,7 +4254,8 @@ build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-init-exit-drain-case build-ktm-posix-pseudofs-case \
 	build-ktm-input-det-case build-ktm-nic-reach-case \
 	build-ktm-tcp-guest-case build-ktm-tcp-wire-case \
-	build-ktm-fault-pipe-case: build-init-hostshare-exec
+	build-ktm-fault-pipe-case build-ktm-epoll-case build-ktm-stream-sock-case: \
+	build-init-hostshare-exec
 
 build-ktm-fork-wait-case:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -4333,6 +4301,28 @@ build-ktm-fault-pipe-case:
 	@file $(KTM_FAULT_PIPE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fault-pipe-case OK"
 
+build-ktm-epoll-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building epoll_basic pilot ($(KTM_EPOLL_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_EPOLL_BIN) $(KTM_EPOLL_SRC)
+	@file $(KTM_EPOLL_BIN) | grep -q ELF
+	@echo "✓ build-ktm-epoll-case OK"
+
+build-ktm-stream-sock-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building stream_sock pilot ($(KTM_STREAM_SOCK_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_STREAM_SOCK_BIN) $(KTM_STREAM_SOCK_SRC)
+	@file $(KTM_STREAM_SOCK_BIN) | grep -q ELF
+	@echo "✓ build-ktm-stream-sock-case OK"
+
 ktm-userdev-run: build-ktm-fork-wait-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py --log /tmp/ktm-userdev-run.log --timeout 90
@@ -4351,6 +4341,36 @@ ktm-userdev-fault-pipe-run: build-ktm-fault-pipe-case build-init-hostshare-exec 
 	@echo "✓ ktm-userdev-fault-pipe-run (pipe.create fault injection)"
 
 smoke-ktm-fault: ktm-userdev-fault-pipe-run
+
+ktm-userdev-epoll-run: build-ktm-epoll-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_EPOLL_BIN) \
+		--log /tmp/ktm-userdev-epoll.log --timeout 90 \
+		--done KTM_EPOLL_OK \
+		--require KTM_EPOLL_OK \
+		--require EPOLL_BASIC_OK \
+		--require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-epoll-run (epoll create/ctl/wait)"
+
+# Canonical plane is KTM; keep smoke name as alias for CI muscle memory.
+smoke-epoll-basic: ktm-userdev-epoll-run
+	@echo "✓ smoke-epoll-basic (alias → ktm-userdev-epoll-run)"
+
+ktm-userdev-stream-sock-run: build-ktm-stream-sock-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_STREAM_SOCK_BIN) \
+		--log /tmp/ktm-userdev-stream-sock.log --timeout 90 \
+		--done KTM_STREAM_SOCK_OK \
+		--require KTM_STREAM_SOCK_OK \
+		--require STREAM_SOCK_OK \
+		--require STREAM_SENDRECV_OK \
+		--require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-stream-sock-run (AF_UNIX + TCP loopback)"
+
+smoke-stream-sock: ktm-userdev-stream-sock-run
+	@echo "✓ smoke-stream-sock (alias → ktm-userdev-stream-sock-run)"
 
 ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi

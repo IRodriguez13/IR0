@@ -16,7 +16,7 @@
 #include "syscalls.h"
 #include "debug_bins/debug_bins.h"
 #include <config.h>
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <string.h>
@@ -403,12 +403,12 @@ void ktest_block_hda_read_contract(void)
 {
 	KTEST_BEGIN("block_hda_read_contract");
 
-	KASSERT(block_dev_is_present("hda"));
-	KASSERT_GT(block_dev_get_sector_count("hda"), 0ULL);
+	KASSERT(ir0_block_name_is_present("hda"));
+	KASSERT_GT(ir0_block_sector_count_by_name("hda"), 0ULL);
 
 	char buf[512];
 	memset(buf, 0, sizeof(buf));
-	KASSERT(block_dev_read_sectors("hda", 0, 1, buf));
+	KASSERT(ir0_block_read_by_name("hda", 0, 1, buf) == 0);
 
 	int64_t fd = sys_open("/dev/hda", KTEST_O_RDONLY, 0);
 	KASSERT_GT(fd, 0);

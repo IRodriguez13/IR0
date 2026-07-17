@@ -230,7 +230,7 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 | 18b | **Fast incremental Rust/C++ build** | `unibuild-rust`, `test-driver-cpp`, ccache — **BUILD-1** |
 | 18c | **Reference driver vertical slice** | Rust or C++ → registry → `/dev`/sysfs → smoke — **DRV-4** |
 | 18d | **Kernel module loader + modprobe** | ELF reloc, `insmod`/`rmmod`/`modprobe` — **MOD-*** |
-| 19 | **Scheduler backend (CFS/priority)** | Own runqueue; menuconfig-selectable |
+| 19 | **Scheduler backend (CFS/priority)** | **Partial** — priority bands = real ops backend (`sched.h`); CFS policy `1` = honest RR alias (no fake `cfs_sched` wrapper). Real CFS runqueue still open. |
 | 20 | **SMP** | Per-CPU runqueue, IPI, pmap shootdown — major oleada |
 | 21 | **ACPI/PCI enumeration hardening** | NIC + storage discovery on real HW |
 

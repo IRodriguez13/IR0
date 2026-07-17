@@ -20,9 +20,7 @@
 
 #include "devfs.h"
 #include <ir0/kmem.h>
-#include <ir0/vga.h>
 #include <ir0/logging.h>
-#include <ir0/keyboard.h>
 #include <ir0/errno.h>
 #include <config.h>
 #include <ir0/console_backend.h>
@@ -34,12 +32,13 @@
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
 #endif
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/partition.h>
 #include <string.h>
 #include <ir0/clock.h>
 #include <ir0/process.h>
 #include <ir0/signals.h>
+#include <ir0/klog.h>
 #include <ir0/serial_io.h>
 #include <ir0/ipc.h>
 #if CONFIG_ENABLE_BLUETOOTH
@@ -48,7 +47,6 @@
 #include <ir0/video_backend.h>
 #include <ir0/copy_user.h>
 #include <ir0/input.h>
-#include <ir0/serial_io.h>
 #include <ir0/credentials.h>
 #include <ir0/fb.h>
 #include <ir0/ktm/userdev.h>
@@ -261,13 +259,13 @@ static void devfs_console_diag_once(devfs_entry_t *entry)
         return;
     diag_done = 1;
 
-    serial_print("DEV_CONSOLE_NODE_OK\n");
-    serial_print("[DEVFS][CONSOLE] name=");
-    serial_print(entry && entry->name ? entry->name : "(null)");
-    serial_print(" device_id=");
-    serial_print_hex32(entry ? entry->device_id : 0);
-    serial_print(" ops=console\n");
-    serial_print("DEV_CONSOLE_OPEN_OK\n");
+    klog_print("DEV_CONSOLE_NODE_OK\n");
+    klog_print("[DEVFS][CONSOLE] name=");
+    klog_print(entry && entry->name ? entry->name : "(null)");
+    klog_print(" device_id=");
+    klog_hex32(entry ? entry->device_id : 0);
+    klog_print(" ops=console\n");
+    klog_print("DEV_CONSOLE_OPEN_OK\n");
 }
 
 static int64_t dev_console_open(devfs_entry_t *entry, int flags)
@@ -1160,8 +1158,8 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
 
         if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
             return -ENODEV;
-        const char *disk_name = block_dev_legacy_name(disk_id);
-        if (!disk_name || !block_dev_is_present(disk_name))
+        const char *disk_name = ir0_block_legacy_name(disk_id);
+        if (!disk_name || !ir0_block_name_is_present(disk_name))
             return -ENODEV;
         if (offset < 0)
             return -1;
@@ -1180,7 +1178,7 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         }
         else
         {
-            uint64_t disk_sectors = block_dev_get_sector_count(disk_name);
+            uint64_t disk_sectors = ir0_block_sector_count_by_name(disk_name);
             if (sector_off >= disk_sectors)
                 return 0;
             if (sector_off + num_sectors > disk_sectors)
@@ -1191,7 +1189,7 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         while (num_sectors > 0)
         {
             uint8_t n = (num_sectors > 255) ? 255 : (uint8_t)num_sectors;
-            if (!block_dev_read_sectors(disk_name, (uint32_t)start_lba, n, dst))
+            if (ir0_block_read_by_name(disk_name, (uint32_t)start_lba, n, dst))
                 return (int64_t)bytes_done;
             bytes_done += (size_t)n * 512;
             start_lba += n;
@@ -1222,11 +1220,11 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         output_len += (size_t)n;
     
     int found_drives = 0;
-    int total_devs = block_dev_count();
+    int total_devs = ir0_block_count();
     for (int i = 0; i < total_devs; i++)
     {
-        const char *disk_name = block_dev_name_at(i);
-        if (!disk_name || !block_dev_is_present(disk_name))
+        const char *disk_name = ir0_block_name_at(i);
+        if (!disk_name || !ir0_block_name_is_present(disk_name))
             continue;
         
         found_drives++;
@@ -1235,8 +1233,8 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         if (len < 0 || len >= (int)sizeof(devname))
             continue;
         
-        /* block_dev_get_sector_count() returns size in 512-byte sectors */
-        uint64_t size = block_dev_get_sector_count(disk_name);
+        /* ir0_block_sector_count_by_name() returns size in 512-byte sectors */
+        uint64_t size = ir0_block_sector_count_by_name(disk_name);
         if (size == 0)
         {
             n = snprintf(output + output_len, sizeof(output) - output_len,
@@ -1353,8 +1351,8 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
 
     if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
         return -ENODEV;
-    const char *disk_name = block_dev_legacy_name(disk_id);
-    if (!disk_name || !block_dev_is_present(disk_name))
+    const char *disk_name = ir0_block_legacy_name(disk_id);
+    if (!disk_name || !ir0_block_name_is_present(disk_name))
         return -ENODEV;
     if (offset < 0)
         return -1;
@@ -1373,7 +1371,7 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
     }
     else
     {
-        uint64_t disk_sectors = block_dev_get_sector_count(disk_name);
+        uint64_t disk_sectors = ir0_block_sector_count_by_name(disk_name);
         if (sector_off >= disk_sectors)
             return 0;
         if (sector_off + num_sectors > disk_sectors)
@@ -1384,7 +1382,7 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
     while (num_sectors > 0)
     {
         uint8_t n = (num_sectors > 255) ? 255 : (uint8_t)num_sectors;
-        if (!block_dev_write_sectors(disk_name, (uint32_t)start_lba, n, src))
+        if (ir0_block_write_by_name(disk_name, (uint32_t)start_lba, n, src))
             return (int64_t)bytes_done;
         bytes_done += (size_t)n * 512;
         start_lba += n;
@@ -1434,12 +1432,12 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 if (req && req->buffer)
                 {
                     uint8_t d = have_disk_ctx ? disk_id : req->drive;
-                    const char *disk_name = block_dev_legacy_name(d);
+                    const char *disk_name = ir0_block_legacy_name(d);
                     uint32_t lba = (uint32_t)req->lba;
                     if (have_disk_ctx && !is_whole)
                         lba = (uint32_t)(part_start_lba + req->lba);
-                    if (disk_name && block_dev_is_present(disk_name) &&
-                        block_dev_read_sectors(disk_name, lba, 1, req->buffer))
+                    if (disk_name && ir0_block_name_is_present(disk_name) &&
+                        ir0_block_read_by_name(disk_name, lba, 1, req->buffer) == 0)
                         return 512;
                 }
             }
@@ -1457,12 +1455,12 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 if (req && req->buffer)
                 {
                     uint8_t d = have_disk_ctx ? disk_id : req->drive;
-                    const char *disk_name = block_dev_legacy_name(d);
+                    const char *disk_name = ir0_block_legacy_name(d);
                     uint32_t lba = (uint32_t)req->lba;
                     if (have_disk_ctx && !is_whole)
                         lba = (uint32_t)(part_start_lba + req->lba);
-                    if (disk_name && block_dev_is_present(disk_name) &&
-                        block_dev_write_sectors(disk_name, lba, 1, req->buffer))
+                    if (disk_name && ir0_block_name_is_present(disk_name) &&
+                        ir0_block_write_by_name(disk_name, lba, 1, req->buffer) == 0)
                         return 512;
                 }
             }
@@ -1480,11 +1478,11 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 if (geom)
                 {
                     uint8_t d = have_disk_ctx ? disk_id : geom->drive;
-                    const char *disk_name = block_dev_legacy_name(d);
-                    if (!disk_name || !block_dev_is_present(disk_name))
+                    const char *disk_name = ir0_block_legacy_name(d);
+                    if (!disk_name || !ir0_block_name_is_present(disk_name))
                         return -1;
                     uint64_t sectors =
-                        (have_disk_ctx && !is_whole) ? part_sectors : block_dev_get_sector_count(disk_name);
+                        (have_disk_ctx && !is_whole) ? part_sectors : ir0_block_sector_count_by_name(disk_name);
                     if (geom->size_sectors)
                         *geom->size_sectors = sectors;
                     if (geom->size_bytes)
@@ -1901,7 +1899,7 @@ static void pty_hangup_fg(void)
 {
 	if (!g_pty.ctty_set || g_pty.fg_pgid <= 0)
 		return;
-	serial_print("PTY_SIGHUP_PGRP\n");
+	klog_print("PTY_SIGHUP_PGRP\n");
 	(void)send_signal_pgrp(g_pty.fg_pgid, SIGHUP);
 	g_pty.ctty_set = 0;
 	g_pty.fg_pgid = 0;
@@ -2054,9 +2052,9 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 			(void)send_signal_pgrp(g_pty.fg_pgid, SIGWINCH);
 		else if (current_process)
 			(void)send_signal((int)current_process->task.pid, SIGWINCH);
-		serial_print("PTY_WINCH_SENT\n");
+		klog_print("PTY_WINCH_SENT\n");
 		handle_signals();
-		serial_print("PTY_TIOCSWINSZ_OK\n");
+		klog_print("PTY_TIOCSWINSZ_OK\n");
 		return 0;
 	}
 	if (request == IR0_TIOCGPTN)
@@ -2090,7 +2088,7 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 		g_pty.ctty_set = 1;
 		g_pty.session_sid = current_process->sid;
 		g_pty.fg_pgid = current_process->pgid;
-		serial_print("PTY_TIOCSCTTY_OK\n");
+		klog_print("PTY_TIOCSCTTY_OK\n");
 		return 0;
 	}
 	if (request == IR0_TIOCSPGRP)
@@ -2449,8 +2447,8 @@ static void devfs_register_disk_topology(void)
      */
     for (unsigned d = 0; d < (unsigned)MAX_DISKS; d++)
     {
-        const char *dn = block_dev_legacy_name((uint8_t)d);
-        if (!dn || !block_dev_is_present(dn))
+        const char *dn = ir0_block_legacy_name((uint8_t)d);
+        if (!dn || !ir0_block_name_is_present(dn))
             continue;
 
         memset(&disk_ctx_whole_slots[d], 0, sizeof(disk_ctx_whole_slots[d]));

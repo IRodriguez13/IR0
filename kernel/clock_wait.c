@@ -16,7 +16,7 @@
 #include <ir0/clock.h>
 #include <ir0/process.h>
 #include <ir0/errno.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/arch_port.h>
 
 extern void kernel_idle_poll(void);

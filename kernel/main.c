@@ -32,15 +32,16 @@
 #include <kernel/elf_loader.h>
 #include <ir0/clock.h>
 #include <ir0/init_drv.h>
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
+#include <ir0/input_backend.h>
 #include <ir0/multiboot.h>
 #include <ir0/ktm/ktm.h>
 #include "ipc.h"
 #include "syscalls.h"
-#include "scheduler_api.h"
+#include <ir0/sched.h>
 #include "process.h"
 #include "rootfs_base.h"
 
@@ -71,7 +72,7 @@ void kernel_idle_poll(void)
 #endif
 	poll_wake_check();
 	sleep_wake_check();
-	keyboard_poll_ps2();
+	input_kbd_poll_ps2();
 	stdin_wake_check();
 	pipe_wake_check();
 	if (ir0_console_take_resched())
@@ -195,7 +196,7 @@ void kmain(uint32_t multiboot_info)
     init_all_drivers();
 
     /* Check configured root block device availability before filesystem init */
-    if (!block_dev_is_present(CONFIG_ROOT_BLOCK_DEVICE))
+    if (!ir0_block_name_is_present(CONFIG_ROOT_BLOCK_DEVICE))
     {
         serial_print("[BOOT] WARNING: Configured root block device not detected\n");
         serial_print("[BOOT] Filesystem initialization may fail\n");

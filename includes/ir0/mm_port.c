@@ -6,19 +6,24 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: mm_port.h
- * Description: Opaque MM stats facade — no <mm/...> includes (impl in mm_port.c).
+ * File: mm_port.c
+ * Description: MM stats facade implementation (PMM + heap allocator).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#pragma once
+#include <ir0/mm_port.h>
 
-#include <stddef.h>
-#include <stdint.h>
-
-#define IR0_MM_PAGE_SIZE 4096u
+#include <mm/allocator.h>
+#include <mm/pmm.h>
 
 void ir0_mm_pmm_stats(size_t *total_frames, size_t *used_frames,
-		      size_t *free_frames);
-void ir0_mm_alloc_stats(size_t *total, size_t *used, size_t *allocs);
+		      size_t *free_frames)
+{
+	pmm_stats(total_frames, used_frames, free_frames);
+}
+
+void ir0_mm_alloc_stats(size_t *total, size_t *used, size_t *allocs)
+{
+	alloc_stats(total, used, allocs);
+}

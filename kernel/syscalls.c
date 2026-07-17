@@ -15,9 +15,9 @@
 #include "syscalls/syscall_dispatch.h"
 #include <ir0/console.h>
 #include <ir0/copy_user.h>
-#include <ir0/keyboard.h>
+#include <ir0/input_backend.h>
 #include <ir0/process.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/serial_io.h>
 
 #define MAX_STDIN_WAITERS 8
@@ -46,7 +46,7 @@ void stdin_wake_check(void)
 	int woke_tty = 0;
 	int i;
 
-	if (!keyboard_buffer_has_data() && !ir0_console_input_ready())
+	if (!input_kbd_has_data() && !ir0_console_input_ready())
 		return;
 
 	woke_tty = ir0_console_wake_readers();
