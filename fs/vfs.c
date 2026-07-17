@@ -39,10 +39,9 @@
 #include <ir0/exec_read_trace.h>
 #include <ir0/permissions.h>
 #include <ir0/credentials.h>
-#include <ir0/block_dev.h>
 #include <ir0/blockdev.h>
-#include <ir0/serial_io.h>
-#include <ir0/vga.h>
+#include <ir0/klog.h>
+#include <ir0/console_backend.h>
 #include <config.h>
 #include <string.h>
 
@@ -137,23 +136,23 @@ static void vfs_exec_audit_log(const char *stage, const char *path, int ret,
     if (!vfs_exec_audit_active)
         return;
 
-    serial_print("[EXEC_AUDIT][VFS] stage=");
-    serial_print(stage ? stage : "?");
-    serial_print(" path=");
-    serial_print(path ? path : "(null)");
-    serial_print(" ret=");
-    serial_print_hex64((uint64_t)(int64_t)ret);
-    serial_print(" offset=");
-    serial_print_hex64((uint64_t)offset);
-    serial_print(" req=");
-    serial_print_hex64((uint64_t)req);
-    serial_print(" got=");
-    serial_print_hex64((uint64_t)got);
-    serial_print(" st_ino=");
-    serial_print_hex64(st_ino);
-    serial_print(" st_size=");
-    serial_print_hex64((uint64_t)st_size);
-    serial_print("\n");
+    klog_print("[EXEC_AUDIT][VFS] stage=");
+    klog_print(stage ? stage : "?");
+    klog_print(" path=");
+    klog_print(path ? path : "(null)");
+    klog_print(" ret=");
+    klog_hex64((uint64_t)(int64_t)ret);
+    klog_print(" offset=");
+    klog_hex64((uint64_t)offset);
+    klog_print(" req=");
+    klog_hex64((uint64_t)req);
+    klog_print(" got=");
+    klog_hex64((uint64_t)got);
+    klog_print(" st_ino=");
+    klog_hex64(st_ino);
+    klog_print(" st_size=");
+    klog_hex64((uint64_t)st_size);
+    klog_print("\n");
 }
 
 /**
@@ -298,10 +297,10 @@ int vfs_init(void)
 #endif
     if (DEBUG_VFS)
     {
-        serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE\n");
-        serial_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_DOCUMENTED\n");
-        serial_print("[VFS][CLASSIFY] SYSCALLS_USE_VFS_ONLY\n");
-        serial_print("[VFS][CLASSIFY] FUTURE_FS_READY\n");
+        klog_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE\n");
+        klog_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_DOCUMENTED\n");
+        klog_print("[VFS][CLASSIFY] SYSCALLS_USE_VFS_ONLY\n");
+        klog_print("[VFS][CLASSIFY] FUTURE_FS_READY\n");
     }
     return 0;
 }
@@ -449,13 +448,15 @@ int vfs_init_root(void)
     char root_dev_path[64];
     int can_use_block_dev = 1;
 
-    print("VFS: Initializing VFS...\n");
+#define VFS_MSG(s) console_backend_write((s), sizeof(s) - 1, IR0_CONSOLE_COLOR_DEFAULT)
+
+    VFS_MSG("VFS: Initializing VFS...\n");
     int ret = vfs_init();
     if (ret != 0) {
-        print("VFS: ERROR - vfs_init failed\n");
+        VFS_MSG("VFS: ERROR - vfs_init failed\n");
         return ret;
     }
-    print("VFS: vfs_init OK (builtin filesystems registered)\n");
+    VFS_MSG("VFS: vfs_init OK (builtin filesystems registered)\n");
 
     snprintf(root_dev_path, sizeof(root_dev_path), "/dev/%s", root_blk);
 
@@ -464,29 +465,30 @@ int vfs_init_root(void)
         can_use_block_dev = 0;
 #endif
 
-    if (can_use_block_dev && !block_dev_is_present(root_blk)) {
-        print("VFS: ERROR - No block device configured for root available\n");
+    if (can_use_block_dev && !ir0_block_name_is_present(root_blk)) {
+        VFS_MSG("VFS: ERROR - No block device configured for root available\n");
         return -ENODEV;
     }
 
-    print("VFS: Mounting root filesystem...\n");
+    VFS_MSG("VFS: Mounting root filesystem...\n");
     ret = vfs_mount(root_dev_path, "/", root_fs);
     if (ret != 0) {
-        print("VFS: configured root mount failed, falling back to tmpfs root\n");
+        VFS_MSG("VFS: configured root mount failed, falling back to tmpfs root\n");
 #if CONFIG_ENABLE_FS_TMPFS
         ret = vfs_mount("none", "/", "tmpfs");
         if (ret != 0) {
-            print("VFS: ERROR - tmpfs fallback also failed\n");
+            VFS_MSG("VFS: ERROR - tmpfs fallback also failed\n");
             return ret;
         }
-        print("VFS: tmpfs root mounted (fallback)\n");
+        VFS_MSG("VFS: tmpfs root mounted (fallback)\n");
 #else
-        print("VFS: ERROR - tmpfs fallback disabled by configuration\n");
+        VFS_MSG("VFS: ERROR - tmpfs fallback disabled by configuration\n");
         return ret;
 #endif
     } else {
-        print("VFS: vfs_mount OK (configured root)\n");
+        VFS_MSG("VFS: vfs_mount OK (configured root)\n");
     }
+#undef VFS_MSG
     return 0;
 }
 
@@ -510,7 +512,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     if (!ir0_open_flags_ok_for_vfs(flags))
     {
         if (DEBUG_VFS)
-            serial_print("[VFS_OPEN][CLASSIFY] VFS_LINUX_RAW_FLAGS_REJECTED\n");
+            klog_print("[VFS_OPEN][CLASSIFY] VFS_LINUX_RAW_FLAGS_REJECTED\n");
         return -EINVAL;
     }
 
@@ -562,7 +564,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
                 if (ret != 0)
                     return ret;
                 if (DEBUG_VFS)
-                    serial_print("[VFS_OPEN][CLASSIFY] VFS_CREATE_SEMANTICS_GENERIC\n");
+                    klog_print("[VFS_OPEN][CLASSIFY] VFS_CREATE_SEMANTICS_GENERIC\n");
             }
             else
             {
@@ -605,7 +607,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
             if (ret != 0)
                 return ret;
             if (DEBUG_VFS)
-                serial_print("[VFS_OPEN][CLASSIFY] VFS_TRUNCATE_GENERIC\n");
+                klog_print("[VFS_OPEN][CLASSIFY] VFS_TRUNCATE_GENERIC\n");
         }
     }
 
@@ -1261,11 +1263,11 @@ int vfs_read_file(const char *path, void **data, size_t *size)
     {
         if (vfs_exec_audit_active)
         {
-            serial_print("[EXEC_AUDIT][VFS] stage=lookup_no_ops path=");
-            serial_print(path);
-            serial_print(" ops=");
-            serial_print_hex64((uint64_t)(uintptr_t)ops);
-            serial_print("\n");
+            klog_print("[EXEC_AUDIT][VFS] stage=lookup_no_ops path=");
+            klog_print(path);
+            klog_print(" ops=");
+            klog_hex64((uint64_t)(uintptr_t)ops);
+            klog_print("\n");
             vfs_exec_audit_log("lookup_fail", path, -ENOSYS, 0, 0, 0, 0, -1);
         }
         return -ENOSYS;
@@ -1273,11 +1275,11 @@ int vfs_read_file(const char *path, void **data, size_t *size)
 
     if (vfs_exec_audit_active)
     {
-        serial_print("[EXEC_AUDIT][VFS] stage=lookup_ok path=");
-        serial_print(path);
-        serial_print(" ops=");
-        serial_print_hex64((uint64_t)(uintptr_t)ops);
-        serial_print("\n");
+        klog_print("[EXEC_AUDIT][VFS] stage=lookup_ok path=");
+        klog_print(path);
+        klog_print(" ops=");
+        klog_hex64((uint64_t)(uintptr_t)ops);
+        klog_print("\n");
     }
 
     ret = ops->stat(path, &st);

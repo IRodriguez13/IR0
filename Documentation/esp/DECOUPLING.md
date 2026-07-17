@@ -20,21 +20,21 @@ fuente). Persisten backends (`video_backend`, `console_backend`) con includes in
 
 ## Inventario de fachadas (`includes/ir0/`)
 
-Ver tabla detallada en `Documentation/DECOUPLING.md`. Áreas cubiertas: disco (`block_dev`,
-`partition`), consola (`console_backend`), tiempo (`clock`, `rtc`), red (`net`), entrada,
-vídeo, serial para depuración, modelo de drivers (`driver`, `driver_bootstrap`, `init_drv`),
-scheduler (`scheduler_api`), recursos (`resource_registry`), tabla pseudo-fs (`pseudo_fs.h`),
-credenciales (`credentials.h`) y vistas de proceso (`process.h` cuando se necesita `process_t`),
-pseudo-VFS (`devfs`, `procfs`, `sysfs`).
+Ver tabla detallada en `Documentation/DECOUPLING.md`. Áreas cubiertas: disco (`blockdev` /
+`ir0_block_*`), consola (`console_backend`), MM opaco (`mm_port`), tiempo (`clock`, `rtc`),
+red (`net`), entrada (`input_backend`), vídeo, `klog`, modelo de drivers (`driver`,
+`driver_bootstrap`, `init_drv`), **scheduler (`sched.h`; `scheduler_api.h` es alias),
+recursos (`resource_registry`), tabla pseudo-fs (`pseudo_fs.h`), credenciales, power
+(`platform_ops`), y vistas de proceso (`process.h`).
 
 ## Patrones de registro
 
 - **Registro de drivers:** `ir0_register_driver` + `ir0_driver_ops_t`.
-- **Bloque:** `block_dev_register` + `block_dev_ops_t`.
+- **Bloque:** `ir0_block_register` / `ir0_block_*`.
 - **Sistemas de archivos:** `vfs_ops` / `vfs_fstype`.
 - **Carácter (/dev):** `devfs_ops_t`.
 - **Arranque:** `init_all_drivers()` vía `includes/ir0/init_drv.h`.
-- **Timer → scheduler:** `includes/ir0/scheduler_api.h` desde `drivers/` (no `kernel/scheduler_api.h`).
+- **Timer → scheduler:** `includes/ir0/sched.h` desde `drivers/` (no headers internos de `sched/`).
 - **Recursos IRQ/puertos:** `includes/ir0/resource_registry.h`.
 - **Bluetooth poll / boot:** `ir0_bluetooth_poll()` y registro opcional (`ir0_bluetooth_register_driver()`) vía `includes/ir0/bluetooth.h`.
 

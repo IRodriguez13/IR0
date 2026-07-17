@@ -14,7 +14,7 @@
 
 #include <ir0/signals.h>
 #include <ir0/process.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/serial_io.h>
 #include <ir0/debug_runtime.h>
 #include <ir0/clock.h>

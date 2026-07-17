@@ -6,12 +6,26 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: scheduler_api.h
- * Description: Legacy path — prefer <ir0/sched.h>.
+ * File: klog.c
+ * Description: klog_* → serial_* adapter (behavior unchanged).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#pragma once
+#include <ir0/klog.h>
+#include <ir0/serial_io.h>
 
-#include <ir0/sched.h>
+void klog_print(const char *str)
+{
+	serial_print(str);
+}
+
+void klog_hex32(uint32_t num)
+{
+	serial_print_hex32(num);
+}
+
+void klog_hex64(uint64_t num)
+{
+	serial_print_hex64(num);
+}

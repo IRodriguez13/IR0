@@ -14,7 +14,7 @@
 
 #include <ir0/futex.h>
 #include <ir0/process.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/errno.h>
 #include <ir0/copy_user.h>
 #include <string.h>

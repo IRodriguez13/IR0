@@ -14,7 +14,7 @@
 
 #include "pmm.h"
 #include <ir0/kmem.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <ir0/process.h>
 #include <ir0/debug_runtime.h>
 #include <config.h>
@@ -95,7 +95,7 @@ void pmm_init(uintptr_t mem_start, size_t mem_size)
     if (!pmm.bitmap)
     {
 #if DEBUG_PMM
-        serial_print("[PMM] CRITICAL: Failed to allocate bitmap\n");
+        klog_print("[PMM] CRITICAL: Failed to allocate bitmap\n");
 #endif
         return;
     }
@@ -123,7 +123,7 @@ void pmm_init(uintptr_t mem_start, size_t mem_size)
     }
 
 #if DEBUG_PMM
-    serial_print("[PMM] Initialized\n");
+    klog_print("[PMM] Initialized\n");
 #endif
 }
 
@@ -166,7 +166,7 @@ uintptr_t pmm_alloc_frame(void)
     
     /* Out of memory */
 #if DEBUG_PMM
-    serial_print("[PMM] FAILED: Out of physical memory\n");
+    klog_print("[PMM] FAILED: Out of physical memory\n");
 #endif
     
     return 0;
@@ -191,7 +191,7 @@ void pmm_frame_put(uintptr_t phys_addr)
 	if (pmm_frame_index(phys_addr, &frame_index) != 0)
 	{
 #if DEBUG_PMM
-		serial_print("[PMM] WARN: Invalid address in put\n");
+		klog_print("[PMM] WARN: Invalid address in put\n");
 #endif
 		return;
 	}
@@ -200,7 +200,7 @@ void pmm_frame_put(uintptr_t phys_addr)
 	{
 		pmm_diag_double_free++;
 #if DEBUG_PMM
-		serial_print("[PMM] WARN: Double free detected\n");
+		klog_print("[PMM] WARN: Double free detected\n");
 #endif
 		return;
 	}
@@ -222,7 +222,7 @@ void pmm_frame_put(uintptr_t phys_addr)
 	if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
 		pmm_diag_events++;
 #if DEBUG_PMM
-	serial_print("[PMM] Freed frame\n");
+	klog_print("[PMM] Freed frame\n");
 #endif
 }
 
@@ -273,8 +273,8 @@ void pmm_stats(size_t *total_frames, size_t *used_frames, size_t *free_frames)
         *free_frames = pmm.total_frames - pmm.used_frames;
 
 #if DEBUG_PMM
-    serial_print("[PMM STATS]\n");
-    serial_print("  Stats available via debugger\n");
+    klog_print("[PMM STATS]\n");
+    klog_print("  Stats available via debugger\n");
     /* pmm.total_frames, pmm.used_frames available in GDB */
 #endif
 }

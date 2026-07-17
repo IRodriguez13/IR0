@@ -22,7 +22,7 @@
 #include <kernel/process.h>
 #include <config.h>
 #include <ir0/clock_wait.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/kmem.h>
 #include <ir0/pipe.h>
 #include <ir0/paging.h>

@@ -31,13 +31,13 @@
 #include <ir0/clone.h>
 #include <ir0/utsname.h>
 #include <ir0/console_backend.h>
-#include <ir0/keyboard.h>
+#include <ir0/input_backend.h>
 #include <ir0/serial_io.h>
 #include <ir0/errno.h>
 #include <ir0/process.h>
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/arch_port.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <d1_12_read_diag.h>
@@ -243,12 +243,12 @@ static int64_t wrap_console_clear(uint64_t a1, uint64_t a2, uint64_t a3, uint64_
 /* Keyboard layout set/get: IR0 custom syscalls */
 static int64_t wrap_keymap_set(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  return keyboard_set_layout((int)a1);
+  return input_kbd_set_layout((int)a1);
 }
 
 static int64_t wrap_keymap_get(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  return keyboard_get_layout();
+  return input_kbd_get_layout();
 }
 
 /* Syscall table: Linux x86-64 numbers -> handlers */

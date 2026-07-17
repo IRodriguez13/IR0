@@ -36,14 +36,13 @@
 #include <ir0/sysfs.h>
 #include <ir0/stat.h>
 #include <ir0/kmem.h>
-#include <ir0/vga.h>
 #include <ir0/version.h>
 #include <ir0/console_backend.h>
 #include <string.h>
 #include <ir0/errno.h>
 #include <config.h>
 #include <ir0/partition.h>
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/video_backend.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/arch_port.h>
@@ -404,8 +403,8 @@ int sys_devices_block_read_reg(char *buf, size_t count)
     size_t off = 0;
     for (uint8_t i = 0; i < 4; i++)
     {
-        const char *disk_name = block_dev_legacy_name(i);
-        if (!disk_name || !block_dev_is_present(disk_name))
+        const char *disk_name = ir0_block_legacy_name(i);
+        if (!disk_name || !ir0_block_name_is_present(disk_name))
             continue;
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
                          "%s\n", disk_name);

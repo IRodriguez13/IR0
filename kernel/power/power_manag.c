@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: power_manag.c
- * Description: Coordinated system halt/reboot/poweroff.
+ * Description: Coordinated system halt/reboot/poweroff via platform_ops.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -15,11 +15,14 @@
 #include "power_manag.h"
 
 #include <ir0/arch_port.h>
+#include <ir0/platform_ops.h>
 #include <ir0/serial_io.h>
 #include <ir0/vfs.h>
 
 void kernel_system_shutdown(enum ir0_system_action action)
 {
+	const struct ir0_platform_ops *ops;
+
 	switch (action)
 	{
 	case IR0_SYSTEM_REBOOT:
@@ -40,26 +43,36 @@ void kernel_system_shutdown(enum ir0_system_action action)
 	serial_print("SYSTEM_SYNC_OK\n");
 
 	/*
-	 * Reach arch power ops before driver teardown: some .shutdown hooks
+	 * Reach platform power ops before driver teardown: some .shutdown hooks
 	 * (e.g. input) can fault and would skip ACPI/QEMU poweroff entirely.
 	 */
 	arch_disable_interrupts();
 
+	ops = ir0_platform_ops_get();
+	if (!ops)
+	{
+		for (;;)
+			arch_cpu_halt();
+	}
+
 	switch (action)
 	{
 	case IR0_SYSTEM_REBOOT:
-		arch_system_reboot();
+		if (ops->reboot)
+			ops->reboot();
 		break;
 	case IR0_SYSTEM_POWEROFF:
-		arch_system_poweroff();
+		if (ops->poweroff)
+			ops->poweroff();
 		break;
 	case IR0_SYSTEM_HALT:
 	default:
-		arch_system_halt();
+		if (ops->halt)
+			ops->halt();
 		break;
 	}
 
-	/* Unreachable if arch callbacks are correct. */
+	/* Unreachable if platform callbacks are correct. */
 	for (;;)
 		arch_cpu_halt();
 }

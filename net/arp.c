@@ -14,7 +14,7 @@
 #include "arp.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <string.h>
@@ -608,15 +608,15 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
         uint64_t timeout_ms = ARP_RESOLVE_TIMEOUT_MS;
         
         /* Log to serial only for verbose info */
-        extern void serial_print(const char *);
-        extern void serial_print_hex32(uint32_t);
-        serial_print("[ARP] Waiting for ARP reply (timeout=");
-        serial_print_hex32((uint32_t)timeout_ms);
-        serial_print(" ms, attempt ");
-        serial_print_hex32((uint32_t)(retry + 1));
-        serial_print("/");
-        serial_print_hex32((uint32_t)ARP_RESOLVE_RETRIES);
-        serial_print(")\n");
+        extern void klog_print(const char *);
+        extern void klog_hex32(uint32_t);
+        klog_print("[ARP] Waiting for ARP reply (timeout=");
+        klog_hex32((uint32_t)timeout_ms);
+        klog_print(" ms, attempt ");
+        klog_hex32((uint32_t)(retry + 1));
+        klog_print("/");
+        klog_hex32((uint32_t)ARP_RESOLVE_RETRIES);
+        klog_print(")\n");
         
         uint64_t last_log_time = start_time;
         int check_count = 0;
@@ -642,13 +642,13 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
             if (check_count == 0 || (current_time - last_log_time) >= 500)
             {
                 /* Use serial for verbose progress logs */
-                extern void serial_print(const char *);
-                extern void serial_print_hex32(uint32_t);
-                serial_print("[ARP] Waiting... elapsed=");
-                serial_print_hex32((uint32_t)elapsed);
-                serial_print(" ms, check_count=");
-                serial_print_hex32((uint32_t)check_count);
-                serial_print("\n");
+                extern void klog_print(const char *);
+                extern void klog_hex32(uint32_t);
+                klog_print("[ARP] Waiting... elapsed=");
+                klog_hex32((uint32_t)elapsed);
+                klog_print(" ms, check_count=");
+                klog_hex32((uint32_t)check_count);
+                klog_print("\n");
                 last_log_time = current_time;
             }
             
@@ -685,13 +685,13 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
                 uint64_t now = clock_get_uptime_milliseconds();
                 uint64_t elapsed_check = (now >= start_time) ? (now - start_time) : 0;
                 /* Use serial only for verbose logging */
-                extern void serial_print(const char *);
-                extern void serial_print_hex32(uint32_t);
-                serial_print("[ARP] Loop check #");
-                serial_print_hex32((uint32_t)check_count);
-                serial_print(", elapsed=");
-                serial_print_hex32((uint32_t)elapsed_check);
-                serial_print(" ms\n");
+                extern void klog_print(const char *);
+                extern void klog_hex32(uint32_t);
+                klog_print("[ARP] Loop check #");
+                klog_hex32((uint32_t)check_count);
+                klog_print(", elapsed=");
+                klog_hex32((uint32_t)elapsed_check);
+                klog_print(" ms\n");
             }
             
             /* Small delay to allow interrupts to be processed */

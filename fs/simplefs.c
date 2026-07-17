@@ -19,7 +19,7 @@
 #include <ir0/errno.h>
 #include <ir0/stat.h>
 #include <ir0/clock.h>
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/credentials.h>
 #include <ir0/permissions.h>
 #include <string.h>
@@ -315,7 +315,7 @@ static int simplefs_check_block_device(const char *dev)
         strcmp(name, "hdc") != 0 && strcmp(name, "hdd") != 0)
         return 0;
 
-    return block_dev_is_present(name) ? 0 : -ENXIO;
+    return ir0_block_name_is_present(name) ? 0 : -ENXIO;
 }
 
 #if CONFIG_ENABLE_FS_FAT16

@@ -13,7 +13,7 @@
 
 #include "chmod.h"
 #include <fs/vfs.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <errno.h>
 #include <string.h>
 
@@ -32,7 +32,7 @@ int parse_mode(const char *mode_str)
     {
         if (mode_str[0] > '7')
         {
-            serial_print("chmod: use octal mode (0-7 digits only), e.g. 755\n");
+            klog_print("chmod: use octal mode (0-7 digits only), e.g. 755\n");
             return -EINVAL;
         }
 
@@ -42,7 +42,7 @@ int parse_mode(const char *mode_str)
         {
             if (mode_str[i] < '0' || mode_str[i] > '7')
             {
-                serial_print("chmod: invalid octal mode string\n");
+                klog_print("chmod: invalid octal mode string\n");
                 return -EINVAL;
             }
             mode = mode * 8 + (mode_str[i] - '0');
@@ -52,7 +52,7 @@ int parse_mode(const char *mode_str)
         return mode;
     }
 
-    serial_print("chmod: symbolic mode not supported; use octal (e.g. 755)\n");
+    klog_print("chmod: symbolic mode not supported; use octal (e.g. 755)\n");
     return -EINVAL;
 }
 

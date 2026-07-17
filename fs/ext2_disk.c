@@ -14,10 +14,10 @@
 
 #include "ext2_disk.h"
 #include "vfs.h"
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <ir0/stat.h>
 #include <string.h>
 
@@ -120,7 +120,7 @@ static int ext2_read_block(struct ext2_vol *v, uint32_t block, void *buf)
 	uint32_t sectors = v->block_size / 512;
 	uint32_t lba = block * sectors;
 
-	if (!block_dev_read_sectors(v->blk_name, lba, sectors, buf))
+	if (ir0_block_read_by_name(v->blk_name, lba, sectors, buf))
 		return -EIO;
 	return 0;
 }
@@ -523,11 +523,11 @@ int ext2_disk_mount(const char *dev, const char *mount_dir)
 	ret = ext2_parse_dev(dev, blk, sizeof(blk));
 	if (ret != 0)
 		return ret;
-	if (!block_dev_is_present(blk))
+	if (!ir0_block_name_is_present(blk))
 		return -ENXIO;
 
 	/* Superblock at byte 1024 → LBA 2 for 512-byte sectors. */
-	if (!block_dev_read_sectors(blk, 2, 2, sector))
+	if (ir0_block_read_by_name(blk, 2, 2, sector))
 		return -EIO;
 	sb = (struct ext2_super *)sector;
 	if (sb->s_magic != EXT2_MAGIC)
@@ -553,7 +553,7 @@ int ext2_disk_mount(const char *dev, const char *mount_dir)
 			uint32_t sectors = slot->block_size / 512;
 			uint32_t lba = gd_block * sectors;
 
-			if (!block_dev_read_sectors(blk, lba, sectors, gbuf))
+			if (ir0_block_read_by_name(blk, lba, sectors, gbuf))
 				ret = -EIO;
 		}
 		if (ret != 0)
@@ -568,7 +568,7 @@ int ext2_disk_mount(const char *dev, const char *mount_dir)
 
 	strncpy(slot->mount_path, mount_dir, sizeof(slot->mount_path) - 1);
 	slot->in_use = 1;
-	serial_print("EXT2_MOUNT_OK\n");
+	klog_print("EXT2_MOUNT_OK\n");
 	return 0;
 }
 

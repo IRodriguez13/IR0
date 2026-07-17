@@ -6,12 +6,18 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: scheduler_api.h
- * Description: Legacy path — prefer <ir0/sched.h>.
+ * File: sched_switch.h
+ * Description: Shared context-switch helper for scheduler backends.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
-#include <ir0/sched.h>
+#include "process.h"
+
+/*
+ * Shared path after a backend has selected @next.
+ * Used by RR and priority-band backends (not a runqueue API).
+ */
+void sched_context_switch_to(process_t *next);

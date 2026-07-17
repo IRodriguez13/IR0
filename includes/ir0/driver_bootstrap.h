@@ -1,20 +1,25 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: driver_bootstrap.h
- * Description: IR0 kernel source/header file
+ * IR0 Kernel — Driver bootstrap orchestration facade (no drivers/ include).
  */
 
-// SPDX-License-Identifier: GPL-3.0-only
-#ifndef IR0_DRIVER_BOOTSTRAP_FACADE_H
-#define IR0_DRIVER_BOOTSTRAP_FACADE_H
+#pragma once
 
-#include <drivers/driver_bootstrap.h>
+#include <stdint.h>
 
-#endif /* IR0_DRIVER_BOOTSTRAP_FACADE_H */
+typedef enum
+{
+	DRIVER_BOOT_STAGE_INPUT = 0,
+	DRIVER_BOOT_STAGE_PLATFORM,
+	DRIVER_BOOT_STAGE_STORAGE,
+	DRIVER_BOOT_STAGE_AUDIO,
+	DRIVER_BOOT_STAGE_NETWORK,
+	DRIVER_BOOT_STAGE_MAX
+} driver_boot_stage_t;
+
+typedef int (*driver_boot_init_fn)(void);
+
+int driver_bootstrap_register(driver_boot_stage_t stage, const char *name,
+			      driver_boot_init_fn init_fn, int enabled);
+int driver_bootstrap_run_all(void);
+void driver_bootstrap_reset(void);
