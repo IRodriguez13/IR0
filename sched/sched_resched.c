@@ -7,19 +7,17 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: sched_resched.c
- * Description: sched_resched.c — reschedule helpers shared by console wake and idle poll
+ * Description: Reschedule helpers shared by console wake and idle poll.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "scheduler_api.h"
-#include <config.h>
+#include <ir0/sched.h>
 #include <ir0/console.h>
 #include <ir0/process.h>
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
 #include <ktm.h>
-#include <ir0/serial_io.h>
 
 extern void kernel_idle_poll(void);
 
@@ -52,30 +50,6 @@ static int sched_irq_may_preempt(uint64_t *gpr_stack)
 	return 0;
 }
 
-#if CONFIG_SCHEDULER_POLICY == 2
-#include "priority_sched.h"
-#else
-#include "rr_sched.h"
-#endif
-
-int sched_count_runnable(void)
-{
-#if CONFIG_SCHEDULER_POLICY == 2
-	return priority_count_runnable();
-#else
-	return rr_count_runnable();
-#endif
-}
-
-void sched_promote_process(process_t *proc)
-{
-#if CONFIG_SCHEDULER_POLICY == 2
-	priority_promote_process(proc);
-#else
-	rr_promote_process(proc);
-#endif
-}
-
 void sched_try_preempt_blocked(void)
 {
 	if (!current_process || current_process->state != PROCESS_BLOCKED)
@@ -85,11 +59,6 @@ void sched_try_preempt_blocked(void)
 	sched_schedule_next();
 }
 
-/*
- * sched_user_return_take_switch - Decide (and consume the pending flag) whether
- * an in-syscall cooperative reschedule should switch at user-return. Lets the
- * caller arm a safe resume (syscall_frame) before invoking sched_schedule_next.
- */
 int sched_user_return_take_switch(void)
 {
 	if (!current_process || current_process->state == PROCESS_BLOCKED)
@@ -120,13 +89,6 @@ int sched_context_switch_take_skip_prev_save(void)
 	return skip;
 }
 
-/*
- * sched_irq_preempt_from_frame — defer TTY wake reschedule to IRQ stub exit.
- *
- * @gpr_stack: ISR stub stack at saved RAX (15 GPRs, then int/err/iret frame).
- * User iret frame already on stack; copy into prev->task and switch with
- * switch_context_x64(NULL, next) so kernel IRQ return is not clobbered.
- */
 int sched_irq_preempt_from_frame(uint64_t *gpr_stack)
 {
 	int why;

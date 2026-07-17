@@ -40,7 +40,7 @@
 #include <ir0/net.h>
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <string.h>
 
 /* Global device and protocol lists. These linked lists maintain all registered
@@ -81,9 +81,9 @@ int net_register_device(struct net_device *dev)
     {
         if (curr == dev)
         {
-            serial_print("NET: Device already registered: ");
-            serial_print(dev->name);
-            serial_print("\n");
+            klog_print("NET: Device already registered: ");
+            klog_print(dev->name);
+            klog_print("\n");
             return 0;
         }
         curr = curr->next;
@@ -96,9 +96,9 @@ int net_register_device(struct net_device *dev)
     dev->next = devices;
     devices = dev;
 
-    serial_print("NET: Registered device: ");
-    serial_print(dev->name);
-    serial_print("\n");
+    klog_print("NET: Registered device: ");
+    klog_print(dev->name);
+    klog_print("\n");
 
     return 0;
 }
@@ -169,7 +169,7 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
 
     if (!dest_mac)
     {
-        serial_print("NET: net_send: NULL destination MAC\n");
+        klog_print("NET: net_send: NULL destination MAC\n");
         return -1;
     }
 
@@ -380,9 +380,9 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
          */
         /* Log only in debug mode to avoid spam */
         #ifdef NET_DEBUG
-        serial_print("NET: No handler registered for EtherType 0x");
-        serial_print_hex32(type);
-        serial_print("\n");
+        klog_print("NET: No handler registered for EtherType 0x");
+        klog_hex32(type);
+        klog_print("\n");
         #endif
     }
 }
@@ -422,9 +422,9 @@ int net_register_protocol(struct net_protocol *proto)
     {
         if (curr == proto)
         {
-            serial_print("NET: Protocol already registered: ");
-            serial_print(proto->name);
-            serial_print("\n");
+            klog_print("NET: Protocol already registered: ");
+            klog_print(proto->name);
+            klog_print("\n");
             return 0;
         }
         curr = curr->next;
@@ -434,21 +434,21 @@ int net_register_protocol(struct net_protocol *proto)
     proto->next = protocols;
     protocols = proto;
 
-    serial_print("NET: Registered protocol: ");
-    serial_print(proto->name);
+    klog_print("NET: Registered protocol: ");
+    klog_print(proto->name);
     if (proto->ethertype != 0)
     {
-        serial_print(" (EtherType: 0x");
-        serial_print_hex32(proto->ethertype);
-        serial_print(")");
+        klog_print(" (EtherType: 0x");
+        klog_hex32(proto->ethertype);
+        klog_print(")");
     }
     if (proto->ipproto != 0)
     {
-        serial_print(" (IP Proto: ");
-        serial_print_hex32(proto->ipproto);
-        serial_print(")");
+        klog_print(" (IP Proto: ");
+        klog_hex32(proto->ipproto);
+        klog_print(")");
     }
-    serial_print("\n");
+    klog_print("\n");
 
     return 0;
 }
@@ -465,9 +465,9 @@ void net_unregister_protocol(struct net_protocol *proto)
     if (protocols == proto)
     {
         protocols = proto->next;
-        serial_print("NET: Unregistered protocol: ");
-        serial_print(proto->name);
-        serial_print("\n");
+        klog_print("NET: Unregistered protocol: ");
+        klog_print(proto->name);
+        klog_print("\n");
         return;
     }
 
@@ -477,9 +477,9 @@ void net_unregister_protocol(struct net_protocol *proto)
         if (curr->next == proto)
         {
             curr->next = proto->next;
-            serial_print("NET: Unregistered protocol: ");
-            serial_print(proto->name);
-            serial_print("\n");
+            klog_print("NET: Unregistered protocol: ");
+            klog_print(proto->name);
+            klog_print("\n");
             return;
         }
         curr = curr->next;

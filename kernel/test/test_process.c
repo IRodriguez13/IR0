@@ -15,7 +15,7 @@
 #include "test/ktest_harness.h"
 #include "process.h"
 #include "syscalls.h"
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/signals.h>
 #include <ir0/wait.h>
 

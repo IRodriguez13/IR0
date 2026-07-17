@@ -25,7 +25,6 @@
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <ir0/validation.h>
-#include <ir0/serial_io.h>
 #include <ir0/ahci_api.h>
 #include <ir0/arch_port.h>
 

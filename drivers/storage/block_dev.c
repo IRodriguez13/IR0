@@ -85,9 +85,5 @@ const char *block_dev_name_at(int index)
 
 const char *block_dev_legacy_name(uint8_t disk_id)
 {
-	static const char *const legacy[] = { "hda", "hdb", "hdc", "hdd" };
-
-	if (disk_id >= (sizeof(legacy) / sizeof(legacy[0])))
-		return NULL;
-	return legacy[disk_id];
+	return ir0_block_legacy_name(disk_id);
 }

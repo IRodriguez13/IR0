@@ -9,7 +9,7 @@ Checks:
    (#include <interrupt/arch/...>);
 4) Files under fs/ must not use #include <arch/...>; use includes/ir0/* facades instead.
 5) fs/, mm/, net/, drivers/: no #include <kernel/*.h> (no whitelist).
-6) mm/, net/: no #include <arch/...>.
+6) mm/, net/, sched/: no #include <arch/...>.
 7) drivers/: no raw #include of drivers/storage/block_dev.h — use ir0/block_dev.h.
 8) Paths outside drivers/bluetooth/ must not #include bluetooth/...
 9) drivers/: no #include <arch/...> (use ir0/arch_port.h).
@@ -19,6 +19,7 @@ Checks:
 13) debug_bins/: no #include "test/... except debug_bins/cmd_ktest.c (IR0_KERNEL_TESTS).
 14) Portable trees must not embed x86 IRQ/MM asm (pushfq / %%cr0-4 / invlpg);
     use arch_irq_* / arch_mm_* / arch_tlb_* facades. Allowlist: includes/ir0/oops.c.
+15) includes/ir0/*.h must not #include <drivers/...> (facade seal).
 """
 
 from pathlib import Path
@@ -52,6 +53,7 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "usb_host.h",
     ROOT / "includes" / "ir0" / "resource_registry.h",
     ROOT / "includes" / "ir0" / "init_drv.h",
+    ROOT / "includes" / "ir0" / "sched.h",
     ROOT / "includes" / "ir0" / "scheduler_api.h",
     ROOT / "includes" / "ir0" / "pseudo_fs.h",
     ROOT / "includes" / "ir0" / "credentials.h",
@@ -142,6 +144,7 @@ PORTABLE_DIRS_NO_KERNEL_HEADERS = [
 PORTABLE_DIRS_MM_NET_NO_ARCH = [
     ROOT / "mm",
     ROOT / "net",
+    ROOT / "sched",
 ]
 
 PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
@@ -241,9 +244,33 @@ def check_mm_net_no_arch_includes():
             for idx, line in enumerate(lines, start=1):
                 if PORTABLE_MM_NET_ARCH_INCLUDE_RE.search(line):
                     rel = fpath.relative_to(ROOT)
-                    errors.append(
-                        f"[mm-net-no-arch-include] {rel}:{idx}: {line.strip()}"
+                    tag = (
+                        "[sched-no-arch-include]"
+                        if base.name == "sched"
+                        else "[mm-net-no-arch-include]"
                     )
+                    errors.append(f"{tag} {rel}:{idx}: {line.strip()}")
+    return errors
+
+
+def check_facade_no_drivers_include():
+    """ir0 facade *headers* must not pull <drivers/...>; .c adapters may."""
+    errors = []
+    base = ROOT / "includes" / "ir0"
+    if not base.is_dir():
+        return errors
+    for fpath in base.rglob("*.h"):
+        try:
+            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception as exc:
+            errors.append(f"[read-error] {fpath}: {exc}")
+            continue
+        for idx, line in enumerate(lines, start=1):
+            if DRIVER_INCLUDE_RE.search(line):
+                rel = fpath.relative_to(ROOT)
+                errors.append(
+                    f"[facade-no-drivers-include] {rel}:{idx}: {line.strip()}"
+                )
     return errors
 
 
@@ -620,6 +647,7 @@ def main():
     errors = []
     errors.extend(check_forbidden_includes())
     errors.extend(check_facades())
+    errors.extend(check_facade_no_drivers_include())
     errors.extend(check_arm64_scaffold())
     errors.extend(check_interrupt_arch_portable())
     errors.extend(check_fs_no_direct_arch())

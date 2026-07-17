@@ -18,7 +18,7 @@
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/errno.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <ir0/clock.h>
 #include <string.h>
 
@@ -287,9 +287,9 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         if (ip_rx_frag_dropped == 1U ||
             (ip_rx_frag_dropped % IP_RX_FRAG_DROP_LOG_EVERY) == 0U)
         {
-            serial_print("[IP] dropped IPv4 fragment (no reassembly), total drops=0x");
-            serial_print_hex64(ip_rx_frag_dropped);
-            serial_print("\n");
+            klog_print("[IP] dropped IPv4 fragment (no reassembly), total drops=0x");
+            klog_hex64(ip_rx_frag_dropped);
+            klog_print("\n");
         }
         return;
     }
@@ -305,33 +305,33 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         const uint8_t *icmp_data = (const uint8_t *)data + header_len;
         uint8_t icmp_type = icmp_data[0];
         uint8_t icmp_code = icmp_data[1];
-        serial_print("[IP] RX ICMP: type=");
+        klog_print("[IP] RX ICMP: type=");
         char type_str[16];
         itoa((int)icmp_type, type_str, 10);
-        serial_print(type_str);
-        serial_print(" code=");
+        klog_print(type_str);
+        klog_print(" code=");
         char code_str[16];
         itoa((int)icmp_code, code_str, 10);
-        serial_print(code_str);
+        klog_print(code_str);
         if (icmp_type == 0)
         {
-            serial_print(" (ECHO_REPLY)");
+            klog_print(" (ECHO_REPLY)");
             /* Dump ICMP header for Echo Reply */
             if (len >= header_len + 8)
             {
                 uint16_t icmp_id = (icmp_data[4] << 8) | icmp_data[5];
                 uint16_t icmp_seq = (icmp_data[6] << 8) | icmp_data[7];
-                serial_print(" id=");
+                klog_print(" id=");
                 char id_str[16];
                 itoa((int)icmp_id, id_str, 10);
-                serial_print(id_str);
-                serial_print(" seq=");
+                klog_print(id_str);
+                klog_print(" seq=");
                 char seq_str[16];
                 itoa((int)icmp_seq, seq_str, 10);
-                serial_print(seq_str);
+                klog_print(seq_str);
             }
         }
-        serial_print("\n");
+        klog_print("\n");
     }
 #endif
 
@@ -438,7 +438,7 @@ int ip_send(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
 
     if (dev->mtu <= sizeof(struct eth_header) + sizeof(struct ip_header))
     {
-        serial_print("IP: ip_send: MTU too small for Ethernet and IP headers\n");
+        klog_print("IP: ip_send: MTU too small for Ethernet and IP headers\n");
         return -1;
     }
 

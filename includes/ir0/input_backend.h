@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: input_backend.h
- * Description: Mouse input facade — no drivers/ includes (impl in kernel/input_backend.c).
+ * Description: Input facade (mouse + keyboard) — no drivers/ in callers.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -16,6 +16,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+
+#define IR0_KBD_LAYOUT_US    0
+#define IR0_KBD_LAYOUT_LATAM 1
 
 typedef struct ir0_mouse_state
 {
@@ -39,3 +42,11 @@ void input_mouse_handle_interrupt(void);
 bool input_mouse_is_available(void);
 bool input_mouse_get_state(ir0_mouse_state_t *out);
 bool input_mouse_set_sensitivity(uint8_t sensitivity);
+
+char input_kbd_get(void);
+int input_kbd_has_data(void);
+void input_kbd_clear(void);
+void input_kbd_poll_ps2(void);
+int input_kbd_set_layout(int layout);
+int input_kbd_get_layout(void);
+const char *input_kbd_get_layout_name(int layout);

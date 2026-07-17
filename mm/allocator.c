@@ -27,7 +27,7 @@
 
 #include "allocator.h"
 #include <ir0/kmem.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <ir0/oops.h>
 #include <config.h>
 
@@ -76,7 +76,7 @@ static inline block_header_t *get_prev_block(block_header_t *current)
 	if ((void *)current <= allocator.heap_start)
 
 	#if DEBUG_MEMORY_ALLOCATOR
-		serial_print("[ALLOC] We're not in heap start");
+		klog_print("[ALLOC] We're not in heap start");
 	#endif
 
 	return NULL;
@@ -88,7 +88,7 @@ static inline block_header_t *get_prev_block(block_header_t *current)
 	if ((void *)prev_footer < allocator.heap_start)
 
 	#if DEBUG_MEMORY_ALLOCATOR
-		serial_print("[ALLOC] We're not in heap boundaries");
+		klog_print("[ALLOC] We're not in heap boundaries");
 	#endif
 
 		return NULL;
@@ -144,7 +144,7 @@ void alloc_init(void)
 	allocator.initialized = 1;
 
 #if DEBUG_MEMORY_ALLOCATOR
-	serial_print("[ALLOCATOR] Initialized\n");
+	klog_print("[ALLOCATOR] Initialized\n");
 #endif
 }
 
@@ -318,7 +318,7 @@ void *alloc(size_t size)
 				((char *)ptr)[i] = 0;
 
 #if DEBUG_MEMORY_ALLOCATOR
-			serial_print("[ALLOC] Memory allocated\n");
+			klog_print("[ALLOC] Memory allocated\n");
 #endif
 
 			return ptr;
@@ -327,7 +327,7 @@ void *alloc(size_t size)
 	}
 
 #if DEBUG_MEMORY_ALLOCATOR
-	serial_print("[ALLOC] FAILED: no suitable block\n");
+	klog_print("[ALLOC] FAILED: no suitable block\n");
 #endif
 
 	return NULL; /* Out of memory */
@@ -376,7 +376,7 @@ void alloc_free(void *ptr)
 	/* Validate block is within heap bounds */
 	if ((void *)block < allocator.heap_start || (void *)block >= allocator.heap_end)
     {
-		serial_print("[ALLOC] BUG: Out of bounds allocation!!");
+		klog_print("[ALLOC] BUG: Out of bounds allocation!!");
 		panicex("Out of bounds allocation", 0, __FILE__, __LINE__, "alloc_free()");
 		return;
 	}
@@ -384,7 +384,7 @@ void alloc_free(void *ptr)
 	/* Detect double-free: block is already on the free list */
 	if (block->is_free)
     {
-		serial_print("[ALLOC] BUG: double-free detected\n");
+		klog_print("[ALLOC] BUG: double-free detected\n");
 		panicex("double-free detected", 0, __FILE__, __LINE__, "alloc_free()");
 		return;
 	}
@@ -397,7 +397,7 @@ void alloc_free(void *ptr)
 	allocator.total_freed += block->size;
 
 #if DEBUG_MEMORY_ALLOCATOR
-	serial_print("[FREE] Memory freed\n");
+	klog_print("[FREE] Memory freed\n");
 #endif
 
 	/* COALESCE WITH NEXT BLOCK (Forward)                                    */
@@ -420,7 +420,7 @@ void alloc_free(void *ptr)
 		allocator.coalesce_forward_count++;
 
 #if DEBUG_MEMORY_COALESCING
-		serial_print("[COALESCE] Forward merge\n");
+		klog_print("[COALESCE] Forward merge\n");
 #endif
 	}
 
@@ -447,7 +447,7 @@ void alloc_free(void *ptr)
 		allocator.coalesce_backward_count++;
 
 #if DEBUG_MEMORY_COALESCING
-		serial_print("[COALESCE] Backward merge\n");
+		klog_print("[COALESCE] Backward merge\n");
 #endif
 	}
 
@@ -474,8 +474,8 @@ void alloc_stats(size_t *total, size_t *used, size_t *allocs)
 		*allocs = allocator.total_allocated;
 
 #if DEBUG_MEMORY_STATS
-	serial_print("[ALLOCATOR STATS]\n");
-	serial_print("  Stats available via debugger\n");
+	klog_print("[ALLOCATOR STATS]\n");
+	klog_print("  Stats available via debugger\n");
 	/* Detailed stats viewable via debugger: */
 	/* allocator.total_allocated, allocator.total_freed */
 	/* allocator.coalesce_forward_count, allocator.coalesce_backward_count */

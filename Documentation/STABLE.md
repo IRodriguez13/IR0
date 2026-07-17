@@ -144,7 +144,7 @@ These items were tracked as partial, WIP, or hardening backlog. They are **close
 |--------|-------------|----------|
 | **H1** ARCH-1 | `kernel/syscalls.c` **86 lines**; submodules under `kernel/syscalls/` | `wc -l kernel/syscalls.c` |
 | **H2** FASE | FASE43–48 in `kernel/debug/fase_audit.c`; hooks on hot path | `process.c` ~3014 L |
-| **H3** facades | 0 `#include <drivers/` in `includes/ir0/` | `make arch-guard` rule 14 |
+| **H3** facades | 0 `#include <drivers/` in `includes/ir0/*.h`; `sched.h` ops facade | `make arch-guard` |
 | **H4** host ABI | `test_musl_cred_abi`, `includes/ir0/abi/musl_cred_abi.h` | `make -C tests/host run` 12/12 |
 | **H5** devfs read | `devfs_resolve_read_fd()` in `fs_syscalls.c` | `kernel-tests` |
 | **H6** size budget | `make kernel-text-budget` in `make health` | ~815754 B / cap 850000 |
