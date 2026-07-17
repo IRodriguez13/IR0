@@ -14,7 +14,7 @@
 
 #include "fat16_disk.h"
 #include "vfs.h"
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <ir0/partition.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
@@ -136,7 +136,7 @@ static int fat16_read_sectors(struct fat16_vol *v, uint32_t rel_lba, uint8_t cou
 {
 	if (!v || !buf || count == 0)
 		return -EINVAL;
-	if (!block_dev_read_sectors(v->blk_name, v->base_lba + rel_lba, count, buf))
+	if (ir0_block_read_by_name(v->blk_name, v->base_lba + rel_lba, count, buf))
 		return -EIO;
 	return 0;
 }
@@ -146,7 +146,7 @@ static int fat16_write_sectors(struct fat16_vol *v, uint32_t rel_lba, uint8_t co
 {
 	if (!v || !buf || count == 0)
 		return -EINVAL;
-	if (!block_dev_write_sectors(v->blk_name, v->base_lba + rel_lba, count, buf))
+	if (ir0_block_write_by_name(v->blk_name, v->base_lba + rel_lba, count, buf))
 		return -EIO;
 	return 0;
 }
@@ -313,7 +313,7 @@ static int fat16_find_fat16_partition(uint8_t disk_id, uint32_t *lba_out)
 	uint8_t mbr[512];
 	int i;
 
-	if (!block_dev_read_sectors(block_dev_legacy_name(disk_id), 0, 1, mbr))
+	if (ir0_block_read_by_name(ir0_block_legacy_name(disk_id), 0, 1, mbr))
 		return -EIO;
 	if (mbr[510] != 0x55 || mbr[511] != 0xAA)
 		return -ENOENT;
@@ -1156,14 +1156,14 @@ int fat16_disk_mount(const char *dev, const char *mount_dir)
 	ret = fat16_parse_dev(dev, blk, sizeof(blk), &part_lba, &whole);
 	if (ret != 0)
 		return ret;
-	if (!block_dev_is_present(blk))
+	if (!ir0_block_name_is_present(blk))
 		return -ENXIO;
 
 	disk_id = (uint8_t)(blk[2] - 'a');
 
 	if (whole)
 	{
-		if (!block_dev_read_sectors(blk, 0, 1, boot))
+		if (ir0_block_read_by_name(blk, 0, 1, boot))
 			return -EIO;
 		if (fat16_disk_probe_bpb(boot, NULL) != 0)
 		{
@@ -1177,7 +1177,7 @@ int fat16_disk_mount(const char *dev, const char *mount_dir)
 	strncpy(slot->blk_name, blk, sizeof(slot->blk_name) - 1);
 	slot->base_lba = part_lba;
 
-	if (!block_dev_read_sectors(blk, part_lba, 1, boot))
+	if (ir0_block_read_by_name(blk, part_lba, 1, boot))
 		return -EIO;
 	ret = fat16_load_bpb(slot, boot);
 	if (ret != 0)

@@ -23,7 +23,7 @@
 #include <ir0/oops.h>
 #include <ir0/logging.h>
 #include <string.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/arch_port.h>
 
 static ipc_channel_t *ipc_channels = NULL;  /* Linked list of all channels */

@@ -15,7 +15,6 @@
 #include "vfs.h"
 #include "tmpfs.h"
 #include <ir0/kmem.h>
-#include <ir0/vga.h>
 #include <errno.h>
 #include <string.h>
 #include <stddef.h>

@@ -14,13 +14,12 @@
 
 #include "process.h"
 #include "rr_sched.h"
+#include "sched_ops.h"
+#include "sched_switch.h"
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <ir0/arch_port.h>
-#include <ir0/signals.h>
-#include <ir0/context.h>
-#include <ir0/serial_io.h>
 #include <stdint.h>
 
 /* Scheduler state - circular queue of runnable processes */
@@ -212,61 +211,6 @@ void rr_remove_process(process_t *proc)
 }
 
 /**
- * sched_context_switch_to - Perform context switch to an already-selected task
- * @next: Runnable process chosen by the active scheduler backend
- *
- * Shared by RR and priority-band backends. Caller must not hold a private
- * irq-save across this call; this function saves/restores IRQs itself.
- */
-void sched_context_switch_to(process_t *next)
-{
-	static int first = 1; /* Track first context switch (kernel->user) */
-	process_t *prev;
-	uint64_t irq_flags;
-	int should_handle_signals = 0;
-
-	if (!next)
-		return;
-
-	irq_flags = rr_irq_save();
-	prev = current_process;
-
-	if (!first && prev == next)
-	{
-		rr_irq_restore(irq_flags);
-		return;
-	}
-
-	if (prev && prev->state == PROCESS_RUNNING)
-	{
-		should_handle_signals = 1;
-		prev->state = PROCESS_READY;
-	}
-
-	if (should_handle_signals)
-		handle_signals();
-
-	next->state = PROCESS_RUNNING;
-	current_process = next;
-
-	if (signals_should_handle_on_run(next))
-		handle_signals();
-
-	if (first)
-	{
-		first = 0;
-		arch_set_current_kernel_stack(next);
-		arch_first_context_switch(next);
-		panic("Returned from first context switch");
-	}
-
-	if (prev && next)
-		arch_context_switch(&prev->task, &next->task);
-
-	rr_irq_restore(irq_flags);
-}
-
-/**
  * rr_schedule_next - Select and switch to next process in round-robin order
  */
 void rr_schedule_next(void)
@@ -356,3 +300,11 @@ void rr_promote_process(process_t *proc)
 	}
 	rr_irq_restore(irq_flags);
 }
+
+const struct ir0_sched_ops ir0_rr_sched_ops = {
+	.add = rr_add_process,
+	.remove = rr_remove_process,
+	.schedule_next = rr_schedule_next,
+	.count_runnable = rr_count_runnable,
+	.promote = rr_promote_process,
+};

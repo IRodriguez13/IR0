@@ -25,7 +25,7 @@
 #include <ir0/time.h>
 #include <ir0/console.h>
 #include <ir0/devfs.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/ktm.h>
 #include <ir0/fcntl.h>
 #include <ir0/clock.h>

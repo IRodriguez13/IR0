@@ -1,6 +1,6 @@
 # KTM — Kernel Test Module
 
-> **Last verified:** 2026-07-12  
+> **Last verified:** 2026-07-17  
 > **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `tests/ktm/`,  
 > `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`, root `Makefile` targets `ktm-*`
 
@@ -282,6 +282,10 @@ make -s ktm-userdev-input-det-virtfs-run
 make -s smoke-nic-reach          # F8-1
 make -s smoke-tcp-guest          # F8-2
 make -s smoke-tcp-wire           # F8-3
+make -s ktm-userdev-epoll-run    # epoll create/ctl/wait (canonical)
+make -s ktm-userdev-stream-sock-run  # AF_UNIX + TCP loopback
+make -s smoke-epoll-basic        # alias → ktm-userdev-epoll-run
+make -s smoke-stream-sock        # alias → ktm-userdev-stream-sock-run
 
 # Hygiene
 make -s arch-guard               # no [FASE in kernel trees; ktm-include rules
@@ -304,6 +308,16 @@ bookkeeping scenario). Host-share: `make smoke-hostshare-9p` (MVP read) and
    [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md).
 4. Keep uapi event type numbers in sync between `event.h` and `uapi.h`
    (`KTM_UAPI_EVENT_*`).
+
+### 7.1 Canonical test plane (when KTM is better)
+
+| Plane | Owns |
+|-------|------|
+| **KTM** (`ktm-run` / `ktm-userdev-*`) | Kernel state, fork/exec/IPC depth, guest net wire, fault injection, syscall depth that fits a musl pilot |
+| **Keep outside KTM** | `arch-guard`, `tests/host` ABI/facade units, `linux-abi-audit-*`, deep COW `smoke-mm-cow-lazy`, product HOST (runit/ash/BusyBox/Doom), storage/hw/ARM machine smokes |
+| **Do not add** | A new serial-only smoke for a gap KTM already covers better — add/extend scenario or userdev + `--require KTM_*` / `KTM\|…` protocol |
+
+Overlapping product smokes must **alias** to the KTM gate as the primary target (e.g. `smoke-epoll-basic` → `ktm-userdev-epoll-run`, `smoke-stream-sock` → `ktm-userdev-stream-sock-run`). Legacy FASE serial storms remain SUB / non-default.
 
 ---
 

@@ -35,7 +35,7 @@
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <ir0/partition.h>
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <fs/vfs.h>
 #include <ir0/validation.h>
 #include <ir0/resource_registry.h>
@@ -86,16 +86,16 @@ static uint64_t get_memory_usage(void)
     uint64_t total_used = 0;
     
     /* Get physical memory statistics */
-    pmm_stats(&total_frames, &used_frames, NULL);
+    ir0_mm_pmm_stats(&total_frames, &used_frames, NULL);
     
     /* Get heap allocator statistics */
-    alloc_stats(&heap_total, &heap_used, NULL);
+    ir0_mm_alloc_stats(&heap_total, &heap_used, NULL);
     
     /* Calculate total used memory:
      * - Physical frames: used_frames * 4KB per frame
      * - Heap: heap_used bytes
      */
-    total_used = ((uint64_t)used_frames * PAGE_SIZE_4KB) + (uint64_t)heap_used;
+    total_used = ((uint64_t)used_frames * IR0_MM_PAGE_SIZE) + (uint64_t)heap_used;
     
     return total_used;
 }
@@ -112,16 +112,16 @@ static uint64_t get_total_memory(void)
     uint64_t total = 0;
     
     /* Get physical memory statistics */
-    pmm_stats(&total_frames, NULL, NULL);
+    ir0_mm_pmm_stats(&total_frames, NULL, NULL);
     
     /* Get heap allocator statistics */
-    alloc_stats(&heap_total, NULL, NULL);
+    ir0_mm_alloc_stats(&heap_total, NULL, NULL);
     
     /* Calculate total available memory:
      * - Physical frames: total_frames * 4KB per frame
      * - Heap: heap_total bytes
      */
-    total = ((uint64_t)total_frames * PAGE_SIZE_4KB) + (uint64_t)heap_total;
+    total = ((uint64_t)total_frames * IR0_MM_PAGE_SIZE) + (uint64_t)heap_total;
     
     return total;
 }
@@ -693,10 +693,10 @@ int proc_blockdevices_read(char *buf, size_t count)
     size_t off = 0;
     for (uint8_t i = 0; i < 4; i++)
     {
-        const char *disk_name = block_dev_legacy_name(i);
-        if (!disk_name || !block_dev_is_present(disk_name))
+        const char *disk_name = ir0_block_legacy_name(i);
+        if (!disk_name || !ir0_block_name_is_present(disk_name))
             continue;
-        uint64_t size = block_dev_get_sector_count(disk_name);
+        uint64_t size = ir0_block_sector_count_by_name(disk_name);
         const char *model = "-";
         const char *serial = "-";
         char name_buf[8];
@@ -782,10 +782,10 @@ int proc_partitions_read(char *buf, size_t count)
     size_t off = 0;
     for (uint8_t disk_id = 0; disk_id < MAX_DISKS; disk_id++)
     {
-        const char *disk_name = block_dev_legacy_name(disk_id);
-        if (!disk_name || !block_dev_is_present(disk_name))
+        const char *disk_name = ir0_block_legacy_name(disk_id);
+        if (!disk_name || !ir0_block_name_is_present(disk_name))
             continue;
-        uint64_t disk_blocks_1k = block_dev_get_sector_count(disk_name) / 2;
+        uint64_t disk_blocks_1k = ir0_block_sector_count_by_name(disk_name) / 2;
         char name_buf[16];
         snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + disk_id);
         char disk_blocks_str[24];
@@ -936,8 +936,8 @@ int proc_iomem_read(char *buf, size_t count)
     uint64_t ram_end;
     int n;
 
-    pmm_stats(&total_frames, NULL, NULL);
-    ram_end = (uint64_t)total_frames * PAGE_SIZE_4KB;
+    ir0_mm_pmm_stats(&total_frames, NULL, NULL);
+    ram_end = (uint64_t)total_frames * IR0_MM_PAGE_SIZE;
     if (ram_end > 0)
         ram_end--;
     proc_u64_to_dec(ram_end, ram_end_str, sizeof(ram_end_str));

@@ -16,9 +16,8 @@
 #include "vfs.h"
 #include <ir0/logging.h>
 #include <ir0/blockdev.h>
-#include <ir0/serial_io.h>
+#include <ir0/klog.h>
 #include <ir0/clock.h>
-#include <ir0/vga.h>
 #include <ir0/stat.h>
 #include <ir0/errno.h>
 #include <ir0/console_backend.h>
@@ -109,7 +108,7 @@ static void minix_emit_blockdev_classify(void)
 	if (minix_blockdev_classified)
 		return;
 	minix_blockdev_classified = 1;
-	serial_print("[MINIX_FS][CLASSIFY] MINIX_USES_BLOCKDEV_FACADE\n");
+	klog_print("[MINIX_FS][CLASSIFY] MINIX_USES_BLOCKDEV_FACADE\n");
 }
 
 static bool minix_root_block_present(void)
@@ -287,16 +286,16 @@ static int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
 
   if (inode_num == 0 || inode_num >= MINIX_MAX_INODES || !inode)
   {
-    serial_print("SERIAL: minix_read_inode: invalid parameters - inode_num=");
-    serial_print_hex32(inode_num);
-    serial_print("\n");
+    klog_print("SERIAL: minix_read_inode: invalid parameters - inode_num=");
+    klog_hex32(inode_num);
+    klog_print("\n");
     return -1;
   }
 
   // Check if filesystem is initialized
   if (!minix_fs.initialized)
   {
-    serial_print("SERIAL: minix_read_inode: filesystem not initialized!\n");
+    klog_print("SERIAL: minix_read_inode: filesystem not initialized!\n");
     return -1;
   }
 
@@ -552,13 +551,13 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
 
 
 #if DEBUG_VFS
-  serial_print("SERIAL: write_inode: inode_num=");
-  serial_print_hex32(inode_num);
-  serial_print(" block=");
-  serial_print_hex32(inode_block);
-  serial_print(" offset=");
-  serial_print_hex32(inode_offset);
-  serial_print("\n");
+  klog_print("SERIAL: write_inode: inode_num=");
+  klog_hex32(inode_num);
+  klog_print(" block=");
+  klog_hex32(inode_block);
+  klog_print(" offset=");
+  klog_hex32(inode_offset);
+  klog_print("\n");
 #endif
 
   // Leer el bloque que contiene el inode
@@ -566,7 +565,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   if (minix_read_block(inode_block, block_buffer) != 0)
   {
 #if DEBUG_VFS
-    serial_print("SERIAL: write_inode: failed to read block\n");
+    klog_print("SERIAL: write_inode: failed to read block\n");
 #endif
     return -EIO;
   }
@@ -578,7 +577,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   if (minix_write_block(inode_block, block_buffer) != 0)
   {
 #if DEBUG_VFS
-    serial_print("SERIAL: write_inode: failed to write block\n");
+    klog_print("SERIAL: write_inode: failed to write block\n");
 #endif
     return -EIO;
   }
@@ -590,7 +589,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   }
 
 #if DEBUG_VFS
-  serial_print("SERIAL: write_inode: success\n");
+  klog_print("SERIAL: write_inode: success\n");
 #endif
   return 0;
 }
@@ -1139,30 +1138,30 @@ int minix_fs_format(void)
   root_inode.i_nlinks = 2;                                    // . and .. links
   root_inode.i_zone[0] = minix_fs.superblock.s_firstdatazone; // First data zone
 
-  serial_print("SERIAL: minix_fs_format: creating root inode with mode=");
-  serial_print_hex32(root_inode.i_mode);
-  serial_print(" zone[0]=");
-  serial_print_hex32(root_inode.i_zone[0]);
-  serial_print("\n");
+  klog_print("SERIAL: minix_fs_format: creating root inode with mode=");
+  klog_hex32(root_inode.i_mode);
+  klog_print(" zone[0]=");
+  klog_hex32(root_inode.i_zone[0]);
+  klog_print("\n");
 
   // Write root inode using proper function
   if (minix_fs_write_inode(MINIX_ROOT_INODE, &root_inode) != 0)
   {
-    serial_print("SERIAL: minix_fs_format: FAILED to write root inode!\n");
+    klog_print("SERIAL: minix_fs_format: FAILED to write root inode!\n");
     return -1;
   }
   
   // Verify what we just wrote
   minix_inode_t verify_inode;
   if (minix_read_inode(MINIX_ROOT_INODE, &verify_inode) == 0) {
-    serial_print("SERIAL: minix_fs_format: VERIFY root inode mode=");
-    serial_print_hex32(verify_inode.i_mode);
-    serial_print("\n");
+    klog_print("SERIAL: minix_fs_format: VERIFY root inode mode=");
+    klog_hex32(verify_inode.i_mode);
+    klog_print("\n");
   } else {
-    serial_print("SERIAL: minix_fs_format: VERIFY FAILED to read back!\n");
+    klog_print("SERIAL: minix_fs_format: VERIFY FAILED to read back!\n");
   }
   
-  serial_print("SERIAL: minix_fs_format: root inode written successfully\n");
+  klog_print("SERIAL: minix_fs_format: root inode written successfully\n");
 
   // Create root directory with . and .. entries
   uint8_t root_dir_block[MINIX_BLOCK_SIZE];
@@ -1182,11 +1181,11 @@ int minix_fs_format(void)
   if (minix_write_block(minix_fs.superblock.s_firstdatazone, root_dir_block) !=
       0)
   {
-    serial_print("SERIAL: minix_fs_format: FAILED to write root directory block!\n");
+    klog_print("SERIAL: minix_fs_format: FAILED to write root directory block!\n");
     return -1;
   }
 
-  serial_print("SERIAL: minix_fs_format: root directory block written successfully\n");
+  klog_print("SERIAL: minix_fs_format: root directory block written successfully\n");
 
   // Mark only inode 1 as used in bitmap
   minix_fs.inode_bitmap[0] |= 0x02; // Bit 1 = inode 1
@@ -1196,31 +1195,31 @@ int minix_fs_format(void)
   // Root directory uses s_firstdatazone (zone 5), so clear bit 5
   minix_fs.zone_bitmap[0] &= ~(1 << 5); // Mark zone 5 as USED (clear bit)
 
-  serial_print("SERIAL: minix_fs_format: marked root inode and root zone as used\n");
+  klog_print("SERIAL: minix_fs_format: marked root inode and root zone as used\n");
 
   // Write inode bitmap
   if (minix_write_block(imap_block, minix_fs.inode_bitmap) != 0)
   {
-    serial_print("SERIAL: minix_fs_format: FAILED to write inode bitmap!\n");
+    klog_print("SERIAL: minix_fs_format: FAILED to write inode bitmap!\n");
     return -1;
   }
 
   // Write zone bitmap
   if (minix_write_block(zmap_block, minix_fs.zone_bitmap) != 0)
   {
-    serial_print("SERIAL: minix_fs_format: FAILED to write zone bitmap!\n");
+    klog_print("SERIAL: minix_fs_format: FAILED to write zone bitmap!\n");
     return -1;
   }
 
-  serial_print("SERIAL: minix_fs_format: filesystem formatted successfully!\n");
+  klog_print("SERIAL: minix_fs_format: filesystem formatted successfully!\n");
 
   minix_fs.initialized = true;
   root_inode_cached = false; // Reset cache
 
   // Create test files to verify ls works
-  serial_print("SERIAL: minix_fs_format: creating test files...\n");  
+  klog_print("SERIAL: minix_fs_format: creating test files...\n");  
 
-  serial_print("SERIAL: minix_fs_format: test files created successfully\n");
+  klog_print("SERIAL: minix_fs_format: test files created successfully\n");
 
   return 0;
 }
@@ -1422,9 +1421,9 @@ static void uint32_to_str(uint32_t num, char *buf, size_t buf_size)
 
 int minix_fs_ls(const char *path, bool detailed)
 {
-  serial_print("SERIAL: minix_fs_ls called for path: ");
-  serial_print(path ? path : "NULL");
-  serial_print("\n");
+  klog_print("SERIAL: minix_fs_ls called for path: ");
+  klog_print(path ? path : "NULL");
+  klog_print("\n");
 
   if (!minix_fs.initialized)
   {
@@ -1543,11 +1542,11 @@ int minix_fs_ls(const char *path, bool detailed)
         char line[VFS_PATH_MAX];
         int len = snprintf(line, sizeof(line), "%s\n", safe_name);
         
-        serial_print("SERIAL: minix_fs_ls: printing line: '");
-        serial_print(line);
-        serial_print("' len=");
-        serial_print_hex32(len);
-        serial_print("\n");
+        klog_print("SERIAL: minix_fs_ls: printing line: '");
+        klog_print(line);
+        klog_print("' len=");
+        klog_hex32(len);
+        klog_print("\n");
         
         typewriter_vga_print(line, 0x0F);
         total_entries_printed++;
@@ -1682,10 +1681,10 @@ static void minix_serial_print_blob(const char *label, const void *content, size
   char scratch[128];
   size_t n;
 
-  serial_print(label);
+  klog_print(label);
   if (!content || content_size == 0)
   {
-    serial_print("(empty)\n");
+    klog_print("(empty)\n");
     return;
   }
   n = content_size;
@@ -1693,10 +1692,10 @@ static void minix_serial_print_blob(const char *label, const void *content, size
     n = sizeof(scratch) - 1;
   kmemcpy(scratch, content, n);
   scratch[n] = '\0';
-  serial_print(scratch);
+  klog_print(scratch);
   if (content_size > n)
-    serial_print("...");
-  serial_print("\n");
+    klog_print("...");
+  klog_print("\n");
 }
 
 #define MINIX_INDIRECT_ZONES (MINIX_BLOCK_SIZE / (int)sizeof(uint16_t))
@@ -2247,11 +2246,11 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
   if (!minix_offset_read_classified)
   {
     minix_offset_read_classified = 1;
-    serial_print("[MINIX_FS][CLASSIFY] MINIX_OFFSET_READ_OK\n");
-    serial_print("[MINIX_FS][CLASSIFY] LARGE_FILE_STREAMING_OK\n");
-    serial_print("[VFS][CLASSIFY] VFS_OFFSET_READ_OK\n");
-    serial_print("[VFS][CLASSIFY] ATA_PRESSURE_REDUCED\n");
-    serial_print("[MINIX_FS][CLASSIFY] VFS_BACKEND_NEUTRAL\n");
+    klog_print("[MINIX_FS][CLASSIFY] MINIX_OFFSET_READ_OK\n");
+    klog_print("[MINIX_FS][CLASSIFY] LARGE_FILE_STREAMING_OK\n");
+    klog_print("[VFS][CLASSIFY] VFS_OFFSET_READ_OK\n");
+    klog_print("[VFS][CLASSIFY] ATA_PRESSURE_REDUCED\n");
+    klog_print("[MINIX_FS][CLASSIFY] VFS_BACKEND_NEUTRAL\n");
   }
 
   if (read_count)
@@ -2366,33 +2365,33 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
   minix_inode_t file_inode;
   int ret;
 
-  serial_print("SERIAL: minix_fs_write_file called\n");
+  klog_print("SERIAL: minix_fs_write_file called\n");
 
   if (!minix_fs.initialized)
   {
-    serial_print("SERIAL: minix_fs_write_file: filesystem not initialized\n");
+    klog_print("SERIAL: minix_fs_write_file: filesystem not initialized\n");
     return -1;
   }
 
   if (!path)
   {
-    serial_print("SERIAL: minix_fs_write_file: path is NULL\n");
+    klog_print("SERIAL: minix_fs_write_file: path is NULL\n");
     return -1;
   }
 
   if (content_size > 0 && !content)
   {
-    serial_print("SERIAL: minix_fs_write_file: content is NULL\n");
+    klog_print("SERIAL: minix_fs_write_file: content is NULL\n");
     return -1;
   }
 
-  serial_print("SERIAL: minix_fs_write_file: path=");
-  serial_print(path);
+  klog_print("SERIAL: minix_fs_write_file: path=");
+  klog_print(path);
   minix_serial_print_blob(" content=", content, content_size);
 
   if (!minix_root_block_present())
   {
-    serial_print("SERIAL: write: disk not available\n");
+    klog_print("SERIAL: write: disk not available\n");
     return -EIO;
   }
 
@@ -2401,9 +2400,9 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
   {
     if (minix_fs_touch(path, 0644) != 0)
     {
-      serial_print("SERIAL: Error: Could not create file ");
-      serial_print(path);
-      serial_print("\n");
+      klog_print("SERIAL: Error: Could not create file ");
+      klog_print(path);
+      klog_print("\n");
       return -1;
     }
 
@@ -2414,13 +2413,13 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
 
   if (minix_read_inode(inode_num, &file_inode) != 0)
   {
-    serial_print("SERIAL: Error: Could not read inode from disk\n");
+    klog_print("SERIAL: Error: Could not read inode from disk\n");
     return -1;
   }
 
   if (file_inode.i_mode & MINIX_IFDIR)
   {
-    serial_print("SERIAL: Error: Cannot write to directory\n");
+    klog_print("SERIAL: Error: Cannot write to directory\n");
     return -1;
   }
 
@@ -2443,11 +2442,11 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
   if (ret != 0)
     return -1;
 
-  serial_print("SERIAL: File '");
-  serial_print(path);
-  serial_print("' written successfully (");
-  serial_print_hex32((uint32_t)content_size);
-  serial_print(" bytes)\n");
+  klog_print("SERIAL: File '");
+  klog_print(path);
+  klog_print("' written successfully (");
+  klog_hex32((uint32_t)content_size);
+  klog_print(" bytes)\n");
 
   return 0;
 }
@@ -3059,9 +3058,9 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   {
     if (vfs_exec_audit_is_active())
     {
-      serial_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_fail path=");
-      serial_print(path);
-      serial_print(" inode=0\n");
+      klog_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_fail path=");
+      klog_print(path);
+      klog_print(" inode=0\n");
     }
     return -ENOENT;
   }
@@ -3071,20 +3070,20 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   {
     if (vfs_exec_audit_is_active())
     {
-      serial_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_fail path=");
-      serial_print(path);
-      serial_print(" inode=0\n");
+      klog_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_fail path=");
+      klog_print(path);
+      klog_print(" inode=0\n");
     }
     return -ENOENT;
   }
 
   if (vfs_exec_audit_is_active())
   {
-    serial_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_ok path=");
-    serial_print(path);
-    serial_print(" inode=");
-    serial_print_hex32((uint32_t)inode_num);
-    serial_print("\n");
+    klog_print("[EXEC_AUDIT][MINIX] stage=inode_lookup_ok path=");
+    klog_print(path);
+    klog_print(" inode=");
+    klog_hex32((uint32_t)inode_num);
+    klog_print("\n");
   }
 
   minix_inode_t inode;
@@ -3098,13 +3097,13 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   {
     if (vfs_exec_audit_is_active())
     {
-      serial_print("[EXEC_AUDIT][MINIX] stage=not_regular mode=");
-      serial_print_hex32((uint32_t)inode.i_mode);
-      serial_print(" ifmt=");
-      serial_print_hex32((uint32_t)(inode.i_mode & MINIX_IFMT));
-      serial_print(" is_dir=");
-      serial_print((inode.i_mode & MINIX_IFMT) == MINIX_IFDIR ? "1" : "0");
-      serial_print("\n");
+      klog_print("[EXEC_AUDIT][MINIX] stage=not_regular mode=");
+      klog_hex32((uint32_t)inode.i_mode);
+      klog_print(" ifmt=");
+      klog_hex32((uint32_t)(inode.i_mode & MINIX_IFMT));
+      klog_print(" is_dir=");
+      klog_print((inode.i_mode & MINIX_IFMT) == MINIX_IFDIR ? "1" : "0");
+      klog_print("\n");
     }
     return -EINVAL; // Not a regular file
   }
@@ -3116,9 +3115,9 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
     *data = NULL;
     if (vfs_exec_audit_is_active())
     {
-      serial_print("[EXEC_AUDIT][MINIX] stage=file_empty inode=");
-      serial_print_hex32((uint32_t)inode_num);
-      serial_print("\n");
+      klog_print("[EXEC_AUDIT][MINIX] stage=file_empty inode=");
+      klog_hex32((uint32_t)inode_num);
+      klog_print("\n");
     }
     return 0;
   }
@@ -3168,7 +3167,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
         if (i == MINIX_DIRECT_ZONES - 1 &&
             *size > (size_t)MINIX_BLOCK_SIZE * (size_t)MINIX_DIRECT_ZONES)
         {
-          serial_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+          klog_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
         }
         kfree(*data);
         return -EIO;
@@ -3197,7 +3196,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
       exec_read_trace_minix_eio("MINIX_READ_EIO_AT_BLOCK", "indirect_meta", 7,
                                 ind_zone, ind_zone, ind_lba, bytes_read,
                                 indirect_buffer);
-      serial_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+      klog_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
       kfree(*data);
       return -EIO;
     }
@@ -3253,7 +3252,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   else if (bytes_read < *size && *size > (size_t)MINIX_BLOCK_SIZE *
                                            (size_t)MINIX_DIRECT_ZONES)
   {
-    serial_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+    klog_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
   }
 
   if (bytes_read < *size && inode.i_zone[8] != 0)
@@ -3323,7 +3322,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
    */
   if (bytes_read < *size)
   {
-    serial_print("[EXEC_ONLY][CLASSIFY] MINIX_OFFSET_SIZE_BUG\n");
+    klog_print("[EXEC_ONLY][CLASSIFY] MINIX_OFFSET_SIZE_BUG\n");
     kfree(*data);
     *data = NULL;
     *size = 0;
@@ -3333,7 +3332,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   if (DEBUG_VFS && *size > (size_t)MINIX_BLOCK_SIZE * ((size_t)MINIX_DIRECT_ZONES +
       (size_t)MINIX_INDIRECT_ZONES))
   {
-    serial_print("[MINIX_FS][CLASSIFY] MINIX_DOUBLE_INDIRECT_OK\n");
+    klog_print("[MINIX_FS][CLASSIFY] MINIX_DOUBLE_INDIRECT_OK\n");
   }
 
   return 0;
@@ -3464,7 +3463,7 @@ static int minix_create(const char *path, mode_t mode)
   {
     minix_backend_classified = 1;
     if (DEBUG_VFS)
-      serial_print("[MINIX_FS][CLASSIFY] MINIX_BACKEND_ONLY_CONFIRMED\n");
+      klog_print("[MINIX_FS][CLASSIFY] MINIX_BACKEND_ONLY_CONFIRMED\n");
   }
   return ret;
 }
@@ -3518,7 +3517,7 @@ static int minix_truncate(const char *path, size_t length)
       return -EIO;
 
     if (DEBUG_VFS)
-      serial_print("[MINIX_FS][CLASSIFY] MINIX_TRUNCATE_GROW_OK\n");
+      klog_print("[MINIX_FS][CLASSIFY] MINIX_TRUNCATE_GROW_OK\n");
     return 0;
   }
 
@@ -3545,7 +3544,7 @@ static int minix_truncate(const char *path, size_t length)
     return -EIO;
 
   if (DEBUG_VFS)
-    serial_print("[MINIX_FS][CLASSIFY] LARGE_FILE_TRUNCATE_OK\n");
+    klog_print("[MINIX_FS][CLASSIFY] LARGE_FILE_TRUNCATE_OK\n");
   return 0;
 }
 
@@ -3662,7 +3661,7 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
 	if (!minix_fs_is_working()) {
 		int ret = minix_fs_init();
 		if (ret != 0) {
-			serial_print("[VFS] ERROR - MINIX_MOUNT: minix_fs_init failed\n");
+			klog_print("[VFS] ERROR - MINIX_MOUNT: minix_fs_init failed\n");
 			return ret;
 		}
 	}

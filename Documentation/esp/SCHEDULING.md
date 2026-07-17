@@ -1,30 +1,47 @@
 # Scheduling en IR0
 
-El scheduling en IR0 se selecciona por API de scheduler y politica desde Kconfig.
+> **Última verificación:** 2026-07-17
+> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/rr_sched.c`, `sched/priority_sched.c`
 
-## Modelo de Seleccion
+El scheduling en IR0 se selecciona por una fachada portable y una tabla de ops
+de backend configurada desde Kconfig.
 
-- Capa de dispatch: `kernel/scheduler_api.c`.
-- Clave de seleccion: `CONFIG_SCHEDULER_POLICY`.
-- Politicas conectadas hoy:
-  - Round-robin.
-  - Wrapper compatible con CFS (conservador).
-  - Wrapper compatible con priority (conservador).
+## Modelo de selección
 
-## Caracteristicas Runtime
+- API portable: [`includes/ir0/sched.h`](../../includes/ir0/sched.h).
+- Despacho: [`sched/sched.c`](../../sched/sched.c) con `struct ir0_sched_ops`
+  según `CONFIG_SCHEDULER_POLICY`.
+- Ops de backend: [`sched/sched_ops.h`](../../sched/sched_ops.h) — RR y priority
+  exportan su propia tabla; un backend no incluye al otro.
+- Switch compartido: [`sched/sched_switch.c`](../../sched/sched_switch.c).
+- Compat: `scheduler_api.h` solo redirige a `<ir0/sched.h>`.
 
-- Integracion con flujo de procesos y senales.
-- Mutaciones de cola endurecidas para mayor seguridad concurrente.
-- Context-switch assembly especifico por arquitectura.
+### Políticas
 
-## Puntos Fuertes
+| `CONFIG_SCHEDULER_POLICY` | Nombre | Objeto |
+|---------------------------|--------|--------|
+| `0` | `round_robin` | `rr_sched.o` |
+| `1` | `cfs` | Alias honesto de RR (sin `cfs_sched.c`) |
+| `2` (defconfig) | `priority` | `priority_sched.o` |
 
-- Seleccion de scheduler guiada por configuracion.
-- Frontera de API facilita iterar politicas sin tocar todo el arbol.
-- Mejoras de estabilidad redujeron riesgos comunes en colas.
+## Características runtime
 
-## Puntos Debiles
+- Integración con procesos y señales.
+- Mutaciones de cola serializadas por backend.
+- Context-switch assembly específico por arquitectura.
 
-- Las politicas alternativas aun son minimas y evolucionan.
-- Fairness/latencia profunda siguen como trabajo futuro.
-- Scheduling orientado a SMP no es baseline actual.
+## Puntos fuertes
+
+- Callers portables no incluyen headers de RR ni de peers.
+- Priority es backend real (no wrapper que incluye `rr_sched.h`).
+
+## Puntos débiles
+
+- Policy `1` aún no es CFS fair real.
+- SMP no es el baseline.
+- Preemption por timer en IRQ sigue diferida (ver mandocs).
+
+## Relacionado
+
+- Mandocs: [`../mandocs/esp/scheduler.md`](../mandocs/esp/scheduler.md)
+- Desacoplamiento: [`../DECOUPLING.md`](../DECOUPLING.md)

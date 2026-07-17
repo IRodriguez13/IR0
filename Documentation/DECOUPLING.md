@@ -27,7 +27,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 |------|-----------|
 | Syscall ISA hook | **`arch_syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/common/arch_interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `interrupt/arch/idt.h`. |
 | Ring‑3 transition | **`arch_switch_to_user(entry, stack)`** in [`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c); scheduler uses [`arch/common/arch_portable.h`](../../arch/common/arch_portable.h) prototypes only. |
-| Context switch | callers use **`arch_context_switch()`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); ISA labels `switch_context_x64` / `switch_context_arm64` remain private to ASM + [`kernel/scheduler/switch/arch_context_switch.c`](../../kernel/scheduler/switch/arch_context_switch.c). |
+| Context switch | callers use **`arch_context_switch()`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); ISA labels `switch_context_x64` / `switch_context_arm64` remain private to ASM + [`sched/switch/arch_context_switch.c`](../../sched/switch/arch_context_switch.c). |
 | **`fs/`** vs `arch/` | No `#include <arch/...>` in `fs/`; use **`includes/ir0/arch_port.h`** (`scripts/architecture_guard.py` enforces). |
 
 ### Architecture guard rules (`scripts/architecture_guard.py`)
@@ -85,17 +85,20 @@ specific driver implementation file:
 | Area | Facade header(s) | Typical consumer |
 |------|------------------|------------------|
 | CPU / ISA queries for pseudo-fs | `arch_port.h` | **`fs/`** (`/proc` CPU text; wraps `arch_portable.h`) |
-| Block I/O | `block_dev.h` | `fs/` (Minix LBA path, VFS helpers) |
+| Block I/O | `blockdev.h` (`ir0_block_*`; `block_dev.h` compat) | `fs/` (Minix/FAT/ext2/devfs) |
 | Partitions | `partition.h` | `fs/devfs.c`, proc/sys helpers |
-| Console output | `console_backend.h` | `fs/`, sysfs paths |
+| Console output | `console_backend.h` | `fs/` (no `vga.h` in `fs/`) |
+| MM stats (opaque) | `mm_port.h` | `fs/procfs.c` |
 | Clock / wall time | `clock.h`, `rtc.h` | Time-related code |
 | Networking abstractions | `net.h` | Stack integration points |
-| Input | `keyboard.h`, `input.h`, backends | `/dev`, console |
-| Video | `vga.h`, `video_backend.h` | Diagnostics, optional UI |
-| Serial (debug) | `serial_io.h` | Logging façade |
+| Input | `input_backend.h` (mouse + kbd); `keyboard.h` thin compat | `/dev`, console, syscalls |
+| Video | `video_backend.h`, `vga.h` (non-`fs/` legacy) | Diagnostics, optional UI |
+| Kernel log | `klog.h` (portable `fs/`/`mm/`/`net/`/`sched/`) | Prefer over raw `serial_print` |
+| Serial (low-level) | `serial_io.h` | `klog` adapter, `/dev/serial` putchar |
 | Syscalls ABI | `syscall*.h`, `copy_user.h` | Arch-specific stubs |
-| Driver model | `driver.h`, `driver_bootstrap.h`, `init_drv.h` | Registry, boot order, `init_all_drivers()` |
-| Scheduler hooks | `scheduler_api.h` | Timer/IRQ paths into `sched_schedule_next()` |
+| Driver model | `driver.h`, `driver_bootstrap.h`, `init_drv.h` | Registry, boot order (opaque headers) |
+| Power | `platform_ops.h` | `kernel/power/power_manag.c` |
+| Scheduler | **`sched.h`** (`scheduler_api.h` → alias) | Process/timer/IRQ → `sched_schedule_next()` |
 | Resources | `resource_registry.h` | IRQ / I/O port registration from drivers |
 | VFS-backed devices | `devfs.h`, `procfs.h`, `sysfs.h` | Virtual filesystems |
 | Pseudo-fs registry | `pseudo_fs.h` | Longest-prefix table for `/proc` / `/sys` nodes |
@@ -103,17 +106,18 @@ specific driver implementation file:
 | `process_t` / task globals | `process.h` | `/proc`, `mm/paging.c` fork paths needing struct layout |
 | Bluetooth façade | `bluetooth.h` | `ir0_bluetooth_poll`, `ir0_bluetooth_register_driver` without `drivers/bluetooth/*.c` callers |
 
-Some facades are thin includes of concrete headers (`block_dev.h` →
-`drivers/storage/block_dev.h`, `driver_bootstrap.h` → `drivers/driver_bootstrap.h`). Central
-definitions still live beside implementations; tightening this would mean splitting “API
-structs only” headers from driver `.c` files.
+REQUIRED façades under `includes/ir0/*.h` must not `#include <drivers/…>`
+(`facade-no-drivers-include` in `architecture_guard.py`). Implementations may
+include drivers from `.c` adapters (`input_backend.c`, `blockdev.c`, …).
+`mm_port.h` is opaque (no `<mm/…>`). Prefer `blockdev.h` / `ir0_block_*` over
+legacy `block_dev_*` names in new `fs/` code.
 
 ## Registration and callback patterns
 
 | Mechanism | Types / APIs | Purpose |
 |-----------|----------------|---------|
 | **Driver registry** | `ir0_driver_ops_t`, `ir0_register_driver()` | Lifecycle + generic I/O; see `kernel/driver_registry.c`. |
-| **Block devices** | `block_dev_ops_t`, `block_dev_register()` | Sector I/O bound to disk id; ATA registers an implementation in `drivers/storage/ata_block.c`. |
+| **Block devices** | `ir0_block_ops` / `ir0_block_register()` | Sector I/O; ATA/AHCI/virtio register via facade. |
 | **Filesystems** | `struct vfs_ops`, `vfs_fstype` | Mountable FS plugins (`minix_fs.c`, `tmpfs.c`, `simplefs.c`, …). |
 | **Character devices** | `devfs_ops_t`, `devfs_register_device()` | Per-node read/write/ioctl/open/close in `fs/devfs.c`. |
 | **Bootstrap** | `driver_boot_init_fn`, `driver_bootstrap_register()` | Staged early init wired from `drivers/init_drv.c` with `CONFIG_INIT_*`. |
@@ -124,7 +128,7 @@ structs only” headers from driver `.c` files.
 | Use case | Preferred API |
 |----------|----------------|
 | Optional driver at boot | `driver_boot_init_fn` + `CONFIG_INIT_*` |
-| Block storage | `block_dev_ops_t` registered by name |
+| Block storage | `ir0_block_*` registered by name |
 | `/dev` node I/O | `devfs_ops_t` per node |
 | Mountable filesystem | `struct vfs_ops` + fstype registration |
 | Network NIC | `struct net_device` vtable in `ir0/net.h` |
@@ -187,7 +191,7 @@ baseline; evolves with refactors):
 
 Drivers register IRQ/I/O ports through **`includes/ir0/resource_registry.h`**. They must not pull
 `kernel/*.h` headers directly (`scripts/architecture_guard.py` requires facades); scheduler entry still
-uses **`includes/ir0/scheduler_api.h`**.
+uses **`includes/ir0/sched.h`**.
 
 ## Assessment: are we on a scalable path?
 

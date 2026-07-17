@@ -15,7 +15,7 @@
 #include "process.h"
 #include <config.h>
 #include "debug_bins/dbgshell.h"
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <ir0/console_backend.h>
 #include <ir0/kmem.h>
 #include <ir0/paging.h>

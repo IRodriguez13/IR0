@@ -21,11 +21,11 @@
 #include <d1_12_read_diag.h>
 #include <d1_16_tty_read_diag.h>
 #include <ir0/errno.h>
-#include <ir0/keyboard.h>
+#include <ir0/input_backend.h>
 #include <ir0/video_console.h>
 #include <ir0/kernel.h>
 #include <ir0/process.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <string.h>
 
 extern void kernel_idle_poll(void);
@@ -417,7 +417,7 @@ int ir0_console_input_ready(void)
 {
 	if (canon_readq_pos < canon_readq_len)
 		return 1;
-	if (!tty_icanon_on() && keyboard_buffer_has_data())
+	if (!tty_icanon_on() && input_kbd_has_data())
 		return 1;
 	return 0;
 }
@@ -455,9 +455,9 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 			continue;
 		}
 
-		while (bytes_read < count && keyboard_buffer_has_data())
+		while (bytes_read < count && input_kbd_has_data())
 		{
-			char c = keyboard_buffer_get();
+			char c = input_kbd_get();
 
 			c = tty_normalize_input(c);
 			if (c == 0)
@@ -538,7 +538,7 @@ int tty_ioctl_termios_kernel(uint64_t request, struct ir0_termios *ktermios)
 
 void tty_flush_input(void)
 {
-	keyboard_buffer_clear();
+	input_kbd_clear();
 	canon_line_len = 0;
 	canon_readq_len = 0;
 	canon_readq_pos = 0;

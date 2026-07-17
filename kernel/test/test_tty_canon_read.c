@@ -15,7 +15,7 @@
 #include "test/ktest_harness.h"
 #include "process.h"
 #include <ir0/console.h>
-#include <ir0/scheduler_api.h>
+#include <ir0/sched.h>
 #include <string.h>
 
 extern void kernel_idle_poll(void);
