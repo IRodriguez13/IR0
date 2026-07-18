@@ -42,6 +42,9 @@
 | ARM64 EL0 drop + SVC + PSCI off (F7.3) | `smoke-arm64-el0` / `make smoke-arm64` |
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | AF_UNIX `socketpair` stream | `smoke-socketpair` (`SOCKETPAIR_OK` / `KTM_SOCKETPAIR_OK`) |
+| AF_UNIX abstract + sock poll | `smoke-unix-abstract` (`UNIX_ABSTRACT_OK` / `SOCK_POLL_OK`) |
+| `SCM_RIGHTS` sendmsg/recvmsg | `smoke-scm-rights` (`SCM_RIGHTS_OK`) |
+| SysV shm (MIT-SHM prep) | `smoke-sysv-shm` (`SYSV_SHM_OK`) |
 | `mmap` MAP_SHARED `/dev/fb0` | `smoke-fb-map-shared` (`FB_MAP_SHARED_OK`) |
 | Host-share virtio-9p (QEMU `-virtfs`) | `smoke-hostshare-9p` (`HOSTSHARE_9P_OK` / `KTM_HOSTSHARE_OK`) |
 | Host-share exec (stub + `ir0_payload`) | `smoke-hostshare-exec` (`HOSTSHARE_EXEC_MOUNT_OK` + case done tag) |
@@ -213,6 +216,12 @@ ALL_OBJS/musl **BLOCKED**. No master merge this wave.
 | Prerequisite | Status | Evidence |
 |--------------|--------|----------|
 | Stream sockets (local) | OK | `smoke-stream-sock` |
+| `socketpair` / abstract unix | OK | `smoke-socketpair`, `smoke-unix-abstract` |
+| `SCM_RIGHTS` | OK | `smoke-scm-rights` |
+| SysV shm (MIT-SHM) | OK | `smoke-sysv-shm` |
+| MAP_SHARED `/dev/fb0` | OK | `smoke-fb-map-shared` |
+| poll on stream socks | OK | `SOCK_POLL_OK` in `smoke-unix-abstract` |
 | Input events | OK | T2 path |
 | Framebuffer | OK | T2 path |
 | Kernel-side WM | **Out of scope** | T3 rule |
+| X11 userspace | **Next campaign** | F11 — outside kernel tree |

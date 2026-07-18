@@ -38,6 +38,8 @@ struct sock_stream
 	int family;
 	enum ss_state state;
 	char path[SS_PATH];
+	size_t path_len;
+	int is_abstract;
 	uint16_t port;
 	struct sock_stream *peer;
 	struct sock_stream *listener;
@@ -46,18 +48,133 @@ struct sock_stream
 	unsigned tail;
 	unsigned count;
 	uint8_t wire_tcp;
-	uint8_t _wire_pad;
+	uint8_t shut_rd;
+	uint8_t shut_wr;
+	uint8_t _pad;
 	uint16_t wire_local_port;
 	uint32_t wire_peer_ip;
 	uint16_t wire_peer_port;
 	uint32_t wire_seq;
 	uint32_t wire_ack;
 	uint8_t magic;
+	uint8_t rights_n;
+	uint8_t rights[SOCK_STREAM_RIGHTS_MAX][SOCK_STREAM_RIGHTS_ENTRY_SIZE];
 };
 
 #define SS_MAGIC 0xA5
 
 static struct sock_stream g_socks[SS_MAX];
+static void (*g_rights_dtor)(void *entry, size_t sz);
+
+extern void poll_wake_check(void);
+
+void sock_stream_set_rights_dtor(void (*dtor)(void *entry, size_t sz))
+{
+	g_rights_dtor = dtor;
+}
+
+static void sock_stream_rights_clear(struct sock_stream *s)
+{
+	int i;
+
+	if (!s)
+		return;
+	for (i = 0; i < s->rights_n; i++)
+	{
+		if (g_rights_dtor)
+			g_rights_dtor(s->rights[i], SOCK_STREAM_RIGHTS_ENTRY_SIZE);
+	}
+	s->rights_n = 0;
+}
+
+int sock_stream_rights_push(struct sock_stream *recv_side, const void *entry, size_t sz)
+{
+	if (!recv_side || !entry || sz == 0 || sz > SOCK_STREAM_RIGHTS_ENTRY_SIZE)
+		return -EINVAL;
+	if (recv_side->rights_n >= SOCK_STREAM_RIGHTS_MAX)
+		return -ENOBUFS;
+	memset(recv_side->rights[recv_side->rights_n], 0, SOCK_STREAM_RIGHTS_ENTRY_SIZE);
+	memcpy(recv_side->rights[recv_side->rights_n], entry, sz);
+	recv_side->rights_n++;
+	poll_wake_check();
+	return 0;
+}
+
+int sock_stream_rights_pop(struct sock_stream *s, void *entry, size_t sz)
+{
+	if (!s || !entry || sz == 0 || sz > SOCK_STREAM_RIGHTS_ENTRY_SIZE)
+		return -EINVAL;
+	if (s->rights_n == 0)
+		return -EAGAIN;
+	memcpy(entry, s->rights[0], sz);
+	s->rights_n--;
+	if (s->rights_n > 0)
+	{
+		memmove(s->rights[0], s->rights[1],
+			(size_t)s->rights_n * SOCK_STREAM_RIGHTS_ENTRY_SIZE);
+	}
+	return 0;
+}
+
+int sock_stream_rights_count(const struct sock_stream *s)
+{
+	return s ? (int)s->rights_n : 0;
+}
+
+int sock_stream_family(const struct sock_stream *s)
+{
+	return s ? s->family : 0;
+}
+
+int sock_stream_buf_count(const struct sock_stream *s)
+{
+	return s ? (int)s->count : 0;
+}
+
+int sock_stream_buf_space(const struct sock_stream *peer_of_sender)
+{
+	if (!peer_of_sender)
+		return 0;
+	return (int)(SS_BUF - peer_of_sender->count);
+}
+
+int sock_stream_is_recv_shutdown(const struct sock_stream *s)
+{
+	return s && s->shut_rd;
+}
+
+struct sock_stream *sock_stream_get_peer(struct sock_stream *s)
+{
+	return s ? s->peer : NULL;
+}
+
+int sock_stream_poll_readable(const struct sock_stream *s)
+{
+	if (!s || s->state != SS_CONNECTED)
+		return 0;
+	if (s->rights_n > 0)
+		return 1;
+	if (s->count > 0)
+		return 1;
+	if (s->shut_rd)
+		return 1;
+	if (!s->peer || s->peer->shut_wr)
+		return 1;
+	return 0;
+}
+
+int sock_stream_poll_writable(const struct sock_stream *s)
+{
+	if (!s || s->state != SS_CONNECTED)
+		return 0;
+	if (s->shut_wr)
+		return 0;
+	if (!s->peer)
+		return 0;
+	if (s->peer->shut_rd)
+		return 0;
+	return s->peer->count < SS_BUF;
+}
 
 int sock_stream_is(const void *ptr)
 {
@@ -115,26 +232,87 @@ void sock_stream_release(struct sock_stream *s)
 #endif
 	if (s->peer && s->peer->peer == s)
 		s->peer->peer = NULL;
+	sock_stream_rights_clear(s);
 	memset(s, 0, sizeof(*s));
+	poll_wake_check();
 }
 
-int sock_stream_bind_unix(struct sock_stream *s, const char *path)
+static int unix_name_equal(const struct sock_stream *a, const char *path,
+			   size_t path_len, int is_abstract)
+{
+	if (!a || a->family != IR0_AF_UNIX)
+		return 0;
+	if (a->is_abstract != is_abstract)
+		return 0;
+	if (a->path_len != path_len)
+		return 0;
+	return memcmp(a->path, path, path_len) == 0;
+}
+
+int sock_stream_bind_unix_n(struct sock_stream *s, const char *path, size_t path_len,
+			    int is_abstract)
 {
 	int i;
 
-	if (!s || !path || path[0] == '\0')
+	if (!s || !path || path_len == 0 || path_len >= SS_PATH)
 		return -EINVAL;
-	if (strlen(path) >= SS_PATH)
-		return -ENAMETOOLONG;
+	if (!is_abstract && path[0] == '\0')
+		return -EINVAL;
 	for (i = 0; i < SS_MAX; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_UNIX &&
 		    g_socks[i].state != SS_IDLE &&
-		    strcmp(g_socks[i].path, path) == 0)
+		    unix_name_equal(&g_socks[i], path, path_len, is_abstract))
 			return -EADDRINUSE;
 	}
-	strncpy(s->path, path, SS_PATH - 1);
+	memcpy(s->path, path, path_len);
+	s->path[path_len] = '\0';
+	s->path_len = path_len;
+	s->is_abstract = is_abstract ? 1 : 0;
 	s->state = SS_BOUND;
+	return 0;
+}
+
+int sock_stream_bind_unix(struct sock_stream *s, const char *path)
+{
+	if (!path)
+		return -EINVAL;
+	return sock_stream_bind_unix_n(s, path, strlen(path), 0);
+}
+
+int sock_stream_get_unix_name(const struct sock_stream *s, char *path_out, size_t path_cap,
+			      size_t *path_len_out, int *is_abstract_out)
+{
+	if (!s || s->family != IR0_AF_UNIX)
+		return -EINVAL;
+	if (path_len_out)
+		*path_len_out = s->path_len;
+	if (is_abstract_out)
+		*is_abstract_out = s->is_abstract;
+	if (path_out && path_cap > 0)
+	{
+		size_t n = s->path_len;
+
+		if (n >= path_cap)
+			n = path_cap - 1;
+		memcpy(path_out, s->path, n);
+		path_out[n] = '\0';
+	}
+	return 0;
+}
+
+int sock_stream_shutdown(struct sock_stream *s, int how)
+{
+	if (!s || s->state != SS_CONNECTED)
+		return -ENOTCONN;
+	/* SHUT_RD=0 SHUT_WR=1 SHUT_RDWR=2 */
+	if (how < 0 || how > 2)
+		return -EINVAL;
+	if (how == 0 || how == 2)
+		s->shut_rd = 1;
+	if (how == 1 || how == 2)
+		s->shut_wr = 1;
+	poll_wake_check();
 	return 0;
 }
 
@@ -186,19 +364,19 @@ int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_ou
 	return 0;
 }
 
-int sock_stream_connect_unix(struct sock_stream *s, const char *path)
+int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t path_len,
+			       int is_abstract)
 {
 	int i;
 	struct sock_stream *lst = NULL;
 	struct sock_stream *acc;
 
-	if (!s || !path)
+	if (!s || !path || path_len == 0 || path_len >= SS_PATH)
 		return -EINVAL;
 	for (i = 0; i < SS_MAX; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].state == SS_LISTEN &&
-		    g_socks[i].family == IR0_AF_UNIX &&
-		    strcmp(g_socks[i].path, path) == 0)
+		    unix_name_equal(&g_socks[i], path, path_len, is_abstract))
 		{
 			lst = &g_socks[i];
 			break;
@@ -214,8 +392,15 @@ int sock_stream_connect_unix(struct sock_stream *s, const char *path)
 	s->state = SS_CONNECTED;
 	s->peer = acc;
 	s->listener = lst;
-	lst->peer = acc; /* pending accept picks this up */
+	lst->peer = acc;
 	return 0;
+}
+
+int sock_stream_connect_unix(struct sock_stream *s, const char *path)
+{
+	if (!path)
+		return -EINVAL;
+	return sock_stream_connect_unix_n(s, path, strlen(path), 0);
 }
 
 struct sock_stream *sock_stream_accept(struct sock_stream *s)
@@ -401,8 +586,12 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 	}
 #endif
 
+	if (s->shut_wr)
+		return -EPIPE;
 	peer = s->peer;
 	if (!peer)
+		return -EPIPE;
+	if (peer->shut_rd)
 		return -EPIPE;
 	for (i = 0; i < len; i++)
 	{
@@ -412,6 +601,8 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 		peer->head = (peer->head + 1) % SS_BUF;
 		peer->count++;
 	}
+	if (i > 0)
+		poll_wake_check();
 	return (ssize_t)i;
 }
 
@@ -442,6 +633,8 @@ ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)
 	}
 #endif
 
+	if (s->shut_rd)
+		return 0;
 	for (i = 0; i < len; i++)
 	{
 		if (s->count == 0)
@@ -450,5 +643,9 @@ ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)
 		s->tail = (s->tail + 1) % SS_BUF;
 		s->count--;
 	}
+	if (i == 0 && (!s->peer || s->peer->shut_wr))
+		return 0;
+	if (i > 0)
+		poll_wake_check();
 	return (ssize_t)i;
 }
