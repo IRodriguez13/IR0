@@ -15,6 +15,8 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
+#include <ir0/uio.h>
 
 #define AF_UNSPEC   0
 #define AF_UNIX     1
@@ -24,6 +26,13 @@
 #define SOCK_DGRAM  2
 
 #define SOL_SOCKET  1
+#define SO_ERROR    4
+#define SO_TYPE     3
+#define SCM_RIGHTS  1
+
+#define SHUT_RD   0
+#define SHUT_WR   1
+#define SHUT_RDWR 2
 
 struct sockaddr
 {
@@ -44,3 +53,26 @@ struct sockaddr_un
 	uint16_t sun_family;
 	char sun_path[108];
 };
+
+struct msghdr
+{
+	void *msg_name;
+	uint32_t msg_namelen;
+	struct iovec *msg_iov;
+	size_t msg_iovlen;
+	void *msg_control;
+	size_t msg_controllen;
+	int msg_flags;
+};
+
+struct cmsghdr
+{
+	size_t cmsg_len;
+	int cmsg_level;
+	int cmsg_type;
+};
+
+#define IR0_CMSG_ALIGN(len) (((len) + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1))
+#define IR0_CMSG_DATA(cmsg) ((unsigned char *)(cmsg) + IR0_CMSG_ALIGN(sizeof(struct cmsghdr)))
+#define IR0_CMSG_SPACE(len) (IR0_CMSG_ALIGN(sizeof(struct cmsghdr)) + IR0_CMSG_ALIGN(len))
+#define IR0_CMSG_LEN(len) (IR0_CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))

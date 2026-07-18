@@ -116,6 +116,9 @@ int fd_can_read_for(process_t *proc, int fd)
     pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
     return (pipe && (pipe->count > 0 || pipe->writers <= 0)) ? 1 : 0;
   }
+  if (fd_table[fd].is_socket && fd_table[fd].vfs_file &&
+      sock_stream_is(fd_table[fd].vfs_file))
+    return sock_stream_poll_readable((struct sock_stream *)fd_table[fd].vfs_file);
   if (fd_table[fd].flags & (O_RDONLY | O_RDWR))
     return 1;
   return 0;
@@ -148,6 +151,9 @@ static int fd_can_write(int fd)
     pipe_t *pipe = (pipe_t *)fd_table[fd].vfs_file;
     return (pipe && pipe->readers > 0 && pipe->count < PIPE_SIZE) ? 1 : 0;
   }
+  if (fd_table[fd].is_socket && fd_table[fd].vfs_file &&
+      sock_stream_is(fd_table[fd].vfs_file))
+    return sock_stream_poll_writable((struct sock_stream *)fd_table[fd].vfs_file);
   if (fd_table[fd].flags & (O_WRONLY | O_RDWR))
     return 1;
   return 0;
