@@ -1,18 +1,18 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
-/*
+/**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
  *
- * Portable architecture façade for callers that must not embed
- * `<arch/common/...>` include paths directly (filesystem pseudo-nodes).
- *
- * Delegates to `arch/common/arch_portable.h` for CPU/feature queries and
- * `arch/common/arch_interface.h` for legacy I/O port helpers used by drivers.
+ * File: arch_port.h
+ * Description: Portable arch facade — no <arch/...> includes (decls under ir0/).
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
-#include <arch/common/arch_portable.h>
-#include <arch/common/arch_interface.h>
+#include <ir0/arch_io.h>
+#include <ir0/arch_cpu.h>

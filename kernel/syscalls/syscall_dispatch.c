@@ -95,6 +95,7 @@ WRAP3(sys_bind, int, const struct sockaddr *, socklen_t)
 WRAP3(sys_connect, int, const struct sockaddr *, socklen_t)
 WRAP2(sys_listen, int, int)
 WRAP3(sys_accept, int, struct sockaddr *, socklen_t *)
+WRAP4(sys_socketpair, int, int, int, int *)
 WRAP6(sys_sendto, int, const void *, size_t, int, const struct sockaddr *, socklen_t)
 WRAP6(sys_recvfrom, int, void *, size_t, int, struct sockaddr *, socklen_t *)
 
@@ -381,7 +382,7 @@ void syscall_table_init(void)
   {
     static const unsigned socket_nosys_nrs[] = {
       __NR_sendmsg, __NR_recvmsg, __NR_shutdown,
-      __NR_getsockname, __NR_getpeername, __NR_socketpair, __NR_setsockopt,
+      __NR_getsockname, __NR_getpeername, __NR_setsockopt,
       __NR_getsockopt,
     };
     size_t si;
@@ -396,6 +397,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_connect]   = wrap_sys_connect;
   syscall_table_rw[__NR_listen]    = wrap_sys_listen;
   syscall_table_rw[__NR_accept]    = wrap_sys_accept;
+  syscall_table_rw[__NR_socketpair] = wrap_sys_socketpair;
   syscall_table_rw[__NR_sendto]    = wrap_sys_sendto;
   syscall_table_rw[__NR_recvfrom]    = wrap_sys_recvfrom;
 #endif

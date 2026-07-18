@@ -247,9 +247,9 @@ Tag `v0.0.1-rc2` closed automated product gates except maintainer **manual VM** 
 
 | # | Item | Notes |
 |---|------|-------|
-| 22 | **TCP stream `send`/`recv`/`listen`** | UDP `connect`/`accept` wired; TCP backlog post-storage |
-| 23 | **AF_UNIX stream** | X11 local display prerequisite |
-| 24 | **X11 vs fbdev vs Wayland** | Plan mode; separate userspace repo |
+| 22 | **TCP stream `send`/`recv`/`listen`** | **Partial DONE** — loopback + guest wire via `smoke-stream-sock` / `smoke-tcp-*` |
+| 23 | **AF_UNIX stream + `socketpair`** | **DONE** — pathname stream + `socketpair(AF_UNIX,SOCK_STREAM)` → `smoke-socketpair` (`SOCKETPAIR_OK`) |
+| 24 | **X11 vs fbdev vs Wayland** | Plan mode; separate userspace repo — kernel prep: `MAP_SHARED` fb0 + AF_UNIX |
 | 25 | **WM + panel** | Not in kernel tree |
 
 ---
@@ -326,8 +326,8 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 | **P1-storage** | FAT16/EXT2/AHCI **done for test**; **NVMe** = F6 | Before heavy Internet NIC (roadmap decision) |
 | **P1-net** | TCP stream, `AF_UNIX` | After storage phase2 stable |
 | **P1-term** | PTY, `TIOCGWINSZ`, `SIGWINCH` | Full ash + terminal clients |
-| **T2** | MAP_SHARED fb0, multitouch input, frame timing | `smoke-fase55b-doom-stub` regression open |
-| **T3 prep** | Sockets + TCP + AF_UNIX + USB HID | `ir0-tier-t3-desktop-minimal` |
+| **T2** | MAP_SHARED fb0 (**DONE** `smoke-fb-map-shared`), multitouch input, frame timing | `smoke-fase55b-doom-stub` regression open |
+| **T3 prep** | Sockets + TCP + AF_UNIX + `socketpair` + USB HID | `ir0-tier-t3-desktop-minimal` |
 
 ---
 
@@ -372,9 +372,11 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 
 | Milestone | Why it matters |
 |-----------|----------------|
-| **`mmap` MAP_SHARED fb0** | Client writes without extra memcpy |
+| **`mmap` MAP_SHARED fb0** | **DONE** — `smoke-fb-map-shared` (`FB_MAP_SHARED_OK`) |
 | **Input `EV_ABS` / multitouch** | Beyond PS/2 buttons |
 | **Frame timing / vsync hook** | Doom-class pacing |
+| **`SCM_RIGHTS` / abstract `@` unix** | Next oleada — X11 fd passing |
+| **SysV / `shm_open` MAP_SHARED anon** | MIT-SHM class handoff |
 
 ### Security (post-T1, separate from KTM)
 
