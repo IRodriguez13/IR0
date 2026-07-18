@@ -20,6 +20,7 @@ Checks:
 14) Portable trees must not embed x86 IRQ/MM asm (pushfq / %%cr0-4 / invlpg);
     use arch_irq_* / arch_mm_* / arch_tlb_* facades. Allowlist: includes/ir0/oops.c.
 15) includes/ir0/*.h must not #include <drivers/...> (facade seal).
+16) includes/ir0/*.h must not #include <arch/...> or <sched/...> (facade seal).
 """
 
 from pathlib import Path
@@ -80,6 +81,8 @@ REQUIRED_ARM64_SCAFFOLD = [
 ]
 
 DRIVER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]drivers/')
+FACADE_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]arch/')
+FACADE_SCHED_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]sched/')
 
 # interrupt/* is for hardware backends; portable code uses arch_portable/facades.
 INTERRUPT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]interrupt/arch/')
@@ -254,7 +257,7 @@ def check_mm_net_no_arch_includes():
 
 
 def check_facade_no_drivers_include():
-    """ir0 facade *headers* must not pull <drivers/...>; .c adapters may."""
+    """ir0 facade *headers* must not pull drivers/arch/sched; .c adapters may."""
     errors = []
     base = ROOT / "includes" / "ir0"
     if not base.is_dir():
@@ -266,10 +269,18 @@ def check_facade_no_drivers_include():
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
         for idx, line in enumerate(lines, start=1):
+            rel = fpath.relative_to(ROOT)
             if DRIVER_INCLUDE_RE.search(line):
-                rel = fpath.relative_to(ROOT)
                 errors.append(
                     f"[facade-no-drivers-include] {rel}:{idx}: {line.strip()}"
+                )
+            if FACADE_ARCH_INCLUDE_RE.search(line):
+                errors.append(
+                    f"[facade-no-arch-include] {rel}:{idx}: {line.strip()}"
+                )
+            if FACADE_SCHED_INCLUDE_RE.search(line):
+                errors.append(
+                    f"[facade-no-sched-include] {rel}:{idx}: {line.strip()}"
                 )
     return errors
 
