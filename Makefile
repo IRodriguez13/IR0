@@ -280,6 +280,7 @@ KERNEL_OBJS = \
     kernel/syscalls/syscall_dispatch.o \
     kernel/sock_udp.o \
     kernel/sock_stream.o \
+    kernel/sysv_shm.o \
     kernel/input_events.o \
     debug_bins/dbgshell.o \
     kernel/elf_loader.o \
@@ -4203,6 +4204,9 @@ ktm: ktm-check
 	ktm-userdev-stream-sock-run build-ktm-stream-sock-case smoke-stream-sock \
 	ktm-userdev-socketpair-run build-ktm-socketpair-case smoke-socketpair \
 	ktm-userdev-fb-map-shared-run build-ktm-fb-map-shared-case smoke-fb-map-shared \
+	ktm-userdev-scm-rights-run build-ktm-scm-rights-case smoke-scm-rights \
+	ktm-userdev-unix-abstract-run build-ktm-unix-abstract-case smoke-unix-abstract \
+	ktm-userdev-sysv-shm-run build-ktm-sysv-shm-case smoke-sysv-shm \
 	build-ktm-tcp-wire-case \
 	build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-exec-drain-case build-ktm-reap-drain-case \
@@ -4253,6 +4257,12 @@ KTM_SOCKETPAIR_SRC = $(KTM_USERDEV_DIR)/ktm_socketpair_case.c $(KTM_USERDEV_LIB_
 KTM_SOCKETPAIR_BIN = $(KTM_USERDEV_DIR)/ktm_socketpair_case
 KTM_FB_MAP_SHARED_SRC = $(KTM_USERDEV_DIR)/ktm_fb_map_shared_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_FB_MAP_SHARED_BIN = $(KTM_USERDEV_DIR)/ktm_fb_map_shared_case
+KTM_SCM_RIGHTS_SRC = $(KTM_USERDEV_DIR)/ktm_scm_rights_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_SCM_RIGHTS_BIN = $(KTM_USERDEV_DIR)/ktm_scm_rights_case
+KTM_UNIX_ABSTRACT_SRC = $(KTM_USERDEV_DIR)/ktm_unix_abstract_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_UNIX_ABSTRACT_BIN = $(KTM_USERDEV_DIR)/ktm_unix_abstract_case
+KTM_SYSV_SHM_SRC = $(KTM_USERDEV_DIR)/ktm_sysv_shm_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_SYSV_SHM_BIN = $(KTM_USERDEV_DIR)/ktm_sysv_shm_case
 
 # All userdev pilots run via hostshare stub + share payload (virtio-9p).
 build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
@@ -4261,7 +4271,8 @@ build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-input-det-case build-ktm-nic-reach-case \
 	build-ktm-tcp-guest-case build-ktm-tcp-wire-case \
 	build-ktm-fault-pipe-case build-ktm-epoll-case build-ktm-stream-sock-case \
-	build-ktm-socketpair-case build-ktm-fb-map-shared-case: \
+	build-ktm-socketpair-case build-ktm-fb-map-shared-case \
+	build-ktm-scm-rights-case build-ktm-unix-abstract-case build-ktm-sysv-shm-case: \
 	build-init-hostshare-exec
 
 build-ktm-fork-wait-case:
@@ -4429,6 +4440,63 @@ ktm-userdev-fb-map-shared-run: build-ktm-fb-map-shared-case build-init-hostshare
 
 smoke-fb-map-shared: ktm-userdev-fb-map-shared-run
 	@echo "✓ smoke-fb-map-shared (alias → ktm-userdev-fb-map-shared-run)"
+
+build-ktm-scm-rights-case:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cross compiler not found"; exit 1; fi
+	@echo "  KTM     Building scm_rights pilot ($(KTM_SCM_RIGHTS_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) -o $(KTM_SCM_RIGHTS_BIN) $(KTM_SCM_RIGHTS_SRC)
+	@file $(KTM_SCM_RIGHTS_BIN) | grep -q ELF
+	@echo "✓ build-ktm-scm-rights-case OK"
+
+ktm-userdev-scm-rights-run: build-ktm-scm-rights-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_SCM_RIGHTS_BIN) \
+		--log /tmp/ktm-userdev-scm-rights.log --timeout 90 \
+		--done KTM_SCM_RIGHTS_OK \
+		--require KTM_SCM_RIGHTS_OK --require SCM_RIGHTS_OK --require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-scm-rights-run"
+
+smoke-scm-rights: ktm-userdev-scm-rights-run
+	@echo "✓ smoke-scm-rights (alias → ktm-userdev-scm-rights-run)"
+
+build-ktm-unix-abstract-case:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cross compiler not found"; exit 1; fi
+	@echo "  KTM     Building unix_abstract pilot ($(KTM_UNIX_ABSTRACT_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) -o $(KTM_UNIX_ABSTRACT_BIN) $(KTM_UNIX_ABSTRACT_SRC)
+	@file $(KTM_UNIX_ABSTRACT_BIN) | grep -q ELF
+	@echo "✓ build-ktm-unix-abstract-case OK"
+
+ktm-userdev-unix-abstract-run: build-ktm-unix-abstract-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_UNIX_ABSTRACT_BIN) \
+		--log /tmp/ktm-userdev-unix-abstract.log --timeout 90 \
+		--done KTM_UNIX_ABSTRACT_OK \
+		--require KTM_UNIX_ABSTRACT_OK --require UNIX_ABSTRACT_OK --require SOCK_POLL_OK --require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-unix-abstract-run"
+
+smoke-unix-abstract: ktm-userdev-unix-abstract-run
+	@echo "✓ smoke-unix-abstract (alias → ktm-userdev-unix-abstract-run)"
+
+build-ktm-sysv-shm-case:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cross compiler not found"; exit 1; fi
+	@echo "  KTM     Building sysv_shm pilot ($(KTM_SYSV_SHM_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) -o $(KTM_SYSV_SHM_BIN) $(KTM_SYSV_SHM_SRC)
+	@file $(KTM_SYSV_SHM_BIN) | grep -q ELF
+	@echo "✓ build-ktm-sysv-shm-case OK"
+
+ktm-userdev-sysv-shm-run: build-ktm-sysv-shm-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_SYSV_SHM_BIN) \
+		--log /tmp/ktm-userdev-sysv-shm.log --timeout 90 \
+		--done KTM_SYSV_SHM_OK \
+		--require KTM_SYSV_SHM_OK --require SYSV_SHM_OK --require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-sysv-shm-run"
+
+smoke-sysv-shm: ktm-userdev-sysv-shm-run
+	@echo "✓ smoke-sysv-shm (alias → ktm-userdev-sysv-shm-run)"
 
 ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi

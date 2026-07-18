@@ -18,18 +18,40 @@
 #define IR0_AF_INET 2
 #define IR0_SOCK_STREAM 1
 
+#define SOCK_STREAM_RIGHTS_MAX 4
+#define SOCK_STREAM_RIGHTS_ENTRY_SIZE 320
+
 struct sock_stream;
 
 struct sock_stream *sock_stream_create(int family);
 void sock_stream_release(struct sock_stream *s);
 int sock_stream_bind_unix(struct sock_stream *s, const char *path);
+int sock_stream_bind_unix_n(struct sock_stream *s, const char *path, size_t path_len,
+			    int is_abstract);
 int sock_stream_listen(struct sock_stream *s, int backlog);
 int sock_stream_connect_unix(struct sock_stream *s, const char *path);
+int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t path_len,
+			       int is_abstract);
 struct sock_stream *sock_stream_accept(struct sock_stream *s);
 int sock_stream_bind_inet(struct sock_stream *s, uint16_t port);
 int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port);
 ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len);
 ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len);
 int sock_stream_is(const void *ptr);
-/* Connected AF_UNIX stream pair without pathname (socketpair). */
 int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_out);
+
+int sock_stream_rights_push(struct sock_stream *recv_side, const void *entry, size_t sz);
+int sock_stream_rights_pop(struct sock_stream *s, void *entry, size_t sz);
+int sock_stream_rights_count(const struct sock_stream *s);
+void sock_stream_set_rights_dtor(void (*dtor)(void *entry, size_t sz));
+
+int sock_stream_shutdown(struct sock_stream *s, int how);
+int sock_stream_get_unix_name(const struct sock_stream *s, char *path_out, size_t path_cap,
+			      size_t *path_len_out, int *is_abstract_out);
+int sock_stream_poll_readable(const struct sock_stream *s);
+int sock_stream_poll_writable(const struct sock_stream *s);
+int sock_stream_family(const struct sock_stream *s);
+int sock_stream_buf_space(const struct sock_stream *peer_of_sender);
+int sock_stream_buf_count(const struct sock_stream *s);
+int sock_stream_is_recv_shutdown(const struct sock_stream *s);
+struct sock_stream *sock_stream_get_peer(struct sock_stream *s);

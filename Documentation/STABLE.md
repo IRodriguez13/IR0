@@ -114,7 +114,7 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
 | **T1 POSIX slice** | **Stable** | tier1 + musl manifests; cred/pthread/setuid smokes |
 | **T2 graphics / Doom** | **Merge-critical** | Real IWAD: `IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric` (`REAL_WAD_PATH`) — **blocker for `master`**; stub 55b = fast aid only |
-| **Local net** | **Stable for test** | `AF_UNIX` + **TCP loopback** — `make smoke-stream-sock` |
+| **Local net** | **Stable for test** | `AF_UNIX` (pathname + abstract + `socketpair` + `SCM_RIGHTS`) + **TCP loopback** — `smoke-stream-sock` / `smoke-scm-rights` / `smoke-unix-abstract` |
 | **Host-share 9p** | **Dev aid** | QEMU `-virtfs` → guest `/mnt/host` — `make smoke-hostshare-9p`; ELF exec via share — `make smoke-hostshare-exec` (**not** virtiofs/FUSE) |
 | **T3 desktop** | **Not in scope** | WM/compositor out of tree — planning only |
 
@@ -127,7 +127,7 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 | Network | AF_UNIX + TCP **loopback** + guest IP | F8-1 NIC (`smoke-nic-reach`); F8-2 guest TCP (`smoke-tcp-guest`) | wire TCP Internet |
 | Host share | virtio-**9p** MVP + exec (`smoke-hostshare-9p`, `smoke-hostshare-exec`) | subdirs / more FS ops | virtiofs + FUSE when ready |
 | ARM | bring-up (F7*) — does not block x86 ship | continue port | — |
-| X11 / WM | **out** | userspace after usable net + T2 | never in-kernel T3 |
+| X11 / WM | **out** (kernel prep OK) | userspace after usable net + T2 | never in-kernel T3; kernel: fb/MAP_SHARED + unix + SysV shm |
 | CFS / SMP | **out** | **out** | much later; not with X11 |
 
 Do **not** claim “virtiofs done” for the 9p path.
