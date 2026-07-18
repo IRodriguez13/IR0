@@ -30,3 +30,12 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int64_t sys_listen(int fd, int backlog);
 int64_t sys_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int64_t sys_socketpair(int domain, int type, int protocol, int *sv);
+ssize_t sys_sendmsg(int fd, const struct msghdr *msg, int flags);
+ssize_t sys_recvmsg(int fd, struct msghdr *msg, int flags);
+int64_t sys_shutdown(int fd, int how);
+int64_t sys_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
+int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
+int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
+		       socklen_t optlen);
+int64_t sys_getsockopt(int fd, int level, int optname, void *optval,
+		       socklen_t *optlen);

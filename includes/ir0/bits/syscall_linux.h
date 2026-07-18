@@ -53,6 +53,9 @@
 #define __NR_msync         26
 #define __NR_mincore       27
 #define __NR_madvise       28
+#define __NR_shmget        29
+#define __NR_shmat         30
+#define __NR_shmctl        31
 #define __NR_dup           32
 #define __NR_dup2          33
 #define __NR_pause         34
@@ -85,6 +88,7 @@
 #define __NR_kill          62
 #define __NR_tgkill        234
 #define __NR_uname         63
+#define __NR_shmdt         67
 #define __NR_mknod         133
 #define __NR_fcntl         72
 #define __NR_flock         73

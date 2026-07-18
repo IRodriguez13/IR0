@@ -248,8 +248,8 @@ Tag `v0.0.1-rc2` closed automated product gates except maintainer **manual VM** 
 | # | Item | Notes |
 |---|------|-------|
 | 22 | **TCP stream `send`/`recv`/`listen`** | **Partial DONE** — loopback + guest wire via `smoke-stream-sock` / `smoke-tcp-*` |
-| 23 | **AF_UNIX stream + `socketpair`** | **DONE** — pathname stream + `socketpair(AF_UNIX,SOCK_STREAM)` → `smoke-socketpair` (`SOCKETPAIR_OK`) |
-| 24 | **X11 vs fbdev vs Wayland** | Plan mode; separate userspace repo — kernel prep: `MAP_SHARED` fb0 + AF_UNIX |
+| 23 | **AF_UNIX stream + `socketpair` + abstract + `SCM_RIGHTS`** | **DONE** — `smoke-socketpair`, `smoke-unix-abstract`, `smoke-scm-rights` |
+| 24 | **X11 vs fbdev vs Wayland** | Plan mode; userspace aparte — **kernel prep checklist DONE** (fb MAP_SHARED, AF_UNIX, SCM_RIGHTS, SysV shm, sock poll) |
 | 25 | **WM + panel** | Not in kernel tree |
 
 ---
@@ -375,8 +375,9 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 | **`mmap` MAP_SHARED fb0** | **DONE** — `smoke-fb-map-shared` (`FB_MAP_SHARED_OK`) |
 | **Input `EV_ABS` / multitouch** | Beyond PS/2 buttons |
 | **Frame timing / vsync hook** | Doom-class pacing |
-| **`SCM_RIGHTS` / abstract `@` unix** | Next oleada — X11 fd passing |
-| **SysV / `shm_open` MAP_SHARED anon** | MIT-SHM class handoff |
+| **`SCM_RIGHTS` / abstract `@` unix** | **DONE** — `smoke-scm-rights`, `smoke-unix-abstract` |
+| **SysV / `shm_open` MAP_SHARED anon** | **SysV DONE** (`smoke-sysv-shm`); `shm_open` still open |
+| **sock poll/epoll on streams** | **DONE** — covered by `smoke-unix-abstract` (`SOCK_POLL_OK`) |
 
 ### Security (post-T1, separate from KTM)
 

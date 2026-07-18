@@ -70,6 +70,14 @@
 #define ENOTSUPP   95  /* Operation not supported */
 #define EOPNOTSUPP ENOTSUPP  /* POSIX name; same numeric value as Linux */
 #define ENOTEMPTY 39 /* Directory not empty (Linux errno 39) */
+#define ENOTSOCK 88
+#define EPROTOTYPE 91
+#define ENOPROTOOPT 92
+#define EPROTONOSUPPORT 93
+#define EAFNOSUPPORT 97
+#define ENOBUFS 105
+#define ENOTCONN 107
+#define ESHUTDOWN 108
 
 /* STANDARD FILE DESCRIPTORS                                                */
 

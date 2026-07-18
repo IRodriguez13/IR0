@@ -26,11 +26,27 @@
 #include <ir0/sock_udp.h>
 #include <ir0/sock_stream.h>
 #include <ir0/socket.h>
+#include <ir0/pipe.h>
+#include <ir0/vfs.h>
+#include <ir0/devfs.h>
+#include <ir0/uio.h>
 #include <config.h>
 #include <string.h>
 
 #define IPPROTO_UDP 17
 #define MSG_DONTWAIT 0x40
+
+static size_t sock_strnlen(const char *s, size_t max)
+{
+	size_t i;
+
+	for (i = 0; i < max; i++)
+	{
+		if (s[i] == '\0')
+			return i;
+	}
+	return max;
+}
 
 static int sock_alloc_fd_any(void *sock, int is_stream)
 {
@@ -192,18 +208,26 @@ int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 
 		if (copy_from_user(&family, addr, sizeof(family)) != 0)
 			return -EFAULT;
-		if (family == AF_UNIX)
-		{
-			struct sockaddr_un sun;
+			if (family == AF_UNIX)
+			{
+				struct sockaddr_un sun;
+				size_t plen;
+				int abs;
 
-			if (addrlen < sizeof(sun.sun_family) + 1)
-				return -EINVAL;
-			memset(&sun, 0, sizeof(sun));
-			if (copy_from_user(&sun, addr,
-					   addrlen < sizeof(sun) ? addrlen : sizeof(sun)) != 0)
-				return -EFAULT;
-			return sock_stream_bind_unix(ss, sun.sun_path);
-		}
+				if (addrlen < sizeof(sun.sun_family) + 1)
+					return -EINVAL;
+				memset(&sun, 0, sizeof(sun));
+				if (copy_from_user(&sun, addr,
+						   addrlen < sizeof(sun) ? addrlen : sizeof(sun)) != 0)
+					return -EFAULT;
+				abs = (sun.sun_path[0] == '\0');
+				plen = (size_t)addrlen - sizeof(sun.sun_family);
+				if (plen >= sizeof(sun.sun_path))
+					plen = sizeof(sun.sun_path) - 1;
+				if (!abs)
+					plen = sock_strnlen(sun.sun_path, plen);
+				return sock_stream_bind_unix_n(ss, sun.sun_path, plen, abs);
+			}
 		if (family == AF_INET)
 		{
 			struct sockaddr_in sin;
@@ -443,16 +467,24 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 
 		if (copy_from_user(&family, addr, sizeof(family)) != 0)
 			return -EFAULT;
-		if (family == AF_UNIX)
-		{
-			struct sockaddr_un sun;
+			if (family == AF_UNIX)
+			{
+				struct sockaddr_un sun;
+				size_t plen;
+				int abs;
 
-			memset(&sun, 0, sizeof(sun));
-			if (copy_from_user(&sun, addr,
-					   addrlen < sizeof(sun) ? addrlen : sizeof(sun)) != 0)
-				return -EFAULT;
-			return sock_stream_connect_unix(ss, sun.sun_path);
-		}
+				memset(&sun, 0, sizeof(sun));
+				if (copy_from_user(&sun, addr,
+						   addrlen < sizeof(sun) ? addrlen : sizeof(sun)) != 0)
+					return -EFAULT;
+				abs = (sun.sun_path[0] == '\0');
+				plen = (size_t)addrlen - sizeof(sun.sun_family);
+				if (plen >= sizeof(sun.sun_path))
+					plen = sizeof(sun.sun_path) - 1;
+				if (!abs)
+					plen = sock_strnlen(sun.sun_path, plen);
+				return sock_stream_connect_unix_n(ss, sun.sun_path, plen, abs);
+			}
 		if (family == AF_INET)
 		{
 			struct sockaddr_in sin;
@@ -613,4 +645,496 @@ int64_t sys_socketpair(int domain, int type, int protocol, int *sv)
 		return -EFAULT;
 	}
 	return 0;
+}
+
+static void scm_rights_dtor(void *entry, size_t sz)
+{
+	fd_entry_t *e = (fd_entry_t *)entry;
+
+	(void)sz;
+	if (!e || !e->in_use)
+		return;
+	if (e->is_pipe && e->vfs_file)
+		pipe_close_end((pipe_t *)e->vfs_file, e->pipe_end);
+	else if (e->is_socket && e->vfs_file)
+	{
+		if (sock_stream_is(e->vfs_file))
+			sock_stream_release((struct sock_stream *)e->vfs_file);
+		else
+			sock_udp_release((struct sock_udp *)e->vfs_file);
+	}
+	else if (e->is_devfs)
+	{
+		devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
+
+		if (node)
+			devfs_close_node(node);
+	}
+	else if (e->vfs_file)
+		vfs_close((struct vfs_file *)e->vfs_file);
+	memset(e, 0, sizeof(*e));
+}
+
+static void scm_rights_ensure_dtor(void)
+{
+	static int once;
+
+	if (!once)
+	{
+		sock_stream_set_rights_dtor(scm_rights_dtor);
+		once = 1;
+	}
+}
+
+static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
+{
+	fd_entry_t *tab = get_process_fd_table();
+
+	if (!tab || srcfd < 0 || srcfd >= MAX_FDS_PER_PROCESS || !tab[srcfd].in_use)
+		return -EBADF;
+	*dst = tab[srcfd];
+	dst->fd_flags = 0;
+	if (dst->is_pipe && dst->vfs_file)
+		pipe_acquire_end((pipe_t *)dst->vfs_file, dst->pipe_end);
+	else if (dst->is_socket && dst->vfs_file)
+	{
+		if (!sock_stream_is(dst->vfs_file))
+			sock_udp_acquire((struct sock_udp *)dst->vfs_file);
+	}
+	else if (dst->is_devfs)
+	{
+		devfs_node_t *node = devfs_find_node_by_id(dst->dev_device_id);
+
+		if (node)
+			node->ref_count++;
+	}
+	else if (dst->is_pseudo && dst->vfs_file)
+	{
+		pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)dst->vfs_file;
+
+		bind->refs++;
+	}
+	else if (dst->vfs_file)
+		vfs_file_acquire((struct vfs_file *)dst->vfs_file);
+	return 0;
+}
+
+static int scm_install_fd_entry(const fd_entry_t *src)
+{
+	fd_entry_t *tab = get_process_fd_table();
+	int fd;
+
+	if (!tab || !src)
+		return -EINVAL;
+	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
+	{
+		if (!tab[fd].in_use)
+			break;
+	}
+	if (fd >= MAX_FDS_PER_PROCESS)
+		return -EMFILE;
+	tab[fd] = *src;
+	tab[fd].in_use = true;
+	fase48_note_fd_created();
+	return fd;
+}
+
+ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
+{
+	struct msghdr msg;
+	struct sock_stream *ss;
+	struct sock_stream *peer;
+	uint8_t ctrl[256];
+	struct iovec iov_stack[8];
+	size_t iovlen;
+	size_t i;
+	ssize_t total = 0;
+
+#if !CONFIG_ENABLE_NETWORKING
+	(void)fd;
+	(void)umsg;
+	(void)flags;
+	return -ENOSYS;
+#endif
+	scm_rights_ensure_dtor();
+	(void)flags;
+	if (!current_process || !umsg)
+		return -EFAULT;
+	if (copy_from_user(&msg, umsg, sizeof(msg)) != 0)
+		return -EFAULT;
+	ss = sock_stream_fd_lookup(fd);
+	if (!ss)
+		return -ENOTSOCK;
+	if (sock_stream_family(ss) != IR0_AF_UNIX)
+		return -EOPNOTSUPP;
+	peer = sock_stream_get_peer(ss);
+	if (!peer)
+		return -ENOTCONN;
+	iovlen = msg.msg_iovlen;
+	if (iovlen > 8)
+		return -EMSGSIZE;
+	if (iovlen > 0)
+	{
+		if (!msg.msg_iov ||
+		    copy_from_user(iov_stack, msg.msg_iov, iovlen * sizeof(struct iovec)) != 0)
+			return -EFAULT;
+	}
+	if (msg.msg_controllen > 0)
+	{
+		struct cmsghdr *cmsg;
+		size_t off = 0;
+
+		if (msg.msg_controllen > sizeof(ctrl) || !msg.msg_control)
+			return -ENOBUFS;
+		if (copy_from_user(ctrl, msg.msg_control, msg.msg_controllen) != 0)
+			return -EFAULT;
+		while (off + sizeof(struct cmsghdr) <= msg.msg_controllen)
+		{
+			size_t payload;
+			int *fds;
+			size_t nfd;
+			size_t fi;
+
+			cmsg = (struct cmsghdr *)(ctrl + off);
+			if (cmsg->cmsg_len < sizeof(struct cmsghdr) ||
+			    cmsg->cmsg_len > msg.msg_controllen - off)
+				break;
+			if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
+			{
+				payload = cmsg->cmsg_len - IR0_CMSG_ALIGN(sizeof(struct cmsghdr));
+				fds = (int *)IR0_CMSG_DATA(cmsg);
+				nfd = payload / sizeof(int);
+				if (nfd == 0 || nfd > SOCK_STREAM_RIGHTS_MAX)
+					return -EINVAL;
+				for (fi = 0; fi < nfd; fi++)
+				{
+					fd_entry_t ent;
+					int ret;
+
+					memset(&ent, 0, sizeof(ent));
+					ret = scm_clone_fd_entry(&ent, fds[fi]);
+					if (ret < 0)
+						return ret;
+					ret = sock_stream_rights_push(peer, &ent, sizeof(ent));
+					if (ret < 0)
+					{
+						scm_rights_dtor(&ent, sizeof(ent));
+						return ret;
+					}
+				}
+			}
+			off += IR0_CMSG_ALIGN(cmsg->cmsg_len);
+		}
+	}
+	for (i = 0; i < iovlen; i++)
+	{
+		uint8_t *kbuf;
+		ssize_t n;
+
+		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
+			continue;
+		if (validate_userspace_buffer(iov_stack[i].iov_base, iov_stack[i].iov_len) != 0)
+			return -EFAULT;
+		kbuf = kmalloc(iov_stack[i].iov_len);
+		if (!kbuf)
+			return -ENOMEM;
+		if (copy_from_user(kbuf, iov_stack[i].iov_base, iov_stack[i].iov_len) != 0)
+		{
+			kfree(kbuf);
+			return -EFAULT;
+		}
+		n = sock_stream_send(ss, kbuf, iov_stack[i].iov_len);
+		kfree(kbuf);
+		if (n < 0)
+			return n;
+		total += n;
+		if ((size_t)n < iov_stack[i].iov_len)
+			break;
+	}
+	if (total == 0 && msg.msg_controllen > 0)
+		return 0;
+	return total;
+}
+
+ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
+{
+	struct msghdr msg;
+	struct sock_stream *ss;
+	struct iovec iov_stack[8];
+	size_t iovlen;
+	size_t i;
+	ssize_t total = 0;
+	uint8_t ctrl[256];
+	size_t ctrl_used = 0;
+	int got_rights = 0;
+
+#if !CONFIG_ENABLE_NETWORKING
+	(void)fd;
+	(void)umsg;
+	(void)flags;
+	return -ENOSYS;
+#endif
+	scm_rights_ensure_dtor();
+	(void)flags;
+	if (!current_process || !umsg)
+		return -EFAULT;
+	if (copy_from_user(&msg, umsg, sizeof(msg)) != 0)
+		return -EFAULT;
+	ss = sock_stream_fd_lookup(fd);
+	if (!ss)
+		return -ENOTSOCK;
+	if (sock_stream_family(ss) != IR0_AF_UNIX)
+		return -EOPNOTSUPP;
+	iovlen = msg.msg_iovlen;
+	if (iovlen > 8)
+		return -EMSGSIZE;
+	if (iovlen > 0)
+	{
+		if (!msg.msg_iov ||
+		    copy_from_user(iov_stack, msg.msg_iov, iovlen * sizeof(struct iovec)) != 0)
+			return -EFAULT;
+	}
+	if (sock_stream_rights_count(ss) > 0 && msg.msg_control && msg.msg_controllen > 0)
+	{
+		fd_entry_t ent;
+		int newfd;
+		struct cmsghdr *cmsg;
+		int *fdp;
+		size_t need = IR0_CMSG_SPACE(sizeof(int));
+
+		memset(&ent, 0, sizeof(ent));
+		if (sock_stream_rights_pop(ss, &ent, sizeof(ent)) == 0)
+		{
+			newfd = scm_install_fd_entry(&ent);
+			if (newfd < 0)
+			{
+				scm_rights_dtor(&ent, sizeof(ent));
+				return newfd;
+			}
+			if (need <= sizeof(ctrl) && need <= msg.msg_controllen)
+			{
+				memset(ctrl, 0, need);
+				cmsg = (struct cmsghdr *)ctrl;
+				cmsg->cmsg_len = IR0_CMSG_LEN(sizeof(int));
+				cmsg->cmsg_level = SOL_SOCKET;
+				cmsg->cmsg_type = SCM_RIGHTS;
+				fdp = (int *)IR0_CMSG_DATA(cmsg);
+				*fdp = newfd;
+				ctrl_used = need;
+				got_rights = 1;
+			}
+			else
+			{
+				/* Cannot deliver — close installed fd */
+				fd_entry_t *tab = get_process_fd_table();
+
+				if (tab)
+					tab[newfd].in_use = false;
+				scm_rights_dtor(&ent, sizeof(ent));
+				return -ENOBUFS;
+			}
+		}
+	}
+	for (i = 0; i < iovlen; i++)
+	{
+		uint8_t *kbuf;
+		ssize_t n;
+
+		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
+			continue;
+		if (validate_userspace_buffer(iov_stack[i].iov_base, iov_stack[i].iov_len) != 0)
+			return -EFAULT;
+		kbuf = kmalloc(iov_stack[i].iov_len);
+		if (!kbuf)
+			return -ENOMEM;
+		n = sock_stream_recv(ss, kbuf, iov_stack[i].iov_len);
+		if (n < 0)
+		{
+			kfree(kbuf);
+			return n;
+		}
+		if (n > 0 &&
+		    copy_to_user(iov_stack[i].iov_base, kbuf, (size_t)n) != 0)
+		{
+			kfree(kbuf);
+			return -EFAULT;
+		}
+		kfree(kbuf);
+		total += n;
+		if ((size_t)n < iov_stack[i].iov_len)
+			break;
+	}
+	if (got_rights && msg.msg_control)
+	{
+		if (copy_to_user(msg.msg_control, ctrl, ctrl_used) != 0)
+			return -EFAULT;
+		msg.msg_controllen = ctrl_used;
+		msg.msg_flags = 0;
+		if (copy_to_user(umsg, &msg, sizeof(msg)) != 0)
+			return -EFAULT;
+	}
+	else if (msg.msg_control)
+	{
+		msg.msg_controllen = 0;
+		if (copy_to_user(umsg, &msg, sizeof(msg)) != 0)
+			return -EFAULT;
+	}
+	(void)got_rights;
+	return total;
+}
+
+int64_t sys_shutdown(int fd, int how)
+{
+	struct sock_stream *ss;
+
+#if !CONFIG_ENABLE_NETWORKING
+	(void)fd;
+	(void)how;
+	return -ENOSYS;
+#endif
+	if (!current_process)
+		return -ESRCH;
+	ss = sock_stream_fd_lookup(fd);
+	if (!ss)
+		return -ENOTSOCK;
+	return sock_stream_shutdown(ss, how);
+}
+
+int64_t sys_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen)
+{
+	struct sock_stream *ss;
+	struct sockaddr_un sun;
+	socklen_t want;
+	socklen_t have;
+	size_t plen = 0;
+	int abs = 0;
+	char path[108];
+
+#if !CONFIG_ENABLE_NETWORKING
+	(void)fd;
+	(void)addr;
+	(void)addrlen;
+	return -ENOSYS;
+#endif
+	if (!current_process || !addr || !addrlen)
+		return -EFAULT;
+	if (copy_from_user(&want, addrlen, sizeof(want)) != 0)
+		return -EFAULT;
+	ss = sock_stream_fd_lookup(fd);
+	if (!ss)
+		return -ENOTSOCK;
+	if (sock_stream_family(ss) != IR0_AF_UNIX)
+		return -EOPNOTSUPP;
+	memset(path, 0, sizeof(path));
+	(void)sock_stream_get_unix_name(ss, path, sizeof(path), &plen, &abs);
+	memset(&sun, 0, sizeof(sun));
+	sun.sun_family = AF_UNIX;
+	if (plen > sizeof(sun.sun_path))
+		plen = sizeof(sun.sun_path);
+	memcpy(sun.sun_path, path, plen);
+	have = (socklen_t)(sizeof(sun.sun_family) + plen);
+	if (want > have)
+		want = have;
+	if (want > 0 && copy_to_user(addr, &sun, want) != 0)
+		return -EFAULT;
+	if (copy_to_user(addrlen, &have, sizeof(have)) != 0)
+		return -EFAULT;
+	(void)abs;
+	return 0;
+}
+
+int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
+{
+	struct sock_stream *ss;
+	struct sock_stream *peer;
+
+#if !CONFIG_ENABLE_NETWORKING
+	(void)fd;
+	(void)addr;
+	(void)addrlen;
+	return -ENOSYS;
+#endif
+	ss = sock_stream_fd_lookup(fd);
+	if (!ss)
+		return -ENOTSOCK;
+	peer = sock_stream_get_peer(ss);
+	if (!peer)
+		return -ENOTCONN;
+	/* Peer unix name is empty for socketpair; still return AF_UNIX. */
+	return sys_getsockname(fd, addr, addrlen);
+}
+
+int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
+		       socklen_t optlen)
+{
+	struct sock_stream *ss;
+
+#if !CONFIG_ENABLE_NETWORKING
+	(void)fd;
+	(void)level;
+	(void)optname;
+	(void)optval;
+	(void)optlen;
+	return -ENOSYS;
+#endif
+	(void)optval;
+	(void)optlen;
+	ss = sock_stream_fd_lookup(fd);
+	if (!ss)
+		return -ENOTSOCK;
+	if (level != SOL_SOCKET)
+		return -ENOPROTOOPT;
+	(void)optname;
+	return -ENOPROTOOPT;
+}
+
+int64_t sys_getsockopt(int fd, int level, int optname, void *optval,
+		       socklen_t *optlen)
+{
+	struct sock_stream *ss;
+	socklen_t len;
+	int val;
+
+#if !CONFIG_ENABLE_NETWORKING
+	(void)fd;
+	(void)level;
+	(void)optname;
+	(void)optval;
+	(void)optlen;
+	return -ENOSYS;
+#endif
+	if (!optval || !optlen)
+		return -EFAULT;
+	if (copy_from_user(&len, optlen, sizeof(len)) != 0)
+		return -EFAULT;
+	ss = sock_stream_fd_lookup(fd);
+	if (!ss)
+		return -ENOTSOCK;
+	if (level != SOL_SOCKET)
+		return -ENOPROTOOPT;
+	if (optname == SO_TYPE)
+	{
+		val = SOCK_STREAM;
+		if (len < sizeof(val))
+			return -EINVAL;
+		if (copy_to_user(optval, &val, sizeof(val)) != 0)
+			return -EFAULT;
+		len = sizeof(val);
+		if (copy_to_user(optlen, &len, sizeof(len)) != 0)
+			return -EFAULT;
+		return 0;
+	}
+	if (optname == SO_ERROR)
+	{
+		val = 0;
+		if (len < sizeof(val))
+			return -EINVAL;
+		if (copy_to_user(optval, &val, sizeof(val)) != 0)
+			return -EFAULT;
+		len = sizeof(val);
+		if (copy_to_user(optlen, &len, sizeof(len)) != 0)
+			return -EFAULT;
+		return 0;
+	}
+	return -ENOPROTOOPT;
 }

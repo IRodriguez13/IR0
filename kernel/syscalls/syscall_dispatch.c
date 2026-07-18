@@ -38,6 +38,7 @@
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/arch_port.h>
 #include <ir0/sched.h>
+#include <ir0/sysv_shm.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <d1_12_read_diag.h>
@@ -96,6 +97,17 @@ WRAP3(sys_connect, int, const struct sockaddr *, socklen_t)
 WRAP2(sys_listen, int, int)
 WRAP3(sys_accept, int, struct sockaddr *, socklen_t *)
 WRAP4(sys_socketpair, int, int, int, int *)
+WRAP3(sys_sendmsg, int, const struct msghdr *, int)
+WRAP3(sys_recvmsg, int, struct msghdr *, int)
+WRAP2(sys_shutdown, int, int)
+WRAP3(sys_getsockname, int, struct sockaddr *, socklen_t *)
+WRAP3(sys_getpeername, int, struct sockaddr *, socklen_t *)
+WRAP5(sys_setsockopt, int, int, int, const void *, socklen_t)
+WRAP5(sys_getsockopt, int, int, int, void *, socklen_t *)
+WRAP3(sys_shmget, int, size_t, int)
+WRAP3(sys_shmat, int, const void *, int)
+WRAP1(sys_shmdt, const void *)
+WRAP3(sys_shmctl, int, int, void *)
 WRAP6(sys_sendto, int, const void *, size_t, int, const struct sockaddr *, socklen_t)
 WRAP6(sys_recvfrom, int, void *, size_t, int, struct sockaddr *, socklen_t *)
 
@@ -377,12 +389,34 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_keymap_get]      = wrap_keymap_get;
 
   /*
-   * Socket API: minimal AF_INET SOCK_DGRAM; msg/listen remain ENOSYS.
+   * Socket API: AF_UNIX stream + TCP loopback + socketpair/msg/SCM_RIGHTS.
    */
+#if CONFIG_ENABLE_NETWORKING
+  syscall_table_rw[__NR_socket]      = wrap_sys_socket;
+  syscall_table_rw[__NR_bind]        = wrap_sys_bind;
+  syscall_table_rw[__NR_connect]     = wrap_sys_connect;
+  syscall_table_rw[__NR_listen]      = wrap_sys_listen;
+  syscall_table_rw[__NR_accept]      = wrap_sys_accept;
+  syscall_table_rw[__NR_socketpair]  = wrap_sys_socketpair;
+  syscall_table_rw[__NR_sendto]      = wrap_sys_sendto;
+  syscall_table_rw[__NR_recvfrom]    = wrap_sys_recvfrom;
+  syscall_table_rw[__NR_sendmsg]     = wrap_sys_sendmsg;
+  syscall_table_rw[__NR_recvmsg]     = wrap_sys_recvmsg;
+  syscall_table_rw[__NR_shutdown]    = wrap_sys_shutdown;
+  syscall_table_rw[__NR_getsockname] = wrap_sys_getsockname;
+  syscall_table_rw[__NR_getpeername] = wrap_sys_getpeername;
+  syscall_table_rw[__NR_setsockopt]  = wrap_sys_setsockopt;
+  syscall_table_rw[__NR_getsockopt]  = wrap_sys_getsockopt;
+  syscall_table_rw[__NR_shmget]      = wrap_sys_shmget;
+  syscall_table_rw[__NR_shmat]       = wrap_sys_shmat;
+  syscall_table_rw[__NR_shmdt]       = wrap_sys_shmdt;
+  syscall_table_rw[__NR_shmctl]      = wrap_sys_shmctl;
+#else
   {
     static const unsigned socket_nosys_nrs[] = {
-      __NR_sendmsg, __NR_recvmsg, __NR_shutdown,
-      __NR_getsockname, __NR_getpeername, __NR_setsockopt,
+      __NR_socket, __NR_bind, __NR_connect, __NR_listen, __NR_accept,
+      __NR_socketpair, __NR_sendto, __NR_recvfrom, __NR_sendmsg, __NR_recvmsg,
+      __NR_shutdown, __NR_getsockname, __NR_getpeername, __NR_setsockopt,
       __NR_getsockopt,
     };
     size_t si;
@@ -390,16 +424,6 @@ void syscall_table_init(void)
     for (si = 0; si < sizeof(socket_nosys_nrs) / sizeof(socket_nosys_nrs[0]); si++)
       syscall_table_rw[socket_nosys_nrs[si]] = sys_nosys;
   }
-
-#if CONFIG_ENABLE_NETWORKING
-  syscall_table_rw[__NR_socket]    = wrap_sys_socket;
-  syscall_table_rw[__NR_bind]      = wrap_sys_bind;
-  syscall_table_rw[__NR_connect]   = wrap_sys_connect;
-  syscall_table_rw[__NR_listen]    = wrap_sys_listen;
-  syscall_table_rw[__NR_accept]    = wrap_sys_accept;
-  syscall_table_rw[__NR_socketpair] = wrap_sys_socketpair;
-  syscall_table_rw[__NR_sendto]    = wrap_sys_sendto;
-  syscall_table_rw[__NR_recvfrom]    = wrap_sys_recvfrom;
 #endif
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit_group;
 }
