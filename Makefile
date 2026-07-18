@@ -4201,6 +4201,8 @@ ktm: ktm-check
 	ktm-userdev-fault-pipe-run smoke-ktm-fault build-ktm-fault-pipe-case \
 	ktm-userdev-epoll-run build-ktm-epoll-case smoke-epoll-basic \
 	ktm-userdev-stream-sock-run build-ktm-stream-sock-case smoke-stream-sock \
+	ktm-userdev-socketpair-run build-ktm-socketpair-case smoke-socketpair \
+	ktm-userdev-fb-map-shared-run build-ktm-fb-map-shared-case smoke-fb-map-shared \
 	build-ktm-tcp-wire-case \
 	build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-exec-drain-case build-ktm-reap-drain-case \
@@ -4247,6 +4249,10 @@ KTM_EPOLL_SRC = $(KTM_USERDEV_DIR)/ktm_epoll_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_EPOLL_BIN = $(KTM_USERDEV_DIR)/ktm_epoll_case
 KTM_STREAM_SOCK_SRC = $(KTM_USERDEV_DIR)/ktm_stream_sock_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_STREAM_SOCK_BIN = $(KTM_USERDEV_DIR)/ktm_stream_sock_case
+KTM_SOCKETPAIR_SRC = $(KTM_USERDEV_DIR)/ktm_socketpair_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_SOCKETPAIR_BIN = $(KTM_USERDEV_DIR)/ktm_socketpair_case
+KTM_FB_MAP_SHARED_SRC = $(KTM_USERDEV_DIR)/ktm_fb_map_shared_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_FB_MAP_SHARED_BIN = $(KTM_USERDEV_DIR)/ktm_fb_map_shared_case
 
 # All userdev pilots run via hostshare stub + share payload (virtio-9p).
 build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
@@ -4254,7 +4260,8 @@ build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-init-exit-drain-case build-ktm-posix-pseudofs-case \
 	build-ktm-input-det-case build-ktm-nic-reach-case \
 	build-ktm-tcp-guest-case build-ktm-tcp-wire-case \
-	build-ktm-fault-pipe-case build-ktm-epoll-case build-ktm-stream-sock-case: \
+	build-ktm-fault-pipe-case build-ktm-epoll-case build-ktm-stream-sock-case \
+	build-ktm-socketpair-case build-ktm-fb-map-shared-case: \
 	build-init-hostshare-exec
 
 build-ktm-fork-wait-case:
@@ -4323,6 +4330,28 @@ build-ktm-stream-sock-case:
 	@file $(KTM_STREAM_SOCK_BIN) | grep -q ELF
 	@echo "✓ build-ktm-stream-sock-case OK"
 
+build-ktm-socketpair-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building socketpair pilot ($(KTM_SOCKETPAIR_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_SOCKETPAIR_BIN) $(KTM_SOCKETPAIR_SRC)
+	@file $(KTM_SOCKETPAIR_BIN) | grep -q ELF
+	@echo "✓ build-ktm-socketpair-case OK"
+
+build-ktm-fb-map-shared-case:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  KTM     Building fb_map_shared pilot ($(KTM_FB_MAP_SHARED_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
+		-o $(KTM_FB_MAP_SHARED_BIN) $(KTM_FB_MAP_SHARED_SRC)
+	@file $(KTM_FB_MAP_SHARED_BIN) | grep -q ELF
+	@echo "✓ build-ktm-fb-map-shared-case OK"
+
 ktm-userdev-run: build-ktm-fork-wait-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py --log /tmp/ktm-userdev-run.log --timeout 90
@@ -4371,6 +4400,35 @@ ktm-userdev-stream-sock-run: build-ktm-stream-sock-case build-init-hostshare-exe
 
 smoke-stream-sock: ktm-userdev-stream-sock-run
 	@echo "✓ smoke-stream-sock (alias → ktm-userdev-stream-sock-run)"
+
+ktm-userdev-socketpair-run: build-ktm-socketpair-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_SOCKETPAIR_BIN) \
+		--log /tmp/ktm-userdev-socketpair.log --timeout 90 \
+		--done KTM_SOCKETPAIR_OK \
+		--require KTM_SOCKETPAIR_OK \
+		--require SOCKETPAIR_OK \
+		--require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-socketpair-run (AF_UNIX SOCK_STREAM socketpair)"
+
+smoke-socketpair: ktm-userdev-socketpair-run
+	@echo "✓ smoke-socketpair (alias → ktm-userdev-socketpair-run)"
+
+ktm-userdev-fb-map-shared-run: build-ktm-fb-map-shared-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_FB_MAP_SHARED_BIN) \
+		--log /tmp/ktm-userdev-fb-map-shared.log --timeout 90 \
+		--done KTM_FB_MAP_SHARED_OK \
+		--require KTM_FB_MAP_SHARED_OK \
+		--require FB_MAP_SHARED_OK \
+		--require FB_MAP_SHARED_USER_OK \
+		--require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-fb-map-shared-run (MAP_SHARED /dev/fb0)"
+
+smoke-fb-map-shared: ktm-userdev-fb-map-shared-run
+	@echo "✓ smoke-fb-map-shared (alias → ktm-userdev-fb-map-shared-run)"
 
 ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi

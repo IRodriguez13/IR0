@@ -1,28 +1,19 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * File: context.h
- * Description: IR0 kernel source/header file
+ * Description: Context-switch facade (no <sched/...> includes).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
-#ifndef _IR0_CONTEXT_H
-#define _IR0_CONTEXT_H
 
-#include <sched/task.h>
+#pragma once
 
-/*
- * Scheduling / MMU accessors visible to portable code; ISA backends stay under
- * the arch directory tree plus kernel/scheduler/switch/.
- */
+#include <ir0/task.h>
+
+struct process;
+
 void arch_context_switch(task_t *prev, task_t *next);
 uint64_t arch_get_current_page_directory(void);
 void arch_set_current_kernel_stack(struct process *p);
-
-#endif /* _IR0_CONTEXT_H */

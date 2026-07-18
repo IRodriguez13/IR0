@@ -811,6 +811,17 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
           if (!s_fb_mmap_ok_tag)
           {
             s_fb_mmap_ok_tag = 1;
+            serial_print("FB_MMAP_OK\n");
+          }
+          if ((flags & MAP_SHARED) != 0)
+          {
+            static int s_fb_map_shared_tag;
+
+            if (!s_fb_map_shared_tag)
+            {
+              s_fb_map_shared_tag = 1;
+              serial_print("FB_MAP_SHARED_OK\n");
+            }
           }
         }
         return (void *)virt_addr;
