@@ -284,8 +284,12 @@ make -s smoke-tcp-guest          # F8-2
 make -s smoke-tcp-wire           # F8-3
 make -s ktm-userdev-epoll-run    # epoll create/ctl/wait (canonical)
 make -s ktm-userdev-stream-sock-run  # AF_UNIX + TCP loopback
+make -s ktm-userdev-socketpair-run   # AF_UNIX SOCK_STREAM socketpair
+make -s ktm-userdev-fb-map-shared-run  # MAP_SHARED /dev/fb0
 make -s smoke-epoll-basic        # alias → ktm-userdev-epoll-run
 make -s smoke-stream-sock        # alias → ktm-userdev-stream-sock-run
+make -s smoke-socketpair         # alias → ktm-userdev-socketpair-run
+make -s smoke-fb-map-shared      # alias → ktm-userdev-fb-map-shared-run
 
 # Hygiene
 make -s arch-guard               # no [FASE in kernel trees; ktm-include rules
@@ -317,7 +321,7 @@ bookkeeping scenario). Host-share: `make smoke-hostshare-9p` (MVP read) and
 | **Keep outside KTM** | `arch-guard`, `tests/host` ABI/facade units, `linux-abi-audit-*`, deep COW `smoke-mm-cow-lazy`, product HOST (runit/ash/BusyBox/Doom), storage/hw/ARM machine smokes |
 | **Do not add** | A new serial-only smoke for a gap KTM already covers better — add/extend scenario or userdev + `--require KTM_*` / `KTM\|…` protocol |
 
-Overlapping product smokes must **alias** to the KTM gate as the primary target (e.g. `smoke-epoll-basic` → `ktm-userdev-epoll-run`, `smoke-stream-sock` → `ktm-userdev-stream-sock-run`). Legacy FASE serial storms remain SUB / non-default.
+Overlapping product smokes must **alias** to the KTM gate as the primary target (e.g. `smoke-epoll-basic` → `ktm-userdev-epoll-run`, `smoke-stream-sock` → `ktm-userdev-stream-sock-run`, `smoke-socketpair` → `ktm-userdev-socketpair-run`, `smoke-fb-map-shared` → `ktm-userdev-fb-map-shared-run`). Legacy FASE serial storms remain SUB / non-default.
 
 ---
 

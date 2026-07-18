@@ -530,3 +530,87 @@ int64_t sys_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
 	nfd = sock_alloc_fd_any(child, 1);
 	return nfd;
 }
+
+int64_t sys_socketpair(int domain, int type, int protocol, int *sv)
+{
+	struct sock_stream *a;
+	struct sock_stream *b;
+	int fd0;
+	int fd1;
+	int sv_k[2];
+	int ret;
+
+#if !CONFIG_ENABLE_NETWORKING
+	(void)domain;
+	(void)type;
+	(void)protocol;
+	(void)sv;
+	return -ENOSYS;
+#endif
+
+	if (!current_process)
+		return -ESRCH;
+	if (!sv)
+		return -EFAULT;
+	if (domain != AF_UNIX)
+		return -EAFNOSUPPORT;
+	if (type != SOCK_STREAM)
+		return -EPROTOTYPE;
+	if (protocol != 0)
+		return -EPROTONOSUPPORT;
+
+	ret = sock_stream_socketpair(&a, &b);
+	if (ret < 0)
+		return ret;
+
+	fd0 = sock_alloc_fd_any(a, 1);
+	if (fd0 < 0)
+	{
+		sock_stream_release(b);
+		return fd0;
+	}
+	fd1 = sock_alloc_fd_any(b, 1);
+	if (fd1 < 0)
+	{
+		fd_entry_t *fd_table = get_process_fd_table();
+
+		if (fd_table && fd0 >= 0 && fd0 < MAX_FDS_PER_PROCESS &&
+		    fd_table[fd0].in_use)
+		{
+			fd_table[fd0].in_use = false;
+			fd_table[fd0].vfs_file = NULL;
+			fd_table[fd0].is_socket = false;
+		}
+		sock_stream_release(a);
+		return fd1;
+	}
+
+	sv_k[0] = fd0;
+	sv_k[1] = fd1;
+	if (copy_to_user(sv, sv_k, sizeof(sv_k)) != 0)
+	{
+		fd_entry_t *fd_table = get_process_fd_table();
+
+		if (fd_table)
+		{
+			if (fd0 >= 0 && fd0 < MAX_FDS_PER_PROCESS &&
+			    fd_table[fd0].in_use)
+			{
+				fd_table[fd0].in_use = false;
+				fd_table[fd0].vfs_file = NULL;
+				fd_table[fd0].is_socket = false;
+			}
+			if (fd1 >= 0 && fd1 < MAX_FDS_PER_PROCESS &&
+			    fd_table[fd1].in_use)
+			{
+				fd_table[fd1].in_use = false;
+				fd_table[fd1].vfs_file = NULL;
+				fd_table[fd1].is_socket = false;
+			}
+		}
+		sock_stream_release(a);
+		sock_stream_release(b);
+		return -EFAULT;
+	}
+	return 0;
+}

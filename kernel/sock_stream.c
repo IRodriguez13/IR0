@@ -159,6 +159,33 @@ int sock_stream_listen(struct sock_stream *s, int backlog)
 	return 0;
 }
 
+int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_out)
+{
+	struct sock_stream *a;
+	struct sock_stream *b;
+
+	if (!a_out || !b_out)
+		return -EINVAL;
+
+	a = sock_stream_create(IR0_AF_UNIX);
+	if (!a)
+		return -ENOMEM;
+	b = sock_stream_create(IR0_AF_UNIX);
+	if (!b)
+	{
+		sock_stream_release(a);
+		return -ENOMEM;
+	}
+
+	a->state = SS_CONNECTED;
+	b->state = SS_CONNECTED;
+	a->peer = b;
+	b->peer = a;
+	*a_out = a;
+	*b_out = b;
+	return 0;
+}
+
 int sock_stream_connect_unix(struct sock_stream *s, const char *path)
 {
 	int i;

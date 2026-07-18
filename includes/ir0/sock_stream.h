@@ -31,3 +31,5 @@ int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port
 ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len);
 ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len);
 int sock_stream_is(const void *ptr);
+/* Connected AF_UNIX stream pair without pathname (socketpair). */
+int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_out);

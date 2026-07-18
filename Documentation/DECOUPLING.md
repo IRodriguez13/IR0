@@ -35,7 +35,10 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | Tag | Scope | Rule |
 |-----|-------|------|
 | `forbidden-include` | `fs/`, `kernel/syscalls.c` | No `#include <drivers/...>` |
-| `missing-facade` | `includes/ir0/` | Required façade headers exist (`arch_port.h`, `mm_port.h`, …) |
+| `missing-facade` | `includes/ir0/` | Required façade headers exist (`arch_port.h`, `mm_port.h`, `sched.h`, `task.h`, …) |
+| `facade-no-drivers-include` | `includes/ir0/*.h` | No `#include <drivers/…>` |
+| `facade-no-arch-include` | `includes/ir0/*.h` | No `#include <arch/…>` |
+| `facade-no-sched-include` | `includes/ir0/*.h` | No `#include <sched/…>` |
 | `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | No `#include <interrupt/arch/...>` |
 | `fs-no-direct-arch` | `fs/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
 | `fs-no-mm-include` | `fs/` | No `#include <mm/...>`; use **`ir0/mm_port.h`** or narrower facades |
@@ -106,11 +109,14 @@ specific driver implementation file:
 | `process_t` / task globals | `process.h` | `/proc`, `mm/paging.c` fork paths needing struct layout |
 | Bluetooth façade | `bluetooth.h` | `ir0_bluetooth_poll`, `ir0_bluetooth_register_driver` without `drivers/bluetooth/*.c` callers |
 
-REQUIRED façades under `includes/ir0/*.h` must not `#include <drivers/…>`
-(`facade-no-drivers-include` in `architecture_guard.py`). Implementations may
-include drivers from `.c` adapters (`input_backend.c`, `blockdev.c`, …).
-`mm_port.h` is opaque (no `<mm/…>`). Prefer `blockdev.h` / `ir0_block_*` over
-legacy `block_dev_*` names in new `fs/` code.
+REQUIRED façades under `includes/ir0/*.h` must not `#include <drivers/…>`,
+`<arch/…>`, or `<sched/…>` (`facade-no-drivers-include` /
+`facade-no-arch-include` / `facade-no-sched-include` in `architecture_guard.py`).
+`arch_port.h` pulls `arch_io.h` + `arch_cpu.h` (no `<arch/…>`). Canonical
+`task_t` lives in `ir0/task.h`; `sched/task.h` and `ir0/context.h` reexport it.
+Implementations may include drivers from `.c` adapters (`input_backend.c`,
+`blockdev.c`, …). `mm_port.h` is opaque (no `<mm/…>`). Prefer `blockdev.h` /
+`ir0_block_*` over legacy `block_dev_*` names in new `fs/` code.
 
 ## Registration and callback patterns
 
@@ -226,7 +232,8 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
 | `drivers/driver_bootstrap.c` | Bootstrap callback list |
 | `drivers/storage/block_dev.h` | `block_dev_ops_t` |
 | `fs/vfs.h` | `vfs_ops` / fstype registration |
-| `includes/ir0/arch_port.h` | Arch-neutral CPU queries for `fs/` |
+| `includes/ir0/arch_port.h` | Arch-neutral CPU/I/O façade (no `<arch/…>` includes) |
+| `includes/ir0/task.h` / `context.h` | Canonical `task_t` + context-switch decls |
 | `scripts/architecture_guard.py` | Driver + facade + pseudo-fs/bluetooth/block_dev include policy |
 | `scripts/kernel_export_digest.py` | SHA-256 of sorted `nm -g` export list |
 | `Makefile` | `ALL_OBJS`, `ARCH_OBJS`, gated `*_OBJS` |
