@@ -55,7 +55,8 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 | `ir0-development-plan-mode.md` | always | When to plan before coding |
 | `ir0-development-multiagent-format.md` | always | Parallel agents and oleada report format |
 | `ir0-userspace-monolith-debt.md` | always | Syscall split targets, facade copies |
-| `ir0-smoke-autokill.md` | always | QEMU smokes via `scripts/smoke_qemu_run.sh` |
+| `ir0-smoke-autokill.md` | always | QEMU smokes via `scripts/smoke_qemu_run.sh` / `smoke_autokill.py` |
+| `ir0-version-stamp.mdc` | always | Lockstep `version.h` / Makefile with upstream tags |
 | `oss-kernel-reference.md` | on demand | Cross-check MM/exec/syscall invariants |
 | `ir0-tier-t0-os-functional.md` | tier T0 | OS + debug_bins scope |
 | `ir0-tier-t1-userspace-posix.md` | tier T1 | init + musl + syscalls |

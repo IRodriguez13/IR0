@@ -10,7 +10,7 @@
 | Status | stable |
 | Depends on | process, memory |
 | Man page | IR0-scheduler (section 7) |
-| Primary sources | `includes/ir0/sched.h`, `sched/sched.c`, `sched/sched_switch.c`, `sched/priority_sched.c`, `sched/rr_sched.c`, `arch/common/arch_portable.h` (`arch_first_context_switch`), `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
+| Primary sources | `includes/ir0/sched.h`, `sched/sched.c`, `sched/sched_switch.c`, `sched/priority_sched.c`, `sched/rr_sched.c`, `arch/common/arch_portable.h` (`first_switch_to`), `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
 
 ## 1. Overview
 
@@ -22,7 +22,7 @@ Round-robin (`0`) and CFS-name alias (`1`) remain available. Scheduling is
 PIT handler.
 
 The first transfer into a newly runnable task goes through
-`arch_first_context_switch(next)` (x86: `user_mode.c`; ARM: `first_switch.c`).
+`first_switch_to(next)` (x86: `user_mode.c`; ARM: `first_switch.c`).
 Portable backend code must **not** embed `iretq` / ISA entry frames.
 
 ## 2. Internal architecture
@@ -37,8 +37,8 @@ Portable backend code must **not** embed `iretq` / ISA entry frames.
 | `priority_sched.c` | Default bands when `CONFIG_SCHEDULER_POLICY=2` |
 | `rr_sched.c` | Circular FIFO queue when policy `0` or `1` |
 | `process_t::state` | `READY`, `RUNNING`, `BLOCKED`, `ZOMBIE` |
-| `arch_first_context_switch` | First user/kernel entry (arch-owned) |
-| `arch_context_switch.c` | Later switches → `switch_context_x64` / ARM path |
+| `first_switch_to` | First user/kernel entry (arch-owned) |
+| `switch_to.c` | Later switches → `switch_context_x64` / ARM path |
 
 **Policy `1` (name `cfs`):** uses **RR ops** with a different policy name. There is
 no `cfs_sched.c` and no `#include "rr_sched.h"` from a fake CFS wrapper.
@@ -51,8 +51,8 @@ no `cfs_sched.c` and no `#include "rr_sched.h"` from a fake CFS wrapper.
 2. If queue empty → return (idle loop handles HLT).
 3. Pick next runnable; skip `ZOMBIE` and `BLOCKED`.
 4. Call `sched_context_switch_to(next)`.
-5. First switch: `arch_first_context_switch(next)`.
-6. Later: `arch_context_switch(&prev->task, &next->task)`.
+5. First switch: `first_switch_to(next)`.
+6. Later: `switch_to(&prev->task, &next->task)`.
 
 **Wake paths** set `PROCESS_READY` and may call `sched_schedule_next`
 (poll/sleep/stdin/pipe/IPC).
@@ -78,7 +78,7 @@ no `cfs_sched.c` and no `#include "rr_sched.h"` from a fake CFS wrapper.
 | Process | `sched_add_process` / `sched_remove_process` on spawn/exit |
 | Syscalls | Block in handler; wake from idle poll |
 | Timer | PIT quantum counting (preemption hook deferred) |
-| Arch | `arch_first_context_switch`, `switch_context_x64` / ARM |
+| Arch | `first_switch_to`, `switch_context_x64` / ARM |
 
 ## 7. Invariants
 

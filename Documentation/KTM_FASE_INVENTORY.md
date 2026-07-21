@@ -27,8 +27,10 @@ Classification for migration (plan FASE→KTM ≥ exigente):
 | smoke-fase55* | 55 | C | `smoke-fase55d-doomgeneric` + KTM | Product WAD |
 | (no smoke-fase57) | 57 | HOST | — | GUI/reintegration docs only |
 | smoke-fase58* / smoke-busybox-manifest | 58 | C | ash/BUSY + KTM | BUSY-1/2 **Closed** |
-| smoke-nic-reach | F8-1 | C | `ktm-userdev-nic-reach-virtfs-run` | NIC probe |
-| smoke-tcp-guest | F8-2 | C | `ktm-userdev-tcp-guest-virtfs-run` | Guest IP TCP send/recv |
-| smoke-tcp-wire | F8-3 | C | `ktm-userdev-tcp-wire-virtfs-run` | Wire TCP guest→host 10.0.2.2:8888 |
+| smoke-nic-reach | F8-1 | C | `ktm-userdev-nic-reach-virtfs-run` | L3 ping/ARP proof |
+| smoke-tcp-guest | F8-2 | C | `ktm-userdev-tcp-guest-virtfs-run` | Guest→host wire 10.0.2.2:8889 |
+| smoke-tcp-wire | F8-3 | C | `ktm-userdev-tcp-wire-virtfs-run` | Wire TCP send+recv 10.0.2.2:8888 |
+| smoke-tcp-listen | F8 listen | C | `smoke-tcp-listen` | Host→guest listen/accept :7777 |
+| smoke-f8-net | F8 battery | C | nic+guest+wire+listen | Honest MVP gate |
 
 Deprecation policy: print warning on legacy target; do not delete for one oleada of grace.

@@ -1,8 +1,9 @@
 # KTM — Kernel Test Module
 
-> **Última verificación:** 2026-07-12  
-> **Fuente de verdad:** `includes/ir0/ktm/*`, `ktm/*.c`, `tests/ktm/`,  
-> `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`, targets `ktm-*` del Makefile  
+> **Última verificación:** 2026-07-21  
+> **Fuente de verdad:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,  
+> `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,  
+> `scripts/smoke_autokill.py`, targets `ktm-*` del Makefile  
 > **Canónico (inglés):** [`../KTM.md`](../KTM.md)
 
 KTM es el **plano canónico de test y diagnóstico** del kernel IR0: eventos tipados,
@@ -45,10 +46,22 @@ Arranque en kernel:
 | `CONFIG_KTM_TEST` | Suite de escenarios al boot |
 | `CONFIG_KTM_USERDEV` | Plano `/dev/ktm` |
 | `CONFIG_KTM_FAULT` | Stub de inyección (off en prod) |
+| `CONFIG_KTM_SERIAL_VERBOSE` | CHECKPOINT/PROBE ruidosos (default **n**) |
 
 Si `KTM_USERDEV` está off, el header expone un `static inline` vacío de
 `ktm_userdev_register()`; la definición real en `ktm/userdev.c` solo se compila con
 la opción on.
+
+### Capas de log (klog vs KTM vs host)
+
+Detalle canónico: [`../KTM.md`](../KTM.md) (Logging layers).
+
+| Capa | Rol |
+|------|-----|
+| **klog** | Eventos humanos `[ts] [LEVEL] [COMP]` — `<ir0/ktm/klog.h>` |
+| **KTM** | Transporte `KTM\|…`; `ASSERT_BATCH` colapsa loops felices |
+| **runit tags** | `ir0_smoke_tag()` — mismo rol que `klog_smoke` para autokill |
+| **QEMU host** | `*.qemu-stderr` separado del log serial del guest |
 
 ---
 
@@ -59,6 +72,8 @@ la opción on.
 | Event ring | `ktm_event_emit4` / `read` vía `/dev/ktm` |
 | Transport | Líneas `KTM|<seq>|<KIND>|<name>|<status>` |
 | Snapshot | Conteos para asserts de leak |
+| Assert | Soft asserts + **`ASSERT_BATCH`** |
+| klog hub | `ktm/klog.c` — log humano |
 | Scenario runner | Register / run / boot suite |
 | Userdev | ioctl + poll del anillo |
 
@@ -107,10 +122,16 @@ Piloto nuevo: `tests/ktm/userdev/ktm_*_case.c` + target `build-ktm-*-case` /
 `init_hostshare_exec` en disco + payload `ir0_payload` en virtio-9p
 (`make smoke-hostshare-exec`); `--legacy-disk-init` para el path antiguo.
 
+**Híbrido producto:** wrapper `scripts/ktm_userdev_runit_run.sh` (T3 checklist /
+`smoke-t3-prep`); PID1 **runit** + `runit_hostshare_payload_run` + `--disk`.
+Stub `ktm-userdev-*-run` = lab. Detalle: [`../KTM.md`](../KTM.md) §5.4.
+
 ```bash
+make -s smoke-t3-prep
 make -s smoke-hostshare-exec
 make -s ktm-userdev-run
 make -s smoke-tcp-wire
+make -s smoke-runit-boot
 ```
 
 ---

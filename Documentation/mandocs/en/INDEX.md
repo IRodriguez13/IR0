@@ -14,7 +14,7 @@ Study IR0 from inside the running system via `man IR0-vfs`, `man IR0-net`, etc.
 
 **Oleada note (0.3):** documented AF_INET TCP wire + FIN/EOF teardown; ARM F7h–F7j
 process/TTBR freestanding; virtio-9p symlink; priority scheduler default;
-`arch_first_context_switch` facade.
+`first_switch_to` facade.
 
 ## Chapter index
 

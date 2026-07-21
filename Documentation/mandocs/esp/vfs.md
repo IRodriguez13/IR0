@@ -224,8 +224,8 @@ Ver mapa ASCII de la sección 3 y `Documentation/mandocs/diagrams/vfs-routing.mm
 
 Tags serial (grep en log):
 
-- `[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE`
-- `[VFS_OPEN][CLASSIFY] VFS_LINUX_RAW_FLAGS_REJECTED`
+- `[ts] [INFO] [VFS] CLASSIFY VFS_FS_CONTRACT_ACTIVE` (`klog_info`)
+- `[ts] [INFO] [VFS] CLASSIFY VFS_LINUX_RAW_FLAGS_REJECTED`
 - `[EXEC_AUDIT][VFS]` — auditoría de carga ELF
 
 Introspección en runtime:

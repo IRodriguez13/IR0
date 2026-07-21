@@ -1,8 +1,10 @@
 # KTM — Kernel Test Module
 
-> **Last verified:** 2026-07-17  
-> **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `tests/ktm/`,  
-> `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`, root `Makefile` targets `ktm-*`
+> **Last verified:** 2026-07-21  
+> **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,  
+> `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,  
+> `scripts/ktm_userdev_runit_run.sh`, `scripts/smoke_autokill.py`,  
+> root `Makefile` targets `ktm-*`
 
 KTM is IR0’s **canonical kernel test and diagnostic plane**: typed events, checkpoints,
 snapshots, in-kernel scenarios, `/dev/ktm` for userspace-driven cases, and host runners
@@ -53,6 +55,7 @@ Boot wiring (kernel):
 | `CONFIG_KTM_TEST` | (defconfig) | Boot scenario suite |
 | `CONFIG_KTM_USERDEV` | depends on KTM+EVENTS | `/dev/ktm` control plane |
 | `CONFIG_KTM_FAULT` | n | Fault-injection stub (v2); keep off in prod |
+| `CONFIG_KTM_SERIAL_VERBOSE` | n | Full `CHECKPOINT`/`PROBE`/`KTM|LOG` on serial; leave off for product/desk |
 | `CONFIG_KTM_PROBE_DIAG` / `MALLOC_FORENSICS` | n | Temporary bring-up noise |
 
 When `CONFIG_KTM_USERDEV` is off, `includes/ir0/ktm/userdev.h` provides an empty
@@ -69,12 +72,32 @@ compiled only when the option is on — keep that pairing intact.
 | Transport | `transport_serial.c` | Host-visible lines: `KTM|<seq>|<KIND>|<name>|<status>` |
 | Registry / probes | `registry.c`, `probe.h` | Named probes (`ktm_probe_register` / `ktm_probe_run`) |
 | Snapshot | `snapshot.c` | Process/frame/fd/pipe counts for leak checks |
-| Assert | `assert.c` | `KTM_V1_ASSERT_*`, `KTM_REQUIRE`, leak helpers |
+| Assert | `assert.c` | `KTM_V1_ASSERT_*`, `KTM_REQUIRE`, leak helpers, **`ASSERT_BATCH`** |
 | Checkpoint | `checkpoint.c` | Lifecycle enum → event + transport |
 | Scenario runner | `scenario.c` | Register / run one / run boot suite; pass/fail counters |
+| Human log hub | `klog.c`, `ktm_klog.c` | `[ts] [LEVEL] [COMP] msg`; facade `<ir0/ktm/klog.h>` |
 | Userdev | `userdev.c` | `/dev/ktm` ioctl + read/poll over the ring |
 | Flight / panic | `ktm_flight.c`, `ktm_panic_class.c`, … | Post-mortem classification |
 | Diags | `d1_*`, `ktm_probe_diag.c` | Optional forensics (Kconfig off by default) |
+
+### Logging layers (klog vs KTM vs host)
+
+| Layer | Role | Include / entry |
+|-------|------|-----------------|
+| **klog** | Human event core (timestamp, severity, subsystem, dmesg + serial) | `#include <ir0/ktm/klog.h>` → `klog_info` / `klog_smoke` / `kprintf_level` |
+| **KTM protocol** | Test transport `KTM\|seq\|KIND\|name\|status` | `ktm_transport_emit`, scenarios, `/dev/ktm` |
+| **Userspace smoke tags** | Bare tokens for autokill (`SMOKE_OK`, stage tags) | `ir0_smoke_tag()` in `setup/runit/ir0_smoke_tag.h` (same role as `klog_smoke`) |
+| **QEMU host chatter** | Version banner / GTK / warnings | Sibling `*.qemu-stderr` from `scripts/smoke_autokill.py` — **not** mixed into the guest serial log |
+
+Rules of thumb:
+
+- Prefer `klog_*` over raw `serial_print` outside `ktm/klog.c` and serial driver stubs.
+- Classify lines use one COMP plus the word `CLASSIFY` in the message, e.g.
+  `[ts] [INFO] [VFS] CLASSIFY VFS_FS_CONTRACT_ACTIVE` — **not** `[VFS][CLASSIFY] …`.
+- Boot banner is `klog_info("BOOT", …)` plus a VGA typewriter copy (avoid `print()` —
+  console mirrors to serial and would duplicate).
+- `CONFIG_KTM_SERIAL_VERBOSE` (default **n**): when off, product/desk boots omit noisy
+  `CHECKPOINT` / `PROBE` / optional `KTM|LOG` mirrors; ASSERT / SUITE / smoke tags still emit.
 
 ### Serial protocol (grep-friendly)
 
@@ -85,8 +108,13 @@ KTM|706|TEST_BEGIN|tcp_wire
 KTM|707|CHECKPOINT|tcp_wire_connect
 KTM|708|ASSERT_PASS|tcp_wire_send
 KTM|709|TEST_END|tcp_wire|PASS
+KTM|…|ASSERT_BATCH|process.wait_drain|iterations=128|PASS
 KTM|…|SUITE_END|…|…
 ```
+
+Happy-path loops (e.g. `process.wait_drain`, `process.reclaim_exit`) wrap soft asserts in
+`ktm_assert_batch_begin` / `ktm_assert_batch_end` so serial gets **one** `ASSERT_BATCH`
+line instead of N× `ASSERT_PASS`.
 
 User-driven cases also print plain tags (e.g. `KTM_USERDEV_OK`, `F8_TCP_WIRE_OK`) for
 `scripts/smoke_autokill.py` / `ktm_userdev_runner.py` `--done` / `--require`.
@@ -244,19 +272,64 @@ Reference pilots: `ktm_fork_wait_case.c`, `ktm_tcp_wire_case.c`,
 ```bash
 make build-ktm-fork-wait-case
 make build-init-hostshare-exec       # stub PID1: mount 9p + execve payload
-make smoke-hostshare-exec            # stub on disk + fork_wait as ir0_payload
+make smoke-hostshare-exec            # runit PID1 piloto + fork_wait as ir0_payload
+make smoke-hostshare-exec-stub       # legacy stub PID1 path
+make smoke-kill-sigterm              # kill(2) SIGTERM + kill(pid,0) without #UD
 make ktm-userdev-run                 # default: stub init + share payload
 make ktm-userdev-fork-storm-virtfs-run
 make smoke-tcp-wire                  # F8-3 alias → tcp_wire virtfs run
+make smoke-tcp-listen                # F8 host→guest listen/accept
+make smoke-f8-net                    # F8 honest MVP battery
 ```
+
+F8 honesty (2026-07-18): nic-reach requires real L3; tcp-guest uses hostfwd wire (not
+in-memory); tcp-wire tags need peer evidence; listen is in the F8 battery. Loopback
+regression remains `smoke-stream-sock` (**runit PID1 piloto** via
+`ktm_prepare_runit_hostshare_disk.sh`).
 
 `scripts/ktm_userdev_runner.py` (default **share-payload** path):
 
 - Copies `disk.img`, injects **stub** `setup/pid1/init_hostshare_exec` as `/sbin/init`.
-- Copies `--init` ELF to the virtio-9p share as **`ir0_payload`** (flat name).
-- Always attaches `-fsdev` / `virtio-9p-pci` (`mount_tag=ir0share`).
+- Copies `--init` ELF to the virtio-9p share as **`ir0_payload`** (flat name) — also when
+  `--disk` is a prebuilt image (hybrid runit path).
+- Always attaches `-fsdev` / `virtio-9p-pci` (`mount_tag=ir0share`) unless `--no-fsdev`.
 - Stub mounts `/mnt/host` and `execve("/mnt/host/ir0_payload")`.
 - Cases report via `ktm_hostshare_report()` (tolerates share already mounted).
+
+#### Hybrid: runit PID1 + 9p payload (preferred for product-shaped smokes)
+
+Product PID1 is **runit** (`make smoke-runit-boot`). Large ELF pilots that still need
+virtio-9p should **not** replace `/sbin/init` with the stub.
+
+**Wrapper (canonical for T3 / product-shaped KTM):**
+
+```bash
+scripts/ktm_userdev_runit_run.sh --init BIN --log LOG --done TAG --require TAG …
+```
+
+Prepares a temp runit disk (`ktm_prepare_runit_hostshare_disk.sh`) and invokes
+`ktm_userdev_runner.py --disk`. Supports `--inject SRC:DEST` (e.g. `f41true` for
+exec-drain) and `--host-file` / `--host-grep`. Makefile targets
+`ktm-userdev-*-runit-run` use this; `make smoke-t3-prep` and
+`make smoke-ktm-drains-runit` point here. Stub `ktm-userdev-*-run` remains lab
+residual. **Exception:** `init-exit-drain` stays stub/virtfs (SUT is PID1 `_exit`).
+
+Manual pattern (same as the wrapper):
+
+1. `install-to-disk.sh` → runit rootfs on a temp MINIX image.
+2. `inject-smoke-service.sh --run-only DISK SERVICE setup/runit/stage-bin/runit_hostshare_payload_run`
+   (service mounts `ir0share` and execs `/mnt/host/ir0_payload`).
+3. Optional: overwrite noisy `console`/`logger` `run` stubs with `runit_pause_run` so serial
+   done-tags are not split by ash.
+4. `ktm_userdev_runner.py --disk DISK --init PAYLOAD --share DIR --done TAG …`
+
+Reference (out of tree): sibling **IR0-desktop** — optional DESK gates
+`make smoke-desk-xfbdev` / `smoke-desk-wm` / `smoke-desk-classicube` / `smoke-desk-play`
+(or battery `make smoke-desk`). **Not** part of `release-0.0.1`. Tree contract:
+`IR0-desktop/Documentation/TREE_CONTRACT.md`; debt list: `Documentation/ARCH_DEBT_SEP.md`.
+
+Lab pilots that still use stub PID1 (`ktm-userdev-*-run` without `--disk` runit) remain
+valid **dev aids**; T3 checklist smokes are already on the hybrid path.
 - `--legacy-disk-init` restores old inject-`--init`-as-`/sbin/init` behavior.
 - Extra QEMU args via `--qemu-arg`; if any arg contains `netdev`, no `-net none`.
 - Autokills on `--done`; checks `--require` and optional `--host-file` / `--host-grep`.
@@ -279,20 +352,39 @@ make -s ktm-userdev-reap-drain-virtfs-run
 make -s ktm-userdev-init-exit-drain-virtfs-run
 make -s ktm-userdev-posix-pseudofs-virtfs-run
 make -s ktm-userdev-input-det-virtfs-run
-make -s smoke-nic-reach          # F8-1
-make -s smoke-tcp-guest          # F8-2
-make -s smoke-tcp-wire           # F8-3
-make -s ktm-userdev-epoll-run    # epoll create/ctl/wait (canonical)
-make -s ktm-userdev-stream-sock-run  # AF_UNIX + TCP loopback
-make -s ktm-userdev-socketpair-run   # AF_UNIX SOCK_STREAM socketpair
-make -s ktm-userdev-fb-map-shared-run  # MAP_SHARED /dev/fb0
-make -s smoke-epoll-basic        # alias → ktm-userdev-epoll-run
-make -s smoke-stream-sock        # alias → ktm-userdev-stream-sock-run
-make -s smoke-socketpair         # alias → ktm-userdev-socketpair-run
-make -s smoke-fb-map-shared      # alias → ktm-userdev-fb-map-shared-run
-make -s smoke-scm-rights         # alias → ktm-userdev-scm-rights-run
-make -s smoke-unix-abstract      # alias → ktm-userdev-unix-abstract-run
-make -s smoke-sysv-shm           # alias → ktm-userdev-sysv-shm-run
+make -s smoke-nic-reach          # F8-1 L3 rtl8139 (NIC_PING_REPLY_OK)
+make -s smoke-nic-reach-virtio   # F8-1 L3 virtio-net-pci legacy
+make -s smoke-tcp-guest          # F8-2 guest→host wire :8889
+make -s smoke-tcp-wire           # F8-3 wire send+recv (peer only)
+make -s smoke-tcp-peer-cc        # peer loss + rexmit (LINUX-LIKE, port 8890)
+make -s smoke-tcp-listen         # F8 listen host→guest :7777
+make -s smoke-f8-net             # battery: nic + guest + wire + listen
+make -s smoke-t3-prep            # T3 sockets/IPC/fb battery (all runit)
+make -s smoke-desk-xfbdev        # OPTIONAL DESK-1 (sibling IR0-desktop; not release)
+make -s smoke-desk-wm            # OPTIONAL DESK-2 fb session
+make -s smoke-desk-classicube    # OPTIONAL DESK-3 soft_fb0
+make -s smoke-desk-play          # OPTIONAL DESK-4
+make -s smoke-desk               # OPTIONAL battery DESK-1..4
+make -s smoke-ktm-drains-runit   # fork/exec/reap/pseudofs/input runit + init-exit stub
+make -s smoke-epoll-basic        # alias → ktm-userdev-epoll-runit-run
+make -s smoke-stream-sock        # alias → ktm-userdev-stream-sock-runit-run
+make -s smoke-kill-sigterm       # kill(2) SIGTERM + probe0
+make -s smoke-socketpair         # alias → ktm-userdev-socketpair-runit-run
+make -s smoke-fb-map-shared      # alias → ktm-userdev-fb-map-shared-runit-run
+make -s smoke-scm-rights         # alias → *-scm-rights-runit-run
+make -s smoke-unix-abstract      # alias → *-unix-abstract-runit-run
+make -s smoke-sysv-shm           # alias → *-sysv-shm-runit-run
+make -s smoke-memfd-shared       # alias → *-memfd-shared-runit-run
+make -s smoke-unix-harden        # alias → *-unix-harden-runit-run
+make -s smoke-unix-flags         # alias → *-unix-flags-runit-run
+make -s smoke-event-fds          # alias → *-event-fds-runit-run
+make -s smoke-posix-shm          # alias → *-posix-shm-runit-run
+make -s ktm-userdev-socketpair-run  # stub PID1 residual (lab)
+make -s ktm-userdev-busybox-manifest-run  # BUSY-2 product applets (canonical)
+make -s smoke-busybox-manifest   # alias → ktm-userdev-busybox-manifest-run
+make -s ktm-userdev-doom-55d-run # hybrid: runit + WAD + KTM_DOOM_55D_OK
+make -s ktm-userdev-tcc-power-halt-run  # hybrid: runit + TCC + POWER_TCC_KTM_OK
+make -s smoke-runit-boot         # product PID1 (not userdev)
 
 # Hygiene
 make -s arch-guard               # no [FASE in kernel trees; ktm-include rules
@@ -303,6 +395,15 @@ python3 scripts/ktm_log_classify.py /tmp/some.log
 Deep COW data-plane remains `make smoke-mm-cow-lazy` (not replaced by `mm.cow_fork`
 bookkeeping scenario). Host-share: `make smoke-hostshare-9p` (MVP read) and
 `make smoke-hostshare-exec` (stub + payload exec).
+
+**Critical product battery (hybrid):**
+
+```text
+ktm-userdev-busybox-manifest-run   # full KTM runner (--disk prebuilt)
+ktm-userdev-doom-55d-run           # hybrid runit (alias smoke-fase55d-doomgeneric)
+ktm-userdev-tcc-power-halt-run     # hybrid runit (alias smoke-tcc-power-halt)
+smoke-runit-boot                   # product PID1 — not migrated to userdev
+```
 
 ---
 
@@ -320,11 +421,15 @@ bookkeeping scenario). Host-share: `make smoke-hostshare-9p` (MVP read) and
 
 | Plane | Owns |
 |-------|------|
-| **KTM** (`ktm-run` / `ktm-userdev-*`) | Kernel state, fork/exec/IPC depth, guest net wire, fault injection, syscall depth that fits a musl pilot |
-| **Keep outside KTM** | `arch-guard`, `tests/host` ABI/facade units, `linux-abi-audit-*`, deep COW `smoke-mm-cow-lazy`, product HOST (runit/ash/BusyBox/Doom), storage/hw/ARM machine smokes |
+| **KTM** (`ktm-run` / `ktm-userdev-*`) | Kernel state, fork/exec/IPC depth, guest net wire, fault injection, syscall depth that fits a musl pilot; **BusyBox manifest** (`ktm-userdev-busybox-manifest-run`) |
+| **Hybrid KTM + product HOST** | Doom 55d / TCC power-halt under **runit**; Xfbdev/mini under **runit + 9p** (`runit_hostshare_payload_run`); emit done tags + optional `KTM_*` |
+| **Keep outside KTM** | `arch-guard`, `tests/host` ABI/facade units, `linux-abi-audit-*`, deep COW `smoke-mm-cow-lazy`, product HOST **runit-boot / ash** (PID1 SUT), storage/hw/ARM machine smokes |
 | **Do not add** | A new serial-only smoke for a gap KTM already covers better — add/extend scenario or userdev + `--require KTM_*` / `KTM\|…` protocol |
 
-Overlapping product smokes must **alias** to the KTM gate as the primary target (e.g. `smoke-epoll-basic` → `ktm-userdev-epoll-run`, `smoke-stream-sock` → `ktm-userdev-stream-sock-run`, `smoke-socketpair` → `ktm-userdev-socketpair-run`, `smoke-fb-map-shared` → `ktm-userdev-fb-map-shared-run`, `smoke-scm-rights` / `smoke-unix-abstract` / `smoke-sysv-shm`). Legacy FASE serial storms remain SUB / non-default.
+Overlapping product smokes must **alias** to the KTM gate as the primary target. T3 prep
+smokes alias to `ktm-userdev-*-runit-run` (wrapper above). Stub `*-run` is residual lab.
+`smoke-busybox-manifest` → `ktm-userdev-busybox-manifest-run`. Legacy FASE serial storms
+remain SUB / non-default. Doom/TCC keep runit recipes; KTM names are hybrid aliases.
 
 ---
 

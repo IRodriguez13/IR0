@@ -1,17 +1,18 @@
 # KTM — Kernel Test / Trace Module (agent index)
 
-> **Last verified:** 2026-07-12  
-> **Full guide:** [`../KTM.md`](../KTM.md) (internals + kernel/user API how-to)  
-> **Source of truth:** `includes/ir0/ktm/*`, `ktm/`, `tests/ktm/`, `make ktm-run`,  
+> **Last verified:** 2026-07-21  
+> **Full guide:** [`../KTM.md`](../KTM.md) (internals + **klog layers** + kernel/user API)  
+> **Source of truth:** `includes/ir0/ktm/*`, `ktm/` (incl. `klog.c`), `tests/ktm/`, `make ktm-run`,  
 > `make ktm-userdev-*`, [`KTM_FASE_PARITY.md`](../KTM_FASE_PARITY.md)
 
 KTM is IR0's **sole kernel-side test and diagnostic source of truth**: typed events,
 checkpoints, snapshots/probes, scenarios, `/dev/ktm` control plane, and host runners.
+Human serial logging is **klog** (`<ir0/ktm/klog.h>`), not raw `serial_print`.
 Legacy kernel `[FASE` serial is **retired** (arch-guard enforced).
 
-**Agent policy:** prefer KTM scenarios / `libktm-user` / `KTM_CHECKPOINT` over new
-serial tags. See the parity map before claiming a FASE oleada is “covered”.
-For how to author scenarios or userdev pilots, read **[`KTM.md`](../KTM.md)** first.
+**Agent policy:** prefer KTM scenarios / `libktm-user` / `KTM_CHECKPOINT` / `klog_*`
+over new ad-hoc serial dialects. See the parity map before claiming a FASE oleada is
+“covered”. For how to author scenarios or userdev pilots, read **[`KTM.md`](../KTM.md)** first.
 
 ---
 
@@ -20,12 +21,14 @@ For how to author scenarios or userdev pilots, read **[`KTM.md`](../KTM.md)** fi
 | Layer | Path |
 |-------|------|
 | Public API (kernel) | `#include <ir0/ktm/ktm.h>` or `#include <ktm.h>` via `includes/ir0/ktm.h` |
+| Human log | `#include <ir0/ktm/klog.h>` — `[ts] [LEVEL] [COMP]` |
 | Private KTM helpers | `#include <ktm_internal.h>` (`ktm/include/`; **no** `../` / quoted paths) |
 | Userspace UAPI | `#include <ir0/ktm/uapi.h>` + `/dev/ktm` (`tests/ktm/lib/`) |
 | Implementation | `ktm/*.c` (internals; no scenarios) |
 | In-kernel scenarios | `tests/ktm/scenarios/` |
-| Host tooling | `scripts/ktm_runner.py`, `scripts/ktm_userdev_runner.py` |
+| Host tooling | `scripts/ktm_runner.py`, `scripts/ktm_userdev_runner.py`, `scripts/smoke_autokill.py` |
 | Userspace pilot | `tests/ktm/userdev/` (`ktm_fork_wait_case`, `ktm_cow_touch_case`, …) |
+| Runit smoke tags | `setup/runit/ir0_smoke_tag.h` |
 
 arch-guard rule `[ktm-include]` forbids relative/quoted includes into KTM from `ktm/` and `includes/ir0/ktm*`.
 Makefile puts `-Iktm/include` **before** `-Iincludes/ir0` so `<ktm.h>` is not shadowed by the thin facade `includes/ir0/ktm.h`.

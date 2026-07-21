@@ -19,7 +19,7 @@ seleccionada por `CONFIG_SCHEDULER_POLICY`. El defconfig usa **bandas de
 prioridad** (`=2`). Round-robin (`0`) y el alias de nombre CFS (`1`) siguen
 disponibles. Planificación **un CPU**; preemption por timer diferida.
 
-La primera transferencia pasa por `arch_first_context_switch(next)`.
+La primera transferencia pasa por `first_switch_to(next)`.
 El código portable **no** embebe `iretq`.
 
 ## 2. Arquitectura interna
@@ -33,7 +33,7 @@ El código portable **no** embebe `iretq`.
 | `sched/sched_resched.c` | Helpers de resched (IRQ/TTY/retorno a user) |
 | `priority_sched.c` | Backend por defecto (policy 2) |
 | `rr_sched.c` | Cola circular (policy 0 / 1) |
-| `arch_first_context_switch` | Primera entrada (propiedad de arch) |
+| `first_switch_to` | Primera entrada (propiedad de arch) |
 
 **Policy `1` (`cfs`):** mismas ops que RR; no existe `cfs_sched.c` ni un wrapper
 que incluya `rr_sched.h`.
@@ -41,7 +41,7 @@ que incluya `rr_sched.h`.
 ## 3. Flujo
 
 `sched_schedule_next()` → ops del backend → pick → `sched_context_switch_to` →
-`arch_first_context_switch` / `arch_context_switch`.
+`first_switch_to` / `switch_to`.
 
 ## 4. Límites del subsistema
 
