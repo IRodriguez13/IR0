@@ -27,7 +27,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 |------|-----------|-----|
 | Fachada portable | `includes/ir0/arch_port.h` | Consultas CPU, habilitación IRQ, fachada port I/O |
 | Interfaz común | `arch/common/arch_interface.c` | Despacho cross-arch |
-| Primer switch | `arch_first_context_switch` | x86 `user_mode.c`; ARM `first_switch.c` |
+| Primer switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
 | x86-64 | `arch/x86-64/` | boot, IDT, PIC, modo user, syscalls |
 | arm64 | `arch/arm64/sources/` | boot_stub, mmu_early, vectors, switch_early, process_early |
 | Context switch | `sched/switch/switch_x64.asm`, `switch_arm64.c` | por ISA; ARM llama `arm64_cpu_switch_mm` |
@@ -51,8 +51,8 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 **Context switch (producto x86):**
 
 ```text
-  sched_schedule_next → arch_first_context_switch(next)   # primera entrada
-                     → arch_context_switch(prev, next)    # posteriores
+  sched_schedule_next → first_switch_to(next)   # primera entrada
+                     → switch_to(prev, next)    # posteriores
 ```
 
 **arm64 freestanding (smoke actual):**
@@ -86,7 +86,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 
 | Vecino | Interacción |
 |--------|-------------|
-| Scheduler | switch por arch; primera entrada vía `arch_first_context_switch` |
+| Scheduler | switch por arch; primera entrada vía `first_switch_to` |
 | Syscalls | entry ASM / stub por arch |
 | Interrupts | PIC (x86) vs scaffold GIC (arm64) |
 | Drivers | port I/O vía fachada; bloques teclado solo x86 |
@@ -113,9 +113,9 @@ Checklist de porting:
 
 ```text
   nueva arch → linker.ld + boot entry
-             → arch_early_init
+             → early_init
              → entry syscall + ABI dispatch
-             → switch_context_* + arch_first_context_switch
+             → switch_context_* + first_switch_to
              → fault/MMU setup
              → revisión de exenciones architecture_guard
 ```
@@ -132,7 +132,7 @@ Checklist de porting:
 
 - `make build-matrix-min` — compila variantes arch según matrix.
 - `make arch-guard` — violaciones de fachada antes de merge.
-- `arch_get_name()` / `/proc/cpuinfo` para cadena ISA en runtime.
+- `get_arch_name()` / `/proc/cpuinfo` para cadena ISA en runtime.
 - Boot arm64: `make smoke-arm64` / `smoke-arm64-syscall` (exige
   `ARM64_PROCESS_TTBR_OK` entre otros tags).
 - F7b pack: `make smoke-arm64-port` / `smoke-arm64-gic`.
@@ -144,7 +144,7 @@ Checklist de porting:
 
 - `fork`/`exec` ARM producto / `rr_sched` con `process_t` real — **fuera** de la imagen freestanding.
 - **ALL_OBJS + musl aarch64** — BLOCKED (toolchain SETUP / muro IRQ).
-- GIC detrás de `arch_register_irq` en path producto.
+- GIC detrás de `register_irq` en path producto.
 - Eliminar clusters `#ifdef` solo x86 en keyboard/console.
 - Boot UEFI en x86 — solo GRUB Multiboot hoy.
 - RISC-V / x86-32 — **no en el árbol**.

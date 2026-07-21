@@ -31,8 +31,8 @@ configured from Kconfig.
 
 - Scheduling integrates with process and signal handling.
 - Queue mutation paths are IRQ-serialized per backend.
-- Context-switch assembly remains architecture-specific
-  (`arch_first_context_switch`, `arch_context_switch`).
+- Context-switch assembly remains architecture-specific behind
+  **`first_switch_to`** and **`switch_to`** (ISA asm private).
 
 ## Strengths
 

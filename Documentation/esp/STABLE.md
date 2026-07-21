@@ -1,8 +1,9 @@
 # IR0 — Baseline estable (release 0.0.1)
 
-> **Última verificación:** 2026-07-12  
+> **Última verificación:** 2026-07-18  
 > **Fuente de verdad:** smokes/`Makefile`, merge `56a3f7b` (kexec/S3, P1-storage, P1-T1),  
-> Future F2–F6, [`../HARDENING.md`](../HARDENING.md), [`../ROADMAP.md`](../ROADMAP.md), gates CTR.
+> F8 MVP honesto (`smoke-f8-net`), Future F2–F6, híbrido runit+9p (`runit_hostshare_payload_run`),  
+> [`../HARDENING.md`](../HARDENING.md), [`../ROADMAP.md`](../ROADMAP.md), gates CTR.
 
 Checklist único de lo **estable para probar en QEMU** (serial y GTK), lo que **estaba en desarrollo** y quedó **cerrado en 0.0.1**, y lo que sigue siendo **trabajo futuro** ([`ROADMAP.md`](../ROADMAP.md) P1+).
 
@@ -62,7 +63,7 @@ Si TCC, Doom+WAD o el smoke userspace están en rojo → **no merge a `master`**
 |------|-----------|-----------|-----------|
 | Gate D1.20 | `release-0.0.1` | mantener verde | — |
 | Producto | TCC + Doom+**IWAD** + posix | mismos blockers | — |
-| Red | AF_UNIX + TCP loopback | F8 Internet/NIC | — |
+| Red | AF_UNIX + TCP loopback | F8 MVP honesto (`smoke-f8-net`) | TCP Internet completo |
 | Host share | virtio-**9p** MVP | profundizar opcional | virtiofs+FUSE |
 | X11 / WM | fuera | userspace post-red+T2 | T3 no in-kernel |
 | CFS / SMP | fuera | fuera | mucho más tarde |
@@ -104,6 +105,8 @@ Ver tabla completa en [`../HARDENING.md`](../HARDENING.md). Resumen: split sysca
 ### Host-share (ayuda de desarrollo)
 
 - virtio-9p (`-virtfs`) → `/mnt/host` — `make smoke-hostshare-9p`
+- Exec stub PID1: `make smoke-hostshare-exec`
+- Exec bajo **runit** PID1: `runit_hostshare_payload_run` + runner `--disk` (referencia: IR0-desktop Xfbdev)
 - No confundir con virtiofs/FUSE (aún no)
 
 ### Storage
