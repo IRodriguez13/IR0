@@ -223,8 +223,8 @@ See section 3 ASCII map and `Documentation/mandocs/diagrams/vfs-routing.mmd`.
 
 Serial classify tags (grep serial log):
 
-- `[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE` — init succeeded
-- `[VFS_OPEN][CLASSIFY] VFS_LINUX_RAW_FLAGS_REJECTED` — flag translation bug
+- `[ts] [INFO] [VFS] CLASSIFY VFS_FS_CONTRACT_ACTIVE` — init succeeded (`klog_info`)
+- `[ts] [INFO] [VFS] CLASSIFY VFS_LINUX_RAW_FLAGS_REJECTED` — flag translation bug
 - `[EXEC_AUDIT][VFS]` — ELF load path auditing when `vfs_exec_audit_begin` active
 
 Runtime introspection:

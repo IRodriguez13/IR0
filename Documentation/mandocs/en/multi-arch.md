@@ -28,7 +28,7 @@ NEON.
 |-------|----------|------|
 | Portable facade | `includes/ir0/arch_port.h` | CPU queries, IRQ enable, port I/O facade |
 | Common interface | `arch/common/arch_interface.c` | Cross-arch dispatch |
-| First switch | `arch_first_context_switch` | x86 `user_mode.c`; ARM `first_switch.c` |
+| First switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
 | x86-64 | `arch/x86-64/` | boot, IDT, PIC, user mode, syscalls |
 | arm64 | `arch/arm64/sources/` | boot_stub, mmu_early, vectors, switch_early, process_early |
 | Context switch | `sched/switch/switch_x64.asm`, `switch_arm64.c` | per-ISA; ARM calls `arm64_cpu_switch_mm` |
@@ -52,8 +52,8 @@ NEON.
 **Context switch (product x86):**
 
 ```text
-  sched_schedule_next → arch_first_context_switch(next)   # first entry
-                     → arch_context_switch(prev, next)    # later
+  sched_schedule_next → first_switch_to(next)   # first entry
+                     → switch_to(prev, next)    # later
 ```
 
 **arm64 freestanding (current smoke path):**
@@ -87,7 +87,7 @@ NEON.
 
 | Neighbor | Interaction |
 |----------|---------------|
-| Scheduler | per-arch switch; first entry via `arch_first_context_switch` |
+| Scheduler | per-arch switch; first entry via `first_switch_to` |
 | Syscalls | per-arch entry ASM / stub |
 | Interrupts | PIC (x86) vs GIC scaffold (arm64) |
 | Drivers | port I/O via facade; keyboard x86-only blocks |
@@ -114,9 +114,9 @@ Porting checklist:
 
 ```text
   new arch → linker.ld + boot entry
-          → arch_early_init
+          → early_init
           → syscall entry + dispatch ABI
-          → switch_context_* + arch_first_context_switch
+          → switch_context_* + first_switch_to
           → fault/MMU setup
           → architecture_guard exemptions review
 ```
@@ -133,7 +133,7 @@ Porting checklist:
 
 - `make build-matrix-min` — builds arch variants per matrix.
 - `make arch-guard` — facade violations before merge.
-- `arch_get_name()` / `/proc/cpuinfo` for runtime ISA string.
+- `get_arch_name()` / `/proc/cpuinfo` for runtime ISA string.
 - arm64 boot: `make smoke-arm64` / `smoke-arm64-syscall` (requires
   `ARM64_PROCESS_TTBR_OK` among other tags).
 - arm64 F7b pack: `make smoke-arm64-port` / `smoke-arm64-gic`.
@@ -145,7 +145,7 @@ Porting checklist:
 
 - Product ARM `fork`/`exec` / `rr_sched` with real `process_t` — **not** in freestanding image.
 - **ALL_OBJS + musl aarch64** — BLOCKED (toolchain SETUP / interrupt wall).
-- GIC behind full `arch_register_irq` product path.
+- GIC behind full `register_irq` product path.
 - Remove x86-only `#ifdef` clusters in keyboard/console for true portability.
 - UEFI boot on x86 — GRUB Multiboot only today.
 - RISC-V / x86-32 — **not in tree**.

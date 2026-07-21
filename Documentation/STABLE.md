@@ -1,10 +1,12 @@
 # IR0 — Stable baseline (release 0.0.1)
 
-> **Last verified:** 2026-07-12  
+> **Last verified:** 2026-07-18  
 > **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
-> hostshare-exec + F8 harden + FAT secondary ship note,  
+> hostshare-exec + F8 **honest MVP** (`smoke-f8-net`) + FAT secondary ship note,  
+> runit PID1 + hybrid 9p payload (`runit_hostshare_payload_run`) for desktop X smoke,  
 > merge `56a3f7b` (dev→master: kexec/S3, P1-storage, P1-T1), Future F2–F6,  
-> `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
+> `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md),  
+> critical hybrid KTM battery ([`KTM.md`](KTM.md) § critical product battery).
 
 This document is the **single checklist** for what is **stable enough to run and test in QEMU** (serial and GTK UI), what was formerly **in development** and is now closed for **0.0.1**, and what remains **future work** (see [`ROADMAP.md`](ROADMAP.md) P1+).
 
@@ -20,7 +22,7 @@ full-copied user pages. Real share-on-fork + write-fault break landed in `62cc51
 | Artifact | Meaning |
 |----------|---------|
 | **`v0.0.1-rc2`** | Pre-release **tag prep**: critical automated gates green (TCC, Doom+IWAD, posix, hostshare, arch-guard). **Not** a shipped release. |
-| **Release 0.0.1 ship** | Maintainer only: **manual QEMU/VM** walkthrough “listo”. Automated BusyBox product path (**BUSY-1** manifest + **BUSY-2** `smoke-busybox-manifest`) is green. |
+| **Release 0.0.1 ship** | Maintainer only: **manual QEMU/VM** walkthrough “listo”. Automated BusyBox product path (**BUSY-1** manifest + **BUSY-2** `ktm-userdev-busybox-manifest-run` / alias `smoke-busybox-manifest`) is green. |
 
 Do **not** treat `v0.0.1-rc2` (or earlier `rc1`/`pre.1`) as “0.0.1 done”. Final git tag `v0.0.1` waits on ship criteria above.
 
@@ -28,21 +30,20 @@ Do **not** treat `v0.0.1-rc2` (or earlier `rc1`/`pre.1`) as “0.0.1 done”. Fi
 
 ## Merge → `master` — critical product gates (maintainer)
 
-**Policy (2026-07-12):** before merging `dev` → `master`, the software that must **not** regress is
+**Policy (2026-07-17):** before merging `dev` → `master`, the software that must **not** regress is
 **TinyCC in-guest** (compile + run), **Doom T2 with real IWAD** (doomgeneric loads WAD + frames),
-and **broader userspace** (`smoke-posix-depth` or `smoke-tier1`). CTR/`smoke-release-0.0.1` alone
-are not enough.
+**BusyBox product applets** (KTM manifest), **runit as PID1**, and **broader userspace**
+(`smoke-posix-depth` or `smoke-tier1`). CTR/`smoke-release-0.0.1` alone are not enough.
 
 ```bash
-# Product blockers (must PASS) — do not merge to master if any red
-make smoke-tcc-power-halt                    # live TCC gate (link + run + halt)
-# Doom = real WAD (default REAL_WAD_PATH in Makefile; override if needed)
-make IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric
-make smoke-posix-depth                       # or: make smoke-tier1
-# Interactive GUI (optional):
-#   make run-fase55d-doomgeneric-gui
+# Critical hybrid KTM battery (must PASS) — do not merge to master if any red
+make -s ktm-userdev-busybox-manifest-run     # BUSY-2; alias: smoke-busybox-manifest
+make -s IR0_LEGACY_SMOKE=1 ktm-userdev-doom-55d-run   # or smoke-fase55d-doomgeneric
+make -s ktm-userdev-tcc-power-halt-run       # or smoke-tcc-power-halt; requires POWER_TCC_KTM_OK
+make -s smoke-runit-boot                     # product PID1 (not userdev)
 
-# Still required hygiene (not a substitute for TCC/Doom/userspace)
+# Broader userspace + hygiene
+make smoke-posix-depth                       # or: make smoke-tier1
 make ctr
 make smoke-tier1
 make smoke-release-0.0.1
@@ -52,8 +53,8 @@ Default IWAD: `REAL_WAD_PATH` → `/home/ivanr013/Escritorio/universal-doom/DOOM
 (file must exist on the merge host). Stub `smoke-fase55b-doom-stub` remains a fast regression
 aid, **not** the merge blocker.
 
-If TCC, Doom+WAD (`FASE55D_DOOMGENERIC_OK` / frame loop), or the userspace smoke is red,
-**do not merge to `master`** even if release/CTR are green.
+If TCC (`POWER_TCC_KTM_OK`), Doom+WAD (`KTM_DOOM_55D_OK` / frame loop), BusyBox manifest,
+or `smoke-runit-boot` is red, **do not merge to `master`** even if release/CTR are green.
 Status honesty: TCC may still hang at static link in some QEMU runs — treat a red TCC smoke as
 a merge blocker, not as “optional WARN”.
 
@@ -108,15 +109,19 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 |------|--------|---------------|
 | **Hardening H1–H6** | **Closed** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Stable** | `make smoke-runit-boot` |
-| **BusyBox ash + applets** | **Stable (product)** | Manifest [`setup/busybox/required_applets.txt`](../setup/busybox/required_applets.txt); rootfs inject via `busybox_inject_manifest.sh`; ship smoke: `make smoke-busybox-manifest` (`BUSYBOX_MANIFEST_OK`). Extended probe: `smoke-fase58l-busybox-coreutils` |
-| **TinyCC in-guest** | **Merge-critical** | `smoke-fase52-tcc` / `smoke-tcc-power-halt` — **blocker for `master`** |
+| **BusyBox ash + applets** | **Stable (product)** | Manifest [`setup/busybox/required_applets.txt`](../setup/busybox/required_applets.txt); rootfs inject via `busybox_inject_manifest.sh`; ship smoke: `make ktm-userdev-busybox-manifest-run` (alias `smoke-busybox-manifest`) → `BUSYBOX_MANIFEST_OK` + `KTM_USERDEV_OK`. Extended probe: `smoke-fase58l-busybox-coreutils` |
+| **TinyCC in-guest** | **Merge-critical** | `ktm-userdev-tcc-power-halt-run` / `smoke-tcc-power-halt` — requires `POWER_TCC_KTM_OK` — **blocker for `master`** |
 | **COW fork** | **Stable** | `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
 | **T1 POSIX slice** | **Stable** | tier1 + musl manifests; cred/pthread/setuid smokes |
-| **T2 graphics / Doom** | **Merge-critical** | Real IWAD: `IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric` (`REAL_WAD_PATH`) — **blocker for `master`**; stub 55b = fast aid only |
-| **Local net** | **Stable for test** | `AF_UNIX` (pathname + abstract + `socketpair` + `SCM_RIGHTS`) + **TCP loopback** — `smoke-stream-sock` / `smoke-scm-rights` / `smoke-unix-abstract` |
-| **Host-share 9p** | **Dev aid** | QEMU `-virtfs` → guest `/mnt/host` — `make smoke-hostshare-9p`; ELF exec via share — `make smoke-hostshare-exec` (**not** virtiofs/FUSE) |
-| **T3 desktop** | **Not in scope** | WM/compositor out of tree — planning only |
+| **T2 graphics / Doom** | **Merge-critical** | Real IWAD: `IR0_LEGACY_SMOKE=1 ktm-userdev-doom-55d-run` (alias `smoke-fase55d-doomgeneric`; requires `KTM_DOOM_55D_OK`) — **blocker for `master`**; stub 55b = fast aid only |
+| **Local net** | **Stable for test** | `AF_UNIX` (pathname + abstract + `socketpair` + `SCM_RIGHTS` multi-fd + real `getpeername` + SOCK flags/`accept4`/`MSG_PEEK`/`SO_REUSEADDR`) + **TCP loopback** — `smoke-stream-sock` / `smoke-scm-rights` / `smoke-unix-abstract` / `smoke-unix-harden` / `smoke-unix-flags` |
+| **Host-share 9p** | **Dev aid / product-dev** | QEMU `-virtfs` → `/mnt/host`; exec: `smoke-hostshare-exec`; recipe: [`HOSTSHARE_PRODUCT.md`](HOSTSHARE_PRODUCT.md). **Not** VirtualBox / virtiofs |
+| **X11 mini (out of tree)** | **Stable for test** | Optional `make smoke-desk-xfbdev` (sibling [`IR0-desktop`](../../IR0-desktop/); **not** in `release-0.0.1`) → `IR0_XFBDEV_SMOKE_OK` |
+| **DESK soft session (out of tree)** | **Stable for test** | Optional `smoke-desk-wm` / `classicube` / `play` — soft fb demos; **smoke ≠ ship ISO** ([`TREE_CONTRACT`](../../IR0-desktop/Documentation/TREE_CONTRACT.md)) |
+| **DESK X session (out of tree)** | **Stable for test (flaky)** | Optional `smoke-desk-session` — often `IR0_DESK_SESSION_OK`; residual kernel panic — [`DESK_SESSION.md`](../../IR0-desktop/Documentation/DESK_SESSION.md) |
+| **Tree separation (SEP-1)** | **Policy** | Kernel / desktop / third-party contract + [`ARCH_DEBT_SEP.md`](ARCH_DEBT_SEP.md); desktop rootfs skeleton fail-closed |
+| **T3 desktop** | **Partial (soft demo)** | Soft fb session out of tree; TinyX X-WM / Mesa ClassiCube lab-blocked; no product desktop ISO yet |
 
 ### Version matrix (0.0.1 vs 0.0.2)
 
@@ -124,10 +129,10 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 |-------|------------------|----------------------|-------|
 | Gate D1.20 | `smoke-release-0.0.1` / `release-0.0.1` | keep green | — |
 | Product | TCC + Doom+**IWAD** + posix/tier1 | same blockers | — |
-| Network | AF_UNIX + TCP **loopback** + guest IP | F8-1 NIC (`smoke-nic-reach`); F8-2 guest TCP (`smoke-tcp-guest`) | wire TCP Internet |
+| Network | AF_UNIX + TCP **loopback** | F8 honest MVP (`smoke-f8-net`: NIC L3 + guest/wire/listen) | full Internet TCP / congestion |
 | Host share | virtio-**9p** MVP + exec (`smoke-hostshare-9p`, `smoke-hostshare-exec`) | subdirs / more FS ops | virtiofs + FUSE when ready |
 | ARM | bring-up (F7*) — does not block x86 ship | continue port | — |
-| X11 / WM | **out** (kernel prep OK) | userspace after usable net + T2 | never in-kernel T3; kernel: fb/MAP_SHARED + unix + SysV shm |
+| X11 / WM | **out** (kernel prep OK) | userspace after usable net + T2 | never in-kernel T3; kernel: fb/MAP_SHARED + unix + SysV shm + memfd |
 | CFS / SMP | **out** | **out** | much later; not with X11 |
 
 Do **not** claim “virtiofs done” for the 9p path.
@@ -169,7 +174,7 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | runit PID1 | `setup/pid1/`, `load-userspace-runit` | `smoke-runit-boot` |
 | BusyBox minimal | `setup/busybox/fase58_busybox.config`, `build-busybox-fase50-min` | `smoke-tier1` |
 | BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional extended probe |
-| BusyBox product manifest | **BUSY-1 / BUSY-2 Closed** | `required_applets.txt` + `smoke-busybox-manifest` (`BUSYBOX_MANIFEST_OK`) |
+| BusyBox product manifest | **BUSY-1 / BUSY-2 Closed** | `required_applets.txt` + `ktm-userdev-busybox-manifest-run` (`BUSYBOX_MANIFEST_OK`) |
 | Interactive ash on FB console | `includes/ir0/console.c`, TTY echo | [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.md) |
 | musl static toolchain | `MUSL_CC`, `kernel-x64-userspace.iso` | tier1 smokes |
 | TinyCC | `setup/tcc/build-fase52.sh` | `build-tcc-fase52` |
@@ -181,9 +186,13 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | `socket` / `bind` / `sendto` / `recvfrom` / `connect` | tier1 manifest, `runtime-net-check` |
 | UDP `accept` → `-EOPNOTSUPP` | documented in mandocs |
 | AF_UNIX + TCP **loopback** `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) — **in 0.0.1** |
-| NIC reach (rtl8139 + `/dev/net`) | **F8-1 PARTIAL** — `make smoke-nic-reach` (`F8_NIC_REACH_OK`) |
-| TCP guest IP (10.0.2.15 stream) | **F8-2 PARTIAL** — `make smoke-tcp-guest` (`F8_TCP_GUEST_OK`) |
-| TCP Internet / wire NIC | **F8-3 PARTIAL** — `make smoke-tcp-wire` (`F8_TCP_WIRE_OK`); SYN/PSH + best-effort FIN\|ACK; NET RX traces at DEBUG; not required for 0.0.1 |
+| NIC L3 reach (rtl8139) | **F8-1 MVP** — `make smoke-nic-reach` requires ICMP/ARP proof (`NIC_PING_REPLY_OK` → `F8_NIC_REACH_OK`) |
+| NIC L3 reach (virtio-net legacy) | **F8-1 MVP** — `make smoke-nic-reach-virtio` (`virt0`; QEMU `virtio-net-pci,disable-modern=on`) |
+| E1000 NIC | **BLOQUEADO** — `CONFIG_DRV_NIC_E1000=n`; no driver sources |
+| TCP guest→host wire | **F8-2 MVP** — `make smoke-tcp-guest` → **10.0.2.2:8889** hostfwd (not in-memory); `F8_TCP_GUEST_SENDRECV_OK` |
+| TCP wire send+recv | **F8-3 MVP** — `make smoke-tcp-wire` peer evidence only (`F8_TCP_WIRE_SENDRECV_OK`); no synthetic CC as ship gate |
+| TCP listen host→guest | **F8 listen MVP** — `make smoke-tcp-listen` (`F8_TCP_LISTEN_OK`); battery `make smoke-f8-net` |
+| Full Internet TCP | **Not claimed** — no arbitrary Internet, no peer-driven congestion/SACK as product |
 
 ### Host share (dev aid)
 
@@ -192,6 +201,7 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | virtio-9p + VFS fstype `9p` → `/mnt/host` | `make smoke-hostshare-9p` (`HOSTSHARE_9P_OK`, host file visible) |
 | 9p getattr + chunked read (ELF-sized) | `virtio_9p_stat_file` / `virtio_9p_read_file`; `hs_stat`/`hs_read` |
 | Exec payload from share | `make smoke-hostshare-exec` — stub `init_hostshare_exec` mounts `ir0share`, `execve(/mnt/host/ir0_payload)` |
+| Exec payload under **runit** PID1 | `setup/runit/runit_hostshare_payload_run` as supervised `sv/*/run` + `ktm_userdev_runner.py --disk` (prebuilt runit rootfs); reference: IR0-desktop Xfbdev smoke |
 | virtiofs / FUSE | **Not implemented** — post-9p when FUSE exists |
 
 ### Storage (phase2 baseline)

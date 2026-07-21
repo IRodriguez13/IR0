@@ -1,6 +1,6 @@
 # IR0 Kernel — Consolidated Development Roadmap
 
-> **Last verified:** 2026-07-11 (post Future F2–F5; see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
+> **Last verified:** 2026-07-21 (klog hub + ASSERT_BATCH + runit smoke_tag; HAB/DESK + SEP-1 — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md), [`ARCH_DEBT_SEP.md`](ARCH_DEBT_SEP.md), [`KTM.md`](KTM.md))  
 > **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`. README and old docs may lag; **grep the tree before claiming “done”.**
 
 This document consolidates tier goals, completed oleadas, reprioritized backlog (storage before TCP/X11), and **recommended evolution milestones**. **What is stable for QEMU test today** is canonical in [`STABLE.md`](STABLE.md). **Open work only:** [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
@@ -85,6 +85,11 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | **`[KTM][PANIC_SITE]` + panic macro audit** | Done | `includes/ir0/oops.h`, `scripts/ktm_panic_inventory.py`, `make ktm-check` |
 | Syscall manifest | Done | `scripts/ktm_syscall_manifest.py`, `make ktm-manifest` |
 | Host contract tests | Done | `tests/host/test_ktm_sched_contract.c`, `test_ktm_panic_inventory.c` |
+| **klog hub + CLASSIFY hygiene** | Done (2026-07-21) | `ktm/klog.c`, `<ir0/ktm/klog.h>`, [`KTM.md`](KTM.md) |
+| **ASSERT_BATCH** | Done | `ktm/assert.c`; scenarios `wait_drain` / `reclaim_exit` |
+| **`CONFIG_KTM_SERIAL_VERBOSE`** | Done (default n) | `setup/Kconfig`; product serial quieter |
+| **Autokill QEMU stderr split** | Done | `scripts/smoke_autokill.py` → `*.qemu-stderr` |
+| **runit `ir0_smoke_tag` + hostshare/pause** | Done | `setup/runit/ir0_smoke_tag.h`, `runit_*_payload_run.c` |
 | **Not** a user-facing security module | Policy | Future MAC/audit is a separate milestone |
 
 ### MM — COW + lazy (~90%)
@@ -106,6 +111,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | `[PF_AUDIT]` gated | Done | `CONFIG_DEBUG_PAGE_FAULTS` |
 | `[MMAP_AUDIT]` / `[FASE39]` gated | Done | `CONFIG_DEBUG_MMAP_AUDIT` |
 | `[FASE45][FORK_AUDIT]` gated | Done | `CONFIG_DEBUG_FORK` |
+| **Dialect → klog** (VFS/NET/IDT/ATA/…) | Done (2026-07-21) | Prefer `klog_*`; no `[COMP][CLASSIFY]` |
 
 ### Storage / phase2 (started)
 
@@ -249,7 +255,7 @@ Tag `v0.0.1-rc2` closed automated product gates except maintainer **manual VM** 
 |---|------|-------|
 | 22 | **TCP stream `send`/`recv`/`listen`** | **Partial DONE** — loopback + guest wire via `smoke-stream-sock` / `smoke-tcp-*` |
 | 23 | **AF_UNIX stream + `socketpair` + abstract + `SCM_RIGHTS`** | **DONE** — `smoke-socketpair`, `smoke-unix-abstract`, `smoke-scm-rights` |
-| 24 | **X11 vs fbdev vs Wayland** | Plan mode; userspace aparte — **kernel prep checklist DONE** (fb MAP_SHARED, AF_UNIX, SCM_RIGHTS, SysV shm, sock poll) |
+| 24 | **X11 vs fbdev vs Wayland** | Plan mode; userspace aparte — **kernel prep checklist DONE** (fb MAP_SHARED, AF_UNIX, SCM_RIGHTS, SysV shm, memfd MAP_SHARED, sock poll) |
 | 25 | **WM + panel** | Not in kernel tree |
 
 ---
@@ -329,6 +335,87 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 | **T2** | MAP_SHARED fb0 (**DONE** `smoke-fb-map-shared`), multitouch input, frame timing | `smoke-fase55b-doom-stub` regression open |
 | **T3 prep** | Sockets + TCP + AF_UNIX + `socketpair` + USB HID | `ir0-tier-t3-desktop-minimal` |
 
+### Future product arcs (same kernel, two demos)
+
+Canonical IDs and proof gates: [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md) (**HAB-***, **DESK-***, **AST-***; Future rows **F14** / **F15** / **F16**).
+
+**Defaults (locked):**
+
+| Topic | Choice |
+|-------|--------|
+| Remote access outside home | WireGuard / Tailscale (or equivalent VPN) into LAN; API stays on subnet — **no** naked port-forward to IR0 |
+| AC IR actuation | ESP (or similar) HTTP blaster first; native GPIO IR only after F7b GPIO (**HAB-4**) |
+| First classic-style game | **soft_fb0** gate **DESK-3 DONE** (`CLASSICUBE_OK`); upstream ClassiCube+GL lab-blocked; Mojang jar / JVM = **DESK-5** BLOCKED |
+| Kernel role | Networking (F8) + later GPIO; **no** in-kernel AC protocol or WM |
+
+```mermaid
+flowchart TB
+  subgraph sameKernel [Mismo nucleo IR0]
+    F8[F8 red estable]
+    T2[T2 fb0 evdev]
+    T3prep[T3 prep sockets shm]
+  end
+  subgraph arcA [Arco HAB - domotica]
+    HAB1[API LAN userspace]
+    HAB2[Blaster IR proxy]
+    HAB3[VPN borde remoto]
+    HAB4[GPIO IR nativo ARM]
+  end
+  subgraph arcB [Arco DESK - desktop toy]
+    DESK1[Mini X estable]
+    DESK2[fb session WM panel]
+    DESK3[soft classic fb0]
+    DESK4[play input]
+    DESK5[JVM classic opcional]
+  end
+  F8 --> HAB1
+  F8 --> DESK1
+  T2 --> DESK1
+  T3prep --> DESK1
+  HAB1 --> HAB2 --> HAB3
+  HAB2 --> HAB4
+  DESK1 --> DESK2 --> DESK3 --> DESK4
+  DESK3 -.-> DESK5
+```
+
+**Work order (same as oleadas):** After DESK soft path, **SEP-1** locked tree boundaries ([`IR0-desktop/Documentation/TREE_CONTRACT.md`](../../IR0-desktop/Documentation/TREE_CONTRACT.md)). Next: ARCH debt ([`ARCH_DEBT_SEP.md`](ARCH_DEBT_SEP.md)) before real TinyX/WM. HAB still open. Soft DESK smokes are **optional** (not `release-0.0.1`).
+
+**Not claimed done:** Desktop product ISO, AC control, IR TX, upstream ClassiCube+GL, TinyX X-WM, Minecraft/JVM, Astral-class demo (AST-*).
+
+### North star — Astral-class desktop (aspirational, post-DESK)
+
+Maintainer long-term product vision (2026-07-18): a **usable CDE-like hobby desktop** on IR0, in the spirit of demos such as [Astral](https://astral-os.org/about.html) ([Mathewnd/Astral](https://github.com/Mathewnd/Astral): custom C kernel, x86-64, X.org, audio, GL, ports) — **not** a clone of Astral, and **not** in scope for release 0.0.1.
+
+Canonical IDs: [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md) (**F16** / **AST-***). All rows below are **Future** until a smoke or ship ISO proves them. Kernel stays platform; WM/apps live in `IR0-desktop` / userspace.
+
+| Capability (reference desktop photo) | Future ID | Depends (honest) | Status |
+|--------------------------------------|-----------|------------------|--------|
+| Bottom panel + clock + launcher icons | **AST-1** | Product WM (post TinyX/DESK-2) | Soft panel smoke only (`smoke-desk-wm`); not CDE product |
+| Virtual workspaces (One / Two / Three / Four) | **AST-2** | AST-1 + session manager | Not started |
+| Terminal client on desktop | **AST-3** | PTY + X/fb terminal | Partial (ash/console); no desktop terminal product gate |
+| Network chat client (`irssi` / IRC over TCP) | **AST-4** | F8 Internet TCP + DNS + PTY | Stack MVP; no `irssi` ship proof |
+| Audio / music player (MOC-class) | **AST-5** | Sound driver + mixer ABI + `/dev/snd` or equiv. | Not started |
+| 3D / OpenGL demo (`glxgears`) | **AST-6** | Mesa/GL or soft GL + DRM/KMS (or X GLX) | **BLOCKED** — no Mesa/GL on IR0 |
+| Ported GUI editors (Notepad++-class) | **AST-7** | Stable X session + libc/porting depth | Aspirational |
+| Classic Minecraft / JVM client | **AST-8** (= **DESK-5**) | JVM or compatible runtime on musl | **BLOCKED** — no done without binary |
+| Shipable desktop ISO (panel + apps concurrent) | **AST-9** | AST-1…4 + SEP desktop rootfs | Not started |
+
+**Order after DESK soft path:** TinyX/product WM → AST-1/2 (CDE shell) → AST-3/4 (terminal + TCP apps) → AST-5 (audio) → AST-6 (GL) → AST-7/8 (ports) → AST-9 (ISO). Do **not** pull AST-* into 0.0.1 or Hab/DESK soft smokes.
+
+```mermaid
+flowchart TB
+  DESKsoft[DESK soft fb done]
+  TinyX[TinyX or product WM]
+  AST12[AST-1/2 CDE panel workspaces]
+  AST34[AST-3/4 term + TCP apps]
+  AST5[AST-5 audio]
+  AST6[AST-6 OpenGL]
+  AST78[AST-7/8 ports + JVM]
+  AST9[AST-9 desktop ISO]
+  DESKsoft --> TinyX --> AST12 --> AST34
+  AST34 --> AST5 --> AST6 --> AST78 --> AST9
+```
+
 ---
 
 ## Evolution milestones (easy to forget)
@@ -356,8 +443,8 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 |-----------|----------------|
 | **PTY (`/dev/ptmx`, `openpty`)** | ssh-like sessions, ncurses resize |
 | **`SIGWINCH` + `TIOCGWINSZ`** | Terminal-aware apps |
-| **`shm_open` / SysV shm / MAP_SHARED anon** | musl + T2 graphics handoff |
-| **`timerfd` / `signalfd`** | event loops without busy poll |
+| **`shm_open` / SysV shm / MAP_SHARED anon** | SysV + `memfd_create` + `/dev/shm` DONE |
+| **`timerfd` / `signalfd`** | `timerfd` DONE (`smoke-event-fds`); `signalfd` still open |
 | **`inotify` (minimal)** | runit/service watchers |
 
 ### Reliability and ops
@@ -376,7 +463,8 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 | **Input `EV_ABS` / multitouch** | Beyond PS/2 buttons |
 | **Frame timing / vsync hook** | Doom-class pacing |
 | **`SCM_RIGHTS` / abstract `@` unix** | **DONE** — `smoke-scm-rights`, `smoke-unix-abstract` |
-| **SysV / `shm_open` MAP_SHARED anon** | **SysV DONE** (`smoke-sysv-shm`); `shm_open` still open |
+| **SysV / `shm_open` MAP_SHARED anon** | **DONE** — `smoke-sysv-shm`, `smoke-memfd-shared`, `smoke-posix-shm` |
+| **`timerfd` / `eventfd`** | **DONE** — `smoke-event-fds` |
 | **sock poll/epoll on streams** | **DONE** — covered by `smoke-unix-abstract` (`SOCK_POLL_OK`) |
 
 ### Security (post-T1, separate from KTM)
@@ -408,6 +496,7 @@ Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust
 | **Dynamic loader + modprobe** | P2 / MOD-* milestones |
 | **Rust/C++ driver ABI + fast build + reference driver** | P2 / DRV-* + BUILD-1 |
 | **Everything else in roadmap** | P1-storage, P1-T1, P3, Evolution milestones |
+| **Astral-class desktop north star** (panel, workspaces, audio, GL, irssi, JVM) | Future product arcs → **AST-*** / **F16** |
 
 ---
 
@@ -504,4 +593,5 @@ Kconfig/defconfig/Makefile
 | `Documentation/mandocs/en/vfs.md` | Mount, backends |
 | `Documentation/ai_driven_dev/rules/ir0-roadmap-research-multiagent.md` | Agent rule summary |
 | `Documentation/ai_driven_dev/rules/ir0-optimization-arch-sprints.md` | Post-milestone optimization + architecture sprints |
-| `Documentation/esp/ROADMAP.md` | Spanish mirror |
+| `Documentation/esp/BACKLOG_REMAINING.md` | Spanish backlog mirror (HAB/DESK summary) |
+| `Documentation/BACKLOG_REMAINING.md` | Open work + HAB/DESK ID tables |

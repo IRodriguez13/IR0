@@ -150,17 +150,20 @@ ASCII:
 
 - Tags: `NET:`, `LOG_*("IP")`, `RTL8139`, `[BOOT]` desenmascarado IRQ red.
 - Smoke listen: `F8_TCP_LISTEN_BOUND_OK`, `ACCEPT_OK`, `EOF_OK`, `F8_TCP_LISTEN_OK`.
-- Smoke cliente: `F8_TCP_WIRE_OK` (`make smoke-tcp-wire`).
-- Helper host: `scripts/tcp_wire_host_connector.py` (payload + `shutdown(SHUT_WR)`).
+- Smokes cliente: `smoke-tcp-wire` / `smoke-tcp-guest` (evidencia hostfwd; batería `smoke-f8-net`).
+- NIC reach: `NIC_PING_REPLY_OK` obligatorio antes de `F8_NIC_REACH_OK`.
+- Helpers host: `scripts/tcp_wire_host_connector.py`, `scripts/tcp_wire_host_listener.py`.
 - `ndev` / lectura de `/dev/net` para snapshot.
 - Compilar con `CONFIG_ENABLE_NETWORKING=y`; QEMU `-device rtl8139`.
 
 ## 10. Roadmap futuro
 
-- **Retransmisión / RTO / ventana / congestión** — no implementado.
+- **Retransmisión / RTO / ventana / congestión peer-driven** — selftests no son ship gates.
 - **IPv6** — descartado en L2.
 - **API BSD sockets completa** (options, OOB, MSG_*) — solo AF_INET STREAM parcial.
 - **DHCP automático al arranque** — IP estática hasta comando `dhcp` explícito.
-- Driver E1000 fuera del path de probe.
+- E1000: **BLOQUEADO** — sin driver MVP (`CONFIG_DRV_NIC_E1000=n`); no reclamar.
+- virtio-net: smoke L3 (`smoke-nic-reach-virtio`); no es el probe por defecto en todos los paths.
+- VirtualBox: **no** canónico; usar QEMU + 9p.
 
 Legacy: mencionado en `Documentation/DRIVERS.md`, `Documentation/mandocs/en/drivers.md`.

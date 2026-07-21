@@ -63,7 +63,7 @@ señales para tareas de usuario o panic para fallos en kernel.
 ## 4. Responsabilidades
 
 - IDT: instalar gates antes de `sti`.
-- PIC: todas las IRQ enmascaradas al init; `arch_boot_irq_unmask` habilita timer, teclado, cascade, ratón, NIC.
+- PIC: todas las IRQ enmascaradas al init; `boot_irq_unmask` habilita timer, teclado, cascade, ratón, NIC.
 - ISR: excepciones usuario → señales; excepciones kernel → panic (salvo rutas audit #PF/#GP).
 - Entrada syscall: capturar frame usuario para fork/reanudación de señal en x86-64.
 

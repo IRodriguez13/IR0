@@ -1,5 +1,8 @@
 # Kernel Decoupling Map
 
+> **Last verified:** 2026-07-21  
+> **Source of truth:** `includes/ir0/*`, `scripts/architecture_guard.py`, `ktm/include/klog.h`
+
 This document maps how IR0 separates subsystems, where stable interfaces live, and where
 coupling still exists. It complements `DRIVERS.md`, `MAKEFILE.md`, `TOOLING.md`, and the CTR checklist in
 `Documentation/ai_driven_dev/skills/ctr/SKILL.md`.
@@ -25,9 +28,10 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 
 | Area | Mechanism |
 |------|-----------|
-| Syscall ISA hook | **`arch_syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/common/arch_interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `interrupt/arch/idt.h`. |
-| Ring‑3 transition | **`arch_switch_to_user(entry, stack)`** in [`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c); scheduler uses [`arch/common/arch_portable.h`](../../arch/common/arch_portable.h) prototypes only. |
-| Context switch | callers use **`arch_context_switch()`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); ISA labels `switch_context_x64` / `switch_context_arm64` remain private to ASM + [`sched/switch/arch_context_switch.c`](../../sched/switch/arch_context_switch.c). |
+| Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/common/arch_interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `interrupt/arch/idt.h`. |
+| Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); portable code uses [`includes/ir0/arch_cpu.h`](../../includes/ir0/arch_cpu.h) only. |
+| Context switch | **`switch_to(prev, next)`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); first entry **`first_switch_to`**. ISA labels `switch_context_x64` / `switch_context_arm64` remain private to the dispatcher. |
+| IRQ / MM / TLB | Simple names: **`irq_save`/`irq_restore`**, **`mm_activate`**, **`tlb_invalidate_*`**, **`cpu_relax`**, **`smp_mb`**, **`timer_read`** ([`includes/ir0/cpu.h`](../../includes/ir0/cpu.h) + `arch_cpu.h`). No `arch_` prefix on new hot-path facades. |
 | **`fs/`** vs `arch/` | No `#include <arch/...>` in `fs/`; use **`includes/ir0/arch_port.h`** (`scripts/architecture_guard.py` enforces). |
 
 ### Architecture guard rules (`scripts/architecture_guard.py`)
@@ -49,7 +53,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `kernel-no-driver-include` | `kernel/` (whole tree) | No `#include <drivers/...>` |
 | `kernel-use-arch-port-facade` | `kernel/` | No `#include <arch/common/arch_portable.h>`; use **`ir0/arch_port.h`** |
 | `bluetooth-include-scope` | Outside `drivers/bluetooth/` | No `#include <bluetooth/...>` |
-| `debug-bins-no-test-include` | `debug_bins/` | No `#include "test/..."` except **`debug_bins/cmd_ktest.c`** (`IR0_KERNEL_TESTS`) |
+| `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`cpu_relax`/`smp_mb`/`inb`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). Allowlist: `syscall_x86_64.h` / `syscall_arm64.h`. |
 
 ### Binary stability check
 
@@ -96,8 +100,8 @@ specific driver implementation file:
 | Networking abstractions | `net.h` | Stack integration points |
 | Input | `input_backend.h` (mouse + kbd); `keyboard.h` thin compat | `/dev`, console, syscalls |
 | Video | `video_backend.h`, `vga.h` (non-`fs/` legacy) | Diagnostics, optional UI |
-| Kernel log | `klog.h` (portable `fs/`/`mm/`/`net/`/`sched/`) | Prefer over raw `serial_print` |
-| Serial (low-level) | `serial_io.h` | `klog` adapter, `/dev/serial` putchar |
+| Kernel log | **`ktm/klog.h`** via `<ir0/ktm/klog.h>` (`[ts] [LEVEL] [COMP]`) | Prefer over raw `serial_print`; hub in `ktm/klog.c` |
+| Serial (low-level) | `serial_io.h` | Sink used by klog + `/dev/serial` putchar |
 | Syscalls ABI | `syscall*.h`, `copy_user.h` | Arch-specific stubs |
 | Driver model | `driver.h`, `driver_bootstrap.h`, `init_drv.h` | Registry, boot order (opaque headers) |
 | Power | `platform_ops.h` | `kernel/power/power_manag.c` |
@@ -188,7 +192,7 @@ needs `ALL_OBJS` (or equivalent) for `ARCH=arm64`, fault/syscall/mm/fs/sched, an
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep
 baseline; evolves with refactors):
 
-- **`kernel/main.c`:** portable boot calls **`arch_boot_irq_unmask()`** after **`arch_irq_init()`**; PIC details live in `arch/common/arch_interface.c`.
+- **`kernel/main.c`:** portable boot calls **`boot_irq_unmask()`** after **`irq_init()`**; PIC details live in `arch/common/arch_interface.c`.
 - **`mm/`:** use **`ir0/serial_io.h`** for logging where applicable.
 - **`net/`:** use **`ir0/serial_io.h`** and **`ir0/clock.h`** for diagnostics and time.
 - **`fs/`:** CPU queries go through **`includes/ir0/arch_port.h`** (no direct `<arch/...>` includes).
