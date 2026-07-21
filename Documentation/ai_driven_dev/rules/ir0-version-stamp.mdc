@@ -1,1 +1,50 @@
-/home/ivanr013/.cursor/rules/kernel-linux/ir0-version-stamp.mdc
+---
+description: IR0 version stamp — sync version.h/Makefile with upstream tags
+alwaysApply: true
+---
+
+# IR0 — Version stamp (upstream tags)
+
+## Source of truth (code)
+
+Keep these **in lockstep** (same MAJOR/MINOR/PATCH/SUFFIX):
+
+| File | Macros |
+|------|--------|
+| `includes/ir0/version.h` | `IR0_VERSION_*`, `IR0_VERSION_STRING` |
+| `Makefile` (top) | `IR0_VERSION_*`, `IR0_VERSION_STRING` |
+
+Banner, `/proc/version`, `uname`, boot `klog` use `IR0_VERSION_STRING`.
+
+**Ignore** as SoT: `setup/kernel_config.h` (legacy `1.0.0` — do not copy from there).
+
+## How to choose the string
+
+1. **Fetch tags:** `git fetch --tags origin` (or `git ls-remote --tags origin`).
+2. **Latest published** semver-ish tag on origin (strip leading `v`):
+   - Examples today: `v0.0.1-pre.1` → `v0.0.1-rc1` → **`v0.0.1-rc2`** (current upstream tip).
+3. **Pick one:**
+
+| Situation | `IR0_VERSION_STRING` | Notes |
+|-----------|----------------------|--------|
+| Checkout / release branch **on** that tag | Match tag body (`0.0.1-rc2`) | `SUFFIX` = `-rc2` (or empty for final `0.0.1`) |
+| Active development **after** latest tag, toward next RC | Next pre-release: after `rc2` → **`0.0.1-pre-rc3`** | Current `dev` default |
+| Cutting the next RC (maintainer OK) | Bump to `0.0.1-rc3` then tag `v0.0.1-rc3` | Only when releasing |
+| Final 0.0.1 ship | `0.0.1` (empty suffix) + tag `v0.0.1` | Ship criteria in `Documentation/STABLE.md` |
+
+**Never invent** versions (no `0.0.2`, no random `-beta` without maintainer intent).
+
+## Agent duties
+
+- At session start on IR0 (or before changing version/banner): run `git tag -l 'v0.0.1*' --sort=-v:refname | head` and/or `git ls-remote --tags origin | grep v0.0.1`.
+- If tree string is **behind** latest published tag (e.g. still `pre-rc2` while origin has `v0.0.1-rc2`): update `version.h` + `Makefile` to match the tag **or** to the agreed next `pre-rcN+1` if already past that tag on `dev`.
+- If tree is **ahead** correctly (`pre-rc3` while latest is `rc2`): leave it; do not regress to `rc2`.
+- Do **not** bump version mid-oleada for logging hygiene alone; bump only when tags/release intent say so.
+- Tag names on git are `v` + string (`v0.0.1-rc2`). In-tree string has **no** leading `v`.
+
+## Current baseline (verify with git, do not treat as eternal)
+
+- Latest upstream tag: **`v0.0.1-rc2`**
+- In-tree on `dev` toward next: **`0.0.1-pre-rc3`** (`SUFFIX=-pre-rc3`)
+
+When `v0.0.1-rc3` (or `v0.0.1`) lands on origin, update this baseline in the rule comment and the two SoT files in the same change.
