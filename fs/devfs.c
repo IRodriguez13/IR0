@@ -181,6 +181,13 @@ static int devfs_resolve_disk_geo(const devfs_entry_t *entry, uint8_t *disk_out,
     return 0;
 }
 
+static int g_devfs_read_nonblock;
+
+void devfs_set_read_nonblock(int nonblock)
+{
+    g_devfs_read_nonblock = nonblock ? 1 : 0;
+}
+
 int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)buf; (void)count; (void)offset;
@@ -212,7 +219,8 @@ int64_t dev_console_read(devfs_entry_t *entry, void *buf, size_t count, off_t of
 {
     (void)entry;
     (void)offset;
-    return ir0_console_read(buf, count, 0);
+    /* Honor O_NONBLOCK from the active sys_read (see devfs_set_read_nonblock). */
+    return ir0_console_read(buf, count, g_devfs_read_nonblock);
 }
 
 static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
@@ -221,6 +229,104 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
     int ret;
 
     (void)entry;
+
+    /*
+     * Minimal Linux VT/KD stubs for TinyX/Xfbdev (kdrive/linux/linux.c).
+     * Single synthetic VT1: OPENQRY→1, GETSTATE active=1, mode get/set no-op.
+     */
+#define IR0_VT_OPENQRY     0x5600U
+#define IR0_VT_GETMODE     0x5601U
+#define IR0_VT_SETMODE     0x5602U
+#define IR0_VT_GETSTATE    0x5603U
+#define IR0_VT_RELDISP     0x5605U
+#define IR0_VT_ACTIVATE    0x5606U
+#define IR0_VT_WAITACTIVE  0x5607U
+#define IR0_VT_DISALLOCATE 0x5608U
+#define IR0_KDSETMODE      0x4B3AU
+#define IR0_KDGETMODE      0x4B3BU
+#define IR0_KDGKBMODE      0x4B44U
+#define IR0_KDSKBMODE      0x4B45U
+#define IR0_KDSETLED       0x4B32U
+#define IR0_KDMKTONE       0x4B30U
+
+    if (request == IR0_VT_OPENQRY)
+    {
+        int vtno = 1;
+
+        if (!arg)
+            return -EINVAL;
+        if (copy_to_user(arg, &vtno, sizeof(vtno)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    if (request == IR0_VT_GETSTATE)
+    {
+        struct
+        {
+            uint16_t v_active;
+            uint16_t v_signal;
+            uint16_t v_state;
+        } st;
+
+        if (!arg)
+            return -EINVAL;
+        st.v_active = 1;
+        st.v_signal = 0;
+        st.v_state = (uint16_t)(1U << 1); /* VT1 occupied */
+        if (copy_to_user(arg, &st, sizeof(st)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    if (request == IR0_VT_GETMODE)
+    {
+        struct
+        {
+            char mode;
+            char waitv;
+            int16_t relsig;
+            int16_t acqsig;
+            int16_t frsig;
+        } mode;
+
+        if (!arg)
+            return -EINVAL;
+        memset(&mode, 0, sizeof(mode));
+        mode.mode = 0; /* VT_AUTO */
+        if (copy_to_user(arg, &mode, sizeof(mode)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    if (request == IR0_VT_SETMODE || request == IR0_VT_ACTIVATE ||
+        request == IR0_VT_WAITACTIVE || request == IR0_VT_DISALLOCATE ||
+        request == IR0_VT_RELDISP || request == IR0_KDSETMODE ||
+        request == IR0_KDSKBMODE || request == IR0_KDSETLED ||
+        request == IR0_KDMKTONE)
+        return 0;
+
+    if (request == IR0_KDGKBMODE)
+    {
+        int kbmode = 0; /* K_RAW-compatible default; TinyX restores later */
+
+        if (!arg)
+            return -EINVAL;
+        if (copy_to_user(arg, &kbmode, sizeof(kbmode)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    if (request == IR0_KDGETMODE)
+    {
+        int kdmode = 0; /* KD_TEXT */
+
+        if (!arg)
+            return -EINVAL;
+        if (copy_to_user(arg, &kdmode, sizeof(kdmode)) != 0)
+            return -EFAULT;
+        return 0;
+    }
 
     if (request == IR0_CONSOLE_TCGETS)
     {
@@ -259,13 +365,11 @@ static void devfs_console_diag_once(devfs_entry_t *entry)
         return;
     diag_done = 1;
 
-    klog_print("DEV_CONSOLE_NODE_OK\n");
-    klog_print("[DEVFS][CONSOLE] name=");
-    klog_print(entry && entry->name ? entry->name : "(null)");
-    klog_print(" device_id=");
-    klog_hex32(entry ? entry->device_id : 0);
-    klog_print(" ops=console\n");
-    klog_print("DEV_CONSOLE_OPEN_OK\n");
+    klog_smoke("DEV_CONSOLE_NODE_OK");
+    klog_info_fmt("DEVFS", "CONSOLE name=%s device_id=0x%x ops=console",
+		  entry && entry->name ? entry->name : "(null)",
+		  entry ? (unsigned)entry->device_id : 0u);
+    klog_smoke("DEV_CONSOLE_OPEN_OK");
 }
 
 static int64_t dev_console_open(devfs_entry_t *entry, int flags)
@@ -457,34 +561,41 @@ int64_t dev_audio_read(devfs_entry_t *entry, void *buf, size_t count, off_t offs
     return 0;
 }
 
+#if CONFIG_ENABLE_MOUSE
+static int dev_mouse_can_read(devfs_entry_t *entry, pid_t pid)
+{
+    (void)entry;
+    (void)pid;
+    /*
+     * Absolute (x,y,buttons) ioctl device — not a PS/2 byte stream.
+     * Always-ready + 12-byte reads made TinyX MouseRead overrun
+     * event[MAX_MOUSE] (stack canary → abort).
+     */
+    return 0;
+}
+#endif
+
 int64_t dev_mouse_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
 #if CONFIG_ENABLE_MOUSE
-    (void)entry; (void)offset;
-    if (count < sizeof(int) * 3)
-        return 0;
-    
-    /* Return mouse state: x, y, buttons */
-    int *mouse_data = (int *)buf;
-
+    int mouse_data[3];
     ir0_mouse_state_t st;
-    if (input_mouse_get_state(&st))
-    {
-        mouse_data[0] = (int)st.x;
-        mouse_data[1] = (int)st.y;
-        /* Encode button state: L=bit0, R=bit1, M=bit2 */
-        mouse_data[2] = (st.left_button ? 1 : 0) |
-                        (st.right_button ? 2 : 0) |
-                        (st.middle_button ? 4 : 0);
-    }
-    else
-    {
-        mouse_data[0] = 0;
-        mouse_data[1] = 0;
-        mouse_data[2] = 0;
-    }
-    
-    return sizeof(int) * 3;
+
+    (void)entry;
+    (void)offset;
+    /*
+     * Legacy absolute-state ABI for IR0 tools. Never pretend to be a
+     * streaming PS/2 mouse: return 0 so poll/read clients idle.
+     * Use ioctl(MOUSE_GET_STATE) or /dev/input/event0 for input.
+     */
+    if (count < sizeof(mouse_data))
+        return 0;
+    if (!input_mouse_get_state(&st))
+        return 0;
+    (void)buf;
+    (void)mouse_data;
+    (void)st;
+    return 0;
 #else
     (void)entry; (void)buf; (void)count; (void)offset;
     return -ENODEV;
@@ -1632,6 +1743,9 @@ static const devfs_ops_t audio_ops = {
 static const devfs_ops_t mouse_ops = {
     .read = dev_mouse_read,
     .ioctl = dev_mouse_ioctl,
+#if CONFIG_ENABLE_MOUSE
+    .can_read = dev_mouse_can_read,
+#endif
 };
 
 static const devfs_ops_t net_ops = {
@@ -1707,8 +1821,49 @@ static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
         var_info.xres_virtual = info.width;
         var_info.yres_virtual = info.height;
         var_info.bits_per_pixel = info.bpp;
+        /*
+         * Default matches vbe_rgb_to_pixel() BGR888 + alpha in high byte
+         * (common QEMU/PC framebuffer layout).
+         */
+        if (info.bpp == 32 || info.bpp == 24)
+        {
+            var_info.red.offset = 16;
+            var_info.red.length = 8;
+            var_info.green.offset = 8;
+            var_info.green.length = 8;
+            var_info.blue.offset = 0;
+            var_info.blue.length = 8;
+            if (info.bpp == 32)
+            {
+                var_info.transp.offset = 24;
+                var_info.transp.length = 8;
+            }
+        }
+        else if (info.bpp == 16)
+        {
+            var_info.red.offset = 11;
+            var_info.red.length = 5;
+            var_info.green.offset = 5;
+            var_info.green.length = 6;
+            var_info.blue.offset = 0;
+            var_info.blue.length = 5;
+        }
         if (copy_to_user(arg, &var_info, sizeof(var_info)) != 0)
             return -EFAULT;
+        return 0;
+    }
+    /*
+     * Fixed VBE/QEMU framebuffer: no mode switching. Accept PUT so TinyX
+     * KdFindMode probes do not abort; subsequent FBIOGET_* report hardware.
+     */
+    if (request == FBIOPUT_VSCREENINFO && arg)
+    {
+        struct fb_var_screeninfo var;
+
+        if (copy_from_user(&var, arg, sizeof(var)) != 0)
+            return -EFAULT;
+        (void)var;
+        (void)info;
         return 0;
     }
     if (request == FBIOGET_FSCREENINFO && arg)
@@ -1717,16 +1872,34 @@ static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 
         memset(&fix, 0, sizeof(fix));
         strncpy(fix.id, "IR0 FB", sizeof(fix.id) - 1);
-        fix.smem_start = info.fb_phys;
+        /*
+         * IR0 mmap(/dev/fb0) maps fb_phys at offset 0 of the returned VA
+         * (see sys_mmap fb path). TinyX then does
+         *   fb = mmap_base + (smem_start % pagesize).
+         * Reporting the raw physical address when it is not page-aligned
+         * makes TinyX skip the first bytes and write past the mapping.
+         * Use 0 so the userspace offset is always 0.
+         */
+        fix.smem_start = 0;
         fix.smem_len = info.fb_size;
         fix.type = FB_TYPE_PACKED_PIXELS;
         fix.visual = FB_VISUAL_TRUECOLOR;
         fix.line_length = info.pitch;
         fix.accel = FB_ACCEL_NONE;
+        /* filled on VGET; here only fix */
         if (copy_to_user(arg, &fix, sizeof(fix)) != 0)
             return -EFAULT;
         return 0;
     }
+    /* No hardware pan/blank — succeed so KDrive enable path continues. */
+    if (request == FBIOPAN_DISPLAY || request == FBIOBLANK)
+        return 0;
+    /*
+     * Colormap put/get: TrueColor FB ignores palette; accept so TinyX
+     * fbdevUpdateFbColormap does not abort enable.
+     */
+    if (request == FBIOPUTCMAP || request == FBIOGETCMAP)
+        return 0;
     return -EINVAL;
 }
 
@@ -1789,9 +1962,23 @@ static int64_t dev_events0_read(devfs_entry_t *entry, void *buf, size_t count, o
     }
 }
 
+static void evdev_set_bit(unsigned long *bits, size_t nlongs, unsigned int bit)
+{
+    unsigned int idx = bit / (8u * sizeof(unsigned long));
+    unsigned int off = bit % (8u * sizeof(unsigned long));
+
+    if (idx >= nlongs)
+        return;
+    bits[idx] |= (1UL << off);
+}
+
 static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
     struct ir0_input_caps caps;
+    unsigned dir;
+    unsigned type;
+    unsigned nr;
+    unsigned size;
 
     (void)entry;
 
@@ -1800,25 +1987,105 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         if (!arg)
             return -EFAULT;
         ir0_input_get_caps(&caps);
-        memcpy(arg, &caps, sizeof(caps));
+        if (copy_to_user(arg, &caps, sizeof(caps)) != 0)
+            return -EFAULT;
         return 0;
     }
 
-    if (request != IR0_INPUT_IOCTL_INJECT)
-        return -EINVAL;
-
-#if CONFIG_TEST_INPUT_INJECT
-    if (!arg)
-        return -EFAULT;
-
+    if (request == IR0_INPUT_IOCTL_INJECT)
     {
-        const struct ir0_input_event *ev = (const struct ir0_input_event *)arg;
-        return ir0_input_inject_event(ev->type, ev->code, ev->value);
-    }
+#if CONFIG_TEST_INPUT_INJECT
+        struct ir0_input_event ev;
+
+        if (!arg)
+            return -EFAULT;
+        if (copy_from_user(&ev, arg, sizeof(ev)) != 0)
+            return -EFAULT;
+        {
+            int rc = ir0_input_inject_event(ev.type, ev.code, ev.value);
+
+            if (rc < 0)
+                return rc;
+            /* Linux clients expect a SYN_REPORT marker after injected edges. */
+            if (ev.type != EV_SYN)
+                (void)ir0_input_inject_event(EV_SYN, SYN_REPORT, 0);
+            return rc;
+        }
 #else
-    (void)arg;
-    return -ENOTTY;
+        (void)arg;
+        return -ENOTTY;
 #endif
+    }
+
+    dir = (unsigned)((request >> EVIOC_DIR_SHIFT) & 0x3u);
+    type = (unsigned)((request >> EVIOC_TYPE_SHIFT) & 0xffu);
+    nr = (unsigned)(request & EVIOC_NR_MASK);
+    size = (unsigned)((request >> EVIOC_SIZE_SHIFT) & EVIOC_SIZE_MASK);
+
+    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == 0x01u)
+    {
+        int version = EV_VERSION;
+
+        if (!arg || size < sizeof(int))
+            return -EINVAL;
+        if (copy_to_user(arg, &version, sizeof(version)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    if (type == (unsigned)'E' && dir == EVIOC_READ && nr >= EVIOCGBIT_BASE &&
+        nr < EVIOCGBIT_BASE + EV_CNT)
+    {
+        unsigned long bits[8];
+        unsigned ev = nr - EVIOCGBIT_BASE;
+        size_t nlongs;
+        size_t copy_n;
+
+        if (!arg || size == 0)
+            return -EINVAL;
+        memset(bits, 0, sizeof(bits));
+        nlongs = sizeof(bits) / sizeof(bits[0]);
+
+        if (ev == 0)
+        {
+            /* Bitmap of supported event types. */
+            evdev_set_bit(bits, nlongs, EV_SYN);
+            evdev_set_bit(bits, nlongs, EV_KEY);
+            evdev_set_bit(bits, nlongs, EV_REL);
+        }
+        else if (ev == EV_KEY)
+        {
+            unsigned k;
+
+            for (k = 1; k < (unsigned)KEY_MAX && k < 256u; k++)
+                evdev_set_bit(bits, nlongs, k);
+            evdev_set_bit(bits, nlongs, BTN_LEFT);
+            evdev_set_bit(bits, nlongs, BTN_RIGHT);
+            evdev_set_bit(bits, nlongs, BTN_MIDDLE);
+            evdev_set_bit(bits, nlongs, BTN_SIDE);
+            evdev_set_bit(bits, nlongs, BTN_EXTRA);
+        }
+        else if (ev == EV_REL)
+        {
+            evdev_set_bit(bits, nlongs, REL_X);
+            evdev_set_bit(bits, nlongs, REL_Y);
+            evdev_set_bit(bits, nlongs, REL_WHEEL);
+        }
+        else if (ev == EV_SYN)
+        {
+            evdev_set_bit(bits, nlongs, SYN_REPORT);
+        }
+        /* other EV_* → empty bitmap (supported) */
+
+        copy_n = size;
+        if (copy_n > sizeof(bits))
+            copy_n = sizeof(bits);
+        if (copy_to_user(arg, bits, copy_n) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    return -EINVAL;
 }
 
 static const devfs_ops_t events0_ops = {
@@ -1831,6 +2098,13 @@ static const devfs_ops_t events0_ops = {
 
 static devfs_node_t dev_events0 = {
     .entry = { .name = "events0", .mode = 0660, .device_id = 16 },
+    .ops = &events0_ops,
+    .ref_count = 0,
+};
+
+/* Linux path alias for Xfbdev (-mouse evdev) */
+static devfs_node_t dev_input_event0 = {
+    .entry = { .name = "input/event0", .mode = 0660, .device_id = 45 },
     .ops = &events0_ops,
     .ref_count = 0,
 };
@@ -2366,6 +2640,19 @@ devfs_node_t dev_tty = {
     .ref_count = 0
 };
 
+/* Synthetic VTs for TinyX/Xfbdev LinuxInit (VT_OPENQRY → tty1). */
+devfs_node_t dev_tty0 = {
+    .entry = { .name = "tty0", .mode = 0620, .device_id = 46 },
+    .ops = &console_ops,
+    .ref_count = 0
+};
+
+devfs_node_t dev_tty1 = {
+    .entry = { .name = "tty1", .mode = 0620, .device_id = 47 },
+    .ops = &console_ops,
+    .ref_count = 0
+};
+
 /*
  * POSIX stream aliases: stdin was 16 and collided with events0 (evdev).
  * stdin uses 17; stdout/stderr/serial use 40–42 to stay clear of disk IDs 20–39.
@@ -2551,6 +2838,8 @@ int devfs_init(void)
     devfs_register_node(&dev_zero);
     devfs_register_node(&dev_console);
     devfs_register_node(&dev_tty);
+    devfs_register_node(&dev_tty0);
+    devfs_register_node(&dev_tty1);
     devfs_register_node(&dev_stdin);
     devfs_register_node(&dev_stdout);
     devfs_register_node(&dev_stderr);
@@ -2565,6 +2854,7 @@ int devfs_init(void)
     devfs_register_node(&dev_full);
     devfs_register_node(&dev_fb0);
     devfs_register_node(&dev_events0);
+    devfs_register_node(&dev_input_event0);
     devfs_register_node(&dev_serial);
     devfs_register_node(&dev_ptmx);
     devfs_register_node(&dev_pts0);
@@ -2681,6 +2971,8 @@ static const char *devfs_virtual_subdir_prefix(const char *path)
 
     if (strcmp(path, "/dev/pts") == 0 || strcmp(path, "/dev/pts/") == 0)
         return "pts";
+    if (strcmp(path, "/dev/input") == 0 || strcmp(path, "/dev/input/") == 0)
+        return "input";
     if (strcmp(path, "/dev/bluetooth") == 0 ||
         strcmp(path, "/dev/bluetooth/") == 0)
         return "bluetooth";

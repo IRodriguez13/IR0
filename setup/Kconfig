@@ -498,6 +498,14 @@ menu "Debugging"
           Enables KTM context snapshots on panic/fault and panic class tags
           ([KTM][PANIC_CLASS]). Near-zero runtime cost except on failure paths.
 
+    config KTM_SERIAL_VERBOSE
+        bool "KTM verbose serial (CHECKPOINT/PROBE/EV/LOG protocol)"
+        depends on KTM
+        default n
+        help
+          Emit full KTM|CHECKPOINT, PROBE, EV, and optional KTM|LOG mirrors
+          on serial. Leave off for product/desk boots (human klog only).
+
     config KTM_EVENTS
         bool "KTM compact serial event tags"
         depends on KTM

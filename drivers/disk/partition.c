@@ -28,6 +28,7 @@
 #include <string.h>
 #include <ir0/block_dev.h>
 #include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 /**
  * Global partition storage
@@ -358,7 +359,7 @@ static int read_gpt_partitions(uint8_t disk_id, const gpt_header_t *header)
         }
     }
 
-    serial_print("GPT_PARTITION_OK\n");
+    klog_smoke("GPT_PARTITION_OK");
     return 0;
 }
 

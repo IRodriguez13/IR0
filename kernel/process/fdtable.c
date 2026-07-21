@@ -13,6 +13,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/memfd.h>
+#include <ir0/eventfd.h>
+#include <ir0/timerfd.h>
 
 void process_release_fds(process_t *p, const char *pipe_trace_op)
 {
@@ -35,14 +38,7 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 
 			if (DEBUG_FASE50)
 			{
-				serial_print_hex32((uint32_t)p->task.pid);
-				serial_print(" fd=");
-				serial_print_hex64((uint64_t)i);
-				serial_print(" refs_before=");
-				serial_print_hex64((uint64_t)refs_before);
-				serial_print(" end=");
-				serial_print_hex64((uint64_t)e->pipe_end);
-				serial_print("\n");
+				klog_debug_fmt("KERN", "%x fd=%llx refs_before=%llx end=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)((uint64_t)i), (unsigned long long)((uint64_t)refs_before), (unsigned long long)((uint64_t)e->pipe_end));
 			}
 			pipe_close_end(pip, e->pipe_end);
 			pipe_wake_all(pip);
@@ -87,6 +83,21 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 			epoll_release_fd(e->vfs_file);
 			e->vfs_file = NULL;
 		}
+		else if (e->is_memfd && e->vfs_file)
+		{
+			ir0_memfd_release((struct ir0_memfd *)e->vfs_file);
+			e->vfs_file = NULL;
+		}
+		else if (e->is_eventfd && e->vfs_file)
+		{
+			ir0_eventfd_release((struct ir0_eventfd *)e->vfs_file);
+			e->vfs_file = NULL;
+		}
+		else if (e->is_timerfd && e->vfs_file)
+		{
+			ir0_timerfd_release((struct ir0_timerfd *)e->vfs_file);
+			e->vfs_file = NULL;
+		}
 		else if (e->vfs_file)
 		{
 			vfs_close((struct vfs_file *)e->vfs_file);
@@ -100,6 +111,9 @@ clear_fd:
 		e->is_devfs = false;
 		e->is_pseudo = false;
 		e->is_epoll = false;
+		e->is_memfd = false;
+		e->is_eventfd = false;
+		e->is_timerfd = false;
 		e->dev_device_id = 0;
 		e->pipe_end = -1;
 		e->path[0] = '\0';
@@ -148,6 +162,12 @@ int process_duplicate_fd_table(process_t *parent, process_t *child)
 		{
 			/* Share epoll interest list with parent (MVP). */
 		}
+		else if (e->is_memfd && e->vfs_file)
+			ir0_memfd_acquire((struct ir0_memfd *)e->vfs_file);
+		else if (e->is_eventfd && e->vfs_file)
+			ir0_eventfd_acquire((struct ir0_eventfd *)e->vfs_file);
+		else if (e->is_timerfd && e->vfs_file)
+			ir0_timerfd_acquire((struct ir0_timerfd *)e->vfs_file);
 		else if (e->vfs_file)
 			vfs_file_acquire((struct vfs_file *)e->vfs_file);
 	}
@@ -176,6 +196,9 @@ void process_init_fd_table(process_t *process)
 		process->fd_table[i].is_devfs = false;
 		process->fd_table[i].is_pseudo = false;
 		process->fd_table[i].is_epoll = false;
+		process->fd_table[i].is_memfd = false;
+		process->fd_table[i].is_eventfd = false;
+		process->fd_table[i].is_timerfd = false;
 		process->fd_table[i].dev_device_id = 0;
 	}
 

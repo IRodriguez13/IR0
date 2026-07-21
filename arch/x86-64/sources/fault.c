@@ -18,13 +18,14 @@
 #include <ir0/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
+#include <ir0/cpu.h>
 #include <ir0/process.h>
 #include <string.h>
 #include <ir0/pmm.h>
 #include <ir0/signals.h>
 #include <arch/common/arch_portable.h>
 #include <ir0/copy_user.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <d1_13_malloc_pf_diag.h>
@@ -156,88 +157,28 @@ static void pf_d110_stack_adjacent_diag(uint64_t *frame, uint64_t fault_addr,
 	dst_touch = (fault_addr >= (rdi & ~0xFFFULL) &&
 		     fault_addr < rdi + (rcx ? rcx * 8ULL : 8ULL));
 
-	serial_print("\n=== [D1.10][PF_STACK_ADJ] ===\n");
-	serial_print("[D1.10][REGS] rip=");
-	serial_print_hex64(rip);
-	serial_print(" rsp=");
-	serial_print_hex64(rsp);
-	serial_print(" rbp=");
-	serial_print_hex64(rbp);
-	serial_print(" rax=");
-	serial_print_hex64(rax);
-	serial_print(" rbx=");
-	serial_print_hex64(rbx);
-	serial_print(" rcx=");
-	serial_print_hex64(rcx);
-	serial_print(" rdx=");
-	serial_print_hex64(rdx);
-	serial_print(" rsi=");
-	serial_print_hex64(rsi);
-	serial_print(" rdi=");
-	serial_print_hex64(rdi);
-	serial_print("\n");
+	klog_debug_fmt("KERN", "\n=== [D1.10][PF_STACK_ADJ] ===\n[D1.10][REGS] rip=%llx rsp=%llx rbp=%llx rax=%llx rbx=%llx rcx=%llx rdx=%llx rsi=%llx rdi=%llx", (unsigned long long)(rip), (unsigned long long)(rsp), (unsigned long long)(rbp), (unsigned long long)(rax), (unsigned long long)(rbx), (unsigned long long)(rcx), (unsigned long long)(rdx), (unsigned long long)(rsi), (unsigned long long)(rdi));
 
-	serial_print("[D1.10][PF] cr2=");
-	serial_print_hex64(fault_addr);
-	serial_print(" err=");
-	serial_print_hex64(errcode);
-	serial_print(" write=");
-	serial_print_hex64(write_fault ? 1 : 0);
-	serial_print(" pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" comm=");
-	serial_print(p->comm[0] ? p->comm : "(none)");
-	serial_print("\n");
+	klog_debug_fmt("KERN", "[D1.10][PF] cr2=%llx err=%llx write=%llx pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(errcode), (unsigned long long)(write_fault ? 1 : 0), (unsigned)((uint32_t)p->task.pid), p->comm[0] ? p->comm : "(none)");
 
 	if (rip >= 0x4422b0ULL && rip <= 0x442320ULL)
 	{
-		serial_print("[D1.10][REP_MOVSQ] len_qwords=");
-		serial_print_hex64(rcx);
-		serial_print(" len_bytes=");
-		serial_print_hex64(rcx * 8ULL);
-		serial_print(" src=");
-		serial_print_hex64(rsi);
-		serial_print(" dst=");
-		serial_print_hex64(rdi);
-		serial_print(" span_end=");
-		serial_print_hex64(movsq_end);
-		serial_print("\n");
+		klog_debug_fmt("KERN", "[D1.10][REP_MOVSQ] len_qwords=%llx len_bytes=%llx src=%llx dst=%llx span_end=%llx", (unsigned long long)(rcx), (unsigned long long)(rcx * 8ULL), (unsigned long long)(rsi), (unsigned long long)(rdi), (unsigned long long)(movsq_end));
 	}
 
-	serial_print("[D1.10][TOUCH] cr2_match=");
-	if (write_fault)
-		serial_print(dst_touch ? "destination" :
-			     (src_touch ? "source_read_unlikely" : "unknown"));
-	else
-		serial_print(src_touch ? "source" :
-			     (dst_touch ? "dest_write_unlikely" : "unknown"));
-	serial_print(" src_page=");
-	serial_print_hex64(rsi & ~0xFFFULL);
-	serial_print(" dst_page=");
-	serial_print_hex64(rdi & ~0xFFFULL);
-	serial_print("\n");
+	klog_debug_fmt("KERN",
+		       "[D1.10][TOUCH] cr2_match=%s src_page=%llx dst_page=%llx",
+		       write_fault
+			   ? (dst_touch ? "destination"
+					: (src_touch ? "source_read_unlikely" : "unknown"))
+			   : (src_touch ? "source"
+					: (dst_touch ? "dest_write_unlikely" : "unknown")),
+		       (unsigned long long)(rsi & ~0xFFFULL),
+		       (unsigned long long)(rdi & ~0xFFFULL));
 
-	serial_print("[D1.10][STACK] base=");
-	serial_print_hex64((uint64_t)stack_lo);
-	serial_print(" top=");
-	serial_print_hex64((uint64_t)stack_hi);
-	serial_print(" guard_below=");
-	serial_print_hex64((uint64_t)guard_lo);
-	serial_print(" pages=");
-	serial_print_hex64((uint64_t)(p->stack_size / PAGE_SIZE_4KB));
-	serial_print(" rsp_free_to_base=");
-	serial_print_hex64(rsp > stack_lo ? rsp - stack_lo : 0);
-	serial_print(" heap_end=");
-	serial_print_hex64(p->heap_end);
-	serial_print(" mmap_base=");
-	serial_print_hex64(p->mmap_base);
-	serial_print("\n");
+	klog_debug_fmt("KERN", "[D1.10][STACK] base=%llx top=%llx guard_below=%llx pages=%llx rsp_free_to_base=%llx heap_end=%llx mmap_base=%llx", (unsigned long long)((uint64_t)stack_lo), (unsigned long long)((uint64_t)stack_hi), (unsigned long long)((uint64_t)guard_lo), (unsigned long long)((uint64_t)(p->stack_size / PAGE_SIZE_4KB)), (unsigned long long)(rsp > stack_lo ? rsp - stack_lo : 0), (unsigned long long)(p->heap_end), (unsigned long long)(p->mmap_base));
 
-	serial_print("[D1.10][VMA] stack=[");
-	serial_print_hex64((uint64_t)stack_lo);
-	serial_print(",");
-	serial_print_hex64((uint64_t)stack_hi);
-	serial_print(")\n");
+	klog_debug_fmt("KERN", "[D1.10][VMA] stack=[%llx,%llx)\n", (unsigned long long)((uint64_t)stack_lo), (unsigned long long)((uint64_t)stack_hi));
 
 	prev_mmap = NULL;
 	next_mmap = NULL;
@@ -258,56 +199,33 @@ static void pf_d110_stack_adjacent_diag(uint64_t *frame, uint64_t fault_addr,
 			next_start = start;
 			next_mmap = r;
 		}
-		serial_print("[D1.10][VMA] mmap=[");
-		serial_print_hex64(start);
-		serial_print(",");
-		serial_print_hex64(end);
-		serial_print(") prot=");
-		serial_print_hex64((uint64_t)r->prot);
-		serial_print("\n");
+		klog_debug_fmt("KERN", "[D1.10][VMA] mmap=[%llx,%llx) prot=%llx", (unsigned long long)(start), (unsigned long long)(end), (unsigned long long)((uint64_t)r->prot));
 	}
 
 	if (p->heap_end > p->heap_start)
 	{
-		serial_print("[D1.10][VMA] heap=[");
-		serial_print_hex64(p->heap_start);
-		serial_print(",");
-		serial_print_hex64(p->heap_end);
-		serial_print(")\n");
+		klog_debug_fmt("KERN", "[D1.10][VMA] heap=[%llx,%llx)\n", (unsigned long long)(p->heap_start), (unsigned long long)(p->heap_end));
 	}
 
 	if (prev_mmap)
 	{
-		serial_print("[D1.10][VMA] prev_mmap_end=");
-		serial_print_hex64(prev_end);
-		serial_print("\n");
+		klog_debug_fmt("KERN", "[D1.10][VMA] prev_mmap_end=%llx", (unsigned long long)(prev_end));
 	}
 	else
 	{
-		serial_print("[D1.10][VMA] prev_mmap_end=none gap_from_prev=");
-		serial_print_hex64(fault_addr - USER_MMAP_END);
-		serial_print("\n");
+		klog_debug_fmt("KERN", "[D1.10][VMA] prev_mmap_end=none gap_from_prev=%llx", (unsigned long long)(fault_addr - USER_MMAP_END));
 	}
 
 	if (next_mmap)
 	{
-		serial_print("[D1.10][VMA] next_mmap_start=");
-		serial_print_hex64(next_start);
-		serial_print("\n");
+		klog_debug_fmt("KERN", "[D1.10][VMA] next_mmap_start=%llx", (unsigned long long)(next_start));
 	}
 	else
 	{
-		serial_print("[D1.10][VMA] next_mmap_start=none gap_to_stack=");
-		serial_print_hex64(stack_lo - fault_addr);
-		serial_print("\n");
+		klog_debug_fmt("KERN", "[D1.10][VMA] next_mmap_start=none gap_to_stack=%llx", (unsigned long long)(stack_lo - fault_addr));
 	}
 
-	serial_print("[D1.10][VMA] guard_gap=[");
-	serial_print_hex64((uint64_t)guard_lo);
-	serial_print(",");
-	serial_print_hex64((uint64_t)stack_lo);
-	serial_print(") unmapped\n");
-	serial_print("=== [D1.10][PF_STACK_ADJ] end ===\n\n");
+	klog_debug_fmt("KERN", "[D1.10][VMA] guard_gap=[%llx,%llx) unmapped\n=== [D1.10][PF_STACK_ADJ] end ===\n\n", (unsigned long long)((uint64_t)guard_lo), (unsigned long long)((uint64_t)stack_lo));
 }
 
 static void pf_d114_memmove_fault_diag(uint64_t *frame, uint64_t fault_addr,
@@ -371,75 +289,31 @@ static void pf_audit_classify(uint64_t *stack, uint64_t fault_addr, uint64_t err
 	in_userspace_range = (fault_addr >= PF_USER_SPACE_START &&
 			      fault_addr <= PF_USER_SPACE_END);
 
-	serial_print("[PF_AUDIT][FAULT] cr2=");
-	serial_print_hex64(fault_addr);
-	serial_print(" err=");
-	serial_print_hex64(errcode);
-	serial_print(" present=");
-	serial_print_hex64(not_present ? 0 : 1);
-	serial_print(" write=");
-	serial_print_hex64(write ? 1 : 0);
-	serial_print(" user=");
-	serial_print_hex64(user ? 1 : 0);
-	serial_print(" reserved=");
-	serial_print_hex64(reserved ? 1 : 0);
-	serial_print(" insn_fetch=");
-	serial_print_hex64(insn_fetch ? 1 : 0);
-	serial_print(" rip=");
-	serial_print_hex64(fault_rip);
-	serial_print(" cs=");
-	serial_print_hex64(fault_cs);
-	serial_print(" rsp=");
-	serial_print_hex64(fault_rsp);
-	serial_print(" mode=");
-	serial_print(user ? "user" : "kernel");
-	serial_print(" pid=");
-	serial_print_hex32(current ? (uint32_t)current->task.pid : 0);
-	serial_print(" comm=");
-	serial_print(current ? current->comm : "(none)");
-	serial_print("\n");
+	klog_debug_fmt("PF", "[PF_AUDIT][FAULT] cr2=%llx err=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(errcode), (unsigned long long)(not_present ? 0 : 1), (unsigned long long)(write ? 1 : 0), (unsigned long long)(user ? 1 : 0), (unsigned long long)(reserved ? 1 : 0), (unsigned long long)(insn_fetch ? 1 : 0), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
 
-	serial_print("[PF_AUDIT][VMA] in_allowed_vma=");
-	serial_print_hex64(in_vma ? 1 : 0);
-	serial_print(" in_heap=");
-	serial_print_hex64(pf_addr_in_heap(current, fault_addr) ? 1 : 0);
-	serial_print(" in_stack=");
-	serial_print_hex64(pf_addr_in_stack(current, fault_addr) ? 1 : 0);
-	serial_print(" in_mmap=");
-	serial_print_hex64(pf_addr_in_mmap(current, fault_addr) ? 1 : 0);
-	serial_print(" pte_present=");
-	serial_print_hex64((mapped > 0 && pte && (*pte & PAGE_PRESENT)) ? 1 : 0);
-	serial_print(" pte_user=");
-	serial_print_hex64(pte_flags & PAGE_USER ? 1 : 0);
-	serial_print(" pte_rw=");
-	serial_print_hex64(pte_flags & PAGE_RW ? 1 : 0);
-	serial_print(" pte_nx=");
-	serial_print_hex64(pte && (*pte & PAGE_NX) ? 1 : 0);
-	serial_print("\n");
+	klog_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_mmap(current, fault_addr) ? 1 : 0), (unsigned long long)((mapped > 0 && pte && (*pte & PAGE_PRESENT)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && (*pte & PAGE_NX) ? 1 : 0));
 
 	if (!user && in_userspace_range)
 	{
-		serial_print("[PF_AUDIT][CLASSIFY] KERNEL_DEREF_USERPTR cr2_in_userspace=1\n");
+		klog_debug("PF", "CLASSIFY KERNEL_DEREF_USERPTR cr2_in_userspace=1");
 	}
 
 	if (user && not_present && in_vma && mapped <= 0)
 	{
-		serial_print("[PF_AUDIT][CLASSIFY] PF_ADDR_IN_VMA_NOT_MAPPED\n");
+		klog_debug("PF", "CLASSIFY PF_ADDR_IN_VMA_NOT_MAPPED");
 	}
 	else if (user && not_present && !in_vma)
 	{
-		serial_print("[PF_AUDIT][CLASSIFY] PF_ADDR_NOT_IN_VMA\n");
+		klog_debug("PF", "CLASSIFY PF_ADDR_NOT_IN_VMA");
 	}
 	else if (user && not_present && in_vma)
 	{
-		serial_print("[PF_AUDIT][CLASSIFY] USER_PF_SHOULD_BE_HANDLED\n");
+		klog_debug("PF", "CLASSIFY USER_PF_SHOULD_BE_HANDLED");
 	}
 
 	if (!user && fault_rip != 0)
 	{
-		serial_print("[PF_AUDIT][CLASSIFY] kernel_fault_rip=");
-		serial_print_hex64(fault_rip);
-		serial_print("\n");
+		klog_debug_fmt("PF", "CLASSIFY kernel_fault_rip=%llx", (unsigned long long)(fault_rip));
 	}
 #endif /* DEBUG_PAGE_FAULTS */
 }
@@ -456,19 +330,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 	if (!p)
 		panic("[PF] userspace fault without process");
 
-	serial_print("[PF] userspace segv pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" addr=");
-	serial_print_hex64(fault_addr);
-	serial_print(" err=");
-	serial_print_hex64(errcode);
-	serial_print(" handler=");
-	serial_print_hex64((uint64_t)(uintptr_t)p->signal_handlers[SIGSEGV]);
-	serial_print(" proc_mask=");
-	serial_print_hex32(p->signal_mask);
-	serial_print(" ignored=");
-	serial_print_hex32(p->signal_ignored);
-	serial_print(" (no handler)\n");
+	klog_debug_fmt("PF", "[PF] userspace segv pid=%x addr=%llx err=%llx handler=%llx proc_mask=%x ignored=%x (no handler)\n", (unsigned)((uint32_t)p->task.pid), (unsigned long long)(fault_addr), (unsigned long long)(errcode), (unsigned long long)((uint64_t)(uintptr_t)p->signal_handlers[SIGSEGV]), (unsigned)(p->signal_mask), (unsigned)(p->signal_ignored));
 
 	(void)send_signal(p->task.pid, SIGSEGV);
 	process_exit(128 + SIGSEGV);
@@ -567,16 +429,10 @@ void page_fault_handler_x64(uint64_t *stack)
 		}
 
 		/*
-		 * Zero out the newly allocated page; switch to process page
-		 * directory to write to userspace.
+		 * Zero via physical identity map — never switch CR3 and memset a
+		 * user VA from CPL0 (that #PF looks like kernel fault → panic).
 		 */
-		{
-			uint64_t old_cr3 = get_current_page_directory();
-
-			load_page_directory((uint64_t)current->page_directory);
-			memset((void *)vaddr_aligned, 0, 0x1000);
-			load_page_directory(old_cr3);
-		}
+		memset((void *)(uintptr_t)phys_addr, 0, 0x1000);
 
 		return;
 	}
@@ -609,7 +465,7 @@ void page_fault_handler_x64(uint64_t *stack)
 		/* Last reference: just re-enable write, clear COW. */
 		if (pmm_frame_refcount(old_phys) <= 1) {
 			*pte = (entry | PAGE_RW) & ~PAGE_COW;
-			arch_tlb_invalidate_page((uintptr_t)vaddr_aligned);
+			tlb_invalidate_page((uintptr_t)vaddr_aligned);
 			return;
 		}
 
@@ -634,7 +490,7 @@ void page_fault_handler_x64(uint64_t *stack)
 		}
 
 		pmm_frame_put(old_phys);
-		arch_tlb_invalidate_page((uintptr_t)vaddr_aligned);
+		tlb_invalidate_page((uintptr_t)vaddr_aligned);
 		return;
 	}
 
@@ -650,6 +506,23 @@ void page_fault_handler_x64(uint64_t *stack)
 	{
 		cpu_relax();
 		return;
+	}
+
+	/*
+	 * Supervisor access to a userspace VA (bad uaccess / CR3 mismatch).
+	 * Never panic the whole machine — tear down the offending task.
+	 */
+	if (fault_addr >= PF_USER_SPACE_START && fault_addr <= PF_USER_SPACE_END)
+	{
+		current = process_get_current();
+
+		klog_debug_fmt("PF", "[PF] kernel_uaccess_fault addr=%llx err=%llx pid=%x", (unsigned long long)(fault_addr), (unsigned long long)(errcode), (unsigned)(current ? (uint32_t)current->task.pid : 0));
+		if (current && current->mode == USER_MODE)
+		{
+			(void)send_signal(current->task.pid, SIGSEGV);
+			process_exit(128 + SIGSEGV);
+		}
+		panic("Unhandled kernel page fault (uaccess, no user task)");
 	}
 
 	print("[PF] Kernel page fault en ");
@@ -728,48 +601,23 @@ void gpf_audit_from_isr(uint64_t *stack)
 	if (ir0_panic_in_progress())
 		return;
 
-	serial_print("[GPF_AUDIT][FAULT] err=");
-	serial_print_hex64(errcode);
-	serial_print(" rip=");
-	serial_print_hex64(fault_rip);
-	serial_print(" cs=");
-	serial_print_hex64(fault_cs);
-	serial_print(" rsp=");
-	serial_print_hex64(fault_rsp);
-	serial_print(" ss=");
-	serial_print_hex64(fault_ss);
-	serial_print(" rflags=");
-	serial_print_hex64(fault_rflags);
-	serial_print(" mode=");
-	serial_print(user ? "user" : "kernel");
-	serial_print(" pid=");
-	serial_print_hex32(current ? (uint32_t)current->task.pid : 0);
-	serial_print(" comm=");
-	serial_print(current ? current->comm : "(none)");
-	serial_print(" cr3=");
-	serial_print_hex64(get_current_page_directory());
-	serial_print("\n");
+	klog_debug_fmt("GPF", "err=%llx rip=%llx cs=%llx rsp=%llx ss=%llx rflags=%llx mode=%s pid=%x comm=%s cr3=%llx", (unsigned long long)(errcode), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), (unsigned long long)(fault_ss), (unsigned long long)(fault_rflags), user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)", (unsigned long long)(get_current_page_directory()));
 
-	serial_print("[GPF_AUDIT][IRETQ_CKPT] rip=");
-	serial_print_hex64(ckpt_rip);
-	serial_print(" cs=");
-	serial_print_hex64(ckpt_cs);
-	serial_print(" rsp=");
-	serial_print_hex64(ckpt_rsp);
-	serial_print("\n");
+	klog_debug_fmt("GPF", "iretq_ckpt rip=%llx cs=%llx rsp=%llx", (unsigned long long)(ckpt_rip), (unsigned long long)(ckpt_cs), (unsigned long long)(ckpt_rsp));
 
 	if (!user)
 	{
-		serial_print("[GPF_AUDIT][CLASSIFY] GPF_IN_KERNEL_BEFORE_IRET\n");
-		if (fault_rip == ckpt_rip || (fault_rip >= 0x160000ULL && fault_rip <= 0x170000ULL))
+		klog_debug("GPF", "CLASSIFY GPF_IN_KERNEL_BEFORE_IRET");
+		if (fault_rip == ckpt_rip ||
+		    (fault_rip >= 0x160000ULL && fault_rip <= 0x170000ULL))
 		{
-			serial_print("[GPF_AUDIT][CLASSIFY] GPF_DURING_IRETQ "
-			             "note=rip_near_arch_switch_to_user\n");
+			klog_debug("GPF",
+				   "CLASSIFY GPF_DURING_IRETQ note=rip_near_switch_to_user");
 		}
 	}
 	else
 	{
-		serial_print("[GPF_AUDIT][CLASSIFY] GPF_IN_USERSPACE\n");
+		klog_debug("GPF", "CLASSIFY GPF_IN_USERSPACE");
 	}
 #endif /* DEBUG_PAGE_FAULTS */
 }

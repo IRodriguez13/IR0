@@ -28,6 +28,7 @@
 #define TCP_WIRE_CONN_MAX   4
 #define TCP_WIRE_RX_MAX     4096
 #define TCP_WIRE_TX_MAX     2048
+#define TCP_WIRE_PEER_CC_PORT 8890U /* guest→host peer-cc smoke (loss probe) */
 #define TCP_WIRE_MSS        536U
 #define TCP_WIRE_CWND_CAP   8U
 #define TCP_WIRE_SB_MAX     4U
@@ -106,6 +107,7 @@ struct tcp_wire_outbound
 	unsigned ssthresh;	 /* Reno slow-start threshold (MSS units) */
 	unsigned dup_ack_count;
 	int drop_next_tx;
+	int peer_cc_mode;	 /* port 8890: loss probe + no synthetic CC */
 	int window_ok_logged;
 	int rexmit_ok_logged;
 	int cwnd_ok_logged;
@@ -116,6 +118,10 @@ struct tcp_wire_outbound
 	int sack_ok_logged;
 	int sack_print_pending;
 	int reno_applied;
+	uint8_t rx[TCP_WIRE_RX_MAX];
+	unsigned rx_len;
+	unsigned rx_off;
+	int peer_fin;
 };
 
 static struct tcp_pending_conn g_pending;
@@ -125,12 +131,12 @@ static struct tcp_wire_outbound g_out;
 
 static inline uint64_t tcp_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void tcp_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 static uint16_t tcp_checksum(const void *tcp_pkt, size_t len,
@@ -640,6 +646,7 @@ static int tcp_build_header(struct tcp_header *hdr, uint16_t src_port,
 	return 0;
 }
 
+#if 0 /* Was synthetic F8 gate; kept for reference only — not ship path. */
 /*
  * Synthetic multi-segment SACK hole exercise (no wire TX — host expects WIRETCP).
  * Scoreboard seg0+seg2 covered by SACK, middle hole → recovery + hole rexmit.
@@ -723,6 +730,7 @@ static void tcp_out_run_recovery_selftest(struct net_device *dev, ip4_addr_t pee
 	tcp_out_exit_recovery();
 	tcp_irq_restore(f);
 }
+#endif /* synthetic recovery selftest */
 
 static int tcp_listener_find(uint16_t port)
 {
@@ -896,6 +904,31 @@ int tcp_wire_recv(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		return -EINVAL;
 
 	f = tcp_irq_save();
+	/* Outbound client association (guest→host). */
+	if (g_out.active && g_out.local_port == local_port &&
+	    g_out.peer_port == peer_port && g_out.peer_ip == peer_ip)
+	{
+		if (g_out.rx_off >= g_out.rx_len)
+		{
+			int fin = g_out.peer_fin;
+
+			tcp_irq_restore(f);
+			return fin ? 0 : -EAGAIN;
+		}
+		n = g_out.rx_len - g_out.rx_off;
+		if (n > len)
+			n = len;
+		memcpy(dst, g_out.rx + g_out.rx_off, n);
+		g_out.rx_off += (unsigned)n;
+		if (g_out.rx_off >= g_out.rx_len)
+		{
+			g_out.rx_off = 0;
+			g_out.rx_len = 0;
+		}
+		tcp_irq_restore(f);
+		return (int)n;
+	}
+
 	c = tcp_inbound_find(peer_ip, peer_port, local_port);
 	if (!c || !c->taken)
 	{
@@ -1024,8 +1057,15 @@ int tcp_wire_connect(ip4_addr_t peer_ip, uint16_t peer_port,
 			g_pending.peer_window ? g_pending.peer_window : 8192;
 		g_out.cwnd = 1;
 		g_out.ssthresh = TCP_WIRE_CWND_CAP;
-		/* First payload TX deliberately dropped once so RTO path runs. */
-		g_out.drop_next_tx = 1;
+		g_out.rx_len = 0;
+		g_out.rx_off = 0;
+		g_out.peer_fin = 0;
+		if (peer_port == TCP_WIRE_PEER_CC_PORT)
+		{
+			/* Peer-CC smoke: drop first data TX once; no synthetic DUPACK/SACK. */
+			g_out.peer_cc_mode = 1;
+			g_out.drop_next_tx = 1;
+		}
 		tcp_irq_restore(f);
 	}
 
@@ -1088,14 +1128,6 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		return -EAGAIN;
 	}
 
-	if (!g_out.recovery_selftest_done)
-	{
-		tcp_irq_restore(f);
-		tcp_out_run_recovery_selftest(dev, peer_ip, peer_port, local_port,
-					      ack_peer);
-		f = tcp_irq_save();
-	}
-
 	seq = *seq_io;
 	tcp_sb_clear();
 	{
@@ -1137,9 +1169,10 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	g_out.snd_nxt = seq + (uint32_t)send_len;
 
 	/*
-	 * Synthetic dup-ACKs (host may not emit them): three ACKs that do not
-	 * advance snd_una while unpaid is outstanding → fast retransmit path.
+	 * Lab-only synthetic dup-ACK/SACK (not peer-driven). Disabled for
+	 * peer-cc smoke (port 8890) — recovery must come from drop+RTO/poll.
 	 */
+	if (!g_out.peer_cc_mode)
 	{
 		uint32_t una;
 		uint16_t win;
@@ -1150,7 +1183,6 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		win = g_out.peer_window ? g_out.peer_window : 8192;
 		for (j = 0; j < 3U; j++)
 			tcp_out_note_ack(una, win);
-		/* Synthetic SACK covering unpaid (RFC 2018 kind 5 reaction). */
 		tcp_out_note_sack_block(g_out.unpaid_seq,
 					g_out.unpaid_seq + g_out.unpaid_len);
 		tcp_irq_restore(f);
@@ -1223,9 +1255,14 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	tcp_sb_clear();
 	if (rexmit > 0 && !g_out.rexmit_ok_logged)
 	{
+		int peer_cc = g_out.peer_cc_mode;
+
 		g_out.rexmit_ok_logged = 1;
 		tcp_irq_restore(f);
-		klog_print("F8_TCP_WIRE_REXMIT_OK\n");
+		if (peer_cc)
+			klog_print("F8_TCP_PEER_REXMIT_OK\n");
+		else
+			klog_print("F8_TCP_WIRE_REXMIT_OK\n");
 	}
 	else
 		tcp_irq_restore(f);
@@ -1280,6 +1317,21 @@ static void tcp_handle_listen_syn(struct net_device *dev, ip4_addr_t src_ip,
 	c = tcp_inbound_find(src_ip, src_port, dest_port);
 	if (c)
 	{
+		/*
+		 * Retransmitted SYN (lost SYN-ACK / RTL8139 TX stall): resend
+		 * SYN-ACK for the half-open slot instead of ignoring.
+		 */
+		if (!c->established)
+		{
+			uint32_t syn_seq = c->local_seq - 1;
+
+			c->peer_ack = seq + 1;
+			tcp_irq_restore(f);
+			tcp_build_header(&hdr, dest_port, src_port, syn_seq,
+					 seq + 1, TCP_FLAG_SYN | TCP_FLAG_ACK);
+			(void)tcp_send_raw(dev, src_ip, &hdr, NULL, 0);
+			return;
+		}
 		tcp_irq_restore(f);
 		return;
 	}
@@ -1425,6 +1477,36 @@ void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,
 			tcp_parse_sack_options((const uint8_t *)data + TCP_HDR_LEN,
 					       hdr_len - TCP_HDR_LEN);
 		tcp_out_note_ack(ack, window ? window : g_out.peer_window);
+		if (payload_len > 0)
+		{
+			size_t space;
+			size_t ncopy;
+
+			if (g_out.rx_off > 0 && g_out.rx_off == g_out.rx_len)
+			{
+				g_out.rx_off = 0;
+				g_out.rx_len = 0;
+			}
+			else if (g_out.rx_off > 0)
+			{
+				memmove(g_out.rx, g_out.rx + g_out.rx_off,
+					g_out.rx_len - g_out.rx_off);
+				g_out.rx_len -= g_out.rx_off;
+				g_out.rx_off = 0;
+			}
+			space = TCP_WIRE_RX_MAX - g_out.rx_len;
+			ncopy = payload_len;
+			if (ncopy > space)
+				ncopy = space;
+			if (ncopy > 0)
+			{
+				memcpy(g_out.rx + g_out.rx_len, payload, ncopy);
+				g_out.rx_len += (unsigned)ncopy;
+				g_out.ack_to_peer = seq + (uint32_t)ncopy;
+			}
+		}
+		if (flags & TCP_FLAG_FIN)
+			g_out.peer_fin = 1;
 		{
 			int print_cwnd = g_out.cwnd_print_pending;
 			int print_sack = g_out.sack_print_pending;
@@ -1439,7 +1521,6 @@ void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,
 			if (print_sack)
 				klog_print("F8_TCP_WIRE_SACK_OK\n");
 		}
-		/* Still allow inbound handler if this were a listen sock — not for client. */
 		return;
 	}
 	tcp_irq_restore(f);

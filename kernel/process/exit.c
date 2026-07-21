@@ -62,13 +62,13 @@ __attribute__((noreturn)) void process_exit(int code)
 	if (!dying)
 	{
 		for (;;)
-			arch_cpu_idle();
+			cpu_idle();
 	}
 	process_fase50_trace_proc("process_exit-entry", dying);
 	dying->irq_frame_saved = 0;
 	process_exit_robust_list(dying);
 	if (IR0_DEBUG_WAIT)
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] ZOMBIE_IRQ_SAVED_CLEARED\n");
+		klog_debug("WAIT", "CLASSIFY ZOMBIE_IRQ_SAVED_CLEARED");
 
 	/*
 	 * CLONE_CHILD_CLEARTID / set_tid_address: zero the tid word and wake
@@ -120,13 +120,7 @@ __attribute__((noreturn)) void process_exit(int code)
 #if IR0_DEBUG_PROC
 	if (dying->exit_signal > 0)
 	{
-		serial_print("[SIGTERM_AUDIT] process_exit pid=");
-		serial_print_hex32((uint32_t)dying->task.pid);
-		serial_print(" exit_signal=");
-		serial_print_hex32((uint32_t)dying->exit_signal);
-		serial_print(" wait_status=");
-		serial_print_hex32((uint32_t)process_child_wait_status_word(dying));
-		serial_print("\n");
+		klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] process_exit pid=%x exit_signal=%x wait_status=%x", (unsigned)((uint32_t)dying->task.pid), (unsigned)((uint32_t)dying->exit_signal), (unsigned)((uint32_t)process_child_wait_status_word(dying)));
 	}
 #endif
 #if IR0_DEBUG_PROC
@@ -230,7 +224,7 @@ __attribute__((noreturn)) void process_exit(int code)
 
 	/* No runnable task: halt forever (must not sysret to exited user context). */
 	for (;;)
-		arch_cpu_idle();
+		cpu_idle();
 }
 
 

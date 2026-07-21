@@ -24,7 +24,7 @@
 #include <ir0/clock_wait.h>
 #include <ir0/clock.h>
 #include <ir0/debug_runtime.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 #include <ir0/oops.h>
@@ -32,7 +32,7 @@
 #include <ir0/elf_loader.h>
 #include <ir0/path.h>
 #include <ir0/permissions.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/kmem.h>
 #include <ir0/validation.h>
 #include <ir0/debug_runtime.h>
@@ -387,15 +387,7 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 #if defined(SIGNAL_DELIVER_LOG) && SIGNAL_DELIVER_LOG
 		if (signum == SIGSEGV)
 		{
-			serial_print("[SIGNAL][REG] pid=");
-			serial_print_hex32((uint32_t)current_process->task.pid);
-			serial_print(" sig=SIGSEGV handler=");
-			serial_print_hex64((uint64_t)(uintptr_t)kact.sa_handler);
-			serial_print(" flags=");
-			serial_print_hex32((uint32_t)kact.sa_flags);
-			serial_print(" proc_mask=");
-			serial_print_hex32(current_process->signal_mask);
-			serial_print("\n");
+			klog_debug_fmt("SIGNAL", "[SIGNAL][REG] pid=%x sig=SIGSEGV handler=%llx flags=%x proc_mask=%x", (unsigned)((uint32_t)current_process->task.pid), (unsigned long long)((uint64_t)(uintptr_t)kact.sa_handler), (unsigned)((uint32_t)kact.sa_flags), (unsigned)(current_process->signal_mask));
 		}
 #endif
 	}
@@ -622,7 +614,7 @@ void process_exit_robust_list(process_t *p)
 		(void)ir0_futex_wake(uaddr, 1);
 
 	p->robust_list = NULL;
-	serial_print("ROBUST_LIST_EXIT_OK\n");
+	klog_smoke("ROBUST_LIST_EXIT_OK");
 }
 
 int64_t sys_setsid(void)
@@ -749,16 +741,16 @@ int64_t sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg)
 	switch (cmd)
 	{
 	case LINUX_REBOOT_CMD_CAD_ON:
-		serial_print("REBOOT_CAD_ON\n");
+		klog_smoke("REBOOT_CAD_ON");
 		return 0;
 	case LINUX_REBOOT_CMD_CAD_OFF:
-		serial_print("REBOOT_CAD_OFF\n");
+		klog_smoke("REBOOT_CAD_OFF");
 		return 0;
 	case LINUX_REBOOT_CMD_RESTART:
 		kernel_system_shutdown(IR0_SYSTEM_REBOOT);
 		break;
 	case LINUX_REBOOT_CMD_RESTART2:
-		serial_print("REBOOT_RESTART2\n");
+		klog_smoke("REBOOT_RESTART2");
 		kernel_system_shutdown(IR0_SYSTEM_REBOOT);
 		break;
 	case LINUX_REBOOT_CMD_HALT:
@@ -774,7 +766,7 @@ int64_t sys_reboot(int magic1, int magic2, unsigned int cmd, void *arg)
 			/* Magic payload returns here; soft reboot. */
 			kernel_system_shutdown(IR0_SYSTEM_REBOOT);
 		}
-		serial_print("REBOOT_KEXEC_STUB\n");
+		klog_smoke("REBOOT_KEXEC_STUB");
 		kernel_system_shutdown(IR0_SYSTEM_REBOOT);
 		break;
 	case LINUX_REBOOT_CMD_SW_SUSPEND:
@@ -919,7 +911,9 @@ int64_t sys_exec(const char *pathname,
                  char *const envp[])
 {
   int exec_argv_slots_seen = 0;
-  serial_print("SERIAL: sys_exec called\n");
+#if CONFIG_DEBUG_FASE50
+  klog_debug("KERN", "SERIAL: sys_exec called\n");
+#endif
   fase50_trace_syscall_proc("sys_exec-entry", current_process);
 
   if (!current_process || !pathname)
@@ -1168,30 +1162,8 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
 
   if (IR0_DEBUG_WAIT)
   {
-    serial_print("[WAIT4_WNOHANG_AUDIT] wait_begin parent=");
-    serial_print_hex32((uint32_t)current_process->task.pid);
-    serial_print(" target=");
-    serial_print_hex32((uint32_t)pid);
-    serial_print(" options=");
-    serial_print_hex32((uint32_t)options);
-    serial_print(" wait_target_pid=");
-    serial_print_hex32((uint32_t)current_process->wait_target_pid);
-    serial_print(" wait_options=");
-    serial_print_hex32((uint32_t)current_process->wait_options);
-    serial_print(" wait_resume_child_pid=");
-    serial_print_hex32((uint32_t)current_process->wait_resume_child_pid);
-    serial_print(" syscall_resume_rax=");
-    serial_print_hex64(current_process->syscall_resume_rax);
-    serial_print("\n");
-    serial_print("[WAIT_EXIT_AUDIT][sys_wait4] entry parent_pid=");
-    serial_print_hex32((uint32_t)current_process->task.pid);
-    serial_print(" wait_pid=");
-    serial_print_hex32((uint32_t)pid);
-    serial_print(" status_ptr=");
-    serial_print_hex64((uint64_t)(uintptr_t)status);
-    serial_print(" options=");
-    serial_print_hex64((uint64_t)(unsigned int)options);
-    serial_print("\n");
+    klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] wait_begin parent=%x target=%x options=%x wait_target_pid=%x wait_options=%x wait_resume_child_pid=%x syscall_resume_rax=%llx", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid), (unsigned)((uint32_t)options), (unsigned)((uint32_t)current_process->wait_target_pid), (unsigned)((uint32_t)current_process->wait_options), (unsigned)((uint32_t)current_process->wait_resume_child_pid), (unsigned long long)(current_process->syscall_resume_rax));
+    klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][sys_wait4] entry parent_pid=%x wait_pid=%x status_ptr=%llx options=%llx", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid), (unsigned long long)((uint64_t)(uintptr_t)status), (unsigned long long)((uint64_t)(unsigned int)options));
   }
 
   fase50_trace_syscall_proc("sys_wait4-entry", current_process);
@@ -1206,22 +1178,8 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
 
     if (IR0_DEBUG_WAIT)
     {
-      serial_print("[WAIT4_WNOHANG_AUDIT] wait_return parent=");
-      serial_print_hex32((uint32_t)current_process->task.pid);
-      serial_print(" ret=");
-      serial_print_hex64((uint64_t)ret);
-      serial_print(" wait_resume_child_pid=");
-      serial_print_hex32((uint32_t)current_process->wait_resume_child_pid);
-      serial_print(" syscall_resume_rax=");
-      serial_print_hex64(current_process->syscall_resume_rax);
-      serial_print(" status_write=");
-      serial_print(ret > 0 ? "yes" : "no");
-      serial_print("\n");
-      serial_print("[WAIT_EXIT_AUDIT][sys_wait4] return parent_pid=");
-      serial_print_hex32((uint32_t)current_process->task.pid);
-      serial_print(" ret=");
-      serial_print_hex64((uint64_t)ret);
-      serial_print("\n");
+      klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] wait_return parent=%x ret=%llx wait_resume_child_pid=%x syscall_resume_rax=%llx status_write=%s", (unsigned)((uint32_t)current_process->task.pid), (unsigned long long)((uint64_t)ret), (unsigned)((uint32_t)current_process->wait_resume_child_pid), (unsigned long long)(current_process->syscall_resume_rax), ret > 0 ? "yes" : "no");
+      klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][sys_wait4] return parent_pid=%x ret=%llx", (unsigned)((uint32_t)current_process->task.pid), (unsigned long long)((uint64_t)ret));
     }
     fase50_trace_syscall_proc("sys_wait4-return", current_process);
     return ret;
@@ -1253,19 +1211,9 @@ int64_t sys_kill(pid_t pid, int signal)
   if (pid <= 0)
     return -EINVAL;
 
-  /* Send signal to target process */
+  /* send_signal handles pending, wake, and default-fatal teardown. */
   if (send_signal(pid, signal) != 0)
     return -ESRCH; /* Process not found */
-
-  if (signal != 0)
-  {
-    process_t *target = process_find_by_pid(pid);
-
-    if (target)
-      (void)process_signal_default_kill(target, signal);
-
-    clock_request_sched_resched();
-  }
 
 #if IR0_DEBUG_PROC
   {
@@ -1273,15 +1221,7 @@ int64_t sys_kill(pid_t pid, int signal)
 
     if (target)
     {
-      serial_print("[SIGTERM_AUDIT] sys_kill pid=");
-      serial_print_hex32((uint32_t)pid);
-      serial_print(" sig=");
-      serial_print_hex32((uint32_t)signal);
-      serial_print(" pending=");
-      serial_print_hex32(target->signal_pending);
-      serial_print(" state=");
-      serial_print_hex32((uint32_t)target->state);
-      serial_print("\n");
+      klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] sys_kill pid=%x sig=%x pending=%x state=%x", (unsigned)((uint32_t)pid), (unsigned)((uint32_t)signal), (unsigned)(target->signal_pending), (unsigned)((uint32_t)target->state));
     }
   }
 #endif
@@ -1349,7 +1289,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
   if (code == ARCH_SET_FS)
   {
     current_process->fs_base = (uint64_t)addr;
-    arch_set_tls((uint64_t)addr);
+    set_tls((uint64_t)addr);
     return 0;
   }
 

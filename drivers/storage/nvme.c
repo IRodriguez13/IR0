@@ -10,11 +10,12 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/cpu.h>
 #include "nvme.h"
 
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <mm/paging.h>
 #include <string.h>
 #include <stdint.h>
@@ -126,9 +127,9 @@ static uint32_t nvme_pci_read(uint8_t bus, uint8_t slot, uint8_t func,
 	uint32_t addr = (uint32_t)(1u << 31) | ((uint32_t)bus << 16) |
 			((uint32_t)slot << 11) | ((uint32_t)func << 8) |
 			(offset & 0xFCu);
-	__asm__ __volatile__("outl %0, %1" : : "a"(addr), "Nd"((uint16_t)PCI_CONFIG_ADDRESS));
+	outl((uint16_t)PCI_CONFIG_ADDRESS, addr);
 	uint32_t val;
-	__asm__ __volatile__("inl %1, %0" : "=a"(val) : "Nd"((uint16_t)PCI_CONFIG_DATA));
+	val = inl((uint16_t)PCI_CONFIG_DATA);
 	return val;
 }
 
@@ -138,8 +139,8 @@ static void nvme_pci_write(uint8_t bus, uint8_t slot, uint8_t func,
 	uint32_t addr = (uint32_t)(1u << 31) | ((uint32_t)bus << 16) |
 			((uint32_t)slot << 11) | ((uint32_t)func << 8) |
 			(offset & 0xFCu);
-	__asm__ __volatile__("outl %0, %1" : : "a"(addr), "Nd"((uint16_t)PCI_CONFIG_ADDRESS));
-	__asm__ __volatile__("outl %0, %1" : : "a"(val), "Nd"((uint16_t)PCI_CONFIG_DATA));
+	outl((uint16_t)PCI_CONFIG_ADDRESS, addr);
+	outl((uint16_t)PCI_CONFIG_DATA, val);
 }
 
 static void nvme_delay(void)
@@ -417,7 +418,7 @@ static int nvme_controller_init(struct nvme_ctrl *c)
 	nvme_wr32(c->bar, NVME_REG_CC, cc);
 	if (nvme_wait_csts(c, 0) < 0)
 	{
-		serial_print("NVME_DISABLE_FAIL\n");
+		klog_smoke("NVME_DISABLE_FAIL");
 		return -EIO;
 	}
 
@@ -442,21 +443,21 @@ static int nvme_controller_init(struct nvme_ctrl *c)
 	nvme_wr32(c->bar, NVME_REG_CC, cc);
 	if (nvme_wait_csts(c, 1) < 0)
 	{
-		serial_print("NVME_ENABLE_FAIL\n");
+		klog_smoke("NVME_ENABLE_FAIL");
 		return -EIO;
 	}
 
 	ret = nvme_identify(c, 0, 1); /* controller */
 	if (ret < 0)
 	{
-		serial_print("NVME_IDENT_CTRL_FAIL\n");
+		klog_smoke("NVME_IDENT_CTRL_FAIL");
 		return ret;
 	}
 
 	ret = nvme_identify(c, 1, 0); /* namespace 1 */
 	if (ret < 0)
 	{
-		serial_print("NVME_IDENT_NS_FAIL\n");
+		klog_smoke("NVME_IDENT_NS_FAIL");
 		return ret;
 	}
 
@@ -473,12 +474,12 @@ static int nvme_controller_init(struct nvme_ctrl *c)
 			c->sector_size = 512u;
 	}
 	c->nsectors = nsze ? nsze : 1;
-	serial_print("NVME_IDENT_OK\n");
+	klog_smoke("NVME_IDENT_OK");
 
 	ret = nvme_create_io_queues(c);
 	if (ret < 0)
 	{
-		serial_print("NVME_IOQ_FAIL\n");
+		klog_smoke("NVME_IOQ_FAIL");
 		return ret;
 	}
 
@@ -524,7 +525,7 @@ void nvme_probe(void)
 				    pci_subclass != PCI_SUBCLASS_NVME)
 					continue;
 
-				serial_print("NVME_DETECT_OK\n");
+				klog_smoke("NVME_DETECT_OK");
 
 				cmd = nvme_pci_read(bus, slot, func, 0x04);
 				cmd |= 0x6; /* bus master + memory */
@@ -543,7 +544,7 @@ void nvme_probe(void)
 					g_nvme.bar_phys = (uintptr_t)(bar0 & ~0xFu);
 				if (g_nvme.bar_phys == 0)
 				{
-					serial_print("NVME_BAR_NONE\n");
+					klog_smoke("NVME_BAR_NONE");
 					return;
 				}
 
@@ -557,7 +558,7 @@ void nvme_probe(void)
 							     PAGE_CACHE_DISABLE) !=
 					    0)
 					{
-						serial_print("NVME_MAP_FAIL\n");
+						klog_smoke("NVME_MAP_FAIL");
 						return;
 					}
 				}
@@ -565,19 +566,19 @@ void nvme_probe(void)
 				g_nvme.bar = (volatile uint8_t *)g_nvme.bar_phys;
 				if (nvme_controller_init(&g_nvme) != 0)
 				{
-					serial_print("NVME_INIT_FAIL\n");
+					klog_smoke("NVME_INIT_FAIL");
 					return;
 				}
 
 				nvme_register_block(&g_nvme);
 				if (nvme_backend_read(&g_nvme, 0, 1, g_nvme.io_buf) ==
 				    0)
-					serial_print("NVME_READ_OK\n");
+					klog_smoke("NVME_READ_OK");
 				else
-					serial_print("NVME_READ_FAIL\n");
+					klog_smoke("NVME_READ_FAIL");
 				return;
 			}
 		}
 	}
-	serial_print("NVME_DETECT_NONE\n");
+	klog_smoke("NVME_DETECT_NONE");
 }

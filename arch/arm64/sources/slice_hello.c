@@ -15,8 +15,9 @@
 #include "slice_hello.h"
 
 #include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 void arm64_slice_after_mmu(void)
 {
-	serial_print("ARM64_SLICE_OK\n");
+	klog_smoke("ARM64_SLICE_OK");
 }

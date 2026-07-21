@@ -21,7 +21,6 @@
 #include <ir0/logging.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <ir0/serial_io.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <init.h>
@@ -36,6 +35,7 @@
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
+#include <ir0/typewriter.h>
 #include <ir0/input_backend.h>
 #include <ir0/multiboot.h>
 #include <ir0/ktm/ktm.h>
@@ -88,7 +88,7 @@ void kernel_idle_loop(void)
 	for (;;)
 	{
 		kernel_idle_poll();
-		arch_cpu_idle();
+		cpu_idle();
 	}
 }
 
@@ -101,8 +101,8 @@ void kmain(uint32_t multiboot_info)
 #endif
 
     /* Initialize architecture-specific early features (GDT, TSS, etc.) */
-    arch_set_boot_params((void *)(uintptr_t)multiboot_info);
-    arch_early_init();
+    set_boot_params((void *)(uintptr_t)multiboot_info);
+    early_init();
 
     /* Initialize core subsystems first (need heap for VBE mapping) */
     heap_init();
@@ -125,9 +125,8 @@ void kmain(uint32_t multiboot_info)
             console_backend_clear(0x0F);  /* Black background, ready for text */
     }
 
-    /* Banner (now uses framebuffer if available) */
-    print("IR0 Kernel v" IR0_VERSION_STRING " Boot routine\n");
-    
+    /* Version banner emitted after serial_init (klog + console). */
+
     /*
      * Physical Memory Manager: manage frames in [32MB, 48MB).
      * Heap occupies [8MB, 32MB), so PMM must use disjoint memory.
@@ -143,6 +142,19 @@ void kmain(uint32_t multiboot_info)
      */
     ir0_driver_registry_init();
     serial_init();
+    /* Serial: framed klog. Screen: VGA/FB only (console_backend_write also hits serial). */
+    klog_info("BOOT", "IR0 Kernel v" IR0_VERSION_STRING " Boot routine");
+    typewriter_vga_print("IR0 Kernel v" IR0_VERSION_STRING " Boot routine\n", 0x0F);
+
+    {
+	char hv_vendor[16];
+
+	if (arch_hypervisor_present() &&
+	    arch_hypervisor_vendor(hv_vendor, sizeof(hv_vendor)) == 0)
+		log_info_fmt("BOOT", "hypervisor present vendor=%s", hv_vendor);
+	else
+		log_info("BOOT", "hypervisor none (bare metal or undetected)");
+    }
 
     /*
      * Log console mode for debugging (serial now available).
@@ -158,33 +170,27 @@ void kmain(uint32_t multiboot_info)
         else
         {
 #if DEBUG_BOOT
-            serial_print("[BOOT] Console: VGA text (80x25)");
-            if (video_backend_is_available())
-                serial_print(" [vbe fallback - may not be visible in graphics mode]");
-            serial_print("\n");
-            serial_print("[BOOT] vbe_fail_reason=");
-            serial_print_hex32((uint32_t)video_backend_fail_reason());
-            serial_print(" (1=mb_null 2=no_fb 3=bad_dims 4=map_fail)\n");
+            log_info_fmt("BOOT",
+                         "Console: VGA text (80x25)%s vbe_fail_reason=%u",
+                         video_backend_is_available()
+                             ? " [vbe fallback - may not be visible in graphics mode]"
+                             : "",
+                         (unsigned)video_backend_fail_reason());
 
             if (multiboot_info)
             {
                 const struct multiboot_info *mb = (const struct multiboot_info *)(uintptr_t)multiboot_info;
-                serial_print("[BOOT] Multiboot flags=0x");
-                serial_print_hex32(mb->flags);
-                serial_print(" (bit12=FB:");
-                serial_print((mb->flags & (1u << 12)) ? "1" : "0");
-                serial_print(") addr=0x");
-                serial_print_hex32((uint32_t)(mb->framebuffer_addr & 0xFFFFFFFF));
-                serial_print(" w=");
-                serial_print_hex32(mb->framebuffer_width);
-                serial_print(" h=");
-                serial_print_hex32(mb->framebuffer_height);
-                serial_print(" bpp=");
-                serial_print_hex32(mb->framebuffer_bpp);
-                serial_print("\n");
+                log_info_fmt("BOOT",
+                             "Multiboot flags=0x%x (bit12=FB:%u) addr=0x%x w=%u h=%u bpp=%u",
+                             (unsigned)mb->flags,
+                             (mb->flags & (1u << 12)) ? 1u : 0u,
+                             (unsigned)(mb->framebuffer_addr & 0xFFFFFFFFu),
+                             (unsigned)mb->framebuffer_width,
+                             (unsigned)mb->framebuffer_height,
+                             (unsigned)mb->framebuffer_bpp);
             }
             else
-                serial_print("[BOOT] Multiboot info is NULL\n");
+                log_info("BOOT", "Multiboot info is NULL");
 #endif
         }
     }
@@ -198,13 +204,13 @@ void kmain(uint32_t multiboot_info)
     /* Check configured root block device availability before filesystem init */
     if (!ir0_block_name_is_present(CONFIG_ROOT_BLOCK_DEVICE))
     {
-        serial_print("[BOOT] WARNING: Configured root block device not detected\n");
-        serial_print("[BOOT] Filesystem initialization may fail\n");
+        log_warn("BOOT", "Configured root block device not detected");
+        log_warn("BOOT", "Filesystem initialization may fail");
     }
 #if DEBUG_BOOT
     else
     {
-        serial_print("[BOOT] Configured root block device detected, proceeding with filesystem init\n");
+        log_info("BOOT", "Configured root block device detected, proceeding with filesystem init");
     }
 #endif
 
@@ -228,28 +234,26 @@ void kmain(uint32_t multiboot_info)
 	extern int priority_sched_selftest(void);
 
 	if (priority_sched_selftest() == 0)
-		serial_print("SCHED_PRIO_OK\n");
+		klog_smoke("SCHED_PRIO_OK");
 	else
-		serial_print("SCHED_PRIO_FAIL\n");
+		klog_smoke("SCHED_PRIO_FAIL");
     }
 #endif
-    serial_print("SCHED_POLICY=");
-    serial_print(sched_active_policy_name());
-    serial_print("\n");
+    klog_info_fmt("SCHED", "SCHED_POLICY=%s", sched_active_policy_name());
 
     /* Initialize system calls */
-    arch_syscall_init();
+    syscall_init();
     syscalls_init();
     log_subsystem_ok("SYSCALLS");
 
     /* Initialize architecture-specific interrupt system (IDT, PIC remap) */
-    arch_irq_init();
-    arch_boot_irq_unmask();
+    irq_init();
+    boot_irq_unmask();
 
     /* Enable interrupts globally */
-    arch_enable_interrupts();
+    enable_interrupts();
 #if DEBUG_BOOT
-    serial_print("[BOOT] Interrupts enabled globally (sti)\n");
+    log_info("BOOT", "Interrupts enabled globally (sti)");
 #endif
 
     log_subsystem_ok("INTERRUPTS");
@@ -280,7 +284,7 @@ void kmain(uint32_t multiboot_info)
         char *argv_init[] = { "/sbin/init", NULL };
 
 #if DEBUG_BOOT
-        serial_print("SERIAL: kmain: Loading userspace init...\n");
+        log_info("BOOT", "Loading userspace init...");
 #endif
         ir0_rootfs_prepare_userspace_base();
         /* Linux-like: argv[0] must be present or BusyBox/runit print usage and exit. */
@@ -288,13 +292,11 @@ void kmain(uint32_t multiboot_info)
         init_pid = kexecve("/sbin/init", argv_init, NULL);
         if (init_pid < 0)
         {
-            serial_print("SERIAL: kmain: FAILED to load /sbin/init\n");
+            log_error("BOOT", "FAILED to load /sbin/init");
             panic("Failed to load /sbin/init");
         }
 #if DEBUG_BOOT
-        serial_print("SERIAL: kmain: /sbin/init loaded (PID ");
-        serial_print_hex32((uint32_t)init_pid);
-        serial_print("), scheduling...\n");
+        log_info_fmt("BOOT", "/sbin/init loaded (PID %d), scheduling...", init_pid);
 #endif
 
         ir0_console_on_userspace_attach();
@@ -307,6 +309,6 @@ void kmain(uint32_t multiboot_info)
     for (;;)
     {
         kernel_idle_poll();
-        arch_cpu_idle();
+        cpu_idle();
     }
 }

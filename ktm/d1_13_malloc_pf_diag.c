@@ -17,7 +17,7 @@
 #include <config.h>
 #include <ir0/copy_user.h>
 #include <ir0/process.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 #if defined(CONFIG_KTM_MALLOC_FORENSICS) && CONFIG_KTM_MALLOC_FORENSICS
@@ -36,21 +36,19 @@ static int d1_14_sh_target(struct process *p)
 
 static void d1_14_hex_line(const char *tag, const uint8_t *buf, size_t len)
 {
+	char line[512];
+	size_t off;
 	size_t i;
-	static const char hex[] = "0123456789ABCDEF";
+	size_t max;
 
-	serial_print(tag);
-	for (i = 0; i < len; i++)
-	{
-		char pair[3];
-
-		pair[0] = hex[(buf[i] >> 4) & 0xF];
-		pair[1] = hex[buf[i] & 0xF];
-		pair[2] = '\0';
-		serial_print(" ");
-		serial_print(pair);
-	}
-	serial_print("\n");
+	off = (size_t)snprintf(line, sizeof(line), "%s", tag);
+	max = len;
+	if (max > 64)
+		max = 64;
+	for (i = 0; i < max && off + 4 < sizeof(line); i++)
+		off += (size_t)snprintf(line + off, sizeof(line) - off, " %02x",
+					buf[i]);
+	klog_debug_fmt("D1.14", "%s", line);
 }
 
 static int d1_14_find_vma(struct process *p, uint64_t addr, uint64_t *lo,
@@ -133,17 +131,18 @@ static int d1_14_read_clamped(struct process *p, uint64_t addr, uint8_t *out,
 static void d1_14_log_candidate(const char *label, uint64_t val, uint64_t rdx,
 				uint64_t rcx)
 {
-	serial_print("[D1.14][WORD] ");
-	serial_print(label);
-	serial_print("=");
-	serial_print_hex64(val);
+	const char *m_rdx = "";
+	const char *m_rcx = "";
+	const char *m_align = "";
+
 	if (val == rdx)
-		serial_print(" MATCH_RDX");
+		m_rdx = " MATCH_RDX";
 	if (val == (rcx * 8ULL))
-		serial_print(" MATCH_RCX8");
+		m_rcx = " MATCH_RCX8";
 	if (val == (rdx & ~0xFULL))
-		serial_print(" MATCH_RDX_ALIGNED");
-	serial_print("\n");
+		m_align = " MATCH_RDX_ALIGNED";
+	klog_debug_fmt("D1.14", "[D1.14][WORD] %s=%llx%s%s%s", label,
+		       (unsigned long long)val, m_rdx, m_rcx, m_align);
 }
 
 static void d1_14_dump_ptr_window(struct process *p, const char *label,
@@ -160,9 +159,7 @@ static void d1_14_dump_ptr_window(struct process *p, const char *label,
 
 	if (!d1_14_find_vma(p, ptr, &vma_lo, &vma_hi))
 	{
-		serial_print("[D1.14][WIN] ");
-		serial_print(label);
-		serial_print(" no_vma\n");
+		klog_debug_fmt("D1.14", "[D1.14][WIN] %s no_vma", label);
 		return;
 	}
 
@@ -173,19 +170,11 @@ static void d1_14_dump_ptr_window(struct process *p, const char *label,
 	if (win_hi > vma_hi)
 		win_hi = vma_hi;
 
-	serial_print("[D1.14][WIN] ");
-	serial_print(label);
-	serial_print(" ptr=");
-	serial_print_hex64(ptr);
-	serial_print(" vma=[");
-	serial_print_hex64(vma_lo);
-	serial_print(",");
-	serial_print_hex64(vma_hi);
-	serial_print(") clip=[");
-	serial_print_hex64(win_lo);
-	serial_print(",");
-	serial_print_hex64(win_hi);
-	serial_print(")\n");
+	klog_debug_fmt("D1.14",
+		       "[D1.14][WIN] %s ptr=%llx vma=[%llx,%llx) clip=[%llx,%llx)",
+		       label, (unsigned long long)ptr,
+		       (unsigned long long)vma_lo, (unsigned long long)vma_hi,
+		       (unsigned long long)win_lo, (unsigned long long)win_hi);
 
 	n = (size_t)(win_hi - win_lo);
 	if (n > sizeof(buf))
@@ -193,9 +182,7 @@ static void d1_14_dump_ptr_window(struct process *p, const char *label,
 
 	if (d1_14_read_clamped(p, win_lo, buf, n) != 0)
 	{
-		serial_print("[D1.14][WIN] ");
-		serial_print(label);
-		serial_print(" read_fail\n");
+		klog_debug_fmt("D1.14", "[D1.14][WIN] %s read_fail", label);
 		return;
 	}
 
@@ -203,14 +190,9 @@ static void d1_14_dump_ptr_window(struct process *p, const char *label,
 
 	if (ptr >= 16 && ptr - 16 >= win_lo && ptr - 8 <= win_hi)
 	{
-		char tag[24];
-
 		memcpy(&w16, buf + (size_t)(ptr - 16 - win_lo), 8);
 		memcpy(&w8, buf + (size_t)(ptr - 8 - win_lo), 8);
-		tag[0] = '\0';
-		serial_print("[D1.14][HDR] ");
-		serial_print(label);
-		serial_print("\n");
+		klog_debug_fmt("D1.14", "[D1.14][HDR] %s", label);
 		d1_14_log_candidate("-16", w16 & ~0xFULL, rdx, rcx);
 		d1_14_log_candidate("-8", w8 & ~0xFULL, rdx, rcx);
 		d1_14_log_candidate("-16_raw", w16, rdx, rcx);
@@ -231,27 +213,20 @@ static void d1_14_dump_page(struct process *p, const char *label, uint64_t addr,
 	page_base = addr & ~(D1_14_PAGE - 1ULL);
 	if (!d1_14_find_vma(p, addr, &vma_lo, &vma_hi))
 	{
-		serial_print("[D1.14][PAGE] ");
-		serial_print(label);
-		serial_print(" unmapped\n");
+		klog_debug_fmt("D1.14", "[D1.14][PAGE] %s unmapped", label);
 		return;
 	}
 
 	if (d1_14_read_clamped(p, page_base, page, D1_14_PAGE) != 0)
 	{
-		serial_print("[D1.14][PAGE] ");
-		serial_print(label);
-		serial_print(" read_fail base=");
-		serial_print_hex64(page_base);
-		serial_print("\n");
+		klog_debug_fmt("D1.14",
+			       "[D1.14][PAGE] %s read_fail base=%llx", label,
+			       (unsigned long long)page_base);
 		return;
 	}
 
-	serial_print("[D1.14][PAGE] ");
-	serial_print(label);
-	serial_print(" base=");
-	serial_print_hex64(page_base);
-	serial_print("\n");
+	klog_debug_fmt("D1.14", "[D1.14][PAGE] %s base=%llx", label,
+		       (unsigned long long)page_base);
 	d1_14_hex_line("[D1.14][PAGE_BYTES]", page, 64);
 
 	if (addr >= 16 && addr - 16 >= page_base)
@@ -271,23 +246,15 @@ void d1_13_malloc_pf_diag(struct process *p, uint64_t fault_addr, uint64_t rip,
 	if (rip < D1_14_MEMMOVE_LO || rip > D1_14_MEMMOVE_HI)
 		return;
 
-	serial_print("\n=== [D1.14][MALLOC_PF] ===\n");
-	serial_print("[D1.14][REGS] rip=");
-	serial_print_hex64(rip);
-	serial_print(" cr2=");
-	serial_print_hex64(fault_addr);
-	serial_print(" rdi=");
-	serial_print_hex64(rdi);
-	serial_print(" rsi=");
-	serial_print_hex64(rsi);
-	serial_print(" rdx=");
-	serial_print_hex64(rdx);
-	serial_print(" rcx=");
-	serial_print_hex64(rcx);
-	serial_print("\n");
+	klog_debug_fmt("D1.14", "=== [D1.14][MALLOC_PF] ===");
+	klog_debug_fmt("D1.14",
+		       "[D1.14][REGS] rip=%llx cr2=%llx rdi=%llx rsi=%llx rdx=%llx rcx=%llx",
+		       (unsigned long long)rip, (unsigned long long)fault_addr,
+		       (unsigned long long)rdi, (unsigned long long)rsi,
+		       (unsigned long long)rdx, (unsigned long long)rcx);
 
 	if (rip == 0x4422E3ULL)
-		serial_print("[D1.14][SITE] rep_movsq\n");
+		klog_debug_fmt("D1.14", "[D1.14][SITE] rep_movsq");
 
 	d1_14_dump_page(p, "rdi_page", rdi, rdx, rcx);
 	d1_14_dump_page(p, "rsi_page", rsi, rdx, rcx);
@@ -295,7 +262,7 @@ void d1_13_malloc_pf_diag(struct process *p, uint64_t fault_addr, uint64_t rip,
 	d1_14_dump_ptr_window(p, "rsi", rsi, rdx, rcx);
 
 	d1_12_read_diag_pf(p, rip, rdx, rsi, rdi);
-	serial_print("=== [D1.14][MALLOC_PF] end ===\n\n");
+	klog_debug_fmt("D1.14", "=== [D1.14][MALLOC_PF] end ===");
 }
 
 #else /* !CONFIG_KTM_MALLOC_FORENSICS */

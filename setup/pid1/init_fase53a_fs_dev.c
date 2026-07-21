@@ -162,7 +162,7 @@ static int check_devfs_null_zero(void)
 		return -1;
 	}
 	close(fd);
-	write_str("[FASE53A][CLASSIFY] DEVFS_NULL_OK\n");
+	write_str("[FASE53A] CLASSIFY DEVFS_NULL_OK\n");
 
 	fd = open("/dev/zero", O_RDONLY);
 	if (fd < 0)
@@ -185,7 +185,7 @@ static int check_devfs_null_zero(void)
 			return -1;
 		}
 	}
-	write_str("[FASE53A][CLASSIFY] DEVFS_ZERO_OK\n");
+	write_str("[FASE53A] CLASSIFY DEVFS_ZERO_OK\n");
 	return 0;
 }
 
@@ -229,7 +229,7 @@ static int check_tmpdir_rw(void)
 		return -1;
 	}
 
-	write_str("[FASE53A][CLASSIFY] TMPDIR_OK\n");
+	write_str("[FASE53A] CLASSIFY TMPDIR_OK\n");
 	return 0;
 }
 
@@ -253,7 +253,7 @@ static int check_chdir_pwd(void)
 		return -1;
 	}
 
-	write_str("[FASE53A][CLASSIFY] CWD_CHDIR_OK\n");
+	write_str("[FASE53A] CLASSIFY CWD_CHDIR_OK\n");
 	return 0;
 }
 
@@ -346,7 +346,7 @@ static int check_tcc_layout(void)
 		return -1;
 	}
 
-	write_str("[FASE53A][CLASSIFY] TCC_LAYOUT_NO_REGRESSION\n");
+	write_str("[FASE53A] CLASSIFY TCC_LAYOUT_NO_REGRESSION\n");
 	return 0;
 }
 
@@ -366,7 +366,7 @@ int main(void)
 	if (check_tcc_layout() != 0)
 		goto halt;
 
-	write_str("[FASE53A][CLASSIFY] FASE50_51_52_NO_REGRESSION\n");
+	write_str("[FASE53A] CLASSIFY FASE50_51_52_NO_REGRESSION\n");
 	write_str("FASE53A_OK\n");
 
 halt:

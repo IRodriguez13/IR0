@@ -656,6 +656,52 @@ static int int_to_string(int value, char *str, int base)
     return i;
 }
 
+/* Full-width unsigned — used by %u/%x and %l / %ll modifiers. */
+static int u64_to_string(uint64_t value, char *str, int base, int upper)
+{
+	static const char dig_lo[] = "0123456789abcdef";
+	static const char dig_up[] = "0123456789ABCDEF";
+	const char *dig = upper ? dig_up : dig_lo;
+	char rev[32];
+	int n = 0;
+	int i;
+
+	if (base < 2 || base > 16)
+		base = 10;
+
+	if (value == 0)
+	{
+		str[0] = '0';
+		str[1] = '\0';
+		return 1;
+	}
+
+	while (value > 0 && n < (int)sizeof(rev))
+	{
+		rev[n++] = dig[value % (uint64_t)base];
+		value /= (uint64_t)base;
+	}
+
+	for (i = 0; i < n; i++)
+		str[i] = rev[n - 1 - i];
+	str[n] = '\0';
+	return n;
+}
+
+static int i64_to_string(int64_t value, char *str)
+{
+	if (value < 0)
+	{
+		uint64_t mag = (value == (int64_t)((uint64_t)1 << 63))
+				   ? ((uint64_t)1 << 63)
+				   : (uint64_t)(-value);
+
+		str[0] = '-';
+		return 1 + u64_to_string(mag, str + 1, 10, 0);
+	}
+	return u64_to_string((uint64_t)value, str, 10, 0);
+}
+
 static int pointer_to_string(uintptr_t value, char *str)
 {
     const char *hex = "0123456789abcdef";
@@ -725,14 +771,38 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
                 format++;
             }
 
+            /* Length: l / ll (and z as size_t). Missing these → literal "lu"/"lx". */
+            int long_count = 0;
+            int is_size_t = 0;
+
+            if (*format == 'z')
+            {
+                is_size_t = 1;
+                format++;
+            }
+            else
+            {
+                while (*format == 'l' && long_count < 2)
+                {
+                    long_count++;
+                    format++;
+                }
+            }
+
             switch (*format)
             {
             case 'd':
             case 'i':
             {
-                int value = va_arg(ap, int);
                 char num_str[32];
-                int len = int_to_string(value, num_str, 10);
+                int len;
+
+                if (long_count >= 2)
+                    len = i64_to_string(va_arg(ap, long long), num_str);
+                else if (long_count == 1)
+                    len = i64_to_string((int64_t)va_arg(ap, long), num_str);
+                else
+                    len = int_to_string(va_arg(ap, int), num_str, 10);
                 while (width > len && remaining > 0)
                 {
                     *ptr++ = pad;
@@ -747,10 +817,19 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             }
             case 'u':
             {
-                unsigned int value = va_arg(ap, unsigned int);
                 char num_str[32];
-                /* Workaround for unsigned in int_to_string */
-                int len = int_to_string((int)value, num_str, 10);
+                uint64_t value;
+                int len;
+
+                if (is_size_t)
+                    value = (uint64_t)va_arg(ap, size_t);
+                else if (long_count >= 2)
+                    value = (uint64_t)va_arg(ap, unsigned long long);
+                else if (long_count == 1)
+                    value = (uint64_t)va_arg(ap, unsigned long);
+                else
+                    value = (uint64_t)va_arg(ap, unsigned int);
+                len = u64_to_string(value, num_str, 10, 0);
                 while (width > len && remaining > 0)
                 {
                     *ptr++ = pad;
@@ -766,9 +845,20 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
             case 'x':
             case 'X':
             {
-                unsigned int value = va_arg(ap, unsigned int);
                 char num_str[32];
-                int len = int_to_string((int)value, num_str, 16);
+                uint64_t value;
+                int upper = (*format == 'X');
+                int len;
+
+                if (is_size_t)
+                    value = (uint64_t)va_arg(ap, size_t);
+                else if (long_count >= 2)
+                    value = (uint64_t)va_arg(ap, unsigned long long);
+                else if (long_count == 1)
+                    value = (uint64_t)va_arg(ap, unsigned long);
+                else
+                    value = (uint64_t)va_arg(ap, unsigned int);
+                len = u64_to_string(value, num_str, 16, upper);
                 while (width > len && remaining > 0)
                 {
                     *ptr++ = pad;

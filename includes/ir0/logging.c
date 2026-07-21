@@ -18,6 +18,7 @@
 #include <stdarg.h>
 #include <ir0/serial_io.h>
 #include <ir0/clock.h>
+#include <ir0/klog.h>
 #include <ir0/kmem.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -67,61 +68,6 @@ static const char *get_level_string(log_level_t level)
     }
 }
 
-/* Helper function to format and print timestamp to serial */
-static void serial_print_timestamp(void)
-{
-    uint64_t uptime_ms = 0;
-    
-    /* Get uptime if clock system is initialized */
-    uptime_ms = clock_get_uptime_milliseconds();
-    
-    /* Format: [SSSS.mmm] where S = seconds, m = milliseconds */
-    uint64_t seconds = uptime_ms / 1000;
-    uint32_t milliseconds = (uint32_t)(uptime_ms % 1000);
-    
-    /* Convert seconds to string manually (simple approach for uint64_t) */
-    char sec_buffer[32];
-    uint64_t sec_temp = seconds;
-    int sec_len = 0;
-    
-    if (sec_temp == 0) 
-    {
-        sec_buffer[sec_len++] = '0';
-    } 
-    else 
-    {
-        /* Convert to string in reverse */
-        char rev_buffer[32];
-        int rev_len = 0;
-        
-        while (sec_temp > 0) 
-        {
-            rev_buffer[rev_len++] = '0' + (char)(sec_temp % 10);
-            sec_temp /= 10;
-        }
-        /* Reverse it */
-        for (int i = rev_len - 1; i >= 0; i--) 
-        {
-            sec_buffer[sec_len++] = rev_buffer[i];
-        }
-    }
-    sec_buffer[sec_len] = '\0';
-    
-    serial_print("[");
-    serial_print(sec_buffer);
-    serial_print(".");
-    
-    /* Print milliseconds with leading zeros (3 digits) */
-    char ms_str[4];
-    ms_str[0] = '0' + (char)((milliseconds / 100) % 10);
-    ms_str[1] = '0' + (char)((milliseconds / 10) % 10);
-    ms_str[2] = '0' + (char)(milliseconds % 10);
-    ms_str[3] = '\0';
-    
-    serial_print(ms_str);
-    serial_print("] ");
-}
-
 /* PUBLIC FUNCTIONS */
 
 void logging_init(void)
@@ -138,12 +84,8 @@ void logging_init(void)
     {
         /* If allocation fails, logging will still work but buffer won't */
         log_buffer = NULL;
-        /* Log to serial that buffer allocation failed */
-        serial_print("[LOGGING] Warning: Failed to allocate log buffer (size: ");
-        char buf[32];
-        itoa((int)buffer_size, buf, 10);
-        serial_print(buf);
-        serial_print(" bytes)\n");
+        klog_warn_fmt("LOGGING", "Failed to allocate log buffer (size: %u bytes)",
+                      (unsigned)buffer_size);
     }
     else
     {
@@ -151,11 +93,8 @@ void logging_init(void)
         log_buffer_head = 0;
         log_buffer_count = 0;
         log_buffer_wrapped = false;
-        serial_print("[LOGGING] Log buffer allocated successfully (");
-        char buf[32];
-        itoa(LOG_BUFFER_MAX_ENTRIES, buf, 10);
-        serial_print(buf);
-        serial_print(" entries)\n");
+        klog_info_fmt("LOGGING", "Log buffer allocated successfully (%u entries)",
+                      (unsigned)LOG_BUFFER_MAX_ENTRIES);
     }
 
     current_log_level = LOG_LEVEL_INFO;
@@ -165,6 +104,7 @@ void logging_init(void)
 void logging_set_level(log_level_t level)
 {
     current_log_level = level;
+    klog_set_level((klog_level_t)level);
 }
 
 log_level_t logging_get_level(void)
@@ -218,16 +158,8 @@ void log_message(log_level_t level, const char *component, const char *message)
         }
     }
 
-    /* All logs go to serial only - VGA output disabled for cleaner output */
-    /* Always output to serial for debugging (with timestamp) */
-    serial_print_timestamp();
-    serial_print("[");
-    serial_print(get_level_string(level));
-    serial_print("] [");
-    serial_print(component);
-    serial_print("] ");
-    serial_print(message);
-    serial_print("\n");
+    /* Human channel via klog (honest timestamps; optional KTM mirror). */
+    klog_emit((klog_level_t)level, component, message);
 }
 
 void log_debug(const char *component, const char *message)

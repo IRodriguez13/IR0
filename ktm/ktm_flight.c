@@ -15,7 +15,7 @@
 #include <ktm.h>
 #include <config.h>
 #include <ir0/process.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <stdint.h>
 
 #if defined(CONFIG_KTM_FLIGHT) && CONFIG_KTM_FLIGHT
@@ -94,7 +94,6 @@ void ktm_flight_dump_last(uint32_t max_events)
 	uint32_t count;
 	uint32_t start_seq;
 	uint32_t i;
-	uint32_t cap;
 
 	if (ktm_flight_head == 0)
 		return;
@@ -108,12 +107,8 @@ void ktm_flight_dump_last(uint32_t max_events)
 
 	start_seq = ktm_flight_seq - count + 1;
 
-	serial_print("\n--- KTM FLIGHT RECORDER (last ");
-	serial_print_hex32(count);
-	serial_print(" events");
-	if (max_events > 0)
-		serial_print(", capped");
-	serial_print(") ---\n");
+	klog_debug_fmt("KTM", "--- KTM FLIGHT RECORDER (last %x events%s) ---",
+		       (unsigned)count, max_events > 0 ? ", capped" : "");
 
 	for (i = 0; i < count; i++)
 	{
@@ -121,26 +116,15 @@ void ktm_flight_dump_last(uint32_t max_events)
 		uint32_t idx = (ktm_flight_head - count + i) % KTM_FLIGHT_CAP;
 		const struct ktm_flight_entry *e = &ktm_flight_ring[idx];
 
-		serial_print("[");
-		serial_print_hex32(seq);
-		serial_print("] cpu");
-		serial_print_hex32((uint32_t)e->cpu);
-		serial_print(" pid=");
-		serial_print_hex32(e->pid);
-		serial_print(" ");
-		serial_print(ktm_flight_type_name(e->type));
-		serial_print(" a0=");
-		serial_print_hex32(e->a0);
-		serial_print(" a1=");
-		serial_print_hex32(e->a1);
-		serial_print(" a2=");
-		serial_print_hex32(e->a2);
-		serial_print(" a3=");
-		serial_print_hex32(e->a3);
-		serial_print("\n");
+		klog_debug_fmt("KTM",
+			       "[%x] cpu%x pid=%x %s a0=%x a1=%x a2=%x a3=%x",
+			       (unsigned)seq, (unsigned)(uint32_t)e->cpu,
+			       (unsigned)e->pid, ktm_flight_type_name(e->type),
+			       (unsigned)e->a0, (unsigned)e->a1, (unsigned)e->a2,
+			       (unsigned)e->a3);
 	}
 
-	serial_print("--- END KTM FLIGHT RECORDER ---\n");
+	klog_debug_fmt("KTM", "--- END KTM FLIGHT RECORDER ---");
 }
 
 #else /* !CONFIG_KTM_FLIGHT */

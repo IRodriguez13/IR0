@@ -12,6 +12,7 @@
 
 #include <ir0/ktm/event.h>
 #include <ir0/ktm/transport.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/ktm/probe.h>
 #include <ir0/ktm/snapshot.h>
 #include <ir0/ktm/assert.h>

@@ -21,7 +21,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/process.h>
 #include <ir0/paging.h>
@@ -32,6 +32,7 @@
 #include <string.h>
 
 #include <ir0/fb.h>
+#include <ir0/memfd.h>
 #include <ir0/validation.h>
 #include <stdint.h>
 
@@ -327,7 +328,8 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	proc->mmap_list = region;
 	KTM_CHECKPOINT(KTM_CP_MM_MAP);
 
-	serial_print("[MMAP_AUDIT][CLASSIFY] FILE_MMAP_PRIVATE_OK\n");
+	if (DEBUG_MMAP_AUDIT)
+		klog_debug("MMAP", "CLASSIFY FILE_MMAP_PRIVATE_OK");
 	return (void *)virt_addr;
 }
 
@@ -376,15 +378,23 @@ int64_t sys_brk(void *addr)
 	if (new_brk > heap_lo + USER_HEAP_MAX_SIZE)
 		return -EFAULT;
 
-	/* If expanding heap, map new pages. */
+	/* If expanding heap, map only pages past the current break.
+	 * Align start UP: aligning down would remap the partially used
+	 * page that already holds heap/TLS (glibc TCB) with a fresh zero
+	 * frame and wipe thread-local state.
+	 */
 	if (new_brk > current_brk)
 	{
-		uintptr_t start_page = current_brk & (uintptr_t)PAGE_FRAME_MASK;
-		uintptr_t end_page = (new_brk + 0xFFF) & ~0xFFF;
-		size_t size_to_map = end_page - start_page;
+		uintptr_t start_page =
+			(current_brk + PAGE_SIZE_4KB - 1) &
+			(uintptr_t)PAGE_FRAME_MASK;
+		uintptr_t end_page = (new_brk + PAGE_SIZE_4KB - 1) &
+				     (uintptr_t)PAGE_FRAME_MASK;
+		size_t size_to_map;
 
-		if (size_to_map > 0)
+		if (end_page > start_page)
 		{
+			size_to_map = end_page - start_page;
 			if (map_user_region_in_directory(current_process->page_directory,
 							 start_page, size_to_map,
 							 PAGE_RW) != 0)
@@ -437,26 +447,29 @@ static void mmap_audit_log_pte(const char *tag, uint64_t *pml4, uintptr_t va)
   mapped = is_page_mapped_in_directory(pml4, va, &pte_flags);
   pte = paging_get_pte(pml4, va);
 
-  serial_print("[MMAP_AUDIT][PTE] tag=");
-  serial_print(tag ? tag : "(null)");
-  serial_print(" va=");
-  serial_print_hex64((uint64_t)va);
-  serial_print(" mapped=");
-  serial_print_hex64((uint64_t)(mapped > 0 ? 1 : 0));
-  serial_print(" present=");
-  serial_print_hex64((uint64_t)(pte && (*pte & PAGE_PRESENT) ? 1 : 0));
-  serial_print(" user=");
-  serial_print_hex64((uint64_t)(pte_flags & PAGE_USER ? 1 : 0));
-  serial_print(" rw=");
-  serial_print_hex64((uint64_t)(pte_flags & PAGE_RW ? 1 : 0));
-  serial_print(" nx=");
-  serial_print_hex64((uint64_t)(pte && (*pte & PAGE_NX) ? 1 : 0));
   if (pte && (*pte & PAGE_PRESENT))
   {
-    serial_print(" pfn=");
-    serial_print_hex64((uint64_t)(*pte & PAGE_PTE_PFN_MASK));
+    klog_debug_fmt("MMAP", "PTE tag=%s va=%llx mapped=%llx present=%llx "
+                   "user=%llx rw=%llx nx=%llx pfn=%llx",
+                   tag ? tag : "(null)", (unsigned long long)((uint64_t)va),
+                   (unsigned long long)((uint64_t)(mapped > 0 ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte && (*pte & PAGE_PRESENT) ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte_flags & PAGE_USER ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte_flags & PAGE_RW ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte && (*pte & PAGE_NX) ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(*pte & PAGE_PTE_PFN_MASK)));
   }
-  serial_print("\n");
+  else
+  {
+    klog_debug_fmt("MMAP", "PTE tag=%s va=%llx mapped=%llx present=%llx "
+                   "user=%llx rw=%llx nx=%llx",
+                   tag ? tag : "(null)", (unsigned long long)((uint64_t)va),
+                   (unsigned long long)((uint64_t)(mapped > 0 ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte && (*pte & PAGE_PRESENT) ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte_flags & PAGE_USER ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte_flags & PAGE_RW ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte && (*pte & PAGE_NX) ? 1 : 0)));
+  }
 }
 
 static void mmap_audit_log_args(void *addr, size_t length, int prot, int flags,
@@ -464,38 +477,43 @@ static void mmap_audit_log_args(void *addr, size_t length, int prot, int flags,
 {
   if (!DEBUG_MMAP_AUDIT)
     return;
-  serial_print("[MMAP_AUDIT][ARGS] classify=MMAP_ARGS_DECODED pid=");
-  serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
-  serial_print(" comm=");
-  serial_print(current_process ? current_process->comm : "(none)");
-  serial_print(" addr=");
-  serial_print_hex64((uint64_t)(uintptr_t)addr);
-  serial_print(" length=");
-  serial_print_hex64((uint64_t)length);
-  serial_print(" prot=");
-  serial_print_hex64((uint64_t)(unsigned int)prot);
-  serial_print(" flags=");
-  serial_print_hex64((uint64_t)(unsigned int)flags);
-  serial_print(" fd=");
-  serial_print_hex64((uint64_t)(unsigned int)fd);
-  serial_print(" offset=");
-  serial_print_hex64((uint64_t)offset);
   if (current_process)
   {
-    serial_print(" caller_rip=");
-    serial_print_hex64(current_process->syscall_frame.rip);
-    serial_print(" caller_rsp=");
-    serial_print_hex64(current_process->syscall_frame.rsp);
+    klog_debug_fmt("MMAP", "ARGS classify=MMAP_ARGS_DECODED pid=%x comm=%s "
+                   "addr=%llx length=%llx prot=%llx flags=%llx fd=%llx offset=%llx "
+                   "caller_rip=%llx caller_rsp=%llx",
+                   (unsigned)(current_process ? (uint32_t)current_process->task.pid : 0),
+                   current_process ? current_process->comm : "(none)",
+                   (unsigned long long)((uint64_t)(uintptr_t)addr),
+                   (unsigned long long)((uint64_t)length),
+                   (unsigned long long)((uint64_t)(unsigned int)prot),
+                   (unsigned long long)((uint64_t)(unsigned int)flags),
+                   (unsigned long long)((uint64_t)(unsigned int)fd),
+                   (unsigned long long)((uint64_t)offset),
+                   (unsigned long long)(current_process->syscall_frame.rip),
+                   (unsigned long long)(current_process->syscall_frame.rsp));
   }
-  serial_print("\n");
+  else
+  {
+    klog_debug_fmt("MMAP", "ARGS classify=MMAP_ARGS_DECODED pid=%x comm=%s "
+                   "addr=%llx length=%llx prot=%llx flags=%llx fd=%llx offset=%llx",
+                   (unsigned)(current_process ? (uint32_t)current_process->task.pid : 0),
+                   current_process ? current_process->comm : "(none)",
+                   (unsigned long long)((uint64_t)(uintptr_t)addr),
+                   (unsigned long long)((uint64_t)length),
+                   (unsigned long long)((uint64_t)(unsigned int)prot),
+                   (unsigned long long)((uint64_t)(unsigned int)flags),
+                   (unsigned long long)((uint64_t)(unsigned int)fd),
+                   (unsigned long long)((uint64_t)offset));
+  }
 
   if ((flags & MAP_SHARED) != 0 && (flags & MAP_PRIVATE) != 0)
   {
-    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_UNSUPPORTED_FLAGS reason=MAP_SHARED_and_MAP_PRIVATE\n");
+    klog_debug("MMAP", "CLASSIFY MMAP_UNSUPPORTED_FLAGS reason=MAP_SHARED_and_MAP_PRIVATE");
   }
   if (!(flags & MAP_ANONYMOUS) && fd < 0)
   {
-    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_UNSUPPORTED_FLAGS reason=file_map_without_fd\n");
+    klog_debug("MMAP", "CLASSIFY MMAP_UNSUPPORTED_FLAGS reason=file_map_without_fd");
   }
 }
 
@@ -509,27 +527,16 @@ static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_a
   if (!DEBUG_MMAP_AUDIT)
     return;
 
-  serial_print("[MMAP_AUDIT][RET] stage=");
-  serial_print(stage ? stage : "(null)");
-  serial_print(" ret=");
-  serial_print_hex64((uint64_t)(uintptr_t)ret);
+  klog_debug_fmt("MMAP", "RET stage=%s ret=%llx", stage ? stage : "(null)", (unsigned long long)((uint64_t)(uintptr_t)ret));
   if (mmap_audit_ptr_err(ret))
   {
-    serial_print(" errno=");
-    serial_print_hex64((uint64_t)(unsigned int)mmap_audit_errno_from_ret(ret));
+    klog_debug_fmt("KERN", " errno=%llx", (unsigned long long)((uint64_t)(unsigned int)mmap_audit_errno_from_ret(ret)));
   }
   else
   {
-    serial_print(" range=[");
-    serial_print_hex64((uint64_t)virt_addr);
-    serial_print(",");
-    serial_print_hex64((uint64_t)(virt_addr + length));
-    serial_print(") pages=");
-    serial_print_hex64((uint64_t)pages);
+    klog_debug_fmt("KERN", " range=[%llx,%llx) pages=%llx", (unsigned long long)((uint64_t)virt_addr), (unsigned long long)((uint64_t)(virt_addr + length)), (unsigned long long)((uint64_t)pages));
   }
-  serial_print(" vma_inserted=");
-  serial_print_hex64((uint64_t)(unsigned int)vma_inserted);
-  serial_print("\n");
+  klog_debug_fmt("KERN", " vma_inserted=%llx", (unsigned long long)((uint64_t)(unsigned int)vma_inserted));
 
   if (mmap_audit_ptr_err(ret) || !pml4 || virt_addr == 0 || length == 0)
     return;
@@ -541,19 +548,15 @@ static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_a
       mapped_pages++;
   }
 
-  serial_print("[MMAP_AUDIT][RET] pte_mapped_pages=");
-  serial_print_hex64((uint64_t)mapped_pages);
-  serial_print(" pte_expected_pages=");
-  serial_print_hex64((uint64_t)pages);
-  serial_print("\n");
+  klog_debug_fmt("MMAP", "RET pte_mapped_pages=%llx pte_expected_pages=%llx", (unsigned long long)((uint64_t)mapped_pages), (unsigned long long)((uint64_t)pages));
 
   if (mapped_pages == 0)
   {
-    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_VMA_WITHOUT_PTES\n");
+    klog_debug("MMAP", "CLASSIFY MMAP_VMA_WITHOUT_PTES");
   }
   else if (mapped_pages < pages)
   {
-    serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_RET_UNMAPPED_RANGE\n");
+    klog_debug("MMAP", "CLASSIFY MMAP_RET_UNMAPPED_RANGE");
   }
 
   mmap_audit_log_pte("first", pml4, virt_addr);
@@ -568,11 +571,11 @@ static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_a
     {
       if (!(flags_low & PAGE_USER))
       {
-        serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_PTE_PERMISSION_BAD reason=missing_PAGE_USER\n");
+        klog_debug("MMAP", "CLASSIFY MMAP_PTE_PERMISSION_BAD reason=missing_PAGE_USER");
       }
       if (!(flags_low & PAGE_RW))
       {
-        serial_print("[MMAP_AUDIT][CLASSIFY] MMAP_PTE_PERMISSION_BAD reason=missing_PAGE_RW\n");
+        klog_debug("MMAP", "CLASSIFY MMAP_PTE_PERMISSION_BAD reason=missing_PAGE_RW");
       }
     }
   }
@@ -597,10 +600,9 @@ static void fase39_dump_current_vmas(const char *tag)
   for (r = current_process->mmap_list; r; r = r->next)
   {
     if ((r->flags & MAP_ANONYMOUS) != 0)
-      serial_print("anonymous");
+      klog_debug("KERN", "anonymous");
     else
-      serial_print("fd-backed-or-device");
-    serial_print("\n");
+      klog_debug("KERN", "fd-backed-or-device");
   }
 }
 
@@ -615,7 +617,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
   if (!current_process)
   {
-    serial_print("SERIAL: mmap: no current process\n");
+    klog_debug("KERN", "SERIAL: mmap: no current process\n");
     ret = (void *)(intptr_t)-ESRCH;
     mmap_audit_log_return("no-process", ret, 0, 0, 0, NULL);
     return ret;
@@ -623,7 +625,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
   if (length == 0)
   {
-    serial_print("SERIAL: mmap: zero length\n");
+    klog_debug("KERN", "SERIAL: mmap: zero length\n");
     ret = SYSCALL_PTR_ERR(EINVAL);
     mmap_audit_log_return("zero-length", ret, 0, 0, 0, current_process->page_directory);
     return ret;
@@ -631,7 +633,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
   if (length > (USER_MMAP_END - USER_MMAP_START) || length > (1UL << 28))
   {
-    serial_print("SERIAL: mmap: length exceeds user mmap arena\n");
+    klog_debug("KERN", "SERIAL: mmap: length exceeds user mmap arena\n");
     ret = SYSCALL_PTR_ERR(EINVAL);
     mmap_audit_log_return("length-too-large", ret, 0, 0, 0,
                           current_process->page_directory);
@@ -641,7 +643,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   /* Validate protection flags */
   if ((prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
   {
-    serial_print("SERIAL: mmap: invalid protection flags\n");
+    klog_debug("KERN", "SERIAL: mmap: invalid protection flags\n");
     ret = SYSCALL_PTR_ERR(EINVAL);
     mmap_audit_log_return("bad-prot", ret, 0, 0, 0, current_process->page_directory);
     return ret;
@@ -652,14 +654,14 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   {
     if (fd < 0)
     {
-      serial_print("SERIAL: mmap: file mapping requires valid fd\n");
+      klog_debug("KERN", "SERIAL: mmap: file mapping requires valid fd\n");
       return SYSCALL_PTR_ERR(EBADF);
     }
     
     /* Offset must be page-aligned for file mappings */
     if (offset % PAGE_SIZE_4KB != 0)
     {
-      serial_print("SERIAL: mmap: offset must be page-aligned\n");
+      klog_debug("KERN", "SERIAL: mmap: offset must be page-aligned\n");
       return SYSCALL_PTR_ERR(EINVAL);
     }
 
@@ -674,7 +676,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
       if (!fd_valid_open)
       {
-        serial_print("SERIAL: mmap: invalid fd for file-backed mmap\n");
+        klog_debug("KERN", "SERIAL: mmap: invalid fd for file-backed mmap\n");
         ret = SYSCALL_PTR_ERR(EBADF);
         mmap_audit_log_return("bad-fd", ret, 0, 0, 0,
                               current_process->page_directory);
@@ -805,13 +807,13 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
           if (fb_mmap_devfs && !s_fb_mmap_devfs_tag)
           {
             s_fb_mmap_devfs_tag = 1;
-            serial_print("FB_MMAP_DEVFS_FD_OK\n");
-            serial_print("DEVFB0_MMAP_REAL_FD_OK\n");
+            klog_smoke("FB_MMAP_DEVFS_FD_OK");
+            klog_smoke("DEVFB0_MMAP_REAL_FD_OK");
           }
           if (!s_fb_mmap_ok_tag)
           {
             s_fb_mmap_ok_tag = 1;
-            serial_print("FB_MMAP_OK\n");
+            klog_smoke("FB_MMAP_OK");
           }
           if ((flags & MAP_SHARED) != 0)
           {
@@ -820,7 +822,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
             if (!s_fb_map_shared_tag)
             {
               s_fb_map_shared_tag = 1;
-              serial_print("FB_MAP_SHARED_OK\n");
+              klog_smoke("FB_MAP_SHARED_OK");
             }
           }
         }
@@ -831,9 +833,92 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
       (void)device_id;
 #endif
     }
-    
+
+    /* memfd_create fd: MAP_SHARED (or MAP_PRIVATE copy-like via shared frames). */
+    {
+      fd_entry_t *fd_table = get_process_fd_table();
+
+      if (fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table &&
+	  fd_table[fd].in_use && fd_table[fd].is_memfd && fd_table[fd].vfs_file)
+      {
+	struct ir0_memfd *m = (struct ir0_memfd *)fd_table[fd].vfs_file;
+	size_t map_len;
+	uintptr_t virt_addr = 0;
+	uint64_t page_flags;
+	int mapped_len;
+	struct mmap_region *region;
+
+	if ((flags & MAP_SHARED) == 0 && (flags & MAP_PRIVATE) == 0)
+	  return SYSCALL_PTR_ERR(EINVAL);
+	if (ir0_memfd_size(m) == 0)
+	  return SYSCALL_PTR_ERR(EINVAL);
+
+	map_len = length;
+	map_len = (map_len + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
+	if (map_len == 0)
+	  return SYSCALL_PTR_ERR(EINVAL);
+
+	if (addr != NULL)
+	{
+	  uintptr_t hint_addr = (uintptr_t)addr;
+
+	  if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
+	    return SYSCALL_PTR_ERR(EINVAL);
+	  if (!is_user_address(addr, map_len))
+	    return SYSCALL_PTR_ERR(EFAULT);
+	  if (is_page_mapped_in_directory(current_process->page_directory,
+					  hint_addr, NULL) == 1)
+	    return SYSCALL_PTR_ERR(EINVAL);
+	  virt_addr = hint_addr;
+	}
+	else
+	{
+	  virt_addr = mm_pick_free_va_topdown(current_process,
+					      current_process->page_directory,
+					      map_len);
+	  if (virt_addr == 0)
+	    return SYSCALL_PTR_ERR(ENOMEM);
+	}
+
+	page_flags = PAGE_USER;
+	if (prot & PROT_WRITE)
+	  page_flags |= PAGE_RW;
+	mapped_len = ir0_memfd_mmap(m, current_process->page_directory, virt_addr,
+				    map_len, offset, page_flags);
+	if (mapped_len < 0)
+	  return SYSCALL_PTR_ERR(-mapped_len);
+	map_len = (size_t)mapped_len;
+
+	region = kmalloc_try(sizeof(struct mmap_region));
+	if (!region)
+	{
+	  for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
+	    unmap_page_in_directory(current_process->page_directory,
+				    virt_addr + off);
+	  return SYSCALL_PTR_ERR(ENOMEM);
+	}
+	region->addr = (void *)virt_addr;
+	region->hint_addr = addr;
+	region->length = map_len;
+	region->prot = prot;
+	region->flags = flags;
+	region->next = current_process->mmap_list;
+	current_process->mmap_list = region;
+	{
+	  static int s_memfd_map_ok;
+
+	  if (!s_memfd_map_ok)
+	  {
+	    s_memfd_map_ok = 1;
+	    klog_smoke("MEMFD_MAP_SHARED_OK");
+	  }
+	}
+	return (void *)virt_addr;
+      }
+    }
+
     /* File-based mapping not yet implemented for other files */
-    serial_print("SERIAL: mmap: file-based mapping not yet implemented\n");
+    klog_debug("KERN", "SERIAL: mmap: file-based mapping not yet implemented\n");
     return SYSCALL_PTR_ERR(ENOSYS);
   }
 
@@ -917,7 +1002,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   {
     if (map_user_region_in_directory(current_process->page_directory, virt_addr, length, page_flags) != 0)
     {
-      serial_print("SERIAL: mmap: failed to map pages\n");
+      klog_debug("KERN", "SERIAL: mmap: failed to map pages\n");
       ret = SYSCALL_PTR_ERR(ENOMEM);
       mmap_audit_log_return("map-failed", ret, virt_addr, aligned_len, 0,
                             current_process->page_directory);
@@ -941,9 +1026,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   }
   else if (DEBUG_MMAP_AUDIT)
   {
-    serial_print("[MMAP_AUDIT][RESERVE] stage=vma-only prot_none anon len=");
-    serial_print_hex64((uint64_t)aligned_len);
-    serial_print("\n");
+    klog_debug_fmt("MMAP", "RESERVE stage=vma-only prot_none anon len=%llx", (unsigned long long)((uint64_t)aligned_len));
   }
 
   /*
@@ -956,15 +1039,15 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   {
     if (prot == PROT_NONE)
     {
-      serial_print("[MMAP_AUDIT][ZERO] stage=skipped reason=prot_none\n");
+      klog_debug("MMAP", "ZERO stage=skipped reason=prot_none");
     }
     else if (prot & PROT_WRITE)
     {
-      serial_print("[MMAP_AUDIT][ZERO] stage=phys-prezeroed-in-map_user_region\n");
+      klog_debug("MMAP", "ZERO stage=phys-prezeroed-in-map_user_region");
     }
     else
     {
-      serial_print("[MMAP_AUDIT][ZERO] stage=skipped reason=no_prot_write\n");
+      klog_debug("MMAP", "ZERO stage=skipped reason=no_prot_write");
     }
   }
 
@@ -999,7 +1082,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   mmap_audit_log_return("ok", ret, virt_addr_out, aligned_len, vma_inserted,
                         current_process->page_directory);
   if (DEBUG_MMAP_AUDIT)
-    serial_print("[MMAP_AUDIT][CLASSIFY] BUSYBOX_NEXT_SYSCALL_REACHED stage=mmap-return-ok\n");
+    klog_debug("MMAP", "CLASSIFY BUSYBOX_NEXT_SYSCALL_REACHED stage=mmap-return-ok");
   return ret;
 }
 
@@ -1061,10 +1144,12 @@ int sys_munmap(void *addr, size_t length)
 int sys_mprotect(void *addr, size_t len, int prot)
 {
   struct mmap_region *current;
+  struct mmap_region *matched = NULL;
   uintptr_t range_start;
   uintptr_t range_end;
   uint64_t *pml4;
   uint64_t map_flags;
+  int saw_present = 0;
 
   if (!current_process)
     return -ESRCH;
@@ -1077,72 +1162,76 @@ int sys_mprotect(void *addr, size_t len, int prot)
   if (!is_user_address(addr, len))
     return -EFAULT;
 
-  /* Find the mapping */
+  /*
+   * Linux allows mprotect on any mapped VA (including ELF LOAD segments).
+   * IR0 mmap_list only tracks sys_mmap regions — fall through to PTE walk so
+   * glibc/musl RELRO (mprotect → PROT_READ after load) works for exec images.
+   */
   current = current_process->mmap_list;
   while (current)
   {
     if (current->addr <= addr &&
         (char *)addr + len <= (char *)current->addr + current->length)
     {
-      current->prot = prot;
-
-      range_start = (uintptr_t)addr & (uintptr_t)PAGE_FRAME_MASK;
-      range_end = (((uintptr_t)addr + len) + PAGE_SIZE_4KB - 1) & (uintptr_t)PAGE_FRAME_MASK;
-      pml4 = current_process->page_directory;
-
-      /*
-       * map_page_in_directory() sets PTE present bit and applies PAGE_NX
-       * when PAGE_EXEC is absent (matches PAGE_NX if !(prot & PROT_EXEC)).
-       */
-      map_flags = PAGE_USER;
-      if (prot & PROT_WRITE)
-        map_flags |= PAGE_RW;
-      if (prot & PROT_EXEC)
-        map_flags |= PAGE_EXEC;
-
-      for (uintptr_t page = range_start; page < range_end; page += PAGE_SIZE_4KB)
-      {
-        uint64_t *pte;
-        uint64_t phys;
-
-        pte = paging_get_pte(pml4, page);
-        if (!pte || !(*pte & PAGE_PRESENT))
-        {
-          phys = pmm_alloc_frame();
-          if (phys == 0)
-            return -ENOMEM;
-          if (map_page_in_directory(pml4, page, phys, map_flags) != 0)
-          {
-            pmm_free_frame(phys);
-            return -ENOMEM;
-          }
-          {
-            uint64_t old_cr3 = get_current_page_directory();
-
-            load_page_directory((uint64_t)pml4);
-            memset((void *)page, 0, PAGE_SIZE_4KB);
-            load_page_directory(old_cr3);
-          }
-          arch_tlb_invalidate_page((uintptr_t)page);
-          continue;
-        }
-
-        phys = *pte & PAGE_FRAME_MASK;
-        if (map_page_in_directory(pml4, page, phys, map_flags) != 0)
-          return -ENOMEM;
-
-        /*
-         * map_page_in_directory() intentionally skips TLB invalidate (foreign
-         * address spaces under kernel root). mprotect changes permissions of an
-         * EXISTING mapping in the CURRENT process, so flush the local TLB entry.
-         */
-        arch_tlb_invalidate_page((uintptr_t)page);
-      }
-
-      return 0;
+      matched = current;
+      break;
     }
     current = current->next;
   }
 
-  return -EINVAL; /* Not found */
+  range_start = (uintptr_t)addr & (uintptr_t)PAGE_FRAME_MASK;
+  range_end = (((uintptr_t)addr + len) + PAGE_SIZE_4KB - 1) & (uintptr_t)PAGE_FRAME_MASK;
+  pml4 = current_process->page_directory;
+
+  map_flags = PAGE_USER;
+  if (prot & PROT_WRITE)
+    map_flags |= PAGE_RW;
+  if (prot & PROT_EXEC)
+    map_flags |= PAGE_EXEC;
+
+  for (uintptr_t page = range_start; page < range_end; page += PAGE_SIZE_4KB)
+  {
+    uint64_t *pte;
+    uint64_t phys;
+
+    pte = paging_get_pte(pml4, page);
+    if (!pte || !(*pte & PAGE_PRESENT))
+    {
+      /* Gaps only OK when covering a known mmap region (lazy anon). */
+      if (!matched)
+        continue;
+      phys = pmm_alloc_frame();
+      if (phys == 0)
+        return -ENOMEM;
+      if (map_page_in_directory(pml4, page, phys, map_flags) != 0)
+      {
+        pmm_free_frame(phys);
+        return -ENOMEM;
+      }
+      {
+        uint64_t old_cr3 = get_current_page_directory();
+
+        load_page_directory((uint64_t)pml4);
+        memset((void *)page, 0, PAGE_SIZE_4KB);
+        load_page_directory(old_cr3);
+      }
+      tlb_invalidate_page((uintptr_t)page);
+      saw_present = 1;
+      continue;
+    }
+
+    saw_present = 1;
+    phys = *pte & PAGE_FRAME_MASK;
+    if (map_page_in_directory(pml4, page, phys, map_flags) != 0)
+      return -ENOMEM;
+    tlb_invalidate_page((uintptr_t)page);
+  }
+
+  if (!saw_present)
+    return -ENOMEM; /* Linux: no mapping in range → typically ENOMEM */
+
+  if (matched)
+    matched->prot = prot;
+
+  return 0;
 }

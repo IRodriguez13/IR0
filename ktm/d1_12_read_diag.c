@@ -16,7 +16,7 @@
 #include <ir0/ash_smoke.h>
 #include <ir0/copy_user.h>
 #include <ir0/process.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 #define D1_12_MAGIC_LEN  0x1AF43FUL
@@ -65,23 +65,15 @@ static int d1_12_target(struct process *p)
 
 static void d1_12_hex_preview(const char *tag, const uint8_t *buf, size_t len)
 {
+	char line[256];
+	size_t off;
 	size_t i;
-	static const char hex[] = "0123456789ABCDEF";
 
-	serial_print(tag);
-	for (i = 0; i < len && i < D1_12_PREVIEW; i++)
-	{
-		serial_print(" ");
-		{
-			char out[3];
-
-			out[0] = hex[(buf[i] >> 4) & 0xF];
-			out[1] = hex[buf[i] & 0xF];
-			out[2] = '\0';
-			serial_print(out);
-		}
-	}
-	serial_print("\n");
+	off = (size_t)snprintf(line, sizeof(line), "%s", tag);
+	for (i = 0; i < len && i < D1_12_PREVIEW && off + 4 < sizeof(line); i++)
+		off += (size_t)snprintf(line + off, sizeof(line) - off, " %02x",
+					buf[i]);
+	klog_debug_fmt("D1.12", "%s", line);
 }
 
 static void d1_12_read_user_preview(struct process *p, uintptr_t buf,
@@ -101,7 +93,7 @@ static void d1_12_read_user_preview(struct process *p, uintptr_t buf,
 	if (copy_from_user(tmp, (const void *)buf, n) == 0)
 		d1_12_hex_preview("[D1.12][USER_AFTER]", tmp, n);
 	else
-		serial_print("[D1.12][USER_AFTER] copy_fail\n");
+		klog_debug_fmt("D1.12", "[D1.12][USER_AFTER] copy_fail");
 }
 
 void d1_12_read_diag_syscall_pre(struct process *p, int fd, uintptr_t buf,
@@ -137,21 +129,14 @@ void d1_12_read_diag_syscall_pre(struct process *p, int fd, uintptr_t buf,
 	if (p->comm[0] == 's' && p->comm[1] == 'h' && p->comm[2] == '\0')
 		d1_12_last_sh = d1_12_last;
 
-	serial_print("\n[D1.12][READ_PRE] seq=");
-	serial_print_hex32(d1_12_last.seq);
-	serial_print(" pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" fd=");
-	serial_print_hex64((uint64_t)fd);
-	serial_print(" buf=");
-	serial_print_hex64((uint64_t)buf);
-	serial_print(" count=");
-	serial_print_hex64((uint64_t)count);
-	serial_print(" rip=");
-	serial_print_hex64(rip);
-	serial_print(" frame_rdx=");
-	serial_print_hex64(sf->rdx);
-	serial_print("\n");
+	klog_debug_fmt("D1.12",
+		       "[D1.12][READ_PRE] seq=%x pid=%x fd=%llx buf=%llx count=%llx rip=%llx frame_rdx=%llx",
+		       (unsigned)d1_12_last.seq, (unsigned)(uint32_t)p->task.pid,
+		       (unsigned long long)(uint64_t)fd,
+		       (unsigned long long)(uint64_t)buf,
+		       (unsigned long long)(uint64_t)count,
+		       (unsigned long long)rip,
+		       (unsigned long long)sf->rdx);
 }
 
 void d1_12_read_diag_kcopy(int64_t ret, size_t req_count,
@@ -173,17 +158,13 @@ void d1_12_read_diag_kcopy(int64_t ret, size_t req_count,
 		memcpy(d1_12_last.kpreview, kbuf, n);
 	}
 
-	serial_print("[D1.12][TTY_KCOPY] seq=");
-	serial_print_hex32(d1_12_last.seq);
-	serial_print(" req=");
-	serial_print_hex64((uint64_t)req_count);
-	serial_print(" ret=");
-	serial_print_hex64((uint64_t)ret);
-	serial_print(" kcopy=");
-	serial_print_hex64((uint64_t)kcopy_len);
-	if (kcopy_len > req_count)
-		serial_print(" OVER_COUNT=1");
-	serial_print("\n");
+	klog_debug_fmt("D1.12",
+		       "[D1.12][TTY_KCOPY] seq=%x req=%llx ret=%llx kcopy=%llx%s",
+		       (unsigned)d1_12_last.seq,
+		       (unsigned long long)(uint64_t)req_count,
+		       (unsigned long long)ret,
+		       (unsigned long long)kcopy_len,
+		       kcopy_len > req_count ? " OVER_COUNT=1" : "");
 	if (kbuf && kcopy_len > 0)
 		d1_12_hex_preview("[D1.12][KERN_BUF]", (const uint8_t *)kbuf,
 				  kcopy_len);
@@ -192,6 +173,9 @@ void d1_12_read_diag_kcopy(int64_t ret, size_t req_count,
 void d1_12_read_diag_syscall_post(struct process *p, int64_t ret)
 {
 	const syscall_user_frame_t *sf;
+	const char *magic_rdx = "";
+	const char *magic_rax = "";
+	const char *rdx_neq = "";
 
 	if (!d1_12_target(p) || !d1_12_last.valid)
 		return;
@@ -204,25 +188,18 @@ void d1_12_read_diag_syscall_post(struct process *p, int64_t ret)
 	if (ret > 0)
 		d1_12_last.ret = ret;
 
-	serial_print("[D1.12][READ_POST] seq=");
-	serial_print_hex32(d1_12_last.seq);
-	serial_print(" ret_rax=");
-	serial_print_hex64((uint64_t)ret);
-	serial_print(" restore_rdx=");
-	serial_print_hex64(sf->rdx);
-	serial_print(" restore_rsi=");
-	serial_print_hex64(sf->rsi);
-	serial_print(" restore_rdi=");
-	serial_print_hex64(sf->rdi);
 	if (sf->rdx == D1_12_MAGIC_LEN)
-		serial_print(" RDX_EQ_1AF43F=1");
+		magic_rdx = " RDX_EQ_1AF43F=1";
 	if ((uint64_t)ret == D1_12_MAGIC_LEN)
-		serial_print(" RAX_EQ_1AF43F=1");
+		magic_rax = " RAX_EQ_1AF43F=1";
 	if (sf->rdx != d1_12_last.req_count)
-	{
-		serial_print(" RDX_NEQ_REQ=1");
-	}
-	serial_print("\n");
+		rdx_neq = " RDX_NEQ_REQ=1";
+
+	klog_debug_fmt("D1.12",
+		       "[D1.12][READ_POST] seq=%x ret_rax=%llx restore_rdx=%llx restore_rsi=%llx restore_rdi=%llx%s%s%s",
+		       (unsigned)d1_12_last.seq, (unsigned long long)(uint64_t)ret,
+		       (unsigned long long)sf->rdx, (unsigned long long)sf->rsi,
+		       (unsigned long long)sf->rdi, magic_rdx, magic_rax, rdx_neq);
 
 	if (ret > 0 && d1_12_last.user_buf)
 		d1_12_read_user_preview(p, d1_12_last.user_buf, (size_t)ret);
@@ -241,11 +218,9 @@ void d1_12_read_diag_tty_line(size_t line_len, const char *kline,
 
 	d1_12_last.tty_line_len = line_len;
 
-	serial_print("[D1.12][TTY_LINE] len=");
-	serial_print_hex64((uint64_t)line_len);
-	serial_print(" queued=");
-	serial_print_hex64((uint64_t)kline_len);
-	serial_print("\n");
+	klog_debug_fmt("D1.12", "[D1.12][TTY_LINE] len=%llx queued=%llx",
+		       (unsigned long long)(uint64_t)line_len,
+		       (unsigned long long)(uint64_t)kline_len);
 	if (kline && kline_len > 0)
 		d1_12_hex_preview("[D1.12][TTY_LINE_BYTES]", (const uint8_t *)kline,
 				  kline_len);
@@ -257,83 +232,71 @@ void d1_12_read_diag_pf(struct process *p, uint64_t fault_rip, uint64_t rdx,
 	if (!d1_12_target(p))
 		return;
 
-	serial_print("\n=== [D1.12][PF_CORRELATE] ===\n");
-	serial_print("[D1.12][PF] rip=");
-	serial_print_hex64(fault_rip);
-	serial_print(" memcpy_rdx=");
-	serial_print_hex64(rdx);
-	serial_print(" rsi=");
-	serial_print_hex64(rsi);
-	serial_print(" rdi=");
-	serial_print_hex64(rdi);
-	if (rdx == D1_12_MAGIC_LEN)
-		serial_print(" MEMCPY_RDX_IS_1AF43F=1");
-	serial_print("\n");
+	klog_debug_fmt("D1.12", "=== [D1.12][PF_CORRELATE] ===");
+	klog_debug_fmt("D1.12",
+		       "[D1.12][PF] rip=%llx memcpy_rdx=%llx rsi=%llx rdi=%llx%s",
+		       (unsigned long long)fault_rip, (unsigned long long)rdx,
+		       (unsigned long long)rsi, (unsigned long long)rdi,
+		       rdx == D1_12_MAGIC_LEN ? " MEMCPY_RDX_IS_1AF43F=1" : "");
 
 	if (d1_12_last.valid)
 	{
-		serial_print("[D1.12][LAST_READ] seq=");
-		serial_print_hex32(d1_12_last.seq);
-		serial_print(" fd=");
-		serial_print_hex64((uint64_t)d1_12_last.fd);
-		serial_print(" req=");
-		serial_print_hex64((uint64_t)d1_12_last.req_count);
-		serial_print(" ret=");
-		serial_print_hex64((uint64_t)d1_12_last.ret);
-		serial_print(" kcopy=");
-		serial_print_hex64((uint64_t)d1_12_last.kcopy_len);
-		serial_print(" restore_rdx=");
-		serial_print_hex64(d1_12_last.restore_rdx);
-		serial_print(" post_rax=");
-		serial_print_hex64(d1_12_last.post_rax);
-		serial_print(" tty_line=");
-		serial_print_hex64((uint64_t)d1_12_last.tty_line_len);
-		serial_print("\n");
+		klog_debug_fmt("D1.12",
+			       "[D1.12][LAST_READ] seq=%x fd=%llx req=%llx ret=%llx kcopy=%llx restore_rdx=%llx post_rax=%llx tty_line=%llx",
+			       (unsigned)d1_12_last.seq,
+			       (unsigned long long)(uint64_t)d1_12_last.fd,
+			       (unsigned long long)d1_12_last.req_count,
+			       (unsigned long long)d1_12_last.ret,
+			       (unsigned long long)d1_12_last.kcopy_len,
+			       (unsigned long long)d1_12_last.restore_rdx,
+			       (unsigned long long)d1_12_last.post_rax,
+			       (unsigned long long)d1_12_last.tty_line_len);
 
 		if (rdx == d1_12_last.restore_rdx)
-			serial_print("[D1.12][MATCH] memcpy_rdx == read_restore_rdx\n");
+			klog_debug_fmt("D1.12",
+				       "[D1.12][MATCH] memcpy_rdx == read_restore_rdx");
 		if (rdx == (uint64_t)d1_12_last.req_count)
-			serial_print("[D1.12][MATCH] memcpy_rdx == read_req_count\n");
+			klog_debug_fmt("D1.12",
+				       "[D1.12][MATCH] memcpy_rdx == read_req_count");
 		if (rdx == (uint64_t)d1_12_last.ret)
-			serial_print("[D1.12][MATCH] memcpy_rdx == read_ret_rax\n");
+			klog_debug_fmt("D1.12",
+				       "[D1.12][MATCH] memcpy_rdx == read_ret_rax");
 		if (d1_12_last.restore_rdx == d1_12_last.req_count)
-			serial_print("[D1.12][ABI] restore_rdx == req_count (preserved)\n");
+			klog_debug_fmt("D1.12",
+				       "[D1.12][ABI] restore_rdx == req_count (preserved)");
 
 		d1_12_hex_preview("[D1.12][LAST_KBUF]", d1_12_last.kpreview,
 				  d1_12_last.kcopy_len);
 	}
 	else
-		serial_print("[D1.12][LAST_READ] none\n");
+		klog_debug_fmt("D1.12", "[D1.12][LAST_READ] none");
 
 	if (d1_12_last_sh.valid)
 	{
-		serial_print("[D1.12][LAST_SH_READ] seq=");
-		serial_print_hex32(d1_12_last_sh.seq);
-		serial_print(" fd=");
-		serial_print_hex64((uint64_t)d1_12_last_sh.fd);
-		serial_print(" req=");
-		serial_print_hex64((uint64_t)d1_12_last_sh.req_count);
-		serial_print(" ret=");
-		serial_print_hex64((uint64_t)d1_12_last_sh.ret);
-		serial_print(" kcopy=");
-		serial_print_hex64((uint64_t)d1_12_last_sh.kcopy_len);
-		serial_print(" restore_rdx=");
-		serial_print_hex64(d1_12_last_sh.restore_rdx);
-		serial_print(" post_rax=");
-		serial_print_hex64(d1_12_last_sh.post_rax);
-		serial_print(" pre_rip=");
-		serial_print_hex64(d1_12_last_sh.pre_rip);
-		if (d1_12_last_sh.post_rax == 0 && d1_12_last_sh.kcopy_len == 0)
-			serial_print(" SH_READ_INCOMPLETE=1");
-		serial_print("\n");
+		klog_debug_fmt("D1.12",
+			       "[D1.12][LAST_SH_READ] seq=%x fd=%llx req=%llx ret=%llx kcopy=%llx restore_rdx=%llx post_rax=%llx pre_rip=%llx%s",
+			       (unsigned)d1_12_last_sh.seq,
+			       (unsigned long long)(uint64_t)d1_12_last_sh.fd,
+			       (unsigned long long)d1_12_last_sh.req_count,
+			       (unsigned long long)d1_12_last_sh.ret,
+			       (unsigned long long)d1_12_last_sh.kcopy_len,
+			       (unsigned long long)d1_12_last_sh.restore_rdx,
+			       (unsigned long long)d1_12_last_sh.post_rax,
+			       (unsigned long long)d1_12_last_sh.pre_rip,
+			       (d1_12_last_sh.post_rax == 0 &&
+				d1_12_last_sh.kcopy_len == 0) ?
+				       " SH_READ_INCOMPLETE=1" :
+				       "");
 
 		if (rdx == d1_12_last_sh.restore_rdx)
-			serial_print("[D1.12][SH_MATCH] memcpy_rdx == sh_restore_rdx\n");
+			klog_debug_fmt("D1.12",
+				       "[D1.12][SH_MATCH] memcpy_rdx == sh_restore_rdx");
 		if (rdx == (uint64_t)d1_12_last_sh.req_count)
-			serial_print("[D1.12][SH_MATCH] memcpy_rdx == sh_req_count\n");
+			klog_debug_fmt("D1.12",
+				       "[D1.12][SH_MATCH] memcpy_rdx == sh_req_count");
 	}
 	else
-		serial_print("[D1.12][LAST_SH_READ] none\n");
+		klog_debug_fmt("D1.12", "[D1.12][LAST_SH_READ] none");
 
-	serial_print("=== [D1.12][PF_CORRELATE] end ===\n\n");
+	klog_debug_fmt("D1.12", "=== [D1.12][PF_CORRELATE] end ===");
 }

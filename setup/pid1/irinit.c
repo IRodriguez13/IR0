@@ -169,7 +169,7 @@ static int irinit_wait_seconds(unsigned sec)
 
 static void classify_missing(const char *tag)
 {
-	write_str("[IRINIT][CLASSIFY] ");
+	write_str("[IRINIT] CLASSIFY ");
 	write_str(tag);
 	write_str("\n");
 }
@@ -193,12 +193,12 @@ static void irinit_prepare_environment(void)
 	if (!path_accessible("/dev") || access("/dev/null", F_OK) != 0)
 		classify_missing("DEVFS_MISSING");
 	else
-		write_str("[IRINIT][CLASSIFY] DEVFS_OK\n");
+		write_str("[IRINIT] CLASSIFY DEVFS_OK\n");
 
 	if (!path_accessible("/proc") || access("/proc/mounts", R_OK) != 0)
 		classify_missing("PROCFS_MISSING");
 	else
-		write_str("[IRINIT][CLASSIFY] PROCFS_OK\n");
+		write_str("[IRINIT] CLASSIFY PROCFS_OK\n");
 
 	if (access("/tmp", F_OK) != 0)
 	{
@@ -213,7 +213,7 @@ static void irinit_prepare_environment(void)
 	}
 
 	if (access("/tmp", W_OK) == 0)
-		write_str("[IRINIT][CLASSIFY] TMP_OK\n");
+		write_str("[IRINIT] CLASSIFY TMP_OK\n");
 	else
 		classify_missing("TMP_MISSING");
 }
@@ -259,7 +259,7 @@ static int irinit_attach_console(void)
 		if (!console_ok_logged)
 		{
 			console_ok_logged = 1;
-			write_str("[IRINIT][CLASSIFY] CONSOLE_IO_OK\n");
+			write_str("[IRINIT] CLASSIFY CONSOLE_IO_OK\n");
 			write_str("INIT_STDIO_CONSOLE_OK\n");
 			write_str("IRINIT_STDIO_CONSOLE_OK\n");
 			write_str("TTY_PRESENT_OK\n");
@@ -508,14 +508,14 @@ static int irinit_run_smoke(void)
 
 	if (access("/usr/games/doom", X_OK) == 0 || access("/bin/doom", X_OK) == 0 ||
 	    access("/bin/doomgeneric", X_OK) == 0)
-		write_str("[IRINIT][CLASSIFY] DOOM_BINARY_PRESENT_MANUAL_OK\n");
+		write_str("[IRINIT] CLASSIFY DOOM_BINARY_PRESENT_MANUAL_OK\n");
 	else
-		write_str("[IRINIT][CLASSIFY] DOOM_BINARY_ABSENT_OK\n");
+		write_str("[IRINIT] CLASSIFY DOOM_BINARY_ABSENT_OK\n");
 
 	if (access("/bin/ping", X_OK) == 0)
-		write_str("[IRINIT][CLASSIFY] PING_AVAILABLE\n");
+		write_str("[IRINIT] CLASSIFY PING_AVAILABLE\n");
 	else
-		write_str("[IRINIT][CLASSIFY] PING_UNAVAILABLE\n");
+		write_str("[IRINIT] CLASSIFY PING_UNAVAILABLE\n");
 
 	write_str("IRINIT_GUI_INTERACTIVE_OK\n");
 	write_str("FASE57B_CONSOLE_OK\n");

@@ -40,6 +40,7 @@ static int scenario_process_reclaim_exit_run(ktm_context_t *ctx)
 	(void)ctx;
 	KTM_REQUIRE(ktm_snapshot_take(&before) == 0);
 
+	ktm_assert_batch_begin("process.reclaim_exit");
 	for (round = 0; round < RECLAIM_ROUNDS; round++)
 	{
 		process_t *child;
@@ -62,6 +63,7 @@ static int scenario_process_reclaim_exit_run(ktm_context_t *ctx)
 		process_reap_zombie_child(child);
 		KTM_V1_ASSERT_TRUE(!process_exists(pid));
 	}
+	ktm_assert_batch_end();
 
 	KTM_REQUIRE(ktm_snapshot_take(&after) == 0);
 	KTM_ASSERT_NO_PROCESS_LEAK(&before, &after);

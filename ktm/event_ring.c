@@ -12,7 +12,7 @@
 #include <ktm.h>
 #include <config.h>
 #include <ir0/process.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 #define KTM_EVENT_RING_CAP 256
@@ -125,20 +125,15 @@ int ktm_event_copy_out(ktm_event_t *dst, size_t max_events)
 
 void ktm_event_emit(const char *tag)
 {
-	serial_print("[KTM][EV] ");
-	serial_print(tag ? tag : "(null)");
-	serial_print("\n");
+	klog_debug_fmt("KTM", "[KTM][EV] %s", tag ? tag : "(null)");
 	ktm_event_emit4(KTM_EVENT_INFO, KTM_SUBSYS_CORE, 0, 0, 0, 0);
 	ktm_transport_emit("EV", tag ? tag : "(null)", NULL);
 }
 
 void ktm_event_emit_pid(const char *tag, uint32_t pid)
 {
-	serial_print("[KTM][EV] ");
-	serial_print(tag ? tag : "(null)");
-	serial_print(" pid=");
-	serial_print_hex32(pid);
-	serial_print("\n");
+	klog_debug_fmt("KTM", "[KTM][EV] %s pid=%x", tag ? tag : "(null)",
+		       (unsigned)pid);
 	ktm_event_emit4(KTM_EVENT_INFO, KTM_SUBSYS_CORE, pid, 0, 0, 0);
 	ktm_transport_emit("EV", tag ? tag : "(null)", NULL);
 }

@@ -36,13 +36,15 @@
 #include <ir0/paging.h>
 #include <config.h>
 
-#include <ir0/pipe.h>
-#include <ir0/vfs.h>
+#include <ir0/memfd.h>
+#include <ir0/eventfd.h>
+#include <ir0/timerfd.h>
+
 #include <ir0/devfs.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/sock_udp.h>
 #include <ir0/sock_stream.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
 #include <string.h>
@@ -119,6 +121,10 @@ int fd_can_read_for(process_t *proc, int fd)
   if (fd_table[fd].is_socket && fd_table[fd].vfs_file &&
       sock_stream_is(fd_table[fd].vfs_file))
     return sock_stream_poll_readable((struct sock_stream *)fd_table[fd].vfs_file);
+  if (fd_table[fd].is_eventfd && fd_table[fd].vfs_file)
+    return ir0_eventfd_poll_readable((struct ir0_eventfd *)fd_table[fd].vfs_file);
+  if (fd_table[fd].is_timerfd && fd_table[fd].vfs_file)
+    return ir0_timerfd_poll_readable((struct ir0_timerfd *)fd_table[fd].vfs_file);
   if (fd_table[fd].flags & (O_RDONLY | O_RDWR))
     return 1;
   return 0;
@@ -154,6 +160,10 @@ static int fd_can_write(int fd)
   if (fd_table[fd].is_socket && fd_table[fd].vfs_file &&
       sock_stream_is(fd_table[fd].vfs_file))
     return sock_stream_poll_writable((struct sock_stream *)fd_table[fd].vfs_file);
+  if (fd_table[fd].is_eventfd && fd_table[fd].vfs_file)
+    return ir0_eventfd_poll_writable((struct ir0_eventfd *)fd_table[fd].vfs_file);
+  if (fd_table[fd].is_timerfd && fd_table[fd].vfs_file)
+    return 1;
   if (fd_table[fd].flags & (O_WRONLY | O_RDWR))
     return 1;
   return 0;
@@ -343,7 +353,11 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
   if (!current_process)
     return -ESRCH;
-  if (nfds < 0 || nfds > MAX_POLL_NFDS)
+  /*
+   * nfds is max_fd+1 (Linux/X11 often MaxClients=256), not the count of
+   * interesting fds. Cap to IR0_FD_SETSIZE; compact interest into pfds[].
+   */
+  if (nfds < 0 || nfds > IR0_FD_SETSIZE)
     return -EINVAL;
   if (!user_r && !user_w && !user_e && !has_timeout)
     return -EINVAL;
@@ -575,7 +589,7 @@ void syscall_wake_blocked_on_child(process_t *parent)
 
 /*
  * syscall_poll_finish_blocked_resume - Copy poll revents and set syscall retval.
- * Called from arch_context_switch irq resume with parent CR3 loaded.
+ * Called from switch_to irq resume with parent CR3 loaded.
  */
 void syscall_poll_finish_blocked_resume(process_t *proc)
 {
@@ -698,17 +712,13 @@ void fase50b_dump_bytes(const char *label, const void *buf, size_t n)
 	const uint8_t *b = (const uint8_t *)buf;
 	size_t i;
 
-	serial_print(label ? label : "[IR0DBG50B][BYTES]");
-	serial_print(" n=");
-	serial_print_hex64((uint64_t)n);
-	serial_print(" hex=");
+	klog_debug_fmt("KERN", "%s n=%llx hex=", label ? label : "[IR0DBG50B][BYTES]", (unsigned long long)((uint64_t)n));
 	for (i = 0; i < n && i < 32; i++)
 	{
 		if (i > 0)
-			serial_print(" ");
-		serial_print_hex64((uint64_t)b[i]);
+			klog_debug_fmt("KERN", " %llx", (unsigned long long)((uint64_t)b[i]));
 	}
-	serial_print(" ascii=");
+	klog_debug("KERN", " ascii=");
 	for (i = 0; i < n && i < 32; i++)
 	{
 		char c = (char)b[i];
@@ -716,9 +726,8 @@ void fase50b_dump_bytes(const char *label, const void *buf, size_t n)
 		if (c >= 32 && c <= 126)
 			serial_putchar(c);
 		else
-			serial_print(".");
+			klog_debug("KERN", ".");
 	}
-	serial_print("\n");
 #else
 	(void)label;
 	(void)buf;
@@ -797,17 +806,9 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read)
 				pipe_fase49_note_read_sleep(pipe);
 			if (proc->mode == USER_MODE)
 			{
-				serial_print("[IR0DBG50B][READ_BLOCK] pid=");
-				serial_print_hex32((uint32_t)proc->task.pid);
-				serial_print(" fd=");
-				serial_print_hex64(proc->syscall_frame.rdi);
-				serial_print(" rsi=");
-				serial_print_hex64(proc->syscall_frame.rsi);
-				serial_print(" rdx=");
-				serial_print_hex64(proc->syscall_frame.rdx);
-				serial_print(" pipe_id=");
-				serial_print_hex64(pipe ? pipe->pipe_id : 0);
-				serial_print("\n");
+#if CONFIG_DEBUG_FASE50
+				klog_debug_fmt("PIPE", "[IR0DBG50B][READ_BLOCK] pid=%x fd=%llx rsi=%llx rdx=%llx pipe_id=%llx", (unsigned)((uint32_t)proc->task.pid), (unsigned long long)(proc->syscall_frame.rdi), (unsigned long long)(proc->syscall_frame.rsi), (unsigned long long)(proc->syscall_frame.rdx), (unsigned long long)(pipe ? pipe->pipe_id : 0));
+#endif
 				process_arm_blocked_syscall_resume(proc, 0);
 			}
 			proc->state = PROCESS_BLOCKED;
@@ -842,68 +843,64 @@ static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
 	if (req == 0 || req > sizeof(kbuf))
 		req = sizeof(kbuf);
 
-	serial_print("[IR0DBG50B][PIPE_WAKE] pipe_id=");
-	serial_print_hex64(pipe->pipe_id);
-	serial_print(" target_pid=");
-	serial_print_hex32((uint32_t)proc->task.pid);
-	serial_print(" waiter_pid=");
-	serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
-	serial_print(" saved_fd=");
-	serial_print_hex64(proc->syscall_frame.rdi);
-	serial_print(" saved_rsi=");
-	serial_print_hex64((uint64_t)user_buf);
-	serial_print(" saved_rdx=");
-	serial_print_hex64((uint64_t)req);
-	serial_print(" pipe_bytes=");
-	serial_print_hex64((uint64_t)pipe->count);
-	serial_print(" target_pml4=");
-	serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
-	serial_print(" active_cr3=");
-	serial_print_hex64(get_current_page_directory());
-	serial_print("\n");
+#if CONFIG_DEBUG_FASE50
+	klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] pipe_id=%llx target_pid=%x waiter_pid=%x saved_fd=%llx saved_rsi=%llx saved_rdx=%llx pipe_bytes=%llx target_pml4=%llx active_cr3=%llx", (unsigned long long)(pipe->pipe_id), (unsigned)((uint32_t)proc->task.pid), (unsigned)(current_process ? (uint32_t)current_process->task.pid : 0), (unsigned long long)(proc->syscall_frame.rdi), (unsigned long long)((uint64_t)user_buf), (unsigned long long)((uint64_t)req), (unsigned long long)((uint64_t)pipe->count), (unsigned long long)((uint64_t)(uintptr_t)proc->page_directory), (unsigned long long)(get_current_page_directory()));
+#endif
 
 	peek_n = (req < (size_t)sizeof(user_before)) ? (int)req : (int)sizeof(user_before);
+#if CONFIG_DEBUG_FASE50
 	if (fase50b_peek_user(proc->page_directory, user_buf, user_before, (size_t)peek_n) == 0)
 		fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] user_before", user_before, (size_t)peek_n);
+#else
+	(void)user_before;
+	(void)user_after;
+	(void)peek_n;
+#endif
 
 	n = pipe_read(pipe, kbuf, req);
 	if (n <= 0)
 	{
-		serial_print("[IR0DBG50B][PIPE_WAKE] pipe_read_ret=");
-		serial_print_hex64((uint64_t)(int64_t)n);
-		serial_print("\n");
+#if CONFIG_DEBUG_FASE50
+		klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] pipe_read_ret=%llx", (unsigned long long)((uint64_t)(int64_t)n));
+#endif
 		return;
 	}
 
+#if CONFIG_DEBUG_FASE50
 	fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] kbuf", kbuf, (size_t)n);
+#endif
 
 	if (!proc->page_directory)
 	{
-		serial_print("[IR0DBG50B][CLASSIFY] PIPE_WAKE_COPY_BAD_USERBUF\n");
+#if CONFIG_DEBUG_FASE50
+		klog_debug("PIPE", "CLASSIFY PIPE_WAKE_COPY_BAD_USERBUF");
+#endif
 		return;
 	}
 
 	copy_ret = copy_to_user_region_in_directory(proc->page_directory, user_buf,
 						      kbuf, (size_t)n);
-	serial_print("[IR0DBG50B][PIPE_WAKE] copy_ret=");
-	serial_print_hex64((uint64_t)(int64_t)copy_ret);
-	serial_print(" copied=");
-	serial_print_hex64((uint64_t)(int64_t)n);
-	serial_print(" resume_rax=");
-	serial_print_hex64((uint64_t)(int64_t)n);
-	serial_print("\n");
+#if CONFIG_DEBUG_FASE50
+	klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] copy_ret=%llx copied=%llx resume_rax=%llx", (unsigned long long)((uint64_t)(int64_t)copy_ret), (unsigned long long)((uint64_t)(int64_t)n), (unsigned long long)((uint64_t)(int64_t)n));
+#endif
 
 	if (copy_ret != 0)
 	{
-		serial_print("[IR0DBG50B][CLASSIFY] PIPE_WAKE_COPY_BAD_USERBUF\n");
+#if CONFIG_DEBUG_FASE50
+		klog_debug("PIPE", "CLASSIFY PIPE_WAKE_COPY_BAD_USERBUF");
+#endif
 		return;
 	}
 
+#if CONFIG_DEBUG_FASE50
 	if (fase50b_peek_user(proc->page_directory, user_buf, user_after, (size_t)peek_n) == 0)
 		fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] user_after", user_after, (size_t)peek_n);
+#endif
 
 	proc->syscall_resume_rax = (uint64_t)n;
-	serial_print("[IR0DBG50B][CLASSIFY] PIPE_WAKE_COPY_OK\n");
+#if CONFIG_DEBUG_FASE50
+	klog_debug("PIPE", "CLASSIFY PIPE_WAKE_COPY_OK");
+#endif
 }
 
 void pipe_wake_all(pipe_t *pipe)
@@ -1099,6 +1096,33 @@ int64_t sys_close(int fd)
   if (!current_process)
     return -ESRCH;
 
+  /* Prefer process fd_table (is_pseudo binds) over legacy global FD bases. */
+  if (fd >= 0 && fd < MAX_FDS_PER_PROCESS)
+  {
+    fd_entry_t *fd_table = get_process_fd_table();
+
+    if (fd_table && fd_table[fd].in_use && fd_table[fd].is_pseudo &&
+	fd_table[fd].vfs_file)
+    {
+      pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fd_table[fd].vfs_file;
+
+      if (bind->refs > 0)
+	bind->refs--;
+      if (bind->refs == 0)
+      {
+	(void)pseudo_fs_release_ops((const pseudo_fs_ops_t *)bind->ops,
+				    bind->ctx, bind->dynamic);
+	kfree(bind);
+      }
+      fd_table[fd].vfs_file = NULL;
+      fd_table[fd].in_use = false;
+      fd_table[fd].is_pseudo = false;
+      fd_table[fd].path[0] = '\0';
+      return 0;
+    }
+  }
+
+  /* Legacy host/registry virtual fds (PSEUDO_FS_*_FD_BASE). */
   if (pseudo_fs_find_by_fd(fd))
     return pseudo_fs_close_fd(fd);
 
@@ -1122,20 +1146,6 @@ int64_t sys_close(int fd)
 
       if (node)
         devfs_close_node(node);
-    }
-    else if (fd_table[fd].is_pseudo && fd_table[fd].vfs_file)
-    {
-      pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fd_table[fd].vfs_file;
-
-      if (bind->refs > 0)
-	bind->refs--;
-      if (bind->refs == 0)
-      {
-	(void)pseudo_fs_release_ops((const pseudo_fs_ops_t *)bind->ops,
-				    bind->ctx, bind->dynamic);
-	kfree(bind);
-      }
-      fd_table[fd].vfs_file = NULL;
     }
     /* Check if this is a pipe */
     else if (fd_table[fd].is_pipe && fd_table[fd].vfs_file)
@@ -1162,6 +1172,21 @@ int64_t sys_close(int fd)
       fd_table[fd].vfs_file = NULL;
       fd_table[fd].is_epoll = false;
     }
+    else if (fd_table[fd].is_memfd && fd_table[fd].vfs_file)
+    {
+      ir0_memfd_release((struct ir0_memfd *)fd_table[fd].vfs_file);
+      fd_table[fd].vfs_file = NULL;
+    }
+    else if (fd_table[fd].is_eventfd && fd_table[fd].vfs_file)
+    {
+      ir0_eventfd_release((struct ir0_eventfd *)fd_table[fd].vfs_file);
+      fd_table[fd].vfs_file = NULL;
+    }
+    else if (fd_table[fd].is_timerfd && fd_table[fd].vfs_file)
+    {
+      ir0_timerfd_release((struct ir0_timerfd *)fd_table[fd].vfs_file);
+      fd_table[fd].vfs_file = NULL;
+    }
     else if (fd_table[fd].vfs_file)
     {
       struct vfs_file *vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
@@ -1174,6 +1199,9 @@ int64_t sys_close(int fd)
     fd_table[fd].is_pipe = false;
     fd_table[fd].is_socket = false;
     fd_table[fd].is_epoll = false;
+    fd_table[fd].is_memfd = false;
+    fd_table[fd].is_eventfd = false;
+    fd_table[fd].is_timerfd = false;
     fd_table[fd].pipe_end = -1;
     fd_table[fd].is_devfs = false;
     fd_table[fd].is_pseudo = false;
@@ -1325,6 +1353,21 @@ int64_t sys_dup2(int oldfd, int newfd)
       }
       fd_table[newfd].vfs_file = NULL;
     }
+    else if (fd_table[newfd].is_memfd && fd_table[newfd].vfs_file)
+    {
+      ir0_memfd_release((struct ir0_memfd *)fd_table[newfd].vfs_file);
+      fd_table[newfd].vfs_file = NULL;
+    }
+    else if (fd_table[newfd].is_eventfd && fd_table[newfd].vfs_file)
+    {
+      ir0_eventfd_release((struct ir0_eventfd *)fd_table[newfd].vfs_file);
+      fd_table[newfd].vfs_file = NULL;
+    }
+    else if (fd_table[newfd].is_timerfd && fd_table[newfd].vfs_file)
+    {
+      ir0_timerfd_release((struct ir0_timerfd *)fd_table[newfd].vfs_file);
+      fd_table[newfd].vfs_file = NULL;
+    }
     else if (fd_table[newfd].vfs_file)
     {
       vfs_close((struct vfs_file *)fd_table[newfd].vfs_file);
@@ -1340,6 +1383,9 @@ int64_t sys_dup2(int oldfd, int newfd)
     fd_table[newfd].is_devfs = false;
     fd_table[newfd].is_pseudo = false;
     fd_table[newfd].is_socket = false;
+    fd_table[newfd].is_memfd = false;
+    fd_table[newfd].is_eventfd = false;
+    fd_table[newfd].is_timerfd = false;
     fd_table[newfd].dev_device_id = 0;
     fase48_note_fd_destroyed();
   }
@@ -1360,6 +1406,9 @@ int64_t sys_dup2(int oldfd, int newfd)
   fd_table[newfd].dev_device_id = fd_table[oldfd].dev_device_id;
   fd_table[newfd].is_pseudo = fd_table[oldfd].is_pseudo;
   fd_table[newfd].is_socket = fd_table[oldfd].is_socket;
+  fd_table[newfd].is_memfd = fd_table[oldfd].is_memfd;
+  fd_table[newfd].is_eventfd = fd_table[oldfd].is_eventfd;
+  fd_table[newfd].is_timerfd = fd_table[oldfd].is_timerfd;
 
   /*
    * Regular files now share one open file description (vfs_file with refcount),
@@ -1384,6 +1433,21 @@ int64_t sys_dup2(int oldfd, int newfd)
 
     bind->refs++;
     fd_table[newfd].vfs_file = bind;
+  }
+  else if (fd_table[oldfd].is_memfd && fd_table[oldfd].vfs_file)
+  {
+    ir0_memfd_acquire((struct ir0_memfd *)fd_table[oldfd].vfs_file);
+    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+  }
+  else if (fd_table[oldfd].is_eventfd && fd_table[oldfd].vfs_file)
+  {
+    ir0_eventfd_acquire((struct ir0_eventfd *)fd_table[oldfd].vfs_file);
+    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+  }
+  else if (fd_table[oldfd].is_timerfd && fd_table[oldfd].vfs_file)
+  {
+    ir0_timerfd_acquire((struct ir0_timerfd *)fd_table[oldfd].vfs_file);
+    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
   }
   else if (fd_table[oldfd].vfs_file)
   {
@@ -1432,7 +1496,18 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
   case F_GETFL:
     return fd_table[fd].flags;
   case F_SETFL:
-    fd_table[fd].flags = (int)arg;
+    /*
+     * Accept O_NONBLOCK etc. Do not honor O_ASYNC/FASYNC: IR0 has no
+     * SIGIO delivery on poll-ready, and TinyX KdAddFd would otherwise
+     * arm handlers that re-enter MouseRead/KeyboardRead unsafely.
+     */
+    fd_table[fd].flags = (int)(arg & ~(unsigned long)O_ASYNC);
+    return 0;
+  case F_GETOWN:
+    return current_process->task.pid;
+  case F_SETOWN:
+    /* Owner recorded as current pid only; no SIGIO wiring yet. */
+    (void)arg;
     return 0;
   case F_DUPFD:
   {

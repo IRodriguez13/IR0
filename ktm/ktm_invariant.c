@@ -14,7 +14,7 @@
 
 #include <ktm.h>
 #include <ir0/process.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 #ifdef IR0_KERNEL_TESTS
 
@@ -22,25 +22,17 @@ void ktm_invariant_process(const process_t *p, const char *tag)
 {
 	if (!p)
 	{
-		serial_print("[KTM][PROC] tag=");
-		serial_print(tag ? tag : "?");
-		serial_print(" (null)\n");
+		klog_debug_fmt("KTM", "[KTM][PROC] tag=%s (null)", tag ? tag : "?");
 		return;
 	}
 
-	serial_print("[KTM][PROC] tag=");
-	serial_print(tag ? tag : "?");
-	serial_print(" pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" state=");
-	serial_print_hex64((uint64_t)p->state);
-	serial_print(" irq_saved=");
-	serial_print_hex64((uint64_t)p->irq_frame_saved);
-	serial_print(" poll_resume_arch=");
-	serial_print_hex64((uint64_t)p->poll_resume_via_arch);
-	serial_print(" poll_waiter=");
-	serial_print_hex64((uint64_t)(uintptr_t)p->poll_waiter);
-	serial_print("\n");
+	klog_debug_fmt("KTM",
+		       "[KTM][PROC] tag=%s pid=%x state=%llx irq_saved=%llx poll_resume_arch=%llx poll_waiter=%llx",
+		       tag ? tag : "?", (unsigned)(uint32_t)p->task.pid,
+		       (unsigned long long)(uint64_t)p->state,
+		       (unsigned long long)(uint64_t)p->irq_frame_saved,
+		       (unsigned long long)(uint64_t)p->poll_resume_via_arch,
+		       (unsigned long long)(uint64_t)(uintptr_t)p->poll_waiter);
 }
 
 #endif /* IR0_KERNEL_TESTS */

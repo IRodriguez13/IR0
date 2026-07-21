@@ -81,9 +81,8 @@ int net_register_device(struct net_device *dev)
     {
         if (curr == dev)
         {
-            klog_print("NET: Device already registered: ");
-            klog_print(dev->name);
-            klog_print("\n");
+            klog_info_fmt("NET", "Device already registered: %s",
+                          dev->name ? dev->name : "(null)");
             return 0;
         }
         curr = curr->next;
@@ -96,9 +95,8 @@ int net_register_device(struct net_device *dev)
     dev->next = devices;
     devices = dev;
 
-    klog_print("NET: Registered device: ");
-    klog_print(dev->name);
-    klog_print("\n");
+    klog_info_fmt("NET", "Registered device: %s",
+                  dev->name ? dev->name : "(null)");
 
     return 0;
 }
@@ -169,7 +167,7 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
 
     if (!dest_mac)
     {
-        klog_print("NET: net_send: NULL destination MAC\n");
+        klog_error("NET", "net_send: NULL destination MAC");
         return -1;
     }
 
@@ -380,9 +378,8 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
          */
         /* Log only in debug mode to avoid spam */
         #ifdef NET_DEBUG
-        klog_print("NET: No handler registered for EtherType 0x");
-        klog_hex32(type);
-        klog_print("\n");
+        klog_debug_fmt("NET", "No handler registered for EtherType 0x%x",
+                       (unsigned)type);
         #endif
     }
 }
@@ -422,9 +419,8 @@ int net_register_protocol(struct net_protocol *proto)
     {
         if (curr == proto)
         {
-            klog_print("NET: Protocol already registered: ");
-            klog_print(proto->name);
-            klog_print("\n");
+            klog_info_fmt("NET", "Protocol already registered: %s",
+                          proto->name ? proto->name : "(null)");
             return 0;
         }
         curr = curr->next;
@@ -434,21 +430,19 @@ int net_register_protocol(struct net_protocol *proto)
     proto->next = protocols;
     protocols = proto;
 
-    klog_print("NET: Registered protocol: ");
-    klog_print(proto->name);
-    if (proto->ethertype != 0)
-    {
-        klog_print(" (EtherType: 0x");
-        klog_hex32(proto->ethertype);
-        klog_print(")");
-    }
-    if (proto->ipproto != 0)
-    {
-        klog_print(" (IP Proto: ");
-        klog_hex32(proto->ipproto);
-        klog_print(")");
-    }
-    klog_print("\n");
+    if (proto->ethertype != 0 && proto->ipproto != 0)
+        klog_info_fmt("NET",
+                      "Registered protocol: %s (EtherType: 0x%x) (IP Proto: 0x%x)",
+                      proto->name, (unsigned)proto->ethertype,
+                      (unsigned)proto->ipproto);
+    else if (proto->ethertype != 0)
+        klog_info_fmt("NET", "Registered protocol: %s (EtherType: 0x%x)",
+                      proto->name, (unsigned)proto->ethertype);
+    else if (proto->ipproto != 0)
+        klog_info_fmt("NET", "Registered protocol: %s (IP Proto: 0x%x)",
+                      proto->name, (unsigned)proto->ipproto);
+    else
+        klog_info_fmt("NET", "Registered protocol: %s", proto->name);
 
     return 0;
 }
@@ -465,9 +459,8 @@ void net_unregister_protocol(struct net_protocol *proto)
     if (protocols == proto)
     {
         protocols = proto->next;
-        klog_print("NET: Unregistered protocol: ");
-        klog_print(proto->name);
-        klog_print("\n");
+        klog_info_fmt("NET", "Unregistered protocol: %s",
+                      proto->name ? proto->name : "(null)");
         return;
     }
 
@@ -477,9 +470,8 @@ void net_unregister_protocol(struct net_protocol *proto)
         if (curr->next == proto)
         {
             curr->next = proto->next;
-            klog_print("NET: Unregistered protocol: ");
-            klog_print(proto->name);
-            klog_print("\n");
+            klog_info_fmt("NET", "Unregistered protocol: %s",
+                          proto->name ? proto->name : "(null)");
             return;
         }
         curr = curr->next;

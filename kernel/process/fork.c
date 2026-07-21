@@ -16,6 +16,8 @@
 #include <ir0/clone.h>
 #include <ir0/ktm/checkpoint.h>
 #include <ir0/ktm/fault.h>
+#include <ir0/ktm/klog.h>
+#include <string.h>
 
 #if defined(__x86_64__) || defined(__amd64__)
 /*
@@ -75,25 +77,26 @@ extern uint8_t fork_flow_set_tf;
 
 static void fork_restore_dump_qwords(const char *tag, uint64_t base, size_t n)
 {
+	char buf[512];
+	size_t off;
 	size_t i;
 
 	if (!DEBUG_FORK)
 		return;
-	serial_print("[FORK_RESTORE] ");
-	serial_print(tag ? tag : "frame");
-	serial_print(" base=");
-	serial_print_hex64(base);
-	serial_print(" qwords=");
-	for (i = 0; i < n; i++)
+
+	off = (size_t)snprintf(buf, sizeof(buf),
+			       "[FORK_RESTORE] %s base=%llx qwords=",
+			       tag ? tag : "frame", (unsigned long long)base);
+	for (i = 0; i < n && off < sizeof(buf) - 24; i++)
 	{
 		uint64_t addr = base + (uint64_t)(i * sizeof(uint64_t));
 		uint64_t v = *(const uint64_t *)(uintptr_t)addr;
 
-		if (i > 0)
-			serial_print(" ");
-		serial_print_hex64(v);
+		off += (size_t)snprintf(buf + off, sizeof(buf) - off, "%s%llx",
+					i > 0 ? " " : "",
+					(unsigned long long)v);
 	}
-	serial_print("\n");
+	klog_debug("FORK", buf);
 }
 
 static void fork_restore_classify(uint64_t userspace_rax)
@@ -132,9 +135,7 @@ static void fork_restore_classify(uint64_t userspace_rax)
 
 	if (!DEBUG_FORK)
 		return;
-	serial_print("[FORK_RESTORE][CLASSIFY] ");
-	serial_print(tag);
-	serial_print("\n");
+	klog_debug_fmt("FORK", "CLASSIFY %s", tag);
 }
 
 static void fork_restore_log_fixup(process_t *parent, process_t *child)
@@ -149,14 +150,7 @@ static void fork_restore_log_fixup(process_t *parent, process_t *child)
 
 	if (DEBUG_FORK)
 	{
-		serial_print("[FORK_RESTORE][FIXUP] child_task=");
-		serial_print_hex64(fork_restore_audit.task_ptr);
-		serial_print(" syscall_frame=");
-		serial_print_hex64((uint64_t)(uintptr_t)&parent->syscall_frame);
-		serial_print(" rax_slot_addr=");
-		serial_print_hex64(fork_restore_audit.rax_slot_addr);
-		serial_print(" task_rax_before=");
-		serial_print_hex64(rax_before);
+		klog_debug_fmt("FORK", "[FORK_RESTORE][FIXUP] child_task=%llx syscall_frame=%llx rax_slot_addr=%llx task_rax_before=%llx", (unsigned long long)(fork_restore_audit.task_ptr), (unsigned long long)((uint64_t)(uintptr_t)&parent->syscall_frame), (unsigned long long)(fork_restore_audit.rax_slot_addr), (unsigned long long)(rax_before));
 	}
 
 	process_apply_syscall_frame_to_task(&child->task, &parent->syscall_frame, 0);
@@ -168,11 +162,7 @@ static void fork_restore_log_fixup(process_t *parent, process_t *child)
 
 	if (DEBUG_FORK)
 	{
-		serial_print(" task_rax_after=");
-		serial_print_hex64(child->task.rax);
-		serial_print(" slot_readback=");
-		serial_print_hex64(*(uint64_t *)(uintptr_t)fork_restore_audit.rax_slot_addr);
-		serial_print("\n");
+		klog_debug_fmt("KERN", " task_rax_after=%llx slot_readback=%llx", (unsigned long long)(child->task.rax), (unsigned long long)(*(uint64_t *)(uintptr_t)fork_restore_audit.rax_slot_addr));
 	}
 }
 
@@ -181,17 +171,6 @@ static void fork_restore_log_fixup(process_t *parent, process_t *child)
 #define FORK_BRANCH_RIP_JE    0x402BA8ULL
 #define FORK_BRANCH_RIP_CHILD 0x402BE8ULL
 #define FORK_BRANCH_RIP_PARENT 0x402BAAULL
-
-static void fork_flow_hex_byte(uint8_t b)
-{
-	static const char *digits = "0123456789abcdef";
-	char out[3];
-
-	out[0] = digits[(b >> 4) & 0x0FU];
-	out[1] = digits[b & 0x0FU];
-	out[2] = '\0';
-	serial_print(out);
-}
 
 static int fork_flow_read_user_bytes(process_t *proc, uint64_t va, uint8_t *buf,
                                      size_t n)
@@ -250,26 +229,17 @@ static struct
 static void fork_branch_hex8(process_t *proc, uint64_t va, const char *tag)
 {
 	uint8_t bytes[8];
-	size_t i;
 
 	if (fork_flow_read_user_bytes(proc, va, bytes, sizeof(bytes)) != 0)
 	{
-		serial_print("[FORK_BRANCH] ");
-		serial_print(tag ? tag : "code");
-		serial_print(" unreadable\n");
+		klog_debug_fmt("FORK", "[FORK_BRANCH] %s unreadable\n", tag ? tag : "code");
 		return;
 	}
 
-	serial_print("[FORK_BRANCH] ");
-	serial_print(tag ? tag : "code");
-	serial_print("=");
-	for (i = 0; i < sizeof(bytes); i++)
-	{
-		if (i > 0)
-			serial_print(" ");
-		fork_flow_hex_byte(bytes[i]);
-	}
-	serial_print("\n");
+	klog_debug_fmt("FORK",
+		       "[FORK_BRANCH] %s=%02x %02x %02x %02x %02x %02x %02x %02x",
+		       tag ? tag : "code", bytes[0], bytes[1], bytes[2], bytes[3],
+		       bytes[4], bytes[5], bytes[6], bytes[7]);
 }
 
 static void fork_branch_emit_step(process_t *proc, const char *label, uint32_t idx,
@@ -279,21 +249,7 @@ static void fork_branch_emit_step(process_t *proc, const char *label, uint32_t i
 	uint64_t zf;
 
 	zf = (rflags >> 6) & 1ULL;
-	serial_print("[FORK_BRANCH] step=");
-	serial_print(label ? label : "?");
-	serial_print(" rip=");
-	serial_print_hex64(rip);
-	serial_print(" rax=");
-	serial_print_hex64(rax);
-	serial_print(" rbx=");
-	serial_print_hex64(rbx);
-	serial_print(" rflags=");
-	serial_print_hex64(rflags);
-	serial_print(" zf=");
-	serial_print_hex64(zf);
-	serial_print(" rsp=");
-	serial_print_hex64(rsp);
-	serial_print("\n");
+	klog_debug_fmt("FORK", "[FORK_BRANCH] step=%s rip=%llx rax=%llx rbx=%llx rflags=%llx zf=%llx rsp=%llx", label ? label : "?", (unsigned long long)(rip), (unsigned long long)(rax), (unsigned long long)(rbx), (unsigned long long)(rflags), (unsigned long long)(zf), (unsigned long long)(rsp));
 
 	if (idx < 3)
 	{
@@ -349,9 +305,7 @@ static void fork_branch_classify(void)
 	else
 		return;
 
-	serial_print("[FORK_BRANCH][CLASSIFY] ");
-	serial_print(tag);
-	serial_print("\n");
+	klog_debug_fmt("FORK", "CLASSIFY %s", tag);
 }
 
 static void fork_branch_arm_pid(pid_t child_pid)
@@ -436,53 +390,11 @@ void fork_ret_emit_pre_return(void)
 	if (!DEBUG_FORK)
 		return;
 
-	serial_print("[FORK_RET][PRE_RETURN] pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" task_ptr=");
-	serial_print_hex64((uint64_t)(uintptr_t)&p->task);
-	serial_print(" rax_slot_addr=");
-	serial_print_hex64((uint64_t)(uintptr_t)&p->task.rax);
-	serial_print(" rax_slot_val=");
-	serial_print_hex64(p->task.rax);
-	serial_print(" restore_method=");
-	serial_print_hex64(fork_restore_audit.restore_method);
-	serial_print(" rax=");
-	serial_print_hex64(pre->rax);
-	serial_print(" live_after_task_load=");
-	serial_print_hex64(fork_restore_audit.live_rax_after_task_load);
-	serial_print(" rcx=");
-	serial_print_hex64(pre->rcx);
-	serial_print(" r11=");
-	serial_print_hex64(pre->r11);
-	serial_print(" rbx=");
-	serial_print_hex64(pre->rbx);
-	serial_print(" rbp=");
-	serial_print_hex64(pre->rbp);
-	serial_print(" r12=");
-	serial_print_hex64(pre->r12);
-	serial_print(" r13=");
-	serial_print_hex64(pre->r13);
-	serial_print(" r14=");
-	serial_print_hex64(pre->r14);
-	serial_print(" r15=");
-	serial_print_hex64(pre->r15);
-	serial_print(" rsp=");
-	serial_print_hex64(pre->rsp);
-	serial_print(" rip=");
-	serial_print_hex64(pre->rip);
-	serial_print(" task_rax=");
-	serial_print_hex64(p->task.rax);
-	serial_print("\n");
+	klog_debug_fmt("FORK", "[FORK_RET][PRE_RETURN] pid=%x task_ptr=%llx rax_slot_addr=%llx rax_slot_val=%llx restore_method=%llx rax=%llx live_after_task_load=%llx rcx=%llx r11=%llx rbx=%llx rbp=%llx r12=%llx r13=%llx r14=%llx r15=%llx rsp=%llx rip=%llx task_rax=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)((uint64_t)(uintptr_t)&p->task), (unsigned long long)((uint64_t)(uintptr_t)&p->task.rax), (unsigned long long)(p->task.rax), (unsigned long long)(fork_restore_audit.restore_method), (unsigned long long)(pre->rax), (unsigned long long)(fork_restore_audit.live_rax_after_task_load), (unsigned long long)(pre->rcx), (unsigned long long)(pre->r11), (unsigned long long)(pre->rbx), (unsigned long long)(pre->rbp), (unsigned long long)(pre->r12), (unsigned long long)(pre->r13), (unsigned long long)(pre->r14), (unsigned long long)(pre->r15), (unsigned long long)(pre->rsp), (unsigned long long)(pre->rip), (unsigned long long)(p->task.rax));
 
 	fork_restore_dump_qwords("stack_at_pre_return", pre->rsp, 20);
 	fork_restore_dump_qwords("asm_stack_pre_gpr", fork_restore_audit.rsp_pre_gpr_load, 20);
-	serial_print("[FORK_RESTORE] asm_rax_slot_mem=");
-	serial_print_hex64(fork_restore_audit.rax_slot_mem);
-	serial_print(" stack_rax_off=");
-	serial_print_hex64(fork_restore_audit.stack_rax_slot_off);
-	serial_print(" live_after_pr_call=");
-	serial_print_hex64(fork_restore_audit.live_rax_after_pr_call);
-	serial_print("\n");
+	klog_debug_fmt("FORK", "[FORK_RESTORE] asm_rax_slot_mem=%llx stack_rax_off=%llx live_after_pr_call=%llx", (unsigned long long)(fork_restore_audit.rax_slot_mem), (unsigned long long)(fork_restore_audit.stack_rax_slot_off), (unsigned long long)(fork_restore_audit.live_rax_after_pr_call));
 }
 
 void fork_restore_emit_pre_iretq(void)
@@ -492,23 +404,7 @@ void fork_restore_emit_pre_iretq(void)
 	if (!DEBUG_FORK)
 		return;
 
-	serial_print("[FORK_RESTORE][PRE_IRETQ] live_rax=");
-	serial_print_hex64(fork_restore_audit.live_rax_pre_iretq);
-	serial_print(" live_rbx=");
-	serial_print_hex64(fork_restore_audit.live_rbx_pre_iretq);
-	serial_print(" live_rcx=");
-	serial_print_hex64(fork_restore_audit.live_rcx_pre_iretq);
-	serial_print(" live_rdx=");
-	serial_print_hex64(fork_restore_audit.live_rdx_pre_iretq);
-	serial_print(" kernel_rsp=");
-	serial_print_hex64(fork_restore_audit.kernel_rsp_pre_iretq);
-	serial_print(" iretq_rip=");
-	serial_print_hex64(fork_restore_audit.iretq_rip);
-	serial_print(" iretq_rflags=");
-	serial_print_hex64(fork_restore_audit.iretq_rflags);
-	serial_print(" iretq_user_rsp=");
-	serial_print_hex64(fork_restore_audit.iretq_user_rsp);
-	serial_print("\n");
+	klog_debug_fmt("FORK", "[FORK_RESTORE][PRE_IRETQ] live_rax=%llx live_rbx=%llx live_rcx=%llx live_rdx=%llx kernel_rsp=%llx iretq_rip=%llx iretq_rflags=%llx iretq_user_rsp=%llx", (unsigned long long)(fork_restore_audit.live_rax_pre_iretq), (unsigned long long)(fork_restore_audit.live_rbx_pre_iretq), (unsigned long long)(fork_restore_audit.live_rcx_pre_iretq), (unsigned long long)(fork_restore_audit.live_rdx_pre_iretq), (unsigned long long)(fork_restore_audit.kernel_rsp_pre_iretq), (unsigned long long)(fork_restore_audit.iretq_rip), (unsigned long long)(fork_restore_audit.iretq_rflags), (unsigned long long)(fork_restore_audit.iretq_user_rsp));
 }
 
 void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw)
@@ -522,15 +418,7 @@ void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp
 
 	if (DEBUG_FORK && !fork_branch.classified)
 	{
-		serial_print("[FORK_RET][FIRST_ENTRY] pid=");
-		serial_print_hex32((uint32_t)p->task.pid);
-		serial_print(" rax=");
-		serial_print_hex64(rax_hw);
-		serial_print(" rip=");
-		serial_print_hex64(rip_hw);
-		serial_print(" rsp=");
-		serial_print_hex64(rsp_hw);
-		serial_print("\n");
+		klog_debug_fmt("FORK", "[FORK_RET][FIRST_ENTRY] pid=%x rax=%llx rip=%llx rsp=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)(rax_hw), (unsigned long long)(rip_hw), (unsigned long long)(rsp_hw));
 	}
 }
 
@@ -616,6 +504,7 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	child->fork_resync_syscall_stack = 0;
 	child->irq_frame_saved = 0;
 	child->coop_resched_resume = 0;
+	child->want_kernel_ret = 0;
 	child->syscall_frame_fresh = 0;
 	child->wait_blocked = 0;
 	child->wait_target_pid = 0;
@@ -804,6 +693,8 @@ pid_t fork(void)
 	child->task.rax = 0;
 	process_set_mm_root(child, (uint64_t)(uintptr_t)child->page_directory);
 	child->task.pid = child_pid;
+	/* Explicit TLS inherit (memcpy already copied; keep obvious for auditors). */
+	child->fs_base = parent->fs_base;
 
 #if defined(__x86_64__) || defined(__amd64__)
 	if (parent->mode == USER_MODE)
@@ -811,7 +702,7 @@ pid_t fork(void)
 		/* Parent must not resume userspace with rax=0 after child ran first. */
 		parent->task.rax = (uint64_t)child_pid;
 		fork_fixup_user_syscall_return(parent, child);
-		arch_set_fs_base(parent->fs_base);
+		set_fs_base(parent->fs_base);
 #if IR0_DEBUG_PROC
 		process_fase46_proc_log(parent, (int64_t)child_pid, "AFTER_FORK");
 		process_fase46_proc_log(child, 0, "USER_ENTER");
@@ -897,7 +788,7 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 		child->task.rsp = (uint64_t)child_sp;
 		child->task.rbp = 0;
 		/* Parent keeps running: restore parent TLS on this CPU. */
-		arch_set_fs_base(parent->fs_base);
+		set_fs_base(parent->fs_base);
 	}
 #endif
 

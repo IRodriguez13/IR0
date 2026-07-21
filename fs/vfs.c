@@ -31,6 +31,7 @@
 #endif
 #include <ir0/path.h>
 #include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
@@ -297,10 +298,10 @@ int vfs_init(void)
 #endif
     if (DEBUG_VFS)
     {
-        klog_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_ACTIVE\n");
-        klog_print("[VFS][CLASSIFY] VFS_FS_CONTRACT_DOCUMENTED\n");
-        klog_print("[VFS][CLASSIFY] SYSCALLS_USE_VFS_ONLY\n");
-        klog_print("[VFS][CLASSIFY] FUTURE_FS_READY\n");
+        klog_info("VFS", "CLASSIFY VFS_FS_CONTRACT_ACTIVE");
+        klog_info("VFS", "CLASSIFY VFS_FS_CONTRACT_DOCUMENTED");
+        klog_info("VFS", "CLASSIFY SYSCALLS_USE_VFS_ONLY");
+        klog_info("VFS", "CLASSIFY FUTURE_FS_READY");
     }
     return 0;
 }
@@ -448,15 +449,16 @@ int vfs_init_root(void)
     char root_dev_path[64];
     int can_use_block_dev = 1;
 
-#define VFS_MSG(s) console_backend_write((s), sizeof(s) - 1, IR0_CONSOLE_COLOR_DEFAULT)
+#define VFS_MSG(s) klog_info("VFS", (s))
+#define VFS_ERR(s) klog_error("VFS", (s))
 
-    VFS_MSG("VFS: Initializing VFS...\n");
+    VFS_MSG("Initializing VFS...");
     int ret = vfs_init();
     if (ret != 0) {
-        VFS_MSG("VFS: ERROR - vfs_init failed\n");
+        VFS_ERR("vfs_init failed");
         return ret;
     }
-    VFS_MSG("VFS: vfs_init OK (builtin filesystems registered)\n");
+    VFS_MSG("vfs_init OK (builtin filesystems registered)");
 
     snprintf(root_dev_path, sizeof(root_dev_path), "/dev/%s", root_blk);
 
@@ -466,29 +468,30 @@ int vfs_init_root(void)
 #endif
 
     if (can_use_block_dev && !ir0_block_name_is_present(root_blk)) {
-        VFS_MSG("VFS: ERROR - No block device configured for root available\n");
+        VFS_ERR("No block device configured for root available");
         return -ENODEV;
     }
 
-    VFS_MSG("VFS: Mounting root filesystem...\n");
+    VFS_MSG("Mounting root filesystem...");
     ret = vfs_mount(root_dev_path, "/", root_fs);
     if (ret != 0) {
-        VFS_MSG("VFS: configured root mount failed, falling back to tmpfs root\n");
+        VFS_MSG("configured root mount failed, falling back to tmpfs root");
 #if CONFIG_ENABLE_FS_TMPFS
         ret = vfs_mount("none", "/", "tmpfs");
         if (ret != 0) {
-            VFS_MSG("VFS: ERROR - tmpfs fallback also failed\n");
+            VFS_ERR("tmpfs fallback also failed");
             return ret;
         }
-        VFS_MSG("VFS: tmpfs root mounted (fallback)\n");
+        VFS_MSG("tmpfs root mounted (fallback)");
 #else
-        VFS_MSG("VFS: ERROR - tmpfs fallback disabled by configuration\n");
+        VFS_ERR("tmpfs fallback disabled by configuration");
         return ret;
 #endif
     } else {
-        VFS_MSG("VFS: vfs_mount OK (configured root)\n");
+        VFS_MSG("vfs_mount OK (configured root)");
     }
 #undef VFS_MSG
+#undef VFS_ERR
     return 0;
 }
 
@@ -512,7 +515,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     if (!ir0_open_flags_ok_for_vfs(flags))
     {
         if (DEBUG_VFS)
-            klog_print("[VFS_OPEN][CLASSIFY] VFS_LINUX_RAW_FLAGS_REJECTED\n");
+            klog_info("VFS", "CLASSIFY VFS_LINUX_RAW_FLAGS_REJECTED");
         return -EINVAL;
     }
 
@@ -564,7 +567,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
                 if (ret != 0)
                     return ret;
                 if (DEBUG_VFS)
-                    klog_print("[VFS_OPEN][CLASSIFY] VFS_CREATE_SEMANTICS_GENERIC\n");
+                    klog_info("VFS", "CLASSIFY VFS_CREATE_SEMANTICS_GENERIC");
             }
             else
             {
@@ -607,7 +610,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
             if (ret != 0)
                 return ret;
             if (DEBUG_VFS)
-                klog_print("[VFS_OPEN][CLASSIFY] VFS_TRUNCATE_GENERIC\n");
+                klog_info("VFS", "CLASSIFY VFS_TRUNCATE_GENERIC");
         }
     }
 
