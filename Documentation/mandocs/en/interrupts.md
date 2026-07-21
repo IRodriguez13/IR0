@@ -62,7 +62,7 @@ exceptions map to signals for user tasks or panic for kernel faults.
 ## 4. Responsibilities
 
 - IDT: install gates before `sti`.
-- PIC: all IRQs masked at init; `arch_boot_irq_unmask` enables timer, keyboard, cascade, mouse, NIC.
+- PIC: all IRQs masked at init; `boot_irq_unmask` enables timer, keyboard, cascade, mouse, NIC.
 - ISR: user exceptions → signals; kernel exceptions → panic (except #PF/#GP audit paths).
 - Syscall entry: capture user frame for fork/signal resume on x86-64.
 

@@ -94,7 +94,7 @@ make -s arch-guard
 ## Prioridad restante (agente — sin VM mantenedor)
 
 1. ARM64 full `ALL_OBJS` link + musl aarch64 — **BLOCKED** (toolchain / KERNEL_OBJS)
-2. F8 TCP hardening (retransmit, listen, FIN/RST) — **0.0.2** follow-on to F8-3 slice
+2. F8 beyond MVP (peer-driven rexmit/window/CC, E1000/virtio-net) — listen+wire MVP already in `smoke-f8-net`
 3. virtiofs+FUSE — Future (9p remains ship host-share)
 
 Mantainer manual VM (ship 0.0.1) is **out of agent backlog** — tracked only under Open in `BACKLOG_REMAINING.md`.

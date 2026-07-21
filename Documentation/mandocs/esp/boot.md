@@ -37,7 +37,7 @@ información Multiboot en `RDI` para `kmain`.
 ```
 GRUB → boot_x64.asm
          → kmain(multiboot_info)
-              → arch_set_boot_params / arch_early_init
+              → set_boot_params / early_init
               → heap_init (0x800000)
               → [CONFIG_ENABLE_VBE] video_backend_init_from_multiboot
               → console_backend_init
@@ -46,8 +46,8 @@ GRUB → boot_x64.asm
               → init_all_drivers()
               → vfs_init_root()  → mount / o fallback tmpfs
               → process_init + ipc_init + clock_system_init
-              → arch_syscall_init + syscalls_init
-              → arch_irq_init + arch_boot_irq_unmask + sti
+              → syscall_init + syscalls_init
+              → irq_init + boot_irq_unmask + sti
               → [KERNEL_DEBUG_SHELL] start_init_process
                 OR ir0_rootfs_prepare_userspace_base + kexecve("/sbin/init")
               → sched_schedule_next → ring 3
@@ -111,8 +111,8 @@ Fuente Mermaid: `Documentation/mandocs/diagrams/boot.mmd`
 
 ## 9. Consejos de depuración
 
-Tags serial: `[ARCH]`, `[BOOT]`, `[DRIVERS]`, `SERIAL: kmain: Loading userspace init`,
-`[FASE52B/53A/58L][CLASSIFY] ROOTFS_LAYOUT_OK`.
+Tags serial: `[ARCH]`, COMP `BOOT` vía klog, `[DRIVERS]`, `SERIAL: kmain: Loading userspace init`,
+`[ts] [INFO] [FASE…] CLASSIFY ROOTFS_LAYOUT_OK` (sin dialecto `[COMP][CLASSIFY]`).
 
 | Síntoma | Comprobar |
 |---------|-----------|

@@ -22,10 +22,12 @@ The goal is to document implemented behavior first, then known gaps.
 - `PSEUDO_FS_HEART.md`: registry + `/heart` facade + ARCH-3 fd_table lifecycle.
 - `STABLE.md`: release 0.0.1 checklist; merge→`master` blockers = TinyCC + Doom T2.
 - `BACKLOG_REMAINING.md`: honest post-0.0.1 open work (storage, POSIX, residual).
-- `KTM.md`: **canonical KTM guide** — internals, kernel API, `/dev/ktm` userspace API, gates (Spanish: `esp/KTM.md`).
+- `KTM.md`: **canonical KTM guide** — internals, **klog layers**, kernel API, `/dev/ktm`, gates (Spanish: `esp/KTM.md`).
 - `KTM_FASE_PARITY.md`: FASE oleada → KTM analogue map (COVERED/PARTIAL/GAP/SUB).
 - `KTM_FASE_INVENTORY.md`: legacy `smoke-fase*` class A/B/C and canonical KTM gates.
+- `CHANGELOG.md`: iteration notes (Unreleased + 0.0.1).
 - `ai_driven_dev/ktm.md`: short agent-facing KTM index (points to `KTM.md`).
+- `ai_driven_dev/rules/ir0-version-stamp.mdc`: lockstep `version.h` / Makefile with upstream tags.
 - `releases/`: ABI board, syscall/pseudo map, 0.0.1 scope and write-path plan.
 - `DRIVERS.md`: driver registry, bootstrap flow, and config-gated initialization.
 - `INTERRUPTS.md`: IDT/PIC path, syscall entry, and exception behavior.
