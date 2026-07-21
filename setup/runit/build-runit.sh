@@ -92,12 +92,17 @@ mkdir -p "$STAGE_BIN"
 	-DRUNIT_EXEC_PATH='"/bin/bb-reboot"' \
 	-DRUNIT_START_TAG='"RUNSV_BUSYBOX_REBOOT_START\n"' \
 	-o "$STAGE_BIN/runit_busybox_reboot_run" "${ROOT}/setup/runit/runit_exec_run.c"
+"$CC" -static -Os -o "$STAGE_BIN/runit_hostshare_payload_run" \
+	"${ROOT}/setup/runit/runit_hostshare_payload_run.c"
+"$CC" -static -Os -o "$STAGE_BIN/runit_pause_run" \
+	"${ROOT}/setup/runit/runit_pause_run.c"
 for bin in runit_stage1 runit_stage2 runit_stage3 runit_console_run runit_logger_run \
 	runit_fase52_run runit_tcc_power_run runit_fase55d_run runit_fase55d_init \
 	runit_power_smoke runit_power_run \
 	runit_busybox_halt_smoke runit_busybox_halt_run \
 	runit_busybox_poweroff_smoke runit_busybox_poweroff_run \
-	runit_busybox_reboot_smoke runit_busybox_reboot_run; do
+	runit_busybox_reboot_smoke runit_busybox_reboot_run \
+	runit_hostshare_payload_run runit_pause_run; do
 	file "$STAGE_BIN/$bin" | grep -q ELF
 done
 echo "✓ runit stage ELF stubs OK"

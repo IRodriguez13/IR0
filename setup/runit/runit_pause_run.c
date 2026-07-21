@@ -6,8 +6,8 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: runit_fase55d_init.c
- * Description: FASE55D smoke init — stage2 tag + doom service exec (no runsvdir spin)
+ * File: runit_pause_run.c
+ * Description: Quiet runit service (no ash) — keeps slot supervised without serial noise.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -15,14 +15,15 @@
 #include <unistd.h>
 #include "ir0_smoke_tag.h"
 
+#ifndef RUNIT_START_TAG
+#define RUNIT_START_TAG "RUNSV_PAUSE_START\n"
+#endif
+
 
 int main(void)
 {
-	char *const argv[] = { "/bin/doom-smoke", NULL };
-
-	ir0_smoke_tag("RUNIT_STAGE2_OK\n");
-	ir0_smoke_tag("RUNSV_FASE55D_START\n");
-	execv("/bin/doom-smoke", argv);
-	ir0_smoke_tag("FASE55D_INIT_EXEC_FAIL\n");
-	return 111;
+	ir0_smoke_tag(RUNIT_START_TAG);
+	for (;;)
+		pause();
+	return 0;
 }

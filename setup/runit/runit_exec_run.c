@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <unistd.h>
+#include "ir0_smoke_tag.h"
 
 #ifndef RUNIT_EXEC_PATH
 #define RUNIT_EXEC_PATH "/bin/sh"
@@ -22,21 +23,13 @@
 #define RUNIT_START_TAG "RUNSV_EXEC_START\n"
 #endif
 
-static void tag(const char *s)
-{
-	const char *p = s;
-
-	while (*p)
-		p++;
-	(void)write(1, s, (size_t)(p - s));
-}
 
 int main(void)
 {
 	char *const argv[] = { (char *)RUNIT_EXEC_PATH, NULL };
 
-	tag(RUNIT_START_TAG);
+	ir0_smoke_tag(RUNIT_START_TAG);
 	execv(RUNIT_EXEC_PATH, argv);
-	tag("RUNSV_EXEC_FAIL\n");
+	ir0_smoke_tag("RUNSV_EXEC_FAIL\n");
 	return 111;
 }
