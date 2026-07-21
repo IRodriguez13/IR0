@@ -43,6 +43,8 @@ DEFAULT_FAIL_RES: list[str] = [
     r"BUSYBOX_FAIL_REASON=|FASE52_FAIL_REASON=|EXEC_ONLY_FAIL=",
     r"\[FASE[0-9A-Z]+\]\[FAIL\]",
     r"KSTACK_CANARY_BROKEN",
+    r"DESK_SESSION_FAIL",
+    r"DESK_CLIENT_FAIL",
 ]
 
 # Last-resort success tags when --success is not overridden.
@@ -126,6 +128,7 @@ SYSCALL_LINE_RES: list[str] = [
     r"SERIAL: sys_\w+",
     r"SERIAL: mmap: entering syscall",
     r"\[MMAP_AUDIT\].*stage=",
+    r"CLASSIFY.*stage=",
     r"\[FASE50\]\[EXEC_ARGV\].*stage=sys_exec",
 ]
 
@@ -136,7 +139,8 @@ TAG_LINE_RES: list[str] = [
     r"BUSYBOX_[A-Z_]+",
     r"KSTACK_[A-Z_]+_OK\b",
     r"DEBUG_[A-Z_]+",
-    r"\[FASE[0-9A-Z]+\]\[CLASSIFY\]",
+    r"\[FASE[0-9A-Z]+\]\[CLASSIFY\]",  # legacy
+    r"\[FASE[0-9A-Z]+\] CLASSIFY",
     r"\[FASE[0-9A-Z]+\]\[FAIL\]",
     r"_FAIL_REASON=",
 ]
@@ -158,6 +162,7 @@ class MonitorState:
     matched_success: str = ""
     matched_fail: str = ""
     reason: str = "running"
+    pending: str = ""
 
 
 def compile_patterns(raw: Sequence[str]) -> list[re.Pattern[str]]:
@@ -179,7 +184,20 @@ def ingest_lines(state: MonitorState, new_text: str) -> None:
     if not new_text:
         return
 
-    for line in new_text.splitlines():
+    # Keep a trailing partial line: QEMU serial often flushes mid-tag; treating
+    # "IR0" as a finished line breaks success matching on joined lines.
+    data = state.pending + new_text.replace("\0", "")
+    state.pending = ""
+    parts = data.split("\n")
+    if not data.endswith("\n") and not data.endswith("\r"):
+        state.pending = parts[-1]
+        parts = parts[:-1]
+    elif data.endswith("\n"):
+        # trailing empty from final newline
+        pass
+
+    for part in parts:
+        line = part.rstrip("\r")
         if not line:
             continue
         state.lines.append(line)
@@ -202,17 +220,26 @@ def read_new_log(state: MonitorState) -> None:
         state.last_growth_at = time.monotonic()
 
 
+def log_text_flat(state: MonitorState) -> str:
+    """Full log with CR/LF stripped — avoids false misses when serial flushes mid-tag."""
+    try:
+        text = state.log_path.read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        text = "\n".join(state.lines)
+    return text.replace("\0", "").replace("\r", "").replace("\n", "")
+
+
 def success_satisfied(state: MonitorState) -> bool:
     if not state.success_tags:
         return False
-    text = "\n".join(state.lines)
+    text = log_text_flat(state)
     if state.success_mode == "any":
         return any(tag in text for tag in state.success_tags)
     return all(tag in text for tag in state.success_tags)
 
 
 def first_success_match(state: MonitorState) -> str:
-    text = "\n".join(state.lines)
+    text = log_text_flat(state)
     if state.success_mode == "any":
         for tag in state.success_tags:
             if tag in text:
@@ -287,65 +314,69 @@ def run_smoke(
     )
 
     with log_path.open("ab", buffering=0) as log_fp:
-        proc = subprocess.Popen(
-            qemu_cmd,
-            stdout=log_fp,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        # Guest serial is QEMU stdout (-serial stdio). Host QEMU chatter
+        # (version banner, GTK, warnings) goes to a sibling .qemu-stderr file.
+        qemu_err_path = Path(str(log_path) + ".qemu-stderr")
+        with qemu_err_path.open("ab", buffering=0) as err_fp:
+            proc = subprocess.Popen(
+                qemu_cmd,
+                stdout=log_fp,
+                stderr=err_fp,
+                start_new_session=True,
+            )
 
-        start = time.monotonic()
-        try:
-            while True:
-                read_new_log(state)
-                elapsed = time.monotonic() - start
-
-                fail_line = first_fail_match(state)
-                if fail_line:
-                    state.reason = "fail_tag"
-                    state.matched_fail = fail_line
-                    kill_process_group(proc)
-                    print_summary(state, elapsed, "FAIL")
-                    return 1
-
-                if success_satisfied(state):
-                    state.reason = "success_tag"
-                    state.matched_success = first_success_match(state)
-                    kill_process_group(proc)
-                    print_summary(state, elapsed, "PASS")
-                    return 0
-
-                if proc.poll() is not None:
+            start = time.monotonic()
+            try:
+                while True:
                     read_new_log(state)
+                    elapsed = time.monotonic() - start
+
+                    fail_line = first_fail_match(state)
+                    if fail_line:
+                        state.reason = "fail_tag"
+                        state.matched_fail = fail_line
+                        kill_process_group(proc)
+                        print_summary(state, elapsed, "FAIL")
+                        return 1
+
                     if success_satisfied(state):
-                        state.reason = "qemu_exit_success"
+                        state.reason = "success_tag"
                         state.matched_success = first_success_match(state)
+                        kill_process_group(proc)
                         print_summary(state, elapsed, "PASS")
                         return 0
-                    state.reason = "qemu_exit"
-                    state.matched_fail = state.lines[-1].strip() if state.lines else ""
-                    print_summary(state, elapsed, "FAIL")
-                    return 1
 
-                if elapsed >= timeout_sec:
-                    state.reason = "timeout"
-                    kill_process_group(proc)
-                    print_summary(state, elapsed, "FAIL")
-                    return 1
+                    if proc.poll() is not None:
+                        read_new_log(state)
+                        if success_satisfied(state):
+                            state.reason = "qemu_exit_success"
+                            state.matched_success = first_success_match(state)
+                            print_summary(state, elapsed, "PASS")
+                            return 0
+                        state.reason = "qemu_exit"
+                        state.matched_fail = state.lines[-1].strip() if state.lines else ""
+                        print_summary(state, elapsed, "FAIL")
+                        return 1
 
-                if (
-                    stale_sec > 0
-                    and state.lines
-                    and (time.monotonic() - state.last_growth_at) >= stale_sec
-                ):
-                    state.reason = "stale_no_progress"
-                    kill_process_group(proc)
-                    print_summary(state, elapsed, "FAIL")
-                    return 1
+                    if elapsed >= timeout_sec:
+                        state.reason = "timeout"
+                        kill_process_group(proc)
+                        print_summary(state, elapsed, "FAIL")
+                        return 1
 
-                time.sleep(0.25)
-        finally:
-            kill_process_group(proc)
+                    if (
+                        stale_sec > 0
+                        and state.lines
+                        and (time.monotonic() - state.last_growth_at) >= stale_sec
+                    ):
+                        state.reason = "stale_no_progress"
+                        kill_process_group(proc)
+                        print_summary(state, elapsed, "FAIL")
+                        return 1
+
+                    time.sleep(0.25)
+            finally:
+                kill_process_group(proc)
 
     return 1
 

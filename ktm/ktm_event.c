@@ -13,25 +13,30 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ktm.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 #if defined(CONFIG_KTM_EVENTS) && CONFIG_KTM_EVENTS
 
+#include <config.h>
+
 void ktm_event_emit(const char *tag)
 {
-	serial_print("[KTM][EV] ");
-	serial_print(tag ? tag : "(null)");
-	serial_print("\n");
+#if defined(CONFIG_KTM_SERIAL_VERBOSE) && CONFIG_KTM_SERIAL_VERBOSE
+	klog_debug_fmt("KTM", "[KTM][EV] %s", tag ? tag : "(null)");
+#else
+	(void)tag;
+#endif
 	KTM_FLIGHT(KTM_FL_EV, 0, 0, 0, 0);
 }
 
 void ktm_event_emit_pid(const char *tag, uint32_t pid)
 {
-	serial_print("[KTM][EV] ");
-	serial_print(tag ? tag : "(null)");
-	serial_print(" pid=");
-	serial_print_hex32(pid);
-	serial_print("\n");
+#if defined(CONFIG_KTM_SERIAL_VERBOSE) && CONFIG_KTM_SERIAL_VERBOSE
+	klog_debug_fmt("KTM", "[KTM][EV] %s pid=%x", tag ? tag : "(null)",
+		       (unsigned)pid);
+#else
+	(void)tag;
+#endif
 	KTM_FLIGHT(KTM_FL_EV, pid, 0, 0, 0);
 }
 

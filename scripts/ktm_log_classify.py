@@ -76,13 +76,28 @@ def classify(text: str) -> list[tuple[str, str, str]]:
     if "[KTM][PANIC_CLASS] KERNEL_JUMP_BAD_RIP" in text or (
         re.search(r"KERNEL_DEREF_USERPTR", text) and
         re.search(r"kernel_fault_rip=", text)
-    ):
+    ) or "CLASSIFY KERNEL_RET_BAD_RIP" in text or "[CTX][CLASSIFY] KERNEL_RET_BAD_RIP" in text:
         hits.append((
             "KERNEL_JUMP_BAD_RIP",
             "high",
             "Kernel RIP points into userspace range — inspect task->rip/cs and "
             "blocked-syscall resume (irq_frame_saved / poll_resume_via_arch).",
         ))
+
+    if "CLASSIFY CLASS_B_FAULT_INJECT" in text or "[CTX][CLASSIFY] CLASS_B_FAULT_INJECT" in text:
+        if "CLASSIFY KERNEL_RET_BAD_RIP" in text or "[CTX][CLASSIFY] KERNEL_RET_BAD_RIP" in text:
+            hits.append((
+                "CLASS_B_INJECT_REPRO",
+                "info",
+                "KTM sched.class_b_arm_window hit with IR0_CLASS_B_REPAIR=0 — "
+                "expected KERNEL_RET_BAD_RIP.",
+            ))
+        elif "CLASSIFY KERNEL_CS_USER_RIP_REPAIR" in text or "[CTX][CLASSIFY] KERNEL_CS_USER_RIP_REPAIR" in text:
+            hits.append((
+                "CLASS_B_INJECT_MITIGATED",
+                "info",
+                "KTM Class B inject sanitized by KERNEL_CS_USER_RIP_REPAIR.",
+            ))
 
     if "RUNIT_STAGE1_OK" in text and "RUNIT_STAGE2_OK" not in text:
         hits.append((

@@ -157,7 +157,7 @@ static int sh_expect_stdout(const char *step, const char *script,
 	}
 	if (!want_prefix || strncmp(out, want_prefix, strlen(want_prefix)) != 0)
 	{
-		write_str("[FASE51][CLASSIFY] ");
+		write_str("[FASE51] CLASSIFY ");
 		write_str(step);
 		write_str("_STDOUT_MISMATCH\n");
 		fase51_fail(step, "stdout");
@@ -184,13 +184,13 @@ int main(void)
 	write_str("FASE51_PIPE_START\n");
 	if (sh_expect_stdout("pipe", "echo hi | cat", "hi") != 0)
 		goto halt;
-	write_str("[FASE51][CLASSIFY] FASE51_PIPE_OK\n");
+	write_str("[FASE51] CLASSIFY FASE51_PIPE_OK\n");
 
 	write_str("FASE51_REDIRECT_START\n");
 	if (sh_expect_stdout("redirect", "echo hello > /f51_a.txt; cat /f51_a.txt",
 			     "hello") != 0)
 		goto halt;
-	write_str("[FASE51][CLASSIFY] FASE51_REDIRECT_OK\n");
+	write_str("[FASE51] CLASSIFY FASE51_REDIRECT_OK\n");
 
 	write_str("FASE51_FOR_START\n");
 	if (sh_capture("for_loop", "for x in a b c; do echo $x; done",
@@ -201,7 +201,7 @@ int main(void)
 	}
 	if (ec != 0)
 	{
-		write_str("[FASE51][CLASSIFY] for_loop_EXIT_STATUS\n");
+		write_str("[FASE51] CLASSIFY for_loop_EXIT_STATUS\n");
 		fase51_fail("for_loop", "exit");
 		goto halt;
 	}
@@ -210,17 +210,17 @@ int main(void)
 		fase51_fail("for_loop", "stdout");
 		goto halt;
 	}
-	write_str("[FASE51][CLASSIFY] FASE51_FOR_LOOP_OK\n");
+	write_str("[FASE51] CLASSIFY FASE51_FOR_LOOP_OK\n");
 
 	write_str("FASE51_CONTROL_START\n");
 	if (sh_expect_stdout("true_and", "true && echo ok", "ok") != 0)
 		goto halt;
 	if (sh_expect_stdout("false_or", "false || echo ok", "ok") != 0)
 		goto halt;
-	write_str("[FASE51][CLASSIFY] FASE51_CONTROL_FLOW_OK\n");
+	write_str("[FASE51] CLASSIFY FASE51_CONTROL_FLOW_OK\n");
 
-	write_str("[FASE51][CLASSIFY] FASE51_BASELINE_STABLE\n");
-	write_str("[FASE51][CLASSIFY] DEBUG_FASE51_GATED\n");
+	write_str("[FASE51] CLASSIFY FASE51_BASELINE_STABLE\n");
+	write_str("[FASE51] CLASSIFY DEBUG_FASE51_GATED\n");
 	write_str("FASE51_OK\n");
 	goto done;
 

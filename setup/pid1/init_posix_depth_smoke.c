@@ -177,7 +177,7 @@ int main(void)
 	close(pfd[0]);
 	close(pfd[1]);
 
-	write_str("[POSIX][CLASSIFY] POSIX_DEPTH_OK\n");
+	write_str("[POSIX] CLASSIFY POSIX_DEPTH_OK\n");
 	write_str("POSIX_DEPTH_OK\n");
 	return 0;
 }

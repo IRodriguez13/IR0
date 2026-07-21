@@ -14,18 +14,20 @@
 #include <ir0/net.h>
 #include "rtl8139.h"
 #include <stdbool.h>
-#include <serial/serial.h>
+#include <ir0/ktm/klog.h>
 #include <interrupt/arch/io.h>
 #include <mm/allocator.h>
 #include <ir0/kmem.h>
 #include <string.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
-#include <ir0/oops.h>  /* For ASSERT and panicex */
+#include <ir0/oops.h>
+#include <ir0/cpu.h>  /* For ASSERT and panicex */
 #include <ir0/resource_registry.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <config.h>
+#include <ir0/ktm/klog.h>
 
 /*
  * Bus/DMA address for RTL8139 register writes. The kernel identity-maps
@@ -47,7 +49,7 @@ static volatile uint8_t rtl8139_rx_processing = 0;
 /* TX tracking for robust DMA management */
 #define RTL8139_MAX_TX_IN_FLIGHT 4  /* Maximum number of TX packets in flight */
 static volatile uint32_t rtl8139_tx_in_flight = 0;  /* Counter of TX packets currently being DMA'd */
-static volatile uint32_t rtl8139_tx_descriptor_own_state[4] = {0, 0, 0, 0};  /* Track OWN bit state per descriptor */
+static volatile uint32_t rtl8139_tx_descriptor_own_state[4] = {1, 1, 1, 1};  /* 1 = host owns (idle) */
 
 /*
  * Packet and error counters for /proc/net/dev and diagnostics.
@@ -69,6 +71,10 @@ static uint8_t rtl8139_tx_timeout_latched[4];
 
 static struct net_device rtl8139_dev;
 
+/* Rate-limit full TX ring recover (ms-scale via timer ticks). */
+static uint64_t rtl8139_last_full_recover_tick;
+static uint32_t rtl8139_recover_suppressed;
+
 /* Forward declarations */
 static int32_t rtl8139_hw_init(void);
 static void rtl8139_check_tx_completion(void);
@@ -77,11 +83,33 @@ static int rtl8139_find_free_tx_descriptor(void);
 /*
  * Force-recover TX path when descriptors appear wedged.
  * This drops any in-flight frames and re-arms all TX descriptors.
+ * Rate-limited: at most one full recover per ~100ms of timer ticks.
+ * Returns 1 if a full recover ran, 0 if suppressed.
  */
-static void rtl8139_recover_tx_path(void)
+static int rtl8139_recover_tx_path(void)
 {
+    uint64_t now;
+    uint32_t hz;
+
     if (!rtl8139_io_base)
-        return;
+        return 0;
+
+    now = clock_get_tick_count();
+    hz = clock_get_timer_frequency();
+    if (hz != 0 && rtl8139_last_full_recover_tick != 0)
+    {
+        uint64_t window = (uint64_t)hz / 10; /* ~100ms */
+
+        if (window == 0)
+            window = 1;
+        if ((now - rtl8139_last_full_recover_tick) < window)
+        {
+            rtl8139_recover_suppressed++;
+            LOG_DEBUG("RTL8139", "TX recover suppressed (rate limit)");
+            return 0;
+        }
+    }
+    rtl8139_last_full_recover_tick = now;
 
     uint8_t cr = inb(rtl8139_io_base + RTL8139_REG_CR);
     uint8_t rx_enabled = cr & RTL8139_CR_RE;
@@ -97,8 +125,8 @@ static void rtl8139_recover_tx_path(void)
             uint32_t phys_addr = KVA_TO_PHYS(rtl8139_tx_buffers[i]);
             outl(rtl8139_io_base + RTL8139_REG_TSAD0 + (i * 4), phys_addr);
         }
-        outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), 0);
-        rtl8139_tx_descriptor_own_state[i] = 0;
+        outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), RTL8139_TSD_OWN);
+        rtl8139_tx_descriptor_own_state[i] = 1;
         rtl8139_tx_desc_start_tick[i] = 0;
         rtl8139_tx_timeout_latched[i] = 0;
     }
@@ -107,17 +135,28 @@ static void rtl8139_recover_tx_path(void)
 
     /* Ack TX interrupts/errors that may have latched. */
     outw(rtl8139_io_base + RTL8139_REG_ISR, RTL8139_INT_TOK | RTL8139_INT_TER | RTL8139_INT_PUN);
-    LOG_WARNING("RTL8139", "TX path recovered (descriptor ring re-armed)");
+    if (rtl8139_recover_suppressed)
+    {
+        LOG_DEBUG_FMT("RTL8139",
+                      "TX path recovered (suppressed=%u prior)",
+                      rtl8139_recover_suppressed);
+        rtl8139_recover_suppressed = 0;
+    }
+    else
+    {
+        LOG_WARNING("RTL8139", "TX path recovered (descriptor ring re-armed)");
+    }
+    return 1;
 }
 
 static inline uint64_t rtl8139_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void rtl8139_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 static bool rtl8139_try_enter_rx(void)
@@ -214,8 +253,8 @@ static int32_t rtl8139_hw_init(void)
 
     if (find_rtl8139(&bus, &slot) != 0)
     {
-        LOG_WARNING("RTL8139", "Device not found");
-        return -1;
+        LOG_WARNING("RTL8139", "Device not found (absent)");
+        return IR0_DRIVER_ABSENT;
     }
 
     LOG_INFO_FMT("RTL8139", "Found device at PCI %d:%d", (int)bus, (int)slot);
@@ -247,7 +286,7 @@ static int32_t rtl8139_hw_init(void)
         {
             if (++reset_iters >= 1000)
             {
-                serial_print("[RTL8139] ERROR: software reset timeout (CR_RST stuck)\n");
+                klog_info("RTL8139", "ERROR: software reset timeout (CR_RST stuck)");
                 return -1;
             }
         }
@@ -310,17 +349,15 @@ static int32_t rtl8139_hw_init(void)
         /* Hardware uses this address for DMA - must be physical, not virtual */
         outl(rtl8139_io_base + RTL8139_REG_TSAD0 + (i * 4), phys_addr);
         
-        /* CRITICAL: Initialize TSD register to 0 (descriptor free, no packet size) */
-        /* This ensures OWN=0 so descriptors start in a free state */
-        /* If we don't do this, descriptors might have residual OWN=1 from hardware reset */
-        outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), 0);
+        /* Host-owns (OWN=1): ready for next TX. Matches QEMU TxHostOwns. */
+        outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), RTL8139_TSD_OWN);
         
-        /* Verify TSD is actually 0 after write */
         uint32_t tsd_init = inl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4));
-        if (tsd_init != 0)
+        if (!(tsd_init & RTL8139_TSD_OWN))
         {
-            LOG_WARNING_FMT("RTL8139", "TX descriptor %d TSD not zero after init: 0x%x", i, tsd_init);
+            LOG_WARNING_FMT("RTL8139", "TX descriptor %d missing host-owns after init: 0x%x", i, tsd_init);
         }
+        rtl8139_tx_descriptor_own_state[i] = 1;
         
         LOG_DEBUG_FMT("RTL8139", "TX buffer %d: virt=%p, phys=0x%x, size=%d, TSD=0x%x", 
                      i, rtl8139_tx_buffers[i], phys_addr, RTL8139_MAX_TX_SIZE, tsd_init);
@@ -401,16 +438,18 @@ init_fail:
 
 static int rtl8139_find_free_tx_descriptor(void)
 {
-    for (int i = 0; i < 4; i++)
-    {
-        uint32_t tsd_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
-        uint32_t tsd = inl(tsd_addr);
-        if (!(tsd & RTL8139_TSD_OWN))
-        {
-            return i;
-        }
-    }
+    /*
+     * QEMU C-mode (and Realtek ring) only advances currTxDesc on a successful
+     * TX of that slot. Always use our matching cursor — not the first free
+     * index — or writes land on the wrong TSD and the frame never leaves.
+     */
+    int i = (int)(rtl8139_current_tx_descriptor % 4);
+    uint32_t tsd_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
+    uint32_t tsd = inl(tsd_addr);
 
+    /* Free when host owns (OWN set). */
+    if (tsd & RTL8139_TSD_OWN)
+        return i;
     return -1;
 }
 
@@ -425,10 +464,11 @@ static void rtl8139_force_release_busy_tx_descriptors(void)
     {
         uint32_t reg_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
         uint32_t tsd = inl(reg_addr);
-        if (tsd & RTL8139_TSD_OWN)
+        /* Busy = host does not own (OWN clear). Return descriptor to host. */
+        if (!(tsd & RTL8139_TSD_OWN))
         {
-            outl((uint16_t)reg_addr, 0);
-            rtl8139_tx_descriptor_own_state[i] = 0;
+            outl((uint16_t)reg_addr, RTL8139_TSD_OWN);
+            rtl8139_tx_descriptor_own_state[i] = 1;
             rtl8139_tx_desc_start_tick[i] = 0;
             rtl8139_tx_timeout_latched[i] = 0;
             if (rtl8139_tx_in_flight > 0)
@@ -436,7 +476,7 @@ static void rtl8139_force_release_busy_tx_descriptors(void)
                 rtl8139_tx_in_flight--;
             }
             rtl8139_counters.tx_errors++;
-            LOG_WARNING_FMT("RTL8139", "Force-released busy TX descriptor %d", i);
+            LOG_DEBUG_FMT("RTL8139", "Force-released busy TX descriptor %d", i);
         }
     }
 }
@@ -475,10 +515,10 @@ int rtl8139_send(void *data, size_t len)
     if (desc == -1)
     {
         /*
-         * Descriptor ring may be temporarily full. Re-check completions a few
-         * times before forcing TX recovery, to avoid dropping in-flight frames.
+         * Descriptor ring may be temporarily full. Re-check completions with
+         * a longer settle window before forcing TX recovery.
          */
-        for (int attempt = 0; attempt < 16 && desc == -1; attempt++)
+        for (int attempt = 0; attempt < 48 && desc == -1; attempt++)
         {
             io_wait();
             rtl8139_check_tx_completion();
@@ -490,19 +530,37 @@ int rtl8139_send(void *data, size_t len)
     {
         /*
          * Descriptors still busy after normal completion check:
-         * perform one recovery pass and retry once.
+         * perform one recovery pass (rate-limited) and retry.
          */
-        rtl8139_recover_tx_path();
+        if (!rtl8139_recover_tx_path())
+        {
+            /*
+             * Recover suppressed by rate limit — still drop stalled OWN so a
+             * free descriptor appears without re-arming the whole ring.
+             */
+            rtl8139_force_release_busy_tx_descriptors();
+        }
 
         /*
          * Some devices need a short settle window after re-arming TX. Retry a
          * few reads before failing the send.
          */
-        for (int attempt = 0; attempt < 16 && desc == -1; attempt++)
+        for (int attempt = 0; attempt < 64 && desc == -1; attempt++)
         {
             io_wait();
             rtl8139_check_tx_completion();
             desc = rtl8139_find_free_tx_descriptor();
+        }
+
+        if (desc == -1)
+        {
+            /* Last clear of OWN before giving up this send attempt. */
+            rtl8139_force_release_busy_tx_descriptors();
+            for (int attempt = 0; attempt < 16 && desc == -1; attempt++)
+            {
+                io_wait();
+                desc = rtl8139_find_free_tx_descriptor();
+            }
         }
 
         if (desc == -1)
@@ -523,84 +581,65 @@ int rtl8139_send(void *data, size_t len)
     memcpy(tx_buf, data, len);
 
     /* Memory barrier to ensure copy completes */
-    __asm__ volatile("mfence" ::: "memory");
+    smp_mb();
 
     /* Write TSD to start DMA */
     uint32_t tsd_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (desc * 4);
     uint32_t tsd_value = (uint32_t)len & RTL8139_TSD_SIZE_MASK;
 
 #if KERNEL_DEBUG
-    serial_print("[RTL8139] TX: desc=");
-    char desc_str[8];
-    itoa(desc, desc_str, 10);
-    serial_print(desc_str);
-    serial_print(" len=");
-    char len_str[16];
-    itoa((int)len, len_str, 10);
-    serial_print(len_str);
-    serial_print(" tsd_reg=0x");
-    serial_print_hex32(tsd_addr);
-    serial_print(" tsd_val=0x");
-    serial_print_hex32(tsd_value);
-    serial_print("\n");
+    klog_debug_fmt("RTL8139",
+                   "TX: desc=%d len=%d tsd_reg=0x%x tsd_val=0x%x",
+                   desc, (int)len, (unsigned)tsd_addr, (unsigned)tsd_value);
 #endif
 
     /* Execute outl - this starts DMA */
     outl((uint16_t)tsd_addr, tsd_value);
 
     /* Memory barrier after I/O */
-    __asm__ volatile("mfence" ::: "memory");
+    smp_mb();
 
-    /* Update tracking */
-    rtl8139_tx_descriptor_own_state[desc] = 1;
+    /* Update tracking: host released descriptor (OWN cleared by size write). */
+    rtl8139_tx_descriptor_own_state[desc] = 0;
     rtl8139_tx_in_flight++;
     rtl8139_current_tx_descriptor = (desc + 1) % 4;
     rtl8139_tx_desc_start_tick[desc] = clock_get_tick_count();
     rtl8139_tx_timeout_latched[desc] = 0;
     
 #if KERNEL_DEBUG
-    serial_print("[RTL8139] TX: DMA started, in_flight=");
-    char flight_str[8];
-    itoa((int)rtl8139_tx_in_flight, flight_str, 10);
-    serial_print(flight_str);
-    serial_print("\n");
+    klog_debug_fmt("RTL8139", "TX: DMA started, in_flight=%d",
+                   (int)rtl8139_tx_in_flight);
 #endif
 
     return 0;
 }
 
 /**
- * rtl8139_check_tx_completion - Check if any TX descriptors have completed
+ * rtl8139_check_tx_completion - Reap finished TX descriptors
  *
- * This function checks all TX descriptors and updates the in-flight counter
- * when hardware finishes DMA (OWN bit changes from 1 to 0).
- *
- * CRITICAL: This should be called periodically (from interrupt handler or polling)
- * to ensure the in-flight counter stays accurate.
+ * Host-owns bit (OWN): cleared by driver to start DMA; set by hardware when
+ * DMA to FIFO completes (QEMU TxHostOwns / Realtek). Completion is 0→1.
  */
 static void rtl8139_check_tx_completion(void)
 {
     if (!rtl8139_io_base)
         return;
     
-    /* Check all 4 descriptors */
     for (int i = 0; i < 4; i++)
     {
         uint32_t reg_addr = rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4);
         
-        /* CRITICAL: Memory barrier before reading hardware state */
-        __asm__ volatile("mfence" ::: "memory");
+        smp_mb();
         uint32_t tsd = inl(reg_addr);
-        __asm__ volatile("mfence" ::: "memory");
+        smp_mb();
         
         uint32_t own = tsd & RTL8139_TSD_OWN;
         uint32_t prev_own = rtl8139_tx_descriptor_own_state[i];
 
         /*
-         * If the NIC still owns the descriptor for many seconds, count one TX
-         * timeout error (latched until the descriptor completes).
+         * In-flight descriptors have OWN clear. Stall → return to host-owns.
          */
-        if (own && rtl8139_tx_desc_start_tick[i] != 0) {
+        if (!own && rtl8139_tx_desc_start_tick[i] != 0) {
             uint32_t hz = clock_get_timer_frequency();
             if (hz != 0) {
                 uint64_t now = clock_get_tick_count();
@@ -611,67 +650,38 @@ static void rtl8139_check_tx_completion(void)
                     rtl8139_tx_timeout_latched[i] = 1;
                     LOG_WARNING_FMT("RTL8139", "TX descriptor %d stalled >1s (timeout)", i);
 
-                    /*
-                     * Recovery path: drop stale frame and force-release
-                     * descriptor so TX ring cannot deadlock.
-                     */
-                    outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), 0);
-                    rtl8139_tx_descriptor_own_state[i] = 0;
+                    outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), RTL8139_TSD_OWN);
+                    rtl8139_tx_descriptor_own_state[i] = 1;
                     rtl8139_tx_desc_start_tick[i] = 0;
                     rtl8139_tx_timeout_latched[i] = 0;
                     if (rtl8139_tx_in_flight > 0)
                         rtl8139_tx_in_flight--;
-                    LOG_WARNING_FMT("RTL8139", "TX descriptor %d force-released after timeout", i);
+                    LOG_DEBUG_FMT("RTL8139", "TX descriptor %d force-released after timeout", i);
                     continue;
                 }
             }
         }
 
-        /* Update our tracking */
         rtl8139_tx_descriptor_own_state[i] = own ? 1 : 0;
         
-        /* CRITICAL: If OWN changed from 1 to 0, hardware finished DMA */
-        if (prev_own == 1 && own == 0)
+        /* DMA finished: OWN went from clear → set (host owns again). */
+        if (prev_own == 0 && own != 0)
         {
             rtl8139_tx_desc_start_tick[i] = 0;
             rtl8139_tx_timeout_latched[i] = 0;
-            /*
-             * DMA finished for this descriptor: count one TX completion.
-             * TOK in TSD indicates successful transmit; otherwise count TX error.
-             */
             if (tsd & RTL8139_TSD_TOK)
                 rtl8139_counters.tx_packets++;
             else
                 rtl8139_counters.tx_errors++;
 
-            /* Hardware finished with this descriptor - decrement in-flight counter */
             if (rtl8139_tx_in_flight > 0)
             {
                 rtl8139_tx_in_flight--;
-#if KERNEL_DEBUG
-                serial_print("[RTL8139] TX OWN CHECK [RETURNED]: desc=");
-                char desc_str[8];
-                itoa(i, desc_str, 10);
-                serial_print(desc_str);
-                serial_print(" OWN changed 1->0, TX in-flight decremented to ");
-                char flight_str[8];
-                itoa((int)rtl8139_tx_in_flight, flight_str, 10);
-                serial_print(flight_str);
-                serial_print("\n");
-#endif
                 LOG_DEBUG_FMT("RTL8139", "TX descriptor %d completed, in-flight=%d", 
                              i, rtl8139_tx_in_flight);
             }
             else
             {
-                /* ASSERT: In-flight counter should never go below 0 */
-#if KERNEL_DEBUG
-                serial_print("[RTL8139] TX OWN CHECK [ERROR]: desc=");
-                char desc_str[8];
-                itoa(i, desc_str, 10);
-                serial_print(desc_str);
-                serial_print(" OWN changed 1->0 but in-flight counter already 0!\n");
-#endif
                 LOG_WARNING_FMT("RTL8139", "TX descriptor %d completed but in-flight counter already 0", i);
             }
         }
@@ -691,17 +701,10 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
 {
     
 #if KERNEL_DEBUG
-    serial_print("[RTL8139] netdev_send ENTRY: dev=");
-    serial_print_hex32((uint32_t)(uintptr_t)dev);
-    serial_print(" data=");
-    serial_print_hex32((uint32_t)(uintptr_t)data);
-    serial_print(" len=");
-    char len_str[32];
-    itoa((int)len, len_str, 10);
-    serial_print(len_str);
-    serial_print(" (0x");
-    serial_print_hex32((uint32_t)len);
-    serial_print(")\n");
+    klog_debug_fmt("RTL8139",
+                   "netdev_send ENTRY: dev=0x%x data=0x%x len=%d (0x%x)",
+                   (unsigned)(uintptr_t)dev, (unsigned)(uintptr_t)data,
+                   (int)len, (unsigned)len);
 #endif
     
     (void)dev;
@@ -712,7 +715,7 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
         LOG_ERROR_FMT("RTL8139", "netdev_send: CORRUPTION! len=%d (0x%x) is invalid! MAX=%d", 
                      (int)len, (unsigned int)len, RTL8139_MAX_TX_SIZE);
 #if KERNEL_DEBUG
-        serial_print("[RTL8139] ERROR: Invalid len parameter!\n");
+        klog_info("RTL8139", "ERROR: Invalid len parameter!");
 #endif
         return -1;
     }
@@ -751,14 +754,19 @@ static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
     }
 
     /*
-     * Last-resort path for transient OWN wedging: release descriptors that
-     * remain busy and perform one final immediate send attempt.
+     * Last-resort path for transient OWN wedging: release busy descriptors
+     * then one recover (rate-limited), settle, and a final send attempt.
      */
     rtl8139_force_release_busy_tx_descriptors();
-    rtl8139_recover_tx_path();
+    (void)rtl8139_recover_tx_path();
+    for (int settle = 0; settle < 32; settle++)
+    {
+        io_wait();
+        rtl8139_check_tx_completion();
+    }
     if (rtl8139_send(data, len) == 0)
     {
-        LOG_WARNING("RTL8139", "netdev_send: TX succeeded after forced descriptor release");
+        LOG_DEBUG("RTL8139", "netdev_send: TX succeeded after forced descriptor release");
         return 0;
     }
 
@@ -895,19 +903,10 @@ static void rtl8139_process_rx_packets(void)
          */
         /* CRITICAL: Log raw RX header BEFORE any processing for debugging */
 #if KERNEL_DEBUG
-        serial_print("[RTL8139] RX raw: status=0x");
-        char status_str[16];
-        char length_str[16];
-        itoa((int)status, status_str, 16);
-        serial_print(status_str);
-        serial_print(" length=");
-        itoa((int)length, length_str, 10);
-        serial_print(length_str);
-        serial_print(" offset=");
-        char offset_str[16];
-        itoa((int)rtl8139_rx_read_offset, offset_str, 10);
-        serial_print(offset_str);
-        serial_print("\n");
+        klog_debug_fmt("RTL8139",
+                       "RX raw: status=0x%x length=%u offset=%u",
+                       (unsigned)status, (unsigned)length,
+                       (unsigned)rtl8139_rx_read_offset);
 #endif
         
         /* CRITICAL: In RTL8139, the 'length' field is the size of:
@@ -1027,20 +1026,18 @@ static void rtl8139_process_rx_packets(void)
                 if (packet_data)
                 {
 #if KERNEL_DEBUG
-                    /* Debug: Log raw packet info before parsing */
-                    serial_print("[RTL8139] RX len=");
-                    char len_str[16];
-                    itoa((int)packet_len, len_str, 10);
-                    serial_print(len_str);
-                    if (packet_len >= 14) 
+                    if (packet_len >= 14)
                     {
                         struct eth_header *eth = (struct eth_header *)packet_data;
                         uint16_t type = ntohs(eth->type);
-                        serial_print(" type=0x");
-                        serial_print_hex32((uint32_t)type);
+
+                        klog_debug_fmt("RTL8139", "RX len=%d type=0x%x",
+                                       (int)packet_len, (unsigned)type);
                     }
-                    
-                    serial_print("\n");
+                    else
+                    {
+                        klog_debug_fmt("RTL8139", "RX len=%d", (int)packet_len);
+                    }
 #endif
                     
                     /* Pass Ethernet frame without trailing CRC */
@@ -1101,10 +1098,8 @@ void rtl8139_handle_interrupt(void)
     uint16_t isr = inw(rtl8139_io_base + RTL8139_REG_ISR);
     
 #if KERNEL_DEBUG
-    /* Log all interrupts only in debug builds. */
-    serial_print("[RTL8139] Interrupt handler called: ISR=0x");
-    serial_print_hex32((uint32_t)isr);
-    serial_print("\n");
+    klog_debug_fmt("RTL8139", "Interrupt handler called: ISR=0x%x",
+                   (unsigned)isr);
 #endif
     
     /* Check for receive interrupt */
@@ -1189,30 +1184,15 @@ void rtl8139_poll(void)
 #if KERNEL_DEBUG
     static int poll_count = 0;
     poll_count++;
-    if ((poll_count % 500) == 0)  /* Log every 500th poll to reduce spam */
+    if ((poll_count % 500) == 0)
     {
-        extern void serial_print(const char *);
-        extern void serial_print_hex32(uint32_t);
-        extern char *itoa(int, char*, int);
-        serial_print("[RTL8139] Poll #");
-        char count_str[16];
-        itoa(poll_count, count_str, 10);
-        serial_print(count_str);
-        serial_print(" ISR=0x");
-        serial_print_hex32((uint32_t)isr);
-        
-        /* Also check write pointer */
         uint16_t current_write = *((volatile uint16_t *)(rtl8139_rx_buffer + 0x10));
+
         current_write &= (RTL8139_RX_BUF_SIZE - 1);
-        serial_print(" write=");
-        char write_str[16];
-        itoa((int)current_write, write_str, 10);
-        serial_print(write_str);
-        serial_print(" read=");
-        char read_str[16];
-        itoa((int)rtl8139_rx_read_offset, read_str, 10);
-        serial_print(read_str);
-        serial_print("\n");
+        klog_debug_fmt("RTL8139",
+                       "Poll #%d ISR=0x%x write=%u read=%u",
+                       poll_count, (unsigned)isr, (unsigned)current_write,
+                       (unsigned)rtl8139_rx_read_offset);
     }
 #endif
     

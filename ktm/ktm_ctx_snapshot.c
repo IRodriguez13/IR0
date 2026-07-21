@@ -14,48 +14,34 @@
 
 #include <ktm.h>
 #include <ir0/process.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 void ktm_ctx_snapshot(const process_t *p, const char *reason)
 {
 	if (!p)
 	{
-		serial_print("[KTM][CTX] reason=");
-		serial_print(reason ? reason : "(null)");
-		serial_print(" proc=(null)\n");
+		klog_debug_fmt("KTM", "[KTM][CTX] reason=%s proc=(null)",
+			       reason ? reason : "(null)");
 		return;
 	}
 
-	serial_print("[KTM][CTX] reason=");
-	serial_print(reason ? reason : "(null)");
-	serial_print(" pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" comm=");
-	serial_print(p->comm[0] ? p->comm : "(none)");
-	serial_print(" state=");
-	serial_print_hex64((uint64_t)p->state);
-	serial_print(" irq_saved=");
-	serial_print_hex64((uint64_t)p->irq_frame_saved);
-	serial_print(" poll_waiter=");
-	serial_print_hex64((uint64_t)(uintptr_t)p->poll_waiter);
-	serial_print(" poll_resume_arch=");
-	serial_print_hex64((uint64_t)p->poll_resume_via_arch);
-	serial_print(" wait_status_ptr=");
-	serial_print_hex64((uint64_t)(uintptr_t)p->wait_status_ptr);
-	serial_print(" rip=");
-	serial_print_hex64(p->task.rip);
-	serial_print(" rsp=");
-	serial_print_hex64(p->task.rsp);
-	serial_print(" cs=");
-	serial_print_hex64((uint64_t)p->task.cs);
-	serial_print(" cr3=");
-	serial_print_hex64(process_mm_root(p));
-	serial_print("\n");
+	klog_debug_fmt("KTM",
+		       "[KTM][CTX] reason=%s pid=%x comm=%s state=%llx irq_saved=%llx poll_waiter=%llx poll_resume_arch=%llx wait_status_ptr=%llx rip=%llx rsp=%llx cs=%llx cr3=%llx",
+		       reason ? reason : "(null)",
+		       (unsigned)(uint32_t)p->task.pid,
+		       p->comm[0] ? p->comm : "(none)",
+		       (unsigned long long)(uint64_t)p->state,
+		       (unsigned long long)(uint64_t)p->irq_frame_saved,
+		       (unsigned long long)(uint64_t)(uintptr_t)p->poll_waiter,
+		       (unsigned long long)(uint64_t)p->poll_resume_via_arch,
+		       (unsigned long long)(uint64_t)(uintptr_t)p->wait_status_ptr,
+		       (unsigned long long)p->task.rip,
+		       (unsigned long long)p->task.rsp,
+		       (unsigned long long)(uint64_t)p->task.cs,
+		       (unsigned long long)process_mm_root(p));
 }
 
 void ktm_panic_class_emit(const char *klass)
 {
-	serial_print("[KTM][PANIC_CLASS] ");
-	serial_print(klass ? klass : "UNKNOWN");
-	serial_print("\n");
+	klog_debug_fmt("KTM", "[KTM][PANIC_CLASS] %s", klass ? klass : "UNKNOWN");
 }

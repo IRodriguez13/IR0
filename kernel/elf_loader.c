@@ -18,7 +18,7 @@
 #include <string.h>
 #include <ir0/kmem.h>
 #include <fs/vfs.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <kernel/process.h>
 #include <mm/paging.h>
 #include <mm/pmm.h>
@@ -26,6 +26,8 @@
 #include <ir0/debug_trap.h>
 #include <ir0/oops.h>
 #include <ir0/arch_port.h>
+#include <ir0/signals.h>
+#include <ir0/arch_cpu.h>
 #include <config.h>
 #include <errno.h>
 
@@ -240,6 +242,33 @@ static uint64_t elf_compute_load_base(const elf64_header_t *header, const uint8_
     return (base == (uint64_t)-1) ? 0 : base;
 }
 
+/* Page-aligned end of last PT_LOAD — Linux-style initial program break. */
+static uint64_t elf_compute_initial_brk(const elf64_header_t *header, const uint8_t *file_data)
+{
+	uint16_t phnum = header->e_phnum;
+	elf64_phdr_t *phdr;
+	uint64_t brk = 0;
+	int i;
+
+	if (phnum > ELF_MAX_PHNUM)
+		phnum = ELF_MAX_PHNUM;
+	if (!file_data)
+		return 0;
+	phdr = (elf64_phdr_t *)(file_data + header->e_phoff);
+	for (i = 0; i < (int)phnum; i++)
+	{
+		uint64_t end;
+
+		if (phdr[i].p_type != PT_LOAD)
+			continue;
+		end = phdr[i].p_vaddr + phdr[i].p_memsz;
+		end = (end + 0xFFFULL) & ~0xFFFULL;
+		if (end > brk)
+			brk = end;
+	}
+	return brk;
+}
+
 static uint64_t elf_compute_at_phdr(const elf64_header_t *header, const uint8_t *file_data)
 {
     uint16_t phnum = header->e_phnum;
@@ -277,11 +306,9 @@ static void elf_fill_random_bytes(uint8_t *buf, size_t len)
     uint64_t tsc;
     size_t i;
 
-#if defined(__x86_64__) || defined(__i386__)
-    __asm__ volatile("rdtsc" : "=a"(tsc) : : "rdx");
-#else
-    tsc = 0x5851f42d4c957f2dULL;
-#endif
+    tsc = timer_read();
+    if (tsc == 0)
+        tsc = 0x5851f42d4c957f2dULL;
 
     for (i = 0; i < len; i++)
     {
@@ -300,7 +327,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
 
     if (header->e_phoff > file_size)
     {
-        serial_print("SERIAL: ELF: Program header table offset out of bounds\n");
+        klog_debug("ELF", "SERIAL: ELF: Program header table offset out of bounds\n");
         return -1;
     }
 
@@ -308,22 +335,20 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
         uint64_t ph_bytes = (uint64_t)phnum * sizeof(elf64_phdr_t);
         if (ph_bytes > (uint64_t)file_size - header->e_phoff)
         {
-            serial_print("SERIAL: ELF: Program header table extends past file\n");
+            klog_debug("ELF", "SERIAL: ELF: Program header table extends past file\n");
             return -1;
         }
     }
 
     elf64_phdr_t *phdr = (elf64_phdr_t *)(file_data + header->e_phoff);
 
-    serial_print("SERIAL: ELF: Loading ");
-    serial_print_hex32(phnum);
-    serial_print(" program segments\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: Loading %x program segments\n", (unsigned)(phnum));
 
     /* Get process page directory */
     uint64_t *pml4 = process->page_directory;
     if (!pml4)
     {
-        serial_print("SERIAL: ELF: Process has no page directory\n");
+        klog_debug("ELF", "SERIAL: ELF: Process has no page directory\n");
         return -1;
     }
 
@@ -338,7 +363,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
 
         if (phdr[i].p_memsz < phdr[i].p_filesz)
         {
-            serial_print("SERIAL: ELF: PT_LOAD p_memsz < p_filesz\n");
+            klog_debug("ELF", "SERIAL: ELF: PT_LOAD p_memsz < p_filesz\n");
             return -1;
         }
 
@@ -347,18 +372,12 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
             if (phdr[i].p_offset > file_size ||
                 phdr[i].p_filesz > (uint64_t)file_size - phdr[i].p_offset)
             {
-                serial_print("SERIAL: ELF: PT_LOAD segment file range out of bounds\n");
+                klog_debug("ELF", "SERIAL: ELF: PT_LOAD segment file range out of bounds\n");
                 return -1;
             }
         }
 
-        serial_print("SERIAL: ELF: Mapping segment ");
-        serial_print_hex32(i);
-        serial_print(" at vaddr 0x");
-        serial_print_hex32((uint32_t)phdr[i].p_vaddr);
-        serial_print(" size 0x");
-        serial_print_hex32((uint32_t)phdr[i].p_memsz);
-        serial_print("\n");
+        klog_debug_fmt("ELF", "SERIAL: ELF: Mapping segment %x at vaddr 0x%x size 0x%x", (unsigned)(i), (unsigned)((uint32_t)phdr[i].p_vaddr), (unsigned)((uint32_t)phdr[i].p_memsz));
 
         {
             uint64_t memsz = phdr[i].p_memsz;
@@ -374,7 +393,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
 
             if (map_user_region_in_directory(pml4, vaddr_aligned, size_aligned, flags) != 0)
             {
-                serial_print("SERIAL: ELF: Failed to map user memory region\n");
+                klog_debug("ELF", "SERIAL: ELF: Failed to map user memory region\n");
                 return -1;
             }
         }
@@ -397,14 +416,10 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
                         file_data + phdr[i].p_offset,
                         (size_t)phdr[i].p_filesz) != 0)
                 {
-                    serial_print("SERIAL: ELF: Failed to copy segment data\n");
+                    klog_debug("ELF", "SERIAL: ELF: Failed to copy segment data\n");
                     return -1;
                 }
-                serial_print("SERIAL: ELF: Copied ");
-                serial_print_hex32((uint32_t)phdr[i].p_filesz);
-                serial_print(" bytes from file to vaddr 0x");
-                serial_print_hex32((uint32_t)vaddr);
-                serial_print("\n");
+                klog_debug_fmt("ELF", "SERIAL: ELF: Copied %x bytes from file to vaddr 0x%x", (unsigned)((uint32_t)phdr[i].p_filesz), (unsigned)((uint32_t)vaddr));
             }
 
             if (phdr[i].p_memsz > phdr[i].p_filesz)
@@ -413,10 +428,10 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
                         vaddr + phdr[i].p_filesz,
                         (size_t)(phdr[i].p_memsz - phdr[i].p_filesz)) != 0)
                 {
-                    serial_print("SERIAL: ELF: Failed to zero BSS\n");
+                    klog_debug("ELF", "SERIAL: ELF: Failed to zero BSS\n");
                     return -1;
                 }
-                serial_print("SERIAL: ELF: Zeroed BSS section\n");
+                klog_debug("ELF", "SERIAL: ELF: Zeroed BSS section\n");
             }
         }
     }
@@ -435,11 +450,7 @@ static void elf_dummy_entry(void)
 static process_t *elf_create_process(elf64_header_t *header, const char *path)
 {
 
-    serial_print("SERIAL: ELF: Creating process for ");
-    serial_print(path);
-    serial_print(" with entry point 0x");
-    serial_print_hex32((uint32_t)header->e_entry);
-    serial_print("\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: Creating process for %s with entry point 0x%x", path, (unsigned)((uint32_t)header->e_entry));
 
     /* Extract basename for process name */
     const char *basename = path;
@@ -456,7 +467,7 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     pid_t pid = spawn_user(elf_dummy_entry, basename);
     if (pid < 0)
     {
-        serial_print("SERIAL: ELF: Failed to create process\n");
+        klog_debug("ELF", "SERIAL: ELF: Failed to create process\n");
         return NULL;
     }
 
@@ -464,7 +475,7 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     process_t *process = process_find_by_pid(pid);
     if (!process)
     {
-        serial_print("SERIAL: ELF: Failed to find created process\n");
+        klog_debug("ELF", "SERIAL: ELF: Failed to find created process\n");
         return NULL;
     }
 
@@ -490,15 +501,9 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     /* Enable interrupts in user mode */
     process->task.rflags = ir0_rflags_sanitize_user(0x202ULL);
 
-    serial_print("SERIAL: ELF: Process created with PID ");
-    serial_print_hex32(process->task.pid);
-    serial_print("\n");
-    serial_print("SERIAL: ELF: Entry point: 0x");
-    serial_print_hex32((uint32_t)process->task.rip);
-    serial_print("\n");
-    serial_print("SERIAL: ELF: Stack: 0x");
-    serial_print_hex32((uint32_t)process->task.rsp);
-    serial_print("\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: Process created with PID %x", (unsigned)(process->task.pid));
+    klog_debug_fmt("ELF", "SERIAL: ELF: Entry point: 0x%x", (unsigned)((uint32_t)process->task.rip));
+    klog_debug_fmt("ELF", "SERIAL: ELF: Stack: 0x%x", (unsigned)((uint32_t)process->task.rsp));
 
     return process;
 }
@@ -578,11 +583,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     size_t stack_margin = 256;
     if (stack_size > (process->stack_size - stack_margin))
     {
-        serial_print("SERIAL: ELF: ERROR - Stack too small for arguments (need ");
-        serial_print_hex32((uint32_t)stack_size);
-        serial_print(" bytes, have ");
-        serial_print_hex32((uint32_t)process->stack_size);
-        serial_print(")\n");
+        klog_debug_fmt("ELF", "SERIAL: ELF: ERROR - Stack too small for arguments (need %x bytes, have %x)\n", (unsigned)((uint32_t)stack_size), (unsigned)((uint32_t)process->stack_size));
         return -ENOMEM;
     }
     
@@ -797,13 +798,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     kfree(argv_ptrs);
     kfree(envp_ptrs);
     
-    serial_print("SERIAL: ELF: Stack initialized: argc=");
-    serial_print_hex32(argc);
-    serial_print(", argv=");
-    serial_print_hex32((uint32_t)argv_array);
-    serial_print(", envp=");
-    serial_print_hex32((uint32_t)envp_array);
-    serial_print("\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: Stack initialized: argc=%x, argv=%x, envp=%x", (unsigned)(argc), (unsigned)((uint32_t)argv_array), (unsigned)((uint32_t)envp_array));
     elf_trace_argv_contract(process, image_path, "stack-builder-final");
     elf_trace_entry_stack_layout(process, header, at_phdr, at_base, "elf_setup_stack-final");
     
@@ -848,10 +843,7 @@ static uint64_t fase41_count_vmas(const process_t *proc)
  */
 int kexecve(const char *path, char *const argv[], char *const envp[])
 {
-    serial_print("SERIAL: ELF: ========================================\n");
-    serial_print("SERIAL: ELF: Loading ELF file: ");
-    serial_print(path);
-    serial_print("\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: ========================================\nSERIAL: ELF: Loading ELF file: %s", path);
 
     /* Step 1: Read the ELF file from filesystem */
     void *file_data = NULL;
@@ -860,18 +852,16 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     int result = vfs_read_file(path, &file_data, &file_size);
     if (result != 0 || !file_data)
     {
-        serial_print("SERIAL: ELF: ERROR - Failed to read file from filesystem\n");
+        klog_debug("ELF", "SERIAL: ELF: ERROR - Failed to read file from filesystem\n");
         return -1;
     }
 
-    serial_print("SERIAL: ELF: File loaded successfully, size: ");
-    serial_print_hex32(file_size);
-    serial_print(" bytes\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: File loaded successfully, size: %x bytes\n", (unsigned)(file_size));
 
     /* Step 2: Validate ELF header */
     if (!validate_elf_header((elf64_header_t *)file_data))
     {
-        serial_print("SERIAL: ELF: ERROR - Invalid ELF header\n");
+        klog_debug("ELF", "SERIAL: ELF: ERROR - Invalid ELF header\n");
         kfree(file_data);
         return -1;
     }
@@ -879,13 +869,13 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     elf64_header_t *header = (elf64_header_t *)file_data;
     uint64_t at_phdr;
     uint64_t at_base;
-    serial_print("SERIAL: ELF: Header validation passed\n");
+    klog_debug("ELF", "SERIAL: ELF: Header validation passed\n");
 
     /* Step 3: Create process first */
     process_t *process = elf_create_process(header, path);
     if (!process)
     {
-        serial_print("SERIAL: ELF: ERROR - Failed to create process\n");
+        klog_debug("ELF", "SERIAL: ELF: ERROR - Failed to create process\n");
         kfree(file_data);
         return -1;
     }
@@ -893,7 +883,7 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     /* Step 4: Load segments into memory */
     if (elf_load_segments(header, (uint8_t *)file_data, file_size, process) != 0)
     {
-        serial_print("SERIAL: ELF: ERROR - Failed to load segments\n");
+        klog_debug("ELF", "SERIAL: ELF: ERROR - Failed to load segments\n");
         /*
          * spawn_user() already queued this process; drop it from the scheduler
          * and free the struct so we do not run a half-loaded image.
@@ -912,7 +902,7 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     if (elf_setup_stack(process, argv, envp, header, at_phdr, at_base,
                         "kexecve", path) != 0)
     {
-        serial_print("SERIAL: ELF: WARNING - Failed to set up stack arguments, continuing anyway\n");
+        klog_debug("ELF", "SERIAL: ELF: WARNING - Failed to set up stack arguments, continuing anyway\n");
         /* Continue even if stack setup fails - some binaries don't need args */
     }
 
@@ -921,13 +911,8 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     /* Step 6: Clean up file data */
     kfree(file_data);
 
-    serial_print("SERIAL: ELF: SUCCESS - Program loaded and scheduled for execution\n");
-    serial_print("SERIAL: ELF: PID: ");
-    serial_print_hex32(process->task.pid);
-    serial_print(" Entry: 0x");
-    serial_print_hex32((uint32_t)process->task.rip);
-    serial_print("\n");
-    serial_print("SERIAL: ELF: ========================================\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: SUCCESS - Program loaded and scheduled for execution\nSERIAL: ELF: PID: %x Entry: 0x%x", (unsigned)(process->task.pid), (unsigned)((uint32_t)process->task.rip));
+    klog_debug("ELF", "SERIAL: ELF: ========================================\n");
 
     return process->task.pid;
 }
@@ -952,46 +937,37 @@ static struct
 static void exec_commit_emit(const char *point, int64_t errno_val,
                              process_t *proc, const char *classify)
 {
-	serial_print("[EXEC_COMMIT] point=");
-	serial_print(point ? point : "(null)");
-	serial_print(" classify=");
-	serial_print(classify ? classify : "(null)");
-	serial_print(" errno=");
-	serial_print_hex64((uint64_t)errno_val);
-	serial_print(" pid=");
-	serial_print_hex32(proc ? (uint32_t)proc->task.pid : 0);
-	serial_print(" mm_entry=");
-	serial_print_hex64(exec_commit_ctx.mm_entry);
-	serial_print(" mm_now=");
-	serial_print_hex64(proc ? (uint64_t)(uintptr_t)proc->page_directory : 0);
-	serial_print(" mm_same=");
-	serial_print((proc && (uint64_t)(uintptr_t)proc->page_directory ==
-	              exec_commit_ctx.mm_entry) ? "1" : "0");
-	serial_print(" task_cr3_entry=");
-	serial_print_hex64(exec_commit_ctx.task_cr3_entry);
-	serial_print(" task_cr3_now=");
-	serial_print_hex64(proc ? process_mm_root(proc) : 0);
-	serial_print(" active_cr3=");
-	serial_print_hex64(get_current_page_directory());
-	serial_print(" cr3_activate=");
-	serial_print((point && strcmp(point, "before-userswitch") == 0) ?
-	             "arch_switch_to_user_asm" : "not_yet");
-	serial_print(" entry_rip=");
-	serial_print_hex64(exec_commit_ctx.entry_rip);
-	serial_print(" task_rip=");
-	serial_print_hex64(proc ? proc->task.rip : exec_commit_ctx.task_rip_final);
-	serial_print(" task_rsp=");
-	serial_print_hex64(proc ? proc->task.rsp : exec_commit_ctx.task_rsp_final);
-	serial_print(" unmapped=");
-	serial_print(exec_commit_ctx.unmapped ? "1" : "0");
-	serial_print(" loaded=");
-	serial_print(exec_commit_ctx.segments_loaded ? "1" : "0");
-	serial_print(" stack=");
-	serial_print(exec_commit_ctx.stack_ready ? "1" : "0");
-	serial_print("\n");
-	serial_print("[EXEC_COMMIT][CLASSIFY] ");
-	serial_print(classify ? classify : "(null)");
-	serial_print("\n");
+	klog_debug_fmt("EXEC",
+		       "[EXEC_COMMIT] point=%s classify=%s errno=%llx pid=%x "
+		       "mm_entry=%llx mm_now=%llx mm_same=%s task_cr3_entry=%llx "
+		       "task_cr3_now=%llx active_cr3=%llx cr3_activate=%s "
+		       "entry_rip=%llx task_rip=%llx task_rsp=%llx unmapped=%s "
+		       "loaded=%s stack=%s",
+		       point ? point : "(null)", classify ? classify : "(null)",
+		       (unsigned long long)((uint64_t)errno_val),
+		       (unsigned)(proc ? (uint32_t)proc->task.pid : 0),
+		       (unsigned long long)(exec_commit_ctx.mm_entry),
+		       (unsigned long long)(proc ? (uint64_t)(uintptr_t)proc->page_directory : 0),
+		       (proc && (uint64_t)(uintptr_t)proc->page_directory ==
+				exec_commit_ctx.mm_entry)
+			   ? "1"
+			   : "0",
+		       (unsigned long long)(exec_commit_ctx.task_cr3_entry),
+		       (unsigned long long)(proc ? process_mm_root(proc) : 0),
+		       (unsigned long long)(get_current_page_directory()),
+		       (point && strcmp(point, "before-userswitch") == 0)
+			   ? "switch_to_user_asm"
+			   : "not_yet",
+		       (unsigned long long)(exec_commit_ctx.entry_rip),
+		       (unsigned long long)(proc ? proc->task.rip
+						 : exec_commit_ctx.task_rip_final),
+		       (unsigned long long)(proc ? proc->task.rsp
+						 : exec_commit_ctx.task_rsp_final),
+		       exec_commit_ctx.unmapped ? "1" : "0",
+		       exec_commit_ctx.segments_loaded ? "1" : "0",
+		       exec_commit_ctx.stack_ready ? "1" : "0");
+	klog_debug_fmt("EXEC", "CLASSIFY %s",
+		       classify ? classify : "(null)");
 }
 
 static const char *exec_audit_classify_vfs(int vfs_ret, size_t file_size,
@@ -1048,27 +1024,18 @@ static void exec_audit_emit_elf_header(const uint8_t *file_data, size_t file_siz
 
 	if (!file_data || file_size < 4)
 	{
-		serial_print("[EXEC_AUDIT][ELF] stage=header_read bytes=0 magic=(none)\n");
+		klog_debug("EXEC", "[EXEC_AUDIT][ELF] stage=header_read bytes=0 magic=(none)\n");
 		return;
 	}
 
 	header = (const elf64_header_t *)file_data;
-	serial_print("[EXEC_AUDIT][ELF] stage=header_read expect=");
-	serial_print_hex64((uint64_t)sizeof(elf64_header_t));
-	serial_print(" got=");
-	serial_print_hex64((uint64_t)file_size);
-	serial_print(" magic=");
+	klog_debug_fmt("EXEC", "[EXEC_AUDIT][ELF] stage=header_read expect=%llx got=%llx magic=", (unsigned long long)((uint64_t)sizeof(elf64_header_t)), (unsigned long long)((uint64_t)file_size));
 	for (i = 0; i < 4; i++)
 	{
 		if (i > 0)
-			serial_print(" ");
-		serial_print_hex64((uint64_t)file_data[i]);
+			klog_debug_fmt("KERN", " %llx", (unsigned long long)((uint64_t)file_data[i]));
 	}
-	serial_print(" e_type=");
-	serial_print_hex64((uint64_t)header->e_type);
-	serial_print(" e_machine=");
-	serial_print_hex64((uint64_t)header->e_machine);
-	serial_print("\n");
+	klog_debug_fmt("KERN", " e_type=%llx e_machine=%llx", (unsigned long long)((uint64_t)header->e_type), (unsigned long long)((uint64_t)header->e_machine));
 }
 
 /**
@@ -1126,24 +1093,20 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     pmm_stats(&total_frames_before, &used_frames_before, NULL);
     vmas_before = fase41_count_vmas(proc);
 
-    serial_print("SERIAL: ELF: exec_replace_current: ");
-    serial_print(path);
-    serial_print("\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: exec_replace_current: %s", path);
 
     if (argv)
     {
         int ai;
 
-        serial_print("[EXEC_AUDIT][LOADER] path=");
-        serial_print(path ? path : "(null)");
-        serial_print(" argv=");
+        klog_debug_fmt("EXEC", "[EXEC_AUDIT][LOADER] path=%s argv=", path ? path : "(null)");
         for (ai = 0; ai < 4 && argv[ai]; ai++)
         {
             if (ai > 0)
-                serial_print(",");
-            serial_print(argv[ai]);
+                klog_debug_fmt("KERN", ",%s", argv[ai]);
+            else
+                klog_debug_fmt("KERN", "%s", argv[ai]);
         }
-        serial_print("\n");
     }
 
     vfs_exec_audit_begin(path);
@@ -1155,16 +1118,8 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
         vfs_class = exec_audit_classify_vfs(vfs_ret, file_size, file_data, path);
         if (vfs_ret != 0 || !file_data)
         {
-            serial_print("[EXEC_AUDIT][CLASSIFY] ");
-            serial_print(vfs_class ? vfs_class : "EXEC_VFS_READ_ERR");
-            serial_print(" vfs_ret=");
-            serial_print_hex64((uint64_t)(int64_t)vfs_ret);
-            serial_print("\n");
-            serial_print("[EXEC_ONLY][LOADER] vfs_read_fail path=");
-            serial_print(path ? path : "(null)");
-            serial_print(" errno=");
-            serial_print_hex64((uint64_t)(int64_t)vfs_ret);
-            serial_print("\n");
+            klog_debug_fmt("EXEC", "CLASSIFY %s vfs_ret=%llx", vfs_class ? vfs_class : "EXEC_VFS_READ_ERR", (unsigned long long)((uint64_t)(int64_t)vfs_ret));
+            klog_debug_fmt("EXEC", "[EXEC_ONLY][LOADER] vfs_read_fail path=%s errno=%llx", path ? path : "(null)", (unsigned long long)((uint64_t)(int64_t)vfs_ret));
             exec_commit_emit("return-vfs_read_fail", (int64_t)vfs_ret, proc,
                              vfs_class ? vfs_class : "EXEC_ABORT_BEFORE_COMMIT");
             return vfs_ret < 0 ? vfs_ret : -ENOENT;
@@ -1178,9 +1133,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
 
         if (elf_class)
         {
-            serial_print("[EXEC_AUDIT][CLASSIFY] ");
-            serial_print(elf_class);
-            serial_print("\n");
+            klog_debug_fmt("EXEC", "CLASSIFY %s", elf_class);
             kfree(file_data);
             exec_commit_emit("return-validate_elf_fail", -ENOEXEC, proc,
                              elf_class);
@@ -1220,6 +1173,14 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
 
     proc->heap_start = 0;
     proc->heap_end = 0;
+    /*
+     * Linux clears TLS across execve. Stale fs_base from the pre-exec image
+     * (or fork parent) must not be restored on the next context switch —
+     * that leaves FS pointing at unmapped VA while glibc/musl still expect
+     * to call arch_prctl(ARCH_SET_FS) during CRT startup.
+     */
+    proc->fs_base = 0;
+    set_fs_base(0);
     proc->stack_size = USER_STACK_SIZE;
     proc->stack_start = USER_STACK_TOP - USER_STACK_SIZE;
 
@@ -1234,6 +1195,16 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     {
         kfree(file_data);
         exec_fail_kill(proc, 127, "elf_load_segments_fail");
+    }
+
+    {
+	uint64_t brk0 = elf_compute_initial_brk(header, (uint8_t *)file_data);
+
+	if (brk0 != 0)
+	{
+		proc->heap_start = brk0;
+		proc->heap_end = brk0;
+	}
     }
     exec_commit_ctx.segments_loaded = 1;
 
@@ -1277,21 +1248,19 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     paging_ir0_mm_checkpoint("exec-after", (int32_t)proc->task.pid);
     process_fase44_list_checkpoint("exec-after");
 
-    serial_print("SERIAL: ELF: exec_replace success PID ");
-    serial_print_hex32((uint32_t)proc->task.pid);
-    serial_print("\n");
-    serial_print("SERIAL: ELF: exec CR3 active=");
-    serial_print_hex64(get_current_page_directory());
-    serial_print(" task_cr3=");
-    serial_print_hex64(process_mm_root(proc));
-    serial_print(" mm_cr3=");
-    serial_print_hex64((uint64_t)(uintptr_t)proc->page_directory);
-    serial_print("\n");
+    klog_debug_fmt("ELF", "SERIAL: ELF: exec_replace success PID %x", (unsigned)((uint32_t)proc->task.pid));
+    klog_debug_fmt("ELF", "SERIAL: ELF: exec CR3 active=%llx task_cr3=%llx mm_cr3=%llx", (unsigned long long)(get_current_page_directory()), (unsigned long long)(process_mm_root(proc)), (unsigned long long)((uint64_t)(uintptr_t)proc->page_directory));
+    /*
+     * Linux clears pending catchable signals across execve. IR0 had
+     * signals_reset_on_exec() but never called it — fork PF leftovers
+     * (SIGSEGV pending) then made accept/poll return -EINTR immediately.
+     */
+    signals_reset_on_exec(proc);
     elf_trace_argv_contract(proc, path, "before-iret");
     elf_trace_entry_stack_layout(proc, header, at_phdr, at_base, "before-userswitch");
 
     exec_commit_emit("before-userswitch", 0, proc, "EXEC_COMMIT_OK");
-    arch_switch_to_user((arch_addr_t)proc->task.rip, (arch_addr_t)proc->task.rsp);
+    switch_to_user((arch_addr_t)proc->task.rip, (arch_addr_t)proc->task.rsp);
     exec_commit_emit("return-after-userswitch", -1, proc, "EXEC_COMMIT_RETURNED");
     return -1;
 }

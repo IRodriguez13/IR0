@@ -15,7 +15,7 @@
 #include <ir0/signals.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/debug_runtime.h>
 #include <ir0/clock.h>
 #include <ir0/copy_user.h>
@@ -29,6 +29,7 @@
 #include <config.h>
 #include <string.h>
 #include <ktm.h>
+#include <ir0/ktm/klog.h>
 
 static void signals_fill_sigcontext_from_frame(struct sigcontext *ctx,
 					       uint64_t *frame)
@@ -180,21 +181,14 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	p->signal_pending &= ~SIGNAL_MASK(sig);
 
 #if SIGNAL_DELIVER_LOG
-	serial_print("[SIGNAL][DELIVER] pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" sig=");
-	serial_print_hex32((uint32_t)sig);
-	serial_print(" cr2=");
-	serial_print_hex64(fault_addr);
-	serial_print(" rip=");
-	serial_print_hex64(ctx->rip);
-	serial_print(" handler=");
-	serial_print_hex64((uint64_t)(uintptr_t)handler);
-	serial_print(" sa_siginfo=");
-	serial_print_hex32((sa_flags & SA_SIGINFO) ? 1U : 0U);
-	serial_print(" rsp=");
-	serial_print_hex64(new_rsp);
-	serial_print("\n");
+	klog_info_fmt("SIGNAL",
+		      "[SIGNAL][DELIVER] pid=0x%x sig=0x%x cr2=0x%llx rip=0x%llx handler=0x%llx sa_siginfo=0x%x rsp=0x%llx",
+		      (unsigned)p->task.pid, (unsigned)sig,
+		      (unsigned long long)fault_addr,
+		      (unsigned long long)ctx->rip,
+		      (unsigned long long)(uintptr_t)handler,
+		      (unsigned)((sa_flags & SA_SIGINFO) ? 1U : 0U),
+		      (unsigned long long)new_rsp);
 #endif
 
 #if defined(CONFIG_KTM_FLIGHT) && CONFIG_KTM_FLIGHT
@@ -287,26 +281,39 @@ int send_signal(int pid, int signal)
         return -1; /* Process not found */
     }
 
-    /* Set signal bit in pending mask */
-    proc->signal_pending |= SIGNAL_MASK(signal);
+    /*
+     * kill(pid, 0): existence probe only (Linux). Must not set pending,
+     * wake blocked tasks, or run default-fatal teardown.
+     */
+    if (signal == 0)
+	return 0;
 
 #if IR0_DEBUG_PROC
-    serial_print("[SIGTERM_AUDIT] send_signal pid=");
-    serial_print_hex32((uint32_t)pid);
-    serial_print(" sig=");
-    serial_print_hex32((uint32_t)signal);
-    serial_print(" pending=");
-    serial_print_hex32(proc->signal_pending);
-    serial_print(" mask=");
-    serial_print_hex32(proc->signal_mask);
-    serial_print(" state=");
-    serial_print_hex32((uint32_t)proc->state);
-    serial_print("\n");
+    klog_info_fmt("SIGNAL",
+                  "[SIGTERM_AUDIT] send_signal pid=0x%x sig=0x%x pending=0x%x mask=0x%x state=0x%x",
+                  (unsigned)pid, (unsigned)signal,
+                  (unsigned)proc->signal_pending, (unsigned)proc->signal_mask,
+                  (unsigned)proc->state);
 #endif
 
     /*
-     * Wake blocked tasks regardless of signal_mask so default actions can run
-     * after schedule (SIGTERM to a child blocked in pause(2)).
+     * Default-fatal: zombieize immediately. Do not promote BLOCKED→READY
+     * first (that raced schedule into a half-dead task → #UD on iret).
+     */
+    if (process_signal_is_default_fatal(proc, signal))
+    {
+	if (process_signal_default_kill(proc, signal))
+	{
+	    clock_request_sched_resched();
+	    return 0;
+	}
+	/* Ignored / caught — fall through to pending delivery. */
+    }
+
+    proc->signal_pending |= SIGNAL_MASK(signal);
+
+    /*
+     * Wake blocked tasks so caught signals / pause(2) can run handlers.
      */
     if (proc->state == PROCESS_BLOCKED)
     {
@@ -314,22 +321,14 @@ int send_signal(int pid, int signal)
 	sched_promote_process(proc);
 	clock_request_sched_resched();
 #if IR0_DEBUG_PROC
-	serial_print("[SIGTERM_AUDIT] wake pid=");
-	serial_print_hex32((uint32_t)pid);
-	serial_print(" state=READY promote=1\n");
+	klog_info_fmt("SIGNAL",
+		      "[SIGTERM_AUDIT] wake pid=0x%x state=READY promote=1",
+		      (unsigned)pid);
 #endif
     }
 
-    /*
-     * Immediate default-terminate (SIGTERM/SIGHUP) — same as sys_kill.
-     * Pending-only delivery can miss if the target never re-enters
-     * handle_signals() (e.g. hangup from another task's close path).
-     */
-    if (signal != 0)
-	(void)process_signal_default_kill(proc, signal);
-
 #if DEBUG_PROCESS
-    serial_print("[SIGNAL] Sent signal to process\n");
+    klog_info("SIGNAL", "Sent signal to process");
 #endif
 
     return 0;
@@ -381,7 +380,7 @@ void handle_signals(void)
     if (current->signal_pending & SIGNAL_MASK(SIGKILL))
     {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGKILL received, terminating process\n");
+        klog_info("SIGNAL", "SIGKILL received, terminating process");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGKILL);
         process_exit(-1);
@@ -392,7 +391,7 @@ void handle_signals(void)
     if (current->signal_pending & SIGNAL_MASK(SIGSTOP))
     {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGSTOP received, stopping process\n");
+        klog_info("SIGNAL", "SIGSTOP received, stopping process");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGSTOP);
         current->state = PROCESS_BLOCKED;
@@ -405,7 +404,7 @@ void handle_signals(void)
         if (!signals_has_user_handler(current, SIGSEGV))
         {
 #if DEBUG_PROCESS
-            serial_print("[SIGNAL] SIGSEGV received (segmentation fault), terminating process\n");
+            klog_info("SIGNAL", "SIGSEGV received (segmentation fault), terminating process");
 #endif
             current->signal_pending &= ~SIGNAL_MASK(SIGSEGV);
             process_exit(139);
@@ -418,7 +417,7 @@ void handle_signals(void)
         if (!signals_has_user_handler(current, SIGFPE))
         {
 #if DEBUG_PROCESS
-            serial_print("[SIGNAL] SIGFPE received (arithmetic error), terminating process\n");
+            klog_info("SIGNAL", "SIGFPE received (arithmetic error), terminating process");
 #endif
             current->signal_pending &= ~SIGNAL_MASK(SIGFPE);
             process_exit(136);
@@ -431,7 +430,7 @@ void handle_signals(void)
         if (!signals_has_user_handler(current, SIGILL))
         {
 #if DEBUG_PROCESS
-            serial_print("[SIGNAL] SIGILL received (illegal instruction), terminating process\n");
+            klog_info("SIGNAL", "SIGILL received (illegal instruction), terminating process");
 #endif
             current->signal_pending &= ~SIGNAL_MASK(SIGILL);
             process_exit(132);
@@ -444,7 +443,7 @@ void handle_signals(void)
         if (!signals_has_user_handler(current, SIGBUS))
         {
 #if DEBUG_PROCESS
-            serial_print("[SIGNAL] SIGBUS received (bus error), terminating process\n");
+            klog_info("SIGNAL", "SIGBUS received (bus error), terminating process");
 #endif
             current->signal_pending &= ~SIGNAL_MASK(SIGBUS);
             process_exit(135);
@@ -456,13 +455,11 @@ void handle_signals(void)
     if (current->signal_pending & SIGNAL_MASK(SIGTERM))
     {
 #if IR0_DEBUG_PROC
-        serial_print("[SIGTERM_AUDIT] handle_signals SIGTERM pending pid=");
-        serial_print_hex32((uint32_t)current->task.pid);
-        serial_print(" ignored=");
-        serial_print_hex32(current->signal_ignored);
-        serial_print(" mask=");
-        serial_print_hex32(current->signal_mask);
-        serial_print("\n");
+        klog_info_fmt("SIGNAL",
+                      "[SIGTERM_AUDIT] handle_signals SIGTERM pending pid=0x%x ignored=0x%x mask=0x%x",
+                      (unsigned)current->task.pid,
+                      (unsigned)current->signal_ignored,
+                      (unsigned)current->signal_mask);
 #endif
         if (current->signal_ignored & SIGNAL_MASK(SIGTERM))
         {
@@ -472,12 +469,12 @@ void handle_signals(void)
         if (!signals_has_user_handler(current, SIGTERM))
         {
 #if DEBUG_PROCESS
-            serial_print("[SIGNAL] SIGTERM received, terminating process\n");
+            klog_info("SIGNAL", "SIGTERM received, terminating process");
 #endif
 #if IR0_DEBUG_PROC
-            serial_print("[SIGTERM_AUDIT] default terminate pid=");
-            serial_print_hex32((uint32_t)current->task.pid);
-            serial_print(" exit_signal=15\n");
+            klog_info_fmt("SIGNAL",
+                          "[SIGTERM_AUDIT] default terminate pid=0x%x exit_signal=15",
+                          (unsigned)current->task.pid);
 #endif
             current->signal_pending &= ~SIGNAL_MASK(SIGTERM);
             current->exit_signal = SIGTERM;
@@ -489,7 +486,7 @@ void handle_signals(void)
     if (current->signal_pending & SIGNAL_MASK(SIGINT))
     {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGINT received, terminating process\n");
+        klog_info("SIGNAL", "SIGINT received, terminating process");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGINT);
         process_exit(130); /* Exit code 130 = 128 + 2 (SIGINT) */
@@ -504,7 +501,7 @@ void handle_signals(void)
         }
         else if (!signals_has_user_handler(current, SIGHUP))
         {
-            serial_print("[SIGNAL] SIGHUP received, terminating process\n");
+            klog_info("SIGNAL", "SIGHUP received, terminating process");
             current->signal_pending &= ~SIGNAL_MASK(SIGHUP);
             current->exit_signal = SIGHUP;
             process_exit(0);
@@ -515,7 +512,7 @@ void handle_signals(void)
     if (current->signal_pending & SIGNAL_MASK(SIGQUIT))
     {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGQUIT received, terminating process\n");
+        klog_info("SIGNAL", "SIGQUIT received, terminating process");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGQUIT);
         process_exit(131); /* Exit code 131 = 128 + 3 (SIGQUIT) */
@@ -525,7 +522,7 @@ void handle_signals(void)
     if (current->signal_pending & SIGNAL_MASK(SIGABRT))
     {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGABRT received, terminating process\n");
+        klog_info("SIGNAL", "SIGABRT received, terminating process");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGABRT);
         process_exit(134); /* Exit code 134 = 128 + 6 (SIGABRT) */
@@ -536,7 +533,7 @@ void handle_signals(void)
     if (current->signal_pending & SIGNAL_MASK(SIGCONT))
     {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGCONT received, resuming process\n");
+        klog_info("SIGNAL", "SIGCONT received, resuming process");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGCONT);
         if (current->state == PROCESS_BLOCKED)
@@ -549,7 +546,7 @@ void handle_signals(void)
     if (current->signal_pending & SIGNAL_MASK(SIGCHLD))
     {
 #if DEBUG_PROCESS
-        serial_print("[SIGNAL] SIGCHLD received (child terminated)\n");
+        klog_info("SIGNAL", "SIGCHLD received (child terminated)");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGCHLD);
         if (current->state == PROCESS_BLOCKED)
@@ -586,9 +583,9 @@ void handle_signals(void)
                 if (is_user_address((void *)handler, sizeof(void *)))
                 {
 #if DEBUG_PROCESS
-                    serial_print("[SIGNAL] Setting up signal frame for signal ");
-                    serial_print_hex32((uint32_t)sig);
-                    serial_print("\n");
+                    klog_info_fmt("SIGNAL",
+                                  "Setting up signal frame for signal 0x%x",
+                                  (unsigned)sig);
 #endif
                     /* Only setup signal frame for USER_MODE processes */
                     if (current->mode == USER_MODE)
@@ -666,7 +663,7 @@ void handle_signals(void)
                         current->signal_pending &= ~SIGNAL_MASK(sig);
                         
 #if DEBUG_PROCESS
-                        serial_print("[SIGNAL] Signal frame set up, handler will be called\n");
+                        klog_info("SIGNAL", "Signal frame set up, handler will be called");
 #endif
                         /* Handler will be invoked on next context switch */
                         /* When handler returns, it will call sigreturn() syscall */

@@ -17,6 +17,7 @@
 #include <ir0/ktm/userdev.h>
 #include <ir0/serial_io.h>
 #include <string.h>
+#include <ir0/ktm/klog.h>
 
 #if defined(CONFIG_KTM_USERDEV) && CONFIG_KTM_USERDEV
 
@@ -185,13 +186,13 @@ static int64_t ktm_ioc_user_event(void *arg)
 			ktm_transport_emit("TEST_END", label, "PASS");
 			ktm_transport_suite_end(1, 0);
 			/* Contiguous host autokill tag (userspace write may fragment). */
-			serial_print("KTM_USERDEV_OK\n");
+			klog_smoke("KTM_USERDEV_OK");
 		}
 		else
 		{
 			ktm_transport_emit("TEST_END", label, "FAIL");
 			ktm_transport_suite_end(0, 1);
-			serial_print("KTM_USERDEV_FAIL\n");
+			klog_smoke("KTM_USERDEV_FAIL");
 		}
 		return 0;
 	}

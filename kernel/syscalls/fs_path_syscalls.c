@@ -27,12 +27,14 @@
 #include <ir0/path_routed.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
 #include <ir0/utsname.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>
+#include <ir0/memfd.h>
+#include <ir0/posix_shm.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -190,7 +192,7 @@ int64_t sys_umount(const char *target, int flags)
 
 int64_t sys_sync(void)
 {
-  serial_print("SYSTEM_SYNC_OK\n");
+  klog_smoke("SYSTEM_SYNC_OK");
   return vfs_sync();
 }
 
@@ -586,6 +588,9 @@ int64_t sys_unlink(const char *pathname)
   if (rc != 0)
     return rc;
 
+  if (posix_shm_path_is(resolved))
+    return posix_shm_try_unlink(resolved);
+
   return vfs_unlink(resolved);
 }
 
@@ -631,6 +636,10 @@ int64_t sys_ftruncate(int fd, off_t length)
   /* Pseudo /proc|/sys|/heart binds are not truncatable regular files. */
   if (fd_table[fd].is_pseudo)
     return -EBADF;
+
+  if (fd_table[fd].is_memfd && fd_table[fd].vfs_file)
+    return ir0_memfd_ftruncate((struct ir0_memfd *)fd_table[fd].vfs_file,
+			       (size_t)length);
 
   if (fd_table[fd].is_pipe || fd_table[fd].is_socket)
     return -EBADF;

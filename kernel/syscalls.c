@@ -18,7 +18,7 @@
 #include <ir0/input_backend.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 #define MAX_STDIN_WAITERS 8
 static process_t *stdin_waiters[MAX_STDIN_WAITERS];
@@ -71,16 +71,13 @@ void syscalls_init(void)
 	process_t *real_list;
 
 	syscall_table_init();
-	serial_print("SERIAL: syscalls_init: using REAL process management\n");
+	klog_info("SYSCALL", "syscalls_init: using REAL process management");
 
 	real_current = current_process;
 	real_list = get_process_list();
 
-	serial_print("SERIAL: Real current_process = ");
-	serial_print_hex32((uint32_t)(uintptr_t)real_current);
-	serial_print("\n");
-
-	serial_print("SERIAL: Real process_list = ");
-	serial_print_hex32((uint32_t)(uintptr_t)real_list);
-	serial_print("\n");
+	klog_debug_fmt("SYSCALL", "Real current_process = %x",
+		       (unsigned)(uintptr_t)real_current);
+	klog_debug_fmt("SYSCALL", "Real process_list = %x",
+		       (unsigned)(uintptr_t)real_list);
 }

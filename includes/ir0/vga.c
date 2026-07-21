@@ -152,7 +152,7 @@ void putchar(char c)
     cursor_pos = cursor_y * cols + cursor_x;
 }
 
-void print(const char *str)
+void console_puts(const char *str)
 {
     int i = 0;
     while (str[i] != '\0')
@@ -379,7 +379,7 @@ void delay_ms(uint32_t ms)
     /* Aproximadamente 1ms por cada 100,000 iteraciones */
     for (volatile uint32_t i = 0; i < ms * 100000; i++)
     {
-        __asm__ volatile("nop");
+        __asm__ volatile("" ::: "memory");
     }
 }
 

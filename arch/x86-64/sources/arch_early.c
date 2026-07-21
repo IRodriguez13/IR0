@@ -25,7 +25,7 @@
 #include <arch/x86-64/sources/tss_x64.h>
 #include <interrupt/arch/idt.h>
 #include <interrupt/arch/pic.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 /*
  * arch_enable_sse_x86_64 - Allow SSE/x87 in ring 0/3 (musl CRT uses XMM).
@@ -47,13 +47,13 @@ static void arch_enable_sse_x86_64(void)
 }
 
 /**
- * arch_early_init_x86_64 - x86-64 early architecture initialization
+ * early_init_x86_64 - x86-64 early architecture initialization
  *
  * Sets up GDT (Global Descriptor Table) and TSS (Task State Segment)
  * required for x86-64 operation. Called before any other subsystems.
- * This function is called via arch_early_init() wrapper.
+ * This function is called via early_init() wrapper.
  */
-void arch_early_init_x86_64(void)
+void early_init_x86_64(void)
 {
     /* Initialize GDT (Global Descriptor Table) */
     gdt_install();
@@ -63,17 +63,17 @@ void arch_early_init_x86_64(void)
 
     arch_enable_sse_x86_64();
     
-    serial_print("[ARCH] x86-64 early init: GDT and TSS initialized\n");
+    klog_info("ARCH", "x86-64 early init: GDT and TSS initialized");
 }
 
 /**
- * arch_interrupt_init_x86_64 - x86-64 interrupt system initialization
+ * interrupt_init_x86_64 - x86-64 interrupt system initialization
  *
  * Sets up IDT (Interrupt Descriptor Table) and PIC (Programmable Interrupt Controller).
  * Called after core subsystems but before enabling interrupts.
- * This function is called via arch_interrupt_init() wrapper.
+ * This function is called via interrupt_init() wrapper.
  */
-void arch_interrupt_init_x86_64(void)
+void interrupt_init_x86_64(void)
 {
     /* Initialize IDT (Interrupt Descriptor Table) */
     idt_init64();
@@ -82,6 +82,6 @@ void arch_interrupt_init_x86_64(void)
     /* Remap PIC (Programmable Interrupt Controller) to IRQs 32-47 */
     pic_remap64();
     
-    serial_print("[ARCH] x86-64 interrupt init: IDT and PIC initialized\n");
+    klog_info("ARCH", "x86-64 interrupt init: IDT and PIC initialized");
 }
 

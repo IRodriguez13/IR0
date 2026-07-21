@@ -16,7 +16,7 @@
 #include <arch/common/arch_interface.h>
 #include <ir0/acpi_pm.h>
 #include <ir0/platform_ops.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -64,7 +64,7 @@ static inline void cpuid(uint32_t leaf, uint32_t subleaf,
  * Get CPU ID (APIC ID)
  * Returns the current CPU's APIC ID using CPUID
  */
-uint32_t arch_get_cpu_id(void)
+uint32_t get_cpu_id(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
@@ -87,7 +87,7 @@ uint32_t arch_get_cpu_id(void)
  * For now, detects if HT/SMT is enabled and logical cores
  * Full SMP detection would require ACPI MADT parsing
  */
-uint32_t arch_get_cpu_count(void)
+uint32_t get_cpu_count(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
@@ -132,7 +132,7 @@ uint32_t arch_get_cpu_count(void)
  * @vendor_buf: Buffer to store vendor string (must be at least 13 bytes)
  * Returns: 0 on success, -1 on failure
  */
-int arch_get_cpu_vendor(char *vendor_buf)
+int get_cpu_vendor(char *vendor_buf)
 {
 #if defined(__x86_64__) || defined(__i386__)
     if (!vendor_buf)
@@ -162,7 +162,7 @@ int arch_get_cpu_vendor(char *vendor_buf)
  * @stepping: Output for CPU stepping
  * Returns: 0 on success, -1 on failure
  */
-int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
+int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
 {
 #if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
@@ -211,7 +211,7 @@ int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping
  * @max_leaf: Output for maximum supported leaf
  * Returns: 0 on success, -1 on failure
  */
-int arch_get_cpuid_max_leaf(uint32_t *max_leaf)
+int get_cpuid_max_leaf(uint32_t *max_leaf)
 {
 #if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
@@ -232,7 +232,7 @@ int arch_get_cpuid_max_leaf(uint32_t *max_leaf)
  * @size: Buffer size
  * Returns: 0 on success, -1 if not supported or failure
  */
-int arch_get_cpu_brand_string(char *buf, size_t size)
+int get_cpu_brand_string(char *buf, size_t size)
 {
 #if defined(__x86_64__) || defined(__i386__)
     if (!buf || size < 49)
@@ -263,7 +263,7 @@ int arch_get_cpu_brand_string(char *buf, size_t size)
  * @out_ecx: Output for ECX feature flags (NULL allowed)
  * Returns: 0 on success, -1 on failure
  */
-int arch_get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
+int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
 {
 #if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
@@ -287,7 +287,7 @@ int arch_get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
  * Get CLFLUSH line size from CPUID.1 EBX bits 15:8 (units: 8 bytes)
  * Returns: size in bytes, or 0 if not reported
  */
-uint32_t arch_get_cpu_clflush_size(void)
+uint32_t get_cpu_clflush_size(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
@@ -301,10 +301,63 @@ uint32_t arch_get_cpu_clflush_size(void)
 #endif
 }
 
+int arch_hypervisor_present(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	static int cached;
+	static int present;
+	uint32_t eax, ebx, ecx, edx;
+
+	if (cached)
+		return present;
+
+	cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+	if (eax < 1)
+	{
+		present = 0;
+		cached = 1;
+		return 0;
+	}
+	cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+	present = (ecx & (1u << 31)) ? 1 : 0;
+	cached = 1;
+	return present;
+#else
+	return 0;
+#endif
+}
+
+int arch_hypervisor_vendor(char *buf, size_t n)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint32_t eax, ebx, ecx, edx;
+	char vendor[13];
+
+	if (!buf || n < 13)
+		return -1;
+	if (!arch_hypervisor_present())
+	{
+		buf[0] = '\0';
+		return -1;
+	}
+	cpuid(0x40000000U, 0, &eax, &ebx, &ecx, &edx);
+	memcpy(vendor + 0, &ebx, 4);
+	memcpy(vendor + 4, &ecx, 4);
+	memcpy(vendor + 8, &edx, 4);
+	vendor[12] = '\0';
+	memcpy(buf, vendor, 13);
+	return 0;
+#else
+	if (buf && n)
+		buf[0] = '\0';
+	return -1;
+#endif
+}
+
 
 static void __attribute__((noreturn)) x86_platform_halt_loop(void)
 {
-	arch_disable_interrupts();
+	disable_interrupts();
 	for (;;)
 		cpu_wait();
 }
@@ -316,7 +369,7 @@ static void x86_platform_halt(void)
 	 * status 0 → guest exit code 1 (QEMU quirk); still terminates cleanly.
 	 * Print the success tag before outb — QEMU exits the VM on the write.
 	 */
-	serial_print("ISA_DEBUG_EXIT_OK\n");
+	klog_smoke("ISA_DEBUG_EXIT_OK");
 	outb(0xf4, 0x01);
 	x86_platform_halt_loop();
 }
@@ -353,21 +406,21 @@ void ir0_platform_ops_set(const struct ir0_platform_ops *ops)
 		g_platform_ops = ops;
 }
 
-void arch_system_halt(void)
+void system_halt(void)
 {
 	ir0_platform_ops_get()->halt();
 	for (;;)
 		cpu_wait();
 }
 
-void arch_system_reboot(void)
+void system_reboot(void)
 {
 	ir0_platform_ops_get()->reboot();
 	for (;;)
 		cpu_wait();
 }
 
-void arch_system_poweroff(void)
+void system_poweroff(void)
 {
 	ir0_platform_ops_get()->poweroff();
 	for (;;)

@@ -14,7 +14,7 @@
 #include <mm/paging.h>
 #include <string.h>
 #include <config.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 /* User space address range (simplified) */
 #define USER_SPACE_START 0x00400000UL  /* 4MB */
@@ -66,7 +66,7 @@ int is_user_address_checked(const void *addr, size_t size, int check_mapped)
             {
                 /* Page not mapped */
 #if DEBUG_SYSCALLS
-                serial_print("[COPY_USER] Address range contains unmapped pages\n");
+                klog_info("COPY_USER", "Address range contains unmapped pages");
 #endif
                 return 0;
             }

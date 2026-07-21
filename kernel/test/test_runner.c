@@ -14,7 +14,7 @@
 
 #include "test/ktest_harness.h"
 #include "test/ktest_decl.h"
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include "process.h"
 #include <stddef.h>
 
@@ -163,7 +163,7 @@ static void ktest_print_decimal(uint32_t n)
 	uint32_t i = 0;
 	uint32_t d;
 	if (n == 0) {
-		serial_print("0");
+		klog_debug("KERN", "0");
 		return;
 	}
 	for (d = n; d; d /= 10)
@@ -184,47 +184,41 @@ void kernel_test_run_all(void)
 		;
 
 	/* KTAP plan: 1..N (obligatorio para parsers) */
-	serial_print("1..");
+	klog_debug("KERN", "1..");
 	ktest_print_decimal((uint32_t)total);
-	serial_print("\n");
+	klog_print("\n");
 
-	serial_print("[KTEST] ========================================\n");
-	serial_print("[KTEST] IR0 kernel test suite (in-kernel)\n");
-	serial_print("[KTEST] ========================================\n");
+	klog_debug("KERN", "[KTEST] ========================================\n[KTEST] IR0 kernel test suite (in-kernel)\n[KTEST] ========================================\n");
 
 	for (idx = 0; ktest_functions[idx] != NULL; idx++) {
 		_ktest_failed = 0;
 		if (ktest_needs_process[idx] && current_process == NULL) {
-			serial_print("ok ");
+			klog_debug("KERN", "ok ");
 			ktest_print_decimal((uint32_t)(idx + 1));
-			serial_print(" - ");
-			serial_print(ktest_names[idx] ? ktest_names[idx] : "unknown");
-			serial_print(" # SKIP need process\n");
+			klog_debug_fmt("KERN", " - %s # SKIP need process\n", ktest_names[idx] ? ktest_names[idx] : "unknown");
 			continue;
 		}
 		ktest_functions[idx]();
 		/* KTAP: ok N - name / not ok N - name */
 		if (_ktest_failed) {
-			serial_print("not ok ");
+			klog_debug("KERN", "not ok ");
 			_ktest_pass = 0;
 		} else {
-			serial_print("ok ");
+			klog_debug("KERN", "ok ");
 		}
 		ktest_print_decimal((uint32_t)(idx + 1));
-		serial_print(" - ");
-		serial_print(ktest_names[idx] ? ktest_names[idx] : "unknown");
-		serial_print("\n");
+		klog_debug_fmt("KERN", " - %s", ktest_names[idx] ? ktest_names[idx] : "unknown");
 	}
 
-	serial_print("[KTEST] ----------------------------------------\n");
+	klog_debug("KERN", "[KTEST] ----------------------------------------\n");
 	if (_ktest_pass) {
-		serial_print("[KTEST] All ");
+		klog_debug("KERN", "[KTEST] All ");
 		ktest_print_decimal((uint32_t)total);
-		serial_print(" test(s) passed.\n");
+		klog_debug("KERN", " test(s) passed.\n");
 	} else {
-		serial_print("[KTEST] Some tests FAILED (total ");
+		klog_debug("KERN", "[KTEST] Some tests FAILED (total ");
 		ktest_print_decimal((uint32_t)total);
-		serial_print(").\n");
+		klog_debug("KERN", ").\n");
 	}
-	serial_print("[KTEST] ========================================\n");
+	klog_debug("KERN", "[KTEST] ========================================\n");
 }
