@@ -58,7 +58,7 @@ static void write_hex_u32(unsigned int v)
 
 static void fase50b_emit_classify(const char *tag)
 {
-	write_str("[FASE50B][CLASSIFY] ");
+	write_str("[FASE50B] CLASSIFY ");
 	write_str(tag ? tag : "(null)");
 	write_str("\n");
 }
@@ -210,7 +210,7 @@ static int read_all(int fd, char *buf, size_t size)
 
 static void fase50d_emit_classify(const char *tag)
 {
-	write_str("[FASE50D][CLASSIFY] ");
+	write_str("[FASE50D] CLASSIFY ");
 	write_str(tag ? tag : "(null)");
 	write_str("\n");
 }
@@ -362,7 +362,7 @@ static void fase50d_classify_capture_fail(const char *step, const char *reason,
 		fase50d_emit_classify("FASE50D_FLAKE_EXIT_CODE_MISMATCH");
 	if (step)
 	{
-		write_str("[FASE50D][CLASSIFY_CTX] step=");
+		write_str("[FASE50D] CLASSIFY_CTX step=");
 		write_str(step);
 		write_str(" reason=");
 		write_str(reason ? reason : "(null)");
@@ -775,7 +775,7 @@ int main(void)
 			write_str("BUSYBOX_FAIL_REASON=echo_stdout\n");
 		goto halt;
 	}
-	write_str("[FASE50B][CLASSIFY] BUSYBOX_ECHO_CAPTURE_OK\n");
+	write_str("[FASE50B] CLASSIFY BUSYBOX_ECHO_CAPTURE_OK\n");
 
 	if (run_capture("ls", argv_ls, out, sizeof(out), err, sizeof(err), &ec,
 			&out_n, &err_n) != 0)
@@ -803,7 +803,7 @@ int main(void)
 		fase50b_classify_open_fail(open_errno, pre_exists);
 		goto halt;
 	}
-	write_str("[FASE50C][CLASSIFY] FILE_CREATE_STILL_OK\n");
+	write_str("[FASE50C] CLASSIFY FILE_CREATE_STILL_OK\n");
 	(void)write(fd, "archivo-fase50\n", 14);
 	close(fd);
 
@@ -889,7 +889,7 @@ int main(void)
 		goto halt;
 
 	write_str("FASE50D_TANDA2_OK\n");
-	write_str("[FASE50D][CLASSIFY] VFS_BACKEND_NEUTRAL\n");
+	write_str("[FASE50D] CLASSIFY VFS_BACKEND_NEUTRAL\n");
 
 	write_str("FASE50D_TANDA3_START\n");
 
@@ -929,7 +929,7 @@ int main(void)
 		goto halt;
 
 	write_str("FASE50D_TANDA3_OK\n");
-	write_str("[FASE50D][CLASSIFY] SYSCALL_MONOLITH_NOT_GROWN\n");
+	write_str("[FASE50D] CLASSIFY SYSCALL_MONOLITH_NOT_GROWN\n");
 
 	write_str("FASE50E_START\n");
 
@@ -937,12 +937,12 @@ int main(void)
 		goto halt;
 
 	write_str("FASE50E_OK\n");
-	write_str("[FASE50E][CLASSIFY] FASE50E_BASELINE_STABLE\n");
-	write_str("[FASE50E][CLASSIFY] OPENAT_RESOLVE_FACADE_OK\n");
-	write_str("[FASE50E][CLASSIFY] SYSCALL_FS_SPLIT_CONTINUES\n");
-	write_str("[FASE50E][CLASSIFY] DEBUG_LOGS_GATED\n");
-	write_str("[FASE50E][CLASSIFY] FASE50E_NO_REGRESSION\n");
-	write_str("[FASE50E][CLASSIFY] FASE50E_NO_REGRESSION_VERIFIED\n");
+	write_str("[FASE50E] CLASSIFY FASE50E_BASELINE_STABLE\n");
+	write_str("[FASE50E] CLASSIFY OPENAT_RESOLVE_FACADE_OK\n");
+	write_str("[FASE50E] CLASSIFY SYSCALL_FS_SPLIT_CONTINUES\n");
+	write_str("[FASE50E] CLASSIFY DEBUG_LOGS_GATED\n");
+	write_str("[FASE50E] CLASSIFY FASE50E_NO_REGRESSION\n");
+	write_str("[FASE50E] CLASSIFY FASE50E_NO_REGRESSION_VERIFIED\n");
 
 halt:
 	for (;;)

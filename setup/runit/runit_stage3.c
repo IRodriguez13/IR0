@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <unistd.h>
+#include "ir0_smoke_tag.h"
 #include <sys/syscall.h>
 #include <sys/reboot.h>
 
@@ -26,22 +27,14 @@
 #define LINUX_REBOOT_CMD_HALT 0xCDEF0123u
 #endif
 
-static void tag(const char *s)
-{
-	const char *p = s;
-
-	while (*p)
-		p++;
-	(void)write(1, s, (size_t)(p - s));
-}
 
 int main(void)
 {
-	tag("RUNIT_STAGE3_OK\n");
+	ir0_smoke_tag("RUNIT_STAGE3_OK\n");
 	(void)syscall(SYS_sync);
-	tag("RUNIT_STAGE3_SYNC_DONE\n");
+	ir0_smoke_tag("RUNIT_STAGE3_SYNC_DONE\n");
 	(void)syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
 		      (unsigned int)LINUX_REBOOT_CMD_HALT, (void *)0);
-	tag("RUNIT_STAGE3_REBOOT_RETURNED\n");
+	ir0_smoke_tag("RUNIT_STAGE3_REBOOT_RETURNED\n");
 	return 1;
 }

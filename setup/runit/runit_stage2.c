@@ -13,22 +13,15 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <unistd.h>
+#include "ir0_smoke_tag.h"
 
-static void tag(const char *s)
-{
-	const char *p = s;
-
-	while (*p)
-		p++;
-	(void)write(1, s, (size_t)(p - s));
-}
 
 int main(void)
 {
 	char *const argv[] = { "/bin/runsvdir", "-P", "/etc/runit/sv", NULL };
 
-	tag("RUNIT_STAGE2_OK\n");
+	ir0_smoke_tag("RUNIT_STAGE2_OK\n");
 	execv("/bin/runsvdir", argv);
-	tag("RUNIT_STAGE2_EXEC_FAIL\n");
+	ir0_smoke_tag("RUNIT_STAGE2_EXEC_FAIL\n");
 	return 111;
 }

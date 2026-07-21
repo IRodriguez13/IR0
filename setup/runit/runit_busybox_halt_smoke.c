@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <unistd.h>
+#include "ir0_smoke_tag.h"
 #include <sys/syscall.h>
 #include <sys/reboot.h>
 
@@ -26,23 +27,15 @@
 #define LINUX_REBOOT_CMD_HALT 0xCDEF0123u
 #endif
 
-static void tag(const char *s)
-{
-	const char *p = s;
-
-	while (*p)
-		p++;
-	(void)write(1, s, (size_t)(p - s));
-}
 
 int main(void)
 {
-	tag("BUSYBOX_HALT_SMOKE_CALL\n");
+	ir0_smoke_tag("BUSYBOX_HALT_SMOKE_CALL\n");
 	(void)syscall(SYS_sync);
 	/* Prefer BusyBox multi-call if linked as /bin/halt; else raw reboot. */
 	execl("/bin/halt", "halt", "-f", (char *)0);
 	(void)syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
 		      (unsigned int)LINUX_REBOOT_CMD_HALT, (void *)0);
-	tag("BUSYBOX_HALT_SMOKE_RETURNED\n");
+	ir0_smoke_tag("BUSYBOX_HALT_SMOKE_RETURNED\n");
 	return 1;
 }
