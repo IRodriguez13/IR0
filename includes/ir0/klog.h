@@ -7,15 +7,11 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: klog.h
- * Description: Portable kernel log facade (delegates to serial today).
+ * Description: Compat reexport — logging hub lives in KTM (<ir0/ktm/klog.h>).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
-#include <stdint.h>
-
-void klog_print(const char *str);
-void klog_hex32(uint32_t num);
-void klog_hex64(uint64_t num);
+#include <ir0/ktm/klog.h>

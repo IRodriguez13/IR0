@@ -17,11 +17,13 @@
 #include "virtio_9p.h"
 
 #include <interrupt/arch/io.h>
+#include <ir0/cpu.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 #include <stddef.h>
+#include <ir0/ktm/klog.h>
 
 #define PCI_CONFIG_ADDRESS 0xCF8
 #define PCI_CONFIG_DATA    0xCFC
@@ -270,15 +272,15 @@ static int v9p_exchange(uint32_t req_len, uint32_t *resp_len)
 
 	avail_idx = *g_avail_idx;
 	g_avail_ring[avail_idx % g_qsz] = desc_idx;
-	__asm__ volatile("mfence" ::: "memory");
+	smp_mb();
 	*g_avail_idx = (uint16_t)(avail_idx + 1);
-	__asm__ volatile("mfence" ::: "memory");
+	smp_mb();
 
 	vp_outw(VIRTIO_PCI_QUEUE_NOTIFY, 0);
 
 	for (spins = 0; spins < 2000000; spins++)
 	{
-		__asm__ volatile("mfence" ::: "memory");
+		smp_mb();
 		if (*g_used_idx != g_last_used_idx)
 		{
 			uint16_t u = (uint16_t)(g_last_used_idx % g_qsz);
@@ -289,7 +291,7 @@ static int v9p_exchange(uint32_t req_len, uint32_t *resp_len)
 			return 0;
 		}
 	}
-	serial_print("HOSTSHARE_9P_NOTIFY_TIMEOUT\n");
+	klog_smoke("HOSTSHARE_9P_NOTIFY_TIMEOUT");
 	return -EIO;
 }
 
@@ -1346,7 +1348,7 @@ int virtio_9p_init(void)
 	g_ready = 0;
 	if (find_virtio_9p(&bus, &slot) != 0)
 	{
-		serial_print("HOSTSHARE_9P_ABSENT\n");
+		klog_smoke("HOSTSHARE_9P_ABSENT");
 		return -ENODEV;
 	}
 
@@ -1356,7 +1358,7 @@ int virtio_9p_init(void)
 	bar0 = pci_read(bus, slot, 0, 0x10);
 	if (!(bar0 & 1))
 	{
-		serial_print("HOSTSHARE_9P_NO_IOBAR\n");
+		klog_smoke("HOSTSHARE_9P_NO_IOBAR");
 		return -ENODEV;
 	}
 	g_iobase = (uint16_t)(bar0 & ~0x3u);
@@ -1372,7 +1374,7 @@ int virtio_9p_init(void)
 	qsz = vp_inw(VIRTIO_PCI_QUEUE_NUM);
 	if (qsz == 0 || qsz > V9P_QUEUE_MAX)
 	{
-		serial_print("HOSTSHARE_9P_BAD_QSZ\n");
+		klog_smoke("HOSTSHARE_9P_BAD_QSZ");
 		vp_outb(VIRTIO_PCI_STATUS, VIRTIO_STATUS_FAILED);
 		return -EINVAL;
 	}
@@ -1397,19 +1399,19 @@ int virtio_9p_init(void)
 	rc = v9p_version();
 	if (rc < 0)
 	{
-		serial_print("HOSTSHARE_9P_VERSION_FAIL\n");
+		klog_smoke("HOSTSHARE_9P_VERSION_FAIL");
 		g_ready = 0;
 		return rc;
 	}
 	rc = v9p_attach(g_root_fid);
 	if (rc < 0)
 	{
-		serial_print("HOSTSHARE_9P_ATTACH_FAIL\n");
+		klog_smoke("HOSTSHARE_9P_ATTACH_FAIL");
 		g_ready = 0;
 		return rc;
 	}
 
-	serial_print("HOSTSHARE_9P_READY\n");
+	klog_smoke("HOSTSHARE_9P_READY");
 	return 0;
 }
 

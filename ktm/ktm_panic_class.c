@@ -14,8 +14,7 @@
 
 #include <ktm.h>
 #include <ir0/process.h>
-#include <ir0/serial_io.h>
-#include <string.h>
+#include <ir0/ktm/klog.h>
 
 #define USER_RIP_LO    0x00400000ULL
 #define USER_RIP_HI    0x00007FFFFFFFFFFFULL
@@ -43,15 +42,10 @@ void ktm_panic_site_emit(const char *file, unsigned int line, const char *caller
 	(void)message;
 	return;
 #else
-	serial_print("[KTM][PANIC_SITE] file=");
-	serial_print(file ? file : "?");
-	serial_print(" line=");
-	serial_print_hex32(line);
-	serial_print(" caller=");
-	serial_print(caller ? caller : "?");
-	serial_print(" msg=");
-	serial_print(message ? message : "(null)");
-	serial_print("\n");
+	klog_error_fmt("KTM",
+		       "[KTM][PANIC_SITE] file=%s line=%x caller=%s msg=%s",
+		       file ? file : "?", (unsigned)line, caller ? caller : "?",
+		       message ? message : "(null)");
 #endif
 }
 

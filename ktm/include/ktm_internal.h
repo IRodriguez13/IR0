@@ -21,6 +21,8 @@ struct ktm_writer
 };
 
 void ktm_registry_init(void);
+void ktm_probes_register_builtins(void);
+void ktm_klog_init(void);
 ktm_context_t *ktm_current_context(void);
 void ktm_set_current_context(ktm_context_t *ctx);
 

@@ -16,8 +16,9 @@
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/credentials.h>
+#include <ir0/cpu.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -124,7 +125,7 @@ int64_t sys_kexec_load(unsigned long entry, unsigned long nr_segments,
 	/* entry 0 → start of kernel-held image (smoke / default). */
 	g_entry = entry ? entry : (unsigned long)(uintptr_t)dst;
 	g_loaded = 1;
-	serial_print("KEXEC_LOAD_OK\n");
+	klog_smoke("KEXEC_LOAD_OK");
 	return 0;
 }
 
@@ -134,11 +135,11 @@ void ir0_kexec_execute(void)
 
 	if (!g_loaded || !g_image)
 	{
-		serial_print("REBOOT_KEXEC_STUB\n");
+		klog_smoke("REBOOT_KEXEC_STUB");
 		return;
 	}
 
-	serial_print("REBOOT_KEXEC_LOADED\n");
+	klog_smoke("REBOOT_KEXEC_LOADED");
 
 	if (g_image_len >= IR0_KEXEC_MAGIC_LEN)
 	{
@@ -157,7 +158,7 @@ void ir0_kexec_execute(void)
 		}
 		if (match)
 		{
-			serial_print("KEXEC_PAYLOAD_OK\n");
+			klog_smoke("KEXEC_PAYLOAD_OK");
 			/* Magic smoke payload: path proven; soft reboot next. */
 			return;
 		}
@@ -166,5 +167,5 @@ void ir0_kexec_execute(void)
 	fn = (void (*)(void))(uintptr_t)g_entry;
 	fn();
 	for (;;)
-		__asm__ __volatile__("hlt");
+		cpu_halt();
 }

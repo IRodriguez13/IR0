@@ -15,7 +15,7 @@
 #include "test/ktest_harness.h"
 #include <ir0/permissions.h>
 #include <ir0/stat.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 void ktest_cred_access_contract(void)
@@ -47,6 +47,6 @@ void ktest_cred_access_contract(void)
 	KASSERT(ir0_access_from_stat_groups(&st, ACCESS_READ, USER_UID,
 					     (gid_t)(USER_GID + 1), supp, 1));
 
-	serial_print("MULTIUSER_PERMS_OK\n");
+	klog_smoke("MULTIUSER_PERMS_OK");
 	KTEST_END();
 }

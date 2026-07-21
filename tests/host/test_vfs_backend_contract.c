@@ -200,5 +200,5 @@ void test_vfs_backend_contract(void)
 
 	TEST_END();
 
-	fprintf(stderr, "[TEST][CLASSIFY] VFS_FS_CONTRACT_DOCUMENTED\n");
+	fprintf(stderr, "[TEST] CLASSIFY VFS_FS_CONTRACT_DOCUMENTED\n");
 }

@@ -98,7 +98,7 @@ int main(void)
 		return 6;
 	}
 
-	write_str("[FAT16][CLASSIFY] FAT16_MOUNT_READ_OK\n");
+	write_str("[FAT16] CLASSIFY FAT16_MOUNT_READ_OK\n");
 	write_str("[FAT16OK]\n");
 	return 0;
 }

@@ -14,11 +14,12 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/cpu.h>
 #include "ahci.h"
 
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <mm/paging.h>
 #include <string.h>
 #include <stdint.h>
@@ -158,19 +159,6 @@ struct fis_reg_h2d
 	uint8_t  control;
 	uint8_t  rsv1[4];
 };
-
-static inline void outl(uint16_t port, uint32_t val)
-{
-	__asm__ __volatile__("outl %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline uint32_t inl(uint16_t port)
-{
-	uint32_t val;
-
-	__asm__ __volatile__("inl %1, %0" : "=a"(val) : "Nd"(port));
-	return val;
-}
 
 static uint32_t ahci_pci_read(uint8_t bus, uint8_t slot, uint8_t func,
 			      uint8_t offset)
@@ -528,9 +516,7 @@ static void ahci_register_block(struct ahci_slot *slot)
 	if (ir0_block_register(&dev) == 0)
 	{
 		slot->registered = 1;
-		serial_print("[AHCI] registered block ");
-		serial_print(slot->name);
-		serial_print("\n");
+		klog_info_fmt("AHCI", "[AHCI] registered block %s", slot->name);
 	}
 }
 
@@ -596,7 +582,7 @@ void ahci_probe(void)
 				    pci_subclass != PCI_SUBCLASS_AHCI)
 					continue;
 
-				serial_print("AHCI_DETECT_OK\n");
+				klog_smoke("AHCI_DETECT_OK");
 
 				cmd = ahci_pci_read(bus, slot, func, 0x04);
 				cmd |= 0x6;
@@ -606,7 +592,7 @@ void ahci_probe(void)
 				ahci_abar_phys = (uintptr_t)(bar5 & ~0xFu);
 				if (ahci_abar_phys == 0)
 				{
-					serial_print("AHCI_ABAR_NONE\n");
+					klog_smoke("AHCI_ABAR_NONE");
 					return;
 				}
 
@@ -628,8 +614,7 @@ void ahci_probe(void)
 								     PAGE_CACHE_DISABLE) !=
 						    0)
 						{
-							serial_print(
-								"AHCI_MAP_FAIL\n");
+							klog_smoke("AHCI_MAP_FAIL");
 							return;
 						}
 					}
@@ -650,7 +635,7 @@ void ahci_probe(void)
 				if (ahci_hba_ncs > (int)AHCI_CMD_SLOTS)
 					ahci_hba_ncs = (int)AHCI_CMD_SLOTS;
 				if (!ahci_hba_sncq)
-					serial_print("AHCI_NCQ_UNSUPPORTED\n");
+					klog_smoke("AHCI_NCQ_UNSUPPORTED");
 
 				pi = ahci_abar->pi;
 				for (port_idx = 0; port_idx < 32; port_idx++)
@@ -677,7 +662,7 @@ void ahci_probe(void)
 						continue;
 					if (ahci_identify(as) != 0)
 					{
-						serial_print("AHCI_IDENT_FAIL\n");
+						klog_smoke("AHCI_IDENT_FAIL");
 						continue;
 					}
 					as->ready = 1;
@@ -690,8 +675,7 @@ void ahci_probe(void)
 							      as->io_buf) == 0)
 					{
 						if (ahci_nslots == 0)
-							serial_print(
-								"AHCI_READ_OK\n");
+							klog_smoke("AHCI_READ_OK");
 						as->ncq_ok = saved_ncq;
 						if (ahci_hba_sncq &&
 						    as->ncq_ok &&
@@ -703,36 +687,33 @@ void ahci_probe(void)
 								    as, 0, 1,
 								    as->io_buf) ==
 							    0)
-								serial_print(
-									"AHCI_NCQ_OK\n");
+								klog_smoke("AHCI_NCQ_OK");
 							else
 							{
-								serial_print(
-									"AHCI_NCQ_FAIL\n");
+								klog_smoke("AHCI_NCQ_FAIL");
 								as->ncq_ok = 0;
 							}
 						}
 						else if (ahci_hba_sncq &&
 							 !as->ncq_ok &&
 							 ahci_nslots == 0)
-							serial_print(
-								"AHCI_NCQ_UNSUPPORTED\n");
+							klog_smoke("AHCI_NCQ_UNSUPPORTED");
 					}
 					else
 					{
-						serial_print("AHCI_READ_FAIL\n");
+						klog_smoke("AHCI_READ_FAIL");
 						as->ncq_ok = 0;
 					}
 
 					ahci_nslots++;
 				}
 				if (ahci_nslots == 0)
-					serial_print("AHCI_PORT_NONE\n");
+					klog_smoke("AHCI_PORT_NONE");
 				else if (ahci_nslots >= 2)
-					serial_print("AHCI_MULTI_OK\n");
+					klog_smoke("AHCI_MULTI_OK");
 				return;
 			}
 		}
 	}
-	serial_print("AHCI_DETECT_NONE\n");
+	klog_smoke("AHCI_DETECT_NONE");
 }

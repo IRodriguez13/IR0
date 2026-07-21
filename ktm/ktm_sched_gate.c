@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ktm.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 #ifdef IR0_KERNEL_TESTS
 
@@ -35,9 +35,9 @@ void ktm_sched_gate_check_before_sched(const char *caller)
 	if (ktm_irq_nest == 0)
 		return;
 
-	serial_print("[KTM][SCHED_GATE] sched from IRQ without contract caller=");
-	serial_print(caller ? caller : "?");
-	serial_print("\n");
+	klog_warn_fmt("KTM",
+		      "[KTM][SCHED_GATE] sched from IRQ without contract caller=%s",
+		      caller ? caller : "?");
 	ktm_fail_at("SCHED_GATE", "sched_schedule_next from IRQ", KTM_FILE, __LINE__);
 }
 

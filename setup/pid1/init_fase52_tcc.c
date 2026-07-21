@@ -167,8 +167,8 @@ static int fase52d_large_file_harness(void)
 		return -1;
 	}
 
-	write_str("[FASE52][CLASSIFY] MINIX_DOUBLE_INDIRECT_OK\n");
-	write_str("[FASE52][CLASSIFY] LARGE_FILE_RW_OK\n");
+	write_str("[FASE52] CLASSIFY MINIX_DOUBLE_INDIRECT_OK\n");
+	write_str("[FASE52] CLASSIFY LARGE_FILE_RW_OK\n");
 	return 0;
 }
 
@@ -271,9 +271,9 @@ static int fase52d_large_file_truncate(void)
 		return -1;
 	}
 
-	write_str("[FASE52][CLASSIFY] LARGE_FILE_TRUNCATE_OK\n");
-	write_str("[FASE52][CLASSIFY] PMM_RECLAIM_LARGE_FILE_OK\n");
-	write_str("[FASE52][CLASSIFY] ROOTFS_CAPACITY_STABLE\n");
+	write_str("[FASE52] CLASSIFY LARGE_FILE_TRUNCATE_OK\n");
+	write_str("[FASE52] CLASSIFY PMM_RECLAIM_LARGE_FILE_OK\n");
+	write_str("[FASE52] CLASSIFY ROOTFS_CAPACITY_STABLE\n");
 	return 0;
 }
 
@@ -401,7 +401,7 @@ static int static_link(const char *tag, const char *src_path, const char *out_pa
 		return -1;
 	if (ec != 0)
 	{
-		write_str("[FASE52][CLASSIFY] ABI_FIX_GENERIC\n");
+		write_str("[FASE52] CLASSIFY ABI_FIX_GENERIC\n");
 		if (out_n && *out_n > 0 && out)
 		{
 			write_str("[FASE52][LINK_ERR] ");
@@ -436,7 +436,7 @@ static int static_link_multi(const char *tag, const char *out_path,
 		return -1;
 	if (ec != 0)
 	{
-		write_str("[FASE52][CLASSIFY] ABI_FIX_GENERIC\n");
+		write_str("[FASE52] CLASSIFY ABI_FIX_GENERIC\n");
 		if (out_n && *out_n > 0 && out)
 		{
 			write_str("[FASE52][LINK_ERR] ");
@@ -496,7 +496,7 @@ int main(void)
 
 	write_str("FASE52_TCC_HARNESS_ID=init_fase52_tcc.c\n");
 	write_str("FASE52B_START\n");
-	write_str("[FASE52][CLASSIFY] FASE52B_ROOTFS_CAPACITY_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52B_ROOTFS_CAPACITY_OK\n");
 
 	write_str("FASE52_BOOT_START\n");
 	if (run_capture("tcc_v", argv_v, out, sizeof(out), &ec, &out_n) != 0)
@@ -509,7 +509,7 @@ int main(void)
 		fase52_fail("tcc_v", ec);
 		goto halt;
 	}
-	write_str("[FASE52][CLASSIFY] FASE52_TCC_BOOT_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52_TCC_BOOT_OK\n");
 
 	write_str("FASE52B_CASE_A\n");
 	if (access("/lib/tcc/crt1.o", R_OK) != 0 && access("/usr/lib/crt1.o", R_OK) != 0)
@@ -524,10 +524,10 @@ int main(void)
 	}
 	if (static_link("tcc_static_a0", "/tmp/a.c", "/tmp/a", out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52B_TCC_STATIC_LINK_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52B_TCC_STATIC_LINK_OK\n");
 	if (exec_expect("exec_a0", "/tmp/a", 0, out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52B_TCC_EXEC_GENERATED_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52B_TCC_EXEC_GENERATED_OK\n");
 
 	write_str("FASE52B_CASE_B\n");
 	if (write_source("/tmp/b.c", "int main(){return 42;}\n") != 0)
@@ -567,8 +567,8 @@ int main(void)
 		fase52_fail_msg("stdio_stdout", out);
 		goto halt;
 	}
-	write_str("[FASE52][CLASSIFY] FASE52B_TCC_STDIO_HELLO_OK\n");
-	write_str("[FASE52][CLASSIFY] FASE52B_BASE_LAYOUT_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52B_TCC_STDIO_HELLO_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52B_BASE_LAYOUT_OK\n");
 
 	write_str("FASE52C_START\n");
 	write_str("FASE52C_CASE_PRINTF\n");
@@ -589,7 +589,7 @@ int main(void)
 			    (char *const[]){ (char *)"/tmp/printf", NULL },
 			    0, "fmt 42 ok ff", out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52C_PRINTF_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52C_PRINTF_OK\n");
 
 	write_str("FASE52C_CASE_MALLOC\n");
 	if (write_source("/tmp/malloc.c",
@@ -612,7 +612,7 @@ int main(void)
 		goto halt;
 	if (exec_expect("exec_malloc", "/tmp/malloc", 0, out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52C_MALLOC_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52C_MALLOC_OK\n");
 
 	write_str("FASE52C_CASE_STDIO_FILE\n");
 	if (write_source("/tmp/fileio.c",
@@ -638,7 +638,7 @@ int main(void)
 		goto halt;
 	if (exec_expect("exec_fileio", "/tmp/fileio", 0, out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52C_STDIO_FILE_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52C_STDIO_FILE_OK\n");
 
 	write_str("FASE52C_CASE_ARGV\n");
 	if (write_source("/tmp/argv.c",
@@ -662,7 +662,7 @@ int main(void)
 					     (char *)"b", NULL },
 			    0, "args a b", out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52C_ARGV_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52C_ARGV_OK\n");
 
 	write_str("FASE52C_CASE_MULTI\n");
 	if (write_source("/tmp/helper.c", "int helper(int x){ return x + 7; }\n") != 0)
@@ -683,9 +683,9 @@ int main(void)
 		goto halt;
 	if (exec_expect("exec_multi", "/tmp/multi", 42, out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52C_MULTI_OBJECT_LINK_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52C_MULTI_OBJECT_LINK_OK\n");
 
-	write_str("[FASE52][CLASSIFY] FASE52C_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52C_OK\n");
 
 	if (fase52d_large_file_harness() != 0)
 		goto halt;
@@ -713,7 +713,7 @@ int main(void)
 	if (exec_expect_out("exec_combo", (char *const[]){ (char *)"/tmp/combo", NULL },
 			    0, "combo-cccc", out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52D_MEDIUM_PROGRAM_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52D_MEDIUM_PROGRAM_OK\n");
 
 	write_str("FASE52D_CASE_LARGE_READER\n");
 	if (write_source("/tmp/large_read.c",
@@ -738,7 +738,7 @@ int main(void)
 			    (char *const[]){ (char *)"/tmp/large_read", NULL },
 			    0, "bytes=532480", out, sizeof(out), &out_n) != 0)
 		goto halt;
-	write_str("[FASE52][CLASSIFY] FASE52D_LARGE_FILE_PROGRAM_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52D_LARGE_FILE_PROGRAM_OK\n");
 
 	if (fase52d_large_file_truncate() != 0)
 		goto halt;
@@ -763,7 +763,7 @@ int main(void)
 				goto halt;
 		}
 	}
-	write_str("[FASE52][CLASSIFY] EXEC_COMPILE_STRESS_OK\n");
+	write_str("[FASE52] CLASSIFY EXEC_COMPILE_STRESS_OK\n");
 
 	write_str("FASE52D_CASE_TXTUTIL\n");
 	if (write_source("/tmp/lines.txt", "a\nb\nc\n") != 0)
@@ -801,12 +801,12 @@ int main(void)
 		goto halt;
 	}
 
-	write_str("[FASE52][CLASSIFY] FASE52D_STAGING_INCREMENTAL_OK\n");
-	write_str("[FASE52][CLASSIFY] TOOLCHAIN_EXPANDED_OK\n");
-	write_str("[FASE52][CLASSIFY] FASE52D_OK\n");
-	write_str("[FASE52][CLASSIFY] FASE50E_NO_REGRESSION_VERIFIED\n");
-	write_str("[FASE52][CLASSIFY] FASE51_BASELINE_STABLE\n");
-	write_str("[FASE52][CLASSIFY] DEBUG_FASE52_GATED\n");
+	write_str("[FASE52] CLASSIFY FASE52D_STAGING_INCREMENTAL_OK\n");
+	write_str("[FASE52] CLASSIFY TOOLCHAIN_EXPANDED_OK\n");
+	write_str("[FASE52] CLASSIFY FASE52D_OK\n");
+	write_str("[FASE52] CLASSIFY FASE50E_NO_REGRESSION_VERIFIED\n");
+	write_str("[FASE52] CLASSIFY FASE51_BASELINE_STABLE\n");
+	write_str("[FASE52] CLASSIFY DEBUG_FASE52_GATED\n");
 	write_str("FASE52_OK\n");
 	goto done;
 

@@ -17,8 +17,9 @@ Checks:
 11) kernel/: no #include <arch/common/arch_portable.h> (use ir0/arch_port.h).
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
 13) debug_bins/: no #include "test/... except debug_bins/cmd_ktest.c (IR0_KERNEL_TESTS).
-14) Portable trees must not embed x86 IRQ/MM asm (pushfq / %%cr0-4 / invlpg);
-    use arch_irq_* / arch_mm_* / arch_tlb_* facades. Allowlist: includes/ir0/oops.c.
+14) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
+    use simple facades in includes/ir0/cpu.h (cpu_relax, smp_mb, inb, …).
+    Allowlist: syscall_x86_64.h / syscall_arm64.h only. Empty barrier OK.
 15) includes/ir0/*.h must not #include <drivers/...> (facade seal).
 16) includes/ir0/*.h must not #include <arch/...> or <sched/...> (facade seal).
 """
@@ -121,6 +122,7 @@ DEVFS_USERCOPY_RE = re.compile(r"\bcopy_(to|from)_user\s*\(")
 DEVFS_USERCOPY_WHITELIST = {
     "dev_audio_ioctl",
     "dev_console_ioctl",
+    "dev_events0_ioctl",
     "dev_fb0_ioctl",
     "dev_pty_ioctl",
 }
@@ -537,6 +539,60 @@ def check_ktm_no_fase_serial():
     return errors
 
 
+def check_klog_serial_print_allowlist():
+    """
+    Human logging must go through KTM hub (ktm/klog.c / kprintf / klog_*).
+    serial_print is only allowed in the sink, serial drivers, KTM protocol
+    transport, and remaining gated diag TUs (shrinking allowlist).
+    """
+    errors = []
+    allow = {
+        "ktm/klog.c",
+        "ktm/transport_serial.c",
+        "drivers/serial/serial.c",
+        "drivers/serial/serial.h",
+        "includes/ir0/serial_io.h",
+        "arch/arm64/sources/serial_io_arm64.c",
+        "arch/arm64/sources/min_link_stubs.c",
+        "tests/host/host_serial_stub.c",
+    }
+    serial_re = re.compile(r"\bserial_print\s*\(")
+    scan_roots = [
+        ROOT / "kernel",
+        ROOT / "mm",
+        ROOT / "fs",
+        ROOT / "drivers",
+        ROOT / "includes" / "ir0",
+        ROOT / "ktm",
+        ROOT / "arch",
+        ROOT / "sched",
+        ROOT / "interrupt",
+    ]
+    for base in scan_roots:
+        if not base.exists():
+            continue
+        for fpath in iter_c_files(base):
+            rel = str(fpath.relative_to(ROOT)).replace("\\", "/")
+            if rel in allow:
+                continue
+            if "/third-party/" in rel:
+                continue
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="replace")
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(text.splitlines(), 1):
+                if _line_is_comment_only(line):
+                    continue
+                if serial_re.search(line):
+                    errors.append(
+                        f"[klog-hub] {rel}:{idx}: use kprintf/klog_* "
+                        f"(serial_print only in ktm/klog.c + serial/KTM protocol)"
+                    )
+    return errors
+
+
 def check_ktm_angle_includes():
     """KTM sources must use <ktm_…> / <ir0/ktm/…>, not relative or quoted ktm paths."""
     errors = []
@@ -593,9 +649,17 @@ def check_kernel_no_relative_includes():
     return errors
 
 
-# Portable C must not embed x86 IRQ/MM asm — facades only (Pack B / F8b).
+# Portable C must not embed ISA asm — facades only (simple names in ir0/cpu.h).
+# Allow: empty compiler barrier asm volatile("" ::: "memory")
+# Allowlist: per-ISA userspace syscall stubs (selected by build, not portable C).
 PORTABLE_ISA_ASM_RE = re.compile(
-    r"(?:__asm__|asm)\s*(?:volatile)?\s*\([^;]*(?:pushfq|%%cr[034]|invlpg)",
+    r"(?:__asm__|asm)\s*(?:volatile)?\s*\([^;]*"
+    r"(?:pause|hlt|cli|sti|rdtsc|mfence|lfence|sfence|cpuid|rdmsr|wrmsr|"
+    r"invlpg|pushfq|lidt|wfi|yield|dmb|dsb|isb|"
+    r"in[bwl]\b|out[bwl]\b|"
+    r"%%cr[0-4]|%%dr[0-7]|%%rax|movq\s+%%|"
+    r"svc\s+#|syscall\b|sysret|sysenter|sysexit|"
+    r"mrs\b|msr\b)",
     re.IGNORECASE,
 )
 PORTABLE_ISA_TREES = (
@@ -605,9 +669,11 @@ PORTABLE_ISA_TREES = (
     ROOT / "mm",
     ROOT / "sched",
     ROOT / "drivers",
+    ROOT / "fs",
 )
 PORTABLE_ISA_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "oops.c",
+    ROOT / "includes" / "ir0" / "syscall_x86_64.h",
+    ROOT / "includes" / "ir0" / "syscall_arm64.h",
 }
 
 
@@ -622,21 +688,35 @@ def _line_is_comment_only(line: str) -> bool:
     )
 
 
+def _is_empty_compiler_barrier(line: str) -> bool:
+    """Permit asm volatile(\"\" ::: \"memory\") — not ISA-specific."""
+    s = re.sub(r"\s+", "", line)
+    return bool(
+        re.search(
+            r'(?:__asm__|asm)(?:volatile)?\(""(?:::+"memory")?\);?',
+            s,
+            re.IGNORECASE,
+        )
+    )
+
+
 def check_portable_no_isa_asm():
-    """Fail if portable trees still use pushfq / %%cr3 / invlpg in real asm."""
+    """Fail if portable trees embed ISA mnemonics; use cpu_relax/smp_mb/…"""
     errors = []
     for base in PORTABLE_ISA_TREES:
         if not base.is_dir():
             continue
-        for fpath in iter_c_files(base):
+        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
             if fpath in PORTABLE_ISA_ALLOWLIST:
                 continue
-            # Skip arch-local paths if ever nested under these trees.
             try:
                 rel = fpath.relative_to(ROOT)
             except ValueError:
                 continue
-            if "arch/" in str(rel).replace("\\", "/"):
+            rel_s = str(rel).replace("\\", "/")
+            if "arch/" in rel_s:
+                continue
+            if fpath.suffix not in (".c", ".h"):
                 continue
             try:
                 lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -646,10 +726,13 @@ def check_portable_no_isa_asm():
             for idx, line in enumerate(lines, 1):
                 if _line_is_comment_only(line):
                     continue
+                if _is_empty_compiler_barrier(line):
+                    continue
                 if PORTABLE_ISA_ASM_RE.search(line):
                     errors.append(
-                        f"[portable-no-isa-asm] {rel}:{idx}: use arch_irq_* / "
-                        f"arch_mm_* / arch_tlb_* (no pushfq/%%cr0-4/invlpg): {line.strip()}"
+                        f"[portable-no-isa-asm] {rel}:{idx}: use simple "
+                        f"facades (cpu_relax/smp_mb/inb/timer_read/…); "
+                        f"no ISA asm: {line.strip()}"
                     )
     return errors
 
@@ -674,6 +757,7 @@ def main():
     errors.extend(check_devfs_usercopy_contract())
     errors.extend(check_ktm_core_no_fase())
     errors.extend(check_ktm_no_fase_serial())
+    errors.extend(check_klog_serial_print_allowlist())
     errors.extend(check_ktm_angle_includes())
     errors.extend(check_kernel_no_relative_includes())
     errors.extend(check_portable_no_isa_asm())

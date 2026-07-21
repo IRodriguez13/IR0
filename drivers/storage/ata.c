@@ -27,7 +27,7 @@
 #include "ata.h"
 #include <ir0/vga.h>
 #include <ir0/oops.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 #include <ir0/arch_port.h>
 #include <ir0/resource_registry.h>
@@ -37,6 +37,8 @@
 #define ATA_MAX_RETRY  3
 
 int vfs_exec_audit_is_active(void);
+static bool ata_wait_ready_probe(uint8_t drive);
+static bool ata_wait_drq_probe(uint8_t drive);
 
 static uint16_t ata_get_status_port(uint8_t drive);
 static uint16_t ata_get_drive_head_port(uint8_t drive);
@@ -69,9 +71,7 @@ static void ata_emit_classify(const char *tag)
 {
 	if (!tag)
 		return;
-	serial_print("[EXEC_ONLY][CLASSIFY] ");
-	serial_print(tag);
-	serial_print("\n");
+	klog_info_fmt("ATA", "CLASSIFY %s", tag);
 }
 
 static const char *ata_poll_classify(ata_poll_result_t res)
@@ -118,23 +118,13 @@ static void ata_trace_status(const char *when, uint8_t drive, uint8_t status)
 	if (!ata_trace_on())
 		return;
 
-	serial_print("[EXEC_ONLY][ATA] when=");
-	serial_print(when ? when : "?");
-	serial_print(" drive=");
-	serial_print_hex32((uint32_t)drive);
-	serial_print(" ch=");
-	serial_print(ata_channel_name(drive));
-	serial_print(" status=0x");
-	serial_print_hex32((uint32_t)status);
-	serial_print(" BSY=");
-	serial_print((status & ATA_STATUS_BSY) ? "1" : "0");
-	serial_print(" DRQ=");
-	serial_print((status & ATA_STATUS_DRQ) ? "1" : "0");
-	serial_print(" ERR=");
-	serial_print((status & ATA_STATUS_ERR) ? "1" : "0");
-	serial_print(" DF=");
-	serial_print((status & ATA_STATUS_DF) ? "1" : "0");
-	serial_print("\n");
+	klog_info_fmt("ATA",
+		      "when=%s drive=0x%x ch=%s status=0x%x BSY=%s DRQ=%s ERR=%s DF=%s",
+		      when ? when : "?", (unsigned)drive, ata_channel_name(drive),
+		      (unsigned)status, (status & ATA_STATUS_BSY) ? "1" : "0",
+		      (status & ATA_STATUS_DRQ) ? "1" : "0",
+		      (status & ATA_STATUS_ERR) ? "1" : "0",
+		      (status & ATA_STATUS_DF) ? "1" : "0");
 }
 
 static void ata_trace_wait_fail(const char *fn, ata_poll_result_t res,
@@ -142,20 +132,21 @@ static void ata_trace_wait_fail(const char *fn, ata_poll_result_t res,
 {
 	const char *tag = ata_poll_classify(res);
 
-	serial_print("[EXEC_ONLY][ATA] wait_fail fn=");
-	serial_print(fn ? fn : "?");
-	serial_print(" drive=");
-	serial_print_hex32((uint32_t)drive);
-	serial_print(" loops=");
-	serial_print_hex32((uint32_t)loops);
-	serial_print(" status=0x");
-	serial_print_hex32((uint32_t)status);
 	if (status & ATA_STATUS_ERR)
 	{
-		serial_print(" err_reg=0x");
-		serial_print_hex32((uint32_t)inb(ata_get_error_port(drive)));
+		klog_info_fmt("ATA",
+			      "wait_fail fn=%s drive=0x%x loops=0x%x status=0x%x err_reg=0x%x",
+			      fn ? fn : "?", (unsigned)drive, (unsigned)loops,
+			      (unsigned)status,
+			      (unsigned)inb(ata_get_error_port(drive)));
 	}
-	serial_print("\n");
+	else
+	{
+		klog_info_fmt("ATA",
+			      "wait_fail fn=%s drive=0x%x loops=0x%x status=0x%x",
+			      fn ? fn : "?", (unsigned)drive, (unsigned)loops,
+			      (unsigned)status);
+	}
 	if (tag)
 		ata_emit_classify(tag);
 }
@@ -285,19 +276,7 @@ bool ata_get_device_info(uint8_t drive, ata_device_info_t *out)
     return true;
 }
 
-// Using I/O functions from arch_interface.h
-
-static inline void outw(uint16_t port, uint16_t value) 
-{
-    __asm__ volatile("outw %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static inline uint16_t inw(uint16_t port) 
-{
-    uint16_t value;
-    __asm__ volatile("inw %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
+// Port I/O: inw/outw from <ir0/cpu.h>
 
 // Get port base for drive
 static uint16_t ata_get_port_base(uint8_t drive) 
@@ -467,9 +446,11 @@ bool ata_identify_drive(uint8_t drive)
     uint8_t drive_select = (drive % 2 == 0) ? ATA_DRIVE_MASTER : ATA_DRIVE_SLAVE;
     outb(drive_head_port, drive_select);
     
-    // Wait for drive to be ready
-    if (!ata_wait_ready(drive)) 
+    // Wait for drive to be ready (quiet: empty slots are normal)
+    if (!ata_wait_ready_probe(drive)) 
     {
+        klog_info_fmt("ATA", "CLASSIFY ATA_PROBE_ABSENT drive=0x%x",
+                      (unsigned)drive);
         return false;
     }
     
@@ -477,8 +458,10 @@ bool ata_identify_drive(uint8_t drive)
     outb(command_port, ATA_CMD_IDENTIFY);
     
     // Wait for response
-    if (!ata_wait_drq(drive)) 
+    if (!ata_wait_drq_probe(drive)) 
     {
+        klog_info_fmt("ATA", "CLASSIFY ATA_PROBE_ABSENT drive=0x%x",
+                      (unsigned)drive);
         return false;
     }
     
@@ -574,6 +557,14 @@ bool ata_wait_ready(uint8_t drive)
 	return true;
 }
 
+static bool ata_wait_ready_probe(uint8_t drive)
+{
+	int loops = 0;
+	uint8_t status = 0;
+
+	return ata_poll_not_busy(drive, &loops, &status) == ATA_POLL_OK;
+}
+
 bool ata_wait_drq(uint8_t drive)
 {
 	int loops = 0;
@@ -587,6 +578,14 @@ bool ata_wait_drq(uint8_t drive)
 		return false;
 	}
 	return true;
+}
+
+static bool ata_wait_drq_probe(uint8_t drive)
+{
+	int loops = 0;
+	uint8_t status = 0;
+
+	return ata_poll_drq(drive, &loops, &status) == ATA_POLL_OK;
 }
 
 static bool ata_read_one_sector_pio(uint8_t drive, uint32_t lba, void *buffer,
@@ -641,21 +640,13 @@ static bool ata_read_one_sector_pio(uint8_t drive, uint32_t lba, void *buffer,
 
 		if (ata_trace_on())
 		{
-			serial_print("[EXEC_ONLY][ATA] read drive=");
-			serial_print_hex32((uint32_t)drive);
-			serial_print(" lba=");
-			serial_print_hex32(lba);
-			serial_print(" sector_idx=");
-			serial_print_hex32((uint32_t)sector_idx);
-			serial_print(" cmd_sectors=");
-			serial_print_hex32((uint32_t)cmd_sectors);
-			serial_print(" attempt=");
-			serial_print_hex32((uint32_t)attempt);
-			serial_print(" buf=");
-			serial_print_hex64((uint64_t)(uintptr_t)buffer);
-			serial_print(" align=");
-			serial_print_hex32((uint32_t)((uintptr_t)buffer & 0xFU));
-			serial_print("\n");
+			klog_info_fmt("ATA",
+				      "read drive=0x%x lba=0x%x sector_idx=0x%x cmd_sectors=0x%x attempt=0x%x buf=0x%llx align=0x%x",
+				      (unsigned)drive, (unsigned)lba,
+				      (unsigned)sector_idx, (unsigned)cmd_sectors,
+				      (unsigned)attempt,
+				      (unsigned long long)(uintptr_t)buffer,
+				      (unsigned)((uintptr_t)buffer & 0xFU));
 		}
 
 		poll_res = ata_poll_drq(drive, &loops, &status);

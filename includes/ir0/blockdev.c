@@ -5,7 +5,7 @@
 
 #include "blockdev.h"
 #include <ir0/errno.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 #define IR0_BLOCKDEV_MAX 8
@@ -39,8 +39,8 @@ static void ir0_block_emit_facade_ok(void)
 	if (ir0_block_facade_classified)
 		return;
 	ir0_block_facade_classified = 1;
-	serial_print("[BLOCKDEV][CLASSIFY] BLOCKDEV_FACADE_OK\n");
-	serial_print("[BLOCKDEV][CLASSIFY] DEVICE_POLICY_NOT_IN_VFS\n");
+	klog_info("BLOCKDEV", "CLASSIFY BLOCKDEV_FACADE_OK");
+	klog_info("BLOCKDEV", "CLASSIFY DEVICE_POLICY_NOT_IN_VFS");
 }
 
 int ir0_block_register(struct ir0_block_device *dev)

@@ -292,6 +292,8 @@ KERNEL_OBJS = \
     ktm/ktm_ctx_snapshot.o \
     ktm/event_ring.o \
     ktm/transport_serial.o \
+    ktm/klog.o \
+    ktm/ktm_klog.o \
     ktm/registry.o \
     ktm/snapshot.o \
     ktm/assert.o \
@@ -505,7 +507,6 @@ LIB_OBJS = \
     includes/ir0/exec_read_trace.o \
     includes/ir0/blockdev.o \
     includes/ir0/mm_port.o \
-    includes/ir0/klog.o \
     includes/ir0/video_backend.o \
     includes/ir0/input_backend.o \
     includes/ir0/audio_backend.o \

@@ -7,16 +7,20 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: arch_context_switch.c
- * Description: Architecture-dispatched context switch wrappers (ISA stubs are private).
+ * Description: Dispatcher for public switch_to() (ISA stubs remain private).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/task.h>
 #include <ir0/process.h>
+#include <ir0/process_ctx_invariant.h>
 #include <ir0/arch_port.h>
 #include <ir0/klog.h>
 #include <ir0/debug_runtime.h>
+#include <ir0/ktm/klog.h>
+#include <ir0/oops.h>
+#include <ir0/ktm/fault.h>
 #include <config.h>
 #include <ir0/paging.h>
 #include <pmm.h>
@@ -28,6 +32,24 @@ extern void switch_context_x64(task_t *prev, task_t *next);
 #endif
 
 extern uint64_t get_current_page_directory(void);
+
+/*
+ * Called from switch_context_x64 when kernel_ret RIP (or the [rsp] value about
+ * to be saved as task.rip) is outside kernel .text. Desk session flake: RIP
+ * equalled the process_t* heap address → #UD. Does not return.
+ */
+void arch_report_bad_kernel_ret_rip(uint64_t rip, task_t *task)
+{
+	process_t *p = task ? task_to_process(task) : current_process;
+
+	klog_debug_fmt("CTX", "CLASSIFY KERNEL_RET_BAD_RIP rip=%llx task=%llx proc=%llx current=%llx", (unsigned long long)(rip), (unsigned long long)((uint64_t)(uintptr_t)task), (unsigned long long)((uint64_t)(uintptr_t)p), (unsigned long long)((uint64_t)(uintptr_t)current_process));
+	if (p)
+	{
+		klog_debug_fmt("KERN", " pid=%x cs=%llx saved_rdi=%llx wait_blocked=%llx wait_target=%llx irq_frame=%llx sf_rip=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)((uint64_t)p->task.cs), (unsigned long long)(p->task.rdi), (unsigned long long)((uint64_t)p->wait_blocked), (unsigned long long)((uint64_t)(int64_t)p->wait_target_pid), (unsigned long long)((uint64_t)p->irq_frame_saved), (unsigned long long)(p->syscall_frame.rip));
+	}
+	panicex("kernel_ret RIP not in .text", PANIC_KERNEL_BUG, __FILE__, __LINE__,
+		__func__);
+}
 
 #if !defined(ARCH_ARM64)
 /* asm globals: arch/x86-64/asm/syscall_insn_entry_64.asm */
@@ -100,7 +122,7 @@ static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_pro
 	(void)next;
 	return;
 #else
-	klog_print("[WAIT_EXIT_AUDIT][CTX] prev_pid=");
+	klog_print("WAIT CTX prev_pid=");
 	klog_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
 	klog_print(" prev_state=");
 	klog_hex64(prev_proc ? (uint64_t)prev_proc->state : 0);
@@ -120,20 +142,17 @@ static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_pro
 
 	if (prev_proc && prev_proc->state == PROCESS_ZOMBIE)
 	{
-		klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] SCHED_SELECTED_ZOMBIE "
-		             "note=prev_is_zombie_on_switch\n");
+		klog_info("WAIT", "CLASSIFY SCHED_SELECTED_ZOMBIE note=prev_is_zombie_on_switch");
 	}
 	if (prev_proc && prev_proc->irq_frame_saved &&
 	    (!next_proc || next_proc->state != PROCESS_BLOCKED))
 	{
-		klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] WAITPID_PARENT_CONTEXT_CORRUPT "
-		             "reason=prev_irq_saved_but_next_not_blocked\n");
+		klog_info("WAIT", "CLASSIFY WAITPID_PARENT_CONTEXT_CORRUPT reason=prev_irq_saved_but_next_not_blocked");
 	}
 	if (prev_proc && prev_proc->irq_frame_saved && next_proc &&
 	    next_proc->irq_frame_saved == 0)
 	{
-		klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] WAITPID_PARENT_CONTEXT_CORRUPT "
-		             "reason=resume_triggered_by_prev_irq_not_next\n");
+		klog_info("WAIT", "CLASSIFY WAITPID_PARENT_CONTEXT_CORRUPT reason=resume_triggered_by_prev_irq_not_next");
 	}
 
 	if (next_proc)
@@ -143,7 +162,7 @@ static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_pro
 		uint16_t cs = next_proc->task.cs;
 		uint16_t ss = next_proc->task.ss;
 
-		klog_print("[WAIT_EXIT_AUDIT][CTX] next_user_frame rip=");
+		klog_print("WAIT CTX next_user_frame rip=");
 		klog_hex64(rip);
 		klog_print(" rsp=");
 		klog_hex64(rsp);
@@ -159,25 +178,25 @@ static void wait_exit_audit_ctx_resume(process_t *prev_proc, process_t *next_pro
 
 		if (task_mm_root(next) == 0 && next_proc->page_directory)
 		{
-			klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_CR3_BAD reason=task_cr3_zero\n");
+			klog_info("WAIT", "CLASSIFY PARENT_CR3_BAD reason=task_cr3_zero");
 		}
 		if (rip < 0x00400000ULL || rip > 0x00007FFFFFFFFFFFULL)
 		{
-			klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RIP\n");
+			klog_info("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RIP");
 		}
 		if (rsp < 0x00400000ULL || rsp > 0x00007FFFFFFFFFFFULL)
 		{
-			klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RSP\n");
+			klog_info("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
 		}
 		if (cs != (uint16_t)USER_CODE_SEL || ss != (uint16_t)USER_DATA_SEL)
 		{
-			klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_CS_SS\n");
+			klog_info("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_CS_SS");
 		}
 	}
 #endif
 }
 
-void arch_context_switch(task_t *prev, task_t *next)
+void switch_to(task_t *prev, task_t *next)
 {
 #if defined(ARCH_ARM64)
     switch_context_arm64(prev, next);
@@ -197,7 +216,7 @@ void arch_context_switch(task_t *prev, task_t *next)
     /*
      * Per-process kernel stack handoff. Snapshot the outgoing task's live user
      * RSP shadow, then point the kernel entry stacks (+ user RSP shadow) at the
-     * incoming task. Covers all resume paths below (arch_switch_to_user_task,
+     * incoming task. Covers all resume paths below (switch_to_user_task,
      * kernel_ret, user iretq) since every one funnels through here.
      */
     if (prev_proc)
@@ -208,13 +227,18 @@ void arch_context_switch(task_t *prev, task_t *next)
      * wait4 in progress without a staged child pid: force kernel resume.
      * Preserve irq_frame_saved when wait_blocked (syscall_frame sleep) so
      * child-exit wake can stage wait_resume_child_pid before user iret.
+     * Do not arm ring-0 CS when task.rip is still userspace — that creates
+     * KERNEL_CS+user RIP and a later iretq with stale GPRs hangs the desk.
      */
     if (next_proc && next_proc->mode == USER_MODE &&
         next_proc->wait_resume_child_pid <= 0 &&
         (next_proc->wait_blocked || next_proc->wait_target_pid != 0) &&
         !next_proc->coop_resched_resume)
     {
-        process_arm_kernel_syscall_sleep(next_proc);
+        uint64_t nrip = next_proc->task.rip;
+
+        if (nrip < 0x00400000ULL || nrip > 0x00007FFFFFFFFFFFULL)
+            process_arm_kernel_syscall_sleep(next_proc);
         if (!next_proc->wait_blocked)
         {
             next_proc->irq_frame_saved = 0;
@@ -242,7 +266,10 @@ void arch_context_switch(task_t *prev, task_t *next)
          */
         if (wait_sleep_no_child)
         {
-            process_arm_kernel_syscall_sleep(next_proc);
+            uint64_t nrip = next_proc->task.rip;
+
+            if (nrip < 0x00400000ULL || nrip > 0x00007FFFFFFFFFFFULL)
+                process_arm_kernel_syscall_sleep(next_proc);
         }
         else if (next_proc->syscall_resume_rax == 0 &&
                  !(next_proc->wait_blocked &&
@@ -262,8 +289,8 @@ void arch_context_switch(task_t *prev, task_t *next)
 
         wait_exit_audit_ctx_resume(prev_proc, next_proc, next);
 #if IR0_DEBUG_WAIT
-        klog_print("[WAIT_EXIT_AUDIT][CLASSIFY] RESUME_GATE_USES_NEXT_FIXED\n");
-        klog_print("[WAIT_EXIT_AUDIT][CTX] resume_path=arch_switch_to_user_task\n");
+        klog_info("WAIT", "CLASSIFY RESUME_GATE_USES_NEXT_FIXED");
+        klog_debug("WAIT", "CTX resume_path=switch_to_user_task");
 #endif
         /*
          * Tear down the zombie child mm only after switching CR3 to the
@@ -320,7 +347,7 @@ void arch_context_switch(task_t *prev, task_t *next)
                 int frame_in_kernel = (frame_addr < 0x00400000ULL ||
                                        frame_addr > 0x00007FFFFFFFFFFFULL);
 
-                klog_print("[CTX][RESUME] prev_pid=");
+                klog_print("CTX RESUME prev_pid=");
                 klog_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
                 klog_print(" next_pid=");
                 klog_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
@@ -352,7 +379,7 @@ void arch_context_switch(task_t *prev, task_t *next)
                 klog_hex64(frame ? frame->rflags : 0);
                 klog_print("\n");
 
-                klog_print("[CTX][RESUME_FRAME] rbx=");
+                klog_print("CTX RESUME_FRAME rbx=");
                 klog_hex64(frame ? frame->rbx : 0);
                 klog_print(" rbp=");
                 klog_hex64(frame ? frame->rbp : 0);
@@ -379,9 +406,9 @@ void arch_context_switch(task_t *prev, task_t *next)
                 klog_print("\n");
             }
 #endif
-            arch_switch_to_user_task(next);
+            switch_to_user_task(next);
 #if IR0_DEBUG_WAIT
-            klog_print("[CTX][RESUME] unexpected_return active_cr3_after=");
+            klog_print("CTX RESUME unexpected_return active_cr3_after=");
             klog_hex64(get_current_page_directory());
             klog_print("\n");
 #endif
@@ -391,15 +418,82 @@ void arch_context_switch(task_t *prev, task_t *next)
     }
 
     /*
-     * wait4 blocked in process_wait: re-assert ring-0 before switch_context.
+     * wait4 blocked in process_wait: re-assert ring-0 before switch_context
+     * only when rip is already in-kernel (post-save). User RIP + kernel CS is
+     * the desk-session #UD class; leave user CS so iretq is used instead.
      */
     if (next_proc && next_proc->wait_target_pid != 0 &&
         next_proc->wait_resume_child_pid <= 0 && !next_proc->coop_resched_resume)
     {
-        process_arm_kernel_syscall_sleep(next_proc);
+        uint64_t nrip = next_proc->task.rip;
+
+        if (nrip < 0x00400000ULL || nrip > 0x00007FFFFFFFFFFFULL)
+            process_arm_kernel_syscall_sleep(next_proc);
     }
 
     arch_fixup_user_task_for_iretq(next_proc);
+
+    /*
+     * Finish deferred arm: save already put kernel RIP on this task, or we are
+     * switching to a waiter whose rip is kernel .text — apply KERNEL CS now.
+     */
+    if (next && next_proc && next_proc->want_kernel_ret &&
+        !process_rip_in_user_range(next->rip))
+    {
+        process_arm_kernel_syscall_sleep(next_proc);
+    }
+
+    /*
+     * KTM: force Class B on *next* (KERNEL CS + user RIP) before sanitize.
+     * Seed syscall_frame so REPAIR can apply a coherent user iretq frame.
+     * With IR0_CLASS_B_REPAIR=0 → KERNEL_RET_BAD_RIP.
+     */
+    if (next && next_proc && next_proc->mode == USER_MODE &&
+        KTM_FAULT_HIT("sched.class_b_arm_window"))
+    {
+        next->cs = (uint16_t)KERNEL_CODE_SEL;
+        next->ss = (uint16_t)KERNEL_DATA_SEL;
+        next->ds = (uint16_t)KERNEL_DATA_SEL;
+        next->es = (uint16_t)KERNEL_DATA_SEL;
+        next->fs = (uint16_t)KERNEL_DATA_SEL;
+        next->gs = (uint16_t)KERNEL_DATA_SEL;
+        next->rip = IR0_USER_RIP_LO + 0x1000ULL;
+        if (!process_rip_in_user_range(next->rsp))
+            next->rsp = 0x00007FFFFFF0ULL;
+        next_proc->syscall_frame.rip = next->rip;
+        next_proc->syscall_frame.rsp = next->rsp;
+        next_proc->syscall_frame.rflags = next->rflags | 2ULL;
+        klog_debug("CTX", "CLASSIFY CLASS_B_FAULT_INJECT");
+    }
+
+    /*
+     * Linux-like Class B safety net (IR0_CLASS_B_REPAIR): KERNEL_CS + user RIP
+     * must not reach kernel_ret. Natural paths should not create this after
+     * pt_regs-only capture + want_kernel_ret; KTM inject still exercises it.
+     * Repair only when syscall_frame has usable user RIP/RSP.
+     */
+#if IR0_CLASS_B_REPAIR
+    if (next && next_proc && next_proc->mode == USER_MODE &&
+        process_task_kernel_ret_rip_bad(next) &&
+        !next_proc->wait_blocked && next_proc->wait_target_pid == 0 &&
+        !next_proc->coop_resched_resume)
+    {
+        const syscall_user_frame_t *sf = &next_proc->syscall_frame;
+
+        if (process_rip_in_user_range(sf->rip) &&
+            process_rip_in_user_range(sf->rsp))
+        {
+            uint64_t rax = next_proc->syscall_resume_rax;
+
+            if (rax == 0)
+                rax = next_proc->task.rax;
+            klog_debug("CTX", "CLASSIFY KERNEL_CS_USER_RIP_REPAIR");
+            process_apply_syscall_frame_to_task(&next_proc->task, sf, rax);
+        }
+        else
+            klog_debug("CTX", "CLASSIFY KERNEL_CS_USER_RIP_UNREPAIRED");
+    }
+#endif
 
     switch_context_x64(prev, next);
 #endif

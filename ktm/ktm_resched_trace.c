@@ -14,32 +14,26 @@
 
 #include <ktm.h>
 #include <ir0/process.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 #ifdef IR0_KERNEL_TESTS
 
 void ktm_sched_trace_wake(const process_t *p, const char *tag)
 {
-	serial_print("[KTM][SCHED_WAKE] tag=");
-	serial_print(tag ? tag : "?");
-	serial_print(" pid=");
-	serial_print_hex32(p ? (uint32_t)p->task.pid : 0);
-	serial_print(" state=");
-	serial_print_hex64(p ? (uint64_t)p->state : 0);
-	serial_print("\n");
+	klog_debug_fmt("KTM",
+		       "[KTM][SCHED_WAKE] tag=%s pid=%x state=%llx",
+		       tag ? tag : "?", (unsigned)(p ? (uint32_t)p->task.pid : 0),
+		       (unsigned long long)(p ? (uint64_t)p->state : 0));
 }
 
 void ktm_sched_trace_pick(const process_t *prev, const process_t *next)
 {
-	serial_print("[KTM][SCHED_PICK] prev_pid=");
-	serial_print_hex32(prev ? (uint32_t)prev->task.pid : 0);
-	serial_print(" prev_state=");
-	serial_print_hex64(prev ? (uint64_t)prev->state : 0);
-	serial_print(" next_pid=");
-	serial_print_hex32(next ? (uint32_t)next->task.pid : 0);
-	serial_print(" next_state=");
-	serial_print_hex64(next ? (uint64_t)next->state : 0);
-	serial_print("\n");
+	klog_debug_fmt("KTM",
+		       "[KTM][SCHED_PICK] prev_pid=%x prev_state=%llx next_pid=%x next_state=%llx",
+		       (unsigned)(prev ? (uint32_t)prev->task.pid : 0),
+		       (unsigned long long)(prev ? (uint64_t)prev->state : 0),
+		       (unsigned)(next ? (uint32_t)next->task.pid : 0),
+		       (unsigned long long)(next ? (uint64_t)next->state : 0));
 }
 
 #endif /* IR0_KERNEL_TESTS */

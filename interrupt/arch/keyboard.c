@@ -22,7 +22,7 @@
 #include <ir0/errno.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/console.h>
 
 #define PS2_STATUS_PORT        0x64
@@ -277,7 +277,7 @@ static void keyboard_buffer_add(char c)
         if (!kbd_ascii_tag && (unsigned char)c >= ' ')
         {
             kbd_ascii_tag = 1;
-            serial_print("KBD_ASCII_OK\n");
+            klog_smoke("KBD_ASCII_OK");
         }
     }
 }
@@ -333,7 +333,7 @@ void keyboard_poll_ps2(void)
         if (!kbd_poll_tag)
         {
             kbd_poll_tag = 1;
-            serial_print("KBD_POLL_OK\n");
+            klog_smoke("KBD_POLL_OK");
         }
         if (ir0_console_in_userspace())
         {
@@ -342,7 +342,7 @@ void keyboard_poll_ps2(void)
             if (!kbd_user_poll_once)
             {
                 kbd_user_poll_once = 1;
-                serial_print("KBD_USER_POLL_OK\n");
+                klog_smoke("KBD_USER_POLL_OK");
             }
         }
         keyboard_feed_scancode(scancode);
@@ -356,7 +356,7 @@ void keyboard_handler64(void)
     if (!kbd_irq_tag)
     {
         kbd_irq_tag = 1;
-        serial_print("KBD_IRQ_OK\n");
+        klog_smoke("KBD_IRQ_OK");
     }
 
     keyboard_poll_ps2();
@@ -375,7 +375,10 @@ static void keyboard_feed_scancode(uint8_t scancode)
         ext_scancode = 0;
         uint16_t kc = ext_scancode_to_keycode[scancode & 0x7F];
         if (kc)
+        {
             input_event_push(EV_KEY, kc, (scancode < 0x80) ? 1 : 0);
+            input_event_push(EV_SYN, SYN_REPORT, 0);
+        }
         if (scancode < 0x80)
         {
             if (scancode == 0x48)
@@ -434,7 +437,10 @@ static void keyboard_feed_scancode(uint8_t scancode)
 
     uint16_t kc = scancode_to_keycode[scancode & 0x7F];
     if (kc)
+    {
         input_event_push(EV_KEY, kc, (scancode < 0x80) ? 1 : 0);
+        input_event_push(EV_SYN, SYN_REPORT, 0);
+    }
 
     if (scancode < 0x80)
     {
@@ -444,7 +450,7 @@ static void keyboard_feed_scancode(uint8_t scancode)
         if (!kbd_scancode_tag)
         {
             kbd_scancode_tag = 1;
-            serial_print("KBD_SCANCODE_OK\n");
+            klog_smoke("KBD_SCANCODE_OK");
         }
 
         ascii = translate_scancode(scancode);

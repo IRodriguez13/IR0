@@ -108,7 +108,7 @@ static void minix_emit_blockdev_classify(void)
 	if (minix_blockdev_classified)
 		return;
 	minix_blockdev_classified = 1;
-	klog_print("[MINIX_FS][CLASSIFY] MINIX_USES_BLOCKDEV_FACADE\n");
+	klog_info("MINIX", "CLASSIFY MINIX_USES_BLOCKDEV_FACADE");
 }
 
 static bool minix_root_block_present(void)
@@ -1676,7 +1676,7 @@ int minix_fs_cat(const char *path)
 // FUNCIÓN PARA ESCRIBIR CONTENIDO A ARCHIVOS
 // ===============================================================================
 
-static void minix_serial_print_blob(const char *label, const void *content, size_t content_size)
+static void minix_klog_print_blob(const char *label, const void *content, size_t content_size)
 {
   char scratch[128];
   size_t n;
@@ -2246,11 +2246,11 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
   if (!minix_offset_read_classified)
   {
     minix_offset_read_classified = 1;
-    klog_print("[MINIX_FS][CLASSIFY] MINIX_OFFSET_READ_OK\n");
-    klog_print("[MINIX_FS][CLASSIFY] LARGE_FILE_STREAMING_OK\n");
-    klog_print("[VFS][CLASSIFY] VFS_OFFSET_READ_OK\n");
-    klog_print("[VFS][CLASSIFY] ATA_PRESSURE_REDUCED\n");
-    klog_print("[MINIX_FS][CLASSIFY] VFS_BACKEND_NEUTRAL\n");
+    klog_info("MINIX", "CLASSIFY MINIX_OFFSET_READ_OK");
+    klog_info("MINIX", "CLASSIFY LARGE_FILE_STREAMING_OK");
+    klog_info("VFS", "CLASSIFY VFS_OFFSET_READ_OK");
+    klog_info("VFS", "CLASSIFY ATA_PRESSURE_REDUCED");
+    klog_info("MINIX", "CLASSIFY VFS_BACKEND_NEUTRAL");
   }
 
   if (read_count)
@@ -2387,7 +2387,7 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
 
   klog_print("SERIAL: minix_fs_write_file: path=");
   klog_print(path);
-  minix_serial_print_blob(" content=", content, content_size);
+  minix_klog_print_blob(" content=", content, content_size);
 
   if (!minix_root_block_present())
   {
@@ -3167,7 +3167,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
         if (i == MINIX_DIRECT_ZONES - 1 &&
             *size > (size_t)MINIX_BLOCK_SIZE * (size_t)MINIX_DIRECT_ZONES)
         {
-          klog_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+          klog_info("EXEC", "CLASSIFY MINIX_DIRECT_INDIRECT_BOUNDARY_BUG");
         }
         kfree(*data);
         return -EIO;
@@ -3196,7 +3196,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
       exec_read_trace_minix_eio("MINIX_READ_EIO_AT_BLOCK", "indirect_meta", 7,
                                 ind_zone, ind_zone, ind_lba, bytes_read,
                                 indirect_buffer);
-      klog_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+      klog_info("EXEC", "CLASSIFY MINIX_DIRECT_INDIRECT_BOUNDARY_BUG");
       kfree(*data);
       return -EIO;
     }
@@ -3252,7 +3252,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   else if (bytes_read < *size && *size > (size_t)MINIX_BLOCK_SIZE *
                                            (size_t)MINIX_DIRECT_ZONES)
   {
-    klog_print("[EXEC_ONLY][CLASSIFY] MINIX_DIRECT_INDIRECT_BOUNDARY_BUG\n");
+    klog_info("EXEC", "CLASSIFY MINIX_DIRECT_INDIRECT_BOUNDARY_BUG");
   }
 
   if (bytes_read < *size && inode.i_zone[8] != 0)
@@ -3322,7 +3322,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
    */
   if (bytes_read < *size)
   {
-    klog_print("[EXEC_ONLY][CLASSIFY] MINIX_OFFSET_SIZE_BUG\n");
+    klog_info("EXEC", "CLASSIFY MINIX_OFFSET_SIZE_BUG");
     kfree(*data);
     *data = NULL;
     *size = 0;
@@ -3332,7 +3332,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   if (DEBUG_VFS && *size > (size_t)MINIX_BLOCK_SIZE * ((size_t)MINIX_DIRECT_ZONES +
       (size_t)MINIX_INDIRECT_ZONES))
   {
-    klog_print("[MINIX_FS][CLASSIFY] MINIX_DOUBLE_INDIRECT_OK\n");
+    klog_info("MINIX", "CLASSIFY MINIX_DOUBLE_INDIRECT_OK");
   }
 
   return 0;
@@ -3463,7 +3463,7 @@ static int minix_create(const char *path, mode_t mode)
   {
     minix_backend_classified = 1;
     if (DEBUG_VFS)
-      klog_print("[MINIX_FS][CLASSIFY] MINIX_BACKEND_ONLY_CONFIRMED\n");
+      klog_info("MINIX", "CLASSIFY MINIX_BACKEND_ONLY_CONFIRMED");
   }
   return ret;
 }
@@ -3517,7 +3517,7 @@ static int minix_truncate(const char *path, size_t length)
       return -EIO;
 
     if (DEBUG_VFS)
-      klog_print("[MINIX_FS][CLASSIFY] MINIX_TRUNCATE_GROW_OK\n");
+      klog_info("MINIX", "CLASSIFY MINIX_TRUNCATE_GROW_OK");
     return 0;
   }
 
@@ -3544,7 +3544,7 @@ static int minix_truncate(const char *path, size_t length)
     return -EIO;
 
   if (DEBUG_VFS)
-    klog_print("[MINIX_FS][CLASSIFY] LARGE_FILE_TRUNCATE_OK\n");
+    klog_info("MINIX", "CLASSIFY LARGE_FILE_TRUNCATE_OK");
   return 0;
 }
 

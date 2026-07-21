@@ -225,7 +225,7 @@ void init_all_drivers(void)
     if (g_bootstrap_done)
         return;
 
-    serial_print("[DRIVERS] Initializing all hardware drivers...\n");
+    LOG_INFO("DRIVERS", "Initializing all hardware drivers...");
     driver_registry_prepare();
     register_bootstrap_plan();
     if (driver_bootstrap_run_all() != 0)
@@ -245,7 +245,14 @@ void init_all_drivers(void)
     log_subsystem_ok("USB_HOST");
 #endif
     g_bootstrap_done = 1;
-    serial_print("[DRIVERS] All drivers initialized successfully\n");
+    {
+	unsigned ready = 0, absent = 0, failed = 0;
+
+	ir0_driver_boot_counts(&ready, &absent, &failed);
+	LOG_INFO_FMT("DRIVERS",
+		     "initialization complete: %u ready, %u absent, %u failed",
+		     ready, absent, failed);
+    }
 }
 
 void drivers_init(void)

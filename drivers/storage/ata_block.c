@@ -6,7 +6,7 @@
 #include "ata.h"
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <drivers/disk/partition.h>
 #include <string.h>
 
@@ -79,7 +79,7 @@ void ata_block_register(void)
 		if (!ata_backend_classified)
 		{
 			ata_backend_classified = 1;
-			serial_print("[ATA][CLASSIFY] ATA_BACKEND_ONLY\n");
+			klog_info("ATA", "CLASSIFY ATA_BACKEND_ONLY");
 		}
 
 		read_partition_table((uint8_t)i);

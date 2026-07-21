@@ -16,7 +16,7 @@
 
 #include <ir0/arch_port.h>
 #include <ir0/platform_ops.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/vfs.h>
 
 void kernel_system_shutdown(enum ir0_system_action action)
@@ -26,33 +26,33 @@ void kernel_system_shutdown(enum ir0_system_action action)
 	switch (action)
 	{
 	case IR0_SYSTEM_REBOOT:
-		serial_print("SYSTEM_SHUTDOWN_REBOOT\n");
+		klog_smoke("SYSTEM_SHUTDOWN_REBOOT");
 		break;
 	case IR0_SYSTEM_POWEROFF:
-		serial_print("SYSTEM_SHUTDOWN_POWEROFF\n");
+		klog_smoke("SYSTEM_SHUTDOWN_POWEROFF");
 		break;
 	case IR0_SYSTEM_HALT:
 	default:
-		serial_print("SYSTEM_SHUTDOWN_HALT\n");
+		klog_smoke("SYSTEM_SHUTDOWN_HALT");
 		action = IR0_SYSTEM_HALT;
 		break;
 	}
 
-	serial_print("SYSTEM_SYNC_BEGIN\n");
+	klog_smoke("SYSTEM_SYNC_BEGIN");
 	(void)vfs_sync();
-	serial_print("SYSTEM_SYNC_OK\n");
+	klog_smoke("SYSTEM_SYNC_OK");
 
 	/*
 	 * Reach platform power ops before driver teardown: some .shutdown hooks
 	 * (e.g. input) can fault and would skip ACPI/QEMU poweroff entirely.
 	 */
-	arch_disable_interrupts();
+	disable_interrupts();
 
 	ops = ir0_platform_ops_get();
 	if (!ops)
 	{
 		for (;;)
-			arch_cpu_halt();
+			cpu_halt();
 	}
 
 	switch (action)
@@ -74,5 +74,5 @@ void kernel_system_shutdown(enum ir0_system_action action)
 
 	/* Unreachable if platform callbacks are correct. */
 	for (;;)
-		arch_cpu_halt();
+		cpu_halt();
 }

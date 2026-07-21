@@ -13,7 +13,7 @@
 
 #include "idt.h"
 #include "io.h"
-#include <ir0/vga.h>
+#include <ir0/ktm/klog.h>
 
 /* Present, DPL=0, 64-bit interrupt gate (type 1110) */
 #define IDT_TYPE_INTERRUPT_GATE 0x8E
@@ -154,12 +154,12 @@ void idt_init64(void)
     extern void syscall_entry_asm(void);
     idt_set_gate64(128, (uint64_t)syscall_entry_asm, 0x08, IDT_TYPE_TRAP_USER, 0); 
 
-    print("IDT inicializada para 64-bit\n");
+    klog_info("IDT", "x86-64 IDT initialized");
 }
 
 /* Load 64-bit IDT into CPU */
 void idt_load64(void)
 {
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
-    print("IDT cargada para 64-bit\n");
+    klog_info("IDT", "x86-64 IDT loaded");
 }

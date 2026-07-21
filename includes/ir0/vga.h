@@ -49,13 +49,15 @@ extern int cursor_pos;
 // ============ FUNCIONES BÁSICAS DE IMPRESIÓN ============
 
 /*
- * Imprime una cadena de caracteres en la posición actual del cursor.
- * Procesa cada carácter hasta encontrar el terminador '\0'.
- * Maneja automáticamente saltos de línea y caracteres especiales.
- * 
- * @param str: Cadena terminada en null a imprimir
+ * console_puts — low-level VGA/FB string output (typewriter/backend path).
+ * Kernel logging must use kprintf()/klog_* from <ir0/ktm/klog.h>.
+ * print() remains an alias for console UI callers (not the logging hub).
  */
-void print(const char *str);
+void console_puts(const char *str);
+static inline void print(const char *str)
+{
+	console_puts(str);
+}
 
 /*
  * Imprime un solo carácter manejando casos especiales:
