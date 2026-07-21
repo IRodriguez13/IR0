@@ -14,22 +14,15 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#include "ir0_smoke_tag.h"
 
-static void tag(const char *s)
-{
-	const char *p = s;
-
-	while (*p)
-		p++;
-	(void)write(1, s, (size_t)(p - s));
-}
 
 int main(void)
 {
 	int fd;
 	char *const argv[] = { "/bin/sh", NULL };
 
-	tag("RUNSV_CONSOLE_START\n");
+	ir0_smoke_tag("RUNSV_CONSOLE_START\n");
 
 	fd = open("/dev/console", O_RDWR);
 	if (fd >= 0)
@@ -39,10 +32,10 @@ int main(void)
 		(void)dup2(fd, 2);
 		if (fd > 2)
 			(void)close(fd);
-		tag("ASH_INTERACTIVE_READY\n");
+		ir0_smoke_tag("ASH_INTERACTIVE_READY\n");
 	}
 
 	execv("/bin/sh", argv);
-	tag("RUNSV_CONSOLE_EXEC_FAIL\n");
+	ir0_smoke_tag("RUNSV_CONSOLE_EXEC_FAIL\n");
 	return 111;
 }

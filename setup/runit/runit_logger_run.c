@@ -13,19 +13,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <unistd.h>
+#include "ir0_smoke_tag.h"
 
-static void tag(const char *s)
-{
-	const char *p = s;
-
-	while (*p)
-		p++;
-	(void)write(1, s, (size_t)(p - s));
-}
 
 int main(void)
 {
-	tag("RUNSV_LOGGER_START\n");
+	ir0_smoke_tag("RUNSV_LOGGER_START\n");
 
 	for (;;)
 		(void)pause();

@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <unistd.h>
+#include "ir0_smoke_tag.h"
 
 #ifndef RUNIT_EXEC_PATH
 #define RUNIT_EXEC_PATH "/bin/power-smoke"
@@ -22,19 +23,11 @@
 #define RUNIT_START_TAG "RUNSV_POWER_START\n"
 #endif
 
-static void tag(const char *s)
-{
-	const char *p = s;
-
-	while (*p)
-		p++;
-	(void)write(1, s, (size_t)(p - s));
-}
 
 int main(void)
 {
-	tag(RUNIT_START_TAG);
+	ir0_smoke_tag(RUNIT_START_TAG);
 	execl(RUNIT_EXEC_PATH, RUNIT_EXEC_PATH, (char *)0);
-	tag("RUNSV_POWER_EXEC_FAIL\n");
+	ir0_smoke_tag("RUNSV_POWER_EXEC_FAIL\n");
 	return 1;
 }
