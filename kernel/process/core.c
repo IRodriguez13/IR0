@@ -13,8 +13,16 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/process_ctx_invariant.h>
 
 static pid_t next_pid = 2;
+
+int process_task_kernel_ret_rip_bad(const task_t *t)
+{
+	if (!t)
+		return 0;
+	return process_cs_rip_kernel_ret_bad((uint64_t)t->cs, t->rip);
+}
 
 uint64_t process_list_count(void)
 {
@@ -129,23 +137,7 @@ void irq_save_user_frame(uint64_t *frame)
 		return;
 
 #if CONFIG_DEBUG_ISRABI
-	serial_print("[ISRABI][IRQ_SAVE] pid=");
-	serial_print_hex32(current_process ? (uint32_t)current_process->task.pid : 0);
-	serial_print(" src_int=");
-	serial_print_hex64(frame[0]);
-	serial_print(" src_err=");
-	serial_print_hex64(frame[1]);
-	serial_print(" src_rip=");
-	serial_print_hex64(frame[2]);
-	serial_print(" src_cs=");
-	serial_print_hex64(frame[3]);
-	serial_print(" src_rflags=");
-	serial_print_hex64(frame[4]);
-	serial_print(" src_rsp=");
-	serial_print_hex64(frame[5]);
-	serial_print(" src_ss=");
-	serial_print_hex64(frame[6]);
-	serial_print("\n");
+	klog_debug_fmt("ISR", "[ISRABI][IRQ_SAVE] pid=%x src_int=%llx src_err=%llx src_rip=%llx src_cs=%llx src_rflags=%llx src_rsp=%llx src_ss=%llx", (unsigned)(current_process ? (uint32_t)current_process->task.pid : 0), (unsigned long long)(frame[0]), (unsigned long long)(frame[1]), (unsigned long long)(frame[2]), (unsigned long long)(frame[3]), (unsigned long long)(frame[4]), (unsigned long long)(frame[5]), (unsigned long long)(frame[6]));
 #endif
 
 	p->task.rip = frame[2];
@@ -182,17 +174,7 @@ void irq_save_user_frame(uint64_t *frame)
 	/* irq_frame_saved is set only when blocking in process_wait(), not on timer IRQ. */
 
 #if CONFIG_DEBUG_ISRABI
-	serial_print("[ISRABI][IRQ_SAVE] task_rip=");
-	serial_print_hex64(p->task.rip);
-	serial_print(" task_rsp=");
-	serial_print_hex64(p->task.rsp);
-	serial_print(" task_cs=");
-	serial_print_hex64((uint64_t)p->task.cs);
-	serial_print(" task_ss=");
-	serial_print_hex64((uint64_t)p->task.ss);
-	serial_print(" task_rflags=");
-	serial_print_hex64(p->task.rflags);
-	serial_print("\n");
+	klog_debug_fmt("ISR", "[ISRABI][IRQ_SAVE] task_rip=%llx task_rsp=%llx task_cs=%llx task_ss=%llx task_rflags=%llx", (unsigned long long)(p->task.rip), (unsigned long long)(p->task.rsp), (unsigned long long)((uint64_t)p->task.cs), (unsigned long long)((uint64_t)p->task.ss), (unsigned long long)(p->task.rflags));
 #endif
 }
 
@@ -293,16 +275,30 @@ void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_h
 	 * Mark this task as having a fresh Linux pt_regs snapshot for this entry.
 	 * Only the `syscall` insn path reaches here; int 0x80 tasks never set it,
 	 * which keeps the cooperative syscall_frame resume restricted to musl.
+	 *
+	 * syscall_frame is the pt_regs source of truth. Soft-sync into task only
+	 * when CS is still user (see process_sync_task_user_ip_from_syscall_frame)
+	 * so IRQ/preempt mirrors stay coherent; never sync onto KERNEL CS.
 	 */
 	p->syscall_frame_fresh = 1;
 	process_sync_task_user_ip_from_syscall_frame(p);
 }
 
+/*
+ * process_sync_task_user_ip_from_syscall_frame - Soft mirror of pt_regs → task.
+ *
+ * Linux keeps user IP only in pt_regs during a syscall. IR0 still mirrors into
+ * task.rip while CS is user so UP preempt/iretq paths see a coherent soft copy.
+ * Never overlay user RIP onto KERNEL CS or while want_kernel_ret (Class B).
+ * Exit-to-user must use process_apply_syscall_frame_to_task.
+ */
 void process_sync_task_user_ip_from_syscall_frame(process_t *p)
 {
 	syscall_user_frame_t *sf;
 
 	if (!p || p->mode != USER_MODE)
+		return;
+	if ((p->task.cs & 3u) == 0u || p->want_kernel_ret)
 		return;
 
 	sf = &p->syscall_frame;
@@ -398,7 +394,7 @@ void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax)
  * process_arm_coop_resched_resume - Arm a cooperative in-syscall reschedule to
  * resume via the saved syscall_frame (fresh iretq) instead of kernel_ret on the
  * shared global syscall stack. Unlike wait4, there is no zombie child to reap,
- * so coop_resched_resume tells arch_context_switch to skip the reap step.
+ * so coop_resched_resume tells switch_to to skip the reap step.
  * Only valid for syscall-insn tasks (syscall_frame_fresh).
  */
 void process_arm_coop_resched_resume(process_t *p, uint64_t rax)
@@ -415,7 +411,7 @@ void process_arm_coop_resched_resume(process_t *p, uint64_t rax)
 /*
  * process_clear_in_thread_syscall_block - Drop irq_frame_saved after blocking
  * syscalls that resume inside the syscall handler (poll/pipe read loops), not
- * via arch_switch_to_user_task.
+ * via switch_to_user_task.
  */
 void process_clear_in_thread_syscall_block(process_t *p)
 {
@@ -425,6 +421,7 @@ void process_clear_in_thread_syscall_block(process_t *p)
 	p->irq_frame_saved = 0;
 	p->poll_resume_via_arch = 0;
 	p->coop_resched_resume = 0;
+	p->want_kernel_ret = 0;
 }
 
 void process_reset_blocked_syscall_state(process_t *p)
@@ -435,6 +432,7 @@ void process_reset_blocked_syscall_state(process_t *p)
 	p->irq_frame_saved = 0;
 	p->poll_resume_via_arch = 0;
 	p->coop_resched_resume = 0;
+	p->want_kernel_ret = 0;
 	p->syscall_resume_rax = 0;
 	p->syscall_interrupted = 0;
 	p->wait_status_ptr = NULL;
@@ -448,15 +446,8 @@ void process_reset_blocked_syscall_state(process_t *p)
 	p->clock_wait_deadline_ms = IR0_CLOCK_WAIT_DISARMED;
 }
 
-/*
- * process_arm_kernel_syscall_sleep - Mark task as ring-0 for switch_context resume.
- * Used when blocking inside a syscall without irq_frame_saved user return.
- */
-void process_arm_kernel_syscall_sleep(process_t *p)
+static void process_apply_kernel_ret_segments(process_t *p)
 {
-	if (!p || p->mode != USER_MODE)
-		return;
-
 	p->task.cs = KERNEL_CODE_SEL;
 	p->task.ss = KERNEL_DATA_SEL;
 	p->task.ds = KERNEL_DATA_SEL;
@@ -465,11 +456,62 @@ void process_arm_kernel_syscall_sleep(process_t *p)
 	p->task.gs = KERNEL_DATA_SEL;
 }
 
+/*
+ * process_arm_kernel_syscall_sleep - Linux-like: mark blocked syscall for
+ * kernel_ret resume after switch_context save (not via user RIP).
+ *
+ * User regs live in syscall_frame (pt_regs). If task.rip still looks like
+ * userspace (stale from a prior iretq), only set want_kernel_ret — never pair
+ * KERNEL_CS with that RIP. Outgoing save stores kernel [rsp] + CPU CS;
+ * process_after_task_save clears the flag. If rip is already kernel .text,
+ * apply KERNEL CS immediately.
+ */
+void process_arm_kernel_syscall_sleep(process_t *p)
+{
+	if (!p || p->mode != USER_MODE)
+		return;
+
+	if (process_rip_in_user_range(p->task.rip))
+	{
+		p->want_kernel_ret = 1;
+		return;
+	}
+
+	process_apply_kernel_ret_segments(p);
+	p->want_kernel_ret = 0;
+}
+
+/*
+ * process_after_task_save - Linux-like post-switch save epilogue.
+ *
+ * Called from switch_context_x64 after prev GPRs/RIP/CS were written from the
+ * CPU (kernel return address + ring-0 CS). Honour want_kernel_ret so the next
+ * resume takes kernel_ret, not user iretq with a stale frame.
+ */
+void process_after_task_save(task_t *prev)
+{
+	process_t *p;
+
+	if (!prev)
+		return;
+
+	p = task_to_process(prev);
+	if (!p || p->mode != USER_MODE || !p->want_kernel_ret)
+		return;
+
+	if (process_rip_in_user_range(prev->rip))
+		return;
+
+	process_apply_kernel_ret_segments(p);
+	p->want_kernel_ret = 0;
+}
+
 void process_restore_user_task_segments(process_t *p)
 {
 	if (!p || p->mode != USER_MODE)
 		return;
 
+	p->want_kernel_ret = 0;
 	p->task.cs = USER_CODE_SEL;
 	p->task.ss = USER_DATA_SEL;
 	p->task.ds = USER_DATA_SEL;

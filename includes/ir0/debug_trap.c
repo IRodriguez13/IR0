@@ -5,7 +5,8 @@
 
 #include <ir0/debug_trap.h>
 #include <ir0/oops.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
+#include <ir0/cpu.h>
 #include <kernel/process.h>
 #include <string.h>
 
@@ -32,8 +33,7 @@ static void debug_trap_tag_once(const char *tag)
 
 			for (j = 0; j <= len; j++)
 				seen[i + j] = tag[j];
-			serial_print(tag);
-			serial_print("\n");
+			klog_smoke(tag);
 			return;
 		}
 	}
@@ -82,25 +82,16 @@ uint64_t ir0_rflags_sanitize_user(uint64_t rflags)
 
 void ir0_debug_clear_dr6_dr7(void)
 {
-#if defined(__x86_64__) || defined(__amd64__)
-	__asm__ volatile("mov %0, %%dr6" :: "r"(0ULL));
-	__asm__ volatile("mov %0, %%dr7" :: "r"(0ULL));
-#endif
+	debug_reg_write(6, 0);
+	debug_reg_write(7, 0);
 }
 
 void ir0_debug_read_dr6_dr7(uint64_t *dr6, uint64_t *dr7)
 {
-#if defined(__x86_64__) || defined(__amd64__)
 	if (dr6)
-		__asm__ volatile("mov %%dr6, %0" : "=r"(*dr6));
+		*dr6 = debug_reg_read(6);
 	if (dr7)
-		__asm__ volatile("mov %%dr7, %0" : "=r"(*dr7));
-#else
-	if (dr6)
-		*dr6 = 0;
-	if (dr7)
-		*dr7 = 0;
-#endif
+		*dr7 = debug_reg_read(7);
 }
 
 int ir0_debug_handle_user_db(uint64_t *stack)
@@ -149,19 +140,12 @@ void ir0_debug_handle_kernel_db(uint64_t *stack)
 
 	ir0_debug_read_dr6_dr7(&dr6, &dr7);
 
-	serial_print("[DEBUG_TRAP][KERNEL_DB] rip=");
-	serial_print_hex64(rip);
-	serial_print(" rflags=");
-	serial_print_hex64(rflags);
-	serial_print(" tf=");
-	serial_print_hex64((rflags & IR0_RFLAGS_TF) ? 1ULL : 0ULL);
-	serial_print(" dr6=");
-	serial_print_hex64(dr6);
-	serial_print(" dr7=");
-	serial_print_hex64(dr7);
-	serial_print(" pid=");
-	serial_print_hex32(cur ? (uint32_t)cur->task.pid : 0);
-	serial_print("\n");
+	klog_info_fmt("DEBUG_TRAP",
+		      "[DEBUG_TRAP][KERNEL_DB] rip=0x%llx rflags=0x%llx tf=0x%llx dr6=0x%llx dr7=0x%llx pid=0x%x",
+		      (unsigned long long)rip, (unsigned long long)rflags,
+		      (unsigned long long)((rflags & IR0_RFLAGS_TF) ? 1ULL : 0ULL),
+		      (unsigned long long)dr6, (unsigned long long)dr7,
+		      (unsigned)(cur ? (uint32_t)cur->task.pid : 0));
 
 	panicex("KERNEL_DEBUG_EXCEPTION_UNEXPECTED", PANIC_HARDWARE_FAULT,
 	        __FILE__, __LINE__, __func__);

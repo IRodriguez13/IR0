@@ -9,6 +9,7 @@
 #include <ir0/typewriter.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
+#include <ir0/ktm/klog.h>
 
 #define CONSOLE_BACKEND_READY_MSG "IR0 console ready\n"
 
@@ -53,15 +54,15 @@ void console_backend_userspace_handoff(void)
     typewriter_console_clear(IR0_CONSOLE_COLOR_DEFAULT);
 
     if (console_backend_uses_framebuffer())
-        serial_print("CONSOLE_BACKEND_FB_OK\n");
+        klog_smoke("CONSOLE_BACKEND_FB_OK");
     else
-        serial_print("CONSOLE_BACKEND_VGA_OK\n");
+        klog_smoke("CONSOLE_BACKEND_VGA_OK");
 
-    serial_print("PRINTK_SERIAL_CONSOLE_FB_HANDOFF_OK\n");
+    klog_smoke("PRINTK_SERIAL_CONSOLE_FB_HANDOFF_OK");
     console_backend_write(CONSOLE_BACKEND_READY_MSG,
                           sizeof(CONSOLE_BACKEND_READY_MSG) - 1,
                           IR0_CONSOLE_COLOR_DEFAULT);
-    serial_print("CONSOLE_GUI_VISIBLE_OK\n");
+    klog_smoke("CONSOLE_GUI_VISIBLE_OK");
 }
 
 void console_backend_scroll(int lines)
@@ -80,8 +81,8 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
         len > 0 && !userspace_gui_first_draw_tag)
     {
         userspace_gui_first_draw_tag = 1;
-        serial_print("BUSYBOX_GUI_TEXT_FIRST_DRAW_OK\n");
-        serial_print("ASH_VISIBLE_QEMU_OK\n");
+        klog_smoke("BUSYBOX_GUI_TEXT_FIRST_DRAW_OK");
+        klog_smoke("ASH_VISIBLE_QEMU_OK");
     }
 
     for (i = 0; i < len; i++)

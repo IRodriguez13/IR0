@@ -4,7 +4,7 @@
  */
 
 #include <ir0/ash_smoke.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 #define ASH_READ_RETURN_CAP 8
@@ -67,7 +67,7 @@ void ir0_ash_smoke_tty_line_ready(void)
 	if (!ash_smoke_active || tty_line_ready_count >= ASH_TTY_LINE_CAP)
 		return;
 	tty_line_ready_count++;
-	serial_print("TTY_CANON_LINE_READY\n");
+	klog_smoke("TTY_CANON_LINE_READY");
 }
 
 void ir0_ash_smoke_read_return(int fd, int64_t ret)
@@ -77,7 +77,7 @@ void ir0_ash_smoke_read_return(int fd, int64_t ret)
 	if (read_return_count >= ASH_READ_RETURN_CAP)
 		return;
 	read_return_count++;
-	serial_print("SYS_READ_RETURN_OK\n");
+	klog_smoke("SYS_READ_RETURN_OK");
 }
 
 void ir0_ash_smoke_scan_stdout(const char *buf, size_t count)
@@ -92,7 +92,7 @@ void ir0_ash_smoke_scan_stdout(const char *buf, size_t count)
 	     ash_memmem(buf, count, "hi\r\n", 4)))
 	{
 		echo_ok_once = 1;
-		serial_print("ASH_COMMAND_ECHO_OK\n");
+		klog_smoke("ASH_COMMAND_ECHO_OK");
 	}
 
 	if (exec_ok_once)
@@ -105,13 +105,13 @@ void ir0_ash_smoke_scan_stdout(const char *buf, size_t count)
 		if (buf[i + 1] == '\n')
 		{
 			exec_ok_once = 1;
-			serial_print("ASH_COMMAND_EXEC_OK\n");
+			klog_smoke("ASH_COMMAND_EXEC_OK");
 			return;
 		}
 		if (i + 2 < count && buf[i + 1] == '\r' && buf[i + 2] == '\n')
 		{
 			exec_ok_once = 1;
-			serial_print("ASH_COMMAND_EXEC_OK\n");
+			klog_smoke("ASH_COMMAND_EXEC_OK");
 			return;
 		}
 	}

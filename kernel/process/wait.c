@@ -35,41 +35,19 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 	cs = p->task.cs;
 	ss = p->task.ss;
 
-	serial_print("[WAIT_EXIT_AUDIT][FRAME] tag=");
-	serial_print(tag ? tag : "(null)");
-	serial_print(" pid=");
-	serial_print_hex32((uint32_t)p->task.pid);
-	serial_print(" comm=");
-	serial_print(p->comm);
-	serial_print(" rip=");
-	serial_print_hex64(rip);
-	serial_print(" rsp=");
-	serial_print_hex64(rsp);
-	serial_print(" cs=");
-	serial_print_hex64((uint64_t)cs);
-	serial_print(" ss=");
-	serial_print_hex64((uint64_t)ss);
-	serial_print(" rflags=");
-	serial_print_hex64(p->task.rflags);
-	serial_print(" rax=");
-	serial_print_hex64(p->task.rax);
-	serial_print(" cr3=");
-	serial_print_hex64(process_mm_root(p));
-	serial_print(" irq_saved=");
-	serial_print_hex64((uint64_t)p->irq_frame_saved);
-	serial_print("\n");
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s rip=%llx rsp=%llx cs=%llx ss=%llx rflags=%llx rax=%llx cr3=%llx irq_saved=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)(rip), (unsigned long long)(rsp), (unsigned long long)((uint64_t)cs), (unsigned long long)((uint64_t)ss), (unsigned long long)(p->task.rflags), (unsigned long long)(p->task.rax), (unsigned long long)(process_mm_root(p)), (unsigned long long)((uint64_t)p->irq_frame_saved));
 
 	if (rip < 0x00400000ULL || rip > 0x00007FFFFFFFFFFFULL)
 	{
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RIP\n");
+		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RIP");
 	}
 	if (rsp < 0x00400000ULL || rsp > 0x00007FFFFFFFFFFFULL)
 	{
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_RSP\n");
+		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
 	}
 	if (cs != (uint16_t)USER_CODE_SEL || ss != (uint16_t)USER_DATA_SEL)
 	{
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] PARENT_IRET_FRAME_BAD_CS_SS\n");
+		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_CS_SS");
 	}
 #endif
 }
@@ -83,44 +61,39 @@ void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
 	(void)parent_state_before;
 	return;
 #else
-	serial_print("[WAIT_EXIT_AUDIT][process_exit] child_pid=");
-	serial_print_hex32((uint32_t)dying->task.pid);
-	serial_print(" child_state_before=RUNNING child_state_after=ZOMBIE parent_pid=");
-	serial_print_hex32(parent ? (uint32_t)parent->task.pid : 0);
-	serial_print(" parent_state_before=");
-	serial_print_hex64((uint64_t)(unsigned int)parent_state_before);
-	serial_print(" parent_state_after=");
-	serial_print_hex64(parent ? (uint64_t)(unsigned int)parent->state : 0);
-	serial_print(" parent_woken=");
-	serial_print_hex64((uint64_t)(parent && parent_state_before == PROCESS_BLOCKED &&
-	                             parent->state == PROCESS_READY ? 1 : 0));
-	serial_print("\n");
+	klog_debug_fmt("WAIT",
+		       "[WAIT_EXIT_AUDIT][process_exit] child_pid=%x "
+		       "child_state_before=RUNNING child_state_after=ZOMBIE "
+		       "parent_pid=%x parent_state_before=%llx parent_state_after=%llx "
+		       "parent_woken=%llx",
+		       (unsigned)((uint32_t)dying->task.pid),
+		       (unsigned)(parent ? (uint32_t)parent->task.pid : 0),
+		       (unsigned long long)((uint64_t)(unsigned int)parent_state_before),
+		       (unsigned long long)(parent ? (uint64_t)(unsigned int)parent->state : 0),
+		       (unsigned long long)((uint64_t)(parent &&
+							parent_state_before == PROCESS_BLOCKED &&
+							parent->state == PROCESS_READY
+								? 1
+								: 0)));
 
-	serial_print("[WAIT_EXIT_AUDIT][process_exit] child_frees address_space=0 page_directory=0 "
-	             "task_struct=0 kernel_stack=0 (zombie until reap)\n");
-	serial_print("[WAIT_EXIT_AUDIT][process_exit] child_closes fd_table=1 cwd=0 vfs_mm=0\n");
+	klog_debug("WAIT",
+		   "[WAIT_EXIT_AUDIT][process_exit] child_frees address_space=0 "
+		   "page_directory=0 task_struct=0 kernel_stack=0 (zombie until reap)");
+	klog_debug("WAIT",
+		   "[WAIT_EXIT_AUDIT][process_exit] child_closes fd_table=1 cwd=0 vfs_mm=0");
 
 	if (parent)
 	{
-		serial_print("[WAIT_EXIT_AUDIT][process_exit] parent_mm=");
-		serial_print_hex64((uint64_t)(uintptr_t)parent->page_directory);
-		serial_print(" parent_cr3=");
-		serial_print_hex64(process_mm_root(parent));
-		serial_print(" parent_files=");
-		serial_print_hex64((uint64_t)(uintptr_t)parent->fd_table);
-		serial_print(" parent_irq_saved=");
-		serial_print_hex64((uint64_t)parent->irq_frame_saved);
-		serial_print("\n");
+		klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_exit] parent_mm=%llx parent_cr3=%llx parent_files=%llx parent_irq_saved=%llx", (unsigned long long)((uint64_t)(uintptr_t)parent->page_directory), (unsigned long long)(process_mm_root(parent)), (unsigned long long)((uint64_t)(uintptr_t)parent->fd_table), (unsigned long long)((uint64_t)parent->irq_frame_saved));
 		wait_exit_audit_classify_user_frame("parent-at-child-exit", parent);
 	}
 
-	serial_print("[WAIT_EXIT_AUDIT][process_exit] child_irq_saved=");
-	serial_print_hex64((uint64_t)dying->irq_frame_saved);
-	serial_print("\n");
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_exit] child_irq_saved=%llx", (unsigned long long)((uint64_t)dying->irq_frame_saved));
 	if (dying->irq_frame_saved)
 	{
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] EXIT_FREED_PARENT_RESOURCE "
-		             "note=child_irq_saved_stale_may_misroute_resume\n");
+		klog_debug("WAIT",
+			   "CLASSIFY EXIT_FREED_PARENT_RESOURCE "
+			   "note=child_irq_saved_stale_may_misroute_resume");
 	}
 #endif
 }
@@ -135,19 +108,9 @@ void wait_exit_audit_process_wait_block(pid_t wait_pid, int *status)
 	if (!current_process)
 		return;
 
-	serial_print("[WAIT_EXIT_AUDIT][process_wait] action=block parent_pid=");
-	serial_print_hex32((uint32_t)current_process->task.pid);
-	serial_print(" wait_pid=");
-	serial_print_hex32((uint32_t)wait_pid);
-	serial_print(" status_ptr=");
-	serial_print_hex64((uint64_t)(uintptr_t)status);
-	serial_print(" expected_rax_after_wake=child_pid\n");
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] action=block parent_pid=%x wait_pid=%x status_ptr=%llx expected_rax_after_wake=child_pid\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)wait_pid), (unsigned long long)((uint64_t)(uintptr_t)status));
 	wait_exit_audit_classify_user_frame("parent-before-wait-sleep", current_process);
-	serial_print("[WAIT_EXIT_AUDIT][process_wait] syscall_frame rip=");
-	serial_print_hex64(current_process->syscall_frame.rip);
-	serial_print(" rsp=");
-	serial_print_hex64(current_process->syscall_frame.rsp);
-	serial_print("\n");
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] syscall_frame rip=%llx rsp=%llx", (unsigned long long)(current_process->syscall_frame.rip), (unsigned long long)(current_process->syscall_frame.rsp));
 #endif
 }
 
@@ -162,17 +125,7 @@ void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *st
 	if (!current_process)
 		return;
 
-	serial_print("[WAIT_EXIT_AUDIT][process_wait] action=reap parent_pid=");
-	serial_print_hex32((uint32_t)current_process->task.pid);
-	serial_print(" reaped_pid=");
-	serial_print_hex32((uint32_t)reaped_pid);
-	serial_print(" status_val=");
-	serial_print_hex64((uint64_t)(unsigned int)status_val);
-	serial_print(" status_ptr=");
-	serial_print_hex64((uint64_t)(uintptr_t)status);
-	serial_print(" return_rax=");
-	serial_print_hex64((uint64_t)(unsigned int)reaped_pid);
-	serial_print("\n");
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] action=reap parent_pid=%x reaped_pid=%x status_val=%llx status_ptr=%llx return_rax=%llx", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)reaped_pid), (unsigned long long)((uint64_t)(unsigned int)status_val), (unsigned long long)((uint64_t)(uintptr_t)status), (unsigned long long)((uint64_t)(unsigned int)reaped_pid));
 	wait_exit_audit_classify_user_frame("parent-after-reap", current_process);
 #endif
 }
@@ -289,9 +242,7 @@ void process_reparent_children(process_t *dying_parent)
 			fase_audit_destroy_audit(child, dying_parent->task.pid,
 					     audit_st, audit_st, 0, "reparent");
 #if DEBUG_PROCESS
-			serial_print("[PROCESS] Reparented child PID ");
-			serial_print_hex32((uint32_t)child->task.pid);
-			serial_print(" to init (PID 1)\n");
+			klog_debug_fmt("KERN", "[PROCESS] Reparented child PID %x to init (PID 1)\n", (unsigned)((uint32_t)child->task.pid));
 #endif
 		}
 		child = child->next;
@@ -341,9 +292,7 @@ void process_reap_zombies(process_t *parent)
 		if (child->ppid == parent->task.pid && child->state == PROCESS_ZOMBIE)
 		{
 #if DEBUG_PROCESS
-			serial_print("[PROCESS] Auto-reaping zombie child PID ");
-			serial_print_hex32((uint32_t)child->task.pid);
-			serial_print("\n");
+			klog_debug_fmt("KERN", "[PROCESS] Auto-reaping zombie child PID %x", (unsigned)((uint32_t)child->task.pid));
 #endif
 			fase_audit_note_reap_event();
 			process_fase43_proc_audit("reap-zombie");
@@ -425,15 +374,7 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 	}
 
 #if IR0_DEBUG_PROC
-	serial_print("[SIGTERM_AUDIT] wait_wake parent=");
-	serial_print_hex32((uint32_t)parent->task.pid);
-	serial_print(" child=");
-	serial_print_hex32((uint32_t)child->task.pid);
-	serial_print(" status=");
-	serial_print_hex32((uint32_t)status_val);
-	serial_print(" rax=");
-	serial_print_hex32((uint32_t)child->task.pid);
-	serial_print("\n");
+	klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] wait_wake parent=%x child=%x status=%x rax=%x", (unsigned)((uint32_t)parent->task.pid), (unsigned)((uint32_t)child->task.pid), (unsigned)((uint32_t)status_val), (unsigned)((uint32_t)child->task.pid));
 #endif
 	parent->wait_resume_child_pid = child->task.pid;
 	parent->syscall_resume_rax = (uint64_t)child->task.pid;
@@ -471,16 +412,13 @@ void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)
 	if (IR0_DEBUG_PROC)
 	{
 		if (used_frames_after >= used_frames_before)
-			serial_print_hex64((uint64_t)(used_frames_after - used_frames_before));
+			klog_debug_fmt("KERN", "%llx", (unsigned long long)((uint64_t)(used_frames_after - used_frames_before)));
 		else
-			serial_print_hex64((uint64_t)(used_frames_before - used_frames_after));
-		serial_print(" sign=");
-		serial_print(used_frames_after <= used_frames_before ? "-" : "+");
-		serial_print("\n");
-		serial_print("[WAIT_EXIT_AUDIT][CLASSIFY] ");
-		serial_print(used_frames_after <= used_frames_before ?
-			     "PMM_RECLAIM_ON_WAIT_OK" : "PMM_RECLAIM_ON_WAIT_PARTIAL");
-		serial_print("\n");
+			klog_debug_fmt("KERN", "%llx sign=%s", (unsigned long long)((uint64_t)(used_frames_before - used_frames_after)), used_frames_after <= used_frames_before ? "-" : "+");
+		klog_debug("WAIT",
+			   used_frames_after <= used_frames_before
+			       ? "CLASSIFY PMM_RECLAIM_ON_WAIT_OK"
+			       : "CLASSIFY PMM_RECLAIM_ON_WAIT_PARTIAL");
 	}
 	paging_ir0_mm_checkpoint("wait-resume-after", (int32_t)parent->task.pid);
 }
@@ -506,7 +444,7 @@ int process_wait(pid_t pid, int *status, int options)
 	const int any_child = (pid == (pid_t)-1 || pid == 0);
 
 	if (!current_process) {
-		serial_print("[ERROR] process_wait called without current process context\n");
+		klog_debug("KERN", "[ERROR] process_wait called without current process context\n");
 		return -ESRCH;
 	}
 
@@ -588,11 +526,7 @@ int process_wait(pid_t pid, int *status, int options)
 			process_irq_restore(irq_flags);
 			if (IR0_DEBUG_WAIT)
 			{
-				serial_print("[WAIT4_WNOHANG_AUDIT] path=echild parent=");
-				serial_print_hex32((uint32_t)current_process->task.pid);
-				serial_print(" target=");
-				serial_print_hex32((uint32_t)pid);
-				serial_print(" ret=ECHILD\n");
+				klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] path=echild parent=%x target=%x ret=ECHILD\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid));
 			}
 			if (IR0_DEBUG_PROC)
 			{
@@ -606,11 +540,7 @@ int process_wait(pid_t pid, int *status, int options)
 			process_irq_restore(irq_flags);
 			if (IR0_DEBUG_WAIT)
 			{
-				serial_print("[WAIT4_WNOHANG_AUDIT] path=wnohang_alive parent=");
-				serial_print_hex32((uint32_t)current_process->task.pid);
-				serial_print(" target=");
-				serial_print_hex32((uint32_t)pid);
-				serial_print(" ret=0 status_write=no\n");
+				klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] path=wnohang_alive parent=%x target=%x ret=0 status_write=no\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid));
 			}
 			if (IR0_DEBUG_PROC)
 			{

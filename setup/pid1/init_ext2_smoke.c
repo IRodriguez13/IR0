@@ -60,7 +60,7 @@ int main(void)
 		write_str("[EXT2][FAIL] verify\n");
 		return 5;
 	}
-	write_str("[EXT2][CLASSIFY] EXT2_MOUNT_READ_OK\n");
+	write_str("[EXT2] CLASSIFY EXT2_MOUNT_READ_OK\n");
 	write_str("[EXT2OK]\n");
 	return 0;
 }

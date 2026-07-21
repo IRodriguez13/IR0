@@ -16,6 +16,7 @@
 #include <ir0/serial_io.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ir0/ktm/klog.h>
 
 static int use_fb = 0;
 static int fb_console_cols = CONSOLE_WIDTH;
@@ -314,7 +315,7 @@ void console_init(void)
 	{
 		use_fb = 1;
 		fb_compute_layout(w, h);
-		serial_print("CONSOLE_FB_BACKEND_ENABLED\n");
+		klog_smoke("CONSOLE_FB_BACKEND_ENABLED");
 	}
 #else
 	use_fb = 0;

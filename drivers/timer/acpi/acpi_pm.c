@@ -18,7 +18,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/acpi_pm.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/paging.h>
 #include <ir0/arch_port.h>
 #include <stddef.h>
@@ -145,7 +145,7 @@ static int acpi_map_phys_window(uint64_t phys, size_t need)
 	if (phys + (uint64_t)need > ACPI_MAP_PHYS_CAP)
 		return -1;
 
-	cr3 = (uint64_t)arch_mm_current_root();
+	cr3 = (uint64_t)mm_current_root();
 	pml4 = (uint64_t *)(uintptr_t)(cr3 & ~0xFFFULL);
 	if (!pml4)
 		return -1;
@@ -171,7 +171,7 @@ static int phys_safe(uint64_t p, size_t need)
 
 static void outw_port(uint16_t port, uint16_t val)
 {
-	__asm__ __volatile__("outw %0, %1" : : "a"(val), "Nd"(port) : "memory");
+	outw(port, val);
 }
 
 /*
@@ -260,7 +260,7 @@ static int acpi_parse_s5_from_dsdt(uint32_t dsdt_phys)
 	if (acpi_parse_sx_from_dsdt(dsdt_phys, '5', &g_slp_typ_a, &g_slp_typ_b) == 0)
 	{
 		g_s5_ok = 1;
-		serial_print("ACPI_S5_OK\n");
+		klog_smoke("ACPI_S5_OK");
 		return 0;
 	}
 	return -1;
@@ -274,7 +274,7 @@ static int acpi_parse_s3_from_dsdt(uint32_t dsdt_phys)
 	if (acpi_parse_sx_from_dsdt(dsdt_phys, '3', &g_s3_typ_a, &g_s3_typ_b) == 0)
 	{
 		g_s3_ok = 1;
-		serial_print("ACPI_S3_OK\n");
+		klog_smoke("ACPI_S3_OK");
 		return 0;
 	}
 	return -1;
@@ -305,7 +305,7 @@ static int fadt_accept(uint64_t phys)
 		g_pm1b_cnt = (uint16_t)fadt->pm1b_cnt_blk;
 	g_acpi_pm_ready = 1;
 	if (phys >= ACPI_SAFE_PHYS_MAX)
-		serial_print("ACPI_FADT_MAPPED\n");
+		klog_smoke("ACPI_FADT_MAPPED");
 	(void)acpi_parse_s5_from_dsdt(fadt->dsdt);
 	(void)acpi_parse_s3_from_dsdt(fadt->dsdt);
 	return 0;
@@ -406,8 +406,8 @@ int ir0_acpi_pm_try_poweroff(void)
 		val_a = (uint16_t)(((uint16_t)g_slp_typ_a << 10) | ACPI_SLP_EN);
 		val_b = (uint16_t)(((uint16_t)g_slp_typ_b << 10) | ACPI_SLP_EN);
 		if (g_s5_ok)
-			serial_print("ACPI_S5_POWEROFF\n");
-		serial_print("ACPI_PM1A_POWEROFF\n");
+			klog_smoke("ACPI_S5_POWEROFF");
+		klog_smoke("ACPI_PM1A_POWEROFF");
 		outw_port(g_pm1a_cnt, val_a);
 		if (g_pm1b_cnt)
 			outw_port(g_pm1b_cnt, val_b);
@@ -415,7 +415,7 @@ int ir0_acpi_pm_try_poweroff(void)
 	}
 
 	/* QEMU/Bochs well-known PM1a soft-off ports (no AML). */
-	serial_print("ACPI_PM1A_FALLBACK_604\n");
+	klog_smoke("ACPI_PM1A_FALLBACK_604");
 	outw_port(0x604, (uint16_t)ACPI_SLP_EN);
 	outw_port(0xB004, (uint16_t)ACPI_SLP_EN);
 	return 0;
@@ -435,7 +435,7 @@ int ir0_acpi_pm_try_suspend(void)
 	uint8_t typ_b;
 
 	(void)ir0_acpi_pm_init();
-	serial_print("SYSTEM_S3_ENTER\n");
+	klog_smoke("SYSTEM_S3_ENTER");
 
 	typ_a = g_s3_ok ? g_s3_typ_a : 0;
 	typ_b = g_s3_ok ? g_s3_typ_b : 0;
@@ -452,9 +452,9 @@ int ir0_acpi_pm_try_suspend(void)
 		outw_port(g_pm1a_cnt, val_a);
 		if (g_pm1b_cnt)
 			outw_port(g_pm1b_cnt, val_b);
-		serial_print("ACPI_S3_PM1A_ARMED\n");
+		klog_smoke("ACPI_S3_PM1A_ARMED");
 	}
 
-	serial_print("SYSTEM_S3_RESUME_OK\n");
+	klog_smoke("SYSTEM_S3_RESUME_OK");
 	return 0;
 }

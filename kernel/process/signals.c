@@ -43,6 +43,17 @@ int process_signal_default_kill(process_t *dying, int sig)
 	if (!process_signal_is_default_fatal(dying, sig))
 		return 0;
 
+	/*
+	 * Self-terminate must use process_exit(): zombieize + schedule away.
+	 * Returning to ring 3 after marking current PROCESS_ZOMBIE yields #UD.
+	 */
+	if (dying == current_process)
+	{
+		dying->signal_pending &= ~SIGNAL_MASK(sig);
+		dying->exit_signal = sig;
+		process_exit(0);
+	}
+
 	dying->irq_frame_saved = 0;
 	process_reap_zombies(dying);
 	process_reparent_children(dying);
@@ -55,13 +66,7 @@ int process_signal_default_kill(process_t *dying, int sig)
 	sched_remove_process(dying);
 
 #if IR0_DEBUG_PROC
-	serial_print("[SIGTERM_AUDIT] process_signal_default_kill pid=");
-	serial_print_hex32((uint32_t)dying->task.pid);
-	serial_print(" sig=");
-	serial_print_hex32((uint32_t)sig);
-	serial_print(" wait_status=");
-	serial_print_hex32((uint32_t)process_child_wait_status_word(dying));
-	serial_print("\n");
+	klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] process_signal_default_kill pid=%x sig=%x wait_status=%x", (unsigned)((uint32_t)dying->task.pid), (unsigned)((uint32_t)sig), (unsigned)((uint32_t)process_child_wait_status_word(dying)));
 #endif
 
 	if (dying->ppid > 0)

@@ -5,7 +5,7 @@
 
 #include <ir0/fb.h>
 #include <ir0/errno.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/video_backend.h>
 #include <string.h>
 
@@ -139,21 +139,15 @@ void ir0_fb_boot_direct_draw(void)
 
     if (!ir0_fb_get_info(&info))
     {
-        serial_print("[FB_BOOT] unavailable\n");
+        klog_info("FB_BOOT", "unavailable");
         return;
     }
 
-    serial_print("[FB_BOOT] phys=0x");
-    serial_print_hex32(info.fb_phys);
-    serial_print(" w=");
-    serial_print_hex32(info.width);
-    serial_print(" h=");
-    serial_print_hex32(info.height);
-    serial_print(" bpp=");
-    serial_print_hex32(info.bpp);
-    serial_print(" pitch=");
-    serial_print_hex32(info.pitch);
-    serial_print("\n");
+    klog_info_fmt("FB_BOOT",
+                  "phys=0x%x w=0x%x h=0x%x bpp=0x%x pitch=0x%x",
+                  (unsigned)info.fb_phys, (unsigned)info.width,
+                  (unsigned)info.height, (unsigned)info.bpp,
+                  (unsigned)info.pitch);
 
     third = info.height / 3;
     if (third == 0)
@@ -171,5 +165,5 @@ void ir0_fb_boot_direct_draw(void)
                                 info.height - (third * 2), 0x000000FFU);
     }
 
-    serial_print("FB_BOOT_DIRECT_DRAW_OK\n");
+    klog_smoke("FB_BOOT_DIRECT_DRAW_OK");
 }

@@ -42,6 +42,7 @@ static int scenario_process_wait_drain_run(ktm_context_t *ctx)
 	(void)ctx;
 	KTM_REQUIRE(ktm_snapshot_take(&before) == 0);
 
+	ktm_assert_batch_begin("process.wait_drain");
 	for (i = 0; i < WAIT_DRAIN_N; i++)
 	{
 		kids[i] = kmalloc_try(sizeof(process_t));
@@ -63,6 +64,7 @@ static int scenario_process_wait_drain_run(ktm_context_t *ctx)
 		process_reap_zombie_child(kids[i]);
 		KTM_V1_ASSERT_TRUE(!process_exists(pids[i]));
 	}
+	ktm_assert_batch_end();
 
 	KTM_REQUIRE(ktm_snapshot_take(&after) == 0);
 	KTM_ASSERT_NO_PROCESS_LEAK(&before, &after);

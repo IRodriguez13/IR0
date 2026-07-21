@@ -95,6 +95,7 @@ void ktm_core_init(void)
 {
 	ktm_registry_init();
 	ktm_probes_register_builtins();
+	ktm_klog_init();
 #if defined(CONFIG_KTM_TEST) && CONFIG_KTM_TEST
 	ktm_scenarios_register_builtins();
 #endif

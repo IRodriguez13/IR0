@@ -15,7 +15,7 @@
 #pragma once
 
 #include <config.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <stdint.h>
 
 struct process;
@@ -29,15 +29,11 @@ struct process;
 static inline void ktm_fail_at(const char *kind, const char *expr,
 			       const char *file, unsigned int line)
 {
-	serial_print("\n[KTM][FAIL] ");
-	serial_print(kind ? kind : "assert");
-	serial_print(" at ");
-	serial_print(file ? file : "?");
-	serial_print(":");
-	serial_print_hex32((uint32_t)line);
-	serial_print(" — ");
-	serial_print(expr ? expr : "(null)");
-	serial_print("\n");
+	klog_error_fmt("KTM", "[FAIL] %s at %s:%u — %s",
+		       kind ? kind : "assert",
+		       file ? file : "?",
+		       line,
+		       expr ? expr : "(null)");
 }
 
 #define KTM_MARK_FAIL() do { \
@@ -187,9 +183,7 @@ void ktm_invariant_process(const struct process *p, const char *tag);
 } while (0)
 
 #define KTM_TRACE(tag) do { \
-	serial_print("[KTM][TRACE] "); \
-	serial_print(tag); \
-	serial_print("\n"); \
+	klog_debug("KTM", tag); \
 } while (0)
 
 void ktm_sched_gate_enter_irq(void);
@@ -238,19 +232,17 @@ static inline void ktm_sched_trace_pick(const struct process *prev,
 	extern int _ktest_count; \
 	_ktest_failed = 0; \
 	_ktest_count++; \
-	serial_print("[KTM] "); \
-	serial_print(name); \
-	serial_print(" ... "); \
+	klog_info_fmt("KTM", "%s ...", name); \
 } while (0)
 
 #define KTM_END() do { \
 	extern int _ktest_failed; \
 	extern int _ktest_pass; \
 	if (_ktest_failed) { \
-		serial_print("FAIL\n"); \
+		klog_error("KTM", "FAIL"); \
 		_ktest_pass = 0; \
 	} else { \
-		serial_print("PASS\n"); \
+		klog_info("KTM", "PASS"); \
 	} \
 } while (0)
 

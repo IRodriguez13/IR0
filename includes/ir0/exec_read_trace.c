@@ -4,7 +4,7 @@
  */
 
 #include "exec_read_trace.h"
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 
 int vfs_exec_audit_is_active(void);
 
@@ -19,19 +19,11 @@ void exec_read_trace_vfs_read_file(const char *path, uint64_t ino, int64_t size,
 	if (!exec_read_trace_on())
 		return;
 
-	serial_print("[EXEC_ONLY][VFS] stage=read_file path=");
-	serial_print(path ? path : "(null)");
-	serial_print(" inode=");
-	serial_print_hex64(ino);
-	serial_print(" size=");
-	serial_print_hex64((uint64_t)size);
-	serial_print(" offset=");
-	serial_print_hex64((uint64_t)offset);
-	serial_print(" req=");
-	serial_print_hex64((uint64_t)req);
-	serial_print(" ret=");
-	serial_print_hex64((uint64_t)(int64_t)ret);
-	serial_print("\n");
+	klog_info_fmt("EXEC",
+		      "[EXEC_ONLY][VFS] stage=read_file path=%s inode=0x%llx size=0x%llx offset=0x%llx req=0x%llx ret=0x%llx",
+		      path ? path : "(null)", (unsigned long long)ino,
+		      (unsigned long long)size, (unsigned long long)offset,
+		      (unsigned long long)req, (unsigned long long)(int64_t)ret);
 }
 
 void exec_read_trace_minix_file_begin(const char *path, uint16_t inode_num,
@@ -40,15 +32,10 @@ void exec_read_trace_minix_file_begin(const char *path, uint16_t inode_num,
 	if (!exec_read_trace_on())
 		return;
 
-	serial_print("[EXEC_ONLY][MINIX] stage=read_file_begin path=");
-	serial_print(path ? path : "(null)");
-	serial_print(" inode=");
-	serial_print_hex32((uint32_t)inode_num);
-	serial_print(" mode=0x");
-	serial_print_hex32((uint32_t)mode);
-	serial_print(" size=");
-	serial_print_hex32(size);
-	serial_print("\n");
+	klog_info_fmt("EXEC",
+		      "[EXEC_ONLY][MINIX] stage=read_file_begin path=%s inode=0x%x mode=0x%x size=0x%x",
+		      path ? path : "(null)", (unsigned)inode_num, (unsigned)mode,
+		      (unsigned)size);
 }
 
 void exec_read_trace_minix_zones(const uint16_t zones[9])
@@ -58,15 +45,11 @@ void exec_read_trace_minix_zones(const uint16_t zones[9])
 	if (!exec_read_trace_on() || !zones)
 		return;
 
-	serial_print("[EXEC_ONLY][MINIX] stage=zones");
-	for (i = 0; i < 9; i++)
-	{
-		serial_print(" z");
-		serial_print_hex32((uint32_t)i);
-		serial_print("=");
-		serial_print_hex32((uint32_t)zones[i]);
-	}
-	serial_print("\n");
+	klog_info_fmt("EXEC",
+		      "[EXEC_ONLY][MINIX] stage=zones z0=0x%x z1=0x%x z2=0x%x z3=0x%x z4=0x%x z5=0x%x z6=0x%x z7=0x%x z8=0x%x",
+		      (unsigned)zones[0], (unsigned)zones[1], (unsigned)zones[2],
+		      (unsigned)zones[3], (unsigned)zones[4], (unsigned)zones[5],
+		      (unsigned)zones[6], (unsigned)zones[7], (unsigned)zones[8]);
 }
 
 void exec_read_trace_minix_block(const char *kind, int block_index,
@@ -77,23 +60,12 @@ void exec_read_trace_minix_block(const char *kind, int block_index,
 	if (!exec_read_trace_on())
 		return;
 
-	serial_print("[EXEC_ONLY][MINIX] stage=block kind=");
-	serial_print(kind ? kind : "?");
-	serial_print(" blk_idx=");
-	serial_print_hex32((uint32_t)block_index);
-	serial_print(" zone=");
-	serial_print_hex32(zone_num);
-	serial_print(" disk_block=");
-	serial_print_hex32(disk_block);
-	serial_print(" lba=");
-	serial_print_hex32(lba);
-	serial_print(" file_off=");
-	serial_print_hex64((uint64_t)file_offset);
-	serial_print(" req=");
-	serial_print_hex64((uint64_t)req);
-	serial_print(" copied=");
-	serial_print_hex64((uint64_t)copied);
-	serial_print(" cache=none shared_buf=0\n");
+	klog_info_fmt("EXEC",
+		      "[EXEC_ONLY][MINIX] stage=block kind=%s blk_idx=0x%x zone=0x%x disk_block=0x%x lba=0x%x file_off=0x%llx req=0x%llx copied=0x%llx cache=none shared_buf=0",
+		      kind ? kind : "?", (unsigned)block_index, (unsigned)zone_num,
+		      (unsigned)disk_block, (unsigned)lba,
+		      (unsigned long long)file_offset, (unsigned long long)req,
+		      (unsigned long long)copied);
 }
 
 void exec_read_trace_minix_eio(const char *classify, const char *kind,
@@ -104,27 +76,14 @@ void exec_read_trace_minix_eio(const char *classify, const char *kind,
 	if (!exec_read_trace_on())
 		return;
 
-	serial_print("[EXEC_ONLY][MINIX] stage=eio errno=-EIO kind=");
-	serial_print(kind ? kind : "?");
-	serial_print(" blk_idx=");
-	serial_print_hex32((uint32_t)block_index);
-	serial_print(" zone=");
-	serial_print_hex32(zone_num);
-	serial_print(" disk_block=");
-	serial_print_hex32(disk_block);
-	serial_print(" lba=");
-	serial_print_hex32(lba);
-	serial_print(" file_off=");
-	serial_print_hex64((uint64_t)file_offset);
-	serial_print(" buf=");
-	serial_print_hex64((uint64_t)(uintptr_t)buf);
-	serial_print("\n");
+	klog_info_fmt("EXEC",
+		      "[EXEC_ONLY][MINIX] stage=eio errno=-EIO kind=%s blk_idx=0x%x zone=0x%x disk_block=0x%x lba=0x%x file_off=0x%llx buf=0x%llx",
+		      kind ? kind : "?", (unsigned)block_index, (unsigned)zone_num,
+		      (unsigned)disk_block, (unsigned)lba,
+		      (unsigned long long)file_offset,
+		      (unsigned long long)(uintptr_t)buf);
 	if (classify)
-	{
-		serial_print("[EXEC_ONLY][CLASSIFY] ");
-		serial_print(classify);
-		serial_print("\n");
-	}
+		klog_info_fmt("EXEC", "CLASSIFY %s", classify);
 }
 
 void exec_read_trace_device_read(uint32_t lba, uint8_t n_sectors, int ok,
@@ -133,17 +92,10 @@ void exec_read_trace_device_read(uint32_t lba, uint8_t n_sectors, int ok,
 	if (!exec_read_trace_on())
 		return;
 
-	serial_print("[EXEC_ONLY][DEV] stage=read_sectors lba=");
-	serial_print_hex32(lba);
-	serial_print(" n=");
-	serial_print_hex32((uint32_t)n_sectors);
-	serial_print(" ret=");
-	serial_print(ok ? "ok" : "fail");
-	serial_print(" buf=");
-	serial_print_hex64((uint64_t)(uintptr_t)buf);
-	serial_print(" cache=none\n");
+	klog_info_fmt("EXEC",
+		      "[EXEC_ONLY][DEV] stage=read_sectors lba=0x%x n=0x%x ret=%s buf=0x%llx cache=none",
+		      (unsigned)lba, (unsigned)n_sectors, ok ? "ok" : "fail",
+		      (unsigned long long)(uintptr_t)buf);
 	if (!ok)
-	{
-		serial_print("[EXEC_ONLY][CLASSIFY] DEVICE_READ_FLAKE\n");
-	}
+		klog_info("EXEC", "CLASSIFY DEVICE_READ_FLAKE");
 }

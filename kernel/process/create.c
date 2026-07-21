@@ -66,13 +66,11 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	if (!entry || !name)
 		return -1;
 
-	serial_print("SERIAL: spawn: begin ");
-	serial_print(name);
-	serial_print("\n");
+	klog_debug_fmt("KERN", "SERIAL: spawn: begin %s", name);
 	
 	proc = kmalloc_try(sizeof(process_t));
 	if (!proc) {
-		serial_print("[ERROR] Failed to allocate process structure\n");
+		klog_debug("KERN", "[ERROR] Failed to allocate process structure\n");
 		return -ENOMEM;
 	}
 
@@ -119,18 +117,18 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->page_directory = (uint64_t *)kcr3;
 		process_set_mm_root(proc, kcr3);
 		proc->owns_page_directory = 0;
-		serial_print("SERIAL: spawn: kernel CR3 shared (idle)\n");
+		klog_debug("KERN", "SERIAL: spawn: kernel CR3 shared (idle)\n");
 	}
 	else
 	{
 		proc->page_directory = (uint64_t *)create_process_page_directory();
 		if (!proc->page_directory)
 		{
-			serial_print("[ERROR] Failed to create page directory for process\n");
+			klog_debug("KERN", "[ERROR] Failed to create page directory for process\n");
 			kfree(proc);
 			return -ENOMEM;
 		}
-		serial_print("SERIAL: spawn: page directory OK\n");
+		klog_debug("KERN", "SERIAL: spawn: page directory OK\n");
 		process_set_mm_root(proc, (uint64_t)(uintptr_t)proc->page_directory);
 	}
 
@@ -176,11 +174,11 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		 */
 		if (map_user_region_in_directory(proc->page_directory, proc->stack_start, proc->stack_size, PAGE_RW) != 0)
 		{
-			serial_print("SERIAL: spawn: stack map failed\n");
+			klog_debug("KERN", "SERIAL: spawn: stack map failed\n");
 			process_unmap_user_pages_all(proc->page_directory, NULL);
 			goto fail_proc;
 		}
-		serial_print("SERIAL: spawn: stack mapped\n");
+		klog_debug("KERN", "SERIAL: spawn: stack mapped\n");
 
 		/* Setup stack pointer just below USER_STACK_TOP (stack grows down) */
 		proc->task.rsp = USER_STACK_TOP - 16;
@@ -246,7 +244,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	/* Private kernel stack for syscall/IRQ entry (see IR0_PROC_KSTACK_SIZE). */
 	if (process_kernel_stack_alloc(proc) != 0)
 	{
-		serial_print("SERIAL: spawn: kernel stack alloc failed\n");
+		klog_debug("KERN", "SERIAL: spawn: kernel stack alloc failed\n");
 		if (proc->mode != USER_MODE && proc->stack_start)
 		{
 			kfree((void *)proc->stack_start);

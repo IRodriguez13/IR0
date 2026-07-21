@@ -28,15 +28,22 @@
 #include <ir0/stat_user.h>
 #include <ir0/named_fifo.h>
 #include <ir0/named_symlink.h>
+#include <ir0/eventfd.h>
+#include <ir0/timerfd.h>
+#include <ir0/posix_shm.h>
+#include <ir0/fd_dispatch.h>
 #include <ir0/supervise_path.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
 #include <ir0/pipe.h>
+#include <ir0/sock_stream.h>
+#include <ir0/signals.h>
 #include <ir0/procfs.h>
+#include "io_syscalls.h"
 #include <ir0/pseudo_fs.h>
 #include <ir0/heartfs.h>
 #include <ir0/kmem.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/ash_smoke.h>
 #include <d1_12_read_diag.h>
 #include <ir0/sysfs.h>
@@ -422,13 +429,7 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
 
   if (DEBUG_VFS)
   {
-    serial_print("[VFS][OPEN] path=");
-    serial_print(path);
-    serial_print(" fd=");
-    serial_print_hex64((uint64_t)fd);
-    serial_print(" dev_id=");
-    serial_print_hex32(node->entry.device_id);
-    serial_print("\n");
+    klog_debug_fmt("VFS", "[VFS][OPEN] path=%s fd=%llx dev_id=%x", path, (unsigned long long)((uint64_t)fd), (unsigned)(node->entry.device_id));
   }
 
   return fd;
@@ -452,7 +453,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   {
     fd_entry_t *fdt = get_process_fd_table();
 
-    if (fdt && fdt[fd].in_use && fdt[fd].is_pseudo && fdt[fd].vfs_file)
+    if (fd_entry_pseudo(fdt ? &fdt[fd] : NULL))
     {
       pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fdt[fd].vfs_file;
 
@@ -502,6 +503,49 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   }
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
+
+  if (fd_table[fd].is_eventfd && fd_table[fd].vfs_file)
+    return ir0_eventfd_write((struct ir0_eventfd *)fd_table[fd].vfs_file, buf, count,
+			     (fd_table[fd].flags & O_NONBLOCK) != 0);
+
+  /* AF_UNIX/TCP stream sockets: write(2) → sock_stream_send */
+  if (fd_entry_socket(&fd_table[fd]) &&
+      sock_stream_is(fd_table[fd].vfs_file))
+  {
+    struct sock_stream *ss = (struct sock_stream *)fd_table[fd].vfs_file;
+    size_t total = 0;
+    int nb = (fd_table[fd].flags & O_NONBLOCK) != 0;
+
+    while (total < count)
+    {
+      size_t chunk = count - total;
+      ssize_t n;
+
+      if (chunk > sizeof(kernel_buf))
+	chunk = sizeof(kernel_buf);
+      if (copy_from_user(kernel_buf, (const char *)buf + total, chunk) != 0)
+	return total > 0 ? (int64_t)total : -EFAULT;
+      n = sock_stream_send(ss, kernel_buf, chunk);
+      if (n < 0)
+	return total > 0 ? (int64_t)total : n;
+      if (n == 0)
+      {
+	if (nb)
+	  return total > 0 ? (int64_t)total : -EAGAIN;
+	if (signals_pause_should_interrupt(current_process))
+	  return total > 0 ? (int64_t)total : -EINTR;
+	{
+	  int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+	  if (sleep_ret < 0)
+	    return total > 0 ? (int64_t)total : sleep_ret;
+	}
+	continue;
+      }
+      total += (size_t)n;
+    }
+    return (int64_t)total;
+  }
 
   /* Check if this is a pipe */
   if (fd_table[fd].is_pipe)
@@ -664,7 +708,15 @@ int64_t sys_read(int fd, void *buf, size_t count)
 
       if (!node->ops || !node->ops->read)
         return -EBADF;
-      ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
+      {
+	int nb = (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+		  fd_table[fd].in_use &&
+		  (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
+
+	devfs_set_read_nonblock(nb);
+	ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
+	devfs_set_read_nonblock(0);
+      }
       if (ret > 0)
       {
         if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
@@ -700,6 +752,46 @@ int64_t sys_read(int fd, void *buf, size_t count)
   }
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
     return -EBADF;
+
+  if (fd_table[fd].is_eventfd && fd_table[fd].vfs_file)
+    return ir0_eventfd_read((struct ir0_eventfd *)fd_table[fd].vfs_file, buf, count,
+			    (fd_table[fd].flags & O_NONBLOCK) != 0);
+  if (fd_table[fd].is_timerfd && fd_table[fd].vfs_file)
+    return ir0_timerfd_read((struct ir0_timerfd *)fd_table[fd].vfs_file, buf, count,
+			    (fd_table[fd].flags & O_NONBLOCK) != 0);
+
+  /* AF_UNIX/TCP stream sockets: read(2) → sock_stream_recv (blocking). */
+  if (fd_table[fd].is_socket && fd_table[fd].vfs_file &&
+      sock_stream_is(fd_table[fd].vfs_file))
+  {
+    struct sock_stream *ss = (struct sock_stream *)fd_table[fd].vfs_file;
+    char kernel_read_buf[PAGE_SIZE_4KB];
+    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
+    int nb = (fd_table[fd].flags & O_NONBLOCK) != 0;
+    ssize_t n;
+
+    for (;;)
+    {
+      n = sock_stream_recv_flags(ss, kernel_read_buf, read_size, 0);
+      if (n != -EAGAIN)
+	break;
+      if (nb)
+	return -EAGAIN;
+      if (signals_pause_should_interrupt(current_process))
+	return -EINTR;
+      {
+	int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+	if (sleep_ret < 0)
+	  return sleep_ret;
+      }
+    }
+    if (n < 0)
+      return n;
+    if (n > 0 && copy_to_user(buf, kernel_read_buf, (size_t)n) != 0)
+      return -EFAULT;
+    return n;
+  }
 
   /* Check if this is a pipe */
   if (fd_table[fd].is_pipe)
@@ -915,6 +1007,13 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   {
     open_ret = open_named_fifo_fd(path_to_use, ir0_flags);
     fase50c_log_open_result(path_to_use, open_ret, 13);
+    return open_ret;
+  }
+
+  if (posix_shm_path_is(path_to_use))
+  {
+    open_ret = posix_shm_try_open(path_to_use, ir0_flags, 0600);
+    fase50c_log_open_result(path_to_use, open_ret, 14);
     return open_ret;
   }
 
@@ -1255,6 +1354,12 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
 
   if (ir0_is_dev_path(resolved))
   {
+    if (posix_shm_path_is(resolved))
+    {
+      open_ret = posix_shm_try_open(resolved, ir0_flags, mode);
+      fase50c_log_open_result(resolved, open_ret, 14);
+      return open_ret;
+    }
     if (strcmp(resolved, "/dev") == 0 || strcmp(resolved, "/dev/") == 0 ||
         devfs_is_virtual_subdir(resolved))
     {
@@ -1449,6 +1554,9 @@ int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
     return 0;
   if (rc != -ENOENT)
     return rc;
+
+  if (posix_shm_path_is(resolved))
+    return posix_shm_try_unlink(resolved);
 
   rc = vfs_unlink(resolved);
   if (rc == -EISDIR)

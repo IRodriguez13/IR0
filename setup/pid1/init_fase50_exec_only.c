@@ -99,7 +99,7 @@ static int verify_busybox_invariants(int iter, ino_t *ref_ino, off_t *ref_size,
 		write_str(" fail errno=");
 		write_dec_u64((unsigned long long)(unsigned int)errno);
 		write_str("\n");
-		write_str("[EXEC_ONLY][CLASSIFY] MINIX_INODE_CORRUPTED_AFTER_N_EXECS\n");
+		write_str("[EXEC_ONLY] CLASSIFY MINIX_INODE_CORRUPTED_AFTER_N_EXECS\n");
 		return -1;
 	}
 
@@ -127,7 +127,7 @@ static int verify_busybox_invariants(int iter, ino_t *ref_ino, off_t *ref_size,
 		else if (st.st_ino != *ref_ino || st.st_size != *ref_size ||
 			 st.st_mode != *ref_mode)
 		{
-			write_str("[EXEC_ONLY][CLASSIFY] MINIX_INODE_CORRUPTED_AFTER_N_EXECS\n");
+			write_str("[EXEC_ONLY] CLASSIFY MINIX_INODE_CORRUPTED_AFTER_N_EXECS\n");
 			return -1;
 		}
 	}
@@ -183,7 +183,7 @@ static int verify_busybox_invariants(int iter, ino_t *ref_ino, off_t *ref_size,
 		*ref_hash = hash;
 	else if (hash != *ref_hash)
 	{
-		write_str("[EXEC_ONLY][CLASSIFY] MINIX_BLOCK_CACHE_CORRUPTION\n");
+		write_str("[EXEC_ONLY] CLASSIFY MINIX_BLOCK_CACHE_CORRUPTION\n");
 		return -1;
 	}
 
@@ -348,7 +348,7 @@ int main(void)
 			write_str(" ec=");
 			write_dec_u64((unsigned long long)ec);
 			write_str("\n");
-			write_str("[EXEC_ONLY][CLASSIFY] EXEC_ONLY_REPRO_OK\n");
+			write_str("[EXEC_ONLY] CLASSIFY EXEC_ONLY_REPRO_OK\n");
 			goto halt;
 		}
 
@@ -358,17 +358,17 @@ int main(void)
 	}
 
 	write_str("EXEC_ONLY_STABLE_OK\n");
-	write_str("[EXEC_ONLY][CLASSIFY] EXEC_ONLY_N50_STABLE_OK\n");
+	write_str("[EXEC_ONLY] CLASSIFY EXEC_ONLY_N50_STABLE_OK\n");
 	if (persistent_leak_iter >= 0)
 	{
-		write_str("[EXEC_ONLY][CLASSIFY] PMM_LEAK_PERSISTENT iter=");
+		write_str("[EXEC_ONLY] CLASSIFY PMM_LEAK_PERSISTENT iter=");
 		write_dec_u64((unsigned long long)persistent_leak_iter);
 		write_str("\n");
 	}
 	else if (read_meminfo_frames(NULL, &iter_used_after_wait) == 0 &&
 		 iter_used_after_wait <= baseline_used + 2)
 	{
-		write_str("[EXEC_ONLY][CLASSIFY] PMM_RECLAIM_ON_WAIT_OK\n");
+		write_str("[EXEC_ONLY] CLASSIFY PMM_RECLAIM_ON_WAIT_OK\n");
 	}
 
 halt:
