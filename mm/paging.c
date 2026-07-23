@@ -206,7 +206,7 @@ static int page_table_is_empty(const uint64_t *table)
 {
     for (size_t i = 0; i < 512; i++)
     {
-        if (arch_mm_pte_present(table[i]))
+        if (mm_pte_present(table[i]))
             return 0;
     }
     return 1;
@@ -232,21 +232,21 @@ static void ir0_mm_free_table_frame(uint64_t frame, int level)
 
 /*
  * Linux mm/x86: pte_pfn(), pud_page() — extract the physical pointer from a
- * descriptor without software/NX bits (via arch_mm_pte_phys).
+ * descriptor without software/NX bits (via mm_pte_phys).
  */
 static inline uintptr_t paging_entry_pfn(uint64_t entry)
 {
-	return arch_mm_pte_phys(entry);
+	return mm_pte_phys(entry);
 }
 
 static inline int paging_entry_large(uint64_t entry)
 {
-	return arch_mm_pte_large(entry);
+	return mm_pte_large(entry);
 }
 
 static inline uint64_t *paging_entry_table(uint64_t entry)
 {
-	if (!arch_mm_pte_present(entry))
+	if (!mm_pte_present(entry))
 		return NULL;
 	if (paging_entry_large(entry))
 		return NULL;
@@ -257,10 +257,10 @@ void enable_paging(void)
 {
 	uint64_t cr0;
 
-	cr0 = arch_mm_read_ctrl0();
+	cr0 = mm_read_ctrl0();
 	/* PG and WP: supervisor respects read-only PTEs */
 	cr0 |= CR0_PG | CR0_WP;
-	arch_mm_write_ctrl0(cr0);
+	mm_write_ctrl0(cr0);
 }
 
 void setup_and_enable_paging(void)
@@ -271,8 +271,8 @@ void setup_and_enable_paging(void)
 	/* 1. Verify we're in 64-bit mode */
 	uint64_t cr0, cr4;
 
-	cr0 = arch_mm_read_ctrl0();
-	cr4 = arch_mm_read_ctrl1();
+	cr0 = mm_read_ctrl0();
+	cr4 = mm_read_ctrl1();
 	(void)cr0;
 
 	if (!(cr4 & CR4_PAE))
@@ -291,17 +291,17 @@ void setup_and_enable_paging(void)
 
 void load_page_directory(uint64_t pml4_addr)
 {
-	arch_mm_activate((uintptr_t)pml4_addr);
+	mm_activate((uintptr_t)pml4_addr);
 }
 
 uint64_t get_current_page_directory(void)
 {
-	return (uint64_t)arch_mm_current_root();
+	return (uint64_t)mm_current_root();
 }
 
 int is_paging_enabled(void)
 {
-	return (arch_mm_read_ctrl0() & CR0_PG) != 0;
+	return (mm_read_ctrl0() & CR0_PG) != 0;
 }
 
 /**
@@ -321,27 +321,27 @@ int is_page_mapped_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t *fl
 	if (!pml4)
 		return -1;
 
-	arch_mm_va_indices((uintptr_t)virt_addr, idx);
+	mm_va_indices((uintptr_t)virt_addr, idx);
 
-	if (!arch_mm_pte_present(pml4[idx[0]]))
+	if (!mm_pte_present(pml4[idx[0]]))
 		return 0;
 	if (paging_entry_large(pml4[idx[0]]))
 		return 0;
 
 	pdpt = paging_entry_table(pml4[idx[0]]);
-	if (!pdpt || !arch_mm_pte_present(pdpt[idx[1]]))
+	if (!pdpt || !mm_pte_present(pdpt[idx[1]]))
 		return 0;
 	if (paging_entry_large(pdpt[idx[1]]))
 		return 0;
 
 	pd = paging_entry_table(pdpt[idx[1]]);
-	if (!pd || !arch_mm_pte_present(pd[idx[2]]))
+	if (!pd || !mm_pte_present(pd[idx[2]]))
 		return 0;
 	if (paging_entry_large(pd[idx[2]]))
 		return 0;
 
 	pt = paging_entry_table(pd[idx[2]]);
-	if (!pt || !arch_mm_pte_present(pt[idx[3]]))
+	if (!pt || !mm_pte_present(pt[idx[3]]))
 		return 0;
 
 	if (flags_out)
@@ -360,21 +360,21 @@ uint64_t *paging_get_pte(uint64_t *pml4, uintptr_t vaddr)
 	if (!pml4)
 		return NULL;
 
-	arch_mm_va_indices(vaddr, idx);
+	mm_va_indices(vaddr, idx);
 
-	if (!arch_mm_pte_present(pml4[idx[0]]))
+	if (!mm_pte_present(pml4[idx[0]]))
 		return NULL;
 	if (paging_entry_large(pml4[idx[0]]))
 		return NULL;
 
 	pdpt = paging_entry_table(pml4[idx[0]]);
-	if (!pdpt || !arch_mm_pte_present(pdpt[idx[1]]))
+	if (!pdpt || !mm_pte_present(pdpt[idx[1]]))
 		return NULL;
 	if (paging_entry_large(pdpt[idx[1]]))
 		return NULL;
 
 	pd = paging_entry_table(pdpt[idx[1]]);
-	if (!pd || !arch_mm_pte_present(pd[idx[2]]))
+	if (!pd || !mm_pte_present(pd[idx[2]]))
 		return NULL;
 	if (paging_entry_large(pd[idx[2]]))
 		return NULL;
@@ -426,9 +426,9 @@ int copy_to_user_region_in_directory(uint64_t *pml4, uintptr_t dst,
         size_t chunk;
 
         fase23_copy_region_probe[4] = (uint64_t)page;
-        fase23_copy_region_probe[5] = (pte && arch_mm_pte_present(*pte)) ? 1ULL : 0ULL;
+        fase23_copy_region_probe[5] = (pte && mm_pte_present(*pte)) ? 1ULL : 0ULL;
 
-        if (!pte || !arch_mm_pte_present(*pte))
+        if (!pte || !mm_pte_present(*pte))
             return -1;
 
         phys = paging_entry_pfn(*pte);
@@ -465,7 +465,7 @@ int copy_from_user_region_in_directory(uint64_t *pml4, uintptr_t src,
         size_t off;
         size_t chunk;
 
-        if (!pte || !arch_mm_pte_present(*pte))
+        if (!pte || !mm_pte_present(*pte))
             return -1;
 
         phys = paging_entry_pfn(*pte);
@@ -498,7 +498,7 @@ int zero_user_region_in_directory(uint64_t *pml4, uintptr_t dst, size_t n)
         size_t off;
         size_t chunk;
 
-        if (!pte || !arch_mm_pte_present(*pte))
+        if (!pte || !mm_pte_present(*pte))
             return -1;
 
         phys = paging_entry_pfn(*pte);
@@ -521,7 +521,7 @@ int zero_user_region_in_directory(uint64_t *pml4, uintptr_t dst, size_t n)
  */
 static uint64_t *get_existing_table(uint64_t *table, size_t index)
 {
-    if (!arch_mm_pte_present(table[index]))
+    if (!mm_pte_present(table[index]))
         return NULL;
 
     if (paging_entry_large(table[index]))
@@ -583,7 +583,7 @@ static uint64_t *get_or_create_table(uint64_t *parent, size_t index, int create,
 {
 	int user = !!(map_flags & PAGE_USER);
 
-	if (!arch_mm_pte_present(parent[index]))
+	if (!mm_pte_present(parent[index]))
 	{
 		uint64_t phys_addr;
 
@@ -596,9 +596,9 @@ static uint64_t *get_or_create_table(uint64_t *parent, size_t index, int create,
 
 		/*
 		 * Linux: table entries use _KERNPG_TABLE / pgtable flags only — never
-		 * NX on non-leaf levels.  Encode via arch_mm_make_table_pte.
+		 * NX on non-leaf levels.  Encode via mm_make_table_pte.
 		 */
-		parent[index] = arch_mm_make_table_pte((uintptr_t)phys_addr, user);
+		parent[index] = mm_make_table_pte((uintptr_t)phys_addr, user);
 		return (uint64_t *)paging_entry_pfn(phys_addr);
 	}
 
@@ -610,7 +610,7 @@ static uint64_t *get_or_create_table(uint64_t *parent, size_t index, int create,
 	 * map created pdpt/pd/pt without U/S).  Linux requires user at all levels.
 	 */
 	if (user)
-		arch_mm_pte_set_user(&parent[index]);
+		mm_pte_set_user(&parent[index]);
 
 	return paging_entry_table(parent[index]);
 }
@@ -633,7 +633,7 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
 	if (!pml4)
 		return -1;
 
-	arch_mm_va_indices((uintptr_t)virt_addr, idx);
+	mm_va_indices((uintptr_t)virt_addr, idx);
 
 	pdpt = get_or_create_table(pml4, idx[0], 1, flags, 1);
 	if (!pdpt)
@@ -651,8 +651,8 @@ int map_page_in_directory(uint64_t *pml4, uint64_t virt_addr, uint64_t phys_addr
 		uint64_t entry;
 		int had_leaf;
 
-		had_leaf = arch_mm_pte_present(pt[idx[3]]);
-		entry = arch_mm_make_leaf_pte((uintptr_t)phys_addr, flags & 0xFFFULL,
+		had_leaf = mm_pte_present(pt[idx[3]]);
+		entry = mm_make_leaf_pte((uintptr_t)phys_addr, flags & 0xFFFULL,
 					     !!(flags & PAGE_EXEC));
 		pt[idx[3]] = entry;
 		if (!had_leaf)
@@ -713,19 +713,19 @@ int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr)
 	if (!pml4)
 		return -1;
 
-	arch_mm_va_indices(virt_addr, idx);
+	mm_va_indices(virt_addr, idx);
 
-	if (!arch_mm_pte_present(pml4[idx[0]]))
+	if (!mm_pte_present(pml4[idx[0]]))
 		return -1;
 	if (paging_entry_large(pml4[idx[0]]))
 		return -1;
 	pdpt = paging_entry_table(pml4[idx[0]]);
-	if (!pdpt || !arch_mm_pte_present(pdpt[idx[1]]))
+	if (!pdpt || !mm_pte_present(pdpt[idx[1]]))
 		return -1;
 	if (paging_entry_large(pdpt[idx[1]]))
 		return -1;
 	pd = paging_entry_table(pdpt[idx[1]]);
-	if (!pd || !arch_mm_pte_present(pd[idx[2]]))
+	if (!pd || !mm_pte_present(pd[idx[2]]))
 		return -1;
 	if (paging_entry_large(pd[idx[2]]))
 		return -1;
@@ -733,14 +733,14 @@ int unmap_page_in_directory(uint64_t *pml4, uintptr_t virt_addr)
 	if (!pt)
 		return -1;
 
-	if (!arch_mm_pte_present(pt[idx[3]]))
+	if (!mm_pte_present(pt[idx[3]]))
 		return -1;
 
 	phys_frame = paging_entry_pfn(pt[idx[3]]);
 	pt[idx[3]] = 0;
     ir0_mm_leaf_freed++;
 
-    arch_tlb_invalidate_page((uintptr_t)virt_addr);
+    tlb_invalidate_page((uintptr_t)virt_addr);
 
     /*
      * Only return frames that the PMM allocated from RAM. MMIO and other
@@ -924,7 +924,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                     uintptr_t virt_addr;
                     int was_writable;
 
-                    if (!arch_mm_pte_present(page_entry) ||
+                    if (!mm_pte_present(page_entry) ||
                         !(page_entry & PAGE_USER))
                         continue;
 
@@ -989,7 +989,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                     uint64_t page_entry = pt[i1];
                     uintptr_t virt_addr;
 
-                    if (!arch_mm_pte_present(page_entry) ||
+                    if (!mm_pte_present(page_entry) ||
                         !(page_entry & PAGE_USER) ||
                         !(page_entry & PAGE_RW))
                         continue;
@@ -1000,7 +1000,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                                 ((uintptr_t)i1 << 12);
 
                     pt[i1] = (page_entry & ~PAGE_RW) | PAGE_COW;
-                    arch_tlb_invalidate_page((uintptr_t)virt_addr);
+                    tlb_invalidate_page((uintptr_t)virt_addr);
                 }
             }
         }
@@ -1098,7 +1098,7 @@ void paging_reclaim_lower_half_tables(uint64_t *pml4)
         uint64_t *pdpt;
         size_t i3;
 
-        if (!arch_mm_pte_present(pml4e) || paging_entry_large(pml4e))
+        if (!mm_pte_present(pml4e) || paging_entry_large(pml4e))
             continue;
 
         pdpt = paging_entry_table(pml4e);
@@ -1111,7 +1111,7 @@ void paging_reclaim_lower_half_tables(uint64_t *pml4)
             uint64_t *pd;
             size_t i2;
 
-            if (!arch_mm_pte_present(pdpte) || paging_entry_large(pdpte))
+            if (!mm_pte_present(pdpte) || paging_entry_large(pdpte))
                 continue;
 
             pd = paging_entry_table(pdpte);
@@ -1124,7 +1124,7 @@ void paging_reclaim_lower_half_tables(uint64_t *pml4)
                 uint64_t *pt;
                 size_t i1;
 
-                if (!arch_mm_pte_present(pde) || paging_entry_large(pde))
+                if (!mm_pte_present(pde) || paging_entry_large(pde))
                     continue;
 
                 pt = paging_entry_table(pde);

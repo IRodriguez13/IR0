@@ -1,9 +1,8 @@
 # IR0 — Backlog post-0.0.1 (trabajo restante honesto)
 
-> **Última verificación:** 2026-07-18  
+> **Última verificación:** 2026-07-23  
 > Espejo de [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) (inglés canónico).
-> F8 MVP + ARCH + kill/#UD + piloto runit + **T3 checklist→runit + RTL8139 TX**:
-> ver *Closed this wave (2026-07-18)* en el inglés.
+> DESK-X: **LINUX-LIKE** (smoke-desk-session OK 2026-07-23); TinyX sigue lab.
 
 ## Closed
 

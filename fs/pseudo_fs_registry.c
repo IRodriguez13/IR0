@@ -598,6 +598,10 @@ int pseudo_fs_ops_stat(const pseudo_fs_ops_t *ops, void *ctx, stat_t *st)
 	return ops->stat(ctx, st);
 }
 
+/*
+ * Legacy: assign a global PSEUDO_FS_*_FD_BASE virtual fd (host tests / old callers).
+ * Kernel syscall open must use pseudo_fs_acquire_path + process fd_table instead.
+ */
 int64_t pseudo_fs_open_path(const char *full_path, int flags, int *out_fd)
 {
 	const pseudo_fs_entry_t *entry;

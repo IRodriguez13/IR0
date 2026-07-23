@@ -31,6 +31,7 @@ extern void test_stat_user_abi(void);
 extern void test_named_fifo_supervise(void);
 extern void test_path_resolve_at(void);
 extern void test_ktm_poll_arch_resume_matrix(void);
+extern void test_class_b_ctx_invariant_matrix(void);
 extern void test_musl_mmap_contract(void);
 extern void test_mmap_null_placement(void);
 extern void test_signal_rt_sigaction_abi(void);
@@ -54,6 +55,7 @@ static void (*test_functions[])(void) = {
 	test_named_fifo_supervise,
 	test_path_resolve_at,
 	test_ktm_poll_arch_resume_matrix,
+	test_class_b_ctx_invariant_matrix,
 	test_musl_mmap_contract,
 	test_mmap_null_placement,
 	test_signal_rt_sigaction_abi,

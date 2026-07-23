@@ -13,12 +13,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-void arch_disable_interrupts(void)
+void disable_interrupts(void)
 {
-	(void)arch_irq_save();
+	unsigned long daif;
+
+	__asm__ volatile("mrs %0, daif" : "=r"(daif));
+	daif |= (1UL << 7);
+	__asm__ volatile("msr daif, %0" :: "r"(daif) : "memory");
 }
 
-void arch_enable_interrupts(void)
+void enable_interrupts(void)
 {
 	unsigned long daif;
 

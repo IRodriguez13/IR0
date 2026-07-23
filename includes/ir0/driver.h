@@ -44,10 +44,12 @@ typedef enum {
     IR0_DRIVER_STATE_INITIALIZED = 2,
     IR0_DRIVER_STATE_ACTIVE = 3,
     IR0_DRIVER_STATE_FAILED = 4,
+    IR0_DRIVER_STATE_ABSENT = 5, /* probed, no hardware — not a failure */
 } ir0_driver_state_t;
 
 // Return codes
 #define IR0_DRIVER_OK           0
+#define IR0_DRIVER_ABSENT       1   /* success path: no device present */
 #define IR0_DRIVER_ERR          -1
 #define IR0_DRIVER_ERR_NOMEM    -2
 #define IR0_DRIVER_ERR_INVAL    -3
@@ -120,6 +122,12 @@ ir0_driver_t* ir0_find_driver(const char* name);
 ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver);
 
 int ir0_driver_list_to_buffer(char *buf, size_t count);
+
+/**
+ * Count registered drivers by outcome for boot summary.
+ * ready = INITIALIZED|ACTIVE; absent = ABSENT; failed = FAILED.
+ */
+void ir0_driver_boot_counts(unsigned *ready, unsigned *absent, unsigned *failed);
 
 /**
  * Initialize the driver registry subsystem

@@ -42,12 +42,18 @@ int64_t syscalls_read_stdio_stdin(void *buf, size_t count)
 
 void stdin_wake_check(void)
 {
+	if (stdin_wake_check_nosched())
+		sched_schedule_next();
+}
+
+int stdin_wake_check_nosched(void)
+{
 	int woke_stdin = 0;
 	int woke_tty = 0;
 	int i;
 
 	if (!input_kbd_has_data() && !ir0_console_input_ready())
-		return;
+		return 0;
 
 	woke_tty = ir0_console_wake_readers();
 
@@ -61,8 +67,7 @@ void stdin_wake_check(void)
 		}
 	}
 
-	if (woke_stdin || woke_tty)
-		sched_schedule_next();
+	return (woke_stdin || woke_tty) ? 1 : 0;
 }
 
 void syscalls_init(void)

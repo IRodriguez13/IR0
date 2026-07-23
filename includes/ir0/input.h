@@ -34,11 +34,21 @@ struct input_event {
 #define EV_KEY  0x01
 #define EV_REL  0x02
 #define EV_ABS  0x03
+#define EV_MAX  0x1f
+#define EV_CNT  (EV_MAX + 1)
+
+/* SYN codes (Linux input-event-codes.h) */
+#define SYN_REPORT    0
+#define SYN_CONFIG    1
+#define SYN_MT_REPORT 2
+#define SYN_DROPPED   3
 
 /* Relative axes (Linux input-event-codes.h subset) */
 #define REL_X      0x00
 #define REL_Y      0x01
 #define REL_WHEEL  0x08
+#define REL_MAX    0x0f
+#define REL_CNT    (REL_MAX + 1)
 
 /*
  * /dev/events0 test hook ioctl (gated by CONFIG_TEST_INPUT_INJECT).
@@ -46,6 +56,17 @@ struct input_event {
  */
 #define IR0_INPUT_IOCTL_INJECT 0x49520001u
 #define IR0_INPUT_IOCTL_GET_CAPS 0x49520002u
+
+/* Linux uapi/linux/input.h — subset used by Xfbdev/evdev clients */
+#define EV_VERSION 0x010001
+#define EVIOCGVERSION 0x80044501u /* _IOR('E', 0x01, int) */
+#define EVIOCGBIT_BASE 0x20u
+#define EVIOC_NR_MASK 0xffu
+#define EVIOC_SIZE_SHIFT 16
+#define EVIOC_SIZE_MASK 0x3fffu
+#define EVIOC_DIR_SHIFT 30
+#define EVIOC_READ 2u
+#define EVIOC_TYPE_SHIFT 8
 
 /* Key codes (Linux input-event-codes.h subset for Doom) */
 #define KEY_RESERVED  0

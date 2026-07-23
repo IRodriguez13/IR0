@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: platform.c
- * Description: ARM64 platform ops — QEMU virt default; RPi stub selectable.
+ * Description: ARM64 platform ops — virt PSCI + RPi stub; board selects via arm64_board.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -15,17 +15,17 @@
 #include <stdint.h>
 #include <string.h>
 
-uint32_t arch_get_cpu_id(void)
+uint32_t get_cpu_id(void)
 {
 	return 0;
 }
 
-uint32_t arch_get_cpu_count(void)
+uint32_t get_cpu_count(void)
 {
 	return 1;
 }
 
-int arch_get_cpu_vendor(char *vendor_buf)
+int get_cpu_vendor(char *vendor_buf)
 {
 	if (!vendor_buf)
 		return -1;
@@ -33,7 +33,7 @@ int arch_get_cpu_vendor(char *vendor_buf)
 	return -1;
 }
 
-int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
+int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
 {
 	if (family)
 		*family = 0;
@@ -44,21 +44,21 @@ int arch_get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping
 	return -1;
 }
 
-int arch_get_cpuid_max_leaf(uint32_t *max_leaf)
+int get_cpuid_max_leaf(uint32_t *max_leaf)
 {
 	if (max_leaf)
 		*max_leaf = 0;
 	return -1;
 }
 
-int arch_get_cpu_brand_string(char *buf, size_t size)
+int get_cpu_brand_string(char *buf, size_t size)
 {
 	(void)buf;
 	(void)size;
 	return -1;
 }
 
-int arch_get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
+int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
 {
 	if (out_edx)
 		*out_edx = 0;
@@ -67,14 +67,26 @@ int arch_get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
 	return -1;
 }
 
-uint32_t arch_get_cpu_clflush_size(void)
+uint32_t get_cpu_clflush_size(void)
 {
 	return 0;
 }
 
+int arch_hypervisor_present(void)
+{
+	return 0;
+}
+
+int arch_hypervisor_vendor(char *buf, size_t n)
+{
+	if (buf && n)
+		buf[0] = '\0';
+	return -1;
+}
+
 static void __attribute__((noreturn)) arm64_halt_loop(void)
 {
-	arch_disable_interrupts();
+	disable_interrupts();
 	for (;;)
 		cpu_wait();
 }
@@ -105,8 +117,8 @@ static void arm64_virt_poweroff(void)
 	arm64_halt_loop();
 }
 
-/* QEMU virt (default). */
-static const struct ir0_platform_ops arm64_virt_ops = {
+/* QEMU virt (default) — selected via arm64_board_get(). */
+const struct ir0_platform_ops arm64_virt_platform_ops = {
 	.halt = arm64_virt_halt,
 	.reboot = arm64_virt_reboot,
 	.poweroff = arm64_virt_poweroff,
@@ -114,7 +126,7 @@ static const struct ir0_platform_ops arm64_virt_ops = {
 
 /*
  * Raspberry Pi stub — same WFI halt until PSCI/mailbox power is wired.
- * Select with ir0_platform_ops_set(&arm64_rpi_platform_ops) from board init.
+ * Selected via arm64_board (rpi4 / rpi5) or ir0_platform_ops_set().
  */
 static void arm64_rpi_halt(void)
 {
@@ -137,7 +149,7 @@ const struct ir0_platform_ops arm64_rpi_platform_ops = {
 	.poweroff = arm64_rpi_poweroff,
 };
 
-static const struct ir0_platform_ops *g_platform_ops = &arm64_virt_ops;
+static const struct ir0_platform_ops *g_platform_ops = &arm64_virt_platform_ops;
 
 const struct ir0_platform_ops *ir0_platform_ops_get(void)
 {
@@ -150,21 +162,21 @@ void ir0_platform_ops_set(const struct ir0_platform_ops *ops)
 		g_platform_ops = ops;
 }
 
-void arch_system_halt(void)
+void system_halt(void)
 {
 	ir0_platform_ops_get()->halt();
 	for (;;)
 		cpu_wait();
 }
 
-void arch_system_reboot(void)
+void system_reboot(void)
 {
 	ir0_platform_ops_get()->reboot();
 	for (;;)
 		cpu_wait();
 }
 
-void arch_system_poweroff(void)
+void system_poweroff(void)
 {
 	ir0_platform_ops_get()->poweroff();
 	for (;;)

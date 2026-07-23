@@ -33,12 +33,12 @@ static rr_task_t *rr_current = NULL; /* Currently running process in queue */
  */
 static inline uint64_t rr_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void rr_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 /**

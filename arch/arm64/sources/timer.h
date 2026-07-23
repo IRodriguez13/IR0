@@ -16,10 +16,10 @@
 
 #include <stdint.h>
 
-void arch_timer_init(void);
-uint64_t arch_timer_read(void);
-void arch_timer_set_frequency(uint32_t hz);
-uint32_t arch_timer_get_frequency(void);
+void timer_init(void);
+uint64_t timer_read(void);
+void timer_set_frequency(uint32_t hz);
+uint32_t timer_get_frequency(void);
 int arch_timer_smoke_ok(void);
 
 /** Arm EL1 physical timer one-shot (CNTP_TVAL + ENABLE, IMASK clear). */

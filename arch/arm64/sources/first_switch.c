@@ -4,7 +4,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: first_switch.c
- * Description: ARM64 first context switch behind arch_first_context_switch.
+ * Description: ARM64 first context switch behind first_switch_to.
  */
 
 #include <arch/common/arch_portable.h>
@@ -14,19 +14,19 @@
 
 extern void switch_context_arm64(task_t *prev, task_t *next);
 
-void arch_first_context_switch(struct process *next)
+void first_switch_to(struct process *next)
 {
 	process_t *p = (process_t *)next;
 	uint64_t root;
 
 	if (!p)
-		panic("arch_first_context_switch: null process");
+		panic("first_switch_to: null process");
 
 	root = process_mm_root(p);
 	if (!root)
-		panic("arch_first_context_switch: null mm root");
+		panic("first_switch_to: null mm root");
 
-	arch_mm_activate((uintptr_t)root);
+	mm_activate((uintptr_t)root);
 	switch_context_arm64(NULL, &p->task);
-	panic("Returned from arch_first_context_switch (ARM64) unexpectedly");
+	panic("Returned from first_switch_to (ARM64) unexpectedly");
 }

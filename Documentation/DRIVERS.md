@@ -32,9 +32,14 @@ IR0 uses a centralized registry and bootstrap path for core and optional drivers
 - Menuconfig-gated init reduces accidental startup of disabled hardware paths.
 - Registry introspection improves runtime debugging and bring-up visibility.
 
-## Weak Points
+## Audio (SB16 / Adlib)
 
-- No full hotplug model yet.
-- Policy and fallback behavior still prioritize practical bring-up over strict isolation.
-- Legacy-oriented device support remains a dominant profile.
+- Sources: `drivers/audio/sound_blaster.c`, `drivers/audio/adlib.c`.
+- Successful SB16 DSP probe emits `klog_smoke("SB16_DSP_OK")` and logs DSP version.
+- QEMU 8+ needs an audiodev before the ISA device:
+  `-audiodev none,id=snd0 -device sb16,audiodev=snd0` (Adlib similarly).
+- Variables / smoke: `scripts/make/boot-audio.mk` → `make smoke-sb16-probe`.
+  Gate is **SB16 DSP detect**; Adlib may still report ABSENT on some QEMU builds
+  (logged as note, not a fail).
+- `make run` attaches `QEMU_AUDIO_ALL` when `CONFIG_ENABLE_SOUND≠n`.
 

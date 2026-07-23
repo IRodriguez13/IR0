@@ -78,7 +78,7 @@ typedef struct
 #define SA_RESETHAND  0x80000000U
 
 #ifndef SIGNAL_DELIVER_LOG
-#define SIGNAL_DELIVER_LOG 1
+#define SIGNAL_DELIVER_LOG 0
 #endif
 
 /* Linux uapi si_code for SIGSEGV (subset). */

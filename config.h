@@ -247,6 +247,15 @@
 #define KERNEL_DATA_SEL     0x10
 #define USER_CODE_SEL       0x1B
 #define USER_DATA_SEL       0x23
+
+/*
+ * Class B safety net in switch_to: KERNEL_CS + user RIP → apply syscall_frame.
+ * Set IR0_CLASS_B_REPAIR=0 (CFLAGS) for deterministic KTM inject repro of
+ * KERNEL_RET_BAD_RIP. Default on for product/desk builds.
+ */
+#ifndef IR0_CLASS_B_REPAIR
+#define IR0_CLASS_B_REPAIR 1
+#endif
 #define RFLAGS_IF           0x202
 #define PMM_PHYS_BASE       0x2000000
 #define PMM_PHYS_SIZE       0x1000000
@@ -326,6 +335,9 @@
 #endif
 #ifndef CONFIG_DRV_NIC_E1000
 #define CONFIG_DRV_NIC_E1000 0
+#endif
+#ifndef CONFIG_DRV_NIC_VIRTIO_NET
+#define CONFIG_DRV_NIC_VIRTIO_NET 0
 #endif
 #ifndef CONFIG_ARCH_X86_64
 #define CONFIG_ARCH_X86_64 1
@@ -414,6 +426,11 @@
 #define CONFIG_DRIVER_CORE_SERIAL 1
 #define CONFIG_DRIVER_CORE_CLOCK 1
 #define CONFIG_DRIVER_CORE_INTERRUPTS 1
+
+/* Product serial stays quiet; enable via menuconfig / -D for ktm deep runs. */
+#ifndef CONFIG_KTM_SERIAL_VERBOSE
+#define CONFIG_KTM_SERIAL_VERBOSE 0
+#endif
 
 /* Legacy aliases for code that still uses the old names */
 #define ENABLE_NETWORKING CONFIG_ENABLE_NETWORKING

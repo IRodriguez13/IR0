@@ -19,3 +19,6 @@
 
 int64_t sys_gettimeofday(struct timeval *tv, void *tz);
 int64_t sys_clock_gettime(int clock_id, struct timespec *tp);
+int64_t sys_getitimer(int which, struct itimerval *curr_value);
+int64_t sys_setitimer(int which, const struct itimerval *new_value,
+		      struct itimerval *old_value);

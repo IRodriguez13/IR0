@@ -1,9 +1,9 @@
 # KTM — Kernel Test Module
 
-> **Última verificación:** 2026-07-21  
+> **Última verificación:** 2026-07-23  
 > **Fuente de verdad:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,  
 > `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,  
-> `scripts/smoke_autokill.py`, targets `ktm-*` del Makefile  
+> `scripts/smoke_autokill.py`, `scripts/make/class-b.mk`, targets `ktm-*` del Makefile  
 > **Canónico (inglés):** [`../KTM.md`](../KTM.md)
 
 KTM es el **plano canónico de test y diagnóstico** del kernel IR0: eventos tipados,
@@ -58,8 +58,8 @@ Detalle canónico: [`../KTM.md`](../KTM.md) (Logging layers).
 
 | Capa | Rol |
 |------|-----|
-| **klog** | Eventos humanos `[ts] [LEVEL] [COMP]` — `<ir0/ktm/klog.h>` |
-| **KTM** | Transporte `KTM\|…`; `ASSERT_BATCH` colapsa loops felices |
+| **klog** | Eventos humanos `[ts] [LEVEL] [COMP]` — `<ir0/ktm/klog.h>`; banner BOOT primero vía `ir0_boot_serial_ready()` (misma API en toda ISA) |
+| **KTM** | Transporte `KTM\|…`; `ASSERT_BATCH` colapsa loops felices; Class B gates |
 | **runit tags** | `ir0_smoke_tag()` — mismo rol que `klog_smoke` para autokill |
 | **QEMU host** | `*.qemu-stderr` separado del log serial del guest |
 

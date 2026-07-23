@@ -42,12 +42,12 @@ static struct udp_port_handler *udp_handlers = NULL;
 
 static inline uint64_t udp_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void udp_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 /**

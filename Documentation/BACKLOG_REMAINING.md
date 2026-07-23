@@ -1,6 +1,6 @@
 # IR0 — Post-0.0.1 backlog (honest remaining work)
 
-> **Last verified:** 2026-07-18  
+> **Last verified:** 2026-07-23  
 > **Source of truth:** `Documentation/ROADMAP.md`, code under `fs/`, `drivers/storage/`,  
 > `scripts/linux_abi/`, Makefile gates. Prefer this file for **what is still open**;  
 > ROADMAP holds history and tier %.
@@ -55,7 +55,7 @@
 | Host-share exec (stub + `ir0_payload`) | `smoke-hostshare-exec` (`HOSTSHARE_EXEC_MOUNT_OK` + case done tag) |
 | Host-share exec under runit PID1 | `runit_hostshare_payload_run` + runner `--disk`; IR0-desktop `run-xfbdev-smoke.sh` |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
-| ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` |
+| ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` + `board.c` (`ARM64_BOARD=qemu-virt\|rpi4\|rpi5`) |
 | KTM boot suite | `make ktm-run` (pass=16 incl. `process.reclaim_exit`) |
 | KTM userdev | `ktm-userdev-run`, `ktm-userdev-cow-run` |
 | Kernel `[FASE` serial retired | arch-guard `ktm-no-fase` |
@@ -182,7 +182,7 @@ Proof: make smoke-arm64
 | Context switch | `switch_arm64.c` empty stub |
 | musl / BusyBox / init | no ARM rootfs |
 | GIC / timer / virtio / storage | not wired in boot image |
-| Board beyond QEMU virt | RPi ops stub only |
+| Board beyond QEMU virt | **virt + rpi4 UART QEMU** (`arm64_board`, PL011 `0xfe201000`); **rpi5 stub** (`uart=none`, `ARM64_BOARD_RPI5_STUB`); GIC/SD/DT/RP1 still future |
 
 **Rough maturity:** early CPU privilege bring-up (**not** “ARM port ~done”). Treat F7 as
 closed for that slice; track real port as **F7b** above.
@@ -363,7 +363,7 @@ Aligns with F11/T3; WM **out of kernel tree** (sibling `IR0-desktop`). First pla
 | **DESK-0** | Declare target: mini desktop out-of-tree + ClassiCube first game | T3 prep OK, mini X PASS | **DONE** — this table + ROADMAP Future product arcs |
 | **DESK-1** | Mini X / Xfbdev **default** smoke stable (TinyX still lab/`force_tinyx`) | F11 | **DONE** — `make smoke-desk-xfbdev` → `IR0_XFBDEV_SMOKE_OK` (mini only unless `force_tinyx`) |
 | **DESK-2** | Minimal WM + panel (out-of-tree) | DESK-1, AF_UNIX/shm | **DONE (fb session)** — `make smoke-desk-wm` → `IR0_DESK_WM_SMOKE_OK`; TinyX X-WM **lab-blocked** (panic/hang) |
-| **DESK-X** | Mini X session: WM layout + panel + client (wire X11) | DESK-1/2 soft | **LINUX-LIKE / flaky** — `make smoke-desk-session` often `IR0_DESK_SESSION_OK`; panic autopsy + `-fno-pie` in [`IR0-desktop/Documentation/DESK_SESSION.md`](../../IR0-desktop/Documentation/DESK_SESSION.md); TinyX remains lab |
+| **DESK-X** | Mini X session: WM layout + panel + client (wire X11) | DESK-1/2 soft | **LINUX-LIKE** — `make smoke-desk-session` → `IR0_DESK_SESSION_OK` (2026-07-23 after stream `fd_refs` + clock_wait nosched); TinyX remains lab — see [`IR0-desktop/Documentation/DESK_SESSION.md`](../../IR0-desktop/Documentation/DESK_SESSION.md) |
 | **DESK-3** | ClassiCube (or fork) on IR0 (fullscreen or X window) | DESK-1/2, LAN, musl/glibc enough | **DONE (soft_fb0)** — `make smoke-desk-classicube` → `CLASSICUBE_OK`; upstream ClassiCube+GL **BLOCKED** |
 | **DESK-4** | Playable perf/input (mouse; audio optional) | DESK-3 | **DONE (soft)** — `make smoke-desk-play` → `DESK_PLAY_OK` (evdev optional) |
 | **DESK-5** | Optional: JVM / Mojang classic client | musl/Java port | **BLOCKED** — no done without binary |

@@ -77,6 +77,9 @@ void klog_fatal_fmt(const char *component, const char *format, ...);
 void klog_set_level(klog_level_t level);
 klog_level_t klog_get_level(void);
 
+/* 1 = suppress serial until BOOT banner; 0 = normal. Default held at boot. */
+void klog_boot_hold(int on);
+
 typedef void (*klog_protocol_mirror_fn)(klog_level_t level, const char *component,
 					const char *message);
 void klog_set_protocol_mirror(klog_protocol_mirror_fn fn);

@@ -257,7 +257,7 @@ int arm64_mmu_ttbr_dual_smoke(void)
 
 	arm64_mmu_clone_root_b();
 
-	arch_mm_activate((uintptr_t)root_b);
+	mm_activate((uintptr_t)root_b);
 	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr));
 	if ((ttbr & ~0x1UL) != (root_b & ~0x1UL))
 		return -EINVAL;
@@ -266,7 +266,7 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	probe = (volatile uint32_t *)(uintptr_t)VIRT_DRAM_BASE;
 	(void)*probe;
 
-	arch_mm_activate((uintptr_t)root_a);
+	mm_activate((uintptr_t)root_a);
 	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr));
 	if ((ttbr & ~0x1UL) != (root_a & ~0x1UL))
 		return -EINVAL;

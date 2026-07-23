@@ -1,11 +1,16 @@
 # IR0 Kernel — Changelog (español)
 
-> **Última verificación:** 2026-07-21  
+> **Última verificación:** 2026-07-23  
 > **Fuente de verdad:** historial git, smokes del `Makefile`, [`../STABLE.md`](../STABLE.md), [`../KTM.md`](../KTM.md)
 
 Versión en inglés (canónica): [`../CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Sin publicar]
+
+### Banner portable / SB16 / Class B / desk (2026-07-23)
+
+- `ir0_boot_serial_ready()` — mismo banner en toda ISA; ARM64 early con
+  `IR0_FREESTANDING_BOOT`; SB16/Class B/desk como en canónico EN.
 
 ### Higiene klog / KTM (2026-07-21)
 

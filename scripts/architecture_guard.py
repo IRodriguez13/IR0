@@ -555,6 +555,8 @@ def check_klog_serial_print_allowlist():
         "arch/arm64/sources/serial_io_arm64.c",
         "arch/arm64/sources/min_link_stubs.c",
         "tests/host/host_serial_stub.c",
+        # Freestanding early boot (IR0_FREESTANDING_BOOT) before klog hub exists.
+        "arch/common/boot_log.c",
     }
     serial_re = re.compile(r"\bserial_print\s*\(")
     scan_roots = [

@@ -23,6 +23,7 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/resource_registry.h>
+#include <ir0/ktm/klog.h>
 
 /* Global Sound Blaster state */
 static sb16_state_t sb16_state = {0};
@@ -61,20 +62,21 @@ static int32_t sb16_hw_init(void)
     /* Reset the DSP */
     if (!sb16_reset_dsp())
     {
-        LOG_ERROR("SB16", "Failed to reset DSP");
-        return -1;
+        LOG_WARNING("SB16", "DSP not detected (normal if no SB16 hardware)");
+        return IR0_DRIVER_ABSENT;
     }
 
     /* Check DSP version */
     uint16_t version = sb16_get_dsp_version();
     if (version == 0)
     {
-        LOG_ERROR("SB16", "Failed to get DSP version");
-        return -1;
+        LOG_WARNING("SB16", "DSP version unavailable (treating as absent)");
+        return IR0_DRIVER_ABSENT;
     }
 
     sb16_state.dsp_version = version;
     LOG_INFO_FMT("SB16", "DSP Version %d.%d detected", version >> 8, version & 0xFF);
+    klog_smoke("SB16_DSP_OK");
 
     /* Set default volume */
     sb16_set_master_volume(SB16_MIXER_VOL_MEDIUM);

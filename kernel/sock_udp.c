@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/sock_udp.h>
+#include <ir0/sock_stream.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>
@@ -55,12 +56,12 @@ static uint16_t sock_next_ephemeral = 32768;
 
 static inline uint64_t sock_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void sock_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 static bool sock_port_in_use(uint16_t port)
@@ -239,6 +240,13 @@ void sock_udp_release(struct sock_udp *sock)
 	uint64_t flags;
 
 	if (!sock)
+		return;
+	/*
+	 * AF_UNIX/TCP stream sockets live in a static table. After the last
+	 * stream release clears magic, a duplicate close used to fall through
+	 * here and kfree() the slot → "pointer out of heap range" panic.
+	 */
+	if (sock_stream_is_slot(sock))
 		return;
 
 	flags = sock_irq_save();

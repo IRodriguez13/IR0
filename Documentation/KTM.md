@@ -1,10 +1,10 @@
 # KTM — Kernel Test Module
 
-> **Last verified:** 2026-07-21  
+> **Last verified:** 2026-07-23  
 > **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,  
 > `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,  
 > `scripts/ktm_userdev_runit_run.sh`, `scripts/smoke_autokill.py`,  
-> root `Makefile` targets `ktm-*`
+> `scripts/make/class-b.mk`, root `Makefile` targets `ktm-*` / `smoke-class-b-*`
 
 KTM is IR0’s **canonical kernel test and diagnostic plane**: typed events, checkpoints,
 snapshots, in-kernel scenarios, `/dev/ktm` for userspace-driven cases, and host runners
@@ -94,10 +94,31 @@ Rules of thumb:
 - Prefer `klog_*` over raw `serial_print` outside `ktm/klog.c` and serial driver stubs.
 - Classify lines use one COMP plus the word `CLASSIFY` in the message, e.g.
   `[ts] [INFO] [VFS] CLASSIFY VFS_FS_CONTRACT_ACTIVE` — **not** `[VFS][CLASSIFY] …`.
-- Boot banner is `klog_info("BOOT", …)` plus a VGA typewriter copy (avoid `print()` —
-  console mirrors to serial and would duplicate).
+- **Boot banner is the first framed serial line on every ISA.** Call
+  `ir0_boot_serial_ready()` after UART/serial init (`includes/ir0/boot_log.h`).
+  Product kernels route through `klog_boot_hold` + `klog_info("BOOT", …)`;
+  freestanding ARM64 early boot (`IR0_FREESTANDING_BOOT`) emits the same layout
+  via `arch/common/boot_log.c`. ISA/board detail uses COMP `ARCH`; autokill tags
+  use COMP `SMOKE` (substring still greppable).
 - `CONFIG_KTM_SERIAL_VERBOSE` (default **n**): when off, product/desk boots omit noisy
   `CHECKPOINT` / `PROBE` / optional `KTM|LOG` mirrors; ASSERT / SUITE / smoke tags still emit.
+
+### Class B context (KERNEL_CS + userspace RIP)
+
+Illegal pairing for `kernel_ret`: task CS is ring-0 but RIP looks like userspace.
+Product default `IR0_CLASS_B_REPAIR=1` (`config.h`) repairs from `syscall_frame` when
+possible. Gates:
+
+| Target | Expect |
+|--------|--------|
+| `make smoke-class-b-mitigated` | inject + `KERNEL_CS_USER_RIP_REPAIR` + `KTM_CLASS_B_OK` |
+| `make smoke-class-b-repro` | rebuild with `IR0_CLASS_B_REPAIR=0` → `KERNEL_RET_BAD_RIP` |
+| `make -C tests/host run` | `test_class_b_ctx_invariant` |
+
+Impl: `sched/switch/arch_context_switch.c`, `process_arm_kernel_syscall_sleep` /
+`want_kernel_ret`, `sched_context_switch_take_skip_prev_save` (IRQ preempt must not
+overwrite a saved user iretq frame). Host fixtures: `tests/mocks/sched/class_b.h`.
+Makefile fragment: `scripts/make/class-b.mk`.
 
 ### Serial protocol (grep-friendly)
 

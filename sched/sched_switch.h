@@ -8,6 +8,10 @@
  *
  * File: sched_switch.h
  * Description: Shared context-switch helper for scheduler backends.
+ *
+ * Sched-internal bookkeeping after a backend selects @next, then calls the
+ * public ISA-polymorphic switch_to() facade (<ir0/context.h>).
+ * Not a portable include — backends share this path instead of each other.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -13,6 +13,7 @@
 #include <ir0/virtio_mmio.h>
 
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 int arm64_virtio_net_smoke(void)
 {
@@ -24,7 +25,7 @@ int arm64_virtio_net_smoke(void)
 	d = arm64_virtio_mmio_find(VIRTIO_ID_NET);
 	if (!d)
 	{
-		pl011_puts("ARM64_VIRTIO_NET_FAIL\n");
+		ir0_boot_smoke("ARM64_VIRTIO_NET_FAIL");
 		return -1;
 	}
 
@@ -53,7 +54,7 @@ int arm64_virtio_net_smoke(void)
 			virtio_mmio_set_status(d, status);
 			if ((virtio_mmio_get_status(d) & VIRTIO_STATUS_FEATURES_OK) == 0)
 			{
-				pl011_puts("ARM64_VIRTIO_NET_FAIL\n");
+				ir0_boot_smoke("ARM64_VIRTIO_NET_FAIL");
 				return -1;
 			}
 		}
@@ -74,11 +75,11 @@ int arm64_virtio_net_smoke(void)
 	/* Non-zero MAC or zeros both OK if DRIVER_OK stuck. */
 	if ((virtio_mmio_get_status(d) & VIRTIO_STATUS_DRIVER_OK) == 0)
 	{
-		pl011_puts("ARM64_VIRTIO_NET_FAIL\n");
+		ir0_boot_smoke("ARM64_VIRTIO_NET_FAIL");
 		return -1;
 	}
 
 	(void)mac;
-	pl011_puts("ARM64_VIRTIO_NET_OK\n");
+	ir0_boot_smoke("ARM64_VIRTIO_NET_OK");
 	return 0;
 }

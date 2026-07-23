@@ -26,7 +26,9 @@
 #include "virtio_net_early.h"
 
 #include <arch/common/arch_portable.h>
+#include <ir0/arm64_board.h>
 #include <ir0/virtio_mmio.h>
+#include <ir0/boot_log.h>
 #include <stdint.h>
 
 void __attribute__((weak)) arm64_all_objs_mark(void)
@@ -71,110 +73,117 @@ static void arm64_irq_oneshot_demo(void)
 
 	if (arm64_gic_v2_enable(ARM64_GIC_PPI_PHYS_TIMER) != 0)
 	{
-		pl011_puts("ARM64_GIC_FAIL\n");
+		ir0_boot_smoke("ARM64_GIC_FAIL");
 		return;
 	}
-	pl011_puts("ARM64_GIC_OK\n");
+	ir0_boot_smoke("ARM64_GIC_OK");
 
 	{
-		unsigned long irqf = arch_irq_save();
+		unsigned long irqf = irq_save();
 
 		arch_timer_oneshot_arm(10000U);
 		/* Unmask IRQ (DAIF.I = bit 7) while keeping other DAIF bits. */
-		arch_irq_restore(irqf & ~(1UL << 7));
+		irq_restore(irqf & ~(1UL << 7));
 
 		for (spins = 0; spins < 2000000U && !arm64_timer_irq_seen(); spins++)
 		{
 			__asm__ volatile("wfi" ::: "memory");
 		}
 
-		(void)arch_irq_save();
+		(void)irq_save();
 		arch_timer_oneshot_disarm();
 	}
 
 	if (!arm64_timer_irq_seen())
 	{
-		pl011_puts("ARM64_TIMER_IRQ_FAIL\n");
+		ir0_boot_smoke("ARM64_TIMER_IRQ_FAIL");
 	}
 }
 
 void boot_main(void)
 {
+	arm64_board_apply_platform();
 	pl011_init();
-	pl011_puts("ARM64_BOOT_OK\n");
+	/*
+	 * Same boot logging contract as x86 kmain: banner first, then ISA detail
+	 * and smoke tags (substring still matches make smoke-arm64-*).
+	 */
+	ir0_boot_serial_ready();
+	arm64_board_log_arch();
+	ir0_boot_smoke("ARM64_BOOT_OK");
 	arm64_all_objs_mark();
 
 	if (arm64_mmu_early_enable() != 0)
 	{
-		pl011_puts("ARM64_MMU_FAIL\n");
+		ir0_boot_smoke("ARM64_MMU_FAIL");
 		goto idle;
 	}
-	pl011_puts("ARM64_MMU_OK\n");
+	ir0_boot_smoke("ARM64_MMU_OK");
 
 	pl011_init();
-	pl011_puts("ARM64_PL011_OK\n");
+	ir0_boot_smoke("ARM64_PL011_OK");
 
 	if (arm64_mmu_early_verify() == 0)
 	{
-		pl011_puts("ARM64_PAGING_OK\n");
+		ir0_boot_smoke("ARM64_PAGING_OK");
 	}
 	else
 	{
-		pl011_puts("ARM64_PAGING_FAIL\n");
+		ir0_boot_smoke("ARM64_PAGING_FAIL");
 	}
 
 	if (arm64_mmu_map_device_block(VIRT_GIC_DIST) == 0)
 	{
-		pl011_puts("ARM64_GIC_MAP_OK\n");
+		ir0_boot_smoke("ARM64_GIC_MAP_OK");
 	}
 	else
 	{
-		pl011_puts("ARM64_GIC_MAP_FAIL\n");
+		ir0_boot_smoke("ARM64_GIC_MAP_FAIL");
 	}
 
 	if (arm64_mmu_map_user_page(ARM64_EL0_USER_PAGE_PA) == 0)
 	{
 		fill_user_page();
-		pl011_puts("ARM64_EL0_PAGE_OK\n");
+		ir0_boot_smoke("ARM64_EL0_PAGE_OK");
 	}
 	else
 	{
-		pl011_puts("ARM64_EL0_PAGE_FAIL\n");
+		ir0_boot_smoke("ARM64_EL0_PAGE_FAIL");
 	}
 
 	arm64_slice_after_mmu();
 
-	arch_timer_init();
+	timer_init();
 	if (arch_timer_smoke_ok() == 0)
 	{
-		pl011_puts("ARM64_TIMER_OK\n");
+		ir0_boot_smoke("ARM64_TIMER_OK");
 	}
 	else
 	{
-		pl011_puts("ARM64_TIMER_FAIL\n");
+		ir0_boot_smoke("ARM64_TIMER_FAIL");
 	}
 
 	if (arm64_vbar_early_install() != 0)
 	{
-		pl011_puts("ARM64_VBAR_FAIL\n");
+		ir0_boot_smoke("ARM64_VBAR_FAIL");
 		goto idle;
 	}
 
 	arm64_irq_oneshot_demo();
 
 	arm64_exc_trigger_svc();
-	pl011_puts("ARM64_SVC_RET_OK\n");
+	ir0_boot_smoke("ARM64_SVC_RET_OK");
 
 	arm64_switch_early_smoke();
 
 	if (arm64_mmu_ttbr_dual_smoke() == 0)
 	{
-		pl011_puts("ARM64_TTBR_B_OK\n");
-		pl011_puts("ARM64_TTBR_SWITCH_OK\n");
+		ir0_boot_smoke("ARM64_TTBR_B_OK");
+		ir0_boot_smoke("ARM64_TTBR_SWITCH_OK");
 	}
 	else
 	{
-		pl011_puts("ARM64_TTBR_SWITCH_FAIL\n");
+		ir0_boot_smoke("ARM64_TTBR_SWITCH_FAIL");
 	}
 
 	(void)arm64_process_ttbr_smoke();

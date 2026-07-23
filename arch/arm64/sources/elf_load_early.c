@@ -12,6 +12,7 @@
 #include "pl011.h"
 
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 #define EI_NIDENT 16
 #define ET_EXEC 2
@@ -179,9 +180,9 @@ void arm64_after_musl(void)
 {
 	g_musl_mode = 0;
 	if (g_musl_wrote)
-		pl011_puts("ARM64_MUSL_HELLO_OK\n");
+		ir0_boot_smoke("ARM64_MUSL_HELLO_OK");
 	else
-		pl011_puts("ARM64_MUSL_HELLO_FAIL\n");
+		ir0_boot_smoke("ARM64_MUSL_HELLO_FAIL");
 	/* BusyBox echo applet, then F7c EL0 syscall smoke. */
 	if (arm64_busybox_el0() != 0)
 	{
@@ -209,7 +210,7 @@ static void enter_musl_el0(uint64_t entry)
 	enable_fp_simd();
 	g_musl_mode = 1;
 	setup_auxv_stack(MUSL_STACK_TOP);
-	pl011_puts("ARM64_MUSL_EL0_DROP\n");
+	ir0_boot_smoke("ARM64_MUSL_EL0_DROP");
 
 	__asm__ volatile(
 		"msr	elr_el1, %0\n"
@@ -238,7 +239,7 @@ int arm64_musl_hello_el0(void)
 
 		if (arm64_mmu_map_user_page_flags(page, 0) != 0)
 		{
-			pl011_puts("ARM64_MUSL_LOAD_FAIL\n");
+			ir0_boot_smoke("ARM64_MUSL_LOAD_FAIL");
 			return -1;
 		}
 		zero_bytes((void *)(uintptr_t)page, PAGE_SIZE);
@@ -246,11 +247,11 @@ int arm64_musl_hello_el0(void)
 
 	if (load_elf(blob, blob_len, &entry) != 0)
 	{
-		pl011_puts("ARM64_MUSL_LOAD_FAIL\n");
+		ir0_boot_smoke("ARM64_MUSL_LOAD_FAIL");
 		return -1;
 	}
 
-	pl011_puts("ARM64_MUSL_LOAD_OK\n");
+	ir0_boot_smoke("ARM64_MUSL_LOAD_OK");
 	enter_musl_el0(entry);
 	return 0;
 }

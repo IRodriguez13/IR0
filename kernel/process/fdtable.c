@@ -50,7 +50,7 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 		{
 			if (sock_stream_is(e->vfs_file))
 				sock_stream_release((struct sock_stream *)e->vfs_file);
-			else
+			else if (!sock_stream_is_slot(e->vfs_file))
 				sock_udp_release((struct sock_udp *)e->vfs_file);
 			e->vfs_file = NULL;
 		}
@@ -141,8 +141,9 @@ int process_duplicate_fd_table(process_t *parent, process_t *child)
 			pipe_acquire_end((pipe_t *)e->vfs_file, e->pipe_end);
 		else if (e->is_socket && e->vfs_file)
 		{
-			/* Stream sockets are static slots; share without refcount. */
-			if (!sock_stream_is(e->vfs_file))
+			if (sock_stream_is(e->vfs_file))
+				sock_stream_acquire((struct sock_stream *)e->vfs_file);
+			else if (!sock_stream_is_slot(e->vfs_file))
 				sock_udp_acquire((struct sock_udp *)e->vfs_file);
 		}
 		else if (e->is_devfs)

@@ -1,12 +1,34 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-07-21  
+> **Last verified:** 2026-07-23  
 > **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
 For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** see [`STABLE.md`](STABLE.md).
 
 ## [Unreleased]
+
+### Portable boot logging (2026-07-23)
+
+- **`ir0_boot_serial_ready()`** (`includes/ir0/boot_log.h`, `arch/common/boot_log.c`) —
+  same framed BOOT banner on every ISA; freestanding ARM64 early boot uses
+  `IR0_FREESTANDING_BOOT` path; product kernels route through klog.
+- ARM64 early tags (`ARM64_*`) emit as COMP `SMOKE` (still greppable for autokill).
+
+### Boot banner, SB16, Class B, desk (2026-07-23)
+
+- **Banner-first serial** — `klog_boot_hold` until after `serial_init`; first framed line is
+  `[BOOT] IR0 Kernel v0.0.1-pre-rc3 Boot routine` (`kernel/main.c`, `ktm/klog.c`).
+- **SB16 QEMU** — audiodev wiring for QEMU 8+; `SB16_DSP_OK` smoke tag;
+  `make smoke-sb16-probe` (`scripts/make/boot-audio.mk`). Adlib may stay ABSENT (not a gate fail).
+- **Blocked syscall yield** — `kernel_idle_poll_nosched` in clock_wait loops; no nested
+  `sched_schedule_next` from poll/stdin wakes during sleep.
+- **Class B** — host invariant + KTM inject/repair gates (`scripts/make/class-b.mk`,
+  `smoke-class-b-mitigated` / `smoke-class-b-repro`); `skip_prev_save` on IRQ preempt.
+- **AF_UNIX stream** — `fd_refs` + `sock_stream_is_slot` guard (close must not
+  `sock_udp_release` static stream slots) — desk session path.
+- **Docs** — `KTM.md`, `SCHEDULING.md`, `DRIVERS.md`, `mandocs/en/boot.md`, desk
+  `DESK_SESSION.md`.
 
 ### Logging / KTM hygiene (2026-07-21)
 

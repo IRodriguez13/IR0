@@ -21,6 +21,31 @@ menu "Architecture"
           Build the kernel for ARM64 targets.
           This port is scaffolded and intended for incremental bring-up.
 
+    choice
+        prompt "ARM64 board (freestanding / early boot)"
+        depends on ARCH_ARM64
+        default ARM64_BOARD_QEMU_VIRT
+        help
+          Compile-time board for UART MMIO and platform_ops. No DTB yet.
+          Makefile override: ARM64_BOARD=qemu-virt|rpi4|rpi5.
+
+        config ARM64_BOARD_QEMU_VIRT
+            bool "QEMU virt (PL011 @ 0x09000000)"
+            help
+              Default early-boot board. Daily smoke-arm64-* gate.
+
+        config ARM64_BOARD_RPI4
+            bool "Raspberry Pi 4 (PL011 @ 0xfe201000)"
+            help
+              QEMU -M raspi4b / BCM2711 UART0. Min smoke only; full GIC/SD later.
+
+        config ARM64_BOARD_RPI5
+            bool "Raspberry Pi 5 (UART stub — RP1 TBD)"
+            help
+              Board id + platform_ops stub only. No RP1 UART yet (uart_mmio=0).
+
+    endchoice
+
 endmenu
 
 menu "General"
@@ -163,6 +188,14 @@ menu "Networking"
         depends on ENABLE_NETWORKING && ARCH_X86_64
         help
           Reserved plugin switch for future Intel E1000 support.
+
+    config DRV_NIC_VIRTIO_NET
+        bool "Driver plugin: virtio-net-pci (legacy)"
+        default y
+        depends on ENABLE_NETWORKING && ARCH_X86_64
+        help
+          Minimal virtio-net legacy TX/RX for QEMU
+          (-device virtio-net-pci,...,disable-modern=on).
 
 endmenu
 
@@ -389,6 +422,15 @@ endmenu
 
 menu "Debugging"
 
+    config BOOT_LOG_HOSTSHARE
+        bool "Dump boot log ring to virtio-9p host share (ir0-boot.log)"
+        default n
+        help
+          After early boot (drivers + interrupts), if QEMU provides virtio-9p
+          with mount_tag=ir0share, write the kernel log ring buffer to
+          ir0-boot.log on the host directory. Opt-in — normal make run needs
+          no -virtfs. Use: make run-bootlog / make smoke-boot-log-hostshare.
+
     config DEBUG_MEMORY_ALLOCATOR
         bool "Heap allocator debug output"
         default n
@@ -498,14 +540,6 @@ menu "Debugging"
           Enables KTM context snapshots on panic/fault and panic class tags
           ([KTM][PANIC_CLASS]). Near-zero runtime cost except on failure paths.
 
-    config KTM_SERIAL_VERBOSE
-        bool "KTM verbose serial (CHECKPOINT/PROBE/EV/LOG protocol)"
-        depends on KTM
-        default n
-        help
-          Emit full KTM|CHECKPOINT, PROBE, EV, and optional KTM|LOG mirrors
-          on serial. Leave off for product/desk boots (human klog only).
-
     config KTM_EVENTS
         bool "KTM compact serial event tags"
         depends on KTM
@@ -557,6 +591,15 @@ menu "Debugging"
           (pipe.create, sock.create, process.fork_alloc, kmem.alloc).
           Inactive until /dev/ktm CONFIG_FAULT arms a slot. Enable for
           smoke-ktm-fault / developer kernels; leave off for lean builds.
+
+    config KTM_SERIAL_VERBOSE
+        bool "KTM verbose serial (CHECKPOINT/PROBE/EV/LOG protocol)"
+        depends on KTM
+        default n
+        help
+          Emit full KTM|CHECKPOINT, PROBE, EV, and optional KTM|LOG mirrors
+          on serial. Leave off for product/desk boots (human klog only).
+          Enable for make ktm-run / deep diagnostics.
 
     config KTM_USERDEV
         bool "KTM /dev/ktm userspace control plane"

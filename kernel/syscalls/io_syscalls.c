@@ -1162,7 +1162,7 @@ int64_t sys_close(int fd)
     {
       if (sock_stream_is(fd_table[fd].vfs_file))
         sock_stream_release((struct sock_stream *)fd_table[fd].vfs_file);
-      else
+      else if (!sock_stream_is_slot(fd_table[fd].vfs_file))
         sock_udp_release((struct sock_udp *)fd_table[fd].vfs_file);
       fd_table[fd].vfs_file = NULL;
     }

@@ -7,13 +7,16 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: pl011.h
- * Description: QEMU virt PL011 UART0 MMIO helpers (0x09000000).
+ * Description: PL011 UART helpers — MMIO base from arm64_board (virt / RPi4).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
+#include <stdint.h>
+
 void pl011_init(void);
+void pl011_init_at(uintptr_t base);
 void pl011_putc(char c);
 void pl011_puts(const char *s);
