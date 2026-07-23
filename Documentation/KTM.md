@@ -94,11 +94,12 @@ Rules of thumb:
 - Prefer `klog_*` over raw `serial_print` outside `ktm/klog.c` and serial driver stubs.
 - Classify lines use one COMP plus the word `CLASSIFY` in the message, e.g.
   `[ts] [INFO] [VFS] CLASSIFY VFS_FS_CONTRACT_ACTIVE` — **not** `[VFS][CLASSIFY] …`.
-- **Boot banner is the first framed serial line.** Early ARCH/LOGGING/DriverRegistry
-  chatter is held with `klog_boot_hold(1)` (default) until after `serial_init`; then
-  `klog_boot_hold(0)` and `klog_info("BOOT", "IR0 Kernel v" IR0_VERSION_STRING " Boot routine")`
-  (`kernel/main.c`). VGA also gets a typewriter copy (avoid `print()` — console mirrors
-  to serial and would duplicate).
+- **Boot banner is the first framed serial line on every ISA.** Call
+  `ir0_boot_serial_ready()` after UART/serial init (`includes/ir0/boot_log.h`).
+  Product kernels route through `klog_boot_hold` + `klog_info("BOOT", …)`;
+  freestanding ARM64 early boot (`IR0_FREESTANDING_BOOT`) emits the same layout
+  via `arch/common/boot_log.c`. ISA/board detail uses COMP `ARCH`; autokill tags
+  use COMP `SMOKE` (substring still greppable).
 - `CONFIG_KTM_SERIAL_VERBOSE` (default **n**): when off, product/desk boots omit noisy
   `CHECKPOINT` / `PROBE` / optional `KTM|LOG` mirrors; ASSERT / SUITE / smoke tags still emit.
 

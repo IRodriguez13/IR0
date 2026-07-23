@@ -948,7 +948,8 @@ CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=0
 endif
 
 ARCH_OBJS_COMMON = \
-    arch/common/arch_interface.o
+    arch/common/arch_interface.o \
+    arch/common/boot_log.o
 
 ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/arch_x64.o \
@@ -966,6 +967,7 @@ ARCH_OBJS_X86_64 = \
     sched/switch/switch_x64.o
 
 ARCH_OBJS_ARM64 = \
+    arch/common/boot_log.o \
     arch/arm64/sources/arch_arm64.o \
     arch/arm64/sources/arch_early.o \
     arch/arm64/sources/interrupts.o \
@@ -2591,7 +2593,8 @@ smoke-robust-list: kernel-x64-userspace.iso
 
 # Minimal ARM64 boot image (identity map — full ARCH_OBJS need freestanding libc).
 ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
-	-I. -Iarch/arm64/sources -Iincludes -Iincludes/ir0
+	-DIR0_FREESTANDING_BOOT=1 \
+	-I. -Iarch/arm64/sources -Iarch/common -Iincludes -Iincludes/ir0 -Iktm/include
 ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib -mgeneral-regs-only
 # QEMU virt: pin GICv2 (default may be v3 — freestanding Dist/CPU iface is v2).
 ARM64_QEMU_MACHINE = virt,gic-version=2
@@ -2813,11 +2816,15 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  AS      arch/arm64/sources/switch_early.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/sources/switch_early.S -o arch/arm64/sources/switch_early_asm.o
+	@echo "  CC      arch/common/boot_log.c (freestanding)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/common/boot_log.c -o build/arm64-boot/boot_log.o
 	@echo "  LD      $@"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
 		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
+		build/arm64-boot/boot_log.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
 		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
@@ -3001,11 +3008,14 @@ smoke-arm64-boot: kernel-arm64-boot.bin
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-boot.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_BOOT_OK" /tmp/arm64-boot-smoke.log; then \
-		echo "✓ smoke-arm64-boot passed"; \
+	@if grep -q "ARM64_BOOT_OK" /tmp/arm64-boot-smoke.log && \
+	    awk '/\[INFO\] \[BOOT\] IR0 Kernel v.*Boot routine/{found=1; exit} NR>20{exit} END{exit !found}' \
+		/tmp/arm64-boot-smoke.log; then \
+		echo "✓ smoke-arm64-boot passed (banner-first + ARM64_BOOT_OK)"; \
+		grep -E '\[BOOT\]|\[ARCH\]|ARM64_BOOT' /tmp/arm64-boot-smoke.log | head -10; \
 	else \
-		echo "✗ smoke-arm64-boot FAILED"; \
-		tail -30 /tmp/arm64-boot-smoke.log; exit 1; \
+		echo "✗ smoke-arm64-boot FAILED (need BOOT banner then ARM64_BOOT_OK)"; \
+		head -30 /tmp/arm64-boot-smoke.log; exit 1; \
 	fi
 
 smoke-arm64-mmu: kernel-arm64-mmu.bin

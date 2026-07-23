@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <ir0/boot_log.h>
 
 #define VIRTQ_DESC_F_NEXT  1U
 #define VIRTQ_DESC_F_WRITE 2U
@@ -280,7 +281,7 @@ static int virtio_blk_bringup(struct virtio_mmio_dev *d)
 
 	if (blk_setup_queue(d) != 0)
 	{
-		pl011_puts("ARM64_VIRTIO_BLK_CAP_OK\n");
+		ir0_boot_smoke("ARM64_VIRTIO_BLK_CAP_OK");
 		return -1;
 	}
 
@@ -308,13 +309,13 @@ int arm64_virtio_blk_smoke(void)
 	d = arm64_virtio_mmio_find(VIRTIO_ID_BLOCK);
 	if (!d)
 	{
-		pl011_puts("ARM64_VIRTIO_BLK_FAIL\n");
+		ir0_boot_smoke("ARM64_VIRTIO_BLK_FAIL");
 		return -1;
 	}
 
 	if (virtio_blk_bringup(d) != 0)
 	{
-		pl011_puts("ARM64_VIRTIO_BLK_FAIL\n");
+		ir0_boot_smoke("ARM64_VIRTIO_BLK_FAIL");
 		return -1;
 	}
 
@@ -334,16 +335,16 @@ int arm64_virtio_blk_smoke(void)
 	rc = ir0_block_register(&bdev);
 	if (rc != 0)
 	{
-		pl011_puts("ARM64_VIRTIO_BLK_FAIL\n");
+		ir0_boot_smoke("ARM64_VIRTIO_BLK_FAIL");
 		return -1;
 	}
 
-	pl011_puts("ARM64_VIRTIO_BLK_OK\n");
+	ir0_boot_smoke("ARM64_VIRTIO_BLK_OK");
 
 	id = ir0_block_lookup_by_name("vda");
 	if (id == 0 || !ir0_block_is_present(id))
 	{
-		pl011_puts("ARM64_BLOCKDEV_FACADE_FAIL\n");
+		ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
 		return -1;
 	}
 
@@ -354,12 +355,12 @@ int arm64_virtio_blk_smoke(void)
 	/* Architecture proof: I/O only through portable ir0_block_*. */
 	if (ir0_block_write(id, 0, 1, wbuf) != 0)
 	{
-		pl011_puts("ARM64_BLOCKDEV_FACADE_FAIL\n");
+		ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
 		return -1;
 	}
 	if (ir0_block_read(id, 0, 1, rbuf) != 0)
 	{
-		pl011_puts("ARM64_BLOCKDEV_FACADE_FAIL\n");
+		ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
 		return -1;
 	}
 
@@ -367,11 +368,11 @@ int arm64_virtio_blk_smoke(void)
 	{
 		if (rbuf[i] != wbuf[i])
 		{
-			pl011_puts("ARM64_BLOCKDEV_FACADE_FAIL\n");
+			ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
 			return -1;
 		}
 	}
 
-	pl011_puts("ARM64_BLOCKDEV_FACADE_OK\n");
+	ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_OK");
 	return 0;
 }

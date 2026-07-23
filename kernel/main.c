@@ -40,6 +40,7 @@
 #include <ir0/input_backend.h>
 #include <ir0/multiboot.h>
 #include <ir0/ktm/ktm.h>
+#include <ir0/boot_log.h>
 #include "ipc.h"
 #include "syscalls.h"
 #include <ir0/sched.h>
@@ -170,11 +171,11 @@ void kmain(uint32_t multiboot_info)
     ir0_driver_registry_init();
     serial_init();
     /*
-     * Banner must be the first framed klog line on serial (early ARCH/LOGGING/
-     * DriverRegistry chatter is held via klog_boot_hold).
+     * Portable boot contract (every ISA): first framed serial line is the
+     * version banner. Early registry chatter is held via klog_boot_hold until
+     * ir0_boot_serial_ready(). ISA-specific detail uses COMP ARCH afterwards.
      */
-    klog_boot_hold(0);
-    klog_info("BOOT", "IR0 Kernel v" IR0_VERSION_STRING " Boot routine");
+    ir0_boot_serial_ready();
     typewriter_vga_print("IR0 Kernel v" IR0_VERSION_STRING " Boot routine\n", 0x0F);
 
     {

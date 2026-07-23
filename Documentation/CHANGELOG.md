@@ -8,6 +8,13 @@ For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** 
 
 ## [Unreleased]
 
+### Portable boot logging (2026-07-23)
+
+- **`ir0_boot_serial_ready()`** (`includes/ir0/boot_log.h`, `arch/common/boot_log.c`) —
+  same framed BOOT banner on every ISA; freestanding ARM64 early boot uses
+  `IR0_FREESTANDING_BOOT` path; product kernels route through klog.
+- ARM64 early tags (`ARM64_*`) emit as COMP `SMOKE` (still greppable for autokill).
+
 ### Boot banner, SB16, Class B, desk (2026-07-23)
 
 - **Banner-first serial** — `klog_boot_hold` until after `serial_init`; first framed line is

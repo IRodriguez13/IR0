@@ -20,6 +20,7 @@
 #include "timer.h"
 
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 #define EBADF  9
 #define EFAULT 14
@@ -223,7 +224,7 @@ static int64_t sleep_timespec_user(uint64_t req, uint64_t rem)
 		return -EINVAL;
 	}
 
-	frq = arch_timer_get_frequency();
+	frq = timer_get_frequency();
 	if (frq == 0)
 	{
 		return -EINVAL;
@@ -236,8 +237,8 @@ static int64_t sleep_timespec_user(uint64_t req, uint64_t rem)
 		delta = 1;
 	}
 
-	deadline = arch_timer_read() + delta;
-	while (arch_timer_read() < deadline)
+	deadline = timer_read() + delta;
+	while (timer_read() < deadline)
 	{
 		__asm__ volatile("yield" ::: "memory");
 	}
@@ -251,7 +252,7 @@ static int64_t sys_nanosleep(uint64_t req, uint64_t rem)
 	if (ret == 0)
 	{
 		g_nanosleep_ok = 1;
-		pl011_puts("ARM64_NANOSLEEP_OK\n");
+		ir0_boot_smoke("ARM64_NANOSLEEP_OK");
 	}
 	return ret;
 }
@@ -270,7 +271,7 @@ static int64_t sys_clock_nanosleep(uint64_t clk_id, uint64_t flags, uint64_t req
 	if (ret == 0)
 	{
 		g_clock_nanosleep_ok = 1;
-		pl011_puts("ARM64_CLOCK_NANOSLEEP_OK\n");
+		ir0_boot_smoke("ARM64_CLOCK_NANOSLEEP_OK");
 	}
 	return ret;
 }
@@ -295,13 +296,13 @@ static int64_t sys_clock_gettime(uint64_t clk_id, uint64_t tp)
 		return -EFAULT;
 	}
 
-	frq = arch_timer_get_frequency();
+	frq = timer_get_frequency();
 	if (frq == 0)
 	{
 		return -EINVAL;
 	}
 
-	pct = arch_timer_read();
+	pct = timer_read();
 	ts.tv_sec = (int64_t)(pct / frq);
 	ts.tv_nsec = (int64_t)(((pct % frq) * NS_PER_SEC) / frq);
 
@@ -312,7 +313,7 @@ static int64_t sys_clock_gettime(uint64_t clk_id, uint64_t tp)
 	}
 
 	g_clock_gettime_ok = 1;
-	pl011_puts("ARM64_CLOCK_GETTIME_OK\n");
+	ir0_boot_smoke("ARM64_CLOCK_GETTIME_OK");
 	return 0;
 }
 
@@ -340,13 +341,13 @@ static int64_t sys_gettimeofday(uint64_t tv, uint64_t tz)
 		return -EFAULT;
 	}
 
-	frq = arch_timer_get_frequency();
+	frq = timer_get_frequency();
 	if (frq == 0)
 	{
 		return -EINVAL;
 	}
 
-	pct = arch_timer_read();
+	pct = timer_read();
 	out.tv_sec = (int64_t)(pct / frq);
 	out.tv_usec = (int64_t)(((pct % frq) * 1000000ULL) / frq);
 
@@ -357,7 +358,7 @@ static int64_t sys_gettimeofday(uint64_t tv, uint64_t tz)
 	}
 
 	g_gettimeofday_ok = 1;
-	pl011_puts("ARM64_GETTIMEOFDAY_OK\n");
+	ir0_boot_smoke("ARM64_GETTIMEOFDAY_OK");
 	return 0;
 }
 
@@ -625,11 +626,11 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return a0;
 		if (arm64_syscall_smoke_ok())
 		{
-			pl011_puts("ARM64_SYSCALL_OK\n");
+			ir0_boot_smoke("ARM64_SYSCALL_OK");
 		}
 		else
 		{
-			pl011_puts("ARM64_SYSCALL_FAIL\n");
+			ir0_boot_smoke("ARM64_SYSCALL_FAIL");
 		}
 		return a0;
 	default:

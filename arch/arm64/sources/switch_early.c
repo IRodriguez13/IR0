@@ -12,6 +12,7 @@
 
 #include <arch/common/arch_portable.h>
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 #define SWITCH_STACK_SIZE 4096
 
@@ -23,13 +24,13 @@ void arm64_cpu_switch_mm(struct arm64_cpu_ctx *prev, struct arm64_cpu_ctx *next,
 			 uint64_t next_ttbr)
 {
 	if (next_ttbr)
-		arch_mm_activate((uintptr_t)next_ttbr);
+		mm_activate((uintptr_t)next_ttbr);
 	arm64_cpu_switch(prev, next);
 }
 
 static void switch_task_b(void)
 {
-	pl011_puts("ARM64_SWITCH_B\n");
+	ir0_boot_smoke("ARM64_SWITCH_B");
 	arm64_cpu_switch(&g_ctx_b, &g_ctx_a);
 	/* Should not return: A prints SWITCH_OK and continues boot. */
 	for (;;)
@@ -60,5 +61,5 @@ void arm64_switch_early_smoke(void)
 	g_ctx_b.x30 = (uint64_t)(uintptr_t)switch_task_b;
 
 	arm64_cpu_switch(&g_ctx_a, &g_ctx_b);
-	pl011_puts("ARM64_SWITCH_OK\n");
+	ir0_boot_smoke("ARM64_SWITCH_OK");
 }

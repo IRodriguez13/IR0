@@ -15,6 +15,7 @@
 #include <arch/common/arch_portable.h>
 #include <sched/task.h>
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 extern void switch_context_arm64(task_t *prev, task_t *next);
 
@@ -47,7 +48,7 @@ static void process_task_b(void)
 	probe = (volatile uint32_t *)(uintptr_t)0x40000000UL;
 	(void)*probe;
 
-	pl011_puts("ARM64_PROCESS_SWITCH_OK\n");
+	ir0_boot_smoke("ARM64_PROCESS_SWITCH_OK");
 	arm64_cpu_switch_mm(&g_proc_ctx_b, &g_proc_ctx_a, g_ttbr_a);
 
 	for (;;)
@@ -66,7 +67,7 @@ static void fork_child_entry(void)
 	probe = (volatile uint32_t *)(uintptr_t)0x40000000UL;
 	(void)*probe;
 
-	pl011_puts("ARM64_FORK_CHILD_OK\n");
+	ir0_boot_smoke("ARM64_FORK_CHILD_OK");
 	arm64_cpu_switch_mm(&g_fork_child, &g_fork_parent, g_ttbr_a);
 
 	for (;;)
@@ -76,7 +77,7 @@ static void fork_child_entry(void)
 static void exec_new_entry(void)
 {
 	g_exec_ran = 1;
-	pl011_puts("ARM64_EXEC_OK\n");
+	ir0_boot_smoke("ARM64_EXEC_OK");
 	arm64_cpu_switch_mm(&g_exec_task, &g_exec_host, g_ttbr_a);
 
 	for (;;)
@@ -119,11 +120,11 @@ int arm64_process_ttbr_smoke(void)
 	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr));
 	if (g_proc_fail || (ttbr & ~0x1UL) != (g_ttbr_a & ~0x1UL))
 	{
-		pl011_puts("ARM64_PROCESS_TTBR_FAIL\n");
+		ir0_boot_smoke("ARM64_PROCESS_TTBR_FAIL");
 		return -1;
 	}
 
-	pl011_puts("ARM64_PROCESS_TTBR_OK\n");
+	ir0_boot_smoke("ARM64_PROCESS_TTBR_OK");
 	return 0;
 }
 
@@ -150,10 +151,10 @@ int arm64_fork_exec_smoke(void)
 	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr));
 	if (g_fork_fail || (ttbr & ~0x1UL) != (g_ttbr_a & ~0x1UL))
 	{
-		pl011_puts("ARM64_FORK_FAIL\n");
+		ir0_boot_smoke("ARM64_FORK_FAIL");
 		return -1;
 	}
-	pl011_puts("ARM64_FORK_OK\n");
+	ir0_boot_smoke("ARM64_FORK_OK");
 
 	/*
 	 * Exec-like: replace entry/sp of a task on the same TTBR (A), switch
@@ -169,7 +170,7 @@ int arm64_fork_exec_smoke(void)
 
 	if (!g_exec_ran)
 	{
-		pl011_puts("ARM64_EXEC_FAIL\n");
+		ir0_boot_smoke("ARM64_EXEC_FAIL");
 		return -1;
 	}
 
@@ -189,7 +190,7 @@ static void process_t_task_b(void)
 	if ((ttbr & ~0x1UL) != (g_ttbr_b & ~0x1UL))
 		g_pt_fail = 1;
 
-	pl011_puts("ARM64_PROCESS_T_SWITCH_OK\n");
+	ir0_boot_smoke("ARM64_PROCESS_T_SWITCH_OK");
 	switch_context_arm64(&g_pt_task_b, &g_pt_task_a);
 
 	for (;;)
@@ -231,7 +232,7 @@ int arm64_process_t_switch_smoke(void)
 	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr));
 	if (g_pt_fail || (ttbr & ~0x1UL) != (g_ttbr_a & ~0x1UL))
 	{
-		pl011_puts("ARM64_PROCESS_T_SWITCH_FAIL\n");
+		ir0_boot_smoke("ARM64_PROCESS_T_SWITCH_FAIL");
 		return -1;
 	}
 
