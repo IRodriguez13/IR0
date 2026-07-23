@@ -20,6 +20,7 @@
 #include <ir0/arch_port.h>
 
 extern void kernel_idle_poll(void);
+extern void kernel_idle_poll_nosched(void);
 extern process_t *process_list;
 extern process_t *current_process;
 
@@ -99,12 +100,17 @@ static void ir0_clock_wait_idle_step(void)
 	unsigned int i;
 
 	t0 = clock_get_uptime_milliseconds();
-	arch_enable_interrupts();
+	enable_interrupts();
 
 	for (i = 0; i < 32; i++)
 	{
-		arch_cpu_idle();
-		kernel_idle_poll();
+		cpu_idle();
+		/*
+		 * Nosched wakes only — block_until / service_runqueue issue one
+		 * sched_schedule_next per loop. Nested schedule from
+		 * poll_wake_check/stdin_wake_check caused Class B on desk.
+		 */
+		kernel_idle_poll_nosched();
 		if (clock_get_uptime_milliseconds() != t0)
 			break;
 	}
@@ -145,12 +151,11 @@ int ir0_clock_wait_block_until(uint64_t deadline_ms)
 		ir0_clock_wait_idle_step();
 		if (ir0_clock_should_yield_runqueue(proc))
 			sched_schedule_next();
-		kernel_idle_poll();
 
 		if (proc->state != PROCESS_BLOCKED)
 			break;
 		if (sched_count_runnable() == 0)
-			arch_cpu_idle();
+			cpu_idle();
 	}
 
 	ir0_clock_wait_disarm(proc);

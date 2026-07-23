@@ -21,6 +21,13 @@
 
 static klog_level_t g_klog_level = KLOG_LEVEL_INFO;
 static klog_protocol_mirror_fn g_protocol_mirror;
+/* Suppress serial until BOOT banner (see klog_boot_hold in kmain). */
+static int g_boot_hold = 1;
+
+void klog_boot_hold(int on)
+{
+	g_boot_hold = on ? 1 : 0;
+}
 
 static const char *klog_level_string(klog_level_t level)
 {
@@ -48,7 +55,7 @@ static void klog_write_raw(const char *str)
 	 * duplicated every line on -serial stdio smokes. Screen output stays on
 	 * console_puts/typewriter; use kprintf only as the log channel.
 	 */
-	if (!str)
+	if (!str || g_boot_hold)
 		return;
 	serial_print(str);
 }
