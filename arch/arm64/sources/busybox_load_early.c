@@ -14,6 +14,7 @@
 #include "syscall_early.h"
 
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 #define EI_NIDENT 16
 #define ET_EXEC 2
@@ -245,9 +246,9 @@ void arm64_after_busybox(void)
 	if (g_bb_stage == 0)
 	{
 		if (g_bb_wrote)
-			pl011_puts("ARM64_BUSYBOX_EL0_OK\n");
+			ir0_boot_smoke("ARM64_BUSYBOX_EL0_OK");
 		else
-			pl011_puts("ARM64_BUSYBOX_EL0_FAIL\n");
+			ir0_boot_smoke("ARM64_BUSYBOX_EL0_FAIL");
 		g_bb_stage = 1;
 		if (arm64_busybox_init_el0() != 0)
 			arm64_enter_el0();
@@ -255,9 +256,9 @@ void arm64_after_busybox(void)
 	}
 
 	if (g_bb_init_wrote)
-		pl011_puts("ARM64_BUSYBOX_INIT_OK\n");
+		ir0_boot_smoke("ARM64_BUSYBOX_INIT_OK");
 	else
-		pl011_puts("ARM64_BUSYBOX_INIT_FAIL\n");
+		ir0_boot_smoke("ARM64_BUSYBOX_INIT_FAIL");
 	arm64_enter_el0();
 }
 
@@ -270,9 +271,9 @@ static void enter_busybox_el0(uint64_t entry, int init_stage)
 	g_bb_mode = 1;
 	setup_busybox_argv_stack(BB_STACK_TOP, init_stage);
 	if (init_stage)
-		pl011_puts("ARM64_BUSYBOX_INIT_EL0_DROP\n");
+		ir0_boot_smoke("ARM64_BUSYBOX_INIT_EL0_DROP");
 	else
-		pl011_puts("ARM64_BUSYBOX_EL0_DROP\n");
+		ir0_boot_smoke("ARM64_BUSYBOX_EL0_DROP");
 
 	__asm__ volatile(
 		"msr	elr_el1, %0\n"
@@ -291,7 +292,7 @@ int arm64_busybox_init_el0(void)
 		return -1;
 	if (arm64_rootfs_smoke_init() != 0)
 	{
-		pl011_puts("ARM64_BUSYBOX_INIT_FAIL\n");
+		ir0_boot_smoke("ARM64_BUSYBOX_INIT_FAIL");
 		return -1;
 	}
 	g_bb_init_wrote = 0;
@@ -318,7 +319,7 @@ int arm64_busybox_el0(void)
 
 		if (arm64_mmu_map_user_page_flags(page, 0) != 0)
 		{
-			pl011_puts("ARM64_BUSYBOX_LOAD_FAIL\n");
+			ir0_boot_smoke("ARM64_BUSYBOX_LOAD_FAIL");
 			return -1;
 		}
 		zero_bytes((void *)(uintptr_t)page, PAGE_SIZE);
@@ -326,11 +327,11 @@ int arm64_busybox_el0(void)
 
 	if (load_elf(blob, blob_len, &entry) != 0)
 	{
-		pl011_puts("ARM64_BUSYBOX_LOAD_FAIL\n");
+		ir0_boot_smoke("ARM64_BUSYBOX_LOAD_FAIL");
 		return -1;
 	}
 
-	pl011_puts("ARM64_BUSYBOX_LOAD_OK\n");
+	ir0_boot_smoke("ARM64_BUSYBOX_LOAD_OK");
 	g_bb_entry = entry;
 	enter_busybox_el0(entry, 0);
 	return 0;

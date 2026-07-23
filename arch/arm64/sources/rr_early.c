@@ -5,6 +5,10 @@
  *
  * File: rr_early.c
  * Description: Freestanding RR queue smoke via rr_add_process + switch_arm64.
+ *
+ * Bring-up exception (not production): may call rr_add_process and
+ * switch_context_arm64 directly. Production backends must use
+ * <ir0/sched.h> / sched_context_switch_to → switch_to() only.
  */
 
 #include "rr_early.h"
@@ -18,6 +22,7 @@
 #include <sched/rr_sched.h>
 #include <sched/task.h>
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 extern void switch_context_arm64(task_t *prev, task_t *next);
 
@@ -70,7 +75,7 @@ static void rr_task_b(void)
 	if ((ttbr & ~0x1UL) != (g_rr_ttbr_b & ~0x1UL))
 		g_rr_fail = 1;
 	g_rr_ran = 1;
-	pl011_puts("ARM64_RR_SCHED_OK\n");
+	ir0_boot_smoke("ARM64_RR_SCHED_OK");
 	switch_context_arm64(&g_rr_pb.task, &g_rr_pa.task);
 
 	for (;;)
@@ -86,7 +91,7 @@ static void rr_tick_task_b(void)
 	if (!g_rr_tick_seen)
 	{
 		g_rr_tick_seen = 1;
-		pl011_puts("ARM64_RR_TICK_OK\n");
+		ir0_boot_smoke("ARM64_RR_TICK_OK");
 	}
 
 	g_rr_tick_active = 0;
@@ -112,9 +117,9 @@ static void rr_tick_task_a(void)
 			__asm__ volatile("wfi" ::: "memory");
 	}
 
-	irqf = arch_irq_save();
+	irqf = irq_save();
 	arch_timer_oneshot_arm(RR_TICK_ONESHOT_TICKS);
-	arch_irq_restore(irqf & ~(1UL << 7));
+	irq_restore(irqf & ~(1UL << 7));
 
 	for (spins = 0; spins < RR_TICK_POLL_SPINS && !g_rr_tick_seen; spins++)
 		__asm__ volatile("wfi" ::: "memory");
@@ -160,7 +165,7 @@ static int arm64_rr_tick_smoke(void)
 
 	if (!g_rr_tick_seen)
 	{
-		pl011_puts("ARM64_RR_TICK_FAIL\n");
+		ir0_boot_smoke("ARM64_RR_TICK_FAIL");
 		return -1;
 	}
 	return 0;
@@ -199,7 +204,7 @@ int arm64_rr_sched_smoke(void)
 	n = rr_count_runnable();
 	if (n < 2)
 	{
-		pl011_puts("ARM64_RR_SCHED_FAIL\n");
+		ir0_boot_smoke("ARM64_RR_SCHED_FAIL");
 		return -1;
 	}
 
@@ -209,7 +214,7 @@ int arm64_rr_sched_smoke(void)
 
 	if (g_rr_fail || !g_rr_ran)
 	{
-		pl011_puts("ARM64_RR_SCHED_FAIL\n");
+		ir0_boot_smoke("ARM64_RR_SCHED_FAIL");
 		return -1;
 	}
 

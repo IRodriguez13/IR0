@@ -24,6 +24,7 @@
 #include <sched/rr_sched.h>
 
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 #define EINVAL 22
 
@@ -69,7 +70,7 @@ static void psci_hvc(uint64_t fn)
 
 void arm64_psci_system_off(void)
 {
-	pl011_puts("ARM64_PSCI_OFF\n");
+	ir0_boot_smoke("ARM64_PSCI_OFF");
 	psci_hvc(PSCI_0_2_FN_SYSTEM_OFF);
 	for (;;)
 	{
@@ -112,11 +113,11 @@ void arm64_exc_sync_el1(void)
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
 	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) == ESR_EC_SVC64)
 	{
-		pl011_puts("ARM64_VBAR_OK\n");
+		ir0_boot_smoke("ARM64_VBAR_OK");
 	}
 	else
 	{
-		pl011_puts("ARM64_SYNC_OTHER\n");
+		ir0_boot_smoke("ARM64_SYNC_OTHER");
 	}
 }
 
@@ -132,7 +133,7 @@ void arm64_exc_irq_el1(void)
 		if (!g_timer_irq_seen)
 		{
 			g_timer_irq_seen = 1;
-			pl011_puts("ARM64_TIMER_IRQ_OK\n");
+			ir0_boot_smoke("ARM64_TIMER_IRQ_OK");
 		}
 
 		if (arm64_rr_tick_sched_active())
@@ -161,7 +162,7 @@ void arm64_exc_sync_lower(uint64_t *frame)
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
 	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) != ESR_EC_SVC64)
 	{
-		pl011_puts("ARM64_EL0_SYNC_OTHER\n");
+		ir0_boot_smoke("ARM64_EL0_SYNC_OTHER");
 		leave = 1;
 	}
 	else
@@ -169,7 +170,7 @@ void arm64_exc_sync_lower(uint64_t *frame)
 		if (!g_el0_svc_tagged)
 		{
 			g_el0_svc_tagged = 1;
-			pl011_puts("ARM64_EL0_SVC_OK\n");
+			ir0_boot_smoke("ARM64_EL0_SVC_OK");
 		}
 
 		/* frame: x0@0 … x8@8 (pairs of uint64_t). */
@@ -198,7 +199,7 @@ void arm64_exc_sync_lower(uint64_t *frame)
 
 void arm64_after_el0(void)
 {
-	pl011_puts("ARM64_EL0_RET_OK\n");
+	ir0_boot_smoke("ARM64_EL0_RET_OK");
 	arm64_psci_system_off();
 }
 
@@ -208,7 +209,7 @@ void arm64_enter_el0(void)
 	uint64_t elr = (uint64_t)(uintptr_t)el0_entry;
 	uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL0T;
 
-	pl011_puts("ARM64_EL0_DROP\n");
+	ir0_boot_smoke("ARM64_EL0_DROP");
 
 	__asm__ volatile(
 		"msr	sp_el0, %0\n"

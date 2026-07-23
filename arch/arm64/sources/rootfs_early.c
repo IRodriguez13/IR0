@@ -17,6 +17,7 @@
 #include "pl011.h"
 
 #include <stdint.h>
+#include <ir0/boot_log.h>
 
 #define AT_FDCWD (-100)
 #define EBADF   9
@@ -242,7 +243,7 @@ void arm64_rootfs_early_init(void)
 		g_slots[i].pos = 0;
 	}
 	g_rootfs_ready = 1;
-	pl011_puts("ARM64_ROOTFS_OK\n");
+	ir0_boot_smoke("ARM64_ROOTFS_OK");
 }
 
 int arm64_rootfs_ready(void)

@@ -43,7 +43,7 @@ GRUB → boot_x64.asm
               → console_backend_init
               → pmm_init (32–48 MiB)
               → logging_init + ir0_driver_registry_init + serial_init
-              → klog_boot_hold(0) + banner BOOT (primera línea framed en serial)
+              → ir0_boot_serial_ready() + banner BOOT (primera línea framed; toda ISA)
               → init_all_drivers()
               → vfs_init_root()  → mount / o fallback tmpfs
               → process_init + ipc_init + clock_system_init

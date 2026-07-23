@@ -108,8 +108,11 @@ Mermaid source: `Documentation/mandocs/diagrams/boot.mmd`
 3. `sti` runs only after IDT/PIC and syscall tables are initialized.
 4. If `sched_schedule_next` returns after init handoff, `kmain` panics.
 5. No separate kernel higher-half VA; boot identity map serves kernel and early user.
-6. Framed klog on serial starts with the BOOT banner (`klog_boot_hold`); earlier
-   registry/logging messages are suppressed, not reordered after the banner.
+6. Framed klog on serial starts with the BOOT banner (`ir0_boot_serial_ready` /
+   `klog_boot_hold`); earlier registry/logging messages are suppressed, not
+   reordered after the banner. The same contract applies on every ISA
+   (`includes/ir0/boot_log.h`); ARM64 early bring-up uses the freestanding path
+   (`IR0_FREESTANDING_BOOT`) with identical `[ts] [LEVEL] [COMP]` lines.
 
 ## 9. Debugging tips
 

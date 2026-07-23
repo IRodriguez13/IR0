@@ -128,6 +128,9 @@ Porting checklist:
 3. Scaffold files listed in guard must exist for arm64 matrix builds.
 4. Production musl/ISO smokes target x86-64 only today.
 5. `arm64_cpu_switch_mm`: activate `next_ttbr` when non-zero and ≠ current TTBR0.
+6. **Boot serial contract is ISA-agnostic:** after UART init, `ir0_boot_serial_ready()`
+   emits the same `[BOOT] IR0 Kernel v… Boot routine` banner first; ISA detail uses
+   COMP `ARCH`, stage tags COMP `SMOKE` (`includes/ir0/boot_log.h`).
 
 ## 9. Debugging tips
 
@@ -135,7 +138,8 @@ Porting checklist:
 - `make arch-guard` — facade violations before merge.
 - `get_arch_name()` / `/proc/cpuinfo` for runtime ISA string.
 - arm64 boot: `make smoke-arm64` / `smoke-arm64-syscall` (requires
-  `ARM64_PROCESS_TTBR_OK` among other tags).
+  `ARM64_PROCESS_TTBR_OK` among other tags). First framed line must be the
+  portable BOOT banner (`ir0_boot_serial_ready`), then `ARM64_*` smoke tags.
 - arm64 F7b pack: `make smoke-arm64-port` / `smoke-arm64-gic`.
 - arm64 portable compile: `make arm64-portable-compile` (curated objs — **not** `ALL_OBJS`).
 - Probe: `make arm64-all-objs-probe` (MEMORY + KERNEL sample compile-only).

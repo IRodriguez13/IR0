@@ -8,8 +8,9 @@
  */
 
 #include "pl011.h"
+#include <ir0/boot_log.h>
 
 void arm64_all_objs_mark(void)
 {
-	pl011_puts("ARM64_ALL_OBJS_LINK_OK\n");
+	ir0_boot_smoke("ARM64_ALL_OBJS_LINK_OK");
 }
