@@ -660,7 +660,7 @@ static void scm_rights_dtor(void *entry, size_t sz)
 	{
 		if (sock_stream_is(e->vfs_file))
 			sock_stream_release((struct sock_stream *)e->vfs_file);
-		else
+		else if (!sock_stream_is_slot(e->vfs_file))
 			sock_udp_release((struct sock_udp *)e->vfs_file);
 	}
 	else if (e->is_devfs)
@@ -698,7 +698,9 @@ static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
 		pipe_acquire_end((pipe_t *)dst->vfs_file, dst->pipe_end);
 	else if (dst->is_socket && dst->vfs_file)
 	{
-		if (!sock_stream_is(dst->vfs_file))
+		if (sock_stream_is(dst->vfs_file))
+			sock_stream_acquire((struct sock_stream *)dst->vfs_file);
+		else if (!sock_stream_is_slot(dst->vfs_file))
 			sock_udp_acquire((struct sock_udp *)dst->vfs_file);
 	}
 	else if (dst->is_devfs)
