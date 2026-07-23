@@ -1,4 +1,9 @@
-# IR0 KERNEL MAKEFILE - MULTI-ARCH SCAFFOLD (x86-64 + ARM64)
+# IR0 KERNEL MAKEFILE — MULTI-ARCH SCAFFOLD (x86-64 + ARM64)
+#
+# Sacred entry point for all developers (including the maintainer).
+# Keep this file as an index: aliases, help, wiring, and explicit includes.
+# Product/profile recipes live under scripts/make/<domain>.mk.
+#
 
 KERNEL_ROOT := $(CURDIR)
 
@@ -1597,6 +1602,9 @@ FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
+-include scripts/make/profiles.mk
+-include scripts/make/docs.mk
+-include scripts/make/pre-submit.mk
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
 MUSL_CC_AARCH64 ?= $(shell \
 	command -v aarch64-linux-musl-gcc 2>/dev/null || \
@@ -5493,7 +5501,7 @@ help:
 
 # DEPENDENCY TEST
 
-deptest:
+deptest check-env:
 	@$(KERNEL_ROOT)/scripts/deptest.sh
 
 # UNIBUILD - ISOLATED FILE COMPILATION

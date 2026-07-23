@@ -42,7 +42,8 @@ GRUB → boot_x64.asm
               → [CONFIG_ENABLE_VBE] video_backend_init_from_multiboot
               → console_backend_init
               → pmm_init (32–48 MiB)
-              → ir0_driver_registry_init + serial_init
+              → logging_init + ir0_driver_registry_init + serial_init
+              → ir0_boot_serial_ready() + banner BOOT (primera línea framed; toda ISA)
               → init_all_drivers()
               → vfs_init_root()  → mount / o fallback tmpfs
               → process_init + ipc_init + clock_system_init
@@ -111,6 +112,10 @@ Fuente Mermaid: `Documentation/mandocs/diagrams/boot.mmd`
 
 ## 9. Consejos de depuración
 
+Nuevos contribuidores: `make man TOPIC=onboarding`. Boot log opcional en el host:
+`make run-bootlog` → `build/hostshare/ir0-boot.log` con `BOOT_LOG_HOSTSHARE=y`
+y QEMU `-virtfs` (`BOOT_LOG_HOSTSHARE_OK` / `_SKIP`).
+
 Tags serial: `[ARCH]`, COMP `BOOT` vía klog, `[DRIVERS]`, `SERIAL: kmain: Loading userspace init`,
 `[ts] [INFO] [FASE…] CLASSIFY ROOTFS_LAYOUT_OK` (sin dialecto `[COMP][CLASSIFY]`).
 
@@ -120,12 +125,14 @@ Tags serial: `[ARCH]`, COMP `BOOT` vía klog, `[DRIVERS]`, `SERIAL: kmain: Loadi
 | Fallo montaje raíz | `block_dev_is_present(CONFIG_ROOT_BLOCK_DEVICE)`; fallback tmpfs |
 | GUI en blanco | `[BOOT] vbe_fail_reason=` (1=mb_null, 2=no_fb, 3=bad_dims, 4=map_fail) |
 | Init no encontrado | Imagen MINIX sin `/sbin/init`; usar scripts inject |
+| Sin `ir0-boot.log` en host | Hace falta `BOOT_LOG_HOSTSHARE=y` + `-virtfs`; `make help-bootlog` |
 
 Build: `make kernel-x64.iso`; userspace: `make kernel-x64-userspace.iso`.
 
 ## 10. Hoja de ruta futura
 
-- Existe stub de arranque ARM64 pero no está listo para producción (`arch/arm64/sources/boot_stub.c`).
+- Arranque temprano ARM64 usa `ir0_boot_*` portable + `arm64_board` (`qemu-virt` /
+  `rpi4` / stub `rpi5`). UART RPi4 min: `make smoke-arm64-rpi4-boot`. No listo para producción.
 - Arranque SMP/APIC-first no es primario (`CONFIG_ENABLE_SMP=0`).
 - Mapa higher-half del kernel no implementado (solo mapa bajo de identidad).
 - Arranque directo UEFI no está en el árbol (solo ruta GRUB Multiboot).

@@ -11,10 +11,12 @@
 
 ## 1. Visión general
 
-IR0 ofrece dos mecanismos IPC: **canales de mensajes en kernel** vía ioctl de
-`/dev/ipc` y **tuberías** en memoria vía syscalls `pipe`/`pipe2`. Las tuberías
-son el path POSIX de producción para redirección de shell. El IPC por canales es
-experimental con limitaciones conocidas en colas de wake documentadas abajo.
+IR0 ofrece tres familias IPC en bring-up: **canales de mensajes en kernel** vía
+ioctl de `/dev/ipc`, **tuberías** en memoria vía `pipe`/`pipe2`, y sockets
+stream **AF_UNIX** (`socket` / `socketpair` / `bind` / `connect` / `send`/`recv`)
+en `kernel/sock_stream.c` + `socket_syscalls.c`. Las tuberías siguen siendo el
+path POSIX principal para redirección de shell. El IPC por canales es
+experimental con limitaciones de wake documentadas abajo.
 
 ## 2. Arquitectura interna
 
@@ -22,7 +24,8 @@ experimental con limitaciones conocidas en colas de wake documentadas abajo.
 |-----------|---------|-----|
 | Canales | `kernel/ipc.c` | `ipc_channel_*`, ring buffer 4096 bytes |
 | Tuberías | `includes/ir0/pipe.c` | `pipe_create`, `pipe_read/write`, refcounts |
-| Syscalls | `kernel/syscalls.c` | `sys_pipe`, `sys_pipe2`, `pipe_wake_*` |
+| AF_UNIX stream | `kernel/sock_stream.c`, `socket_syscalls.c` | socket/socketpair/bind/connect/send/recv |
+| Syscalls | `io_syscalls.c` / `socket_syscalls.c` | `sys_pipe`, `sys_pipe2`, familia socket |
 | devfs | `fs/devfs.c` | `/dev/ipc` device_id 13, ioctl 0x5001–0x5003 |
 
 Arranque: `ipc_init()` en `kmain` tras `process_init()`.
@@ -110,6 +113,6 @@ Mapa ASCII:
 - **Wake de lectura en canal IPC al escribir** — read_queue puede no despertar al escribir productor (deuda); productor/consumidor bloqueante en `/dev/ipc` poco fiable.
 - `semaphore_down` no implementado por completo para semáforos de canal.
 - Aplicar tope `IPC_MAX_CHANNELS`.
-- Unix domain sockets — ausentes (syscalls socket ENOSYS).
+- AF_UNIX: profundizar credenciales/`SCM_RIGHTS`; datagram aún ausente.
 
-Ver también: `IR0-process`, `IR0-syscalls`.
+Ver también: `IR0-process`, `IR0-syscalls`, `IR0-net`.

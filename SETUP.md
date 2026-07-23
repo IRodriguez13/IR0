@@ -6,54 +6,84 @@ For architecture and capability boundaries, see [README.md](README.md).
 
 ## Prerequisites
 
-### Required (kernel ISO + QEMU)
+### Required for `make ir0` / `PROFILE=desktop` (kernel ISO + QEMU)
 
 | Tool | Purpose |
 |------|---------|
-| `gcc`, `ld` | Kernel C compilation and ELF link |
+| `gcc`, `g++`, `ld` | Kernel C/C++ compile and ELF link |
 | `nasm` | x86-64 assembly |
 | `make` | Build orchestration |
-| `python3` | Kconfig helpers, MINIX disk injection |
+| `python3` (+ curses) | menuconfig / Kconfig helpers |
+| `rustc` + `cargo` + nightly `rust-src` | Rust drivers in default kernel link |
+| `grub-mkrescue` + `xorriso` | ISO generation (`kernel-x64.iso`) |
 | `qemu-system-x86_64` | Execution |
-| `grub-mkrescue` | ISO generation |
 
 Debian/Ubuntu example:
 
 ```bash
-sudo apt install build-essential nasm qemu-system-x86 grub-pc-bin python3
+sudo apt install build-essential nasm qemu-system-x86 grub-pc-bin xorriso python3
+# Rust (rustup): https://rustup.rs
+rustup toolchain install nightly
+rustup component add rust-src --toolchain nightly
 ```
 
-### Required for static userspace (BusyBox, irinit, Doom)
+### Required for static userspace (`PROFILE=userspace`)
 
 | Tool | Purpose |
 |------|---------|
-| `x86_64-linux-musl-gcc` or `musl-gcc` | Static musl binaries (x86-64 userspace) |
-| `aarch64-linux-musl-gcc` (optional) | Cross musl for aarch64 hello / future ARM userspace |
+| `x86_64-linux-musl-gcc` or `musl-gcc` | Static musl binaries (BusyBox, irinit, …) |
 
 ```bash
 sudo apt install musl-tools
 # or set MUSL_CC=/path/to/x86_64-linux-musl-gcc
-
-# aarch64 musl cross (repo-local under toolchain/, gitignored binaries):
-./scripts/setup_musl_aarch64.sh
-# or: make setup-musl-aarch64 && make musl-aarch64-hello
-# Override: MUSL_CC_AARCH64=/path/to/aarch64-linux-musl-gcc
 ```
 
-This installs a prebuilt `aarch64-linux-musl` toolchain (default from musl.cc) into
-`toolchain/aarch64-linux-musl/`. It does **not** run IR0 ARM userspace yet — only
-proves the cross compiler can produce a static aarch64 ELF (`make smoke-musl-aarch64-toolchain`).
+### Required for ARM hub/watch (`PROFILE=hub` / `watch`)
 
-### Optional
-
-- `git` — cloning TinyCC during TCC build
-- `sudo` — only if using host-mount disk scripts (`scripts/load_init.sh`); not required for `inject_init_minix.py`
-
-Verify tools:
+| Tool | Purpose |
+|------|---------|
+| `aarch64-linux-gnu-gcc` / `ld` | Freestanding ARM64 images |
+| `qemu-system-aarch64` | ARM smokes (`raspi4b` optional — smoke SKIPs if missing) |
 
 ```bash
-make deptest
+sudo apt install gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-system-arm
+# aarch64 musl cross (optional hello / future userspace):
+./scripts/setup_musl_aarch64.sh
+# or: make setup-musl-aarch64 && make musl-aarch64-hello
 ```
+
+Verify host tools for the profile you will build (`check-env` is an alias of `deptest`):
+
+```bash
+make check-env                              # desktop-x86_64
+make check-env PROFILE=desktop-x86_64
+make check-env PROFILE=userspace
+make check-env PROFILE=hub-rpi4
+make check-env PROFILE=all
+```
+
+Errors distinguish **required**, **optional**, **unsupported_version**, and
+**present_but_unusable**, with apt/pacman/dnf install hints. Exit 0 only when
+every required check for that profile passed.
+If `.config` is missing: `make defconfig` (or `make ir0_defconfig PROFILE=desktop`).
+
+### Man pages (subsystem docs)
+
+```bash
+make sync-mandocs          # install → ~/.local/share/man (no sudo)
+make man TOPIC=onboarding  # first clone → first bug
+make man TOPIC=boot
+make man TOPIC=multi-arch
+make run-bootlog           # optional: CONFIG_BOOT_LOG_HOSTSHARE → build/hostshare/ir0-boot.log
+make help-bootlog
+```
+
+Interactive / one language: `make mandocs`, `make mandocs-en`, `make mandocs-es`.
+See also `make help-docs`.
+
+**Boot log on the host (opt-in):** Linux-style *consultable* ring dump, not a
+verbose ACPI/PCI wall. Requires QEMU `-virtfs` (wired by `run-bootlog` /
+`smoke-boot-log-hostshare`). Normal `make run` does not need it.
 
 ## First-Time Configuration
 

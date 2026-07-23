@@ -11,10 +11,12 @@
 
 ## 1. Overview
 
-IR0 provides two IPC mechanisms: **kernel message channels** via `/dev/ipc` ioctl
-and in-memory **pipes** via `pipe`/`pipe2` syscalls. Pipes are the production
-POSIX path for shell redirection. Channel IPC is experimental with known wake
-queue limitations documented below.
+IR0 provides three IPC families used in bring-up: **kernel message channels**
+via `/dev/ipc` ioctl, in-memory **pipes** via `pipe`/`pipe2`, and **AF_UNIX**
+stream sockets (`socket` / `socketpair` / `bind` / `connect` / `send`/`recv`)
+implemented in `kernel/sock_stream.c` + `socket_syscalls.c`. Pipes remain the
+primary POSIX path for shell redirection. Channel IPC is experimental with
+known wake-queue limitations documented below.
 
 ## 2. Internal architecture
 
@@ -22,7 +24,8 @@ queue limitations documented below.
 |-----------|------|-----|
 | Channels | `kernel/ipc.c` | `ipc_channel_*`, ring buffer 4096 bytes |
 | Pipes | `includes/ir0/pipe.c` | `pipe_create`, `pipe_read/write`, refcounts |
-| Syscalls | `kernel/syscalls.c` | `sys_pipe`, `sys_pipe2`, `pipe_wake_*` |
+| AF_UNIX stream | `kernel/sock_stream.c`, `socket_syscalls.c` | socket/socketpair/bind/connect/send/recv |
+| Syscalls | `io_syscalls.c` / `socket_syscalls.c` | `sys_pipe`, `sys_pipe2`, socket family |
 | devfs | `fs/devfs.c` | `/dev/ipc` device_id 13, ioctl 0x5001–0x5003 |
 
 Boot: `ipc_init()` in `kmain` after `process_init()`.
@@ -110,6 +113,6 @@ ASCII:
 - **IPC channel read wake on write** — read_queue may not wake on producer write (debt); blocking `/dev/ipc` producer/consumer unreliable.
 - `semaphore_down` not fully implemented for channel semaphores.
 - Enforce `IPC_MAX_CHANNELS` cap.
-- Unix domain sockets — not present (socket syscalls ENOSYS).
+- AF_UNIX: deepen credentials/`SCM_RIGHTS` edge cases; datagram sockets still absent.
 
-See also: `IR0-process`, `IR0-syscalls`.
+See also: `IR0-process`, `IR0-syscalls`, `IR0-net`.
