@@ -41,7 +41,8 @@ GRUB → boot_x64.asm
               → [CONFIG_ENABLE_VBE] video_backend_init_from_multiboot
               → console_backend_init
               → pmm_init (32–48 MiB)
-              → ir0_driver_registry_init + serial_init
+              → logging_init + ir0_driver_registry_init + serial_init
+              → klog_boot_hold(0) + BOOT banner (first framed serial line)
               → init_all_drivers()
               → vfs_init_root()  → mount / or tmpfs fallback
               → process_init + ipc_init + clock_system_init
@@ -107,6 +108,8 @@ Mermaid source: `Documentation/mandocs/diagrams/boot.mmd`
 3. `sti` runs only after IDT/PIC and syscall tables are initialized.
 4. If `sched_schedule_next` returns after init handoff, `kmain` panics.
 5. No separate kernel higher-half VA; boot identity map serves kernel and early user.
+6. Framed klog on serial starts with the BOOT banner (`klog_boot_hold`); earlier
+   registry/logging messages are suppressed, not reordered after the banner.
 
 ## 9. Debugging tips
 
