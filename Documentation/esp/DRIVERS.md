@@ -37,3 +37,9 @@ IR0 usa un registry central y un bootstrap unificado para drivers core y opciona
 - No hay modelo full de hotplug.
 - La politica prioriza estabilidad de bring-up sobre aislamiento estricto.
 - El perfil de hardware sigue mas orientado a dispositivos legacy.
+
+## Audio (SB16 / Adlib)
+
+- Probe SB16 OK emite `SB16_DSP_OK`. QEMU 8+: `-audiodev none,id=snd0 -device sb16,audiodev=snd0`.
+- Smoke: `make smoke-sb16-probe` (`scripts/make/boot-audio.mk`). Adlib puede quedar ABSENT (no falla el gate).
+- Detalle canónico: [`../DRIVERS.md`](../DRIVERS.md).

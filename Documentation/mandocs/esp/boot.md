@@ -42,7 +42,8 @@ GRUB → boot_x64.asm
               → [CONFIG_ENABLE_VBE] video_backend_init_from_multiboot
               → console_backend_init
               → pmm_init (32–48 MiB)
-              → ir0_driver_registry_init + serial_init
+              → logging_init + ir0_driver_registry_init + serial_init
+              → klog_boot_hold(0) + banner BOOT (primera línea framed en serial)
               → init_all_drivers()
               → vfs_init_root()  → mount / o fallback tmpfs
               → process_init + ipc_init + clock_system_init

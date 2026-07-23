@@ -15,7 +15,9 @@ handle isolated harnesses; everything else flows through the root file.
 | Quality gates | `arch-guard`, `repo-hygiene-guard`, `build-matrix-*`, `health` |
 
 Python scripts under `scripts/` implement logic that would be unreadable in Make; the Makefile
-invokes them with stable target names.
+invokes them with stable target names. Focused smoke fragments live under
+`scripts/make/` (e.g. `boot-audio.mk` → `smoke-sb16-probe`, `class-b.mk` →
+`smoke-class-b-mitigated`) and are `-include`d from the root Makefile.
 
 ## Configuration flow
 
