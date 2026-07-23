@@ -21,6 +21,7 @@
 #include <ir0/logging.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <init.h>
@@ -59,10 +60,10 @@
 #include "kernel.h"
 
 /*
- * kernel_idle_poll - Wake blocked tasks and poll optional subsystems.
- * Shared by the RR idle kernel process and the kmain fallback loop.
+ * kernel_idle_poll_nosched - Same wakes as kernel_idle_poll without scheduling.
+ * Used from clock_wait / blocked syscall loops that own a single yield point.
  */
-void kernel_idle_poll(void)
+void kernel_idle_poll_nosched(void)
 {
 #if CONFIG_ENABLE_NETWORKING
 	net_stack_poll();
@@ -70,12 +71,38 @@ void kernel_idle_poll(void)
 #if CONFIG_ENABLE_BLUETOOTH
 	ir0_bluetooth_poll();
 #endif
-	poll_wake_check();
+	(void)poll_wake_check_nosched();
 	sleep_wake_check();
 	input_kbd_poll_ps2();
-	stdin_wake_check();
+	(void)stdin_wake_check_nosched();
+	pipe_wake_check();
+	(void)ir0_console_take_resched();
+}
+
+/*
+ * kernel_idle_poll - Wake blocked tasks and poll optional subsystems.
+ * Shared by the RR idle kernel process and the kmain fallback loop.
+ */
+void kernel_idle_poll(void)
+{
+	int woke = 0;
+
+#if CONFIG_ENABLE_NETWORKING
+	net_stack_poll();
+#endif
+#if CONFIG_ENABLE_BLUETOOTH
+	ir0_bluetooth_poll();
+#endif
+	if (poll_wake_check_nosched())
+		woke = 1;
+	sleep_wake_check();
+	input_kbd_poll_ps2();
+	if (stdin_wake_check_nosched())
+		woke = 1;
 	pipe_wake_check();
 	if (ir0_console_take_resched())
+		woke = 1;
+	if (woke)
 		sched_schedule_next();
 }
 
@@ -142,7 +169,11 @@ void kmain(uint32_t multiboot_info)
      */
     ir0_driver_registry_init();
     serial_init();
-    /* Serial: framed klog. Screen: VGA/FB only (console_backend_write also hits serial). */
+    /*
+     * Banner must be the first framed klog line on serial (early ARCH/LOGGING/
+     * DriverRegistry chatter is held via klog_boot_hold).
+     */
+    klog_boot_hold(0);
     klog_info("BOOT", "IR0 Kernel v" IR0_VERSION_STRING " Boot routine");
     typewriter_vga_print("IR0 Kernel v" IR0_VERSION_STRING " Boot routine\n", 0x0F);
 
@@ -151,9 +182,29 @@ void kmain(uint32_t multiboot_info)
 
 	if (arch_hypervisor_present() &&
 	    arch_hypervisor_vendor(hv_vendor, sizeof(hv_vendor)) == 0)
-		log_info_fmt("BOOT", "hypervisor present vendor=%s", hv_vendor);
+	{
+		/*
+		 * CPUID 0x40000000 packs 12 chars (ebx|ecx|edx). QEMU TCG uses
+		 * "TCGTCGTCGTCG"; KVM uses "KVMKVMKVM\0\0\0"; Xen "XenVMMXenVMM".
+		 */
+		if (strncmp(hv_vendor, "TCGTCGTCGTCG", 12) == 0)
+			log_info_fmt("BOOT",
+				     "hypervisor present vendor=%s (QEMU TCG)",
+				     hv_vendor);
+		else if (strncmp(hv_vendor, "KVMKVMKVM", 9) == 0)
+			log_info_fmt("BOOT",
+				     "hypervisor present vendor=%s (KVM)",
+				     hv_vendor);
+		else
+			log_info_fmt("BOOT", "hypervisor present vendor=%s",
+				     hv_vendor);
+	}
 	else
-		log_info("BOOT", "hypervisor none (bare metal or undetected)");
+	{
+		log_info("BOOT", "hypervisor none");
+		log_info("BOOT", "IR0 is running on bare metal!");
+		typewriter_vga_print("IR0 is running on bare metal!\n", 0x0A);
+	}
     }
 
     /*

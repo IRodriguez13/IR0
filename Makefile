@@ -226,9 +226,10 @@ else
 QEMU_NET_ALL =
 endif
 
-# Audio: Sound Blaster 16 y Adlib OPL2 (sintaxis moderna QEMU)
-QEMU_AUDIO_SB16 = -device sb16
-QEMU_AUDIO_ADLIB = -device adlib
+# Audio: Sound Blaster 16 + Adlib (QEMU 8+ needs audiodev; ISA on default pc)
+QEMU_AUDIO_DEV = -audiodev none,id=snd0
+QEMU_AUDIO_SB16 = $(QEMU_AUDIO_DEV) -device sb16,audiodev=snd0
+QEMU_AUDIO_ADLIB = -device adlib,audiodev=snd0
 ifneq ($(CONFIG_ENABLE_SOUND),n)
 QEMU_AUDIO_ALL = $(QEMU_AUDIO_SB16) $(QEMU_AUDIO_ADLIB)
 else
@@ -1597,6 +1598,8 @@ FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
+-include scripts/make/boot-audio.mk
+-include scripts/make/class-b.mk
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
 MUSL_CC_AARCH64 ?= $(shell \
 	command -v aarch64-linux-musl-gcc 2>/dev/null || \
