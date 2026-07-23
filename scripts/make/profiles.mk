@@ -78,20 +78,11 @@ image:
 		echo "  IMAGE   desktop-x86_64 → make ir0"; \
 		$(MAKE) ir0; \
 	elif [ "$(PROFILE)" = "hub" ] && [ "$(BOARD)" = "rpi4" ]; then \
-		if [ -f "$(KERNEL_ROOT)/scripts/make/arm64-board.mk" ]; then \
-			echo "  IMAGE   hub-rpi4 → kernel-arm64-rpi4-min.bin (UART/board min; appliance TBD)"; \
-			$(MAKE) kernel-arm64-rpi4-min.bin arm64-rpi4-compile; \
-		else \
-			echo "⊘ hub-rpi4 image: arm64-board.mk not on this branch yet (see origin/dev)"; \
-			echo "  Defconfig applied; full min image lands with ARM board merge."; \
-		fi; \
+		echo "  IMAGE   hub-rpi4 → kernel-arm64-rpi4-min.bin (UART/board min; appliance TBD)"; \
+		$(MAKE) kernel-arm64-rpi4-min.bin arm64-rpi4-compile; \
 	elif [ "$(PROFILE)" = "watch" ] && [ "$(BOARD)" = "rpi5" ]; then \
-		if [ -f "$(KERNEL_ROOT)/scripts/make/arm64-board.mk" ]; then \
-			echo "  IMAGE   watch-rpi5-stub → kernel-arm64-rpi5-min.bin (uart=none stub)"; \
-			$(MAKE) kernel-arm64-rpi5-min.bin arm64-rpi5-compile; \
-		else \
-			echo "⊘ watch-rpi5-stub image: arm64-board.mk not on this branch yet (see origin/dev)"; \
-		fi; \
+		echo "  IMAGE   watch-rpi5-stub → kernel-arm64-rpi5-min.bin (uart=none stub)"; \
+		$(MAKE) kernel-arm64-rpi5-min.bin arm64-rpi5-compile; \
 	else \
 		echo "✗ image: unsupported PROFILE=$(PROFILE) BOARD=$(BOARD)"; \
 		echo "  run: make help-profiles"; \

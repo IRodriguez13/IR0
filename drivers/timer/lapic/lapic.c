@@ -11,6 +11,7 @@
  * Description: IR0 kernel source/header file
  */
 
+#include <ir0/cpu.h>
 #include "lapic.h"
 #include <vga.h>
 #include <ir0/oops.h>
@@ -31,7 +32,7 @@ static int lapic_cpuid_has_apic(void)
 {
     uint32_t eax, ebx, ecx, edx;
 
-    __asm__ volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
+    cpuid(1, &eax, &ebx, &ecx, &edx);
     return (edx & (1U << 9)) != 0;
 }
 
@@ -47,12 +48,9 @@ static void lapic_probe_mmio_base(void)
     }
 
     {
-        uint32_t lo, hi;
-
-        __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(MSR_IA32_APIC_BASE));
+        uint64_t msr = rdmsr(MSR_IA32_APIC_BASE);
         /* Bits 12:35 of the MSR hold the page-aligned physical base */
-        lapic_mmio_base = (uintptr_t)(((uint64_t)(hi & 0x0FU) << 32) |
-                                      ((uint64_t)lo & 0xFFFFF000ULL));
+        lapic_mmio_base = (uintptr_t)(msr & 0xFFFFFFFFFFFFF000ULL);
     }
 }
 

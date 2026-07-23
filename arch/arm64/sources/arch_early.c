@@ -11,7 +11,7 @@
  * Description: ARM64 early init hooks.
  */
 
-void arch_early_init_arm64(void)
+void early_init_arm64(void)
 {
     /* Stub: board/SoC-specific EL and MMU setup is implemented during bring-up. */
 }

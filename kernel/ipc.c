@@ -43,12 +43,12 @@ static ipc_channel_t *ipc_channel_find_locked(uint32_t id)
 
 static inline uint64_t ipc_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void ipc_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 static bool wait_queue_contains(wait_queue_t *wq, process_t *proc)
@@ -461,11 +461,8 @@ static void ipc_lock(ipc_channel_t *channel)
 {
     if (!channel)
         return;
-    while (__sync_lock_test_and_set(&channel->lock, 1)) {
-#if defined(__x86_64__) || defined(__i386__)
-        __asm__ volatile("pause");
-#endif
-    }
+    while (__sync_lock_test_and_set(&channel->lock, 1))
+        cpu_relax();
 }
 
 static void ipc_unlock(ipc_channel_t *channel)

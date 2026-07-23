@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/sock_stream.h>
+#include <ir0/socket.h>
 #include <ir0/types.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
@@ -35,6 +36,7 @@ enum ss_state
 struct sock_stream
 {
 	int in_use;
+	int fd_refs; /* close/fork: free slot only when last fd drops */
 	int family;
 	enum ss_state state;
 	char path[SS_PATH];
@@ -50,7 +52,7 @@ struct sock_stream
 	uint8_t wire_tcp;
 	uint8_t shut_rd;
 	uint8_t shut_wr;
-	uint8_t _pad;
+	uint8_t reuseaddr;
 	uint16_t wire_local_port;
 	uint32_t wire_peer_ip;
 	uint16_t wire_peer_port;
@@ -150,7 +152,12 @@ struct sock_stream *sock_stream_get_peer(struct sock_stream *s)
 
 int sock_stream_poll_readable(const struct sock_stream *s)
 {
-	if (!s || s->state != SS_CONNECTED)
+	if (!s)
+		return 0;
+	/* Pending AF_UNIX/TCP-loopback accept queue (single slot via listener->peer). */
+	if (s->state == SS_LISTEN && s->peer && s->peer->state == SS_CONNECTED)
+		return 1;
+	if (s->state != SS_CONNECTED)
 		return 0;
 	if (s->rights_n > 0)
 		return 1;
@@ -190,6 +197,26 @@ int sock_stream_is(const void *ptr)
 	return s && s->magic == SS_MAGIC && s->in_use;
 }
 
+int sock_stream_is_slot(const void *ptr)
+{
+	uintptr_t base = (uintptr_t)&g_socks[0];
+	uintptr_t end = (uintptr_t)&g_socks[SS_MAX];
+	uintptr_t p = (uintptr_t)ptr;
+
+	if (p < base || p >= end)
+		return 0;
+	if (((p - base) % sizeof(g_socks[0])) != 0)
+		return 0;
+	return 1;
+}
+
+void sock_stream_acquire(struct sock_stream *s)
+{
+	if (!s || !s->in_use || s->magic != SS_MAGIC)
+		return;
+	s->fd_refs++;
+}
+
 struct sock_stream *sock_stream_create(int family)
 {
 	int i;
@@ -203,6 +230,7 @@ struct sock_stream *sock_stream_create(int family)
 		{
 			memset(&g_socks[i], 0, sizeof(g_socks[i]));
 			g_socks[i].in_use = 1;
+			g_socks[i].fd_refs = 1;
 			g_socks[i].family = family;
 			g_socks[i].magic = SS_MAGIC;
 			g_socks[i].state = SS_IDLE;
@@ -216,6 +244,12 @@ void sock_stream_release(struct sock_stream *s)
 {
 	if (!s || !s->in_use)
 		return;
+	if (s->fd_refs > 1)
+	{
+		s->fd_refs--;
+		return;
+	}
+	s->fd_refs = 0;
 #if CONFIG_ENABLE_NETWORKING
 	if (s->family == IR0_AF_INET && s->state == SS_LISTEN && s->port != 0)
 		tcp_wire_listen_unregister(s->port);
@@ -263,7 +297,21 @@ int sock_stream_bind_unix_n(struct sock_stream *s, const char *path, size_t path
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_UNIX &&
 		    g_socks[i].state != SS_IDLE &&
 		    unix_name_equal(&g_socks[i], path, path_len, is_abstract))
+		{
+			/*
+			 * SO_REUSEADDR MVP: steal name from a peer that is only
+			 * BOUND (not LISTEN/CONNECTED).
+			 */
+			if (s->reuseaddr && g_socks[i].state == SS_BOUND &&
+			    &g_socks[i] != s)
+			{
+				g_socks[i].path_len = 0;
+				g_socks[i].path[0] = '\0';
+				g_socks[i].is_abstract = 0;
+				continue;
+			}
 			return -EADDRINUSE;
+		}
 	}
 	memcpy(s->path, path, path_len);
 	s->path[path_len] = '\0';
@@ -387,12 +435,21 @@ int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t p
 	acc = sock_stream_create(IR0_AF_UNIX);
 	if (!acc)
 		return -ENOMEM;
+	/* Accepted endpoint inherits listener bind name (Linux getsockname/peer). */
+	if (lst->path_len > 0 && lst->path_len < SS_PATH)
+	{
+		memcpy(acc->path, lst->path, lst->path_len);
+		acc->path[lst->path_len] = '\0';
+		acc->path_len = lst->path_len;
+		acc->is_abstract = lst->is_abstract;
+	}
 	acc->state = SS_CONNECTED;
 	acc->peer = s;
 	s->state = SS_CONNECTED;
 	s->peer = acc;
 	s->listener = lst;
 	lst->peer = acc;
+	poll_wake_check();
 	return 0;
 }
 
@@ -559,6 +616,7 @@ int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port
 	s->state = SS_CONNECTED;
 	s->peer = acc;
 	lst->peer = acc;
+	poll_wake_check();
 	return 0;
 }
 
@@ -606,10 +664,13 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 	return (ssize_t)i;
 }
 
-ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)
+ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags)
 {
 	size_t i;
 	char *dst = buf;
+	int peek = (flags & MSG_PEEK) != 0;
+	unsigned tail;
+	unsigned count;
 
 	if (!s || s->state != SS_CONNECTED || !buf)
 		return -EINVAL;
@@ -620,6 +681,7 @@ ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)
 		int ret;
 		uint32_t ack;
 
+		(void)peek;
 		net_stack_poll();
 		ack = tcp_wire_peer_ack((ip4_addr_t)s->wire_peer_ip,
 					s->wire_peer_port, s->wire_local_port);
@@ -635,17 +697,44 @@ ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)
 
 	if (s->shut_rd)
 		return 0;
+	tail = s->tail;
+	count = s->count;
 	for (i = 0; i < len; i++)
 	{
-		if (s->count == 0)
+		if (count == 0)
 			break;
-		dst[i] = s->buf[s->tail];
-		s->tail = (s->tail + 1) % SS_BUF;
-		s->count--;
+		dst[i] = s->buf[tail];
+		tail = (tail + 1) % SS_BUF;
+		count--;
 	}
 	if (i == 0 && (!s->peer || s->peer->shut_wr))
 		return 0;
-	if (i > 0)
-		poll_wake_check();
+	if (i == 0)
+		return -EAGAIN; /* caller may block; MSG_DONTWAIT keeps -EAGAIN */
+	if (!peek)
+	{
+		s->tail = tail;
+		s->count = count;
+		if (i > 0)
+			poll_wake_check();
+	}
 	return (ssize_t)i;
+}
+
+ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)
+{
+	return sock_stream_recv_flags(s, buf, len, 0);
+}
+
+int sock_stream_set_reuseaddr(struct sock_stream *s, int on)
+{
+	if (!s)
+		return -EINVAL;
+	s->reuseaddr = on ? 1 : 0;
+	return 0;
+}
+
+int sock_stream_get_reuseaddr(const struct sock_stream *s)
+{
+	return s ? (int)s->reuseaddr : 0;
 }

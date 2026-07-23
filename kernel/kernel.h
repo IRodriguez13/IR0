@@ -45,4 +45,5 @@ bool sb16_init(void);
 
 /* Kernel idle loop (RR idle process + kmain fallback) */
 void kernel_idle_poll(void);
+void kernel_idle_poll_nosched(void);
 void kernel_idle_loop(void);

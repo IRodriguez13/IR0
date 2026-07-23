@@ -16,3 +16,4 @@
 
 #include <ir0/arch_io.h>
 #include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>

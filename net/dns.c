@@ -75,12 +75,12 @@ static ip4_addr_t dns_default_server = 0;
 
 static inline uint64_t dns_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void dns_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 static struct dns_query_state *dns_pending_find_locked(uint16_t id)

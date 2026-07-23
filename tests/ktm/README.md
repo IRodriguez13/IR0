@@ -15,7 +15,9 @@ repo root.
 | `tests/ktm/userdev/` | musl static pilots injected as `/sbin/init` for QEMU smokes (`make ktm-userdev-*`) |
 | `tests/ktm/lib/` | Shared userspace helper (`libktm_user.c`) over `/dev/ktm` ioctls |
 
-Host-side KTM checks (panic inventory, sched contract) remain in `tests/host/`.
+Host-side KTM checks (panic inventory, sched contract, Class B predicate) remain
+in `tests/host/`. Shared fixtures for Class B live under
+[`tests/mocks/sched/`](../mocks/sched/) — see [`tests/mocks/README.md`](../mocks/README.md).
 
 ## Build
 

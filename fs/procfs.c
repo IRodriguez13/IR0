@@ -44,8 +44,6 @@
 #include <ir0/logging.h>
 
 #define PROC_BUFFER_SIZE           4096    /* Standard proc buffer size */
-#define PROC_FD_MAP_SIZE           1000    /* Max file descriptors tracked */
-#define PROC_OFFSET_MAP_SIZE       2000    /* procfs 1000-1999 + sysfs 3000-3999 */
 #define PROC_LINE_MAX_LEN          256     /* Max line length for parsing */
 #define PROC_ESTIMATED_ENTRY_SIZE  256     /* Estimated entry size for formatting */
 #define PROC_DEFAULT_FILE_SIZE     1024    /* Default file size for stat */
@@ -53,24 +51,7 @@
 #define BYTES_PER_SECTOR           512     /* Bytes per disk sector */
 #define SECTORS_PER_MB             (2 * 1024)  /* Sectors per megabyte (2*1024*512 = 1MB) */
 
-/* Track offsets for legacy /sys virtual fds (3000-3999) and residual maps. */
-static off_t proc_fd_offset_map[PROC_OFFSET_MAP_SIZE];
-static pid_t proc_fd_offset_owner_map[PROC_OFFSET_MAP_SIZE];
-static int proc_fd_offset_map_init = 0;
-
 static void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
-
-static void proc_fd_offset_map_ensure_init(void)
-{
-    if (proc_fd_offset_map_init)
-        return;
-    for (int i = 0; i < (int)(sizeof(proc_fd_offset_map) / sizeof(proc_fd_offset_map[0])); i++)
-    {
-        proc_fd_offset_map[i] = 0;
-        proc_fd_offset_owner_map[i] = -1;
-    }
-    proc_fd_offset_map_init = 1;
-}
 
 /**
  * get_memory_usage - Get total memory used by kernel
@@ -543,30 +524,30 @@ int proc_cpuinfo_read(char *buf, size_t count)
 
     memset(buf, 0, count);
 
-    uint32_t cpu_id = arch_get_cpu_id();
-    uint32_t cpu_count = arch_get_cpu_count();
+    uint32_t cpu_id = get_cpu_id();
+    uint32_t cpu_count = get_cpu_count();
 
     char vendor_str[13] = {0};
-    if (arch_get_cpu_vendor(vendor_str) < 0)
+    if (get_cpu_vendor(vendor_str) < 0)
         strncpy(vendor_str, "Unknown", sizeof(vendor_str) - 1);
 
     uint32_t family = 0, model = 0, stepping = 0;
-    arch_get_cpu_signature(&family, &model, &stepping);
+    get_cpu_signature(&family, &model, &stepping);
 
     char model_name[49] = {0};
-    if (arch_get_cpu_brand_string(model_name, sizeof(model_name)) < 0)
-        strncpy(model_name, arch_get_name() ? arch_get_name() : "Unknown", sizeof(model_name) - 1);
+    if (get_cpu_brand_string(model_name, sizeof(model_name)) < 0)
+        strncpy(model_name, get_arch_name() ? get_arch_name() : "Unknown", sizeof(model_name) - 1);
 
     uint32_t max_leaf = 0;
-    arch_get_cpuid_max_leaf(&max_leaf);
+    get_cpuid_max_leaf(&max_leaf);
 
     uint32_t feat_edx = 0, feat_ecx = 0;
-    arch_get_cpu_feature_bits(&feat_edx, &feat_ecx);
+    get_cpu_feature_bits(&feat_edx, &feat_ecx);
 
     char flags_buf[512];
     proc_cpuinfo_flags_from_cpuid(feat_edx, feat_ecx, flags_buf, sizeof(flags_buf));
 
-    uint32_t clflush_sz = arch_get_cpu_clflush_size();
+    uint32_t clflush_sz = get_cpu_clflush_size();
     if (clflush_sz == 0)
         clflush_sz = 64;
 
@@ -585,6 +566,18 @@ int proc_cpuinfo_read(char *buf, size_t count)
     n = snprintf(buf + off, (off < count) ? (count - off) : 0, "model name\t%s\nstepping\t%u\n", model_name, stepping); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
     n = snprintf(buf + off, (off < count) ? (count - off) : 0, "siblings\t%u\napicid\t%u\ncpuid level\t%u\n", cpu_count, cpu_id, max_leaf); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
     n = snprintf(buf + off, (off < count) ? (count - off) : 0, "flags\t%s\nclflush size\t%u\n", flags_buf, clflush_sz); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
+    {
+	char hv_vendor[16];
+
+	if (arch_hypervisor_present() &&
+	    arch_hypervisor_vendor(hv_vendor, sizeof(hv_vendor)) == 0)
+	{
+	    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+			 "hypervisor_vendor\t%s\n", hv_vendor);
+	    if (n > 0 && (size_t)n < count - off)
+		off += (size_t)n;
+	}
+    }
     snprintf(t, sizeof(t), "%ubits physical, %ubits virtual", arch_bits, arch_bits);
     n = snprintf(buf + off, (off < count) ? (count - off) : 0, "address sizes\t%s\n", t); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
     if (off < count) buf[off] = '\0';
@@ -1112,22 +1105,10 @@ int proc_cmdline_read(char *buf, size_t count, pid_t pid)
     return len;
 }
 
-/* Get offset for /proc (1000-1999) or /sys (3000-3999) fd */
+/* Legacy virtual-fd offset maps removed — offsets live in process fd_table. */
 off_t proc_get_offset(int fd)
 {
-    pid_t owner = ir0_current_pid();
-    proc_fd_offset_map_ensure_init();
-    int idx = -1;
-    if (fd >= 1000 && fd <= 1999)
-        idx = fd - 1000;
-    else if (fd >= 3000 && fd <= 3999)
-        idx = 1000 + (fd - 3000);
-    if (idx >= 0 && idx < (int)(sizeof(proc_fd_offset_map) / sizeof(proc_fd_offset_map[0])))
-    {
-        if (proc_fd_offset_owner_map[idx] != owner)
-            return 0;
-        return proc_fd_offset_map[idx];
-    }
+    (void)fd;
     return 0;
 }
 
@@ -1212,21 +1193,11 @@ int proc_getdents(int fd, void *dirent_buf, size_t count)
     return -EBADF;
 }
 
-/* Set offset for /proc (1000-1999) or /sys (3000-3999) fd */
+/* Legacy virtual-fd offset maps removed — offsets live in process fd_table. */
 void proc_set_offset(int fd, off_t offset)
 {
-    pid_t owner = ir0_current_pid();
-    proc_fd_offset_map_ensure_init();
-    int idx = -1;
-    if (fd >= 1000 && fd <= 1999)
-        idx = fd - 1000;
-    else if (fd >= 3000 && fd <= 3999)
-        idx = 1000 + (fd - 3000);
-    if (idx >= 0 && idx < (int)(sizeof(proc_fd_offset_map) / sizeof(proc_fd_offset_map[0])))
-    {
-        proc_fd_offset_map[idx] = offset;
-        proc_fd_offset_owner_map[idx] = owner;
-    }
+    (void)fd;
+    (void)offset;
 }
 
 /* Open /proc — no longer assigns global virtual fds (use fd_table binds). */
@@ -1257,7 +1228,9 @@ int proc_open(const char *path, int flags)
     return -ENOENT;
 }
 
-/* Read from /proc file with offset support (legacy virtual fd path). */
+/* Read from /proc file — LEGACY global virtual fd only (PSEUDO_FS_*_FD_BASE).
+ * Syscall path uses process fd_table is_pseudo + pseudo_fs_ops_read.
+ */
 int proc_read(int fd, char *buf, size_t count, off_t offset)
 {
     int64_t pbytes;
@@ -1281,6 +1254,7 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
  * /proc/bluetooth/scan). Writes under /proc/sys/ are not implemented and
  * return -EOPNOTSUPP.
  */
+/* Write to /proc — LEGACY global virtual fd only; syscall uses fd_table binds. */
 int proc_write(int fd, const char *buf, size_t count)
 {
     int64_t pw;

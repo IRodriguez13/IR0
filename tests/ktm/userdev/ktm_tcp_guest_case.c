@@ -3,8 +3,8 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_tcp_guest_case.c
- * Description: AF_INET stream connect on guest IP 10.0.2.15 (beyond loopback).
- *              Optional virtio-9p host share report.
+ * Description: AF_INET wire connect to QEMU gateway 10.0.2.2:8889 (host
+ *              listener). Proves guest TCP via rtl8139, not in-memory pairing.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -20,6 +20,8 @@
 
 #include "libktm_user.h"
 
+#define GUEST_WIRE_PORT 8889
+
 static void say(const char *s)
 {
 	(void)write(1, s, strlen(s));
@@ -27,72 +29,45 @@ static void say(const char *s)
 
 static int test_tcp_guest(void)
 {
-	int srv;
-	int cli;
-	int acc;
+	int fd;
 	struct sockaddr_in addr;
-	char buf[32];
+	const char *msg = "GUESTTCP\n";
+	char rbuf[64];
 	ssize_t n;
-	const char *msg = "GUESTTCP";
+	int tries;
 
-	srv = socket(AF_INET, SOCK_STREAM, 0);
-	if (srv < 0)
+	fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0)
 		return -1;
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(9876);
-	addr.sin_addr.s_addr = htonl((10U << 24) | (0U << 16) | (2U << 8) | 15U);
-	if (bind(srv, (struct sockaddr *)&addr, sizeof(addr)) != 0)
+	addr.sin_port = htons(GUEST_WIRE_PORT);
+	addr.sin_addr.s_addr = htonl((10U << 24) | (0U << 16) | (2U << 8) | 2U);
+	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0)
 	{
-		close(srv);
+		close(fd);
 		return -1;
 	}
-	if (listen(srv, 1) != 0)
+	say("F8_TCP_GUEST_CONNECT_OK\n");
+
+	if (send(fd, msg, strlen(msg), 0) != (ssize_t)strlen(msg))
 	{
-		close(srv);
+		close(fd);
 		return -1;
 	}
 
-	cli = socket(AF_INET, SOCK_STREAM, 0);
-	if (cli < 0)
+	for (tries = 0; tries < 40; tries++)
 	{
-		close(srv);
-		return -1;
+		n = recv(fd, rbuf, sizeof(rbuf), 0);
+		if (n > 0)
+			break;
+		usleep(50000);
 	}
-	if (connect(cli, (struct sockaddr *)&addr, sizeof(addr)) != 0)
-	{
-		close(cli);
-		close(srv);
+	close(fd);
+	if (n <= 0 || memcmp(rbuf, "GUESTECHO", 9) != 0)
 		return -1;
-	}
 
-	acc = accept(srv, NULL, NULL);
-	if (acc < 0)
-	{
-		close(cli);
-		close(srv);
-		return -1;
-	}
-	if (send(cli, msg, 8, 0) != 8)
-	{
-		close(acc);
-		close(cli);
-		close(srv);
-		return -1;
-	}
-	n = recv(acc, buf, sizeof(buf), 0);
-	if (n != 8 || memcmp(buf, msg, 8) != 0)
-	{
-		close(acc);
-		close(cli);
-		close(srv);
-		return -1;
-	}
-
-	close(acc);
-	close(cli);
-	close(srv);
 	say("F8_TCP_GUEST_SENDRECV_OK\n");
 	return 0;
 }
@@ -108,7 +83,7 @@ int main(void)
 {
 	int kfd;
 	int fails = 0;
-	int tcp_ok;
+	int ok;
 	ktm_user_caps_t caps;
 
 	kfd = ktm_open();
@@ -123,7 +98,6 @@ int main(void)
 		ktm_close(kfd);
 		return 1;
 	}
-	(void)ktm_reset(kfd);
 	if (ktm_case_begin(kfd, "tcp_guest") != 0)
 	{
 		say("F8_TCP_GUEST_FAIL case_begin\n");
@@ -131,27 +105,18 @@ int main(void)
 		return 1;
 	}
 
-	(void)ktm_checkpoint(kfd, "tcp_guest_bind");
-	tcp_ok = (test_tcp_guest() == 0);
-	if (!tcp_ok)
-		fails++;
-	if (ktm_assert_true(kfd, "tcp_guest_sendrecv", tcp_ok) != 0)
+	ok = (test_tcp_guest() == 0);
+	ktm_assert_true(kfd, "tcp_guest_wire", ok);
+	if (!ok)
 		fails++;
 
-	(void)ktm_case_end(kfd, "tcp_guest", fails == 0 ? 0 : 1);
-	ktm_close(kfd);
-
-	try_hostshare_report(fails == 0);
-
-	if (fails == 0)
-	{
+	try_hostshare_report(ok);
+	if (ok)
 		say("F8_TCP_GUEST_OK\n");
-		for (;;)
-			(void)pause();
-		return 0;
-	}
-	say("F8_TCP_GUEST_FAIL\n");
-	for (;;)
-		(void)pause();
-	return 1;
+	else
+		say("F8_TCP_GUEST_FAIL\n");
+
+	ktm_case_end(kfd, "tcp_guest", fails == 0 ? 0 : 1);
+	ktm_close(kfd);
+	return fails == 0 ? 0 : 1;
 }

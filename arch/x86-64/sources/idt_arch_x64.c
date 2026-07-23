@@ -30,5 +30,5 @@ void idt_arch_set_gate_64(int n, uintptr_t handler, uint8_t flags)
 
 void paging_set_cpu_64(uint64_t page_directory)
 {
-    arch_mm_activate((uintptr_t)page_directory);
+    mm_activate((uintptr_t)page_directory);
 }

@@ -73,12 +73,12 @@ static const uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static inline uint64_t arp_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void arp_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 static int arp_lookup_mac(ip4_addr_t ip, mac_addr_t mac_out)
@@ -705,7 +705,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
             int delay_iterations = 0;
             
             /* Enable interrupts during delay to allow timer to advance */
-            __asm__ volatile("sti");
+            enable_interrupts();
             
             /* Busy-wait checking timer periodically */
             while (clock_get_uptime_milliseconds() < delay_target)
@@ -722,7 +722,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
                     }
                 }
                 /* Small CPU pause to reduce power consumption and allow interrupts */
-                __asm__ volatile("pause");
+                cpu_relax();
             }
             
             /* Keep interrupts enabled to allow RX interrupts to be processed */

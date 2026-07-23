@@ -25,6 +25,7 @@ global syscall_insn_entry_asm
 extern syscall_dispatch
 extern process_capture_syscall_frame_at_entry
 extern fase24_log_stack_once
+extern arch_restore_user_fs_base
 
 section .bss
 align 16
@@ -217,12 +218,30 @@ syscall_insn_entry_asm:
     mov [rel fase27_rsp_before_sysret], rax
     mov [rel fase29_entry_rsp], rax
     pop rax
+    ;
+    ; C helpers below clobber SysV volatiles. Linux syscall ABI must preserve
+    ; all GPR except rax (retval), rcx, and r11 — musl _Fork keeps the TLS
+    ; pointer in %rdx across gettid after fork returns 0. Save the full set.
+    ;
     push rax
     push rcx
     push r11
-    sub rsp, 8                  ; align 16 before C call (SysV)
+    push rdx
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    sub rsp, 8                  ; 10 pushes = 80 bytes; keep 16-byte align
     call fase24_log_stack_once
+    call arch_restore_user_fs_base
     add rsp, 8
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rdx
     pop r11
     pop rcx
     pop rax

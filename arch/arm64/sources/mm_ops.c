@@ -28,14 +28,14 @@
 #define A64_PTE_PFN_MASK  0x0000FFFFFFFFF000ULL
 #define A64_INDEX_MASK    0x1FFUL
 
-void arch_mm_activate(uintptr_t root)
+void mm_activate(uintptr_t root)
 {
 	__asm__ volatile("msr ttbr0_el1, %0" :: "r"(root) : "memory");
 	__asm__ volatile("isb" ::: "memory");
-	arch_tlb_invalidate_all();
+	tlb_invalidate_all();
 }
 
-uintptr_t arch_mm_current_root(void)
+uintptr_t mm_current_root(void)
 {
 	uintptr_t root;
 
@@ -43,7 +43,7 @@ uintptr_t arch_mm_current_root(void)
 	return root;
 }
 
-void arch_tlb_invalidate_page(uintptr_t va)
+void tlb_invalidate_page(uintptr_t va)
 {
 	/* VA → page; TLBI VAE1 (EL1 stage-1). */
 	uintptr_t page = va >> 12;
@@ -54,7 +54,7 @@ void arch_tlb_invalidate_page(uintptr_t va)
 	__asm__ volatile("isb" ::: "memory");
 }
 
-void arch_tlb_invalidate_all(void)
+void tlb_invalidate_all(void)
 {
 	__asm__ volatile("dsb ishst" ::: "memory");
 	__asm__ volatile("tlbi vmalle1" ::: "memory");
@@ -62,7 +62,7 @@ void arch_tlb_invalidate_all(void)
 	__asm__ volatile("isb" ::: "memory");
 }
 
-unsigned long arch_irq_save(void)
+unsigned long irq_save(void)
 {
 	unsigned long daif;
 
@@ -71,12 +71,12 @@ unsigned long arch_irq_save(void)
 	return daif;
 }
 
-void arch_irq_restore(unsigned long flags)
+void irq_restore(unsigned long flags)
 {
 	__asm__ volatile("msr daif, %0" :: "r"(flags) : "memory");
 }
 
-uint64_t arch_mm_read_ctrl0(void)
+uint64_t mm_read_ctrl0(void)
 {
 	uint64_t sctlr;
 
@@ -84,19 +84,19 @@ uint64_t arch_mm_read_ctrl0(void)
 	return sctlr;
 }
 
-void arch_mm_write_ctrl0(uint64_t value)
+void mm_write_ctrl0(uint64_t value)
 {
 	__asm__ volatile("msr sctlr_el1, %0" :: "r"(value) : "memory");
 	__asm__ volatile("isb" ::: "memory");
 }
 
-uint64_t arch_mm_read_ctrl1(void)
+uint64_t mm_read_ctrl1(void)
 {
 	/* No CR4 analogue claimed for freestanding ARM yet. */
 	return 0;
 }
 
-void arch_mm_va_indices(uintptr_t va, size_t idx[4])
+void mm_va_indices(uintptr_t va, size_t idx[4])
 {
 	/* Same 4-level 9-bit split as x86-64 4 KiB (VA bits 47:12). */
 	idx[0] = ((uint64_t)va >> 39) & A64_INDEX_MASK;
@@ -105,23 +105,23 @@ void arch_mm_va_indices(uintptr_t va, size_t idx[4])
 	idx[3] = ((uint64_t)va >> 12) & A64_INDEX_MASK;
 }
 
-int arch_mm_pte_present(uint64_t e)
+int mm_pte_present(uint64_t e)
 {
 	return (e & A64_PTE_VALID) != 0;
 }
 
-int arch_mm_pte_large(uint64_t e)
+int mm_pte_large(uint64_t e)
 {
 	/* Block descriptor: valid + not table (bit1 clear) at L1/L2. */
-	return arch_mm_pte_present(e) && ((e & A64_PTE_TABLE) == 0);
+	return mm_pte_present(e) && ((e & A64_PTE_TABLE) == 0);
 }
 
-uintptr_t arch_mm_pte_phys(uint64_t e)
+uintptr_t mm_pte_phys(uint64_t e)
 {
 	return (uintptr_t)(e & A64_PTE_PFN_MASK);
 }
 
-uint64_t arch_mm_make_table_pte(uintptr_t phys, int user)
+uint64_t mm_make_table_pte(uintptr_t phys, int user)
 {
 	uint64_t e = ((uint64_t)phys & A64_PTE_PFN_MASK) | A64_PTE_VALID | A64_PTE_TABLE;
 
@@ -129,7 +129,7 @@ uint64_t arch_mm_make_table_pte(uintptr_t phys, int user)
 	return e;
 }
 
-uint64_t arch_mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
+uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 {
 	uint64_t e = ((uint64_t)phys & A64_PTE_PFN_MASK) | A64_PTE_VALID | A64_PTE_AF;
 
@@ -139,7 +139,7 @@ uint64_t arch_mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 	return e;
 }
 
-void arch_mm_pte_set_user(uint64_t *e)
+void mm_pte_set_user(uint64_t *e)
 {
 	if (e)
 		*e |= A64_PTE_AP_EL0;

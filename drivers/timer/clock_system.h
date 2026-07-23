@@ -109,6 +109,7 @@ clock_timer_t detect_best_clock(void);
 clock_timer_t get_current_timer_type(void);
 
 /* Time functions */
+int clock_is_ready(void);
 uint64_t clock_get_uptime_seconds(void);
 uint64_t clock_get_uptime_milliseconds(void);
 uint64_t clock_get_tick_count(void);

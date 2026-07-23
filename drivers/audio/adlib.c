@@ -147,7 +147,7 @@ static int32_t adlib_hw_init(void)
     if (!adlib_detect())
     {
         LOG_WARNING("Adlib", "Adlib card not detected (this is normal if no hardware is present)");
-        return 0; /* Not an error, just no hardware */
+        return IR0_DRIVER_ABSENT;
     }
     
     LOG_INFO("Adlib", "Adlib OPL2 card detected");

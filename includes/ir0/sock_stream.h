@@ -37,7 +37,13 @@ int sock_stream_bind_inet(struct sock_stream *s, uint16_t port);
 int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port);
 ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len);
 ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len);
+ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags);
+int sock_stream_set_reuseaddr(struct sock_stream *s, int on);
+int sock_stream_get_reuseaddr(const struct sock_stream *s);
 int sock_stream_is(const void *ptr);
+/* Address in g_socks[] even if already released (magic cleared). */
+int sock_stream_is_slot(const void *ptr);
+void sock_stream_acquire(struct sock_stream *s);
 int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_out);
 
 int sock_stream_rights_push(struct sock_stream *recv_side, const void *entry, size_t sz);

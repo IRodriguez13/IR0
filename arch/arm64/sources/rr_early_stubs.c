@@ -68,7 +68,7 @@ void __attribute__((weak)) arch_set_current_kernel_stack(process_t *p)
 	(void)p;
 }
 
-void __attribute__((weak)) arch_first_context_switch(struct process *next)
+void __attribute__((weak)) first_switch_to(struct process *next)
 {
 	extern void switch_context_arm64(task_t *prev, task_t *next);
 
@@ -102,7 +102,7 @@ int __attribute__((weak)) strncmp(const char *a, const char *b, size_t n)
 	return (unsigned char)*a - (unsigned char)*b;
 }
 
-void __attribute__((weak)) arch_context_switch(task_t *prev, task_t *next)
+void __attribute__((weak)) switch_to(task_t *prev, task_t *next)
 {
 	extern void switch_context_arm64(task_t *a, task_t *b);
 

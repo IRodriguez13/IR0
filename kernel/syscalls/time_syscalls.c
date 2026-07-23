@@ -19,6 +19,8 @@
 #include <ir0/errno.h>
 #include <ir0/rtc.h>
 #include <ir0/clock.h>
+#include <ir0/copy_user.h>
+#include <ir0/validation.h>
 
 /*
  * rtc_time_to_unix - Convert RTC date/time to Unix timestamp (seconds since 1970-01-01 UTC).
@@ -86,4 +88,26 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 	tp->tv_sec = (time_t)(uptime_ms / 1000);
 	tp->tv_nsec = (long)((uptime_ms % 1000) * 1000000UL);
 	return 0;
+}
+
+/*
+ * getitimer/setitimer — honest ENOSYS until SIGALRM delivery exists.
+ * TinyX SmartSchedule probes setitimer; on failure it sets
+ * SmartScheduleDisable and continues on poll/select (desired).
+ * Returning success without timers caused glibc stack-canary abort in X.
+ */
+int64_t sys_getitimer(int which, struct itimerval *curr_value)
+{
+	(void)which;
+	(void)curr_value;
+	return -ENOSYS;
+}
+
+int64_t sys_setitimer(int which, const struct itimerval *new_value,
+		      struct itimerval *old_value)
+{
+	(void)which;
+	(void)new_value;
+	(void)old_value;
+	return -ENOSYS;
 }

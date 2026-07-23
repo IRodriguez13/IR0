@@ -145,12 +145,31 @@ void test_pseudo_fs_proc_registry_paths(void)
 	rc = pseudo_fs_open_path("/proc/42/status", 0, &fd);
 	ASSERT_EQ(rc, 0);
 	ASSERT_EQ(fd, 1700);
+	/* Legacy open_path still uses PSEUDO_FS_DYN_FD_BASE — host/unit only. */
 
 	memset(out, 0, sizeof(out));
 	n = pseudo_fs_read_fd(fd, out, sizeof(out) - 1, 0);
 	ASSERT_EQ(n, (int64_t)strlen("init\tR\t42\t1\t0\t0\n"));
 	ASSERT(strstr(out, "\t") != NULL);
 	pseudo_fs_close_fd(fd);
+
+	/* C1-A: acquire_path does not mint a global virtual fd (≥1500). */
+	{
+		const pseudo_fs_ops_t *ops = NULL;
+		void *ctx = NULL;
+		int dynamic = 0;
+		off_t off = 0;
+
+		rc = (int)pseudo_fs_acquire_path("/proc/cpuinfo", 0, &ops, &ctx, &dynamic);
+		ASSERT_EQ(rc, 0);
+		ASSERT(ops != NULL);
+		ASSERT_EQ(dynamic, 0);
+		memset(out, 0, sizeof(out));
+		n = pseudo_fs_ops_read(ops, ctx, out, sizeof(out) - 1, &off);
+		ASSERT_EQ(n, 10);
+		ASSERT_STR_EQ(out, "cpuinfo-ok");
+		(void)pseudo_fs_release_ops(ops, ctx, dynamic);
+	}
 
 	pseudo_fs_reset();
 	TEST_END();

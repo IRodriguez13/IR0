@@ -31,7 +31,13 @@
 typedef unsigned int ir0_tcflag_t;
 typedef unsigned char ir0_cc_t;
 
-#define IR0_NCCS 32
+/*
+ * Linux kernel uapi termios for TCGETS/TCSETS (asm-generic/termbits.h).
+ * NCCS=19 → sizeof 36. glibc userspace termios is larger (NCCS=32); libc
+ * converts. Copying the glibc size into the kernel TCGETS buffer smashes
+ * TinyX/glibc stack canaries in tcgetattr().
+ */
+#define IR0_NCCS 19
 
 struct ir0_winsize
 {
@@ -48,10 +54,7 @@ struct ir0_termios
 	ir0_tcflag_t c_cflag;
 	ir0_tcflag_t c_lflag;
 	ir0_cc_t c_line;
-	uint8_t __pad[3];
 	ir0_cc_t c_cc[IR0_NCCS];
-	uint32_t c_ispeed;
-	uint32_t c_ospeed;
 };
 
 #define IR0_CONSOLE_IFLAG_DEFAULT (0x00000400u) /* ICRNL */

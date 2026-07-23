@@ -9,7 +9,9 @@ KERNEL_ROOT ?= ../..
 CC         = gcc
 BASE_CFLAGS = -Wall -Wextra -g -I. -DTEST_HOST
 # idirafter: resolve <ir0/...> after system headers so host <string.h> wins over includes/string.h
-HOST_KERNEL_CPPFLAGS = -I$(KERNEL_ROOT) -idirafter $(KERNEL_ROOT)/includes
+HOST_KERNEL_CPPFLAGS = -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/ktm/include \
+	-idirafter $(KERNEL_ROOT)/includes \
+	-I$(KERNEL_ROOT)/tests/mocks
 KERNEL_CFLAGS = $(BASE_CFLAGS) $(HOST_KERNEL_CPPFLAGS)
 LDFLAGS    =
 
@@ -19,12 +21,12 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_usb_pci_scan.c test_bt_scan_sync.c \
 	test_vfs_backend_contract.c 	test_stat_user_abi.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
-	test_ktm_sched_contract.c test_musl_cred_abi.c test_musl_mmap_contract.c \
+	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_mmap_null_placement.c \
 	test_elf_initial_brk_abi.c test_blockdev_facade.c \
 	test_arch_irq_facade.c test_arch_mm_pte_facade.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
-	host_kmem_stub.o host_serial_stub.o host_fase48_stub.o \
+	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
@@ -44,6 +46,9 @@ host_kmem_stub.o: host_kmem_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
 host_serial_stub.o: host_serial_stub.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+host_klog_stub.o: host_klog_stub.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_fase48_stub.o: host_fase48_stub.c
@@ -111,6 +116,9 @@ test_path_resolve_at.o: test_path_resolve_at.c
 
 test_ktm_sched_contract.o: test_ktm_sched_contract.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+test_class_b_ctx_invariant.o: test_class_b_ctx_invariant.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_musl_mmap_contract.o: test_musl_mmap_contract.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<

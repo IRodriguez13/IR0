@@ -3,8 +3,8 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_tcp_wire_case.c
- * Description: connect+send to QEMU gateway 10.0.2.2:8888 (host listener).
- *              Host listener must accept WIRETCP. Optional virtio-9p report.
+ * Description: connect+send+recv to QEMU gateway 10.0.2.2:8888 (host echo).
+ *              Host listener must accept WIRETCP and echo WIREECHO.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -32,7 +32,9 @@ static int test_tcp_wire(void)
 	int fd;
 	struct sockaddr_in addr;
 	const char *msg = "WIRETCP\n";
+	char rbuf[64];
 	ssize_t n;
+	int tries;
 
 	fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0)
@@ -50,8 +52,21 @@ static int test_tcp_wire(void)
 	say("F8_TCP_WIRE_CONNECT_OK\n");
 
 	n = send(fd, msg, strlen(msg), 0);
-	close(fd);
 	if (n != (ssize_t)strlen(msg))
+	{
+		close(fd);
+		return -1;
+	}
+
+	for (tries = 0; tries < 40; tries++)
+	{
+		n = recv(fd, rbuf, sizeof(rbuf), 0);
+		if (n > 0)
+			break;
+		usleep(50000);
+	}
+	close(fd);
+	if (n <= 0 || memcmp(rbuf, "WIREECHO", 8) != 0)
 		return -1;
 
 	say("F8_TCP_WIRE_SENDRECV_OK\n");
@@ -84,7 +99,6 @@ int main(void)
 		ktm_close(kfd);
 		return 1;
 	}
-	(void)ktm_reset(kfd);
 	if (ktm_case_begin(kfd, "tcp_wire") != 0)
 	{
 		say("F8_TCP_WIRE_FAIL case_begin\n");
@@ -92,23 +106,18 @@ int main(void)
 		return 1;
 	}
 
-	(void)ktm_checkpoint(kfd, "tcp_wire_connect");
 	wire_ok = (test_tcp_wire() == 0);
+	ktm_assert_true(kfd, "tcp_wire", wire_ok);
 	if (!wire_ok)
 		fails++;
-	if (ktm_assert_true(kfd, "tcp_wire_send", wire_ok) != 0)
-		fails++;
 
-	(void)ktm_case_end(kfd, "tcp_wire", fails == 0 ? 0 : 1);
-	ktm_close(kfd);
-
-	try_hostshare_report(fails == 0);
-
-	if (fails == 0)
-	{
+	try_hostshare_report(wire_ok);
+	if (wire_ok)
 		say("F8_TCP_WIRE_OK\n");
-		_exit(0);
-	}
-	say("F8_TCP_WIRE_FAIL\n");
-	_exit(1);
+	else
+		say("F8_TCP_WIRE_FAIL\n");
+
+	ktm_case_end(kfd, "tcp_wire", fails == 0 ? 0 : 1);
+	ktm_close(kfd);
+	return fails == 0 ? 0 : 1;
 }

@@ -97,12 +97,12 @@ static int dhcp_handler_registered;
 
 static inline uint64_t dhcp_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void dhcp_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 static void dhcp_state_reset_for_xid(uint32_t xid)
@@ -470,9 +470,7 @@ static int dhcp_wait_offer(uint32_t timeout_ms)
         }
 
         for (volatile int spin = 0; spin < 4000; spin++)
-        {
-            __asm__ volatile("pause");
-        }
+            cpu_relax();
     }
 
     return -1;
@@ -506,9 +504,7 @@ static int dhcp_wait_ack(uint32_t timeout_ms)
         }
 
         for (volatile int spin = 0; spin < 4000; spin++)
-        {
-            __asm__ volatile("pause");
-        }
+            cpu_relax();
     }
 
     return -1;

@@ -29,13 +29,13 @@ The goal is to document implemented behavior first, then known gaps.
 - `ai_driven_dev/ktm.md`: short agent-facing KTM index (points to `KTM.md`).
 - `ai_driven_dev/rules/ir0-version-stamp.mdc`: lockstep `version.h` / Makefile with upstream tags.
 - `releases/`: ABI board, syscall/pseudo map, 0.0.1 scope and write-path plan.
-- `DRIVERS.md`: driver registry, bootstrap flow, and config-gated initialization.
+- `DRIVERS.md`: driver registry, bootstrap flow, config-gated initialization, **SB16 QEMU smoke**.
 - `INTERRUPTS.md`: IDT/PIC path, syscall entry, and exception behavior.
 - `MEMORY.md`: PMM, allocator, paging, real fork COW + lazy alloc limits.
 - `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
-- `SCHEDULING.md`: scheduler selection and current policy implementations.
+- `SCHEDULING.md`: scheduler selection, blocked poll/pause yield, Class B.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
-- `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`; MM COW in `mandocs/en/mm.md`).
+- `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`; MM COW in `mandocs/en/mm.md`; **boot banner-first** in `mandocs/en/boot.md`).
 - `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`
   (QEMU GTK), keyboard poll + TTY echo path, build/run and serial tags.
 ## AI-assisted development

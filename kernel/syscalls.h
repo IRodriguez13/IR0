@@ -98,3 +98,4 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 void poll_wake_check(void);
 /* read(0): desbloquea procesos esperando teclado cuando hay datos */
 void stdin_wake_check(void);
+int stdin_wake_check_nosched(void);
