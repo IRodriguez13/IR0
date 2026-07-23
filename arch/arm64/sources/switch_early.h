@@ -35,7 +35,7 @@ struct arm64_cpu_ctx
 void arm64_cpu_switch(struct arm64_cpu_ctx *prev, struct arm64_cpu_ctx *next);
 
 /**
- * Activate @next_ttbr (if non-zero) via arch_mm_activate, then arm64_cpu_switch.
+ * Activate @next_ttbr (if non-zero) via mm_activate, then arm64_cpu_switch.
  */
 void arm64_cpu_switch_mm(struct arm64_cpu_ctx *prev, struct arm64_cpu_ctx *next,
 			 uint64_t next_ttbr);

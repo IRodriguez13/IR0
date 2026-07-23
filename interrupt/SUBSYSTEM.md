@@ -198,9 +198,9 @@ sti();  /* Enable interrupts */
 
 Or using the architecture interface:
 ```c
-arch_disable_interrupts();
+disable_interrupts();
 /* Critical section */
-arch_enable_interrupts();
+enable_interrupts();
 ```
 
 ## Nested Interrupts

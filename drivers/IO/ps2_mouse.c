@@ -447,6 +447,14 @@ void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
     {
         input_event_push(EV_KEY, BTN_EXTRA, mouse_state.button5 ? 1 : 0);
     }
+
+    if (packet->delta_x != 0 || packet->delta_y != 0 || packet->delta_wheel != 0 ||
+        prev_left != mouse_state.left_button || prev_right != mouse_state.right_button ||
+        prev_middle != mouse_state.middle_button || prev_button4 != mouse_state.button4 ||
+        prev_button5 != mouse_state.button5)
+    {
+        input_event_push(EV_SYN, SYN_REPORT, 0);
+    }
 }
 
 bool ps2_mouse_send_command(uint8_t command)

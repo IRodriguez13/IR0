@@ -11,19 +11,23 @@ import curses
 import os
 import sys
 import re
+import subprocess
 
 KERNEL_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 KCONFIG_PATH = os.path.join(KERNEL_ROOT, "setup", "Kconfig")
 DOT_CONFIG   = os.path.join(KERNEL_ROOT, ".config")
+DEFCONFIG_PATH = os.path.join(KERNEL_ROOT, "setup", "defconfig")
+PROFILE_CONFIGS_DIR = os.path.join(KERNEL_ROOT, "setup", "configs")
 AUTOCONF_DIR = os.path.join(KERNEL_ROOT, "includes", "generated")
 AUTOCONF_H   = os.path.join(AUTOCONF_DIR, "autoconf.h")
 VALID_UI_LANGS = ("en", "es")
 ARCH_SYMBOLS = ("ARCH_X86_64", "ARCH_ARM64")
+BOARD_SYMBOLS = ("ARM64_BOARD_QEMU_VIRT", "ARM64_BOARD_RPI4", "ARM64_BOARD_RPI5")
 
 I18N = {
     "en": {
         "title": " IR0 Kernel Configuration ",
-        "footer": " Space toggle  Enter edit  S save  D defaults  G/T/I/C presets  ' or H presets  ? symbol  L lang  Q quit ",
+        "footer": " Space toggle  Enter edit  S save  D defaults  G/T/I/C/W presets  M mandocs  ' or H presets  ? symbol  L lang  Q quit ",
         "modified": " [MODIFIED] ",
         "help_title": " Symbol ",
         "preset_help_title": " Build presets ",
@@ -32,17 +36,21 @@ I18N = {
         "depends": "Depends on",
         "range": "Range",
         "saved": "Configuration saved to .config",
-        "preset_generic": "Applied preset: generic",
+        "preset_generic": "Applied preset: generic (desktop x86)",
         "preset_tiny": "Applied preset: tiny",
-        "preset_iot": "Applied preset: IoT / router scaffold",
+        "preset_iot": "Applied preset: hub / IoT (ARM64 rpi4)",
+        "preset_watch": "Applied preset: watch (ARM64 rpi5 stub)",
         "preset_custom": "Applied preset: defaults (customize freely)",
         "save_before_exit": "Save before exit?",
         "lang_switched": "UI language switched to English",
         "symbol": "Symbol",
+        "mandocs_ok": "Mandocs build finished",
+        "mandocs_fail": "Mandocs build failed — see terminal",
+        "mandocs_prompt": "Mandocs language (en/es/all)",
     },
     "es": {
         "title": " Configuracion del Kernel IR0 ",
-        "footer": " Espacio toggle  Enter editar  S guardar  D defecto  G/T/I/C presets  ' o H presets  ? simbolo  L idioma  Q salir ",
+        "footer": " Espacio toggle  Enter editar  S guardar  D defecto  G/T/I/C/W presets  M mandocs  ' o H presets  ? simbolo  L idioma  Q salir ",
         "modified": " [MODIFICADO] ",
         "help_title": " Opcion ",
         "preset_help_title": " Perfiles de compilacion ",
@@ -51,32 +59,40 @@ I18N = {
         "depends": "Depende de",
         "range": "Rango",
         "saved": "Configuracion guardada en .config",
-        "preset_generic": "Preset aplicado: generic",
+        "preset_generic": "Preset aplicado: generic (desktop x86)",
         "preset_tiny": "Preset aplicado: tiny",
-        "preset_iot": "Preset aplicado: IoT/router (ARM64 scaffold)",
+        "preset_iot": "Preset aplicado: hub / IoT (ARM64 rpi4)",
+        "preset_watch": "Preset aplicado: watch (ARM64 rpi5 stub)",
         "preset_custom": "Preset aplicado: valores por defecto (editar)",
         "save_before_exit": "Guardar antes de salir?",
         "lang_switched": "Idioma de interfaz cambiado a Espanol",
         "symbol": "Simbolo",
+        "mandocs_ok": "Mandocs generados",
+        "mandocs_fail": "Fallo al generar mandocs",
+        "mandocs_prompt": "Idioma mandocs (en/es/all)",
     },
 }
 
 PRESET_HELP_TEXT = {
     "en": (
-        "Generic — full QEMU/PC profile (IPv4 stack, ATA, TMPFS/minix).\n"
+        "Generic / desktop — full QEMU/PC profile (IPv4 stack, ATA, TMPFS/minix).\n"
         "Tiny — minimal footprint: ATA + filesystem bins, networking & BT off.\n"
-        "IoT / router — AArch64 scaffolding + IPv4/BT/USB-friendly defaults, PC VGA/SB16 off.\n"
+        "IoT / hub (I) — AArch64 + ARM64_BOARD_RPI4; appliance UART path.\n"
+        "Watch (W) — AArch64 + ARM64_BOARD_RPI5 stub (uart=none).\n"
         "Custom — every visible symbol reset to effective Kconfig default; edit manually.\n"
-        "Unset .config lines often behave like implicit 'y'; add explicit '=n' to carve features out.\n"
-        "Makefile must honor CONFIG_* for true compile-outs; run `make kernel-x64.bin` + guards after changes.\n"
+        "M — generate mandocs (en/es/all) via scripts/build_mandocs.py --yes.\n"
+        "New Kconfig symbols are merged on load (menu always tracks setup/Kconfig).\n"
+        "Makefile must honor CONFIG_* for true compile-outs; run build + guards after changes.\n"
     ),
     "es": (
-        "Generic — perfil PC/QEMU completo (IPv4, ATA, TMPFS/minix).\n"
+        "Generic / desktop — perfil PC/QEMU completo (IPv4, ATA, TMPFS/minix).\n"
         "Tiny — mínimo: ATA + binarios de filesystem, sin red ni bluetooth.\n"
-        "IoT / router — armado AArch64 + IPv4/bluetooth enfocado en embebido; sin video/audio legacy.\n"
+        "IoT / hub (I) — AArch64 + ARM64_BOARD_RPI4; ruta UART appliance.\n"
+        "Watch (W) — AArch64 + ARM64_BOARD_RPI5 stub (uart=none).\n"
         "Custom — cada símbolo vuelve al default efectivo para editarlo a mano.\n"
-        "Sin entrada en .config muchas opciones equivalen a 'y'; usa '=n' explícito para desactivar.\n"
-        "El Makefile debe respetar CONFIG_* para compilar/descompilar subsistemas; valida build tras cambios.\n"
+        "M — generar mandocs (en/es/all) con scripts/build_mandocs.py --yes.\n"
+        "Los símbolos nuevos de Kconfig se fusionan al cargar (el menú sigue a setup/Kconfig).\n"
+        "El Makefile debe respetar CONFIG_* ; valida build tras cambios.\n"
     ),
 }
 
@@ -267,6 +283,147 @@ def save_config(symbols):
         f.write("\n#endif /* _IR0_AUTOCONF_H */\n")
 
 
+def read_config_vals(path):
+    """Parse CONFIG_*=value lines from a defconfig/.config file."""
+    vals = {}
+    if not path or not os.path.isfile(path):
+        return vals
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            vals[k.strip()] = v.strip()
+    return vals
+
+
+def apply_vals_to_symbols(symbols, vals):
+    """Apply CONFIG_* map; missing symbols keep/get effective defaults. Return added names."""
+    added = []
+    for s in symbols:
+        key = "CONFIG_" + s.name
+        if key in vals:
+            if s.type == "string":
+                s.value = normalize_string_value(vals[key])
+            else:
+                s.value = vals[key]
+        else:
+            s.value = s.effective_default()
+            added.append(s.name)
+    known = {"CONFIG_" + s.name for s in symbols}
+    orphans = sorted(k[7:] for k in vals if k.startswith("CONFIG_") and k not in known)
+    return added, orphans
+
+
+def write_config_file(symbols, path, header_lines=None):
+    """Write CONFIG_* file only (no autoconf.h)."""
+    with open(path, "w") as f:
+        if header_lines:
+            for hl in header_lines:
+                f.write(hl if hl.endswith("\n") else hl + "\n")
+            if header_lines and header_lines[-1].strip() != "":
+                f.write("\n")
+        else:
+            f.write("#\n# IR0 Kernel Configuration\n# Generated by menuconfig sync\n#\n\n")
+        for s in symbols:
+            key = "CONFIG_" + s.name
+            if s.type == "bool":
+                f.write(f"{key}={'y' if s.value == 'y' else 'n'}\n")
+            elif s.type == "string":
+                f.write(f"{key}={s.value}\n")
+            else:
+                f.write(f"{key}={s.value}\n")
+
+
+def set_board_selection(symbols, selected_name):
+    """Exclusive ARM64 board choice (like ARCH_*)."""
+    changed = False
+    for sym in symbols:
+        if sym.name in BOARD_SYMBOLS:
+            desired = "y" if sym.name == selected_name else "n"
+            if sym.value != desired:
+                sym.value = desired
+                changed = True
+    return changed
+
+
+def sync_capabilities(defconfig_only=False, dry_run=False):
+    """
+    Merge Kconfig symbols into .config and/or setup/defconfig (+ profile configs).
+    Returns exit code: 0 if clean / written OK; 1 if dry-run would change something.
+    """
+    targets = []
+    if defconfig_only:
+        targets.append(DEFCONFIG_PATH)
+        if os.path.isdir(PROFILE_CONFIGS_DIR):
+            for name in sorted(os.listdir(PROFILE_CONFIGS_DIR)):
+                if name.endswith(".defconfig"):
+                    targets.append(os.path.join(PROFILE_CONFIGS_DIR, name))
+    else:
+        targets.append(DOT_CONFIG)
+
+    any_change = False
+    for path in targets:
+        symbols = parse_kconfig(KCONFIG_PATH)
+        vals = read_config_vals(path)
+        header = None
+        if path != DOT_CONFIG and os.path.isfile(path):
+            with open(path) as f:
+                lines = f.readlines()
+            hdr = []
+            for line in lines:
+                if line.startswith("#") or line.strip() == "":
+                    hdr.append(line)
+                else:
+                    break
+            if hdr:
+                header = hdr
+        added, orphans = apply_vals_to_symbols(symbols, vals)
+        enforce_dependencies(symbols)
+        if added or orphans:
+            any_change = True
+            rel = os.path.relpath(path, KERNEL_ROOT)
+            print(f"{rel}: +{len(added)} new symbol(s), -{len(orphans)} orphan(s)")
+            if added:
+                print("  add:", ", ".join(added[:20]) + ("…" if len(added) > 20 else ""))
+            if orphans:
+                print("  drop:", ", ".join(orphans[:20]) + ("…" if len(orphans) > 20 else ""))
+        if dry_run:
+            continue
+        if path == DOT_CONFIG:
+            save_config(symbols)
+        else:
+            write_config_file(symbols, path, header_lines=header)
+
+    if dry_run:
+        if any_change:
+            print("sync-capabilities: changes needed")
+            return 1
+        print("sync-capabilities: up to date")
+        return 0
+
+    if not defconfig_only:
+        print("Synced .config and includes/generated/autoconf.h")
+    else:
+        print("Synced setup/defconfig and setup/configs/*.defconfig")
+    return 0
+
+
+def run_mandocs_batch(lang):
+    """Invoke build_mandocs.py --yes (noninteractive)."""
+    script = os.path.join(KERNEL_ROOT, "scripts", "build_mandocs.py")
+    langs = ("en", "es") if lang == "all" else (lang,)
+    rc = 0
+    for L in langs:
+        cmd = [sys.executable, script, "--lang", L, "--yes", "--mandoc-only"]
+        print(" ".join(cmd), flush=True)
+        r = subprocess.call(cmd, cwd=KERNEL_ROOT)
+        if r != 0:
+            rc = r
+    return rc
+
+
 # ---------------------------------------------------------------------------
 # Dependency helpers
 # ---------------------------------------------------------------------------
@@ -373,6 +530,8 @@ def set_symbol_value(symbols, assignment):
             raise ValueError(f"Boolean symbol {key} requires y/n")
         if key in ARCH_SYMBOLS and raw_val == "y":
             set_arch_selection(symbols, key)
+        elif key in BOARD_SYMBOLS and raw_val == "y":
+            set_board_selection(symbols, key)
         else:
             sym.value = raw_val
     elif sym.type == "int":
@@ -389,6 +548,10 @@ def set_symbol_value(symbols, assignment):
 def apply_preset(symbols, preset):
     """Apply a predefined config profile."""
     preset_key = preset.strip().lower()
+    if preset_key == "desktop":
+        preset_key = "generic"
+    if preset_key == "hub":
+        preset_key = "iot"
 
     if preset_key == "custom":
         for sym in symbols:
@@ -531,6 +694,56 @@ def apply_preset(symbols, preset):
             "ENABLE_USB_HOST": "y",
             "INIT_USB_HOST": "y",
             "TOOL_MENUCONFIG_LANG": "en",
+            "ARM64_BOARD_QEMU_VIRT": "n",
+            "ARM64_BOARD_RPI4": "y",
+            "ARM64_BOARD_RPI5": "n",
+        }
+    elif preset_key == "watch":
+        values = {
+            "KERNEL_DEBUG_SHELL": "y",
+            "ARCH_X86_64": "n",
+            "ARCH_ARM64": "y",
+            "TICK_RATE_HZ": "250",
+            "SCHEDULER_POLICY": "0",
+            "ROOT_BLOCK_DEVICE": "hda",
+            "ROOT_FILESYSTEM": "tmpfs",
+            "ENABLE_SMP": "n",
+            "DEBUG_BINS_GROUP_CORE": "y",
+            "DEBUG_BINS_GROUP_FS": "n",
+            "DEBUG_BINS_GROUP_TEXT": "n",
+            "DEBUG_BINS_GROUP_IDENTITY": "n",
+            "DEBUG_BINS_GROUP_DIAG": "y",
+            "DEBUG_BINS_GROUP_NET": "n",
+            "DEBUG_BINS_GROUP_BT": "y",
+            "ENABLE_NETWORKING": "n",
+            "DRV_NIC_RTL8139": "n",
+            "DRV_NIC_E1000": "n",
+            "ENABLE_SOUND": "n",
+            "ENABLE_BLUETOOTH": "y",
+            "ENABLE_MOUSE": "n",
+            "ENABLE_STORAGE_ATA": "n",
+            "ENABLE_STORAGE_ATA_BLOCK": "n",
+            "ENABLE_FS_MINIX": "n",
+            "ENABLE_FS_TMPFS": "y",
+            "ENABLE_FS_SIMPLEFS": "n",
+            "ENABLE_FS_FAT16": "n",
+            "ENABLE_PC_SPEAKER": "n",
+            "ENABLE_VBE": "n",
+            "ENABLE_EXAMPLE_DRIVERS": "n",
+            "INIT_PS2_CONTROLLER": "n",
+            "INIT_PC_SPEAKER": "n",
+            "INIT_STORAGE_ATA": "n",
+            "INIT_STORAGE_ATA_BLOCK": "n",
+            "INIT_SOUND_DRIVERS": "n",
+            "INIT_MOUSE_DRIVER": "n",
+            "INIT_NETWORK_STACK": "n",
+            "INIT_BLUETOOTH_DRIVER": "y",
+            "ENABLE_USB_HOST": "n",
+            "INIT_USB_HOST": "n",
+            "TOOL_MENUCONFIG_LANG": "en",
+            "ARM64_BOARD_QEMU_VIRT": "n",
+            "ARM64_BOARD_RPI4": "n",
+            "ARM64_BOARD_RPI5": "y",
         }
     elif preset_key == "userspace":
         values = {
@@ -579,6 +792,11 @@ def apply_preset(symbols, preset):
     for sym in symbols:
         if sym.name in values:
             sym.value = values[sym.name]
+    # Exclusive board choice if any board symbol is set
+    for bname in BOARD_SYMBOLS:
+        if values.get(bname) == "y":
+            set_board_selection(symbols, bname)
+            break
     enforce_dependencies(symbols)
 
 # ---------------------------------------------------------------------------
@@ -758,6 +976,9 @@ def run_menu(stdscr, symbols):
                     if sym.name in ARCH_SYMBOLS:
                         if sym.value != "y":
                             dirty |= set_arch_selection(symbols, sym.name)
+                    elif sym.name in BOARD_SYMBOLS:
+                        if sym.value != "y":
+                            dirty |= set_board_selection(symbols, sym.name)
                     else:
                         sym.value = "n" if sym.value == "y" else "y"
                         dirty = True
@@ -804,11 +1025,36 @@ def run_menu(stdscr, symbols):
             ui_lang = get_ui_lang(symbols)
             dirty = True
             flash_msg(stdscr, tr(ui_lang, "preset_iot"), h, w)
+        elif key == ord('w') or key == ord('W'):
+            apply_preset(symbols, "watch")
+            ui_lang = get_ui_lang(symbols)
+            dirty = True
+            flash_msg(stdscr, tr(ui_lang, "preset_watch"), h, w)
         elif key == ord('c') or key == ord('C'):
             apply_preset(symbols, "custom")
             ui_lang = get_ui_lang(symbols)
             dirty = True
             flash_msg(stdscr, tr(ui_lang, "preset_custom"), h, w)
+        elif key == ord('m') or key == ord('M'):
+            default_lang = get_ui_lang(symbols)
+            choice = curses_input(stdscr, tr(ui_lang, "mandocs_prompt"), default_lang, h, w)
+            if choice is not None:
+                choice = choice.strip().lower() or default_lang
+                if choice not in ("en", "es", "all", "english", "spanish"):
+                    choice = default_lang
+                if choice == "english":
+                    choice = "en"
+                if choice == "spanish":
+                    choice = "es"
+                curses.endwin()
+                rc = run_mandocs_batch(choice)
+                # Resume curses
+                stdscr.refresh()
+                curses.doupdate()
+                if rc == 0:
+                    flash_msg(stdscr, tr(ui_lang, "mandocs_ok"), h, w)
+                else:
+                    flash_msg(stdscr, tr(ui_lang, "mandocs_fail"), h, w)
         elif key == ord('l') or key == ord('L'):
             ui_lang = "es" if ui_lang == "en" else "en"
             set_ui_lang(symbols, ui_lang)
@@ -885,11 +1131,30 @@ def main():
         print(f"Error: {KCONFIG_PATH} not found", file=sys.stderr)
         sys.exit(1)
 
+    args = sys.argv[1:]
+
+    # --sync-capabilities [--defconfig-only] [--dry-run]
+    if len(args) > 0 and args[0] == "--sync-capabilities":
+        defconfig_only = "--defconfig-only" in args[1:]
+        dry_run = "--dry-run" in args[1:]
+        sys.exit(sync_capabilities(defconfig_only=defconfig_only, dry_run=dry_run))
+
+    # --mandocs en|es|all
+    if len(args) > 0 and args[0] == "--mandocs":
+        lang = args[1].strip().lower() if len(args) > 1 else "en"
+        if lang in ("english",):
+            lang = "en"
+        if lang in ("spanish",):
+            lang = "es"
+        if lang not in ("en", "es", "all"):
+            print("usage: menuconfig.py --mandocs en|es|all", file=sys.stderr)
+            sys.exit(2)
+        sys.exit(run_mandocs_batch(lang))
+
     symbols = parse_kconfig(KCONFIG_PATH)
     load_dotconfig(symbols)
     enforce_dependencies(symbols)
 
-    args = sys.argv[1:]
     if len(args) > 0 and args[0] == "--sync":
         enforce_dependencies(symbols)
         save_config(symbols)
@@ -898,7 +1163,8 @@ def main():
 
     if len(args) > 1 and args[0] == "--preset":
         preset_name = args[1].strip().lower()
-        if preset_name not in ("generic", "tiny", "iot", "userspace", "custom"):
+        allowed = ("generic", "desktop", "tiny", "iot", "hub", "watch", "userspace", "custom")
+        if preset_name not in allowed:
             print(f"Unknown preset: {preset_name}", file=sys.stderr)
             sys.exit(2)
         apply_preset(symbols, preset_name)
@@ -917,6 +1183,7 @@ def main():
         print("Applied explicit symbol assignments and synced config files")
         return
 
+    # Interactive: symbols already merged with Kconfig defaults via load_dotconfig
     curses.wrapper(run_menu, symbols)
 
 

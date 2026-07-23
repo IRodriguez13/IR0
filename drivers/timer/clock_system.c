@@ -124,6 +124,11 @@ clock_timer_t get_current_timer_type(void)
     return clock_state.active_timer;
 }
 
+int clock_is_ready(void)
+{
+	return clock_state.initialized ? 1 : 0;
+}
+
 /* Time functions */
 uint64_t clock_get_uptime_seconds(void)
 {
@@ -188,7 +193,7 @@ int clock_sleep_ticks(uint32_t ticks)
     while ((clock_state.tick_count - start_ticks) < ticks) 
     {
         /* Wait for ticks to increment */
-        arch_cpu_idle();
+        cpu_idle();
     }
     return 0;
 }

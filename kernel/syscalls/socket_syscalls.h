@@ -29,6 +29,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int64_t sys_listen(int fd, int backlog);
 int64_t sys_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
+int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
 int64_t sys_socketpair(int domain, int type, int protocol, int *sv);
 ssize_t sys_sendmsg(int fd, const struct msghdr *msg, int flags);
 ssize_t sys_recvmsg(int fd, struct msghdr *msg, int flags);

@@ -2,12 +2,12 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.2 |
+| Versión | 0.3 |
 | Fase IR0 | T0 |
 | Estado | stable |
 | Depende de | boot, syscalls, scheduler |
 | Página man | IR0-multi-arch (sección 7) |
-| Fuentes principales | `arch/common/arch_interface.c`, `arch/x86-64/`, `arch/arm64/sources/` (`boot_stub.c`, `mmu_early.c`, `switch_early.S`, `process_early.c`, `first_switch.c`), `sched/switch/switch_arm64.c`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
+| Fuentes principales | `arch/common/arch_interface.c`, `arch/x86-64/`, `arch/arm64/sources/` (`boot_stub.c`, `board.c`, `mmu_early.c`, `switch_early.S`, `process_early.c`, `first_switch.c`), `includes/ir0/arm64_board.h`, `sched/switch/switch_arm64.c`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
 
 ## 1. Visión general
 
@@ -127,6 +127,12 @@ Checklist de porting:
 3. Ficheros scaffold listados en el guard deben existir para builds matrix arm64.
 4. Smokes musl/ISO de producción apuntan solo a x86-64 hoy.
 5. `arm64_cpu_switch_mm`: activa `next_ttbr` si es no-cero y distinto del TTBR0 actual.
+6. **Contrato serial de boot ISA-agnóstico:** tras init UART, `ir0_boot_serial_ready()`
+   emite primero el banner `[BOOT] IR0 Kernel v… Boot routine`; detalle ISA en COMP
+   `ARCH`, tags de etapa en COMP `SMOKE` (`includes/ir0/boot_log.h`).
+7. **Board ARM64 en compile-time** (`includes/ir0/arm64_board.h`, `ARM64_BOARD=` /
+   Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`, QEMU
+   `raspi4b`), `rpi5` (UART stub — sin RP1 aún). Sin parseo DTB todavía.
 
 ## 9. Consejos de depuración
 
@@ -139,12 +145,16 @@ Checklist de porting:
 - Compile portable: `make arm64-portable-compile` (objs curados — **no** `ALL_OBJS`).
 - Probe: `make arm64-all-objs-probe` (MEMORY + sample KERNEL compile-only).
 - Link scaffold: `make ARCH=arm64 kernel-arm64.bin`.
+- Boards: `make smoke-arm64-rpi4-boot` (QEMU `raspi4b` o **SKIP** si no hay máquina);
+  `make arm64-rpi5-compile` (solo strings stub). Ver `scripts/make/arm64-board.mk`.
 
 ## 10. Hoja de ruta futura
 
 - `fork`/`exec` ARM producto / `rr_sched` con `process_t` real — **fuera** de la imagen freestanding.
 - **ALL_OBJS + musl aarch64** — BLOCKED (toolchain SETUP / muro IRQ).
 - GIC detrás de `register_irq` en path producto.
+- Raspberry Pi 4: GIC-400, SD, mailbox, DTB (más allá del UART min).
+- Raspberry Pi 5: UART RP1 + bring-up real (hoy solo stub de board id).
 - Eliminar clusters `#ifdef` solo x86 en keyboard/console.
 - Boot UEFI en x86 — solo GRUB Multiboot hoy.
 - RISC-V / x86-32 — **no en el árbol**.

@@ -35,12 +35,12 @@ static inline void named_fifo_irq_restore(uint64_t flags)
 #else
 static inline uint64_t named_fifo_irq_save(void)
 {
-    return (uint64_t)arch_irq_save();
+    return (uint64_t)irq_save();
 }
 
 static inline void named_fifo_irq_restore(uint64_t flags)
 {
-    arch_irq_restore((unsigned long)flags);
+    irq_restore((unsigned long)flags);
 }
 #endif
 

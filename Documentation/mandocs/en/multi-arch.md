@@ -2,12 +2,12 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2 |
+| Version | 0.3 |
 | IR0 phase | T0 |
 | Status | stable |
 | Depends on | boot, syscalls, scheduler |
 | Man page | IR0-multi-arch (section 7) |
-| Primary sources | `arch/common/arch_interface.c`, `arch/x86-64/`, `arch/arm64/sources/` (`boot_stub.c`, `mmu_early.c`, `switch_early.S`, `process_early.c`, `first_switch.c`), `sched/switch/switch_arm64.c`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
+| Primary sources | `arch/common/arch_interface.c`, `arch/x86-64/`, `arch/arm64/sources/` (`boot_stub.c`, `board.c`, `mmu_early.c`, `switch_early.S`, `process_early.c`, `first_switch.c`), `includes/ir0/arm64_board.h`, `sched/switch/switch_arm64.c`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
 
 ## 1. Overview
 
@@ -131,6 +131,9 @@ Porting checklist:
 6. **Boot serial contract is ISA-agnostic:** after UART init, `ir0_boot_serial_ready()`
    emits the same `[BOOT] IR0 Kernel v… Boot routine` banner first; ISA detail uses
    COMP `ARCH`, stage tags COMP `SMOKE` (`includes/ir0/boot_log.h`).
+7. **ARM64 board is compile-time** (`includes/ir0/arm64_board.h`, `ARM64_BOARD=` /
+   Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`, QEMU
+   `raspi4b`), `rpi5` (UART stub — no RP1 yet). No DTB parse yet.
 
 ## 9. Debugging tips
 
@@ -144,12 +147,16 @@ Porting checklist:
 - arm64 portable compile: `make arm64-portable-compile` (curated objs — **not** `ALL_OBJS`).
 - Probe: `make arm64-all-objs-probe` (MEMORY + KERNEL sample compile-only).
 - arm64 scaffold link: `make ARCH=arm64 kernel-arm64.bin`.
+- arm64 boards: `make smoke-arm64-rpi4-boot` (QEMU `raspi4b` or **SKIP** if machine
+  missing); `make arm64-rpi5-compile` (stub strings only). See `scripts/make/arm64-board.mk`.
 
 ## 10. Future roadmap
 
 - Product ARM `fork`/`exec` / `rr_sched` with real `process_t` — **not** in freestanding image.
 - **ALL_OBJS + musl aarch64** — BLOCKED (toolchain SETUP / interrupt wall).
 - GIC behind full `register_irq` product path.
+- Raspberry Pi 4: GIC-400, SD, mailbox, DTB (beyond UART min smoke).
+- Raspberry Pi 5: RP1 UART + real bring-up (board id stub only today).
 - Remove x86-only `#ifdef` clusters in keyboard/console for true portability.
 - UEFI boot on x86 — GRUB Multiboot only today.
 - RISC-V / x86-32 — **not in tree**.

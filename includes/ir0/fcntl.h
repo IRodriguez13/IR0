@@ -38,8 +38,16 @@
 #define F_SETFD         2   /* Set fd flags */
 #define F_GETFL         3   /* Get file status flags */
 #define F_SETFL         4   /* Set file status flags */
+#define F_GETOWN        5   /* Get owner for SIGIO (Linux x86-64) */
+#define F_SETOWN        8   /* Set owner for SIGIO (Linux x86-64) */
 
 #define FD_CLOEXEC      1   /* Close-on-exec flag */
+
+/* Linux open status bit; IR0 does not deliver SIGIO yet — strip on F_SETFL. */
+#ifndef O_ASYNC
+#define O_ASYNC         020000
+#endif
+#define FASYNC          O_ASYNC
 
 /* flock(2) operations (Linux uapi) */
 #define LOCK_SH  1

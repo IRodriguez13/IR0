@@ -26,6 +26,7 @@
 #include "virtio_net_early.h"
 
 #include <arch/common/arch_portable.h>
+#include <ir0/arm64_board.h>
 #include <ir0/virtio_mmio.h>
 #include <ir0/boot_log.h>
 #include <stdint.h>
@@ -101,13 +102,14 @@ static void arm64_irq_oneshot_demo(void)
 
 void boot_main(void)
 {
+	arm64_board_apply_platform();
 	pl011_init();
 	/*
 	 * Same boot logging contract as x86 kmain: banner first, then ISA detail
 	 * and smoke tags (substring still matches make smoke-arm64-*).
 	 */
 	ir0_boot_serial_ready();
-	ir0_boot_arch("isa=arm64 board=qemu-virt uart=pl011");
+	arm64_board_log_arch();
 	ir0_boot_smoke("ARM64_BOOT_OK");
 	arm64_all_objs_mark();
 

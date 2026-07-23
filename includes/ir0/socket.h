@@ -24,11 +24,18 @@
 
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
+#define SOCK_CLOEXEC   0x80000
+#define SOCK_NONBLOCK  0x800
+#define SOCK_TYPE_MASK 0xf
 
 #define SOL_SOCKET  1
 #define SO_ERROR    4
 #define SO_TYPE     3
+#define SO_REUSEADDR 2
 #define SCM_RIGHTS  1
+
+#define MSG_PEEK     0x2
+#define MSG_DONTWAIT 0x40
 
 #define SHUT_RD   0
 #define SHUT_WR   1

@@ -26,12 +26,12 @@
 #define X86_PTE_PFN_MASK  0x000FFFFFFFFFF000ULL
 #define X86_INDEX_MASK    0x1FFUL
 
-void arch_mm_activate(uintptr_t root)
+void mm_activate(uintptr_t root)
 {
 	__asm__ volatile("mov %0, %%cr3" :: "r"(root) : "memory");
 }
 
-uintptr_t arch_mm_current_root(void)
+uintptr_t mm_current_root(void)
 {
 	uintptr_t root;
 
@@ -39,20 +39,20 @@ uintptr_t arch_mm_current_root(void)
 	return root;
 }
 
-void arch_tlb_invalidate_page(uintptr_t va)
+void tlb_invalidate_page(uintptr_t va)
 {
 	__asm__ volatile("invlpg (%0)" :: "r"(va) : "memory");
 }
 
-void arch_tlb_invalidate_all(void)
+void tlb_invalidate_all(void)
 {
-	uintptr_t root = arch_mm_current_root();
+	uintptr_t root = mm_current_root();
 
 	/* Reload CR3 to flush local non-global TLB entries. */
-	arch_mm_activate(root);
+	mm_activate(root);
 }
 
-unsigned long arch_irq_save(void)
+unsigned long irq_save(void)
 {
 	unsigned long flags;
 
@@ -60,12 +60,12 @@ unsigned long arch_irq_save(void)
 	return flags;
 }
 
-void arch_irq_restore(unsigned long flags)
+void irq_restore(unsigned long flags)
 {
 	__asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
 }
 
-uint64_t arch_mm_read_ctrl0(void)
+uint64_t mm_read_ctrl0(void)
 {
 	uint64_t v;
 
@@ -73,12 +73,12 @@ uint64_t arch_mm_read_ctrl0(void)
 	return v;
 }
 
-void arch_mm_write_ctrl0(uint64_t value)
+void mm_write_ctrl0(uint64_t value)
 {
 	__asm__ volatile("mov %0, %%cr0" :: "r"(value) : "memory");
 }
 
-uint64_t arch_mm_read_ctrl1(void)
+uint64_t mm_read_ctrl1(void)
 {
 	uint64_t v;
 
@@ -86,7 +86,7 @@ uint64_t arch_mm_read_ctrl1(void)
 	return v;
 }
 
-void arch_mm_va_indices(uintptr_t va, size_t idx[4])
+void mm_va_indices(uintptr_t va, size_t idx[4])
 {
 	idx[0] = ((uint64_t)va >> 39) & X86_INDEX_MASK;
 	idx[1] = ((uint64_t)va >> 30) & X86_INDEX_MASK;
@@ -94,22 +94,22 @@ void arch_mm_va_indices(uintptr_t va, size_t idx[4])
 	idx[3] = ((uint64_t)va >> 12) & X86_INDEX_MASK;
 }
 
-int arch_mm_pte_present(uint64_t e)
+int mm_pte_present(uint64_t e)
 {
 	return (e & X86_PTE_PRESENT) != 0;
 }
 
-int arch_mm_pte_large(uint64_t e)
+int mm_pte_large(uint64_t e)
 {
-	return arch_mm_pte_present(e) && ((e & X86_PTE_LARGE) != 0);
+	return mm_pte_present(e) && ((e & X86_PTE_LARGE) != 0);
 }
 
-uintptr_t arch_mm_pte_phys(uint64_t e)
+uintptr_t mm_pte_phys(uint64_t e)
 {
 	return (uintptr_t)(e & X86_PTE_PFN_MASK);
 }
 
-uint64_t arch_mm_make_table_pte(uintptr_t phys, int user)
+uint64_t mm_make_table_pte(uintptr_t phys, int user)
 {
 	uint64_t e = ((uint64_t)phys & X86_PTE_PFN_MASK) | X86_PTE_PRESENT | X86_PTE_RW;
 
@@ -118,7 +118,7 @@ uint64_t arch_mm_make_table_pte(uintptr_t phys, int user)
 	return e;
 }
 
-uint64_t arch_mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
+uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 {
 	uint64_t e = ((uint64_t)phys & X86_PTE_PFN_MASK) | (flags12 & 0xFFFULL) |
 		     X86_PTE_PRESENT;
@@ -128,7 +128,7 @@ uint64_t arch_mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 	return e;
 }
 
-void arch_mm_pte_set_user(uint64_t *e)
+void mm_pte_set_user(uint64_t *e)
 {
 	if (e)
 		*e |= X86_PTE_USER;

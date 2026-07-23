@@ -27,7 +27,7 @@
 #include <ir0/pipe.h>
 #include <ir0/paging.h>
 #include <ir0/vfs.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/video_backend.h>
 #include <ir0/permissions.h>
 #include <ir0/signals.h>
@@ -69,12 +69,12 @@ typedef struct
 
 static inline uint64_t process_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void process_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 /* fdtable.c */

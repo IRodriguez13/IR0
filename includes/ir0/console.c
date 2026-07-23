@@ -28,6 +28,10 @@
 #include <ir0/sched.h>
 #include <string.h>
 
+/* TCGETS/TCSETS ABI must stay Linux kernel termios (36 bytes, NCCS=19). */
+_Static_assert(sizeof(struct ir0_termios) == 36,
+	       "ir0_termios must match Linux uapi termios for TCGETS");
+
 extern void kernel_idle_poll(void);
 
 #define IR0_TTY_MAX_READ_WAITERS 8
@@ -60,8 +64,6 @@ static void tty_termios_ensure(void)
 		tty_termios.c_cc[IR0_CC_VTIME] = 0;
 		tty_termios.c_cc[IR0_CC_VMIN] = 1;
 		tty_termios.c_cc[IR0_CC_VERASE] = 127;
-		tty_termios.c_ispeed = 38400;
-		tty_termios.c_ospeed = 38400;
 		tty_termios_ready = 1;
 	}
 }
@@ -246,12 +248,12 @@ static void tty_wake_stage_user_read(process_t *proc)
 
 static inline uint64_t tty_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void tty_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 static int tty_waiter_count(void)

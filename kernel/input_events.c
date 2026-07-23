@@ -30,12 +30,12 @@ static volatile unsigned int ev_tail;
 
 static inline uint64_t input_events_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void input_events_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 /* Called from keyboard IRQ handler - must be fast, no blocking */

@@ -119,6 +119,8 @@ static const char GUEST_SRC[] =
 	"\t\t\tok = 0;\n"
 	"\t\t(void)raw_syscall(NR_close, fd, 0, 0, 0);\n"
 	"\t\tsay(ok ? \"POWER_TCC_KTM_OK\\n\" : \"POWER_TCC_KTM_FAIL\\n\");\n"
+	"\t\tif (ok)\n"
+	"\t\t\tsay(\"KTM_USERDEV_OK\\n\");\n"
 	"\t}\n"
 	"\n"
 	"\tsay(\"POWER_TCC_HALT_CALL\\n\");\n"

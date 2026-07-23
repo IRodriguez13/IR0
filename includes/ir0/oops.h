@@ -34,9 +34,8 @@ extern "C" {
 void panic(const char *message);
 void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller); /*Panic with more detailed logs*/
 int ir0_panic_in_progress(void);
-void cpu_relax();
-void dump_stack_trace();
-void dump_registers();
+void dump_stack_trace(void);
+void dump_registers(void);
 
 #ifdef __cplusplus
 }

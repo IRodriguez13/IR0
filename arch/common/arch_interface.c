@@ -13,6 +13,8 @@
 
 #include "arch_interface.h"
 #include <arch/common/arch_portable.h>
+#include <ir0/cpu.h>
+#include <ir0/arch_cpu.h>
 #include <ir0/oops.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -38,7 +40,7 @@ static void *g_arch_boot_params = NULL;
 #endif
 
 // Implementaciones específicas de arquitectura
-void arch_enable_interrupts(void)
+void enable_interrupts(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
     #if MINGW_BUILD
@@ -47,12 +49,11 @@ void arch_enable_interrupts(void)
         __asm__ volatile("sti");
     #endif
 #elif defined(__aarch64__)
-    // ARM64: msr daifclr, #2
     __asm__ volatile("msr daifclr, #2" ::: "memory");
 #endif
 }
 
-void arch_disable_interrupts(void)
+void disable_interrupts(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
     #if MINGW_BUILD
@@ -61,7 +62,6 @@ void arch_disable_interrupts(void)
         __asm__ volatile("cli");
     #endif
 #elif defined(__aarch64__)
-    // ARM64: msr daifset, #2
     __asm__ volatile("msr daifset, #2" ::: "memory");
 #endif
 }
@@ -109,7 +109,12 @@ uintptr_t read_fault_address(void)
 #endif
 }
 
-const char *arch_get_name(void)
+arch_addr_t get_fault_address(void)
+{
+	return (arch_addr_t)read_fault_address();
+}
+
+const char *get_arch_name(void)
 {
 #if defined(__x86_64__)
     return "x86-64 (amd64)";
@@ -133,10 +138,187 @@ void outb(uint16_t port, uint8_t value)
         asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
     #endif
 #elif defined(__aarch64__)
-    // ARM no tiene puertos I/O - usar MMIO
-    // Implementar cuando sea necesario
+    (void)port;
+    (void)value;
 #endif
 }
+
+uint16_t inw(uint16_t port)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint16_t ret;
+
+	__asm__ volatile("inw %1, %0" : "=a"(ret) : "Nd"(port));
+	return ret;
+#else
+	(void)port;
+	return 0;
+#endif
+}
+
+void outw(uint16_t port, uint16_t value)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	__asm__ volatile("outw %0, %1" : : "a"(value), "Nd"(port));
+#else
+	(void)port;
+	(void)value;
+#endif
+}
+
+uint32_t inl(uint16_t port)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint32_t ret;
+
+	__asm__ volatile("inl %1, %0" : "=a"(ret) : "Nd"(port));
+	return ret;
+#else
+	(void)port;
+	return 0;
+#endif
+}
+
+void outl(uint16_t port, uint32_t value)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	__asm__ volatile("outl %0, %1" : : "a"(value), "Nd"(port));
+#else
+	(void)port;
+	(void)value;
+#endif
+}
+
+void cpu_relax(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	__asm__ volatile("pause");
+#elif defined(__aarch64__)
+	__asm__ volatile("yield" ::: "memory");
+#else
+	__asm__ volatile("" ::: "memory");
+#endif
+}
+
+void smp_mb(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	__asm__ volatile("mfence" ::: "memory");
+#elif defined(__aarch64__)
+	__asm__ volatile("dmb sy" ::: "memory");
+#else
+	__asm__ volatile("" ::: "memory");
+#endif
+}
+
+uint64_t rdmsr(uint32_t msr)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint32_t lo, hi;
+
+	__asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+	return ((uint64_t)hi << 32) | lo;
+#else
+	(void)msr;
+	return 0;
+#endif
+}
+
+void wrmsr(uint32_t msr, uint64_t value)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint32_t lo = (uint32_t)value;
+	uint32_t hi = (uint32_t)(value >> 32);
+
+	__asm__ volatile("wrmsr" : : "c"(msr), "a"(lo), "d"(hi) : "memory");
+#else
+	(void)msr;
+	(void)value;
+#endif
+}
+
+void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx, uint32_t *ecx,
+	   uint32_t *edx)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint32_t a, b, c, d;
+
+	__asm__ volatile("cpuid"
+			 : "=a"(a), "=b"(b), "=c"(c), "=d"(d)
+			 : "a"(leaf));
+	if (eax)
+		*eax = a;
+	if (ebx)
+		*ebx = b;
+	if (ecx)
+		*ecx = c;
+	if (edx)
+		*edx = d;
+#else
+	(void)leaf;
+	if (eax)
+		*eax = 0;
+	if (ebx)
+		*ebx = 0;
+	if (ecx)
+		*ecx = 0;
+	if (edx)
+		*edx = 0;
+#endif
+}
+
+void debug_reg_write(unsigned int regno, uint64_t value)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	switch (regno)
+	{
+	case 6:
+		__asm__ volatile("mov %0, %%dr6" :: "r"(value));
+		break;
+	case 7:
+		__asm__ volatile("mov %0, %%dr7" :: "r"(value));
+		break;
+	default:
+		break;
+	}
+#else
+	(void)regno;
+	(void)value;
+#endif
+}
+
+uint64_t debug_reg_read(unsigned int regno)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint64_t v = 0;
+
+	switch (regno)
+	{
+	case 6:
+		__asm__ volatile("mov %%dr6, %0" : "=r"(v));
+		break;
+	case 7:
+		__asm__ volatile("mov %%dr7, %0" : "=r"(v));
+		break;
+	default:
+		break;
+	}
+	return v;
+#else
+	(void)regno;
+	return 0;
+#endif
+}
+
+#if defined(__x86_64__) || defined(__i386__)
+uint64_t timer_read(void)
+{
+	uint32_t lo, hi;
+
+	__asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+	return ((uint64_t)hi << 32) | lo;
+}
+#endif
 
 void cpu_wait(void)
 {
@@ -149,22 +331,22 @@ void cpu_wait(void)
 #endif
 }
 
-void arch_cpu_idle(void)
+void cpu_idle(void)
 {
     cpu_wait();
 }
 
-void arch_cpu_halt(void)
+void cpu_halt(void)
 {
     cpu_wait();
 }
 
-void arch_set_boot_params(void *params)
+void set_boot_params(void *params)
 {
     g_arch_boot_params = params;
 }
 
-void *arch_get_boot_params(void)
+void *get_boot_params(void)
 {
     return g_arch_boot_params;
 }
@@ -173,17 +355,17 @@ void *arch_get_boot_params(void)
  * Architecture-specific early initialization wrapper
  * Calls the appropriate architecture implementation
  */
-void arch_early_init(void)
+void early_init(void)
 {
 #if defined(__x86_64__) || defined(__amd64__)
     /* x86-64 specific early init */
-    extern void arch_early_init_x86_64(void);
-    arch_early_init_x86_64();
+    extern void early_init_x86_64(void);
+    early_init_x86_64();
 #elif defined(__aarch64__)
-    extern void arch_early_init_arm64(void);
-    arch_early_init_arm64();
+    extern void early_init_arm64(void);
+    early_init_arm64();
 #else
-    #error "Unsupported architecture for arch_early_init()"
+    #error "Unsupported architecture for early_init()"
 #endif
 }
 
@@ -191,26 +373,26 @@ void arch_early_init(void)
  * Architecture-specific interrupt initialization wrapper
  * Calls the appropriate architecture implementation
  */
-void arch_interrupt_init(void)
+void interrupt_init(void)
 {
 #if defined(__x86_64__) || defined(__amd64__)
     /* x86-64 specific interrupt init */
-    extern void arch_interrupt_init_x86_64(void);
-    arch_interrupt_init_x86_64();
+    extern void interrupt_init_x86_64(void);
+    interrupt_init_x86_64();
 #elif defined(__aarch64__)
-    extern void arch_interrupt_init_arm64(void);
-    arch_interrupt_init_arm64();
+    extern void interrupt_init_arm64(void);
+    interrupt_init_arm64();
 #else
-    #error "Unsupported architecture for arch_interrupt_init()"
+    #error "Unsupported architecture for interrupt_init()"
 #endif
 }
 
-void arch_irq_init(void)
+void irq_init(void)
 {
-    arch_interrupt_init();
+    interrupt_init();
 }
 
-void arch_boot_irq_unmask(void)
+void boot_irq_unmask(void)
 {
 #if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
     pic_unmask_irq(0);
@@ -230,11 +412,11 @@ void arch_boot_irq_unmask(void)
 #elif defined(__aarch64__)
     /* ARM64 GIC unmask policy: board-specific bring-up */
 #else
-    #error "Unsupported architecture for arch_boot_irq_unmask()"
+    #error "Unsupported architecture for boot_irq_unmask()"
 #endif
 }
 
-void arch_syscall_init(void)
+void syscall_init(void)
 {
 #if defined(__x86_64__) || defined(__amd64__)
     /*

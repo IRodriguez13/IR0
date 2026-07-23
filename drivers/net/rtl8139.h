@@ -82,11 +82,13 @@
 #define RTL8139_RCR_AB (1 << 3)   /* Accept Broadcast */
 #define RTL8139_RCR_WRAP (1 << 7) /* Wrap around */
 
-/* Transmit Status Descriptor bits */
+/* Transmit Status Descriptor bits (QEMU TxHostOwns / Realtek OWN) */
 #define RTL8139_TSD_SIZE_MASK   0x1FFF /* Packet size mask */
-#define RTL8139_TSD_OWN         (1 << 13)    /* Descriptor owned by NIC (busy) */
-#define RTL8139_TSD_ERTX_64     0x00002000 /* Early TX threshold 64 bytes */
-#define RTL8139_TSD_TOK         (1U << 15)   /* Transmit OK (valid when OWN cleared) */
+/* Bit 13: host owns descriptor when set (idle / ready). Driver clears it
+ * (writes size only) to start DMA; hardware sets it again when DMA done. */
+#define RTL8139_TSD_OWN         (1 << 13)
+#define RTL8139_TSD_ERTX_64     (1U << 16) /* Early TX threshold field (not OWN) */
+#define RTL8139_TSD_TOK         (1U << 15)   /* Transmit OK (valid when host owns) */
 
 /* Receive Status bits (from packet header) */
 #define RTL8139_RX_STAT_ROK     (1 << 0) /* Receive OK */

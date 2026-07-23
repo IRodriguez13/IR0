@@ -74,6 +74,16 @@ def main() -> int:
         action="store_true",
         help="Inject --init as /sbin/init (old path; no share payload)",
     )
+    ap.add_argument(
+        "--disk",
+        default="",
+        help="Prebuilt MINIX disk image (skip copy of disk.img and init inject; caller owns cleanup)",
+    )
+    ap.add_argument(
+        "--no-fsdev",
+        action="store_true",
+        help="Omit virtio-9p share (product disks that do not need hostshare)",
+    )
     args = ap.parse_args()
     require = list(args.require)
     if not require:
@@ -90,7 +100,12 @@ def main() -> int:
         return 2
 
     stub_bin = Path(args.stub)
-    if not args.legacy_disk_init and not stub_bin.is_file():
+    prebuilt_disk = Path(args.disk) if args.disk else None
+    if prebuilt_disk is not None:
+        if not prebuilt_disk.is_file():
+            print(f"✗ missing --disk {prebuilt_disk}", file=sys.stderr)
+            return 2
+    elif not args.legacy_disk_init and not stub_bin.is_file():
         print(f"✗ missing stub {stub_bin}; make build-init-hostshare-exec", file=sys.stderr)
         return 2
 
@@ -113,38 +128,62 @@ def main() -> int:
         injects.append((src, dest))
 
     base = ROOT / "disk.img"
-    if not base.is_file():
+    if prebuilt_disk is None and not base.is_file():
         print("✗ missing disk.img", file=sys.stderr)
         return 2
 
     share_dir: Path | None = None
     own_share = False
-    if args.share:
-        share_dir = Path(args.share)
-        share_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        share_dir = Path(tempfile.mkdtemp(prefix="ir0-ktm-share-"))
-        own_share = True
+    if not args.no_fsdev:
+        if args.share:
+            share_dir = Path(args.share)
+            share_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            share_dir = Path(tempfile.mkdtemp(prefix="ir0-ktm-share-"))
+            own_share = True
 
-    if not args.legacy_disk_init:
-        shutil.copy2(payload_bin, share_dir / PAYLOAD_NAME)
-        os.chmod(share_dir / PAYLOAD_NAME, 0o755)
+        # Always place --init on the 9p share as ir0_payload (stub PID1 or
+        # runit supervised hostshare service both exec this path).
+        if not args.legacy_disk_init:
+            shutil.copy2(payload_bin, share_dir / PAYLOAD_NAME)
+            os.chmod(share_dir / PAYLOAD_NAME, 0o755)
 
     log = Path(args.log)
     if log.exists():
         log.unlink()
 
-    disk = Path(tempfile.mktemp(prefix="ir0-ktm-userdev-", suffix=".img"))
+    own_disk = False
+    if prebuilt_disk is not None:
+        disk = prebuilt_disk
+    else:
+        disk = Path(tempfile.mktemp(prefix="ir0-ktm-userdev-", suffix=".img"))
+        own_disk = True
+
     try:
-        subprocess.check_call(["cp", "-f", str(base), str(disk)], cwd=str(ROOT))
-        disk_init = payload_bin if args.legacy_disk_init else stub_bin
-        subprocess.check_call(
-            ["python3", "scripts/inject_init_minix.py", str(disk), str(disk_init), "sbin/init"],
-            cwd=str(ROOT),
-        )
+        if own_disk:
+            subprocess.check_call(["cp", "-f", str(base), str(disk)], cwd=str(ROOT))
+            disk_init = payload_bin if args.legacy_disk_init else stub_bin
+            subprocess.check_call(
+                [
+                    "python3",
+                    "scripts/inject_init_minix.py",
+                    str(disk),
+                    str(disk_init),
+                    "sbin/init",
+                ],
+                cwd=str(ROOT),
+            )
+        # Extra --inject applies to both copied disk.img and prebuilt --disk
+        # (e.g. runit rootfs needs /bin/f41true for exec-drain).
         for src, dest in injects:
             subprocess.check_call(
-                ["python3", "scripts/inject_init_minix.py", str(disk), str(src), dest],
+                [
+                    "python3",
+                    "scripts/inject_init_minix.py",
+                    str(disk),
+                    str(src),
+                    dest,
+                ],
                 cwd=str(ROOT),
             )
 
@@ -164,11 +203,14 @@ def main() -> int:
             str(iso),
             "-drive",
             f"file={disk},format=raw,if=ide,index=0",
-            "-fsdev",
-            f"local,id=ir0fs,path={share_dir},security_model=none",
-            "-device",
-            "virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on",
         ]
+        if share_dir is not None:
+            cmd += [
+                "-fsdev",
+                f"local,id=ir0fs,path={share_dir},security_model=none",
+                "-device",
+                "virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on",
+            ]
         if args.qemu_arg:
             cmd += list(args.qemu_arg)
         has_netdev = any("netdev" in a for a in (args.qemu_arg or []))
@@ -183,11 +225,16 @@ def main() -> int:
         ]
         if not has_netdev:
             cmd += ["-net", "none"]
-        mode = "legacy-disk-init" if args.legacy_disk_init else f"share-payload={PAYLOAD_NAME}"
+        if prebuilt_disk is not None:
+            mode = f"prebuilt-disk={disk.name}"
+        elif args.legacy_disk_init:
+            mode = "legacy-disk-init"
+        else:
+            mode = f"share-payload={PAYLOAD_NAME}"
         print(f"  KTM-USERDEV-RUN log={log} share={share_dir} ({mode})")
         rc = subprocess.call(cmd, cwd=str(ROOT))
     finally:
-        if disk.exists():
+        if own_disk and disk.exists():
             disk.unlink()
 
     text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
