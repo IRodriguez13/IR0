@@ -68,7 +68,7 @@ static void typewriter_delay(uint32_t microseconds)
     
     for (volatile uint32_t i = 0; i < cycles; i++) {
         /* Busy wait */
-        __asm__ volatile ("nop");
+        __asm__ volatile("" ::: "memory");
     }
 }
 

@@ -39,6 +39,10 @@
 #include <ir0/arch_port.h>
 #include <ir0/sched.h>
 #include <ir0/sysv_shm.h>
+#include <ir0/memfd.h>
+#include <ir0/eventfd.h>
+#include <ir0/timerfd.h>
+#include <ir0/time.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <d1_12_read_diag.h>
@@ -96,6 +100,7 @@ WRAP3(sys_bind, int, const struct sockaddr *, socklen_t)
 WRAP3(sys_connect, int, const struct sockaddr *, socklen_t)
 WRAP2(sys_listen, int, int)
 WRAP3(sys_accept, int, struct sockaddr *, socklen_t *)
+WRAP4(sys_accept4, int, struct sockaddr *, socklen_t *, int)
 WRAP4(sys_socketpair, int, int, int, int *)
 WRAP3(sys_sendmsg, int, const struct msghdr *, int)
 WRAP3(sys_recvmsg, int, struct msghdr *, int)
@@ -108,6 +113,11 @@ WRAP3(sys_shmget, int, size_t, int)
 WRAP3(sys_shmat, int, const void *, int)
 WRAP1(sys_shmdt, const void *)
 WRAP3(sys_shmctl, int, int, void *)
+WRAP2(sys_memfd_create, const char *, unsigned int)
+WRAP2(sys_eventfd2, unsigned int, int)
+WRAP2(sys_timerfd_create, int, int)
+WRAP4(sys_timerfd_settime, int, int, const struct itimerspec *, struct itimerspec *)
+WRAP2(sys_timerfd_gettime, int, struct itimerspec *)
 WRAP6(sys_sendto, int, const void *, size_t, int, const struct sockaddr *, socklen_t)
 WRAP6(sys_recvfrom, int, void *, size_t, int, struct sockaddr *, socklen_t *)
 
@@ -202,6 +212,8 @@ WRAP2(sys_nanosleep, const struct timespec *, struct timespec *)
 WRAP0(sys_pause)
 WRAP0(sys_sync)
 WRAP2(sys_gettimeofday, struct timeval *, void *)
+WRAP2(sys_getitimer, int, struct itimerval *)
+WRAP3(sys_setitimer, int, const struct itimerval *, struct itimerval *)
 WRAP1(sys_setuid, uid_t)
 WRAP1(sys_setgid, gid_t)
 WRAP1(sys_umask, mode_t)
@@ -302,6 +314,8 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_pipe2]          = wrap_sys_pipe2;
   syscall_table_rw[__NR_dup2]           = wrap_sys_dup2;
   syscall_table_rw[__NR_nanosleep]      = wrap_sys_nanosleep;
+  syscall_table_rw[__NR_getitimer]      = wrap_sys_getitimer;
+  syscall_table_rw[__NR_setitimer]      = wrap_sys_setitimer;
   syscall_table_rw[__NR_pause]          = wrap_sys_pause;
   syscall_table_rw[__NR_getpid]         = wrap_sys_getpid;
   syscall_table_rw[__NR_gettid]         = wrap_sys_gettid;
@@ -397,6 +411,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_connect]     = wrap_sys_connect;
   syscall_table_rw[__NR_listen]      = wrap_sys_listen;
   syscall_table_rw[__NR_accept]      = wrap_sys_accept;
+  syscall_table_rw[__NR_accept4]     = wrap_sys_accept4;
   syscall_table_rw[__NR_socketpair]  = wrap_sys_socketpair;
   syscall_table_rw[__NR_sendto]      = wrap_sys_sendto;
   syscall_table_rw[__NR_recvfrom]    = wrap_sys_recvfrom;
@@ -415,7 +430,7 @@ void syscall_table_init(void)
   {
     static const unsigned socket_nosys_nrs[] = {
       __NR_socket, __NR_bind, __NR_connect, __NR_listen, __NR_accept,
-      __NR_socketpair, __NR_sendto, __NR_recvfrom, __NR_sendmsg, __NR_recvmsg,
+      __NR_accept4, __NR_socketpair, __NR_sendto, __NR_recvfrom, __NR_sendmsg, __NR_recvmsg,
       __NR_shutdown, __NR_getsockname, __NR_getpeername, __NR_setsockopt,
       __NR_getsockopt,
     };
@@ -425,6 +440,11 @@ void syscall_table_init(void)
       syscall_table_rw[socket_nosys_nrs[si]] = sys_nosys;
   }
 #endif
+  syscall_table_rw[__NR_memfd_create] = wrap_sys_memfd_create;
+  syscall_table_rw[__NR_eventfd2] = wrap_sys_eventfd2;
+  syscall_table_rw[__NR_timerfd_create] = wrap_sys_timerfd_create;
+  syscall_table_rw[__NR_timerfd_settime] = wrap_sys_timerfd_settime;
+  syscall_table_rw[__NR_timerfd_gettime] = wrap_sys_timerfd_gettime;
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit_group;
 }
 
@@ -505,9 +525,14 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     /*
      * Mark ring-0 before waking the child so a timer-deferred schedule
      * resumes via kernel_ret (syscall stack), not user iretq with a stale rip.
+     * IRQs off first: otherwise arm leaves KERNEL_CS+user RIP while the timer
+     * can still preempt and schedule the parent as next (desk #UD class).
      */
     if (current_process && current_process->mode == USER_MODE)
+    {
+      disable_interrupts();
       process_arm_kernel_syscall_sleep(current_process);
+    }
 
     /*
      * Linux-style fork exit: wake child after parent retval is in rax, then
@@ -519,7 +544,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
        * Disable IRQs before enqueueing the child: sched_add can otherwise
        * run the child on timer tick before parent sysret (UP race).
        */
-      arch_disable_interrupts();
+      disable_interrupts();
       process_fork_wake_pending(current_process);
     }
   }

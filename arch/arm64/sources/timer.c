@@ -17,7 +17,7 @@
 static uint64_t g_cntfrq;
 static uint32_t g_hz;
 
-void arch_timer_init(void)
+void timer_init(void)
 {
 	uint64_t frq;
 
@@ -26,7 +26,7 @@ void arch_timer_init(void)
 	g_hz = (uint32_t)frq;
 }
 
-uint64_t arch_timer_read(void)
+uint64_t timer_read(void)
 {
 	uint64_t pct;
 
@@ -34,12 +34,12 @@ uint64_t arch_timer_read(void)
 	return pct;
 }
 
-void arch_timer_set_frequency(uint32_t hz)
+void timer_set_frequency(uint32_t hz)
 {
 	g_hz = hz;
 }
 
-uint32_t arch_timer_get_frequency(void)
+uint32_t timer_get_frequency(void)
 {
 	if (g_hz != 0)
 	{

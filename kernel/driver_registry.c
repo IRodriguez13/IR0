@@ -76,6 +76,7 @@ static const char* state_to_string(ir0_driver_state_t state)
         case IR0_DRIVER_STATE_INITIALIZED:  return "Initialized";
         case IR0_DRIVER_STATE_ACTIVE:       return "Active";
         case IR0_DRIVER_STATE_FAILED:       return "Failed";
+        case IR0_DRIVER_STATE_ABSENT:       return "Absent";
         default:                            return "Unknown";
     }
 }
@@ -277,7 +278,13 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
         {
             driver->state = IR0_DRIVER_STATE_INITIALIZED;
             LOG_INFO_FMT("DriverRegistry", "Driver '%s' initialized successfully", driver->info.name);
-        } else 
+        }
+        else if (result == IR0_DRIVER_ABSENT)
+        {
+            driver->state = IR0_DRIVER_STATE_ABSENT;
+            LOG_WARNING_FMT("DriverRegistry", "Driver '%s' absent (no hardware)", driver->info.name);
+        }
+        else
         {
             driver->state = IR0_DRIVER_STATE_FAILED;
             LOG_ERROR_FMT("DriverRegistry", "Driver '%s' initialization failed: %d", driver->info.name, result);
@@ -375,6 +382,34 @@ void ir0_driver_shutdown_all(void)
     }
 }
 
+
+void ir0_driver_boot_counts(unsigned *ready, unsigned *absent, unsigned *failed)
+{
+	unsigned r = 0, a = 0, f = 0;
+	ir0_driver_t *current;
+
+	if (driver_registry.initialized)
+	{
+		current = driver_registry.drivers;
+		while (current)
+		{
+			if (current->state == IR0_DRIVER_STATE_INITIALIZED ||
+			    current->state == IR0_DRIVER_STATE_ACTIVE)
+				r++;
+			else if (current->state == IR0_DRIVER_STATE_ABSENT)
+				a++;
+			else if (current->state == IR0_DRIVER_STATE_FAILED)
+				f++;
+			current = current->next;
+		}
+	}
+	if (ready)
+		*ready = r;
+	if (absent)
+		*absent = a;
+	if (failed)
+		*failed = f;
+}
 
 /*
  * Raw data only: one line per driver, tab-separated.

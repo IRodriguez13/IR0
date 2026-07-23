@@ -280,7 +280,7 @@ static int sys_devices_cpu_online[SYS_MAX_CPUS] = { 1 };
 
 static uint32_t sys_sysfs_cpu_count(void)
 {
-    uint32_t n = arch_get_cpu_count();
+    uint32_t n = get_cpu_count();
 
     if (n == 0)
         n = 1;
@@ -441,7 +441,7 @@ int sysfs_open(const char *path, int flags)
     return -ENOENT;
 }
 
-/* Read from /sys file */
+/* Read from /sys — LEGACY global virtual fd only; syscall uses fd_table binds. */
 int sysfs_read(int fd, char *buf, size_t count, off_t offset)
 {
     int64_t pr;
@@ -458,7 +458,7 @@ int sysfs_read(int fd, char *buf, size_t count, off_t offset)
     return -EBADF;
 }
 
-/* Write to /sys file */
+/* Write to /sys — LEGACY global virtual fd only; syscall uses fd_table binds. */
 int sysfs_write(int fd, const char *buf, size_t count)
 {
     int64_t pw;

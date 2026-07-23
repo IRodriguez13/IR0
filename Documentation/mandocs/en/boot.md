@@ -116,6 +116,12 @@ Mermaid source: `Documentation/mandocs/diagrams/boot.mmd`
 
 ## 9. Debugging tips
 
+New contributors: start with `make man TOPIC=onboarding` (first bug walkthrough).
+Optional host-side boot log (consultable ring, not a Linux ACPI dump):
+`make run-bootlog` → `build/hostshare/ir0-boot.log` when
+`CONFIG_BOOT_LOG_HOSTSHARE=y` and QEMU `-virtfs` is present
+(`BOOT_LOG_HOSTSHARE_OK` / `_SKIP`).
+
 Serial tags: `[ARCH]`, `klog` COMP `BOOT`, `[DRIVERS]`, `SERIAL: kmain: Loading userspace init`,
 `[ts] [INFO] [FASE…] CLASSIFY ROOTFS_LAYOUT_OK` (no dialect `[COMP][CLASSIFY]`).
 
@@ -125,12 +131,14 @@ Serial tags: `[ARCH]`, `klog` COMP `BOOT`, `[DRIVERS]`, `SERIAL: kmain: Loading 
 | Root mount fail | `block_dev_is_present(CONFIG_ROOT_BLOCK_DEVICE)`; tmpfs fallback |
 | Blank GUI | `[BOOT] vbe_fail_reason=` (1=mb_null, 2=no_fb, 3=bad_dims, 4=map_fail) |
 | Init not found | MINIX image missing `/sbin/init`; use inject scripts |
+| No `ir0-boot.log` on host | Need `BOOT_LOG_HOSTSHARE=y` + `-virtfs`; see `make help-bootlog` |
 
 Build: `make kernel-x64.iso`; userspace: `make kernel-x64-userspace.iso`.
 
 ## 10. Future roadmap
 
-- ARM64 boot stub exists but is not production-ready (`arch/arm64/sources/boot_stub.c`).
+- ARM64 early boot uses portable `ir0_boot_*` + `arm64_board` (`qemu-virt` / `rpi4` /
+  `rpi5` stub). RPi4 UART min: `make smoke-arm64-rpi4-boot`. Not production-ready.
 - SMP/APIC-first boot not primary (`CONFIG_ENABLE_SMP=0`).
 - Higher-half kernel mapping not implemented (identity low map only).
 - UEFI direct boot not in tree (GRUB Multiboot path only).

@@ -76,6 +76,8 @@ int devfs_is_virtual_subdir(const char *path);
 int devfs_readdir_root(struct vfs_dirent *entries, int max_entries);
 int devfs_readdir_subdir(const char *path, struct vfs_dirent *entries,
                          int max_entries);
+/* Per-syscall: O_NONBLOCK for shared console/tty read ops. */
+void devfs_set_read_nonblock(int nonblock);
 
 // Standard device implementations
 int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
@@ -142,7 +144,20 @@ struct audio_format {
 
 /* Framebuffer (OSDev /dev/fb0, Linux-compatible ioctl) */
 #define FBIOGET_VSCREENINFO 0x4600  /* Linux uapi/fb.h */
+#define FBIOPUT_VSCREENINFO 0x4601
 #define FBIOGET_FSCREENINFO 0x4602
+#define FBIOGETCMAP         0x4604
+#define FBIOPUTCMAP         0x4605
+#define FBIOPAN_DISPLAY     0x4606
+#define FBIOBLANK           0x4611
+
+/* Linux uapi/linux/fb.h */
+struct fb_bitfield {
+    uint32_t offset;
+    uint32_t length;
+    uint32_t msb_right;
+};
+
 struct fb_var_screeninfo {
     uint32_t xres;           /* visible resolution */
     uint32_t yres;
@@ -152,10 +167,10 @@ struct fb_var_screeninfo {
     uint32_t yoffset;
     uint32_t bits_per_pixel;
     uint32_t grayscale;
-    uint32_t red;
-    uint32_t green;
-    uint32_t blue;
-    uint32_t transp;
+    struct fb_bitfield red;
+    struct fb_bitfield green;
+    struct fb_bitfield blue;
+    struct fb_bitfield transp;
     uint32_t nonstd;
     uint32_t activate;
     uint32_t height;
@@ -172,6 +187,7 @@ struct fb_var_screeninfo {
     uint32_t vmode;
     uint32_t rotate;
     uint32_t colorspace;
+    uint32_t reserved[4];
 };
 
 /* Linux fb_fix_screeninfo (for mmap: line_length, smem_len) */

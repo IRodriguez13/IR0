@@ -16,29 +16,32 @@
 #include <stdint.h>
 
 
-void arch_enable_interrupts(void);
-void arch_disable_interrupts(void);
+void enable_interrupts(void);
+void disable_interrupts(void);
 
 
 uint8_t inb(uint16_t port);
-
-
 void outb(uint16_t port, uint8_t value);
 
+/* Wider port I/O — also declared in <ir0/cpu.h>; one impl in arch_interface.c */
+uint16_t inw(uint16_t port);
+void outw(uint16_t port, uint16_t value);
+uint32_t inl(uint16_t port);
+void outl(uint16_t port, uint32_t value);
 
 uintptr_t read_fault_address(void);
 
 
-const char *arch_get_name(void);
+const char *get_arch_name(void);
 
 
 void cpu_wait(void);
-void arch_cpu_idle(void);
-void arch_cpu_halt(void);
-void arch_system_halt(void) __attribute__((noreturn));
-void arch_system_reboot(void) __attribute__((noreturn));
-void arch_system_poweroff(void) __attribute__((noreturn));
-void arch_set_boot_params(void *params);
+void cpu_idle(void);
+void cpu_halt(void);
+void system_halt(void) __attribute__((noreturn));
+void system_reboot(void) __attribute__((noreturn));
+void system_poweroff(void) __attribute__((noreturn));
+void set_boot_params(void *params);
 
 
 

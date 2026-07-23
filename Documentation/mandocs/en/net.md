@@ -17,9 +17,11 @@ proc nodes. In addition, **AF_INET `SOCK_STREAM`** is wired through
 `kernel/sock_stream.c` onto a minimal **TCP wire** path in `net/tcp.c`
 (`tcp_wire_connect` / listen / accept / send / recv / close).
 
-This is **not** a full TCP stack: no retransmit, no window/congestion control,
-no out-of-order reassembly. Wire teardown is honest FIN/ACK + guest EOF (recv
-returns 0 after peer FIN and drained RX).
+This is **not** a full TCP / Internet stack. Lab paths include limited recovery
+(hole rexmit / peer-driven CC smokes — see `smoke-tcp-peer-cc`, `smoke-f8-net`).
+There is no production congestion control, no complete out-of-order reassembly,
+and no claim of arbitrary Internet reachability. Wire teardown is honest FIN/ACK
++ guest EOF (`recv` returns 0 after peer FIN and drained RX).
 
 ## 2. Internal architecture
 
@@ -110,7 +112,8 @@ ASCII:
 ## 5. Subsystem boundaries
 
 - `net/` uses `includes/ir0/*`; no direct `#include <drivers/...>` from portable trees.
-- TCP wire is a **minimal** path for smokes and AF_INET STREAM — not BSD sockets parity.
+- TCP wire is a **lab** path for smokes and AF_INET STREAM — not BSD sockets parity.
+  AF_UNIX streams share `sock_stream` (see `IR0-ipc`).
 - Device/protocol lists assume registration before interrupts enabled (no locks).
 
 ## 6. Relations to other subsystems
@@ -158,9 +161,10 @@ ASCII:
 
 ## 10. Future roadmap
 
-- **Peer-driven retransmit / RTO / window / congestion** — selftest stubs are not ship gates.
+- **Deeper peer-driven retransmit / RTO / window / congestion** — lab probes exist;
+  selftest stubs are not ship gates for “Internet TCP done”.
 - **IPv6** — dropped at L2.
-- **Full BSD socket API** (options, OOB, MSG_*) — partial AF_INET STREAM only.
+- **Full BSD socket API** (options, OOB, MSG_*) — partial AF_UNIX + AF_INET STREAM.
 - **Auto DHCP at boot** — static IP until explicit `dhcp` command.
 - E1000: **BLOCKED** — no driver MVP (`CONFIG_DRV_NIC_E1000=n`); do not claim.
 - virtio-net: L3 reach smoke exists (`smoke-nic-reach-virtio`); not default probe for all paths.

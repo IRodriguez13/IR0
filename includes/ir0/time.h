@@ -31,3 +31,14 @@ struct timeval {
     time_t tv_sec;
     suseconds_t tv_usec;
 };
+
+struct itimerspec {
+    struct timespec it_interval;
+    struct timespec it_value;
+};
+
+/* POSIX itimerval — setitimer/getitimer (ITIMER_REAL etc.) */
+struct itimerval {
+    struct timeval it_interval;
+    struct timeval it_value;
+};

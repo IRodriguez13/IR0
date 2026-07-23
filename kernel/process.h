@@ -54,6 +54,9 @@ typedef struct fd_entry
 	bool is_socket; /* bound to sock_udp when true */
 	bool is_pseudo; /* bound to pseudo_fs ops via vfs_file (pseudo_fd_bind_t) */
 	bool is_epoll;  /* vfs_file points at epoll_state */
+	bool is_memfd;  /* vfs_file points at ir0_memfd */
+	bool is_eventfd;
+	bool is_timerfd;
 } fd_entry_t;
 
 /* Process-local binding for /proc /sys /heart opens (not global virtual fds). */
@@ -120,7 +123,7 @@ typedef struct process
 	/*
 	 * x86-64 TLS base (MSR IA32_FS_BASE).
 	 * Persisted across context switches because IR0 does not yet save/restore
-	 * FS_BASE in switch_context_x64 / arch_switch_to_user_task_asm. Linux ABI
+	 * FS_BASE in switch_context_x64 / switch_to_user_task_asm. Linux ABI
 	 * (musl, glibc) sets this via arch_prctl(ARCH_SET_FS) on every task.
 	 * The asm restore paths read this field directly via a hard-coded offset
 	 * (guarded by _Static_assert in this file).
@@ -190,7 +193,7 @@ typedef struct process
 	/* Linux syscall insn frame (for fork child / blocked syscall return). */
 	syscall_user_frame_t syscall_frame;
 	uint64_t syscall_resume_rax;
-	uint8_t irq_frame_saved; /* blocked syscall: resume via arch_switch_to_user_task */
+	uint8_t irq_frame_saved; /* blocked syscall: resume via switch_to_user_task */
 	int *wait_status_ptr;    /* userspace wait4 status word while irq_frame_saved */
 	/*
 	 * wait4 blocked-syscall contract (D1.17): while irq_frame_saved from wait4,
@@ -227,6 +230,12 @@ typedef struct process
 	 */
 	uint8_t syscall_frame_fresh;
 	uint8_t coop_resched_resume;
+	/*
+	 * Class B close: arm requested kernel_ret resume but task.rip was still
+	 * userspace — do not set KERNEL CS until switch_context has saved kernel
+	 * [rsp] (see process_after_task_save / process_arm_kernel_syscall_sleep).
+	 */
+	uint8_t want_kernel_ret;
 
 	/*
 	 * Per-process kernel stack (see IR0_PROC_KSTACK_SIZE). kstack_base is the
@@ -320,6 +329,7 @@ void process_capture_syscall_frame(process_t *p);
 void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw);
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
                                          uint64_t rax);
+/* Soft pt_regs→task mirror; no-op if KERNEL CS or want_kernel_ret (Class B). */
 void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 
 void process_restore_user_task_segments(process_t *p);
@@ -333,6 +343,11 @@ void process_arm_coop_resched_resume(process_t *p, uint64_t rax);
 void process_clear_in_thread_syscall_block(process_t *p);
 void process_reset_blocked_syscall_state(process_t *p);
 void process_arm_kernel_syscall_sleep(process_t *p);
+/* After switch_context saved prev: honour want_kernel_ret (Class B close). */
+void process_after_task_save(task_t *prev);
+
+/* Class B: KERNEL CS + userspace RIP unsafe for kernel_ret (see process_ctx_invariant.h). */
+int process_task_kernel_ret_rip_bad(const task_t *t);
 void fork_ret_emit_pre_return(void);
 void fork_restore_emit_pre_iretq(void);
 void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw);
@@ -352,10 +367,10 @@ int process_wait_child_matches_blocked_target(const process_t *parent,
 int process_child_wait_status_word(const process_t *child);
 
 /*
- * Fatal default action for kill(2): SIGKILL always; SIGTERM when not caught or
- * ignored (signal mask does not defer default terminate). Returns 1 if @target
- * is now a zombie; caller must request schedule.
+ * Fatal default action for kill(2): SIGKILL always; SIGTERM/SIGHUP when not
+ * caught or ignored. Returns 1 if @target is now a zombie (or self-exited).
  */
+int process_signal_is_default_fatal(process_t *p, int sig);
 int process_signal_default_kill(process_t *target, int signal);
 
 /*

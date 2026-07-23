@@ -3,9 +3,8 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_nic_reach_case.c
- * Description: Probe /dev/net (open + ifconfig write). Optional ping to
- *              10.0.2.2. Pass on probe; ping reply is best-effort.
- *              Optional virtio-9p host share report.
+ * Description: Probe /dev/net (ifconfig + ICMP ping to 10.0.2.2). Pass only
+ *              when ping_result success=1 is readable. Optional virtio-9p report.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -29,6 +28,8 @@ static int probe_dev_net(void)
 	struct stat st;
 	int fd;
 	ssize_t n;
+	char buf[512];
+	int tries;
 	const char *ifc = "ifconfig\n";
 	const char *ping = "ping 10.0.2.2\n";
 
@@ -46,15 +47,35 @@ static int probe_dev_net(void)
 	}
 	say("NIC_IFCONFIG_WRITE_OK\n");
 
-	/* Best-effort ping; do not fail the case if echo reply is missing. */
 	n = write(fd, ping, strlen(ping));
-	if (n >= 0)
-		say("NIC_PING_SUBMIT_OK\n");
-	else
-		say("NIC_PING_SUBMIT_SKIP\n");
+	if (n < 0)
+	{
+		say("NIC_PING_SUBMIT_FAIL\n");
+		close(fd);
+		return -1;
+	}
+	say("NIC_PING_SUBMIT_OK\n");
 
+	for (tries = 0; tries < 80; tries++)
+	{
+		n = read(fd, buf, sizeof(buf) - 1);
+		if (n > 0)
+		{
+			buf[n] = '\0';
+			if (strstr(buf, "type=ping_result") &&
+			    strstr(buf, "success=1"))
+			{
+				say("NIC_PING_REPLY_OK\n");
+				close(fd);
+				return 0;
+			}
+		}
+		usleep(50000);
+	}
+
+	say("NIC_PING_REPLY_FAIL\n");
 	close(fd);
-	return 0;
+	return -1;
 }
 
 static void try_hostshare_report(int ok)
@@ -83,7 +104,6 @@ int main(void)
 		ktm_close(kfd);
 		return 1;
 	}
-	(void)ktm_reset(kfd);
 	if (ktm_case_begin(kfd, "nic_reach") != 0)
 	{
 		say("F8_NIC_REACH_FAIL case_begin\n");
@@ -91,28 +111,18 @@ int main(void)
 		return 1;
 	}
 
-	(void)ktm_checkpoint(kfd, "nic_probe");
 	ok = (probe_dev_net() == 0);
+	ktm_assert_true(kfd, "nic_reach_probe", ok);
 	if (!ok)
 		fails++;
-	if (ktm_assert_true(kfd, "dev_net_probe", ok) != 0)
-		fails++;
 
-	(void)ktm_case_end(kfd, "nic_reach", fails == 0 ? 0 : 1);
-	ktm_close(kfd);
-
-	try_hostshare_report(fails == 0);
-
-	if (fails == 0)
-	{
-		say("NIC_REACH_OK\n");
+	try_hostshare_report(ok);
+	if (ok)
 		say("F8_NIC_REACH_OK\n");
-		for (;;)
-			(void)pause();
-		return 0;
-	}
-	say("F8_NIC_REACH_FAIL\n");
-	for (;;)
-		(void)pause();
-	return 1;
+	else
+		say("F8_NIC_REACH_FAIL\n");
+
+	ktm_case_end(kfd, "nic_reach", fails == 0 ? 0 : 1);
+	ktm_close(kfd);
+	return fails == 0 ? 0 : 1;
 }

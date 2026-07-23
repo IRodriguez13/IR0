@@ -93,6 +93,13 @@ MANDOC_CHAPTERS: list[MandocChapter] = [
         "Pipeline de arranque desde GRUB hasta handoff a userspace",
     ),
     MandocChapter(
+        "onboarding",
+        "onboarding.md",
+        "IR0-onboarding",
+        "First clone, check-env, build, boot variants, and first bug",
+        "Primer clone, check-env, build, variantes de boot y primer bug",
+    ),
+    MandocChapter(
         "scheduler",
         "scheduler.md",
         "IR0-scheduler",
@@ -932,18 +939,41 @@ def main() -> int:
         default=DEFAULT_PREFIX,
         help="Install root (default: $MANDOC_PREFIX or ~/.local)",
     )
+    parser.add_argument(
+        "--yes",
+        "--noninteractive",
+        action="store_true",
+        help="No prompts (for menuconfig / CI); build all chapters of --lang",
+    )
     args = parser.parse_args()
 
     if args.uninstall:
         lang = None if not args.lang or args.lang == "all" else args.lang
         return uninstall_mandocs(lang, args.prefix.expanduser().resolve() if args.prefix else None)
 
+    if args.lang == "all":
+        rc = 0
+        for one in ("en", "es"):
+            ns = argparse.Namespace(**vars(args))
+            ns.lang = one
+            rc |= _run_mandocs_build(ns)
+        return rc
+
+    return _run_mandocs_build(args)
+
+
+def _run_mandocs_build(args: argparse.Namespace) -> int:
     do_install = not args.no_install
-    lang = resolve_language(args.lang if args.lang not in (None, "all") else None)
+    if args.lang in (None, "all") and getattr(args, "yes", False):
+        lang = "en"
+    else:
+        lang = resolve_language(args.lang if args.lang not in (None, "all") else None)
     prefix = args.prefix.expanduser().resolve()
 
-    if do_install and sys.stdin.isatty():
+    if do_install and sys.stdin.isatty() and not getattr(args, "yes", False):
         print_install_banner(lang, prefix)
+    elif do_install:
+        print(f"install prefix: {prefix}")
 
     if args.mandoc_only and args.legacy_only:
         print("error: --mandoc-only and --legacy-only are mutually exclusive", file=sys.stderr)
@@ -952,7 +982,10 @@ def main() -> int:
     build_legacy = not args.mandoc_only
     build_mandoc = not args.legacy_only
 
-    chapters = resolve_chapters(args.chapters, lang) if build_legacy else []
+    if getattr(args, "yes", False) and not args.chapters:
+        chapters = CHAPTERS[:] if build_legacy else []
+    else:
+        chapters = resolve_chapters(args.chapters, lang) if build_legacy else []
     mandoc_chapters = list(MANDOC_CHAPTERS) if build_mandoc else []
 
     out_dir = MANDOC_ROOT / lang
@@ -1005,11 +1038,13 @@ def main() -> int:
             return 1
         write_install_manifest(lang, prefix, installed)
         print("")
-        print(f"Installed under {man7}")
+        print(f"Installed {len(installed)} manual pages into:")
+        print(f"  {prefix}/share/man")
+        print("")
+        print("Run:")
         print(f"  man {man_name}")
-        for name in installed:
-            if name != installed_page_name("IR0-krnl.7", lang):
-                print(f"  man {name[:-3] if name.endswith('.7') else name}")
+        print("  make man TOPIC=boot")
+        print("")
         print(ui(lang)["manpath_hint"].format(prefix=prefix))
         print(ui(lang)["uninstall_hint"])
     else:

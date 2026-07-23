@@ -11,7 +11,7 @@
  * Description: ARM64 interrupt controller scaffold.
  */
 
-void arch_interrupt_init_arm64(void)
+void interrupt_init_arm64(void)
 {
     /* Stub: integrate GICv2/v3 or SoC-specific interrupt controller here. */
 }

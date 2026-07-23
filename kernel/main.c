@@ -19,6 +19,7 @@
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <ir0/logging.h>
+#include <ir0/boot_log_hostshare.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -315,6 +316,9 @@ void kmain(uint32_t multiboot_info)
 #if defined(CONFIG_KTM_TEST) && CONFIG_KTM_TEST
     ktm_scenarios_run_boot();
 #endif
+
+    /* Optional: export log ring to QEMU -virtfs (CONFIG_BOOT_LOG_HOSTSHARE). */
+    (void)ir0_boot_log_hostshare_try();
 
     /*
      * In-kernel tests run from init_1 (process context) when linked.

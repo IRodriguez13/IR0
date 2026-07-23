@@ -55,7 +55,7 @@
 | Host-share exec (stub + `ir0_payload`) | `smoke-hostshare-exec` (`HOSTSHARE_EXEC_MOUNT_OK` + case done tag) |
 | Host-share exec under runit PID1 | `runit_hostshare_payload_run` + runner `--disk`; IR0-desktop `run-xfbdev-smoke.sh` |
 | `isa-debug-exit` + CAD/RESTART2 tags | `smoke-isa-debug-exit` |
-| ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` |
+| ARM64 `platform_ops` virt + RPi stub | `arch/arm64/sources/platform.c` + `board.c` (`ARM64_BOARD=qemu-virt\|rpi4\|rpi5`) |
 | KTM boot suite | `make ktm-run` (pass=16 incl. `process.reclaim_exit`) |
 | KTM userdev | `ktm-userdev-run`, `ktm-userdev-cow-run` |
 | Kernel `[FASE` serial retired | arch-guard `ktm-no-fase` |
@@ -182,7 +182,7 @@ Proof: make smoke-arm64
 | Context switch | `switch_arm64.c` empty stub |
 | musl / BusyBox / init | no ARM rootfs |
 | GIC / timer / virtio / storage | not wired in boot image |
-| Board beyond QEMU virt | RPi ops stub only |
+| Board beyond QEMU virt | **virt + rpi4 UART QEMU** (`arm64_board`, PL011 `0xfe201000`); **rpi5 stub** (`uart=none`, `ARM64_BOARD_RPI5_STUB`); GIC/SD/DT/RP1 still future |
 
 **Rough maturity:** early CPU privilege bring-up (**not** “ARM port ~done”). Treat F7 as
 closed for that slice; track real port as **F7b** above.

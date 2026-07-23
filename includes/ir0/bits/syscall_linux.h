@@ -153,6 +153,12 @@
 #define __NR_set_robust_list 273
 #define __NR_get_robust_list 274
 #define __NR_getrandom       318
+#define __NR_memfd_create    319
+#define __NR_timerfd_create  283
+#define __NR_timerfd_settime 286
+#define __NR_timerfd_gettime 287
+#define __NR_accept4         288
+#define __NR_eventfd2        290
 #define __NR_prlimit64       302
 #define __NR_openat          257
 #define __NR_mknodat         259

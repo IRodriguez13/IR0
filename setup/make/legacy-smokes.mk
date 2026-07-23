@@ -1143,7 +1143,9 @@ smoke-fase55d-doomgeneric: build-runit build-init-fase55d-doomgeneric kernel-x64
 	    grep -q "DOOMGENERIC_INIT_OK" $(FASE55D_DOOMGENERIC_LOG) && \
 	    grep -q "DOOMGENERIC_FIRST_FRAME_OK" $(FASE55D_DOOMGENERIC_LOG) && \
 	    grep -q "DOOMGENERIC_FRAME_LOOP_OK" $(FASE55D_DOOMGENERIC_LOG) && \
-	    grep -q "FASE55D_DOOMGENERIC_OK" $(FASE55D_DOOMGENERIC_LOG); then \
+	    grep -q "FASE55D_DOOMGENERIC_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "KTM_DOOM_55D_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "KTM_USERDEV_OK" $(FASE55D_DOOMGENERIC_LOG); then \
 		echo "LONG_RUNNING_BUT_STABLE"; \
 		echo "FASE55D_DOOMGENERIC_REAL_WAD_OK"; \
 		echo "✓ smoke-fase55d-doomgeneric finished"; \
@@ -1158,6 +1160,10 @@ smoke-fase55d-doomgeneric: build-runit build-init-fase55d-doomgeneric kernel-x64
 		fi; \
 		exit 1; \
 	fi
+
+# Hybrid KTM name for critical battery (same runit+WAD recipe)
+ktm-userdev-doom-55d-run: smoke-fase55d-doomgeneric
+	@echo "✓ ktm-userdev-doom-55d-run (hybrid runit)"
 
 run-fase55d-doomgeneric-gui: build-fase55e-doom-interactive kernel-x64-userspace.iso
 	@if [ -z "$(REAL_WAD_PATH)" ] || [ ! -f "$(REAL_WAD_PATH)" ]; then \

@@ -247,6 +247,7 @@ int main(void)
 		write_str("KTM_BUSYBOX_COREUTILS_SKIP\n");
 
 	write_str("BUSYBOX_MANIFEST_OK\n");
+	write_str("KTM_USERDEV_OK\n");
 	write_str("FASE58L_OK\n");
 	for (;;)
 		pause();

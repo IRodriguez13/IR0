@@ -336,6 +336,9 @@
 #ifndef CONFIG_DRV_NIC_E1000
 #define CONFIG_DRV_NIC_E1000 0
 #endif
+#ifndef CONFIG_DRV_NIC_VIRTIO_NET
+#define CONFIG_DRV_NIC_VIRTIO_NET 0
+#endif
 #ifndef CONFIG_ARCH_X86_64
 #define CONFIG_ARCH_X86_64 1
 #endif

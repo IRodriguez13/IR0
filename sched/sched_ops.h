@@ -8,6 +8,13 @@
  *
  * File: sched_ops.h
  * Description: Backend ops table (sched/ only — not a portable include).
+ *
+ * Contract (API layers):
+ * - Portable callers use <ir0/sched.h> only (facade).
+ * - Backends implement ir0_sched_ops; they must NOT #include or call the
+ *   other backend's private symbols (e.g. rr_* from priority, or vice versa).
+ * - After picking @next, backends call sched_context_switch_to() — never
+ *   another backend's runqueue helpers.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -346,7 +346,7 @@ static void pseudo_fs_register_proc_dynamic(void)
 
 static void pseudo_fs_register_sys_cpus(void)
 {
-    uint32_t cpus = arch_get_cpu_count();
+    uint32_t cpus = get_cpu_count();
     char rel[96];
 
     if (cpus == 0)

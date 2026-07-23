@@ -14,6 +14,7 @@
 
 #include "socket_syscalls.h"
 #include "syscalls_glue.h"
+#include "io_syscalls.h"
 #include <errno.h>
 #include <ir0/syscalls_kernel.h>
 #include <ir0/process.h>
@@ -26,15 +27,52 @@
 #include <ir0/sock_udp.h>
 #include <ir0/sock_stream.h>
 #include <ir0/socket.h>
+#include <ir0/signals.h>
 #include <ir0/pipe.h>
 #include <ir0/vfs.h>
+#include <ir0/memfd.h>
 #include <ir0/devfs.h>
 #include <ir0/uio.h>
 #include <config.h>
 #include <string.h>
 
 #define IPPROTO_UDP 17
-#define MSG_DONTWAIT 0x40
+
+extern int64_t sys_close(int fd);
+
+static int64_t unix_fill_sockaddr(struct sock_stream *ss, struct sockaddr *addr,
+				  socklen_t *addrlen)
+{
+	struct sockaddr_un sun;
+	socklen_t want;
+	socklen_t have;
+	size_t plen = 0;
+	int abs = 0;
+	char path[108];
+
+	if (!current_process || !addr || !addrlen)
+		return -EFAULT;
+	if (copy_from_user(&want, addrlen, sizeof(want)) != 0)
+		return -EFAULT;
+	if (sock_stream_family(ss) != IR0_AF_UNIX)
+		return -EOPNOTSUPP;
+	memset(path, 0, sizeof(path));
+	(void)sock_stream_get_unix_name(ss, path, sizeof(path), &plen, &abs);
+	memset(&sun, 0, sizeof(sun));
+	sun.sun_family = AF_UNIX;
+	if (plen > sizeof(sun.sun_path))
+		plen = sizeof(sun.sun_path);
+	memcpy(sun.sun_path, path, plen);
+	have = (socklen_t)(sizeof(sun.sun_family) + plen);
+	if (want > have)
+		want = have;
+	if (want > 0 && copy_to_user(addr, &sun, want) != 0)
+		return -EFAULT;
+	if (copy_to_user(addrlen, &have, sizeof(have)) != 0)
+		return -EFAULT;
+	(void)abs;
+	return 0;
+}
 
 static size_t sock_strnlen(const char *s, size_t max)
 {
@@ -48,7 +86,7 @@ static size_t sock_strnlen(const char *s, size_t max)
 	return max;
 }
 
-static int sock_alloc_fd_any(void *sock, int is_stream)
+static int sock_alloc_fd_flags(void *sock, int is_stream, int type_flags)
 {
 	fd_entry_t *fd_table;
 	int fd;
@@ -71,19 +109,21 @@ static int sock_alloc_fd_any(void *sock, int is_stream)
 		return -EMFILE;
 	}
 
+	memset(&fd_table[fd], 0, sizeof(fd_table[fd]));
 	fd_table[fd].in_use = true;
-	fd_table[fd].path[0] = '\0';
-	fd_table[fd].offset = 0;
-	fd_table[fd].flags = 0;
-	fd_table[fd].fd_flags = 0;
 	fd_table[fd].vfs_file = sock;
-	fd_table[fd].is_pipe = false;
-	fd_table[fd].pipe_end = -1;
-	fd_table[fd].is_devfs = false;
-	fd_table[fd].dev_device_id = 0;
 	fd_table[fd].is_socket = true;
+	if (type_flags & SOCK_CLOEXEC)
+		fd_table[fd].fd_flags = FD_CLOEXEC;
+	if (type_flags & SOCK_NONBLOCK)
+		fd_table[fd].flags = O_NONBLOCK;
 	fase48_note_fd_created();
 	return fd;
+}
+
+static int sock_alloc_fd_any(void *sock, int is_stream)
+{
+	return sock_alloc_fd_flags(sock, is_stream, 0);
 }
 
 static int sock_alloc_fd(struct sock_udp *sock)
@@ -142,6 +182,8 @@ static int sock_nonblock_fd(int fd, int flags)
 int64_t sys_socket(int domain, int type, int protocol)
 {
 	int fd;
+	int type_flags = type;
+	int base = type & SOCK_TYPE_MASK;
 
 #if !CONFIG_ENABLE_NETWORKING
 	(void)domain;
@@ -153,7 +195,7 @@ int64_t sys_socket(int domain, int type, int protocol)
 	if (!current_process)
 		return -ESRCH;
 
-	if (type == SOCK_STREAM && (domain == AF_UNIX || domain == AF_INET))
+	if (base == SOCK_STREAM && (domain == AF_UNIX || domain == AF_INET))
 	{
 		struct sock_stream *ss;
 
@@ -162,13 +204,13 @@ int64_t sys_socket(int domain, int type, int protocol)
 		ss = sock_stream_create(domain == AF_UNIX ? IR0_AF_UNIX : IR0_AF_INET);
 		if (!ss)
 			return -ENOMEM;
-		fd = sock_alloc_fd_any(ss, 1);
+		fd = sock_alloc_fd_flags(ss, 1, type_flags);
 		return fd < 0 ? fd : fd;
 	}
 
 	if (domain != AF_INET)
 		return -EAFNOSUPPORT;
-	if (type != SOCK_DGRAM)
+	if (base != SOCK_DGRAM)
 		return -EPROTOTYPE;
 	if (protocol != 0 && protocol != IPPROTO_UDP)
 		return -EPROTONOSUPPORT;
@@ -178,7 +220,7 @@ int64_t sys_socket(int domain, int type, int protocol)
 
 		if (!sock)
 			return -ENOMEM;
-		fd = sock_alloc_fd(sock);
+		fd = sock_alloc_fd_flags(sock, 0, type_flags);
 		return fd;
 	}
 }
@@ -366,10 +408,41 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 	ss = sock_stream_fd_lookup(fd);
 	if (ss)
 	{
+		nb = sock_nonblock_fd(fd, flags);
 		kbuf = kmalloc(len);
 		if (!kbuf)
 			return -ENOMEM;
-		n = sock_stream_recv(ss, kbuf, len);
+		for (;;)
+		{
+			n = sock_stream_recv_flags(ss, kbuf, len, flags);
+			if (n != -EAGAIN)
+				break;
+			if (nb)
+			{
+				kfree(kbuf);
+				return -EAGAIN;
+			}
+			if (signals_pause_should_interrupt(current_process))
+			{
+				kfree(kbuf);
+				return -EINTR;
+			}
+			{
+				int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+				if (sleep_ret < 0)
+				{
+					kfree(kbuf);
+					return sleep_ret;
+				}
+			}
+			ss = sock_stream_fd_lookup(fd);
+			if (!ss)
+			{
+				kfree(kbuf);
+				return -EBADF;
+			}
+		}
 		if (n < 0)
 		{
 			kfree(kbuf);
@@ -381,7 +454,6 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 			return -EFAULT;
 		}
 		kfree(kbuf);
-		(void)flags;
 		(void)src_addr;
 		(void)addrlen;
 		return n;
@@ -534,6 +606,11 @@ int64_t sys_listen(int fd, int backlog)
 
 int64_t sys_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
+	return sys_accept4(fd, addr, addrlen, 0);
+}
+
+int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
+{
 	struct sock_stream *ss;
 	struct sock_stream *child;
 	int nfd;
@@ -543,11 +620,14 @@ int64_t sys_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
 
 #if !CONFIG_ENABLE_NETWORKING
 	(void)fd;
+	(void)flags;
 	return -ENOSYS;
 #endif
 
 	if (!current_process)
 		return -ESRCH;
+	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
+		return -EINVAL;
 
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
@@ -556,10 +636,39 @@ int64_t sys_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
 			return -ENOTSOCK;
 		return -EOPNOTSUPP;
 	}
-	child = sock_stream_accept(ss);
-	if (!child)
-		return -EAGAIN;
-	nfd = sock_alloc_fd_any(child, 1);
+
+	/*
+	 * Linux accept(2) blocks until a connection is pending unless the
+	 * listener is O_NONBLOCK / accept4(..., SOCK_NONBLOCK). IR0 previously
+	 * returned -EAGAIN immediately (same-process smokes connect-before-accept).
+	 * X11 servers need the blocking path across fork/exec.
+	 */
+	for (;;)
+	{
+		child = sock_stream_accept(ss);
+		if (child)
+			break;
+		if (sock_nonblock_fd(fd, 0) || (flags & SOCK_NONBLOCK))
+			return -EAGAIN;
+		if (signals_pause_should_interrupt(current_process))
+			return -EINTR;
+#if CONFIG_ENABLE_NETWORKING
+		net_stack_poll();
+#endif
+		{
+			int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+			if (sleep_ret < 0)
+				return sleep_ret;
+		}
+#if CONFIG_ENABLE_NETWORKING
+		net_stack_poll();
+#endif
+		ss = sock_stream_fd_lookup(fd);
+		if (!ss)
+			return -EBADF;
+	}
+	nfd = sock_alloc_fd_flags(child, 1, flags);
 	return nfd;
 }
 
@@ -586,7 +695,7 @@ int64_t sys_socketpair(int domain, int type, int protocol, int *sv)
 		return -EFAULT;
 	if (domain != AF_UNIX)
 		return -EAFNOSUPPORT;
-	if (type != SOCK_STREAM)
+	if ((type & SOCK_TYPE_MASK) != SOCK_STREAM)
 		return -EPROTOTYPE;
 	if (protocol != 0)
 		return -EPROTONOSUPPORT;
@@ -595,25 +704,16 @@ int64_t sys_socketpair(int domain, int type, int protocol, int *sv)
 	if (ret < 0)
 		return ret;
 
-	fd0 = sock_alloc_fd_any(a, 1);
+	fd0 = sock_alloc_fd_flags(a, 1, type);
 	if (fd0 < 0)
 	{
 		sock_stream_release(b);
 		return fd0;
 	}
-	fd1 = sock_alloc_fd_any(b, 1);
+	fd1 = sock_alloc_fd_flags(b, 1, type);
 	if (fd1 < 0)
 	{
-		fd_entry_t *fd_table = get_process_fd_table();
-
-		if (fd_table && fd0 >= 0 && fd0 < MAX_FDS_PER_PROCESS &&
-		    fd_table[fd0].in_use)
-		{
-			fd_table[fd0].in_use = false;
-			fd_table[fd0].vfs_file = NULL;
-			fd_table[fd0].is_socket = false;
-		}
-		sock_stream_release(a);
+		(void)sys_close(fd0);
 		return fd1;
 	}
 
@@ -621,27 +721,8 @@ int64_t sys_socketpair(int domain, int type, int protocol, int *sv)
 	sv_k[1] = fd1;
 	if (copy_to_user(sv, sv_k, sizeof(sv_k)) != 0)
 	{
-		fd_entry_t *fd_table = get_process_fd_table();
-
-		if (fd_table)
-		{
-			if (fd0 >= 0 && fd0 < MAX_FDS_PER_PROCESS &&
-			    fd_table[fd0].in_use)
-			{
-				fd_table[fd0].in_use = false;
-				fd_table[fd0].vfs_file = NULL;
-				fd_table[fd0].is_socket = false;
-			}
-			if (fd1 >= 0 && fd1 < MAX_FDS_PER_PROCESS &&
-			    fd_table[fd1].in_use)
-			{
-				fd_table[fd1].in_use = false;
-				fd_table[fd1].vfs_file = NULL;
-				fd_table[fd1].is_socket = false;
-			}
-		}
-		sock_stream_release(a);
-		sock_stream_release(b);
+		(void)sys_close(fd0);
+		(void)sys_close(fd1);
 		return -EFAULT;
 	}
 	return 0;
@@ -670,6 +751,8 @@ static void scm_rights_dtor(void *entry, size_t sz)
 		if (node)
 			devfs_close_node(node);
 	}
+	else if (e->is_memfd && e->vfs_file)
+		ir0_memfd_release((struct ir0_memfd *)e->vfs_file);
 	else if (e->vfs_file)
 		vfs_close((struct vfs_file *)e->vfs_file);
 	memset(e, 0, sizeof(*e));
@@ -716,6 +799,8 @@ static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
 
 		bind->refs++;
 	}
+	else if (dst->is_memfd && dst->vfs_file)
+		ir0_memfd_acquire((struct ir0_memfd *)dst->vfs_file);
 	else if (dst->vfs_file)
 		vfs_file_acquire((struct vfs_file *)dst->vfs_file);
 	return 0;
@@ -898,45 +983,74 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 	}
 	if (sock_stream_rights_count(ss) > 0 && msg.msg_control && msg.msg_controllen > 0)
 	{
-		fd_entry_t ent;
-		int newfd;
+		fd_entry_t ents[SOCK_STREAM_RIGHTS_MAX];
+		int newfds[SOCK_STREAM_RIGHTS_MAX];
+		size_t n_pop = 0;
+		size_t pending = (size_t)sock_stream_rights_count(ss);
+		size_t max_fit;
+		size_t fi;
 		struct cmsghdr *cmsg;
 		int *fdp;
-		size_t need = IR0_CMSG_SPACE(sizeof(int));
+		size_t need;
 
-		memset(&ent, 0, sizeof(ent));
-		if (sock_stream_rights_pop(ss, &ent, sizeof(ent)) == 0)
+		if (pending > SOCK_STREAM_RIGHTS_MAX)
+			pending = SOCK_STREAM_RIGHTS_MAX;
+		max_fit = (msg.msg_controllen >= IR0_CMSG_SPACE(sizeof(int)))
+			? ((msg.msg_controllen - IR0_CMSG_ALIGN(sizeof(struct cmsghdr))) /
+			   sizeof(int))
+			: 0;
+		if (max_fit > SOCK_STREAM_RIGHTS_MAX)
+			max_fit = SOCK_STREAM_RIGHTS_MAX;
+		if (pending > max_fit)
+			pending = max_fit;
+		if (pending == 0)
+			return -ENOBUFS;
+
+		for (fi = 0; fi < pending; fi++)
 		{
-			newfd = scm_install_fd_entry(&ent);
-			if (newfd < 0)
+			memset(&ents[fi], 0, sizeof(ents[fi]));
+			if (sock_stream_rights_pop(ss, &ents[fi], sizeof(ents[fi])) != 0)
+				break;
+			newfds[fi] = scm_install_fd_entry(&ents[fi]);
+			if (newfds[fi] < 0)
 			{
-				scm_rights_dtor(&ent, sizeof(ent));
-				return newfd;
-			}
-			if (need <= sizeof(ctrl) && need <= msg.msg_controllen)
-			{
-				memset(ctrl, 0, need);
-				cmsg = (struct cmsghdr *)ctrl;
-				cmsg->cmsg_len = IR0_CMSG_LEN(sizeof(int));
-				cmsg->cmsg_level = SOL_SOCKET;
-				cmsg->cmsg_type = SCM_RIGHTS;
-				fdp = (int *)IR0_CMSG_DATA(cmsg);
-				*fdp = newfd;
-				ctrl_used = need;
-				got_rights = 1;
-			}
-			else
-			{
-				/* Cannot deliver — close installed fd */
-				fd_entry_t *tab = get_process_fd_table();
+				int err = newfds[fi];
 
-				if (tab)
-					tab[newfd].in_use = false;
-				scm_rights_dtor(&ent, sizeof(ent));
-				return -ENOBUFS;
+				scm_rights_dtor(&ents[fi], sizeof(ents[fi]));
+				while (fi > 0)
+				{
+					fi--;
+					(void)sys_close(newfds[fi]);
+				}
+				return err;
 			}
+			n_pop++;
 		}
+		if (n_pop == 0)
+			goto recv_payload;
+
+		need = IR0_CMSG_SPACE(n_pop * sizeof(int));
+		if (need > sizeof(ctrl) || need > msg.msg_controllen)
+		{
+			while (n_pop > 0)
+			{
+				n_pop--;
+				(void)sys_close(newfds[n_pop]);
+			}
+			return -ENOBUFS;
+		}
+		memset(ctrl, 0, need);
+		cmsg = (struct cmsghdr *)ctrl;
+		cmsg->cmsg_len = IR0_CMSG_LEN(n_pop * sizeof(int));
+		cmsg->cmsg_level = SOL_SOCKET;
+		cmsg->cmsg_type = SCM_RIGHTS;
+		fdp = (int *)IR0_CMSG_DATA(cmsg);
+		for (fi = 0; fi < n_pop; fi++)
+			fdp[fi] = newfds[fi];
+		ctrl_used = need;
+		got_rights = 1;
 	}
+recv_payload:
 	for (i = 0; i < iovlen; i++)
 	{
 		uint8_t *kbuf;
@@ -949,7 +1063,7 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 		kbuf = kmalloc(iov_stack[i].iov_len);
 		if (!kbuf)
 			return -ENOMEM;
-		n = sock_stream_recv(ss, kbuf, iov_stack[i].iov_len);
+		n = sock_stream_recv_flags(ss, kbuf, iov_stack[i].iov_len, flags);
 		if (n < 0)
 		{
 			kfree(kbuf);
@@ -1005,12 +1119,6 @@ int64_t sys_shutdown(int fd, int how)
 int64_t sys_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
 	struct sock_stream *ss;
-	struct sockaddr_un sun;
-	socklen_t want;
-	socklen_t have;
-	size_t plen = 0;
-	int abs = 0;
-	char path[108];
 
 #if !CONFIG_ENABLE_NETWORKING
 	(void)fd;
@@ -1018,31 +1126,10 @@ int64_t sys_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen)
 	(void)addrlen;
 	return -ENOSYS;
 #endif
-	if (!current_process || !addr || !addrlen)
-		return -EFAULT;
-	if (copy_from_user(&want, addrlen, sizeof(want)) != 0)
-		return -EFAULT;
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
 		return -ENOTSOCK;
-	if (sock_stream_family(ss) != IR0_AF_UNIX)
-		return -EOPNOTSUPP;
-	memset(path, 0, sizeof(path));
-	(void)sock_stream_get_unix_name(ss, path, sizeof(path), &plen, &abs);
-	memset(&sun, 0, sizeof(sun));
-	sun.sun_family = AF_UNIX;
-	if (plen > sizeof(sun.sun_path))
-		plen = sizeof(sun.sun_path);
-	memcpy(sun.sun_path, path, plen);
-	have = (socklen_t)(sizeof(sun.sun_family) + plen);
-	if (want > have)
-		want = have;
-	if (want > 0 && copy_to_user(addr, &sun, want) != 0)
-		return -EFAULT;
-	if (copy_to_user(addrlen, &have, sizeof(have)) != 0)
-		return -EFAULT;
-	(void)abs;
-	return 0;
+	return unix_fill_sockaddr(ss, addr, addrlen);
 }
 
 int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
@@ -1062,14 +1149,14 @@ int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
 	peer = sock_stream_get_peer(ss);
 	if (!peer)
 		return -ENOTCONN;
-	/* Peer unix name is empty for socketpair; still return AF_UNIX. */
-	return sys_getsockname(fd, addr, addrlen);
+	return unix_fill_sockaddr(peer, addr, addrlen);
 }
 
 int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 		       socklen_t optlen)
 {
 	struct sock_stream *ss;
+	int val = 0;
 
 #if !CONFIG_ENABLE_NETWORKING
 	(void)fd;
@@ -1079,14 +1166,19 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 	(void)optlen;
 	return -ENOSYS;
 #endif
-	(void)optval;
-	(void)optlen;
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
 		return -ENOTSOCK;
 	if (level != SOL_SOCKET)
 		return -ENOPROTOOPT;
-	(void)optname;
+	if (optname == SO_REUSEADDR)
+	{
+		if (optlen < sizeof(int) || !optval)
+			return -EINVAL;
+		if (copy_from_user(&val, optval, sizeof(val)) != 0)
+			return -EFAULT;
+		return sock_stream_set_reuseaddr(ss, val);
+	}
 	return -ENOPROTOOPT;
 }
 
@@ -1129,6 +1221,18 @@ int64_t sys_getsockopt(int fd, int level, int optname, void *optval,
 	if (optname == SO_ERROR)
 	{
 		val = 0;
+		if (len < sizeof(val))
+			return -EINVAL;
+		if (copy_to_user(optval, &val, sizeof(val)) != 0)
+			return -EFAULT;
+		len = sizeof(val);
+		if (copy_to_user(optlen, &len, sizeof(len)) != 0)
+			return -EFAULT;
+		return 0;
+	}
+	if (optname == SO_REUSEADDR)
+	{
+		val = sock_stream_get_reuseaddr(ss);
 		if (len < sizeof(val))
 			return -EINVAL;
 		if (copy_to_user(optval, &val, sizeof(val)) != 0)

@@ -20,6 +20,13 @@
 #define FBIOGET_VSCREENINFO 0x4600
 #define FBIOGET_FSCREENINFO 0x4602
 
+struct fb_bitfield
+{
+	uint32_t offset;
+	uint32_t length;
+	uint32_t msb_right;
+};
+
 struct fb_var_screeninfo
 {
 	uint32_t xres;
@@ -30,10 +37,10 @@ struct fb_var_screeninfo
 	uint32_t yoffset;
 	uint32_t bits_per_pixel;
 	uint32_t grayscale;
-	uint32_t red;
-	uint32_t green;
-	uint32_t blue;
-	uint32_t transp;
+	struct fb_bitfield red;
+	struct fb_bitfield green;
+	struct fb_bitfield blue;
+	struct fb_bitfield transp;
 	uint32_t nonstd;
 	uint32_t activate;
 	uint32_t height;
