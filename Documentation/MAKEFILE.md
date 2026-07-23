@@ -15,7 +15,9 @@ handle isolated harnesses; everything else flows through the root file.
 | Quality gates | `arch-guard`, `repo-hygiene-guard`, `build-matrix-*`, `health` |
 
 Python scripts under `scripts/` implement logic that would be unreadable in Make; the Makefile
-invokes them with stable target names.
+invokes them with stable target names. Focused smoke fragments live under
+`scripts/make/` (e.g. `boot-audio.mk` → `smoke-sb16-probe`, `class-b.mk` →
+`smoke-class-b-mitigated`) and are `-include`d from the root Makefile.
 
 ## Configuration flow
 
@@ -73,8 +75,10 @@ Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-rootf
 
 | Target | Output |
 |--------|--------|
-| `make mandocs` | `build/mandoc/IR0-krnl.7` unified manual |
-| `make mandocs-view` | Build + `man -l build/mandoc/IR0-krnl.7` |
+| `make sync-mandocs` | Rebuild + install → `~/.local/share/man` (no sudo) |
+| `make man TOPIC=boot` | `man IR0-boot` without requiring MANPATH setup |
+| `make mandocs` / `mandocs-en` | Build manuals (interactive / one language) |
+| `make mandocs-view` | Open installed / built `IR0-krnl` |
 | `make ai-dev-rules-install` | Install AI rules into gitignored `.cursor/` |
 
 ### Developer tooling
@@ -82,10 +86,14 @@ Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-rootf
 | Target | Purpose |
 |--------|---------|
 | `make help` | Full target listing (always current) |
+| `make help-profiles` | Product profiles + honest ceilings |
+| `make help-docs` / `help-pre-submit` | Docs and contributor gate help |
 | `make format` | `clang-format` over C/H sources |
 | `make compile-commands` | `compile_commands.json` for LSP |
 | `make unibuild <file.c>` | Compile single translation units in isolation |
-| `make deptest` | Check host toolchain dependencies |
+| `make check-env` / `deptest` | Host env diagnostic (`PROFILE=desktop-x86_64` default) |
+| `make deptest PROFILE=…` | `desktop-x86_64` \| `userspace` \| `hub-rpi4` \| `watch` \| `all` |
+| `make pre-submit [SUBSYSTEM=mm]` | Local gate → `PRE_SUBMIT_OK` (no push) |
 
 ## Object list composition
 

@@ -17,9 +17,11 @@ wire) con un único driver de NIC (RTL8139). Control y depuración siguen usando
 `kernel/sock_stream.c` a un camino mínimo **TCP wire** en `net/tcp.c`
 (`tcp_wire_connect` / listen / accept / send / recv / close).
 
-No es una pila TCP completa: sin retransmisión, sin ventana/congestión, sin
-reensamblado fuera de orden. El teardown es FIN/ACK honesto + EOF en guest
-(`recv` devuelve 0 tras FIN del peer y RX drenado).
+No es una pila TCP / Internet completa. Hay caminos de laboratorio con
+recuperación limitada (rexmit de huecos / CC peer — ver `smoke-tcp-peer-cc`,
+`smoke-f8-net`). No hay control de congestión de producción, ni reensamblado
+fuera de orden completo, ni alcance Internet arbitrario. El teardown es FIN/ACK
+honesto + EOF en guest (`recv` devuelve 0 tras FIN del peer y RX drenado).
 
 ## 2. Arquitectura interna
 
@@ -110,7 +112,8 @@ ASCII:
 ## 5. Límites del subsistema
 
 - `net/` usa `includes/ir0/*`; sin `#include <drivers/...>` directo desde árboles portables.
-- TCP wire es un camino **mínimo** para smokes y AF_INET STREAM — no paridad BSD sockets.
+- TCP wire es un camino de **laboratorio** para smokes y AF_INET STREAM — no
+  paridad BSD. AF_UNIX stream comparte `sock_stream` (ver `IR0-ipc`).
 - Listas device/protocol asumen registro antes de habilitar IRQs (sin locks).
 
 ## 6. Relaciones con otros subsistemas
@@ -158,9 +161,10 @@ ASCII:
 
 ## 10. Roadmap futuro
 
-- **Retransmisión / RTO / ventana / congestión peer-driven** — selftests no son ship gates.
+- **Retransmisión / RTO / ventana / congestión peer-driven más profunda** — hay
+  probes de lab; selftests no son ship gate de “TCP Internet hecho”.
 - **IPv6** — descartado en L2.
-- **API BSD sockets completa** (options, OOB, MSG_*) — solo AF_INET STREAM parcial.
+- **API BSD sockets completa** (options, OOB, MSG_*) — AF_UNIX + AF_INET STREAM parcial.
 - **DHCP automático al arranque** — IP estática hasta comando `dhcp` explícito.
 - E1000: **BLOQUEADO** — sin driver MVP (`CONFIG_DRV_NIC_E1000=n`); no reclamar.
 - virtio-net: smoke L3 (`smoke-nic-reach-virtio`); no es el probe por defecto en todos los paths.

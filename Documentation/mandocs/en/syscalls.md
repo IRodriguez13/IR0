@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | vfs, process, memory |
 | Man page | IR0-syscalls (section 7) |
-| Primary sources | `kernel/syscalls.c`, `kernel/syscalls/fs_syscalls.c`, `arch/x86-64/asm/syscall_*.asm`, `includes/ir0/syscall*.h`, `includes/ir0/copy_user.c` |
+| Primary sources | `kernel/syscalls.c`, `kernel/syscalls/{fs_syscalls,socket_syscalls,syscall_dispatch}.c`, `arch/x86-64/asm/syscall_*.asm`, `includes/ir0/syscall*.h`, `includes/ir0/copy_user.c` |
 
 ## 1. Overview
 
@@ -24,8 +24,9 @@ Two entry mechanisms coexist: legacy **`int 0x80`** (debug_bins) and the
 | `syscall_entry_64.asm` | int 0x80: args in rax, rbx, rcx, rdx, rsi, rdi |
 | `syscall_insn_entry_64.asm` | Linux syscall insn: rdi, rsi, rdx, r10, r8, r9; 8 KiB kstack |
 | `syscall_dispatch` | Bounds check, table lookup, invoke handler |
-| `init_syscall_table` | Wires `__NR_*` → `wrap_sys_*`; sockets default `sys_nosys` |
+| `init_syscall_table` | Wires `__NR_*` → `wrap_sys_*` (incl. socket family) |
 | `fs_syscalls.c` | open/read/write/stat path routing |
+| `socket_syscalls.c` | socket/bind/listen/accept/connect/send/recv/socketpair |
 | `copy_user.c` | User range checks + directory-aware copy |
 
 **FD model (`process.h`):**
@@ -81,7 +82,10 @@ Two entry mechanisms coexist: legacy **`int 0x80`** (debug_bins) and the
 
 - `kernel/syscalls.c` must not grow without split plan (`fs_syscalls.c`, future submodules).
 - No `#include <drivers/...>` in syscall portable paths (architecture_guard).
-- Socket syscalls intentionally `sys_nosys` until network userspace API is defined.
+- Socket syscalls are wired (`socket_syscalls.c`): **AF_UNIX** stream +
+  `socketpair`, and **AF_INET** `SOCK_STREAM` onto the TCP wire path. Other
+  domains/types still return `-ENOSYS` / `-EAFNOSUPPORT` as appropriate.
+  See `IR0-net` and `IR0-ipc`.
 
 ## 6. Relations to other subsystems
 
@@ -131,7 +135,7 @@ Reference: Linux x86-64 syscall table, musl `arch/x86_64/syscall_arch.h`.
   `LINUX_REBOOT_CMD_KEXEC` → `REBOOT_KEXEC_LOADED` if `kexec_load` staged, else `REBOOT_KEXEC_STUB`;
   `LINUX_REBOOT_CMD_SW_SUSPEND` → `SYSTEM_S3_ENTER` + soft `SYSTEM_S3_RESUME_OK` (`_S3_` typ armed).
 - `sys_kexec_load` (246): up to 4 segments into kernel RAM; magic `IR0KEXEC` payload for smoke.
-- Split monolith: remaining glue in `syscalls.c`; process/mm/io already split.
+- Split monolith: remaining glue in `syscalls.c`; process/mm/io/socket already split.
 - Full `openat`/`*at` fd resolution.
-- Socket syscall expansion beyond loopback stream smoke.
+- Broader socket options / datagram / Internet TCP depth (see `IR0-net` ceiling).
 - ARM64: `syscall_entry_arm64` returns -1 (stub).
