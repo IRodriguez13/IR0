@@ -4,6 +4,9 @@ extern fork_ret_emit_pre_return
 extern fork_ret_pre_regs
 extern fork_flow_set_tf
 extern fork_restore_audit
+extern _etext
+extern arch_report_bad_kernel_ret_rip
+extern process_after_task_save
 
 section .bss
 align 16
@@ -141,10 +144,29 @@ switch_context_x64:
     lea rax, [rsp + 8]
     mov [rdi + 0x70], rax
 
-    ; RIP: return address pushed by `call`
+    ; RIP: return address pushed by `call` — must be in kernel .text
+    mov rax, [rsp]
+    cmp rax, 0x101000
+    jb .bad_save_rip
+    lea r8, [rel _etext]
+    cmp rax, r8
+    jae .bad_save_rip
+    mov [rdi + 0x80], rax
+    jmp .save_rflags_ok
+
+.bad_save_rip:
+    ; [rsp] was not .text (seen: process_t* → later kernel_ret #UD)
+    push rdi
+    push rsi
+    mov rsi, rdi
+    mov rdi, rax
+    call arch_report_bad_kernel_ret_rip
+    pop rsi
+    pop rdi
     mov rax, [rsp]
     mov [rdi + 0x80], rax
 
+.save_rflags_ok:
     pushfq
     pop qword [rdi + 0x88]
 
@@ -163,6 +185,11 @@ switch_context_x64:
 
     mov rax, cr3
     mov [rdi + 0xB0], rax
+
+    ; Class B close: honour want_kernel_ret now that rip/cs are kernel from save.
+    push rsi
+    call process_after_task_save
+    pop rsi
 
 .load_only:
     ; ---- Load new context (rsi = &new->task) ----
@@ -207,12 +234,36 @@ switch_context_x64:
     pop rax
 
     mov r10, [r11 + 0x80]
+    cmp r10, 0x101000
+    jb .bad_ret_rip
+    lea r8, [rel _etext]
+    cmp r10, r8
+    jae .bad_ret_rip
     mov r8, [r11 + 0x48]
     mov rsp, [r11 + 0x70]
     mov r11, r8
     jmp r10
 
+.bad_ret_rip:
+    mov rdi, r10
+    mov rsi, r11
+    call arch_report_bad_kernel_ret_rip
+    ; fall through unreachable (report panics)
+
 .user_iretq_resume:
+    ; Refuse non-canonical user RIP/RSP (heap #UD class if CS flipped alone).
+    mov rax, [r11 + 0x80]
+    cmp rax, 0x00400000
+    jb .bad_user_iret_frame
+    mov rbx, 0x00007FFFFFFFFFFF
+    cmp rax, rbx
+    ja .bad_user_iret_frame
+    mov rax, [r11 + 0x70]
+    cmp rax, 0x00400000
+    jb .bad_user_iret_frame
+    cmp rax, rbx
+    ja .bad_user_iret_frame
+
     mov rax, [r11 + 0x00]
     mov rbx, [r11 + 0x08]
     mov rcx, [r11 + 0x10]
@@ -256,15 +307,20 @@ switch_context_x64:
 
     iretq
 
+.bad_user_iret_frame:
+    mov rdi, [r11 + 0x80]
+    mov rsi, r11
+    call arch_report_bad_kernel_ret_rip
+
 .skip:
     ret
 
 ;
-; arch_switch_to_user_task_asm(const task_t *task)
+; switch_to_user_task_asm(const task_t *task)
 ; Linux ret_from_fork-style entry: load CR3 + GPRs, iretq (no ring-0 MOV SS).
 ;
-global arch_switch_to_user_task_asm
-arch_switch_to_user_task_asm:
+global switch_to_user_task_asm
+switch_to_user_task_asm:
     test rdi, rdi
     jz .aus_ret
 

@@ -18,16 +18,21 @@
 #include <ir0/context.h>
 #include <ir0/oops.h>
 #include <ir0/signals.h>
+#include <ir0/sched.h>
 #include <stdint.h>
+
+#if !defined(ARCH_ARM64)
+extern uint64_t user_rsp_save;
+#endif
 
 static inline uint64_t sched_switch_irq_save(void)
 {
-	return (uint64_t)arch_irq_save();
+	return (uint64_t)irq_save();
 }
 
 static inline void sched_switch_irq_restore(uint64_t flags)
 {
-	arch_irq_restore((unsigned long)flags);
+	irq_restore((unsigned long)flags);
 }
 
 void sched_context_switch_to(process_t *next)
@@ -68,12 +73,28 @@ void sched_context_switch_to(process_t *next)
 	{
 		first = 0;
 		arch_set_current_kernel_stack(next);
-		arch_first_context_switch(next);
+		first_switch_to(next);
 		panic("Returned from first context switch");
 	}
 
 	if (prev && next)
-		arch_context_switch(&prev->task, &next->task);
+	{
+		/*
+		 * IRQ user preempt already filled prev->task from the iretq frame
+		 * (sched_irq_preempt_from_frame). Do not let switch_context_x64
+		 * overwrite that with kernel CS + [rsp] (mid-ISR), or a later
+		 * process_arm_kernel_syscall_sleep leaves KERNEL_CS + user RIP.
+		 */
+		if (sched_context_switch_take_skip_prev_save())
+		{
+#if !defined(ARCH_ARM64)
+			prev->saved_user_rsp = user_rsp_save;
+#endif
+			switch_to(NULL, &next->task);
+		}
+		else
+			switch_to(&prev->task, &next->task);
+	}
 
 	sched_switch_irq_restore(irq_flags);
 }

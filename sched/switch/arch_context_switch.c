@@ -463,7 +463,7 @@ void switch_to(task_t *prev, task_t *next)
         next_proc->syscall_frame.rip = next->rip;
         next_proc->syscall_frame.rsp = next->rsp;
         next_proc->syscall_frame.rflags = next->rflags | 2ULL;
-        klog_debug("CTX", "CLASSIFY CLASS_B_FAULT_INJECT");
+        klog_info("CTX", "CLASSIFY CLASS_B_FAULT_INJECT");
     }
 
     /*
@@ -487,11 +487,11 @@ void switch_to(task_t *prev, task_t *next)
 
             if (rax == 0)
                 rax = next_proc->task.rax;
-            klog_debug("CTX", "CLASSIFY KERNEL_CS_USER_RIP_REPAIR");
+            klog_info("CTX", "CLASSIFY KERNEL_CS_USER_RIP_REPAIR");
             process_apply_syscall_frame_to_task(&next_proc->task, sf, rax);
         }
         else
-            klog_debug("CTX", "CLASSIFY KERNEL_CS_USER_RIP_UNREPAIRED");
+            klog_info("CTX", "CLASSIFY KERNEL_CS_USER_RIP_UNREPAIRED");
     }
 #endif
 
