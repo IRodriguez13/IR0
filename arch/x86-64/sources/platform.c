@@ -382,7 +382,14 @@ static void x86_platform_reboot(void)
 
 static void x86_platform_poweroff(void)
 {
-	/* Always attempts PM1a write (FADT or QEMU 0x604/0xB004 fallback). */
+	/*
+	 * isa-debug-exit FIRST. With QEMU -no-shutdown, an ACPI PM1a write
+	 * pauses the VM immediately ("QEMU [Paused]") and never reaches a
+	 * later outb(0xf4). Exit the process when the device is present;
+	 * then try ACPI; then hlt.
+	 */
+	klog_smoke("ISA_DEBUG_EXIT_OK");
+	outb(0xf4, 0x01);
 	(void)ir0_acpi_pm_try_poweroff();
 	x86_platform_halt_loop();
 }

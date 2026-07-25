@@ -1025,7 +1025,7 @@ fd_entry_t *get_process_fd_table(void)
   if (!current_process)
     return NULL;
   /*
-   * La tabla se inicializa en spawn() y en start_init_process(); no usar un
+   * La tabla se inicializa en spawn() / process create; no usar un
    * flag estático global (rompía si el primer syscall no era del proceso init).
    */
   return current_process->fd_table;
@@ -1063,6 +1063,46 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
   {
     if (request == IR0_CONSOLE_TIOCGWINSZ)
       return ir0_console_ioctl_winsize(arg);
+    if (request == IR0_TIOCSCTTY)
+      return 0;
+    if (request == IR0_TIOCSPGRP)
+    {
+      pid_t pg;
+
+      if (!arg)
+	return -EINVAL;
+      if (copy_from_user(&pg, arg, sizeof(pg)) != 0)
+	return -EFAULT;
+      return (pg > 0) ? 0 : -EINVAL;
+    }
+    if (request == IR0_TIOCGPGRP)
+    {
+      pid_t pg;
+
+      if (!arg)
+	return -EINVAL;
+      pg = current_process->pgid > 0 ? current_process->pgid
+				     : (pid_t)current_process->task.pid;
+      if (copy_to_user(arg, &pg, sizeof(pg)) != 0)
+	return -EFAULT;
+      return 0;
+    }
+    if (request == IR0_CONSOLE_TCFLSH)
+    {
+      tty_flush_input();
+      return 0;
+    }
+    if (request == IR0_CONSOLE_FIONREAD)
+    {
+      int avail;
+
+      if (!arg)
+	return -EINVAL;
+      avail = tty_input_bytes_available();
+      if (copy_to_user(arg, &avail, sizeof(avail)) != 0)
+	return -EFAULT;
+      return 0;
+    }
     if (request == IR0_CONSOLE_TCGETS || request == IR0_CONSOLE_TCSETS ||
 	request == IR0_CONSOLE_TCSETSW || request == IR0_CONSOLE_TCSETSF)
     {

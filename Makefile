@@ -278,8 +278,10 @@ QEMU_STORAGE_IDE = -drive file=disk.img,format=raw,if=ide,index=0
 # Serial: COM1 para debug
 QEMU_SERIAL_COM1 = -serial stdio
 
+# Guest outb(0xf4) → QEMU process exit (halt/poweroff). Needed with -no-shutdown.
+QEMU_ISA_DEBUG_EXIT = -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
-QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1)
+QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT)
 
 QEMU_64_FLAGS = -cdrom
 
@@ -287,7 +289,6 @@ QEMU_64_FLAGS = -cdrom
 
 KERNEL_OBJS = \
 	kernel/main.o \
-    kernel/init.o \
     kernel/cmdline.o \
     kernel/rootfs_base.o \
     kernel/process/core.o \
@@ -374,124 +375,8 @@ KERNEL_OBJS += \
     $(KTM_D1_DIAG_OBJS)
 endif
 
-DEBUG_BINS_CORE_OBJS = \
-    debug_bins/cmd_ls.o \
-    debug_bins/cmd_cd.o \
-    debug_bins/cmd_pwd.o \
-    debug_bins/cmd_cat.o \
-    debug_bins/cmd_echo.o \
-    debug_bins/cmd_exec.o \
-    debug_bins/cmd_cmp.o \
-    debug_bins/cmd_which.o \
-    debug_bins/cmd_true.o \
-    debug_bins/cmd_false.o \
-    debug_bins/cmd_sleep.o
-
-DEBUG_BINS_FS_OBJS = \
-    debug_bins/cmd_mkdir.o \
-    debug_bins/cmd_rm.o \
-    debug_bins/cmd_rmdir.o \
-    debug_bins/cmd_touch.o \
-    debug_bins/cmd_cp.o \
-    debug_bins/cmd_mv.o \
-    debug_bins/cmd_ln.o \
-    debug_bins/cmd_mount.o \
-    debug_bins/cmd_umount.o \
-    debug_bins/cmd_chmod.o \
-    debug_bins/cmd_chown.o \
-    debug_bins/cmd_basename.o \
-    debug_bins/cmd_dirname.o
-
-DEBUG_BINS_TEXT_OBJS = \
-    debug_bins/cmd_sed.o \
-    debug_bins/cmd_cut.o \
-    debug_bins/cmd_tr.o \
-    debug_bins/cmd_wc.o \
-    debug_bins/cmd_head.o \
-    debug_bins/cmd_tail.o
-
-DEBUG_BINS_IDENTITY_OBJS = \
-    debug_bins/cmd_id.o \
-    debug_bins/cmd_whoami.o
-
-DEBUG_BINS_DIAG_OBJS = \
-    debug_bins/cmd_ps.o \
-    debug_bins/cmd_df.o \
-    debug_bins/cmd_dmesg.o \
-    debug_bins/cmd_lsmod.o \
-    debug_bins/cmd_hostname.o \
-    debug_bins/cmd_uname.o \
-    debug_bins/cmd_lsblk.o \
-    debug_bins/cmd_lsdrv.o \
-    debug_bins/cmd_free.o \
-    debug_bins/cmd_uptime.o \
-    debug_bins/cmd_date.o \
-    debug_bins/cmd_keymap.o \
-    debug_bins/cmd_lshw.o \
-    debug_bins/cmd_stat.o
-
-DEBUG_BINS_NET_OBJS = \
-    debug_bins/cmd_ping.o \
-    debug_bins/cmd_ndev.o \
-    debug_bins/cmd_route.o \
-    debug_bins/cmd_ifconfig.o \
-    debug_bins/cmd_netstat.o
-
-DEBUG_BINS_BT_OBJS = \
-    debug_bins/cmd_lsblue.o \
-    debug_bins/cmd_bluestart.o \
-    debug_bins/cmd_blue.o
-
-DEBUG_BINS_ENABLED := $(if $(filter y,$(CONFIG_DEBUG_BINS) $(CONFIG_KERNEL_DEBUG_SHELL)),y,n)
-ifeq ($(DEBUG_BINS_ENABLED),y)
-KERNEL_OBJS += debug_bins/dbgshell.o debug_bins/debug_bins_registry.o
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_CORE),n)
-KERNEL_OBJS += $(DEBUG_BINS_CORE_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_FS),n)
-KERNEL_OBJS += $(DEBUG_BINS_FS_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_TEXT),n)
-KERNEL_OBJS += $(DEBUG_BINS_TEXT_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_IDENTITY),n)
-KERNEL_OBJS += $(DEBUG_BINS_IDENTITY_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_DIAG),n)
-KERNEL_OBJS += $(DEBUG_BINS_DIAG_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_NET),n)
-ifneq ($(CONFIG_ENABLE_NETWORKING),n)
-KERNEL_OBJS += $(DEBUG_BINS_NET_OBJS)
-endif
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_BT),n)
-ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
-KERNEL_OBJS += $(DEBUG_BINS_BT_OBJS)
-else
-KERNEL_OBJS += debug_bins/cmd_bt_stub.o
-endif
-else
-KERNEL_OBJS += debug_bins/cmd_bt_stub.o
-endif
-endif
-
-# debug_bins_registry_test.o: misma fuente que debug_bins_registry.o pero con IR0_KERNEL_TESTS=1
-# Evita que make reutilice un .o compilado para tests al hacer make ir0 (y viceversa)
-debug_bins/debug_bins_registry_test.o: debug_bins/debug_bins_registry.c
-	@echo "  CC      $< (IR0_KERNEL_TESTS=1)"
-	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \
-		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
-		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
-		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
-		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
-		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
-		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
-		-c $< -o $@
-
-# In-kernel test suite y comando ktest: solo se enlazan en kernel-x64-test.bin (make tests)
-KERNEL_TEST_OBJS = debug_bins/debug_bins_registry_test.o \
-	debug_bins/cmd_ktest.o \
+# In-kernel test suite: linked only in kernel-x64-test.bin (make tests)
+KERNEL_TEST_OBJS = \
 	kernel/test/test_runner.o \
 	kernel/test/test_syscall.o \
 	kernel/test/test_procfs.o \
@@ -947,12 +832,8 @@ endif
 CONFIG_TICK_RATE_HZ ?= 1000
 CFLAGS += -DCONFIG_TICK_RATE_HZ=$(CONFIG_TICK_RATE_HZ)
 
-# Kernel debug shell as PID 1
-ifneq ($(CONFIG_KERNEL_DEBUG_SHELL),n)
-CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=1
-else
+# Product boot always loads /sbin/init (legacy KERNEL_DEBUG_SHELL removed).
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
-endif
 
 # Force /sbin/init boot path for userspace smoke ISO (overrides autoconf in config.h)
 ifneq ($(USERSPACE_INIT_BUILD),)
@@ -961,50 +842,6 @@ CFLAGS += -DIR0_USERSPACE_INIT_BOOT=1
 ifeq ($(USERSPACE_EAGER_MM),1)
 CFLAGS += -DCONFIG_LAZY_ANON_MMAP=0 -DCONFIG_LAZY_BRK_HEAP=0
 endif
-endif
-
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_CORE),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_CORE=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_CORE=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_FS),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_FS=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_FS=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_TEXT),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_TEXT=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_TEXT=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_IDENTITY),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_IDENTITY=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_IDENTITY=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_DIAG),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_DIAG=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_DIAG=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_NET),n)
-ifneq ($(CONFIG_ENABLE_NETWORKING),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=0
-endif
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_BT),n)
-ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=0
-endif
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=0
 endif
 
 ARCH_OBJS_COMMON = \
@@ -1124,8 +961,7 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(STORAGE_NVME_OBJS)
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
-# Excluir debug_bins_registry.o y usar debug_bins_registry_test.o (compilado con IR0_KERNEL_TESTS=1)
-ALL_OBJS_TEST = $(filter-out debug_bins/debug_bins_registry.o,$(KERNEL_OBJS)) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+ALL_OBJS_TEST = $(KERNEL_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
                 $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
@@ -1350,7 +1186,7 @@ run: kernel-x64-userspace.iso load-userspace-runit
 	fi
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot -no-shutdown \
+		-m 512M -no-reboot \
 		$(QEMU_DISPLAY) \
 		$(QEMU_DEBUG_GUEST) $$QEMU_LOG_OPTION
 
@@ -2389,9 +2225,10 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 		done; \
 	fi; \
 	if [ $$NEED -eq 0 ]; then \
-		echo "  DISK    $$DISK up to date (cached runit rootfs)"; \
+		echo "  DISK    $$DISK up to date (cached runit rootfs — no reinject)"; \
 	else \
-		echo "  DISK    Preparing $$DISK (200M MINIX) for runit..."; \
+		echo "  DISK    Preparing $$DISK (200M MINIX root — not virtio-9p)..."; \
+		echo "  NOTE    virtio-9p is optional /mnt/host share; product / is always disk.img"; \
 		dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
 		python3 scripts/inject_init_minix.py --format-large $$DISK; \
 		$(IR0_USERSPACE_MAKE) rootfs DISK=$(KERNEL_ROOT)/$$DISK \
@@ -6122,7 +5959,7 @@ build-matrix-min:
 	@$(MAKE) -s kernel-x64.bin >/dev/null
 	@echo "  MATRIX  Bluetooth disabled"
 	@$(MAKE) defconfig >/dev/null
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n DEBUG_BINS_GROUP_BT=n >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n >/dev/null
 	@$(MAKE) -s kernel-x64.bin >/dev/null
 	@echo "  MATRIX  lazy MM disabled (eager mmap/brk bisect)"
 	@$(MAKE) defconfig >/dev/null

@@ -22,7 +22,6 @@ INCLUDE_DIRS = (
     "includes",
     "ktm",
     "interrupt",
-    "debug_bins",
     "tests/host",
     "tests/kernel_memsafe",
 )

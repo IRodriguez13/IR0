@@ -1781,7 +1781,12 @@ struct linux_dirent64 {
 
 #define LINUX_DIRENT64_NAME_OFF ((size_t)offsetof(struct linux_dirent64, d_name))
 
-#define GETDENTS_BATCH_MAX 64
+/*
+ * Keep batch modest: each vfs_dirent is large (path-sized name). 64 × that
+ * plus a 4K bounce buffer blew most of IR0_PROC_KSTACK_SIZE and hung/paused
+ * guests on ls /proc under GTK (-no-shutdown looked like a freeze).
+ */
+#define GETDENTS_BATCH_MAX 24
 
 /* Directory entry types (Linux DT_* subset) */
 #define DT_UNKNOWN 0

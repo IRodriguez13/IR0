@@ -11,7 +11,7 @@
 
 > **Last verified:** 2026-07-25
 
-> **Note (2026-07-25):** the Unix userspace (runit, BusyBox, login, doas, `/etc`) lives in the **`IR0-userspace`** sibling repository. The kernel keeps only its own test fixtures (`setup/pid1/`, `debug_bins/`) and drives the product build through `IR0_USERSPACE_ROOT`; a missing sibling fails `check-userspace` instead of skipping a gate.
+> **Note (2026-07-25):** the Unix userspace (runit, BusyBox, login, doas, `/etc`) lives in the **`IR0-userspace`** sibling repository. The kernel keeps only its own test fixtures (`setup/pid1/`) plus a coupling pointer (`userspace/README.md`, `Documentation/USERSPACE.md`) and drives the product build through `IR0_USERSPACE_ROOT`; a missing sibling fails `check-userspace` instead of skipping a gate. Legacy `debug_bins/` / in-kernel dbgshell were removed.
 
 > **Note (2026-07-24):** transitional PID1 **irinit** was removed. Product and tests use **runit** only (`make build-runit` / `load-userspace-runit` / `smoke-runit-boot`).
 

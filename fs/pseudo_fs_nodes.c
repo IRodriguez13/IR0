@@ -244,7 +244,7 @@ typedef struct proc_pid_file_ctx
 #define PROC_PID_FILE_STATUS  0
 #define PROC_PID_FILE_CMDLINE 1
 #define PROC_PID_FILE_STAT    2
-#define PROC_PID_CTX_MAX      8
+#define PROC_PID_CTX_MAX      32
 
 static proc_pid_file_ctx_t g_proc_pid_ctx[PROC_PID_CTX_MAX];
 
@@ -330,7 +330,8 @@ static int proc_pid_file_stat(void *ctx, stat_t *st)
     st->st_nlink = 1;
     st->st_uid = 0;
     st->st_gid = 0;
-    st->st_size = 1024;
+    /* Linux reports 0 for /proc/pid files; readers must not trust st_size. */
+    st->st_size = 0;
     return 0;
 }
 

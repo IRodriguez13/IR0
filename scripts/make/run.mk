@@ -6,7 +6,7 @@
 #   IR0_PID1 / INIT  PID1 binary injected as /sbin/init (run-pid1)
 #   IR0_FRESH_DISK=1 copy disk to temp before inject (run-pid1)
 #   IR0_QEMU_ARGS    extra QEMU arguments
-#   IR0_DEBUG=1      serial stdio + no GUI (run / run-dbgshell / run-pid1)
+#   IR0_DEBUG=1      serial stdio + no GUI (run / run-pid1)
 #   IR0_SERIAL_LOG   serial log file when not using stdio (default: /tmp/ir0-run.log)
 
 IR0_DISK ?= disk.img
@@ -16,9 +16,9 @@ IR0_QEMU_RUN ?= $(QEMU)
 
 .PHONY: run run-dbgshell run-pid1
 
-# Default daily dev: dbgshell kernel ISO (CONFIG_KERNEL_DEBUG_SHELL=y).
+# Default daily dev: product kernel ISO (kexecve /sbin/init when disk has init).
 run: kernel-x64.iso
-	@echo "Running IR0 (dbgshell kernel — daily dev)"
+	@echo "Running IR0 (product kernel)"
 	@if [ "$(IR0_DEBUG)" = "1" ]; then \
 		$(IR0_QEMU_RUN) -cdrom kernel-x64.iso \
 			$(QEMU_HW_IR0_ALL) \
@@ -41,14 +41,10 @@ run: kernel-x64.iso
 			$(IR0_QEMU_ARGS); \
 	fi
 
-# Console dbgshell — serial only, no smokes.
-run-dbgshell: kernel-x64.iso
-	@echo "Running IR0 dbgshell (serial stdio)"
-	@$(IR0_QEMU_RUN) -cdrom kernel-x64.iso \
-		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot -no-shutdown \
-		-serial stdio -display none -net none \
-		$(IR0_QEMU_ARGS)
+# Retired: in-kernel dbgshell removed. Alias kept for muscle memory.
+run-dbgshell:
+	@echo "run-dbgshell retired: use make run-pid1 / run-console (IR0-userspace ash)"
+	@exit 1
 
 # Userspace PID1: kernel-x64-userspace.iso + injected /sbin/init.
 # Does not rebuild BusyBox or run tests. INIT= overrides IR0_PID1.

@@ -51,6 +51,7 @@
 
 #ifdef FASE55E_INTERACTIVE
 #define DOOM_CFG_PATH "/etc/doom-frames"
+#define DOOM_CFG_PATH_HOSTSHARE "/mnt/host/doom-frames"
 #endif
 
 struct input_event
@@ -455,32 +456,56 @@ void DG_SetWindowTitle(const char *title)
     (void)title;
 }
 
-static int check_required_wad(void)
+static int wad_header_ok(const char *path)
 {
-    int fd = open("/usr/share/doom/doom1.wad", O_RDONLY);
+    int fd = open(path, O_RDONLY);
     uint8_t hdr[12];
     ssize_t n;
 
     if (fd < 0)
+        return -1;
+    n = read(fd, hdr, sizeof(hdr));
+    close(fd);
+    if (n != (ssize_t)sizeof(hdr))
+        return -1;
+    if (memcmp(hdr, "IWAD", 4) != 0 && memcmp(hdr, "PWAD", 4) != 0)
+        return -1;
+    return 0;
+}
+
+/*
+ * Prefer argv -iwad, then hostshare (/mnt/host), then disk inject path.
+ * Desktop ash: mount -t 9p ir0share /mnt/host && /mnt/host/doomgeneric
+ */
+static const char *pick_wad_path(int argc, char **argv)
+{
+    static const char *const candidates[] = {
+        "/mnt/host/doom1.wad",
+        "/usr/share/doom/doom1.wad",
+        NULL
+    };
+    int i;
+
+    for (i = 1; i + 1 < argc; i++)
+    {
+        if (strcmp(argv[i], "-iwad") == 0 && argv[i + 1] && argv[i + 1][0])
+            return argv[i + 1];
+    }
+    for (i = 0; candidates[i]; i++)
+    {
+        if (wad_header_ok(candidates[i]) == 0)
+            return candidates[i];
+    }
+    return NULL;
+}
+
+static int check_required_wad(const char *path)
+{
+    if (!path || wad_header_ok(path) != 0)
     {
         write_fail("open_wad", "ABI_MISSING");
         return -1;
     }
-
-    n = read(fd, hdr, sizeof(hdr));
-    close(fd);
-    if (n != (ssize_t)sizeof(hdr))
-    {
-        write_fail("read_wad_header", "ABI_MISSING");
-        return -1;
-    }
-
-    if (memcmp(hdr, "IWAD", 4) != 0 && memcmp(hdr, "PWAD", 4) != 0)
-    {
-        write_fail("wad_magic", "ABI_MISSING");
-        return -1;
-    }
-
     write_str("DOOMGENERIC_WAD_LOAD_OK\n");
     return 0;
 }
@@ -512,9 +537,9 @@ static void read_interactive_cfg(unsigned int *frame_limit, unsigned int *dump_e
 
     f = fopen(DOOM_CFG_PATH, "r");
     if (!f)
-    {
+        f = fopen(DOOM_CFG_PATH_HOSTSHARE, "r");
+    if (!f)
         return;
-    }
     *frame_limit = read_cfg_line(f, 0);
     *dump_every = read_cfg_line(f, 0);
     fclose(f);
@@ -606,16 +631,11 @@ static int run_interactive_loop(unsigned int frame_limit)
 }
 #endif
 
-int main(void)
+int main(int argc, char **argv)
 {
-    char *argv[] = {
-        (char *)"doomgeneric-ir0",
-        (char *)"-iwad",
-        (char *)"/usr/share/doom/doom1.wad",
-        (char *)"-nomusic",
-        (char *)"-nosound",
-        NULL
-    };
+    const char *wad;
+    char *dg_argv[8];
+    int dg_argc;
 
     write_str("DOOMGENERIC_BUILD_OK\n");
 #ifdef FASE55E_INTERACTIVE
@@ -624,12 +644,20 @@ int main(void)
     write_str("DOOMGENERIC_BUILD_MODE=smoke\n");
 #endif
 
-    if (check_required_wad() != 0)
+    wad = pick_wad_path(argc, argv);
+    if (check_required_wad(wad) != 0)
     {
         return 1;
     }
 
-    doomgeneric_Create(5, argv);
+    dg_argv[0] = (char *)"doomgeneric-ir0";
+    dg_argv[1] = (char *)"-iwad";
+    dg_argv[2] = (char *)wad;
+    dg_argv[3] = (char *)"-nomusic";
+    dg_argv[4] = (char *)"-nosound";
+    dg_argv[5] = NULL;
+    dg_argc = 5;
+    doomgeneric_Create(dg_argc, dg_argv);
     write_str("DOOMGENERIC_INIT_OK\n");
 
 #ifdef FASE55E_INTERACTIVE

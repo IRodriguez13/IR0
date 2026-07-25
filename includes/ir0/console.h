@@ -16,8 +16,11 @@
 #define IR0_CONSOLE_TCSETS  0x5402u
 #define IR0_CONSOLE_TCSETSW 0x5403u
 #define IR0_CONSOLE_TCSETSF 0x5404u
+#define IR0_CONSOLE_TCFLSH  0x540Bu
 #define IR0_CONSOLE_TIOCGWINSZ 0x5413u
 #define IR0_CONSOLE_TIOCSWINSZ 0x5414u
+/* Linux FIONREAD / TIOCINQ — bytes available to read */
+#define IR0_CONSOLE_FIONREAD 0x541Bu
 /* Linux TIOCGPTN — get pty number (_IOR('T', 0x30, unsigned int)) */
 #define IR0_TIOCGPTN 0x80045430u
 /* Linux TIOCSPTLCK — lock/unlock pty (_IOW('T', 0x31, int)); no-op OK */
@@ -69,10 +72,13 @@ struct ir0_termios
 #define IR0_IFLAG_ICRNL           (0x00000400u)
 #define IR0_OFLAG_ONLCR           (0x00000004u)
 #define IR0_OFLAG_OPOST           (0x00000001u)
+/* Linux asm-generic/termbits.h c_cc indices */
+#define IR0_CC_VINTR              0
+#define IR0_CC_VQUIT              1
+#define IR0_CC_VERASE             2
 #define IR0_CC_VEOF               4
 #define IR0_CC_VTIME              5
 #define IR0_CC_VMIN               6
-#define IR0_CC_VERASE             2
 
 /* TTY line discipline (kernel buffers only) */
 void tty_input_char(char c);
@@ -80,9 +86,12 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock);
 int64_t tty_write_kernel(const char *kbuf, size_t count, uint8_t color);
 int tty_ioctl_termios_kernel(uint64_t request, struct ir0_termios *ktermios);
 void tty_flush_input(void);
+int tty_input_bytes_available(void);
 
 int ir0_console_wake_readers(void);
 int ir0_console_take_resched(void);
+int ir0_console_resched_pending(void);
+int ir0_console_in_tty_sleep(void);
 int ir0_console_timer_resched_pending(void);
 int ir0_console_poll(void);
 int ir0_console_has_blocked_reader(void);
@@ -105,4 +114,7 @@ int ir0_console_term_height(void);
 int ir0_console_ioctl_winsize(void *user_arg);
 int ir0_console_fill_termios(struct ir0_termios *out);
 int ir0_console_set_termios(const struct ir0_termios *in);
+void ir0_console_reset_cooked_echo(void);
 void ir0_console_flush_input(void);
+int ir0_console_set_fg_pgid(int32_t pgid);
+int32_t ir0_console_get_fg_pgid(void);

@@ -50,7 +50,11 @@ int console_backend_printk_to_screen(void)
 void console_backend_userspace_handoff(void)
 {
     printk_to_screen = 0;
-    typewriter_set_mode(TYPEWRITER_FAST);
+    /*
+     * Product console must be instant. TYPEWRITER_* delays are a demo effect
+     * only — never leave FAST/NORMAL/SLOW enabled after userspace attach.
+     */
+    typewriter_set_mode(TYPEWRITER_DISABLED);
     typewriter_console_clear(IR0_CONSOLE_COLOR_DEFAULT);
 
     if (console_backend_uses_framebuffer())

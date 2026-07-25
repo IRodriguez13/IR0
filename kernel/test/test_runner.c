@@ -49,7 +49,6 @@ static void (*const ktest_functions[])(void) = {
 	ktest_sysfs_hostname_contract,
 	ktest_proc_netinfo_contract,
 	ktest_dev_net_contract,
-	ktest_help_sections_contract,
 	ktest_mount_proc_contract,
 	ktest_mount_tmpfs_contract,
 	ktest_mount_multi_fs_contract,
@@ -93,7 +92,6 @@ static const char *const ktest_names[] = {
 	"sysfs_hostname_contract",
 	"proc_netinfo_contract",
 	"dev_net_contract",
-	"help_sections_contract",
 	"mount_proc_contract",
 	"mount_tmpfs_contract",
 	"mount_multi_fs_contract",
@@ -141,7 +139,6 @@ static const int ktest_needs_process[] = {
 	1,  /* sysfs_hostname_contract */
 	1,  /* proc_netinfo_contract */
 	1,  /* dev_net_contract */
-	1,  /* help_sections_contract */
 	1,  /* mount_proc_contract */
 	1,  /* mount_tmpfs_contract */
 	1,  /* mount_multi_fs_contract */

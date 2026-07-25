@@ -574,6 +574,14 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755,
                 if (existing["mode"] & IFMT) == IFDIR:
                     remove_dir_entry(f, sb, cur, cur_num, part)
                     ino = 0
+                elif existing.get("nlinks", 1) > 1:
+                    # Hardlink: do not rewrite the shared inode (that would
+                    # clobber BusyBox when replacing halt/poweroff wrappers).
+                    # Detach this name and allocate a fresh inode.
+                    remove_dir_entry(f, sb, cur, cur_num, part)
+                    existing["nlinks"] = max(1, existing["nlinks"] - 1)
+                    write_inode(f, sb, ino, existing)
+                    ino = 0
             if ino == 0:
                 ino = alloc_inode(f, sb)
                 new_entry = True

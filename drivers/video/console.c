@@ -127,12 +127,30 @@ static void fb_compute_layout(uint32_t w, uint32_t h)
 		ph = fb_console_rows * fb_cell_h;
 	}
 
-	fb_origin_x = ((int)w - pw) / 2;
-	fb_origin_y = ((int)h - ph) / 2;
-	if (fb_origin_x < 0)
-		fb_origin_x = 0;
-	if (fb_origin_y < 0)
-		fb_origin_y = 0;
+	/*
+	 * Prefer native 8x16 glyphs (scale 1). Max-fit scale-2 on 1280x800
+	 * made text look oversized; center the 80x25 cell area with inset so
+	 * the first column is not clipped under QEMU/GTK.
+	 */
+	{
+		const int inset = 16;
+
+		fb_scale = 1;
+		fb_cell_w = FONT_WIDTH;
+		fb_cell_h = FONT_HEIGHT;
+		pw = fb_console_cols * fb_cell_w;
+		ph = fb_console_rows * fb_cell_h;
+		fb_origin_x = ((int)w - pw) / 2;
+		fb_origin_y = ((int)h - ph) / 2;
+		if ((int)w >= pw + 2 * inset && fb_origin_x < inset)
+			fb_origin_x = inset;
+		if ((int)h >= ph + 2 * inset && fb_origin_y < inset)
+			fb_origin_y = inset;
+		if (fb_origin_x < 0)
+			fb_origin_x = 0;
+		if (fb_origin_y < 0)
+			fb_origin_y = 0;
+	}
 }
 
 static void put_cell_fb(int row, int col, char c, uint8_t color)

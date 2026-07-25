@@ -382,6 +382,12 @@ void cpu_wait(void)
 
 void cpu_idle(void)
 {
+    /*
+     * Safe halt: IRQs must be on or hlt never wakes (no IRQ1 → dead TTY
+     * after ash blocks and the idle task runs). clock_wait already sti'd
+     * before idle; kernel_idle_loop did not — force it here.
+     */
+    enable_interrupts();
     cpu_wait();
 }
 

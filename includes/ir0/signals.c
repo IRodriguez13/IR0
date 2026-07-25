@@ -297,6 +297,20 @@ int send_signal(int pid, int signal)
 #endif
 
     /*
+     * Linux: signals to PID 1 are discarded unless init installed a handler
+     * (man 2 kill). BusyBox poweroff/reboot without -f send SIGUSR2/SIGTERM
+     * to PID 1; runit has no handler — leaving them pending destabilized
+     * stage supervision and later showed up as kernel #UD.
+     */
+    if (proc->task.pid == 1)
+    {
+	void (*handler)(int) = proc->signal_handlers[signal];
+
+	if (!handler || handler == SIG_DFL || handler == SIG_IGN)
+		return 0;
+    }
+
+    /*
      * Default-fatal: zombieize immediately. Do not promote BLOCKED→READY
      * first (that raced schedule into a half-dead task → #UD on iret).
      */

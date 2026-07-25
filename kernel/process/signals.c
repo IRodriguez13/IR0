@@ -22,8 +22,12 @@ int process_signal_is_default_fatal(process_t *p, int sig)
 		return 0;
 	if (sig == SIGKILL)
 		return 1;
-	/* Default action Terminate — same path as sys_kill(SIGTERM). */
-	if (sig != SIGTERM && sig != SIGHUP)
+	/*
+	 * Default action Terminate (Linux signal(7)). Include USR1/USR2 —
+	 * BusyBox halt/poweroff signal init with those when not using -f.
+	 */
+	if (sig != SIGTERM && sig != SIGHUP && sig != SIGINT && sig != SIGQUIT &&
+	    sig != SIGUSR1 && sig != SIGUSR2)
 		return 0;
 	if (p->signal_ignored & SIGNAL_MASK(sig))
 		return 0;
