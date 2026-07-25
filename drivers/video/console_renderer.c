@@ -49,6 +49,25 @@ static void csi_clear_from_cursor(int cols, int rows, uint8_t color)
 	}
 }
 
+/* CSI J mode 1 — erase from start of screen through cursor (inclusive). */
+static void csi_clear_to_cursor(int cols, int rows, uint8_t color)
+{
+	extern int cursor_pos;
+	int row = cursor_pos / cols;
+	int col = cursor_pos % cols;
+	int r;
+	int c;
+
+	(void)rows;
+	for (r = 0; r <= row; r++)
+	{
+		int end = (r == row) ? col : (cols - 1);
+
+		for (c = 0; c <= end; c++)
+			console_put_cell(r, c, ' ', color);
+	}
+}
+
 static void csi_clear_screen(int cols, int rows, uint8_t color)
 {
 	int r;
@@ -123,13 +142,17 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t *color)
 		break;
 	case 'J':
 	{
+		/* ECMA-48 / xterm: 0=from cursor, 1=to cursor, 2=entire screen. */
 		int mode = csi_param_count > 0 ? csi_params[0] : 0;
 
-		if (mode == 2)
+		if (mode == 2 || mode == 3)
 		{
 			csi_clear_screen(cols, rows, *color);
-			cursor_pos = 0;
+			if (mode == 2)
+				cursor_pos = 0;
 		}
+		else if (mode == 1)
+			csi_clear_to_cursor(cols, rows, *color);
 		else
 			csi_clear_from_cursor(cols, rows, *color);
 		break;

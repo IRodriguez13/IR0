@@ -15,6 +15,7 @@
 #include <kernel/syscalls.h>
 #include <kernel/process.h>
 #include "fs_syscalls.h"
+#include "fs_path_syscalls.h"
 #include "syscalls_glue.h"
 #include <config.h>
 #include <ir0/copy_user.h>
@@ -491,7 +492,32 @@ int64_t sys_write(int fd, const void *buf, size_t count)
       ash_smoke_write_trace(fd, kernel_buf, copy_size);
       str = kernel_buf;
       uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
-      console_backend_write(str, copy_size, color);
+      {
+	size_t done = 0;
+	const size_t step = 64;
+
+	/*
+	 * Binary dumps (`cat /dev/hda`) can pin the CPU in putchar for
+	 * minutes. Check SIGINT between chunks so Ctrl+C is not ignored.
+	 */
+	while (done < copy_size)
+	{
+	  size_t n = copy_size - done;
+
+	  if (n > step)
+	    n = step;
+	  if (current_process &&
+	      signals_pause_should_interrupt(current_process))
+	  {
+	    handle_signals();
+	    if (done > 0)
+	      return (int64_t)done;
+	    return -EINTR;
+	  }
+	  console_backend_write(str + done, n, color);
+	  done += n;
+	}
+      }
       if (current_process->task.pid == 1 && copy_size >= 10 &&
 	  kernel_buf[0] == 'F' && !memcmp(kernel_buf, "FASE48_IPC", 10))
 	process_fase48_ipc_summary("fase48-final");
@@ -1033,9 +1059,19 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     if (vfs_stat(path_to_use, &st) != 0)
     {
       char parent[256];
+      stat_t pst;
 
       if (get_parent_path(path_to_use, parent, sizeof(parent)) != 0)
         return -ENAMETOOLONG;
+      /*
+       * Missing parent is ENOENT (Linux). check_file_access() returns false
+       * when stat fails — do not mask that as EACCES (runsv pid.new noise).
+       */
+      if (vfs_stat(parent, &pst) != 0)
+      {
+        fase50c_log_open_result(path_to_use, -ENOENT, 9);
+        return -ENOENT;
+      }
       if (!check_file_access(parent, ACCESS_EXEC | ACCESS_WRITE, current_process))
       {
         fase50c_log_open_result(path_to_use, -EACCES, 9);
@@ -1757,7 +1793,12 @@ int64_t sys_fchdir(int fd)
   if (fd_table[fd].path[0] == '\0')
     return -EBADF;
 
-  return sys_chdir(fd_table[fd].path);
+  /*
+   * fd_table[].path is a kernel string. sys_chdir() rejects non-userspace
+   * pointers with -EFAULT, which broke runsvdir's fchdir(curdir) loop and
+   * left services with a wrong cwd (./run ENOENT, supervise create fails).
+   */
+  return ir0_chdir_resolved(fd_table[fd].path);
 }
 
 /* Linux getdents (NR 78) — legacy filldir layout: d_type at reclen-1. */

@@ -477,42 +477,32 @@ int64_t sys_rmdir(const char *pathname)
   return vfs_rmdir(resolved);
 }
 
-int64_t sys_chdir(const char *pathname)
+int64_t ir0_chdir_resolved(const char *pathname)
 {
   int64_t ret;
+  size_t len;
+  char new_path[256];
+  stat_t st;
 
   if (!current_process || !pathname)
     return -EFAULT;
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
-  if (validate_userspace_string(pathname, 256) != 0)
-    return -EFAULT;
-
-  /* Validate path length */
-  size_t len = strlen(pathname);
+  len = strlen(pathname);
   if (len == 0 || len >= 256)
     return -EINVAL;
 
-  /* Calculate new path */
-  char new_path[256];
-
   if (is_absolute_path(pathname))
   {
-    /* Absolute path - just normalize it */
     if (normalize_path(pathname, new_path, sizeof(new_path)) != 0)
       return -ENAMETOOLONG;
   }
   else
   {
-    /* Relative path - join with current working directory */
     if (join_paths(current_process->cwd, pathname, new_path, sizeof(new_path)) != 0)
       return -ENAMETOOLONG;
   }
 
-  /* Verify directory exists */
-  stat_t st;
   ret = ir0_stat_path_routed(new_path, &st);
-
   if (ret < 0)
     return ret;
   if (!S_ISDIR(st.st_mode))
@@ -525,12 +515,23 @@ int64_t sys_chdir(const char *pathname)
   if (ret != 0)
     return ret;
 
-  /* Update current working directory */
   strncpy(current_process->cwd, new_path, sizeof(current_process->cwd) - 1);
   current_process->cwd[sizeof(current_process->cwd) - 1] = '\0';
   process_cwd_ensure_absolute(current_process);
 
   return 0;
+}
+
+int64_t sys_chdir(const char *pathname)
+{
+  if (!current_process || !pathname)
+    return -EFAULT;
+
+  /* Validate pathname is in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  return ir0_chdir_resolved(pathname);
 }
 
 int64_t sys_getcwd(char *buf, size_t size)

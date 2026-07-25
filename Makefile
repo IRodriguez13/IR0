@@ -2214,9 +2214,11 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
 		echo "  WARN    nano not built (optional; cat /usr/bin/nano after reinject)"
 	@DISK=$${DISK:-disk.img}; \
+	PROFILE=$${IR0_PRODUCT_PROFILE:-development}; \
 	STAMP=$${DISK}.runit.stamp; \
 	NEED=0; \
 	if [ ! -f "$$DISK" ] || [ ! -f "$$STAMP" ]; then NEED=1; fi; \
+	if [ $$NEED -eq 0 ] && [ "$$(cat "$$STAMP" 2>/dev/null)" != "$$PROFILE" ]; then NEED=1; fi; \
 	if [ $$NEED -eq 0 ]; then \
 		for dep in $(RUNIT_BIN_DIR)/runit-init $(RUNIT_STAGE_BIN)/runit_console_run \
 			$(RUNIT_STAGE_BIN)/ir0_passwd $(RUNIT_STAGE_BIN)/doas \
@@ -2236,8 +2238,8 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 		dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
 		python3 scripts/inject_init_minix.py --format-large $$DISK; \
 		$(IR0_USERSPACE_MAKE) rootfs DISK=$(KERNEL_ROOT)/$$DISK \
-			PROFILE=$${IR0_PRODUCT_PROFILE:-development}; \
-		touch "$$STAMP"; \
+			PROFILE=$$PROFILE; \
+		printf '%s\n' "$$PROFILE" > "$$STAMP"; \
 	fi
 	@echo "✓ load-userspace-runit OK (runit-init → runsvdir → console + logger)"
 

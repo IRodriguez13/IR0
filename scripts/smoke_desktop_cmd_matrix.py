@@ -63,11 +63,16 @@ FAIL_RES = [
 ]
 LOCK_SPAM_RE = re.compile(r"unable to lock supervise/lock")
 STAGE2_RE = re.compile(r"enter stage: /etc/runit/2")
-PROMPT_RE = re.compile(r"(?:ivan|root)@ir0:\S*\$")
+# Product /etc/hostname is "ir0"; some images still ship the legacy "unix".
+# Root PS1 ends with '#', non-root with '$' (see IR0-userspace rootfs/etc/profile).
+_HOST = r"(?:ir0|unix)"
+_USER = r"(?:ivan|root)"
+PROMPT_RE = re.compile(rf"{_USER}@{_HOST}:\S*[#$]")
 # Empty command: prompt with only whitespace before next prompt/EOL.
 EMPTY_PROMPT_RE = re.compile(
-    r"(?:ivan|root)@ir0:\S*\$\s*(?=(?:\n|\r|$|(?:ivan|root)@ir0:))"
+    rf"{_USER}@{_HOST}:\S*[#$]\s*(?=(?:\n|\r|$|{_USER}@{_HOST}:))"
 )
+LOGIN_PROMPT_RE = re.compile(rf"ivan@{_HOST}:")
 # Kernel serial noise interleaved with typed chars (breaks contiguous "true").
 KERN_LINE_RE = re.compile(r"\[#\d+\][^\n]*\n?")
 CSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
@@ -318,8 +323,9 @@ def classify_fail(new: str, *, allow_storm: bool = True) -> Optional[str]:
         return "lock_spam"
     if STAGE2_RE.search(new):
         return "stage2_reenter"
-    if new.count("GETTY_READY") >= 1 and "ivan@ir0" in new:
-        if new.find("GETTY_READY") > new.find("ivan@ir0"):
+    login_m = LOGIN_PROMPT_RE.search(new)
+    if new.count("GETTY_READY") >= 1 and login_m:
+        if new.find("GETTY_READY") > login_m.start():
             return "console_restart"
     # Enter storms are real under FEATURE_EDITING+HMP, but kernel log gaps
     # between PS1 redraws look identical after normalize — only trip when
@@ -522,7 +528,7 @@ def login_desktop(
         try:
             wait_pred(
                 log,
-                lambda t: "ivan@ir0" in t
+                lambda t: LOGIN_PROMPT_RE.search(t) is not None
                 or "ASH_INTERACTIVE_READY" in t
                 or "Login incorrect" in t,
                 t0,
@@ -532,10 +538,12 @@ def login_desktop(
         except TimeoutError:
             return "login_timeout"
         whole = log.read_text(errors="replace")
-        if "Login incorrect" in whole[base:] and "ivan@ir0" not in whole[base:]:
+        if "Login incorrect" in whole[base:] and not LOGIN_PROMPT_RE.search(
+            whole[base:]
+        ):
             time.sleep(1.5)
             continue
-        if "ivan@ir0" not in whole:
+        if not LOGIN_PROMPT_RE.search(whole):
             return "no_prompt"
         time.sleep(1.0)
         if do_su:
