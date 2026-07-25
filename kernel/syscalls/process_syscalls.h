@@ -41,6 +41,8 @@ int64_t sys_get_robust_list(int pid, struct robust_list_head **head_ptr,
 			    size_t *len_ptr);
 void process_exit_robust_list(process_t *p);
 int64_t sys_setsid(void);
+int64_t sys_getsid(pid_t pid);
+int64_t sys_getpgid(pid_t pid);
 int64_t sys_setpgid(pid_t pid, pid_t pgid);
 void process_cred_init_groups(process_t *p);
 int process_cred_in_group(const process_t *p, gid_t gid);
@@ -59,7 +61,6 @@ int64_t sys_getegid(void);
 int64_t sys_setuid(uid_t uid);
 int64_t sys_setgid(gid_t gid);
 int64_t sys_umask(mode_t mask);
-int64_t sys_sudo_auth(const char *password);
 int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[]);
 int64_t sys_fork(void);
 int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
@@ -69,6 +70,8 @@ int64_t sys_waitpid(pid_t pid, int *status, int options);
 int64_t sys_kill(pid_t pid, int signal);
 int64_t sys_sigaction(int signum, const struct sigaction *act,
 		      struct sigaction *oldact);
+int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
+		  unsigned long arg4, unsigned long arg5);
 int64_t sys_arch_prctl(int code, unsigned long addr);
 int64_t sys_set_tid_address(int *tidptr);
 int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,

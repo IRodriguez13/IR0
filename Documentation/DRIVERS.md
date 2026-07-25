@@ -24,7 +24,9 @@ IR0 uses a centralized registry and bootstrap path for core and optional drivers
 
 - Devices surface through `/dev` nodes.
 - Driver status surfaces through `/proc/drivers`.
-- Kernel initialization and failures are logged through backend logging paths.
+- Boot emits `KLOG_EVENT_DRIVER_PROBE_RESULT` per registered driver and a
+  `KLOG_EVENT_DRIVER_SUMMARY` line (`ready/absent/deferred/unsupported/failed`)
+  plus smoke tag `DRIVER_SUMMARY_OK` — see [`KLOG.md`](KLOG.md).
 
 ## Strengths
 

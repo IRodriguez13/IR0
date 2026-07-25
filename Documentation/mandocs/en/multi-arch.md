@@ -129,7 +129,7 @@ Porting checklist:
 4. Production musl/ISO smokes target x86-64 only today.
 5. `arm64_cpu_switch_mm`: activate `next_ttbr` when non-zero and ≠ current TTBR0.
 6. **Boot serial contract is ISA-agnostic:** after UART init, `ir0_boot_serial_ready()`
-   emits the same `[BOOT] IR0 Kernel v… Boot routine` banner first; ISA detail uses
+   emits the same `[BOOT] IR0 kernel <ver>` banner first; ISA detail uses
    COMP `ARCH`, stage tags COMP `SMOKE` (`includes/ir0/boot_log.h`).
 7. **ARM64 board is compile-time** (`includes/ir0/arm64_board.h`, `ARM64_BOARD=` /
    Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`, QEMU

@@ -153,9 +153,22 @@ typedef struct process
 	uint32_t umask;
 	gid_t groups[IR0_NGROUPS_MAX];
 	uint8_t ngroups;
+	/*
+	 * POSIX saved set-user-ID / set-group-ID: written from the effective IDs
+	 * on setuid-on-exec, so a privileged program can drop and regain its
+	 * effective ID (setuid(2) / setresuid(2) semantics).
+	 */
+	uint32_t suid;
+	uint32_t sgid;
+	/* prctl(PR_SET_NO_NEW_PRIVS): execve must not raise privileges. */
+	uint8_t no_new_privs;
+	/* AT_SECURE of the running image; recomputed on every execve. */
+	uint8_t at_secure;
 	pid_t tgid;
 	pid_t sid;  /* session id (Linux setsid) */
 	pid_t pgid; /* process group id */
+	/* Ticks since boot at creation — /proc/[pid]/stat field 22 (starttime). */
+	uint64_t start_ticks;
 	struct robust_list_head *robust_list;
 	
 	/* Current working directory */

@@ -45,6 +45,8 @@ typedef enum {
     IR0_DRIVER_STATE_ACTIVE = 3,
     IR0_DRIVER_STATE_FAILED = 4,
     IR0_DRIVER_STATE_ABSENT = 5, /* probed, no hardware — not a failure */
+    IR0_DRIVER_STATE_DEFERRED = 6,
+    IR0_DRIVER_STATE_UNSUPPORTED = 7,
 } ir0_driver_state_t;
 
 // Return codes
@@ -125,9 +127,17 @@ int ir0_driver_list_to_buffer(char *buf, size_t count);
 
 /**
  * Count registered drivers by outcome for boot summary.
- * ready = INITIALIZED|ACTIVE; absent = ABSENT; failed = FAILED.
+ * ready = INITIALIZED|ACTIVE; the remaining outputs map one-to-one to states.
  */
-void ir0_driver_boot_counts(unsigned *ready, unsigned *absent, unsigned *failed);
+void ir0_driver_boot_counts(unsigned *ready, unsigned *absent,
+			    unsigned *deferred, unsigned *unsupported,
+			    unsigned *failed);
+
+/*
+ * Emit one KLOG_EVENT_DRIVER_PROBE_RESULT per registered driver
+ * (message: "probe name=<n> state=<token>").
+ */
+void ir0_driver_boot_emit_probe_results(void);
 
 /**
  * Initialize the driver registry subsystem

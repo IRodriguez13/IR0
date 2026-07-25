@@ -97,7 +97,7 @@ This document does **not** authorize moves yet. Execute after:
 ### P2 — Nice-to-have after 0.0.1
 
 1. Rename `debug_bins/` → `userspace/cmd/` or keep path with alias.
-2. Consolidate `setup/runit`, `setup/doom` under `setup/experiments/`.
+2. Consolidate `setup/doom` under `setup/experiments/` (`setup/runit` already left the tree with SEP-2 → `IR0-userspace`).
 3. Generate QA target list from `contracts.json` (single source).
 
 ---

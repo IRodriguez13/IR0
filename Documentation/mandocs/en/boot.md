@@ -2,29 +2,34 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1 |
-| IR0 phase | T0 |
-| Status | stable |
+| Version | 0.2 |
+| IR0 phase | T0 / T1 product |
+| Status | stable (product: runit; debug shell opt-in) |
 | Depends on | memory, drivers, vfs, process |
 | Man page | IR0-boot (section 7) |
-| Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/arch_early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c` |
+| Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/arch_early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
 
 ## 1. Overview
 
 The boot path on x86-64 runs from a Multiboot-compatible GRUB load through minimal
-page tables, `kmain`, driver and VFS bring-up, syscall/IRQ enablement, and either
-in-kernel debug shell or `kexecve("/sbin/init")`. There is no separate `boot/`
-directory; boot code lives under `arch/` and `kernel/main.c`.
+page tables, `kmain`, driver and VFS bring-up, syscall/IRQ enablement, and
+`kexecve("/sbin/init")` (runit). Product defconfigs set
+`CONFIG_KERNEL_DEBUG_SHELL=n`. The in-kernel debug shell remains available only
+when explicitly enabled for legacy contracts. Structured boot logging:
+[`KLOG.md`](../../KLOG.md).
 
 ## 2. Internal architecture
 
 | Stage | Component | File |
 |-------|-----------|------|
 | Loader entry | Multiboot check, PAE, long mode | `arch/x86-64/asm/boot_x64.asm` |
-| Early CPU | GDT, TSS, SSE | `arch/x86-64/sources/arch_early.c` |
-| Kernel entry | Orchestration | `kernel/main.c` (`kmain`) |
-| Drivers | Staged bootstrap | `drivers/init_drv.c` |
+| Early CPU | GDT, TSS, SSE, **early IDT** | `arch/x86-64/sources/arch_early.c`, `interrupt/arch/x86-64/early_idt*.{c,asm}` |
+| Kernel entry | Orchestration + boot phases | `kernel/main.c` (`kmain`) |
+| Log profile | Kconfig + `ir0.loglevel=` cmdline | `kernel/cmdline.c` |
+| Event core | `klog_record` + early clock | `ktm/klog.c`, `arch_early_clock_*` |
+| Drivers | Staged bootstrap + probe events | `drivers/init_drv.c` |
 | Root FS | Mount table init | `fs/vfs.c` (`vfs_init_root`) |
+| Bare-metal milestone | `/etc/ir0-baremetal-booted` | `kernel/main.c` (post-VFS) |
 | Userspace | ELF load + schedule | `kernel/elf_loader.c` (`kexecve`) |
 
 **Early paging (`boot_x64.asm`):** identity map 0–48 MiB with 2 MiB pages;
@@ -36,41 +41,37 @@ in `RDI` for `kmain`.
 ```
 GRUB → boot_x64.asm
          → kmain(multiboot_info)
-              → set_boot_params / early_init
+              → set_boot_params / ir0_cmdline_apply_log_profile / early_init
+                 (GDT + TSS + early IDT)
               → heap_init (0x800000)
               → [CONFIG_ENABLE_VBE] video_backend_init_from_multiboot
               → console_backend_init
               → pmm_init (32–48 MiB)
-              → logging_init + ir0_driver_registry_init + serial_init
-              → klog_boot_hold(0) + BOOT banner (first framed serial line)
-              → init_all_drivers()
-              → vfs_init_root()  → mount / or tmpfs fallback
-              → process_init + ipc_init + clock_system_init
+              → logging_init + klog_promote_normal_ring
+              → ir0_driver_registry_init + serial_init
+              → phase EARLY_ARCH: ir0_boot_serial_ready() (BOOT banner)
+              → PLATFORM / HYPERVISOR lines
+              → phase DRIVERS: init_all_drivers() + DRIVER_PROBE_RESULT*
+              → vfs_init_root() + optional FIRST_BAREMETAL_BOOT sentinel
+              → process_init + ipc_init + clock_system_init (MONOTONIC)
               → syscall_init + syscalls_init
-              → irq_init + boot_irq_unmask + sti
-              → [KERNEL_DEBUG_SHELL] start_init_process
-                OR ir0_rootfs_prepare_userspace_base + kexecve("/sbin/init")
+              → irq_init + boot_irq_unmask + sti  (full IDT replaces early table)
+              → "kernel core initialization complete"
+              → [CONFIG_KTM] suite → "KTM validation complete"
+              → "system ready for userspace" + kexecve("/sbin/init")
+                OR [KERNEL_DEBUG_SHELL] start_init_process
               → sched_schedule_next → ring 3
 ```
 
-ASCII map:
-
-```text
-  Multiboot EBX ──► kmain
-                      │
-    arch_early ───────┤ GDT/TSS/SSE
-    heap + PMM ───────┤ 8–32 MiB heap, 32–48 MiB frames
-    drivers ──────────┤ bootstrap stages INPUT→NET
-    vfs_init_root ────┤ /dev/hda → / (minix) or tmpfs
-    syscalls + IRQ ───┤ int 0x80 + syscall insn
-    kexecve ───────────► /sbin/init (musl static)
-```
+**Early IDT:** installed immediately after TSS in `early_init_x86_64()` so a
+page fault or GPF during bring-up dumps `vec/err/rip/cr2` on COM1 and halts
+instead of triple-faulting silently. `irq_init()` installs the full table later.
 
 ## 4. Responsibilities
 
 - **boot_x64.asm:** CPU mode transition only; no C runtime.
 - **kmain:** Ordered subsystem init; must not return to userspace without scheduler.
-- **init_all_drivers:** Register and init Kconfig-gated hardware stacks.
+- **init_all_drivers:** Register and init Kconfig-gated hardware stacks; emit probe results.
 - **vfs_init_root:** Provide a usable `/` before any file-based exec.
 - **kexecve:** Load ELF from VFS, map segments, enqueue process.
 
@@ -89,6 +90,7 @@ ASCII map:
 | VFS | Root mount uses `CONFIG_ROOT_BLOCK_DEVICE`, `CONFIG_ROOT_FILESYSTEM` |
 | Process | `process_init` before first `kexecve` |
 | Scheduler | First user task entered via `sched_schedule_next` |
+| Klog | [`KLOG.md`](../../KLOG.md) — phases, sinks, `/proc/kmsg` |
 
 ## 7. Visual maps
 
@@ -108,37 +110,22 @@ Mermaid source: `Documentation/mandocs/diagrams/boot.mmd`
 3. `sti` runs only after IDT/PIC and syscall tables are initialized.
 4. If `sched_schedule_next` returns after init handoff, `kmain` panics.
 5. No separate kernel higher-half VA; boot identity map serves kernel and early user.
-6. Framed klog on serial starts with the BOOT banner (`ir0_boot_serial_ready` /
-   `klog_boot_hold`); earlier registry/logging messages are suppressed, not
-   reordered after the banner. The same contract applies on every ISA
-   (`includes/ir0/boot_log.h`); ARM64 early bring-up uses the freestanding path
-   (`IR0_FREESTANDING_BOOT`) with identical `[ts] [LEVEL] [COMP]` lines.
+6. Framed klog starts with the BOOT banner; every record carries `#sequence` and
+   boot phase; timestamps stay `[    ?.???]` until monotonic clock
+   ([`KLOG.md`](../../KLOG.md)).
+7. Product daily boot does **not** end in dbgshell; exploration is ash + `/proc/kmsg`.
 
 ## 9. Debugging tips
 
 New contributors: start with `make man TOPIC=onboarding` (first bug walkthrough).
-Optional host-side boot log (consultable ring, not a Linux ACPI dump):
-`make run-bootlog` → `build/hostshare/ir0-boot.log` when
-`CONFIG_BOOT_LOG_HOSTSHARE=y` and QEMU `-virtfs` is present
-(`BOOT_LOG_HOSTSHARE_OK` / `_SKIP`).
-
-Serial tags: `[ARCH]`, `klog` COMP `BOOT`, `[DRIVERS]`, `SERIAL: kmain: Loading userspace init`,
-`[ts] [INFO] [FASE…] CLASSIFY ROOTFS_LAYOUT_OK` (no dialect `[COMP][CLASSIFY]`).
 
 | Symptom | Check |
 |---------|-------|
-| `"MN"` on screen | Multiboot header mismatch |
-| Root mount fail | `block_dev_is_present(CONFIG_ROOT_BLOCK_DEVICE)`; tmpfs fallback |
-| Blank GUI | `[BOOT] vbe_fail_reason=` (1=mb_null, 2=no_fb, 3=bad_dims, 4=map_fail) |
-| Init not found | MINIX image missing `/sbin/init`; use inject scripts |
-| No `ir0-boot.log` on host | Need `BOOT_LOG_HOSTSHARE=y` + `-virtfs`; see `make help-bootlog` |
+| No serial after banner | `klog_boot_hold` / serial_init order |
+| Stuck before getty | `smoke-runit-boot` tags / disk inject |
+| Missing `/proc/kmsg` content | `klog_read_records` vs old logging buffer |
 
-Build: `make kernel-x64.iso`; userspace: `make kernel-x64-userspace.iso`.
+## 10. Known limits
 
-## 10. Future roadmap
-
-- ARM64 early boot uses portable `ir0_boot_*` + `arm64_board` (`qemu-virt` / `rpi4` /
-  `rpi5` stub). RPi4 UART min: `make smoke-arm64-rpi4-boot`. Not production-ready.
 - SMP/APIC-first boot not primary (`CONFIG_ENABLE_SMP=0`).
-- Higher-half kernel mapping not implemented (identity low map only).
-- UEFI direct boot not in tree (GRUB Multiboot path only).
+- Bare-metal first-boot sentinel only when no hypervisor is detected.

@@ -51,24 +51,24 @@ int register_multilang_example_drivers(void)
     driver = (ir0_driver_t*)register_rust_simple_driver();
     if (driver) {
         registered++;
-        LOG_INFO("MultiLangDrivers", "Registered rust_simple driver");
+        LOG_INFO("MULTILANG", "Registered rust_simple driver");
     } else {
-        LOG_WARNING("MultiLangDrivers", "Failed to register rust_simple driver (may not be compiled)");
+        LOG_WARNING("MULTILANG", "Failed to register rust_simple driver (may not be compiled)");
     }
 
     /* Register C++ example driver */
     driver = register_cpp_example_driver();
     if (driver) {
         registered++;
-        LOG_INFO("MultiLangDrivers", "Registered cpp_example driver");
+        LOG_INFO("MULTILANG", "Registered cpp_example driver");
     } else {
-        LOG_WARNING("MultiLangDrivers", "Failed to register cpp_example driver (may not be compiled)");
+        LOG_WARNING("MULTILANG", "Failed to register cpp_example driver (may not be compiled)");
     }
 
     if (registered > 0) {
-        LOG_INFO_FMT("MultiLangDrivers", "Successfully registered %d multi-language driver(s)", registered);
+        LOG_INFO_FMT("MULTILANG", "Successfully registered %d multi-language driver(s)", registered);
     } else {
-        LOG_WARNING("MultiLangDrivers", "No multi-language drivers were registered (they may not be compiled)");
+        LOG_WARNING("MULTILANG", "No multi-language drivers were registered (they may not be compiled)");
     }
 
     return registered;

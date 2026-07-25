@@ -1,12 +1,14 @@
 # IR0 — Stable baseline (release 0.0.1)
 
-> **Last verified:** 2026-07-18  
+> **Last verified:** 2026-07-25  
 > **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
 > hostshare-exec + F8 **honest MVP** (`smoke-f8-net`) + FAT secondary ship note,  
 > runit PID1 + hybrid 9p payload (`runit_hostshare_payload_run`) for desktop X smoke,  
 > merge `56a3f7b` (dev→master: kexec/S3, P1-storage, P1-T1), Future F2–F6,  
 > `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md),  
-> critical hybrid KTM battery ([`KTM.md`](KTM.md) § critical product battery).
+> critical hybrid KTM battery ([`KTM.md`](KTM.md) § critical product battery),  
+> **SEP-2** userspace split: product rootfs now built by the **`IR0-userspace`** sibling
+> (`IR0_USERSPACE_ROOT`, `make headers_install`) — see [`TREE_CONTRACT`](../../IR0-desktop/Documentation/TREE_CONTRACT.md).
 
 This document is the **single checklist** for what is **stable enough to run and test in QEMU** (serial and GTK UI), what was formerly **in development** and is now closed for **0.0.1**, and what remains **future work** (see [`ROADMAP.md`](ROADMAP.md) P1+).
 
@@ -109,11 +111,13 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 |------|--------|---------------|
 | **Hardening H1–H6** | **Closed** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Stable** | `make smoke-runit-boot` |
-| **BusyBox ash + applets** | **Stable (product)** | Manifest [`setup/busybox/required_applets.txt`](../setup/busybox/required_applets.txt); rootfs inject via `busybox_inject_manifest.sh`; ship smoke: `make ktm-userdev-busybox-manifest-run` (alias `smoke-busybox-manifest`) → `BUSYBOX_MANIFEST_OK` + `KTM_USERDEV_OK`. Extended probe: `smoke-fase58l-busybox-coreutils` |
+| **BusyBox ash + applets** | **Stable (product)** | Manifest `IR0-userspace/packages/busybox/required_applets.txt`; rootfs inject via `busybox_inject_manifest.sh`; ship smoke: `make ktm-userdev-busybox-manifest-run` (alias `smoke-busybox-manifest`) → `BUSYBOX_MANIFEST_OK` + `KTM_USERDEV_OK`. Extended probe: `smoke-fase58l-busybox-coreutils` |
 | **TinyCC in-guest** | **Merge-critical** | `ktm-userdev-tcc-power-halt-run` / `smoke-tcc-power-halt` — requires `POWER_TCC_KTM_OK` — **blocker for `master`** |
 | **COW fork** | **Stable** | `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
 | **T1 POSIX slice** | **Stable** | tier1 + musl manifests; cred/pthread/setuid smokes |
+| **Privilege model + doas** | **Stable** | set-id exec + `AT_SECURE` + `no_new_privs`; `smoke-setuid-exec`, `smoke-passwd`, `smoke-doas` (grant / env / **persist** / deny) |
+| **Product profiles** | **Stable** | `/etc/ir0-profile`: `development` (root autologin + warning), `desktop` (`hostname login:` + `/etc/ir0-noroot`), `appliance` (`CONSOLE_NO_LOGIN`) |
 | **T2 graphics / Doom** | **Merge-critical** | Real IWAD: `IR0_LEGACY_SMOKE=1 ktm-userdev-doom-55d-run` (alias `smoke-fase55d-doomgeneric`; requires `KTM_DOOM_55D_OK`) — **blocker for `master`**; stub 55b = fast aid only |
 | **Local net** | **Stable for test** | `AF_UNIX` (pathname + abstract + `socketpair` + `SCM_RIGHTS` multi-fd + real `getpeername` + SOCK flags/`accept4`/`MSG_PEEK`/`SO_REUSEADDR`) + **TCP loopback** — `smoke-stream-sock` / `smoke-scm-rights` / `smoke-unix-abstract` / `smoke-unix-harden` / `smoke-unix-flags` |
 | **Host-share 9p** | **Dev aid / product-dev** | QEMU `-virtfs` → `/mnt/host`; exec: `smoke-hostshare-exec`; recipe: [`HOSTSHARE_PRODUCT.md`](HOSTSHARE_PRODUCT.md). **Not** VirtualBox / virtiofs |
@@ -171,12 +175,14 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 
 | Item | Paths | Proof |
 |------|-------|-------|
-| runit PID1 | `setup/pid1/`, `load-userspace-runit` | `smoke-runit-boot` |
-| BusyBox minimal | `setup/busybox/fase58_busybox.config`, `build-busybox-fase50-min` | `smoke-tier1` |
+| Product userspace tree | `IR0-userspace/` (`fetch build rootfs image`), `IR0_USERSPACE_ROOT` | `check-userspace` fails loudly if the sibling is missing |
+| runit PID1 | `IR0-userspace/services/`, `load-userspace-runit` | `smoke-runit-boot` |
+| BusyBox minimal | `IR0-userspace/packages/busybox/fase58_busybox.config`, `build-busybox-fase50-min` | `smoke-tier1` |
 | BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional extended probe |
 | BusyBox product manifest | **BUSY-1 / BUSY-2 Closed** | `required_applets.txt` + `ktm-userdev-busybox-manifest-run` (`BUSYBOX_MANIFEST_OK`) |
 | Interactive ash on FB console | `includes/ir0/console.c`, TTY echo | [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.md) |
 | musl static toolchain | `MUSL_CC`, `kernel-x64-userspace.iso` | tier1 smokes |
+| Public UAPI export | `includes/uapi/`, `make headers_install DESTDIR=…` | `make -C IR0-userspace headers` |
 | TinyCC | `setup/tcc/build-fase52.sh` | `build-tcc-fase52` |
 
 ### Networking (UDP + local streams)
@@ -201,7 +207,7 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | virtio-9p + VFS fstype `9p` → `/mnt/host` | `make smoke-hostshare-9p` (`HOSTSHARE_9P_OK`, host file visible) |
 | 9p getattr + chunked read (ELF-sized) | `virtio_9p_stat_file` / `virtio_9p_read_file`; `hs_stat`/`hs_read` |
 | Exec payload from share | `make smoke-hostshare-exec` — stub `init_hostshare_exec` mounts `ir0share`, `execve(/mnt/host/ir0_payload)` |
-| Exec payload under **runit** PID1 | `setup/runit/runit_hostshare_payload_run` as supervised `sv/*/run` + `ktm_userdev_runner.py --disk` (prebuilt runit rootfs); reference: IR0-desktop Xfbdev smoke |
+| Exec payload under **runit** PID1 | `IR0-userspace/services/runit_hostshare_payload_run.c` as supervised `sv/*/run` + `ktm_userdev_runner.py --disk` (prebuilt runit rootfs); reference: IR0-desktop Xfbdev smoke |
 | virtiofs / FUSE | **Not implemented** — post-9p when FUSE exists |
 
 ### Storage (phase2 baseline)
@@ -237,10 +243,10 @@ Everything in this table was reached in at least one oleada and has a **runnable
 
 | Tier | Capability | Automated smoke | QEMU GTK (manual) |
 |------|------------|-----------------|-------------------|
-| **T0** | Kernel + debug_bins contracts | `make kernel-tests` (29/29) | `make run` (kernel dbgshell) |
+| **T0** | Kernel contracts (legacy debug_bins test-only) | `make kernel-tests` | `make run` (runit/getty/ash) |
 | **T0** | pseudo-FS `/proc` `/dev` `/sys` | ktests, `runtime-mount-check` | explore from ash after tier1 boot |
 | **T1** | runit + services | `make smoke-runit-boot` | `make run-fase58e-ash-gui` |
-| **T1** | BusyBox ash interactive | `make smoke-tier1` | `make run-irinit-interactive-gui` |
+| **T1** | BusyBox ash interactive | `make smoke-tier1` | `make run-fase58e-ash-gui` |
 | **T1** | multi-UID / permissions | `make smoke-multiuser-perms` | `su` / `id` in ash (rootfs) |
 | **T1** | pthread / futex path | `make smoke-musl-pthread` | — |
 | **T1** | setuid exec | `make smoke-setuid-exec` | — |
@@ -275,7 +281,7 @@ make defconfig
 make run-fase58e-ash-gui
 ```
 
-Builds its own temporary MINIX disk (irinit + BusyBox). **No** `IR0_LEGACY_SMOKE=1` — target lives in main `Makefile`.
+Builds its own temporary MINIX disk (runit + BusyBox). **No** `IR0_LEGACY_SMOKE=1` — target lives in main `Makefile`.
 
 - **Display:** QEMU GTK window (keyboard focus required for typing).
 - **Expect:** BusyBox ash prompt `#`, echo on Enter, basic applets (`ls`, `pwd`, `echo`).
@@ -287,8 +293,8 @@ Details: [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.
 
 | Target | What you get |
 |--------|----------------|
-| `make run` | Kernel debug shell (no `/sbin/init`) — VBE console |
-| `make run-irinit-interactive-gui` | irinit → BusyBox ash (optional Doom if WAD injected) |
+| `make run` | Product path: runit → getty/login → BusyBox ash |
+| `make run-fase58e-ash-gui` | runit → BusyBox ash (recommended) |
 | `make run-fase58c-fbdev-gui` | Framebuffer probe on `/dev/fb0` |
 | `make run-fase55d-doomgeneric-gui` | doomgeneric stub (needs IWAD + inject — see SETUP) |
 

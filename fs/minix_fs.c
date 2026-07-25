@@ -62,6 +62,15 @@ static int minix_blockdev_classified;
 static int minix_zmap_dirty;
 static uint32_t minix_zmap_search_start;
 
+/*
+ * MINIX i_time is a POSIX time_t (seconds); the kernel clock counts
+ * milliseconds since boot.
+ */
+static uint32_t minix_now_seconds(void)
+{
+	return (uint32_t)(get_system_time() / 1000ULL);
+}
+
 static size_t minix_zmap_bytes(void)
 {
 	uint16_t blocks = minix_fs.superblock.s_zmap_blocks;
@@ -596,39 +605,28 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
 
 int minix_fs_free_inode(uint16_t inode_num)
 {
+  uint32_t byte_index;
+  uint32_t bit_index;
+
   if (inode_num == 0 || inode_num > minix_fs.superblock.s_ninodes)
-  {
     return -EINVAL;
-  }
 
-  // Calcular la posición en el bitmap de inodes
-  uint32_t byte_index = (inode_num - 1) / 8;
-  uint32_t bit_index = (inode_num - 1) % 8;
-
-  if (byte_index >= minix_fs.superblock.s_imap_blocks * MINIX_BLOCK_SIZE)
-  {
+  /*
+   * Inode bitmap lives at block 2 (same as minix_sync_inode_bitmap /
+   * minix_alloc_inode). A previous off-by-one used block 1 and corrupted
+   * s_zmap_blocks in the superblock — next mount then kmalloc'd ~64MiB.
+   * Bit polarity matches alloc: bit set = used, clear = free.
+   */
+  byte_index = (uint32_t)inode_num / 8;
+  bit_index = (uint32_t)inode_num % 8;
+  if (byte_index >= (uint32_t)minix_fs.superblock.s_imap_blocks * MINIX_BLOCK_SIZE)
     return -EINVAL;
-  }
 
-  // Leer el bloque del bitmap
-  uint32_t block_num = 1 + byte_index / MINIX_BLOCK_SIZE;
-  uint32_t block_offset = byte_index % MINIX_BLOCK_SIZE;
+  if (minix_fs.inode_bitmap)
+    minix_fs.inode_bitmap[byte_index] &= ~(1u << bit_index);
 
-  uint8_t bitmap_block[MINIX_BLOCK_SIZE];
-  if (minix_read_block(block_num, bitmap_block) != 0)
-  {
+  if (minix_sync_inode_bitmap() != 0)
     return -EIO;
-  }
-
-  // Marcar el inode como libre (bit = 1)
-  bitmap_block[block_offset] |= (1 << bit_index);
-
-  // Escribir el bloque actualizado
-  if (minix_write_block(block_num, bitmap_block) != 0)
-  {
-    return -EIO;
-  }
-
   return 0;
 }
 
@@ -988,6 +986,22 @@ int minix_fs_init(void)
     return minix_fs_format();
   }
 
+  /*
+   * Reject absurd geometry before kmalloc(zmap). A corrupt s_zmap_blocks
+   * (historically written by minix_fs_free_inode into the superblock) used
+   * to panic with "kmalloc: size too large".
+   */
+  if (minix_fs.superblock.s_imap_blocks == 0 ||
+      minix_fs.superblock.s_zmap_blocks == 0 ||
+      minix_fs.superblock.s_zmap_blocks > 256 ||
+      minix_fs.superblock.s_imap_blocks > 16)
+  {
+    log_warn_fmt("MINIX", "corrupt geometry imap=%u zmap=%u, formatting",
+                 minix_fs.superblock.s_imap_blocks,
+                 minix_fs.superblock.s_zmap_blocks);
+    return minix_fs_format();
+  }
+
   // Read bitmaps
   // Block 2 is always the first inode bitmap block
   uint32_t imap_block = 2;
@@ -1319,12 +1333,13 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     const struct ir0_task_cred *cr = ir0_current_cred();
 
     mode_t effective_mode = mode & ~(cr ? cr->umask : (mode_t)0);
+    /* POSIX: a new directory is owned by the creator's effective IDs. */
     new_inode.i_mode = MINIX_IFDIR | (effective_mode & 0777);
-    new_inode.i_uid = cr ? (uint16_t)cr->uid : (uint16_t)0;
-    new_inode.i_gid = cr ? (uint8_t)cr->gid : (uint8_t)0;
+    new_inode.i_uid = cr ? (uint16_t)cr->euid : (uint16_t)0;
+    new_inode.i_gid = cr ? (uint8_t)cr->egid : (uint8_t)0;
   }
   new_inode.i_size = MINIX_BLOCK_SIZE; // One block for . and ..
-  new_inode.i_time = get_system_time();
+  new_inode.i_time = minix_now_seconds();
   new_inode.i_nlinks = 2; // . and ..
 
   // Allocate and initialize directory block
@@ -1378,7 +1393,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   }
 
   parent_inode.i_nlinks++;
-  parent_inode.i_time = get_system_time();
+  parent_inode.i_time = minix_now_seconds();
 
   if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
   {
@@ -2348,7 +2363,7 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
   }
 
   file_inode.i_size = (uint32_t)new_size;
-  file_inode.i_time = get_system_time();
+  file_inode.i_time = minix_now_seconds();
   if (minix_fs_write_inode(inode_num, &file_inode) != 0)
     return -EIO;
   if (minix_sync_zone_bitmap() != 0)
@@ -2427,7 +2442,7 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
   {
     minix_inode_free_all_zones(&file_inode);
     file_inode.i_size = 0;
-    file_inode.i_time = get_system_time();
+    file_inode.i_time = minix_now_seconds();
     if (minix_fs_write_inode(inode_num, &file_inode) != 0)
       return -1;
     return 0;
@@ -2495,7 +2510,7 @@ int minix_fs_touch(const char *path, mode_t mode)
     if (existing_inode->i_mode & MINIX_IFDIR)
       return -EISDIR;
 
-    existing_inode->i_time = get_system_time();
+    existing_inode->i_time = minix_now_seconds();
     uint16_t inode_num = minix_fs_get_inode_number(path);
     if (inode_num != 0)
     {
@@ -2542,12 +2557,13 @@ int minix_fs_touch(const char *path, mode_t mode)
     const struct ir0_task_cred *cr = ir0_current_cred();
     mode_t effective_mode = mode & ~(cr ? cr->umask : (mode_t)0);
 
+    /* POSIX: a new file is owned by the creator's effective IDs. */
     new_inode.i_mode = MINIX_IFREG | (effective_mode & 0777);
-    new_inode.i_uid = cr ? (uint16_t)cr->uid : (uint16_t)0;
-    new_inode.i_gid = cr ? (uint8_t)cr->gid : (uint8_t)0;
+    new_inode.i_uid = cr ? (uint16_t)cr->euid : (uint16_t)0;
+    new_inode.i_gid = cr ? (uint8_t)cr->egid : (uint8_t)0;
   }
   new_inode.i_size = 0;
-  new_inode.i_time = get_system_time();
+  new_inode.i_time = minix_now_seconds();
   new_inode.i_nlinks = 1;
   kmemset(new_inode.i_zone, 0, sizeof(new_inode.i_zone));
 
@@ -2565,7 +2581,7 @@ int minix_fs_touch(const char *path, mode_t mode)
     return -EIO;
   }
 
-  parent_inode.i_time = get_system_time();
+  parent_inode.i_time = minix_now_seconds();
   {
     uint16_t parent_inode_num = minix_fs_get_inode_number(parent_path);
 
@@ -2917,7 +2933,7 @@ int minix_fs_rmdir(const char *path)
   {
     if (parent_inode.i_nlinks > 2)
       parent_inode.i_nlinks--;
-    parent_inode.i_time = get_system_time();
+    parent_inode.i_time = minix_now_seconds();
     if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
       return -EIO;
   }
@@ -3029,7 +3045,7 @@ int minix_fs_rmdir_force(const char *path)
     {
       parent_inode.i_nlinks--;
     }
-    parent_inode.i_time = get_system_time();
+    parent_inode.i_time = minix_now_seconds();
 
     if (minix_fs_write_inode(parent_inode_num, &parent_inode) != 0)
     {
@@ -3387,8 +3403,8 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
   // directly
   buf->st_mode = inode.i_mode;
 
-  if (kstrcmp(pathname, "/") == 0)
-    log_info_fmt("MINIX", "stat('%s') OK ino=%u mode=0x%x", pathname, inode_num, buf->st_mode);
+  if (kstrcmp(pathname, "/") == 0 && klog_trace_enabled(KLOG_TRACE_VFS_STAT))
+    klog_trace_fmt("MINIX", "stat('%s') OK ino=%u mode=0x%x", pathname, inode_num, buf->st_mode);
   return 0;
 }
 
@@ -3426,6 +3442,44 @@ int minix_fs_chown(const char *path, uid_t owner, gid_t group)
   return minix_fs_write_inode(inode_num, &inode_copy);
 }
 
+
+/*
+ * minix_fs_utimens - utimensat(2) backend.
+ *
+ * MINIX v1 inodes keep a single timestamp, so the modification time wins and
+ * stat() reports it for atime, mtime and ctime alike.
+ */
+static int minix_fs_utimens(const char *path, const struct timespec times[2])
+{
+  const struct ir0_task_cred *cr = ir0_current_cred();
+  minix_inode_t *inode;
+  minix_inode_t inode_copy;
+  uint16_t inode_num;
+
+  if (!path)
+    return -EINVAL;
+  if (!cr)
+    return -ESRCH;
+
+  inode = minix_fs_find_inode(path);
+  if (!inode)
+    return -ENOENT;
+
+  if (!ir0_cred_is_root() && cr->euid != inode->i_uid)
+    return -EPERM;
+
+  inode_num = minix_fs_get_inode_number(path);
+  if (inode_num == 0)
+    return -ENOENT;
+
+  kmemcpy(&inode_copy, inode, sizeof(minix_inode_t));
+  if (times)
+    inode_copy.i_time = (uint32_t)times[1].tv_sec;
+  else
+    inode_copy.i_time = minix_now_seconds();
+
+  return minix_fs_write_inode(inode_num, &inode_copy);
+}
 
 static int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
 {
@@ -3510,7 +3564,7 @@ static int minix_truncate(const char *path, size_t length)
       return grow_rc;
 
     inode.i_size = (uint32_t)length;
-    inode.i_time = get_system_time();
+    inode.i_time = minix_now_seconds();
     if (minix_fs_write_inode(inode_num, &inode) != 0)
       return -EIO;
     if (minix_sync_zone_bitmap() != 0)
@@ -3537,7 +3591,7 @@ static int minix_truncate(const char *path, size_t length)
   if (!changed)
     return 0;
 
-  inode.i_time = get_system_time();
+  inode.i_time = minix_now_seconds();
   if (minix_fs_write_inode(inode_num, &inode) != 0)
     return -EIO;
   if (minix_sync_zone_bitmap() != 0)
@@ -3649,6 +3703,7 @@ static struct vfs_ops minix_fs_ops = {
 	.link    = minix_fs_link,
 	.chown   = minix_fs_chown,
 	.chmod   = minix_fs_chmod,
+	.utimens = minix_fs_utimens,
 };
 
 static struct vfs_fstype minix_fs_type;

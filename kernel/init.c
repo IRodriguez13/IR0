@@ -25,6 +25,7 @@
 #include <string.h>
 #include "rootfs_base.h"
 
+#if KERNEL_DEBUG_SHELL
 /*
  * Build a Unix-like base hierarchy for the debug shell runtime.
  * This is idempotent: existing directories are kept as-is.
@@ -174,6 +175,8 @@ int start_init_process(void)
 	init->gid = ROOT_GID;
 	init->euid = ROOT_UID;
 	init->egid = ROOT_GID;
+	init->suid = ROOT_UID;
+	init->sgid = ROOT_GID;
 	init->umask = DEFAULT_UMASK;
 
 	/* Initialize fd table (stdin/stdout/stderr) */
@@ -197,3 +200,4 @@ int start_init_process(void)
 
 	return 0;
 }
+#endif

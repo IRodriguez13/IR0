@@ -33,6 +33,7 @@ uintptr_t read_fault_address(void);
 
 
 const char *get_arch_name(void);
+const char *get_arch_uname_machine(void);
 
 
 void cpu_wait(void);

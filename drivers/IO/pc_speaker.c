@@ -64,7 +64,7 @@ static int32_t speaker_driver_init(void)
 {
     if (speaker_initialized)
     {
-        LOG_WARNING("PCSpeaker", "PC Speaker already initialized");
+        LOG_WARNING("PC_SPEAKER", "PC Speaker already initialized");
         return 0;
     }
 
@@ -76,7 +76,7 @@ static int32_t speaker_driver_init(void)
     speaker_initialized = true;
     speaker_enabled = false;
 
-    LOG_INFO("PCSpeaker", "PC Speaker initialized");
+    LOG_INFO("PC_SPEAKER", "PC Speaker initialized");
     return 0;
 }
 
@@ -85,13 +85,13 @@ static int32_t speaker_driver_beep(const void *buf, size_t len)
 {
     if (!speaker_initialized)
     {
-        LOG_ERROR("PCSpeaker", "PC Speaker not initialized");
+        LOG_ERROR("PC_SPEAKER", "PC Speaker not initialized");
         return -1;
     }
 
     if (!buf || len < sizeof(uint16_t))
     {
-        LOG_ERROR("PCSpeaker", "Invalid buffer or size");
+        LOG_ERROR("PC_SPEAKER", "Invalid buffer or size");
         return -1;
     }
 
@@ -136,7 +136,7 @@ static void speaker_driver_shutdown(void)
 {
     speaker_driver_stop();
     speaker_initialized = false;
-    LOG_INFO("PCSpeaker", "PC Speaker shutdown");
+    LOG_INFO("PC_SPEAKER", "PC Speaker shutdown");
 }
 
 /* Driver operations */
@@ -166,7 +166,7 @@ void pc_speaker_init(void)
     ir0_driver_t *driver = ir0_register_driver(&speaker_info, &speaker_ops);
     if (!driver)
     {
-        LOG_ERROR("PCSpeaker", "Failed to register PC Speaker driver");
+        LOG_ERROR("PC_SPEAKER", "Failed to register PC Speaker driver");
     }
 }
 

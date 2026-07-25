@@ -99,6 +99,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	proc->sid = proc->task.pid;
 	proc->pgid = proc->task.pid;
 	proc->ppid = current_process ? current_process->task.pid : 0;
+	proc->start_ticks = clock_get_tick_count();
 	proc->state = PROCESS_READY;
 	proc->sched_prio = IR0_SCHED_PRIO_DEFAULT;
 
@@ -138,6 +139,10 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->gid = current_process->gid;
 		proc->euid = current_process->euid;
 		proc->egid = current_process->egid;
+		proc->suid = current_process->suid;
+		proc->sgid = current_process->sgid;
+		proc->no_new_privs = current_process->no_new_privs;
+		proc->at_secure = current_process->at_secure;
 		proc->umask = current_process->umask;
 		strncpy(proc->cwd, current_process->cwd, sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
@@ -146,6 +151,10 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->gid = ROOT_GID;
 		proc->euid = ROOT_UID;
 		proc->egid = ROOT_GID;
+		proc->suid = ROOT_UID;
+		proc->sgid = ROOT_GID;
+		proc->no_new_privs = 0;
+		proc->at_secure = 0;
 		proc->umask = DEFAULT_UMASK;
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';

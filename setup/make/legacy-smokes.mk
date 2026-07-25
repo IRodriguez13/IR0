@@ -105,35 +105,15 @@ load-userspace-rootfs: build-init-minimal build-sh-smoke
 	@chmod +x scripts/load_userspace_rootfs.sh
 	@./scripts/load_userspace_rootfs.sh disk.img $(INIT_SMOKE_BIN) $(SH_SMOKE_BIN)
 
-# Inject irinit + BusyBox on MINIX disk (transitional PID1 before runit).
-load-userspace-irinit: build-irinit build-busybox-fase50-min
-	@DISK=$${DISK:-disk.img}; \
-	echo "  DISK    Preparing $$DISK (200M MINIX)..."; \
-	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
-	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	python3 scripts/inject_init_minix.py $$DISK $(IRINIT_BIN) sbin/init && \
-	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
-	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
-	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/sh /bin/busybox
-	@echo "✓ load-userspace-irinit OK (irinit → /bin/sh; replace with runit later)"
+# Inject runit + BusyBox on MINIX disk (canonical PID1).
+# Retired: load-userspace-irinit / smoke-userspace-irinit (irinit removed).
+load-userspace-irinit:
+	@echo "✗ load-userspace-irinit retired — use: make load-userspace-runit"
+	@exit 2
 
-smoke-userspace-irinit: load-userspace-irinit kernel-x64-userspace.iso
-	@echo "  SMOKE   irinit PID1 boot (transitional, ring 3)..."
-	@DISK=$$(mktemp /tmp/ir0-irinit-smoke.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	$(SMOKE_QEMU_RUN) --log /tmp/irinit-boot-smoke.log --timeout 120 --done IRINIT_PID1_OK -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none; \
-	rm -f $$DISK
-	@if grep -q "IRINIT_PID1_OK" /tmp/irinit-boot-smoke.log && \
-	    grep -q "DEV_CONSOLE_OPEN_OK" /tmp/irinit-boot-smoke.log; then \
-		echo "✓ smoke-userspace-irinit passed"; \
-	else \
-		echo "✗ smoke-userspace-irinit FAILED"; \
-		grep -E 'IRINIT_|KERNEL PANIC|panic' /tmp/irinit-boot-smoke.log | tail -20; \
-		exit 1; \
-	fi
+smoke-userspace-irinit:
+	@echo "✗ smoke-userspace-irinit retired — use: make smoke-runit-boot"
+	@exit 2
 
 # QEMU smoke: PID1 fork+execve /bin/sh in ring 3.
 smoke-userspace-shell: load-userspace-rootfs kernel-x64-userspace.iso
@@ -755,9 +735,8 @@ smoke-fase52-tcc: build-runit build-init-fase52-tcc build-tcc-fase52 $(KERNEL_US
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) ./setup/runit/install-to-disk.sh $$DISK && \
-	chmod +x setup/runit/inject-smoke-service.sh && \
-	./setup/runit/inject-smoke-service.sh $$DISK fase52 \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) $(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK && \
+		$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK fase52 \
 		$(RUNIT_STAGE_BIN)/runit_fase52_run $(FASE52_HARNESS_BIN) bin/f52-harness && \
 	find $(FASE52_TCC_STAGE) -type f | sort | while read -r f; do \
 		rel="$${f#$(FASE52_TCC_STAGE)/}"; \
@@ -1122,10 +1101,9 @@ smoke-fase55d-doomgeneric: build-runit build-init-fase55d-doomgeneric kernel-x64
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) ./setup/runit/install-to-disk.sh $$DISK && \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) $(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(RUNIT_STAGE_BIN)/runit_fase55d_init sbin/init && \
-	chmod +x setup/runit/inject-smoke-service.sh && \
-	./setup/runit/inject-smoke-service.sh $$DISK doom \
+		$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK doom \
 		$(RUNIT_STAGE_BIN)/runit_fase55d_run $(FASE55D_SMOKE_BIN) bin/doom-smoke && \
 	python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/doom-smoke \
@@ -1278,7 +1256,7 @@ run-fase58c-doom-gui: build-fase55e-doom-interactive kernel-x64-userspace.iso
 	rm -f $$DISK
 
 # FASE58E — runit GUI/smoke targets live in root Makefile (avoid duplicate override).
-# Legacy irinit path: load-userspace-irinit + run-irinit-interactive-gui below.
+# Legacy irinit path retired — use load-userspace-runit / smoke-runit-* / run-fase58e-ash-gui.
 
 smoke-fase58e-ash-interactive: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   FASE58E ash interactive (headless + monitor sendkey)..."
@@ -1363,43 +1341,11 @@ check-fase58c-logs:
 		grep -E 'DOOMGENERIC_WAD_LOAD_OK|DOOMGENERIC_FIRST_FRAME_OK|DOOMGENERIC_FRAME_LOOP_OK|DOOMGENERIC_FRAMEBUFFER_VISIBLE' "$(FASE58C_DOOM_LOG)" || echo "(no doom tags)"; \
 	else echo "missing $(FASE58C_DOOM_LOG)"; fi
 
-run-irinit-interactive-gui: build-irinit build-busybox-fase50-min build-tcc-fase52 kernel-x64-userspace.iso
-	@echo "  RUN     irinit GUI interactive (BusyBox ash on /dev/console)"
-	@echo "  LOG     serial -> $(IRINIT_GUI_LOG)"
-	@echo "  HINT    click QEMU window to capture keyboard; Ctrl+C to stop"
-	@echo "  HINT    type ls, pwd, echo hi, cat /proc/mounts manually"
-	@rm -f $(IRINIT_GUI_LOG); \
-	DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
-	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
-	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	python3 scripts/inject_init_minix.py $$DISK $(IRINIT_BIN) sbin/init && \
-	python3 scripts/inject_init_minix.py $$DISK $(IRINIT_BIN) sbin/irinit && \
-	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/busybox && \
-	python3 scripts/inject_init_minix.py $$DISK $(FASE50_BUSYBOX_BIN) bin/sh && \
-	find $(FASE52_TCC_STAGE) -type f 2>/dev/null | sort | while read -r f; do \
-		rel="$${f#$(FASE52_TCC_STAGE)/}"; \
-		python3 scripts/inject_init_minix.py $$DISK "$$f" "$$rel"; \
-	done; \
-	if [ -n "$(REAL_WAD_PATH)" ] && [ -f "$(REAL_WAD_PATH)" ]; then \
-		$(MAKE) -s build-fase55e-doom-interactive; \
-		CFG=$$(mktemp /tmp/doom-frames-cfg.XXXXXX); \
-		printf '0\n0\n' > $$CFG; \
-		python3 scripts/inject_init_minix.py $$DISK $(FASE55E_DOOM_BIN) bin/doomgeneric && \
-		python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
-		python3 scripts/inject_init_minix.py $$DISK $$CFG etc/doom-frames && \
-		rm -f $$CFG; \
-	fi; \
-	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/irinit /bin/sh /bin/busybox; \
-	if [ "$(IRINIT_DISPLAY)" = "sdl" ]; then \
-		DISP="-display sdl2"; \
-	else \
-		DISP="-display gtk"; \
-	fi; \
-	$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial file:$(IRINIT_GUI_LOG) \
-		$$DISP -m 256M -no-reboot -net none; \
-	rm -f $$DISK
+# Legacy irinit GUI path retired — product PID1 is runit (FASE58E ash GUI).
+run-irinit-interactive-gui:
+	@echo "✗ run-irinit-interactive-gui retired (irinit removed)"
+	@echo "  use: make run-fase58e-ash-gui"
+	@exit 2
 
 smoke-current-fase54b: kernel-x64.bin arch-guard smoke-fase54b-input
 	@echo "FAST_ITERATION_GATES_OK"

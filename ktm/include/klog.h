@@ -34,15 +34,32 @@
 
 #include <stdint.h>
 #include <stdarg.h>
+#include <ir0/klog_event.h>
 
 typedef enum
 {
-	KLOG_LEVEL_DEBUG = 0,
-	KLOG_LEVEL_INFO = 1,
-	KLOG_LEVEL_WARN = 2,
-	KLOG_LEVEL_ERROR = 3,
-	KLOG_LEVEL_FATAL = 4
+	KLOG_LEVEL_TRACE = 0,
+	KLOG_LEVEL_DEBUG = 1,
+	KLOG_LEVEL_INFO = 2,
+	KLOG_LEVEL_NOTICE = 3,
+	KLOG_LEVEL_WARN = 4,
+	KLOG_LEVEL_ERROR = 5,
+	KLOG_LEVEL_FATAL = 6
 } klog_level_t;
+
+/* Presentation profiles (Kconfig default + ir0.loglevel= override). */
+typedef enum
+{
+	KLOG_PROFILE_QUIET = 0,
+	KLOG_PROFILE_NORMAL = 1,
+	KLOG_PROFILE_DEBUG = 2,
+	KLOG_PROFILE_TRACE = 3
+} klog_profile_t;
+
+/* Runtime trace categories (ir0.trace=open_abi,vfs). */
+#define KLOG_TRACE_OPEN_ABI (1u << 0)
+#define KLOG_TRACE_VFS_STAT (1u << 1)
+#define KLOG_TRACE_ALL ((uint32_t)-1)
 
 /*
  * kprintf — Linux printk analogue: formatted kernel output to serial
@@ -62,20 +79,30 @@ void klog_hex32(uint32_t num);
 void klog_hex64(uint64_t num);
 
 void klog_emit(klog_level_t level, const char *component, const char *message);
+void klog_trace(const char *component, const char *message);
 void klog_debug(const char *component, const char *message);
 void klog_info(const char *component, const char *message);
+void klog_notice(const char *component, const char *message);
 void klog_warn(const char *component, const char *message);
 void klog_error(const char *component, const char *message);
 void klog_fatal(const char *component, const char *message);
 
+void klog_trace_fmt(const char *component, const char *format, ...);
 void klog_debug_fmt(const char *component, const char *format, ...);
 void klog_info_fmt(const char *component, const char *format, ...);
+void klog_notice_fmt(const char *component, const char *format, ...);
 void klog_warn_fmt(const char *component, const char *format, ...);
 void klog_error_fmt(const char *component, const char *format, ...);
 void klog_fatal_fmt(const char *component, const char *format, ...);
 
 void klog_set_level(klog_level_t level);
 klog_level_t klog_get_level(void);
+void klog_apply_profile(klog_profile_t profile);
+klog_profile_t klog_get_profile(void);
+
+void klog_set_trace_mask(uint32_t mask);
+uint32_t klog_get_trace_mask(void);
+int klog_trace_enabled(uint32_t category);
 
 /* 1 = suppress serial until BOOT banner; 0 = normal. Default held at boot. */
 void klog_boot_hold(int on);

@@ -23,7 +23,7 @@
 #include "io_syscalls.h"
 #include "time_syscalls.h"
 #include "epoll_syscalls.h"
-#include <ir0/bits/syscall_linux.h>
+#include <ir0/syscall_linux.h>
 #include <ir0/kexec.h>
 #include <ir0/signals.h>
 #include <ir0/futex.h>
@@ -214,12 +214,10 @@ WRAP0(sys_sync)
 WRAP2(sys_gettimeofday, struct timeval *, void *)
 WRAP2(sys_getitimer, int, struct itimerval *)
 WRAP3(sys_setitimer, int, const struct itimerval *, struct itimerval *)
+WRAP5(sys_prctl, int, unsigned long, unsigned long, unsigned long, unsigned long)
 WRAP1(sys_setuid, uid_t)
 WRAP1(sys_setgid, gid_t)
 WRAP1(sys_umask, mode_t)
-#if CONFIG_IR0_SUDO_AUTH_SYSCALL
-WRAP1(sys_sudo_auth, const char *)
-#endif
 WRAP5(sys_clone, unsigned long, void *, int *, int *, unsigned long)
 
 #undef WRAP1
@@ -242,6 +240,10 @@ static int64_t wrap_sys_setsid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_setsid(); }
 static int64_t wrap_sys_setpgid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a3;(void)a4;(void)a5;(void)a6; return sys_setpgid((pid_t)a1, (pid_t)a2); }
+static int64_t wrap_sys_getsid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getsid((pid_t)a1); }
+static int64_t wrap_sys_getpgid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
+  (void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getpgid((pid_t)a1); }
 static int64_t wrap_sys_getuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getuid(); }
 static int64_t wrap_sys_geteuid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
@@ -332,9 +334,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_setresgid]      = wrap_sys_setresgid;
   syscall_table_rw[__NR_getresgid]      = wrap_sys_getresgid;
   syscall_table_rw[__NR_umask]          = wrap_sys_umask;
-#if CONFIG_IR0_SUDO_AUTH_SYSCALL
-  syscall_table_rw[__NR_sudo_auth]      = wrap_sys_sudo_auth;
-#endif
+  syscall_table_rw[__NR_prctl]          = wrap_sys_prctl;
   syscall_table_rw[__NR_clone]           = wrap_sys_clone;
   syscall_table_rw[__NR_fork]          = wrap_sys_fork;
   syscall_table_rw[__NR_execve]        = wrap_sys_exec;
@@ -375,6 +375,8 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_gettimeofday]   = wrap_sys_gettimeofday;
   syscall_table_rw[__NR_getppid]        = wrap_sys_getppid;
   syscall_table_rw[__NR_setsid]         = wrap_sys_setsid;
+  syscall_table_rw[__NR_getsid]         = wrap_sys_getsid;
+  syscall_table_rw[__NR_getpgid]        = wrap_sys_getpgid;
   syscall_table_rw[__NR_setpgid]        = wrap_sys_setpgid;
   syscall_table_rw[__NR_arch_prctl]     = wrap_sys_arch_prctl;
   syscall_table_rw[__NR_set_tid_address] = wrap_sys_set_tid_address;

@@ -19,6 +19,7 @@
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <ir0/logging.h>
+#include <ir0/cmdline.h>
 #include <ir0/boot_log_hostshare.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -42,6 +43,9 @@
 #include <ir0/multiboot.h>
 #include <ir0/ktm/ktm.h>
 #include <ir0/boot_log.h>
+#include <ir0/vfs.h>
+#include <ir0/open_flags.h>
+#include <ir0/stat.h>
 #include "ipc.h"
 #include "syscalls.h"
 #include <ir0/sched.h>
@@ -131,6 +135,7 @@ void kmain(uint32_t multiboot_info)
 
     /* Initialize architecture-specific early features (GDT, TSS, etc.) */
     set_boot_params((void *)(uintptr_t)multiboot_info);
+    ir0_cmdline_apply_log_profile();
     early_init();
 
     /* Initialize core subsystems first (need heap for VBE mapping) */
@@ -164,6 +169,7 @@ void kmain(uint32_t multiboot_info)
     pmm_init(PMM_PHYS_BASE, PMM_PHYS_SIZE);
     
     logging_init();
+    (void)klog_promote_normal_ring();
     /*
      * Core driver policy:
      * serial/logging/clock/interrupt plumbing is always-on and initialized in
@@ -176,9 +182,23 @@ void kmain(uint32_t multiboot_info)
      * version banner. Early registry chatter is held via klog_boot_hold until
      * ir0_boot_serial_ready(). ISA-specific detail uses COMP ARCH afterwards.
      */
+    klog_set_boot_phase(KLOG_BOOT_EARLY_ARCH);
     ir0_boot_serial_ready();
-    typewriter_vga_print("IR0 Kernel v" IR0_VERSION_STRING " Boot routine\n", 0x0F);
+    ir0_boot_arch(
+#if defined(__x86_64__)
+		"x86_64 bootstrap entry"
+#elif defined(__aarch64__)
+		"aarch64 bootstrap entry"
+#else
+		"bootstrap entry"
+#endif
+	);
+    /* Honest SMP line: product builds are UP until real SMP lands. */
+    ir0_boot_info("SMP", "UP (1 CPU online)");
 
+    klog_set_boot_phase(KLOG_BOOT_MEMORY);
+    klog_info("PMM", "physical memory manager online");
+    klog_set_boot_phase(KLOG_BOOT_PLATFORM);
     {
 	char hv_vendor[16];
 
@@ -190,22 +210,16 @@ void kmain(uint32_t multiboot_info)
 		 * "TCGTCGTCGTCG"; KVM uses "KVMKVMKVM\0\0\0"; Xen "XenVMMXenVMM".
 		 */
 		if (strncmp(hv_vendor, "TCGTCGTCGTCG", 12) == 0)
-			log_info_fmt("BOOT",
-				     "hypervisor present vendor=%s (QEMU TCG)",
-				     hv_vendor);
+			ir0_boot_info("HYPERVISOR", "detected vendor=TCG (QEMU TCG)");
 		else if (strncmp(hv_vendor, "KVMKVMKVM", 9) == 0)
-			log_info_fmt("BOOT",
-				     "hypervisor present vendor=%s (KVM)",
-				     hv_vendor);
+			ir0_boot_info("HYPERVISOR", "detected vendor=KVM");
 		else
-			log_info_fmt("BOOT", "hypervisor present vendor=%s",
-				     hv_vendor);
+			log_info_fmt("HYPERVISOR", "detected vendor=%s", hv_vendor);
 	}
 	else
 	{
-		log_info("BOOT", "hypervisor none");
-		log_info("BOOT", "IR0 is running on bare metal!");
-		typewriter_vga_print("IR0 is running on bare metal!\n", 0x0A);
+		ir0_boot_info("HYPERVISOR", "none detected");
+		ir0_boot_notice("PLATFORM", "Bare-metal execution confirmed!");
 	}
     }
 
@@ -252,9 +266,11 @@ void kmain(uint32_t multiboot_info)
     log_subsystem_ok("CORE");
 
     /* Initialize all hardware drivers */
+    klog_set_boot_phase(KLOG_BOOT_DRIVERS);
     init_all_drivers();
 
     /* Check configured root block device availability before filesystem init */
+    klog_set_boot_phase(KLOG_BOOT_STORAGE);
     if (!ir0_block_name_is_present(CONFIG_ROOT_BLOCK_DEVICE))
     {
         log_warn("BOOT", "Configured root block device not detected");
@@ -268,8 +284,43 @@ void kmain(uint32_t multiboot_info)
 #endif
 
     /* Initialize filesystem */
+    klog_set_boot_phase(KLOG_BOOT_ROOTFS);
     vfs_init_root();
     log_subsystem_ok("FILESYSTEM");
+
+    /*
+     * First successful bare-metal boot milestone: persist a rootfs sentinel
+     * so subsequent boots skip the one-shot event. Hypervisor boots never
+     * claim the milestone (QEMU lab is not bare metal).
+     */
+    if (!arch_hypervisor_present())
+    {
+	stat_t st;
+	struct vfs_file *f = NULL;
+
+	if (vfs_stat("/etc/ir0-baremetal-booted", &st) == 0)
+	{
+		klog_info("BOOT", "bare-metal milestone already recorded");
+		klog_smoke("FIRST_BAREMETAL_BOOT_SKIP");
+	}
+	else if (vfs_open("/etc/ir0-baremetal-booted",
+			  IR0_O_WRONLY | IR0_O_CREAT | IR0_O_TRUNC, 0644,
+			  &f) == 0)
+	{
+		static const char mark[] = "IR0 first bare-metal boot\n";
+
+		(void)vfs_write(f, mark, sizeof(mark) - 1);
+		(void)vfs_close(f);
+		klog_event(KLOG_EVENT_FIRST_BAREMETAL_BOOT, 0, KLOG_LEVEL_NOTICE,
+			   "BOOT", "first bare-metal boot recorded");
+		klog_smoke("FIRST_BAREMETAL_BOOT");
+	}
+	else
+	{
+		klog_warn("BOOT", "bare-metal milestone sentinel write failed");
+		klog_smoke("FIRST_BAREMETAL_BOOT_FAIL");
+	}
+    }
 
     /* Initialize process management */
 
@@ -281,7 +332,9 @@ void kmain(uint32_t multiboot_info)
     log_subsystem_ok("IPC");
 
     /* Scheduler tick + policy backend (see CONFIG_SCHEDULER_POLICY). */
+    klog_set_boot_phase(KLOG_BOOT_TIME);
     clock_system_init();
+    klog_info("CLOCK", "monotonic clock online");
 #if CONFIG_SCHEDULER_POLICY == 2
     {
 	extern int priority_sched_selftest(void);
@@ -300,6 +353,7 @@ void kmain(uint32_t multiboot_info)
     log_subsystem_ok("SYSCALLS");
 
     /* Initialize architecture-specific interrupt system (IDT, PIC remap) */
+    klog_set_boot_phase(KLOG_BOOT_INTERRUPTS);
     irq_init();
     boot_irq_unmask();
 
@@ -311,10 +365,15 @@ void kmain(uint32_t multiboot_info)
 
     log_subsystem_ok("INTERRUPTS");
 
+    klog_set_boot_phase(KLOG_BOOT_READY);
+    klog_notice("BOOT", "kernel core initialization complete");
+#if CONFIG_KTM
     ktm_core_init();
     KTM_CHECKPOINT(KTM_CP_BOOT_READY);
-#if defined(CONFIG_KTM_TEST) && CONFIG_KTM_TEST
+#if CONFIG_KTM_TEST
     ktm_scenarios_run_boot();
+#endif
+    klog_notice("BOOT", "KTM validation complete");
 #endif
 
     /* Optional: export log ring to QEMU -virtfs (CONFIG_BOOT_LOG_HOSTSHARE). */
@@ -339,9 +398,10 @@ void kmain(uint32_t multiboot_info)
         pid_t init_pid;
         char *argv_init[] = { "/sbin/init", NULL };
 
-#if DEBUG_BOOT
-        log_info("BOOT", "Loading userspace init...");
-#endif
+        klog_set_boot_phase(KLOG_BOOT_USERSPACE);
+        klog_notice("BOOT", "system ready for userspace");
+        klog_event(KLOG_EVENT_USERSPACE_HANDOFF, 0, KLOG_LEVEL_INFO, "INIT",
+                   "exec /sbin/init");
         ir0_rootfs_prepare_userspace_base();
         /* Linux-like: argv[0] must be present or BusyBox/runit print usage and exit. */
         process_prepare_pid1_for_init();
@@ -351,9 +411,8 @@ void kmain(uint32_t multiboot_info)
             log_error("BOOT", "FAILED to load /sbin/init");
             panic("Failed to load /sbin/init");
         }
-#if DEBUG_BOOT
-        log_info_fmt("BOOT", "/sbin/init loaded (PID %d), scheduling...", init_pid);
-#endif
+        klog_info_fmt("INIT", "/sbin/init loaded (PID %d), scheduling",
+                      init_pid);
 
         ir0_console_on_userspace_attach();
 

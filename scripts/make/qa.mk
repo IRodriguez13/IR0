@@ -63,7 +63,7 @@ INIT_FASE51_SHELL_SRC = setup/pid1/init_fase51_shell.c
 INIT_FASE52_TCC_SRC = setup/pid1/init_fase52_tcc.c
 FASE52_HARNESS_BIN = setup/pid1/fase52_harness
 FASE55D_SMOKE_BIN = setup/doom/doomgeneric_smoke
-RUNIT_STAGE_BIN = setup/runit/stage-bin
+RUNIT_STAGE_BIN = $(RUNIT_STAGE_BIN)
 INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
 INIT_FASE53B_POSIX_PSEUDOFS_SRC = setup/pid1/init_fase53b_posix_pseudofs.c
 INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
@@ -95,9 +95,9 @@ FASE48_ECHO_BIN = setup/pid1/fase48_echo
 FASE48_BUSYBOX_BIN = setup/pid1/fase48_busybox
 FASE50_HELLO_BIN = setup/pid1/fase50_hello
 FASE50_BUSYBOX_BIN = setup/pid1/fase50_busybox_real
-FASE50_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
-FASE58_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
-FASE58_FULL_BUSYBOX_CFG = setup/busybox/fase58_full.config
+FASE50_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
+FASE58_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
+FASE58_FULL_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_full.config
 FASE58L_SMOKE_SRC = setup/pid1/fase58l_busybox_smoke.c
 FASE58L_SMOKE_BIN = setup/pid1/fase58l_busybox_smoke
 FASE58L_SMOKE_LOG = /tmp/fase58l-busybox-smoke.log
@@ -154,16 +154,11 @@ MUSL_PTHREAD_SMOKE_LOG = /tmp/userspace-musl-pthread.log
 SU_SETUID_SMOKE_LOG = /tmp/userspace-su-setuid.log
 FASE55E_DOOM_BIN = setup/pid1/fase55e_doom_interactive
 FASE55E_DOOM_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
-IRINIT_SRC = setup/pid1/irinit.c
-IRINIT_BIN = setup/pid1/sbin/irinit
-RUNIT_VERSION = 2.3.1
-RUNIT_SRC_DIR = setup/third-party/runit-$(RUNIT_VERSION)
-RUNIT_BIN_DIR = setup/runit/bin
+# irinit retired — product PID1 is runit.
+RUNIT_BIN_DIR = $(RUNIT_BIN_DIR)
 RUNIT_INIT_BIN = $(RUNIT_BIN_DIR)/runit-init
 RUNIT_SMOKE_LOG = /tmp/runit-boot-smoke.log
 RUNIT_ASH_SMOKE_LOG = /tmp/runit-ash-smoke.log
-IRINIT_GUI_LOG = /tmp/userspace-irinit-gui.log
-IRINIT_DISPLAY ?= gtk
 DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
@@ -173,7 +168,7 @@ FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
-BUSYBOX_SRC ?= $(KERNEL_ROOT)/setup/third-party/busybox-1.36.1
+BUSYBOX_SRC ?= $(IR0_USERSPACE_ROOT)/packages/busybox/src
 TCC_SRC ?= /tmp/tinycc-fase52
 
 build-init-smoke:
@@ -511,7 +506,7 @@ build-busybox-fase50-min:
 	fi
 	@if [ ! -d "$(BUSYBOX_SRC)" ] || [ ! -f "$(BUSYBOX_SRC)/Makefile" ]; then \
 		echo "✗ BusyBox source missing at BUSYBOX_SRC=$(BUSYBOX_SRC)"; \
-		echo "  Expected vendored tree: setup/third-party/busybox-1.36.1"; \
+		echo "  Expected vendored tree: $(IR0_USERSPACE_ROOT)/packages/busybox/src"; \
 		echo "  Or override: make ... BUSYBOX_SRC=/path/to/busybox-<version>"; \
 		exit 1; \
 	fi
@@ -627,27 +622,20 @@ build-init-fase51-shell:
 	@echo "✓ build-init-fase51-shell OK"
 
 build-irinit:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building irinit PID1 ($(IRINIT_BIN))"
-	@mkdir -p setup/pid1/sbin
-	@$(MUSL_CC) -static -Os -o $(IRINIT_BIN) $(IRINIT_SRC)
-	@file $(IRINIT_BIN) | grep -q ELF
-	@echo "✓ build-irinit OK"
+	@echo "✗ build-irinit retired — PID1 is runit (make build-runit)"
+	@exit 2
 
 build-runit:
-	@chmod +x setup/runit/build-runit.sh
-	@./setup/runit/build-runit.sh
+	@chmod +x $(IR0_USERSPACE_ROOT)/packages/runit/build.sh
+	@./$(IR0_USERSPACE_ROOT)/packages/runit/build.sh
 
 load-userspace-runit: build-runit build-busybox-fase50-min
 	@DISK=$${DISK:-disk.img}; \
 	echo "  DISK    Preparing $$DISK (200M MINIX) for runit..."; \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
 	python3 scripts/inject_init_minix.py --format-large $$DISK; \
-	chmod +x setup/runit/install-to-disk.sh; \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) ./setup/runit/install-to-disk.sh $$DISK
+	chmod +x $(IR0_USERSPACE_ROOT)/services/install-to-disk.sh; \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) $(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK
 	@echo "✓ load-userspace-runit OK (runit-init → runsvdir → console + logger)"
 
 smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
@@ -895,7 +883,7 @@ build-linux-abi-process-lifecycle-probe: scripts/linux_abi/workloads/process_lif
 verify-minix-rootfs: disk.img
 	@python3 scripts/verify_minix_rootfs.py --gate disk.img \
 		/sbin /sbin/init /bin/sh /bin/busybox || \
-		(echo "✗ verify-minix-rootfs FAILED (rebuild with: make build-runit && setup/runit/install-to-disk.sh disk.img)"; exit 1)
+		(echo "✗ verify-minix-rootfs FAILED (rebuild with: make build-runit && $(IR0_USERSPACE_ROOT)/services/install-to-disk.sh disk.img)"; exit 1)
 	@echo "✓ verify-minix-rootfs passed"
 
 linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe

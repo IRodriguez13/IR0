@@ -128,7 +128,7 @@ Checklist de porting:
 4. Smokes musl/ISO de producción apuntan solo a x86-64 hoy.
 5. `arm64_cpu_switch_mm`: activa `next_ttbr` si es no-cero y distinto del TTBR0 actual.
 6. **Contrato serial de boot ISA-agnóstico:** tras init UART, `ir0_boot_serial_ready()`
-   emite primero el banner `[BOOT] IR0 Kernel v… Boot routine`; detalle ISA en COMP
+   emite primero el banner `[BOOT] IR0 kernel <ver>`; detalle ISA en COMP
    `ARCH`, tags de etapa en COMP `SMOKE` (`includes/ir0/boot_log.h`).
 7. **Board ARM64 en compile-time** (`includes/ir0/arm64_board.h`, `ARM64_BOARD=` /
    Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`, QEMU
