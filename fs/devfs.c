@@ -354,6 +354,53 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
     if (request == IR0_CONSOLE_TIOCGWINSZ)
         return ir0_console_ioctl_winsize(arg);
 
+    if (request == IR0_CONSOLE_TCFLSH)
+    {
+        /* 0=IFLUSH, 1=OFLUSH, 2=IOFLUSH — input-only console. */
+        tty_flush_input();
+        return 0;
+    }
+
+    if (request == IR0_CONSOLE_FIONREAD)
+    {
+        int avail;
+
+        if (!arg)
+            return -EINVAL;
+        avail = tty_input_bytes_available();
+        if (copy_to_user(arg, &avail, sizeof(avail)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    /*
+     * Job-control ioctls on /dev/console. Without these, BusyBox ash may
+     * disable job control; stubs keep interactive read path alive.
+     */
+    if (request == IR0_TIOCSCTTY)
+	return 0;
+    if (request == IR0_TIOCSPGRP)
+    {
+	pid_t pg;
+
+	if (!arg)
+	    return -EINVAL;
+	if (copy_from_user(&pg, arg, sizeof(pg)) != 0)
+	    return -EFAULT;
+	return ir0_console_set_fg_pgid((int32_t)pg);
+    }
+    if (request == IR0_TIOCGPGRP)
+    {
+	pid_t pg;
+
+	if (!arg)
+	    return -EINVAL;
+	pg = (pid_t)ir0_console_get_fg_pgid();
+	if (copy_to_user(arg, &pg, sizeof(pg)) != 0)
+	    return -EFAULT;
+	return 0;
+    }
+
     return -ENOTTY;
 }
 

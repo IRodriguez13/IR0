@@ -578,9 +578,33 @@ int64_t pseudo_fs_release_ops(const pseudo_fs_ops_t *ops, void *ctx, int dynamic
 int64_t pseudo_fs_ops_read(const pseudo_fs_ops_t *ops, void *ctx, char *buf,
 			   size_t count, off_t *offset)
 {
+	static char full_buf[4096];
+	off_t gen_off = 0;
+	int64_t full;
+	size_t to_copy;
+
 	if (!ops || !ops->read || !buf || !offset)
 		return -EINVAL;
-	return ops->read(ctx, buf, count, offset);
+
+	/*
+	 * Always regenerate from offset 0 into a bounce buffer, then slice.
+	 * Many backends ignore *offset; BusyBox full_read() would otherwise
+	 * re-read the same payload (cmdline "sh" → "shshshsh…", "busybox"×N).
+	 */
+	full = ops->read(ctx, full_buf, sizeof(full_buf), &gen_off);
+	if (full < 0)
+		return full;
+
+	if (*offset >= full)
+		return 0;
+
+	to_copy = (size_t)full - (size_t)*offset;
+	if (to_copy > count)
+		to_copy = count;
+
+	memcpy(buf, full_buf + (size_t)*offset, to_copy);
+	*offset += (off_t)to_copy;
+	return (int64_t)to_copy;
 }
 
 int64_t pseudo_fs_ops_write(const pseudo_fs_ops_t *ops, void *ctx,

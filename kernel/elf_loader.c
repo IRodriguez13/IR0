@@ -27,6 +27,7 @@
 #include <ir0/oops.h>
 #include <ir0/arch_port.h>
 #include <ir0/signals.h>
+#include <ir0/console.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/chmod.h>
 #include <ir0/credentials.h>
@@ -1365,6 +1366,13 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
      * (SIGSEGV pending) then made accept/poll return -EINTR immediately.
      */
     signals_reset_on_exec(proc);
+    /*
+     * Password read may leave want_kernel_ret set; clear before iretq into
+     * the new image. Cooked+echo is restored from userspace before execve.
+     */
+    proc->want_kernel_ret = 0;
+    proc->irq_frame_saved = 0;
+    ir0_console_reset_cooked_echo();
     elf_trace_argv_contract(proc, path, "before-iret");
     elf_trace_entry_stack_layout(proc, header, at_phdr, at_base, "before-userswitch");
 

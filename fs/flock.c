@@ -68,6 +68,11 @@ static int flock_conflicts(const struct vfs_file *file, const char *path,
 {
 	size_t i;
 
+	/*
+	 * Do not probe holder->file->ref_count: after vfs_close frees the
+	 * description, that is a UAF (ir0_flock_release_file is the only
+	 * safe clear path — wired from vfs_close).
+	 */
 	for (i = 0; i < IR0_FLOCK_MAX; i++)
 	{
 		const struct flock_holder *h = &flock_table[i];

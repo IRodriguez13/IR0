@@ -7,14 +7,13 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: test_debug_contracts.c
- * Description: Contract tests for proc/sys/dev endpoints consumed by debug_bins.
+ * Description: Contract tests for proc/sys/dev endpoints.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
 #include "syscalls.h"
-#include "debug_bins/debug_bins.h"
 #include <config.h>
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
@@ -193,21 +192,6 @@ void ktest_dev_net_contract(void)
 	KTEST_END();
 }
 
-void ktest_help_sections_contract(void)
-{
-	KTEST_BEGIN("help_sections_contract");
-
-	KASSERT(debug_is_valid_section("shell"));
-	KASSERT(debug_is_valid_section("core"));
-	KASSERT(debug_is_valid_section("diag"));
-	KASSERT(!debug_is_valid_section("unknown_section"));
-
-	KASSERT(strcmp(debug_command_section("ls"), "core") == 0);
-	KASSERT(strcmp(debug_command_section("mkdir"), "fs") == 0);
-	KASSERT(debug_command_section("help") == NULL);
-
-	KTEST_END();
-}
 
 void ktest_mount_proc_contract(void)
 {

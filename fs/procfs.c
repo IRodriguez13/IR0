@@ -360,6 +360,23 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
                 return "stat";
         }
     }
+    else
+    {
+        /* Bare /proc/N directory (digit-only name). */
+        const char *p = after_proc;
+        int digits = 0;
+
+        while (*p >= '0' && *p <= '9')
+        {
+            digits++;
+            p++;
+        }
+        if (digits > 0 && *p == '\0')
+        {
+            *pid_out = atoi(after_proc);
+            return "pid_subdir";
+        }
+    }
 
     /* Regular /proc files */
     *pid_out = -1;
@@ -470,10 +487,16 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
         case PROCESS_ZOMBIE:  state_str = "Z"; break;
     }
 
+    /*
+     * Linux proc(5) after ") ": state … tpgid, then flags..priority (10
+     * fields), nice, num_threads, itrealvalue, starttime, vsize, rss, …
+     * Misplacing starttime as field 21 made BusyBox FAST_TOP see nice≠0
+     * and vsz=0 → STAT "RWN" instead of "R".
+     */
     len = snprintf(buf, count,
                    "%d (%s) %s %d %d %d %d %d "     /*  1-8  */
-                   "0 0 0 0 0 0 0 0 0 0 "           /*  9-18 */
-                   "%d 0 %llu 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n", /* 19-37 */
+                   "0 0 0 0 0 0 0 0 0 %d "          /*  9-18 (18=priority) */
+                   "0 0 0 %llu 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n", /* 19-37 */
                    (int)proc->task.pid,
                    proc->comm[0] ? proc->comm : "none",
                    state_str,
@@ -482,8 +505,8 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
                    (int)proc->sid,
                    tty_nr,
                    (int)proc->pgid,               /* tpgid: fg group on tty */
-                   (int)proc->sched_prio,         /* 19: priority */
-                   (unsigned long long)proc->start_ticks);
+                   (int)proc->sched_prio,         /* 18: priority */
+                   (unsigned long long)proc->start_ticks); /* 22: starttime */
     if (len < 0)
         return -1;
     if (len >= (int)count)
@@ -1218,11 +1241,33 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
 
     if (strcmp(path, "/proc") == 0 || strcmp(path, "/proc/") == 0)
     {
+        process_t *p;
+        unsigned long irqf;
+
         pseudo_fs_nodes_register_all();
         n = pseudo_fs_collect_registry_children("/proc", entries, max_entries, 0);
         if (n < 0)
             return n;
-        return proc_readdir_add(entries, max_entries, n, "pid", DT_DIR);
+        n = proc_readdir_add(entries, max_entries, n, "pid", DT_DIR);
+        /*
+         * BusyBox ps scans /proc for digit dirents then opens /proc/N/stat.
+         * Listing only "pid/" left ps empty.
+         */
+        irqf = irq_save();
+        for (p = process_list; p && n < max_entries; p = p->next)
+        {
+            char pid_str[16];
+            int len;
+
+            if (p->state == PROCESS_ZOMBIE)
+                continue;
+            len = snprintf(pid_str, sizeof(pid_str), "%d", (int)p->task.pid);
+            if (len <= 0 || len >= (int)sizeof(pid_str))
+                break;
+            n = proc_readdir_add(entries, max_entries, n, pid_str, DT_DIR);
+        }
+        irq_restore(irqf);
+        return n;
     }
 
     filename = proc_resolve_path(path, &pid);

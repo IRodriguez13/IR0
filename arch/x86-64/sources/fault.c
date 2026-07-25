@@ -525,17 +525,51 @@ void page_fault_handler_x64(uint64_t *stack)
 		panic("Unhandled kernel page fault (uaccess, no user task)");
 	}
 
-	print("[PF] Kernel page fault en ");
-	print_hex(fault_addr);
-	print(" - código: ");
-	print_hex(errcode);
-	print(" not_present=");
-	print_hex(not_present);
-	print(" write=");
-	print_hex(write);
-	print(" user=");
-	print_hex(user);
-	print("\n");
+	/*
+	 * Always emit full-width CR2 + faulting RIP (stack[2]). Truncated
+	 * 32-bit hex hid ERR_PTR-range addresses (e.g. -66 → …FFBE).
+	 */
+	{
+		uint64_t fault_rip = stack ? stack[2] : 0;
+		uint64_t fault_cs = stack ? stack[3] : 0;
+		uint64_t fault_rsp = stack ? stack[5] : 0;
+		process_t *cur = process_get_current();
+
+		print("[PF] Kernel page fault cr2=");
+		print_hex64(fault_addr);
+		print(" err=");
+		print_hex64(errcode);
+		print(" rip=");
+		print_hex64(fault_rip);
+		print(" cs=");
+		print_hex64(fault_cs);
+		print(" rsp=");
+		print_hex64(fault_rsp);
+		print(" np=");
+		print_hex((uintptr_t)not_present);
+		print(" wr=");
+		print_hex((uintptr_t)write);
+		print(" user=");
+		print_hex((uintptr_t)user);
+		print(" pid=");
+		print_hex((uintptr_t)(cur ? (uint32_t)cur->task.pid : 0));
+		print("\n");
+		klog_error_fmt("PF",
+			       "kernel_pf cr2=%llx err=%llx rip=%llx cs=%llx rsp=%llx pid=%x",
+			       (unsigned long long)fault_addr,
+			       (unsigned long long)errcode,
+			       (unsigned long long)fault_rip,
+			       (unsigned long long)fault_cs,
+			       (unsigned long long)fault_rsp,
+			       (unsigned)(cur ? (uint32_t)cur->task.pid : 0));
+		if (fault_addr >= (uint64_t)(intptr_t)-4095 &&
+		    fault_addr <= (uint64_t)(intptr_t)-1)
+		{
+			print("[PF] cr2 looks like ERR_PTR(-errno) errno=");
+			print_hex((uintptr_t)(-(intptr_t)fault_addr));
+			print("\n");
+		}
+	}
 
 	panic("Unhandled kernel page fault");
 }

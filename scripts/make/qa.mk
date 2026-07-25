@@ -1027,6 +1027,64 @@ smoke-runit-ash-interactive: kernel-x64-userspace.iso
 	@python3 scripts/smoke_runit_ash_interactive.py --log $(RUNIT_ASH_SMOKE_LOG) --timeout 120 --iso kernel-x64-userspace.iso --disk disk.img
 	@echo "  LOG     $(RUNIT_ASH_SMOKE_LOG)"
 
+# Desktop ash command matrix — panics, lock spam, serial storms, Tab, poweroff.
+# Optional Doom product path: WITH_DOOM=1 (virtfs /mnt/host + WAD).
+DESKTOP_CMD_MATRIX_LOG ?= /tmp/ir0-cmd-matrix.log
+DESKTOP_CMD_MATRIX_ROUNDS ?= 1
+# Doom/virtfs is a separate target (smoke-desktop-doom-mnt); ash matrix stays reliable.
+DESKTOP_CMD_MATRIX_WITH_DOOM ?= 0
+.PHONY: smoke-desktop-cmd-matrix smoke-desktop-doom-mnt smoke-desktop-nano-mnt
+smoke-desktop-cmd-matrix: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    disk.img missing — running load-userspace-runit"; \
+		$(MAKE) -s load-userspace-runit; \
+	fi
+	@if [ "$(DESKTOP_CMD_MATRIX_WITH_DOOM)" = "1" ]; then \
+		$(MAKE) -s build-fase55e-doom-interactive; \
+	fi
+	@echo "  SMOKE   desktop ash command matrix (sendkey, doom=$(DESKTOP_CMD_MATRIX_WITH_DOOM))..."
+	@chmod +x scripts/smoke_desktop_cmd_matrix.py
+	@DOOM_ARGS=""; \
+	if [ "$(DESKTOP_CMD_MATRIX_WITH_DOOM)" = "1" ]; then \
+		DOOM_ARGS="--with-doom --doom-bin $(FASE55E_DOOM_BIN) --wad $(REAL_WAD_PATH)"; \
+	fi; \
+	PYTHONUNBUFFERED=1 python3 scripts/smoke_desktop_cmd_matrix.py --iso kernel-x64-userspace.iso \
+		--disk disk.img --log $(DESKTOP_CMD_MATRIX_LOG) \
+		--rounds $(DESKTOP_CMD_MATRIX_ROUNDS) --batch-size 5 --key-delay 0.40 \
+		$$DOOM_ARGS
+	@echo "  LOG     $(DESKTOP_CMD_MATRIX_LOG)"
+
+# Doom product path only: su → mount -t 9p ir0share /mnt/host → doomgeneric + WAD.
+# Flaky under TCG (#DF); not part of default ash matrix.
+smoke-desktop-doom-mnt: kernel-x64-userspace.iso build-fase55e-doom-interactive
+	@chmod +x scripts/smoke_desktop_cmd_matrix.py
+	@PYTHONUNBUFFERED=1 python3 scripts/smoke_desktop_cmd_matrix.py --iso kernel-x64-userspace.iso \
+		--disk disk.img --log /tmp/ir0-cmd-matrix-doom.log --rounds 1 --only-doom \
+		--skip-poweroff \
+		--doom-bin $(FASE55E_DOOM_BIN) --wad $(REAL_WAD_PATH)
+	@echo "  LOG     /tmp/ir0-cmd-matrix-doom.log"
+
+# Nano (static musl): inject /usr/bin/nano into temp disk + TERM=linux edit smoke.
+# Requires IR0-userspace `make build-nano`. Kernel CSI/termios must be present.
+IR0_USERSPACE ?= $(abspath $(CURDIR)/../IR0-userspace)
+IR0_NANO_BIN ?= $(IR0_USERSPACE)/out/stage-bin/nano
+smoke-desktop-nano-mnt: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    disk.img missing — running load-userspace-runit"; \
+		$(MAKE) -s load-userspace-runit; \
+	fi
+	@if [ ! -x "$(IR0_NANO_BIN)" ]; then \
+		echo "  NANO    building $(IR0_NANO_BIN)"; \
+		$(MAKE) -C $(IR0_USERSPACE) -s fetch build-nano; \
+	fi
+	@echo "  SMOKE   desktop nano edit (TERM=linux, injected /usr/bin/nano)..."
+	@chmod +x scripts/smoke_desktop_nano_mnt.py
+	@PYTHONUNBUFFERED=1 IR0_NANO_BIN="$(IR0_NANO_BIN)" \
+		python3 scripts/smoke_desktop_nano_mnt.py \
+		--iso kernel-x64-userspace.iso --disk disk.img \
+		--nano "$(IR0_NANO_BIN)" --log /tmp/ir0-nano-mnt.log
+	@echo "  LOG     /tmp/ir0-nano-mnt.log"
+
 # T1 GUI — runit → BusyBox ash on /dev/console (tier1 stable; not legacy-only).
 .PHONY: run-fase58e-ash-gui check-fase58e-logs
 
@@ -1036,8 +1094,9 @@ run-fase58e-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  FASE58E   runit → ash on /dev/console"
 	@echo "  QEMU     display=$(FASE58E_DISPLAY)"
 	@echo "  LOG      serial -> $(FASE58E_ASH_LOG)"
-	@echo "  HINT     click QEMU window; try: ls / pwd / echo hi"
-	@echo "  HINT     Doom manual: doomgeneric /usr/share/doom/doom1.wad"
+	@echo "  HINT     click QEMU window; try: ls / pwd / echo hi / Tab completion"
+	@echo "  HINT     Doom on disk: doomgeneric  (WAD /usr/share/doom/doom1.wad if injected)"
+	@echo "  HINT     Doom hostshare: mkdir -p /mnt/host && mount -t 9p ir0share /mnt/host && /mnt/host/doomgeneric"
 	@rm -f $(FASE58E_ASH_LOG); \
 	DISK=$$(mktemp /tmp/ir0-fase58e-ash.XXXXXX.img); \
 	cp -f disk.img $$DISK; \

@@ -143,7 +143,8 @@ void typewriter_console_clear(uint8_t color)
 
 void typewriter_init(void)
 {
-    current_mode = TYPEWRITER_FAST;
+    /* Default off — product console must not delay per character. */
+    current_mode = TYPEWRITER_DISABLED;
     command_output_enabled = 1;
     total_lines_written = 0;
     current_col = 0;

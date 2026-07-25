@@ -19,7 +19,7 @@
 #define CONSOLE_WIDTH  80
 #define CONSOLE_HEIGHT 25
 
-#define CONSOLE_FB_SCALE_DEFAULT 2
+#define CONSOLE_FB_SCALE_DEFAULT 1
 #define CONSOLE_FB_BORDER_COLOR  0x00u
 
 void console_put_cell(int row, int col, char c, uint8_t color);

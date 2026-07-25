@@ -44,7 +44,6 @@ SCAN = [
     ROOT / "interrupt",
     ROOT / "ktm",
     ROOT / "arch",
-    ROOT / "debug_bins",
     ROOT / "sched" / "switch",
     ROOT / "includes" / "ir0",
 ]

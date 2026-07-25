@@ -32,6 +32,7 @@
 void wakeup_from_idle(void);
 void stdin_wake_check(void);
 static void keyboard_buffer_add(char c);
+static void keyboard_buffer_add_str(const char *s);
 static void keyboard_feed_scancode(uint8_t scancode);
 
 /*
@@ -58,20 +59,10 @@ static int ext_scancode = 0;
 static int current_keyboard_layout = KEYBOARD_LAYOUT_US;
 
 /*
- * Escape sequences for shell: ESC + code, where codes are consumed by
- * debug_bins/dbgshell.c (userspace-like shell via SYS_READ).
- * Shell uses only syscalls; scroll reads call SYS_CONSOLE_SCROLL.
+ * Extended keys: standard ANSI/VT CSI for BusyBox ash FEATURE_EDITING,
+ * nano, and other terminfo clients (TERM=linux). Legacy IR0 private
+ * ESC+byte codes are no longer emitted from the IRQ path.
  */
-#define KEY_ESC_SCROLL_UP     0x01
-#define KEY_ESC_SCROLL_DOWN   0x02
-#define KEY_ESC_CLEAR_SCREEN  0x03
-#define KEY_ESC_HISTORY_UP    0x04
-#define KEY_ESC_HISTORY_DOWN  0x05
-#define KEY_ESC_CURSOR_LEFT   0x06
-#define KEY_ESC_CURSOR_RIGHT  0x07
-#define KEY_ESC_CURSOR_HOME   0x08
-#define KEY_ESC_CURSOR_END    0x09
-#define KEY_ESC_DELETE_CHAR   0x0A
 
 /* Basic scancode -> ASCII (printable subset), US layout */
 static const char scancode_to_ascii_us[] = {
@@ -221,14 +212,12 @@ char translate_scancode(uint8_t sc)
         return 0;
 
     /*
-     * Ctrl+L: shell clears via ESC + KEY_ESC_CLEAR_SCREEN (same pattern as
-     * Page Up/Down); IRQ path does not call into the debug shell.
+     * Ctrl+L: form-feed — BusyBox lineedit / many shells clear the screen.
      */
     case 0x26:
         if (!ctrl_pressed)
             return 'l';
-        keyboard_buffer_add(0x1B);
-        keyboard_buffer_add((char)KEY_ESC_CLEAR_SCREEN);
+        keyboard_buffer_add('\f');
         ctrl_pressed = 0;
         return 0;
 
@@ -243,6 +232,18 @@ char translate_scancode(uint8_t sc)
     case 0x16:
         if (ctrl_pressed)
             return 0x15; /* Ctrl+U */
+        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
+    case 0x2E:
+        if (ctrl_pressed)
+            return 0x03; /* Ctrl+C → VINTR */
+        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
+    case 0x20:
+        if (ctrl_pressed)
+            return 0x04; /* Ctrl+D → VEOF */
+        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
+    case 0x2B:
+        if (ctrl_pressed)
+            return 0x1c; /* Ctrl+\ → VQUIT */
         return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
 
     default:
@@ -280,6 +281,14 @@ static void keyboard_buffer_add(char c)
             klog_smoke("KBD_ASCII_OK");
         }
     }
+}
+
+static void keyboard_buffer_add_str(const char *s)
+{
+    if (!s)
+        return;
+    while (*s)
+        keyboard_buffer_add(*s++);
 }
 
 #ifdef __x86_64__
@@ -381,51 +390,25 @@ static void keyboard_feed_scancode(uint8_t scancode)
         }
         if (scancode < 0x80)
         {
+            /* ANSI CSI (linux/vt100) — ash lineedit + nano/terminfo */
             if (scancode == 0x48)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_HISTORY_UP);
-            }
+                keyboard_buffer_add_str("\x1b[A");
             else if (scancode == 0x50)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_HISTORY_DOWN);
-            }
-            else if (scancode == 0x4B)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_CURSOR_LEFT);
-            }
+                keyboard_buffer_add_str("\x1b[B");
             else if (scancode == 0x4D)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_CURSOR_RIGHT);
-            }
+                keyboard_buffer_add_str("\x1b[C");
+            else if (scancode == 0x4B)
+                keyboard_buffer_add_str("\x1b[D");
             else if (scancode == 0x47)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_CURSOR_HOME);
-            }
+                keyboard_buffer_add_str("\x1b[H");
             else if (scancode == 0x4F)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_CURSOR_END);
-            }
+                keyboard_buffer_add_str("\x1b[F");
             else if (scancode == 0x53)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_DELETE_CHAR);
-            }
+                keyboard_buffer_add_str("\x1b[3~");
             else if (scancode == 0x49)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_SCROLL_UP);
-            }
+                keyboard_buffer_add_str("\x1b[5~");
             else if (scancode == 0x51)
-            {
-                keyboard_buffer_add(0x1B);
-                keyboard_buffer_add(KEY_ESC_SCROLL_DOWN);
-            }
+                keyboard_buffer_add_str("\x1b[6~");
         }
         return;
     }

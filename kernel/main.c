@@ -93,6 +93,7 @@ void kernel_idle_poll(void)
 {
 	int woke = 0;
 
+	enable_interrupts();
 #if CONFIG_ENABLE_NETWORKING
 	net_stack_poll();
 #endif
@@ -120,6 +121,7 @@ void kernel_idle_loop(void)
 {
 	for (;;)
 	{
+		enable_interrupts();
 		kernel_idle_poll();
 		cpu_idle();
 	}
@@ -384,16 +386,7 @@ void kmain(uint32_t multiboot_info)
      * Calling them here (before init process exists) would force SKIP paths.
      */
 
-#if KERNEL_DEBUG_SHELL
-    /* Init de test: shell integrada como PID 1. No es el init real (/sbin/init). */
-    {
-        int init_ret = start_init_process();
-        if (init_ret < 0)
-            panic("Failed to start debug shell init process");
-        panic("start_init_process returned unexpectedly");
-    }
-#else
-    /* Real init: load /sbin/init from root filesystem and run in ring 3. */
+    /* Product init: load /sbin/init from root filesystem and run in ring 3. */
     {
         pid_t init_pid;
         char *argv_init[] = { "/sbin/init", NULL };
@@ -419,7 +412,6 @@ void kmain(uint32_t multiboot_info)
         sched_schedule_next();
         panic("sched_schedule_next returned after userspace init");
     }
-#endif
 
     for (;;)
     {

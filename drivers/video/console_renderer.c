@@ -285,6 +285,7 @@ void console_renderer_reset(uint8_t color)
 {
 	extern int cursor_pos;
 
+	csi_reset();
 	render_color = color;
 	render_cursor_visible = 0;
 	render_cursor_row = 0;
@@ -326,6 +327,7 @@ void console_renderer_putchar(char c, uint8_t color)
 	}
 	else if (c == '\r')
 	{
+		csi_reset();
 		cursor_pos = (cursor_pos / cols) * cols;
 	}
 	else if (c == '\b' || c == 127)
