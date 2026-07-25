@@ -28,8 +28,9 @@
 #define CONSOLE_WIDTH  80
 #define CONSOLE_HEIGHT 25
 
-/* Default before fb_compute_layout picks max scale that fits the mode. */
+/* Default / product FB glyph scale (1× = classic 8×16 in an 80×25 island). */
 #define CONSOLE_FB_SCALE_DEFAULT 1
+#define CONSOLE_FB_SCALE_MAX     1
 
 #define CONSOLE_FB_BORDER_COLOR 0x00u /* black letterbox */
 

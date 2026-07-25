@@ -1320,6 +1320,16 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         while (num_sectors > 0)
         {
             uint8_t n = (num_sectors > 255) ? 255 : (uint8_t)num_sectors;
+
+            /* cat /dev/hda must be interruptible (Ctrl+C → EINTR). */
+            if (current_process &&
+                signals_pause_should_interrupt(current_process))
+            {
+                handle_signals();
+                if (bytes_done > 0)
+                    return (int64_t)bytes_done;
+                return -EINTR;
+            }
             if (ir0_block_read_by_name(disk_name, (uint32_t)start_lba, n, dst))
                 return (int64_t)bytes_done;
             bytes_done += (size_t)n * 512;

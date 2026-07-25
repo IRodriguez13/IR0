@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -31,7 +32,8 @@ DEFAULT_TIMEOUT = 75
 
 LOGIN_USER = "ivan"
 EXPECTED_UID_TAG = "LOGIN_UID=1000 EUID=1000"
-EXPECTED_PROMPT = "ivan@ir0:/home/ivan$"
+# Accept product hostname "ir0" and legacy default "unix".
+EXPECTED_PROMPT_RE = re.compile(r"ivan@(?:ir0|unix):/home/ivan\$")
 
 # crypt(3) SHA-512 hash of the empty password (crypt("", "$6$ir0empty12345678")).
 IVAN_EMPTY_SHA512 = (
@@ -142,11 +144,12 @@ def main() -> int:
                     print(f"  log: {log_path}")
                     return 1
 
-            if EXPECTED_UID_TAG in text and EXPECTED_PROMPT in text:
+            if EXPECTED_UID_TAG in text and EXPECTED_PROMPT_RE.search(text):
                 elapsed = time.monotonic() - start
                 kill_qemu(proc)
                 print(f"✓ smoke-runit-login-nonroot PASS "
-                      f"(crypt auth + uid 1000 + PS1 {EXPECTED_PROMPT!r}, {elapsed:.1f}s)")
+                      f"(crypt auth + uid 1000 + PS1 ivan@ir0|unix:/home/ivan$, "
+                      f"{elapsed:.1f}s)")
                 return 0
 
             time.sleep(0.2)
@@ -157,8 +160,8 @@ def main() -> int:
             print("  - crypt(3) auth never succeeded for ivan")
         if EXPECTED_UID_TAG not in text:
             print(f"  - missing uid tag: {EXPECTED_UID_TAG} (privilege drop)")
-        if EXPECTED_PROMPT not in text:
-            print(f"  - missing prompt: {EXPECTED_PROMPT} (/etc/profile PS1)")
+        if not EXPECTED_PROMPT_RE.search(text):
+            print("  - missing prompt: ivan@(ir0|unix):/home/ivan$ (/etc/profile PS1)")
         print(f"  log: {log_path}")
         return 1
     finally:

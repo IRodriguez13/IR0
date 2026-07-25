@@ -165,22 +165,25 @@ static void fb_compute_layout(uint32_t w, uint32_t h)
 	}
 
 	/*
-	 * Largest integer glyph scale that fits the mode (sharper in QEMU/GTK
-	 * than a tiny 80x25 island scaled by the host). Center with a small
-	 * inset so column 0 is not clipped by window chrome.
+	 * Prefer 1× VGA glyphs (8×16 → 80×25 = 640×400). Filling the whole
+	 * 1280×800 panel with 2–4× nearest-neighbor looks like a toy UI;
+	 * center a crisp text island and leave a black margin instead.
+	 * Cap at CONSOLE_FB_SCALE_MAX if the mode is too small for 1×.
 	 */
 	{
 		const int inset = 8;
-		int max_s = 1;
 		int s;
 
-		for (s = 1; s <= 4; s++)
+		fb_scale = 1;
+		for (s = CONSOLE_FB_SCALE_MAX; s >= 1; s--)
 		{
 			if (fb_console_cols * FONT_WIDTH * s <= (int)w &&
 			    fb_console_rows * FONT_HEIGHT * s <= (int)h)
-				max_s = s;
+			{
+				fb_scale = s;
+				break;
+			}
 		}
-		fb_scale = max_s;
 		fb_cell_w = FONT_WIDTH * fb_scale;
 		fb_cell_h = FONT_HEIGHT * fb_scale;
 		pw = fb_console_cols * fb_cell_w;

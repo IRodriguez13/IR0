@@ -1560,7 +1560,7 @@ build-matrix-min:
 	@$(MAKE) -s kernel-x64.bin >/dev/null
 	@echo "  MATRIX  Bluetooth disabled"
 	@$(MAKE) defconfig >/dev/null
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n DEBUG_BINS_GROUP_BT=n >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n >/dev/null
 	@$(MAKE) -s kernel-x64.bin >/dev/null
 	@echo "  MATRIX  lazy MM disabled (eager mmap/brk bisect)"
 	@$(MAKE) defconfig >/dev/null

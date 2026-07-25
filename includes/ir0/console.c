@@ -103,6 +103,14 @@ static void tty_deliver_sig(int sig)
 	if (n > 0)
 		return;
 
+	/*
+	 * No fg pgrp yet (ash before tcsetpgrp) and no blocked tty readers:
+	 * still deliver to the current userspace task. Otherwise Ctrl+C
+	 * during `cat /dev/hda` (busy in write, not in read) is a no-op.
+	 */
+	if (current_process && current_process->task.pid > 1)
+		(void)send_signal((int)current_process->task.pid, sig);
+
 	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
 	{
 		process_t *w = tty_read_waiters[i];
