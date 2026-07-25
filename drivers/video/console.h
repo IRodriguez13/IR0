@@ -43,6 +43,16 @@
 void console_put_cell(int row, int col, char c, uint8_t color);
 
 /*
+ * console_draw_cell - Paint without updating the cell shadow (software cursor).
+ */
+void console_draw_cell(int row, int col, char c, uint8_t color);
+
+/*
+ * console_get_cell - Return shadowed (char | color<<8) for software cursor restore.
+ */
+uint16_t console_get_cell(int row, int col);
+
+/*
  * console_scroll_up - Scroll displayed content up by one line.
  * Bottom line is cleared with spaces.
  */

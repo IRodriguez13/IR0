@@ -199,6 +199,7 @@ WRAP2(sys_pipe2, int *, int)
 WRAP1(sys_pipe, int *)
 WRAP1(sys_sigreturn, struct sigcontext *)
 WRAP3(sys_ioctl, int, uint64_t, void *)
+WRAP3(sys_syslog, int, char *, int)
 WRAP3(sys_getdents, int, void *, size_t)
 WRAP3(sys_getdents64, int, void *, size_t)
 WRAP3(sys_poll, struct pollfd *, unsigned int, int)
@@ -322,6 +323,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_getpid]         = wrap_sys_getpid;
   syscall_table_rw[__NR_gettid]         = wrap_sys_gettid;
   syscall_table_rw[__NR_getuid]         = wrap_sys_getuid;
+  syscall_table_rw[__NR_syslog]         = wrap_sys_syslog;
   syscall_table_rw[__NR_geteuid]        = wrap_sys_geteuid;
   syscall_table_rw[__NR_getgid]         = wrap_sys_getgid;
   syscall_table_rw[__NR_getegid]        = wrap_sys_getegid;
