@@ -62,13 +62,23 @@
 | PERF-1 `sys_gettid` | no per-call GETTID spam |
 | FASE→KTM Open residual | 41/42/44 fork+exec_drain+reap_drain+**init_exit_drain** SUB; 52/55/58 HOST+KTM; **57 GUI** HOST |
 
+## Closed this wave (2026-07-25) — tree boundary: no in-kernel userspace shell
+
+| Item | Proof |
+|------|-------|
+| Publish **IR0-userspace** sibling | https://github.com/IRodriguez13/IR0-userspace |
+| Coupling docs | [`USERSPACE.md`](USERSPACE.md), `userspace/README.md` |
+| Remove `debug_bins/` + `kernel/init.c` (dbgshell PID1) | PR #28; `make run-dbgshell` retired |
+| Drop `CONFIG_KERNEL_DEBUG_SHELL` / `CONFIG_DEBUG_BINS*` | `setup/Kconfig`, `setup/defconfig` |
+| Gates still green | `kernel-x64.bin`, `arch-guard`, `build-matrix-min`, `tests/host` 22/22 |
+
 ## Closed this wave (2026-07-24) — klog event core + product without dbgshell
 
 | Item | Proof |
 |------|-------|
 | Structured `klog_record` + phases + early clock | [`KLOG.md`](KLOG.md); serial `[#seq] [phase]` |
 | Sinks: serial/console/kmsg/hostshare; KTM optional | `smoke-klog-ktm-off`, `smoke-boot-log-hostshare` |
-| Product `make run*` → runit/ash | `CONFIG_KERNEL_DEBUG_SHELL=n`, `CONFIG_DEBUG_BINS=n` |
+| Product `make run*` → runit/ash | dbgshell/`debug_bins` removed; always `kexecve("/sbin/init")` |
 | Driver probe events + summary | `DRIVER_PROBE_RESULT` + `DRIVER_SUMMARY_OK` |
 | First bare-metal boot sentinel | `/etc/ir0-baremetal-booted` + `FIRST_BAREMETAL_BOOT*` (no HV) |
 | ARM64 hello without musl CRT | freestanding fallback in `musl-aarch64-hello` + early stubs; `smoke-arm64-boot` PASS |
@@ -94,7 +104,6 @@
 | Interactive sendkey password path | TTY | Username echoes; password stage stalls in QEMU — lab uses `/etc/ir0-autologin`; GUI: `IR0_NO_AUTOLOGIN=1` |
 | `smoke-runit-ash-interactive` echo OK | Flaky post-login | LOGIN/welcome OK; `ASH_COMMAND_ECHO_OK` after sendkey still pending |
 | Full musl aarch64 CRT restore | Optional toolchain hygiene | Freestanding `hello_aarch64` + weak `sched_context_switch_to`/`klog_info` in `rr_early_stubs.c` unblock `smoke-arm64-boot`; re-extract musl.cc for libc programs |
-| Migrate remaining `debug_bins/cmd_*` → ktest/userspace | Tree delete | Inventory in [`mandocs/en/debug-bins.md`](mandocs/en/debug-bins.md); keep tree until contracts move |
 | virtiofs + FUSE | Future host-share | Guest FUSE; 9p remains ship path |
 | Migrate remaining drains/storms stub PID1 → runit+9p | Lab depth | **Mostly closed** — `smoke-ktm-drains-runit`; `init-exit-drain` stays stub (PID1 SUT) |
 

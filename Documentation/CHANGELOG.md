@@ -1,12 +1,25 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-07-24
+> **Last verified:** 2026-07-25
 > **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
 For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** see [`STABLE.md`](STABLE.md).
 
 ## [Unreleased]
+
+### Kernel / userspace tree boundary (2026-07-25)
+
+- Sibling **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)** is the
+  public Unix userland (runit, BusyBox, login/doas, rootfs profiles).
+- Kernel coupling: [`USERSPACE.md`](USERSPACE.md), `userspace/README.md`,
+  `IR0_USERSPACE_ROOT` + `make check-userspace` / `headers_install`.
+- **Removed** from IR0: `debug_bins/` (dbgshell + cmd_*), `kernel/init.c`
+  (`start_init_process`), and Kconfig `KERNEL_DEBUG_SHELL` / `DEBUG_BINS*`.
+- Product boot is only `kexecve("/sbin/init")`. `make run-dbgshell` is retired.
+- Mandoc `debug-bins` chapter kept as a **removed** historical note.
+- TTY/CSI/termios support + desktop smokes (`smoke_desktop_cmd_matrix`,
+  `smoke_desktop_nano_mnt`) land with the same boundary PR.
 
 ### Login shell PS1 + BusyBox ash builtins (2026-07-24)
 
@@ -36,13 +49,13 @@ For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** 
   `?.???` until the monotonic clock is online.
 - Serial, boot console, `/proc/kmsg`, `/dev/kmsg`, hostshare, and optional KTM
   mirror consume the same event stream. `smoke-klog-ktm-off` proves klog without KTM.
-- Product profiles and daily `make run*` use runit/getty/ash. Legacy
-  `debug_bins` are test-only behind `CONFIG_DEBUG_BINS`.
+- Product profiles and daily `make run*` use runit/getty/ash.
+  (Later: `debug_bins` removed entirely — see wave 2026-07-25 above.)
 - Driver probe results emit `KLOG_EVENT_DRIVER_PROBE_RESULT` per registration;
   summary uses `KLOG_EVENT_DRIVER_SUMMARY`.
 - First bare-metal boot: sentinel `/etc/ir0-baremetal-booted` + smoke tags
   `FIRST_BAREMETAL_BOOT` / `_SKIP` / `_FAIL` (skipped under hypervisor).
-- Docs: [`KLOG.md`](KLOG.md), updated boot/debug-bins/VFS/KTM/BACKLOG.
+- Docs: [`KLOG.md`](KLOG.md), updated boot/VFS/KTM/BACKLOG.
 - ARM64: freestanding `hello_aarch64` when musl CRT is incomplete; early boot
   stubs for `sched_context_switch_to` / `klog_info`. Proof: `smoke-arm64-boot`.
 

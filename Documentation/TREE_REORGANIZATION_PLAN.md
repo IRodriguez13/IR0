@@ -6,6 +6,14 @@
 
 ---
 
+## Status update (2026-07-25)
+
+- **`debug_bins/` deleted** — not renamed under `userspace/`. Coupling pointer is
+  `userspace/README.md` + [`USERSPACE.md`](USERSPACE.md); product shell is
+  [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace).
+- `make run-dbgshell` retired. Remaining stages below that mention renaming
+  `debug_bins/` are **obsolete** for that path.
+
 ## 1. Purpose
 
 Prepare a **maintainable tree** for the decade after 0.0.1: kernel code, QA/tooling,

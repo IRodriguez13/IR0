@@ -1,55 +1,46 @@
-# IR0 Debug Shell (debug_bins) — legacy harness
+# IR0 Debug Shell (debug_bins) — removed
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2 |
-| IR0 phase | T0 (test-only) |
-| Status | **retired from product**; opt-in via Kconfig |
-| Depends on | syscalls, vfs, boot |
+| Version | 0.3 |
+| IR0 phase | historical |
+| Status | **removed from tree** (2026-07-25) |
+| Depends on | — |
 | Man page | IR0-debug-bins (section 7) |
-| Primary sources | `debug_bins/dbgshell.c`, `debug_bins/debug_bins_registry.c`, `kernel/init.c`, `setup/Kconfig` |
+| Primary sources | git history only; product path: [`USERSPACE.md`](../../USERSPACE.md) |
+
+> **Last verified:** 2026-07-25
 
 ## 1. Overview
 
-**Product path (2026-07-24+):** desktop defconfigs use
-`CONFIG_KERNEL_DEBUG_SHELL=n` and `CONFIG_DEBUG_BINS=n`. Daily `make run*` boots
-runit → getty/ash. T0 exploration is **ash + `/proc/kmsg`**, not the ring-0 shell.
+The in-kernel **dbgshell** (`debug_bins/`, `kernel/init.c` / `start_init_process`)
+was the Tier-0 laboratory REPL. It is **gone from the IR0 tree**.
 
-When `CONFIG_KERNEL_DEBUG_SHELL=y` (and/or `CONFIG_DEBUG_BINS=y`), PID 1 can still
-run the in-kernel **dbgshell**. Command objects under `debug_bins/cmd_*.c` remain
-in-tree for migrating contracts to ktest/userspace — **do not delete the tree yet**.
+Product and lab exploration use the sibling **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)**
+(runit → getty/ash) plus kernel contracts (`make kernel-tests`, linux-abi audits).
 
-## 2. Kconfig
+`make run-dbgshell` exits with a retirement message. There are no
+`CONFIG_KERNEL_DEBUG_SHELL` / `CONFIG_DEBUG_BINS*` Kconfig symbols.
 
-| Symbol | Product default | Role |
-|--------|-----------------|------|
-| `CONFIG_KERNEL_DEBUG_SHELL` | n | PID1 = `start_init_process` / `shell_entry` |
-| `CONFIG_DEBUG_BINS` | n | Link `dbgshell.o` + cmd groups into the kernel |
-| `CONFIG_DEBUG_BINS_GROUP_*` | (groups) | Only linked if `CONFIG_DEBUG_BINS=y` |
+## 2. Replacement map
 
-Makefile: `DEBUG_BINS_ENABLED` is y if either `DEBUG_BINS` or `KERNEL_DEBUG_SHELL` is y
-(so matrix profiles that still enable the shell keep a linkable `shell_entry`).
+| Former role | Current path |
+|-------------|--------------|
+| PID1 REPL | `/sbin/init` (runit) via `kexecve` |
+| Shell cmds (`ls`, `cat`, …) | BusyBox ash applets in IR0-userspace |
+| Syscall / proc contracts | `kernel/test/*`, `make kernel-tests` |
+| Boot / kmsg exploration | ash + `cat /proc/kmsg` ([`KLOG.md`](../../KLOG.md)) |
+| Coupling docs | [`USERSPACE.md`](../../USERSPACE.md), `userspace/README.md` |
 
-## 3. Architecture (when enabled)
+## 3. Do not
 
-| Piece | Role |
-|-------|------|
-| `dbgshell.c` | REPL: read stdin, parse line, dispatch |
-| `debug_bins_registry.c` | `debug_commands[]` table |
-| `cmd_*.c` | Syscall-only command handlers |
-| `kernel/init.c` | `init_1` → `shell_entry()` (compiled only if `KERNEL_DEBUG_SHELL`) |
+- Re-add `debug_bins/` or an in-kernel mono shell without a dedicated oleada + maintainer OK.
+- Treat old README “debug_bins %” tier claims as current product readiness.
+- Document `CONFIG_KERNEL_DEBUG_SHELL=y` as a supported product profile.
 
-## 4. Migration status
+## 4–10. Historical note
 
-| Area | Destination | Notes |
-|------|-------------|-------|
-| Boot / identity / kmsg | runit + `/proc/kmsg` + [`KLOG.md`](../../KLOG.md) | Done for product |
-| Syscall contracts | `make kernel-tests`, linux-abi audits, ktest | Prefer over new dbgshell cmds |
-| Device probes (fb0/events0) | GUI/runit smokes | See STABLE.md |
-| Remaining cmd_* surface | TBD | Keep tree until contracts migrate |
-
-## 5. Do not
-
-- Add new product features that require dbgshell as PID1.
-- Treat README “debug_bins %” as proof of product readiness.
-- Re-enable `CONFIG_KERNEL_DEBUG_SHELL` in desktop defconfig without maintainer OK.
+Earlier versions of this chapter described Kconfig groups, `dbgshell.c`, and
+`debug_bins_registry.c`. Those sources exist only in git history prior to the
+`chore/kernel-userspace-boundary` removal. See section 10 of other mandocs for
+related debt; this chapter no longer describes live code.

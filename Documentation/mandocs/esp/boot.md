@@ -4,7 +4,7 @@
 |-------|-------|
 | Versión | 0.2 |
 | Fase IR0 | T0 / T1 producto |
-| Estado | stable (producto: runit; debug shell opt-in) |
+| Estado | stable (producto: solo runit; dbgshell eliminado) |
 | Depende de | memory, drivers, vfs, process |
 | Página man | IR0-boot (sección 7) |
 | Fuentes principales | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/arch_early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
@@ -13,11 +13,11 @@
 
 La ruta de arranque en x86-64 va desde una carga GRUB compatible con Multiboot
 hasta tablas de páginas mínimas, `kmain`, puesta en marcha de drivers y VFS,
-habilitación de syscalls/IRQ, y `kexecve("/sbin/init")` (runit). Los defconfigs
-de producto ponen `CONFIG_KERNEL_DEBUG_SHELL=n`. El shell de depuración en
-kernel solo queda disponible si se habilita explícitamente para contratos
-legacy. Logging estructurado de arranque: [`KLOG.md`](../../KLOG.md) /
-[`esp/KLOG.md`](../../esp/KLOG.md).
+habilitación de syscalls/IRQ, y `kexecve("/sbin/init")` (runit desde
+**IR0-userspace**). El dbgshell / `debug_bins/` in-kernel se **eliminó**
+(2026-07-25); ver [`USERSPACE.md`](../../USERSPACE.md) /
+[`esp/USERSPACE.md`](../../esp/USERSPACE.md). Logging estructurado:
+[`KLOG.md`](../../KLOG.md) / [`esp/KLOG.md`](../../esp/KLOG.md).
 
 ## 2. Arquitectura interna
 
@@ -55,8 +55,7 @@ GRUB → boot_x64.asm
               → process_init + ipc_init + clock_system_init (MONOTONIC)
               → syscall_init + syscalls_init
               → irq_init + boot_irq_unmask + sti
-              → fase USERSPACE: kexecve("/sbin/init")  [default producto]
-                OR [KERNEL_DEBUG_SHELL] start_init_process
+              → fase USERSPACE: kexecve("/sbin/init")
               → sched_schedule_next → ring 3
 ```
 

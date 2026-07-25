@@ -1,7 +1,8 @@
 # Coupling IR0 (kernel) ↔ IR0-userspace
 
 > **Last verified:** 2026-07-25  
-> **Source of truth:** this file, `Makefile` (`IR0_USERSPACE_ROOT`, `check-userspace`, `headers_install`), sibling [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), and [TREE_CONTRACT](../../IR0-desktop/Documentation/TREE_CONTRACT.md) when present.
+> **Source of truth:** this file, `Makefile` (`IR0_USERSPACE_ROOT`, `check-userspace`, `headers_install`), sibling [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../SETUP.md) (sibling section), and [TREE_CONTRACT](../../IR0-desktop/Documentation/TREE_CONTRACT.md) when present.  
+> **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
 
 ## Boundary
 

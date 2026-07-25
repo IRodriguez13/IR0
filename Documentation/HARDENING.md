@@ -50,7 +50,7 @@ This document tracks **post-milestone sanitization** (not new features). Each sp
 
 | Caller | Correct flags |
 |--------|----------------|
-| Userspace / `debug_bins` via `syscall(SYS_OPEN, …)` | Linux `O_*` (musl headers) |
+| Userspace via `syscall(SYS_OPEN, …)` | Linux `O_*` (musl headers) |
 | In-kernel ktest calling `sys_open()` directly | `KTEST_O_CREAT`, `KTEST_O_TRUNC`, `KTEST_O_RDWR`, … from `ktest_harness.h` |
 | Wrong | `includes/ir0/fcntl.h` `O_CREAT` (`IR0_O_CREAT` = `0x100`) passed into `sys_open` — **`O_CREAT` and `O_TRUNC` are silently dropped** |
 

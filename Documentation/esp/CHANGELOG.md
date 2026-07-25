@@ -1,11 +1,19 @@
 # IR0 Kernel — Changelog (español)
 
-> **Última verificación:** 2026-07-23  
+> **Última verificación:** 2026-07-25  
 > **Fuente de verdad:** historial git, smokes del `Makefile`, [`../STABLE.md`](../STABLE.md), [`../KTM.md`](../KTM.md)
 
 Versión en inglés (canónica): [`../CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Sin publicar]
+
+### Límite kernel / userspace (2026-07-25)
+
+- Hermano público **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)**.
+- Acoplamiento: [`USERSPACE.md`](USERSPACE.md) / [`../USERSPACE.md`](../USERSPACE.md).
+- Eliminados del kernel: `debug_bins/`, `kernel/init.c` (dbgshell), Kconfig
+  `KERNEL_DEBUG_SHELL` / `DEBUG_BINS*`. Boot solo `kexecve("/sbin/init")`.
+- Detalle canónico en el CHANGELOG inglés.
 
 ### Banner portable / SB16 / Class B / desk (2026-07-23)
 

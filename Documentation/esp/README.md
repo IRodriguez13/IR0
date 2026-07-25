@@ -11,6 +11,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 ## Mapa de Archivos
 
 - `README.md`
+- `USERSPACE.md` — acoplamiento kernel ↔ [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)
 - `DECOUPLING.md`
 - `MAKEFILE.md`
 - `TOOLING.md`
@@ -22,6 +23,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `PROCESSES.md`
 - `SCHEDULING.md`
 - `UNIX_DIFFERENCES.md`
+- `KLOG.md` / `KTM.md` / `STABLE.md` / `BACKLOG_REMAINING.md` (espejos donde existan)
 
 Capítulos internos del kernel (iniciativa mandocs, espejo bilingüe):
 

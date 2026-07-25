@@ -95,7 +95,7 @@ Diagrama de doble ruta:
 - `CONFIG_KEYBOARD_LAYOUT`: 0=US, 1=LATAM.
 - `CONFIG_TEST_INPUT_INJECT` + ioctl `IR0_INPUT_IOCTL_INJECT` para tests deterministas.
 - Smoke Doom: `init_fase54b-input`, `smoke-fase54b-input`.
-- dbgshell sondea `/dev/events0` al arranque.
+- Smokes de producto/GUI sondean `/dev/events0` (sin shell in-kernel).
 
 ## 10. Roadmap futuro
 

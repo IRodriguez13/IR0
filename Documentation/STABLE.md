@@ -7,8 +7,10 @@
 > merge `56a3f7b` (dev→master: kexec/S3, P1-storage, P1-T1), Future F2–F6,  
 > `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md),  
 > critical hybrid KTM battery ([`KTM.md`](KTM.md) § critical product battery),  
-> **SEP-2** userspace split: product rootfs now built by the **`IR0-userspace`** sibling
-> (`IR0_USERSPACE_ROOT`, `make headers_install`) — see [`TREE_CONTRACT`](../../IR0-desktop/Documentation/TREE_CONTRACT.md).
+> **SEP-2** userspace split: product rootfs built by the **`IR0-userspace`** sibling
+> (`IR0_USERSPACE_ROOT`, `make headers_install`) — see [`USERSPACE.md`](USERSPACE.md) and
+> [`TREE_CONTRACT`](../../IR0-desktop/Documentation/TREE_CONTRACT.md).
+> In-kernel dbgshell / `debug_bins/` **removed** (2026-07-25).
 
 This document is the **single checklist** for what is **stable enough to run and test in QEMU** (serial and GTK UI), what was formerly **in development** and is now closed for **0.0.1**, and what remains **future work** (see [`ROADMAP.md`](ROADMAP.md) P1+).
 
@@ -243,7 +245,7 @@ Everything in this table was reached in at least one oleada and has a **runnable
 
 | Tier | Capability | Automated smoke | QEMU GTK (manual) |
 |------|------------|-----------------|-------------------|
-| **T0** | Kernel contracts (legacy debug_bins test-only) | `make kernel-tests` | `make run` (runit/getty/ash) |
+| **T0** | Kernel contracts (ktest / linux-abi; no in-tree dbgshell) | `make kernel-tests` | `make run-console` / `run-pid1` (runit/getty/ash) |
 | **T0** | pseudo-FS `/proc` `/dev` `/sys` | ktests, `runtime-mount-check` | explore from ash after tier1 boot |
 | **T1** | runit + services | `make smoke-runit-boot` | `make run-fase58e-ash-gui` |
 | **T1** | BusyBox ash interactive | `make smoke-tier1` | `make run-fase58e-ash-gui` |

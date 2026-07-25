@@ -6,8 +6,7 @@
 
 Apply these rules in every kernel-related task.
 These rules apply to the entire kernel codebase, including (non-exhaustive):
-`kernel/*`, `fs/*`, `drivers/*`, `arch/*`, `includes/*`, `debug_bins/*`,
-build/config wiring (`Makefile`, `setup/Kconfig`, `setup/defconfig`,
+`kernel/*`, `fs/*`, `drivers/*`, `arch/*`, `includes/*`, build/config wiring (`Makefile`, `setup/Kconfig`, `setup/defconfig`,
 `scripts/kconfig/*`), and technical kernel documentation.
 
 ## Architecture and Design

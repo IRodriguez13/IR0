@@ -94,7 +94,6 @@ ASCII:
 | VFS | all path operations |
 | Process | cred inheritance on spawn/fork |
 | Syscalls | identity and permission syscalls |
-| debug_bins | `cmd_whoami` and friends via syscalls |
 | IR0-userspace | login/getty, `passwd`, OpenDoas; `smoke-setuid-exec`, `smoke-passwd`, `smoke-doas` |
 
 ## 7. Visual maps

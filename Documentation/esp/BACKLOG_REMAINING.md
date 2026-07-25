@@ -1,13 +1,15 @@
 # IR0 — Backlog post-0.0.1 (trabajo restante honesto)
 
-> **Última verificación:** 2026-07-23  
+> **Última verificación:** 2026-07-25  
 > Espejo de [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) (inglés canónico).
 > DESK-X: **LINUX-LIKE** (smoke-desk-session OK 2026-07-23); TinyX sigue lab.
 
 ## Closed
 
-Ver tabla en el archivo inglés. Open residual KTM/HOST cerrado (pass=16,
-COW A–F, reclaim 41, ACPI FADT map on-demand, F2–F5). **Open vacío.**
+Ver tablas en el archivo inglés, incluida la oleada **2026-07-25** (publicación
+de IR0-userspace, eliminación de `debug_bins`/dbgshell, docs de acoplamiento).
+Open residual KTM/HOST cerrado (pass=16, COW A–F, reclaim 41, ACPI FADT map
+on-demand, F2–F5).
 
 ## Open
 

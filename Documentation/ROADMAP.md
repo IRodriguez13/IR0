@@ -27,7 +27,7 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 
 | Tier | Target | ~Progress | Proof today |
 |------|--------|-----------|-------------|
-| **T0** | Functional kernel + migrated contracts | ~85% | `make kernel-tests`, `arch-guard`, pseudo-FS contracts; legacy `debug_bins` test-only |
+| **T0** | Functional kernel + migrated contracts | ~85% | `make kernel-tests`, `arch-guard`, pseudo-FS contracts; product shell in IR0-userspace |
 | **T1** | POSIX userspace (runit + musl + ash) | ~75–78% | `smoke-tier1`; manifest tier1+musl; pthread/setuid/perms smokes; `smoke-doas` with `DOAS_PERSIST_OK` |
 | **T2** | Fullscreen graphics (Doom-class) | ~55% | fb0/evdev/mmap; GUI targets in [`STABLE.md`](STABLE.md) |
 | **T3** | Minimal desktop (WM + panel) | ~15–20% | **Planning only** — WM/compositor **out of kernel tree** |
