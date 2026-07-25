@@ -13,7 +13,7 @@
 
 Los programas de usuario alcanzan el kernel mediante syscalls numeradas al estilo
 Linux en x86-64. Coexisten dos mecanismos de entrada: legacy **`int 0x80`**
-(debug_bins) y la instrucción **`syscall`** (ABI musl). El despacho está
+(ABI de laboratorio histórica) y la instrucción **`syscall`** (ABI musl). El despacho está
 centralizado en `syscall_dispatch()` con una tabla de handlers `__NR_*`. La I/O
 de ficheros está separada en `fs_syscalls.c`; la mayoría de handlers restantes
 permanecen en el monolítico `syscalls.c`.
@@ -68,7 +68,7 @@ permanecen en el monolítico `syscalls.c`.
 
 **`copy_from_user` / `copy_to_user`:**
 
-1. Si proceso `KERNEL_MODE` (dbgshell): `memcpy` plano.
+1. Si proceso `KERNEL_MODE` (tareas embebidas/kernel): `memcpy` plano.
 2. Si no, validar `[USER_SPACE_START, USER_SPACE_END)`.
 3. Copiar vía `copy_*_region_in_directory(current_process->page_directory, …)`.
 

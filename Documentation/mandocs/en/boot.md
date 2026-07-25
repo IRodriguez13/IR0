@@ -4,7 +4,7 @@
 |-------|-------|
 | Version | 0.2 |
 | IR0 phase | T0 / T1 product |
-| Status | stable (product: runit; debug shell opt-in) |
+| Status | stable (product: runit only; dbgshell removed) |
 | Depends on | memory, drivers, vfs, process |
 | Man page | IR0-boot (section 7) |
 | Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/arch_early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
@@ -13,9 +13,9 @@
 
 The boot path on x86-64 runs from a Multiboot-compatible GRUB load through minimal
 page tables, `kmain`, driver and VFS bring-up, syscall/IRQ enablement, and
-`kexecve("/sbin/init")` (runit). Product defconfigs set
-`CONFIG_KERNEL_DEBUG_SHELL=n`. The in-kernel debug shell remains available only
-when explicitly enabled for legacy contracts. Structured boot logging:
+`kexecve("/sbin/init")` (runit from **IR0-userspace**). The former in-kernel
+dbgshell / `debug_bins/` path was **removed** (2026-07-25); see
+[`USERSPACE.md`](../../USERSPACE.md). Structured boot logging:
 [`KLOG.md`](../../KLOG.md).
 
 ## 2. Internal architecture
@@ -59,7 +59,6 @@ GRUB → boot_x64.asm
               → "kernel core initialization complete"
               → [CONFIG_KTM] suite → "KTM validation complete"
               → "system ready for userspace" + kexecve("/sbin/init")
-                OR [KERNEL_DEBUG_SHELL] start_init_process
               → sched_schedule_next → ring 3
 ```
 
@@ -113,7 +112,8 @@ Mermaid source: `Documentation/mandocs/diagrams/boot.mmd`
 6. Framed klog starts with the BOOT banner; every record carries `#sequence` and
    boot phase; timestamps stay `[    ?.???]` until monotonic clock
    ([`KLOG.md`](../../KLOG.md)).
-7. Product daily boot does **not** end in dbgshell; exploration is ash + `/proc/kmsg`.
+7. Boot always hands off to `/sbin/init`; exploration is ash + `/proc/kmsg`
+   (no in-kernel shell).
 
 ## 9. Debugging tips
 

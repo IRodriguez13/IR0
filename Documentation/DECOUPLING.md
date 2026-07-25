@@ -68,7 +68,7 @@ Use this to compare before/after refactors **with the same toolchain**; bytecode
 ## Layered overview
 
 ```text
-  debug_bins / future userspace
+  IR0-userspace (sibling) / ash
            │
            ▼  syscalls only
        kernel/, fs/, mm/, net/

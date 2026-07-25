@@ -95,7 +95,6 @@ Mapa ASCII:
 | VFS | todas las operaciones de path |
 | Process | herencia cred en spawn/fork |
 | Syscalls | syscalls identidad y permisos |
-| debug_bins | `cmd_whoami` y similares vía syscalls |
 | IR0-userspace | login/getty, `passwd`, OpenDoas; `smoke-setuid-exec`, `smoke-passwd`, `smoke-doas` |
 
 ## 7. Mapas visuales

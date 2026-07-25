@@ -13,7 +13,7 @@
 
 x86-64 interrupt handling uses a 256-entry IDT, dual 8259 PIC (IRQ 0–15 → vectors
 32–47), assembly stubs, and C handlers in `isr_handler64`. Syscalls enter via
-**int 0x80** (debug_bins ABI) and **`syscall` insn** (musl/Linux ABI). CPU
+**int 0x80** (legacy lab ABI) and **`syscall` insn** (musl/Linux ABI). CPU
 exceptions map to signals for user tasks or panic for kernel faults.
 
 ## 2. Internal architecture
@@ -44,7 +44,7 @@ exceptions map to signals for user tasks or panic for kernel faults.
 
 ```text
   int $0x80 ──► syscall_entry_asm
-       ──► map debug_bins regs → Linux C ABI
+       ──► map int 0x80 regs → Linux C ABI
        ──► syscall_dispatch()
        ──► iretq (user segments 0x23)
 ```

@@ -45,7 +45,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
        → syscall_dispatch
        → handler → sysret
 
-  debug_bins → int 0x80 → syscall_entry_64.asm → dispatch
+  userspace → insn syscall (preferida) / int 0x80 → dispatch
 ```
 
 **Context switch (producto x86):**

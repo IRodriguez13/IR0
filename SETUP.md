@@ -85,6 +85,21 @@ See also `make help-docs`.
 verbose ACPI/PCI wall. Requires QEMU `-virtfs` (wired by `run-bootlog` /
 `smoke-boot-log-hostshare`). Normal `make run` does not need it.
 
+## Sibling userspace (required for product rootfs)
+
+Product PID1 (runit), BusyBox, login/doas, and `/etc` live in a **separate**
+repository. Clone it next to IR0:
+
+```bash
+git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace
+# or: export IR0_USERSPACE_ROOT=/path/to/IR0-userspace
+make check-userspace
+make headers_install DESTDIR=../IR0-userspace/out/sysroot
+```
+
+Full boundary and targets: [`Documentation/USERSPACE.md`](Documentation/USERSPACE.md)
+(Spanish: [`Documentation/esp/USERSPACE.md`](Documentation/esp/USERSPACE.md)).
+
 ## First-Time Configuration
 
 Copy the default Kconfig snapshot:
@@ -98,10 +113,11 @@ This installs `setup/defconfig` as `.config` and regenerates `config.h`.
 Default highlights:
 
 - x86-64, MINIX root on `hda`, round-robin scheduler
-- runit `/sbin/init` (`CONFIG_KERNEL_DEBUG_SHELL=n`, `CONFIG_DEBUG_BINS=n`)
+- runit `/sbin/init` from sibling **IR0-userspace** (no in-kernel dbgshell)
 - VBE framebuffer enabled (`CONFIG_ENABLE_VBE=y`)
 
 Daily run targets build the userspace ISO and inject the runit rootfs.
+Clone layout and wiring: [`Documentation/USERSPACE.md`](Documentation/USERSPACE.md).
 
 ## Basic Kernel Build
 

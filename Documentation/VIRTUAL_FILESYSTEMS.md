@@ -76,7 +76,7 @@ See [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md) for layout, gates, and ARCH-3 not
 
 - Strong observability at runtime without external debug tooling.
 - Consistent user-facing access model through open/read/write/stat patterns.
-- Product exploration: ash + `cat /proc/kmsg` (no ring-0 dbgshell required).
+- Product exploration: ash + `cat /proc/kmsg` (in-kernel dbgshell removed).
 
 ## Weak Points
 

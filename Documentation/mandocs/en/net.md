@@ -107,7 +107,7 @@ ASCII:
 - Protocols register handlers; `net_receive` demultiplexes.
 - `/dev/net` parses text commands (ping, dhcp, ifconfig) and ioctl API.
 - `sock_stream` owns listen/accept/connect state; `tcp_wire_*` owns segments.
-- debug_bins (`ping`, `ifconfig`, `route`, `netstat`) use syscalls only.
+- userspace (BusyBox) (`ping`, `ifconfig`, `route`, `netstat`) use syscalls only.
 
 ## 5. Subsystem boundaries
 
@@ -125,7 +125,7 @@ ASCII:
 | Syscalls | socket/bind/listen/accept/connect/send/recv → sock_stream |
 | devfs | `/dev/net` ops and poll |
 | procfs | `/proc/netinfo`, `/proc/net/dev` |
-| debug_bins | `cmd_ping.c`, `cmd_ifconfig.c`, etc. |
+| userspace (BusyBox) | `cmd_ping.c`, `cmd_ifconfig.c`, etc. |
 
 ## 7. Visual maps
 
@@ -133,7 +133,7 @@ ASCII:
   ┌──────────────┐     ┌──────────┐     ┌─────────┐
   │ sock_stream  │────►│ TCP wire │────►│ RTL8139 │
   │ /dev/net     │     │ IP/ICMP  │     │  NIC    │
-  │ debug_bins   │     │ ARP/UDP  │     └─────────┘
+  │ userspace (BusyBox)   │     │ ARP/UDP  │     └─────────┘
   └──────────────┘     └──────────┘
          │                  ▲
          └──── read snapshot/proc ────┘

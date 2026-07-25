@@ -36,7 +36,7 @@ Empezá por: `make man TOPIC=onboarding`.
 | ipc | IR0-ipc | T0–T1 | stable | `pipe.h` |
 | input | IR0-input | T2 | stable | `input.h` |
 | graphics | IR0-graphics | T2 | stable | `fb.h`, `video_backend.h` |
-| debug-bins | IR0-debug-bins | T0 | stable | debug shell |
+| debug-bins | IR0-debug-bins | histórico | eliminado | árbol borrado 2026-07-25; ver USERSPACE.md |
 | signals | IR0-signals | T1 | stable | `signals.h` |
 | security | IR0-security | T0–T1 | stable | cred / sudo |
 

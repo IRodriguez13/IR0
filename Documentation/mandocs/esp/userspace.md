@@ -17,8 +17,8 @@
 
 ## 1. Resumen
 
-El boot de producción carga **`/sbin/init`** vía `kexecve` desde `kmain` cuando
-`KERNEL_DEBUG_SHELL=0`. El PID1 canónico es **runit** (`IR0-userspace/out/bin/runit-init`
+El boot de producción siempre carga **`/sbin/init`** vía `kexecve` desde `kmain`.
+El PID1 canónico es **runit** (`IR0-userspace/out/bin/runit-init`
 y stages), estático con musl —lo construye el repo hermano— e inyectado en el
 rootfs MINIX. BusyBox, TCC y
 DoomGeneric son payloads opcionales.
@@ -61,6 +61,9 @@ entradas de directorio de MINIX v1), `appliance` no abre login interactivo
 | `make smoke-runit-login` | Autologin root (password vacío) |
 | `make smoke-runit-login-nonroot` | No-root: crypt(3) + uid 1001 + PS1 |
 | `make run-fase58e-ash-gui` | ash interactivo GTK |
+
+Guía de acoplamiento (clone, `headers_install`, límite):
+[`USERSPACE.md`](../../USERSPACE.md) / [`esp/USERSPACE.md`](../../esp/USERSPACE.md).
 
 Aliases retirados (fail-fast): `build-irinit`, `load-userspace-irinit`,
 `smoke-userspace-irinit`, `run-irinit-interactive-gui`.

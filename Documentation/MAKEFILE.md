@@ -109,7 +109,7 @@ The Makefile builds `ALL_OBJS` from layered fragments:
 - **Core:** `kernel/`, `fs/`, `mm/`, `sched/`, `includes/ir0/`
 - **Arch:** `arch/x86-64/` or `arch/arm64/` selected by `ARCH`
 - **Drivers:** gated by `CONFIG_ENABLE_*` and `CONFIG_INIT_*`
-- **Legacy debug harness:** `debug_bins/` only when `CONFIG_DEBUG_BINS=y`
+- **Userspace coupling:** sibling `IR0-userspace` via `IR0_USERSPACE_ROOT` (see [`USERSPACE.md`](USERSPACE.md)); no in-tree `debug_bins/`
 - **Generated:** `version.o`, kconfig headers
 
 Adding a new subsystem requires **four wiring points** (CTR rule):

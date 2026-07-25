@@ -97,14 +97,13 @@ Boot completion (product): `kernel core initialization complete` → (optional)
 Component tags use UPPER_SNAKE (`DRIVER`, `PS2_MOUSE`, `PC_SPEAKER`, `ADLIB`).
 QEMU host warnings live on host stderr (`*.qemu-stderr`), not the guest serial stream.
 
-## Product path (no dbgshell)
+## Product path (no in-kernel shell)
 
-Desktop defconfigs: `CONFIG_KERNEL_DEBUG_SHELL=n`, `CONFIG_DEBUG_BINS=n`.  
-Daily `make run` / `run-console` / `run-bootlog` → `kernel-x64-userspace.iso` +
-runit/getty/ash. Legacy ring-0 shell is opt-in (`CONFIG_DEBUG_BINS` /
-`CONFIG_KERNEL_DEBUG_SHELL`) for isolated contracts only.
+Daily `make run-console` / `run-pid1` / `run-bootlog` → `kernel-x64-userspace.iso`
++ runit/getty/ash from **IR0-userspace**. The ring-0 dbgshell / `debug_bins/`
+tree was **removed** (2026-07-25); see [`USERSPACE.md`](USERSPACE.md).
 
-Exploration: `cat /proc/kmsg` or `dmesg` from ash — not the in-kernel shell.
+Exploration: `cat /proc/kmsg` or `dmesg` from ash.
 
 ## Gates
 
@@ -120,4 +119,5 @@ Exploration: `cat /proc/kmsg` or `dmesg` from ash — not the in-kernel shell.
 - [`KTM.md`](KTM.md) — KTM protocol vs klog layers  
 - [`mandocs/en/boot.md`](mandocs/en/boot.md) — boot pipeline + phases  
 - [`VIRTUAL_FILESYSTEMS.md`](VIRTUAL_FILESYSTEMS.md) — `/proc/kmsg`, `/dev/kmsg`  
-- [`mandocs/en/debug-bins.md`](mandocs/en/debug-bins.md) — legacy harness status  
+- [`USERSPACE.md`](USERSPACE.md) — sibling coupling  
+- [`mandocs/en/debug-bins.md`](mandocs/en/debug-bins.md) — historical removal note  

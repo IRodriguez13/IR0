@@ -17,8 +17,8 @@
 
 ## 1. Overview
 
-Production boot loads **`/sbin/init`** via `kexecve` from `kmain` when
-`KERNEL_DEBUG_SHELL=0`. The canonical PID1 is **runit** (`IR0-userspace/out/bin/runit-init`
+Production boot always loads **`/sbin/init`** via `kexecve` from `kmain`.
+The canonical PID1 is **runit** (`IR0-userspace/out/bin/runit-init`
 and stage services), built static with musl by the sibling repository and
 injected into the MINIX root image. BusyBox, TCC, and DoomGeneric are optional rootfs payloads for smoke and
 T2 graphics milestones.
@@ -80,6 +80,8 @@ the console policy: `development` keeps root autologin and prints a warning,
 | `make smoke-runit-login-nonroot` | Non-root: crypt(3) + uid 1001 + PS1 |
 | `make run-fase58e-ash-gui` | Interactive ash on GTK |
 | `make smoke-tier1` | Bundle: runit boot + ash |
+
+Coupling guide (clone, `headers_install`, boundary): [`USERSPACE.md`](../../USERSPACE.md).
 
 Retired fail-fast aliases: `build-irinit`, `load-userspace-irinit`,
 `smoke-userspace-irinit`, `run-irinit-interactive-gui` (print redirect and exit 2).

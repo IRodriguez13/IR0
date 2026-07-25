@@ -62,7 +62,7 @@ and `/dev/tty`. Input arrives from the PS/2 keyboard path; output goes through
 
 ## 5. Subsystem boundaries
 
-- Console must not bypass devfs for userspace I/O (debug_bins use syscalls too).
+- Console must not bypass devfs for userspace I/O (ash and smokes use syscalls).
 - Keyboard scancode tables under `#ifdef __x86_64__` in `keyboard.c`.
 - User ioctl copies only in whitelisted devfs handlers (`architecture_guard.py`).
 

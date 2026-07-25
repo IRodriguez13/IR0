@@ -46,7 +46,7 @@ NEON.
        → syscall_dispatch
        → handler → sysret
 
-  debug_bins → int 0x80 → syscall_entry_64.asm → dispatch
+  userspace → syscall insn (preferred) / int 0x80 → dispatch
 ```
 
 **Context switch (product x86):**
