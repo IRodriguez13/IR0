@@ -1688,3 +1688,69 @@ int64_t sys_pipe2(int pipefd[2], int flags)
 {
   return sys_pipe_install(pipefd, flags);
 }
+
+/*
+ * Linux syslog(2) / klogctl — enough for BusyBox dmesg (SIZE_BUFFER + READ_ALL).
+ * Ring content comes from klog_read_records (same as /proc/kmsg).
+ */
+#define IR0_SYSLOG_CLOSE          0
+#define IR0_SYSLOG_OPEN           1
+#define IR0_SYSLOG_READ           2
+#define IR0_SYSLOG_READ_ALL       3
+#define IR0_SYSLOG_READ_CLEAR     4
+#define IR0_SYSLOG_CLEAR          5
+#define IR0_SYSLOG_CONSOLE_OFF    6
+#define IR0_SYSLOG_CONSOLE_ON     7
+#define IR0_SYSLOG_CONSOLE_LEVEL  8
+#define IR0_SYSLOG_SIZE_UNREAD    9
+#define IR0_SYSLOG_SIZE_BUFFER    10
+
+#define IR0_SYSLOG_BUF_CAP        16384
+
+int64_t sys_syslog(int type, char *bufp, int len)
+{
+	char *kbuf;
+	int n;
+
+	switch (type)
+	{
+	case IR0_SYSLOG_CLOSE:
+	case IR0_SYSLOG_OPEN:
+	case IR0_SYSLOG_CLEAR:
+	case IR0_SYSLOG_CONSOLE_OFF:
+	case IR0_SYSLOG_CONSOLE_ON:
+		return 0;
+	case IR0_SYSLOG_CONSOLE_LEVEL:
+		if (len < 1 || len > 8)
+			return -EINVAL;
+		return 0;
+	case IR0_SYSLOG_SIZE_BUFFER:
+	case IR0_SYSLOG_SIZE_UNREAD:
+		return IR0_SYSLOG_BUF_CAP;
+	case IR0_SYSLOG_READ:
+	case IR0_SYSLOG_READ_ALL:
+	case IR0_SYSLOG_READ_CLEAR:
+		if (!bufp || len <= 0)
+			return -EINVAL;
+		if (len > IR0_SYSLOG_BUF_CAP)
+			len = IR0_SYSLOG_BUF_CAP;
+		kbuf = (char *)kmalloc_try((size_t)len);
+		if (!kbuf)
+			return -ENOMEM;
+		n = klog_read_records(kbuf, (size_t)len);
+		if (n < 0)
+		{
+			kfree(kbuf);
+			return -EIO;
+		}
+		if (n > 0 && copy_to_user(bufp, kbuf, (size_t)n) != 0)
+		{
+			kfree(kbuf);
+			return -EFAULT;
+		}
+		kfree(kbuf);
+		return n;
+	default:
+		return -EINVAL;
+	}
+}

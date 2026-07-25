@@ -27,7 +27,44 @@ static int fb_origin_y;
 static int fb_cell_w;
 static int fb_cell_h;
 
+/* Glyph+color shadow so the software cursor can restore column 0 after CR/LF. */
+static uint16_t cell_shadow[CONSOLE_HEIGHT][CONSOLE_WIDTH];
+
 #define VGA_BUF ((volatile uint16_t *)0xB8000)
+
+static void shadow_put(int row, int col, char c, uint8_t color)
+{
+	if (row < 0 || row >= CONSOLE_HEIGHT || col < 0 || col >= CONSOLE_WIDTH)
+		return;
+	cell_shadow[row][col] = (uint16_t)(((uint16_t)color << 8) | (uint8_t)c);
+}
+
+static void shadow_scroll_up(uint8_t clear_color)
+{
+	int r;
+	int c;
+
+	for (r = 0; r < CONSOLE_HEIGHT - 1; r++)
+	{
+		for (c = 0; c < CONSOLE_WIDTH; c++)
+			cell_shadow[r][c] = cell_shadow[r + 1][c];
+	}
+	for (c = 0; c < CONSOLE_WIDTH; c++)
+		cell_shadow[CONSOLE_HEIGHT - 1][c] =
+			(uint16_t)(((uint16_t)clear_color << 8) | ' ');
+}
+
+static void shadow_clear(uint8_t color)
+{
+	int r;
+	int c;
+
+	for (r = 0; r < CONSOLE_HEIGHT; r++)
+	{
+		for (c = 0; c < CONSOLE_WIDTH; c++)
+			cell_shadow[r][c] = (uint16_t)(((uint16_t)color << 8) | ' ');
+	}
+}
 
 static void put_cell_vga(int row, int col, char c, uint8_t color)
 {
@@ -128,16 +165,24 @@ static void fb_compute_layout(uint32_t w, uint32_t h)
 	}
 
 	/*
-	 * Prefer native 8x16 glyphs (scale 1). Max-fit scale-2 on 1280x800
-	 * made text look oversized; center the 80x25 cell area with inset so
-	 * the first column is not clipped under QEMU/GTK.
+	 * Largest integer glyph scale that fits the mode (sharper in QEMU/GTK
+	 * than a tiny 80x25 island scaled by the host). Center with a small
+	 * inset so column 0 is not clipped by window chrome.
 	 */
 	{
-		const int inset = 16;
+		const int inset = 8;
+		int max_s = 1;
+		int s;
 
-		fb_scale = 1;
-		fb_cell_w = FONT_WIDTH;
-		fb_cell_h = FONT_HEIGHT;
+		for (s = 1; s <= 4; s++)
+		{
+			if (fb_console_cols * FONT_WIDTH * s <= (int)w &&
+			    fb_console_rows * FONT_HEIGHT * s <= (int)h)
+				max_s = s;
+		}
+		fb_scale = max_s;
+		fb_cell_w = FONT_WIDTH * fb_scale;
+		fb_cell_h = FONT_HEIGHT * fb_scale;
 		pw = fb_console_cols * fb_cell_w;
 		ph = fb_console_rows * fb_cell_h;
 		fb_origin_x = ((int)w - pw) / 2;
@@ -296,7 +341,7 @@ static void clear_fb(uint8_t color)
 }
 #endif
 
-void console_put_cell(int row, int col, char c, uint8_t color)
+void console_draw_cell(int row, int col, char c, uint8_t color)
 {
 	if (use_fb)
 		put_cell_fb(row, col, c, color);
@@ -304,8 +349,22 @@ void console_put_cell(int row, int col, char c, uint8_t color)
 		put_cell_vga(row, col, c, color);
 }
 
+void console_put_cell(int row, int col, char c, uint8_t color)
+{
+	shadow_put(row, col, c, color);
+	console_draw_cell(row, col, c, color);
+}
+
+uint16_t console_get_cell(int row, int col)
+{
+	if (row < 0 || row >= CONSOLE_HEIGHT || col < 0 || col >= CONSOLE_WIDTH)
+		return (uint16_t)((0x07u << 8) | ' ');
+	return cell_shadow[row][col];
+}
+
 void console_scroll_up(uint8_t clear_color)
 {
+	shadow_scroll_up(clear_color);
 	if (use_fb)
 		scroll_up_fb(clear_color);
 	else
@@ -314,6 +373,7 @@ void console_scroll_up(uint8_t clear_color)
 
 void console_clear(uint8_t color)
 {
+	shadow_clear(color);
 	if (use_fb)
 		clear_fb(color);
 	else

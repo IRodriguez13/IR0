@@ -224,7 +224,8 @@ QEMU_FLAGS = -no-reboot -no-shutdown
 QEMU_TIMEOUT = 30
 
 # Modos de display
-QEMU_DISPLAY_GTK = -display gtk
+# zoom-to-fit=off avoids host soft-scaling that blurs the guest framebuffer.
+QEMU_DISPLAY_GTK = -display gtk,zoom-to-fit=off
 QEMU_DISPLAY_SDL = -display sdl2
 QEMU_DISPLAY_NONE = -display none
 QEMU_NGRAPHIC = -nographic
@@ -2210,6 +2211,8 @@ build-runit: check-userspace
 	@$(IR0_USERSPACE_MAKE) build-runit build-services
 
 load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-opendoas
+	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
+		echo "  WARN    nano not built (optional; cat /usr/bin/nano after reinject)"
 	@DISK=$${DISK:-disk.img}; \
 	STAMP=$${DISK}.runit.stamp; \
 	NEED=0; \
@@ -2217,6 +2220,7 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 	if [ $$NEED -eq 0 ]; then \
 		for dep in $(RUNIT_BIN_DIR)/runit-init $(RUNIT_STAGE_BIN)/runit_console_run \
 			$(RUNIT_STAGE_BIN)/ir0_passwd $(RUNIT_STAGE_BIN)/doas \
+			$(RUNIT_STAGE_BIN)/nano \
 			$(IR0_USERSPACE_ROOT)/rootfs/etc/passwd \
 			$(IR0_USERSPACE_ROOT)/rootfs/etc/doas.conf \
 			$(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh \

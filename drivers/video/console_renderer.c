@@ -18,6 +18,8 @@ static uint8_t render_color = CONSOLE_RENDERER_COLOR_DEFAULT;
 static int render_cursor_visible;
 static int render_cursor_row;
 static int render_cursor_col;
+static char render_cursor_under_ch = ' ';
+static uint8_t render_cursor_under_color = CONSOLE_RENDERER_COLOR_DEFAULT;
 static int csi_state;
 static int csi_param;
 static int csi_params[4];
@@ -271,13 +273,16 @@ static int render_rows(void)
 
 static void render_erase_cursor(int cols, int rows, uint8_t color)
 {
+	(void)color;
 	if (!render_cursor_visible)
 		return;
 	if (render_cursor_row < 0 || render_cursor_row >= rows)
 		return;
 	if (render_cursor_col < 0 || render_cursor_col >= cols)
 		return;
-	console_put_cell(render_cursor_row, render_cursor_col, ' ', color);
+	/* Restore glyph wiped by the block cursor (ONLCR: CR paints col 0). */
+	console_put_cell(render_cursor_row, render_cursor_col,
+			 render_cursor_under_ch, render_cursor_under_color);
 	render_cursor_visible = 0;
 }
 
@@ -385,14 +390,21 @@ void console_renderer_show_cursor(uint8_t color)
 	int row = cursor_pos / cols;
 	int col = cursor_pos % cols;
 	uint8_t cur_color;
+	uint16_t cell;
 
+	(void)color;
 	render_erase_cursor(cols, rows, color);
 
 	if (row < 0 || row >= rows || col < 0 || col >= cols)
 		return;
 
-	cur_color = (uint8_t)(((color & 0xF0) >> 4) | ((color & 0x0F) << 4));
-	console_put_cell(row, col, ' ', cur_color);
+	cell = console_get_cell(row, col);
+	render_cursor_under_ch = (char)(cell & 0xFF);
+	render_cursor_under_color = (uint8_t)(cell >> 8);
+	/* Invert fg/bg; draw without clobbering the shadow under-glyph. */
+	cur_color = (uint8_t)(((render_cursor_under_color & 0xF0) >> 4) |
+			      ((render_cursor_under_color & 0x0F) << 4));
+	console_draw_cell(row, col, render_cursor_under_ch, cur_color);
 	render_cursor_visible = 1;
 	render_cursor_row = row;
 	render_cursor_col = col;
