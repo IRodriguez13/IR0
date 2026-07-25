@@ -14,7 +14,6 @@
 
 #include <ir0/boot_log_hostshare.h>
 #include <config.h>
-#include <ir0/logging.h>
 #include <ir0/virtio_9p.h>
 #include <ir0/version.h>
 #include <ir0/ktm/klog.h>
@@ -49,7 +48,7 @@ int ir0_boot_log_hostshare_try(void)
 		return 1;
 	}
 
-	hdr = "IR0 Kernel v" IR0_VERSION_STRING " boot log (hostshare)\n"
+	hdr = "IR0 kernel " IR0_VERSION_STRING " boot log (hostshare)\n"
 	      "---\n";
 	while (hdr[off] && off + 1 < sizeof(g_boot_log_dump))
 	{
@@ -57,7 +56,8 @@ int ir0_boot_log_hostshare_try(void)
 		off++;
 	}
 
-	n = logging_read_buffer(g_boot_log_dump + off, sizeof(g_boot_log_dump) - off);
+	n = klog_read_records(g_boot_log_dump + off,
+			      sizeof(g_boot_log_dump) - off);
 	if (n < 0)
 	{
 		klog_smoke("BOOT_LOG_HOSTSHARE_FAIL");

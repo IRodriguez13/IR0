@@ -2,36 +2,41 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1 |
+| Version | 0.2 |
 | IR0 phase | T0–T1 |
 | Status | stable |
 | Depends on | process, vfs, syscalls |
 | Man page | IR0-security (section 7) |
-| Primary sources | `kernel/credentials.c`, `fs/permissions.c`, `fs/vfs.c`, `kernel/syscalls.c`, `includes/ir0/permissions.h` |
+| Primary sources | `kernel/credentials.c`, `kernel/elf_loader.c`, `kernel/process.h`, `fs/permissions.c`, `fs/vfs.c`, `includes/ir0/credentials.h` |
+
+> **Last verified:** 2026-07-25
 
 ## 1. Overview
 
-IR0 uses a minimal Unix-like credential model: per-process `uid/gid/euid/egid`,
-`umask`, and path checks via effective IDs. There is no Linux capability set.
-Elevation for debug workflows uses the IR0-specific **`sudo_auth`** syscall with
-hardcoded passwords in `fs/permissions.c`.
+IR0 uses a Unix credential model: per-process real/effective/saved
+`uid`/`gid`, supplementary groups, `umask`, and path checks via effective IDs.
+There is no Linux capability set.
+
+Privilege elevation is **userspace policy**, not a kernel service: the kernel
+enforces set-user-ID/set-group-ID bits on `execve`, and the product userspace
+(`IR0-userspace`) ships **OpenDoas** with `permit persist :wheel as root`. The
+old IR0-specific `sudo_auth` syscall (404) and its hardcoded passwords were
+removed; the number is retired in `includes/uapi/ir0/syscall_linux.h`.
 
 ## 2. Internal architecture
 
 | Piece | Role |
 |-------|------|
 | `credentials.c` | `ir0_current_cred`, `ir0_check_file_access` |
-| `permissions.c` | `ir0_access_from_stat`, `auth_user_password` |
-| `process_t` | uid, gid, euid, egid, umask |
+| `permissions.c` | `ir0_access_from_stat` |
+| `process_t` | uid, gid, euid, egid, `suid`, `sgid`, `groups[]`, `ngroups`, `no_new_privs`, umask |
+| `elf_loader.c` | set-id bits on exec, `AT_SECURE` in auxv |
 | VFS | traverse checks, chmod/chown/mount policy |
-| Syscalls | get/set uid/gid, umask, chmod, chown, access, sudo_auth |
+| Syscalls | get/set{res}uid/gid, setgroups, umask, chmod, chown, access, `PR_SET_NO_NEW_PRIVS` |
 
-**Hardcoded users (`permissions.c`):**
-
-```text
-  root / uid 0 / password "root"
-  user / uid 1000 / password "ir0"
-```
+**Account database:** real `/etc/passwd`, `/etc/shadow` (mode 0600) and
+`/etc/group`, produced by the userspace tree. Hashes are SHA-512 `crypt(3)`;
+there are no passwords in kernel source.
 
 ## 3. Data flow
 
@@ -45,12 +50,15 @@ hardcoded passwords in `fs/permissions.c`.
        → else owner/group/other rwx bits on st_mode
 ```
 
-**sudo_auth:**
+**Elevation (set-id exec):**
 
 ```text
-  sys_sudo_auth(password)
-       → if already root: success
-       → auth_user_password → on match set euid=0, egid=0 (permanent for process)
+  execve(/usr/bin/doas)          ← mode 4755, owner root
+       → elf_loader reads st_mode
+       → no_new_privs set?  → ignore set-id bits
+       → S_ISUID → euid = st_uid (suid keeps the real id for setresuid)
+       → AT_SECURE = 1 in auxv
+       → doas authenticates the caller against /etc/shadow and checks :wheel
 ```
 
 ASCII:
@@ -74,10 +82,10 @@ ASCII:
 
 ## 5. Subsystem boundaries
 
-- No supplementary groups; effective uid/gid only.
-- No setuid/setgid **bit** enforcement on exec.
-- Passwords plaintext in source — not production security model.
-- No `/etc/shadow`, PAM, or capabilities.
+- Authentication and elevation policy live in userspace (`IR0-userspace`), not
+  in the kernel: the kernel only provides identity syscalls, set-id exec,
+  `/proc/[pid]/stat` and file permission checks.
+- No PAM and no capabilities.
 
 ## 6. Relations to other subsystems
 
@@ -86,7 +94,8 @@ ASCII:
 | VFS | all path operations |
 | Process | cred inheritance on spawn/fork |
 | Syscalls | identity and permission syscalls |
-| debug_bins | `cmd_sudo`, `cmd_whoami` via syscalls |
+| debug_bins | `cmd_whoami` and friends via syscalls |
+| IR0-userspace | login/getty, `passwd`, OpenDoas; `smoke-setuid-exec`, `smoke-passwd`, `smoke-doas` |
 
 ## 7. Visual maps
 
@@ -102,8 +111,13 @@ ASCII:
 1. `ROOT_UID`/`ROOT_GID` = 0; default spawn without parent uses root + umask 0022.
 2. `ir0_current_cred()` with no process returns boot root stub.
 3. No `CAP_*` checks anywhere.
-4. `vfs_utimens` stub — does not apply real timestamps.
-5. Sticky bit / ACLs not implemented.
+4. `no_new_privs` is inherited on fork and disables set-id bits on exec.
+5. New files take the **effective** uid/gid of the creator (POSIX), which is
+   what makes the doas persist timestamp file pass its ownership check.
+6. `vfs_utimens` dispatches to the backend; MINIX stores `i_time` in seconds.
+7. MINIX v1 directory entries cap names at 14 bytes — sentinels such as
+   `/etc/ir0-noroot` must stay within that limit or they are silently truncated.
+8. ACLs not implemented.
 
 ## 9. Debugging tips
 
@@ -113,9 +127,7 @@ ASCII:
 
 ## 10. Future roadmap
 
-- Capability set and `setresuid` parity.
-- `/etc/passwd` database, shadow passwords.
-- setuid bit on exec.
+- Capability set.
 - ACLs on tmpfs/minix (noted in IR0-vfs §10).
 - Signal send permissions.
 - Namespaces — not planned.

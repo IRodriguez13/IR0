@@ -1,12 +1,60 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-07-23  
+> **Last verified:** 2026-07-24
 > **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
 For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** see [`STABLE.md`](STABLE.md).
 
 ## [Unreleased]
+
+### Login shell PS1 + BusyBox ash builtins (2026-07-24)
+
+- BusyBox product configs enable `CONFIG_ASH_EXPAND_PRMT` (dynamic `$PWD` in
+  prompts) and `CONFIG_ASH_TEST` (`[`/`test` builtins for POSIX scripts).
+- Console login execs ash as a login shell (`argv[0] = "-sh"`); `/etc/profile`
+  owns `PS1` (`# ` for root, `user@$HOSTNAME:$PWD$ ` otherwise). Password
+  reads silence tty echo via `tcsetattr`.
+- New gate: `make smoke-runit-login-nonroot` (crypt(3) as `ivan`, uid 1001,
+  prompt `ivan@unix:/home/ivan$`). Docs: mandocs en/esp `userspace.md`.
+- **MINIX:** `minix_fs_free_inode` wrote the inode bitmap to block 1 (superblock)
+  instead of block 2; remount then panicked in `kmalloc(s_zmap_blocks)`. Fixed
+  block/index/polarity to match `minix_alloc_inode`; init rejects absurd geometry.
+
+### Structured klog event core (2026-07-24)
+
+- Every klog record carries sequence, boot phase, clock state, raw early ticks,
+  severity, component, event id, CPU id, and a bounded message.
+- Presentation profiles: quiet/normal/debug/trace via `LOG_PROFILE_*` and
+  Multiboot `ir0.loglevel=` / `ir0.trace=open_abi,vfs` (`kernel/cmdline.c`).
+- `OPEN_ABI` and MINIX `stat('/') OK` are TRACE-gated; driver ceremony is DEBUG
+  with concise INFO one-liners; `klog_smoke` always emits.
+- Early x86-64 IDT after TSS; full IDT still installed at `irq_init()`.
+- Boot messages: core complete → KTM validation → ready for userspace.
+- Login: crypt(3) shadows, setuid session, `ivan` account, Welcome to IR0/Unix.
+- Early static ring promotes to a 1024-record heap ring; timestamps remain
+  `?.???` until the monotonic clock is online.
+- Serial, boot console, `/proc/kmsg`, `/dev/kmsg`, hostshare, and optional KTM
+  mirror consume the same event stream. `smoke-klog-ktm-off` proves klog without KTM.
+- Product profiles and daily `make run*` use runit/getty/ash. Legacy
+  `debug_bins` are test-only behind `CONFIG_DEBUG_BINS`.
+- Driver probe results emit `KLOG_EVENT_DRIVER_PROBE_RESULT` per registration;
+  summary uses `KLOG_EVENT_DRIVER_SUMMARY`.
+- First bare-metal boot: sentinel `/etc/ir0-baremetal-booted` + smoke tags
+  `FIRST_BAREMETAL_BOOT` / `_SKIP` / `_FAIL` (skipped under hypervisor).
+- Docs: [`KLOG.md`](KLOG.md), updated boot/debug-bins/VFS/KTM/BACKLOG.
+- ARM64: freestanding `hello_aarch64` when musl CRT is incomplete; early boot
+  stubs for `sched_context_switch_to` / `klog_info`. Proof: `smoke-arm64-boot`.
+
+### runit-only + Unix login + stage1 helpers (2026-07-24)
+
+- **PID1** — `irinit` removed; product/tests use runit only (fail-fast retired Make targets).
+- **Boot identity** — `IR0 kernel <stamp>` + `ARCH` / `HYPERVISOR` / `PLATFORM` + honest `SMP: UP`.
+- **uname** — `IR0` / `unix` / stamp / `IR0/Unix` / machine; `/proc/version` aligned.
+- **Login** — runit console service is getty/login (`unix login:` / `Password:`), welcome block, tags `GETTY_READY` / `LOGIN_OK`.
+- **Stage1** — `/sbin/fsck.ir0` (MINIX magic or `FSCK_SKIPPED`) + `/sbin/ir0-firstboot` defaults when passwd missing.
+- **Drivers** — NOTICE summary `ready/absent/deferred/unsupported/failed` + `DRIVER_SUMMARY_OK`.
+- **Smokes** — `smoke-runit-boot`, `smoke-runit-login`; ash interactive logs in first.
 
 ### Portable boot logging (2026-07-23)
 
@@ -17,8 +65,8 @@ For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** 
 
 ### Boot banner, SB16, Class B, desk (2026-07-23)
 
-- **Banner-first serial** — `klog_boot_hold` until after `serial_init`; first framed line is
-  `[BOOT] IR0 Kernel v0.0.1-pre-rc3 Boot routine` (`kernel/main.c`, `ktm/klog.c`).
+- **Banner-first serial** — `klog_boot_hold` until after `serial_init`; first
+  framed line identifies `IR0 kernel <version>` (`kernel/main.c`, `ktm/klog.c`).
 - **SB16 QEMU** — audiodev wiring for QEMU 8+; `SB16_DSP_OK` smoke tag;
   `make smoke-sb16-probe` (`scripts/make/boot-audio.mk`). Adlib may stay ABSENT (not a gate fail).
 - **Blocked syscall yield** — `kernel_idle_poll_nosched` in clock_wait loops; no nested

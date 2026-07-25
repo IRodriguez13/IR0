@@ -162,7 +162,7 @@
 #elif defined(CONFIG_KERNEL_DEBUG_SHELL)
 #define KERNEL_DEBUG_SHELL CONFIG_KERNEL_DEBUG_SHELL
 #else
-#define KERNEL_DEBUG_SHELL 1
+#define KERNEL_DEBUG_SHELL 0
 #endif
 
 #ifndef CONFIG_TICK_RATE_HZ
@@ -430,6 +430,19 @@
 /* Product serial stays quiet; enable via menuconfig / -D for ktm deep runs. */
 #ifndef CONFIG_KTM_SERIAL_VERBOSE
 #define CONFIG_KTM_SERIAL_VERBOSE 0
+#endif
+
+#ifndef CONFIG_LOG_PROFILE_QUIET
+#define CONFIG_LOG_PROFILE_QUIET 0
+#endif
+#ifndef CONFIG_LOG_PROFILE_NORMAL
+#define CONFIG_LOG_PROFILE_NORMAL 1
+#endif
+#ifndef CONFIG_LOG_PROFILE_DEBUG
+#define CONFIG_LOG_PROFILE_DEBUG 0
+#endif
+#ifndef CONFIG_LOG_PROFILE_TRACE
+#define CONFIG_LOG_PROFILE_TRACE 0
 #endif
 
 /* Legacy aliases for code that still uses the old names */

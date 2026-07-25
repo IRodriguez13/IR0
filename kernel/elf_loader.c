@@ -28,6 +28,9 @@
 #include <ir0/arch_port.h>
 #include <ir0/signals.h>
 #include <ir0/arch_cpu.h>
+#include <ir0/chmod.h>
+#include <ir0/credentials.h>
+#include <ir0/permissions.h>
 #include <config.h>
 #include <errno.h>
 
@@ -742,10 +745,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
 
     /* auxv[] — musl walks past envp NULL to find these */
     {
-        uint64_t at_secure = 0;
-
-        if (process->uid != process->euid || process->gid != process->egid)
-            at_secure = 1;
+        uint64_t at_secure = process ? process->at_secure : 0;
 
         struct
         {
@@ -1048,6 +1048,101 @@ static void exec_audit_emit_elf_header(const uint8_t *file_data, size_t file_siz
  * process (same PID), sets up a fresh stack/auxv, and jumps to user mode.
  * Does not return on success.
  */
+/*
+ * Set-user-ID / set-group-ID on exec (Linux execve(2)).
+ *
+ * The decision is taken from the on-disk inode before the image is replaced,
+ * and only committed once the old image is gone: from that point every failure
+ * kills the task (exec_fail_kill), so a failed exec can never return to the
+ * caller with raised credentials.
+ */
+struct exec_setid
+{
+	int raise_uid;
+	int raise_gid;
+	uint32_t new_euid;
+	uint32_t new_egid;
+};
+
+/*
+ * DAC on exec. vfs_read_file() enforces nothing, so without this an
+ * unprivileged task could load (and with set-user-ID bits, gain the identity
+ * of) a binary it has no execute permission on. Root keeps the bypass it has
+ * everywhere else in ir0_access_from_stat().
+ */
+static int exec_permission_denied(const process_t *proc, const char *path)
+{
+	if (!proc || proc->euid == ROOT_UID)
+		return 0;
+
+	return ir0_check_file_access(path, ACCESS_EXEC) ? 0 : 1;
+}
+
+static void exec_setid_collect(const process_t *proc, const char *path,
+			       struct exec_setid *out)
+{
+	stat_t st;
+
+	memset(out, 0, sizeof(*out));
+
+	if (!proc || !path)
+		return;
+	if (vfs_stat(path, &st) != 0)
+		return;
+	if (!S_ISREG(st.st_mode))
+		return;
+	if (!(st.st_mode & (S_ISUID | S_ISGID)))
+		return;
+
+	if (proc->no_new_privs)
+	{
+		klog_notice_fmt("EXEC",
+				"no_new_privs: ignoring set-id bits on %s", path);
+		return;
+	}
+
+	if (!vfs_path_allows_setid(path))
+	{
+		klog_notice_fmt("EXEC",
+				"nosuid mount: ignoring set-id bits on %s", path);
+		return;
+	}
+
+	if (st.st_mode & S_ISUID)
+	{
+		out->raise_uid = 1;
+		out->new_euid = (uint32_t)st.st_uid;
+	}
+	if (st.st_mode & S_ISGID)
+	{
+		out->raise_gid = 1;
+		out->new_egid = (uint32_t)st.st_gid;
+	}
+}
+
+static void exec_setid_commit(process_t *proc, const struct exec_setid *setid)
+{
+	if (!proc || !setid)
+		return;
+
+	if (setid->raise_uid)
+		proc->euid = setid->new_euid;
+	if (setid->raise_gid)
+		proc->egid = setid->new_egid;
+
+	/* POSIX: the saved IDs track the effective IDs of the new image. */
+	proc->suid = proc->euid;
+	proc->sgid = proc->egid;
+	proc->at_secure = (proc->uid != proc->euid || proc->gid != proc->egid);
+
+	if (setid->raise_uid || setid->raise_gid)
+		klog_notice_fmt("EXEC",
+				"set-id exec: pid=%u uid=%u euid=%u gid=%u egid=%u",
+				(unsigned)proc->task.pid, (unsigned)proc->uid,
+				(unsigned)proc->euid, (unsigned)proc->gid,
+				(unsigned)proc->egid);
+}
+
 static void exec_fail_kill(process_t *proc, int code, const char *point)
 {
 	exec_commit_ctx.fail_point = point;
@@ -1075,6 +1170,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     size_t used_frames_after = 0;
     uint64_t vmas_before = 0;
     uint64_t vmas_after = 0;
+    struct exec_setid setid;
 
     if (!proc || proc->mode != USER_MODE || !path)
     {
@@ -1107,6 +1203,13 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
             else
                 klog_debug_fmt("KERN", "%s", argv[ai]);
         }
+    }
+
+    if (exec_permission_denied(proc, path))
+    {
+        exec_commit_emit("return-eacces", -EACCES, proc,
+                         "EXEC_ABORT_BEFORE_COMMIT");
+        return -EACCES;
     }
 
     vfs_exec_audit_begin(path);
@@ -1152,6 +1255,9 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     header = (elf64_header_t *)file_data;
     at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
     at_base = elf_compute_load_base(header, (uint8_t *)file_data);
+
+    /* Decided on the old image; committed below, past the point of no return. */
+    exec_setid_collect(proc, path, &setid);
 
     process_exec_close_cloexec(proc);
 
@@ -1207,6 +1313,9 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
 	}
     }
     exec_commit_ctx.segments_loaded = 1;
+
+    /* Old image is gone: raise credentials before auxv (AT_SECURE/AT_EUID). */
+    exec_setid_commit(proc, &setid);
 
     basename = path;
     last_slash = path;

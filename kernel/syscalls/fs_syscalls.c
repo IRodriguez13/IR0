@@ -22,6 +22,7 @@
 #include <ir0/devfs.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
+#include <ir0/flock.h>
 #include <ir0/open_flags.h>
 #include <ir0/path.h>
 #include <ir0/path_routed.h>
@@ -1729,20 +1730,11 @@ int64_t sys_flock(int fd, int operation)
   if (!fd_table || !fd_table[fd].in_use)
     return -EBADF;
 
-  /*
-   * Tier-1 stub: runsv uses LOCK_EX|LOCK_NB on supervise/lock. Full advisory
-   * locking is deferred; single-instance smoke only needs success / -EWOULDBLOCK.
-   */
-  if (operation & LOCK_UN)
-    return 0;
+  /* Pipes and pseudo fds have no open file description to lock. */
+  if (fd_table[fd].is_pipe || !fd_table[fd].vfs_file)
+    return -EINVAL;
 
-  if ((operation & LOCK_NB) && (operation & (LOCK_EX | LOCK_SH)))
-    return 0;
-
-  if (operation & (LOCK_EX | LOCK_SH))
-    return 0;
-
-  return -EINVAL;
+  return ir0_flock_apply((struct vfs_file *)fd_table[fd].vfs_file, operation);
 }
 
 int64_t sys_fchdir(int fd)

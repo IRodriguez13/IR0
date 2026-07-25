@@ -69,9 +69,6 @@ void process_init(void)
 	/* First spawned process is /sbin/init (PID 1). */
 	next_pid = 1;
 #endif
-
-	/* Initialize simple user system */
-	init_simple_users();
 }
 
 

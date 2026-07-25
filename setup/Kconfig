@@ -52,18 +52,16 @@ menu "General"
 
     config KERNEL_DEBUG_SHELL
         bool "Use debug shell as init (PID 1)"
-        default y
-        help
-          When enabled the kernel boots into the built-in debug shell
-          instead of loading /sbin/init from the filesystem.
-          Disable this only when you have a working userspace init.
-
-    config IR0_SUDO_AUTH_SYSCALL
-        bool "IR0 legacy sudo_auth syscall (debug_bins only)"
         default n
         help
-          Enables __NR_sudo_auth (404) for debug_bins/cmd_sudo.c.
-          Production userspace should use setuid binaries and real sudo.
+          Legacy laboratory path. Product profiles load /sbin/init (runit).
+
+    config DEBUG_BINS
+        bool "Link legacy ring-0 debug commands"
+        default n
+        help
+          Keeps the historical debug_bins harness available for isolated
+          kernel contracts. Product kernels leave it disabled and use ash.
 
     config TICK_RATE_HZ
         int "Timer tick rate (Hz)"
@@ -421,6 +419,24 @@ menu "Tooling"
 endmenu
 
 menu "Debugging"
+
+    choice
+        prompt "Kernel log presentation profile"
+        default LOG_PROFILE_NORMAL
+        help
+          Serial/console verbosity for human klog. Runtime override:
+          ir0.loglevel=quiet|normal|debug|trace on the Multiboot cmdline.
+          Autokill smoke tags (klog_smoke) always emit.
+
+        config LOG_PROFILE_QUIET
+            bool "quiet (NOTICE+ / warnings / failures)"
+        config LOG_PROFILE_NORMAL
+            bool "normal (phase milestones + driver summary)"
+        config LOG_PROFILE_DEBUG
+            bool "debug (driver register/init ceremony)"
+        config LOG_PROFILE_TRACE
+            bool "trace (OPEN_ABI / VFS_STAT and internal events)"
+    endchoice
 
     config BOOT_LOG_HOSTSHARE
         bool "Dump boot log ring to virtio-9p host share (ir0-boot.log)"

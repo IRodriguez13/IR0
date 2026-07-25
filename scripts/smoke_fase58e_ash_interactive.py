@@ -29,6 +29,8 @@ DEFAULT_TIMEOUT = 90
 MONITOR_PORT = 4445
 
 CORE_TAGS = [
+    "GETTY_READY",
+    "LOGIN_OK",
     "ASH_INTERACTIVE_READY",
     "KBD_USER_POLL_OK",
     "TTY_CANON_LINE_READY",
@@ -50,6 +52,8 @@ FAIL_RES = [
 
 ECHO_KEYS = ["e", "c", "h", "o", "spc", "h", "i", "ret"]
 PWD_KEYS = ["p", "w", "d", "ret"]
+LOGIN_KEYS = ["r", "o", "o", "t", "ret"]
+PASSWORD_KEYS = ["ret"]
 
 
 def log_has_tags(text: str, tags: list[str]) -> tuple[bool, list[str]]:
@@ -171,7 +175,8 @@ def main() -> int:
                     return 1
 
             ready = (
-                "ASH_INTERACTIVE_READY" in text
+                "LOGIN_OK" in text
+                and "ASH_INTERACTIVE_READY" in text
                 and "RUNSV_CONSOLE_START" in text
                 and "BusyBox v" in text
             )

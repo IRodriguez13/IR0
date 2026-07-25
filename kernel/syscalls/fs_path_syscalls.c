@@ -30,6 +30,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
+#include <ir0/arch_cpu.h>
 #include <ir0/utsname.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>
@@ -109,6 +110,20 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     if (rc != 0)
       return rc;
     dev_path = dev_resolved;
+  }
+
+  /* Remount convention for the 3-arg IR0 mount ABI (recovery RO/RW). */
+  if (strcmp(dev_copy, "remount") == 0)
+  {
+    unsigned long flags = IR0_MS_REMOUNT;
+
+    if (strcmp(mount_fstype, "ro") == 0 ||
+        strcmp(mount_fstype, "remount,ro") == 0)
+      flags |= IR0_MS_RDONLY;
+    else if (strcmp(mount_fstype, "rw") != 0 &&
+             strcmp(mount_fstype, "remount,rw") != 0)
+      return -EINVAL;
+    return vfs_remount(mount_path, flags);
   }
 
   /* Validate device path unless pseudo device was allowed. */
@@ -361,11 +376,12 @@ int64_t sys_uname(struct utsname *buf)
     return -EFAULT;
 
   memset(buf, 0, sizeof(struct utsname));
+  /* Product identity: IR0 unix <release> <machine> IR0/Unix */
   strncpy(buf->sysname, "IR0", _UTSNAME_LENGTH - 1);
-  strncpy(buf->nodename, IR0_BUILD_HOST, _UTSNAME_LENGTH - 1);
+  strncpy(buf->nodename, "unix", _UTSNAME_LENGTH - 1);
   strncpy(buf->release, IR0_VERSION_STRING, _UTSNAME_LENGTH - 1);
-  strncpy(buf->version, IR0_BUILD_INFO, _UTSNAME_LENGTH - 1);
-  strncpy(buf->machine, "x86_64", _UTSNAME_LENGTH - 1);
+  strncpy(buf->version, "IR0/Unix", _UTSNAME_LENGTH - 1);
+  strncpy(buf->machine, get_arch_uname_machine(), _UTSNAME_LENGTH - 1);
   return 0;
 }
 
@@ -546,19 +562,36 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
   struct timespec ktimes[2];
   int rc;
 
-  if (!current_process || !pathname)
+  if (!current_process)
     return -EFAULT;
 
-  if (dirfd != IR0_AT_FDCWD)
-    return -ENOSYS;
+  /* futimens(fd, times): utimensat(fd, NULL, times, 0) on the open file. */
+  if (!pathname)
+  {
+    fd_entry_t *slot;
 
-  if (validate_userspace_string(pathname, 256) != 0)
-    return -EFAULT;
+    if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+      return -EBADF;
+    slot = &current_process->fd_table[dirfd];
+    if (!slot->in_use || slot->path[0] == '\0')
+      return -EBADF;
+    if (strlen(slot->path) >= sizeof(resolved))
+      return -ENAMETOOLONG;
+    strcpy(resolved, slot->path);
+  }
+  else
+  {
+    if (dirfd != IR0_AT_FDCWD)
+      return -ENOSYS;
 
-  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
-  if (rc != 0)
-    return rc;
+    if (validate_userspace_string(pathname, 256) != 0)
+      return -EFAULT;
+
+    rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                              current_process->cwd);
+    if (rc != 0)
+      return rc;
+  }
 
   if (times)
   {

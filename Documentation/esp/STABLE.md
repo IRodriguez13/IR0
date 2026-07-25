@@ -139,12 +139,13 @@ make defconfig
 make run-fase58e-ash-gui
 ```
 
-Construye disco MINIX temporal (irinit + BusyBox). **Sin** `IR0_LEGACY_SMOKE=1`.
+Construye disco MINIX temporal (runit + BusyBox). **Sin** `IR0_LEGACY_SMOKE=1`.
 
 - Ventana GTK; foco en teclado para escribir en el prompt `#`.
 - Serial en la misma terminal.
 
-Otros: `make run-irinit-interactive-gui`, `make run-fase55d-doomgeneric-gui` (IWAD), `make run` (dbgshell kernel).
+Otros: `make run-fase58e-ash-gui`, `make run-fase55d-doomgeneric-gui`
+(IWAD), `make run` (runit/getty/ash).
 
 Regresión headless:
 

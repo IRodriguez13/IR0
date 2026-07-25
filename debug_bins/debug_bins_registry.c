@@ -67,7 +67,6 @@ extern struct debug_command cmd_bluestart;
 extern struct debug_command cmd_blue;
 #endif
 #if CONFIG_DEBUG_BINS_GROUP_IDENTITY
-extern struct debug_command cmd_sudo;
 extern struct debug_command cmd_id;
 extern struct debug_command cmd_whoami;
 #endif
@@ -141,7 +140,6 @@ struct debug_command *debug_commands[] = {
     &cmd_blue,
 #endif
 #if CONFIG_DEBUG_BINS_GROUP_IDENTITY
-    &cmd_sudo,
     &cmd_id,
     &cmd_whoami,
 #endif

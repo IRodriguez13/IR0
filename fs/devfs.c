@@ -387,56 +387,29 @@ int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, o
     return ir0_console_write(buf, count, 0x07);
 }
 
-/* Circular buffer for kernel messages */
-#define KMSG_BUFFER_SIZE 4096
-static char kmsg_buffer[KMSG_BUFFER_SIZE];
-static size_t kmsg_head = 0;
-static size_t kmsg_tail = 0;
-static size_t kmsg_count = 0;  /* Number of bytes in buffer */
-
 int64_t dev_kmsg_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)offset;
-    const char *msg = (const char *)buf;
-    size_t written = 0;
-    
-    /* Add to circular buffer */
-    for (size_t i = 0; i < count && i < 256; i++)
-    {
-        kmsg_buffer[kmsg_head] = msg[i];
-        kmsg_head = (kmsg_head + 1) % KMSG_BUFFER_SIZE;
-        
-        if (kmsg_count < KMSG_BUFFER_SIZE)
-        {
-            kmsg_count++;
-        }
-        else
-        {
-            /* Buffer is full, overwrite oldest data */
-            kmsg_tail = (kmsg_tail + 1) % KMSG_BUFFER_SIZE;
-        }
-        written++;
-    }
-    
-    return (int64_t)written;
+    char message[97];
+    size_t n;
+
+    (void)entry;
+    (void)offset;
+    if (!buf)
+        return -EINVAL;
+    n = count < sizeof(message) - 1 ? count : sizeof(message) - 1;
+    memcpy(message, buf, n);
+    message[n] = '\0';
+    while (n > 0 && (message[n - 1] == '\n' || message[n - 1] == '\r'))
+        message[--n] = '\0';
+    klog_info("USER", message);
+    return (int64_t)count;
 }
 
 int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)offset;
-    char *out_buf = (char *)buf;
-    size_t read_count = 0;
-    
-    /* Read from circular buffer */
-    while (read_count < count && kmsg_count > 0)
-    {
-        out_buf[read_count] = kmsg_buffer[kmsg_tail];
-        kmsg_tail = (kmsg_tail + 1) % KMSG_BUFFER_SIZE;
-        kmsg_count--;
-        read_count++;
-    }
-    
-    return (int64_t)read_count;
+    (void)entry;
+    (void)offset;
+    return (int64_t)klog_read_records((char *)buf, count);
 }
 
 #if CONFIG_ENABLE_SOUND

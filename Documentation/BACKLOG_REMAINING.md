@@ -1,8 +1,8 @@
 # IR0 — Post-0.0.1 backlog (honest remaining work)
 
-> **Last verified:** 2026-07-23  
-> **Source of truth:** `Documentation/ROADMAP.md`, code under `fs/`, `drivers/storage/`,  
-> `scripts/linux_abi/`, Makefile gates. Prefer this file for **what is still open**;  
+> **Last verified:** 2026-07-24
+> **Source of truth:** `Documentation/ROADMAP.md`, code under `fs/`, `drivers/storage/`,
+> `scripts/linux_abi/`, Makefile gates. Prefer this file for **what is still open**;
 > ROADMAP holds history and tier %.
 
 ## Closed (do not re-open without regression)
@@ -62,12 +62,39 @@
 | PERF-1 `sys_gettid` | no per-call GETTID spam |
 | FASE→KTM Open residual | 41/42/44 fork+exec_drain+reap_drain+**init_exit_drain** SUB; 52/55/58 HOST+KTM; **57 GUI** HOST |
 
+## Closed this wave (2026-07-24) — klog event core + product without dbgshell
+
+| Item | Proof |
+|------|-------|
+| Structured `klog_record` + phases + early clock | [`KLOG.md`](KLOG.md); serial `[#seq] [phase]` |
+| Sinks: serial/console/kmsg/hostshare; KTM optional | `smoke-klog-ktm-off`, `smoke-boot-log-hostshare` |
+| Product `make run*` → runit/ash | `CONFIG_KERNEL_DEBUG_SHELL=n`, `CONFIG_DEBUG_BINS=n` |
+| Driver probe events + summary | `DRIVER_PROBE_RESULT` + `DRIVER_SUMMARY_OK` |
+| First bare-metal boot sentinel | `/etc/ir0-baremetal-booted` + `FIRST_BAREMETAL_BOOT*` (no HV) |
+| ARM64 hello without musl CRT | freestanding fallback in `musl-aarch64-hello` + early stubs; `smoke-arm64-boot` PASS |
+
+## Closed this wave (2026-07-24) — runit login + stage1 + driver summary
+
+| Item | Proof |
+|------|-------|
+| getty/login + welcome | `make smoke-runit-login` (`GETTY_READY` / `LOGIN_OK`); GUI: `run-fase58e-ash-gui` |
+| First-boot account defaults | `ir0-firstboot` → `FIRSTBOOT_OK` / `FIRSTBOOT_SKIP`; rootfs `IR0-userspace/rootfs/etc/` |
+| `fsck.ir0` stage1 | `FSCK_OK` / `FSCK_SKIPPED` / `FSCK_FAIL` (honest) |
+| Driver summary NOTICE | `DRIVER_SUMMARY_OK` + structured `DRIVER_SUMMARY` event |
+| SMP honesty | `[SMP] UP (1 CPU online)` |
+
 ## Open
 
 | Item | Blocks | Next proof |
 |------|--------|------------|
 | Maintainer manual VM (**mantenedor only**) | **0.0.1 ship** | Interactive QEMU GTK / serial — **not agent backlog** |
-| ARM64 `ALL_OBJS` + musl aarch64 | F7b port | Cross toolchain + KERNEL_OBJS link |
+| Interactive first-boot wizard (TTY Q&A) | UX polish | Today: non-interactive defaults via `ir0-firstboot` when `/etc/passwd` missing |
+| `crypt(3)` shadow hashes | Login hardening | Plain/`empty` passwords for bring-up; BusyBox login/PAM later |
+| Kernel root RO → fsck → remount RW | Storage path | `fsck.ir0` tags honest SKIP/OK/FAIL; remount pipeline TBD |
+| Interactive sendkey password path | TTY | Username echoes; password stage stalls in QEMU — lab uses `/etc/ir0-autologin`; GUI: `IR0_NO_AUTOLOGIN=1` |
+| `smoke-runit-ash-interactive` echo OK | Flaky post-login | LOGIN/welcome OK; `ASH_COMMAND_ECHO_OK` after sendkey still pending |
+| Full musl aarch64 CRT restore | Optional toolchain hygiene | Freestanding `hello_aarch64` + weak `sched_context_switch_to`/`klog_info` in `rr_early_stubs.c` unblock `smoke-arm64-boot`; re-extract musl.cc for libc programs |
+| Migrate remaining `debug_bins/cmd_*` → ktest/userspace | Tree delete | Inventory in [`mandocs/en/debug-bins.md`](mandocs/en/debug-bins.md); keep tree until contracts move |
 | virtiofs + FUSE | Future host-share | Guest FUSE; 9p remains ship path |
 | Migrate remaining drains/storms stub PID1 → runit+9p | Lab depth | **Mostly closed** — `smoke-ktm-drains-runit`; `init-exit-drain` stays stub (PID1 SUT) |
 
@@ -99,7 +126,7 @@
 
 | Item | Proof |
 |------|-------|
-| Runit + 9p payload service | `setup/runit/runit_hostshare_payload_run.c`; `inject-smoke-service.sh --run-only` |
+| Runit + 9p payload service | `IR0-userspace/services/runit_hostshare_payload_run.c`; `inject-smoke-service.sh --run-only` |
 | Desktop X smoke | IR0-desktop `smoke/run-xfbdev-smoke.sh` → `IR0_XFBDEV_SMOKE_OK` (autokill PASS) |
 | Autokill mid-tag flush | `scripts/smoke_autokill.py` flat success match + pending line buffer |
 | Runner `--disk` payload copy | `ktm_userdev_runner.py` always copies `--init` → share `ir0_payload` when fsdev on |
@@ -157,7 +184,7 @@ Slice: connect+send/recv to QEMU gateway **10.0.2.2:8888** (MVP, not full stack)
 
 | Item | Proof |
 |------|-------|
-| **BUSY-1** product applet manifest | `setup/busybox/required_applets.txt` + `scripts/busybox_inject_manifest.sh` on runit disk (`load-userspace-runit`) |
+| **BUSY-1** product applet manifest | `IR0-userspace/packages/busybox/required_applets.txt` + `IR0-userspace/scripts/busybox_inject_manifest.sh` on runit disk (`load-userspace-runit`) |
 | **BUSY-2** applet smoke | `make smoke-busybox-manifest` → `BUSYBOX_MANIFEST_OK` (also `smoke-fase58l-busybox-coreutils`) |
 
 virtiofs/FUSE remains **Future** (no guest FUSE). Host-share remains virtio-**9p**.

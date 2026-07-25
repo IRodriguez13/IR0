@@ -10,8 +10,9 @@
  * Description: Portable boot serial contract — same framed lines on every ISA.
  *
  * After serial is ready, call ir0_boot_serial_ready() first. That emits the
- * standard BOOT banner as the first framed line. Later lines use COMP BOOT
- * (universal), ARCH (ISA/board detail), or SMOKE (autokill tags).
+ * sober product banner as the first framed line. Later lines use COMP BOOT
+ * (universal), ARCH (ISA/board detail), HYPERVISOR / PLATFORM, or SMOKE
+ * (autokill tags). ASCII art belongs at login / quiet=0 — not here.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -24,12 +25,13 @@ extern "C" {
 
 /*
  * Call once after serial_init() (or arch UART init). Releases boot hold and
- * prints: [ts] [INFO] [BOOT] IR0 Kernel v<ver> Boot routine
+ * prints: [ts] [INFO] [BOOT] IR0 kernel <ver>
  */
 void ir0_boot_serial_ready(void);
 
-/* Framed INFO / WARN — same layout as klog human channel. */
+/* Framed INFO / NOTICE / WARN — same layout as klog human channel. */
 void ir0_boot_info(const char *component, const char *message);
+void ir0_boot_notice(const char *component, const char *message);
 void ir0_boot_warn(const char *component, const char *message);
 
 /* ISA/board detail under COMP ARCH (does not replace the BOOT banner). */

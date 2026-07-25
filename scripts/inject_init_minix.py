@@ -6,8 +6,10 @@ Inject a file into a MINIX v1 disk image without mounting (no minix module).
 Usage:
   inject_init_minix.py --format DISK_IMAGE
   inject_init_minix.py --format-large DISK_IMAGE
-  inject_init_minix.py [--setuid] DISK_IMAGE FILE [DEST_PATH]
+  inject_init_minix.py [--setuid|--mode OCTAL] [--owner UID:GID] \
+      DISK_IMAGE FILE [DEST_PATH]
   inject_init_minix.py --hardlink DISK_IMAGE EXISTING_DEST NEW_DEST
+  inject_init_minix.py --owner UID:GID [--mode OCTAL] --chown DISK_IMAGE PATH
 
   DEST_PATH: slash-separated path without leading slash (default: sbin/init)
   Examples:
@@ -535,7 +537,28 @@ def prepare_regular_file(f, sb, file_inode, data, file_mode=0o755):
     return file_inode
 
 
-def write_file(f, sb, path_parts, data, source_path, file_mode=0o755):
+def chown_path(f, sb, path_parts, uid, gid, file_mode=None):
+    """Set owner (and optionally mode) of an existing file or directory."""
+    ino, inode = resolve_path_inode(f, sb, path_parts)
+    if ino == 0 or inode is None:
+        raise SystemExit("chown target missing: /" + "/".join(path_parts))
+    inode["uid"] = uid
+    inode["gid"] = gid
+    if file_mode is not None:
+        inode["mode"] = (inode["mode"] & IFMT) | file_mode
+    write_inode(f, sb, ino, inode)
+    audit_entry(
+        "(chown)",
+        "/" + "/".join(path_parts),
+        "directory" if (inode["mode"] & IFMT) == IFDIR else "file",
+        inode["mode"],
+        ino,
+        inode["size"],
+    )
+
+
+def write_file(f, sb, path_parts, data, source_path, file_mode=0o755,
+               owner=None):
     root = read_inode(f, sb, 1)
     cur_num = 1
     cur = root
@@ -577,6 +600,8 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755):
                     }
 
             file_inode = prepare_regular_file(f, sb, file_inode, data, file_mode)
+            if owner is not None:
+                file_inode["uid"], file_inode["gid"] = owner
             audit_entry(
                 source_path,
                 dest_path,
@@ -668,13 +693,75 @@ def hardlink_path(f, sb, existing_parts, new_parts):
     raise SystemExit("hardlink: empty NEW_DEST")
 
 
+def parse_owner(spec):
+    """UID:GID string → (uid, gid). MINIX v1 stores an 8-bit GID."""
+    try:
+        uid_s, gid_s = spec.split(":", 1)
+        uid = int(uid_s, 10)
+        gid = int(gid_s, 10)
+    except ValueError:
+        raise SystemExit("--owner needs UID:GID (decimal)")
+    if not 0 <= uid <= 0xFFFF:
+        raise SystemExit(f"uid {uid} does not fit MINIX v1 (16-bit)")
+    if not 0 <= gid <= 0xFF:
+        raise SystemExit(f"gid {gid} does not fit MINIX v1 (8-bit)")
+    return uid, gid
+
+
 def main():
     file_mode = 0o755
+    mode_given = False
+    owner = None
     argv = sys.argv[:]
     if "--setuid" in argv:
         file_mode = 0o4755
+        mode_given = True
         argv.remove("--setuid")
+    if "--mode" in argv:
+        idx = argv.index("--mode")
+        try:
+            file_mode = int(argv[idx + 1], 8)
+        except (IndexError, ValueError):
+            print("--mode needs an octal permission value", file=sys.stderr)
+            sys.exit(1)
+        mode_given = True
+        del argv[idx : idx + 2]
+    if "--owner" in argv:
+        idx = argv.index("--owner")
+        if idx + 1 >= len(argv):
+            print("--owner needs UID:GID", file=sys.stderr)
+            sys.exit(1)
+        owner = parse_owner(argv[idx + 1])
+        del argv[idx : idx + 2]
     sys.argv = argv
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "--chown":
+        if len(sys.argv) != 4 or owner is None:
+            print(
+                f"Usage: {sys.argv[0]} --owner UID:GID [--mode OCTAL] "
+                "--chown DISK_IMAGE PATH",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        disk_path = sys.argv[2]
+        path_parts = [p for p in sys.argv[3].split("/") if p]
+        with open(disk_path, "r+b") as f:
+            sb = parse_super(read_block(f, 1))
+            sync_bitmaps_from_tree(f, sb)
+            chown_path(
+                f,
+                sb,
+                path_parts,
+                owner[0],
+                owner[1],
+                file_mode if mode_given else None,
+            )
+            sync_bitmaps_from_tree(f, sb)
+        print(
+            f"✅ Chowned {disk_path}:/{'/'.join(path_parts)} to "
+            f"{owner[0]}:{owner[1]}"
+        )
+        return
 
     if len(sys.argv) >= 2 and sys.argv[1] in ("--format", "--format-large"):
         if len(sys.argv) != 3:
@@ -729,7 +816,7 @@ def main():
             file=sys.stderr,
         )
         print(
-            f"       {sys.argv[0]} [--setuid] DISK_IMAGE FILE [DEST_PATH]",
+            f"       {sys.argv[0]} [--setuid|--mode OCTAL] DISK_IMAGE FILE [DEST_PATH]",
             file=sys.stderr,
         )
         print(
@@ -755,7 +842,7 @@ def main():
     with open(disk_path, "r+b") as f:
         sb = parse_super(read_block(f, 1))
         sync_bitmaps_from_tree(f, sb)
-        write_file(f, sb, path_parts, data, file_path, file_mode)
+        write_file(f, sb, path_parts, data, file_path, file_mode, owner)
         sync_bitmaps_from_tree(f, sb)
 
     dest_display = "/" + "/".join(path_parts)

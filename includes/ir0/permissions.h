@@ -22,7 +22,10 @@
 /* Forward declaration */
 struct process;
 
-/* Simple user system - hardcoded */
+/*
+ * Well-known IDs used by the kernel itself (root checks) and by tests.
+ * Account data lives in userspace: /etc/passwd, /etc/shadow, /etc/group.
+ */
 #define ROOT_UID     0
 #define ROOT_GID     0
 #define USER_UID     1000
@@ -46,7 +49,3 @@ bool check_file_access(const char *path, int mode, const struct process *process
 uint32_t get_current_uid(void);
 uint32_t get_current_gid(void);
 bool is_root(const struct process *process);
-void init_simple_users(void);
-bool user_exists(uid_t uid);
-const char *lookup_user_name(uid_t uid);
-int auth_user_password(uid_t uid, const char *password);

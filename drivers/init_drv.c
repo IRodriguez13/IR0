@@ -27,6 +27,8 @@
 #include <ir0/driver_bootstrap.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
+#include <string.h>
 #include <config.h>
 #include <drivers/multilang_drivers.h>
 #include <drivers/IO/ps2.h>
@@ -246,12 +248,19 @@ void init_all_drivers(void)
 #endif
     g_bootstrap_done = 1;
     {
-	unsigned ready = 0, absent = 0, failed = 0;
+	unsigned ready = 0, absent = 0, deferred = 0;
+	unsigned unsupported = 0, failed = 0;
+	char summary[96];
 
-	ir0_driver_boot_counts(&ready, &absent, &failed);
-	LOG_INFO_FMT("DRIVERS",
-		     "initialization complete: %u ready, %u absent, %u failed",
-		     ready, absent, failed);
+	ir0_driver_boot_emit_probe_results();
+	ir0_driver_boot_counts(&ready, &absent, &deferred, &unsupported,
+			       &failed);
+	snprintf(summary, sizeof(summary),
+		 "summary ready=%u absent=%u deferred=%u unsupported=%u failed=%u",
+		 ready, absent, deferred, unsupported, failed);
+	klog_event(KLOG_EVENT_DRIVER_SUMMARY, 0, KLOG_LEVEL_NOTICE, "DRIVERS",
+		   summary);
+	klog_smoke("DRIVER_SUMMARY_OK");
     }
 }
 

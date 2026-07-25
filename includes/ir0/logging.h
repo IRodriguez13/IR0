@@ -18,13 +18,15 @@
 
 /*LOGGING SYSTEM*/ 
 
-typedef enum 
+typedef enum
 {
-    LOG_LEVEL_DEBUG = 0,
-    LOG_LEVEL_INFO = 1,
-    LOG_LEVEL_WARN = 2,
-    LOG_LEVEL_ERROR = 3,
-    LOG_LEVEL_FATAL = 4
+    LOG_LEVEL_TRACE = 0,
+    LOG_LEVEL_DEBUG = 1,
+    LOG_LEVEL_INFO = 2,
+    LOG_LEVEL_NOTICE = 3,
+    LOG_LEVEL_WARN = 4,
+    LOG_LEVEL_ERROR = 5,
+    LOG_LEVEL_FATAL = 6
 } log_level_t;
 
 /*LOGGING FUNCTIONS*/ 

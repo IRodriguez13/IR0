@@ -129,6 +129,55 @@ const char *get_arch_name(void)
 #endif
 }
 
+/* uname(2) machine field — short Linux-style ISA token. */
+const char *get_arch_uname_machine(void)
+{
+#if defined(__x86_64__)
+    return "x86_64";
+#elif defined(__i386__)
+    return "i386";
+#elif defined(__aarch64__)
+    return "aarch64";
+#elif defined(__arm__)
+    return "arm";
+#else
+    return "unknown";
+#endif
+}
+
+int arch_early_clock_available(void)
+{
+#if defined(__x86_64__) || defined(__i386__) || defined(__aarch64__)
+	return 1;
+#else
+	return 0;
+#endif
+}
+
+uint64_t arch_early_clock_read(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint32_t lo;
+	uint32_t hi;
+
+	__asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+	return ((uint64_t)hi << 32) | lo;
+#elif defined(__aarch64__)
+	uint64_t ticks;
+
+	__asm__ volatile("mrs %0, cntpct_el0" : "=r"(ticks));
+	return ticks;
+#else
+	return 0;
+#endif
+}
+
+arch_clock_quality_t arch_early_clock_quality(void)
+{
+	return arch_early_clock_available() ? ARCH_CLOCK_RAW
+					   : ARCH_CLOCK_UNAVAILABLE;
+}
+
 void outb(uint16_t port, uint8_t value)
 {
 #if defined(__x86_64__) || defined(__i386__)

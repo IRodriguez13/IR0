@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TIMEOUT = 90
 MONITOR_PORT = 4446
-ECHO_STABILIZE_SEC = 2.0
+ECHO_STABILIZE_SEC = 3.5
 ECHO_RETRY_SEC = 12.0
 ECHO_RETRY_FAST_SEC = 2.5
 ECHO_RETRY_MIN_SEC = 1.0
@@ -41,6 +41,7 @@ RUNIT_TAGS = [
     "RUNIT_STAGE2_OK",
     "RUNSV_CONSOLE_START",
     "RUNSV_LOGGER_START",
+    "GETTY_READY",
 ]
 
 PASS_TAGS = [
@@ -49,6 +50,7 @@ PASS_TAGS = [
 ]
 
 PREREQ_TAGS = [
+    "LOGIN_OK",
     "ASH_INTERACTIVE_READY",
 ]
 
@@ -77,6 +79,9 @@ ECHO_GARBLED_RE = re.compile(
 )
 
 ECHO_KEYS = ["e", "c", "h", "o", "spc", "h", "i", "ret"]
+# Dev account: root / (empty password) — see IR0-userspace/rootfs/etc/shadow
+LOGIN_KEYS = ["r", "o", "o", "t", "ret"]
+PASSWORD_KEYS = ["ret"]
 
 SERIAL_SMOKE_TAGS = RUNIT_TAGS + PREREQ_TAGS + PASS_TAGS + DIAG_TAGS
 
@@ -84,6 +89,10 @@ SERIAL_SMOKE_TAGS = RUNIT_TAGS + PREREQ_TAGS + PASS_TAGS + DIAG_TAGS
 def ash_ready_for_input(text: str, busybox_seen_at: float, now: float) -> bool:
     runit_ok, _ = log_has_tags(text, RUNIT_TAGS)
     if not runit_ok:
+        return False
+    if "LOGIN_OK" not in text:
+        return False
+    if "Welcome to IR0" not in text:
         return False
     if "ASH_INTERACTIVE_READY" not in text:
         return False

@@ -31,7 +31,7 @@ rustup component add rust-src --toolchain nightly
 
 | Tool | Purpose |
 |------|---------|
-| `x86_64-linux-musl-gcc` or `musl-gcc` | Static musl binaries (BusyBox, irinit, …) |
+| `x86_64-linux-musl-gcc` or `musl-gcc` | Static musl binaries (BusyBox, runit, …) |
 
 ```bash
 sudo apt install musl-tools
@@ -98,10 +98,10 @@ This installs `setup/defconfig` as `.config` and regenerates `config.h`.
 Default highlights:
 
 - x86-64, MINIX root on `hda`, round-robin scheduler
-- In-kernel debug shell enabled (`CONFIG_KERNEL_DEBUG_SHELL=y`)
+- runit `/sbin/init` (`CONFIG_KERNEL_DEBUG_SHELL=n`, `CONFIG_DEBUG_BINS=n`)
 - VBE framebuffer enabled (`CONFIG_ENABLE_VBE=y`)
 
-To boot real `/sbin/init` instead of the kernel shell, use the **userspace ISO** build below (separate kernel binary with `IR0_USERSPACE_INIT_BOOT=1`).
+Daily run targets build the userspace ISO and inject the runit rootfs.
 
 ## Basic Kernel Build
 
@@ -130,13 +130,14 @@ make clean
 
 ## Running in QEMU
 
-### Graphical run (kernel debug shell default)
+### Graphical run (runit + getty/ash)
 
 ```bash
 make run
 ```
 
-Uses `kernel-x64.iso`, attaches `disk.img`, enables the standard IR0 hardware profile (RTL8139, ATA, PS/2, VGA/VBE, serial).
+Builds `kernel-x64-userspace.iso`, injects runit + BusyBox into `disk.img`,
+and enables the standard IR0 hardware profile.
 
 ### Serial-only (no GUI)
 
@@ -154,11 +155,8 @@ make run-debug
 
 Guest serial and debug events go to the invoking terminal; QEMU monitor on telnet `127.0.0.1:1234`.
 
-### Without disk
-
-```bash
-make run-nodisk
-```
+`make run-nodisk` and `make run-dbgshell` are retired: product boot requires
+the runit rootfs.
 
 ### Network (optional, host setup required)
 
@@ -171,7 +169,9 @@ Requires TUN/TAP and bridge configuration on the host (see comments in `Makefile
 
 ## Serial Logging
 
-Kernel messages go to the COM1 serial port configured in QEMU flags.
+Kernel event records go to COM1, the boot console, `/proc/kmsg`, and
+`/dev/kmsg`. Records always carry sequence + boot phase; time remains `?.???`
+until the monotonic clock is online.
 
 | Target | Serial behavior |
 |--------|-----------------|
@@ -227,20 +227,20 @@ make build-busybox-fase50-min
 
 Output: `setup/pid1/fase50_busybox_real` (static musl ELF). Configuration fragment: `setup/busybox/fase58_busybox.config`.
 
-Build the PID1 launcher:
+Build the canonical PID1 (runit):
 
 ```bash
-make build-irinit
+make build-runit
 ```
 
-Output: `setup/pid1/sbin/irinit`.
+Output: `setup/runit/bin/runit-init` (and companions under `setup/runit/bin/`).
 
-Example rootfs layout for interactive `ash`:
+Example rootfs layout for interactive `ash` (or use `make load-userspace-runit`):
 
 ```bash
 DISK=disk.img
 python3 scripts/inject_init_minix.py --format-large "$DISK"
-python3 scripts/inject_init_minix.py "$DISK" setup/pid1/sbin/irinit sbin/init
+python3 scripts/inject_init_minix.py "$DISK" setup/runit/bin/runit-init sbin/init
 python3 scripts/inject_init_minix.py "$DISK" setup/pid1/fase50_busybox_real bin/busybox
 python3 scripts/inject_init_minix.py "$DISK" setup/pid1/fase50_busybox_real bin/sh
 python3 scripts/verify_minix_rootfs.py "$DISK" /sbin/init /bin/sh /bin/busybox
@@ -256,7 +256,9 @@ qemu-system-x86_64 \
   -display gtk -serial stdio
 ```
 
-`irinit` attaches `/dev/console`, disables Doom autostart, and execs BusyBox `ash`. Type in the QEMU window (keyboard focus required).
+runit stage 2 brings up console services; product path uses BusyBox `ash` on
+`/dev/console` (GUI helper: `make run-fase58e-ash-gui`). Type in the QEMU window
+(keyboard focus required).
 
 Extended applet set (optional):
 
@@ -309,7 +311,8 @@ Clones/builds TinyCC via `setup/tcc/build-fase52.sh` (default output under `/tmp
 | `run` | QEMU GUI + disk |
 | `run-console` | QEMU nographic + serial |
 | `run-debug` | QEMU GUI + serial debug |
-| `build-irinit` | Build `/sbin/init` harness |
+| `build-runit` | Build runit PID1 (`/sbin/init`) |
+| `load-userspace-runit` | Inject runit + BusyBox on MINIX disk |
 | `build-busybox-fase50-min` | Build static BusyBox |
 | `build-busybox-fase58-full` | BusyBox with extended applets |
 | `build-fase55e-doom-interactive` | Build doomgeneric binary |
