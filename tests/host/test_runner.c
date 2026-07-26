@@ -52,6 +52,7 @@ extern void test_ps2_mouse_interleaved_does_not_touch_kbd_mods(void);
 extern void test_ps2_set1_alt_independent(void);
 extern void test_pipe_close_end_last_ref_frees_once(void);
 extern void test_pipe_pipeline_two_closes_destroy_once(void);
+extern void test_rtc_calendar(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -87,6 +88,7 @@ static void (*test_functions[])(void) = {
 	test_ps2_set1_alt_independent,
 	test_pipe_close_end_last_ref_frees_once,
 	test_pipe_pipeline_two_closes_destroy_once,
+	test_rtc_calendar,
 	NULL
 };
 

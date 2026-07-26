@@ -22,12 +22,94 @@
 #include <ir0/clock_wait.h>
 #include <ir0/poll.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/rtc.h>
+#include <ir0/process.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"
 #include "clock_system.h"
 
 /* Global clock state */
 static clock_state_t clock_state;
+
+/* Idle CPU time (ms spent in the idle task). UP today; sum per-CPU later. */
+static uint64_t clock_idle_ms;
+
+/* Loadavg EMA (×100). Updated once per second from runnable non-idle count. */
+static uint32_t clock_load1_x100;
+static uint32_t clock_load5_x100;
+static uint32_t clock_load15_x100;
+static unsigned clock_load_runnable;
+static unsigned clock_load_nprocs;
+static int clock_realtime_ok;
+
+static int clock_comm_is_idle(const char *comm)
+{
+	if (!comm)
+		return 0;
+	return (comm[0] == 'i' && comm[1] == 'd' && comm[2] == 'l' &&
+		comm[3] == 'e' && comm[4] == '\0');
+}
+
+static void clock_sample_loadavg(void)
+{
+	process_t *p;
+	unsigned runnable = 0;
+	unsigned total = 0;
+
+	p = process_list;
+	while (p)
+	{
+		total++;
+		if ((p->state == PROCESS_READY || p->state == PROCESS_RUNNING) &&
+		    !clock_comm_is_idle(p->comm))
+			runnable++;
+		p = p->next;
+	}
+
+	/*
+	 * Discrete EMA with dt=1s:
+	 *   τ1≈60s, τ5≈300s, τ15≈900s  →  load = load*(τ-1)/τ + active*100/τ
+	 */
+	clock_load1_x100 =
+	    (clock_load1_x100 * 59u + runnable * 100u) / 60u;
+	clock_load5_x100 =
+	    (clock_load5_x100 * 299u + runnable * 100u) / 300u;
+	clock_load15_x100 =
+	    (clock_load15_x100 * 899u + runnable * 100u) / 900u;
+	clock_load_runnable = runnable;
+	clock_load_nprocs = total;
+}
+
+static void clock_try_set_realtime_from_rtc(void)
+{
+	rtc_time_t rt;
+	time_t epoch;
+
+	if (rtc_init() != 0)
+	{
+		clock_realtime_ok = 0;
+		return;
+	}
+	if (rtc_read_time(&rt) != 0)
+	{
+		clock_realtime_ok = 0;
+		return;
+	}
+	epoch = rtc_fields_to_unix(&rt);
+	/*
+	 * Accept any civil year ≥ 1970 (including QEMU default 1970-01-01).
+	 * Reject only impossible conversions (rtc_fields_to_unix returns 0 with
+	 * zeroed day/month — still a valid epoch for 1970-01-01 00:00:00).
+	 */
+	if (rt.month == 0 || rt.day == 0)
+	{
+		clock_realtime_ok = 0;
+		return;
+	}
+	clock_state.boot_time = epoch;
+	clock_state.current_time = epoch;
+	clock_realtime_ok = 1;
+}
 
 /*                          MAIN CLOCK SYSTEM FUNCTIONS */
 
@@ -70,9 +152,12 @@ int clock_system_init(void)
     clock_state.pit_enabled = 1;
     clock_state.active_timer = CLOCK_TIMER_PIT;
 
-    /* Initialize RTC for gettimeofday (wall-clock time) */
-    if (rtc_init() == 0)
-        clock_state.current_time = 0;  /* Will be read from RTC on first gettimeofday */
+    /* Wall clock: realtime_boot_epoch = RTC_UTC; then += monotonic elapsed. */
+    clock_try_set_realtime_from_rtc();
+    if (clock_realtime_ok)
+	    klog_notice("CLOCK", "CLOCK_REALTIME from CMOS RTC (UTC)");
+    else
+	    klog_notice("CLOCK", "CLOCK_REALTIME unavailable (no usable RTC)");
 
     /* Mark as initialized */
     clock_state.initialized = 1;
@@ -154,7 +239,54 @@ time_t clock_get_current_time(void)
 int clock_set_current_time(time_t time)
 {
     clock_state.current_time = time;
+    clock_state.boot_time = time - (time_t)clock_state.uptime_seconds;
+    clock_realtime_ok = 1;
     return 0;
+}
+
+int clock_realtime_available(void)
+{
+	return clock_realtime_ok;
+}
+
+uint64_t clock_get_idle_milliseconds(void)
+{
+	return clock_idle_ms;
+}
+
+void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
+		       uint32_t *load15_x100, unsigned *runnable,
+		       unsigned *nprocs, int *last_pid)
+{
+	process_t *p;
+	unsigned live_runnable = 0;
+	unsigned live_total = 0;
+
+	/* Instant runnable/total; EMA fields update once per second. */
+	p = process_list;
+	while (p)
+	{
+		live_total++;
+		if ((p->state == PROCESS_READY || p->state == PROCESS_RUNNING) &&
+		    !clock_comm_is_idle(p->comm))
+			live_runnable++;
+		p = p->next;
+	}
+	clock_load_runnable = live_runnable;
+	clock_load_nprocs = live_total;
+
+	if (load1_x100)
+		*load1_x100 = clock_load1_x100;
+	if (load5_x100)
+		*load5_x100 = clock_load5_x100;
+	if (load15_x100)
+		*load15_x100 = clock_load15_x100;
+	if (runnable)
+		*runnable = clock_load_runnable;
+	if (nprocs)
+		*nprocs = clock_load_nprocs;
+	if (last_pid)
+		*last_pid = (int)process_last_assigned_pid();
 }
 
 /* Timezone functions */
@@ -391,6 +523,34 @@ void clock_tick(void)
     /* Increment tick count */
     clock_state.tick_count++;
     
+    /*
+	 * Idle accounting (UP): tick with no runnable non-idle task, or the
+	 * current task is explicitly named "idle".
+	 */
+	{
+		process_t *p = process_list;
+		unsigned busy = 0;
+
+		/*
+		 * Always scan the runqueue. Short-circuiting on current==idle
+		 * over-counted idle while another READY task waited for the
+		 * next reschedule (Bugbot).
+		 */
+		while (p)
+		{
+			if ((p->state == PROCESS_READY ||
+			     p->state == PROCESS_RUNNING) &&
+			    !clock_comm_is_idle(p->comm))
+			{
+				busy = 1;
+				break;
+			}
+			p = p->next;
+		}
+		if (!busy)
+			clock_idle_ms++;
+	}
+
     /* Update uptime */
     clock_state.uptime_milliseconds++;
     if (clock_state.uptime_milliseconds >= 1000) 
@@ -398,8 +558,10 @@ void clock_tick(void)
         clock_state.uptime_milliseconds = 0;
         clock_state.uptime_seconds++;
         
-        /* Update current time (increment by 1 second when milliseconds wrap) */
-        clock_state.current_time++;
+        /* Wall clock tracks monotonic once RTC epoch was established. */
+	if (clock_realtime_ok)
+		clock_state.current_time++;
+	clock_sample_loadavg();
     }
     
     /* Check and fire alarms */

@@ -7,7 +7,7 @@
  * Description: ARM64 EL1 cooperative context switch with optional TTBR0.
  */
 
-#include <sched/task.h>
+#include <ir0/task.h>
 #include <stdint.h>
 
 extern void arm64_cpu_switch(void *prev_ctx, void *next_ctx);
@@ -23,9 +23,13 @@ void switch_context_arm64(task_t *prev, task_t *next)
 	if (!next)
 		return;
 
-	prev_ctx = prev ? (void *)&prev->arm64.x19 : (void *)discard_ctx;
-	next_ctx = (void *)&next->arm64.x19;
-	next_ttbr = next->arm64.ttbr0_el1;
+	/*
+	 * Callee-saved block starts at arch.x19; arm64_cpu_ctx.sp overlays
+	 * arch.sp_el0 (see process_early TTBR smoke).
+	 */
+	prev_ctx = prev ? (void *)&prev->arch.x19 : (void *)discard_ctx;
+	next_ctx = (void *)&next->arch.x19;
+	next_ttbr = next->arch.ttbr0_el1;
 
 	if (next_ttbr)
 		arm64_cpu_switch_mm(prev_ctx, next_ctx, next_ttbr);

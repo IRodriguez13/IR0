@@ -2,12 +2,13 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.3 |
+| Versión | 0.4 |
 | Fase IR0 | T0 |
 | Estado | stable |
 | Depende de | boot, syscalls, scheduler |
 | Página man | IR0-multi-arch (sección 7) |
-| Fuentes principales | `arch/common/arch_interface.c`, `arch/x86-64/`, `arch/arm64/sources/` (`boot_stub.c`, `board.c`, `mmu_early.c`, `switch_early.S`, `process_early.c`, `first_switch.c`), `includes/ir0/arm64_board.h`, `sched/switch/switch_arm64.c`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
+| Fuentes principales | Ver versión inglesa `Documentation/mandocs/en/multi-arch.md` (fachadas `irq`/`arch_switch`/`arch_mm`/`arch_signal`) |
+| Última verificación | 2026-07-26 |
 
 ## 1. Visión general
 
@@ -25,12 +26,13 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 
 | Capa | Ubicación | Rol |
 |------|-----------|-----|
-| Fachada portable | `includes/ir0/arch_port.h` | Consultas CPU, habilitación IRQ, fachada port I/O |
+| Fachada portable | `arch_port.h`, `irq.h`, `context.h` | CPU, IRQ, `switch_to` |
+| Backends ISA | `arch/*/sources/arch_*.c` | switch, mm, signal, syscall frame, irq_init |
+| sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | uapi Linux en ambas ISA |
 | Interfaz común | `arch/common/arch_interface.c` | Despacho cross-arch |
-| Primer switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
-| x86-64 | `arch/x86-64/` | boot, IDT, PIC, modo user, syscalls |
-| arm64 | `arch/arm64/sources/` | boot_stub, mmu_early, vectors, switch_early, process_early |
-| Context switch | `sched/switch/switch_x64.asm`, `switch_arm64.c` | por ISA; ARM llama `arm64_cpu_switch_mm` |
+| x86-64 | `arch/x86-64/` + `interrupt/arch/` | IDT/PIC impl + userspace |
+| arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; musl ALL_OBJS BLOCKED |
+| Context switch | `arch_switch_to` → asm/C por ISA | dispatcher en `sched/switch/arch_context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` en Makefile | `ARCH_OBJS_ARM64` incluye `switch_early.S` |
 
 **Tags guard (`architecture_guard.py`):** árboles portables no deben incluir

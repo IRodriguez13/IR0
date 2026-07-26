@@ -18,8 +18,10 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <ir0/task.h>
-#include <ir0/signals.h>  
+#include <ir0/signals.h>
 #include <ir0/types.h>
+#include <ir0/fd_types.h>
+#include <ir0/files_struct.h>
 
 #ifndef ECHILD
 #define ECHILD 10 /* No child processes (POSIX; matches ir0/errno.h) */
@@ -31,33 +33,11 @@
 #define WEXITSTATUS(s) (((s) >> 8) & 0xFF)
 #define WIFEXITED(s) (((s) & 0x7F) == 0)
 
-#define MAX_FDS_PER_PROCESS 64
-
 #ifndef IR0_NGROUPS_MAX
 #define IR0_NGROUPS_MAX 32
 #endif
 
 struct robust_list_head;
-
-typedef struct fd_entry
-{
-	bool in_use;
-	char path[256];
-	int flags;       /* Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.) */
-	uint8_t fd_flags; /* FD_CLOEXEC etc. */
-	void *vfs_file;
-	uint64_t offset; /* File offset for seek operations */
-	bool is_pipe;  /* 1 if this fd is a pipe */
-	int pipe_end;  /* 0 = read end, 1 = write end */
-	bool is_devfs; /* bound to devfs node when true */
-	uint32_t dev_device_id;
-	bool is_socket; /* bound to sock_udp when true */
-	bool is_pseudo; /* bound to pseudo_fs ops via vfs_file (pseudo_fd_bind_t) */
-	bool is_epoll;  /* vfs_file points at epoll_state */
-	bool is_memfd;  /* vfs_file points at ir0_memfd */
-	bool is_eventfd;
-	bool is_timerfd;
-} fd_entry_t;
 
 /* Process-local binding for /proc /sys /heart opens (not global virtual fds). */
 typedef struct pseudo_fd_bind
@@ -96,7 +76,8 @@ struct mmap_region
 
 /*
  * User register snapshot at syscall entry (Linux pt_regs subset).
- * Captured before dispatch runs nested handlers (fork, wait4, etc.).
+ * Opaque to portable call sites — use process_syscall_* accessors.
+ * Layout decode/fill is ISA-private (arch_syscall_frame / arch_switch).
  */
 typedef struct
 {
@@ -121,17 +102,21 @@ typedef struct process
 {
 	task_t task;
 	/*
-	 * x86-64 TLS base (MSR IA32_FS_BASE).
-	 * Persisted across context switches because IR0 does not yet save/restore
-	 * FS_BASE in switch_context_x64 / switch_to_user_task_asm. Linux ABI
-	 * (musl, glibc) sets this via arch_prctl(ARCH_SET_FS) on every task.
-	 * The asm restore paths read this field directly via a hard-coded offset
-	 * (guarded by _Static_assert in this file).
+	 * Per-task TLS base (x86: IA32_FS_BASE). Portable code must use
+	 * process_tls_get/set — ASM may still read fs_base via asm_offsets.
 	 */
 	uint64_t fs_base;
 	pid_t ppid;
+	/*
+	 * Address space: process->mm is canonical (refcount). page_directory /
+	 * owns_page_directory / mmap_list are private mirrors kept in sync by
+	 * process_mm_bind() / process_set_pgd() — portable code must use
+	 * process_pgd() / process_mm_owns_tables(), never touch these fields.
+	 */
+	struct mm_struct *mm;
+	struct files_struct *files;
 	uint64_t *page_directory;
-	uint8_t owns_page_directory; /* 0 = shared kernel CR3 (idle task) */
+	uint8_t owns_page_directory; /* 0 = shared kernel CR3 or shared mm */
 	struct mmap_region *mmap_list;
 	uint64_t mmap_base; /* top-down cursor for kernel-chosen mmap(NULL) */
 	uint64_t heap_start;
@@ -143,8 +128,7 @@ typedef struct process
 	int exit_code;
 	int exit_signal; /* >0 if killed by signal (wait WIFSIGNALED / WTERMSIG) */
 	struct process *next;
-	fd_entry_t fd_table[MAX_FDS_PER_PROCESS];
-	
+
 	/* User and permissions */
 	uint32_t uid;
 	uint32_t gid;
@@ -244,7 +228,7 @@ typedef struct process
 	uint8_t syscall_frame_fresh;
 	uint8_t coop_resched_resume;
 	/*
-	 * Class B close: arm requested kernel_ret resume but task.rip was still
+	 * Class B close: arm requested kernel_ret resume but task.arch.rip was still
 	 * userspace — do not set KERNEL CS until switch_context has saved kernel
 	 * [rsp] (see process_after_task_save / process_arm_kernel_syscall_sleep).
 	 */
@@ -288,13 +272,24 @@ typedef struct process
  * The placeholder forces a compile error showing the real value if it drifts.
  */
 /*
- * PROC_FS_BASE_OFFSET (0x258) is hard-coded in switch_x64.asm to load
- * IA32_FS_BASE before returning to user. Keep both ends in sync.
+ * FS_BASE offset: includes/ir0/asm_offsets.h + asm_offsets.inc (NASM).
+ * arch-guard verifies the C header matches the .inc file.
  */
+#include <ir0/asm_offsets.h>
 #if defined(__x86_64__) || defined(__amd64__)
-_Static_assert(offsetof(process_t, task) == 0,        "process_t.task must be at offset 0");
-_Static_assert(offsetof(process_t, fs_base) == 0x258, "switch_x64.asm PROC_FS_BASE_OFFSET out of sync");
+_Static_assert(offsetof(process_t, task) == 0, "process_t.task must be at offset 0");
+_Static_assert(offsetof(process_t, fs_base) == IR0_PROC_FS_BASE_OFFSET,
+	       "asm_offsets.h PROC_FS_BASE out of sync with process_t");
 #endif
+
+#include <ir0/mm_struct.h>
+
+static inline fd_entry_t *process_fd_table(const process_t *p)
+{
+	if (!p || !p->files)
+		return NULL;
+	return p->files->fd_table;
+}
 
 static inline process_t *task_to_process(task_t *task)
 {
@@ -311,32 +306,105 @@ static inline uint64_t process_mm_root(const process_t *p)
 	return p ? task_mm_root(&p->task) : 0;
 }
 
+static inline uint64_t *process_pgd(const process_t *p)
+{
+	if (!p)
+		return NULL;
+	if (p->mm)
+		return p->mm->page_directory;
+	return p->page_directory;
+}
+
+static inline void process_set_pgd(process_t *p, uint64_t *pgd)
+{
+	if (!p)
+		return;
+	p->page_directory = pgd;
+	if (p->mm)
+		p->mm->page_directory = pgd;
+	if (!pgd)
+		p->owns_page_directory = 0;
+}
+
 static inline void process_set_mm_root(process_t *p, uint64_t root)
 {
 	if (p)
 		task_set_mm_root(&p->task, root);
 }
 
-/* PUBLIC MACROS - Register accessors                                        */
+static inline pid_t process_pid(const process_t *p)
+{
+	return p ? p->task.pid : 0;
+}
 
-#define process_rax(p)    ((p)->task.rax)
-#define process_rbx(p)    ((p)->task.rbx)
-#define process_rcx(p)    ((p)->task.rcx)
-#define process_rdx(p)    ((p)->task.rdx)
-#define process_rsi(p)    ((p)->task.rsi)
-#define process_rdi(p)    ((p)->task.rdi)
-#define process_rsp(p)    ((p)->task.rsp)
-#define process_rbp(p)    ((p)->task.rbp)
-#define process_rip(p)    ((p)->task.rip)
-#define process_rflags(p) ((p)->task.rflags)
-#define process_cs(p)     ((p)->task.cs)
-#define process_ss(p)     ((p)->task.ss)
-#define process_ds(p)     ((p)->task.ds)
-#define process_es(p)     ((p)->task.es)
-#define process_fs(p)     ((p)->task.fs)
-#define process_gs(p)     ((p)->task.gs)
-#define process_pid(p)    ((p)->task.pid)
+static inline uint64_t process_tls_get(const process_t *p)
+{
+	return p ? p->fs_base : 0;
+}
 
+static inline void process_tls_set(process_t *p, uint64_t tls)
+{
+	if (p)
+		p->fs_base = tls;
+}
+
+/* Opaque syscall-frame accessors (layout is ISA-shaped; do not open-code fields). */
+static inline uint64_t process_syscall_ip(const process_t *p)
+{
+	return p ? p->syscall_frame.rip : 0;
+}
+
+static inline uint64_t process_syscall_sp(const process_t *p)
+{
+	return p ? p->syscall_frame.rsp : 0;
+}
+
+static inline uint64_t process_syscall_flags(const process_t *p)
+{
+	return p ? p->syscall_frame.rflags : 0;
+}
+
+static inline void process_syscall_set_ip(process_t *p, uint64_t ip)
+{
+	if (p)
+		p->syscall_frame.rip = ip;
+}
+
+static inline void process_syscall_set_sp(process_t *p, uint64_t sp)
+{
+	if (p)
+		p->syscall_frame.rsp = sp;
+}
+
+static inline void process_syscall_set_flags(process_t *p, uint64_t flags)
+{
+	if (p)
+		p->syscall_frame.rflags = flags;
+}
+
+/* Linux x86-64 ABI arg slots: 0=rdi … 5=r9 (ARM64 maps later). */
+static inline uint64_t process_syscall_arg(const process_t *p, unsigned n)
+{
+	if (!p)
+		return 0;
+	switch (n)
+	{
+	case 0:
+		return p->syscall_frame.rdi;
+	case 1:
+		return p->syscall_frame.rsi;
+	case 2:
+		return p->syscall_frame.rdx;
+	case 3:
+		return p->syscall_frame.r10;
+	case 4:
+		return p->syscall_frame.r8;
+	case 5:
+		return p->syscall_frame.r9;
+	default:
+		return 0;
+	}
+}
 
 void process_capture_syscall_frame(process_t *p);
 void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw);
@@ -347,9 +415,7 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 
 void process_restore_user_task_segments(process_t *p);
 
-#if defined(__x86_64__) || defined(__amd64__)
 void process_save_user_context_from_irq_frame(uint64_t *gpr_stack);
-#endif
 
 void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax);
 void process_arm_coop_resched_resume(process_t *p, uint64_t rax);
@@ -419,6 +485,7 @@ process_t *process_get_current(void);
 void irq_save_user_frame(uint64_t *frame);
 process_t *get_process_list(void);
 pid_t process_get_next_pid(void);
+pid_t process_last_assigned_pid(void);
 void process_prepare_pid1_for_init(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 

@@ -2,12 +2,13 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.3 |
+| Version | 0.4 |
 | IR0 phase | T0 |
 | Status | stable |
 | Depends on | boot, syscalls, scheduler |
 | Man page | IR0-multi-arch (section 7) |
-| Primary sources | `arch/common/arch_interface.c`, `arch/x86-64/`, `arch/arm64/sources/` (`boot_stub.c`, `board.c`, `mmu_early.c`, `switch_early.S`, `process_early.c`, `first_switch.c`), `includes/ir0/arm64_board.h`, `sched/switch/switch_arm64.c`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
+| Primary sources | `arch/common/arch_interface.c`, `arch/*/sources/arch_{switch,mm,signal,syscall_frame,irq_init}.c`, `includes/ir0/{arch_switch,arch_mm,arch_signal,irq,sigcontext_*}.h`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
+| Last verified | 2026-07-26 |
 
 ## 1. Overview
 
@@ -26,12 +27,14 @@ NEON.
 
 | Layer | Location | Role |
 |-------|----------|------|
-| Portable facade | `includes/ir0/arch_port.h` | CPU queries, IRQ enable, port I/O facade |
-| Common interface | `arch/common/arch_interface.c` | Cross-arch dispatch |
+| Portable facade | `includes/ir0/arch_port.h`, `irq.h`, `context.h` | CPU, IRQ bring-up, `switch_to` |
+| ISA backends | `arch/*/sources/arch_*.c` | switch, mm half, signal frames, syscall frames, irq_init |
+| sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | Linux uapi on both ISAs (`__reserved[4096]` on aarch64) |
+| Common interface | `arch/common/arch_interface.c` | Cross-arch dispatch (`irq_init` → interrupt_init) |
 | First switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
-| x86-64 | `arch/x86-64/` | boot, IDT, PIC, user mode, syscalls |
-| arm64 | `arch/arm64/sources/` | boot_stub, mmu_early, vectors, switch_early, process_early |
-| Context switch | `sched/switch/switch_x64.asm`, `switch_arm64.c` | per-ISA; ARM calls `arm64_cpu_switch_mm` |
+| x86-64 | `arch/x86-64/` + `interrupt/arch/` | boot, IDT/PIC impl, user mode, syscalls |
+| arm64 | `arch/arm64/sources/` | VBAR+GIC via `irq_*`; `arch_switch`/`arch_mm` TTBR0; freestanding EL0 smokes |
+| Context switch | `arch_switch_to` → `switch_context_x64` / `switch_context_arm64` | portable dispatcher in `sched/switch/arch_context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` in Makefile | `ARCH_OBJS_ARM64` includes `switch_early.S` |
 
 **Guard tags (`architecture_guard.py`):** portable trees must not include
@@ -89,8 +92,8 @@ NEON.
 |----------|---------------|
 | Scheduler | per-arch switch; first entry via `first_switch_to` |
 | Syscalls | per-arch entry ASM / stub |
-| Interrupts | PIC (x86) vs GIC scaffold (arm64) |
-| Drivers | port I/O via facade; keyboard x86-only blocks |
+| Interrupts | Product entry: `ir0/irq.h`; impl PIC (x86 `interrupt/arch/`) vs GIC scaffold (arm64) |
+| Drivers | port I/O via `ir0/arch_io.h` (not `interrupt/arch/io.h`) |
 | VFS/procfs | CPU info via `arch_port` |
 
 ## 7. Visual maps
@@ -154,7 +157,8 @@ Porting checklist:
 
 - Product ARM `fork`/`exec` / `rr_sched` with real `process_t` — **not** in freestanding image.
 - **ALL_OBJS + musl aarch64** — BLOCKED (toolchain SETUP / interrupt wall).
-- GIC behind full `register_irq` product path.
+- Product musl aarch64 + shared process_t IRQ delivery (facades ready; ALL_OBJS still BLOCKED).
+- SPI / full GIC distributor policy beyond bank-0 PPI/SGI (`irq_unmask_line` covers bank 0).
 - Raspberry Pi 4: GIC-400, SD, mailbox, DTB (beyond UART min smoke).
 - Raspberry Pi 5: RP1 UART + real bring-up (board id stub only today).
 - Remove x86-only `#ifdef` clusters in keyboard/console for true portability.

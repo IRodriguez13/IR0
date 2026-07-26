@@ -115,6 +115,11 @@ uint64_t clock_get_uptime_milliseconds(void);
 uint64_t clock_get_tick_count(void);
 time_t clock_get_current_time(void);
 int clock_set_current_time(time_t time);
+int clock_realtime_available(void);
+uint64_t clock_get_idle_milliseconds(void);
+void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
+		       uint32_t *load15_x100, unsigned *runnable,
+		       unsigned *nprocs, int *last_pid);
 
 /* Timezone functions */
 int clock_set_timezone_offset(int32_t offset_seconds);

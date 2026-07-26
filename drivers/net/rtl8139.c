@@ -15,7 +15,7 @@
 #include "rtl8139.h"
 #include <stdbool.h>
 #include <ir0/ktm/klog.h>
-#include <interrupt/arch/io.h>
+#include <ir0/arch_io.h>
 #include <mm/allocator.h>
 #include <ir0/kmem.h>
 #include <string.h>
@@ -58,9 +58,14 @@ static volatile uint32_t rtl8139_tx_descriptor_own_state[4] = {1, 1, 1, 1};  /* 
 static struct rtl8139_counters {
     uint64_t rx_packets;
     uint64_t tx_packets;
+    uint64_t rx_bytes;
+    uint64_t tx_bytes;
     uint64_t rx_errors;
     uint64_t tx_errors;
 } rtl8139_counters;
+
+/* Packet lengths queued per TX descriptor (added to tx_bytes on TOK). */
+static uint32_t rtl8139_tx_pending_len[4];
 
 /*
  * Per-descriptor TX start time (clock ticks) for stuck-DMA detection;
@@ -199,6 +204,8 @@ static int rtl8139_netdev_get_irq_line(struct net_device *dev);
 static int rtl8139_netdev_handle_irq(struct net_device *dev, uint8_t irq);
 static void rtl8139_netdev_get_stats(struct net_device *dev, uint64_t *rx_pkts, uint64_t *tx_pkts,
                                      uint64_t *rx_errs, uint64_t *tx_errs);
+static void rtl8139_netdev_get_byte_stats(struct net_device *dev, uint64_t *rx_bytes,
+					  uint64_t *tx_bytes);
 
 /* PCI configuration space access */
 static uint32_t pci_config_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
@@ -411,6 +418,7 @@ static int32_t rtl8139_hw_init(void)
     rtl8139_dev.get_irq_line = rtl8139_netdev_get_irq_line;
     rtl8139_dev.handle_irq = rtl8139_netdev_handle_irq;
     rtl8139_dev.get_stats = rtl8139_netdev_get_stats;
+    rtl8139_dev.get_byte_stats = rtl8139_netdev_get_byte_stats;
 
     net_register_device(&rtl8139_dev);
 
@@ -600,6 +608,7 @@ int rtl8139_send(void *data, size_t len)
     smp_mb();
 
     /* Update tracking: host released descriptor (OWN cleared by size write). */
+    rtl8139_tx_pending_len[desc] = (uint32_t)len;
     rtl8139_tx_descriptor_own_state[desc] = 0;
     rtl8139_tx_in_flight++;
     rtl8139_current_tx_descriptor = (desc + 1) % 4;
@@ -654,6 +663,8 @@ static void rtl8139_check_tx_completion(void)
                     rtl8139_tx_descriptor_own_state[i] = 1;
                     rtl8139_tx_desc_start_tick[i] = 0;
                     rtl8139_tx_timeout_latched[i] = 0;
+                    /* Drop stale length so a later OWN edge cannot inflate tx_bytes. */
+                    rtl8139_tx_pending_len[i] = 0;
                     if (rtl8139_tx_in_flight > 0)
                         rtl8139_tx_in_flight--;
                     LOG_DEBUG_FMT("RTL8139", "TX descriptor %d force-released after timeout", i);
@@ -670,9 +681,13 @@ static void rtl8139_check_tx_completion(void)
             rtl8139_tx_desc_start_tick[i] = 0;
             rtl8139_tx_timeout_latched[i] = 0;
             if (tsd & RTL8139_TSD_TOK)
+            {
                 rtl8139_counters.tx_packets++;
+                rtl8139_counters.tx_bytes += rtl8139_tx_pending_len[i];
+            }
             else
                 rtl8139_counters.tx_errors++;
+            rtl8139_tx_pending_len[i] = 0;
 
             if (rtl8139_tx_in_flight > 0)
             {
@@ -801,6 +816,16 @@ static void rtl8139_netdev_get_stats(struct net_device *dev, uint64_t *rx_pkts, 
 {
     (void)dev;
     rtl8139_get_stats(rx_pkts, tx_pkts, rx_errs, tx_errs);
+}
+
+static void rtl8139_netdev_get_byte_stats(struct net_device *dev, uint64_t *rx_bytes,
+					  uint64_t *tx_bytes)
+{
+    (void)dev;
+    if (rx_bytes)
+        *rx_bytes = rtl8139_counters.rx_bytes;
+    if (tx_bytes)
+        *tx_bytes = rtl8139_counters.tx_bytes;
 }
 
 /*
@@ -1043,6 +1068,7 @@ static void rtl8139_process_rx_packets(void)
                     /* Pass Ethernet frame without trailing CRC */
                     net_receive(&rtl8139_dev, packet_data, packet_len);
                     rtl8139_counters.rx_packets++;
+                    rtl8139_counters.rx_bytes += packet_len;
                     packet_count++;
                 }
 

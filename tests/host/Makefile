@@ -28,9 +28,12 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_arch_irq_facade.c test_arch_mm_pte_facade.c \
 	test_ps2_set1_modifiers.c \
 	test_ps2_mouse_pkt.c \
-	test_pipe_close_refcount.c
+	test_pipe_close_refcount.c \
+	test_rtc_calendar.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
+	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
+	host_sysfs_net_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
 	host_ps2_set1.o host_ps2_mouse_pkt.o
@@ -59,6 +62,9 @@ host_klog_stub.o: host_klog_stub.c
 host_fase48_stub.o: host_fase48_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
+host_sysfs_net_stub.o: host_sysfs_net_stub.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
 host_named_fifo.o: $(KERNEL_ROOT)/includes/ir0/named_fifo.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -DCONFIG_DEBUG_FASE50=0 -c -o $@ $<
 
@@ -81,6 +87,12 @@ host_ps2_set1.o: $(KERNEL_ROOT)/includes/ir0/ps2_set1.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/includes/ir0/ps2_mouse_pkt.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+host_rtc_calendar.o: $(KERNEL_ROOT)/includes/ir0/rtc_calendar.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_rtc_calendar.o: test_rtc_calendar.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_ps2_set1_modifiers.o: test_ps2_set1_modifiers.c

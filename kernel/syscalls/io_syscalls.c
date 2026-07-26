@@ -44,6 +44,7 @@
 #include <ir0/pseudo_fs.h>
 #include <ir0/sock_udp.h>
 #include <ir0/sock_stream.h>
+#include <ir0/sock_inet_ioctl.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
@@ -101,7 +102,7 @@ int64_t syscall_sleep_ms_locked(uint64_t ms)
  */
 int fd_can_read_for(process_t *proc, int fd)
 {
-  fd_entry_t *fd_table = proc ? proc->fd_table : get_process_fd_table();
+  fd_entry_t *fd_table = proc ? process_fd_table(proc) : get_process_fd_table();
   pid_t pid = proc ? proc->task.pid : 0;
 
   if (fd == STDIN_FILENO && !stdio_is_redirected(fd_table, fd))
@@ -609,9 +610,9 @@ void syscall_poll_finish_blocked_resume(process_t *proc)
 	if (ready < 0)
 		ready = 0;
 
-	if (w->user_fds && proc->page_directory)
+	if (w->user_fds && process_pgd(proc))
 	{
-		if (copy_to_user_region_in_directory(proc->page_directory,
+		if (copy_to_user_region_in_directory(process_pgd(proc),
 						     (uintptr_t)w->user_fds,
 						     w->kfds,
 						     w->nfds * sizeof(struct pollfd)) != 0)
@@ -807,7 +808,7 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read)
 			if (proc->mode == USER_MODE)
 			{
 #if CONFIG_DEBUG_FASE50
-				klog_debug_fmt("PIPE", "[IR0DBG50B][READ_BLOCK] pid=%x fd=%llx rsi=%llx rdx=%llx pipe_id=%llx", (unsigned)((uint32_t)proc->task.pid), (unsigned long long)(proc->syscall_frame.rdi), (unsigned long long)(proc->syscall_frame.rsi), (unsigned long long)(proc->syscall_frame.rdx), (unsigned long long)(pipe ? pipe->pipe_id : 0));
+				klog_debug_fmt("PIPE", "[IR0DBG50B][READ_BLOCK] pid=%x fd=%llx rsi=%llx rdx=%llx pipe_id=%llx", (unsigned)((uint32_t)proc->task.pid), (unsigned long long)(process_syscall_arg(proc, 0)), (unsigned long long)(process_syscall_arg(proc, 1)), (unsigned long long)(process_syscall_arg(proc, 2)), (unsigned long long)(pipe ? pipe->pipe_id : 0));
 #endif
 				process_arm_blocked_syscall_resume(proc, 0);
 			}
@@ -838,18 +839,18 @@ static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
 	if (!proc || !pipe || !proc->irq_frame_saved || pipe->count == 0)
 		return;
 
-	user_buf = (uintptr_t)proc->syscall_frame.rsi;
-	req = proc->syscall_frame.rdx;
+	user_buf = (uintptr_t)process_syscall_arg(proc, 1);
+	req = process_syscall_arg(proc, 2);
 	if (req == 0 || req > sizeof(kbuf))
 		req = sizeof(kbuf);
 
 #if CONFIG_DEBUG_FASE50
-	klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] pipe_id=%llx target_pid=%x waiter_pid=%x saved_fd=%llx saved_rsi=%llx saved_rdx=%llx pipe_bytes=%llx target_pml4=%llx active_cr3=%llx", (unsigned long long)(pipe->pipe_id), (unsigned)((uint32_t)proc->task.pid), (unsigned)(current_process ? (uint32_t)current_process->task.pid : 0), (unsigned long long)(proc->syscall_frame.rdi), (unsigned long long)((uint64_t)user_buf), (unsigned long long)((uint64_t)req), (unsigned long long)((uint64_t)pipe->count), (unsigned long long)((uint64_t)(uintptr_t)proc->page_directory), (unsigned long long)(get_current_page_directory()));
+	klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] pipe_id=%llx target_pid=%x waiter_pid=%x saved_fd=%llx saved_rsi=%llx saved_rdx=%llx pipe_bytes=%llx target_pml4=%llx active_cr3=%llx", (unsigned long long)(pipe->pipe_id), (unsigned)((uint32_t)proc->task.pid), (unsigned)(current_process ? (uint32_t)current_process->task.pid : 0), (unsigned long long)(process_syscall_arg(proc, 0)), (unsigned long long)((uint64_t)user_buf), (unsigned long long)((uint64_t)req), (unsigned long long)((uint64_t)pipe->count), (unsigned long long)((uint64_t)(uintptr_t)process_pgd(proc)), (unsigned long long)(get_current_page_directory()));
 #endif
 
 	peek_n = (req < (size_t)sizeof(user_before)) ? (int)req : (int)sizeof(user_before);
 #if CONFIG_DEBUG_FASE50
-	if (fase50b_peek_user(proc->page_directory, user_buf, user_before, (size_t)peek_n) == 0)
+	if (fase50b_peek_user(process_pgd(proc), user_buf, user_before, (size_t)peek_n) == 0)
 		fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] user_before", user_before, (size_t)peek_n);
 #else
 	(void)user_before;
@@ -870,7 +871,7 @@ static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
 	fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] kbuf", kbuf, (size_t)n);
 #endif
 
-	if (!proc->page_directory)
+	if (!process_pgd(proc))
 	{
 #if CONFIG_DEBUG_FASE50
 		klog_debug("PIPE", "CLASSIFY PIPE_WAKE_COPY_BAD_USERBUF");
@@ -878,7 +879,7 @@ static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
 		return;
 	}
 
-	copy_ret = copy_to_user_region_in_directory(proc->page_directory, user_buf,
+	copy_ret = copy_to_user_region_in_directory(process_pgd(proc), user_buf,
 						      kbuf, (size_t)n);
 #if CONFIG_DEBUG_FASE50
 	klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] copy_ret=%llx copied=%llx resume_rax=%llx", (unsigned long long)((uint64_t)(int64_t)copy_ret), (unsigned long long)((uint64_t)(int64_t)n), (unsigned long long)((uint64_t)(int64_t)n));
@@ -893,7 +894,7 @@ static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
 	}
 
 #if CONFIG_DEBUG_FASE50
-	if (fase50b_peek_user(proc->page_directory, user_buf, user_after, (size_t)peek_n) == 0)
+	if (fase50b_peek_user(process_pgd(proc), user_buf, user_after, (size_t)peek_n) == 0)
 		fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] user_after", user_after, (size_t)peek_n);
 #endif
 
@@ -1028,7 +1029,7 @@ fd_entry_t *get_process_fd_table(void)
    * La tabla se inicializa en spawn() / process create; no usar un
    * flag estático global (rompía si el primer syscall no era del proceso init).
    */
-  return current_process->fd_table;
+  return process_fd_table(current_process);
 }
 int64_t sys_ioctl(int fd, uint64_t request, void *arg)
 {
@@ -1055,6 +1056,15 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
     /* Handlers perform sized copy_to/from_user; do not require 256B here
      * (stack ioctl args near page end would false-fail). */
     return node->ops->ioctl(&node->entry, request, arg);
+  }
+
+  /* AF_INET socket: Linux SIOCGIF* for BusyBox ifconfig (read-only). */
+  if (fd_table[fd].is_socket)
+  {
+    int64_t rc = sock_inet_ioctl(request, arg);
+
+    if (rc != -ENOTTY)
+      return rc;
   }
 
   /* Unredirected stdio: console tty ioctls (TIOCGWINSZ / termios). */

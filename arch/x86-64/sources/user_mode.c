@@ -30,20 +30,20 @@ static int arch_user_va_canonical(uint64_t va)
 
 static void arch_audit_iret_frame(const task_t *task)
 {
-    klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][IRET_CHECK] rip=%llx rsp=%llx cs=%llx ss=%llx rflags=%llx", (unsigned long long)(task->rip), (unsigned long long)(task->rsp), (unsigned long long)((uint64_t)task->cs), (unsigned long long)((uint64_t)task->ss), (unsigned long long)(task->rflags));
+    klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][IRET_CHECK] rip=%llx rsp=%llx cs=%llx ss=%llx rflags=%llx", (unsigned long long)(task->arch.rip), (unsigned long long)(task->arch.rsp), (unsigned long long)((uint64_t)task->arch.cs), (unsigned long long)((uint64_t)task->arch.ss), (unsigned long long)(task->arch.rflags));
 
-    if ((task->cs & 0xFFFFU) != (uint16_t)USER_CODE_SEL ||
-        (task->ss & 0xFFFFU) != (uint16_t)USER_DATA_SEL)
+    if ((task->arch.cs & 0xFFFFU) != (uint16_t)USER_CODE_SEL ||
+        (task->arch.ss & 0xFFFFU) != (uint16_t)USER_DATA_SEL)
     {
         klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_CS_SS");
         panic("switch_to_user_task: invalid CS/SS for ring3 iretq");
     }
-    if (!arch_user_va_canonical(task->rip))
+    if (!arch_user_va_canonical(task->arch.rip))
     {
         klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RIP");
         panic("switch_to_user_task: invalid RIP for ring3 iretq");
     }
-    if (!arch_user_va_canonical(task->rsp))
+    if (!arch_user_va_canonical(task->arch.rsp))
     {
         klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
         panic("switch_to_user_task: invalid RSP for ring3 iretq");
@@ -162,9 +162,9 @@ void first_switch_to(struct process *next)
 			"pushq %[rip_val]\n"
 			"iretq\n"
 			:
-			: [rsp_val] "r"(p->task.rsp),
+			: [rsp_val] "r"(p->task.arch.rsp),
 			  [rflags] "r"((uint64_t)RFLAGS_IF),
-			  [rip_val] "r"(p->task.rip),
+			  [rip_val] "r"(p->task.arch.rip),
 			  [ds] "r"(kds),
 			  [cs_val] "r"(kcs)
 			: "memory"
@@ -173,8 +173,8 @@ void first_switch_to(struct process *next)
 	else
 	{
 		mm_activate((uintptr_t)process_mm_root(p));
-		switch_to_user((arch_addr_t)p->task.rip,
-				    (arch_addr_t)p->task.rsp);
+		switch_to_user((arch_addr_t)p->task.arch.rip,
+				    (arch_addr_t)p->task.arch.rsp);
 	}
 	panic("Returned from first_switch_to unexpectedly");
 #endif

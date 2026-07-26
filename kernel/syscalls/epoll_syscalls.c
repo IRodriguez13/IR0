@@ -19,6 +19,7 @@
 #include <ir0/errno.h>
 #include <ir0/poll.h>
 #include <ir0/process.h>
+#include <ir0/files_struct.h>
 #include <ir0/time.h>
 #include <ir0/clock.h>
 #include <string.h>
@@ -84,8 +85,8 @@ static struct epoll_state *epoll_from_fd(int epfd)
 
 	if (!current_process || epfd < 0 || epfd >= MAX_FDS_PER_PROCESS)
 		return NULL;
-	tab = current_process->fd_table;
-	if (!tab[epfd].in_use || !tab[epfd].is_epoll || !tab[epfd].vfs_file)
+	tab = process_fd_table(current_process);
+	if (!tab || !tab[epfd].in_use || !tab[epfd].is_epoll || !tab[epfd].vfs_file)
 		return NULL;
 	return (struct epoll_state *)tab[epfd].vfs_file;
 }
@@ -119,7 +120,9 @@ int64_t sys_epoll_create1(int flags)
 	if (slot < 0)
 		return -EMFILE;
 
-	tab = current_process->fd_table;
+	tab = process_fd_table(current_process);
+	if (!tab)
+		return -ESRCH;
 	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
 	{
 		if (!tab[fd].in_use)
@@ -139,10 +142,11 @@ int64_t sys_epoll_create1(int flags)
 	return fd;
 }
 
-int64_t sys_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
+	int64_t sys_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
 	struct epoll_state *ep;
 	struct epoll_event ev;
+	fd_entry_t *tab;
 	int free_i = -1;
 
 	ep = epoll_from_fd(epfd);
@@ -150,7 +154,8 @@ int64_t sys_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 		return -EBADF;
 	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
 		return -EBADF;
-	if (!current_process->fd_table[fd].in_use)
+	tab = process_fd_table(current_process);
+	if (!tab || !tab[fd].in_use)
 		return -EBADF;
 	if (fd == epfd)
 		return -EINVAL;

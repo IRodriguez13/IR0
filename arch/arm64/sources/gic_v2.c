@@ -23,7 +23,6 @@
 
 #define GICD_CTLR        (*(volatile uint32_t *)(GICD_BASE + 0x000UL))
 #define GICD_ISENABLER0  (*(volatile uint32_t *)(GICD_BASE + 0x100UL))
-#define GICD_ICENABLER0  (*(volatile uint32_t *)(GICD_BASE + 0x180UL))
 #define GICD_ICPENDR0    (*(volatile uint32_t *)(GICD_BASE + 0x280UL))
 #define GICD_IPRIORITYR  ((volatile uint8_t *)(GICD_BASE + 0x400UL))
 #define GICD_ITARGETSR   ((volatile uint8_t *)(GICD_BASE + 0x800UL))
@@ -37,6 +36,25 @@
 #define GICD_CTLR_ENABLE 1U
 #define GICC_CTLR_ENABLE 1U
 
+static int g_gic_inited;
+
+int arm64_gic_v2_init(void)
+{
+	if (g_gic_inited)
+		return 0;
+
+	GICD_CTLR = 0;
+	GICC_CTLR = 0;
+	GICC_PMR = 0xffU;
+	GICC_CTLR = GICC_CTLR_ENABLE;
+	GICD_CTLR = GICD_CTLR_ENABLE;
+
+	__asm__ volatile("dsb sy" ::: "memory");
+	__asm__ volatile("isb" ::: "memory");
+	g_gic_inited = 1;
+	return 0;
+}
+
 int arm64_gic_v2_enable(uint32_t irq)
 {
 	uint32_t bit;
@@ -49,10 +67,9 @@ int arm64_gic_v2_enable(uint32_t irq)
 		return -1;
 	}
 
-	GICD_CTLR = 0;
-	GICC_CTLR = 0;
+	if (arm64_gic_v2_init() != 0)
+		return -1;
 
-	/* Priority: highest for timer; PMR accepts anything below 0xff. */
 	GICD_IPRIORITYR[irq] = 0x00;
 	GICD_ITARGETSR[irq] = 0x01; /* CPU0 */
 
@@ -64,10 +81,6 @@ int arm64_gic_v2_enable(uint32_t irq)
 	bit = 1U << irq;
 	GICD_ICPENDR0 = bit;
 	GICD_ISENABLER0 = bit;
-
-	GICC_PMR = 0xffU;
-	GICC_CTLR = GICC_CTLR_ENABLE;
-	GICD_CTLR = GICD_CTLR_ENABLE;
 
 	__asm__ volatile("dsb sy" ::: "memory");
 	__asm__ volatile("isb" ::: "memory");

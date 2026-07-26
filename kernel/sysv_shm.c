@@ -166,7 +166,7 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 	if (!s || !s->frames)
 		return -EINVAL;
 
-	pml4 = current_process->page_directory;
+	pml4 = process_pgd(current_process);
 	len = s->npages * PAGE_SZ;
 	va = 0x70000000UL + (uintptr_t)((unsigned)shmid * 0x01000000UL) +
 	     (uintptr_t)((unsigned)s->nattch * 0x00100000UL);
@@ -222,7 +222,7 @@ int64_t sys_shmdt(const void *shmaddr)
 			    s->attaches[ai].va != va)
 				continue;
 			for (off = 0; off < s->attaches[ai].len; off += PAGE_SZ)
-				unmap_page_in_directory(current_process->page_directory,
+				unmap_page_in_directory(process_pgd(current_process),
 							va + off);
 			s->attaches[ai].used = 0;
 			s->nattch--;

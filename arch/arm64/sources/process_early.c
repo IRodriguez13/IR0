@@ -219,13 +219,13 @@ int arm64_process_t_switch_smoke(void)
 	sp_b = (uintptr_t)g_pt_stack_b + PROC_STACK_SIZE;
 	sp_b &= ~(uintptr_t)0xf;
 	/*
-	 * switch_context_arm64 passes &task.arm64.x19 to arm64_cpu_switch;
+	 * switch_context_arm64 passes &task.arch.x19 to arm64_cpu_switch;
 	 * the SP slot in that layout is arm64.sp_el0.
 	 */
-	g_pt_task_b.arm64.sp_el0 = sp_b;
-	g_pt_task_b.arm64.x30 = (uint64_t)(uintptr_t)process_t_task_b;
-	g_pt_task_b.arm64.ttbr0_el1 = g_ttbr_b;
-	g_pt_task_a.arm64.ttbr0_el1 = g_ttbr_a;
+	g_pt_task_b.arch.sp_el0 = sp_b;
+	g_pt_task_b.arch.x30 = (uint64_t)(uintptr_t)process_t_task_b;
+	g_pt_task_b.arch.ttbr0_el1 = g_ttbr_b;
+	g_pt_task_a.arch.ttbr0_el1 = g_ttbr_a;
 
 	switch_context_arm64(&g_pt_task_a, &g_pt_task_b);
 

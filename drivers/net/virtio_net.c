@@ -15,7 +15,8 @@
 #include <config.h>
 #if CONFIG_DRV_NIC_VIRTIO_NET
 
-#include <interrupt/arch/io.h>
+#include <ir0/arch_io.h>
+#include <ir0/cpu.h>
 #include <ir0/arch_port.h>
 #include <ir0/cpu.h>
 #include <ir0/errno.h>
@@ -96,6 +97,8 @@ static uint8_t *g_tx_pkt;
 static struct net_device g_dev;
 static uint64_t g_rx_pkts;
 static uint64_t g_tx_pkts;
+static uint64_t g_rx_bytes;
+static uint64_t g_tx_bytes;
 static uint64_t g_tx_errs;
 
 static uint32_t pci_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t off)
@@ -258,6 +261,7 @@ static void virtio_net_poll_rx(void)
 
 		buf = g_rx_bufs[id];
 		g_rx_pkts++;
+		g_rx_bytes += (uint64_t)(len - VN_HDR_LEN);
 		net_receive(&g_dev, buf + VN_HDR_LEN, len - VN_HDR_LEN);
 		rx_post((uint16_t)id);
 	}
@@ -302,6 +306,7 @@ static int virtio_net_send(struct net_device *dev, void *data, size_t len)
 			g_tx.last_used++;
 			(void)vp_inb(VIRTIO_PCI_ISR);
 			g_tx_pkts++;
+			g_tx_bytes += (uint64_t)len;
 			return 0;
 		}
 	}
@@ -342,6 +347,16 @@ static void virtio_net_get_stats(struct net_device *dev, uint64_t *rx_pkts,
 		*rx_errs = 0;
 	if (tx_errs)
 		*tx_errs = g_tx_errs;
+}
+
+static void virtio_net_get_byte_stats(struct net_device *dev, uint64_t *rx_bytes,
+				      uint64_t *tx_bytes)
+{
+	(void)dev;
+	if (rx_bytes)
+		*rx_bytes = g_rx_bytes;
+	if (tx_bytes)
+		*tx_bytes = g_tx_bytes;
 }
 
 int virtio_net_init(void)
@@ -417,6 +432,7 @@ int virtio_net_init(void)
 	g_dev.get_irq_line = virtio_net_get_irq;
 	g_dev.handle_irq = virtio_net_handle_irq;
 	g_dev.get_stats = virtio_net_get_stats;
+	g_dev.get_byte_stats = virtio_net_get_byte_stats;
 	net_register_device(&g_dev);
 
 	g_ready = 1;
