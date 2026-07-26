@@ -1,61 +1,54 @@
 # Acoplamiento IR0 (kernel) ↔ IR0-userspace
 
-> **Última verificación:** 2026-07-25  
-> **Fuente de verdad:** este archivo, `Makefile` (`IR0_USERSPACE_ROOT`, `check-userspace`, `headers_install`), hermano [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), y [TREE_CONTRACT](../../../IR0-desktop/Documentation/TREE_CONTRACT.md) si existe.  
+> **Última verificación:** 2026-07-26  
+> **Fuente de verdad:** este archivo, `Makefile` (`bootstrap-userspace`, `IR0_USERSPACE_ROOT`), hermano [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../../SETUP.md).  
 > **Inglés:** [`../USERSPACE.md`](../USERSPACE.md)
 
-## Límite
+## ¿Por qué dos repos?
 
-| Vive en **IR0** | Vive en **IR0-userspace** |
-|-----------------|---------------------------|
-| Kernel, drivers, UAPI (`includes/uapi/`) | runit, BusyBox, login/doas, `/etc` de producto |
-| Fixtures de test (`setup/pid1/`) | Recetas de paquetes, servicios, perfiles rootfs |
-| Targets Make que *delegan* | ELFs y `disk.img` bajo `out/` |
+El kernel solo no es una distro Unix. El PID1 de producto (**runit**), **BusyBox**, login/doas y `/etc` viven en **IR0-userspace**. El boot siempre hace `kexecve("/sbin/init")` desde `disk.img`.
 
-**Regla dura:** si PID 1 puede reemplazarlo sin recompilar el kernel, no vive en IR0.
+## Camino más corto (primera vez)
 
-El boot de producto siempre hace `kexecve("/sbin/init")`. No hay shell de depuración in-kernel ni harness `debug_bins/`.
+```bash
+git clone https://github.com/IRodriguez13/IR0.git
+cd IR0
+make check-env
+make defconfig
+make first-boot    # clona ../IR0-userspace si falta + rootfs mínimo + ISO
+make run           # QEMU → getty → BusyBox ash
+```
 
-## Layout sugerido
+En el guest:
+
+```text
+busybox
+ls /
+cat /proc/version
+```
+
+| Target | Rol |
+|--------|-----|
+| `make first-boot` | Hermano + distro mínima |
+| `make run` | GTK con runit+BusyBox (sin TinyCC obligatorio) |
+| `IR0_WITH_DEVTOOLS=1 make run` | + toolchain in-guest (opcional) |
+
+## Contrato de boot: sin init / init muere
+
+| Situación | Comportamiento |
+|-----------|----------------|
+| No hay `/sbin/init` o falla `kexecve` | **`panic("Failed to load /sbin/init")`** — no hay shell in-kernel |
+| Init corre | Camino normal (runit → getty → ash) |
+| Init **sale** | Reparent; el idle del kernel sigue — no hay panic automático; el userspace queda muerto |
+| No se inyectó el rootfs del hermano | Mismo panic de la primera fila |
+
+## Layout
 
 ```text
 parent/
-├── IR0/                 # este árbol
-├── IR0-userspace/       # https://github.com/IRodriguez13/IR0-userspace
-└── IR0-desktop/         # producto desktop opcional + smokes DESK
+├── IR0/
+├── IR0-userspace/
+└── IR0-desktop/     # opcional
 ```
 
-```bash
-export IR0_USERSPACE_ROOT=/ruta/a/IR0-userspace
-export IR0_ROOT=/ruta/a/IR0          # desde el árbol userspace
-```
-
-## Cableado (lado kernel)
-
-```bash
-git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace
-make headers_install DESTDIR=../IR0-userspace/out/sysroot
-make check-userspace
-make build-runit
-make load-userspace-runit
-make kernel-x64-userspace.iso
-```
-
-`make check-userspace` **falla** si falta el hermano (nunca skip silencioso como PASS).
-
-## Cableado (lado userspace)
-
-Desde `IR0-userspace`:
-
-```bash
-export IR0_ROOT=../IR0
-make fetch build rootfs
-```
-
-Ver `IR0-userspace/README.md` y `userspace/README.md` en este árbol (solo puntero).
-
-## Qué no reintroducir en este árbol
-
-- Fuentes BusyBox / runit / doas o `/etc` de producto bajo `setup/`
-- Shell mono in-kernel (`dbgshell`) o registro `debug_bins/`
-- `#include` de userspace de producto en el link del kernel
+Docs completas en inglés: [`../USERSPACE.md`](../USERSPACE.md).

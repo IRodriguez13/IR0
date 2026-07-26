@@ -118,9 +118,20 @@ IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_USERSPACE_ROOT) IR0_ROOT=$(KERNEL_ROOT)
 check-userspace:
 	@if [ ! -f "$(IR0_USERSPACE_ROOT)/Makefile" ]; then \
 		echo "✗ IR0-userspace not found at $(IR0_USERSPACE_ROOT)"; \
-		echo "  clone it next to this tree or set IR0_USERSPACE_ROOT=/path/to/IR0-userspace"; \
+		echo "  First time:  make bootstrap-userspace"; \
+		echo "  Or clone:    git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace"; \
+		echo "  Or set:      IR0_USERSPACE_ROOT=/path/to/IR0-userspace"; \
 		exit 1; \
 	fi
+
+# Clone sibling (if missing), headers_install, runit+BusyBox → disk.img + ISO.
+bootstrap-userspace:
+	@chmod +x scripts/bootstrap-userspace.sh
+	@./scripts/bootstrap-userspace.sh
+
+# Alias for new contributors: same as bootstrap-userspace.
+first-boot: bootstrap-userspace
+	@echo "✓ first-boot OK — next: make run"
 
 all: $(DEFAULT_BUILD_TARGET)
 
@@ -1182,19 +1193,33 @@ windows-clean win-clean:
 # Run with GUI and disk (default) - ALL IR0 SUPPORTED HARDWARE
 # Note: This target does NOT call clean-net or rebuild with special flags
 # It simply runs the existing kernel ISO. Use 'make run-tap' for TAP networking.
-# Human console: development disk includes tcc/make + BusyBox filters.
+# Human console: minimal distro = runit + BusyBox (sibling IR0-userspace).
+# Optional in-guest TinyCC/GNU make: IR0_WITH_DEVTOOLS=1 make run
 # Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (document in SETUP.md).
-run: kernel-x64-userspace.iso load-userspace-devtools
+#
+# First time (no sibling yet): make first-boot && make run
+run: kernel-x64-userspace.iso
+	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
+		$(MAKE) -s load-userspace-devtools; \
+	else \
+		$(MAKE) -s load-userspace-runit; \
+	fi
 	@echo "Running IR0/Unix (human console — clean GTK)..."
 	@echo "   Hardware: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2, VGA"
 	@echo "   Ungrab input: Ctrl+Alt+G"
+	@echo "   Distro: runit + BusyBox (devtools: IR0_WITH_DEVTOOLS=1)"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot \
 		$(QEMU_DISPLAY)
 
 # Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
-run-debug: kernel-x64-userspace.iso load-userspace-devtools
+run-debug: kernel-x64-userspace.iso
+	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
+		$(MAKE) -s load-userspace-devtools; \
+	else \
+		$(MAKE) -s load-userspace-runit; \
+	fi
 	@echo "Running IR0/Unix userspace with debug output..."
 	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2, VGA"
 	@echo "Serial output will appear in this terminal"
@@ -1212,7 +1237,12 @@ run-debug: kernel-x64-userspace.iso load-userspace-devtools
 # run-bootlog: defined in scripts/make/hostshare-boot.mk (serial + optional 9p boot log).
 # Human interactive with serial in-terminal: make run-debug.
 
-run-fullscreen: kernel-x64-userspace.iso load-userspace-devtools
+run-fullscreen: kernel-x64-userspace.iso
+	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
+		$(MAKE) -s load-userspace-devtools; \
+	else \
+		$(MAKE) -s load-userspace-runit; \
+	fi
 	@echo "Running IR0/Unix fullscreen GTK..."
 	@echo "   Ungrab input: Ctrl+Alt+G"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
