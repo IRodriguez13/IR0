@@ -2308,6 +2308,15 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 			if [ -e "$$dep" ] && [ "$$dep" -nt "$$STAMP" ]; then NEED=1; break; fi; \
 		done; \
 	fi; \
+	if [ $$NEED -eq 0 ] && [ "$${IR0_GUEST_MANDOCS:-1}" != "0" ]; then \
+		if [ -d "$$GUEST_MAN/usr/share/man/cat7" ] && \
+		   ls "$$GUEST_MAN/usr/share/man/cat7"/IR0-*.7 >/dev/null 2>&1; then \
+			if [ ! -f "$$GUEST_MAN/.stamp" ] || \
+			   [ "$$GUEST_MAN/.stamp" -nt "$$STAMP" ]; then \
+				NEED=1; \
+			fi; \
+		fi; \
+	fi; \
 	if [ $$NEED -eq 0 ]; then \
 		echo "  DISK    $$DISK up to date (cached runit rootfs — no reinject)"; \
 	else \

@@ -663,6 +663,8 @@ static void rtl8139_check_tx_completion(void)
                     rtl8139_tx_descriptor_own_state[i] = 1;
                     rtl8139_tx_desc_start_tick[i] = 0;
                     rtl8139_tx_timeout_latched[i] = 0;
+                    /* Drop stale length so a later OWN edge cannot inflate tx_bytes. */
+                    rtl8139_tx_pending_len[i] = 0;
                     if (rtl8139_tx_in_flight > 0)
                         rtl8139_tx_in_flight--;
                     LOG_DEBUG_FMT("RTL8139", "TX descriptor %d force-released after timeout", i);
