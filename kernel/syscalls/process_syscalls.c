@@ -52,6 +52,10 @@
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
 
+/* prctl(2) options (Linux include/uapi/linux/prctl.h) */
+#define PR_SET_NO_NEW_PRIVS 38
+#define PR_GET_NO_NEW_PRIVS 39
+
 #define FUTEX_WAIT 0
 #define FUTEX_WAKE 1
 
@@ -152,38 +156,47 @@ int64_t sys_setgroups(size_t size, const gid_t *list)
 	return 0;
 }
 
+/*
+ * Unprivileged setres*id: every requested value must already be one of the
+ * caller's real, effective or saved ID (Linux setresuid(2)).
+ */
+static int cred_id_allowed(uint32_t want, uint32_t real, uint32_t eff,
+			   uint32_t saved)
+{
+	return want == real || want == eff || want == saved;
+}
+
 int64_t sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
-	(void)suid;
+	int priv;
 
 	if (!current_process)
 		return -ESRCH;
 
-	if (current_process->euid == ROOT_UID)
-	{
-		if ((int)ruid != (int)-1)
-		{
-			current_process->uid = (uint32_t)ruid;
-			current_process->euid = (uint32_t)ruid;
-		}
-		if ((int)euid != (int)-1)
-			current_process->euid = (uint32_t)euid;
-		return 0;
-	}
+	priv = current_process->euid == ROOT_UID;
 
-	if ((int)euid != (int)-1 &&
-	    (uint32_t)euid != current_process->uid &&
-	    (uint32_t)euid != current_process->euid)
-		return -EPERM;
-	if ((int)ruid != (int)-1 &&
-	    (uint32_t)ruid != current_process->uid &&
-	    (uint32_t)ruid != current_process->euid)
-		return -EPERM;
+	if (!priv)
+	{
+		if ((int)ruid != (int)-1 &&
+		    !cred_id_allowed((uint32_t)ruid, current_process->uid,
+				     current_process->euid, current_process->suid))
+			return -EPERM;
+		if ((int)euid != (int)-1 &&
+		    !cred_id_allowed((uint32_t)euid, current_process->uid,
+				     current_process->euid, current_process->suid))
+			return -EPERM;
+		if ((int)suid != (int)-1 &&
+		    !cred_id_allowed((uint32_t)suid, current_process->uid,
+				     current_process->euid, current_process->suid))
+			return -EPERM;
+	}
 
 	if ((int)ruid != (int)-1)
 		current_process->uid = (uint32_t)ruid;
 	if ((int)euid != (int)-1)
 		current_process->euid = (uint32_t)euid;
+	if ((int)suid != (int)-1)
+		current_process->suid = (uint32_t)suid;
 	return 0;
 }
 
@@ -191,12 +204,14 @@ int64_t sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
 {
 	uid_t u;
 	uid_t eu;
+	uid_t su;
 
 	if (!current_process)
 		return -ESRCH;
 
 	u = (uid_t)current_process->uid;
 	eu = (uid_t)current_process->euid;
+	su = (uid_t)current_process->suid;
 
 	if (ruid)
 	{
@@ -216,7 +231,7 @@ int64_t sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
 	{
 		if (validate_userspace_buffer(suid, sizeof(uid_t)) != 0)
 			return -EFAULT;
-		if (copy_to_user(suid, &u, sizeof(u)) != 0)
+		if (copy_to_user(suid, &su, sizeof(su)) != 0)
 			return -EFAULT;
 	}
 	return 0;
@@ -224,42 +239,36 @@ int64_t sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
 
 int64_t sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 {
-	(void)sgid;
+	int priv;
 
 	if (!current_process)
 		return -ESRCH;
 
-	if (current_process->euid == ROOT_UID)
-	{
-		if ((int)rgid != (int)-1)
-		{
-			current_process->gid = (uint32_t)rgid;
-			current_process->egid = (uint32_t)rgid;
-		}
-		if ((int)egid != (int)-1)
-			current_process->egid = (uint32_t)egid;
-		process_cred_init_groups(current_process);
-		current_process->groups[0] = (gid_t)current_process->gid;
-		current_process->ngroups = 1;
-		return 0;
-	}
+	priv = current_process->euid == ROOT_UID;
 
-	if ((int)egid != (int)-1 &&
-	    (uint32_t)egid != current_process->gid &&
-	    (uint32_t)egid != current_process->egid)
-		return -EPERM;
-	if ((int)rgid != (int)-1 &&
-	    (uint32_t)rgid != current_process->gid &&
-	    (uint32_t)rgid != current_process->egid)
-		return -EPERM;
+	if (!priv)
+	{
+		if ((int)rgid != (int)-1 &&
+		    !cred_id_allowed((uint32_t)rgid, current_process->gid,
+				     current_process->egid, current_process->sgid))
+			return -EPERM;
+		if ((int)egid != (int)-1 &&
+		    !cred_id_allowed((uint32_t)egid, current_process->gid,
+				     current_process->egid, current_process->sgid))
+			return -EPERM;
+		if ((int)sgid != (int)-1 &&
+		    !cred_id_allowed((uint32_t)sgid, current_process->gid,
+				     current_process->egid, current_process->sgid))
+			return -EPERM;
+	}
 
 	if ((int)rgid != (int)-1)
 		current_process->gid = (uint32_t)rgid;
 	if ((int)egid != (int)-1)
 		current_process->egid = (uint32_t)egid;
+	if ((int)sgid != (int)-1)
+		current_process->sgid = (uint32_t)sgid;
 	process_cred_init_groups(current_process);
-	current_process->groups[0] = (gid_t)current_process->gid;
-	current_process->ngroups = 1;
 	return 0;
 }
 
@@ -267,12 +276,14 @@ int64_t sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
 {
 	gid_t g;
 	gid_t eg;
+	gid_t sg;
 
 	if (!current_process)
 		return -ESRCH;
 
 	g = (gid_t)current_process->gid;
 	eg = (gid_t)current_process->egid;
+	sg = (gid_t)current_process->sgid;
 
 	if (rgid)
 	{
@@ -292,7 +303,7 @@ int64_t sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
 	{
 		if (validate_userspace_buffer(sgid, sizeof(gid_t)) != 0)
 			return -EFAULT;
-		if (copy_to_user(sgid, &g, sizeof(g)) != 0)
+		if (copy_to_user(sgid, &sg, sizeof(sg)) != 0)
 			return -EFAULT;
 	}
 	return 0;
@@ -634,6 +645,34 @@ int64_t sys_setsid(void)
 	return (int64_t)pid;
 }
 
+int64_t sys_getsid(pid_t pid)
+{
+	process_t *target;
+
+	if (!current_process)
+		return -ESRCH;
+
+	target = (pid == 0) ? current_process : process_find_by_pid(pid);
+	if (!target)
+		return -ESRCH;
+
+	return (int64_t)target->sid;
+}
+
+int64_t sys_getpgid(pid_t pid)
+{
+	process_t *target;
+
+	if (!current_process)
+		return -ESRCH;
+
+	target = (pid == 0) ? current_process : process_find_by_pid(pid);
+	if (!target)
+		return -ESRCH;
+
+	return (int64_t)target->pgid;
+}
+
 int64_t sys_setpgid(pid_t pid, pid_t pgid)
 {
 	process_t *target;
@@ -840,14 +879,17 @@ int64_t sys_setuid(uid_t uid)
   if (!current_process)
     return -ESRCH;
 
+  /* Privileged: real, effective and saved UID all become @uid (no way back). */
   if (current_process->euid == ROOT_UID)
   {
     current_process->uid = (uint32_t)uid;
     current_process->euid = (uint32_t)uid;
+    current_process->suid = (uint32_t)uid;
     return 0;
   }
 
-  if ((uint32_t)uid == current_process->uid || (uint32_t)uid == current_process->euid)
+  /* Unprivileged: only the effective UID moves, and only to real or saved. */
+  if ((uint32_t)uid == current_process->uid || (uint32_t)uid == current_process->suid)
   {
     current_process->euid = (uint32_t)uid;
     return 0;
@@ -865,10 +907,11 @@ int64_t sys_setgid(gid_t gid)
   {
     current_process->gid = (uint32_t)gid;
     current_process->egid = (uint32_t)gid;
+    current_process->sgid = (uint32_t)gid;
     return 0;
   }
 
-  if ((uint32_t)gid == current_process->gid || (uint32_t)gid == current_process->egid)
+  if ((uint32_t)gid == current_process->gid || (uint32_t)gid == current_process->sgid)
   {
     current_process->egid = (uint32_t)gid;
     return 0;
@@ -887,25 +930,6 @@ int64_t sys_umask(mode_t mask)
   return (int64_t)old;
 }
 
-int64_t sys_sudo_auth(const char *password)
-{
-  if (!current_process || !password)
-    return -EFAULT;
-  if (validate_userspace_string(password, 64) != 0)
-    return -EFAULT;
-
-  if (current_process->euid == ROOT_UID)
-    return 0;
-
-  if (!user_exists(current_process->uid))
-    return -EPERM;
-  if (auth_user_password(current_process->uid, password) != 0)
-    return -EACCES;
-
-  current_process->euid = ROOT_UID;
-  current_process->egid = ROOT_GID;
-  return 0;
-}
 int64_t sys_exec(const char *pathname,
                  char *const argv[],
                  char *const envp[])
@@ -991,13 +1015,14 @@ int64_t sys_exec(const char *pathname,
         rc_vec = -ENOMEM;
         break;
       }
-      if (copy_from_user(arg_str, user_ptr, 256) != 0)
+      /* Stop at NUL — fixed 256-byte copies EFAULT when heap strings sit
+       * near an unmapped page (doas prepenv/asprintf). */
+      if (copy_from_user_cstring(arg_str, 256, user_ptr) != 0)
       {
         kfree(arg_str);
         rc_vec = -EFAULT;
         break;
       }
-      arg_str[255] = '\0';  /* force termination in case the user string was 256+ */
       kernel_argv[i] = arg_str;
       argc_kept = i + 1;
     }
@@ -1048,13 +1073,12 @@ int64_t sys_exec(const char *pathname,
         rc_vec = -ENOMEM;
         break;
       }
-      if (copy_from_user(env_str, user_ptr, 256) != 0)
+      if (copy_from_user_cstring(env_str, 256, user_ptr) != 0)
       {
         kfree(env_str);
         rc_vec = -EFAULT;
         break;
       }
-      env_str[255] = '\0';
       kernel_envp[i] = env_str;
       envc_kept = i + 1;
     }
@@ -1279,6 +1303,33 @@ int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction 
 
   return 0;
 }
+/*
+ * sys_prctl — Linux prctl(2), no_new_privs subset.
+ * PR_SET_NO_NEW_PRIVS is one-way: once set it cannot be cleared, and it makes
+ * every later execve ignore set-user-ID / set-group-ID bits.
+ */
+int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
+                  unsigned long arg4, unsigned long arg5)
+{
+  if (!current_process)
+    return -ESRCH;
+
+  switch (option)
+  {
+  case PR_SET_NO_NEW_PRIVS:
+    if (arg2 != 1 || arg3 || arg4 || arg5)
+      return -EINVAL;
+    current_process->no_new_privs = 1;
+    return 0;
+  case PR_GET_NO_NEW_PRIVS:
+    if (arg2 || arg3 || arg4 || arg5)
+      return -EINVAL;
+    return (int64_t)current_process->no_new_privs;
+  default:
+    return -EINVAL;
+  }
+}
+
 int64_t sys_arch_prctl(int code, unsigned long addr)
 {
   uint64_t fsbase;

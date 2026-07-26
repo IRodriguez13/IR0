@@ -10,6 +10,7 @@
 #pragma once
 
 #include <ir0/stat.h>
+#include <ir0/time.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/types.h>
@@ -71,6 +72,13 @@ struct vfs_ops {
 	 * Directory: -EISDIR. length > max file size: -EFBIG.
 	 */
 	int (*truncate)(const char *path, size_t length);
+	/*
+	 * utimensat(2) backend: set access/modification times.
+	 * times == NULL means "now" for both. Backends with a single on-disk
+	 * timestamp (MINIX v1) store the modification time and report it for
+	 * both st_atim and st_mtim.
+	 */
+	int (*utimens)(const char *path, const struct timespec times[2]);
 };
 
 /*

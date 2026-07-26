@@ -45,6 +45,8 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg);
 int64_t sys_fcntl(int fd, int cmd, unsigned long arg);
 int64_t sys_pipe(int pipefd[2]);
 int64_t sys_pipe2(int pipefd[2], int flags);
+/* Linux syslog(2) / klogctl — BusyBox dmesg. */
+int64_t sys_syslog(int type, char *bufp, int len);
 fd_entry_t *get_process_fd_table(void);
 void ensure_devfs_init(void);
 int stdio_is_redirected(fd_entry_t *fd_table, int fd);

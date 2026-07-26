@@ -317,24 +317,28 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
             return;
         }
 
-        print("[ISR64] int=");
-        print_hex(interrupt_number);
+	/*
+	 * Frame at stack: [int_no, err, RIP, CS, RFLAGS, RSP, SS].
+	 * Printing stack[0] as RIP was wrong (always showed the vector).
+	 */
+	print("[ISR64] int=");
+	print_hex64(interrupt_number);
+	print(" current=");
+	print_hex64((uint64_t)(uintptr_t)current);
+	print(" user=");
+	print_hex((uintptr_t)is_user_exception_frame(stack));
+	print(" cs=");
+	print_hex64(stack[3]);
+	print(" rip=");
+	print_hex64(stack[2]);
+	print(" err=");
+	print_hex64(stack[1]);
+	print(" rsp=");
+	print_hex64(stack[5]);
+	print("\n");
 
-        print(" current=");
-        print_hex((uint64_t)current);
-
-        print(" user=");
-        print_hex(is_user_exception_frame(stack));
-
-        print(" cs=");
-        print_hex(stack[3]);
-
-        print(" rip=");
-        print_hex(stack[0]);
-
-        print("\n");
-
-        panicex("Unhandled kernel CPU exception", PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__);
+	panicex("Unhandled kernel CPU exception", PANIC_KERNEL_BUG, __FILE__,
+		__LINE__, __func__);
     }
 
     /* Manejar syscall (0x80) */

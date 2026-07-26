@@ -63,7 +63,7 @@ INIT_FASE51_SHELL_SRC = setup/pid1/init_fase51_shell.c
 INIT_FASE52_TCC_SRC = setup/pid1/init_fase52_tcc.c
 FASE52_HARNESS_BIN = setup/pid1/fase52_harness
 FASE55D_SMOKE_BIN = setup/doom/doomgeneric_smoke
-RUNIT_STAGE_BIN = setup/runit/stage-bin
+RUNIT_STAGE_BIN = $(RUNIT_STAGE_BIN)
 INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
 INIT_FASE53B_POSIX_PSEUDOFS_SRC = setup/pid1/init_fase53b_posix_pseudofs.c
 INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
@@ -95,9 +95,9 @@ FASE48_ECHO_BIN = setup/pid1/fase48_echo
 FASE48_BUSYBOX_BIN = setup/pid1/fase48_busybox
 FASE50_HELLO_BIN = setup/pid1/fase50_hello
 FASE50_BUSYBOX_BIN = setup/pid1/fase50_busybox_real
-FASE50_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
-FASE58_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
-FASE58_FULL_BUSYBOX_CFG = setup/busybox/fase58_full.config
+FASE50_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
+FASE58_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
+FASE58_FULL_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_full.config
 FASE58L_SMOKE_SRC = setup/pid1/fase58l_busybox_smoke.c
 FASE58L_SMOKE_BIN = setup/pid1/fase58l_busybox_smoke
 FASE58L_SMOKE_LOG = /tmp/fase58l-busybox-smoke.log
@@ -154,16 +154,11 @@ MUSL_PTHREAD_SMOKE_LOG = /tmp/userspace-musl-pthread.log
 SU_SETUID_SMOKE_LOG = /tmp/userspace-su-setuid.log
 FASE55E_DOOM_BIN = setup/pid1/fase55e_doom_interactive
 FASE55E_DOOM_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
-IRINIT_SRC = setup/pid1/irinit.c
-IRINIT_BIN = setup/pid1/sbin/irinit
-RUNIT_VERSION = 2.3.1
-RUNIT_SRC_DIR = setup/third-party/runit-$(RUNIT_VERSION)
-RUNIT_BIN_DIR = setup/runit/bin
+# irinit retired — product PID1 is runit.
+RUNIT_BIN_DIR = $(RUNIT_BIN_DIR)
 RUNIT_INIT_BIN = $(RUNIT_BIN_DIR)/runit-init
 RUNIT_SMOKE_LOG = /tmp/runit-boot-smoke.log
 RUNIT_ASH_SMOKE_LOG = /tmp/runit-ash-smoke.log
-IRINIT_GUI_LOG = /tmp/userspace-irinit-gui.log
-IRINIT_DISPLAY ?= gtk
 DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
@@ -173,7 +168,7 @@ FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
-BUSYBOX_SRC ?= $(KERNEL_ROOT)/setup/third-party/busybox-1.36.1
+BUSYBOX_SRC ?= $(IR0_USERSPACE_ROOT)/packages/busybox/src
 TCC_SRC ?= /tmp/tinycc-fase52
 
 build-init-smoke:
@@ -511,7 +506,7 @@ build-busybox-fase50-min:
 	fi
 	@if [ ! -d "$(BUSYBOX_SRC)" ] || [ ! -f "$(BUSYBOX_SRC)/Makefile" ]; then \
 		echo "✗ BusyBox source missing at BUSYBOX_SRC=$(BUSYBOX_SRC)"; \
-		echo "  Expected vendored tree: setup/third-party/busybox-1.36.1"; \
+		echo "  Expected vendored tree: $(IR0_USERSPACE_ROOT)/packages/busybox/src"; \
 		echo "  Or override: make ... BUSYBOX_SRC=/path/to/busybox-<version>"; \
 		exit 1; \
 	fi
@@ -627,27 +622,20 @@ build-init-fase51-shell:
 	@echo "✓ build-init-fase51-shell OK"
 
 build-irinit:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building irinit PID1 ($(IRINIT_BIN))"
-	@mkdir -p setup/pid1/sbin
-	@$(MUSL_CC) -static -Os -o $(IRINIT_BIN) $(IRINIT_SRC)
-	@file $(IRINIT_BIN) | grep -q ELF
-	@echo "✓ build-irinit OK"
+	@echo "✗ build-irinit retired — PID1 is runit (make build-runit)"
+	@exit 2
 
 build-runit:
-	@chmod +x setup/runit/build-runit.sh
-	@./setup/runit/build-runit.sh
+	@chmod +x $(IR0_USERSPACE_ROOT)/packages/runit/build.sh
+	@./$(IR0_USERSPACE_ROOT)/packages/runit/build.sh
 
 load-userspace-runit: build-runit build-busybox-fase50-min
 	@DISK=$${DISK:-disk.img}; \
 	echo "  DISK    Preparing $$DISK (200M MINIX) for runit..."; \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
 	python3 scripts/inject_init_minix.py --format-large $$DISK; \
-	chmod +x setup/runit/install-to-disk.sh; \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) ./setup/runit/install-to-disk.sh $$DISK
+	chmod +x $(IR0_USERSPACE_ROOT)/services/install-to-disk.sh; \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) $(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK
 	@echo "✓ load-userspace-runit OK (runit-init → runsvdir → console + logger)"
 
 smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
@@ -895,7 +883,7 @@ build-linux-abi-process-lifecycle-probe: scripts/linux_abi/workloads/process_lif
 verify-minix-rootfs: disk.img
 	@python3 scripts/verify_minix_rootfs.py --gate disk.img \
 		/sbin /sbin/init /bin/sh /bin/busybox || \
-		(echo "✗ verify-minix-rootfs FAILED (rebuild with: make build-runit && setup/runit/install-to-disk.sh disk.img)"; exit 1)
+		(echo "✗ verify-minix-rootfs FAILED (rebuild with: make build-runit && $(IR0_USERSPACE_ROOT)/services/install-to-disk.sh disk.img)"; exit 1)
 	@echo "✓ verify-minix-rootfs passed"
 
 linux-abi-audit: kernel-x64-userspace.iso build-linux-abi-brk-probe
@@ -1039,6 +1027,64 @@ smoke-runit-ash-interactive: kernel-x64-userspace.iso
 	@python3 scripts/smoke_runit_ash_interactive.py --log $(RUNIT_ASH_SMOKE_LOG) --timeout 120 --iso kernel-x64-userspace.iso --disk disk.img
 	@echo "  LOG     $(RUNIT_ASH_SMOKE_LOG)"
 
+# Desktop ash command matrix — panics, lock spam, serial storms, Tab, poweroff.
+# Optional Doom product path: WITH_DOOM=1 (virtfs /mnt/host + WAD).
+DESKTOP_CMD_MATRIX_LOG ?= /tmp/ir0-cmd-matrix.log
+DESKTOP_CMD_MATRIX_ROUNDS ?= 1
+# Doom/virtfs is a separate target (smoke-desktop-doom-mnt); ash matrix stays reliable.
+DESKTOP_CMD_MATRIX_WITH_DOOM ?= 0
+.PHONY: smoke-desktop-cmd-matrix smoke-desktop-doom-mnt smoke-desktop-nano-mnt
+smoke-desktop-cmd-matrix: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    disk.img missing — running load-userspace-runit"; \
+		$(MAKE) -s load-userspace-runit; \
+	fi
+	@if [ "$(DESKTOP_CMD_MATRIX_WITH_DOOM)" = "1" ]; then \
+		$(MAKE) -s build-fase55e-doom-interactive; \
+	fi
+	@echo "  SMOKE   desktop ash command matrix (sendkey, doom=$(DESKTOP_CMD_MATRIX_WITH_DOOM))..."
+	@chmod +x scripts/smoke_desktop_cmd_matrix.py
+	@DOOM_ARGS=""; \
+	if [ "$(DESKTOP_CMD_MATRIX_WITH_DOOM)" = "1" ]; then \
+		DOOM_ARGS="--with-doom --doom-bin $(FASE55E_DOOM_BIN) --wad $(REAL_WAD_PATH)"; \
+	fi; \
+	PYTHONUNBUFFERED=1 python3 scripts/smoke_desktop_cmd_matrix.py --iso kernel-x64-userspace.iso \
+		--disk disk.img --log $(DESKTOP_CMD_MATRIX_LOG) \
+		--rounds $(DESKTOP_CMD_MATRIX_ROUNDS) --batch-size 5 --key-delay 0.40 \
+		$$DOOM_ARGS
+	@echo "  LOG     $(DESKTOP_CMD_MATRIX_LOG)"
+
+# Doom product path only: su → mount -t 9p ir0share /mnt/host → doomgeneric + WAD.
+# Flaky under TCG (#DF); not part of default ash matrix.
+smoke-desktop-doom-mnt: kernel-x64-userspace.iso build-fase55e-doom-interactive
+	@chmod +x scripts/smoke_desktop_cmd_matrix.py
+	@PYTHONUNBUFFERED=1 python3 scripts/smoke_desktop_cmd_matrix.py --iso kernel-x64-userspace.iso \
+		--disk disk.img --log /tmp/ir0-cmd-matrix-doom.log --rounds 1 --only-doom \
+		--skip-poweroff \
+		--doom-bin $(FASE55E_DOOM_BIN) --wad $(REAL_WAD_PATH)
+	@echo "  LOG     /tmp/ir0-cmd-matrix-doom.log"
+
+# Nano (static musl): inject /usr/bin/nano into temp disk + TERM=linux edit smoke.
+# Requires IR0-userspace `make build-nano`. Kernel CSI/termios must be present.
+IR0_USERSPACE ?= $(abspath $(CURDIR)/../IR0-userspace)
+IR0_NANO_BIN ?= $(IR0_USERSPACE)/out/stage-bin/nano
+smoke-desktop-nano-mnt: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then \
+		echo "  DISK    disk.img missing — running load-userspace-runit"; \
+		$(MAKE) -s load-userspace-runit; \
+	fi
+	@if [ ! -x "$(IR0_NANO_BIN)" ]; then \
+		echo "  NANO    building $(IR0_NANO_BIN)"; \
+		$(MAKE) -C $(IR0_USERSPACE) -s fetch build-nano; \
+	fi
+	@echo "  SMOKE   desktop nano edit (TERM=linux, injected /usr/bin/nano)..."
+	@chmod +x scripts/smoke_desktop_nano_mnt.py
+	@PYTHONUNBUFFERED=1 IR0_NANO_BIN="$(IR0_NANO_BIN)" \
+		python3 scripts/smoke_desktop_nano_mnt.py \
+		--iso kernel-x64-userspace.iso --disk disk.img \
+		--nano "$(IR0_NANO_BIN)" --log /tmp/ir0-nano-mnt.log
+	@echo "  LOG     /tmp/ir0-nano-mnt.log"
+
 # T1 GUI — runit → BusyBox ash on /dev/console (tier1 stable; not legacy-only).
 .PHONY: run-fase58e-ash-gui check-fase58e-logs
 
@@ -1048,8 +1094,9 @@ run-fase58e-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  FASE58E   runit → ash on /dev/console"
 	@echo "  QEMU     display=$(FASE58E_DISPLAY)"
 	@echo "  LOG      serial -> $(FASE58E_ASH_LOG)"
-	@echo "  HINT     click QEMU window; try: ls / pwd / echo hi"
-	@echo "  HINT     Doom manual: doomgeneric /usr/share/doom/doom1.wad"
+	@echo "  HINT     click QEMU window; try: ls / pwd / echo hi / Tab completion"
+	@echo "  HINT     Doom on disk: doomgeneric  (WAD /usr/share/doom/doom1.wad if injected)"
+	@echo "  HINT     Doom hostshare: mkdir -p /mnt/host && mount -t 9p ir0share /mnt/host && /mnt/host/doomgeneric"
 	@rm -f $(FASE58E_ASH_LOG); \
 	DISK=$$(mktemp /tmp/ir0-fase58e-ash.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
@@ -1513,7 +1560,7 @@ build-matrix-min:
 	@$(MAKE) -s kernel-x64.bin >/dev/null
 	@echo "  MATRIX  Bluetooth disabled"
 	@$(MAKE) defconfig >/dev/null
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n DEBUG_BINS_GROUP_BT=n >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n >/dev/null
 	@$(MAKE) -s kernel-x64.bin >/dev/null
 	@echo "  MATRIX  lazy MM disabled (eager mmap/brk bisect)"
 	@$(MAKE) defconfig >/dev/null

@@ -17,7 +17,7 @@
 #if defined(CONFIG_KTM_PROBE_DIAG) && CONFIG_KTM_PROBE_DIAG
 
 #include <ktm.h>
-#include <ir0/bits/syscall_linux.h>
+#include <ir0/syscall_linux.h>
 #include <ir0/process.h>
 #include <ir0/paging.h>
 #include <ir0/ktm/klog.h>

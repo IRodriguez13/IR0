@@ -44,19 +44,6 @@ void pipe_fase48_get_stats(uint64_t *created, uint64_t *destroyed)
 		*destroyed = fase48_pipe_destroyed;
 }
 
-static void pipe_try_free(pipe_t *pipe, const char *event)
-{
-	if (!pipe)
-		return;
-
-	if (pipe->fd_refs <= 0)
-	{
-		fase49_pipe_line(pipe, event ? event : "DESTROY");
-		fase48_pipe_destroyed++;
-		kfree(pipe);
-	}
-}
-
 pipe_t *pipe_create(void)
 {
 	pipe_t *pipe;
@@ -176,6 +163,8 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 
 void pipe_close_end(pipe_t *pipe, int end)
 {
+	int last = 0;
+
 	if (!pipe)
 		return;
 
@@ -197,11 +186,34 @@ void pipe_close_end(pipe_t *pipe, int end)
 			pipe->closed_write = 1;
 	}
 
+	/*
+	 * Free only on the 1→0 transition. fd_refs<=0 must not call kfree again
+	 * (stale pointer after a prior last-close → double-free panic).
+	 */
 	if (pipe->fd_refs > 0)
+	{
 		pipe->fd_refs--;
+		last = (pipe->fd_refs == 0);
+	}
 
 	fase49_pipe_line(pipe, "CLOSE");
-	pipe_try_free(pipe, "DESTROY");
+
+	/*
+	 * Wake waiters while pipe_t is still alive. Callers must not
+	 * pipe_wake_all() after this returns when last==1 (object may be gone).
+	 */
+	{
+		extern void pipe_wake_all(pipe_t *p);
+
+		pipe_wake_all(pipe);
+	}
+
+	if (last)
+	{
+		fase49_pipe_line(pipe, "DESTROY");
+		fase48_pipe_destroyed++;
+		kfree(pipe);
+	}
 }
 
 void pipe_fase49_note_read_sleep(pipe_t *pipe)

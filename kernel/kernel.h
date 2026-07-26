@@ -38,7 +38,6 @@ void idt_init64(void);
 void idt_load64(void);
 void pic_remap64(void);
 void pic_unmask_irq(uint8_t irq);
-int start_init_process(void);
 void serial_init(void);
 void heap_init(void);
 bool sb16_init(void);

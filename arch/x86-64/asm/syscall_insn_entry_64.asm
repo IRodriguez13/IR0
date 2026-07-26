@@ -249,6 +249,10 @@ syscall_insn_entry_asm:
     ; ---- FASE 24: restore user RSP before sysret -------------------------
     mov rsp, [rel user_rsp_save]
 
+    ; Force IF in R11. Shared syscall stack / cli save can leave IF=0 and
+    ; sysret would return ash with IRQs masked (dead keyboard after login).
+    or r11, 0x200
+
     o64 sysret
 
 section .note.GNU-stack noalloc noexec nowrite progbits

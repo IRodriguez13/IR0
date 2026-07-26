@@ -36,7 +36,8 @@ static int sched_irq_may_preempt(uint64_t *gpr_stack)
 	if (vec < 32 || vec > 47)
 		return 0;
 
-	if (ir0_console_take_resched())
+	/* Peek only — do not clear until we actually schedule. */
+	if (ir0_console_resched_pending())
 		return 2;
 
 	/*
@@ -98,6 +99,34 @@ int sched_irq_preempt_from_frame(uint64_t *gpr_stack)
 		return 0;
 	if (gpr_stack[15] < 32 || gpr_stack[15] > 47)
 		return 0;
+
+	/*
+	 * TTY wake: reader marked READY. Old code called take_resched() then
+	 * aborted when current was BLOCKED, clearing the flag so ash never
+	 * ran after login. If we are inside tty_sleep on this stack, leave
+	 * the flag for idle_poll and let the sleeper see READY. Otherwise
+	 * schedule the woken reader.
+	 */
+	if (why == 2)
+	{
+		if (ir0_console_in_tty_sleep())
+			return 0;
+
+		(void)ir0_console_take_resched();
+		KTM_EVENT(KTM_EV_SCHED_IRQ_TTY_PREEMPT);
+		if ((gpr_stack[18] & 3U) != 3U)
+		{
+			sched_schedule_next();
+			return 0;
+		}
+		if (sched_count_runnable() <= 1)
+			return 0;
+		process_save_user_context_from_irq_frame(gpr_stack);
+		sched_context_switch_skip_prev_save();
+		sched_schedule_next();
+		return 0;
+	}
+
 	if (!current_process || current_process->state == PROCESS_BLOCKED)
 		return 0;
 	if (sched_count_runnable() <= 1)
@@ -105,9 +134,7 @@ int sched_irq_preempt_from_frame(uint64_t *gpr_stack)
 	if ((gpr_stack[18] & 3U) != 3U)
 		return 0;
 
-	if (why == 2)
-		KTM_EVENT(KTM_EV_SCHED_IRQ_TTY_PREEMPT);
-	else if (why == 3)
+	if (why == 3)
 		KTM_EVENT(KTM_EV_SCHED_IRQ_TIMER_PREEMPT);
 
 	process_save_user_context_from_irq_frame(gpr_stack);

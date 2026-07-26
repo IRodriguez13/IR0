@@ -16,8 +16,7 @@ Checks:
 10) kernel/: no #include <drivers/...> (whole tree).
 11) kernel/: no #include <arch/common/arch_portable.h> (use ir0/arch_port.h).
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
-13) debug_bins/: no #include "test/... except debug_bins/cmd_ktest.c (IR0_KERNEL_TESTS).
-14) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
+13) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
     use simple facades in includes/ir0/cpu.h (cpu_relax, smp_mb, inb, …).
     Allowlist: syscall_x86_64.h / syscall_arm64.h only. Empty barrier OK.
 15) includes/ir0/*.h must not #include <drivers/...> (facade seal).
@@ -114,10 +113,6 @@ KERNEL_ARCH_PORTABLE_DIRECT_RE = re.compile(
 
 FS_MM_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]mm/')
 
-DEBUG_BINS_TEST_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*"test/')
-
-DEBUG_BINS_KTEST_CMD = ROOT / "debug_bins" / "cmd_ktest.c"
-
 DEVFS_USERCOPY_RE = re.compile(r"\bcopy_(to|from)_user\s*\(")
 DEVFS_USERCOPY_WHITELIST = {
     "dev_audio_ioctl",
@@ -129,7 +124,6 @@ DEVFS_USERCOPY_WHITELIST = {
 
 DIRS_BLUETOOTH_INCLUDE_SCAN = [
     ROOT / "arch",
-    ROOT / "debug_bins",
     ROOT / "drivers",
     ROOT / "fs",
     ROOT / "includes",
@@ -391,28 +385,6 @@ def check_fs_no_mm_includes():
     return errors
 
 
-def check_debug_bins_test_include_policy():
-    errors = []
-    base = ROOT / "debug_bins"
-    if not base.exists():
-        return errors
-    for fpath in iter_c_files(base):
-        if fpath.resolve() == DEBUG_BINS_KTEST_CMD.resolve():
-            continue
-        try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
-        except Exception as exc:
-            errors.append(f"[read-error] {fpath}: {exc}")
-            continue
-        for idx, line in enumerate(lines, start=1):
-            if DEBUG_BINS_TEST_INCLUDE_RE.search(line):
-                rel = fpath.relative_to(ROOT)
-                errors.append(
-                    f"[debug-bins-no-test-include] {rel}:{idx}: {line.strip()}"
-                )
-    return errors
-
-
 def check_bluetooth_subdir_include_policy():
     errors = []
     bt_root = ROOT / "drivers" / "bluetooth"
@@ -463,8 +435,10 @@ def check_devfs_usercopy_contract():
     fn_re = re.compile(r'^\s*(?:static\s+)?(?:inline\s+)?[A-Za-z_][A-Za-z0-9_\s\*]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(')
 
     for idx, line in enumerate(lines, start=1):
+        # Skip `return foo(` — not a function definition (false positive).
+        stripped = line.lstrip()
         m = fn_re.match(line)
-        if m:
+        if m and not stripped.startswith("return"):
             name = m.group(1)
             if name not in ("if", "while", "for", "switch", "return", "sizeof"):
                 current_fn = name
@@ -754,7 +728,6 @@ def main():
     errors.extend(check_kernel_no_driver_includes())
     errors.extend(check_kernel_no_direct_arch_portable())
     errors.extend(check_fs_no_mm_includes())
-    errors.extend(check_debug_bins_test_include_policy())
     errors.extend(check_bluetooth_subdir_include_policy())
     errors.extend(check_devfs_usercopy_contract())
     errors.extend(check_ktm_core_no_fase())

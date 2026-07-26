@@ -29,6 +29,7 @@
 #include <ir0/errno.h>
 #include <ir0/net.h>
 #include <ir0/driver.h>
+#include <ir0/klog.h>
 #include <ir0/process.h>
 #include <ir0/credentials.h>
 #include <ir0/version.h>
@@ -36,6 +37,8 @@
 #include <ir0/arch_port.h>
 #include <ir0/partition.h>
 #include <ir0/blockdev.h>
+#include <ir0/multiboot.h>
+#include <ir0/arch_cpu.h>
 #include <fs/vfs.h>
 #include <ir0/validation.h>
 #include <ir0/resource_registry.h>
@@ -47,6 +50,8 @@
 #define PROC_LINE_MAX_LEN          256     /* Max line length for parsing */
 #define PROC_ESTIMATED_ENTRY_SIZE  256     /* Estimated entry size for formatting */
 #define PROC_DEFAULT_FILE_SIZE     1024    /* Default file size for stat */
+/* /dev/console device id — single terminal, reported as tty_nr in pid stat. */
+#define IR0_PROC_CONSOLE_TTY_NR    3
 #define BYTES_PER_KB               1024    /* Bytes per kilobyte */
 #define BYTES_PER_SECTOR           512     /* Bytes per disk sector */
 #define SECTORS_PER_MB             (2 * 1024)  /* Sectors per megabyte (2*1024*512 = 1MB) */
@@ -330,6 +335,8 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
             return "status";
         if (strncmp(slash + 1, "cmdline", 7) == 0)
             return "cmdline";
+        if (strncmp(slash + 1, "stat", 4) == 0)
+            return "stat";
         return NULL;
     }
 
@@ -349,6 +356,25 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
                 return "status";
             if (strncmp(slash + 1, "cmdline", 7) == 0)
                 return "cmdline";
+            if (strncmp(slash + 1, "stat", 4) == 0)
+                return "stat";
+        }
+    }
+    else
+    {
+        /* Bare /proc/N directory (digit-only name). */
+        const char *p = after_proc;
+        int digits = 0;
+
+        while (*p >= '0' && *p <= '9')
+        {
+            digits++;
+            p++;
+        }
+        if (digits > 0 && *p == '\0')
+        {
+            *pid_out = atoi(after_proc);
+            return "pid_subdir";
         }
     }
 
@@ -429,6 +455,69 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
     return len;
 }
 
+/*
+ * /proc/[pid]/stat — Linux proc(5) field order.
+ *
+ * Fields 1..22 carry real process state (pid, comm, state, ppid, pgrp,
+ * session, tty_nr, starttime); CPU/memory accounting counters are reported as
+ * 0 because IR0 keeps no per-process time or fault accounting yet. Field 7
+ * (tty_nr) is the /dev/console device id: IR0 exposes a single console today,
+ * so every process on it shares that terminal.
+ */
+int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
+{
+    process_t *proc;
+    const char *state_str = "?";
+    int tty_nr = IR0_PROC_CONSOLE_TTY_NR;
+    int len;
+
+    if (VALIDATE_BUFFER(buf, count) != 0)
+        return -1;
+    memset(buf, 0, count);
+
+    proc = (pid == -1) ? current_process : process_find_by_pid(pid);
+    if (!proc)
+        return 0;
+
+    switch (proc->state)
+    {
+        case PROCESS_READY:   state_str = "R"; break;
+        case PROCESS_RUNNING: state_str = "R"; break;
+        case PROCESS_BLOCKED: state_str = "S"; break;
+        case PROCESS_ZOMBIE:  state_str = "Z"; break;
+    }
+
+    /*
+     * Linux proc(5) after ") ": state … tpgid, then flags..priority (10
+     * fields), nice, num_threads, itrealvalue, starttime, vsize, rss, …
+     * Misplacing starttime as field 21 made BusyBox FAST_TOP see nice≠0
+     * and vsz=0 → STAT "RWN" instead of "R".
+     */
+    len = snprintf(buf, count,
+                   "%d (%s) %s %d %d %d %d %d "     /*  1-8  */
+                   "0 0 0 0 0 0 0 0 0 %d "          /*  9-18 (18=priority) */
+                   "0 0 0 %llu 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n", /* 19-37 */
+                   (int)proc->task.pid,
+                   proc->comm[0] ? proc->comm : "none",
+                   state_str,
+                   (int)proc->ppid,
+                   (int)proc->pgid,
+                   (int)proc->sid,
+                   tty_nr,
+                   (int)proc->pgid,               /* tpgid: fg group on tty */
+                   (int)proc->sched_prio,         /* 18: priority */
+                   (unsigned long long)proc->start_ticks); /* 22: starttime */
+    if (len < 0)
+        return -1;
+    if (len >= (int)count)
+    {
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
+    buf[len] = '\0';
+    return len;
+}
+
 /* /proc/uptime: raw data only. One line: uptime_sec */
 int proc_uptime_read(char *buf, size_t count)
 {
@@ -451,7 +540,8 @@ int proc_version_read(char *buf, size_t count)
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
     memset(buf, 0, count);
-    int len = snprintf(buf, count, "%s\t%s\t%s\t%s\t%s\t%s\n",
+    /* Human line aligned with uname identity (IR0/Unix). */
+    int len = snprintf(buf, count, "IR0 version %s IR0/Unix (%s %s by %s@%s with %s)\n",
                        IR0_VERSION_STRING, IR0_BUILD_DATE, IR0_BUILD_TIME,
                        IR0_BUILD_USER, IR0_BUILD_HOST, IR0_BUILD_CC);
     if (len < 0) return -1;
@@ -460,18 +550,28 @@ int proc_version_read(char *buf, size_t count)
     return len;
 }
 
-/* /proc/cmdline: boot command line visible to userspace (QEMU/default). */
+/* /proc/cmdline: Multiboot command line, or a QEMU-shaped default. */
 int proc_boot_cmdline_read(char *buf, size_t count)
 {
-    static const char cmdline[] = "root=/dev/hda console=ttyS0\n";
+    const struct multiboot_info *mb;
+    const char *cmdline = "root=/dev/hda console=ttyS0";
     size_t n;
+    size_t i;
 
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
-    n = sizeof(cmdline) - 1;
-    if (n >= count)
-        n = count - 1;
-    memcpy(buf, cmdline, n);
+
+    mb = (const struct multiboot_info *)get_boot_params();
+    if (mb && (mb->flags & MULTIBOOT_FLAG_CMDLINE) && mb->cmdline)
+        cmdline = (const char *)(uintptr_t)mb->cmdline;
+
+    n = 0;
+    while (cmdline[n] && n + 1 < count)
+        n++;
+    for (i = 0; i < n; i++)
+        buf[i] = cmdline[i];
+    if (n + 1 < count)
+        buf[n++] = '\n';
     buf[n] = '\0';
     return (int)n;
 }
@@ -964,7 +1064,7 @@ int proc_kmsg_read(char *buf, size_t count)
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
     memset(buf, 0, count);
-    n = logging_read_buffer(buf, count);
+    n = klog_read_records(buf, count);
     if (n < 0)
         return -1;
     if (n >= (int)count)
@@ -1141,11 +1241,33 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
 
     if (strcmp(path, "/proc") == 0 || strcmp(path, "/proc/") == 0)
     {
+        process_t *p;
+        unsigned long irqf;
+
         pseudo_fs_nodes_register_all();
         n = pseudo_fs_collect_registry_children("/proc", entries, max_entries, 0);
         if (n < 0)
             return n;
-        return proc_readdir_add(entries, max_entries, n, "pid", DT_DIR);
+        n = proc_readdir_add(entries, max_entries, n, "pid", DT_DIR);
+        /*
+         * BusyBox ps scans /proc for digit dirents then opens /proc/N/stat.
+         * Listing only "pid/" left ps empty.
+         */
+        irqf = irq_save();
+        for (p = process_list; p && n < max_entries; p = p->next)
+        {
+            char pid_str[16];
+            int len;
+
+            if (p->state == PROCESS_ZOMBIE)
+                continue;
+            len = snprintf(pid_str, sizeof(pid_str), "%d", (int)p->task.pid);
+            if (len <= 0 || len >= (int)sizeof(pid_str))
+                break;
+            n = proc_readdir_add(entries, max_entries, n, pid_str, DT_DIR);
+        }
+        irq_restore(irqf);
+        return n;
     }
 
     filename = proc_resolve_path(path, &pid);
@@ -1178,6 +1300,7 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
         n = 0;
         n = proc_readdir_add(entries, max_entries, n, "status", DT_REG);
         n = proc_readdir_add(entries, max_entries, n, "cmdline", DT_REG);
+        n = proc_readdir_add(entries, max_entries, n, "stat", DT_REG);
         return n;
     }
 
@@ -1218,7 +1341,8 @@ int proc_open(const char *path, int flags)
         return -ENOENT;
 
     /* Files: opened only via pseudo_bind_file_fd (registry / dynamic). */
-    if (strcmp(filename, "status") == 0 || strcmp(filename, "cmdline") == 0)
+    if (strcmp(filename, "status") == 0 || strcmp(filename, "cmdline") == 0 ||
+        (strcmp(filename, "stat") == 0 && pid > 0))
         return -ENOENT;
 
     if (strcmp(filename, "pid_dir") == 0 || strcmp(filename, "pid_subdir") == 0)

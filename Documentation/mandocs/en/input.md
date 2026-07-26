@@ -95,7 +95,7 @@ Dual path diagram:
 - `CONFIG_KEYBOARD_LAYOUT`: 0=US, 1=LATAM.
 - `CONFIG_TEST_INPUT_INJECT` + ioctl `IR0_INPUT_IOCTL_INJECT` for deterministic tests.
 - Doom smoke: `init_fase54b-input`, `smoke-fase54b-input`.
-- dbgshell probes `/dev/events0` at startup.
+- Product/GUI smokes probe `/dev/events0` (no in-kernel shell).
 
 ## 10. Future roadmap
 

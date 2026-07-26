@@ -52,11 +52,18 @@ default subsystems to **enabled** (bring-up friendly).
 
 | Target | Notes |
 |--------|-------|
-| `make run` | GUI + `disk.img` (recommended) |
+| `make run` | Product GUI: userspace ISO + runit/getty/ash |
 | `make run-console` | Serial-focused |
 | `make run-gdb` | Wait for GDB on localhost:1234 |
-| `make run-fase58e-ash-gui` | Interactive BusyBox ash |
-| `make run-irinit-interactive-gui` | irinit + ash path |
+| `make run-fase58e-ash-gui` | Interactive ash; Doom/WAD via virtio-9p when `REAL_WAD_PATH` set |
+| `make run-bootlog` | Boot log → `build/hostshare/ir0-boot.log` (reuses `disk.img`) |
+| `make smoke-runit-boot` | runit PID1 boot smoke |
+| `make load-userspace-runit` | Inject runit + BusyBox on MINIX disk (cached stamp) |
+
+**Disk injection policy:** `/sbin/init` and the runit tree must live on the MINIX
+root (`disk.img`) today — root-from-virtio is not implemented. Extra payloads
+(Doom, WAD, boot log export) use virtio-9p when available; `load-userspace-runit`
+skips reinject when the stamp is newer than inputs.
 
 Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-rootfs`.
 
@@ -102,7 +109,7 @@ The Makefile builds `ALL_OBJS` from layered fragments:
 - **Core:** `kernel/`, `fs/`, `mm/`, `sched/`, `includes/ir0/`
 - **Arch:** `arch/x86-64/` or `arch/arm64/` selected by `ARCH`
 - **Drivers:** gated by `CONFIG_ENABLE_*` and `CONFIG_INIT_*`
-- **Debug:** `debug_bins/` when `CONFIG_KERNEL_DEBUG_SHELL=y`
+- **Userspace coupling:** sibling `IR0-userspace` via `IR0_USERSPACE_ROOT` (see [`USERSPACE.md`](USERSPACE.md)); no in-tree `debug_bins/`
 - **Generated:** `version.o`, kconfig headers
 
 Adding a new subsystem requires **four wiring points** (CTR rule):

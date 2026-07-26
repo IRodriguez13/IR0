@@ -69,8 +69,6 @@ drivers. Las reglas ejecutadas por `scripts/architecture_guard.py` están tabula
 | `kernel-no-driver-include` | `kernel/` (árbol completo) | Sin `#include <drivers/...>` |
 | `kernel-use-arch-port-facade` | `kernel/` | Sin `#include <arch/common/arch_portable.h>`; **`ir0/arch_port.h`** |
 | `bluetooth-include-scope` | Fuera de `drivers/bluetooth/` | Sin `#include <bluetooth/...>` |
-| `debug-bins-no-test-include` | `debug_bins/` | Sin `#include "test/..."` salvo **`debug_bins/cmd_ktest.c`** (`IR0_KERNEL_TESTS`) |
-
 | Recursos | `resource_register_irq`, `resource_register_ioport` | Los drivers usan [`includes/ir0/resource_registry.h`](../../includes/ir0/resource_registry.h). |
 
 **Nota proc/sys:** el runtime legacy sigue siendo **FD + switch** en `fs/procfs.c`; la tabla registrada amplía algunos endpoints sin reemplazar todavía el árbol completo.

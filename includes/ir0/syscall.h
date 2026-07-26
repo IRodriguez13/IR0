@@ -29,9 +29,9 @@
  * POSIX-compliant System Call Numbers (Linux/musl ABI)
  *
  * Numbers follow Linux x86-64 syscall conventions for musl compatibility.
- * See <ir0/bits/syscall_linux.h> for __NR_* definitions.
+ * See <ir0/syscall_linux.h> for __NR_* definitions.
  */
-#include <ir0/bits/syscall_linux.h>
+#include <ir0/syscall_linux.h>
 
 /* Map SYS_* to Linux __NR_* for backward compatibility */
 #define SYS_READ         __NR_read
@@ -88,7 +88,6 @@
 #define SYS_CONSOLE_CLEAR __NR_console_clear
 #define SYS_KEYMAP_SET   __NR_keymap_set
 #define SYS_KEYMAP_GET   __NR_keymap_get
-#define SYS_SUDO_AUTH    __NR_sudo_auth
 
 /* creat: use open(O_CREAT|O_WRONLY|O_TRUNC, mode) - no separate Linux syscall */
 #define SYS_CREAT        __NR_open
@@ -298,11 +297,6 @@ static inline int64_t ir0_setgid(gid_t gid)
 static inline int64_t ir0_umask(mode_t mask)
 {
     return syscall1(SYS_UMASK, (int64_t)mask);
-}
-
-static inline int64_t ir0_sudo_auth(const char *password)
-{
-    return syscall1(SYS_SUDO_AUTH, (int64_t)password);
 }
 
 /* Directory operations */

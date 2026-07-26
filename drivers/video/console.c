@@ -27,7 +27,73 @@ static int fb_origin_y;
 static int fb_cell_w;
 static int fb_cell_h;
 
+/* Glyph+color shadow so the software cursor can restore column 0 after CR/LF. */
+static uint16_t cell_shadow[CONSOLE_MAX_HEIGHT][CONSOLE_MAX_WIDTH];
+
 #define VGA_BUF ((volatile uint16_t *)0xB8000)
+
+static int shadow_rows(void)
+{
+	return use_fb ? fb_console_rows : CONSOLE_HEIGHT;
+}
+
+static int shadow_cols(void)
+{
+	return use_fb ? fb_console_cols : CONSOLE_WIDTH;
+}
+
+static void shadow_put(int row, int col, char c, uint8_t color)
+{
+	int rows = shadow_rows();
+	int cols = shadow_cols();
+
+	if (row < 0 || row >= rows || col < 0 || col >= cols)
+		return;
+	if (row >= CONSOLE_MAX_HEIGHT || col >= CONSOLE_MAX_WIDTH)
+		return;
+	cell_shadow[row][col] = (uint16_t)(((uint16_t)color << 8) | (uint8_t)c);
+}
+
+static void shadow_scroll_up(uint8_t clear_color)
+{
+	int r;
+	int c;
+	int rows = shadow_rows();
+	int cols = shadow_cols();
+
+	if (rows > CONSOLE_MAX_HEIGHT)
+		rows = CONSOLE_MAX_HEIGHT;
+	if (cols > CONSOLE_MAX_WIDTH)
+		cols = CONSOLE_MAX_WIDTH;
+
+	for (r = 0; r < rows - 1; r++)
+	{
+		for (c = 0; c < cols; c++)
+			cell_shadow[r][c] = cell_shadow[r + 1][c];
+	}
+	for (c = 0; c < cols; c++)
+		cell_shadow[rows - 1][c] =
+			(uint16_t)(((uint16_t)clear_color << 8) | ' ');
+}
+
+static void shadow_clear(uint8_t color)
+{
+	int r;
+	int c;
+	int rows = shadow_rows();
+	int cols = shadow_cols();
+
+	if (rows > CONSOLE_MAX_HEIGHT)
+		rows = CONSOLE_MAX_HEIGHT;
+	if (cols > CONSOLE_MAX_WIDTH)
+		cols = CONSOLE_MAX_WIDTH;
+
+	for (r = 0; r < rows; r++)
+	{
+		for (c = 0; c < cols; c++)
+			cell_shadow[r][c] = (uint16_t)(((uint16_t)color << 8) | ' ');
+	}
+}
 
 static void put_cell_vga(int row, int col, char c, uint8_t color)
 {
@@ -55,11 +121,12 @@ static void clear_vga(uint8_t color)
 }
 
 #if CONFIG_ENABLE_VBE
+/* Soft product palette: off-black bg, light-gray fg (not pure white). */
 static const uint8_t vga_palette_rgb[16][3] = {
-	{0, 0, 0}, {0, 0, 170}, {0, 170, 0}, {0, 170, 170},
-	{170, 0, 0}, {170, 0, 170}, {170, 85, 0}, {170, 170, 170},
-	{85, 85, 85}, {85, 85, 255}, {85, 255, 85}, {85, 255, 255},
-	{255, 85, 85}, {255, 85, 255}, {255, 255, 85}, {255, 255, 255}
+	{12, 12, 14}, {0, 0, 170}, {0, 170, 0}, {0, 170, 170},
+	{170, 0, 0}, {170, 0, 170}, {200, 140, 40}, {180, 180, 180},
+	{90, 90, 95}, {85, 85, 255}, {85, 255, 85}, {85, 255, 255},
+	{230, 70, 70}, {255, 85, 255}, {255, 200, 80}, {220, 220, 220}
 };
 
 static uint32_t fb_rgb_from_vga(uint8_t idx)
@@ -109,24 +176,40 @@ static void fb_compute_layout(uint32_t w, uint32_t h)
 {
 	int pw;
 	int ph;
+	const int margin = CONSOLE_FB_MARGIN_PX;
+	int usable_w;
+	int usable_h;
 
-	fb_console_cols = CONSOLE_WIDTH;
-	fb_console_rows = CONSOLE_HEIGHT;
-	fb_scale = CONSOLE_FB_SCALE_DEFAULT;
-	fb_cell_w = FONT_WIDTH * fb_scale;
-	fb_cell_h = FONT_HEIGHT * fb_scale;
+	fb_scale = 1;
+	fb_cell_w = FONT_PRODUCT_WIDTH;
+	fb_cell_h = FONT_PRODUCT_HEIGHT;
+
+	usable_w = (int)w - 2 * margin;
+	usable_h = (int)h - 2 * margin;
+	if (usable_w < fb_cell_w)
+		usable_w = (int)w;
+	if (usable_h < fb_cell_h)
+		usable_h = (int)h;
+
+	fb_console_cols = usable_w / fb_cell_w;
+	fb_console_rows = usable_h / fb_cell_h;
+	if (fb_console_cols < 40)
+		fb_console_cols = 40;
+	if (fb_console_rows < 12)
+		fb_console_rows = 12;
+	if (fb_console_cols > CONSOLE_MAX_WIDTH)
+		fb_console_cols = CONSOLE_MAX_WIDTH;
+	if (fb_console_rows > CONSOLE_MAX_HEIGHT)
+		fb_console_rows = CONSOLE_MAX_HEIGHT;
+
+	/* Fit again if clamped geometry exceeds the panel. */
+	while (fb_console_cols * fb_cell_w > (int)w && fb_console_cols > 40)
+		fb_console_cols--;
+	while (fb_console_rows * fb_cell_h > (int)h && fb_console_rows > 12)
+		fb_console_rows--;
+
 	pw = fb_console_cols * fb_cell_w;
 	ph = fb_console_rows * fb_cell_h;
-
-	if (pw > (int)w || ph > (int)h)
-	{
-		fb_scale = 1;
-		fb_cell_w = FONT_WIDTH;
-		fb_cell_h = FONT_HEIGHT;
-		pw = fb_console_cols * fb_cell_w;
-		ph = fb_console_rows * fb_cell_h;
-	}
-
 	fb_origin_x = ((int)w - pw) / 2;
 	fb_origin_y = ((int)h - ph) / 2;
 	if (fb_origin_x < 0)
@@ -149,9 +232,7 @@ static void put_cell_fb(int row, int col, char c, uint8_t color)
 	unsigned char idx;
 	const unsigned char *glyph;
 	int dy;
-	int sy;
 	int dx;
-	int sx;
 
 	if (row < 0 || row >= fb_console_rows || col < 0 || col >= fb_console_cols)
 		return;
@@ -173,23 +254,20 @@ static void put_cell_fb(int row, int col, char c, uint8_t color)
 		return;
 
 	idx = (unsigned char)c;
-	glyph = font_8x16[idx];
+	glyph = font_terminus_14x28[idx];
 
-	for (dy = 0; dy < FONT_HEIGHT; dy++)
+	/* Native Terminus 14×28: 2 bytes/row, MSB = leftmost pixel. */
+	for (dy = 0; dy < FONT_PRODUCT_HEIGHT; dy++)
 	{
-		uint8_t row_bits = glyph[dy];
+		const unsigned char *row_bytes = glyph + dy * 2;
+		uint32_t *line = (uint32_t *)(fb + (py + dy) * pitch);
 
-		for (sy = 0; sy < fb_scale; sy++)
+		for (dx = 0; dx < FONT_PRODUCT_WIDTH; dx++)
 		{
-			uint32_t *line = (uint32_t *)(fb + (py + dy * fb_scale + sy) * pitch);
+			uint8_t bit = row_bytes[dx >> 3] & (uint8_t)(0x80u >> (dx & 7));
+			uint32_t pixel = bit ? fg_rgb : bg_rgb;
 
-			for (dx = 0; dx < FONT_WIDTH; dx++)
-			{
-				uint32_t pixel = (row_bits & (0x80 >> dx)) ? fg_rgb : bg_rgb;
-
-				for (sx = 0; sx < fb_scale; sx++)
-					line[px + dx * fb_scale + sx] = pixel;
-			}
+			line[px + dx] = pixel;
 		}
 	}
 }
@@ -278,7 +356,49 @@ static void clear_fb(uint8_t color)
 }
 #endif
 
-void console_put_cell(int row, int col, char c, uint8_t color)
+/*
+ * Always available (VGA text and framebuffer). Must not live inside the
+ * CONFIG_ENABLE_VBE block — TIOCGWINSZ / tiny matrix need this symbol.
+ */
+void console_get_geometry(struct console_geometry *geo)
+{
+	uint32_t w = 0;
+	uint32_t h = 0;
+	uint32_t bpp = 0;
+
+	if (!geo)
+		return;
+	memset(geo, 0, sizeof(*geo));
+	geo->columns = (unsigned)console_get_width();
+	geo->rows = (unsigned)console_get_height();
+	geo->scale = (unsigned)console_get_fb_scale();
+	if (use_fb)
+	{
+		geo->cell_width = (unsigned)fb_cell_w;
+		geo->cell_height = (unsigned)fb_cell_h;
+	}
+	else
+	{
+		geo->cell_width = FONT_EARLY_WIDTH;
+		geo->cell_height = FONT_EARLY_HEIGHT;
+	}
+#if CONFIG_ENABLE_VBE
+	if (use_fb && vbe_get_info(&w, &h, &bpp))
+	{
+		geo->pixel_width = w;
+		geo->pixel_height = h;
+		return;
+	}
+#else
+	(void)w;
+	(void)h;
+	(void)bpp;
+#endif
+	geo->pixel_width = geo->columns * geo->cell_width;
+	geo->pixel_height = geo->rows * geo->cell_height;
+}
+
+void console_draw_cell(int row, int col, char c, uint8_t color)
 {
 	if (use_fb)
 		put_cell_fb(row, col, c, color);
@@ -286,8 +406,27 @@ void console_put_cell(int row, int col, char c, uint8_t color)
 		put_cell_vga(row, col, c, color);
 }
 
+void console_put_cell(int row, int col, char c, uint8_t color)
+{
+	shadow_put(row, col, c, color);
+	console_draw_cell(row, col, c, color);
+}
+
+uint16_t console_get_cell(int row, int col)
+{
+	int rows = shadow_rows();
+	int cols = shadow_cols();
+
+	if (row < 0 || row >= rows || col < 0 || col >= cols)
+		return (uint16_t)((0x07u << 8) | ' ');
+	if (row >= CONSOLE_MAX_HEIGHT || col >= CONSOLE_MAX_WIDTH)
+		return (uint16_t)((0x07u << 8) | ' ');
+	return cell_shadow[row][col];
+}
+
 void console_scroll_up(uint8_t clear_color)
 {
+	shadow_scroll_up(clear_color);
 	if (use_fb)
 		scroll_up_fb(clear_color);
 	else
@@ -296,6 +435,7 @@ void console_scroll_up(uint8_t clear_color)
 
 void console_clear(uint8_t color)
 {
+	shadow_clear(color);
 	if (use_fb)
 		clear_fb(color);
 	else

@@ -10,7 +10,13 @@ TGZ_URL="${MUSL_AARCH64_TGZ_URL:-https://musl.cc/aarch64-linux-musl-cross.tgz}"
 CACHE_TGZ="${MUSL_AARCH64_TGZ:-/tmp/aarch64-linux-musl-cross.tgz}"
 
 if [ -x "$GCC" ]; then
-	echo "✓ musl aarch64 already present: $GCC"
+	crt="$("$GCC" -print-file-name=crt1.o 2>/dev/null || true)"
+	if [ -n "$crt" ] && [ "$crt" != "crt1.o" ] && [ -f "$crt" ]; then
+		echo "✓ musl aarch64 already present: $GCC"
+		"$GCC" -dumpmachine
+		exit 0
+	fi
+	echo "✓ musl aarch64 present (CRT incomplete — freestanding hello fallback OK): $GCC"
 	"$GCC" -dumpmachine
 	exit 0
 fi
