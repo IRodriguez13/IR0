@@ -40,8 +40,8 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 			{
 				klog_debug_fmt("KERN", "%x fd=%llx refs_before=%llx end=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)((uint64_t)i), (unsigned long long)((uint64_t)refs_before), (unsigned long long)((uint64_t)e->pipe_end));
 			}
+			/* pipe_close_end wakes waiters then frees on last ref. */
 			pipe_close_end(pip, e->pipe_end);
-			pipe_wake_all(pip);
 			e->vfs_file = NULL;
 		}
 		else if (i <= 2)
@@ -58,6 +58,13 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 		{
 			devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
 
+			if (e->vfs_file &&
+			    devfs_node_wants_text_snap(e->dev_device_id))
+			{
+				devfs_text_snap_release(
+					(devfs_text_snap_t *)e->vfs_file);
+				e->vfs_file = NULL;
+			}
 			if (node)
 				devfs_close_node(node);
 		}
@@ -152,6 +159,10 @@ int process_duplicate_fd_table(process_t *parent, process_t *child)
 
 			if (node)
 				node->ref_count++;
+			if (e->vfs_file &&
+			    devfs_node_wants_text_snap(e->dev_device_id))
+				devfs_text_snap_acquire(
+					(devfs_text_snap_t *)e->vfs_file);
 		}
 		else if (e->is_pseudo && e->vfs_file)
 		{

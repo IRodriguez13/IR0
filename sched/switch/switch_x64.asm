@@ -297,7 +297,10 @@ switch_context_x64:
     movzx rdi, word [r11 + 0x9A]
     push rdi
     push qword [r11 + 0x70]
-    push qword [r11 + 0x88]
+    ; Force IF — task.rflags may have been saved under cli (IF=0).
+    mov rdi, [r11 + 0x88]
+    or rdi, 0x200
+    push rdi
     movzx rdi, word [r11 + 0x90]
     push rdi
     push qword [r11 + 0x80]
@@ -438,8 +441,9 @@ switch_to_user_task_asm:
     movzx rdi, word [r11 + 0x9A]
     push rdi
     push qword [r11 + 0x70]
+    ; Force IF (0x200) + bit1; clear TF. Saved rflags may be IF=0 under cli.
     mov rdi, [r11 + 0x88]
-    or rdi, 2
+    or rdi, 0x202
     and rdi, 0xFFFFFFFFFFFFFEFF
     push rdi
     movzx rdi, word [r11 + 0x90]

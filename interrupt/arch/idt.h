@@ -37,6 +37,8 @@ void idt_init64(void);
 void idt_load64(void);
 void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags,
                     uint8_t ist);
+/* Minimal exception table right after GDT/TSS; replaced by idt_init64(). */
+void idt_early_install64(void);
 
 void isr_handler64(uint64_t interrupt_number, uint64_t *stack);
 

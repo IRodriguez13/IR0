@@ -417,6 +417,27 @@ const char *get_cmdline(void);
 const char *get_arch_name(void);
 
 /**
+ * uname(2) machine field (x86_64 / aarch64 / …).
+ */
+const char *get_arch_uname_machine(void);
+
+typedef enum
+{
+	ARCH_CLOCK_UNAVAILABLE = 0,
+	ARCH_CLOCK_RAW = 1,
+	ARCH_CLOCK_CALIBRATED = 2,
+	ARCH_CLOCK_MONOTONIC = 3
+} arch_clock_quality_t;
+
+/*
+ * Earliest architecture counter. RAW means ordered ticks only: callers must
+ * not render duration until the common monotonic clock is calibrated.
+ */
+int arch_early_clock_available(void);
+uint64_t arch_early_clock_read(void);
+arch_clock_quality_t arch_early_clock_quality(void);
+
+/**
  * Get architecture bits (32/64)
  */
 uint32_t get_arch_bits(void);

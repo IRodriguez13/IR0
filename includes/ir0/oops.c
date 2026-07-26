@@ -17,6 +17,7 @@
 #include <kernel/process.h>
 #include <stdint.h>
 #include <ir0/cpu.h>
+#include <ir0/clock.h>
 /**
  * Kernel panic handler - comprehensive error reporting system
  *
@@ -60,6 +61,30 @@ int ir0_panic_in_progress(void)
 /* Forward declarations for helper functions */
 static void dump_process_context(void);
 static void dump_memory_state(void);
+
+/* Panic-safe decimal (no malloc, no printf). */
+static void klog_u32_dec(uint32_t n)
+{
+	char dec[12];
+	int i = 0;
+
+	if (n == 0)
+	{
+		klog_print("0");
+		return;
+	}
+	while (n && i < (int)sizeof(dec) - 1)
+	{
+		dec[i++] = (char)('0' + (n % 10));
+		n /= 10;
+	}
+	while (i > 0)
+	{
+		char c[2] = { dec[--i], '\0' };
+
+		klog_print(c);
+	}
+}
 
 /**
  * panicex - Extended panic handler with comprehensive diagnostics
@@ -124,7 +149,26 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     klog_print("========================================\n");
     klog_print("KERNEL PANIC - SYSTEM HALTED\n");
     klog_print("========================================\n");
-    klog_print("Timestamp: [kernel panic - no reliable time source]\n");
+    {
+	/*
+	 * Monotonic uptime is a plain counter read — no locks. If the clock
+	 * subsystem was never calibrated, values may be zero; still preferred
+	 * over a hard-coded "no reliable time" string when ticks exist.
+	 */
+	uint64_t up_ms = clock_get_uptime_milliseconds();
+	uint64_t up_s = up_ms / 1000ULL;
+	uint64_t up_frac = up_ms % 1000ULL;
+
+	klog_print("Uptime at panic: ");
+	klog_u32_dec((uint32_t)up_s);
+	klog_print(".");
+	if (up_frac < 100)
+		klog_print("0");
+	if (up_frac < 10)
+		klog_print("0");
+	klog_u32_dec((uint32_t)up_frac);
+	klog_print(" s\n");
+    }
     klog_print("Panic Level: ");
     klog_print(panic_level_names[level]);
     klog_print("\n");
@@ -142,6 +186,10 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     klog_print("\n");
     klog_print("========================================\n");
 
+    /*
+     * Framebuffer and VGA text: clear_screen()/print() already select the
+     * active console backend so the panic is visible on the product FB path.
+     */
     clear_screen();
     print_colored("     ╔════════════════════════════════════════════════════════╗\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
     print_colored("     ║                                                        ║\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
@@ -151,13 +199,13 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
 
     print("\n");
 
-    /* Panic info  */
+    /* Panic info — always on screen (FB or VGA). */
     print_colored("Type: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
     print_error(panic_level_names[level]);
     print("\n");
 
     print_colored("Location: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print(file);
+    print(file ? file : "unknown");
     print(":");
     print_hex_compact(line);
     print("\n");
@@ -167,8 +215,15 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     print("\n");
 
     print_colored("Due to: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
-    print_error(message);
-    print("\n\n");
+    print_error(message ? message : "no message");
+    print("\n");
+    {
+	uint64_t up_ms = clock_get_uptime_milliseconds();
+
+	print_colored("Uptime ms: ", VGA_COLOR_CYAN, VGA_COLOR_BLACK);
+	print_hex_compact((uint32_t)up_ms);
+	print("\n\n");
+    }
 
     /* Dump CPU state - registers and control registers */
     dump_registers();
@@ -236,11 +291,36 @@ static void dump_process_context(void)
 
     if (current_process)
     {
+	uint32_t pid = (uint32_t)current_process->task.pid;
+
         klog_print("Current PID: ");
-        klog_hex32((uint32_t)current_process->task.pid);
-        klog_print(" state=");
+	klog_u32_dec(pid);
+	klog_print(" (0x");
+        klog_hex32(pid);
+        klog_print(")\n");
+	klog_print("comm: ");
+	klog_print(current_process->comm[0] ? current_process->comm : "(none)");
+	klog_print("\n");
+	klog_print("state: 0x");
         klog_hex64((uint64_t)current_process->state);
         klog_print("\n");
+	klog_print("uid/euid/suid: ");
+	klog_u32_dec((uint32_t)current_process->uid);
+	klog_print("/");
+	klog_u32_dec((uint32_t)current_process->euid);
+	klog_print("/");
+	klog_u32_dec((uint32_t)current_process->suid);
+	klog_print("\n");
+	klog_print("gid/egid/sgid: ");
+	klog_u32_dec((uint32_t)current_process->gid);
+	klog_print("/");
+	klog_u32_dec((uint32_t)current_process->egid);
+	klog_print("/");
+	klog_u32_dec((uint32_t)current_process->sgid);
+	klog_print("\n");
+	klog_print("cwd: ");
+	klog_print(current_process->cwd[0] ? current_process->cwd : "(none)");
+	klog_print("\n");
     }
     else
     {

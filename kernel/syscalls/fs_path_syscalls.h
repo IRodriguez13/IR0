@@ -30,6 +30,11 @@ int64_t sys_uname(struct utsname *buf);
 int64_t sys_access(const char *pathname, int mode);
 int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags);
 int64_t sys_chdir(const char *pathname);
+/*
+ * Kernel-path chdir (no userspace pointer check). Used by sys_fchdir and
+ * after sys_chdir has validated/copied the user string.
+ */
+int64_t ir0_chdir_resolved(const char *pathname);
 int64_t sys_getcwd(char *buf, size_t size);
 int64_t sys_utimensat(int dirfd, const char *pathname,
                       const struct timespec *times, int flags);

@@ -231,7 +231,7 @@ Tags serial (grep en log):
 Introspección en runtime:
 
 - `/proc/mounts`, `/proc/filesystems`, `/proc/drivers`
-- `debug_bins` y ktest
+- ktest / auditorías linux-abi
 
 Fallos frecuentes:
 

@@ -71,13 +71,17 @@ int driver_bootstrap_run_all(void)
             if ((int)entry->stage != stage || !entry->enabled)
                 continue;
 
-            LOG_INFO_FMT("DRIVERS", "Boot init: %s", entry->name);
+            LOG_DEBUG_FMT("DRIVERS", "Boot init: %s", entry->name);
             ret = entry->init_fn();
             if (ret != 0)
             {
                 LOG_WARNING_FMT("DRIVERS", "Boot init failed: %s (%d)",
                                 entry->name, ret);
                 failures++;
+            }
+            else
+            {
+                LOG_INFO_FMT("DRIVERS", "%s initialized", entry->name);
             }
         }
     }

@@ -231,7 +231,7 @@ Runtime introspection:
 
 - `/proc/mounts`, `/proc/filesystems` — static/registry text
 - `/proc/drivers` — driver registry snapshot
-- `debug_bins` and ktest — path open/read contracts
+- ktest / linux-abi audits — path open/read contracts
 
 Host tests: `make -C tests/host run` (vfs-related cases when present).
 

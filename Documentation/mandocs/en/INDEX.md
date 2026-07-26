@@ -36,7 +36,7 @@ Start here: `make man TOPIC=onboarding`. Study subsystems via `man IR0-vfs`, etc
 | ipc | IR0-ipc | T0–T1 | stable | `pipe.h` |
 | input | IR0-input | T2 | stable | `input.h`, `input_backend.h` |
 | graphics | IR0-graphics | T2 | stable | `fb.h`, `video_backend.h` |
-| debug-bins | IR0-debug-bins | T0 | stable | debug shell paths |
+| debug-bins | IR0-debug-bins | historical | removed | tree deleted 2026-07-25; see USERSPACE.md |
 | signals | IR0-signals | T1 | stable | `signals.h` |
 | security | IR0-security | T0–T1 | stable | cred / sudo paths |
 

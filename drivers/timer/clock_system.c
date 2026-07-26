@@ -21,6 +21,7 @@
 #include <ir0/sched.h>
 #include <ir0/clock_wait.h>
 #include <ir0/poll.h>
+#include <ir0/ktm/klog.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"
 #include "clock_system.h"
@@ -75,7 +76,7 @@ int clock_system_init(void)
 
     /* Mark as initialized */
     clock_state.initialized = 1;
-    print_success("Clock system initialized successfully with PIT\n");
+    klog_notice("CLOCK", "Clock system initialized with PIT");
     return 0;
 }
 

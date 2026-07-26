@@ -19,10 +19,14 @@ static const char *ktm_klog_level_name(klog_level_t level)
 {
 	switch (level)
 	{
+	case KLOG_LEVEL_TRACE:
+		return "TRACE";
 	case KLOG_LEVEL_DEBUG:
 		return "DEBUG";
 	case KLOG_LEVEL_INFO:
 		return "INFO";
+	case KLOG_LEVEL_NOTICE:
+		return "NOTICE";
 	case KLOG_LEVEL_WARN:
 		return "WARN";
 	case KLOG_LEVEL_ERROR:

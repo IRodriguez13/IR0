@@ -30,6 +30,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
+#include <ir0/arch_cpu.h>
 #include <ir0/utsname.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>
@@ -109,6 +110,20 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     if (rc != 0)
       return rc;
     dev_path = dev_resolved;
+  }
+
+  /* Remount convention for the 3-arg IR0 mount ABI (recovery RO/RW). */
+  if (strcmp(dev_copy, "remount") == 0)
+  {
+    unsigned long flags = IR0_MS_REMOUNT;
+
+    if (strcmp(mount_fstype, "ro") == 0 ||
+        strcmp(mount_fstype, "remount,ro") == 0)
+      flags |= IR0_MS_RDONLY;
+    else if (strcmp(mount_fstype, "rw") != 0 &&
+             strcmp(mount_fstype, "remount,rw") != 0)
+      return -EINVAL;
+    return vfs_remount(mount_path, flags);
   }
 
   /* Validate device path unless pseudo device was allowed. */
@@ -361,11 +376,12 @@ int64_t sys_uname(struct utsname *buf)
     return -EFAULT;
 
   memset(buf, 0, sizeof(struct utsname));
+  /* Product identity: IR0 unix <release> <machine> IR0/Unix */
   strncpy(buf->sysname, "IR0", _UTSNAME_LENGTH - 1);
-  strncpy(buf->nodename, IR0_BUILD_HOST, _UTSNAME_LENGTH - 1);
+  strncpy(buf->nodename, "unix", _UTSNAME_LENGTH - 1);
   strncpy(buf->release, IR0_VERSION_STRING, _UTSNAME_LENGTH - 1);
-  strncpy(buf->version, IR0_BUILD_INFO, _UTSNAME_LENGTH - 1);
-  strncpy(buf->machine, "x86_64", _UTSNAME_LENGTH - 1);
+  strncpy(buf->version, "IR0/Unix", _UTSNAME_LENGTH - 1);
+  strncpy(buf->machine, get_arch_uname_machine(), _UTSNAME_LENGTH - 1);
   return 0;
 }
 
@@ -461,42 +477,32 @@ int64_t sys_rmdir(const char *pathname)
   return vfs_rmdir(resolved);
 }
 
-int64_t sys_chdir(const char *pathname)
+int64_t ir0_chdir_resolved(const char *pathname)
 {
   int64_t ret;
+  size_t len;
+  char new_path[256];
+  stat_t st;
 
   if (!current_process || !pathname)
     return -EFAULT;
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
-  if (validate_userspace_string(pathname, 256) != 0)
-    return -EFAULT;
-
-  /* Validate path length */
-  size_t len = strlen(pathname);
+  len = strlen(pathname);
   if (len == 0 || len >= 256)
     return -EINVAL;
 
-  /* Calculate new path */
-  char new_path[256];
-
   if (is_absolute_path(pathname))
   {
-    /* Absolute path - just normalize it */
     if (normalize_path(pathname, new_path, sizeof(new_path)) != 0)
       return -ENAMETOOLONG;
   }
   else
   {
-    /* Relative path - join with current working directory */
     if (join_paths(current_process->cwd, pathname, new_path, sizeof(new_path)) != 0)
       return -ENAMETOOLONG;
   }
 
-  /* Verify directory exists */
-  stat_t st;
   ret = ir0_stat_path_routed(new_path, &st);
-
   if (ret < 0)
     return ret;
   if (!S_ISDIR(st.st_mode))
@@ -509,12 +515,23 @@ int64_t sys_chdir(const char *pathname)
   if (ret != 0)
     return ret;
 
-  /* Update current working directory */
   strncpy(current_process->cwd, new_path, sizeof(current_process->cwd) - 1);
   current_process->cwd[sizeof(current_process->cwd) - 1] = '\0';
   process_cwd_ensure_absolute(current_process);
 
   return 0;
+}
+
+int64_t sys_chdir(const char *pathname)
+{
+  if (!current_process || !pathname)
+    return -EFAULT;
+
+  /* Validate pathname is in userspace (for USER_MODE processes) */
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  return ir0_chdir_resolved(pathname);
 }
 
 int64_t sys_getcwd(char *buf, size_t size)
@@ -546,19 +563,36 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
   struct timespec ktimes[2];
   int rc;
 
-  if (!current_process || !pathname)
+  if (!current_process)
     return -EFAULT;
 
-  if (dirfd != IR0_AT_FDCWD)
-    return -ENOSYS;
+  /* futimens(fd, times): utimensat(fd, NULL, times, 0) on the open file. */
+  if (!pathname)
+  {
+    fd_entry_t *slot;
 
-  if (validate_userspace_string(pathname, 256) != 0)
-    return -EFAULT;
+    if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+      return -EBADF;
+    slot = &current_process->fd_table[dirfd];
+    if (!slot->in_use || slot->path[0] == '\0')
+      return -EBADF;
+    if (strlen(slot->path) >= sizeof(resolved))
+      return -ENAMETOOLONG;
+    strcpy(resolved, slot->path);
+  }
+  else
+  {
+    if (dirfd != IR0_AT_FDCWD)
+      return -ENOSYS;
 
-  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
-  if (rc != 0)
-    return rc;
+    if (validate_userspace_string(pathname, 256) != 0)
+      return -EFAULT;
+
+    rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                              current_process->cwd);
+    if (rc != 0)
+      return rc;
+  }
 
   if (times)
   {

@@ -21,6 +21,7 @@
 #include <ir0/pseudo_fs.h>
 #include <kernel/process.h>
 #include <config.h>
+#include <ir0/clock.h>
 #include <ir0/clock_wait.h>
 #include <ir0/sched.h>
 #include <ir0/kmem.h>

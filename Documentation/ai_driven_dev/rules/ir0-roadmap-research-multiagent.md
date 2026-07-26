@@ -8,7 +8,7 @@
 
 | Tier | Target | ~Progress | Primary paths |
 |------|--------|-----------|---------------|
-| T0 | OS funcional + debug_bins | ~80% | `debug_bins/`, `kernel/syscalls.c`, `fs/*`, contracts |
+| T0 | OS funcional + contratos | ~80% | `kernel/test/`, `kernel/syscalls.c`, `fs/*`, contracts |
 | T1 | Userspace POSIX mínimo (init+musl) | ~40% | `kernel/elf_loader.c`, `kernel/process.c`, `setup/pid1/`, `includes/ir0/bits/` |
 | T2 | Cliente gráfico fullscreen (Doom-class) | ~50% | `drivers/video/`, `/dev/fb0`, `/dev/events0`, `sys_mmap` |
 | T3 | Escritorio minimalista (WM+panel) | ~15–20% | Out of kernel slice unless explicitly scoped |

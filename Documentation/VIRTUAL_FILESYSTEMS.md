@@ -1,14 +1,15 @@
 # IR0 Virtual Filesystems
 
-> **Last verified:** 2026-07-10  
-> **Source of truth:** `fs/procfs.c`, `fs/sysfs.c`, `fs/devfs.c`, `fs/heartfs.c`,  
-> `fs/pseudo_fs_registry.c`, [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md)
+> **Last verified:** 2026-07-24
+> **Source of truth:** `fs/procfs.c`, `fs/sysfs.c`, `fs/devfs.c`, `fs/heartfs.c`,
+> `fs/pseudo_fs_registry.c`, [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md),
+> [`KLOG.md`](KLOG.md) (`/proc/kmsg`, `/dev/kmsg`)
 
 This document focuses on pseudo-filesystems exposed through VFS.
 
 ## `/heart`
 
-IR0-only unified read-only facade (does **not** replace `/proc` or `/sys`).  
+IR0-only unified read-only facade (does **not** replace `/proc` or `/sys`).
 See [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md) for layout, gates, and ARCH-3 notes.
 
 ## `/proc`
@@ -26,6 +27,7 @@ See [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md) for layout, gates, and ARCH-3 not
 - `/proc/interrupts`
 - `/proc/blockdevices`
 - `/proc/partitions`
+- `/proc/kmsg` — structured klog records (`klog_read_records`, see [`KLOG.md`](KLOG.md))
 - `/proc/[pid]/status`
 - `/proc/[pid]/cmdline`
 
@@ -35,6 +37,7 @@ See [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md) for layout, gates, and ARCH-3 not
 - Numeric formatting was hardened for 64-bit values.
 - Opens install real `fd_table` slots (`is_pseudo`); no global virtual fds for new opens.
 - Path-based readdir for `/proc`, `/proc/pid`, `/proc/pid/N` via `proc_readdir()`.
+- `/proc/kmsg` mirrors the same event ring as serial (not the legacy textual-only path).
 
 ## `/dev`
 
@@ -44,7 +47,7 @@ See [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md) for layout, gates, and ARCH-3 not
 
 - `/dev/null`, `/dev/zero`
 - `/dev/console`, `/dev/tty`
-- `/dev/kmsg`
+- `/dev/kmsg` — same event backend as `/proc/kmsg` on read; writes → `klog_info("USER", …)`
 - `/dev/disk`
 - `/dev/net`
 - `/dev/audio`
@@ -73,9 +76,9 @@ See [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md) for layout, gates, and ARCH-3 not
 
 - Strong observability at runtime without external debug tooling.
 - Consistent user-facing access model through open/read/write/stat patterns.
+- Product exploration: ash + `cat /proc/kmsg` (in-kernel dbgshell removed).
 
 ## Weak Points
 
 - Some endpoints remain intentionally minimal and need richer semantics.
 - Coverage of edge-case parsing/format compatibility still depends on runtime tests.
-

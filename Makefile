@@ -109,7 +109,31 @@ else
 DEFAULT_BUILD_TARGET := kernel-x64.iso
 endif
 
+# Userspace product tree (BusyBox, runit, login, doas, rootfs) lives in the
+# sibling repository; the kernel only drives its build for gates.
+IR0_USERSPACE_ROOT ?= $(abspath $(KERNEL_ROOT)/../IR0-userspace)
+IR0_USERSPACE_OUT  = $(IR0_USERSPACE_ROOT)/out
+IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_USERSPACE_ROOT) IR0_ROOT=$(KERNEL_ROOT)
+
+check-userspace:
+	@if [ ! -f "$(IR0_USERSPACE_ROOT)/Makefile" ]; then \
+		echo "✗ IR0-userspace not found at $(IR0_USERSPACE_ROOT)"; \
+		echo "  clone it next to this tree or set IR0_USERSPACE_ROOT=/path/to/IR0-userspace"; \
+		exit 1; \
+	fi
+
 all: $(DEFAULT_BUILD_TARGET)
+
+# Public userspace ABI export (Linux `make headers_install` equivalent).
+# Only includes/uapi leaves the kernel tree: a userspace package that needs a
+# private kernel header is a broken boundary, not a missing include path.
+UAPI_DIR = $(KERNEL_ROOT)/includes/uapi
+DESTDIR ?= $(KERNEL_ROOT)/usr
+
+headers_install:
+	@mkdir -p $(DESTDIR)/usr/include
+	@cp -a $(UAPI_DIR)/. $(DESTDIR)/usr/include/
+	@echo "✓ headers_install → $(DESTDIR)/usr/include ($$(find $(UAPI_DIR) -name '*.h' | wc -l) headers)"
 
 menuconfig:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
@@ -147,6 +171,8 @@ CFLAGS += $(CFLAGS_TARGET)
 # Include paths
 CFLAGS += -I$(KERNEL_ROOT)
 CFLAGS += -I$(KERNEL_ROOT)/includes
+# Public userspace ABI (exported by `make headers_install`).
+CFLAGS += -I$(KERNEL_ROOT)/includes/uapi
 # ktm/include before includes/ir0 so <ktm.h> is not shadowed by includes/ir0/ktm.h
 CFLAGS += -I$(KERNEL_ROOT)/ktm/include
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
@@ -197,11 +223,20 @@ QEMU_MEMORY = 512M
 QEMU_FLAGS = -no-reboot -no-shutdown
 QEMU_TIMEOUT = 30
 
-# Modos de display
-QEMU_DISPLAY_GTK = -display gtk
+# Display profiles (GTK flags vary by QEMU version — probe once).
 QEMU_DISPLAY_SDL = -display sdl2
 QEMU_DISPLAY_NONE = -display none
 QEMU_NGRAPHIC = -nographic
+QEMU_NAME = -name IR0/Unix-x86_64
+# Guest scale-2 glyphs are sharp; avoid host soft-scale blur.
+QEMU_GTK_BASE = gtk,zoom-to-fit=off
+# Probe optional GTK flags; never fail the build if unsupported.
+QEMU_DISPLAY_GTK = $(shell \
+	_opts='$(QEMU_GTK_BASE)'; \
+	if $(QEMU) -display help 2>&1 | grep -q show-menubar; then _opts="$$_opts,show-menubar=off"; fi; \
+	if $(QEMU) -display help 2>&1 | grep -q show-tabs; then _opts="$$_opts,show-tabs=off"; fi; \
+	echo "-display $$_opts $(QEMU_NAME)")
+QEMU_DISPLAY_GTK_DEBUG = -display gtk $(QEMU_NAME)
 
 # Configuración por defecto
 QEMU_DISPLAY = $(QEMU_DISPLAY_GTK)
@@ -252,8 +287,10 @@ QEMU_STORAGE_IDE = -drive file=disk.img,format=raw,if=ide,index=0
 # Serial: COM1 para debug
 QEMU_SERIAL_COM1 = -serial stdio
 
+# Guest outb(0xf4) → QEMU process exit (halt/poweroff). Needed with -no-shutdown.
+QEMU_ISA_DEBUG_EXIT = -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
-QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1)
+QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT)
 
 QEMU_64_FLAGS = -cdrom
 
@@ -261,7 +298,7 @@ QEMU_64_FLAGS = -cdrom
 
 KERNEL_OBJS = \
 	kernel/main.o \
-    kernel/init.o \
+    kernel/cmdline.o \
     kernel/rootfs_base.o \
     kernel/process/core.o \
     kernel/process/create.o \
@@ -297,17 +334,25 @@ KERNEL_OBJS = \
     kernel/timerfd.o \
     kernel/posix_shm.o \
     kernel/input_events.o \
-    debug_bins/dbgshell.o \
     kernel/elf_loader.o \
     kernel/driver_registry.o \
     kernel/resource_registry.o \
     kernel/ipc.o \
     kernel/futex.o \
     kernel/net_compat.o \
+    ktm/klog.o \
+    ktm/d1_13_malloc_pf_diag.o \
+    sched/sched.o \
+    sched/sched_switch.o \
+    sched/sched_resched.o \
+    sched/switch/arch_context_switch.o \
+    kernel/console_backend.o
+
+ifeq ($(CONFIG_KTM),y)
+KERNEL_OBJS += \
     ktm/ktm_ctx_snapshot.o \
     ktm/event_ring.o \
     ktm/transport_serial.o \
-    ktm/klog.o \
     ktm/ktm_klog.o \
     ktm/registry.o \
     ktm/snapshot.o \
@@ -336,130 +381,11 @@ KERNEL_OBJS = \
     ktm/ktm_flight.o \
     ktm/ktm_panic_class.o \
     ktm/ktm_probe_diag.o \
-    $(KTM_D1_DIAG_OBJS) \
-    ktm/d1_13_malloc_pf_diag.o \
-    sched/sched.o \
-    sched/sched_switch.o \
-    sched/sched_resched.o \
-    sched/switch/arch_context_switch.o \
-    kernel/console_backend.o \
-    debug_bins/debug_bins_registry.o
-
-DEBUG_BINS_CORE_OBJS = \
-    debug_bins/cmd_ls.o \
-    debug_bins/cmd_cd.o \
-    debug_bins/cmd_pwd.o \
-    debug_bins/cmd_cat.o \
-    debug_bins/cmd_echo.o \
-    debug_bins/cmd_exec.o \
-    debug_bins/cmd_cmp.o \
-    debug_bins/cmd_which.o \
-    debug_bins/cmd_true.o \
-    debug_bins/cmd_false.o \
-    debug_bins/cmd_sleep.o
-
-DEBUG_BINS_FS_OBJS = \
-    debug_bins/cmd_mkdir.o \
-    debug_bins/cmd_rm.o \
-    debug_bins/cmd_rmdir.o \
-    debug_bins/cmd_touch.o \
-    debug_bins/cmd_cp.o \
-    debug_bins/cmd_mv.o \
-    debug_bins/cmd_ln.o \
-    debug_bins/cmd_mount.o \
-    debug_bins/cmd_umount.o \
-    debug_bins/cmd_chmod.o \
-    debug_bins/cmd_chown.o \
-    debug_bins/cmd_basename.o \
-    debug_bins/cmd_dirname.o
-
-DEBUG_BINS_TEXT_OBJS = \
-    debug_bins/cmd_sed.o \
-    debug_bins/cmd_cut.o \
-    debug_bins/cmd_tr.o \
-    debug_bins/cmd_wc.o \
-    debug_bins/cmd_head.o \
-    debug_bins/cmd_tail.o
-
-DEBUG_BINS_IDENTITY_OBJS = \
-    debug_bins/cmd_id.o \
-    debug_bins/cmd_whoami.o \
-    debug_bins/cmd_sudo.o
-
-DEBUG_BINS_DIAG_OBJS = \
-    debug_bins/cmd_ps.o \
-    debug_bins/cmd_df.o \
-    debug_bins/cmd_dmesg.o \
-    debug_bins/cmd_lsmod.o \
-    debug_bins/cmd_hostname.o \
-    debug_bins/cmd_uname.o \
-    debug_bins/cmd_lsblk.o \
-    debug_bins/cmd_lsdrv.o \
-    debug_bins/cmd_free.o \
-    debug_bins/cmd_uptime.o \
-    debug_bins/cmd_date.o \
-    debug_bins/cmd_keymap.o \
-    debug_bins/cmd_lshw.o \
-    debug_bins/cmd_stat.o
-
-DEBUG_BINS_NET_OBJS = \
-    debug_bins/cmd_ping.o \
-    debug_bins/cmd_ndev.o \
-    debug_bins/cmd_route.o \
-    debug_bins/cmd_ifconfig.o \
-    debug_bins/cmd_netstat.o
-
-DEBUG_BINS_BT_OBJS = \
-    debug_bins/cmd_lsblue.o \
-    debug_bins/cmd_bluestart.o \
-    debug_bins/cmd_blue.o
-
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_CORE),n)
-KERNEL_OBJS += $(DEBUG_BINS_CORE_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_FS),n)
-KERNEL_OBJS += $(DEBUG_BINS_FS_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_TEXT),n)
-KERNEL_OBJS += $(DEBUG_BINS_TEXT_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_IDENTITY),n)
-KERNEL_OBJS += $(DEBUG_BINS_IDENTITY_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_DIAG),n)
-KERNEL_OBJS += $(DEBUG_BINS_DIAG_OBJS)
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_NET),n)
-ifneq ($(CONFIG_ENABLE_NETWORKING),n)
-KERNEL_OBJS += $(DEBUG_BINS_NET_OBJS)
-endif
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_BT),n)
-ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
-KERNEL_OBJS += $(DEBUG_BINS_BT_OBJS)
-else
-KERNEL_OBJS += debug_bins/cmd_bt_stub.o
-endif
-else
-KERNEL_OBJS += debug_bins/cmd_bt_stub.o
+    $(KTM_D1_DIAG_OBJS)
 endif
 
-# debug_bins_registry_test.o: misma fuente que debug_bins_registry.o pero con IR0_KERNEL_TESTS=1
-# Evita que make reutilice un .o compilado para tests al hacer make ir0 (y viceversa)
-debug_bins/debug_bins_registry_test.o: debug_bins/debug_bins_registry.c
-	@echo "  CC      $< (IR0_KERNEL_TESTS=1)"
-	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \
-		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
-		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
-		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
-		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
-		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
-		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
-		-c $< -o $@
-
-# In-kernel test suite y comando ktest: solo se enlazan en kernel-x64-test.bin (make tests)
-KERNEL_TEST_OBJS = debug_bins/debug_bins_registry_test.o \
-	debug_bins/cmd_ktest.o \
+# In-kernel test suite: linked only in kernel-x64-test.bin (make tests)
+KERNEL_TEST_OBJS = \
 	kernel/test/test_runner.o \
 	kernel/test/test_syscall.o \
 	kernel/test/test_procfs.o \
@@ -515,6 +441,8 @@ LIB_OBJS = \
     includes/ir0/path_user.o \
     includes/ir0/path_routed.o \
     includes/ir0/console.o \
+    includes/ir0/ps2_set1.o \
+    includes/ir0/ps2_mouse_pkt.o \
     includes/ir0/ash_smoke.o \
     includes/ir0/debug_trap.o \
     includes/ir0/fb.o \
@@ -530,10 +458,12 @@ LIB_OBJS = \
 
 INTERRUPT_OBJS_X86_64 = \
     interrupt/arch/idt.o \
+    interrupt/arch/x86-64/early_idt.o \
     interrupt/arch/pic.o \
     interrupt/arch/isr_handlers.o \
     interrupt/arch/keyboard.o \
-    interrupt/arch/x86-64/isr_stubs_64.o
+    interrupt/arch/x86-64/isr_stubs_64.o \
+    interrupt/arch/x86-64/early_idt_stubs.o
 
 # ARM64: do not pull lidt / isr_stubs_64 — GIC is in ARCH_OBJS.
 INTERRUPT_OBJS_ARM64 = \
@@ -559,6 +489,7 @@ DRIVER_OBJS = \
     drivers/storage/fs_types.o \
 	drivers/video/console.o \
 	drivers/video/console_font.o \
+	drivers/video/font_terminus_14x28.o \
 	drivers/video/console_renderer.o \
 	drivers/video/typewriter.o \
 	drivers/init_drv.o \
@@ -592,7 +523,7 @@ FS_OBJS = \
     fs/path.o \
     fs/chmod.o \
     fs/permissions.o \
-    fs/passwd_db.o \
+    fs/flock.o \
     fs/pseudo_fs_registry.o \
     fs/pseudo_fs_nodes.o \
     fs/heartfs.o \
@@ -913,12 +844,8 @@ endif
 CONFIG_TICK_RATE_HZ ?= 1000
 CFLAGS += -DCONFIG_TICK_RATE_HZ=$(CONFIG_TICK_RATE_HZ)
 
-# Kernel debug shell as PID 1
-ifneq ($(CONFIG_KERNEL_DEBUG_SHELL),n)
-CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=1
-else
+# Product boot always loads /sbin/init (legacy KERNEL_DEBUG_SHELL removed).
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
-endif
 
 # Force /sbin/init boot path for userspace smoke ISO (overrides autoconf in config.h)
 ifneq ($(USERSPACE_INIT_BUILD),)
@@ -927,50 +854,6 @@ CFLAGS += -DIR0_USERSPACE_INIT_BOOT=1
 ifeq ($(USERSPACE_EAGER_MM),1)
 CFLAGS += -DCONFIG_LAZY_ANON_MMAP=0 -DCONFIG_LAZY_BRK_HEAP=0
 endif
-endif
-
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_CORE),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_CORE=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_CORE=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_FS),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_FS=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_FS=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_TEXT),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_TEXT=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_TEXT=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_IDENTITY),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_IDENTITY=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_IDENTITY=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_DIAG),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_DIAG=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_DIAG=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_NET),n)
-ifneq ($(CONFIG_ENABLE_NETWORKING),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=0
-endif
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_NET=0
-endif
-ifneq ($(CONFIG_DEBUG_BINS_GROUP_BT),n)
-ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=1
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=0
-endif
-else
-CFLAGS += -DCONFIG_DEBUG_BINS_GROUP_BT=0
 endif
 
 ARCH_OBJS_COMMON = \
@@ -1090,8 +973,7 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(STORAGE_NVME_OBJS)
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
-# Excluir debug_bins_registry.o y usar debug_bins_registry_test.o (compilado con IR0_KERNEL_TESTS=1)
-ALL_OBJS_TEST = $(filter-out debug_bins/debug_bins_registry.o,$(KERNEL_OBJS)) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+ALL_OBJS_TEST = $(KERNEL_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
                 $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
@@ -1300,52 +1182,58 @@ windows-clean win-clean:
 # Run with GUI and disk (default) - ALL IR0 SUPPORTED HARDWARE
 # Note: This target does NOT call clean-net or rebuild with special flags
 # It simply runs the existing kernel ISO. Use 'make run-tap' for TAP networking.
-run: kernel-x64.iso disk.img
-	@echo "🚀 Running IR0 Kernel with all supported hardware..."
+# Human console: development disk includes tcc/make + BusyBox filters.
+# Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (document in SETUP.md).
+run: kernel-x64-userspace.iso load-userspace-devtools
+	@echo "Running IR0/Unix (human console — clean GTK)..."
 	@echo "   Hardware: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2, VGA"
-	@# Check if we can write to qemu_debug.log (skip if owned by root or not writable)
-	@QEMU_LOG_OPTION=""; \
-	if [ -f qemu_debug.log ] && [ ! -w qemu_debug.log ]; then \
-		echo "   ⚠️  qemu_debug.log not writable (owned by root?), skipping log file"; \
-		QEMU_LOG_OPTION=""; \
-	elif touch qemu_debug.log 2>/dev/null; then \
-		QEMU_LOG_OPTION="$(QEMU_LOG_FILE)"; \
-		rm -f qemu_debug.log; \
-	else \
-		QEMU_LOG_OPTION=""; \
-	fi
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	@echo "   Ungrab input: Ctrl+Alt+G"
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY) \
-		$(QEMU_DEBUG_GUEST) $$QEMU_LOG_OPTION
+		-m 512M -no-reboot \
+		$(QEMU_DISPLAY)
 
 # Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
-run-debug: kernel-x64.iso disk.img
-	@echo "Running IR0 Kernel with debug output and all supported hardware..."
+run-debug: kernel-x64-userspace.iso load-userspace-devtools
+	@echo "Running IR0/Unix userspace with debug output..."
 	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2, VGA"
 	@echo "Serial output will appear in this terminal"
-	@echo "QEMU GUI will open in separate window"
+	@echo "QEMU GUI will open in separate window (menubar visible)"
+	@echo "Ungrab input: Ctrl+Alt+G"
 	@echo "Press Ctrl+C to stop"
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY) \
+		$(QEMU_DISPLAY_GTK_DEBUG) \
+		-serial stdio \
 		-monitor telnet:127.0.0.1:1234,server,nowait \
 		-d guest_errors,int $(QEMU_LOG_FILE)
 
+# run-bootlog: defined in scripts/make/hostshare-boot.mk (serial + optional 9p boot log).
+# Human interactive with serial in-terminal: make run-debug.
+
+run-fullscreen: kernel-x64-userspace.iso load-userspace-devtools
+	@echo "Running IR0/Unix fullscreen GTK..."
+	@echo "   Ungrab input: Ctrl+Alt+G"
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+		$(QEMU_HW_IR0_ALL) \
+		-m 512M -no-reboot \
+		-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME)
+
 # Run without disk
-run-nodisk: kernel-x64.iso
-	@echo "Running IR0 Kernel (no disk)..."
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
-		-m 512M -no-reboot -no-shutdown \
-		-display gtk -serial stdio
+run-nodisk:
+	@echo "run-nodisk retired: product boot requires runit rootfs (use: make run)"
+	@exit 2
+
+run-dbgshell:
+	@echo "run-dbgshell retired: use runit/getty/ash (make run-console)"
+	@exit 2
 
 # Run in console mode (attach disk image) - ALL IR0 SUPPORTED HARDWARE
-run-console: kernel-x64.iso disk.img
-	@echo "Running IR0 Kernel (console) with all supported hardware..."
+run-console: kernel-x64-userspace.iso load-userspace-runit
+	@echo "Running IR0/Unix console (runit PID1 → getty/ash)..."
 	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2"
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
 		$(QEMU_NGRAPHIC)
@@ -1357,7 +1245,7 @@ run-console: kernel-x64.iso disk.img
 #   3. sudo ip tuntap add tap0 mode tap
 #   4. sudo ip link set tap0 master br0
 #   5. sudo ip link set br0 up && sudo ip link set tap0 up
-run-tap: kernel-x64.iso disk.img
+run-tap: load-userspace-runit
 	@echo "🚀 Running IR0 Kernel with TAP networking (full ICMP support)..."
 	@echo "   Hardware: RTL8139, ATA/IDE, Serial, PS/2, VGA (audio disabled)"
 	@echo "   ⚠️  Requires: root permissions and TAP interface configured"
@@ -1367,9 +1255,9 @@ run-tap: kernel-x64.iso disk.img
 	fi
 	@echo "   📝 Building kernel with TAP networking support (auto-configure IP)..."
 	@$(MAKE) clean-net 2>/dev/null || true
-	@$(MAKE) CFLAGS="$(CFLAGS) -DIR0_TAP_NETWORKING" ir0
+	@$(MAKE) CFLAGS="$(CFLAGS) -DIR0_TAP_NETWORKING" kernel-x64-userspace.iso
 	@echo "   🎮 Starting QEMU (audio disabled to avoid ALSA errors)..."
-	sudo qemu-system-x86_64 -cdrom kernel-x64.iso \
+	sudo qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_NET_RTL8139_TAP) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) \
 		-m 512M -no-reboot -no-shutdown \
 		$(QEMU_DISPLAY) \
@@ -1380,7 +1268,7 @@ run-tap: kernel-x64.iso disk.img
 # Only needs sudo once to set the sysctl; QEMU itself runs unprivileged.
 # Guest IP: 10.0.2.15, Gateway/DNS: 10.0.2.2 (always pingable)
 # Internet: ping 8.8.8.8 works after sysctl is set.
-run-ping: kernel-x64.iso disk.img
+run-ping: kernel-x64-userspace.iso load-userspace-runit
 	@echo "  PING    Checking ICMP socket permissions..."
 	@CURRENT=$$(cat /proc/sys/net/ipv4/ping_group_range 2>/dev/null); \
 	if echo "$$CURRENT" | grep -q "^0[[:space:]]"; then \
@@ -1397,28 +1285,28 @@ run-ping: kernel-x64.iso disk.img
 	@echo "          Guest: 10.0.2.15 | Gateway: 10.0.2.2 | DNS: 10.0.2.3"
 	@echo "          Try: ping 10.0.2.2   (gateway, always works)"
 	@echo "          Try: ping 8.8.8.8    (internet, needs sysctl)"
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
 		$(QEMU_DISPLAY)
 
 # Debug mode (detailed QEMU logging) - ALL IR0 SUPPORTED HARDWARE
-debug: kernel-x64.iso disk.img
+debug: kernel-x64-userspace.iso load-userspace-runit
 	@echo "Running IR0 Kernel (debug) with all supported hardware..."
 	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2, VGA"
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
 		$(QEMU_DISPLAY) \
 		-d int,cpu_reset,guest_errors $(QEMU_LOG_FILE)
 
 # QEMU con servidor GDB: inspección de memoria, breakpoints, single-step.
-run-gdb: kernel-x64.iso disk.img
+run-gdb: kernel-x64-userspace.iso load-userspace-runit
 	@echo "  GDB     QEMU waiting for GDB on localhost:1234"
 	@echo "          In another terminal run:"
 	@echo "            gdb -x scripts/kernel.gdb"
 	@echo "          Breakpoints on kmain and kernel_panic are set automatically."
-	qemu-system-x86_64 -cdrom kernel-x64.iso \
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_SERIAL_COM1) -drive file=disk.img,format=raw,if=ide,index=0 \
 		-m 512M -no-reboot -no-shutdown -display none -net none \
 		-s -S
@@ -1485,7 +1373,15 @@ INIT_SMOKE_SRC = setup/pid1/init_smoke.c
 INIT_MUSL_SRC  = setup/pid1/init_musl.c
 MUSL_ARCH_PRCTL_SMOKE_SRC = setup/pid1/musl_arch_prctl_smoke.c
 MUSL_PTHREAD_SMOKE_SRC = setup/pid1/musl_pthread_smoke.c
-SU_SETUID_SMOKE_SRC = setup/pid1/su_setuid_smoke.c
+SETUID_EXEC_SMOKE_SRC = setup/pid1/setuid_exec_smoke.c
+SETID_HELPER_SRC = setup/pid1/setid_helper.c
+PASSWD_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/passwd_smoke.c
+DOAS_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/doas_smoke.c
+IR0_AUTH_LIB_SRC = $(IR0_USERSPACE_ROOT)/lib/ir0_auth.c
+RECOVERY_SMOKE_LOG = /tmp/userspace-recovery.log
+DOAS_SMOKE_LOG = /tmp/userspace-doas.log
+DOAS_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/doas_smoke
+SETID_SCRIPT_SRC = setup/pid1/setid_script.sh
 INIT_MINIMAL_SRC = setup/pid1/init_minimal.c
 INIT_SEGV_SMOKE_SRC = setup/pid1/init_segv_smoke.c
 INIT_HEAP_SMOKE_SRC = setup/pid1/init_heap_smoke.c
@@ -1518,7 +1414,7 @@ INIT_TCC_POWER_HALT_SRC = setup/pid1/init_tcc_power_halt.c
 TCC_POWER_HALT_HARNESS_BIN = setup/pid1/tcc_power_halt_harness
 TCC_POWER_HALT_LOG = /tmp/tcc-power-halt-smoke.log
 FASE55D_SMOKE_BIN = setup/doom/doomgeneric_smoke
-RUNIT_STAGE_BIN = setup/runit/stage-bin
+RUNIT_STAGE_BIN = $(IR0_USERSPACE_OUT)/stage-bin
 INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
 INIT_FASE53B_POSIX_PSEUDOFS_SRC = setup/pid1/init_fase53b_posix_pseudofs.c
 INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
@@ -1550,9 +1446,18 @@ FASE48_ECHO_BIN = setup/pid1/fase48_echo
 FASE48_BUSYBOX_BIN = setup/pid1/fase48_busybox
 FASE50_HELLO_BIN = setup/pid1/fase50_hello
 FASE50_BUSYBOX_BIN = setup/pid1/fase50_busybox_real
-FASE50_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
-FASE58_BUSYBOX_CFG = setup/busybox/fase58_busybox.config
-FASE58_FULL_BUSYBOX_CFG = setup/busybox/fase58_full.config
+FASE50_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
+FASE58_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
+FASE58_FULL_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_full.config
+# Product split: large general binary (0755) + reduced privileged binary (4755).
+IR0_BUSYBOX_FULL_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/ir0_full.config
+IR0_BUSYBOX_AUTH_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/ir0_auth.config
+IR0_BUSYBOX_FULL_BIN = $(IR0_USERSPACE_OUT)/busybox-full
+IR0_BUSYBOX_AUTH_BIN = $(IR0_USERSPACE_OUT)/busybox-auth
+BB_MATRIX_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/busybox_matrix_smoke.c
+BB_MATRIX_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/busybox_matrix_smoke
+BB_MATRIX_LOG = /tmp/busybox-applet-matrix.log
+BB_MATRIX_TSV = $(IR0_USERSPACE_ROOT)/packages/busybox/bb_status.tsv
 FASE58L_SMOKE_SRC = setup/pid1/fase58l_busybox_smoke.c
 FASE58L_SMOKE_BIN = setup/pid1/fase58l_busybox_smoke
 FASE58L_SMOKE_LOG = /tmp/fase58l-busybox-smoke.log
@@ -1562,7 +1467,9 @@ SEGV_SMOKE_SRC   = setup/pid1/userspace_segv.c
 INIT_SMOKE_BIN   = setup/pid1/init
 MUSL_ARCH_PRCTL_BIN = setup/pid1/musl_arch_prctl_smoke
 MUSL_PTHREAD_SMOKE_BIN = setup/pid1/musl_pthread_smoke
-SU_SETUID_SMOKE_BIN = setup/pid1/su_setuid_smoke
+SETUID_EXEC_SMOKE_BIN = setup/pid1/setuid_exec_smoke
+SETID_HELPER_BIN = setup/pid1/setid_helper
+PASSWD_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/passwd_smoke
 SH_SMOKE_BIN     = setup/pid1/sh_smoke
 SEGV_SMOKE_BIN   = setup/pid1/userspace_segv
 FASE41_TRUE_BIN  = setup/pid1/f41true
@@ -1606,19 +1513,15 @@ FASE55C_TIMING_INPUT_LOG = /tmp/userspace-fase55c-timing-input.log
 FASE55D_DOOMGENERIC_LOG = /tmp/userspace-fase55d-doomgeneric.log
 MUSL_ARCH_PRCTL_LOG = /tmp/userspace-musl-arch-prctl.log
 MUSL_PTHREAD_SMOKE_LOG = /tmp/userspace-musl-pthread.log
-SU_SETUID_SMOKE_LOG = /tmp/userspace-su-setuid.log
+SETUID_EXEC_SMOKE_LOG = /tmp/userspace-setuid-exec.log
+PASSWD_SMOKE_LOG = /tmp/userspace-passwd.log
 FASE55E_DOOM_BIN = setup/pid1/fase55e_doom_interactive
 FASE55E_DOOM_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
-IRINIT_SRC = setup/pid1/irinit.c
-IRINIT_BIN = setup/pid1/sbin/irinit
-RUNIT_VERSION = 2.3.1
-RUNIT_SRC_DIR = setup/third-party/runit-$(RUNIT_VERSION)
-RUNIT_BIN_DIR = setup/runit/bin
+# irinit retired — product PID1 is runit (see build-runit / load-userspace-runit).
+RUNIT_BIN_DIR = $(IR0_USERSPACE_OUT)/bin
 RUNIT_INIT_BIN = $(RUNIT_BIN_DIR)/runit-init
 RUNIT_SMOKE_LOG = /tmp/runit-boot-smoke.log
 RUNIT_ASH_SMOKE_LOG = /tmp/runit-ash-smoke.log
-IRINIT_GUI_LOG = /tmp/userspace-irinit-gui.log
-IRINIT_DISPLAY ?= gtk
 DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
@@ -1643,7 +1546,7 @@ MUSL_CC_AARCH64 ?= $(shell \
 		echo $(KERNEL_ROOT)/toolchain/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc) || \
 	true)
 MUSL_AARCH64_HELLO = $(KERNEL_ROOT)/build/hello_aarch64
-BUSYBOX_SRC ?= $(KERNEL_ROOT)/setup/third-party/busybox-1.36.1
+BUSYBOX_SRC ?= $(IR0_USERSPACE_ROOT)/packages/busybox/src
 TCC_SRC ?= /tmp/tinycc-fase52
 
 .PHONY: setup-musl-aarch64 musl-aarch64-hello smoke-musl-aarch64-toolchain
@@ -1651,15 +1554,22 @@ setup-musl-aarch64:
 	@bash $(KERNEL_ROOT)/scripts/setup_musl_aarch64.sh
 
 musl-aarch64-hello: setup-musl-aarch64
-	@if [ -z "$(MUSL_CC_AARCH64)" ] || [ ! -x "$(MUSL_CC_AARCH64)" ]; then \
-		echo "✗ MUSL_CC_AARCH64 missing after setup"; exit 1; \
-	fi
 	@mkdir -p $(KERNEL_ROOT)/build
-	@echo "  CC      hello_aarch64 with $(MUSL_CC_AARCH64)"
-	@$(MUSL_CC_AARCH64) -static -fno-pie -no-pie -Os \
-		-Wl,-Ttext-segment=0x43000000 \
-		-o $(MUSL_AARCH64_HELLO) \
-		$(KERNEL_ROOT)/setup/pid1/hello_aarch64.c
+	@set -e; \
+	if [ -n "$(MUSL_CC_AARCH64)" ] && [ -x "$(MUSL_CC_AARCH64)" ] && \
+	   [ "$$($(MUSL_CC_AARCH64) -print-file-name=crt1.o)" != "crt1.o" ]; then \
+		echo "  CC      hello_aarch64 with $(MUSL_CC_AARCH64)"; \
+		$(MUSL_CC_AARCH64) -static -fno-pie -no-pie -Os \
+			-Wl,-Ttext-segment=0x43000000 \
+			-o $(MUSL_AARCH64_HELLO) \
+			$(KERNEL_ROOT)/setup/pid1/hello_aarch64.c; \
+	else \
+		echo "  CC      hello_aarch64 freestanding (musl CRT missing)"; \
+		aarch64-linux-gnu-gcc -nostdlib -static -fno-pie -no-pie -Os \
+			-Wl,-Ttext-segment=0x43000000 -Wl,-e,_start \
+			-o $(MUSL_AARCH64_HELLO) \
+			$(KERNEL_ROOT)/setup/pid1/hello_aarch64_freestanding.c; \
+	fi
 	@file $(MUSL_AARCH64_HELLO) | grep -qi 'aarch64'
 	@file $(MUSL_AARCH64_HELLO) | grep -qi 'static'
 	@echo "✓ musl-aarch64-hello → $(MUSL_AARCH64_HELLO) (ET_EXEC @ 0x43000000)"
@@ -1727,17 +1637,99 @@ build-musl-pthread-smoke:
 		(echo "✗ pthread smoke missing MUSL_PTHREAD_OK string"; exit 1)
 	@echo "✓ build-musl-pthread-smoke OK"
 
-build-su-setuid-smoke:
+build-setuid-exec-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  MUSL    Building setuid exec smoke ($(SU_SETUID_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(SU_SETUID_SMOKE_BIN) $(SU_SETUID_SMOKE_SRC)
-	@file $(SU_SETUID_SMOKE_BIN) | grep -q ELF
-	@strings $(SU_SETUID_SMOKE_BIN) 2>/dev/null | grep -q "SU_SETUID_OK" || \
-		(echo "✗ setuid smoke missing SU_SETUID_OK string"; exit 1)
-	@echo "✓ build-su-setuid-smoke OK"
+	@echo "  MUSL    Building setuid-exec smoke ($(SETUID_EXEC_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(SETUID_EXEC_SMOKE_BIN) $(SETUID_EXEC_SMOKE_SRC)
+	@$(MUSL_CC) -static -Os -o $(SETID_HELPER_BIN) $(SETID_HELPER_SRC)
+	@file $(SETUID_EXEC_SMOKE_BIN) | grep -q ELF
+	@file $(SETID_HELPER_BIN) | grep -q ELF
+	@strings $(SETUID_EXEC_SMOKE_BIN) 2>/dev/null | grep -q "SETUID_EXEC_ALL_OK" || \
+		(echo "✗ setuid smoke missing SETUID_EXEC_ALL_OK string"; exit 1)
+	@echo "✓ build-setuid-exec-smoke OK"
+
+build-passwd-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@mkdir -p $(dir $(PASSWD_SMOKE_BIN))
+	@echo "  MUSL    Building passwd smoke ($(PASSWD_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(PASSWD_SMOKE_BIN) $(PASSWD_SMOKE_SRC) $(IR0_AUTH_LIB_SRC)
+	@file $(PASSWD_SMOKE_BIN) | grep -q ELF
+	@strings $(PASSWD_SMOKE_BIN) 2>/dev/null | grep -q "PASSWD_ALL_OK" || \
+		(echo "✗ passwd smoke missing PASSWD_ALL_OK string"; exit 1)
+	@echo "✓ build-passwd-smoke OK"
+
+.PHONY: build-opendoas build-doas-smoke smoke-doas smoke-recovery
+build-opendoas: check-userspace
+	@$(IR0_USERSPACE_MAKE) build-opendoas
+
+build-doas-smoke: build-opendoas
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@mkdir -p $(dir $(DOAS_SMOKE_BIN))
+	@echo "  MUSL    Building doas smoke ($(DOAS_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(DOAS_SMOKE_BIN) $(DOAS_SMOKE_SRC) $(IR0_AUTH_LIB_SRC)
+	@file $(DOAS_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-doas-smoke OK"
+
+DOAS_SMOKE_TAGS = DOAS_SETUP_OK DOAS_GRANT_OK DOAS_ENV_OK DOAS_PERSIST_OK DOAS_DENY_AUTH_OK DOAS_ALL_OK
+
+smoke-doas: build-doas-smoke load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   OpenDoas grant/deny/env..."
+	@DISK=$$(mktemp /tmp/ir0-doas-smoke.XXXXXX.img); \
+	cp -f disk.img $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(DOAS_SMOKE_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/bin/doas /etc/doas.conf && \
+	$(SMOKE_QEMU_RUN) --log $(DOAS_SMOKE_LOG) --timeout 90 --stale-sec 25 \
+		--done DOAS_ALL_OK --fail-regex 'DOAS_SMOKE_FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@for tag in $(DOAS_SMOKE_TAGS); do \
+		grep -q "$$tag" $(DOAS_SMOKE_LOG) || \
+			{ echo "✗ smoke-doas FAILED (missing $$tag)"; \
+			  grep -E 'DOAS_|doas' $(DOAS_SMOKE_LOG) | tail -30; exit 1; }; \
+	done
+	@echo "✓ smoke-doas passed"
+
+RECOVERY_SMOKE_TAGS = RECOVERY_BOOT_SELECTED RECOVERY_START RECOVERY_ROOT_RO RECOVERY_SHELL_READY
+RECOVERY_SMOKE_ISO = /tmp/ir0-recovery-smoke.iso
+
+# QEMU -kernel cannot load this x86-64 Multiboot ELF; GRUB ISO + recovery cfg.
+kernel-x64-userspace-recovery.iso: kernel-x64-userspace.bin arch/x86-64/grub-recovery.cfg
+	@echo "  ISO     $@ (recovery autoboot)"
+	@rm -rf iso_userspace_recovery
+	@mkdir -p iso_userspace_recovery/boot/grub
+	@cp arch/x86-64/grub-recovery.cfg iso_userspace_recovery/boot/grub/grub.cfg
+	@cp kernel-x64-userspace.bin iso_userspace_recovery/boot/kernel-x64.bin
+	@grub-mkrescue -o $@ iso_userspace_recovery
+	@rm -rf iso_userspace_recovery
+	@echo "✓ ISO (recovery) created: $@"
+
+smoke-recovery: load-userspace-runit kernel-x64-userspace-recovery.iso
+	@echo "  SMOKE   recovery boot (ir0.recovery=1, rootfs RO)..."
+	@DISK=$$(mktemp /tmp/ir0-recovery-smoke.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	$(SMOKE_QEMU_RUN) --log $(RECOVERY_SMOKE_LOG) --timeout 60 --stale-sec 20 \
+		--done RECOVERY_SHELL_READY --fail-regex 'RECOVERY_HANDOFF_FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace-recovery.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@for tag in $(RECOVERY_SMOKE_TAGS); do \
+		grep -q "$$tag" $(RECOVERY_SMOKE_LOG) || \
+			{ echo "✗ smoke-recovery FAILED (missing $$tag)"; \
+			  grep -E 'RECOVERY_|RUNIT_' $(RECOVERY_SMOKE_LOG) | tail -30; exit 1; }; \
+	done
+	@echo "✓ smoke-recovery passed"
 
 # Minimal PID 1: fork/execve/wait4 (musl); needs /bin/sh on disk for oleada 2 smoke.
 build-init-minimal:
@@ -2020,7 +2012,7 @@ build-busybox-fase50-min:
 	fi
 	@if [ ! -d "$(BUSYBOX_SRC)" ] || [ ! -f "$(BUSYBOX_SRC)/Makefile" ]; then \
 		echo "✗ BusyBox source missing at BUSYBOX_SRC=$(BUSYBOX_SRC)"; \
-		echo "  Expected vendored tree: setup/third-party/busybox-1.36.1"; \
+		echo "  Run: make -C $(IR0_USERSPACE_ROOT) fetch"; \
 		echo "  Or override: make ... BUSYBOX_SRC=/path/to/busybox-<version>"; \
 		exit 1; \
 	fi
@@ -2083,6 +2075,53 @@ build-busybox-fase58-full:
 	@chmod +x scripts/busybox_check_manifest.sh
 	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
 	@echo "✓ build-busybox-fase58-full OK (installed to $(FASE50_BUSYBOX_BIN))"
+
+.PHONY: build-busybox-ir0-full build-busybox-ir0-auth build-busybox-matrix-smoke \
+	busybox-matrix busybox-profiles-check
+
+# Product BusyBox binaries (full 0755 + auth 4755) come from IR0-userspace.
+build-busybox-ir0-full: check-userspace
+	@$(IR0_USERSPACE_MAKE) build-busybox
+
+build-busybox-ir0-auth: build-busybox-ir0-full
+
+build-busybox-matrix-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@mkdir -p $(dir $(BB_MATRIX_SMOKE_BIN))
+	@echo "  MUSL    Building BusyBox applet matrix driver ($(BB_MATRIX_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(BB_MATRIX_SMOKE_BIN) $(BB_MATRIX_SMOKE_SRC)
+	@file $(BB_MATRIX_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-busybox-matrix-smoke OK"
+
+# Applet status matrix from real guest behaviour (never from "it compiled").
+busybox-matrix: build-busybox-matrix-smoke build-busybox-ir0-full kernel-x64-userspace.iso
+	@echo "  SMOKE   BusyBox applet matrix (supported / partial / unavailable)..."
+	@DISK=$$(mktemp /tmp/ir0-bbmatrix.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(BB_MATRIX_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(IR0_BUSYBOX_FULL_BIN) bin/busybox && \
+	python3 scripts/inject_init_minix.py --hardlink $$DISK bin/busybox bin/sh && \
+	python3 scripts/inject_init_minix.py --hardlink $$DISK bin/busybox bin/ls && \
+	python3 scripts/inject_init_minix.py --hardlink $$DISK bin/busybox bin/true && \
+	$(SMOKE_QEMU_RUN) --log $(BB_MATRIX_LOG) --timeout 420 --stale-sec 60 \
+		--done BBMATRIX_OK --fail-regex 'BBMATRIX_FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+	@python3 $(IR0_USERSPACE_ROOT)/scripts/busybox_applet_matrix.py --log $(BB_MATRIX_LOG) \
+		--binary $(IR0_BUSYBOX_FULL_BIN) --write $(BB_MATRIX_TSV) \
+		--write-development $(IR0_USERSPACE_ROOT)/profiles/development.txt
+	@echo "✓ busybox-matrix OK ($(BB_MATRIX_TSV))"
+
+# Gate: no profile may advertise an applet the matrix does not back with a run.
+busybox-profiles-check: check-userspace
+	@python3 $(IR0_USERSPACE_ROOT)/scripts/busybox_applet_matrix.py --check \
+		--matrix $(BB_MATRIX_TSV) --profiles $(IR0_USERSPACE_ROOT)/profiles
 
 build-fase58l-busybox-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -2168,35 +2207,81 @@ build-init-fase51-shell:
 	@echo "✓ build-init-fase51-shell OK"
 
 build-irinit:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building irinit PID1 ($(IRINIT_BIN))"
-	@mkdir -p setup/pid1/sbin
-	@$(MUSL_CC) -static -Os -o $(IRINIT_BIN) $(IRINIT_SRC)
-	@file $(IRINIT_BIN) | grep -q ELF
-	@echo "✓ build-irinit OK"
+	@echo "✗ build-irinit retired — PID1 is runit (make build-runit)"
+	@exit 2
 
-build-runit:
-	@chmod +x setup/runit/build-runit.sh
-	@./setup/runit/build-runit.sh
+load-userspace-irinit:
+	@echo "✗ load-userspace-irinit retired — use: make load-userspace-runit"
+	@exit 2
 
-load-userspace-runit: build-runit build-busybox-fase50-min
+smoke-userspace-irinit:
+	@echo "✗ smoke-userspace-irinit retired — use: make smoke-runit-boot"
+	@exit 2
+
+run-irinit-interactive-gui:
+	@echo "✗ run-irinit-interactive-gui retired — use: make run-fase58e-ash-gui"
+	@exit 2
+
+build-runit: check-userspace
+	@$(IR0_USERSPACE_MAKE) build-runit build-services
+
+load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-opendoas
+	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
+		echo "  WARN    nano not built (optional; cat /usr/bin/nano after reinject)"
 	@DISK=$${DISK:-disk.img}; \
-	echo "  DISK    Preparing $$DISK (200M MINIX) for runit..."; \
-	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
-	python3 scripts/inject_init_minix.py --format-large $$DISK; \
-	chmod +x setup/runit/install-to-disk.sh; \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) ./setup/runit/install-to-disk.sh $$DISK
+	set -e; \
+	PROFILE=$${IR0_PRODUCT_PROFILE:-development}; \
+	STAMP=$${DISK}.runit.stamp; \
+	NEED=0; \
+	if [ ! -f "$$DISK" ] || [ ! -f "$$STAMP" ]; then NEED=1; fi; \
+	if [ $$NEED -eq 0 ] && [ "$$(cat "$$STAMP" 2>/dev/null)" != "$$PROFILE" ]; then NEED=1; fi; \
+	if [ $$NEED -eq 0 ]; then \
+		for dep in $(RUNIT_BIN_DIR)/runit-init $(RUNIT_STAGE_BIN)/runit_console_run \
+			$(RUNIT_STAGE_BIN)/ir0_passwd $(RUNIT_STAGE_BIN)/doas \
+			$(RUNIT_STAGE_BIN)/nano \
+			$(IR0_USERSPACE_ROOT)/rootfs/etc/passwd \
+			$(IR0_USERSPACE_ROOT)/rootfs/etc/doas.conf \
+			$(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh \
+			$(IR0_USERSPACE_ROOT)/packages/busybox/required_applets.txt \
+			$(IR0_BUSYBOX_FULL_BIN) $(IR0_BUSYBOX_AUTH_BIN); do \
+			if [ -e "$$dep" ] && [ "$$dep" -nt "$$STAMP" ]; then NEED=1; break; fi; \
+		done; \
+	fi; \
+	if [ $$NEED -eq 0 ]; then \
+		echo "  DISK    $$DISK up to date (cached runit rootfs — no reinject)"; \
+	else \
+		echo "  DISK    Preparing $$DISK (200M MINIX root — not virtio-9p)..."; \
+		echo "  NOTE    virtio-9p is optional /mnt/host share; product / is always disk.img"; \
+		dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
+		python3 scripts/inject_init_minix.py --format-large $$DISK; \
+		$(IR0_USERSPACE_MAKE) rootfs DISK=$(KERNEL_ROOT)/$$DISK \
+			PROFILE=$$PROFILE; \
+		printf '%s\n' "$$PROFILE" > "$$STAMP"; \
+	fi
 	@echo "✓ load-userspace-runit OK (runit-init → runsvdir → console + logger)"
+
+# Static GNU make for in-guest builds (musl).
+build-gmake-static:
+	@chmod +x scripts/build_gmake_static.sh
+	@./scripts/build_gmake_static.sh
+
+# Product disk + TinyCC + GNU make + expanded BusyBox filters (sed/awk/tar/…).
+# Use after (or instead of) plain load-userspace-runit for toolchain experiments.
+load-userspace-devtools: build-tcc-fase52 build-gmake-static
+	@rm -f disk.img.runit.stamp disk.img.devtools.stamp
+	@IR0_PRODUCT_PROFILE=$${IR0_PRODUCT_PROFILE:-development} IR0_NO_AUTOLOGIN=$${IR0_NO_AUTOLOGIN:-0} \
+		$(MAKE) -s load-userspace-runit
+	@chmod +x scripts/inject_devtools_minix.sh
+	@./scripts/inject_devtools_minix.sh disk.img
+	@printf 'devtools\n' > disk.img.devtools.stamp
+	@echo "✓ load-userspace-devtools OK (/bin/tcc /bin/make /bin/sed …)"
 
 smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 boot (console + logger)..."
 	@DISK=$$(mktemp /tmp/ir0-runit-smoke.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	$(SMOKE_QEMU_RUN) --log $(RUNIT_SMOKE_LOG) --timeout 50 --stale-sec 18 \
-		--done RUNSV_CONSOLE_START --done RUNSV_LOGGER_START -- \
+		--done RUNSV_CONSOLE_START --done RUNSV_LOGGER_START --done GETTY_READY -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
@@ -2204,13 +2289,69 @@ smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 	@	if grep -q "RUNIT_STAGE1_OK" $(RUNIT_SMOKE_LOG) && \
 	    grep -q "RUNIT_STAGE2_OK" $(RUNIT_SMOKE_LOG) && \
 	    grep -q "RUNSV_CONSOLE_START" $(RUNIT_SMOKE_LOG) && \
-	    grep -q "RUNSV_LOGGER_START" $(RUNIT_SMOKE_LOG); then \
-		echo "✓ smoke-runit-boot passed (2 services)"; \
+	    grep -q "RUNSV_LOGGER_START" $(RUNIT_SMOKE_LOG) && \
+	    grep -q "GETTY_READY" $(RUNIT_SMOKE_LOG) && \
+	    grep -qE "FSCK_OK|FSCK_SKIPPED" $(RUNIT_SMOKE_LOG) && \
+	    grep -qE "FIRSTBOOT_SKIP|FIRSTBOOT_OK" $(RUNIT_SMOKE_LOG) && \
+	    grep -q "DRIVER_SUMMARY_OK" $(RUNIT_SMOKE_LOG); then \
+		echo "✓ smoke-runit-boot passed (getty + stage1 helpers + driver summary)"; \
 	else \
 		echo "✗ smoke-runit-boot FAILED"; \
-		grep -E 'RUNIT_|RUNSV_|KERNEL PANIC|panic' $(RUNIT_SMOKE_LOG) | tail -25; \
+		grep -E 'RUNIT_|RUNSV_|GETTY_|FSCK_|FIRSTBOOT_|DRIVER_SUMMARY|KERNEL PANIC|panic' $(RUNIT_SMOKE_LOG) | tail -40; \
 		exit 1; \
 	fi
+
+RUNIT_LOGIN_SMOKE_LOG = /tmp/runit-login-smoke.log
+smoke-runit-login: load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   runit Unix login (root / empty password)..."
+	@chmod +x scripts/smoke_runit_login.py
+	@python3 scripts/smoke_runit_login.py --log $(RUNIT_LOGIN_SMOKE_LOG) --timeout 75 \
+		--iso kernel-x64-userspace.iso --disk disk.img
+	@echo "  LOG     $(RUNIT_LOGIN_SMOKE_LOG)"
+
+smoke-tty-raw-probe: kernel-x64-userspace.iso
+	@echo "  SMOKE   TTY raw probe (Ctrl-X=0x18 + ESC[A)..."
+	@rm -f disk.img.runit.stamp
+	@IR0_PRODUCT_PROFILE=development IR0_NO_AUTOLOGIN=0 $(MAKE) -s load-userspace-runit
+	@chmod +x scripts/smoke_tty_raw_probe.py
+	@python3 scripts/smoke_tty_raw_probe.py --iso kernel-x64-userspace.iso --disk disk.img
+
+smoke-desktop-nano: kernel-x64-userspace.iso
+	@echo "  SMOKE   GNU nano Ctrl-X save path..."
+	@rm -f disk.img.runit.stamp
+	@IR0_PRODUCT_PROFILE=development IR0_NO_AUTOLOGIN=0 $(MAKE) -s load-userspace-runit
+	@chmod +x scripts/smoke_desktop_nano_mnt.py
+	@python3 scripts/smoke_desktop_nano_mnt.py --iso kernel-x64-userspace.iso --disk disk.img
+
+# Non-root path: crypt(3) auth + setuid drop + /etc/profile PS1 (typed via monitor).
+RUNIT_LOGIN_NONROOT_SMOKE_LOG = /tmp/runit-login-nonroot-smoke.log
+smoke-runit-login-nonroot: load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   runit Unix login non-root (ivan, crypt + uid drop)..."
+	@chmod +x scripts/smoke_runit_login_nonroot.py
+	@python3 scripts/smoke_runit_login_nonroot.py --log $(RUNIT_LOGIN_NONROOT_SMOKE_LOG) \
+		--timeout 90 --iso kernel-x64-userspace.iso --disk disk.img
+	@echo "  LOG     $(RUNIT_LOGIN_NONROOT_SMOKE_LOG)"
+
+smoke-klog-ktm-off:
+	@set -e; \
+	backup=$$(mktemp /tmp/ir0-klog-config.XXXXXX); \
+	if [ -f .config ]; then cp .config $$backup; else : > $$backup; fi; \
+	restore() { if [ -s $$backup ]; then cp $$backup .config; else rm -f .config; fi; rm -f $$backup; }; \
+	trap restore EXIT; \
+	$(MAKE) -s ir0_defconfig PROFILE=desktop BOARD=; \
+	python3 scripts/kconfig/menuconfig.py --set KTM=n; \
+	$(MAKE) -s kernel-x64-userspace.iso load-userspace-runit; \
+	DISK=$$(mktemp /tmp/ir0-klog-ktm-off.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	$(SMOKE_QEMU_RUN) --log /tmp/klog-ktm-off.log --timeout 50 --stale-sec 18 \
+		--done GETTY_READY -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK; \
+	grep -q 'GETTY_READY' /tmp/klog-ktm-off.log; \
+	grep -q '\[#[0-9][0-9]*\] \[EARLY_ARCH\]' /tmp/klog-ktm-off.log; \
+	echo "✓ smoke-klog-ktm-off passed"
 
 # System power MVP: runit service calls reboot(2) HALT; PASS = serial tags (QEMU -no-reboot).
 RUNIT_POWER_SMOKE_LOG = /tmp/runit-power-smoke.log
@@ -2218,10 +2359,10 @@ smoke-runit-power: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit + sys_reboot HALT (power_manag)..."
 	@DISK=$$(mktemp /tmp/ir0-runit-power.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
-	chmod +x setup/runit/inject-smoke-service.sh; \
-	./setup/runit/inject-smoke-service.sh $$DISK power \
-		setup/runit/stage-bin/runit_power_run \
-		setup/runit/stage-bin/runit_power_smoke bin/power-smoke; \
+	 \
+	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK power \
+		$(RUNIT_STAGE_BIN)/runit_power_run \
+		$(RUNIT_STAGE_BIN)/runit_power_smoke bin/power-smoke; \
 	rm -f $(RUNIT_POWER_SMOKE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(RUNIT_POWER_SMOKE_LOG) --timeout 60 --stale-sec 20 \
 		--done SYSTEM_SHUTDOWN_HALT -- \
@@ -2246,10 +2387,10 @@ smoke-runit-busybox-halt: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit + BusyBox halt applet..."
 	@DISK=$$(mktemp /tmp/ir0-runit-bb-halt.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
-	chmod +x setup/runit/inject-smoke-service.sh; \
-	./setup/runit/inject-smoke-service.sh $$DISK bbhalt \
-		setup/runit/stage-bin/runit_busybox_halt_run \
-		setup/runit/stage-bin/runit_busybox_halt_smoke bin/bb-halt; \
+	 \
+	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK bbhalt \
+		$(RUNIT_STAGE_BIN)/runit_busybox_halt_run \
+		$(RUNIT_STAGE_BIN)/runit_busybox_halt_smoke bin/bb-halt; \
 	rm -f $(RUNIT_BB_HALT_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(RUNIT_BB_HALT_LOG) --timeout 60 --stale-sec 20 \
 		--done SYSTEM_SHUTDOWN_HALT -- \
@@ -2273,10 +2414,10 @@ smoke-runit-busybox-poweroff: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit + BusyBox poweroff applet..."
 	@DISK=$$(mktemp /tmp/ir0-runit-bb-pwroff.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
-	chmod +x setup/runit/inject-smoke-service.sh; \
-	./setup/runit/inject-smoke-service.sh $$DISK bbpwroff \
-		setup/runit/stage-bin/runit_busybox_poweroff_run \
-		setup/runit/stage-bin/runit_busybox_poweroff_smoke bin/bb-pwroff; \
+	 \
+	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK bbpwroff \
+		$(RUNIT_STAGE_BIN)/runit_busybox_poweroff_run \
+		$(RUNIT_STAGE_BIN)/runit_busybox_poweroff_smoke bin/bb-pwroff; \
 	rm -f $(RUNIT_BB_POWEROFF_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(RUNIT_BB_POWEROFF_LOG) --timeout 60 --stale-sec 20 \
 		--done SYSTEM_SHUTDOWN_POWEROFF -- \
@@ -2300,10 +2441,10 @@ smoke-runit-busybox-reboot: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit + BusyBox reboot applet..."
 	@DISK=$$(mktemp /tmp/ir0-runit-bb-reboot.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
-	chmod +x setup/runit/inject-smoke-service.sh; \
-	./setup/runit/inject-smoke-service.sh $$DISK bbreboot \
-		setup/runit/stage-bin/runit_busybox_reboot_run \
-		setup/runit/stage-bin/runit_busybox_reboot_smoke bin/bb-reboot; \
+	 \
+	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK bbreboot \
+		$(RUNIT_STAGE_BIN)/runit_busybox_reboot_run \
+		$(RUNIT_STAGE_BIN)/runit_busybox_reboot_smoke bin/bb-reboot; \
 	rm -f $(RUNIT_BB_REBOOT_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(RUNIT_BB_REBOOT_LOG) --timeout 60 --stale-sec 20 \
 		--done SYSTEM_SHUTDOWN_REBOOT -- \
@@ -2342,9 +2483,9 @@ smoke-tcc-power-halt: build-runit build-init-tcc-power-halt build-tcc-fase52 $(K
 	@DISK=$$(mktemp /tmp/ir0-tcc-power.XXXXXX.img); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) ./setup/runit/install-to-disk.sh $$DISK && \
-	chmod +x setup/runit/inject-smoke-service.sh && \
-	./setup/runit/inject-smoke-service.sh $$DISK tccpower \
+	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) $(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK && \
+	 \
+	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK tccpower \
 		$(RUNIT_STAGE_BIN)/runit_tcc_power_run $(TCC_POWER_HALT_HARNESS_BIN) bin/tccph && \
 	find $(FASE52_TCC_STAGE) -type f | sort | while read -r f; do \
 		rel="$${f#$(FASE52_TCC_STAGE)/}"; \
@@ -3094,7 +3235,7 @@ smoke-arm64-boot: kernel-arm64-boot.bin
 		-kernel kernel-arm64-boot.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_BOOT_OK" /tmp/arm64-boot-smoke.log && \
-	    awk '/\[INFO\] \[BOOT\] IR0 Kernel v.*Boot routine/{found=1; exit} NR>20{exit} END{exit !found}' \
+	    awk '/\[INFO\] \[BOOT\] IR0 kernel/{found=1; exit} NR>20{exit} END{exit !found}' \
 		/tmp/arm64-boot-smoke.log; then \
 		echo "✓ smoke-arm64-boot passed (banner-first + ARM64_BOOT_OK)"; \
 		grep -E '\[BOOT\]|\[ARCH\]|ARM64_BOOT' /tmp/arm64-boot-smoke.log | head -10; \
@@ -4016,22 +4157,24 @@ smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace.iso
 run-fase58e-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	@case "$(FASE58E_DISPLAY)" in none|headless) \
 		echo "✗ FASE58E ash GUI blocked: FASE58E_DISPLAY=$(FASE58E_DISPLAY)"; exit 1;; esac
-	@echo "  FASE58E   runit → ash on /dev/console"
+	@echo "  FASE58E   runit → getty/login → ash on /dev/console"
 	@echo "  QEMU     display=$(FASE58E_DISPLAY)"
 	@echo "  LOG      serial -> $(FASE58E_ASH_LOG)"
-	@echo "  HINT     click QEMU window; try: ls / pwd / echo hi"
-	@echo "  HINT     Doom manual: doomgeneric /usr/share/doom/doom1.wad"
+	@echo "  HINT     login: auto (etc/ir0-autologin) or IR0_NO_AUTOLOGIN=1 → root/(empty) or ivan/ivan"
+	@echo "  HINT     then: ls / pwd / echo hi"
+	@echo "  HINT     Doom via virtio-9p: /mnt/host/doomgeneric /mnt/host/doom1.wad"
 	@rm -f $(FASE58E_ASH_LOG); \
 	DISK=$$(mktemp /tmp/ir0-fase58e-ash.XXXXXX.img); \
+	SHARE=$$(mktemp -d /tmp/ir0-fase58e-share.XXXXXX); \
 	cp -f disk.img $$DISK; \
+	VIRTFS=""; \
 	if [ -n "$(REAL_WAD_PATH)" ] && [ -f "$(REAL_WAD_PATH)" ]; then \
 		$(MAKE) -s build-fase55e-doom-interactive; \
-		CFG=$$(mktemp /tmp/doom-frames-cfg.XXXXXX); \
-		printf '0\n0\n' > $$CFG; \
-		python3 scripts/inject_init_minix.py $$DISK $(FASE55E_DOOM_BIN) bin/doomgeneric && \
-		python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
-		python3 scripts/inject_init_minix.py $$DISK $$CFG etc/doom-frames && \
-		rm -f $$CFG; \
+		cp -f $(FASE55E_DOOM_BIN) $$SHARE/doomgeneric; \
+		cp -f "$(REAL_WAD_PATH)" $$SHARE/doom1.wad; \
+		printf '0\n0\n' > $$SHARE/doom-frames; \
+		VIRTFS="-fsdev local,id=ir0fs,path=$$SHARE,security_model=none -device virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on"; \
+		echo "  SHARE   Doom/WAD on virtio-9p ($$SHARE) — mount: mkdir -p /mnt/host && mount -t 9p ir0share /mnt/host"; \
 	fi; \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/sh /bin/busybox; \
 	if [ "$(FASE58E_DISPLAY)" = "sdl" ]; then \
@@ -4041,9 +4184,11 @@ run-fase58e-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	fi; \
 	$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		$$VIRTFS \
 		-serial file:$(FASE58E_ASH_LOG) \
 		$$DISP -m 256M -no-reboot -net none; \
-	rm -f $$DISK
+	rm -f $$DISK; \
+	rm -rf $$SHARE
 
 check-fase58e-logs:
 	@echo "=== FASE58E/K (runit ash GUI + compact smoke tags) ==="
@@ -5685,7 +5830,7 @@ smoke-multiuser-perms: kernel-tests
 		(echo "✗ smoke-multiuser-perms FAILED (tag missing)"; exit 1)
 	@echo "✓ smoke-multiuser-perms passed"
 
-.PHONY: smoke-multiuser-perms smoke-musl-pthread smoke-musl-pthread-libc smoke-setuid-exec build-musl-pthread-smoke build-musl-pthread-libc-smoke build-su-setuid-smoke
+.PHONY: smoke-multiuser-perms smoke-musl-pthread smoke-musl-pthread-libc smoke-setuid-exec smoke-passwd build-musl-pthread-smoke build-musl-pthread-libc-smoke build-setuid-exec-smoke build-passwd-smoke
 
 MUSL_PTHREAD_LIBC_SMOKE_SRC = setup/pid1/musl_pthread_libc_smoke.c
 MUSL_PTHREAD_LIBC_SMOKE_BIN = setup/pid1/musl_pthread_libc_smoke
@@ -5717,22 +5862,58 @@ smoke-musl-pthread-libc: build-musl-pthread-libc-smoke kernel-x64-userspace.iso
 		(echo "✗ smoke-musl-pthread-libc FAILED"; \
 		 grep -E 'MUSL_|pthread|panic|errno' $(MUSL_PTHREAD_LIBC_SMOKE_LOG) | tail -40; exit 1)
 
-smoke-setuid-exec: build-su-setuid-smoke kernel-x64-userspace.iso
-	@echo "  SMOKE   setuid-root exec (S_ISUID + setresuid drop)..."
+SETUID_EXEC_TAGS = SETID_SUID_OK SETID_SGID_OK SETID_PLAIN_OK SETID_NNP_OK \
+	SETID_ENOENT_OK SETID_SCRIPT_OK SETID_NOEXEC_OK SETUID_EXEC_ALL_OK
+
+PASSWD_SMOKE_TAGS = PASSWD_SETUP_OK PASSWD_CHANGE_OK PASSWD_WRONG_OLD_OK \
+	PASSWD_OTHER_DENIED_OK PASSWD_ALL_OK
+
+# passwd(1) runs against the product rootfs: it needs /etc/{passwd,shadow,group}
+# and the set-user-ID /bin/passwd installed by install-to-disk.sh.
+smoke-passwd: build-passwd-smoke load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   passwd(1) shadow update, wrong old password, other user..."
+	@DISK=$$(mktemp /tmp/ir0-passwd-smoke.XXXXXX.img); \
+	cp -f disk.img $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(PASSWD_SMOKE_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/passwd \
+		/etc/passwd /etc/shadow /etc/group && \
+	$(SMOKE_QEMU_RUN) --log $(PASSWD_SMOKE_LOG) --timeout 90 --stale-sec 25 \
+		--done PASSWD_ALL_OK --fail-regex 'PASSWD_SMOKE_FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@for tag in $(PASSWD_SMOKE_TAGS); do \
+		grep -q "$$tag" $(PASSWD_SMOKE_LOG) || \
+			{ echo "✗ smoke-passwd FAILED (missing $$tag)"; \
+			  grep -E 'PASSWD_|passwd:|AUTH' $(PASSWD_SMOKE_LOG) | tail -20; exit 1; }; \
+	done
+	@echo "✓ smoke-passwd passed"
+
+smoke-setuid-exec: build-setuid-exec-smoke kernel-x64-userspace.iso
+	@echo "  SMOKE   setuid/setgid on exec, saved IDs, no_new_privs, exec DAC..."
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	dd if=/dev/zero of=$$DISK bs=1M count=64 status=none && \
-	python3 scripts/inject_init_minix.py --format $$DISK && \
-	python3 scripts/inject_init_minix.py --setuid $$DISK $(SU_SETUID_SMOKE_BIN) sbin/init && \
-	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
-	$(SMOKE_QEMU_RUN) --log $(SU_SETUID_SMOKE_LOG) --profile musl-arch-prctl \
-		--done SU_SETUID_OK -- \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(SETUID_EXEC_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py --mode 4755 $$DISK $(SETID_HELPER_BIN) bin/setid_suid && \
+	python3 scripts/inject_init_minix.py --mode 2755 $$DISK $(SETID_HELPER_BIN) bin/setid_sgid && \
+	python3 scripts/inject_init_minix.py --mode 755 $$DISK $(SETID_HELPER_BIN) bin/setid_plain && \
+	python3 scripts/inject_init_minix.py --mode 4700 $$DISK $(SETID_HELPER_BIN) bin/setid_priv && \
+	python3 scripts/inject_init_minix.py --mode 4755 $$DISK $(SETID_SCRIPT_SRC) bin/setid_script && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/setid_suid /bin/setid_sgid && \
+	$(SMOKE_QEMU_RUN) --log $(SETUID_EXEC_SMOKE_LOG) --profile musl-arch-prctl \
+		--done SETUID_EXEC_ALL_OK --fail-regex 'SETID_HELPER_FAIL|SETID_CASE_FAIL|SETUID_EXEC_FAIL' -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
-	@grep -q "SU_SETUID_OK" $(SU_SETUID_SMOKE_LOG) && \
-		echo "✓ smoke-setuid-exec passed" || \
-		(echo "✗ smoke-setuid-exec FAILED"; exit 1)
+	@for tag in $(SETUID_EXEC_TAGS); do \
+		grep -q "$$tag" $(SETUID_EXEC_SMOKE_LOG) || \
+			{ echo "✗ smoke-setuid-exec FAILED (missing $$tag)"; \
+			  grep -E 'SETID_|SETUID_' $(SETUID_EXEC_SMOKE_LOG) | tail -20; exit 1; }; \
+	done
+	@echo "✓ smoke-setuid-exec passed"
 
 smoke-musl-pthread: build-musl-pthread-smoke kernel-x64-userspace.iso
 	@echo "  SMOKE   musl pthread_create + join..."
@@ -5831,7 +6012,7 @@ build-matrix-min:
 	@$(MAKE) -s kernel-x64.bin >/dev/null
 	@echo "  MATRIX  Bluetooth disabled"
 	@$(MAKE) defconfig >/dev/null
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n DEBUG_BINS_GROUP_BT=n >/dev/null
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n >/dev/null
 	@$(MAKE) -s kernel-x64.bin >/dev/null
 	@echo "  MATRIX  lazy MM disabled (eager mmap/brk bisect)"
 	@$(MAKE) defconfig >/dev/null
@@ -6090,12 +6271,13 @@ help:
 	@echo "  make run-fase58c-fbdev-gui        FASE58C B: /dev/fb0 mmap CMY bands"
 	@echo "  make run-fase58c-doom-gui         FASE58C C: Doom DOOM1.WAD (diagnostic)"
 	@echo "  make check-fase58c-logs           grep serial tags after GUI runs"
-	@echo "  make run-fase58e-ash-gui          FASE58E: ash interactive (no Doom autostart)"
+	@echo "  make run-fase58e-ash-gui          FASE58E: ash interactive (runit PID1; no Doom autostart)"
 	@echo "  make check-fase58e-logs           grep FASE58E serial tags"
 	@echo "  make smoke-fase58l-busybox-coreutils  FASE58L: full BusyBox coreutils smoke"
 	@echo "  make smoke-busybox-manifest           BUSY-2: alias → ktm-userdev-busybox-manifest-run"
 	@echo "  make ktm-userdev-busybox-manifest-run BUSY-2: product applet manifest (KTM)"
-	@echo "  make run-irinit-interactive-gui   irinit + BusyBox ash (bundles Doom if WAD exists)"
+	@echo "  make smoke-runit-boot             runit PID1 boot smoke"
+	@echo "  make load-userspace-runit         inject runit + BusyBox on MINIX disk"
 	@echo ""
 	@echo "Debug (off by default; rebuild kernel after change):"
 	@echo "  IR0_DEBUG_PMM=1       FASE41 PMM FREE/RECLAIM traces"
@@ -6464,7 +6646,7 @@ test-drivers-clean:
 
 # PHONY TARGETS
 
-.PHONY: all clean run run-debug run-tap run-nodisk run-console run-gdb debug create-disk delete-disk load-init remove-init help \
+.PHONY: all clean run run-debug run-dbgshell run-tap run-nodisk run-console run-gdb debug create-disk delete-disk load-init remove-init help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
         ir0 ir0-auto auto windows win windows-clean win-clean deptest check-env pre-submit menuconfig menuconfig-en menuconfig-es defconfig sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
         en-ext-drv dis-ext-drv \

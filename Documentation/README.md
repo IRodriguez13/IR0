@@ -23,6 +23,8 @@ The goal is to document implemented behavior first, then known gaps.
 - `STABLE.md`: release 0.0.1 checklist; merge→`master` blockers = TinyCC + Doom T2.
 - `BACKLOG_REMAINING.md`: honest post-0.0.1 open work (storage, POSIX, residual).
 - `KTM.md`: **canonical KTM guide** — internals, **klog layers**, kernel API, `/dev/ktm`, gates (Spanish: `esp/KTM.md`).
+- `USERSPACE.md`: **kernel ↔ IR0-userspace coupling** — clone layout, `IR0_USERSPACE_ROOT`, `headers_install`, boundary rules (Spanish: `esp/USERSPACE.md`).
+- `KLOG.md`: **structured event core** — `klog_record`, phases, early clock, sinks, `/proc/kmsg`, product boot via runit/ash (Spanish: `esp/KLOG.md`).
 - `KTM_FASE_PARITY.md`: FASE oleada → KTM analogue map (COVERED/PARTIAL/GAP/SUB).
 - `KTM_FASE_INVENTORY.md`: legacy `smoke-fase*` class A/B/C and canonical KTM gates.
 - `CHANGELOG.md`: iteration notes (Unreleased + 0.0.1).
@@ -38,6 +40,14 @@ The goal is to document implemented behavior first, then known gaps.
 - `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`; MM COW in `mandocs/en/mm.md`; **boot banner-first** in `mandocs/en/boot.md`).
 - `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`
   (QEMU GTK), keyboard poll + TTY echo path, build/run and serial tags.
+- `input/ps2-routing.md`: i8042 demux (AUXDATA), set-1 modifiers, mouse packets
+  (Spanish: `esp/input/ps2-routing.md`).
+- `filesystems/virtual-file-semantics.md`: snapshot / bounce / ring / stream read
+  contracts for `/dev/net`, `/dev/kmsg`, `/proc/*` (Spanish: `esp/filesystems/…`).
+- `tty/terminal-contract.md`: TIOCGWINSZ, termios, TERM=linux, nano, panic on
+  screen (Spanish: `esp/tty/terminal-contract.md`).
+- `debts/tty-canon-block-wake.md`: boot ktest hang — correct late-gate home.
+- `debts/events0-device-id.md`: proposed `device_id` ABI (not implemented).
 ## AI-assisted development
 
 Rules for coding agents live in **`Documentation/ai_driven_dev/`** (tracked in git).

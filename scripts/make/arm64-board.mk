@@ -69,7 +69,7 @@ smoke-arm64-rpi4-boot: kernel-arm64-rpi4-min.bin
 			qemu-system-aarch64 -M raspi4b \
 			-kernel kernel-arm64-rpi4-min.bin -nographic -serial mon:stdio \
 			-display none -no-reboot 2>/dev/null || true; \
-		if grep -q 'IR0 Kernel v' /tmp/arm64-rpi4-boot-smoke.log && \
+		if grep -q 'IR0 kernel' /tmp/arm64-rpi4-boot-smoke.log && \
 		   grep -q '\[BOOT\]' /tmp/arm64-rpi4-boot-smoke.log && \
 		   grep -q 'board=rpi4' /tmp/arm64-rpi4-boot-smoke.log && \
 		   grep -q 'ARM64_BOOT_OK' /tmp/arm64-rpi4-boot-smoke.log; then \
