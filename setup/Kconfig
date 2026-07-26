@@ -251,6 +251,15 @@ menu "Graphics"
           Use the VESA BIOS Extensions framebuffer when available
           (via Multiboot). VGA text-mode console is always compiled.
 
+    config CONSOLE_SERIAL_MIRROR
+        bool "Mirror TTY output to serial after userspace handoff"
+        default y
+        help
+          When disabled, console_backend_write stops echoing glyphs to COM1
+          after userspace attach (cleaner make run). Smoke markers still use
+          /dev/serial via ir0_smoke_tag. Enable for make run-bootlog / CI
+          greps of ash banners on the serial log.
+
 endmenu
 
 menu "Driver Init Selection"
@@ -470,8 +479,19 @@ menu "Debugging"
         default n
 
     config DEBUG_KEYBOARD
-        bool "Keyboard/stdin read debug output"
+        bool "Keyboard scancode/modifier [INPUT] serial traces"
         default n
+        help
+          Log each PS/2 set-1 byte: raw scancode, E0/E1 prefix, make/break,
+          logical key, modifier before/after, and bytes emitted to the TTY.
+          Keep disabled in product profiles (noisy on serial).
+
+    config DEBUG_PS2
+        bool "i8042 keyboard/mouse demux [PS2]/[MOUSE] serial traces"
+        default n
+        help
+          Log status+data with source=keyboard|mouse before any decoder,
+          plus assembled mouse packets. Keep off in product profiles.
 
     config TEST_INPUT_INJECT
         bool "Enable deterministic input injection test hook"

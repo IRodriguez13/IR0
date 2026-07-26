@@ -25,11 +25,15 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_mmap_null_placement.c \
 	test_elf_initial_brk_abi.c test_blockdev_facade.c \
-	test_arch_irq_facade.c test_arch_mm_pte_facade.c
+	test_arch_irq_facade.c test_arch_mm_pte_facade.c \
+	test_ps2_set1_modifiers.c \
+	test_ps2_mouse_pkt.c \
+	test_pipe_close_refcount.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
-	host_arch_irq_stub.o host_arch_mm_stub.o
+	host_arch_irq_stub.o host_arch_mm_stub.o \
+	host_ps2_set1.o host_ps2_mouse_pkt.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -72,6 +76,21 @@ host_arch_irq_stub.o: host_arch_irq_stub.c
 
 host_arch_mm_stub.o: host_arch_mm_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+host_ps2_set1.o: $(KERNEL_ROOT)/includes/ir0/ps2_set1.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/includes/ir0/ps2_mouse_pkt.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_ps2_set1_modifiers.o: test_ps2_set1_modifiers.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_ps2_mouse_pkt.o: test_ps2_mouse_pkt.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_pipe_close_refcount.o: test_pipe_close_refcount.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_runner.o: test_runner.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<

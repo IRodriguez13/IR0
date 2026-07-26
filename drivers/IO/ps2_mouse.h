@@ -21,9 +21,15 @@
 #define PS2_STATUS_PORT         0x64
 #define PS2_COMMAND_PORT        0x64
 
-// PS/2 Status register bits
+/* PS/2 Status register bits */
 #define PS2_STATUS_OUTPUT_FULL  0x01
 #define PS2_STATUS_INPUT_FULL   0x02
+#define PS2_STATUS_AUXDATA      0x20
+
+/* i8042 configuration byte (command 0x20/0x60) */
+#define PS2_CFG_INT1            (1 << 0)
+#define PS2_CFG_INT2            (1 << 1)
+#define PS2_CFG_CLK2            (1 << 5)
 
 // PS/2 Device commands
 #define PS2_DEV_RESET           0xFF
@@ -75,10 +81,11 @@
 #define PS2_MOUSE_5BTN_SEQUENCE_2      200
 #define PS2_MOUSE_5BTN_SEQUENCE_3      80
 
-// Mouse packet flags
+/* Mouse packet flags (byte 0); bit 3 is always 1 — used for resync. */
 #define PS2_MOUSE_LEFT_BUTTON   0x01
 #define PS2_MOUSE_RIGHT_BUTTON  0x02
 #define PS2_MOUSE_MIDDLE_BUTTON 0x04
+#define PS2_MOUSE_ALWAYS_1      0x08
 #define PS2_MOUSE_X_SIGN        0x10
 #define PS2_MOUSE_Y_SIGN        0x20
 #define PS2_MOUSE_X_OVERFLOW    0x40
@@ -136,8 +143,9 @@ bool ps2_mouse_set_resolution(uint8_t resolution);
 bool ps2_mouse_set_scaling_2_1(void);
 bool ps2_mouse_set_scaling_1_1(void);
 
-// Data handling
-void ps2_mouse_handle_interrupt(void);
+/* Data handling — feed_byte is the only entry for AUX controller bytes. */
+void ps2_mouse_feed_byte(uint8_t data);
+void ps2_mouse_handle_interrupt(void); /* drains i8042 via keyboard_poll demux */
 bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet);
 void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet);
 

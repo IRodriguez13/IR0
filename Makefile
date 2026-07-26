@@ -223,12 +223,20 @@ QEMU_MEMORY = 512M
 QEMU_FLAGS = -no-reboot -no-shutdown
 QEMU_TIMEOUT = 30
 
-# Modos de display
-# zoom-to-fit=off avoids host soft-scaling that blurs the guest framebuffer.
-QEMU_DISPLAY_GTK = -display gtk,zoom-to-fit=off
+# Display profiles (GTK flags vary by QEMU version — probe once).
 QEMU_DISPLAY_SDL = -display sdl2
 QEMU_DISPLAY_NONE = -display none
 QEMU_NGRAPHIC = -nographic
+QEMU_NAME = -name IR0/Unix-x86_64
+# Guest scale-2 glyphs are sharp; avoid host soft-scale blur.
+QEMU_GTK_BASE = gtk,zoom-to-fit=off
+# Probe optional GTK flags; never fail the build if unsupported.
+QEMU_DISPLAY_GTK = $(shell \
+	_opts='$(QEMU_GTK_BASE)'; \
+	if $(QEMU) -display help 2>&1 | grep -q show-menubar; then _opts="$$_opts,show-menubar=off"; fi; \
+	if $(QEMU) -display help 2>&1 | grep -q show-tabs; then _opts="$$_opts,show-tabs=off"; fi; \
+	echo "-display $$_opts $(QEMU_NAME)")
+QEMU_DISPLAY_GTK_DEBUG = -display gtk $(QEMU_NAME)
 
 # Configuración por defecto
 QEMU_DISPLAY = $(QEMU_DISPLAY_GTK)
@@ -433,6 +441,8 @@ LIB_OBJS = \
     includes/ir0/path_user.o \
     includes/ir0/path_routed.o \
     includes/ir0/console.o \
+    includes/ir0/ps2_set1.o \
+    includes/ir0/ps2_mouse_pkt.o \
     includes/ir0/ash_smoke.o \
     includes/ir0/debug_trap.o \
     includes/ir0/fb.o \
@@ -479,6 +489,7 @@ DRIVER_OBJS = \
     drivers/storage/fs_types.o \
 	drivers/video/console.o \
 	drivers/video/console_font.o \
+	drivers/video/font_terminus_14x28.o \
 	drivers/video/console_renderer.o \
 	drivers/video/typewriter.o \
 	drivers/init_drv.o \
@@ -1171,39 +1182,43 @@ windows-clean win-clean:
 # Run with GUI and disk (default) - ALL IR0 SUPPORTED HARDWARE
 # Note: This target does NOT call clean-net or rebuild with special flags
 # It simply runs the existing kernel ISO. Use 'make run-tap' for TAP networking.
-run: kernel-x64-userspace.iso load-userspace-runit
-	@echo "Running IR0/Unix (runit PID1 → getty/ash)..."
+# Human console: development disk includes tcc/make + BusyBox filters.
+# Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (document in SETUP.md).
+run: kernel-x64-userspace.iso load-userspace-devtools
+	@echo "Running IR0/Unix (human console — clean GTK)..."
 	@echo "   Hardware: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2, VGA"
-	@# Check if we can write to qemu_debug.log (skip if owned by root or not writable)
-	@QEMU_LOG_OPTION=""; \
-	if [ -f qemu_debug.log ] && [ ! -w qemu_debug.log ]; then \
-		echo "   ⚠️  qemu_debug.log not writable (owned by root?), skipping log file"; \
-		QEMU_LOG_OPTION=""; \
-	elif touch qemu_debug.log 2>/dev/null; then \
-		QEMU_LOG_OPTION="$(QEMU_LOG_FILE)"; \
-		rm -f qemu_debug.log; \
-	else \
-		QEMU_LOG_OPTION=""; \
-	fi
+	@echo "   Ungrab input: Ctrl+Alt+G"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot \
-		$(QEMU_DISPLAY) \
-		$(QEMU_DEBUG_GUEST) $$QEMU_LOG_OPTION
+		$(QEMU_DISPLAY)
 
 # Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
-run-debug: kernel-x64-userspace.iso load-userspace-runit
+run-debug: kernel-x64-userspace.iso load-userspace-devtools
 	@echo "Running IR0/Unix userspace with debug output..."
 	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2, VGA"
 	@echo "Serial output will appear in this terminal"
-	@echo "QEMU GUI will open in separate window"
+	@echo "QEMU GUI will open in separate window (menubar visible)"
+	@echo "Ungrab input: Ctrl+Alt+G"
 	@echo "Press Ctrl+C to stop"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		$(QEMU_HW_IR0_ALL) \
 		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY) \
+		$(QEMU_DISPLAY_GTK_DEBUG) \
+		-serial stdio \
 		-monitor telnet:127.0.0.1:1234,server,nowait \
 		-d guest_errors,int $(QEMU_LOG_FILE)
+
+# run-bootlog: defined in scripts/make/hostshare-boot.mk (serial + optional 9p boot log).
+# Human interactive with serial in-terminal: make run-debug.
+
+run-fullscreen: kernel-x64-userspace.iso load-userspace-devtools
+	@echo "Running IR0/Unix fullscreen GTK..."
+	@echo "   Ungrab input: Ctrl+Alt+G"
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+		$(QEMU_HW_IR0_ALL) \
+		-m 512M -no-reboot \
+		-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME)
 
 # Run without disk
 run-nodisk:
@@ -2214,6 +2229,7 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
 		echo "  WARN    nano not built (optional; cat /usr/bin/nano after reinject)"
 	@DISK=$${DISK:-disk.img}; \
+	set -e; \
 	PROFILE=$${IR0_PRODUCT_PROFILE:-development}; \
 	STAMP=$${DISK}.runit.stamp; \
 	NEED=0; \
@@ -2226,6 +2242,7 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 			$(IR0_USERSPACE_ROOT)/rootfs/etc/passwd \
 			$(IR0_USERSPACE_ROOT)/rootfs/etc/doas.conf \
 			$(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh \
+			$(IR0_USERSPACE_ROOT)/packages/busybox/required_applets.txt \
 			$(IR0_BUSYBOX_FULL_BIN) $(IR0_BUSYBOX_AUTH_BIN); do \
 			if [ -e "$$dep" ] && [ "$$dep" -nt "$$STAMP" ]; then NEED=1; break; fi; \
 		done; \
@@ -2242,6 +2259,22 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 		printf '%s\n' "$$PROFILE" > "$$STAMP"; \
 	fi
 	@echo "✓ load-userspace-runit OK (runit-init → runsvdir → console + logger)"
+
+# Static GNU make for in-guest builds (musl).
+build-gmake-static:
+	@chmod +x scripts/build_gmake_static.sh
+	@./scripts/build_gmake_static.sh
+
+# Product disk + TinyCC + GNU make + expanded BusyBox filters (sed/awk/tar/…).
+# Use after (or instead of) plain load-userspace-runit for toolchain experiments.
+load-userspace-devtools: build-tcc-fase52 build-gmake-static
+	@rm -f disk.img.runit.stamp disk.img.devtools.stamp
+	@IR0_PRODUCT_PROFILE=$${IR0_PRODUCT_PROFILE:-development} IR0_NO_AUTOLOGIN=$${IR0_NO_AUTOLOGIN:-0} \
+		$(MAKE) -s load-userspace-runit
+	@chmod +x scripts/inject_devtools_minix.sh
+	@./scripts/inject_devtools_minix.sh disk.img
+	@printf 'devtools\n' > disk.img.devtools.stamp
+	@echo "✓ load-userspace-devtools OK (/bin/tcc /bin/make /bin/sed …)"
 
 smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 boot (console + logger)..."
@@ -2275,6 +2308,20 @@ smoke-runit-login: load-userspace-runit kernel-x64-userspace.iso
 	@python3 scripts/smoke_runit_login.py --log $(RUNIT_LOGIN_SMOKE_LOG) --timeout 75 \
 		--iso kernel-x64-userspace.iso --disk disk.img
 	@echo "  LOG     $(RUNIT_LOGIN_SMOKE_LOG)"
+
+smoke-tty-raw-probe: kernel-x64-userspace.iso
+	@echo "  SMOKE   TTY raw probe (Ctrl-X=0x18 + ESC[A)..."
+	@rm -f disk.img.runit.stamp
+	@IR0_PRODUCT_PROFILE=development IR0_NO_AUTOLOGIN=0 $(MAKE) -s load-userspace-runit
+	@chmod +x scripts/smoke_tty_raw_probe.py
+	@python3 scripts/smoke_tty_raw_probe.py --iso kernel-x64-userspace.iso --disk disk.img
+
+smoke-desktop-nano: kernel-x64-userspace.iso
+	@echo "  SMOKE   GNU nano Ctrl-X save path..."
+	@rm -f disk.img.runit.stamp
+	@IR0_PRODUCT_PROFILE=development IR0_NO_AUTOLOGIN=0 $(MAKE) -s load-userspace-runit
+	@chmod +x scripts/smoke_desktop_nano_mnt.py
+	@python3 scripts/smoke_desktop_nano_mnt.py --iso kernel-x64-userspace.iso --disk disk.img
 
 # Non-root path: crypt(3) auth + setuid drop + /etc/profile PS1 (typed via monitor).
 RUNIT_LOGIN_NONROOT_SMOKE_LOG = /tmp/runit-login-nonroot-smoke.log

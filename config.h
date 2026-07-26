@@ -145,6 +145,11 @@
 #else
 #define DEBUG_KEYBOARD 0
 #endif
+#if defined(CONFIG_DEBUG_PS2) && CONFIG_DEBUG_PS2
+#define DEBUG_PS2 1
+#else
+#define DEBUG_PS2 0
+#endif
 
 /* KERNEL BEHAVIOR CONFIGURATION                                             */
 
@@ -315,6 +320,10 @@
 
 #ifndef CONFIG_ENABLE_SOUND
 #define CONFIG_ENABLE_SOUND 1
+#endif
+
+#ifndef CONFIG_CONSOLE_SERIAL_MIRROR
+#define CONFIG_CONSOLE_SERIAL_MIRROR 1
 #endif
 
 #ifndef CONFIG_ENABLE_VBE

@@ -382,9 +382,33 @@ void kmain(uint32_t multiboot_info)
     (void)ir0_boot_log_hostshare_try();
 
     /*
-     * In-kernel tests run from init_1 (process context) when linked.
-     * Calling them here (before init process exists) would force SKIP paths.
+     * In-kernel ktests (kernel-x64-test.bin): need a process context so
+     * syscall/devfs contracts are not SKIP'd. Spawn a short-lived kernel
+     * holder, run the suite, then continue to product /sbin/init.
      */
+#if defined(IR0_KERNEL_TESTS)
+    {
+	extern void kernel_test_run_all(void);
+	process_t *saved = current_process;
+	process_t *holder;
+	pid_t holder_pid;
+
+	holder_pid = spawn_kernel(kernel_idle_loop, "ktest-ctx");
+	holder = (holder_pid > 0) ? process_find_by_pid(holder_pid) : NULL;
+	if (holder)
+	{
+		/*
+		 * Suite runs in kmain with current_process=holder so
+		 * sys_open/sys_read see a real fd_table.
+		 */
+		current_process = holder;
+		kernel_test_run_all();
+		current_process = saved;
+	}
+	else
+		klog_error("KTEST", "no process context; suite skipped");
+    }
+#endif
 
     /* Product init: load /sbin/init from root filesystem and run in ring 3. */
     {

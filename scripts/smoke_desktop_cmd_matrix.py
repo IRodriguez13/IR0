@@ -479,7 +479,29 @@ def login_desktop(
     mon: Monitor, log: Path, key_delay: float, proc: subprocess.Popen, do_su: bool
 ) -> Optional[str]:
     t0 = time.time()
-    wait_pred(log, lambda t: "login:" in t, t0, 90, proc)
+    # Development images may autologin as root (no "login:" prompt).
+    try:
+        wait_pred(
+            log,
+            lambda t: "login:" in t
+            or "ASH_INTERACTIVE_READY" in t
+            or PROMPT_RE.search(t) is not None,
+            t0,
+            90,
+            proc,
+        )
+    except TimeoutError:
+        return "login_wait"
+    whole = log.read_text(errors="replace")
+    if "ASH_INTERACTIVE_READY" in whole or PROMPT_RE.search(whole):
+        time.sleep(0.8)
+        if do_su and "root@" not in whole[-400:]:
+            mon.type_str("su", key_delay)
+            mon.ret()
+            time.sleep(0.8)
+            mon.ret()
+            time.sleep(1.0)
+        return None
     time.sleep(2.0)
     d = max(key_delay, 0.45)
 
@@ -766,6 +788,8 @@ def run_session(
                     if batch_log.is_file():
                         break
                     time.sleep(0.05)
+                # Special injectors (nano) wait on the live QEMU serial file.
+                os.environ["IR0_NANO_SMOKE_LOG"] = str(batch_log)
                 mon.connect(timeout=20)
                 fail = login_desktop(mon, batch_log, key_delay, proc, do_su)
                 if fail:

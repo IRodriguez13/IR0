@@ -49,3 +49,10 @@ bool ktm_fault_should_fail(const char *name)
 	(void)name;
 	return false;
 }
+
+/* Kernel wake lives in io_syscalls.c; host needs a no-op for pipe_close_end. */
+struct pipe;
+void pipe_wake_all(struct pipe *pipe)
+{
+	(void)pipe;
+}

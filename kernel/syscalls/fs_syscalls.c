@@ -429,6 +429,14 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
   strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
   fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
 
+  /*
+   * Finite text devices: capture a per-open snapshot so read() honors
+   * offset and reaches EOF (BusyBox cat). Failure falls back to ops->read
+   * bounce+slice.
+   */
+  if (devfs_node_wants_text_snap(node->entry.device_id))
+    fd_table[fd].vfs_file = devfs_text_snap_capture(node->entry.device_id);
+
   if (DEBUG_VFS)
   {
     klog_debug_fmt("VFS", "[VFS][OPEN] path=%s fd=%llx dev_id=%x", path, (unsigned long long)((uint64_t)fd), (unsigned)(node->entry.device_id));
@@ -733,16 +741,27 @@ int64_t sys_read(int fd, void *buf, size_t count)
       size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
       int ret;
 
-      if (!node->ops || !node->ops->read)
-        return -EBADF;
+      if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+	  fd_table[fd].in_use && fd_table[fd].vfs_file &&
+	  devfs_node_wants_text_snap(fd_table[fd].dev_device_id))
       {
-	int nb = (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
-		  fd_table[fd].in_use &&
-		  (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
+	ret = (int)devfs_text_snap_read(
+		(const devfs_text_snap_t *)fd_table[fd].vfs_file,
+		kernel_read_buf, read_size, read_off);
+      }
+      else
+      {
+	if (!node->ops || !node->ops->read)
+	  return -EBADF;
+	{
+	  int nb = (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+		    fd_table[fd].in_use &&
+		    (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
 
-	devfs_set_read_nonblock(nb);
-	ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
-	devfs_set_read_nonblock(0);
+	  devfs_set_read_nonblock(nb);
+	  ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
+	  devfs_set_read_nonblock(0);
+	}
       }
       if (ret > 0)
       {

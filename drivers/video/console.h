@@ -25,12 +25,32 @@
 
 #include <stdint.h>
 
+/* VGA text mode geometry (and soft defaults). */
 #define CONSOLE_WIDTH  80
 #define CONSOLE_HEIGHT 25
 
-/* Default / product FB glyph scale (1× = classic 8×16 in an 80×25 island). */
+/* FB shadow / soft cursor bounds (Terminus 14×28 ≈ 88×27 on 1280×800). */
+#define CONSOLE_MAX_WIDTH  128
+#define CONSOLE_MAX_HEIGHT 48
+
+/*
+ * Product FB uses a native bitmap font (no nearest-neighbor upscale).
+ * Scale remains 1; cell size comes from FONT_WIDTH/HEIGHT.
+ */
 #define CONSOLE_FB_SCALE_DEFAULT 1
 #define CONSOLE_FB_SCALE_MAX     1
+#define CONSOLE_FB_MARGIN_PX     20
+
+struct console_geometry
+{
+	unsigned pixel_width;
+	unsigned pixel_height;
+	unsigned cell_width;
+	unsigned cell_height;
+	unsigned columns;
+	unsigned rows;
+	unsigned scale;
+};
 
 #define CONSOLE_FB_BORDER_COLOR 0x00u /* black letterbox */
 
@@ -79,5 +99,6 @@ int console_use_framebuffer(void);
 int console_get_width(void);
 int console_get_height(void);
 int console_get_fb_scale(void);
+void console_get_geometry(struct console_geometry *geo);
 
 #endif /* CONSOLE_H */

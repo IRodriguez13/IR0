@@ -44,10 +44,13 @@ def expect_nano_saved(new: str) -> bool:
     text = normalize_serial(new)
     if "KERNEL PANIC" in text or "#DF" in text or "#UD" in text:
         return False
-    # Strong: saved file + marker. Soft: nano UI came up (tty/CSI/termios OK).
-    if "NANO_SMOKE_OK" in text and "hello IR0" in text:
+    # Hard: Ctrl-X → save → shell. Prefer file contents + marker; accept
+    # nano's "[ Wrote N line ]" when HMP mangles a follow-up cat.
+    wrote = ("[ Wrote" in text) or ("Wrote" in text and "line" in text)
+    prompt = ("root@ir0" in text) or ("ivan@ir0" in text)
+    if "NANO_SMOKE_OK" in text and ("hello IR0" in text or wrote):
         return True
-    return "GNU nano" in text and "New File" in text
+    return bool(wrote and prompt)
 
 
 def inject_nano_disk(disk: Path, nano: Path) -> None:
@@ -58,29 +61,66 @@ def inject_nano_disk(disk: Path, nano: Path) -> None:
     )
 
 
+def _serial_has(log: Path, needle: str) -> bool:
+    if not log.is_file():
+        return False
+    return needle in log.read_text(errors="replace")
+
+
 def nano_inject_case(mon: Monitor, case: Case, key_delay: float) -> None:
     if case.special != "nano_edit":
         inject_case(mon, case, key_delay)
         return
-    d = max(key_delay, 0.50)
-    mon.type_str("TERM=linux /usr/bin/nano /tmp/nano-smoke.txt", d)
+    # Prefer the batch serial log path used by run_session.
+    log = Path(os.environ.get("IR0_NANO_SMOKE_LOG", "/tmp/ir0-nano-mnt.log"))
+    d = max(key_delay, 0.35)
+    # Short path: MINIX NAME_MAX is tight; long names → nano "Filename too long".
+    mon.type_str("TERM=linux /usr/bin/nano /tmp/n.txt", d)
     mon.ret()
-    # Wait for nano chrome (CSI paint) before sending body text.
-    time.sleep(5.0)
-    mon.type_str("hello IR0 nano", d)
-    time.sleep(1.0)
-    # Tiny nano: ^X → "Save modified buffer?" → Y → Enter filename / confirm.
+    # Wait for nano chrome (CSI paint / title) before body text.
+    deadline = time.monotonic() + 20.0
+    while time.monotonic() < deadline:
+        if _serial_has(log, "GNU nano") or _serial_has(log, "New File"):
+            break
+        time.sleep(0.25)
+    time.sleep(0.8)
+    # Short payload — HMP is slow; avoid doubled glyphs from long delays.
+    mon.type_str("hello IR0", 0.12)
+    time.sleep(0.6)
+    # Tiny nano: ^X → "Save modified buffer?" → Y → confirm filename.
     mon.key("ctrl-x")
-    time.sleep(2.0)
+    deadline = time.monotonic() + 15.0
+    while time.monotonic() < deadline:
+        text = log.read_text(errors="replace") if log.is_file() else ""
+        if "Save modified" in text or "Yes" in text[-800:]:
+            break
+        time.sleep(0.2)
+    time.sleep(0.4)
     mon.key("y")
-    time.sleep(1.2)
+    deadline = time.monotonic() + 15.0
+    while time.monotonic() < deadline:
+        text = log.read_text(errors="replace") if log.is_file() else ""
+        if "File Name" in text or "Write" in text[-1200:]:
+            break
+        time.sleep(0.2)
+    time.sleep(0.4)
     mon.ret()
-    time.sleep(2.5)
-    # Back at ash (hopefully): show file + marker.
-    mon.type_str("cat /tmp/nano-smoke.txt", d)
+    deadline = time.monotonic() + 25.0
+    while time.monotonic() < deadline:
+        text = log.read_text(errors="replace") if log.is_file() else ""
+        if "KERNEL PANIC" in text:
+            return
+        tail = text[-500:]
+        if "Wrote" in text and ("root@ir0" in tail or "ivan@ir0" in tail):
+            break
+        if "Error writing" in text:
+            return
+        time.sleep(0.25)
+    time.sleep(0.8)
+    # Optional marker — HMP often mangles post-nano typing; Wrote+PS1 is enough.
     mon.ret()
-    time.sleep(1.2)
-    mon.type_str("echo NANO_SMOKE_OK", d)
+    time.sleep(0.3)
+    mon.type_str("echo NANO_SMOKE_OK", 0.18)
     mon.ret()
 
 
@@ -131,7 +171,7 @@ def main() -> int:
             expect_nano_saved,
             special="nano_edit",
             echo="GNU nano",
-            timeout=90.0,
+            timeout=120.0,
         )
         print(f"NANO_EDIT nano={args.nano}", flush=True)
         args.log.write_text("")
