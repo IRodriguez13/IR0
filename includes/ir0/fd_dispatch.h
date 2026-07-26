@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <ir0/process.h>
+#include <ir0/fd_types.h>
 #include <stddef.h>
 
 static inline int fd_entry_live(const fd_entry_t *e)

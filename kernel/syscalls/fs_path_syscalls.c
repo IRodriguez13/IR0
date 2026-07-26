@@ -573,7 +573,10 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
 
     if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
       return -EBADF;
-    slot = &current_process->fd_table[dirfd];
+    slot = process_fd_table(current_process);
+    if (!slot)
+      return -EBADF;
+    slot = &slot[dirfd];
     if (!slot->in_use || slot->path[0] == '\0')
       return -EBADF;
     if (strlen(slot->path) >= sizeof(resolved))

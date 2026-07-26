@@ -16,14 +16,11 @@
 
 #include <ir0/arch_port.h>
 #include <ir0/context.h>
+#include <ir0/arch_switch.h>
 #include <ir0/oops.h>
 #include <ir0/signals.h>
 #include <ir0/sched.h>
 #include <stdint.h>
-
-#if !defined(ARCH_ARM64)
-extern uint64_t user_rsp_save;
-#endif
 
 static inline uint64_t sched_switch_irq_save(void)
 {
@@ -87,9 +84,7 @@ void sched_context_switch_to(process_t *next)
 		 */
 		if (sched_context_switch_take_skip_prev_save())
 		{
-#if !defined(ARCH_ARM64)
-			prev->saved_user_rsp = user_rsp_save;
-#endif
+			arch_switch_save_user_rsp(prev);
 			switch_to(NULL, &next->task);
 		}
 		else

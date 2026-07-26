@@ -32,8 +32,7 @@
 #include <config.h>
 #include <drivers/multilang_drivers.h>
 #include <drivers/IO/ps2.h>
-#include <interrupt/arch/keyboard.h>
-#include <interrupt/arch/pic.h>
+#include <ir0/irq.h>
 #if CONFIG_ENABLE_PC_SPEAKER
 #include <drivers/IO/pc_speaker.h>
 #endif
@@ -84,7 +83,7 @@ static int boot_init_ps2_controller(void)
 static int boot_init_keyboard(void)
 {
 #if CONFIG_INIT_PS2_CONTROLLER
-    keyboard_init();
+    irq_keyboard_init();
 #endif
     return 0;
 }

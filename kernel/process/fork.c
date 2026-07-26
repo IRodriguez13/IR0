@@ -7,473 +7,26 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: fork.c
- * Description: POSIX fork, deferred enqueue, rollback, and fork-return diagnostics.
+ * Description: Portable POSIX fork / clone_thread — transactional, ISA-agnostic.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
 #include <ir0/clone.h>
+#include <ir0/arch_fork.h>
+#include <ir0/arch_task.h>
+#include <ir0/process_domains.h>
+#include <ir0/mm_struct.h>
+#include <ir0/files_struct.h>
 #include <ir0/ktm/checkpoint.h>
 #include <ir0/ktm/fault.h>
-#include <ir0/ktm/klog.h>
 #include <string.h>
 
-#if defined(__x86_64__) || defined(__amd64__)
 /*
- * fork_ret - register-level fork child return audit (PRE_RETURN + FIRST_ENTRY).
+ * Transactional child construction — no memcpy(process_t). Each domain is
+ * cloned explicitly; resource handles start NULL until their phase succeeds.
  */
-typedef struct
-{
-	uint64_t rax;
-	uint64_t rcx;
-	uint64_t r11;
-	uint64_t rbx;
-	uint64_t rbp;
-	uint64_t r12;
-	uint64_t r13;
-	uint64_t r14;
-	uint64_t r15;
-	uint64_t rsp;
-	uint64_t rip;
-} fork_ret_pre_regs_t;
-
-fork_ret_pre_regs_t fork_ret_pre_regs;
-
-/*
- * fork_restore_audit — GPR restore path before iretq (ASM + C).
- * Layout must match switch_x64.asm offsets (FORK_RESTORE_AUDIT_*).
- */
-typedef struct
-{
-	uint64_t magic;
-	uint64_t task_ptr;
-	uint64_t rax_slot_addr;
-	uint64_t rax_slot_mem;
-	uint64_t rsp_pre_gpr_load;
-	uint64_t stack_qwords[20];
-	uint64_t restore_method;
-	uint64_t stack_rax_slot_off;
-	uint64_t live_rax_after_task_load;
-	uint64_t live_rbx_after_task_load;
-	uint64_t live_rax_after_pr_call;
-	uint64_t live_rax_pre_iretq;
-	uint64_t live_rbx_pre_iretq;
-	uint64_t live_rcx_pre_iretq;
-	uint64_t live_rdx_pre_iretq;
-	uint64_t kernel_rsp_pre_iretq;
-	uint64_t iretq_rip;
-	uint64_t iretq_rflags;
-	uint64_t iretq_user_rsp;
-	uint64_t task_rax_at_fixup;
-	uint64_t pre_return_log_rax;
-	uint64_t userspace_rax;
-	uint64_t classify_emit;
-} fork_restore_audit_t;
-
-fork_restore_audit_t fork_restore_audit;
-
-extern uint8_t fork_flow_set_tf;
-
-static void fork_restore_dump_qwords(const char *tag, uint64_t base, size_t n)
-{
-	char buf[512];
-	size_t off;
-	size_t i;
-
-	if (!DEBUG_FORK)
-		return;
-
-	off = (size_t)snprintf(buf, sizeof(buf),
-			       "[FORK_RESTORE] %s base=%llx qwords=",
-			       tag ? tag : "frame", (unsigned long long)base);
-	for (i = 0; i < n && off < sizeof(buf) - 24; i++)
-	{
-		uint64_t addr = base + (uint64_t)(i * sizeof(uint64_t));
-		uint64_t v = *(const uint64_t *)(uintptr_t)addr;
-
-		off += (size_t)snprintf(buf + off, sizeof(buf) - off, "%s%llx",
-					i > 0 ? " " : "",
-					(unsigned long long)v);
-	}
-	klog_debug("FORK", buf);
-}
-
-static void fork_restore_classify(uint64_t userspace_rax)
-{
-	const char *tag = NULL;
-	uint64_t slot;
-	uint64_t after_load;
-	uint64_t pre_iret;
-	uint64_t pre_log;
-	uint64_t fixup_rax;
-
-	if (fork_restore_audit.classify_emit)
-		return;
-
-	fork_restore_audit.classify_emit = 1;
-	fork_restore_audit.userspace_rax = userspace_rax;
-	slot = fork_restore_audit.rax_slot_mem;
-	after_load = fork_restore_audit.live_rax_after_task_load;
-	pre_iret = fork_restore_audit.live_rax_pre_iretq;
-	pre_log = fork_restore_audit.pre_return_log_rax;
-	fixup_rax = fork_restore_audit.task_rax_at_fixup;
-
-	if (fixup_rax == 0 && slot != 0)
-		tag = "RAX_SLOT_STALE";
-	else if (after_load != slot)
-		tag = "RESTORE_SOURCE_MISMATCH";
-	else if (pre_log != after_load)
-		tag = "PRE_RETURN_LOG_NOT_AUTHORITATIVE";
-	else if (after_load == 0 && pre_iret != 0)
-		tag = "LATE_RAX_CLOBBER";
-	else if (after_load == 0 && pre_iret == 0 && fixup_rax == 0)
-		tag = "LATE_RAX_CLOBBER_FIXED";
-
-	if (!tag)
-		return;
-
-	if (!DEBUG_FORK)
-		return;
-	klog_debug_fmt("FORK", "CLASSIFY %s", tag);
-}
-
-static void fork_restore_log_fixup(process_t *parent, process_t *child)
-{
-	uint64_t rax_before;
-
-	rax_before = child->task.rax;
-	fork_restore_audit.magic = 0xF010CAFEULL;
-	fork_restore_audit.task_ptr = (uint64_t)(uintptr_t)&child->task;
-	fork_restore_audit.rax_slot_addr =
-		(uint64_t)(uintptr_t)&child->task.rax;
-
-	if (DEBUG_FORK)
-	{
-		klog_debug_fmt("FORK", "[FORK_RESTORE][FIXUP] child_task=%llx syscall_frame=%llx rax_slot_addr=%llx task_rax_before=%llx", (unsigned long long)(fork_restore_audit.task_ptr), (unsigned long long)((uint64_t)(uintptr_t)&parent->syscall_frame), (unsigned long long)(fork_restore_audit.rax_slot_addr), (unsigned long long)(rax_before));
-	}
-
-	process_apply_syscall_frame_to_task(&child->task, &parent->syscall_frame, 0);
-	process_apply_syscall_frame_to_task(&parent->task, &parent->syscall_frame,
-	                                    (uint64_t)child->task.pid);
-
-	fork_restore_audit.task_rax_at_fixup = child->task.rax;
-	fork_restore_audit.rax_slot_mem = child->task.rax;
-
-	if (DEBUG_FORK)
-	{
-		klog_debug_fmt("KERN", " task_rax_after=%llx slot_readback=%llx", (unsigned long long)(child->task.rax), (unsigned long long)(*(uint64_t *)(uintptr_t)fork_restore_audit.rax_slot_addr));
-	}
-}
-
-#define FORK_BRANCH_RIP_MOV   0x402BA3ULL
-#define FORK_BRANCH_RIP_TEST  0x402BA6ULL
-#define FORK_BRANCH_RIP_JE    0x402BA8ULL
-#define FORK_BRANCH_RIP_CHILD 0x402BE8ULL
-#define FORK_BRANCH_RIP_PARENT 0x402BAAULL
-
-static int fork_flow_read_user_bytes(process_t *proc, uint64_t va, uint8_t *buf,
-                                     size_t n)
-{
-	size_t i;
-
-	if (!proc || !proc->page_directory || !buf || n == 0)
-		return -1;
-
-	for (i = 0; i < n; i++)
-	{
-		uintptr_t page = (uintptr_t)((va + i) & ~0xFFFULL);
-		size_t off = (size_t)((va + i) & 0xFFFULL);
-		uint64_t *pte = paging_get_pte(proc->page_directory, page);
-		uintptr_t phys;
-
-		if (!pte || !(*pte & PAGE_PRESENT))
-			return -1;
-
-		phys = (uintptr_t)(*pte & PAGE_PTE_PFN_MASK);
-		buf[i] = *(const uint8_t *)(phys + off);
-	}
-
-	return 0;
-}
-
-static struct
-{
-	uint8_t active;
-	uint8_t pre_return_done;
-	pid_t child_pid;
-	uint64_t expected_rax;
-	uint64_t expected_rip;
-	uint64_t expected_rsp;
-	uint64_t task_rax_at_fixup;
-	uint64_t pre_rax;
-	uint64_t pre_rip;
-	uint64_t pre_rsp;
-} fork_ret_expect;
-
-static struct
-{
-	uint8_t active;
-	uint8_t step;
-	uint8_t classified;
-	uint8_t code_dumped;
-	pid_t child_pid;
-	uint64_t step_rax[3];
-	uint64_t step_rbx[3];
-	uint64_t step_rip[3];
-	uint64_t step_rflags[3];
-	uint64_t step_rsp[3];
-	uint64_t step_zf[3];
-} fork_branch;
-
-static void fork_branch_hex8(process_t *proc, uint64_t va, const char *tag)
-{
-	uint8_t bytes[8];
-
-	if (fork_flow_read_user_bytes(proc, va, bytes, sizeof(bytes)) != 0)
-	{
-		klog_debug_fmt("FORK", "[FORK_BRANCH] %s unreadable\n", tag ? tag : "code");
-		return;
-	}
-
-	klog_debug_fmt("FORK",
-		       "[FORK_BRANCH] %s=%02x %02x %02x %02x %02x %02x %02x %02x",
-		       tag ? tag : "code", bytes[0], bytes[1], bytes[2], bytes[3],
-		       bytes[4], bytes[5], bytes[6], bytes[7]);
-}
-
-static void fork_branch_emit_step(process_t *proc, const char *label, uint32_t idx,
-                                  uint64_t rip, uint64_t rax, uint64_t rbx,
-                                  uint64_t rflags, uint64_t rsp)
-{
-	uint64_t zf;
-
-	zf = (rflags >> 6) & 1ULL;
-	klog_debug_fmt("FORK", "[FORK_BRANCH] step=%s rip=%llx rax=%llx rbx=%llx rflags=%llx zf=%llx rsp=%llx", label ? label : "?", (unsigned long long)(rip), (unsigned long long)(rax), (unsigned long long)(rbx), (unsigned long long)(rflags), (unsigned long long)(zf), (unsigned long long)(rsp));
-
-	if (idx < 3)
-	{
-		fork_branch.step_rax[idx] = rax;
-		fork_branch.step_rbx[idx] = rbx;
-		fork_branch.step_rip[idx] = rip;
-		fork_branch.step_rflags[idx] = rflags;
-		fork_branch.step_rsp[idx] = rsp;
-		fork_branch.step_zf[idx] = zf;
-	}
-
-	if (idx == 0 && fork_ret_expect.active)
-	{
-		fork_restore_emit_pre_iretq();
-		fork_restore_classify(rax);
-	}
-
-	if (!fork_branch.code_dumped && proc)
-	{
-		fork_branch_hex8(proc, FORK_BRANCH_RIP_MOV, "code_at_402BA3");
-		fork_branch_hex8(proc, FORK_BRANCH_RIP_TEST, "code_at_402BA6");
-		fork_branch_hex8(proc, FORK_BRANCH_RIP_JE, "code_at_402BA8");
-		fork_branch.code_dumped = 1;
-	}
-}
-
-static void fork_branch_classify(void)
-{
-	const char *tag;
-	uint64_t rax0;
-	uint64_t rax1;
-	uint64_t zf1;
-	uint64_t rip2;
-
-	if (fork_branch.classified)
-		return;
-
-	fork_branch.classified = 1;
-	fork_flow_set_tf = 0;
-	rax0 = fork_branch.step_rax[0];
-	rax1 = fork_branch.step_rax[1];
-	zf1 = fork_branch.step_zf[1];
-	rip2 = fork_branch.step_rip[2];
-
-	if (rax0 != rax1)
-		tag = "RAX_MUTATED_BETWEEN_STEPS";
-	else if (((rax1 == 0) ? 1ULL : 0ULL) != zf1)
-		tag = "FLAGS_UNEXPECTED";
-	else if (rax1 == 0 && rip2 != FORK_BRANCH_RIP_CHILD)
-		tag = "BRANCH_PARENT_WITH_RAX_ZERO";
-	else if (rip2 == FORK_BRANCH_RIP_CHILD)
-		tag = "BRANCH_CHILD_OK";
-	else
-		return;
-
-	klog_debug_fmt("FORK", "CLASSIFY %s", tag);
-}
-
-static void fork_branch_arm_pid(pid_t child_pid)
-{
-	memset(&fork_branch, 0, sizeof(fork_branch));
-	fork_branch.active = 1;
-	fork_branch.child_pid = child_pid;
-}
-
-int fork_flow_note_debug_exception(uint64_t *stack)
-{
-	process_t *p = current_process;
-	uint64_t rip;
-	uint64_t rax;
-	uint64_t rbx;
-	uint64_t rflags;
-	uint64_t rsp;
-	const char *label;
-
-	if (!fork_branch.active || fork_branch.classified || !stack || !p ||
-	    p->task.pid != fork_branch.child_pid)
-		return 0;
-
-	rip = stack[2];
-	rflags = stack[4];
-	rsp = stack[5];
-	rax = stack[-1];
-	rbx = stack[-4];
-
-	if (fork_branch.step == 0)
-		label = "STEP0";
-	else if (fork_branch.step == 1)
-		label = "STEP1";
-	else if (fork_branch.step == 2)
-		label = "STEP2";
-	else
-	{
-		stack[4] &= ~0x100ULL;
-		fork_flow_set_tf = 0;
-		return 0;
-	}
-
-	fork_branch_emit_step(p, label, fork_branch.step, rip, rax, rbx, rflags, rsp);
-	fork_branch.step++;
-
-	if (fork_branch.step >= 3)
-	{
-		stack[4] &= ~0x100ULL;
-		fork_branch_classify();
-	}
-	else
-		stack[4] |= 0x100ULL;
-
-	return 1;
-}
-
-void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall)
-{
-	(void)rip_hw;
-	(void)nr;
-	(void)from_syscall;
-}
-
-void fork_ret_emit_pre_return(void)
-{
-	process_t *p = current_process;
-	const fork_ret_pre_regs_t *pre = &fork_ret_pre_regs;
-
-	if (!fork_ret_expect.active || fork_ret_expect.pre_return_done)
-		return;
-	if (!p || p->task.pid != fork_ret_expect.child_pid)
-		return;
-
-	fork_ret_expect.pre_return_done = 1;
-	fork_ret_expect.pre_rax = pre->rax;
-	fork_ret_expect.pre_rip = pre->rip;
-	fork_ret_expect.pre_rsp = pre->rsp;
-	if (ir0_debug_fork_singlestep_active())
-		fork_flow_set_tf = 1;
-	fork_restore_audit.pre_return_log_rax = pre->rax;
-
-	if (!DEBUG_FORK)
-		return;
-
-	klog_debug_fmt("FORK", "[FORK_RET][PRE_RETURN] pid=%x task_ptr=%llx rax_slot_addr=%llx rax_slot_val=%llx restore_method=%llx rax=%llx live_after_task_load=%llx rcx=%llx r11=%llx rbx=%llx rbp=%llx r12=%llx r13=%llx r14=%llx r15=%llx rsp=%llx rip=%llx task_rax=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)((uint64_t)(uintptr_t)&p->task), (unsigned long long)((uint64_t)(uintptr_t)&p->task.rax), (unsigned long long)(p->task.rax), (unsigned long long)(fork_restore_audit.restore_method), (unsigned long long)(pre->rax), (unsigned long long)(fork_restore_audit.live_rax_after_task_load), (unsigned long long)(pre->rcx), (unsigned long long)(pre->r11), (unsigned long long)(pre->rbx), (unsigned long long)(pre->rbp), (unsigned long long)(pre->r12), (unsigned long long)(pre->r13), (unsigned long long)(pre->r14), (unsigned long long)(pre->r15), (unsigned long long)(pre->rsp), (unsigned long long)(pre->rip), (unsigned long long)(p->task.rax));
-
-	fork_restore_dump_qwords("stack_at_pre_return", pre->rsp, 20);
-	fork_restore_dump_qwords("asm_stack_pre_gpr", fork_restore_audit.rsp_pre_gpr_load, 20);
-	klog_debug_fmt("FORK", "[FORK_RESTORE] asm_rax_slot_mem=%llx stack_rax_off=%llx live_after_pr_call=%llx", (unsigned long long)(fork_restore_audit.rax_slot_mem), (unsigned long long)(fork_restore_audit.stack_rax_slot_off), (unsigned long long)(fork_restore_audit.live_rax_after_pr_call));
-}
-
-void fork_restore_emit_pre_iretq(void)
-{
-	if (!fork_ret_expect.active || !fork_ret_expect.pre_return_done)
-		return;
-	if (!DEBUG_FORK)
-		return;
-
-	klog_debug_fmt("FORK", "[FORK_RESTORE][PRE_IRETQ] live_rax=%llx live_rbx=%llx live_rcx=%llx live_rdx=%llx kernel_rsp=%llx iretq_rip=%llx iretq_rflags=%llx iretq_user_rsp=%llx", (unsigned long long)(fork_restore_audit.live_rax_pre_iretq), (unsigned long long)(fork_restore_audit.live_rbx_pre_iretq), (unsigned long long)(fork_restore_audit.live_rcx_pre_iretq), (unsigned long long)(fork_restore_audit.live_rdx_pre_iretq), (unsigned long long)(fork_restore_audit.kernel_rsp_pre_iretq), (unsigned long long)(fork_restore_audit.iretq_rip), (unsigned long long)(fork_restore_audit.iretq_rflags), (unsigned long long)(fork_restore_audit.iretq_user_rsp));
-}
-
-void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw)
-{
-	process_t *p = current_process;
-
-	if (!fork_ret_expect.active || !p || p->task.pid != fork_ret_expect.child_pid)
-		return;
-	if (!fork_ret_expect.pre_return_done)
-		return;
-
-	if (DEBUG_FORK && !fork_branch.classified)
-	{
-		klog_debug_fmt("FORK", "[FORK_RET][FIRST_ENTRY] pid=%x rax=%llx rip=%llx rsp=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)(rax_hw), (unsigned long long)(rip_hw), (unsigned long long)(rsp_hw));
-	}
-}
-
-static void fork_ret_arm(process_t *child)
-{
-	memset(&fork_ret_expect, 0, sizeof(fork_ret_expect));
-	fork_ret_expect.active = 1;
-	fork_ret_expect.child_pid = child->task.pid;
-	fork_ret_expect.expected_rax = child->task.rax;
-	fork_ret_expect.expected_rip = child->task.rip;
-	fork_ret_expect.expected_rsp = child->task.rsp;
-	fork_ret_expect.task_rax_at_fixup = child->task.rax;
-	fork_branch_arm_pid(child->task.pid);
-}
-
-static void fork_fixup_user_syscall_return(process_t *parent, process_t *child)
-{
-	memset(&fork_restore_audit, 0, sizeof(fork_restore_audit));
-	fork_restore_log_fixup(parent, child);
-	fork_ret_arm(child);
-	/* Parent RESTORE_ALL uses syscall_frame captured at fork syscall entry. */
-}
-
-#endif /* __x86_64__ */
-
-#if !(defined(__x86_64__) || defined(__amd64__))
-void fork_ret_emit_pre_return(void)
-{
-}
-
-void fork_restore_emit_pre_iretq(void)
-{
-}
-
-void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw)
-{
-	(void)rax_hw;
-	(void)rip_hw;
-	(void)rsp_hw;
-}
-
-int fork_flow_note_debug_exception(uint64_t *stack)
-{
-	(void)stack;
-	return 0;
-}
-
-void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall)
-{
-	(void)rip_hw;
-	(void)nr;
-	(void)from_syscall;
-}
-#endif
-
 static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 {
 	process_t *child;
@@ -489,72 +42,73 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	if (!child)
 		return NULL;
 
-	memcpy(child, parent, sizeof(process_t));
+	memset(child, 0, sizeof(*child));
 
 	child_pid = process_get_next_pid();
-	child->task.pid = child_pid;
-	child->tgid = child_pid;
-	child->ppid = parent->task.pid;
-	child->state = PROCESS_READY;
-	child->next = NULL;
-	child->saved_context = NULL;
-	child->poll_waiter = NULL;
-	child->poll_resume_via_arch = 0;
-	child->fork_pending_child = NULL;
-	child->fork_resync_syscall_stack = 0;
-	child->irq_frame_saved = 0;
-	child->coop_resched_resume = 0;
-	child->want_kernel_ret = 0;
-	child->syscall_frame_fresh = 0;
-	child->wait_blocked = 0;
-	child->wait_target_pid = 0;
-	child->wait_options = 0;
-	child->wait_resume_child_pid = 0;
-	child->wait_status_ptr = NULL;
-	child->syscall_resume_rax = 0;
-#if IR0_DEBUG_PROC
-	fase_audit_fork_init(child, parent);
-#endif
-	child->page_directory = NULL;
-	child->owns_page_directory = 0;
-	child->mmap_list = NULL;
-	memset(child->fd_table, 0, sizeof(child->fd_table));
+	child->task.priority = parent->task.priority;
+	child->task.state = TASK_READY;
+	arch_task_context_clone(&child->task.arch, &parent->task.arch);
+	child->start_ticks = clock_get_tick_count();
+	process_tls_set(child, process_tls_get(parent));
 
-	/*
-	 * memcpy copied the parent's kernel-stack pointer; the child needs its own
-	 * private kernel stack (a shared one would corrupt both on concurrent
-	 * syscalls). Reset before allocating so a failure cannot free parent's.
-	 */
+	if (process_rel_init_child(child, parent, child_pid) < 0 ||
+	    process_cred_clone(child, parent) < 0 ||
+	    process_session_attrs_clone(child, parent) < 0 ||
+	    process_signals_clone(child, parent) < 0 ||
+	    process_mm_cursor_clone(child, parent) < 0)
+	{
+		kfree(child);
+		return NULL;
+	}
+
+	child->files = NULL;
+	child->set_tid_ptr = NULL;
+	child->next = NULL;
+	child->poll_waiter = NULL;
+	child->fork_pending_child = NULL;
 	child->kstack_base = NULL;
 	child->kstack_top = 0;
 	child->saved_user_rsp = 0;
+
 	if (process_kernel_stack_alloc(child) != 0)
 	{
-		fase_audit_fork_state(child_pid, "FAILED");
 		kfree(child);
 		return NULL;
 	}
 
 	*child_pid_out = child_pid;
-	fase_audit_fork_state(child_pid, "CREATED");
 	return child;
 }
 
 static int fork_child_mm_create(process_t *child)
 {
+	mm_struct_t *mm;
+
 	if (!child)
 		return -ENOMEM;
 
-	child->page_directory = (uint64_t *)create_process_page_directory();
-	if (!child->page_directory)
+	if (KTM_FAULT_HIT("process.fork_mm"))
+		return -ENOMEM;
+
+	mm = mm_create();
+	if (!mm)
+		return -ENOMEM;
+
+	mm->page_directory = (uint64_t *)create_process_page_directory();
+	if (!mm->page_directory)
 	{
-		fase_audit_fork_state(child->task.pid, "FAILED");
+		mm_put(mm);
 		return -ENOMEM;
 	}
 
-	child->owns_page_directory = 1;
-	process_set_mm_root(child, (uint64_t)(uintptr_t)child->page_directory);
-	fase_audit_fork_state(child->task.pid, "MM_CREATED");
+	mm->owns_tables = 1;
+	mm->mmap_base = child->mmap_base;
+	mm->heap_start = child->heap_start;
+	mm->heap_end = child->heap_end;
+	mm->stack_start = child->stack_start;
+	mm->stack_size = child->stack_size;
+	process_mm_bind(child, mm);
+	process_set_mm_root(child, (uint64_t)(uintptr_t)process_pgd(child));
 	return 0;
 }
 
@@ -565,6 +119,9 @@ static int fork_attach_pending_child(process_t *child, process_t *parent)
 	if (!child || !parent)
 		return -EINVAL;
 
+	if (KTM_FAULT_HIT("process.fork_enqueue"))
+		return -ENOMEM;
+
 	irq_flags = process_irq_save();
 	child->next = process_list;
 	process_list = child;
@@ -572,7 +129,6 @@ static int fork_attach_pending_child(process_t *child, process_t *parent)
 
 	child->state = PROCESS_BLOCKED;
 	parent->fork_pending_child = child;
-	fase_audit_fork_state(child->task.pid, "DEFERRED");
 	return 0;
 }
 
@@ -590,18 +146,14 @@ void process_fork_wake_pending(process_t *parent)
 	parent->fork_pending_child = NULL;
 	child->state = PROCESS_READY;
 	sched_add_process(child);
-	fase_audit_fork_state(child->task.pid, "SCHEDULED");
-	fase_audit_note_scheduled();
 }
 
 static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
 {
+	(void)child_pid;
+
 	if (!child)
 		return;
-
-	fase_audit_fork_state(child_pid, "FAILED");
-	fase_audit_fork_state(child_pid, "ROLLBACK");
-	fase_audit_note_fork_rollback();
 
 	if (enqueued)
 	{
@@ -615,26 +167,21 @@ static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
 		(void)process_remove_from_list(child);
 	}
 
-	fase_audit_assert_child_not_visible(child_pid);
-
 	process_release_fds(child, "FORK_ROLLBACK");
+	if (child->files)
+	{
+		files_put(child->files);
+		child->files = NULL;
+	}
 	process_fork_destroy_child_mm(child);
 	process_fork_free_mmap_list(child);
-
-	fase_audit_fork_state(child_pid, "DESTROYED");
 	process_kernel_stack_free(child);
 	kfree(child);
-
-	fase_audit_assert_child_not_visible(child_pid);
-	process_fase45_fork_audit("rollback");
 }
 
 /*
- * fork() - POSIX fork for user and kernel processes.
- *
- * Clones the parent process struct and user address space (share-on-fork COW
- * via copy_process_memory), duplicates the FD table, and arranges for the
- * child to return 0 from fork().
+ * fork() — clone address space (COW), files, and arrange parent/child returns
+ * via arch_fork_* hooks. Child is not runnable until process_fork_wake_pending.
  */
 pid_t fork(void)
 {
@@ -644,21 +191,6 @@ pid_t fork(void)
 
 	if (!parent)
 		return -1;
-#if IR0_DEBUG_PROC
-	if (!fase46_frames_baseline_set && parent->task.pid == 1)
-	{
-		size_t total_frames = 0;
-		size_t used_frames = 0;
-
-		pmm_stats(&total_frames, &used_frames, NULL);
-		fase46_frames_baseline = (uint64_t)used_frames;
-		fase46_frames_baseline_set = 1;
-	}
-	process_fase43_proc_audit("fork-before");
-	process_fase44_list_checkpoint("fork-before");
-	process_fase45_fork_audit("fork-before");
-	paging_ir0_mm_checkpoint("fork-before", (int32_t)parent->task.pid);
-#endif
 
 	child = fork_process_create(parent, &child_pid);
 	if (!child)
@@ -675,40 +207,34 @@ pid_t fork(void)
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
 	}
-	fase_audit_fork_state(child_pid, "MEMORY_CLONED");
 
-	child->mmap_list = process_clone_mmap_list(parent->mmap_list);
-	if (parent->mmap_list && !child->mmap_list)
+	{
+		struct mmap_region *mmap_list;
+
+		mmap_list = process_clone_mmap_list(parent->mmap_list);
+		if (parent->mmap_list && !mmap_list)
+		{
+			fork_rollback(child, child_pid, 0);
+			return -ENOMEM;
+		}
+		process_mm_set_mmap_list(child, mmap_list);
+	}
+
+	if (process_files_clone(child, parent) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
 	}
 
-	if (process_duplicate_fd_table(parent, child) != 0)
-	{
-		fork_rollback(child, child_pid, 0);
-		return -ENOMEM;
-	}
-
-	child->task.rax = 0;
-	process_set_mm_root(child, (uint64_t)(uintptr_t)child->page_directory);
+	process_set_mm_root(child, (uint64_t)(uintptr_t)process_pgd(child));
 	child->task.pid = child_pid;
-	/* Explicit TLS inherit (memcpy already copied; keep obvious for auditors). */
-	child->fs_base = parent->fs_base;
+	process_tls_set(child, process_tls_get(parent));
 
-#if defined(__x86_64__) || defined(__amd64__)
 	if (parent->mode == USER_MODE)
 	{
-		/* Parent must not resume userspace with rax=0 after child ran first. */
-		parent->task.rax = (uint64_t)child_pid;
-		fork_fixup_user_syscall_return(parent, child);
-		set_fs_base(parent->fs_base);
-#if IR0_DEBUG_PROC
-		process_fase46_proc_log(parent, (int64_t)child_pid, "AFTER_FORK");
-		process_fase46_proc_log(child, 0, "USER_ENTER");
-#endif
+		(void)arch_fork_prepare_child_return(child, parent);
+		(void)arch_fork_prepare_parent_return(parent, child_pid);
 	}
-#endif
 
 	if (fork_attach_pending_child(child, parent) != 0)
 	{
@@ -716,23 +242,12 @@ pid_t fork(void)
 		return -ENOMEM;
 	}
 
-	fase_audit_note_proc_created();
-#if IR0_DEBUG_PROC
-	process_fase43_proc_audit("fork-after");
-	fase_audit_trace_pid(child_pid, "CREATED");
-	fase_audit_ref_emit(child, "fork");
-	process_fase44_list_checkpoint("fork-after");
-	process_fase45_fork_audit("fork-after");
-	paging_ir0_mm_checkpoint("fork-after", (int32_t)child_pid);
-#endif
 	KTM_CHECKPOINT(KTM_CP_PROCESS_FORK);
-
 	return child_pid;
 }
 
 /*
- * clone_thread - Minimal CLONE_VM|CLONE_THREAD for musl pthread smoke.
- * Shares the parent's page directory; child returns 0 on @stack.
+ * clone_thread — CLONE_VM|CLONE_THREAD (+ optional CLONE_FILES / SETTLS / tid).
  */
 pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 		   int *child_tid, unsigned long tls)
@@ -741,8 +256,6 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 	process_t *child;
 	pid_t child_pid;
 	uintptr_t child_sp;
-
-	(void)tls;
 
 	if (!parent)
 		return -ESRCH;
@@ -755,42 +268,54 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 	if (!child)
 		return -ENOMEM;
 
-	/* Share address space with parent (do not free on thread exit). */
-	child->page_directory = parent->page_directory;
-	child->owns_page_directory = 0;
+	if (process_mm_share(child, parent) < 0)
+	{
+		fork_rollback(child, child_pid, 0);
+		return -ENOMEM;
+	}
 	process_set_mm_root(child, process_mm_root(parent));
-	child->mmap_list = NULL;
 	child->tgid = parent->tgid;
-	/* Keep creator as parent so exit wake targets the right task. */
 	child->ppid = parent->task.pid;
 
 	if (flags & CLONE_SETTLS)
-		child->fs_base = tls;
-	else
-		child->fs_base = parent->fs_base;
+	{
+		int tls_ret = arch_process_set_tls(child, tls);
 
-	if (process_duplicate_fd_table(parent, child) != 0)
+		if (tls_ret < 0 && tls_ret != -EOPNOTSUPP)
+		{
+			fork_rollback(child, child_pid, 0);
+			return tls_ret;
+		}
+		if (tls_ret == -EOPNOTSUPP)
+			process_tls_set(child, tls);
+	}
+	else
+		process_tls_set(child, process_tls_get(parent));
+
+	if (flags & CLONE_FILES)
+	{
+		if (process_files_share(child, parent) != 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return -ENOMEM;
+		}
+	}
+	else if (process_files_clone(child, parent) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
 	}
 
 	child_sp = (uintptr_t)stack;
-	/* Do not re-align: musl __clone already aligned and pushed the thread arg. */
-	child->task.rax = 0;
 	child->task.pid = child_pid;
+	task_set_sp(&child->task, (uint64_t)child_sp);
+	arch_task_clear_frame_pointer(&child->task);
 
-#if defined(__x86_64__) || defined(__amd64__)
 	if (parent->mode == USER_MODE)
 	{
-		parent->task.rax = (uint64_t)child_pid;
-		fork_fixup_user_syscall_return(parent, child);
-		child->task.rsp = (uint64_t)child_sp;
-		child->task.rbp = 0;
-		/* Parent keeps running: restore parent TLS on this CPU. */
-		set_fs_base(parent->fs_base);
+		(void)arch_fork_prepare_child_return(child, parent);
+		(void)arch_fork_prepare_parent_return(parent, child_pid);
 	}
-#endif
 
 	if (flags & CLONE_PARENT_SETTID && parent_tid)
 	{
@@ -815,8 +340,5 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 		return -ENOMEM;
 	}
 
-	fase_audit_note_proc_created();
 	return child_pid;
 }
-
-

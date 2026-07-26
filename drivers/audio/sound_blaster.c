@@ -16,7 +16,8 @@
 #include <stddef.h>
 #include <string.h>
 #include <ir0/arch_port.h>
-#include <interrupt/arch/io.h>
+#include <ir0/arch_io.h>
+#include <ir0/cpu.h>
 #include <drivers/dma/dma.h>
 #include <ir0/kmem.h>
 #include <drivers/timer/pit/pit.h>

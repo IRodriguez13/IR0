@@ -181,6 +181,106 @@ static const pseudo_fs_ops_t sys_cpu_online_ops = {
     .stat = pseudo_writable_stat,
 };
 
+#if CONFIG_ENABLE_NETWORKING
+typedef struct sys_net_iface_ctx
+{
+	char ifname[16];
+	unsigned attr;
+	int in_use;
+} sys_net_iface_ctx_t;
+
+#define SYS_NET_IFACE_CTX_MAX 32
+
+static sys_net_iface_ctx_t g_sys_net_iface_ctx[SYS_NET_IFACE_CTX_MAX];
+static int g_sys_net_dynamic_registered;
+
+static sys_net_iface_ctx_t *sys_net_iface_ctx_alloc(void)
+{
+	int i;
+
+	for (i = 0; i < SYS_NET_IFACE_CTX_MAX; i++)
+	{
+		if (!g_sys_net_iface_ctx[i].in_use)
+			return &g_sys_net_iface_ctx[i];
+	}
+	return NULL;
+}
+
+static int sys_net_iface_match(const char *path, void **out_ctx)
+{
+	const char *rest;
+	const char *slash;
+	char ifname[16];
+	size_t nlen;
+	int attr;
+	sys_net_iface_ctx_t *ctx;
+
+	if (!path || !out_ctx)
+		return -EINVAL;
+	if (strncmp(path, "/sys/class/net/", 15) != 0)
+		return -ENOENT;
+	rest = path + 15;
+	if (!rest[0])
+		return -ENOENT;
+	slash = strchr(rest, '/');
+	if (!slash || !slash[1])
+		return -ENOENT;
+	nlen = (size_t)(slash - rest);
+	if (nlen == 0 || nlen >= sizeof(ifname))
+		return -ENOENT;
+	memcpy(ifname, rest, nlen);
+	ifname[nlen] = '\0';
+	if (sys_class_net_find_name(ifname) != 0)
+		return -ENOENT;
+	attr = sys_class_net_parse_attr(slash + 1);
+	if (attr < 0)
+		return -ENOENT;
+	ctx = sys_net_iface_ctx_alloc();
+	if (!ctx)
+		return -ENFILE;
+	memset(ctx, 0, sizeof(*ctx));
+	memcpy(ctx->ifname, ifname, nlen + 1);
+	ctx->attr = (unsigned)attr;
+	ctx->in_use = 1;
+	*out_ctx = ctx;
+	return 0;
+}
+
+static int64_t sys_net_iface_read(void *ctx, char *buf, size_t count, off_t *offset)
+{
+	sys_net_iface_ctx_t *file = ctx;
+
+	(void)offset;
+	if (!file || !buf)
+		return -EINVAL;
+	return sys_class_net_attr_read_named(buf, count, file->ifname, file->attr);
+}
+
+static int64_t sys_net_iface_close(void *ctx)
+{
+	sys_net_iface_ctx_t *file = ctx;
+
+	if (file)
+		file->in_use = 0;
+	return 0;
+}
+
+static const pseudo_fs_ops_t sys_net_iface_ops = {
+	.read = sys_net_iface_read,
+	.close = sys_net_iface_close,
+	.stat = pseudo_default_stat,
+};
+
+static void pseudo_fs_register_sys_net_dynamic(void)
+{
+	if (g_sys_net_dynamic_registered)
+		return;
+	if (pseudo_fs_register_dynamic("/sys", sys_net_iface_match,
+				       &sys_net_iface_ops) == 0)
+		g_sys_net_dynamic_registered = 1;
+}
+#endif
+
 #if CONFIG_ENABLE_BLUETOOTH
 static const pseudo_fs_ops_t proc_bt_devices_ops = {
     .read = pseudo_read_wrap_int,
@@ -446,6 +546,10 @@ void pseudo_fs_nodes_register_all(void)
                        (void *)(uintptr_t)sys_kernel_version_read_reg);
     pseudo_fs_register("/sys", "kernel/osrelease", &sys_static_read_ops,
                        (void *)(uintptr_t)sys_kernel_osrelease_read_reg);
+    pseudo_fs_register("/sys", "kernel/build", &sys_static_read_ops,
+		       (void *)(uintptr_t)sys_kernel_build_read_reg);
+    pseudo_fs_register("/sys", "kernel/features", &sys_static_read_ops,
+		       (void *)(uintptr_t)sys_kernel_features_read_reg);
     pseudo_fs_register("/sys", "kernel/max_processes", &sys_max_processes_ops,
                        (void *)(uintptr_t)sys_kernel_max_processes_read_reg);
     pseudo_fs_register("/sys", "devices/system", &sys_static_read_ops,
@@ -454,6 +558,12 @@ void pseudo_fs_nodes_register_all(void)
                        (void *)(uintptr_t)sys_devices_block_read_reg);
     pseudo_fs_register("/sys", "console/mode", &sys_static_read_ops,
                        (void *)(uintptr_t)sys_console_mode_read_reg);
+    /* NIC list + /sys/class/net/<iface>/attrs via dynamic matcher. */
+    pseudo_fs_register("/sys", "class/net", &sys_static_read_ops,
+		       (void *)(uintptr_t)sys_class_net_list_read_reg);
+#if CONFIG_ENABLE_NETWORKING
+    pseudo_fs_register_sys_net_dynamic();
+#endif
 
     pseudo_fs_register_sys_cpus();
 

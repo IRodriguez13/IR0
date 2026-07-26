@@ -23,6 +23,16 @@ void ir0_mm_pmm_stats(size_t *total_frames, size_t *used_frames,
 	pmm_stats(total_frames, used_frames, free_frames);
 }
 
+uintptr_t ir0_mm_pmm_start(void)
+{
+	return pmm_get_start();
+}
+
+uintptr_t ir0_mm_pmm_end(void)
+{
+	return pmm_get_end();
+}
+
 void ir0_mm_alloc_stats(size_t *total, size_t *used, size_t *allocs)
 {
 	alloc_stats(total, used, allocs);

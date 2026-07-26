@@ -23,7 +23,7 @@
 /*
  * process_cs_rip_kernel_ret_bad - True when kernel_ret would jmp to user VA.
  *
- * Desk Class B: task.cs ring-0 paired with task.rip in userspace (sync wrote
+ * Desk Class B: task.arch.cs ring-0 paired with task.arch.rip in userspace (sync wrote
  * user IP, then process_arm_kernel_syscall_sleep flipped CS without a save).
  */
 static inline int process_cs_rip_kernel_ret_bad(uint64_t cs, uint64_t rip)

@@ -21,44 +21,11 @@
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
 #include <ir0/kmem.h>
-#include <config.h>
-#include <string.h>
-
-#include <ir0/paging.h>
-#include <ir0/kmem.h>
+#include <ir0/arch_task_ops.h>
+#include <ir0/arch_signal.h>
 #include <config.h>
 #include <string.h>
 #include <ktm.h>
-#include <ir0/ktm/klog.h>
-
-static void signals_fill_sigcontext_from_frame(struct sigcontext *ctx,
-					       uint64_t *frame)
-{
-	if (!ctx || !frame)
-		return;
-
-	ctx->r15 = frame[-15];
-	ctx->r14 = frame[-14];
-	ctx->r13 = frame[-13];
-	ctx->r12 = frame[-12];
-	ctx->r11 = frame[-11];
-	ctx->r10 = frame[-10];
-	ctx->r9 = frame[-9];
-	ctx->r8 = frame[-8];
-	ctx->rdi = frame[-7];
-	ctx->rsi = frame[-6];
-	ctx->rbp = frame[-5];
-	ctx->rbx = frame[-4];
-	ctx->rdx = frame[-3];
-	ctx->rcx = frame[-2];
-	ctx->rax = frame[-1];
-	ctx->orig_rax = 0;
-	ctx->rip = frame[2];
-	ctx->cs = frame[3];
-	ctx->rflags = frame[4];
-	ctx->rsp = frame[5];
-	ctx->ss = frame[6];
-}
 
 int signals_has_user_handler(process_t *p, int sig)
 {
@@ -108,10 +75,10 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	if (!ctx)
 		return 0;
 
-	signals_fill_sigcontext_from_frame(ctx, frame);
+	arch_signal_fill_sigcontext_from_irq_frame(ctx, frame);
 	p->saved_context = ctx;
 
-	new_rsp = frame[5];
+	new_rsp = arch_irq_frame_sp(frame);
 	if (sa_flags & SA_SIGINFO)
 		new_rsp -= 256;
 	else
@@ -153,26 +120,15 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 
 		memset(uctx_zero, 0, sizeof(uctx_zero));
 		old_cr3 = get_current_page_directory();
-		load_page_directory((uint64_t)p->page_directory);
+		load_page_directory((uint64_t)process_pgd(p));
 		memcpy((void *)info_addr, &info, sizeof(info));
 		memcpy((void *)uctx_addr, uctx_zero, sizeof(uctx_zero));
 		load_page_directory(old_cr3);
 	}
 
-	frame[2] = (uint64_t)(uintptr_t)handler;
-	frame[5] = new_rsp;
-	frame[-7] = (uint64_t)(uint32_t)sig;
-	if (sa_flags & SA_SIGINFO)
-	{
-		frame[-6] = info_addr;
-		frame[-3] = uctx_addr;
-	}
-	else
-	{
-		frame[-6] = 0;
-		frame[-3] = 0;
-	}
-
+	arch_signal_redirect_irq_frame(frame, (void *)handler, sig, new_rsp,
+				       info_addr, uctx_addr,
+				       (sa_flags & SA_SIGINFO) ? 1 : 0);
 	irq_save_user_frame(frame);
 
 	if (sa_flags & SA_RESETHAND)
@@ -185,7 +141,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 		      "[SIGNAL][DELIVER] pid=0x%x sig=0x%x cr2=0x%llx rip=0x%llx handler=0x%llx sa_siginfo=0x%x rsp=0x%llx",
 		      (unsigned)p->task.pid, (unsigned)sig,
 		      (unsigned long long)fault_addr,
-		      (unsigned long long)ctx->rip,
+		      (unsigned long long)arch_sigcontext_ip(ctx),
 		      (unsigned long long)(uintptr_t)handler,
 		      (unsigned)((sa_flags & SA_SIGINFO) ? 1U : 0U),
 		      (unsigned long long)new_rsp);
@@ -197,7 +153,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 
 		KTM_FLIGHT(KTM_FL_PF_USER, pid, (uint32_t)fault_addr,
 			   (uint32_t)(fault_addr >> 32),
-			   (uint32_t)ctx->rip);
+			   (uint32_t)arch_sigcontext_ip(ctx));
 		KTM_FLIGHT(KTM_FL_SIGNAL_DELIVER, (uint32_t)sig, pid,
 			   (uint32_t)(uintptr_t)handler, 0);
 	}
@@ -635,33 +591,14 @@ void handle_signals(void)
                         }
                         
                         /* Save CPU state from task structure */
-                        ctx->r15 = current->task.r15;
-                        ctx->r14 = current->task.r14;
-                        ctx->r13 = current->task.r13;
-                        ctx->r12 = current->task.r12;
-                        ctx->rbp = current->task.rbp;
-                        ctx->rbx = current->task.rbx;
-                        ctx->r11 = current->task.r11;
-                        ctx->r10 = current->task.r10;
-                        ctx->r9 = current->task.r9;
-                        ctx->r8 = current->task.r8;
-                        ctx->rax = current->task.rax;
-                        ctx->rcx = current->task.rcx;
-                        ctx->rdx = current->task.rdx;
-                        ctx->rsi = current->task.rsi;
-                        ctx->rdi = current->task.rdi;
-                        ctx->orig_rax = 0;  /* orig_rax not stored in task_t - set to 0 */
-                        ctx->rip = current->task.rip;
-                        ctx->cs = current->task.cs;
-                        ctx->rflags = current->task.rflags;
-                        ctx->rsp = current->task.rsp;
-                        ctx->ss = current->task.ss;
+                        arch_task_store_sigcontext(ctx, &current->task);
                         
                         /* Store saved context in process */
                         current->saved_context = ctx;
                         
                         /* Allocate signal frame on userspace stack */
-                        uint64_t frame_addr = current->task.rsp - sizeof(struct sigframe);
+                        uint64_t frame_addr = task_get_sp(&current->task) -
+                                              sizeof(struct sigframe);
                         frame_addr &= ~0xF;  /* Align to 16 bytes (ABI requirement) */
                         
                         /* Ensure frame is in userspace */
@@ -683,16 +620,14 @@ void handle_signals(void)
                         
                         /* Copy frame to userspace stack */
                         uint64_t old_cr3 = get_current_page_directory();
-                        load_page_directory((uint64_t)current->page_directory);
+                        load_page_directory((uint64_t)process_pgd(current));
                         memcpy((void *)frame_addr, &frame, sizeof(struct sigframe));
                         load_page_directory(old_cr3);
                         
-                        /* Modify task state to invoke handler */
-                        current->task.rsp = frame_addr;
-                        current->task.rip = (uint64_t)handler;  /* Jump to handler */
-                        current->task.rdi = sig;  /* First argument: signal number */
-                        /* RSI/RDX/RCX/R8/R9 = 0 (other args, unused for signal handlers) */
-                        
+                        arch_signal_prepare_task_handler(&current->task,
+                                                         (void *)handler, sig,
+                                                         frame_addr);
+
                         /* Clear signal before calling handler */
                         current->signal_pending &= ~SIGNAL_MASK(sig);
                         

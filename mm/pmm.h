@@ -30,6 +30,19 @@
 /* Physical frame size (4KB pages) */
 #define PMM_FRAME_SIZE 4096
 
+/*
+ * PMM frame ownership class — not a single PID when COW-shared.
+ * owner_pid is meaningful only for PMM_OWNER_USER (sole owner, refcount == 1).
+ */
+typedef enum
+{
+	PMM_OWNER_NONE = 0,
+	PMM_OWNER_KERNEL,
+	PMM_OWNER_USER,
+	PMM_OWNER_SHARED,
+	PMM_OWNER_PAGE_TABLE,
+} pmm_owner_class_t;
+
 
 /**
  * pmm_init - Initialize Physical Memory Manager
@@ -75,6 +88,16 @@ void pmm_frame_put(uintptr_t phys_addr);
  */
 unsigned pmm_frame_refcount(uintptr_t phys_addr);
 
+/**
+ * pmm_frame_set_owner_class - Tag an allocated frame (e.g. page-table leaf).
+ * @pid: sole owner PID when @cls is PMM_OWNER_USER; ignored otherwise.
+ */
+void pmm_frame_set_owner_class(uintptr_t phys_addr, pmm_owner_class_t cls,
+                               int32_t pid);
+
+/** Current ownership class, or PMM_OWNER_NONE if unused/invalid. */
+pmm_owner_class_t pmm_frame_owner_class(uintptr_t phys_addr);
+
 /*
  * Physical bounds of the region covered by the PMM bitmap (RAM frames only).
  * Addresses outside [start, end) are not owned by the allocator (e.g. MMIO).
@@ -103,6 +126,7 @@ void pmm_owner_audit(uint64_t *orphan_frames, uint64_t *double_free,
                      uint64_t *alive_owner_missing);
 
 int pmm_fase47_frame_is_used(size_t frame_index);
+pmm_owner_class_t pmm_fase47_frame_owner_class(size_t frame_index);
 int32_t pmm_fase47_frame_owner(size_t frame_index);
 uintptr_t pmm_fase47_frame_phys(size_t frame_index);
 size_t pmm_fase47_total_frames(void);

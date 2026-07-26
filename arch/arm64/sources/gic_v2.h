@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: gic_v2.h
- * Description: QEMU virt GICv2 Dist/CPU iface for freestanding timer IRQ.
+ * Description: QEMU virt GICv2 Dist/CPU iface (freestanding + irq facade).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -19,7 +19,16 @@
 /** EL1 physical timer PPI (ARM Generic Timer). */
 #define ARM64_GIC_PPI_PHYS_TIMER 30U
 
-/** Enable Dist+CPU, PMR, and PPI @irq. Returns 0 on success. */
+/**
+ * Enable Dist+CPU and PMR once. Safe to call repeatedly (idempotent).
+ * Returns 0 on success.
+ */
+int arm64_gic_v2_init(void);
+
+/**
+ * Enable IRQ line @irq (SGI/PPI bank 0, irq < 32). Calls init if needed.
+ * Returns 0 on success, -1 if out of range.
+ */
 int arm64_gic_v2_enable(uint32_t irq);
 
 /** Write GICC_EOIR after handling @irq. */

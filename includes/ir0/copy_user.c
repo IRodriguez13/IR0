@@ -55,13 +55,13 @@ int is_user_address_checked(const void *addr, size_t size, int check_mapped)
     if (check_mapped)
     {
         process_t *current = process_get_current();
-        if (!current || !current->page_directory)
+        if (!current || !process_pgd(current))
             return 0;  /* No process context or page directory */
         
         /* Check each page in the range */
         for (uintptr_t addr_check = start & ~0xFFF; addr_check < end; addr_check += 0x1000)
         {
-            int mapped = is_page_mapped_in_directory(current->page_directory, addr_check, NULL);
+            int mapped = is_page_mapped_in_directory(process_pgd(current), addr_check, NULL);
             if (mapped != 1)
             {
                 /* Page not mapped */
@@ -110,9 +110,9 @@ int copy_to_user(void *dst, const void *src, size_t n)
      * Walk target process page tables via MM facade — safe under any active
      * CR3 and fails cleanly on guard/unmapped pages (no kernel #PF panic).
      */
-    if (current && current->page_directory)
+    if (current && process_pgd(current))
     {
-        if (copy_to_user_region_in_directory(current->page_directory,
+        if (copy_to_user_region_in_directory(process_pgd(current),
                                              (uintptr_t)dst, src, n) != 0)
             return -EFAULT;
         return 0;
@@ -142,9 +142,9 @@ int copy_from_user(void *dst, const void *src, size_t n)
     if (!is_user_address(src, n))
         return -EFAULT;
 
-    if (current && current->page_directory)
+    if (current && process_pgd(current))
     {
-        if (copy_from_user_region_in_directory(current->page_directory,
+        if (copy_from_user_region_in_directory(process_pgd(current),
                                                (uintptr_t)src, dst, n) != 0)
             return -EFAULT;
         return 0;
@@ -178,14 +178,14 @@ int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src)
     if (!is_user_address(src, 1))
         return -EFAULT;
 
-    if (!current || !current->page_directory)
+    if (!current || !process_pgd(current))
         return -EFAULT;
 
     for (i = 0; i + 1 < dst_sz; i++)
     {
         char c;
 
-        if (copy_from_user_region_in_directory(current->page_directory,
+        if (copy_from_user_region_in_directory(process_pgd(current),
                                                (uintptr_t)src + i, &c, 1) != 0)
             return -EFAULT;
         dst[i] = c;

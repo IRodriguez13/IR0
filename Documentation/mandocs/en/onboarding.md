@@ -109,10 +109,24 @@ make pre-submit
 # expect PRE_SUBMIT_OK
 ```
 
-## 10. Future roadmap
+## 10. Guest manuals
+
+After `make first-boot` / `load-userspace-runit`, the product disk includes
+BusyBox `man` and pre-rendered IR0 pages under `/usr/share/man/cat7/`:
+
+```text
+man IR0-boot
+man IR0-onboard
+man -w IR0-tty
+```
+
+Host rebuild of the guest tree: `make prepare-guest-mandocs` (needs host `mandoc`).
+Full English/Spanish install on the host remains `make sync-mandocs`.
+
+## 11. Future roadmap
 
 - More “first bug” recipes per subsystem (mm, vfs, net).
 - Broader mandoc coverage of `includes/ir0/` (honest backlog — not done).
-- In-guest `man` on userspace ISO (depends on userspace maturity).
 
-See also: `README.md`, `SETUP.md`, `CONTRIBUTING.md`, `make help-bootlog`.
+See also: `README.md`, `SETUP.md`, `CONTRIBUTING.md`, `Documentation/USERSPACE.md`,
+`make help-bootlog`.

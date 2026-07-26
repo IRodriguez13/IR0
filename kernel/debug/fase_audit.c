@@ -149,10 +149,10 @@ static uint64_t fase43_count_user_frames(process_t *p)
 	uint64_t count = 0;
 	uint64_t *pml4;
 
-	if (!p || !p->page_directory)
+	if (!p || !process_pgd(p))
 		return 0;
 
-	pml4 = p->page_directory;
+	pml4 = process_pgd(p);
 	for (i4 = 0; i4 < 256; i4++)
 	{
 		uint64_t *pdpt = process_pt_child(pml4, i4);
@@ -194,10 +194,10 @@ static uint64_t process_fase47_count_leaves_in_range(process_t *p, uint64_t star
 	uint64_t count = 0;
 	uint64_t *pml4;
 
-	if (!p || !p->page_directory || end <= start)
+	if (!p || !process_pgd(p) || end <= start)
 		return 0;
 
-	pml4 = p->page_directory;
+	pml4 = process_pgd(p);
 	for (i4 = 0; i4 < 256; i4++)
 	{
 		uint64_t *pdpt = process_pt_child(pml4, i4);
@@ -242,10 +242,10 @@ static uint64_t process_fase47_count_page_table_frames(process_t *p)
 	uint64_t count = 0;
 	uint64_t *pml4;
 
-	if (!p || !p->page_directory || !p->owns_page_directory)
+	if (!p || !process_pgd(p) || !process_mm_owns_tables(p))
 		return 0;
 
-	pml4 = p->page_directory;
+	pml4 = process_pgd(p);
 	count++;
 	for (i4 = 0; i4 < 256; i4++)
 	{
@@ -699,13 +699,17 @@ void fase_audit_note_scheduled(void) { fase46_scheduled++; }
 static uint64_t fase_audit_count_open_fds(process_t *p)
 {
 	uint64_t n = 0;
+	fd_entry_t *fdt;
 	int i;
 
 	if (!p)
 		return 0;
+	fdt = process_fd_table(p);
+	if (!fdt)
+		return 0;
 	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
 	{
-		if (p->fd_table[i].in_use)
+		if (fdt[i].in_use)
 			n++;
 	}
 	return n;

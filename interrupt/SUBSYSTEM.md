@@ -1,21 +1,25 @@
 # Interrupt Subsystem
 
+> **Last verified:** 2026-07-26  
+> **Source of truth:** `includes/ir0/irq.h`, `arch/*/sources/arch_irq_init.c`, `interrupt/arch/`
+
 Interrupt handling, exception management, and hardware interrupt routing.
+
+**Portable entry (product):** call `irq_tables_init` / `irq_controller_init` /
+`irq_keyboard_init` / `irq_unmask_line` / `irq_keyboard_poll_ps2` via
+`#include <ir0/irq.h>`. Do **not** `#include <interrupt/arch/...>` from
+`kernel/`, `fs/`, `mm/`, `net/`, or drivers — port I/O is `ir0/arch_io.h`.
+
+**Implementation today:** x86-64 IDT/PIC/ISR live under `interrupt/arch/` and are
+wired by `arch/x86-64/sources/arch_irq_init.c`. ARM64 `arch_irq_init.c` is a
+GIC/bring-up scaffold (product EL0 IRQ path still BLOCKED).
 
 ## Architecture
 
 ```
-interrupt/
-├── idt.c/h              - Interrupt Descriptor Table (common)
-├── isr_handlers.c/h     - Interrupt Service Routines (common)
-├── pic.c/h              - Programmable Interrupt Controller
-└── arch/
-    ├── x86-64/
-    │   ├── isr_stubs_64.asm - Assembly interrupt stubs
-    │   └── interrupt.asm    - Interrupt entry points
-    └── x86-32/
-        ├── isr_stubs_32.asm
-        └── interrupt.asm
+includes/ir0/irq.h           - Portable facade (bring-up + unmask + PS/2 poll)
+arch/*/sources/arch_irq_init.c
+interrupt/arch/              - x86 IDT/PIC/ISR implementation (not a portable API)
 ```
 
 ## Components
