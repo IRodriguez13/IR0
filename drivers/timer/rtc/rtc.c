@@ -151,7 +151,7 @@ void rtc_get_date_string(char *buffer, size_t buffer_size)
 		return;
 	}
 
-	full_year = (uint16_t)(time.century * 100 + (time.year % 100));
+	full_year = rtc_civil_year(&time);
 	buffer[0] = (char)('0' + (time.day / 10));
 	buffer[1] = (char)('0' + (time.day % 10));
 	buffer[2] = '/';
