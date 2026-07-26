@@ -26,10 +26,18 @@ void test_rtc_calendar(void)
 	t.hour = 12;
 	t.minute = 0;
 	t.second = 0;
+	ASSERT_EQ(rtc_civil_year(&t), 2026);
 	unix_t = rtc_fields_to_unix(&t);
 	/* 2026-07-26 12:00:00 UTC ≈ 1785067200 */
 	ASSERT_EQ((unix_t > 1700000000) ? 1 : 0, 1);
 	ASSERT_EQ((unix_t < 1900000000) ? 1 : 0, 1);
+
+	/* Full year in .year with century=0 (same as date-string path). */
+	memset(&t, 0, sizeof(t));
+	t.year = 2026;
+	t.month = 1;
+	t.day = 1;
+	ASSERT_EQ(rtc_civil_year(&t), 2026);
 
 	/* Leap day 2024-02-29 */
 	memset(&t, 0, sizeof(t));

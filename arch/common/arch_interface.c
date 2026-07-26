@@ -447,7 +447,7 @@ void irq_init(void)
 
 void boot_irq_unmask(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
 	/* PIC lines — x86 only; arm64 uses GIC PPIs via arch_irq_init. */
 	irq_unmask_line(0);
 	irq_unmask_line(1);

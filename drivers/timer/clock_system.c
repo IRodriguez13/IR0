@@ -96,7 +96,12 @@ static void clock_try_set_realtime_from_rtc(void)
 		return;
 	}
 	epoch = rtc_fields_to_unix(&rt);
-	if (epoch < 1000000000) /* before ~2001 — reject obvious garbage */
+	/*
+	 * Accept any civil year ≥ 1970 (including QEMU default 1970-01-01).
+	 * Reject only impossible conversions (rtc_fields_to_unix returns 0 with
+	 * zeroed day/month — still a valid epoch for 1970-01-01 00:00:00).
+	 */
+	if (rt.month == 0 || rt.day == 0)
 	{
 		clock_realtime_ok = 0;
 		return;
