@@ -526,21 +526,21 @@ void clock_tick(void)
 		process_t *p = process_list;
 		unsigned busy = 0;
 
-		if (current_process && clock_comm_is_idle(current_process->comm))
-			busy = 0;
-		else
+		/*
+		 * Always scan the runqueue. Short-circuiting on current==idle
+		 * over-counted idle while another READY task waited for the
+		 * next reschedule (Bugbot).
+		 */
+		while (p)
 		{
-			while (p)
+			if ((p->state == PROCESS_READY ||
+			     p->state == PROCESS_RUNNING) &&
+			    !clock_comm_is_idle(p->comm))
 			{
-				if ((p->state == PROCESS_READY ||
-				     p->state == PROCESS_RUNNING) &&
-				    !clock_comm_is_idle(p->comm))
-				{
-					busy = 1;
-					break;
-				}
-				p = p->next;
+				busy = 1;
+				break;
 			}
+			p = p->next;
 		}
 		if (!busy)
 			clock_idle_ms++;
