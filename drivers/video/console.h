@@ -25,11 +25,32 @@
 
 #include <stdint.h>
 
+/* VGA text mode geometry (and soft defaults). */
 #define CONSOLE_WIDTH  80
 #define CONSOLE_HEIGHT 25
 
-/* 2x 8x16 glyphs => 16x32 cells; 80x25 @ 2x needs 1280x800 (falls back to 1x). */
-#define CONSOLE_FB_SCALE_DEFAULT 2
+/* FB shadow / soft cursor bounds (Terminus 14×28 ≈ 88×27 on 1280×800). */
+#define CONSOLE_MAX_WIDTH  128
+#define CONSOLE_MAX_HEIGHT 48
+
+/*
+ * Product FB uses a native bitmap font (no nearest-neighbor upscale).
+ * Scale remains 1; cell size comes from FONT_WIDTH/HEIGHT.
+ */
+#define CONSOLE_FB_SCALE_DEFAULT 1
+#define CONSOLE_FB_SCALE_MAX     1
+#define CONSOLE_FB_MARGIN_PX     20
+
+struct console_geometry
+{
+	unsigned pixel_width;
+	unsigned pixel_height;
+	unsigned cell_width;
+	unsigned cell_height;
+	unsigned columns;
+	unsigned rows;
+	unsigned scale;
+};
 
 #define CONSOLE_FB_BORDER_COLOR 0x00u /* black letterbox */
 
@@ -41,6 +62,16 @@
  * @color: VGA color byte (fg in low nibble, bg in high nibble; 0x0F = white on black)
  */
 void console_put_cell(int row, int col, char c, uint8_t color);
+
+/*
+ * console_draw_cell - Paint without updating the cell shadow (software cursor).
+ */
+void console_draw_cell(int row, int col, char c, uint8_t color);
+
+/*
+ * console_get_cell - Return shadowed (char | color<<8) for software cursor restore.
+ */
+uint16_t console_get_cell(int row, int col);
 
 /*
  * console_scroll_up - Scroll displayed content up by one line.
@@ -68,5 +99,6 @@ int console_use_framebuffer(void);
 int console_get_width(void);
 int console_get_height(void);
 int console_get_fb_scale(void);
+void console_get_geometry(struct console_geometry *geo);
 
 #endif /* CONSOLE_H */

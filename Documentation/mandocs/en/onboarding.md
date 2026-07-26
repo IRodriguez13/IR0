@@ -94,7 +94,7 @@ Optional boot log on the **host** (not required for first run):
 ## 9. Debugging tips — first bug walkthrough
 
 1. Boot with `make run` (or `run-console`) and note the serial banner
-   `IR0 Kernel v… Boot routine`.
+   `IR0 kernel …` (portable banner; then ARCH / HYPERVISOR / PLATFORM).
 2. `make man TOPIC=boot` — find `ir0_boot_serial_ready` / `includes/ir0/boot_log.h`.
 3. Grep the tree for that symbol; open the C file; read one call site in `kmain`.
 4. Optional: `make run-bootlog` and open `build/hostshare/ir0-boot.log` on the host

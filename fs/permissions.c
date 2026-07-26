@@ -15,33 +15,11 @@
 #include <ir0/credentials.h>
 #include <string.h>
 
-struct simple_user_entry {
-    uid_t uid;
-    gid_t gid;
-    const char *name;
-    const char *password;
-};
-
-static const struct simple_user_entry simple_users[] = {
-    { ROOT_UID, ROOT_GID, "root", "root" },
-    { USER_UID, USER_GID, "user", "ir0" },
-};
-
-static const struct simple_user_entry *find_user_by_uid(uid_t uid)
-{
-    for (size_t i = 0; i < (sizeof(simple_users) / sizeof(simple_users[0])); i++)
-    {
-        if (simple_users[i].uid == uid)
-            return &simple_users[i];
-    }
-    return NULL;
-}
-
-/* Initialize simple user system */
-void init_simple_users(void)
-{
-    /* Nothing to initialize - everything is hardcoded */
-}
+/*
+ * Accounts and passwords are userspace policy (/etc/passwd, /etc/shadow,
+ * /etc/group). The kernel only provides the mechanism: credentials on the
+ * task, set-id transitions on exec and these permission checks.
+ */
 
 /* Get current process UID */
 uint32_t get_current_uid(void)
@@ -129,23 +107,4 @@ bool ir0_access_from_stat_groups(const stat_t *st, int mode, uid_t euid,
     }
 
     return false;
-}
-
-bool user_exists(uid_t uid)
-{
-    return find_user_by_uid(uid) != NULL;
-}
-
-const char *lookup_user_name(uid_t uid)
-{
-    const struct simple_user_entry *entry = find_user_by_uid(uid);
-    return entry ? entry->name : NULL;
-}
-
-int auth_user_password(uid_t uid, const char *password)
-{
-    const struct simple_user_entry *entry = find_user_by_uid(uid);
-    if (!entry || !password)
-        return -1;
-    return strcmp(entry->password, password) == 0 ? 0 : -1;
 }

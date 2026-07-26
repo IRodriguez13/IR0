@@ -50,21 +50,6 @@ endmenu
 
 menu "General"
 
-    config KERNEL_DEBUG_SHELL
-        bool "Use debug shell as init (PID 1)"
-        default y
-        help
-          When enabled the kernel boots into the built-in debug shell
-          instead of loading /sbin/init from the filesystem.
-          Disable this only when you have a working userspace init.
-
-    config IR0_SUDO_AUTH_SYSCALL
-        bool "IR0 legacy sudo_auth syscall (debug_bins only)"
-        default n
-        help
-          Enables __NR_sudo_auth (404) for debug_bins/cmd_sudo.c.
-          Production userspace should use setuid binaries and real sudo.
-
     config TICK_RATE_HZ
         int "Timer tick rate (Hz)"
         range 100 1000
@@ -111,58 +96,6 @@ menu "General"
         help
           Build and register optional sample drivers used for multi-language
           integration testing. Keep disabled for production-like builds.
-
-endmenu
-
-menu "Debug Binaries"
-
-    config DEBUG_BINS_GROUP_CORE
-        bool "Debug bins core commands"
-        default y
-        help
-          Build core shell-facing commands such as ls/cd/pwd/cat/echo/exec
-          plus tiny process helpers like true/false/sleep.
-
-    config DEBUG_BINS_GROUP_FS
-        bool "Debug bins filesystem commands"
-        default y
-        help
-          Build filesystem management commands: mkdir/rm/rmdir/touch/cp/mv/ln
-          and permission/mount tools such as chmod/chown/mount.
-
-    config DEBUG_BINS_GROUP_TEXT
-        bool "Debug bins text processing commands"
-        default y
-        help
-          Build small text tools such as sed/wc/head/tail.
-
-    config DEBUG_BINS_GROUP_IDENTITY
-        bool "Debug bins identity/privilege commands"
-        default y
-        help
-          Build identity-oriented commands like id/whoami and privilege helper
-          commands such as sudo.
-
-    config DEBUG_BINS_GROUP_DIAG
-        bool "Debug bins diagnostics/system-info commands"
-        default y
-        help
-          Build diagnostics and system-info commands (ps/df/dmesg/free/uptime/
-          date/uname/lsblk/lsdrv/lshw/keymap/stat).
-
-    config DEBUG_BINS_GROUP_NET
-        bool "Debug bins networking commands"
-        default y
-        depends on ENABLE_NETWORKING
-        help
-          Build networking debug bins such as ping.
-
-    config DEBUG_BINS_GROUP_BT
-        bool "Debug bins Bluetooth commands"
-        default y
-        depends on ENABLE_BLUETOOTH
-        help
-          Build Bluetooth-oriented debug bins (lsblue/bluestart/blue).
 
 endmenu
 
@@ -318,6 +251,15 @@ menu "Graphics"
           Use the VESA BIOS Extensions framebuffer when available
           (via Multiboot). VGA text-mode console is always compiled.
 
+    config CONSOLE_SERIAL_MIRROR
+        bool "Mirror TTY output to serial after userspace handoff"
+        default y
+        help
+          When disabled, console_backend_write stops echoing glyphs to COM1
+          after userspace attach (cleaner make run). Smoke markers still use
+          /dev/serial via ir0_smoke_tag. Enable for make run-bootlog / CI
+          greps of ash banners on the serial log.
+
 endmenu
 
 menu "Driver Init Selection"
@@ -422,6 +364,24 @@ endmenu
 
 menu "Debugging"
 
+    choice
+        prompt "Kernel log presentation profile"
+        default LOG_PROFILE_NORMAL
+        help
+          Serial/console verbosity for human klog. Runtime override:
+          ir0.loglevel=quiet|normal|debug|trace on the Multiboot cmdline.
+          Autokill smoke tags (klog_smoke) always emit.
+
+        config LOG_PROFILE_QUIET
+            bool "quiet (NOTICE+ / warnings / failures)"
+        config LOG_PROFILE_NORMAL
+            bool "normal (phase milestones + driver summary)"
+        config LOG_PROFILE_DEBUG
+            bool "debug (driver register/init ceremony)"
+        config LOG_PROFILE_TRACE
+            bool "trace (OPEN_ABI / VFS_STAT and internal events)"
+    endchoice
+
     config BOOT_LOG_HOSTSHARE
         bool "Dump boot log ring to virtio-9p host share (ir0-boot.log)"
         default n
@@ -519,8 +479,19 @@ menu "Debugging"
         default n
 
     config DEBUG_KEYBOARD
-        bool "Keyboard/stdin read debug output"
+        bool "Keyboard scancode/modifier [INPUT] serial traces"
         default n
+        help
+          Log each PS/2 set-1 byte: raw scancode, E0/E1 prefix, make/break,
+          logical key, modifier before/after, and bytes emitted to the TTY.
+          Keep disabled in product profiles (noisy on serial).
+
+    config DEBUG_PS2
+        bool "i8042 keyboard/mouse demux [PS2]/[MOUSE] serial traces"
+        default n
+        help
+          Log status+data with source=keyboard|mouse before any decoder,
+          plus assembled mouse packets. Keep off in product profiles.
 
     config TEST_INPUT_INJECT
         bool "Enable deterministic input injection test hook"

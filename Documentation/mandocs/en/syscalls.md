@@ -12,7 +12,7 @@
 ## 1. Overview
 
 User programs reach the kernel through Linux-numbered syscalls on x86-64.
-Two entry mechanisms coexist: legacy **`int 0x80`** (debug_bins) and the
+Two entry mechanisms coexist: legacy **`int 0x80`** (historical lab ABI) and the
 **`syscall` instruction** (musl ABI). Dispatch is centralized in
 `syscall_dispatch()` with a table of `__NR_*` handlers. File I/O is split into
 `fs_syscalls.c`; most other handlers remain in the monolithic `syscalls.c`.
@@ -67,7 +67,7 @@ Two entry mechanisms coexist: legacy **`int 0x80`** (debug_bins) and the
 
 **`copy_from_user` / `copy_to_user`:**
 
-1. If `KERNEL_MODE` process (dbgshell): plain `memcpy`.
+1. If `KERNEL_MODE` process (embedded/kernel tasks): plain `memcpy`.
 2. Else validate `[USER_SPACE_START, USER_SPACE_END)`.
 3. Copy via `copy_*_region_in_directory(current_process->page_directory, …)`.
 

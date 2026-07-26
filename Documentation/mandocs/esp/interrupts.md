@@ -13,7 +13,7 @@
 
 El manejo de interrupciones x86-64 usa una IDT de 256 entradas, PIC 8259 dual
 (IRQ 0–15 → vectores 32–47), stubs en ensamblador y handlers C en
-`isr_handler64`. Las syscalls entran vía **int 0x80** (ABI debug_bins) e
+`isr_handler64`. Las syscalls entran vía **int 0x80** (ABI legacy) e
 instrucción **`syscall`** (ABI musl/Linux). Las excepciones de CPU se mapean a
 señales para tareas de usuario o panic para fallos en kernel.
 
@@ -45,7 +45,7 @@ señales para tareas de usuario o panic para fallos en kernel.
 
 ```text
   int $0x80 ──► syscall_entry_asm
-       ──► mapear regs debug_bins → ABI C Linux
+       ──► mapear regs int 0x80 → ABI C Linux
        ──► syscall_dispatch()
        ──► iretq (segmentos usuario 0x23)
 ```

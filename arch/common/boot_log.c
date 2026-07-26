@@ -25,6 +25,7 @@
 #ifdef IR0_FREESTANDING_BOOT
 /* Hold serial until banner — matches klog_boot_hold default. */
 static int g_boot_hold = 1;
+static uint64_t g_boot_sequence;
 
 static void boot_append(char *buf, size_t sz, size_t *off, const char *s)
 {
@@ -40,7 +41,10 @@ static void boot_append(char *buf, size_t sz, size_t *off, const char *s)
 static void boot_emit_raw(const char *level, const char *comp, const char *msg)
 {
 	char line[384];
+	char digits[24];
+	unsigned digit_count = 0;
 	size_t off = 0;
+	uint64_t sequence;
 
 	if (g_boot_hold)
 		return;
@@ -51,11 +55,18 @@ static void boot_emit_raw(const char *level, const char *comp, const char *msg)
 	if (!msg)
 		msg = "";
 
-	/*
-	 * Same human layout as ktm/klog.c before clock is ready:
-	 *   [    ?.???] [LEVEL] [COMP] message\n
-	 */
-	boot_append(line, sizeof(line), &off, "[    ?.???] [");
+	sequence = ++g_boot_sequence;
+	do
+	{
+		digits[digit_count++] = (char)('0' + (sequence % 10));
+		sequence /= 10;
+	} while (sequence && digit_count < sizeof(digits));
+	boot_append(line, sizeof(line), &off, "[#");
+	while (digit_count > 0 && off + 1 < sizeof(line))
+		line[off++] = digits[--digit_count];
+	line[off] = '\0';
+	boot_append(line, sizeof(line), &off,
+		    "] [EARLY_ARCH] [    ?.???] [");
 	boot_append(line, sizeof(line), &off, level);
 	boot_append(line, sizeof(line), &off, "] [");
 	boot_append(line, sizeof(line), &off, comp);
@@ -70,27 +81,37 @@ void ir0_boot_serial_ready(void)
 {
 #ifndef IR0_FREESTANDING_BOOT
 	klog_boot_hold(0);
-	klog_info("BOOT", "IR0 Kernel v" IR0_VERSION_STRING " Boot routine");
+	klog_event(KLOG_EVENT_BOOT_BANNER, 0, KLOG_LEVEL_INFO, "BOOT",
+		   "IR0 kernel " IR0_VERSION_STRING);
 #else
 	g_boot_hold = 0;
-	boot_emit_raw("INFO", "BOOT",
-		      "IR0 Kernel v" IR0_VERSION_STRING " Boot routine");
+	boot_emit_raw("INFO", "BOOT", "IR0 kernel " IR0_VERSION_STRING);
 #endif
 }
 
 void ir0_boot_info(const char *component, const char *message)
 {
 #ifndef IR0_FREESTANDING_BOOT
-	klog_info(component, message);
+	klog_event(KLOG_EVENT_BOOT_INFO, 0, KLOG_LEVEL_INFO, component, message);
 #else
 	boot_emit_raw("INFO", component, message);
+#endif
+}
+
+void ir0_boot_notice(const char *component, const char *message)
+{
+#ifndef IR0_FREESTANDING_BOOT
+	klog_event(KLOG_EVENT_BOOT_INFO, 0, KLOG_LEVEL_NOTICE, component,
+		   message);
+#else
+	boot_emit_raw("NOTICE", component, message);
 #endif
 }
 
 void ir0_boot_warn(const char *component, const char *message)
 {
 #ifndef IR0_FREESTANDING_BOOT
-	klog_warn(component, message);
+	klog_event(KLOG_EVENT_BOOT_INFO, 0, KLOG_LEVEL_WARN, component, message);
 #else
 	boot_emit_raw("WARN", component, message);
 #endif

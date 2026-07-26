@@ -101,9 +101,9 @@ PROCESS_BLOCKED → sched_schedule_next()
 | Console draw | `kernel/console_backend.c`, `drivers/video/*` | FB handoff, `typewriter_vga_print_char` |
 | devfs console | `fs/devfs.c` | `/dev/console`, `/dev/tty`, termios ioctl |
 | PID 1 | `setup/pid1/irinit.c` | Attach stdio to `/dev/console`, spawn `ash -i` |
-| BusyBox config | `setup/busybox/fase50_minimal.config` | `FEATURE_EDITING=n`, `ASH_JOB_CONTROL=n` |
+| BusyBox config | `IR0-userspace/packages/busybox/fase50_minimal.config` | `FEATURE_EDITING=n`, `ASH_JOB_CONTROL=n` |
 | Smoke tags | `includes/ir0/ash_smoke.c` | Compact serial tags after BusyBox banner (FASE58K) |
-| Next BusyBox | `setup/busybox/fase58_busybox.config` | More coreutils; build with `make build-busybox-fase58-plus` |
+| Next BusyBox | `IR0-userspace/packages/busybox/fase58_busybox.config` | More coreutils; build with `make build-busybox-fase58-plus` |
 
 ## BusyBox configuration (intentional)
 

@@ -2,34 +2,56 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1 |
+| Version | 0.2 |
 | IR0 phase | T1–T2 |
 | Status | stable |
 | Depends on | boot, process, vfs, tty |
 | Man page | IR0-userspace (section 7) |
-| Primary sources | `setup/pid1/irinit.c`, `kernel/main.c`, `kernel/rootfs_base.c`, `scripts/inject_init_minix.py`, `Makefile` |
+| Primary sources | `kernel/main.c`, `kernel/rootfs_base.c`, `scripts/inject_init_minix.py`, `Makefile`, sibling `IR0-userspace/` |
+
+> **Last verified:** 2026-07-25
+
+> **Note (2026-07-25):** the Unix userspace (runit, BusyBox, login, doas, `/etc`) lives in the **`IR0-userspace`** sibling repository. The kernel keeps only its own test fixtures (`setup/pid1/`) plus a coupling pointer (`userspace/README.md`, `Documentation/USERSPACE.md`) and drives the product build through `IR0_USERSPACE_ROOT`; a missing sibling fails `check-userspace` instead of skipping a gate. Legacy `debug_bins/` / in-kernel dbgshell were removed.
+
+> **Note (2026-07-24):** transitional PID1 **irinit** was removed. Product and tests use **runit** only (`make build-runit` / `load-userspace-runit` / `smoke-runit-boot`).
 
 ## 1. Overview
 
-Production boot loads **`/sbin/init`** via `kexecve` from `kmain` when
-`KERNEL_DEBUG_SHELL=0`. The reference PID1 implementation is **irinit**
-(`setup/pid1/irinit.c`), built static with musl and injected into the MINIX root
-image. BusyBox, TCC, and DoomGeneric are optional rootfs payloads for smoke and
+Production boot always loads **`/sbin/init`** via `kexecve` from `kmain`.
+The canonical PID1 is **runit** (`IR0-userspace/out/bin/runit-init`
+and stage services), built static with musl by the sibling repository and
+injected into the MINIX root image. BusyBox, TCC, and DoomGeneric are optional rootfs payloads for smoke and
 T2 graphics milestones.
 
 ## 2. Internal architecture
 
 | Artifact | Role |
 |----------|------|
-| `irinit.c` | PID1: console attach, spawn `/bin/sh`, reap zombies |
+| `runit-init` + stages | PID1: stage1 → stage2 services → console/ash |
 | `init_musl.c` | musl syscall smoke binary |
 | `rootfs_base.c` | Creates `/bin`, `/sbin`, `/dev`, `/proc`, … on disk |
 | `inject_init_minix.py` | Writes binaries into MINIX v1 image |
-| `busybox-1.36.1` | Third-party applets; configs in `setup/busybox/` |
+| `busybox-1.36.1` | Applets; recipe and configs in `IR0-userspace/packages/busybox/` |
 | `kernel-x64-userspace.bin` | Kernel built with `IR0_USERSPACE_INIT_BOOT=1` |
 
-**irinit behavior (non-smoke):** prepare environment → attach console → spawn shell →
-respawn on exit; limits on consecutive SEGV and empty shell loops.
+**runit behavior:** stage 1 prepares the rootfs; stage 2 supervises services; the
+console service runs getty/login (`runit_console_run`): auth against
+`/etc/passwd`+`/etc/shadow` (musl `crypt(3)` for `$…` hashes), then
+`setgid`/`setgroups`/`setuid`/`chdir`, export of `HOME`/`USER`/`HOSTNAME`, and
+exec of BusyBox ash as a **login shell** (`argv[0] = "-sh"`) so `/etc/profile`
+runs. Product BusyBox enables `CONFIG_ASH_EXPAND_PRMT` and `CONFIG_ASH_TEST`
+(`[`/`test` builtins). Prompt (`PS1`): `# ` for root, `user@host:$PWD$ ` for
+others (`HOSTNAME` from `/etc/hostname`, default `unix`). Accounts: `root`
+(empty password), `ir0`/`ivan` (MD5 crypt). Lab disks may include
+`/etc/ir0-autologin` (see FASE58E / `run-fase58e-ash-gui`). Smokes:
+`smoke-runit-login` (root autologin), `smoke-runit-login-nonroot` (ivan + crypt).
+
+**Product profiles.** `/etc/ir0-profile` (written by
+`IR0-userspace/scripts/install-to-disk.sh` from `IR0_PRODUCT_PROFILE`) selects
+the console policy: `development` keeps root autologin and prints a warning,
+`desktop` runs `hostname login:` and denies direct root login through
+`/etc/ir0-noroot` (name kept ≤14 bytes for MINIX v1 directory entries),
+`appliance` starts no interactive login at all (`CONSOLE_NO_LOGIN`).
 
 ## 3. Data flow
 
@@ -37,93 +59,41 @@ respawn on exit; limits on consecutive SEGV and empty shell loops.
   make kernel-x64-userspace.iso + disk.img
        │
        ▼
-  inject_init_minix.py  (irinit → /sbin/init, busybox → /bin/...)
+  inject_init_minix.py  (runit-init → /sbin/init, busybox → /bin/...)
        │
        ▼
-  QEMU: kernel-x64-userspace.iso + disk.img
+  QEMU boot → kexecve("/sbin/init")
        │
        ▼
-  kmain → vfs_init_root (MINIX /)
-       → ir0_rootfs_prepare_userspace_base()  (mkdir layout)
-       → kexecve("/sbin/init")
-       │
-       ▼
-  irinit → open /dev/console → spawn /bin/sh (BusyBox ash)
-       │
-       ▼
-  user: doom, tcc, coreutils smokes
+  runit stage1 → stage2 → console → /bin/sh (BusyBox ash)
 ```
 
-ASCII:
+## 4. Make targets
 
-```text
-  [MINIX disk]          [kernel ISO]
-  /sbin/init=irinit  +  userspace boot flag
-         │                    │
-         └────────┬───────────┘
-                  ▼
-            kexecve("/sbin/init")
-                  ▼
-              irinit → /bin/sh
-```
+| Target | Role |
+|--------|------|
+| `make headers_install DESTDIR=…` | Export public UAPI (`includes/uapi/`) for the userspace build |
+| `make build-runit` | Delegates to `IR0-userspace` (runit + service ELFs) |
+| `make load-userspace-runit` | Format MINIX disk and install the product rootfs from the sibling |
+| `make smoke-runit-boot` | Headless PID1 boot smoke |
+| `make smoke-runit-login` | Root autologin (empty password) |
+| `make smoke-runit-login-nonroot` | Non-root: crypt(3) + uid 1001 + PS1 |
+| `make run-fase58e-ash-gui` | Interactive ash on GTK |
+| `make smoke-tier1` | Bundle: runit boot + ash |
 
-## 4. Responsibilities
+Coupling guide (clone, `headers_install`, boundary): [`USERSPACE.md`](../../USERSPACE.md).
 
-- Kernel: mount root, ensure base dirs, exec init once, then schedule.
-- irinit: reap zombies, respawn shell, no driver access (syscalls only).
-- Build system: musl cross compiler (`MUSL_CC`), inject scripts, ISO targets.
+Retired fail-fast aliases: `build-irinit`, `load-userspace-irinit`,
+`smoke-userspace-irinit`, `run-irinit-interactive-gui` (print redirect and exit 2).
 
-## 5. Subsystem boundaries
+## 5. Identity
 
-- PID1 must not link kernel symbols; static musl only.
-- `debug_bins` shell replaces init when `KERNEL_DEBUG_SHELL=1` — separate T0 path.
-- Phase-named inits under `setup/pid1/init_fase*.c` are smoke harnesses, not production PID1.
+- Kernel serial banner: `IR0 kernel <IR0_VERSION_STRING>` via `ir0_boot_serial_ready()`.
+- Userspace: `uname` → sysname `IR0`, nodename `unix`, version `IR0/Unix`.
+- `/proc/version` human line matches the same stamp.
 
-## 6. Relations to other subsystems
+## 6. Open (post-0.0.1)
 
-| Neighbor | Interaction |
-|----------|---------------|
-| Boot | `kexecve` handoff |
-| VFS | MINIX root, tmpfs fallback if disk missing |
-| TTY | irinit uses `/dev/console`, termios |
-| Process | fork/exec/wait in shell and applets |
-| T2 | DoomGeneric via `/usr/share/doom` layout in rootfs_base |
-
-## 7. Visual maps
-
-```text
-  build chain:
-  musl-gcc → irinit/busybox/doom binaries
-       → inject_init_minix.py → disk.img
-       → make kernel-x64-userspace.iso
-       → QEMU smoke targets
-```
-
-## 8. Important invariants
-
-1. `/sbin/init` must exist on root FS for production boot path.
-2. `IR0_USERSPACE_INIT_BOOT=1` required on kernel for real init (not debug shell).
-3. irinit smoke mode (`DIRINIT_SMOKE`) halts after probes — not interactive default.
-4. musl requires `x86_64-linux-musl-gcc` or `musl-gcc`.
-
-## 9. Debugging tips
-
-| Symptom | Fix |
-|---------|-----|
-| `musl cross compiler not found` | `apt install musl-tools`, set `MUSL_CC` |
-| `/sbin/init` not found | Re-run inject; check disk.img |
-| Kernel shell instead of init | Wrong ISO (use userspace variant) |
-| ash silent | See IR0-tty; verify `/dev/console` |
-
-Targets: `make build-irinit`, `make smoke-userspace-shell`, `make run-irinit-interactive-gui`.
-
-See `SETUP.md` for full bootstrap flow.
-
-## 10. Future roadmap
-
-- runit-style service supervision — irinit is minimal, not full runit port.
-- musl dynamic linking — static binaries only today.
-- Proper package layout / shared libs on rootfs — partial `/lib` staging.
-- systemd-style init — **out of scope** for IR0 T1.
-
-Phase doc: `Documentation/fase58e-ash-interactive-console.md`.
+- `IR0-system` release manifest pinning kernel + userspace + desktop commits.
+- Interactive first-boot wizard (TTY Q&A) — defaults via `ir0-firstboot` today.
+- BusyBox `login`/`su`/`passwd` applets (optional; custom console already drops privileges).

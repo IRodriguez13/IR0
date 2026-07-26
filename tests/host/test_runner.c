@@ -41,6 +41,17 @@ extern void test_blockdev_facade_contract(void);
 extern void test_blockdev_readonly_allows_read(void);
 extern void test_arch_irq_facade_nested(void);
 extern void test_arch_mm_pte_facade(void);
+extern void test_ps2_set1_ctrl_x_then_a(void);
+extern void test_ps2_set1_left_right_ctrl_independent(void);
+extern void test_ps2_set1_shift_a(void);
+extern void test_ps2_set1_caps_toggle(void);
+extern void test_ps2_set1_arrows_e0(void);
+extern void test_ps2_set1_autorepeat_ctrl(void);
+extern void test_ps2_mouse_pkt_resync_and_complete(void);
+extern void test_ps2_mouse_interleaved_does_not_touch_kbd_mods(void);
+extern void test_ps2_set1_alt_independent(void);
+extern void test_pipe_close_end_last_ref_frees_once(void);
+extern void test_pipe_pipeline_two_closes_destroy_once(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -65,6 +76,17 @@ static void (*test_functions[])(void) = {
 	test_blockdev_readonly_allows_read,
 	test_arch_irq_facade_nested,
 	test_arch_mm_pte_facade,
+	test_ps2_set1_ctrl_x_then_a,
+	test_ps2_set1_left_right_ctrl_independent,
+	test_ps2_set1_shift_a,
+	test_ps2_set1_caps_toggle,
+	test_ps2_set1_arrows_e0,
+	test_ps2_set1_autorepeat_ctrl,
+	test_ps2_mouse_pkt_resync_and_complete,
+	test_ps2_mouse_interleaved_does_not_touch_kbd_mods,
+	test_ps2_set1_alt_independent,
+	test_pipe_close_end_last_ref_frees_once,
+	test_pipe_pipeline_two_closes_destroy_once,
 	NULL
 };
 

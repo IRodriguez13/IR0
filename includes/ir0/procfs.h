@@ -73,6 +73,7 @@ int proc_meminfo_read(char *buf, size_t count);
 int proc_ps_read(char *buf, size_t count);
 int proc_status_read(char *buf, size_t count, pid_t pid);
 int proc_cmdline_read(char *buf, size_t count, pid_t pid);
+int proc_pid_stat_read(char *buf, size_t count, pid_t pid);
 const char *proc_resolve_path(const char *path, pid_t *pid_out);
 int proc_is_virtual_subdir(const char *path);
 int proc_uptime_read(char *buf, size_t count);

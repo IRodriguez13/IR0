@@ -43,8 +43,15 @@ struct vfs_mount {
     char path[VFS_PATH_MAX];
     char dev[64];
     struct vfs_fstype *fs;
+    unsigned long flags; /* MS_RDONLY and friends */
     struct vfs_mount *next;
 };
+
+/* Linux mount(2) flag bits we honour today. */
+#define IR0_MS_RDONLY  1
+#define IR0_MS_REMOUNT 32
+
+int vfs_remount(const char *path, unsigned long flags);
 
 /* Open file handle — created by vfs_open, freed by vfs_close */
 struct vfs_file {
@@ -109,6 +116,9 @@ int vfs_utimens(const char *path, const struct timespec times[2]);
 
 /* Bulk read helper (ELF loader, etc.) */
 int vfs_read_file(const char *path, void **data, size_t *size);
+
+/* Non-zero when the mount holding @path may raise privileges on exec. */
+int vfs_path_allows_setid(const char *path);
 
 /* Exec-loader observational audit (single-threaded). */
 void vfs_exec_audit_begin(const char *path);

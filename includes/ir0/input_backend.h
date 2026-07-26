@@ -39,6 +39,8 @@ typedef struct ir0_mouse_state
 } ir0_mouse_state_t;
 
 void input_mouse_handle_interrupt(void);
+/* One AUX byte from i8042 (never fed to the keyboard decoder). */
+void input_mouse_feed_byte(uint8_t data);
 bool input_mouse_is_available(void);
 bool input_mouse_get_state(ir0_mouse_state_t *out);
 bool input_mouse_set_sensitivity(uint8_t sensitivity);

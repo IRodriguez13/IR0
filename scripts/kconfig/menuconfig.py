@@ -564,7 +564,6 @@ def apply_preset(symbols, preset):
         sym.value = sym.effective_default()
     if preset_key == "generic":
         values = {
-            "KERNEL_DEBUG_SHELL": "y",
             "ARCH_X86_64": "y",
             "ARCH_ARM64": "n",
             "TICK_RATE_HZ": "1000",
@@ -572,13 +571,6 @@ def apply_preset(symbols, preset):
             "ROOT_BLOCK_DEVICE": "hda",
             "ROOT_FILESYSTEM": "minix",
             "ENABLE_SMP": "n",
-            "DEBUG_BINS_GROUP_CORE": "y",
-            "DEBUG_BINS_GROUP_FS": "y",
-            "DEBUG_BINS_GROUP_TEXT": "y",
-            "DEBUG_BINS_GROUP_IDENTITY": "y",
-            "DEBUG_BINS_GROUP_DIAG": "y",
-            "DEBUG_BINS_GROUP_NET": "y",
-            "DEBUG_BINS_GROUP_BT": "y",
             "ENABLE_NETWORKING": "y",
             "DRV_NIC_RTL8139": "y",
             "DRV_NIC_E1000": "n",
@@ -609,7 +601,6 @@ def apply_preset(symbols, preset):
         }
     elif preset_key == "tiny":
         values = {
-            "KERNEL_DEBUG_SHELL": "y",
             "ARCH_X86_64": "y",
             "ARCH_ARM64": "n",
             "TICK_RATE_HZ": "250",
@@ -617,13 +608,6 @@ def apply_preset(symbols, preset):
             "ROOT_BLOCK_DEVICE": "hda",
             "ROOT_FILESYSTEM": "minix",
             "ENABLE_SMP": "n",
-            "DEBUG_BINS_GROUP_CORE": "y",
-            "DEBUG_BINS_GROUP_FS": "y",
-            "DEBUG_BINS_GROUP_TEXT": "y",
-            "DEBUG_BINS_GROUP_IDENTITY": "y",
-            "DEBUG_BINS_GROUP_DIAG": "y",
-            "DEBUG_BINS_GROUP_NET": "n",
-            "DEBUG_BINS_GROUP_BT": "n",
             "ENABLE_NETWORKING": "n",
             "DRV_NIC_RTL8139": "n",
             "DRV_NIC_E1000": "n",
@@ -653,7 +637,6 @@ def apply_preset(symbols, preset):
         }
     elif preset_key == "iot":
         values = {
-            "KERNEL_DEBUG_SHELL": "y",
             "ARCH_X86_64": "n",
             "ARCH_ARM64": "y",
             "TICK_RATE_HZ": "500",
@@ -661,13 +644,6 @@ def apply_preset(symbols, preset):
             "ROOT_BLOCK_DEVICE": "hda",
             "ROOT_FILESYSTEM": "tmpfs",
             "ENABLE_SMP": "n",
-            "DEBUG_BINS_GROUP_CORE": "y",
-            "DEBUG_BINS_GROUP_FS": "y",
-            "DEBUG_BINS_GROUP_TEXT": "y",
-            "DEBUG_BINS_GROUP_IDENTITY": "y",
-            "DEBUG_BINS_GROUP_DIAG": "y",
-            "DEBUG_BINS_GROUP_NET": "y",
-            "DEBUG_BINS_GROUP_BT": "y",
             "ENABLE_NETWORKING": "y",
             "DRV_NIC_RTL8139": "n",
             "DRV_NIC_E1000": "n",
@@ -700,7 +676,6 @@ def apply_preset(symbols, preset):
         }
     elif preset_key == "watch":
         values = {
-            "KERNEL_DEBUG_SHELL": "y",
             "ARCH_X86_64": "n",
             "ARCH_ARM64": "y",
             "TICK_RATE_HZ": "250",
@@ -708,13 +683,6 @@ def apply_preset(symbols, preset):
             "ROOT_BLOCK_DEVICE": "hda",
             "ROOT_FILESYSTEM": "tmpfs",
             "ENABLE_SMP": "n",
-            "DEBUG_BINS_GROUP_CORE": "y",
-            "DEBUG_BINS_GROUP_FS": "n",
-            "DEBUG_BINS_GROUP_TEXT": "n",
-            "DEBUG_BINS_GROUP_IDENTITY": "n",
-            "DEBUG_BINS_GROUP_DIAG": "y",
-            "DEBUG_BINS_GROUP_NET": "n",
-            "DEBUG_BINS_GROUP_BT": "y",
             "ENABLE_NETWORKING": "n",
             "DRV_NIC_RTL8139": "n",
             "DRV_NIC_E1000": "n",
@@ -747,7 +715,6 @@ def apply_preset(symbols, preset):
         }
     elif preset_key == "userspace":
         values = {
-            "KERNEL_DEBUG_SHELL": "n",
             "ARCH_X86_64": "y",
             "ARCH_ARM64": "n",
             "TICK_RATE_HZ": "1000",
@@ -755,13 +722,6 @@ def apply_preset(symbols, preset):
             "ROOT_BLOCK_DEVICE": "hda",
             "ROOT_FILESYSTEM": "minix",
             "ENABLE_SMP": "n",
-            "DEBUG_BINS_GROUP_CORE": "n",
-            "DEBUG_BINS_GROUP_FS": "n",
-            "DEBUG_BINS_GROUP_TEXT": "n",
-            "DEBUG_BINS_GROUP_IDENTITY": "n",
-            "DEBUG_BINS_GROUP_DIAG": "n",
-            "DEBUG_BINS_GROUP_NET": "n",
-            "DEBUG_BINS_GROUP_BT": "n",
             "ENABLE_NETWORKING": "n",
             "DRV_NIC_RTL8139": "n",
             "DRV_NIC_E1000": "n",

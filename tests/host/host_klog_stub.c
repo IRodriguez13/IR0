@@ -30,6 +30,32 @@ klog_level_t klog_get_level(void)
 	return KLOG_LEVEL_INFO;
 }
 
+void klog_apply_profile(klog_profile_t profile)
+{
+	(void)profile;
+}
+
+klog_profile_t klog_get_profile(void)
+{
+	return KLOG_PROFILE_NORMAL;
+}
+
+void klog_set_trace_mask(uint32_t mask)
+{
+	(void)mask;
+}
+
+uint32_t klog_get_trace_mask(void)
+{
+	return 0;
+}
+
+int klog_trace_enabled(uint32_t category)
+{
+	(void)category;
+	return 0;
+}
+
 void klog_set_protocol_mirror(klog_protocol_mirror_fn fn)
 {
 	(void)fn;
@@ -55,6 +81,12 @@ void klog_smoke(const char *tag)
 	(void)tag;
 }
 
+void klog_trace(const char *component, const char *message)
+{
+	(void)component;
+	(void)message;
+}
+
 void klog_debug(const char *component, const char *message)
 {
 	(void)component;
@@ -62,6 +94,12 @@ void klog_debug(const char *component, const char *message)
 }
 
 void klog_info(const char *component, const char *message)
+{
+	(void)component;
+	(void)message;
+}
+
+void klog_notice(const char *component, const char *message)
 {
 	(void)component;
 	(void)message;
@@ -85,6 +123,12 @@ void klog_fatal(const char *component, const char *message)
 	(void)message;
 }
 
+void klog_trace_fmt(const char *component, const char *format, ...)
+{
+	(void)component;
+	(void)format;
+}
+
 void klog_debug_fmt(const char *component, const char *format, ...)
 {
 	(void)component;
@@ -92,6 +136,12 @@ void klog_debug_fmt(const char *component, const char *format, ...)
 }
 
 void klog_info_fmt(const char *component, const char *format, ...)
+{
+	(void)component;
+	(void)format;
+}
+
+void klog_notice_fmt(const char *component, const char *format, ...)
 {
 	(void)component;
 	(void)format;

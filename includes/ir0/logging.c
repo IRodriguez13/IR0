@@ -53,10 +53,14 @@ static const char *get_level_string(log_level_t level)
 {
     switch (level)
     {
+    case LOG_LEVEL_TRACE:
+        return "TRACE";
     case LOG_LEVEL_DEBUG:
         return "DEBUG";
     case LOG_LEVEL_INFO:
         return "INFO";
+    case LOG_LEVEL_NOTICE:
+        return "NOTICE";
     case LOG_LEVEL_WARN:
         return "WARN";
     case LOG_LEVEL_ERROR:
@@ -103,12 +107,14 @@ void logging_init(void)
 
 void logging_set_level(log_level_t level)
 {
+    /* Single source of truth: klog owns the filter threshold. */
     current_log_level = level;
     klog_set_level((klog_level_t)level);
 }
 
 log_level_t logging_get_level(void)
 {
+    current_log_level = (log_level_t)klog_get_level();
     return current_log_level;
 }
 
@@ -119,7 +125,8 @@ void log_message(log_level_t level, const char *component, const char *message)
         logging_init();
     }
 
-    if (level < current_log_level)
+    /* Filter via klog global so profiles apply to LOG_* macros too. */
+    if ((klog_level_t)level < klog_get_level())
     {
         return;
     }

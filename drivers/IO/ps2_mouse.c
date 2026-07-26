@@ -12,17 +12,20 @@
  */
 
 #include "ps2_mouse.h"
+#include <config.h>
 #include <ir0/vga.h>
 #include <stddef.h>
 #include <ir0/arch_port.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/input.h>
+#include <ir0/ktm/klog.h>
+#include <ir0/ps2_mouse_pkt.h>
+#include <ir0/console.h>
 
 /* Global mouse state */
 static ps2_mouse_state_t mouse_state = {0};
-static uint8_t packet_buffer[4];
-static uint8_t packet_index = 0;
+static struct ps2_mouse_pkt_state pkt_state;
 static uint8_t expected_packet_size = 3;
 
 /* Mouse packet queue (ring buffer) */
@@ -102,6 +105,7 @@ static int32_t ps2_mouse_hw_init(void)
     {
         mouse_state.has_wheel = true;
         expected_packet_size = 4;
+        ps2_mouse_pkt_reset(&pkt_state, expected_packet_size);
     }
 
     /* Enable 5 buttons if supported */
@@ -121,7 +125,23 @@ static int32_t ps2_mouse_hw_init(void)
         return -1;
     }
 
+    /* Enable IRQ12 (AUX) on the i8042 config byte. */
+    {
+	uint8_t config;
+
+	ps2_controller_write_command(PS2_CMD_READ_CONFIG);
+	if (ps2_controller_wait_output())
+	{
+		config = ps2_controller_read_data();
+		config |= PS2_CFG_INT2;
+		config &= (uint8_t)~PS2_CFG_CLK2; /* clear AUX clock disable */
+		ps2_controller_write_command(PS2_CMD_WRITE_CONFIG);
+		ps2_controller_write_data(config);
+	}
+    }
+
     mouse_state.initialized = true;
+    ps2_mouse_pkt_reset(&pkt_state, expected_packet_size);
     return 0;
 }
 
@@ -252,71 +272,50 @@ bool ps2_mouse_set_scaling_1_1(void)
     return ps2_mouse_send_command(PS2_MOUSE_SET_SCALING_1_1);
 }
 
+void ps2_mouse_feed_byte(uint8_t data)
+{
+	struct ps2_mouse_pkt assembled;
+	ps2_mouse_packet_t packet;
+
+	if (!mouse_state.initialized)
+	{
+		ps2_mouse_pkt_reset(&pkt_state, expected_packet_size);
+		return;
+	}
+
+	ps2_mouse_pkt_feed(&pkt_state, data, &assembled);
+	if (!assembled.complete)
+	{
+#if DEBUG_PS2
+		if (pkt_state.index == 0 && !(data & PS2_MOUSE_PKT_ALWAYS_1))
+			kprintf("[MOUSE] resync drop=0x%02x\n", data);
+#endif
+		return;
+	}
+
+	packet.flags = assembled.flags;
+	packet.delta_x = assembled.dx;
+	packet.delta_y = assembled.dy;
+	packet.delta_wheel = assembled.wheel;
+	packet.extra_buttons = mouse_state.has_5buttons ? assembled.extra_buttons : 0;
+
+#if DEBUG_PS2
+	kprintf("[MOUSE] packet=[%02x %02x %02x] dx=%d dy=%d buttons=0x%02x\n",
+		assembled.flags, (uint8_t)assembled.dx, (uint8_t)assembled.dy,
+		(int)packet.delta_x, (int)packet.delta_y, packet.flags & 0x07);
+#endif
+
+	ps2_mouse_process_packet(&packet);
+	mouse_queue_push(&packet);
+}
+
 void ps2_mouse_handle_interrupt(void)
 {
-    uint8_t data;
-
-    if (!mouse_state.initialized)
-    {
-        return;
-    }
-
-    /* Read data from controller */
-    data = ps2_controller_read_data();
-
-    /* Store in packet buffer */
-    packet_buffer[packet_index] = data;
-    packet_index++;
-
-    /* Check if we have a complete packet */
-    if (packet_index >= expected_packet_size)
-    {
-        ps2_mouse_packet_t packet;
-
-        /* Parse standard 3-byte packet */
-        packet.flags = packet_buffer[0];
-        packet.delta_x = packet_buffer[1];
-        packet.delta_y = packet_buffer[2];
-        packet.delta_wheel = 0;
-        packet.extra_buttons = 0;
-
-        /* Handle sign extension for X movement */
-        if (packet.flags & PS2_MOUSE_X_SIGN)
-        {
-            packet.delta_x |= 0xFF00;
-        }
-
-        /* Handle sign extension for Y movement */
-        if (packet.flags & PS2_MOUSE_Y_SIGN)
-        {
-            packet.delta_y |= 0xFF00;
-        }
-
-        /* Parse wheel data if available */
-        if (expected_packet_size == 4 && mouse_state.has_wheel)
-        {
-            packet.delta_wheel = (int8_t)(packet_buffer[3] & 0x0F);
-            if (packet.delta_wheel & 0x08)
-            {
-                packet.delta_wheel |= 0xF0; /* Sign extend */
-            }
-
-            /* Parse extra buttons if available */
-            if (mouse_state.has_5buttons)
-            {
-                packet.extra_buttons = (packet_buffer[3] >> 4) & 0x03;
-            }
-        }
-
-        /* Process the packet */
-        ps2_mouse_process_packet(&packet);
-
-        /* Push to data queue for userspace/shell */
-        mouse_queue_push(&packet);
-
-        /* Reset packet buffer */
-        packet_index = 0;
-    }
+	/*
+	 * Legacy entry: full i8042 demux lives in keyboard_poll_ps2 so IRQ1
+	 * cannot steal AUX bytes. IRQ12 calls input_mouse_handle_interrupt →
+	 * the same demux.
+	 */
 }
 
 bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet)

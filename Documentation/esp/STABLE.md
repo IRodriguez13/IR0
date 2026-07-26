@@ -120,7 +120,7 @@ Ver tabla completa en [`../HARDENING.md`](../HARDENING.md). Resumen: split sysca
 
 | Tier | Capacidad | Smoke automático | GTK manual |
 |------|-----------|------------------|------------|
-| T0 | ktests + pseudo-FS | `make kernel-tests` | `make run` |
+| T0 | ktests + pseudo-FS (sin dbgshell in-tree) | `make kernel-tests` | `make run-console` / `run-pid1` |
 | T1 | runit + ash | `make smoke-tier1` | `make run-fase58e-ash-gui` |
 | T1 | permisos multi-UID | `make smoke-multiuser-perms` | `su`/`id` en ash |
 | T1 | COW + lazy | `make smoke-mm-cow-lazy` | — |
@@ -139,12 +139,13 @@ make defconfig
 make run-fase58e-ash-gui
 ```
 
-Construye disco MINIX temporal (irinit + BusyBox). **Sin** `IR0_LEGACY_SMOKE=1`.
+Construye disco MINIX temporal (runit + BusyBox). **Sin** `IR0_LEGACY_SMOKE=1`.
 
 - Ventana GTK; foco en teclado para escribir en el prompt `#`.
 - Serial en la misma terminal.
 
-Otros: `make run-irinit-interactive-gui`, `make run-fase55d-doomgeneric-gui` (IWAD), `make run` (dbgshell kernel).
+Otros: `make run-fase58e-ash-gui`, `make run-fase55d-doomgeneric-gui`
+(IWAD), `make run` (runit/getty/ash).
 
 Regresión headless:
 

@@ -15,6 +15,7 @@
 #include <kernel/syscalls.h>
 #include <kernel/process.h>
 #include "fs_syscalls.h"
+#include "fs_path_syscalls.h"
 #include "syscalls_glue.h"
 #include <config.h>
 #include <ir0/copy_user.h>
@@ -22,6 +23,7 @@
 #include <ir0/devfs.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
+#include <ir0/flock.h>
 #include <ir0/open_flags.h>
 #include <ir0/path.h>
 #include <ir0/path_routed.h>
@@ -427,6 +429,14 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
   strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
   fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
 
+  /*
+   * Finite text devices: capture a per-open snapshot so read() honors
+   * offset and reaches EOF (BusyBox cat). Failure falls back to ops->read
+   * bounce+slice.
+   */
+  if (devfs_node_wants_text_snap(node->entry.device_id))
+    fd_table[fd].vfs_file = devfs_text_snap_capture(node->entry.device_id);
+
   if (DEBUG_VFS)
   {
     klog_debug_fmt("VFS", "[VFS][OPEN] path=%s fd=%llx dev_id=%x", path, (unsigned long long)((uint64_t)fd), (unsigned)(node->entry.device_id));
@@ -490,7 +500,32 @@ int64_t sys_write(int fd, const void *buf, size_t count)
       ash_smoke_write_trace(fd, kernel_buf, copy_size);
       str = kernel_buf;
       uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
-      console_backend_write(str, copy_size, color);
+      {
+	size_t done = 0;
+	const size_t step = 64;
+
+	/*
+	 * Binary dumps (`cat /dev/hda`) can pin the CPU in putchar for
+	 * minutes. Check SIGINT between chunks so Ctrl+C is not ignored.
+	 */
+	while (done < copy_size)
+	{
+	  size_t n = copy_size - done;
+
+	  if (n > step)
+	    n = step;
+	  if (current_process &&
+	      signals_pause_should_interrupt(current_process))
+	  {
+	    handle_signals();
+	    if (done > 0)
+	      return (int64_t)done;
+	    return -EINTR;
+	  }
+	  console_backend_write(str + done, n, color);
+	  done += n;
+	}
+      }
       if (current_process->task.pid == 1 && copy_size >= 10 &&
 	  kernel_buf[0] == 'F' && !memcmp(kernel_buf, "FASE48_IPC", 10))
 	process_fase48_ipc_summary("fase48-final");
@@ -706,16 +741,27 @@ int64_t sys_read(int fd, void *buf, size_t count)
       size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
       int ret;
 
-      if (!node->ops || !node->ops->read)
-        return -EBADF;
+      if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+	  fd_table[fd].in_use && fd_table[fd].vfs_file &&
+	  devfs_node_wants_text_snap(fd_table[fd].dev_device_id))
       {
-	int nb = (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
-		  fd_table[fd].in_use &&
-		  (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
+	ret = (int)devfs_text_snap_read(
+		(const devfs_text_snap_t *)fd_table[fd].vfs_file,
+		kernel_read_buf, read_size, read_off);
+      }
+      else
+      {
+	if (!node->ops || !node->ops->read)
+	  return -EBADF;
+	{
+	  int nb = (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+		    fd_table[fd].in_use &&
+		    (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
 
-	devfs_set_read_nonblock(nb);
-	ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
-	devfs_set_read_nonblock(0);
+	  devfs_set_read_nonblock(nb);
+	  ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
+	  devfs_set_read_nonblock(0);
+	}
       }
       if (ret > 0)
       {
@@ -1032,9 +1078,19 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     if (vfs_stat(path_to_use, &st) != 0)
     {
       char parent[256];
+      stat_t pst;
 
       if (get_parent_path(path_to_use, parent, sizeof(parent)) != 0)
         return -ENAMETOOLONG;
+      /*
+       * Missing parent is ENOENT (Linux). check_file_access() returns false
+       * when stat fails — do not mask that as EACCES (runsv pid.new noise).
+       */
+      if (vfs_stat(parent, &pst) != 0)
+      {
+        fase50c_log_open_result(path_to_use, -ENOENT, 9);
+        return -ENOENT;
+      }
       if (!check_file_access(parent, ACCESS_EXEC | ACCESS_WRITE, current_process))
       {
         fase50c_log_open_result(path_to_use, -EACCES, 9);
@@ -1729,20 +1785,11 @@ int64_t sys_flock(int fd, int operation)
   if (!fd_table || !fd_table[fd].in_use)
     return -EBADF;
 
-  /*
-   * Tier-1 stub: runsv uses LOCK_EX|LOCK_NB on supervise/lock. Full advisory
-   * locking is deferred; single-instance smoke only needs success / -EWOULDBLOCK.
-   */
-  if (operation & LOCK_UN)
-    return 0;
+  /* Pipes and pseudo fds have no open file description to lock. */
+  if (fd_table[fd].is_pipe || !fd_table[fd].vfs_file)
+    return -EINVAL;
 
-  if ((operation & LOCK_NB) && (operation & (LOCK_EX | LOCK_SH)))
-    return 0;
-
-  if (operation & (LOCK_EX | LOCK_SH))
-    return 0;
-
-  return -EINVAL;
+  return ir0_flock_apply((struct vfs_file *)fd_table[fd].vfs_file, operation);
 }
 
 int64_t sys_fchdir(int fd)
@@ -1765,7 +1812,12 @@ int64_t sys_fchdir(int fd)
   if (fd_table[fd].path[0] == '\0')
     return -EBADF;
 
-  return sys_chdir(fd_table[fd].path);
+  /*
+   * fd_table[].path is a kernel string. sys_chdir() rejects non-userspace
+   * pointers with -EFAULT, which broke runsvdir's fchdir(curdir) loop and
+   * left services with a wrong cwd (./run ENOENT, supervise create fails).
+   */
+  return ir0_chdir_resolved(fd_table[fd].path);
 }
 
 /* Linux getdents (NR 78) — legacy filldir layout: d_type at reclen-1. */
@@ -1789,7 +1841,12 @@ struct linux_dirent64 {
 
 #define LINUX_DIRENT64_NAME_OFF ((size_t)offsetof(struct linux_dirent64, d_name))
 
-#define GETDENTS_BATCH_MAX 64
+/*
+ * Keep batch modest: each vfs_dirent is large (path-sized name). 64 × that
+ * plus a 4K bounce buffer blew most of IR0_PROC_KSTACK_SIZE and hung/paused
+ * guests on ls /proc under GTK (-no-shutdown looked like a freeze).
+ */
+#define GETDENTS_BATCH_MAX 24
 
 /* Directory entry types (Linux DT_* subset) */
 #define DT_UNKNOWN 0

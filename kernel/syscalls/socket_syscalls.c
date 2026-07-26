@@ -748,6 +748,12 @@ static void scm_rights_dtor(void *entry, size_t sz)
 	{
 		devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
 
+		if (e->vfs_file &&
+		    devfs_node_wants_text_snap(e->dev_device_id))
+		{
+			devfs_text_snap_release((devfs_text_snap_t *)e->vfs_file);
+			e->vfs_file = NULL;
+		}
 		if (node)
 			devfs_close_node(node);
 	}
@@ -792,6 +798,9 @@ static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
 
 		if (node)
 			node->ref_count++;
+		if (dst->vfs_file &&
+		    devfs_node_wants_text_snap(dst->dev_device_id))
+			devfs_text_snap_acquire((devfs_text_snap_t *)dst->vfs_file);
 	}
 	else if (dst->is_pseudo && dst->vfs_file)
 	{

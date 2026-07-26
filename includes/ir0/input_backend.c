@@ -19,11 +19,22 @@
 #endif
 #include <interrupt/arch/keyboard.h>
 
-void input_mouse_handle_interrupt(void)
+void input_mouse_feed_byte(uint8_t data)
 {
 #if CONFIG_ENABLE_MOUSE
-	ps2_mouse_handle_interrupt();
+	ps2_mouse_feed_byte(data);
+#else
+	(void)data; /* Discard AUX while mouse driver is disabled. */
 #endif
+}
+
+void input_mouse_handle_interrupt(void)
+{
+	/*
+	 * IRQ12 and IRQ1 share the i8042 output buffer. Always demux by
+	 * status AUXDATA — never assume this IRQ's byte is mouse-only.
+	 */
+	keyboard_poll_ps2();
 }
 
 bool input_mouse_is_available(void)

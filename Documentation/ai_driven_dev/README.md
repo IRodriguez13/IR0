@@ -58,7 +58,7 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 | `ir0-smoke-autokill.md` | always | QEMU smokes via `scripts/smoke_qemu_run.sh` / `smoke_autokill.py` |
 | `ir0-version-stamp.mdc` | always | Lockstep `version.h` / Makefile with upstream tags |
 | `oss-kernel-reference.md` | on demand | Cross-check MM/exec/syscall invariants |
-| `ir0-tier-t0-os-functional.md` | tier T0 | OS + debug_bins scope |
+| `ir0-tier-t0-os-functional.md` | tier T0 | OS + ktest/contracts scope |
 | `ir0-tier-t1-userspace-posix.md` | tier T1 | init + musl + syscalls |
 | `ir0-tier-t2-graphics-fullscreen.md` | tier T2 | fb0, input, mmap clients |
 | `ir0-tier-t3-desktop-minimal.md` | tier T3 | WM/desktop (planning only) |

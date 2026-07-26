@@ -145,25 +145,19 @@
 #else
 #define DEBUG_KEYBOARD 0
 #endif
+#if defined(CONFIG_DEBUG_PS2) && CONFIG_DEBUG_PS2
+#define DEBUG_PS2 1
+#else
+#define DEBUG_PS2 0
+#endif
 
 /* KERNEL BEHAVIOR CONFIGURATION                                             */
 
 /*
- * KERNEL_DEBUG_SHELL
- * 1: Test init — use integrated shell as PID 1 (init_1 / debshell). Not the real init.
- * 0: Real init — load and execute /sbin/init from the filesystem.
- *
- * IR0_USERSPACE_INIT_BOOT (Makefile USERSPACE_INIT_BUILD=1) forces real init for
- * smoke ISO builds without rewriting .config. Otherwise CONFIG_KERNEL_DEBUG_SHELL
- * from autoconf/Makefile applies.
+ * KERNEL_DEBUG_SHELL — retired. Product boot always kexecve("/sbin/init").
+ * Kept as 0 so any residual #if KERNEL_DEBUG_SHELL compiles out.
  */
-#if defined(IR0_USERSPACE_INIT_BOOT) && IR0_USERSPACE_INIT_BOOT
 #define KERNEL_DEBUG_SHELL 0
-#elif defined(CONFIG_KERNEL_DEBUG_SHELL)
-#define KERNEL_DEBUG_SHELL CONFIG_KERNEL_DEBUG_SHELL
-#else
-#define KERNEL_DEBUG_SHELL 1
-#endif
 
 #ifndef CONFIG_TICK_RATE_HZ
 #define CONFIG_TICK_RATE_HZ 1000
@@ -171,7 +165,7 @@
 
 /*
  * IR0_KERNEL_TESTS
- * Include in-kernel test suite and cmd_ktest in debug shell.
+ * Include in-kernel test suite (test_runner + contracts).
  * Default: undefined (make ir0) - tests not linked.
  * Makefile sets -DIR0_KERNEL_TESTS=1 for kernel-x64-test.bin / make tests.
  * See Makefile target kernel-x64-test.bin.
@@ -293,28 +287,6 @@
 #endif
 #define ENABLE_USB CONFIG_ENABLE_USB_HOST
 
-#ifndef CONFIG_DEBUG_BINS_GROUP_CORE
-#define CONFIG_DEBUG_BINS_GROUP_CORE 1
-#endif
-#ifndef CONFIG_DEBUG_BINS_GROUP_FS
-#define CONFIG_DEBUG_BINS_GROUP_FS 1
-#endif
-#ifndef CONFIG_DEBUG_BINS_GROUP_TEXT
-#define CONFIG_DEBUG_BINS_GROUP_TEXT 1
-#endif
-#ifndef CONFIG_DEBUG_BINS_GROUP_IDENTITY
-#define CONFIG_DEBUG_BINS_GROUP_IDENTITY 1
-#endif
-#ifndef CONFIG_DEBUG_BINS_GROUP_DIAG
-#define CONFIG_DEBUG_BINS_GROUP_DIAG 1
-#endif
-#ifndef CONFIG_DEBUG_BINS_GROUP_NET
-#define CONFIG_DEBUG_BINS_GROUP_NET 1
-#endif
-#ifndef CONFIG_DEBUG_BINS_GROUP_BT
-#define CONFIG_DEBUG_BINS_GROUP_BT 1
-#endif
-
 #ifndef CONFIG_SCHEDULER_POLICY
 #define CONFIG_SCHEDULER_POLICY 0
 #endif
@@ -348,6 +320,10 @@
 
 #ifndef CONFIG_ENABLE_SOUND
 #define CONFIG_ENABLE_SOUND 1
+#endif
+
+#ifndef CONFIG_CONSOLE_SERIAL_MIRROR
+#define CONFIG_CONSOLE_SERIAL_MIRROR 1
 #endif
 
 #ifndef CONFIG_ENABLE_VBE
@@ -430,6 +406,19 @@
 /* Product serial stays quiet; enable via menuconfig / -D for ktm deep runs. */
 #ifndef CONFIG_KTM_SERIAL_VERBOSE
 #define CONFIG_KTM_SERIAL_VERBOSE 0
+#endif
+
+#ifndef CONFIG_LOG_PROFILE_QUIET
+#define CONFIG_LOG_PROFILE_QUIET 0
+#endif
+#ifndef CONFIG_LOG_PROFILE_NORMAL
+#define CONFIG_LOG_PROFILE_NORMAL 1
+#endif
+#ifndef CONFIG_LOG_PROFILE_DEBUG
+#define CONFIG_LOG_PROFILE_DEBUG 0
+#endif
+#ifndef CONFIG_LOG_PROFILE_TRACE
+#define CONFIG_LOG_PROFILE_TRACE 0
 #endif
 
 /* Legacy aliases for code that still uses the old names */

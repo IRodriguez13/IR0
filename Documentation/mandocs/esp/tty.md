@@ -63,7 +63,7 @@ de userspace principal.
 
 ## 5. Límites del subsistema
 
-- La consola no debe saltarse devfs para I/O userspace (debug_bins también usan syscalls).
+- La consola no debe saltarse devfs para I/O userspace (ash y smokes usan syscalls).
 - Tablas scancode teclado bajo `#ifdef __x86_64__` en `keyboard.c`.
 - Copias user ioctl solo en handlers devfs en lista blanca (`architecture_guard.py`).
 

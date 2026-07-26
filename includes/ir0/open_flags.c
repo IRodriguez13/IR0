@@ -54,6 +54,9 @@ void ir0_open_flags_log_translation(int linux_raw, int ir0_flags)
     char flags[128];
     size_t off = 0;
 
+    if (!klog_trace_enabled(KLOG_TRACE_OPEN_ABI))
+        return;
+
     flags[0] = '\0';
 #define APPEND_FLAG(bit, name) do { \
 	if (ir0_flags & (bit)) { \
@@ -90,14 +93,14 @@ void ir0_open_flags_log_translation(int linux_raw, int ir0_flags)
 #undef APPEND_FLAG
 
     if (off == 0)
-        klog_info_fmt("OPEN_ABI", "raw=0x%x ir0=0x%x",
-                      (unsigned)(uint32_t)linux_raw,
-                      (unsigned)(uint32_t)ir0_flags);
+        klog_trace_fmt("OPEN_ABI", "raw=0x%x ir0=0x%x",
+                       (unsigned)(uint32_t)linux_raw,
+                       (unsigned)(uint32_t)ir0_flags);
     else
-        klog_info_fmt("OPEN_ABI", "raw=0x%x ir0=0x%x flags=%s",
-                      (unsigned)(uint32_t)linux_raw,
-                      (unsigned)(uint32_t)ir0_flags, flags);
+        klog_trace_fmt("OPEN_ABI", "raw=0x%x ir0=0x%x flags=%s",
+                       (unsigned)(uint32_t)linux_raw,
+                       (unsigned)(uint32_t)ir0_flags, flags);
 
     if (ir0_open_flags_ok_for_vfs(ir0_flags))
-        klog_info("OPEN_ABI", "CLASSIFY OPEN_ABI_TRANSLATION_LAYER_OK");
+        klog_trace("OPEN_ABI", "CLASSIFY OPEN_ABI_TRANSLATION_LAYER_OK");
 }

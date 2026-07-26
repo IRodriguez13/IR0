@@ -10,11 +10,18 @@
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
 #include <ir0/ktm/klog.h>
+#include <config.h>
+
+#ifndef CONFIG_CONSOLE_SERIAL_MIRROR
+#define CONFIG_CONSOLE_SERIAL_MIRROR 1
+#endif
 
 #define CONSOLE_BACKEND_READY_MSG "IR0 console ready\n"
 
 static int printk_to_screen = 1;
 static int userspace_gui_first_draw_tag;
+/* After handoff, do not mirror TTY glyphs to serial (human console vs bootlog). */
+static int tty_serial_mirror = 1;
 
 void console_backend_init(void)
 {
@@ -47,10 +54,22 @@ int console_backend_printk_to_screen(void)
     return printk_to_screen;
 }
 
+void console_backend_set_tty_serial_mirror(int on)
+{
+    tty_serial_mirror = on ? 1 : 0;
+}
+
 void console_backend_userspace_handoff(void)
 {
     printk_to_screen = 0;
-    typewriter_set_mode(TYPEWRITER_FAST);
+#if !CONFIG_CONSOLE_SERIAL_MIRROR
+    tty_serial_mirror = 0;
+#endif
+    /*
+     * Product console must be instant. TYPEWRITER_* delays are a demo effect
+     * only — never leave FAST/NORMAL/SLOW enabled after userspace attach.
+     */
+    typewriter_set_mode(TYPEWRITER_DISABLED);
     typewriter_console_clear(IR0_CONSOLE_COLOR_DEFAULT);
 
     if (console_backend_uses_framebuffer())
@@ -91,13 +110,17 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
 
         if (c == '\n')
         {
-            serial_putchar('\r');
-            serial_putchar('\n');
+            if (tty_serial_mirror)
+            {
+                serial_putchar('\r');
+                serial_putchar('\n');
+            }
             typewriter_vga_print("\n", color);
         }
         else
         {
-            serial_putchar(c);
+            if (tty_serial_mirror)
+                serial_putchar(c);
             typewriter_vga_print_char(c, color);
         }
     }

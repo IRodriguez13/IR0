@@ -17,32 +17,34 @@ fi
 DISK_OUT="${1:?disk output path}"
 
 cd "$ROOT"
-if [ ! -x setup/runit/stage-bin/runit_hostshare_payload_run ]; then
+# Product PID1 and rootfs live in the sibling userspace repository.
+US_ROOT="${IR0_USERSPACE_ROOT:-$ROOT/../IR0-userspace}"
+US_STAGE="$US_ROOT/out/stage-bin"
+if [ ! -x "$US_STAGE/runit_hostshare_payload_run" ]; then
 	echo "✗ missing runit_hostshare_payload_run — run make build-runit" >&2
 	exit 1
 fi
-if [ ! -x setup/runit/install-to-disk.sh ]; then
-	echo "✗ missing setup/runit/install-to-disk.sh" >&2
+if [ ! -x "$US_ROOT/scripts/install-to-disk.sh" ]; then
+	echo "✗ missing $US_ROOT/scripts/install-to-disk.sh (clone IR0-userspace)" >&2
 	exit 1
 fi
 
 dd if=/dev/zero of="$DISK_OUT" bs=1M count=200 status=none
 python3 scripts/inject_init_minix.py --format-large "$DISK_OUT"
 FASE50_BUSYBOX_BIN="${FASE50_BUSYBOX_BIN:-setup/pid1/fase50_busybox_real}" \
-	./setup/runit/install-to-disk.sh "$DISK_OUT"
-chmod +x setup/runit/inject-smoke-service.sh
-./setup/runit/inject-smoke-service.sh --run-only "$DISK_OUT" ktm \
-	setup/runit/stage-bin/runit_hostshare_payload_run
+	IR0_ROOT="$ROOT" "$US_ROOT/scripts/install-to-disk.sh" "$DISK_OUT"
+IR0_ROOT="$ROOT" "$US_ROOT/scripts/inject-smoke-service.sh" --run-only "$DISK_OUT" ktm \
+	"$US_STAGE/runit_hostshare_payload_run"
 
 if [ "$QUIET" = 1 ]; then
-	if [ ! -x setup/runit/stage-bin/runit_pause_run ]; then
+	if [ ! -x "$US_STAGE/runit_pause_run" ]; then
 		echo "✗ missing runit_pause_run — run make build-runit" >&2
 		exit 1
 	fi
 	python3 scripts/inject_init_minix.py "$DISK_OUT" \
-		setup/runit/stage-bin/runit_pause_run etc/runit/sv/console/run
+		"$US_STAGE/runit_pause_run" etc/runit/sv/console/run
 	python3 scripts/inject_init_minix.py "$DISK_OUT" \
-		setup/runit/stage-bin/runit_pause_run etc/runit/sv/logger/run
+		"$US_STAGE/runit_pause_run" etc/runit/sv/logger/run
 fi
 
 python3 scripts/verify_minix_rootfs.py "$DISK_OUT" /sbin/init /etc/runit/sv/ktm/run

@@ -28,5 +28,6 @@ void console_backend_write(const char *str, size_t len, uint8_t color);
 void console_backend_show_cursor(uint8_t color);
 int console_backend_cursor_x(void);
 void console_backend_userspace_handoff(void);
+void console_backend_set_tty_serial_mirror(int on);
 int console_backend_printk_to_screen(void);
 void console_backend_typewriter_init(void);
