@@ -58,60 +58,6 @@
 
 static void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
 
-/**
- * get_memory_usage - Get total memory used by kernel
- *
- * Returns: Total memory used in bytes (physical frames + heap)
- */
-static uint64_t get_memory_usage(void)
-{
-    size_t total_frames = 0;
-    size_t used_frames = 0;
-    size_t heap_total = 0;
-    size_t heap_used = 0;
-    uint64_t total_used = 0;
-    
-    /* Get physical memory statistics */
-    ir0_mm_pmm_stats(&total_frames, &used_frames, NULL);
-    
-    /* Get heap allocator statistics */
-    ir0_mm_alloc_stats(&heap_total, &heap_used, NULL);
-    
-    /* Calculate total used memory:
-     * - Physical frames: used_frames * 4KB per frame
-     * - Heap: heap_used bytes
-     */
-    total_used = ((uint64_t)used_frames * IR0_MM_PAGE_SIZE) + (uint64_t)heap_used;
-    
-    return total_used;
-}
-
-/**
- * get_total_memory - Get total available memory
- *
- * Returns: Total memory available in bytes (physical frames + heap)
- */
-static uint64_t get_total_memory(void)
-{
-    size_t total_frames = 0;
-    size_t heap_total = 0;
-    uint64_t total = 0;
-    
-    /* Get physical memory statistics */
-    ir0_mm_pmm_stats(&total_frames, NULL, NULL);
-    
-    /* Get heap allocator statistics */
-    ir0_mm_alloc_stats(&heap_total, NULL, NULL);
-    
-    /* Calculate total available memory:
-     * - Physical frames: total_frames * 4KB per frame
-     * - Heap: heap_total bytes
-     */
-    total = ((uint64_t)total_frames * IR0_MM_PAGE_SIZE) + (uint64_t)heap_total;
-    
-    return total;
-}
-
 /*
  * /proc/ps: raw data only, one line per process, tab-separated.
  * pid\tppid\tstate\tuid\tname (OSDev-style: PID PPID S UID CMD)
@@ -404,29 +350,47 @@ int proc_is_virtual_subdir(const char *path)
            strcmp(filename, "pid_subdir") == 0;
 }
 
-/* /proc/meminfo: raw data only. One line: total_kb\tfree_kb\tused_kb */
+/*
+ * /proc/meminfo — labelled kB from PMM frames (PAGE_SIZE = 4 KiB).
+ * MemUsed + MemFree == MemTotal (PMM-managed region only).
+ */
 int proc_meminfo_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
-        return -1;
-    memset(buf, 0, count);
-    uint64_t total = get_total_memory();
-    uint64_t used = get_memory_usage();
-    uint64_t free = total - used;
-    uint64_t total_kb = total / BYTES_PER_KB;
-    uint64_t free_kb = free / BYTES_PER_KB;
-    uint64_t used_kb = used / BYTES_PER_KB;
-    char total_kb_str[24];
-    char free_kb_str[24];
-    char used_kb_str[24];
-    proc_u64_to_dec(total_kb, total_kb_str, sizeof(total_kb_str));
-    proc_u64_to_dec(free_kb, free_kb_str, sizeof(free_kb_str));
-    proc_u64_to_dec(used_kb, used_kb_str, sizeof(used_kb_str));
-    int len = snprintf(buf, count, "%s\t%s\t%s\n", total_kb_str, free_kb_str, used_kb_str);
-    if (len < 0) return -1;
-    if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
-    buf[len] = '\0';
-    return len;
+	size_t total_frames = 0;
+	size_t used_frames = 0;
+	size_t free_frames = 0;
+	uint64_t total_kb;
+	uint64_t used_kb;
+	uint64_t free_kb;
+	int len;
+
+	if (VALIDATE_BUFFER(buf, count) != 0)
+		return -1;
+	memset(buf, 0, count);
+
+	ir0_mm_pmm_stats(&total_frames, &used_frames, &free_frames);
+	total_kb = ((uint64_t)total_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
+	used_kb = ((uint64_t)used_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
+	free_kb = ((uint64_t)free_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
+
+	len = snprintf(buf, count,
+		       "MemTotal:       %llu kB\n"
+		       "MemFree:        %llu kB\n"
+		       "MemUsed:        %llu kB\n"
+		       "PageSize:       %u kB\n",
+		       (unsigned long long)total_kb,
+		       (unsigned long long)free_kb,
+		       (unsigned long long)used_kb,
+		       (unsigned)(IR0_MM_PAGE_SIZE / BYTES_PER_KB));
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	buf[len] = '\0';
+	return len;
 }
 
 /* /proc/[pid]/status: raw data only. One line: name\tstate\tpid\tppid\tuid\tgid */
@@ -518,20 +482,43 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
     return len;
 }
 
-/* /proc/uptime: raw data only. One line: uptime_sec */
+/*
+ * /proc/uptime — "<seconds_uptime> <seconds_idle>\n" (Unix/BusyBox contract).
+ * Values are real seconds from the monotonic clock / idle tick counter.
+ */
 int proc_uptime_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
-        return -1;
-    memset(buf, 0, count);
-    uint64_t uptime = get_system_time() / 1000;
-    char uptime_str[24];
-    proc_u64_to_dec(uptime, uptime_str, sizeof(uptime_str));
-    int len = snprintf(buf, count, "%s\n", uptime_str);
-    if (len < 0) return -1;
-    if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
-    buf[len] = '\0';
-    return len;
+	uint64_t up_ms;
+	uint64_t idle_ms;
+	uint64_t up_sec;
+	uint64_t idle_sec;
+	unsigned up_frac;
+	unsigned idle_frac;
+	int len;
+
+	if (VALIDATE_BUFFER(buf, count) != 0)
+		return -1;
+	memset(buf, 0, count);
+
+	up_ms = clock_get_uptime_milliseconds();
+	idle_ms = clock_get_idle_milliseconds();
+	up_sec = up_ms / 1000;
+	idle_sec = idle_ms / 1000;
+	up_frac = (unsigned)((up_ms % 1000) / 10);     /* hundredths */
+	idle_frac = (unsigned)((idle_ms % 1000) / 10);
+
+	len = snprintf(buf, count, "%llu.%02u %llu.%02u\n",
+		       (unsigned long long)up_sec, up_frac,
+		       (unsigned long long)idle_sec, idle_frac);
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	buf[len] = '\0';
+	return len;
 }
 
 /* /proc/version: raw data only. One line: version\tdate\ttime\tuser\thost\tcompiler */
@@ -684,32 +671,34 @@ int proc_cpuinfo_read(char *buf, size_t count)
     return (int)off;
 }
 
-/* /proc/loadavg: raw data only. One line: load1\tload5\tload15\trunning\ttotal\tlast_pid */
+/*
+ * /proc/loadavg — "0.03 0.01 0.00 1/7 123\n"
+ * EMA from scheduler samples (see clock_get_loadavg); not raw tick noise.
+ */
 int proc_loadavg_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
-        return -1;
-    memset(buf, 0, count);
-    size_t running = 0, ready = 0;
-    process_t *p = process_list;
-    while (p) {
-        if (p->state == PROCESS_RUNNING) running++;
-        else if (p->state == PROCESS_READY) ready++;
-        p = p->next;
-    }
-    uint32_t load1_x100 = (uint32_t)(running * 100 + ready * 50);
-    uint32_t load5_x100 = (uint32_t)(running * 100 + ready * 40);
-    uint32_t load15_x100 = (uint32_t)(running * 100 + ready * 30);
-    int last_pid = current_process ? (int)current_process->task.pid : 0;
-    int len = snprintf(buf, count, "%u.%02u\t%u.%02u\t%u.%02u\t%u\t%u\t%d\n",
-                       load1_x100 / 100, load1_x100 % 100,
-                       load5_x100 / 100, load5_x100 % 100,
-                       load15_x100 / 100, load15_x100 % 100,
-                       (unsigned)running, (unsigned)(running + ready), last_pid);
-    if (len < 0) return -1;
-    if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }
-    buf[len] = '\0';
-    return len;
+	uint32_t l1 = 0, l5 = 0, l15 = 0;
+	unsigned runnable = 0, nprocs = 0;
+	int last_pid = 0;
+	int len;
+
+	if (VALIDATE_BUFFER(buf, count) != 0)
+		return -1;
+	memset(buf, 0, count);
+
+	clock_get_loadavg(&l1, &l5, &l15, &runnable, &nprocs, &last_pid);
+	len = snprintf(buf, count, "%u.%02u %u.%02u %u.%02u %u/%u %d\n",
+		       l1 / 100, l1 % 100, l5 / 100, l5 % 100, l15 / 100,
+		       l15 % 100, runnable, nprocs, last_pid);
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	buf[len] = '\0';
+	return len;
 }
 
 static void proc_u64_to_dec(uint64_t value, char *out, size_t out_len)
@@ -774,9 +763,9 @@ static void proc_format_size(uint64_t sectors, char *out, size_t out_size, int *
 }
 
 /*
- * /proc/blockdevices: raw data (tab-separated).
- * One line per device: type\tname\tmaj\tmin\tsectors\tsize_human\tmodel\tserial
- * type = "disk" | "part". size_human = human-readable (e.g. 128M, 1G).
+ * /proc/blockdevices — tab-separated; sectors are 512-byte units.
+ * Header documents the contract; size_human uses MiB/GiB from those sectors.
+ * Columns: type name maj min sectors_512 size_human model serial
  */
 int proc_blockdevices_read(char *buf, size_t count)
 {
@@ -784,6 +773,18 @@ int proc_blockdevices_read(char *buf, size_t count)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
+    {
+	int nh = snprintf(buf, count,
+			  "# type\tname\tmaj\tmin\tsectors_512\tsize\tmodel\tserial\n");
+	if (nh < 0)
+		return -1;
+	if ((size_t)nh >= count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	off = (size_t)nh;
+    }
     for (uint8_t i = 0; i < 4; i++)
     {
         const char *disk_name = ir0_block_legacy_name(i);
@@ -1000,60 +1001,67 @@ struct iomem_ctx {
 
 static int iomem_mmio_cb(uint64_t start, uint64_t end, const char *name, void *ctx)
 {
-    struct iomem_ctx *c = (struct iomem_ctx *)ctx;
-    char start_str[24];
-    char end_str[24];
-    int n;
+	struct iomem_ctx *c = (struct iomem_ctx *)ctx;
+	int n;
 
-    proc_u64_to_dec(start, start_str, sizeof(start_str));
-    proc_u64_to_dec(end, end_str, sizeof(end_str));
-    n = snprintf(c->buf + c->off, (c->off < c->count) ? (c->count - c->off) : 0,
-                 "%s\t%s\t%s\n", start_str, end_str, name);
-    if (n > 0 && (size_t)n < c->count - c->off)
-    {
-        c->off += (size_t)n;
-        return 0;
-    }
-    return 1;
+	/* Registry stores inclusive end (see resource_register_mmio callers). */
+	n = snprintf(c->buf + c->off, (c->off < c->count) ? (c->count - c->off) : 0,
+		     "%016llx-%016llx : %s\n",
+		     (unsigned long long)start, (unsigned long long)end,
+		     name ? name : "MMIO");
+	if (n > 0 && (size_t)n < c->count - c->off)
+	{
+		c->off += (size_t)n;
+		return 0;
+	}
+	return 1;
 }
 
-/* /proc/iomem: raw data only. One line per region: start\tend\tname */
+/*
+ * /proc/iomem — inclusive hex ranges from the real PMM window + MMIO registry.
+ * "System RAM" is only the region pmm_init manages (not a hardcoded 16 MiB).
+ */
 int proc_iomem_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
-        return -1;
-    memset(buf, 0, count);
-    size_t total_frames = 0;
-    size_t off = 0;
-    char ram_end_str[24];
-    uint64_t ram_end;
-    int n;
+	size_t off = 0;
+	uintptr_t ram_start;
+	uintptr_t ram_end_excl;
+	uint64_t ram_end_incl;
+	int n;
 
-    ir0_mm_pmm_stats(&total_frames, NULL, NULL);
-    ram_end = (uint64_t)total_frames * IR0_MM_PAGE_SIZE;
-    if (ram_end > 0)
-        ram_end--;
-    proc_u64_to_dec(ram_end, ram_end_str, sizeof(ram_end_str));
-    n = snprintf(buf, count, "0\t%s\tSystem RAM\n", ram_end_str);
-    if (n < 0)
-        return -1;
-    if ((size_t)n >= count)
-    {
-        buf[count - 1] = '\0';
-        return (int)(count - 1);
-    }
-    off = (size_t)n;
+	if (VALIDATE_BUFFER(buf, count) != 0)
+		return -1;
+	memset(buf, 0, count);
 
-    {
-        struct iomem_ctx ctx = { .buf = buf, .count = count, .off = off };
+	ram_start = ir0_mm_pmm_start();
+	ram_end_excl = ir0_mm_pmm_end();
+	if (ram_end_excl > ram_start)
+	{
+		ram_end_incl = (uint64_t)ram_end_excl - 1ULL;
+		n = snprintf(buf, count,
+			     "%016llx-%016llx : System RAM (PMM-managed)\n",
+			     (unsigned long long)ram_start,
+			     (unsigned long long)ram_end_incl);
+		if (n < 0)
+			return -1;
+		if ((size_t)n >= count)
+		{
+			buf[count - 1] = '\0';
+			return (int)(count - 1);
+		}
+		off = (size_t)n;
+	}
 
-        resource_foreach_mmio(iomem_mmio_cb, &ctx);
-        off = ctx.off;
-    }
+	{
+		struct iomem_ctx ctx = { .buf = buf, .count = count, .off = off };
 
-    if (off < count)
-        buf[off] = '\0';
-    return (int)off;
+		resource_foreach_mmio(iomem_mmio_cb, &ctx);
+		off = ctx.off;
+	}
+
+	if (off < count)
+		buf[off] = '\0';
+	return (int)off;
 }
 
 /* /proc/kmsg: kernel log ring buffer (read-only, no serial side effects). */
@@ -1413,8 +1421,10 @@ int proc_write(int fd, const char *buf, size_t count)
                     return -EBADF;
 
                 const char *path = NULL;
-                if (current_process->fd_table[fd].in_use)
-                    path = current_process->fd_table[fd].path;
+                fd_entry_t *fdt = process_fd_table(current_process);
+
+                if (fdt && fdt[fd].in_use)
+                    path = fdt[fd].path;
 
                 if (!path || strncmp(path, "/proc/", 6) != 0)
                     return -EACCES;

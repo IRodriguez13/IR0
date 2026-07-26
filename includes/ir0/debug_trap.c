@@ -76,7 +76,7 @@ uint64_t ir0_rflags_sanitize_user(uint64_t rflags)
 
 	/*
 	 * Always force IF for ring-3. Context-switch save under cli can
-	 * stash IF=0 into task.rflags; returning that to ash freezes the
+	 * stash IF=0 into task.arch.rflags; returning that to ash freezes the
 	 * keyboard (no IRQ1) after login.
 	 */
 	out = rflags | 2ULL | 0x200ULL;

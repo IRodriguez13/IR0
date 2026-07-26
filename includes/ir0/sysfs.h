@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <ir0/stat.h>
 #include <ir0/types.h>
+#include <ir0/vfs.h>
 
 /* /sys filesystem interface
  *
@@ -50,5 +51,29 @@ int sys_devices_cpu_read_reg(char *buf, size_t count, unsigned cpu);
 int sys_devices_cpu_online_read_reg(char *buf, size_t count, unsigned cpu);
 int sys_devices_cpu_online_write_reg(unsigned cpu, const char *buf, size_t count);
 int sys_devices_block_read_reg(char *buf, size_t count);
+int sys_kernel_build_read_reg(char *buf, size_t count);
+int sys_kernel_features_read_reg(char *buf, size_t count);
+int sys_class_net_list_read_reg(char *buf, size_t count);
+int sys_class_net_attr_read_reg(char *buf, size_t count, unsigned attr);
+int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
+				  unsigned attr);
+int sys_class_net_parse_attr(const char *attr_name);
+int sys_class_net_find_name(const char *ifname);
+int sys_class_net_collect_children(const char *dir_path,
+				   struct vfs_dirent *entries, int max_entries,
+				   int start_n);
+int sys_class_net_path_has_children(const char *path);
 
+/* Attr ids for /sys/class/net/<iface>/ attributes */
+enum
+{
+	SYS_NET_ATTR_NAME = 1,
+	SYS_NET_ATTR_ADDRESS = 2,
+	SYS_NET_ATTR_MTU = 3,
+	SYS_NET_ATTR_STATE = 4,
+	SYS_NET_ATTR_RX_PACKETS = 5,
+	SYS_NET_ATTR_TX_PACKETS = 6,
+	SYS_NET_ATTR_RX_BYTES = 7,
+	SYS_NET_ATTR_TX_BYTES = 8
+};
 

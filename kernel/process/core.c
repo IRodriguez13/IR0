@@ -14,14 +14,39 @@
 
 #include "process_internal.h"
 #include <ir0/process_ctx_invariant.h>
+#include <ir0/arch_task_ops.h>
+#include <ir0/arch_syscall_frame.h>
 
 static pid_t next_pid = 2;
+
+static void syscall_frame_to_arch(const syscall_user_frame_t *sf,
+				  arch_task_syscall_frame_t *out)
+{
+	if (!sf || !out)
+		return;
+
+	out->rip = sf->rip;
+	out->rflags = sf->rflags;
+	out->rsp = sf->rsp;
+	out->rbx = sf->rbx;
+	out->rbp = sf->rbp;
+	out->r12 = sf->r12;
+	out->r13 = sf->r13;
+	out->r14 = sf->r14;
+	out->r15 = sf->r15;
+	out->rdi = sf->rdi;
+	out->rsi = sf->rsi;
+	out->rdx = sf->rdx;
+	out->r10 = sf->r10;
+	out->r8 = sf->r8;
+	out->r9 = sf->r9;
+}
 
 int process_task_kernel_ret_rip_bad(const task_t *t)
 {
 	if (!t)
 		return 0;
-	return process_cs_rip_kernel_ret_bad((uint64_t)t->cs, t->rip);
+	return process_cs_rip_kernel_ret_bad((uint64_t)task_get_cs(t), task_get_ip(t));
 }
 
 uint64_t process_list_count(void)
@@ -75,6 +100,16 @@ pid_t process_get_next_pid(void)
 	return pid;
 }
 
+/* Highest PID already handed out (0 if none). */
+pid_t process_last_assigned_pid(void)
+{
+	uint64_t irq_flags = process_irq_save();
+	pid_t last = (next_pid > 1) ? (pid_t)(next_pid - 1) : 0;
+
+	process_irq_restore(irq_flags);
+	return last;
+}
+
 /*
  * KTM boot scenarios (and similar early probes) may advance next_pid.
  * runit-init / BusyBox init require getpid()==1. Restore the allocator so the
@@ -98,21 +133,8 @@ process_t *process_get_current(void)
 }
 
 /*
- * irq_save_user_frame - Copy the full user context from the IRQ stub stack into
- * the current task.
- *
- * @frame: pointer to the iretq frame on the ISR stub stack
- *         (frame[0..6] = int_no, err, RIP, CS, RFLAGS, RSP, SS). The 15 saved
- *         GPRs sit immediately BELOW it (isr_common_stub_64 push order), so they
- *         are reachable at frame[-1..-15]:
- *           [-1]=rax [-2]=rcx [-3]=rdx [-4]=rbx [-5]=rbp [-6]=rsi [-7]=rdi
- *           [-8]=r8  [-9]=r9  [-10]=r10 [-11]=r11 [-12]=r12 [-13]=r13
- *           [-14]=r14 [-15]=r15
- *
- * Saving the GPRs (not just RIP/RSP/RFLAGS) keeps task_t coherent if a user task
- * is ever resumed via switch_context_x64 .user_iretq_resume from this snapshot
- * (e.g. when the IRQ preempt path is wired): a partial save would resume the
- * task with stale GPRs and corrupt user computation.
+ * irq_save_user_frame - Copy user context from an IRQ stub frame into the
+ * current task. Frame layout is ISA-private (decoded in arch_task_ops).
  */
 void irq_save_user_frame(uint64_t *frame)
 {
@@ -125,48 +147,17 @@ void irq_save_user_frame(uint64_t *frame)
 	if (!p || p->mode != USER_MODE)
 		return;
 
-	if ((frame[3] & 3U) != 3U)
+	if (!arch_irq_frame_is_user(frame))
 		return;
 
 #if CONFIG_DEBUG_ISRABI
 	klog_debug_fmt("ISR", "[ISRABI][IRQ_SAVE] pid=%x src_int=%llx src_err=%llx src_rip=%llx src_cs=%llx src_rflags=%llx src_rsp=%llx src_ss=%llx", (unsigned)(current_process ? (uint32_t)current_process->task.pid : 0), (unsigned long long)(frame[0]), (unsigned long long)(frame[1]), (unsigned long long)(frame[2]), (unsigned long long)(frame[3]), (unsigned long long)(frame[4]), (unsigned long long)(frame[5]), (unsigned long long)(frame[6]));
 #endif
 
-	p->task.rip = frame[2];
-	p->task.rflags = ir0_rflags_sanitize_user((frame[4] | 2ULL) | RFLAGS_IF);
-	p->task.rsp = frame[5];
-
-	/* Full user GPR set from the stub stack (below the iretq frame). */
-	p->task.rax = frame[-1];
-	p->task.rcx = frame[-2];
-	p->task.rdx = frame[-3];
-	p->task.rbx = frame[-4];
-	p->task.rbp = frame[-5];
-	p->task.rsi = frame[-6];
-	p->task.rdi = frame[-7];
-	p->task.r8 = frame[-8];
-	p->task.r9 = frame[-9];
-	p->task.r10 = frame[-10];
-	p->task.r11 = frame[-11];
-	p->task.r12 = frame[-12];
-	p->task.r13 = frame[-13];
-	p->task.r14 = frame[-14];
-	p->task.r15 = frame[-15];
-
-	if ((frame[3] & 3U) == 3U)
-	{
-		p->task.cs = (uint16_t)USER_CODE_SEL;
-		p->task.ss = (uint16_t)USER_DATA_SEL;
-	}
-	else
-	{
-		p->task.cs = (uint16_t)frame[3];
-		p->task.ss = (uint16_t)frame[6];
-	}
-	/* irq_frame_saved is set only when blocking in process_wait(), not on timer IRQ. */
+	arch_task_save_irq_user_frame(&p->task, frame);
 
 #if CONFIG_DEBUG_ISRABI
-	klog_debug_fmt("ISR", "[ISRABI][IRQ_SAVE] task_rip=%llx task_rsp=%llx task_cs=%llx task_ss=%llx task_rflags=%llx", (unsigned long long)(p->task.rip), (unsigned long long)(p->task.rsp), (unsigned long long)((uint64_t)p->task.cs), (unsigned long long)((uint64_t)p->task.ss), (unsigned long long)(p->task.rflags));
+	klog_debug_fmt("ISR", "[ISRABI][IRQ_SAVE] task_rip=%llx task_rsp=%llx task_cs=%llx task_ss=%llx task_rflags=%llx", (unsigned long long)(task_get_ip(&p->task)), (unsigned long long)(task_get_sp(&p->task)), (unsigned long long)((uint64_t)task_get_cs(&p->task)), (unsigned long long)((uint64_t)task_get_ss(&p->task)), (unsigned long long)(task_get_flags(&p->task)));
 #endif
 }
 
@@ -214,75 +205,18 @@ int process_validate_userspace_buffer(const void *buf, size_t size)
 	return 0;
 }
 
-#if defined(__x86_64__) || defined(__amd64__)
-extern uint64_t fase29_entry_rip;
-
 /*
- * process_capture_syscall_frame - Snapshot user GPRs at syscall dispatch entry.
- *
- * Must run before nested C calls (fork, wait4, execve path) clobber the
- * syscall kernel stack layout (Linux pt_regs at entry).
- */
-
-/*
- * process_capture_syscall_frame_at_entry - Linux SAVE_ALL at syscall entry.
- *
- * @frame_base: RSP at the rbx slot (see syscall_insn_entry_64.asm).
- * @rip_hw: optional hardware user RIP; asm does not pass this today.
+ * process_capture_syscall_frame_at_entry - Snapshot user GPRs at syscall entry.
+ * Layout decode is ISA-private (arch_syscall_frame).
  */
 void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw)
 {
-	process_t *p = current_process;
-	syscall_user_frame_t *sf;
-
-	if (!frame_base || !p || p->mode != USER_MODE)
-		return;
-
-	sf = &p->syscall_frame;
-	/*
-	 * frame_base[7] is the user RIP (rcx) pushed at this syscall entry.
-	 * fase29_entry_rip is written at the *previous* syscall's sysret and must
-	 * not override the current entry snapshot (breaks fork child iretq).
-	 * rip_hw is not passed from asm today; only use as last resort.
-	 */
-	sf->rip = frame_base[7];
-	if (!sf->rip && rip_hw)
-		sf->rip = rip_hw;
-	sf->rflags = frame_base[6];
-	sf->rsp = frame_base[8];
-	sf->rbx = frame_base[0];
-	sf->rbp = frame_base[1];
-	sf->r12 = frame_base[2];
-	sf->r13 = frame_base[3];
-	sf->r14 = frame_base[4];
-	sf->r15 = frame_base[5];
-	/* Linux ABI args sit below the callee-saved block on the syscall stack. */
-	sf->rdi = frame_base[-1];
-	sf->rsi = frame_base[-2];
-	sf->rdx = frame_base[-3];
-	sf->r10 = frame_base[-4];
-	sf->r8 = frame_base[-5];
-	sf->r9 = frame_base[-6];
-	/*
-	 * Mark this task as having a fresh Linux pt_regs snapshot for this entry.
-	 * Only the `syscall` insn path reaches here; int 0x80 tasks never set it,
-	 * which keeps the cooperative syscall_frame resume restricted to musl.
-	 *
-	 * syscall_frame is the pt_regs source of truth. Soft-sync into task only
-	 * when CS is still user (see process_sync_task_user_ip_from_syscall_frame)
-	 * so IRQ/preempt mirrors stay coherent; never sync onto KERNEL CS.
-	 */
-	p->syscall_frame_fresh = 1;
-	process_sync_task_user_ip_from_syscall_frame(p);
+	arch_process_capture_syscall_frame_at_entry(current_process, frame_base,
+						    rip_hw);
 }
 
 /*
- * process_sync_task_user_ip_from_syscall_frame - Soft mirror of pt_regs → task.
- *
- * Linux keeps user IP only in pt_regs during a syscall. IR0 still mirrors into
- * task.rip while CS is user so UP preempt/iretq paths see a coherent soft copy.
- * Never overlay user RIP onto KERNEL CS or while want_kernel_ret (Class B).
- * Exit-to-user must use process_apply_syscall_frame_to_task.
+ * Soft mirror of syscall_frame → task while CS is still user (Class B safe).
  */
 void process_sync_task_user_ip_from_syscall_frame(process_t *p)
 {
@@ -290,15 +224,18 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p)
 
 	if (!p || p->mode != USER_MODE)
 		return;
-	if ((p->task.cs & 3u) == 0u || p->want_kernel_ret)
+	if (!task_cs_is_user(&p->task) || p->want_kernel_ret)
 		return;
 
 	sf = &p->syscall_frame;
-	p->task.rip = sf->rip;
-	p->task.rsp = sf->rsp;
-	p->task.rflags = ir0_rflags_sanitize_user(sf->rflags | 2ULL);
-	p->task.rcx = sf->rip;
-	p->task.r11 = p->task.rflags;
+	{
+		arch_task_syscall_frame_t arch_sf;
+
+		arch_sf.rip = sf->rip;
+		arch_sf.rflags = sf->rflags;
+		arch_sf.rsp = sf->rsp;
+		arch_task_sync_syscall_soft_mirror(&p->task, &arch_sf);
+	}
 }
 
 void process_capture_syscall_frame(process_t *p)
@@ -309,67 +246,18 @@ void process_capture_syscall_frame(process_t *p)
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
                                          uint64_t rax)
 {
+	arch_task_syscall_frame_t arch_sf;
+
 	if (!task || !sf)
 		return;
 
-	task->rip = sf->rip;
-	task->rsp = sf->rsp;
-	task->rflags = ir0_rflags_sanitize_user(sf->rflags | 2ULL);
-	task->rax = rax;
-	task->rbx = sf->rbx;
-	task->rbp = sf->rbp;
-	task->r12 = sf->r12;
-	task->r13 = sf->r13;
-	task->r14 = sf->r14;
-	task->r15 = sf->r15;
-	task->rdi = sf->rdi;
-	task->rsi = sf->rsi;
-	task->rdx = sf->rdx;
-	task->r10 = sf->r10;
-	task->r8 = sf->r8;
-	task->r9 = sf->r9;
-	task->rcx = sf->rip;
-	task->r11 = ir0_rflags_sanitize_user(sf->rflags | 2ULL);
-	task->cs = USER_CODE_SEL;
-	task->ss = USER_DATA_SEL;
-	task->ds = USER_DATA_SEL;
-	task->es = USER_DATA_SEL;
-	task->fs = USER_DATA_SEL;
-	task->gs = USER_DATA_SEL;
+	syscall_frame_to_arch(sf, &arch_sf);
+	arch_task_apply_syscall_frame(task, &arch_sf, rax);
 }
 
-/*
- * process_syscall_restore_exit_regs - Linux RESTORE_ALL before sysret.
- *
- * Repopulate the syscall stack pt_regs mirror from current->syscall_frame so
- * nested C in fork/wait4 cannot clobber user GPRs (musl TLS in %rdx, etc.).
- *
- * @stack_r9_slot: RSP at the saved-r9 word (see syscall_insn_entry_64.asm).
- */
 void process_syscall_restore_exit_regs(uint64_t *stack_r9_slot)
 {
-	process_t *p = current_process;
-	const syscall_user_frame_t *sf;
-
-	if (!stack_r9_slot || !p || p->mode != USER_MODE)
-		return;
-
-	sf = &p->syscall_frame;
-	stack_r9_slot[0] = sf->r9;
-	stack_r9_slot[1] = sf->r8;
-	stack_r9_slot[2] = sf->r10;
-	stack_r9_slot[3] = sf->rdx;
-	stack_r9_slot[4] = sf->rsi;
-	stack_r9_slot[5] = sf->rdi;
-	stack_r9_slot[6] = sf->rbx;
-	stack_r9_slot[7] = sf->rbp;
-	stack_r9_slot[8] = sf->r12;
-	stack_r9_slot[9] = sf->r13;
-	stack_r9_slot[10] = sf->r14;
-	stack_r9_slot[11] = sf->r15;
-	stack_r9_slot[12] = sf->rflags;
-	stack_r9_slot[13] = sf->rip;
-	p->fork_resync_syscall_stack = 0;
+	arch_process_syscall_restore_exit_regs(current_process, stack_r9_slot);
 }
 
 void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax)
@@ -445,19 +333,14 @@ void process_reset_blocked_syscall_state(process_t *p)
 
 static void process_apply_kernel_ret_segments(process_t *p)
 {
-	p->task.cs = KERNEL_CODE_SEL;
-	p->task.ss = KERNEL_DATA_SEL;
-	p->task.ds = KERNEL_DATA_SEL;
-	p->task.es = KERNEL_DATA_SEL;
-	p->task.fs = KERNEL_DATA_SEL;
-	p->task.gs = KERNEL_DATA_SEL;
+	arch_task_apply_kernel_segments(&p->task);
 }
 
 /*
  * process_arm_kernel_syscall_sleep - Linux-like: mark blocked syscall for
  * kernel_ret resume after switch_context save (not via user RIP).
  *
- * User regs live in syscall_frame (pt_regs). If task.rip still looks like
+ * User regs live in syscall_frame (pt_regs). If task.arch.rip still looks like
  * userspace (stale from a prior iretq), only set want_kernel_ret — never pair
  * KERNEL_CS with that RIP. Outgoing save stores kernel [rsp] + CPU CS;
  * process_after_task_save clears the flag. If rip is already kernel .text,
@@ -468,7 +351,7 @@ void process_arm_kernel_syscall_sleep(process_t *p)
 	if (!p || p->mode != USER_MODE)
 		return;
 
-	if (process_rip_in_user_range(p->task.rip))
+	if (process_rip_in_user_range(task_get_ip(&p->task)))
 	{
 		p->want_kernel_ret = 1;
 		return;
@@ -496,7 +379,7 @@ void process_after_task_save(task_t *prev)
 	if (!p || p->mode != USER_MODE || !p->want_kernel_ret)
 		return;
 
-	if (process_rip_in_user_range(prev->rip))
+	if (process_rip_in_user_range(task_get_ip(prev)))
 		return;
 
 	process_apply_kernel_ret_segments(p);
@@ -509,28 +392,12 @@ void process_restore_user_task_segments(process_t *p)
 		return;
 
 	p->want_kernel_ret = 0;
-	p->task.cs = USER_CODE_SEL;
-	p->task.ss = USER_DATA_SEL;
-	p->task.ds = USER_DATA_SEL;
-	p->task.es = USER_DATA_SEL;
-	p->task.fs = USER_DATA_SEL;
-	p->task.gs = USER_DATA_SEL;
+	arch_task_apply_user_segments(&p->task);
 }
 
 
-#if defined(__x86_64__) || defined(__amd64__)
 void process_save_user_context_from_irq_frame(uint64_t *gpr_stack)
 {
-	/*
-	 * gpr_stack points at the saved-RAX slot on the ISR stub stack; the
-	 * iretq frame begins 15 qwords above (see isr_common_stub_64 / sched_resched.c).
-	 */
-	if (!gpr_stack)
-		return;
-
-	irq_save_user_frame(gpr_stack + 15);
+	arch_process_save_user_context_from_irq(gpr_stack);
 }
-#endif
-
-#endif /* __x86_64__ */
 

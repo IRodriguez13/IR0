@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-only
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2025  Iván Rodriguez
@@ -11,7 +10,10 @@
  * Description: ELF binary loader for user programs with segment loading and process creation
  */
 
+/* SPDX-License-Identifier: GPL-3.0-only */
+
 #include "process.h"
+#include <ir0/arch_task.h>
 #include <ir0/sched.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -349,7 +351,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
     klog_debug_fmt("ELF", "SERIAL: ELF: Loading %x program segments\n", (unsigned)(phnum));
 
     /* Get process page directory */
-    uint64_t *pml4 = process->page_directory;
+    uint64_t *pml4 = process_pgd(process);
     if (!pml4)
     {
         klog_debug("ELF", "SERIAL: ELF: Process has no page directory\n");
@@ -494,20 +496,17 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     /* We just need to set the entry point (will be done after loading segments) */
     
     /* Set entry point (will be adjusted after segments are loaded) */
-    process->task.rip = header->e_entry;
-    process->task.cs = 0x1B; // User code segment (GDT entry 3, RPL=3)
-    process->task.ss = 0x23; // User data segment (GDT entry 4, RPL=3)
-    process->task.ds = 0x23; // User data segment
-    process->task.es = 0x23; // User data segment
+    task_set_ip(&process->task, header->e_entry);
+    arch_task_set_user_segments(&process->task);
 
     /* Stack is already set up by spawn() at 0x7FFFF000 */
 
     /* Enable interrupts in user mode */
-    process->task.rflags = ir0_rflags_sanitize_user(0x202ULL);
+    task_set_flags(&process->task, ir0_rflags_sanitize_user(0x202ULL));
 
     klog_debug_fmt("ELF", "SERIAL: ELF: Process created with PID %x", (unsigned)(process->task.pid));
-    klog_debug_fmt("ELF", "SERIAL: ELF: Entry point: 0x%x", (unsigned)((uint32_t)process->task.rip));
-    klog_debug_fmt("ELF", "SERIAL: ELF: Stack: 0x%x", (unsigned)((uint32_t)process->task.rsp));
+    klog_debug_fmt("ELF", "SERIAL: ELF: Entry point: 0x%x", (unsigned)((uint32_t)task_get_ip(&process->task)));
+    klog_debug_fmt("ELF", "SERIAL: ELF: Stack: 0x%x", (unsigned)((uint32_t)task_get_sp(&process->task)));
 
     return process;
 }
@@ -613,7 +612,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     uint64_t random_base;
     uint64_t strings_base;
     uint64_t current_string_ptr;
-    uint64_t *pml4 = process->page_directory;
+    uint64_t *pml4 = process_pgd(process);
 
     stack_base &= ~0xFULL;
 
@@ -766,7 +765,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
             { AT_RANDOM, random_base },
             { AT_PAGESZ, 4096 },
             { AT_BASE, at_base },
-            { AT_ENTRY, process->task.rip },
+            { AT_ENTRY, task_get_ip(&process->task) },
             { AT_NULL, 0 },
         };
         size_t i;
@@ -788,13 +787,13 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         }
     }
 
-    process->task.rsp = argc_slot;
-    process->task.rbp = argc_slot;
-    
+    task_set_sp(&process->task, argc_slot);
+    arch_task_set_frame_pointer(&process->task, argc_slot);
+
     /* Set registers for x86-64 ABI: rdi=argc, rsi=argv, rdx=envp */
-    process->task.rdi = (uint64_t)argc;
-    process->task.rsi = argv_array;
-    process->task.rdx = envp_array;
+    task_set_rdi(&process->task, (uint64_t)argc);
+    task_set_rsi(&process->task, argv_array);
+    task_set_rdx(&process->task, envp_array);
 
     kfree(argv_ptrs);
     kfree(envp_ptrs);
@@ -844,8 +843,6 @@ static uint64_t fase41_count_vmas(const process_t *proc)
  */
 int kexecve(const char *path, char *const argv[], char *const envp[])
 {
-    klog_debug_fmt("ELF", "SERIAL: ELF: ========================================\nSERIAL: ELF: Loading ELF file: %s", path);
-
     /* Step 1: Read the ELF file from filesystem */
     void *file_data = NULL;
     size_t file_size = 0;
@@ -912,7 +909,7 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
     /* Step 6: Clean up file data */
     kfree(file_data);
 
-    klog_debug_fmt("ELF", "SERIAL: ELF: SUCCESS - Program loaded and scheduled for execution\nSERIAL: ELF: PID: %x Entry: 0x%x", (unsigned)(process->task.pid), (unsigned)((uint32_t)process->task.rip));
+    klog_debug_fmt("ELF", "SERIAL: ELF: SUCCESS - Program loaded and scheduled for execution\nSERIAL: ELF: PID: %x Entry: 0x%x", (unsigned)(process->task.pid), (unsigned)((uint32_t)task_get_ip(&process->task)));
     klog_debug("ELF", "SERIAL: ELF: ========================================\n");
 
     return process->task.pid;
@@ -948,8 +945,8 @@ static void exec_commit_emit(const char *point, int64_t errno_val,
 		       (unsigned long long)((uint64_t)errno_val),
 		       (unsigned)(proc ? (uint32_t)proc->task.pid : 0),
 		       (unsigned long long)(exec_commit_ctx.mm_entry),
-		       (unsigned long long)(proc ? (uint64_t)(uintptr_t)proc->page_directory : 0),
-		       (proc && (uint64_t)(uintptr_t)proc->page_directory ==
+		       (unsigned long long)(proc ? (uint64_t)(uintptr_t)process_pgd(proc) : 0),
+		       (proc && (uint64_t)(uintptr_t)process_pgd(proc) ==
 				exec_commit_ctx.mm_entry)
 			   ? "1"
 			   : "0",
@@ -960,9 +957,9 @@ static void exec_commit_emit(const char *point, int64_t errno_val,
 			   ? "switch_to_user_asm"
 			   : "not_yet",
 		       (unsigned long long)(exec_commit_ctx.entry_rip),
-		       (unsigned long long)(proc ? proc->task.rip
+		       (unsigned long long)(proc ? task_get_ip(&proc->task)
 						 : exec_commit_ctx.task_rip_final),
-		       (unsigned long long)(proc ? proc->task.rsp
+		       (unsigned long long)(proc ? task_get_sp(&proc->task)
 						 : exec_commit_ctx.task_rsp_final),
 		       exec_commit_ctx.unmapped ? "1" : "0",
 		       exec_commit_ctx.segments_loaded ? "1" : "0",
@@ -1181,7 +1178,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     }
 
     memset(&exec_commit_ctx, 0, sizeof(exec_commit_ctx));
-    exec_commit_ctx.mm_entry = (uint64_t)(uintptr_t)proc->page_directory;
+    exec_commit_ctx.mm_entry = (uint64_t)(uintptr_t)process_pgd(proc);
     exec_commit_ctx.task_cr3_entry = process_mm_root(proc);
     exec_commit_ctx.active_cr3_entry = get_current_page_directory();
 
@@ -1286,12 +1283,12 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
      * that leaves FS pointing at unmapped VA while glibc/musl still expect
      * to call arch_prctl(ARCH_SET_FS) during CRT startup.
      */
-    proc->fs_base = 0;
+    process_tls_set(proc, 0);
     set_fs_base(0);
     proc->stack_size = USER_STACK_SIZE;
     proc->stack_start = USER_STACK_TOP - USER_STACK_SIZE;
 
-    if (map_user_region_in_directory(proc->page_directory, proc->stack_start,
+    if (map_user_region_in_directory(process_pgd(proc), proc->stack_start,
                                      proc->stack_size, PAGE_RW) != 0)
     {
         kfree(file_data);
@@ -1331,15 +1328,10 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     strncpy(proc->comm, basename, sizeof(proc->comm) - 1);
     proc->comm[sizeof(proc->comm) - 1] = '\0';
 
-    proc->task.rip = header->e_entry;
+    task_set_ip(&proc->task, header->e_entry);
     exec_commit_ctx.entry_rip = header->e_entry;
-    proc->task.cs = USER_CODE_SEL;
-    proc->task.ss = USER_DATA_SEL;
-    proc->task.ds = USER_DATA_SEL;
-    proc->task.es = USER_DATA_SEL;
-    proc->task.fs = USER_DATA_SEL;
-    proc->task.gs = USER_DATA_SEL;
-    proc->task.rflags = ir0_rflags_sanitize_user(0x202ULL);
+    arch_task_set_user_segments(&proc->task);
+    task_set_flags(&proc->task, ir0_rflags_sanitize_user(0x202ULL));
 
     if (elf_setup_stack(proc, argv, envp, header, at_phdr, at_base,
                         "exec_replace_current", path) != 0)
@@ -1348,8 +1340,8 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
         exec_fail_kill(proc, 127, "elf_setup_stack_fail");
     }
     exec_commit_ctx.stack_ready = 1;
-    exec_commit_ctx.task_rip_final = proc->task.rip;
-    exec_commit_ctx.task_rsp_final = proc->task.rsp;
+    exec_commit_ctx.task_rip_final = task_get_ip(&proc->task);
+    exec_commit_ctx.task_rsp_final = task_get_sp(&proc->task);
     elf_trace_entry_stack_layout(proc, header, at_phdr, at_base, "after-setup-stack");
 
     kfree(file_data);
@@ -1359,7 +1351,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     process_fase44_list_checkpoint("exec-after");
 
     klog_debug_fmt("ELF", "SERIAL: ELF: exec_replace success PID %x", (unsigned)((uint32_t)proc->task.pid));
-    klog_debug_fmt("ELF", "SERIAL: ELF: exec CR3 active=%llx task_cr3=%llx mm_cr3=%llx", (unsigned long long)(get_current_page_directory()), (unsigned long long)(process_mm_root(proc)), (unsigned long long)((uint64_t)(uintptr_t)proc->page_directory));
+    klog_debug_fmt("ELF", "SERIAL: ELF: exec CR3 active=%llx task_cr3=%llx mm_cr3=%llx", (unsigned long long)(get_current_page_directory()), (unsigned long long)(process_mm_root(proc)), (unsigned long long)((uint64_t)(uintptr_t)process_pgd(proc)));
     /*
      * Linux clears pending catchable signals across execve. IR0 had
      * signals_reset_on_exec() but never called it — fork PF leftovers
@@ -1377,7 +1369,7 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
     elf_trace_entry_stack_layout(proc, header, at_phdr, at_base, "before-userswitch");
 
     exec_commit_emit("before-userswitch", 0, proc, "EXEC_COMMIT_OK");
-    switch_to_user((arch_addr_t)proc->task.rip, (arch_addr_t)proc->task.rsp);
+    switch_to_user((arch_addr_t)task_get_ip(&proc->task), (arch_addr_t)task_get_sp(&proc->task));
     exec_commit_emit("return-after-userswitch", -1, proc, "EXEC_COMMIT_RETURNED");
     return -1;
 }

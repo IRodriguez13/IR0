@@ -96,7 +96,7 @@ CFLAGS += -mgeneral-regs-only
 else
 CFLAGS += -m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
 endif
-NASMFLAGS = -f elf64
+NASMFLAGS = -f elf64 -I$(CURDIR)/
 
 # Directories
 BUILD_DIR = build
@@ -214,12 +214,12 @@ CXX_KERNEL_FLAGS = -m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe
 endif
 CXXFLAGS_COMPILE = $(CXX_KERNEL_FLAGS) $(CFLAGS)
 
-# Assembler and linker flags
-ASMFLAGS = -f elf64
+# Assembler and linker flags (-I for asm_offsets.inc)
+ASMFLAGS = -f elf64 -I$(CURDIR)/
 LDFLAGS = -m elf_x86_64 -T arch/x86-64/linker.ld -Map=kernel-x64.map
 
 ifeq ($(ARCH),arm64)
-ASMFLAGS = -f elf64
+ASMFLAGS = -f elf64 -I$(CURDIR)/
 LDFLAGS = -m aarch64elf -T arch/arm64/linker.ld -Map=kernel-arm64.map
 endif
 
@@ -313,6 +313,9 @@ KERNEL_OBJS = \
     kernel/rootfs_base.o \
     kernel/process/core.o \
     kernel/process/create.o \
+    kernel/process/domains.o \
+    kernel/process/mm_struct.o \
+    kernel/process/files_struct.o \
     kernel/process/fork.o \
     kernel/process/exec.o \
     kernel/process/exit.o \
@@ -339,6 +342,7 @@ KERNEL_OBJS = \
     kernel/syscalls/syscall_dispatch.o \
     kernel/sock_udp.o \
     kernel/sock_stream.o \
+    kernel/sock_inet_ioctl.o \
     kernel/sysv_shm.o \
     kernel/memfd.o \
     kernel/eventfd.o \
@@ -434,7 +438,8 @@ MEMORY_OBJS = \
 	mm/allocator.o \
 	mm/paging.o \
 	mm/pmm.o \
-	mm/kmem.o
+	mm/kmem.o \
+	mm/page_fault.o
 
 LIB_OBJS = \
     includes/ir0/vga.o \
@@ -462,6 +467,7 @@ LIB_OBJS = \
     includes/ir0/exec_read_trace.o \
     includes/ir0/blockdev.o \
     includes/ir0/mm_port.o \
+    includes/ir0/rtc_calendar.o \
     includes/ir0/video_backend.o \
     includes/ir0/input_backend.o \
     includes/ir0/audio_backend.o \
@@ -878,6 +884,15 @@ ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/tss_x64.o \
     arch/x86-64/sources/arch_early.o \
     arch/x86-64/sources/user_mode.o \
+    arch/x86-64/sources/arch_fork.o \
+    arch/x86-64/sources/fork_asm_hooks.o \
+    arch/x86-64/sources/arch_task_ops.o \
+    arch/x86-64/sources/arch_syscall_frame.o \
+    arch/x86-64/sources/arch_signal.o \
+    arch/x86-64/sources/arch_switch.o \
+    arch/x86-64/sources/arch_mm.o \
+    arch/x86-64/sources/arch_irq_init.o \
+    arch/x86-64/sources/arch_page_fault.o \
     arch/x86-64/sources/idt_arch_x64.o \
     arch/x86-64/sources/fault.o \
     arch/x86-64/sources/debug_dump.o \
@@ -906,6 +921,15 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/vectors.o \
     arch/arm64/sources/syscall_stub.o \
     arch/arm64/sources/platform.o \
+    arch/arm64/sources/arch_fork.o \
+    arch/arm64/sources/fork_asm_hooks.o \
+    arch/arm64/sources/arch_task_ops.o \
+    arch/arm64/sources/arch_syscall_frame.o \
+    arch/arm64/sources/arch_signal.o \
+    arch/arm64/sources/arch_switch.o \
+    arch/arm64/sources/arch_mm.o \
+    arch/arm64/sources/arch_irq_init.o \
+    arch/arm64/sources/arch_page_fault.o \
     arch/arm64/sources/freestanding_stubs.o \
     arch/arm64/sources/switch_early_asm.o \
     arch/arm64/sources/switch_early.o \
@@ -2258,11 +2282,15 @@ build-runit: check-userspace
 load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-opendoas
 	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
 		echo "  WARN    nano not built (optional; cat /usr/bin/nano after reinject)"
+	@if [ "$${IR0_GUEST_MANDOCS:-1}" != "0" ]; then \
+		$(MAKE) -s prepare-guest-mandocs; \
+	fi
 	@DISK=$${DISK:-disk.img}; \
 	set -e; \
 	PROFILE=$${IR0_PRODUCT_PROFILE:-development}; \
 	STAMP=$${DISK}.runit.stamp; \
 	NEED=0; \
+	GUEST_MAN="$(KERNEL_ROOT)/build/guest-man"; \
 	if [ ! -f "$$DISK" ] || [ ! -f "$$STAMP" ]; then NEED=1; fi; \
 	if [ $$NEED -eq 0 ] && [ "$$(cat "$$STAMP" 2>/dev/null)" != "$$PROFILE" ]; then NEED=1; fi; \
 	if [ $$NEED -eq 0 ]; then \
@@ -2271,9 +2299,11 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 			$(RUNIT_STAGE_BIN)/nano \
 			$(IR0_USERSPACE_ROOT)/rootfs/etc/passwd \
 			$(IR0_USERSPACE_ROOT)/rootfs/etc/doas.conf \
+			$(IR0_USERSPACE_ROOT)/rootfs/etc/profile \
 			$(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh \
 			$(IR0_USERSPACE_ROOT)/packages/busybox/required_applets.txt \
-			$(IR0_BUSYBOX_FULL_BIN) $(IR0_BUSYBOX_AUTH_BIN); do \
+			$(IR0_BUSYBOX_FULL_BIN) $(IR0_BUSYBOX_AUTH_BIN) \
+			$$GUEST_MAN/.stamp; do \
 			if [ -e "$$dep" ] && [ "$$dep" -nt "$$STAMP" ]; then NEED=1; break; fi; \
 		done; \
 	fi; \
@@ -2284,8 +2314,14 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 		echo "  NOTE    virtio-9p is optional /mnt/host share; product / is always disk.img"; \
 		dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
 		python3 scripts/inject_init_minix.py --format-large $$DISK; \
+		if [ "$${IR0_GUEST_MANDOCS:-1}" != "0" ] && [ -d "$$GUEST_MAN/usr/share/man/cat7" ]; then \
+			export IR0_GUEST_MANDOC_DIR="$$GUEST_MAN"; \
+		else \
+			unset IR0_GUEST_MANDOC_DIR || true; \
+		fi; \
 		$(IR0_USERSPACE_MAKE) rootfs DISK=$(KERNEL_ROOT)/$$DISK \
-			PROFILE=$$PROFILE; \
+			PROFILE=$$PROFILE \
+			IR0_GUEST_MANDOC_DIR=$${IR0_GUEST_MANDOC_DIR-}; \
 		printf '%s\n' "$$PROFILE" > "$$STAMP"; \
 	fi
 	@echo "✓ load-userspace-runit OK (runit-init → runsvdir → console + logger)"
@@ -6106,6 +6142,30 @@ mandocs-en:
 
 mandocs-es:
 	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py --lang es
+
+# Pre-render IR0 section-7 pages for guest BusyBox man (cat7 ASCII).
+# Output: build/guest-man/usr/share/man/cat7/IR0-*.7
+# Injected by load-userspace-runit / install-to-disk (IR0_GUEST_MANDOCS=1 default).
+prepare-guest-mandocs:
+	@chmod +x $(KERNEL_ROOT)/scripts/prepare_guest_mandocs.sh
+	@$(KERNEL_ROOT)/scripts/prepare_guest_mandocs.sh
+
+check-guest-mandocs: prepare-guest-mandocs
+	@test -s build/guest-man/usr/share/man/cat7/IR0-boot.7
+	@test -s build/guest-man/usr/share/man/cat7/IR0-uspace.7
+	@test -s build/guest-man/usr/share/man/cat7/IR0-onboard.7
+	@! grep -qE '^\.Sh[[:space:]]' build/guest-man/usr/share/man/cat7/IR0-boot.7
+	@grep -qi boot build/guest-man/usr/share/man/cat7/IR0-boot.7
+	@if [ -f disk.img ]; then \
+		python3 scripts/verify_minix_rootfs.py --gate disk.img \
+			/usr/share/man/cat7/IR0-boot.7 \
+			/usr/share/man/cat7/IR0-uspace.7 \
+			/usr/share/man/cat7/IR0-onboard.7 \
+			/etc/man.conf; \
+		echo "✓ check-guest-mandocs OK (ASCII cat7 + disk.img)"; \
+	else \
+		echo "✓ check-guest-mandocs OK (ASCII cat7; disk.img not present yet)"; \
+	fi
 
 mandocs-uninstall:
 	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py --uninstall \

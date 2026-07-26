@@ -16,7 +16,8 @@
 
 #include "virtio_9p.h"
 
-#include <interrupt/arch/io.h>
+#include <ir0/arch_io.h>
+#include <ir0/cpu.h>
 #include <ir0/cpu.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>

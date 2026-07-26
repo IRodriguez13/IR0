@@ -15,6 +15,7 @@
 #include <ir0/pseudo_fs.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
+#include <ir0/sysfs.h>
 #include <string.h>
 
 static pseudo_fs_entry_t g_proc_entries[PSEUDO_FS_MAX_ENTRIES];
@@ -167,6 +168,18 @@ static const pseudo_fs_entry_t *pseudo_fs_lookup_table(const pseudo_fs_entry_t *
     }
 
     return best;
+}
+
+/* 1 if lookup hit is the exact path (not a parent prefix of a longer path). */
+static int pseudo_fs_entry_is_exact(const pseudo_fs_entry_t *entry,
+				    const char *full_path)
+{
+	char norm[256];
+
+	if (!entry || !full_path)
+		return 0;
+	pseudo_fs_normalize(full_path, norm, sizeof(norm));
+	return strcmp(entry->full_path, norm) == 0;
 }
 
 static const pseudo_fs_entry_t *pseudo_fs_find_by_fd_table(const pseudo_fs_entry_t *table,
@@ -482,12 +495,18 @@ int pseudo_fs_stat_path(const char *full_path, stat_t *st)
         return -EINVAL;
 
     entry = pseudo_fs_lookup(full_path);
-    if (entry && entry->ops && entry->ops->stat)
+    if (entry && pseudo_fs_entry_is_exact(entry, full_path) && entry->ops &&
+	entry->ops->stat)
         return entry->ops->stat(entry->ctx, st);
 
     rc = pseudo_fs_dynamic_try_match(full_path, &ctx, &ops);
     if (rc != 0)
-        return rc;
+    {
+	if (entry && pseudo_fs_entry_is_exact(entry, full_path) && entry->ops &&
+	    entry->ops->stat)
+		return entry->ops->stat(entry->ctx, st);
+	return rc;
+    }
 
     if (!ops || !ops->stat)
     {
@@ -512,6 +531,8 @@ int64_t pseudo_fs_acquire_path(const char *full_path, int flags,
 			       int *out_dynamic)
 {
 	const pseudo_fs_entry_t *entry;
+	void *ctx = NULL;
+	const pseudo_fs_ops_t *ops = NULL;
 	int64_t rc;
 
 	if (!full_path || !out_ops || !out_ctx || !out_dynamic)
@@ -522,7 +543,7 @@ int64_t pseudo_fs_acquire_path(const char *full_path, int flags,
 	*out_dynamic = 0;
 
 	entry = pseudo_fs_lookup(full_path);
-	if (entry)
+	if (entry && pseudo_fs_entry_is_exact(entry, full_path))
 	{
 		if (entry->ops && entry->ops->open)
 		{
@@ -536,32 +557,31 @@ int64_t pseudo_fs_acquire_path(const char *full_path, int flags,
 		return 0;
 	}
 
+	/*
+	 * Prefix-only hits (e.g. /sys/class/net for …/eth0/address) must not
+	 * steal leaf opens — try dynamic matchers first.
+	 */
+	rc = pseudo_fs_dynamic_try_match(full_path, &ctx, &ops);
+	if (rc != 0)
+		return rc;
+
+	if (ops->open)
 	{
-		void *ctx = NULL;
-		const pseudo_fs_ops_t *ops = NULL;
-
-		rc = pseudo_fs_dynamic_try_match(full_path, &ctx, &ops);
-		if (rc != 0)
-			return rc;
-
-		if (ops->open)
+		rc = ops->open(ctx, flags);
+		if (rc < 0)
 		{
-			rc = ops->open(ctx, flags);
-			if (rc < 0)
-			{
-				if (ops->close)
-					ops->close(ctx);
-				else
-					kfree(ctx);
-				return rc;
-			}
+			if (ops->close)
+				ops->close(ctx);
+			else
+				kfree(ctx);
+			return rc;
 		}
-
-		*out_ops = ops;
-		*out_ctx = ctx;
-		*out_dynamic = 1;
-		return 0;
 	}
+
+	*out_ops = ops;
+	*out_ctx = ctx;
+	*out_dynamic = 1;
+	return 0;
 }
 
 int64_t pseudo_fs_release_ops(const pseudo_fs_ops_t *ops, void *ctx, int dynamic)
@@ -635,7 +655,7 @@ int64_t pseudo_fs_open_path(const char *full_path, int flags, int *out_fd)
 		return -EINVAL;
 
 	entry = pseudo_fs_lookup(full_path);
-	if (entry)
+	if (entry && pseudo_fs_entry_is_exact(entry, full_path))
 	{
 		if (entry->ops && entry->ops->open)
 		{
@@ -777,7 +797,10 @@ int pseudo_fs_path_has_children(const char *path)
     if (pseudo_fs_table_has_children(g_sys_entries, g_sys_count, path))
         return 1;
 
-    return pseudo_fs_table_has_children(g_heart_entries, g_heart_count, path);
+    if (pseudo_fs_table_has_children(g_heart_entries, g_heart_count, path))
+        return 1;
+
+    return sys_class_net_path_has_children(path);
 }
 
 static int pseudo_fs_dirent_exists(struct vfs_dirent *entries, int n,
@@ -869,5 +892,5 @@ int pseudo_fs_collect_registry_children(const char *dir_path,
         }
     }
 
-    return n;
+    return sys_class_net_collect_children(norm, entries, max_entries, n);
 }

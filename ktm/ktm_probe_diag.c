@@ -368,11 +368,11 @@ static void probe_dump_pte(struct process *p, uint64_t va, const char *tag)
 	int mapped;
 	uint64_t *pte;
 
-	if (!p || !p->page_directory)
+	if (!p || !process_pgd(p))
 		return;
 
-	mapped = is_page_mapped_in_directory(p->page_directory, va, &pte_flags);
-	pte = paging_get_pte(p->page_directory, (uintptr_t)(va & ~0xFFFULL));
+	mapped = is_page_mapped_in_directory(process_pgd(p), va, &pte_flags);
+	pte = paging_get_pte(process_pgd(p), (uintptr_t)(va & ~0xFFFULL));
 
 	klog_debug_fmt("PROBE",
 		       "[PROBE][PTE] %s va=%llx mapped=%x present=%x user=%x rw=%x nx=%x",
