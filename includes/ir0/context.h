@@ -14,9 +14,9 @@
 #pragma once
 
 #include <ir0/task.h>
+#include <ir0/arch_switch.h>
 
 struct process;
 
 void switch_to(task_t *prev, task_t *next);
 uint64_t arch_get_current_page_directory(void);
-void arch_set_current_kernel_stack(struct process *p);

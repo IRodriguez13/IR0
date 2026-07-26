@@ -452,14 +452,6 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit_group;
 }
 
-/* Syscall dispatcher called from assembly */
-#if defined(__x86_64__) || defined(__amd64__)
-static void syscall_capture_user_frame(process_t *p)
-{
-  process_capture_syscall_frame(p);
-}
-#endif
-
 /**
  * syscall_dispatch - Dispatch system call via table (Linux/musl ABI)
  * @syscall_num: Linux x86-64 syscall number
@@ -476,17 +468,15 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   pid_t cur_pid = current_process ? current_process->task.pid : 0;
   int do_trace = (fase10_count < 5 && cur_pid >= 2);
 
-#if defined(__x86_64__) || defined(__amd64__)
   if (current_process)
-    syscall_capture_user_frame(current_process);
+    process_capture_syscall_frame(current_process);
 
   if (current_process && current_process->mode == USER_MODE)
   {
     fork_ret_first_syscall_entry(syscall_num,
-                                 current_process->syscall_frame.rip,
-                                 current_process->syscall_frame.rsp);
+                                 process_syscall_ip(current_process),
+                                 process_syscall_sp(current_process));
   }
-#endif
 
   if (do_trace) {
     extern uint64_t iretq_checkpoint_buf[40];
@@ -497,27 +487,23 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 
   syscall_handler_t handler = syscall_table_rw[syscall_num];
   KTM_TRACE_SYSCALL_ENTER((uint32_t)syscall_num);
-#if defined(__x86_64__) || defined(__amd64__)
   if (current_process && current_process->mode == USER_MODE)
   {
     ktm_probe_diag_syscall_pre(syscall_num, arg1, arg2, arg3, arg4, arg5, arg6,
-			       current_process->syscall_frame.rip);
+			       process_syscall_ip(current_process));
     if (syscall_num == __NR_read)
     {
       d1_12_read_diag_syscall_pre(current_process, (int)arg1,
 				  (uintptr_t)arg2, (size_t)arg3,
-				  current_process->syscall_frame.rip);
+				  process_syscall_ip(current_process));
     }
   }
-#endif
   r = handler(arg1, arg2, arg3, arg4, arg5, arg6);
   KTM_TRACE_SYSCALL_RET((uint32_t)syscall_num, (uint32_t)r);
   ktm_probe_diag_syscall_post(syscall_num, r);
-#if defined(__x86_64__) || defined(__amd64__)
   if (current_process && current_process->mode == USER_MODE &&
       syscall_num == __NR_read)
     d1_12_read_diag_syscall_post(current_process, r);
-#endif
 
   if (do_trace) {
     fase10_count++;

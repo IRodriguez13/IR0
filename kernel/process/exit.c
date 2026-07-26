@@ -257,25 +257,49 @@ void process_destroy(process_t *p)
 
 	process_release_fds(p, "DESTROY");
 
+	if (p->files)
+	{
+		files_put(p->files);
+		p->files = NULL;
+	}
 
-	/* Unmap all user pages in this process's PML4 (reaper may run under another CR3) */
-	if (p->page_directory && p->owns_page_directory)
-		process_unmap_user_pages_all(p->page_directory, &reclaim_stats);
+	/*
+	 * Address space teardown via mm refcount when present. Legacy path
+	 * keeps owns_page_directory for processes without mm.
+	 */
+	if (p->mm)
+	{
+		process_mm_sync_from_process(p);
+		mm_put(p->mm);
+		p->mm = NULL;
+		process_set_pgd(p, NULL);
+		p->mmap_list = NULL;
+		process_fase43_note_mm_destroyed();
+	}
+	else if (process_pgd(p) && process_mm_owns_tables(p))
+	{
+		process_unmap_user_pages_all(process_pgd(p), &reclaim_stats);
+		paging_reclaim_lower_half_tables(process_pgd(p));
+		r = p->mmap_list;
+		while (r)
+		{
+			next = r->next;
+			kfree(r);
+			r = next;
+		}
+		p->mmap_list = NULL;
+	}
 	else
 	{
+		r = p->mmap_list;
+		while (r)
+		{
+			next = r->next;
+			kfree(r);
+			r = next;
+		}
+		p->mmap_list = NULL;
 	}
-	if (p->page_directory && p->owns_page_directory)
-		paging_reclaim_lower_half_tables(p->page_directory);
-
-	/* Drop mmap bookkeeping nodes associated with this process. */
-	r = p->mmap_list;
-	while (r)
-	{
-		next = r->next;
-		kfree(r);
-		r = next;
-	}
-	p->mmap_list = NULL;
 
 	if (p->saved_context)
 	{
@@ -294,11 +318,11 @@ void process_destroy(process_t *p)
 		p->stack_size = 0;
 	}
 
-	if (p->page_directory && p->owns_page_directory)
+	if (!p->mm && process_pgd(p) && process_mm_owns_tables(p))
 	{
-		paging_ir0_mm_note_pml4_freed((uint64_t)(uintptr_t)p->page_directory);
-		kfree_aligned(p->page_directory);
-		p->page_directory = NULL;
+		paging_ir0_mm_note_pml4_freed((uint64_t)(uintptr_t)process_pgd(p));
+		kfree_aligned(process_pgd(p));
+		process_set_pgd(p, NULL);
 		process_fase43_note_mm_destroyed();
 	}
 

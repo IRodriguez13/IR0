@@ -11,6 +11,6 @@
  * Description: IR0 kernel source/header file
  */
 
-/* Shim: canonical task_t lives in the scheduler header. */
+/* Shim: canonical task_t lives in includes/ir0/task.h. */
 #pragma once
-#include <sched/task.h>
+#include <ir0/task.h>

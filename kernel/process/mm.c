@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/arch_mm.h>
 
 static bool process_va_ranges_overlap(uintptr_t a_start, size_t a_len,
 				      uintptr_t b_start, size_t b_len)
@@ -80,7 +81,7 @@ void process_unmap_user_pages_all(uint64_t *pml4,
 	if (!pml4)
 		return;
 
-	for (i4 = 0; i4 < 256; i4++)
+	for (i4 = 0; i4 < (size_t)arch_mm_user_root_slots(); i4++)
 	{
 		uint64_t *pdpt = process_pt_child(pml4, i4);
 
@@ -152,7 +153,7 @@ void process_unmap_user_address_space(process_t *p)
 		return;
 	memset(&stats, 0, sizeof(stats));
 
-	process_unmap_user_pages_all(p->page_directory, &stats);
+	process_unmap_user_pages_all(process_pgd(p), &stats);
 	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
 	if (IR0_DEBUG_PROC)
 	{
@@ -197,15 +198,27 @@ struct mmap_region *process_clone_mmap_list(struct mmap_region *parent_list)
 
 void process_fork_destroy_child_mm(process_t *child)
 {
-	if (!child || !child->page_directory || !child->owns_page_directory)
+	if (!child)
 		return;
 
-	process_unmap_user_pages_all(child->page_directory, NULL);
-	paging_reclaim_lower_half_tables(child->page_directory);
-	paging_ir0_mm_note_pml4_freed((uint64_t)(uintptr_t)child->page_directory);
-	kfree_aligned(child->page_directory);
-	child->page_directory = NULL;
-	child->owns_page_directory = 0;
+	if (child->mm)
+	{
+		mm_put(child->mm);
+		child->mm = NULL;
+		process_set_pgd(child, NULL);
+		child->mmap_list = NULL;
+		process_fase43_note_mm_destroyed();
+		return;
+	}
+
+	if (!process_pgd(child) || !process_mm_owns_tables(child))
+		return;
+
+	process_unmap_user_pages_all(process_pgd(child), NULL);
+	paging_reclaim_lower_half_tables(process_pgd(child));
+	paging_ir0_mm_note_pml4_freed((uint64_t)(uintptr_t)process_pgd(child));
+	kfree_aligned(process_pgd(child));
+	process_set_pgd(child, NULL);
 	process_fase43_note_mm_destroyed();
 }
 
@@ -232,7 +245,6 @@ uint64_t create_process_page_directory(void)
 	uint64_t *pml4;
 	uint64_t kernel_cr3;
 	uint64_t *kernel_pml4;
-	int i;
 
 	/* Allocate page-aligned memory for PML4 */
 	pml4 = kmalloc_aligned_try(4096, 4096);
@@ -247,19 +259,11 @@ uint64_t create_process_page_directory(void)
 	kernel_cr3 = get_current_page_directory();
 	kernel_pml4 = (uint64_t *)kernel_cr3;
 
-	/* Copy ONLY kernel space mappings (not user space)
-	 * In x86-64 canonical addressing:
-	 * - User space: virtual addresses 0x0000000000000000 - 0x00007FFFFFFFFFFF (PML4 indices 0-255)
-	 * - Kernel space: virtual addresses 0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF (PML4 indices 256-511)
-	 * 
-	 * We only copy kernel space (indices 256-511) to prevent user processes from
-	 * accessing kernel memory. User space entries start empty.
+	/*
+	 * Copy kernel half of the root table only (user half stays empty).
+	 * Slot counts are ISA-private (arch_mm_copy_kernel_half).
 	 */
-	for (i = 256; i < 512; i++)
-	{
-		if (kernel_pml4[i] & PAGE_PRESENT)
-			pml4[i] = kernel_pml4[i];
-	}
+	arch_mm_copy_kernel_half(pml4, kernel_pml4);
 
 	/*
 	 * Map kernel low memory with 4 KiB supervisor pages so timer IRQ (TSS

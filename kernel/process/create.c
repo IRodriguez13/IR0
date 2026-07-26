@@ -105,32 +105,48 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 
 	/* Explicit mode specification - no magic address detection */
 	proc->mode = mode;
-	proc->owns_page_directory = 1;
 
 	/*
 	 * Kernel idle reuses active kernel CR3 (boot/kmain tables).  Avoids
 	 * remapping ~48MB of supervisor pages on every idle spawn (slow + PMM).
+	 * Lowest sched band so priority pick never starves userspace (IRQ
+	 * preempt is ring-3-only today).
 	 */
-	if (mode == KERNEL_MODE && name && strcmp(name, "idle") == 0)
 	{
-		uint64_t kcr3 = get_current_page_directory();
+		mm_struct_t *mm = mm_create();
 
-		proc->page_directory = (uint64_t *)kcr3;
-		process_set_mm_root(proc, kcr3);
-		proc->owns_page_directory = 0;
-		klog_debug("KERN", "SERIAL: spawn: kernel CR3 shared (idle)\n");
-	}
-	else
-	{
-		proc->page_directory = (uint64_t *)create_process_page_directory();
-		if (!proc->page_directory)
+		if (!mm)
 		{
-			klog_debug("KERN", "[ERROR] Failed to create page directory for process\n");
 			kfree(proc);
 			return -ENOMEM;
 		}
-		klog_debug("KERN", "SERIAL: spawn: page directory OK\n");
-		process_set_mm_root(proc, (uint64_t)(uintptr_t)proc->page_directory);
+
+		if (mode == KERNEL_MODE && name && strcmp(name, "idle") == 0)
+		{
+			uint64_t kcr3 = get_current_page_directory();
+
+			proc->sched_prio = 0;
+			mm->page_directory = (uint64_t *)kcr3;
+			mm->owns_tables = 0;
+			process_mm_bind(proc, mm);
+			process_set_mm_root(proc, kcr3);
+			klog_debug("KERN", "SERIAL: spawn: kernel CR3 shared (idle)\n");
+		}
+		else
+		{
+			mm->page_directory = (uint64_t *)create_process_page_directory();
+			if (!mm->page_directory)
+			{
+				mm_put(mm);
+				klog_debug("KERN", "[ERROR] Failed to create page directory for process\n");
+				kfree(proc);
+				return -ENOMEM;
+			}
+			mm->owns_tables = 1;
+			process_mm_bind(proc, mm);
+			klog_debug("KERN", "SERIAL: spawn: page directory OK\n");
+			process_set_mm_root(proc, (uint64_t)(uintptr_t)process_pgd(proc));
+		}
 	}
 
 	/* Inherit permissions from current process or default to root */
@@ -181,17 +197,17 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		 * Map under kernel CR3: map_user_region_in_directory() allocates page
 		 * tables from the kernel heap and must not run with child CR3 active.
 		 */
-		if (map_user_region_in_directory(proc->page_directory, proc->stack_start, proc->stack_size, PAGE_RW) != 0)
+		if (map_user_region_in_directory(process_pgd(proc), proc->stack_start, proc->stack_size, PAGE_RW) != 0)
 		{
 			klog_debug("KERN", "SERIAL: spawn: stack map failed\n");
-			process_unmap_user_pages_all(proc->page_directory, NULL);
+			process_unmap_user_pages_all(process_pgd(proc), NULL);
 			goto fail_proc;
 		}
 		klog_debug("KERN", "SERIAL: spawn: stack mapped\n");
 
 		/* Setup stack pointer just below USER_STACK_TOP (stack grows down) */
-		proc->task.rsp = USER_STACK_TOP - 16;
-		proc->task.rbp = proc->task.rsp;
+		task_set_sp(&proc->task, USER_STACK_TOP - 16);
+		arch_task_set_frame_pointer(&proc->task, task_get_sp(&proc->task));
 	}
 	else
 	{
@@ -200,39 +216,25 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->stack_start = (uint64_t)kmalloc_try(proc->stack_size);
 		if (!proc->stack_start)
 		{
-			if (proc->owns_page_directory)
-				process_unmap_user_pages_all(proc->page_directory, NULL);
+			if (process_mm_owns_tables(proc))
+				process_unmap_user_pages_all(process_pgd(proc), NULL);
 			goto fail_proc;
 		}
 		memset((void *)proc->stack_start, 0, proc->stack_size);
-		proc->task.rsp = proc->stack_start + proc->stack_size - 16;
-		proc->task.rbp = proc->task.rsp;
+		task_set_sp(&proc->task, proc->stack_start + proc->stack_size - 16);
+		arch_task_set_frame_pointer(&proc->task, task_get_sp(&proc->task));
 	}
 
 	/* Setup task registers for clean start */
-	proc->task.rip = (uint64_t)entry;
+	task_set_ip(&proc->task, (uint64_t)entry);
 	if (proc->mode == USER_MODE)
-		proc->task.rflags = ir0_rflags_sanitize_user(RFLAGS_IF);
+		task_set_flags(&proc->task, ir0_rflags_sanitize_user(RFLAGS_IF));
 	else
-		proc->task.rflags = RFLAGS_IF;
+		task_set_flags(&proc->task, RFLAGS_IF);
 	if (proc->mode == KERNEL_MODE)
-	{
-		proc->task.cs = KERNEL_CODE_SEL;
-		proc->task.ss = KERNEL_DATA_SEL;
-		proc->task.ds = KERNEL_DATA_SEL;
-		proc->task.es = KERNEL_DATA_SEL;
-		proc->task.fs = KERNEL_DATA_SEL;
-		proc->task.gs = KERNEL_DATA_SEL;
-	}
+		arch_task_set_kernel_segments(&proc->task);
 	else
-	{
-		proc->task.cs = USER_CODE_SEL;
-		proc->task.ss = USER_DATA_SEL;
-		proc->task.ds = USER_DATA_SEL;
-		proc->task.es = USER_DATA_SEL;
-		proc->task.fs = USER_DATA_SEL;
-		proc->task.gs = USER_DATA_SEL;
-	}
+		arch_task_set_user_segments(&proc->task);
 
 	/* Initialize file descriptor table */
 	process_init_fd_table(proc);
@@ -259,9 +261,9 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 			kfree((void *)proc->stack_start);
 			proc->stack_start = 0;
 		}
-		else if (proc->owns_page_directory)
+		else if (process_mm_owns_tables(proc))
 		{
-			process_unmap_user_pages_all(proc->page_directory, NULL);
+			process_unmap_user_pages_all(process_pgd(proc), NULL);
 		}
 		goto fail_proc;
 	}
@@ -295,10 +297,16 @@ fail_proc:
 		kfree((void *)proc->stack_start);
 		proc->stack_start = 0;
 	}
-	if (proc->page_directory && proc->owns_page_directory)
+	if (proc->mm)
 	{
-		kfree_aligned(proc->page_directory);
-		proc->page_directory = NULL;
+		mm_put(proc->mm);
+		proc->mm = NULL;
+		process_set_pgd(proc, NULL);
+	}
+	else if (process_pgd(proc) && process_mm_owns_tables(proc))
+	{
+		kfree_aligned(process_pgd(proc));
+		process_set_pgd(proc, NULL);
 	}
 	kfree(proc);
 	return -ENOMEM;

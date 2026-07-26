@@ -46,6 +46,9 @@
 #include <ir0/video_backend.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/arch_port.h>
+#if CONFIG_ENABLE_NETWORKING
+#include <ir0/net.h>
+#endif
 
 #define SYS_BUFFER_SIZE 4096
 #define SYS_FD_BASE 3000  /* sysfs uses FD range 3000-3999 */
@@ -428,6 +431,350 @@ int sys_devices_block_read_reg(char *buf, size_t count)
         buf[off] = '\0';
     return (int)off;
 }
+
+int sys_kernel_build_read_reg(char *buf, size_t count)
+{
+	int len;
+
+	if (!buf || count == 0)
+		return -EINVAL;
+	len = snprintf(buf, count, "%s %s %s@%s %s\n",
+		       IR0_BUILD_DATE, IR0_BUILD_TIME, IR0_BUILD_USER,
+		       IR0_BUILD_HOST, IR0_BUILD_CC);
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	return len;
+}
+
+int sys_kernel_features_read_reg(char *buf, size_t count)
+{
+	int len;
+
+	if (!buf || count == 0)
+		return -EINVAL;
+	/* Honest compile-time feature list — not aspirational. */
+	len = snprintf(buf, count,
+		       "procfs\nsysfs\nheartfs\n"
+#if CONFIG_ENABLE_NETWORKING
+		       "networking\n"
+#endif
+		       "minix\ntmpfs\n");
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	return len;
+}
+
+#if CONFIG_ENABLE_NETWORKING
+int sys_class_net_list_read_reg(char *buf, size_t count)
+{
+	struct net_device *dev;
+	size_t off = 0;
+
+	if (!buf || count == 0)
+		return -EINVAL;
+	memset(buf, 0, count);
+	dev = net_get_devices();
+	while (dev && off + 2 < count)
+	{
+		int n = snprintf(buf + off, count - off, "%s\n",
+				 dev->name ? dev->name : "?");
+		if (n <= 0)
+			break;
+		if ((size_t)n >= count - off)
+		{
+			off = count - 1;
+			break;
+		}
+		off += (size_t)n;
+		dev = dev->next;
+	}
+	return (int)off;
+}
+
+static struct net_device *sys_class_net_find_dev(const char *ifname)
+{
+	struct net_device *dev;
+
+	if (!ifname || !ifname[0])
+		return NULL;
+	dev = net_get_devices();
+	while (dev)
+	{
+		if (dev->name && strcmp(dev->name, ifname) == 0)
+			return dev;
+		dev = dev->next;
+	}
+	return NULL;
+}
+
+int sys_class_net_find_name(const char *ifname)
+{
+	return sys_class_net_find_dev(ifname) ? 0 : -ENOENT;
+}
+
+int sys_class_net_parse_attr(const char *attr_name)
+{
+	if (!attr_name)
+		return -ENOENT;
+	if (strcmp(attr_name, "name") == 0)
+		return SYS_NET_ATTR_NAME;
+	if (strcmp(attr_name, "address") == 0)
+		return SYS_NET_ATTR_ADDRESS;
+	if (strcmp(attr_name, "mtu") == 0)
+		return SYS_NET_ATTR_MTU;
+	if (strcmp(attr_name, "state") == 0)
+		return SYS_NET_ATTR_STATE;
+	if (strcmp(attr_name, "rx_packets") == 0)
+		return SYS_NET_ATTR_RX_PACKETS;
+	if (strcmp(attr_name, "tx_packets") == 0)
+		return SYS_NET_ATTR_TX_PACKETS;
+	if (strcmp(attr_name, "rx_bytes") == 0)
+		return SYS_NET_ATTR_RX_BYTES;
+	if (strcmp(attr_name, "tx_bytes") == 0)
+		return SYS_NET_ATTR_TX_BYTES;
+	return -ENOENT;
+}
+
+int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
+				  unsigned attr)
+{
+	struct net_device *dev;
+	uint64_t rxp = 0, txp = 0, rxe = 0, txe = 0;
+	uint64_t rxb = 0, txb = 0;
+	int len = 0;
+
+	if (!buf || count == 0 || !ifname)
+		return -EINVAL;
+	memset(buf, 0, count);
+	dev = sys_class_net_find_dev(ifname);
+	if (!dev)
+		return -ENOENT;
+
+	if (dev->get_stats)
+		dev->get_stats(dev, &rxp, &txp, &rxe, &txe);
+	if (dev->get_byte_stats)
+		dev->get_byte_stats(dev, &rxb, &txb);
+
+	switch (attr)
+	{
+	case SYS_NET_ATTR_NAME:
+		len = snprintf(buf, count, "%s\n", dev->name ? dev->name : "");
+		break;
+	case SYS_NET_ATTR_ADDRESS:
+		len = snprintf(buf, count, "%02x:%02x:%02x:%02x:%02x:%02x\n",
+			       (unsigned)dev->mac[0], (unsigned)dev->mac[1],
+			       (unsigned)dev->mac[2], (unsigned)dev->mac[3],
+			       (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
+		break;
+	case SYS_NET_ATTR_MTU:
+		len = snprintf(buf, count, "%u\n", (unsigned)dev->mtu);
+		break;
+	case SYS_NET_ATTR_STATE:
+		len = snprintf(buf, count, "%s\n",
+			       (dev->flags & IFF_UP) ? "up" : "down");
+		break;
+	case SYS_NET_ATTR_RX_PACKETS:
+		len = snprintf(buf, count, "%llu\n", (unsigned long long)rxp);
+		break;
+	case SYS_NET_ATTR_TX_PACKETS:
+		len = snprintf(buf, count, "%llu\n", (unsigned long long)txp);
+		break;
+	case SYS_NET_ATTR_RX_BYTES:
+		len = snprintf(buf, count, "%llu\n", (unsigned long long)rxb);
+		break;
+	case SYS_NET_ATTR_TX_BYTES:
+		len = snprintf(buf, count, "%llu\n", (unsigned long long)txb);
+		break;
+	default:
+		return -ENOENT;
+	}
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	return len;
+}
+
+int sys_class_net_attr_read_reg(char *buf, size_t count, unsigned attr)
+{
+	struct net_device *dev = net_get_devices();
+
+	if (!dev || !dev->name)
+		return 0;
+	return sys_class_net_attr_read_named(buf, count, dev->name, attr);
+}
+
+static int sys_net_dirent_exists(struct vfs_dirent *entries, int n,
+				 const char *name)
+{
+	int i;
+
+	for (i = 0; i < n; i++)
+	{
+		if (strcmp(entries[i].name, name) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+int sys_class_net_collect_children(const char *dir_path,
+				   struct vfs_dirent *entries, int max_entries,
+				   int start_n)
+{
+	char norm[256];
+	size_t plen;
+	int n = start_n;
+	struct net_device *dev;
+	static const char *const attrs[] = {
+		"name",	      "address",    "mtu",	"state",
+		"rx_packets", "tx_packets", "rx_bytes",	"tx_bytes",
+	};
+	unsigned i;
+
+	if (!dir_path || !entries || max_entries <= 0 || start_n < 0)
+		return -EINVAL;
+
+	/* Normalize: strip trailing slash except root. */
+	plen = strlen(dir_path);
+	if (plen >= sizeof(norm))
+		return -ENAMETOOLONG;
+	memcpy(norm, dir_path, plen + 1);
+	if (plen > 1 && norm[plen - 1] == '/')
+	{
+		norm[plen - 1] = '\0';
+		plen--;
+	}
+
+	if (strcmp(norm, "/sys/class/net") == 0)
+	{
+		dev = net_get_devices();
+		while (dev && n < max_entries)
+		{
+			if (dev->name && !sys_net_dirent_exists(entries, n, dev->name))
+			{
+				strncpy(entries[n].name, dev->name,
+					sizeof(entries[n].name) - 1);
+				entries[n].name[sizeof(entries[n].name) - 1] = '\0';
+				entries[n].type = DT_DIR;
+				n++;
+			}
+			dev = dev->next;
+		}
+		return n;
+	}
+
+	if (strncmp(norm, "/sys/class/net/", 15) == 0)
+	{
+		const char *ifname = norm + 15;
+		const char *slash = strchr(ifname, '/');
+
+		if (slash)
+			return n;
+		if (sys_class_net_find_dev(ifname) == NULL)
+			return n;
+		for (i = 0; i < sizeof(attrs) / sizeof(attrs[0]) && n < max_entries; i++)
+		{
+			if (sys_net_dirent_exists(entries, n, attrs[i]))
+				continue;
+			strncpy(entries[n].name, attrs[i],
+				sizeof(entries[n].name) - 1);
+			entries[n].name[sizeof(entries[n].name) - 1] = '\0';
+			entries[n].type = DT_REG;
+			n++;
+		}
+	}
+	return n;
+}
+
+int sys_class_net_path_has_children(const char *path)
+{
+	char norm[256];
+	size_t plen;
+	struct vfs_dirent tmp[8];
+	int n;
+
+	if (!path)
+		return 0;
+	plen = strlen(path);
+	if (plen >= sizeof(norm))
+		return 0;
+	memcpy(norm, path, plen + 1);
+	if (plen > 1 && norm[plen - 1] == '/')
+		norm[plen - 1] = '\0';
+
+	n = sys_class_net_collect_children(norm, tmp, 8, 0);
+	return (n > 0);
+}
+#else
+int sys_class_net_list_read_reg(char *buf, size_t count)
+{
+	if (!buf || count == 0)
+		return -EINVAL;
+	buf[0] = '\0';
+	return 0;
+}
+
+int sys_class_net_attr_read_reg(char *buf, size_t count, unsigned attr)
+{
+	(void)attr;
+	if (!buf || count == 0)
+		return -EINVAL;
+	buf[0] = '\0';
+	return 0;
+}
+
+int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
+				  unsigned attr)
+{
+	(void)ifname;
+	(void)attr;
+	if (!buf || count == 0)
+		return -EINVAL;
+	buf[0] = '\0';
+	return 0;
+}
+
+int sys_class_net_parse_attr(const char *attr_name)
+{
+	(void)attr_name;
+	return -ENOENT;
+}
+
+int sys_class_net_find_name(const char *ifname)
+{
+	(void)ifname;
+	return -ENOENT;
+}
+
+int sys_class_net_collect_children(const char *dir_path,
+				   struct vfs_dirent *entries, int max_entries,
+				   int start_n)
+{
+	(void)dir_path;
+	(void)entries;
+	(void)max_entries;
+	return start_n;
+}
+
+int sys_class_net_path_has_children(const char *path)
+{
+	(void)path;
+	return 0;
+}
+#endif
 
 /* Open /sys — no virtual fds; callers must use pseudo_bind_file_fd. */
 int sysfs_open(const char *path, int flags)

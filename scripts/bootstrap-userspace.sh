@@ -67,6 +67,9 @@ Dentro del guest (tras login / autologin development):
   ls /
   cat /proc/version
   echo hello
+  man IR0-boot
+  man IR0-uspace
+  man -w IR0-tty
 
 Toolchain in-guest (TinyCC + GNU make) es opcional:
   make load-userspace-devtools   # o: IR0_WITH_DEVTOOLS=1 make run

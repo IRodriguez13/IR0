@@ -1,6 +1,6 @@
 # Kernel Decoupling Map
 
-> **Last verified:** 2026-07-21  
+> **Last verified:** 2026-07-26  
 > **Source of truth:** `includes/ir0/*`, `scripts/architecture_guard.py`, `ktm/include/klog.h`
 
 This document maps how IR0 separates subsystems, where stable interfaces live, and where
@@ -30,7 +30,11 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 |------|-----------|
 | Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/common/arch_interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `interrupt/arch/idt.h`. |
 | Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); portable code uses [`includes/ir0/arch_cpu.h`](../../includes/ir0/arch_cpu.h) only. |
-| Context switch | **`switch_to(prev, next)`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); first entry **`first_switch_to`**. ISA labels `switch_context_x64` / `switch_context_arm64` remain private to the dispatcher. |
+| Context switch | **`switch_to(prev, next)`** → **`arch_switch_to`** ([`includes/ir0/context.h`](../../includes/ir0/context.h), [`arch_switch.h`](../../includes/ir0/arch_switch.h)); first entry **`first_switch_to`**. ISA bodies in `arch/*/sources/arch_switch.c`. |
+| IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_keyboard_*` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/arch_irq_init.c`. Portable trees must not `#include <interrupt/arch/...>`. |
+| Signals / sigcontext | ISA layouts in [`sigcontext_x86_64.h`](../../includes/ir0/sigcontext_x86_64.h) / [`sigcontext_arm64.h`](../../includes/ir0/sigcontext_arm64.h); portable delivery via **`arch_signal_*`** + **`arch_task_{load,store}_sigcontext`**. |
+| Syscall frame | Opaque **`process_syscall_*`** accessors; fill/restore in **`arch_syscall_frame`**. Guard: `[syscall-frame-accessor]`. |
+| MM root half | **`arch_mm_copy_kernel_half` / `arch_mm_user_root_slots`** ([`arch_mm.h`](../../includes/ir0/arch_mm.h)). |
 | IRQ / MM / TLB | Simple names: **`irq_save`/`irq_restore`**, **`mm_activate`**, **`tlb_invalidate_*`**, **`cpu_relax`**, **`smp_mb`**, **`timer_read`** ([`includes/ir0/cpu.h`](../../includes/ir0/cpu.h) + `arch_cpu.h`). No `arch_` prefix on new hot-path facades. |
 | **`fs/`** vs `arch/` | No `#include <arch/...>` in `fs/`; use **`includes/ir0/arch_port.h`** (`scripts/architecture_guard.py` enforces). |
 
@@ -43,7 +47,10 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `facade-no-drivers-include` | `includes/ir0/*.h` | No `#include <drivers/…>` |
 | `facade-no-arch-include` | `includes/ir0/*.h` | No `#include <arch/…>` |
 | `facade-no-sched-include` | `includes/ir0/*.h` | No `#include <sched/…>` |
-| `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | No `#include <interrupt/arch/...>` |
+| `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | No `#include <interrupt/arch/...>` (use **`ir0/irq.h`**) |
+| `process-pgd-accessor` | broad | No `process->page_directory`; use **`process_pgd`/`process_set_pgd`** |
+| `syscall-frame-accessor` | portable trees | No `syscall_frame.<gpr>`; use **`process_syscall_*`** |
+| `portable-no-task-arch-field` | portable | No `task->arch.<field>`; use **`task_get_*`/`task_set_*`** |
 | `fs-no-direct-arch` | `fs/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
 | `fs-no-mm-include` | `fs/` | No `#include <mm/...>`; use **`ir0/mm_port.h`** or narrower facades |
 | `mm-net-no-arch-include` | `mm/`, `net/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
@@ -106,6 +113,9 @@ specific driver implementation file:
 | Driver model | `driver.h`, `driver_bootstrap.h`, `init_drv.h` | Registry, boot order (opaque headers) |
 | Power | `platform_ops.h` | `kernel/power/power_manag.c` |
 | Scheduler | **`sched.h`** (`scheduler_api.h` → alias) | Process/timer/IRQ → `sched_schedule_next()` |
+| IRQ subsystem | **`irq.h`** | Boot IDT/PIC/GIC + keyboard poll; not `interrupt/arch/*` from portable/drivers |
+| Context switch | **`context.h`**, **`arch_switch.h`** | `switch_to` / kernel stack handoff |
+| MM root layout | **`arch_mm.h`** | User/kernel half of page-table root |
 | Resources | `resource_registry.h` | IRQ / I/O port registration from drivers |
 | VFS-backed devices | `devfs.h`, `procfs.h`, `sysfs.h` | Virtual filesystems |
 | Pseudo-fs registry | `pseudo_fs.h` | Longest-prefix table for `/proc` / `/sys` nodes |
@@ -214,9 +224,14 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
 1. **`kernel/` and `net/`:** reduce remaining direct `arch_portable` surface where a narrower façade
    helps testing (optional split of “CPU info” vs “I/O port” APIs).
 2. **Facades that include drivers:** optionally split **API-only** headers from `.c`.
-3. **ARM64:** freestanding bring-up exists (`smoke-arm64`); `kernel-arm64.bin` still links
-   **only** `$(ARCH_OBJS)`. Full parity with the x86 image remains future work — no change
-   claiming “port done” until that wiring + musl smoke land.
+3. **ARM64 product image:** freestanding bring-up exists (`smoke-arm64`); `kernel-arm64.bin`
+   still links **only** `$(ARCH_OBJS)`. ISA facades are wired:
+   `sigcontext_arm64` = Linux aarch64 uapi; `arch_switch` / `arch_mm` = TTBR0 model;
+   `irq_*` → VBAR + GICv2. Full **musl aarch64 + ALL_OBJS** (x86 drivers excluded) remains
+   future work.
+4. **`interrupt/arch/`** is the **x86-only** IDT/PIC/ISR backend (see `interrupt/arch/README.md`).
+   Portable and driver code enter via **`ir0/irq.h`** / **`ir0/arch_io.h`**; arm64 never
+   links this tree.
 
 ## Testing and menuconfig ergonomics
 

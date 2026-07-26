@@ -35,9 +35,9 @@ void ktm_ctx_snapshot(const process_t *p, const char *reason)
 		       (unsigned long long)(uint64_t)(uintptr_t)p->poll_waiter,
 		       (unsigned long long)(uint64_t)p->poll_resume_via_arch,
 		       (unsigned long long)(uint64_t)(uintptr_t)p->wait_status_ptr,
-		       (unsigned long long)p->task.rip,
-		       (unsigned long long)p->task.rsp,
-		       (unsigned long long)(uint64_t)p->task.cs,
+		       (unsigned long long)p->task.arch.rip,
+		       (unsigned long long)p->task.arch.rsp,
+		       (unsigned long long)(uint64_t)p->task.arch.cs,
 		       (unsigned long long)process_mm_root(p));
 }
 
