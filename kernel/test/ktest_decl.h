@@ -40,7 +40,6 @@ void ktest_proc_uptime_contract(void);
 void ktest_sysfs_hostname_contract(void);
 void ktest_proc_netinfo_contract(void);
 void ktest_dev_net_contract(void);
-void ktest_help_sections_contract(void);
 void ktest_mount_proc_contract(void);
 void ktest_mount_tmpfs_contract(void);
 void ktest_mount_multi_fs_contract(void);

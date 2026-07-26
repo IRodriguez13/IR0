@@ -44,20 +44,31 @@ static int tw_rows(void)
 #define VGA_BUFFER ((volatile uint16_t *)0xB8000)
 #define SCROLLBACK_LINES 200
 
-/* Global typewriter state */
-static typewriter_mode_t current_mode = TYPEWRITER_FAST;
+/* Global typewriter state — default off (product console must not delay). */
+static typewriter_mode_t current_mode = TYPEWRITER_DISABLED;
 static int command_output_enabled = 1;
 
 /*
  * Scrollback: circular buffer of lines for console scroll (Page Up/Down).
- * Each line is VGA_WIDTH cells (uint16_t). Logical line index L is at
- * scrollback[L % SCROLLBACK_LINES].
+ * Width matches CONSOLE_MAX_WIDTH so FB fitted geometry (e.g. ~87 cols)
+ * does not OOB-read past a VGA-only 80-wide line.
  */
-static uint16_t scrollback[SCROLLBACK_LINES][VGA_WIDTH];
+static uint16_t scrollback[SCROLLBACK_LINES][CONSOLE_MAX_WIDTH];
 static size_t total_lines_written = 0;   /* Total lines ever appended */
-static size_t current_col = 0;          /* Column in current line (0..VGA_WIDTH-1) */
+static size_t current_col = 0;          /* Column in current line */
 static int scroll_offset = 0;           /* 0 = live at bottom; >0 = scrolled up */
 static uint8_t scrollback_color = 0x0F;
+
+static int scrollback_cols(void)
+{
+	int cols = tw_cols();
+
+	if (cols > CONSOLE_MAX_WIDTH)
+		cols = CONSOLE_MAX_WIDTH;
+	if (cols < 1)
+		cols = 1;
+	return cols;
+}
 
 /* Simple delay function using CPU cycles */
 static void typewriter_delay(uint32_t microseconds)
@@ -95,11 +106,15 @@ static void redraw_from_scrollback(void)
         else
         {
             size_t buf_idx = (size_t)line_idx % SCROLLBACK_LINES;
-            for (int col = 0; col < cols; col++)
+            int maxc = cols < CONSOLE_MAX_WIDTH ? cols : CONSOLE_MAX_WIDTH;
+
+            for (int col = 0; col < maxc; col++)
             {
                 uint16_t cell = scrollback[buf_idx][col];
                 console_put_cell(row, col, (char)(cell & 0xFF), (uint8_t)(cell >> 8));
             }
+            for (int col = maxc; col < cols; col++)
+                console_put_cell(row, col, ' ', scrollback_color);
         }
     }
     if (scroll_offset == 0)
@@ -136,20 +151,21 @@ void typewriter_console_clear(uint8_t color)
 
     for (int i = 0; i < SCROLLBACK_LINES; i++)
     {
-        for (int c = 0; c < VGA_WIDTH; c++)
+        for (int c = 0; c < CONSOLE_MAX_WIDTH; c++)
             scrollback[i][c] = blank;
     }
 }
 
 void typewriter_init(void)
 {
-    current_mode = TYPEWRITER_FAST;
+    /* Default off — product console must not delay per character. */
+    current_mode = TYPEWRITER_DISABLED;
     command_output_enabled = 1;
     total_lines_written = 0;
     current_col = 0;
     scroll_offset = 0;
     for (int i = 0; i < SCROLLBACK_LINES; i++)
-        for (int c = 0; c < VGA_WIDTH; c++)
+        for (int c = 0; c < CONSOLE_MAX_WIDTH; c++)
             scrollback[i][c] = (scrollback_color << 8) | ' ';
 }
 
@@ -264,11 +280,12 @@ void typewriter_vga_print_char(char c, uint8_t color)
     console_renderer_putchar(c, color);
 
     line_idx = total_lines_written % SCROLLBACK_LINES;
+    cols = scrollback_cols();
     if (c == '\n')
     {
         size_t j;
 
-        for (j = current_col; j < (size_t)cols && j < VGA_WIDTH; j++)
+        for (j = current_col; j < (size_t)cols; j++)
             scrollback[line_idx][j] = (color << 8) | ' ';
         total_lines_written++;
         current_col = 0;
@@ -276,7 +293,7 @@ void typewriter_vga_print_char(char c, uint8_t color)
     else if (c == '\b' || c == 127)
     {
         current_col = (size_t)(cursor_pos % cols);
-        if (current_col < VGA_WIDTH)
+        if (current_col < (size_t)cols)
             scrollback[line_idx][current_col] = (color << 8) | ' ';
     }
     else if ((unsigned char)c >= ' ')
@@ -286,7 +303,7 @@ void typewriter_vga_print_char(char c, uint8_t color)
         {
             int sc = pos % cols;
 
-            if (sc >= 0 && sc < VGA_WIDTH)
+            if (sc >= 0 && sc < cols)
                 scrollback[line_idx][sc] = (color << 8) | (uint8_t)c;
         }
         current_col = (size_t)(cursor_pos % cols);

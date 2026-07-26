@@ -107,7 +107,7 @@ ASCII:
 - Los protocolos registran handlers; `net_receive` demultiplexa.
 - `/dev/net` parsea comandos de texto (ping, dhcp, ifconfig) e ioctl.
 - `sock_stream` posee estado listen/accept/connect; `tcp_wire_*` los segmentos.
-- debug_bins (`ping`, `ifconfig`, `route`, `netstat`) usan solo syscalls.
+- Userspace BusyBox (`ping`, `ifconfig`, `route`, `netstat`) usa solo syscalls.
 
 ## 5. Límites del subsistema
 
@@ -125,7 +125,7 @@ ASCII:
 | Syscalls | socket/bind/listen/accept/connect/send/recv → sock_stream |
 | devfs | ops y poll de `/dev/net` |
 | procfs | `/proc/netinfo`, `/proc/net/dev` |
-| debug_bins | `cmd_ping.c`, `cmd_ifconfig.c`, etc. |
+| IR0-userspace | applets BusyBox / smokes de red |
 
 ## 7. Mapas visuales
 
@@ -133,7 +133,7 @@ ASCII:
   ┌──────────────┐     ┌──────────┐     ┌─────────┐
   │ sock_stream  │────►│ TCP wire │────►│ RTL8139 │
   │ /dev/net     │     │ IP/ICMP  │     │  NIC    │
-  │ debug_bins   │     │ ARP/UDP  │     └─────────┘
+  │ userspace    │     │ ARP/UDP  │     └─────────┘
   └──────────────┘     └──────────┘
          │                  ▲
          └──── lectura snapshot/proc ────┘

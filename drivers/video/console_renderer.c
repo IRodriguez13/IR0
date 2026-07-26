@@ -18,16 +18,21 @@ static uint8_t render_color = CONSOLE_RENDERER_COLOR_DEFAULT;
 static int render_cursor_visible;
 static int render_cursor_row;
 static int render_cursor_col;
+static char render_cursor_under_ch = ' ';
+static uint8_t render_cursor_under_color = CONSOLE_RENDERER_COLOR_DEFAULT;
 static int csi_state;
 static int csi_param;
 static int csi_params[4];
 static int csi_param_count;
+static int csi_priv; /* ESC[? … private mode */
+static int render_cursor_enabled = 1; /* DECTCEM: 0 = civis, 1 = cnorm */
 
 static void csi_reset(void)
 {
 	csi_state = CSI_NONE;
 	csi_param = 0;
 	csi_param_count = 0;
+	csi_priv = 0;
 }
 
 static void csi_clear_from_cursor(int cols, int rows, uint8_t color)
@@ -43,6 +48,25 @@ static void csi_clear_from_cursor(int cols, int rows, uint8_t color)
 		int start = (r == row) ? col : 0;
 
 		for (c = start; c < cols; c++)
+			console_put_cell(r, c, ' ', color);
+	}
+}
+
+/* CSI J mode 1 — erase from start of screen through cursor (inclusive). */
+static void csi_clear_to_cursor(int cols, int rows, uint8_t color)
+{
+	extern int cursor_pos;
+	int row = cursor_pos / cols;
+	int col = cursor_pos % cols;
+	int r;
+	int c;
+
+	(void)rows;
+	for (r = 0; r <= row; r++)
+	{
+		int end = (r == row) ? col : (cols - 1);
+
+		for (c = 0; c <= end; c++)
 			console_put_cell(r, c, ' ', color);
 	}
 }
@@ -119,15 +143,30 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t *color)
 		else
 			cursor_pos = (cursor_pos / cols) * cols;
 		break;
+	case 'B':
+		cursor_pos += n * cols;
+		if (cursor_pos >= cols * rows)
+			cursor_pos = (rows - 1) * cols + (cursor_pos % cols);
+		break;
+	case 'h':
+	case 'l':
+		/* ESC[?25h / ESC[?25l — show / hide cursor (DECTCEM). */
+		if (csi_priv && n == 25)
+			render_cursor_enabled = (cmd == 'h') ? 1 : 0;
+		break;
 	case 'J':
 	{
+		/* ECMA-48 / xterm: 0=from cursor, 1=to cursor, 2=entire screen. */
 		int mode = csi_param_count > 0 ? csi_params[0] : 0;
 
-		if (mode == 2)
+		if (mode == 2 || mode == 3)
 		{
 			csi_clear_screen(cols, rows, *color);
-			cursor_pos = 0;
+			if (mode == 2)
+				cursor_pos = 0;
 		}
+		else if (mode == 1)
+			csi_clear_to_cursor(cols, rows, *color);
 		else
 			csi_clear_from_cursor(cols, rows, *color);
 		break;
@@ -233,7 +272,10 @@ static int csi_feed(char c, int cols, int rows, uint8_t *color)
 			return 1;
 		}
 		if (c == '?')
+		{
+			csi_priv = 1;
 			return 1;
+		}
 		if (c >= 0x40 && c <= 0x7e)
 		{
 			if (csi_param_count < 4)
@@ -271,13 +313,16 @@ static int render_rows(void)
 
 static void render_erase_cursor(int cols, int rows, uint8_t color)
 {
+	(void)color;
 	if (!render_cursor_visible)
 		return;
 	if (render_cursor_row < 0 || render_cursor_row >= rows)
 		return;
 	if (render_cursor_col < 0 || render_cursor_col >= cols)
 		return;
-	console_put_cell(render_cursor_row, render_cursor_col, ' ', color);
+	/* Restore glyph wiped by the block cursor (ONLCR: CR paints col 0). */
+	console_put_cell(render_cursor_row, render_cursor_col,
+			 render_cursor_under_ch, render_cursor_under_color);
 	render_cursor_visible = 0;
 }
 
@@ -285,6 +330,7 @@ void console_renderer_reset(uint8_t color)
 {
 	extern int cursor_pos;
 
+	csi_reset();
 	render_color = color;
 	render_cursor_visible = 0;
 	render_cursor_row = 0;
@@ -305,10 +351,27 @@ void console_renderer_putchar(char c, uint8_t color)
 	(void)color;
 	draw = render_color;
 
+	/* Guard against soft geometry / early boot (never divide by zero). */
+	if (cols <= 0)
+		cols = CONSOLE_WIDTH;
+	if (rows <= 0)
+		rows = CONSOLE_HEIGHT;
+
 	if (csi_feed(c, cols, rows, &render_color))
 	{
 		draw = render_color;
-		console_renderer_show_cursor(draw);
+		/*
+		 * Only refresh the hardware cursor when a full CSI sequence
+		 * completes (or civis). Intermediate ESC/[ / digits must not
+		 * paint — nano floods DECTCEM around every glyph.
+		 */
+		if (csi_state == CSI_NONE)
+		{
+			if (render_cursor_enabled)
+				console_renderer_show_cursor(draw);
+			else
+				render_erase_cursor(cols, rows, draw);
+		}
 		return;
 	}
 
@@ -326,6 +389,7 @@ void console_renderer_putchar(char c, uint8_t color)
 	}
 	else if (c == '\r')
 	{
+		csi_reset();
 		cursor_pos = (cursor_pos / cols) * cols;
 	}
 	else if (c == '\b' || c == 127)
@@ -372,7 +436,10 @@ void console_renderer_putchar(char c, uint8_t color)
 		}
 	}
 
-	console_renderer_show_cursor(draw);
+	if (render_cursor_enabled)
+		console_renderer_show_cursor(draw);
+	else
+		render_erase_cursor(cols, rows, draw);
 }
 
 void console_renderer_show_cursor(uint8_t color)
@@ -383,14 +450,26 @@ void console_renderer_show_cursor(uint8_t color)
 	int row = cursor_pos / cols;
 	int col = cursor_pos % cols;
 	uint8_t cur_color;
+	uint16_t cell;
 
+	(void)color;
+	if (!render_cursor_enabled)
+	{
+		render_erase_cursor(cols, rows, color);
+		return;
+	}
 	render_erase_cursor(cols, rows, color);
 
 	if (row < 0 || row >= rows || col < 0 || col >= cols)
 		return;
 
-	cur_color = (uint8_t)(((color & 0xF0) >> 4) | ((color & 0x0F) << 4));
-	console_put_cell(row, col, ' ', cur_color);
+	cell = console_get_cell(row, col);
+	render_cursor_under_ch = (char)(cell & 0xFF);
+	render_cursor_under_color = (uint8_t)(cell >> 8);
+	/* Invert fg/bg; draw without clobbering the shadow under-glyph. */
+	cur_color = (uint8_t)(((render_cursor_under_color & 0xF0) >> 4) |
+			      ((render_cursor_under_color & 0x0F) << 4));
+	console_draw_cell(row, col, render_cursor_under_ch, cur_color);
 	render_cursor_visible = 1;
 	render_cursor_row = row;
 	render_cursor_col = col;

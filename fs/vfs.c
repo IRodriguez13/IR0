@@ -35,6 +35,7 @@
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
+#include <ir0/flock.h>
 #include <ir0/open_flags.h>
 #include <ir0/named_fifo.h>
 #include <ir0/exec_read_trace.h>
@@ -108,6 +109,13 @@ static struct vfs_mount *find_mount(const char *path)
     return best;
 }
 
+static int mount_is_readonly(const char *path)
+{
+    struct vfs_mount *m = find_mount(path);
+
+    return m && (m->flags & IR0_MS_RDONLY);
+}
+
 static int vfs_exec_audit_active;
 static const char *vfs_exec_audit_path;
 
@@ -154,6 +162,26 @@ static void vfs_exec_audit_log(const char *stage, const char *path, int ret,
     klog_print(" st_size=");
     klog_hex64((uint64_t)st_size);
     klog_print("\n");
+}
+
+/*
+ * Set-user-ID / set-group-ID on exec is honoured only on the trusted on-disk
+ * root filesystem. IR0 has no per-mount MS_NOSUID yet (sys_mount takes no
+ * flags), so every other backend — pseudo-filesystems, devfs, host 9p shares —
+ * is treated as nosuid instead of pretending the flag exists.
+ */
+int vfs_path_allows_setid(const char *path)
+{
+    struct vfs_mount *m;
+
+    if (!path)
+        return 0;
+
+    m = find_mount(path);
+    if (!m || !m->fs || !m->fs->name)
+        return 0;
+
+    return strcmp(m->fs->name, "minix") == 0;
 }
 
 /**
@@ -370,6 +398,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
         m->dev[0] = '\0';
     }
     m->fs = ft;
+    m->flags = 0;
     m->next = mounts;
 
     ret = ft->mount(dev, mount_path);
@@ -380,6 +409,34 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     }
 
     mounts = m;
+    return 0;
+}
+
+int vfs_remount(const char *path, unsigned long flags)
+{
+    char mount_path[MAX_PATH];
+    struct vfs_mount *m;
+    int ret;
+
+    if (!path)
+        return -EINVAL;
+    if (ir0_current_cred() && !ir0_cred_is_root())
+        return -EPERM;
+
+    ret = validate_path(path);
+    if (ret != 0)
+        return ret;
+
+    normalize_mount_path(path, mount_path, sizeof(mount_path));
+    m = find_mount(mount_path);
+    if (!m)
+        return -EINVAL;
+
+    /* Only RO bit is toggled today; other MS_* bits are ignored honestly. */
+    if (flags & IR0_MS_RDONLY)
+        m->flags |= IR0_MS_RDONLY;
+    else
+        m->flags &= ~IR0_MS_RDONLY;
     return 0;
 }
 
@@ -519,6 +576,10 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
         return -EINVAL;
     }
 
+    if (mount_is_readonly(path) &&
+        ((flags & IR0_O_ACCMODE) != IR0_O_RDONLY || (flags & IR0_O_CREAT)))
+        return -EROFS;
+
     ret = check_dir_traverse(path);
     if (ret != 0)
         return ret;
@@ -555,7 +616,8 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
         {
             if (ops->create)
             {
-                mode_t fmode = mode ? (mode & 0777) : 0644;
+                /* open(2): the caller's mode is authoritative, 0000 included. */
+                mode_t fmode = mode & 07777;
 
                 ret = ops->create(path, fmode);
                 if (ret == -EISDIR)
@@ -658,6 +720,8 @@ int vfs_write(struct vfs_file *f, const char *buf, size_t count)
     if (count == 0) return 0;
     if ((f->flags & IR0_O_ACCMODE) == IR0_O_RDONLY)
         return -EBADF;
+    if (mount_is_readonly(f->path))
+        return -EROFS;
 
     struct vfs_ops *ops = ops_for_path(f->path);
     if (!ops || !ops->write)
@@ -718,6 +782,8 @@ int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset)
         return -EINVAL;
     if ((f->flags & IR0_O_ACCMODE) == IR0_O_RDONLY)
         return -EBADF;
+    if (mount_is_readonly(f->path))
+        return -EROFS;
 
     struct vfs_ops *ops = ops_for_path(f->path);
     if (!ops || !ops->write)
@@ -737,8 +803,11 @@ int vfs_close(struct vfs_file *f)
         return -EBADF;
     if (f->ref_count > 0)
         f->ref_count--;
-    if (f->ref_count <= 0)
+    if (f->ref_count <= 0) {
+        /* Last reference to the description: its flock(2) lock dies with it. */
+        ir0_flock_release_file(f);
         kfree(f);
+    }
     return 0;
 }
 
@@ -805,6 +874,8 @@ int vfs_mkdir(const char *path, int mode)
     if (ret != 0) return ret;
     if (!ir0_current_cred())
         return -ESRCH;
+    if (mount_is_readonly(path))
+        return -EROFS;
 
     char parent[MAX_PATH];
     if (parent_dir(path, parent, sizeof(parent)) == 0)
@@ -831,6 +902,8 @@ int vfs_unlink(const char *path)
     if (ret != 0) return ret;
     if (!ir0_current_cred())
         return -ESRCH;
+    if (mount_is_readonly(path))
+        return -EROFS;
     if (strcmp(path, "/") == 0)
         return -EPERM;
 
@@ -1229,9 +1302,8 @@ int vfs_truncate(const char *path, size_t length)
 
 int vfs_utimens(const char *path, const struct timespec times[2])
 {
+    struct vfs_ops *ops;
     stat_t st;
-
-    (void)times;
 
     if (!path)
         return -EINVAL;
@@ -1241,7 +1313,11 @@ int vfs_utimens(const char *path, const struct timespec times[2])
         return -EINVAL;
     if (vfs_stat(path, &st) != 0)
         return -ENOENT;
-    return 0;
+
+    ops = ops_for_path(path);
+    if (!ops || !ops->utimens)
+        return -ENOSYS;
+    return ops->utimens(path, times);
 }
 
 

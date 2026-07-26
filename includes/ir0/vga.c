@@ -386,22 +386,30 @@ void delay_ms(uint32_t ms)
 /* Función para convertir uint a hex string */
 void uint_to_hex(uintptr_t value, char *hex_str)
 {
-    char hex_chars[] = "0123456789ABCDEF";
-    int i = 0;
+	static const char hex_chars[] = "0123456789ABCDEF";
+	/*
+	 * Full pointer width (16 nibbles on LP64). The old 8-nibble path
+	 * truncated CR2/RIP so ERR_PTR(-errno) looked like FFFFFFBE instead
+	 * of FFFFFFFFFFFFFFBE.
+	 */
+	const int nibbles = (int)(sizeof(uintptr_t) * 2);
+	int i = 0;
+	int j;
 
-    /* Convertir a hex */
-    for (int j = 7; j >= 0; j--)
-    {
-        uint8_t nibble = (value >> (j * 4)) & 0xF;
-        hex_str[i++] = hex_chars[nibble];
-    }
-    hex_str[i] = '\0';
+	for (j = nibbles - 1; j >= 0; j--)
+	{
+		uint8_t nibble = (uint8_t)((value >> (j * 4)) & 0xF);
+
+		hex_str[i++] = hex_chars[nibble];
+	}
+	hex_str[i] = '\0';
 }
 
 /* Función para imprimir valores hexadecimales */
 void print_hex(uintptr_t value)
 {
-    char hex_str[20];
-    uint_to_hex(value, hex_str);
-    print(hex_str);
+	char hex_str[20];
+
+	uint_to_hex(value, hex_str);
+	print(hex_str);
 }

@@ -2,20 +2,22 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.1 |
-| Fase IR0 | T0 |
-| Estado | stable |
+| Versión | 0.2 |
+| Fase IR0 | T0 / T1 producto |
+| Estado | stable (producto: solo runit; dbgshell eliminado) |
 | Depende de | memory, drivers, vfs, process |
 | Página man | IR0-boot (sección 7) |
-| Fuentes principales | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/arch_early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c` |
+| Fuentes principales | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/arch_early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
 
 ## 1. Visión general
 
 La ruta de arranque en x86-64 va desde una carga GRUB compatible con Multiboot
 hasta tablas de páginas mínimas, `kmain`, puesta en marcha de drivers y VFS,
-habilitación de syscalls/IRQ, y bien un shell de depuración en kernel o
-`kexecve("/sbin/init")`. No existe un directorio `boot/` separado; el código de
-arranque vive bajo `arch/` y `kernel/main.c`.
+habilitación de syscalls/IRQ, y `kexecve("/sbin/init")` (runit desde
+**IR0-userspace**). El dbgshell / `debug_bins/` in-kernel se **eliminó**
+(2026-07-25); ver [`USERSPACE.md`](../../USERSPACE.md) /
+[`esp/USERSPACE.md`](../../esp/USERSPACE.md). Logging estructurado:
+[`KLOG.md`](../../KLOG.md) / [`esp/KLOG.md`](../../esp/KLOG.md).
 
 ## 2. Arquitectura interna
 
@@ -23,9 +25,11 @@ arranque vive bajo `arch/` y `kernel/main.c`.
 |-------|------------|---------|
 | Entrada del loader | Comprobación Multiboot, PAE, long mode | `arch/x86-64/asm/boot_x64.asm` |
 | CPU temprana | GDT, TSS, SSE | `arch/x86-64/sources/arch_early.c` |
-| Entrada del kernel | Orquestación | `kernel/main.c` (`kmain`) |
-| Drivers | Bootstrap por etapas | `drivers/init_drv.c` |
+| Entrada del kernel | Orquestación + fases de boot | `kernel/main.c` (`kmain`) |
+| Event core | `klog_record` + early clock | `ktm/klog.c`, `arch_early_clock_*` |
+| Drivers | Bootstrap por etapas + probe events | `drivers/init_drv.c` |
 | FS raíz | Init de tabla de montajes | `fs/vfs.c` (`vfs_init_root`) |
+| Milestone bare-metal | `/etc/ir0-baremetal-booted` | `kernel/main.c` (post-VFS) |
 | Userspace | Carga ELF + schedule | `kernel/elf_loader.c` (`kexecve`) |
 
 **Paginación temprana (`boot_x64.asm`):** mapa de identidad 0–48 MiB con páginas
@@ -42,36 +46,24 @@ GRUB → boot_x64.asm
               → [CONFIG_ENABLE_VBE] video_backend_init_from_multiboot
               → console_backend_init
               → pmm_init (32–48 MiB)
-              → logging_init + ir0_driver_registry_init + serial_init
-              → ir0_boot_serial_ready() + banner BOOT (primera línea framed; toda ISA)
-              → init_all_drivers()
-              → vfs_init_root()  → mount / o fallback tmpfs
-              → process_init + ipc_init + clock_system_init
+              → logging_init + klog_promote_normal_ring
+              → ir0_driver_registry_init + serial_init
+              → fase EARLY_ARCH: ir0_boot_serial_ready() (banner BOOT)
+              → líneas PLATFORM / HYPERVISOR
+              → fase DRIVERS: init_all_drivers() + DRIVER_PROBE_RESULT*
+              → vfs_init_root() + sentinel opcional FIRST_BAREMETAL_BOOT
+              → process_init + ipc_init + clock_system_init (MONOTONIC)
               → syscall_init + syscalls_init
               → irq_init + boot_irq_unmask + sti
-              → [KERNEL_DEBUG_SHELL] start_init_process
-                OR ir0_rootfs_prepare_userspace_base + kexecve("/sbin/init")
+              → fase USERSPACE: kexecve("/sbin/init")
               → sched_schedule_next → ring 3
-```
-
-Mapa ASCII:
-
-```text
-  Multiboot EBX ──► kmain
-                      │
-    arch_early ───────┤ GDT/TSS/SSE
-    heap + PMM ───────┤ heap 8–32 MiB, frames 32–48 MiB
-    drivers ──────────┤ etapas bootstrap INPUT→NET
-    vfs_init_root ────┤ /dev/hda → / (minix) o tmpfs
-    syscalls + IRQ ───┤ int 0x80 + insn syscall
-    kexecve ──────────► /sbin/init (musl estático)
 ```
 
 ## 4. Responsabilidades
 
 - **boot_x64.asm:** solo transición de modo CPU; sin runtime C.
 - **kmain:** init ordenado de subsistemas; no debe volver a userspace sin scheduler.
-- **init_all_drivers:** registrar e init de stacks de hardware condicionados por Kconfig.
+- **init_all_drivers:** registrar e init de stacks de hardware condicionados por Kconfig; emitir probe results.
 - **vfs_init_root:** proporcionar un `/` usable antes de cualquier exec basado en fichero.
 - **kexecve:** cargar ELF desde VFS, mapear segmentos, encolar proceso.
 
@@ -116,8 +108,9 @@ Nuevos contribuidores: `make man TOPIC=onboarding`. Boot log opcional en el host
 `make run-bootlog` → `build/hostshare/ir0-boot.log` con `BOOT_LOG_HOSTSHARE=y`
 y QEMU `-virtfs` (`BOOT_LOG_HOSTSHARE_OK` / `_SKIP`).
 
-Tags serial: `[ARCH]`, COMP `BOOT` vía klog, `[DRIVERS]`, `SERIAL: kmain: Loading userspace init`,
-`[ts] [INFO] [FASE…] CLASSIFY ROOTFS_LAYOUT_OK` (sin dialecto `[COMP][CLASSIFY]`).
+Tags serial: `[ARCH]`, COMP `BOOT` vía klog, `[DRIVERS]`, `DRIVER_SUMMARY_OK`,
+`FIRST_BAREMETAL_BOOT*` (solo bare-metal), handoff userspace,
+`[ts] [INFO] [FASE…] CLASSIFY ROOTFS_LAYOUT_OK`.
 
 | Síntoma | Comprobar |
 |---------|-----------|
@@ -132,7 +125,8 @@ Build: `make kernel-x64.iso`; userspace: `make kernel-x64-userspace.iso`.
 ## 10. Hoja de ruta futura
 
 - Arranque temprano ARM64 usa `ir0_boot_*` portable + `arm64_board` (`qemu-virt` /
-  `rpi4` / stub `rpi5`). UART RPi4 min: `make smoke-arm64-rpi4-boot`. No listo para producción.
+  `rpi4` / stub `rpi5`). UART RPi4 min: `make smoke-arm64-rpi4-boot`. Hello sin CRT
+  musl: fallback freestanding en `musl-aarch64-hello`.
 - Arranque SMP/APIC-first no es primario (`CONFIG_ENABLE_SMP=0`).
 - Mapa higher-half del kernel no implementado (solo mapa bajo de identidad).
 - Arranque directo UEFI no está en el árbol (solo ruta GRUB Multiboot).

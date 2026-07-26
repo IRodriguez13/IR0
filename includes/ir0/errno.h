@@ -36,6 +36,7 @@
 #define EBADF   9   /* Bad file number */
 #define ECHILD  10  /* No child processes */
 #define EAGAIN  11  /* Try again */
+#define EWOULDBLOCK EAGAIN /* POSIX alias; same value as Linux */
 #define ENOMEM  12  /* Out of memory */
 #define EACCES  13  /* Permission denied */
 #define EFAULT  14  /* Bad address */
@@ -70,6 +71,7 @@
 #define ENOTSUPP   95  /* Operation not supported */
 #define EOPNOTSUPP ENOTSUPP  /* POSIX name; same numeric value as Linux */
 #define ENOTEMPTY 39 /* Directory not empty (Linux errno 39) */
+#define ENOLCK  37  /* No record locks available (Linux errno 37) */
 #define ENOTSOCK 88
 #define EPROTOTYPE 91
 #define ENOPROTOOPT 92

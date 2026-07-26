@@ -93,7 +93,7 @@ Boot log opcional en el **host**:
 
 ## 9. Consejos de depuración — primer bug
 
-1. Arrancá con `make run` y mirá el banner serial `IR0 Kernel v… Boot routine`.
+1. Arrancá con `make run` y mirá el banner serial `IR0 kernel …` (luego ARCH / HYPERVISOR / PLATFORM).
 2. `make man TOPIC=boot` — buscá `ir0_boot_serial_ready` / `boot_log.h`.
 3. Grep el símbolo; abrí el `.c`; leé un call site en `kmain`.
 4. Opcional: `make run-bootlog` y abrí `build/hostshare/ir0-boot.log`.

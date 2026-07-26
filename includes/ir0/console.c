@@ -16,6 +16,7 @@
 #include <ir0/console.h>
 #include <ir0/paging.h>
 #include <ir0/arch_port.h>
+#include <ir0/arch_cpu.h>
 #include <ir0/console_backend.h>
 #include <ir0/ash_smoke.h>
 #include <d1_12_read_diag.h>
@@ -26,6 +27,9 @@
 #include <ir0/kernel.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
+#include <ir0/signals.h>
+#include <ir0/clock.h>
+#include <ir0/clock_wait.h>
 #include <string.h>
 
 /* TCGETS/TCSETS ABI must stay Linux kernel termios (36 bytes, NCCS=19). */
@@ -42,6 +46,13 @@ static process_t *tty_read_waiters[IR0_TTY_MAX_READ_WAITERS];
 static struct ir0_termios tty_termios;
 static int tty_termios_ready;
 static int tty_userspace_attached;
+static int tty_need_resched;
+static int tty_sleep_depth;
+/* Foreground pgrp for /dev/console (TIOCSPGRP); 0 → signal TTY waiters only. */
+static int32_t console_fg_pgid;
+/* Soft winsize from TIOCSWINSZ (0 → report renderer geometry). */
+static uint16_t soft_ws_row;
+static uint16_t soft_ws_col;
 
 static char canon_line[IR0_TTY_CANON_MAX];
 static size_t canon_line_len;
@@ -49,6 +60,8 @@ static size_t canon_line_len;
 static char canon_readq[IR0_TTY_CANON_MAX + 1];
 static size_t canon_readq_len;
 static size_t canon_readq_pos;
+/* Set when ICANON VEOF arrives on an empty line — next read returns 0. */
+static int canon_eof_pending;
 
 static void tty_termios_ensure(void)
 {
@@ -60,12 +73,78 @@ static void tty_termios_ensure(void)
 		tty_termios.c_cflag = IR0_CONSOLE_CFLAG_DEFAULT;
 		tty_termios.c_lflag = IR0_CONSOLE_LFLAG_DEFAULT;
 		tty_termios.c_line = 0;
-		tty_termios.c_cc[IR0_CC_VEOF] = 4;
+		tty_termios.c_cc[IR0_CC_VINTR] = 3;   /* Ctrl+C */
+		tty_termios.c_cc[IR0_CC_VQUIT] = 28;  /* Ctrl+\ */
+		tty_termios.c_cc[IR0_CC_VERASE] = 127;
+		tty_termios.c_cc[IR0_CC_VEOF] = 4;    /* Ctrl+D */
 		tty_termios.c_cc[IR0_CC_VTIME] = 0;
 		tty_termios.c_cc[IR0_CC_VMIN] = 1;
-		tty_termios.c_cc[IR0_CC_VERASE] = 127;
 		tty_termios_ready = 1;
 	}
+}
+
+static int tty_isig_on(void)
+{
+	tty_termios_ensure();
+	return (tty_termios.c_lflag & IR0_LFLAG_ISIG) ? 1 : 0;
+}
+
+/*
+ * Deliver INTR/QUIT to the console foreground group, or to blocked readers
+ * when job-control has not installed a fg pgid yet (ash without tcsetpgrp).
+ */
+static void tty_deliver_sig(int sig)
+{
+	int i;
+	int n = 0;
+
+	/*
+	 * Never signal PID/pgid 1 (runit). A wrong TIOCSPGRP of 1 would
+	 * otherwise let VINTR tear down stage supervision and leave stale
+	 * supervise/lock holders.
+	 */
+	if (console_fg_pgid > 1)
+		n = send_signal_pgrp(console_fg_pgid, sig);
+	if (n > 0)
+		return;
+
+	/*
+	 * No fg pgrp yet (ash before tcsetpgrp) and no blocked tty readers:
+	 * still deliver to the current userspace task. Otherwise Ctrl+C
+	 * during `cat /dev/hda` (busy in write, not in read) is a no-op.
+	 */
+	if (current_process && current_process->task.pid > 1)
+		(void)send_signal((int)current_process->task.pid, sig);
+
+	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
+	{
+		process_t *w = tty_read_waiters[i];
+
+		if (!w || w->task.pid <= 1)
+			continue;
+		(void)send_signal((int)w->task.pid, sig);
+	}
+}
+
+int ir0_console_set_fg_pgid(int32_t pgid)
+{
+	if (pgid <= 1)
+		return -EINVAL;
+	console_fg_pgid = pgid;
+	return 0;
+}
+
+int32_t ir0_console_get_fg_pgid(void)
+{
+	if (console_fg_pgid > 0)
+		return console_fg_pgid;
+	if (current_process)
+	{
+		if (current_process->pgid > 0)
+			return (int32_t)current_process->pgid;
+		return (int32_t)current_process->task.pid;
+	}
+	return 1;
 }
 
 static int tty_echo_on(void)
@@ -83,7 +162,13 @@ static int tty_icanon_on(void)
 static char tty_normalize_input(char c)
 {
 	tty_termios_ensure();
-	if (c == '\r' && (tty_termios.c_iflag & IR0_IFLAG_ICRNL))
+	/*
+	 * ICRNL maps CR→NL for cooked lines. In non-canonical/raw mode
+	 * (nano/ncurses), deliver CR as 0x0d even if ICRNL is stale — apps
+	 * expect Enter = '\r' after cfmakeraw().
+	 */
+	if (c == '\r' && (tty_termios.c_iflag & IR0_IFLAG_ICRNL) &&
+	    tty_icanon_on())
 		return '\n';
 	return c;
 }
@@ -171,6 +256,9 @@ static int tty_canon_feed(char c)
 		erase = 127;
 
 	c = tty_normalize_input(c);
+	/* Defensive: treat bare CR as EOL under ICANON (Enter from PS/2). */
+	if (c == '\r')
+		c = '\n';
 
 	if (c == '\b' || c == 127 || (unsigned char)c == erase)
 	{
@@ -199,6 +287,23 @@ static int tty_canon_feed(char c)
 		return 1;
 	}
 
+	/* VEOF (Ctrl+D): empty line → EOF; else push partial line without NL. */
+	if ((unsigned char)c == tty_termios.c_cc[IR0_CC_VEOF] ||
+	    (unsigned char)c == 4)
+	{
+		canon_readq_len = 0;
+		canon_readq_pos = 0;
+		if (canon_line_len == 0)
+		{
+			canon_eof_pending = 1;
+			return 1;
+		}
+		for (i = 0; i < canon_line_len; i++)
+			canon_readq[canon_readq_len++] = canon_line[i];
+		canon_line_len = 0;
+		return 1;
+	}
+
 	if (canon_line_len + 1 >= IR0_TTY_CANON_MAX)
 		return 0;
 
@@ -206,44 +311,6 @@ static int tty_canon_feed(char c)
 	if (tty_echo_on())
 		tty_echo_char(c);
 	return 0;
-}
-
-static void tty_wake_stage_user_read(process_t *proc)
-{
-	char kbuf[IR0_TTY_CANON_MAX + 1];
-	size_t out = 0;
-	uintptr_t user_buf;
-	size_t req;
-	int64_t n;
-
-	if (!proc || proc->mode != USER_MODE || !proc->irq_frame_saved)
-		return;
-	if (canon_readq_pos >= canon_readq_len)
-		return;
-
-	while (out < sizeof(kbuf) && canon_readq_pos < canon_readq_len)
-		tty_canon_drain(kbuf, sizeof(kbuf), &out);
-	if (out == 0)
-		return;
-
-	user_buf = (uintptr_t)proc->syscall_frame.rsi;
-	req = proc->syscall_frame.rdx;
-	if (req > 0 && out > req)
-		out = req;
-	if (!proc->page_directory || user_buf == 0 || out == 0)
-		return;
-
-	if (copy_to_user_region_in_directory(proc->page_directory, user_buf,
-					     kbuf, out) != 0)
-	{
-		proc->syscall_resume_rax = (uint64_t)(-EFAULT);
-		return;
-	}
-
-	n = (int64_t)out;
-	proc->syscall_resume_rax = (uint64_t)n;
-	d1_12_read_diag_kcopy(n, req, kbuf, out);
-	ir0_ash_smoke_read_return(0, n);
 }
 
 static inline uint64_t tty_irq_save(void)
@@ -322,6 +389,7 @@ static int tty_sleep_for_input(void)
 		return 0;
 
 	d1_16_tty_read_block(proc, tty_waiter_count(), "tty_input");
+	tty_sleep_depth++;
 
 	for (;;)
 	{
@@ -330,6 +398,7 @@ static int tty_sleep_for_input(void)
 			tty_waiter_remove(proc);
 			process_clear_in_thread_syscall_block(proc);
 			d1_16_tty_read_resume(proc, "input_ready");
+			tty_sleep_depth--;
 			return 1;
 		}
 
@@ -340,12 +409,18 @@ static int tty_sleep_for_input(void)
 			tty_waiter_remove(proc);
 			process_clear_in_thread_syscall_block(proc);
 			d1_16_tty_read_resume(proc, "input_ready_irq");
+			tty_sleep_depth--;
 			return 1;
 		}
 
 		prev_state = proc->state;
+		/*
+		 * Stay in the syscall (kernel_ret), do not arm user-iretq with
+		 * rax=0. Staging a user frame here caused login to hang after
+		 * Enter: echo ran, but read() never returned → no Password:.
+		 */
 		if (proc->mode == USER_MODE)
-			process_arm_blocked_syscall_resume(proc, 0);
+			process_arm_kernel_syscall_sleep(proc);
 		if (proc->state != PROCESS_READY)
 		{
 			proc->state = PROCESS_BLOCKED;
@@ -355,7 +430,15 @@ static int tty_sleep_for_input(void)
 		}
 		tty_irq_restore(flags);
 
+		/*
+		 * Depth must be 0 while switched out. A global depth left >0
+		 * after schedule made IRQ1 think it was nested in tty_sleep and
+		 * skip scheduling the woken ash reader (dead shell keyboard).
+		 */
+		tty_sleep_depth--;
+		enable_interrupts();
 		sched_schedule_next();
+		tty_sleep_depth++;
 
 		if (proc->state != PROCESS_BLOCKED)
 		{
@@ -363,7 +446,9 @@ static int tty_sleep_for_input(void)
 				d1_16_tty_state_transition(proc, PROCESS_BLOCKED,
 							   proc->state);
 			tty_waiter_remove(proc);
+			process_clear_in_thread_syscall_block(proc);
 			d1_16_tty_read_resume(proc, "woke");
+			tty_sleep_depth--;
 			return 1;
 		}
 
@@ -371,6 +456,7 @@ static int tty_sleep_for_input(void)
 		 * All tasks blocked: RR has no idle thread yet, so poll PS/2 and
 		 * wake TTY waiters from syscall context (QEMU GTK often skips IRQ1).
 		 */
+		enable_interrupts();
 		kernel_idle_poll();
 
 		if (ir0_console_input_ready())
@@ -380,7 +466,9 @@ static int tty_sleep_for_input(void)
 			d1_16_tty_state_transition(proc, prev_state,
 						   PROCESS_READY);
 			tty_waiter_remove(proc);
+			process_clear_in_thread_syscall_block(proc);
 			d1_16_tty_read_resume(proc, "poll_ready");
+			tty_sleep_depth--;
 			return 1;
 		}
 	}
@@ -395,11 +483,43 @@ void ir0_console_keypress(char c)
 {
 	char nc;
 	int line_done;
+	unsigned char vintr;
+	unsigned char vquit;
 
 	tty_termios_ensure();
 	nc = tty_normalize_input(c);
 	if (nc == 0)
 		return;
+
+	/*
+	 * ISIG: Ctrl+C / Ctrl+\ generate signals and are not queued as input.
+	 * Without this, Ctrl+C inserted literal 'c' into blocked readers (wc).
+	 */
+	if (tty_isig_on())
+	{
+		vintr = tty_termios.c_cc[IR0_CC_VINTR];
+		vquit = tty_termios.c_cc[IR0_CC_VQUIT];
+		if (vintr == 0)
+			vintr = 3;
+		if (vquit == 0)
+			vquit = 28;
+		if ((unsigned char)nc == vintr)
+		{
+			canon_line_len = 0;
+			tty_deliver_sig(SIGINT);
+			if (tty_sleep_depth == 0)
+				sched_schedule_next();
+			return;
+		}
+		if ((unsigned char)nc == vquit)
+		{
+			canon_line_len = 0;
+			tty_deliver_sig(SIGQUIT);
+			if (tty_sleep_depth == 0)
+				sched_schedule_next();
+			return;
+		}
+	}
 
 	if (tty_icanon_on())
 	{
@@ -407,11 +527,20 @@ void ir0_console_keypress(char c)
 		if (line_done)
 		{
 			ir0_ash_smoke_tty_line_ready();
-			if (ir0_console_wake_readers())
+			/*
+			 * Wake waiters. Schedule only when NOT already inside
+			 * tty_sleep on this stack (nested schedule stranded ash
+			 * after login). IRQ/async path must schedule or the
+			 * shell never runs again after BLOCKED.
+			 */
+			if (ir0_console_wake_readers() && tty_sleep_depth == 0)
 				sched_schedule_next();
 		}
+		return;
 	}
-	else if (tty_echo_on())
+
+	/* Raw (!ICANON): optional echo; byte lands in the kbd ring via store. */
+	if (tty_echo_on())
 		tty_echo_char(nc);
 }
 
@@ -443,6 +572,15 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 
 	for (;;)
 	{
+		if (current_process && signals_should_handle_on_run(current_process))
+			return -EINTR;
+
+		if (canon_eof_pending && canon_readq_pos >= canon_readq_len)
+		{
+			canon_eof_pending = 0;
+			return 0;
+		}
+
 		while (bytes_read < count && canon_readq_pos < canon_readq_len)
 			tty_canon_drain(kbuf, count, &bytes_read);
 
@@ -454,6 +592,9 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 			if (nonblock)
 				return -EAGAIN;
 			(void)tty_sleep_for_input();
+			if (current_process &&
+			    signals_should_handle_on_run(current_process))
+				return -EINTR;
 			continue;
 		}
 
@@ -477,6 +618,35 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 
 		if (nonblock)
 			return -EAGAIN;
+
+		{
+			unsigned vmin = tty_termios.c_cc[IR0_CC_VMIN];
+			unsigned vtime = tty_termios.c_cc[IR0_CC_VTIME];
+
+			/*
+			 * Linux non-canonical: VMIN=0,VTIME=0 → return 0 now
+			 * (ncurses poll). VMIN=0,VTIME>0 → wait up to VTIME
+			 * tenths of a second then return 0.
+			 */
+			if (vmin == 0 && vtime == 0)
+				return 0;
+			if (vmin == 0 && vtime > 0)
+			{
+				uint64_t now = clock_get_uptime_milliseconds();
+				uint64_t deadline = now + (uint64_t)vtime * 100u;
+
+				while (clock_get_uptime_milliseconds() < deadline)
+				{
+					if (input_kbd_has_data())
+						break;
+					if (current_process &&
+					    signals_should_handle_on_run(current_process))
+						return -EINTR;
+					(void)ir0_clock_wait_block_until(deadline);
+				}
+				continue;
+			}
+		}
 
 		(void)tty_sleep_for_input();
 	}
@@ -525,17 +695,40 @@ int tty_ioctl_termios_kernel(uint64_t request, struct ir0_termios *ktermios)
 	    request == IR0_CONSOLE_TCSETSW ||
 	    request == IR0_CONSOLE_TCSETSF)
 	{
+		int was_icanon = tty_icanon_on();
+		int now_icanon;
+
 		tty_termios = *ktermios;
+		/*
+		 * Do NOT force ICANON when VMIN==0: nano and other editors use
+		 * non-canonical timed reads (VMIN=0). Password prompts
+		 * (bb_ask_noecho) keep ICANON and only clear ECHO. Cooked+echo
+		 * restore after exec is ir0_console_reset_cooked_echo().
+		 */
+		now_icanon = (tty_termios.c_lflag & IR0_LFLAG_ICANON) ? 1 : 0;
+		if (now_icanon)
+			tty_termios.c_iflag |= IR0_IFLAG_ICRNL;
 		tty_termios_ready = 1;
-		canon_line_len = 0;
-		canon_readq_len = 0;
-		canon_readq_pos = 0;
-		if (request == IR0_CONSOLE_TCSETSF)
+		/*
+		 * Mode flip or TCSETSF: drop pending input so raw↔cooked does
+		 * not replay stale NL/ESC bytes (empty-prompt storms).
+		 */
+		if (request == IR0_CONSOLE_TCSETSF || was_icanon != now_icanon)
 			tty_flush_input();
 		return 0;
 	}
 
 	return -ENOTTY;
+}
+
+int tty_input_bytes_available(void)
+{
+	tty_termios_ensure();
+	if (canon_readq_pos < canon_readq_len)
+		return (int)(canon_readq_len - canon_readq_pos);
+	if (!tty_icanon_on() && input_kbd_has_data())
+		return 1;
+	return 0;
 }
 
 void tty_flush_input(void)
@@ -544,6 +737,7 @@ void tty_flush_input(void)
 	canon_line_len = 0;
 	canon_readq_len = 0;
 	canon_readq_pos = 0;
+	canon_eof_pending = 0;
 }
 
 int ir0_console_wake_readers(void)
@@ -556,39 +750,68 @@ int ir0_console_wake_readers(void)
 	if (!ir0_console_input_ready())
 		return 0;
 
+	/*
+	 * Wake one waiter back into tty_read_kernel (in-syscall drain).
+	 * Do not tty_wake_stage_user_read here — that path fought
+	 * process_arm_blocked_syscall_resume and hung getty after Enter.
+	 */
 	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
 	{
-		if (tty_read_waiters[i])
-		{
-			process_t *reader = tty_read_waiters[i];
-			int prev_state;
+		process_t *reader;
+		int prev_state;
 
-			if (reader->state == PROCESS_ZOMBIE)
-			{
-				tty_read_waiters[i] = NULL;
-				continue;
-			}
-			if (reader->mode == USER_MODE && reader->irq_frame_saved)
-				tty_wake_stage_user_read(reader);
-			prev_state = reader->state;
-			reader->state = PROCESS_READY;
-			d1_16_tty_state_transition(reader, prev_state,
-						   PROCESS_READY);
-			last_pid = (uint32_t)reader->task.pid;
+		if (!tty_read_waiters[i])
+			continue;
+
+		reader = tty_read_waiters[i];
+		if (reader->state == PROCESS_ZOMBIE)
+		{
 			tty_read_waiters[i] = NULL;
-			woke = 1;
+			continue;
 		}
+		/*
+		 * Async wake: mark READY only. Do not clear want_kernel_ret
+		 * (process_after_task_save still needs it). Do not
+		 * process_clear_in_thread_syscall_block here.
+		 */
+		if (reader->mode == USER_MODE)
+			reader->irq_frame_saved = 0;
+		prev_state = reader->state;
+		reader->state = PROCESS_READY;
+		d1_16_tty_state_transition(reader, prev_state, PROCESS_READY);
+		/* Prefer woken TTY reader on the next schedule. */
+		sched_promote_process(reader);
+		last_pid = (uint32_t)reader->task.pid;
+		tty_read_waiters[i] = NULL;
+		woke = 1;
+		break;
 	}
 
 	if (woke)
+	{
+		tty_need_resched = 1;
 		d1_16_tty_wake(waiters_before, woke, last_pid);
+	}
 
 	return woke;
 }
 
 int ir0_console_take_resched(void)
 {
-	return 0;
+	int v = tty_need_resched;
+
+	tty_need_resched = 0;
+	return v;
+}
+
+int ir0_console_resched_pending(void)
+{
+	return tty_need_resched;
+}
+
+int ir0_console_in_tty_sleep(void)
+{
+	return tty_sleep_depth > 0;
 }
 
 int ir0_console_timer_resched_pending(void)
@@ -669,42 +892,82 @@ int ir0_console_isatty(void)
 
 int ir0_console_term_width(void)
 {
-	int w = console_get_width();
+	int w;
 
+	if (soft_ws_col > 0)
+		return (int)soft_ws_col;
+	w = console_get_width();
 	return w > 0 ? w : 80;
 }
 
 int ir0_console_term_height(void)
 {
-	int h = console_get_height();
+	int h;
 
+	if (soft_ws_row > 0)
+		return (int)soft_ws_row;
+	h = console_get_height();
 	return h > 0 ? h : 25;
 }
 
 int ir0_console_ioctl_winsize(void *user_arg)
 {
 	struct ir0_winsize win;
+	struct console_geometry geo;
 
 	if (!user_arg)
 		return -EINVAL;
+	console_get_geometry(&geo);
 	win.ws_row = (uint16_t)ir0_console_term_height();
 	win.ws_col = (uint16_t)ir0_console_term_width();
 	{
-		int scale = console_backend_fb_scale();
+		unsigned scale = geo.scale ? geo.scale : 1u;
+		unsigned cw = geo.cell_width ? geo.cell_width : 8u * scale;
+		unsigned ch = geo.cell_height ? geo.cell_height : 16u * scale;
 
-		if (scale < 1)
-			scale = 1;
-		win.ws_xpixel = (uint16_t)(win.ws_col * 8u * (uint16_t)scale);
-		win.ws_ypixel = (uint16_t)(win.ws_row * 16u * (uint16_t)scale);
+		win.ws_xpixel = (uint16_t)(win.ws_col * cw);
+		win.ws_ypixel = (uint16_t)(win.ws_row * ch);
 	}
 	if (copy_to_user(user_arg, &win, sizeof(win)) != 0)
 		return -EFAULT;
 	return 0;
 }
 
+int ir0_console_ioctl_winsize_set(void *user_arg)
+{
+	struct ir0_winsize win;
+	int32_t pgid;
+
+	if (!user_arg)
+		return -EINVAL;
+	if (copy_from_user(&win, user_arg, sizeof(win)) != 0)
+		return -EFAULT;
+	if (win.ws_row == 0 || win.ws_col == 0)
+		return -EINVAL;
+	soft_ws_row = win.ws_row;
+	soft_ws_col = win.ws_col;
+	pgid = ir0_console_get_fg_pgid();
+	if (pgid > 1)
+		(void)send_signal_pgrp(pgid, SIGWINCH);
+	return 0;
+}
+
 int ir0_console_fill_termios(struct ir0_termios *out)
 {
 	return tty_ioctl_termios_kernel(IR0_CONSOLE_TCGETS, out);
+}
+
+/*
+ * Restore cooked+echo after password entry / exec. Dropped ECHO or ICANON
+ * leaves ash looking dead (no echo, lines never finish).
+ */
+void ir0_console_reset_cooked_echo(void)
+{
+	tty_termios_ensure();
+	tty_termios.c_iflag |= IR0_IFLAG_ICRNL;
+	tty_termios.c_lflag |= (IR0_LFLAG_ICANON | IR0_LFLAG_ECHO |
+				IR0_LFLAG_ECHOE | IR0_LFLAG_ECHOK);
+	tty_termios_ready = 1;
 }
 
 int ir0_console_set_termios(const struct ir0_termios *in)

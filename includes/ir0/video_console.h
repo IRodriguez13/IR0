@@ -20,7 +20,19 @@
 #define CONSOLE_HEIGHT 25
 
 #define CONSOLE_FB_SCALE_DEFAULT 2
+#define CONSOLE_FB_SCALE_MAX     2
 #define CONSOLE_FB_BORDER_COLOR  0x00u
+
+struct console_geometry
+{
+	unsigned pixel_width;
+	unsigned pixel_height;
+	unsigned cell_width;
+	unsigned cell_height;
+	unsigned columns;
+	unsigned rows;
+	unsigned scale;
+};
 
 void console_put_cell(int row, int col, char c, uint8_t color);
 void console_scroll_up(uint8_t clear_color);
@@ -30,3 +42,4 @@ int console_use_framebuffer(void);
 int console_get_width(void);
 int console_get_height(void);
 int console_get_fb_scale(void);
+void console_get_geometry(struct console_geometry *geo);

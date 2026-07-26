@@ -297,6 +297,20 @@ int send_signal(int pid, int signal)
 #endif
 
     /*
+     * Linux: signals to PID 1 are discarded unless init installed a handler
+     * (man 2 kill). BusyBox poweroff/reboot without -f send SIGUSR2/SIGTERM
+     * to PID 1; runit has no handler — leaving them pending destabilized
+     * stage supervision and later showed up as kernel #UD.
+     */
+    if (proc->task.pid == 1)
+    {
+	void (*handler)(int) = proc->signal_handlers[signal];
+
+	if (!handler || handler == SIG_DFL || handler == SIG_IGN)
+		return 0;
+    }
+
+    /*
      * Default-fatal: zombieize immediately. Do not promote BLOCKED→READY
      * first (that raced schedule into a half-dead task → #UD on iret).
      */
@@ -483,14 +497,27 @@ void handle_signals(void)
         }
     }
 
+    /*
+     * SIGINT/SIGQUIT: same contract as SIGTERM. BusyBox ash installs a
+     * handler and may raise(SIGINT) after a fg job (^C in nano). Always
+     * process_exit(130) killed the login shell → runsv restart loop.
+     */
     if (current->signal_pending & SIGNAL_MASK(SIGINT))
     {
+        if (current->signal_ignored & SIGNAL_MASK(SIGINT))
+        {
+            current->signal_pending &= ~SIGNAL_MASK(SIGINT);
+        }
+        else if (!signals_has_user_handler(current, SIGINT))
+        {
 #if DEBUG_PROCESS
-        klog_info("SIGNAL", "SIGINT received, terminating process");
+            klog_info("SIGNAL", "SIGINT received, terminating process");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGINT);
-        process_exit(130); /* Exit code 130 = 128 + 2 (SIGINT) */
-        return;
+            current->signal_pending &= ~SIGNAL_MASK(SIGINT);
+            process_exit(130); /* 128 + SIGINT */
+            return;
+        }
+        /* else: fall through to userspace handler delivery below */
     }
 
     if (current->signal_pending & SIGNAL_MASK(SIGHUP))
@@ -511,12 +538,19 @@ void handle_signals(void)
 
     if (current->signal_pending & SIGNAL_MASK(SIGQUIT))
     {
+        if (current->signal_ignored & SIGNAL_MASK(SIGQUIT))
+        {
+            current->signal_pending &= ~SIGNAL_MASK(SIGQUIT);
+        }
+        else if (!signals_has_user_handler(current, SIGQUIT))
+        {
 #if DEBUG_PROCESS
-        klog_info("SIGNAL", "SIGQUIT received, terminating process");
+            klog_info("SIGNAL", "SIGQUIT received, terminating process");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGQUIT);
-        process_exit(131); /* Exit code 131 = 128 + 3 (SIGQUIT) */
-        return;
+            current->signal_pending &= ~SIGNAL_MASK(SIGQUIT);
+            process_exit(131); /* 128 + SIGQUIT */
+            return;
+        }
     }
 
     if (current->signal_pending & SIGNAL_MASK(SIGABRT))
@@ -708,9 +742,7 @@ int register_signal_handler(int signal, void (*handler)(int))
     if (current->mode == USER_MODE && handler != SIG_DFL && handler != SIG_IGN)
     {
         if (!is_user_address((void *)handler, sizeof(void *)))
-        {
-            return -1; /* Invalid handler address */
-        }
+            return -1; /* Invalid handler address */  
     }
     
     current->signal_handlers[signal] = handler;

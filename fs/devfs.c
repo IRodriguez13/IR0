@@ -353,6 +353,55 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
 
     if (request == IR0_CONSOLE_TIOCGWINSZ)
         return ir0_console_ioctl_winsize(arg);
+    if (request == IR0_CONSOLE_TIOCSWINSZ)
+        return ir0_console_ioctl_winsize_set(arg);
+
+    if (request == IR0_CONSOLE_TCFLSH)
+    {
+        /* 0=IFLUSH, 1=OFLUSH, 2=IOFLUSH — input-only console. */
+        tty_flush_input();
+        return 0;
+    }
+
+    if (request == IR0_CONSOLE_FIONREAD)
+    {
+        int avail;
+
+        if (!arg)
+            return -EINVAL;
+        avail = tty_input_bytes_available();
+        if (copy_to_user(arg, &avail, sizeof(avail)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    /*
+     * Job-control ioctls on /dev/console. Without these, BusyBox ash may
+     * disable job control; stubs keep interactive read path alive.
+     */
+    if (request == IR0_TIOCSCTTY)
+	return 0;
+    if (request == IR0_TIOCSPGRP)
+    {
+	pid_t pg;
+
+	if (!arg)
+	    return -EINVAL;
+	if (copy_from_user(&pg, arg, sizeof(pg)) != 0)
+	    return -EFAULT;
+	return ir0_console_set_fg_pgid((int32_t)pg);
+    }
+    if (request == IR0_TIOCGPGRP)
+    {
+	pid_t pg;
+
+	if (!arg)
+	    return -EINVAL;
+	pg = (pid_t)ir0_console_get_fg_pgid();
+	if (copy_to_user(arg, &pg, sizeof(pg)) != 0)
+	    return -EFAULT;
+	return 0;
+    }
 
     return -ENOTTY;
 }
@@ -387,56 +436,50 @@ int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, o
     return ir0_console_write(buf, count, 0x07);
 }
 
-/* Circular buffer for kernel messages */
-#define KMSG_BUFFER_SIZE 4096
-static char kmsg_buffer[KMSG_BUFFER_SIZE];
-static size_t kmsg_head = 0;
-static size_t kmsg_tail = 0;
-static size_t kmsg_count = 0;  /* Number of bytes in buffer */
-
 int64_t dev_kmsg_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)offset;
-    const char *msg = (const char *)buf;
-    size_t written = 0;
-    
-    /* Add to circular buffer */
-    for (size_t i = 0; i < count && i < 256; i++)
-    {
-        kmsg_buffer[kmsg_head] = msg[i];
-        kmsg_head = (kmsg_head + 1) % KMSG_BUFFER_SIZE;
-        
-        if (kmsg_count < KMSG_BUFFER_SIZE)
-        {
-            kmsg_count++;
-        }
-        else
-        {
-            /* Buffer is full, overwrite oldest data */
-            kmsg_tail = (kmsg_tail + 1) % KMSG_BUFFER_SIZE;
-        }
-        written++;
-    }
-    
-    return (int64_t)written;
+    char message[97];
+    size_t n;
+
+    (void)entry;
+    (void)offset;
+    if (!buf)
+        return -EINVAL;
+    n = count < sizeof(message) - 1 ? count : sizeof(message) - 1;
+    memcpy(message, buf, n);
+    message[n] = '\0';
+    while (n > 0 && (message[n - 1] == '\n' || message[n - 1] == '\r'))
+        message[--n] = '\0';
+    klog_info("USER", message);
+    return (int64_t)count;
 }
 
 int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
-    (void)entry; (void)offset;
-    char *out_buf = (char *)buf;
-    size_t read_count = 0;
-    
-    /* Read from circular buffer */
-    while (read_count < count && kmsg_count > 0)
-    {
-        out_buf[read_count] = kmsg_buffer[kmsg_tail];
-        kmsg_tail = (kmsg_tail + 1) % KMSG_BUFFER_SIZE;
-        kmsg_count--;
-        read_count++;
-    }
-    
-    return (int64_t)read_count;
+	/*
+	 * Legacy ops path — preferred open path uses per-open text snap.
+	 * Keep bounce+slice here so a direct ops->read still reaches EOF.
+	 */
+	char full[4096];
+	int64_t n;
+
+	(void)entry;
+	n = (int64_t)klog_read_records(full, sizeof(full));
+	if (n < 0)
+		return n;
+	if (offset < 0)
+		return -EINVAL;
+	if ((uint64_t)offset >= (uint64_t)n)
+		return 0;
+	{
+		size_t avail = (size_t)n - (size_t)offset;
+		size_t to_copy = avail < count ? avail : count;
+
+		if (!buf)
+			return -EFAULT;
+		memcpy(buf, full + (size_t)offset, to_copy);
+		return (int64_t)to_copy;
+	}
 }
 
 #if CONFIG_ENABLE_SOUND
@@ -1020,118 +1063,222 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
 #endif
 }
 
+#if CONFIG_ENABLE_NETWORKING
+/*
+ * Build one /dev/net text payload into @out (ping_result or snapshot).
+ * Returns byte length (not including a forced NUL).
+ */
+static size_t dev_net_build_text(char *out, size_t out_len)
+{
+	size_t off = 0;
+	int n;
+	pid_t pid;
+	uint16_t id;
+	uint16_t seq = 0;
+	uint64_t rtt = 0;
+	uint8_t ttl = 0;
+	size_t payload_bytes = 0;
+	ip4_addr_t reply_ip = 0;
+	struct net_device *dev;
+
+	if (!out || out_len == 0)
+		return 0;
+
+	net_poll();
+	pid = devfs_current_pid();
+	id = (uint16_t)(pid & 0xFFFF);
+
+	if (icmp_get_next_echo_result(id, &seq, &rtt, &ttl, &payload_bytes, &reply_ip))
+	{
+		uint32_t ip = ntohl(reply_ip);
+
+		n = snprintf(out, out_len,
+			     "type=ping_result\nsuccess=1\nseq=%u\nrtt_ms=%u\nttl=%u\npayload_bytes=%u\nip=%u.%u.%u.%u\n",
+			     (unsigned)seq, (unsigned)rtt, (unsigned)ttl,
+			     (unsigned)payload_bytes,
+			     (unsigned)((ip >> 24) & 0xFF), (unsigned)((ip >> 16) & 0xFF),
+			     (unsigned)((ip >> 8) & 0xFF), (unsigned)(ip & 0xFF));
+		if (n <= 0)
+			return 0;
+		if ((size_t)n >= out_len)
+			return out_len - 1;
+		return (size_t)n;
+	}
+
+	n = snprintf(out + off, out_len - off, "type=snapshot\n");
+	if (n > 0 && (size_t)n < out_len - off)
+		off += (size_t)n;
+	n = snprintf(out + off, out_len - off, "iface\tmtu\tflags\tmac\n");
+	if (n > 0 && (size_t)n < out_len - off)
+		off += (size_t)n;
+
+	dev = net_get_devices();
+	while (dev && off < out_len - 1)
+	{
+		char flags[32];
+		size_t foff = 0;
+
+		flags[0] = '\0';
+		if (dev->flags & IFF_UP)
+			foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "UP");
+		if (dev->flags & IFF_RUNNING)
+			foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff,
+						 "%sRUNNING", foff ? "," : "");
+		if (dev->flags & IFF_BROADCAST)
+			foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff,
+						 "%sBROADCAST", foff ? "," : "");
+		if (foff == 0)
+			snprintf(flags, sizeof(flags), "-");
+
+		n = snprintf(out + off, out_len - off,
+			     "%s\t%u\t%s\t%02x:%02x:%02x:%02x:%02x:%02x\n",
+			     dev->name ? dev->name : "", (unsigned)dev->mtu, flags,
+			     (unsigned)dev->mac[0], (unsigned)dev->mac[1],
+			     (unsigned)dev->mac[2], (unsigned)dev->mac[3],
+			     (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
+		if (n <= 0 || (size_t)n >= out_len - off)
+			break;
+		off += (size_t)n;
+		dev = dev->next;
+	}
+
+	if (off < out_len)
+	{
+		uint32_t ip_h = ntohl(ip_local_addr);
+		uint32_t nm_h = ntohl(ip_netmask);
+		uint32_t gw_h = ntohl(ip_gateway);
+
+		n = snprintf(out + off, out_len - off,
+			     "ip=%u.%u.%u.%u\nnetmask=%u.%u.%u.%u\ngateway=%u.%u.%u.%u\n",
+			     (unsigned)((ip_h >> 24) & 0xFF), (unsigned)((ip_h >> 16) & 0xFF),
+			     (unsigned)((ip_h >> 8) & 0xFF), (unsigned)(ip_h & 0xFF),
+			     (unsigned)((nm_h >> 24) & 0xFF), (unsigned)((nm_h >> 16) & 0xFF),
+			     (unsigned)((nm_h >> 8) & 0xFF), (unsigned)(nm_h & 0xFF),
+			     (unsigned)((gw_h >> 24) & 0xFF), (unsigned)((gw_h >> 16) & 0xFF),
+			     (unsigned)((gw_h >> 8) & 0xFF), (unsigned)(gw_h & 0xFF));
+		if (n > 0 && (size_t)n < out_len - off)
+			off += (size_t)n;
+	}
+
+	return off;
+}
+#endif /* CONFIG_ENABLE_NETWORKING */
+
+int devfs_node_wants_text_snap(uint32_t device_id)
+{
+	return device_id == DEVFS_ID_NET || device_id == DEVFS_ID_KMSG;
+}
+
+int64_t devfs_text_snap_read(const devfs_text_snap_t *snap, void *buf,
+			     size_t count, off_t offset)
+{
+	size_t avail;
+	size_t to_copy;
+
+	if (!snap || !snap->buf)
+		return -EINVAL;
+	if (!buf)
+		return -EFAULT;
+	if (offset < 0)
+		return -EINVAL;
+	if ((uint64_t)offset >= (uint64_t)snap->len)
+		return 0;
+	avail = snap->len - (size_t)offset;
+	to_copy = avail < count ? avail : count;
+	memcpy(buf, snap->buf + (size_t)offset, to_copy);
+	return (int64_t)to_copy;
+}
+
+void devfs_text_snap_acquire(devfs_text_snap_t *snap)
+{
+	if (snap)
+		snap->refs++;
+}
+
+void devfs_text_snap_release(devfs_text_snap_t *snap)
+{
+	if (!snap)
+		return;
+	if (snap->refs > 0)
+		snap->refs--;
+	if (snap->refs == 0)
+	{
+		if (snap->buf)
+			kfree(snap->buf);
+		kfree(snap);
+	}
+}
+
+devfs_text_snap_t *devfs_text_snap_capture(uint32_t device_id)
+{
+	devfs_text_snap_t *snap;
+	char tmp[2048];
+	size_t len = 0;
+
+	if (device_id == DEVFS_ID_KMSG)
+	{
+		int n = klog_read_records(tmp, sizeof(tmp));
+
+		if (n < 0)
+			return NULL;
+		len = (size_t)n;
+	}
+#if CONFIG_ENABLE_NETWORKING
+	else if (device_id == DEVFS_ID_NET)
+		len = dev_net_build_text(tmp, sizeof(tmp));
+#endif
+	else
+		return NULL;
+
+	snap = (devfs_text_snap_t *)kmalloc(sizeof(*snap));
+	if (!snap)
+		return NULL;
+	snap->buf = (char *)kmalloc(len + 1);
+	if (!snap->buf)
+	{
+		kfree(snap);
+		return NULL;
+	}
+	memcpy(snap->buf, tmp, len);
+	snap->buf[len] = '\0';
+	snap->len = len;
+	snap->refs = 1;
+	return snap;
+}
+
 int64_t dev_net_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
 #if CONFIG_ENABLE_NETWORKING
-    (void)entry; (void)offset;
-    
-    if (!buf || count == 0)
-        return 0;
-    
-    /*
-     * Stable /dev/net read contract:
-     * - If a ping result is pending for caller pid: emit type=ping_result payload.
-     * - Otherwise emit type=snapshot payload.
-     * Both payloads are plain text key/value with deterministic field names.
-     */
-    net_poll();
+	char full[2048];
+	size_t len;
+	size_t avail;
+	size_t to_copy;
 
-    {
-        pid_t pid = devfs_current_pid();
-        uint16_t id = (uint16_t)(pid & 0xFFFF);
-        uint16_t seq = 0;
-        uint64_t rtt = 0;
-        uint8_t ttl = 0;
-        size_t payload_bytes = 0;
-        ip4_addr_t reply_ip = 0;
+	(void)entry;
+	if (!buf)
+		return -EFAULT;
+	if (count == 0)
+		return 0;
+	if (offset < 0)
+		return -EINVAL;
 
-        if (icmp_get_next_echo_result(id, &seq, &rtt, &ttl, &payload_bytes, &reply_ip))
-        {
-            char *out = (char *)buf;
-            size_t out_len = count;
-            size_t off = 0;
-            uint32_t ip = ntohl(reply_ip);
-            int n;
-
-            n = snprintf(out + off, out_len - off,
-                         "type=ping_result\nsuccess=1\nseq=%u\nrtt_ms=%u\nttl=%u\npayload_bytes=%u\nip=%u.%u.%u.%u\n",
-                         (unsigned)seq, (unsigned)rtt, (unsigned)ttl, (unsigned)payload_bytes,
-                         (unsigned)((ip >> 24) & 0xFF), (unsigned)((ip >> 16) & 0xFF),
-                         (unsigned)((ip >> 8) & 0xFF), (unsigned)(ip & 0xFF));
-            if (n <= 0)
-                return -EIO;
-            if ((size_t)n >= out_len)
-                return (int64_t)(out_len - 1);
-            return (int64_t)n;
-        }
-    }
-
-    {
-        char *out = (char *)buf;
-        size_t out_len = count;
-        size_t off = 0;
-        struct net_device *dev = net_get_devices();
-        int n;
-
-        n = snprintf(out + off, (off < out_len) ? (out_len - off) : 0,
-                     "type=snapshot\n");
-        if (n > 0 && (size_t)n < out_len - off)
-            off += (size_t)n;
-        n = snprintf(out + off, (off < out_len) ? (out_len - off) : 0,
-                     "iface\tmtu\tflags\tmac\n");
-        if (n > 0 && (size_t)n < out_len - off)
-            off += (size_t)n;
-
-        while (dev && off < out_len - 1)
-        {
-            char flags[32];
-            size_t foff = 0;
-
-            flags[0] = '\0';
-            if (dev->flags & IFF_UP)
-                foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "UP");
-            if (dev->flags & IFF_RUNNING)
-                foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "%sRUNNING", foff ? "," : "");
-            if (dev->flags & IFF_BROADCAST)
-                foff += (size_t)snprintf(flags + foff, sizeof(flags) - foff, "%sBROADCAST", foff ? "," : "");
-            if (foff == 0)
-                snprintf(flags, sizeof(flags), "-");
-
-            n = snprintf(out + off, out_len - off, "%s\t%u\t%s\t%02x:%02x:%02x:%02x:%02x:%02x\n",
-                         dev->name ? dev->name : "", (unsigned)dev->mtu, flags,
-                         (unsigned)dev->mac[0], (unsigned)dev->mac[1], (unsigned)dev->mac[2],
-                         (unsigned)dev->mac[3], (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
-            if (n <= 0 || (size_t)n >= out_len - off)
-                break;
-            off += (size_t)n;
-            dev = dev->next;
-        }
-
-        if (off < out_len)
-        {
-            uint32_t ip_h = ntohl(ip_local_addr);
-            uint32_t nm_h = ntohl(ip_netmask);
-            uint32_t gw_h = ntohl(ip_gateway);
-
-            n = snprintf(out + off, out_len - off,
-                         "ip=%u.%u.%u.%u\nnetmask=%u.%u.%u.%u\ngateway=%u.%u.%u.%u\n",
-                         (unsigned)((ip_h >> 24) & 0xFF), (unsigned)((ip_h >> 16) & 0xFF),
-                         (unsigned)((ip_h >> 8) & 0xFF), (unsigned)(ip_h & 0xFF),
-                         (unsigned)((nm_h >> 24) & 0xFF), (unsigned)((nm_h >> 16) & 0xFF),
-                         (unsigned)((nm_h >> 8) & 0xFF), (unsigned)(nm_h & 0xFF),
-                         (unsigned)((gw_h >> 24) & 0xFF), (unsigned)((gw_h >> 16) & 0xFF),
-                         (unsigned)((gw_h >> 8) & 0xFF), (unsigned)(gw_h & 0xFF));
-            if (n > 0 && (size_t)n < out_len - off)
-                off += (size_t)n;
-        }
-
-        if (off < out_len)
-            out[off] = '\0';
-        return off > 0 ? (int64_t)off : 0;
-    }
+	/*
+	 * Bounce+slice fallback when no per-open snap is attached (ops path).
+	 * Preferred: open captures snap; sys_read uses devfs_text_snap_read.
+	 */
+	len = dev_net_build_text(full, sizeof(full));
+	if ((uint64_t)offset >= (uint64_t)len)
+		return 0;
+	avail = len - (size_t)offset;
+	to_copy = avail < count ? avail : count;
+	memcpy(buf, full + (size_t)offset, to_copy);
+	return (int64_t)to_copy;
 #else
-    (void)entry; (void)buf; (void)count; (void)offset;
-    return -ENODEV;
+	(void)entry;
+	(void)buf;
+	(void)count;
+	(void)offset;
+	return -ENODEV;
 #endif
 }
 
@@ -1300,6 +1447,16 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         while (num_sectors > 0)
         {
             uint8_t n = (num_sectors > 255) ? 255 : (uint8_t)num_sectors;
+
+            /* cat /dev/hda must be interruptible (Ctrl+C → EINTR). */
+            if (current_process &&
+                signals_pause_should_interrupt(current_process))
+            {
+                handle_signals();
+                if (bytes_done > 0)
+                    return (int64_t)bytes_done;
+                return -EINTR;
+            }
             if (ir0_block_read_by_name(disk_name, (uint32_t)start_lba, n, dst))
                 return (int64_t)bytes_done;
             bytes_done += (size_t)n * 512;

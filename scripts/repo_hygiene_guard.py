@@ -48,7 +48,6 @@ def git_ls_files():
 
 # Paths where compiled artifacts must never be tracked (sources only).
 COMPILED_ARTIFACT_PREFIXES = (
-    "setup/third-party/busybox-1.36.1/",
     "setup/pid1/fase52_staging/bin/",
     "setup/pid1/fase52_staging/lib/",
 )
@@ -208,7 +207,7 @@ def main():
 
         full = ROOT / rel
         if full.is_file() and is_elf_executable(full):
-            if rel.startswith(("setup/pid1/", "setup/third-party/busybox-1.36.1/")):
+            if rel.startswith("setup/pid1/"):
                 errors.append(f"[tracked-elf] {rel}")
 
         if is_spanish_named_markdown(rel):

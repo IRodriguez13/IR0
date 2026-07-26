@@ -81,7 +81,12 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 	if (validate_userspace_buffer(tp, sizeof(struct timespec)) != 0)
 		return -EFAULT;
 
-	if (clock_id != 0 && clock_id != 1)
+	/*
+	 * REALTIME(0), MONOTONIC(1), MONOTONIC_RAW(4) and BOOTTIME(7) all read
+	 * the same uptime source: IR0 has no wall clock offset or suspend yet,
+	 * so boot-relative and monotonic are identical.
+	 */
+	if (clock_id != 0 && clock_id != 1 && clock_id != 4 && clock_id != 7)
 		return -EINVAL;
 
 	uptime_ms = clock_get_uptime_milliseconds();

@@ -41,11 +41,14 @@
 #define PS2_DEV_DISABLE_SCAN 0xF5
 #define PS2_DEV_SET_DEFAULTS 0xF6
 
-// PS/2 Status register bits
+/* PS/2 Status register bits (Linux i8042.h / OSDev dual-channel). */
 #define PS2_STATUS_OUTPUT_FULL  0x01
 #define PS2_STATUS_INPUT_FULL   0x02
 #define PS2_STATUS_SYSTEM_FLAG  0x04
 #define PS2_STATUS_COMMAND_DATA 0x08
+#define PS2_STATUS_KEYLOCK      0x10
+/* Bit 5: data in output buffer is from AUX (mouse), not keyboard. */
+#define PS2_STATUS_AUXDATA      0x20
 #define PS2_STATUS_TIMEOUT      0x40
 #define PS2_STATUS_PARITY_ERROR 0x80
 

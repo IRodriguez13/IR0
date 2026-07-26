@@ -1025,7 +1025,7 @@ fd_entry_t *get_process_fd_table(void)
   if (!current_process)
     return NULL;
   /*
-   * La tabla se inicializa en spawn() y en start_init_process(); no usar un
+   * La tabla se inicializa en spawn() / process create; no usar un
    * flag estático global (rompía si el primer syscall no era del proceso init).
    */
   return current_process->fd_table;
@@ -1063,6 +1063,48 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
   {
     if (request == IR0_CONSOLE_TIOCGWINSZ)
       return ir0_console_ioctl_winsize(arg);
+    if (request == IR0_CONSOLE_TIOCSWINSZ)
+      return ir0_console_ioctl_winsize_set(arg);
+    if (request == IR0_TIOCSCTTY)
+      return 0;
+    if (request == IR0_TIOCSPGRP)
+    {
+      pid_t pg;
+
+      if (!arg)
+	return -EINVAL;
+      if (copy_from_user(&pg, arg, sizeof(pg)) != 0)
+	return -EFAULT;
+      return ir0_console_set_fg_pgid((int32_t)pg);
+    }
+    if (request == IR0_TIOCGPGRP)
+    {
+      pid_t pg;
+
+      if (!arg)
+	return -EINVAL;
+      pg = current_process->pgid > 0 ? current_process->pgid
+				     : (pid_t)current_process->task.pid;
+      if (copy_to_user(arg, &pg, sizeof(pg)) != 0)
+	return -EFAULT;
+      return 0;
+    }
+    if (request == IR0_CONSOLE_TCFLSH)
+    {
+      tty_flush_input();
+      return 0;
+    }
+    if (request == IR0_CONSOLE_FIONREAD)
+    {
+      int avail;
+
+      if (!arg)
+	return -EINVAL;
+      avail = tty_input_bytes_available();
+      if (copy_to_user(arg, &avail, sizeof(avail)) != 0)
+	return -EFAULT;
+      return 0;
+    }
     if (request == IR0_CONSOLE_TCGETS || request == IR0_CONSOLE_TCSETS ||
 	request == IR0_CONSOLE_TCSETSW || request == IR0_CONSOLE_TCSETSF)
     {
@@ -1144,6 +1186,12 @@ int64_t sys_close(int fd)
     {
       devfs_node_t *node = devfs_find_node_by_id(fd_table[fd].dev_device_id);
 
+      if (fd_table[fd].vfs_file &&
+	  devfs_node_wants_text_snap(fd_table[fd].dev_device_id))
+      {
+	devfs_text_snap_release((devfs_text_snap_t *)fd_table[fd].vfs_file);
+	fd_table[fd].vfs_file = NULL;
+      }
       if (node)
         devfs_close_node(node);
     }
@@ -1154,8 +1202,8 @@ int64_t sys_close(int fd)
 
       pipe_fase49_fd_trace((uint32_t)current_process->task.pid, fd, pipe,
 			   fd_table[fd].pipe_end, pipe->fd_refs, "CLOSE");
+      /* pipe_close_end wakes waiters then frees on last ref. */
       pipe_close_end(pipe, fd_table[fd].pipe_end);
-      pipe_wake_all(pipe);
       fd_table[fd].vfs_file = NULL;
     }
     else if (fd_table[fd].is_socket && fd_table[fd].vfs_file)
@@ -1329,13 +1377,18 @@ int64_t sys_dup2(int oldfd, int newfd)
       pipe_t *p = (pipe_t *)fd_table[newfd].vfs_file;
 
       pipe_close_end(p, fd_table[newfd].pipe_end);
-      pipe_wake_all(p);
       fd_table[newfd].vfs_file = NULL;
     }
     else if (fd_table[newfd].is_devfs)
     {
       devfs_node_t *node = devfs_find_node_by_id(fd_table[newfd].dev_device_id);
 
+      if (fd_table[newfd].vfs_file &&
+	  devfs_node_wants_text_snap(fd_table[newfd].dev_device_id))
+      {
+	devfs_text_snap_release((devfs_text_snap_t *)fd_table[newfd].vfs_file);
+	fd_table[newfd].vfs_file = NULL;
+      }
       if (node)
         devfs_close_node(node);
     }
@@ -1421,6 +1474,14 @@ int64_t sys_dup2(int oldfd, int newfd)
 
     if (node)
       node->ref_count++;
+    if (fd_table[oldfd].vfs_file &&
+	devfs_node_wants_text_snap(fd_table[oldfd].dev_device_id))
+    {
+      devfs_text_snap_acquire((devfs_text_snap_t *)fd_table[oldfd].vfs_file);
+      fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+    }
+    else
+      fd_table[newfd].vfs_file = NULL;
   }
   else if (fd_table[oldfd].is_pipe)
   {
@@ -1647,4 +1708,70 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
 int64_t sys_pipe2(int pipefd[2], int flags)
 {
   return sys_pipe_install(pipefd, flags);
+}
+
+/*
+ * Linux syslog(2) / klogctl — enough for BusyBox dmesg (SIZE_BUFFER + READ_ALL).
+ * Ring content comes from klog_read_records (same as /proc/kmsg).
+ */
+#define IR0_SYSLOG_CLOSE          0
+#define IR0_SYSLOG_OPEN           1
+#define IR0_SYSLOG_READ           2
+#define IR0_SYSLOG_READ_ALL       3
+#define IR0_SYSLOG_READ_CLEAR     4
+#define IR0_SYSLOG_CLEAR          5
+#define IR0_SYSLOG_CONSOLE_OFF    6
+#define IR0_SYSLOG_CONSOLE_ON     7
+#define IR0_SYSLOG_CONSOLE_LEVEL  8
+#define IR0_SYSLOG_SIZE_UNREAD    9
+#define IR0_SYSLOG_SIZE_BUFFER    10
+
+#define IR0_SYSLOG_BUF_CAP        16384
+
+int64_t sys_syslog(int type, char *bufp, int len)
+{
+	char *kbuf;
+	int n;
+
+	switch (type)
+	{
+	case IR0_SYSLOG_CLOSE:
+	case IR0_SYSLOG_OPEN:
+	case IR0_SYSLOG_CLEAR:
+	case IR0_SYSLOG_CONSOLE_OFF:
+	case IR0_SYSLOG_CONSOLE_ON:
+		return 0;
+	case IR0_SYSLOG_CONSOLE_LEVEL:
+		if (len < 1 || len > 8)
+			return -EINVAL;
+		return 0;
+	case IR0_SYSLOG_SIZE_BUFFER:
+	case IR0_SYSLOG_SIZE_UNREAD:
+		return IR0_SYSLOG_BUF_CAP;
+	case IR0_SYSLOG_READ:
+	case IR0_SYSLOG_READ_ALL:
+	case IR0_SYSLOG_READ_CLEAR:
+		if (!bufp || len <= 0)
+			return -EINVAL;
+		if (len > IR0_SYSLOG_BUF_CAP)
+			len = IR0_SYSLOG_BUF_CAP;
+		kbuf = (char *)kmalloc_try((size_t)len);
+		if (!kbuf)
+			return -ENOMEM;
+		n = klog_read_records(kbuf, (size_t)len);
+		if (n < 0)
+		{
+			kfree(kbuf);
+			return -EIO;
+		}
+		if (n > 0 && copy_to_user(bufp, kbuf, (size_t)n) != 0)
+		{
+			kfree(kbuf);
+			return -EFAULT;
+		}
+		kfree(kbuf);
+		return n;
+	default:
+		return -EINVAL;
+	}
 }

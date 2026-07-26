@@ -1,17 +1,18 @@
 # KTM — Kernel Test Module
 
-> **Last verified:** 2026-07-23  
-> **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,  
-> `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,  
-> `scripts/ktm_userdev_runit_run.sh`, `scripts/smoke_autokill.py`,  
-> `scripts/make/class-b.mk`, root `Makefile` targets `ktm-*` / `smoke-class-b-*`
+> **Last verified:** 2026-07-24
+> **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,
+> `includes/ir0/klog_event.h`, [`KLOG.md`](KLOG.md),
+> `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,
+> `scripts/ktm_userdev_runit_run.sh`, `scripts/smoke_autokill.py`,
+> `scripts/make/class-b.mk`, root `Makefile` targets `ktm-*` / `smoke-class-b-*` / `smoke-klog-ktm-off`
 
 KTM is IR0’s **canonical kernel test and diagnostic plane**: typed events, checkpoints,
 snapshots, in-kernel scenarios, `/dev/ktm` for userspace-driven cases, and host runners
 that autokill QEMU on protocol tags. Legacy kernel `[FASE` serial tags are **retired**
 (enforced by `make arch-guard`).
 
-Agent-oriented short index: [`ai_driven_dev/ktm.md`](ai_driven_dev/ktm.md).  
+Agent-oriented short index: [`ai_driven_dev/ktm.md`](ai_driven_dev/ktm.md).
 FASE migration maps: [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md),
 [`KTM_FASE_INVENTORY.md`](KTM_FASE_INVENTORY.md).
 
@@ -75,7 +76,7 @@ compiled only when the option is on — keep that pairing intact.
 | Assert | `assert.c` | `KTM_V1_ASSERT_*`, `KTM_REQUIRE`, leak helpers, **`ASSERT_BATCH`** |
 | Checkpoint | `checkpoint.c` | Lifecycle enum → event + transport |
 | Scenario runner | `scenario.c` | Register / run one / run boot suite; pass/fail counters |
-| Human log hub | `klog.c`, `ktm_klog.c` | `[ts] [LEVEL] [COMP] msg`; facade `<ir0/ktm/klog.h>` |
+| Human log hub | `klog.c`, `ktm_klog.c`, [`KLOG.md`](KLOG.md) | Structured `klog_record` + `[#seq] [phase] [ts] [LEVEL] [COMP] msg`; facade `<ir0/ktm/klog.h>` |
 | Userdev | `userdev.c` | `/dev/ktm` ioctl + read/poll over the ring |
 | Flight / panic | `ktm_flight.c`, `ktm_panic_class.c`, … | Post-mortem classification |
 | Diags | `d1_*`, `ktm_probe_diag.c` | Optional forensics (Kconfig off by default) |
@@ -84,22 +85,22 @@ compiled only when the option is on — keep that pairing intact.
 
 | Layer | Role | Include / entry |
 |-------|------|-----------------|
-| **klog** | Human event core (timestamp, severity, subsystem, dmesg + serial) | `#include <ir0/ktm/klog.h>` → `klog_info` / `klog_smoke` / `kprintf_level` |
+| **klog** | Structured event core (sequence, phase, clock_state, sinks) | `#include <ir0/ktm/klog.h>` / [`KLOG.md`](KLOG.md) |
 | **KTM protocol** | Test transport `KTM\|seq\|KIND\|name\|status` | `ktm_transport_emit`, scenarios, `/dev/ktm` |
-| **Userspace smoke tags** | Bare tokens for autokill (`SMOKE_OK`, stage tags) | `ir0_smoke_tag()` in `setup/runit/ir0_smoke_tag.h` (same role as `klog_smoke`) |
+| **Userspace smoke tags** | Bare tokens for autokill (`SMOKE_OK`, stage tags) | `ir0_smoke_tag()` in `IR0-userspace/lib/ir0_smoke_tag.h` (same role as `klog_smoke`) |
 | **QEMU host chatter** | Version banner / GTK / warnings | Sibling `*.qemu-stderr` from `scripts/smoke_autokill.py` — **not** mixed into the guest serial log |
 
 Rules of thumb:
 
-- Prefer `klog_*` over raw `serial_print` outside `ktm/klog.c` and serial driver stubs.
+- Prefer `klog_*` / `klog_event()` over raw `serial_print` outside `ktm/klog.c` and serial driver stubs.
 - Classify lines use one COMP plus the word `CLASSIFY` in the message, e.g.
-  `[ts] [INFO] [VFS] CLASSIFY VFS_FS_CONTRACT_ACTIVE` — **not** `[VFS][CLASSIFY] …`.
+  `[#n] [phase] [ts] [INFO] [VFS] CLASSIFY VFS_FS_CONTRACT_ACTIVE`.
 - **Boot banner is the first framed serial line on every ISA.** Call
   `ir0_boot_serial_ready()` after UART/serial init (`includes/ir0/boot_log.h`).
-  Product kernels route through `klog_boot_hold` + `klog_info("BOOT", …)`;
+  Product kernels route through `klog_boot_hold` + `klog_event(BOOT_BANNER, …)`;
   freestanding ARM64 early boot (`IR0_FREESTANDING_BOOT`) emits the same layout
-  via `arch/common/boot_log.c`. ISA/board detail uses COMP `ARCH`; autokill tags
-  use COMP `SMOKE` (substring still greppable).
+  via `arch/common/boot_log.c` (with `#sequence` + `EARLY_ARCH`).
+- `CONFIG_KTM=n`: klog + `/proc/kmsg` still work (`make smoke-klog-ktm-off`).
 - `CONFIG_KTM_SERIAL_VERBOSE` (default **n**): when off, product/desk boots omit noisy
   `CHECKPOINT` / `PROBE` / optional `KTM|LOG` mirrors; ASSERT / SUITE / smoke tags still emit.
 
@@ -338,7 +339,7 @@ residual. **Exception:** `init-exit-drain` stays stub/virtfs (SUT is PID1 `_exit
 Manual pattern (same as the wrapper):
 
 1. `install-to-disk.sh` → runit rootfs on a temp MINIX image.
-2. `inject-smoke-service.sh --run-only DISK SERVICE setup/runit/stage-bin/runit_hostshare_payload_run`
+2. `inject-smoke-service.sh --run-only DISK SERVICE IR0-userspace/out/stage-bin/runit_hostshare_payload_run`
    (service mounts `ir0share` and execs `/mnt/host/ir0_payload`).
 3. Optional: overwrite noisy `console`/`logger` `run` stubs with `runit_pause_run` so serial
    done-tags are not split by ash.

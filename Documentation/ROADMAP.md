@@ -1,7 +1,7 @@
 # IR0 Kernel — Consolidated Development Roadmap
 
-> **Last verified:** 2026-07-21 (klog hub + ASSERT_BATCH + runit smoke_tag; HAB/DESK + SEP-1 — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md), [`ARCH_DEBT_SEP.md`](ARCH_DEBT_SEP.md), [`KTM.md`](KTM.md))  
-> **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`. README and old docs may lag; **grep the tree before claiming “done”.**
+> **Last verified:** 2026-07-25 (SEP-2: Unix userspace split into the `IR0-userspace` sibling; doas persist VERIFIED — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md), [`ARCH_DEBT_SEP.md`](ARCH_DEBT_SEP.md), [`KTM.md`](KTM.md))  
+> **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`; product userspace lives in the **`IR0-userspace`** sibling. README and old docs may lag; **grep the tree before claiming “done”.**
 
 This document consolidates tier goals, completed oleadas, reprioritized backlog (storage before TCP/X11), and **recommended evolution milestones**. **What is stable for QEMU test today** is canonical in [`STABLE.md`](STABLE.md). **Open work only:** [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 
@@ -17,7 +17,8 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 | **KTM = dev ally** | Kernel Test Module (`ktm/`, `CONFIG_KTM`) is for **developer** regression/debug only — not a userspace security subsystem (that comes later). Must stay low overhead. |
 | **Log hygiene** | After a feature is stable, trim debug serial storms (`FASE*`, audit tags) or gate behind Kconfig. |
 | **Makefile = tooling** | Historical phase smokes live in `setup/make/legacy-smokes.mk` (`IR0_LEGACY_SMOKE=1`). Default CTR stays lean: `smoke-tier1`, `roadmap-phase*`, `ktm-*`. C test sources are kept; Makefile wiring is curated, not deleted blindly. |
-| **Don't break userspace** | Syscall ABI stable unless versioned break documented in `Documentation/mandocs/`. |
+| **Don't break userspace** | Syscall ABI stable unless versioned break documented in `Documentation/mandocs/`. Public UAPI is exported with `make headers_install`. |
+| **Kernel ≠ product** | If PID 1 can replace it without recompiling the kernel, it lives in `IR0-userspace` (BusyBox, runit, login, doas, `/etc`), not here. |
 | **Post-milestone sprints** | After each green gate / oleada: optimization + architecture sanitization **before** the next big feature. **Rule:** `Documentation/ai_driven_dev/rules/ir0-optimization-arch-sprints.md` (`make ai-dev-rules-install`). |
 
 ---
@@ -26,8 +27,8 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 
 | Tier | Target | ~Progress | Proof today |
 |------|--------|-----------|-------------|
-| **T0** | Functional OS + `debug_bins` | ~85% | `make kernel-tests` (29/29), `arch-guard`, pseudo-FS contracts |
-| **T1** | POSIX userspace (runit + musl + ash) | ~72–75% | `smoke-tier1`; manifest tier1+múscl; pthread/setuid/perms smokes |
+| **T0** | Functional kernel + migrated contracts | ~85% | `make kernel-tests`, `arch-guard`, pseudo-FS contracts; product shell in IR0-userspace |
+| **T1** | POSIX userspace (runit + musl + ash) | ~75–78% | `smoke-tier1`; manifest tier1+musl; pthread/setuid/perms smokes; `smoke-doas` with `DOAS_PERSIST_OK` |
 | **T2** | Fullscreen graphics (Doom-class) | ~55% | fb0/evdev/mmap; GUI targets in [`STABLE.md`](STABLE.md) |
 | **T3** | Minimal desktop (WM + panel) | ~15–20% | **Planning only** — WM/compositor **out of kernel tree** |
 
@@ -41,7 +42,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Transition path **irinit → runit** (not permanent irinit) | Done | `setup/pid1/`, `load-userspace-runit`, `smoke-runit-boot` |
+| Transition path **irinit → runit** (irinit removed; runit-only) | Done | `build-runit`, `load-userspace-runit`, `smoke-runit-boot`; fail-fast retired targets |
 | **runit** boots and supervises services | Done | `make smoke-tier1` → `smoke-runit-boot` |
 | **BusyBox ash** interactive on `/dev/console` | Done | `smoke-runit-ash-interactive` |
 | Scheduler policy fix (preempt / RR promotion) | Done | `sched/sched_resched.c`, boot log in `kernel/main.c` |
@@ -89,8 +90,22 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | **ASSERT_BATCH** | Done | `ktm/assert.c`; scenarios `wait_drain` / `reclaim_exit` |
 | **`CONFIG_KTM_SERIAL_VERBOSE`** | Done (default n) | `setup/Kconfig`; product serial quieter |
 | **Autokill QEMU stderr split** | Done | `scripts/smoke_autokill.py` → `*.qemu-stderr` |
-| **runit `ir0_smoke_tag` + hostshare/pause** | Done | `setup/runit/ir0_smoke_tag.h`, `runit_*_payload_run.c` |
+| **runit `ir0_smoke_tag` + hostshare/pause** | Done | `IR0-userspace/lib/ir0_smoke_tag.h`, `services/runit_*_payload_run.c` (tags routed to `/dev/serial`, human console stays clean) |
 | **Not** a user-facing security module | Policy | Future MAC/audit is a separate milestone |
+
+### SEP-2 — Unix userspace out of the kernel tree (2026-07-25)
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| `IR0-userspace` sibling repo (packages / services / lib / rootfs / profiles / smoke / tests) | Done | `IR0-userspace/README.md`, `Makefile` (`fetch build rootfs image`) |
+| Reproducible package recipes instead of vendored trees | Done | `packages/{busybox,runit,opendoas}/{version,url,sha256,srcroot,patches,build.sh}`; `make fetch` verifies sha256 and reapplies patches |
+| Public UAPI export | Done | `includes/uapi/`, `make headers_install DESTDIR=…`, consumed by `make -C IR0-userspace headers` |
+| Kernel gates delegate to the sibling | Done | `IR0_USERSPACE_ROOT` + `check-userspace`; `smoke-runit-*`, `smoke-doas`, `smoke-passwd`, `smoke-recovery`, `busybox-*` all green through the wrapper |
+| Userspace account-policy host test moved out | Done | `IR0-userspace/tests/host` (1/1); kernel `tests/host` 22/22 without crypt |
+| OpenDoas persist | **VERIFIED** | `DOAS_PERSIST_OK` in `smoke-doas`, backed by `/proc/[pid]/stat`, `getsid`/`getpgid`, `minix_fs_utimens`, effective-uid file creation |
+| Product profiles | Done | `/etc/ir0-profile`: `development` (root autologin + warning), `desktop` (`hostname login:`, `/etc/ir0-noroot`), `appliance` (`CONSOLE_NO_LOGIN`) |
+
+Deferred: **IR0-system** (release manifest pinning kernel + userspace + desktop commits) — `IR0-userspace` composes the image today via `IR0_ROOT`.
 
 ### MM — COW + lazy (~90%)
 
@@ -244,7 +259,7 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 
 | # | Item | Notes |
 |---|------|-------|
-| 17b | **Full ash + required applets in rootfs** | **BUSY-1 DONE** — `setup/busybox/required_applets.txt` + inject on runit disk |
+| 17b | **Full ash + required applets in rootfs** | **BUSY-1 DONE** — `IR0-userspace/packages/busybox/required_applets.txt` + inject on runit disk |
 | 17c | **Applet smoke** | **BUSY-2 DONE** — `make smoke-busybox-manifest` → `BUSYBOX_MANIFEST_OK` |
 
 Tag `v0.0.1-rc2` closed automated product gates except maintainer **manual VM** for final ship.
@@ -297,7 +312,7 @@ driver platform (static ABI, then modules) → P1-storage → TCP/T2 → T3 prep
 
 | ID | Milestone | Why | Paths / proof |
 |----|-----------|-----|---------------|
-| **BUSY-1** | ash + essential applets in production rootfs | **Done** — `required_applets.txt` + `busybox_inject_manifest.sh` | `setup/busybox/`, `setup/runit/install-to-disk.sh` |
+| **BUSY-1** | ash + essential applets in production rootfs | **Done** — `required_applets.txt` + `busybox_inject_manifest.sh` | `IR0-userspace/packages/busybox/`, `IR0-userspace/scripts/install-to-disk.sh` |
 | **BUSY-2** | Required-applet manifest smoke | **Done** — `smoke-busybox-manifest` | `setup/pid1/fase58l_busybox_smoke.c` |
 | **BUSY-3** | Broader applet parity with minimal Linux embed | Operational parity for tier1 POSIX | BusyBox Kconfig + rootfs size budget |
 

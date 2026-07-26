@@ -61,9 +61,12 @@ void early_init_x86_64(void)
     /* Initialize TSS (Task State Segment) for user mode support */
     setup_tss();
 
+    /* Early exception table — diagnose PF/GPF before late irq_init(). */
+    idt_early_install64();
+
     arch_enable_sse_x86_64();
     
-    klog_info("ARCH", "x86-64 early init: GDT and TSS initialized");
+    klog_info("ARCH", "x86-64 early init: GDT, TSS, and early IDT");
 }
 
 /**

@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test_harness.h"
-#include <ir0/bits/syscall_linux.h>
+#include <ir0/syscall_linux.h>
 #include <ir0/abi/musl_cred_abi.h>
 
 void test_musl_cred_abi(void)

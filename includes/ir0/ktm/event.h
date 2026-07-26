@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <config.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -78,8 +79,22 @@ typedef struct ktm_event
 	uint64_t arg3;
 } ktm_event_t;
 
+#if CONFIG_KTM
 void ktm_event_emit4(uint16_t type, uint16_t subsystem,
 		     uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3);
+#else
+static inline void ktm_event_emit4(uint16_t type, uint16_t subsystem,
+				   uint64_t arg0, uint64_t arg1,
+				   uint64_t arg2, uint64_t arg3)
+{
+	(void)type;
+	(void)subsystem;
+	(void)arg0;
+	(void)arg1;
+	(void)arg2;
+	(void)arg3;
+}
+#endif
 
 /* Legacy string tags → typed INFO events (compat). */
 void ktm_event_emit(const char *tag);

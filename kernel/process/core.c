@@ -62,16 +62,8 @@ void process_init(void)
 	current_process = NULL;
 	process_list = NULL;
 	ir0_debug_trap_init();
-#if KERNEL_DEBUG_SHELL
-	/* PID 1 reserved for debug-shell init (start_init_process hardcodes pid 1). */
-	next_pid = 2;
-#else
 	/* First spawned process is /sbin/init (PID 1). */
 	next_pid = 1;
-#endif
-
-	/* Initialize simple user system */
-	init_simple_users();
 }
 
 
@@ -421,6 +413,11 @@ void process_clear_in_thread_syscall_block(process_t *p)
 	p->irq_frame_saved = 0;
 	p->poll_resume_via_arch = 0;
 	p->coop_resched_resume = 0;
+	/*
+	 * Clear want_kernel_ret only from in-syscall return paths (tty_sleep
+	 * poll_ready, pipe, etc.). ir0_console_wake_readers must NOT call this —
+	 * async wake races process_after_task_save and must leave the flag alone.
+	 */
 	p->want_kernel_ret = 0;
 }
 

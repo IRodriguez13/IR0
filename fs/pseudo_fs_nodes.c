@@ -243,7 +243,8 @@ typedef struct proc_pid_file_ctx
 
 #define PROC_PID_FILE_STATUS  0
 #define PROC_PID_FILE_CMDLINE 1
-#define PROC_PID_CTX_MAX      8
+#define PROC_PID_FILE_STAT    2
+#define PROC_PID_CTX_MAX      32
 
 static proc_pid_file_ctx_t g_proc_pid_ctx[PROC_PID_CTX_MAX];
 
@@ -273,7 +274,8 @@ static int proc_pid_file_match(const char *path, void **out_ctx)
     if (!name)
         return -ENOENT;
 
-    if (strcmp(name, "status") != 0 && strcmp(name, "cmdline") != 0)
+    if (strcmp(name, "status") != 0 && strcmp(name, "cmdline") != 0 &&
+        !(strcmp(name, "stat") == 0 && pid > 0))
         return -ENOENT;
 
     ctx = proc_pid_file_ctx_alloc();
@@ -281,8 +283,12 @@ static int proc_pid_file_match(const char *path, void **out_ctx)
         return -ENFILE;
 
     ctx->pid = pid;
-    ctx->kind = (strcmp(name, "cmdline") == 0) ? PROC_PID_FILE_CMDLINE
-                                                 : PROC_PID_FILE_STATUS;
+    if (strcmp(name, "cmdline") == 0)
+        ctx->kind = PROC_PID_FILE_CMDLINE;
+    else if (strcmp(name, "stat") == 0)
+        ctx->kind = PROC_PID_FILE_STAT;
+    else
+        ctx->kind = PROC_PID_FILE_STATUS;
     ctx->in_use = 1;
     *out_ctx = ctx;
     return 0;
@@ -298,6 +304,8 @@ static int64_t proc_pid_file_read(void *ctx, char *buf, size_t count, off_t *off
 
     if (file->kind == PROC_PID_FILE_CMDLINE)
         return proc_cmdline_read(buf, count, file->pid);
+    if (file->kind == PROC_PID_FILE_STAT)
+        return proc_pid_stat_read(buf, count, file->pid);
 
     return proc_status_read(buf, count, file->pid);
 }
@@ -322,7 +330,8 @@ static int proc_pid_file_stat(void *ctx, stat_t *st)
     st->st_nlink = 1;
     st->st_uid = 0;
     st->st_gid = 0;
-    st->st_size = 1024;
+    /* Linux reports 0 for /proc/pid files; readers must not trust st_size. */
+    st->st_size = 0;
     return 0;
 }
 

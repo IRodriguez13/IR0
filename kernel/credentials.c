@@ -81,7 +81,13 @@ bool ir0_check_file_access(const char *path, int mode)
     if (ir0_stat_path_routed(path, &st) != 0)
         return false;
 
-    return ir0_access_from_stat(&st, mode, c->euid, c->egid);
+    if (!current_process)
+        return ir0_access_from_stat(&st, mode, c->euid, c->egid);
+
+    /* Supplementary groups count for DAC (wheel, etc.), like Linux. */
+    return ir0_access_from_stat_groups(&st, mode, c->euid, c->egid,
+                                      current_process->groups,
+                                      (int)current_process->ngroups);
 }
 
 bool check_file_access(const char *path, int mode, const struct process *process)

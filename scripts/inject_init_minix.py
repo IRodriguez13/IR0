@@ -6,8 +6,10 @@ Inject a file into a MINIX v1 disk image without mounting (no minix module).
 Usage:
   inject_init_minix.py --format DISK_IMAGE
   inject_init_minix.py --format-large DISK_IMAGE
-  inject_init_minix.py [--setuid] DISK_IMAGE FILE [DEST_PATH]
+  inject_init_minix.py [--setuid|--mode OCTAL] [--owner UID:GID] \
+      DISK_IMAGE FILE [DEST_PATH]
   inject_init_minix.py --hardlink DISK_IMAGE EXISTING_DEST NEW_DEST
+  inject_init_minix.py --owner UID:GID [--mode OCTAL] --chown DISK_IMAGE PATH
 
   DEST_PATH: slash-separated path without leading slash (default: sbin/init)
   Examples:
@@ -260,19 +262,23 @@ def alloc_zone(f, sb):
     raise SystemExit("no free zone")
 
 
+def dir_zone_list(inode):
+    """Direct directory zones (MINIX v1 i_zone[0..6]); matches fs/minix_fs.c."""
+    return [z for z in inode["zones"][:7] if z]
+
+
 def dir_entries(f, inode):
     if (inode["mode"] & IFMT) != IFDIR:
         return []
-    z = inode["zones"][0]
-    if z == 0:
-        return []
-    raw = read_block(f, z)
     out = []
-    for i in range(0, BLOCK, DIR_ENTRY):
-        ino, name = struct.unpack("<H", raw[i : i + 2])[0], raw[i + 2 : i + DIR_ENTRY]
-        name = name.split(b"\x00", 1)[0].decode("ascii", errors="replace")
-        if ino != 0:
-            out.append((ino, name))
+    for z in dir_zone_list(inode):
+        raw = read_block(f, z)
+        for i in range(0, BLOCK, DIR_ENTRY):
+            ino = struct.unpack("<H", raw[i : i + 2])[0]
+            name = raw[i + 2 : i + DIR_ENTRY]
+            name = name.split(b"\x00", 1)[0].decode("ascii", errors="replace")
+            if ino != 0:
+                out.append((ino, name))
     return out
 
 
@@ -284,19 +290,19 @@ def find_in_dir(f, sb, inode, name):
 
 
 def remove_dir_entry(f, sb, dir_inode, dir_num, name):
-    z = dir_inode["zones"][0]
-    raw = bytearray(read_block(f, z))
     nb = name.encode("ascii")[:NAME_LEN]
-    for i in range(0, BLOCK, DIR_ENTRY):
-        ino = struct.unpack("<H", raw[i : i + 2])[0]
-        entry_name = raw[i + 2 : i + DIR_ENTRY].split(b"\x00", 1)[0]
-        if ino != 0 and entry_name == nb:
-            raw[i : i + DIR_ENTRY] = b"\x00" * DIR_ENTRY
-            write_block(f, z, bytes(raw))
-            if dir_inode["size"] >= DIR_ENTRY:
-                dir_inode["size"] -= DIR_ENTRY
-            write_inode(f, sb, dir_num, dir_inode)
-            return True
+    for z in dir_zone_list(dir_inode):
+        raw = bytearray(read_block(f, z))
+        for i in range(0, BLOCK, DIR_ENTRY):
+            ino = struct.unpack("<H", raw[i : i + 2])[0]
+            entry_name = raw[i + 2 : i + DIR_ENTRY].split(b"\x00", 1)[0]
+            if ino != 0 and entry_name == nb:
+                raw[i : i + DIR_ENTRY] = b"\x00" * DIR_ENTRY
+                write_block(f, z, bytes(raw))
+                if dir_inode["size"] >= DIR_ENTRY:
+                    dir_inode["size"] -= DIR_ENTRY
+                write_inode(f, sb, dir_num, dir_inode)
+                return True
     return False
 
 
@@ -423,19 +429,38 @@ def format_minix_v1(f, ninodes=64, nzones=1024):
 
 
 def add_dir_entry(f, sb, dir_inode, dir_num, name, child_num):
-    z = dir_inode["zones"][0]
-    raw = bytearray(read_block(f, z))
-    for i in range(0, BLOCK, DIR_ENTRY):
-        ino = struct.unpack("<H", raw[i : i + 2])[0]
-        if ino != 0:
-            continue
-        nb = name.encode("ascii")[:NAME_LEN]
-        raw[i : i + 2] = struct.pack("<H", child_num)
-        raw[i + 2 : i + 2 + len(nb)] = nb
-        write_block(f, z, bytes(raw))
+    nb = name.encode("ascii")[:NAME_LEN]
+
+    def write_slot(zone, raw, off):
+        raw[off : off + 2] = struct.pack("<H", child_num)
+        raw[off + 2 : off + DIR_ENTRY] = b"\x00" * (DIR_ENTRY - 2)
+        raw[off + 2 : off + 2 + len(nb)] = nb
+        write_block(f, zone, bytes(raw))
         dir_inode["size"] += DIR_ENTRY
         write_inode(f, sb, dir_num, dir_inode)
+
+    for zi in range(7):
+        z = dir_inode["zones"][zi]
+        if z == 0:
+            continue
+        raw = bytearray(read_block(f, z))
+        for i in range(0, BLOCK, DIR_ENTRY):
+            ino = struct.unpack("<H", raw[i : i + 2])[0]
+            if ino != 0:
+                continue
+            write_slot(z, raw, i)
+            return
+
+    # Grow directory with another direct zone (kernel walks i_zone[0..6]).
+    for zi in range(7):
+        if dir_inode["zones"][zi] != 0:
+            continue
+        z = alloc_zone(f, sb)
+        dir_inode["zones"][zi] = z
+        raw = bytearray(BLOCK)
+        write_slot(z, raw, 0)
         return
+
     raise SystemExit(f"directory full: cannot add {name}")
 
 
@@ -535,7 +560,28 @@ def prepare_regular_file(f, sb, file_inode, data, file_mode=0o755):
     return file_inode
 
 
-def write_file(f, sb, path_parts, data, source_path, file_mode=0o755):
+def chown_path(f, sb, path_parts, uid, gid, file_mode=None):
+    """Set owner (and optionally mode) of an existing file or directory."""
+    ino, inode = resolve_path_inode(f, sb, path_parts)
+    if ino == 0 or inode is None:
+        raise SystemExit("chown target missing: /" + "/".join(path_parts))
+    inode["uid"] = uid
+    inode["gid"] = gid
+    if file_mode is not None:
+        inode["mode"] = (inode["mode"] & IFMT) | file_mode
+    write_inode(f, sb, ino, inode)
+    audit_entry(
+        "(chown)",
+        "/" + "/".join(path_parts),
+        "directory" if (inode["mode"] & IFMT) == IFDIR else "file",
+        inode["mode"],
+        ino,
+        inode["size"],
+    )
+
+
+def write_file(f, sb, path_parts, data, source_path, file_mode=0o755,
+               owner=None):
     root = read_inode(f, sb, 1)
     cur_num = 1
     cur = root
@@ -550,6 +596,14 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755):
                 existing = read_inode(f, sb, ino)
                 if (existing["mode"] & IFMT) == IFDIR:
                     remove_dir_entry(f, sb, cur, cur_num, part)
+                    ino = 0
+                elif existing.get("nlinks", 1) > 1:
+                    # Hardlink: do not rewrite the shared inode (that would
+                    # clobber BusyBox when replacing halt/poweroff wrappers).
+                    # Detach this name and allocate a fresh inode.
+                    remove_dir_entry(f, sb, cur, cur_num, part)
+                    existing["nlinks"] = max(1, existing["nlinks"] - 1)
+                    write_inode(f, sb, ino, existing)
                     ino = 0
             if ino == 0:
                 ino = alloc_inode(f, sb)
@@ -577,6 +631,8 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755):
                     }
 
             file_inode = prepare_regular_file(f, sb, file_inode, data, file_mode)
+            if owner is not None:
+                file_inode["uid"], file_inode["gid"] = owner
             audit_entry(
                 source_path,
                 dest_path,
@@ -668,13 +724,75 @@ def hardlink_path(f, sb, existing_parts, new_parts):
     raise SystemExit("hardlink: empty NEW_DEST")
 
 
+def parse_owner(spec):
+    """UID:GID string → (uid, gid). MINIX v1 stores an 8-bit GID."""
+    try:
+        uid_s, gid_s = spec.split(":", 1)
+        uid = int(uid_s, 10)
+        gid = int(gid_s, 10)
+    except ValueError:
+        raise SystemExit("--owner needs UID:GID (decimal)")
+    if not 0 <= uid <= 0xFFFF:
+        raise SystemExit(f"uid {uid} does not fit MINIX v1 (16-bit)")
+    if not 0 <= gid <= 0xFF:
+        raise SystemExit(f"gid {gid} does not fit MINIX v1 (8-bit)")
+    return uid, gid
+
+
 def main():
     file_mode = 0o755
+    mode_given = False
+    owner = None
     argv = sys.argv[:]
     if "--setuid" in argv:
         file_mode = 0o4755
+        mode_given = True
         argv.remove("--setuid")
+    if "--mode" in argv:
+        idx = argv.index("--mode")
+        try:
+            file_mode = int(argv[idx + 1], 8)
+        except (IndexError, ValueError):
+            print("--mode needs an octal permission value", file=sys.stderr)
+            sys.exit(1)
+        mode_given = True
+        del argv[idx : idx + 2]
+    if "--owner" in argv:
+        idx = argv.index("--owner")
+        if idx + 1 >= len(argv):
+            print("--owner needs UID:GID", file=sys.stderr)
+            sys.exit(1)
+        owner = parse_owner(argv[idx + 1])
+        del argv[idx : idx + 2]
     sys.argv = argv
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "--chown":
+        if len(sys.argv) != 4 or owner is None:
+            print(
+                f"Usage: {sys.argv[0]} --owner UID:GID [--mode OCTAL] "
+                "--chown DISK_IMAGE PATH",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        disk_path = sys.argv[2]
+        path_parts = [p for p in sys.argv[3].split("/") if p]
+        with open(disk_path, "r+b") as f:
+            sb = parse_super(read_block(f, 1))
+            sync_bitmaps_from_tree(f, sb)
+            chown_path(
+                f,
+                sb,
+                path_parts,
+                owner[0],
+                owner[1],
+                file_mode if mode_given else None,
+            )
+            sync_bitmaps_from_tree(f, sb)
+        print(
+            f"✅ Chowned {disk_path}:/{'/'.join(path_parts)} to "
+            f"{owner[0]}:{owner[1]}"
+        )
+        return
 
     if len(sys.argv) >= 2 and sys.argv[1] in ("--format", "--format-large"):
         if len(sys.argv) != 3:
@@ -690,7 +808,9 @@ def main():
         disk_path = sys.argv[2]
         with open(disk_path, "r+b") as f:
             if sys.argv[1] == "--format-large":
-                format_minix_v1(f, ninodes=256, nzones=65535)
+                # Headroom for TinyCC headers/libs + GNU make + samples
+                # (product runit rootfs alone uses ~50 inodes).
+                format_minix_v1(f, ninodes=1024, nzones=65535)
             else:
                 format_minix_v1(f)
         print(f"✅ Formatted {disk_path} as MINIX v1 (kernel-compatible layout)")
@@ -729,7 +849,7 @@ def main():
             file=sys.stderr,
         )
         print(
-            f"       {sys.argv[0]} [--setuid] DISK_IMAGE FILE [DEST_PATH]",
+            f"       {sys.argv[0]} [--setuid|--mode OCTAL] DISK_IMAGE FILE [DEST_PATH]",
             file=sys.stderr,
         )
         print(
@@ -755,7 +875,7 @@ def main():
     with open(disk_path, "r+b") as f:
         sb = parse_super(read_block(f, 1))
         sync_bitmaps_from_tree(f, sb)
-        write_file(f, sb, path_parts, data, file_path, file_mode)
+        write_file(f, sb, path_parts, data, file_path, file_mode, owner)
         sync_bitmaps_from_tree(f, sb)
 
     dest_display = "/" + "/".join(path_parts)
