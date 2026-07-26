@@ -23,7 +23,7 @@ Linux completa. La profundidad de subsistemas está en otras páginas `IR0-*`.
 | Pieza | Rol |
 |-------|-----|
 | `make check-env` / `deptest` | Diagnóstico host (required / optional / unusable) |
-| `make defconfig` / `ir0` / `run` | Primer boot oficial (x86-64 QEMU) |
+| `make defconfig` / `first-boot` / `run` | Primer boot oficial (x86-64 + BusyBox) |
 | `make help-profiles` | Perfiles + techos honestos |
 | `make sync-mandocs` / `make man TOPIC=` | Docs sin pelear MANPATH |
 | `make pre-submit` | Gate local → `PRE_SUBMIT_OK` |
@@ -32,12 +32,15 @@ Linux completa. La profundidad de subsistemas está en otras páginas `IR0-*`.
 ## 3. Flujo de datos — primer boot
 
 ```text
-  git clone → cd IR0
+  git clone IR0 → cd IR0
        → make check-env
        → make defconfig
-       → make ir0          # kernel-x64.iso
-       → make run          # QEMU (camino Supported)
+       → make first-boot   # clona ../IR0-userspace + rootfs BusyBox + ISO
+       → make run          # QEMU → getty → BusyBox ash
 ```
+
+Sin `/sbin/init` en `disk.img` el kernel hace panic en el handoff (no hay shell in-kernel).
+Ver `Documentation/esp/USERSPACE.md`.
 
 Boot log opcional en el **host**:
 
@@ -75,7 +78,7 @@ Boot log opcional en el **host**:
 ```text
   Nuevo contribuidor
        │
-       ├─► check-env ──► defconfig ──► ir0 ──► run
+       ├─► check-env ──► defconfig ──► first-boot ──► run
        │                                      │
        │                                      └─► (opcional) run-bootlog
        │                                                └─► host ir0-boot.log

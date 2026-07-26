@@ -32,12 +32,15 @@ Linux ABI. Subsystem depth lives in other `IR0-*` pages.
 ## 3. Data flow — first boot
 
 ```text
-  git clone → cd IR0
+  git clone IR0 → cd IR0
        → make check-env
        → make defconfig
-       → make ir0          # kernel-x64.iso
-       → make run          # QEMU (Supported path)
+       → make first-boot   # clone ../IR0-userspace + runit/BusyBox disk + ISO
+       → make run          # QEMU → getty → BusyBox ash
 ```
+
+`make ir0` builds a kernel-only ISO. Product shell needs the sibling rootfs;
+without `/sbin/init` the kernel panics at handoff. See `Documentation/USERSPACE.md`.
 
 Optional boot log on the **host** (not required for first run):
 
