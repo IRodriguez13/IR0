@@ -71,12 +71,16 @@ int ktm_snapshot_take(ktm_system_snapshot_t *out)
 		n++;
 		if (p->state == PROCESS_ZOMBIE)
 			z++;
+		fd_entry_t *fdt = process_fd_table(p);
+
+		if (!fdt)
+			continue;
 		for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
 		{
-			if (p->fd_table[i].in_use)
+			if (fdt[i].in_use)
 			{
 				fds++;
-				if (p->fd_table[i].is_pipe)
+				if (fdt[i].is_pipe)
 					out->pipes++;
 			}
 		}

@@ -25,6 +25,7 @@
 #include <ir0/clock.h>
 #include <ir0/debug_runtime.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/arch_task_ops.h>
 #include <string.h>
 
 #include <ir0/oops.h>
@@ -1177,8 +1178,8 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
      * syscall stack can clobber the C ABI parameter slots).
      */
     process_clear_in_thread_syscall_block(current_process);
-    wait_pid = (pid_t)current_process->syscall_frame.rdi;
-    wait_opts = (int)current_process->syscall_frame.rdx;
+    wait_pid = (pid_t)process_syscall_arg(current_process, 0);
+    wait_opts = (int)process_syscall_arg(current_process, 2);
     current_process->wait_options = wait_opts;
     pid = wait_pid;
     options = wait_opts;
@@ -1339,7 +1340,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
 
   if (code == ARCH_SET_FS)
   {
-    current_process->fs_base = (uint64_t)addr;
+    process_tls_set(current_process, (uint64_t)addr);
     set_tls((uint64_t)addr);
     return 0;
   }
@@ -1350,7 +1351,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
       return -EINVAL;
     if (validate_userspace_buffer((void *)(uintptr_t)addr, sizeof(uint64_t)) != 0)
       return -EFAULT;
-    fsbase = current_process->fs_base;
+    fsbase = process_tls_get(current_process);
     if (copy_to_user((void *)(uintptr_t)addr, &fsbase, sizeof(uint64_t)) != 0)
       return -EFAULT;
     return 0;
@@ -1515,27 +1516,7 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
     }
     
     /* Restore CPU state from context */
-    current_process->task.r15 = restore_ctx->r15;
-    current_process->task.r14 = restore_ctx->r14;
-    current_process->task.r13 = restore_ctx->r13;
-    current_process->task.r12 = restore_ctx->r12;
-    current_process->task.rbp = restore_ctx->rbp;
-    current_process->task.rbx = restore_ctx->rbx;
-    current_process->task.r11 = restore_ctx->r11;
-    current_process->task.r10 = restore_ctx->r10;
-    current_process->task.r9 = restore_ctx->r9;
-    current_process->task.r8 = restore_ctx->r8;
-    current_process->task.rax = restore_ctx->rax;
-    current_process->task.rcx = restore_ctx->rcx;
-    current_process->task.rdx = restore_ctx->rdx;
-    current_process->task.rsi = restore_ctx->rsi;
-    current_process->task.rdi = restore_ctx->rdi;
-    /* orig_rax not stored in task_t - not needed for context restoration */
-    current_process->task.rip = restore_ctx->rip;
-    current_process->task.cs = restore_ctx->cs;
-    current_process->task.rflags = restore_ctx->rflags;
-    current_process->task.rsp = restore_ctx->rsp;
-    current_process->task.ss = restore_ctx->ss;
+    arch_task_load_sigcontext(&current_process->task, restore_ctx);
     
     /* Free saved context */
     if (current_process->saved_context)

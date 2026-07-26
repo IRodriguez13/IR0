@@ -82,7 +82,7 @@ static void d1_12_read_user_preview(struct process *p, uintptr_t buf,
 	uint8_t tmp[D1_12_PREVIEW];
 	size_t n;
 
-	if (!p || !p->page_directory || !buf || len == 0)
+	if (!p || !process_pgd(p) || !buf || len == 0)
 		return;
 
 	n = len;

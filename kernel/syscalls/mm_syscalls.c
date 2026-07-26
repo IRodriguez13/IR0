@@ -24,6 +24,8 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/process.h>
+#include <ir0/files_struct.h>
+#include <ir0/mm_struct.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
 #include <ir0/arch_port.h>
@@ -79,9 +81,9 @@ static void mm_prepare_map_fixed(uintptr_t start, size_t length)
 
 	for (uintptr_t page = start; page < end; page += PAGE_SIZE_4KB)
 	{
-		if (is_page_mapped_in_directory(current_process->page_directory, page,
+		if (is_page_mapped_in_directory(process_pgd(current_process), page,
 						NULL) == 1)
-			unmap_page_in_directory(current_process->page_directory, page);
+			unmap_page_in_directory(process_pgd(current_process), page);
 	}
 }
 
@@ -190,6 +192,7 @@ static uintptr_t mm_pick_free_va_topdown(process_t *proc, uint64_t *pml4,
 				continue;
 
 			proc->mmap_base = start;
+			process_mm_sync_from_process(proc);
 			return start;
 		}
 	}
@@ -239,7 +242,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 			return SYSCALL_PTR_ERR(ENOSYS);
 	}
 
-	fd_table = proc->fd_table;
+	fd_table = process_fd_table(proc);
 	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
 		return SYSCALL_PTR_ERR(EBADF);
 	if (fd_table[fd].is_pipe || fd_table[fd].is_devfs)
@@ -263,7 +266,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	if (map_len == 0)
 		return SYSCALL_PTR_ERR(EINVAL);
 
-	virt_addr = mm_find_free_va(proc->page_directory, proc, (uintptr_t)addr, map_len);
+	virt_addr = mm_find_free_va(process_pgd(proc), proc, (uintptr_t)addr, map_len);
 	if (virt_addr == 0)
 		return SYSCALL_PTR_ERR(ENOMEM);
 
@@ -273,7 +276,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	if (prot & PROT_EXEC)
 		page_flags |= PAGE_EXEC;
 
-	if (map_user_region_in_directory(proc->page_directory, virt_addr, map_len,
+	if (map_user_region_in_directory(process_pgd(proc), virt_addr, map_len,
 					 page_flags) != 0)
 		return SYSCALL_PTR_ERR(ENOMEM);
 
@@ -292,18 +295,18 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 		if (nread < 0)
 		{
 			for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-				unmap_page_in_directory(proc->page_directory,
+				unmap_page_in_directory(process_pgd(proc),
 							virt_addr + off);
 			return SYSCALL_PTR_ERR(EIO);
 		}
 		if ((size_t)nread < chunk)
 			memset(page_buf + nread, 0, chunk - (size_t)nread);
-		if (copy_to_user_region_in_directory(proc->page_directory,
+		if (copy_to_user_region_in_directory(process_pgd(proc),
 						     virt_addr + copied,
 						     page_buf, chunk) != 0)
 		{
 			for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-				unmap_page_in_directory(proc->page_directory,
+				unmap_page_in_directory(process_pgd(proc),
 							virt_addr + off);
 			return SYSCALL_PTR_ERR(EFAULT);
 		}
@@ -315,7 +318,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	if (!region)
 	{
 		for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-			unmap_page_in_directory(proc->page_directory, virt_addr + off);
+			unmap_page_in_directory(process_pgd(proc), virt_addr + off);
 		return SYSCALL_PTR_ERR(ENOMEM);
 	}
 
@@ -325,7 +328,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	region->prot = prot;
 	region->flags = flags;
 	region->next = proc->mmap_list;
-	proc->mmap_list = region;
+	process_mm_set_mmap_list(proc, region);
 	KTM_CHECKPOINT(KTM_CP_MM_MAP);
 
 	if (DEBUG_MMAP_AUDIT)
@@ -350,6 +353,7 @@ int64_t sys_brk(void *addr)
 		{
 			current_process->heap_start = USER_HEAP_BASE;
 			current_process->heap_end = USER_HEAP_BASE;
+			process_mm_sync_from_process(current_process);
 		}
 		return (int64_t)current_process->heap_end;
 	}
@@ -371,6 +375,7 @@ int64_t sys_brk(void *addr)
 		current_process->heap_start = heap_lo;
 		current_process->heap_end = heap_lo;
 		current_brk = heap_lo;
+		process_mm_sync_from_process(current_process);
 	}
 
 	if (new_brk < heap_lo)
@@ -395,7 +400,7 @@ int64_t sys_brk(void *addr)
 		if (end_page > start_page)
 		{
 			size_to_map = end_page - start_page;
-			if (map_user_region_in_directory(current_process->page_directory,
+			if (map_user_region_in_directory(process_pgd(current_process),
 							 start_page, size_to_map,
 							 PAGE_RW) != 0)
 				return (int64_t)current_process->heap_end;
@@ -409,10 +414,11 @@ int64_t sys_brk(void *addr)
 				      (uintptr_t)PAGE_FRAME_MASK;
 		     page < old_end;
 		     page += PAGE_SIZE_4KB)
-			unmap_page_in_directory(current_process->page_directory, page);
+			unmap_page_in_directory(process_pgd(current_process), page);
 	}
 
 	current_process->heap_end = new_brk;
+	process_mm_sync_from_process(current_process);
 	fase39_dump_current_vmas("brk");
 	return (int64_t)new_brk;
 }
@@ -490,8 +496,8 @@ static void mmap_audit_log_args(void *addr, size_t length, int prot, int flags,
                    (unsigned long long)((uint64_t)(unsigned int)flags),
                    (unsigned long long)((uint64_t)(unsigned int)fd),
                    (unsigned long long)((uint64_t)offset),
-                   (unsigned long long)(current_process->syscall_frame.rip),
-                   (unsigned long long)(current_process->syscall_frame.rsp));
+                   (unsigned long long)(process_syscall_ip(current_process)),
+                   (unsigned long long)(process_syscall_sp(current_process)));
   }
   else
   {
@@ -627,7 +633,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   {
     klog_debug("KERN", "SERIAL: mmap: zero length\n");
     ret = SYSCALL_PTR_ERR(EINVAL);
-    mmap_audit_log_return("zero-length", ret, 0, 0, 0, current_process->page_directory);
+    mmap_audit_log_return("zero-length", ret, 0, 0, 0, process_pgd(current_process));
     return ret;
   }
 
@@ -636,7 +642,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     klog_debug("KERN", "SERIAL: mmap: length exceeds user mmap arena\n");
     ret = SYSCALL_PTR_ERR(EINVAL);
     mmap_audit_log_return("length-too-large", ret, 0, 0, 0,
-                          current_process->page_directory);
+                          process_pgd(current_process));
     return ret;
   }
 
@@ -645,7 +651,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   {
     klog_debug("KERN", "SERIAL: mmap: invalid protection flags\n");
     ret = SYSCALL_PTR_ERR(EINVAL);
-    mmap_audit_log_return("bad-prot", ret, 0, 0, 0, current_process->page_directory);
+    mmap_audit_log_return("bad-prot", ret, 0, 0, 0, process_pgd(current_process));
     return ret;
   }
 
@@ -679,7 +685,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         klog_debug("KERN", "SERIAL: mmap: invalid fd for file-backed mmap\n");
         ret = SYSCALL_PTR_ERR(EBADF);
         mmap_audit_log_return("bad-fd", ret, 0, 0, 0,
-                              current_process->page_directory);
+                              process_pgd(current_process));
         return ret;
       }
     }
@@ -736,7 +742,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
             return SYSCALL_PTR_ERR(EINVAL);
           if (!is_user_address(addr, map_len))
             return SYSCALL_PTR_ERR(EFAULT);
-          int mapped = is_page_mapped_in_directory(current_process->page_directory, hint_addr, NULL);
+          int mapped = is_page_mapped_in_directory(process_pgd(current_process), hint_addr, NULL);
           if (mapped == 1)
             return SYSCALL_PTR_ERR(EINVAL);
           virt_addr = hint_addr;
@@ -752,7 +758,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
             bool all_unmapped = true;
             for (uintptr_t check = candidate; check < candidate + map_len; check += PAGE_SIZE_4KB)
             {
-              int m = is_page_mapped_in_directory(current_process->page_directory, check, NULL);
+              int m = is_page_mapped_in_directory(process_pgd(current_process), check, NULL);
               if (m == 1)
               {
                 all_unmapped = false;
@@ -775,11 +781,11 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         {
           uintptr_t v = virt_addr + off;
           uintptr_t p = (uintptr_t)fb_phys + off_u + off;
-          if (map_page_in_directory(current_process->page_directory, v, p, page_flags) != 0)
+          if (map_page_in_directory(process_pgd(current_process), v, p, page_flags) != 0)
           {
             /* Rollback: unmap already mapped pages */
             for (size_t r = 0; r < off; r += PAGE_SIZE_4KB)
-              unmap_page_in_directory(current_process->page_directory, virt_addr + r);
+              unmap_page_in_directory(process_pgd(current_process), virt_addr + r);
             return SYSCALL_PTR_ERR(ENOMEM);
           }
         }
@@ -788,7 +794,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         if (!region)
         {
           for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-            unmap_page_in_directory(current_process->page_directory, virt_addr + off);
+            unmap_page_in_directory(process_pgd(current_process), virt_addr + off);
           return SYSCALL_PTR_ERR(ENOMEM);
         }
         region->addr = (void *)virt_addr;
@@ -797,7 +803,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         region->prot = prot;
         region->flags = flags;
         region->next = current_process->mmap_list;
-        current_process->mmap_list = region;
+        process_mm_set_mmap_list(current_process, region);
         KTM_CHECKPOINT(KTM_CP_MM_MAP);
         fase39_dump_current_vmas("mmap-fb");
         {
@@ -866,7 +872,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 	    return SYSCALL_PTR_ERR(EINVAL);
 	  if (!is_user_address(addr, map_len))
 	    return SYSCALL_PTR_ERR(EFAULT);
-	  if (is_page_mapped_in_directory(current_process->page_directory,
+	  if (is_page_mapped_in_directory(process_pgd(current_process),
 					  hint_addr, NULL) == 1)
 	    return SYSCALL_PTR_ERR(EINVAL);
 	  virt_addr = hint_addr;
@@ -874,7 +880,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 	else
 	{
 	  virt_addr = mm_pick_free_va_topdown(current_process,
-					      current_process->page_directory,
+					      process_pgd(current_process),
 					      map_len);
 	  if (virt_addr == 0)
 	    return SYSCALL_PTR_ERR(ENOMEM);
@@ -883,7 +889,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 	page_flags = PAGE_USER;
 	if (prot & PROT_WRITE)
 	  page_flags |= PAGE_RW;
-	mapped_len = ir0_memfd_mmap(m, current_process->page_directory, virt_addr,
+	mapped_len = ir0_memfd_mmap(m, process_pgd(current_process), virt_addr,
 				    map_len, offset, page_flags);
 	if (mapped_len < 0)
 	  return SYSCALL_PTR_ERR(-mapped_len);
@@ -893,7 +899,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 	if (!region)
 	{
 	  for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-	    unmap_page_in_directory(current_process->page_directory,
+	    unmap_page_in_directory(process_pgd(current_process),
 				    virt_addr + off);
 	  return SYSCALL_PTR_ERR(ENOMEM);
 	}
@@ -903,7 +909,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 	region->prot = prot;
 	region->flags = flags;
 	region->next = current_process->mmap_list;
-	current_process->mmap_list = region;
+	process_mm_set_mmap_list(current_process, region);
 	{
 	  static int s_memfd_map_ok;
 
@@ -943,7 +949,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     {
       ret = SYSCALL_PTR_ERR(EINVAL);
       mmap_audit_log_return("map-fixed-bad-addr", ret, 0, 0, 0,
-                            current_process->page_directory);
+                            process_pgd(current_process));
       return ret;
     }
 
@@ -964,7 +970,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     for (uintptr_t check = hint_addr; check < hint_addr + length;
          check += PAGE_SIZE_4KB)
     {
-      if (is_page_mapped_in_directory(current_process->page_directory, check,
+      if (is_page_mapped_in_directory(process_pgd(current_process), check,
                                       NULL) == 1)
       {
         collision = true;
@@ -982,7 +988,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   if (!use_hint)
   {
     virt_addr = mm_pick_free_va_topdown(current_process,
-                                        current_process->page_directory,
+                                        process_pgd(current_process),
                                         length);
     if (virt_addr == 0)
       return SYSCALL_PTR_ERR(ENOMEM);
@@ -1000,29 +1006,29 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   /* Map pages in process page directory (skip PTE install for anon PROT_NONE) */
   if (!((flags & MAP_ANONYMOUS) && prot == PROT_NONE))
   {
-    if (map_user_region_in_directory(current_process->page_directory, virt_addr, length, page_flags) != 0)
+    if (map_user_region_in_directory(process_pgd(current_process), virt_addr, length, page_flags) != 0)
     {
       klog_debug("KERN", "SERIAL: mmap: failed to map pages\n");
       ret = SYSCALL_PTR_ERR(ENOMEM);
       mmap_audit_log_return("map-failed", ret, virt_addr, aligned_len, 0,
-                            current_process->page_directory);
+                            process_pgd(current_process));
       return ret;
     }
 
-    if (mm_mmap_verify_ptes(current_process->page_directory, virt_addr,
+    if (mm_mmap_verify_ptes(process_pgd(current_process), virt_addr,
                             aligned_len) != 0)
     {
       for (uintptr_t page = virt_addr; page < virt_addr + aligned_len;
            page += PAGE_SIZE_4KB)
-        unmap_page_in_directory(current_process->page_directory, page);
+        unmap_page_in_directory(process_pgd(current_process), page);
       ret = SYSCALL_PTR_ERR(ENOMEM);
       mmap_audit_log_return("pte-verify-fail", ret, virt_addr, aligned_len, 0,
-                            current_process->page_directory);
+                            process_pgd(current_process));
       return ret;
     }
 
     virt_addr_out = virt_addr;
-    mmap_audit_log_pte("post-map", current_process->page_directory, virt_addr);
+    mmap_audit_log_pte("post-map", process_pgd(current_process), virt_addr);
   }
   else if (DEBUG_MMAP_AUDIT)
   {
@@ -1060,7 +1066,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
       {
         for (uintptr_t page = virt_addr; page < virt_addr + length; page += PAGE_SIZE_4KB)
         {
-          unmap_page_in_directory(current_process->page_directory, page);
+          unmap_page_in_directory(process_pgd(current_process), page);
         }
       }
     return SYSCALL_PTR_ERR(ENOMEM);
@@ -1072,7 +1078,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   region->prot = prot;  /* Store protection flags for mprotect */
   region->flags = flags;
   region->next = current_process->mmap_list;
-  current_process->mmap_list = region;
+  process_mm_set_mmap_list(current_process, region);
   vma_inserted = 1;
   virt_addr_out = virt_addr;
   KTM_CHECKPOINT(KTM_CP_MM_MAP);
@@ -1080,7 +1086,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
   ret = (void *)virt_addr;
   mmap_audit_log_return("ok", ret, virt_addr_out, aligned_len, vma_inserted,
-                        current_process->page_directory);
+                        process_pgd(current_process));
   if (DEBUG_MMAP_AUDIT)
     klog_debug("MMAP", "CLASSIFY BUSYBOX_NEXT_SYSCALL_REACHED stage=mmap-return-ok");
   return ret;
@@ -1118,12 +1124,12 @@ int sys_munmap(void *addr, size_t length)
       if (prev)
         prev->next = current->next;
       else
-        current_process->mmap_list = current->next;
+        process_mm_set_mmap_list(current_process, current->next);
 
       /* Unmap pages in process page directory */
       for (uintptr_t page = start_page; page < start_page + aligned_length; page += PAGE_SIZE_4KB)
       {
-        if (unmap_page_in_directory(current_process->page_directory, page) == 0)
+        if (unmap_page_in_directory(process_pgd(current_process), page) == 0)
           unmapped_pages++;
       }
 
@@ -1181,7 +1187,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
 
   range_start = (uintptr_t)addr & (uintptr_t)PAGE_FRAME_MASK;
   range_end = (((uintptr_t)addr + len) + PAGE_SIZE_4KB - 1) & (uintptr_t)PAGE_FRAME_MASK;
-  pml4 = current_process->page_directory;
+  pml4 = process_pgd(current_process);
 
   map_flags = PAGE_USER;
   if (prot & PROT_WRITE)

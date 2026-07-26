@@ -123,7 +123,14 @@ void kernel_idle_loop(void)
 	{
 		enable_interrupts();
 		kernel_idle_poll();
-		cpu_idle();
+		/*
+		 * IRQ preempt only returns to ring 3 today. Idle must yield
+		 * explicitly when a higher-priority task is runnable.
+		 */
+		if (sched_count_runnable() > 1)
+			sched_schedule_next();
+		else
+			cpu_idle();
 	}
 }
 
@@ -430,6 +437,14 @@ void kmain(uint32_t multiboot_info)
         }
         klog_info_fmt("INIT", "/sbin/init loaded (PID %d), scheduling",
                       init_pid);
+
+        /*
+         * Always-runnable idle after PID 1 so clock idle/loadavg can exclude
+         * comm=="idle" (see clock_comm_is_idle). Must not run before kexecve
+         * or it would consume PID 1.
+         */
+        if (spawn_kernel(kernel_idle_loop, "idle") < 0)
+            klog_notice("BOOT", "idle task spawn failed; UP idle heuristic only");
 
         ir0_console_on_userspace_attach();
 

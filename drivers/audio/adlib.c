@@ -12,7 +12,8 @@
  */
 
 #include "adlib.h"
-#include <interrupt/arch/io.h>
+#include <ir0/arch_io.h>
+#include <ir0/cpu.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <stdbool.h>

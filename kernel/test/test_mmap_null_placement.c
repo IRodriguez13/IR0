@@ -31,9 +31,9 @@ static int ktest_pte_present(uintptr_t va)
 {
 	uint64_t flags = 0;
 
-	if (!current_process || !current_process->page_directory)
+	if (!current_process || !process_pgd(current_process))
 		return 0;
-	return is_page_mapped_in_directory(current_process->page_directory, va,
+	return is_page_mapped_in_directory(process_pgd(current_process), va,
 					   &flags) == 1;
 }
 

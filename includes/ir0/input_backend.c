@@ -17,7 +17,15 @@
 #if CONFIG_ENABLE_MOUSE
 #include <drivers/IO/ps2_mouse.h>
 #endif
-#include <interrupt/arch/keyboard.h>
+#include <ir0/irq.h>
+
+/* Implemented in interrupt/arch/keyboard.c — no portable #include of that tree. */
+extern char keyboard_buffer_get(void);
+extern int keyboard_buffer_has_data(void);
+extern void keyboard_buffer_clear(void);
+extern int keyboard_set_layout(int layout);
+extern int keyboard_get_layout(void);
+extern const char *keyboard_get_layout_name(int layout);
 
 void input_mouse_feed_byte(uint8_t data)
 {
@@ -34,7 +42,7 @@ void input_mouse_handle_interrupt(void)
 	 * IRQ12 and IRQ1 share the i8042 output buffer. Always demux by
 	 * status AUXDATA — never assume this IRQ's byte is mouse-only.
 	 */
-	keyboard_poll_ps2();
+	irq_keyboard_poll_ps2();
 }
 
 bool input_mouse_is_available(void)
@@ -105,7 +113,7 @@ void input_kbd_clear(void)
 
 void input_kbd_poll_ps2(void)
 {
-	keyboard_poll_ps2();
+	irq_keyboard_poll_ps2();
 }
 
 int input_kbd_set_layout(int layout)

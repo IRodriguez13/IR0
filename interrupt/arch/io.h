@@ -13,7 +13,4 @@
 #include <ir0/cpu.h>
 #include <ir0/arch_io.h>
 
-static inline void io_wait(void)
-{
-	outb(0x80, 0);
-}
+/* io_wait() comes from <ir0/arch_io.h> */

@@ -9,7 +9,7 @@
  * File: class_b.h
  * Description: Host/KTM fixtures for Class B (KERNEL_CS + userspace RIP)
  *
- * Linux-like contract: syscall_frame holds user pt_regs; task.rip must not
+ * Linux-like contract: syscall_frame holds user pt_regs; task.arch.rip must not
  * receive user RIP via sync at syscall entry. Class B is the illegal pairing
  * KERNEL_CS + user RIP on task_t (kernel_ret would jmp to user VA).
  *
@@ -47,7 +47,7 @@ typedef struct ir0_mock_cs_rip
 
 /*
  * A: user CS + user RIP — OK for iretq (pt_regs applied to task at exit-to-user).
- * Historical name "sync_like" kept; entry sync into task.rip is a no-op now.
+ * Historical name "sync_like" kept; entry sync into task.arch.rip is a no-op now.
  */
 static inline ir0_mock_cs_rip_t ir0_mock_class_b_user_iretq_ok(void)
 {

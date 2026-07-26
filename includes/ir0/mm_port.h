@@ -22,3 +22,7 @@
 void ir0_mm_pmm_stats(size_t *total_frames, size_t *used_frames,
 		      size_t *free_frames);
 void ir0_mm_alloc_stats(size_t *total, size_t *used, size_t *allocs);
+
+/* PMM-managed physical range [start, end) — for /proc/iomem honesty. */
+uintptr_t ir0_mm_pmm_start(void);
+uintptr_t ir0_mm_pmm_end(void);

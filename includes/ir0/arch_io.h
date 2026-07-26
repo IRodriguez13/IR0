@@ -23,6 +23,14 @@ void disable_interrupts(void);
 uint8_t inb(uint16_t port);
 void outb(uint16_t port, uint8_t value);
 
+/* Short I/O delay (x86 port 0x80); no-op on architectures without port I/O. */
+static inline void io_wait(void)
+{
+#if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
+	outb(0x80, 0);
+#endif
+}
+
 /* Wider port I/O — also declared in <ir0/cpu.h>; one impl in arch_interface.c */
 uint16_t inw(uint16_t port);
 void outw(uint16_t port, uint16_t value);

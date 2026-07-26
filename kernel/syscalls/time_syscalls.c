@@ -17,46 +17,15 @@
 #include <ir0/syscalls_kernel.h>
 #include <ir0/process.h>
 #include <ir0/errno.h>
-#include <ir0/rtc.h>
 #include <ir0/clock.h>
 #include <ir0/copy_user.h>
 #include <ir0/validation.h>
 
-/*
- * rtc_time_to_unix - Convert RTC date/time to Unix timestamp (seconds since 1970-01-01 UTC).
- * Simplified: assumes UTC, no leap seconds.
- */
-static time_t rtc_time_to_unix(const rtc_time_t *rt)
-{
-	uint16_t year = (rt->century > 0 && rt->century < 100) ?
-	    (uint16_t)(rt->century * 100 + rt->year) : (uint16_t)(2000 + rt->year);
-	int leap;
-	time_t days = 0;
-
-	if (year < 1970)
-		year = 1970;
-
-	static const int days_in_month[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-
-	leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 1 : 0;
-
-	for (uint16_t y = 1970; y < year; y++)
-		days += 365 + ((y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 1 : 0);
-
-	for (int m = 1; m < (int)rt->month && m <= 12; m++)
-		days += days_in_month[m - 1] + (m == 2 ? leap : 0);
-
-	days += (rt->day > 0 && rt->day <= 31) ? (rt->day - 1) : 0;
-
-	return (time_t)days * 86400 +
-	    (rt->hour < 24 ? rt->hour : 0) * 3600 +
-	    (rt->minute < 60 ? rt->minute : 0) * 60 +
-	    (rt->second < 60 ? rt->second : 0);
-}
-
 int64_t sys_gettimeofday(struct timeval *tv, void *tz)
 {
 	uint64_t uptime_ms;
+	time_t sec;
+	suseconds_t usec;
 
 	(void)tz;
 
@@ -66,8 +35,20 @@ int64_t sys_gettimeofday(struct timeval *tv, void *tz)
 		return -EFAULT;
 
 	uptime_ms = clock_get_uptime_milliseconds();
-	tv->tv_sec = (time_t)(uptime_ms / 1000);
-	tv->tv_usec = (suseconds_t)((uptime_ms % 1000) * 1000);
+	if (clock_realtime_available())
+	{
+		sec = clock_get_current_time();
+		/* current_time advances on second boundaries; residual from uptime. */
+		usec = (suseconds_t)((uptime_ms % 1000) * 1000);
+	}
+	else
+	{
+		/* Honest fallback: no wall clock — boot-relative (same as MONOTONIC). */
+		sec = (time_t)(uptime_ms / 1000);
+		usec = (suseconds_t)((uptime_ms % 1000) * 1000);
+	}
+	tv->tv_sec = sec;
+	tv->tv_usec = usec;
 	return 0;
 }
 
@@ -81,15 +62,29 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 	if (validate_userspace_buffer(tp, sizeof(struct timespec)) != 0)
 		return -EFAULT;
 
+	uptime_ms = clock_get_uptime_milliseconds();
+
 	/*
-	 * REALTIME(0), MONOTONIC(1), MONOTONIC_RAW(4) and BOOTTIME(7) all read
-	 * the same uptime source: IR0 has no wall clock offset or suspend yet,
-	 * so boot-relative and monotonic are identical.
+	 * CLOCK_REALTIME (0): RTC_UTC + monotonic elapsed when available.
+	 * CLOCK_MONOTONIC (1), MONOTONIC_RAW (4), BOOTTIME (7): uptime since boot.
 	 */
-	if (clock_id != 0 && clock_id != 1 && clock_id != 4 && clock_id != 7)
+	if (clock_id == 0)
+	{
+		if (clock_realtime_available())
+		{
+			tp->tv_sec = clock_get_current_time();
+			tp->tv_nsec = (long)((uptime_ms % 1000) * 1000000UL);
+			return 0;
+		}
+		/* No RTC: still return boot-relative so date(1) is not ENOSYS. */
+		tp->tv_sec = (time_t)(uptime_ms / 1000);
+		tp->tv_nsec = (long)((uptime_ms % 1000) * 1000000UL);
+		return 0;
+	}
+
+	if (clock_id != 1 && clock_id != 4 && clock_id != 7)
 		return -EINVAL;
 
-	uptime_ms = clock_get_uptime_milliseconds();
 	tp->tv_sec = (time_t)(uptime_ms / 1000);
 	tp->tv_nsec = (long)((uptime_ms % 1000) * 1000000UL);
 	return 0;

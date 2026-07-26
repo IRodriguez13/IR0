@@ -95,6 +95,18 @@ uint64_t clock_get_tick_count(void);
 time_t clock_get_current_time(void);
 int clock_set_current_time(time_t time);
 
+/* Non-zero when CLOCK_REALTIME is backed by RTC (or settime) wall epoch. */
+int clock_realtime_available(void);
+uint64_t clock_get_idle_milliseconds(void);
+
+/*
+ * Load averages as fixed-point ×100 (e.g. 3 → "0.03").
+ * runnable/total exclude the kernel idle task from the numerator.
+ */
+void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
+		       uint32_t *load15_x100, unsigned *runnable,
+		       unsigned *nprocs, int *last_pid);
+
 int clock_set_timezone_offset(int32_t offset_seconds);
 int32_t clock_get_timezone_offset(void);
 
