@@ -12,17 +12,27 @@ where unimplemented).
 
 Complexity belongs in the code — starting should not.
 
+Product userspace (runit + BusyBox) lives in a **sibling repo**. First boot:
+
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
-make check-env            # alias: make deptest — actionable host diagnostic
+make check-env            # host diagnostic
 make defconfig
-make ir0                  # kernel-x64.iso
-make run                  # QEMU
-make sync-mandocs         # install man pages → ~/.local/share/man (no sudo)
-make man TOPIC=onboarding # first-contributor guide (clone → first bug)
+make first-boot           # clone ../IR0-userspace if needed + minimal rootfs + ISO
+make run                  # QEMU GTK → getty → BusyBox ash
+```
+
+Kernel-only ISO (no shell): `make ir0`. Without `/sbin/init` on `disk.img` the
+kernel **panics** at handoff — there is no in-kernel fallback shell.
+
+```bash
+make sync-mandocs         # man pages → ~/.local/share/man (no sudo)
+make man TOPIC=onboarding
 make man TOPIC=boot
 ```
+
+Full coupling guide: **[Documentation/USERSPACE.md](Documentation/USERSPACE.md)**.
 
 | Profile | Meaning | Status |
 |---------|---------|--------|

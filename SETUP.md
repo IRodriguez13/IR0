@@ -88,16 +88,35 @@ verbose ACPI/PCI wall. Requires QEMU `-virtfs` (wired by `run-bootlog` /
 ## Sibling userspace (required for product rootfs)
 
 Product PID1 (runit), BusyBox, login/doas, and `/etc` live in a **separate**
-repository. Clone it next to IR0:
+repository. **Recommended first-time path:**
+
+```bash
+make first-boot    # clones ../IR0-userspace if missing, builds rootfs, makes ISO
+make run           # QEMU → BusyBox ash (GTK)
+```
+
+Manual equivalent:
 
 ```bash
 git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace
 # or: export IR0_USERSPACE_ROOT=/path/to/IR0-userspace
 make check-userspace
 make headers_install DESTDIR=../IR0-userspace/out/sysroot
+make load-userspace-runit
+make kernel-x64-userspace.iso
 ```
 
-Full boundary and targets: [`Documentation/USERSPACE.md`](Documentation/USERSPACE.md)
+Optional in-guest TinyCC + GNU make (not required for BusyBox):
+
+```bash
+IR0_WITH_DEVTOOLS=1 make run
+# or: make load-userspace-devtools
+```
+
+**Boot without `/sbin/init`:** kernel `panic("Failed to load /sbin/init")`.
+**Init exits:** idle keeps the CPU; no userspace shell until reboot with a live PID1.
+
+Full boundary: [`Documentation/USERSPACE.md`](Documentation/USERSPACE.md)
 (Spanish: [`Documentation/esp/USERSPACE.md`](Documentation/esp/USERSPACE.md)).
 
 ## First-Time Configuration
@@ -149,11 +168,13 @@ make clean
 ### Graphical run (runit + getty/ash)
 
 ```bash
+make first-boot   # once: sibling + disk.img
 make run
 ```
 
-Builds `kernel-x64-userspace.iso`, injects runit + BusyBox into `disk.img`,
-and enables the standard IR0 hardware profile.
+Builds/uses `kernel-x64-userspace.iso`, injects runit + BusyBox into `disk.img`,
+and enables the standard IR0 hardware profile. Does **not** require TinyCC/GNU
+make unless `IR0_WITH_DEVTOOLS=1`.
 
 ### Serial-only (no GUI)
 
