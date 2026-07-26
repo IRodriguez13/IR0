@@ -2283,7 +2283,8 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
 		echo "  WARN    nano not built (optional; cat /usr/bin/nano after reinject)"
 	@if [ "$${IR0_GUEST_MANDOCS:-1}" != "0" ]; then \
-		$(MAKE) -s prepare-guest-mandocs; \
+		$(MAKE) -s prepare-guest-mandocs || \
+			echo "  WARN    prepare-guest-mandocs failed (optional)"; \
 	fi
 	@DISK=$${DISK:-disk.img}; \
 	set -e; \
