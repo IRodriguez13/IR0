@@ -16,14 +16,19 @@
 
 void process_exec_close_cloexec(process_t *p)
 {
+	fd_entry_t *table;
 	int i;
 
 	if (!p)
 		return;
 
+	table = process_fd_table(p);
+	if (!table)
+		return;
+
 	for (i = 3; i < MAX_FDS_PER_PROCESS; i++)
 	{
-		fd_entry_t *e = &p->fd_table[i];
+		fd_entry_t *e = &table[i];
 
 		if (!e->in_use)
 			continue;

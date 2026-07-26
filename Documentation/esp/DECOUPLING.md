@@ -1,8 +1,16 @@
 # Mapa de desacople del kernel IR0
 
+> **Última verificación:** 2026-07-26  
+> **Fuente de verdad:** `Documentation/DECOUPLING.md` (inglés) + `includes/ir0/*`
+
 Este documento es la versión en español de `Documentation/DECOUPLING.md`. La documentación
 técnica principal se mantiene en inglés en el directorio `Documentation/`; aquí se resume el
 mismo contenido sin mezclar idiomas.
+
+**Oleada ISA (2026-07-26):** fachadas `irq.h`, `arch_switch.h`, `arch_mm.h`, `arch_signal.h`,
+`sigcontext_{x86_64,arm64}.h` (aarch64 = uapi Linux completo); `switch_to` → `arch_switch_to`
+con TTBR0/SP_EL*; ARM64 `irq_*` → VBAR+GICv2; `interrupt/arch/` = backend x86-only.
+Residual: musl aarch64 + `ALL_OBJS` producto.
 
 ## Objetivos de diseño
 

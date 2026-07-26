@@ -8,6 +8,9 @@ extern _etext
 extern arch_report_bad_kernel_ret_rip
 extern process_after_task_save
 
+; Single source: includes/ir0/asm_offsets.h ↔ asm_offsets.inc
+%include "includes/ir0/asm_offsets.inc"
+
 section .bss
 align 16
 iretq_checkpoint_buf:
@@ -151,7 +154,7 @@ switch_context_x64:
     lea r8, [rel _etext]
     cmp rax, r8
     jae .bad_save_rip
-    mov [rdi + 0x80], rax
+    mov [rdi + TASK_ARCH_RIP_OFFSET], rax
     jmp .save_rflags_ok
 
 .bad_save_rip:
@@ -164,7 +167,7 @@ switch_context_x64:
     pop rsi
     pop rdi
     mov rax, [rsp]
-    mov [rdi + 0x80], rax
+    mov [rdi + TASK_ARCH_RIP_OFFSET], rax
 
 .save_rflags_ok:
     pushfq
@@ -181,10 +184,10 @@ switch_context_x64:
     mov ax, gs
     mov [rdi + 0x98], ax
     mov ax, ss
-    mov [rdi + 0x9A], ax
+    mov [rdi + TASK_ARCH_SS_OFFSET], ax
 
     mov rax, cr3
-    mov [rdi + 0xB0], rax
+    mov [rdi + TASK_ARCH_CR3_OFFSET], rax
 
     ; Class B close: honour want_kernel_ret now that rip/cs are kernel from save.
     push rsi
@@ -197,7 +200,7 @@ switch_context_x64:
     mov r11, rsi
 
     ; CR3 before GPR restore: rax is scratch until task->rax is loaded below.
-    mov rax, [r11 + 0xB0]
+    mov rax, [r11 + TASK_ARCH_CR3_OFFSET]
     mov cr3, rax
 
     movzx eax, word [r11 + 0x90]
@@ -224,7 +227,7 @@ switch_context_x64:
     push rax
     push rcx
     push rdx
-    mov rax, [r11 + 0x258]
+    mov rax, [r11 + PROC_FS_BASE_OFFSET]
     mov rdx, rax
     shr rdx, 32
     mov ecx, 0xC0000100
@@ -233,7 +236,7 @@ switch_context_x64:
     pop rcx
     pop rax
 
-    mov r10, [r11 + 0x80]
+    mov r10, [r11 + TASK_ARCH_RIP_OFFSET]
     cmp r10, 0x101000
     jb .bad_ret_rip
     lea r8, [rel _etext]
@@ -252,7 +255,7 @@ switch_context_x64:
 
 .user_iretq_resume:
     ; Refuse non-canonical user RIP/RSP (heap #UD class if CS flipped alone).
-    mov rax, [r11 + 0x80]
+    mov rax, [r11 + TASK_ARCH_RIP_OFFSET]
     cmp rax, 0x00400000
     jb .bad_user_iret_frame
     mov rbx, 0x00007FFFFFFFFFFF
@@ -278,13 +281,13 @@ switch_context_x64:
     mov r14, [r11 + 0x60]
     mov r15, [r11 + 0x68]
 
-    ; FASE 18: restore IA32_FS_BASE from process_t->fs_base (offset 0x258).
+    ; FASE 18: restore IA32_FS_BASE from process_t->fs_base (offset 0x140).
     ; task is at offset 0 of process_t, so r11 (=&task) doubles as process_t*.
     ; Guarded by _Static_assert in kernel/process.h.
     push rax
     push rcx
     push rdx
-    mov rax, [r11 + 0x258]
+    mov rax, [r11 + PROC_FS_BASE_OFFSET]
     mov rdx, rax
     shr rdx, 32
     mov ecx, 0xC0000100
@@ -294,7 +297,7 @@ switch_context_x64:
     pop rax
 
     ; Build iretq frame on target CR3; segments reload on iretq (SS) / user entry.
-    movzx rdi, word [r11 + 0x9A]
+    movzx rdi, word [r11 + TASK_ARCH_SS_OFFSET]
     push rdi
     push qword [r11 + 0x70]
     ; Force IF — task.rflags may have been saved under cli (IF=0).
@@ -303,7 +306,7 @@ switch_context_x64:
     push rdi
     movzx rdi, word [r11 + 0x90]
     push rdi
-    push qword [r11 + 0x80]
+    push qword [r11 + TASK_ARCH_RIP_OFFSET]
 
     mov rdi, [r11 + 0x28]
     mov r11, [r11 + 0x48]
@@ -311,7 +314,7 @@ switch_context_x64:
     iretq
 
 .bad_user_iret_frame:
-    mov rdi, [r11 + 0x80]
+    mov rdi, [r11 + TASK_ARCH_RIP_OFFSET]
     mov rsi, r11
     call arch_report_bad_kernel_ret_rip
 
@@ -334,9 +337,9 @@ switch_to_user_task_asm:
     push rcx
     lea rax, [rel iretq_checkpoint_buf]
     mov qword [rax + 0], 0xAAA1
-    mov rcx, [r11 + 0xB0]
+    mov rcx, [r11 + TASK_ARCH_CR3_OFFSET]
     mov [rax + 8], rcx
-    mov rcx, [r11 + 0x80]
+    mov rcx, [r11 + TASK_ARCH_RIP_OFFSET]
     mov [rax + 16], rcx
     movzx rcx, word [r11 + 0x90]
     mov [rax + 24], rcx
@@ -346,7 +349,7 @@ switch_to_user_task_asm:
     mov [rax + 32], rcx
     mov rcx, [r11 + 0x70]
     mov [rax + 40], rcx
-    movzx rcx, word [r11 + 0x9A]
+    movzx rcx, word [r11 + TASK_ARCH_SS_OFFSET]
     mov [rax + 48], rcx
     mov [rax + 56], r11
     pop rcx
@@ -354,7 +357,7 @@ switch_to_user_task_asm:
     ; -------------------------
 
     sub rsp, 8
-    mov rax, [r11 + 0xB0]
+    mov rax, [r11 + TASK_ARCH_CR3_OFFSET]
     mov [rsp], rax
     mov cr3, rax
 
@@ -423,13 +426,13 @@ switch_to_user_task_asm:
     pop rax
     ; -------------------------
 
-    ; FASE 18: restore IA32_FS_BASE from process_t->fs_base (offset 0x258).
+    ; FASE 18: restore IA32_FS_BASE from process_t->fs_base (offset 0x140).
     ; task is at offset 0 of process_t, so r11 doubles as process_t*.
     ; Guarded by _Static_assert in kernel/process.h.
     push rax
     push rcx
     push rdx
-    mov rax, [r11 + 0x258]
+    mov rax, [r11 + PROC_FS_BASE_OFFSET]
     mov rdx, rax
     shr rdx, 32
     mov ecx, 0xC0000100
@@ -438,7 +441,7 @@ switch_to_user_task_asm:
     pop rcx
     pop rax
 
-    movzx rdi, word [r11 + 0x9A]
+    movzx rdi, word [r11 + TASK_ARCH_SS_OFFSET]
     push rdi
     push qword [r11 + 0x70]
     ; Force IF (0x200) + bit1; clear TF. Saved rflags may be IF=0 under cli.
@@ -448,7 +451,7 @@ switch_to_user_task_asm:
     push rdi
     movzx rdi, word [r11 + 0x90]
     push rdi
-    push qword [r11 + 0x80]
+    push qword [r11 + TASK_ARCH_RIP_OFFSET]
 
     mov rdi, [r11 + 0x28]
     mov r11, [r11 + 0x48]

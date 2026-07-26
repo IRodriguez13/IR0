@@ -12,7 +12,8 @@
  */
 
 #include "hci_uart.h"
-#include <interrupt/arch/io.h>
+#include <ir0/arch_io.h>
+#include <ir0/cpu.h>
 #include <stdint.h>
 #include <ir0/kmem.h>
 #include <string.h>

@@ -138,8 +138,8 @@ static void rr_setup_proc_stack(process_t *p, uint8_t *stack, void (*entry)(void
 
 	sp = (uintptr_t)stack + RR_STACK_SIZE;
 	sp &= ~(uintptr_t)0xf;
-	p->task.arm64.sp_el0 = sp;
-	p->task.arm64.x30 = (uint64_t)(uintptr_t)entry;
+	p->task.arch.sp_el0 = sp;
+	p->task.arch.x30 = (uint64_t)(uintptr_t)entry;
 }
 
 static int arm64_rr_tick_smoke(void)
@@ -149,8 +149,8 @@ static int arm64_rr_tick_smoke(void)
 
 	zero_task(&g_rr_pa.task);
 	zero_task(&g_rr_pb.task);
-	g_rr_pa.task.arm64.ttbr0_el1 = g_rr_ttbr_a;
-	g_rr_pb.task.arm64.ttbr0_el1 = g_rr_ttbr_b;
+	g_rr_pa.task.arch.ttbr0_el1 = g_rr_ttbr_a;
+	g_rr_pb.task.arch.ttbr0_el1 = g_rr_ttbr_b;
 	rr_setup_proc_stack(&g_rr_pa, g_rr_stack_a, rr_tick_task_a);
 	rr_setup_proc_stack(&g_rr_pb, g_rr_stack_b, rr_tick_task_b);
 
@@ -191,13 +191,13 @@ int arm64_rr_sched_smoke(void)
 
 	g_rr_pa.state = PROCESS_READY;
 	g_rr_pb.state = PROCESS_READY;
-	g_rr_pa.task.arm64.ttbr0_el1 = g_rr_ttbr_a;
-	g_rr_pb.task.arm64.ttbr0_el1 = g_rr_ttbr_b;
+	g_rr_pa.task.arch.ttbr0_el1 = g_rr_ttbr_a;
+	g_rr_pb.task.arch.ttbr0_el1 = g_rr_ttbr_b;
 
 	sp_b = (uintptr_t)g_rr_stack_b + RR_STACK_SIZE;
 	sp_b &= ~(uintptr_t)0xf;
-	g_rr_pb.task.arm64.sp_el0 = sp_b;
-	g_rr_pb.task.arm64.x30 = (uint64_t)(uintptr_t)rr_task_b;
+	g_rr_pb.task.arch.sp_el0 = sp_b;
+	g_rr_pb.task.arch.x30 = (uint64_t)(uintptr_t)rr_task_b;
 
 	rr_add_process(&g_rr_pa);
 	rr_add_process(&g_rr_pb);

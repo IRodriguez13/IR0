@@ -23,9 +23,9 @@
 #include <arch/common/arch_portable.h>
 #include <arch/x86-64/sources/gdt.h>
 #include <arch/x86-64/sources/tss_x64.h>
-#include <interrupt/arch/idt.h>
-#include <interrupt/arch/pic.h>
+#include <ir0/irq.h>
 #include <ir0/ktm/klog.h>
+#include <interrupt/arch/idt.h> /* idt_early_install64 only */
 
 /*
  * arch_enable_sse_x86_64 - Allow SSE/x87 in ring 0/3 (musl CRT uses XMM).
@@ -78,13 +78,8 @@ void early_init_x86_64(void)
  */
 void interrupt_init_x86_64(void)
 {
-    /* Initialize IDT (Interrupt Descriptor Table) */
-    idt_init64();
-    idt_load64();
-    
-    /* Remap PIC (Programmable Interrupt Controller) to IRQs 32-47 */
-    pic_remap64();
-    
-    klog_info("ARCH", "x86-64 interrupt init: IDT and PIC initialized");
+	irq_tables_init();
+	irq_controller_init();
+	klog_info("ARCH", "x86-64 interrupt init: IDT and PIC initialized");
 }
 

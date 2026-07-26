@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <ir0/arch_config.h>
 
 typedef struct process process_t;
 
@@ -113,33 +114,15 @@ struct sigaction {
     sigset_t sa_mask;
 };
 
-/**
- * struct sigcontext - Signal context saved on stack
- * Stores CPU state before signal handler is called
+/*
+ * ISA-specific sigcontext (Linux uapi: x86-64 and aarch64).
+ * Portable code: arch_task_load/store_sigcontext / arch_signal_* only.
  */
-struct sigcontext {
-    uint64_t r15;
-    uint64_t r14;
-    uint64_t r13;
-    uint64_t r12;
-    uint64_t rbp;
-    uint64_t rbx;
-    uint64_t r11;
-    uint64_t r10;
-    uint64_t r9;
-    uint64_t r8;
-    uint64_t rax;
-    uint64_t rcx;
-    uint64_t rdx;
-    uint64_t rsi;
-    uint64_t rdi;
-    uint64_t orig_rax;    /* Original syscall number (if from syscall) */
-    uint64_t rip;         /* Instruction pointer */
-    uint64_t cs;          /* Code segment */
-    uint64_t rflags;      /* CPU flags */
-    uint64_t rsp;         /* Stack pointer */
-    uint64_t ss;          /* Stack segment */
-};
+#if defined(ARCH_ARM64) || defined(__aarch64__)
+#include <ir0/sigcontext_arm64.h>
+#else
+#include <ir0/sigcontext_x86_64.h>
+#endif
 
 /**
  * struct sigframe - Signal frame on userspace stack

@@ -19,8 +19,13 @@ Checks:
 13) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
     use simple facades in includes/ir0/cpu.h (cpu_relax, smp_mb, inb, …).
     Allowlist: syscall_x86_64.h / syscall_arm64.h only. Empty barrier OK.
+14) Portable trees must not hardcode userspace RIPs (0x402B*) or read CR2
+    / emit iretq/sysret mnemonics outside arch/ (use arch_page_fault /
+    arch_fork facades).
 15) includes/ir0/*.h must not #include <drivers/...> (facade seal).
 16) includes/ir0/*.h must not #include <arch/...> or <sched/...> (facade seal).
+17) process_t.page_directory must not be touched outside process.h /
+    mm_struct.c — use process_pgd() / process_set_pgd() (mm->page_directory OK).
 """
 
 from pathlib import Path
@@ -59,6 +64,10 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "pseudo_fs.h",
     ROOT / "includes" / "ir0" / "credentials.h",
     ROOT / "includes" / "ir0" / "ktm" / "ktm.h",
+    ROOT / "includes" / "ir0" / "irq.h",
+    ROOT / "includes" / "ir0" / "arch_switch.h",
+    ROOT / "includes" / "ir0" / "arch_mm.h",
+    ROOT / "includes" / "ir0" / "arch_signal.h",
 ]
 
 REQUIRED_ARM64_SCAFFOLD = [
@@ -151,6 +160,8 @@ PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
     ROOT / "kernel",
     ROOT / "mm",
     ROOT / "net",
+    ROOT / "drivers",
+    ROOT / "sched",
 ]
 
 
@@ -713,6 +724,254 @@ def check_portable_no_isa_asm():
     return errors
 
 
+# Hardcoded musl/BusyBox RIPs from historical fork bugs — forbidden in product.
+PORTABLE_HARDCODED_RIP_RE = re.compile(r"\b0x402[Bb][0-9A-Fa-f]+\b")
+# Direct CR2 / iretq / sysret in executable code (not comments).
+PORTABLE_CR2_RE = re.compile(r"\b(?:read_cr2|__read_cr2|get_cr2)\s*\(|\bmov\s+.*,\s*cr2\b", re.I)
+PORTABLE_IRETQ_SYSRET_ASM_RE = re.compile(
+    r'(?:__asm__|asm)\b[^;]*\b(?:iretq|sysret)\b', re.I
+)
+
+
+def check_portable_no_isa_leak_literals():
+    """Ban hardcoded userspace RIPs and CR2/iretq/sysret outside arch/."""
+    errors = []
+    trees = list(PORTABLE_ISA_TREES) + [ROOT / "sched", ROOT / "includes" / "ir0"]
+    for base in trees:
+        if not base.is_dir():
+            continue
+        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+            try:
+                rel = fpath.relative_to(ROOT)
+            except ValueError:
+                continue
+            rel_s = str(rel).replace("\\", "/")
+            if rel_s.startswith("arch/"):
+                continue
+            if fpath.suffix not in (".c", ".h"):
+                continue
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, 1):
+                if _line_is_comment_only(line):
+                    continue
+                if PORTABLE_HARDCODED_RIP_RE.search(line):
+                    errors.append(
+                        f"[portable-no-hardcoded-rip] {rel}:{idx}: "
+                        f"workload RIP forbidden; use KTM/live IP: {line.strip()}"
+                    )
+                if PORTABLE_CR2_RE.search(line):
+                    errors.append(
+                        f"[portable-no-cr2] {rel}:{idx}: use "
+                        f"arch_page_fault_decode(); no CR2 in portable code: "
+                        f"{line.strip()}"
+                    )
+                if PORTABLE_IRETQ_SYSRET_ASM_RE.search(line):
+                    errors.append(
+                        f"[portable-no-iretq-sysret] {rel}:{idx}: iretq/sysret "
+                        f"belong in arch/; use facades: {line.strip()}"
+                    )
+    return errors
+
+
+# Direct GPR / control-register fields on task.arch — portable code must use
+# includes/ir0/arch_task.h accessors (or arch_task_ops bulk helpers).
+PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
+    r"(?:\.|->)arch\.(rax|rbx|rcx|rdx|rsi|rdi|rbp|rsp|r8|r9|r10|r11|r12|r13|r14|r15|"
+    r"rip|rflags|cs|ss|ds|es|fs|gs|cr0|cr2|cr3|cr4|dr0|dr1|dr2|dr3|dr6|dr7|"
+    r"x0|x1|x2|ttbr0_el1|elr_el1|sp_el0|spsr_el1)\b"
+)
+
+PORTABLE_TASK_ARCH_ALLOWLIST = {
+    ROOT / "includes" / "ir0" / "arch_task.h",
+    ROOT / "includes" / "ir0" / "arch_task_context_x86_64.h",
+    ROOT / "includes" / "ir0" / "arch_task_context_arm64.h",
+    ROOT / "includes" / "ir0" / "arch_task_ops.h",
+}
+
+
+def check_asm_offsets_sync():
+    """C asm_offsets.h constants must match NASM asm_offsets.inc."""
+    errors = []
+    h_path = ROOT / "includes" / "ir0" / "asm_offsets.h"
+    i_path = ROOT / "includes" / "ir0" / "asm_offsets.inc"
+    if not h_path.is_file() or not i_path.is_file():
+        errors.append("[asm-offsets] missing asm_offsets.h or asm_offsets.inc")
+        return errors
+    h = h_path.read_text(encoding="utf-8", errors="replace")
+    inc = i_path.read_text(encoding="utf-8", errors="replace")
+    pairs = [
+        ("IR0_PROC_FS_BASE_OFFSET", "PROC_FS_BASE_OFFSET"),
+        ("IR0_TASK_ARCH_RIP_OFFSET", "TASK_ARCH_RIP_OFFSET"),
+        ("IR0_TASK_ARCH_CR3_OFFSET", "TASK_ARCH_CR3_OFFSET"),
+        ("IR0_TASK_ARCH_SS_OFFSET", "TASK_ARCH_SS_OFFSET"),
+    ]
+    for c_name, asm_name in pairs:
+        hm = re.search(rf"#define\s+{c_name}\s+(0x[0-9A-Fa-f]+|\d+)", h)
+        im = re.search(rf"%define\s+{asm_name}\s+(0x[0-9A-Fa-f]+|\d+)", inc)
+        if not hm or not im:
+            errors.append(f"[asm-offsets] missing {c_name} / {asm_name}")
+            continue
+        if int(hm.group(1), 0) != int(im.group(1), 0):
+            errors.append(
+                f"[asm-offsets] mismatch {c_name}={hm.group(1)} vs "
+                f"{asm_name}={im.group(1)}"
+            )
+    return errors
+
+
+def check_portable_no_task_arch_fields():
+    """Fail if portable trees touch task.arch.<isa-field> directly."""
+    errors = []
+    trees = list(PORTABLE_ISA_TREES) + [ROOT / "sched", ROOT / "includes" / "ir0"]
+    for base in trees:
+        if not base.is_dir():
+            continue
+        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+            if fpath in PORTABLE_TASK_ARCH_ALLOWLIST:
+                continue
+            try:
+                rel = fpath.relative_to(ROOT)
+            except ValueError:
+                continue
+            rel_s = str(rel).replace("\\", "/")
+            if rel_s.startswith("arch/"):
+                continue
+            # ISA dispatchers under sched/switch may still need allowlist if any
+            if rel_s.startswith("sched/switch/switch_"):
+                continue
+            if fpath.suffix not in (".c", ".h"):
+                continue
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, 1):
+                if _line_is_comment_only(line):
+                    continue
+                if PORTABLE_TASK_ARCH_FIELD_RE.search(line):
+                    errors.append(
+                        f"[portable-no-task-arch-field] {rel}:{idx}: use "
+                        f"task_get_*/task_set_* or arch_task_ops; "
+                        f"no direct task.arch field: {line.strip()}"
+                    )
+    return errors
+
+
+# process_t.page_directory is a private mirror; mm->page_directory is canonical.
+PROCESS_PGD_FIELD_RE = re.compile(
+    r"(?<![.\w])(?!mm\b)([A-Za-z_][A-Za-z0-9_]*)->page_directory\b"
+)
+
+PROCESS_PGD_ALLOWLIST = {
+    ROOT / "kernel" / "process.h",
+    ROOT / "kernel" / "process" / "mm_struct.c",
+    ROOT / "includes" / "ir0" / "mm_struct.h",
+}
+
+
+def check_process_pgd_accessor():
+    """Fail if code touches process->page_directory outside mm bind helpers."""
+    errors = []
+    trees = [
+        ROOT / "kernel",
+        ROOT / "mm",
+        ROOT / "fs",
+        ROOT / "net",
+        ROOT / "sched",
+        ROOT / "includes" / "ir0",
+        ROOT / "ktm",
+        ROOT / "interrupt",
+        ROOT / "drivers",
+    ]
+    for base in trees:
+        if not base.is_dir():
+            continue
+        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+            if fpath in PROCESS_PGD_ALLOWLIST:
+                continue
+            if fpath.suffix not in (".c", ".h"):
+                continue
+            try:
+                rel = fpath.relative_to(ROOT)
+            except ValueError:
+                continue
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, 1):
+                if _line_is_comment_only(line):
+                    continue
+                if PROCESS_PGD_FIELD_RE.search(line):
+                    errors.append(
+                        f"[process-pgd-accessor] {rel}:{idx}: use "
+                        f"process_pgd()/process_set_pgd(); "
+                        f"no direct process->page_directory: {line.strip()}"
+                    )
+    return errors
+
+
+# syscall_user_frame_t fields — portable code uses process_syscall_* accessors.
+SYSCALL_FRAME_FIELD_RE = re.compile(
+    r"syscall_frame\.(rip|rsp|rflags|rdi|rsi|rdx|r10|r8|r9|rbx|rbp|r12|r13|r14|r15)\b"
+)
+
+SYSCALL_FRAME_ALLOWLIST = {
+    ROOT / "kernel" / "process.h",
+    ROOT / "kernel" / "process" / "core.c",
+}
+
+
+def check_syscall_frame_accessor():
+    """Fail if portable code opens syscall_frame.* fields directly."""
+    errors = []
+    trees = [
+        ROOT / "kernel",
+        ROOT / "mm",
+        ROOT / "fs",
+        ROOT / "net",
+        ROOT / "sched",
+        ROOT / "includes" / "ir0",
+        ROOT / "ktm",
+    ]
+    for base in trees:
+        if not base.is_dir():
+            continue
+        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+            if fpath in SYSCALL_FRAME_ALLOWLIST:
+                continue
+            try:
+                rel = fpath.relative_to(ROOT)
+            except ValueError:
+                continue
+            rel_s = str(rel).replace("\\", "/")
+            if rel_s.startswith("arch/"):
+                continue
+            if fpath.suffix not in (".c", ".h"):
+                continue
+            try:
+                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, 1):
+                if _line_is_comment_only(line):
+                    continue
+                if SYSCALL_FRAME_FIELD_RE.search(line):
+                    errors.append(
+                        f"[syscall-frame-accessor] {rel}:{idx}: use "
+                        f"process_syscall_ip/sp/arg/set_*; "
+                        f"no direct syscall_frame field: {line.strip()}"
+                    )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -736,6 +995,11 @@ def main():
     errors.extend(check_ktm_angle_includes())
     errors.extend(check_kernel_no_relative_includes())
     errors.extend(check_portable_no_isa_asm())
+    errors.extend(check_portable_no_isa_leak_literals())
+    errors.extend(check_portable_no_task_arch_fields())
+    errors.extend(check_process_pgd_accessor())
+    errors.extend(check_syscall_frame_accessor())
+    errors.extend(check_asm_offsets_sync())
 
     if errors:
         print("[arch-guard] FAILED")
