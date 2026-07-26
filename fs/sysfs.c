@@ -825,7 +825,7 @@ int sysfs_write(int fd, const char *buf, size_t count)
 /* Get stat for /sys file */
 int sysfs_stat(const char *path, stat_t *st)
 {
-    const pseudo_fs_entry_t *pf;
+    int rc;
 
     if (!st || !is_sys_path(path))
         return -EINVAL;
@@ -838,12 +838,17 @@ int sysfs_stat(const char *path, stat_t *st)
         return 0;
     }
 
+    /*
+     * Use exact + dynamic resolution (same as open). Do not apply prefix
+     * static entries (e.g. /sys/class/net) to longer paths.
+     */
     pseudo_fs_nodes_register_all();
-    pf = pseudo_fs_lookup(path);
-    if (pf && pf->ops && pf->ops->stat)
-        return pf->ops->stat(pf->ctx, st);
+    rc = pseudo_fs_stat_path(path, st);
+    if (rc == 0)
+        return 0;
 
-    if (pseudo_fs_path_has_children(path))
+    if (pseudo_fs_path_has_children(path) ||
+	sys_class_net_path_has_children(path))
     {
         memset(st, 0, sizeof(*st));
         st->st_mode = S_IFDIR | 0555;
@@ -851,7 +856,7 @@ int sysfs_stat(const char *path, stat_t *st)
         return 0;
     }
 
-    return -ENOENT;  /* File not found */
+    return (rc < 0) ? rc : -ENOENT;
 }
 
 int sysfs_is_virtual_subdir(const char *path)
@@ -860,5 +865,7 @@ int sysfs_is_virtual_subdir(const char *path)
         return 0;
     if (strcmp(path, "/sys") == 0 || strcmp(path, "/sys/") == 0)
         return 1;
-    return pseudo_fs_path_has_children(path);
+    if (pseudo_fs_path_has_children(path))
+	return 1;
+    return sys_class_net_path_has_children(path);
 }
