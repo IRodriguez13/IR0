@@ -24,12 +24,15 @@ static int csi_state;
 static int csi_param;
 static int csi_params[4];
 static int csi_param_count;
+static int csi_priv; /* ESC[? … private mode */
+static int render_cursor_enabled = 1; /* DECTCEM: 0 = civis, 1 = cnorm */
 
 static void csi_reset(void)
 {
 	csi_state = CSI_NONE;
 	csi_param = 0;
 	csi_param_count = 0;
+	csi_priv = 0;
 }
 
 static void csi_clear_from_cursor(int cols, int rows, uint8_t color)
@@ -139,6 +142,17 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t *color)
 			cursor_pos -= n * cols;
 		else
 			cursor_pos = (cursor_pos / cols) * cols;
+		break;
+	case 'B':
+		cursor_pos += n * cols;
+		if (cursor_pos >= cols * rows)
+			cursor_pos = (rows - 1) * cols + (cursor_pos % cols);
+		break;
+	case 'h':
+	case 'l':
+		/* ESC[?25h / ESC[?25l — show / hide cursor (DECTCEM). */
+		if (csi_priv && n == 25)
+			render_cursor_enabled = (cmd == 'h') ? 1 : 0;
 		break;
 	case 'J':
 	{
@@ -258,7 +272,10 @@ static int csi_feed(char c, int cols, int rows, uint8_t *color)
 			return 1;
 		}
 		if (c == '?')
+		{
+			csi_priv = 1;
 			return 1;
+		}
 		if (c >= 0x40 && c <= 0x7e)
 		{
 			if (csi_param_count < 4)
@@ -334,10 +351,27 @@ void console_renderer_putchar(char c, uint8_t color)
 	(void)color;
 	draw = render_color;
 
+	/* Guard against soft geometry / early boot (never divide by zero). */
+	if (cols <= 0)
+		cols = CONSOLE_WIDTH;
+	if (rows <= 0)
+		rows = CONSOLE_HEIGHT;
+
 	if (csi_feed(c, cols, rows, &render_color))
 	{
 		draw = render_color;
-		console_renderer_show_cursor(draw);
+		/*
+		 * Only refresh the hardware cursor when a full CSI sequence
+		 * completes (or civis). Intermediate ESC/[ / digits must not
+		 * paint — nano floods DECTCEM around every glyph.
+		 */
+		if (csi_state == CSI_NONE)
+		{
+			if (render_cursor_enabled)
+				console_renderer_show_cursor(draw);
+			else
+				render_erase_cursor(cols, rows, draw);
+		}
 		return;
 	}
 
@@ -402,7 +436,10 @@ void console_renderer_putchar(char c, uint8_t color)
 		}
 	}
 
-	console_renderer_show_cursor(draw);
+	if (render_cursor_enabled)
+		console_renderer_show_cursor(draw);
+	else
+		render_erase_cursor(cols, rows, draw);
 }
 
 void console_renderer_show_cursor(uint8_t color)
@@ -416,6 +453,11 @@ void console_renderer_show_cursor(uint8_t color)
 	uint16_t cell;
 
 	(void)color;
+	if (!render_cursor_enabled)
+	{
+		render_erase_cursor(cols, rows, color);
+		return;
+	}
 	render_erase_cursor(cols, rows, color);
 
 	if (row < 0 || row >= rows || col < 0 || col >= cols)

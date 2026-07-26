@@ -40,6 +40,14 @@ The goal is to document implemented behavior first, then known gaps.
 - `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`; MM COW in `mandocs/en/mm.md`; **boot banner-first** in `mandocs/en/boot.md`).
 - `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`
   (QEMU GTK), keyboard poll + TTY echo path, build/run and serial tags.
+- `input/ps2-routing.md`: i8042 demux (AUXDATA), set-1 modifiers, mouse packets
+  (Spanish: `esp/input/ps2-routing.md`).
+- `filesystems/virtual-file-semantics.md`: snapshot / bounce / ring / stream read
+  contracts for `/dev/net`, `/dev/kmsg`, `/proc/*` (Spanish: `esp/filesystems/…`).
+- `tty/terminal-contract.md`: TIOCGWINSZ, termios, TERM=linux, nano, panic on
+  screen (Spanish: `esp/tty/terminal-contract.md`).
+- `debts/tty-canon-block-wake.md`: boot ktest hang — correct late-gate home.
+- `debts/events0-device-id.md`: proposed `device_id` ABI (not implemented).
 ## AI-assisted development
 
 Rules for coding agents live in **`Documentation/ai_driven_dev/`** (tracked in git).

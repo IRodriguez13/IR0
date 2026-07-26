@@ -262,19 +262,23 @@ def alloc_zone(f, sb):
     raise SystemExit("no free zone")
 
 
+def dir_zone_list(inode):
+    """Direct directory zones (MINIX v1 i_zone[0..6]); matches fs/minix_fs.c."""
+    return [z for z in inode["zones"][:7] if z]
+
+
 def dir_entries(f, inode):
     if (inode["mode"] & IFMT) != IFDIR:
         return []
-    z = inode["zones"][0]
-    if z == 0:
-        return []
-    raw = read_block(f, z)
     out = []
-    for i in range(0, BLOCK, DIR_ENTRY):
-        ino, name = struct.unpack("<H", raw[i : i + 2])[0], raw[i + 2 : i + DIR_ENTRY]
-        name = name.split(b"\x00", 1)[0].decode("ascii", errors="replace")
-        if ino != 0:
-            out.append((ino, name))
+    for z in dir_zone_list(inode):
+        raw = read_block(f, z)
+        for i in range(0, BLOCK, DIR_ENTRY):
+            ino = struct.unpack("<H", raw[i : i + 2])[0]
+            name = raw[i + 2 : i + DIR_ENTRY]
+            name = name.split(b"\x00", 1)[0].decode("ascii", errors="replace")
+            if ino != 0:
+                out.append((ino, name))
     return out
 
 
@@ -286,19 +290,19 @@ def find_in_dir(f, sb, inode, name):
 
 
 def remove_dir_entry(f, sb, dir_inode, dir_num, name):
-    z = dir_inode["zones"][0]
-    raw = bytearray(read_block(f, z))
     nb = name.encode("ascii")[:NAME_LEN]
-    for i in range(0, BLOCK, DIR_ENTRY):
-        ino = struct.unpack("<H", raw[i : i + 2])[0]
-        entry_name = raw[i + 2 : i + DIR_ENTRY].split(b"\x00", 1)[0]
-        if ino != 0 and entry_name == nb:
-            raw[i : i + DIR_ENTRY] = b"\x00" * DIR_ENTRY
-            write_block(f, z, bytes(raw))
-            if dir_inode["size"] >= DIR_ENTRY:
-                dir_inode["size"] -= DIR_ENTRY
-            write_inode(f, sb, dir_num, dir_inode)
-            return True
+    for z in dir_zone_list(dir_inode):
+        raw = bytearray(read_block(f, z))
+        for i in range(0, BLOCK, DIR_ENTRY):
+            ino = struct.unpack("<H", raw[i : i + 2])[0]
+            entry_name = raw[i + 2 : i + DIR_ENTRY].split(b"\x00", 1)[0]
+            if ino != 0 and entry_name == nb:
+                raw[i : i + DIR_ENTRY] = b"\x00" * DIR_ENTRY
+                write_block(f, z, bytes(raw))
+                if dir_inode["size"] >= DIR_ENTRY:
+                    dir_inode["size"] -= DIR_ENTRY
+                write_inode(f, sb, dir_num, dir_inode)
+                return True
     return False
 
 
@@ -425,19 +429,38 @@ def format_minix_v1(f, ninodes=64, nzones=1024):
 
 
 def add_dir_entry(f, sb, dir_inode, dir_num, name, child_num):
-    z = dir_inode["zones"][0]
-    raw = bytearray(read_block(f, z))
-    for i in range(0, BLOCK, DIR_ENTRY):
-        ino = struct.unpack("<H", raw[i : i + 2])[0]
-        if ino != 0:
-            continue
-        nb = name.encode("ascii")[:NAME_LEN]
-        raw[i : i + 2] = struct.pack("<H", child_num)
-        raw[i + 2 : i + 2 + len(nb)] = nb
-        write_block(f, z, bytes(raw))
+    nb = name.encode("ascii")[:NAME_LEN]
+
+    def write_slot(zone, raw, off):
+        raw[off : off + 2] = struct.pack("<H", child_num)
+        raw[off + 2 : off + DIR_ENTRY] = b"\x00" * (DIR_ENTRY - 2)
+        raw[off + 2 : off + 2 + len(nb)] = nb
+        write_block(f, zone, bytes(raw))
         dir_inode["size"] += DIR_ENTRY
         write_inode(f, sb, dir_num, dir_inode)
+
+    for zi in range(7):
+        z = dir_inode["zones"][zi]
+        if z == 0:
+            continue
+        raw = bytearray(read_block(f, z))
+        for i in range(0, BLOCK, DIR_ENTRY):
+            ino = struct.unpack("<H", raw[i : i + 2])[0]
+            if ino != 0:
+                continue
+            write_slot(z, raw, i)
+            return
+
+    # Grow directory with another direct zone (kernel walks i_zone[0..6]).
+    for zi in range(7):
+        if dir_inode["zones"][zi] != 0:
+            continue
+        z = alloc_zone(f, sb)
+        dir_inode["zones"][zi] = z
+        raw = bytearray(BLOCK)
+        write_slot(z, raw, 0)
         return
+
     raise SystemExit(f"directory full: cannot add {name}")
 
 
@@ -785,7 +808,9 @@ def main():
         disk_path = sys.argv[2]
         with open(disk_path, "r+b") as f:
             if sys.argv[1] == "--format-large":
-                format_minix_v1(f, ninodes=256, nzones=65535)
+                # Headroom for TinyCC headers/libs + GNU make + samples
+                # (product runit rootfs alone uses ~50 inodes).
+                format_minix_v1(f, ninodes=1024, nzones=65535)
             else:
                 format_minix_v1(f)
         print(f"✅ Formatted {disk_path} as MINIX v1 (kernel-compatible layout)")

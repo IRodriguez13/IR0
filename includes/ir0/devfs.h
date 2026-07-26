@@ -60,6 +60,27 @@ extern devfs_node_t dev_net;
 extern devfs_node_t dev_disk;
 extern devfs_node_t dev_kmsg;
 
+/*
+ * Finite text snapshots for /dev/net and /dev/kmsg (per-open, refcounted).
+ * Captured at open; read honors offset and returns 0 at EOF.
+ */
+typedef struct devfs_text_snap
+{
+	char *buf;
+	size_t len;
+	int refs;
+} devfs_text_snap_t;
+
+#define DEVFS_ID_KMSG 5u
+#define DEVFS_ID_NET  8u
+
+int devfs_node_wants_text_snap(uint32_t device_id);
+devfs_text_snap_t *devfs_text_snap_capture(uint32_t device_id);
+void devfs_text_snap_acquire(devfs_text_snap_t *snap);
+void devfs_text_snap_release(devfs_text_snap_t *snap);
+int64_t devfs_text_snap_read(const devfs_text_snap_t *snap, void *buf,
+			     size_t count, off_t offset);
+
 /* Device filesystem management */
 int devfs_init(void);
 devfs_node_t *devfs_find_node(const char *path);

@@ -1063,6 +1063,8 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
   {
     if (request == IR0_CONSOLE_TIOCGWINSZ)
       return ir0_console_ioctl_winsize(arg);
+    if (request == IR0_CONSOLE_TIOCSWINSZ)
+      return ir0_console_ioctl_winsize_set(arg);
     if (request == IR0_TIOCSCTTY)
       return 0;
     if (request == IR0_TIOCSPGRP)
@@ -1073,7 +1075,7 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
 	return -EINVAL;
       if (copy_from_user(&pg, arg, sizeof(pg)) != 0)
 	return -EFAULT;
-      return (pg > 0) ? 0 : -EINVAL;
+      return ir0_console_set_fg_pgid((int32_t)pg);
     }
     if (request == IR0_TIOCGPGRP)
     {
@@ -1184,6 +1186,12 @@ int64_t sys_close(int fd)
     {
       devfs_node_t *node = devfs_find_node_by_id(fd_table[fd].dev_device_id);
 
+      if (fd_table[fd].vfs_file &&
+	  devfs_node_wants_text_snap(fd_table[fd].dev_device_id))
+      {
+	devfs_text_snap_release((devfs_text_snap_t *)fd_table[fd].vfs_file);
+	fd_table[fd].vfs_file = NULL;
+      }
       if (node)
         devfs_close_node(node);
     }
@@ -1194,8 +1202,8 @@ int64_t sys_close(int fd)
 
       pipe_fase49_fd_trace((uint32_t)current_process->task.pid, fd, pipe,
 			   fd_table[fd].pipe_end, pipe->fd_refs, "CLOSE");
+      /* pipe_close_end wakes waiters then frees on last ref. */
       pipe_close_end(pipe, fd_table[fd].pipe_end);
-      pipe_wake_all(pipe);
       fd_table[fd].vfs_file = NULL;
     }
     else if (fd_table[fd].is_socket && fd_table[fd].vfs_file)
@@ -1369,13 +1377,18 @@ int64_t sys_dup2(int oldfd, int newfd)
       pipe_t *p = (pipe_t *)fd_table[newfd].vfs_file;
 
       pipe_close_end(p, fd_table[newfd].pipe_end);
-      pipe_wake_all(p);
       fd_table[newfd].vfs_file = NULL;
     }
     else if (fd_table[newfd].is_devfs)
     {
       devfs_node_t *node = devfs_find_node_by_id(fd_table[newfd].dev_device_id);
 
+      if (fd_table[newfd].vfs_file &&
+	  devfs_node_wants_text_snap(fd_table[newfd].dev_device_id))
+      {
+	devfs_text_snap_release((devfs_text_snap_t *)fd_table[newfd].vfs_file);
+	fd_table[newfd].vfs_file = NULL;
+      }
       if (node)
         devfs_close_node(node);
     }
@@ -1461,6 +1474,14 @@ int64_t sys_dup2(int oldfd, int newfd)
 
     if (node)
       node->ref_count++;
+    if (fd_table[oldfd].vfs_file &&
+	devfs_node_wants_text_snap(fd_table[oldfd].dev_device_id))
+    {
+      devfs_text_snap_acquire((devfs_text_snap_t *)fd_table[oldfd].vfs_file);
+      fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+    }
+    else
+      fd_table[newfd].vfs_file = NULL;
   }
   else if (fd_table[oldfd].is_pipe)
   {

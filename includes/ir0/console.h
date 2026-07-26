@@ -60,7 +60,12 @@ struct ir0_termios
 	ir0_cc_t c_cc[IR0_NCCS];
 };
 
-#define IR0_CONSOLE_IFLAG_DEFAULT (0x00000400u) /* ICRNL */
+/* c_iflag bits: Linux asm-generic/termbits.h (octal → hex). */
+#define IR0_IFLAG_INLCR           (0x00000040u) /* 0000100 */
+#define IR0_IFLAG_IGNCR           (0x00000080u) /* 0000200 */
+#define IR0_IFLAG_ICRNL           (0x00000100u) /* 0000400 — was wrongly 0x400 (IXON) */
+#define IR0_IFLAG_IXON            (0x00000400u) /* 0002000 */
+#define IR0_CONSOLE_IFLAG_DEFAULT (IR0_IFLAG_ICRNL)
 #define IR0_CONSOLE_OFLAG_DEFAULT (0x00000005u) /* ONLCR|OPOST */
 #define IR0_CONSOLE_CFLAG_DEFAULT (0x00004B00u) /* CS8|CREAD|HUPCL */
 #define IR0_CONSOLE_LFLAG_DEFAULT (0x0000003Bu) /* ISIG|ICANON|ECHO|ECHOE|ECHOK */
@@ -69,7 +74,6 @@ struct ir0_termios
 #define IR0_LFLAG_ECHO             (0x00000008u)
 #define IR0_LFLAG_ECHOE            (0x00000010u)
 #define IR0_LFLAG_ECHOK            (0x00000020u)
-#define IR0_IFLAG_ICRNL           (0x00000400u)
 #define IR0_OFLAG_ONLCR           (0x00000004u)
 #define IR0_OFLAG_OPOST           (0x00000001u)
 /* Linux asm-generic/termbits.h c_cc indices */
@@ -112,6 +116,7 @@ int ir0_console_isatty(void);
 int ir0_console_term_width(void);
 int ir0_console_term_height(void);
 int ir0_console_ioctl_winsize(void *user_arg);
+int ir0_console_ioctl_winsize_set(void *user_arg);
 int ir0_console_fill_termios(struct ir0_termios *out);
 int ir0_console_set_termios(const struct ir0_termios *in);
 void ir0_console_reset_cooked_echo(void);

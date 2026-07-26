@@ -28,6 +28,8 @@
 #include <ir0/process.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
+#include <ir0/clock.h>
+#include <ir0/clock_wait.h>
 #include <string.h>
 
 /* TCGETS/TCSETS ABI must stay Linux kernel termios (36 bytes, NCCS=19). */
@@ -48,6 +50,9 @@ static int tty_need_resched;
 static int tty_sleep_depth;
 /* Foreground pgrp for /dev/console (TIOCSPGRP); 0 → signal TTY waiters only. */
 static int32_t console_fg_pgid;
+/* Soft winsize from TIOCSWINSZ (0 → report renderer geometry). */
+static uint16_t soft_ws_row;
+static uint16_t soft_ws_col;
 
 static char canon_line[IR0_TTY_CANON_MAX];
 static size_t canon_line_len;
@@ -157,7 +162,13 @@ static int tty_icanon_on(void)
 static char tty_normalize_input(char c)
 {
 	tty_termios_ensure();
-	if (c == '\r' && (tty_termios.c_iflag & IR0_IFLAG_ICRNL))
+	/*
+	 * ICRNL maps CR→NL for cooked lines. In non-canonical/raw mode
+	 * (nano/ncurses), deliver CR as 0x0d even if ICRNL is stale — apps
+	 * expect Enter = '\r' after cfmakeraw().
+	 */
+	if (c == '\r' && (tty_termios.c_iflag & IR0_IFLAG_ICRNL) &&
+	    tty_icanon_on())
 		return '\n';
 	return c;
 }
@@ -608,6 +619,35 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 		if (nonblock)
 			return -EAGAIN;
 
+		{
+			unsigned vmin = tty_termios.c_cc[IR0_CC_VMIN];
+			unsigned vtime = tty_termios.c_cc[IR0_CC_VTIME];
+
+			/*
+			 * Linux non-canonical: VMIN=0,VTIME=0 → return 0 now
+			 * (ncurses poll). VMIN=0,VTIME>0 → wait up to VTIME
+			 * tenths of a second then return 0.
+			 */
+			if (vmin == 0 && vtime == 0)
+				return 0;
+			if (vmin == 0 && vtime > 0)
+			{
+				uint64_t now = clock_get_uptime_milliseconds();
+				uint64_t deadline = now + (uint64_t)vtime * 100u;
+
+				while (clock_get_uptime_milliseconds() < deadline)
+				{
+					if (input_kbd_has_data())
+						break;
+					if (current_process &&
+					    signals_should_handle_on_run(current_process))
+						return -EINTR;
+					(void)ir0_clock_wait_block_until(deadline);
+				}
+				continue;
+			}
+		}
+
 		(void)tty_sleep_for_input();
 	}
 }
@@ -852,36 +892,63 @@ int ir0_console_isatty(void)
 
 int ir0_console_term_width(void)
 {
-	int w = console_get_width();
+	int w;
 
+	if (soft_ws_col > 0)
+		return (int)soft_ws_col;
+	w = console_get_width();
 	return w > 0 ? w : 80;
 }
 
 int ir0_console_term_height(void)
 {
-	int h = console_get_height();
+	int h;
 
+	if (soft_ws_row > 0)
+		return (int)soft_ws_row;
+	h = console_get_height();
 	return h > 0 ? h : 25;
 }
 
 int ir0_console_ioctl_winsize(void *user_arg)
 {
 	struct ir0_winsize win;
+	struct console_geometry geo;
 
 	if (!user_arg)
 		return -EINVAL;
+	console_get_geometry(&geo);
 	win.ws_row = (uint16_t)ir0_console_term_height();
 	win.ws_col = (uint16_t)ir0_console_term_width();
 	{
-		int scale = console_backend_fb_scale();
+		unsigned scale = geo.scale ? geo.scale : 1u;
+		unsigned cw = geo.cell_width ? geo.cell_width : 8u * scale;
+		unsigned ch = geo.cell_height ? geo.cell_height : 16u * scale;
 
-		if (scale < 1)
-			scale = 1;
-		win.ws_xpixel = (uint16_t)(win.ws_col * 8u * (uint16_t)scale);
-		win.ws_ypixel = (uint16_t)(win.ws_row * 16u * (uint16_t)scale);
+		win.ws_xpixel = (uint16_t)(win.ws_col * cw);
+		win.ws_ypixel = (uint16_t)(win.ws_row * ch);
 	}
 	if (copy_to_user(user_arg, &win, sizeof(win)) != 0)
 		return -EFAULT;
+	return 0;
+}
+
+int ir0_console_ioctl_winsize_set(void *user_arg)
+{
+	struct ir0_winsize win;
+	int32_t pgid;
+
+	if (!user_arg)
+		return -EINVAL;
+	if (copy_from_user(&win, user_arg, sizeof(win)) != 0)
+		return -EFAULT;
+	if (win.ws_row == 0 || win.ws_col == 0)
+		return -EINVAL;
+	soft_ws_row = win.ws_row;
+	soft_ws_col = win.ws_col;
+	pgid = ir0_console_get_fg_pgid();
+	if (pgid > 1)
+		(void)send_signal_pgrp(pgid, SIGWINCH);
 	return 0;
 }
 

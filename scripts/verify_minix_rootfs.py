@@ -86,19 +86,20 @@ def read_inode(f, sb, num):
 def dir_entries(f, inode):
     if (inode["mode"] & IFMT) != IFDIR:
         return []
-    z = inode["zones"][0]
-    if z == 0:
-        return []
-    raw = read_block(f, z)
     out = []
-    for i in range(0, BLOCK, DIR_ENTRY):
-        ino, = struct.unpack("<H", raw[i : i + 2])
-        if ino == 0:
+    # Direct zones only (i_zone[0..6]) — same as fs/minix_fs.c / inject_init_minix.
+    for z in inode["zones"][:7]:
+        if not z:
             continue
-        name = raw[i + 2 : i + DIR_ENTRY].split(b"\x00", 1)[0].decode(
-            "ascii", errors="replace"
-        )
-        out.append((ino, name))
+        raw = read_block(f, z)
+        for i in range(0, BLOCK, DIR_ENTRY):
+            ino, = struct.unpack("<H", raw[i : i + 2])
+            if ino == 0:
+                continue
+            name = raw[i + 2 : i + DIR_ENTRY].split(b"\x00", 1)[0].decode(
+                "ascii", errors="replace"
+            )
+            out.append((ino, name))
     return out
 
 

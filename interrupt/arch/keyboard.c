@@ -1,44 +1,43 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
  * File: keyboard.c
- * Description: IR0 kernel source/header file
+ * Description: PS/2 IRQ path; set-1 decode via <ir0/ps2_set1.h>; TTY ring.
  */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "idt.h"
 #include "pic.h"
 #include "io.h"
 #include "keyboard.h"
 
-/* PS/2 keyboard controller: data port (scancode byte read) */
 #define PS2_DATA_PORT 0x60
 #include <config.h>
 #include <ir0/errno.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
+#include <ir0/input_backend.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/console.h>
+#include <ir0/ps2_set1.h>
 
 #define PS2_STATUS_PORT        0x64
 #define PS2_STATUS_OUTPUT_FULL 0x01
+/* i8042: output buffer byte is from AUX (mouse) when set — Linux I8042_STR_AUXDATA */
+#define PS2_STATUS_AUXDATA     0x20
 
-/* Forward declarations */
 void wakeup_from_idle(void);
 void stdin_wake_check(void);
 static void keyboard_buffer_add(char c);
-static void keyboard_buffer_add_str(const char *s);
+static void keyboard_buffer_add_bytes(const uint8_t *data, uint8_t len);
 static void keyboard_feed_scancode(uint8_t scancode);
 
-/*
- * Kernel-side ring for stdin; separate from the shared userspace layout in
- * config.h (KEYBOARD_BUFFER_*).
- */
 #define KERNEL_KBD_RING_SIZE 256
 static char keyboard_buffer[KERNEL_KBD_RING_SIZE];
 static int keyboard_buffer_head = 0;
@@ -48,35 +47,10 @@ volatile char *shared_keyboard_buffer = (volatile char *)KEYBOARD_BUFFER_ADDR;
 volatile int *shared_keyboard_buffer_pos =
     (volatile int *)(KEYBOARD_BUFFER_ADDR + KEYBOARD_BUFFER_SIZE);
 
-/* Idle wake coordination */
 static int system_in_idle_mode = 0;
 static int wake_requested = 0;
 
-static int shift_pressed = 0;
-static int ctrl_pressed = 0;
-/* Extended scancode prefix (0xE0); next byte may be Page Up/Down etc. */
-static int ext_scancode = 0;
-static int current_keyboard_layout = KEYBOARD_LAYOUT_US;
-
-/*
- * Extended keys: standard ANSI/VT CSI for BusyBox ash FEATURE_EDITING,
- * nano, and other terminfo clients (TERM=linux). Legacy IR0 private
- * ESC+byte codes are no longer emitted from the IRQ path.
- */
-
-/* Basic scancode -> ASCII (printable subset), US layout */
-static const char scancode_to_ascii_us[] = {
-    0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  // 0-7
-    '7',  '8',  '9',  '0',  '-',  '=',  0,    0,    // 8-15 (backspace, tab - manejados por separado)
-    'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',  // 16-23
-    'o',  'p',  '[',  ']',  0,    0,    'a',  's',  // 24-31 (enter, ctrl - manejados por separado)
-    'd',  'f',  'g',  'h',  'j',  'k',  'l',  ';',  // 32-39
-    '\'', '`',  0,    '\\', 'z',  'x',  'c',  'v',  // 40-47 (shift)
-    'b',  'n',  'm',  ',',  '.',  '/',  0,    '*',  // 48-55 (shift)
-    0,    0,    0,    0,    0,    0,    0,    0,    // 64-71 (F5-F12)
-    0,    0,    0,    0,    0,    0,    0,    0,    // 72-79 (numpad)
-    0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
-};
+static struct ps2_set1_state kbd_state;
 
 /* PS/2 scancode set 1 -> Linux KEY_* (for /dev/events0, Doom) */
 static const uint16_t scancode_to_keycode[256] = {
@@ -103,7 +77,7 @@ static const uint16_t scancode_to_keycode[256] = {
     [0x4E] = KEY_KPPLUS, [0x4F] = KEY_KP1, [0x50] = KEY_KP2, [0x51] = KEY_KP3,
     [0x52] = KEY_KP0, [0x53] = KEY_KPDOT, [0x57] = KEY_F11, [0x58] = KEY_F12,
 };
-/* Extended scancodes (0xE0 prefix) */
+
 static const uint16_t ext_scancode_to_keycode[256] = {
     [0x1C] = KEY_KPENTER, [0x1D] = KEY_RIGHTCTRL, [0x35] = KEY_KPSLASH,
     [0x37] = KEY_SYSRQ, [0x38] = KEY_RIGHTALT, [0x47] = KEY_HOME,
@@ -113,383 +87,285 @@ static const uint16_t ext_scancode_to_keycode[256] = {
     [0x5B] = KEY_LEFTMETA, [0x5C] = KEY_RIGHTMETA,
 };
 
-/* Scancode table with Shift held, US layout */
-static const char scancode_to_ascii_shift_us[] = {
-    0,    0,    '!',  '@',  '#',  '$',  '%',  '^',  // 0-7
-    '&',  '*',  '(',  ')',  '_',  '+',  0,    0,    // 8-15
-    'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',  // 16-23
-    'O',  'P',  '{',  '}',  0,    0,    'A',  'S',  // 24-31
-    'D',  'F',  'G',  'H',  'J',  'K',  'L',  ':',  // 32-39
-    '"',  '~',  0,    '|',  'Z',  'X',  'C',  'V',  // 40-47
-    'B',  'N',  'M',  '<',  '>',  '?',  0,    '*',  // 48-55
-    0,    0,    0,    0,    0,    0,    0,    0,    // 56-63
-    0,    0,    0,    0,    0,    0,    0,    0,    // 64-71
-    0,    0,    0,    0,    0,    0,    0,    0,    // 72-79
-    0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
-};
-
-/* Basic scancode -> ASCII (printable subset), LATAM layout */
-static const char scancode_to_ascii_latam[] = {
-    0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  // 0-7
-    '7',  '8',  '9',  '0',  '\'', 0,    0,    0,    // 8-15
-    'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',  // 16-23
-    'o',  'p',  '\'', '+',  0,    0,    'a',  's',  // 24-31
-    'd',  'f',  'g',  'h',  'j',  'k',  'l',  ';',  // 32-39
-    '\'', '|',  0,    '}',  'z',  'x',  'c',  'v',  // 40-47
-    'b',  'n',  'm',  ',',  '.',  '-',  0,    '*',  // 48-55
-    0,    0,    0,    0,    0,    0,    0,    0,    // 64-71 (F5-F12)
-    0,    0,    0,    0,    0,    0,    0,    0,    // 72-79 (numpad)
-    0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
-};
-
-/* Scancode table with Shift held, LATAM layout (ASCII subset) */
-static const char scancode_to_ascii_shift_latam[] = {
-    0,    0,    '!',  '"',  '#',  '$',  '%',  '&',  // 0-7
-    '/',  '(',  ')',  '=',  '?',  '!',  0,    0,    // 8-15
-    'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',  // 16-23
-    'O',  'P',  '"',  '*',  0,    0,    'A',  'S',  // 24-31
-    'D',  'F',  'G',  'H',  'J',  'K',  'L',  ':',  // 32-39
-    '"',  '~',  0,    '|',  'Z',  'X',  'C',  'V',  // 40-47
-    'B',  'N',  'M',  '<',  '>',  '_',  0,    '*',  // 48-55
-    0,    0,    0,    0,    0,    0,    0,    0,    // 56-63
-    0,    0,    0,    0,    0,    0,    0,    0,    // 64-71
-    0,    0,    0,    0,    0,    0,    0,    0,    // 72-79
-    0,    0,    0,    0,    0,    0,    0,    0,    // 80-87
-};
-
-static const char *keyboard_ascii_table_base(void)
+#if DEBUG_KEYBOARD
+static void kbd_dbg_trace(const struct ps2_set1_result *r)
 {
-    if (current_keyboard_layout == KEYBOARD_LAYOUT_LATAM)
-        return scancode_to_ascii_latam;
-    return scancode_to_ascii_us;
-}
+	if (!r)
+		return;
 
-static const char *keyboard_ascii_table_shift(void)
-{
-    if (current_keyboard_layout == KEYBOARD_LAYOUT_LATAM)
-        return scancode_to_ascii_shift_latam;
-    return scancode_to_ascii_shift_us;
+	if (r->raw == 0xE0 || r->raw == 0xE1 || r->prefix == 0xE1)
+	{
+		kprintf("[INPUT] raw_scancode=0x%02x prefix=0x%02x event=prefix\n",
+			r->raw, r->prefix);
+		return;
+	}
+
+	if (r->emitted_len == 1)
+	{
+		kprintf("[INPUT] raw_scancode=0x%02x prefix=0x%02x event=%s key=%s emitted=0x%02x\n",
+			r->raw, r->prefix, r->down ? "down" : "up",
+			ps2_set1_key_name(r->key), r->emitted[0]);
+	}
+	else
+	{
+		kprintf("[INPUT] raw_scancode=0x%02x prefix=0x%02x event=%s key=%s emitted_len=%u\n",
+			r->raw, r->prefix, r->down ? "down" : "up",
+			ps2_set1_key_name(r->key), (unsigned)r->emitted_len);
+	}
+
+	if (r->mods_before != r->mods_after)
+	{
+		kprintf("[INPUT] modifiers before=0x%x after=0x%x\n",
+			(unsigned)r->mods_before, (unsigned)r->mods_after);
+	}
 }
+#else
+static void kbd_dbg_trace(const struct ps2_set1_result *r)
+{
+	(void)r;
+}
+#endif
 
 int keyboard_set_layout(int layout)
 {
-    if (layout != KEYBOARD_LAYOUT_US && layout != KEYBOARD_LAYOUT_LATAM)
-        return -EINVAL;
-    current_keyboard_layout = layout;
-    return 0;
+	if (layout != KEYBOARD_LAYOUT_US && layout != KEYBOARD_LAYOUT_LATAM)
+		return -EINVAL;
+	kbd_state.layout = layout;
+	return 0;
 }
 
 int keyboard_get_layout(void)
 {
-    return current_keyboard_layout;
+	return kbd_state.layout;
 }
 
 const char *keyboard_get_layout_name(int layout)
 {
-    if (layout == KEYBOARD_LAYOUT_LATAM)
-        return "latam";
-    return "us";
+	if (layout == KEYBOARD_LAYOUT_LATAM)
+		return "latam";
+	return "us";
 }
 
-char translate_scancode(uint8_t sc)
+uint32_t keyboard_modifiers_mask(void)
 {
-    switch (sc)
-    {
-    case 0x0E:
-        return '\b'; /* Backspace */
-    case 0x0F:
-        return '\t'; /* Tab */
-    case 0x1C:
-        return '\n'; /* Enter */
-    case 0x39:
-        return ' '; /* Space */
-
-    case 0x1D:
-        ctrl_pressed = 1;
-        return 0;
-    case 0x9D:
-        ctrl_pressed = 0;
-        return 0;
-
-    /*
-     * Ctrl+L: form-feed — BusyBox lineedit / many shells clear the screen.
-     */
-    case 0x26:
-        if (!ctrl_pressed)
-            return 'l';
-        keyboard_buffer_add('\f');
-        ctrl_pressed = 0;
-        return 0;
-
-    case 0x1E:
-        if (ctrl_pressed)
-            return 0x01; /* Ctrl+A */
-        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
-    case 0x12:
-        if (ctrl_pressed)
-            return 0x05; /* Ctrl+E */
-        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
-    case 0x16:
-        if (ctrl_pressed)
-            return 0x15; /* Ctrl+U */
-        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
-    case 0x2E:
-        if (ctrl_pressed)
-            return 0x03; /* Ctrl+C → VINTR */
-        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
-    case 0x20:
-        if (ctrl_pressed)
-            return 0x04; /* Ctrl+D → VEOF */
-        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
-    case 0x2B:
-        if (ctrl_pressed)
-            return 0x1c; /* Ctrl+\ → VQUIT */
-        return shift_pressed ? keyboard_ascii_table_shift()[sc] : keyboard_ascii_table_base()[sc];
-
-    default:
-        if (sc < sizeof(scancode_to_ascii_us))
-        {
-            const char *base = keyboard_ascii_table_base();
-            const char *shift = keyboard_ascii_table_shift();
-            if (shift_pressed)
-                return shift[sc];
-            return base[sc];
-        }
-        return 0;
-    }
+	return ps2_set1_mods_mask(&kbd_state.mods);
 }
 
+int keyboard_ctrl_active(void)
+{
+	return ps2_set1_ctrl(&kbd_state.mods);
+}
 
+void keyboard_all_keys_up(void)
+{
+	ps2_set1_all_keys_up(&kbd_state);
+}
 
 static void keyboard_buffer_add(char c)
 {
-    int next = (keyboard_buffer_head + 1) % KERNEL_KBD_RING_SIZE;
-    static int kbd_ascii_tag;
+	int next = (keyboard_buffer_head + 1) % KERNEL_KBD_RING_SIZE;
+	static int kbd_ascii_tag;
 
-    ir0_console_keypress(c);
+	ir0_console_keypress(c);
 
-    if (!ir0_console_store_key_in_ring())
-        return;
+	if (!ir0_console_store_key_in_ring())
+		return;
 
-    if (next != keyboard_buffer_tail)
-    {
-        keyboard_buffer[keyboard_buffer_head] = c;
-        keyboard_buffer_head = next;
-        if (!kbd_ascii_tag && (unsigned char)c >= ' ')
-        {
-            kbd_ascii_tag = 1;
-            klog_smoke("KBD_ASCII_OK");
-        }
-    }
+	if (next != keyboard_buffer_tail)
+	{
+		keyboard_buffer[keyboard_buffer_head] = c;
+		keyboard_buffer_head = next;
+		if (!kbd_ascii_tag && (unsigned char)c >= ' ')
+		{
+			kbd_ascii_tag = 1;
+			klog_smoke("KBD_ASCII_OK");
+		}
+	}
+	else
+	{
+		/* Ring overflow: resync momentary modifiers (documented). */
+		keyboard_all_keys_up();
+	}
 }
 
-static void keyboard_buffer_add_str(const char *s)
+static void keyboard_buffer_add_bytes(const uint8_t *data, uint8_t len)
 {
-    if (!s)
-        return;
-    while (*s)
-        keyboard_buffer_add(*s++);
+	uint8_t i;
+
+	if (!data || !len)
+		return;
+	for (i = 0; i < len; i++)
+		keyboard_buffer_add((char)data[i]);
 }
 
 #ifdef __x86_64__
 
-
-char keyboard_buffer_get(void) 
+char keyboard_buffer_get(void)
 {
-    if (keyboard_buffer_head == keyboard_buffer_tail) 
-    {
-        return 0; 
-    }
+	if (keyboard_buffer_head == keyboard_buffer_tail)
+		return 0;
 
-
-    char c = keyboard_buffer[keyboard_buffer_tail];
-    keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KERNEL_KBD_RING_SIZE;
-    return c;
+	char c = keyboard_buffer[keyboard_buffer_tail];
+	keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KERNEL_KBD_RING_SIZE;
+	return c;
 }
 
-int keyboard_buffer_has_data(void) 
+int keyboard_buffer_has_data(void)
 {
-    return keyboard_buffer_head != keyboard_buffer_tail;
+	return keyboard_buffer_head != keyboard_buffer_tail;
 }
 
-
-
-void keyboard_buffer_clear(void) 
+void keyboard_buffer_clear(void)
 {
-    keyboard_buffer_head = 0;
-    keyboard_buffer_tail = 0;
+	keyboard_buffer_head = 0;
+	keyboard_buffer_tail = 0;
 }
 #endif
 
-/*
- * Drain the PS/2 controller output buffer (port 0x60).
- * Safe from IRQ handler and from idle poll — QEMU GTK sometimes delivers
- * scancodes without raising IRQ1 reliably while ash is blocked.
- */
 void keyboard_poll_ps2(void)
 {
-    static int kbd_poll_tag;
+	static int kbd_poll_tag;
 
-    for (;;)
-    {
-        uint8_t status = inb(PS2_STATUS_PORT);
-        uint8_t scancode;
+	for (;;)
+	{
+		uint8_t status = inb(PS2_STATUS_PORT);
+		uint8_t data;
 
-        if (!(status & PS2_STATUS_OUTPUT_FULL))
-            break;
+		if (!(status & PS2_STATUS_OUTPUT_FULL))
+			break;
 
-        scancode = inb(PS2_DATA_PORT);
-        if (!kbd_poll_tag)
-        {
-            kbd_poll_tag = 1;
-            klog_smoke("KBD_POLL_OK");
-        }
-        if (ir0_console_in_userspace())
-        {
-            static int kbd_user_poll_once;
+		/*
+		 * Classify BEFORE reading would be ideal; i8042 latches AUXDATA
+		 * with the byte, so read status then data and branch on AUXDATA.
+		 */
+		data = inb(PS2_DATA_PORT);
 
-            if (!kbd_user_poll_once)
-            {
-                kbd_user_poll_once = 1;
-                klog_smoke("KBD_USER_POLL_OK");
-            }
-        }
-        keyboard_feed_scancode(scancode);
-    }
+#if DEBUG_PS2
+		kprintf("[PS2] status=0x%02x data=0x%02x source=%s\n", status, data,
+			(status & PS2_STATUS_AUXDATA) ? "mouse" : "keyboard");
+#endif
+
+		if (status & PS2_STATUS_AUXDATA)
+		{
+			input_mouse_feed_byte(data);
+			continue;
+		}
+
+		if (!kbd_poll_tag)
+		{
+			kbd_poll_tag = 1;
+			klog_smoke("KBD_POLL_OK");
+		}
+		if (ir0_console_in_userspace())
+		{
+			static int kbd_user_poll_once;
+
+			if (!kbd_user_poll_once)
+			{
+				kbd_user_poll_once = 1;
+				klog_smoke("KBD_USER_POLL_OK");
+			}
+		}
+		keyboard_feed_scancode(data);
+	}
 }
 
 void keyboard_handler64(void)
 {
-    static int kbd_irq_tag;
+	static int kbd_irq_tag;
 
-    if (!kbd_irq_tag)
-    {
-        kbd_irq_tag = 1;
-        klog_smoke("KBD_IRQ_OK");
-    }
+	if (!kbd_irq_tag)
+	{
+		kbd_irq_tag = 1;
+		klog_smoke("KBD_IRQ_OK");
+	}
 
-    keyboard_poll_ps2();
-    stdin_wake_check();
+	keyboard_poll_ps2();
+	stdin_wake_check();
 }
 
 static void keyboard_feed_scancode(uint8_t scancode)
 {
-    if (scancode == 0xE0)
-    {
-        ext_scancode = 1;
-        return;
-    }
-    if (ext_scancode)
-    {
-        ext_scancode = 0;
-        uint16_t kc = ext_scancode_to_keycode[scancode & 0x7F];
-        if (kc)
-        {
-            input_event_push(EV_KEY, kc, (scancode < 0x80) ? 1 : 0);
-            input_event_push(EV_SYN, SYN_REPORT, 0);
-        }
-        if (scancode < 0x80)
-        {
-            /* ANSI CSI (linux/vt100) — ash lineedit + nano/terminfo */
-            if (scancode == 0x48)
-                keyboard_buffer_add_str("\x1b[A");
-            else if (scancode == 0x50)
-                keyboard_buffer_add_str("\x1b[B");
-            else if (scancode == 0x4D)
-                keyboard_buffer_add_str("\x1b[C");
-            else if (scancode == 0x4B)
-                keyboard_buffer_add_str("\x1b[D");
-            else if (scancode == 0x47)
-                keyboard_buffer_add_str("\x1b[H");
-            else if (scancode == 0x4F)
-                keyboard_buffer_add_str("\x1b[F");
-            else if (scancode == 0x53)
-                keyboard_buffer_add_str("\x1b[3~");
-            else if (scancode == 0x49)
-                keyboard_buffer_add_str("\x1b[5~");
-            else if (scancode == 0x51)
-                keyboard_buffer_add_str("\x1b[6~");
-        }
-        return;
-    }
+	struct ps2_set1_result r;
+	uint8_t code;
+	int down;
+	int extended;
+	uint16_t kc;
 
-    if (scancode == 0x2A || scancode == 0x36)
-        shift_pressed = 1;
-    else if (scancode == 0xAA || scancode == 0xB6)
-        shift_pressed = 0;
+	ps2_set1_feed(&kbd_state, scancode, &r);
+	kbd_dbg_trace(&r);
 
-    uint16_t kc = scancode_to_keycode[scancode & 0x7F];
-    if (kc)
-    {
-        input_event_push(EV_KEY, kc, (scancode < 0x80) ? 1 : 0);
-        input_event_push(EV_SYN, SYN_REPORT, 0);
-    }
+	/* Prefix-only: no EV_KEY yet. */
+	if (scancode == 0xE0 || scancode == 0xE1 || r.prefix == 0xE1)
+		return;
 
-    if (scancode < 0x80)
-    {
-        static int kbd_scancode_tag;
-        char ascii;
+	extended = (r.prefix == 0xE0) ? 1 : 0;
+	down = r.down ? 1 : 0;
+	code = (uint8_t)(scancode & 0x7F);
 
-        if (!kbd_scancode_tag)
-        {
-            kbd_scancode_tag = 1;
-            klog_smoke("KBD_SCANCODE_OK");
-        }
+	kc = extended ? ext_scancode_to_keycode[code] : scancode_to_keycode[code];
+	if (kc)
+	{
+		input_event_push(EV_KEY, kc, down);
+		input_event_push(EV_SYN, SYN_REPORT, 0);
+	}
 
-        ascii = translate_scancode(scancode);
-        if (ascii != 0)
-            keyboard_buffer_add(ascii);
-    }
+	if (r.emitted_len)
+	{
+		static int kbd_scancode_tag;
+
+		if (!kbd_scancode_tag)
+		{
+			kbd_scancode_tag = 1;
+			klog_smoke("KBD_SCANCODE_OK");
+		}
+		keyboard_buffer_add_bytes(r.emitted, r.emitted_len);
+	}
 }
 
-
-
-/*
- * keyboard_init - Reset keyboard buffer.
- * IRQ1 unmasking is done centrally in main.c after PIC remap.
- */
 void keyboard_init(void)
 {
-    keyboard_buffer_head = 0;
-    keyboard_buffer_tail = 0;
-    if (CONFIG_KEYBOARD_LAYOUT == KEYBOARD_LAYOUT_LATAM)
-        current_keyboard_layout = KEYBOARD_LAYOUT_LATAM;
-    else
-        current_keyboard_layout = KEYBOARD_LAYOUT_US;
+	keyboard_buffer_head = 0;
+	keyboard_buffer_tail = 0;
+	ps2_set1_reset(&kbd_state);
+	if (CONFIG_KEYBOARD_LAYOUT == KEYBOARD_LAYOUT_LATAM)
+		kbd_state.layout = KEYBOARD_LAYOUT_LATAM;
+	else
+		kbd_state.layout = KEYBOARD_LAYOUT_US;
 }
 
-
-void set_idle_mode(int is_idle) 
+void set_idle_mode(int is_idle)
 {
-    system_in_idle_mode = is_idle;
-    if (is_idle) 
-    {
-        wake_requested = 0; // Reset wake request when entering idle
-    }
+	system_in_idle_mode = is_idle;
+	if (is_idle)
+		wake_requested = 0;
 }
 
-int is_in_idle_mode(void) 
+int is_in_idle_mode(void)
 {
-    return system_in_idle_mode;
+	return system_in_idle_mode;
 }
 
-void wakeup_from_idle(void) 
+void wakeup_from_idle(void)
 {
-    if (system_in_idle_mode) {
-        wake_requested = 1;
-        system_in_idle_mode = 0;
-      
-    } else {
-        print_colored("DEBUG: wakeup called but not in idle mode\n", VGA_COLOR_RED, VGA_COLOR_BLACK);
-    }
+	if (system_in_idle_mode)
+	{
+		wake_requested = 1;
+		system_in_idle_mode = 0;
+	}
+	else
+	{
+		print_colored("DEBUG: wakeup called but not in idle mode\n",
+			      VGA_COLOR_RED, VGA_COLOR_BLACK);
+	}
 }
 
-int is_wake_requested(void) 
+int is_wake_requested(void)
 {
-    return wake_requested;
+	return wake_requested;
 }
 
-void clear_wake_request(void) 
+void clear_wake_request(void)
 {
-    wake_requested = 0;
+	wake_requested = 0;
 }
