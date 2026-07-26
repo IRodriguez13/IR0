@@ -46,9 +46,10 @@ if [ -n "${IR0_GUEST_MANDOC_PAGES:-}" ]; then
 fi
 
 if ! command -v mandoc >/dev/null 2>&1; then
-	echo "✗ prepare_guest_mandocs: host 'mandoc' not found" >&2
-	echo "  Install mandoc (e.g. apt install mandoc) and retry." >&2
-	exit 1
+	echo "  WARN    prepare_guest_mandocs: host 'mandoc' not found — skipping" >&2
+	echo "          Install mandoc (e.g. apt install mandoc) for guest man pages." >&2
+	echo "          Boot does not require them; set IR0_GUEST_MANDOCS=0 to silence." >&2
+	exit 0
 fi
 
 echo "  MANDOC  Building English mdoc pages (mandoc-only, no host install)..."

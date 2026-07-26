@@ -65,10 +65,18 @@ void arch_switch_to(task_t *prev, task_t *next)
 			task_set_mm_root(next,
 					 (uint64_t)(uintptr_t)process_pgd(next_proc));
 		arch_set_current_kernel_stack(next_proc);
-		if (next_proc->saved_user_rsp)
-			__asm__ volatile("msr sp_el0, %0" ::
-						 "r"(next_proc->saved_user_rsp)
+		/*
+		 * Always program SP_EL0 — skipping when saved_user_rsp==0 left
+		 * a stale value from the previous task (Bugbot).
+		 */
+		{
+			uint64_t sp_el0 = next_proc->saved_user_rsp;
+
+			if (!sp_el0)
+				sp_el0 = task_get_sp(next);
+			__asm__ volatile("msr sp_el0, %0" :: "r"(sp_el0)
 					 : "memory");
+		}
 	}
 
 	switch_context_arm64(prev, next);
