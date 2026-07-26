@@ -447,6 +447,8 @@ void irq_init(void)
 
 void boot_irq_unmask(void)
 {
+#if defined(__x86_64__) || defined(__i386__)
+	/* PIC lines — x86 only; arm64 uses GIC PPIs via arch_irq_init. */
 	irq_unmask_line(0);
 	irq_unmask_line(1);
 	irq_unmask_line(2);
@@ -460,6 +462,10 @@ void boot_irq_unmask(void)
 #endif
 #if CONFIG_ENABLE_MOUSE
 	irq_unmask_line(12);
+#endif
+#elif defined(__aarch64__)
+	/* Physical timer PPI (ARM Generic Timer); see gic_v2.h. */
+	irq_unmask_line(30);
 #endif
 }
 
