@@ -17,6 +17,7 @@
 #include <ir0/logging.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
+#include <ir0/arch_mm.h>
 #include <ir0/debug_runtime.h>
 #include <ir0/video_backend.h>
 #include "paging.h"
@@ -888,14 +889,14 @@ int copy_process_memory(struct process *parent, struct process *child)
     if (!parent || !child)
         return -1;
 
-    if (!parent->page_directory || !child->page_directory)
+    if (!process_pgd(parent) || !process_pgd(child))
         return -1;
 
-    parent_pml4 = parent->page_directory;
-    child_pml4 = child->page_directory;
+    parent_pml4 = process_pgd(parent);
+    child_pml4 = process_pgd(child);
 
     /* Phase 1: share into child only (parent PTEs untouched). */
-    for (i4 = 0; i4 < 256; i4++)
+    for (i4 = 0; i4 < (size_t)arch_mm_user_root_slots(); i4++)
     {
         uint64_t *pdpt = get_existing_table(parent_pml4, i4);
 
@@ -963,7 +964,7 @@ int copy_process_memory(struct process *parent, struct process *child)
     }
 
     /* Phase 2: mark parent writable pages RO+COW (fork committed). */
-    for (i4 = 0; i4 < 256; i4++)
+    for (i4 = 0; i4 < (size_t)arch_mm_user_root_slots(); i4++)
     {
         uint64_t *pdpt = get_existing_table(parent_pml4, i4);
 
@@ -1092,7 +1093,7 @@ void paging_reclaim_lower_half_tables(uint64_t *pml4)
     if (!pml4)
         return;
 
-    for (i4 = 0; i4 < 256; i4++)
+    for (i4 = 0; i4 < (size_t)arch_mm_user_root_slots(); i4++)
     {
         uint64_t pml4e = pml4[i4];
         uint64_t *pdpt;

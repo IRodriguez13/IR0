@@ -30,12 +30,12 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 	if (!p)
 		return;
 
-	rip = p->task.rip;
-	rsp = p->task.rsp;
-	cs = p->task.cs;
-	ss = p->task.ss;
+	rip = task_get_ip(&p->task);
+	rsp = task_get_sp(&p->task);
+	cs = task_get_cs(&p->task);
+	ss = task_get_ss(&p->task);
 
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s rip=%llx rsp=%llx cs=%llx ss=%llx rflags=%llx rax=%llx cr3=%llx irq_saved=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)(rip), (unsigned long long)(rsp), (unsigned long long)((uint64_t)cs), (unsigned long long)((uint64_t)ss), (unsigned long long)(p->task.rflags), (unsigned long long)(p->task.rax), (unsigned long long)(process_mm_root(p)), (unsigned long long)((uint64_t)p->irq_frame_saved));
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s rip=%llx rsp=%llx cs=%llx ss=%llx rflags=%llx rax=%llx cr3=%llx irq_saved=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)(rip), (unsigned long long)(rsp), (unsigned long long)((uint64_t)cs), (unsigned long long)((uint64_t)ss), (unsigned long long)(task_get_flags(&p->task)), (unsigned long long)(task_get_retval(&p->task)), (unsigned long long)(process_mm_root(p)), (unsigned long long)((uint64_t)p->irq_frame_saved));
 
 	if (rip < 0x00400000ULL || rip > 0x00007FFFFFFFFFFFULL)
 	{
@@ -45,7 +45,7 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 	{
 		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
 	}
-	if (cs != (uint16_t)USER_CODE_SEL || ss != (uint16_t)USER_DATA_SEL)
+	if (!task_cs_is_user(&p->task) || (ss & 3u) != 3u)
 	{
 		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_CS_SS");
 	}
@@ -84,7 +84,7 @@ void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
 
 	if (parent)
 	{
-		klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_exit] parent_mm=%llx parent_cr3=%llx parent_files=%llx parent_irq_saved=%llx", (unsigned long long)((uint64_t)(uintptr_t)parent->page_directory), (unsigned long long)(process_mm_root(parent)), (unsigned long long)((uint64_t)(uintptr_t)parent->fd_table), (unsigned long long)((uint64_t)parent->irq_frame_saved));
+		klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_exit] parent_mm=%llx parent_cr3=%llx parent_files=%llx parent_irq_saved=%llx", (unsigned long long)((uint64_t)(uintptr_t)process_pgd(parent)), (unsigned long long)(process_mm_root(parent)), (unsigned long long)((uint64_t)(uintptr_t)parent->files), (unsigned long long)((uint64_t)parent->irq_frame_saved));
 		wait_exit_audit_classify_user_frame("parent-at-child-exit", parent);
 	}
 
@@ -110,7 +110,7 @@ void wait_exit_audit_process_wait_block(pid_t wait_pid, int *status)
 
 	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] action=block parent_pid=%x wait_pid=%x status_ptr=%llx expected_rax_after_wake=child_pid\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)wait_pid), (unsigned long long)((uint64_t)(uintptr_t)status));
 	wait_exit_audit_classify_user_frame("parent-before-wait-sleep", current_process);
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] syscall_frame rip=%llx rsp=%llx", (unsigned long long)(current_process->syscall_frame.rip), (unsigned long long)(current_process->syscall_frame.rsp));
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] syscall_frame rip=%llx rsp=%llx", (unsigned long long)(process_syscall_ip(current_process)), (unsigned long long)(process_syscall_sp(current_process)));
 #endif
 }
 
@@ -350,7 +350,7 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 		/*
 		 * Blocked via process_arm_kernel_syscall_sleep: keep kernel CS/SS so
 		 * switch_context_x64 resumes with kernel_ret into process_wait, not
-		 * user iretq with stale task.rax (placeholder 0 at block time).
+		 * user iretq with stale task.arch.rax (placeholder 0 at block time).
 		 */
 		parent->state = PROCESS_READY;
 		sched_add_process(parent);
@@ -361,13 +361,13 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 	status_val = process_child_wait_status_word(child);
 	status_ptr = parent->wait_status_ptr;
 	if (!status_ptr)
-		status_ptr = (int *)(uintptr_t)parent->syscall_frame.rsi;
+		status_ptr = (int *)(uintptr_t)process_syscall_arg(parent, 1);
 
 	copy_ret = -1;
-	if (status_ptr && parent->page_directory &&
+	if (status_ptr && process_pgd(parent) &&
 	    process_validate_userspace_buffer(status_ptr, sizeof(int)) == 0)
 	{
-		copy_ret = copy_to_user_region_in_directory(parent->page_directory,
+		copy_ret = copy_to_user_region_in_directory(process_pgd(parent),
 							    (uintptr_t)status_ptr,
 							    &status_val,
 							    sizeof(int));
@@ -511,7 +511,7 @@ int process_wait(pid_t pid, int *status, int options)
 			current_process->wait_resume_child_pid = 0;
 			current_process->syscall_resume_rax = 0;
 			current_process->coop_resched_resume = 0;
-			current_process->task.rax = (uint64_t)(uint32_t)reaped_pid;
+			task_set_retval(&current_process->task, (uint64_t)(uint32_t)reaped_pid);
 
 			if (IR0_DEBUG_PROC)
 			{
@@ -563,7 +563,7 @@ int process_wait(pid_t pid, int *status, int options)
 			current_process->wait_resume_child_pid = 0;
 			current_process->coop_resched_resume = 0;
 			current_process->syscall_resume_rax = 0;
-			current_process->task.rax = 0;
+			task_set_retval(&current_process->task, 0);
 			process_arm_blocked_syscall_resume(current_process, 0);
 			process_arm_kernel_syscall_sleep(current_process);
 			wait_exit_audit_classify_user_frame("parent-after-wait-arm",

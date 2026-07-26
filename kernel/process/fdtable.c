@@ -19,14 +19,23 @@
 
 void process_release_fds(process_t *p, const char *pipe_trace_op)
 {
+	fd_entry_t *table;
 	int i;
 
-	if (!p)
+	if (!p || !p->files)
 		return;
 
+	/*
+	 * Shared files_struct (CLONE_FILES): other processes still use the table;
+	 * only the last reference closes underlying handles.
+	 */
+	if (p->files->refcount != 1)
+		return;
+
+	table = p->files->fd_table;
 	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
 	{
-		fd_entry_t *e = &p->fd_table[i];
+		fd_entry_t *e = &table[i];
 
 		if (!e->in_use)
 			continue;
@@ -132,99 +141,56 @@ clear_fd:
 
 int process_duplicate_fd_table(process_t *parent, process_t *child)
 {
-	int i;
-
-	if (!parent || !child)
-		return -EINVAL;
-
-	memcpy(child->fd_table, parent->fd_table, sizeof(child->fd_table));
-	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
-	{
-		fd_entry_t *e = &child->fd_table[i];
-
-		if (!e->in_use)
-			continue;
-		if (e->is_pipe && e->vfs_file)
-			pipe_acquire_end((pipe_t *)e->vfs_file, e->pipe_end);
-		else if (e->is_socket && e->vfs_file)
-		{
-			if (sock_stream_is(e->vfs_file))
-				sock_stream_acquire((struct sock_stream *)e->vfs_file);
-			else if (!sock_stream_is_slot(e->vfs_file))
-				sock_udp_acquire((struct sock_udp *)e->vfs_file);
-		}
-		else if (e->is_devfs)
-		{
-			devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
-
-			if (node)
-				node->ref_count++;
-			if (e->vfs_file &&
-			    devfs_node_wants_text_snap(e->dev_device_id))
-				devfs_text_snap_acquire(
-					(devfs_text_snap_t *)e->vfs_file);
-		}
-		else if (e->is_pseudo && e->vfs_file)
-		{
-			pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)e->vfs_file;
-
-			bind->refs++;
-		}
-		else if (e->is_epoll)
-		{
-			/* Share epoll interest list with parent (MVP). */
-		}
-		else if (e->is_memfd && e->vfs_file)
-			ir0_memfd_acquire((struct ir0_memfd *)e->vfs_file);
-		else if (e->is_eventfd && e->vfs_file)
-			ir0_eventfd_acquire((struct ir0_eventfd *)e->vfs_file);
-		else if (e->is_timerfd && e->vfs_file)
-			ir0_timerfd_acquire((struct ir0_timerfd *)e->vfs_file);
-		else if (e->vfs_file)
-			vfs_file_acquire((struct vfs_file *)e->vfs_file);
-	}
-	fase_audit_fork_state(child->task.pid, "FILES_CLONED");
-	return 0;
+	return process_files_clone(child, parent);
 }
 
 void process_init_fd_table(process_t *process)
 {
+	fd_entry_t *table;
 	int i;
 
 	if (!process)
 		return;
 
+	if (!process->files)
+	{
+		process->files = files_create();
+		if (!process->files)
+			return;
+	}
+
+	table = process->files->fd_table;
+
 	/* Initialize all FDs as unused */
 	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
 	{
-		process->fd_table[i].in_use = false;
-		process->fd_table[i].path[0] = '\0';
-		process->fd_table[i].flags = 0;
-		process->fd_table[i].fd_flags = 0;
-		process->fd_table[i].offset = 0;
-		process->fd_table[i].vfs_file = NULL;
-		process->fd_table[i].is_pipe = false;
-		process->fd_table[i].is_socket = false;
-		process->fd_table[i].is_devfs = false;
-		process->fd_table[i].is_pseudo = false;
-		process->fd_table[i].is_epoll = false;
-		process->fd_table[i].is_memfd = false;
-		process->fd_table[i].is_eventfd = false;
-		process->fd_table[i].is_timerfd = false;
-		process->fd_table[i].dev_device_id = 0;
+		table[i].in_use = false;
+		table[i].path[0] = '\0';
+		table[i].flags = 0;
+		table[i].fd_flags = 0;
+		table[i].offset = 0;
+		table[i].vfs_file = NULL;
+		table[i].is_pipe = false;
+		table[i].is_socket = false;
+		table[i].is_devfs = false;
+		table[i].is_pseudo = false;
+		table[i].is_epoll = false;
+		table[i].is_memfd = false;
+		table[i].is_eventfd = false;
+		table[i].is_timerfd = false;
+		table[i].dev_device_id = 0;
 	}
 
 	/* Setup standard streams */
-	process->fd_table[0].in_use = true;
-	strncpy(process->fd_table[0].path, "/dev/stdin",
-		sizeof(process->fd_table[0].path) - 1);
+	table[0].in_use = true;
+	strncpy(table[0].path, "/dev/stdin",
+		sizeof(table[0].path) - 1);
 
-	process->fd_table[1].in_use = true;
-	strncpy(process->fd_table[1].path, "/dev/stdout",
-		sizeof(process->fd_table[1].path) - 1);
+	table[1].in_use = true;
+	strncpy(table[1].path, "/dev/stdout",
+		sizeof(table[1].path) - 1);
 
-	process->fd_table[2].in_use = true;
-	strncpy(process->fd_table[2].path, "/dev/stderr",
-		sizeof(process->fd_table[2].path) - 1);
+	table[2].in_use = true;
+	strncpy(table[2].path, "/dev/stderr",
+		sizeof(table[2].path) - 1);
 }
-

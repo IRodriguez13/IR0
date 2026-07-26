@@ -84,6 +84,9 @@ struct net_device
     int (*handle_irq)(struct net_device *dev, uint8_t irq);
     void (*get_stats)(struct net_device *dev, uint64_t *rx_pkts, uint64_t *tx_pkts,
                       uint64_t *rx_errs, uint64_t *tx_errs);
+    /* Optional; NULL → sysfs reports 0 bytes (packets may still be non-zero). */
+    void (*get_byte_stats)(struct net_device *dev, uint64_t *rx_bytes,
+			   uint64_t *tx_bytes);
 
     struct net_device *next;
 };

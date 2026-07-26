@@ -46,6 +46,9 @@ busybox
 ls /
 cat /proc/version
 echo hello
+man IR0-boot
+man IR0-uspace
+man -w IR0-tty
 ```
 
 | Target | Role |
@@ -55,6 +58,35 @@ echo hello
 | `make run-console` | Same disk, serial only |
 | `IR0_WITH_DEVTOOLS=1 make run` | Also inject TinyCC + GNU make (optional) |
 | `make smoke-runit-boot` | Non-interactive boot gate |
+| `make prepare-guest-mandocs` | Host-render IR0 `cat7` pages for guest `man` |
+| `make check-guest-mandocs` | Assert ASCII pages (not raw mdoc) |
+
+## Guest manuals (`man`) — Implemented
+
+BusyBox `man` + pre-rendered ASCII under `/usr/share/man/cat7/` (no `nroff`/`mandoc` in the guest). Host builds pages with `mandoc -Tascii` via `make prepare-guest-mandocs`; `load-userspace-runit` / `first-boot` inject them by default (`IR0_GUEST_MANDOCS=0` to skip).
+
+MINIX v1 names are ≤14 characters, so two long host titles are shortened on disk:
+
+| Host page | Guest `man` | Path |
+|-----------|-------------|------|
+| IR0-boot | `IR0-boot` | `/usr/share/man/cat7/IR0-boot.7` |
+| IR0-userspace | `IR0-uspace` | `…/IR0-uspace.7` |
+| IR0-onboarding | `IR0-onboard` | `…/IR0-onboard.7` |
+| IR0-vfs / syscalls / tty / process | same name | `…/IR0-<name>.7` |
+
+| Contract | State |
+|----------|--------|
+| `man IR0-boot` (readable text, not `.Sh` macros) | **Implemented** |
+| Subset above (7 pages) | **Implemented** |
+| Full mandoc catalog / Spanish in guest | **Partial** — host `make sync-mandocs` / `man TOPIC=…` |
+| Generic Linux pages (`man ls`) | Out of scope |
+
+```text
+man IR0-boot
+man IR0-uspace
+man IR0-onboard
+man -w IR0-tty          # → /usr/share/man/cat7/IR0-tty.7
+```
 
 ## Suggested layout
 

@@ -83,3 +83,5 @@ struct cmsghdr
 #define IR0_CMSG_DATA(cmsg) ((unsigned char *)(cmsg) + IR0_CMSG_ALIGN(sizeof(struct cmsghdr)))
 #define IR0_CMSG_SPACE(len) (IR0_CMSG_ALIGN(sizeof(struct cmsghdr)) + IR0_CMSG_ALIGN(len))
 #define IR0_CMSG_LEN(len) (IR0_CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))
+
+typedef uint32_t socklen_t;
