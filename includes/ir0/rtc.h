@@ -38,6 +38,8 @@ uint8_t rtc_read_register(uint8_t reg);
 void rtc_write_register(uint8_t reg, uint8_t value);
 
 uint8_t rtc_bcd_to_binary(uint8_t bcd);
+/* Resolve century + year (or full year) to a Gregorian year ≥ 1970. */
+uint16_t rtc_civil_year(const rtc_time_t *rt);
 time_t rtc_fields_to_unix(const rtc_time_t *rt);
 void rtc_apply_cmos_format(rtc_time_t *time, uint8_t status_b);
 

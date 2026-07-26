@@ -64,9 +64,10 @@ int sys_class_net_collect_children(const char *dir_path,
 				   int start_n);
 int sys_class_net_path_has_children(const char *path);
 
-/* Attr ids for /sys/class/net/<iface>/ attributes */
+/* Attr ids for /sys/class/net/<iface>/… (0 = the iface directory itself). */
 enum
 {
+	SYS_NET_ATTR_DIR = 0,
 	SYS_NET_ATTR_NAME = 1,
 	SYS_NET_ATTR_ADDRESS = 2,
 	SYS_NET_ATTR_MTU = 3,

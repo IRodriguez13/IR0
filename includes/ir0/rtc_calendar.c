@@ -19,6 +19,25 @@ uint8_t rtc_bcd_to_binary(uint8_t bcd)
 	return (uint8_t)(((bcd >> 4) * 10) + (bcd & 0x0F));
 }
 
+uint16_t rtc_civil_year(const rtc_time_t *rt)
+{
+	uint16_t year;
+
+	if (!rt)
+		return 1970;
+
+	if (rt->century > 0 && rt->century < 100)
+		year = (uint16_t)(rt->century * 100 + (rt->year % 100));
+	else if (rt->year >= 1970)
+		year = rt->year;
+	else
+		year = (uint16_t)(2000 + (rt->year % 100));
+
+	if (year < 1970)
+		year = 1970;
+	return year;
+}
+
 /*
  * Convert civil date/time (UTC) to seconds since 1970-01-01.
  * Leap years: Gregorian. No leap seconds.
@@ -35,15 +54,7 @@ time_t rtc_fields_to_unix(const rtc_time_t *rt)
 	if (!rt)
 		return 0;
 
-	if (rt->century > 0 && rt->century < 100)
-		year = (uint16_t)(rt->century * 100 + (rt->year % 100));
-	else if (rt->year >= 1970)
-		year = rt->year;
-	else
-		year = (uint16_t)(2000 + (rt->year % 100));
-
-	if (year < 1970)
-		year = 1970;
+	year = rtc_civil_year(rt);
 
 	leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 1 : 0;
 

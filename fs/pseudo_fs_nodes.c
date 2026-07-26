@@ -223,17 +223,28 @@ static int sys_net_iface_match(const char *path, void **out_ctx)
 	if (!rest[0])
 		return -ENOENT;
 	slash = strchr(rest, '/');
-	if (!slash || !slash[1])
+	if (!slash)
+	{
+		/* /sys/class/net/<iface> — directory node (Linux sysfs). */
+		nlen = strlen(rest);
+		attr = SYS_NET_ATTR_DIR;
+	}
+	else if (!slash[1])
+	{
 		return -ENOENT;
-	nlen = (size_t)(slash - rest);
+	}
+	else
+	{
+		nlen = (size_t)(slash - rest);
+		attr = sys_class_net_parse_attr(slash + 1);
+		if (attr < 0)
+			return -ENOENT;
+	}
 	if (nlen == 0 || nlen >= sizeof(ifname))
 		return -ENOENT;
 	memcpy(ifname, rest, nlen);
 	ifname[nlen] = '\0';
 	if (sys_class_net_find_name(ifname) != 0)
-		return -ENOENT;
-	attr = sys_class_net_parse_attr(slash + 1);
-	if (attr < 0)
 		return -ENOENT;
 	ctx = sys_net_iface_ctx_alloc();
 	if (!ctx)
@@ -246,6 +257,27 @@ static int sys_net_iface_match(const char *path, void **out_ctx)
 	return 0;
 }
 
+static int sys_net_iface_stat(void *ctx, stat_t *st)
+{
+	sys_net_iface_ctx_t *file = ctx;
+
+	if (!file || !st)
+		return -EINVAL;
+	memset(st, 0, sizeof(*st));
+	if (file->attr == (unsigned)SYS_NET_ATTR_DIR)
+	{
+		st->st_mode = S_IFDIR | 0555;
+		st->st_nlink = 2;
+	}
+	else
+	{
+		st->st_mode = S_IFREG | 0444;
+		st->st_nlink = 1;
+		st->st_size = 4096;
+	}
+	return 0;
+}
+
 static int64_t sys_net_iface_read(void *ctx, char *buf, size_t count, off_t *offset)
 {
 	sys_net_iface_ctx_t *file = ctx;
@@ -253,6 +285,8 @@ static int64_t sys_net_iface_read(void *ctx, char *buf, size_t count, off_t *off
 	(void)offset;
 	if (!file || !buf)
 		return -EINVAL;
+	if (file->attr == (unsigned)SYS_NET_ATTR_DIR)
+		return -EISDIR;
 	return sys_class_net_attr_read_named(buf, count, file->ifname, file->attr);
 }
 
@@ -268,7 +302,7 @@ static int64_t sys_net_iface_close(void *ctx)
 static const pseudo_fs_ops_t sys_net_iface_ops = {
 	.read = sys_net_iface_read,
 	.close = sys_net_iface_close,
-	.stat = pseudo_default_stat,
+	.stat = sys_net_iface_stat,
 };
 
 static void pseudo_fs_register_sys_net_dynamic(void)
