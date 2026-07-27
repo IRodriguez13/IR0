@@ -67,7 +67,7 @@ int process_rel_init_child(process_t *child, const process_t *parent,
 	child->ppid = parent->task.pid;
 	child->sid = parent->sid;
 	child->pgid = parent->pgid;
-	child->state = PROCESS_READY;
+	process_set_sched_state(child, PROCESS_READY);
 	child->mode = parent->mode;
 	child->sched_prio = parent->sched_prio;
 	return 0;
@@ -75,16 +75,13 @@ int process_rel_init_child(process_t *child, const process_t *parent,
 
 int process_mm_cursor_clone(process_t *dst, const process_t *src)
 {
+	/*
+	 * Cursors live only in mm_struct. Child gets a fresh mm in
+	 * fork_child_mm_create() which copies heap/stack/mmap_base from parent.
+	 */
 	if (!dst || !src)
 		return -EINVAL;
-
-	process_set_pgd(dst, NULL);
-	dst->mmap_list = NULL;
-	dst->mmap_base = src->mmap_base;
-	dst->heap_start = src->heap_start;
-	dst->heap_end = src->heap_end;
-	dst->stack_start = src->stack_start;
-	dst->stack_size = src->stack_size;
+	dst->mm = NULL;
 	return 0;
 }
 

@@ -76,15 +76,22 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 		return NULL;
 	}
 
+	if (KTM_FAULT_HIT("process.fork_kstack"))
+	{
+		process_kernel_stack_free(child);
+		kfree(child);
+		return NULL;
+	}
+
 	*child_pid_out = child_pid;
 	return child;
 }
 
-static int fork_child_mm_create(process_t *child)
+static int fork_child_mm_create(process_t *child, process_t *parent)
 {
 	mm_struct_t *mm;
 
-	if (!child)
+	if (!child || !parent)
 		return -ENOMEM;
 
 	if (KTM_FAULT_HIT("process.fork_mm"))
@@ -102,13 +109,22 @@ static int fork_child_mm_create(process_t *child)
 	}
 
 	mm->owns_tables = 1;
-	mm->mmap_base = child->mmap_base;
-	mm->heap_start = child->heap_start;
-	mm->heap_end = child->heap_end;
-	mm->stack_start = child->stack_start;
-	mm->stack_size = child->stack_size;
+	if (parent->mm)
+	{
+		mm->mmap_base = parent->mm->mmap_base;
+		mm->heap_start = parent->mm->heap_start;
+		mm->heap_end = parent->mm->heap_end;
+		mm->stack_start = parent->mm->stack_start;
+		mm->stack_size = parent->mm->stack_size;
+	}
 	process_mm_bind(child, mm);
 	process_set_mm_root(child, (uint64_t)(uintptr_t)process_pgd(child));
+
+	if (KTM_FAULT_HIT("process.fork_page_directory"))
+	{
+		process_fork_destroy_child_mm(child);
+		return -ENOMEM;
+	}
 	return 0;
 }
 
@@ -127,7 +143,7 @@ static int fork_attach_pending_child(process_t *child, process_t *parent)
 	process_list = child;
 	process_irq_restore(irq_flags);
 
-	child->state = PROCESS_BLOCKED;
+	process_set_sched_state(child, PROCESS_BLOCKED);
 	parent->fork_pending_child = child;
 	return 0;
 }
@@ -144,7 +160,7 @@ void process_fork_wake_pending(process_t *parent)
 		return;
 
 	parent->fork_pending_child = NULL;
-	child->state = PROCESS_READY;
+	process_set_sched_state(child, PROCESS_READY);
 	sched_add_process(child);
 }
 
@@ -188,6 +204,7 @@ pid_t fork(void)
 	process_t *parent = current_process;
 	process_t *child;
 	pid_t child_pid;
+	int ret;
 
 	if (!parent)
 		return -1;
@@ -196,13 +213,13 @@ pid_t fork(void)
 	if (!child)
 		return -ENOMEM;
 
-	if (fork_child_mm_create(child) != 0)
+	if (fork_child_mm_create(child, parent) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
 	}
 
-	if (copy_process_memory(parent, child) != 0)
+	if (KTM_FAULT_HIT("process.fork_cow") || copy_process_memory(parent, child) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
@@ -211,8 +228,14 @@ pid_t fork(void)
 	{
 		struct mmap_region *mmap_list;
 
-		mmap_list = process_clone_mmap_list(parent->mmap_list);
-		if (parent->mmap_list && !mmap_list)
+		if (KTM_FAULT_HIT("process.fork_mmap_clone"))
+		{
+			fork_rollback(child, child_pid, 0);
+			return -ENOMEM;
+		}
+
+		mmap_list = process_clone_mmap_list(process_mmap_list(parent));
+		if (process_mmap_list(parent) && !mmap_list)
 		{
 			fork_rollback(child, child_pid, 0);
 			return -ENOMEM;
@@ -220,7 +243,8 @@ pid_t fork(void)
 		process_mm_set_mmap_list(child, mmap_list);
 	}
 
-	if (process_files_clone(child, parent) != 0)
+	if (KTM_FAULT_HIT("process.fork_files") ||
+	    process_files_clone(child, parent) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
@@ -230,16 +254,40 @@ pid_t fork(void)
 	child->task.pid = child_pid;
 	process_tls_set(child, process_tls_get(parent));
 
+	/*
+	 * Child ISA setup before visibility. Parent return must NOT run until
+	 * attach succeeds — otherwise enqueue fault leaves parent irreversibly
+	 * mutated (§5).
+	 */
 	if (parent->mode == USER_MODE)
 	{
-		(void)arch_fork_prepare_child_return(child, parent);
-		(void)arch_fork_prepare_parent_return(parent, child_pid);
+		if (KTM_FAULT_HIT("process.fork_arch_child"))
+		{
+			fork_rollback(child, child_pid, 0);
+			return -ENOMEM;
+		}
+		ret = arch_fork_prepare_child_return(child, parent);
+		if (ret < 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return ret;
+		}
 	}
 
 	if (fork_attach_pending_child(child, parent) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
+	}
+
+	if (parent->mode == USER_MODE)
+	{
+		ret = arch_fork_prepare_parent_return(parent, child_pid);
+		if (ret < 0)
+		{
+			fork_rollback(child, child_pid, 1);
+			return ret;
+		}
 	}
 
 	KTM_CHECKPOINT(KTM_CP_PROCESS_FORK);
@@ -313,8 +361,19 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 
 	if (parent->mode == USER_MODE)
 	{
-		(void)arch_fork_prepare_child_return(child, parent);
-		(void)arch_fork_prepare_parent_return(parent, child_pid);
+		int cret;
+
+		if (KTM_FAULT_HIT("process.fork_arch_child"))
+		{
+			fork_rollback(child, child_pid, 0);
+			return -ENOMEM;
+		}
+		cret = arch_fork_prepare_child_return(child, parent);
+		if (cret < 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return cret;
+		}
 	}
 
 	if (flags & CLONE_PARENT_SETTID && parent_tid)
@@ -338,6 +397,17 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
+	}
+
+	if (parent->mode == USER_MODE)
+	{
+		int pret = arch_fork_prepare_parent_return(parent, child_pid);
+
+		if (pret < 0)
+		{
+			fork_rollback(child, child_pid, 1);
+			return pret;
+		}
 	}
 
 	return child_pid;

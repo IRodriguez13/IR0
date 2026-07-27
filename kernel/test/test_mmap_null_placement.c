@@ -66,13 +66,13 @@ void ktest_mmap_null_placement(void)
 
 	KTEST_BEGIN("mmap_null_placement");
 
-	saved_heap_start = current_process->heap_start;
-	saved_heap_end = current_process->heap_end;
-	saved_mmap_base = current_process->mmap_base;
+	saved_heap_start = process_heap_start(current_process);
+	saved_heap_end = process_heap_end(current_process);
+	saved_mmap_base = process_mmap_base(current_process);
 
-	current_process->heap_start = KTEST_BUSYBOX_INITIAL_BRK;
-	current_process->heap_end = KTEST_BUSYBOX_INITIAL_BRK;
-	current_process->mmap_base = 0;
+	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_mmap_base(current_process, 0);
 
 	for (i = 0; i < 4; i++)
 	{
@@ -117,9 +117,9 @@ void ktest_mmap_null_placement(void)
 
 	ktest_unmap_all(slot, 4);
 
-	current_process->heap_start = saved_heap_start;
-	current_process->heap_end = saved_heap_end;
-	current_process->mmap_base = saved_mmap_base;
+	process_set_heap_start(current_process, saved_heap_start);
+	process_set_heap_end(current_process, saved_heap_end);
+	process_set_mmap_base(current_process, saved_mmap_base);
 
 	KTEST_END();
 }
