@@ -77,9 +77,18 @@ void pipe_acquire_end(pipe_t *pipe, int end)
 
 	pipe->fd_refs++;
 	if (end == 0)
+	{
 		pipe->readers++;
+		/* Reopen after last closer: named FIFOs stay allocated. */
+		if (pipe->named)
+			pipe->closed_read = 0;
+	}
 	else
+	{
 		pipe->writers++;
+		if (pipe->named)
+			pipe->closed_write = 0;
+	}
 
 	fase49_pipe_line(pipe, "ACQUIRE");
 }
@@ -189,6 +198,7 @@ void pipe_close_end(pipe_t *pipe, int end)
 	/*
 	 * Free only on the 1→0 transition. fd_refs<=0 must not call kfree again
 	 * (stale pointer after a prior last-close → double-free panic).
+	 * Named FIFOs are owned by the inode table — never free here.
 	 */
 	if (pipe->fd_refs > 0)
 	{
@@ -208,7 +218,7 @@ void pipe_close_end(pipe_t *pipe, int end)
 		pipe_wake_all(pipe);
 	}
 
-	if (last)
+	if (last && !pipe->named)
 	{
 		fase49_pipe_line(pipe, "DESTROY");
 		fase48_pipe_destroyed++;

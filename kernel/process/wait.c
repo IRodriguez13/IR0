@@ -352,7 +352,7 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 		 * switch_context_x64 resumes with kernel_ret into process_wait, not
 		 * user iretq with stale task.arch.rax (placeholder 0 at block time).
 		 */
-		parent->state = PROCESS_READY;
+		process_set_sched_state(parent, PROCESS_READY);
 		sched_add_process(parent);
 		sched_promote_process(parent);
 		return;
@@ -378,7 +378,7 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 #endif
 	parent->wait_resume_child_pid = child->task.pid;
 	parent->syscall_resume_rax = (uint64_t)child->task.pid;
-	parent->state = PROCESS_READY;
+	process_set_sched_state(parent, PROCESS_READY);
 	sched_add_process(parent);
 	sched_promote_process(parent);
 }
@@ -602,7 +602,7 @@ int process_wait(pid_t pid, int *status, int options)
 			continue;
 
 
-		current_process->state = PROCESS_BLOCKED;
+		process_set_sched_state(current_process, PROCESS_BLOCKED);
 		while (current_process->state == PROCESS_BLOCKED)
 		{
 			ir0_clock_wait_service_runqueue();

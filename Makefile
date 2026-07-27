@@ -61,6 +61,17 @@ ifdef arch
 ARCH := $(arch)
 endif
 
+# Accept userspace-style triples so a sibling `ARCH=x86_64` env does not break make.
+ifeq ($(ARCH),x86_64)
+ARCH := x86-64
+endif
+ifeq ($(ARCH),amd64)
+ARCH := x86-64
+endif
+ifeq ($(ARCH),aarch64)
+ARCH := arm64
+endif
+
 ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),1)
 TOOL_DEFAULT_DISK_FS_NAME := fat32
 else ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),2)
@@ -113,7 +124,8 @@ endif
 # sibling repository; the kernel only drives its build for gates.
 IR0_USERSPACE_ROOT ?= $(abspath $(KERNEL_ROOT)/../IR0-userspace)
 IR0_USERSPACE_OUT  = $(IR0_USERSPACE_ROOT)/out
-IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_USERSPACE_ROOT) IR0_ROOT=$(KERNEL_ROOT)
+# Userspace builder ARCH=x86_64; kernel maps that alias to x86-64 when needed.
+IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_USERSPACE_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=x86_64
 
 check-userspace:
 	@if [ ! -f "$(IR0_USERSPACE_ROOT)/Makefile" ]; then \
@@ -131,7 +143,6 @@ bootstrap-userspace:
 
 # Alias for new contributors: same as bootstrap-userspace.
 first-boot: bootstrap-userspace
-	@echo "✓ first-boot OK — next: make run"
 
 all: $(DEFAULT_BUILD_TARGET)
 
@@ -456,6 +467,7 @@ LIB_OBJS = \
     includes/ir0/named_symlink.o \
     includes/ir0/path_user.o \
     includes/ir0/path_routed.o \
+    includes/ir0/utsname_info.o \
     includes/ir0/console.o \
     includes/ir0/ps2_set1.o \
     includes/ir0/ps2_mouse_pkt.o \
@@ -1164,7 +1176,7 @@ auto ir0-auto: ir0
 
 # Process architecture parameter and .config selection.
 ifneq ($(filter $(ARCH),x86-64 arm64),$(ARCH))
-$(error Unsupported architecture: $(ARCH). Valid values: x86-64, arm64)
+$(error Unsupported architecture: $(ARCH). Valid values: x86-64, arm64 (aliases: x86_64, aarch64))
 endif
 
 ifeq ($(CONFIG_ARCH_X86_64),y)
@@ -2288,7 +2300,7 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 	fi
 	@DISK=$${DISK:-disk.img}; \
 	set -e; \
-	PROFILE=$${IR0_PRODUCT_PROFILE:-development}; \
+	PROFILE=$${IR0_PRODUCT_PROFILE:-minimal}; \
 	STAMP=$${DISK}.runit.stamp; \
 	NEED=0; \
 	GUEST_MAN="$(KERNEL_ROOT)/build/guest-man"; \
@@ -2318,10 +2330,9 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 		fi; \
 	fi; \
 	if [ $$NEED -eq 0 ]; then \
-		echo "  DISK    $$DISK up to date (cached runit rootfs — no reinject)"; \
+		echo "  DISK    $$DISK up to date (cached)"; \
 	else \
-		echo "  DISK    Preparing $$DISK (200M MINIX root — not virtio-9p)..."; \
-		echo "  NOTE    virtio-9p is optional /mnt/host share; product / is always disk.img"; \
+		echo "  DISK    $$DISK (200M MINIX, profile=$$PROFILE)"; \
 		dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
 		python3 scripts/inject_init_minix.py --format-large $$DISK; \
 		if [ "$${IR0_GUEST_MANDOCS:-1}" != "0" ] && [ -d "$$GUEST_MAN/usr/share/man/cat7" ]; then \
@@ -2334,7 +2345,7 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 			IR0_GUEST_MANDOC_DIR=$${IR0_GUEST_MANDOC_DIR-}; \
 		printf '%s\n' "$$PROFILE" > "$$STAMP"; \
 	fi
-	@echo "✓ load-userspace-runit OK (runit-init → runsvdir → console + logger)"
+	@echo "  DISK    load-userspace-runit OK"
 
 # Static GNU make for in-guest builds (musl).
 build-gmake-static:
@@ -4476,7 +4487,7 @@ kernel-x64-userspace.iso: kernel-x64-userspace.bin arch/x86-64/grub.cfg
 	@cp kernel-x64-userspace.bin iso_userspace/boot/kernel-x64.bin
 	@grub-mkrescue -o $@ iso_userspace
 	@rm -rf iso_userspace
-	@echo "✓ ISO (userspace init, lazy MM) created: $@"
+	@echo "  ISO     $@"
 
 kernel-x64-userspace-lazy.iso: kernel-x64-userspace.iso
 	@cp kernel-x64-userspace.iso $@

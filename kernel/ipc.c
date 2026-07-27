@@ -105,7 +105,7 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
     }
 
     /* Mark process as blocked */
-    proc->state = PROCESS_BLOCKED;
+    process_set_sched_state(proc, PROCESS_BLOCKED);
     ipc_irq_restore(irq_flags);
 }
 
@@ -132,7 +132,7 @@ process_t *wait_queue_wake_one(wait_queue_t *wq)
     /* Mark process as ready to run outside IRQ-off section. */
     if (proc)
     {
-        proc->state = PROCESS_READY;
+        process_set_sched_state(proc, PROCESS_READY);
         sched_add_process(proc);
     }
 
@@ -161,7 +161,7 @@ void wait_queue_wake_all(wait_queue_t *wq)
 
         if (node->process)
         {
-            node->process->state = PROCESS_READY;
+            process_set_sched_state(node->process, PROCESS_READY);
             sched_add_process(node->process);
         }
         kfree(node);

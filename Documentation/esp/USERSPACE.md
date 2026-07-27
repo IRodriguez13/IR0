@@ -10,14 +10,20 @@ El kernel solo no es una distro Unix. El PID1 de producto (**runit**), **BusyBox
 
 ## Camino más corto (primera vez)
 
+Clonar ambos como hermanos (nombres por defecto):
+
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
+git clone https://github.com/IRodriguez13/IR0-userspace.git
 cd IR0
 make check-env
 make defconfig
-make first-boot    # clona ../IR0-userspace si falta + rootfs mínimo + ISO
+make first-boot    # UAPI + rootfs + ISO (o clona el hermano si falta)
 make run           # QEMU → getty → BusyBox ash
 ```
+
+Perfil de producto: `IR0_PRODUCT_PROFILE=minimal|development|desktop|appliance`
+(por defecto `minimal`: registro en primer boot + doas). Detalle EN: [`../USERSPACE.md`](../USERSPACE.md).
 
 En el guest:
 

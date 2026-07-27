@@ -66,7 +66,7 @@ int process_signal_default_kill(process_t *dying, int sig)
 	dying->signal_pending &= ~SIGNAL_MASK(sig);
 	dying->exit_signal = sig;
 	dying->exit_code = 0;
-	dying->state = PROCESS_ZOMBIE;
+	process_mark_zombie(dying);
 	sched_remove_process(dying);
 
 #if IR0_DEBUG_PROC

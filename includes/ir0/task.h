@@ -24,13 +24,26 @@
 #include <ir0/arch_task_context_x86_64.h>
 #endif
 
+/*
+ * Scheduler-facing task state (canonical). Numeric values for READY/RUNNING/
+ * SLEEPING/TERMINATED stay stable; STOPPED is additive.
+ * Compatibility macros TASK_* keep call sites compiling during migration.
+ */
 typedef enum
 {
-	TASK_READY,      /* Listo para ejecutar */
-	TASK_RUNNING,    /* En ejecución */
-	TASK_BLOCKED,    /* Esperando E/S, mutex, etc. */
-	TASK_TERMINATED
-} task_state_t;
+	TASK_SCHED_RUNNABLE = 0,
+	TASK_SCHED_RUNNING = 1,
+	TASK_SCHED_SLEEPING = 2,
+	TASK_SCHED_TERMINATED = 3,
+	TASK_SCHED_STOPPED = 4
+} task_sched_state_t;
+
+typedef task_sched_state_t task_state_t;
+
+#define TASK_READY TASK_SCHED_RUNNABLE
+#define TASK_RUNNING TASK_SCHED_RUNNING
+#define TASK_BLOCKED TASK_SCHED_SLEEPING
+#define TASK_TERMINATED TASK_SCHED_TERMINATED
 
 /*
  * Proceso / hilo del kernel: registros guardados y metadatos mínimos.

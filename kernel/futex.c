@@ -48,7 +48,7 @@ int ir0_futex_wait(process_t *proc, int *uaddr, int val)
 			futex_waiters[i].uaddr = uaddr;
 			futex_waiters[i].val = val;
 			futex_waiters[i].in_use = 1;
-			proc->state = PROCESS_BLOCKED;
+			process_set_sched_state(proc, PROCESS_BLOCKED);
 			while (proc->state == PROCESS_BLOCKED)
 			{
 				sched_schedule_next();
@@ -82,7 +82,7 @@ int ir0_futex_wake(int *uaddr, int count)
 		if (futex_waiters[i].uaddr != uaddr)
 			continue;
 		if (futex_waiters[i].proc)
-			futex_waiters[i].proc->state = PROCESS_READY;
+			process_set_sched_state(futex_waiters[i].proc, PROCESS_READY);
 		futex_waiters[i].in_use = 0;
 		futex_waiters[i].proc = NULL;
 		woke++;

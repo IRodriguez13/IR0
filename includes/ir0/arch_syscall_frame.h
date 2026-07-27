@@ -8,6 +8,9 @@
  *
  * File: arch_syscall_frame.h
  * Description: ISA hooks for syscall/IRQ user-frame capture (portable core.c).
+ *
+ * Storage type: arch_syscall_frame_t in kernel/process.h (legacy alias
+ * syscall_user_frame_t). This header only declares ISA capture/restore ops.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
