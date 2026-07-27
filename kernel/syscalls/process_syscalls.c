@@ -504,7 +504,7 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 		    ~current_process->signal_mask)
 			break;
 
-		current_process->state = PROCESS_BLOCKED;
+		process_set_sched_state(current_process, PROCESS_BLOCKED);
 		process_arm_kernel_syscall_sleep(current_process);
 		while (current_process->state == PROCESS_BLOCKED)
 		{

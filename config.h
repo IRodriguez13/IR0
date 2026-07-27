@@ -198,10 +198,6 @@
 #define VERBOSE_LOGGING 0
 #endif
 
-/* KERNEL VERSION AND BUILD INFO */
-/* Version is now centralized in includes/ir0/version.h */
-#include <ir0/version.h>
-
 /* MEMORY CONFIGURATION */
 #define DEFAULT_STACK_SIZE (4 * 1024)    // 4KB stack per process
 #define KERNEL_HEAP_SIZE (16 * 1024 * 1024) // 16MB kernel heap
@@ -290,6 +286,9 @@
 #ifndef CONFIG_SCHEDULER_POLICY
 #define CONFIG_SCHEDULER_POLICY 0
 #endif
+
+/* KERNEL VERSION AND BUILD INFO (after CONFIG_* so uname version macros see them) */
+#include <ir0/version.h>
 
 #ifndef CONFIG_ROOT_BLOCK_DEVICE
 #define CONFIG_ROOT_BLOCK_DEVICE "hda"

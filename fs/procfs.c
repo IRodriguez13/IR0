@@ -32,7 +32,9 @@
 #include <ir0/klog.h>
 #include <ir0/process.h>
 #include <ir0/credentials.h>
+#include <config.h>
 #include <ir0/version.h>
+#include <ir0/utsname_info.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <ir0/partition.h>
@@ -42,7 +44,6 @@
 #include <fs/vfs.h>
 #include <ir0/validation.h>
 #include <ir0/resource_registry.h>
-#include <config.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/logging.h>
 
@@ -59,9 +60,9 @@
 static void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
 
 /*
- * /proc/ps: raw data only, one line per process, tab-separated.
- * pid\tppid\tstate\tuid\tname (OSDev-style: PID PPID S UID CMD)
- * Frontend (ps) does formatting.
+ * /proc/ps: one line header then one line per process, tab-separated.
+ * Header: PID\tPPID\tS\tUID\tCMD
+ * State: R=runnable/running, S=sleeping(blocked), Z=zombie (§8).
  */
 int proc_ps_read(char *buf, size_t count)
 {
@@ -69,20 +70,34 @@ int proc_ps_read(char *buf, size_t count)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
+    int n;
+
+    n = snprintf(buf + off, count - off, "PID\tPPID\tS\tUID\tCMD\n");
+    if (n < 0)
+        return -1;
+    if (n >= (int)(count - off))
+        n = (int)(count - off) - 1;
+    off += (size_t)n;
+
     process_t *p = process_list;
     while (p && off < count - 1)
     {
         const char *state_str;
-        switch (p->state)
+        if (process_is_zombie(p))
+            state_str = "Z";
+        else
         {
-        case PROCESS_READY:   state_str = "R"; break;
-        case PROCESS_RUNNING: state_str = "R"; break;
-        case PROCESS_BLOCKED: state_str = "S"; break;
-        case PROCESS_ZOMBIE:  state_str = "Z"; break;
-        default:              state_str = "?"; break;
+            switch (p->state)
+            {
+            case PROCESS_READY:   state_str = "R"; break;
+            case PROCESS_RUNNING: state_str = "R"; break;
+            case PROCESS_BLOCKED: state_str = "S"; break;
+            case PROCESS_ZOMBIE:  state_str = "Z"; break;
+            default:              state_str = "?"; break;
+            }
         }
         const char *name = p->comm[0] ? p->comm : "(none)";
-        int n = snprintf(buf + off, count - off,
+        n = snprintf(buf + off, count - off,
                          "%d\t%d\t%s\t%u\t%s\n",
                          (int)p->task.pid, (int)p->ppid, state_str,
                          (unsigned)p->uid, name);
@@ -524,12 +539,16 @@ int proc_uptime_read(char *buf, size_t count)
 /* /proc/version: raw data only. One line: version\tdate\ttime\tuser\thost\tcompiler */
 int proc_version_read(char *buf, size_t count)
 {
+    char uname_ver[64];
+
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
     memset(buf, 0, count);
-    /* Human line aligned with uname identity (IR0/Unix). */
-    int len = snprintf(buf, count, "IR0 version %s IR0/Unix (%s %s by %s@%s with %s)\n",
-                       IR0_VERSION_STRING, IR0_BUILD_DATE, IR0_BUILD_TIME,
+    ir0_utsname_fill_version(uname_ver, sizeof(uname_ver));
+    /* Human line aligned with uname(2) version (runtime UP|SMP + RR|Priority). */
+    int len = snprintf(buf, count, "IR0 version %s %s (%s %s by %s@%s with %s)\n",
+                       IR0_VERSION_STRING, uname_ver,
+                       IR0_BUILD_DATE, IR0_BUILD_TIME,
                        IR0_BUILD_USER, IR0_BUILD_HOST, IR0_BUILD_CC);
     if (len < 0) return -1;
     if (len >= (int)count) { buf[count - 1] = '\0'; return (int)(count - 1); }

@@ -36,17 +36,17 @@ bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t leng
 	if (!proc || length == 0)
 		return false;
 
-	if (proc->heap_end > proc->heap_start &&
-	    process_va_ranges_overlap(addr, length, proc->heap_start,
-				      (size_t)(proc->heap_end - proc->heap_start)))
+	if (process_heap_end(proc) > process_heap_start(proc) &&
+	    process_va_ranges_overlap(addr, length, process_heap_start(proc),
+				      (size_t)(process_heap_end(proc) - process_heap_start(proc))))
 		return true;
 
-	if (proc->stack_size > 0 &&
-	    process_va_ranges_overlap(addr, length, proc->stack_start,
-				      (size_t)proc->stack_size))
+	if (process_stack_size(proc) > 0 &&
+	    process_va_ranges_overlap(addr, length, process_stack_start(proc),
+				      (size_t)process_stack_size(proc)))
 		return true;
 
-	for (r = proc->mmap_list; r; r = r->next)
+	for (r = process_mmap_list(proc); r; r = r->next)
 	{
 		if (process_va_ranges_overlap(addr, length, (uintptr_t)r->addr,
 					      r->length))
@@ -205,21 +205,8 @@ void process_fork_destroy_child_mm(process_t *child)
 	{
 		mm_put(child->mm);
 		child->mm = NULL;
-		process_set_pgd(child, NULL);
-		child->mmap_list = NULL;
 		process_fase43_note_mm_destroyed();
-		return;
 	}
-
-	if (!process_pgd(child) || !process_mm_owns_tables(child))
-		return;
-
-	process_unmap_user_pages_all(process_pgd(child), NULL);
-	paging_reclaim_lower_half_tables(process_pgd(child));
-	paging_ir0_mm_note_pml4_freed((uint64_t)(uintptr_t)process_pgd(child));
-	kfree_aligned(process_pgd(child));
-	process_set_pgd(child, NULL);
-	process_fase43_note_mm_destroyed();
 }
 
 void process_fork_free_mmap_list(process_t *child)
@@ -230,14 +217,14 @@ void process_fork_free_mmap_list(process_t *child)
 	if (!child)
 		return;
 
-	r = child->mmap_list;
+	r = process_mmap_list(child);
 	while (r)
 	{
 		next = r->next;
 		kfree(r);
 		r = next;
 	}
-	child->mmap_list = NULL;
+	process_mm_set_mmap_list(child, NULL);
 }
 
 uint64_t create_process_page_directory(void)

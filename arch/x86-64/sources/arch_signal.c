@@ -85,5 +85,5 @@ void arch_signal_prepare_task_handler(task_t *t, void *handler, int sig,
 
 	task_set_sp(t, frame_sp);
 	task_set_ip(t, (uint64_t)(uintptr_t)handler);
-	task_set_rdi(t, (uint64_t)(uint32_t)sig);
+	task_set_arg0(t, (uint64_t)(uint32_t)sig);
 }

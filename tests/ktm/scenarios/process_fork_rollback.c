@@ -30,6 +30,12 @@ static int scenario_process_fork_rollback_run(ktm_context_t *ctx)
 	/*
 	 * Simulate fork failure after allocating the child struct: never link
 	 * permanently — free without inserting, assert no leak.
+	 *
+	 * Production fork() KTM fault sites (§5):
+	 *   process.fork_alloc, process.fork_kstack, process.fork_mm,
+	 *   process.fork_page_directory, process.fork_cow,
+	 *   process.fork_mmap_clone, process.fork_files,
+	 *   process.fork_arch_child, process.fork_enqueue
 	 */
 	child = kmalloc_try(sizeof(process_t));
 	KTM_REQUIRE(child != NULL);

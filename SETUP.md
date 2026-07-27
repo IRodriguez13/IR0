@@ -91,21 +91,27 @@ Product PID1 (runit), BusyBox, login/doas, and `/etc` live in a **separate**
 repository. **Recommended first-time path:**
 
 ```bash
-make first-boot    # clones ../IR0-userspace if missing, builds rootfs, makes ISO
+make first-boot    # checks host deps (asks to install if missing), clones ../IR0-userspace, builds rootfs + ISO
 make run           # QEMU → BusyBox ash (GTK)
 ```
 
-Manual equivalent:
+If a required host tool is missing, `first-boot` lists it and asks `Install now? [y/N]`
+(uses `sudo` for the package manager; password prompt is from sudo). Decline with `n`
+and follow this file, or set `IR0_DEPS_INSTALL=never` / `yes` for non-interactive use.
+
+Manual equivalent (sibling layout: `IR0/` next to `IR0-userspace/`):
 
 ```bash
 git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace
 # or: export IR0_USERSPACE_ROOT=/path/to/IR0-userspace
+export IR0_ROOT=$PWD
 make check-userspace
-make headers_install DESTDIR=../IR0-userspace/out/sysroot
+make -C ../IR0-userspace fetch headers build ARCH=x86_64
 make load-userspace-runit
 make kernel-x64-userspace.iso
 ```
 
+`ARCH=x86_64` is the userspace triple; the kernel Makefile accepts it as an alias of `x86-64`.
 Optional in-guest TinyCC + GNU make (not required for BusyBox):
 
 ```bash

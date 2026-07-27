@@ -709,6 +709,13 @@ int64_t sys_read(int fd, void *buf, size_t count)
   {
     fd_entry_t *fdt = get_process_fd_table();
 
+    if (fdt && fdt[fd].in_use && (fdt[fd].flags & O_DIRECTORY) &&
+	!fdt[fd].is_pipe && !fdt[fd].is_socket)
+    {
+      /* Directory fds (incl. O_DIRECTORY opens) are not readable via read(2). */
+      return -EISDIR;
+    }
+
     if (fdt && fdt[fd].in_use && fdt[fd].is_pseudo && fdt[fd].vfs_file)
     {
       pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fdt[fd].vfs_file;

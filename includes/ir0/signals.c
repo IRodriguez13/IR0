@@ -287,7 +287,7 @@ int send_signal(int pid, int signal)
      */
     if (proc->state == PROCESS_BLOCKED)
     {
-	proc->state = PROCESS_READY;
+	process_set_sched_state(proc, PROCESS_READY);
 	sched_promote_process(proc);
 	clock_request_sched_resched();
 #if IR0_DEBUG_PROC
@@ -364,7 +364,7 @@ void handle_signals(void)
         klog_info("SIGNAL", "SIGSTOP received, stopping process");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGSTOP);
-        current->state = PROCESS_BLOCKED;
+        process_set_sched_state(current, PROCESS_BLOCKED);
         return;
     }
 
@@ -528,7 +528,7 @@ void handle_signals(void)
         current->signal_pending &= ~SIGNAL_MASK(SIGCONT);
         if (current->state == PROCESS_BLOCKED)
         {
-            current->state = PROCESS_READY;
+            process_set_sched_state(current, PROCESS_READY);
         }
     }
 
@@ -540,7 +540,7 @@ void handle_signals(void)
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGCHLD);
         if (current->state == PROCESS_BLOCKED)
-            current->state = PROCESS_READY;
+            process_set_sched_state(current, PROCESS_READY);
     }
 
     /* Check for signals with userspace handlers */

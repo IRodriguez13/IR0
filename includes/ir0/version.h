@@ -84,5 +84,33 @@
 
 #define IR0_BUILD_INFO IR0_VERSION_STRING " (built " IR0_BUILD_DATE " " IR0_BUILD_TIME " by " IR0_BUILD_USER "@" IR0_BUILD_HOST " with " IR0_BUILD_CC ")"
 
+/*
+ * Build-time fallback for early diagnostics only.
+ * Runtime uname(2) /proc/version use ir0_utsname_fill_version()
+ * (online CPUs + active scheduler policy).
+ * CONFIG_ENABLE_SMP reflects SMP build hooks (not a claim of SMP-safe runtime).
+ * CONFIG_SCHEDULER_POLICY: 0/1 → RR (1 is CFS alias → RR); 2 → Priority.
+ */
+#ifndef CONFIG_ENABLE_SMP
+#define CONFIG_ENABLE_SMP 0
+#endif
+#ifndef CONFIG_SCHEDULER_POLICY
+#define CONFIG_SCHEDULER_POLICY 0
+#endif
+
+#if CONFIG_ENABLE_SMP
+#define IR0_UNAME_CPU_MODE "SMP"
+#else
+#define IR0_UNAME_CPU_MODE "UP"
+#endif
+
+#if CONFIG_SCHEDULER_POLICY == 2
+#define IR0_UNAME_SCHED_POLICY "Priority"
+#else
+#define IR0_UNAME_SCHED_POLICY "RR"
+#endif
+
+#define IR0_UNAME_VERSION_STRING IR0_UNAME_CPU_MODE " " IR0_UNAME_SCHED_POLICY
+
 #endif /* _IR0_VERSION_H */
 

@@ -1331,7 +1331,7 @@ kernel-x64-userspace.iso: kernel-x64-userspace.bin arch/x86-64/grub.cfg
 	@cp kernel-x64-userspace.bin iso_userspace/boot/kernel-x64.bin
 	@grub-mkrescue -o $@ iso_userspace
 	@rm -rf iso_userspace
-	@echo "✓ ISO (userspace init, lazy MM) created: $@"
+	@echo "  ISO     $@"
 
 kernel-x64-userspace-lazy.iso: kernel-x64-userspace.iso
 	@cp kernel-x64-userspace.iso $@

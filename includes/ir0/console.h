@@ -68,12 +68,14 @@ struct ir0_termios
 #define IR0_CONSOLE_IFLAG_DEFAULT (IR0_IFLAG_ICRNL)
 #define IR0_CONSOLE_OFLAG_DEFAULT (0x00000005u) /* ONLCR|OPOST */
 #define IR0_CONSOLE_CFLAG_DEFAULT (0x00004B00u) /* CS8|CREAD|HUPCL */
-#define IR0_CONSOLE_LFLAG_DEFAULT (0x0000003Bu) /* ISIG|ICANON|ECHO|ECHOE|ECHOK */
+/* ISIG|ICANON|ECHO|ECHOE|ECHOK|ECHONL — ECHONL keeps Enter visible with ECHO off. */
+#define IR0_CONSOLE_LFLAG_DEFAULT (0x0000007Bu)
 #define IR0_LFLAG_ISIG             (0x00000001u)
 #define IR0_LFLAG_ICANON           (0x00000002u)
 #define IR0_LFLAG_ECHO             (0x00000008u)
 #define IR0_LFLAG_ECHOE            (0x00000010u)
 #define IR0_LFLAG_ECHOK            (0x00000020u)
+#define IR0_LFLAG_ECHONL           (0x00000040u)
 #define IR0_OFLAG_ONLCR           (0x00000004u)
 #define IR0_OFLAG_OPOST           (0x00000001u)
 /* Linux asm-generic/termbits.h c_cc indices */

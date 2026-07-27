@@ -272,8 +272,16 @@ static int tty_canon_feed(char c)
 
 	if (c == '\n')
 	{
-		if (tty_echo_on())
-			tty_echo_char('\n');
+		/*
+		 * Linux ECHONL: echo NL even when ECHO is clear (password prompts).
+		 * Without this, "Password:" leaves the cursor on the same line.
+		 */
+		if (tty_echo_on() || (tty_termios.c_lflag & IR0_LFLAG_ECHONL))
+		{
+			char nl = '\n';
+
+			console_backend_write(&nl, 1, IR0_TTY_ECHO_COLOR);
+		}
 		canon_readq_len = 0;
 		canon_readq_pos = 0;
 		for (i = 0; i < canon_line_len; i++)
@@ -423,7 +431,7 @@ static int tty_sleep_for_input(void)
 			process_arm_kernel_syscall_sleep(proc);
 		if (proc->state != PROCESS_READY)
 		{
-			proc->state = PROCESS_BLOCKED;
+			process_set_sched_state(proc, PROCESS_BLOCKED);
 			blocked_once = 1;
 			d1_16_tty_state_transition(proc, prev_state,
 						   PROCESS_BLOCKED);
@@ -462,7 +470,7 @@ static int tty_sleep_for_input(void)
 		if (ir0_console_input_ready())
 		{
 			prev_state = proc->state;
-			proc->state = PROCESS_READY;
+			process_set_sched_state(proc, PROCESS_READY);
 			d1_16_tty_state_transition(proc, prev_state,
 						   PROCESS_READY);
 			tty_waiter_remove(proc);
@@ -777,7 +785,7 @@ int ir0_console_wake_readers(void)
 		if (reader->mode == USER_MODE)
 			reader->irq_frame_saved = 0;
 		prev_state = reader->state;
-		reader->state = PROCESS_READY;
+		process_set_sched_state(reader, PROCESS_READY);
 		d1_16_tty_state_transition(reader, prev_state, PROCESS_READY);
 		/* Prefer woken TTY reader on the next schedule. */
 		sched_promote_process(reader);
@@ -966,7 +974,8 @@ void ir0_console_reset_cooked_echo(void)
 	tty_termios_ensure();
 	tty_termios.c_iflag |= IR0_IFLAG_ICRNL;
 	tty_termios.c_lflag |= (IR0_LFLAG_ICANON | IR0_LFLAG_ECHO |
-				IR0_LFLAG_ECHOE | IR0_LFLAG_ECHOK);
+				IR0_LFLAG_ECHOE | IR0_LFLAG_ECHOK |
+				IR0_LFLAG_ECHONL);
 	tty_termios_ready = 1;
 }
 

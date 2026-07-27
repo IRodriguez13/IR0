@@ -55,7 +55,7 @@
 #define SYS_DEFAULT_FILE_SIZE 256
 #define SYS_MAX_CPUS 16
 
-static char sys_kernel_hostname[64] = "ir0-kernel";
+static char sys_kernel_hostname[64] = "unix";
 
 /**
  * Offset tracking for /sys files
@@ -290,6 +290,20 @@ static uint32_t sys_sysfs_cpu_count(void)
     if (n > SYS_MAX_CPUS)
         n = SYS_MAX_CPUS;
     return n;
+}
+
+int sys_devices_cpu_online_count(void)
+{
+	uint32_t n = sys_sysfs_cpu_count();
+	uint32_t i;
+	int online = 0;
+
+	for (i = 0; i < n; i++)
+	{
+		if (sys_devices_cpu_online[i])
+			online++;
+	}
+	return online > 0 ? online : 1;
 }
 
 /* /sys/devices/system — one cpuN entry per logical CPU. */
