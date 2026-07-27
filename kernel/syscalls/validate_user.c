@@ -37,12 +37,12 @@ int validate_userspace_string(const char *str, size_t max_len)
   {
     /* Allow if address is in process's stack or heap region */
     uint64_t addr = (uint64_t)str;
-    if (addr >= current_process->stack_start &&
-        addr < current_process->stack_start + current_process->stack_size)
+    if (addr >= process_stack_start(current_process) &&
+        addr < process_stack_start(current_process) + process_stack_size(current_process))
       return 0;
-    if (current_process->heap_start > 0 &&
-        addr >= current_process->heap_start &&
-        addr < current_process->heap_end)
+    if (process_heap_start(current_process) > 0 &&
+        addr >= process_heap_start(current_process) &&
+        addr < process_heap_end(current_process))
       return 0;
     /* Also allow if it's a valid user address (for compatibility) */
     if (is_user_address(str, max_len))
@@ -76,12 +76,12 @@ int validate_userspace_buffer(const void *buf, size_t size)
   {
     /* Allow if address is in process's stack or heap region */
     uint64_t addr = (uint64_t)buf;
-    if (addr >= current_process->stack_start &&
-        addr + size <= current_process->stack_start + current_process->stack_size)
+    if (addr >= process_stack_start(current_process) &&
+        addr + size <= process_stack_start(current_process) + process_stack_size(current_process))
       return 0;
-    if (current_process->heap_start > 0 &&
-        addr >= current_process->heap_start &&
-        addr + size <= current_process->heap_end)
+    if (process_heap_start(current_process) > 0 &&
+        addr >= process_heap_start(current_process) &&
+        addr + size <= process_heap_end(current_process))
       return 0;
     /* Also allow if it's a valid user address (for compatibility) */
     if (is_user_address(buf, size))

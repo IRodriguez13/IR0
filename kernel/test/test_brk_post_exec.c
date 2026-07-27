@@ -41,11 +41,11 @@ void ktest_brk_post_exec(void)
 
 	KTEST_BEGIN("brk_post_exec");
 
-	saved_start = current_process->heap_start;
-	saved_end = current_process->heap_end;
+	saved_start = process_heap_start(current_process);
+	saved_end = process_heap_end(current_process);
 
-	current_process->heap_start = KTEST_BUSYBOX_INITIAL_BRK;
-	current_process->heap_end = KTEST_BUSYBOX_INITIAL_BRK;
+	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
 
 	cur = sys_brk(NULL);
 	KASSERT_EQ((uint64_t)cur, KTEST_BUSYBOX_INITIAL_BRK);
@@ -55,8 +55,8 @@ void ktest_brk_post_exec(void)
 	KASSERT(ktest_pte_present(KTEST_BUSYBOX_INITIAL_BRK));
 	KASSERT(ktest_pte_present(KTEST_BUSYBOX_INITIAL_BRK + 0x1000UL));
 
-	current_process->heap_start = saved_start;
-	current_process->heap_end = saved_end;
+	process_set_heap_start(current_process, saved_start);
+	process_set_heap_end(current_process, saved_end);
 
 	KTEST_END();
 }

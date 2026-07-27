@@ -55,6 +55,12 @@ typedef enum
 	USER_MODE = 1     /* Running in userspace (real processes) */
 } process_mode_t;
 
+/*
+ * Sched mirror on process_t during migration — must stay in sync with
+ * task.state via process_set_sched_state(). Lifecycle (alive/zombie/dead)
+ * lives in process_lifecycle_t; do not use PROCESS_ZOMBIE as a sched state
+ * writer path (use process_mark_zombie()).
+ */
 typedef enum
 {
 	PROCESS_READY = 0,
@@ -62,6 +68,13 @@ typedef enum
 	PROCESS_BLOCKED,
 	PROCESS_ZOMBIE
 } process_state_t;
+
+typedef enum
+{
+	PROCESS_LIFECYCLE_ALIVE = 0,
+	PROCESS_LIFECYCLE_ZOMBIE,
+	PROCESS_LIFECYCLE_DEAD
+} process_lifecycle_t;
 
 /* Tracked anonymous/file mmap regions for demand paging and munmap */
 struct mmap_region
@@ -76,8 +89,8 @@ struct mmap_region
 
 /*
  * User register snapshot at syscall entry (Linux pt_regs subset).
- * Opaque to portable call sites — use process_syscall_* accessors.
- * Layout decode/fill is ISA-private (arch_syscall_frame / arch_switch).
+ * Prefer the ISA-neutral name arch_syscall_frame_t in new code.
+ * Layout decode/fill remains ISA-private (arch_syscall_frame / arch_switch).
  */
 typedef struct
 {
@@ -96,34 +109,42 @@ typedef struct
 	uint64_t r10;
 	uint64_t r8;
 	uint64_t r9;
-} syscall_user_frame_t;
+} arch_syscall_frame_t;
+
+/* Legacy alias — same type; do not invent a second frame layout. */
+typedef arch_syscall_frame_t syscall_user_frame_t;
+
+/*
+ * Arch-owned thread TLS (x86: IA32_FS_BASE). Lives in a union with fs_base so
+ * ASM IR0_PROC_FS_BASE_OFFSET stays stable; portable code uses process_tls_*.
+ */
+typedef struct arch_thread_state
+{
+	uint64_t tls_base;
+} arch_thread_state_t;
 
 typedef struct process
 {
 	task_t task;
 	/*
-	 * Per-task TLS base (x86: IA32_FS_BASE). Portable code must use
-	 * process_tls_get/set — ASM may still read fs_base via asm_offsets.
+	 * TLS / arch thread state. Prefer process_tls_get/set and
+	 * p->arch_thread.tls_base — not open-coded fs_base outside asm_offsets.
 	 */
-	uint64_t fs_base;
+	union
+	{
+		uint64_t fs_base;
+		arch_thread_state_t arch_thread;
+	};
 	pid_t ppid;
 	/*
-	 * Address space: process->mm is canonical (refcount). page_directory /
-	 * owns_page_directory / mmap_list are private mirrors kept in sync by
-	 * process_mm_bind() / process_set_pgd() — portable code must use
-	 * process_pgd() / process_mm_owns_tables(), never touch these fields.
+	 * Address space: process->mm is the sole owner of page_directory,
+	 * mmap_list, heap/stack cursors (see mm_struct). Use process_pgd(),
+	 * process_heap_*, process_mmap_list(), process_mm_owns_tables().
 	 */
 	struct mm_struct *mm;
 	struct files_struct *files;
-	uint64_t *page_directory;
-	uint8_t owns_page_directory; /* 0 = shared kernel CR3 or shared mm */
-	struct mmap_region *mmap_list;
-	uint64_t mmap_base; /* top-down cursor for kernel-chosen mmap(NULL) */
-	uint64_t heap_start;
-	uint64_t heap_end;
-	uint64_t stack_start;
-	uint64_t stack_size;
-	process_state_t state;
+	process_state_t state; /* sched mirror — use process_set_sched_state() */
+	process_lifecycle_t lifecycle; /* ALIVE / ZOMBIE / DEAD */
 	process_mode_t mode;  /* Execution mode (kernel vs user) */
 	int exit_code;
 	int exit_signal; /* >0 if killed by signal (wait WIFSIGNALED / WTERMSIG) */
@@ -188,7 +209,7 @@ typedef struct process
 	struct sigcontext *saved_context;  /* Saved context before signal handler (for sigreturn) */
 
 	/* Linux syscall insn frame (for fork child / blocked syscall return). */
-	syscall_user_frame_t syscall_frame;
+	arch_syscall_frame_t syscall_frame;
 	uint64_t syscall_resume_rax;
 	uint8_t irq_frame_saved; /* blocked syscall: resume via switch_to_user_task */
 	int *wait_status_ptr;    /* userspace wait4 status word while irq_frame_saved */
@@ -308,22 +329,78 @@ static inline uint64_t process_mm_root(const process_t *p)
 
 static inline uint64_t *process_pgd(const process_t *p)
 {
-	if (!p)
-		return NULL;
-	if (p->mm)
-		return p->mm->page_directory;
-	return p->page_directory;
+	return (p && p->mm) ? p->mm->page_directory : NULL;
 }
 
 static inline void process_set_pgd(process_t *p, uint64_t *pgd)
 {
-	if (!p)
+	if (!p || !p->mm)
 		return;
-	p->page_directory = pgd;
-	if (p->mm)
-		p->mm->page_directory = pgd;
+	p->mm->page_directory = pgd;
 	if (!pgd)
-		p->owns_page_directory = 0;
+		p->mm->owns_tables = 0;
+}
+
+static inline struct mmap_region *process_mmap_list(const process_t *p)
+{
+	return (p && p->mm) ? p->mm->mmap_list : NULL;
+}
+
+static inline struct mmap_region **process_mmap_list_p(process_t *p)
+{
+	return (p && p->mm) ? &p->mm->mmap_list : NULL;
+}
+
+static inline uint64_t process_mmap_base(const process_t *p)
+{
+	return (p && p->mm) ? p->mm->mmap_base : 0;
+}
+
+static inline void process_set_mmap_base(process_t *p, uint64_t base)
+{
+	if (p && p->mm)
+		p->mm->mmap_base = base;
+}
+
+static inline uint64_t process_heap_start(const process_t *p)
+{
+	return (p && p->mm) ? p->mm->heap_start : 0;
+}
+
+static inline uint64_t process_heap_end(const process_t *p)
+{
+	return (p && p->mm) ? p->mm->heap_end : 0;
+}
+
+static inline void process_set_heap_start(process_t *p, uint64_t v)
+{
+	if (p && p->mm)
+		p->mm->heap_start = v;
+}
+
+static inline void process_set_heap_end(process_t *p, uint64_t v)
+{
+	if (p && p->mm)
+		p->mm->heap_end = v;
+}
+
+static inline uint64_t process_stack_start(const process_t *p)
+{
+	return (p && p->mm) ? p->mm->stack_start : 0;
+}
+
+static inline uint64_t process_stack_size(const process_t *p)
+{
+	return (p && p->mm) ? p->mm->stack_size : 0;
+}
+
+static inline void process_set_stack_layout(process_t *p, uint64_t start,
+					   uint64_t size)
+{
+	if (!p || !p->mm)
+		return;
+	p->mm->stack_start = start;
+	p->mm->stack_size = size;
 }
 
 static inline void process_set_mm_root(process_t *p, uint64_t root)
@@ -339,13 +416,13 @@ static inline pid_t process_pid(const process_t *p)
 
 static inline uint64_t process_tls_get(const process_t *p)
 {
-	return p ? p->fs_base : 0;
+	return p ? p->arch_thread.tls_base : 0;
 }
 
 static inline void process_tls_set(process_t *p, uint64_t tls)
 {
 	if (p)
-		p->fs_base = tls;
+		p->arch_thread.tls_base = tls;
 }
 
 /* Opaque syscall-frame accessors (layout is ISA-shaped; do not open-code fields). */
@@ -434,6 +511,62 @@ int fork_flow_note_debug_exception(uint64_t *stack);
 void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall);
 __attribute__((noreturn)) void process_exit(int code);
 int process_wait(pid_t pid, int *status, int options);
+
+/*
+ * Single writers for sched vs lifecycle (§4A). Prefer these over raw
+ * p->state / p->task.state assignments so the two views cannot diverge.
+ */
+static inline void process_set_sched_state(process_t *p, process_state_t st)
+{
+	if (!p || st == PROCESS_ZOMBIE)
+		return;
+
+	p->state = st;
+	switch (st)
+	{
+	case PROCESS_READY:
+		p->task.state = TASK_SCHED_RUNNABLE;
+		break;
+	case PROCESS_RUNNING:
+		p->task.state = TASK_SCHED_RUNNING;
+		break;
+	case PROCESS_BLOCKED:
+		p->task.state = TASK_SCHED_SLEEPING;
+		break;
+	default:
+		break;
+	}
+}
+
+static inline void process_mark_zombie(process_t *p)
+{
+	if (!p)
+		return;
+	p->lifecycle = PROCESS_LIFECYCLE_ZOMBIE;
+	p->state = PROCESS_ZOMBIE;
+	p->task.state = TASK_SCHED_TERMINATED;
+}
+
+static inline void process_mark_dead(process_t *p)
+{
+	if (!p)
+		return;
+	p->lifecycle = PROCESS_LIFECYCLE_DEAD;
+	p->state = PROCESS_ZOMBIE;
+	p->task.state = TASK_SCHED_TERMINATED;
+}
+
+static inline int process_is_zombie(const process_t *p)
+{
+	return p && (p->lifecycle == PROCESS_LIFECYCLE_ZOMBIE ||
+		     p->state == PROCESS_ZOMBIE);
+}
+
+static inline int process_is_alive(const process_t *p)
+{
+	return p && p->lifecycle == PROCESS_LIFECYCLE_ALIVE &&
+	       p->state != PROCESS_ZOMBIE;
+}
 
 /*
  * True when parent is blocked in wait4 and child_pid satisfies the wait target.

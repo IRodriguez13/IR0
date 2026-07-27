@@ -135,7 +135,7 @@ static uint64_t fase43_count_vmas(process_t *p)
 
 	if (!p)
 		return 0;
-	for (r = p->mmap_list; r; r = r->next)
+	for (r = process_mmap_list(p); r; r = r->next)
 		n++;
 	return n;
 }
@@ -281,7 +281,7 @@ static uint64_t process_fase47_count_mmap_pages(process_t *p)
 
 	if (!p)
 		return 0;
-	for (r = p->mmap_list; r; r = r->next)
+	for (r = process_mmap_list(p); r; r = r->next)
 		pages += (r->length + PAGE_SIZE_4KB - 1) / PAGE_SIZE_4KB;
 	return pages;
 }

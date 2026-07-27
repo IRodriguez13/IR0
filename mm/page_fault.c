@@ -40,11 +40,11 @@ static int pf_addr_in_heap(process_t *p, uint64_t fa)
 	if (!p)
 		return 0;
 
-	heap_lo = (uint64_t)p->heap_start;
+	heap_lo = (uint64_t)process_heap_start(p);
 	if (heap_lo == 0)
 		heap_lo = USER_HEAP_BASE;
 
-	return (fa >= heap_lo && fa < (uint64_t)p->heap_end);
+	return (fa >= heap_lo && fa < (uint64_t)process_heap_end(p));
 }
 
 static int pf_addr_in_stack(process_t *p, uint64_t fa)
@@ -60,7 +60,7 @@ static struct mmap_region *pf_mmap_region_for(process_t *p, uint64_t fa)
 
 	if (!p)
 		return NULL;
-	for (r = p->mmap_list; r != NULL; r = r->next)
+	for (r = process_mmap_list(p); r != NULL; r = r->next)
 	{
 		uintptr_t base = (uintptr_t)r->addr;
 		uint64_t end = base + (uint64_t)r->length;
@@ -101,8 +101,8 @@ static void pf_d110_stack_adjacent_diag(uint64_t *frame, uint64_t fault_addr,
 	if (!frame || !p || !info || !info->user)
 		return;
 
-	stack_lo = (uintptr_t)p->stack_start;
-	stack_hi = (uintptr_t)(p->stack_start + p->stack_size);
+	stack_lo = (uintptr_t)process_stack_start(p);
+	stack_hi = (uintptr_t)(process_stack_start(p) + process_stack_size(p));
 	guard_lo = stack_lo - PAGE_SIZE_4KB;
 
 	if (fault_addr < guard_lo - PAGE_SIZE_4KB ||
@@ -148,7 +148,7 @@ static void pf_d110_stack_adjacent_diag(uint64_t *frame, uint64_t fault_addr,
 		       (unsigned long long)(rsi & ~0xFFFULL),
 		       (unsigned long long)(rdi & ~0xFFFULL));
 
-	klog_debug_fmt("KERN", "[D1.10][STACK] base=%llx top=%llx guard_below=%llx pages=%llx rsp_free_to_base=%llx heap_end=%llx mmap_base=%llx", (unsigned long long)((uint64_t)stack_lo), (unsigned long long)((uint64_t)stack_hi), (unsigned long long)((uint64_t)guard_lo), (unsigned long long)((uint64_t)(p->stack_size / PAGE_SIZE_4KB)), (unsigned long long)(rsp > stack_lo ? rsp - stack_lo : 0), (unsigned long long)(p->heap_end), (unsigned long long)(p->mmap_base));
+	klog_debug_fmt("KERN", "[D1.10][STACK] base=%llx top=%llx guard_below=%llx pages=%llx rsp_free_to_base=%llx heap_end=%llx mmap_base=%llx", (unsigned long long)((uint64_t)stack_lo), (unsigned long long)((uint64_t)stack_hi), (unsigned long long)((uint64_t)guard_lo), (unsigned long long)((uint64_t)(process_stack_size(p) / PAGE_SIZE_4KB)), (unsigned long long)(rsp > stack_lo ? rsp - stack_lo : 0), (unsigned long long)(process_heap_end(p)), (unsigned long long)(process_mmap_base(p)));
 
 	klog_debug_fmt("KERN", "[D1.10][VMA] stack=[%llx,%llx)\n", (unsigned long long)((uint64_t)stack_lo), (unsigned long long)((uint64_t)stack_hi));
 
@@ -156,7 +156,7 @@ static void pf_d110_stack_adjacent_diag(uint64_t *frame, uint64_t fault_addr,
 	next_mmap = NULL;
 	prev_end = 0;
 	next_start = ~0ULL;
-	for (r = p->mmap_list; r != NULL; r = r->next)
+	for (r = process_mmap_list(p); r != NULL; r = r->next)
 	{
 		uint64_t start = (uint64_t)(uintptr_t)r->addr;
 		uint64_t end = start + (uint64_t)r->length;
@@ -174,9 +174,9 @@ static void pf_d110_stack_adjacent_diag(uint64_t *frame, uint64_t fault_addr,
 		klog_debug_fmt("KERN", "[D1.10][VMA] mmap=[%llx,%llx) prot=%llx", (unsigned long long)(start), (unsigned long long)(end), (unsigned long long)((uint64_t)r->prot));
 	}
 
-	if (p->heap_end > p->heap_start)
+	if (process_heap_end(p) > process_heap_start(p))
 	{
-		klog_debug_fmt("KERN", "[D1.10][VMA] heap=[%llx,%llx)\n", (unsigned long long)(p->heap_start), (unsigned long long)(p->heap_end));
+		klog_debug_fmt("KERN", "[D1.10][VMA] heap=[%llx,%llx)\n", (unsigned long long)(process_heap_start(p)), (unsigned long long)(process_heap_end(p)));
 	}
 
 	if (prev_mmap)

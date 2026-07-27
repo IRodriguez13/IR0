@@ -584,9 +584,9 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     
     /* Leave 256 bytes margin for safety */
     size_t stack_margin = 256;
-    if (stack_size > (process->stack_size - stack_margin))
+    if (stack_size > (process_stack_size(process) - stack_margin))
     {
-        klog_debug_fmt("ELF", "SERIAL: ELF: ERROR - Stack too small for arguments (need %x bytes, have %x)\n", (unsigned)((uint32_t)stack_size), (unsigned)((uint32_t)process->stack_size));
+        klog_debug_fmt("ELF", "SERIAL: ELF: ERROR - Stack too small for arguments (need %x bytes, have %x)\n", (unsigned)((uint32_t)stack_size), (unsigned)((uint32_t)process_stack_size(process)));
         return -ENOMEM;
     }
     
@@ -603,7 +603,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         return -1;
     }
 
-    uint64_t stack_top = process->stack_start + process->stack_size;
+    uint64_t stack_top = process_stack_start(process) + process_stack_size(process);
     uint64_t stack_base = stack_top - stack_size;
     uint64_t argc_slot;
     uint64_t argv_array;
@@ -791,7 +791,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     arch_task_set_frame_pointer(&process->task, argc_slot);
 
     /* Set registers for x86-64 ABI: rdi=argc, rsi=argv, rdx=envp */
-    task_set_rdi(&process->task, (uint64_t)argc);
+    task_set_arg0(&process->task, (uint64_t)argc);
     task_set_rsi(&process->task, argv_array);
     task_set_rdx(&process->task, envp_array);
 
@@ -813,7 +813,7 @@ static uint64_t fase41_count_vmas(const process_t *proc)
     if (!proc)
         return 0;
 
-    for (r = proc->mmap_list; r; r = r->next)
+    for (r = process_mmap_list(proc); r; r = r->next)
         count++;
 
     return count;
@@ -1267,16 +1267,16 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
         exec_commit_ctx.unmapped = 1;
     }
 
-    while (proc->mmap_list)
+    while (process_mmap_list(proc))
     {
-        struct mmap_region *next = proc->mmap_list->next;
+        struct mmap_region *next = process_mmap_list(proc)->next;
 
-        kfree(proc->mmap_list);
-        proc->mmap_list = next;
+        kfree(process_mmap_list(proc));
+        process_mm_set_mmap_list(proc, next);
     }
 
-    proc->heap_start = 0;
-    proc->heap_end = 0;
+    process_set_heap_start(proc, 0);
+    process_set_heap_end(proc, 0);
     /*
      * Linux clears TLS across execve. Stale fs_base from the pre-exec image
      * (or fork parent) must not be restored on the next context switch —
@@ -1285,11 +1285,11 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
      */
     process_tls_set(proc, 0);
     set_fs_base(0);
-    proc->stack_size = USER_STACK_SIZE;
-    proc->stack_start = USER_STACK_TOP - USER_STACK_SIZE;
+    process_set_stack_layout(proc, USER_STACK_TOP - USER_STACK_SIZE,
+			     USER_STACK_SIZE);
 
-    if (map_user_region_in_directory(process_pgd(proc), proc->stack_start,
-                                     proc->stack_size, PAGE_RW) != 0)
+    if (map_user_region_in_directory(process_pgd(proc), process_stack_start(proc),
+                                     process_stack_size(proc), PAGE_RW) != 0)
     {
         kfree(file_data);
         exec_fail_kill(proc, 127, "map_stack_fail");
@@ -1306,8 +1306,8 @@ int exec_replace_current(const char *path, char *const argv[], char *const envp[
 
 	if (brk0 != 0)
 	{
-		proc->heap_start = brk0;
-		proc->heap_end = brk0;
+		process_set_heap_start(proc, brk0);
+		process_set_heap_end(proc, brk0);
 	}
     }
     exec_commit_ctx.segments_loaded = 1;
