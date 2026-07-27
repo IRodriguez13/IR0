@@ -29,7 +29,13 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_ps2_set1_modifiers.c \
 	test_ps2_mouse_pkt.c \
 	test_pipe_close_refcount.c \
-	test_rtc_calendar.c
+	test_rtc_calendar.c \
+	test_arch_task_contract.c \
+	test_pseudo_fs_contract.c \
+	test_mm_mirror_contract.c \
+	test_netdev_contract.c \
+	test_sched_backend_contract.c \
+	test_block_backend_contract.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
@@ -165,6 +171,24 @@ test_mmap_null_placement.o: test_mmap_null_placement.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_elf_initial_brk_abi.o: test_elf_initial_brk_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_arch_task_contract.o: test_arch_task_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_pseudo_fs_contract.o: test_pseudo_fs_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_mm_mirror_contract.o: test_mm_mirror_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_netdev_contract.o: test_netdev_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_sched_backend_contract.o: test_sched_backend_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_block_backend_contract.o: test_block_backend_contract.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 $(TEST_BIN): $(TEST_OBJS)

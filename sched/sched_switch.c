@@ -54,13 +54,13 @@ void sched_context_switch_to(process_t *next)
 	if (prev && prev->state == PROCESS_RUNNING)
 	{
 		should_handle_signals = 1;
-		prev->state = PROCESS_READY;
+		process_set_sched_state(prev, PROCESS_READY);
 	}
 
 	if (should_handle_signals)
 		handle_signals();
 
-	next->state = PROCESS_RUNNING;
+	process_set_sched_state(next, PROCESS_RUNNING);
 	current_process = next;
 
 	if (signals_should_handle_on_run(next))

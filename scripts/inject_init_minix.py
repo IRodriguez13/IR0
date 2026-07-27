@@ -33,6 +33,20 @@ IFREG = 0o100000
 IFMT = 0o170000
 
 
+def inject_verbose():
+    """Per-file inject audit (MINIX_INJECT / Injected). Off by default."""
+    return os.environ.get("IR0_INJECT_VERBOSE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def vprint(*args, **kwargs):
+    if inject_verbose():
+        print(*args, **kwargs)
+
+
 def read_block(f, n):
     f.seek(n * BLOCK)
     data = f.read(BLOCK)
@@ -307,7 +321,7 @@ def remove_dir_entry(f, sb, dir_inode, dir_num, name):
 
 
 def audit_entry(source_path, dest_path, source_type, mode, inode_num, size):
-    print(
+    vprint(
         f"MINIX_INJECT source={source_path} dest={dest_path} "
         f"source_type={source_type} mode=0x{mode:04x} inode={inode_num} size={size}"
     )
@@ -421,7 +435,7 @@ def format_minix_v1(f, ninodes=64, nzones=1024):
     root_dir[DIR_ENTRY + 2 : DIR_ENTRY + 4] = b".."
     write_block(f, root_zone, bytes(root_dir))
 
-    print(
+    vprint(
         f"MINIX_FORMAT ok magic=0x{MAGIC:04x} ninodes={sb['ninodes']} "
         f"nzones={sb['nzones']} firstdatazone={sb['firstdatazone']}"
     )
@@ -788,8 +802,8 @@ def main():
                 file_mode if mode_given else None,
             )
             sync_bitmaps_from_tree(f, sb)
-        print(
-            f"✅ Chowned {disk_path}:/{'/'.join(path_parts)} to "
+        vprint(
+            f"chown {disk_path}:/{'/'.join(path_parts)} -> "
             f"{owner[0]}:{owner[1]}"
         )
         return
@@ -813,7 +827,7 @@ def main():
                 format_minix_v1(f, ninodes=1024, nzones=65535)
             else:
                 format_minix_v1(f)
-        print(f"✅ Formatted {disk_path} as MINIX v1 (kernel-compatible layout)")
+        vprint(f"format {disk_path} MINIX v1")
         return
 
     if len(sys.argv) >= 2 and sys.argv[1] == "--hardlink":
@@ -836,7 +850,7 @@ def main():
             sync_bitmaps_from_tree(f, sb)
         dest_display = "/" + "/".join(new_parts)
         src_display = "/" + "/".join(existing_parts)
-        print(f"✅ Hardlinked {src_display} -> {disk_path}:{dest_display}")
+        vprint(f"hardlink {src_display} -> {disk_path}:{dest_display}")
         return
 
     if len(sys.argv) < 3 or len(sys.argv) > 5:
@@ -891,9 +905,9 @@ def main():
     )
     if rc.returncode != 0:
         raise SystemExit(f"post-inject verify failed for {dest_display}")
-    print(
-        f"✅ Injected {file_path} -> {disk_path}:{dest_display} "
-        f"({len(data)} bytes, no mount)"
+    vprint(
+        f"inject {file_path} -> {disk_path}:{dest_display} "
+        f"({len(data)} bytes)"
     )
 
 

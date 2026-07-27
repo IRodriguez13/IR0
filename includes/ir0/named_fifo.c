@@ -190,6 +190,8 @@ int named_fifo_create(const char *path, mode_t mode)
         named_fifo_irq_restore(irq_flags);
         return -ENOMEM;
     }
+    /* Inode owns pipe_t until unlink/recycle (see pipe_close_end). */
+    pipe->named = 1;
 
     if (normalize_path(path, slot->path, sizeof(slot->path)) != 0)
     {
@@ -250,8 +252,14 @@ int named_fifo_unlink(const char *path)
         return -ENOENT;
     }
 
-    if (e->pipe && e->pipe->fd_refs <= 0)
-        pipe_abort_unopened(e->pipe);
+    if (e->pipe)
+    {
+        if (e->pipe->fd_refs <= 0)
+            pipe_abort_unopened(e->pipe);
+        else
+            /* Still open: last pipe_close_end will free. */
+            e->pipe->named = 0;
+    }
 
     e->in_use = 0;
     e->path[0] = '\0';

@@ -8,6 +8,32 @@ It is not a general-purpose production OS. The tree emphasizes narrow facades
 (`includes/ir0/`), Kconfig selection, and honest partial Linux ABI (`-ENOSYS`
 where unimplemented).
 
+## ISD — IR0 Software Distribution
+
+**ISD** is the official minimal product of kernel + userspace: runit PID 1,
+BusyBox, login/firstboot, and a thin admin path (`doas` when installed). The
+userspace sources live in the sibling repo
+[`IR0-userspace`](https://github.com/IRodriguez13/IR0-userspace); this tree is
+the kernel, UAPI, and integration/smokes surface.
+
+| Layer | Repo | Role |
+|-------|------|------|
+| Kernel | **IR0** (this tree) | mechanisms, drivers, UAPI, KTM |
+| Userland | **IR0-userspace** | packages, init, services, rootfs |
+| Product | **ISD** | integrated image (`make first-boot` / `make run`) |
+
+<p align="center">
+  <img src="scripts/kconfig/assets/isd-firstboot.png" alt="ISD first boot — create your account" width="720" />
+</p>
+
+<p align="center"><em>ISD first boot: runit stage1 → account wizard (password also used for doas).</em></p>
+
+<p align="center">
+  <img src="scripts/kconfig/assets/isd-shell-session.png" alt="ISD shell — ls, uname, doas" width="720" />
+</p>
+
+<p align="center"><em>Logged-in shell: Unix hierarchy, <code>uname -a</code>, privilege elevation with <code>doas</code>.</em></p>
+
 ## Getting started
 
 Complexity belongs in the code — starting should not.
@@ -17,7 +43,7 @@ Product userspace (runit + BusyBox) lives in a **sibling repo**. First boot:
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
-make check-env            # host diagnostic
+make check-env            # host diagnostic (or: make first-boot asks to install missing deps)
 make defconfig
 make first-boot           # clone ../IR0-userspace if needed + minimal rootfs + ISO
 make run                  # QEMU GTK → getty → BusyBox ash

@@ -103,7 +103,7 @@ void rr_add_process(process_t *proc)
 		if (scan->process == proc)
 		{
 			/* Process already queued: only ensure READY state. */
-			proc->state = PROCESS_READY;
+			process_set_sched_state(proc, PROCESS_READY);
 			rr_irq_restore(irq_flags);
 			kfree(node);
 			return;
@@ -125,7 +125,7 @@ void rr_add_process(process_t *proc)
 	/* Mark process as ready for scheduling.
 	 * State machine: NEW -> READY -> RUNNING -> READY -> ...
 	 */
-	proc->state = PROCESS_READY;
+	process_set_sched_state(proc, PROCESS_READY);
 	rr_irq_restore(irq_flags);
 }
 
@@ -292,7 +292,7 @@ void rr_promote_process(process_t *proc)
 		if (walk->process == proc)
 		{
 			rr_current = walk;
-			proc->state = PROCESS_READY;
+			process_set_sched_state(proc, PROCESS_READY);
 			break;
 		}
 		if (walk->next == rr_head)

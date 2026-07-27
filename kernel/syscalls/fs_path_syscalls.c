@@ -32,6 +32,7 @@
 #include <ir0/utimens.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/utsname.h>
+#include <ir0/utsname_info.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>
 #include <ir0/memfd.h>
@@ -369,6 +370,9 @@ int64_t sys_rename(const char *oldpath, const char *newpath)
  */
 int64_t sys_uname(struct utsname *buf)
 {
+  char version[64];
+  char nodename[64];
+
   if (!current_process || !buf)
     return -EFAULT;
 
@@ -376,11 +380,13 @@ int64_t sys_uname(struct utsname *buf)
     return -EFAULT;
 
   memset(buf, 0, sizeof(struct utsname));
-  /* Product identity: IR0 unix <release> <machine> IR0/Unix */
+  ir0_utsname_fill_version(version, sizeof(version));
+  ir0_utsname_fill_nodename(nodename, sizeof(nodename));
+  /* sysname nodename release version machine — version/nodename from live state. */
   strncpy(buf->sysname, "IR0", _UTSNAME_LENGTH - 1);
-  strncpy(buf->nodename, "unix", _UTSNAME_LENGTH - 1);
+  strncpy(buf->nodename, nodename, _UTSNAME_LENGTH - 1);
   strncpy(buf->release, IR0_VERSION_STRING, _UTSNAME_LENGTH - 1);
-  strncpy(buf->version, "IR0/Unix", _UTSNAME_LENGTH - 1);
+  strncpy(buf->version, version, _UTSNAME_LENGTH - 1);
   strncpy(buf->machine, get_arch_uname_machine(), _UTSNAME_LENGTH - 1);
   return 0;
 }

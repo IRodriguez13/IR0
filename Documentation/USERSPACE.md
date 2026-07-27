@@ -1,7 +1,7 @@
 # Coupling IR0 (kernel) ↔ IR0-userspace
 
 > **Last verified:** 2026-07-26  
-> **Source of truth:** this file, `Makefile` (`IR0_USERSPACE_ROOT`, `check-userspace`, `headers_install`, `bootstrap-userspace`), sibling [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../SETUP.md).  
+> **Source of truth:** this file, `Makefile` (`IR0_USERSPACE_ROOT`, `check-userspace`, `bootstrap-userspace` / `first-boot`), sibling [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../SETUP.md).  
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
 
 ## Why two repositories?
@@ -18,28 +18,47 @@ The kernel alone is not a Unix distro. Product PID1 (**runit**), **BusyBox**, lo
 
 ## Fastest path (first time)
 
-From an empty parent directory:
+Clone **both** trees as siblings (names matter for the default paths):
 
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
+git clone https://github.com/IRodriguez13/IR0-userspace.git
 cd IR0
 make check-env
 make defconfig
 
-# Clones ../IR0-userspace if missing, exports UAPI, builds runit+BusyBox → disk.img + ISO
-make first-boot
+# Or only clone IR0 and let bootstrap clone the sibling:
+make first-boot          # → ../IR0-userspace + UAPI + rootfs + ISO
+make run                 # QEMU GTK → getty → BusyBox ash
+```
 
-# Boot the minimal distro (getty → BusyBox ash)
+Layout expected by defaults:
+
+```text
+parent/
+├── IR0/                 # this tree (IR0_ROOT)
+└── IR0-userspace/       # IR0_USERSPACE_ROOT (override if needed)
+```
+
+| Variable | Default | Role |
+|----------|---------|------|
+| `IR0_ROOT` | set by userspace to `../IR0` | kernel tree for UAPI + MINIX/ISO adapters |
+| `IR0_USERSPACE_ROOT` | `../IR0-userspace` | distro builder |
+| `IR0_PRODUCT_PROFILE` | `minimal` | First-boot account wizard + doas (`development` = lab autologin) |
+
+Manual wire-up (same result as `first-boot`):
+
+```bash
+export IR0_ROOT=$PWD
+export IR0_USERSPACE_ROOT=$PWD/../IR0-userspace
+make -C "$IR0_USERSPACE_ROOT" fetch headers build ARCH=x86_64
+make load-userspace-runit
 make run
 ```
 
-Equivalent one-liner from the kernel tree after `defconfig`:
+**Note:** the userspace builder uses `ARCH=x86_64`; the kernel accepts that as an alias of `x86-64`, so a leftover env var no longer breaks `make kernel-x64.bin`.
 
-```bash
-./scripts/bootstrap-userspace.sh && make run
-```
-
-Inside the guest (development profile often autologins as root):
+Inside the guest (`development` may autologin as root; `minimal` uses firstboot):
 
 ```text
 busybox
