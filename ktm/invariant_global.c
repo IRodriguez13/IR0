@@ -34,6 +34,12 @@ int ktm_invariants_run(uint32_t mask)
 						  "invariant");
 				bad++;
 			}
+			if (p->mode == USER_MODE && !process_mm_ok(p))
+			{
+				ktm_assert_result(false, "mm_present", KTM_FILE, __LINE__,
+						  "invariant");
+				bad++;
+			}
 		}
 		if (bad == 0)
 			ktm_transport_emit("INVARIANT", "process.list", "PASS");

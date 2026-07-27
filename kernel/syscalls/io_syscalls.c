@@ -33,6 +33,7 @@
 #include <ir0/clock_wait.h>
 #include <ir0/signals.h>
 #include <ir0/arch_port.h>
+#include <ir0/arch_cpu.h>
 #include <ir0/paging.h>
 #include <config.h>
 
@@ -292,7 +293,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   w->ready_count = 0;
   current_process->poll_waiter = w;
   process_arm_kernel_syscall_sleep(current_process);
-  current_process->state = PROCESS_BLOCKED;
+  process_set_sched_state(current_process, PROCESS_BLOCKED);
 
   while (current_process->state == PROCESS_BLOCKED)
   {
@@ -541,7 +542,7 @@ static int poll_wake_do(void)
       w->woken = 1;
       if (w->proc->state == PROCESS_BLOCKED)
       {
-        w->proc->state = PROCESS_READY;
+        process_set_sched_state(w->proc, PROCESS_READY);
         sched_add_process(w->proc);
         sched_promote_process(w->proc);
       }
@@ -582,7 +583,7 @@ void syscall_wake_blocked_on_child(process_t *parent)
 
 	if (was_blocked || wait_armed)
 	{
-		parent->state = PROCESS_READY;
+		process_set_sched_state(parent, PROCESS_READY);
 		sched_add_process(parent);
 		sched_promote_process(parent);
 	}
@@ -646,7 +647,7 @@ int64_t sys_pause(void)
       return -EINTR;
     }
 
-    current_process->state = PROCESS_BLOCKED;
+    process_set_sched_state(current_process, PROCESS_BLOCKED);
     process_arm_kernel_syscall_sleep(current_process);
     while (current_process->state == PROCESS_BLOCKED)
     {
@@ -736,6 +737,7 @@ void fase50b_dump_bytes(const char *label, const void *buf, size_t n)
 #endif
 }
 
+#if CONFIG_DEBUG_FASE50
 static int fase50b_peek_user(uint64_t *pml4, uintptr_t user_addr,
 			     uint8_t *scratch, size_t n)
 {
@@ -761,6 +763,9 @@ static int fase50b_peek_user(uint64_t *pml4, uintptr_t user_addr,
 	}
 	return 0;
 }
+#else
+/* Staged pipe wake removed; peek helper only used under DEBUG_FASE50. */
+#endif
 void fase48_fd_get_stats(uint64_t *created, uint64_t *destroyed,
 			 uint64_t *blocked_readers, uint64_t *blocked_writers)
 {
@@ -791,117 +796,77 @@ void fase48_note_fd_destroyed(void)
 int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read)
 {
 	unsigned int i;
+	int slot = -1;
+
+	if (!proc || !pipe)
+		return -EINVAL;
 
 	for (i = 0; i < MAX_PIPE_WAITERS; i++)
 	{
 		if (!pipe_waiters[i].proc)
 		{
-			pipe_waiters[i].proc = proc;
-			pipe_waiters[i].pipe = pipe;
-			pipe_waiters[i].waiting_read = waiting_read;
-			if (waiting_read)
-				fase48_blocked_readers++;
-			else
-				fase48_blocked_writers++;
-			if (waiting_read)
-				pipe_fase49_note_read_sleep(pipe);
-			if (proc->mode == USER_MODE)
-			{
-#if CONFIG_DEBUG_FASE50
-				klog_debug_fmt("PIPE", "[IR0DBG50B][READ_BLOCK] pid=%x fd=%llx rsi=%llx rdx=%llx pipe_id=%llx", (unsigned)((uint32_t)proc->task.pid), (unsigned long long)(process_syscall_arg(proc, 0)), (unsigned long long)(process_syscall_arg(proc, 1)), (unsigned long long)(process_syscall_arg(proc, 2)), (unsigned long long)(pipe ? pipe->pipe_id : 0));
-#endif
-				process_arm_blocked_syscall_resume(proc, 0);
-			}
-			proc->state = PROCESS_BLOCKED;
-			sched_schedule_next();
-			if (waiting_read)
-				pipe_fase49_note_read_wake(pipe);
-			pipe_waiters[i].proc = NULL;
-			pipe_waiters[i].pipe = NULL;
-			pipe_waiters[i].waiting_read = 0;
-			return 0;
+			slot = (int)i;
+			break;
 		}
 	}
-	return -EAGAIN;
-}
+	if (slot < 0)
+		return -EAGAIN;
 
-static void pipe_wake_stage_user_read(process_t *proc, pipe_t *pipe)
-{
-	char kbuf[PIPE_SIZE];
-	uint8_t user_before[32];
-	uint8_t user_after[32];
-	uintptr_t user_buf;
-	size_t req;
-	int n;
-	int copy_ret;
-	int peek_n;
-
-	if (!proc || !pipe || !proc->irq_frame_saved || pipe->count == 0)
-		return;
-
-	user_buf = (uintptr_t)process_syscall_arg(proc, 1);
-	req = process_syscall_arg(proc, 2);
-	if (req == 0 || req > sizeof(kbuf))
-		req = sizeof(kbuf);
-
+	pipe_waiters[slot].proc = proc;
+	pipe_waiters[slot].pipe = pipe;
+	pipe_waiters[slot].waiting_read = waiting_read;
+	if (waiting_read)
+		fase48_blocked_readers++;
+	else
+		fase48_blocked_writers++;
+	if (waiting_read)
+		pipe_fase49_note_read_sleep(pipe);
 #if CONFIG_DEBUG_FASE50
-	klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] pipe_id=%llx target_pid=%x waiter_pid=%x saved_fd=%llx saved_rsi=%llx saved_rdx=%llx pipe_bytes=%llx target_pml4=%llx active_cr3=%llx", (unsigned long long)(pipe->pipe_id), (unsigned)((uint32_t)proc->task.pid), (unsigned)(current_process ? (uint32_t)current_process->task.pid : 0), (unsigned long long)(process_syscall_arg(proc, 0)), (unsigned long long)((uint64_t)user_buf), (unsigned long long)((uint64_t)req), (unsigned long long)((uint64_t)pipe->count), (unsigned long long)((uint64_t)(uintptr_t)process_pgd(proc)), (unsigned long long)(get_current_page_directory()));
+	if (proc->mode == USER_MODE && waiting_read)
+		klog_debug_fmt("PIPE", "[IR0DBG50B][READ_BLOCK] pid=%x fd=%llx rsi=%llx rdx=%llx pipe_id=%llx", (unsigned)((uint32_t)proc->task.pid), (unsigned long long)(process_syscall_arg(proc, 0)), (unsigned long long)(process_syscall_arg(proc, 1)), (unsigned long long)(process_syscall_arg(proc, 2)), (unsigned long long)(pipe ? pipe->pipe_id : 0));
 #endif
 
-	peek_n = (req < (size_t)sizeof(user_before)) ? (int)req : (int)sizeof(user_before);
-#if CONFIG_DEBUG_FASE50
-	if (fase50b_peek_user(process_pgd(proc), user_buf, user_before, (size_t)peek_n) == 0)
-		fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] user_before", user_before, (size_t)peek_n);
-#else
-	(void)user_before;
-	(void)user_after;
-	(void)peek_n;
-#endif
-
-	n = pipe_read(pipe, kbuf, req);
-	if (n <= 0)
+	/*
+	 * Portable in-syscall sleep (same contract as tty/poll):
+	 * process_arm_kernel_syscall_sleep only. Do NOT arm
+	 * process_arm_blocked_syscall_resume(..., 0) — that is wait4/user-iret
+	 * and triggers x86-only arch_switch rax==0 special-casing.
+	 */
+	for (;;)
 	{
-#if CONFIG_DEBUG_FASE50
-		klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] pipe_read_ret=%llx", (unsigned long long)((uint64_t)(int64_t)n));
-#endif
-		return;
+		if (waiting_read)
+		{
+			if (pipe->count > 0 || pipe->writers <= 0)
+				break;
+		}
+		else
+		{
+			if (pipe->readers <= 0 || pipe->count < PIPE_SIZE)
+				break;
+		}
+
+		if (proc->mode == USER_MODE)
+			process_arm_kernel_syscall_sleep(proc);
+		process_set_sched_state(proc, PROCESS_BLOCKED);
+		enable_interrupts();
+		sched_schedule_next();
+
+		if (proc->state != PROCESS_BLOCKED)
+			break;
 	}
 
-#if CONFIG_DEBUG_FASE50
-	fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] kbuf", kbuf, (size_t)n);
-#endif
+	if (proc->mode == USER_MODE)
+		process_restore_user_task_segments(proc);
 
-	if (!process_pgd(proc))
+	if (waiting_read)
+		pipe_fase49_note_read_wake(pipe);
+	if (pipe_waiters[slot].proc == proc)
 	{
-#if CONFIG_DEBUG_FASE50
-		klog_debug("PIPE", "CLASSIFY PIPE_WAKE_COPY_BAD_USERBUF");
-#endif
-		return;
+		pipe_waiters[slot].proc = NULL;
+		pipe_waiters[slot].pipe = NULL;
+		pipe_waiters[slot].waiting_read = 0;
 	}
-
-	copy_ret = copy_to_user_region_in_directory(process_pgd(proc), user_buf,
-						      kbuf, (size_t)n);
-#if CONFIG_DEBUG_FASE50
-	klog_debug_fmt("PIPE", "[IR0DBG50B][PIPE_WAKE] copy_ret=%llx copied=%llx resume_rax=%llx", (unsigned long long)((uint64_t)(int64_t)copy_ret), (unsigned long long)((uint64_t)(int64_t)n), (unsigned long long)((uint64_t)(int64_t)n));
-#endif
-
-	if (copy_ret != 0)
-	{
-#if CONFIG_DEBUG_FASE50
-		klog_debug("PIPE", "CLASSIFY PIPE_WAKE_COPY_BAD_USERBUF");
-#endif
-		return;
-	}
-
-#if CONFIG_DEBUG_FASE50
-	if (fase50b_peek_user(process_pgd(proc), user_buf, user_after, (size_t)peek_n) == 0)
-		fase50b_dump_bytes("[IR0DBG50B][PIPE_WAKE] user_after", user_after, (size_t)peek_n);
-#endif
-
-	proc->syscall_resume_rax = (uint64_t)n;
-#if CONFIG_DEBUG_FASE50
-	klog_debug("PIPE", "CLASSIFY PIPE_WAKE_COPY_OK");
-#endif
+	return 0;
 }
 
 void pipe_wake_all(pipe_t *pipe)
@@ -914,6 +879,7 @@ void pipe_wake_all(pipe_t *pipe)
 	for (i = 0; i < MAX_PIPE_WAITERS; i++)
 	{
 		struct pipe_waiter *w = &pipe_waiters[i];
+		process_t *proc;
 
 		if (!w->proc || w->pipe != pipe)
 			continue;
@@ -923,9 +889,15 @@ void pipe_wake_all(pipe_t *pipe)
 			if (pipe->count > 0 || pipe->writers <= 0)
 			{
 				pipe_fase49_note_read_wake(pipe);
-				if (w->proc && w->proc->mode == USER_MODE && w->proc->irq_frame_saved)
-					pipe_wake_stage_user_read(w->proc, pipe);
-				w->proc->state = PROCESS_READY;
+				/*
+				 * In-syscall resume only (matches tty wake). Do not
+				 * stage a user read here — conflicts with kernel sleep.
+				 */
+				proc = w->proc;
+				if (proc->mode == USER_MODE)
+					proc->irq_frame_saved = 0;
+				process_set_sched_state(proc, PROCESS_READY);
+				sched_promote_process(proc);
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
@@ -936,7 +908,11 @@ void pipe_wake_all(pipe_t *pipe)
 			if (pipe->readers <= 0 || pipe->count < PIPE_SIZE)
 			{
 				pipe_fase49_note_write_wake(pipe);
-				w->proc->state = PROCESS_READY;
+				proc = w->proc;
+				if (proc->mode == USER_MODE)
+					proc->irq_frame_saved = 0;
+				process_set_sched_state(proc, PROCESS_READY);
+				sched_promote_process(proc);
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
@@ -953,6 +929,7 @@ void pipe_wake_check(void)
 	{
 		struct pipe_waiter *w = &pipe_waiters[i];
 		pipe_t *pipe;
+		process_t *proc;
 
 		if (!w->proc || !w->pipe)
 			continue;
@@ -963,9 +940,14 @@ void pipe_wake_check(void)
 			if (pipe->count > 0 || pipe->writers <= 0)
 			{
 				pipe_fase49_note_read_wake(pipe);
-				if (w->proc && w->proc->mode == USER_MODE && w->proc->irq_frame_saved)
-					pipe_wake_stage_user_read(w->proc, pipe);
-				w->proc->state = PROCESS_READY;
+				proc = w->proc;
+				if (proc->mode == USER_MODE)
+					proc->irq_frame_saved = 0;
+				process_set_sched_state(proc, PROCESS_READY);
+				sched_promote_process(proc);
+				w->proc = NULL;
+				w->pipe = NULL;
+				w->waiting_read = 0;
 			}
 		}
 		else
@@ -973,7 +955,14 @@ void pipe_wake_check(void)
 			if (pipe->readers <= 0 || pipe->count < PIPE_SIZE)
 			{
 				pipe_fase49_note_write_wake(pipe);
-				w->proc->state = PROCESS_READY;
+				proc = w->proc;
+				if (proc->mode == USER_MODE)
+					proc->irq_frame_saved = 0;
+				process_set_sched_state(proc, PROCESS_READY);
+				sched_promote_process(proc);
+				w->proc = NULL;
+				w->pipe = NULL;
+				w->waiting_read = 0;
 			}
 		}
 	}

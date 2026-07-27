@@ -102,7 +102,7 @@ void priority_add_process(process_t *proc)
 
 	if (prio_already_queued(proc))
 	{
-		proc->state = PROCESS_READY;
+		process_set_sched_state(proc, PROCESS_READY);
 		prio_irq_restore(irq_flags);
 		kfree(node);
 		return;
@@ -117,7 +117,7 @@ void priority_add_process(process_t *proc)
 		band->tail = node;
 	}
 
-	proc->state = PROCESS_READY;
+	process_set_sched_state(proc, PROCESS_READY);
 	prio_irq_restore(irq_flags);
 }
 
@@ -256,7 +256,7 @@ void priority_promote_process(process_t *proc)
 		if (walk->process == proc)
 		{
 			prio_bands[b].curr = walk;
-			proc->state = PROCESS_READY;
+			process_set_sched_state(proc, PROCESS_READY);
 			break;
 		}
 	}

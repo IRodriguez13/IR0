@@ -15,7 +15,6 @@
 #include "process_internal.h"
 #include <ir0/mm_struct.h>
 #include <ir0/errno.h>
-#include <ir0/paging.h>
 #include <string.h>
 
 mm_struct_t *mm_create(void)
@@ -82,28 +81,7 @@ void process_mm_bind(process_t *p, mm_struct_t *mm)
 {
 	if (!p)
 		return;
-
 	p->mm = mm;
-	if (!mm)
-	{
-		p->page_directory = NULL;
-		p->owns_page_directory = 0;
-		p->mmap_list = NULL;
-		return;
-	}
-
-	p->page_directory = mm->page_directory;
-	/*
-	 * Mirror ownership: only the sole user with owns_tables tears down via
-	 * legacy paths; shared mm always clears the process-local owns flag.
-	 */
-	p->owns_page_directory = (mm->owns_tables && mm->refcount == 1) ? 1 : 0;
-	p->mmap_list = mm->mmap_list;
-	p->mmap_base = mm->mmap_base;
-	p->heap_start = mm->heap_start;
-	p->heap_end = mm->heap_end;
-	p->stack_start = mm->stack_start;
-	p->stack_size = mm->stack_size;
 }
 
 int process_mm_share(process_t *child, process_t *parent)
@@ -115,80 +93,18 @@ int process_mm_share(process_t *child, process_t *parent)
 
 	mm = parent->mm;
 	if (!mm)
-	{
-		/*
-		 * Legacy parent without mm object: wrap existing page tables.
-		 */
-		mm = mm_create();
-		if (!mm)
-			return -ENOMEM;
-		mm->page_directory = process_pgd(parent);
-		mm->owns_tables = process_mm_owns_tables(parent) ? 1 : 0;
-		mm->mmap_list = parent->mmap_list;
-		mm->mmap_base = parent->mmap_base;
-		mm->heap_start = parent->heap_start;
-		mm->heap_end = parent->heap_end;
-		mm->stack_start = parent->stack_start;
-		mm->stack_size = parent->stack_size;
-		process_mm_bind(parent, mm);
-	}
+		return -EINVAL;
 
 	(void)mm_get(mm);
 	process_mm_bind(child, mm);
 	return 0;
 }
 
-void process_mm_sync_to_process(process_t *p)
-{
-	mm_struct_t *mm;
-
-	if (!p)
-		return;
-	mm = p->mm;
-	if (!mm)
-		return;
-
-	p->page_directory = mm->page_directory;
-	p->owns_page_directory =
-		(mm->owns_tables && mm->refcount == 1) ? 1 : 0;
-	p->mmap_list = mm->mmap_list;
-	p->mmap_base = mm->mmap_base;
-	p->heap_start = mm->heap_start;
-	p->heap_end = mm->heap_end;
-	p->stack_start = mm->stack_start;
-	p->stack_size = mm->stack_size;
-}
-
-void process_mm_sync_from_process(process_t *p)
-{
-	mm_struct_t *mm;
-
-	if (!p)
-		return;
-	mm = p->mm;
-	if (!mm)
-		return;
-
-	/*
-	 * mm->page_directory is canonical; process_set_pgd() already keeps the
-	 * process mirror aligned. Only sync VMA/heap/stack cursors here.
-	 */
-	mm->mmap_list = p->mmap_list;
-	mm->mmap_base = p->mmap_base;
-	mm->heap_start = p->heap_start;
-	mm->heap_end = p->heap_end;
-	mm->stack_start = p->stack_start;
-	mm->stack_size = p->stack_size;
-}
-
 void process_mm_set_mmap_list(process_t *p, struct mmap_region *list)
 {
-	if (!p)
+	if (!p || !p->mm)
 		return;
-
-	p->mmap_list = list;
-	if (p->mm)
-		p->mm->mmap_list = list;
+	p->mm->mmap_list = list;
 }
 
 int process_mm_owns_tables(const process_t *p)
@@ -198,7 +114,12 @@ int process_mm_owns_tables(const process_t *p)
 	if (!p)
 		return 0;
 	mm = p->mm;
-	if (mm)
-		return (mm->owns_tables && mm->refcount == 1) ? 1 : 0;
-	return p->owns_page_directory ? 1 : 0;
+	if (!mm)
+		return 0;
+	return (mm->owns_tables && mm->refcount == 1) ? 1 : 0;
+}
+
+int process_mm_ok(const process_t *p)
+{
+	return (p && p->mm) ? 1 : 0;
 }

@@ -31,7 +31,7 @@ void arch_report_bad_kernel_ret_rip(uint64_t rip, task_t *task)
 	klog_debug_fmt("CTX", "CLASSIFY KERNEL_RET_BAD_RIP rip=%llx task=%llx proc=%llx current=%llx", (unsigned long long)(rip), (unsigned long long)((uint64_t)(uintptr_t)task), (unsigned long long)((uint64_t)(uintptr_t)p), (unsigned long long)((uint64_t)(uintptr_t)current_process));
 	if (p)
 	{
-		klog_debug_fmt("KERN", " pid=%x cs=%llx saved_rdi=%llx wait_blocked=%llx wait_target=%llx irq_frame=%llx sf_rip=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)((uint64_t)task_get_cs(&p->task)), (unsigned long long)(task_get_rdi(&p->task)), (unsigned long long)((uint64_t)p->wait_blocked), (unsigned long long)((uint64_t)(int64_t)p->wait_target_pid), (unsigned long long)((uint64_t)p->irq_frame_saved), (unsigned long long)(process_syscall_ip(p)));
+		klog_debug_fmt("KERN", " pid=%x cs=%llx saved_arg0=%llx wait_blocked=%llx wait_target=%llx irq_frame=%llx sf_rip=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)((uint64_t)task_get_cs(&p->task)), (unsigned long long)(task_get_arg0(&p->task)), (unsigned long long)((uint64_t)p->wait_blocked), (unsigned long long)((uint64_t)(int64_t)p->wait_target_pid), (unsigned long long)((uint64_t)p->irq_frame_saved), (unsigned long long)(process_syscall_ip(p)));
 	}
 	panicex("kernel_ret RIP not in .text", PANIC_KERNEL_BUG, __FILE__, __LINE__,
 		__func__);

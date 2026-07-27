@@ -61,8 +61,8 @@ static int d1_14_find_vma(struct process *p, uint64_t addr, uint64_t *lo,
 	if (!p || !lo || !hi)
 		return 0;
 
-	stack_lo = (uint64_t)(uintptr_t)p->stack_start;
-	stack_hi = stack_lo + (uint64_t)p->stack_size;
+	stack_lo = (uint64_t)(uintptr_t)process_stack_start(p);
+	stack_hi = stack_lo + (uint64_t)process_stack_size(p);
 	if (addr >= stack_lo && addr < stack_hi)
 	{
 		*lo = stack_lo;
@@ -70,14 +70,14 @@ static int d1_14_find_vma(struct process *p, uint64_t addr, uint64_t *lo,
 		return 1;
 	}
 
-	if (addr >= p->heap_start && addr < p->heap_end)
+	if (addr >= process_heap_start(p) && addr < process_heap_end(p))
 	{
-		*lo = p->heap_start;
-		*hi = p->heap_end;
+		*lo = process_heap_start(p);
+		*hi = process_heap_end(p);
 		return 1;
 	}
 
-	for (r = p->mmap_list; r != NULL; r = r->next)
+	for (r = process_mmap_list(p); r != NULL; r = r->next)
 	{
 		uint64_t start = (uint64_t)(uintptr_t)r->addr;
 		uint64_t end = start + (uint64_t)r->length;

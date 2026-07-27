@@ -175,6 +175,10 @@ report_issue() {
 	fi
 	if [ -n "$_apt" ]; then
 		print_install_hints "$_apt" "$_pac" "$_dnf"
+		# Machine-readable package triples for ensure-host-deps.sh
+		if [ -n "${IR0_DEPS_LIST_FILE:-}" ] && [ "$_kind" != "optional" ]; then
+			printf '%s\t%s\t%s\n' "$_apt" "$_pac" "$_dnf" >>"$IR0_DEPS_LIST_FILE"
+		fi
 	elif [ "$_kind" = "optional" ]; then
 		echo ""
 	fi

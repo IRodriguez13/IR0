@@ -650,9 +650,13 @@ int minix_fs_split_path(const char *pathname, char *parent_path,
   }
   if (!last_slash)
   {
-    // No hay barra, el archivo está en el directorio raíz (paths relativos se tratan como absolutos desde root)
+    size_t i;
+
+    /* Relative path → treat as under root. Caller buffer ≥ MINIX_NAME_LEN+1. */
     kstrncpy(parent_path, "/", 2);
-    kstrncpy(filename, pathname, MINIX_NAME_LEN);
+    for (i = 0; i < MINIX_NAME_LEN && pathname[i]; i++)
+      filename[i] = pathname[i];
+    filename[i] = '\0';
     return 0;
   }
 
@@ -669,8 +673,15 @@ int minix_fs_split_path(const char *pathname, char *parent_path,
     parent_path[parent_len] = '\0';
   }
 
-  // Copiar el nombre del archivo
-  kstrncpy(filename, last_slash + 1, MINIX_NAME_LEN);
+  /* Up to 14 chars + NUL (classic MINIX name field width). */
+  {
+    const char *base = last_slash + 1;
+    size_t i;
+
+    for (i = 0; i < MINIX_NAME_LEN && base[i]; i++)
+      filename[i] = base[i];
+    filename[i] = '\0';
+  }
 
   return 0;
 }
@@ -690,9 +701,12 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
     return -EINVAL; // Invalid parameters
   }
 
-  // Check if filename is too long or empty
+  /*
+   * Classic MINIX v1: name field is 14 bytes (may be unterminated if full).
+   * Reject only names longer than MINIX_NAME_LEN (not >=).
+   */
   size_t name_len = kstrlen(filename);
-  if (name_len == 0 || name_len >= MINIX_NAME_LEN)
+  if (name_len == 0 || name_len > MINIX_NAME_LEN)
   {
     return -EINVAL; // Invalid filename length
   }
@@ -731,11 +745,9 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
       {
         // Initialize the entry
         entries[i].inode = inode_num;
-        size_t copy_len = name_len < (MINIX_NAME_LEN - 1) ? name_len : (MINIX_NAME_LEN - 1);
-        kmemcpy(entries[i].name, filename, copy_len);
-        entries[i].name[copy_len] = '\0';
-        if (copy_len < MINIX_NAME_LEN - 1)
-          kmemset(entries[i].name + copy_len + 1, 0, MINIX_NAME_LEN - copy_len - 1);
+        kmemcpy(entries[i].name, filename, name_len);
+        if (name_len < MINIX_NAME_LEN)
+          kmemset(entries[i].name + name_len, 0, MINIX_NAME_LEN - name_len);
 
         // Write the updated block back
         if (minix_write_block(zone, block_buffer) != 0)
@@ -773,11 +785,9 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
 
       // Add the new entry as the first one
       entries[0].inode = inode_num;
-      size_t copy_len = name_len < (MINIX_NAME_LEN - 1) ? name_len : (MINIX_NAME_LEN - 1);
-      kmemcpy(entries[0].name, filename, copy_len);
-      entries[0].name[copy_len] = '\0';
-      if (copy_len < MINIX_NAME_LEN - 1)
-        kmemset(entries[0].name + copy_len + 1, 0, MINIX_NAME_LEN - copy_len - 1);
+      kmemcpy(entries[0].name, filename, name_len);
+      if (name_len < MINIX_NAME_LEN)
+        kmemset(entries[0].name + name_len, 0, MINIX_NAME_LEN - name_len);
 
       // Write the new zone
       if (minix_write_block(new_zone, block_buffer) != 0)
@@ -2533,7 +2543,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   if (!(parent_inode.i_mode & MINIX_IFDIR))
     return -ENOTDIR;
 
-  if (kstrlen(filename) >= MINIX_NAME_LEN)
+  if (kstrlen(filename) > MINIX_NAME_LEN)
     return -ENAMETOOLONG;
 
   existing = minix_fs_find_dir_entry(&parent_inode, filename);
@@ -2612,8 +2622,15 @@ int minix_fs_rm(const char *path)
     return -EPERM;
   }
 
-  minix_inode_t *file_inode = minix_fs_find_inode(path);
-  if (!file_inode)
+  /*
+   * Snapshot child + parent: find_inode() returns a shared static buffer.
+   * vfs_rename is link()+unlink(); unlink must decrement i_nlinks and only
+   * free the inode at 0. Freeing while another name still points at the
+   * inode (the rename destination) lets the next creat() reuse it — firstboot
+   * then left /etc/shadow,/etc/group,/etc/fb.done as hardlinks to "ok\n".
+   */
+  uint16_t file_inode_num = minix_fs_get_inode_number(path);
+  if (file_inode_num == 0)
   {
     char error_msg[VFS_PATH_MAX];
     snprintf(error_msg, sizeof(error_msg), "rm: '%s': No such file\n", path);
@@ -2621,7 +2638,11 @@ int minix_fs_rm(const char *path)
     return -ENOENT;
   }
 
-  if (file_inode->i_mode & MINIX_IFDIR)
+  minix_inode_t file_inode;
+  if (minix_read_inode(file_inode_num, &file_inode) != 0)
+    return -EIO;
+
+  if (file_inode.i_mode & MINIX_IFDIR)
     return -EISDIR;
 
   char parent_path[VFS_PATH_MAX];
@@ -2640,23 +2661,8 @@ int minix_fs_rm(const char *path)
     return -ENOENT;
   }
 
-  /*
-   * Snapshot the parent before any further minix_fs_find_inode() call:
-   * the lookup returns a pointer into a shared static buffer that
-   * minix_fs_get_inode_number(path) below clobbers with the *child*
-   * inode. Without this copy, minix_fs_remove_dir_entry() would scan the
-   * wrong inode's zones and return -ENOENT, surfacing as a spurious EIO
-   * ("Could not remove directory entry") on runsv supervise cleanup.
-   */
   minix_inode_t parent_inode;
   kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
-
-  uint16_t file_inode_num = minix_fs_get_inode_number(path);
-  if (file_inode_num == 0)
-  {
-    typewriter_vga_print("Error: Could not get inode number\n", 0x0C);
-    return -ENOENT;
-  }
 
   if (minix_fs_remove_dir_entry(&parent_inode, filename) != 0)
   {
@@ -2664,9 +2670,24 @@ int minix_fs_rm(const char *path)
     return -EIO;
   }
 
-  if (minix_fs_free_inode(file_inode_num) != 0)
+  if (file_inode.i_nlinks > 0)
+    file_inode.i_nlinks--;
+
+  if (file_inode.i_nlinks == 0)
   {
-    typewriter_vga_print("Error: Could not free inode\n", 0x0C);
+    minix_inode_truncate_zones(&file_inode, file_inode_num,
+			       file_inode.i_size, 0);
+    file_inode.i_size = 0;
+    if (minix_fs_write_inode(file_inode_num, &file_inode) != 0)
+      return -EIO;
+    if (minix_fs_free_inode(file_inode_num) != 0)
+    {
+      typewriter_vga_print("Error: Could not free inode\n", 0x0C);
+      return -EIO;
+    }
+  }
+  else if (minix_fs_write_inode(file_inode_num, &file_inode) != 0)
+  {
     return -EIO;
   }
 

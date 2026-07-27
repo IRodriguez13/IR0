@@ -351,7 +351,7 @@ static struct mmap_region *probe_vma_containing(struct process *p, uint64_t fa)
 {
 	struct mmap_region *r;
 
-	for (r = p->mmap_list; r != NULL; r = r->next)
+	for (r = process_mmap_list(p); r != NULL; r = r->next)
 	{
 		uintptr_t base = (uintptr_t)r->addr;
 		uint64_t end = base + (uint64_t)r->length;
@@ -419,15 +419,15 @@ static void probe_dump_all_vmas(struct process *p)
 	if (!p)
 		return;
 
-	hs = p->heap_start;
-	he = p->heap_end;
-	ss = p->stack_start;
-	se = p->stack_start + p->stack_size;
+	hs = process_heap_start(p);
+	he = process_heap_end(p);
+	ss = process_stack_start(p);
+	se = process_stack_start(p) + process_stack_size(p);
 
 	probe_dump_vma_region("heap", hs, he, PROT_READ | PROT_WRITE, -1, "all");
 	probe_dump_vma_region("stack", ss, se, PROT_READ | PROT_WRITE, -1, "all");
 
-	for (r = p->mmap_list; r != NULL; r = r->next)
+	for (r = process_mmap_list(p); r != NULL; r = r->next)
 	{
 		uint64_t start = (uint64_t)(uintptr_t)r->addr;
 		uint64_t end = start + (uint64_t)r->length;
@@ -459,14 +459,14 @@ static void probe_dump_vma_window(struct process *p, uint64_t fa)
 		       (unsigned long long)fa, (unsigned)(uint32_t)p->task.pid,
 		       p->comm[0] ? p->comm : "(none)");
 
-	if (fa >= p->heap_start && fa < p->heap_end)
+	if (fa >= process_heap_start(p) && fa < process_heap_end(p))
 		klog_debug_fmt("PROBE", "[PROBE][VMA] IN_HEAP=1");
-	else if (fa >= p->stack_start && fa < p->stack_start + p->stack_size)
+	else if (fa >= process_stack_start(p) && fa < process_stack_start(p) + process_stack_size(p))
 		klog_debug_fmt("PROBE", "[PROBE][VMA] IN_STACK=1");
 	else
 		klog_debug_fmt("PROBE", "[PROBE][VMA] IN_HEAP=0 IN_STACK=0");
 
-	for (r = p->mmap_list; r != NULL; r = r->next)
+	for (r = process_mmap_list(p); r != NULL; r = r->next)
 	{
 		uint64_t start = (uint64_t)(uintptr_t)r->addr;
 		uint64_t end = start + (uint64_t)r->length;
@@ -666,10 +666,10 @@ void ktm_probe_diag_syscall_post(uint64_t nr, int64_t ret)
 				off = probe_line_append(
 					line, sizeof(line), off,
 					" heap=[%llx,%llx)",
-					(unsigned long long)current_process
-						->heap_start,
-					(unsigned long long)current_process
-						->heap_end);
+					(unsigned long long)process_heap_start(
+						current_process),
+					(unsigned long long)process_heap_end(
+						current_process));
 			}
 			break;
 		default:
