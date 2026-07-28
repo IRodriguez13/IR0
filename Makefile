@@ -293,10 +293,16 @@ else
 QEMU_NET_ALL =
 endif
 
-# Audio: Sound Blaster 16 + Adlib (QEMU 8+ needs audiodev; ISA on default pc)
-QEMU_AUDIO_DEV = -audiodev none,id=snd0
+# Audio: Sound Blaster 16 + Adlib (QEMU 8+ needs audiodev; ISA on default pc).
+# Default backend is PulseAudio so the Linux host hears guest PCM (Doom /dev/audio).
+# CI / headless: QEMU_AUDIO_BACKEND=none. Alternatives: alsa, sdl, pipewire.
+QEMU_AUDIO_BACKEND ?= pa
+QEMU_AUDIO_DEV = -audiodev $(QEMU_AUDIO_BACKEND),id=snd0
 QEMU_AUDIO_SB16 = $(QEMU_AUDIO_DEV) -device sb16,audiodev=snd0
 QEMU_AUDIO_ADLIB = -device adlib,audiodev=snd0
+# Silent audiodev for automated smokes (no host mixer required).
+QEMU_AUDIO_DEV_SILENT = -audiodev none,id=snd0
+QEMU_AUDIO_SB16_SILENT = $(QEMU_AUDIO_DEV_SILENT) -device sb16,audiodev=snd0
 ifneq ($(CONFIG_ENABLE_SOUND),n)
 QEMU_AUDIO_ALL = $(QEMU_AUDIO_SB16) $(QEMU_AUDIO_ADLIB)
 else

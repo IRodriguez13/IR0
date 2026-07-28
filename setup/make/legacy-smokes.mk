@@ -1113,7 +1113,7 @@ smoke-fase55d-doomgeneric: build-runit build-init-fase55d-doomgeneric kernel-x64
 		--done FASE55D_DOOMGENERIC_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		$(QEMU_AUDIO_SB16) \
+		$(QEMU_AUDIO_SB16_SILENT) \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "RUNIT_STAGE2_OK" $(FASE55D_DOOMGENERIC_LOG) && \
