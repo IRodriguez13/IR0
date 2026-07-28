@@ -1262,7 +1262,7 @@ build-init-fase55d-doomgeneric:
 	@echo "  HARNESS Building FASE55D real doomgeneric ($(FASE55D_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DIR0_DOOM_PORT \
+		-DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(INIT_FASE55D_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \
@@ -1278,7 +1278,7 @@ build-fase55e-doom-interactive:
 	@echo "  DOOM    Building FASE55E interactive doomgeneric ($(FASE55E_DOOM_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT \
+		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(INIT_FASE55D_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \

@@ -35,16 +35,21 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_mm_mirror_contract.c \
 	test_netdev_contract.c \
 	test_sched_backend_contract.c \
-	test_block_backend_contract.c
+	test_block_backend_contract.c \
+	test_matrix_capture.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
 	host_sysfs_net_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
-	host_ps2_set1.o host_ps2_mouse_pkt.o
+	host_ps2_set1.o host_ps2_mouse_pkt.o \
+	host_matrix_capture.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
+
+IR0_USERSPACE_ROOT ?= $(abspath $(KERNEL_ROOT)/../IR0-userspace)
+MATRIX_CAPTURE_CFLAGS = $(BASE_CFLAGS) -I$(IR0_USERSPACE_ROOT)/smoke
 
 .PHONY: all clean memsafe run
 
@@ -97,6 +102,12 @@ host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/includes/ir0/ps2_mouse_pkt.c
 
 host_rtc_calendar.o: $(KERNEL_ROOT)/includes/ir0/rtc_calendar.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+host_matrix_capture.o: $(IR0_USERSPACE_ROOT)/smoke/matrix_capture.c
+	$(CC) $(MATRIX_CAPTURE_CFLAGS) -c -o $@ $<
+
+test_matrix_capture.o: test_matrix_capture.c
+	$(CC) $(MATRIX_CAPTURE_CFLAGS) -c -o $@ $<
 
 test_rtc_calendar.o: test_rtc_calendar.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<

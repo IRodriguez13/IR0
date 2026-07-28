@@ -8,6 +8,21 @@ For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** 
 
 ## [Unreleased]
 
+### Doom T2 audio/mouse + ESC + TinyCC `/lib/tcc` (2026-07-28)
+
+- doomgeneric IR0: `EV_REL`/buttons → `ev_mouse`; PCM to `/dev/audio` (no `-nosound`);
+  smoke requires `MOUSE_CAPS` / `AUDIO_OK` / `AUDIO_WRITE_OK` with QEMU SB16.
+- PS/2 set-1 ESC (`0x01`) emits ASCII `0x1b` for BusyBox `vi`.
+- TinyCC staging uses absolute `--tccdir=/lib/tcc`; `inject_devtools_minix.sh`
+  verifies `libtcc1.a` / `libc.a` / `crt*` on disk.
+- Docs: [`testing/DOOM_FASE55D.md`](testing/DOOM_FASE55D.md), [`USERSPACE.md`](USERSPACE.md),
+  [`STABLE.md`](STABLE.md).
+
+### BusyBox matrix capture (2026-07-28)
+
+- Drain-to-EOF + streaming needles; host `test_matrix_capture`; QEMU `-m 1024M`.
+  See [`testing/BUSYBOX_MATRIX.md`](testing/BUSYBOX_MATRIX.md).
+
 ### Kernel / userspace tree boundary (2026-07-25)
 
 - Sibling **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)** is the
