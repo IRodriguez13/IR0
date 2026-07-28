@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DISK="${1:-${ROOT}/disk.img}"
 INJECT="${ROOT}/scripts/inject_init_minix.py"
 BIN="${IR0_KEN_DOOM_BIN:-${ROOT}/setup/pid1/fase55e_doom_interactive}"
-WAD="${REAL_WAD_PATH:-/home/ivanr013/Escritorio/universal-doom/DOOM1.WAD}"
+WAD="${REAL_WAD_PATH:-}"
 
 if [ "${IR0_INSTALL_KEN_GAMES:-1}" = "0" ]; then
 	echo "  SKIP    ken/games (IR0_INSTALL_KEN_GAMES=0)"
@@ -40,13 +40,13 @@ python3 "${INJECT}" --mode 0755 "${DISK}" "${BIN}" usr/ken/games/doom
 # PATH-visible name (BusyBox which / usr/bin)
 python3 "${INJECT}" --mode 0755 "${DISK}" "${BIN}" usr/bin/doom
 
-if [ -f "${WAD}" ]; then
+if [ -n "${WAD}" ] && [ -f "${WAD}" ]; then
 	echo "  KEN     /usr/ken/games/doom1.wad ← ${WAD}"
 	python3 "${INJECT}" --mode 0644 "${DISK}" "${WAD}" usr/ken/games/doom1.wad
 	# Compat path still used by older smokes
 	python3 "${INJECT}" --mode 0644 "${DISK}" "${WAD}" usr/share/doom/doom1.wad
 else
-	echo "  WARN    ken/games: no IWAD at REAL_WAD_PATH=${WAD}" >&2
+	echo "  WARN    ken/games: no IWAD (set REAL_WAD_PATH=/path/to/doom1.wad)" >&2
 fi
 
 echo "✓ inject_ken_games_minix OK"

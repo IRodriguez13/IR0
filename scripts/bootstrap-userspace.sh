@@ -36,6 +36,15 @@ echo "  userspace  ${USERSPACE_ROOT}"
 chmod +x "${ROOT}/scripts/ensure-host-deps.sh" "${ROOT}/scripts/deptest.sh"
 PROFILE=userspace "${ROOT}/scripts/ensure-host-deps.sh"
 
+# Product .config — clean clones have none (gitignored). Match SETUP.md.
+if [ ! -f "${ROOT}/.config" ]; then
+	echo "  CONFIG    make defconfig (no .config yet)"
+	make -s defconfig
+fi
+
+# Skip Doom/IWAD inject on the default first-boot path (override with =1).
+export IR0_INSTALL_KEN_GAMES="${IR0_INSTALL_KEN_GAMES:-0}"
+
 if [ ! -f "${USERSPACE_ROOT}/Makefile" ]; then
 	parent="$(dirname "${USERSPACE_ROOT}")"
 	mkdir -p "${parent}"
@@ -70,5 +79,6 @@ Sibling distro ready (runit PID1 + BusyBox, profile=${PROFILE}).
 Next:  make run
 On first boot: create your username + password (used for login and doas).
 Deps:  IR0_DEPS_INSTALL=ask|yes|never (default ask) — see scripts/ensure-host-deps.sh
+Doom:  IR0_INSTALL_KEN_GAMES=1 make first-boot   # optional IWAD via REAL_WAD_PATH
 Docs:  SETUP.md, Documentation/USERSPACE.md
 EOF
