@@ -19,6 +19,10 @@ test -x scripts/bootstrap-isd.sh && ok "A bootstrap-isd executable" || bad "A ex
 grep -q 'PROFILE="$(ISD_PROFILE)"' scripts/make/isd.mk && ok "A PROFILE to ISD make" || bad "A PROFILE prop"
 grep -q 'run-isd' Makefile && ok "D run → run-isd" || bad "D run"
 grep -q 'images/\$(ISD_PROFILE)/disk.img' scripts/make/isd.mk && ok "D per-profile disk" || bad "D path"
+grep -q 'ensure-isd-disk' scripts/make/isd.mk \
+	&& ok "D ensure-isd-disk target" || bad "D no ensure-isd-disk"
+grep -q 'ensure-isd-disk' Makefile \
+	&& ok "D run-* auto-ensure disk" || bad "D run still hard-fails missing disk"
 # Bugbot: run-console must boot ISD disk (not hard-dep load-userspace-runit).
 if grep -E '^run-console:.*load-userspace-runit' Makefile >/dev/null; then
 	bad "D run-console still deps load-userspace-runit"
