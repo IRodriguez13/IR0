@@ -4,14 +4,24 @@
 # QEMU 8+ requires an audiodev before -device sb16/adlib.
 # Override QEMU_AUDIO_* in the top Makefile before including this file if needed.
 
+# Prefer host playback (pa). Smokes should pass QEMU_AUDIO_BACKEND=none or use *_SILENT.
+ifndef QEMU_AUDIO_BACKEND
+QEMU_AUDIO_BACKEND = pa
+endif
 ifndef QEMU_AUDIO_DEV
-QEMU_AUDIO_DEV = -audiodev none,id=snd0
+QEMU_AUDIO_DEV = -audiodev $(QEMU_AUDIO_BACKEND),id=snd0
 endif
 ifndef QEMU_AUDIO_SB16
 QEMU_AUDIO_SB16 = $(QEMU_AUDIO_DEV) -device sb16,audiodev=snd0
 endif
 ifndef QEMU_AUDIO_ADLIB
 QEMU_AUDIO_ADLIB = -device adlib,audiodev=snd0
+endif
+ifndef QEMU_AUDIO_DEV_SILENT
+QEMU_AUDIO_DEV_SILENT = -audiodev none,id=snd0
+endif
+ifndef QEMU_AUDIO_SB16_SILENT
+QEMU_AUDIO_SB16_SILENT = $(QEMU_AUDIO_DEV_SILENT) -device sb16,audiodev=snd0
 endif
 ifndef QEMU_AUDIO_ALL
 ifneq ($(CONFIG_ENABLE_SOUND),n)
@@ -35,7 +45,7 @@ smoke-sb16-probe: kernel-x64-userspace.iso
 		--done SB16_DSP_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		$(QEMU_AUDIO_ALL) \
+		$(QEMU_AUDIO_SB16_SILENT) -device adlib,audiodev=snd0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK; \
 	if grep -q "SB16_DSP_OK" $(SB16_PROBE_LOG) && \

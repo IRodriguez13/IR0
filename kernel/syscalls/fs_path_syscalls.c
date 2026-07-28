@@ -35,6 +35,7 @@
 #include <ir0/utsname_info.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>
+#include <ir0/statfs.h>
 #include <ir0/memfd.h>
 #include <ir0/posix_shm.h>
 #include <stddef.h>
@@ -50,7 +51,13 @@ static void process_cwd_ensure_absolute(process_t *proc)
   proc->cwd[sizeof(proc->cwd) - 1] = '\0';
 }
 
-int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
+/*
+ * Linux mount(2): mount(source, target, fstype, flags, data).
+ * Remount: flags & MS_REMOUNT — source/fstype/data ignored (man7 mount.2).
+ * Legacy IR0 recovery still accepts mount("remount", path, "ro"|"rw", 0, NULL).
+ */
+int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
+		  unsigned long flags, const void *data)
 {
   char mountpoint_resolved[256];
   char dev_copy[256];
@@ -62,18 +69,15 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   int dev_is_pseudo = 0;
   int rc;
 
+  (void)data;
+
   if (!current_process)
     return -ESRCH;
 
-  if (!dev || !mountpoint)
+  if (!mountpoint)
     return -EFAULT;
 
-  /* Validate arguments are in userspace (for USER_MODE processes) */
-  if (validate_userspace_string(dev, 256) != 0)
-    return -EFAULT;
   if (validate_userspace_string(mountpoint, 256) != 0)
-    return -EFAULT;
-  if (fstype && validate_userspace_string(fstype, 32) != 0)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(mountpoint, mountpoint_resolved,
@@ -82,6 +86,18 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   if (rc != 0)
     return rc;
   mount_path = mountpoint_resolved;
+
+  /* Linux remount via flags (BusyBox umount -r, mount -o remount,ro). */
+  if (flags & IR0_MS_REMOUNT)
+    return vfs_remount(mount_path, flags);
+
+  if (!dev)
+    return -EFAULT;
+
+  if (validate_userspace_string(dev, 256) != 0)
+    return -EFAULT;
+  if (fstype && validate_userspace_string(fstype, 32) != 0)
+    return -EFAULT;
 
   if (copy_from_user_cstring(dev_copy, sizeof(dev_copy), dev) != 0)
     return -EFAULT;
@@ -97,10 +113,17 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     mount_fstype = CONFIG_ROOT_FILESYSTEM;
   }
 
-  /* tmpfs accepts pseudo device strings for Unix-like parity (e.g. none). */
+  /* tmpfs / 9p accept pseudo device strings (none, mount_tag, …). */
   if (strcmp(mount_fstype, "tmpfs") == 0 &&
       (strcmp(dev_copy, "none") == 0 || strcmp(dev_copy, "tmpfs") == 0))
   {
+    dev_is_pseudo = 1;
+    dev_path = dev_copy;
+  }
+  else if (strcmp(mount_fstype, "9p") == 0 &&
+           dev_copy[0] != '\0' && strchr(dev_copy, '/') == NULL)
+  {
+    /* QEMU virtio-9p mount_tag (e.g. ir0share, dennis). */
     dev_is_pseudo = 1;
     dev_path = dev_copy;
   }
@@ -113,19 +136,22 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     dev_path = dev_resolved;
   }
 
-  /* Remount convention for the 3-arg IR0 mount ABI (recovery RO/RW). */
+  /* Legacy string remount for IR0 recovery helpers. */
   if (strcmp(dev_copy, "remount") == 0)
   {
-    unsigned long flags = IR0_MS_REMOUNT;
+    unsigned long rflags = IR0_MS_REMOUNT;
 
     if (strcmp(mount_fstype, "ro") == 0 ||
         strcmp(mount_fstype, "remount,ro") == 0)
-      flags |= IR0_MS_RDONLY;
+      rflags |= IR0_MS_RDONLY;
     else if (strcmp(mount_fstype, "rw") != 0 &&
              strcmp(mount_fstype, "remount,rw") != 0)
       return -EINVAL;
-    return vfs_remount(mount_path, flags);
+    return vfs_remount(mount_path, rflags);
   }
+
+  if (flags & IR0_MS_UNSUPPORTED)
+    return -EINVAL;
 
   /* Validate device path unless pseudo device was allowed. */
   if (!dev_is_pseudo && (dev_path[0] != '/' || strlen(dev_path) >= 256))
@@ -166,7 +192,14 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     return rc;
   }
 
-  return rc;
+  if (flags & IR0_MS_RDONLY)
+  {
+    rc = vfs_remount(mount_path, IR0_MS_REMOUNT | IR0_MS_RDONLY);
+    if (rc < 0)
+      return rc;
+  }
+
+  return 0;
 }
 
 int64_t sys_umount(const char *target, int flags)
@@ -701,4 +734,58 @@ int64_t sys_ftruncate(int fd, off_t length)
     return -EINVAL;
 
   return vfs_truncate(path, (size_t)length);
+}
+
+int64_t sys_statfs(const char *pathname, void *buf)
+{
+	char resolved[256];
+	struct ir0_statfs kst;
+	int64_t rc;
+
+	if (!current_process || !pathname || !buf)
+		return -EFAULT;
+	if (validate_userspace_buffer(buf, sizeof(kst)) != 0)
+		return -EFAULT;
+
+	rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+				   current_process->cwd);
+	if (rc != 0)
+		return rc;
+
+	rc = vfs_statfs(resolved, &kst);
+	if (rc != 0)
+		return rc;
+	if (copy_to_user(buf, &kst, sizeof(kst)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+int64_t sys_fstatfs(int fd, void *buf)
+{
+	fd_entry_t *fd_table;
+	struct ir0_statfs kst;
+	const char *path;
+	int rc;
+
+	if (!current_process || !buf)
+		return -EFAULT;
+	if (validate_userspace_buffer(buf, sizeof(kst)) != 0)
+		return -EFAULT;
+	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+		return -EBADF;
+
+	fd_table = get_process_fd_table();
+	if (!fd_table || !fd_table[fd].in_use)
+		return -EBADF;
+
+	path = fd_table[fd].path;
+	if (!path || path[0] != '/')
+		return -EBADF;
+
+	rc = vfs_statfs(path, &kst);
+	if (rc != 0)
+		return rc;
+	if (copy_to_user(buf, &kst, sizeof(kst)) != 0)
+		return -EFAULT;
+	return 0;
 }

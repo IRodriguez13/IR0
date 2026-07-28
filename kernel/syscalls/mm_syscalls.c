@@ -207,6 +207,9 @@ static uintptr_t mm_find_free_va(uint64_t *pml4, process_t *proc, uintptr_t hint
 	{
 		if ((hint & (PAGE_SIZE_4KB - 1)) != 0)
 			return 0;
+		if (hint < USER_MMAP_START ||
+		    hint + length > USER_MMAP_END || hint + length < hint)
+			return 0;
 		if (!is_user_address((void *)(uintptr_t)hint, length))
 			return 0;
 		if (proc && process_user_va_range_overlaps(proc, hint, length))
@@ -961,6 +964,9 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
    */
   else if (addr != NULL &&
            (hint_addr & (PAGE_SIZE_4KB - 1)) == 0 &&
+           hint_addr >= USER_MMAP_START &&
+           hint_addr + length <= USER_MMAP_END &&
+           hint_addr + length >= hint_addr &&
            is_user_address(addr, length))
   {
     bool collision = false;

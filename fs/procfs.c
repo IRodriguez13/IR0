@@ -933,7 +933,7 @@ int proc_partitions_read(char *buf, size_t count)
     return (int)off;
 }
 
-/* /proc/mounts: one line per VFS mount — device path fstype rw 0 0 */
+/* /proc/mounts: one line per VFS mount — device path fstype ro|rw 0 0 */
 int proc_mounts_read(char *buf, size_t count)
 {
     if (VALIDATE_BUFFER(buf, count) != 0)
@@ -944,9 +944,10 @@ int proc_mounts_read(char *buf, size_t count)
     for (struct vfs_mount *m = vfs_get_mounts(); m && off < count; m = m->next) {
         const char *dev = (m->dev[0] != '\0') ? m->dev : "none";
         const char *fst = (m->fs && m->fs->name) ? m->fs->name : "unknown";
+        const char *opts = (m->flags & IR0_MS_RDONLY) ? "ro" : "rw";
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-                         "%s %s %s rw 0 0\n",
-                         dev, m->path, fst);
+                         "%s %s %s %s 0 0\n",
+                         dev, m->path, fst, opts);
         if (n <= 0 || (size_t)n >= count - off)
             break;
         off += (size_t)n;

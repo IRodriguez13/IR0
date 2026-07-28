@@ -1393,7 +1393,7 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
     return open_ret;
   }
 
-  if (is_heart_path(resolved))
+  if (is_heart_path(resolved) && !heart_is_dennis_vfs_path(resolved))
   {
     char canon[256];
 

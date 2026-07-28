@@ -293,10 +293,16 @@ else
 QEMU_NET_ALL =
 endif
 
-# Audio: Sound Blaster 16 + Adlib (QEMU 8+ needs audiodev; ISA on default pc)
-QEMU_AUDIO_DEV = -audiodev none,id=snd0
+# Audio: Sound Blaster 16 + Adlib (QEMU 8+ needs audiodev; ISA on default pc).
+# Default backend is PulseAudio so the Linux host hears guest PCM (Doom /dev/audio).
+# CI / headless: QEMU_AUDIO_BACKEND=none. Alternatives: alsa, sdl, pipewire.
+QEMU_AUDIO_BACKEND ?= pa
+QEMU_AUDIO_DEV = -audiodev $(QEMU_AUDIO_BACKEND),id=snd0
 QEMU_AUDIO_SB16 = $(QEMU_AUDIO_DEV) -device sb16,audiodev=snd0
 QEMU_AUDIO_ADLIB = -device adlib,audiodev=snd0
+# Silent audiodev for automated smokes (no host mixer required).
+QEMU_AUDIO_DEV_SILENT = -audiodev none,id=snd0
+QEMU_AUDIO_SB16_SILENT = $(QEMU_AUDIO_DEV_SILENT) -device sb16,audiodev=snd0
 ifneq ($(CONFIG_ENABLE_SOUND),n)
 QEMU_AUDIO_ALL = $(QEMU_AUDIO_SB16) $(QEMU_AUDIO_ADLIB)
 else
@@ -313,6 +319,15 @@ QEMU_SERIAL_COM1 = -serial stdio
 QEMU_ISA_DEBUG_EXIT = -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
 QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT)
+
+# Full host IR0 tree at guest /heart/dennis/src (writable; long names OK).
+# Default on for interactive run*; IR0_DENNIS_9P=0 to skip.
+IR0_DENNIS_9P ?= 1
+QEMU_DENNIS_9P = -fsdev local,id=dennisfs,path=$(KERNEL_ROOT),security_model=none \
+	-device virtio-9p-pci,fsdev=dennisfs,mount_tag=dennis,disable-modern=on
+ifeq ($(IR0_DENNIS_9P),0)
+QEMU_DENNIS_9P =
+endif
 
 QEMU_64_FLAGS = -cdrom
 
@@ -1230,12 +1245,15 @@ windows-clean win-clean:
 # Note: This target does NOT call clean-net or rebuild with special flags
 # It simply runs the existing kernel ISO. Use 'make run-tap' for TAP networking.
 # Human console: minimal distro = runit + BusyBox (sibling IR0-userspace).
-# Optional in-guest TinyCC/GNU make: IR0_WITH_DEVTOOLS=1 make run
+# Optional in-guest TinyCC/GNU make: default ON (tcc needs /lib/tcc).
+# Disable with: IR0_WITH_DEVTOOLS=0 make run
+# Product login: minimal + firstboot wizard (not development autologin).
+# Lab autologin: IR0_PRODUCT_PROFILE=development make load-userspace-devtools
 # Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (document in SETUP.md).
 #
 # First time (no sibling yet): make first-boot && make run
 run: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
+	@if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
 		$(MAKE) -s load-userspace-devtools; \
 	else \
 		$(MAKE) -s load-userspace-runit; \
@@ -1243,15 +1261,16 @@ run: kernel-x64-userspace.iso
 	@echo "Running IR0/Unix (human console — clean GTK)..."
 	@echo "   Hardware: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2, VGA"
 	@echo "   Ungrab input: Ctrl+Alt+G"
-	@echo "   Distro: runit + BusyBox (devtools: IR0_WITH_DEVTOOLS=1)"
+	@echo "   Distro: minimal + firstboot (devtools ON; IR0_WITH_DEVTOOLS=0 to skip)"
+	@echo "   Dennis: virtfs mount_tag=dennis → /heart/dennis/src (IR0_DENNIS_9P=0 to skip)"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
+		$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
 		-m 512M -no-reboot \
 		$(QEMU_DISPLAY)
 
 # Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
 run-debug: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
+	@if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
 		$(MAKE) -s load-userspace-devtools; \
 	else \
 		$(MAKE) -s load-userspace-runit; \
@@ -1263,7 +1282,7 @@ run-debug: kernel-x64-userspace.iso
 	@echo "Ungrab input: Ctrl+Alt+G"
 	@echo "Press Ctrl+C to stop"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
+		$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
 		-m 512M -no-reboot -no-shutdown \
 		$(QEMU_DISPLAY_GTK_DEBUG) \
 		-serial stdio \
@@ -1274,7 +1293,7 @@ run-debug: kernel-x64-userspace.iso
 # Human interactive with serial in-terminal: make run-debug.
 
 run-fullscreen: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
+	@if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
 		$(MAKE) -s load-userspace-devtools; \
 	else \
 		$(MAKE) -s load-userspace-runit; \
@@ -1282,7 +1301,7 @@ run-fullscreen: kernel-x64-userspace.iso
 	@echo "Running IR0/Unix fullscreen GTK..."
 	@echo "   Ungrab input: Ctrl+Alt+G"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
+		$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
 		-m 512M -no-reboot \
 		-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME)
 
@@ -1300,7 +1319,7 @@ run-console: kernel-x64-userspace.iso load-userspace-runit
 	@echo "Running IR0/Unix console (runit PID1 → getty/ash)..."
 	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
+		$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
 		-m 512M -no-reboot -no-shutdown \
 		$(QEMU_NGRAPHIC)
 
@@ -2355,23 +2374,38 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 			IR0_GUEST_MANDOC_DIR=$${IR0_GUEST_MANDOC_DIR-}; \
 		printf '%s\n' "$$PROFILE" > "$$STAMP"; \
 	fi
+	@$(MAKE) -s install-ken-games DISK=$${DISK:-disk.img} || \
+		echo "  WARN    install-ken-games skipped (optional)"
+	@$(MAKE) -s install-dennis-src DISK=$${DISK:-disk.img} || \
+		echo "  WARN    install-dennis-src skipped (optional)"
 	@echo "  DISK    load-userspace-runit OK"
+
+# Doom under /usr/ken/games (Ken Thompson nod) + /usr/bin/doom for PATH.
+install-ken-games: build-fase55e-doom-interactive
+	@chmod +x scripts/inject_ken_games_minix.sh
+	@./scripts/inject_ken_games_minix.sh $${DISK:-disk.img}
+
+# Dennis Ritchie playground: /heart/dennis + short-name samples under src/.
+# Full IR0 tree: make run attaches virtfs mount_tag=dennis (see QEMU_DENNIS_9P).
+install-dennis-src:
+	@chmod +x scripts/inject_dennis_src_minix.sh
+	@./scripts/inject_dennis_src_minix.sh $${DISK:-disk.img}
 
 # Static GNU make for in-guest builds (musl).
 build-gmake-static:
 	@chmod +x scripts/build_gmake_static.sh
 	@./scripts/build_gmake_static.sh
 
-# Product disk + TinyCC + GNU make + expanded BusyBox filters (sed/awk/tar/…).
-# Use after (or instead of) plain load-userspace-runit for toolchain experiments.
+# Product disk + TinyCC + GNU make. Default profile is minimal (firstboot wizard).
+# Lab autologin root: IR0_PRODUCT_PROFILE=development make load-userspace-devtools
 load-userspace-devtools: build-tcc-fase52 build-gmake-static
 	@rm -f disk.img.runit.stamp disk.img.devtools.stamp
-	@IR0_PRODUCT_PROFILE=$${IR0_PRODUCT_PROFILE:-development} IR0_NO_AUTOLOGIN=$${IR0_NO_AUTOLOGIN:-0} \
+	@IR0_PRODUCT_PROFILE=$${IR0_PRODUCT_PROFILE:-minimal} IR0_NO_AUTOLOGIN=$${IR0_NO_AUTOLOGIN:-0} \
 		$(MAKE) -s load-userspace-runit
 	@chmod +x scripts/inject_devtools_minix.sh
 	@./scripts/inject_devtools_minix.sh disk.img
 	@printf 'devtools\n' > disk.img.devtools.stamp
-	@echo "✓ load-userspace-devtools OK (/bin/tcc /bin/make /bin/sed …)"
+	@echo "✓ load-userspace-devtools OK (profile=$${IR0_PRODUCT_PROFILE:-minimal}; /bin/tcc /bin/make …)"
 
 smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 boot (console + logger)..."
