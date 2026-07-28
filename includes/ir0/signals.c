@@ -376,8 +376,12 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGSEGV received (segmentation fault), terminating process");
 #endif
-            current->signal_pending &= ~SIGNAL_MASK(SIGSEGV);
-            process_exit(139);
+            if (!process_signal_default_kill(current, SIGSEGV))
+            {
+                current->signal_pending &= ~SIGNAL_MASK(SIGSEGV);
+                current->exit_signal = SIGSEGV;
+                process_exit(0);
+            }
             return;
         }
     }
@@ -389,8 +393,12 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGFPE received (arithmetic error), terminating process");
 #endif
-            current->signal_pending &= ~SIGNAL_MASK(SIGFPE);
-            process_exit(136);
+            if (!process_signal_default_kill(current, SIGFPE))
+            {
+                current->signal_pending &= ~SIGNAL_MASK(SIGFPE);
+                current->exit_signal = SIGFPE;
+                process_exit(0);
+            }
             return;
         }
     }
@@ -402,8 +410,12 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGILL received (illegal instruction), terminating process");
 #endif
-            current->signal_pending &= ~SIGNAL_MASK(SIGILL);
-            process_exit(132);
+            if (!process_signal_default_kill(current, SIGILL))
+            {
+                current->signal_pending &= ~SIGNAL_MASK(SIGILL);
+                current->exit_signal = SIGILL;
+                process_exit(0);
+            }
             return;
         }
     }
@@ -415,8 +427,12 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGBUS received (bus error), terminating process");
 #endif
-            current->signal_pending &= ~SIGNAL_MASK(SIGBUS);
-            process_exit(135);
+            if (!process_signal_default_kill(current, SIGBUS))
+            {
+                current->signal_pending &= ~SIGNAL_MASK(SIGBUS);
+                current->exit_signal = SIGBUS;
+                process_exit(0);
+            }
             return;
         }
     }
@@ -470,7 +486,8 @@ void handle_signals(void)
             klog_info("SIGNAL", "SIGINT received, terminating process");
 #endif
             current->signal_pending &= ~SIGNAL_MASK(SIGINT);
-            process_exit(130); /* 128 + SIGINT */
+            current->exit_signal = SIGINT;
+            process_exit(0);
             return;
         }
         /* else: fall through to userspace handler delivery below */
@@ -504,7 +521,8 @@ void handle_signals(void)
             klog_info("SIGNAL", "SIGQUIT received, terminating process");
 #endif
             current->signal_pending &= ~SIGNAL_MASK(SIGQUIT);
-            process_exit(131); /* 128 + SIGQUIT */
+            current->exit_signal = SIGQUIT;
+            process_exit(0);
             return;
         }
     }
@@ -515,7 +533,8 @@ void handle_signals(void)
         klog_info("SIGNAL", "SIGABRT received, terminating process");
 #endif
         current->signal_pending &= ~SIGNAL_MASK(SIGABRT);
-        process_exit(134); /* Exit code 134 = 128 + 6 (SIGABRT) */
+        current->exit_signal = SIGABRT;
+        process_exit(0);
         return;
     }
 

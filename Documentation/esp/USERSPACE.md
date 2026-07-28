@@ -72,16 +72,37 @@ Tags obligatorios: `DOOMGENERIC_MOUSE_CAPS_OK`, `DOOMGENERIC_AUDIO_OK`, `DOOMGEN
 
 Scancode PS/2 `0x01` → ASCII `0x1b` en `ps2_set1` (host test en `tests/host`).
 
+### BusyBox `less` / `man` + mensajes de señal
+
+- Páginas en `/usr/share/man/cat7/*.7` (`man IR0` → `IR0.7`, no un archivo `IR0`).
+- Pager por defecto: `more` (`/etc/man.conf`); `less` depende de `poll`/`F_SETFL` correctos.
+- `FEATURE_LESS_MAXLINES=9999999`; `FEATURE_LESS_ASK_TERMINAL` off.
+- SIGSEGV/etc. dejan `exit_signal` → ash imprime `"Segmentation fault"` como Linux.
+
+### Doom + TTY
+
+Con `/dev/events0` abierto, las teclas van a Doom (EV_KEY) pero no al TTY cocido (evita `qqqls` en ash). Doom sale con shutdown de audio + flush TTY (sin `pause()` infinito).
+
+### Dennis (fuentes del kernel + fechas)
+
+MINIX v1 no puede alojar el árbol completo (nombres ≤14). En disco solo hay muestras cortas bajo `/heart/dennis/src/` (`hello.c`, `Makefile`).
+
+El árbol host se monta en stage1 **como root** vía virtio-9p (`make run` → `mount_tag=dennis`). Tags: `DENNIS_9P_MOUNT_OK` / `SKIP`. Comprobar: `ls /heart/dennis/src/kernel`.
+
+`inject_init_minix.py` escribe `mtime` real (ya no 1970 en `ls -l` de archivos recién inyectados).
+
+Porteo a ISD: `man IR0-port`.
+
 ## Manuales en guest (`man`) — Implementado
 
 BusyBox `man` + páginas ASCII en `/usr/share/man/cat7/` (sin `nroff`/`mandoc` en el guest). El host las genera con `mandoc -Tascii` (`make prepare-guest-mandocs`); `load-userspace-runit` / `first-boot` las inyectan por defecto (`IR0_GUEST_MANDOCS=0` para omitir).
 
-MINIX v1 limita nombres a 14 caracteres: en guest usá `man IR0-uspace` y `man IR0-onboard` (contenido de IR0-userspace / IR0-onboarding).
+MINIX v1 limita nombres a 14 caracteres: en guest usá `man IR0-uspace`, `man IR0-onboard` y `man IR0-port`.
 
 | Contrato | Estado |
 |----------|--------|
 | `man IR0-boot` (texto legible) | **Implementado** |
-| Subset (7 páginas; alias cortos donde hace falta) | **Implementado** |
+| Subset (incl. `IR0-port`; alias cortos donde hace falta) | **Implementado** |
 | Catálogo completo / ES en guest | **Parcial** — en host: `make sync-mandocs` |
 | Páginas Linux genéricas (`man ls`) | Fuera de alcance |
 

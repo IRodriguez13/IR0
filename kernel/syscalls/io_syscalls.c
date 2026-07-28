@@ -127,7 +127,11 @@ int fd_can_read_for(process_t *proc, int fd)
     return ir0_eventfd_poll_readable((struct ir0_eventfd *)fd_table[fd].vfs_file);
   if (fd_table[fd].is_timerfd && fd_table[fd].vfs_file)
     return ir0_timerfd_poll_readable((struct ir0_timerfd *)fd_table[fd].vfs_file);
-  if (fd_table[fd].flags & (O_RDONLY | O_RDWR))
+  /*
+   * Regular VFS / redirected files: poll-readable unless write-only.
+   * O_RDONLY is 0 — never use `flags & O_RDONLY` (always false).
+   */
+  if ((fd_table[fd].flags & O_ACCMODE) != O_WRONLY)
     return 1;
   return 0;
 }
@@ -1557,11 +1561,16 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
     return fd_table[fd].flags;
   case F_SETFL:
     /*
-     * Accept O_NONBLOCK etc. Do not honor O_ASYNC/FASYNC: IR0 has no
-     * SIGIO delivery on poll-ready, and TinyX KdAddFd would otherwise
-     * arm handlers that re-enter MouseRead/KeyboardRead unsafely.
+     * Linux: preserve O_ACCMODE; only status flags are mutable.
+     * Do not honor O_ASYNC/FASYNC (no SIGIO). Clobbering access mode
+     * broke BusyBox less (ndelay_on → flags became O_NONBLOCK alone).
      */
-    fd_table[fd].flags = (int)(arg & ~(unsigned long)O_ASYNC);
+    {
+      int keep = fd_table[fd].flags & O_ACCMODE;
+      int settable = (int)arg & (O_APPEND | O_NONBLOCK);
+
+      fd_table[fd].flags = keep | settable;
+    }
     return 0;
   case F_GETOWN:
     return current_process->task.pid;
