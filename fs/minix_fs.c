@@ -3375,6 +3375,57 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
   return 0;
 }
 
+int minix_fs_statfs(struct ir0_statfs *buf)
+{
+	uint32_t first;
+	uint32_t limit;
+	uint32_t z;
+	uint32_t free_z = 0;
+	uint32_t free_i = 0;
+	uint32_t i;
+
+	if (!buf)
+		return -EINVAL;
+	if (!minix_fs.initialized || !minix_fs.zone_bitmap)
+		return -ENODEV;
+
+	memset(buf, 0, sizeof(*buf));
+	first = minix_fs.superblock.s_firstdatazone;
+	limit = minix_fs.superblock.s_nzones;
+	if (limit > MINIX_MAX_ZONES)
+		limit = MINIX_MAX_ZONES;
+	if (first >= limit)
+		return -EINVAL;
+
+	for (z = first; z < limit; z++)
+	{
+		if (minix_is_zone_free(z))
+			free_z++;
+	}
+
+	/* Inode bitmap polarity is opposite of zones: bit 1 = used. */
+	for (i = 1; i <= minix_fs.superblock.s_ninodes && i < MINIX_MAX_INODES; i++)
+	{
+		uint32_t byte = i / 8;
+		uint32_t bit = i % 8;
+
+		if ((minix_fs.inode_bitmap[byte] & (1U << bit)) == 0)
+			free_i++;
+	}
+
+	buf->f_type = IR0_MINIX_SUPER_MAGIC;
+	buf->f_bsize = MINIX_BLOCK_SIZE;
+	buf->f_frsize = MINIX_BLOCK_SIZE;
+	buf->f_blocks = (unsigned long)(limit - first);
+	buf->f_bfree = (unsigned long)free_z;
+	buf->f_bavail = (unsigned long)free_z;
+	buf->f_files = (unsigned long)minix_fs.superblock.s_ninodes;
+	buf->f_ffree = (unsigned long)free_i;
+	buf->f_namelen = MINIX_NAME_LEN;
+	buf->f_flags = 0;
+	return 0;
+}
+
 int minix_fs_stat(const char *pathname, stat_t *buf)
 {
   minix_inode_t inode;

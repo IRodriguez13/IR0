@@ -44,6 +44,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/klog.h>
 #include <ir0/console_backend.h>
+#include <ir0/statfs.h>
 #include <config.h>
 #include <string.h>
 
@@ -866,6 +867,60 @@ int vfs_stat(const char *path, stat_t *buf)
     if (!ops || !ops->stat)
         return -ENODEV;
     return ops->stat(path, buf);
+}
+
+int vfs_statfs(const char *path, struct ir0_statfs *buf)
+{
+	struct vfs_mount *m;
+	const char *fst;
+	int ret;
+
+	if (!path || !buf)
+		return -EINVAL;
+	ret = validate_path(path);
+	if (ret != 0)
+		return ret;
+
+	m = find_mount(path);
+	if (!m || !m->fs || !m->fs->name)
+		return -ENODEV;
+
+	memset(buf, 0, sizeof(*buf));
+	fst = m->fs->name;
+
+#if CONFIG_ENABLE_FS_MINIX
+	if (strcmp(fst, "minix") == 0)
+		return minix_fs_statfs(buf);
+#endif
+#if CONFIG_ENABLE_FS_TMPFS
+	if (strcmp(fst, "tmpfs") == 0)
+	{
+		buf->f_type = IR0_TMPFS_MAGIC;
+		buf->f_bsize = 4096;
+		buf->f_frsize = 4096;
+		buf->f_blocks = 0;
+		buf->f_bfree = 0;
+		buf->f_bavail = 0;
+		buf->f_namelen = 255;
+		return 0;
+	}
+	if (strcmp(fst, "9p") == 0)
+	{
+		buf->f_type = IR0_9P_MAGIC;
+		buf->f_bsize = 4096;
+		buf->f_frsize = 4096;
+		buf->f_blocks = 0;
+		buf->f_bfree = 0;
+		buf->f_bavail = 0;
+		buf->f_namelen = 255;
+		return 0;
+	}
+#endif
+	/* Unknown FS: honest empty stats (df skips f_blocks==0 unless -a). */
+	buf->f_bsize = 1024;
+	buf->f_frsize = 1024;
+	buf->f_namelen = 255;
+	return 0;
 }
 
 int vfs_mkdir(const char *path, int mode)

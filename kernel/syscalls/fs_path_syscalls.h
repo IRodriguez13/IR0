@@ -18,7 +18,8 @@
 #include <ir0/utsname.h>
 #include <ir0/time.h>
 
-int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype);
+int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
+		  unsigned long flags, const void *data);
 int64_t sys_umount(const char *target, int flags);
 int64_t sys_sync(void);
 int64_t sys_mkdir(const char *pathname, mode_t mode);
@@ -42,3 +43,5 @@ int64_t sys_unlink(const char *pathname);
 int64_t sys_truncate(const char *pathname, off_t length);
 int64_t sys_ftruncate(int fd, off_t length);
 int64_t sys_rmdir(const char *pathname);
+int64_t sys_statfs(const char *pathname, void *buf);
+int64_t sys_fstatfs(int fd, void *buf);
