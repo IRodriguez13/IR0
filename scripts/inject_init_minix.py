@@ -22,6 +22,7 @@ Usage:
 import os
 import struct
 import sys
+import time
 
 BLOCK = 1024
 INODE_SIZE = 32
@@ -31,6 +32,16 @@ MAGIC = 0x137F
 IFDIR = 0o040000
 IFREG = 0o100000
 IFMT = 0o170000
+
+
+def now_mtime(path=None):
+    """Unix time for MINIX v1 inode mtime (avoid epoch 1970 on ls -l)."""
+    if path:
+        try:
+            return int(os.stat(path).st_mtime) & 0xFFFFFFFF
+        except OSError:
+            pass
+    return int(time.time()) & 0xFFFFFFFF
 
 
 def inject_verbose():
@@ -421,7 +432,7 @@ def format_minix_v1(f, ninodes=64, nzones=1024):
         "mode": IFDIR | 0o755,
         "uid": 0,
         "size": 2 * DIR_ENTRY,
-        "mtime": 0,
+        "mtime": now_mtime(),
         "gid": 0,
         "nlinks": 2,
         "zones": [root_zone] + [0] * 8,
@@ -489,7 +500,7 @@ def mkdir(f, sb, parent_num, parent, name, parent_prefix):
         "mode": mode,
         "uid": 0,
         "size": 2 * DIR_ENTRY,
-        "mtime": 0,
+        "mtime": now_mtime(),
         "gid": 0,
         "nlinks": 2,
         "zones": [zone] + [0] * 8,
@@ -626,7 +637,7 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755,
                     "mode": IFREG | file_mode,
                     "uid": 0,
                     "size": 0,
-                    "mtime": 0,
+                    "mtime": now_mtime(source_path),
                     "gid": 0,
                     "nlinks": 1,
                     "zones": [0] * 9,
@@ -638,13 +649,14 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755,
                         "mode": IFREG | file_mode,
                         "uid": 0,
                         "size": 0,
-                        "mtime": 0,
+                        "mtime": now_mtime(source_path),
                         "gid": 0,
                         "nlinks": 1,
                         "zones": [0] * 9,
                     }
 
             file_inode = prepare_regular_file(f, sb, file_inode, data, file_mode)
+            file_inode["mtime"] = now_mtime(source_path)
             if owner is not None:
                 file_inode["uid"], file_inode["gid"] = owner
             audit_entry(
@@ -710,9 +722,15 @@ def hardlink_path(f, sb, existing_parts, new_parts):
             if existing != 0:
                 if existing == src_ino:
                     return src_ino
-                raise SystemExit(
-                    "hardlink dest already exists: /" + "/".join(new_parts)
-                )
+                # Replace stale applet name (e.g. BusyBox reinject): detach
+                # the old directory entry so the hardlink can point at the
+                # new multicall inode.
+                old = read_inode(f, sb, existing)
+                remove_dir_entry(f, sb, cur, cur_num, part)
+                if old.get("nlinks", 1) > 1:
+                    old["nlinks"] = max(1, old["nlinks"] - 1)
+                    write_inode(f, sb, existing, old)
+                existing = 0
             add_dir_entry(f, sb, cur, cur_num, part, src_ino)
             src["nlinks"] = min(255, src["nlinks"] + 1)
             write_inode(f, sb, src_ino, src)

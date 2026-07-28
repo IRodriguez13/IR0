@@ -130,6 +130,40 @@ Required serial tags (not frames-only): `DOOMGENERIC_MOUSE_CAPS_OK`, `DOOMGENERI
 
 PS/2 set-1 scancode `0x01` emits ASCII `0x1b` (`includes/ir0/ps2_set1.c`) so line-discipline apps (BusyBox `vi`) can leave insert/command modes. Host: `tests/host` → `ps2_set1 ESC make emits 0x1b`.
 
+### BusyBox `less` / `man` + fatal signal messages
+
+- Guest pages live under `/usr/share/man/cat7/*.7` (e.g. `man IR0` → `IR0.7`, not a file named `IR0`).
+- Default pager is `more` (`/etc/man.conf`); `less` needs working `poll`/`F_SETFL` (O_RDONLY is 0).
+- Product BusyBox: `FEATURE_LESS_MAXLINES=9999999`; `FEATURE_LESS_ASK_TERMINAL` off (no CSI `6n`).
+- Userspace SIGSEGV/FPE/ILL/BUS set `exit_signal` so `waitpid` is `WIFSIGNALED`; ash prints `"Segmentation fault"` (etc.) like Linux.
+
+### Doom + TTY
+
+While `/dev/events0` is open, keyboard EV_KEY still reaches Doom but cooked TTY input is diverted (avoids leftover `qqq`/`ls` in the shell). Doom exits cleanly (sound shutdown + TCFLSH) instead of `pause()` forever.
+
+### Dennis playground (kernel sources + dates)
+
+MINIX v1 cannot hold the full IR0 tree (file names ≤14 chars). Offline samples only:
+
+```text
+/heart/dennis/README
+/heart/dennis/src/hello.c
+/heart/dennis/src/Makefile
+```
+
+Full host tree (long names) is attached by QEMU and mounted in runit **stage1 as root**:
+
+| Piece | Role |
+|-------|------|
+| `make run` | `-virtfs …,mount_tag=dennis` (`IR0_DENNIS_9P=0` to skip) |
+| `/etc/runit/1` | `mount("dennis", "/heart/dennis/src", "9p", …)` before login |
+| Serial tags | `DENNIS_9P_MOUNT_OK` or `DENNIS_9P_MOUNT_SKIP` |
+| Guest check | `ls /heart/dennis/src/kernel` |
+
+`scripts/inject_init_minix.py` sets inode `mtime` from the host file (or `time.time()`), so `ls -l` no longer shows 1970-01-01 for freshly injected files.
+
+Porting checklist: `man IR0-port` (mandoc `Documentation/mandocs/en/porting.md`).
+
 ## Guest manuals (`man`) — Implemented
 
 BusyBox `man` + pre-rendered ASCII under `/usr/share/man/cat7/` (no `nroff`/`mandoc` in the guest). Host builds pages with `mandoc -Tascii` via `make prepare-guest-mandocs`; `load-userspace-runit` / `first-boot` inject them by default (`IR0_GUEST_MANDOCS=0` to skip).
@@ -141,12 +175,13 @@ MINIX v1 names are ≤14 characters, so two long host titles are shortened on di
 | IR0-boot | `IR0-boot` | `/usr/share/man/cat7/IR0-boot.7` |
 | IR0-userspace | `IR0-uspace` | `…/IR0-uspace.7` |
 | IR0-onboarding | `IR0-onboard` | `…/IR0-onboard.7` |
+| IR0-port | `IR0-port` | `…/IR0-port.7` |
 | IR0-vfs / syscalls / tty / process | same name | `…/IR0-<name>.7` |
 
 | Contract | State |
 |----------|--------|
 | `man IR0-boot` (readable text, not `.Sh` macros) | **Implemented** |
-| Subset above (7 pages) | **Implemented** |
+| Subset above (incl. `IR0-port`) | **Implemented** |
 | Full mandoc catalog / Spanish in guest | **Partial** — host `make sync-mandocs` / `man TOPIC=…` |
 | Generic Linux pages (`man ls`) | Out of scope |
 
@@ -154,6 +189,7 @@ MINIX v1 names are ≤14 characters, so two long host titles are shortened on di
 man IR0-boot
 man IR0-uspace
 man IR0-onboard
+man IR0-port
 man -w IR0-tty          # → /usr/share/man/cat7/IR0-tty.7
 ```
 

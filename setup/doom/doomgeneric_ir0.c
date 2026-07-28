@@ -1077,21 +1077,27 @@ int main(int argc, char **argv)
     if (g_fd_input >= 0)
     {
         close(g_fd_input);
+        g_fd_input = -1;
     }
+    IR0_SoundShutdown();
     if (g_fb_map && g_fb_map != MAP_FAILED)
     {
         (void)munmap(g_fb_map, g_fb_len);
+        g_fb_map = NULL;
     }
     if (g_fd_fb >= 0)
     {
         close(g_fd_fb);
+        g_fd_fb = -1;
     }
 
 #ifdef FASE55E_INTERACTIVE
-    for (;;)
-    {
-        (void)pause();
-    }
+    /*
+     * Drop leftover cooked-TTY bytes that arrived before events0 divert
+     * (or if divert was unavailable). TCFLSH = 0x540B, TCIFLUSH = 0.
+     */
+    (void)ioctl(STDIN_FILENO, 0x540Bu, 0);
+    write_str("DOOMGENERIC_INTERACTIVE_EXIT_OK\n");
 #endif
 
     return 0;
