@@ -59,6 +59,7 @@ extern void test_mm_mirror_contract(void);
 extern void test_netdev_contract(void);
 extern void test_sched_backend_contract(void);
 extern void test_block_backend_contract(void);
+extern void test_matrix_capture_suite(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -101,6 +102,7 @@ static void (*test_functions[])(void) = {
 	test_netdev_contract,
 	test_sched_backend_contract,
 	test_block_backend_contract,
+	test_matrix_capture_suite,
 	NULL
 };
 
