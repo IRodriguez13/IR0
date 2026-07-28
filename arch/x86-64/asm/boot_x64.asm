@@ -139,33 +139,13 @@ pd_fb:
 align 4096
 pd_minimal:
     ; 0x83 = Present + RW + PS (2MB pages), no User — identity map is supervisor-only
-    ; 0-32MB: kernel + heap
-    dq 0x0000000 + 0x83
-    dq 0x0200000 + 0x83
-    dq 0x0400000 + 0x83
-    dq 0x0600000 + 0x83
-    dq 0x0800000 + 0x83
-    dq 0x0A00000 + 0x83
-    dq 0x0C00000 + 0x83
-    dq 0x0E00000 + 0x83
-    dq 0x1000000 + 0x83
-    dq 0x1200000 + 0x83
-    dq 0x1400000 + 0x83
-    dq 0x1600000 + 0x83
-    dq 0x1800000 + 0x83
-    dq 0x1A00000 + 0x83
-    dq 0x1C00000 + 0x83
-    dq 0x1E00000 + 0x83
-    ; 32-48MB: PMM physical frame pool
-    dq 0x2000000 + 0x83
-    dq 0x2200000 + 0x83
-    dq 0x2400000 + 0x83
-    dq 0x2600000 + 0x83
-    dq 0x2800000 + 0x83
-    dq 0x2A00000 + 0x83
-    dq 0x2C00000 + 0x83
-    dq 0x2E00000 + 0x83
-    times 487 dq 0
+    ; 0-512MB: kernel + heap + PMM pool (ends at USER_MMAP_START; 256 x 2MB pages)
+%assign i 0
+%rep 256
+    dq i * 0x200000 + 0x83
+%assign i i+1
+%endrep
+    times 256 dq 0
 
 
 align 16

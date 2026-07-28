@@ -140,6 +140,8 @@
 #define __NR_epoll_pwait   281
 #define __NR_epoll_create1 291
 #define __NR_pselect6      270
+#define __NR_statfs       137
+#define __NR_fstatfs      138
 #define __NR_mount        165
 #define __NR_umount2      166
 #define __NR_sync         162

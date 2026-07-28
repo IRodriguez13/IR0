@@ -73,7 +73,8 @@ int64_t sys_renameat(int olddirfd, const char *oldpath,
 int64_t sys_link(const char *oldpath, const char *newpath);
 int64_t sys_chmod(const char *path, mode_t mode);
 int64_t sys_chown(const char *path, uid_t owner, gid_t group);
-int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype);
+int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
+		  unsigned long flags, const void *data);
 int64_t sys_umount(const char *target, int flags);
 int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags);
 int64_t sys_poll(struct pollfd *fds, unsigned int nfds, int timeout_ms);

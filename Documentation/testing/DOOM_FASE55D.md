@@ -32,7 +32,8 @@ Defaults: `REAL_WAD_PATH` often set in `scripts/make/qa.mk`. Hybrid KTM alias: `
 | Doom ELF | `setup/doom/doomgeneric_smoke` → guest `/bin/doom-smoke` |
 | runit init/run | `IR0-userspace/out/smoke/stage-bin/runit_fase55d_{init,run}` (`RUNIT_SMOKE_STAGE_BIN`) |
 | IWAD | injected as `/usr/share/doom/doom1.wad` |
-| QEMU audio | `$(QEMU_AUDIO_SB16)` (`-audiodev … -device sb16`) |
+| QEMU audio (GUI / `make run`) | `$(QEMU_AUDIO_SB16)` → default `-audiodev pa` (host oye) |
+| QEMU audio (smoke CI) | `$(QEMU_AUDIO_SB16_SILENT)` → `-audiodev none` |
 
 `make build-runit` also builds the smoke service tree (`build-services.sh smoke`).
 

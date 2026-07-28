@@ -146,6 +146,13 @@ int map_user_region_in_directory(uint64_t *pml4, uintptr_t virtual_start, size_t
  */
 int map_supervisor_identity_low(uint64_t *pml4, uint64_t start, uint64_t end);
 
+/*
+ * Supervisor-only 2 MiB identity map (PD-level PS). Use for heap/PMM ranges that
+ * do not overlap the user ELF load window (0x400000); COW break uses memcpy via
+ * physical VA under process CR3.
+ */
+int map_supervisor_identity_2mb(uint64_t *pml4, uint64_t start, uint64_t end);
+
 /* Copy/zero user VAs via page-table walk (kernel CR3, no user CR3 switch) */
 int copy_to_user_region_in_directory(uint64_t *pml4, uintptr_t dst,
                                      const void *src, size_t n);
