@@ -1259,7 +1259,7 @@ run-debug: kernel-x64-userspace.iso
 			-monitor telnet:127.0.0.1:1234,server,nowait \
 			-d guest_errors,int $(QEMU_LOG_FILE); \
 	else \
-		test -f "$(IR0_ISD_DISK)" || { echo "✗ missing $(IR0_ISD_DISK); make first-boot PROFILE=$(ISD_PROFILE)"; exit 1; }; \
+		$(MAKE) -s ensure-isd-disk; \
 		echo "Running IR0+ISD debug (PROFILE=$(ISD_PROFILE) DISK=$(IR0_ISD_DISK))..."; \
 		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
@@ -1283,7 +1283,7 @@ run-fullscreen: kernel-x64-userspace.iso
 			-m 512M -no-reboot \
 			-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME); \
 	else \
-		test -f "$(IR0_ISD_DISK)" || { echo "✗ missing $(IR0_ISD_DISK); make first-boot PROFILE=$(ISD_PROFILE)"; exit 1; }; \
+		$(MAKE) -s ensure-isd-disk; \
 		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
 			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) $(QEMU_DENNIS_9P) \
@@ -1311,11 +1311,7 @@ run-console: kernel-x64-userspace.iso
 			-m 512M -no-reboot -no-shutdown \
 			$(QEMU_NGRAPHIC); \
 	else \
-		test -f "$(IR0_ISD_DISK)" || { \
-			echo "✗ missing $(IR0_ISD_DISK)"; \
-			echo "  Run: make first-boot PROFILE=$(ISD_PROFILE)"; \
-			exit 1; \
-		}; \
+		$(MAKE) -s ensure-isd-disk; \
 		echo "Running IR0+ISD console (PROFILE=$(ISD_PROFILE) DISK=$(IR0_ISD_DISK))..."; \
 		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
