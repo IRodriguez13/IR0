@@ -89,39 +89,52 @@ See also `make help-docs`.
 verbose ACPI/PCI wall. Requires QEMU `-virtfs` (wired by `run-bootlog` /
 `smoke-boot-log-hostshare`). Normal `make run` does not need it.
 
-## Sibling userspace (required for product rootfs)
+## Sibling ISD distribution (required for product rootfs)
 
-Product PID1 (runit), BusyBox, login/doas, and `/etc` live in a **separate**
-repository. **Recommended first-time path:**
+Product PID1 (runit), BusyBox, login/doas, rootfs, and `disk.img` live in
+**ISD**. **Recommended first-time path:**
 
 ```bash
-make first-boot    # deps + defconfig if needed + clone ../IR0-userspace + rootfs + ISO
-make run           # QEMU → BusyBox ash (GTK)
+make first-boot PROFILE=minimal   # host deps (ask), clone ../ISD, image + ISO
+make run PROFILE=minimal          # QEMU → BusyBox ash (GTK)
 ```
 
-If a required host tool is missing, `first-boot` lists it and asks `Install now? [y/N]`
-(uses `sudo` for the package manager; password prompt is from sudo). Decline with `n`
-and follow this file, or set `IR0_DEPS_INSTALL=never` / `yes` for non-interactive use.
+If a required host tool is missing, `first-boot` lists it and asks
+`Install missing host dependencies? [y/N]` (uses `sudo` for the package manager
+only; password prompt is from sudo — never stored). Decline with `n` and follow
+this file, or set `IR0_DEPS_INSTALL=never` / `yes` for non-interactive use.
 
-Manual equivalent (sibling layout: `IR0/` next to `IR0-userspace/`):
+Supported host package managers: **apt** (Debian/Ubuntu/Mint), **pacman** (Arch),
+**dnf** (Fedora), **zypper** (openSUSE). Product path requires an **x86_64** host.
+
+### WSL (Windows Subsystem for Linux)
+
+WSL2 is supported for build + QEMU:
+
+| Topic | Guidance |
+|-------|----------|
+| Distro | Ubuntu/Debian x86_64 under WSL2 (not WSL1) |
+| Tree location | Keep `IR0/` + `ISD/` on the Linux filesystem (`~/…`), not `/mnt/c` |
+| KVM | Optional. Without `/dev/kvm`, QEMU uses TCG (slower, OK). Nested KVM needs Windows 11 + `nestedVirtualization=true` in `%UserProfile%\.wslconfig`, then `wsl --shutdown` |
+| GUI | WSLg or an X server; if GTK fails: `make run-console PROFILE=minimal` |
+| sudo | Same ask/yes/never flow; password is typed to sudo in the terminal |
+
+Manual equivalent (sibling layout: `IR0/` next to `ISD/`):
 
 ```bash
-git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace
-# or: export IR0_USERSPACE_ROOT=/path/to/IR0-userspace
+git clone https://github.com/IRodriguez13/ISD.git ../ISD
+# or: export IR0_ISD_ROOT=/path/to/ISD
 export IR0_ROOT=$PWD
-make check-userspace
-make -C ../IR0-userspace fetch headers build ARCH=x86_64
-make load-userspace-runit
+make check-isd
+make -C ../ISD fetch headers build ARCH=x86_64 PROFILE=minimal
+make -C ../ISD image-minix PROFILE=minimal
 make kernel-x64-userspace.iso
+make run PROFILE=minimal
 ```
 
 `ARCH=x86_64` is the userspace triple; the kernel Makefile accepts it as an alias of `x86-64`.
-Optional in-guest TinyCC + GNU make (not required for BusyBox):
-
-```bash
-IR0_WITH_DEVTOOLS=1 make run
-# or: make load-userspace-devtools
-```
+Deprecated: `IR0_USERSPACE_ROOT`, `bootstrap-userspace`, `load-userspace-runit` on the
+canonical path (still available for smokes via `IR0_LEGACY_USERSPACE=1`).
 
 **Boot without `/sbin/init`:** kernel `panic("Failed to load /sbin/init")`.
 **Init exits:** idle keeps the CPU; no userspace shell until reboot with a live PID1.

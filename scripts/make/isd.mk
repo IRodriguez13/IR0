@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# ISD bridge — product distribution lives in the sibling ISD repo.
+# Included from the IR0 Makefile (index only; recipes stay here).
+#
+# Public targets:
+#   check-isd clone-isd isd-defconfig isdconfig
+#   isd isd-rootfs isd-image isd-clean first-boot
+#
+# Canonical interface: PROFILE=minimal|development|desktop|appliance
+# Compat: IR0_PRODUCT_PROFILE, IR0_USERSPACE_ROOT/URL, bootstrap-userspace
+
+ifndef _IR0_ISD_MK
+_IR0_ISD_MK := 1
+
+# --- paths / URLs ------------------------------------------------------------
+
+IR0_ISD_ROOT ?= $(abspath $(KERNEL_ROOT)/../ISD)
+IR0_ISD_URL  ?= https://github.com/IRodriguez13/ISD.git
+
+# Temporary aliases (deprecated names)
+ifneq ($(origin IR0_USERSPACE_ROOT),command line)
+  IR0_USERSPACE_ROOT ?= $(IR0_ISD_ROOT)
+else
+  IR0_ISD_ROOT := $(IR0_USERSPACE_ROOT)
+endif
+ifneq ($(origin IR0_USERSPACE_URL),command line)
+  IR0_USERSPACE_URL ?= $(IR0_ISD_URL)
+else
+  IR0_ISD_URL := $(IR0_USERSPACE_URL)
+endif
+
+ISD_ARCH ?= x86_64
+
+# Resolve ISD product profile without clobbering kernel deptest PROFILE defaults.
+# Command-line PROFILE=minimal|development|desktop|appliance → ISD profile.
+# Otherwise IR0_PRODUCT_PROFILE, else minimal.
+ISD_PROFILE := minimal
+ifdef IR0_PRODUCT_PROFILE
+  ISD_PROFILE := $(IR0_PRODUCT_PROFILE)
+endif
+ifeq ($(origin PROFILE),command line)
+  ifneq ($(filter minimal development desktop appliance,$(PROFILE)),)
+    ISD_PROFILE := $(PROFILE)
+  endif
+endif
+# Keep IR0_PRODUCT_PROFILE in sync for scripts that still read it.
+IR0_PRODUCT_PROFILE := $(ISD_PROFILE)
+export IR0_PRODUCT_PROFILE
+
+IR0_ISD_MAKE = $(MAKE) -C "$(IR0_ISD_ROOT)" \
+	IR0_ROOT="$(KERNEL_ROOT)" \
+	ARCH="$(ISD_ARCH)" \
+	PROFILE="$(ISD_PROFILE)"
+
+# Disk owned by ISD (not copied into IR0/ by default)
+IR0_ISD_DISK = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/images/$(ISD_PROFILE)/disk.img
+
+IR0_USERSPACE_OUT = $(IR0_ISD_ROOT)/out
+IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=$(ISD_ARCH)
+
+.PHONY: check-isd clone-isd isd-defconfig isdconfig isd isd-rootfs isd-image \
+	isd-clean first-boot bootstrap-userspace check-userspace \
+	warn-userspace-deprecated
+
+warn-userspace-deprecated:
+	@if [ -n "$${IR0_USERSPACE_ROOT_SET:-}" ] || [ "$(origin IR0_USERSPACE_ROOT)" = "command line" ]; then \
+		echo "note: IR0_USERSPACE_ROOT is deprecated; use IR0_ISD_ROOT=$${IR0_ISD_ROOT}"; \
+	fi
+
+check-isd:
+	@if [ ! -f "$(IR0_ISD_ROOT)/Makefile" ]; then \
+		echo "✗ ISD not found at $(IR0_ISD_ROOT)"; \
+		echo "  First time:  make first-boot PROFILE=$(ISD_PROFILE)"; \
+		echo "  Or clone:    make clone-isd"; \
+		echo "  Or set:      IR0_ISD_ROOT=/path/to/ISD"; \
+		exit 1; \
+	fi
+	@case "$(ISD_ARCH)" in \
+		x86_64|x86-64) ;; \
+		*) echo "✗ first-boot/ISD product path currently supports ISD_ARCH=x86_64 (got $(ISD_ARCH))"; exit 1 ;; \
+	esac
+
+clone-isd:
+	@if [ -f "$(IR0_ISD_ROOT)/Makefile" ]; then \
+		echo "  CLONE    ISD already present at $(IR0_ISD_ROOT)"; \
+	else \
+		parent="$(dir $(IR0_ISD_ROOT))"; \
+		mkdir -p "$$parent"; \
+		echo "  CLONE    $(IR0_ISD_URL) → $(IR0_ISD_ROOT)"; \
+		git clone --depth 1 "$(IR0_ISD_URL)" "$(IR0_ISD_ROOT)"; \
+	fi
+
+isd-defconfig: check-isd
+	@$(IR0_ISD_MAKE) isd-defconfig
+
+isdconfig: check-isd
+	@$(IR0_ISD_MAKE) isdconfig
+
+isd: check-isd
+	@$(IR0_ISD_MAKE) build
+
+isd-rootfs: check-isd
+	@$(IR0_ISD_MAKE) rootfs-tree
+
+isd-image: check-isd
+	@$(IR0_ISD_MAKE) image-minix
+	@echo "✓ isd-image $(IR0_ISD_DISK)"
+
+isd-clean: check-isd
+	@$(IR0_ISD_MAKE) clean
+
+# Alias: old check-userspace name
+check-userspace: check-isd
+
+# Deprecated alias → new bootstrap
+bootstrap-userspace:
+	@echo "note: bootstrap-userspace is deprecated; use make first-boot PROFILE=$(ISD_PROFILE)"
+	@$(MAKE) first-boot PROFILE=$(ISD_PROFILE)
+
+first-boot:
+	@chmod +x "$(KERNEL_ROOT)/scripts/bootstrap-isd.sh"
+	@PROFILE="$(ISD_PROFILE)" \
+		IR0_PRODUCT_PROFILE="$(ISD_PROFILE)" \
+		IR0_ISD_ROOT="$(IR0_ISD_ROOT)" \
+		IR0_ISD_URL="$(IR0_ISD_URL)" \
+		IR0_USERSPACE_ROOT="$(IR0_ISD_ROOT)" \
+		IR0_USERSPACE_URL="$(IR0_ISD_URL)" \
+		ISD_ARCH="$(ISD_ARCH)" \
+		"$(KERNEL_ROOT)/scripts/bootstrap-isd.sh"
+
+# Product run: boot ISD-owned disk for PROFILE (no per-binary inject).
+# Does not rebuild packages; rebuild kernel ISO only if needed via deps.
+run-isd: kernel-x64-userspace.iso
+	@if [ ! -f "$(IR0_ISD_DISK)" ]; then \
+		echo "✗ missing ISD disk: $(IR0_ISD_DISK)"; \
+		echo "  Run: make first-boot PROFILE=$(ISD_PROFILE)"; \
+		exit 1; \
+	fi
+	@echo "Running IR0 + ISD (PROFILE=$(ISD_PROFILE))"
+	@echo "  DISK     $(IR0_ISD_DISK)"
+	@echo "  ISO      kernel-x64-userspace.iso"
+	@echo "  Ungrab:  Ctrl+Alt+G"
+	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+		-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
+		$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) \
+		$(QEMU_DENNIS_9P) \
+		-m 512M -no-reboot \
+		$(QEMU_DISPLAY)
+
+endif
