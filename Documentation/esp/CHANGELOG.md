@@ -7,6 +7,18 @@ Versión en inglés (canónica): [`../CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Sin publicar]
 
+### Doom T2 audio/mouse + ESC + TinyCC `/lib/tcc` (2026-07-28)
+
+- doomgeneric: mouse `EV_REL`+botones; PCM `/dev/audio` sin `-nosound`; smoke con
+  tags mouse/audio/`AUDIO_WRITE` y SB16.
+- ESC PS/2 → `0x1b` para BusyBox `vi`.
+- TinyCC `--tccdir=/lib/tcc`; inject exige `libtcc1.a`/`libc.a`/`crt*`.
+- Docs: [`../testing/DOOM_FASE55D.md`](../testing/DOOM_FASE55D.md).
+
+### Captura BusyBox matrix (2026-07-28)
+
+- Drain hasta EOF + needles streaming; ver [`../testing/BUSYBOX_MATRIX.md`](../testing/BUSYBOX_MATRIX.md).
+
 ### Límite kernel / userspace (2026-07-25)
 
 - Hermano público **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)**.

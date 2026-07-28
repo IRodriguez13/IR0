@@ -1097,14 +1097,15 @@ smoke-fase55d-doomgeneric: build-runit build-init-fase55d-doomgeneric kernel-x64
 		exit 1; \
 	fi
 	@test -f $(FASE55D_SMOKE_BIN) || (echo "✗ missing $(FASE55D_SMOKE_BIN) — run build-init-fase55d-doomgeneric"; exit 1)
-	@test -f $(RUNIT_STAGE_BIN)/runit_fase55d_run || (echo "✗ missing runit_fase55d_run — run build-runit"; exit 1)
+	@test -f $(RUNIT_SMOKE_STAGE_BIN)/runit_fase55d_run || (echo "✗ missing runit_fase55d_run — run build-runit"; exit 1)
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) $(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK && \
-	python3 scripts/inject_init_minix.py $$DISK $(RUNIT_STAGE_BIN)/runit_fase55d_init sbin/init && \
+	IR0_ROOT=$(KERNEL_ROOT) FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) \
+		$(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(RUNIT_SMOKE_STAGE_BIN)/runit_fase55d_init sbin/init && \
 		$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK doom \
-		$(RUNIT_STAGE_BIN)/runit_fase55d_run $(FASE55D_SMOKE_BIN) bin/doom-smoke && \
+		$(RUNIT_SMOKE_STAGE_BIN)/runit_fase55d_run $(FASE55D_SMOKE_BIN) bin/doom-smoke && \
 	python3 scripts/inject_init_minix.py $$DISK "$(REAL_WAD_PATH)" usr/share/doom/doom1.wad && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/doom-smoke \
 		/usr/share/doom/doom1.wad /etc/runit/sv/doom/run && \
@@ -1112,6 +1113,7 @@ smoke-fase55d-doomgeneric: build-runit build-init-fase55d-doomgeneric kernel-x64
 		--done FASE55D_DOOMGENERIC_OK -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		$(QEMU_AUDIO_SB16) \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "RUNIT_STAGE2_OK" $(FASE55D_DOOMGENERIC_LOG) && \
@@ -1119,6 +1121,9 @@ smoke-fase55d-doomgeneric: build-runit build-init-fase55d-doomgeneric kernel-x64
 	    grep -q "DOOMGENERIC_BUILD_OK" $(FASE55D_DOOMGENERIC_LOG) && \
 	    grep -q "DOOMGENERIC_WAD_LOAD_OK" $(FASE55D_DOOMGENERIC_LOG) && \
 	    grep -q "DOOMGENERIC_INIT_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "DOOMGENERIC_MOUSE_CAPS_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "DOOMGENERIC_AUDIO_OK" $(FASE55D_DOOMGENERIC_LOG) && \
+	    grep -q "DOOMGENERIC_AUDIO_WRITE_OK" $(FASE55D_DOOMGENERIC_LOG) && \
 	    grep -q "DOOMGENERIC_FIRST_FRAME_OK" $(FASE55D_DOOMGENERIC_LOG) && \
 	    grep -q "DOOMGENERIC_FRAME_LOOP_OK" $(FASE55D_DOOMGENERIC_LOG) && \
 	    grep -q "FASE55D_DOOMGENERIC_OK" $(FASE55D_DOOMGENERIC_LOG) && \
