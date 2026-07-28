@@ -29,7 +29,7 @@ Clona `../ISD` si falta. No inyecta binarios uno a uno.
 | Target | Rol |
 |--------|-----|
 | `make first-boot PROFILE=…` | Bootstrap completo |
-| `make isdconfig PROFILE=…` | Extras (`.isdconfig`) |
+| `make isdconfig PROFILE=…` | Extras interactivos (paquetes + applets, p. ej. top) |
 | `make isd-image PROFILE=…` | Solo imagen ISD |
 | `make run PROFILE=…` | QEMU con disco ISD |
 | `bootstrap-userspace` | Deprecado → `first-boot` |

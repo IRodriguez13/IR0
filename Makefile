@@ -1300,14 +1300,30 @@ run-dbgshell:
 	@echo "run-dbgshell retired: use runit/getty/ash (make run-console)"
 	@exit 2
 
-# Run in console mode (attach disk image) - ALL IR0 SUPPORTED HARDWARE
-run-console: kernel-x64-userspace.iso load-userspace-runit
-	@echo "Running IR0/Unix console (runit PID1 → getty/ash)..."
-	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_NGRAPHIC)
+# Run in console mode (-nographic). Product path: ISD disk for PROFILE.
+# Legacy inject: IR0_LEGACY_USERSPACE=1 make run-console
+run-console: kernel-x64-userspace.iso
+	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
+		$(MAKE) -s load-userspace-runit; \
+		echo "Running IR0/Unix console (LEGACY inject → disk.img)..."; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot -no-shutdown \
+			$(QEMU_NGRAPHIC); \
+	else \
+		test -f "$(IR0_ISD_DISK)" || { \
+			echo "✗ missing $(IR0_ISD_DISK)"; \
+			echo "  Run: make first-boot PROFILE=$(ISD_PROFILE)"; \
+			exit 1; \
+		}; \
+		echo "Running IR0+ISD console (PROFILE=$(ISD_PROFILE) DISK=$(IR0_ISD_DISK))..."; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
+			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) \
+			$(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot -no-shutdown \
+			$(QEMU_NGRAPHIC); \
+	fi
 
 # Run with TAP networking (permite ping bidireccional, requiere root y bridge configurado)
 # Pasos previos (bridge y TAP):
@@ -6455,7 +6471,7 @@ help:
 	@echo "  make sync-menuconfig-defconfig  Refresh setup/defconfig from Kconfig"
 	@echo "  make sync-menuconfig-check      Dry-run: show config drift vs Kconfig"
 	@echo "  make check-env | deptest   Host env diagnostic (default desktop-x86_64)"
-	@echo "  make deptest PROFILE=desktop-x86_64|userspace|hub-rpi4|watch|all"
+	@echo "  make deptest PROFILE=desktop-x86_64|userspace|minimal|hub-rpi4|watch|all"
 	@echo "  make pre-submit [SUBSYSTEM=mm|net|arm64]   Local gate → PRE_SUBMIT_OK"
 	@echo "  make tests            Build all test artifacts (tests/, kernel with ktest)"
 	@echo "  make kernel-memsafe   Run Valgrind over kernel code (tests/kernel_memsafe)"

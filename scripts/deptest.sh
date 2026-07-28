@@ -5,7 +5,10 @@
 #
 # Profiles (PROFILE=…; aliases match product image names):
 #   desktop | desktop-x86_64  — make ir0 / desktop-x86_64
-#   userspace                 — desktop + musl static userspace
+#   userspace                 — desktop + musl static userspace / ISD
+#   minimal | development | appliance
+#                             — ISD product profiles → same checks as userspace
+#                               (PROFILE=desktop stays the kernel desktop profile)
 #   hub | hub-rpi4            — ARM64 RPi4 UART lab
 #   watch | watch-rpi5-stub   — ARM64 rpi5 stub
 #   all                       — union of the above
@@ -19,6 +22,7 @@
 # Usage:
 #   make deptest
 #   make check-env PROFILE=desktop-x86_64
+#   make deptest PROFILE=minimal   # ISD first-boot deps (→ userspace)
 #   PROFILE=hub BOARD=rpi4 ./scripts/deptest.sh
 #
 
@@ -67,6 +71,12 @@ userspace)
 	PROFILE=userspace
 	PROFILE_DISPLAY=userspace
 	;;
+# ISD product profiles share the userspace host-deps set. Keep PROFILE=desktop
+# as the kernel desktop image profile (not remapped).
+minimal|development|appliance)
+	PROFILE=userspace
+	PROFILE_DISPLAY="userspace (ISD ${PROFILE_RAW})"
+	;;
 hub|hub-rpi4)
 	PROFILE=hub
 	PROFILE_DISPLAY=hub-rpi4
@@ -83,7 +93,7 @@ all)
 	;;
 *)
 	echo "[deptest] Unknown PROFILE=${PROFILE_RAW}"
-	echo "Valid: desktop | desktop-x86_64 | userspace | hub | hub-rpi4 | watch | watch-rpi5-stub | all"
+	echo "Valid: desktop | desktop-x86_64 | userspace | minimal | development | appliance | hub | hub-rpi4 | watch | watch-rpi5-stub | all"
 	exit 2
 	;;
 esac

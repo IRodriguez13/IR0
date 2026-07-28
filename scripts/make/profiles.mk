@@ -43,7 +43,7 @@ help-profiles:
 	@echo "  PROFILE=$(PROFILE)  BOARD=$(BOARD)"
 	@echo ""
 	@echo "  make check-env | deptest             # host env diagnostic (desktop default)"
-	@echo "  make deptest PROFILE=desktop-x86_64|userspace|hub-rpi4|watch|all"
+	@echo "  make deptest PROFILE=desktop-x86_64|userspace|minimal|hub-rpi4|watch|all"
 	@echo "  make ir0_defconfig PROFILE=desktop"
 	@echo "  make ir0_defconfig PROFILE=hub BOARD=rpi4"
 	@echo "  make ir0_defconfig PROFILE=watch BOARD=rpi5"

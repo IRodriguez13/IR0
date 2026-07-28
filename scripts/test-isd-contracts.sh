@@ -19,6 +19,28 @@ test -x scripts/bootstrap-isd.sh && ok "A bootstrap-isd executable" || bad "A ex
 grep -q 'PROFILE="$(ISD_PROFILE)"' scripts/make/isd.mk && ok "A PROFILE to ISD make" || bad "A PROFILE prop"
 grep -q 'run-isd' Makefile && ok "D run → run-isd" || bad "D run"
 grep -q 'images/\$(ISD_PROFILE)/disk.img' scripts/make/isd.mk && ok "D per-profile disk" || bad "D path"
+# Bugbot: run-console must boot ISD disk (not hard-dep load-userspace-runit).
+if grep -E '^run-console:.*load-userspace-runit' Makefile >/dev/null; then
+	bad "D run-console still deps load-userspace-runit"
+else
+	ok "D run-console not legacy-only"
+fi
+grep -A25 '^run-console:' Makefile | grep -q 'IR0_ISD_DISK' \
+	&& ok "D run-console uses IR0_ISD_DISK" || bad "D run-console no ISD disk"
+# Bugbot: ISD PROFILE names accepted by deptest (must not exit 2 = unknown).
+set +e
+out=$(PROFILE=minimal ./scripts/deptest.sh 2>&1)
+rc=$?
+set -e
+echo "$out" | grep -q 'Unknown PROFILE' && bad "D deptest rejects PROFILE=minimal" \
+	|| ok "D deptest PROFILE=minimal accepted (rc=$rc)"
+grep -q 'minimal|development|appliance' scripts/deptest.sh \
+	&& ok "D deptest maps ISD profiles" || bad "D no ISD profile map"
+# Bugbot: env IR0_USERSPACE_ROOT syncs into IR0_ISD_ROOT
+grep -q 'origin IR0_USERSPACE_ROOT),environment' scripts/make/isd.mk \
+	&& ok "D isd.mk syncs env USERSPACE_ROOT" || bad "D no env sync"
+grep -q 'IR0_USERSPACE_ROOT := \$(IR0_ISD_ROOT)' scripts/make/isd.mk \
+	&& ok "D USERSPACE_ROOT aliases ISD" || bad "D no USERSPACE alias"
 grep -q 'IR0_LEGACY_USERSPACE' Makefile && ok "legacy gate" || bad "legacy"
 grep -q 'IR0_DEPS_SELFTEST' scripts/ensure-host-deps.sh && ok "F SELFTEST hook" || bad "F SELFTEST"
 
