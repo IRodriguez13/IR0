@@ -61,15 +61,16 @@ ifdef arch
 ARCH := $(arch)
 endif
 
-# Accept userspace-style triples so a sibling `ARCH=x86_64` env does not break make.
+# Accept userspace-style triples so a sibling `ARCH=x86_64` env/MAKEFLAGS
+# does not break make (command-line ARCH requires override).
 ifeq ($(ARCH),x86_64)
-ARCH := x86-64
+override ARCH := x86-64
 endif
 ifeq ($(ARCH),amd64)
-ARCH := x86-64
+override ARCH := x86-64
 endif
 ifeq ($(ARCH),aarch64)
-ARCH := arm64
+override ARCH := arm64
 endif
 
 ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),1)
@@ -120,29 +121,9 @@ else
 DEFAULT_BUILD_TARGET := kernel-x64.iso
 endif
 
-# Userspace product tree (BusyBox, runit, login, doas, rootfs) lives in the
-# sibling repository; the kernel only drives its build for gates.
-IR0_USERSPACE_ROOT ?= $(abspath $(KERNEL_ROOT)/../IR0-userspace)
-IR0_USERSPACE_OUT  = $(IR0_USERSPACE_ROOT)/out
-# Userspace builder ARCH=x86_64; kernel maps that alias to x86-64 when needed.
-IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_USERSPACE_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=x86_64
-
-check-userspace:
-	@if [ ! -f "$(IR0_USERSPACE_ROOT)/Makefile" ]; then \
-		echo "✗ IR0-userspace not found at $(IR0_USERSPACE_ROOT)"; \
-		echo "  First time:  make bootstrap-userspace"; \
-		echo "  Or clone:    git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace"; \
-		echo "  Or set:      IR0_USERSPACE_ROOT=/path/to/IR0-userspace"; \
-		exit 1; \
-	fi
-
-# Clone sibling (if missing), headers_install, runit+BusyBox → disk.img + ISO.
-bootstrap-userspace:
-	@chmod +x scripts/bootstrap-userspace.sh
-	@./scripts/bootstrap-userspace.sh
-
-# Alias for new contributors: same as bootstrap-userspace.
-first-boot: bootstrap-userspace
+# Product distribution (ISD). Recipes live in scripts/make/isd.mk.
+# Compat: IR0_USERSPACE_ROOT/URL alias IR0_ISD_ROOT/URL.
+-include scripts/make/isd.mk
 
 all: $(DEFAULT_BUILD_TARGET)
 
@@ -309,8 +290,9 @@ else
 QEMU_AUDIO_ALL =
 endif
 
-# Storage: ATA/IDE disk
-QEMU_STORAGE_IDE = -drive file=disk.img,format=raw,if=ide,index=0
+# Storage: ATA/IDE disk (product run uses IR0_DISK → ISD image; smokes may override)
+IR0_DISK ?= disk.img
+QEMU_STORAGE_IDE = -drive file=$(IR0_DISK),format=raw,if=ide,index=0
 
 # Serial: COM1 para debug
 QEMU_SERIAL_COM1 = -serial stdio
@@ -1244,66 +1226,70 @@ windows-clean win-clean:
 # Run with GUI and disk (default) - ALL IR0 SUPPORTED HARDWARE
 # Note: This target does NOT call clean-net or rebuild with special flags
 # It simply runs the existing kernel ISO. Use 'make run-tap' for TAP networking.
-# Human console: minimal distro = runit + BusyBox (sibling IR0-userspace).
-# Optional in-guest TinyCC/GNU make: default ON (tcc needs /lib/tcc).
-# Disable with: IR0_WITH_DEVTOOLS=0 make run
-# Product login: minimal + firstboot wizard (not development autologin).
-# Lab autologin: IR0_PRODUCT_PROFILE=development make load-userspace-devtools
-# Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (document in SETUP.md).
-#
-# First time (no sibling yet): make first-boot && make run
+# Product console: ISD-owned disk for PROFILE (no per-binary inject).
+# First time: make first-boot PROFILE=minimal && make run PROFILE=minimal
+# Legacy inject: IR0_LEGACY_USERSPACE=1 make run  (load-userspace-*)
+# Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (SETUP.md).
 run: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
-		$(MAKE) -s load-userspace-devtools; \
+	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
+		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
+			$(MAKE) -s load-userspace-devtools; \
+		else \
+			$(MAKE) -s load-userspace-runit; \
+		fi; \
+		echo "Running IR0/Unix (LEGACY inject → disk.img)..."; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot \
+			$(QEMU_DISPLAY); \
 	else \
-		$(MAKE) -s load-userspace-runit; \
+		$(MAKE) run-isd; \
 	fi
-	@echo "Running IR0/Unix (human console — clean GTK)..."
-	@echo "   Hardware: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2, VGA"
-	@echo "   Ungrab input: Ctrl+Alt+G"
-	@echo "   Distro: minimal + firstboot (devtools ON; IR0_WITH_DEVTOOLS=0 to skip)"
-	@echo "   Dennis: virtfs mount_tag=dennis → /heart/dennis/src (IR0_DENNIS_9P=0 to skip)"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
-		-m 512M -no-reboot \
-		$(QEMU_DISPLAY)
 
 # Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
 run-debug: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
-		$(MAKE) -s load-userspace-devtools; \
+	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
+		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then $(MAKE) -s load-userspace-devtools; \
+		else $(MAKE) -s load-userspace-runit; fi; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot -no-shutdown \
+			$(QEMU_DISPLAY_GTK_DEBUG) \
+			-serial stdio \
+			-monitor telnet:127.0.0.1:1234,server,nowait \
+			-d guest_errors,int $(QEMU_LOG_FILE); \
 	else \
-		$(MAKE) -s load-userspace-runit; \
+		test -f "$(IR0_ISD_DISK)" || { echo "✗ missing $(IR0_ISD_DISK); make first-boot PROFILE=$(ISD_PROFILE)"; exit 1; }; \
+		echo "Running IR0+ISD debug (PROFILE=$(ISD_PROFILE) DISK=$(IR0_ISD_DISK))..."; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
+			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_ISA_DEBUG_EXIT) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot -no-shutdown \
+			$(QEMU_DISPLAY_GTK_DEBUG) \
+			-serial stdio \
+			-monitor telnet:127.0.0.1:1234,server,nowait \
+			-d guest_errors,int $(QEMU_LOG_FILE); \
 	fi
-	@echo "Running IR0/Unix userspace with debug output..."
-	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2, VGA"
-	@echo "Serial output will appear in this terminal"
-	@echo "QEMU GUI will open in separate window (menubar visible)"
-	@echo "Ungrab input: Ctrl+Alt+G"
-	@echo "Press Ctrl+C to stop"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY_GTK_DEBUG) \
-		-serial stdio \
-		-monitor telnet:127.0.0.1:1234,server,nowait \
-		-d guest_errors,int $(QEMU_LOG_FILE)
 
 # run-bootlog: defined in scripts/make/hostshare-boot.mk (serial + optional 9p boot log).
 # Human interactive with serial in-terminal: make run-debug.
 
 run-fullscreen: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
-		$(MAKE) -s load-userspace-devtools; \
+	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
+		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then $(MAKE) -s load-userspace-devtools; \
+		else $(MAKE) -s load-userspace-runit; fi; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot \
+			-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME); \
 	else \
-		$(MAKE) -s load-userspace-runit; \
+		test -f "$(IR0_ISD_DISK)" || { echo "✗ missing $(IR0_ISD_DISK); make first-boot PROFILE=$(ISD_PROFILE)"; exit 1; }; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
+			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot \
+			-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME); \
 	fi
-	@echo "Running IR0/Unix fullscreen GTK..."
-	@echo "   Ungrab input: Ctrl+Alt+G"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
-		-m 512M -no-reboot \
-		-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME)
 
 # Run without disk
 run-nodisk:
@@ -1613,7 +1599,7 @@ DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
 # Optional Doom IWAD for ken/games and legacy smokes (no maintainer home path).
-REAL_WAD_PATH ?=
+REAL_WAD_PATH ?= $(or $(ISD_DOOM_IWAD),$(IR0_DOOM_IWAD),)
 FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
@@ -2322,6 +2308,7 @@ build-runit: check-userspace
 	@$(IR0_USERSPACE_MAKE) compat-links
 
 load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-opendoas
+	@echo "note: load-userspace-runit is LEGACY — product path is make first-boot / isd-image"
 	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
 		echo "  WARN    nano not built (optional; cat /usr/bin/nano after reinject)"
 	@if [ "$${IR0_GUEST_MANDOCS:-1}" != "0" ]; then \
@@ -6393,11 +6380,21 @@ help:
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "Start here (new clone):"
-	@echo "  make check-env && make defconfig && make ir0 && make run"
+	@echo "  make first-boot PROFILE=minimal   # deps + clone ISD + image + ISO"
+	@echo "  make run PROFILE=minimal"
+	@echo "  make check-env && make defconfig && make ir0"
 	@echo "  make sync-mandocs && make man TOPIC=onboarding"
-	@echo "  make run-bootlog            # optional: boot log → build/hostshare/ir0-boot.log"
-	@echo "  make help-profiles         # desktop | hub-rpi4 | watch-rpi5-stub"
+	@echo "  make help-profiles         # kernel board profiles (desktop | hub | watch)"
 	@echo "  make pre-submit            # local contributor gate (no push)"
+	@echo ""
+	@echo "ISD distribution (sibling ../ISD — scripts/make/isd.mk):"
+	@echo "  make first-boot PROFILE=minimal|development"
+	@echo "  make isdconfig PROFILE=minimal    # extras (.isdconfig)"
+	@echo "  make isd / isd-rootfs / isd-image PROFILE=…"
+	@echo "  make run PROFILE=minimal          # boots ISD out/<arch>/images/<profile>/disk.img"
+	@echo "  make clone-isd | check-isd | isd-clean"
+	@echo "  Legacy inject (smokes): IR0_LEGACY_USERSPACE=1 make run"
+	@echo "  Deprecated alias: bootstrap-userspace → first-boot"
 	@echo ""
 	@echo "Profiles / images (scripts/make/profiles.mk):"
 	@echo "  make help-profiles"
