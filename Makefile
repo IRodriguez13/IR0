@@ -1612,7 +1612,8 @@ RUNIT_ASH_SMOKE_LOG = /tmp/runit-ash-smoke.log
 DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
-REAL_WAD_PATH ?= /home/ivanr013/Escritorio/universal-doom/DOOM1.WAD
+# Optional Doom IWAD for ken/games and legacy smokes (no maintainer home path).
+REAL_WAD_PATH ?=
 FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).

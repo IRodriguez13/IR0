@@ -44,10 +44,11 @@ Product userspace (runit + BusyBox) lives in a **sibling repo**. First boot:
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
 make check-env            # host diagnostic (or: make first-boot asks to install missing deps)
-make defconfig
-make first-boot           # clone ../IR0-userspace if needed + minimal rootfs + ISO
+make first-boot           # defconfig if needed + clone ../IR0-userspace + rootfs + ISO
 make run                  # QEMU GTK → getty → BusyBox ash
 ```
+
+`make first-boot` does not require Rust nightly (only if you enable example drivers in menuconfig). Host needs musl-tools, bison (`yacc`), git, curl, and the usual desktop ISO toolchain — see [SETUP.md](SETUP.md).
 
 Kernel-only ISO (no shell): `make ir0`. Without `/sbin/init` on `disk.img` the
 kernel **panics** at handoff — there is no in-kernel fallback shell.

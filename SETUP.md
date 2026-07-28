@@ -14,7 +14,6 @@ For architecture and capability boundaries, see [README.md](README.md).
 | `nasm` | x86-64 assembly |
 | `make` | Build orchestration |
 | `python3` (+ curses) | menuconfig / Kconfig helpers |
-| `rustc` + `cargo` + nightly `rust-src` | Rust drivers in default kernel link |
 | `grub-mkrescue` + `xorriso` | ISO generation (`kernel-x64.iso`) |
 | `qemu-system-x86_64` | Execution |
 
@@ -22,21 +21,26 @@ Debian/Ubuntu example:
 
 ```bash
 sudo apt install build-essential nasm qemu-system-x86 grub-pc-bin xorriso python3
-# Rust (rustup): https://rustup.rs
-rustup toolchain install nightly
-rustup component add rust-src --toolchain nightly
 ```
 
-### Required for static userspace (`PROFILE=userspace`)
+Rust (`rustc` / `cargo` / nightly `rust-src` via [rustup](https://rustup.rs)) is **optional** for the default kernel. It is required only when `.config` has `CONFIG_ENABLE_EXAMPLE_DRIVERS=y` (off in `make defconfig`).
+
+### Required for static userspace / `make first-boot` (`PROFILE=userspace`)
 
 | Tool | Purpose |
 |------|---------|
+| Everything in desktop above | ISO + QEMU |
 | `x86_64-linux-musl-gcc` or `musl-gcc` | Static musl binaries (BusyBox, runit, …) |
+| `git`, `curl`, `patch`, `sha256sum`, `file`, `flock` | Clone sibling, fetch/verify/patch package sources |
+| `yacc` (from `bison`) | Build opendoas (`parse.y`) |
 
 ```bash
-sudo apt install musl-tools
+sudo apt install musl-tools git curl patch file util-linux bison
 # or set MUSL_CC=/path/to/x86_64-linux-musl-gcc
+# Arch: pacman -S musl bison   (musl provides musl-gcc; there is no musl-gcc package)
 ```
+
+`make first-boot` runs `ensure-host-deps` (`IR0_DEPS_INSTALL=ask|yes|never`), creates `.config` via `defconfig` if missing, clones `../IR0-userspace`, builds rootfs + ISO. Optional Doom inject: `IR0_INSTALL_KEN_GAMES=1 REAL_WAD_PATH=/path/to/doom1.wad make first-boot`.
 
 ### Required for ARM hub/watch (`PROFILE=hub` / `watch`)
 
@@ -91,7 +95,7 @@ Product PID1 (runit), BusyBox, login/doas, and `/etc` live in a **separate**
 repository. **Recommended first-time path:**
 
 ```bash
-make first-boot    # checks host deps (asks to install if missing), clones ../IR0-userspace, builds rootfs + ISO
+make first-boot    # deps + defconfig if needed + clone ../IR0-userspace + rootfs + ISO
 make run           # QEMU → BusyBox ash (GTK)
 ```
 

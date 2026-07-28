@@ -257,10 +257,28 @@ if command -v python3 >/dev/null 2>&1; then
 	else
 		report_issue "python3-curses" present_but_unusable \
 			"  python3 found but 'import curses' fails (menuconfig TUI)." \
-			"libncurses-dev python3" "python" "python3-libs"
+			"libncurses-dev python3" "python" "python3-curses"
 	fi
 fi
 echo ""
+
+# Prefer rustup's cargo bin when it is not yet on PATH (fresh install / new shell).
+ensure_cargo_path() {
+	if [ -d "${HOME}/.cargo/bin" ]; then
+		case ":${PATH}:" in
+		*":${HOME}/.cargo/bin:"*) ;;
+		*)
+			PATH="${HOME}/.cargo/bin:${PATH}"
+			export PATH
+			;;
+		esac
+	fi
+}
+
+example_drivers_enabled() {
+	[ -f "${KERNEL_ROOT}/.config" ] || return 1
+	_grep -q '^CONFIG_ENABLE_EXAMPLE_DRIVERS=y' "${KERNEL_ROOT}/.config"
+}
 
 # ---------------------------------------------------------------------------
 # Desktop
@@ -316,22 +334,53 @@ need_desktop() {
 		ok_line "xorriso"
 	fi
 
+	# Rust is only linked when CONFIG_ENABLE_EXAMPLE_DRIVERS=y (off in defconfig).
+	if example_drivers_enabled; then
+		need_rust_example_drivers
+	else
+		ensure_cargo_path
+		if command -v rustc >/dev/null 2>&1; then
+			ok_line "rustc (optional): $(rustc --version 2>&1)"
+		else
+			report_issue "rustc" optional \
+				"  Not required for default kernel/ISO (example drivers off). Enable CONFIG_ENABLE_EXAMPLE_DRIVERS=y to link Rust drivers."
+		fi
+	fi
+
+	if [ -f "${KERNEL_ROOT}/.config" ]; then
+		ok_line ".config present"
+	else
+		report_issue ".config" optional \
+			"  Missing — next: make defconfig   (or: make first-boot / make ir0_defconfig PROFILE=desktop)"
+	fi
+	echo ""
+}
+
+# Required only when .config has CONFIG_ENABLE_EXAMPLE_DRIVERS=y.
+need_rust_example_drivers() {
+	echo "Rust example drivers (CONFIG_ENABLE_EXAMPLE_DRIVERS=y):"
+	echo "-------------------------------------------------------"
+	ensure_cargo_path
 	if ! command -v rustc >/dev/null 2>&1; then
 		report_issue "rustc" required \
-			"  Rust drivers are linked into the default kernel image.
+			"  Example Rust drivers are enabled.
   Install: https://rustup.rs
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     rustup toolchain install nightly
-    rustup component add rust-src --toolchain nightly"
+    rustup component add rust-src --toolchain nightly
+  Then re-open the shell (or: export PATH=\"\$HOME/.cargo/bin:\$PATH\")."
 	else
 		ok_line "rustc: $(rustc --version 2>&1)"
 		if ! command -v cargo >/dev/null 2>&1; then
-			report_issue "cargo" required "  Required with rustc (rustup)."
+			report_issue "cargo" required \
+				"  Required with rustc (rustup). Install: https://rustup.rs"
 		else
 			ok_line "cargo: $(cargo --version 2>&1)"
 		fi
 		if ! command -v rustup >/dev/null 2>&1; then
 			report_issue "rustup" required \
-				"  Required to manage nightly + rust-src for no_std drivers."
+				"  Required to manage nightly + rust-src for no_std drivers.
+  Install: https://rustup.rs"
 		else
 			if rustup toolchain list 2>/dev/null | _grep -q nightly; then
 				ok_line "rustup nightly toolchain"
@@ -347,19 +396,11 @@ need_desktop() {
 			fi
 		fi
 	fi
-
-	if [ -f "${KERNEL_ROOT}/.config" ]; then
-		ok_line ".config present"
-	else
-		report_issue ".config" optional \
-			"  Missing — next: make defconfig   (or: make ir0_defconfig PROFILE=desktop)"
-	fi
-	echo ""
 }
 
 need_userspace() {
-	echo "Userspace musl (required for PROFILE=userspace):"
-	echo "-----------------------------------------------"
+	echo "Userspace musl + fetch tools (required for PROFILE=userspace):"
+	echo "--------------------------------------------------------------"
 	if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then
 		ok_line "x86_64-linux-musl-gcc: $(x86_64-linux-musl-gcc --version 2>&1 | _head -1)"
 	elif command -v musl-gcc >/dev/null 2>&1; then
@@ -367,7 +408,41 @@ need_userspace() {
 	else
 		report_issue "musl-gcc / x86_64-linux-musl-gcc" required \
 			"  Or set MUSL_CC=/path/to/x86_64-linux-musl-gcc" \
-			"musl-tools" "musl musl-gcc" "musl-gcc"
+			"musl-tools" "musl" "musl-gcc"
+	fi
+	# Clone sibling, download package tarballs, verify, patch, and build probes.
+	require_cmd "git" git "git" "git" "git" --version || true
+	require_cmd "curl" curl "curl" "curl" "curl" --version || true
+	require_cmd "patch" patch "patch" "patch" "patch" --version || true
+	require_cmd "file" file "file" "file" "file" --version || true
+	if command -v sha256sum >/dev/null 2>&1; then
+		ok_line "sha256sum"
+	elif command -v sha256 >/dev/null 2>&1; then
+		ok_line "sha256"
+	else
+		report_issue "sha256sum" required \
+			"  Needed to verify IR0-userspace package tarballs." \
+			"coreutils" "coreutils" "coreutils"
+	fi
+	if command -v flock >/dev/null 2>&1; then
+		ok_line "flock (util-linux)"
+	else
+		report_issue "flock" required \
+			"  Needed by BusyBox package build lock." \
+			"util-linux" "util-linux" "util-linux"
+	fi
+	# opendoas builds parse.c from parse.y via Make's implicit yacc rule.
+	if command -v yacc >/dev/null 2>&1; then
+		ok_line "yacc: $(yacc --version 2>&1 | _head -1 || echo present)"
+	elif command -v bison >/dev/null 2>&1; then
+		# Some installs ship bison without a yacc wrapper; Make still needs `yacc`.
+		report_issue "yacc" required \
+			"  bison found but no 'yacc' on PATH (opendoas parse.y). Install the distro bison package that provides /usr/bin/yacc, or: ln -s \"\$(command -v bison)\" ~/bin/yacc && export PATH=\"\$HOME/bin:\$PATH\"." \
+			"bison" "bison" "bison"
+	else
+		report_issue "yacc" required \
+			"  Needed to build opendoas (parse.y → parse.c)." \
+			"bison" "bison" "bison"
 	fi
 	echo ""
 }
