@@ -296,6 +296,12 @@ static void emit_ascii(struct ps2_set1_state *st, struct ps2_set1_result *out,
 	char ch;
 	int shifted;
 
+	/* ESC → ASCII ESC so TTY apps (BusyBox vi) can leave insert/command modes. */
+	if (code == 0x01)
+	{
+		emit_byte(out, (uint8_t)0x1b);
+		return;
+	}
 	if (code == 0x0E)
 	{
 		emit_byte(out, (uint8_t)'\b');
