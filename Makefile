@@ -2158,7 +2158,9 @@ build-busybox-matrix-smoke:
 	fi
 	@mkdir -p $(dir $(BB_MATRIX_SMOKE_BIN))
 	@echo "  MUSL    Building BusyBox applet matrix driver ($(BB_MATRIX_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(BB_MATRIX_SMOKE_BIN) $(BB_MATRIX_SMOKE_SRC)
+	@$(MUSL_CC) -static -Os -o $(BB_MATRIX_SMOKE_BIN) \
+		$(BB_MATRIX_SMOKE_SRC) \
+		$(IR0_USERSPACE_ROOT)/smoke/matrix_capture.c
 	@file $(BB_MATRIX_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-busybox-matrix-smoke OK"
 
@@ -2177,7 +2179,7 @@ busybox-matrix: build-busybox-matrix-smoke build-busybox-ir0-full kernel-x64-use
 		--done BBMATRIX_OK --fail-regex 'BBMATRIX_FAIL|KERNEL PANIC' -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none; \
+		-serial stdio -display none -m 1024M -no-reboot -net none; \
 	rm -f $$DISK
 	@python3 $(IR0_USERSPACE_ROOT)/scripts/busybox_applet_matrix.py --log $(BB_MATRIX_LOG) \
 		--binary $(IR0_BUSYBOX_FULL_BIN) --write $(BB_MATRIX_TSV) \
