@@ -332,8 +332,15 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 			(unsigned)(p->signal_mask),
 			(unsigned)(p->signal_ignored));
 
-	(void)send_signal(p->task.pid, SIGSEGV);
-	process_exit(128 + SIGSEGV);
+	/*
+	 * Linux wait status must be WIFSIGNALED(SIGSEGV), not exited(139).
+	 * Ash prints "Segmentation fault" only when exit_signal is set.
+	 */
+	if (!process_signal_default_kill(p, SIGSEGV))
+	{
+		p->exit_signal = SIGSEGV;
+		process_exit(0);
+	}
 }
 
 void mm_page_fault_handle(const struct arch_page_fault_info *info, void *irq_frame)
@@ -519,8 +526,11 @@ void mm_page_fault_handle(const struct arch_page_fault_info *info, void *irq_fra
 			       (unsigned)(current ? (uint32_t)current->task.pid : 0));
 		if (current && current->mode == USER_MODE)
 		{
-			(void)send_signal(current->task.pid, SIGSEGV);
-			process_exit(128 + SIGSEGV);
+			if (!process_signal_default_kill(current, SIGSEGV))
+			{
+				current->exit_signal = SIGSEGV;
+				process_exit(0);
+			}
 		}
 		panic("Unhandled kernel page fault (uaccess, no user task)");
 	}

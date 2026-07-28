@@ -23,11 +23,14 @@ int process_signal_is_default_fatal(process_t *p, int sig)
 	if (sig == SIGKILL)
 		return 1;
 	/*
-	 * Default action Terminate (Linux signal(7)). Include USR1/USR2 —
-	 * BusyBox halt/poweroff signal init with those when not using -f.
+	 * Default action Terminate (Linux signal(7)). Include:
+	 * - USR1/USR2 — BusyBox halt/poweroff when not using -f
+	 * - SEGV/FPE/ILL/BUS/ABRT — so wait status is WIFSIGNALED (ash
+	 *   prints "Segmentation fault", etc.)
 	 */
 	if (sig != SIGTERM && sig != SIGHUP && sig != SIGINT && sig != SIGQUIT &&
-	    sig != SIGUSR1 && sig != SIGUSR2)
+	    sig != SIGUSR1 && sig != SIGUSR2 && sig != SIGSEGV && sig != SIGFPE &&
+	    sig != SIGILL && sig != SIGBUS && sig != SIGABRT)
 		return 0;
 	if (p->signal_ignored & SIGNAL_MASK(sig))
 		return 0;

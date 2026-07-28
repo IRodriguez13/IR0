@@ -319,7 +319,12 @@ static void keyboard_feed_scancode(uint8_t scancode)
 			kbd_scancode_tag = 1;
 			klog_smoke("KBD_SCANCODE_OK");
 		}
-		keyboard_buffer_add_bytes(r.emitted, r.emitted_len);
+		/*
+		 * While /dev/events0 has readers (Doom, etc.), only EV_KEY —
+		 * do not also inject ASCII into the cooked TTY line (qqqls).
+		 */
+		if (!input_events_readers_active())
+			keyboard_buffer_add_bytes(r.emitted, r.emitted_len);
 	}
 }
 

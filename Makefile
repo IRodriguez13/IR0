@@ -2336,7 +2336,8 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 	if [ ! -f "$$DISK" ] || [ ! -f "$$STAMP" ]; then NEED=1; fi; \
 	if [ $$NEED -eq 0 ] && [ "$$(cat "$$STAMP" 2>/dev/null)" != "$$PROFILE" ]; then NEED=1; fi; \
 	if [ $$NEED -eq 0 ]; then \
-		for dep in $(RUNIT_BIN_DIR)/runit-init $(RUNIT_STAGE_BIN)/runit_console_run \
+		for dep in $(RUNIT_BIN_DIR)/runit-init $(RUNIT_STAGE_BIN)/runit_stage1 \
+			$(RUNIT_STAGE_BIN)/runit_console_run \
 			$(RUNIT_STAGE_BIN)/ir0_passwd $(RUNIT_STAGE_BIN)/doas \
 			$(RUNIT_STAGE_BIN)/nano \
 			$(IR0_USERSPACE_ROOT)/rootfs/etc/passwd \

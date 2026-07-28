@@ -136,18 +136,19 @@ smoke-userspace-shell: load-userspace-rootfs kernel-x64-userspace.iso
 	fi
 
 smoke-userspace-segv: build-init-segv-smoke build-userspace-segv kernel-x64-userspace.iso
-	@echo "  SMOKE   userspace #PF -> SIGSEGV (PID1 wait4)..."
+	@echo "  SMOKE   userspace #PF -> WIFSIGNALED(SIGSEGV) (PID1 wait4)..."
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(SEGV_SMOKE_BIN) bin/userspace_segv; \
-	$(SMOKE_QEMU_RUN) --log /tmp/userspace-segv-smoke.log --timeout 90 --done code=000000000000008B -- \
+	$(SMOKE_QEMU_RUN) --log /tmp/userspace-segv-smoke.log --timeout 90 \
+		--done "userspace_segv smoke observed" -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
 	@if grep -q "\\[PF\\] userspace segv pid=" /tmp/userspace-segv-smoke.log && \
-	    grep -q "\\[PROCESS\\] exit pid=.*code=000000000000008B" /tmp/userspace-segv-smoke.log; then \
+	    grep -q "userspace_segv smoke observed" /tmp/userspace-segv-smoke.log; then \
 		echo "✓ smoke-userspace-segv passed"; \
 	else \
 		echo "✗ smoke-userspace-segv FAILED"; \

@@ -30,6 +30,7 @@ DEFAULT_PAGE_MAP=(
 	"IR0-boot"
 	"IR0-userspace IR0-uspace"
 	"IR0-onboarding IR0-onboard"
+	"IR0-port"
 	"IR0-vfs"
 	"IR0-syscalls"
 	"IR0-tty"
@@ -115,7 +116,8 @@ done
 		"PAGES ON THIS SYSTEM" \
 		"       man IR0-boot      boot and bring-up" \
 		"       man IR0-uspace    userspace and ISD" \
-		"       man IR0-onboard   onboarding" \
+		"       man IR0-port      porting software to ISD" \
+		"       man IR0-onboard   first boot / onboarding" \
 		"       man IR0-vfs       VFS" \
 		"       man IR0-syscalls  syscalls" \
 		"       man IR0-tty       TTY" \
