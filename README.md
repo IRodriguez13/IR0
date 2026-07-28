@@ -10,17 +10,19 @@ where unimplemented).
 
 ## ISD — IR0 Software Distribution
 
-**ISD** is the official minimal product of kernel + userspace: runit PID 1,
-BusyBox, login/firstboot, and a thin admin path (`doas` when installed). The
-userspace sources live in the sibling repo
-[`IR0-userspace`](https://github.com/IRodriguez13/IR0-userspace); this tree is
-the kernel, UAPI, and integration/smokes surface.
+**ISD** is the official product userspace for IR0: runit PID 1, BusyBox,
+login/firstboot, packages, rootfs, and the MINIX `disk.img`. Sources live in
+the sibling repo [`ISD`](https://github.com/IRodriguez13/ISD). This tree is the
+kernel, UAPI export, and QEMU/boot orchestration.
 
 | Layer | Repo | Role |
 |-------|------|------|
-| Kernel | **IR0** (this tree) | mechanisms, drivers, UAPI, KTM |
-| Userland | **IR0-userspace** | packages, init, services, rootfs |
-| Product | **ISD** | integrated image (`make first-boot` / `make run`) |
+| Kernel | **IR0** (this tree) | mechanisms, drivers, UAPI, ISO |
+| Distribution | **ISD** | packages, services, rootfs, `disk.img` |
+| Product | both | `make first-boot` / `make run PROFILE=…` |
+
+IR0 does **not** inject BusyBox/runit/nano individually on the canonical path —
+ISD builds a finished image; IR0 boots it.
 
 <p align="center">
   <img src="scripts/kconfig/assets/isd-firstboot.png" alt="ISD first boot — create your account" width="720" />
@@ -34,23 +36,36 @@ the kernel, UAPI, and integration/smokes surface.
 
 <p align="center"><em>Logged-in shell: Unix hierarchy, <code>uname -a</code>, privilege elevation with <code>doas</code>.</em></p>
 
+<p align="center">
+  <img src="scripts/kconfig/assets/isd-vi-editor.png" alt="ISD guest — BusyBox vi editing main.c" width="720" />
+</p>
+
+<p align="center"><em>In-guest BusyBox <code>vi</code> after <code>make run</code>: edit C sources on the ISD rootfs (QEMU GTK).</em></p>
+
 ## Getting started
-
-Complexity belongs in the code — starting should not.
-
-Product userspace (runit + BusyBox) lives in a **sibling repo**. First boot:
 
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
-make check-env            # host diagnostic (or: make first-boot asks to install missing deps)
-make first-boot           # defconfig if needed + clone ../IR0-userspace + rootfs + ISO
-make run                  # QEMU GTK → getty → BusyBox ash
+make check-env                    # host diagnostic (or: first-boot asks to install)
+make first-boot PROFILE=minimal   # host deps (ask) + clone ../ISD + image + ISO
+make run PROFILE=minimal          # QEMU GTK → getty → BusyBox ash
 ```
 
-`make first-boot` does not require Rust nightly (only if you enable example drivers in menuconfig). Host needs musl-tools, bison (`yacc`), git, curl, and the usual desktop ISO toolchain — see [SETUP.md](SETUP.md).
+`first-boot` asks before installing host packages (`IR0_DEPS_INSTALL=ask|yes|never`).
+sudo is used only for that install, never for clone/build. It does not require Rust
+nightly (only if you enable example drivers in menuconfig). Host needs musl-tools,
+bison (`yacc`), git, curl, and the usual desktop ISO toolchain — see [SETUP.md](SETUP.md).
 
-Kernel-only ISO (no shell): `make ir0`. Without `/sbin/init` on `disk.img` the
+Layout:
+
+```text
+parent/
+├── IR0/
+└── ISD/                  # cloned automatically if missing
+```
+
+Kernel-only ISO (no shell): `make ir0`. Without `/sbin/init` on the ISD disk the
 kernel **panics** at handoff — there is no in-kernel fallback shell.
 
 ```bash
