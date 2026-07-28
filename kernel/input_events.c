@@ -19,6 +19,7 @@
 #include <ir0/input.h>
 #include <ir0/time.h>
 #include <ir0/clock.h>
+#include <ir0/console.h>
 #include <string.h>
 #include <ir0/arch_port.h>
 
@@ -27,6 +28,7 @@
 static struct input_event event_queue[INPUT_EVENT_QUEUE_SIZE];
 static volatile unsigned int ev_head;
 static volatile unsigned int ev_tail;
+static volatile int events_readers;
 
 static inline uint64_t input_events_irq_save(void)
 {
@@ -36,6 +38,32 @@ static inline uint64_t input_events_irq_save(void)
 static inline void input_events_irq_restore(uint64_t flags)
 {
 	irq_restore((unsigned long)flags);
+}
+
+void input_events_reader_open(void)
+{
+	uint64_t irq_flags = input_events_irq_save();
+
+	events_readers++;
+	input_events_irq_restore(irq_flags);
+}
+
+void input_events_reader_close(void)
+{
+	int do_flush = 0;
+	uint64_t irq_flags = input_events_irq_save();
+
+	if (events_readers > 0)
+		events_readers--;
+	do_flush = (events_readers == 0);
+	input_events_irq_restore(irq_flags);
+	if (do_flush)
+		ir0_console_flush_input();
+}
+
+int input_events_readers_active(void)
+{
+	return events_readers > 0;
 }
 
 /* Called from keyboard IRQ handler - must be fast, no blocking */

@@ -30,6 +30,7 @@ Start here: `make man TOPIC=onboarding`. Study subsystems via `man IR0-vfs`, etc
 | drivers | IR0-drivers | T0 | stable | `*_backend.h` |
 | process | IR0-process | T1 | stable | process / signals facades |
 | userspace | IR0-userspace | T1–T2 | stable | exec / ash helpers |
+| porting | IR0-port | T1 | stable | (ISD porting guide — guest `man IR0-port`) |
 | multi-arch | IR0-multi-arch | T0 | stable | `arch_port.h`, `arm64_board.h` |
 | net | IR0-net | T0 | stable | `net.h` |
 | interrupts | IR0-interrupts | T0 | stable | irq / arch port |
