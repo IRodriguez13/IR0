@@ -79,7 +79,7 @@ IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=
 
 .PHONY: check-isd clone-isd isd-defconfig isdconfig isd isd-rootfs isd-image \
 	isd-clean first-boot bootstrap-userspace check-userspace \
-	warn-userspace-deprecated
+	warn-userspace-deprecated ensure-isd-disk run-isd
 
 warn-userspace-deprecated:
 	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
@@ -115,35 +115,48 @@ clone-isd:
 	fi
 
 isd-defconfig: check-isd
-	@$(IR0_ISD_MAKE) isd-defconfig
+	+@$(IR0_ISD_MAKE) isd-defconfig
 
+# '+' forwards the jobserver; keep the caller's TTY for the interactive menu.
 isdconfig: check-isd
-	@$(IR0_ISD_MAKE) isdconfig
+	+@$(IR0_ISD_MAKE) isdconfig
 
 isd: check-isd
-	@$(IR0_ISD_MAKE) build
+	+@$(IR0_ISD_MAKE) build
 
 isd-rootfs: check-isd
-	@$(IR0_ISD_MAKE) rootfs-tree
+	+@$(IR0_ISD_MAKE) rootfs-tree
 
 isd-image: check-isd
-	@$(IR0_ISD_MAKE) image-minix
+	+@$(IR0_ISD_MAKE) image-minix
 	@echo "✓ isd-image $(IR0_ISD_DISK)"
 
 isd-clean: check-isd
-	@$(IR0_ISD_MAKE) clean
+	+@$(IR0_ISD_MAKE) clean
 
 # Alias: old check-userspace name
 check-userspace: check-isd
 
+# Ensure per-PROFILE disk is up to date with stamps / .isdconfig.
+# Always runs ISD image-minix (incremental): rebuilds when config or packages change.
+ensure-isd-disk: check-isd
+	+@$(IR0_ISD_MAKE) fetch
+	+@$(IR0_ISD_MAKE) image-minix
+	@test -f "$(IR0_ISD_DISK)" || { \
+		echo "✗ failed to create $(IR0_ISD_DISK)"; \
+		exit 1; \
+	}
+	@echo "  DISK     $(IR0_ISD_DISK)"
+
 # Deprecated alias → new bootstrap
 bootstrap-userspace:
 	@echo "note: bootstrap-userspace is deprecated; use make first-boot PROFILE=$(ISD_PROFILE)"
-	@$(MAKE) first-boot PROFILE=$(ISD_PROFILE)
+	+@$(MAKE) first-boot PROFILE=$(ISD_PROFILE)
 
+# '+' so nested make -C ISD inside bootstrap inherits the jobserver.
 first-boot:
-	@chmod +x "$(KERNEL_ROOT)/scripts/bootstrap-isd.sh"
-	@PROFILE="$(ISD_PROFILE)" \
+	+@chmod +x "$(KERNEL_ROOT)/scripts/bootstrap-isd.sh"
+	+@PROFILE="$(ISD_PROFILE)" \
 		IR0_PRODUCT_PROFILE="$(ISD_PROFILE)" \
 		IR0_ISD_ROOT="$(IR0_ISD_ROOT)" \
 		IR0_ISD_URL="$(IR0_ISD_URL)" \
@@ -153,13 +166,8 @@ first-boot:
 		"$(KERNEL_ROOT)/scripts/bootstrap-isd.sh"
 
 # Product run: boot ISD-owned disk for PROFILE (no per-binary inject).
-# Does not rebuild packages; rebuild kernel ISO only if needed via deps.
-run-isd: kernel-x64-userspace.iso
-	@if [ ! -f "$(IR0_ISD_DISK)" ]; then \
-		echo "✗ missing ISD disk: $(IR0_ISD_DISK)"; \
-		echo "  Run: make first-boot PROFILE=$(ISD_PROFILE)"; \
-		exit 1; \
-	fi
+# Auto-builds the disk if missing (e.g. after ISD make clean).
+run-isd: kernel-x64-userspace.iso ensure-isd-disk
 	@echo "Running IR0 + ISD (PROFILE=$(ISD_PROFILE))"
 	@echo "  DISK     $(IR0_ISD_DISK)"
 	@echo "  ISO      kernel-x64-userspace.iso"
