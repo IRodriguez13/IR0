@@ -47,6 +47,7 @@ extern void test_ps2_set1_shift_a(void);
 extern void test_ps2_set1_caps_toggle(void);
 extern void test_ps2_set1_arrows_e0(void);
 extern void test_ps2_set1_autorepeat_ctrl(void);
+extern void test_ps2_set1_esc_emits_ascii_escape(void);
 extern void test_ps2_mouse_pkt_resync_and_complete(void);
 extern void test_ps2_mouse_interleaved_does_not_touch_kbd_mods(void);
 extern void test_ps2_set1_alt_independent(void);
@@ -90,6 +91,7 @@ static void (*test_functions[])(void) = {
 	test_ps2_set1_caps_toggle,
 	test_ps2_set1_arrows_e0,
 	test_ps2_set1_autorepeat_ctrl,
+	test_ps2_set1_esc_emits_ascii_escape,
 	test_ps2_mouse_pkt_resync_and_complete,
 	test_ps2_mouse_interleaved_does_not_touch_kbd_mods,
 	test_ps2_set1_alt_independent,

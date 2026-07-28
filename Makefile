@@ -1481,6 +1481,8 @@ TCC_POWER_HALT_HARNESS_BIN = setup/pid1/tcc_power_halt_harness
 TCC_POWER_HALT_LOG = /tmp/tcc-power-halt-smoke.log
 FASE55D_SMOKE_BIN = setup/doom/doomgeneric_smoke
 RUNIT_STAGE_BIN = $(IR0_USERSPACE_OUT)/stage-bin
+# Smoke runit helpers (fase55d, tcc power, busybox power) live under smoke/stage-bin.
+RUNIT_SMOKE_STAGE_BIN = $(IR0_USERSPACE_OUT)/smoke/stage-bin
 INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
 INIT_FASE53B_POSIX_PSEUDOFS_SRC = setup/pid1/init_fase53b_posix_pseudofs.c
 INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
@@ -2292,6 +2294,12 @@ run-irinit-interactive-gui:
 
 build-runit: check-userspace
 	@$(IR0_USERSPACE_MAKE) build-runit build-services
+	@chmod +x $(IR0_USERSPACE_ROOT)/scripts/build-services.sh
+	@ARCH=x86_64 CC="$(MUSL_CC)" MUSL_CC="$(MUSL_CC)" \
+		PRODUCT_OUT="$(IR0_USERSPACE_OUT)/x86_64/product" \
+		SMOKE_OUT="$(IR0_USERSPACE_OUT)/x86_64/smoke" \
+		$(IR0_USERSPACE_ROOT)/scripts/build-services.sh smoke
+	@$(IR0_USERSPACE_MAKE) compat-links
 
 load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-opendoas
 	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
@@ -4420,7 +4428,7 @@ build-init-fase55d-doomgeneric:
 	@echo "  HARNESS Building FASE55D real doomgeneric ($(FASE55D_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DIR0_DOOM_PORT \
+		-DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(INIT_FASE55D_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \
@@ -4436,7 +4444,7 @@ build-fase55e-doom-interactive:
 	@echo "  DOOM    Building FASE55E interactive doomgeneric ($(FASE55E_DOOM_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT \
+		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(INIT_FASE55D_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \

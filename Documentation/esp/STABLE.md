@@ -51,7 +51,7 @@ Si TCC, Doom+WAD o el smoke userspace están en rojo → **no merge a `master`**
 | **COW fork** | **Estable** | `make smoke-mm-cow-lazy` |
 | **Lazy alloc** | **Estable** | mismo smoke |
 | **Slice POSIX T1** | **Estable** | manifests tier1/musl; smokes cred/pthread/setuid |
-| **Gráficos T2 / Doom** | **Crítico p/ merge** | `IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric` (IWAD) — bloquea `master` |
+| **Gráficos T2 / Doom** | **Crítico p/ merge** | `IR0_LEGACY_SMOKE=1 smoke-fase55d-doomgeneric` (IWAD) + tags mouse/audio/`AUDIO_WRITE` + SB16 — bloquea `master`. Ver [`../testing/DOOM_FASE55D.md`](../testing/DOOM_FASE55D.md) |
 | **Userspace amplio** | **Crítico p/ merge** | `smoke-posix-depth` o `smoke-tier1` |
 | **Red local** | **Estable p/ prueba** | AF_UNIX + TCP loopback — `smoke-stream-sock` |
 | **Host-share 9p** | **Ayuda de desarrollo** | `smoke-hostshare-9p` (no es virtiofs) |

@@ -1,7 +1,7 @@
 # Coupling IR0 (kernel) ↔ IR0-userspace
 
 > **Last verified:** 2026-07-28  
-> **Source of truth:** this file, `Makefile` (`IR0_USERSPACE_ROOT`, `check-userspace`, `bootstrap-userspace` / `first-boot`), sibling [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../SETUP.md), [`testing/BUSYBOX_MATRIX.md`](testing/BUSYBOX_MATRIX.md).  
+> **Source of truth:** this file, `Makefile` (`IR0_USERSPACE_ROOT`, `check-userspace`, `bootstrap-userspace` / `first-boot`), sibling [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../SETUP.md), [`testing/BUSYBOX_MATRIX.md`](testing/BUSYBOX_MATRIX.md), [`testing/DOOM_FASE55D.md`](testing/DOOM_FASE55D.md).  
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
 
 ## Why two repositories?
@@ -100,6 +100,35 @@ Product binary (`IR0-userspace` `ir0_full.config`, base `defconfig`):
 - PMM pool **[32 MiB, 512 MiB)** with `USER_MMAP_START` at **512 MiB** (`0x20000000`); mmap hints only in `[USER_MMAP_START, USER_MMAP_END)`.
 - `make busybox-matrix`: drain worker pipe **until EOF** after exit (never stop on `EAGAIN`); streaming needle matcher; `BBCASE_*` / `BBMATRIX_END` protocol via `write(1)`; static store (no post-fork mmap); parent uses only `poll(fd,0)` + `poll(NULL,0,ms)` (no blocking poll waiter). See [`testing/BUSYBOX_MATRIX.md`](testing/BUSYBOX_MATRIX.md).
 - Still skip `CONFIG_TC` (host UAPI) and BusyBox init/runit applets.
+
+### Doom T2 (FASE55D) — mouse + PCM
+
+Backend: `setup/doom/doomgeneric_ir0.c` over `/dev/fb0`, `/dev/events0`, `/dev/audio`.
+
+| Path | Behavior |
+|------|----------|
+| Keyboard | Linux EV_KEY → doom keys (ESC, arrows, WASD, fire, …) |
+| Mouse | `EV_REL` + `BTN_*` → `D_PostEvent(ev_mouse)` |
+| Sound | No `-nosound`; `FEATURE_SOUND` module writes 11025 Hz 8-bit mono PCM to `/dev/audio` (SB16) |
+| Music | Still `-nomusic` |
+
+Gate:
+
+```bash
+IR0_LEGACY_SMOKE=1 make smoke-fase55d-doomgeneric REAL_WAD_PATH=/path/to/doom1.wad
+```
+
+Required serial tags (not frames-only): `DOOMGENERIC_MOUSE_CAPS_OK`, `DOOMGENERIC_AUDIO_OK`, `DOOMGENERIC_AUDIO_WRITE_OK`, `DOOMGENERIC_FIRST_FRAME_OK`, `FASE55D_DOOMGENERIC_OK`, `KTM_DOOM_55D_OK`. QEMU attaches `$(QEMU_AUDIO_SB16)`. Smoke runit helpers live under `IR0-userspace/out/smoke/stage-bin` (`RUNIT_SMOKE_STAGE_BIN`). Detail: [`testing/DOOM_FASE55D.md`](testing/DOOM_FASE55D.md).
+
+### TinyCC in-guest (`libtcc1.a`)
+
+- Build: `make build-tcc-fase52` → `setup/pid1/fase52_staging/` with `--tccdir=/lib/tcc` (absolute).
+- Inject: `scripts/inject_devtools_minix.sh` requires `/lib/tcc/libtcc1.a`, `libc.a`, and `crt*.o` on the disk (not only `/bin/tcc`).
+- Guest compile: `tcc hello.c` must find runtime under `/lib/tcc` without a cwd-relative `lib/tcc`.
+
+### TTY ESC (BusyBox vi)
+
+PS/2 set-1 scancode `0x01` emits ASCII `0x1b` (`includes/ir0/ps2_set1.c`) so line-discipline apps (BusyBox `vi`) can leave insert/command modes. Host: `tests/host` → `ps2_set1 ESC make emits 0x1b`.
 
 ## Guest manuals (`man`) — Implemented
 

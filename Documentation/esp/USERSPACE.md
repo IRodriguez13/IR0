@@ -1,7 +1,7 @@
 # Acoplamiento IR0 (kernel) ↔ IR0-userspace
 
 > **Última verificación:** 2026-07-28  
-> **Fuente de verdad:** este archivo, `Makefile` (`bootstrap-userspace`, `IR0_USERSPACE_ROOT`), hermano [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../../SETUP.md), [`../testing/BUSYBOX_MATRIX.md`](../testing/BUSYBOX_MATRIX.md).  
+> **Fuente de verdad:** este archivo, `Makefile` (`bootstrap-userspace`, `IR0_USERSPACE_ROOT`), hermano [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../../SETUP.md), [`../testing/BUSYBOX_MATRIX.md`](../testing/BUSYBOX_MATRIX.md), [`../testing/DOOM_FASE55D.md`](../testing/DOOM_FASE55D.md).  
 > **Inglés:** [`../USERSPACE.md`](../USERSPACE.md)
 
 ## ¿Por qué dos repos?
@@ -53,6 +53,24 @@ man IR0-boot
 - `/proc/mounts` muestra `ro`/`rw`; `/etc/mtab` → `/proc/mounts`.
 - PMM **[32 MiB, 512 MiB)**; `USER_MMAP_START` a **512 MiB** (`0x20000000`); hints mmap solo en el arena.
 - Matrix: drenaje hasta **EOF** tras `waitpid` (no cortar en `EAGAIN`); matcher streaming; protocolo `BBCASE_*` / `BBMATRIX_END`; sin mmap post-fork; **sin** `poll(fd, timeout>0)` en el padre (pool `poll_waiter` de IR0). Ver [`../testing/BUSYBOX_MATRIX.md`](../testing/BUSYBOX_MATRIX.md).
+
+### Doom T2 (FASE55D) — mouse + PCM
+
+Backend `setup/doom/doomgeneric_ir0.c`: `/dev/fb0`, `/dev/events0`, `/dev/audio`. Mouse `EV_REL`+botones; sonido 11025 Hz 8-bit mono sin `-nosound`; música sigue `-nomusic`.
+
+```bash
+IR0_LEGACY_SMOKE=1 make smoke-fase55d-doomgeneric REAL_WAD_PATH=/ruta/doom1.wad
+```
+
+Tags obligatorios: `DOOMGENERIC_MOUSE_CAPS_OK`, `DOOMGENERIC_AUDIO_OK`, `DOOMGENERIC_AUDIO_WRITE_OK`, frames + `FASE55D_DOOMGENERIC_OK` / `KTM_DOOM_55D_OK`. QEMU con SB16. Detalle EN: [`../testing/DOOM_FASE55D.md`](../testing/DOOM_FASE55D.md).
+
+### TinyCC en guest (`libtcc1.a`)
+
+`make build-tcc-fase52` usa `--tccdir=/lib/tcc`. `inject_devtools_minix.sh` exige `libtcc1.a` / `libc.a` / `crt*` en el disco.
+
+### ESC en TTY (BusyBox vi)
+
+Scancode PS/2 `0x01` → ASCII `0x1b` en `ps2_set1` (host test en `tests/host`).
 
 ## Manuales en guest (`man`) — Implementado
 
