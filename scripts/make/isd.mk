@@ -15,20 +15,38 @@ _IR0_ISD_MK := 1
 
 # --- paths / URLs ------------------------------------------------------------
 
+# Defaults (origin → file when unset). CLI/env IR0_ISD_* already win over ?=.
 IR0_ISD_ROOT ?= $(abspath $(KERNEL_ROOT)/../ISD)
 IR0_ISD_URL  ?= https://github.com/IRodriguez13/ISD.git
 
-# Temporary aliases (deprecated names)
-ifneq ($(origin IR0_USERSPACE_ROOT),command line)
-  IR0_USERSPACE_ROOT ?= $(IR0_ISD_ROOT)
-else
-  IR0_ISD_ROOT := $(IR0_USERSPACE_ROOT)
+# Capture before we rewrite aliases (for deprecation notes).
+_IR0_USERSPACE_ROOT_ORIGIN := $(origin IR0_USERSPACE_ROOT)
+_IR0_USERSPACE_URL_ORIGIN := $(origin IR0_USERSPACE_URL)
+
+# Deprecated IR0_USERSPACE_* aliases — keep in sync for CLI and environment.
+# Priority: CLI IR0_ISD_* > CLI IR0_USERSPACE_* > env IR0_ISD_* >
+#           env IR0_USERSPACE_* > file default above.
+ifeq ($(origin IR0_USERSPACE_ROOT),command line)
+  ifneq ($(origin IR0_ISD_ROOT),command line)
+    IR0_ISD_ROOT := $(IR0_USERSPACE_ROOT)
+  endif
+else ifeq ($(origin IR0_USERSPACE_ROOT),environment)
+  ifeq ($(origin IR0_ISD_ROOT),file)
+    IR0_ISD_ROOT := $(IR0_USERSPACE_ROOT)
+  endif
 endif
-ifneq ($(origin IR0_USERSPACE_URL),command line)
-  IR0_USERSPACE_URL ?= $(IR0_ISD_URL)
-else
-  IR0_ISD_URL := $(IR0_USERSPACE_URL)
+ifeq ($(origin IR0_USERSPACE_URL),command line)
+  ifneq ($(origin IR0_ISD_URL),command line)
+    IR0_ISD_URL := $(IR0_USERSPACE_URL)
+  endif
+else ifeq ($(origin IR0_USERSPACE_URL),environment)
+  ifeq ($(origin IR0_ISD_URL),file)
+    IR0_ISD_URL := $(IR0_USERSPACE_URL)
+  endif
 endif
+# Legacy recipes still read IR0_USERSPACE_*; always alias to the ISD path.
+IR0_USERSPACE_ROOT := $(IR0_ISD_ROOT)
+IR0_USERSPACE_URL := $(IR0_ISD_URL)
 
 ISD_ARCH ?= x86_64
 
@@ -64,9 +82,14 @@ IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=
 	warn-userspace-deprecated
 
 warn-userspace-deprecated:
-	@if [ -n "$${IR0_USERSPACE_ROOT_SET:-}" ] || [ "$(origin IR0_USERSPACE_ROOT)" = "command line" ]; then \
-		echo "note: IR0_USERSPACE_ROOT is deprecated; use IR0_ISD_ROOT=$${IR0_ISD_ROOT}"; \
-	fi
+	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
+		command\ line|environment) \
+			echo "note: IR0_USERSPACE_ROOT is deprecated; use IR0_ISD_ROOT=$(IR0_ISD_ROOT)" ;; \
+	esac
+	@case "$(_IR0_USERSPACE_URL_ORIGIN)" in \
+		command\ line|environment) \
+			echo "note: IR0_USERSPACE_URL is deprecated; use IR0_ISD_URL=$(IR0_ISD_URL)" ;; \
+	esac
 
 check-isd:
 	@if [ ! -f "$(IR0_ISD_ROOT)/Makefile" ]; then \

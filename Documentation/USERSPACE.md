@@ -64,14 +64,14 @@ parent/
 | `IR0/.config` | kernel | Kconfig |
 | `ISD/profiles/<p>/profile.conf` | ISD | login/root/fsck policy |
 | `ISD/profiles/<p>/packages.txt` | ISD | mandatory packages |
-| `ISD/.isdconfig` | ISD | optional extras (`make isdconfig`) |
+| `ISD/.isdconfig` | ISD | optional packages + applets (`make isdconfig`) |
 
 ### Targets
 
 | Target | Role |
 |--------|------|
 | `make first-boot PROFILE=…` | Full product bootstrap |
-| `make isdconfig PROFILE=…` | Toggle extras |
+| `make isdconfig PROFILE=…` | Interactive extras (TTY: packages + applets e.g. top) |
 | `make isd` / `isd-rootfs` / `isd-image` | Delegate to ISD |
 | `make run PROFILE=…` | Boot ISD disk (no rebuild if up to date) |
 | `make bootstrap-userspace` | **Deprecated** → `first-boot` |
