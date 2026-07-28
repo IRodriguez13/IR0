@@ -260,14 +260,33 @@ uint64_t create_process_page_directory(void)
 	 * PAGE_USER on every level for user mappings).
 	 */
 	{
-		uint64_t id_end = PMM_PHYS_BASE + PMM_PHYS_SIZE;
+		/*
+		 * 4 KiB supervisor map: low kernel image and keyboard ring only.
+		 * Stop before 0x600000 so 2 MiB slots never cover user ELF at 0x400000.
+		 * Heap [8,32) MiB and PMM [32,512) MiB use 2 MiB identity (COW
+		 * memcpy uses PA as VA under process CR3). Cap at USER_MMAP_START.
+		 */
+		const uint64_t supervisor_kbd_end = 0x00600000UL;
+		const uint64_t pmm_end = PMM_PHYS_BASE + PMM_PHYS_SIZE;
 
 		if (map_supervisor_identity_low(pml4, 0, 0x00400000UL) != 0)
 		{
 			kfree_aligned(pml4);
 			return 0;
 		}
-		if (map_supervisor_identity_low(pml4, KEYBOARD_BUFFER_ADDR, id_end) != 0)
+		if (map_supervisor_identity_low(pml4, KEYBOARD_BUFFER_ADDR,
+						supervisor_kbd_end) != 0)
+		{
+			kfree_aligned(pml4);
+			return 0;
+		}
+		if (map_supervisor_identity_2mb(pml4, supervisor_kbd_end,
+						PMM_PHYS_BASE) != 0)
+		{
+			kfree_aligned(pml4);
+			return 0;
+		}
+		if (map_supervisor_identity_2mb(pml4, PMM_PHYS_BASE, pmm_end) != 0)
 		{
 			kfree_aligned(pml4);
 			return 0;

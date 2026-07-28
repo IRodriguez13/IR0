@@ -171,9 +171,10 @@ void kmain(uint32_t multiboot_info)
     /* Version banner emitted after serial_init (klog + console). */
 
     /*
-     * Physical Memory Manager: manage frames in [32MB, 48MB).
+     * Physical Memory Manager: manage frames in [32MB, 512MB).
      * Heap occupies [8MB, 32MB), so PMM must use disjoint memory.
-     * Boot page tables identity-map up to 48MB (24 x 2MB pages).
+     * Boot page tables identity-map up to 512MB (256 x 2MB pages), ending
+     * at USER_MMAP_START so user anon mmap is not covered by supervisor PS.
      */
     pmm_init(PMM_PHYS_BASE, PMM_PHYS_SIZE);
     

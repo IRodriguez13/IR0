@@ -458,6 +458,18 @@ void mm_page_fault_handle(const struct arch_page_fault_info *info, void *irq_fra
 		new_phys = pmm_alloc_frame();
 		if (!new_phys)
 		{
+			size_t tot = 0;
+			size_t used = 0;
+			size_t free_fr = 0;
+
+			pmm_stats(&tot, &used, &free_fr);
+			klog_notice_fmt("PF",
+					"[PF] COW OOM pid=%x addr=%llx refs=%u used=%u free=%u\n",
+					(unsigned)((uint32_t)current->task.pid),
+					(unsigned long long)fault_addr,
+					(unsigned)pmm_frame_refcount(old_phys),
+					(unsigned)used,
+					(unsigned)free_fr);
 			pf_user_segv(current, stack, fault_addr, info);
 			return;
 		}

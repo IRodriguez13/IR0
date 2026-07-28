@@ -213,11 +213,13 @@
 
 /* MEMORY LAYOUT — virtual addresses and segment selectors */
 #define USER_STACK_TOP      0x7FFFF000UL
-#define USER_STACK_SIZE     0x10000   /* 64 KiB — musl/BusyBox headroom below guard page */
+/* 512 KiB — nearly-full BusyBox (~2 MiB static) overflows smaller stacks. */
+#define USER_STACK_SIZE     0x80000
 #define USER_STACK_BASE     (USER_STACK_TOP - USER_STACK_SIZE)
 #define USER_STACK_GUARD    (USER_STACK_BASE - 0x1000UL)
 #define USER_HEAP_BASE      0x2000000UL
-#define USER_MMAP_START     0x8000000UL
+/* Anon mmap arena starts above the PMM identity window (see PMM_PHYS_*). */
+#define USER_MMAP_START     0x20000000UL
 /*
  * Linux-like separation: anon mmap arena ends at least USER_STACK_MMAP_GAP below
  * the stack guard page (not flush against guard like pre-D1.15).
@@ -247,8 +249,13 @@
 #define IR0_CLASS_B_REPAIR 1
 #endif
 #define RFLAGS_IF           0x202
+/*
+ * PMM frame pool: physical [32 MiB, 512 MiB). Must stay below USER_MMAP_START
+ * (0x20000000): process CR3 identity-maps PMM as PA==VA for COW; covering the
+ * mmap arena makes user mmap hit supervisor 2 MiB pages (SEGV). Boot map 0–512 MiB.
+ */
 #define PMM_PHYS_BASE       0x2000000
-#define PMM_PHYS_SIZE       0x1000000
+#define PMM_PHYS_SIZE       0x1E000000
 
 /* PROCESS LIMITS */
 #define MAX_PROCESSES 256
