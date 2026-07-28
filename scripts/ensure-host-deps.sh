@@ -131,8 +131,12 @@ if [ "$fake_fail" -eq 0 ]; then
 fi
 
 if [ ! -s "$LIST" ]; then
-	echo "  deptest failed without a package mapping (version/usability issue)."
-	echo "  Fix the messages above, or see SETUP.md"
+	echo "  Required issue without an installable package mapping (e.g. rustup"
+	echo "  components, wrong toolchain version, or a probe failure)."
+	echo "  Read the [deptest] blocks above and SETUP.md, then fix manually."
+	echo "  Rust example drivers: https://rustup.rs"
+	echo "    rustup toolchain install nightly"
+	echo "    rustup component add rust-src --toolchain nightly"
 	echo "  Then: make deptest PROFILE=${PROFILE}"
 	exit 1
 fi
@@ -200,8 +204,18 @@ if [ "$fake_fail" -eq 1 ]; then
 fi
 
 echo "[ensure-host-deps] Running: ${INSTALL_CMD}"
+set +e
 # shellcheck disable=SC2086
 eval ${INSTALL_CMD}
+install_rc=$?
+set -e
+if [ "$install_rc" -ne 0 ]; then
+	echo "[ensure-host-deps] Package install failed (exit ${install_rc})."
+	echo "  Re-run as a user with sudo, or install manually:"
+	echo "    ${INSTALL_CMD}"
+	echo "  Then: make deptest PROFILE=${PROFILE}"
+	exit 1
+fi
 
 echo ""
 echo "[ensure-host-deps] Re-checking…"
