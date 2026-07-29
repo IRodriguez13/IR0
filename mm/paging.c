@@ -1086,6 +1086,61 @@ int map_supervisor_identity_low(uint64_t *pml4, uint64_t start, uint64_t end)
     return 0;
 }
 
+/*
+ * map_supervisor_identity_2mb - 2 MiB supervisor identity (PD-level PS bit)
+ *
+ * Cheaper than 4 KiB walks for the kernel heap and PMM frame pool. Callers must
+ * not overlap [0x400000, 0x600000): a 2 MiB slot there would block user ELF.
+ */
+int map_supervisor_identity_2mb(uint64_t *pml4, uint64_t start, uint64_t end)
+{
+    uint64_t va;
+
+#if !CONFIG_ARCH_X86_64
+    return map_supervisor_identity_low(pml4, start, end);
+#else
+    if (!pml4 || end <= start)
+        return -1;
+
+    start = (start + PAGE_SIZE_2MB - 1) & ~((uint64_t)PAGE_SIZE_2MB - 1);
+    end &= ~((uint64_t)PAGE_SIZE_2MB - 1);
+    if (end <= start)
+        return 0;
+
+    for (va = start; va < end; va += PAGE_SIZE_2MB)
+    {
+        size_t idx[4];
+        uint64_t *pdpt;
+        uint64_t *pd;
+        uint64_t entry;
+
+        mm_va_indices((uintptr_t)va, idx);
+
+        pdpt = get_or_create_table(pml4, idx[0], 1, 0, 1);
+        if (!pdpt)
+            return -1;
+
+        pd = get_or_create_table(pdpt, idx[1], 1, 0, 2);
+        if (!pd)
+            return -1;
+
+        if (mm_pte_present(pd[idx[2]]))
+        {
+            if (paging_entry_large(pd[idx[2]]))
+                continue;
+            return -1;
+        }
+
+        entry = mm_make_leaf_pte((uintptr_t)va,
+                                 PAGE_RW | PAGE_SIZE_2MB_FLAG, 1);
+        pd[idx[2]] = entry;
+        ir0_mm_leaf_created++;
+    }
+
+    return 0;
+#endif
+}
+
 void paging_reclaim_lower_half_tables(uint64_t *pml4)
 {
     size_t i4;
@@ -1125,8 +1180,15 @@ void paging_reclaim_lower_half_tables(uint64_t *pml4)
                 uint64_t *pt;
                 size_t i1;
 
-                if (!mm_pte_present(pde) || paging_entry_large(pde))
+                if (!mm_pte_present(pde))
                     continue;
+
+                /* Supervisor 2 MiB identity: drop PDE only (PFN is not a PT). */
+                if (paging_entry_large(pde))
+                {
+                    pd[i2] = 0;
+                    continue;
+                }
 
                 pt = paging_entry_table(pde);
                 if (!pt)

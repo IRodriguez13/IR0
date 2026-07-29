@@ -162,7 +162,8 @@ RUNIT_ASH_SMOKE_LOG = /tmp/runit-ash-smoke.log
 DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
-REAL_WAD_PATH ?= /home/ivanr013/Escritorio/universal-doom/DOOM1.WAD
+# Optional Doom IWAD — set REAL_WAD_PATH=/path/to/doom1.wad for Doom smokes.
+REAL_WAD_PATH ?=
 FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
@@ -1262,7 +1263,7 @@ build-init-fase55d-doomgeneric:
 	@echo "  HARNESS Building FASE55D real doomgeneric ($(FASE55D_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DIR0_DOOM_PORT \
+		-DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(INIT_FASE55D_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \
@@ -1278,7 +1279,7 @@ build-fase55e-doom-interactive:
 	@echo "  DOOM    Building FASE55E interactive doomgeneric ($(FASE55E_DOOM_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT \
+		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(INIT_FASE55D_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \
@@ -1331,7 +1332,7 @@ kernel-x64-userspace.iso: kernel-x64-userspace.bin arch/x86-64/grub.cfg
 	@cp kernel-x64-userspace.bin iso_userspace/boot/kernel-x64.bin
 	@grub-mkrescue -o $@ iso_userspace
 	@rm -rf iso_userspace
-	@echo "✓ ISO (userspace init, lazy MM) created: $@"
+	@echo "  ISO     $@"
 
 kernel-x64-userspace-lazy.iso: kernel-x64-userspace.iso
 	@cp kernel-x64-userspace.iso $@

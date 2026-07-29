@@ -32,6 +32,7 @@
 #include <ir0/kernel.h>
 #include <ir0/elf_loader.h>
 #include <ir0/path.h>
+#include <ir0/path_user.h>
 #include <ir0/permissions.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/kmem.h>
@@ -504,7 +505,7 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 		    ~current_process->signal_mask)
 			break;
 
-		current_process->state = PROCESS_BLOCKED;
+		process_set_sched_state(current_process, PROCESS_BLOCKED);
 		process_arm_kernel_syscall_sleep(current_process);
 		while (current_process->state == PROCESS_BLOCKED)
 		{
@@ -949,21 +950,16 @@ int64_t sys_exec(const char *pathname,
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  /* Unix-style: resolve relative paths against cwd before loading */
+  /* Unix-style: resolve relative against cwd; absolute under chroot. */
   char resolved_path[256];
   const char *path_to_use = pathname;
-  if (!is_absolute_path(pathname))
-  {
-    if (join_paths(current_process->cwd, pathname, resolved_path, sizeof(resolved_path)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved_path;
-  }
-  else
-  {
-    if (normalize_path(pathname, resolved_path, sizeof(resolved_path)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved_path;
-  }
+  int path_rc;
+
+  path_rc = ir0_resolve_user_path(pathname, resolved_path, sizeof(resolved_path),
+                                  current_process->cwd, current_process->root);
+  if (path_rc != 0)
+    return path_rc;
+  path_to_use = resolved_path;
 
   /* argv/envp are NULL-terminated vectors; only validate the first slot here.
    * Per-entry mapped checks happen inside the iteration below.

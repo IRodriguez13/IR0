@@ -103,4 +103,50 @@ void test_named_fifo_supervise(void)
 	TEST_END();
 
 	reset_named_fifo_table();
+
+	/*
+	 * Regression: last FD close must not free named FIFO pipe_t; unlink
+	 * (or table recycle) is the sole destroy path. Otherwise runsv hits
+	 * alloc_free double-free when supervise/control is reopened.
+	 */
+	TEST_BEGIN("named_fifo_close_then_unlink_no_double_free");
+	{
+		pipe_t *p;
+		uint64_t created0 = 0, destroyed0 = 0;
+		uint64_t created1 = 0, destroyed1 = 0;
+
+		pipe_fase48_get_stats(&created0, &destroyed0);
+		rc = named_fifo_create("/etc/runit/sv/console/supervise/ok", 0600);
+		ASSERT_EQ(rc, 0);
+		p = named_fifo_lookup("/etc/runit/sv/console/supervise/ok");
+		ASSERT(p != NULL);
+		ASSERT_EQ(p->named, 1);
+
+		pipe_acquire_end(p, 0);
+		pipe_acquire_end(p, 1);
+		pipe_close_end(p, 0);
+		pipe_close_end(p, 1);
+
+		pipe_fase48_get_stats(&created1, &destroyed1);
+		ASSERT_EQ(destroyed1, destroyed0); /* still owned by inode */
+
+		p = named_fifo_lookup("/etc/runit/sv/console/supervise/ok");
+		ASSERT(p != NULL);
+		ASSERT_EQ(p->fd_refs, 0);
+
+		/* Reopen after last close must work (runsv supervise). */
+		pipe_acquire_end(p, 0);
+		ASSERT_EQ(p->fd_refs, 1);
+		ASSERT_EQ(p->closed_read, 0);
+		pipe_close_end(p, 0);
+
+		rc = named_fifo_unlink("/etc/runit/sv/console/supervise/ok");
+		ASSERT_EQ(rc, 0);
+		pipe_fase48_get_stats(&created1, &destroyed1);
+		ASSERT_EQ(destroyed1, destroyed0 + 1);
+		ASSERT_EQ(created1, created0 + 1);
+	}
+	TEST_END();
+
+	reset_named_fifo_table();
 }

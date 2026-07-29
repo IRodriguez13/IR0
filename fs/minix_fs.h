@@ -21,6 +21,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <ir0/stat.h>
+#include <ir0/statfs.h>
 #include <ir0/types.h>  // For standard types
 
 
@@ -154,6 +155,8 @@ int minix_fs_rm(const char *path);
 int minix_fs_rmdir(const char *path);
 int minix_fs_rmdir_force(const char *path);
 int minix_fs_stat(const char *pathname, stat_t *buf);
+/* Fill Linux-compatible statfs for the mounted MINIX volume. */
+int minix_fs_statfs(struct ir0_statfs *buf);
 int minix_fs_chown(const char *path, uid_t owner, gid_t group);
 int minix_fs_link(const char *oldpath, const char *newpath);
 void minix_fs_cleanup(void);

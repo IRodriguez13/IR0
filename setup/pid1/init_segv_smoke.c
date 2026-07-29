@@ -1,14 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * PID1 smoke for userspace #PF -> SIGSEGV-equivalent exit.
+ * PID1 smoke for userspace #PF -> WIFSIGNALED(SIGSEGV) wait status.
+ * Linux ash prints "Segmentation fault" only when exit_signal is set
+ * (not exited(139)).
  */
 
+#include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
 int main(void)
 {
 	pid_t pid = fork();
+	int status = 0;
 
 	if (pid == 0)
 	{
@@ -25,12 +29,24 @@ int main(void)
 		return 1;
 	}
 
+	if (wait4(pid, &status, 0, 0) < 0)
 	{
-		(void)wait4(pid, 0, 0, 0);
+		static const char msg[] = "IR0: userspace_segv: wait4 failed\n";
+		write(2, msg, sizeof(msg) - 1);
+		return 2;
+	}
+
+	if (!WIFSIGNALED(status) || WTERMSIG(status) != SIGSEGV)
+	{
+		static const char msg[] =
+			"IR0: userspace_segv: expected WIFSIGNALED(SIGSEGV)\n";
+		write(2, msg, sizeof(msg) - 1);
+		return 3;
+	}
+
+	{
 		static const char ok[] = "IR0: userspace_segv smoke observed\n";
 		write(1, ok, sizeof(ok) - 1);
 		return 0;
 	}
-
-	return 4;
 }

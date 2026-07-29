@@ -47,9 +47,12 @@ struct vfs_mount {
     struct vfs_mount *next;
 };
 
-/* Linux mount(2) flag bits we honour today. */
+/* Linux mount(2) flag bits we honour today (values match linux/fs.h). */
 #define IR0_MS_RDONLY  1
 #define IR0_MS_REMOUNT 32
+#define IR0_MS_BIND    4096
+/* Flags that are not implemented yet — reject on new mounts. */
+#define IR0_MS_UNSUPPORTED (IR0_MS_BIND)
 
 int vfs_remount(const char *path, unsigned long flags);
 
@@ -100,10 +103,13 @@ void vfs_file_acquire(struct vfs_file *f);
 
 /* Path operations */
 int vfs_stat(const char *path, stat_t *buf);
+struct ir0_statfs;
+int vfs_statfs(const char *path, struct ir0_statfs *buf);
 int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);
 int vfs_rmdir(const char *path);
 int vfs_rmdir_recursive(const char *path);
+int vfs_clear_stale_for_regular_file(const char *path);
 int vfs_link(const char *oldpath, const char *newpath);
 int vfs_rename(const char *oldpath, const char *newpath);
 int vfs_symlink(const char *target, const char *linkpath);

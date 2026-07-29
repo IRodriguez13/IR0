@@ -19,6 +19,10 @@
 
 #include "upstream/doomgeneric/doomgeneric.h"
 #include "upstream/doomgeneric/doomkeys.h"
+#include "upstream/doomgeneric/d_event.h"
+#include "upstream/doomgeneric/i_sound.h"
+#include "upstream/doomgeneric/w_wad.h"
+#include "upstream/doomgeneric/z_zone.h"
 
 #ifndef CLOCK_MONOTONIC
 #define CLOCK_MONOTONIC 1
@@ -30,6 +34,14 @@
 #define IR0_INPUT_IOCTL_GET_CAPS 0x49520002u
 
 #define EV_KEY 0x01
+#define EV_REL 0x02
+#define REL_X  0x00
+#define REL_Y  0x01
+#define BTN_LEFT   0x110
+#define BTN_RIGHT  0x111
+#define BTN_MIDDLE 0x112
+
+#define AUDIO_SET_FORMAT 0x1005
 
 #define IR0_KEY_ESC       1
 #define IR0_KEY_ENTER     28
@@ -45,6 +57,17 @@
 #define IR0_KEY_LEFT      105
 #define IR0_KEY_RIGHT     106
 #define IR0_KEY_DOWN      108
+
+struct audio_format
+{
+    uint32_t sample_rate;
+    uint8_t channels;
+    uint8_t bits_per_sample;
+};
+
+/* Bound by I_BindSoundVariables when FEATURE_SOUND is enabled. */
+int use_libsamplerate;
+float libsamplerate_scale = 0.65f;
 
 #define FASE55D_MAX_FRAMES 240
 #define KEY_QUEUE_SIZE 64
@@ -136,6 +159,7 @@ struct ir0_input_caps
 
 static int g_fd_fb = -1;
 static int g_fd_input = -1;
+static int g_fd_audio = -1;
 static struct fb_var_screeninfo g_var;
 static struct fb_fix_screeninfo g_fix;
 static uint8_t *g_fb_map;
@@ -145,6 +169,12 @@ static unsigned int g_key_write;
 static unsigned int g_key_read;
 static uint32_t g_frame_count;
 static int g_first_frame_tagged;
+static int g_mouse_buttons;
+static int g_mouse_caps_tagged;
+static int g_mouse_event_tagged;
+static int g_audio_ok_tagged;
+static int g_audio_write_tagged;
+static boolean g_use_sfx_prefix;
 #ifdef FASE55E_INTERACTIVE
 static volatile int g_quit_requested;
 static unsigned int g_frame_dump_every;
@@ -243,9 +273,37 @@ static void enqueue_key(int pressed, uint8_t doom_key)
     g_key_write = next;
 }
 
+static void tag_mouse_event_once(void)
+{
+    if (!g_mouse_event_tagged)
+    {
+        g_mouse_event_tagged = 1;
+        write_str("DOOMGENERIC_MOUSE_EVENT_OK\n");
+    }
+}
+
+static void post_mouse(int dx, int dy)
+{
+    event_t ev;
+
+    memset(&ev, 0, sizeof(ev));
+    ev.type = ev_mouse;
+    ev.data1 = g_mouse_buttons;
+    ev.data2 = dx << 2;
+    ev.data3 = (-dy) << 2;
+    D_PostEvent(&ev);
+    if (dx != 0 || dy != 0 || g_mouse_buttons != 0)
+    {
+        tag_mouse_event_once();
+    }
+}
+
 static void pump_input_events(void)
 {
     struct input_event ev;
+    int dx = 0;
+    int dy = 0;
+    int have_rel = 0;
 
     if (g_fd_input < 0)
     {
@@ -271,11 +329,56 @@ static void pump_input_events(void)
                 g_quit_requested = 1;
             }
 #endif
+            if (ev.code == BTN_LEFT || ev.code == BTN_RIGHT || ev.code == BTN_MIDDLE)
+            {
+                int bit = 0;
+
+                if (ev.code == BTN_LEFT)
+                {
+                    bit = 1;
+                }
+                else if (ev.code == BTN_RIGHT)
+                {
+                    bit = 2;
+                }
+                else
+                {
+                    bit = 4;
+                }
+                if (ev.value)
+                {
+                    g_mouse_buttons |= bit;
+                }
+                else
+                {
+                    g_mouse_buttons &= ~bit;
+                }
+                post_mouse(0, 0);
+                continue;
+            }
             if (ev.value == 1 || ev.value == 0)
             {
                 enqueue_key(ev.value == 1, key);
             }
         }
+        else if (ev.type == EV_REL)
+        {
+            if (ev.code == REL_X)
+            {
+                dx += (int)ev.value;
+                have_rel = 1;
+            }
+            else if (ev.code == REL_Y)
+            {
+                dy += (int)ev.value;
+                have_rel = 1;
+            }
+        }
+    }
+
+    if (have_rel)
+    {
+        post_mouse(dx, dy);
     }
 }
 
@@ -341,6 +444,250 @@ static void blit_framebuffer_scaled(void)
     }
 }
 
+#ifdef FEATURE_SOUND
+static snddevice_t ir0_sound_devices[] = { SNDDEVICE_SB };
+static snddevice_t ir0_music_devices[] = { SNDDEVICE_SB };
+
+static void tag_audio_write_once(void)
+{
+    if (!g_audio_write_tagged)
+    {
+        g_audio_write_tagged = 1;
+        write_str("DOOMGENERIC_AUDIO_WRITE_OK\n");
+    }
+}
+
+static boolean IR0_SoundInit(boolean use_sfx_prefix)
+{
+    struct audio_format fmt;
+    unsigned char probe[256];
+    size_t i;
+
+    g_use_sfx_prefix = use_sfx_prefix;
+    g_fd_audio = open("/dev/audio", O_WRONLY);
+    if (g_fd_audio < 0)
+    {
+        write_str("DOOMGENERIC_AUDIO_OPEN_FAIL\n");
+        return false;
+    }
+
+    memset(&fmt, 0, sizeof(fmt));
+    fmt.sample_rate = 11025;
+    fmt.channels = 1;
+    fmt.bits_per_sample = 8;
+    (void)ioctl(g_fd_audio, AUDIO_SET_FORMAT, &fmt);
+
+    if (!g_audio_ok_tagged)
+    {
+        g_audio_ok_tagged = 1;
+        write_str("DOOMGENERIC_AUDIO_OK\n");
+    }
+
+    /* Short PCM probe so smoke does not depend on title-screen SFX. */
+    for (i = 0; i < sizeof(probe); i++)
+    {
+        probe[i] = (unsigned char)(128 + ((i & 8) ? 40 : -40));
+    }
+    if (write(g_fd_audio, probe, sizeof(probe)) > 0)
+    {
+        tag_audio_write_once();
+    }
+    return true;
+}
+
+static void IR0_SoundShutdown(void)
+{
+    if (g_fd_audio >= 0)
+    {
+        close(g_fd_audio);
+        g_fd_audio = -1;
+    }
+}
+
+static int IR0_GetSfxLumpNum(sfxinfo_t *sfxinfo)
+{
+    char namebuf[9];
+
+    if (!sfxinfo)
+    {
+        return -1;
+    }
+    if (g_use_sfx_prefix)
+    {
+        snprintf(namebuf, sizeof(namebuf), "ds%s", sfxinfo->name);
+    }
+    else
+    {
+        snprintf(namebuf, sizeof(namebuf), "%s", sfxinfo->name);
+    }
+    return W_GetNumForName(namebuf);
+}
+
+static void IR0_UpdateSound(void)
+{
+}
+
+static void IR0_UpdateSoundParams(int channel, int vol, int sep)
+{
+    (void)channel;
+    (void)vol;
+    (void)sep;
+}
+
+static int IR0_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep)
+{
+    int lump;
+    int len;
+    const unsigned char *data;
+    int samples;
+    size_t nbytes;
+
+    (void)vol;
+    (void)sep;
+    if (!sfxinfo || g_fd_audio < 0)
+    {
+        return -1;
+    }
+
+    lump = sfxinfo->lumpnum;
+    if (lump < 0)
+    {
+        lump = IR0_GetSfxLumpNum(sfxinfo);
+        sfxinfo->lumpnum = lump;
+    }
+    if (lump < 0)
+    {
+        return -1;
+    }
+
+    len = W_LumpLength((unsigned int)lump);
+    data = W_CacheLumpNum(lump, PU_CACHE);
+    if (!data || len < 8)
+    {
+        return -1;
+    }
+
+    /* Classic DMX PCM: format=3, rate LE16, sample count LE32, then 8-bit unsigned. */
+    if (data[0] == 3 && data[1] == 0)
+    {
+        samples = (int)(data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24));
+        if (samples > 0 && samples + 8 <= len)
+        {
+            nbytes = (size_t)samples;
+            if (nbytes > 8192u)
+            {
+                nbytes = 8192u;
+            }
+            if (write(g_fd_audio, data + 8, nbytes) > 0)
+            {
+                tag_audio_write_once();
+            }
+        }
+    }
+    return channel;
+}
+
+static void IR0_StopSound(int channel)
+{
+    (void)channel;
+}
+
+static boolean IR0_SoundIsPlaying(int channel)
+{
+    (void)channel;
+    return false;
+}
+
+static void IR0_CacheSounds(sfxinfo_t *sounds, int num_sounds)
+{
+    (void)sounds;
+    (void)num_sounds;
+}
+
+sound_module_t DG_sound_module = {
+    ir0_sound_devices,
+    1,
+    IR0_SoundInit,
+    IR0_SoundShutdown,
+    IR0_GetSfxLumpNum,
+    IR0_UpdateSound,
+    IR0_UpdateSoundParams,
+    IR0_StartSound,
+    IR0_StopSound,
+    IR0_SoundIsPlaying,
+    IR0_CacheSounds,
+};
+
+static boolean IR0_MusicInit(void)
+{
+    return false;
+}
+
+static void IR0_MusicShutdown(void)
+{
+}
+
+static void IR0_SetMusicVolume(int volume)
+{
+    (void)volume;
+}
+
+static void IR0_PauseMusic(void)
+{
+}
+
+static void IR0_ResumeMusic(void)
+{
+}
+
+static void *IR0_RegisterSong(void *data, int len)
+{
+    (void)data;
+    (void)len;
+    return NULL;
+}
+
+static void IR0_UnRegisterSong(void *handle)
+{
+    (void)handle;
+}
+
+static void IR0_PlaySong(void *handle, boolean looping)
+{
+    (void)handle;
+    (void)looping;
+}
+
+static void IR0_StopSong(void)
+{
+}
+
+static boolean IR0_MusicIsPlaying(void)
+{
+    return false;
+}
+
+static void IR0_MusicPoll(void)
+{
+}
+
+music_module_t DG_music_module = {
+    ir0_music_devices,
+    1,
+    IR0_MusicInit,
+    IR0_MusicShutdown,
+    IR0_SetMusicVolume,
+    IR0_PauseMusic,
+    IR0_ResumeMusic,
+    IR0_RegisterSong,
+    IR0_UnRegisterSong,
+    IR0_PlaySong,
+    IR0_StopSong,
+    IR0_MusicIsPlaying,
+    IR0_MusicPoll,
+};
+#endif /* FEATURE_SOUND */
+
 void DG_Init(void)
 {
     struct ir0_input_caps caps;
@@ -388,6 +735,15 @@ void DG_Init(void)
     {
         write_fail("events0_get_caps", "INPUT_SUBSYSTEM_FAIL");
         exit(1);
+    }
+
+    if (caps.mouse || caps.supports_mouse_motion)
+    {
+        if (!g_mouse_caps_tagged)
+        {
+            g_mouse_caps_tagged = 1;
+            write_str("DOOMGENERIC_MOUSE_CAPS_OK\n");
+        }
     }
 
     write_str("DOOMGENERIC_INIT_OK\n");
@@ -480,8 +836,9 @@ static int wad_header_ok(const char *path)
 static const char *pick_wad_path(int argc, char **argv)
 {
     static const char *const candidates[] = {
-        "/mnt/host/doom1.wad",
+        "/usr/ken/games/doom1.wad",
         "/usr/share/doom/doom1.wad",
+        "/mnt/host/doom1.wad",
         NULL
     };
     int i;
@@ -654,9 +1011,8 @@ int main(int argc, char **argv)
     dg_argv[1] = (char *)"-iwad";
     dg_argv[2] = (char *)wad;
     dg_argv[3] = (char *)"-nomusic";
-    dg_argv[4] = (char *)"-nosound";
-    dg_argv[5] = NULL;
-    dg_argc = 5;
+    dg_argv[4] = NULL;
+    dg_argc = 4;
     doomgeneric_Create(dg_argc, dg_argv);
     write_str("DOOMGENERIC_INIT_OK\n");
 
@@ -721,21 +1077,27 @@ int main(int argc, char **argv)
     if (g_fd_input >= 0)
     {
         close(g_fd_input);
+        g_fd_input = -1;
     }
+    IR0_SoundShutdown();
     if (g_fb_map && g_fb_map != MAP_FAILED)
     {
         (void)munmap(g_fb_map, g_fb_len);
+        g_fb_map = NULL;
     }
     if (g_fd_fb >= 0)
     {
         close(g_fd_fb);
+        g_fd_fb = -1;
     }
 
 #ifdef FASE55E_INTERACTIVE
-    for (;;)
-    {
-        (void)pause();
-    }
+    /*
+     * Drop leftover cooked-TTY bytes that arrived before events0 divert
+     * (or if divert was unavailable). TCFLSH = 0x540B, TCIFLUSH = 0.
+     */
+    (void)ioctl(STDIN_FILENO, 0x540Bu, 0);
+    write_str("DOOMGENERIC_INTERACTIVE_EXIT_OK\n");
 #endif
 
     return 0;

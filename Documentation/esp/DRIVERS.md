@@ -40,6 +40,6 @@ IR0 usa un registry central y un bootstrap unificado para drivers core y opciona
 
 ## Audio (SB16 / Adlib)
 
-- Probe SB16 OK emite `SB16_DSP_OK`. QEMU 8+: `-audiodev none,id=snd0 -device sb16,audiodev=snd0`.
+- Probe SB16 OK emite `SB16_DSP_OK`. QEMU interactivo: `-audiodev pa,id=snd0` (host oye PCM). Smokes: backend `none`. Override: `QEMU_AUDIO_BACKEND=alsa|sdl|none`.
 - Smoke: `make smoke-sb16-probe` (`scripts/make/boot-audio.mk`). Adlib puede quedar ABSENT (no falla el gate).
 - Detalle canónico: [`../DRIVERS.md`](../DRIVERS.md).

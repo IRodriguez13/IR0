@@ -27,6 +27,12 @@ typedef struct pipe
 	int writers;
 	int closed_read;
 	int closed_write;
+	/*
+	 * Named FIFO (mkfifo / runsv supervise): pipe_t outlives FD closes and is
+	 * freed only from named_fifo_unlink / slot recycle. Anonymous pipes keep
+	 * named==0 and free on last pipe_close_end.
+	 */
+	int named;
 } pipe_t;
 
 pipe_t *pipe_create(void);

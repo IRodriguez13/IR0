@@ -27,8 +27,11 @@ rm -f "${TCC_SRC}/config-extra.mak"
 	cd "$TCC_SRC"
 	make clean >/dev/null 2>&1 || true
 	CFLAGS="-static -Os" LDFLAGS="-static" \
-		./configure --cc="$MUSL_CC" --prefix=/usr --tccdir=lib/tcc \
+		./configure --cc="$MUSL_CC" --prefix=/usr --tccdir=/lib/tcc \
 		--crtprefix="{B}:/usr/lib"
+	# Prefer absolute guest tccdir; do not force config-extra here — it can
+	# break libtcc1 host compile (tcov.o / stdio). Paths are staged to /lib/tcc.
+	rm -f config-extra.mak
 	make -j"$(nproc)"
 )
 

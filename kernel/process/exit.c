@@ -111,7 +111,7 @@ __attribute__((noreturn)) void process_exit(int code)
 #endif
 
 	/* Mark as zombie */
-	dying->state = PROCESS_ZOMBIE;
+	process_mark_zombie(dying);
 	KTM_CHECKPOINT(KTM_CP_PROCESS_EXIT);
 	if (dying->exit_signal == 0)
 		dying->exit_code = code;
@@ -137,7 +137,7 @@ __attribute__((noreturn)) void process_exit(int code)
 #if IR0_DEBUG_PROC
 	paging_ir0_mm_checkpoint("exit-before", (int32_t)dying->task.pid);
 #endif
-	for (struct mmap_region *r = dying->mmap_list; r; r = r->next)
+	for (struct mmap_region *r = process_mmap_list(dying); r; r = r->next)
 		vmas++;
 	pmm_stats(&total_frames, &used_frames, NULL);
 	if (IR0_DEBUG_PROC)
@@ -235,16 +235,12 @@ __attribute__((noreturn)) void process_exit(int code)
  */
 void process_destroy(process_t *p)
 {
-	struct mmap_region *r;
-	struct mmap_region *next;
-	process_reclaim_stats_t reclaim_stats;
 	uint64_t orphan_frames = 0;
 	uint64_t double_free = 0;
 	uint64_t alive_owner_missing = 0;
 
 	if (!p)
 		return;
-	memset(&reclaim_stats, 0, sizeof(reclaim_stats));
 
 	ir0_console_purge_waiters_for_process(p);
 	ir0_clock_wait_disarm(p);
@@ -264,41 +260,25 @@ void process_destroy(process_t *p)
 	}
 
 	/*
-	 * Address space teardown via mm refcount when present. Legacy path
-	 * keeps owns_page_directory for processes without mm.
+	 * Address space teardown via mm refcount. Capture kernel-mode
+	 * kmalloc stack cursor before mm_put frees the mm_struct.
 	 */
-	if (p->mm)
 	{
-		process_mm_sync_from_process(p);
-		mm_put(p->mm);
-		p->mm = NULL;
-		process_set_pgd(p, NULL);
-		p->mmap_list = NULL;
-		process_fase43_note_mm_destroyed();
-	}
-	else if (process_pgd(p) && process_mm_owns_tables(p))
-	{
-		process_unmap_user_pages_all(process_pgd(p), &reclaim_stats);
-		paging_reclaim_lower_half_tables(process_pgd(p));
-		r = p->mmap_list;
-		while (r)
+		uint64_t kstack = 0;
+
+		if (p->mode == KERNEL_MODE)
+			kstack = process_stack_start(p);
+
+		if (p->mm)
 		{
-			next = r->next;
-			kfree(r);
-			r = next;
+			mm_put(p->mm);
+			p->mm = NULL;
+			process_fase43_note_mm_destroyed();
 		}
-		p->mmap_list = NULL;
-	}
-	else
-	{
-		r = p->mmap_list;
-		while (r)
-		{
-			next = r->next;
-			kfree(r);
-			r = next;
-		}
-		p->mmap_list = NULL;
+
+		if (p->mode == KERNEL_MODE && kstack &&
+		    kstack != INIT_DEBUG_STACK_BASE)
+			kfree((void *)(uintptr_t)kstack);
 	}
 
 	if (p->saved_context)
@@ -309,22 +289,6 @@ void process_destroy(process_t *p)
 
 	/* Release the private kernel stack (zombie is off-CPU; not in use). */
 	process_kernel_stack_free(p);
-
-	if (p->mode == KERNEL_MODE && p->stack_start &&
-	    p->stack_start != INIT_DEBUG_STACK_BASE)
-	{
-		kfree((void *)p->stack_start);
-		p->stack_start = 0;
-		p->stack_size = 0;
-	}
-
-	if (!p->mm && process_pgd(p) && process_mm_owns_tables(p))
-	{
-		paging_ir0_mm_note_pml4_freed((uint64_t)(uintptr_t)process_pgd(p));
-		kfree_aligned(process_pgd(p));
-		process_set_pgd(p, NULL);
-		process_fase43_note_mm_destroyed();
-	}
 
 	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
 #if IR0_DEBUG_PMM

@@ -13,6 +13,7 @@
  *   - mm_create() returns refcount=1
  *   - mm_get() / mm_put() balance shares (CLONE_VM)
  *   - Last mm_put() tears down page tables + VMA list when owns_tables
+ *   - process_t holds only process->mm; heap/stack/mmap live in mm_struct
  * May sleep: no (destroy may free; callers must not hold IRQ-only locks).
  */
 
@@ -48,23 +49,17 @@ mm_struct_t *mm_get(mm_struct_t *mm);
 /* Drop refcount; destroy on zero. */
 void mm_put(mm_struct_t *mm);
 
-/*
- * Bind process private mirrors to @mm (process_pgd / owns / heap cursors).
- * Callers outside mm_struct.c must use process_pgd() / process_mm_owns_tables().
- */
+/* Attach @mm to process (sole address-space pointer on process_t). */
 void process_mm_bind(struct process *p, mm_struct_t *mm);
 
 /* Share parent's mm with child (CLONE_VM). Returns 0 or -errno. */
 int process_mm_share(struct process *child, struct process *parent);
 
-/* Sync process mirrors FROM mm (after share/bind). */
-void process_mm_sync_to_process(struct process *p);
-
-/* Sync mm FROM process mirrors (before mm_put / after mutating mmap_list/heap). */
-void process_mm_sync_from_process(struct process *p);
-
-/* Set mmap_list on both process and mm (if present). */
+/* Set mmap_list head on process->mm. */
 void process_mm_set_mmap_list(struct process *p, struct mmap_region *list);
 
-/* 1 if sole owner of page tables / may free via mm_put or legacy teardown. */
+/* 1 if sole owner of page tables / may free via mm_put. */
 int process_mm_owns_tables(const struct process *p);
+
+/* 1 if process has an mm object (required for user address space). */
+int process_mm_ok(const struct process *p);

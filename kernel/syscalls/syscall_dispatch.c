@@ -147,8 +147,10 @@ WRAP4(sys_faccessat, int, const char *, int, int)
 WRAP1(sys_dup, int)
 WRAP3(sys_exec, const char *, char *const *, char *const *)
 WRAP1(sys_chdir, const char *)
+WRAP1(sys_chroot, const char *)
 WRAP1(sys_fchdir, int)
-WRAP3(sys_mount, const char *, const char *, const char *)
+WRAP5(sys_mount, const char *, const char *, const char *, unsigned long,
+      const void *)
 WRAP2(sys_umount, const char *, int)
 WRAP2(sys_mkdir, const char *, mode_t)
 WRAP1(sys_rmdir, const char *)
@@ -159,6 +161,8 @@ WRAP2(sys_getcwd, char *, size_t)
 WRAP4(sys_utimensat, int, const char *, const struct timespec *, int)
 WRAP2(sys_stat, const char *, stat_t *)
 WRAP2(sys_fstat, int, stat_t *)
+WRAP2(sys_statfs, const char *, void *)
+WRAP2(sys_fstatfs, int, void *)
 WRAP2(sys_dup2, int, int)
 WRAP2(sys_flock, int, int)
 WRAP2(sys_fchmod, int, mode_t)
@@ -297,6 +301,8 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_stat]           = wrap_sys_stat;
   syscall_table_rw[__NR_lstat]          = wrap_sys_stat;
   syscall_table_rw[__NR_fstat]          = wrap_sys_fstat;
+  syscall_table_rw[__NR_statfs]         = wrap_sys_statfs;
+  syscall_table_rw[__NR_fstatfs]        = wrap_sys_fstatfs;
   syscall_table_rw[__NR_poll]           = wrap_sys_poll;
   syscall_table_rw[__NR_select]         = wrap_sys_select;
   syscall_table_rw[__NR_lseek]          = wrap_sys_lseek;
@@ -350,6 +356,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_getcwd]         = wrap_sys_getcwd;
   syscall_table_rw[__NR_utimensat]      = wrap_sys_utimensat;
   syscall_table_rw[__NR_chdir]          = wrap_sys_chdir;
+  syscall_table_rw[__NR_chroot]         = wrap_sys_chroot;
   syscall_table_rw[__NR_fchdir]         = wrap_sys_fchdir;
   syscall_table_rw[__NR_mkdir]          = wrap_sys_mkdir;
   syscall_table_rw[__NR_rmdir]          = wrap_sys_rmdir;

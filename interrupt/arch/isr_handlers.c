@@ -20,6 +20,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/debug_trap.h>
 #include <kernel/process.h>
+#include <ir0/sched.h>
 #include <config.h>
 #include <ir0/input_backend.h>
 #include <string.h>
@@ -222,33 +223,43 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
         klog_debug_fmt("ISR", "[ISR] int=%llx current=%llx cr3=%llx rip=%llx cs=%llx rsp=%llx ss=%llx frame=%llx user=%llx", (unsigned long long)(interrupt_number), (unsigned long long)((uint64_t)(uintptr_t)current), (unsigned long long)(get_current_page_directory()), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), (unsigned long long)(stack[6]), (unsigned long long)((uint64_t)(uintptr_t)stack), (unsigned long long)(user));
 
         /*
-         * Desk-session flake: #UD/#GP with RIP on BSS globals
-         * (current_process @ .bss). Dump the fault RSP window to catch the
-         * call/ret that landed in data.
+         * Desk-session flake: #UD/#GP with RIP in non-text (data/bss).
+         * Fault RIP 0x20E52A was nearest-symbol noise on event_queue; class
+         * is KERNEL_EXECUTE_BSS for any RIP past _etext.
          */
-        if (!user && fault_rip >= (uint64_t)(uintptr_t)&current_process &&
-            fault_rip < (uint64_t)(uintptr_t)&current_process + 0x1000ULL)
-        {
-            char rspbuf[512];
-            size_t off;
-            size_t i;
+	{
+		extern char _etext[];
+		extern char _end[];
+		uint64_t et = (uint64_t)(uintptr_t)_etext;
+		uint64_t en = (uint64_t)(uintptr_t)_end;
 
-            klog_debug_fmt("ISR", "CLASSIFY KERNEL_EXECUTE_BSS rip_near=current_process "
-                           "bss_x &current_process=%llx *current_process=%llx "
-                           "rsp_qwords=",
-                           (unsigned long long)((uint64_t)(uintptr_t)&current_process),
-                           (unsigned long long)((uint64_t)(uintptr_t)current_process));
-            off = 0;
-            for (i = 0; i < 24 && off < sizeof(rspbuf) - 24; i++)
-            {
-                uint64_t v = ((uint64_t *)(uintptr_t)fault_rsp)[i];
+		if (!user && fault_rip >= et && fault_rip < en)
+		{
+			char rspbuf[512];
+			size_t off;
+			size_t i;
 
-                off += (size_t)snprintf(rspbuf + off, sizeof(rspbuf) - off,
-                                        "%s%llx", i ? " " : "",
-                                        (unsigned long long)v);
-            }
-            klog_debug("ISR", rspbuf);
-        }
+			klog_notice_fmt("ISR",
+					"CLASSIFY KERNEL_EXECUTE_BSS rip=%llx "
+					"_etext=%llx _end=%llx current=%llx "
+					"comm=%s rsp_qwords=",
+					(unsigned long long)fault_rip,
+					(unsigned long long)et,
+					(unsigned long long)en,
+					(unsigned long long)((uint64_t)(uintptr_t)current),
+					current ? current->comm : "(none)");
+			off = 0;
+			for (i = 0; i < 24 && off < sizeof(rspbuf) - 24; i++)
+			{
+				uint64_t v = ((uint64_t *)(uintptr_t)fault_rsp)[i];
+
+				off += (size_t)snprintf(rspbuf + off, sizeof(rspbuf) - off,
+							"%s%llx", i ? " " : "",
+							(unsigned long long)v);
+			}
+			klog_notice("ISR", rspbuf);
+		}
+	}
     }
 
     /* Manejar excepciones del CPU (0-31) */
@@ -381,6 +392,11 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
 
         /* Enviar EOI para IRQs */
         pic_send_eoi64(irq);
+	/*
+	 * Safe preempt after wake (TTY/timer flags). Must run with the IRQ
+	 * frame still intact; never schedule from keyboard_handler itself.
+	 */
+	(void)sched_irq_preempt_from_frame(stack);
         return;
     }
 

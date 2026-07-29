@@ -249,9 +249,14 @@ process_t *prev_proc;
                    next_proc->wait_resume_child_pid > 0))
         {
             /*
-             * Stale syscall-frame resume (pipe-read block placeholder, coop
-             * reschedule with rax=0, etc.). Continue in kernel instead of
+             * Stale syscall-frame resume (wait4 placeholder rax=0, coop
+             * reschedule with rax=0). Continue in kernel instead of
              * iretq with rax=0.
+             *
+             * Pipe/TTY/poll must NOT arm blocked_resume(rax=0); they use
+             * process_arm_kernel_syscall_sleep only (portable kernel_ret).
+             * This branch is x86 wait/coop legacy — do not extend to new
+             * in-syscall sleepers.
              */
             next_proc->irq_frame_saved = 0;
             next_proc->coop_resched_resume = 0;

@@ -22,6 +22,7 @@ Usage:
 import os
 import struct
 import sys
+import time
 
 BLOCK = 1024
 INODE_SIZE = 32
@@ -31,6 +32,30 @@ MAGIC = 0x137F
 IFDIR = 0o040000
 IFREG = 0o100000
 IFMT = 0o170000
+
+
+def now_mtime(path=None):
+    """Unix time for MINIX v1 inode mtime (avoid epoch 1970 on ls -l)."""
+    if path:
+        try:
+            return int(os.stat(path).st_mtime) & 0xFFFFFFFF
+        except OSError:
+            pass
+    return int(time.time()) & 0xFFFFFFFF
+
+
+def inject_verbose():
+    """Per-file inject audit (MINIX_INJECT / Injected). Off by default."""
+    return os.environ.get("IR0_INJECT_VERBOSE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def vprint(*args, **kwargs):
+    if inject_verbose():
+        print(*args, **kwargs)
 
 
 def read_block(f, n):
@@ -120,7 +145,11 @@ def inode_type(mode):
 
 
 def collect_zones_from_inode(f, inode):
-    """Return all data zone numbers referenced by an inode."""
+    """
+    Return every zone owned by an inode: data + single/double-indirect
+    pointer blocks. sync_zmap must mark metadata zones allocated; omitting
+    them frees indirect blocks and the next inject overwrites them (init SEGV).
+    """
     zones = set()
     if (inode["mode"] & IFMT) != IFDIR and (inode["mode"] & IFMT) != IFREG:
         return zones
@@ -131,18 +160,23 @@ def collect_zones_from_inode(f, inode):
         if z:
             zones.add(z)
     if inode["zones"][7]:
-        ind = read_block(f, inode["zones"][7])
+        ind_z = inode["zones"][7]
+        zones.add(ind_z)
+        ind = read_block(f, ind_z)
         for j in range(BLOCK // 2):
             z, = struct.unpack("<H", ind[j * 2 : j * 2 + 2])
             if z == 0:
                 break
             zones.add(z)
     if inode["zones"][8]:
-        dind = read_block(f, inode["zones"][8])
+        dind_z = inode["zones"][8]
+        zones.add(dind_z)
+        dind = read_block(f, dind_z)
         for j in range(BLOCK // 2):
             z1, = struct.unpack("<H", dind[j * 2 : j * 2 + 2])
             if z1 == 0:
                 break
+            zones.add(z1)
             lvl1 = read_block(f, z1)
             for k in range(BLOCK // 2):
                 z2, = struct.unpack("<H", lvl1[k * 2 : k * 2 + 2])
@@ -176,9 +210,9 @@ def collect_used_inodes(f, sb):
 
 
 def sync_imap_from_tree(f, sb):
-    """Mark every in-use inode in the imap (bit set = allocated)."""
+    """Rebuild imap from the live tree (+ orphan inodes with mode/nlinks)."""
     used = collect_used_inodes(f, sb)
-    imap = bytearray(read_block(f, imap_block(sb)))
+    imap = bytearray(BLOCK)  # bit set = allocated; start empty then mark used
     for n in used:
         byte_i = n // 8
         bit_i = n % 8
@@ -189,7 +223,7 @@ def sync_imap_from_tree(f, sb):
 
 
 def sync_zmap_from_inodes(f, sb, used_inodes=None):
-    """Mark data zones referenced by used inodes as allocated (bit clear = used)."""
+    """Rebuild zmap from inodes (bit set = free, clear = allocated)."""
     if used_inodes is None:
         used_inodes = collect_used_inodes(f, sb)
     used_zones = set()
@@ -197,8 +231,10 @@ def sync_zmap_from_inodes(f, sb, used_inodes=None):
         inode = read_inode(f, sb, n)
         used_zones.update(collect_zones_from_inode(f, inode))
     zmap_blk_base = zmap_start(sb)
+    for blk in range(sb["zmap_blocks"]):
+        write_block(f, zmap_blk_base + blk, bytes(b"\xff" * BLOCK))
     for zone in used_zones:
-        if zone < sb["firstdatazone"]:
+        if zone < sb["firstdatazone"] or zone >= sb["nzones"]:
             continue
         idx = zone - sb["firstdatazone"]
         byte_i = idx // 8
@@ -216,16 +252,18 @@ def sync_bitmaps_from_tree(f, sb):
     return used
 
 
+# Sequential hint: avoid rescanning the whole zmap from firstdatazone each time.
+_zone_alloc_hint = 0
+
+
 def alloc_inode(f, sb):
-    sync_imap_from_tree(f, sb)
-    imap = read_block(f, imap_block(sb))
-    for n in range(1, sb["ninodes"] + 1):
+    """Allocate from imap; caller must have a coherent map (format or sync)."""
+    imap = bytearray(read_block(f, imap_block(sb)))
+    limit = min(sb["ninodes"] + 1, BLOCK * 8)
+    for n in range(1, limit):
         byte_i = n // 8
         bit_i = n % 8
-        if byte_i >= BLOCK:
-            break
         if (imap[byte_i] & (1 << bit_i)) == 0:
-            imap = bytearray(imap)
             imap[byte_i] |= 1 << bit_i
             write_block(f, imap_block(sb), bytes(imap))
             return n
@@ -233,33 +271,60 @@ def alloc_inode(f, sb):
 
 
 def zone_free(f, sb, zone):
-    if zone < sb["firstdatazone"]:
+    if zone < sb["firstdatazone"] or zone >= sb["nzones"]:
         return False
     idx = zone - sb["firstdatazone"]
     byte_i = idx // 8
     bit_i = idx % 8
     zmap_blk = zmap_start(sb) + byte_i // BLOCK
     zoff = byte_i % BLOCK
-    zmap = bytearray(read_block(f, zmap_blk))
+    zmap = read_block(f, zmap_blk)
     return (zmap[zoff] & (1 << bit_i)) != 0
 
 
 def alloc_zone(f, sb):
-    sync_zmap_from_inodes(f, sb)
+    """
+    Allocate one data zone from the on-disk zmap.
+
+    Do NOT rebuild zmap here: pack-minix calls this per block of every file.
+    With nzones=65535, sync-per-alloc made desktop inject appear hung.
+    """
+    global _zone_alloc_hint
     zmap_blk_base = zmap_start(sb)
-    for zone in range(sb["firstdatazone"], sb["nzones"]):
-        if not zone_free(f, sb, zone):
-            continue
-        idx = zone - sb["firstdatazone"]
-        byte_i = idx // 8
-        bit_i = idx % 8
-        zmap_blk = zmap_blk_base + byte_i // BLOCK
-        zoff = byte_i % BLOCK
-        zmap = bytearray(read_block(f, zmap_blk))
-        zmap[zoff] &= ~(1 << bit_i)
-        write_block(f, zmap_blk, bytes(zmap))
-        return zone
-    raise SystemExit("no free zone")
+    first = sb["firstdatazone"]
+    nzones = sb["nzones"]
+    hint = _zone_alloc_hint if _zone_alloc_hint >= first else first
+
+    def try_from(start_zone):
+        idx0 = start_zone - first
+        start_blk = idx0 // (BLOCK * 8)
+        for zmap_i in range(start_blk, sb["zmap_blocks"]):
+            zmap = bytearray(read_block(f, zmap_blk_base + zmap_i))
+            bit_base = zmap_i * BLOCK * 8
+            off0 = 0 if zmap_i > start_blk else (idx0 % (BLOCK * 8)) // 8
+            for zoff in range(off0, BLOCK):
+                byte_val = zmap[zoff]
+                if byte_val == 0:
+                    continue
+                bit0 = 0 if not (zmap_i == start_blk and zoff == off0) else (idx0 % 8)
+                for bit_i in range(bit0, 8):
+                    if (byte_val & (1 << bit_i)) == 0:
+                        continue
+                    zone = first + bit_base + zoff * 8 + bit_i
+                    if zone < first or zone >= nzones:
+                        continue
+                    zmap[zoff] &= ~(1 << bit_i)
+                    write_block(f, zmap_blk_base + zmap_i, bytes(zmap))
+                    return zone
+        return None
+
+    zone = try_from(hint)
+    if zone is None and hint > first:
+        zone = try_from(first)
+    if zone is None:
+        raise SystemExit("no free zone")
+    _zone_alloc_hint = zone + 1
+    return zone
 
 
 def dir_zone_list(inode):
@@ -307,7 +372,7 @@ def remove_dir_entry(f, sb, dir_inode, dir_num, name):
 
 
 def audit_entry(source_path, dest_path, source_type, mode, inode_num, size):
-    print(
+    vprint(
         f"MINIX_INJECT source={source_path} dest={dest_path} "
         f"source_type={source_type} mode=0x{mode:04x} inode={inode_num} size={size}"
     )
@@ -402,12 +467,19 @@ def format_minix_v1(f, ninodes=64, nzones=1024):
             zmap[0] &= ~(1 << 0)
         write_block(f, zmap_base + blk, bytes(zmap))
 
+    # Wipe inode table. Re-format of a previously packed image must not leave
+    # stale mode!=0 inodes: sync_imap_from_tree would mark them used and the
+    # next pack runs out of free inodes / corrupts root dentries (missing /etc).
+    itab = 2 + imap_blocks + zmap_blocks
+    for blk in range(inode_table_blocks):
+        write_block(f, itab + blk, bytes(BLOCK))
+
     root_zone = sb["firstdatazone"]
     root_inode = {
         "mode": IFDIR | 0o755,
         "uid": 0,
         "size": 2 * DIR_ENTRY,
-        "mtime": 0,
+        "mtime": now_mtime(),
         "gid": 0,
         "nlinks": 2,
         "zones": [root_zone] + [0] * 8,
@@ -421,10 +493,12 @@ def format_minix_v1(f, ninodes=64, nzones=1024):
     root_dir[DIR_ENTRY + 2 : DIR_ENTRY + 4] = b".."
     write_block(f, root_zone, bytes(root_dir))
 
-    print(
+    vprint(
         f"MINIX_FORMAT ok magic=0x{MAGIC:04x} ninodes={sb['ninodes']} "
         f"nzones={sb['nzones']} firstdatazone={sb['firstdatazone']}"
     )
+    global _zone_alloc_hint
+    _zone_alloc_hint = sb["firstdatazone"]
     return sb
 
 
@@ -475,7 +549,7 @@ def mkdir(f, sb, parent_num, parent, name, parent_prefix):
         "mode": mode,
         "uid": 0,
         "size": 2 * DIR_ENTRY,
-        "mtime": 0,
+        "mtime": now_mtime(),
         "gid": 0,
         "nlinks": 2,
         "zones": [zone] + [0] * 8,
@@ -612,7 +686,7 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755,
                     "mode": IFREG | file_mode,
                     "uid": 0,
                     "size": 0,
-                    "mtime": 0,
+                    "mtime": now_mtime(source_path),
                     "gid": 0,
                     "nlinks": 1,
                     "zones": [0] * 9,
@@ -624,13 +698,14 @@ def write_file(f, sb, path_parts, data, source_path, file_mode=0o755,
                         "mode": IFREG | file_mode,
                         "uid": 0,
                         "size": 0,
-                        "mtime": 0,
+                        "mtime": now_mtime(source_path),
                         "gid": 0,
                         "nlinks": 1,
                         "zones": [0] * 9,
                     }
 
             file_inode = prepare_regular_file(f, sb, file_inode, data, file_mode)
+            file_inode["mtime"] = now_mtime(source_path)
             if owner is not None:
                 file_inode["uid"], file_inode["gid"] = owner
             audit_entry(
@@ -696,9 +771,15 @@ def hardlink_path(f, sb, existing_parts, new_parts):
             if existing != 0:
                 if existing == src_ino:
                     return src_ino
-                raise SystemExit(
-                    "hardlink dest already exists: /" + "/".join(new_parts)
-                )
+                # Replace stale applet name (e.g. BusyBox reinject): detach
+                # the old directory entry so the hardlink can point at the
+                # new multicall inode.
+                old = read_inode(f, sb, existing)
+                remove_dir_entry(f, sb, cur, cur_num, part)
+                if old.get("nlinks", 1) > 1:
+                    old["nlinks"] = max(1, old["nlinks"] - 1)
+                    write_inode(f, sb, existing, old)
+                existing = 0
             add_dir_entry(f, sb, cur, cur_num, part, src_ino)
             src["nlinks"] = min(255, src["nlinks"] + 1)
             write_inode(f, sb, src_ino, src)
@@ -788,8 +869,8 @@ def main():
                 file_mode if mode_given else None,
             )
             sync_bitmaps_from_tree(f, sb)
-        print(
-            f"✅ Chowned {disk_path}:/{'/'.join(path_parts)} to "
+        vprint(
+            f"chown {disk_path}:/{'/'.join(path_parts)} -> "
             f"{owner[0]}:{owner[1]}"
         )
         return
@@ -808,12 +889,12 @@ def main():
         disk_path = sys.argv[2]
         with open(disk_path, "r+b") as f:
             if sys.argv[1] == "--format-large":
-                # Headroom for TinyCC headers/libs + GNU make + samples
-                # (product runit rootfs alone uses ~50 inodes).
-                format_minix_v1(f, ninodes=1024, nzones=65535)
+                # Headroom for TinyCC headers/libs + GNU make + BusyBox applets.
+                # (Must wipe inode table — see format_minix_v1 — or re-pack fails.)
+                format_minix_v1(f, ninodes=2048, nzones=65535)
             else:
                 format_minix_v1(f)
-        print(f"✅ Formatted {disk_path} as MINIX v1 (kernel-compatible layout)")
+        vprint(f"format {disk_path} MINIX v1")
         return
 
     if len(sys.argv) >= 2 and sys.argv[1] == "--hardlink":
@@ -836,7 +917,7 @@ def main():
             sync_bitmaps_from_tree(f, sb)
         dest_display = "/" + "/".join(new_parts)
         src_display = "/" + "/".join(existing_parts)
-        print(f"✅ Hardlinked {src_display} -> {disk_path}:{dest_display}")
+        vprint(f"hardlink {src_display} -> {disk_path}:{dest_display}")
         return
 
     if len(sys.argv) < 3 or len(sys.argv) > 5:
@@ -874,9 +955,9 @@ def main():
 
     with open(disk_path, "r+b") as f:
         sb = parse_super(read_block(f, 1))
+        # One rebuild per inject process; alloc_* maintain bitmaps afterward.
         sync_bitmaps_from_tree(f, sb)
         write_file(f, sb, path_parts, data, file_path, file_mode, owner)
-        sync_bitmaps_from_tree(f, sb)
 
     dest_display = "/" + "/".join(path_parts)
     verify_script = os.path.join(os.path.dirname(__file__), "verify_minix_rootfs.py")
@@ -891,9 +972,9 @@ def main():
     )
     if rc.returncode != 0:
         raise SystemExit(f"post-inject verify failed for {dest_display}")
-    print(
-        f"✅ Injected {file_path} -> {disk_path}:{dest_display} "
-        f"({len(data)} bytes, no mount)"
+    vprint(
+        f"inject {file_path} -> {disk_path}:{dest_display} "
+        f"({len(data)} bytes)"
     )
 
 

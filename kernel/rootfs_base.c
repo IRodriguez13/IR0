@@ -32,6 +32,11 @@ void ir0_rootfs_prepare_userspace_base(void)
 		"/usr/lib",
 		"/usr/share",
 		"/usr/share/doom",
+		"/usr/ken",
+		"/usr/ken/games",
+		"/heart",
+		"/heart/dennis",
+		"/heart/dennis/src",
 		NULL
 	};
 	int i;

@@ -12,8 +12,11 @@ Default paths when none given: /bin /bin/busybox
 --gate: strict post-inject checks (dentry tree, imap consistency, /sbin layout).
 
 Exits 0 on success; prints ROOTFS_* classification tags on failure.
+Success chatter (ROOTFS_STAT / ROOTFS_VERIFY_OK) only when
+IR0_INJECT_VERBOSE=1 or IR0_ROOTFS_VERBOSE=1.
 """
 
+import os
 import struct
 import sys
 
@@ -27,6 +30,18 @@ IFDIR = 0o040000
 IFREG = 0o100000
 ELF_MAGIC = b"\x7fELF"
 MIN_BUSYBOX_SIZE = 4096
+
+
+def rootfs_verbose():
+    for key in ("IR0_ROOTFS_VERBOSE", "IR0_INJECT_VERBOSE"):
+        if os.environ.get(key, "").strip().lower() in ("1", "true", "yes"):
+            return True
+    return False
+
+
+def vprint(*args, **kwargs):
+    if rootfs_verbose():
+        print(*args, **kwargs)
 
 
 def read_block(f, n):
@@ -132,24 +147,42 @@ def read_file_prefix(f, sb, inode, length):
         return b""
     zones = inode["zones"]
     out = bytearray()
-    for zidx in range(9):
+
+    def take_zone(z):
+        nonlocal out
+        if len(out) >= size or z == 0:
+            return
+        chunk = read_block(f, z)
+        need = size - len(out)
+        out.extend(chunk[:need])
+
+    for zidx in range(7):
+        take_zone(zones[zidx])
         if len(out) >= size:
-            break
-        if zidx == 7 and zones[7]:
-            ind = read_block(f, zones[7])
-            for j in range((BLOCK // 2)):
-                z, = struct.unpack("<H", ind[j * 2 : j * 2 + 2])
-                if z == 0:
+            return bytes(out[:size])
+    if zones[7]:
+        ind = read_block(f, zones[7])
+        for j in range(BLOCK // 2):
+            z, = struct.unpack("<H", ind[j * 2 : j * 2 + 2])
+            if z == 0:
+                break
+            take_zone(z)
+            if len(out) >= size:
+                return bytes(out[:size])
+    if zones[8]:
+        dind = read_block(f, zones[8])
+        for j in range(BLOCK // 2):
+            z1, = struct.unpack("<H", dind[j * 2 : j * 2 + 2])
+            if z1 == 0:
+                break
+            lvl1 = read_block(f, z1)
+            for k in range(BLOCK // 2):
+                z2, = struct.unpack("<H", lvl1[k * 2 : k * 2 + 2])
+                if z2 == 0:
                     break
-                chunk = read_block(f, z)
-                need = size - len(out)
-                out.extend(chunk[:need])
+                take_zone(z2)
                 if len(out) >= size:
-                    break
-        elif zones[zidx]:
-            chunk = read_block(f, zones[zidx])
-            need = size - len(out)
-            out.extend(chunk[:need])
+                    return bytes(out[:size])
     return bytes(out[:size])
 
 
@@ -268,7 +301,7 @@ def verify_entry(f, sb, path):
         print(f"ROOTFS_VERIFY_FAIL path={path} error={err}")
         return False
     kind = type_name(inode["mode"])
-    print(
+    vprint(
         f"ROOTFS_STAT path={path} inode_mode=0x{inode['mode']:04x} "
         f"type={kind} size={inode['size']}"
     )
@@ -352,7 +385,7 @@ def main():
                         )
                         ok = False
                     else:
-                        print(
+                        vprint(
                             f"ROOTFS_BUSYBOX_FIXED_REGULAR_FILE size={inode['size']} "
                             f"elf_magic=OK"
                         )
@@ -361,9 +394,9 @@ def main():
             sys.exit(1)
 
         if busybox_inode is not None:
-            print("ROOTFS_VERIFY_OK busybox present as regular ELF file")
+            vprint("ROOTFS_VERIFY_OK busybox present as regular ELF file")
         else:
-            print("ROOTFS_VERIFY_OK")
+            vprint("ROOTFS_VERIFY_OK")
 
 
 if __name__ == "__main__":

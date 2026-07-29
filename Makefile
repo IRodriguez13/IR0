@@ -61,6 +61,18 @@ ifdef arch
 ARCH := $(arch)
 endif
 
+# Accept userspace-style triples so a sibling `ARCH=x86_64` env/MAKEFLAGS
+# does not break make (command-line ARCH requires override).
+ifeq ($(ARCH),x86_64)
+override ARCH := x86-64
+endif
+ifeq ($(ARCH),amd64)
+override ARCH := x86-64
+endif
+ifeq ($(ARCH),aarch64)
+override ARCH := arm64
+endif
+
 ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),1)
 TOOL_DEFAULT_DISK_FS_NAME := fat32
 else ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),2)
@@ -109,29 +121,9 @@ else
 DEFAULT_BUILD_TARGET := kernel-x64.iso
 endif
 
-# Userspace product tree (BusyBox, runit, login, doas, rootfs) lives in the
-# sibling repository; the kernel only drives its build for gates.
-IR0_USERSPACE_ROOT ?= $(abspath $(KERNEL_ROOT)/../IR0-userspace)
-IR0_USERSPACE_OUT  = $(IR0_USERSPACE_ROOT)/out
-IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_USERSPACE_ROOT) IR0_ROOT=$(KERNEL_ROOT)
-
-check-userspace:
-	@if [ ! -f "$(IR0_USERSPACE_ROOT)/Makefile" ]; then \
-		echo "✗ IR0-userspace not found at $(IR0_USERSPACE_ROOT)"; \
-		echo "  First time:  make bootstrap-userspace"; \
-		echo "  Or clone:    git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace"; \
-		echo "  Or set:      IR0_USERSPACE_ROOT=/path/to/IR0-userspace"; \
-		exit 1; \
-	fi
-
-# Clone sibling (if missing), headers_install, runit+BusyBox → disk.img + ISO.
-bootstrap-userspace:
-	@chmod +x scripts/bootstrap-userspace.sh
-	@./scripts/bootstrap-userspace.sh
-
-# Alias for new contributors: same as bootstrap-userspace.
-first-boot: bootstrap-userspace
-	@echo "✓ first-boot OK — next: make run"
+# Product distribution (ISD). Recipes live in scripts/make/isd.mk.
+# Compat: IR0_USERSPACE_ROOT/URL alias IR0_ISD_ROOT/URL.
+-include scripts/make/isd.mk
 
 all: $(DEFAULT_BUILD_TARGET)
 
@@ -282,18 +274,25 @@ else
 QEMU_NET_ALL =
 endif
 
-# Audio: Sound Blaster 16 + Adlib (QEMU 8+ needs audiodev; ISA on default pc)
-QEMU_AUDIO_DEV = -audiodev none,id=snd0
+# Audio: Sound Blaster 16 + Adlib (QEMU 8+ needs audiodev; ISA on default pc).
+# Default backend is PulseAudio so the Linux host hears guest PCM (Doom /dev/audio).
+# CI / headless: QEMU_AUDIO_BACKEND=none. Alternatives: alsa, sdl, pipewire.
+QEMU_AUDIO_BACKEND ?= pa
+QEMU_AUDIO_DEV = -audiodev $(QEMU_AUDIO_BACKEND),id=snd0
 QEMU_AUDIO_SB16 = $(QEMU_AUDIO_DEV) -device sb16,audiodev=snd0
 QEMU_AUDIO_ADLIB = -device adlib,audiodev=snd0
+# Silent audiodev for automated smokes (no host mixer required).
+QEMU_AUDIO_DEV_SILENT = -audiodev none,id=snd0
+QEMU_AUDIO_SB16_SILENT = $(QEMU_AUDIO_DEV_SILENT) -device sb16,audiodev=snd0
 ifneq ($(CONFIG_ENABLE_SOUND),n)
 QEMU_AUDIO_ALL = $(QEMU_AUDIO_SB16) $(QEMU_AUDIO_ADLIB)
 else
 QEMU_AUDIO_ALL =
 endif
 
-# Storage: ATA/IDE disk
-QEMU_STORAGE_IDE = -drive file=disk.img,format=raw,if=ide,index=0
+# Storage: ATA/IDE disk (product run uses IR0_DISK → ISD image; smokes may override)
+IR0_DISK ?= disk.img
+QEMU_STORAGE_IDE = -drive file=$(IR0_DISK),format=raw,if=ide,index=0
 
 # Serial: COM1 para debug
 QEMU_SERIAL_COM1 = -serial stdio
@@ -302,6 +301,15 @@ QEMU_SERIAL_COM1 = -serial stdio
 QEMU_ISA_DEBUG_EXIT = -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
 QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT)
+
+# Full host IR0 tree at guest /heart/dennis/src (writable; long names OK).
+# Default on for interactive run*; IR0_DENNIS_9P=0 to skip.
+IR0_DENNIS_9P ?= 1
+QEMU_DENNIS_9P = -fsdev local,id=dennisfs,path=$(KERNEL_ROOT),security_model=none \
+	-device virtio-9p-pci,fsdev=dennisfs,mount_tag=dennis,disable-modern=on
+ifeq ($(IR0_DENNIS_9P),0)
+QEMU_DENNIS_9P =
+endif
 
 QEMU_64_FLAGS = -cdrom
 
@@ -456,6 +464,7 @@ LIB_OBJS = \
     includes/ir0/named_symlink.o \
     includes/ir0/path_user.o \
     includes/ir0/path_routed.o \
+    includes/ir0/utsname_info.o \
     includes/ir0/console.o \
     includes/ir0/ps2_set1.o \
     includes/ir0/ps2_mouse_pkt.o \
@@ -1164,7 +1173,7 @@ auto ir0-auto: ir0
 
 # Process architecture parameter and .config selection.
 ifneq ($(filter $(ARCH),x86-64 arm64),$(ARCH))
-$(error Unsupported architecture: $(ARCH). Valid values: x86-64, arm64)
+$(error Unsupported architecture: $(ARCH). Valid values: x86-64, arm64 (aliases: x86_64, aarch64))
 endif
 
 ifeq ($(CONFIG_ARCH_X86_64),y)
@@ -1217,62 +1226,70 @@ windows-clean win-clean:
 # Run with GUI and disk (default) - ALL IR0 SUPPORTED HARDWARE
 # Note: This target does NOT call clean-net or rebuild with special flags
 # It simply runs the existing kernel ISO. Use 'make run-tap' for TAP networking.
-# Human console: minimal distro = runit + BusyBox (sibling IR0-userspace).
-# Optional in-guest TinyCC/GNU make: IR0_WITH_DEVTOOLS=1 make run
-# Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (document in SETUP.md).
-#
-# First time (no sibling yet): make first-boot && make run
+# Product console: ISD-owned disk for PROFILE (no per-binary inject).
+# First time: make first-boot PROFILE=minimal && make run PROFILE=minimal
+# Legacy inject: IR0_LEGACY_USERSPACE=1 make run  (load-userspace-*)
+# Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (SETUP.md).
 run: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
-		$(MAKE) -s load-userspace-devtools; \
+	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
+		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
+			$(MAKE) -s load-userspace-devtools; \
+		else \
+			$(MAKE) -s load-userspace-runit; \
+		fi; \
+		echo "Running IR0/Unix (LEGACY inject → disk.img)..."; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot \
+			$(QEMU_DISPLAY); \
 	else \
-		$(MAKE) -s load-userspace-runit; \
+		$(MAKE) run-isd; \
 	fi
-	@echo "Running IR0/Unix (human console — clean GTK)..."
-	@echo "   Hardware: RTL8139, SB16, Adlib, ATA/IDE, Serial, PS/2, VGA"
-	@echo "   Ungrab input: Ctrl+Alt+G"
-	@echo "   Distro: runit + BusyBox (devtools: IR0_WITH_DEVTOOLS=1)"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot \
-		$(QEMU_DISPLAY)
 
 # Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
 run-debug: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
-		$(MAKE) -s load-userspace-devtools; \
+	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
+		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then $(MAKE) -s load-userspace-devtools; \
+		else $(MAKE) -s load-userspace-runit; fi; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot -no-shutdown \
+			$(QEMU_DISPLAY_GTK_DEBUG) \
+			-serial stdio \
+			-monitor telnet:127.0.0.1:1234,server,nowait \
+			-d guest_errors,int $(QEMU_LOG_FILE); \
 	else \
-		$(MAKE) -s load-userspace-runit; \
+		$(MAKE) -s ensure-isd-disk; \
+		echo "Running IR0+ISD debug (PROFILE=$(ISD_PROFILE) DISK=$(IR0_ISD_DISK))..."; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
+			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_ISA_DEBUG_EXIT) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot -no-shutdown \
+			$(QEMU_DISPLAY_GTK_DEBUG) \
+			-serial stdio \
+			-monitor telnet:127.0.0.1:1234,server,nowait \
+			-d guest_errors,int $(QEMU_LOG_FILE); \
 	fi
-	@echo "Running IR0/Unix userspace with debug output..."
-	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2, VGA"
-	@echo "Serial output will appear in this terminal"
-	@echo "QEMU GUI will open in separate window (menubar visible)"
-	@echo "Ungrab input: Ctrl+Alt+G"
-	@echo "Press Ctrl+C to stop"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY_GTK_DEBUG) \
-		-serial stdio \
-		-monitor telnet:127.0.0.1:1234,server,nowait \
-		-d guest_errors,int $(QEMU_LOG_FILE)
 
 # run-bootlog: defined in scripts/make/hostshare-boot.mk (serial + optional 9p boot log).
 # Human interactive with serial in-terminal: make run-debug.
 
 run-fullscreen: kernel-x64-userspace.iso
-	@if [ "$${IR0_WITH_DEVTOOLS:-0}" = "1" ]; then \
-		$(MAKE) -s load-userspace-devtools; \
+	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
+		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then $(MAKE) -s load-userspace-devtools; \
+		else $(MAKE) -s load-userspace-runit; fi; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot \
+			-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME); \
 	else \
-		$(MAKE) -s load-userspace-runit; \
+		$(MAKE) -s ensure-isd-disk; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
+			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot \
+			-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME); \
 	fi
-	@echo "Running IR0/Unix fullscreen GTK..."
-	@echo "   Ungrab input: Ctrl+Alt+G"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot \
-		-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME)
 
 # Run without disk
 run-nodisk:
@@ -1283,14 +1300,26 @@ run-dbgshell:
 	@echo "run-dbgshell retired: use runit/getty/ash (make run-console)"
 	@exit 2
 
-# Run in console mode (attach disk image) - ALL IR0 SUPPORTED HARDWARE
-run-console: kernel-x64-userspace.iso load-userspace-runit
-	@echo "Running IR0/Unix console (runit PID1 → getty/ash)..."
-	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_NGRAPHIC)
+# Run in console mode (-nographic). Product path: ISD disk for PROFILE.
+# Legacy inject: IR0_LEGACY_USERSPACE=1 make run-console
+run-console: kernel-x64-userspace.iso
+	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
+		$(MAKE) -s load-userspace-runit; \
+		echo "Running IR0/Unix console (LEGACY inject → disk.img)..."; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot -no-shutdown \
+			$(QEMU_NGRAPHIC); \
+	else \
+		$(MAKE) -s ensure-isd-disk; \
+		echo "Running IR0+ISD console (PROFILE=$(ISD_PROFILE) DISK=$(IR0_ISD_DISK))..."; \
+		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
+			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) \
+			$(QEMU_DENNIS_9P) \
+			-m 512M -no-reboot -no-shutdown \
+			$(QEMU_NGRAPHIC); \
+	fi
 
 # Run with TAP networking (permite ping bidireccional, requiere root y bridge configurado)
 # Pasos previos (bridge y TAP):
@@ -1428,6 +1457,7 @@ INIT_MUSL_SRC  = setup/pid1/init_musl.c
 MUSL_ARCH_PRCTL_SMOKE_SRC = setup/pid1/musl_arch_prctl_smoke.c
 MUSL_PTHREAD_SMOKE_SRC = setup/pid1/musl_pthread_smoke.c
 SETUID_EXEC_SMOKE_SRC = setup/pid1/setuid_exec_smoke.c
+CHROOT_SMOKE_SRC = setup/pid1/chroot_smoke.c
 SETID_HELPER_SRC = setup/pid1/setid_helper.c
 PASSWD_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/passwd_smoke.c
 DOAS_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/doas_smoke.c
@@ -1469,6 +1499,8 @@ TCC_POWER_HALT_HARNESS_BIN = setup/pid1/tcc_power_halt_harness
 TCC_POWER_HALT_LOG = /tmp/tcc-power-halt-smoke.log
 FASE55D_SMOKE_BIN = setup/doom/doomgeneric_smoke
 RUNIT_STAGE_BIN = $(IR0_USERSPACE_OUT)/stage-bin
+# Smoke runit helpers (fase55d, tcc power, busybox power) live under smoke/stage-bin.
+RUNIT_SMOKE_STAGE_BIN = $(IR0_USERSPACE_OUT)/smoke/stage-bin
 INIT_FASE53A_FS_DEV_SRC = setup/pid1/init_fase53a_fs_dev.c
 INIT_FASE53B_POSIX_PSEUDOFS_SRC = setup/pid1/init_fase53b_posix_pseudofs.c
 INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
@@ -1522,6 +1554,7 @@ INIT_SMOKE_BIN   = setup/pid1/init
 MUSL_ARCH_PRCTL_BIN = setup/pid1/musl_arch_prctl_smoke
 MUSL_PTHREAD_SMOKE_BIN = setup/pid1/musl_pthread_smoke
 SETUID_EXEC_SMOKE_BIN = setup/pid1/setuid_exec_smoke
+CHROOT_SMOKE_BIN = setup/pid1/chroot_smoke
 SETID_HELPER_BIN = setup/pid1/setid_helper
 PASSWD_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/passwd_smoke
 SH_SMOKE_BIN     = setup/pid1/sh_smoke
@@ -1568,6 +1601,7 @@ FASE55D_DOOMGENERIC_LOG = /tmp/userspace-fase55d-doomgeneric.log
 MUSL_ARCH_PRCTL_LOG = /tmp/userspace-musl-arch-prctl.log
 MUSL_PTHREAD_SMOKE_LOG = /tmp/userspace-musl-pthread.log
 SETUID_EXEC_SMOKE_LOG = /tmp/userspace-setuid-exec.log
+CHROOT_SMOKE_LOG = /tmp/userspace-chroot.log
 PASSWD_SMOKE_LOG = /tmp/userspace-passwd.log
 FASE55E_DOOM_BIN = setup/pid1/fase55e_doom_interactive
 FASE55E_DOOM_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
@@ -1579,7 +1613,8 @@ RUNIT_ASH_SMOKE_LOG = /tmp/runit-ash-smoke.log
 DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
-REAL_WAD_PATH ?= /home/ivanr013/Escritorio/universal-doom/DOOM1.WAD
+# Optional Doom IWAD for ken/games and legacy smokes (no maintainer home path).
+REAL_WAD_PATH ?= $(or $(ISD_DOOM_IWAD),$(IR0_DOOM_IWAD),)
 FASE52_TCC_STAGE = setup/pid1/fase52_staging
 FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
@@ -1704,6 +1739,18 @@ build-setuid-exec-smoke:
 	@strings $(SETUID_EXEC_SMOKE_BIN) 2>/dev/null | grep -q "SETUID_EXEC_ALL_OK" || \
 		(echo "✗ setuid smoke missing SETUID_EXEC_ALL_OK string"; exit 1)
 	@echo "✓ build-setuid-exec-smoke OK"
+
+build-chroot-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  MUSL    Building chroot smoke ($(CHROOT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(CHROOT_SMOKE_BIN) $(CHROOT_SMOKE_SRC)
+	@file $(CHROOT_SMOKE_BIN) | grep -q ELF
+	@strings $(CHROOT_SMOKE_BIN) 2>/dev/null | grep -q "CHROOT_OK" || \
+		(echo "✗ chroot smoke missing CHROOT_OK string"; exit 1)
+	@echo "✓ build-chroot-smoke OK"
 
 build-passwd-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -2146,7 +2193,9 @@ build-busybox-matrix-smoke:
 	fi
 	@mkdir -p $(dir $(BB_MATRIX_SMOKE_BIN))
 	@echo "  MUSL    Building BusyBox applet matrix driver ($(BB_MATRIX_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(BB_MATRIX_SMOKE_BIN) $(BB_MATRIX_SMOKE_SRC)
+	@$(MUSL_CC) -static -Os -o $(BB_MATRIX_SMOKE_BIN) \
+		$(BB_MATRIX_SMOKE_SRC) \
+		$(IR0_USERSPACE_ROOT)/smoke/matrix_capture.c
 	@file $(BB_MATRIX_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-busybox-matrix-smoke OK"
 
@@ -2165,7 +2214,7 @@ busybox-matrix: build-busybox-matrix-smoke build-busybox-ir0-full kernel-x64-use
 		--done BBMATRIX_OK --fail-regex 'BBMATRIX_FAIL|KERNEL PANIC' -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none; \
+		-serial stdio -display none -m 1024M -no-reboot -net none; \
 	rm -f $$DISK
 	@python3 $(IR0_USERSPACE_ROOT)/scripts/busybox_applet_matrix.py --log $(BB_MATRIX_LOG) \
 		--binary $(IR0_BUSYBOX_FULL_BIN) --write $(BB_MATRIX_TSV) \
@@ -2278,8 +2327,15 @@ run-irinit-interactive-gui:
 
 build-runit: check-userspace
 	@$(IR0_USERSPACE_MAKE) build-runit build-services
+	@chmod +x $(IR0_USERSPACE_ROOT)/scripts/build-services.sh
+	@ARCH=x86_64 CC="$(MUSL_CC)" MUSL_CC="$(MUSL_CC)" \
+		PRODUCT_OUT="$(IR0_USERSPACE_OUT)/x86_64/product" \
+		SMOKE_OUT="$(IR0_USERSPACE_OUT)/x86_64/smoke" \
+		$(IR0_USERSPACE_ROOT)/scripts/build-services.sh smoke
+	@$(IR0_USERSPACE_MAKE) compat-links
 
 load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-opendoas
+	@echo "note: load-userspace-runit is LEGACY — product path is make first-boot / isd-image"
 	@$(IR0_USERSPACE_MAKE) build-ncurses build-nano || \
 		echo "  WARN    nano not built (optional; cat /usr/bin/nano after reinject)"
 	@if [ "$${IR0_GUEST_MANDOCS:-1}" != "0" ]; then \
@@ -2288,14 +2344,15 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 	fi
 	@DISK=$${DISK:-disk.img}; \
 	set -e; \
-	PROFILE=$${IR0_PRODUCT_PROFILE:-development}; \
+	PROFILE=$${IR0_PRODUCT_PROFILE:-minimal}; \
 	STAMP=$${DISK}.runit.stamp; \
 	NEED=0; \
 	GUEST_MAN="$(KERNEL_ROOT)/build/guest-man"; \
 	if [ ! -f "$$DISK" ] || [ ! -f "$$STAMP" ]; then NEED=1; fi; \
 	if [ $$NEED -eq 0 ] && [ "$$(cat "$$STAMP" 2>/dev/null)" != "$$PROFILE" ]; then NEED=1; fi; \
 	if [ $$NEED -eq 0 ]; then \
-		for dep in $(RUNIT_BIN_DIR)/runit-init $(RUNIT_STAGE_BIN)/runit_console_run \
+		for dep in $(RUNIT_BIN_DIR)/runit-init $(RUNIT_STAGE_BIN)/runit_stage1 \
+			$(RUNIT_STAGE_BIN)/runit_console_run \
 			$(RUNIT_STAGE_BIN)/ir0_passwd $(RUNIT_STAGE_BIN)/doas \
 			$(RUNIT_STAGE_BIN)/nano \
 			$(IR0_USERSPACE_ROOT)/rootfs/etc/passwd \
@@ -2318,10 +2375,9 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 		fi; \
 	fi; \
 	if [ $$NEED -eq 0 ]; then \
-		echo "  DISK    $$DISK up to date (cached runit rootfs — no reinject)"; \
+		echo "  DISK    $$DISK up to date (cached)"; \
 	else \
-		echo "  DISK    Preparing $$DISK (200M MINIX root — not virtio-9p)..."; \
-		echo "  NOTE    virtio-9p is optional /mnt/host share; product / is always disk.img"; \
+		echo "  DISK    $$DISK (200M MINIX, profile=$$PROFILE)"; \
 		dd if=/dev/zero of=$$DISK bs=1M count=200 status=none; \
 		python3 scripts/inject_init_minix.py --format-large $$DISK; \
 		if [ "$${IR0_GUEST_MANDOCS:-1}" != "0" ] && [ -d "$$GUEST_MAN/usr/share/man/cat7" ]; then \
@@ -2334,23 +2390,38 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 			IR0_GUEST_MANDOC_DIR=$${IR0_GUEST_MANDOC_DIR-}; \
 		printf '%s\n' "$$PROFILE" > "$$STAMP"; \
 	fi
-	@echo "✓ load-userspace-runit OK (runit-init → runsvdir → console + logger)"
+	@$(MAKE) -s install-ken-games DISK=$${DISK:-disk.img} || \
+		echo "  WARN    install-ken-games skipped (optional)"
+	@$(MAKE) -s install-dennis-src DISK=$${DISK:-disk.img} || \
+		echo "  WARN    install-dennis-src skipped (optional)"
+	@echo "  DISK    load-userspace-runit OK"
+
+# Doom under /usr/ken/games (Ken Thompson nod) + /usr/bin/doom for PATH.
+install-ken-games: build-fase55e-doom-interactive
+	@chmod +x scripts/inject_ken_games_minix.sh
+	@./scripts/inject_ken_games_minix.sh $${DISK:-disk.img}
+
+# Dennis Ritchie playground: /heart/dennis + short-name samples under src/.
+# Full IR0 tree: make run attaches virtfs mount_tag=dennis (see QEMU_DENNIS_9P).
+install-dennis-src:
+	@chmod +x scripts/inject_dennis_src_minix.sh
+	@./scripts/inject_dennis_src_minix.sh $${DISK:-disk.img}
 
 # Static GNU make for in-guest builds (musl).
 build-gmake-static:
 	@chmod +x scripts/build_gmake_static.sh
 	@./scripts/build_gmake_static.sh
 
-# Product disk + TinyCC + GNU make + expanded BusyBox filters (sed/awk/tar/…).
-# Use after (or instead of) plain load-userspace-runit for toolchain experiments.
+# Product disk + TinyCC + GNU make. Default profile is minimal (firstboot wizard).
+# Lab autologin root: IR0_PRODUCT_PROFILE=development make load-userspace-devtools
 load-userspace-devtools: build-tcc-fase52 build-gmake-static
 	@rm -f disk.img.runit.stamp disk.img.devtools.stamp
-	@IR0_PRODUCT_PROFILE=$${IR0_PRODUCT_PROFILE:-development} IR0_NO_AUTOLOGIN=$${IR0_NO_AUTOLOGIN:-0} \
+	@IR0_PRODUCT_PROFILE=$${IR0_PRODUCT_PROFILE:-minimal} IR0_NO_AUTOLOGIN=$${IR0_NO_AUTOLOGIN:-0} \
 		$(MAKE) -s load-userspace-runit
 	@chmod +x scripts/inject_devtools_minix.sh
 	@./scripts/inject_devtools_minix.sh disk.img
 	@printf 'devtools\n' > disk.img.devtools.stamp
-	@echo "✓ load-userspace-devtools OK (/bin/tcc /bin/make /bin/sed …)"
+	@echo "✓ load-userspace-devtools OK (profile=$${IR0_PRODUCT_PROFILE:-minimal}; /bin/tcc /bin/make …)"
 
 smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 boot (console + logger)..."
@@ -2398,6 +2469,23 @@ smoke-desktop-nano: kernel-x64-userspace.iso
 	@IR0_PRODUCT_PROFILE=development IR0_NO_AUTOLOGIN=0 $(MAKE) -s load-userspace-runit
 	@chmod +x scripts/smoke_desktop_nano_mnt.py
 	@python3 scripts/smoke_desktop_nano_mnt.py --iso kernel-x64-userspace.iso --disk disk.img
+
+# Product binaries stress: top quit, man, dmesg/pipes, tcc hello, optional doom.
+# Uses ISD development disk (top/man/tcc). Doom only if DOOM1.WAD is on the host.
+USERSPACE_STABILITY_LOG = /tmp/ir0-userspace-stability.log
+USERSPACE_STABILITY_DISK ?= $(IR0_USERSPACE_ROOT)/out/x86_64/images/development/disk.img
+.PHONY: smoke-userspace-stability
+smoke-userspace-stability: kernel-x64-userspace.iso
+	@echo "  SMOKE   userspace stability (top/man/tcc/pipes[+doom])..."
+	@test -f $(USERSPACE_STABILITY_DISK) || \
+		{ echo "✗ missing $(USERSPACE_STABILITY_DISK) — pack ISD development first"; exit 2; }
+	@chmod +x scripts/smoke_userspace_stability.py scripts/smoke_desktop_cmd_matrix.py
+	@python3 scripts/smoke_userspace_stability.py \
+		--iso kernel-x64-userspace.iso \
+		--disk $(USERSPACE_STABILITY_DISK) \
+		--log $(USERSPACE_STABILITY_LOG) \
+		--auto-doom
+	@echo "  LOG     $(USERSPACE_STABILITY_LOG)"
 
 # Non-root path: crypt(3) auth + setuid drop + /etc/profile PS1 (typed via monitor).
 RUNIT_LOGIN_NONROOT_SMOKE_LOG = /tmp/runit-login-nonroot-smoke.log
@@ -4407,7 +4495,7 @@ build-init-fase55d-doomgeneric:
 	@echo "  HARNESS Building FASE55D real doomgeneric ($(FASE55D_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DIR0_DOOM_PORT \
+		-DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(INIT_FASE55D_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \
@@ -4423,7 +4511,7 @@ build-fase55e-doom-interactive:
 	@echo "  DOOM    Building FASE55E interactive doomgeneric ($(FASE55E_DOOM_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT \
+		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(INIT_FASE55D_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \
@@ -4476,7 +4564,7 @@ kernel-x64-userspace.iso: kernel-x64-userspace.bin arch/x86-64/grub.cfg
 	@cp kernel-x64-userspace.bin iso_userspace/boot/kernel-x64.bin
 	@grub-mkrescue -o $@ iso_userspace
 	@rm -rf iso_userspace
-	@echo "✓ ISO (userspace init, lazy MM) created: $@"
+	@echo "  ISO     $@"
 
 kernel-x64-userspace-lazy.iso: kernel-x64-userspace.iso
 	@cp kernel-x64-userspace.iso $@
@@ -5991,6 +6079,30 @@ smoke-setuid-exec: build-setuid-exec-smoke kernel-x64-userspace.iso
 	done
 	@echo "✓ smoke-setuid-exec passed"
 
+CHROOT_SMOKE_TAGS = CHROOT_OPEN_INSIDE_OK CHROOT_OUTSIDE_DENIED CHROOT_GETCWD_OK \
+	CHROOT_FORK_INHERIT_OK CHROOT_OK
+
+.PHONY: build-chroot-smoke smoke-chroot
+smoke-chroot: build-chroot-smoke kernel-x64-userspace.iso
+	@echo "  SMOKE   chroot(2) jail remap + fork inherit..."
+	@DISK=$$(mktemp /tmp/ir0-chroot-smoke.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=64 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(CHROOT_SMOKE_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
+	$(SMOKE_QEMU_RUN) --log $(CHROOT_SMOKE_LOG) --timeout 60 --stale-sec 20 \
+		--done CHROOT_OK --fail-regex 'CHROOT_FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK;
+	@for tag in $(CHROOT_SMOKE_TAGS); do \
+		grep -q "$$tag" $(CHROOT_SMOKE_LOG) || \
+			{ echo "✗ smoke-chroot FAILED (missing $$tag)"; \
+			  grep -E 'CHROOT_' $(CHROOT_SMOKE_LOG) | tail -30; exit 1; }; \
+	done
+	@echo "✓ smoke-chroot passed"
+
 smoke-musl-pthread: build-musl-pthread-smoke kernel-x64-userspace.iso
 	@echo "  SMOKE   musl pthread_create + join..."
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
@@ -6336,11 +6448,21 @@ help:
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "Start here (new clone):"
-	@echo "  make check-env && make defconfig && make ir0 && make run"
+	@echo "  make first-boot PROFILE=minimal   # deps + clone ISD + image + ISO"
+	@echo "  make run PROFILE=minimal"
+	@echo "  make check-env && make defconfig && make ir0"
 	@echo "  make sync-mandocs && make man TOPIC=onboarding"
-	@echo "  make run-bootlog            # optional: boot log → build/hostshare/ir0-boot.log"
-	@echo "  make help-profiles         # desktop | hub-rpi4 | watch-rpi5-stub"
+	@echo "  make help-profiles         # kernel board profiles (desktop | hub | watch)"
 	@echo "  make pre-submit            # local contributor gate (no push)"
+	@echo ""
+	@echo "ISD distribution (sibling ../ISD — scripts/make/isd.mk):"
+	@echo "  make first-boot PROFILE=minimal|development"
+	@echo "  make isdconfig PROFILE=minimal    # extras (.isdconfig)"
+	@echo "  make isd / isd-rootfs / isd-image PROFILE=…"
+	@echo "  make run PROFILE=minimal          # boots ISD out/<arch>/images/<profile>/disk.img"
+	@echo "  make clone-isd | check-isd | isd-clean"
+	@echo "  Legacy inject (smokes): IR0_LEGACY_USERSPACE=1 make run"
+	@echo "  Deprecated alias: bootstrap-userspace → first-boot"
 	@echo ""
 	@echo "Profiles / images (scripts/make/profiles.mk):"
 	@echo "  make help-profiles"
@@ -6401,7 +6523,7 @@ help:
 	@echo "  make sync-menuconfig-defconfig  Refresh setup/defconfig from Kconfig"
 	@echo "  make sync-menuconfig-check      Dry-run: show config drift vs Kconfig"
 	@echo "  make check-env | deptest   Host env diagnostic (default desktop-x86_64)"
-	@echo "  make deptest PROFILE=desktop-x86_64|userspace|hub-rpi4|watch|all"
+	@echo "  make deptest PROFILE=desktop-x86_64|userspace|minimal|hub-rpi4|watch|all"
 	@echo "  make pre-submit [SUBSYSTEM=mm|net|arm64]   Local gate → PRE_SUBMIT_OK"
 	@echo "  make tests            Build all test artifacts (tests/, kernel with ktest)"
 	@echo "  make kernel-memsafe   Run Valgrind over kernel code (tests/kernel_memsafe)"
