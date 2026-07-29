@@ -2487,6 +2487,21 @@ smoke-userspace-stability: kernel-x64-userspace.iso
 		--auto-doom
 	@echo "  LOG     $(USERSPACE_STABILITY_LOG)"
 
+# Interactive firstboot wizard (HMP): password Confirm must not #UD under IRQ1.
+FIRSTBOOT_WIZARD_LOG = /tmp/ir0-firstboot-wizard.log
+FIRSTBOOT_WIZARD_DISK ?= $(IR0_USERSPACE_ROOT)/out/x86_64/images/desktop/disk.img
+.PHONY: smoke-firstboot-wizard
+smoke-firstboot-wizard: kernel-x64-userspace.iso
+	@echo "  SMOKE   firstboot wizard (username + password Confirm)..."
+	@test -f $(FIRSTBOOT_WIZARD_DISK) || \
+		{ echo "✗ missing $(FIRSTBOOT_WIZARD_DISK) — pack ISD desktop first"; exit 2; }
+	@chmod +x scripts/smoke_firstboot_wizard.py
+	@python3 scripts/smoke_firstboot_wizard.py \
+		--iso kernel-x64-userspace.iso \
+		--disk $(FIRSTBOOT_WIZARD_DISK) \
+		--log $(FIRSTBOOT_WIZARD_LOG)
+	@echo "  LOG     $(FIRSTBOOT_WIZARD_LOG)"
+
 # Non-root path: crypt(3) auth + setuid drop + /etc/profile PS1 (typed via monitor).
 RUNIT_LOGIN_NONROOT_SMOKE_LOG = /tmp/runit-login-nonroot-smoke.log
 smoke-runit-login-nonroot: load-userspace-runit kernel-x64-userspace.iso
