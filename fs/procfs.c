@@ -536,6 +536,86 @@ int proc_uptime_read(char *buf, size_t count)
 	return len;
 }
 
+/*
+ * /proc/stat — Linux proc(5) / BusyBox top contract.
+ *
+ * Aggregate "cpu" + single "cpu0" jiffy lines (USER_HZ ≈ CONFIG_TICK_RATE_HZ).
+ * IR0 has no per-state CPU accounting yet: idle from clock_get_idle_milliseconds(),
+ * non-idle split user/system; nice/iowait/irq/softirq/steal are 0.
+ * Source: man7.org/linux/man-pages/man5/proc_stat.5.html
+ */
+int proc_stat_read(char *buf, size_t count)
+{
+	uint64_t total;
+	uint64_t idle;
+	uint64_t busy;
+	uint64_t user;
+	uint64_t system;
+	uint64_t nice = 0;
+	uint64_t iowait = 0;
+	uint64_t irq = 0;
+	uint64_t softirq = 0;
+	uint64_t steal = 0;
+	unsigned runnable = 0;
+	unsigned nprocs = 0;
+	int len;
+
+	if (VALIDATE_BUFFER(buf, count) != 0)
+		return -1;
+	memset(buf, 0, count);
+
+	total = clock_get_tick_count();
+	idle = clock_get_idle_milliseconds() * (uint64_t)CONFIG_TICK_RATE_HZ / 1000ULL;
+	if (idle > total)
+		idle = total;
+	busy = total - idle;
+	user = busy / 2ULL;
+	system = busy - user;
+
+	clock_get_loadavg(NULL, NULL, NULL, &runnable, &nprocs, NULL);
+
+	/*
+	 * Eight fields after the label so FEATURE_TOP_SMP_CPU (BusyBox) accepts
+	 * both the aggregate line (>=4) and cpu0 (>4). Duplicate cpu0: one logical CPU.
+	 */
+	len = snprintf(buf, count,
+		       "cpu  %llu %llu %llu %llu %llu %llu %llu %llu\n"
+		       "cpu0 %llu %llu %llu %llu %llu %llu %llu %llu\n"
+		       "intr 0\n"
+		       "ctxt 0\n"
+		       "btime 0\n"
+		       "processes %u\n"
+		       "procs_running %u\n"
+		       "procs_blocked 0\n",
+		       (unsigned long long)user,
+		       (unsigned long long)nice,
+		       (unsigned long long)system,
+		       (unsigned long long)idle,
+		       (unsigned long long)iowait,
+		       (unsigned long long)irq,
+		       (unsigned long long)softirq,
+		       (unsigned long long)steal,
+		       (unsigned long long)user,
+		       (unsigned long long)nice,
+		       (unsigned long long)system,
+		       (unsigned long long)idle,
+		       (unsigned long long)iowait,
+		       (unsigned long long)irq,
+		       (unsigned long long)softirq,
+		       (unsigned long long)steal,
+		       nprocs,
+		       runnable);
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	buf[len] = '\0';
+	return len;
+}
+
 /* /proc/version: raw data only. One line: version\tdate\ttime\tuser\thost\tcompiler */
 int proc_version_read(char *buf, size_t count)
 {
@@ -1254,9 +1334,13 @@ static int proc_readdir_add(struct vfs_dirent *entries, int max_entries, int n,
 
 /*
  * Path-based readdir for /proc mounts (no virtual fds).
- * /proc          — registry children + "pid"
+ * /proc          — digit PIDs first, then "pid", then registry children
  * /proc/pid      — one dirent per live PID
- * /proc/pid/N    — status, cmdline
+ * /proc/pid/N    — status, cmdline, stat
+ *
+ * Digit PIDs must come first: sys_getdents uses GETDENTS_BATCH_MAX (24) and
+ * truncates; BusyBox top/ps scan only numeric dirents then open /proc/N/stat.
+ * Filling the batch with static registry names alone yields "no process info".
  */
 int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
 {
@@ -1273,14 +1357,7 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
         unsigned long irqf;
 
         pseudo_fs_nodes_register_all();
-        n = pseudo_fs_collect_registry_children("/proc", entries, max_entries, 0);
-        if (n < 0)
-            return n;
-        n = proc_readdir_add(entries, max_entries, n, "pid", DT_DIR);
-        /*
-         * BusyBox ps scans /proc for digit dirents then opens /proc/N/stat.
-         * Listing only "pid/" left ps empty.
-         */
+        n = 0;
         irqf = irq_save();
         for (p = process_list; p && n < max_entries; p = p->next)
         {
@@ -1295,6 +1372,17 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
             n = proc_readdir_add(entries, max_entries, n, pid_str, DT_DIR);
         }
         irq_restore(irqf);
+        n = proc_readdir_add(entries, max_entries, n, "pid", DT_DIR);
+        if (n < max_entries)
+        {
+            int reg;
+
+            reg = pseudo_fs_collect_registry_children("/proc", entries,
+                                                     max_entries, n);
+            if (reg < 0)
+                return reg;
+            n = reg;
+        }
         return n;
     }
 

@@ -13,7 +13,9 @@ IR0 uses a centralized registry and bootstrap path for core and optional drivers
 
 - Input: PS/2 controller, keyboard, mouse.
 - Timers: PIT, RTC, HPET, LAPIC, clock abstraction.
-- Storage: ATA core and ATA block path.
+- Storage: ATA core and ATA block path. Odd userspace buffers use a 512-byte
+  bounce in `drivers/storage/ata.c`; MINIX fast-path skips when dst/src is odd
+  (`fs/minix_fs.c`) to avoid alignment storms.
 - Network: RTL8139 path used by network stack.
 - Audio: Sound Blaster, Adlib, PC speaker.
 - Video/console: typewriter, console backend, VBE path.

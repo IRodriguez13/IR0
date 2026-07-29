@@ -1,40 +1,57 @@
 # Modelo de Procesos en IR0
 
-El manejo de procesos en IR0 prioriza ciclo de vida claro y semantica Unix de
+> **Última verificación:** 2026-07-29
+> **Fuente de verdad:** `kernel/process/exit.c`, `kernel/process/wait.c`,
+> [`PROCESSES.md`](../PROCESSES.md) (canónico en inglés)
+
+El manejo de procesos en IR0 prioriza ciclo de vida claro y semántica Unix de
 credenciales en forma incremental.
 
-## Areas Core
+## Áreas core
 
-- Ciclo de vida y tablas en `kernel/process.c` y `kernel/process.h`.
-- Integracion con syscalls en `kernel/syscalls.c`.
-- Handoff al scheduler via scheduler API.
-- Rutas de senales y wait/reap integradas al estado de proceso.
+- Ciclo de vida bajo `kernel/process/` (`exit.c`, `wait.c`, fork/create, …).
+- Integración con syscalls en `kernel/syscalls/process_syscalls.c`.
+- Handoff al scheduler vía scheduler API.
+- Rutas de señales y wait/reap integradas al estado de proceso.
 
-## Datos Clave por Proceso
+## Datos clave por proceso
 
 - PID/PPID y enlaces de lista de procesos.
 - Metadatos de contexto/tarea y address-space.
 - Tabla de file descriptors y directorio de trabajo.
 - Credenciales: `uid/gid/euid/egid` y `umask`.
-- Estado de senales pendientes y metadata de salida.
+- Estado de señales pendientes y metadata de salida.
 
-## Semantica Actual de Credenciales
+## Exit, reparent, wait
+
+En `process_exit()`:
+
+1. Reap de zombies propios.
+2. **`process_reparent_children`** → hijos con `ppid` del moribundo pasan a
+   **`ppid = 1`** (init).
+3. El moribundo queda zombie hasta `wait` del padre (o de init).
+4. Si no hay init (o muere el propio PID 1): huérfanos con **`ppid = 0`**.
+
+ISD no reparenta en userspace; depende del kernel.
+
+## Semántica actual de credenciales
 
 - Los checks de permisos usan credenciales efectivas.
 - Superficie de syscalls de identidad:
   - `getuid/geteuid/getgid/getegid`
   - `setuid/setgid`
   - `umask`
-- Existe un modelo minimo de usuarios para separacion root/user.
+- Existe un modelo mínimo de usuarios para separación root/user.
 
-## Puntos Fuertes
+## Puntos fuertes
 
-- Ciclo de vida explicito con wait/reap bien definido.
-- Las credenciales ya participan en decisiones de politica reales.
-- Mejor alineacion con ownership y permisos tipo Unix.
+- Ciclo de vida explícito con wait/reap bien definido.
+- Reparent de huérfanos a init al estilo Unix clásico.
+- Las credenciales ya participan en decisiones de política reales.
 
-## Puntos Debiles
+## Puntos débiles
 
-- El modelo completo de cuentas/sesion sigue siendo liviano.
-- Algunos casos borde de fork/exec/credenciales aun maduran.
+- El modelo completo de cuentas/sesión sigue siendo liviano.
+- Algunos casos borde de fork/exec/credenciales aún maduran.
 - El modelo de threads no es foco principal por ahora.
+- PID 1 debe hacer `wait` de zombies reparentados.

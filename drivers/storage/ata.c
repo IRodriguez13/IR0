@@ -61,6 +61,7 @@ typedef enum
 
 static int ata_single_sector_announced;
 static int ata_multi_sector_warned;
+static int ata_buffer_align_warned;
 
 static int ata_trace_on(void)
 {
@@ -676,9 +677,10 @@ static bool ata_read_one_sector_pio(uint8_t drive, uint32_t lba, void *buffer,
 	return false;
 }
 
-bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer)
+bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void *buffer)
 {
 	uint8_t s;
+	int need_bounce;
 
 	if (!ata_drives_present[drive] || !buffer || num_sectors == 0)
 		return false;
@@ -689,8 +691,12 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
 		ata_emit_classify("ATA_SINGLE_SECTOR_MODE_FIXED");
 	}
 
-	if (((uintptr_t)buffer & 0x1U) != 0U)
+	need_bounce = (((uintptr_t)buffer & 0x1U) != 0U);
+	if (need_bounce && !ata_buffer_align_warned)
+	{
+		ata_buffer_align_warned = 1;
 		ata_emit_classify("ATA_BUFFER_ALIGNMENT_SUSPECT");
+	}
 
 	if (num_sectors > 1 && !ata_multi_sector_warned)
 	{
@@ -703,73 +709,138 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* bu
 		uint32_t sector_lba = lba + (uint32_t)s;
 		uint8_t *dest = (uint8_t *)buffer + (size_t)s * ATA_SECTOR_SIZE;
 
-		if (!ata_read_one_sector_pio(drive, sector_lba, dest, s, 1))
+		if (need_bounce)
+		{
+			uint8_t bounce[ATA_SECTOR_SIZE] __attribute__((aligned(2)));
+
+			if (!ata_read_one_sector_pio(drive, sector_lba, bounce, s, 1))
+				return false;
+			memcpy(dest, bounce, ATA_SECTOR_SIZE);
+		}
+		else if (!ata_read_one_sector_pio(drive, sector_lba, dest, s, 1))
+		{
 			return false;
+		}
 	}
 
 	return true;
 }
 
-bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer) 
+static bool ata_write_one_sector_pio(uint8_t drive, uint32_t lba, const void *buffer)
 {
-    
-    if (!ata_drives_present[drive]) 
-    {
-        return false;
-    }
-    
-    uint16_t status_port = ata_get_status_port(drive);
-    (void)status_port; // Variable not used in this implementation
-    uint16_t drive_head_port = ata_get_drive_head_port(drive);
-    uint16_t sector_count_port = ata_get_sector_count_port(drive);
-    uint16_t lba_low_port = ata_get_lba_low_port(drive);
-    uint16_t lba_mid_port = ata_get_lba_mid_port(drive);
-    uint16_t lba_high_port = ata_get_lba_high_port(drive);
-    uint16_t command_port = ata_get_command_port(drive);
-    uint16_t data_port = ata_get_port_base(drive);
-    
-    // Select drive
-    uint8_t drive_select = (drive % 2 == 0) ? ATA_DRIVE_MASTER : ATA_DRIVE_SLAVE;
-    outb(drive_head_port, drive_select | 0x40); // LBA mode
-    
-    // Wait for drive to be ready
-    if (!ata_wait_ready(drive)) 
-    {
-        return false;
-    }
-    
-    // Set up LBA address
-    outb(sector_count_port, num_sectors);
-    outb(lba_low_port, lba & 0xFF);
-    outb(lba_mid_port, (lba >> 8) & 0xFF);
-    outb(lba_high_port, (lba >> 16) & 0xFF);
-    outb(drive_head_port, drive_select | 0x40 | ((lba >> 24) & 0x0F));
-    
-    // Send write command
-    outb(command_port, ATA_CMD_WRITE_SECTORS);
-    
-    // Write data
-    const uint16_t* buffer16 = (const uint16_t*)buffer;
-    for (int sector = 0; sector < num_sectors; sector++) 
-    {
-        // Wait for DRQ
-        if (!ata_wait_drq(drive)) 
-        {
-            return false;
-        }
-        
-        // Write sector
-        for (int i = 0; i < 256; i++) 
-        {
-            outw(data_port, buffer16[sector * 256 + i]);
-        }
-    }
+	uint16_t drive_head_port = ata_get_drive_head_port(drive);
+	uint16_t sector_count_port = ata_get_sector_count_port(drive);
+	uint16_t lba_low_port = ata_get_lba_low_port(drive);
+	uint16_t lba_mid_port = ata_get_lba_mid_port(drive);
+	uint16_t lba_high_port = ata_get_lba_high_port(drive);
+	uint16_t command_port = ata_get_command_port(drive);
+	uint16_t data_port = ata_get_port_base(drive);
+	uint8_t drive_select = (drive % 2 == 0) ? ATA_DRIVE_MASTER : ATA_DRIVE_SLAVE;
+	const uint16_t *buffer16 = (const uint16_t *)buffer;
+	int i;
 
-    /*
-     * Do not FLUSH_CACHE after every PIO write — that serializes bulk
-     * MINIX zone growth (FASE52D ~500KB) into multi-minute hangs.
-     * Callers that need durability should use ir0_block_flush / fsync.
-     */
-    return ata_wait_ready(drive);
+	outb(drive_head_port, drive_select | 0x40);
+	if (!ata_wait_ready(drive))
+		return false;
+
+	outb(sector_count_port, 1);
+	outb(lba_low_port, lba & 0xFF);
+	outb(lba_mid_port, (lba >> 8) & 0xFF);
+	outb(lba_high_port, (lba >> 16) & 0xFF);
+	outb(drive_head_port, drive_select | 0x40 | ((lba >> 24) & 0x0F));
+	outb(command_port, ATA_CMD_WRITE_SECTORS);
+
+	if (!ata_wait_drq(drive))
+		return false;
+
+	for (i = 0; i < 256; i++)
+		outw(data_port, buffer16[i]);
+
+	return ata_wait_ready(drive);
+}
+
+bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors,
+		       const void *buffer)
+{
+	uint8_t s;
+	int need_bounce;
+
+	if (!ata_drives_present[drive] || !buffer || num_sectors == 0)
+		return false;
+
+	need_bounce = (((uintptr_t)buffer & 0x1U) != 0U);
+	if (need_bounce && !ata_buffer_align_warned)
+	{
+		ata_buffer_align_warned = 1;
+		ata_emit_classify("ATA_BUFFER_ALIGNMENT_SUSPECT");
+	}
+
+	if (num_sectors > 1 && !ata_multi_sector_warned)
+	{
+		ata_multi_sector_warned = 1;
+		ata_emit_classify("ATA_MULTI_SECTOR_UNSAFE");
+	}
+
+	/*
+	 * Odd caller buffers: PIO one sector through an aligned bounce.
+	 * Aligned multi-sector keeps the historical single-command path.
+	 */
+	if (need_bounce)
+	{
+		for (s = 0; s < num_sectors; s++)
+		{
+			uint8_t bounce[ATA_SECTOR_SIZE] __attribute__((aligned(2)));
+			const uint8_t *src =
+				(const uint8_t *)buffer + (size_t)s * ATA_SECTOR_SIZE;
+
+			memcpy(bounce, src, ATA_SECTOR_SIZE);
+			if (!ata_write_one_sector_pio(drive, lba + (uint32_t)s, bounce))
+				return false;
+		}
+		return true;
+	}
+
+	{
+		uint16_t drive_head_port = ata_get_drive_head_port(drive);
+		uint16_t sector_count_port = ata_get_sector_count_port(drive);
+		uint16_t lba_low_port = ata_get_lba_low_port(drive);
+		uint16_t lba_mid_port = ata_get_lba_mid_port(drive);
+		uint16_t lba_high_port = ata_get_lba_high_port(drive);
+		uint16_t command_port = ata_get_command_port(drive);
+		uint16_t data_port = ata_get_port_base(drive);
+		uint8_t drive_select =
+			(drive % 2 == 0) ? ATA_DRIVE_MASTER : ATA_DRIVE_SLAVE;
+		const uint16_t *buffer16 = (const uint16_t *)buffer;
+		int sector;
+
+		outb(drive_head_port, drive_select | 0x40);
+		if (!ata_wait_ready(drive))
+			return false;
+
+		outb(sector_count_port, num_sectors);
+		outb(lba_low_port, lba & 0xFF);
+		outb(lba_mid_port, (lba >> 8) & 0xFF);
+		outb(lba_high_port, (lba >> 16) & 0xFF);
+		outb(drive_head_port, drive_select | 0x40 | ((lba >> 24) & 0x0F));
+		outb(command_port, ATA_CMD_WRITE_SECTORS);
+
+		for (sector = 0; sector < num_sectors; sector++)
+		{
+			int i;
+
+			if (!ata_wait_drq(drive))
+				return false;
+
+			for (i = 0; i < 256; i++)
+				outw(data_port, buffer16[sector * 256 + i]);
+		}
+
+		/*
+		 * Do not FLUSH_CACHE after every PIO write — that serializes bulk
+		 * MINIX zone growth (FASE52D ~500KB) into multi-minute hangs.
+		 * Callers that need durability should use ir0_block_flush / fsync.
+		 */
+		return ata_wait_ready(drive);
+	}
 }
 

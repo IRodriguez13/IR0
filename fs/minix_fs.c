@@ -2250,7 +2250,8 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
     {
       kmemset(dst, 0, chunk);
     }
-    else if (block_off == 0 && chunk == MINIX_BLOCK_SIZE)
+    else if (block_off == 0 && chunk == MINIX_BLOCK_SIZE &&
+             ((uintptr_t)dst & 1U) == 0U)
     {
       if (minix_read_block(disk_zone, dst) != 0)
         return -EIO;
@@ -2353,7 +2354,8 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
     if (ret != 0)
       return ret;
 
-    if (block_off == 0 && chunk == MINIX_BLOCK_SIZE)
+    if (block_off == 0 && chunk == MINIX_BLOCK_SIZE &&
+        ((uintptr_t)src & 1U) == 0U)
     {
       if (minix_write_block(disk_zone, src) != 0)
         return -EIO;
