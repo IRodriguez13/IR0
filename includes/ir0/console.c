@@ -515,16 +515,18 @@ void ir0_console_keypress(char c)
 		{
 			canon_line_len = 0;
 			tty_deliver_sig(SIGINT);
-			if (tty_sleep_depth == 0)
-				sched_schedule_next();
+			/*
+			 * Never sched_schedule_next() here: keypress runs under
+			 * IRQ1. Wake + tty_need_resched; ISR / idle_poll switch.
+			 */
+			(void)ir0_console_wake_readers();
 			return;
 		}
 		if ((unsigned char)nc == vquit)
 		{
 			canon_line_len = 0;
 			tty_deliver_sig(SIGQUIT);
-			if (tty_sleep_depth == 0)
-				sched_schedule_next();
+			(void)ir0_console_wake_readers();
 			return;
 		}
 	}
@@ -536,13 +538,12 @@ void ir0_console_keypress(char c)
 		{
 			ir0_ash_smoke_tty_line_ready();
 			/*
-			 * Wake waiters. Schedule only when NOT already inside
-			 * tty_sleep on this stack (nested schedule stranded ash
-			 * after login). IRQ/async path must schedule or the
-			 * shell never runs again after BLOCKED.
+			 * Wake waiters only. Scheduling from IRQ1 (keyboard →
+			 * keypress) corrupted prev RIP → #UD into .bss /
+			 * process_t during firstboot password Confirm.
+			 * sched_irq_preempt_from_frame / idle_poll pick READY.
 			 */
-			if (ir0_console_wake_readers() && tty_sleep_depth == 0)
-				sched_schedule_next();
+			(void)ir0_console_wake_readers();
 		}
 		return;
 	}
