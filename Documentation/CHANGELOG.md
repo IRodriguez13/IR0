@@ -1,12 +1,24 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-07-25
+> **Last verified:** 2026-07-29
 > **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
 For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** see [`STABLE.md`](STABLE.md).
 
 ## [Unreleased]
+
+### `/proc/stat` + BusyBox `top` + ATA odd-buffer bounce (2026-07-29)
+
+- `/proc/stat` (`proc_stat_read`): Linux-shaped `cpu`/`cpu0` jiffy lines so
+  BusyBox `top` can open `/proc/stat` after `chdir("/proc")`.
+- `proc_readdir("/proc")` lists digit PID dirs **before** static registry names
+  so `GETDENTS_BATCH_MAX` (24) does not hide all processes from `top`/`ps`.
+- ATA/MINIX: bounce path for odd userspace buffers; gate MINIX fast-path when
+  dst/src is odd (stops `ATA_BUFFER_ALIGNMENT_SUSPECT` storms).
+- Smokes: `scripts/smoke_proc_stat_top.py`; `smoke_proc_coherence.py` checks
+  `/proc/stat`. Docs: [`VIRTUAL_FILESYSTEMS.md`](VIRTUAL_FILESYSTEMS.md),
+  [`PROCESSES.md`](PROCESSES.md) (reparent-to-init note).
 
 ### Doom T2 audio/mouse + ESC + TinyCC `/lib/tcc` (2026-07-28)
 
