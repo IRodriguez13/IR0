@@ -27,6 +27,7 @@
 #include <ir0/path_routed.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
+#include <ir0/credentials.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
@@ -82,7 +83,7 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
 
   rc = ir0_resolve_user_path(mountpoint, mountpoint_resolved,
                              sizeof(mountpoint_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
   mount_path = mountpoint_resolved;
@@ -130,7 +131,7 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
   else
   {
     rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, dev_copy, dev_resolved,
-                              sizeof(dev_resolved), current_process->cwd);
+                              sizeof(dev_resolved), current_process->cwd, current_process->root);
     if (rc != 0)
       return rc;
     dev_path = dev_resolved;
@@ -219,7 +220,7 @@ int64_t sys_umount(const char *target, int flags)
     return -EINVAL;
 
   rc = ir0_resolve_user_path(target, target_resolved, sizeof(target_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -259,7 +260,7 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
+                            current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -271,25 +272,19 @@ int64_t sys_chmod(const char *path, mode_t mode)
   if (!current_process || !path)
     return -EFAULT;
 
-  /* Validate path is in userspace (for USER_MODE processes) */
+  /* Resolve relative paths against cwd; absolute under chroot. */
+  char resolved[256];
+  const char *path_to_use = path;
+  int rc;
+
   if (validate_userspace_string(path, 256) != 0)
     return -EFAULT;
 
-  /* Resolve relative paths against cwd */
-  char resolved[256];
-  const char *path_to_use = path;
-  if (!is_absolute_path(path))
-  {
-    if (join_paths(current_process->cwd, path, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else
-  {
-    if (normalize_path(path, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
+  path_to_use = resolved;
 
   stat_t st;
   int sret = vfs_stat(path_to_use, &st);
@@ -304,31 +299,23 @@ int64_t sys_chmod(const char *path, mode_t mode)
 
 int64_t sys_chown(const char *path, uid_t owner, gid_t group)
 {
+  char resolved[256];
+  int rc;
+
   if (!current_process || !path)
     return -EFAULT;
   if (validate_userspace_string(path, 256) != 0)
     return -EFAULT;
 
-  /* Resolve relative paths against cwd */
-  char resolved[256];
-  const char *path_to_use = path;
-  if (!is_absolute_path(path))
-  {
-    if (join_paths(current_process->cwd, path, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else
-  {
-    if (normalize_path(path, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
 
   if (current_process->euid != ROOT_UID)
     return -EPERM;
 
-  return vfs_chown(path_to_use, owner, group);
+  return vfs_chown(resolved, owner, group);
 }
 
 int64_t sys_link(const char *oldpath, const char *newpath)
@@ -346,12 +333,12 @@ int64_t sys_link(const char *oldpath, const char *newpath)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
   rc = ir0_resolve_user_path(newpath, new_resolved, sizeof(new_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -380,12 +367,12 @@ int64_t sys_rename(const char *oldpath, const char *newpath)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
   rc = ir0_resolve_user_path(newpath, new_resolved, sizeof(new_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -433,7 +420,8 @@ int64_t sys_uname(struct utsname *buf)
  */
 int64_t sys_access(const char *pathname, int mode)
 {
-  int64_t rc;
+  char resolved[256];
+  int rc;
 
   if (!current_process || !pathname)
     return -EFAULT;
@@ -441,23 +429,14 @@ int64_t sys_access(const char *pathname, int mode)
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  char resolved[256];
-  const char *path_to_use = pathname;
-  if (!is_absolute_path(pathname))
-  {
-    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else if (normalize_path(pathname, resolved, sizeof(resolved)) == 0)
-  {
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
 
-  rc = ir0_access_path_routed(path_to_use, mode,
-                              (uid_t)current_process->euid,
-                              (gid_t)current_process->egid);
-  return rc;
+  return ir0_access_path_routed(resolved, mode,
+                                (uid_t)current_process->euid,
+                                (gid_t)current_process->egid);
 }
 
 int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
@@ -509,7 +488,7 @@ int64_t sys_rmdir(const char *pathname)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
+                            current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -530,6 +509,10 @@ int64_t ir0_chdir_resolved(const char *pathname)
   if (len == 0 || len >= 256)
     return -EINVAL;
 
+  /*
+   * pathname is a kernel/host path (already chroot-mapped by sys_chdir,
+   * or an open directory path from fchdir).
+   */
   if (is_absolute_path(pathname))
   {
     if (normalize_path(pathname, new_path, sizeof(new_path)) != 0)
@@ -563,18 +546,26 @@ int64_t ir0_chdir_resolved(const char *pathname)
 
 int64_t sys_chdir(const char *pathname)
 {
+  char resolved[256];
+  int rc;
+
   if (!current_process || !pathname)
     return -EFAULT;
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  return ir0_chdir_resolved(pathname);
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
+
+  return ir0_chdir_resolved(resolved);
 }
 
 int64_t sys_getcwd(char *buf, size_t size)
 {
+  char visible[256];
   size_t len;
 
   if (!current_process || !buf || size == 0)
@@ -584,15 +575,59 @@ int64_t sys_getcwd(char *buf, size_t size)
     return -EFAULT;
 
   process_cwd_ensure_absolute(current_process);
+  if (current_process->root[0] != '/')
+  {
+    strncpy(current_process->root, "/", sizeof(current_process->root) - 1);
+    current_process->root[sizeof(current_process->root) - 1] = '\0';
+  }
 
-  len = strlen(current_process->cwd);
+  if (ir0_path_getcwd_visible(current_process->root, current_process->cwd,
+                              visible, sizeof(visible)) != 0)
+    return -ENAMETOOLONG;
+
+  len = strlen(visible);
   if (len >= size)
     return -ERANGE;
 
-  if (copy_to_user(buf, current_process->cwd, len + 1) != 0)
+  if (copy_to_user(buf, visible, len + 1) != 0)
     return -EFAULT;
 
   return (int64_t)len;
+}
+
+int64_t sys_chroot(const char *path)
+{
+  char resolved[256];
+  stat_t st;
+  int rc;
+  int64_t ret;
+
+  if (!current_process || !path)
+    return -EFAULT;
+
+  if (!ir0_cred_is_root())
+    return -EPERM;
+
+  if (validate_userspace_string(path, 256) != 0)
+    return -EFAULT;
+
+  rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
+
+  ret = ir0_stat_path_routed(resolved, &st);
+  if (ret < 0)
+    return ret;
+  if (!S_ISDIR(st.st_mode))
+    return -ENOTDIR;
+
+  /*
+   * Linux: does not change cwd. Absolute paths after this use the new root.
+   */
+  strncpy(current_process->root, resolved, sizeof(current_process->root) - 1);
+  current_process->root[sizeof(current_process->root) - 1] = '\0';
+  return 0;
 }
 
 int64_t sys_utimensat(int dirfd, const char *pathname,
@@ -631,7 +666,7 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
       return -EFAULT;
 
     rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                              current_process->cwd);
+                              current_process->cwd, current_process->root);
     if (rc != 0)
       return rc;
   }
@@ -660,7 +695,7 @@ int64_t sys_unlink(const char *pathname)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
+                            current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -684,7 +719,7 @@ int64_t sys_truncate(const char *pathname, off_t length)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
+                            current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -748,7 +783,7 @@ int64_t sys_statfs(const char *pathname, void *buf)
 		return -EFAULT;
 
 	rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-				   current_process->cwd);
+				   current_process->cwd, current_process->root);
 	if (rc != 0)
 		return rc;
 

@@ -1457,6 +1457,7 @@ INIT_MUSL_SRC  = setup/pid1/init_musl.c
 MUSL_ARCH_PRCTL_SMOKE_SRC = setup/pid1/musl_arch_prctl_smoke.c
 MUSL_PTHREAD_SMOKE_SRC = setup/pid1/musl_pthread_smoke.c
 SETUID_EXEC_SMOKE_SRC = setup/pid1/setuid_exec_smoke.c
+CHROOT_SMOKE_SRC = setup/pid1/chroot_smoke.c
 SETID_HELPER_SRC = setup/pid1/setid_helper.c
 PASSWD_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/passwd_smoke.c
 DOAS_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/doas_smoke.c
@@ -1553,6 +1554,7 @@ INIT_SMOKE_BIN   = setup/pid1/init
 MUSL_ARCH_PRCTL_BIN = setup/pid1/musl_arch_prctl_smoke
 MUSL_PTHREAD_SMOKE_BIN = setup/pid1/musl_pthread_smoke
 SETUID_EXEC_SMOKE_BIN = setup/pid1/setuid_exec_smoke
+CHROOT_SMOKE_BIN = setup/pid1/chroot_smoke
 SETID_HELPER_BIN = setup/pid1/setid_helper
 PASSWD_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/passwd_smoke
 SH_SMOKE_BIN     = setup/pid1/sh_smoke
@@ -1599,6 +1601,7 @@ FASE55D_DOOMGENERIC_LOG = /tmp/userspace-fase55d-doomgeneric.log
 MUSL_ARCH_PRCTL_LOG = /tmp/userspace-musl-arch-prctl.log
 MUSL_PTHREAD_SMOKE_LOG = /tmp/userspace-musl-pthread.log
 SETUID_EXEC_SMOKE_LOG = /tmp/userspace-setuid-exec.log
+CHROOT_SMOKE_LOG = /tmp/userspace-chroot.log
 PASSWD_SMOKE_LOG = /tmp/userspace-passwd.log
 FASE55E_DOOM_BIN = setup/pid1/fase55e_doom_interactive
 FASE55E_DOOM_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
@@ -1736,6 +1739,18 @@ build-setuid-exec-smoke:
 	@strings $(SETUID_EXEC_SMOKE_BIN) 2>/dev/null | grep -q "SETUID_EXEC_ALL_OK" || \
 		(echo "✗ setuid smoke missing SETUID_EXEC_ALL_OK string"; exit 1)
 	@echo "✓ build-setuid-exec-smoke OK"
+
+build-chroot-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@echo "  MUSL    Building chroot smoke ($(CHROOT_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(CHROOT_SMOKE_BIN) $(CHROOT_SMOKE_SRC)
+	@file $(CHROOT_SMOKE_BIN) | grep -q ELF
+	@strings $(CHROOT_SMOKE_BIN) 2>/dev/null | grep -q "CHROOT_OK" || \
+		(echo "✗ chroot smoke missing CHROOT_OK string"; exit 1)
+	@echo "✓ build-chroot-smoke OK"
 
 build-passwd-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -2454,6 +2469,23 @@ smoke-desktop-nano: kernel-x64-userspace.iso
 	@IR0_PRODUCT_PROFILE=development IR0_NO_AUTOLOGIN=0 $(MAKE) -s load-userspace-runit
 	@chmod +x scripts/smoke_desktop_nano_mnt.py
 	@python3 scripts/smoke_desktop_nano_mnt.py --iso kernel-x64-userspace.iso --disk disk.img
+
+# Product binaries stress: top quit, man, dmesg/pipes, tcc hello, optional doom.
+# Uses ISD development disk (top/man/tcc). Doom only if DOOM1.WAD is on the host.
+USERSPACE_STABILITY_LOG = /tmp/ir0-userspace-stability.log
+USERSPACE_STABILITY_DISK ?= $(IR0_USERSPACE_ROOT)/out/x86_64/images/development/disk.img
+.PHONY: smoke-userspace-stability
+smoke-userspace-stability: kernel-x64-userspace.iso
+	@echo "  SMOKE   userspace stability (top/man/tcc/pipes[+doom])..."
+	@test -f $(USERSPACE_STABILITY_DISK) || \
+		{ echo "✗ missing $(USERSPACE_STABILITY_DISK) — pack ISD development first"; exit 2; }
+	@chmod +x scripts/smoke_userspace_stability.py scripts/smoke_desktop_cmd_matrix.py
+	@python3 scripts/smoke_userspace_stability.py \
+		--iso kernel-x64-userspace.iso \
+		--disk $(USERSPACE_STABILITY_DISK) \
+		--log $(USERSPACE_STABILITY_LOG) \
+		--auto-doom
+	@echo "  LOG     $(USERSPACE_STABILITY_LOG)"
 
 # Non-root path: crypt(3) auth + setuid drop + /etc/profile PS1 (typed via monitor).
 RUNIT_LOGIN_NONROOT_SMOKE_LOG = /tmp/runit-login-nonroot-smoke.log
@@ -6046,6 +6078,30 @@ smoke-setuid-exec: build-setuid-exec-smoke kernel-x64-userspace.iso
 			  grep -E 'SETID_|SETUID_' $(SETUID_EXEC_SMOKE_LOG) | tail -20; exit 1; }; \
 	done
 	@echo "✓ smoke-setuid-exec passed"
+
+CHROOT_SMOKE_TAGS = CHROOT_OPEN_INSIDE_OK CHROOT_OUTSIDE_DENIED CHROOT_GETCWD_OK \
+	CHROOT_FORK_INHERIT_OK CHROOT_OK
+
+.PHONY: build-chroot-smoke smoke-chroot
+smoke-chroot: build-chroot-smoke kernel-x64-userspace.iso
+	@echo "  SMOKE   chroot(2) jail remap + fork inherit..."
+	@DISK=$$(mktemp /tmp/ir0-chroot-smoke.XXXXXX.img); \
+	dd if=/dev/zero of=$$DISK bs=1M count=64 status=none && \
+	python3 scripts/inject_init_minix.py --format-large $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(CHROOT_SMOKE_BIN) sbin/init && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
+	$(SMOKE_QEMU_RUN) --log $(CHROOT_SMOKE_LOG) --timeout 60 --stale-sec 20 \
+		--done CHROOT_OK --fail-regex 'CHROOT_FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK;
+	@for tag in $(CHROOT_SMOKE_TAGS); do \
+		grep -q "$$tag" $(CHROOT_SMOKE_LOG) || \
+			{ echo "✗ smoke-chroot FAILED (missing $$tag)"; \
+			  grep -E 'CHROOT_' $(CHROOT_SMOKE_LOG) | tail -30; exit 1; }; \
+	done
+	@echo "✓ smoke-chroot passed"
 
 smoke-musl-pthread: build-musl-pthread-smoke kernel-x64-userspace.iso
 	@echo "  SMOKE   musl pthread_create + join..."

@@ -147,6 +147,7 @@ WRAP4(sys_faccessat, int, const char *, int, int)
 WRAP1(sys_dup, int)
 WRAP3(sys_exec, const char *, char *const *, char *const *)
 WRAP1(sys_chdir, const char *)
+WRAP1(sys_chroot, const char *)
 WRAP1(sys_fchdir, int)
 WRAP5(sys_mount, const char *, const char *, const char *, unsigned long,
       const void *)
@@ -355,6 +356,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_getcwd]         = wrap_sys_getcwd;
   syscall_table_rw[__NR_utimensat]      = wrap_sys_utimensat;
   syscall_table_rw[__NR_chdir]          = wrap_sys_chdir;
+  syscall_table_rw[__NR_chroot]         = wrap_sys_chroot;
   syscall_table_rw[__NR_fchdir]         = wrap_sys_fchdir;
   syscall_table_rw[__NR_mkdir]          = wrap_sys_mkdir;
   syscall_table_rw[__NR_rmdir]          = wrap_sys_rmdir;

@@ -141,6 +141,7 @@ void clock_cancel_all_alarms(void);
 int clock_set_scheduler_quantum(uint32_t ticks);
 uint32_t clock_get_scheduler_quantum(void);
 int clock_take_sched_resched_pending(void);
+int clock_sched_resched_pending_peek(void);
 void clock_request_sched_resched(void);
 
 /* Statistics */

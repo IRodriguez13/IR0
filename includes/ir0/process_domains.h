@@ -49,7 +49,7 @@ int process_rel_init_child(struct process *child, const struct process *parent,
 int process_mm_cursor_clone(struct process *dst, const struct process *src);
 
 /*
- * Copy cwd / comm / rlimits (session-visible process attributes).
+ * Copy cwd / root (chroot) / comm / rlimits (session-visible process attributes).
  * May not sleep. Returns 0 or -errno.
  */
 int process_session_attrs_clone(struct process *dst, const struct process *src);
