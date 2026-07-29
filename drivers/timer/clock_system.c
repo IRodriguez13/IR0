@@ -632,6 +632,11 @@ int clock_take_sched_resched_pending(void)
     return pending;
 }
 
+int clock_sched_resched_pending_peek(void)
+{
+    return clock_state.sched_resched_pending ? 1 : 0;
+}
+
 void clock_request_sched_resched(void)
 {
     clock_state.sched_resched_pending = 1;

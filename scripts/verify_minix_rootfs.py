@@ -147,24 +147,42 @@ def read_file_prefix(f, sb, inode, length):
         return b""
     zones = inode["zones"]
     out = bytearray()
-    for zidx in range(9):
+
+    def take_zone(z):
+        nonlocal out
+        if len(out) >= size or z == 0:
+            return
+        chunk = read_block(f, z)
+        need = size - len(out)
+        out.extend(chunk[:need])
+
+    for zidx in range(7):
+        take_zone(zones[zidx])
         if len(out) >= size:
-            break
-        if zidx == 7 and zones[7]:
-            ind = read_block(f, zones[7])
-            for j in range((BLOCK // 2)):
-                z, = struct.unpack("<H", ind[j * 2 : j * 2 + 2])
-                if z == 0:
+            return bytes(out[:size])
+    if zones[7]:
+        ind = read_block(f, zones[7])
+        for j in range(BLOCK // 2):
+            z, = struct.unpack("<H", ind[j * 2 : j * 2 + 2])
+            if z == 0:
+                break
+            take_zone(z)
+            if len(out) >= size:
+                return bytes(out[:size])
+    if zones[8]:
+        dind = read_block(f, zones[8])
+        for j in range(BLOCK // 2):
+            z1, = struct.unpack("<H", dind[j * 2 : j * 2 + 2])
+            if z1 == 0:
+                break
+            lvl1 = read_block(f, z1)
+            for k in range(BLOCK // 2):
+                z2, = struct.unpack("<H", lvl1[k * 2 : k * 2 + 2])
+                if z2 == 0:
                     break
-                chunk = read_block(f, z)
-                need = size - len(out)
-                out.extend(chunk[:need])
+                take_zone(z2)
                 if len(out) >= size:
-                    break
-        elif zones[zidx]:
-            chunk = read_block(f, zones[zidx])
-            need = size - len(out)
-            out.extend(chunk[:need])
+                    return bytes(out[:size])
     return bytes(out[:size])
 
 

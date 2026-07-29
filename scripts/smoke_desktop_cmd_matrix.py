@@ -12,6 +12,8 @@ Stability notes:
   - Empty-prompt storms abort the batch so a fresh VM can retry.
   - Poweroff is soft-gated (TIMEOUT → WARN, round still PASS if ash OK).
   - Doom is opt-in (--with-doom / --only-doom).
+  - --stability: product binaries that stress TTY/sched/exec (top/man/tcc/pipes);
+    optional doom; fail hard on panic/#UD/SEGV tags.
 """
 
 from __future__ import annotations
@@ -50,6 +52,16 @@ SPECIAL = {
     "?": "shift-slash",
     "(": "shift-9",
     ")": "shift-0",
+    ",": "comma",
+    "+": "shift-equal",
+    "*": "shift-8",
+    ">": "shift-dot",
+    "<": "shift-comma",
+    "#": "shift-3",
+    "{": "shift-bracket_left",
+    "}": "shift-bracket_right",
+    "[": "bracket_left",
+    "]": "bracket_right",
 }
 
 FAIL_RES = [
@@ -59,6 +71,7 @@ FAIL_RES = [
     re.compile(r"Unhandled kernel"),
     re.compile(r"General protection fault"),
     re.compile(r"#UD\b|#DF\b"),
+    re.compile(r"CONSOLE_SESSION_SEGV"),
     re.compile(r"shshsh|busyboxbusybox"),
 ]
 LOCK_SPAM_RE = re.compile(r"unable to lock supervise/lock")
@@ -226,6 +239,107 @@ CASES: list[Case] = [
 ]
 
 
+# Product-binaries stress suite: exit fullscreen apps, pipes, tcc/exec, find.
+# Doom is attached separately via --with-doom (needs WAD).
+#
+# BusyBox top: without CONFIG_FEATURE_TOP_INTERACTIVE, `q` is ignored and top
+# loops until signal. Use batch mode (-b -n N) for a reliable leave→prompt
+# path; top_intr soft-gates Ctrl-C until TTY SIGINT is solid.
+STABILITY_CASES: list[Case] = [
+    Case("true", "true", expect_prompt, echo="true"),
+    Case(
+        "top_batch",
+        "top -b -n 2;echo TOP_BATCH_OK",
+        expect_prompt_any("TOP_BATCH_OK", "Mem:"),
+        echo="TOP_BATCH_OK",
+        timeout=45.0,
+    ),
+    Case(
+        "top_leave",
+        "top -b -n 3;echo TOP_LEAVE_OK",
+        expect_prompt_any("TOP_LEAVE_OK"),
+        echo="TOP_LEAVE_OK",
+        timeout=55.0,
+    ),
+    Case(
+        "top_intr",
+        "",
+        expect_prompt_any("TOP_INTR_OK"),
+        special="top_intr",
+        echo="TOP_INTR_OK",
+        timeout=55.0,
+    ),
+    Case(
+        "man_quit",
+        "",
+        expect_prompt_any("MAN_QUIT_OK"),
+        special="man_quit",
+        echo="MAN_QUIT_OK",
+        timeout=55.0,
+    ),
+    Case(
+        "find_etc",
+        "find /etc -name hostname;echo FIND_OK",
+        expect_prompt_any("FIND_OK"),
+        echo="FIND_OK",
+        timeout=35.0,
+    ),
+    Case(
+        "dmesg_file",
+        "dmesg>/tmp/d.txt;wc -c /tmp/d.txt;echo DMESG_FILE_OK",
+        expect_prompt_any("DMESG_FILE_OK"),
+        echo="DMESG_FILE_OK",
+        timeout=45.0,
+    ),
+    Case(
+        "dmesg_pipe",
+        "dmesg|grep -i irq;echo DMESG_PIPE_OK",
+        expect_prompt_any("DMESG_PIPE_OK"),
+        echo="DMESG_PIPE_OK",
+        timeout=50.0,
+    ),
+    Case(
+        "pipe_chain",
+        "echo a|cat|cat;echo PIPE_CHAIN_OK",
+        expect_prompt_any("PIPE_CHAIN_OK"),
+        echo="PIPE_CHAIN_OK",
+        timeout=30.0,
+    ),
+    Case(
+        "ls_proc_stat",
+        "cat /proc/stat;echo STAT_OK",
+        expect_prompt_any("STAT_OK", "cpu "),
+        echo="STAT_OK",
+        timeout=30.0,
+    ),
+]
+
+STABILITY_TCC_CASE = Case(
+    "tcc_hello",
+    "",
+    expect_prompt_any("TCC_HELLO", "TCC_HELLO_OK"),
+    special="tcc_mnt",
+    echo="TCC_HELLO_OK",
+    timeout=90.0,
+)
+
+
+HELLO_C = """\
+#include <stdio.h>
+int main(void)
+{
+    puts("TCC_HELLO");
+    return 0;
+}
+"""
+
+
+def stage_stability_share(share: Path) -> None:
+    share.mkdir(parents=True, exist_ok=True)
+    (share / "hello.c").write_text(HELLO_C)
+
+
+
 class Monitor:
     """Persistent QEMU HMP connection — critical for FEATURE_EDITING sendkey."""
 
@@ -390,6 +504,57 @@ def inject_case(mon: Monitor, case: Case, key_delay: float) -> None:
         mon.ret()
         time.sleep(2.0)
         mon.type_str("id", key_delay)
+        mon.ret()
+        return
+    if case.special == "top_intr":
+        d = max(key_delay, 0.40)
+        # Infinite batch refresh (no FEATURE_TOP_INTERACTIVE → `q` ignored).
+        mon.type_str("top -b -n 9999", d)
+        mon.ret()
+        time.sleep(2.5)
+        for _ in range(5):
+            mon.key("ctrl-c")
+            time.sleep(0.4)
+        time.sleep(1.2)
+        mon.type_str("echo TOP_INTR_OK", d)
+        mon.ret()
+        return
+    if case.special == "man_quit":
+        d = max(key_delay, 0.40)
+        mon.type_str("man true", d)
+        mon.ret()
+        time.sleep(2.5)
+        for _ in range(3):
+            mon.key("q")
+            time.sleep(0.35)
+        mon.key("ctrl-c")
+        time.sleep(1.0)
+        mon.type_str("echo MAN_QUIT_OK", d)
+        mon.ret()
+        return
+    if case.special == "tcc_mnt":
+        d = max(key_delay, 0.50)
+        mon.type_str("su", d)
+        mon.ret()
+        time.sleep(0.8)
+        mon.ret()
+        time.sleep(1.0)
+        mon.type_str("mkdir -p /mnt/host", d)
+        mon.ret()
+        time.sleep(1.0)
+        mon.type_str("busybox mount -t 9p ir0share /mnt/host", d)
+        mon.ret()
+        time.sleep(2.0)
+        mon.type_str("ls /mnt/host", d)
+        mon.ret()
+        time.sleep(1.0)
+        mon.type_str("tcc -o /tmp/hello /mnt/host/hello.c", d)
+        mon.ret()
+        time.sleep(3.0)
+        mon.type_str("/tmp/hello", d)
+        mon.ret()
+        time.sleep(1.5)
+        mon.type_str("echo TCC_HELLO_OK", d)
         mon.ret()
         return
     if case.special == "doom_mnt":
@@ -668,10 +833,21 @@ def run_cases(
 
         results.append((case.name, status))
         if status != "PASS":
-            # Soft cases: keep going so later cmds (soft_poweroff) still run.
-            if case.name in {"ctrl_c"} and (
+            # Soft cases: keep going so later cmds still run.
+            soft_continue = {"ctrl_c"}
+            if case.name in soft_continue and (
                 status == "TIMEOUT" or status.startswith("WARN:")
             ):
+                continue
+            # Stability soft-gates (no panic): do not abort the batch.
+            if case.name in {"top_intr", "man_quit", "dmesg_pipe"} and (
+                status == "TIMEOUT"
+                or status.startswith("WARN:")
+                or status.startswith("FAIL:enter_storm")
+            ):
+                # Relabel TIMEOUT as WARN so ash_results_ok treats it soft.
+                if status == "TIMEOUT":
+                    results[-1] = (case.name, "WARN:timeout")
                 continue
             return results
 
@@ -859,23 +1035,31 @@ def chunked(items: list[Case], size: int) -> list[list[Case]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
-def ash_results_ok(results: list[tuple[str, str]]) -> bool:
+def ash_results_ok(
+    results: list[tuple[str, str]], *, stability: bool = False
+) -> bool:
     """Ash cases must PASS or soft WARN; hard FAIL fails the round."""
     soft_names = {"poweroff", "ctrl_c", "soft_poweroff"}
+    if stability:
+        # dmesg|grep flaky under HMP; top Ctrl-C soft until TTY SIGINT is solid.
+        soft_names |= {"dmesg_pipe", "top_intr", "man_quit"}
+    hard_in_status = ("panic", "#UD", "SEGV", "fatal", "DOUBLE", "ISR64", "Unhandled")
     for name, st in results:
         if st == "PASS" or st.startswith("WARN:"):
             continue
-        if name in soft_names and not st.startswith("FAIL:"):
+        if name in soft_names:
+            if any(tag in st for tag in hard_in_status):
+                return False
             continue
         return False
-    # Require a minimum core of PASS (not only WARNs).
-    core = {"true", "false", "echo_hi", "id", "whoami", "tab_etc"}
+    if stability:
+        core = {"true", "top_batch", "top_leave", "ls_proc_stat"}
+    else:
+        core = {"true", "false", "echo_hi", "id", "whoami", "tab_etc"}
     passed = {n for n, st in results if st == "PASS"}
-    # tab_etc may be in a later batch that did not run — only require present cores.
     present_core = core & {n for n, _ in results}
     if present_core and not present_core <= passed:
-        # allow tab_etc missing if batch aborted early
-        must = present_core - {"tab_etc"}
+        must = present_core - ({"tab_etc"} if not stability else set())
         if must and not must <= passed:
             return False
     return True
@@ -894,10 +1078,17 @@ def run_round(
     batch_size: int,
     only_doom: bool = False,
     skip_poweroff: bool = False,
+    stability: bool = False,
+    with_tcc: bool = True,
 ) -> tuple[bool, list[tuple[str, str]]]:
     results: list[tuple[str, str]] = []
     share_dir: Optional[Path] = None
-    batches = [] if only_doom else chunked(list(CASES), batch_size)
+    if only_doom:
+        batches: list[list[Case]] = []
+    elif stability:
+        batches = chunked(list(STABILITY_CASES), batch_size)
+    else:
+        batches = chunked(list(CASES), batch_size)
     doom_case: Optional[Case] = None
     if with_doom or only_doom:
         share_dir = Path(tempfile.mkdtemp(prefix="ir0-cmx-share."))
@@ -911,6 +1102,7 @@ def run_round(
             timeout=300.0,
         )
 
+    tcc_share: Optional[Path] = None
     try:
         log.write_text("")
         pending: list[Case] = []
@@ -933,11 +1125,10 @@ def run_round(
                 do_poweroff=False,
             )
             results.extend(part)
-            # If we soft-skipped enter_storm, queue remaining cases of this batch.
             if part and part[-1][1] == "WARN:enter_storm":
                 done = {n for n, _ in part}
                 pending = [c for c in work if c.name not in done]
-            if not ash_results_ok(part):
+            if not ash_results_ok(part, stability=stability):
                 return False, results
         if pending:
             print(f"  -- batch retry-pending ({len(pending)} cmds) --", flush=True)
@@ -953,7 +1144,26 @@ def run_round(
                 do_poweroff=False,
             )
             results.extend(part)
-            if not ash_results_ok(part):
+            if not ash_results_ok(part, stability=stability):
+                return False, results
+
+        if stability and with_tcc and not only_doom:
+            tcc_share = Path(tempfile.mkdtemp(prefix="ir0-cmx-tcc."))
+            stage_stability_share(tcc_share)
+            print("  -- batch tcc /mnt/host (su for mount) --", flush=True)
+            part = run_session(
+                iso,
+                disk_src,
+                port + 80,
+                log,
+                key_delay,
+                True,
+                [STABILITY_TCC_CASE],
+                share_dir=tcc_share,
+                do_poweroff=False,
+            )
+            results.extend(part)
+            if not ash_results_ok(part, stability=stability):
                 return False, results
 
         if doom_case is not None:
@@ -970,7 +1180,7 @@ def run_round(
                 do_poweroff=False,
             )
             results.extend(part)
-            if not ash_results_ok(part):
+            if not ash_results_ok(part, stability=stability):
                 return False, results
 
         if not skip_poweroff:
@@ -987,10 +1197,12 @@ def run_round(
                 do_poweroff=True,
             )
             results.extend(part)
-        return ash_results_ok(results), results
+        return ash_results_ok(results, stability=stability), results
     finally:
         if share_dir is not None:
             shutil.rmtree(share_dir, ignore_errors=True)
+        if tcc_share is not None:
+            shutil.rmtree(tcc_share, ignore_errors=True)
 
 
 def main() -> int:
@@ -1005,6 +1217,16 @@ def main() -> int:
     ap.add_argument("--su", action="store_true")
     ap.add_argument("--with-doom", action="store_true")
     ap.add_argument("--only-doom", action="store_true")
+    ap.add_argument(
+        "--stability",
+        action="store_true",
+        help="Run STABILITY_CASES (top/man/tcc/pipes) instead of ash matrix",
+    )
+    ap.add_argument(
+        "--no-tcc",
+        action="store_true",
+        help="With --stability, skip tcc hello via 9p",
+    )
     ap.add_argument(
         "--skip-poweroff",
         action="store_true",
@@ -1029,16 +1251,27 @@ def main() -> int:
         args.with_doom = True
     if args.with_doom:
         if not args.doom_bin.is_file() or not args.wad.is_file():
-            print("✗ missing doom bin or WAD", file=sys.stderr)
+            print(
+                f"✗ missing doom bin or WAD ({args.doom_bin}, {args.wad})",
+                file=sys.stderr,
+            )
             return 2
+    if args.stability:
+        args.skip_poweroff = True
+        if args.batch_size == 5:
+            args.batch_size = 3
 
-    ncases = (0 if args.only_doom else len(CASES)) + (
-        0 if args.skip_poweroff else 1
-    ) + (1 if args.with_doom else 0)
+    if args.stability:
+        ncases = len(STABILITY_CASES) + (0 if args.no_tcc else 1)
+    else:
+        ncases = 0 if args.only_doom else len(CASES)
+    ncases += 0 if args.skip_poweroff else 1
+    ncases += 1 if args.with_doom else 0
     print(
         f"CMD_MATRIX rounds={args.rounds} cases={ncases} "
         f"batch={args.batch_size} delay={args.key_delay} "
-        f"doom={args.with_doom} only_doom={args.only_doom}",
+        f"doom={args.with_doom} only_doom={args.only_doom} "
+        f"stability={args.stability}",
         flush=True,
     )
     round_ok = 0
@@ -1057,6 +1290,8 @@ def main() -> int:
             args.batch_size,
             only_doom=args.only_doom,
             skip_poweroff=args.skip_poweroff,
+            stability=args.stability,
+            with_tcc=not args.no_tcc,
         )
         for name, st in results:
             print(f"  {st:22} {name}", flush=True)

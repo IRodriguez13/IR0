@@ -91,6 +91,7 @@ int process_session_attrs_clone(process_t *dst, const process_t *src)
 		return -EINVAL;
 
 	memcpy(dst->cwd, src->cwd, sizeof(dst->cwd));
+	memcpy(dst->root, src->root, sizeof(dst->root));
 	memcpy(dst->comm, src->comm, sizeof(dst->comm));
 	memcpy(dst->rlimits, src->rlimits, sizeof(dst->rlimits));
 	dst->robust_list = src->robust_list;
