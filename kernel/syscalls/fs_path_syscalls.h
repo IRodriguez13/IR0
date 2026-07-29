@@ -37,6 +37,7 @@ int64_t sys_chdir(const char *pathname);
  */
 int64_t ir0_chdir_resolved(const char *pathname);
 int64_t sys_getcwd(char *buf, size_t size);
+int64_t sys_chroot(const char *path);
 int64_t sys_utimensat(int dirfd, const char *pathname,
                       const struct timespec *times, int flags);
 int64_t sys_unlink(const char *pathname);

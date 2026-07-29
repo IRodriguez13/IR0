@@ -176,8 +176,10 @@ typedef struct process
 	uint64_t start_ticks;
 	struct robust_list_head *robust_list;
 	
-	/* Current working directory */
+	/* Current working directory (host-absolute). */
 	char cwd[256];
+	/* chroot(2) root (host-absolute); "/" = no jail. Inherited on fork. */
+	char root[256];
 	
 	/* Process command name (for ps) */
 	char comm[16]; /* Process command name (max 15 chars + null) */

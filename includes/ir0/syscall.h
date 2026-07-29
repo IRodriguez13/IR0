@@ -68,6 +68,7 @@
 #define SYS_KILL         __NR_kill
 #define SYS_GETCWD       __NR_getcwd
 #define SYS_CHDIR        __NR_chdir
+#define SYS_CHROOT       __NR_chroot
 #define SYS_MKDIR        __NR_mkdir
 #define SYS_RMDIR        __NR_rmdir
 #define SYS_LINK         __NR_link
@@ -308,6 +309,11 @@ static inline int64_t ir0_getcwd(char *buf, size_t size)
 static inline int64_t ir0_chdir(const char *path)
 {
     return syscall1(SYS_CHDIR, (int64_t)path);
+}
+
+static inline int64_t ir0_chroot(const char *path)
+{
+    return syscall1(SYS_CHROOT, (int64_t)path);
 }
 
 /* Filesystem operations */

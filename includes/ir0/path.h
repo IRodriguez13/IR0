@@ -36,4 +36,25 @@ int is_absolute_path(const char *path);
 // Returns 0 on success, -1 on error
 int get_parent_path(const char *path, char *dest, size_t size);
 
+/*
+ * Map an absolute userspace path through a chroot root (host-absolute).
+ * root "/" or NULL → normalize abs_user only.
+ * Returns 0 on success, -1 on error.
+ */
+int ir0_path_apply_root(const char *root, const char *abs_user,
+			char *dest, size_t size);
+
+/*
+ * True if host-absolute cwd is at or under root (prefix + '/' or equal).
+ */
+int ir0_path_under_root(const char *root, const char *cwd);
+
+/*
+ * Path shown by getcwd(2): strip root prefix when cwd is under root;
+ * otherwise copy cwd (cwd outside jail after chroot without chdir).
+ * Returns 0 on success, -1 on error.
+ */
+int ir0_path_getcwd_visible(const char *root, const char *cwd,
+			    char *dest, size_t size);
+
 #endif /* _IR0_PATH_H */

@@ -162,6 +162,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->umask = current_process->umask;
 		strncpy(proc->cwd, current_process->cwd, sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
+		strncpy(proc->root, current_process->root, sizeof(proc->root) - 1);
+		proc->root[sizeof(proc->root) - 1] = '\0';
 	} else {
 		proc->uid = ROOT_UID;
 		proc->gid = ROOT_GID;
@@ -174,12 +176,19 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->umask = DEFAULT_UMASK;
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
+		strncpy(proc->root, "/", sizeof(proc->root) - 1);
+		proc->root[sizeof(proc->root) - 1] = '\0';
 	}
 	process_cred_init_groups(proc);
 	if (proc->cwd[0] != '/')
 	{
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
+	}
+	if (proc->root[0] != '/')
+	{
+		strncpy(proc->root, "/", sizeof(proc->root) - 1);
+		proc->root[sizeof(proc->root) - 1] = '\0';
 	}
 	
 	/* Set command name */

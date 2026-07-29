@@ -98,6 +98,7 @@
 #define __NR_getcwd        79
 #define __NR_chdir         80
 #define __NR_fchdir        81
+#define __NR_chroot       161
 #define __NR_rename        82
 #define __NR_mkdir         83
 #define __NR_rmdir         84

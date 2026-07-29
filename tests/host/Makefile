@@ -22,6 +22,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_usb_pci_scan.c test_bt_scan_sync.c \
 	test_vfs_backend_contract.c 	test_stat_user_abi.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
+	test_path_chroot.c \
 	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_mmap_null_placement.c \
 	test_elf_initial_brk_abi.c test_blockdev_facade.c \
@@ -161,6 +162,9 @@ test_named_fifo_supervise.o: test_named_fifo_supervise.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_path_resolve_at.o: test_path_resolve_at.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_path_chroot.o: test_path_chroot.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_ktm_sched_contract.o: test_ktm_sched_contract.c
