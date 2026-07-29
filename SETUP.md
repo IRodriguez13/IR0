@@ -40,7 +40,7 @@ sudo apt install musl-tools git curl patch file util-linux bison
 # Arch: pacman -S musl bison   (musl provides musl-gcc; there is no musl-gcc package)
 ```
 
-`make first-boot` runs `ensure-host-deps` (`IR0_DEPS_INSTALL=ask|yes|never`), creates `.config` via `defconfig` if missing, clones `../IR0-userspace`, builds rootfs + ISO. Optional Doom inject: `IR0_INSTALL_KEN_GAMES=1 REAL_WAD_PATH=/path/to/doom1.wad make first-boot`.
+`make first-boot` runs `ensure-host-deps` (`IR0_DEPS_INSTALL=ask|yes|never`), creates `.config` via `defconfig` if missing, clones sibling **ISD**, builds rootfs + ISO. Optional Doom inject: `IR0_INSTALL_KEN_GAMES=1 REAL_WAD_PATH=/path/to/doom1.wad make first-boot`.
 
 ### Required for ARM hub/watch (`PROFILE=hub` / `watch`)
 
@@ -155,10 +155,10 @@ This installs `setup/defconfig` as `.config` and regenerates `config.h`.
 Default highlights:
 
 - x86-64, MINIX root on `hda`, round-robin scheduler
-- runit `/sbin/init` from sibling **IR0-userspace** (no in-kernel dbgshell)
+- runit `/sbin/init` from sibling **ISD** (no in-kernel dbgshell)
 - VBE framebuffer enabled (`CONFIG_ENABLE_VBE=y`)
 
-Daily run targets build the userspace ISO and inject the runit rootfs.
+Daily run targets build the userspace ISO and use the ISD-owned `disk.img`.
 Clone layout and wiring: [`Documentation/USERSPACE.md`](Documentation/USERSPACE.md).
 
 ## Basic Kernel Build

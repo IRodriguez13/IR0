@@ -140,6 +140,8 @@ check-userspace: check-isd
 # Ensure per-PROFILE disk is up to date with stamps / .isdconfig.
 # Always runs ISD image-minix (incremental): rebuilds when config or packages change.
 ensure-isd-disk: check-isd
+	@echo "ISD disk    PROFILE=$(ISD_PROFILE) → $(IR0_ISD_DISK)"
+	@echo "            (first pack or format-large can take 1–3 min; stamps skip work when clean)"
 	+@$(IR0_ISD_MAKE) fetch
 	+@$(IR0_ISD_MAKE) image-minix
 	@test -f "$(IR0_ISD_DISK)" || { \
@@ -172,6 +174,7 @@ run-isd: kernel-x64-userspace.iso ensure-isd-disk
 	@echo "  DISK     $(IR0_ISD_DISK)"
 	@echo "  ISO      kernel-x64-userspace.iso"
 	@echo "  Ungrab:  Ctrl+Alt+G"
+	@echo "  Guest:   first-boot wizard or login (development = autologin root)"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
 		$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) \
