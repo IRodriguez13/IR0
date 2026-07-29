@@ -201,9 +201,9 @@ def collect_used_inodes(f, sb):
 
 
 def sync_imap_from_tree(f, sb):
-    """Mark every in-use inode in the imap (bit set = allocated)."""
+    """Rebuild imap from the live tree (+ orphan inodes with mode/nlinks)."""
     used = collect_used_inodes(f, sb)
-    imap = bytearray(read_block(f, imap_block(sb)))
+    imap = bytearray(BLOCK)  # bit set = allocated; start empty then mark used
     for n in used:
         byte_i = n // 8
         bit_i = n % 8
@@ -426,6 +426,13 @@ def format_minix_v1(f, ninodes=64, nzones=1024):
         if blk == 0:
             zmap[0] &= ~(1 << 0)
         write_block(f, zmap_base + blk, bytes(zmap))
+
+    # Wipe inode table. Re-format of a previously packed image must not leave
+    # stale mode!=0 inodes: sync_imap_from_tree would mark them used and the
+    # next pack runs out of free inodes / corrupts root dentries (missing /etc).
+    itab = 2 + imap_blocks + zmap_blocks
+    for blk in range(inode_table_blocks):
+        write_block(f, itab + blk, bytes(BLOCK))
 
     root_zone = sb["firstdatazone"]
     root_inode = {
@@ -840,9 +847,9 @@ def main():
         disk_path = sys.argv[2]
         with open(disk_path, "r+b") as f:
             if sys.argv[1] == "--format-large":
-                # Headroom for TinyCC headers/libs + GNU make + samples
-                # (product runit rootfs alone uses ~50 inodes).
-                format_minix_v1(f, ninodes=1024, nzones=65535)
+                # Headroom for TinyCC headers/libs + GNU make + BusyBox applets.
+                # (Must wipe inode table — see format_minix_v1 — or re-pack fails.)
+                format_minix_v1(f, ninodes=2048, nzones=65535)
             else:
                 format_minix_v1(f)
         vprint(f"format {disk_path} MINIX v1")
