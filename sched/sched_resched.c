@@ -119,17 +119,19 @@ int sched_irq_preempt_from_frame(uint64_t *gpr_stack)
 		if (ir0_console_in_tty_sleep())
 			return 0;
 
-		(void)ir0_console_take_resched();
-		KTM_EVENT(KTM_EV_SCHED_IRQ_TTY_PREEMPT);
 		/*
 		 * Ring-0 interrupt context (idle / kernel): never schedule here.
-		 * Mid-ISR switch_to corrupts prev RIP/RSP → #UD into BSS on resume.
-		 * Wake left tasks READY; idle_poll / cooperative yield picks them up.
+		 * Mid-ISR switch_to corrupts prev RIP/RSP → #UD into BSS /
+		 * process_t on resume. Leave tty_need_resched pending for
+		 * idle_poll (do not take_resched until we actually switch).
 		 */
 		if ((gpr_stack[18] & 3U) != 3U)
 			return 0;
 		if (sched_count_runnable() <= 1)
 			return 0;
+
+		(void)ir0_console_take_resched();
+		KTM_EVENT(KTM_EV_SCHED_IRQ_TTY_PREEMPT);
 		process_save_user_context_from_irq_frame(gpr_stack);
 		sched_context_switch_skip_prev_save();
 		sched_schedule_next();
