@@ -1,140 +1,99 @@
-# Coupling IR0 (kernel) ↔ IR0-userspace
+# Coupling IR0 (kernel) ↔ ISD
 
-> **Last verified:** 2026-07-26  
-> **Source of truth:** this file, `Makefile` (`IR0_USERSPACE_ROOT`, `check-userspace`, `headers_install`, `bootstrap-userspace`), sibling [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace), [SETUP.md](../SETUP.md).  
+> **Last verified:** 2026-07-29  
+> **Source of truth:** this file, `scripts/make/isd.mk`, `scripts/bootstrap-isd.sh`, sibling [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../SETUP.md).  
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
 
 ## Why two repositories?
 
-The kernel alone is not a Unix distro. Product PID1 (**runit**), **BusyBox**, login/doas, and `/etc` live in **IR0-userspace**. Boot always does `kexecve("/sbin/init")` from `disk.img`.
+The kernel alone is not a Unix distro. Product PID1 (**runit**), **BusyBox**,
+login/doas, packages, man pages, and the finished MINIX `disk.img` live in
+**ISD** (IR0 Software Distribution). IR0 compiles the kernel, exports UAPI,
+delegates the ISD build, and boots the ISD-owned image.
 
-| Lives in **IR0** | Lives in **IR0-userspace** |
-|------------------|----------------------------|
-| Kernel, drivers, UAPI (`includes/uapi/`) | runit, BusyBox, login/doas, product `/etc` |
-| Kernel test fixtures (`setup/pid1/`) | Package recipes, services, rootfs profiles |
-| Orchestration Make targets that *delegate* | Built ELFs under `out/` |
+| Lives in **IR0** | Lives in **ISD** |
+|------------------|------------------|
+| Kernel, drivers, UAPI (`includes/uapi/`) | Packages, services, rootfs, profiles |
+| Boot ISO / QEMU orchestration | `out/<arch>/images/<profile>/disk.img` |
+| Host-deps / first-boot wrapper | `.isdconfig` extras, `stage-rootfs`, `pack-minix` |
 
-**Hard rule:** if PID 1 can replace it without recompiling the kernel, it does not live in IR0.
+**Hard rule:** IR0 must not inject BusyBox/runit/nano one-by-one on the
+canonical product path. Legacy `load-userspace-runit` remains for smokes
+(`IR0_LEGACY_USERSPACE=1`).
 
 ## Fastest path (first time)
 
-From an empty parent directory:
+Happy path on an **x86_64 Linux** host (Debian/Ubuntu/Arch/Fedora/openSUSE or
+WSL2). Target: clone → two commands → QEMU with ash.
 
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
-make check-env
-make defconfig
-
-# Clones ../IR0-userspace if missing, exports UAPI, builds runit+BusyBox → disk.img + ISO
-make first-boot
-
-# Boot the minimal distro (getty → BusyBox ash)
-make run
+make first-boot PROFILE=minimal
+make run PROFILE=minimal
 ```
 
-Equivalent one-liner from the kernel tree after `defconfig`:
+| PROFILE | Expectation in guest |
+|---------|----------------------|
+| `minimal` | Interactive firstboot (create user) then login |
+| `development` | Lab autologin root (empty password allowed) |
+| `desktop` | Like minimal + fuller BusyBox/applets (heavier pack) |
 
-```bash
-./scripts/bootstrap-userspace.sh && make run
-```
+`first-boot` will:
 
-Inside the guest (development profile often autologins as root):
+1. Check host deps (`IR0_DEPS_INSTALL=ask|yes|never`, default **ask**)
+2. Ask before any `sudo apt-get install` (never captures the password)
+3. Clone `../ISD` if missing
+4. Write `.isdconfig` only if absent
+5. Fetch sources, export UAPI, build packages (stamp-incremental)
+6. Stage rootfs + pack `disk.img` under ISD (`format-large` wipes MINIX inodes)
+7. Build `kernel-x64-userspace.iso`
 
-```text
-busybox
-ls /
-cat /proc/version
-echo hello
-man IR0-boot
-man IR0-uspace
-man -w IR0-tty
-```
+`make run` rebuilds the ISO if needed, then `ensure-isd-disk` (stamp-incremental
+pack; first pack ~1–3 min — progress is printed). Then QEMU GTK.
 
-| Target | Role |
-|--------|------|
-| `make first-boot` / `bootstrap-userspace` | Clone sibling + minimal rootfs + ISO |
-| `make run` | QEMU GTK — runit + BusyBox (no TinyCC required) |
-| `make run-console` | Same disk, serial only |
-| `IR0_WITH_DEVTOOLS=1 make run` | Also inject TinyCC + GNU make (optional) |
-| `make smoke-runit-boot` | Non-interactive boot gate |
-| `make prepare-guest-mandocs` | Host-render IR0 `cat7` pages for guest `man` |
-| `make check-guest-mandocs` | Assert ASCII pages (not raw mdoc) |
-
-## Guest manuals (`man`) — Implemented
-
-BusyBox `man` + pre-rendered ASCII under `/usr/share/man/cat7/` (no `nroff`/`mandoc` in the guest). Host builds pages with `mandoc -Tascii` via `make prepare-guest-mandocs`; `load-userspace-runit` / `first-boot` inject them by default (`IR0_GUEST_MANDOCS=0` to skip).
-
-MINIX v1 names are ≤14 characters, so two long host titles are shortened on disk:
-
-| Host page | Guest `man` | Path |
-|-----------|-------------|------|
-| IR0-boot | `IR0-boot` | `/usr/share/man/cat7/IR0-boot.7` |
-| IR0-userspace | `IR0-uspace` | `…/IR0-uspace.7` |
-| IR0-onboarding | `IR0-onboard` | `…/IR0-onboard.7` |
-| IR0-vfs / syscalls / tty / process | same name | `…/IR0-<name>.7` |
-
-| Contract | State |
-|----------|--------|
-| `man IR0-boot` (readable text, not `.Sh` macros) | **Implemented** |
-| Subset above (7 pages) | **Implemented** |
-| Full mandoc catalog / Spanish in guest | **Partial** — host `make sync-mandocs` / `man TOPIC=…` |
-| Generic Linux pages (`man ls`) | Out of scope |
-
-```text
-man IR0-boot
-man IR0-uspace
-man IR0-onboard
-man -w IR0-tty          # → /usr/share/man/cat7/IR0-tty.7
-```
-
-## Suggested layout
+Layout:
 
 ```text
 parent/
-├── IR0/                 # this tree
-├── IR0-userspace/       # https://github.com/IRodriguez13/IR0-userspace
-└── IR0-desktop/         # optional
+├── IR0/
+└── ISD/
 ```
 
-```bash
-export IR0_USERSPACE_ROOT=/path/to/IR0-userspace   # if not ../IR0-userspace
-export IR0_ROOT=/path/to/IR0                         # from the userspace tree
-```
+| Variable | Default | Role |
+|----------|---------|------|
+| `IR0_ISD_ROOT` | `../ISD` | distribution tree |
+| `IR0_ISD_URL` | `https://github.com/IRodriguez13/ISD.git` | clone URL |
+| `PROFILE` | `minimal` (when passed on CLI) | ISD product profile |
+| `IR0_PRODUCT_PROFILE` | alias of ISD profile | compat |
+| `ISD_ARCH` | `x86_64` | userspace arch name |
+| `IR0_USERSPACE_ROOT` / `_URL` | aliases of `IR0_ISD_*` | **deprecated** |
 
-`make check-userspace` **fails** if the sibling is missing (never silent skip-as-PASS).
+### Config layers
 
-## Manual wire-up (same steps as the script)
+| File | Owner | Meaning |
+|------|-------|---------|
+| `IR0/.config` | kernel | Kconfig |
+| `ISD/profiles/<p>/profile.conf` | ISD | login/root/fsck policy |
+| `ISD/profiles/<p>/packages.txt` | ISD | mandatory packages |
+| `ISD/.isdconfig` | ISD | optional packages + applets (`make isdconfig`) |
 
-```bash
-git clone https://github.com/IRodriguez13/IR0-userspace.git ../IR0-userspace
-make headers_install DESTDIR=../IR0-userspace/out/sysroot
-make check-userspace
-make load-userspace-runit          # builds BusyBox/runit via sibling + injects disk.img
-make kernel-x64-userspace.iso
-make run
-```
+### Targets
 
-From `IR0-userspace`:
+| Target | Role |
+|--------|------|
+| `make first-boot PROFILE=…` | Full product bootstrap |
+| `make isdconfig PROFILE=…` | Interactive extras (TTY: packages + applets e.g. top) |
+| `make isd` / `isd-rootfs` / `isd-image` | Delegate to ISD |
+| `make run PROFILE=…` | Boot ISD disk (stamp-incremental pack) |
+| `make run-console PROFILE=…` | Same without GTK |
+| `make bootstrap-userspace` | **Deprecated** → `first-boot` |
+| `IR0_LEGACY_USERSPACE=1 make run` | Old inject path (smokes) |
 
-```bash
-export IR0_ROOT=../IR0
-make fetch build rootfs
-```
+### Incremental builds
 
-## Boot contract: no init / init dies
+ISD stamps under `out/<arch>/stamps/{toolchain,uapi,packages,rootfs,images}/`.
+A second `make first-boot PROFILE=minimal` without input changes must not
+re-run package `build.sh` scripts.
 
-| Situation | Kernel behavior |
-|-----------|-----------------|
-| `disk.img` missing `/sbin/init` or `kexecve` fails | **`panic("Failed to load /sbin/init")`** — there is no in-kernel shell |
-| Init loads and scheduler runs | Normal product path (runit → getty → ash) |
-| Init **exits** | Children reparented; kernel **idle** loop keeps the CPU alive — not a second panic by default. Userspace is effectively dead (no getty). |
-| Init never present because sibling not loaded | Same as first row: panic at handoff |
-
-There is **no** dbgshell fallback. Always inject a product rootfs (`make first-boot` / `load-userspace-runit`) before expecting a shell.
-
-## What this tree must not re-add
-
-- BusyBox / runit / doas sources or product `/etc` under `setup/`
-- In-kernel mono shell (`dbgshell`) or `debug_bins/` command registry
-- `#include` of product userspace into the kernel link
+See ISD [`Documentation/PACKAGES.md`](https://github.com/IRodriguez13/ISD/blob/master/Documentation/PACKAGES.md).

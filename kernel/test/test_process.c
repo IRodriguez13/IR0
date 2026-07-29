@@ -68,7 +68,7 @@ void ktest_wait4_status(void)
 	 */
 	child = process_find_by_pid(pid);
 	KASSERT(child != NULL);
-	child->state = PROCESS_ZOMBIE;
+	process_mark_zombie(child);
 	child->exit_code = 42;
 	sched_remove_process(child);
 
@@ -94,7 +94,7 @@ void ktest_wait4_specific_reaps_requested_child(void)
 
 	child_b = process_find_by_pid(pid_b);
 	KASSERT(child_b != NULL);
-	child_b->state = PROCESS_ZOMBIE;
+	process_mark_zombie(child_b);
 	child_b->exit_code = 20;
 	sched_remove_process(child_b);
 
@@ -109,7 +109,7 @@ void ktest_wait4_specific_reaps_requested_child(void)
 
 	child_a = process_find_by_pid(pid_a);
 	KASSERT(child_a != NULL);
-	child_a->state = PROCESS_ZOMBIE;
+	process_mark_zombie(child_a);
 	child_a->exit_code = 10;
 	sched_remove_process(child_a);
 
@@ -138,7 +138,7 @@ void ktest_wait4_minus_one_reaps_any_child(void)
 
 	child_b = process_find_by_pid(pid_b);
 	KASSERT(child_b != NULL);
-	child_b->state = PROCESS_ZOMBIE;
+	process_mark_zombie(child_b);
 	child_b->exit_code = 20;
 	sched_remove_process(child_b);
 
@@ -160,7 +160,7 @@ void ktest_wait4_specific_no_leak_after_destroy(void)
 
 	child = process_find_by_pid(pid);
 	KASSERT(child != NULL);
-	child->state = PROCESS_ZOMBIE;
+	process_mark_zombie(child);
 	child->exit_code = 7;
 	sched_remove_process(child);
 
@@ -198,7 +198,7 @@ void ktest_wait4_wnohang_echild_after_reap(void)
 
 	child = process_find_by_pid(pid);
 	KASSERT(child != NULL);
-	child->state = PROCESS_ZOMBIE;
+	process_mark_zombie(child);
 	child->exit_code = 5;
 	sched_remove_process(child);
 
@@ -222,7 +222,7 @@ void ktest_kill_sigterm_wait_status(void)
 	KASSERT(child != NULL);
 
 	/* Simulate SIGTERM death encoding (same path as handle_signals + wait4). */
-	child->state = PROCESS_ZOMBIE;
+	process_mark_zombie(child);
 	child->exit_signal = SIGTERM;
 	child->exit_code = 0;
 	sched_remove_process(child);
@@ -239,14 +239,14 @@ void ktest_kill_sigterm_wait_status(void)
 	KASSERT_GT(pid, 0);
 	child = process_find_by_pid(pid);
 	KASSERT(child != NULL);
-	child->state = PROCESS_BLOCKED;
+	process_set_sched_state(child, PROCESS_BLOCKED);
 	KASSERT_EQ(send_signal(pid, SIGTERM), 0);
 	KASSERT(child->state == PROCESS_READY || child->state == PROCESS_ZOMBIE);
 	if (child->state == PROCESS_READY)
 		KASSERT(child->signal_pending & SIGNAL_MASK(SIGTERM));
 	if (child->state != PROCESS_ZOMBIE)
 	{
-		child->state = PROCESS_ZOMBIE;
+		process_mark_zombie(child);
 		child->exit_code = 0;
 		sched_remove_process(child);
 	}

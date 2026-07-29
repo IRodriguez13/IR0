@@ -24,6 +24,7 @@ Registry opens install **real** `current_process->fd_table` slots (`is_pseudo` +
 | Path | Behavior |
 |------|----------|
 | `/heart/README` | Static identity text |
+| `/heart/MANIFESTO` | Brief “what is IR0” for guests |
 | `/heart/proc/…` | Alias → same ops/ctx as `/proc/…` |
 | `/heart/sys/…` | Alias → same ops/ctx as `/sys/…` |
 | `/heart/kernel/{version,build,features}` | IR0 metadata |

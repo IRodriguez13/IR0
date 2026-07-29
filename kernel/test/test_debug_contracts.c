@@ -18,6 +18,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
+#include <ir0/vfs.h>
 #include <string.h>
 
 static int count_tabs(const char *line)
@@ -255,13 +256,13 @@ void ktest_mount_tmpfs_contract(void)
 	int64_t mk = sys_mkdir("/mntkt", 0755);
 	KASSERT(mk == 0 || mk == -EEXIST);
 
-	int64_t ret = sys_mount("none", "/mntkt", "tmpfs");
+	int64_t ret = sys_mount("none", "/mntkt", "tmpfs", 0, NULL);
 	KASSERT_EQ(ret, 0);
 
-	int64_t dup = sys_mount("none", "/mntkt", "tmpfs");
+	int64_t dup = sys_mount("none", "/mntkt", "tmpfs", 0, NULL);
 	KASSERT(dup < 0);
 
-	int64_t bad = sys_mount("none", "/mntkt", "badfs");
+	int64_t bad = sys_mount("none", "/mntkt", "badfs", 0, NULL);
 	KASSERT(bad < 0);
 
 	int64_t file_fd = sys_open("/mntkt/mount_probe.txt",
@@ -295,9 +296,9 @@ void ktest_mount_multi_fs_contract(void)
 	int64_t mk_fat = sys_mkdir("/mnt/fat", 0755);
 	KASSERT(mk_fat == 0 || mk_fat == -EEXIST);
 
-	int64_t ms = sys_mount("/dev/simple0", "/mnt/simple", "simplefs");
+	int64_t ms = sys_mount("/dev/simple0", "/mnt/simple", "simplefs", 0, NULL);
 	KASSERT(ms == 0 || ms == -EBUSY);
-	int64_t mf = sys_mount("/dev/fat0", "/mnt/fat", "fat16");
+	int64_t mf = sys_mount("/dev/fat0", "/mnt/fat", "fat16", 0, NULL);
 	KASSERT(mf == 0 || mf == -EBUSY);
 
 	int64_t sfd = sys_open("/mnt/simple/s1.txt",
@@ -336,36 +337,44 @@ void ktest_mount_umount_remount_contract(void)
 	int64_t mk = sys_mkdir("/mnt/um", 0755);
 	KASSERT(mk == 0 || mk == -EEXIST);
 
-	int64_t m1 = sys_mount("/dev/simple0", "/mnt/um", "simplefs");
+	int64_t m1 = sys_mount("/dev/simple0", "/mnt/um", "simplefs", 0, NULL);
 	if (m1 == -EBUSY)
 	{
 		(void)sys_umount("/mnt/um", 0);
-		m1 = sys_mount("/dev/simple0", "/mnt/um", "simplefs");
+		m1 = sys_mount("/dev/simple0", "/mnt/um", "simplefs", 0, NULL);
 	}
 	KASSERT_EQ(m1, 0);
 
 	int64_t u = sys_umount("/mnt/um", 0);
 	KASSERT_EQ(u, 0);
 
-	int64_t m2 = sys_mount("/dev/simple0", "/mnt/um", "simplefs");
+	int64_t m2 = sys_mount("/dev/simple0", "/mnt/um", "simplefs", 0, NULL);
 	KASSERT_EQ(m2, 0);
 
 	int64_t mk_fat = sys_mkdir("/mnt/umfat", 0755);
 	KASSERT(mk_fat == 0 || mk_fat == -EEXIST);
 
-	int64_t mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16");
+	int64_t mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
 	if (mf1 == -EBUSY)
 	{
 		(void)sys_umount("/mnt/umfat", 0);
-		mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16");
+		mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
 	}
 	KASSERT_EQ(mf1, 0);
 
 	int64_t uf = sys_umount("/mnt/umfat", 0);
 	KASSERT_EQ(uf, 0);
 
-	int64_t mf2 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16");
+	int64_t mf2 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
 	KASSERT_EQ(mf2, 0);
+
+	/* Linux mount(2) remount via MS_REMOUNT|MS_RDONLY (flags arg). */
+	int64_t rro = sys_mount(NULL, "/mnt/um", NULL,
+				IR0_MS_REMOUNT | IR0_MS_RDONLY, NULL);
+	KASSERT_EQ(rro, 0);
+	int64_t rrw = sys_mount("ignored", "/mnt/um", "ignored",
+				IR0_MS_REMOUNT, NULL);
+	KASSERT_EQ(rrw, 0);
 
 	KTEST_END();
 }
@@ -377,13 +386,13 @@ void ktest_mount_longest_prefix_contract(void)
 	int64_t mk_lp = sys_mkdir("/mnt/lp", 0755);
 	KASSERT(mk_lp == 0 || mk_lp == -EEXIST);
 
-	int64_t mt = sys_mount("none", "/mnt/lp", "tmpfs");
+	int64_t mt = sys_mount("none", "/mnt/lp", "tmpfs", 0, NULL);
 	KASSERT(mt == 0 || mt == -EBUSY);
 
 	int64_t mk_sub = sys_mkdir("/mnt/lp/sub", 0755);
 	KASSERT(mk_sub == 0 || mk_sub == -EEXIST);
 
-	int64_t ms = sys_mount("/dev/simplelp", "/mnt/lp/sub", "simplefs");
+	int64_t ms = sys_mount("/dev/simplelp", "/mnt/lp/sub", "simplefs", 0, NULL);
 	KASSERT(ms == 0 || ms == -EBUSY);
 
 	int64_t ofd = sys_open("/mnt/lp/outer.txt",

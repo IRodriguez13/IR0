@@ -22,6 +22,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_usb_pci_scan.c test_bt_scan_sync.c \
 	test_vfs_backend_contract.c 	test_stat_user_abi.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
+	test_path_chroot.c \
 	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_mmap_null_placement.c \
 	test_elf_initial_brk_abi.c test_blockdev_facade.c \
@@ -29,16 +30,27 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_ps2_set1_modifiers.c \
 	test_ps2_mouse_pkt.c \
 	test_pipe_close_refcount.c \
-	test_rtc_calendar.c
+	test_rtc_calendar.c \
+	test_arch_task_contract.c \
+	test_pseudo_fs_contract.c \
+	test_mm_mirror_contract.c \
+	test_netdev_contract.c \
+	test_sched_backend_contract.c \
+	test_block_backend_contract.c \
+	test_matrix_capture.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
 	host_sysfs_net_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
-	host_ps2_set1.o host_ps2_mouse_pkt.o
+	host_ps2_set1.o host_ps2_mouse_pkt.o \
+	host_matrix_capture.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
+
+IR0_USERSPACE_ROOT ?= $(abspath $(KERNEL_ROOT)/../IR0-userspace)
+MATRIX_CAPTURE_CFLAGS = $(BASE_CFLAGS) -I$(IR0_USERSPACE_ROOT)/smoke
 
 .PHONY: all clean memsafe run
 
@@ -91,6 +103,12 @@ host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/includes/ir0/ps2_mouse_pkt.c
 
 host_rtc_calendar.o: $(KERNEL_ROOT)/includes/ir0/rtc_calendar.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+host_matrix_capture.o: $(IR0_USERSPACE_ROOT)/smoke/matrix_capture.c
+	$(CC) $(MATRIX_CAPTURE_CFLAGS) -c -o $@ $<
+
+test_matrix_capture.o: test_matrix_capture.c
+	$(CC) $(MATRIX_CAPTURE_CFLAGS) -c -o $@ $<
 
 test_rtc_calendar.o: test_rtc_calendar.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
@@ -146,6 +164,9 @@ test_named_fifo_supervise.o: test_named_fifo_supervise.c
 test_path_resolve_at.o: test_path_resolve_at.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
+test_path_chroot.o: test_path_chroot.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
 test_ktm_sched_contract.o: test_ktm_sched_contract.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
@@ -165,6 +186,24 @@ test_mmap_null_placement.o: test_mmap_null_placement.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_elf_initial_brk_abi.o: test_elf_initial_brk_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_arch_task_contract.o: test_arch_task_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_pseudo_fs_contract.o: test_pseudo_fs_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_mm_mirror_contract.o: test_mm_mirror_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_netdev_contract.o: test_netdev_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_sched_backend_contract.o: test_sched_backend_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_block_backend_contract.o: test_block_backend_contract.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 $(TEST_BIN): $(TEST_OBJS)

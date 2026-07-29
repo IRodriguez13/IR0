@@ -2245,10 +2245,27 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
     return -EINVAL;
 }
 
+static int64_t dev_events0_open(devfs_entry_t *entry, int flags)
+{
+	(void)entry;
+	(void)flags;
+	input_events_reader_open();
+	return 0;
+}
+
+static int64_t dev_events0_close(devfs_entry_t *entry)
+{
+	(void)entry;
+	input_events_reader_close();
+	return 0;
+}
+
 static const devfs_ops_t events0_ops = {
     .read = dev_events0_read,
     .write = NULL,
     .ioctl = dev_events0_ioctl,
+    .open = dev_events0_open,
+    .close = dev_events0_close,
     .can_read = devfs_events0_can_read,
     .can_write = devfs_events0_can_write,
 };
@@ -3054,8 +3071,16 @@ int64_t devfs_close_node(devfs_node_t *node)
 
     node->ref_count--;
     rc = 0;
-    if (node->ref_count == 0 && node->ops && node->ops->close)
-        rc = node->ops->close(&node->entry);
+    if (node->ops && node->ops->close)
+    {
+        /*
+         * events0: per-fd release (reader divert count).
+         * Other devices: last-close teardown only.
+         */
+        if (node == &dev_events0 || node == &dev_input_event0 ||
+            node->ref_count == 0)
+            rc = node->ops->close(&node->entry);
+    }
 
     return rc;
 }

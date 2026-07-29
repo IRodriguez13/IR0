@@ -43,7 +43,7 @@ static void ir0_clock_wait_wake_process(process_t *proc)
 	if (!proc || proc->state != PROCESS_BLOCKED)
 		return;
 
-	proc->state = PROCESS_READY;
+	process_set_sched_state(proc, PROCESS_READY);
 	sched_add_process(proc);
 	sched_promote_process(proc);
 }
@@ -143,7 +143,7 @@ int ir0_clock_wait_block_until(uint64_t deadline_ms)
 		return 0;
 
 	ir0_clock_wait_arm(proc, deadline_ms);
-	proc->state = PROCESS_BLOCKED;
+	process_set_sched_state(proc, PROCESS_BLOCKED);
 	process_arm_kernel_syscall_sleep(proc);
 
 	while (proc->state == PROCESS_BLOCKED)

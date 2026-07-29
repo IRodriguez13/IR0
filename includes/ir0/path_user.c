@@ -10,7 +10,8 @@
 #include <ir0/utimens.h>
 
 int ir0_resolve_kpath_at(int dirfd, const char *path, char *resolved,
-                         size_t resolved_sz, const char *cwd)
+                         size_t resolved_sz, const char *cwd,
+                         const char *root)
 {
     if (!path || !resolved || resolved_sz == 0)
         return -EINVAL;
@@ -20,7 +21,7 @@ int ir0_resolve_kpath_at(int dirfd, const char *path, char *resolved,
 
     if (path[0] == '/')
     {
-        if (normalize_path(path, resolved, resolved_sz) != 0)
+        if (ir0_path_apply_root(root, path, resolved, resolved_sz) != 0)
             return -ENAMETOOLONG;
         return 0;
     }
@@ -38,7 +39,8 @@ int ir0_resolve_kpath_at(int dirfd, const char *path, char *resolved,
 }
 
 int ir0_resolve_user_path_at(int dirfd, const char *user_path, char *resolved,
-                             size_t resolved_sz, const char *cwd)
+                             size_t resolved_sz, const char *cwd,
+                             const char *root)
 {
     char path_copy[256];
 
@@ -48,12 +50,14 @@ int ir0_resolve_user_path_at(int dirfd, const char *user_path, char *resolved,
     if (copy_from_user_cstring(path_copy, sizeof(path_copy), user_path) != 0)
         return -EFAULT;
 
-    return ir0_resolve_kpath_at(dirfd, path_copy, resolved, resolved_sz, cwd);
+    return ir0_resolve_kpath_at(dirfd, path_copy, resolved, resolved_sz, cwd,
+                                root);
 }
 
-int ir0_resolve_user_path(const char *user_path, char *resolved, size_t resolved_sz,
-                          const char *cwd)
+int ir0_resolve_user_path(const char *user_path, char *resolved,
+                          size_t resolved_sz, const char *cwd,
+                          const char *root)
 {
     return ir0_resolve_user_path_at(IR0_AT_FDCWD, user_path, resolved,
-                                    resolved_sz, cwd);
+                                    resolved_sz, cwd, root);
 }

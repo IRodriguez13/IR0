@@ -27,7 +27,35 @@ static int g_heart_nodes_ready;
 static const char heart_readme_text[] =
     "IR0 /heart — unified read-only view of kernel identity and pseudo-fs.\n"
     "Does not replace /proc or /sys; those mounts remain authoritative.\n"
-    "Layout: README, proc/, sys/, kernel/, src/\n";
+    "Layout: README, MANIFESTO, proc/, sys/, kernel/, src/, dennis/\n"
+    "Start with: cat /heart/MANIFESTO\n"
+    "Sources to edit: /heart/dennis/src (mount -t 9p dennis /heart/dennis/src)\n";
+
+/*
+ * Brief identity for guests (cat /heart/MANIFESTO). Keep short — serial TTY.
+ */
+static const char heart_manifesto_text[] =
+    "IR0 — Independent Research Operating system\n"
+    "\n"
+    "A Unix-like research kernel with a Linux-compatible userspace ABI\n"
+    "goal: musl, BusyBox, and simple desktop clients on x86-64 (ARM64\n"
+    "bring-up in progress).\n"
+    "\n"
+    "What you are running:\n"
+    "  - Kernel: IR0 (syscalls, VFS, MM, sched, /proc /sys /dev /heart)\n"
+    "  - Userspace: ISD (IR0 Software Distribution) — runit + BusyBox\n"
+    "  - Philosophy: honest surfaces, no fake success, Linux as ground\n"
+    "    truth for ABI contracts when claimed.\n"
+    "\n"
+    "Explore:\n"
+    "  cat /heart/MANIFESTO   this text\n"
+    "  cat /heart/README      /heart layout\n"
+    "  cat /heart/kernel/version\n"
+    "  man IR0-boot           guest mandocs (BusyBox man + cat7)\n"
+    "  ls /usr/ken/games      Ken Thompson nod — small games (Doom)\n"
+    "  ls /heart/dennis/src   Dennis Ritchie nod — IR0 sources (9p/writable)\n"
+    "\n"
+    "Home: Documentation/ in the source tree; SETUP.md for QEMU.\n";
 
 static int64_t heart_static_read(void *ctx, char *buf, size_t count, off_t *offset)
 {
@@ -143,6 +171,16 @@ int is_heart_path(const char *path)
     return strncmp(path, "/heart/", 7) == 0;
 }
 
+int heart_is_dennis_vfs_path(const char *path)
+{
+    if (!path)
+        return 0;
+    if (strcmp(path, "/heart/dennis") == 0 ||
+        strcmp(path, "/heart/dennis/") == 0)
+        return 1;
+    return strncmp(path, "/heart/dennis/", 14) == 0;
+}
+
 int heart_alias_canonical(const char *path, char *out, size_t out_sz)
 {
     const char *rest;
@@ -174,6 +212,10 @@ int heart_alias_canonical(const char *path, char *out, size_t out_sz)
 int heart_is_virtual_subdir(const char *path)
 {
     if (!path)
+        return 0;
+
+    /* Dennis playground is VFS (disk + optional 9p), not pseudo_fs. */
+    if (heart_is_dennis_vfs_path(path))
         return 0;
 
     if (strcmp(path, "/heart") == 0 || strcmp(path, "/heart/") == 0)
@@ -213,6 +255,9 @@ int heart_stat(const char *path, stat_t *st)
         return -EINVAL;
 
     heart_nodes_register();
+
+    if (heart_is_dennis_vfs_path(path))
+        return vfs_stat(path, st);
 
     if (heart_is_virtual_subdir(path))
     {
@@ -259,12 +304,21 @@ int heart_getdents(const char *path, struct vfs_dirent *entries, int max_entries
     if (strcmp(path, "/heart") == 0 || strcmp(path, "/heart/") == 0)
     {
         n = heart_add_dirent(entries, max_entries, n, "README", DT_REG);
+        n = heart_add_dirent(entries, max_entries, n, "MANIFESTO", DT_REG);
         n = heart_add_dirent(entries, max_entries, n, "proc", DT_DIR);
         n = heart_add_dirent(entries, max_entries, n, "sys", DT_DIR);
         n = heart_add_dirent(entries, max_entries, n, "kernel", DT_DIR);
         n = heart_add_dirent(entries, max_entries, n, "src", DT_DIR);
+        n = heart_add_dirent(entries, max_entries, n, "dennis", DT_DIR);
         return n;
     }
+
+    /*
+     * /heart/dennis is VFS — callers should use vfs_readdir. If we are still
+     * invoked, report empty rather than inventing pseudo children.
+     */
+    if (heart_is_dennis_vfs_path(path))
+        return -ENOTDIR;
 
     if (strcmp(path, "/heart/proc") == 0 || strcmp(path, "/heart/proc/") == 0)
         return pseudo_fs_collect_registry_children("/proc", entries, max_entries, 0);
@@ -294,6 +348,8 @@ void heart_nodes_register(void)
 
     pseudo_fs_register("/heart", "README", &heart_static_ops,
                        (void *)heart_readme_text);
+    pseudo_fs_register("/heart", "MANIFESTO", &heart_static_ops,
+                       (void *)heart_manifesto_text);
     pseudo_fs_register("/heart", "kernel/version", &heart_static_ops,
                        (void *)g_heart_version_buf);
     pseudo_fs_register("/heart", "kernel/build", &heart_static_ops,

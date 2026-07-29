@@ -185,6 +185,14 @@ struct input_event {
 /* Push event from keyboard IRQ (kernel/input_events.c) */
 void input_event_push(uint16_t type, uint16_t code, int32_t value);
 
+/*
+ * /dev/events0 open-reader count. While >0, PS/2 still feeds EV_KEY but
+ * must not also inject cooked TTY bytes (Doom dual-delivery → "qqqls").
+ */
+void input_events_reader_open(void);
+void input_events_reader_close(void);
+int input_events_readers_active(void);
+
 /* Read events (devfs /dev/events0) */
 size_t input_event_read(struct input_event *buf, size_t count);
 int input_event_has_data(void);

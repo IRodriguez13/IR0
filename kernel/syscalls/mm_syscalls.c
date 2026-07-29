@@ -60,7 +60,9 @@ static void mm_prepare_map_fixed(uintptr_t start, size_t length)
 		return;
 
 	end = start + length;
-	link = &current_process->mmap_list;
+	link = process_mmap_list_p(current_process);
+	if (!link)
+		return;
 
 	while (*link)
 	{
@@ -125,10 +127,10 @@ static uintptr_t mm_mmap_search_low(process_t *proc)
 	if (!proc)
 		return search_low;
 
-	if (proc->heap_end > proc->heap_start &&
-	    proc->heap_end > search_low)
+	if (process_heap_end(proc) > process_heap_start(proc) &&
+	    process_heap_end(proc) > search_low)
 	{
-		search_low = (uintptr_t)(proc->heap_end + PAGE_SIZE_4KB - 1) &
+		search_low = (uintptr_t)(process_heap_end(proc) + PAGE_SIZE_4KB - 1) &
 			     ~(PAGE_SIZE_4KB - 1);
 	}
 	return search_low;
@@ -136,10 +138,10 @@ static uintptr_t mm_mmap_search_low(process_t *proc)
 
 static uintptr_t mm_mmap_stack_ref(process_t *proc)
 {
-	if (!proc || proc->mode != USER_MODE || !proc->stack_start)
+	if (!proc || proc->mode != USER_MODE || !process_stack_start(proc))
 		return USER_STACK_BASE;
 
-	return (uintptr_t)proc->stack_start;
+	return (uintptr_t)process_stack_start(proc);
 }
 
 static uintptr_t mm_mmap_search_end(process_t *proc)
@@ -152,7 +154,7 @@ static uintptr_t mm_mmap_search_end(process_t *proc)
 
 /*
  * Linux-like top-down placement for mmap(NULL) and non-fixed hints.
- * Updates proc->mmap_base to the chosen start for the next call.
+ * Updates process_mmap_base(proc) to the chosen start for the next call.
  */
 static uintptr_t mm_pick_free_va_topdown(process_t *proc, uint64_t *pml4,
 					 size_t length)
@@ -176,7 +178,7 @@ static uintptr_t mm_pick_free_va_topdown(process_t *proc, uint64_t *pml4,
 		if (search_low >= search_end || length > search_end - search_low)
 			return 0;
 
-		top = (uintptr_t)proc->mmap_base;
+		top = (uintptr_t)process_mmap_base(proc);
 		if (top == 0 || top > search_end)
 			top = search_end;
 		for (start = top - length; start >= search_low; start -= PAGE_SIZE_4KB)
@@ -191,8 +193,7 @@ static uintptr_t mm_pick_free_va_topdown(process_t *proc, uint64_t *pml4,
 			if (!mm_va_range_all_unmapped(pml4, start, length))
 				continue;
 
-			proc->mmap_base = start;
-			process_mm_sync_from_process(proc);
+			process_set_mmap_base(proc, start);
 			return start;
 		}
 	}
@@ -205,6 +206,9 @@ static uintptr_t mm_find_free_va(uint64_t *pml4, process_t *proc, uintptr_t hint
 	if (hint != 0)
 	{
 		if ((hint & (PAGE_SIZE_4KB - 1)) != 0)
+			return 0;
+		if (hint < USER_MMAP_START ||
+		    hint + length > USER_MMAP_END || hint + length < hint)
 			return 0;
 		if (!is_user_address((void *)(uintptr_t)hint, length))
 			return 0;
@@ -327,7 +331,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	region->length = map_len;
 	region->prot = prot;
 	region->flags = flags;
-	region->next = proc->mmap_list;
+	region->next = process_mmap_list(proc);
 	process_mm_set_mmap_list(proc, region);
 	KTM_CHECKPOINT(KTM_CP_MM_MAP);
 
@@ -348,22 +352,21 @@ int64_t sys_brk(void *addr)
 	/* brk(NULL) / brk(0): return current program break (Linux ABI). */
 	if (!addr)
 	{
-		if (current_process->heap_start == 0 &&
-		    current_process->heap_end == 0)
+		if (process_heap_start(current_process) == 0 &&
+		    process_heap_end(current_process) == 0)
 		{
-			current_process->heap_start = USER_HEAP_BASE;
-			current_process->heap_end = USER_HEAP_BASE;
-			process_mm_sync_from_process(current_process);
+			process_set_heap_start(current_process, USER_HEAP_BASE);
+			process_set_heap_end(current_process, USER_HEAP_BASE);
 		}
-		return (int64_t)current_process->heap_end;
+		return (int64_t)process_heap_end(current_process);
 	}
 
 	if (!is_user_address(addr, 0))
 		return -EFAULT;
 
 	new_brk = (uintptr_t)addr;
-	current_brk = current_process->heap_end;
-	heap_lo = current_process->heap_start;
+	current_brk = process_heap_end(current_process);
+	heap_lo = process_heap_start(current_process);
 
 	/*
 	 * Processes without ELF exec init (legacy smokes): fall back to
@@ -372,10 +375,9 @@ int64_t sys_brk(void *addr)
 	if (heap_lo == 0 && current_brk == 0)
 	{
 		heap_lo = USER_HEAP_BASE;
-		current_process->heap_start = heap_lo;
-		current_process->heap_end = heap_lo;
+		process_set_heap_start(current_process, heap_lo);
+		process_set_heap_end(current_process, heap_lo);
 		current_brk = heap_lo;
-		process_mm_sync_from_process(current_process);
 	}
 
 	if (new_brk < heap_lo)
@@ -403,7 +405,7 @@ int64_t sys_brk(void *addr)
 			if (map_user_region_in_directory(process_pgd(current_process),
 							 start_page, size_to_map,
 							 PAGE_RW) != 0)
-				return (int64_t)current_process->heap_end;
+				return (int64_t)process_heap_end(current_process);
 		}
 	}
 	else if (new_brk < current_brk)
@@ -417,8 +419,7 @@ int64_t sys_brk(void *addr)
 			unmap_page_in_directory(process_pgd(current_process), page);
 	}
 
-	current_process->heap_end = new_brk;
-	process_mm_sync_from_process(current_process);
+	process_set_heap_end(current_process, new_brk);
 	fase39_dump_current_vmas("brk");
 	return (int64_t)new_brk;
 }
@@ -603,7 +604,7 @@ static void fase39_dump_current_vmas(const char *tag)
 
 
 
-  for (r = current_process->mmap_list; r; r = r->next)
+  for (r = process_mmap_list(current_process); r; r = r->next)
   {
     if ((r->flags & MAP_ANONYMOUS) != 0)
       klog_debug("KERN", "anonymous");
@@ -802,7 +803,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         region->length = map_len;
         region->prot = prot;
         region->flags = flags;
-        region->next = current_process->mmap_list;
+        region->next = process_mmap_list(current_process);
         process_mm_set_mmap_list(current_process, region);
         KTM_CHECKPOINT(KTM_CP_MM_MAP);
         fase39_dump_current_vmas("mmap-fb");
@@ -908,7 +909,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 	region->length = map_len;
 	region->prot = prot;
 	region->flags = flags;
-	region->next = current_process->mmap_list;
+	region->next = process_mmap_list(current_process);
 	process_mm_set_mmap_list(current_process, region);
 	{
 	  static int s_memfd_map_ok;
@@ -963,6 +964,9 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
    */
   else if (addr != NULL &&
            (hint_addr & (PAGE_SIZE_4KB - 1)) == 0 &&
+           hint_addr >= USER_MMAP_START &&
+           hint_addr + length <= USER_MMAP_END &&
+           hint_addr + length >= hint_addr &&
            is_user_address(addr, length))
   {
     bool collision = false;
@@ -1077,7 +1081,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   region->length = length;
   region->prot = prot;  /* Store protection flags for mprotect */
   region->flags = flags;
-  region->next = current_process->mmap_list;
+  region->next = process_mmap_list(current_process);
   process_mm_set_mmap_list(current_process, region);
   vma_inserted = 1;
   virt_addr_out = virt_addr;
@@ -1110,7 +1114,7 @@ int sys_munmap(void *addr, size_t length)
   size_t aligned_length = ((length + 0xFFF) & ~0xFFF);
 
   /* Find the mapping */
-  struct mmap_region *current = current_process->mmap_list;
+  struct mmap_region *current = process_mmap_list(current_process);
   struct mmap_region *prev = NULL;
 
   while (current)
@@ -1173,7 +1177,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
    * IR0 mmap_list only tracks sys_mmap regions — fall through to PTE walk so
    * glibc/musl RELRO (mprotect → PROT_READ after load) works for exec images.
    */
-  current = current_process->mmap_list;
+  current = process_mmap_list(current_process);
   while (current)
   {
     if (current->addr <= addr &&

@@ -13,7 +13,9 @@ IR0 uses a centralized registry and bootstrap path for core and optional drivers
 
 - Input: PS/2 controller, keyboard, mouse.
 - Timers: PIT, RTC, HPET, LAPIC, clock abstraction.
-- Storage: ATA core and ATA block path.
+- Storage: ATA core and ATA block path. Odd userspace buffers use a 512-byte
+  bounce in `drivers/storage/ata.c`; MINIX fast-path skips when dst/src is odd
+  (`fs/minix_fs.c`) to avoid alignment storms.
 - Network: RTL8139 path used by network stack.
 - Audio: Sound Blaster, Adlib, PC speaker.
 - Video/console: typewriter, console backend, VBE path.
@@ -38,8 +40,12 @@ IR0 uses a centralized registry and bootstrap path for core and optional drivers
 
 - Sources: `drivers/audio/sound_blaster.c`, `drivers/audio/adlib.c`.
 - Successful SB16 DSP probe emits `klog_smoke("SB16_DSP_OK")` and logs DSP version.
-- QEMU 8+ needs an audiodev before the ISA device:
-  `-audiodev none,id=snd0 -device sb16,audiodev=snd0` (Adlib similarly).
+- QEMU 8+ needs an audiodev before the ISA device.
+- Interactive (`make run` / Doom GUI): default **PulseAudio** —
+  `-audiodev pa,id=snd0 -device sb16,audiodev=snd0` so the Linux host hears guest PCM.
+  Override: `QEMU_AUDIO_BACKEND=alsa|sdl|pipewire|none`.
+- Automated smokes use a silent backend (`QEMU_AUDIO_SB16_SILENT` / `none`) so CI
+  does not require a mixer.
 - Variables / smoke: `scripts/make/boot-audio.mk` → `make smoke-sb16-probe`.
   Gate is **SB16 DSP detect**; Adlib may still report ABSENT on some QEMU builds
   (logged as note, not a fail).

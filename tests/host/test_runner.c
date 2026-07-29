@@ -30,6 +30,7 @@ extern void test_vfs_backend_contract(void);
 extern void test_stat_user_abi(void);
 extern void test_named_fifo_supervise(void);
 extern void test_path_resolve_at(void);
+extern void test_path_chroot(void);
 extern void test_ktm_poll_arch_resume_matrix(void);
 extern void test_class_b_ctx_invariant_matrix(void);
 extern void test_musl_mmap_contract(void);
@@ -47,12 +48,20 @@ extern void test_ps2_set1_shift_a(void);
 extern void test_ps2_set1_caps_toggle(void);
 extern void test_ps2_set1_arrows_e0(void);
 extern void test_ps2_set1_autorepeat_ctrl(void);
+extern void test_ps2_set1_esc_emits_ascii_escape(void);
 extern void test_ps2_mouse_pkt_resync_and_complete(void);
 extern void test_ps2_mouse_interleaved_does_not_touch_kbd_mods(void);
 extern void test_ps2_set1_alt_independent(void);
 extern void test_pipe_close_end_last_ref_frees_once(void);
 extern void test_pipe_pipeline_two_closes_destroy_once(void);
 extern void test_rtc_calendar(void);
+extern void test_arch_task_contract(void);
+extern void test_pseudo_fs_contract(void);
+extern void test_mm_mirror_contract(void);
+extern void test_netdev_contract(void);
+extern void test_sched_backend_contract(void);
+extern void test_block_backend_contract(void);
+extern void test_matrix_capture_suite(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -66,6 +75,7 @@ static void (*test_functions[])(void) = {
 	test_stat_user_abi,
 	test_named_fifo_supervise,
 	test_path_resolve_at,
+	test_path_chroot,
 	test_ktm_poll_arch_resume_matrix,
 	test_class_b_ctx_invariant_matrix,
 	test_musl_mmap_contract,
@@ -83,12 +93,20 @@ static void (*test_functions[])(void) = {
 	test_ps2_set1_caps_toggle,
 	test_ps2_set1_arrows_e0,
 	test_ps2_set1_autorepeat_ctrl,
+	test_ps2_set1_esc_emits_ascii_escape,
 	test_ps2_mouse_pkt_resync_and_complete,
 	test_ps2_mouse_interleaved_does_not_touch_kbd_mods,
 	test_ps2_set1_alt_independent,
 	test_pipe_close_end_last_ref_frees_once,
 	test_pipe_pipeline_two_closes_destroy_once,
 	test_rtc_calendar,
+	test_arch_task_contract,
+	test_pseudo_fs_contract,
+	test_mm_mirror_contract,
+	test_netdev_contract,
+	test_sched_backend_contract,
+	test_block_backend_contract,
+	test_matrix_capture_suite,
 	NULL
 };
 

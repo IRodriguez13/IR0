@@ -23,6 +23,18 @@ if [ ! -x "${TCC_STAGE}/bin/tcc" ]; then
 	echo "✗ missing ${TCC_STAGE}/bin/tcc — run: make build-tcc-fase52" >&2
 	exit 1
 fi
+for req in \
+	"${TCC_STAGE}/lib/tcc/libtcc1.a" \
+	"${TCC_STAGE}/lib/tcc/libc.a" \
+	"${TCC_STAGE}/lib/tcc/crt1.o" \
+	"${TCC_STAGE}/lib/tcc/crti.o" \
+	"${TCC_STAGE}/lib/tcc/crtn.o"
+do
+	if [ ! -f "${req}" ]; then
+		echo "✗ missing ${req} — run: make build-tcc-fase52 (FASE52_STAGE=link|full)" >&2
+		exit 1
+	fi
+done
 if [ ! -x "${DEV_STAGE}/bin/make" ]; then
 	echo "✗ missing ${DEV_STAGE}/bin/make — run: make build-gmake-static" >&2
 	exit 1
@@ -56,7 +68,8 @@ fi
 
 python3 "${ROOT}/scripts/verify_minix_rootfs.py" "${DISK}" \
 	/bin/tcc /bin/cc /bin/make /usr/bin/make \
+	/lib/tcc/libtcc1.a /lib/tcc/libc.a /lib/tcc/crt1.o \
 	/usr/share/ir0-devtools/hello.c /root/hello.c \
 	/bin/sed /bin/awk /bin/tar
 
-echo "✓ inject-devtools OK (tcc + make + busybox filters on ${DISK})"
+echo "✓ inject-devtools OK (tcc + libtcc1.a + make + busybox filters on ${DISK})"

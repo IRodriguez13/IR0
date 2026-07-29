@@ -199,3 +199,104 @@ int get_parent_path(const char *path, char *dest, size_t size)
     dest[parent_len] = '\0';
     return 0;
 }
+
+int ir0_path_apply_root(const char *root, const char *abs_user,
+			char *dest, size_t size)
+{
+	char norm_user[256];
+	char norm_root[256];
+
+	if (!abs_user || !dest || size == 0)
+		return -1;
+
+	if (normalize_path(abs_user, norm_user, sizeof(norm_user)) != 0)
+		return -1;
+
+	if (!root || root[0] == '\0' ||
+	    (root[0] == '/' && root[1] == '\0'))
+		return normalize_path(norm_user, dest, size);
+
+	if (normalize_path(root, norm_root, sizeof(norm_root)) != 0)
+		return -1;
+
+	/* User "/" → the jail root itself. */
+	if (norm_user[0] == '/' && norm_user[1] == '\0')
+		return normalize_path(norm_root, dest, size);
+
+	/* join_paths ignores base when rel is absolute — strip leading '/'. */
+	return join_paths(norm_root, norm_user + 1, dest, size);
+}
+
+int ir0_path_under_root(const char *root, const char *cwd)
+{
+	char norm_root[256];
+	char norm_cwd[256];
+	size_t rlen;
+
+	if (!cwd || cwd[0] != '/')
+		return 0;
+	if (!root || root[0] == '\0' ||
+	    (root[0] == '/' && root[1] == '\0'))
+		return 1;
+
+	if (normalize_path(root, norm_root, sizeof(norm_root)) != 0)
+		return 0;
+	if (normalize_path(cwd, norm_cwd, sizeof(norm_cwd)) != 0)
+		return 0;
+
+	rlen = strlen(norm_root);
+	if (strcmp(norm_cwd, norm_root) == 0)
+		return 1;
+	if (strncmp(norm_cwd, norm_root, rlen) != 0)
+		return 0;
+	return norm_cwd[rlen] == '/';
+}
+
+int ir0_path_getcwd_visible(const char *root, const char *cwd,
+			    char *dest, size_t size)
+{
+	char norm_root[256];
+	char norm_cwd[256];
+	size_t rlen;
+	const char *vis;
+
+	if (!cwd || !dest || size == 0)
+		return -1;
+
+	if (normalize_path(cwd, norm_cwd, sizeof(norm_cwd)) != 0)
+		return -1;
+
+	if (!root || root[0] == '\0' ||
+	    (root[0] == '/' && root[1] == '\0'))
+	{
+		if (strlen(norm_cwd) >= size)
+			return -1;
+		strncpy(dest, norm_cwd, size - 1);
+		dest[size - 1] = '\0';
+		return 0;
+	}
+
+	if (normalize_path(root, norm_root, sizeof(norm_root)) != 0)
+		return -1;
+
+	if (!ir0_path_under_root(norm_root, norm_cwd))
+	{
+		if (strlen(norm_cwd) >= size)
+			return -1;
+		strncpy(dest, norm_cwd, size - 1);
+		dest[size - 1] = '\0';
+		return 0;
+	}
+
+	rlen = strlen(norm_root);
+	if (strcmp(norm_cwd, norm_root) == 0)
+		vis = "/";
+	else
+		vis = norm_cwd + rlen; /* starts with '/' */
+
+	if (strlen(vis) >= size)
+		return -1;
+	strncpy(dest, vis, size - 1);
+	dest[size - 1] = '\0';
+	return 0;
+}

@@ -182,7 +182,7 @@ int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
   if (path_copy[0] == '/')
   {
     return ir0_resolve_kpath_at(IR0_AT_FDCWD, path_copy, resolved, resolved_sz,
-                                current_process->cwd);
+                                current_process->cwd, current_process->root);
   }
 
   if (dirfd != IR0_AT_FDCWD)
@@ -192,12 +192,17 @@ int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
       return rc;
     if (join_paths(dirpath, path_copy, joined, sizeof(joined)) != 0)
       return -ENAMETOOLONG;
-    return ir0_resolve_kpath_at(IR0_AT_FDCWD, joined, resolved, resolved_sz,
-                                current_process->cwd);
+    /*
+     * dirfd path is already host-absolute (may be outside the jail).
+     * Do not re-apply process root (Linux openat via outside fd).
+     */
+    if (normalize_path(joined, resolved, resolved_sz) != 0)
+      return -ENAMETOOLONG;
+    return 0;
   }
 
   return ir0_resolve_user_path_at(dirfd, user_path, resolved, resolved_sz,
-                                  current_process->cwd);
+                                  current_process->cwd, current_process->root);
 }
 
 static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
@@ -708,6 +713,13 @@ int64_t sys_read(int fd, void *buf, size_t count)
   if (fd >= 0 && fd < MAX_FDS_PER_PROCESS)
   {
     fd_entry_t *fdt = get_process_fd_table();
+
+    if (fdt && fdt[fd].in_use && (fdt[fd].flags & O_DIRECTORY) &&
+	!fdt[fd].is_pipe && !fdt[fd].is_socket)
+    {
+      /* Directory fds (incl. O_DIRECTORY opens) are not readable via read(2). */
+      return -EISDIR;
+    }
 
     if (fdt && fdt[fd].in_use && fdt[fd].is_pseudo && fdt[fd].vfs_file)
     {
@@ -1386,7 +1398,7 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
     return open_ret;
   }
 
-  if (is_heart_path(resolved))
+  if (is_heart_path(resolved) && !heart_is_dennis_vfs_path(resolved))
   {
     char canon[256];
 
@@ -1475,7 +1487,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
 
 
   path_rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, path_copy, resolved_path,
-                                 sizeof(resolved_path), current_process->cwd);
+                                 sizeof(resolved_path), current_process->cwd, current_process->root);
   if (path_rc != 0)
     return path_rc;
 
@@ -1496,7 +1508,7 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -1731,7 +1743,7 @@ int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
     return -EINVAL;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 

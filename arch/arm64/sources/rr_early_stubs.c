@@ -126,9 +126,9 @@ void __attribute__((weak)) sched_context_switch_to(process_t *next)
 		return;
 
 	if (prev && prev->state == PROCESS_RUNNING)
-		prev->state = PROCESS_READY;
+		process_set_sched_state(prev, PROCESS_READY);
 
-	next->state = PROCESS_RUNNING;
+	process_set_sched_state(next, PROCESS_RUNNING);
 	current_process = next;
 
 	if (first)

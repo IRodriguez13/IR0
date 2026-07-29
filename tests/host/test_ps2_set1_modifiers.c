@@ -170,3 +170,17 @@ void test_ps2_set1_autorepeat_ctrl(void)
 	ASSERT_EQ(ps2_set1_mods_mask(&st.mods), KBD_MOD_NONE);
 	TEST_END();
 }
+
+void test_ps2_set1_esc_emits_ascii_escape(void)
+{
+	struct ps2_set1_state st;
+	struct ps2_set1_result r;
+
+	TEST_BEGIN("ps2_set1 ESC make emits 0x1b for TTY (vi)");
+	ps2_set1_reset(&st);
+	feed(&st, 0x01, &r); /* ESC make */
+	ASSERT(emitted_eq(&r, 0x1b));
+	feed(&st, 0x81, &r); /* ESC break — no emit */
+	ASSERT(r.emitted_len == 0);
+	TEST_END();
+}

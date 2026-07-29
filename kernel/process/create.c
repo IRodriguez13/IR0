@@ -100,7 +100,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	proc->pgid = proc->task.pid;
 	proc->ppid = current_process ? current_process->task.pid : 0;
 	proc->start_ticks = clock_get_tick_count();
-	proc->state = PROCESS_READY;
+	process_set_sched_state(proc, PROCESS_READY);
 	proc->sched_prio = IR0_SCHED_PRIO_DEFAULT;
 
 	/* Explicit mode specification - no magic address detection */
@@ -162,6 +162,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->umask = current_process->umask;
 		strncpy(proc->cwd, current_process->cwd, sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
+		strncpy(proc->root, current_process->root, sizeof(proc->root) - 1);
+		proc->root[sizeof(proc->root) - 1] = '\0';
 	} else {
 		proc->uid = ROOT_UID;
 		proc->gid = ROOT_GID;
@@ -174,12 +176,19 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->umask = DEFAULT_UMASK;
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
+		strncpy(proc->root, "/", sizeof(proc->root) - 1);
+		proc->root[sizeof(proc->root) - 1] = '\0';
 	}
 	process_cred_init_groups(proc);
 	if (proc->cwd[0] != '/')
 	{
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
 		proc->cwd[sizeof(proc->cwd) - 1] = '\0';
+	}
+	if (proc->root[0] != '/')
+	{
+		strncpy(proc->root, "/", sizeof(proc->root) - 1);
+		proc->root[sizeof(proc->root) - 1] = '\0';
 	}
 	
 	/* Set command name */
@@ -190,14 +199,14 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	if (proc->mode == USER_MODE)
 	{
 		/* User stack: [USER_STACK_TOP - USER_STACK_SIZE, USER_STACK_TOP) */
-		proc->stack_size = USER_STACK_SIZE;
-		proc->stack_start = USER_STACK_TOP - USER_STACK_SIZE;
+		process_set_stack_layout(proc, USER_STACK_TOP - USER_STACK_SIZE,
+					 USER_STACK_SIZE);
 
 		/*
 		 * Map under kernel CR3: map_user_region_in_directory() allocates page
 		 * tables from the kernel heap and must not run with child CR3 active.
 		 */
-		if (map_user_region_in_directory(process_pgd(proc), proc->stack_start, proc->stack_size, PAGE_RW) != 0)
+		if (map_user_region_in_directory(process_pgd(proc), process_stack_start(proc), process_stack_size(proc), PAGE_RW) != 0)
 		{
 			klog_debug("KERN", "SERIAL: spawn: stack map failed\n");
 			process_unmap_user_pages_all(process_pgd(proc), NULL);
@@ -212,16 +221,17 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	else
 	{
 		/* Kernel mode: allocate from kernel heap (existing behavior) */
-		proc->stack_size = 0x2000;
-		proc->stack_start = (uint64_t)kmalloc_try(proc->stack_size);
-		if (!proc->stack_start)
+		void *kstack = kmalloc_try(0x2000);
+
+		if (!kstack)
 		{
 			if (process_mm_owns_tables(proc))
 				process_unmap_user_pages_all(process_pgd(proc), NULL);
 			goto fail_proc;
 		}
-		memset((void *)proc->stack_start, 0, proc->stack_size);
-		task_set_sp(&proc->task, proc->stack_start + proc->stack_size - 16);
+		process_set_stack_layout(proc, (uint64_t)(uintptr_t)kstack, 0x2000);
+		memset(kstack, 0, 0x2000);
+		task_set_sp(&proc->task, process_stack_start(proc) + process_stack_size(proc) - 16);
 		arch_task_set_frame_pointer(&proc->task, task_get_sp(&proc->task));
 	}
 
@@ -256,10 +266,10 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	if (process_kernel_stack_alloc(proc) != 0)
 	{
 		klog_debug("KERN", "SERIAL: spawn: kernel stack alloc failed\n");
-		if (proc->mode != USER_MODE && proc->stack_start)
+		if (proc->mode != USER_MODE && process_stack_start(proc))
 		{
-			kfree((void *)proc->stack_start);
-			proc->stack_start = 0;
+			kfree((void *)(uintptr_t)process_stack_start(proc));
+			process_set_stack_layout(proc, 0, 0);
 		}
 		else if (process_mm_owns_tables(proc))
 		{
@@ -292,21 +302,15 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 
 fail_proc:
 	process_kernel_stack_free(proc);
-	if (proc->stack_start && proc->mode == KERNEL_MODE)
+	if (process_stack_start(proc) && proc->mode == KERNEL_MODE)
 	{
-		kfree((void *)proc->stack_start);
-		proc->stack_start = 0;
+		kfree((void *)(uintptr_t)process_stack_start(proc));
+		process_set_stack_layout(proc, 0, 0);
 	}
 	if (proc->mm)
 	{
 		mm_put(proc->mm);
 		proc->mm = NULL;
-		process_set_pgd(proc, NULL);
-	}
-	else if (process_pgd(proc) && process_mm_owns_tables(proc))
-	{
-		kfree_aligned(process_pgd(proc));
-		process_set_pgd(proc, NULL);
 	}
 	kfree(proc);
 	return -ENOMEM;

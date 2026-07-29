@@ -5,7 +5,10 @@
 #
 # Profiles (PROFILE=…; aliases match product image names):
 #   desktop | desktop-x86_64  — make ir0 / desktop-x86_64
-#   userspace                 — desktop + musl static userspace
+#   userspace                 — desktop + musl static userspace / ISD
+#   minimal | development | appliance
+#                             — ISD product profiles → same checks as userspace
+#                               (PROFILE=desktop stays the kernel desktop profile)
 #   hub | hub-rpi4            — ARM64 RPi4 UART lab
 #   watch | watch-rpi5-stub   — ARM64 rpi5 stub
 #   all                       — union of the above
@@ -19,6 +22,7 @@
 # Usage:
 #   make deptest
 #   make check-env PROFILE=desktop-x86_64
+#   make deptest PROFILE=minimal   # ISD first-boot deps (→ userspace)
 #   PROFILE=hub BOARD=rpi4 ./scripts/deptest.sh
 #
 
@@ -35,9 +39,21 @@ _sed() { command -v sed >/dev/null 2>&1 && sed "$@" || /usr/bin/sed "$@"; }
 KERNEL_ROOT="$(CDPATH= cd -- "$(_dirname "$0")/.." && pwd)"
 cd "$KERNEL_ROOT"
 
+# Portable PATH: rustup, local musl prefixes, and core bins (WSL/min PATH).
+PATH="${HOME}/.cargo/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+export PATH
+
 ERRORS=0
 WARNINGS=0
 PM=unknown
+IN_WSL=0
+
+# Detect WSL (optional KVM / display notes).
+if [ -n "${WSL_DISTRO_NAME:-}" ] || [ -n "${WSL_INTEROP:-}" ] || \
+	_grep -qi microsoft /proc/version 2>/dev/null || \
+	_grep -qi wsl /proc/sys/kernel/osrelease 2>/dev/null; then
+	IN_WSL=1
+fi
 
 # Normalize aliases → internal profile + display name for messages
 PROFILE="$PROFILE_RAW"
@@ -55,6 +71,12 @@ userspace)
 	PROFILE=userspace
 	PROFILE_DISPLAY=userspace
 	;;
+# ISD product profiles share the userspace host-deps set. Keep PROFILE=desktop
+# as the kernel desktop image profile (not remapped).
+minimal|development|appliance)
+	PROFILE=userspace
+	PROFILE_DISPLAY="userspace (ISD ${PROFILE_RAW})"
+	;;
 hub|hub-rpi4)
 	PROFILE=hub
 	PROFILE_DISPLAY=hub-rpi4
@@ -71,7 +93,7 @@ all)
 	;;
 *)
 	echo "[deptest] Unknown PROFILE=${PROFILE_RAW}"
-	echo "Valid: desktop | desktop-x86_64 | userspace | hub | hub-rpi4 | watch | watch-rpi5-stub | all"
+	echo "Valid: desktop | desktop-x86_64 | userspace | minimal | development | appliance | hub | hub-rpi4 | watch | watch-rpi5-stub | all"
 	exit 2
 	;;
 esac
@@ -83,26 +105,29 @@ else
 fi
 
 detect_pm() {
-	if command -v apt-get >/dev/null 2>&1; then
+	if command -v apt-get >/dev/null 2>&1 || [ -x /usr/bin/apt-get ]; then
 		PM=apt
-	elif command -v pacman >/dev/null 2>&1; then
+	elif command -v pacman >/dev/null 2>&1 || [ -x /usr/bin/pacman ]; then
 		PM=pacman
-	elif command -v dnf >/dev/null 2>&1; then
+	elif command -v dnf >/dev/null 2>&1 || [ -x /usr/bin/dnf ]; then
 		PM=dnf
+	elif command -v zypper >/dev/null 2>&1 || [ -x /usr/bin/zypper ]; then
+		PM=zypper
 	else
 		PM=unknown
 	fi
 }
 
-# Print install hints: args are apt_pkg | pacman_pkg | dnf_pkg
+# Print install hints: args are apt_pkg | pacman_pkg | dnf_pkg | [zypper_pkg]
 print_install_hints() {
 	_apt=$1
 	_pac=$2
 	_dnf=$3
+	_zyp=${4:-$3}
 	echo ""
 	case "$PM" in
 	apt)
-		echo "Ubuntu/Debian:"
+		echo "Ubuntu/Debian/Mint:"
 		echo "  sudo apt install ${_apt}"
 		;;
 	pacman)
@@ -113,8 +138,12 @@ print_install_hints() {
 		echo "Fedora:"
 		echo "  sudo dnf install ${_dnf}"
 		;;
+	zypper)
+		echo "openSUSE:"
+		echo "  sudo zypper install ${_zyp}"
+		;;
 	*)
-		echo "Ubuntu/Debian:"
+		echo "Ubuntu/Debian/Mint:"
 		echo "  sudo apt install ${_apt}"
 		echo ""
 		echo "Arch:"
@@ -122,6 +151,9 @@ print_install_hints() {
 		echo ""
 		echo "Fedora:"
 		echo "  sudo dnf install ${_dnf}"
+		echo ""
+		echo "openSUSE:"
+		echo "  sudo zypper install ${_zyp}"
 		;;
 	esac
 	echo ""
@@ -130,8 +162,7 @@ print_install_hints() {
 	echo "  # alias: make check-env PROFILE=${PROFILE_DISPLAY}"
 }
 
-# $1=tool_name $2=kind (required|optional|unsupported_version|present_but_unusable)
-# $3=detail  $4=apt  $5=pacman  $6=dnf
+# $1=tool_name $2=kind  $3=detail  $4=apt  $5=pacman  $6=dnf  [$7=zypper]
 report_issue() {
 	_tool=$1
 	_kind=$2
@@ -139,6 +170,7 @@ report_issue() {
 	_apt=${4:-}
 	_pac=${5:-}
 	_dnf=${6:-}
+	_zyp=${7:-$_dnf}
 
 	echo ""
 	case "$_kind" in
@@ -174,7 +206,11 @@ report_issue() {
 		echo "${_detail}"
 	fi
 	if [ -n "$_apt" ]; then
-		print_install_hints "$_apt" "$_pac" "$_dnf"
+		print_install_hints "$_apt" "$_pac" "$_dnf" "$_zyp"
+		# Machine-readable: apt \t pacman \t dnf \t zypper
+		if [ -n "${IR0_DEPS_LIST_FILE:-}" ] && [ "$_kind" != "optional" ]; then
+			printf '%s\t%s\t%s\t%s\n' "$_apt" "$_pac" "$_dnf" "$_zyp" >>"$IR0_DEPS_LIST_FILE"
+		fi
 	elif [ "$_kind" = "optional" ]; then
 		echo ""
 	fi
@@ -224,6 +260,11 @@ detect_pm
 echo "=========================================="
 echo "IR0 — Environment check (deptest)"
 echo "OS: ${OS_TYPE}   PROFILE=${PROFILE_DISPLAY}   BOARD=${BOARD:-—}   pm=${PM}"
+if [ "$IN_WSL" -eq 1 ]; then
+	echo "WSL: detected — QEMU uses TCG if /dev/kvm is missing (slower, still OK)."
+	echo "     Nested KVM (optional): Win11 + %UserProfile%\\.wslconfig nestedVirtualization=true"
+	echo "     GUI: WSLg or X server; headless: make run-console / IR0_DEBUG=1"
+fi
 echo "=========================================="
 echo ""
 
@@ -253,10 +294,28 @@ if command -v python3 >/dev/null 2>&1; then
 	else
 		report_issue "python3-curses" present_but_unusable \
 			"  python3 found but 'import curses' fails (menuconfig TUI)." \
-			"libncurses-dev python3" "python" "python3-libs"
+			"libncurses-dev python3" "python" "python3-curses" "python3-curses"
 	fi
 fi
 echo ""
+
+# Prefer rustup's cargo bin when it is not yet on PATH (fresh install / new shell).
+ensure_cargo_path() {
+	if [ -d "${HOME}/.cargo/bin" ]; then
+		case ":${PATH}:" in
+		*":${HOME}/.cargo/bin:"*) ;;
+		*)
+			PATH="${HOME}/.cargo/bin:${PATH}"
+			export PATH
+			;;
+		esac
+	fi
+}
+
+example_drivers_enabled() {
+	[ -f "${KERNEL_ROOT}/.config" ] || return 1
+	_grep -q '^CONFIG_ENABLE_EXAMPLE_DRIVERS=y' "${KERNEL_ROOT}/.config"
+}
 
 # ---------------------------------------------------------------------------
 # Desktop
@@ -312,22 +371,53 @@ need_desktop() {
 		ok_line "xorriso"
 	fi
 
+	# Rust is only linked when CONFIG_ENABLE_EXAMPLE_DRIVERS=y (off in defconfig).
+	if example_drivers_enabled; then
+		need_rust_example_drivers
+	else
+		ensure_cargo_path
+		if command -v rustc >/dev/null 2>&1; then
+			ok_line "rustc (optional): $(rustc --version 2>&1)"
+		else
+			report_issue "rustc" optional \
+				"  Not required for default kernel/ISO (example drivers off). Enable CONFIG_ENABLE_EXAMPLE_DRIVERS=y to link Rust drivers."
+		fi
+	fi
+
+	if [ -f "${KERNEL_ROOT}/.config" ]; then
+		ok_line ".config present"
+	else
+		report_issue ".config" optional \
+			"  Missing — next: make defconfig   (or: make first-boot / make ir0_defconfig PROFILE=desktop)"
+	fi
+	echo ""
+}
+
+# Required only when .config has CONFIG_ENABLE_EXAMPLE_DRIVERS=y.
+need_rust_example_drivers() {
+	echo "Rust example drivers (CONFIG_ENABLE_EXAMPLE_DRIVERS=y):"
+	echo "-------------------------------------------------------"
+	ensure_cargo_path
 	if ! command -v rustc >/dev/null 2>&1; then
 		report_issue "rustc" required \
-			"  Rust drivers are linked into the default kernel image.
+			"  Example Rust drivers are enabled.
   Install: https://rustup.rs
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     rustup toolchain install nightly
-    rustup component add rust-src --toolchain nightly"
+    rustup component add rust-src --toolchain nightly
+  Then re-open the shell (or: export PATH=\"\$HOME/.cargo/bin:\$PATH\")."
 	else
 		ok_line "rustc: $(rustc --version 2>&1)"
 		if ! command -v cargo >/dev/null 2>&1; then
-			report_issue "cargo" required "  Required with rustc (rustup)."
+			report_issue "cargo" required \
+				"  Required with rustc (rustup). Install: https://rustup.rs"
 		else
 			ok_line "cargo: $(cargo --version 2>&1)"
 		fi
 		if ! command -v rustup >/dev/null 2>&1; then
 			report_issue "rustup" required \
-				"  Required to manage nightly + rust-src for no_std drivers."
+				"  Required to manage nightly + rust-src for no_std drivers.
+  Install: https://rustup.rs"
 		else
 			if rustup toolchain list 2>/dev/null | _grep -q nightly; then
 				ok_line "rustup nightly toolchain"
@@ -343,28 +433,61 @@ need_desktop() {
 			fi
 		fi
 	fi
-
-	if [ -f "${KERNEL_ROOT}/.config" ]; then
-		ok_line ".config present"
-	else
-		report_issue ".config" optional \
-			"  Missing — next: make defconfig   (or: make ir0_defconfig PROFILE=desktop)"
-	fi
-	echo ""
 }
 
 need_userspace() {
-	echo "Userspace musl (required for PROFILE=userspace):"
-	echo "-----------------------------------------------"
+	echo "Userspace / ISD fetch+build (required for PROFILE=userspace):"
+	echo "-------------------------------------------------------------"
 	if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then
 		ok_line "x86_64-linux-musl-gcc: $(x86_64-linux-musl-gcc --version 2>&1 | _head -1)"
 	elif command -v musl-gcc >/dev/null 2>&1; then
 		ok_line "musl-gcc: $(musl-gcc --version 2>&1 | _head -1)"
 	else
+		# Arch: community/musl (provides musl-gcc). Never list a fake musl-gcc pkg.
 		report_issue "musl-gcc / x86_64-linux-musl-gcc" required \
 			"  Or set MUSL_CC=/path/to/x86_64-linux-musl-gcc" \
-			"musl-tools" "musl musl-gcc" "musl-gcc"
+			"musl-tools" "musl" "musl-gcc" "musl-gcc"
 	fi
+
+	# Tools used by ISD fetch/build (never need sudo for these once installed).
+	require_cmd "git" git "git" "git" "git" --version || true
+	require_cmd "curl" curl "curl" "curl" "curl" --version || true
+	require_cmd "patch" patch "patch" "patch" "patch" --version || true
+	require_cmd "tar" tar "tar" "tar" "tar" --version || true
+	require_cmd "file" file "file" "file" "file" --version || true
+	if command -v sha256sum >/dev/null 2>&1; then
+		ok_line "sha256sum"
+	elif command -v shasum >/dev/null 2>&1; then
+		ok_line "shasum (sha256sum alternative)"
+	elif command -v sha256 >/dev/null 2>&1; then
+		ok_line "sha256"
+	else
+		report_issue "sha256sum" required 			"  Needed to verify ISD package tarballs." 			"coreutils" "coreutils" "coreutils" "coreutils"
+	fi
+	if command -v flock >/dev/null 2>&1; then
+		ok_line "flock (util-linux)"
+	else
+		report_issue "flock" required 			"  Needed by BusyBox package build lock." 			"util-linux" "util-linux" "util-linux" "util-linux"
+	fi
+	# opendoas builds parse.c from parse.y via Make's implicit yacc rule.
+	if command -v yacc >/dev/null 2>&1; then
+		ok_line "yacc: $(yacc --version 2>&1 | _head -1 || echo present)"
+	elif command -v bison >/dev/null 2>&1; then
+		report_issue "yacc" required 			"  bison found but no 'yacc' on PATH (opendoas parse.y). Install the distro bison package that provides /usr/bin/yacc, or: ln -s \"$(command -v bison)\" ~/bin/yacc && export PATH=\"\$HOME/bin:\$PATH\"." 			"bison" "bison" "bison" "bison"
+	else
+		report_issue "yacc" required 			"  Needed to build opendoas (parse.y → parse.c)." 			"bison" "bison" "bison" "bison"
+	fi
+
+	_host_m=$(uname -m 2>/dev/null || echo unknown)
+	case "$_host_m" in
+	x86_64|amd64)
+		ok_line "host arch ${_host_m} (ISD product path supported)"
+		;;
+	*)
+		report_issue "host arch ${_host_m}" required 			"  make first-boot / ISD x86_64 images need an x86_64 host (or a cross musl toolchain + QEMU user).
+  On WSL/ARM64 Windows: use an x86_64 distro/VM, or build only the kernel ARM profiles."
+		;;
+	esac
 	echo ""
 }
 

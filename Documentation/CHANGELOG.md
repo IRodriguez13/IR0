@@ -1,12 +1,42 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-07-25
+> **Last verified:** 2026-07-29
 > **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
 For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** see [`STABLE.md`](STABLE.md).
 
 ## [Unreleased]
+
+### `/proc/stat` + BusyBox `top` + ATA odd-buffer bounce (2026-07-29)
+
+- `/proc/stat` (`proc_stat_read`): Linux-shaped `cpu`/`cpu0` jiffy lines so
+  BusyBox `top` can open `/proc/stat` after `chdir("/proc")`.
+- `proc_readdir("/proc")` lists digit PID dirs **before** static registry names
+  so `GETDENTS_BATCH_MAX` (24) does not hide all processes from `top`/`ps`.
+- ATA/MINIX: bounce path for odd userspace buffers; gate MINIX fast-path when
+  dst/src is odd (stops `ATA_BUFFER_ALIGNMENT_SUSPECT` storms).
+- MINIX `--format-large`: wipe inode table + rebuild imap (stale inodes from a
+  prior pack broke `/etc` inject → `ROOTFS_VERIFY_FAIL … missing component 'etc'`);
+  large images use 2048 inodes.
+- Smokes: `scripts/smoke_proc_stat_top.py`; `smoke_proc_coherence.py` checks
+  `/proc/stat`. Docs: [`VIRTUAL_FILESYSTEMS.md`](VIRTUAL_FILESYSTEMS.md),
+  [`PROCESSES.md`](PROCESSES.md) (reparent-to-init note).
+
+### Doom T2 audio/mouse + ESC + TinyCC `/lib/tcc` (2026-07-28)
+
+- doomgeneric IR0: `EV_REL`/buttons → `ev_mouse`; PCM to `/dev/audio` (no `-nosound`);
+  smoke requires `MOUSE_CAPS` / `AUDIO_OK` / `AUDIO_WRITE_OK` with QEMU SB16.
+- PS/2 set-1 ESC (`0x01`) emits ASCII `0x1b` for BusyBox `vi`.
+- TinyCC staging uses absolute `--tccdir=/lib/tcc`; `inject_devtools_minix.sh`
+  verifies `libtcc1.a` / `libc.a` / `crt*` on disk.
+- Docs: [`testing/DOOM_FASE55D.md`](testing/DOOM_FASE55D.md), [`USERSPACE.md`](USERSPACE.md),
+  [`STABLE.md`](STABLE.md).
+
+### BusyBox matrix capture (2026-07-28)
+
+- Drain-to-EOF + streaming needles; host `test_matrix_capture`; QEMU `-m 1024M`.
+  See [`testing/BUSYBOX_MATRIX.md`](testing/BUSYBOX_MATRIX.md).
 
 ### Kernel / userspace tree boundary (2026-07-25)
 

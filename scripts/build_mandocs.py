@@ -156,6 +156,13 @@ MANDOC_CHAPTERS: list[MandocChapter] = [
         "BusyBox, runit, musl, TCC y bootstrap DoomGeneric",
     ),
     MandocChapter(
+        "porting",
+        "porting.md",
+        "IR0-port",
+        "Porting small C programs and tools onto ISD",
+        "Portar programas C y herramientas pequenas a ISD",
+    ),
+    MandocChapter(
         "multi-arch",
         "multi-arch.md",
         "IR0-multi-arch",

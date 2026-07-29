@@ -22,6 +22,12 @@
 int is_heart_path(const char *path);
 int heart_is_virtual_subdir(const char *path);
 
+/*
+ * /heart/dennis and below are real VFS (MINIX + optional virtio-9p mount of
+ * the host IR0 tree). Not pseudo_fs — writable for nano/vi/tcc/make.
+ */
+int heart_is_dennis_vfs_path(const char *path);
+
 /* Map /heart/proc/X → /proc/X and /heart/sys/X → /sys/X; else 0. */
 int heart_alias_canonical(const char *path, char *out, size_t out_sz);
 

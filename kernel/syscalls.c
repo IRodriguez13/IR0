@@ -18,6 +18,7 @@
 #include <ir0/input_backend.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
+#include <ir0/clock.h>
 #include <ir0/ktm/klog.h>
 
 #define MAX_STDIN_WAITERS 8
@@ -42,8 +43,16 @@ int64_t syscalls_read_stdio_stdin(void *buf, size_t count)
 
 void stdin_wake_check(void)
 {
-	if (stdin_wake_check_nosched())
-		sched_schedule_next();
+	if (!stdin_wake_check_nosched())
+		return;
+	/*
+	 * Never sched_schedule_next() from here: keyboard IRQ calls this while
+	 * current may be userspace or idle. Mid-IRQ switch_to saves [rsp] into
+	 * prev->task.rip (kernel C / stack junk) → later kernel_ret/#UD into
+	 * BSS (desk panic after top/TTY). Defer via resched flags; ISR exit
+	 * uses sched_irq_preempt_from_frame, idle_poll yields cooperatively.
+	 */
+	clock_request_sched_resched();
 }
 
 int stdin_wake_check_nosched(void)

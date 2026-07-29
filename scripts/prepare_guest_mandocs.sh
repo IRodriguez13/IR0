@@ -30,6 +30,7 @@ DEFAULT_PAGE_MAP=(
 	"IR0-boot"
 	"IR0-userspace IR0-uspace"
 	"IR0-onboarding IR0-onboard"
+	"IR0-port"
 	"IR0-vfs"
 	"IR0-syscalls"
 	"IR0-tty"
@@ -99,6 +100,35 @@ for entry in "${DEFAULT_PAGE_MAP[@]}"; do
 	fi
 	count=$((count + 1))
 done
+
+# Short overview page: man IR0  (basename IR0.7 ≤14)
+{
+	printf '%s\n' \
+		"IR0(7)                     IR0 Manual                     IR0(7)" \
+		"" \
+		"NAME" \
+		"       IR0 - Independent Research Operating system" \
+		"" \
+		"DESCRIPTION" \
+		"       Unix-like research kernel with a Linux-compatible userspace" \
+		"       ABI goal (musl, BusyBox, ISD). See also /heart/MANIFESTO." \
+		"" \
+		"PAGES ON THIS SYSTEM" \
+		"       man IR0-boot      boot and bring-up" \
+		"       man IR0-uspace    userspace and ISD" \
+		"       man IR0-port      porting software to ISD" \
+		"       man IR0-onboard   first boot / onboarding" \
+		"       man IR0-vfs       VFS" \
+		"       man IR0-syscalls  syscalls" \
+		"       man IR0-tty       TTY" \
+		"       man IR0-process   process model" \
+		"" \
+		"SEE ALSO" \
+		"       cat /heart/MANIFESTO, cat /etc/os-release" \
+		""
+} > "${CAT7}/IR0.7"
+echo "  CAT7    ${CAT7#${ROOT}/}/IR0.7  (overview)"
+count=$((count + 1))
 
 date -u +%Y-%m-%dT%H:%M:%SZ > "${OUT_ROOT}/.stamp"
 echo "✓ prepare-guest-mandocs → ${CAT7} (${count} pages)"

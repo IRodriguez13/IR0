@@ -41,6 +41,13 @@ static int sched_irq_may_preempt(uint64_t *gpr_stack)
 		return 2;
 
 	/*
+	 * Keyboard/stdin wake sets clock_request_sched_resched without always
+	 * arming tty_need_resched (stdin_waiters-only). Honor it on any IRQ.
+	 */
+	if (clock_sched_resched_pending_peek() && sched_count_runnable() > 1)
+		return 4;
+
+	/*
 	 * Brief PIT fairness window after TTY wake (see ir0_console_note_tty_wake).
 	 * Avoids global timer preempt during PID1 fork/exec boot.
 	 */
@@ -114,11 +121,13 @@ int sched_irq_preempt_from_frame(uint64_t *gpr_stack)
 
 		(void)ir0_console_take_resched();
 		KTM_EVENT(KTM_EV_SCHED_IRQ_TTY_PREEMPT);
+		/*
+		 * Ring-0 interrupt context (idle / kernel): never schedule here.
+		 * Mid-ISR switch_to corrupts prev RIP/RSP → #UD into BSS on resume.
+		 * Wake left tasks READY; idle_poll / cooperative yield picks them up.
+		 */
 		if ((gpr_stack[18] & 3U) != 3U)
-		{
-			sched_schedule_next();
 			return 0;
-		}
 		if (sched_count_runnable() <= 1)
 			return 0;
 		process_save_user_context_from_irq_frame(gpr_stack);
@@ -136,6 +145,8 @@ int sched_irq_preempt_from_frame(uint64_t *gpr_stack)
 
 	if (why == 3)
 		KTM_EVENT(KTM_EV_SCHED_IRQ_TIMER_PREEMPT);
+	if (why == 4)
+		(void)clock_take_sched_resched_pending();
 
 	process_save_user_context_from_irq_frame(gpr_stack);
 	sched_context_switch_skip_prev_save();

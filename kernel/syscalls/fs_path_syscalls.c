@@ -27,13 +27,16 @@
 #include <ir0/path_routed.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
+#include <ir0/credentials.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/utsname.h>
+#include <ir0/utsname_info.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>
+#include <ir0/statfs.h>
 #include <ir0/memfd.h>
 #include <ir0/posix_shm.h>
 #include <stddef.h>
@@ -49,7 +52,13 @@ static void process_cwd_ensure_absolute(process_t *proc)
   proc->cwd[sizeof(proc->cwd) - 1] = '\0';
 }
 
-int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
+/*
+ * Linux mount(2): mount(source, target, fstype, flags, data).
+ * Remount: flags & MS_REMOUNT — source/fstype/data ignored (man7 mount.2).
+ * Legacy IR0 recovery still accepts mount("remount", path, "ro"|"rw", 0, NULL).
+ */
+int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
+		  unsigned long flags, const void *data)
 {
   char mountpoint_resolved[256];
   char dev_copy[256];
@@ -61,26 +70,35 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
   int dev_is_pseudo = 0;
   int rc;
 
+  (void)data;
+
   if (!current_process)
     return -ESRCH;
 
-  if (!dev || !mountpoint)
+  if (!mountpoint)
     return -EFAULT;
 
-  /* Validate arguments are in userspace (for USER_MODE processes) */
-  if (validate_userspace_string(dev, 256) != 0)
-    return -EFAULT;
   if (validate_userspace_string(mountpoint, 256) != 0)
-    return -EFAULT;
-  if (fstype && validate_userspace_string(fstype, 32) != 0)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(mountpoint, mountpoint_resolved,
                              sizeof(mountpoint_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
   mount_path = mountpoint_resolved;
+
+  /* Linux remount via flags (BusyBox umount -r, mount -o remount,ro). */
+  if (flags & IR0_MS_REMOUNT)
+    return vfs_remount(mount_path, flags);
+
+  if (!dev)
+    return -EFAULT;
+
+  if (validate_userspace_string(dev, 256) != 0)
+    return -EFAULT;
+  if (fstype && validate_userspace_string(fstype, 32) != 0)
+    return -EFAULT;
 
   if (copy_from_user_cstring(dev_copy, sizeof(dev_copy), dev) != 0)
     return -EFAULT;
@@ -96,35 +114,45 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     mount_fstype = CONFIG_ROOT_FILESYSTEM;
   }
 
-  /* tmpfs accepts pseudo device strings for Unix-like parity (e.g. none). */
+  /* tmpfs / 9p accept pseudo device strings (none, mount_tag, …). */
   if (strcmp(mount_fstype, "tmpfs") == 0 &&
       (strcmp(dev_copy, "none") == 0 || strcmp(dev_copy, "tmpfs") == 0))
   {
     dev_is_pseudo = 1;
     dev_path = dev_copy;
   }
+  else if (strcmp(mount_fstype, "9p") == 0 &&
+           dev_copy[0] != '\0' && strchr(dev_copy, '/') == NULL)
+  {
+    /* QEMU virtio-9p mount_tag (e.g. ir0share, dennis). */
+    dev_is_pseudo = 1;
+    dev_path = dev_copy;
+  }
   else
   {
     rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, dev_copy, dev_resolved,
-                              sizeof(dev_resolved), current_process->cwd);
+                              sizeof(dev_resolved), current_process->cwd, current_process->root);
     if (rc != 0)
       return rc;
     dev_path = dev_resolved;
   }
 
-  /* Remount convention for the 3-arg IR0 mount ABI (recovery RO/RW). */
+  /* Legacy string remount for IR0 recovery helpers. */
   if (strcmp(dev_copy, "remount") == 0)
   {
-    unsigned long flags = IR0_MS_REMOUNT;
+    unsigned long rflags = IR0_MS_REMOUNT;
 
     if (strcmp(mount_fstype, "ro") == 0 ||
         strcmp(mount_fstype, "remount,ro") == 0)
-      flags |= IR0_MS_RDONLY;
+      rflags |= IR0_MS_RDONLY;
     else if (strcmp(mount_fstype, "rw") != 0 &&
              strcmp(mount_fstype, "remount,rw") != 0)
       return -EINVAL;
-    return vfs_remount(mount_path, flags);
+    return vfs_remount(mount_path, rflags);
   }
+
+  if (flags & IR0_MS_UNSUPPORTED)
+    return -EINVAL;
 
   /* Validate device path unless pseudo device was allowed. */
   if (!dev_is_pseudo && (dev_path[0] != '/' || strlen(dev_path) >= 256))
@@ -165,7 +193,14 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype)
     return rc;
   }
 
-  return rc;
+  if (flags & IR0_MS_RDONLY)
+  {
+    rc = vfs_remount(mount_path, IR0_MS_REMOUNT | IR0_MS_RDONLY);
+    if (rc < 0)
+      return rc;
+  }
+
+  return 0;
 }
 
 int64_t sys_umount(const char *target, int flags)
@@ -185,7 +220,7 @@ int64_t sys_umount(const char *target, int flags)
     return -EINVAL;
 
   rc = ir0_resolve_user_path(target, target_resolved, sizeof(target_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -225,7 +260,7 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
+                            current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -237,25 +272,19 @@ int64_t sys_chmod(const char *path, mode_t mode)
   if (!current_process || !path)
     return -EFAULT;
 
-  /* Validate path is in userspace (for USER_MODE processes) */
+  /* Resolve relative paths against cwd; absolute under chroot. */
+  char resolved[256];
+  const char *path_to_use = path;
+  int rc;
+
   if (validate_userspace_string(path, 256) != 0)
     return -EFAULT;
 
-  /* Resolve relative paths against cwd */
-  char resolved[256];
-  const char *path_to_use = path;
-  if (!is_absolute_path(path))
-  {
-    if (join_paths(current_process->cwd, path, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else
-  {
-    if (normalize_path(path, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
+  path_to_use = resolved;
 
   stat_t st;
   int sret = vfs_stat(path_to_use, &st);
@@ -270,31 +299,23 @@ int64_t sys_chmod(const char *path, mode_t mode)
 
 int64_t sys_chown(const char *path, uid_t owner, gid_t group)
 {
+  char resolved[256];
+  int rc;
+
   if (!current_process || !path)
     return -EFAULT;
   if (validate_userspace_string(path, 256) != 0)
     return -EFAULT;
 
-  /* Resolve relative paths against cwd */
-  char resolved[256];
-  const char *path_to_use = path;
-  if (!is_absolute_path(path))
-  {
-    if (join_paths(current_process->cwd, path, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else
-  {
-    if (normalize_path(path, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
 
   if (current_process->euid != ROOT_UID)
     return -EPERM;
 
-  return vfs_chown(path_to_use, owner, group);
+  return vfs_chown(resolved, owner, group);
 }
 
 int64_t sys_link(const char *oldpath, const char *newpath)
@@ -312,12 +333,12 @@ int64_t sys_link(const char *oldpath, const char *newpath)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
   rc = ir0_resolve_user_path(newpath, new_resolved, sizeof(new_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -346,12 +367,12 @@ int64_t sys_rename(const char *oldpath, const char *newpath)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
   rc = ir0_resolve_user_path(newpath, new_resolved, sizeof(new_resolved),
-                             current_process->cwd);
+                             current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -369,6 +390,9 @@ int64_t sys_rename(const char *oldpath, const char *newpath)
  */
 int64_t sys_uname(struct utsname *buf)
 {
+  char version[64];
+  char nodename[64];
+
   if (!current_process || !buf)
     return -EFAULT;
 
@@ -376,11 +400,13 @@ int64_t sys_uname(struct utsname *buf)
     return -EFAULT;
 
   memset(buf, 0, sizeof(struct utsname));
-  /* Product identity: IR0 unix <release> <machine> IR0/Unix */
+  ir0_utsname_fill_version(version, sizeof(version));
+  ir0_utsname_fill_nodename(nodename, sizeof(nodename));
+  /* sysname nodename release version machine — version/nodename from live state. */
   strncpy(buf->sysname, "IR0", _UTSNAME_LENGTH - 1);
-  strncpy(buf->nodename, "unix", _UTSNAME_LENGTH - 1);
+  strncpy(buf->nodename, nodename, _UTSNAME_LENGTH - 1);
   strncpy(buf->release, IR0_VERSION_STRING, _UTSNAME_LENGTH - 1);
-  strncpy(buf->version, "IR0/Unix", _UTSNAME_LENGTH - 1);
+  strncpy(buf->version, version, _UTSNAME_LENGTH - 1);
   strncpy(buf->machine, get_arch_uname_machine(), _UTSNAME_LENGTH - 1);
   return 0;
 }
@@ -394,7 +420,8 @@ int64_t sys_uname(struct utsname *buf)
  */
 int64_t sys_access(const char *pathname, int mode)
 {
-  int64_t rc;
+  char resolved[256];
+  int rc;
 
   if (!current_process || !pathname)
     return -EFAULT;
@@ -402,23 +429,14 @@ int64_t sys_access(const char *pathname, int mode)
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  char resolved[256];
-  const char *path_to_use = pathname;
-  if (!is_absolute_path(pathname))
-  {
-    if (join_paths(current_process->cwd, pathname, resolved, sizeof(resolved)) != 0)
-      return -ENAMETOOLONG;
-    path_to_use = resolved;
-  }
-  else if (normalize_path(pathname, resolved, sizeof(resolved)) == 0)
-  {
-    path_to_use = resolved;
-  }
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
 
-  rc = ir0_access_path_routed(path_to_use, mode,
-                              (uid_t)current_process->euid,
-                              (gid_t)current_process->egid);
-  return rc;
+  return ir0_access_path_routed(resolved, mode,
+                                (uid_t)current_process->euid,
+                                (gid_t)current_process->egid);
 }
 
 int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
@@ -470,7 +488,7 @@ int64_t sys_rmdir(const char *pathname)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
+                            current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -491,6 +509,10 @@ int64_t ir0_chdir_resolved(const char *pathname)
   if (len == 0 || len >= 256)
     return -EINVAL;
 
+  /*
+   * pathname is a kernel/host path (already chroot-mapped by sys_chdir,
+   * or an open directory path from fchdir).
+   */
   if (is_absolute_path(pathname))
   {
     if (normalize_path(pathname, new_path, sizeof(new_path)) != 0)
@@ -524,18 +546,26 @@ int64_t ir0_chdir_resolved(const char *pathname)
 
 int64_t sys_chdir(const char *pathname)
 {
+  char resolved[256];
+  int rc;
+
   if (!current_process || !pathname)
     return -EFAULT;
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  return ir0_chdir_resolved(pathname);
+  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
+
+  return ir0_chdir_resolved(resolved);
 }
 
 int64_t sys_getcwd(char *buf, size_t size)
 {
+  char visible[256];
   size_t len;
 
   if (!current_process || !buf || size == 0)
@@ -545,15 +575,59 @@ int64_t sys_getcwd(char *buf, size_t size)
     return -EFAULT;
 
   process_cwd_ensure_absolute(current_process);
+  if (current_process->root[0] != '/')
+  {
+    strncpy(current_process->root, "/", sizeof(current_process->root) - 1);
+    current_process->root[sizeof(current_process->root) - 1] = '\0';
+  }
 
-  len = strlen(current_process->cwd);
+  if (ir0_path_getcwd_visible(current_process->root, current_process->cwd,
+                              visible, sizeof(visible)) != 0)
+    return -ENAMETOOLONG;
+
+  len = strlen(visible);
   if (len >= size)
     return -ERANGE;
 
-  if (copy_to_user(buf, current_process->cwd, len + 1) != 0)
+  if (copy_to_user(buf, visible, len + 1) != 0)
     return -EFAULT;
 
   return (int64_t)len;
+}
+
+int64_t sys_chroot(const char *path)
+{
+  char resolved[256];
+  stat_t st;
+  int rc;
+  int64_t ret;
+
+  if (!current_process || !path)
+    return -EFAULT;
+
+  if (!ir0_cred_is_root())
+    return -EPERM;
+
+  if (validate_userspace_string(path, 256) != 0)
+    return -EFAULT;
+
+  rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
+                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
+
+  ret = ir0_stat_path_routed(resolved, &st);
+  if (ret < 0)
+    return ret;
+  if (!S_ISDIR(st.st_mode))
+    return -ENOTDIR;
+
+  /*
+   * Linux: does not change cwd. Absolute paths after this use the new root.
+   */
+  strncpy(current_process->root, resolved, sizeof(current_process->root) - 1);
+  current_process->root[sizeof(current_process->root) - 1] = '\0';
+  return 0;
 }
 
 int64_t sys_utimensat(int dirfd, const char *pathname,
@@ -592,7 +666,7 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
       return -EFAULT;
 
     rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                              current_process->cwd);
+                              current_process->cwd, current_process->root);
     if (rc != 0)
       return rc;
   }
@@ -621,7 +695,7 @@ int64_t sys_unlink(const char *pathname)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
+                            current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -645,7 +719,7 @@ int64_t sys_truncate(const char *pathname, off_t length)
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd);
+                            current_process->cwd, current_process->root);
   if (rc != 0)
     return rc;
 
@@ -695,4 +769,58 @@ int64_t sys_ftruncate(int fd, off_t length)
     return -EINVAL;
 
   return vfs_truncate(path, (size_t)length);
+}
+
+int64_t sys_statfs(const char *pathname, void *buf)
+{
+	char resolved[256];
+	struct ir0_statfs kst;
+	int64_t rc;
+
+	if (!current_process || !pathname || !buf)
+		return -EFAULT;
+	if (validate_userspace_buffer(buf, sizeof(kst)) != 0)
+		return -EFAULT;
+
+	rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
+				   current_process->cwd, current_process->root);
+	if (rc != 0)
+		return rc;
+
+	rc = vfs_statfs(resolved, &kst);
+	if (rc != 0)
+		return rc;
+	if (copy_to_user(buf, &kst, sizeof(kst)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+int64_t sys_fstatfs(int fd, void *buf)
+{
+	fd_entry_t *fd_table;
+	struct ir0_statfs kst;
+	const char *path;
+	int rc;
+
+	if (!current_process || !buf)
+		return -EFAULT;
+	if (validate_userspace_buffer(buf, sizeof(kst)) != 0)
+		return -EFAULT;
+	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+		return -EBADF;
+
+	fd_table = get_process_fd_table();
+	if (!fd_table || !fd_table[fd].in_use)
+		return -EBADF;
+
+	path = fd_table[fd].path;
+	if (!path || path[0] != '/')
+		return -EBADF;
+
+	rc = vfs_statfs(path, &kst);
+	if (rc != 0)
+		return rc;
+	if (copy_to_user(buf, &kst, sizeof(kst)) != 0)
+		return -EFAULT;
+	return 0;
 }
