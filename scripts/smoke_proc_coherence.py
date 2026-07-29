@@ -101,6 +101,7 @@ def main() -> int:
             "date",
             "cat /proc/uptime",
             "cat /proc/loadavg",
+            "cat /proc/stat",
             "cat /proc/meminfo",
             "cat /proc/iomem",
             "echo PROC_COH_DONE",
@@ -120,6 +121,13 @@ def main() -> int:
             ok = False
         if not re.search(r"\d+\.\d{2}\s+\d+\.\d{2}\s+\d+\.\d{2}\s+\d+/\d+\s+\d+", text):
             print("✗ /proc/loadavg format missing", file=sys.stderr)
+            ok = False
+        # BusyBox top needs "cpu" + ≥4 jiffy fields (user nice system idle …)
+        if not re.search(r"(?m)^cpu\s+\d+\s+\d+\s+\d+\s+\d+", text):
+            print("✗ /proc/stat cpu line missing", file=sys.stderr)
+            ok = False
+        if not re.search(r"(?m)^cpu0\s+\d+\s+\d+\s+\d+\s+\d+", text):
+            print("✗ /proc/stat cpu0 line missing", file=sys.stderr)
             ok = False
         if "MemTotal:" not in text or "kB" not in text:
             print("✗ /proc/meminfo labels missing", file=sys.stderr)
@@ -144,11 +152,17 @@ def main() -> int:
                         "202",
                         "System RAM",
                         "PROC_COH",
+                        "cpu ",
+                        "cpu0",
                         ".",
                     )
                 ):
-                    if "Mem" in line or "RAM" in line or "PROC" in line or re.search(
-                        r"\d+\.\d{2}", line
+                    if (
+                        "Mem" in line
+                        or "RAM" in line
+                        or "PROC" in line
+                        or line.startswith("cpu")
+                        or re.search(r"\d+\.\d{2}", line)
                     ):
                         print(line)
             return 0

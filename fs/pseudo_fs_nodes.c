@@ -531,6 +531,8 @@ void pseudo_fs_nodes_register_all(void)
                        (void *)(uintptr_t)proc_boot_cmdline_read);
     pseudo_fs_register("/proc", "uptime", &proc_static_read_ops,
                        (void *)(uintptr_t)proc_uptime_read);
+    pseudo_fs_register("/proc", "stat", &proc_static_read_ops,
+                       (void *)(uintptr_t)proc_stat_read);
     pseudo_fs_register("/proc", "meminfo", &proc_static_read_ops,
                        (void *)(uintptr_t)proc_meminfo_read);
     pseudo_fs_register("/proc", "ps", &proc_static_read_ops,
