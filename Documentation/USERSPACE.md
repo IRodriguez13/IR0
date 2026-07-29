@@ -1,6 +1,6 @@
 # Coupling IR0 (kernel) ↔ ISD
 
-> **Last verified:** 2026-07-28  
+> **Last verified:** 2026-07-29  
 > **Source of truth:** this file, `scripts/make/isd.mk`, `scripts/bootstrap-isd.sh`, sibling [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../SETUP.md).  
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
 
@@ -23,12 +23,21 @@ canonical product path. Legacy `load-userspace-runit` remains for smokes
 
 ## Fastest path (first time)
 
+Happy path on an **x86_64 Linux** host (Debian/Ubuntu/Arch/Fedora/openSUSE or
+WSL2). Target: clone → two commands → QEMU with ash.
+
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
 make first-boot PROFILE=minimal
 make run PROFILE=minimal
 ```
+
+| PROFILE | Expectation in guest |
+|---------|----------------------|
+| `minimal` | Interactive firstboot (create user) then login |
+| `development` | Lab autologin root (empty password allowed) |
+| `desktop` | Like minimal + fuller BusyBox/applets (heavier pack) |
 
 `first-boot` will:
 
@@ -37,8 +46,11 @@ make run PROFILE=minimal
 3. Clone `../ISD` if missing
 4. Write `.isdconfig` only if absent
 5. Fetch sources, export UAPI, build packages (stamp-incremental)
-6. Stage rootfs + pack `disk.img` under ISD
+6. Stage rootfs + pack `disk.img` under ISD (`format-large` wipes MINIX inodes)
 7. Build `kernel-x64-userspace.iso`
+
+`make run` rebuilds the ISO if needed, then `ensure-isd-disk` (stamp-incremental
+pack; first pack ~1–3 min — progress is printed). Then QEMU GTK.
 
 Layout:
 
@@ -73,7 +85,8 @@ parent/
 | `make first-boot PROFILE=…` | Full product bootstrap |
 | `make isdconfig PROFILE=…` | Interactive extras (TTY: packages + applets e.g. top) |
 | `make isd` / `isd-rootfs` / `isd-image` | Delegate to ISD |
-| `make run PROFILE=…` | Boot ISD disk (no rebuild if up to date) |
+| `make run PROFILE=…` | Boot ISD disk (stamp-incremental pack) |
+| `make run-console PROFILE=…` | Same without GTK |
 | `make bootstrap-userspace` | **Deprecated** → `first-boot` |
 | `IR0_LEGACY_USERSPACE=1 make run` | Old inject path (smokes) |
 
