@@ -16,6 +16,9 @@ For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** 
   so `GETDENTS_BATCH_MAX` (24) does not hide all processes from `top`/`ps`.
 - ATA/MINIX: bounce path for odd userspace buffers; gate MINIX fast-path when
   dst/src is odd (stops `ATA_BUFFER_ALIGNMENT_SUSPECT` storms).
+- MINIX `--format-large`: wipe inode table + rebuild imap (stale inodes from a
+  prior pack broke `/etc` inject → `ROOTFS_VERIFY_FAIL … missing component 'etc'`);
+  large images use 2048 inodes.
 - Smokes: `scripts/smoke_proc_stat_top.py`; `smoke_proc_coherence.py` checks
   `/proc/stat`. Docs: [`VIRTUAL_FILESYSTEMS.md`](VIRTUAL_FILESYSTEMS.md),
   [`PROCESSES.md`](PROCESSES.md) (reparent-to-init note).
