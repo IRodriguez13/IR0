@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Push-mirror GitHub → GitLab. Missing secrets skip the job (green).
+#
+# GitHub Settings → Secrets and variables → Actions:
+#   GITLAB_MIRROR_URL    https://gitlab.example/group/IR0.git
+#   GITLAB_MIRROR_TOKEN  PAT with write_repository
+#
+# Optional GitLab-side pull mirror (no GitHub secrets):
+#   GitLab project → Settings → Repository → Mirroring repositories
+#   URL: https://github.com/IRodriguez13/IR0.git  Direction: Pull
+name: GitLab mirror
+
+on:
+  push:
+    branches: [master, dev, stable]
+    tags: ['*']
+  workflow_dispatch:
+    inputs:
+      full_mirror:
+        description: 'Push every ref (git push --mirror)'
+        type: boolean
+        default: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require GitLab secrets
+        id: cfg
+        env:
+          GITLAB_MIRROR_URL: ${{ secrets.GITLAB_MIRROR_URL }}
+          GITLAB_MIRROR_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}
+        run: |
+          if [ -z "${GITLAB_MIRROR_URL}" ] || [ -z "${GITLAB_MIRROR_TOKEN}" ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            echo "GITLAB_MIRROR_URL / GITLAB_MIRROR_TOKEN unset — skip"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.skip != '1'
+        with:
+          fetch-depth: 0
+
+      - name: Fetch product branches
+        if: steps.cfg.outputs.skip != '1'
+        run: |
+          git fetch --no-tags origin master dev stable || true
+          git fetch --tags origin || true
+
+      - name: Push to GitLab
+        if: steps.cfg.outputs.skip != '1'
+        env:
+          GITLAB_MIRROR_URL: ${{ secrets.GITLAB_MIRROR_URL }}
+          GITLAB_MIRROR_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}
+          GITLAB_MIRROR_ALL: ${{ github.event.inputs.full_mirror == 'true' && '1' || '' }}
+        run: |
+          chmod +x scripts/mirror_to_gitlab.sh
+          scripts/mirror_to_gitlab.sh

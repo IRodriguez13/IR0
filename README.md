@@ -12,6 +12,9 @@
   IR0 is a operating-system kernel (GPL-3.0). Primary bring-up target is
   **x86-64** under QEMU (Multiboot, GRUB, VFS/MINIX, ELF userspace). Version
   string: **`0.0.1-rc4`** (last pre-release before `v0.0.1` final).
+  **GitHub** [`IRodriguez13/IR0`](https://github.com/IRodriguez13/IR0) is the
+  upstream; GitLab is a push-mirror of `master` / `dev` / `stable` and tags
+  (`scripts/mirror_to_gitlab.sh`).
 
 
 ## ISD — IR0 Software Distribution
