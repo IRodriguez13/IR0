@@ -1538,6 +1538,7 @@ load-init:
 
 # QA / smoke / KTM / test targets (see scripts/make/testing.mk)
 -include scripts/make/testing.mk
+-include scripts/make/gitlab-mirror.mk
 
 # Host↔guest clipboard via 9p dennis (.ir0/clipboard → guest ir0-paste)
 .PHONY: clip-send clip-pull clip-status
@@ -1633,6 +1634,8 @@ help:
 	@echo "  make sync-mandocs && make man TOPIC=onboarding"
 	@echo "  make help-profiles         # kernel board profiles (desktop | hub | watch)"
 	@echo "  make pre-submit            # local contributor gate (no push)"
+	@echo "  make gitlab-remote         # git remote 'mirror' → GitLab IR0 (+ ISD)"
+	@echo "  make push-mirror           # git push master/dev/stable+tags to GitLab"
 	@echo ""
 	@echo "ISD distribution (sibling ../ISD — scripts/make/isd.mk):"
 	@echo "  make first-boot PROFILE=minimal|development"

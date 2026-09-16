@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Push-mirror GitHub → GitLab. Missing secrets skip the job (green).
+# Push-mirror GitHub → GitLab (https://gitlab.com/IvanR013/IR0.git).
+# GitHub stays upstream. Missing token skips the job (green).
 #
 # GitHub Settings → Secrets and variables → Actions:
-#   GITLAB_MIRROR_URL    https://gitlab.example/group/IR0.git
 #   GITLAB_MIRROR_TOKEN  PAT with write_repository
 #
-# Optional GitLab-side pull mirror (no GitHub secrets):
-#   GitLab project → Settings → Repository → Mirroring repositories
-#   URL: https://github.com/IRodriguez13/IR0.git  Direction: Pull
+# Optional: GITLAB_MIRROR_URL overrides the default IvanR013/IR0 URL.
+#
+# Local:  git remote add mirror https://gitlab.com/IvanR013/IR0.git
+#         git push mirror
 name: GitLab mirror
 
 on:
@@ -25,15 +26,14 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
-      - name: Require GitLab secrets
+      - name: Require GitLab token
         id: cfg
         env:
-          GITLAB_MIRROR_URL: ${{ secrets.GITLAB_MIRROR_URL }}
           GITLAB_MIRROR_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}
         run: |
-          if [ -z "${GITLAB_MIRROR_URL}" ] || [ -z "${GITLAB_MIRROR_TOKEN}" ]; then
+          if [ -z "${GITLAB_MIRROR_TOKEN}" ]; then
             echo "skip=1" >> "$GITHUB_OUTPUT"
-            echo "GITLAB_MIRROR_URL / GITLAB_MIRROR_TOKEN unset — skip"
+            echo "GITLAB_MIRROR_TOKEN unset — skip"
           fi
 
       - uses: actions/checkout@v4

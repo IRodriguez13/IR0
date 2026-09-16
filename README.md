@@ -12,9 +12,18 @@
   IR0 is a operating-system kernel (GPL-3.0). Primary bring-up target is
   **x86-64** under QEMU (Multiboot, GRUB, VFS/MINIX, ELF userspace). Version
   string: **`0.0.1-rc4`** (last pre-release before `v0.0.1` final).
-  **GitHub** [`IRodriguez13/IR0`](https://github.com/IRodriguez13/IR0) is the
-  upstream; GitLab is a push-mirror of `master` / `dev` / `stable` and tags
-  (`scripts/mirror_to_gitlab.sh`).
+  **GitHub** is the upstream
+  ([IR0](https://github.com/IRodriguez13/IR0),
+  [ISD](https://github.com/IRodriguez13/ISD)).
+  GitLab is a read-replica
+  ([IR0](https://gitlab.com/IvanR013/IR0),
+  [ISD](https://gitlab.com/IvanR013/ISD)):
+
+```bash
+make gitlab-remote          # git remote add mirror …
+git push mirror             # current branch → GitLab
+make push-mirror            # master / dev / stable + tags
+```
 
 
 ## ISD — IR0 Software Distribution
