@@ -23,6 +23,8 @@ iso_test/
 .config
 .build_number
 .build_number_inc
+.kernel_build_number
+.kernel_userspace_build_number
 .example_drivers_enabled
 AGENTS.md
 /.cursor
