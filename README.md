@@ -11,7 +11,7 @@
 
   IR0 is a operating-system kernel (GPL-3.0). Primary bring-up target is
   **x86-64** under QEMU (Multiboot, GRUB, VFS/MINIX, ELF userspace). Version
-  string: **`0.0.1-rc4`** (last pre-release before `v0.0.1` final).
+  string: **`0.0.1-rc5`** (last pre-release before `v0.0.1` final).
 
 
 ## ISD — IR0 Software Distribution
@@ -61,6 +61,12 @@ ISD builds a finished image; IR0 boots it.
 </p>
 
 <p align="center"><em>Doom on IR0/Unix (<code>PROFILE=desktop</code>): framebuffer + input path.</em></p>
+
+<p align="center">
+  <img src="scripts/kconfig/assets/isd-x11-desktop.png" alt="IR0 running an upstream X11 desktop with uname output" width="960" />
+</p>
+
+<p align="center"><em>Experimental upstream X11 session on IR0: TinyX/Xfbdev, twm, xterm, Xaw clients, mouse and keyboard. The terminal identifies the tested kernel with <code>uname -a</code>.</em></p>
 
 <p align="center">
   <img src="./scripts/kconfig/assets/isd-panic-gtk.png" alt="IR0 kernel panic on GTK framebuffer — uptime, fault site, safe shutdown" width="720" />
