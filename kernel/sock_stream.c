@@ -29,7 +29,6 @@
  * blocking writev must complete before the reader is scheduled. */
 #define SS_CHUNK_SIZE 4096U
 #define SS_QUEUE_MAX  (1024U * 1024U)
-#define SS_MAX 16
 #define SS_PATH 108
 
 struct ss_chunk {
@@ -87,7 +86,7 @@ struct sock_stream
 
 #define SS_MAGIC 0xA5
 
-static struct sock_stream g_socks[SS_MAX];
+static struct sock_stream g_socks[CONFIG_STREAM_SOCKET_CAPACITY];
 static void (*g_rights_dtor)(void *entry, size_t sz);
 
 extern void poll_wake_check(void);
@@ -371,7 +370,7 @@ int sock_stream_is(const void *ptr)
 {
 	const struct sock_stream *s = ptr;
 	uintptr_t base = (uintptr_t)&g_socks[0];
-	uintptr_t end = (uintptr_t)&g_socks[SS_MAX];
+	uintptr_t end = (uintptr_t)&g_socks[CONFIG_STREAM_SOCKET_CAPACITY];
 	uintptr_t p = (uintptr_t)ptr;
 
 	if (p < base || p >= end)
@@ -384,7 +383,7 @@ int sock_stream_is(const void *ptr)
 int sock_stream_is_slot(const void *ptr)
 {
 	uintptr_t base = (uintptr_t)&g_socks[0];
-	uintptr_t end = (uintptr_t)&g_socks[SS_MAX];
+	uintptr_t end = (uintptr_t)&g_socks[CONFIG_STREAM_SOCKET_CAPACITY];
 	uintptr_t p = (uintptr_t)ptr;
 
 	if (p < base || p >= end)
@@ -413,7 +412,7 @@ struct sock_stream *sock_stream_create(int family)
 	if (KTM_FAULT_HIT("sock.create"))
 		return NULL;
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (!g_socks[i].in_use)
 		{
@@ -510,7 +509,7 @@ int sock_stream_bind_unix_n(struct sock_stream *s, const char *path, size_t path
 		return -EINVAL;
 	if (!is_abstract && path[0] == '\0')
 		return -EINVAL;
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_UNIX &&
 		    g_socks[i].state != SS_IDLE &&
@@ -588,8 +587,8 @@ int sock_stream_listen(struct sock_stream *s, int backlog)
 		return -EINVAL;
 	if (backlog < 1)
 		backlog = 1;
-	if (backlog > SS_MAX)
-		backlog = SS_MAX;
+	if (backlog > CONFIG_STREAM_SOCKET_CAPACITY)
+		backlog = CONFIG_STREAM_SOCKET_CAPACITY;
 	s->accept_backlog = (unsigned)backlog;
 	s->state = SS_LISTEN;
 #if CONFIG_ENABLE_NETWORKING
@@ -673,7 +672,7 @@ int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t p
 	if (s->state != SS_IDLE && s->state != SS_BOUND)
 		return -EINVAL;
 	old_state = s->state;
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].state == SS_LISTEN &&
 		    unix_name_equal(&g_socks[i], path, path_len, is_abstract))
@@ -782,7 +781,7 @@ int sock_stream_bind_inet(struct sock_stream *s, uint16_t port)
 
 	if (!s)
 		return -EINVAL;
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_INET &&
 		    g_socks[i].state != SS_IDLE && g_socks[i].port == port)
@@ -821,7 +820,7 @@ static int sock_stream_is_local_listener(uint16_t port)
 {
 	int i;
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_INET &&
 		    g_socks[i].state == SS_LISTEN && g_socks[i].port == port)
@@ -909,7 +908,7 @@ int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr,
 #endif
 	}
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_INET &&
 		    g_socks[i].state == SS_LISTEN && g_socks[i].port == port)
@@ -1113,7 +1112,7 @@ int sock_stream_inet_walk(int (*cb)(const struct sock_stream_inet_snap *s,
 	if (!cb)
 		return -EINVAL;
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		struct sock_stream *s = &g_socks[i];
 
@@ -1158,7 +1157,7 @@ int sock_stream_unix_walk(int (*cb)(const struct sock_stream_unix_snap *s,
 	if (!cb)
 		return -EINVAL;
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		struct sock_stream *s = &g_socks[i];
 
