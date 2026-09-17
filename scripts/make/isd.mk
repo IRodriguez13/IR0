@@ -73,6 +73,8 @@ IR0_ISD_MAKE = $(MAKE) -C "$(IR0_ISD_ROOT)" \
 
 # Disk owned by ISD (not copied into IR0/ by default)
 IR0_ISD_DISK = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/images/$(ISD_PROFILE)/disk.img
+IR0_ISD_HOME_DISK = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/images/$(ISD_PROFILE)/home.ext2.img
+IR0_ISD_ROOTFS = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/rootfs/$(ISD_PROFILE)
 
 # Mutable guest state lives outside ISD out/. Rebuilding a package or rootfs may
 # recreate IR0_ISD_DISK, but must never overwrite an installed machine.
@@ -80,15 +82,34 @@ IR0_MACHINE ?= default
 IR0_MACHINE_ROOT ?= $(abspath $(IR0_ISD_ROOT)/../IR0-machines)
 IR0_MACHINE_DIR = $(IR0_MACHINE_ROOT)/$(ISD_ARCH)/$(ISD_PROFILE)/$(IR0_MACHINE)
 IR0_MACHINE_DISK = $(IR0_MACHINE_DIR)/disk.img
+IR0_MACHINE_HOME_DISK = $(IR0_MACHINE_DIR)/home.ext2.img
 IR0_MACHINE_VMDK = $(IR0_MACHINE_DIR)/ir0-$(ISD_PROFILE).vmdk
+IR0_MACHINE_KERNEL_LINK = $(IR0_MACHINE_DIR)/kernel-current.iso
+IR0_KERNEL_BUILD_ID = $(IR0_VERSION_STRING)-build$(IR0_BUILD_NUMBER)
+
+# Canonical kernel-manager context. `make kmang` always opens the same store;
+# product build PROFILE variables cannot silently redirect its history.
+KMANG_ARCH ?= x86_64
+KMANG_PROFILE ?= desktop
+KMANG_MACHINE ?= default
+KMANG_MACHINE_DIR = $(IR0_MACHINE_ROOT)/$(KMANG_ARCH)/$(KMANG_PROFILE)/$(KMANG_MACHINE)
+
+# Keep comma-bearing QEMU arguments out of $(if ...): make treats their commas
+# as function separators even when the text is shell-quoted.
+ifeq ($(ISD_PROFILE),desktop)
+IR0_MACHINE_HOME_QEMU_DRIVE = -drive "file=$(IR0_MACHINE_HOME_DISK),format=raw,if=ide,index=1"
+IR0_ISD_HOME_QEMU_DRIVE = -drive "file=$(IR0_ISD_HOME_DISK),format=raw,if=ide,index=1"
+endif
 
 IR0_USERSPACE_OUT = $(IR0_ISD_ROOT)/out
 IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=$(ISD_ARCH)
 
 .PHONY: check-isd clone-isd isd-defconfig isdconfig isd isd-rootfs isd-image \
 	isd-clean first-boot bootstrap-userspace check-userspace \
-	warn-userspace-deprecated ensure-isd-disk run-isd machine-create \
-	machine-reset machine-info machine-update-kernel image-vmware poweron
+	warn-userspace-deprecated ensure-isd-disk ensure-isd-home run-isd machine-create \
+	machine-reset machine-info machine-update-kernel image-vmware poweron kmang kmang-cli \
+	kernel-manager-install kernel-manager-list machine-update-userspace \
+	machine-migrate-home
 
 warn-userspace-deprecated:
 	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
@@ -159,6 +180,12 @@ ensure-isd-disk: check-isd
 	}
 	@echo "  DISK     $(IR0_ISD_DISK)"
 
+ensure-isd-home: check-isd
+	+@if [ "$(ISD_PROFILE)" = desktop ]; then \
+		$(IR0_ISD_MAKE) image-ext2-home; \
+		test -f "$(IR0_ISD_HOME_DISK)"; \
+	fi
+
 # Deprecated alias → new bootstrap
 bootstrap-userspace:
 	@echo "note: bootstrap-userspace is deprecated; use make first-boot PROFILE=$(ISD_PROFILE)"
@@ -178,11 +205,16 @@ first-boot:
 	+@$(MAKE) -s machine-create PROFILE=$(ISD_PROFILE) IR0_MACHINE=$(IR0_MACHINE)
 	@echo "  POWERON  make poweron PROFILE=$(ISD_PROFILE) IR0_MACHINE=$(IR0_MACHINE)"
 
-machine-create: ensure-isd-disk
+machine-create: ensure-isd-disk ensure-isd-home
 	@chmod +x "$(KERNEL_ROOT)/scripts/isd_machine_disk.sh"
 	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create
+	@if [ "$(ISD_PROFILE)" = desktop ]; then \
+		IR0_MACHINE_BASE_DISK="$(IR0_ISD_HOME_DISK)" \
+		IR0_MACHINE_DISK="$(IR0_MACHINE_HOME_DISK)" \
+		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create; \
+	fi
 
 machine-reset: ensure-isd-disk
 	@chmod +x "$(KERNEL_ROOT)/scripts/isd_machine_disk.sh"
@@ -196,7 +228,54 @@ machine-info:
 	@echo "MACHINE       $(IR0_MACHINE)"
 	@echo "BASE DISK     $(IR0_ISD_DISK)"
 	@echo "MACHINE DISK  $(IR0_MACHINE_DISK)"
+	@echo "HOME DISK     $(IR0_MACHINE_HOME_DISK)"
+	@echo "KERNEL        $$(python3 scripts/kernel_manager.py --machine-dir \
+		"$(IR0_MACHINE_DIR)" --arch "$(ISD_ARCH)" \
+		--profile "$(ISD_PROFILE)" --machine "$(IR0_MACHINE)" \
+		resolve 2>/dev/null || echo "$(KERNEL_ROOT)/kernel-x64-userspace.iso")"
 	@echo "VMWARE DISK   $(IR0_MACHINE_VMDK)"
+
+kernel-manager-install: check-isd
+	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
+		echo "✗ machine $(IR0_MACHINE) is running; power it off cleanly first"; \
+		exit 2; \
+	fi
+	+@$(MAKE) -s kernel-x64-userspace.iso PROFILE=$(ISD_PROFILE)
+	@python3 scripts/kernel_manager.py --machine-dir "$(IR0_MACHINE_DIR)" \
+		--arch "$(ISD_ARCH)" --profile "$(ISD_PROFILE)" \
+		--machine "$(IR0_MACHINE)" \
+		--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
+		--version "$(IR0_VERSION_STRING)" install-workspace
+
+kernel-manager-list:
+	@python3 scripts/kernel_manager.py --machine-dir "$(KMANG_MACHINE_DIR)" \
+		--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
+		--machine "$(KMANG_MACHINE)" list
+	@python3 scripts/kernel_manager.py --machine-dir "$(KMANG_MACHINE_DIR)" \
+		--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
+		--machine "$(KMANG_MACHINE)" \
+		--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
+		--version "$(IR0_VERSION_STRING)" workspace
+
+kmang: check-isd
+	@chmod +x scripts/kernel_manager.py
+	@python3 scripts/kernel_manager.py --machine-dir "$(KMANG_MACHINE_DIR)" \
+		--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
+		--machine "$(KMANG_MACHINE)" \
+		--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
+		--version "$(IR0_VERSION_STRING)" \
+		--make-arg "PROFILE=$(KMANG_PROFILE)" tui; \
+	rc=$$?; \
+	if [ $$rc -eq 10 ]; then \
+		$(MAKE) poweron PROFILE=$(KMANG_PROFILE) IR0_MACHINE=$(KMANG_MACHINE); \
+	elif [ $$rc -ne 0 ]; then \
+		exit $$rc; \
+	fi
+
+kmang-cli:
+	@python3 scripts/kernel_manager.py --machine-dir "$(KMANG_MACHINE_DIR)" \
+		--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
+		--machine "$(KMANG_MACHINE)" list --json
 
 # Refresh only the boot ISO. The mutable machine disk is never a dependency.
 machine-update-kernel: check-isd
@@ -207,6 +286,44 @@ machine-update-kernel: check-isd
 	+@$(MAKE) -s kernel-x64-userspace.iso
 	@echo "✓ machine kernel updated: $(KERNEL_ROOT)/kernel-x64-userspace.iso"
 	@echo "  DISK preserved: $(IR0_MACHINE_DISK)"
+
+machine-update-userspace: check-isd
+	@if [ "$(ISD_PROFILE)" != desktop ]; then \
+		echo "✗ machine-update-userspace currently requires PROFILE=desktop"; exit 2; \
+	fi
+	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
+		echo "✗ machine $(IR0_MACHINE) is running; power it off cleanly first"; \
+		exit 2; \
+	fi
+	+@$(IR0_ISD_MAKE) rootfs-tree
+	@chmod +x scripts/isd_machine_desktop_update.sh
+	@IR0_ISD_ROOTFS="$(IR0_ISD_ROOTFS)" \
+		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
+		IR0_INJECT_TOOL="$(KERNEL_ROOT)/scripts/inject_init_minix.py" \
+		scripts/isd_machine_desktop_update.sh
+
+machine-migrate-home: check-isd
+	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
+		echo "✗ machine $(IR0_MACHINE) is running; power it off cleanly first"; exit 2; \
+	fi
+	@test -f "$(IR0_MACHINE_DISK)" -a -f "$(IR0_MACHINE_HOME_DISK)" || { \
+		echo "✗ machine disks are missing"; exit 2; \
+	}
+	@if debugfs -R 'stat /ivan' "$(IR0_MACHINE_HOME_DISK)" 2>&1 | \
+		grep -q '^Inode:'; then \
+		echo "✗ ext2 /home/ivan already exists; refusing to merge over live data"; exit 2; \
+	fi
+	@cp --reflink=auto "$(IR0_MACHINE_HOME_DISK)" \
+		"$(IR0_MACHINE_HOME_DISK).migration-new"
+	@python3 scripts/migrate_minix_home_to_ext2.py \
+		--minix "$(IR0_MACHINE_DISK)" \
+		--ext2 "$(IR0_MACHINE_HOME_DISK).migration-new" \
+		--kernel-root "$(KERNEL_ROOT)"
+	@e2fsck -fn "$(IR0_MACHINE_HOME_DISK).migration-new"
+	@cp --reflink=auto "$(IR0_MACHINE_HOME_DISK)" \
+		"$(IR0_MACHINE_HOME_DISK).previous"
+	@mv "$(IR0_MACHINE_HOME_DISK).migration-new" "$(IR0_MACHINE_HOME_DISK)"
+	@echo "✓ legacy home migrated; rollback: $(IR0_MACHINE_HOME_DISK).previous"
 
 image-vmware:
 	@chmod +x "$(KERNEL_ROOT)/scripts/isd_machine_disk.sh"
@@ -230,8 +347,21 @@ poweron: check-isd
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create
 	@echo "Running persistent IR0 + ISD machine ($(IR0_MACHINE))"
 	@echo "  DISK     $(IR0_MACHINE_DISK)"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
+	@KERNEL_ISO="$$(python3 scripts/kernel_manager.py --machine-dir \
+		"$(IR0_MACHINE_DIR)" --arch "$(ISD_ARCH)" \
+		--profile "$(ISD_PROFILE)" --machine "$(IR0_MACHINE)" \
+		resolve 2>/dev/null)"; \
+	if [ -z "$$KERNEL_ISO" ]; then \
+		if find "$(IR0_MACHINE_DIR)/kernels" -maxdepth 1 -name '*.iso' \
+			-print -quit 2>/dev/null | grep -q .; then \
+			echo "✗ kmanag has installed kernels but none verifies"; exit 2; \
+		fi; \
+		KERNEL_ISO="$(KERNEL_ROOT)/kernel-x64-userspace.iso"; \
+	fi; \
+	echo "  KERNEL   $$KERNEL_ISO"; \
+	qemu-system-x86_64 -cdrom "$$KERNEL_ISO" \
 		-drive "file=$(IR0_MACHINE_DISK),format=raw,if=ide,index=0" \
+		$(IR0_MACHINE_HOME_QEMU_DRIVE) \
 		$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) \
 		$(QEMU_DENNIS_9P) \
 		-m 512M -no-reboot \
@@ -239,7 +369,7 @@ poweron: check-isd
 
 # Product run: boot ISD-owned disk for PROFILE (no per-binary inject).
 # Auto-builds the disk if missing (e.g. after ISD make clean).
-run-isd: kernel-x64-userspace.iso ensure-isd-disk
+run-isd: kernel-x64-userspace.iso ensure-isd-disk ensure-isd-home
 	@echo "Running IR0 + ISD (PROFILE=$(ISD_PROFILE))"
 	@echo "  DISK     $(IR0_ISD_DISK)"
 	@echo "  ISO      kernel-x64-userspace.iso"
@@ -248,6 +378,7 @@ run-isd: kernel-x64-userspace.iso ensure-isd-disk
 	@echo "  Guest:   first-boot wizard or login (development = autologin root)"
 	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
 		-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
+		$(IR0_ISD_HOME_QEMU_DRIVE) \
 		$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) \
 		$(QEMU_DENNIS_9P) \
 		-m 512M -no-reboot \

@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <ir0/errno.h>
 #include <ir0/syscall_frame.h>
+#include <uapi/ir0/syscall_linux.h>
 
 /* A captured negative read descriptor is never a valid restart argument. */
 static inline int signal_syscall_read_fd_suspicious(uint64_t val)
@@ -113,4 +114,24 @@ static inline int signal_blocked_syscall_is_console_read(uint32_t block_nr,
 							 int64_t arg0_fd)
 {
 	return block_nr == 0u && arg0_fd == 0;
+}
+
+/*
+ * Linux never restarts fd-multiplexing waits or sigsuspend(2), irrespective
+ * of SA_RESTART.  Userspace rebuilds their timeout and fd-set arguments.
+ * Re-entering TinyX select(2) with the old snapshot after SmartScheduleTimer
+ * consumed SIGALRM left the server asleep while a new X client was queued.
+ */
+static inline int signal_blocked_syscall_may_restart(uint32_t block_nr)
+{
+	switch (block_nr)
+	{
+	case __NR_poll:
+	case __NR_select:
+	case __NR_rt_sigsuspend:
+	case __NR_pselect6:
+		return 0;
+	default:
+		return 1;
+	}
 }

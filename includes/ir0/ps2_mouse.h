@@ -42,6 +42,15 @@ typedef struct
 	bool initialized;
 } ps2_mouse_state_t;
 
+typedef struct
+{
+	uint8_t flags;
+	int16_t delta_x;
+	int16_t delta_y;
+	int8_t delta_wheel;
+	uint8_t extra_buttons;
+} ps2_mouse_packet_t;
+
 bool ps2_mouse_init(void);
 void ps2_mouse_shutdown(void);
 bool ps2_mouse_is_available(void);
@@ -49,3 +58,5 @@ ps2_mouse_state_t *ps2_mouse_get_state(void);
 void ps2_mouse_handle_interrupt(void);
 void ps2_mouse_feed_byte(uint8_t data);
 bool ps2_mouse_set_sample_rate(uint8_t rate);
+bool ps2_mouse_packet_available(void);
+bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet);

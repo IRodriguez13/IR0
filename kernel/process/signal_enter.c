@@ -103,12 +103,22 @@ void process_kernel_sleep_interrupted_backup_frame(process_t *p)
 	}
 
 	/*
-	 * Catchable signal while still in the syscall path but before
-	 * process_arm_kernel_syscall_sleep (pipe_wait pending check).
-	 * Without this snap, rt_sigreturn restores rax=__NR_read (0) → false EOF.
+	 * A fresh syscall frame alone does not mean that the syscall blocked.
+	 * Timer signals commonly arrive at the return boundary of clock_gettime,
+	 * close, or write. Treating those as interrupted sleeps made rt_sigreturn
+	 * re-execute the completed syscall; TinyX consequently closed a live X11
+	 * client fd when SIGALRM landed after close(2). Blocking paths must arm
+	 * kernel_syscall_sleep before scheduling, which is the sole restart proof.
 	 */
-	if (p->syscall_frame_fresh)
+	if (p->syscall_frame_fresh &&
+	    (int64_t)p->syscall_resume_rax == -(int64_t)EINTR)
 	{
+		/*
+		 * Some wait paths observe a pending signal immediately, before they
+		 * schedule and arm kernel_syscall_sleep.  Their completed result is
+		 * explicitly -EINTR, which is sufficient proof that sigreturn must
+		 * apply SA_RESTART policy to the captured entry frame.
+		 */
 		process_kernel_sleep_capture_syscall_frame(p);
 		p->kernel_sleep_interrupted = 1;
 	}

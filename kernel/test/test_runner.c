@@ -70,6 +70,8 @@ static void (*const ktest_functions[])(void) = {
 	ktest_brk_linux_fail_returns_current,
 	ktest_tty_canon_read_immediate,
 	ktest_process_reset_blocked_syscall_state,
+	ktest_sock_stream_accept_fifo_backlog,
+	ktest_sock_stream_segmented_queue,
 	/*
 	 * tty_canon_block_wake: needs cooperative schedule from a real
 	 * timer/IRQ context; from kmain+holder it can spin forever.
@@ -126,6 +128,8 @@ static const char *const ktest_names[] = {
 	"brk_linux_fail_returns_current",
 	"tty_canon_read_immediate",
 	"process_reset_blocked_syscall_state",
+	"sock_stream_accept_fifo_backlog",
+	"sock_stream_segmented_queue",
 	NULL
 };
 
@@ -181,6 +185,8 @@ static const int ktest_needs_process[] = {
 	1,  /* brk_linux_fail_returns_current */
 	1,  /* tty_canon_read_immediate */
 	0,  /* process_reset_blocked_syscall_state */
+	0,  /* sock_stream_accept_fifo_backlog */
+	0,  /* sock_stream_segmented_queue */
 };
 
 static void ktest_print_decimal(uint32_t n)

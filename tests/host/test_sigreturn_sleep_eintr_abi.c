@@ -48,6 +48,11 @@ void test_sigreturn_sleep_eintr_frame_abi(void)
 	ASSERT(signal_blocked_syscall_is_console_read(0u, 0));
 	ASSERT(!signal_blocked_syscall_is_console_read(0u, 1));
 	ASSERT(!signal_blocked_syscall_is_console_read(1u, 0));
+	ASSERT(!signal_blocked_syscall_may_restart(__NR_poll));
+	ASSERT(!signal_blocked_syscall_may_restart(__NR_select));
+	ASSERT(!signal_blocked_syscall_may_restart(__NR_rt_sigsuspend));
+	ASSERT(!signal_blocked_syscall_may_restart(__NR_pselect6));
+	ASSERT(signal_blocked_syscall_may_restart(0u));
 
 	memset(&block, 0, sizeof(block));
 	block.rdi = (uint64_t)(int64_t)(-1);

@@ -64,6 +64,15 @@ if grep -q '^machine-update-kernel: check-isd' scripts/make/isd.mk \
 else
 	bad "D machine-update-kernel contract"
 fi
+if grep -q '^kmang: check-isd' scripts/make/isd.mk \
+	&& grep -A12 '^poweron:' scripts/make/isd.mk | grep -q 'kernel_manager.py'; then
+	ok "D kmang selects the persistent-machine boot kernel"
+else
+	bad "D kmang/poweron contract"
+fi
+python3 scripts/test_kernel_manager.py >/dev/null \
+	&& ok "D kernel manager install/select/fallback behavior" \
+	|| bad "D kernel manager behavior"
 
 ENS=scripts/ensure-host-deps.sh
 TMP=$(mktemp -d)

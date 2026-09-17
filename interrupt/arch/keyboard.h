@@ -31,6 +31,8 @@ void keyboard_init(void);
 int keyboard_set_layout(int layout);
 int keyboard_get_layout(void);
 const char *keyboard_get_layout_name(int layout);
+int keyboard_set_console_mode(int mode);
+int keyboard_get_console_mode(void);
 
 /* Momentary + lock modifier snapshot (see ps2_set1.h masks). */
 uint32_t keyboard_modifiers_mask(void);

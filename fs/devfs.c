@@ -52,6 +52,10 @@
 #include <ir0/credentials.h>
 #include <ir0/fb.h>
 #include <ir0/ktm/userdev.h>
+#include <ir0/io_async.h>
+#include <linux/kd.h>
+#include <linux/keyboard.h>
+#include <linux/vt.h>
 #include "vfs.h"
 
 static pid_t devfs_current_pid(void)
@@ -237,6 +241,67 @@ static int devfs_resolve_disk_geo(const devfs_entry_t *entry, uint8_t *disk_out,
 
 static int g_devfs_read_nonblock;
 
+struct console_vt_backend_ops {
+    int (*set_keyboard_mode)(int mode);
+    int (*get_keyboard_mode)(void);
+};
+
+static const struct console_vt_backend_ops console_vt_backend = {
+    .set_keyboard_mode = input_kbd_set_console_mode,
+    .get_keyboard_mode = input_kbd_get_console_mode,
+};
+
+static struct vt_mode console_vt_mode = { .mode = VT_AUTO };
+static int console_display_mode = KD_TEXT;
+
+static unsigned short console_linux_keysym(unsigned int table,
+                                           unsigned int key)
+{
+    static const char plain_digits[] = "1234567890";
+    static const char shift_digits[] = "!@#$%^&*()";
+
+    if (key >= 2 && key <= 11)
+        return (unsigned short)((table & 1U) ? shift_digits[key - 2]
+                                             : plain_digits[key - 2]);
+    if (key >= 16 && key <= 25)
+        return (unsigned short)(((table & 1U) ? 'Q' : 'q') +
+            ("qwertyuiop"[key - 16] - 'q'));
+    if (key >= 30 && key <= 38)
+        return (unsigned short)(((table & 1U) ? 'A' : 'a') +
+            ("asdfghjkl"[key - 30] - 'a'));
+    if (key >= 44 && key <= 50)
+        return (unsigned short)(((table & 1U) ? 'Z' : 'z') +
+            ("zxcvbnm"[key - 44] - 'z'));
+    switch (key)
+    {
+    case 1: return 27;
+    case 12: return (table & 1U) ? '_' : '-';
+    case 13: return (table & 1U) ? '+' : '=';
+    case 14: return 127;
+    case 15: return '\t';
+    case 26: return (table & 1U) ? '{' : '[';
+    case 27: return (table & 1U) ? '}' : ']';
+    case 28: return K_ENTER;
+    case 29: return K_CTRL;
+    case 39: return (table & 1U) ? ':' : ';';
+    case 40: return (table & 1U) ? '"' : '\'';
+    case 41: return (table & 1U) ? '~' : '`';
+    case 42: return K_SHIFTL;
+    case 43: return (table & 1U) ? '|' : '\\';
+    case 51: return (table & 1U) ? '<' : ',';
+    case 52: return (table & 1U) ? '>' : '.';
+    case 53: return (table & 1U) ? '?' : '/';
+    case 54: return K_SHIFTR;
+    case 56: return K_ALT;
+    case 57: return ' ';
+    case 58: return K_CAPS;
+    default:
+        if (key >= 59 && key <= 68)
+            return (unsigned short)K(KT_FN, key - 59);
+        return 0;
+    }
+}
+
 void devfs_set_read_nonblock(int nonblock)
 {
     g_devfs_read_nonblock = nonblock ? 1 : 0;
@@ -284,26 +349,7 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
 
     (void)entry;
 
-    /*
-     * Minimal Linux VT/KD stubs for TinyX/Xfbdev (kdrive/linux/linux.c).
-     * Single synthetic VT1: OPENQRY→1, GETSTATE active=1, mode get/set no-op.
-     */
-#define IR0_VT_OPENQRY     0x5600U
-#define IR0_VT_GETMODE     0x5601U
-#define IR0_VT_SETMODE     0x5602U
-#define IR0_VT_GETSTATE    0x5603U
-#define IR0_VT_RELDISP     0x5605U
-#define IR0_VT_ACTIVATE    0x5606U
-#define IR0_VT_WAITACTIVE  0x5607U
-#define IR0_VT_DISALLOCATE 0x5608U
-#define IR0_KDSETMODE      0x4B3AU
-#define IR0_KDGETMODE      0x4B3BU
-#define IR0_KDGKBMODE      0x4B44U
-#define IR0_KDSKBMODE      0x4B45U
-#define IR0_KDSETLED       0x4B32U
-#define IR0_KDMKTONE       0x4B30U
-
-    if (request == IR0_VT_OPENQRY)
+    if (request == VT_OPENQRY)
     {
         int vtno = 1;
 
@@ -314,7 +360,7 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
-    if (request == IR0_VT_GETSTATE)
+    if (request == VT_GETSTATE)
     {
         struct
         {
@@ -333,36 +379,38 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
-    if (request == IR0_VT_GETMODE)
+    if (request == VT_GETMODE)
     {
-        struct
-        {
-            char mode;
-            char waitv;
-            int16_t relsig;
-            int16_t acqsig;
-            int16_t frsig;
-        } mode;
-
         if (!arg)
             return -EINVAL;
-        memset(&mode, 0, sizeof(mode));
-        mode.mode = 0; /* VT_AUTO */
-        if (copy_to_user(arg, &mode, sizeof(mode)) != 0)
+        if (copy_to_user(arg, &console_vt_mode, sizeof(console_vt_mode)) != 0)
             return -EFAULT;
         return 0;
     }
 
-    if (request == IR0_VT_SETMODE || request == IR0_VT_ACTIVATE ||
-        request == IR0_VT_WAITACTIVE || request == IR0_VT_DISALLOCATE ||
-        request == IR0_VT_RELDISP || request == IR0_KDSETMODE ||
-        request == IR0_KDSKBMODE || request == IR0_KDSETLED ||
-        request == IR0_KDMKTONE)
+    if (request == VT_SETMODE)
+    {
+        struct vt_mode mode;
+
+        if (!arg)
+            return -EINVAL;
+        if (copy_from_user(&mode, arg, sizeof(mode)) != 0)
+            return -EFAULT;
+        if (mode.mode != VT_AUTO && mode.mode != VT_PROCESS)
+            return -EINVAL;
+        console_vt_mode = mode;
+        return 0;
+    }
+
+    if (request == VT_ACTIVATE || request == VT_WAITACTIVE)
+        return (uintptr_t)arg == 1U ? 0 : -ENXIO;
+    if (request == VT_DISALLOCATE || request == VT_RELDISP ||
+        request == KDSETLED || request == KDMKTONE)
         return 0;
 
-    if (request == IR0_KDGKBMODE)
+    if (request == KDGKBMODE)
     {
-        int kbmode = 0; /* K_RAW-compatible default; TinyX restores later */
+        int kbmode = console_vt_backend.get_keyboard_mode();
 
         if (!arg)
             return -EINVAL;
@@ -371,13 +419,39 @@ static int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
-    if (request == IR0_KDGETMODE)
+    if (request == KDSKBMODE)
+        return console_vt_backend.set_keyboard_mode((int)(uintptr_t)arg);
+
+    if (request == KDGKBENT)
     {
-        int kdmode = 0; /* KD_TEXT */
+        struct kbentry ent;
 
         if (!arg)
             return -EINVAL;
-        if (copy_to_user(arg, &kdmode, sizeof(kdmode)) != 0)
+        if (copy_from_user(&ent, arg, sizeof(ent)) != 0)
+            return -EFAULT;
+        ent.kb_value = console_linux_keysym(ent.kb_table, ent.kb_index);
+        if (copy_to_user(arg, &ent, sizeof(ent)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    if (request == KDSETMODE)
+    {
+        int mode = (int)(uintptr_t)arg;
+
+        if (mode != KD_TEXT && mode != KD_GRAPHICS)
+            return -EINVAL;
+        console_display_mode = mode;
+        return 0;
+    }
+
+    if (request == KDGETMODE)
+    {
+        if (!arg)
+            return -EINVAL;
+        if (copy_to_user(arg, &console_display_mode,
+                         sizeof(console_display_mode)) != 0)
             return -EFAULT;
         return 0;
     }
@@ -487,7 +561,15 @@ int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, o
 {
     (void)entry;
     (void)offset;
+    /* Linux graphical VT ownership: tty output must not overwrite X's fb. */
+    if (console_display_mode == KD_GRAPHICS)
+        return (int64_t)count;
     return ir0_console_write(buf, count, 0x07);
+}
+
+int dev_console_is_graphics(void)
+{
+    return console_display_mode == KD_GRAPHICS;
 }
 
 int64_t dev_kmsg_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
@@ -670,38 +752,80 @@ static int dev_mouse_can_read(devfs_entry_t *entry, pid_t pid)
 {
     (void)entry;
     (void)pid;
-    /*
-     * Absolute (x,y,buttons) ioctl device — not a PS/2 byte stream.
-     * Always-ready + 12-byte reads made TinyX MouseRead overrun
-     * event[MAX_MOUSE] (stack canary → abort).
-     */
-    return 0;
+	return input_mouse_packet_available() ? 1 : 0;
 }
 #endif
 
 int64_t dev_mouse_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
 #if CONFIG_ENABLE_MOUSE
-    int mouse_data[3];
-    ir0_mouse_state_t st;
+    uint8_t packet[3];
+    int n;
+    static int read_path_logged;
+    static uint8_t last_buttons;
 
     (void)entry;
     (void)offset;
-    /*
-     * Legacy absolute-state ABI for IR0 tools. Never pretend to be a
-     * streaming PS/2 mouse: return 0 so poll/read clients idle.
-     * Use ioctl(MOUSE_GET_STATE) or /dev/input/event0 for input.
-     */
-    if (count < sizeof(mouse_data))
+    /* Linux KDrive consumes standard three-byte packets from /dev/mouse. */
+    if (!buf || count < sizeof(packet))
         return 0;
-    if (!input_mouse_get_state(&st))
+    n = input_mouse_read_ps2(packet);
+    if (n <= 0)
         return 0;
-    (void)buf;
-    (void)mouse_data;
-    (void)st;
-    return 0;
+    memcpy(buf, packet, sizeof(packet));
+    if ((packet[0] & 0x07u) != last_buttons)
+    {
+        last_buttons = packet[0] & 0x07u;
+        klog_info_fmt("INPUT", "DEV_MOUSE_BUTTONS mask=%u",
+                      (unsigned)last_buttons);
+    }
+    if (!read_path_logged)
+    {
+        read_path_logged = 1;
+        klog_info_fmt("INPUT", "DEV_MOUSE_READ_PATH_OK");
+    }
+    return (int64_t)sizeof(packet);
 #else
     (void)entry; (void)buf; (void)count; (void)offset;
+    return -ENODEV;
+#endif
+}
+
+static int64_t dev_mouse_write(devfs_entry_t *entry, const void *buf,
+                               size_t count, off_t offset)
+{
+#if CONFIG_ENABLE_MOUSE
+    static int first_write_logged;
+
+    (void)entry;
+    (void)offset;
+
+    if (!input_mouse_is_available())
+        return -ENODEV;
+    if (!buf && count != 0)
+        return -EFAULT;
+
+    if (!first_write_logged)
+    {
+        first_write_logged = 1;
+        klog_info_fmt("INPUT", "DEV_MOUSE_WRITE bytes=%u", (unsigned)count);
+    }
+
+    /*
+     * Linux KDrive probes a legacy psaux-style node by writing PS/2
+     * initialization commands before consuming packets. IR0 already owns
+     * and configures the physical i8042 device in-kernel; forwarding those
+     * bytes would race its IRQ packet parser with ACK/ID replies. Accepting
+     * the complete command stream is the compatibility contract here: the
+     * requested operational state (enabled stream, negotiated packet size)
+     * is already maintained by the driver.
+     */
+    return (int64_t)count;
+#else
+    (void)entry;
+    (void)buf;
+    (void)count;
+    (void)offset;
     return -ENODEV;
 #endif
 }
@@ -1937,11 +2061,19 @@ static const devfs_ops_t audio_ops = {
 
 static const devfs_ops_t mouse_ops = {
     .read = dev_mouse_read,
+    .write = dev_mouse_write,
     .ioctl = dev_mouse_ioctl,
 #if CONFIG_ENABLE_MOUSE
     .can_read = dev_mouse_can_read,
 #endif
 };
+
+extern devfs_node_t dev_mouse;
+
+static void dev_mouse_ready_notify(void)
+{
+    io_async_notify_device(dev_mouse.entry.device_id);
+}
 
 static const devfs_ops_t net_ops = {
     .read = dev_net_read,
@@ -2368,6 +2500,11 @@ struct pty_ring
 	unsigned int count;
 };
 
+enum {
+	DEVFS_PTMX_DEVICE_ID = 43,
+	DEVFS_PTS0_DEVICE_ID = 44,
+};
+
 static struct
 {
 	struct pty_ring m2s;
@@ -2379,7 +2516,26 @@ static struct
 	pid_t fg_pgid;
 	pid_t session_sid;
 	struct ir0_winsize winsz;
+	struct ir0_termios termios;
+	int termios_ready;
 } g_pty;
+
+static void pty_termios_ensure(void)
+{
+	if (g_pty.termios_ready)
+		return;
+	memset(&g_pty.termios, 0, sizeof(g_pty.termios));
+	g_pty.termios.c_iflag = IR0_CONSOLE_IFLAG_DEFAULT;
+	g_pty.termios.c_oflag = IR0_CONSOLE_OFLAG_DEFAULT;
+	g_pty.termios.c_cflag = IR0_CONSOLE_CFLAG_DEFAULT;
+	g_pty.termios.c_lflag = IR0_CONSOLE_LFLAG_DEFAULT;
+	g_pty.termios.c_cc[IR0_CC_VINTR] = 3;
+	g_pty.termios.c_cc[IR0_CC_VQUIT] = 28;
+	g_pty.termios.c_cc[IR0_CC_VERASE] = 127;
+	g_pty.termios.c_cc[IR0_CC_VEOF] = 4;
+	g_pty.termios.c_cc[IR0_CC_VMIN] = 1;
+	g_pty.termios_ready = 1;
+}
 
 static void pty_hangup_fg(void)
 {
@@ -2418,6 +2574,29 @@ static int pty_ring_push(struct pty_ring *r, const char *src, size_t n)
 	return (int)i;
 }
 
+static int pty_ring_push_all(struct pty_ring *r, const char *src, size_t n)
+{
+	unsigned long irq_flags;
+	size_t i;
+
+	if (!r || !src || n == 0 || n > PTY_BUF_SIZE)
+		return 0;
+	irq_flags = irq_save();
+	if (PTY_BUF_SIZE - r->count < n)
+	{
+		irq_restore(irq_flags);
+		return 0;
+	}
+	for (i = 0; i < n; i++)
+	{
+		r->buf[r->head] = src[i];
+		r->head = (r->head + 1) % PTY_BUF_SIZE;
+		r->count++;
+	}
+	irq_restore(irq_flags);
+	return 1;
+}
+
 static int pty_ring_pop(struct pty_ring *r, char *dst, size_t n)
 {
 	unsigned long irq_flags;
@@ -2447,6 +2626,7 @@ static int64_t dev_ptmx_open(devfs_entry_t *entry, int flags)
 		return -EBUSY;
 	g_pty.master_open = 1;
 	g_pty.locked = 0;
+	pty_termios_ensure();
 	return 0;
 }
 
@@ -2491,11 +2671,38 @@ static int64_t dev_ptmx_read(devfs_entry_t *entry, void *buf, size_t count,
 static int64_t dev_ptmx_write(devfs_entry_t *entry, const void *buf,
 			      size_t count, off_t offset)
 {
+	const unsigned char *src = (const unsigned char *)buf;
+	size_t consumed = 0;
+
 	(void)entry;
 	(void)offset;
 	if (!buf)
 		return -EFAULT;
-	return pty_ring_push(&g_pty.m2s, (const char *)buf, count);
+	pty_termios_ensure();
+	while (consumed < count)
+	{
+		unsigned char c = src[consumed];
+		char translated;
+
+		if (c == '\r')
+		{
+			if (g_pty.termios.c_iflag & IR0_IFLAG_IGNCR)
+			{
+				consumed++;
+				continue;
+			}
+			if (g_pty.termios.c_iflag & IR0_IFLAG_ICRNL)
+				c = '\n';
+		}
+		else if (c == '\n' &&
+			 (g_pty.termios.c_iflag & IR0_IFLAG_INLCR))
+			c = '\r';
+		translated = (char)c;
+		if (pty_ring_push(&g_pty.m2s, &translated, 1) != 1)
+			break;
+		consumed++;
+	}
+	return (int64_t)consumed;
 }
 
 static int64_t dev_pts_read(devfs_entry_t *entry, void *buf, size_t count,
@@ -2511,11 +2718,35 @@ static int64_t dev_pts_read(devfs_entry_t *entry, void *buf, size_t count,
 static int64_t dev_pts_write(devfs_entry_t *entry, const void *buf,
 			     size_t count, off_t offset)
 {
+	const unsigned char *src = (const unsigned char *)buf;
+	size_t consumed = 0;
+
 	(void)entry;
 	(void)offset;
 	if (!buf)
 		return -EFAULT;
-	return pty_ring_push(&g_pty.s2m, (const char *)buf, count);
+	pty_termios_ensure();
+	while (consumed < count)
+	{
+		char c = (char)src[consumed];
+
+		/* Linux N_TTY output processing: OPOST+ONLCR expands NL to CR/NL. */
+		if (c == '\n' &&
+		    (g_pty.termios.c_oflag &
+		     (IR0_OFLAG_OPOST | IR0_OFLAG_ONLCR)) ==
+		    (IR0_OFLAG_OPOST | IR0_OFLAG_ONLCR))
+		{
+			static const char crlf[2] = { '\r', '\n' };
+
+			/* Do not consume the source byte unless expansion is atomic. */
+			if (!pty_ring_push_all(&g_pty.s2m, crlf, sizeof(crlf)))
+				break;
+		}
+		else if (pty_ring_push(&g_pty.s2m, &c, 1) != 1)
+			break;
+		consumed++;
+	}
+	return (int64_t)consumed;
 }
 
 static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
@@ -2550,14 +2781,11 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 			return -EFAULT;
 		if (win.ws_row == 0 || win.ws_col == 0)
 			return -EINVAL;
+		if (memcmp(&g_pty.winsz, &win, sizeof(win)) == 0)
+			return 0;
 		g_pty.winsz = win;
 		if (g_pty.ctty_set && g_pty.fg_pgid > 0)
 			(void)send_signal_pgrp(g_pty.fg_pgid, SIGWINCH);
-		else if (current_process)
-			(void)send_signal((int)current_process->task.pid, SIGWINCH);
-		klog_print("PTY_WINCH_SENT\n");
-		handle_signals();
-		klog_print("PTY_TIOCSWINSZ_OK\n");
 		return 0;
 	}
 	if (request == IR0_TIOCGPTN)
@@ -2622,9 +2850,29 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 			return -EFAULT;
 		return 0;
 	}
-	if (request == IR0_CONSOLE_TCGETS || request == IR0_CONSOLE_TCSETS ||
+	if (request == IR0_CONSOLE_TCGETS)
+	{
+		pty_termios_ensure();
+		if (!arg)
+			return -EINVAL;
+		return copy_to_user(arg, &g_pty.termios, sizeof(g_pty.termios)) == 0
+			? 0 : -EFAULT;
+	}
+	if (request == IR0_CONSOLE_TCSETS ||
 	    request == IR0_CONSOLE_TCSETSW || request == IR0_CONSOLE_TCSETSF)
-		return dev_console_ioctl(entry, request, arg);
+	{
+		struct ir0_termios termios;
+
+		if (!arg)
+			return -EINVAL;
+		if (copy_from_user(&termios, arg, sizeof(termios)) != 0)
+			return -EFAULT;
+		g_pty.termios = termios;
+		g_pty.termios_ready = 1;
+		if (request == IR0_CONSOLE_TCSETSF)
+			g_pty.m2s.head = g_pty.m2s.tail = g_pty.m2s.count = 0;
+		return 0;
+	}
 	return -ENOTTY;
 }
 
@@ -2632,7 +2880,7 @@ static int dev_ptmx_can_read(devfs_entry_t *entry, pid_t pid)
 {
 	(void)entry;
 	(void)pid;
-	return g_pty.s2m.count > 0 ? 1 : 0;
+	return (g_pty.s2m.count > 0 || !g_pty.slave_open) ? 1 : 0;
 }
 
 static int dev_ptmx_can_write(devfs_entry_t *entry, pid_t pid)
@@ -2646,7 +2894,7 @@ static int dev_pts_can_read(devfs_entry_t *entry, pid_t pid)
 {
 	(void)entry;
 	(void)pid;
-	return g_pty.m2s.count > 0 ? 1 : 0;
+	return (g_pty.m2s.count > 0 || !g_pty.master_open) ? 1 : 0;
 }
 
 static int dev_pts_can_write(devfs_entry_t *entry, pid_t pid)
@@ -2677,13 +2925,15 @@ static const devfs_ops_t pts_ops = {
 };
 
 static devfs_node_t dev_ptmx = {
-	.entry = { .name = "ptmx", .mode = 0666, .device_id = 43 },
+	.entry = { .name = "ptmx", .mode = 0666,
+		   .device_id = DEVFS_PTMX_DEVICE_ID },
 	.ops = &ptmx_ops,
 	.ref_count = 0,
 };
 
 static devfs_node_t dev_pts0 = {
-	.entry = { .name = "pts/0", .mode = 0620, .device_id = 44 },
+	.entry = { .name = "pts/0", .mode = 0620,
+		   .device_id = DEVFS_PTS0_DEVICE_ID },
 	.ops = &pts_ops,
 	.ref_count = 0,
 };
@@ -3075,6 +3325,7 @@ int devfs_init(void)
     devfs_register_node(&dev_kmsg);
     devfs_register_node(&dev_audio);
     devfs_register_node(&dev_mouse);
+    input_mouse_set_ready_notifier(dev_mouse_ready_notify);
     devfs_register_node(&dev_net);
     devfs_register_node(&dev_disk);
     devfs_register_disk_topology();
