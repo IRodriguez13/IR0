@@ -73,10 +73,13 @@ void ir0_clock_wait_fire_due(uint64_t now_ms)
 	for (p = process_list; p; p = p->next)
 	{
 		/*
-		 * Poll/pipe/wait4 use irq_frame_saved or poll_waiter wake paths;
-		 * only nanosleep/pause-style kernel sleeps use the timer queue.
+		 * An armed clock wait owns its deadline even when irq_frame_saved
+		 * describes how the blocked syscall must resume.  Treating that
+		 * resume metadata as a different wake source stranded timed socket
+		 * reads with only idle runnable.  poll_waiter is the actual separate
+		 * readiness owner and remains excluded here.
 		 */
-		if (p->irq_frame_saved || p->poll_waiter)
+		if (p->poll_waiter)
 			continue;
 		if (!p->clock_wait_armed)
 			continue;

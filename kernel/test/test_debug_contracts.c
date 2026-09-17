@@ -112,6 +112,7 @@ void ktest_proc_version_contract(void)
 	KASSERT(buf[0] != '\0');
 	/* Human-readable banner (not a fixed tab-separated schema). */
 	KASSERT(contains_text(buf, "IR0") || contains_text(buf, "Linux"));
+	KASSERT(contains_text(buf, "#"));
 
 	KTEST_END();
 }

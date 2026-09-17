@@ -33,6 +33,7 @@
 #include <ir0/signals.h>
 #include <ir0/ktm/user_canary.h>
 #include <ir0/console.h>
+#include <ir0/input_backend.h>
 #include <ir0/paging.h>
 #include <ir0/tls.h>
 #include <ir0/context.h>
@@ -1618,13 +1619,17 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
      * (SIGSEGV pending) then made accept/poll return -EINTR immediately.
      */
     signals_reset_on_exec(proc);
-    /*
-     * Password read may leave want_kernel_ret set; clear before iretq into
-     * the new image. Cooked+echo is restored from userspace before execve.
-     */
+    /* Password read may leave kernel-return state; clear it before iretq. */
     proc->want_kernel_ret = 0;
     proc->irq_frame_saved = 0;
-    ir0_console_reset_cooked_echo();
+	/*
+	 * execve must not mutate a terminal's termios.  In particular, resetting
+	 * the global console here turned TinyX's K_MEDIUMRAW/raw console back to
+	 * ICANON whenever twm or xterm exec'd, so X could never read keycodes.
+	 * Login/password userspace restores its own tty before exec, as on Linux.
+	 */
+	if (input_kbd_get_console_mode() != IR0_INPUT_KBD_MEDIUMRAW)
+		ir0_console_reset_cooked_echo();
     elf_trace_argv_contract(proc, path, "before-iret");
     elf_trace_entry_stack_layout(proc, header, at_phdr, at_base, "before-userswitch");
 

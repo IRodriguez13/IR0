@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: ext2_disk.h
- * Description: Minimal read-only EXT2 on ir0 block devices.
+ * Description: Bounded writable EXT2 backend on IR0 block devices.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -25,6 +25,7 @@ typedef struct fd_entry
 	char path[256];
 	int flags;       /* Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.) */
 	uint8_t fd_flags; /* FD_CLOEXEC etc. */
+	int32_t async_owner; /* F_SETOWN recipient when O_ASYNC is enabled */
 	void *vfs_file;
 	uint64_t offset; /* File offset for seek operations */
 	bool is_pipe;  /* 1 if this fd is a pipe */

@@ -227,3 +227,8 @@ int ir0_input_poll(void);
 int ir0_input_read_event(struct ir0_input_event *ev);
 void ir0_input_get_caps(struct ir0_input_caps *caps);
 int ir0_input_inject_event(uint16_t type, uint16_t code, int32_t value);
+
+/* IRQ-safe notification after a complete device event/report is queued. */
+typedef void (*input_ready_notifier_t)(void);
+void input_mouse_set_ready_notifier(input_ready_notifier_t notifier);
+void input_event_wake_readers(void);

@@ -289,6 +289,7 @@ int rr_count_runnable(void)
 void rr_promote_process(process_t *proc)
 {
 	rr_task_t *walk;
+	rr_task_t *prev = NULL;
 	uint64_t irq_flags;
 
 	if (!proc || !rr_head)
@@ -299,10 +300,17 @@ void rr_promote_process(process_t *proc)
 	{
 		if (walk->process == proc)
 		{
-			rr_current = walk;
+			/*
+			 * rr_schedule_next() advances the cursor before selecting.
+			 * Point at the predecessor so the promoted task is the next
+			 * candidate.  Pointing at @walk skipped the very task that the
+			 * wake path intended to run.
+			 */
+			rr_current = prev ? prev : rr_tail;
 			process_set_sched_state(proc, PROCESS_READY);
 			break;
 		}
+		prev = walk;
 		if (walk->next == rr_head)
 			break;
 	}
