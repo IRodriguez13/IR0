@@ -555,9 +555,22 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     fase10_count++;
   }
 
+  /*
+   * Publish the completed return value before signal delivery.  A signal
+   * arriving at this exit edge interrupted userspace *after* the syscall;
+   * its sigcontext must therefore preserve @r, not manufacture -EINTR.
+   * Genuinely blocked syscalls use kernel_sleep_syscall_frame instead.
+   */
+  if (current_process && current_process->mode == USER_MODE)
+    current_process->syscall_resume_rax = (uint64_t)r;
+
   /* Deliver only at a proven exit-to-user edge on this task's own stack. */
   if (current_process && current_process->mode == USER_MODE)
+  {
     signals_prepare_user_return(current_process);
+    /* The value above is capture-only; arch resume owns this field later. */
+    current_process->syscall_resume_rax = 0;
+  }
 
   if (syscall_num == __NR_fork || syscall_num == __NR_clone ||
       syscall_num == __NR_vfork)

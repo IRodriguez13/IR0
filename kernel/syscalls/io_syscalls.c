@@ -28,6 +28,7 @@
 #include <ir0/sched.h>
 #include <ir0/ktm.h>
 #include <ir0/fcntl.h>
+#include <ir0/io_async.h>
 #include <ir0/clock.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/clock_wait.h>
@@ -79,6 +80,58 @@ struct poll_waiter {
 static struct poll_waiter poll_waiters[MAX_POLL_WAITERS];
 
 static int poll_wake_do(void);
+
+static int poll_wait_kernel(struct pollfd *kfds, unsigned int nfds,
+			    uint64_t expire)
+{
+	struct poll_waiter *w = NULL;
+	unsigned int i;
+	int ready;
+
+	for (i = 0; i < MAX_POLL_WAITERS; i++)
+	{
+		if (!poll_waiters[i].proc)
+		{
+			w = &poll_waiters[i];
+			break;
+		}
+	}
+	if (!w)
+		return -EAGAIN;
+
+	w->proc = current_process;
+	w->user_fds = NULL;
+	w->nfds = nfds;
+	w->kfds = kfds;
+	w->timeout_expire = expire;
+	w->woken = 0;
+	w->ready_count = 0;
+	current_process->poll_waiter = w;
+	process_arm_kernel_syscall_sleep(current_process);
+	process_set_sched_state(current_process, PROCESS_BLOCKED);
+	(void)poll_wake_do();
+
+	while (current_process->state == PROCESS_BLOCKED)
+		ir0_clock_wait_service_runqueue();
+
+	process_restore_user_task_segments(current_process);
+	ready = w->ready_count;
+	current_process->poll_waiter = NULL;
+	w->proc = NULL;
+	w->user_fds = NULL;
+	w->nfds = 0;
+	w->kfds = NULL;
+	w->timeout_expire = 0;
+	w->woken = 0;
+	w->ready_count = 0;
+
+	if (current_process->syscall_interrupted)
+	{
+		current_process->syscall_interrupted = 0;
+		return -EINTR;
+	}
+	return ready;
+}
 
 /*
  * syscall_sleep_ms_locked - Block current task for @ms (kernel-side, no user copy).
@@ -274,7 +327,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
         if (ret < 0)
           return ret;
         if (current_process->signal_pending != 0)
-          return 0;
+          return -EINTR;
       }
     }
     return syscall_sleep_ms_locked((uint64_t)timeout_ms);
@@ -331,6 +384,15 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   current_process->poll_waiter = w;
   process_arm_kernel_syscall_sleep(current_process);
   process_set_sched_state(current_process, PROCESS_BLOCKED);
+
+  /*
+   * Close the check-to-sleep race.  Data may become ready after the first
+   * poll_check_ready() but before PROCESS_BLOCKED is visible to the producer;
+   * that producer then observes a running task and has nothing to enqueue.
+   * Rechecking after the waiter and blocked state are both published gives
+   * poll the same no-lost-wakeup contract as Linux wait queues.
+   */
+  (void)poll_wake_do();
 
   while (current_process->state == PROCESS_BLOCKED)
   {
@@ -390,6 +452,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
   unsigned int i;
   int fd;
 
+
   if (!current_process)
     return -ESRCH;
   /*
@@ -444,7 +507,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
         if (ret < 0)
           return ret;
         if (current_process->signal_pending != 0)
-          return 0;
+          return -EINTR;
       }
     }
     return syscall_sleep_ms_locked((uint64_t)timeout_ms);
@@ -469,6 +532,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
     pfds[npoll].revents = 0;
     npoll++;
   }
+
 
   if (npoll == 0)
   {
@@ -501,14 +565,13 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
         clock_get_uptime_milliseconds() >= expire)
       break;
     if (current_process->signal_pending != 0)
-      break;
+      return -EINTR;
 
-    {
-      int64_t ret = syscall_sleep_ms_locked(50);
-
-      if (ret < 0)
-        return ret;
-    }
+	ready = poll_wait_kernel(pfds, npoll, expire);
+	if (ready < 0)
+		return ready;
+	if (ready > 0)
+		break;
   }
 
   IR0_FD_ZERO(&kr);
@@ -596,8 +659,46 @@ int poll_wake_check_nosched(void)
 
 void poll_wake_check(void)
 {
-  if (poll_wake_do())
-    sched_schedule_next();
+  /*
+   * Producers call this facade from ordinary syscalls and from device paths.
+   * A wakeup makes consumers runnable; it must not force a cooperative switch
+   * at this syscall boundary.  AF_UNIX connect exposed why: preempting the
+   * producer after connect but before its setup write lets the X server accept
+   * and wait for bytes while the producer's cooperative resume is starved.
+   * The normal timer/idle scheduler observes the READY task, matching Linux's
+   * separation between try_to_wake_up() and the later scheduling decision.
+   */
+	(void)poll_wake_do();
+}
+
+/*
+ * Linux fasync facade for device IRQ producers.  Drivers identify only the
+ * devfs endpoint; fd ownership, O_ASYNC policy, and signal delivery remain in
+ * the generic I/O layer.
+ */
+void io_async_notify_device(uint32_t device_id)
+{
+  process_t *proc;
+
+  for (proc = process_list; proc; proc = proc->next)
+  {
+    fd_entry_t *table = process_fd_table(proc);
+    int fd;
+
+    if (!table || proc->state == PROCESS_ZOMBIE)
+      continue;
+    for (fd = 0; fd < MAX_FDS_PER_PROCESS; fd++)
+    {
+      fd_entry_t *entry = &table[fd];
+
+      if (!entry->in_use || !entry->is_devfs ||
+          entry->dev_device_id != device_id ||
+          !(entry->flags & O_ASYNC) || entry->async_owner <= 0)
+        continue;
+      (void)send_signal(entry->async_owner, SIGIO);
+      break;
+    }
+  }
 }
 
 void syscall_wake_blocked_on_child(process_t *parent)
@@ -1811,24 +1912,30 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
   case F_SETFL:
     /*
      * Linux: preserve O_ACCMODE; only status flags are mutable.
-     * Do not honor O_ASYNC/FASYNC (no SIGIO). Clobbering access mode
-     * broke BusyBox less (ndelay_on → flags became O_NONBLOCK alone).
+     * Clobbering access mode broke BusyBox less (ndelay_on made flags become
+     * O_NONBLOCK alone). O_ASYNC is implemented for device fasync delivery.
      */
     {
       int keep = e->flags & O_ACCMODE;
-      int settable = (int)arg & (O_APPEND | O_NONBLOCK);
+      int settable = (int)arg & (O_APPEND | O_NONBLOCK | O_ASYNC);
 
       e->flags = keep | settable;
     }
     ret = 0;
     break;
   case F_GETOWN:
-    ret = current_process->task.pid;
+    ret = e->async_owner;
     break;
   case F_SETOWN:
-    /* Owner recorded as current pid only; no SIGIO wiring yet. */
-    (void)arg;
-    ret = 0;
+    if ((int)arg <= 0 || !process_find_by_pid((int)arg))
+      ret = -ESRCH;
+    else if ((int)arg != current_process->task.pid)
+      ret = -EPERM;
+    else
+    {
+      e->async_owner = (int32_t)arg;
+      ret = 0;
+    }
     break;
   case F_DUPFD:
   {

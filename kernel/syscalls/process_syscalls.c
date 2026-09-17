@@ -1511,6 +1511,11 @@ int64_t sys_waitpid(pid_t pid, int *status, int options)
  */
 int64_t sys_kill(pid_t pid, int signal)
 {
+  process_t *target;
+  process_t *scan;
+  pid_t pgid;
+  int delivered = 0;
+
   if (!current_process)
     return -ESRCH;
 
@@ -1518,13 +1523,39 @@ int64_t sys_kill(pid_t pid, int signal)
   if (signal < 0 || signal >= _NSIG)
     return -EINVAL;
 
-  /* Can't send signal to PID 0 or negative */
-  if (pid <= 0)
-    return -EINVAL;
-
-  /* send_signal handles pending, wake, and default-fatal teardown. */
-  if (send_signal(pid, signal) != 0)
-    return -ESRCH; /* Process not found */
+  if (pid > 0)
+  {
+    target = process_find_by_pid(pid);
+    if (!target)
+      return -ESRCH;
+    if (current_process->euid != 0 &&
+        current_process->euid != target->uid &&
+        current_process->euid != target->suid)
+      return -EPERM;
+    if (send_signal(pid, signal) != 0)
+      return -ESRCH;
+    delivered = 1;
+  }
+  else
+  {
+    /* Linux kill(2): 0 selects caller's pgrp; <-1 selects -pid. */
+    if (pid == INT32_MIN)
+      return -ESRCH;
+    pgid = (pid == 0) ? current_process->pgid : -pid;
+    for (scan = process_list; scan; scan = scan->next)
+    {
+      if ((pid != -1 && scan->pgid != pgid) || scan->task.pid == 1)
+        continue;
+      if (current_process->euid != 0 &&
+          current_process->euid != scan->uid &&
+          current_process->euid != scan->suid)
+        continue;
+      if (send_signal(scan->task.pid, signal) == 0)
+        delivered++;
+    }
+    if (delivered == 0)
+      return -ESRCH;
+  }
 
 #if IR0_DEBUG_PROC
   {
@@ -1886,6 +1917,8 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
 
     if (delivered > 0 && delivered < _NSIG &&
         !(current_process->signal_sa_flags[delivered] & SA_RESTART))
+      restart = 0;
+    if (!signal_blocked_syscall_may_restart(current_process->syscall_block_nr))
       restart = 0;
 
     /*

@@ -15,6 +15,7 @@
 #include <ir0/kmem.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/arch_cpu.h>
+#include "log.h"
 #include <config.h>
 #include <string.h>
 
@@ -23,9 +24,19 @@
 #include <ir0/net.h>
 #endif
 
-#define SS_BUF 4096
-#define SS_MAX 16
+/* X11 setup/property bursts exceed one page.  Linux AF_UNIX sockets provide
+ * substantially larger queues; a page-sized queue can deadlock peers when a
+ * blocking writev must complete before the reader is scheduled. */
+#define SS_CHUNK_SIZE 4096U
+#define SS_QUEUE_MAX  (1024U * 1024U)
 #define SS_PATH 108
+
+struct ss_chunk {
+	struct ss_chunk *next;
+	unsigned start;
+	unsigned end;
+	char data[SS_CHUNK_SIZE];
+};
 
 enum ss_state
 {
@@ -48,10 +59,14 @@ struct sock_stream
 	uint16_t port;
 	struct sock_stream *peer;
 	struct sock_stream *listener;
-	char buf[SS_BUF];
-	unsigned head;
-	unsigned tail;
-	unsigned count;
+	struct sock_stream *accept_head;
+	struct sock_stream *accept_tail;
+	struct sock_stream *accept_next;
+	unsigned accept_count;
+	unsigned accept_backlog;
+	struct ss_chunk *rx_head;
+	struct ss_chunk *rx_tail;
+	unsigned queued_bytes;
 	uint8_t wire_tcp;
 	uint8_t shut_rd;
 	uint8_t shut_wr;
@@ -71,7 +86,7 @@ struct sock_stream
 
 #define SS_MAGIC 0xA5
 
-static struct sock_stream g_socks[SS_MAX];
+static struct sock_stream g_socks[CONFIG_STREAM_SOCKET_CAPACITY];
 static void (*g_rights_dtor)(void *entry, size_t sz);
 
 extern void poll_wake_check(void);
@@ -136,14 +151,14 @@ int sock_stream_family(const struct sock_stream *s)
 
 int sock_stream_buf_count(const struct sock_stream *s)
 {
-	return s ? (int)s->count : 0;
+	return s ? (int)s->queued_bytes : 0;
 }
 
 int sock_stream_buf_space(const struct sock_stream *peer_of_sender)
 {
 	if (!peer_of_sender)
 		return 0;
-	return (int)(SS_BUF - peer_of_sender->count);
+	return (int)(SS_QUEUE_MAX - peer_of_sender->queued_bytes);
 }
 
 int sock_stream_is_recv_shutdown(const struct sock_stream *s)
@@ -195,8 +210,7 @@ int sock_stream_poll_readable(const struct sock_stream *s)
 
 	if (!s)
 		return 0;
-	/* Pending AF_UNIX/TCP-loopback accept queue (single slot via listener->peer). */
-	if (s->state == SS_LISTEN && s->peer && s->peer->state == SS_CONNECTED)
+	if (s->state == SS_LISTEN && s->accept_head)
 		return 1;
 	if (s->state == SS_CONNECTING)
 	{
@@ -207,7 +221,7 @@ int sock_stream_poll_readable(const struct sock_stream *s)
 		return 0;
 	if (s->rights_n > 0)
 		return 1;
-	if (s->count > 0)
+	if (s->queued_bytes > 0)
 		return 1;
 	if (s->shut_rd)
 		return 1;
@@ -252,14 +266,111 @@ int sock_stream_poll_writable(const struct sock_stream *s)
 		return 0;
 	if (s->peer->shut_rd)
 		return 0;
-	return s->peer->count < SS_BUF;
+	return s->peer->queued_bytes < SS_QUEUE_MAX;
+}
+
+static void sock_stream_queue_free(struct ss_chunk *chunk)
+{
+	while (chunk) {
+		struct ss_chunk *next = chunk->next;
+		kfree(chunk);
+		chunk = next;
+	}
+}
+
+static size_t sock_stream_queue_write(struct sock_stream *s,
+				      const char *src, size_t len)
+{
+	size_t written = 0;
+
+	while (written < len) {
+		struct ss_chunk *chunk;
+		unsigned long flags;
+		size_t room, take;
+
+		flags = irq_save();
+		if (s->queued_bytes >= SS_QUEUE_MAX) {
+			irq_restore(flags);
+			break;
+		}
+		chunk = s->rx_tail;
+		if (chunk && chunk->end < SS_CHUNK_SIZE) {
+			room = SS_CHUNK_SIZE - chunk->end;
+			take = len - written;
+			if (take > room) take = room;
+			if (take > SS_QUEUE_MAX - s->queued_bytes)
+				take = SS_QUEUE_MAX - s->queued_bytes;
+			memcpy(chunk->data + chunk->end, src + written, take);
+			chunk->end += (unsigned)take;
+			s->queued_bytes += (unsigned)take;
+			irq_restore(flags);
+			written += take;
+			continue;
+		}
+		irq_restore(flags);
+
+		chunk = kmalloc_try(sizeof(*chunk));
+		if (!chunk) break;
+		memset(chunk, 0, sizeof(*chunk));
+		flags = irq_save();
+		if (s->rx_tail && s->rx_tail->end < SS_CHUNK_SIZE) {
+			irq_restore(flags);
+			kfree(chunk);
+			continue;
+		}
+		if (s->queued_bytes >= SS_QUEUE_MAX) {
+			irq_restore(flags);
+			kfree(chunk);
+			break;
+		}
+		if (s->rx_tail) s->rx_tail->next = chunk;
+		else s->rx_head = chunk;
+		s->rx_tail = chunk;
+		irq_restore(flags);
+	}
+	return written;
+}
+
+static size_t sock_stream_queue_read(struct sock_stream *s, char *dst,
+				     size_t len, int peek)
+{
+	struct ss_chunk *chunk, *free_head = NULL, *free_tail = NULL;
+	unsigned long flags;
+	size_t copied = 0;
+
+	flags = irq_save();
+	chunk = s->rx_head;
+	while (chunk && copied < len) {
+		size_t available = chunk->end - chunk->start;
+		size_t take = len - copied;
+		if (take > available) take = available;
+		memcpy(dst + copied, chunk->data + chunk->start, take);
+		copied += take;
+		if (peek) {
+			chunk = chunk->next;
+			continue;
+		}
+		chunk->start += (unsigned)take;
+		s->queued_bytes -= (unsigned)take;
+		if (chunk->start != chunk->end) break;
+		s->rx_head = chunk->next;
+		if (!s->rx_head) s->rx_tail = NULL;
+		chunk->next = NULL;
+		if (free_tail) free_tail->next = chunk;
+		else free_head = chunk;
+		free_tail = chunk;
+		chunk = s->rx_head;
+	}
+	irq_restore(flags);
+	sock_stream_queue_free(free_head);
+	return copied;
 }
 
 int sock_stream_is(const void *ptr)
 {
 	const struct sock_stream *s = ptr;
 	uintptr_t base = (uintptr_t)&g_socks[0];
-	uintptr_t end = (uintptr_t)&g_socks[SS_MAX];
+	uintptr_t end = (uintptr_t)&g_socks[CONFIG_STREAM_SOCKET_CAPACITY];
 	uintptr_t p = (uintptr_t)ptr;
 
 	if (p < base || p >= end)
@@ -272,7 +383,7 @@ int sock_stream_is(const void *ptr)
 int sock_stream_is_slot(const void *ptr)
 {
 	uintptr_t base = (uintptr_t)&g_socks[0];
-	uintptr_t end = (uintptr_t)&g_socks[SS_MAX];
+	uintptr_t end = (uintptr_t)&g_socks[CONFIG_STREAM_SOCKET_CAPACITY];
 	uintptr_t p = (uintptr_t)ptr;
 
 	if (p < base || p >= end)
@@ -301,7 +412,7 @@ struct sock_stream *sock_stream_create(int family)
 	if (KTM_FAULT_HIT("sock.create"))
 		return NULL;
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (!g_socks[i].in_use)
 		{
@@ -314,12 +425,15 @@ struct sock_stream *sock_stream_create(int family)
 			return &g_socks[i];
 		}
 	}
+	log_warn("SOCKET", "stream socket table exhausted");
 	return NULL;
 }
 
 void sock_stream_release(struct sock_stream *s)
 {
 	unsigned long irq_flags;
+	struct sock_stream *queued;
+	struct ss_chunk *rx_queue;
 
 	if (!s || !s->in_use)
 		return;
@@ -347,9 +461,29 @@ void sock_stream_release(struct sock_stream *s)
 			       s->wire_local_port, s->wire_seq, s->wire_ack);
 	}
 #endif
+	/* Detach the whole accept queue before releasing its endpoints. */
+	irq_flags = irq_save();
+	queued = s->accept_head;
+	s->accept_head = NULL;
+	s->accept_tail = NULL;
+	s->accept_count = 0;
+	irq_restore(irq_flags);
+	while (queued)
+	{
+		struct sock_stream *next = queued->accept_next;
+
+		queued->accept_next = NULL;
+		sock_stream_release(queued);
+		queued = next;
+	}
 	if (s->peer && s->peer->peer == s)
 		s->peer->peer = NULL;
 	sock_stream_rights_clear(s);
+	rx_queue = s->rx_head;
+	s->rx_head = NULL;
+	s->rx_tail = NULL;
+	s->queued_bytes = 0;
+	sock_stream_queue_free(rx_queue);
 	memset(s, 0, sizeof(*s));
 	poll_wake_check();
 }
@@ -375,7 +509,7 @@ int sock_stream_bind_unix_n(struct sock_stream *s, const char *path, size_t path
 		return -EINVAL;
 	if (!is_abstract && path[0] == '\0')
 		return -EINVAL;
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_UNIX &&
 		    g_socks[i].state != SS_IDLE &&
@@ -449,9 +583,13 @@ int sock_stream_shutdown(struct sock_stream *s, int how)
 
 int sock_stream_listen(struct sock_stream *s, int backlog)
 {
-	(void)backlog;
 	if (!s || s->state != SS_BOUND)
 		return -EINVAL;
+	if (backlog < 1)
+		backlog = 1;
+	if (backlog > CONFIG_STREAM_SOCKET_CAPACITY)
+		backlog = CONFIG_STREAM_SOCKET_CAPACITY;
+	s->accept_backlog = (unsigned)backlog;
 	s->state = SS_LISTEN;
 #if CONFIG_ENABLE_NETWORKING
 	if (s->family == IR0_AF_INET && s->port != 0)
@@ -465,6 +603,30 @@ int sock_stream_listen(struct sock_stream *s, int backlog)
 		}
 	}
 #endif
+	return 0;
+}
+
+static int sock_stream_accept_enqueue(struct sock_stream *listener,
+				      struct sock_stream *child)
+{
+	unsigned long irq_flags;
+
+	if (!listener || !child || listener->state != SS_LISTEN)
+		return -EINVAL;
+	irq_flags = irq_save();
+	if (listener->accept_count >= listener->accept_backlog)
+	{
+		irq_restore(irq_flags);
+		return -ECONNREFUSED;
+	}
+	child->accept_next = NULL;
+	if (listener->accept_tail)
+		listener->accept_tail->accept_next = child;
+	else
+		listener->accept_head = child;
+	listener->accept_tail = child;
+	listener->accept_count++;
+	irq_restore(irq_flags);
 	return 0;
 }
 
@@ -501,10 +663,16 @@ int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t p
 	int i;
 	struct sock_stream *lst = NULL;
 	struct sock_stream *acc;
+	enum ss_state old_state;
 
 	if (!s || !path || path_len == 0 || path_len >= SS_PATH)
 		return -EINVAL;
-	for (i = 0; i < SS_MAX; i++)
+	if (s->state == SS_CONNECTED)
+		return -EISCONN;
+	if (s->state != SS_IDLE && s->state != SS_BOUND)
+		return -EINVAL;
+	old_state = s->state;
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].state == SS_LISTEN &&
 		    unix_name_equal(&g_socks[i], path, path_len, is_abstract))
@@ -514,7 +682,9 @@ int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t p
 		}
 	}
 	if (!lst)
+	{
 		return -ECONNREFUSED;
+	}
 	acc = sock_stream_create(IR0_AF_UNIX);
 	if (!acc)
 		return -ENOMEM;
@@ -531,7 +701,15 @@ int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t p
 	s->state = SS_CONNECTED;
 	s->peer = acc;
 	s->listener = lst;
-	lst->peer = acc;
+	if (sock_stream_accept_enqueue(lst, acc) != 0)
+	{
+		s->peer = NULL;
+		s->listener = NULL;
+		s->state = old_state;
+		acc->peer = NULL;
+		sock_stream_release(acc);
+		return -ECONNREFUSED;
+	}
 	poll_wake_check();
 	return 0;
 }
@@ -546,15 +724,24 @@ int sock_stream_connect_unix(struct sock_stream *s, const char *path)
 struct sock_stream *sock_stream_accept(struct sock_stream *s)
 {
 	struct sock_stream *child;
+	unsigned long irq_flags;
 
 	if (!s || s->state != SS_LISTEN)
 		return NULL;
-	child = s->peer;
-	if (child && child->state == SS_CONNECTED)
+	irq_flags = irq_save();
+	child = s->accept_head;
+	if (child)
 	{
-		s->peer = NULL;
+		s->accept_head = child->accept_next;
+		if (!s->accept_head)
+			s->accept_tail = NULL;
+		child->accept_next = NULL;
+		if (s->accept_count > 0)
+			s->accept_count--;
+		irq_restore(irq_flags);
 		return child;
 	}
+	irq_restore(irq_flags);
 #if CONFIG_ENABLE_NETWORKING
 	if (s->family == IR0_AF_INET && s->port != 0)
 	{
@@ -594,7 +781,7 @@ int sock_stream_bind_inet(struct sock_stream *s, uint16_t port)
 
 	if (!s)
 		return -EINVAL;
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_INET &&
 		    g_socks[i].state != SS_IDLE && g_socks[i].port == port)
@@ -633,7 +820,7 @@ static int sock_stream_is_local_listener(uint16_t port)
 {
 	int i;
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_INET &&
 		    g_socks[i].state == SS_LISTEN && g_socks[i].port == port)
@@ -653,6 +840,7 @@ int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr,
 	int i;
 	struct sock_stream *lst = NULL;
 	struct sock_stream *acc;
+	enum ss_state old_state;
 
 	if (!s)
 		return -EINVAL;
@@ -672,6 +860,9 @@ int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr,
 	}
 	if (s->state == SS_CONNECTED)
 		return -EISCONN;
+	if (s->state != SS_IDLE && s->state != SS_BOUND)
+		return -EINVAL;
+	old_state = s->state;
 
 	if (!sock_stream_is_local_listener(port))
 	{
@@ -717,7 +908,7 @@ int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr,
 #endif
 	}
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_INET &&
 		    g_socks[i].state == SS_LISTEN && g_socks[i].port == port)
@@ -736,7 +927,14 @@ int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr,
 	acc->port = port;
 	s->state = SS_CONNECTED;
 	s->peer = acc;
-	lst->peer = acc;
+	if (sock_stream_accept_enqueue(lst, acc) != 0)
+	{
+		s->peer = NULL;
+		s->state = old_state;
+		acc->peer = NULL;
+		sock_stream_release(acc);
+		return -ECONNREFUSED;
+	}
 	poll_wake_check();
 	return 0;
 }
@@ -783,19 +981,7 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 		return -EPIPE;
 	if (peer->shut_rd)
 		return -EPIPE;
-	{
-		unsigned long irq_flags = irq_save();
-
-		for (i = 0; i < len; i++)
-		{
-			if (peer->count >= SS_BUF)
-				break;
-			peer->buf[peer->head] = src[i];
-			peer->head = (peer->head + 1) % SS_BUF;
-			peer->count++;
-		}
-		irq_restore(irq_flags);
-	}
+	i = sock_stream_queue_write(peer, src, len);
 	if (i > 0)
 		poll_wake_check();
 	return (ssize_t)i;
@@ -806,8 +992,6 @@ ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int
 	size_t i;
 	char *dst = buf;
 	int peek = (flags & MSG_PEEK) != 0;
-	unsigned tail;
-	unsigned count;
 
 	if (!s || (s->state != SS_CONNECTED && s->state != SS_CONNECTING) || !buf)
 		return -EINVAL;
@@ -842,26 +1026,7 @@ ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int
 
 	if (s->shut_rd)
 		return 0;
-	{
-		unsigned long irq_flags = irq_save();
-
-		tail = s->tail;
-		count = s->count;
-		for (i = 0; i < len; i++)
-		{
-			if (count == 0)
-				break;
-			dst[i] = s->buf[tail];
-			tail = (tail + 1) % SS_BUF;
-			count--;
-		}
-		if (!peek && i > 0)
-		{
-			s->tail = tail;
-			s->count = count;
-		}
-		irq_restore(irq_flags);
-	}
+	i = sock_stream_queue_read(s, dst, len, peek);
 	if (i == 0 && (!s->peer || s->peer->shut_wr))
 		return 0;
 	if (i == 0)
@@ -947,7 +1112,7 @@ int sock_stream_inet_walk(int (*cb)(const struct sock_stream_inet_snap *s,
 	if (!cb)
 		return -EINVAL;
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		struct sock_stream *s = &g_socks[i];
 
@@ -992,7 +1157,7 @@ int sock_stream_unix_walk(int (*cb)(const struct sock_stream_unix_snap *s,
 	if (!cb)
 		return -EINVAL;
 
-	for (i = 0; i < SS_MAX; i++)
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		struct sock_stream *s = &g_socks[i];
 

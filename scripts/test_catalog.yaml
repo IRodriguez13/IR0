@@ -186,8 +186,18 @@ suites:
 
   - id: smoke-ext2-mount
     group: storage
-    label: "ext2 mount smoke"
+    label: "ext2 writable Xauthority + persistence smoke"
     make: smoke-ext2-mount
+
+  - id: smoke-desktop-home-boot
+    group: desktop
+    label: "desktop ext2 home product-mount smoke"
+    make: smoke-desktop-home-boot PROFILE=desktop
+
+  - id: smoke-ext2-startx
+    group: desktop
+    label: "upstream startx + twm/xterm on ext2 home"
+    make: smoke-ext2-startx PROFILE=desktop
 
   - id: smoke-gpt-partition
     group: storage

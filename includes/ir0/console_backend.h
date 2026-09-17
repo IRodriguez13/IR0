@@ -25,6 +25,7 @@ int console_backend_uses_framebuffer(void);
 int console_backend_fb_scale(void);
 void console_backend_scroll(int lines);
 void console_backend_write(const char *str, size_t len, uint8_t color);
+void console_backend_write_serial(const char *str, size_t len);
 void console_backend_show_cursor(uint8_t color);
 int console_backend_cursor_x(void);
 void console_backend_userspace_handoff(void);

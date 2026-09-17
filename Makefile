@@ -443,6 +443,7 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_path.o \
 	kernel/test/test_string.o \
 	kernel/test/test_ktm_sched.o \
+	kernel/test/test_sock_stream.o \
 	kernel/test/test_mmap_null_placement.o \
 	kernel/test/test_signal_segv_deliver.o \
 	kernel/test/test_brk_post_exec.o \
@@ -483,6 +484,7 @@ LIB_OBJS = \
     kernel/lib/open_flags.o \
     kernel/lib/stat_user.o \
     kernel/lib/named_fifo.o \
+    kernel/lib/named_socket.o \
     kernel/lib/named_devnode.o \
     kernel/lib/supervise_path.o \
     kernel/lib/named_symlink.o \
@@ -1139,8 +1141,9 @@ endif
 # Link kernel
 kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 	@echo "  LD      $@"
-	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS)
+	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS)
 	@echo "✓ Kernel linked: $@"
+	@echo "$(IR0_BUILD_NUMBER)" > .kernel_build_number
 	@echo "  BUILD   Incrementing build number..."
 	@if [ -f .build_number ]; then \
 		BUILD_NUM=$$(cat .build_number); \
@@ -1152,7 +1155,7 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 
 kernel-arm64.bin: $(ARCH_OBJS) arch/arm64/linker.ld
 	@echo "  LD      $@"
-	@$(LD) $(LDFLAGS) -o $@ $(ARCH_OBJS)
+	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ARCH_OBJS)
 	@echo "✓ Kernel linked: $@"
 
 # Create ISO
@@ -1172,7 +1175,7 @@ kernel-x64.iso: kernel-x64.bin arch/x86-64/grub.cfg
 # would skip kernel_test_run_all() and make kernel-tests time out.
 kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
 	@echo "  LD      $@ (with in-kernel tests)"
-	@$(LD) $(LDFLAGS) -o $@ $(ALL_OBJS_TEST)
+	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS_TEST)
 	@echo "✓ Kernel (test) linked: $@"
 
 build/test/kernel/%.o: kernel/%.c
@@ -1639,6 +1642,10 @@ help:
 	@echo "  make isdconfig PROFILE=minimal    # extras (.isdconfig)"
 	@echo "  make isd / isd-rootfs / isd-image PROFILE=…"
 	@echo "  make poweron PROFILE=minimal      # boots persistent IR0-machines disk"
+	@echo "  make kmang PROFILE=desktop        # versioned kernel manager + fallback"
+	@echo "  make kernel-manager-install PROFILE=…  # build and install without userspace rebuild"
+	@echo "  make machine-update-userspace PROFILE=desktop  # update X, preserve session + rollback"
+	@echo "  make machine-migrate-home PROFILE=desktop  # one-time MINIX → ext2 home migration"
 	@echo "  make machine-info | machine-create | image-vmware PROFILE=…"
 	@echo "  CONFIRM_RESET=yes make machine-reset PROFILE=…"
 	@echo "  make run PROFILE=minimal          # development base-image boot"

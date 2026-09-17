@@ -27,6 +27,9 @@ extern void keyboard_all_keys_up(void);
 extern int keyboard_set_layout(int layout);
 extern int keyboard_get_layout(void);
 extern const char *keyboard_get_layout_name(int layout);
+extern int keyboard_set_console_mode(int mode);
+extern int keyboard_get_console_mode(void);
+extern int poll_wake_check_nosched(void);
 
 void input_mouse_feed_byte(uint8_t data)
 {
@@ -97,6 +100,33 @@ bool input_mouse_set_sensitivity(uint8_t sensitivity)
 #endif
 }
 
+bool input_mouse_packet_available(void)
+{
+#if CONFIG_ENABLE_MOUSE
+	return ps2_mouse_packet_available();
+#else
+	return false;
+#endif
+}
+
+int input_mouse_read_ps2(uint8_t packet[3])
+{
+#if CONFIG_ENABLE_MOUSE
+	ps2_mouse_packet_t source;
+
+	if (!packet || !ps2_mouse_packet_available() ||
+	    !ps2_mouse_read_packet(&source))
+		return 0;
+	packet[0] = (uint8_t)(source.flags | 0x08u);
+	packet[1] = (uint8_t)source.delta_x;
+	packet[2] = (uint8_t)source.delta_y;
+	return 3;
+#else
+	(void)packet;
+	return 0;
+#endif
+}
+
 char input_kbd_get(void)
 {
 	return keyboard_buffer_get();
@@ -135,4 +165,19 @@ int input_kbd_get_layout(void)
 const char *input_kbd_get_layout_name(int layout)
 {
 	return keyboard_get_layout_name(layout);
+}
+
+int input_kbd_set_console_mode(int mode)
+{
+	return keyboard_set_console_mode(mode);
+}
+
+int input_kbd_get_console_mode(void)
+{
+	return keyboard_get_console_mode();
+}
+
+void input_kbd_wake_readers(void)
+{
+	(void)poll_wake_check_nosched();
 }

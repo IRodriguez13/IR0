@@ -35,6 +35,21 @@ typedef struct prio_band
 
 static prio_band_t prio_bands[IR0_SCHED_PRIO_BANDS];
 
+/*
+ * nice(2) is a proportional CPU-share hint, not a real-time scheduling
+ * class.  Always selecting the highest non-empty band lets a process which
+ * lowers its nice value by one starve every ordinary task.  Xorg does that
+ * during server startup, which previously left twm/xterm runnable forever.
+ * Keep the responsive priority preference, but periodically service one
+ * lower runnable band and rotate that relief across all lower bands.
+ */
+/* One preferred dispatch followed by one rotating lower-band dispatch gives
+ * nice -1 a modest bias while keeping interactive peers responsive on UP. */
+#define PRIO_PREFERRED_RUNS 1
+static int prio_preferred_band = -1;
+static unsigned prio_preferred_runs;
+static int prio_relief_band = -1;
+
 static inline uint64_t prio_irq_save(void)
 {
 	return (uint64_t)irq_save();
@@ -164,44 +179,84 @@ void priority_remove_process(process_t *proc)
 	prio_irq_restore(irq_flags);
 }
 
-static process_t *priority_pick_next(void)
+static process_t *priority_pick_from_band(int b)
 {
-	int b;
 	int attempts;
 	prio_task_t *start;
 	prio_task_t *walk;
 	process_t *cand;
 
-	for (b = IR0_SCHED_PRIO_MAX; b >= 0; b--)
+	if (b < 0 || b >= IR0_SCHED_PRIO_BANDS || !prio_bands[b].head)
+		return NULL;
+
+	if (!prio_bands[b].curr)
+		prio_bands[b].curr = prio_bands[b].head;
+	else if (prio_bands[b].curr->next)
+		prio_bands[b].curr = prio_bands[b].curr->next;
+	else
+		prio_bands[b].curr = prio_bands[b].head;
+
+	start = prio_bands[b].curr;
+	walk = start;
+	attempts = 0;
+	do
 	{
-		if (!prio_bands[b].head)
-			continue;
-
-		if (!prio_bands[b].curr)
-			prio_bands[b].curr = prio_bands[b].head;
-		else if (prio_bands[b].curr->next)
-			prio_bands[b].curr = prio_bands[b].curr->next;
-		else
-			prio_bands[b].curr = prio_bands[b].head;
-
-		start = prio_bands[b].curr;
-		walk = start;
-		attempts = 0;
-		do
+		cand = walk ? walk->process : NULL;
+		if (cand && cand->state != PROCESS_ZOMBIE &&
+		    cand->state != PROCESS_BLOCKED)
 		{
-			cand = walk ? walk->process : NULL;
-			if (cand && cand->state != PROCESS_ZOMBIE &&
-			    cand->state != PROCESS_BLOCKED)
-			{
-				prio_bands[b].curr = walk;
-				return cand;
-			}
-			walk = walk->next ? walk->next : prio_bands[b].head;
-			attempts++;
-		} while (walk && walk != start && attempts < 64);
+			prio_bands[b].curr = walk;
+			return cand;
+		}
+		walk = walk->next ? walk->next : prio_bands[b].head;
+		attempts++;
+	} while (walk && walk != start && attempts < 64);
+	return NULL;
+}
+
+static process_t *priority_pick_next(void)
+{
+	process_t *next;
+	int highest;
+	int b;
+
+	for (highest = IR0_SCHED_PRIO_MAX; highest >= 0; highest--)
+		if ((next = priority_pick_from_band(highest)) != NULL)
+			break;
+	if (highest < 0)
+		return NULL;
+
+	/* A preferred task commonly blocks for a few ticks on a full pipe/socket.
+	 * Do not reset its budget merely because a lower band ran while it slept:
+	 * doing so lets wake/sleep loops evade the starvation bound forever. */
+	if (prio_preferred_band < highest)
+	{
+		prio_preferred_band = highest;
+		prio_preferred_runs = 0;
+		prio_relief_band = highest - 1;
 	}
 
-	return NULL;
+	if (prio_preferred_runs >= PRIO_PREFERRED_RUNS && highest > 0)
+	{
+		if (prio_relief_band < 0 || prio_relief_band >= highest)
+			prio_relief_band = highest - 1;
+		for (b = 0; b < highest; b++)
+		{
+			int candidate = prio_relief_band;
+
+			prio_relief_band--;
+			if (prio_relief_band < 0)
+				prio_relief_band = highest - 1;
+			if ((next = priority_pick_from_band(candidate)) != NULL)
+			{
+				prio_preferred_runs = 0;
+				return next;
+			}
+		}
+	}
+
+	prio_preferred_runs++;
+	return next;
 }
 
 void priority_schedule_next(void)
@@ -244,6 +299,7 @@ void priority_promote_process(process_t *proc)
 {
 	int b;
 	prio_task_t *walk;
+	prio_task_t *prev = NULL;
 	uint64_t irq_flags;
 
 	if (!proc)
@@ -255,10 +311,12 @@ void priority_promote_process(process_t *proc)
 	{
 		if (walk->process == proc)
 		{
-			prio_bands[b].curr = walk;
+			/* priority_pick_from_band() advances before selecting. */
+			prio_bands[b].curr = prev ? prev : prio_bands[b].tail;
 			process_set_sched_state(proc, PROCESS_READY);
 			break;
 		}
+		prev = walk;
 	}
 	prio_irq_restore(irq_flags);
 }
@@ -272,6 +330,8 @@ int priority_sched_selftest(void)
 	process_t lo;
 	process_t hi;
 	process_t *pick;
+	int saw_lo = 0;
+	int i;
 	uint64_t irq_flags;
 
 	memset(&lo, 0, sizeof(lo));
@@ -288,12 +348,25 @@ int priority_sched_selftest(void)
 
 	irq_flags = prio_irq_save();
 	pick = priority_pick_next();
+	if (pick != &hi)
+	{
+		prio_irq_restore(irq_flags);
+		priority_remove_process(&lo);
+		priority_remove_process(&hi);
+		return -1;
+	}
+	for (i = 0; i < PRIO_PREFERRED_RUNS + 2; i++)
+	{
+		pick = priority_pick_next();
+		if (pick == &lo)
+			saw_lo = 1;
+	}
 	prio_irq_restore(irq_flags);
 
 	priority_remove_process(&lo);
 	priority_remove_process(&hi);
 
-	if (pick != &hi)
+	if (!saw_lo)
 		return -1;
 	if (priority_count_runnable() != 0)
 		return -1;

@@ -8,6 +8,7 @@
 #include <ir0/devfs.h>
 #include <ir0/errno.h>
 #include <ir0/named_fifo.h>
+#include <ir0/named_socket.h>
 #include <ir0/named_devnode.h>
 #include <ir0/named_symlink.h>
 #include <ir0/permissions.h>
@@ -66,6 +67,13 @@ int ir0_stat_path_routed(const char *path, stat_t *st)
         ensure_devfs_init();
         return devfs_stat_path(path, st);
     }
+
+    /* Bound pathname sockets are visible filesystem nodes. */
+    rc = named_socket_stat(path, st);
+    if (rc == 0)
+        return 0;
+    if (rc != -ENOENT)
+        return rc;
 
     /* In-memory runsv FIFOs (mknod S_IFIFO) are not VFS nodes. */
     rc = named_fifo_stat(path, st);
