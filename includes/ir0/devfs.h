@@ -118,6 +118,7 @@ int64_t dev_zero_write(devfs_entry_t *entry, const void *buf, size_t count, off_
 
 int64_t dev_console_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
 int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
+int dev_console_is_graphics(void);
 
 int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
 int64_t dev_kmsg_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);

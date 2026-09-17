@@ -52,6 +52,7 @@ volatile int *shared_keyboard_buffer_pos =
 static int system_in_idle_mode = 0;
 
 static struct ps2_set1_state kbd_state;
+static int console_keyboard_mode = IR0_INPUT_KBD_XLATE;
 
 /* PS/2 scancode set 1 -> Linux KEY_* (for /dev/events0, Doom) */
 static const uint16_t scancode_to_keycode[256] = {
@@ -179,12 +180,15 @@ static void keyboard_buffer_add(char c)
 	ir0_console_keypress(c);
 
 	if (!ir0_console_store_key_in_ring())
+	{
 		return;
+	}
 
 	if (next != keyboard_buffer_tail)
 	{
 		keyboard_buffer[keyboard_buffer_head] = c;
 		keyboard_buffer_head = next;
+		input_kbd_wake_readers();
 		if (ir0_cmdline_ash_smoke_enabled() &&
 		    !kbd_ascii_tag && (unsigned char)c >= ' ')
 		{
@@ -213,10 +217,12 @@ static void keyboard_buffer_add_bytes(const uint8_t *data, uint8_t len)
 
 char keyboard_buffer_get(void)
 {
+	char c;
+
 	if (keyboard_buffer_head == keyboard_buffer_tail)
 		return 0;
 
-	char c = keyboard_buffer[keyboard_buffer_tail];
+	c = keyboard_buffer[keyboard_buffer_tail];
 	keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KERNEL_KBD_RING_SIZE;
 	return c;
 }
@@ -358,6 +364,13 @@ static void keyboard_feed_scancode(uint8_t scancode)
 		input_event_push(EV_SYN, SYN_REPORT, 0);
 	}
 
+	/* Linux K_MEDIUMRAW: one byte, KEY_* code with bit 7 on release. */
+	if (console_keyboard_mode == IR0_INPUT_KBD_MEDIUMRAW && kc && kc < 128)
+	{
+		keyboard_buffer_add((char)((uint8_t)kc | (down ? 0U : 0x80U)));
+		return;
+	}
+
 	if (r.emitted_len)
 	{
 		static int kbd_scancode_tag;
@@ -390,6 +403,21 @@ static void keyboard_feed_scancode(uint8_t scancode)
 						suppressed);
 		}
 	}
+}
+
+int keyboard_set_console_mode(int mode)
+{
+	if (mode != IR0_INPUT_KBD_XLATE && mode != IR0_INPUT_KBD_MEDIUMRAW)
+		return -EINVAL;
+	console_keyboard_mode = mode;
+	keyboard_buffer_clear();
+	keyboard_all_keys_up();
+	return 0;
+}
+
+int keyboard_get_console_mode(void)
+{
+	return console_keyboard_mode;
 }
 
 void keyboard_init(void)

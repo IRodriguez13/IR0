@@ -30,6 +30,7 @@
 #include <ir0/path_routed.h>
 #include <ir0/stat_user.h>
 #include <ir0/named_fifo.h>
+#include <ir0/named_socket.h>
 #include <ir0/named_symlink.h>
 #include <ir0/eventfd.h>
 #include <ir0/timerfd.h>
@@ -510,6 +511,15 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   {
     if (fd == STDOUT_FILENO || fd == STDERR_FILENO)
     {
+      /* The active graphical VT owns the framebuffer, including stdio's
+       * fast path. Diagnostics remain available on the serial console. */
+      if (dev_console_is_graphics())
+      {
+        if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+          return -EFAULT;
+        console_backend_write_serial(kernel_buf, copy_size);
+        return (int64_t)copy_size;
+      }
       /* Unredirected stdio still goes to console backend. */
       if (copy_from_user(kernel_buf, buf, copy_size) != 0)
         return -EFAULT;
@@ -833,9 +843,23 @@ int64_t sys_read(int fd, void *buf, size_t count)
 		    fd_table[fd].in_use &&
 		    (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
 
-	  devfs_set_read_nonblock(nb);
-	  ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
-	  devfs_set_read_nonblock(0);
+	  for (;;)
+	  {
+	    devfs_set_read_nonblock(nb);
+	    ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
+	    devfs_set_read_nonblock(0);
+	    if (ret != 0 || nb || !node->ops->can_read ||
+	        node->ops->can_read(&node->entry, current_process->task.pid))
+	      break;
+	    if (signals_pause_should_interrupt(current_process))
+	      return -EINTR;
+	    {
+	      int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+	      if (sleep_ret < 0)
+	        return sleep_ret;
+	    }
+	  }
 	}
       }
       if (ret > 0)
@@ -1040,6 +1064,19 @@ int64_t sys_readv(int fd, const struct iovec *iov, int iovcnt)
   {
     struct iovec kiov;
     int64_t ret;
+
+    /* Linux stream readv(2) blocks only until some data is available.  Once
+     * progress exists, do not block merely because an earlier iovec happened
+     * to fill exactly; X11 setup replies commonly arrive fragmented here. */
+    if (total > 0)
+    {
+      fd_entry_t *table = get_process_fd_table();
+
+      if (table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+          table[fd].in_use && table[fd].is_socket &&
+          !fd_can_read_for(current_process, fd))
+        break;
+    }
 
     if (copy_from_user(&kiov, &iov[i], sizeof(kiov)) != 0)
       return total > 0 ? total : -EFAULT;
@@ -1726,6 +1763,12 @@ int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
     return rc;
 
   rc = named_fifo_unlink(resolved);
+  if (rc == 0)
+    return 0;
+  if (rc != -ENOENT)
+    return rc;
+
+  rc = named_socket_unlink(resolved);
   if (rc == 0)
     return 0;
   if (rc != -ENOENT)

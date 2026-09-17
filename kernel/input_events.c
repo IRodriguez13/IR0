@@ -32,6 +32,22 @@ static volatile unsigned int ev_head;
 static volatile unsigned int ev_tail;
 static volatile int events_readers;
 
+/* Poll core callback: marks matching waiters ready without scheduling in IRQ. */
+extern int poll_wake_check_nosched(void);
+static input_ready_notifier_t mouse_ready_notifier;
+
+void input_mouse_set_ready_notifier(input_ready_notifier_t notifier)
+{
+	mouse_ready_notifier = notifier;
+}
+
+void input_event_wake_readers(void)
+{
+	(void)poll_wake_check_nosched();
+	if (mouse_ready_notifier)
+		mouse_ready_notifier();
+}
+
 void input_events_reader_open(void)
 {
 	ir0_spinlock_t lock;

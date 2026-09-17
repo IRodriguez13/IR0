@@ -1659,26 +1659,115 @@ build-init-ext2-smoke:
 
 smoke-ext2-mount: kernel-x64-userspace.iso build/ext2_smoke.img
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   EXT2 mount + read HELLO.TXT on /dev/hdb..."
+	@echo "  SMOKE   EXT2 read/write + Xauthority hardlink on /dev/hdb..."
 	@$(MAKE) -s build-init-ext2-smoke
 	@DISK=$$(mktemp /tmp/ir0-ext2-smoke.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(EXT2_SMOKE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(EXT2_SMOKE_LOG) --timeout 90 \
-		--done 'EXT2OK' -- \
+		--done 'EXT2WRITEOK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-drive file=$(EXT2_SMOKE_IMG),format=raw,if=ide,index=1 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rc=$$?; \
+	if tr -d '\n\r' < $(EXT2_SMOKE_LOG) | grep -q 'EXT2WRITEOK'; then \
+		echo "✓ EXT2 writable semantics passed"; \
+	elif [ $$rc -ne 0 ]; then \
+		echo "✗ smoke-ext2-mount FAILED (QEMU/autokill)"; exit $$rc; \
+	else \
+		echo "✗ smoke-ext2-mount FAILED (tag missing)"; exit 1; \
+	fi; \
+	rm -f $(EXT2_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(EXT2_SMOKE_LOG) --timeout 90 \
+		--done 'EXT2PERSISTOK' -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-drive file=$(EXT2_SMOKE_IMG),format=raw,if=ide,index=1 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rc=$$?; rm -f $$DISK; \
-	if tr -d '\n\r' < $(EXT2_SMOKE_LOG) | grep -q 'EXT2OK'; then \
-		echo "✓ smoke-ext2-mount passed"; \
+	if tr -d '\n\r' < $(EXT2_SMOKE_LOG) | grep -q 'EXT2PERSISTOK'; then \
+		echo "✓ smoke-ext2-mount persistence passed"; \
 	elif [ $$rc -ne 0 ]; then \
-		echo "✗ smoke-ext2-mount FAILED (QEMU/autokill)"; exit $$rc; \
+		echo "✗ smoke-ext2-mount persistence FAILED (QEMU/autokill)"; exit $$rc; \
 	else \
-		echo "✗ smoke-ext2-mount FAILED (tag missing)"; exit 1; \
+		echo "✗ smoke-ext2-mount persistence FAILED (tag missing)"; exit 1; \
+	fi; \
+	e2fsck -fn $(EXT2_SMOKE_IMG) >/tmp/ext2-smoke-fsck.log 2>&1 || { \
+		cat /tmp/ext2-smoke-fsck.log; \
+		echo "✗ EXT2 image consistency check failed"; exit 1; \
+	}; \
+	echo "✓ EXT2 e2fsck consistency passed"
+
+EXT2_STARTX_LOG = /tmp/ext2-startx-smoke.log
+EXT2_STARTX_INIT = build/init-ext2-startx-smoke
+.PHONY: smoke-ext2-startx smoke-x11-pointer
+
+.PHONY: smoke-desktop-home-boot
+smoke-desktop-home-boot: check-isd
+	+@$(MAKE) -s kernel-x64-userspace.iso PROFILE=desktop
+	+@$(MAKE) -s ensure-isd-disk ensure-isd-home PROFILE=desktop
+	@ROOT_DISK=$$(mktemp /tmp/ir0-home-boot-root.XXXXXX.img); \
+	HOME_DISK=$$(mktemp /tmp/ir0-home-boot-home.XXXXXX.img); \
+	cp --reflink=auto "$(IR0_ISD_DISK)" $$ROOT_DISK; \
+	cp --reflink=auto "$(IR0_ISD_HOME_DISK)" $$HOME_DISK; \
+	$(SMOKE_QEMU_RUN) --log /tmp/desktop-home-boot.log --timeout 60 \
+		--done 'EXT2_HOME_MOUNT_OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$ROOT_DISK,format=raw,if=ide,index=0 \
+		-drive file=$$HOME_DISK,format=raw,if=ide,index=1 \
+		-serial stdio -display none -m 512M -no-reboot -net none; \
+	rc=$$?; \
+	e2fsck -fn $$HOME_DISK >/tmp/desktop-home-fsck.log 2>&1 || rc=1; \
+	rm -f $$ROOT_DISK $$HOME_DISK; \
+	exit $$rc
+
+smoke-ext2-startx: check-isd
+	@if [ "$(ISD_PROFILE)" != desktop ]; then \
+		echo "✗ smoke-ext2-startx requires PROFILE=desktop"; exit 2; \
 	fi
+	+@$(MAKE) -s kernel-x64-userspace.iso PROFILE=desktop
+	+@$(MAKE) -s ensure-isd-disk ensure-isd-home PROFILE=desktop
+	@$(MUSL_CC) -static -Os -o $(EXT2_STARTX_INIT) \
+		setup/pid1/init_ext2_startx_smoke.c
+	@ROOT_DISK=$$(mktemp /tmp/ir0-startx-root.XXXXXX.img); \
+	HOME_DISK=$$(mktemp /tmp/ir0-startx-home.XXXXXX.img); \
+	cp --reflink=auto "$(IR0_ISD_DISK)" $$ROOT_DISK; \
+	cp --reflink=auto "$(IR0_ISD_HOME_DISK)" $$HOME_DISK; \
+	python3 scripts/inject_init_minix.py $$ROOT_DISK \
+		$(EXT2_STARTX_INIT) sbin/init; \
+	$(SMOKE_QEMU_RUN) --log $(EXT2_STARTX_LOG) --timeout 90 \
+		--fail-regex 'STARTX.*FAIL' \
+		--done 'STARTX_EXT2_OK' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$ROOT_DISK,format=raw,if=ide,index=0 \
+		-drive file=$$HOME_DISK,format=raw,if=ide,index=1 \
+		-serial stdio -display none -m 512M -no-reboot -net none; \
+	rc=$$?; \
+	e2fsck -fn $$HOME_DISK >/tmp/ext2-startx-fsck.log 2>&1 || { \
+		cat /tmp/ext2-startx-fsck.log; rc=1; \
+	}; \
+	rm -f $$ROOT_DISK $$HOME_DISK; \
+	if [ $$rc -ne 0 ]; then exit $$rc; fi; \
+	if ! rg -q 'X11_PATH_SOCKET_INODE_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'X11_WM_AND_TERMINAL_LAUNCHED_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'X11_DESKTOP_CLIENTS_SUSTAINED_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'X11_DESKTOP_BACKGROUND_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'X11_DESKTOP_DEMOS_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'X11_XAW_CLIENTS_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if rg -i 'panic|general protection|page fault|corrupt|STARTX.*FAIL|Could not init font path|Fatal server error|xinit: giving up' \
+		$(EXT2_STARTX_LOG); then exit 1; fi; \
+	if rg -i 'Cannot convert string "calculator"|Cannot convert string ".*adobe-symbol' \
+		$(EXT2_STARTX_LOG); then exit 1; fi; \
+	echo "✓ upstream startx desktop clients remained alive with ext2 HOME"
+
+smoke-x11-pointer: smoke-ext2-startx
+	@python3 scripts/smoke_x11_pointer.py \
+		--qemu "$(QEMU)" --iso kernel-x64-userspace.iso \
+		--root "$(IR0_ISD_DISK)" --home "$(IR0_ISD_HOME_DISK)" \
+		--init "$(EXT2_STARTX_INIT)" \
+		--inject scripts/inject_init_minix.py
 
 POSIX_DEPTH_SMOKE_LOG = /tmp/posix-depth-smoke.log
 INIT_POSIX_DEPTH_SMOKE_SRC = setup/pid1/init_posix_depth_smoke.c
@@ -3452,6 +3541,7 @@ kernel-x64-userspace.bin:
 		drivers/video/console.o sched/rr_sched.o
 	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1
 	@cp kernel-x64.bin $@
+	@cp .kernel_build_number .kernel_userspace_build_number
 	@rm -f kernel/main.o kernel/process/*.o
 	@$(MAKE) kernel-x64.bin
 	@echo "✓ Kernel (userspace init, lazy MM) copied: $@"
@@ -3462,6 +3552,7 @@ kernel-x64-userspace-eager.bin:
 		drivers/video/console.o sched/rr_sched.o
 	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1 USERSPACE_EAGER_MM=1
 	@cp kernel-x64.bin $@
+	@cp .kernel_build_number .kernel_userspace_build_number
 	@rm -f kernel/main.o kernel/process/*.o
 	@$(MAKE) kernel-x64.bin
 	@echo "✓ Kernel (userspace init, eager MM bisect) copied: $@"

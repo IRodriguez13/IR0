@@ -51,6 +51,7 @@ typedef struct process process_t;
 #define SIGUSR2  12   /* User-defined signal 2 */
 #define SIGPIPE  13   /* Write on a pipe with no readers (Linux signal(7)) */
 #define SIGWINCH 28   /* Window size change (TTY) */
+#define SIGIO    29   /* I/O readiness notification (F_SETOWN/O_ASYNC) */
 
 /* Signal bitmask helpers */
 #define SIGNAL_MASK(sig) (1U << (sig))

@@ -35,6 +35,9 @@
 #include <ir0/pipe.h>
 #include <ir0/vfs.h>
 #include <ir0/memfd.h>
+#include <ir0/named_socket.h>
+#include <ir0/path_user.h>
+#include <ir0/logging.h>
 #include <ir0/devfs.h>
 #include <ir0/uio.h>
 #include <config.h>
@@ -303,8 +306,10 @@ int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 		if (family == AF_UNIX)
 		{
 			struct sockaddr_un sun;
+			char resolved[256];
 			size_t plen;
 			int abs;
+			int rc;
 
 			if (addrlen < sizeof(sun.sun_family) + 1)
 				return -EINVAL;
@@ -317,8 +322,42 @@ int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 			if (plen >= sizeof(sun.sun_path))
 				plen = sizeof(sun.sun_path) - 1;
 			if (!abs)
+			{
 				plen = sock_strnlen(sun.sun_path, plen);
-			return sock_stream_bind_unix_n(ss, sun.sun_path, plen, abs);
+				rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, sun.sun_path,
+						       resolved, sizeof(resolved),
+						       current_process->cwd,
+						       current_process->root);
+				if (rc != 0)
+					return rc;
+				rc = named_socket_create(resolved, 0777);
+				if (rc != 0)
+				{
+					if (rc == -EADDRINUSE)
+						log_warn("AF_UNIX", "socket node already exists");
+					else if (rc == -EINVAL)
+						log_warn("AF_UNIX", "socket node invalid path");
+					else if (rc == -ENAMETOOLONG)
+						log_warn("AF_UNIX", "socket node path too long");
+					else
+						log_warn("AF_UNIX", "socket node create failed");
+					return rc;
+				}
+				rc = sock_stream_bind_unix_n(ss, resolved,
+							    strlen(resolved), 0);
+				if (rc != 0)
+				{
+					(void)named_socket_unlink(resolved);
+					if (rc == -EINVAL)
+						log_warn("AF_UNIX", "transport bind invalid path");
+					else if (rc == -EADDRINUSE)
+						log_warn("AF_UNIX", "transport address in use");
+					else
+						log_warn("AF_UNIX", "transport bind failed");
+				}
+				return rc;
+			}
+			return sock_stream_bind_unix_n(ss, sun.sun_path, plen, 1);
 		}
 		if (family == AF_INET)
 		{
@@ -711,8 +750,10 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 		if (family == AF_UNIX)
 		{
 			struct sockaddr_un sun;
+			char resolved[256];
 			size_t plen;
 			int abs;
+			int rc;
 
 			memset(&sun, 0, sizeof(sun));
 			if (copy_from_user(&sun, addr,
@@ -723,8 +764,18 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 			if (plen >= sizeof(sun.sun_path))
 				plen = sizeof(sun.sun_path) - 1;
 			if (!abs)
+			{
 				plen = sock_strnlen(sun.sun_path, plen);
-			return sock_stream_connect_unix_n(ss, sun.sun_path, plen, abs);
+				rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, sun.sun_path,
+						       resolved, sizeof(resolved),
+						       current_process->cwd,
+						       current_process->root);
+				if (rc != 0)
+					return rc;
+				return sock_stream_connect_unix_n(ss, resolved,
+								 strlen(resolved), 0);
+			}
+			return sock_stream_connect_unix_n(ss, sun.sun_path, plen, 1);
 		}
 		if (family == AF_INET)
 		{
@@ -1138,6 +1189,7 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 	uint8_t ctrl[256];
 	size_t ctrl_used = 0;
 	int got_rights = 0;
+	int nonblock;
 
 #if !CONFIG_ENABLE_NETWORKING
 	(void)fd;
@@ -1146,7 +1198,6 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 	return -ENOSYS;
 #endif
 	scm_rights_ensure_dtor();
-	(void)flags;
 	if (!current_process || !umsg)
 		return -EFAULT;
 	if (copy_from_user(&msg, umsg, sizeof(msg)) != 0)
@@ -1156,6 +1207,7 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 		return -ENOTSOCK;
 	if (sock_stream_family(ss) != IR0_AF_UNIX)
 		return -EOPNOTSUPP;
+	nonblock = sock_nonblock_fd(fd, flags);
 	iovlen = msg.msg_iovlen;
 	if (iovlen > 8)
 		return -EMSGSIZE;
@@ -1247,11 +1299,40 @@ recv_payload:
 		kbuf = kmalloc(iov_stack[i].iov_len);
 		if (!kbuf)
 			return -ENOMEM;
-		n = sock_stream_recv_flags(ss, kbuf, iov_stack[i].iov_len, flags);
+		for (;;)
+		{
+			n = sock_stream_recv_flags(ss, kbuf,
+						   iov_stack[i].iov_len, flags);
+			if (n != -EAGAIN)
+				break;
+			/* Linux may return an already received prefix immediately. */
+			if (total > 0 || got_rights || nonblock)
+				break;
+			if (signals_pause_should_interrupt(current_process))
+			{
+				kfree(kbuf);
+				return -EINTR;
+			}
+			{
+				int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+				if (sleep_ret < 0)
+				{
+					kfree(kbuf);
+					return sleep_ret;
+				}
+			}
+			ss = sock_stream_fd_lookup(fd);
+			if (!ss)
+			{
+				kfree(kbuf);
+				return -EBADF;
+			}
+		}
 		if (n < 0)
 		{
 			kfree(kbuf);
-			return n;
+			return total > 0 ? total : n;
 		}
 		if (n > 0 &&
 		    copy_to_user(iov_stack[i].iov_base, kbuf, (size_t)n) != 0)

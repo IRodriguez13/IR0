@@ -22,6 +22,9 @@
 #define CONFIG_ENABLE_SMP 0
 #endif
 
+/* Absolute value supplied by the linker for every concrete kernel image. */
+extern char ir0_build_number[];
+
 void ir0_utsname_fill_version(char *dst, size_t n)
 {
 	const char *cpu_mode;
@@ -48,7 +51,10 @@ void ir0_utsname_fill_version(char *dst, size_t n)
 	else
 		sched_label = "RR";
 
-	snprintf(dst, n, "%s %s", cpu_mode, sched_label);
+	/* Linux exposes the build identity in the uname version field. */
+	snprintf(dst, n, "#%lu %s %s",
+		 (unsigned long)(uintptr_t)ir0_build_number,
+		 cpu_mode, sched_label);
 	dst[n - 1] = '\0';
 }
 

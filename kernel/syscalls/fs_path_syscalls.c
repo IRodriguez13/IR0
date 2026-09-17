@@ -22,6 +22,7 @@
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/named_fifo.h>
+#include <ir0/named_socket.h>
 #include <ir0/named_symlink.h>
 #include <ir0/path.h>
 #include <ir0/path_routed.h>
@@ -415,6 +416,7 @@ int64_t sys_rename(const char *oldpath, const char *newpath)
     return rc;
 
   (void)named_fifo_unlink(new_resolved);
+  (void)named_socket_unlink(new_resolved);
   (void)named_symlink_unlink(new_resolved);
 
   return vfs_rename(old_resolved, new_resolved);
@@ -751,6 +753,12 @@ int64_t sys_unlink(const char *pathname)
 
   if (posix_shm_path_is(resolved))
     return posix_shm_try_unlink(resolved);
+
+  rc = named_socket_unlink(resolved);
+  if (rc == 0)
+    return 0;
+  if (rc != -ENOENT)
+    return rc;
 
   return vfs_unlink(resolved);
 }
