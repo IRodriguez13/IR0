@@ -147,6 +147,7 @@ bool ps2_mouse_set_scaling_1_1(void);
 void ps2_mouse_feed_byte(uint8_t data);
 void ps2_mouse_handle_interrupt(void); /* drains i8042 via keyboard_poll demux */
 bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet);
+bool ps2_mouse_packet_available(void);
 void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet);
 
 // Low-level functions
@@ -166,4 +167,3 @@ uint8_t ps2_controller_read_data(void);
 ps2_mouse_type_t ps2_mouse_detect_type(void);
 bool ps2_mouse_enable_wheel(void);
 bool ps2_mouse_enable_5buttons(void);
-

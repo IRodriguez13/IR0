@@ -29,7 +29,7 @@ static struct ps2_mouse_pkt_state pkt_state;
 static uint8_t expected_packet_size = 3;
 
 /* Mouse packet queue (ring buffer) */
-#define MOUSE_QUEUE_SIZE 32
+#define MOUSE_QUEUE_SIZE 256
 static ps2_mouse_packet_t mouse_queue[MOUSE_QUEUE_SIZE];
 static int mouse_queue_head = 0;
 static int mouse_queue_tail = 0;
@@ -37,11 +37,15 @@ static int mouse_queue_tail = 0;
 static void mouse_queue_push(const ps2_mouse_packet_t *p)
 {
     int next = (mouse_queue_head + 1) % MOUSE_QUEUE_SIZE;
-    if (next != mouse_queue_tail)
-    {
-        mouse_queue[mouse_queue_head] = *p;
-        mouse_queue_head = next;
-    }
+
+    /* Preserve the newest physical state under input bursts.  Dropping the
+     * incoming packet can discard ButtonPress/ButtonRelease and leave a GUI
+     * permanently stuck; evdev-style consumers can recover from an older
+     * motion sample being displaced by the latest complete PS/2 packet. */
+    if (next == mouse_queue_tail)
+        mouse_queue_tail = (mouse_queue_tail + 1) % MOUSE_QUEUE_SIZE;
+    mouse_queue[mouse_queue_head] = *p;
+    mouse_queue_head = next;
 }
 
 static bool mouse_queue_pop(ps2_mouse_packet_t *p)
@@ -53,6 +57,11 @@ static bool mouse_queue_pop(ps2_mouse_packet_t *p)
     *p = mouse_queue[mouse_queue_tail];
     mouse_queue_tail = (mouse_queue_tail + 1) % MOUSE_QUEUE_SIZE;
     return true;
+}
+
+bool ps2_mouse_packet_available(void)
+{
+    return mouse_queue_head != mouse_queue_tail;
 }
 
 /* Internal hardware initialization function */
@@ -276,6 +285,7 @@ void ps2_mouse_feed_byte(uint8_t data)
 {
 	struct ps2_mouse_pkt assembled;
 	ps2_mouse_packet_t packet;
+	static int packet_path_logged;
 
 	if (!mouse_state.initialized)
 	{
@@ -307,6 +317,13 @@ void ps2_mouse_feed_byte(uint8_t data)
 
 	ps2_mouse_process_packet(&packet);
 	mouse_queue_push(&packet);
+	if (!packet_path_logged)
+	{
+		packet_path_logged = 1;
+		klog_info_fmt("INPUT", "PS2_MOUSE_PACKET_PATH_OK");
+	}
+	/* /dev/mouse and evdev readers may be asleep in select/poll. */
+	input_event_wake_readers();
 }
 
 void ps2_mouse_handle_interrupt(void)
