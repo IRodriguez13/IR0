@@ -44,6 +44,9 @@ void input_mouse_feed_byte(uint8_t data);
 bool input_mouse_is_available(void);
 bool input_mouse_get_state(ir0_mouse_state_t *out);
 bool input_mouse_set_sensitivity(uint8_t sensitivity);
+/* Linux /dev/mouse compatibility: one standard three-byte PS/2 packet. */
+bool input_mouse_packet_available(void);
+int input_mouse_read_ps2(uint8_t packet[3]);
 
 char input_kbd_get(void);
 int input_kbd_has_data(void);
@@ -54,3 +57,11 @@ void input_kbd_poll_ps2(void);
 int input_kbd_set_layout(int layout);
 int input_kbd_get_layout(void);
 const char *input_kbd_get_layout_name(int layout);
+
+/* Linux console keyboard discipline used by unmodified userspace (Xfbdev). */
+#define IR0_INPUT_KBD_XLATE     0
+#define IR0_INPUT_KBD_MEDIUMRAW 2
+int input_kbd_set_console_mode(int mode);
+int input_kbd_get_console_mode(void);
+/* Publish newly queued console bytes to poll/select waiters. */
+void input_kbd_wake_readers(void);

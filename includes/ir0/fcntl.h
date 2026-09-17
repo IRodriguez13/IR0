@@ -43,7 +43,7 @@
 
 #define FD_CLOEXEC      1   /* Close-on-exec flag */
 
-/* Linux open status bit; IR0 does not deliver SIGIO yet — strip on F_SETFL. */
+/* Linux asynchronous-I/O status bit used by input consumers such as KDrive. */
 #ifndef O_ASYNC
 #define O_ASYNC         020000
 #endif

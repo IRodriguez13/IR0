@@ -1618,7 +1618,7 @@ int proc_version_read(char *buf, size_t count)
         return -1;
     memset(buf, 0, count);
     ir0_utsname_fill_version(uname_ver, sizeof(uname_ver));
-    /* Human line aligned with uname(2) version (runtime UP|SMP + RR|Priority). */
+    /* Human line aligned with uname(2), including the immutable build id. */
     int len = snprintf(buf, count, "IR0 version %s %s (%s %s by %s@%s with %s)\n",
                        IR0_VERSION_STRING, uname_ver,
                        IR0_BUILD_DATE, IR0_BUILD_TIME,

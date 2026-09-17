@@ -92,7 +92,15 @@ void process_itimer_tick(uint64_t now_ms)
 		else
 			p->it_real_expire_ms = 0;
 
-		(void)send_signal((int)p->task.pid, SIGALRM);
+		/*
+		 * Standard (non-realtime) timer signals coalesce.  Do not manufacture
+		 * another delivery while SIGALRM is already pending or its handler is
+		 * active (the delivery path blocks the signal unless SA_NODEFER).
+		 * Advancing the expiry above still accounts for elapsed intervals.
+		 */
+		if (!(p->signal_pending & SIGNAL_MASK(SIGALRM)) &&
+		    p->signal_last_delivered != SIGALRM)
+			(void)send_signal((int)p->task.pid, SIGALRM);
 	}
 }
 

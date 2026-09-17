@@ -62,3 +62,5 @@ void ktest_brk_linux_fail_returns_current(void);
 void ktest_tty_canon_read_immediate(void);
 void ktest_tty_canon_block_wake(void);
 void ktest_process_reset_blocked_syscall_state(void);
+void ktest_sock_stream_accept_fifo_backlog(void);
+void ktest_sock_stream_segmented_queue(void);

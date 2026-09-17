@@ -140,6 +140,20 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
     }
 }
 
+void console_backend_write_serial(const char *str, size_t len)
+{
+    size_t i;
+
+    if (!str || !tty_serial_mirror)
+        return;
+    for (i = 0; i < len; i++)
+    {
+        if (str[i] == '\n')
+            serial_putchar('\r');
+        serial_putchar(str[i]);
+    }
+}
+
 void console_backend_show_cursor(uint8_t color)
 {
     typewriter_show_cursor(color);

@@ -1051,6 +1051,7 @@ int ir0_console_ioctl_winsize_set(void *user_arg)
 {
 	struct ir0_winsize win;
 	int32_t pgid;
+	int changed;
 
 	if (!user_arg)
 		return -EINVAL;
@@ -1058,8 +1059,11 @@ int ir0_console_ioctl_winsize_set(void *user_arg)
 		return -EFAULT;
 	if (win.ws_row == 0 || win.ws_col == 0)
 		return -EINVAL;
+	changed = soft_ws_row != win.ws_row || soft_ws_col != win.ws_col;
 	soft_ws_row = win.ws_row;
 	soft_ws_col = win.ws_col;
+	if (!changed)
+		return 0;
 	pgid = ir0_console_get_fg_pgid();
 	if (pgid > 1)
 		(void)send_signal_pgrp(pgid, SIGWINCH);

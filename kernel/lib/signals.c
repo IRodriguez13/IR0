@@ -338,6 +338,8 @@ void signals_reset_on_exec(process_t *p)
 
 int signals_pause_should_interrupt(process_t *p)
 {
+	uint32_t deliverable;
+
 	if (!p || p->signal_pending == 0)
 		return 0;
 
@@ -355,17 +357,22 @@ int signals_pause_should_interrupt(process_t *p)
 	    !signals_has_user_handler(p, SIGHUP))
 		return 1;
 
-	return (p->signal_pending & ~p->signal_mask) != 0;
+	deliverable = p->signal_pending & ~p->signal_mask;
+	deliverable &= ~p->signal_ignored;
+	/* POSIX default-ignore signals do not interrupt blocking syscalls. */
+	if (p->signal_handlers[SIGCHLD] == SIG_DFL)
+		deliverable &= ~SIGNAL_MASK(SIGCHLD);
+	if (p->signal_handlers[SIGWINCH] == SIG_DFL)
+		deliverable &= ~SIGNAL_MASK(SIGWINCH);
+	if (p->signal_handlers[SIGCONT] == SIG_DFL)
+		deliverable &= ~SIGNAL_MASK(SIGCONT);
+	return deliverable != 0;
 }
 
 int signals_should_handle_on_run(process_t *p)
 {
 	if (!p || p->signal_pending == 0)
 		return 0;
-
-	if (p->signal_pending & ~p->signal_mask)
-		return 1;
-
 	return signals_pause_should_interrupt(p);
 }
 
@@ -936,15 +943,17 @@ void handle_signals(void)
                          */
                         if (signal_delivery_blocked_nested(current))
                         {
-                            klog_info_fmt("SIGNAL",
-                                          "NESTED_BLOCKED sig=%x outer_rip=%llx",
-                                          (unsigned)sig,
-                                          (unsigned long long)
-                                          (process_saved_context_present(current)
-                                           ? sigcontext_ip(
-                                               process_saved_context_peek(
-                                                 current))
-                                           : 0ULL));
+                            if (sig == SIGSEGV || sig == SIGBUS ||
+                                sig == SIGILL || sig == SIGFPE)
+                                klog_info_fmt("SIGNAL",
+                                              "NESTED_BLOCKED sig=%x outer_rip=%llx",
+                                              (unsigned)sig,
+                                              (unsigned long long)
+                                              (process_saved_context_present(current)
+                                               ? sigcontext_ip(
+                                                   process_saved_context_peek(
+                                                     current))
+                                               : 0ULL));
                             if (sig == SIGSEGV || sig == SIGBUS ||
                                 sig == SIGILL || sig == SIGFPE)
                             {
@@ -987,7 +996,9 @@ void handle_signals(void)
                         {
                             signal_fill_sigcontext_from_syscall_frame(
                                 ctx, &current->syscall_frame,
-                                (uint64_t)(int64_t)(-EINTR));
+                                sig == SIGCHLD
+                                    ? (uint64_t)(int64_t)(-EINTR)
+                                    : current->syscall_resume_rax);
                         }
                         else
                             task_store_sigcontext(ctx, &current->task);
@@ -1148,15 +1159,16 @@ void handle_signals(void)
                                                          (void *)handler, sig,
                                                          user_sp);
 
-                        klog_info_fmt("SIGNAL",
-                                      "DELIVER_CTX sig=%d saved_rip=%llx "
-                                      "saved_rdi=%llx saved_rsp=%llx "
-                                      "handler=%llx",
-                                      sig,
-                                      (unsigned long long)ctx->rip,
-                                      (unsigned long long)ctx->rdi,
-                                      (unsigned long long)ctx->rsp,
-                                      (unsigned long long)(uintptr_t)handler);
+                        if (sig != SIGALRM && sig != SIGIO)
+                            klog_info_fmt("SIGNAL",
+                                          "DELIVER_CTX sig=%d saved_rip=%llx "
+                                          "saved_rdi=%llx saved_rsp=%llx "
+                                          "handler=%llx",
+                                          sig,
+                                          (unsigned long long)ctx->rip,
+                                          (unsigned long long)ctx->rdi,
+                                          (unsigned long long)ctx->rsp,
+                                          (unsigned long long)(uintptr_t)handler);
 
                         /*
                          * Backup the real syscall entry frame before redirecting
