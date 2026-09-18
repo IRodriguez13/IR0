@@ -1,0 +1,39 @@
+---
+description: IR0 kernel workspace — tiers, smokes, upstream discipline
+alwaysApply: true
+---
+
+# IR0 workspace
+
+Kernel Unix-like **IR0**. Reglas canónicas en `~/.cursor/rules/kernel-linux/`.
+
+Instalar/actualizar symlinks (IR0 + linux-upstream):
+
+```bash
+make kernel-linux-rules-install
+# o: ./scripts/install-cursor-rules.sh
+```
+
+## Capas
+
+| Capa | Reglas | Verificación |
+|------|--------|--------------|
+| IR0 tiers T0–T3 | `ir0-tier-t*` | `make smoke-*`, tags en serial |
+| POSIX / userspace | `ir0-tier-t1`, `kernel-userspace-abi` | musl smokes, contratos ABI |
+| Arquitectura | `kernel-architecture-rigor`, `kernel-c-allman-style` | `make arch-guard`, CTR gates |
+| Linux ground truth | `linux-ground-truth-first` | `scripts/d1_13_linux_ground_truth.py` |
+| Linux fork debug | `ir0-linux-fork-debug-reference` | `$LINUX_TREE` (= `~/Escritorio/linux`), `git log -S` / `git show` |
+| Smoke behavior | `ir0-smoke-behavior-validation` | `smoke_tty_guards.py`, multi-trial, guards en ventana de sesión |
+| Upstream discipline | `linux-upstream-*` | referencia Linux/BSD al diseñar syscalls, MM, drivers |
+| Version stamp | `ir0-version-stamp` | `includes/ir0/version.h` + `Makefile` ↔ tags `v0.0.1*` |
+
+## Gates CTR (cierre de oleada)
+
+```bash
+make -s kernel-x64.bin
+make -s arch-guard
+make -s build-matrix-min
+make -s -C tests/host run
+```
+
+**Nota:** estilo C en IR0 es **Allman** (`kernel-c-allman-style`); `linux-upstream-coding-style` aplica como referencia OSS, no para imitar tabs K&R en el fork.

@@ -337,7 +337,11 @@ build-passwd-smoke:
 
 .PHONY: build-opendoas build-doas-smoke smoke-doas smoke-recovery
 build-opendoas: check-userspace
-	@$(IR0_USERSPACE_MAKE) build-opendoas
+	@if $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=$(ISD_ARCH) -n build-opendoas >/dev/null 2>&1; then \
+		$(IR0_USERSPACE_MAKE) build-opendoas; \
+	else \
+		echo "  WARN    build-opendoas skipped (no ISD target; smoke-doas needs opendoas port)"; \
+	fi
 
 build-doas-smoke: build-opendoas
 	@if [ -z "$(MUSL_CC)" ]; then \

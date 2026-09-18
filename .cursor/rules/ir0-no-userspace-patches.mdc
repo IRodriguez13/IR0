@@ -1,0 +1,61 @@
+---
+description: IR0 kernel adapts to Linux ABI; never patch userspace/ports to tolerate kernel bugs
+alwaysApply: true
+---
+
+# IR0 — No userspace patches (kernel-first Linux ABI)
+
+**IR0 adapts to what programs need.** BusyBox, musl, xterm, twm, GNU tools, and
+third-party ports are the observable spec. Do **not** patch them to tolerate IR0
+kernel gaps.
+
+Complements `ir0-userspace-first-linux-abi.mdc` and `kernel-userspace-abi.mdc`.
+
+## Hard stop
+
+Before changing anything under `setup/pid1/`, `ir0-patches/`, ISD rootfs ports,
+musl, BusyBox, xterm, twm, or other **userspace** trees for ABI-like behavior:
+
+1. Observe divergence (strace, `linux-abi-audit-*`, smoke).
+2. Classify in `kernel-maintainer/divergence-taxonomy.mdc`.
+3. Fix **kernel** (syscalls, devfs, signals, TTY) via `includes/ir0/*` facades.
+4. Verify CTR gates + contract/smoke before any userspace belt.
+
+**Forbidden:** closing PTY/signal/TTY/read errno bugs with a userspace-only patch
+while the kernel still returns wrong behavior.
+
+## Architecture
+
+- Portable code uses `#include <ir0/...>` facades — no `#include <drivers/...>` in
+  `fs/`, `mm/`, `net/`.
+- Subsystems communicate through callback/facade tables; extend facades instead of
+  cross-includes.
+- New syscall logic → `kernel/syscalls/<domain>.c` or `includes/ir0/*` helpers;
+  do not grow glue `kernel/syscalls.c`.
+
+## ISD / rootfs scope
+
+| Allowed in ISD/rootfs | Not allowed |
+|---|---|
+| Packaging, staging, smoke harness init | musl/BusyBox/xterm patches for kernel ABI |
+| `etc/profile` policy (auto-startx) if Linux-equivalent | Fake success in ports when kernel is wrong |
+| App-defaults / xinitrc layout (no ABI lies) | irssi/network hacks before TCP stack exists |
+
+## Verification (ABI-touching kernel work)
+
+```bash
+make -s kernel-x64.bin
+make -s arch-guard
+make -s -C tests/host run
+# When contract exists:
+make -s linux-abi-audit-<contract>
+```
+
+Update `scripts/linux_abi/contracts.json` and
+`Documentation/releases/IR0_0.0.1_ABI_BOARD.md` only after audit/smoke PASS.
+
+## Anti-patterns
+
+- Patching ash/login for `-EINTR` while kernel still returns EOF or corrupt sigframe.
+- Duplicate devfs `device_id` values (breaks `devfs_find_node_by_id` routing).
+- Marking contracts VERIFIED without runnable compare workload.
