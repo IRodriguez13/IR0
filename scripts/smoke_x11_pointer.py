@@ -283,7 +283,7 @@ def main() -> int:
             print(f"✓ xterm rendered varied readable glyphs (repeat peak {repeated_glyphs})")
             print("✓ xsetroot desktop texture remained visible")
             print("✓ graphical keyboard executed a shell command in xterm")
-            print("✓ stock X server and seven X11 desktop clients remained stable")
+            print("✓ stock X server and X11 desktop clients remained stable")
             return 0
         finally:
             if log.exists():

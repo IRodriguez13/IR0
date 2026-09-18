@@ -154,18 +154,18 @@ with a new kernel but will not show the verified X11 session. Refresh userspace
 explicitly (`make isd-image PROFILE=desktop` / `machine-update-userspace`) —
 do not expect kernel rebuilds to upgrade third-party packages.
 
-## Userspace versioning (direction, ISD-owned)
+## Userspace versioning (ISD-owned, implemented)
 
-Keep IR0 adapting to Linux/musl ABI; leave package recipes in ISD. Suggested
-ISD-side model (not implemented in this kernel tree):
+| Layer | Mechanism |
+|-------|-----------|
+| ISD release | Top-level `ISD/VERSION` → `/etc/os-release` `VERSION_ID` + `/usr/share/isd/release.txt` |
+| Package origins | `/usr/share/isd/package-manifest.txt` (`first-party` / `third-party` / `third-party+isd-patches`) |
+| Userland base | `USERLAND_BASE=busybox` in `profiles/*/profile.conf` (`coreutils` reserved) |
+| Guest CLI | `ir0-status version \| profile \| kernel \| packages \| userland \| busybox` |
+| Host CLI | `make usmang` → `scripts/userspace_manager.py` |
 
-| Layer | What to version | Notes |
-|-------|-----------------|-------|
-| ISD release / profile stamp | Distro image identity | Independent of kernel `#N` |
-| First-party ISD bits | runit glue, login, doas, session, `/heart` | Own semver or git describe |
-| Third-party ports | BusyBox, TinyX, twm, xterm, … | Upstream version + ISD patch level |
-| Base userland choice | BusyBox ash vs GNU coreutils profile | Profile or `.isdconfig` toggle — do not fork third-party trees in IR0 |
+Keep IR0 adapting to Linux/musl ABI; leave package recipes in ISD. Do **not**
+share the kernel `.build_number` counter with ISD releases.
 
-A future `usmang` (or `isdconfig` panel) can list profile stamps and which
-base userland is active; it should not share the kernel build counter. Until
-then: `PROFILE=` + `make isdconfig` + package stamps under `out/<arch>/stamps/`.
+Desktop ABI contract: [`DESKTOP_ABI.md`](DESKTOP_ABI.md) (IR0) and ISD
+`Documentation/DESKTOP_ABI.md`.

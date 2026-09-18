@@ -80,17 +80,15 @@ Tras cambiar el kernel: reconstruir el ISO → `make kmang` → `i` → `b`
 kernel nuevo pero no mostrará la sesión X11 verificada hasta actualizar el
 rootfs (`make isd-image PROFILE=desktop` / `machine-update-userspace`).
 
-## Versionado de userspace (dirección, dueño ISD)
+## Versionado de userspace (ISD, implementado)
 
-IR0 se adapta al ABI Linux/musl; las recetas de paquetes quedan en ISD. Modelo
-sugerido (no implementado en este árbol):
+| Capa | Mecanismo |
+|------|-----------|
+| Release ISD | `ISD/VERSION` → `VERSION_ID` + `/usr/share/isd/release.txt` |
+| Orígenes de paquetes | `/usr/share/isd/package-manifest.txt` |
+| Base userland | `USERLAND_BASE=busybox` (`coreutils` reservado) |
+| Guest | `ir0-status version \| packages \| userland` |
+| Host | `make usmang` |
 
-| Capa | Qué versionar | Notas |
-|------|---------------|-------|
-| Stamp de release/perfil ISD | Identidad de la imagen | Independiente del `#N` del kernel |
-| Bits propios de ISD | glue runit, login, sesión | Semver propio o git describe |
-| Ports de terceros | BusyBox, TinyX, twm, … | Versión upstream + nivel de parche ISD |
-| Base userland | BusyBox vs GNU coreutils | Toggle de perfil/`.isdconfig` — sin forkar terceros en IR0 |
-
-Un futuro `usmang` puede listar stamps de perfil; no debe compartir el contador
-del kernel.
+IR0 se adapta al ABI Linux/musl; no se parchean clientes X upstream. Ver
+[`../DESKTOP_ABI.md`](../DESKTOP_ABI.md).

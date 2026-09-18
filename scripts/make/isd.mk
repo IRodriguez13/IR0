@@ -109,7 +109,7 @@ IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=
 	warn-userspace-deprecated ensure-isd-disk ensure-isd-home run-isd machine-create \
 	machine-reset machine-info machine-update-kernel image-vmware poweron kmang kmang-cli \
 	kernel-manager-install kernel-manager-list machine-update-userspace \
-	machine-migrate-home
+	machine-migrate-home usmang
 
 warn-userspace-deprecated:
 	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
@@ -276,6 +276,16 @@ kmang: check-isd
 
 kmang-cli:
 	@$(KMANG_PY) list --json
+
+# Host inspector for ISD release / package origins / userland base (not kernel #N).
+usmang: check-isd
+	@chmod +x scripts/userspace_manager.py
+	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
+		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" summary
+	@echo "---"
+	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
+		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop
+	@echo "guest: ir0-status version | packages | userland"
 
 # Refresh only the boot ISO. The mutable machine disk is never a dependency.
 # Does NOT enroll the ISO into kmang — run `make kmang` and press i, or
