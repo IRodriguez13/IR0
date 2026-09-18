@@ -189,6 +189,54 @@ class KernelManagerTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("verified", result.stdout)
 
+    def test_prune_keeps_default_and_fallback(self) -> None:
+        self.install("0.0.1-rc5-build41", b"kernel-41")
+        self.install("0.0.1-rc5-build42", b"kernel-42")
+        self.install("0.0.1-rc5-build43", b"kernel-43")
+        self.run_manager("prune")
+        listing = self.run_manager("list").stdout
+        self.assertIn("0.0.1-rc5-build43\t", listing)
+        self.assertIn("0.0.1-rc5-build42\t", listing)
+        self.assertNotIn("0.0.1-rc5-build41\t", listing)
+
+    def test_compare_reports_diverged_workspace(self) -> None:
+        self.install("0.0.1-rc5-build41", b"kernel-41")
+        newer = self.root / "workspace.iso"
+        kernel = self.root / "workspace.bin"
+        obj = self.root / "workspace.o"
+        subprocess.run(
+            ["cc", "-c", "-x", "c", "-o", str(obj), "-"],
+            input='const char payload[] = "kernel-99";\n',
+            text=True, capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["ld", "-r", "--defsym=ir0_build_number=99", "-o", str(kernel), str(obj)],
+            capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["xorriso", "-outdev", str(newer), "-map", str(kernel),
+             "/boot/kernel-x64.bin"],
+            capture_output=True, check=True,
+        )
+        result = self.run_manager(
+            "--source", str(newer), "--version", "0.0.1-rc5",
+            "compare", success=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["relation"], "diverged")
+        self.assertTrue(report["needs_install"])
+        self.assertEqual(report["workspace_id"], "0.0.1-rc5-build99")
+        self.assertEqual(report["default_id"], "0.0.1-rc5-build41")
+
+    def test_info_marks_build_scope_machine_local(self) -> None:
+        self.install("0.0.1-rc5-build41", b"kernel-41")
+        payload = json.loads(
+            self.run_manager("info", "0.0.1-rc5-build41", "--json").stdout
+        )
+        self.assertEqual(payload["build_scope"], "machine-local")
+        self.assertEqual(payload["embedded_build"], 41)
+
 
 if __name__ == "__main__":
     unittest.main()
