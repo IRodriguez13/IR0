@@ -36,6 +36,7 @@ from compare import (  # noqa: E402
     compare_pipe,
     compare_poll,
     compare_process_lifecycle,
+    compare_pty_multiplex,
     compare_kill_sigterm,
     compare_read,
     compare_sigreturn_blocked_syscall,
@@ -1323,6 +1324,37 @@ def audit_dup(report_dir: Path, cfg: dict) -> CompareResult:
     return compare_dup(linux_trace, ir0_trace, ebadf_errno)
 
 
+def audit_pty_multiplex(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "pty_multiplex"
+    ir0_dir = report_dir / "ir0" / "pty_multiplex"
+
+    build_static_probe(
+        report_dir / "pty_multiplex_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "pty_multiplex_probe.c",
+    )
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_pty_multiplex.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_workload.sh"
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="pty_multiplex",
+            ok=False,
+            divergences=["pty_multiplex Linux workload script failed"],
+        )
+    if run_cmd(
+        ["bash", str(sh_ir0), "pty_multiplex", "pty_multiplex_probe", "PTYMULTIPLEXOK", str(ir0_dir)]
+    ) != 0:
+        return CompareResult(
+            contract="pty_multiplex",
+            ok=False,
+            divergences=["pty_multiplex IR0 workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+    return compare_pty_multiplex(linux_trace, ir0_trace)
+
+
 def audit_ioctl(report_dir: Path, cfg: dict) -> CompareResult:
     linux_dir = report_dir / "linux" / "ioctl"
     ir0_dir = report_dir / "ir0" / "ioctl"
@@ -1386,6 +1418,7 @@ AUDITORS = {
     "getcwd": audit_getcwd,
     "chdir": audit_chdir,
     "dup": audit_dup,
+    "pty_multiplex": audit_pty_multiplex,
     "ioctl": audit_ioctl,
     "fcntl": audit_fcntl,
     "mmap": audit_mmap,

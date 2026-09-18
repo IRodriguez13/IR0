@@ -137,6 +137,7 @@ DEVFS_USERCOPY_WHITELIST = {
     "dev_mouse_ioctl",
     "dev_net_ioctl",
     "dev_pty_ioctl",
+    "pty_master_ioctl_pair",
 }
 
 DIRS_BLUETOOTH_INCLUDE_SCAN = [
@@ -1599,6 +1600,129 @@ def check_common_paging_uses_neutral_roots():
     return errors
 
 
+def _parse_devfs_pty_id_block():
+    """Return (pts0, pty_max) from includes/ir0/pty_devfs.h."""
+    pty_h = ROOT / "includes" / "ir0" / "pty_devfs.h"
+    pts0, pty_max = 48, 8
+    if not pty_h.is_file():
+        return pts0, pty_max
+    text = pty_h.read_text(encoding="utf-8", errors="replace")
+    m0 = re.search(r"#define\s+DEVFS_PTS0_DEVICE_ID\s+(\d+)u?", text)
+    m1 = re.search(r"#define\s+DEVFS_PTY_MAX\s+(\d+)", text)
+    if m0:
+        pts0 = int(m0.group(1))
+    if m1:
+        pty_max = int(m1.group(1))
+    return pts0, pty_max
+
+
+def check_devfs_unique_device_ids():
+    """
+    devfs_find_node_by_id() returns the first registration match (Linux uses
+    unique dev_t). Duplicate device_id values break fd routing (PTY incident).
+    """
+    errors = []
+    devfs_path = ROOT / "fs" / "devfs.c"
+    if not devfs_path.is_file():
+        return errors
+
+    pts0, pty_max = _parse_devfs_pty_id_block()
+    pty_end = pts0 + pty_max
+    disk_base = 20
+    disk_whole_count = 4
+
+    try:
+        lines = devfs_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        errors.append(f"[read-error] {devfs_path}: {exc}")
+        return errors
+
+    owners = {}
+    id_re = re.compile(r"\.device_id\s*=\s*(\d+)\b")
+    name_re = re.compile(r'\.name\s*=\s*"([^"]+)"')
+
+    def claim(dev_id, label, line_no):
+        prev = owners.get(dev_id)
+        if prev and prev[0] != label:
+            rel = devfs_path.relative_to(ROOT)
+            errors.append(
+                f"[devfs-unique-device-id] id={dev_id} used by {prev[0]}:{prev[1]} "
+                f"and {label}:{line_no} ({rel})"
+            )
+            return
+        owners[dev_id] = (label, line_no)
+
+    reserved = []
+    for i in range(pty_max):
+        reserved.append((pts0 + i, pts0 + i + 1, f"pts/{i}"))
+    for d in range(disk_whole_count):
+        base = disk_base + d
+        reserved.append((base, base + 1, f"disk-whole-{d}"))
+
+    def in_reserved(dev_id):
+        for start, end, _label in reserved:
+            if start <= dev_id < end:
+                return _label
+        return None
+
+    for idx, line in enumerate(lines, start=1):
+        m_id = id_re.search(line)
+        if not m_id:
+            continue
+        dev_id = int(m_id.group(1))
+        m_name = name_re.search(line)
+        label = m_name.group(1) if m_name else f"line-{idx}"
+        slot = in_reserved(dev_id)
+        if slot and not label.startswith("pts/") and "DEVFS_PTS0" not in line:
+            errors.append(
+                f"[devfs-unique-device-id] static id={dev_id} ({label}:{idx}) "
+                f"falls in reserved {slot} block"
+            )
+        claim(dev_id, label, idx)
+
+    for start, end, label in reserved:
+        for dev_id in range(start, end):
+            claim(dev_id, label, f"reserved-{dev_id}")
+
+    return errors
+
+
+def check_devfs_no_find_by_id_outside_devfs():
+    """
+    fd_table stores dev_node at open; re-resolving by device_id in syscalls was
+    a first-match footgun (PTY vs evdev collision). Allow only fs/devfs.c and
+    the documented fallback in includes/ir0/devfs.h.
+    """
+    errors = []
+    allow_files = {
+        ROOT / "fs" / "devfs.c",
+        ROOT / "includes" / "ir0" / "devfs.h",
+    }
+    scan_roots = [ROOT / "kernel", ROOT / "fs", ROOT / "mm", ROOT / "net"]
+    needle = "devfs_find_node_by_id"
+
+    for root in scan_roots:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix not in (".c", ".h"):
+                continue
+            if path in allow_files:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                errors.append(f"[read-error] {path}: {exc}")
+                continue
+            if needle in text:
+                rel = path.relative_to(ROOT)
+                errors.append(
+                    f"[devfs-find-by-id] {needle} in portable path {rel} "
+                    f"(use fd_entry_devfs_node / dev_node at open)"
+                )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -1616,6 +1740,8 @@ def main():
     errors.extend(check_fs_no_mm_includes())
     errors.extend(check_bluetooth_subdir_include_policy())
     errors.extend(check_devfs_usercopy_contract())
+    errors.extend(check_devfs_unique_device_ids())
+    errors.extend(check_devfs_no_find_by_id_outside_devfs())
     errors.extend(check_usercopy_no_raw_user_touch())
     errors.extend(check_ktm_core_no_fase())
     errors.extend(check_ktm_no_fase_serial())

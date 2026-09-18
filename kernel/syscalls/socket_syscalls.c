@@ -970,7 +970,7 @@ static void scm_rights_dtor(void *entry, size_t sz)
 	}
 	else if (e->is_devfs)
 	{
-		devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
+		devfs_node_t *node = fd_entry_devfs_node(e);
 
 		if (e->vfs_file &&
 		    devfs_node_wants_text_snap(e->dev_device_id))
@@ -1020,7 +1020,7 @@ static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
 	}
 	else if (dst->is_devfs)
 	{
-		devfs_node_t *node = devfs_find_node_by_id(dst->dev_device_id);
+		devfs_node_t *node = fd_entry_devfs_node(dst);
 
 		if (node)
 			node->ref_count++;

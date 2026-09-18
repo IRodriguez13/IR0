@@ -1287,9 +1287,11 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
   {
     ensure_devfs_init();
     {
-      devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
+      devfs_node_t *node = fd_entry_devfs_node(e);
 
-      if (!node || !node->ops || !node->ops->ioctl)
+      if (devfs_is_ptmx_device(e->dev_device_id))
+	ret = devfs_pty_master_ioctl(e->vfs_file, request, arg);
+      else if (!node || !node->ops || !node->ops->ioctl)
 	ret = -ENOTTY;
       else
 	/* Handlers perform sized copy_to/from_user; do not require 256B here
@@ -1484,8 +1486,10 @@ int64_t sys_close(int fd)
 
   if (was_devfs)
   {
-    devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
+    devfs_node_t *node = fd_entry_devfs_node(e);
 
+    if (devfs_is_ptmx_device(e->dev_device_id))
+      devfs_pty_master_release_vfs(e->vfs_file);
     if (e->vfs_file &&
 	devfs_node_wants_text_snap(e->dev_device_id))
     {
@@ -1549,9 +1553,8 @@ int64_t sys_close(int fd)
   e->is_eventfd = false;
   e->is_timerfd = false;
   e->pipe_end = -1;
-  e->is_devfs = false;
   e->is_pseudo = false;
-  e->dev_device_id = 0;
+  fd_entry_devfs_unbind(e);
   e->path[0] = '\0';
   e->flags = 0;
   e->fd_flags = 0;
@@ -1715,7 +1718,7 @@ int64_t sys_dup2(int oldfd, int newfd)
     }
     else if (fd_table[newfd].is_devfs)
     {
-      devfs_node_t *node = devfs_find_node_by_id(fd_table[newfd].dev_device_id);
+      devfs_node_t *node = fd_entry_devfs_node(&fd_table[newfd]);
 
       if (fd_table[newfd].vfs_file &&
 	  devfs_node_wants_text_snap(fd_table[newfd].dev_device_id))
@@ -1776,12 +1779,13 @@ int64_t sys_dup2(int oldfd, int newfd)
     fd_table[newfd].is_pipe = false;
     fd_table[newfd].pipe_end = -1;
     fd_table[newfd].is_devfs = false;
+    fd_entry_devfs_unbind(&fd_table[newfd]);
     fd_table[newfd].is_pseudo = false;
     fd_table[newfd].is_socket = false;
     fd_table[newfd].is_memfd = false;
     fd_table[newfd].is_eventfd = false;
     fd_table[newfd].is_timerfd = false;
-    fd_table[newfd].dev_device_id = 0;
+    fd_entry_devfs_unbind(&fd_table[newfd]);
     fd_slot_note_destroyed();
   }
 
@@ -1799,6 +1803,7 @@ int64_t sys_dup2(int oldfd, int newfd)
   fd_table[newfd].pipe_end = fd_table[oldfd].pipe_end;
   fd_table[newfd].is_devfs = fd_table[oldfd].is_devfs;
   fd_table[newfd].dev_device_id = fd_table[oldfd].dev_device_id;
+  fd_table[newfd].dev_node = fd_table[oldfd].dev_node;
   fd_table[newfd].is_pseudo = fd_table[oldfd].is_pseudo;
   fd_table[newfd].is_socket = fd_table[oldfd].is_socket;
   fd_table[newfd].is_memfd = fd_table[oldfd].is_memfd;
@@ -1812,7 +1817,7 @@ int64_t sys_dup2(int oldfd, int newfd)
    */
   if (fd_table[oldfd].is_devfs)
   {
-    devfs_node_t *node = devfs_find_node_by_id(fd_table[oldfd].dev_device_id);
+    devfs_node_t *node = fd_entry_devfs_node(&fd_table[oldfd]);
 
     if (node)
       node->ref_count++;
@@ -1821,6 +1826,12 @@ int64_t sys_dup2(int oldfd, int newfd)
     {
       devfs_text_snap_acquire((devfs_text_snap_t *)fd_table[oldfd].vfs_file);
       fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+    }
+    else if (devfs_is_ptmx_device(fd_table[oldfd].dev_device_id) &&
+	     fd_table[oldfd].vfs_file)
+    {
+      fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+      devfs_pty_master_dup_vfs(fd_table[oldfd].vfs_file);
     }
     else
       fd_table[newfd].vfs_file = NULL;

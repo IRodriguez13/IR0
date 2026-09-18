@@ -14,6 +14,7 @@
 
 #include "process_internal.h"
 #include <ir0/fd_get.h>
+#include <ir0/devfs.h>
 #include <ir0/memfd.h>
 #include <ir0/eventfd.h>
 #include <ir0/timerfd.h>
@@ -114,8 +115,11 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 		}
 		else if (e->is_devfs)
 		{
-			devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
+			devfs_node_t *node = fd_entry_devfs_node(e);
 
+			if (e->vfs_file &&
+			    devfs_is_ptmx_device(e->dev_device_id))
+				devfs_pty_master_release_vfs(e->vfs_file);
 			if (e->vfs_file &&
 			    devfs_node_wants_text_snap(e->dev_device_id))
 			{
@@ -174,13 +178,12 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 		e->in_use = false;
 		e->is_pipe = false;
 		e->is_socket = false;
-		e->is_devfs = false;
 		e->is_pseudo = false;
 		e->is_epoll = false;
 		e->is_memfd = false;
 		e->is_eventfd = false;
 		e->is_timerfd = false;
-		e->dev_device_id = 0;
+		fd_entry_devfs_unbind(e);
 		e->pipe_end = -1;
 		e->path[0] = '\0';
 		e->flags = 0;
@@ -228,7 +231,7 @@ void process_init_fd_table(process_t *process)
 		table[i].is_memfd = false;
 		table[i].is_eventfd = false;
 		table[i].is_timerfd = false;
-		table[i].dev_device_id = 0;
+		fd_entry_devfs_unbind(&table[i]);
 	}
 
 	/* Setup standard streams */

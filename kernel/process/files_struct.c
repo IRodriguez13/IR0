@@ -18,6 +18,7 @@
 #include <ir0/memfd.h>
 #include <ir0/eventfd.h>
 #include <ir0/timerfd.h>
+#include <ir0/devfs.h>
 #include <mm/allocator.h>
 #include <string.h>
 
@@ -138,11 +139,14 @@ static int process_files_acquire_entries(files_struct_t *f)
 		}
 		else if (e->is_devfs)
 		{
-			devfs_node_t *node = devfs_find_node_by_id(e->dev_device_id);
+			devfs_node_t *node = fd_entry_devfs_node(e);
 
 			if (node)
 				node->ref_count++;
 			if (e->vfs_file &&
+			    devfs_is_ptmx_device(e->dev_device_id))
+				devfs_pty_master_dup_vfs(e->vfs_file);
+			else if (e->vfs_file &&
 			    devfs_node_wants_text_snap(e->dev_device_id))
 				devfs_text_snap_acquire(
 					(devfs_text_snap_t *)e->vfs_file);

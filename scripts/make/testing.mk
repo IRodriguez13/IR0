@@ -1754,6 +1754,8 @@ smoke-ext2-startx: check-isd
 	if ! rg -q 'X11_WM_AND_TERMINAL_LAUNCHED_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if ! rg -q 'X11_DESKTOP_CLIENTS_SUSTAINED_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if ! rg -q 'X11_DESKTOP_BACKGROUND_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'X11_DESKTOP_TASKBAR_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'X11_DESKTOP_WORKSPACES_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if ! rg -q 'X11_DESKTOP_DEMOS_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if rg -i 'panic|general protection|page fault|corrupt|STARTX.*FAIL|Could not init font path|Fatal server error|xinit: giving up' \
 		$(EXT2_STARTX_LOG); then exit 1; fi; \
@@ -1854,7 +1856,8 @@ smoke-pty-winsz: kernel-x64-userspace.iso
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rc=$$?; rm -f $$DISK; \
 	if grep -q 'PTY_WINSZ_OK' $(PTY_WINSZ_SMOKE_LOG) && \
-	   grep -q 'PTY_WINCH_SENT' $(PTY_WINSZ_SMOKE_LOG); then \
+	   { grep -q 'PTY_WINCH_SENT' $(PTY_WINSZ_SMOKE_LOG) || \
+	     grep -q 'PTY_WINCH_OK' $(PTY_WINSZ_SMOKE_LOG); }; then \
 		echo "✓ smoke-pty-winsz passed"; \
 	else \
 		echo "✗ smoke-pty-winsz FAILED"; \
@@ -3071,7 +3074,7 @@ LINUX_ABI_VFS_WRITE_PROBE := $(LINUX_ABI_AUDIT_DIR)/vfs_write_probe
 	build-linux-abi-openat-probe build-linux-abi-stat-probe build-linux-abi-vfs-write-probe \
 	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
 	linux-abi-audit-pipe linux-abi-audit-poll linux-abi-audit-nanosleep \
-	linux-abi-audit-getcwd linux-abi-audit-chdir linux-abi-audit-dup linux-abi-audit-execve \
+	linux-abi-audit-getcwd linux-abi-audit-chdir linux-abi-audit-dup linux-abi-audit-pty-multiplex linux-abi-audit-execve \
 	linux-abi-audit-ioctl linux-abi-audit-fcntl linux-abi-audit-kill-sigterm \
 	linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
 	linux-abi-audit-vfs-write linux-abi-audit-sigreturn-blocked-syscall
@@ -3235,6 +3238,13 @@ linux-abi-audit-dup: kernel-x64-userspace.iso
 	@grep -q '^## dup — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-dup passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-dup FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-pty-multiplex: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_pty_multiplex.sh scripts/linux_abi/run_ir0_workload.sh
+	@python3 scripts/linux_abi_audit.py --contract pty_multiplex
+	@grep -q '^## pty_multiplex — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-pty-multiplex passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-pty-multiplex FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 linux-abi-audit-ioctl: kernel-x64-userspace.iso
 	@chmod +x scripts/linux_abi/run_linux_workload.sh scripts/linux_abi/run_ir0_workload.sh

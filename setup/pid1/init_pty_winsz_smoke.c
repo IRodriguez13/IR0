@@ -30,6 +30,9 @@
 #ifndef TIOCGWINSZ
 #define TIOCGWINSZ 0x5413
 #endif
+#ifndef TIOCSCTTY
+#define TIOCSCTTY 0x540E
+#endif
 
 static volatile sig_atomic_t got_winch;
 
@@ -64,6 +67,18 @@ int main(void)
 	slave = open(path, O_RDWR | O_CLOEXEC);
 	if (slave < 0)
 		return 5;
+
+	/*
+	 * TIOCSCTTY requires session leader (Linux pty.c). PID 1 is already
+	 * leader — setsid(2) correctly returns EPERM; skip when sid == pid.
+	 */
+	if (getsid(0) != getpid())
+	{
+		if (setsid() < 0)
+			return 9;
+	}
+	if (ioctl(master, TIOCSCTTY, 0) != 0)
+		return 10;
 
 	if (ioctl(master, TIOCSWINSZ, &ws_set) != 0)
 		return 6;

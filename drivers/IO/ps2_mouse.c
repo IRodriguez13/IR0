@@ -127,6 +127,8 @@ static int32_t ps2_mouse_hw_init(void)
     ps2_mouse_set_defaults();
     ps2_mouse_set_sample_rate(PS2_MOUSE_DEFAULT_SAMPLE_RATE);
     ps2_mouse_set_resolution(PS2_MOUSE_DEFAULT_RESOLUTION);
+    /* Linux PS/2 scaling 2:1 — faster pointer without userspace patches. */
+    (void)ps2_mouse_set_scaling_2_1();
 
     /* Enable mouse */
     if (!ps2_mouse_enable())

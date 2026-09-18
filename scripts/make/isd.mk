@@ -109,7 +109,7 @@ IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=
 	warn-userspace-deprecated ensure-isd-disk ensure-isd-home run-isd machine-create \
 	machine-reset machine-info machine-update-kernel image-vmware poweron kmang kmang-cli \
 	kernel-manager-install kernel-manager-list machine-update-userspace \
-	machine-migrate-home
+	machine-migrate-home ensure-machine-desktop-sync
 
 warn-userspace-deprecated:
 	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
@@ -301,6 +301,22 @@ machine-update-userspace: check-isd
 		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
 		IR0_INJECT_TOOL="$(KERNEL_ROOT)/scripts/inject_init_minix.py" \
 		scripts/isd_machine_desktop_update.sh
+	@mkdir -p "$(IR0_MACHINE_DIR)"
+	@touch "$(IR0_MACHINE_DIR)/.desktop-sync-stamp"
+
+ensure-machine-desktop-sync: check-isd
+	@if [ "$(ISD_PROFILE)" != desktop ]; then exit 0; fi
+	@if [ ! -f "$(IR0_MACHINE_DISK)" ]; then exit 0; fi
+	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
+		echo "note: machine running; skip desktop userspace sync"; exit 0; \
+	fi
+	@stamp="$(IR0_ISD_ROOT)/out/$(ISD_ARCH)/stamps/rootfs/desktop"; \
+	sync_stamp="$(IR0_MACHINE_DIR)/.desktop-sync-stamp"; \
+	if [ ! -f "$$sync_stamp" ] || [ "$$stamp" -nt "$$sync_stamp" ]; then \
+		echo "  SYNC     ISD desktop rootfs → $(IR0_MACHINE_DISK)"; \
+		$(MAKE) -s machine-update-userspace PROFILE=$(ISD_PROFILE) \
+			IR0_MACHINE=$(IR0_MACHINE); \
+	fi
 
 machine-migrate-home: check-isd
 	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
@@ -335,7 +351,7 @@ image-vmware:
 
 # Product session: boot existing artifacts only. first-boot/machine-create are
 # the explicit provisioning paths; rebuilding the kernel remains explicit.
-poweron: check-isd
+poweron: check-isd ensure-machine-desktop-sync
 	@test -f "$(KERNEL_ROOT)/kernel-x64-userspace.iso" || { \
 		echo "✗ missing $(KERNEL_ROOT)/kernel-x64-userspace.iso"; \
 		echo "  Run make first-boot PROFILE=$(ISD_PROFILE) first."; \

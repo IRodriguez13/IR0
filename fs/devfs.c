@@ -2487,10 +2487,11 @@ static devfs_node_t dev_serial = {
 };
 
 /*
- * Minimal PTY pair: /dev/ptmx (master) + /dev/pts/0 (slave).
- * One global pair; ring buffers each direction; TIOCGWINSZ + TIOCGPTN.
+ * PTY multiplex: /dev/ptmx (master) + /dev/pts/0..N-1 (slaves).
+ * Master slot is stored in fd_table->vfs_file (see devfs.h helpers).
  */
 #define PTY_BUF_SIZE 1024
+#define DEVFS_PTY_VFS_TAG 0x50545900u
 
 struct pty_ring
 {
@@ -2500,16 +2501,12 @@ struct pty_ring
 	unsigned int count;
 };
 
-enum {
-	DEVFS_PTMX_DEVICE_ID = 43,
-	DEVFS_PTS0_DEVICE_ID = 44,
-};
-
-static struct
+struct pty_pair
 {
 	struct pty_ring m2s;
 	struct pty_ring s2m;
 	int master_open;
+	int master_refs;
 	int slave_open;
 	int locked;
 	int ctty_set;
@@ -2518,34 +2515,154 @@ static struct
 	struct ir0_winsize winsz;
 	struct ir0_termios termios;
 	int termios_ready;
-} g_pty;
+};
 
-static void pty_termios_ensure(void)
+static struct pty_pair g_ptys[DEVFS_PTY_MAX];
+static devfs_node_t dev_pts_nodes[DEVFS_PTY_MAX];
+static char dev_pts_names[DEVFS_PTY_MAX][8];
+static int g_ptmx_pending_slot = -1;
+static pid_t g_ptmx_pending_pid;
+
+static struct pty_pair *pty_slot(int idx)
 {
-	if (g_pty.termios_ready)
-		return;
-	memset(&g_pty.termios, 0, sizeof(g_pty.termios));
-	g_pty.termios.c_iflag = IR0_CONSOLE_IFLAG_DEFAULT;
-	g_pty.termios.c_oflag = IR0_CONSOLE_OFLAG_DEFAULT;
-	g_pty.termios.c_cflag = IR0_CONSOLE_CFLAG_DEFAULT;
-	g_pty.termios.c_lflag = IR0_CONSOLE_LFLAG_DEFAULT;
-	g_pty.termios.c_cc[IR0_CC_VINTR] = 3;
-	g_pty.termios.c_cc[IR0_CC_VQUIT] = 28;
-	g_pty.termios.c_cc[IR0_CC_VERASE] = 127;
-	g_pty.termios.c_cc[IR0_CC_VEOF] = 4;
-	g_pty.termios.c_cc[IR0_CC_VMIN] = 1;
-	g_pty.termios_ready = 1;
+	if (idx < 0 || idx >= DEVFS_PTY_MAX)
+		return NULL;
+	return &g_ptys[idx];
 }
 
-static void pty_hangup_fg(void)
+static struct pty_pair *pty_from_pts_entry(const devfs_entry_t *entry);
+static void pty_hangup_fg(struct pty_pair *p);
+
+static struct pty_pair *pty_from_pts_entry(const devfs_entry_t *entry)
 {
-	if (!g_pty.ctty_set || g_pty.fg_pgid <= 0)
+	uint32_t id;
+
+	if (!entry)
+		return NULL;
+	id = entry->device_id;
+	if (!devfs_is_pts_device(id))
+		return NULL;
+	return pty_slot((int)(id - DEVFS_PTS0_DEVICE_ID));
+}
+
+static int pty_alloc_master(void)
+{
+	int i;
+
+	for (i = 0; i < DEVFS_PTY_MAX; i++)
+	{
+		if (!g_ptys[i].master_open)
+			return i;
+	}
+	return -1;
+}
+
+void *devfs_pty_vfs_mark(int slot)
+{
+	if (slot < 0 || slot >= DEVFS_PTY_MAX)
+		return NULL;
+	return (void *)(uintptr_t)(DEVFS_PTY_VFS_TAG + (unsigned)slot);
+}
+
+int devfs_pty_vfs_slot(const void *vfs_file)
+{
+	uintptr_t v = (uintptr_t)vfs_file;
+
+	if (v < DEVFS_PTY_VFS_TAG ||
+	    v >= DEVFS_PTY_VFS_TAG + DEVFS_PTY_MAX)
+		return -1;
+	return (int)(v - DEVFS_PTY_VFS_TAG);
+}
+
+int devfs_pty_take_pending_master_slot(void)
+{
+	int slot = g_ptmx_pending_slot;
+	pid_t pid = g_ptmx_pending_pid;
+
+	g_ptmx_pending_slot = -1;
+	g_ptmx_pending_pid = 0;
+	if (slot < 0 || pid != devfs_current_pid())
+		return -1;
+	return slot;
+}
+
+void devfs_pty_abort_pending_master(void)
+{
+	struct pty_pair *p;
+
+	if (g_ptmx_pending_slot < 0 ||
+	    g_ptmx_pending_pid != devfs_current_pid())
+		return;
+	p = pty_slot(g_ptmx_pending_slot);
+	if (p)
+	{
+		pty_hangup_fg(p);
+		p->master_open = 0;
+		p->master_refs = 0;
+		p->locked = 0;
+	}
+	g_ptmx_pending_slot = -1;
+	g_ptmx_pending_pid = 0;
+}
+
+void devfs_pty_master_release_vfs(const void *vfs_file)
+{
+	struct pty_pair *p;
+	int slot = devfs_pty_vfs_slot(vfs_file);
+
+	if (slot < 0)
+		return;
+	p = pty_slot(slot);
+	if (!p || p->master_refs <= 0)
+		return;
+	p->master_refs--;
+	if (p->master_refs > 0)
+		return;
+	pty_hangup_fg(p);
+	p->master_open = 0;
+	p->locked = 0;
+	p->slave_open = 0;
+}
+
+void devfs_pty_master_dup_vfs(const void *vfs_file)
+{
+	struct pty_pair *p;
+	int slot = devfs_pty_vfs_slot(vfs_file);
+
+	if (slot < 0)
+		return;
+	p = pty_slot(slot);
+	if (!p || p->master_refs <= 0)
+		return;
+	p->master_refs++;
+}
+
+static void pty_termios_ensure(struct pty_pair *p)
+{
+	if (!p || p->termios_ready)
+		return;
+	memset(&p->termios, 0, sizeof(p->termios));
+	p->termios.c_iflag = IR0_CONSOLE_IFLAG_DEFAULT;
+	p->termios.c_oflag = IR0_CONSOLE_OFLAG_DEFAULT;
+	p->termios.c_cflag = IR0_CONSOLE_CFLAG_DEFAULT;
+	p->termios.c_lflag = IR0_CONSOLE_LFLAG_DEFAULT;
+	p->termios.c_cc[IR0_CC_VINTR] = 3;
+	p->termios.c_cc[IR0_CC_VQUIT] = 28;
+	p->termios.c_cc[IR0_CC_VERASE] = 127;
+	p->termios.c_cc[IR0_CC_VEOF] = 4;
+	p->termios.c_cc[IR0_CC_VMIN] = 1;
+	p->termios_ready = 1;
+}
+
+static void pty_hangup_fg(struct pty_pair *p)
+{
+	if (!p || !p->ctty_set || p->fg_pgid <= 0)
 		return;
 	klog_print("PTY_SIGHUP_PGRP\n");
-	(void)send_signal_pgrp(g_pty.fg_pgid, SIGHUP);
-	g_pty.ctty_set = 0;
-	g_pty.fg_pgid = 0;
-	g_pty.session_sid = 0;
+	(void)send_signal_pgrp(p->fg_pgid, SIGHUP);
+	p->ctty_set = 0;
+	p->fg_pgid = 0;
+	p->session_sid = 0;
 }
 
 static int pty_ring_push(struct pty_ring *r, const char *src, size_t n)
@@ -2618,67 +2735,54 @@ static int pty_ring_pop(struct pty_ring *r, char *dst, size_t n)
 	return (int)i;
 }
 
-static int64_t dev_ptmx_open(devfs_entry_t *entry, int flags)
+static int pty_isig_on(const struct pty_pair *p)
 {
-	(void)entry;
-	(void)flags;
-	if (g_pty.master_open)
-		return -EBUSY;
-	g_pty.master_open = 1;
-	g_pty.locked = 0;
-	pty_termios_ensure();
+	return p && (p->termios.c_lflag & IR0_LFLAG_ISIG) != 0;
+}
+
+static void pty_deliver_sig(struct pty_pair *p, int sig)
+{
+	if (p && p->ctty_set && p->fg_pgid > 0)
+		(void)send_signal_pgrp(p->fg_pgid, sig);
+}
+
+static int pty_handle_isig(struct pty_pair *p, unsigned char c)
+{
+	unsigned char vintr;
+	unsigned char vquit;
+
+	if (!pty_isig_on(p))
+		return 0;
+	vintr = p->termios.c_cc[IR0_CC_VINTR];
+	vquit = p->termios.c_cc[IR0_CC_VQUIT];
+	if (vintr == 0)
+		vintr = 3;
+	if (vquit == 0)
+		vquit = 28;
+	if (c == vintr)
+	{
+		p->m2s.head = p->m2s.tail = p->m2s.count = 0;
+		pty_deliver_sig(p, SIGINT);
+		return 1;
+	}
+	if (c == vquit)
+	{
+		p->m2s.head = p->m2s.tail = p->m2s.count = 0;
+		pty_deliver_sig(p, SIGQUIT);
+		return 1;
+	}
 	return 0;
 }
 
-static int64_t dev_pts_open(devfs_entry_t *entry, int flags)
-{
-	(void)entry;
-	(void)flags;
-	if (g_pty.locked)
-		return -EIO;
-	if (!g_pty.master_open)
-		return -EIO;
-	g_pty.slave_open = 1;
-	return 0;
-}
-
-static int64_t dev_ptmx_close(devfs_entry_t *entry)
-{
-	(void)entry;
-	g_pty.master_open = 0;
-	/* Master close → hangup controlling session (Linux PTY semantics). */
-	pty_hangup_fg();
-	return 0;
-}
-
-static int64_t dev_pts_close(devfs_entry_t *entry)
-{
-	(void)entry;
-	g_pty.slave_open = 0;
-	return 0;
-}
-
-static int64_t dev_ptmx_read(devfs_entry_t *entry, void *buf, size_t count,
-			     off_t offset)
-{
-	(void)entry;
-	(void)offset;
-	if (!buf)
-		return -EFAULT;
-	return pty_ring_pop(&g_pty.s2m, (char *)buf, count);
-}
-
-static int64_t dev_ptmx_write(devfs_entry_t *entry, const void *buf,
-			      size_t count, off_t offset)
+static int64_t pty_master_write_pair(struct pty_pair *p, const void *buf,
+				     size_t count)
 {
 	const unsigned char *src = (const unsigned char *)buf;
 	size_t consumed = 0;
 
-	(void)entry;
-	(void)offset;
-	if (!buf)
+	if (!p || !buf)
 		return -EFAULT;
-	pty_termios_ensure();
+	pty_termios_ensure(p);
 	while (consumed < count)
 	{
 		unsigned char c = src[consumed];
@@ -2686,72 +2790,57 @@ static int64_t dev_ptmx_write(devfs_entry_t *entry, const void *buf,
 
 		if (c == '\r')
 		{
-			if (g_pty.termios.c_iflag & IR0_IFLAG_IGNCR)
+			if (p->termios.c_iflag & IR0_IFLAG_IGNCR)
 			{
 				consumed++;
 				continue;
 			}
-			if (g_pty.termios.c_iflag & IR0_IFLAG_ICRNL)
+			if (p->termios.c_iflag & IR0_IFLAG_ICRNL)
 				c = '\n';
 		}
-		else if (c == '\n' &&
-			 (g_pty.termios.c_iflag & IR0_IFLAG_INLCR))
+		else if (c == '\n' && (p->termios.c_iflag & IR0_IFLAG_INLCR))
 			c = '\r';
-		translated = (char)c;
-		if (pty_ring_push(&g_pty.m2s, &translated, 1) != 1)
-			break;
-		consumed++;
-	}
-	return (int64_t)consumed;
-}
-
-static int64_t dev_pts_read(devfs_entry_t *entry, void *buf, size_t count,
-			    off_t offset)
-{
-	(void)entry;
-	(void)offset;
-	if (!buf)
-		return -EFAULT;
-	return pty_ring_pop(&g_pty.m2s, (char *)buf, count);
-}
-
-static int64_t dev_pts_write(devfs_entry_t *entry, const void *buf,
-			     size_t count, off_t offset)
-{
-	const unsigned char *src = (const unsigned char *)buf;
-	size_t consumed = 0;
-
-	(void)entry;
-	(void)offset;
-	if (!buf)
-		return -EFAULT;
-	pty_termios_ensure();
-	while (consumed < count)
-	{
-		char c = (char)src[consumed];
-
-		/* Linux N_TTY output processing: OPOST+ONLCR expands NL to CR/NL. */
-		if (c == '\n' &&
-		    (g_pty.termios.c_oflag &
-		     (IR0_OFLAG_OPOST | IR0_OFLAG_ONLCR)) ==
-		    (IR0_OFLAG_OPOST | IR0_OFLAG_ONLCR))
+		if (pty_handle_isig(p, (unsigned char)c))
 		{
-			static const char crlf[2] = { '\r', '\n' };
-
-			/* Do not consume the source byte unless expansion is atomic. */
-			if (!pty_ring_push_all(&g_pty.s2m, crlf, sizeof(crlf)))
-				break;
+			consumed++;
+			continue;
 		}
-		else if (pty_ring_push(&g_pty.s2m, &c, 1) != 1)
+		translated = (char)c;
+		if (pty_ring_push(&p->m2s, &translated, 1) != 1)
 			break;
 		consumed++;
 	}
 	return (int64_t)consumed;
 }
 
-static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+int64_t devfs_pty_master_read(const void *vfs_file, void *buf, size_t count)
 {
-	(void)entry;
+	struct pty_pair *p;
+	int slot = devfs_pty_vfs_slot(vfs_file);
+
+	if (slot < 0 || !buf)
+		return -EFAULT;
+	p = pty_slot(slot);
+	if (!p)
+		return -EBADF;
+	return pty_ring_pop(&p->s2m, (char *)buf, count);
+}
+
+int64_t devfs_pty_master_write(const void *vfs_file, const void *buf,
+			       size_t count)
+{
+	int slot = devfs_pty_vfs_slot(vfs_file);
+
+	if (slot < 0)
+		return -EBADF;
+	return pty_master_write_pair(pty_slot(slot), buf, count);
+}
+
+static int64_t pty_master_ioctl_pair(struct pty_pair *p, int slot,
+				    uint64_t request, void *arg)
+{
+	if (!p)
+		return -EBADF;
 
 	if (request == IR0_CONSOLE_TIOCGWINSZ)
 	{
@@ -2759,14 +2848,10 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 
 		if (!arg)
 			return -EINVAL;
-		if (g_pty.winsz.ws_row != 0 || g_pty.winsz.ws_col != 0)
-			win = g_pty.winsz;
+		if (p->winsz.ws_row != 0 || p->winsz.ws_col != 0)
+			win = p->winsz;
 		else
-		{
-			int wret = ir0_console_ioctl_winsize(arg);
-
-			return wret;
-		}
+			return ir0_console_ioctl_winsize(arg);
 		if (copy_to_user(arg, &win, sizeof(win)) != 0)
 			return -EFAULT;
 		return 0;
@@ -2781,16 +2866,19 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 			return -EFAULT;
 		if (win.ws_row == 0 || win.ws_col == 0)
 			return -EINVAL;
-		if (memcmp(&g_pty.winsz, &win, sizeof(win)) == 0)
+		if (memcmp(&p->winsz, &win, sizeof(win)) == 0)
 			return 0;
-		g_pty.winsz = win;
-		if (g_pty.ctty_set && g_pty.fg_pgid > 0)
-			(void)send_signal_pgrp(g_pty.fg_pgid, SIGWINCH);
+		p->winsz = win;
+		if (p->ctty_set && p->fg_pgid > 0)
+		{
+			klog_print("PTY_WINCH_SENT\n");
+			(void)send_signal_pgrp(p->fg_pgid, SIGWINCH);
+		}
 		return 0;
 	}
 	if (request == IR0_TIOCGPTN)
 	{
-		unsigned int n = 0;
+		unsigned int n = (unsigned int)slot;
 
 		if (!arg)
 			return -EINVAL;
@@ -2806,19 +2894,18 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 			return -EINVAL;
 		if (copy_from_user(&lock, arg, sizeof(lock)) != 0)
 			return -EFAULT;
-		g_pty.locked = lock ? 1 : 0;
+		p->locked = lock ? 1 : 0;
 		return 0;
 	}
 	if (request == IR0_TIOCSCTTY)
 	{
 		if (!current_process)
 			return -ESRCH;
-		/* Session leader only (Linux-like). */
 		if (current_process->sid != current_process->task.pid)
 			return -EPERM;
-		g_pty.ctty_set = 1;
-		g_pty.session_sid = current_process->sid;
-		g_pty.fg_pgid = current_process->pgid;
+		p->ctty_set = 1;
+		p->session_sid = current_process->sid;
+		p->fg_pgid = current_process->pgid;
 		klog_print("PTY_TIOCSCTTY_OK\n");
 		return 0;
 	}
@@ -2832,9 +2919,9 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 			return -EFAULT;
 		if (pg <= 0)
 			return -EINVAL;
-		if (!g_pty.ctty_set)
+		if (!p->ctty_set)
 			return -ENOTTY;
-		g_pty.fg_pgid = pg;
+		p->fg_pgid = pg;
 		return 0;
 	}
 	if (request == IR0_TIOCGPGRP)
@@ -2843,19 +2930,19 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 
 		if (!arg)
 			return -EINVAL;
-		if (!g_pty.ctty_set)
+		if (!p->ctty_set)
 			return -ENOTTY;
-		pg = g_pty.fg_pgid;
+		pg = p->fg_pgid;
 		if (copy_to_user(arg, &pg, sizeof(pg)) != 0)
 			return -EFAULT;
 		return 0;
 	}
 	if (request == IR0_CONSOLE_TCGETS)
 	{
-		pty_termios_ensure();
+		pty_termios_ensure(p);
 		if (!arg)
 			return -EINVAL;
-		return copy_to_user(arg, &g_pty.termios, sizeof(g_pty.termios)) == 0
+		return copy_to_user(arg, &p->termios, sizeof(p->termios)) == 0
 			? 0 : -EFAULT;
 	}
 	if (request == IR0_CONSOLE_TCSETS ||
@@ -2867,47 +2954,221 @@ static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 			return -EINVAL;
 		if (copy_from_user(&termios, arg, sizeof(termios)) != 0)
 			return -EFAULT;
-		g_pty.termios = termios;
-		g_pty.termios_ready = 1;
+		p->termios = termios;
+		p->termios_ready = 1;
 		if (request == IR0_CONSOLE_TCSETSF)
-			g_pty.m2s.head = g_pty.m2s.tail = g_pty.m2s.count = 0;
+			p->m2s.head = p->m2s.tail = p->m2s.count = 0;
 		return 0;
 	}
 	return -ENOTTY;
+}
+
+int64_t devfs_pty_master_ioctl(const void *vfs_file, uint64_t request,
+			       void *arg)
+{
+	int slot = devfs_pty_vfs_slot(vfs_file);
+
+	if (slot < 0)
+		return -EBADF;
+	return pty_master_ioctl_pair(pty_slot(slot), slot, request, arg);
+}
+
+int devfs_pty_master_can_read(const void *vfs_file)
+{
+	struct pty_pair *p;
+	int slot = devfs_pty_vfs_slot(vfs_file);
+
+	if (slot < 0)
+		return 0;
+	p = pty_slot(slot);
+	if (!p)
+		return 0;
+	return (p->s2m.count > 0 || !p->slave_open) ? 1 : 0;
+}
+
+int devfs_pty_master_can_write(const void *vfs_file)
+{
+	struct pty_pair *p;
+	int slot = devfs_pty_vfs_slot(vfs_file);
+
+	if (slot < 0)
+		return 0;
+	p = pty_slot(slot);
+	if (!p)
+		return 0;
+	return p->m2s.count < PTY_BUF_SIZE ? 1 : 0;
+}
+
+static int64_t dev_ptmx_open(devfs_entry_t *entry, int flags)
+{
+	int slot;
+	struct pty_pair *p;
+
+	(void)entry;
+	(void)flags;
+	slot = pty_alloc_master();
+	if (slot < 0)
+		return -EBUSY;
+	p = pty_slot(slot);
+	p->master_open = 1;
+	p->master_refs = 1;
+	p->locked = 1;
+	p->slave_open = 0;
+	p->m2s.head = p->m2s.tail = p->m2s.count = 0;
+	p->s2m.head = p->s2m.tail = p->s2m.count = 0;
+	pty_termios_ensure(p);
+	g_ptmx_pending_slot = slot;
+	g_ptmx_pending_pid = devfs_current_pid();
+	return 0;
+}
+
+static int64_t dev_pts_open(devfs_entry_t *entry, int flags)
+{
+	struct pty_pair *p = pty_from_pts_entry(entry);
+
+	(void)flags;
+	if (!p)
+		return -ENODEV;
+	if (p->locked)
+		return -EIO;
+	if (!p->master_open)
+		return -EIO;
+	if (p->slave_open)
+		return -EBUSY;
+	p->slave_open = 1;
+	return 0;
+}
+
+static int64_t dev_ptmx_close(devfs_entry_t *entry)
+{
+	(void)entry;
+	return 0;
+}
+
+static int64_t dev_pts_close(devfs_entry_t *entry)
+{
+	struct pty_pair *p = pty_from_pts_entry(entry);
+
+	if (!p)
+		return 0;
+	p->slave_open = 0;
+	return 0;
+}
+
+static int64_t dev_ptmx_read(devfs_entry_t *entry, void *buf, size_t count,
+			     off_t offset)
+{
+	(void)entry;
+	(void)buf;
+	(void)count;
+	(void)offset;
+	return -EBADF;
+}
+
+static int64_t dev_ptmx_write(devfs_entry_t *entry, const void *buf,
+			      size_t count, off_t offset)
+{
+	(void)entry;
+	(void)buf;
+	(void)count;
+	(void)offset;
+	return -EBADF;
+}
+
+static int64_t dev_pts_read(devfs_entry_t *entry, void *buf, size_t count,
+			    off_t offset)
+{
+	struct pty_pair *p = pty_from_pts_entry(entry);
+
+	(void)offset;
+	if (!buf)
+		return -EFAULT;
+	if (!p)
+		return -EBADF;
+	return pty_ring_pop(&p->m2s, (char *)buf, count);
+}
+
+static int64_t dev_pts_write(devfs_entry_t *entry, const void *buf,
+			     size_t count, off_t offset)
+{
+	struct pty_pair *p = pty_from_pts_entry(entry);
+	const unsigned char *src = (const unsigned char *)buf;
+	size_t consumed = 0;
+
+	(void)offset;
+	if (!p || !buf)
+		return -EFAULT;
+	pty_termios_ensure(p);
+	while (consumed < count)
+	{
+		char c = (char)src[consumed];
+
+		if (c == '\n' &&
+		    (p->termios.c_oflag &
+		     (IR0_OFLAG_OPOST | IR0_OFLAG_ONLCR)) ==
+		    (IR0_OFLAG_OPOST | IR0_OFLAG_ONLCR))
+		{
+			static const char crlf[2] = { '\r', '\n' };
+
+			if (!pty_ring_push_all(&p->s2m, crlf, sizeof(crlf)))
+				break;
+		}
+		else if (pty_ring_push(&p->s2m, &c, 1) != 1)
+			break;
+		consumed++;
+	}
+	return (int64_t)consumed;
+}
+
+static int64_t dev_pty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+{
+	struct pty_pair *p = pty_from_pts_entry(entry);
+	int slot;
+
+	if (!p)
+		return -ENOTTY;
+	slot = (int)(entry->device_id - DEVFS_PTS0_DEVICE_ID);
+	return pty_master_ioctl_pair(p, slot, request, arg);
 }
 
 static int dev_ptmx_can_read(devfs_entry_t *entry, pid_t pid)
 {
 	(void)entry;
 	(void)pid;
-	return (g_pty.s2m.count > 0 || !g_pty.slave_open) ? 1 : 0;
+	return 1;
 }
 
 static int dev_ptmx_can_write(devfs_entry_t *entry, pid_t pid)
 {
 	(void)entry;
 	(void)pid;
-	return g_pty.m2s.count < PTY_BUF_SIZE ? 1 : 0;
+	return 1;
 }
 
 static int dev_pts_can_read(devfs_entry_t *entry, pid_t pid)
 {
-	(void)entry;
+	struct pty_pair *p = pty_from_pts_entry(entry);
+
 	(void)pid;
-	return (g_pty.m2s.count > 0 || !g_pty.master_open) ? 1 : 0;
+	if (!p)
+		return 0;
+	return (p->m2s.count > 0 || !p->master_open) ? 1 : 0;
 }
 
 static int dev_pts_can_write(devfs_entry_t *entry, pid_t pid)
 {
-	(void)entry;
+	struct pty_pair *p = pty_from_pts_entry(entry);
+
 	(void)pid;
-	return g_pty.s2m.count < PTY_BUF_SIZE ? 1 : 0;
+	if (!p)
+		return 0;
+	return p->s2m.count < PTY_BUF_SIZE ? 1 : 0;
 }
 
 static const devfs_ops_t ptmx_ops = {
 	.read = dev_ptmx_read,
 	.write = dev_ptmx_write,
-	.ioctl = dev_pty_ioctl,
+	.ioctl = NULL,
 	.open = dev_ptmx_open,
 	.close = dev_ptmx_close,
 	.can_read = dev_ptmx_can_read,
@@ -2931,12 +3192,22 @@ static devfs_node_t dev_ptmx = {
 	.ref_count = 0,
 };
 
-static devfs_node_t dev_pts0 = {
-	.entry = { .name = "pts/0", .mode = 0620,
-		   .device_id = DEVFS_PTS0_DEVICE_ID },
-	.ops = &pts_ops,
-	.ref_count = 0,
-};
+static void devfs_pty_register_nodes(void)
+{
+	int i;
+
+	for (i = 0; i < DEVFS_PTY_MAX; i++)
+	{
+		snprintf(dev_pts_names[i], sizeof(dev_pts_names[i]), "pts/%d", i);
+		dev_pts_nodes[i].entry.name = dev_pts_names[i];
+		dev_pts_nodes[i].entry.mode = 0620;
+		dev_pts_nodes[i].entry.device_id = DEVFS_PTS0_DEVICE_ID + (uint32_t)i;
+		dev_pts_nodes[i].ops = &pts_ops;
+		dev_pts_nodes[i].ref_count = 0;
+		if (devfs_register_node(&dev_pts_nodes[i]) != 0)
+			klog_print("DEVFS_PTS_REGISTER_FAIL\n");
+	}
+}
 
 /* IPC device operations */
 int64_t dev_ipc_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
@@ -3307,40 +3578,78 @@ int devfs_register_node(devfs_node_t *node)
 {
     if (!node || num_dev_nodes >= MAX_DEV_NODES)
         return -1;
+    if (devfs_find_node_by_id(node->entry.device_id))
+    {
+        klog_print("DEVFS_DUP_DEVICE_ID\n");
+        return -EEXIST;
+    }
     dev_nodes[num_dev_nodes++] = node;
     return 0;
 }
 
+static int devfs_register_node_checked(devfs_node_t *node)
+{
+    int rc = devfs_register_node(node);
+
+    if (rc != 0)
+        klog_print("DEVFS_INIT_REGISTER_FAIL\n");
+    return rc;
+}
+
 int devfs_init(void)
 {
-    devfs_register_node(&dev_null);
-    devfs_register_node(&dev_zero);
-    devfs_register_node(&dev_console);
-    devfs_register_node(&dev_tty);
-    devfs_register_node(&dev_tty0);
-    devfs_register_node(&dev_tty1);
-    devfs_register_node(&dev_stdin);
-    devfs_register_node(&dev_stdout);
-    devfs_register_node(&dev_stderr);
-    devfs_register_node(&dev_kmsg);
-    devfs_register_node(&dev_audio);
-    devfs_register_node(&dev_mouse);
+    if (devfs_register_node_checked(&dev_null) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_zero) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_console) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_tty) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_tty0) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_tty1) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_stdin) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_stdout) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_stderr) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_kmsg) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_audio) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_mouse) != 0)
+        return -1;
     input_mouse_set_ready_notifier(dev_mouse_ready_notify);
-    devfs_register_node(&dev_net);
-    devfs_register_node(&dev_disk);
+    if (devfs_register_node_checked(&dev_net) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_disk) != 0)
+        return -1;
     devfs_register_disk_topology();
-    devfs_register_node(&dev_random);
-    devfs_register_node(&dev_urandom);
-    devfs_register_node(&dev_full);
-    devfs_register_node(&dev_fb0);
-    devfs_register_node(&dev_events0);
-    devfs_register_node(&dev_input_event0);
-    devfs_register_node(&dev_serial);
-    devfs_register_node(&dev_ptmx);
-    devfs_register_node(&dev_pts0);
-    devfs_register_node(&dev_ipc);
+    if (devfs_register_node_checked(&dev_random) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_urandom) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_full) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_fb0) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_events0) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_input_event0) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_serial) != 0)
+        return -1;
+    if (devfs_register_node_checked(&dev_ptmx) != 0)
+        return -1;
+    devfs_pty_register_nodes();
+    if (devfs_register_node_checked(&dev_ipc) != 0)
+        return -1;
 #if CONFIG_ENABLE_BLUETOOTH
-    devfs_register_node(&dev_bluetooth_hci0);
+    if (devfs_register_node_checked(&dev_bluetooth_hci0) != 0)
+        return -1;
 #endif
     ktm_userdev_register();
 

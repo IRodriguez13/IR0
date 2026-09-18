@@ -391,7 +391,7 @@ static devfs_node_t *devfs_node_from_fd(int fd)
   if (!fd_table[fd].is_devfs)
     return NULL;
   ensure_devfs_init();
-  return devfs_find_node_by_id(fd_table[fd].dev_device_id);
+  return fd_entry_devfs_node(&fd_table[fd]);
 }
 
 /*
@@ -408,7 +408,7 @@ static devfs_node_t *devfs_resolve_read_fd(int fd, off_t *offset_out)
     ensure_devfs_init();
     if (offset_out)
       *offset_out = fd_table[fd].offset;
-    return devfs_find_node_by_id(fd_table[fd].dev_device_id);
+    return fd_entry_devfs_node(&fd_table[fd]);
   }
 
   return NULL;
@@ -435,8 +435,7 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
     return -EMFILE;
 
   fd_table[fd].in_use = true;
-  fd_table[fd].is_devfs = true;
-  fd_table[fd].dev_device_id = node->entry.device_id;
+  fd_entry_devfs_bind(&fd_table[fd], node);
   fd_table[fd].is_pipe = false;
   fd_table[fd].pipe_end = -1;
   fd_table[fd].vfs_file = NULL;
@@ -445,6 +444,18 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
   fd_table[fd].fd_flags = 0;
   strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
   fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
+
+  if (devfs_is_ptmx_device(node->entry.device_id))
+  {
+    int slot = devfs_pty_take_pending_master_slot();
+
+    if (slot < 0)
+    {
+      fd_table[fd].in_use = false;
+      return -EIO;
+    }
+    fd_table[fd].vfs_file = devfs_pty_vfs_mark(slot);
+  }
 
   /*
    * Finite text devices: capture a per-open snapshot so read() honors
@@ -493,6 +504,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 
   {
     devfs_node_t *node = devfs_node_from_fd(fd);
+    fd_entry_t *fdt = get_process_fd_table();
 
     if (node)
     {
@@ -500,6 +512,11 @@ int64_t sys_write(int fd, const void *buf, size_t count)
         return -EBADF;
       if (copy_from_user(kernel_buf, buf, copy_size) != 0)
         return -EFAULT;
+      if (fdt && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+          fdt[fd].in_use &&
+          devfs_is_ptmx_device(fdt[fd].dev_device_id))
+        return devfs_pty_master_write(fdt[fd].vfs_file, kernel_buf,
+                                      copy_size);
       ash_smoke_write_trace(fd, kernel_buf, copy_size);
       return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
     }
@@ -827,6 +844,29 @@ int64_t sys_read(int fd, void *buf, size_t count)
       int ret;
 
       if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+	  fd_table[fd].in_use &&
+	  devfs_is_ptmx_device(fd_table[fd].dev_device_id))
+      {
+	int nb = (fd_table[fd].flags & IR0_O_NONBLOCK) ? 1 : 0;
+
+	for (;;)
+	{
+	  ret = (int)devfs_pty_master_read(fd_table[fd].vfs_file,
+					   kernel_read_buf, read_size);
+	  if (ret != 0 || nb ||
+	      devfs_pty_master_can_read(fd_table[fd].vfs_file))
+	    break;
+	  if (signals_pause_should_interrupt(current_process))
+	    return -EINTR;
+	  {
+	    int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+	    if (sleep_ret < 0)
+	      return sleep_ret;
+	  }
+	}
+      }
+      else if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
 	  fd_table[fd].in_use && fd_table[fd].vfs_file &&
 	  devfs_node_wants_text_snap(fd_table[fd].dev_device_id))
       {
@@ -1227,7 +1267,10 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
         return drc;
       open_ret = devfs_bind_fd_slot(path_to_use, dn, ir0_flags);
       if (open_ret < 0)
+      {
+        devfs_pty_abort_pending_master();
         devfs_close_node(dn);
+      }
       return open_ret;
     }
   }
@@ -1353,11 +1396,10 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     fd_table[fd].offset = vfs_file ? vfs_file->pos : 0;
   fd_table[fd].is_pipe = false;
   fd_table[fd].is_socket = false;
-  fd_table[fd].is_devfs = false;
+  fd_entry_devfs_unbind(&fd_table[fd]);
   fd_table[fd].is_pseudo = false;
   fd_table[fd].is_epoll = false;
   fd_table[fd].pipe_end = -1;
-  fd_table[fd].dev_device_id = 0;
   fd_slot_note_created();
 
   fase50c_log_open_result(path_to_use, (int64_t)fd, 8);
@@ -1404,10 +1446,9 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
   fd_table[fd].offset = 0;
   fd_table[fd].is_pipe = false;
   fd_table[fd].is_socket = false;
-  fd_table[fd].is_devfs = false;
+  fd_entry_devfs_unbind(&fd_table[fd]);
   fd_table[fd].is_pseudo = false;
   fd_table[fd].pipe_end = -1;
-  fd_table[fd].dev_device_id = 0;
   fd_slot_note_created();
   fase50c_log_open_result(path, (int64_t)fd, 5);
   return fd;
@@ -1464,10 +1505,9 @@ static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
   fd_table[fd].offset = 0;
   fd_table[fd].is_pipe = false;
   fd_table[fd].is_socket = false;
-  fd_table[fd].is_devfs = false;
+  fd_entry_devfs_unbind(&fd_table[fd]);
   fd_table[fd].is_pseudo = true;
   fd_table[fd].pipe_end = -1;
-  fd_table[fd].dev_device_id = 0;
   fd_slot_note_created();
   fase50c_log_open_result(path, (int64_t)fd, 1);
   return fd;
@@ -1495,6 +1535,7 @@ static int64_t devfs_open_resolved_node(const char *path, int ir0_flags)
   open_ret = devfs_bind_fd_slot(path, node, ir0_flags);
   if (open_ret < 0)
   {
+    devfs_pty_abort_pending_master();
     devfs_close_node(node);
     fase50c_log_open_result(path, open_ret, 5);
     return open_ret;

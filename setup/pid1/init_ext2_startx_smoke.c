@@ -52,35 +52,51 @@ static int install_smoke_xinitrc(void)
 	static const char script[] =
 		"#!/bin/sh\n"
 		"echo '[STARTX] XINITRC_ENTER'\n"
-		"/usr/bin/xsetroot -mod 3 3 -fg '#78909c' -bg '#263238' || { echo '[STARTX][FAIL] xsetroot exited'; exit 1; }\n"
+		"/usr/bin/xsetroot -bitmap /usr/share/backgrounds/ir0desk.xbm -fg '#78909c' -bg '#263238' -name 'IR0 Desktop' || { echo '[STARTX][FAIL] xsetroot exited'; exit 1; }\n"
 		"echo ready > $HOME/.xsetroot-ready\n"
 		"echo '[STARTX] XSETROOT_EXEC_OK'\n"
-		"(echo '[STARTX] TWM_EXEC'; exec /usr/bin/twm) 2>$HOME/.twm-smoke.err &\n"
+		"(echo '[STARTX] TWM_EXEC'; exec /usr/bin/twm -f /etc/X11/twm/system.twmrc) 2>$HOME/.twm-smoke.err &\n"
 		"wm=$!\n"
 		"sleep 3\n"
 		"if ! kill -0 \"$wm\"; then echo '[STARTX][FAIL] twm exited'; cat $HOME/.twm-smoke.err; exit 1; fi\n"
-		"(echo '[STARTX] XTERM_EXEC'; exec /usr/bin/xterm -geometry 80x24+400+250) 2>$HOME/.xterm-smoke.err &\n"
-		"terminal=$!\n"
-		"(echo '[STARTX] XCLOCK_EXEC'; /usr/bin/xclock -digital -update 1 -geometry 220x48-18+18; rc=$?; echo \"[STARTX] XCLOCK_EXIT=$rc\"; exit $rc) 2>$HOME/.xclock-smoke.err &\n"
+		"(echo '[STARTX] XCLOCK_EXEC'; exec /usr/bin/xclock -geometry 100x100+12+12 -bg '#263238' -fg '#eceff1' -bd '#87a9b5') 2>$HOME/.xclock-smoke.err &\n"
 		"clock=$!\n"
+		"(echo '[STARTX] XWORKSPACES_EXEC'; exec /usr/bin/xmessage -timeout 0 -buttons \"One:0\",\"Two:0\",\"Three:0\",\"Four:0\" -geometry 280x32+372-58 -bg '#263238' -fg '#eceff1' -bd '#87a9b5' ' ') 2>$HOME/.xworkspaces-smoke.err &\n"
+		"workspaces=$!\n"
 		"(echo '[STARTX] XEYES_EXEC'; exec /usr/bin/xeyes -geometry 150x90-22+150) 2>$HOME/.xeyes-smoke.err &\n"
 		"eyes=$!\n"
 		"(echo '[STARTX] XLOGO_EXEC'; exec /usr/bin/xlogo -geometry 160x120-24-30) 2>$HOME/.xlogo-smoke.err &\n"
 		"logo=$!\n"
+		"(echo '[STARTX] XCALC_EXEC'; /usr/bin/xcalc -geometry 226x304-210+170; rc=$?; echo \"[STARTX] XCALC_EXIT=$rc\"; exit $rc) &\n"
+		"calc=$!\n"
+		"sleep 1\n"
+		"(echo '[STARTX] XTERM_EXEC'; exec /usr/bin/xterm -geometry 80x24+400+250 -title 'IR0 Terminal') 2>$HOME/.xterm-smoke.err &\n"
+		"terminal=$!\n"
+		"sleep 1\n"
+		"(echo '[STARTX] XTERM_CHAT_EXEC'; exec /usr/bin/xterm -geometry 72x16+520+300 -title 'IR0 Chat' -e /bin/sh -c 'echo chat-ready; exec /bin/sh') 2>$HOME/.xterm-chat-smoke.err &\n"
+		"chat=$!\n"
 		"sleep 2\n"
 		"if ! kill -0 \"$terminal\"; then echo '[STARTX][FAIL] xterm exited'; cat $HOME/.xterm-smoke.err; exit 1; fi\n"
+		"if ! kill -0 \"$chat\"; then echo '[STARTX][FAIL] chat xterm exited'; cat $HOME/.xterm-chat-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$clock\"; then echo '[STARTX][FAIL] xclock exited'; cat $HOME/.xclock-smoke.err; exit 1; fi\n"
+		"if ! kill -0 \"$workspaces\"; then echo '[STARTX][FAIL] workspace bar exited'; cat $HOME/.xworkspaces-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$eyes\"; then echo '[STARTX][FAIL] xeyes exited'; cat $HOME/.xeyes-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$logo\"; then echo '[STARTX][FAIL] xlogo exited'; cat $HOME/.xlogo-smoke.err; exit 1; fi\n"
+		"if ! kill -0 \"$calc\"; then echo '[STARTX][FAIL] xcalc exited'; cat $HOME/.xcalc-smoke.err; exit 1; fi\n"
+		"echo '[STARTX] X11_DESKTOP_TASKBAR_OK'\n"
+		"echo '[STARTX] X11_DESKTOP_WORKSPACES_OK'\n"
 		"echo ready > \"$HOME/.xclient-started\"\n"
 		"sleep 12\n"
 		"if ! kill -0 \"$wm\"; then echo '[STARTX][FAIL] twm exited after readiness'; cat $HOME/.twm-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$terminal\"; then echo '[STARTX][FAIL] xterm exited after readiness'; cat $HOME/.xterm-smoke.err; exit 1; fi\n"
+		"if ! kill -0 \"$chat\"; then echo '[STARTX][FAIL] chat xterm exited after readiness'; cat $HOME/.xterm-chat-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$clock\"; then echo '[STARTX][FAIL] xclock exited after readiness'; cat $HOME/.xclock-smoke.err; exit 1; fi\n"
+		"if ! kill -0 \"$workspaces\"; then echo '[STARTX][FAIL] workspace bar exited after readiness'; cat $HOME/.xworkspaces-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$eyes\"; then echo '[STARTX][FAIL] xeyes exited after readiness'; cat $HOME/.xeyes-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$logo\"; then echo '[STARTX][FAIL] xlogo exited after readiness'; cat $HOME/.xlogo-smoke.err; exit 1; fi\n"
+		"if ! kill -0 \"$calc\"; then echo '[STARTX][FAIL] xcalc exited after readiness'; cat $HOME/.xcalc-smoke.err; exit 1; fi\n"
 		"echo sustained > \"$HOME/.xclient-sustained\"\n"
-		"while kill -0 \"$wm\" && kill -0 \"$terminal\" && kill -0 \"$clock\" && kill -0 \"$eyes\" && kill -0 \"$logo\"; do sleep 60; done\n";
+		"while kill -0 \"$wm\" && kill -0 \"$terminal\" && kill -0 \"$chat\" && kill -0 \"$clock\" && kill -0 \"$workspaces\" && kill -0 \"$eyes\" && kill -0 \"$logo\" && kill -0 \"$calc\"; do sleep 60; done\n";
 	static const char twmrc[] = "RandomPlacement\n";
 	FILE *fp = fopen(SMOKE_HOME "/.xinitrc-smoke", "w");
 
@@ -199,6 +215,7 @@ int main(void)
 	tag("[STARTX] X11_WM_AND_TERMINAL_SUSTAINED_OK\n");
 	tag("[STARTX] X11_DESKTOP_BACKGROUND_OK\n");
 	tag("[STARTX] X11_DESKTOP_CLIENTS_SUSTAINED_OK\n");
+	tag("[STARTX] X11_DESKTOP_WORKSPACES_OK\n");
 	tag("[STARTX] X11_DESKTOP_DEMOS_OK\n");
 	tag("[STARTX_EXT2_OK]\n");
 	for (;;)

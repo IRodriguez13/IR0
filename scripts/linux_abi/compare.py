@@ -1613,6 +1613,124 @@ def compare_dup(linux: dict, ir0: dict, ebadf_errno: int) -> CompareResult:
     return res
 
 
+def compare_pty_multiplex(linux: dict, ir0: dict) -> CompareResult:
+    res = CompareResult(contract="pty_multiplex", ok=True)
+    l_steps = linux.get("audit_steps") or []
+    i_steps = ir0.get("audit_steps") or []
+
+    def ir0_complete() -> bool:
+        for op in (
+            "open_ptmx0",
+            "open_pts0",
+            "open_ptmx1",
+            "open_pts1",
+            "read_s0",
+            "read_s1",
+        ):
+            s = _find_step(i_steps, op)
+            if not s or s.get("ret", -1) < 0:
+                return False
+        for op in ("read_s0", "read_s1"):
+            s = _find_step(i_steps, op)
+            if not s or s.get("ret") != 1:
+                return False
+        i_n0 = _find_step(i_steps, "tiocgptn0")
+        i_n1 = _find_step(i_steps, "tiocgptn1")
+        if not i_n0 or not i_n1 or i_n0.get("ret") == i_n1.get("ret"):
+            return False
+        return True
+
+    def linux_complete() -> bool:
+        for op in ("open_pts1", "read_s0", "read_s1"):
+            s = _find_step(l_steps, op)
+            if not s or s.get("ret", -1) < 0:
+                return False
+        for op in ("read_s0", "read_s1"):
+            s = _find_step(l_steps, op)
+            if not s or s.get("ret") != 1:
+                return False
+        return True
+
+    if not ir0_complete():
+        res.ok = False
+        res.divergences.append("ir0 pty_multiplex probe incomplete or failed")
+
+    if not linux_complete():
+        if ir0_complete():
+            res.notes.append(
+                "Linux PTY ground truth unavailable on this host; IR0 probe PASS "
+                "(use devpts newinstance for full Linux↔IR0 compare)"
+            )
+            res.notes.append(
+                "UNIX98 PTY: two /dev/ptmx opens, distinct TIOCGPTN, master→slave echo (Linux pty.c)"
+            )
+            return res
+        res.ok = False
+        res.divergences.append("linux pty_multiplex probe incomplete or failed")
+
+    required_opens = (
+        "open_ptmx0",
+        "open_pts0",
+        "open_ptmx1",
+        "open_pts1",
+    )
+    for op in required_opens:
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(
+                f"missing {op} (linux={bool(l_s)} ir0={bool(i_s)})"
+            )
+            continue
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret", -1) < 0:
+                res.ok = False
+                res.divergences.append(f"{label} {op}: ret={step.get('ret')}")
+
+    l_n0 = _find_step(l_steps, "tiocgptn0")
+    l_n1 = _find_step(l_steps, "tiocgptn1")
+    i_n0 = _find_step(i_steps, "tiocgptn0")
+    i_n1 = _find_step(i_steps, "tiocgptn1")
+    for label, a, b in (
+        ("linux", l_n0, l_n1),
+        ("ir0", i_n0, i_n1),
+    ):
+        if not a or not b:
+            res.ok = False
+            res.divergences.append(f"{label} missing TIOCGPTN steps")
+            continue
+        if a.get("ret", -1) < 0 or b.get("ret", -1) < 0:
+            res.ok = False
+            res.divergences.append(f"{label} tiocgptn failed")
+        elif a.get("ret") == b.get("ret"):
+            res.ok = False
+            res.divergences.append(
+                f"{label} tiocgptn: same index {a.get('ret')} (need distinct pairs)"
+            )
+
+    for op in ("read_s0", "read_s1"):
+        l_s = _find_step(l_steps, op)
+        i_s = _find_step(i_steps, op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(f"missing {op}")
+            continue
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret") != 1:
+                res.ok = False
+                res.divergences.append(f"{label} {op}: ret={step.get('ret')} expected 1")
+
+    if l_n0 and i_n0 and l_n0.get("ret") != i_n0.get("ret"):
+        res.notes.append(
+            f"TIOCGPTN index differs (linux={l_n0.get('ret')} ir0={i_n0.get('ret')}) — OK if both valid"
+        )
+    res.notes.append(
+        "UNIX98 PTY: two /dev/ptmx opens, distinct TIOCGPTN, master→slave echo (Linux pty.c)"
+    )
+    return res
+
+
 def compare_ioctl(linux: dict, ir0: dict) -> CompareResult:
     res = CompareResult(contract="ioctl", ok=True)
     required = ("tcgets", "tiocgwinsz", "tiocgpgrp")

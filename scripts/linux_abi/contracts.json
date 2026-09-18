@@ -139,6 +139,17 @@
       "status_doc": "UNKNOWN"
     },
     {
+      "id": "pty_multiplex",
+      "enabled": true,
+      "title": "UNIX98 PTY multiplex (/dev/ptmx + /dev/pts/N)",
+      "status_doc": "LINUX-LIKE",
+      "done_tag": "PTYMULTIPLEXOK",
+      "linux_ref": "drivers/tty/pty.c; man7 pty(7); TIOCGPTN TIOCSPTLCK",
+      "smokes": [
+        "smoke-ext2-startx PROFILE=desktop"
+      ]
+    },
+    {
       "id": "ioctl",
       "enabled": true,
       "title": "ioctl(2) console TTY",

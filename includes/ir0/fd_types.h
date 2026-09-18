@@ -17,6 +17,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+struct devfs_node;
+
 #define MAX_FDS_PER_PROCESS 64
 
 typedef struct fd_entry
@@ -32,6 +34,7 @@ typedef struct fd_entry
 	int pipe_end;  /* 0 = read end, 1 = write end */
 	bool is_devfs; /* bound to devfs node when true */
 	uint32_t dev_device_id;
+	struct devfs_node *dev_node; /* canonical node at open; not find_by_id */
 	bool is_socket; /* bound to sock_udp when true */
 	bool is_pseudo; /* bound to pseudo_fs ops via vfs_file (pseudo_fd_bind_t) */
 	bool is_epoll;  /* vfs_file points at epoll_state */

@@ -34,9 +34,22 @@ inject_file()
 	python3 "$INJECT" --mode "$mode" "$temporary" "$source" "$path"
 }
 
+inject_tree_files()
+{
+	local base="$1"
+	local f rel
+	[ -d "${TREE}/${base}" ] || return 0
+	while IFS= read -r f; do
+		rel="${f#${TREE}/}"
+		inject_file "$rel"
+	done < <(find "${TREE}/${base}" -type f | LC_ALL=C sort)
+}
+
 for path in \
 	usr/bin/Xfbdev usr/bin/X usr/bin/xinit usr/bin/startx usr/bin/xauth \
-	usr/bin/twm usr/bin/xterm etc/X11/xinit/xinitrc \
+	usr/bin/twm usr/bin/xterm usr/bin/xsetroot \
+	usr/bin/xclock usr/bin/xeyes usr/bin/xlogo usr/bin/xcalc usr/bin/xmessage \
+	etc/X11/xinit/xinitrc \
 	usr/share/fonts/X11/misc/6x13.bdf \
 	usr/share/fonts/X11/misc/cursor.bdf \
 	usr/share/fonts/X11/misc/fonts.alias \
@@ -50,6 +63,14 @@ do
 	else
 		inject_file "$path"
 	fi
+done
+
+# Session assets referenced by /etc/X11/xinit/xinitrc and twm defaults.
+inject_tree_files etc/X11/twm
+inject_tree_files usr/share/backgrounds
+inject_tree_files usr/share/X11/app-defaults
+for path in etc/profile etc/ashrc; do
+	inject_file "$path"
 done
 
 # X11 uses well-known lock files here; this is a Unix ABI requirement, not an

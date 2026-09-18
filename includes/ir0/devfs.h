@@ -18,6 +18,7 @@
 
 #include <ir0/types.h>
 #include <ir0/stat.h>
+#include <ir0/pty_devfs.h>
 
 // Virtual Device Filesystem - /dev
 // Implements Unix "everything is a file" for devices
@@ -50,10 +51,11 @@ typedef struct {
 } devfs_ops_t;
 
 // Device node structure
-typedef struct {
-    devfs_entry_t entry;
-    const devfs_ops_t *ops;
-    uint64_t ref_count;
+typedef struct devfs_node
+{
+	devfs_entry_t entry;
+	const devfs_ops_t *ops;
+	uint64_t ref_count;
 } devfs_node_t;
 
 // Standard device nodes
@@ -99,6 +101,7 @@ int devfs_register_device(const char *name, const devfs_ops_t *ops, uint32_t mod
 int devfs_unregister_device(const char *name);
 int devfs_fd_can_read(uint32_t device_id, pid_t pid);
 int devfs_fd_can_write(uint32_t device_id, pid_t pid);
+
 int64_t devfs_open_node(devfs_node_t *node, int flags);
 int64_t devfs_close_node(devfs_node_t *node);
 int devfs_stat_path(const char *path, stat_t *buf);
@@ -251,3 +254,38 @@ struct fb_info_min {
     uint32_t bpp;
     uint32_t pitch;
 };
+
+#include <ir0/fd_types.h>
+
+/*
+ * Resolve the devfs node bound to an fd slot. Prefer the pointer stored at
+ * open time — devfs_find_node_by_id() is first-match and unsafe if IDs collide.
+ */
+static inline devfs_node_t *fd_entry_devfs_node(const fd_entry_t *e)
+{
+	if (!e || !e->is_devfs)
+		return NULL;
+	if (e->dev_node)
+		return e->dev_node;
+	return devfs_find_node_by_id(e->dev_device_id);
+}
+
+static inline void fd_entry_devfs_bind(fd_entry_t *e, devfs_node_t *node)
+{
+	if (!e || !node)
+		return;
+
+	e->is_devfs = true;
+	e->dev_device_id = node->entry.device_id;
+	e->dev_node = node;
+}
+
+static inline void fd_entry_devfs_unbind(fd_entry_t *e)
+{
+	if (!e)
+		return;
+
+	e->is_devfs = false;
+	e->dev_device_id = 0;
+	e->dev_node = NULL;
+}

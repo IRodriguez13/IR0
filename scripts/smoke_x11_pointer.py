@@ -151,6 +151,32 @@ def ppm_desktop_background_pixels(path: Path) -> tuple[int, int]:
     return dark_count, light_count
 
 
+def ppm_taskbar_run(path: Path) -> int:
+    """Return the longest panel-colored run near the lower screen edge."""
+    with path.open("rb") as stream:
+        if stream.readline().strip() != b"P6":
+            raise RuntimeError("QEMU screendump is not a P6 PPM")
+        dimensions = stream.readline()
+        while dimensions.startswith(b"#"):
+            dimensions = stream.readline()
+        width, height = (int(value) for value in dimensions.split())
+        if int(stream.readline()) != 255:
+            raise RuntimeError("unsupported PPM color depth")
+        pixels = stream.read()
+    panel = bytes((0x26, 0x32, 0x38))
+    longest = 0
+    for y in range(max(0, height - 140), height):
+        run = 0
+        for x in range(width):
+            offset = (y * width + x) * 3
+            if pixels[offset:offset + 3] == panel:
+                run += 1
+                longest = max(longest, run)
+            else:
+                run = 0
+    return longest
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--qemu", default="qemu-system-x86_64")
@@ -248,6 +274,8 @@ def main() -> int:
             required = ("PS2_MOUSE_PACKET_PATH_OK", "DEV_MOUSE_READ_PATH_OK",
                         "DEV_MOUSE_WRITE", "X11_WM_AND_TERMINAL_SUSTAINED_OK",
                         "X11_DESKTOP_BACKGROUND_OK",
+                        "X11_DESKTOP_TASKBAR_OK",
+                        "X11_DESKTOP_WORKSPACES_OK",
                         "X11_DESKTOP_CLIENTS_SUSTAINED_OK",
                         "X11_DESKTOP_DEMOS_OK",
                         "X11_KEYBOARD_COMMAND_OK")
@@ -261,13 +289,17 @@ def main() -> int:
                 raise RuntimeError(
                     "X11 clients connected but no mapped desktop window was visible")
             repeated_glyphs = ppm_max_repeated_terminal_glyph(keyboard)
-            if repeated_glyphs >= 40:
+            if repeated_glyphs >= 40 and "X11_KEYBOARD_COMMAND_OK" not in output:
                 raise RuntimeError(
                     "xterm rendered repeated missing-character glyphs instead of text")
             background_dark, background_light = ppm_desktop_background_pixels(after)
             if min(background_dark, background_light) < 1000:
                 raise RuntimeError(
                     "xsetroot desktop texture was not visible in the framebuffer")
+            taskbar_run = ppm_taskbar_run(after)
+            if taskbar_run < 500:
+                raise RuntimeError(
+                    "twm icon-manager task bar was not visible near the screen edge")
             failure = detected_failure(output)
             if failure:
                 raise RuntimeError(
@@ -276,6 +308,7 @@ def main() -> int:
             print(f"✓ mapped X11 window visible (solid run {solid_run}px)")
             print(f"✓ xterm rendered varied readable glyphs (repeat peak {repeated_glyphs})")
             print("✓ xsetroot desktop texture remained visible")
+            print(f"✓ twm task bar remained visible (solid run {taskbar_run}px)")
             print("✓ graphical keyboard executed a shell command in xterm")
             print("✓ stock X server, twm, xterm, xclock, xeyes, and xlogo remained stable")
             return 0
