@@ -98,8 +98,8 @@ python3 scripts/test_kernel_manager.py >/dev/null \
 python3 scripts/test_userspace_manager.py >/dev/null \
 	&& ok "D usmang profile-aware desktop reporting" \
 	|| bad "D usmang behavior"
-ISD_ROOT=$(make -s -pn 2>/dev/null | sed -n 's/^IR0_ISD_ROOT := //p' | head -1)
-if [ -n "$ISD_ROOT" ] && [ -f "$ISD_ROOT/scripts/pack-minix.sh" ]; then
+ISD_ROOT="$ROOT/../ISD"
+if [ -f "$ISD_ROOT/scripts/pack-minix.sh" ]; then
 	grep -q 'xload' "$ISD_ROOT/scripts/pack-minix.sh" \
 		&& ok "D ISD pack-minix includes xload" \
 		|| bad "D ISD pack-minix missing xload loop"
