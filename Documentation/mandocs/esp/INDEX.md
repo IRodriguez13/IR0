@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.4 |
+| Versión | 0.5 |
 | Fase IR0 | T0–T2 (transversal) |
 | Estado | stable |
 | Página man | (solo navegación — usar `IR0-<slug>` por subsistema) |
@@ -12,8 +12,8 @@
 Documentación bilingüe fiel al código en `Documentation/mandocs/`.
 Empezá por: `make man TOPIC=onboarding`.
 
-**Nota de oleada (0.4):** `IR0-onboarding`; boot log opcional → virtio-9p
-(`BOOT_LOG_HOSTSHARE` / `make run-bootlog`); mapa honesto de facades abajo.
+**Nota de oleada (0.5):** `IR0-tty` documenta multiplex PTY; `IR0-userspace` documenta
+puente ISD, `kmang` y `usmang` (2026-09-18).
 
 ## Índice de capítulos
 

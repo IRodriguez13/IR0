@@ -282,9 +282,11 @@ usmang: check-isd
 	@chmod +x scripts/userspace_manager.py
 	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
 		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" summary
-	@echo "---"
-	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
-		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop
+	@if [ "$(ISD_PROFILE)" = "desktop" ]; then \
+		echo "---"; \
+		python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
+			--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop; \
+	fi
 	@echo "guest: ir0-status version | packages | userland"
 
 # Refresh only the boot ISO. The mutable machine disk is never a dependency.

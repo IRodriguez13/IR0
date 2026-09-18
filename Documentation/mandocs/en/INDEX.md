@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.4 |
+| Version | 0.5 |
 | IR0 phase | T0–T2 (cross-cutting) |
 | Status | stable |
 | Man page | (navigation only — use per-subsystem `IR0-<slug>` pages) |
@@ -12,8 +12,8 @@
 Bilingual, code-faithful kernel documentation under `Documentation/mandocs/`.
 Start here: `make man TOPIC=onboarding`. Study subsystems via `man IR0-vfs`, etc.
 
-**Oleada note (0.4):** `IR0-onboarding`; optional boot log → virtio-9p
-(`BOOT_LOG_HOSTSHARE` / `make run-bootlog`); honest facade coverage map below.
+**Oleada note (0.5):** `IR0-tty` documents PTY multiplex (`pty_devfs.h`, audit gate);
+`IR0-userspace` documents ISD bridge, `kmang`, and `usmang` host tooling (2026-09-18).
 
 ## Chapter index
 

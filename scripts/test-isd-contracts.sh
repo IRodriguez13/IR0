@@ -84,6 +84,9 @@ grep -q '^usmang:' scripts/make/isd.mk \
 python3 scripts/test_kernel_manager.py >/dev/null \
 	&& ok "D kernel manager install/select/fallback behavior" \
 	|| bad "D kernel manager behavior"
+python3 scripts/test_userspace_manager.py >/dev/null \
+	&& ok "D usmang profile-aware desktop reporting" \
+	|| bad "D usmang behavior"
 
 ENS=scripts/ensure-host-deps.sh
 TMP=$(mktemp -d)

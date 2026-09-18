@@ -2,17 +2,21 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.1 |
+| Versión | 0.2 |
 | Fase IR0 | T1–T2 |
 | Estado | stable |
 | Depende de | drivers, syscalls, devfs |
 | Página man | IR0-tty (sección 7) |
-| Fuentes principales | `includes/ir0/console.c`, `kernel/console_backend.c`, `fs/devfs.c`, `interrupt/arch/keyboard.c`, `drivers/video/console_renderer.c` |
+| Fuentes principales | `includes/ir0/console.c`, `includes/ir0/pty_devfs.h`, `kernel/console_backend.c`, `fs/devfs.c`, `interrupt/arch/keyboard.c`, `drivers/video/console_renderer.c` |
+
+> **Última verificación:** 2026-09-18
 
 ## 1. Visión general
 
 La capa TTY proporciona disciplina de línea, eco y lectura bloqueante para
-`/dev/console` y `/dev/tty`. La entrada llega desde la ruta PS/2 del teclado;
+`/dev/console` y `/dev/tty`. Un **multiplex PTY estilo UNIX98** (`/dev/ptmx` +
+`/dev/pts/N`) vive en el mismo módulo devfs para xterm, smokes duales y
+`linux-abi-audit-pty-multiplex`. La entrada llega desde la ruta PS/2 del teclado;
 la salida pasa por `console_backend` hacia serial y renderizado typewriter
 VGA/framebuffer. BusyBox `ash` sobre `/dev/console` es el consumidor interactivo
 de userspace principal.
@@ -23,12 +27,25 @@ de userspace principal.
 |------|---------|-----|
 | Disciplina de línea | `includes/ir0/console.c` | buffer canónico, eco, termios |
 | Backend | `kernel/console_backend.c` | despacho serial + typewriter |
-| devfs | `fs/devfs.c` | `/dev/console` (id 3), `/dev/tty` (4), alias stdio |
+| devfs | `fs/devfs.c` | `/dev/console` (id 3), `/dev/tty` (4), multiplex PTY, alias stdio |
+| Facade PTY | `includes/ir0/pty_devfs.h` | `/dev/ptmx` (43), `/dev/pts/0..7` (48–55), `DEVFS_PTY_MAX=8` |
 | Teclado | `interrupt/arch/keyboard.c` | scancode → ASCII + eventos input |
 | Renderer | `drivers/video/console_renderer.c` | celdas 80×25, CSI/SGR, escala FB |
 | Syscalls | `kernel/syscalls.c` | `ir0_console_read`, poll wake, keymap |
 
 **termios por defecto:** ICANON | ECHO | ECHOE | ISIG, ICRNL, OPOST|ONLCR, VMIN=1, VTIME=0.
+
+**Multiplex PTY (Linux-like):** abrir `/dev/ptmx` reserva un slot; el esclavo es
+`/dev/pts/N` con `TIOCGPTN` / `TIOCSPTLCK`. Anillos master/slave de 1024 bytes;
+`TIOCGWINSZ` / `TIOCSWINSZ` actualizan `winsize` y entregan `SIGWINCH` al grupo
+foreground del esclavo. Masters con `locked=1` al abrir (espíritu grantpt).
+Código portable: `includes/ir0/pty_devfs.h` — ids fijos solo en `fs/devfs.c`
+(`architecture_guard.py` exige ids únicos y prohíbe `devfs_find_node_by_id` en
+hot paths de syscalls; usar `fd_entry.dev_node`).
+
+Gate: `make linux-abi-audit-pty-multiplex` + `make smoke-pty-winsz`.
+Compare en host Linux puede colgar con devpts roto — el camino QEMU/IR0 manda
+para el kernel; estado **LINUX-LIKE** hasta arreglar el runner host.
 
 ## 3. Flujo de datos
 
@@ -104,12 +121,17 @@ Canónico vs raw:
 2. id dispositivo stdin 17 (no 16 — colisión con events0 documentada en devfs).
 3. ioctl: TCGETS/TCSETS/TCSETSW/TCSETSF, TIOCGWINSZ; otras peticiones `-ENOTTY`.
 4. open `/dev/console` dispara `ir0_console_on_userspace_attach()` una vez.
-5. TTY no toca punteros user — devfs/capa syscall copian.5. TTY no toca punteros user — devfs/capa syscall copian.
-6. El drenado del teclado se comparte con el subsistema de entrada — ver el invariante de reclamo atómico del i8042 en IR0-input. Los caracteres duplicados en la línea casi siempre son esa carrera, no un bug de eco del TTY.
+5. TTY no toca punteros user — devfs/capa syscall copian.
+6. ids PTY 43 (ptmx) y 48–55 (pts) no deben colisionar con evdev (46) — ver
+   `includes/ir0/pty_devfs.h`.
+7. El drenado del teclado se comparte con el subsistema de entrada — ver el
+   invariante de reclamo atómico del i8042 en IR0-input.
 
 ## 9. Consejos de depuración
 
 - Smoke ash interactivo: `Documentation/fase58e-ash-interactive-console.md`.
+- PTY: `make smoke-pty-winsz`; audit `linux-abi-audit-pty-multiplex`.
+- Escritorio dual xterm: `make smoke-x11-pointer PROFILE=desktop`.
 - Serial: layout teclado vía `CONFIG_KEYBOARD_LAYOUT`; get/set keymap syscall.
 - Eco en blanco pero serial OK: comprobar termios ICANON/ECHO; verificar attach backend.
 - poll bloqueado: asegurar que `stdin_wake_check` corre desde bucle idle.
@@ -118,7 +140,8 @@ Build/run: `make run-fase58e-ash-gui` (ver SETUP.md).
 
 ## 10. Hoja de ruta futura
 
-- Control de jobs (grupo foreground tty) — **no implementado**.
+- devpts dinámico completo — solo `/dev/pts/0..7` (`DEVFS_PTY_MAX=8`).
+- Control de jobs (grupo foreground tty) — **parcial** (existe ruta SIGWINCH PTY).
 - Paridad completa de flags termios con Linux — solo subconjunto.
 - Teclado USB — ruta PS/2 primaria hoy.
 - Múltiples terminales virtuales — foco en consola única.

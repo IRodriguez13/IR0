@@ -2,16 +2,19 @@
 
 | Campo | Valor |
 |-------|-------|
-| Version | 0.2 |
+| Version | 0.3 |
 | Fase IR0 | T1–T2 |
 | Estado | estable |
 | Depende de | boot, process, vfs, tty |
 | Man page | IR0-userspace (sección 7) |
-| Fuentes principales | `kernel/main.c`, `kernel/rootfs_base.c`, `scripts/inject_init_minix.py`, `Makefile`, repo hermano `IR0-userspace/` |
+| Fuentes principales | `kernel/main.c`, `scripts/make/isd.mk`, `scripts/kernel_manager.py`, `scripts/userspace_manager.py`, repo hermano `ISD/` |
 
-> **Última verificación:** 2026-07-25
+> **Última verificación:** 2026-09-18
 
-> **Nota (2026-07-25):** el userspace Unix (runit, BusyBox, login, doas, `/etc`) vive en el repositorio hermano **`IR0-userspace`**. El kernel conserva solo sus fixtures de test (`setup/pid1/`) más el acoplamiento (`userspace/README.md`, `Documentation/USERSPACE.md`) y dispara la build de producto vía `IR0_USERSPACE_ROOT`; si falta el hermano, `check-userspace` falla en vez de saltear el gate. Se retiraron `debug_bins/` y el dbgshell in-kernel.
+> **Nota (2026-09-18):** el rootfs de producto y los perfiles se construyen desde el
+> repo hermano **`ISD/`** (`IR0_ISD_ROOT`). El kernel dispara boot vía `scripts/make/isd.mk`:
+> discos persistentes, `make kmang` (TUI catálogo ISO) y `make usmang` (inspector ISD
+> en host). El alias legacy `IR0-userspace/` apunta a `IR0_ISD_ROOT`.
 
 > **Nota (2026-07-24):** el PID1 transitorio **irinit** se eliminó. Producto y tests usan solo **runit** (`make build-runit` / `load-userspace-runit` / `smoke-runit-boot`).
 
@@ -61,9 +64,17 @@ entradas de directorio de MINIX v1), `appliance` no abre login interactivo
 | `make smoke-runit-login` | Autologin root (password vacío) |
 | `make smoke-runit-login-nonroot` | No-root: crypt(3) + uid 1001 + PS1 |
 | `make run-fase58e-ash-gui` | ash interactivo GTK |
+| `make kmang` | Catálogo interactivo de ISO kernel; `poweron` arranca Default |
+| `make usmang` | Resumen ISD en host; detalle desktop solo con `PROFILE=desktop` |
+| `make smoke-x11-pointer PROFILE=desktop` | TinyX fullscreen + clientes desktop |
 
-Guía de acoplamiento (clone, `headers_install`, límite):
-[`USERSPACE.md`](../../USERSPACE.md) / [`esp/USERSPACE.md`](../../esp/USERSPACE.md).
+Guía: [`USERSPACE.md`](../../USERSPACE.md), [`TOOLING.md`](../../TOOLING.md).
+
+**kmang:** el `#N` de build es **local a la máquina**. Comparar hosts por SHA-256 y
+procedencia, no solo por `#N`. La TUI avisa si el ISO Workspace difiere del Default.
+
+**usmang:** lee `ISD/VERSION` y `profiles/<PROFILE>/packages.txt` reales; clientes X
+solo con `PROFILE=desktop`. Versión ISD ≠ build local del kernel.
 
 Aliases retirados (fail-fast): `build-irinit`, `load-userspace-irinit`,
 `smoke-userspace-irinit`, `run-irinit-interactive-gui`.

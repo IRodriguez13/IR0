@@ -670,17 +670,20 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
         screen.addstr(4, 2, _clip(f"Default:   {default_id or '(none — poweron uses workspace ISO)'}", width - 4))
         screen.addstr(5, 2, _clip(f"Fallback:  {store.fallback_id() or '-'}", width - 4))
         screen.addstr(6, 2, _clip(f"Workspace: {workspace_id or '-'} [{workspace_health}]", width - 4))
-        if drift:
-            screen.addstr(
-                7, 2,
-                _clip(
-                    "! poweron boots Default, not Workspace — press i to enroll this ISO",
-                    width - 4,
-                ),
-                curses.A_BOLD,
+        if workspace_id is None:
+            sync_line = (
+                "Workspace ISO unavailable — build kernel-x64-userspace.iso, then i"
             )
+            sync_attr = 0
+        elif drift:
+            sync_line = (
+                "! poweron boots Default, not Workspace — press i to enroll this ISO"
+            )
+            sync_attr = curses.A_BOLD
         else:
-            screen.addstr(7, 2, _clip("Default matches Workspace (or Workspace unavailable)", width - 4))
+            sync_line = "Default matches Workspace (same id and SHA-256)"
+            sync_attr = 0
+        screen.addstr(7, 2, _clip(sync_line, width - 4), sync_attr)
         screen.addstr(8, 2, "Installed:", curses.A_BOLD)
 
         if not entries:

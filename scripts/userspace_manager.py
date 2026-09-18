@@ -16,6 +16,9 @@ import sys
 from pathlib import Path
 
 
+ROOT = Path(__file__).resolve().parent.parent
+
+
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
 
@@ -103,35 +106,62 @@ def cmd_userland(isd: Path, profile: str) -> dict:
     }
 
 
-def cmd_desktop(isd: Path) -> dict:
-    packages = read_text(isd / "profiles/desktop/packages.txt").splitlines()
-    x_clients = [
-        line.strip()
-        for line in packages
-        if line.strip()
-        and not line.strip().startswith("#")
-        and line.strip()
-        in {
-            "tinyx",
-            "twm",
-            "xterm",
-            "xclock",
-            "xeyes",
-            "xlogo",
-            "xcalc",
-            "xmessage",
-            "xsetroot",
-            "xload",
-            "xinit",
-            "xauth",
-        }
+# Interactive X session clients listed in ISD desktop profile (not the full X stack).
+X_SESSION_CLIENTS = frozenset({
+    "tinyx",
+    "twm",
+    "xterm",
+    "xclock",
+    "xeyes",
+    "xlogo",
+    "xcalc",
+    "xmessage",
+    "xsetroot",
+    "xload",
+    "xinit",
+    "xauth",
+})
+
+
+def profile_packages(isd: Path, profile: str) -> list[str]:
+    path = isd / "profiles" / profile / "packages.txt"
+    names: list[str] = []
+    for raw in read_text(path).splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        names.append(line)
+    return names
+
+
+def cmd_desktop(isd: Path, profile: str) -> dict:
+    packages = profile_packages(isd, profile)
+    x_clients = [name for name in packages if name in X_SESSION_CLIENTS]
+    overlay = isd / "profiles" / profile / "overlay"
+    wallpaper_candidates = [
+        overlay / "usr/share/backgrounds/ir0-desktop.xbm",
+        overlay / "usr/share/backgrounds/ir0desk.xbm",
+        isd / "profiles/desktop/overlay/usr/share/backgrounds/ir0-desktop.xbm",
     ]
-    wallpaper = isd / "profiles/desktop/overlay/usr/share/backgrounds/ir0-desktop.xbm"
+    wallpaper = next((path for path in wallpaper_candidates if path.is_file()), None)
+    abi_candidates = [
+        isd / "Documentation/DESKTOP_ABI.md",
+        ROOT / "Documentation/DESKTOP_ABI.md",
+    ]
+    abi_doc = next((str(path) for path in abi_candidates if path.is_file()), None)
     return {
+        "profile": profile,
+        "applies": profile == "desktop",
         "x_session_packages": x_clients,
-        "wallpaper_xbm": str(wallpaper) if wallpaper.is_file() else None,
-        "abi_doc": str(isd / "Documentation/DESKTOP_ABI.md"),
+        "x_session_missing_from_profile": sorted(X_SESSION_CLIENTS - set(x_clients)),
+        "wallpaper_xbm": str(wallpaper) if wallpaper else None,
+        "abi_doc": abi_doc,
         "golden_rule": "unmodified upstream clients; IR0 supplies Linux surfaces",
+        "note": (
+            "Desktop ABI applies to PROFILE=desktop only; other profiles omit X clients."
+            if profile != "desktop"
+            else None
+        ),
     }
 
 
@@ -161,17 +191,25 @@ def main() -> int:
     elif args.command == "userland":
         payload = cmd_userland(isd, args.profile)
     elif args.command == "desktop":
-        payload = cmd_desktop(isd)
+        payload = cmd_desktop(isd, args.profile)
     else:
+        desktop = cmd_desktop(isd, args.profile)
         payload = {
             "version": cmd_version(isd, args.profile, args.arch),
             "userland": cmd_userland(isd, args.profile),
-            "desktop": cmd_desktop(isd),
             "packages": {
                 k: cmd_packages(isd, args.profile)[k]
                 for k in ("count", "first_party", "third_party")
             },
         }
+        if desktop["applies"]:
+            payload["desktop"] = desktop
+        else:
+            payload["desktop"] = {
+                "profile": args.profile,
+                "applies": False,
+                "note": desktop["note"],
+            }
 
     if args.json:
         print(json.dumps(payload, sort_keys=True, indent=2))
@@ -185,7 +223,16 @@ def main() -> int:
                 f"(first-party={payload['packages']['first_party']}, "
                 f"third-party={payload['packages']['third_party']})"
             )
-            print(f"  desktop X pkgs: {', '.join(payload['desktop']['x_session_packages'])}")
+            desktop = payload["desktop"]
+            if desktop.get("applies"):
+                print(
+                    f"  desktop X clients ({len(desktop['x_session_packages'])}): "
+                    f"{', '.join(desktop['x_session_packages'])}"
+                )
+                if desktop.get("wallpaper_xbm"):
+                    print(f"  wallpaper: {desktop['wallpaper_xbm']}")
+            else:
+                print(f"  desktop: n/a (profile={args.profile}; use PROFILE=desktop)")
             print(f"  note: {ver.get('note')}")
         elif args.command == "packages":
             for row in payload["packages"]:
