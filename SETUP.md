@@ -198,10 +198,34 @@ make poweron      # reuse the installed machine on every boot
 `first-boot` builds a reproducible ISD base image and creates a separate mutable
 machine disk under the sibling `IR0-machines/` directory. `poweron` reuses that
 disk without running the ISD image packer, so guest users, configuration and
-files survive kernel or rootfs rebuilds. It boots existing artifacts without
-recompiling; rebuild `kernel-x64-userspace.iso` explicitly after kernel changes.
+files survive kernel or rootfs rebuilds. It boots **the kmang Default kernel**
+(or the workspace ISO only when the catalog is empty). Rebuilding
+`kernel-x64-userspace.iso` alone does **not** change what `poweron` boots —
+enroll it with `make kmang` → `i`, or `make kernel-manager-install`.
 Does **not** require TinyCC/GNU make unless
 `IR0_WITH_DEVTOOLS=1`.
+
+### Kernel catalog (`make kmang`)
+
+`make kmang` opens a TUI over
+`IR0-machines/<arch>/<profile>/<machine>/kernels/`. Build numbers (`#1420`,
+`0.0.1-rc5-build1420`) come from the host-local `.build_number` counter: the
+same tree on another PC can stamp `#1450` for equivalent source. Compare
+kernels by SHA-256 / provenance (host, user, git), not by `#N` alone.
+
+| Key | Action |
+|-----|--------|
+| `i` | Install workspace ISO into catalog and select it |
+| `r` | Rebuild ISO, install, select |
+| Enter | Select highlighted as Default (previous → Fallback) |
+| `c` | Compare Workspace vs Default |
+| `s` | Detail (sha, builder, git) |
+| `v` | Verify |
+| `p` | Prune everything except Default+Fallback |
+| `b` | Boot Default (`make poweron`) |
+
+CLI: `make kmang-cli`, `make kernel-manager-list`, or
+`python3 scripts/kernel_manager.py … compare|info|prune`.
 
 Use `IR0_MACHINE=name` to keep multiple installations of the same profile.
 Reset is intentionally explicit and destructive:
