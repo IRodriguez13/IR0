@@ -77,6 +77,10 @@ grep -q 'machine-local' scripts/kernel_manager.py \
 	&& grep -q 'compare_workspace' scripts/kernel_manager.py \
 	&& ok "D kmang treats build numbers as machine-local" \
 	|| bad "D kmang provenance contract"
+grep -q '^usmang:' scripts/make/isd.mk \
+	&& test -f scripts/userspace_manager.py \
+	&& ok "D usmang host inspector wired" \
+	|| bad "D usmang missing"
 python3 scripts/test_kernel_manager.py >/dev/null \
 	&& ok "D kernel manager install/select/fallback behavior" \
 	|| bad "D kernel manager behavior"

@@ -71,6 +71,8 @@ Uninstall: `make mandocs-uninstall` or `MANDOC_LANG=all make mandocs-uninstall`
 - `make poweron`: boot Default (or workspace ISO only if the catalog is empty).
 - `make machine-update-kernel`: rebuild ISO only — does not enroll; kmang `i`
   is still required before `poweron` picks it up.
+- `make usmang`: host inspector for ISD release, package origins, `USERLAND_BASE`,
+  and desktop package set (independent of kernel `#N`).
 
 ## Current Strengths
 
