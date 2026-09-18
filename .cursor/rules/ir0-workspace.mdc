@@ -19,7 +19,7 @@ make kernel-linux-rules-install
 | Capa | Reglas | Verificación |
 |------|--------|--------------|
 | IR0 tiers T0–T3 | `ir0-tier-t*` | `make smoke-*`, tags en serial |
-| POSIX / userspace | `ir0-tier-t1`, `kernel-userspace-abi` | musl smokes, contratos ABI |
+| POSIX / userspace | `ir0-tier-t1`, **`ir0-userspace-first-linux-abi`**, **`ir0-no-userspace-patches`** | musl smokes, contratos ABI; kernel-first, sin parches ports |
 | Arquitectura | `kernel-architecture-rigor`, `kernel-c-allman-style` | `make arch-guard`, CTR gates |
 | Linux ground truth | `linux-ground-truth-first` | `scripts/d1_13_linux_ground_truth.py` |
 | Linux fork debug | `ir0-linux-fork-debug-reference` | `$LINUX_TREE` (= `~/Escritorio/linux`), `git log -S` / `git show` |
