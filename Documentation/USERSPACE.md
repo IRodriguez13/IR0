@@ -1,6 +1,6 @@
 # Coupling IR0 (kernel) ↔ ISD
 
-> **Last verified:** 2026-09-02  
+> **Last verified:** 2026-09-18  
 > **Source of truth:** this file, `scripts/make/isd.mk`, `scripts/bootstrap-isd.sh`, sibling [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../SETUP.md),
 > `ISD/services/runit_console_run.c`, `ISD/lib/ir0_auth.c`.  
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
@@ -121,3 +121,51 @@ A second `make first-boot PROFILE=minimal` without input changes must not
 re-run package `build.sh` scripts.
 
 See ISD [`Documentation/PACKAGES.md`](https://github.com/IRodriguez13/ISD/blob/master/Documentation/PACKAGES.md).
+
+## Persistent machine + kmang
+
+Kernel boot ISOs for a installed machine live under sibling `IR0-machines/`,
+managed by `scripts/kernel_manager.py` (`make kmang`).
+
+| Concept | Meaning |
+|---------|---------|
+| Workspace | `IR0/kernel-x64-userspace.iso` just built in the tree |
+| Default | Symlink `kernel-current.iso` — what `make poweron` boots |
+| Fallback | Previous Default after a select/install |
+| Installed | Catalog copies with SHA-256 metadata |
+
+**Build numbers are machine-local.** `.build_number` increments on each link on
+that host. `#1420` on a smoke host and `#1450` on a laptop can be the same
+branch tip; never treat `#N` as a global release id. kmang stores provenance
+(builder host/user, optional git short SHA, SHA-256) so the TUI can tell
+workspace drift from merely “an older local counter”.
+
+Typical loop after a kernel change:
+
+```bash
+make kernel-x64-userspace.iso   # or: make machine-update-kernel
+make kmang                      # press i (install) then b (boot)
+# or non-interactive:
+make kernel-manager-install && make poweron PROFILE=desktop
+```
+
+An old ISD rootfs (missing X clients / desktop session scripts) will boot fine
+with a new kernel but will not show the verified X11 session. Refresh userspace
+explicitly (`make isd-image PROFILE=desktop` / `machine-update-userspace`) —
+do not expect kernel rebuilds to upgrade third-party packages.
+
+## Userspace versioning (ISD-owned, implemented)
+
+| Layer | Mechanism |
+|-------|-----------|
+| ISD release | Top-level `ISD/VERSION` → `/etc/os-release` `VERSION_ID` + `/usr/share/isd/release.txt` |
+| Package origins | `/usr/share/isd/package-manifest.txt` (`first-party` / `third-party` / `third-party+isd-patches`) |
+| Userland base | `USERLAND_BASE=busybox` in `profiles/*/profile.conf` (`coreutils` reserved) |
+| Guest CLI | `ir0-status version \| profile \| kernel \| packages \| userland \| busybox` |
+| Host CLI | `make usmang` → `scripts/userspace_manager.py` |
+
+Keep IR0 adapting to Linux/musl ABI; leave package recipes in ISD. Do **not**
+share the kernel `.build_number` counter with ISD releases.
+
+Desktop ABI contract: [`DESKTOP_ABI.md`](DESKTOP_ABI.md) (IR0) and ISD
+`Documentation/DESKTOP_ABI.md`.

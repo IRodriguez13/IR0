@@ -1761,7 +1761,10 @@ smoke-ext2-startx: check-isd
 	if ! rg -q 'X11_DESKTOP_TASKBAR_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if ! rg -q 'X11_DESKTOP_WORKSPACES_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if ! rg -q 'X11_DESKTOP_DEMOS_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'X11_XAW_CLIENTS_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if rg -i 'panic|general protection|page fault|corrupt|STARTX.*FAIL|Could not init font path|Fatal server error|xinit: giving up' \
+		$(EXT2_STARTX_LOG); then exit 1; fi; \
+	if rg -i 'Cannot convert string "calculator"|Cannot convert string ".*adobe-symbol' \
 		$(EXT2_STARTX_LOG); then exit 1; fi; \
 	echo "✓ upstream startx desktop clients remained alive with ext2 HOME"
 

@@ -109,7 +109,7 @@ IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=
 	warn-userspace-deprecated ensure-isd-disk ensure-isd-home run-isd machine-create \
 	machine-reset machine-info machine-update-kernel image-vmware poweron kmang kmang-cli \
 	kernel-manager-install kernel-manager-list machine-update-userspace \
-	machine-migrate-home ensure-machine-desktop-sync
+	machine-migrate-home ensure-machine-desktop-sync usmang
 
 warn-userspace-deprecated:
 	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
@@ -235,6 +235,17 @@ machine-info:
 		resolve 2>/dev/null || echo "$(KERNEL_ROOT)/kernel-x64-userspace.iso")"
 	@echo "VMWARE DISK   $(IR0_MACHINE_VMDK)"
 
+# Shared kmang CLI flags: store path + provenance context for local builds.
+KMANG_PY = python3 scripts/kernel_manager.py \
+	--machine-dir "$(KMANG_MACHINE_DIR)" \
+	--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
+	--machine "$(KMANG_MACHINE)" \
+	--kernel-root "$(KERNEL_ROOT)" \
+	--isd-disk "$(IR0_ISD_ROOT)/out/$(KMANG_ARCH)/images/$(KMANG_PROFILE)/disk.img" \
+	--machine-disk "$(KMANG_MACHINE_DIR)/disk.img" \
+	--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
+	--version "$(IR0_VERSION_STRING)"
+
 kernel-manager-install: check-isd
 	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
 		echo "✗ machine $(IR0_MACHINE) is running; power it off cleanly first"; \
@@ -244,27 +255,18 @@ kernel-manager-install: check-isd
 	@python3 scripts/kernel_manager.py --machine-dir "$(IR0_MACHINE_DIR)" \
 		--arch "$(ISD_ARCH)" --profile "$(ISD_PROFILE)" \
 		--machine "$(IR0_MACHINE)" \
+		--kernel-root "$(KERNEL_ROOT)" \
 		--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
 		--version "$(IR0_VERSION_STRING)" install-workspace
 
 kernel-manager-list:
-	@python3 scripts/kernel_manager.py --machine-dir "$(KMANG_MACHINE_DIR)" \
-		--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
-		--machine "$(KMANG_MACHINE)" list
-	@python3 scripts/kernel_manager.py --machine-dir "$(KMANG_MACHINE_DIR)" \
-		--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
-		--machine "$(KMANG_MACHINE)" \
-		--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
-		--version "$(IR0_VERSION_STRING)" workspace
+	@$(KMANG_PY) list
+	@$(KMANG_PY) workspace
+	@$(KMANG_PY) compare || true
 
 kmang: check-isd
 	@chmod +x scripts/kernel_manager.py
-	@python3 scripts/kernel_manager.py --machine-dir "$(KMANG_MACHINE_DIR)" \
-		--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
-		--machine "$(KMANG_MACHINE)" \
-		--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
-		--version "$(IR0_VERSION_STRING)" \
-		--make-arg "PROFILE=$(KMANG_PROFILE)" tui; \
+	@$(KMANG_PY) --make-arg "PROFILE=$(KMANG_PROFILE)" tui; \
 	rc=$$?; \
 	if [ $$rc -eq 10 ]; then \
 		$(MAKE) poweron PROFILE=$(KMANG_PROFILE) IR0_MACHINE=$(KMANG_MACHINE); \
@@ -273,19 +275,31 @@ kmang: check-isd
 	fi
 
 kmang-cli:
-	@python3 scripts/kernel_manager.py --machine-dir "$(KMANG_MACHINE_DIR)" \
-		--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
-		--machine "$(KMANG_MACHINE)" list --json
+	@$(KMANG_PY) list --json
+
+# Host inspector for ISD release / package origins / userland base (not kernel #N).
+usmang: check-isd
+	@chmod +x scripts/userspace_manager.py
+	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
+		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" summary
+	@echo "---"
+	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
+		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop
+	@echo "guest: ir0-status version | packages | userland"
 
 # Refresh only the boot ISO. The mutable machine disk is never a dependency.
+# Does NOT enroll the ISO into kmang — run `make kmang` and press i, or
+# `make kernel-manager-install`, before poweron will boot the new image.
 machine-update-kernel: check-isd
 	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
 		echo "✗ machine $(IR0_MACHINE) is running; power it off cleanly first"; \
 		exit 2; \
 	fi
 	+@$(MAKE) -s kernel-x64-userspace.iso
-	@echo "✓ machine kernel updated: $(KERNEL_ROOT)/kernel-x64-userspace.iso"
+	@echo "✓ workspace ISO rebuilt: $(KERNEL_ROOT)/kernel-x64-userspace.iso"
 	@echo "  DISK preserved: $(IR0_MACHINE_DISK)"
+	@echo "  note: poweron still boots kmang Default until you enroll this ISO"
+	@echo "        (make kmang → i, or make kernel-manager-install)"
 
 machine-update-userspace: check-isd
 	@if [ "$(ISD_PROFILE)" != desktop ]; then \

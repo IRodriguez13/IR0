@@ -63,10 +63,16 @@ Uninstall: `make mandocs-uninstall` or `MANDOC_LANG=all make mandocs-uninstall`
 
 - `make ai-dev-rules-install`: copy AI dev rules into gitignored `.cursor/`.
 
-## Host Test Harness
+## Persistent machine tooling
 
-- `make -C tests/host`: compile host-side tests.
-- `make -C tests/host run`: execute host-side test suite.
+- `make kmang`: TUI catalog for boot ISOs under `IR0-machines/` (Default /
+  Fallback / Workspace). Build `#N` is host-local; compare with SHA-256.
+- `make kernel-manager-install`: rebuild workspace ISO and enroll it as Default.
+- `make poweron`: boot Default (or workspace ISO only if the catalog is empty).
+- `make machine-update-kernel`: rebuild ISO only — does not enroll; kmang `i`
+  is still required before `poweron` picks it up.
+- `make usmang`: host inspector for ISD release, package origins, `USERLAND_BASE`,
+  and desktop package set (independent of kernel `#N`).
 
 ## Current Strengths
 

@@ -58,18 +58,29 @@ else
 	ok "D poweron boots existing kernel artifacts"
 fi
 if grep -q '^machine-update-kernel: check-isd' scripts/make/isd.mk \
-	&& grep -A10 '^machine-update-kernel:' scripts/make/isd.mk | grep -q 'kernel-x64-userspace.iso' \
-	&& ! grep -A10 '^machine-update-kernel:' scripts/make/isd.mk | grep -Eq 'ensure-isd-disk|machine-reset'; then
+	&& grep -A14 '^machine-update-kernel:' scripts/make/isd.mk | grep -q 'kernel-x64-userspace.iso' \
+	&& grep -A14 '^machine-update-kernel:' scripts/make/isd.mk | grep -q 'enroll' \
+	&& ! grep -A14 '^machine-update-kernel:' scripts/make/isd.mk | grep -Eq 'ensure-isd-disk|machine-reset'; then
 	ok "D machine-update-kernel refreshes ISO without persistent disk"
 else
 	bad "D machine-update-kernel contract"
 fi
 if grep -q '^kmang: check-isd' scripts/make/isd.mk \
-	&& grep -A12 '^poweron:' scripts/make/isd.mk | grep -q 'kernel_manager.py'; then
+	&& grep -A12 '^poweron:' scripts/make/isd.mk | grep -q 'kernel_manager.py' \
+	&& grep -q 'KMANG_PY' scripts/make/isd.mk \
+	&& grep -q -- '--kernel-root' scripts/make/isd.mk; then
 	ok "D kmang selects the persistent-machine boot kernel"
 else
 	bad "D kmang/poweron contract"
 fi
+grep -q 'machine-local' scripts/kernel_manager.py \
+	&& grep -q 'compare_workspace' scripts/kernel_manager.py \
+	&& ok "D kmang treats build numbers as machine-local" \
+	|| bad "D kmang provenance contract"
+grep -q '^usmang:' scripts/make/isd.mk \
+	&& test -f scripts/userspace_manager.py \
+	&& ok "D usmang host inspector wired" \
+	|| bad "D usmang missing"
 python3 scripts/test_kernel_manager.py >/dev/null \
 	&& ok "D kernel manager install/select/fallback behavior" \
 	|| bad "D kernel manager behavior"

@@ -324,6 +324,15 @@
 #ifndef CONFIG_ENABLE_NETWORKING
 #define CONFIG_ENABLE_NETWORKING 0
 #endif
+
+/*
+ * Global capacity for AF_UNIX and TCP stream endpoints.  One local stream
+ * connection consumes two endpoints; a graphical session opens several
+ * concurrent X11 clients in addition to its listening socket.
+ */
+#ifndef CONFIG_STREAM_SOCKET_CAPACITY
+#define CONFIG_STREAM_SOCKET_CAPACITY 128
+#endif
 #ifndef CONFIG_DRV_NIC_RTL8139
 #define CONFIG_DRV_NIC_RTL8139 CONFIG_ENABLE_NETWORKING
 #endif
@@ -447,4 +456,3 @@
 #define ENABLE_NETWORKING CONFIG_ENABLE_NETWORKING
 #define ENABLE_GRAPHICS   CONFIG_ENABLE_VBE
 #define ENABLE_SOUND      CONFIG_ENABLE_SOUND
-

@@ -52,7 +52,13 @@ static int install_smoke_xinitrc(void)
 	static const char script[] =
 		"#!/bin/sh\n"
 		"echo '[STARTX] XINITRC_ENTER'\n"
-		"/usr/bin/xsetroot -bitmap /usr/share/backgrounds/ir0desk.xbm -fg '#78909c' -bg '#263238' -name 'IR0 Desktop' || { echo '[STARTX][FAIL] xsetroot exited'; exit 1; }\n"
+		"if [ -f /usr/share/backgrounds/ir0-desktop.xbm ]; then\n"
+		"  /usr/bin/xsetroot -bitmap /usr/share/backgrounds/ir0-desktop.xbm -fg '#78909c' -bg '#1b2830' -name 'IR0 Desktop' || { echo '[STARTX][FAIL] xsetroot exited'; exit 1; }\n"
+		"elif [ -f /usr/share/backgrounds/ir0desk.xbm ]; then\n"
+		"  /usr/bin/xsetroot -bitmap /usr/share/backgrounds/ir0desk.xbm -fg '#78909c' -bg '#263238' -name 'IR0 Desktop' || { echo '[STARTX][FAIL] xsetroot exited'; exit 1; }\n"
+		"else\n"
+		"  /usr/bin/xsetroot -mod 3 3 -fg '#78909c' -bg '#263238' || { echo '[STARTX][FAIL] xsetroot exited'; exit 1; }\n"
+		"fi\n"
 		"echo ready > $HOME/.xsetroot-ready\n"
 		"echo '[STARTX] XSETROOT_EXEC_OK'\n"
 		"(echo '[STARTX] TWM_EXEC'; exec /usr/bin/twm -f /etc/X11/twm/system.twmrc) 2>$HOME/.twm-smoke.err &\n"
@@ -69,6 +75,13 @@ static int install_smoke_xinitrc(void)
 		"logo=$!\n"
 		"(echo '[STARTX] XCALC_EXEC'; /usr/bin/xcalc -geometry 226x304-210+170; rc=$?; echo \"[STARTX] XCALC_EXIT=$rc\"; exit $rc) &\n"
 		"calc=$!\n"
+		"(echo '[STARTX] XMESSAGE_EXEC'; /usr/bin/xmessage -timeout 120 -geometry +24+180 -buttons Close:0 'IR0 Xaw smoke'; rc=$?; echo \"[STARTX] XMESSAGE_EXIT=$rc\"; exit $rc) &\n"
+		"message=$!\n"
+		"load=0\n"
+		"if [ -x /usr/bin/xload ]; then\n"
+		"  (echo '[STARTX] XLOAD_EXEC'; exec /usr/bin/xload -geometry 220x90-18+250) 2>$HOME/.xload-smoke.err &\n"
+		"  load=$!\n"
+		"fi\n"
 		"sleep 1\n"
 		"(echo '[STARTX] XTERM_EXEC'; exec /usr/bin/xterm -geometry 80x24+400+250 -title 'IR0 Terminal') 2>$HOME/.xterm-smoke.err &\n"
 		"terminal=$!\n"
@@ -83,6 +96,8 @@ static int install_smoke_xinitrc(void)
 		"if ! kill -0 \"$eyes\"; then echo '[STARTX][FAIL] xeyes exited'; cat $HOME/.xeyes-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$logo\"; then echo '[STARTX][FAIL] xlogo exited'; cat $HOME/.xlogo-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$calc\"; then echo '[STARTX][FAIL] xcalc exited'; cat $HOME/.xcalc-smoke.err; exit 1; fi\n"
+		"if ! kill -0 \"$message\"; then echo '[STARTX][FAIL] xmessage demo exited'; cat $HOME/.xmessage-smoke.err; exit 1; fi\n"
+		"if [ \"$load\" != 0 ] && ! kill -0 \"$load\"; then echo '[STARTX][FAIL] xload exited'; cat $HOME/.xload-smoke.err; exit 1; fi\n"
 		"echo '[STARTX] X11_DESKTOP_TASKBAR_OK'\n"
 		"echo '[STARTX] X11_DESKTOP_WORKSPACES_OK'\n"
 		"echo ready > \"$HOME/.xclient-started\"\n"
@@ -95,8 +110,13 @@ static int install_smoke_xinitrc(void)
 		"if ! kill -0 \"$eyes\"; then echo '[STARTX][FAIL] xeyes exited after readiness'; cat $HOME/.xeyes-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$logo\"; then echo '[STARTX][FAIL] xlogo exited after readiness'; cat $HOME/.xlogo-smoke.err; exit 1; fi\n"
 		"if ! kill -0 \"$calc\"; then echo '[STARTX][FAIL] xcalc exited after readiness'; cat $HOME/.xcalc-smoke.err; exit 1; fi\n"
+		"if ! kill -0 \"$message\"; then echo '[STARTX][FAIL] xmessage demo exited after readiness'; cat $HOME/.xmessage-smoke.err; exit 1; fi\n"
+		"if [ \"$load\" != 0 ] && ! kill -0 \"$load\"; then echo '[STARTX][FAIL] xload exited after readiness'; cat $HOME/.xload-smoke.err; exit 1; fi\n"
 		"echo sustained > \"$HOME/.xclient-sustained\"\n"
-		"while kill -0 \"$wm\" && kill -0 \"$terminal\" && kill -0 \"$chat\" && kill -0 \"$clock\" && kill -0 \"$workspaces\" && kill -0 \"$eyes\" && kill -0 \"$logo\" && kill -0 \"$calc\"; do sleep 60; done\n";
+		"while kill -0 \"$wm\" && kill -0 \"$terminal\" && kill -0 \"$chat\" && kill -0 \"$clock\" && kill -0 \"$workspaces\" && kill -0 \"$eyes\" && kill -0 \"$logo\" && kill -0 \"$calc\" && kill -0 \"$message\"; do\n"
+		"  [ \"$load\" = 0 ] || kill -0 \"$load\" || break\n"
+		"  sleep 60\n"
+		"done\n";
 	static const char twmrc[] = "RandomPlacement\n";
 	FILE *fp = fopen(SMOKE_HOME "/.xinitrc-smoke", "w");
 
@@ -217,6 +237,7 @@ int main(void)
 	tag("[STARTX] X11_DESKTOP_CLIENTS_SUSTAINED_OK\n");
 	tag("[STARTX] X11_DESKTOP_WORKSPACES_OK\n");
 	tag("[STARTX] X11_DESKTOP_DEMOS_OK\n");
+	tag("[STARTX] X11_XAW_CLIENTS_OK\n");
 	tag("[STARTX_EXT2_OK]\n");
 	for (;;)
 	{
