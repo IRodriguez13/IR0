@@ -1,20 +1,11 @@
-# ISD sync patch (this agent wave)
+# ISD packaging notes (kernel-first — no upstream patches)
 
-The Cursor cloud token cannot push to `IRodriguez13/ISD`. Apply on a checkout of ISD:
+When IR0 needs a missing **upstream** desktop client, add an ISD package under
+`packages/<name>/` (fetch URL + sha256 + `build-xorg-autotools.sh` or ISD
+recipe). **Do not** patch BusyBox, xload, xterm, etc. for ABI — fix the kernel.
 
-```bash
-cd ../ISD
-git am ../IR0/contrib/isd/*.patch
-git push -u origin cursor/usmang-desktop-3bc2
-```
+This wave adds **`xload`** (Xorg app 1.2.1, unmodified sources) to
+`profiles/desktop/packages.txt` via standard ISD metadata only.
 
-Or cherry-pick the local commit from a machine that has write access:
-
-```bash
-# if this VM's /home/ubuntu/src/ISD is reachable
-git -C ../ISD log -1 --oneline
-```
-
-Contents: ISD release stamp, `ir0-status` multi-command, package origins,
-`USERLAND_BASE=busybox`, desktop wallpaper XBM, unmodified `xload` package,
-DESKTOP_ABI.md.
+Legacy note: if `contrib/isd/*.patch` exist on another machine, they are ISD-side
+packaging/metadata — not IR0 kernel changes.

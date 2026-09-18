@@ -51,16 +51,14 @@ IR0_USERSPACE_URL := $(IR0_ISD_URL)
 ISD_ARCH ?= x86_64
 
 # Resolve ISD product profile without clobbering kernel deptest PROFILE defaults.
-# Command-line PROFILE=minimal|development|desktop|appliance → ISD profile.
-# Otherwise IR0_PRODUCT_PROFILE, else minimal.
+# When PROFILE is a known ISD profile name (CLI or env), map it to ISD_PROFILE.
+# Deptest uses other PROFILE values (e.g. arch labels) — those are ignored here.
 ISD_PROFILE := minimal
 ifdef IR0_PRODUCT_PROFILE
   ISD_PROFILE := $(IR0_PRODUCT_PROFILE)
 endif
-ifeq ($(origin PROFILE),command line)
-  ifneq ($(filter minimal development desktop appliance,$(PROFILE)),)
-    ISD_PROFILE := $(PROFILE)
-  endif
+ifneq ($(filter minimal development desktop appliance,$(PROFILE)),)
+  ISD_PROFILE := $(PROFILE)
 endif
 # Keep IR0_PRODUCT_PROFILE in sync for scripts that still read it.
 IR0_PRODUCT_PROFILE := $(ISD_PROFILE)
