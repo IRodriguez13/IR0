@@ -44,8 +44,7 @@ Código portable: `includes/ir0/pty_devfs.h` — ids fijos solo en `fs/devfs.c`
 hot paths de syscalls; usar `fd_entry.dev_node`).
 
 Gate: `make linux-abi-audit-pty-multiplex` + `make smoke-pty-winsz`.
-Compare en host Linux puede colgar con devpts roto — el camino QEMU/IR0 manda
-para el kernel; estado **LINUX-LIKE** hasta arreglar el runner host.
+Compare host Linux con `unshare` + devpts nuevo. Contrato **VERIFIED** (2026-09-18).
 
 ## 3. Flujo de datos
 

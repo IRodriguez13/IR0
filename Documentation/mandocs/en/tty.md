@@ -53,8 +53,8 @@ Portable code must use `includes/ir0/pty_devfs.h` — not raw device ids outside
 ```
 
 Contract gate: `make linux-abi-audit-pty-multiplex` + `make smoke-pty-winsz`.
-Host Linux compare may hang on broken devpts — IR0 QEMU path is authoritative for
-kernel behavior; state **LINUX-LIKE** until host runner is fixed.
+Host Linux compare uses `unshare` + fresh devpts (`run_linux_pty_multiplex.sh`).
+Contract **VERIFIED** as of 2026-09-18 (audit PASS).
 
 ## 3. Data flow
 

@@ -142,10 +142,11 @@
       "id": "pty_multiplex",
       "enabled": true,
       "title": "UNIX98 PTY multiplex (/dev/ptmx + /dev/pts/N)",
-      "status_doc": "LINUX-LIKE",
+      "status_doc": "VERIFIED",
       "done_tag": "PTYMULTIPLEXOK",
       "linux_ref": "drivers/tty/pty.c; man7 pty(7); TIOCGPTN TIOCSPTLCK",
       "smokes": [
+        "smoke-pty-winsz",
         "smoke-ext2-startx PROFILE=desktop"
       ]
     },
