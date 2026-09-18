@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <arch/common/arch_portable.h>
+#include <ir0/oops.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -36,9 +37,14 @@ void cpu_wait(void)
 	__asm__ volatile("wfi" ::: "memory");
 }
 
-void panic(const char *msg)
+void panicex(const char *message, panic_level_t level, const char *file,
+	     int line, const char *caller)
 {
-	(void)msg;
+	(void)message;
+	(void)level;
+	(void)file;
+	(void)line;
+	(void)caller;
 	for (;;)
 		__asm__ volatile("wfi" ::: "memory");
 }

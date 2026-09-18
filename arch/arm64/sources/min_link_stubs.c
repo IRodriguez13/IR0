@@ -12,21 +12,22 @@
 #include <stdint.h>
 
 #include <arch/common/arch_portable.h>
+#include <ir0/oops.h>
 
 /* From freestanding_stubs / serial when linked with boot image. */
-extern void panic(const char *msg);
 extern void serial_print(const char *s);
 
-void __attribute__((weak)) panic(const char *msg)
+void __attribute__((weak)) panicex(const char *message, panic_level_t level,
+				   const char *file, int line,
+				   const char *caller)
 {
-	(void)msg;
+	(void)message;
+	(void)level;
+	(void)file;
+	(void)line;
+	(void)caller;
 	for (;;)
 		__asm__ volatile("wfi" ::: "memory");
-}
-
-void __attribute__((weak)) panicex(const char *msg)
-{
-	panic(msg ? msg : "panicex");
 }
 
 void __attribute__((weak)) serial_print_hex64(uint64_t v)

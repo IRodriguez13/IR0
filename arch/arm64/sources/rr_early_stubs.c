@@ -12,21 +12,23 @@
 
 #include <ir0/process.h>
 #include <ir0/boot_log.h>
+#include <ir0/oops.h>
 #include <sched/task.h>
 
 static uint8_t g_heap[8192] __attribute__((aligned(16)));
 static unsigned g_heap_off;
 
-void __attribute__((weak)) panic(const char *msg)
+void __attribute__((weak)) panicex(const char *message, panic_level_t level,
+				   const char *file, int line,
+				   const char *caller)
 {
-	(void)msg;
+	(void)message;
+	(void)level;
+	(void)file;
+	(void)line;
+	(void)caller;
 	for (;;)
 		__asm__ volatile("wfi" ::: "memory");
-}
-
-void __attribute__((weak)) panicex(const char *msg)
-{
-	panic(msg ? msg : "panicex");
 }
 
 void *__attribute__((weak)) __kmalloc_checked(size_t n, const char *file, int line,

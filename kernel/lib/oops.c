@@ -598,9 +598,3 @@ static void dump_memory_state(void)
     klog_print("(Full memory statistics may be unavailable due to panic state)\n");
     klog_print("\n");
 }
-
-/* Unix panic() pipeline wrapper  */
-void panic(const char *message)
-{
-    panicex(message, PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__);
-}

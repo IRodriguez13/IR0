@@ -30,7 +30,6 @@ typedef enum
 extern "C" {
 #endif
 
-void panic(const char *message);
 void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller); /*Panic with more detailed logs*/
 int ir0_panic_in_progress(void);
 /*
@@ -62,6 +61,9 @@ void dump_registers(void);
 }
 #endif
 
+/* Call-site metadata for KTM panic inventory (scripts/ktm_panic_inventory.py). */
+#define panic(message) \
+	panicex((message), PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__)
 
 #define PANIC(msg) \
     panicex((msg), PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__)
