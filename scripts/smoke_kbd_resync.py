@@ -48,6 +48,11 @@ PROMPT_RE = relogin.PROMPT_RE
 NEED_BOOT = relogin.NEED_BOOT
 FATAL = relogin.FATAL
 
+_guards_spec = importlib.util.spec_from_file_location(
+    "guards", str(ROOT / "scripts" / "smoke_tty_guards.py"))
+guards = importlib.util.module_from_spec(_guards_spec)
+_guards_spec.loader.exec_module(guards)
+
 
 def sanitize(s: str) -> str:
     return "".join(c if (32 <= ord(c) < 127 or c in "\n\t") else "." for c in s)
@@ -161,16 +166,10 @@ def main() -> int:
                   file=sys.stderr)
             print(sanitize(window[-2000:]), file=sys.stderr)
             return 1
-        # Any non-ASCII on a prompt input line is a failure (ê-prefix class).
-        raw_lines = [ln for ln in window.splitlines() if "labuser@" in ln]
-        for ln in raw_lines:
-            run = max((len(m.group(0)) for m in
-                       re.finditer(r"[^\x20-\x7e]+", ln)), default=0)
-            if run >= 1:
-                print("✗ non-ASCII/garbage on input line after relogin",
-                      file=sys.stderr)
-                print(repr(ln), file=sys.stderr)
-                return 1
+
+        errs = guards.check_typing_garbage(text, mark=mark)
+        if errs:
+            return guards.report_guard_failures(errs, window[-4000:])
 
         print("✓ smoke-kbd-resync PASS "
               f"(LOGIN_OK x{text.count('LOGIN_OK')}, KBD_STATE_RESYNC seen)")

@@ -27,6 +27,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_signal_rt_sigaction_abi.c test_sigreturn_sleep_eintr_abi.c test_mmap_null_placement.c \
 	test_elf_initial_brk_abi.c test_blockdev_facade.c \
 	test_arch_irq_facade.c test_arch_mm_pte_facade.c \
+	test_open_flags_abi.c \
 	test_ps2_set1_modifiers.c \
 	test_ps2_mouse_pkt.c \
 	test_pipe_close_refcount.c \
@@ -42,6 +43,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
+	host_open_flags.o \
 	host_sysfs_net_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
@@ -130,6 +132,15 @@ test_runner.o: test_runner.c
 
 test_blockdev_facade.o: test_blockdev_facade.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
+
+host_open_flags.o: $(KERNEL_ROOT)/kernel/lib/open_flags.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_open_flags_abi.o: test_open_flags_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_ktm_panic_inventory.o: test_ktm_panic_inventory.c
+	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
 test_arch_irq_facade.o: test_arch_irq_facade.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<

@@ -17,6 +17,18 @@ grep -q 'IR0_ISD_ROOT.*/ISD' scripts/make/isd.mk && ok "A IR0_ISD_ROOT default" 
 grep -q 'bootstrap-isd.sh' scripts/make/isd.mk && ok "A first-boot → bootstrap-isd" || bad "A bootstrap"
 test -x scripts/bootstrap-isd.sh && ok "A bootstrap-isd executable" || bad "A exec"
 grep -q 'PROFILE="$(ISD_PROFILE)"' scripts/make/isd.mk && ok "A PROFILE to ISD make" || bad "A PROFILE prop"
+grep -q 'filter minimal development desktop appliance,$(PROFILE)' scripts/make/isd.mk \
+	&& ok "A ISD_PROFILE follows env PROFILE" || bad "A ISD_PROFILE env sync"
+got=$(PROFILE=desktop make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
+[ "$got" = desktop ] && ok "A PROFILE=desktop → ISD_PROFILE=desktop" \
+	|| bad "A PROFILE=desktop got ISD_PROFILE=${got:-empty}"
+grep -q 'ensure-machine-desktop-sync' scripts/make/isd.mk \
+	&& grep -E '^poweron:.*ensure-machine-desktop-sync' scripts/make/isd.mk >/dev/null \
+	&& ok "D poweron syncs desktop userspace when stale" \
+	|| bad "D poweron desktop sync wiring"
+grep -q 'kmang has installed kernels' scripts/make/isd.mk \
+	&& ! grep -q 'kmanag has installed kernels' scripts/make/isd.mk \
+	&& ok "D poweron kmang typo fixed" || bad "D kmang message typo"
 grep -q 'run-isd' Makefile && ok "D run → run-isd" || bad "D run"
 grep -q 'images/\$(ISD_PROFILE)/disk.img' scripts/make/isd.mk && ok "D per-profile disk" || bad "D path"
 grep -q 'ensure-isd-disk' scripts/make/isd.mk \
@@ -59,7 +71,6 @@ else
 fi
 if grep -q '^machine-update-kernel: check-isd' scripts/make/isd.mk \
 	&& grep -A14 '^machine-update-kernel:' scripts/make/isd.mk | grep -q 'kernel-x64-userspace.iso' \
-	&& grep -A14 '^machine-update-kernel:' scripts/make/isd.mk | grep -q 'enroll' \
 	&& ! grep -A14 '^machine-update-kernel:' scripts/make/isd.mk | grep -Eq 'ensure-isd-disk|machine-reset'; then
 	ok "D machine-update-kernel refreshes ISO without persistent disk"
 else
@@ -87,6 +98,19 @@ python3 scripts/test_kernel_manager.py >/dev/null \
 python3 scripts/test_userspace_manager.py >/dev/null \
 	&& ok "D usmang profile-aware desktop reporting" \
 	|| bad "D usmang behavior"
+ISD_ROOT=$(make -s -pn 2>/dev/null | sed -n 's/^IR0_ISD_ROOT := //p' | head -1)
+if [ -n "$ISD_ROOT" ] && [ -f "$ISD_ROOT/scripts/pack-minix.sh" ]; then
+	grep -q 'xload' "$ISD_ROOT/scripts/pack-minix.sh" \
+		&& ok "D ISD pack-minix includes xload" \
+		|| bad "D ISD pack-minix missing xload loop"
+else
+	ok "D ISD pack-minix xload (skipped — no sibling ISD checkout)"
+fi
+grep -q '^isd-contracts:' scripts/make/isd.mk \
+	&& grep -q 'test-isd-contracts.sh' scripts/make/isd.mk \
+	&& ok "D isd-contracts make target" || bad "D isd-contracts target"
+grep -q 'isd-contracts' scripts/make/testing.mk \
+	&& ok "D test-fast runs isd-contracts" || bad "D test-fast isd-contracts"
 
 ENS=scripts/ensure-host-deps.sh
 TMP=$(mktemp -d)

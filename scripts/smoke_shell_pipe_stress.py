@@ -28,6 +28,14 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+import importlib.util
+
+_guards_spec = importlib.util.spec_from_file_location(
+    "guards", str(ROOT / "scripts" / "smoke_tty_guards.py"))
+guards = importlib.util.module_from_spec(_guards_spec)
+_guards_spec.loader.exec_module(guards)
+
 PROMPT_RE = re.compile(r"[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+:\S*[#$]")
 ANSI_ESCAPE_RE = re.compile(
     r"\x1b\[[0-9;?]*[ -/]*[@-~]"  # CSI (colors, cursor)
@@ -382,6 +390,9 @@ def main() -> int:
                 print(f"    {how:>7} {secs:>6}s  {cmd}")
         if soft_skips:
             print("⚠ soft-skip heavy pipelines:", ", ".join(repr(c) for c in soft_skips))
+        errs = guards.check_typing_garbage(text)
+        if errs:
+            return guards.report_guard_failures(errs, text[-4000:])
         print("✓ smoke-shell-pipe-stress OK")
         return 0
     finally:

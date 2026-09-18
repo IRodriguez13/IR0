@@ -37,6 +37,14 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+import importlib.util
+
+_guards_spec = importlib.util.spec_from_file_location(
+    "guards", str(ROOT / "scripts" / "smoke_tty_guards.py"))
+guards = importlib.util.module_from_spec(_guards_spec)
+_guards_spec.loader.exec_module(guards)
+
 PROMPT_RE = re.compile(r"[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+:\S*[#$]")
 ANSI_ESCAPE_RE = re.compile(
     r"\x1b\[[0-9;?]*[ -/]*[@-~]"
@@ -482,6 +490,11 @@ def main() -> int:
             print("✗ fatal tag in log at end", file=sys.stderr)
             print(first_fatal(text), file=sys.stderr)
             return 1
+
+        errs = guards.check_typing_garbage(text)
+        if errs:
+            kill_qemu(proc)
+            return guards.report_guard_failures(errs, text[-4000:])
 
         kill_qemu(proc)
         hard_n = len(HARD_COMMANDS) + len(DOAS_SETUP) + len(HARD_TAIL)

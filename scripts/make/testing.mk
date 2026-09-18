@@ -1762,6 +1762,7 @@ smoke-ext2-startx: check-isd
 	if ! rg -q 'X11_DESKTOP_WORKSPACES_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if ! rg -q 'X11_DESKTOP_DEMOS_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if ! rg -q 'X11_XAW_CLIENTS_OK' $(EXT2_STARTX_LOG); then exit 1; fi; \
+	if ! rg -q 'XLOAD_EXEC' $(EXT2_STARTX_LOG); then exit 1; fi; \
 	if rg -i 'panic|general protection|page fault|corrupt|STARTX.*FAIL|Could not init font path|Fatal server error|xinit: giving up' \
 		$(EXT2_STARTX_LOG); then exit 1; fi; \
 	if rg -i 'Cannot convert string "calculator"|Cannot convert string ".*adobe-symbol' \
@@ -3619,6 +3620,7 @@ ctr:
 
 test-fast: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
+	@$(MAKE) -s isd-contracts
 
 agent-fast: test-fast kernel-tests
 	@echo "✓ agent-fast OK (host + ktest)"

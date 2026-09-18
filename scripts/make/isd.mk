@@ -107,7 +107,7 @@ IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=
 	warn-userspace-deprecated ensure-isd-disk ensure-isd-home run-isd machine-create \
 	machine-reset machine-info machine-update-kernel image-vmware poweron kmang kmang-cli \
 	kernel-manager-install kernel-manager-list machine-update-userspace \
-	machine-migrate-home ensure-machine-desktop-sync usmang
+	machine-migrate-home ensure-machine-desktop-sync usmang isd-contracts
 
 warn-userspace-deprecated:
 	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
@@ -287,6 +287,11 @@ usmang: check-isd
 	fi
 	@echo "guest: ir0-status version | packages | userland"
 
+# Host contract tests for ISD bridge + ensure-host-deps (no sudo, no QEMU).
+isd-contracts:
+	@chmod +x scripts/test-isd-contracts.sh
+	@scripts/test-isd-contracts.sh
+
 # Refresh only the boot ISO. The mutable machine disk is never a dependency.
 # Does NOT enroll the ISO into kmang — run `make kmang` and press i, or
 # `make kernel-manager-install`, before poweron will boot the new image.
@@ -384,7 +389,7 @@ poweron: check-isd ensure-machine-desktop-sync
 	if [ -z "$$KERNEL_ISO" ]; then \
 		if find "$(IR0_MACHINE_DIR)/kernels" -maxdepth 1 -name '*.iso' \
 			-print -quit 2>/dev/null | grep -q .; then \
-			echo "✗ kmanag has installed kernels but none verifies"; exit 2; \
+			echo "✗ kmang has installed kernels but none verifies"; exit 2; \
 		fi; \
 		KERNEL_ISO="$(KERNEL_ROOT)/kernel-x64-userspace.iso"; \
 	fi; \

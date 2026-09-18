@@ -21,6 +21,9 @@ echo "== CTR: build-matrix-min =="
 echo "== CTR: tests/host =="
 make -s -C tests/host run
 
+echo "== CTR: isd-contracts =="
+make -s isd-contracts
+
 if [[ "$RUN_KTM" == "1" ]]; then
 	echo "== CTR: kernel-tests (KTM in QEMU) =="
 	"$ROOT/scripts/ir0-qa.sh" kernel-tests
