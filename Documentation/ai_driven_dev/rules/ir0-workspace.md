@@ -1,7 +1,6 @@
----
-description: IR0 kernel workspace — tiers, smokes, upstream discipline
-alwaysApply: true
----
+<!-- IR0 AI dev rule: ir0-workspace -->
+<!-- alwaysApply: true -->
+<!-- description: IR0 kernel workspace — tiers, smokes, upstream discipline -->
 
 # IR0 workspace
 

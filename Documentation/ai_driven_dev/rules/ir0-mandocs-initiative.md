@@ -1,7 +1,6 @@
 <!-- IR0 AI dev rule: ir0-mandocs-initiative -->
 <!-- alwaysApply: false -->
 <!-- description: IR0 mandocs initiative — bilingual subsystem chapters, 10-section format, diagrams, build wiring -->
-<!-- globs: Documentation/mandocs/**,scripts/build_mandocs.py -->
 
 # IR0 Mandocs Initiative
 

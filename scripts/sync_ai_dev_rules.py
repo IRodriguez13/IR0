@@ -90,6 +90,8 @@ def export_rules() -> int:
     RULES_DST.mkdir(parents=True, exist_ok=True)
     count = 0
     for src in sorted(RULES_SRC.glob("*.mdc")):
+        if src.is_symlink() or not src.is_file():
+            continue
         raw = src.read_text(encoding="utf-8")
         meta, body = parse_frontmatter(raw)
         body = rewrite_paths_to_doc(body)
@@ -114,13 +116,22 @@ def export_skill() -> bool:
     return True
 
 
+def _doc_rule_sources() -> list[Path]:
+    if not RULES_DST.is_dir():
+        return []
+    out: list[Path] = []
+    for pat in ("*.md", "*.mdc"):
+        out.extend(sorted(RULES_DST.glob(pat)))
+    return out
+
+
 def install_rules() -> int:
     if not RULES_DST.is_dir():
         print(f"install: missing {RULES_DST}", file=sys.stderr)
         return 1
     RULES_SRC.mkdir(parents=True, exist_ok=True)
     count = 0
-    for src in sorted(RULES_DST.glob("*.md")):
+    for src in _doc_rule_sources():
         src_text = src.read_text(encoding="utf-8")
         raw = re.sub(r"^<!--.*?-->\n", "", src_text, flags=re.MULTILINE)
         always = "true" if "alwaysApply: true" in src_text else "false"

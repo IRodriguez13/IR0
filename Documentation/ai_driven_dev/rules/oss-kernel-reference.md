@@ -65,3 +65,15 @@ Do not `sched_add_process()` until PT_LOAD, stack, and arch entry state are read
 3. Identify subsystem (mm, exec, sched, syscall, driver, fs).
 4. Find the analogous upstream function and compare **ordering and invariants**, not line-by-line code.
 5. Fix IR0 minimally; run `make smoke-userspace-init` / ktests as appropriate.
+
+## Local Linux tree and real patches
+
+- Prefer the local Linux fork at `/home/irodriguez/Escritorio/linux` when it
+  exists; inspect the exact implementation and its git history before relying
+  on summaries or memory.
+- Search real `*.patch` / `*.diff` series under
+  `/home/irodriguez/Escritorio` when the bug class matches. Extract ordering,
+  lifetime, locking, validation, and rollback invariants; do not copy code or
+  assume a patch applies to IR0 unchanged.
+- Record the upstream/local symbols or patch names that guided the fix in the
+  task summary, and still validate the adapted IR0 behavior in QEMU logs.

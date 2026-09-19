@@ -4,7 +4,8 @@ This directory is the **tracked, versioned** copy of rules and skills for AI cod
 agents (Cursor, Claude Code, Copilot Workspace, etc.) working on the IR0 kernel.
 
 Local IDE configuration under `.cursor/` is **gitignored** and must be installed from
-here when setting up a developer machine.
+here when setting up a developer machine (`make ai-dev-rules-install`). Do **not**
+commit rules under `.cursor/rules/` in the repository root.
 
 ## Why this exists
 
@@ -57,6 +58,13 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 | `ir0-userspace-monolith-debt.md` | always | Syscall split targets, facade copies |
 | `ir0-smoke-autokill.md` | always | QEMU smokes via `scripts/smoke_qemu_run.sh` / `smoke_autokill.py` |
 | `ir0-version-stamp.mdc` | always | Lockstep `version.h` / Makefile with upstream tags |
+| `ir0-no-userspace-patches.md` | always | Kernel-first ABI; no BusyBox/musl belts |
+| `ir0-userspace-first-linux-abi.md` | always | Linux ground truth before userspace patches |
+| `ir0-api-public-private.md` | always | Facade naming; anti cross-coupling |
+| `ir0-smoke-behavior-validation.md` | always | QEMU smoke guards and multi-trial |
+| `ir0-ktm-instrumentation.md` | on demand | KTM tags and panic metadata |
+| `ir0-linux-fork-debug-reference.md` | on demand | `$LINUX_TREE` fork debug workflow |
+| `ir0-workspace.md` | always | Tier map and CTR gates (installed locally) |
 | `oss-kernel-reference.md` | on demand | Cross-check MM/exec/syscall invariants |
 | `ir0-tier-t0-os-functional.md` | tier T0 | OS + ktest/contracts scope |
 | `ir0-tier-t1-userspace-posix.md` | tier T1 | init + musl + syscalls |

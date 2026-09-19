@@ -32,7 +32,7 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 | **T2** | Fullscreen graphics (Doom-class) | ~55% | fb0/evdev/mmap; GUI targets in [`STABLE.md`](STABLE.md) |
 | **T3** | Minimal desktop (WM + panel) | ~15–20% | **Planning only** — WM/compositor **out of kernel tree** |
 
-T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+input, **POSIX sockets + TCP + AF_UNIX**, USB HID or PS/2 mouse. See `.cursor/rules/ir0-tier-t3-desktop-minimal.mdc`.
+T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+input, **POSIX sockets + TCP + AF_UNIX**, USB HID or PS/2 mouse. See [`Documentation/ai_driven_dev/rules/ir0-tier-t3-desktop-minimal.md`](ai_driven_dev/rules/ir0-tier-t3-desktop-minimal.md).
 
 ---
 

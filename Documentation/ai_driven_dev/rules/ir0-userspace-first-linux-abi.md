@@ -1,7 +1,6 @@
----
-description: Userspace-first — IR0 adapts to Linux/musl/BusyBox/GNU; never the reverse
-alwaysApply: true
----
+<!-- IR0 AI dev rule: ir0-userspace-first-linux-abi -->
+<!-- alwaysApply: true -->
+<!-- description: Userspace-first — IR0 adapts to Linux/musl/BusyBox/GNU; never the reverse -->
 
 # IR0 — Userspace-first Linux ABI (mandatory)
 
@@ -10,8 +9,8 @@ future third-party binaries are the specification for **observable** behavior.
 The kernel implements Linux + man-pages + musl semantics; userspace is not
 required to carry IR0-specific patches to be "correct."
 
-This rule **extends** (does not replace) `kernel-userspace-abi.mdc`,
-`kernel-maintainer/linux-first-workflow.mdc`, and `ir0-contract-iteration-states.mdc`.
+This rule **extends** (does not replace) `kernel-userspace-abi.md`,
+`kernel-maintainer/linux-first-workflow.mdc`, and `ir0-contract-iteration-states.md`.
 
 ## North star
 

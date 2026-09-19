@@ -27,9 +27,7 @@ iso_test/
 .kernel_userspace_build_number
 .example_drivers_enabled
 AGENTS.md
-/.cursor/*
-!/.cursor/rules/
-!/.cursor/rules/**
+/.cursor/
 
 # Menuconfig / Kconfig generated headers
 includes/generated/

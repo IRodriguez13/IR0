@@ -3,7 +3,7 @@
 > **Last verified:** 2026-09-01  
 > **Source of truth:** `kernel/syscalls.c`, `kernel/process/*`, `includes/ir0/*`, `scripts/architecture_guard.py`, CTR gates in `Makefile`, ktest runner in `kernel/test/test_runner.c`.
 
-This document tracks **post-milestone sanitization** (not new features). Each sprint must close with green CTR gates before the next feature oleada. Canonical sprint IDs also appear in [`ROADMAP.md`](ROADMAP.md) and `.cursor/rules/ir0-optimization-arch-sprints.mdc`.
+This document tracks **post-milestone sanitization** (not new features). Each sprint must close with green CTR gates before the next feature oleada. Canonical sprint IDs also appear in [`ROADMAP.md`](ROADMAP.md) and [`Documentation/ai_driven_dev/rules/ir0-optimization-arch-sprints.md`](ai_driven_dev/rules/ir0-optimization-arch-sprints.md).
 
 ---
 

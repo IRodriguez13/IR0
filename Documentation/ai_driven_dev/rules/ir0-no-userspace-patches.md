@@ -1,7 +1,6 @@
----
-description: IR0 kernel adapts to Linux ABI; never patch userspace/ports to tolerate kernel bugs
-alwaysApply: true
----
+<!-- IR0 AI dev rule: ir0-no-userspace-patches -->
+<!-- alwaysApply: true -->
+<!-- description: IR0 kernel adapts to Linux ABI; never patch userspace/ports to tolerate kernel bugs -->
 
 # IR0 — No userspace patches (kernel-first Linux ABI)
 
@@ -9,7 +8,7 @@ alwaysApply: true
 third-party ports are the observable spec. Do **not** patch them to tolerate IR0
 kernel gaps.
 
-Complements `ir0-userspace-first-linux-abi.mdc` and `kernel-userspace-abi.mdc`.
+Complements `ir0-userspace-first-linux-abi.md` and `kernel-userspace-abi.md`.
 
 ## Hard stop
 
