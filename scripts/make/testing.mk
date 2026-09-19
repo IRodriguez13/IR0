@@ -336,12 +336,20 @@ build-passwd-smoke:
 	@echo "✓ build-passwd-smoke OK"
 
 .PHONY: build-opendoas build-doas-smoke smoke-doas smoke-recovery
+ISD_OPENDOAS_STAMP = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/stamps/packages/opendoas
+
 build-opendoas: check-userspace
 	@if $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=$(ISD_ARCH) -n build-opendoas >/dev/null 2>&1; then \
 		$(IR0_USERSPACE_MAKE) build-opendoas; \
+	elif [ -f "$(ISD_OPENDOAS_STAMP)" ]; then \
+		echo "  DOAS    opendoas stamp up to date"; \
 	else \
-		echo "  WARN    build-opendoas skipped (no ISD target; smoke-doas needs opendoas port)"; \
+		$(IR0_USERSPACE_MAKE) out/$(ISD_ARCH)/stamps/packages/opendoas; \
 	fi
+
+install-opendoas-minix: build-opendoas
+	@chmod +x scripts/inject_opendoas_minix.sh
+	@./scripts/inject_opendoas_minix.sh $${DISK:-disk.img}
 
 build-doas-smoke: build-opendoas
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -405,6 +413,33 @@ smoke-recovery: load-userspace-runit kernel-x64-userspace-recovery.iso
 			  grep -E 'RECOVERY_|RUNIT_' $(RECOVERY_SMOKE_LOG) | tail -30; exit 1; }; \
 	done
 	@echo "✓ smoke-recovery passed"
+
+FSCK_STAGE1_LOG = /tmp/ir0-fsck-stage1.log
+FSCK_REMOUNT_LOG = /tmp/ir0-fsck-remount.log
+
+.PHONY: smoke-fsck-remount-rw
+smoke-fsck-remount-rw: load-userspace-runit kernel-x64-userspace-recovery.iso
+	@echo "  SMOKE   fsck stage1 (development) + recovery remount RW..."
+	@rm -f disk.img.runit.stamp
+	@IR0_PRODUCT_PROFILE=development $(MAKE) -s load-userspace-runit
+	@DISK=$$(mktemp /tmp/ir0-fsck-stage1.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	rc=0; \
+	$(SMOKE_QEMU_RUN) --log $(FSCK_STAGE1_LOG) --timeout 55 --stale-sec 18 \
+		--done RUNIT_STAGE1_OK --fail-regex 'FSCK_FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none || rc=1; \
+	grep -qE 'FSCK_OK|FSCK_SKIPPED' $(FSCK_STAGE1_LOG) || \
+		{ echo "✗ fsck stage1 missing FSCK_OK|FSCK_SKIPPED"; \
+		  grep -E 'FSCK_|RUNIT_STAGE1' $(FSCK_STAGE1_LOG) | tail -20; rc=1; }; \
+	grep -q FSCK_FAIL $(FSCK_STAGE1_LOG) && \
+		{ echo "✗ fsck stage1 reported FSCK_FAIL"; rc=1; }; \
+	rm -f $$DISK; \
+	test $$rc -eq 0
+	@chmod +x scripts/smoke_fsck_remount_rw.py
+	@python3 scripts/smoke_fsck_remount_rw.py --disk disk.img --log $(FSCK_REMOUNT_LOG)
+	@echo "✓ smoke-fsck-remount-rw passed"
 
 PIPELINE_STRESS_SRC = setup/pid1/pipeline_stress_smoke.c
 PIPELINE_STRESS_BIN = setup/pid1/pipeline_stress_smoke
@@ -1172,6 +1207,7 @@ load-userspace-runit: check-userspace build-runit build-busybox-ir0-auth build-o
 			IR0_GUEST_MANDOC_DIR=$${IR0_GUEST_MANDOC_DIR-}; \
 		printf '%s\n' "$$PROFILE" > "$$STAMP"; \
 	fi
+	@$(MAKE) -s install-opendoas-minix DISK=$${DISK:-disk.img}
 	@$(MAKE) -s install-ken-games DISK=$${DISK:-disk.img} || \
 		echo "  WARN    install-ken-games skipped (optional)"
 	@$(MAKE) -s install-dennis-src DISK=$${DISK:-disk.img} || \
@@ -3693,6 +3729,7 @@ release-0.0.1-capabilities: kernel-x64-userspace.iso
 	@$(MAKE) -s smoke-ctrl-c-spam
 	@$(MAKE) -s smoke-sigchld-no-false-logout
 	@$(MAKE) -s smoke-posix-setsid
+	@$(MAKE) -s smoke-fsck-remount-rw
 	@echo "✓ release-0.0.1-capabilities passed (audits + terminal smokes; board VERIFIED requires compare PASS)"
 
 .PHONY: desktop-maintainer-check

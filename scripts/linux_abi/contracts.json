@@ -254,7 +254,7 @@
       "id": "vfs_write_fat",
       "enabled": true,
       "title": "VFS write-path bundle on FAT16",
-      "status_doc": "LINUX-LIKE",
+      "status_doc": "VERIFIED",
       "workdir": "/tmp/ir0wtest",
       "hello_hex": "68656c6c6f0a",
       "enoent_errno": 2,
@@ -276,7 +276,7 @@
       "id": "process_lifecycle",
       "enabled": true,
       "title": "Process lifecycle capability bundle",
-      "status_doc": "LINUX-LIKE",
+      "status_doc": "VERIFIED",
       "ktest": "wait4_status",
       "echild_errno": 10,
       "enoent_errno": 2

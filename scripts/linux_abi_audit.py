@@ -355,6 +355,22 @@ def run_ktest_brk(name: str) -> bool | None:
     return rc == 0
 
 
+def reuse_ktest_evidence(ktest_log: Path, name: str) -> bool | None:
+    """Return True/False when log proves pass/fail; None if inconclusive."""
+    if not ktest_log.is_file():
+        return None
+    text = ktest_log.read_text(errors="replace")
+    if f"[KTEST] {name} ... PASS" in text:
+        return True
+    if f"[KTEST] {name} ... FAIL" in text:
+        return False
+    if re.search(rf"^ok \d+ - {re.escape(name)}$", text, re.MULTILINE):
+        return True
+    if re.search(rf"^not ok \d+ - {re.escape(name)}$", text, re.MULTILINE):
+        return False
+    return None
+
+
 def audit_brk(report_dir: Path, cfg: dict) -> CompareResult:
     linux_dir = report_dir / "linux" / "brk"
     ir0_dir = report_dir / "ir0" / "brk"
@@ -973,9 +989,11 @@ def audit_process_lifecycle(report_dir: Path, cfg: dict) -> CompareResult:
     ktest_ok: bool | None = None
     ktest_log = Path(os.environ.get("KTEST_LOG", "/tmp/ktest.log"))
     ktest_name = cfg.get("ktest", "wait4_status")
-    if ktest_log.is_file() and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
-        ktest_ok = ktest_log.read_text(errors="replace").find(f"[PASS] {ktest_name}") >= 0
-        if ktest_ok:
+    if os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = None
+    else:
+        ktest_ok = reuse_ktest_evidence(ktest_log, ktest_name)
+        if ktest_ok is True:
             print(f"  NOTE  reusing process_lifecycle ktest evidence from {ktest_log}")
 
     if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
@@ -996,14 +1014,14 @@ def audit_process_lifecycle(report_dir: Path, cfg: dict) -> CompareResult:
     ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
 
     res = compare_process_lifecycle(linux_trace, ir0_trace, cfg)
+    if ktest_ok is None and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
+        ktest_ok = run_ktest_brk(ktest_name)
     if ktest_ok is False:
         res.ok = False
-        res.divergences.append(f"ktest {ktest_name} FAILED")
-    elif ktest_ok is True:
+        if f"ktest {ktest_name} FAILED" not in res.divergences:
+            res.divergences.append(f"ktest {ktest_name} FAILED")
+    elif ktest_ok is True and f"ktest {ktest_name} OK" not in res.notes:
         res.notes.append(f"ktest {ktest_name} OK")
-    return res
-
-
     return res
 
 

@@ -46,6 +46,7 @@ guards = importlib.util.module_from_spec(_guards_spec)
 _guards_spec.loader.exec_module(guards)
 
 PROMPT_RE = re.compile(r"[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+:\S*[#$]")
+DOAS_PASS_RE = re.compile(r"doas \([^)]+\) password:", re.IGNORECASE)
 ANSI_ESCAPE_RE = re.compile(
     r"\x1b\[[0-9;?]*[ -/]*[@-~]"
     r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
@@ -117,13 +118,14 @@ HARD_COMMANDS = [
     "echo CHAOS_PRE_MOUNT",
 ]
 
+DOAS_BIN = "/usr/bin/doas"
+
 DOAS_SETUP = [
-    "mkdir -p /home/labuser/mntchaos",
-    "doas /bin/sh -c 'mkdir -p /mnt/host; mount -t tmpfs tmpfs /home/labuser/mntchaos'",
+    f"{DOAS_BIN} /bin/sh -c 'mkdir -p /home/labuser/mntchaos /mnt/host; mount -t tmpfs tmpfs /home/labuser/mntchaos'",
     "echo ram >/home/labuser/mntchaos/x",
     "cat /home/labuser/mntchaos/x",
-    "doas umount /home/labuser/mntchaos",
-    "doas /bin/sh -c 'mount -t 9p ir0share /mnt/host; ls /mnt/host; cat /mnt/host/host_marker.txt; echo guest_ok >/mnt/host/chaos_guest.txt; umount /mnt/host'",
+    f"{DOAS_BIN} umount /home/labuser/mntchaos",
+    f"{DOAS_BIN} /bin/sh -c 'mount -t 9p ir0share /mnt/host; ls /mnt/host; cat /mnt/host/host_marker.txt; echo guest_ok >/mnt/host/chaos_guest.txt; umount /mnt/host'",
 ]
 
 HARD_TAIL = [
@@ -300,18 +302,30 @@ def run_cmd(port: int, log: Path, proc: subprocess.Popen[bytes], cmd: str,
     return True, n, None
 
 
+def doas_pass_prompts(text: str) -> int:
+    return len(DOAS_PASS_RE.findall(text))
+
+
 def run_doas(port: int, log: Path, proc: subprocess.Popen[bytes], cmd: str,
              password: str, prompts_before: int, budget: float,
              segv_base: int) -> tuple[bool, int, str | None]:
     """Run a command that starts with doas; type password when prompted."""
-    pass_before = read_log(log).count("Password:")
+    pass_before = doas_pass_prompts(read_log(log))
     type_str(port, cmd)
     mon(port, "sendkey ret", 0.4)
-    # OpenDoas prompts "Password:" (or similar) once.
-    if wait_count(log, proc, "Password:", pass_before + 1, 25):
-        time.sleep(0.4)
-        type_str(port, password)
-        mon(port, "sendkey ret", 0.4)
+    deadline = time.time() + 25
+    while time.time() < deadline:
+        text = read_log(log)
+        if first_fatal(text):
+            return False, prompts_before, f"fatal_doas:{cmd}"
+        if doas_pass_prompts(text) > pass_before:
+            time.sleep(0.4)
+            type_str(port, password)
+            mon(port, "sendkey ret", 0.4)
+            break
+        if proc.poll() is not None:
+            return False, prompts_before, f"no_prompt_doas:{cmd}"
+        time.sleep(0.25)
     if not wait_prompt(log, proc, budget, after=prompts_before):
         return False, prompts_before, f"no_prompt_doas:{cmd}"
     text = read_log(log)
@@ -361,6 +375,16 @@ def main() -> int:
     proc = None
     try:
         subprocess.run(["cp", "-f", str(src), str(disk)], check=True)
+        verify = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "verify_minix_rootfs.py"),
+             str(disk), "/usr/bin/doas", "/etc/doas.conf"],
+            capture_output=True, text=True)
+        if verify.returncode != 0:
+            print("✗ disk missing /usr/bin/doas — run: make load-userspace-runit",
+                  file=sys.stderr)
+            if verify.stdout:
+                print(verify.stdout.strip(), file=sys.stderr)
+            return 1
         seed_path.write_text(seed_body, encoding="utf-8")
         subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "inject_init_minix.py"),
@@ -418,7 +442,7 @@ def main() -> int:
 
         for cmd in DOAS_SETUP:
             print(f"  chaos doas/mount: {cmd}", flush=True)
-            if cmd.startswith("doas "):
+            if cmd.startswith(DOAS_BIN) or cmd.startswith("doas "):
                 ok, prompts, reason = run_doas(
                     args.port, log_path, proc, cmd, password, prompts,
                     args.hard_budget, segv_base)
