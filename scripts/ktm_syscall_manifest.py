@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SYSCALL_H = ROOT / "includes/ir0/bits/syscall_linux.h"
+SYSCALL_H = ROOT / "includes/uapi/ir0/syscall_linux.h"
 SYSCALL_DISPATCH_C = ROOT / "kernel/syscalls/syscall_dispatch.c"
 SYSCALLS_C = ROOT / "kernel/syscalls.c"  # legacy fallback if dispatch not split yet
 

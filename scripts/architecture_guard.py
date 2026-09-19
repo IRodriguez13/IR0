@@ -405,6 +405,25 @@ def check_fs_no_mm_includes():
     return errors
 
 
+def check_ktm_no_mm_includes():
+    """KTM observes IR0 via facades — no direct <mm/...> includes."""
+    errors = []
+    base = ROOT / "ktm"
+    if not base.is_dir():
+        return errors
+    for fpath in iter_c_files(base):
+        try:
+            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception as exc:
+            errors.append(f"[read-error] {fpath}: {exc}")
+            continue
+        for idx, line in enumerate(lines, start=1):
+            if FS_MM_INCLUDE_RE.search(line):
+                rel = fpath.relative_to(ROOT)
+                errors.append(f"[ktm-no-mm-include] {rel}:{idx}: {line.strip()}")
+    return errors
+
+
 def check_bluetooth_subdir_include_policy():
     errors = []
     bt_root = ROOT / "drivers" / "bluetooth"
@@ -924,7 +943,11 @@ def check_asm_offsets_sync():
 def check_portable_no_task_arch_fields():
     """Fail if portable trees touch task.arch.<isa-field> directly."""
     errors = []
-    trees = list(PORTABLE_ISA_TREES) + [ROOT / "sched", ROOT / "includes" / "ir0"]
+    trees = list(PORTABLE_ISA_TREES) + [
+        ROOT / "sched",
+        ROOT / "includes" / "ir0",
+        ROOT / "ktm",
+    ]
     for base in trees:
         if not base.is_dir():
             continue
@@ -1237,14 +1260,22 @@ def check_process_wait_state_accessor():
 
 
 # syscall_user_frame_t fields — portable code uses process_syscall_* accessors.
+_SYSCALL_FRAME_FIELD_NAMES = (
+    r"rip|rsp|rflags|rdi|rsi|rdx|r10|r8|r9|rbx|rbp|r12|r13|r14|r15|"
+    r"elr|spsr|sp|x0|x1|x2|x3|x4|x5"
+)
 SYSCALL_FRAME_FIELD_RE = re.compile(
-    r"syscall_frame\.(rip|rsp|rflags|rdi|rsi|rdx|r10|r8|r9|rbx|rbp|r12|r13|r14|r15|"
-    r"elr|spsr|sp|x0|x1|x2|x3|x4|x5)\b"
+    rf"syscall_frame\.({_SYSCALL_FRAME_FIELD_NAMES})\b"
+)
+SYSCALL_FRAME_PTR_FIELD_RE = re.compile(
+    rf"\bsf->({_SYSCALL_FRAME_FIELD_NAMES})\b"
 )
 
 SYSCALL_FRAME_ALLOWLIST = {
     ROOT / "includes" / "ir0" / "arch_syscall_frame_x86_64.h",
     ROOT / "includes" / "ir0" / "arch_syscall_frame_arm64.h",
+    ROOT / "ktm" / "d1_12_read_diag.c",
+    ROOT / "ktm" / "d1_16_tty_read_diag.c",
 }
 
 
@@ -1283,7 +1314,7 @@ def check_syscall_frame_accessor():
             for idx, line in enumerate(lines, 1):
                 if _line_is_comment_only(line):
                     continue
-                if SYSCALL_FRAME_FIELD_RE.search(line):
+                if SYSCALL_FRAME_FIELD_RE.search(line) or SYSCALL_FRAME_PTR_FIELD_RE.search(line):
                     errors.append(
                         f"[syscall-frame-accessor] {rel}:{idx}: use "
                         f"process_syscall_ip/sp/arg/set_*; "
@@ -1738,6 +1769,7 @@ def main():
     errors.extend(check_kernel_no_driver_includes())
     errors.extend(check_kernel_no_direct_arch_portable())
     errors.extend(check_fs_no_mm_includes())
+    errors.extend(check_ktm_no_mm_includes())
     errors.extend(check_bluetooth_subdir_include_policy())
     errors.extend(check_devfs_usercopy_contract())
     errors.extend(check_devfs_unique_device_ids())

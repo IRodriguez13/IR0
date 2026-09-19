@@ -31,9 +31,10 @@
     },
     {
       "id": "munmap",
-      "enabled": false,
+      "enabled": true,
       "title": "Unmap memory",
-      "status_doc": "PARTIAL"
+      "status_doc": "PARTIAL",
+      "audit_via": "mmap"
     },
     {
       "id": "mprotect",
@@ -273,7 +274,7 @@
     },
     {
       "id": "process_lifecycle",
-      "enabled": false,
+      "enabled": true,
       "title": "Process lifecycle capability bundle",
       "status_doc": "LINUX-LIKE",
       "ktest": "wait4_status",

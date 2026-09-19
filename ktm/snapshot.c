@@ -9,19 +9,18 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ktm_internal.h>
-#include <ir0/process.h>
-#include <mm/pmm.h>
+#include <ir0/mm_port.h>
+#include <ir0/process_introspect.h>
 #include <string.h>
-
-extern process_t *process_list;
-extern process_t *current_process;
 
 static int probe_mm_frames(void *ctx, ktm_writer_t *w)
 {
-	size_t total = 0, used = 0, free_f = 0;
+	size_t total = 0;
+	size_t used = 0;
+	size_t free_f = 0;
 
 	(void)ctx;
-	pmm_stats(&total, &used, &free_f);
+	ir0_mm_pmm_stats(&total, &used, &free_f);
 	ktm_write_u64(w, "mm.frames.total", total);
 	ktm_write_u64(w, "mm.frames.used", used);
 	ktm_write_u64(w, "mm.frames.free", free_f);
@@ -30,18 +29,13 @@ static int probe_mm_frames(void *ctx, ktm_writer_t *w)
 
 static int probe_proc_list(void *ctx, ktm_writer_t *w)
 {
-	process_t *p;
-	uint64_t n = 0, z = 0;
+	ir0_proc_snapshot_t snap;
 
 	(void)ctx;
-	for (p = process_list; p; p = p->next)
-	{
-		n++;
-		if (p->state == PROCESS_ZOMBIE)
-			z++;
-	}
-	ktm_write_u64(w, "proc.list.count", n);
-	ktm_write_u64(w, "proc.list.zombies", z);
+	if (ir0_proc_snapshot_collect(&snap) != 0)
+		return -1;
+	ktm_write_u64(w, "proc.list.count", snap.processes);
+	ktm_write_u64(w, "proc.list.zombies", snap.zombies);
 	return 0;
 }
 
@@ -53,41 +47,25 @@ void ktm_probes_register_builtins(void)
 
 int ktm_snapshot_take(ktm_system_snapshot_t *out)
 {
-	process_t *p;
-	size_t total = 0, used = 0, free_f = 0;
-	uint64_t n = 0, z = 0, fds = 0;
-	int i;
+	ir0_proc_snapshot_t proc;
+	size_t total = 0;
+	size_t used = 0;
+	size_t free_f = 0;
 
 	if (!out)
 		return -1;
 	memset(out, 0, sizeof(*out));
-	pmm_stats(&total, &used, &free_f);
+	ir0_mm_pmm_stats(&total, &used, &free_f);
 	out->total_frames = total;
 	out->used_frames = used;
 	out->free_frames = free_f;
 
-	for (p = process_list; p; p = p->next)
-	{
-		n++;
-		if (p->state == PROCESS_ZOMBIE)
-			z++;
-		fd_entry_t *fdt = process_fd_table(p);
-
-		if (!fdt)
-			continue;
-		for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
-		{
-			if (fdt[i].in_use)
-			{
-				fds++;
-				if (fdt[i].is_pipe)
-					out->pipes++;
-			}
-		}
-	}
-	out->processes = n;
-	out->zombies = z;
-	out->open_fds = fds;
+	if (ir0_proc_snapshot_collect(&proc) != 0)
+		return -1;
+	out->processes = proc.processes;
+	out->zombies = proc.zombies;
+	out->open_fds = proc.open_fds;
+	out->pipes = proc.pipes;
 	return 0;
 }
 

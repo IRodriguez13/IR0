@@ -46,6 +46,7 @@ extern void test_arch_mm_pte_facade(void);
 extern void test_open_flags_linux_to_ir0(void);
 extern void test_open_flags_vfs_guard(void);
 extern void test_ktm_panic_inventory_contract(void);
+extern void test_ktm_facade_no_mm_includes(void);
 extern void test_ps2_set1_ctrl_x_then_a(void);
 extern void test_ps2_set1_left_right_ctrl_independent(void);
 extern void test_ps2_set1_shift_a(void);
@@ -96,6 +97,7 @@ static void (*test_functions[])(void) = {
 	test_open_flags_linux_to_ir0,
 	test_open_flags_vfs_guard,
 	test_ktm_panic_inventory_contract,
+	test_ktm_facade_no_mm_includes,
 	test_ps2_set1_ctrl_x_then_a,
 	test_ps2_set1_left_right_ctrl_independent,
 	test_ps2_set1_shift_a,

@@ -650,6 +650,20 @@ def audit_mmap(report_dir: Path, cfg: dict) -> CompareResult:
     return res
 
 
+def audit_munmap(report_dir: Path, cfg: dict) -> CompareResult:
+    """munmap contract reuses mmap_probe trace (munmap_rw step)."""
+    res = audit_mmap(report_dir, cfg)
+    res.contract = "munmap"
+    return res
+
+
+def audit_munmap(report_dir: Path, cfg: dict) -> CompareResult:
+    """munmap contract reuses mmap_probe trace (munmap_rw step)."""
+    res = audit_mmap(report_dir, cfg)
+    res.contract = "munmap"
+    return res
+
+
 def audit_mount(report_dir: Path, cfg: dict) -> CompareResult:
     linux_dir = report_dir / "linux" / "mount"
     ir0_dir = report_dir / "ir0" / "mount"
@@ -1429,6 +1443,7 @@ AUDITORS = {
     "vfs_write": audit_vfs_write,
     "vfs_write_fat": audit_vfs_write_fat,
     "process_lifecycle": audit_process_lifecycle,
+    "munmap": audit_munmap,
 }
 
 

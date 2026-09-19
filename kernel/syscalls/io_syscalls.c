@@ -28,6 +28,7 @@
 #include <ir0/sched.h>
 #include <ir0/ktm.h>
 #include <ir0/fcntl.h>
+#include <ir0/fd_dispatch.h>
 #include <ir0/io_async.h>
 #include <ir0/clock.h>
 #include <ir0/pseudo_fs.h>
@@ -689,9 +690,9 @@ void io_async_notify_device(uint32_t device_id)
       continue;
     for (fd = 0; fd < MAX_FDS_PER_PROCESS; fd++)
     {
-      fd_entry_t *entry = &table[fd];
+      fd_entry_t *entry = fd_table_slot(table, fd);
 
-      if (!entry->in_use || !entry->is_devfs ||
+      if (!fd_entry_live(entry) || !entry->is_devfs ||
           entry->dev_device_id != device_id ||
           !(entry->flags & O_ASYNC) || entry->async_owner <= 0)
         continue;
@@ -1224,9 +1225,12 @@ void ensure_devfs_init(void)
 
 int stdio_is_redirected(fd_entry_t *fd_table, int fd)
 {
+  fd_entry_t *e;
+
   if (!fd_table || fd < STDIN_FILENO || fd > STDERR_FILENO)
     return 0;
-  return fd_entry_is_redirected(&fd_table[fd]);
+  e = fd_table_slot(fd_table, fd);
+  return e && fd_entry_is_redirected(e);
 }
 int64_t sys_dup(int oldfd)
 {

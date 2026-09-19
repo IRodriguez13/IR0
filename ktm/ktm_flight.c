@@ -14,7 +14,7 @@
 
 #include <ktm.h>
 #include <config.h>
-#include <ir0/process.h>
+#include <ir0/process_introspect.h>
 #include <ir0/ktm/klog.h>
 #include <stdint.h>
 
@@ -77,7 +77,7 @@ void ktm_flight_record(uint16_t type, uint32_t a0, uint32_t a1,
 	slot->seq = ktm_flight_seq;
 	slot->type = type;
 	slot->cpu = 0;
-	slot->pid = current_process ? (uint32_t)current_process->task.pid : 0;
+	slot->pid = (uint32_t)ir0_proc_current_pid();
 	slot->a0 = a0;
 	slot->a1 = a1;
 	slot->a2 = a2;

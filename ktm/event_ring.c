@@ -11,7 +11,7 @@
 #include <ktm_internal.h>
 #include <ktm.h>
 #include <config.h>
-#include <ir0/process.h>
+#include <ir0/process_introspect.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/ktm/deferred.h>
 #include <string.h>
@@ -54,9 +54,7 @@ uint64_t ktm_now_ticks(void)
 
 int32_t ktm_current_pid(void)
 {
-	extern process_t *current_process;
-
-	return current_process ? (int32_t)current_process->task.pid : 0;
+	return ir0_proc_current_pid();
 }
 
 void ktm_event_emit4(uint16_t type, uint16_t subsystem,

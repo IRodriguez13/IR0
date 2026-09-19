@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ktm_internal.h>
+#include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/process.h>
 #include <string.h>
@@ -98,6 +99,9 @@ void ktm_scenario_register_vfs_open_flags(void);
 void ktm_scenario_register_process_reclaim_exit(void);
 void ktm_scenario_register_process_exec(void);
 void ktm_scenario_register_process_fork_rollback(void);
+#if defined(CONFIG_KTM_BLOCK_FAKE) && CONFIG_KTM_BLOCK_FAKE
+void ktm_scenario_register_block_read_eio(void);
+#endif
 
 void ktm_scenarios_register_builtins(void)
 {
@@ -117,4 +121,7 @@ void ktm_scenarios_register_builtins(void)
 	ktm_scenario_register_process_reclaim_exit();
 	ktm_scenario_register_process_exec();
 	ktm_scenario_register_process_fork_rollback();
+#if defined(CONFIG_KTM_BLOCK_FAKE) && CONFIG_KTM_BLOCK_FAKE
+	ktm_scenario_register_block_read_eio();
+#endif
 }

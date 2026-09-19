@@ -563,6 +563,14 @@ menu "Debugging"
           Inactive until /dev/ktm CONFIG_FAULT arms a slot. Enable for
           smoke-ktm-fault / developer kernels; leave off for lean builds.
 
+    config KTM_BLOCK_FAKE
+        bool "KTM in-kernel fake block device (scenario tests)"
+        depends on KTM && KTM_TEST
+        default y
+        help
+          Registers a temporary block backend for KTM scenarios such as
+          block.read_eio_once. Uses ir0_block_register; no VFS bypass.
+
     config KTM_SERIAL_VERBOSE
         bool "KTM verbose serial (CHECKPOINT/PROBE/EV/LOG protocol)"
         depends on KTM

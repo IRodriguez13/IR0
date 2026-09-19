@@ -49,8 +49,8 @@ static inline void signal_blocked_syscall_frame_sanitize(arch_syscall_frame_t *s
 	if (block_nr != 0u)
 		return;
 
-	if (signal_syscall_read_fd_suspicious(sf->rdi))
-		sf->rdi = 0;
+	if (signal_syscall_read_fd_suspicious(syscall_frame_arg(sf, 0)))
+		syscall_frame_set_arg(sf, 0, 0);
 }
 
 static inline uint64_t signal_repair_sigcontext_syscall_arg(

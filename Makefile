@@ -428,6 +428,11 @@ KERNEL_OBJS += \
     ktm/ktm_ctx_snapshot.o \
     ktm/ktm_probe_diag.o \
     $(KTM_D1_DIAG_OBJS)
+ifeq ($(CONFIG_KTM_BLOCK_FAKE),y)
+KERNEL_OBJS += \
+    ktm/backends/ktm_block_fake.o \
+    tests/ktm/scenarios/block_read_eio.o
+endif
 endif
 
 # In-kernel test suite: linked only in kernel-x64-test.bin (make tests)
@@ -502,6 +507,7 @@ LIB_OBJS = \
     kernel/lib/exec_read_trace.o \
     kernel/lib/blockdev.o \
     kernel/lib/mm_port.o \
+    kernel/lib/process_introspect.o \
     kernel/lib/rtc_calendar.o \
     kernel/lib/video_backend.o \
     kernel/lib/input_backend.o \

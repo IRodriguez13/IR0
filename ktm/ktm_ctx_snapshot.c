@@ -14,6 +14,7 @@
 
 #include <ktm.h>
 #include <ir0/process.h>
+#include <ir0/arch_task.h>
 #include <ir0/ktm/klog.h>
 
 void ktm_ctx_snapshot(const process_t *p, const char *reason)
@@ -40,9 +41,9 @@ void ktm_ctx_snapshot(const process_t *p, const char *reason)
 	klog_debug_fmt("KTM",
 		       "[KTM][CTX] pid=%x rip=%llx rsp=%llx cs=%llx cr3=%llx poll=%llx",
 		       (unsigned)(uint32_t)p->task.pid,
-		       (unsigned long long)p->task.arch.rip,
-		       (unsigned long long)p->task.arch.rsp,
-		       (unsigned long long)(uint64_t)p->task.arch.cs,
+		       (unsigned long long)process_syscall_ip(p),
+		       (unsigned long long)process_syscall_sp(p),
+		       (unsigned long long)(uint64_t)task_get_cs(&p->task),
 		       (unsigned long long)process_mm_root(p),
 		       (unsigned long long)(uint64_t)(uintptr_t)p->poll_waiter);
 }

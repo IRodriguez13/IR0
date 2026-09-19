@@ -15,7 +15,7 @@
 #include <ir0/ktm/user_canary.h>
 #include <ir0/ktm/event.h>
 #include <ir0/ktm/klog.h>
-#include <mm/paging.h>
+#include <ir0/copy_user.h>
 
 #define KTM_CANARY_BYTES 16
 #define KTM_CANARY_MAGIC 0x4952304B414E3159ULL /* "IR0KANY1" */

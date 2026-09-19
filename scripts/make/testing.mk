@@ -3084,7 +3084,8 @@ LINUX_ABI_VFS_WRITE_PROBE := $(LINUX_ABI_AUDIT_DIR)/vfs_write_probe
 	linux-abi-audit-pipe linux-abi-audit-poll linux-abi-audit-nanosleep \
 	linux-abi-audit-getcwd linux-abi-audit-chdir linux-abi-audit-dup linux-abi-audit-pty-multiplex linux-abi-audit-execve \
 	linux-abi-audit-ioctl linux-abi-audit-fcntl linux-abi-audit-kill-sigterm \
-	linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
+	linux-abi-audit-mmap linux-abi-audit-munmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
+	linux-abi-audit-process-lifecycle linux-abi-audit-ipc-bundle \
 	linux-abi-audit-vfs-write linux-abi-audit-sigreturn-blocked-syscall
 
 build-linux-abi-brk-probe: scripts/linux_abi/workloads/brk_probe.c
@@ -3288,6 +3289,29 @@ linux-abi-audit-mmap: kernel-x64-userspace.iso build-linux-abi-mmap-probe
 	@grep -q '^## mmap — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-mmap passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-mmap FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-munmap: kernel-x64-userspace.iso build-linux-abi-mmap-probe
+	@chmod +x scripts/linux_abi/run_linux_mmap.sh scripts/linux_abi/run_ir0_mmap.sh
+	@python3 scripts/linux_abi_audit.py --contract munmap
+	@grep -q '^## munmap — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-munmap passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-munmap FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-process-lifecycle: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_process_lifecycle.sh scripts/linux_abi/run_ir0_process_lifecycle.sh
+	@python3 scripts/linux_abi_audit.py --contract process_lifecycle
+	@grep -q '^## process_lifecycle — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-process-lifecycle passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-process-lifecycle FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+.PHONY: linux-abi-audit-ipc-bundle
+# Run audits sequentially; do not parallelize (shared report.md).
+linux-abi-audit-ipc-bundle:
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-pipe
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-poll
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-dup
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-munmap
+	@echo "✓ linux-abi-audit-ipc-bundle passed (pipe poll dup munmap)"
 
 linux-abi-audit-mount: kernel-x64-userspace.iso build-linux-abi-mount-probe
 	@chmod +x scripts/linux_abi/run_linux_mount.sh scripts/linux_abi/run_ir0_mount.sh
@@ -3621,6 +3645,7 @@ ctr:
 test-fast: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
 	@$(MAKE) -s isd-contracts
+	@$(MAKE) -s ktm-check
 
 agent-fast: test-fast kernel-tests
 	@echo "✓ agent-fast OK (host + ktest)"
@@ -3659,6 +3684,30 @@ smoke-release-0.0.1:
 
 release-0.0.1: kernel-text-budget smoke-release-0.0.1
 	@echo "✓ release-0.0.1 gate passed (kernel-text-budget + smoke-release-0.0.1)"
+
+.PHONY: release-0.0.1-capabilities
+release-0.0.1-capabilities: kernel-x64-userspace.iso
+	@echo "  RELEASE 0.0.1 capability subset (IPC + process + terminal smokes)"
+	@$(MAKE) -s linux-abi-audit-ipc-bundle
+	@$(MAKE) -s linux-abi-audit-process-lifecycle
+	@$(MAKE) -s smoke-ctrl-c-spam
+	@$(MAKE) -s smoke-sigchld-no-false-logout
+	@$(MAKE) -s smoke-posix-setsid
+	@echo "✓ release-0.0.1-capabilities passed (audits + terminal smokes; board VERIFIED requires compare PASS)"
+
+.PHONY: desktop-maintainer-check
+desktop-maintainer-check:
+	@echo "  DESK maintainer VM checklist (sibling IR0-desktop required)"
+	@if [ ! -d "$(IR0_DESKTOP_ROOT)" ]; then \
+		echo "✗ IR0-desktop not found at $(IR0_DESKTOP_ROOT)" >&2; \
+		echo "  Clone sibling repo or set IR0_DESKTOP_ROOT= then re-run." >&2; \
+		exit 1; \
+	fi
+	@echo "  [ ] make smoke-desk-xfbdev   (TinyX #PF/#GP lab)"
+	@echo "  [ ] make smoke-desk-session  (fd_refs + sched; may be flaky)"
+	@echo "  [ ] Manual: login, xterm, twm, logout — no kernel panic"
+	@$(MAKE) -s smoke-desk-xfbdev || exit 1
+	@echo "✓ desktop-maintainer-check: xfbdev smoke green (session smoke: run manually if flaky)"
 
 # T3 kernel-prep battery (IPC/shm/fb MAP_SHARED) — not Xfbdev boot itself.
 .PHONY: smoke-t3-prep
