@@ -119,9 +119,49 @@ int main(void)
 		return 1;
 	audit_mmap(1, "mmap_verify_rw", map_rw, 0, PAGE_SIZE, 0, hex);
 
+	{
+		long mpret = syscall(SYS_mprotect, (void *)(uintptr_t)map_rw,
+				      PAGE_SIZE, PROT_READ);
+
+		audit_mmap(2, "mprotect_ro", (unsigned long long)mpret,
+			   mpret != 0 ? errno : 0, PAGE_SIZE, map_rw, NULL);
+		if (mpret != 0)
+			return 1;
+	}
+
+	{
+		long mpret = syscall(SYS_mprotect, (void *)(uintptr_t)map_rw,
+				      PAGE_SIZE, PROT_READ | PROT_WRITE);
+
+		audit_mmap(3, "mprotect_rw", (unsigned long long)mpret,
+			   mpret != 0 ? errno : 0, PAGE_SIZE, map_rw, NULL);
+		if (mpret != 0)
+			return 1;
+	}
+
+	memcpy((void *)(uintptr_t)map_rw, MAP_OK_MSG, MAP_OK_LEN);
+	memcpy(verify, (void *)(uintptr_t)map_rw, MAP_OK_LEN);
+	if (memcmp(verify, MAP_OK_MSG, MAP_OK_LEN) != 0)
+		return 1;
+	if (hex_encode7(verify, hex, sizeof(hex)) < 0)
+		return 1;
+	audit_mmap(4, "mmap_verify_rw_after_mprotect", map_rw, 0, PAGE_SIZE, 0,
+		   hex);
+
+	{
+		void *bad = (void *)((uintptr_t)map_rw + 1);
+		long mpret = syscall(SYS_mprotect, bad, PAGE_SIZE, PROT_READ);
+
+		audit_mmap(5, "mprotect_einval", (unsigned long long)mpret,
+			   mpret != 0 ? errno : 0, PAGE_SIZE,
+			   (unsigned long long)(uintptr_t)bad, NULL);
+		if (mpret == 0 || errno != EINVAL)
+			return 1;
+	}
+
 	map_none = do_mmap(NULL, NONE_SIZE, PROT_NONE,
 			   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	audit_mmap(2, "mmap_anon_none", map_none,
+	audit_mmap(6, "mmap_anon_none", map_none,
 		   map_none == MMAP_FAILED ? errno : 0, NONE_SIZE, 0, NULL);
 	if (!ptr_ok(map_none))
 		return 1;
@@ -130,7 +170,7 @@ int main(void)
 	map_fixed = do_mmap((void *)(uintptr_t)fixed_req, PAGE_SIZE,
 			    PROT_READ | PROT_WRITE,
 			    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-	audit_mmap(3, "mmap_fixed", map_fixed,
+	audit_mmap(7, "mmap_fixed", map_fixed,
 		   map_fixed == MMAP_FAILED ? errno : 0, PAGE_SIZE, fixed_req,
 		   NULL);
 	if (!ptr_ok(map_fixed) || map_fixed != fixed_req)
@@ -138,7 +178,7 @@ int main(void)
 
 	unret = (unsigned long long)syscall(SYS_munmap, (void *)(uintptr_t)map_rw,
 					    PAGE_SIZE);
-	audit_mmap(4, "munmap_rw", unret, unret == MMAP_FAILED ? errno : 0,
+	audit_mmap(8, "munmap_rw", unret, unret == MMAP_FAILED ? errno : 0,
 		   PAGE_SIZE, map_rw, NULL);
 	if ((long)unret != 0)
 		return 1;
@@ -147,7 +187,7 @@ int main(void)
 		unsigned long long bad =
 			do_mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
 				MAP_PRIVATE, -1, 0);
-		audit_mmap(5, "mmap_bad_nanon", bad, errno, PAGE_SIZE, 0, NULL);
+		audit_mmap(9, "mmap_bad_nanon", bad, errno, PAGE_SIZE, 0, NULL);
 		if (ptr_ok(bad) || errno != EBADF)
 			return 1;
 	}
@@ -156,7 +196,7 @@ int main(void)
 		unsigned long long bad =
 			do_mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
 				MAP_PRIVATE, 9999, 0);
-		audit_mmap(6, "mmap_bad_fd", bad, errno, PAGE_SIZE, 0, NULL);
+		audit_mmap(10, "mmap_bad_fd", bad, errno, PAGE_SIZE, 0, NULL);
 		if (ptr_ok(bad) || errno != EBADF)
 			return 1;
 	}

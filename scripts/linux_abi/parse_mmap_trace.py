@@ -111,6 +111,43 @@ def parse_strace_mmap(strace_log: Path) -> list[dict]:
             )
             idx += 1
             continue
+        m = re.match(
+            r"^mprotect\(0x([0-9a-fA-F]+),\s*(\d+),\s*PROT_([^)]+)\)\s*=\s*(-?\d+)",
+            line,
+        )
+        if m:
+            ret = int(m.group(4))
+            steps.append(
+                {
+                    "step": idx,
+                    "op": "mprotect_ro"
+                    if "READ" in m.group(3) and "WRITE" not in m.group(3)
+                    else "mprotect_rw",
+                    "ret": ret if ret >= 0 else 0xFFFFFFFFFFFFFFFF,
+                    "errno": 0 if ret >= 0 else -ret,
+                    "len": int(m.group(2)),
+                    "req": int(m.group(1), 16),
+                    "source": "strace",
+                }
+            )
+            idx += 1
+            continue
+        m = re.match(r"^mprotect\(NULL,\s*(\d+),\s*PROT_[^)]+\)\s*=\s*(-?\d+)", line)
+        if m:
+            ret = int(m.group(2))
+            steps.append(
+                {
+                    "step": idx,
+                    "op": "mprotect_einval",
+                    "ret": ret if ret >= 0 else 0xFFFFFFFFFFFFFFFF,
+                    "errno": 0 if ret >= 0 else -ret,
+                    "len": int(m.group(1)),
+                    "req": 0,
+                    "source": "strace",
+                }
+            )
+            idx += 1
+            continue
         m = re.match(r"^munmap\(0x([0-9a-fA-F]+),\s*(\d+)\)\s*=\s*(-?\d+)", line)
         if m:
             ret = int(m.group(3))

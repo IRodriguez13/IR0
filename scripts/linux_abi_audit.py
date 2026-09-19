@@ -673,10 +673,10 @@ def audit_munmap(report_dir: Path, cfg: dict) -> CompareResult:
     return res
 
 
-def audit_munmap(report_dir: Path, cfg: dict) -> CompareResult:
-    """munmap contract reuses mmap_probe trace (munmap_rw step)."""
+def audit_mprotect(report_dir: Path, cfg: dict) -> CompareResult:
+    """mprotect contract reuses mmap_probe trace (mprotect_* steps)."""
     res = audit_mmap(report_dir, cfg)
-    res.contract = "munmap"
+    res.contract = "mprotect"
     return res
 
 
@@ -1462,6 +1462,7 @@ AUDITORS = {
     "vfs_write_fat": audit_vfs_write_fat,
     "process_lifecycle": audit_process_lifecycle,
     "munmap": audit_munmap,
+    "mprotect": audit_mprotect,
 }
 
 

@@ -26,7 +26,7 @@ MAPS="$OUT/maps_after_mmap.txt"
 echo "  LINUX_ABI  strace mmap_probe (Linux ground truth)"
 (
 	cd "$OUT"
-	strace -f -o "$STRACE" -e trace=mmap,munmap -s 128 "$PROBE"
+	strace -f -o "$STRACE" -e trace=mmap,munmap,mprotect -s 128 "$PROBE"
 ) >"$STDOUT" 2>&1 || true
 
 if [[ -r /proc/self/maps ]]; then

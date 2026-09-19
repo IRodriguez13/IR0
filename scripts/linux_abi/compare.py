@@ -473,6 +473,10 @@ def compare_mmap(
     required_ops = (
         "mmap_anon_rw",
         "mmap_verify_rw",
+        "mprotect_ro",
+        "mprotect_rw",
+        "mmap_verify_rw_after_mprotect",
+        "mprotect_einval",
         "mmap_anon_none",
         "mmap_fixed",
         "munmap_rw",
@@ -501,7 +505,19 @@ def compare_mmap(
 
         for label, step in (("linux", l_s), ("ir0", i_s)):
             ret = step.get("ret")
-            if op in ("mmap_bad_nanon", "mmap_bad_fd"):
+            if op in ("mmap_bad_nanon", "mmap_bad_fd", "mprotect_einval"):
+                if op == "mprotect_einval":
+                    if ret == 0:
+                        res.ok = False
+                        res.divergences.append(
+                            f"{label} {op}: expected failure got ret=0"
+                        )
+                    if step.get("errno") != 22:
+                        res.ok = False
+                        res.divergences.append(
+                            f"{label} {op}: errno={step.get('errno')} expected=22 (EINVAL)"
+                        )
+                    continue
                 if _mmap_ok(ret):
                     res.ok = False
                     res.divergences.append(f"{label} {op}: expected MAP_FAILED got 0x{ret:x}")
@@ -516,6 +532,14 @@ def compare_mmap(
                 if ret != 0:
                     res.ok = False
                     res.divergences.append(f"{label} {op}: ret=0x{ret:x} expected 0")
+                continue
+
+            if op in ("mprotect_ro", "mprotect_rw"):
+                if ret != 0:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: ret=0x{ret:x} errno={step.get('errno')} expected 0"
+                    )
                 continue
 
             if not _mmap_ok(ret):
@@ -538,6 +562,14 @@ def compare_mmap(
                         f"{label} {op}: data_hex={got_hex} expected={verify_data_hex}"
                     )
 
+            if op == "mmap_verify_rw_after_mprotect":
+                got_hex = (step.get("data_hex") or "").lower()
+                if got_hex != verify_data_hex.lower():
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: data_hex={got_hex} expected={verify_data_hex}"
+                    )
+
             if op == "mmap_fixed":
                 req = step.get("req", 0)
                 if ret != req:
@@ -546,14 +578,14 @@ def compare_mmap(
                         f"{label} {op}: ret=0x{ret:x} req=0x{req:x} (MAP_FIXED mismatch)"
                     )
 
-        if op == "mmap_verify_rw":
+        if op in ("mmap_verify_rw", "mmap_verify_rw_after_mprotect"):
             l_hex = (l_s.get("data_hex") or "").lower()
             i_hex = (i_s.get("data_hex") or "").lower()
             if l_hex != i_hex:
                 res.ok = False
                 res.divergences.append(f"{op} data mismatch linux={l_hex} ir0={i_hex}")
 
-        if op in ("mmap_bad_nanon", "mmap_bad_fd"):
+        if op in ("mmap_bad_nanon", "mmap_bad_fd", "mprotect_einval"):
             if l_s.get("errno") != i_s.get("errno"):
                 res.ok = False
                 res.divergences.append(

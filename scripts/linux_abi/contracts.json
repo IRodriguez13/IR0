@@ -22,7 +22,7 @@
       "id": "mmap",
       "enabled": true,
       "title": "Memory map",
-      "status_doc": "PARTIAL",
+      "status_doc": "VERIFIED",
       "ktest": "mmap_null_placement",
       "page_size": 4096,
       "none_size": 8192,
@@ -33,14 +33,15 @@
       "id": "munmap",
       "enabled": true,
       "title": "Unmap memory",
-      "status_doc": "PARTIAL",
+      "status_doc": "VERIFIED",
       "audit_via": "mmap"
     },
     {
       "id": "mprotect",
-      "enabled": false,
+      "enabled": true,
       "title": "Protect memory",
-      "status_doc": "UNKNOWN"
+      "status_doc": "VERIFIED",
+      "audit_via": "mmap"
     },
     {
       "id": "fork",
@@ -155,7 +156,11 @@
       "id": "ioctl",
       "enabled": true,
       "title": "ioctl(2) console TTY",
-      "status_doc": "LINUX-LIKE"
+      "status_doc": "VERIFIED",
+      "smokes": [
+        "smoke-runit-ash-interactive",
+        "smoke-ctrl-c-spam"
+      ]
     },
     {
       "id": "fcntl",

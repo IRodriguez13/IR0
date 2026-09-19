@@ -1,6 +1,6 @@
 # ARCH debt inventory (post-DESK / SEP + Campaña 1)
 
-> **Last verified:** 2026-07-18  
+> **Last verified:** 2026-09-19  
 > **Source of truth:** `scripts/architecture_guard.py`, Makefile smokes,  
 > [`HOSTSHARE_PRODUCT.md`](HOSTSHARE_PRODUCT.md),  
 > sibling [`IR0-desktop/Documentation/TREE_CONTRACT.md`](../../IR0-desktop/Documentation/TREE_CONTRACT.md)
@@ -22,7 +22,11 @@
 | Kernel ↔ TinyX code link | None |
 | `release-0.0.1` depends on IR0-desktop | No |
 
-## Campaña 2 — TINYX-LAB
+## Campaña 2 — TINYX-LAB (out of 0.0.1 release scope)
+
+**Release 0.0.1:** tier-2 fb+evdev prep (`smoke-desk-xfbdev` mini path) may run green;
+**TinyX guest boot is not a 0.0.1 ship criterion.** Product X11/WM/GTK waits on Campaña 2
+or 0.0.2.
 
 | ID | Area | Status |
 |----|------|--------|

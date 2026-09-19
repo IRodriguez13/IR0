@@ -1,6 +1,6 @@
 # IR0 — Capability board (release certification)
 
-> **Last verified:** 2026-06-26  
+> **Last verified:** 2026-09-19  
 > **Source of truth:** `make linux-abi-audit`, `make smoke-release-0.0.1`,  
 > `scripts/linux_abi/contracts.json`, `Documentation/ai_driven_dev/linux_ground_truth.md`,  
 > `kernel/test/`, `tests/host/`
@@ -66,13 +66,13 @@ Goal of 0.0.1: a **small set of fully certified capabilities**, not syscall coun
 | Capability | Status | Primary gate | Blocks 0.0.1? |
 |------------|--------|--------------|---------------|
 | Filesystem RW (VFS) | **VERIFIED** | `linux-abi-audit-vfs-write`, openat, stat | No |
-| Process lifecycle | **LINUX-LIKE** | ktests; `wait4` audit only | Yes (partial) |
-| Memory ABI | **LINUX-LIKE** | `linux-abi-audit` brk/mmap; `smoke-mm-cow-lazy` | Yes (partial) |
-| IPC | **LINUX-LIKE** | ktests/host subsets | Yes |
-| Terminal | **LINUX-LIKE** | `smoke-runit-ash-interactive` | Yes (partial) |
-| Filesystems (backends) | mixed | see below | FAT16 rw yes |
+| Process lifecycle | **VERIFIED** | `linux-abi-audit-process-lifecycle`, wait4 | No |
+| Memory ABI | **VERIFIED** | `linux-abi-audit-memory-bundle` (brk/mmap/munmap/mprotect) | No |
+| IPC | **VERIFIED** | `linux-abi-audit-ipc-bundle` (pipe/poll/dup/munmap) | No |
+| Terminal | **VERIFIED** | `linux-abi-audit-ioctl`, PTY multiplex, session smokes | No |
+| Filesystems (backends) | mixed | see below | FAT16 rw verified on audit |
 | Networking | **TODO** | — | No (0.0.2) |
-| Graphics | **TODO** | — | No (0.0.2) |
+| Graphics / fb+evdev | **LINUX-LIKE** | `smoke-desk-xfbdev` (mini harness); TinyX **BLOCKED** | No (0.0.2) |
 
 ---
 
@@ -109,91 +109,82 @@ backends).
 
 ## Process lifecycle
 
-**Status:** **LINUX-LIKE**
+**Status:** **VERIFIED**
 
 | Syscall / behaviour | Status | Evidence |
 |----------------------|--------|----------|
-| fork | LINUX-LIKE | ktests partial; no capability audit |
-| execve | LINUX-LIKE | tier-1 smokes; audit disabled in `contracts.json` |
-| wait4 | VERIFIED | `linux-abi-audit-wait4` (single syscall only) |
-| exit | LINUX-LIKE | ktests partial |
-| signals (minimal) | LINUX-LIKE | host `test_signal_rt_sigaction_abi` |
-| argv / envp / auxv | LINUX-LIKE | ELF loader smokes; no paired audit |
+| fork | VERIFIED | `linux-abi-audit-process-lifecycle` bundle |
+| execve | VERIFIED | `linux-abi-audit-execve` + lifecycle bundle |
+| wait4 | VERIFIED | `linux-abi-audit-wait4`, lifecycle bundle |
+| exit | VERIFIED | lifecycle bundle ktest evidence |
+| signals (minimal) | LINUX-LIKE | host `test_signal_rt_sigaction_abi`; sigreturn contract VERIFIED |
+| argv / envp / auxv | LINUX-LIKE | ELF loader smokes; no dedicated audit |
 
-**Impact for userspace:** `/sbin/init`, runit, basic shell; **not** full job control or
-robust signal semantics for all musl paths.
+**Impact for userspace:** `/sbin/init`, runit, BusyBox ash, `su`/`doas` session paths;
+job control and full musl signal paths still partial.
 
-**Unlocks when VERIFIED:** static BusyBox applets, `su`/`sudo` paths, TCC in-guest link
-(musl expects coherent fork/exec/wait).
-
-**Next capability work:** single **process lifecycle audit bundle** (fork → execve →
-wait4 → exit + minimal SIGCHLD), not isolated `execve` contract.
+**Next within process:** optional `fork`/`exit` standalone contracts; SIGCHLD edge cases
+via session smokes (`smoke-session-chaos`).
 
 ---
 
 ## Memory ABI
 
-**Status:** **LINUX-LIKE**
+**Status:** **VERIFIED**
 
 | Syscall / behaviour | Status | Evidence |
 |----------------------|--------|----------|
 | brk | VERIFIED | `linux-abi-audit` |
 | mmap | VERIFIED | `linux-abi-audit-mmap` (anon RW, PROT_NONE, MAP_FIXED, bad fd) |
-| munmap | LINUX-LIKE | covered in mmap audit steps; standalone contract disabled |
-| mprotect | TODO | no audit |
+| munmap | VERIFIED | `linux-abi-audit-munmap` / memory bundle |
+| mprotect | VERIFIED | `linux-abi-audit-mprotect` (RO/RW toggle; unaligned → EINVAL) |
 | lazy allocation | LINUX-LIKE | `CONFIG_LAZY_*`, `smoke-mm-cow-lazy` |
 | COW | LINUX-LIKE | FASE40 smoke + ktests |
 | stack | LINUX-LIKE | gap policy in `mmap_contract.h`; not Linux ASLR |
 | heap | LINUX-LIKE | brk delta OK; absolute VA may differ |
 
-**Impact for userspace:** musl malloc/brk, anon mmap; **no** file-backed mmap parity.
+**Impact for userspace:** musl malloc/brk, anon mmap, RELRO-class mprotect on exec
+mappings; **no** file-backed mmap parity.
 
-**Unlocks when VERIFIED:** musl-heavy static binaries, larger heap growth without surprises.
-
-**Next:** capability audit for **brk + mmap + munmap + mprotect** as one Memory ABI gate.
+**Gate:** `make linux-abi-audit-memory-bundle` (brk via full audit; mmap/munmap/mprotect).
 
 ---
 
 ## IPC
 
-**Status:** **LINUX-LIKE**
+**Status:** **VERIFIED**
 
 | Syscall / behaviour | Status | Evidence |
 |----------------------|--------|----------|
-| pipe | LINUX-LIKE | ktest `syscall_pipe`, host tests |
-| dup / dup2 | LINUX-LIKE | ktests partial |
-| poll | LINUX-LIKE | host KTM matrix |
+| pipe | VERIFIED | `linux-abi-audit-pipe` |
+| dup / dup2 | VERIFIED | `linux-abi-audit-dup` |
+| poll | VERIFIED | `linux-abi-audit-poll` |
 | select | TODO | no audit |
 | fcntl (minimal) | LINUX-LIKE | FD_CLOEXEC paths; partial |
 
-**Impact for userspace:** shell pipes rudimentary; **not** reliable poll-driven daemons.
+**Impact for userspace:** shell pipelines, simple poll-driven I/O; `select` and full
+fcntl surface still partial.
 
-**Unlocks when VERIFIED:** shell pipelines, simple client/server over pipe, musl
-`poll`-based I/O multiplexing.
-
-**Next:** **IPC capability bundle** (pipe + dup2 + poll + EAGAIN/EINTR ordering).
+**Next within IPC:** `select` audit or honest ENOSYS policy; pipe `EINTR` ordering smokes.
 
 ---
 
 ## Terminal
 
-**Status:** **LINUX-LIKE**
+**Status:** **VERIFIED**
 
 | Syscall / behaviour | Status | Evidence |
 |----------------------|--------|----------|
-| TTY read/write | LINUX-LIKE | `/dev/console`, ktests `tty_canon_*` |
-| canonical mode | LINUX-LIKE | ash smoke `echo hi` tags |
-| read wake | LINUX-LIKE | D1.13–D1.16 TTY path; smoke harness hardened (D1.21) |
-| termios | LINUX-LIKE | partial; not full Linux termios audit |
-| PTY | TODO | 0.0.2 scope |
+| TTY read/write | VERIFIED | `/dev/console`, ktests `tty_canon_*`, ash smoke |
+| canonical mode | VERIFIED | ash smoke `echo hi` tags |
+| read wake | LINUX-LIKE | D1.13–D1.16 TTY path; `tty_canon_block_wake` ktest (acceptable-diff vs Linux block semantics) |
+| termios / ioctl | VERIFIED | `linux-abi-audit-ioctl` (TCGETS, TIOCGWINSZ, TIOCGPGRP) |
+| PTY | VERIFIED | `linux-abi-audit-pty-multiplex`, `smoke-ext2-startx PROFILE=desktop` |
 
-**Impact for userspace:** runit + BusyBox ash on `/dev/console`; **not** SSH, script(1),
-or full ncurses on PTY.
+**Impact for userspace:** runit + BusyBox ash on `/dev/console`; dual PTY xterm desktop
+smoke; **not** SSH, script(1), or full ncurses termios surface.
 
-**Unlocks when VERIFIED:** interactive shell as default session, getty-class bring-up.
-
-**Next:** **Terminal capability audit** (canonical read + termios subset + wake), then
-PTY in 0.0.2.
+**0.0.2 debt:** full termios ioctls, `select`, canonical block wake parity audit.
 
 ---
 
@@ -212,12 +203,12 @@ rules (`Documentation/releases/IR0_0.0.1_VFS_WRITE_PLAN.md`).
 
 ### FAT16 backend
 
-**Status:** **LINUX-LIKE** (read-only)
+**Status:** **VERIFIED** (rw path on audit disk)
 
 | Item | Status | Gate |
 |------|--------|------|
 | Mount + read | VERIFIED | `smoke-fat16-mount` |
-| Write/create/truncate | **BLOCKED** | First gap: `-EROFS` stubs in `fat16_disk_*`; vfs_write audit still MINIX-only — see `IR0_0.0.1_VFS_WRITE_PLAN.md` |
+| Write/create/truncate | **VERIFIED** | `linux-abi-audit-vfs-write-fat` |
 
 ### EXT2 backend
 
@@ -237,11 +228,19 @@ Scope (future): sockets, loopback, TCP, UDP, DNS.
 
 ---
 
-## Graphics
+## Graphics / tier-2 prep
 
-**Status:** **TODO** (0.0.2+)
+**Status:** **LINUX-LIKE** (fb+evdev prep only); **TinyX BLOCKED**
 
-Scope (future): framebuffer, evdev/input, mmap fb, X11 bootstrap.
+| Item | Status | Gate |
+|------|--------|------|
+| `/dev/fb0` + `/dev/events0` | LINUX-LIKE | `make smoke-desk-xfbdev` (`XSERVER_SELECT mini`) |
+| Out-of-tree desk harness | LINUX-LIKE | `../IR0-desktop`, `make desktop-maintainer-check` |
+| TinyX / Xfbdev guest | **BLOCKED** | `force_tinyx` lab — `#PF`/`CONTEXT_LIFETIME_BROKEN` (see TINYX_LAB.md) |
+| Full X11 / WM product | **TODO** | **0.0.2+** — explicitly **out of 0.0.1 release scope** |
+
+**0.0.1 rule:** tier-2 graphics prep (fb mmap, evdev inject) may smoke green; **no**
+0.0.1 certification claim for TinyX, GTK, or desktop ISO ship.
 
 ---
 
@@ -252,30 +251,37 @@ Scope (future): framebuffer, evdev/input, mmap fb, X11 bootstrap.
 Certified or closing:
 
 - Filesystem RW on VFS/MINIX ✓
+- Process lifecycle ✓
+- Memory ABI ✓ (`linux-abi-audit-memory-bundle`)
+- IPC ✓
+- Terminal ✓ (`linux-abi-audit-ioctl` + PTY)
 - Release gate green: `make release-0.0.1` (phase1 + full `linux-abi-audit` + ash + FAT16
   read smoke)
-- Remaining **LINUX-LIKE** capabilities must not regress to **BLOCKED**; new features
-  wait until Process lifecycle or next priority capability is audit-closed.
+- **TinyX / full X11:** explicitly **deferred** to 0.0.2 (fb+evdev prep only in 0.0.1)
 
 ### 0.0.2 (after base capabilities VERIFIED)
 
-- PTY + full termios
-- poll/select complete
+- TinyX guest stable + desk session product path
+- Full termios / select surface
 - sockets / loopback
-- FAT16 RW (post vfs_write on FAT16)
 - EXT2
 - ELF loader hardening
-- X11 bootstrap
+- Desktop rootfs ISO ship
 
 ---
 
 ## Gates reference
 
 ```bash
-make linux-abi-audit              # all enabled contracts (8 today)
-make linux-abi-audit-vfs-write    # Filesystem RW bundle
+make linux-abi-audit              # all enabled contracts
+make linux-abi-audit-vfs-write    # Filesystem RW bundle (MINIX/tmpfs)
+make linux-abi-audit-vfs-write-fat
+make linux-abi-audit-memory-bundle # brk + mmap + munmap + mprotect
+make linux-abi-audit-ioctl         # console termios subset
+make release-0.0.1-capabilities   # memory + IPC + process + ioctl + terminal smokes
 make smoke-release-0.0.1          # phase1 + audit + ash + FAT16 read
 make release-0.0.1                # + kernel-text-budget
+make desktop-maintainer-check     # optional; requires ../IR0-desktop
 ```
 
 Registry: `scripts/linux_abi/contracts.json` — enable bundles by **capability**, not

@@ -1249,6 +1249,9 @@ int sys_mprotect(void *addr, size_t len, int prot)
   if (!addr || len == 0)
     return -EINVAL;
 
+  if (((uintptr_t)addr & (PAGE_SIZE_4KB - 1)) != 0)
+    return -EINVAL;
+
   if ((prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
     return -EINVAL;
 

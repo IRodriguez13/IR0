@@ -3333,6 +3333,20 @@ linux-abi-audit-munmap: kernel-x64-userspace.iso build-linux-abi-mmap-probe
 		echo "✓ linux-abi-audit-munmap passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-munmap FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
+linux-abi-audit-mprotect: kernel-x64-userspace.iso build-linux-abi-mmap-probe
+	@chmod +x scripts/linux_abi/run_linux_mmap.sh scripts/linux_abi/run_ir0_mmap.sh
+	@python3 scripts/linux_abi_audit.py --contract mprotect
+	@grep -q '^## mprotect — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-mprotect passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-mprotect FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+.PHONY: linux-abi-audit-memory-bundle
+linux-abi-audit-memory-bundle:
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-mmap
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-munmap
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-mprotect
+	@echo "✓ linux-abi-audit-memory-bundle passed (brk via full audit; mmap munmap mprotect)"
+
 linux-abi-audit-process-lifecycle: kernel-x64-userspace.iso
 	@chmod +x scripts/linux_abi/run_linux_process_lifecycle.sh scripts/linux_abi/run_ir0_process_lifecycle.sh
 	@python3 scripts/linux_abi_audit.py --contract process_lifecycle
@@ -3723,9 +3737,11 @@ release-0.0.1: kernel-text-budget smoke-release-0.0.1
 
 .PHONY: release-0.0.1-capabilities
 release-0.0.1-capabilities: kernel-x64-userspace.iso
-	@echo "  RELEASE 0.0.1 capability subset (IPC + process + terminal smokes)"
+	@echo "  RELEASE 0.0.1 capability subset (memory + IPC + process + terminal)"
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-memory-bundle
 	@$(MAKE) -s linux-abi-audit-ipc-bundle
 	@$(MAKE) -s linux-abi-audit-process-lifecycle
+	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-ioctl
 	@$(MAKE) -s smoke-ctrl-c-spam
 	@$(MAKE) -s smoke-sigchld-no-false-logout
 	@$(MAKE) -s smoke-posix-setsid
@@ -3737,7 +3753,7 @@ desktop-maintainer-check:
 	@echo "  DESK maintainer VM checklist (sibling IR0-desktop required)"
 	@if [ ! -d "$(IR0_DESKTOP_ROOT)" ]; then \
 		echo "✗ IR0-desktop not found at $(IR0_DESKTOP_ROOT)" >&2; \
-		echo "  Clone sibling repo or set IR0_DESKTOP_ROOT= then re-run." >&2; \
+		echo "  Run: scripts/bootstrap_ir0_desktop.sh (or clone sibling) then re-run." >&2; \
 		exit 1; \
 	fi
 	@echo "  [ ] make smoke-desk-xfbdev   (TinyX #PF/#GP lab)"

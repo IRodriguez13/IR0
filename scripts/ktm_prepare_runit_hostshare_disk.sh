@@ -17,10 +17,22 @@ fi
 DISK_OUT="${1:?disk output path}"
 
 cd "$ROOT"
-# Product PID1 and rootfs live in the sibling userspace repository.
-US_ROOT="${IR0_USERSPACE_ROOT:-$ROOT/../IR0-userspace}"
-US_STAGE="$US_ROOT/out/stage-bin"
-if [ ! -x "$US_STAGE/runit_hostshare_payload_run" ]; then
+# Product PID1 and rootfs live in the sibling ISD repo (IR0_USERSPACE_ROOT alias).
+US_ROOT="${IR0_USERSPACE_ROOT:-${IR0_ISD_ROOT:-$ROOT/../ISD}}"
+US_STAGE=""
+US_PAUSE_STAGE=""
+for cand in \
+	"$US_ROOT/out/x86_64/smoke/stage-bin" \
+	"$US_ROOT/out/stage-bin" \
+	"$US_ROOT/out/x86_64/product/stage-bin"; do
+	if [ -z "$US_STAGE" ] && [ -x "$cand/runit_hostshare_payload_run" ]; then
+		US_STAGE="$cand"
+	fi
+	if [ -z "$US_PAUSE_STAGE" ] && [ -x "$cand/runit_pause_run" ]; then
+		US_PAUSE_STAGE="$cand"
+	fi
+done
+if [ -z "$US_STAGE" ] || [ ! -x "$US_STAGE/runit_hostshare_payload_run" ]; then
 	echo "✗ missing runit_hostshare_payload_run — run make build-runit" >&2
 	exit 1
 fi
@@ -37,14 +49,14 @@ IR0_ROOT="$ROOT" "$US_ROOT/scripts/inject-smoke-service.sh" --run-only "$DISK_OU
 	"$US_STAGE/runit_hostshare_payload_run"
 
 if [ "$QUIET" = 1 ]; then
-	if [ ! -x "$US_STAGE/runit_pause_run" ]; then
+	if [ -z "$US_PAUSE_STAGE" ] || [ ! -x "$US_PAUSE_STAGE/runit_pause_run" ]; then
 		echo "✗ missing runit_pause_run — run make build-runit" >&2
 		exit 1
 	fi
 	python3 scripts/inject_init_minix.py "$DISK_OUT" \
-		"$US_STAGE/runit_pause_run" etc/runit/sv/console/run
+		"$US_PAUSE_STAGE/runit_pause_run" etc/runit/sv/console/run
 	python3 scripts/inject_init_minix.py "$DISK_OUT" \
-		"$US_STAGE/runit_pause_run" etc/runit/sv/logger/run
+		"$US_PAUSE_STAGE/runit_pause_run" etc/runit/sv/logger/run
 fi
 
 python3 scripts/verify_minix_rootfs.py "$DISK_OUT" /sbin/init /etc/runit/sv/ktm/run
