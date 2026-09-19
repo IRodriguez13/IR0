@@ -66,7 +66,7 @@ ISD builds a finished image; IR0 boots it.
   <img src="scripts/kconfig/assets/isd-x11-desktop.png" alt="IR0 running an upstream X11 desktop with uname output" width="960" />
 </p>
 
-<p align="center"><em>Experimental upstream X11 session on IR0: TinyX/Xfbdev, twm, xterm, Xaw clients, mouse and keyboard. The terminal identifies the tested kernel with <code>uname -a</code>.</em></p>
+<p align="center"><em>Upstream X11 session on IR0 (<code>PROFILE=desktop-console</code>, manual <code>startx</code>): TinyX/Xfbdev, twm, xterm, Xaw clients. Terminal shows <code>uname -a</code> on kernel <code>0.0.1-rc5</code>.</em></p>
 
 <p align="center">
   <img src="./scripts/kconfig/assets/isd-panic-gtk.png" alt="IR0 kernel panic on GTK framebuffer — uptime, fault site, safe shutdown" width="720" />
@@ -82,6 +82,10 @@ cd IR0
 make check-env                    # host diagnostic (or: first-boot asks to install)
 make first-boot PROFILE=minimal   # host deps (ask) + clone ../ISD + image + ISO
 make run PROFILE=minimal          # QEMU GTK → getty → BusyBox ash
+
+# Full desktop userspace (X11 stack) — terminal first, start GUI when you want:
+make first-boot PROFILE=desktop-console
+make run PROFILE=desktop-console   # login → ash; then: startx
 ```
 
 `first-boot` asks before installing host packages (`IR0_DEPS_INSTALL=ask|yes|never`).

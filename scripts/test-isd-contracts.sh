@@ -17,11 +17,14 @@ grep -q 'IR0_ISD_ROOT.*/ISD' scripts/make/isd.mk && ok "A IR0_ISD_ROOT default" 
 grep -q 'bootstrap-isd.sh' scripts/make/isd.mk && ok "A first-boot → bootstrap-isd" || bad "A bootstrap"
 test -x scripts/bootstrap-isd.sh && ok "A bootstrap-isd executable" || bad "A exec"
 grep -q 'PROFILE="$(ISD_PROFILE)"' scripts/make/isd.mk && ok "A PROFILE to ISD make" || bad "A PROFILE prop"
-grep -q 'filter minimal development desktop appliance,$(PROFILE)' scripts/make/isd.mk \
+grep -q 'filter minimal development desktop desktop-console appliance,$(PROFILE)' scripts/make/isd.mk \
 	&& ok "A ISD_PROFILE follows env PROFILE" || bad "A ISD_PROFILE env sync"
 got=$(PROFILE=desktop make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
 [ "$got" = desktop ] && ok "A PROFILE=desktop → ISD_PROFILE=desktop" \
 	|| bad "A PROFILE=desktop got ISD_PROFILE=${got:-empty}"
+got=$(PROFILE=desktop-console make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
+[ "$got" = desktop-console ] && ok "A PROFILE=desktop-console → ISD_PROFILE=desktop-console" \
+	|| bad "A PROFILE=desktop-console got ISD_PROFILE=${got:-empty}"
 grep -q 'ensure-machine-desktop-sync' scripts/make/isd.mk \
 	&& grep -E '^poweron:.*ensure-machine-desktop-sync' scripts/make/isd.mk >/dev/null \
 	&& ok "D poweron syncs desktop userspace when stale" \

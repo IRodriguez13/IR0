@@ -7,7 +7,7 @@
 #   check-isd clone-isd isd-defconfig isdconfig
 #   isd isd-rootfs isd-image isd-clean first-boot
 #
-# Canonical interface: PROFILE=minimal|development|desktop|appliance
+# Canonical interface: PROFILE=minimal|development|desktop|desktop-console|appliance
 # Compat: IR0_PRODUCT_PROFILE, IR0_USERSPACE_ROOT/URL, bootstrap-userspace
 
 ifndef _IR0_ISD_MK
@@ -57,9 +57,11 @@ ISD_PROFILE := minimal
 ifdef IR0_PRODUCT_PROFILE
   ISD_PROFILE := $(IR0_PRODUCT_PROFILE)
 endif
-ifneq ($(filter minimal development desktop appliance,$(PROFILE)),)
+ifneq ($(filter minimal development desktop desktop-console appliance,$(PROFILE)),)
   ISD_PROFILE := $(PROFILE)
 endif
+# Profiles with ext2 /home + full X11 userspace stack.
+ISD_PROFILE_IS_DESKTOP := $(filter $(ISD_PROFILE),desktop desktop-console)
 # Keep IR0_PRODUCT_PROFILE in sync for scripts that still read it.
 IR0_PRODUCT_PROFILE := $(ISD_PROFILE)
 export IR0_PRODUCT_PROFILE
@@ -94,7 +96,7 @@ KMANG_MACHINE_DIR = $(IR0_MACHINE_ROOT)/$(KMANG_ARCH)/$(KMANG_PROFILE)/$(KMANG_M
 
 # Keep comma-bearing QEMU arguments out of $(if ...): make treats their commas
 # as function separators even when the text is shell-quoted.
-ifeq ($(ISD_PROFILE),desktop)
+ifneq ($(ISD_PROFILE_IS_DESKTOP),)
 IR0_MACHINE_HOME_QEMU_DRIVE = -drive "file=$(IR0_MACHINE_HOME_DISK),format=raw,if=ide,index=1"
 IR0_ISD_HOME_QEMU_DRIVE = -drive "file=$(IR0_ISD_HOME_DISK),format=raw,if=ide,index=1"
 endif
@@ -179,7 +181,7 @@ ensure-isd-disk: check-isd
 	@echo "  DISK     $(IR0_ISD_DISK)"
 
 ensure-isd-home: check-isd
-	+@if [ "$(ISD_PROFILE)" = desktop ]; then \
+	+@if [ -n "$(ISD_PROFILE_IS_DESKTOP)" ]; then \
 		$(IR0_ISD_MAKE) image-ext2-home; \
 		test -f "$(IR0_ISD_HOME_DISK)"; \
 	fi
@@ -208,7 +210,7 @@ machine-create: ensure-isd-disk ensure-isd-home
 	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create
-	@if [ "$(ISD_PROFILE)" = desktop ]; then \
+	@if [ -n "$(ISD_PROFILE_IS_DESKTOP)" ]; then \
 		IR0_MACHINE_BASE_DISK="$(IR0_ISD_HOME_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_HOME_DISK)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create; \
@@ -280,7 +282,7 @@ usmang: check-isd
 	@chmod +x scripts/userspace_manager.py
 	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
 		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" summary
-	@if [ "$(ISD_PROFILE)" = "desktop" ]; then \
+	@if [ -n "$(ISD_PROFILE_IS_DESKTOP)" ]; then \
 		echo "---"; \
 		python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
 			--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop; \
@@ -307,8 +309,8 @@ machine-update-kernel: check-isd
 	@echo "        (make kmang → i, or make kernel-manager-install)"
 
 machine-update-userspace: check-isd
-	@if [ "$(ISD_PROFILE)" != desktop ]; then \
-		echo "✗ machine-update-userspace currently requires PROFILE=desktop"; exit 2; \
+	@if [ -z "$(ISD_PROFILE_IS_DESKTOP)" ]; then \
+		echo "✗ machine-update-userspace requires PROFILE=desktop or desktop-console"; exit 2; \
 	fi
 	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
 		echo "✗ machine $(IR0_MACHINE) is running; power it off cleanly first"; \
@@ -324,12 +326,12 @@ machine-update-userspace: check-isd
 	@touch "$(IR0_MACHINE_DIR)/.desktop-sync-stamp"
 
 ensure-machine-desktop-sync: check-isd
-	@if [ "$(ISD_PROFILE)" != desktop ]; then exit 0; fi
+	@if [ -z "$(ISD_PROFILE_IS_DESKTOP)" ]; then exit 0; fi
 	@if [ ! -f "$(IR0_MACHINE_DISK)" ]; then exit 0; fi
 	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
 		echo "note: machine running; skip desktop userspace sync"; exit 0; \
 	fi
-	@stamp="$(IR0_ISD_ROOT)/out/$(ISD_ARCH)/stamps/rootfs/desktop"; \
+	@stamp="$(IR0_ISD_ROOT)/out/$(ISD_ARCH)/stamps/rootfs/$(ISD_PROFILE)"; \
 	sync_stamp="$(IR0_MACHINE_DIR)/.desktop-sync-stamp"; \
 	if [ ! -f "$$sync_stamp" ] || [ "$$stamp" -nt "$$sync_stamp" ]; then \
 		echo "  SYNC     ISD desktop rootfs → $(IR0_MACHINE_DISK)"; \
