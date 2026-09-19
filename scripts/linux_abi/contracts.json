@@ -290,7 +290,7 @@
       "id": "kill_sigterm",
       "enabled": true,
       "title": "SIGTERM default action and wait status",
-      "status_doc": "LINUX-LIKE",
+      "status_doc": "VERIFIED",
       "ktest": "kill_sigterm_wait_status",
       "expected_status": 15
     }

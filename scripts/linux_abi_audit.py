@@ -343,16 +343,15 @@ def run_host_brk_test() -> bool | None:
 def run_ktest_brk(name: str) -> bool | None:
     if os.environ.get("LINUX_ABI_SKIP_KTEST"):
         return None
+    ktest_log = Path("/tmp/ktest.log")
+    reuse = reuse_ktest_evidence(ktest_log, name)
+    if reuse is not None:
+        return reuse
     rc = run_cmd(["make", "-s", "kernel-tests"])
-    log = Path("/tmp/ktest.log")
-    if not log.is_file():
-        return False if rc != 0 else None
-    text = log.read_text(errors="replace")
-    if f"[KTEST] {name} ... PASS" in text:
-        return True
-    if f"[KTEST] {name} ... FAIL" in text:
-        return False
-    return rc == 0
+    reuse = reuse_ktest_evidence(ktest_log, name)
+    if reuse is not None:
+        return reuse
+    return False if rc != 0 else None
 
 
 def reuse_ktest_evidence(ktest_log: Path, name: str) -> bool | None:

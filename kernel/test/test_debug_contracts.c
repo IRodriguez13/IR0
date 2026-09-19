@@ -18,6 +18,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
+#include <ir0/stat.h>
 #include <ir0/vfs.h>
 #include <string.h>
 
@@ -52,6 +53,23 @@ static int contains_text(const char *haystack, const char *needle)
 		p++;
 	}
 	return 0;
+}
+
+static void ktest_ensure_mountpoint_dir(const char *path)
+{
+	stat_t st;
+	int mk;
+
+	if (vfs_stat(path, &st) == 0 && !S_ISDIR(st.st_mode))
+		(void)vfs_unlink(path);
+
+	mk = vfs_mkdir(path, 0755);
+	KASSERT(mk == 0 || mk == -EEXIST);
+	if (mk == -EEXIST)
+	{
+		KASSERT(vfs_stat(path, &st) == 0);
+		KASSERT(S_ISDIR(st.st_mode));
+	}
 }
 
 void ktest_proc_blockdevices_contract(void)
@@ -254,8 +272,7 @@ void ktest_mount_tmpfs_contract(void)
 {
 	KTEST_BEGIN("mount_tmpfs_contract");
 
-	int64_t mk = sys_mkdir("/mntkt", 0755);
-	KASSERT(mk == 0 || mk == -EEXIST);
+	ktest_ensure_mountpoint_dir("/mntkt");
 
 	int64_t ret = sys_mount("none", "/mntkt", "tmpfs", 0, NULL);
 	KASSERT_EQ(ret, 0);
@@ -290,12 +307,9 @@ void ktest_mount_multi_fs_contract(void)
 {
 	KTEST_BEGIN("mount_multi_fs_contract");
 
-	int64_t mk_mnt = sys_mkdir("/mnt", 0755);
-	KASSERT(mk_mnt == 0 || mk_mnt == -EEXIST);
-	int64_t mk_simple = sys_mkdir("/mnt/simple", 0755);
-	KASSERT(mk_simple == 0 || mk_simple == -EEXIST);
-	int64_t mk_fat = sys_mkdir("/mnt/fat", 0755);
-	KASSERT(mk_fat == 0 || mk_fat == -EEXIST);
+	ktest_ensure_mountpoint_dir("/mnt");
+	ktest_ensure_mountpoint_dir("/mnt/simple");
+	ktest_ensure_mountpoint_dir("/mnt/fat");
 
 	int64_t ms = sys_mount("/dev/simple0", "/mnt/simple", "simplefs", 0, NULL);
 	KASSERT(ms == 0 || ms == -EBUSY);
@@ -335,8 +349,8 @@ void ktest_mount_umount_remount_contract(void)
 {
 	KTEST_BEGIN("mount_umount_remount_contract");
 
-	int64_t mk = sys_mkdir("/mnt/um", 0755);
-	KASSERT(mk == 0 || mk == -EEXIST);
+	ktest_ensure_mountpoint_dir("/mnt/um");
+	ktest_ensure_mountpoint_dir("/mnt/umfat");
 
 	int64_t m1 = sys_mount("/dev/simple0", "/mnt/um", "simplefs", 0, NULL);
 	if (m1 == -EBUSY)
@@ -351,9 +365,6 @@ void ktest_mount_umount_remount_contract(void)
 
 	int64_t m2 = sys_mount("/dev/simple0", "/mnt/um", "simplefs", 0, NULL);
 	KASSERT_EQ(m2, 0);
-
-	int64_t mk_fat = sys_mkdir("/mnt/umfat", 0755);
-	KASSERT(mk_fat == 0 || mk_fat == -EEXIST);
 
 	int64_t mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
 	if (mf1 == -EBUSY)
@@ -384,14 +395,12 @@ void ktest_mount_longest_prefix_contract(void)
 {
 	KTEST_BEGIN("mount_longest_prefix_contract");
 
-	int64_t mk_lp = sys_mkdir("/mnt/lp", 0755);
-	KASSERT(mk_lp == 0 || mk_lp == -EEXIST);
+	ktest_ensure_mountpoint_dir("/mnt/lp");
 
 	int64_t mt = sys_mount("none", "/mnt/lp", "tmpfs", 0, NULL);
 	KASSERT(mt == 0 || mt == -EBUSY);
 
-	int64_t mk_sub = sys_mkdir("/mnt/lp/sub", 0755);
-	KASSERT(mk_sub == 0 || mk_sub == -EEXIST);
+	ktest_ensure_mountpoint_dir("/mnt/lp/sub");
 
 	int64_t ms = sys_mount("/dev/simplelp", "/mnt/lp/sub", "simplefs", 0, NULL);
 	KASSERT(ms == 0 || ms == -EBUSY);

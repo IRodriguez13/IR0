@@ -3736,7 +3736,7 @@ release-0.0.1: kernel-text-budget smoke-release-0.0.1
 	@echo "✓ release-0.0.1 gate passed (kernel-text-budget + smoke-release-0.0.1)"
 
 .PHONY: release-0.0.1-capabilities
-release-0.0.1-capabilities: kernel-x64-userspace.iso
+release-0.0.1-capabilities: kernel-x64.bin kernel-x64-userspace.iso
 	@echo "  RELEASE 0.0.1 capability subset (memory + IPC + process + terminal)"
 	@LINUX_ABI_SKIP_KTEST=1 $(MAKE) -s linux-abi-audit-memory-bundle
 	@$(MAKE) -s linux-abi-audit-ipc-bundle

@@ -117,6 +117,7 @@ backends).
 | execve | VERIFIED | `linux-abi-audit-execve` + lifecycle bundle |
 | wait4 | VERIFIED | `linux-abi-audit-wait4`, lifecycle bundle |
 | exit | VERIFIED | lifecycle bundle ktest evidence |
+| kill (SIGTERM) | VERIFIED | `linux-abi-audit-kill-sigterm` + ktest `kill_sigterm_wait_status` |
 | signals (minimal) | LINUX-LIKE | host `test_signal_rt_sigaction_abi`; sigreturn contract VERIFIED |
 | argv / envp / auxv | LINUX-LIKE | ELF loader smokes; no dedicated audit |
 
