@@ -86,7 +86,7 @@ Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-rootf
 | `make man TOPIC=boot` | `man IR0-boot` without requiring MANPATH setup |
 | `make mandocs` / `mandocs-en` | Build manuals (interactive / one language) |
 | `make mandocs-view` | Open installed / built `IR0-krnl` |
-| `make ai-dev-rules-install` | Install AI rules into gitignored `.cursor/` |
+| `make ai-dev-rules-install` | Install tracked rules into gitignored `.cursor/` |
 
 ### Developer tooling
 
