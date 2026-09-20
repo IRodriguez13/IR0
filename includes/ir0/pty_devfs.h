@@ -28,7 +28,7 @@
  * nodes in fs/devfs.c — enforced by scripts/architecture_guard.py.
  *
  * Static map (fs/devfs.c): 1-17 builtins, 40-47 stdio/tty/serial/event0,
- * 20-23 disk wholes; pts use 48..55 only.
+ * 20-23 disk wholes; pts use 48..55; /dev/ktm uses DEVFS_KTM_DEVICE_ID (56).
  */
 #define DEVFS_PTS0_DEVICE_ID  48u
 #define DEVFS_PTY_MAX           8

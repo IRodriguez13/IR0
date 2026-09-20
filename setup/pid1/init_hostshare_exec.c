@@ -32,7 +32,7 @@ int main(int argc, char **argv, char **envp)
 	(void)mkdir("/mnt", 0755);
 	(void)mkdir("/mnt/host", 0755);
 
-	if (mount("ir0share", "/mnt/host", "9p", 0, NULL) != 0)
+	if (mount("ir0share", "/mnt/host", "9p", 0, NULL) != 0 && errno != EBUSY)
 	{
 		say("HOSTSHARE_EXEC_MOUNT_FAIL\n");
 		return 2;

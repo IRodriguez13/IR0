@@ -83,6 +83,12 @@ typedef struct devfs_text_snap
 #define DEVFS_ID_KMSG 5u
 #define DEVFS_ID_NET  8u
 
+/*
+ * /dev/ktm (CONFIG_KTM_USERDEV). Must sit after the fixed PTY slave block
+ * (DEVFS_PTS0_DEVICE_ID .. DEVFS_PTY_ID_END-1 in pty_devfs.h).
+ */
+#define DEVFS_KTM_DEVICE_ID 56u
+
 int devfs_node_wants_text_snap(uint32_t device_id);
 devfs_text_snap_t *devfs_text_snap_capture(uint32_t device_id);
 void devfs_text_snap_acquire(devfs_text_snap_t *snap);

@@ -21,8 +21,6 @@
 
 #if defined(CONFIG_KTM_USERDEV) && CONFIG_KTM_USERDEV
 
-#define KTM_DEV_ID 48u
-
 static int g_registered;
 
 static int64_t ktm_dev_read(devfs_entry_t *entry, void *buf, size_t count,
@@ -263,7 +261,7 @@ static const devfs_ops_t ktm_ops = {
 };
 
 static devfs_node_t dev_ktm = {
-	.entry = { .name = "ktm", .mode = 0600, .device_id = KTM_DEV_ID },
+	.entry = { .name = "ktm", .mode = 0600, .device_id = DEVFS_KTM_DEVICE_ID },
 	.ops = &ktm_ops,
 	.ref_count = 0,
 };
@@ -272,8 +270,12 @@ void ktm_userdev_register(void)
 {
 	if (g_registered)
 		return;
-	if (devfs_register_node(&dev_ktm) == 0)
-		g_registered = 1;
+	if (devfs_register_node(&dev_ktm) != 0)
+	{
+		klog_print("KTM_USERDEV_REGISTER_FAIL\n");
+		return;
+	}
+	g_registered = 1;
 }
 
 #else /* !CONFIG_KTM_USERDEV */
