@@ -41,10 +41,7 @@ int bt_sysfs_hci0_address_read(char *buf, size_t count)
 
     struct hci_device *hdev = hci_get_device();
     if (!hdev)
-    {
-        int n = snprintf(buf, count, "00:00:00:00:00:00\n");
-        return (n < 0 || (size_t)n >= count) ? (int)(count - 1) : n;
-    }
+        return -ENODEV;
 
     /*
      * BD_ADDR is little-endian in HCI; display as usual MSB first (colon-separated).

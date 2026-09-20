@@ -45,6 +45,8 @@ int sys_kernel_version_read_reg(char *buf, size_t count);
 int sys_kernel_osrelease_read_reg(char *buf, size_t count);
 int sys_kernel_max_processes_read_reg(char *buf, size_t count);
 int sys_kernel_max_processes_write_reg(const char *buf, size_t count);
+uint32_t sys_kernel_max_processes_limit(void);
+int sys_kernel_process_live_count(void);
 /* /sys/kernel/panic — read: help text; write: force a kernel panic (test). */
 int sys_kernel_panic_read_reg(char *buf, size_t count);
 int sys_kernel_panic_write_reg(const char *buf, size_t count);

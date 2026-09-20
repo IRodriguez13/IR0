@@ -16,6 +16,7 @@
 #include <ir0/heartfs.h>
 #include <ir0/sysfs.h>
 #include <ir0/procfs.h>
+#include <ir0/process.h>
 #include <ir0/fd_types.h>
 #include <ir0/arch_port.h>
 #include <ir0/power_manag.h>
@@ -538,6 +539,9 @@ static int proc_pid_file_match(const char *path, void **out_ctx)
 
     if (proc_pid_file_parse_fd_link(path, &pid, &fd_num) == 0)
     {
+        if (pid > 0 && !process_find_by_pid(pid))
+            return -ENOENT;
+
         ctx = proc_pid_file_ctx_alloc();
         if (!ctx)
             return -ENFILE;
@@ -558,6 +562,9 @@ static int proc_pid_file_match(const char *path, void **out_ctx)
         strcmp(name, "maps") != 0 && strcmp(name, "statm") != 0 &&
         strcmp(name, "environ") != 0 &&
         !(strcmp(name, "stat") == 0 && pid > 0))
+        return -ENOENT;
+
+    if (pid > 0 && !process_find_by_pid(pid))
         return -ENOENT;
 
     ctx = proc_pid_file_ctx_alloc();
