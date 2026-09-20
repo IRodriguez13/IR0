@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/syscalls_kernel.h>
+#include <kernel/syscalls.h>
 #include "mm_syscalls.h"
 #include "syscalls_glue.h"
 #include <ir0/abi/mmap_contract.h>

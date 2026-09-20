@@ -14,7 +14,7 @@
 
 #include "process_syscalls.h"
 #include "syscalls_glue.h"
-#include <ir0/syscalls_kernel.h>
+#include <kernel/syscalls.h>
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>
 #include <ir0/process.h>
@@ -172,6 +172,11 @@ static int cred_id_allowed(uint32_t want, uint32_t real, uint32_t eff,
 			   uint32_t saved)
 {
 	return want == real || want == eff || want == saved;
+}
+
+int64_t sys_setreuid(uid_t ruid, uid_t euid)
+{
+	return sys_setresuid(ruid, euid, (uid_t)-1);
 }
 
 int64_t sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)

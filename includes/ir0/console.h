@@ -139,4 +139,5 @@ int ir0_console_set_fg_pgid(int32_t pgid);
 void ir0_console_clear_fg_pgid(int32_t pgid, int32_t exiting_pid);
 /* TIOCSCTTY on the console: session-leader check + foreground pgrp bind. */
 int ir0_console_ioctl_set_ctty(void);
+void ir0_console_clear_ctty_session(int32_t sid);
 int32_t ir0_console_get_fg_pgid(void);

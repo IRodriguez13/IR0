@@ -15,7 +15,7 @@
 #include "io_syscalls.h"
 #include "syscalls_glue.h"
 #include "epoll_syscalls.h"
-#include <ir0/syscalls_kernel.h>
+#include <kernel/syscalls.h>
 #include <ir0/process.h>
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>
@@ -939,9 +939,12 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 {
 	unsigned int i;
 	int slot = -1;
+	int ret = 0;
 
 	if (!proc || !pipe)
 		return -EINVAL;
+
+	pipe_wait_enter(pipe);
 
 	if (!waiting_read)
 	{
@@ -968,7 +971,8 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 		 */
 		enable_interrupts();
 		sched_schedule_next();
-		return 0;
+		ret = 0;
+		goto out;
 	}
 
 	pipe_waiters[slot].proc = proc;
@@ -1020,7 +1024,8 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 				pipe_waiters[slot].waiting_read = 0;
 				pipe_waiters[slot].write_need = 0;
 			}
-			return -EINTR;
+			ret = -EINTR;
+			goto out;
 		}
 
 		if (waiting_read)
@@ -1059,7 +1064,8 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 				pipe_waiters[slot].waiting_read = 0;
 				pipe_waiters[slot].write_need = 0;
 			}
-			return -EINTR;
+			ret = -EINTR;
+			goto out;
 		}
 
 		if (proc->state != PROCESS_BLOCKED)
@@ -1078,7 +1084,10 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 		pipe_waiters[slot].waiting_read = 0;
 		pipe_waiters[slot].write_need = 0;
 	}
-	return 0;
+
+out:
+	pipe_wait_leave(pipe);
+	return ret;
 }
 
 void pipe_wake_all(pipe_t *pipe)
@@ -1447,12 +1456,7 @@ int64_t sys_close(int fd)
 
   ret = ir0_fd_get(current_process, fd, &h);
   if (ret != 0)
-  {
-    /* Legacy host/registry virtual fds (PSEUDO_FS_*_FD_BASE). */
-    if (pseudo_fs_find_by_fd(fd))
-      return pseudo_fs_close_fd(fd);
     return ret;
-  }
   e = h.entry;
 
   if (e->is_pseudo && e->vfs_file)
@@ -1522,7 +1526,7 @@ int64_t sys_close(int fd)
   }
   else if (e->is_epoll && e->vfs_file)
   {
-    epoll_release_fd(e->vfs_file);
+    epoll_release(e->vfs_file);
     e->vfs_file = NULL;
     e->is_epoll = false;
   }
@@ -1789,6 +1793,7 @@ int64_t sys_dup2(int oldfd, int newfd)
     fd_table[newfd].is_memfd = false;
     fd_table[newfd].is_eventfd = false;
     fd_table[newfd].is_timerfd = false;
+    fd_table[newfd].is_epoll = false;
     fd_entry_devfs_unbind(&fd_table[newfd]);
     fd_slot_note_destroyed();
   }
@@ -1813,6 +1818,7 @@ int64_t sys_dup2(int oldfd, int newfd)
   fd_table[newfd].is_memfd = fd_table[oldfd].is_memfd;
   fd_table[newfd].is_eventfd = fd_table[oldfd].is_eventfd;
   fd_table[newfd].is_timerfd = fd_table[oldfd].is_timerfd;
+  fd_table[newfd].is_epoll = fd_table[oldfd].is_epoll;
 
   /*
    * Regular files now share one open file description (vfs_file with refcount),
@@ -1860,6 +1866,11 @@ int64_t sys_dup2(int oldfd, int newfd)
   else if (fd_table[oldfd].is_eventfd && fd_table[oldfd].vfs_file)
   {
     ir0_eventfd_acquire((struct ir0_eventfd *)fd_table[oldfd].vfs_file);
+    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
+  }
+  else if (fd_table[oldfd].is_epoll && fd_table[oldfd].vfs_file)
+  {
+    epoll_acquire(fd_table[oldfd].vfs_file);
     fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
   }
   else if (fd_table[oldfd].is_timerfd && fd_table[oldfd].vfs_file)

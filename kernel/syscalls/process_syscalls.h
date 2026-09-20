@@ -31,6 +31,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize);
 int64_t sys_getgroups(int size, gid_t *list);
 int64_t sys_setgroups(size_t size, const gid_t *list);
+int64_t sys_setreuid(uid_t ruid, uid_t euid);
 int64_t sys_setresuid(uid_t ruid, uid_t euid, uid_t suid);
 int64_t sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid);
 int64_t sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid);

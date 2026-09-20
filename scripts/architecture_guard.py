@@ -24,11 +24,12 @@ Checks:
     arch_fork facades).
 15) includes/ir0/*.h must not #include <drivers/...> (facade seal).
 16) includes/ir0/*.h must not #include <arch/...> or <sched/...> (facade seal).
-17) process_t.page_directory must not be touched outside process.h /
+17) includes/ir0/*.h must not #include <kernel/...> except ARCH-STAB allowlist (6 passthrough headers).
+18) process_t.page_directory must not be touched outside process.h /
     mm_struct.c — use process_pgd() / process_set_pgd() (mm->page_directory OK).
-18) kernel/lib I1–I2: selected syscall/MM/IPC helpers must not remain as .c under includes/ir0/.
-19) Portable task setup must not construct x86 RFLAGS directly; use task_ops.
-20) Process lifecycle C must not select an ISA with compiler predefines.
+19) kernel/lib I1–I2: selected syscall/MM/IPC helpers must not remain as .c under includes/ir0/.
+20) Portable task setup must not construct x86 RFLAGS directly; use task_ops.
+21) Process lifecycle C must not select an ISA with compiler predefines.
 """
 
 from pathlib import Path
@@ -111,6 +112,14 @@ PORTABLE_MM_NET_ARCH_INCLUDE_RE = re.compile(
 )
 
 KERNEL_HEADER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]kernel/')
+
+# ARCH-STAB: thin passthrough headers pending API-only split (see DECOUPLING.md).
+FACADE_KERNEL_INCLUDE_ALLOWLIST = frozenset(
+    {
+        # process_t still leaks from kernel/process.h — split in a later oleada.
+        "includes/ir0/process.h",
+    }
+)
 
 DRIVER_BLOCK_DEV_RAW_INCLUDE_RE = re.compile(
     r'^\s*#\s*include\s*[<"]drivers/storage/block_dev\.h[>"]'
@@ -297,6 +306,29 @@ def check_facade_no_drivers_include():
             if FACADE_SCHED_INCLUDE_RE.search(line):
                 errors.append(
                     f"[facade-no-sched-include] {rel}:{idx}: {line.strip()}"
+                )
+    return errors
+
+
+def check_facade_no_kernel_include():
+    """includes/ir0/*.h must not passthrough #include <kernel/...> (allowlist only)."""
+    errors = []
+    base = ROOT / "includes" / "ir0"
+    if not base.is_dir():
+        return errors
+    for fpath in base.rglob("*.h"):
+        try:
+            rel_s = fpath.relative_to(ROOT).as_posix()
+            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception as exc:
+            errors.append(f"[read-error] {fpath}: {exc}")
+            continue
+        if rel_s in FACADE_KERNEL_INCLUDE_ALLOWLIST:
+            continue
+        for idx, line in enumerate(lines, start=1):
+            if KERNEL_HEADER_INCLUDE_RE.search(line):
+                errors.append(
+                    f"[facade-no-kernel-include] {rel_s}:{idx}: {line.strip()}"
                 )
     return errors
 
@@ -1759,6 +1791,7 @@ def main():
     errors.extend(check_forbidden_includes())
     errors.extend(check_facades())
     errors.extend(check_facade_no_drivers_include())
+    errors.extend(check_facade_no_kernel_include())
     errors.extend(check_arm64_scaffold())
     errors.extend(check_interrupt_arch_portable())
     errors.extend(check_fs_no_direct_arch())

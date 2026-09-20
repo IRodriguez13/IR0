@@ -7,11 +7,41 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: kernel.h
- * Description: IR0 — core kernel globals facade (implementation in kernel/)
+ * Description: IR0 core kernel globals and bring-up entry points.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
-#include <kernel/kernel.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+/* Main kernel entry point. multiboot_info is physical addr of Multiboot info (ebx), may be 0. */
+void kmain(uint32_t multiboot_info);
+
+void gdt_install(void);
+void setup_tss(void);
+void logging_init(void);
+void ps2_init(void);
+void keyboard_init(void);
+void keyboard_poll_ps2(void);
+void simple_alloc_init(void);
+void ata_init(void);
+int vfs_init_with_minix(void);
+int vfs_init_root(void);
+void process_init(void);
+int clock_system_init(void);
+void syscalls_init(void);
+void idt_init64(void);
+void idt_load64(void);
+void pic_remap64(void);
+void pic_unmask_irq(uint8_t irq);
+void serial_init(void);
+void heap_init(void);
+bool sb16_init(void);
+
+void kernel_idle_poll(void);
+void kernel_idle_poll_nosched(void);
+void kernel_idle_loop(void);

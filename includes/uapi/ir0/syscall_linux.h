@@ -137,6 +137,7 @@
 #define __NR_getpgid      121
 #define __NR_getsid       124
 #define __NR_setgroups    116
+#define __NR_setreuid      113
 #define __NR_setresuid    117
 #define __NR_getresuid    118
 #define __NR_setresgid    119

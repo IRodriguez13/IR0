@@ -51,6 +51,7 @@ static int tty_need_resched;
 static int tty_sleep_depth;
 /* Foreground pgrp for /dev/console (TIOCSPGRP); 0 → signal TTY waiters only. */
 static int32_t console_fg_pgid;
+static pid_t console_ctty_sid;
 /* Soft winsize from TIOCSWINSZ (0 → report renderer geometry). */
 static uint16_t soft_ws_row;
 static uint16_t soft_ws_col;
@@ -153,6 +154,12 @@ void ir0_console_clear_fg_pgid(int32_t pgid, int32_t exiting_pid)
 	console_fg_pgid = 0;
 }
 
+void ir0_console_clear_ctty_session(int32_t sid)
+{
+	if (sid > 0 && console_ctty_sid == (pid_t)sid)
+		console_ctty_sid = 0;
+}
+
 int ir0_console_ioctl_set_ctty(void)
 {
 	int32_t pgid;
@@ -160,17 +167,14 @@ int ir0_console_ioctl_set_ctty(void)
 	if (!current_process)
 		return -ESRCH;
 
-	/*
-	 * Linux TIOCSCTTY requires the caller to be a session leader; the
-	 * console is the only tty of the boot session, so binding it means
-	 * adopting the caller's process group as foreground.
-	 *
-	 * ARCH_DEBT: the console keeps no per-session ctty state, so the
-	 * "already controlling terminal of another session" case (-EPERM
-	 * without the force argument) cannot be detected yet.
-	 */
 	if (current_process->sid != (pid_t)current_process->task.pid)
 		return -EPERM;
+
+	if (console_ctty_sid != 0 &&
+	    console_ctty_sid != current_process->sid)
+		return -EPERM;
+
+	console_ctty_sid = current_process->sid;
 
 	pgid = current_process->pgid > 0 ? (int32_t)current_process->pgid
 					: (int32_t)current_process->task.pid;

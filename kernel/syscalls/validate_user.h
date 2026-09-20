@@ -16,5 +16,8 @@
 
 #include <stddef.h>
 
+/* Must match VFS_PATH_MAX in fs/vfs.h. */
+#define IR0_VALIDATE_PATH_MAX 256
+
 int validate_userspace_string(const char *str, size_t max_len);
 int validate_userspace_buffer(const void *buf, size_t size);

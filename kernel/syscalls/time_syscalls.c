@@ -14,7 +14,7 @@
 
 #include "time_syscalls.h"
 #include "syscalls_glue.h"
-#include <ir0/syscalls_kernel.h>
+#include <kernel/syscalls.h>
 #include <ir0/process.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>

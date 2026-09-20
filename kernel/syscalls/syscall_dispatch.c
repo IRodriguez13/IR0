@@ -185,6 +185,7 @@ WRAP4(sys_rt_sigprocmask, int, const sigset_t *, sigset_t *, size_t)
 WRAP2(sys_rt_sigsuspend, const sigset_t *, size_t)
 WRAP2(sys_getgroups, int, gid_t *)
 WRAP2(sys_setgroups, size_t, const gid_t *)
+WRAP2(sys_setreuid, uid_t, uid_t)
 WRAP3(sys_setresuid, uid_t, uid_t, uid_t)
 WRAP3(sys_getresuid, uid_t *, uid_t *, uid_t *)
 WRAP3(sys_setresgid, gid_t, gid_t, gid_t)
@@ -351,6 +352,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_setgid]         = wrap_sys_setgid;
   syscall_table_rw[__NR_getgroups]      = wrap_sys_getgroups;
   syscall_table_rw[__NR_setgroups]      = wrap_sys_setgroups;
+  syscall_table_rw[__NR_setreuid]       = wrap_sys_setreuid;
   syscall_table_rw[__NR_setresuid]      = wrap_sys_setresuid;
   syscall_table_rw[__NR_getresuid]      = wrap_sys_getresuid;
   syscall_table_rw[__NR_setresgid]      = wrap_sys_setresgid;
