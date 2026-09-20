@@ -117,6 +117,7 @@ time_t clock_get_current_time(void);
 int clock_set_current_time(time_t time);
 int clock_realtime_available(void);
 uint64_t clock_get_idle_milliseconds(void);
+void clock_get_cpu_accounting(uint64_t *user, uint64_t *system, uint64_t *idle);
 void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
 		       uint32_t *load15_x100, unsigned *runnable,
 		       unsigned *nprocs, int *last_pid);

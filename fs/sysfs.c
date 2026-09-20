@@ -34,6 +34,7 @@
 
 #include "procfs.h"
 #include <ir0/sysfs.h>
+#include <ir0/process.h>
 #include <ir0/stat.h>
 #include <ir0/kmem.h>
 #include <ir0/version.h>
@@ -237,6 +238,21 @@ int sys_kernel_max_processes_read_reg(char *buf, size_t count)
     return len;
 }
 
+uint32_t sys_kernel_max_processes_limit(void)
+{
+    return sys_max_processes;
+}
+
+int sys_kernel_process_live_count(void)
+{
+    process_t *p;
+    int n = 0;
+
+    for (p = process_list; p; p = p->next)
+        n++;
+    return n;
+}
+
 /**
  * sys_kernel_max_processes_write - Write maximum processes to /sys/kernel/max_processes
  * @buf: Buffer containing new value
@@ -279,6 +295,9 @@ int sys_kernel_max_processes_write_reg(const char *buf, size_t count)
     
     /* Validate range */
     if (new_value < 1 || new_value > 65535)
+        return -EINVAL;
+
+    if (new_value < (uint32_t)sys_kernel_process_live_count())
         return -EINVAL;
     
     sys_max_processes = new_value;
@@ -418,38 +437,10 @@ int sys_devices_cpu_online_read_reg(char *buf, size_t count, unsigned cpu)
 
 int sys_devices_cpu_online_write_reg(unsigned cpu, const char *buf, size_t count)
 {
-    char value_buf[32];
-    size_t copy_len;
-
-    if (!buf || count == 0)
-        return 0;
-    if (cpu >= SYS_MAX_CPUS)
-        return -EINVAL;
-
-    copy_len = (count < sizeof(value_buf) - 1) ? count : (sizeof(value_buf) - 1);
-    memcpy(value_buf, buf, copy_len);
-    value_buf[copy_len] = '\0';
-
-    while (copy_len > 0 && (value_buf[copy_len - 1] == '\n' ||
-                            value_buf[copy_len - 1] == '\r' ||
-                            value_buf[copy_len - 1] == ' '))
-    {
-        copy_len--;
-        value_buf[copy_len] = '\0';
-    }
-
-    if (copy_len == 1 && value_buf[0] == '0')
-    {
-        sys_devices_cpu_online[cpu] = 0;
-        return (int)count;
-    }
-    if (copy_len == 1 && value_buf[0] == '1')
-    {
-        sys_devices_cpu_online[cpu] = 1;
-        return (int)count;
-    }
-
-    return -EINVAL;
+    (void)cpu;
+    (void)buf;
+    (void)count;
+    return -EOPNOTSUPP;
 }
 
 /*
@@ -910,38 +901,23 @@ int sysfs_open(const char *path, int flags)
     return -ENOENT;
 }
 
-/* Read from /sys — LEGACY global virtual fd only; syscall uses fd_table binds. */
+/* Read from /sys — syscall path uses process fd_table is_pseudo binds. */
 int sysfs_read(int fd, char *buf, size_t count, off_t offset)
 {
-    int64_t pr;
-
-    if (!buf || count == 0)
-        return 0;
-
-    if (pseudo_fs_find_by_fd(fd))
-    {
-        pr = pseudo_fs_read_fd(fd, buf, count, offset);
-        return (int)pr;
-    }
-
-    return -EBADF;
+	(void)fd;
+	(void)buf;
+	(void)count;
+	(void)offset;
+	return -EBADF;
 }
 
-/* Write to /sys — LEGACY global virtual fd only; syscall uses fd_table binds. */
+/* Write to /sys — syscall path uses process fd_table is_pseudo binds. */
 int sysfs_write(int fd, const char *buf, size_t count)
 {
-    int64_t pw;
-
-    if (!buf || count == 0)
-        return 0;
-
-    if (pseudo_fs_find_by_fd(fd))
-    {
-        pw = pseudo_fs_write_fd(fd, buf, count);
-        return (int)pw;
-    }
-
-    return -EBADF;
+	(void)fd;
+	(void)buf;
+	(void)count;
+	return -EBADF;
 }
 
 /* Get stat for /sys file */

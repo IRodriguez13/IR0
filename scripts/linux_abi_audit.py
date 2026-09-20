@@ -41,6 +41,7 @@ from compare import (  # noqa: E402
     compare_read,
     compare_sigreturn_blocked_syscall,
     compare_stat,
+    compare_proc_stat,
     compare_vfs_write,
     compare_wait4,
     compare_wait4_wnohang,
@@ -166,6 +167,13 @@ def build_stat_probe(report_dir: Path) -> Path:
     return build_static_probe(
         report_dir / "stat_probe",
         ROOT / "scripts" / "linux_abi" / "workloads" / "stat_probe.c",
+    )
+
+
+def build_proc_stat_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "proc_stat_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "proc_stat_probe.c",
     )
 
 
@@ -878,6 +886,35 @@ def audit_stat(report_dir: Path, cfg: dict) -> CompareResult:
     return compare_stat(linux_trace, ir0_trace, enoent_errno, ebadf_errno, host_ok)
 
 
+def audit_proc_stat(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "proc_stat"
+    ir0_dir = report_dir / "ir0" / "proc_stat"
+
+    build_proc_stat_probe(report_dir)
+
+    sh_linux = ROOT / "scripts" / "linux_abi" / "run_linux_proc_stat.sh"
+    sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_proc_stat.sh"
+
+    if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
+        return CompareResult(
+            contract="proc_stat",
+            ok=False,
+            divergences=["Linux proc_stat workload script failed"],
+        )
+
+    if run_cmd(["bash", str(sh_ir0), str(ir0_dir)]) != 0:
+        return CompareResult(
+            contract="proc_stat",
+            ok=False,
+            divergences=["IR0 proc_stat workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+
+    return compare_proc_stat(linux_trace, ir0_trace)
+
+
 def audit_vfs_write(report_dir: Path, cfg: dict) -> CompareResult:
     linux_dir = report_dir / "linux" / "vfs_write"
     ir0_dir = report_dir / "ir0" / "vfs_write"
@@ -1457,6 +1494,7 @@ AUDITORS = {
     "execve": audit_execve,
     "openat": audit_openat,
     "stat": audit_stat,
+    "proc_stat": audit_proc_stat,
     "vfs_write": audit_vfs_write,
     "vfs_write_fat": audit_vfs_write_fat,
     "process_lifecycle": audit_process_lifecycle,

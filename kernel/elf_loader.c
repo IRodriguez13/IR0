@@ -28,6 +28,7 @@
 #include <mm/pmm.h>
 #include <ir0/copy_user.h>
 #include <ir0/debug_trap.h>
+#include <ir0/mm_struct.h>
 #include <ir0/oops.h>
 #include <ir0/arch_port.h>
 #include <ir0/signals.h>
@@ -615,6 +616,39 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     return process;
 }
 
+static void exec_set_comm(process_t *proc, const char *path, char *const argv[])
+{
+	const char *name;
+	const char *walk;
+	const char *last_slash;
+
+	if (!proc)
+		return;
+
+	if (argv && argv[0] && argv[0][0])
+	{
+		name = strrchr(argv[0], '/');
+		name = name ? name + 1 : argv[0];
+	}
+	else if (path)
+	{
+		last_slash = path;
+		for (walk = path; *walk; walk++)
+		{
+			if (*walk == '/')
+				last_slash = walk + 1;
+		}
+		name = last_slash;
+	}
+	else
+	{
+		name = "(none)";
+	}
+
+	strncpy(proc->comm, name, sizeof(proc->comm) - 1);
+	proc->comm[sizeof(proc->comm) - 1] = '\0';
+}
+
 /**
  * elf_setup_stack - argc/argv/envp + auxv (SysV ABI stack; ISA-neutral).
  * @process: Process to set up stack for
@@ -928,6 +962,16 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         if (env_rc < 0)
             return env_rc;
     }
+
+    {
+        int cmd_rc = process_saved_cmdline_set(process, argv);
+
+        if (cmd_rc < 0)
+            return cmd_rc;
+    }
+
+    process->utime = 0;
+    process->stime = 0;
 
     return 0;
 }
@@ -1334,9 +1378,6 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     elf64_header_t *header;
     uint64_t at_phdr;
     uint64_t at_base;
-    const char *basename;
-    const char *last_slash;
-    const char *walk;
     size_t total_frames_before = 0;
     size_t used_frames_before = 0;
     size_t total_frames_after = 0;
@@ -1497,6 +1538,14 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     /* Decided on the old image; committed below, past the point of no return. */
     exec_setid_collect(proc, path, &setid);
 
+    if (proc->mm && mm_users(proc->mm) > 1)
+    {
+        kfree(file_data);
+        exec_commit_emit("return-shared-mm", -EBUSY, proc,
+                         "EXEC_MM_SHARED");
+        return -EBUSY;
+    }
+
     process_exec_close_cloexec(proc);
 
     {
@@ -1567,19 +1616,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
 
     /* Old image is gone: raise credentials before auxv (AT_SECURE/AT_EUID). */
     exec_setid_commit(proc, &setid);
-
-    basename = path;
-    last_slash = path;
-    walk = path;
-    while (*walk)
-    {
-        if (*walk == '/')
-            last_slash = walk + 1;
-        walk++;
-    }
-    basename = last_slash;
-    strncpy(proc->comm, basename, sizeof(proc->comm) - 1);
-    proc->comm[sizeof(proc->comm) - 1] = '\0';
+    exec_set_comm(proc, path, argv);
     /* @path is already absolute here (sys_exec resolved it). */
     strncpy(proc->exe_path, path, sizeof(proc->exe_path) - 1);
     proc->exe_path[sizeof(proc->exe_path) - 1] = '\0';

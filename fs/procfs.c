@@ -81,9 +81,17 @@ typedef struct proc_fs_snap
 	pid_t sid;
 	int sched_prio;
 	uint64_t start_ticks;
+	uint64_t utime;
+	uint64_t stime;
 	int state;
 	uid_t uid;
 	gid_t gid;
+	uint32_t euid;
+	uint32_t egid;
+	uint32_t suid;
+	uint32_t sgid;
+	char *cmdline_copy;
+	size_t cmdline_len;
 	uint64_t heap_start;
 	uint64_t heap_end;
 	uint64_t stack_start;
@@ -106,16 +114,12 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	if (pid == -1)
 		proc = current_process;
 	else
-	{
-		proc = process_list;
-		while (proc && proc->task.pid != pid)
-			proc = proc->next;
-	}
+		proc = process_find_by_pid(pid);
 
 	if (!proc)
 	{
 		irq_restore((unsigned long)irqf);
-		return 0;
+		return -ENOENT;
 	}
 
 	strncpy(snap->comm, proc->comm, sizeof(snap->comm) - 1);
@@ -126,9 +130,28 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->sid = proc->sid;
 	snap->sched_prio = proc->sched_prio;
 	snap->start_ticks = proc->start_ticks;
+	snap->utime = proc->utime;
+	snap->stime = proc->stime;
 	snap->state = (int)proc->state;
 	snap->uid = proc->uid;
 	snap->gid = proc->gid;
+	snap->euid = proc->euid;
+	snap->egid = proc->egid;
+	snap->suid = proc->suid;
+	snap->sgid = proc->sgid;
+	snap->cmdline_copy = NULL;
+	snap->cmdline_len = 0;
+
+	if (proc->saved_cmdline && proc->saved_cmdline_len > 0)
+	{
+		snap->cmdline_copy = kmalloc_try(proc->saved_cmdline_len);
+		if (snap->cmdline_copy)
+		{
+			memcpy(snap->cmdline_copy, proc->saved_cmdline,
+			       proc->saved_cmdline_len);
+			snap->cmdline_len = proc->saved_cmdline_len;
+		}
+	}
 
 	if (proc->mm)
 	{
@@ -144,12 +167,22 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	}
 
 	irq_restore((unsigned long)irqf);
-	return 1;
+	return 0;
 }
 
 static void proc_fs_snap_release(proc_fs_snap_t *snap)
 {
-	if (!snap || !snap->mm)
+	if (!snap)
+		return;
+
+	if (snap->cmdline_copy)
+	{
+		kfree(snap->cmdline_copy);
+		snap->cmdline_copy = NULL;
+		snap->cmdline_len = 0;
+	}
+
+	if (!snap->mm)
 		return;
 
 	mm_put(snap->mm);
@@ -981,6 +1014,7 @@ int proc_meminfo_read(char *buf, size_t count)
 		       "MemAvailable:   %llu kB\n"
 		       "Buffers:        0 kB\n"
 		       "Cached:         0 kB\n"
+		       "Shmem:          0 kB\n"
 		       "MemUsed:        %llu kB\n"
 		       "PageSize:       %u kB\n"
 		       "Slab:           %llu kB\n"
@@ -1013,32 +1047,52 @@ int proc_meminfo_read(char *buf, size_t count)
 	return len;
 }
 
-/* /proc/[pid]/status: raw data only. One line: name\tstate\tpid\tppid\tuid\tgid */
+/* /proc/[pid]/status — Linux proc(5) lines (BusyBox top reads Uid:/Name:). */
 int proc_status_read(char *buf, size_t count, pid_t pid)
 {
 	proc_fs_snap_t snap;
 	const char *state_str = "?";
+	const char *state_paren = "unknown";
 	int len;
 
 	if (VALIDATE_BUFFER(buf, count) != 0)
 		return -1;
 	memset(buf, 0, count);
 
-	if (!proc_fs_snap_acquire(pid, &snap))
-		return 0;
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
 
 	switch (snap.state)
 	{
-		case PROCESS_READY:   state_str = "R"; break;
-		case PROCESS_RUNNING: state_str = "R"; break;
-		case PROCESS_BLOCKED: state_str = "S"; break;
-		case PROCESS_ZOMBIE:  state_str = "Z"; break;
+		case PROCESS_READY:
+		case PROCESS_RUNNING:
+			state_str = "R";
+			state_paren = "running";
+			break;
+		case PROCESS_BLOCKED:
+			state_str = "S";
+			state_paren = "sleeping";
+			break;
+		case PROCESS_ZOMBIE:
+			state_str = "Z";
+			state_paren = "zombie";
+			break;
 	}
 
-	len = snprintf(buf, count, "%s\t%s\t%d\t%d\t%d\t%d\n",
+	len = snprintf(buf, count,
+		       "Name:\t%s\n"
+		       "State:\t%s (%s)\n"
+		       "Pid:\t%d\n"
+		       "PPid:\t%d\n"
+		       "Uid:\t%d\t%d\t%d\t%d\n"
+		       "Gid:\t%d\t%d\t%d\t%d\n",
 		       snap.comm[0] ? snap.comm : "(none)",
-		       state_str, (int)snap.pid, (int)snap.ppid,
-		       (int)snap.uid, (int)snap.gid);
+		       state_str, state_paren,
+		       (int)snap.pid, (int)snap.ppid,
+		       (int)snap.uid, (int)snap.euid, (int)snap.suid,
+		       (int)snap.uid,
+		       (int)snap.gid, (int)snap.egid, (int)snap.sgid,
+		       (int)snap.gid);
 	proc_fs_snap_release(&snap);
 	if (len < 0)
 		return -1;
@@ -1054,10 +1108,8 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 /*
  * /proc/[pid]/stat — Linux proc(5) field order.
  *
- * Fields 1..22 carry real process state (pid, comm, state, ppid, pgrp,
- * session, tty_nr, starttime); CPU/memory accounting counters are reported as
- * 0 because IR0 keeps no per-process time or fault accounting yet. Field 7
- * (tty_nr) is the /dev/console device id: IR0 exposes a single console today,
+ * Fields 1..22 carry real process state; utime/stime are scheduler jiffies.
+ * Field 7 (tty_nr) is the /dev/console device id: IR0 exposes a single console today,
  * so every process on it shares that terminal.
  */
 int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
@@ -1073,8 +1125,8 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 		return -1;
 	memset(buf, 0, count);
 
-	if (!proc_fs_snap_acquire(pid, &snap))
-		return 0;
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
 
 	switch (snap.state)
 	{
@@ -1099,8 +1151,8 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 
 	len = snprintf(buf, count,
 		       "%d (%s) %s %d %d %d %d %d "     /*  1-8  */
-		       "0 0 0 0 0 0 0 0 0 %d "          /*  9-18 (18=priority) */
-		       "0 1 0 %llu %llu %llu 0 0 0 0 0 0 0 0 0 0 0 0\n", /* 19-36 */
+		       "0 0 0 0 %llu %llu 0 0 0 %d "    /*  9-18 */
+		       "0 1 0 %llu %llu %llu 0 0 0 0 0 0 0 0 0 0 0 0\n",
 		       (int)snap.pid,
 		       snap.comm[0] ? snap.comm : "none",
 		       state_str,
@@ -1109,6 +1161,8 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 		       (int)snap.sid,
 		       tty_nr,
 		       (int)snap.pgid,               /* tpgid: fg group on tty */
+		       (unsigned long long)snap.utime,
+		       (unsigned long long)snap.stime,
 		       snap.sched_prio,               /* 18: priority */
 		       (unsigned long long)snap.start_ticks, /* 22: starttime */
 		       (unsigned long long)vsize,               /* 23: vsize */
@@ -1145,8 +1199,8 @@ int proc_pid_maps_read(char *buf, size_t count, pid_t pid)
 		return -1;
 	memset(buf, 0, count);
 
-	if (!proc_fs_snap_acquire(pid, &snap))
-		return 0;
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
 
 	if (snap.heap_end > snap.heap_start)
 	{
@@ -1215,8 +1269,8 @@ int proc_pid_statm_read(char *buf, size_t count, pid_t pid)
 		return -1;
 	memset(buf, 0, count);
 
-	if (!proc_fs_snap_acquire(pid, &snap))
-		return 0;
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
 
 	if (snap.heap_end > snap.heap_start)
 		vsize = snap.heap_end - snap.heap_start;
@@ -1533,17 +1587,16 @@ int proc_uptime_read(char *buf, size_t count)
  * /proc/stat — Linux proc(5) / BusyBox top contract.
  *
  * Aggregate "cpu" + single "cpu0" jiffy lines (USER_HZ ≈ CONFIG_TICK_RATE_HZ).
- * IR0 has no per-state CPU accounting yet: idle from clock_get_idle_milliseconds(),
- * non-idle split user/system; nice/iowait/irq/softirq/steal are 0.
+ * Jiffies from clock_get_cpu_accounting(); nice/iowait/irq/softirq/steal are 0
+ * until IR0 tracks those buckets (honest zeros, not invented).
  * Source: man7.org/linux/man-pages/man5/proc_stat.5.html
  */
 int proc_stat_read(char *buf, size_t count)
 {
 	uint64_t total;
-	uint64_t idle;
-	uint64_t busy;
 	uint64_t user;
 	uint64_t system;
+	uint64_t idle;
 	uint64_t nice = 0;
 	uint64_t iowait = 0;
 	uint64_t irq = 0;
@@ -1558,12 +1611,9 @@ int proc_stat_read(char *buf, size_t count)
 	memset(buf, 0, count);
 
 	total = clock_get_tick_count();
-	idle = clock_get_idle_milliseconds() * (uint64_t)CONFIG_TICK_RATE_HZ / 1000ULL;
-	if (idle > total)
-		idle = total;
-	busy = total - idle;
-	user = busy / 2ULL;
-	system = busy - user;
+	clock_get_cpu_accounting(&user, &system, &idle);
+	if (user + system + idle > total)
+		total = user + system + idle;
 
 	clock_get_loadavg(NULL, NULL, NULL, &runnable, &nprocs, NULL);
 
@@ -1629,11 +1679,11 @@ int proc_version_read(char *buf, size_t count)
     return len;
 }
 
-/* /proc/cmdline: Multiboot command line, or a QEMU-shaped default. */
+/* /proc/cmdline: Multiboot command line only (empty when absent). */
 int proc_boot_cmdline_read(char *buf, size_t count)
 {
     const struct multiboot_info *mb;
-    const char *cmdline = "root=/dev/hda console=ttyS0";
+    const char *cmdline;
     size_t n;
     size_t i;
 
@@ -1641,8 +1691,13 @@ int proc_boot_cmdline_read(char *buf, size_t count)
         return -1;
 
     mb = (const struct multiboot_info *)get_boot_params();
-    if (mb && (mb->flags & MULTIBOOT_FLAG_CMDLINE) && mb->cmdline)
-        cmdline = (const char *)(uintptr_t)mb->cmdline;
+    if (!mb || !(mb->flags & MULTIBOOT_FLAG_CMDLINE) || !mb->cmdline)
+    {
+        buf[0] = '\0';
+        return 0;
+    }
+
+    cmdline = (const char *)(uintptr_t)mb->cmdline;
 
     n = 0;
     while (cmdline[n] && n + 1 < count)
@@ -2290,33 +2345,38 @@ int proc_timer_list_read(char *buf, size_t count)
     return n;
 }
 
-/* Generate /proc/[pid]/cmdline content */
+/* Generate /proc/[pid]/cmdline content (NUL-separated argv, Linux proc(5)). */
 int proc_cmdline_read(char *buf, size_t count, pid_t pid)
 {
 	proc_fs_snap_t snap;
-	int len;
+	size_t n;
 
 	if (VALIDATE_BUFFER(buf, count) != 0)
 		return -1;
 
 	memset(buf, 0, count);
 
-	if (!proc_fs_snap_acquire(pid, &snap))
-		return -1;
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
 
-	len = snprintf(buf, count, "%s", snap.comm[0] ? snap.comm : "(none)");
+	if (!snap.cmdline_copy || snap.cmdline_len == 0)
+	{
+		proc_fs_snap_release(&snap);
+		return 0;
+	}
+
+	n = snap.cmdline_len;
+	if (n > count)
+		n = count;
+	memcpy(buf, snap.cmdline_copy, n);
 	proc_fs_snap_release(&snap);
 
-	if (len < 0)
-		return -1;
-	if (len >= (int)count)
+	if (n >= count && count > 0)
 	{
 		buf[count - 1] = '\0';
 		return (int)(count - 1);
 	}
-
-	buf[len] = '\0';
-	return len;
+	return (int)n;
 }
 
 /* Legacy virtual-fd offset maps removed — offsets live in process fd_table. */
@@ -2537,23 +2597,14 @@ int proc_open(const char *path, int flags)
     return -ENOENT;
 }
 
-/* Read from /proc file — LEGACY global virtual fd only (PSEUDO_FS_*_FD_BASE).
- * Syscall path uses process fd_table is_pseudo + pseudo_fs_ops_read.
- */
+/* Read from /proc file — syscall path uses process fd_table is_pseudo binds. */
 int proc_read(int fd, char *buf, size_t count, off_t offset)
 {
-    int64_t pbytes;
-
-    if (!buf || count == 0)
-        return 0;
-
-    if (pseudo_fs_find_by_fd(fd))
-    {
-        pbytes = pseudo_fs_read_fd(fd, buf, count, offset);
-        return (int)pbytes;
-    }
-
-    return -EBADF;
+	(void)fd;
+	(void)buf;
+	(void)count;
+	(void)offset;
+	return -EBADF;
 }
 
 /*
@@ -2563,22 +2614,14 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
  * /proc/bluetooth/scan). Writes under /proc/sys/ are not implemented and
  * return -EOPNOTSUPP.
  */
-/* Write to /proc — LEGACY global virtual fd only; syscall uses fd_table binds. */
+/* Write to /proc — syscall uses fd_table binds; legacy global fds retired. */
 int proc_write(int fd, const char *buf, size_t count)
 {
-    int64_t pw;
-
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -EINVAL;
 
     if (count == 0)
         return 0;
-
-    if (pseudo_fs_find_by_fd(fd))
-    {
-        pw = pseudo_fs_write_fd(fd, buf, count);
-        return (int)pw;
-    }
 
     if (fd < 1000)
         return -EBADF;

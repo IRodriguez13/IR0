@@ -112,9 +112,14 @@ __attribute__((noreturn)) void process_exit(int code)
 	 */
 	ir0_console_purge_waiters_for_process(dying);
 	pipe_purge_waiters_for_process(dying);
+	ipc_purge_waiters_for_process(dying);
+	if (dying->fork_pending_child)
+		process_fork_abort_pending_on_exit(dying);
 	if (dying->pgid > 1)
 		ir0_console_clear_fg_pgid((int32_t)dying->pgid,
 					 (int32_t)dying->task.pid);
+	if ((pid_t)dying->task.pid == dying->sid)
+		ir0_console_clear_ctty_session((int32_t)dying->sid);
 
 	process_release_fds(dying, "EXIT_CLOSE");
 
@@ -308,6 +313,7 @@ void process_destroy(process_t *p)
 
 	process_saved_context_clear(p);
 	process_saved_environ_clear(p);
+	process_saved_cmdline_clear(p);
 
 	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
 #if IR0_DEBUG_PMM

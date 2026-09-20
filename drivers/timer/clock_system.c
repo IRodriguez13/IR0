@@ -33,6 +33,9 @@ static clock_state_t clock_state;
 
 /* Idle CPU time (ms spent in the idle task). UP today; sum per-CPU later. */
 static uint64_t clock_idle_ms;
+static uint64_t clock_cpu_user;
+static uint64_t clock_cpu_system;
+static uint64_t clock_cpu_idle;
 
 /* Loadavg EMA (×100). Updated once per second from runnable non-idle count. */
 static uint32_t clock_load1_x100;
@@ -60,7 +63,7 @@ static void clock_sample_loadavg(void)
 	while (p)
 	{
 		total++;
-		if ((p->state == PROCESS_READY || p->state == PROCESS_RUNNING) &&
+		if (p->state == PROCESS_RUNNING &&
 		    !clock_comm_is_idle(p->comm))
 			runnable++;
 		p = p->next;
@@ -254,6 +257,16 @@ uint64_t clock_get_idle_milliseconds(void)
 	return clock_idle_ms;
 }
 
+void clock_get_cpu_accounting(uint64_t *user, uint64_t *system, uint64_t *idle)
+{
+	if (user)
+		*user = clock_cpu_user;
+	if (system)
+		*system = clock_cpu_system;
+	if (idle)
+		*idle = clock_cpu_idle;
+}
+
 void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
 		       uint32_t *load15_x100, unsigned *runnable,
 		       unsigned *nprocs, int *last_pid)
@@ -267,7 +280,7 @@ void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
 	while (p)
 	{
 		live_total++;
-		if ((p->state == PROCESS_READY || p->state == PROCESS_RUNNING) &&
+		if (p->state == PROCESS_RUNNING &&
 		    !clock_comm_is_idle(p->comm))
 			live_runnable++;
 		p = p->next;
@@ -523,32 +536,29 @@ void clock_tick(void)
     /* Increment tick count */
     clock_state.tick_count++;
     
-    /*
-	 * Idle accounting (UP): tick with no runnable non-idle task, or the
-	 * current task is explicitly named "idle".
+	/*
+	 * UP CPU accounting: attribute each tick to whoever is running now.
+	 * Do not infer busy from other READY tasks — that made /proc/stat idle
+	 * read 0% on a quiet desktop while the idle task was actually running.
 	 */
 	{
-		process_t *p = process_list;
-		unsigned busy = 0;
+		process_t *cur = current_process;
 
-		/*
-		 * Always scan the runqueue. Short-circuiting on current==idle
-		 * over-counted idle while another READY task waited for the
-		 * next reschedule (Bugbot).
-		 */
-		while (p)
+		if (!cur || clock_comm_is_idle(cur->comm))
 		{
-			if ((p->state == PROCESS_READY ||
-			     p->state == PROCESS_RUNNING) &&
-			    !clock_comm_is_idle(p->comm))
-			{
-				busy = 1;
-				break;
-			}
-			p = p->next;
-		}
-		if (!busy)
+			clock_cpu_idle++;
 			clock_idle_ms++;
+		}
+		else if (cur->mode == USER_MODE)
+		{
+			cur->utime++;
+			clock_cpu_user++;
+		}
+		else
+		{
+			cur->stime++;
+			clock_cpu_system++;
+		}
 	}
 
     /* Update uptime */

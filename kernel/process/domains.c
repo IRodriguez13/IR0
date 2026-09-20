@@ -110,5 +110,7 @@ int process_session_attrs_clone(process_t *dst, const process_t *src)
 	memcpy(dst->exe_path, src->exe_path, sizeof(dst->exe_path));
 	memcpy(dst->rlimits, src->rlimits, sizeof(dst->rlimits));
 	dst->robust_list = src->robust_list;
-	return process_saved_environ_clone(dst, src);
+	if (process_saved_environ_clone(dst, src) != 0)
+		return -ENOMEM;
+	return process_saved_cmdline_clone(dst, src);
 }

@@ -157,6 +157,9 @@ typedef struct process
 	pid_t pgid; /* process group id */
 	/* Ticks since boot at creation — /proc/[pid]/stat field 22 (starttime). */
 	uint64_t start_ticks;
+	/* Scheduler tick accounting (USER_HZ jiffies) for /proc/stat and pid stat. */
+	uint64_t utime;
+	uint64_t stime;
 	struct robust_list_head *robust_list;
 	
 	/* Current working directory (host-absolute). */
@@ -179,6 +182,9 @@ typedef struct process
 	 */
 	char *saved_environ;
 	size_t saved_environ_len;
+	/* NUL-separated argv blob for /proc/<pid>/cmdline (set at exec). */
+	char *saved_cmdline;
+	size_t saved_cmdline_len;
 
 	/* Resource limits (Linux rlimit indices 0..15). */
 #define IR0_RLIM_NLIMITS 16
@@ -684,6 +690,9 @@ int process_kernel_sleep_interrupted(const process_t *p);
 void process_saved_environ_clear(process_t *p);
 int process_saved_environ_set(process_t *p, char *const envp[]);
 int process_saved_environ_clone(process_t *dst, const process_t *src);
+void process_saved_cmdline_clear(process_t *p);
+int process_saved_cmdline_set(process_t *p, char *const argv[]);
+int process_saved_cmdline_clone(process_t *dst, const process_t *src);
 
 int process_wait_blocked(const process_t *p);
 void process_wait_blocked_set(process_t *p);
@@ -723,6 +732,7 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
  * Called from syscall_dispatch on fork/clone/vfork exit only.
  */
 void process_fork_wake_pending(process_t *parent);
+void process_fork_abort_pending_on_exit(process_t *parent);
 void process_syscall_restore_exit_regs(uint64_t *stack_r9_slot);
 
 

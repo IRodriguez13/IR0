@@ -293,6 +293,13 @@
       "status_doc": "VERIFIED",
       "ktest": "kill_sigterm_wait_status",
       "expected_status": 15
+    },
+    {
+      "id": "proc_stat",
+      "enabled": true,
+      "title": "/proc/stat CPU accounting + /proc/self/status Uid",
+      "status_doc": "VERIFIED",
+      "host_test": "procfs_linux_abi"
     }
   ]
 }

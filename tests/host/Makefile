@@ -39,12 +39,14 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_sched_backend_contract.c \
 	test_block_backend_contract.c \
 	test_usercopy_contract.c \
+	test_procfs_linux_abi.c \
+	test_pseudo_fs_honesty.c \
 	test_matrix_capture.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
 	host_open_flags.o \
-	host_sysfs_net_stub.o \
+	host_sysfs_net_stub.o host_sysfs_honesty_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
 	host_ps2_set1.o host_ps2_mouse_pkt.o \
@@ -78,6 +80,9 @@ host_klog_stub.o: host_klog_stub.c
 
 host_fase48_stub.o: host_fase48_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+host_sysfs_honesty_stub.o: host_sysfs_honesty_stub.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_sysfs_net_stub.o: host_sysfs_net_stub.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
@@ -209,6 +214,12 @@ test_arch_task_contract.o: test_arch_task_contract.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_pseudo_fs_contract.o: test_pseudo_fs_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_pseudo_fs_honesty.o: test_pseudo_fs_honesty.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_procfs_linux_abi.o: test_procfs_linux_abi.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_mm_mirror_contract.o: test_mm_mirror_contract.c

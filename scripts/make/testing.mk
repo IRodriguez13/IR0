@@ -3111,16 +3111,18 @@ LINUX_ABI_MMAP_PROBE := $(LINUX_ABI_AUDIT_DIR)/mmap_probe
 LINUX_ABI_MOUNT_PROBE := $(LINUX_ABI_AUDIT_DIR)/mount_probe
 LINUX_ABI_OPENAT_PROBE := $(LINUX_ABI_AUDIT_DIR)/openat_probe
 LINUX_ABI_STAT_PROBE := $(LINUX_ABI_AUDIT_DIR)/stat_probe
+LINUX_ABI_PROC_STAT_PROBE := $(LINUX_ABI_AUDIT_DIR)/proc_stat_probe
 LINUX_ABI_VFS_WRITE_PROBE := $(LINUX_ABI_AUDIT_DIR)/vfs_write_probe
 
 .PHONY: build-linux-abi-brk-probe build-linux-abi-wait4-probe build-linux-abi-read-probe \
 	build-linux-abi-mmap-probe build-linux-abi-mount-probe \
-	build-linux-abi-openat-probe build-linux-abi-stat-probe build-linux-abi-vfs-write-probe \
+	build-linux-abi-openat-probe build-linux-abi-stat-probe build-linux-abi-proc-stat-probe build-linux-abi-vfs-write-probe \
 	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
 	linux-abi-audit-pipe linux-abi-audit-poll linux-abi-audit-nanosleep \
 	linux-abi-audit-getcwd linux-abi-audit-chdir linux-abi-audit-dup linux-abi-audit-pty-multiplex linux-abi-audit-execve \
 	linux-abi-audit-ioctl linux-abi-audit-fcntl linux-abi-audit-kill-sigterm \
 	linux-abi-audit-mmap linux-abi-audit-munmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
+	linux-abi-audit-proc-stat \
 	linux-abi-audit-process-lifecycle linux-abi-audit-ipc-bundle \
 	linux-abi-audit-vfs-write linux-abi-audit-sigreturn-blocked-syscall
 
@@ -3186,6 +3188,15 @@ build-linux-abi-stat-probe: scripts/linux_abi/workloads/stat_probe.c
 		gcc -static -Os -o $(LINUX_ABI_STAT_PROBE) scripts/linux_abi/workloads/stat_probe.c; \
 	fi
 	@echo "✓ $(LINUX_ABI_STAT_PROBE)"
+
+build-linux-abi-proc-stat-probe: scripts/linux_abi/workloads/proc_stat_probe.c
+	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
+	@if command -v musl-gcc >/dev/null 2>&1; then \
+		musl-gcc -static -Os -o $(LINUX_ABI_PROC_STAT_PROBE) scripts/linux_abi/workloads/proc_stat_probe.c; \
+	else \
+		gcc -static -Os -o $(LINUX_ABI_PROC_STAT_PROBE) scripts/linux_abi/workloads/proc_stat_probe.c; \
+	fi
+	@echo "✓ $(LINUX_ABI_PROC_STAT_PROBE)"
 
 build-linux-abi-vfs-write-probe: scripts/linux_abi/workloads/vfs_write_probe.c
 	@mkdir -p $(LINUX_ABI_AUDIT_DIR)
@@ -3383,6 +3394,13 @@ linux-abi-audit-stat: kernel-x64-userspace.iso build-linux-abi-stat-probe
 	@grep -q '^## stat — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-stat passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-stat FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-proc-stat: kernel-x64-userspace.iso build-linux-abi-proc-stat-probe
+	@chmod +x scripts/linux_abi/run_linux_proc_stat.sh scripts/linux_abi/run_ir0_proc_stat.sh
+	@python3 scripts/linux_abi_audit.py --contract proc_stat
+	@grep -q '^## proc_stat — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-proc-stat passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-proc-stat FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 linux-abi-audit-vfs-write: kernel-x64-userspace.iso build-linux-abi-vfs-write-probe
 	@chmod +x scripts/linux_abi/run_linux_vfs_write.sh scripts/linux_abi/run_ir0_vfs_write.sh

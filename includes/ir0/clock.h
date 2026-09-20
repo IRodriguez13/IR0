@@ -100,6 +100,12 @@ int clock_realtime_available(void);
 uint64_t clock_get_idle_milliseconds(void);
 
 /*
+ * Aggregate CPU jiffies (USER_HZ) since boot for /proc/stat.
+ * user + system + idle <= clock_get_tick_count() (UP).
+ */
+void clock_get_cpu_accounting(uint64_t *user, uint64_t *system, uint64_t *idle);
+
+/*
  * Load averages as fixed-point ×100 (e.g. 3 → "0.03").
  * runnable/total exclude the kernel idle task from the numerator.
  */

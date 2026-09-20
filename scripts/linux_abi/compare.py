@@ -1850,6 +1850,56 @@ def compare_fcntl(linux: dict, ir0: dict) -> CompareResult:
     return res
 
 
+def compare_proc_stat(linux: dict, ir0: dict) -> CompareResult:
+    res = CompareResult(contract="proc_stat", ok=True)
+    required = ("cpu_user", "cpu_system", "cpu_idle", "quiet_idle_dominant")
+
+    for op in required:
+        l_s = _find_step(linux.get("audit_steps") or [], op)
+        i_s = _find_step(ir0.get("audit_steps") or [], op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(
+                f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})"
+            )
+            continue
+
+        if op == "quiet_idle_dominant":
+            if l_s.get("ret") != 1:
+                res.ok = False
+                res.divergences.append(
+                    f"linux quiet_idle_dominant ret={l_s.get('ret')} expected 1"
+                )
+            if i_s.get("ret") != 1:
+                res.ok = False
+                res.divergences.append(
+                    f"ir0 quiet_idle_dominant ret={i_s.get('ret')} expected 1"
+                )
+            continue
+
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret", -1) < 0:
+                res.ok = False
+                res.divergences.append(f"{label} {op}: ret={step.get('ret')}")
+
+    l_uid = _find_step(linux.get("audit_steps") or [], "self_uid")
+    i_uid = _find_step(ir0.get("audit_steps") or [], "self_uid")
+    if not l_uid or not i_uid:
+        res.ok = False
+        res.divergences.append("missing self_uid step")
+    elif l_uid.get("ret", -1) < 0 or i_uid.get("ret", -1) < 0:
+        res.ok = False
+        res.divergences.append(
+            f"self_uid parse failed linux={l_uid.get('ret')} ir0={i_uid.get('ret')}"
+        )
+
+    res.notes.append(
+        "After 2s sleep, /proc/stat idle jiffies must exceed user and system (BusyBox top sanity)"
+    )
+    res.notes.append("/proc/self/status must expose Uid: line (Linux proc(5))")
+    return res
+
+
 def render_markdown(results: list[CompareResult], meta: dict) -> str:
     lines = [
         "# Linux ABI audit report",
