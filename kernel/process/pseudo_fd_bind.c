@@ -32,8 +32,12 @@ int pseudo_fd_bind_release(pseudo_fd_bind_t *bind)
 		return 0;
 
 	irq_flags = irq_save();
-	if (bind->refs > 0)
-		bind->refs--;
+	if (bind->refs <= 0)
+	{
+		irq_restore(irq_flags);
+		return 0;
+	}
+	bind->refs--;
 	last = (bind->refs == 0);
 	irq_restore(irq_flags);
 	return last;

@@ -49,6 +49,9 @@ mm_struct_t *mm_get(mm_struct_t *mm);
 /* Drop refcount; destroy on zero. */
 void mm_put(mm_struct_t *mm);
 
+/* Live mm_struct users (CLONE_VM shares). */
+int mm_users(const mm_struct_t *mm);
+
 /* Attach @mm to process (sole address-space pointer on process_t). */
 void process_mm_bind(struct process *p, mm_struct_t *mm);
 

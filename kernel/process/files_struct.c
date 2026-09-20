@@ -157,10 +157,8 @@ static int process_files_acquire_entries(files_struct_t *f)
 
 			pseudo_fd_bind_acquire(bind);
 		}
-		else if (e->is_epoll)
-		{
-			/* Share epoll interest list with parent (MVP). */
-		}
+		else if (e->is_epoll && e->vfs_file)
+			epoll_acquire(e->vfs_file);
 		else if (e->is_memfd && e->vfs_file)
 			ir0_memfd_acquire((struct ir0_memfd *)e->vfs_file);
 		else if (e->is_eventfd && e->vfs_file)

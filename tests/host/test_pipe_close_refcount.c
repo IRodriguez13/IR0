@@ -66,3 +66,25 @@ void test_pipe_pipeline_two_closes_destroy_once(void)
 	ASSERT_EQ(destroyed1, destroyed0 + 1);
 	TEST_END();
 }
+
+void test_pipe_wait_pins_destroy(void)
+{
+	pipe_t *p;
+	uint64_t destroyed0 = 0, destroyed1 = 0;
+
+	TEST_BEGIN("pipe_wait_enter defers destroy until leave");
+	pipe_stats_get(0, &destroyed0);
+	p = pipe_create();
+	ASSERT(p != 0);
+	pipe_acquire_end(p, 0);
+	pipe_acquire_end(p, 1);
+	pipe_wait_enter(p);
+	pipe_close_end(p, 0);
+	pipe_close_end(p, 1);
+	pipe_stats_get(0, &destroyed1);
+	ASSERT_EQ(destroyed1, destroyed0);
+	pipe_wait_leave(p);
+	pipe_stats_get(0, &destroyed1);
+	ASSERT_EQ(destroyed1, destroyed0 + 1);
+	TEST_END();
+}

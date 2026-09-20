@@ -25,6 +25,8 @@ typedef struct pipe
 	size_t count;
 	uint64_t pipe_id;
 	int fd_refs;
+	/* Blocked read/write syscalls pin the object until pipe_wait_leave(). */
+	int wait_refs;
 	int readers;
 	int writers;
 	int closed_read;
@@ -41,6 +43,8 @@ pipe_t *pipe_create(void);
 int pipe_read(pipe_t *pipe, void *buf, size_t count);
 int pipe_write(pipe_t *pipe, const void *buf, size_t count);
 void pipe_close_end(pipe_t *pipe, int end);
+void pipe_wait_enter(pipe_t *pipe);
+void pipe_wait_leave(pipe_t *pipe);
 void pipe_acquire(pipe_t *pipe);
 void pipe_acquire_end(pipe_t *pipe, int end);
 

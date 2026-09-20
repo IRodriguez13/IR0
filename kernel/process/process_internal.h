@@ -51,6 +51,9 @@ extern void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
 			      uint64_t *blocked_readers, uint64_t *blocked_writers);
 extern void pipe_wake_all(pipe_t *pipe);
 extern void pipe_purge_waiters_for_process(process_t *proc);
+extern void ipc_purge_waiters_for_process(process_t *proc);
+extern void epoll_acquire(void *epoll_state);
+extern void epoll_release(void *epoll_state);
 extern int64_t process_close_fd(process_t *proc, int fd);
 
 extern process_t *current_process;

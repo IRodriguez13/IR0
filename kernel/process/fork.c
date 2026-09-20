@@ -15,6 +15,7 @@
 #include "process_internal.h"
 #include <ir0/clone.h>
 #include <ir0/fork.h>
+#include <ir0/sysfs.h>
 #include <ir0/arch_task.h>
 #include <ir0/process_domains.h>
 #include <ir0/mm_struct.h>
@@ -36,6 +37,10 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 		return NULL;
 
 	if (KTM_FAULT_HIT("process.fork_alloc"))
+		return NULL;
+
+	if ((uint32_t)sys_kernel_process_live_count() >=
+	    sys_kernel_max_processes_limit())
 		return NULL;
 
 	child = kmalloc_try(sizeof(process_t));
@@ -149,6 +154,30 @@ void process_fork_wake_pending(process_t *parent)
 		return;
 
 	parent->fork_pending_child = NULL;
+	process_set_sched_state(child, PROCESS_READY);
+	sched_add_process(child);
+}
+
+void process_fork_abort_pending_on_exit(process_t *parent)
+{
+	process_t *child;
+	uint64_t irq_flags;
+
+	if (!parent)
+		return;
+
+	irq_flags = process_irq_save();
+	child = parent->fork_pending_child;
+	parent->fork_pending_child = NULL;
+	process_irq_restore(irq_flags);
+
+	if (!child)
+		return;
+
+	/*
+	 * Parent died before fork syscall exit woke the child (signal/kill
+	 * race). Linux still runs the child; reparent happens separately.
+	 */
 	process_set_sched_state(child, PROCESS_READY);
 	sched_add_process(child);
 }

@@ -22,6 +22,7 @@
 #include <ir0/files_struct.h>
 #include <ir0/time.h>
 #include <ir0/clock.h>
+#include <ir0/cpu.h>
 #include <string.h>
 
 #define EPOLL_CTL_ADD 1
@@ -50,6 +51,8 @@ struct epoll_interest
 struct epoll_state
 {
 	int in_use;
+	int refs;
+	int waiters;
 	struct epoll_interest interest[EPOLL_MAX_INTEREST];
 };
 
@@ -91,13 +94,108 @@ static struct epoll_state *epoll_from_fd(int epfd)
 	return (struct epoll_state *)tab[epfd].vfs_file;
 }
 
-void epoll_release_fd(void *epoll_state)
+static int epoll_state_live(const struct epoll_state *ep)
+{
+	if (!ep)
+		return 0;
+	return ep >= g_epoll &&
+	       ep < g_epoll + EPOLL_MAX_SLOTS &&
+	       ep->in_use;
+}
+
+static void epoll_try_destroy(struct epoll_state *ep)
+{
+	unsigned long irq_flags;
+	int destroy;
+
+	if (!epoll_state_live(ep))
+		return;
+
+	irq_flags = irq_save();
+	destroy = (ep->refs == 0 && ep->waiters == 0 && ep->in_use);
+	if (destroy)
+		ep->in_use = 0;
+	irq_restore(irq_flags);
+
+	if (!destroy)
+		return;
+
+	memset(ep, 0, sizeof(*ep));
+}
+
+static int epoll_wait_enter(struct epoll_state *ep)
+{
+	unsigned long irq_flags;
+
+	if (!epoll_state_live(ep))
+		return -1;
+
+	irq_flags = irq_save();
+	if (!ep->in_use)
+	{
+		irq_restore(irq_flags);
+		return -1;
+	}
+	ep->waiters++;
+	irq_restore(irq_flags);
+	return 0;
+}
+
+static void epoll_wait_leave(struct epoll_state *ep)
+{
+	unsigned long irq_flags;
+
+	if (!epoll_state_live(ep))
+		return;
+
+	irq_flags = irq_save();
+	if (ep->waiters > 0)
+		ep->waiters--;
+	irq_restore(irq_flags);
+	epoll_try_destroy(ep);
+}
+
+void epoll_acquire(void *epoll_state)
 {
 	struct epoll_state *ep = (struct epoll_state *)epoll_state;
+	unsigned long irq_flags;
 
-	if (!ep)
+	if (!epoll_state_live(ep))
 		return;
-	memset(ep, 0, sizeof(*ep));
+
+	irq_flags = irq_save();
+	ep->refs++;
+	irq_restore(irq_flags);
+}
+
+void epoll_release(void *epoll_state)
+{
+	struct epoll_state *ep = (struct epoll_state *)epoll_state;
+	unsigned long irq_flags;
+	int last;
+
+	if (!epoll_state_live(ep))
+		return;
+
+	irq_flags = irq_save();
+	if (ep->refs <= 0)
+	{
+		irq_restore(irq_flags);
+		return;
+	}
+	ep->refs--;
+	last = (ep->refs == 0);
+	irq_restore(irq_flags);
+
+	if (!last)
+		return;
+
+	epoll_try_destroy(ep);
+}
+
+void epoll_release_fd(void *epoll_state)
+{
+	epoll_release(epoll_state);
 }
 
 int64_t sys_epoll_create1(int flags)
@@ -133,6 +231,7 @@ int64_t sys_epoll_create1(int flags)
 
 	memset(&g_epoll[slot], 0, sizeof(g_epoll[slot]));
 	g_epoll[slot].in_use = 1;
+	g_epoll[slot].refs = 1;
 	memset(&tab[fd], 0, sizeof(tab[fd]));
 	tab[fd].in_use = true;
 	tab[fd].is_epoll = true;
@@ -222,12 +321,20 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 	ep = epoll_from_fd(epfd);
 	if (!ep)
 		return -EBADF;
+	if (epoll_wait_enter(ep) != 0)
+		return -EBADF;
 	if (maxevents <= 0)
+	{
+		epoll_wait_leave(ep);
 		return -EINVAL;
+	}
 	if (!events ||
 	    validate_userspace_buffer(events,
 				      (size_t)maxevents * sizeof(struct epoll_event)) != 0)
+	{
+		epoll_wait_leave(ep);
 		return -EFAULT;
+	}
 
 	for (int i = 0; i < EPOLL_MAX_INTEREST; i++)
 	{
@@ -245,7 +352,10 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 	}
 
 	if (nfds == 0)
+	{
+		epoll_wait_leave(ep);
 		return 0;
+	}
 
 	expire = (timeout < 0) ? (uint64_t)-1
 			       : (clock_get_uptime_milliseconds() + (uint64_t)timeout);
@@ -259,12 +369,18 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 		    clock_get_uptime_milliseconds() >= expire)
 			break;
 		if (current_process->signal_pending != 0)
+		{
+			epoll_wait_leave(ep);
 			return -EINTR;
+		}
 		{
 			int64_t ret = syscall_sleep_ms_locked(50);
 
 			if (ret < 0)
+			{
+				epoll_wait_leave(ep);
 				return ret;
+			}
 		}
 	}
 
@@ -285,9 +401,13 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 			ev.events |= EPOLLERR;
 		ev.data = ep->interest[ii].data;
 		if (copy_to_user(&events[out], &ev, sizeof(ev)) != 0)
+		{
+			epoll_wait_leave(ep);
 			return -EFAULT;
+		}
 		out++;
 	}
+	epoll_wait_leave(ep);
 	return out;
 }
 

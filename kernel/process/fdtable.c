@@ -145,9 +145,7 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 		}
 		else if (e->is_epoll && e->vfs_file)
 		{
-			extern void epoll_release_fd(void *epoll_state);
-
-			epoll_release_fd(e->vfs_file);
+			epoll_release(e->vfs_file);
 			e->vfs_file = NULL;
 		}
 		else if (e->is_memfd && e->vfs_file)

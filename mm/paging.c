@@ -1199,14 +1199,17 @@ int copy_process_memory(struct process *parent, struct process *child)
                     if (!(page_entry & PAGE_NX))
                         flags |= PAGE_EXEC;
 
-                    pmm_frame_get(parent_phys);
-
                     if (map_page_in_directory(child_root, virt_addr,
                                               parent_phys, flags) != 0)
                     {
-                        pmm_frame_put(parent_phys);
+                        extern void process_unmap_user_pages_all(
+                            uint64_t *address_space_root, void *reclaim_stats);
+
+                        process_unmap_user_pages_all(child_root, NULL);
                         return -1;
                     }
+
+                    pmm_frame_get(parent_phys);
 
                     if (DEBUG_FORK && fase40_copy_diag_events < 256U)
                         fase40_copy_diag_events++;

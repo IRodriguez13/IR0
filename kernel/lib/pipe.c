@@ -241,9 +241,56 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 	return (int)bytes_written;
 }
 
+static void pipe_try_destroy(pipe_t *pipe)
+{
+	ir0_spinlock_t lock;
+	int destroy = 0;
+
+	if (!pipe)
+		return;
+
+	ir0_spin_lock(&lock);
+	if (pipe->fd_refs == 0 && pipe->wait_refs == 0 && !pipe->named)
+		destroy = 1;
+	ir0_spin_unlock(&lock);
+
+	if (!destroy)
+		return;
+
+	pipe_stats_destroyed++;
+	kfree(pipe);
+}
+
+void pipe_wait_enter(pipe_t *pipe)
+{
+	ir0_spinlock_t lock;
+
+	if (!pipe)
+		return;
+
+	ir0_spin_lock(&lock);
+	pipe->wait_refs++;
+	ir0_spin_unlock(&lock);
+}
+
+void pipe_wait_leave(pipe_t *pipe)
+{
+	ir0_spinlock_t lock;
+
+	if (!pipe)
+		return;
+
+	ir0_spin_lock(&lock);
+	if (pipe->wait_refs > 0)
+		pipe->wait_refs--;
+	ir0_spin_unlock(&lock);
+
+	pipe_try_destroy(pipe);
+}
+
 void pipe_close_end(pipe_t *pipe, int end)
 {
-	int last = 0;
+	int last_fd = 0;
 	ir0_spinlock_t lock;
 
 	if (!pipe)
@@ -271,7 +318,7 @@ void pipe_close_end(pipe_t *pipe, int end)
 	if (pipe->fd_refs > 0)
 	{
 		pipe->fd_refs--;
-		last = (pipe->fd_refs == 0);
+		last_fd = (pipe->fd_refs == 0);
 	}
 	ir0_spin_unlock(&lock);
 
@@ -281,8 +328,8 @@ void pipe_close_end(pipe_t *pipe, int end)
 			(uint64_t)(uint32_t)pipe->writers);
 
 	/*
-	 * Wake waiters while pipe_t is still alive. Callers must not
-	 * pipe_wake_all() after this returns when last==1 (object may be gone).
+	 * Wake waiters while pipe_t is still alive. Destruction is deferred
+	 * until fd_refs==0 and wait_refs==0 (pipe_wait_leave).
 	 */
 	{
 		extern void pipe_wake_all(pipe_t *p);
@@ -290,11 +337,8 @@ void pipe_close_end(pipe_t *pipe, int end)
 		pipe_wake_all(pipe);
 	}
 
-	if (last && !pipe->named)
-	{
-		pipe_stats_destroyed++;
-		kfree(pipe);
-	}
+	if (last_fd && !pipe->named)
+		pipe_try_destroy(pipe);
 }
 
 void pipe_ktm_note_read_sleep(pipe_t *pipe)

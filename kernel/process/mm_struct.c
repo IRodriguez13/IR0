@@ -90,6 +90,20 @@ void mm_put(mm_struct_t *mm)
 	kfree(mm);
 }
 
+int mm_users(const mm_struct_t *mm)
+{
+	uint64_t irq_flags;
+	int n;
+
+	if (!mm)
+		return 0;
+
+	irq_flags = process_irq_save();
+	n = mm->refcount;
+	process_irq_restore(irq_flags);
+	return n;
+}
+
 void process_mm_bind(process_t *p, mm_struct_t *mm)
 {
 	if (!p)

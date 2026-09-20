@@ -160,6 +160,55 @@ void wait_queue_wake_all(wait_queue_t *wq)
     }
 }
 
+static void wait_queue_remove_process(wait_queue_t *wq, process_t *proc)
+{
+    ir0_spinlock_t lock;
+    wait_queue_node_t **cur;
+
+    if (!wq || !proc)
+        return;
+
+    ir0_spin_lock(&lock);
+    cur = &wq->head;
+    while (*cur)
+    {
+        if ((*cur)->process == proc)
+        {
+            wait_queue_node_t *dead = *cur;
+
+            *cur = dead->next;
+            if (wq->tail == dead)
+                wq->tail = NULL;
+            ir0_spin_unlock(&lock);
+            kfree(dead);
+            ir0_spin_lock(&lock);
+            cur = &wq->head;
+            continue;
+        }
+        cur = &(*cur)->next;
+    }
+    ir0_spin_unlock(&lock);
+}
+
+void ipc_purge_waiters_for_process(process_t *proc)
+{
+    ir0_spinlock_t lock;
+    ipc_channel_t *channel;
+
+    if (!proc)
+        return;
+
+    ir0_spin_lock(&lock);
+    channel = ipc_channels;
+    while (channel)
+    {
+        wait_queue_remove_process(&channel->read_queue, proc);
+        wait_queue_remove_process(&channel->write_queue, proc);
+        channel = channel->next;
+    }
+    ir0_spin_unlock(&lock);
+}
+
 void semaphore_init(semaphore_t *sem, int initial_count)
 {
     if (!sem)
