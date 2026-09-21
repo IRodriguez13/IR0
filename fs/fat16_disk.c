@@ -18,6 +18,7 @@
 #include <ir0/partition.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
+#include <ir0/mount_prefix.h>
 #include <ir0/stat.h>
 #include <string.h>
 
@@ -98,7 +99,7 @@ static struct fat16_vol *fat16_find_mount(const char *vfs_path, char *rel, size_
 		mlen = strlen(v->mount_path);
 		if (strncmp(vfs_path, v->mount_path, mlen) != 0)
 			continue;
-		if (vfs_path[mlen] != '\0' && vfs_path[mlen] != '/')
+		if (!ir0_mount_prefix_boundary_ok(vfs_path, v->mount_path, mlen))
 			continue;
 		if (mlen >= best)
 		{

@@ -411,10 +411,9 @@ static void vfs_exec_audit_log(const char *stage, const char *path, int ret,
 }
 
 /*
- * Set-user-ID / set-group-ID on exec is honoured only on the trusted on-disk
- * root filesystem. IR0 has no per-mount MS_NOSUID yet (sys_mount takes no
- * flags), so every other backend — pseudo-filesystems, devfs, host 9p shares —
- * is treated as nosuid instead of pretending the flag exists.
+ * Set-user-ID / set-group-ID on exec is allowed only on mounts that are not
+ * MS_NOSUID and expose a real on-disk backend (vfs_ops). Pseudo / nodev
+ * filesystems default to nosuid at mount time — not by comparing fs name.
  */
 int vfs_path_allows_setid(const char *path)
 {
@@ -424,10 +423,37 @@ int vfs_path_allows_setid(const char *path)
         return 0;
 
     m = find_mount(path);
-    if (!m || !m->fs || !m->fs->name)
+    if (!m || !m->fs || !m->fs->ops)
         return 0;
 
-    return strcmp(m->fs->name, "minix") == 0;
+    if (m->flags & IR0_MS_NOSUID)
+        return 0;
+
+    return 1;
+}
+
+int vfs_mount_is_nosuid(const char *path)
+{
+    struct vfs_mount *m = find_mount(path);
+
+    if (!m)
+        return 1;
+    return (m->flags & IR0_MS_NOSUID) != 0;
+}
+
+static unsigned long vfs_default_mount_flags(const char *mount_path,
+                                             const char *fstype)
+{
+    (void)mount_path;
+
+    if (!fstype)
+        return IR0_MS_NOSUID;
+
+    if (strcmp(fstype, "proc") == 0 || strcmp(fstype, "sysfs") == 0 ||
+        strcmp(fstype, "tmpfs") == 0 || strcmp(fstype, "ramfs") == 0)
+        return IR0_MS_NOSUID;
+
+    return 0;
 }
 
 /**
@@ -678,7 +704,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
         m->dev[0] = '\0';
     }
     m->fs = ft;
-    m->flags = 0;
+    m->flags = vfs_default_mount_flags(mount_path, resolved_fstype);
     m->next = mounts;
 
     ret = ft->mount(dev, mount_path);
@@ -801,6 +827,10 @@ int vfs_init_root(void)
 
 #if !CONFIG_ENABLE_FS_MINIX
     if (strcmp(root_fs, "minix") == 0)
+        can_use_block_dev = 0;
+#endif
+#if !CONFIG_ENABLE_FS_EXT2
+    if (strcmp(root_fs, "ext2") == 0)
         can_use_block_dev = 0;
 #endif
 

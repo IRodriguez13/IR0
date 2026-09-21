@@ -41,7 +41,8 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_usercopy_contract.c \
 	test_procfs_linux_abi.c \
 	test_pseudo_fs_honesty.c \
-	test_matrix_capture.c
+	test_matrix_capture.c \
+	test_mount_prefix_boundary.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
@@ -50,7 +51,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
 	host_ps2_set1.o host_ps2_mouse_pkt.o \
-	host_matrix_capture.o
+	host_matrix_capture.o host_mount_prefix.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -91,6 +92,9 @@ host_named_fifo.o: $(KERNEL_ROOT)/kernel/lib/named_fifo.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -DCONFIG_DEBUG_FASE50=0 -c -o $@ $<
 
 host_path.o: $(KERNEL_ROOT)/fs/path.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+host_mount_prefix.o: $(KERNEL_ROOT)/kernel/lib/mount_prefix.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_pipe.o: $(KERNEL_ROOT)/kernel/lib/pipe.c
@@ -232,6 +236,9 @@ test_sched_backend_contract.o: test_sched_backend_contract.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_block_backend_contract.o: test_block_backend_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_mount_prefix_boundary.o: test_mount_prefix_boundary.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 $(TEST_BIN): $(TEST_OBJS)

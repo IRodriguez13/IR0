@@ -17,6 +17,7 @@
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
+#include <ir0/mount_prefix.h>
 #include <ir0/stat.h>
 #include <ir0/clock.h>
 #include <ir0/blockdev.h>
@@ -225,7 +226,7 @@ static simplefs_mount_t *simplefs_find_mount_for_path(const char *fs_name, const
         mlen = strlen(g_mounts[i].mount_path);
         if (strncmp(path, g_mounts[i].mount_path, mlen) != 0)
             continue;
-        if (path[mlen] != '\0' && path[mlen] != '/')
+        if (!ir0_mount_prefix_boundary_ok(path, g_mounts[i].mount_path, mlen))
             continue;
         if (mlen > best_len)
         {

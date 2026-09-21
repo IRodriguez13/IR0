@@ -1012,7 +1012,8 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     result = vfs_read_file(path, &file_data, &file_size);
     if (result != 0 || !file_data)
     {
-        klog_debug("ELF", "SERIAL: ELF: ERROR - Failed to read file from filesystem\n");
+        klog_error_fmt("ELF", "kexecve vfs_read_file %s ret=%d size=%x\n",
+                       path ? path : "(null)", result, (unsigned)file_size);
         return -1;
     }
 

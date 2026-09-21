@@ -71,6 +71,7 @@ extern void test_usercopy_no_raw_user_touch(void);
 extern void test_procfs_linux_abi(void);
 extern void test_pseudo_fs_honesty(void);
 extern void test_matrix_capture_suite(void);
+extern void test_mount_prefix_boundary(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -125,6 +126,7 @@ static void (*test_functions[])(void) = {
 	test_procfs_linux_abi,
 	test_pseudo_fs_honesty,
 	test_matrix_capture_suite,
+	test_mount_prefix_boundary,
 	NULL
 };
 

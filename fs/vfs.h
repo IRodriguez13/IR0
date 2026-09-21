@@ -49,6 +49,7 @@ struct vfs_mount {
 
 /* Linux mount(2) flag bits we honour today (values match linux/fs.h). */
 #define IR0_MS_RDONLY  1
+#define IR0_MS_NOSUID  2
 #define IR0_MS_REMOUNT 32
 #define IR0_MS_BIND    4096
 /* Flags that are not implemented yet — reject on new mounts. */
@@ -126,6 +127,7 @@ int vfs_read_file(const char *path, void **data, size_t *size);
 
 /* Non-zero when the mount holding @path may raise privileges on exec. */
 int vfs_path_allows_setid(const char *path);
+int vfs_mount_is_nosuid(const char *path);
 
 /* Exec-loader observational audit (single-threaded). */
 void vfs_exec_audit_begin(const char *path);

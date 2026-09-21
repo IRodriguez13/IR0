@@ -20,6 +20,7 @@
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/klog.h>
+#include <ir0/mount_prefix.h>
 #include <ir0/stat.h>
 #include <string.h>
 
@@ -355,7 +356,7 @@ static struct ext2_vol *ext2_find(const char *path, char *rel, size_t rel_sz, in
 		mlen = strlen(v->mount_path);
 		if (strncmp(path, v->mount_path, mlen) != 0)
 			continue;
-		if (path[mlen] != '\0' && path[mlen] != '/')
+		if (!ir0_mount_prefix_boundary_ok(path, v->mount_path, mlen))
 			continue;
 		if (mlen >= best)
 		{
