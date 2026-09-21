@@ -16,6 +16,7 @@
 #include <arch_interface.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
+#include <ir0/clock.h>
 #include <ir0/resource_registry.h>
 
 /* Driver registration structures */
@@ -52,11 +53,10 @@ uint32_t get_pit_ticks(void)
 
 void increment_pit_ticks(void)
 {
-    ticks++;
-    /* Update clock system - this updates uptime_milliseconds */
-    extern void clock_tick(void);
-    clock_tick();
-    
+	ticks++;
+	clock_note_irq();
+	extern void clock_tick(void);
+	clock_tick();
 }
 
 /*

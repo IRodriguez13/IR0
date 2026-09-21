@@ -298,3 +298,51 @@ void ktest_procfs_pid_exe(void)
 
 	KTEST_END();
 }
+
+static int ktest_parse_ull_field(const char *line, const char *prefix,
+				 unsigned long long *out)
+{
+	size_t plen;
+	unsigned long long v = 0;
+	size_t i;
+
+	if (!line || !prefix || !out)
+		return -1;
+	plen = strlen(prefix);
+	if (strncmp(line, prefix, plen) != 0)
+		return -1;
+	for (i = plen; line[i] >= '0' && line[i] <= '9'; i++)
+		v = v * 10ULL + (unsigned long long)(line[i] - '0');
+	if (i == plen)
+		return -1;
+	*out = v;
+	return 0;
+}
+
+void ktest_procfs_stat(void)
+{
+	char buf[512];
+	char *line;
+	int64_t fd;
+	int64_t n;
+	unsigned long long intr = 0;
+	unsigned long long ctxt = 0;
+
+	KTEST_BEGIN("procfs_stat");
+	fd = sys_open("/proc/stat", 0, 0);
+	KASSERT_GT(fd, 0);
+	memset(buf, 0, sizeof(buf));
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+	KASSERT(strstr(buf, "cpu ") != NULL);
+	line = strstr(buf, "intr ");
+	KASSERT(line != NULL);
+	KASSERT(ktest_parse_ull_field(line, "intr ", &intr) == 0);
+	line = strstr(buf, "ctxt ");
+	KASSERT(line != NULL);
+	KASSERT(ktest_parse_ull_field(line, "ctxt ", &ctxt) == 0);
+	KASSERT(strstr(buf, "btime ") != NULL);
+	KASSERT_GT(intr, 0ULL);
+	KTEST_END();
+}

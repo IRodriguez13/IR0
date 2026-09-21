@@ -67,12 +67,24 @@ Uninstall: `make mandocs-uninstall` or `MANDOC_LANG=all make mandocs-uninstall`
 
 - `make kmang`: TUI catalog for boot ISOs under `IR0-machines/` (Default /
   Fallback / Workspace). Build `#N` is host-local; compare with SHA-256.
+  On **desktop** / **desktop-console** profiles, **Enter** (select kernel) and
+  **`b`** (boot Default) ask **terminal only** vs **X direct**, then write a
+  one-shot `/etc/ir0-session` on the machine disk before `poweron`.
 - `make kernel-manager-install`: rebuild workspace ISO and enroll it as Default.
 - `make poweron`: boot Default (or workspace ISO only if the catalog is empty).
 - `make machine-update-kernel`: rebuild ISO only — does not enroll; kmang `i`
   is still required before `poweron` picks it up.
 - `make usmang`: host inspector for ISD release, package origins, `USERLAND_BASE`,
   and desktop package set (independent of kernel `#N`).
+- `make kmang-test`: host regression tests for the kernel catalog, confirm-twice cleanup, and session prompt.
+- `make usmang-test`: host tests for the ISD inspector CLI and help legend.
+- `make smoke-desktop-twm-resize`: twm title resize → xterm SIGWINCH + session survival (PROFILE=desktop).
+
+**Build `#N` vs release tag:** `#363` in kmang is the **machine-local** counter in
+`.build_number` (incremented on each `kernel-x64.bin` link). It is independent of
+`IR0_VERSION_STRING` (`0.0.1-rc5`, etc.). When the release string changes (e.g.
+rc5 → rc6), the Makefile resets `.build_number` to `1` automatically
+(`.build_number_version` stamp).
 
 ## Current Strengths
 

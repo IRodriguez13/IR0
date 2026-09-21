@@ -23,11 +23,22 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 BUILD_ID_RE = re.compile(r"-build([0-9]+)$")
+IR0_LOGIN_SESSION_TERMINAL = "terminal"
+IR0_LOGIN_SESSION_X = "x"
+IR0_SESSION_FILE = "etc/ir0-session"
+# Backward-compatible aliases for host tests and mandoc cross-refs.
+KMANG_SESSION_TERMINAL = IR0_LOGIN_SESSION_TERMINAL
+KMANG_SESSION_X = IR0_LOGIN_SESSION_X
+KMANG_SESSION_FILE = IR0_SESSION_FILE
+TUI_EXIT_BOOT = 10
+DESKTOP_BOOT_PROFILES = frozenset({"desktop", "desktop-console"})
+TRUTHY_PROFILE_FLAGS = frozenset({"1", "yes", "true", "on"})
 # Fragments emitted into kernel .rodata via IR0_BUILD_* macros.
 PROVENANCE_RE = re.compile(
     rb"built ([A-Za-z]{3} +\d{1,2} +\d{4}) (\d{2}:\d{2}:\d{2}) by "
@@ -43,6 +54,7 @@ class KernelStore:
         profile: str = "unknown",
         machine: str = "unknown",
         kernel_root: Path | None = None,
+        isd_root: Path | None = None,
         isd_disk: Path | None = None,
         machine_disk: Path | None = None,
     ) -> None:
@@ -51,12 +63,73 @@ class KernelStore:
         self.profile = profile
         self.machine = machine
         self.kernel_root = kernel_root.resolve() if kernel_root else None
+        self.isd_root = isd_root.resolve() if isd_root else None
         self.isd_disk = isd_disk.resolve() if isd_disk else None
         self.machine_disk = machine_disk.resolve() if machine_disk else None
         self.kernels = self.machine_dir / "kernels"
         self.current = self.machine_dir / "kernel-current.iso"
         self.fallback = self.machine_dir / "kernel-fallback.iso"
         self.lock_path = self.machine_dir / ".kernel-manager.lock"
+
+    @property
+    def persistent_disk(self) -> Path:
+        if self.machine_disk is not None:
+            return self.machine_disk
+        return self.machine_dir / "disk.img"
+
+    def profile_conf_value(self, key: str) -> str | None:
+        if self.isd_root is None:
+            return None
+        conf = self.isd_root / "profiles" / self.profile / "profile.conf"
+        if not conf.is_file():
+            return None
+        prefix = key + "="
+        for raw in conf.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith(prefix):
+                return line.split("=", 1)[1].strip().strip('"')
+        return None
+
+    def boot_session_prompt_capable(self) -> bool:
+        """True when kmang TUI may ask terminal vs X before poweron."""
+        flag = self.profile_conf_value("KMANG_BOOT_PROMPT")
+        if flag is not None:
+            return flag.lower() in TRUTHY_PROFILE_FLAGS
+        return self.profile in DESKTOP_BOOT_PROFILES
+
+    def desktop_boot_capable(self) -> bool:
+        return self.boot_session_prompt_capable()
+
+    def write_login_session(self, session: str) -> None:
+        if session not in (IR0_LOGIN_SESSION_TERMINAL, IR0_LOGIN_SESSION_X):
+            raise ValueError(f"unsupported login session: {session}")
+        disk = self.persistent_disk
+        if not disk.is_file():
+            raise ValueError(
+                f"machine disk missing: {disk} (provision with make first-boot/poweron)"
+            )
+        if self.kernel_root is None:
+            raise ValueError("kernel root is not configured for login-session inject")
+        inject = self.kernel_root / "scripts" / "inject_init_minix.py"
+        if not inject.is_file():
+            raise ValueError(f"missing inject tool: {inject}")
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as stream:
+            stream.write(session + "\n")
+            payload = Path(stream.name)
+        try:
+            result = subprocess.run(
+                [sys.executable, str(inject), str(disk), str(payload), IR0_SESSION_FILE],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip() or "inject failed"
+                raise ValueError(detail)
+        finally:
+            payload.unlink(missing_ok=True)
 
     def metadata_path(self, kernel_id: str) -> Path:
         return self.kernels / f"{kernel_id}.json"
@@ -209,16 +282,17 @@ class KernelStore:
                 bits.append(f"{label}=missing")
         return ", ".join(bits) if bits else "disks not configured"
 
+    def _iso_has_bootable_kernel(self, image: Path) -> bool:
+        """True when xorriso can extract a supported /boot/kernel*.bin payload."""
+        with tempfile.TemporaryDirectory(prefix="ir0-kernel-probe.") as directory:
+            kernel = Path(directory) / "kernel.bin"
+            return self._extract_kernel(image, kernel)
+
     def verify(self, kernel_id: str, enroll: bool = False) -> tuple[bool, str]:
         image = self.kernels / f"{kernel_id}.iso"
         if not image.is_file():
             return False, "missing"
-        probe = subprocess.run(
-            ["xorriso", "-indev", str(image), "-ls", "/boot/kernel-x64.bin"],
-            text=True, capture_output=True, check=False,
-            env=self._inspection_env(),
-        )
-        if probe.returncode != 0 or "/boot/kernel-x64.bin" not in probe.stdout:
+        if not self._iso_has_bootable_kernel(image):
             return False, "invalid ISO"
         digest = self.checksum(image)
         embedded = self.embedded_build(image)
@@ -549,21 +623,236 @@ def _provenance_label(meta: dict) -> str:
     return " · ".join(bits)
 
 
-HELP_LINES = [
-    "Build #N is local to this host's .build_number — not a global release id.",
-    "poweron boots Default (catalog), not Workspace, until you press i.",
-    "",
-    "i  install workspace ISO into catalog + select it",
-    "r  rebuild kernel ISO, install, select",
-    "Enter  select highlighted as Default (old becomes Fallback)",
-    "b  boot Default via make poweron",
-    "v  verify checksum + embedded identity",
-    "c  compare Workspace vs Default",
-    "s  show detail for highlighted kernel",
-    "p  prune (delete all except Default+Fallback); press twice",
-    "d  delete highlighted (not Default/Fallback); press twice",
-    "h/?  this help   q  quit",
-]
+@dataclass(frozen=True)
+class HelpEntry:
+    keys: str
+    description: str
+
+
+@dataclass(frozen=True)
+class HelpSection:
+    title: str
+    entries: tuple[HelpEntry, ...]
+
+
+KMANG_HELP_SECTIONS: tuple[HelpSection, ...] = (
+    HelpSection(
+        "Concepts",
+        (
+            HelpEntry(
+                "",
+                "Build #N is local to this host's .build_number — not a global release id.",
+            ),
+            HelpEntry(
+                "",
+                "poweron boots Default (catalog), not Workspace, until you press i.",
+            ),
+            HelpEntry(
+                "",
+                "* marks Default; [fallback] is the previous Default after re-select.",
+            ),
+        ),
+    ),
+    HelpSection(
+        "Workspace and catalog",
+        (
+            HelpEntry("i", "Install workspace ISO into catalog and select as Default"),
+            HelpEntry("r", "Rebuild kernel-x64-userspace.iso, install, and select"),
+            HelpEntry("Enter", "Select highlighted kernel; desktop profiles ask terminal vs X"),
+            HelpEntry("b", "Verify Default/Fallback, ask terminal vs X, then poweron"),
+            HelpEntry("c", "Compare workspace ISO vs Default (relation + SHA-256)"),
+        ),
+    ),
+    HelpSection(
+        "Inspection",
+        (
+            HelpEntry("s", "Show metadata detail for highlighted kernel"),
+            HelpEntry("v", "Verify checksum and embedded build identity"),
+        ),
+    ),
+    HelpSection(
+        "Navigation",
+        (
+            HelpEntry("↑ / ↓", "Move selection in the kernel list"),
+            HelpEntry("PgUp / PgDn", "Page the kernel list"),
+        ),
+    ),
+    HelpSection(
+        "Cleanup (confirm twice)",
+        (
+            HelpEntry("d", "Delete highlighted kernel (not Default or Fallback)"),
+            HelpEntry("p", "Prune all kernels except Default and Fallback"),
+        ),
+    ),
+    HelpSection(
+        "General",
+        (
+            HelpEntry("h / ? / F1", "Show this key legend"),
+            HelpEntry("q / Esc", "Quit without booting"),
+        ),
+    ),
+)
+
+# Single-letter keys handled by the TUI (excluding Enter and navigation).
+KMANG_TUI_ACTION_KEYS = frozenset("ircsvdpbh?")
+
+
+def format_help_plain_lines(section: HelpSection) -> list[str]:
+    lines: list[str] = []
+    lines.append(section.title + ":")
+    for entry in section.entries:
+        if entry.keys:
+            lines.append(f"  {entry.keys:<14} {entry.description}")
+        else:
+            lines.append(f"  {entry.description}")
+    lines.append("")
+    return lines
+
+
+def format_help_text() -> str:
+    chunks: list[str] = ["IR0 Kernel Manager (kmang) — key legend", ""]
+    for section in KMANG_HELP_SECTIONS:
+        chunks.extend(format_help_plain_lines(section))
+    while chunks and chunks[-1] == "":
+        chunks.pop()
+    return "\n".join(chunks)
+
+
+def format_help_compact(max_width: int = 76) -> str:
+    legend = "Keys: h/? · q · ↑↓ · i · r · Enter · b · c · s/v · d/p  (h/? = full legend)"
+    return _clip(legend, max_width)
+
+
+def help_overlay_lines() -> list[tuple[bool, str]]:
+    rows: list[tuple[bool, str]] = [(True, "kmang — key legend")]
+    rows.append((False, ""))
+    for section in KMANG_HELP_SECTIONS:
+        rows.append((True, section.title))
+        for entry in section.entries:
+            if entry.keys:
+                rows.append((False, f"  {entry.keys:<14} {entry.description}"))
+            else:
+                rows.append((False, f"  {entry.description}"))
+        rows.append((False, ""))
+    while rows and rows[-1] == (False, ""):
+        rows.pop()
+    rows.append((False, ""))
+    rows.append((False, "↑/↓ scroll legend · any other key closes"))
+    return rows
+
+
+def _render_help_overlay(
+    screen: curses.window,
+    lines: list[tuple[bool, str]],
+    scroll: int,
+) -> int:
+    height, width = screen.getmaxyx()
+    footer = 2
+    body_rows = max(1, height - footer)
+    max_scroll = max(0, len(lines) - body_rows)
+    scroll = min(scroll, max_scroll)
+    screen.erase()
+    for row in range(body_rows):
+        index = scroll + row
+        if index >= len(lines):
+            break
+        is_title, text = lines[index]
+        attr = curses.A_BOLD if is_title else 0
+        screen.addstr(row, 2, _clip(text, width - 4), attr)
+    if max_scroll > 0:
+        hint = f"scroll {scroll + 1}/{max_scroll + 1}  ↑↓  close: any key"
+    else:
+        hint = "close: any key"
+    screen.addstr(height - 1, 2, _clip(hint, width - 4))
+    screen.refresh()
+    return scroll
+
+
+def _read_help_scroll_key(screen: curses.window, scroll: int, max_scroll: int) -> tuple[int, bool]:
+    key = screen.getch()
+    if key in (curses.KEY_UP, ord("k")):
+        return max(0, scroll - 1), False
+    if key in (curses.KEY_DOWN, ord("j")):
+        return min(max_scroll, scroll + 1), False
+    if key in (curses.KEY_PPAGE,):
+        return max(0, scroll - 5), False
+    if key in (curses.KEY_NPAGE,):
+        return min(max_scroll, scroll + 5), False
+    return scroll, True
+
+
+HELP_LINES = format_help_text().splitlines()
+
+
+def _prompt_boot_session(screen: curses.window, kernel_id: str) -> str | None:
+    """Return terminal/x session choice, or None to stay in kmang."""
+    height, width = screen.getmaxyx()
+    rows: list[tuple[bool, str]] = [
+        (True, "Boot session"),
+        (False, ""),
+        (False, f"Kernel: {kernel_id}"),
+        (False, ""),
+        (False, "  t   Terminal only"),
+        (False, "  x   X direct"),
+        (False, "  q   Select only (stay in kmang)"),
+    ]
+    screen.erase()
+    for index, (is_title, text) in enumerate(rows):
+        if index >= height - 2:
+            break
+        attr = curses.A_BOLD if is_title else 0
+        screen.addstr(index, 2, _clip(text, width - 4), attr)
+    screen.addstr(height - 1, 2, _clip("choose: t / x / q", width - 4))
+    screen.refresh()
+    key = screen.getch()
+    if key in (ord("x"), ord("X")):
+        return IR0_LOGIN_SESSION_X
+    if key in (ord("t"), ord("T")):
+        return IR0_LOGIN_SESSION_TERMINAL
+    return None
+
+
+@dataclass(frozen=True)
+class TuiConfirmState:
+    pending_delete: str | None = None
+    pending_prune: bool = False
+
+
+def tui_confirm_reset() -> TuiConfirmState:
+    return TuiConfirmState()
+
+
+def tui_arm_delete(state: TuiConfirmState, kernel_id: str) -> tuple[TuiConfirmState, str, bool]:
+    """Arm or confirm delete. Returns (state, status message, confirmed)."""
+    if state.pending_delete != kernel_id:
+        return (
+            TuiConfirmState(pending_delete=kernel_id, pending_prune=False),
+            f"Press d again to remove {kernel_id}",
+            False,
+        )
+    return TuiConfirmState(), "Kernel removed", True
+
+
+def tui_arm_prune(state: TuiConfirmState) -> tuple[TuiConfirmState, str, bool]:
+    """Arm or confirm prune. Returns (state, status message, confirmed)."""
+    if not state.pending_prune:
+        return (
+            TuiConfirmState(pending_prune=True),
+            "Press p again to prune all except Default+Fallback",
+            False,
+        )
+    return TuiConfirmState(), "", True
+
+
+def _maybe_boot_after_select(store: KernelStore, screen: curses.window,
+                            kernel_id: str) -> int | None:
+    if not store.boot_session_prompt_capable():
+        return None
+    choice = _prompt_boot_session(screen, kernel_id)
+    if choice is None:
+        return None
+    store.write_login_session(choice)
+    return TUI_EXIT_BOOT
 
 
 def tui(screen: curses.window, store: KernelStore, make_args: list[str],
@@ -574,16 +863,13 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
         pass
     selected = 0
     scroll = 0
-    pending_delete = None
-    pending_prune = False
+    confirm = tui_confirm_reset()
     statuses: dict[str, tuple[bool, str]] = {}
     refresh_status = True
     show_help = False
+    help_scroll = 0
     detail: str | None = None
-    message = (
-        "i install  r rebuild  enter select  c compare  s detail  "
-        "v verify  p prune  b boot  h help  q quit"
-    )
+    message = "Press h/? for full key legend"
     while True:
         entries = store.installed()
         workspace_id = None
@@ -605,7 +891,7 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
         selected = min(selected, max(0, len(entries) - 1))
         height, width = screen.getmaxyx()
         list_top = 9
-        list_bottom = max(list_top, height - 3)
+        list_bottom = max(list_top, height - 4)
         visible = max(1, list_bottom - list_top)
         if selected < scroll:
             scroll = selected
@@ -625,15 +911,21 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
 
         screen.erase()
         if show_help:
-            screen.addstr(0, 2, "kmang help", curses.A_BOLD)
-            for index, line in enumerate(HELP_LINES):
-                if 2 + index >= height - 1:
+            overlay = help_overlay_lines()
+            height, width = screen.getmaxyx()
+            body_rows = max(1, height - 2)
+            max_scroll = max(0, len(overlay) - body_rows)
+            help_scroll = min(help_scroll, max_scroll)
+            while True:
+                help_scroll = _render_help_overlay(screen, overlay, help_scroll)
+                help_scroll, close = _read_help_scroll_key(
+                    screen, help_scroll, max_scroll
+                )
+                if close:
                     break
-                screen.addstr(2 + index, 2, _clip(line, width - 4))
-            screen.addstr(height - 1, 2, _clip("press any key", width - 4))
-            screen.refresh()
-            screen.getch()
             show_help = False
+            help_scroll = 0
+            confirm = tui_confirm_reset()
             continue
 
         if detail is not None:
@@ -705,16 +997,17 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
             attr = curses.A_REVERSE if index == selected else 0
             screen.addstr(list_top + row, 2, _clip(line, width - 4), attr)
 
+        screen.addstr(height - 3, 2, _clip(format_help_compact(width - 4), width - 4))
         screen.addstr(height - 2, 2, _clip(message, width - 4))
         screen.refresh()
         key = screen.getch()
         try:
             if key in (ord("q"), 27):
                 return 0
-            if key in (ord("h"), ord("?")):
+            if key in (ord("h"), ord("?"), curses.KEY_F1):
                 show_help = True
-                pending_delete = None
-                pending_prune = False
+                help_scroll = 0
+                confirm = tui_confirm_reset()
             elif key == curses.KEY_UP and entries:
                 selected = (selected - 1) % len(entries)
             elif key == curses.KEY_DOWN and entries:
@@ -724,10 +1017,13 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
             elif key == curses.KEY_NPAGE and entries:
                 selected = min(len(entries) - 1, selected + visible)
             elif key in (10, 13) and entries:
-                store.select(entries[selected])
-                message = f"Selected {entries[selected]}; previous retained as fallback"
-                pending_delete = None
-                pending_prune = False
+                kernel_id = entries[selected]
+                store.select(kernel_id)
+                message = f"Selected {kernel_id}; previous retained as fallback"
+                confirm = tui_confirm_reset()
+                boot_rc = _maybe_boot_after_select(store, screen, kernel_id)
+                if boot_rc is not None:
+                    return boot_rc
             elif key == ord("i"):
                 if source is None or version is None:
                     raise ValueError("workspace install source/version is not configured")
@@ -735,8 +1031,7 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
                 store.install(source.resolve(), workspace_id)
                 message = f"Installed and selected {workspace_id}"
                 refresh_status = True
-                pending_delete = None
-                pending_prune = False
+                confirm = tui_confirm_reset()
             elif key == ord("r"):
                 curses.endwin()
                 result = subprocess.run(
@@ -753,8 +1048,7 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
                 else:
                     message = "Kernel build/install failed"
                 refresh_status = True
-                pending_delete = None
-                pending_prune = False
+                confirm = tui_confirm_reset()
             elif key == ord("c"):
                 if source is None or version is None:
                     raise ValueError("workspace source/version is not configured")
@@ -765,8 +1059,7 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
                     f"default={report['default_id'] or '-'}  "
                     f"needs_install={report['needs_install']}"
                 )
-                pending_delete = None
-                pending_prune = False
+                confirm = tui_confirm_reset()
             elif key == ord("s") and entries:
                 info = store.describe(entries[selected])
                 lines = [
@@ -783,41 +1076,35 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
                     f"path:          {info.get('path')}",
                 ]
                 detail = "\n".join(lines)
-                pending_delete = None
-                pending_prune = False
+                confirm = tui_confirm_reset()
             elif key == ord("d") and entries:
-                pending_prune = False
-                if pending_delete != entries[selected]:
-                    pending_delete = entries[selected]
-                    message = f"Press d again to remove {entries[selected]}"
-                else:
+                confirm, message, confirmed = tui_arm_delete(confirm, entries[selected])
+                if confirmed:
                     store.delete(entries[selected])
-                    pending_delete = None
-                    message = "Kernel removed"
                     refresh_status = True
             elif key == ord("p"):
-                pending_delete = None
-                if not pending_prune:
-                    pending_prune = True
-                    message = "Press p again to prune all except Default+Fallback"
-                else:
+                confirm, prune_message, confirmed = tui_arm_prune(confirm)
+                if confirmed:
                     removed = store.prune()
-                    pending_prune = False
                     message = f"Pruned {len(removed)} kernel(s)"
                     refresh_status = True
+                else:
+                    message = prune_message
             elif key == ord("v") and entries:
                 valid, state = store.verify(entries[selected], enroll=True)
                 message = f"{entries[selected]}: {state if valid else 'FAILED ' + state}"
                 refresh_status = True
-                pending_delete = None
-                pending_prune = False
+                confirm = tui_confirm_reset()
             elif key == ord("b"):
                 store.resolve()
-                return 10
+                kernel_id = store.current_id() or "Default"
+                boot_rc = _maybe_boot_after_select(store, screen, kernel_id)
+                if boot_rc is not None:
+                    return boot_rc
+                return TUI_EXIT_BOOT
         except (OSError, ValueError) as error:
             message = f"Error: {error}"
-            pending_delete = None
-            pending_prune = False
+            confirm = tui_confirm_reset()
 
 
 def main() -> int:
@@ -832,6 +1119,7 @@ def main() -> int:
     parser.add_argument("--profile", default="unknown")
     parser.add_argument("--machine", default="unknown")
     parser.add_argument("--kernel-root", type=Path)
+    parser.add_argument("--isd-root", type=Path)
     parser.add_argument("--isd-disk", type=Path)
     parser.add_argument("--machine-disk", type=Path)
     parser.add_argument("--make-arg", action="append", default=[])
@@ -857,6 +1145,7 @@ def main() -> int:
     info.add_argument("--json", action="store_true")
     subparsers.add_parser("compare")
     subparsers.add_parser("prune")
+    subparsers.add_parser("help", help="Print TUI/CLI key legend")
     subparsers.add_parser("tui")
     args = parser.parse_args()
     store = KernelStore(
@@ -865,6 +1154,7 @@ def main() -> int:
         args.profile,
         args.machine,
         kernel_root=args.kernel_root,
+        isd_root=args.isd_root,
         isd_disk=args.isd_disk,
         machine_disk=args.machine_disk,
     )
@@ -954,6 +1244,8 @@ def main() -> int:
             )
             state = "installed" if kernel_id in store.installed() else "not-installed"
             print(f"{kernel_id}\t{state},arch={embedded_arch}")
+        elif args.command == "help":
+            print(format_help_text())
         else:
             if not sys.stdin.isatty() or not sys.stdout.isatty():
                 print("✗ kmang requires an interactive terminal", file=sys.stderr)

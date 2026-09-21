@@ -776,13 +776,13 @@ int64_t dev_mouse_read(devfs_entry_t *entry, void *buf, size_t count, off_t offs
     if ((packet[0] & 0x07u) != last_buttons)
     {
         last_buttons = packet[0] & 0x07u;
-        klog_info_fmt("INPUT", "DEV_MOUSE_BUTTONS mask=%u",
-                      (unsigned)last_buttons);
+        klog_debug_fmt("INPUT", "DEV_MOUSE_BUTTONS mask=%u",
+                       (unsigned)last_buttons);
     }
     if (!read_path_logged)
     {
         read_path_logged = 1;
-        klog_info_fmt("INPUT", "DEV_MOUSE_READ_PATH_OK");
+        klog_debug_fmt("INPUT", "DEV_MOUSE_READ_PATH_OK");
     }
     return (int64_t)sizeof(packet);
 #else
@@ -808,7 +808,7 @@ static int64_t dev_mouse_write(devfs_entry_t *entry, const void *buf,
     if (!first_write_logged)
     {
         first_write_logged = 1;
-        klog_info_fmt("INPUT", "DEV_MOUSE_WRITE bytes=%u", (unsigned)count);
+        klog_debug_fmt("INPUT", "DEV_MOUSE_WRITE bytes=%u", (unsigned)count);
     }
 
     /*

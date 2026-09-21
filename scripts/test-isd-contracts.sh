@@ -89,8 +89,26 @@ else
 fi
 grep -q 'machine-local' scripts/kernel_manager.py \
 	&& grep -q 'compare_workspace' scripts/kernel_manager.py \
+	&& grep -q "add_parser(\"help\"" scripts/kernel_manager.py \
+	&& grep -q 'format_help_text' scripts/kernel_manager.py \
 	&& ok "D kmang treats build numbers as machine-local" \
 	|| bad "D kmang provenance contract"
+ISD_ROOT="$ROOT/../ISD"
+grep -q 'write_login_session' scripts/kernel_manager.py \
+	&& grep -q 'etc/ir0-session' scripts/kernel_manager.py \
+	&& grep -q 'KMANG_BOOT_PROMPT' scripts/kernel_manager.py \
+	&& grep -q 'tui_arm_delete' scripts/kernel_manager.py \
+	&& ok "D kmang login-session boot prompt wired" \
+	|| bad "D kmang login-session contract"
+grep -q 'KMANG_BOOT_PROMPT=1' "$ISD_ROOT/profiles/desktop/profile.conf" 2>/dev/null \
+	&& ok "D ISD desktop KMANG_BOOT_PROMPT" \
+	|| { [ -f "$ISD_ROOT/profiles/desktop/profile.conf" ] && bad "D ISD desktop KMANG_BOOT_PROMPT"; \
+	     ok "D ISD KMANG_BOOT_PROMPT (skipped — no sibling ISD checkout)"; }
+grep -q 'etc/ir0-session' scripts/kernel_manager.py \
+	&& test -f "$ISD_ROOT/Documentation/LOGIN_SESSION.md" 2>/dev/null \
+	&& ok "D ISD login-session guest contract doc" \
+	|| { [ -f "$ISD_ROOT/Documentation/LOGIN_SESSION.md" ] && bad "D ISD login-session doc"; \
+	     ok "D ISD login-session doc (skipped — no sibling ISD checkout)"; }
 grep -q '^usmang:' scripts/make/isd.mk \
 	&& test -f scripts/userspace_manager.py \
 	&& ok "D usmang host inspector wired" \
@@ -101,7 +119,10 @@ python3 scripts/test_kernel_manager.py >/dev/null \
 python3 scripts/test_userspace_manager.py >/dev/null \
 	&& ok "D usmang profile-aware desktop reporting" \
 	|| bad "D usmang behavior"
-ISD_ROOT="$ROOT/../ISD"
+grep -q 'format_usmang_help' scripts/userspace_manager.py \
+	&& grep -q '"help"' scripts/userspace_manager.py \
+	&& ok "D usmang help command wired" \
+	|| bad "D usmang help missing"
 if [ -f "$ISD_ROOT/scripts/pack-minix.sh" ]; then
 	grep -q 'xload' "$ISD_ROOT/scripts/pack-minix.sh" \
 		&& ok "D ISD pack-minix includes xload" \

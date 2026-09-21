@@ -30,6 +30,7 @@ void ktest_procfs_pid_fd(void);
 void ktest_procfs_pid_environ(void);
 void ktest_procfs_self_symlink(void);
 void ktest_procfs_pid_exe(void);
+void ktest_procfs_stat(void);
 void ktest_process_current(void);
 void ktest_wait4_status(void);
 void ktest_wait4_specific_reaps_requested_child(void);

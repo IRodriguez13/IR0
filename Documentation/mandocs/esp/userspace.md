@@ -64,7 +64,7 @@ entradas de directorio de MINIX v1), `appliance` no abre login interactivo
 | `make smoke-runit-login` | Autologin root (password vacío) |
 | `make smoke-runit-login-nonroot` | No-root: crypt(3) + uid 1001 + PS1 |
 | `make run-fase58e-ash-gui` | ash interactivo GTK |
-| `make kmang` | Catálogo interactivo de ISO kernel; `poweron` arranca Default |
+| `make kmang` | Catálogo interactivo de ISO kernel; `poweron` arranca Default — ver **`man IR0-kmang`** |
 | `make usmang` | Resumen ISD en host; detalle desktop solo con `PROFILE=desktop` |
 | `make smoke-x11-pointer PROFILE=desktop` | TinyX fullscreen + clientes desktop |
 
@@ -72,6 +72,7 @@ Guía: [`USERSPACE.md`](../../USERSPACE.md), [`TOOLING.md`](../../TOOLING.md).
 
 **kmang:** el `#N` de build es **local a la máquina**. Comparar hosts por SHA-256 y
 procedencia, no solo por `#N`. La TUI avisa si el ISO Workspace difiere del Default.
+Contrato completo: **`man IR0-kmang`**.
 
 **usmang:** lee `ISD/VERSION` y `profiles/<PROFILE>/packages.txt` reales; clientes X
 solo con `PROFILE=desktop`. Versión ISD ≠ build local del kernel.

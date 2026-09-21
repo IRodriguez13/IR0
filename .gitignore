@@ -23,6 +23,7 @@ iso_test/
 .config
 .build_number
 .build_number_inc
+.build_number_version
 .kernel_build_number
 .kernel_userspace_build_number
 .example_drivers_enabled

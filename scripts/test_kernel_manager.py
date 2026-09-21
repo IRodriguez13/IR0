@@ -4,17 +4,34 @@
 
 from __future__ import annotations
 
-import subprocess
-import tempfile
-import unittest
-import re
+import importlib.util
 import json
 import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+import curses
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
 MANAGER = ROOT / "scripts/kernel_manager.py"
+
+
+def load_kernel_manager():
+    spec = importlib.util.spec_from_file_location("kernel_manager", MANAGER)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {MANAGER}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+KM = load_kernel_manager()
 
 
 class KernelManagerTest(unittest.TestCase):
@@ -236,6 +253,279 @@ class KernelManagerTest(unittest.TestCase):
         )
         self.assertEqual(payload["build_scope"], "machine-local")
         self.assertEqual(payload["embedded_build"], 41)
+
+    def test_help_command_lists_every_tui_action_key(self) -> None:
+        result = self.run_manager("help")
+        text = result.stdout
+        self.assertIn("key legend", text)
+        for key in sorted(KM.KMANG_TUI_ACTION_KEYS):
+            self.assertIn(key, text, msg=f"help text missing TUI key {key!r}")
+        self.assertIn("Enter", text)
+        self.assertIn("PgUp", text)
+        self.assertIn(".build_number", text)
+
+    def test_help_compact_mentions_primary_bindings(self) -> None:
+        full = KM.format_help_compact(200)
+        for fragment in ("h/?", "q", "i", "Enter", "b", "d/p"):
+            self.assertIn(fragment, full)
+        narrow = KM.format_help_compact(76)
+        self.assertIn("h/?", narrow)
+        self.assertTrue(narrow.startswith("Keys:"))
+
+    def test_help_sections_have_unique_titles(self) -> None:
+        titles = [section.title for section in KM.KMANG_HELP_SECTIONS]
+        self.assertEqual(len(titles), len(set(titles)))
+
+    def test_resolve_fails_without_enrolled_kernels(self) -> None:
+        result = self.run_manager("resolve", success=False)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("no verified", result.stderr)
+
+    def test_install_workspace_selects_current(self) -> None:
+        source = self.root / "workspace.iso"
+        obj = self.root / "ws.o"
+        subprocess.run(
+            ["cc", "-c", "-x", "c", "-o", str(obj), "-"],
+            input='const char payload[] = "kernel-55";\n',
+            text=True, capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["ld", "-r", "--defsym=ir0_build_number=55", "-o", str(self.root / "ws.bin"), str(obj)],
+            capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["xorriso", "-outdev", str(source), "-map", str(self.root / "ws.bin"),
+             "/boot/kernel-x64.bin"],
+            capture_output=True, check=True,
+        )
+        self.run_manager(
+            "--source", str(source), "--version", "0.0.1-rc5", "install-workspace"
+        )
+        listing = self.run_manager("list").stdout
+        self.assertIn("0.0.1-rc5-build55\tcurrent", listing)
+        resolved = Path(self.run_manager("resolve").stdout.strip())
+        self.assertEqual(resolved, self.machine / "kernels/0.0.1-rc5-build55.iso")
+
+    def test_compare_identical_when_default_matches_workspace(self) -> None:
+        self.install("0.0.1-rc5-build41", b"kernel-41")
+        source = self.root / "workspace.iso"
+        shutil.copy(
+            self.machine / "kernels/0.0.1-rc5-build41.iso",
+            source,
+        )
+        result = self.run_manager(
+            "--source", str(source), "--version", "0.0.1-rc5", "compare"
+        )
+        report = json.loads(result.stdout)
+        self.assertEqual(report["relation"], "identical")
+        self.assertFalse(report["needs_install"])
+
+    def test_verify_rejects_invalid_iso_payload(self) -> None:
+        source = self.root / "bad.iso"
+        junk = self.root / "junk.bin"
+        junk.write_bytes(b"not-a-kernel")
+        subprocess.run(
+            ["xorriso", "-outdev", str(source), "-map", str(junk), "/boot/kernel-x64.bin"],
+            capture_output=True, check=True,
+        )
+        result = self.run_manager(
+            "install", "--source", str(source), "--id", "0.0.1-rc5-build77",
+            success=False,
+        )
+        self.assertIn("no embedded build identity", result.stderr)
+
+    def test_select_rejects_missing_kernel(self) -> None:
+        result = self.run_manager("select", "missing-build1", success=False)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("not installed", result.stderr)
+
+    def test_metadata_written_on_install(self) -> None:
+        self.install("0.0.1-rc5-build41", b"kernel-41")
+        meta = json.loads(
+            (self.machine / "kernels/0.0.1-rc5-build41.json").read_text()
+        )
+        self.assertEqual(meta["format"], 3)
+        self.assertEqual(meta["id"], "0.0.1-rc5-build41")
+        self.assertEqual(meta["embedded_build"], 41)
+        self.assertEqual(meta["build_scope"], "machine-local")
+        self.assertTrue(meta["sha256"])
+
+    def test_concurrent_manager_is_rejected(self) -> None:
+        import fcntl
+
+        self.machine.mkdir(parents=True, exist_ok=True)
+        lock_path = self.machine / ".kernel-manager.lock"
+        lock_path.touch()
+        lock_stream = lock_path.open("a+")
+        fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            result = subprocess.run(
+                ["python3", str(MANAGER), "--machine-dir", str(self.machine), "list"],
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("another kernel manager is active", result.stderr)
+        finally:
+            fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+            lock_stream.close()
+
+    def test_tui_requires_interactive_terminal(self) -> None:
+        result = subprocess.run(
+            ["python3", str(MANAGER), "--machine-dir", str(self.machine), "tui"],
+            text=True, capture_output=True, check=False,
+            stdin=subprocess.DEVNULL,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires an interactive terminal", result.stderr)
+
+    def test_iso_probe_accepts_extractable_payload_path(self) -> None:
+        store = KM.KernelStore(self.machine)
+        self.install("0.0.1-rc5-build41", b"kernel-41")
+        image = self.machine / "kernels/0.0.1-rc5-build41.iso"
+        self.assertTrue(store._iso_has_bootable_kernel(image))
+        junk = self.root / "empty.iso"
+        junk.write_bytes(b"not an iso")
+        self.assertFalse(store._iso_has_bootable_kernel(junk))
+
+    def test_desktop_boot_capable_profiles(self) -> None:
+        desktop = KM.KernelStore(self.machine, profile="desktop")
+        console = KM.KernelStore(self.machine, profile="desktop-console")
+        minimal = KM.KernelStore(self.machine, profile="minimal")
+        self.assertTrue(desktop.desktop_boot_capable())
+        self.assertTrue(console.desktop_boot_capable())
+        self.assertFalse(minimal.desktop_boot_capable())
+
+    def test_write_login_session_injects_one_shot_file(self) -> None:
+        disk = self.machine / "disk.img"
+        disk.parent.mkdir(parents=True, exist_ok=True)
+        disk.touch()
+        inject = ROOT / "scripts/inject_init_minix.py"
+        subprocess.run(
+            [sys.executable, str(inject), "--format", str(disk)],
+            capture_output=True, check=True,
+        )
+        store = KM.KernelStore(
+            self.machine,
+            profile="desktop",
+            kernel_root=ROOT,
+            machine_disk=disk,
+        )
+        store.write_login_session(KM.KMANG_SESSION_X)
+        verify = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/verify_minix_rootfs.py"),
+             str(disk), "/etc/ir0-session"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
+
+    def test_prompt_boot_session_maps_keys(self) -> None:
+        class FakeScreen:
+            def __init__(self, key: int) -> None:
+                self._key = key
+
+            def getmaxyx(self) -> tuple[int, int]:
+                return (12, 80)
+
+            def erase(self) -> None:
+                return None
+
+            def addstr(self, *_args, **_kwargs) -> None:
+                return None
+
+            def refresh(self) -> None:
+                return None
+
+            def getch(self) -> int:
+                return self._key
+
+        self.assertEqual(
+            KM._prompt_boot_session(FakeScreen(ord("x")), "0.0.1-rc5-build1"),
+            KM.KMANG_SESSION_X,
+        )
+        self.assertEqual(
+            KM._prompt_boot_session(FakeScreen(ord("t")), "0.0.1-rc5-build1"),
+            KM.KMANG_SESSION_TERMINAL,
+        )
+        self.assertIsNone(
+            KM._prompt_boot_session(FakeScreen(ord("q")), "0.0.1-rc5-build1"),
+        )
+
+    def test_tui_arm_delete_requires_second_press(self) -> None:
+        state = KM.tui_confirm_reset()
+        state, message, confirmed = KM.tui_arm_delete(state, "build-1")
+        self.assertFalse(confirmed)
+        self.assertEqual(state.pending_delete, "build-1")
+        self.assertIn("Press d again", message)
+        state, message, confirmed = KM.tui_arm_delete(state, "build-1")
+        self.assertTrue(confirmed)
+        self.assertIsNone(state.pending_delete)
+        self.assertEqual(message, "Kernel removed")
+
+    def test_tui_arm_delete_switches_target_without_confirming(self) -> None:
+        state = KM.tui_confirm_reset()
+        state, _, _ = KM.tui_arm_delete(state, "build-1")
+        state, message, confirmed = KM.tui_arm_delete(state, "build-2")
+        self.assertFalse(confirmed)
+        self.assertEqual(state.pending_delete, "build-2")
+        self.assertIn("build-2", message)
+
+    def test_tui_arm_prune_requires_second_press(self) -> None:
+        state = KM.tui_confirm_reset()
+        state, message, confirmed = KM.tui_arm_prune(state)
+        self.assertFalse(confirmed)
+        self.assertTrue(state.pending_prune)
+        self.assertIn("Press p again", message)
+        state, _, confirmed = KM.tui_arm_prune(state)
+        self.assertTrue(confirmed)
+        self.assertFalse(state.pending_prune)
+
+    def test_tui_arm_delete_clears_pending_prune(self) -> None:
+        state = KM.TuiConfirmState(pending_prune=True)
+        state, _, confirmed = KM.tui_arm_delete(state, "build-9")
+        self.assertFalse(confirmed)
+        self.assertEqual(state.pending_delete, "build-9")
+        self.assertFalse(state.pending_prune)
+
+    def test_read_help_scroll_key_maps_navigation(self) -> None:
+        class FakeScreen:
+            def __init__(self, key: int) -> None:
+                self._key = key
+
+            def getch(self) -> int:
+                return self._key
+
+        scroll, close = KM._read_help_scroll_key(FakeScreen(curses.KEY_UP), 3, 10)
+        self.assertEqual(scroll, 2)
+        self.assertFalse(close)
+        scroll, close = KM._read_help_scroll_key(FakeScreen(ord("j")), 0, 10)
+        self.assertEqual(scroll, 1)
+        self.assertFalse(close)
+        scroll, close = KM._read_help_scroll_key(FakeScreen(ord("q")), 1, 10)
+        self.assertEqual(scroll, 1)
+        self.assertTrue(close)
+
+    def test_boot_session_prompt_reads_isd_profile_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            isd = Path(directory)
+            profile_dir = isd / "profiles" / "desktop"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.conf").write_text(
+                "PROFILE_NAME=desktop\nKMANG_BOOT_PROMPT=0\n"
+            )
+            store = KM.KernelStore(self.machine, profile="desktop", isd_root=isd)
+            self.assertFalse(store.boot_session_prompt_capable())
+            (profile_dir / "profile.conf").write_text(
+                "PROFILE_NAME=desktop\nKMANG_BOOT_PROMPT=1\n"
+            )
+            self.assertTrue(store.boot_session_prompt_capable())
+
+    def test_boot_session_prompt_fallback_without_isd(self) -> None:
+        minimal = KM.KernelStore(self.machine, profile="minimal")
+        self.assertFalse(minimal.boot_session_prompt_capable())
+        desktop = KM.KernelStore(self.machine, profile="desktop")
+        self.assertTrue(desktop.boot_session_prompt_capable())
 
 
 if __name__ == "__main__":

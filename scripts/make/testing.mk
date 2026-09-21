@@ -1812,6 +1812,32 @@ smoke-x11-pointer: smoke-ext2-startx
 		--init "$(EXT2_STARTX_INIT)" \
 		--inject scripts/inject_init_minix.py
 
+DESKTOP_RESIZE_INIT = build/init-desktop-resize-smoke
+DESKTOP_RESIZE_LOG = /tmp/desktop-resize-smoke.log
+.PHONY: smoke-desktop-twm-resize build-init-desktop-resize-smoke
+
+build-init-desktop-resize-smoke:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(DESKTOP_RESIZE_INIT) \
+		setup/pid1/init_desktop_resize_smoke.c
+	@file $(DESKTOP_RESIZE_INIT) | grep -q ELF
+	@echo "✓ build-init-desktop-resize-smoke OK"
+
+smoke-desktop-twm-resize: check-isd
+	@if [ "$(ISD_PROFILE)" != desktop ]; then \
+		echo "✗ smoke-desktop-twm-resize requires PROFILE=desktop"; exit 2; \
+	fi
+	+@$(MAKE) -s kernel-x64-userspace.iso PROFILE=desktop
+	+@$(MAKE) -s ensure-isd-disk ensure-isd-home PROFILE=desktop
+	+@$(MAKE) -s build-init-desktop-resize-smoke
+	@chmod +x scripts/smoke_desktop_twm_resize.py
+	@python3 scripts/smoke_desktop_twm_resize.py \
+		--qemu "$(QEMU)" --iso kernel-x64-userspace.iso \
+		--root "$(IR0_ISD_DISK)" --home "$(IR0_ISD_HOME_DISK)" \
+		--init "$(DESKTOP_RESIZE_INIT)" \
+		--inject scripts/inject_init_minix.py
+	@echo "✓ smoke-desktop-twm-resize passed"
+
 POSIX_DEPTH_SMOKE_LOG = /tmp/posix-depth-smoke.log
 INIT_POSIX_DEPTH_SMOKE_SRC = setup/pid1/init_posix_depth_smoke.c
 .PHONY: smoke-posix-depth build-init-posix-depth-smoke

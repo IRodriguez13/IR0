@@ -140,3 +140,9 @@ void clock_tick(void);
 
 uint64_t get_system_time(void);
 uint64_t clock_get_boot_time(void);
+
+/* /proc/stat aggregate counters (Linux proc(5) intr/ctxt lines). */
+void clock_note_irq(void);
+void clock_note_context_switch(void);
+uint64_t clock_get_irq_count(void);
+uint64_t clock_get_context_switch_count(void);

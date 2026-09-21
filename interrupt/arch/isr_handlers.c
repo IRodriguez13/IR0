@@ -22,6 +22,7 @@
 #include <ir0/debug_trap.h>
 #include <kernel/process.h>
 #include <ir0/cpu.h>
+#include <ir0/clock.h>
 #include <ir0/arch_io.h>
 #include <config.h>
 #include <ir0/input_backend.h>
@@ -214,7 +215,6 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
 
 static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
 {
-
 #if defined(__x86_64__) || defined(__amd64__)
     if (interrupt_number == 1 && stack)
     {
@@ -507,11 +507,13 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
         }
 
         case 1: /* Keyboard */
+			clock_note_irq();
             keyboard_handler64();
             break;
 
         case 12: /* PS/2 Mouse */
         {
+			clock_note_irq();
             input_mouse_handle_interrupt();
             break;
         }

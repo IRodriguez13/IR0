@@ -225,6 +225,13 @@ MANDOC_CHAPTERS: list[MandocChapter] = [
         "Credentials, permissions, chmod/chown, and sudo_auth",
         "Credenciales, permisos, chmod/chown y sudo_auth",
     ),
+    MandocChapter(
+        "kmang",
+        "kmang.md",
+        "IR0-kmang",
+        "Persistent-machine kernel ISO catalog (make kmang) and poweron resolve",
+        "Catalogo de ISO kernel por maquina persistente (make kmang) y resolve de poweron",
+    ),
 ]
 
 CHAPTERS: list[Chapter] = [

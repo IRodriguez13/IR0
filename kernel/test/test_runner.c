@@ -39,6 +39,7 @@ static void (*const ktest_functions[])(void) = {
 	ktest_procfs_pid_environ,
 	ktest_procfs_self_symlink,
 	ktest_procfs_pid_exe,
+	ktest_procfs_stat,
 	ktest_process_current,
 	ktest_wait4_status,
 	ktest_wait4_specific_reaps_requested_child,
@@ -97,6 +98,7 @@ static const char *const ktest_names[] = {
 	"procfs_pid_environ",
 	"procfs_self_symlink",
 	"procfs_pid_exe",
+	"procfs_stat",
 	"process_current",
 	"wait4_status",
 	"wait4_specific_reaps_requested_child",
@@ -154,6 +156,7 @@ static const int ktest_needs_process[] = {
 	1,  /* procfs_pid_environ */
 	1,  /* procfs_self_symlink */
 	1,  /* procfs_pid_exe */
+	1,  /* procfs_stat */
 	1,  /* process_current */
 	1,  /* wait4_status */
 	1,  /* wait4_specific_reaps_requested_child */

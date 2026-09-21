@@ -18,6 +18,38 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+USMANG_HELP_LINES = (
+    "IR0 Userspace Manager (usmang) — host inspector for sibling ISD/",
+    "",
+    "Today: read-only CLI (no TUI yet). Future: userland composition choices",
+    "(BusyBox vs GNU coreutils, runit vs sysvinit vs systemd) without kernel changes.",
+    "",
+    "Commands:",
+    "  summary     ISD version, userland base, package counts, desktop ABI",
+    "  version     VERSION file + staged release metadata",
+    "  packages    Resolved package list with origins",
+    "  userland    USERLAND_BASE and implementation status",
+    "  desktop     X client set for PROFILE=desktop only",
+    "  help        This legend",
+    "",
+    "Environment:",
+    "  IR0_ISD_ROOT   Path to ISD checkout (default: ../ISD)",
+    "  ISD_PROFILE    Profile name (default: desktop)",
+    "  ISD_ARCH       Architecture (default: x86_64)",
+    "",
+    "Examples:",
+    "  make usmang",
+    "  python3 scripts/userspace_manager.py --isd-root ../ISD summary",
+    "  python3 scripts/userspace_manager.py --profile minimal --json userland",
+    "",
+    "See also: ISD/Documentation/LOGIN_SESSION.md (login one-shot, kmang-owned),",
+    "Documentation/USERSPACE.md, make kmang (kernel ISO catalog).",
+)
+
+
+def format_usmang_help() -> str:
+    return "\n".join(USMANG_HELP_LINES)
+
 
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
@@ -176,7 +208,7 @@ def main() -> int:
     parser.add_argument("--arch", default=os.environ.get("ISD_ARCH", "x86_64"))
     parser.add_argument("--json", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("version", "packages", "userland", "desktop", "summary"):
+    for name in ("version", "packages", "userland", "desktop", "summary", "help"):
         sub.add_parser(name)
     args = parser.parse_args()
     isd = args.isd_root.resolve()
@@ -186,6 +218,9 @@ def main() -> int:
 
     if args.command == "version":
         payload = cmd_version(isd, args.profile, args.arch)
+    elif args.command == "help":
+        print(format_usmang_help())
+        return 0
     elif args.command == "packages":
         payload = cmd_packages(isd, args.profile)
     elif args.command == "userland":

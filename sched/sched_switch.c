@@ -15,6 +15,7 @@
 #include "sched_switch.h"
 
 #include <ir0/arch_port.h>
+#include <ir0/clock.h>
 #include <ir0/context.h>
 #include <ir0/switch.h>
 #include <ir0/oops.h>
@@ -64,7 +65,10 @@ void sched_context_switch_to(process_t *next)
 	}
 
 	if (prev && next)
+	{
+		clock_note_context_switch();
 		switch_to(&prev->task, &next->task);
+	}
 
 	sched_switch_irq_restore(irq_flags);
 }

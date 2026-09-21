@@ -1604,6 +1604,9 @@ int proc_stat_read(char *buf, size_t count)
 	uint64_t steal = 0;
 	unsigned runnable = 0;
 	unsigned nprocs = 0;
+	uint64_t irq_total;
+	uint64_t ctxt_total;
+	time_t btime;
 	int len;
 
 	if (VALIDATE_BUFFER(buf, count) != 0)
@@ -1616,17 +1619,21 @@ int proc_stat_read(char *buf, size_t count)
 		total = user + system + idle;
 
 	clock_get_loadavg(NULL, NULL, NULL, &runnable, &nprocs, NULL);
+	irq_total = clock_get_irq_count();
+	ctxt_total = clock_get_context_switch_count();
+	btime = (time_t)clock_get_boot_time();
 
 	/*
 	 * Eight fields after the label so FEATURE_TOP_SMP_CPU (BusyBox) accepts
 	 * both the aggregate line (>=4) and cpu0 (>4). Duplicate cpu0: one logical CPU.
+	 * intr/ctxt/btime: runtime counters (not placeholder zeros when activity exists).
 	 */
 	len = snprintf(buf, count,
 		       "cpu  %llu %llu %llu %llu %llu %llu %llu %llu\n"
 		       "cpu0 %llu %llu %llu %llu %llu %llu %llu %llu\n"
-		       "intr 0\n"
-		       "ctxt 0\n"
-		       "btime 0\n"
+		       "intr %llu\n"
+		       "ctxt %llu\n"
+		       "btime %lld\n"
 		       "processes %u\n"
 		       "procs_running %u\n"
 		       "procs_blocked 0\n",
@@ -1646,6 +1653,9 @@ int proc_stat_read(char *buf, size_t count)
 		       (unsigned long long)irq,
 		       (unsigned long long)softirq,
 		       (unsigned long long)steal,
+		       (unsigned long long)irq_total,
+		       (unsigned long long)ctxt_total,
+		       (long long)btime,
 		       nprocs,
 		       runnable);
 	if (len < 0)

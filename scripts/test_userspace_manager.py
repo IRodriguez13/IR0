@@ -71,6 +71,21 @@ class UserspaceManagerTest(unittest.TestCase):
             self.assertFalse(payload["applies"])
             self.assertEqual(payload["x_session_packages"], [])
 
+    def test_help_lists_commands_and_future_scope(self) -> None:
+        result = self.run_manager("help")
+        text = result.stdout
+        self.assertIn("usmang", text.lower())
+        for fragment in ("summary", "userland", "help", "BusyBox", "systemd"):
+            self.assertIn(fragment, text)
+
+    @unittest.skipUnless(ISD.is_dir(), "ISD sibling tree not present")
+    def test_help_mentions_login_session_doc_when_isd_present(self) -> None:
+        doc = ISD / "Documentation/LOGIN_SESSION.md"
+        if not doc.is_file():
+            self.skipTest("ISD LOGIN_SESSION.md not present yet")
+        result = self.run_manager("help")
+        self.assertIn("LOGIN_SESSION.md", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

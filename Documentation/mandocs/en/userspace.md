@@ -83,7 +83,7 @@ the console policy: `development` keeps root autologin and prints a warning,
 | `make smoke-runit-login-nonroot` | Non-root: crypt(3) + uid 1001 + PS1 |
 | `make run-fase58e-ash-gui` | Interactive ash on GTK |
 | `make smoke-tier1` | Bundle: runit boot + ash |
-| `make kmang` | Interactive kernel ISO catalog (`scripts/kernel_manager.py`); `poweron` boots Default |
+| `make kmang` | Interactive kernel ISO catalog (`scripts/kernel_manager.py`); `poweron` boots Default — see **`man IR0-kmang`** |
 | `make usmang` | Host ISD summary; desktop detail only when `PROFILE=desktop` |
 | `make smoke-x11-pointer PROFILE=desktop` | Fullscreen TinyX + dual xterm + desktop clients |
 
@@ -92,7 +92,7 @@ Coupling guide: [`USERSPACE.md`](../../USERSPACE.md), [`TOOLING.md`](../../TOOLI
 **kmang honesty:** build `#N` is **machine-local** (`.build_number` per host). Compare
 hosts by SHA-256 and provenance (`compare`, `info --json`), not by `#N` alone.
 The TUI warns when Workspace ISO diverges from Default — `poweron` never silently
-boots an unenrolled workspace build.
+boots an unenrolled workspace build. Full contract: **`man IR0-kmang`**.
 
 **usmang honesty:** reads real `ISD/VERSION`, `profiles/<PROFILE>/packages.txt`, and
 `resolve-packages.sh`; desktop X clients are listed only for `PROFILE=desktop`.

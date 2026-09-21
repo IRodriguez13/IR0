@@ -17,7 +17,7 @@ CFLAGS_TARGET := -DIR0_DESKTOP
 IR0_VERSION_MAJOR := 0
 IR0_VERSION_MINOR := 0
 IR0_VERSION_PATCH := 1
-IR0_VERSION_SUFFIX := -rc5
+IR0_VERSION_SUFFIX := -rc6
 IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PATCH)$(IR0_VERSION_SUFFIX)
 
 # Build information 
@@ -27,7 +27,15 @@ IR0_BUILD_TIME := $(shell date +"%H:%M:%S")
 IR0_BUILD_USER := $(shell whoami 2>/dev/null || echo "unknown")
 IR0_BUILD_HOST := $(shell hostname 2>/dev/null || echo "localhost")
 IR0_BUILD_CC := $(shell $(CC) --version 2>/dev/null | head -n1 | cut -d' ' -f1-3 || echo "gcc unknown")
-# Build number - auto-increment on each build
+# Reset machine-local build counter when the release string changes (rc boundary).
+$(shell \
+	stamp='$(IR0_VERSION_STRING)'; \
+	if [ -f .build_number_version ]; then \
+		old=$$(cat .build_number_version 2>/dev/null); \
+		if [ "$$old" != "$$stamp" ]; then echo 1 > .build_number; fi; \
+	fi; \
+	echo "$$stamp" > .build_number_version)
+# Build number - auto-increment on each kernel link (local to this workspace).
 IR0_BUILD_NUMBER := $(shell [ -f .build_number ] && cat .build_number || echo "1")
 # Increment build number for next build (only if building kernel target)
 -include .build_number_inc

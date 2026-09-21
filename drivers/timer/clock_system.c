@@ -36,6 +36,8 @@ static uint64_t clock_idle_ms;
 static uint64_t clock_cpu_user;
 static uint64_t clock_cpu_system;
 static uint64_t clock_cpu_idle;
+static uint64_t clock_irq_total;
+static uint64_t clock_ctxt_total;
 
 /* Loadavg EMA (×100). Updated once per second from runnable non-idle count. */
 static uint32_t clock_load1_x100;
@@ -617,6 +619,26 @@ uint64_t get_system_time(void)
 uint64_t clock_get_boot_time(void)
 {
     return clock_state.boot_time;
+}
+
+void clock_note_irq(void)
+{
+	clock_irq_total++;
+}
+
+void clock_note_context_switch(void)
+{
+	clock_ctxt_total++;
+}
+
+uint64_t clock_get_irq_count(void)
+{
+	return clock_irq_total;
+}
+
+uint64_t clock_get_context_switch_count(void)
+{
+	return clock_ctxt_total;
 }
 
 /* Set scheduler quantum (ticks per quantum) */

@@ -108,8 +108,9 @@ IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=
 	isd-clean first-boot bootstrap-userspace check-userspace \
 	warn-userspace-deprecated ensure-isd-disk ensure-isd-home run-isd machine-create \
 	machine-reset machine-info machine-update-kernel image-vmware poweron kmang kmang-cli \
+	kmang-test kernel-manager-install kernel-manager-list \
 	kernel-manager-install kernel-manager-list machine-update-userspace \
-	machine-migrate-home ensure-machine-desktop-sync usmang isd-contracts
+	machine-migrate-home ensure-machine-desktop-sync usmang usmang-test isd-contracts
 
 warn-userspace-deprecated:
 	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
@@ -241,6 +242,7 @@ KMANG_PY = python3 scripts/kernel_manager.py \
 	--arch "$(KMANG_ARCH)" --profile "$(KMANG_PROFILE)" \
 	--machine "$(KMANG_MACHINE)" \
 	--kernel-root "$(KERNEL_ROOT)" \
+	--isd-root "$(IR0_ISD_ROOT)" \
 	--isd-disk "$(IR0_ISD_ROOT)/out/$(KMANG_ARCH)/images/$(KMANG_PROFILE)/disk.img" \
 	--machine-disk "$(KMANG_MACHINE_DIR)/disk.img" \
 	--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
@@ -276,6 +278,12 @@ kmang: check-isd
 
 kmang-cli:
 	@$(KMANG_PY) list --json
+
+kmang-test:
+	@python3 scripts/test_kernel_manager.py -v
+
+usmang-test:
+	@python3 scripts/test_userspace_manager.py -v
 
 # Host inspector for ISD release / package origins / userland base (not kernel #N).
 usmang: check-isd
