@@ -132,6 +132,7 @@ endif
 # Product distribution (ISD). Recipes live in scripts/make/isd.mk.
 # Compat: IR0_USERSPACE_ROOT/URL alias IR0_ISD_ROOT/URL.
 -include scripts/make/isd.mk
+-include scripts/make/release.mk
 
 all: $(DEFAULT_BUILD_TARGET)
 
@@ -1666,6 +1667,9 @@ help:
 	@echo "  make run PROFILE=minimal          # development base-image boot"
 	@echo "  make clip-send / clip-pull        # host↔guest clipboard (9p + ir0-paste)"
 	@echo "  make clone-isd | check-isd | isd-clean"
+	@echo "  make release-check PROFILE=minimal     # Tier-1 integration gate (no QEMU)"
+	@echo "  make release-check-clean PROFILE=minimal"
+	@echo "  make release-check-container           # fresh clone in Docker"
 	@echo "  Legacy inject (smokes): IR0_LEGACY_USERSPACE=1 make run"
 	@echo "  Deprecated alias: bootstrap-userspace → first-boot"
 	@echo ""

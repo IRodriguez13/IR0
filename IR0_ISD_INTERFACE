@@ -1,0 +1,5 @@
+# IR0↔ISD integration interface (machine-readable).
+# ISD check-ir0-interface.sh compares against IR0_ISD_INTERFACE_SUPPORTED.
+VERSION=1
+REQUIRED_SCRIPT=scripts/inject_init_minix.py
+REQUIRED_SCRIPT=scripts/verify_minix_rootfs.py

@@ -3739,6 +3739,7 @@ ctr:
 test-fast: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
 	@$(MAKE) -s isd-contracts
+	@$(MAKE) -s truth-tests
 	@$(MAKE) -s ktm-check
 
 agent-fast: test-fast kernel-tests

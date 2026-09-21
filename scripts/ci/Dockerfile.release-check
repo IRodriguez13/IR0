@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Tier-1 release-check image (no QEMU guest boot).
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    bash \
+    bison \
+    build-essential \
+    ca-certificates \
+    curl \
+    e2fsprogs \
+    flex \
+    git \
+    make \
+    musl-tools \
+    python3 \
+    python3-venv \
+    xorriso \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+COPY scripts/ci/release-check-fresh.sh /usr/local/bin/release-check-fresh.sh
+RUN chmod +x /usr/local/bin/release-check-fresh.sh
+
+ENTRYPOINT ["/usr/local/bin/release-check-fresh.sh"]

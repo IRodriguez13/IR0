@@ -53,13 +53,35 @@ make run PROFILE=minimal
 `make run` rebuilds the ISO if needed, then `ensure-isd-disk` (stamp-incremental
 pack; first pack ~1–3 min — progress is printed). Then QEMU GTK.
 
-Layout:
+Layout (only supported arrangement — no `$HOME/ISD` or path search heuristics):
 
 ```text
-parent/
+workspace/
 ├── IR0/
 └── ISD/
 ```
+
+Set `IR0_ISD_ROOT=/path/to/ISD` when the sibling layout is not used; `make check-isd`
+fails early with an actionable message if ISD is missing.
+
+### IR0↔ISD interface
+
+| File | Repo | Role |
+|------|------|------|
+| `IR0/IR0_ISD_INTERFACE` | IR0 | Published integration version (`VERSION=1`) + required adapter scripts |
+| `ISD/IR0_ISD_INTERFACE_SUPPORTED` | ISD | Maximum interface version this ISD checkout supports |
+
+ISD `check-ir0-interface` runs before headers/image paths; IR0 `check-isd` verifies
+the sibling ISD supports the kernel's interface version.
+
+### Release verification (Tier 1, no QEMU)
+
+| Target | Role |
+|--------|------|
+| `make release-check PROFILE=minimal` | Kernel + bridge + ISD rootfs verify + usmang verify |
+| `make release-check-clean PROFILE=minimal` | Same, but rejects stale `out/` / workspace ISO |
+| `make release-check-container` | Fresh shallow clone of IR0+ISD in Docker (Tier 1 CI) |
+| `make truth-tests` | Negative/honesty tests for kmang, usmang, ISD path resolver |
 
 | Variable | Default | Role |
 |----------|---------|------|

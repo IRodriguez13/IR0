@@ -110,6 +110,27 @@ else
 fi
 
 run_host_tests || true
+
+echo ""
+echo "[pre-submit] ISD bridge contracts"
+if make -s isd-contracts; then
+	echo "  isd-contracts: OK"
+	SMOKES_PASSED=$((SMOKES_PASSED + 1))
+else
+	echo "  isd-contracts: FAIL"
+	FAIL=1
+fi
+
+echo ""
+echo "[pre-submit] tooling truth tests"
+if python3 scripts/test_truth_tooling.py; then
+	echo "  truth tests: OK"
+	SMOKES_PASSED=$((SMOKES_PASSED + 1))
+else
+	echo "  truth tests: FAIL"
+	FAIL=1
+fi
+
 check_fmt || true
 
 case "$SUBSYSTEM" in
