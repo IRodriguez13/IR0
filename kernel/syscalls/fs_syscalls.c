@@ -54,10 +54,10 @@
 #include <ir0/sysfs.h>
 #include <ir0/uio.h>
 #include <ir0/validation.h>
+#include <ir0/utimens.h>
 #include <ir0/vfs.h>
 #include <ir0/elf_loader.h>
 #include <ir0/process.h>
-#include <ir0/utimens.h>
 #include <ir0/paging.h>
 #include <stddef.h>
 #include <string.h>
@@ -1888,39 +1888,156 @@ int64_t sys_symlinkat(const char *target, int dirfd, const char *linkpath)
   return do_symlinkat(target, dirfd, linkpath);
 }
 
+/*
+ * fchownat(2)/fchmodat(2) with AT_EMPTY_PATH: operate on the inode referred
+ * to by dirfd (OpenRC checkpath uses O_PATH + fchownat(fd, "", …, AT_EMPTY_PATH)).
+ */
+static int fs_resolve_at_empty(int dirfd, char *resolved, size_t resolved_sz)
+{
+  fd_entry_t *fd_table;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (dirfd == IR0_AT_FDCWD)
+  {
+    return ir0_resolve_user_path(".", resolved, resolved_sz,
+                               current_process->cwd, current_process->root);
+  }
+
+  if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table || !fd_table[dirfd].in_use || fd_table[dirfd].path[0] == '\0')
+    return -EBADF;
+
+  if (strlen(fd_table[dirfd].path) >= resolved_sz)
+    return -ENAMETOOLONG;
+
+  memcpy(resolved, fd_table[dirfd].path, strlen(fd_table[dirfd].path) + 1);
+  return 0;
+}
+
+static int fs_resolve_fchmodat_path(int dirfd, const char *pathname, char *resolved,
+                                  size_t resolved_sz, int flags)
+{
+  char path_copy[256];
+  int rc;
+
+  if (!pathname)
+    return -EFAULT;
+  if (flags & ~(IR0_AT_SYMLINK_NOFOLLOW | IR0_AT_EMPTY_PATH))
+    return -EINVAL;
+  if (copy_from_user_cstring(path_copy, sizeof(path_copy), pathname) != 0)
+    return -EFAULT;
+
+  if (path_copy[0] == '\0')
+  {
+    if (!(flags & IR0_AT_EMPTY_PATH))
+      return -EINVAL;
+    return fs_resolve_at_empty(dirfd, resolved, resolved_sz);
+  }
+
+  rc = ir0_resolve_path_at(dirfd, pathname, resolved, resolved_sz);
+  return rc;
+}
+
 int64_t sys_fchmod(int fd, mode_t mode)
 {
-  (void)fd;
-  (void)mode;
-  return -ENOSYS;
+  char resolved[256];
+  stat_t st;
+  fd_entry_t *fd_table;
+  int rc;
+
+  if (!current_process)
+    return -ESRCH;
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table || !fd_table[fd].in_use || fd_table[fd].path[0] == '\0')
+    return -EBADF;
+
+  rc = fs_resolve_at_empty(fd, resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  rc = vfs_stat(resolved, &st);
+  if (rc != 0)
+    return rc;
+
+  if (current_process->euid != ROOT_UID && current_process->euid != st.st_uid)
+    return -EPERM;
+
+  return vfs_chmod(resolved, mode);
 }
 
 int64_t sys_fchown(int fd, uid_t owner, gid_t group)
 {
-  (void)fd;
-  (void)owner;
-  (void)group;
-  return -ENOSYS;
+  char resolved[256];
+  fd_entry_t *fd_table;
+  int rc;
+
+  if (!current_process)
+    return -ESRCH;
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+
+  fd_table = get_process_fd_table();
+  if (!fd_table || !fd_table[fd].in_use || fd_table[fd].path[0] == '\0')
+    return -EBADF;
+
+  rc = fs_resolve_at_empty(fd, resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  if (current_process->euid != ROOT_UID)
+    return -EPERM;
+
+  return vfs_chown(resolved, owner, group);
 }
 
 int64_t sys_fchmodat(int dirfd, const char *pathname, mode_t mode, int flags)
 {
-  (void)dirfd;
-  (void)pathname;
-  (void)mode;
-  (void)flags;
-  return -ENOSYS;
+  char resolved[256];
+  stat_t st;
+  int rc;
+
+  if (!current_process)
+    return -ESRCH;
+
+  rc = fs_resolve_fchmodat_path(dirfd, pathname, resolved, sizeof(resolved), flags);
+  if (rc != 0)
+    return rc;
+
+  rc = vfs_stat(resolved, &st);
+  if (rc != 0)
+    return rc;
+
+  if (current_process->euid != ROOT_UID && current_process->euid != st.st_uid)
+    return -EPERM;
+
+  return vfs_chmod(resolved, mode);
 }
 
 int64_t sys_fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group,
 		     int flags)
 {
-  (void)dirfd;
-  (void)pathname;
-  (void)owner;
-  (void)group;
-  (void)flags;
-  return -ENOSYS;
+  char resolved[256];
+  int rc;
+
+  if (!current_process)
+    return -ESRCH;
+
+  rc = fs_resolve_fchmodat_path(dirfd, pathname, resolved, sizeof(resolved), flags);
+  if (rc != 0)
+    return rc;
+
+  if (current_process->euid != ROOT_UID)
+    return -EPERM;
+
+  return vfs_chown(resolved, owner, group);
 }
 
 /*

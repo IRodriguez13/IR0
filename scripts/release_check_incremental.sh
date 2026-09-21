@@ -91,4 +91,8 @@ for alt in minimal-sysvinit minimal-openrc; do
 	echo "  OK  usmang summary PROFILE=${alt}"
 done
 
+echo "-- init boot matrix (QEMU serial contract) --"
+make -s init-smoke-matrix ARCH="$ARCH" ISD_ARCH="$ARCH"
+echo "  OK  init-smoke-matrix"
+
 echo "✓ incremental/idempotence OK"
