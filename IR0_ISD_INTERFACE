@@ -3,7 +3,10 @@
 VERSION=1
 REQUIRED_SCRIPT=scripts/inject_init_minix.py
 REQUIRED_SCRIPT=scripts/verify_minix_rootfs.py
+REQUIRED_SCRIPT=scripts/verify_ext2_rootfs.sh
 PUBLIC_TARGET=ir0-minix-inject-path
 PUBLIC_TARGET=ir0-verify-minix-path
+PUBLIC_TARGET=verify-ext2-rootfs
+PUBLIC_TARGET=verify-rootfs
 PUBLIC_TARGET=headers_install
 PUBLIC_TARGET=kernel-x64-userspace.iso

@@ -3679,6 +3679,33 @@ kernel-x64-userspace.bin:
 	@$(MAKE) kernel-x64.bin
 	@echo "✓ Kernel (userspace init, lazy MM) copied: $@"
 
+# Same userspace boot path; root mount uses CONFIG_ROOT_FILESYSTEM=ext2 (STO-2 lab).
+kernel-x64-ext2-root.bin:
+	@cfg_bak=$$(mktemp); had=0; \
+	if [ -f .config ]; then cp .config $$cfg_bak; had=1; fi; \
+	cp setup/configs/userspace-ext2-root.defconfig .config; \
+	python3 scripts/kconfig/menuconfig.py --sync >/dev/null; \
+	rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
+		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
+		drivers/video/console.o sched/rr_sched.o; \
+	$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1; \
+	cp kernel-x64.bin $@; \
+	rm -f kernel/main.o kernel/process/*.o; \
+	$(MAKE) kernel-x64.bin; \
+	if [ $$had -eq 1 ]; then cp $$cfg_bak .config; else rm -f .config; fi; \
+	rm -f $$cfg_bak; \
+	echo "✓ Kernel (ext2 root /, userspace init) copied: $@"
+
+kernel-x64-ext2-root.iso: kernel-x64-ext2-root.bin arch/x86-64/grub.cfg
+	@echo "  ISO     $@ (userspace init, ext2 root /)"
+	@rm -rf iso_userspace_ext2_root
+	@mkdir -p iso_userspace_ext2_root/boot/grub
+	@cp arch/x86-64/grub.cfg iso_userspace_ext2_root/boot/grub/
+	@cp kernel-x64-ext2-root.bin iso_userspace_ext2_root/boot/kernel-x64.bin
+	@grub-mkrescue -o $@ iso_userspace_ext2_root
+	@rm -rf iso_userspace_ext2_root
+	@echo "  ISO     $@"
+
 kernel-x64-userspace-eager.bin:
 	@rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
 		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \

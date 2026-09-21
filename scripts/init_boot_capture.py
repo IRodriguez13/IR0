@@ -79,12 +79,29 @@ def staged_rootfs(isd: Path, profile: str, arch: str) -> Path:
     return isd / "out" / arch / "rootfs" / profile
 
 
-def disk_image(isd: Path, profile: str, arch: str) -> Path:
-    return isd / "out" / arch / "images" / profile / "disk.img"
+def profile_root_fs(isd: Path, profile: str) -> str:
+    conf = isd / "profiles" / profile / "profile.conf"
+    if not conf.is_file():
+        return "minix"
+    root_fs = "minix"
+    for raw in conf.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if line.startswith("ROOT_FS="):
+            root_fs = line.split("=", 1)[1].strip()
+        elif line.startswith("ROOTFS_PACK=") and root_fs == "minix":
+            root_fs = line.split("=", 1)[1].strip()
+    return root_fs if root_fs in ("minix", "ext2") else "minix"
 
 
-def ensure_disk(isd: Path, profile: str, arch: str) -> Path:
-    img = disk_image(isd, profile, arch)
+def disk_image(isd: Path, profile: str, arch: str, root_fs: str) -> Path:
+    base = isd / "out" / arch / "images" / profile
+    if root_fs == "ext2":
+        return base / "disk.ext2.img"
+    return base / "disk.img"
+
+
+def ensure_disk(isd: Path, profile: str, arch: str, root_fs: str) -> Path:
+    img = disk_image(isd, profile, arch, root_fs)
     if img.is_file():
         return img
     env = {
@@ -94,19 +111,28 @@ def ensure_disk(isd: Path, profile: str, arch: str) -> Path:
         "ARCH": arch,
         "ISD_ARCH": arch,
     }
-    print(f"  BUILD   ISD disk PROFILE={profile} ARCH={arch} …", flush=True)
+    if root_fs == "ext2":
+        target = "ensure-isd-root-disk"
+        extra = [f"ROOT_FS={root_fs}"]
+    else:
+        target = "ensure-isd-disk"
+        extra = []
+    print(f"  BUILD   ISD {root_fs} disk PROFILE={profile} ARCH={arch} …", flush=True)
     subprocess.run(
-        ["make", "-s", "-C", str(ROOT), f"ensure-isd-disk", f"PROFILE={profile}", f"ARCH={arch}"],
+        ["make", "-s", "-C", str(ROOT), target, f"PROFILE={profile}", f"ARCH={arch}"] + extra,
         check=True,
         env=env,
     )
     if not img.is_file():
-        raise InitBootError(f"missing disk after ensure-isd-disk: {img}")
+        raise InitBootError(f"missing disk after {target}: {img}")
     return img
 
 
-def ensure_kernel_iso(arch_cfg: dict[str, Any]) -> Path:
-    iso_name = arch_cfg["kernel_iso"]
+def ensure_kernel_iso(arch_cfg: dict[str, Any], root_fs: str) -> Path:
+    if root_fs == "ext2":
+        iso_name = "kernel-x64-ext2-root.iso"
+    else:
+        iso_name = arch_cfg["kernel_iso"]
     iso = ROOT / iso_name
     if iso.is_file():
         return iso
@@ -248,6 +274,7 @@ def run_capture(
     profile: str,
     arch: str,
     *,
+    root_fs: str = "minix",
     smoke_only: bool = False,
     timeout: int = 90,
     stale_sec: int = 25,
@@ -262,11 +289,16 @@ def run_capture(
 
     spec = contract["profiles"][profile]
     isd = resolve_isd_root()
-    iso = ensure_kernel_iso(arch_cfg)
-    disk_src = ensure_disk(isd, profile, arch)
+    if root_fs not in ("minix", "ext2"):
+        root_fs = profile_root_fs(isd, profile)
+    iso = ensure_kernel_iso(arch_cfg, root_fs)
+    disk_src = ensure_disk(isd, profile, arch, root_fs)
     audit = audit_staged_init(isd, profile, arch, spec)
 
-    out_dir = (out_root or ROOT / "out" / "init-boot-capture" / arch / profile).resolve()
+    out_dir = (
+        out_root
+        or ROOT / "out" / "init-boot-capture" / arch / profile / root_fs
+    ).resolve()
     if not smoke_only:
         out_dir.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / "serial.log" if not smoke_only else Path(tempfile.mktemp(suffix=".log"))
@@ -292,7 +324,7 @@ def run_capture(
         cmd.extend(arch_cfg["disk_drive"].format(disk=str(tmp_disk)).split())
         cmd.extend(arch_cfg["qemu_args"])
 
-        print(f"  SMOKE   init boot PROFILE={profile} ARCH={arch}", flush=True)
+        print(f"  SMOKE   init boot PROFILE={profile} ROOT_FS={root_fs} ARCH={arch}", flush=True)
         result = subprocess.run(cmd, cwd=ROOT, check=False)
         serial = log_path.read_text(encoding="utf-8", errors="replace") if log_path.is_file() else ""
     finally:
@@ -317,6 +349,7 @@ def run_capture(
     manifest = {
         "profile": profile,
         "arch": arch,
+        "root_fs": root_fs,
         "init_system": spec["init_system"],
         "passed": passed,
         "smoke_exit_code": result.returncode,
@@ -340,7 +373,10 @@ def run_capture(
         log_path.unlink(missing_ok=True)
 
     if passed:
-        print(f"✓ init boot capture OK PROFILE={profile} init={spec['init_system']}")
+        print(
+            f"✓ init boot capture OK PROFILE={profile} ROOT_FS={root_fs} "
+            f"init={spec['init_system']}"
+        )
     else:
         print(f"✗ init boot capture FAIL PROFILE={profile}", file=sys.stderr)
         if tags["missing_required"]:
@@ -359,6 +395,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="IR0 init boot capture harness")
     parser.add_argument("--profile", default=os.environ.get("ISD_PROFILE", "minimal"))
     parser.add_argument("--arch", default=os.environ.get("ISD_ARCH", "x86_64"))
+    parser.add_argument("--root-fs", choices=("minix", "ext2"), default=None,
+                        help="root filesystem backend (default: profile ROOT_FS=minix)")
+    parser.add_argument("--root-fs-matrix", action="store_true",
+                        help="with --matrix: run each profile on minix and ext2")
     parser.add_argument("--matrix", action="store_true", help="run all contract profiles")
     parser.add_argument("--smoke-only", action="store_true", help="no artifact dir; exit code only")
     parser.add_argument("--timeout", type=int, default=90)
@@ -369,28 +409,39 @@ def main() -> int:
     profiles = list(load_contract()["profiles"]) if args.matrix else [args.profile]
     failures = 0
     skipped = 0
+    runs = 0
+    isd = resolve_isd_root()
     for profile in profiles:
-        try:
-            manifest = run_capture(
-                profile,
-                args.arch,
-                smoke_only=args.smoke_only,
-                timeout=args.timeout,
-                stale_sec=args.stale_sec,
-                out_root=args.out_root,
-            )
-            if not manifest["passed"]:
+        if args.root_fs_matrix:
+            fs_iter = ["minix", "ext2"]
+        elif args.root_fs:
+            fs_iter = [args.root_fs]
+        else:
+            fs_iter = [profile_root_fs(isd, profile)]
+        for root_fs in fs_iter:
+            runs += 1
+            try:
+                manifest = run_capture(
+                    profile,
+                    args.arch,
+                    root_fs=root_fs,
+                    smoke_only=args.smoke_only,
+                    timeout=args.timeout,
+                    stale_sec=args.stale_sec,
+                    out_root=args.out_root,
+                )
+                if not manifest["passed"]:
+                    failures += 1
+            except InitBootSkip as exc:
+                skipped += 1
+                print(f"  SKIP  PROFILE={profile} ROOT_FS={root_fs}: {exc}", file=sys.stderr)
+            except InitBootError as exc:
                 failures += 1
-        except InitBootSkip as exc:
-            skipped += 1
-            print(f"  SKIP  PROFILE={profile}: {exc}", file=sys.stderr)
-        except InitBootError as exc:
-            failures += 1
-            print(f"✗ PROFILE={profile}: {exc}", file=sys.stderr)
+                print(f"✗ PROFILE={profile} ROOT_FS={root_fs}: {exc}", file=sys.stderr)
 
     if failures:
         return 1
-    if skipped and skipped == len(profiles):
+    if skipped and skipped == runs:
         return 2
     return 0
 

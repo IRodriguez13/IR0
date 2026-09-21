@@ -438,6 +438,40 @@ Long-term vision after DESK soft path: CDE-like multi-window desktop with concur
 
 **Not done / not claimed:** CDE product shell, workspaces, audio, GL, irssi-on-IR0, Notepad++ port, Minecraft/JVM, Astral-class ISO.
 
+## STO — Storage evolution: EXT2 root (elevate over MINIX v1)
+
+**Problem (2026-09):** Product rootfs still packs via MINIX v1 (`ISD/scripts/pack-minix.sh`).
+Directory names ≤14 bytes force renames (`orc-shutdn`, `rc-func.sh`), applet skips, and
+inject/link-shard complexity. Kernel EXT2 backend is **ahead** of MINIX for POSIX paths
+(chown, writes, larger trees) but only ships as **secondary** `/home` today
+(`home.ext2.img`, `smoke-ext2-mount`).
+
+**North star:** Host-built EXT2 root image → `CONFIG_ROOT_FILESYSTEM=ext2` on `/dev/hda`
+→ same ISD rootfs tree without MINIX inject — **no userspace patches** for long paths.
+
+**Oleada closed (2026-09-21, pre-rc7):** STO-0..STO-4 lab path green (`root-fs-smoke-matrix`,
+`smoke-ext2-root-boot`, `make first-boot PROFILE=development ROOT_FS=ext2`, `ci-local-docker`).
+Product default remains MINIX until maintainer flips profiles (STO-5).
+
+| ID | Oleada | Scope | Proof gate | Status |
+|----|--------|-------|------------|--------|
+| **STO-0** | Inventory + size model | `estimate-rootfs-ext2.sh` + pack size cap | Host estimate in `pack-ext2-root.sh` | **Closed** |
+| **STO-1** | ISD `pack-ext2-root.sh` | Parallel to `pack-minix.sh`; `ROOT_FS` / `image-root` | `verify-ext2-rootfs`, `ensure-isd-ext2-disk` | **Closed** |
+| **STO-2** | Kernel boot EXT2 `/` | `userspace-ext2-root.defconfig`, `mount_prefix`, PID1 boot | `smoke-ext2-root-boot`, `kernel-x64-ext2-root.iso` | **Closed** |
+| **STO-3** | Writable root under init | Guest writes via init smokes on ext2 `/` | `root-fs-smoke-matrix` (minix+ext2) | **Closed (LINUX-LIKE)** — dedicated `linux-abi-audit-vfs-write` on ext2 block image: P1 |
+| **STO-4** | Dual-run lab | `ROOT_FS=minix\|ext2`, `first-boot`, machine disks | `root-fs-smoke-matrix`, `ci-local-docker` incremental | **Closed (phase 1)** — default `ROOTFS_PACK=ext2`: **STO-5** |
+| **STO-5** | Retire MINIX product path | Drop inject/rename; minix lab-only | `pack-minix.sh` absent from default profiles | **Deferred** — post-rc7 maintainer decision |
+
+**Depends on:** P1-storage closed (EXT2 RO smoke, AHCI, GPT) — **done**. Blocks **coreutils
+GNU pilot** and **glibc** less than MINIX names, but **STO-2** should precede large
+userland expansion.
+
+**Out of scope for STO:** ext2 as `/` on ARM until `kernel-arm64-userspace.iso` + ISD
+`ARCH=arm64` packer exists (scaffold only today).
+
+**Relation:** ROADMAP P1-storage = block drivers + RO smoke; **STO-*** = product root
+migration. Do not mark T1 “done” for new ports until **STO-2** or explicit MINIX waiver.
+
 ## T3 prep checklist (no WM in kernel)
 
 Canonical path: **runit PID1 + 9p** via `scripts/ktm_userdev_runit_run.sh` (`make smoke-t3-prep`).

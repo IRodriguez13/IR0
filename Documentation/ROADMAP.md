@@ -195,6 +195,10 @@ See version matrix in [`STABLE.md`](STABLE.md). Open Future: [`BACKLOG_REMAINING
 - **0.0.1:** MINIX root, `/dev/hda` read, FAT16 read-only MVP on block (`fs/fat16_disk.c`).
 - **`fat0` virtual mount** still uses simplefs engine (by design).
 - **Next:** FAT write path, EXT2 read-only, AHCI.
+- **Product direction (2026-09):** MINIX v1 root is a bring-up constraint (14-char names,
+  inject pipeline). **STO-*** oleadas in [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
+  track EXT2-as-`/` until stable; kernel EXT2 write path exists; `/home` ext2 already
+  ships on desktop (`home.ext2.img`).
 
 ### POSIX depth (T1+)
 
@@ -510,6 +514,7 @@ flowchart TB
 | **Post-hito optimization sprints as project rule** | `ir0-optimization-arch-sprints.md` + Sprints section |
 | **Full BusyBox ash + applets** | P2-T1 / BUSY-* milestones |
 | **Dynamic loader + modprobe** | P2 / MOD-* milestones |
+| **EXT2 product root (STO-*)** | **Closed lab (rc7)** — dual-run MINIX+EXT2; default pack still MINIX (STO-5) |
 | **Rust/C++ driver ABI + fast build + reference driver** | P2 / DRV-* + BUILD-1 |
 | **Everything else in roadmap** | P1-storage, P1-T1, P3, Evolution milestones |
 | **Astral-class desktop north star** (panel, workspaces, audio, GL, irssi, JVM) | Future product arcs → **AST-*** / **F16** |

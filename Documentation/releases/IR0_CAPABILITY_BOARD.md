@@ -1,6 +1,6 @@
 # IR0 — Capability board (release certification)
 
-> **Last verified:** 2026-09-19  
+> **Last verified:** 2026-09-21  
 > **Source of truth:** `make linux-abi-audit`, `make smoke-release-0.0.1`,  
 > `scripts/linux_abi/contracts.json`, `Documentation/ai_driven_dev/linux_ground_truth.md`,  
 > `kernel/test/`, `tests/host/`
@@ -213,7 +213,9 @@ rules (`Documentation/releases/IR0_0.0.1_VFS_WRITE_PLAN.md`).
 
 ### EXT2 backend
 
-**Status:** **TODO**
+**Status:** **LINUX-LIKE** — STO-2/3 lab path (root PID1 boot, dual-run matrix). Not yet
+capability-audited on a dedicated ext2 block workload (`linux-abi-audit-vfs-write` on ext2
+image remains P1). Single block-group / linear dir lookup limits apply.
 
 ### IR0FS / simplefs backend
 

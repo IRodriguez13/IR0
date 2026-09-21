@@ -12,7 +12,8 @@ _IR0_PRODUCT_MK := 1
 	usmang usmang-test usmang-verify tui-u \
 	machine-update-kernel machine-update-userspace \
 	ensure-machine-desktop-sync machine-migrate-home image-vmware poweron run-isd \
-	smoke-runit-boot-isd smoke-init-boot-isd init-cap init-smoke init-smoke-matrix
+	smoke-runit-boot-isd smoke-init-boot-isd smoke-ext2-root-boot init-cap init-smoke \
+	init-smoke-matrix root-fs-smoke-matrix
 
 INIT_BOOT_PY = python3 scripts/init_boot_capture.py
 
@@ -22,9 +23,10 @@ bootstrap-userspace:
 	+@$(MAKE) first-boot PROFILE=$(ISD_PROFILE)
 
 # '+' so nested make -C ISD inside bootstrap inherits the jobserver.
-first-boot: kernel-x64-userspace.iso
+first-boot: $(IR0_KERNEL_ROOT_ISO)
 	+@chmod +x "$(KERNEL_ROOT)/scripts/bootstrap-isd.sh"
 	+@PROFILE="$(ISD_PROFILE)" \
+		ROOT_FS="$(ISD_ROOT_FS)" \
 		IR0_PRODUCT_PROFILE="$(ISD_PROFILE)" \
 		IR0_ISD_ROOT="$(IR0_ISD_ROOT)" \
 		IR0_ISD_URL="$(IR0_ISD_URL)" \
@@ -32,15 +34,15 @@ first-boot: kernel-x64-userspace.iso
 		IR0_USERSPACE_URL="$(IR0_ISD_URL)" \
 		ISD_ARCH="$(ISD_ARCH)" \
 		"$(KERNEL_ROOT)/scripts/bootstrap-isd.sh"
-	+@$(MAKE) -s machine-create PROFILE=$(ISD_PROFILE) IR0_MACHINE=$(IR0_MACHINE)
-	@test -f "$(KERNEL_ROOT)/kernel-x64-userspace.iso" || { \
-		echo "✗ bootstrap finished without kernel-x64-userspace.iso"; exit 1; \
+	+@$(MAKE) -s machine-create PROFILE=$(ISD_PROFILE) ROOT_FS=$(ISD_ROOT_FS)
+	@test -f "$(KERNEL_ROOT)/$(IR0_KERNEL_ROOT_ISO)" || { \
+		echo "✗ bootstrap finished without $(IR0_KERNEL_ROOT_ISO)"; exit 1; \
 	}
-	@echo "  POWERON  make poweron PROFILE=$(ISD_PROFILE) IR0_MACHINE=$(IR0_MACHINE)"
+	@echo "  POWERON  make poweron PROFILE=$(ISD_PROFILE) ROOT_FS=$(ISD_ROOT_FS) IR0_MACHINE=$(IR0_MACHINE)"
 
-machine-create: ensure-isd-disk ensure-isd-home
+machine-create: ensure-isd-root-disk ensure-isd-home
 	@chmod +x "$(KERNEL_ROOT)/scripts/isd_machine_disk.sh"
-	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_DISK)" \
+	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_ROOT_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create
 	@if [ "$(ISD_REQUIRES_HOME_DISK)" = "1" ]; then \
@@ -49,9 +51,9 @@ machine-create: ensure-isd-disk ensure-isd-home
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create; \
 	fi
 
-machine-reset: ensure-isd-disk
+machine-reset: ensure-isd-root-disk
 	@chmod +x "$(KERNEL_ROOT)/scripts/isd_machine_disk.sh"
-	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_DISK)" \
+	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_ROOT_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
 		CONFIRM_RESET="$(CONFIRM_RESET)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" reset
@@ -59,7 +61,7 @@ machine-reset: ensure-isd-disk
 machine-info:
 	@echo "PROFILE       $(ISD_PROFILE)"
 	@echo "MACHINE       $(IR0_MACHINE)"
-	@echo "BASE DISK     $(IR0_ISD_DISK)"
+	@echo "BASE DISK     $(IR0_ISD_ROOT_DISK) (ROOT_FS=$(ISD_ROOT_FS))"
 	@echo "MACHINE DISK  $(IR0_MACHINE_DISK)"
 	@echo "HOME DISK     $(IR0_MACHINE_HOME_DISK)"
 	@echo "KERNEL        $$(python3 scripts/kernel_manager.py --machine-dir \
@@ -185,16 +187,16 @@ image-vmware:
 	@echo "  Attach $(KERNEL_ROOT)/kernel-x64-userspace.iso as the boot CD."
 
 poweron: check-isd ensure-machine-desktop-sync
-	@test -f "$(KERNEL_ROOT)/kernel-x64-userspace.iso" || { \
-		echo "✗ missing $(KERNEL_ROOT)/kernel-x64-userspace.iso"; \
-		echo "  Run make first-boot PROFILE=$(ISD_PROFILE) first."; \
+	@test -f "$(KERNEL_ROOT)/$(IR0_KERNEL_ROOT_ISO)" || { \
+		echo "✗ missing $(KERNEL_ROOT)/$(IR0_KERNEL_ROOT_ISO)"; \
+		echo "  Run make first-boot PROFILE=$(ISD_PROFILE) ROOT_FS=$(ISD_ROOT_FS) first."; \
 		exit 2; \
 	}
 	@chmod +x "$(KERNEL_ROOT)/scripts/isd_machine_disk.sh"
-	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_DISK)" \
+	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_ROOT_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create
-	@echo "Running persistent IR0 + ISD machine ($(IR0_MACHINE))"
+	@echo "Running persistent IR0 + ISD machine ($(IR0_MACHINE)) ROOT_FS=$(ISD_ROOT_FS)"
 	@echo "  DISK     $(IR0_MACHINE_DISK)"
 	@KERNEL_ISO="$$(python3 scripts/kernel_manager.py --machine-dir \
 		"$(IR0_MACHINE_DIR)" --arch "$(ISD_ARCH)" \
@@ -205,7 +207,7 @@ poweron: check-isd ensure-machine-desktop-sync
 			-print -quit 2>/dev/null | grep -q .; then \
 			echo "✗ kmang has installed kernels but none verifies"; exit 2; \
 		fi; \
-		KERNEL_ISO="$(KERNEL_ROOT)/kernel-x64-userspace.iso"; \
+		KERNEL_ISO="$(KERNEL_ROOT)/$(IR0_KERNEL_ROOT_ISO)"; \
 	fi; \
 	echo "  KERNEL   $$KERNEL_ISO"; \
 	qemu-system-x86_64 -cdrom "$$KERNEL_ISO" \
@@ -270,5 +272,13 @@ init-smoke: smoke-init-boot-isd
 
 init-smoke-matrix: kernel-x64-userspace.iso
 	@$(INIT_BOOT_PY) --matrix --arch $(ISD_ARCH)
+
+# Dual-run lab: same ISD profiles × minix + ext2 root (review north star).
+root-fs-smoke-matrix: kernel-x64-userspace.iso kernel-x64-ext2-root.iso
+	@$(INIT_BOOT_PY) --matrix --root-fs-matrix --arch $(ISD_ARCH) --smoke-only
+
+# STO-2: PID1 boot with kernel CONFIG_ROOT_FILESYSTEM=ext2 on ISD disk.ext2.img
+smoke-ext2-root-boot: kernel-x64-ext2-root.iso
+	@$(INIT_BOOT_PY) --profile minimal --root-fs ext2 --arch $(ISD_ARCH) --smoke-only
 
 endif

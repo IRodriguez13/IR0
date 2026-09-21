@@ -516,6 +516,7 @@ LIB_OBJS = \
     kernel/lib/input.o \
     kernel/lib/utimens.o \
     kernel/lib/exec_read_trace.o \
+    kernel/lib/mount_prefix.o \
     kernel/lib/blockdev.o \
     kernel/lib/mm_port.o \
     kernel/lib/process_introspect.o \

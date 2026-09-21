@@ -9,6 +9,7 @@
 #
 # Env:
 #   PROFILE / IR0_PRODUCT_PROFILE   minimal|development|desktop|appliance
+#   ROOT_FS                         minix|ext2 (default from ISD profile / minix)
 #   IR0_ISD_ROOT / IR0_ISD_URL      sibling path and clone URL
 #   IR0_USERSPACE_*                 deprecated aliases of IR0_ISD_*
 #   IR0_DEPS_INSTALL                ask (default) | yes | never
@@ -36,6 +37,15 @@ ISD_ROOT="${IR0_ISD_ROOT:-${ROOT}/../ISD}"
 ISD_URL="${IR0_ISD_URL:-https://github.com/IRodriguez13/ISD.git}"
 ARCH="${ISD_ARCH:-x86_64}"
 PROFILE="${PROFILE:-${IR0_PRODUCT_PROFILE:-minimal}}"
+ROOT_FS="${ROOT_FS:-minix}"
+
+case "${ROOT_FS}" in
+minix|ext2) ;;
+*)
+	echo "✗ unknown ROOT_FS=${ROOT_FS} (expected minix|ext2)" >&2
+	exit 1
+	;;
+esac
 
 case "${PROFILE}" in
 minimal|development|desktop|appliance) ;;
@@ -75,6 +85,7 @@ fi
 
 echo "=== IR0 first-boot ==="
 echo "PROFILE      ${PROFILE}"
+echo "ROOT_FS      ${ROOT_FS}"
 echo "ARCH         ${ARCH}"
 echo "HOST         ${HOST_M}"
 echo "KERNEL       ${ROOT}"
@@ -158,26 +169,35 @@ echo "PKG          building resolved set for PROFILE=${PROFILE}"
 echo "ROOTFS       ${PROFILE}"
 "${ISD_MAKE[@]}" rootfs-tree
 
-DISK="${ISD_ROOT}/out/${ARCH}/images/${PROFILE}/disk.img"
-echo "IMAGE        ${DISK}"
-"${ISD_MAKE[@]}" image-minix
+if [ "${ROOT_FS}" = ext2 ]; then
+	DISK="${ISD_ROOT}/out/${ARCH}/images/${PROFILE}/disk.ext2.img"
+	echo "IMAGE        ${DISK} (ext2)"
+	"${ISD_MAKE[@]}" image-root ROOT_FS=ext2
+	KERNEL_ISO_TARGET="kernel-x64-ext2-root.iso"
+else
+	DISK="${ISD_ROOT}/out/${ARCH}/images/${PROFILE}/disk.img"
+	echo "IMAGE        ${DISK} (minix)"
+	"${ISD_MAKE[@]}" image-root ROOT_FS=minix
+	KERNEL_ISO_TARGET="kernel-x64-userspace.iso"
+fi
 
 # 8) Kernel + boot ISO (Make rebuilds only if needed)
-echo "KERNEL       kernel-x64-userspace.iso"
-make kernel-x64-userspace.iso
+echo "KERNEL       ${KERNEL_ISO_TARGET}"
+make "${KERNEL_ISO_TARGET}"
 
-ISO="${ROOT}/kernel-x64-userspace.iso"
+ISO="${ROOT}/${KERNEL_ISO_TARGET}"
 
 cat <<EOF
 
 === first-boot complete ===
 PROFILE      ${PROFILE}
+ROOT_FS      ${ROOT_FS}
 ARCH         ${ARCH}
 DISK         ${DISK}
 ISO          ${ISO}
 
 Next:
-  make poweron PROFILE=${PROFILE}
+  make poweron PROFILE=${PROFILE} ROOT_FS=${ROOT_FS}
 
 Host deps: IR0_DEPS_INSTALL=ask|yes|never (default ask)
 Extras:    make isdconfig PROFILE=${PROFILE}

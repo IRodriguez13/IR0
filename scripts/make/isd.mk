@@ -57,7 +57,7 @@ ISD_PROFILE := minimal
 ifdef IR0_PRODUCT_PROFILE
   ISD_PROFILE := $(IR0_PRODUCT_PROFILE)
 endif
-ifneq ($(filter minimal development desktop desktop-console appliance,$(PROFILE)),)
+ifneq ($(filter minimal minimal-sysvinit minimal-openrc development desktop desktop-console appliance,$(PROFILE)),)
   ISD_PROFILE := $(PROFILE)
 endif
 # Keep IR0_PRODUCT_PROFILE in sync for scripts that still read it.
@@ -71,9 +71,12 @@ IR0_ISD_MAKE = $(MAKE) -C "$(IR0_ISD_ROOT)" \
 
 # Artifact paths come from ISD print-artifacts-mk (cached .mk; not hardcoded out/ layout).
 IR0_ISD_DISK ?=
+IR0_ISD_DISK_EXT2 ?=
 IR0_ISD_HOME_DISK ?=
 IR0_ISD_ROOTFS ?=
 ISD_REQUIRES_HOME_DISK ?=
+ISD_ROOT_FS ?= minix
+ISD_ROOTFS_PACK ?= minix
 ISD_VARIANT_ID ?=
 ISD_ROOTFS_STAMP ?=
 ISD_ARTIFACTS_CACHE := $(KERNEL_ROOT)/.cache/isd-artifacts/$(ISD_ARCH)-$(ISD_PROFILE).mk
@@ -87,6 +90,24 @@ $(shell bash "$(KERNEL_ROOT)/scripts/load_isd_artifacts.sh" \
 	"$(KMANG_ARTIFACTS_CACHE)" KMANG_)
 -include $(ISD_ARTIFACTS_CACHE)
 -include $(KMANG_ARTIFACTS_CACHE)
+endif
+
+# CLI ROOT_FS=minix|ext2 overrides ISD profile manifest (STO-1 lab / north-star matrix).
+ifneq ($(filter minix ext2,$(ROOT_FS)),)
+  ISD_ROOT_FS := $(ROOT_FS)
+endif
+export ISD_ROOT_FS
+
+ifeq ($(ISD_ROOT_FS),ext2)
+IR0_ISD_ROOT_DISK := $(IR0_ISD_DISK_EXT2)
+else
+IR0_ISD_ROOT_DISK := $(IR0_ISD_DISK)
+endif
+
+ifeq ($(ISD_ROOT_FS),ext2)
+IR0_KERNEL_ROOT_ISO := kernel-x64-ext2-root.iso
+else
+IR0_KERNEL_ROOT_ISO := kernel-x64-userspace.iso
 endif
 KMANG_ISD_DISK ?= $(IR0_ISD_DISK)
 
@@ -120,8 +141,8 @@ IR0_USERSPACE_OUT = $(IR0_ISD_ROOT)/out
 IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=$(ISD_ARCH)
 
 .PHONY: check-isd clone-isd isd-defconfig isdconfig isd isd-rootfs isd-image \
-	isd-clean check-userspace warn-userspace-deprecated ensure-isd-disk \
-	ensure-isd-home isd-contracts
+	isd-image-ext2 isd-clean check-userspace warn-userspace-deprecated ensure-isd-disk \
+	ensure-isd-ext2-disk ensure-isd-root-disk verify-ext2-rootfs ensure-isd-home isd-contracts
 
 warn-userspace-deprecated:
 	@case "$(_IR0_USERSPACE_ROOT_ORIGIN)" in \
@@ -187,6 +208,26 @@ isd-image: check-isd
 	+@$(IR0_ISD_MAKE) image-minix
 	@echo "✓ isd-image $(IR0_ISD_DISK)"
 
+# Profile ROOT_FS from ISD manifest (default minix until STO-4 switch).
+isd-image-root: check-isd
+	+@$(IR0_ISD_MAKE) image-root ROOT_FS="$(ISD_ROOT_FS)"
+	@if [ "$(ISD_ROOT_FS)" = ext2 ]; then \
+		test -f "$(IR0_ISD_DISK_EXT2)" || exit 1; \
+		echo "✓ isd-image-root ext2 $(IR0_ISD_DISK_EXT2)"; \
+	else \
+		test -f "$(IR0_ISD_DISK)" || exit 1; \
+		echo "✓ isd-image-root minix $(IR0_ISD_DISK)"; \
+	fi
+
+# STO-1: parallel EXT2 root image (offline verify; boot on ext2 / is STO-2).
+isd-image-ext2: check-isd
+	+@$(IR0_ISD_MAKE) image-ext2-root
+	@test -f "$(IR0_ISD_DISK_EXT2)" || { \
+		echo "✗ failed to create $(IR0_ISD_DISK_EXT2)"; \
+		exit 1; \
+	}
+	@echo "✓ isd-image-ext2 $(IR0_ISD_DISK_EXT2)"
+
 isd-clean: check-isd
 	+@$(IR0_ISD_MAKE) clean
 
@@ -205,6 +246,41 @@ ensure-isd-disk: check-isd
 		exit 1; \
 	}
 	@echo "  DISK     $(IR0_ISD_DISK)"
+
+ensure-isd-ext2-disk: check-isd
+	@echo "ISD ext2   PROFILE=$(ISD_PROFILE) → $(IR0_ISD_DISK_EXT2)"
+	+@$(IR0_ISD_MAKE) image-ext2-root
+	@test -f "$(IR0_ISD_DISK_EXT2)" || { \
+		echo "✗ failed to create $(IR0_ISD_DISK_EXT2)"; \
+		exit 1; \
+	}
+	@echo "  DISK     $(IR0_ISD_DISK_EXT2)"
+
+# Profile-selected root image (ROOT_FS=minix|ext2; CLI ROOT_FS= overrides profile.conf).
+ensure-isd-root-disk: check-isd
+	@echo "ISD root   PROFILE=$(ISD_PROFILE) ROOT_FS=$(ISD_ROOT_FS) → $(IR0_ISD_ROOT_DISK)"
+	@echo "            (first pack or format-large can take 1–3 min; stamps skip work when clean)"
+	+@$(IR0_ISD_MAKE) fetch
+	+@$(IR0_ISD_MAKE) image-root ROOT_FS="$(ISD_ROOT_FS)"
+	@test -f "$(IR0_ISD_ROOT_DISK)" || { \
+		echo "✗ failed to create $(IR0_ISD_ROOT_DISK)"; \
+		exit 1; \
+	}
+	@echo "  DISK     $(IR0_ISD_ROOT_DISK)"
+
+# Offline path checks on host-built ext2 root (debugfs + e2fsck). STO-1 gate.
+verify-ext2-rootfs: ensure-isd-ext2-disk
+	@chmod +x scripts/verify_ext2_rootfs.sh
+	@scripts/verify_ext2_rootfs.sh "$(IR0_ISD_DISK_EXT2)" \
+		sbin/init bin/busybox etc/passwd var/lib/ir0
+
+verify-rootfs: check-isd
+	@if [ "$(ISD_ROOT_FS)" = ext2 ]; then \
+		$(MAKE) -s verify-ext2-rootfs PROFILE="$(ISD_PROFILE)"; \
+	else \
+		$(MAKE) -s -C "$(IR0_ISD_ROOT)" IR0_ROOT="$(KERNEL_ROOT)" \
+			ARCH="$(ISD_ARCH)" PROFILE="$(ISD_PROFILE)" isd-verify-rootfs; \
+	fi
 
 ensure-isd-home: check-isd
 	+@if [ "$(ISD_REQUIRES_HOME_DISK)" = "1" ]; then \

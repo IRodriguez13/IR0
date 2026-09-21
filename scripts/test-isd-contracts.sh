@@ -20,7 +20,7 @@ grep -q 'IR0_ISD_ROOT.*/ISD' scripts/make/isd.mk && ok "A IR0_ISD_ROOT default" 
 grep -q 'bootstrap-isd.sh' $MK_ALL && ok "A first-boot → bootstrap-isd" || bad "A bootstrap"
 test -x scripts/bootstrap-isd.sh && ok "A bootstrap-isd executable" || bad "A exec"
 grep -q 'PROFILE="$(ISD_PROFILE)"' scripts/make/isd.mk && ok "A PROFILE to ISD make" || bad "A PROFILE prop"
-grep -q 'filter minimal development desktop desktop-console appliance,$(PROFILE)' scripts/make/isd.mk \
+grep -q 'filter minimal minimal-sysvinit minimal-openrc development desktop desktop-console appliance,$(PROFILE)' scripts/make/isd.mk \
 	&& ok "A ISD_PROFILE follows env PROFILE" || bad "A ISD_PROFILE env sync"
 got=$(MAKEFLAGS= PROFILE=desktop IR0_PRODUCT_PROFILE= make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
 [ "$got" = desktop ] && ok "A PROFILE=desktop → ISD_PROFILE=desktop" \
@@ -150,9 +150,17 @@ if [ -f "$ISD_ROOT/scripts/pack-minix.sh" ]; then
 	grep -q 'xload' "$ISD_ROOT/scripts/pack-minix.sh" \
 		&& ok "D ISD pack-minix includes xload" \
 		|| bad "D ISD pack-minix missing xload loop"
+	grep -q 'pack-ext2-root.sh' "$ISD_ROOT/Makefile" \
+		&& ok "D ISD image-ext2-root wired" \
+		|| bad "D ISD missing image-ext2-root"
 else
 	ok "D ISD pack-minix xload (skipped — no sibling ISD checkout)"
 fi
+grep -q 'verify-ext2-rootfs' "$MK_BRIDGE" \
+	&& grep -q 'verify_ext2_rootfs.sh' "$MK_BRIDGE" \
+	&& ok "D verify-ext2-rootfs gate" || bad "D verify-ext2-rootfs missing"
+grep -q 'IR0_ISD_DISK_EXT2' "$MK_BRIDGE" \
+	&& ok "D IR0_ISD_DISK_EXT2 manifest bridge" || bad "D IR0_ISD_DISK_EXT2"
 grep -q '^isd-contracts:' "$MK_BRIDGE" \
 	&& grep -q 'test-isd-contracts.sh' "$MK_BRIDGE" \
 	&& ok "D isd-contracts make target" || bad "D isd-contracts target"

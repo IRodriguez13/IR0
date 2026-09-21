@@ -58,6 +58,34 @@
       "boot_window_start": "RUNIT_STAGE1_OK",
       "boot_window_end": "GETTY_READY"
     },
+    "development": {
+      "init_system": "runit",
+      "staged_init_path": "sbin/init",
+      "staged_init_impl": "sbin/runit",
+      "autokill_success": [
+        "RUNSV_CONSOLE_START",
+        "RUNSV_LOGGER_START",
+        "GETTY_READY"
+      ],
+      "required_serial_tags": [
+        "RUNIT_STAGE1_OK",
+        "RUNIT_STAGE2_OK",
+        "RUNSV_CONSOLE_START",
+        "RUNSV_LOGGER_START",
+        "GETTY_READY",
+        "DRIVER_SUMMARY_OK"
+      ],
+      "optional_serial_tags": [
+        "FSCK_OK",
+        "FSCK_SKIPPED",
+        "FIRSTBOOT_SKIP",
+        "FIRSTBOOT_OK",
+        "FIRSTBOOT_PENDING",
+        "RUNTIME_TMPFS_OK"
+      ],
+      "boot_window_start": "RUNIT_STAGE1_OK",
+      "boot_window_end": "GETTY_READY"
+    },
     "minimal-sysvinit": {
       "init_system": "sysvinit",
       "staged_init_path": "sbin/init",
