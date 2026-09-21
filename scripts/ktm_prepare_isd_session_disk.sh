@@ -38,26 +38,11 @@ minimal|development|desktop|appliance) ;;
 	;;
 esac
 
-resolve_isd_root()
-{
-	local cand
-	if [ -n "${IR0_ISD_ROOT:-}" ]; then
-		printf '%s\n' "$IR0_ISD_ROOT"
-		return 0
-	fi
-	for cand in \
-		"$ROOT/../ISD" \
-		"${HOME}/ISD"
-	do
-		if [ -f "${cand}/Makefile" ]; then
-			printf '%s\n' "$(cd "$cand" && pwd)"
-			return 0
-		fi
-	done
-	printf '%s\n' "${HOME}/ISD"
-}
-
-ISD_ROOT="$(resolve_isd_root)"
+if [ -n "${IR0_ISD_ROOT:-}" ]; then
+	ISD_ROOT="$(cd "${IR0_ISD_ROOT}" && pwd)"
+else
+	ISD_ROOT="$(bash "$ROOT/scripts/resolve_isd_root.sh" "$ROOT")"
+fi
 export IR0_ISD_ROOT="$ISD_ROOT"
 export IR0_USERSPACE_ROOT="$ISD_ROOT"
 

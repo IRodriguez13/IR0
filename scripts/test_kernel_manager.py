@@ -483,6 +483,36 @@ class KernelManagerTest(unittest.TestCase):
         )
         self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
 
+    def test_write_login_session_uses_world_deletable_mode(self) -> None:
+        disk = self.machine / "session-mode.img"
+        disk.parent.mkdir(parents=True, exist_ok=True)
+        disk.touch()
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts/inject_init_minix.py"),
+             "--format", str(disk)],
+            capture_output=True,
+            check=True,
+        )
+        store = KM.KernelStore(
+            self.machine,
+            profile="desktop",
+            kernel_root=ROOT,
+            machine_disk=disk,
+        )
+        store.write_login_session(KM.KMANG_SESSION_TERMINAL)
+        env = os.environ.copy()
+        env["IR0_ROOTFS_VERBOSE"] = "1"
+        stat = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/verify_minix_rootfs.py"),
+             str(disk), "/etc/ir0-session"],
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        self.assertEqual(stat.returncode, 0, stat.stdout + stat.stderr)
+        self.assertIn("inode_mode=0x81b6", stat.stdout)
+
     def test_prompt_boot_session_maps_keys(self) -> None:
         class FakeScreen:
             def __init__(self, key: int) -> None:

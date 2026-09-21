@@ -17,8 +17,7 @@ fi
 DISK_OUT="${1:?disk output path}"
 
 cd "$ROOT"
-# Product PID1 and rootfs live in the sibling ISD repo (IR0_USERSPACE_ROOT alias).
-US_ROOT="${IR0_USERSPACE_ROOT:-${IR0_ISD_ROOT:-$ROOT/../ISD}}"
+US_ROOT="$(bash "$ROOT/scripts/resolve_isd_root.sh" "$ROOT")"
 US_STAGE=""
 US_PAUSE_STAGE=""
 for cand in \

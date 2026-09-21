@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DISK="${1:-${ROOT}/disk.img}"
-ISD="${IR0_ISD_ROOT:-${ROOT}/../ISD}"
+ISD="$(bash "$ROOT/scripts/resolve_isd_root.sh" "$ROOT")"
 ARCH="${ISD_ARCH:-x86_64}"
 INJECT="${ROOT}/scripts/inject_init_minix.py"
 DOAS_BIN="${ISD}/out/${ARCH}/product/stage-bin/doas"

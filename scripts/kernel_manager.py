@@ -122,7 +122,8 @@ class KernelStore:
             payload = Path(stream.name)
         try:
             result = subprocess.run(
-                [sys.executable, str(inject), str(disk), str(payload), IR0_SESSION_FILE],
+                [sys.executable, str(inject), "--mode", "0666",
+                 str(disk), str(payload), IR0_SESSION_FILE],
                 text=True,
                 capture_output=True,
                 check=False,
