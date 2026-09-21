@@ -11,7 +11,8 @@
 #   tooling-check       — fast host checks (no QEMU, no Docker)
 #   release-check*      — Tier 1 build + contracts on current tree
 #   release-check-boot* — Tier 1.5 ISO + QEMU + guest probes
-#   fresh-clone-check   — Docker: git clone IR0+ISD, build from scratch, boot
+#   fresh-clone-check   — maintainer CI: git clone IR0+ISD in Docker (simulates third party)
+#   ci-local*           — staged pre-push gates on your machine (see ci_local.sh)
 #   *-container-local — opt-in bind mounts for uncommitted WIP only
 
 ifndef _IR0_RELEASE_MK
@@ -24,6 +25,7 @@ RELEASE_CHECK_ISD_REF ?= dev
 RELEASE_CHECK_DOUBLE ?= 0
 
 .PHONY: truth-tests tooling-check fresh-clone-check \
+	ci-local ci-local-fast ci-local-boot ci-local-docker ci-local-rc \
 	release-check release-check-clean \
 	release-check-container release-check-container-local \
 	release-check-boot release-check-boot-clean \
@@ -44,6 +46,36 @@ tooling-check:
 	@make -s isd-contracts
 	@make -s check-isd
 
+# --- Local pre-push CI (staged; run before push) ---
+
+ci-local-fast:
+	@chmod +x scripts/ci_local.sh
+	@CI_LOCAL_STAGE=fast PROFILE="$(ISD_PROFILE)" scripts/ci_local.sh
+
+ci-local-boot:
+	@chmod +x scripts/ci_local.sh scripts/release_check_boot.sh \
+		scripts/release_check_kmang.sh scripts/release_check_guest_probes.py
+	@CI_LOCAL_STAGE=boot PROFILE="$(ISD_PROFILE)" scripts/ci_local.sh
+
+ci-local-docker:
+	@chmod +x scripts/ci_local.sh scripts/ci/release-check-fresh.sh \
+		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
+		scripts/release_check_guest_probes.py
+	@CI_LOCAL_STAGE=docker PROFILE="$(ISD_PROFILE)" scripts/ci_local.sh
+
+ci-local-rc:
+	@chmod +x scripts/ci_local.sh scripts/ci/release-check-fresh.sh \
+		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
+		scripts/release_check_guest_probes.py
+	@CI_LOCAL_STAGE=rc PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" scripts/ci_local.sh
+
+# Recommended before push: fast checks + Docker E2E on your working tree.
+ci-local:
+	@chmod +x scripts/ci_local.sh scripts/ci/release-check-fresh.sh \
+		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
+		scripts/release_check_guest_probes.py
+	@CI_LOCAL_STAGE=all PROFILE="$(ISD_PROFILE)" scripts/ci_local.sh
+
 release-check:
 	@chmod +x scripts/release_check.sh scripts/resolve_isd_root.sh
 	@RELEASE_CHECK_FRESH=0 PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" \
@@ -55,8 +87,8 @@ release-check-clean:
 		scripts/release_check.sh
 
 release-check-boot:
-	@chmod +x scripts/release_check_boot.sh scripts/resolve_isd_root.sh \
-		scripts/release_check_guest_probes.py
+	@chmod +x scripts/release_check_boot.sh scripts/release_check_kmang.sh \
+		scripts/resolve_isd_root.sh scripts/release_check_guest_probes.py
 	@PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" \
 		RELEASE_CHECK_GUEST=1 scripts/release_check_boot.sh
 
@@ -101,14 +133,16 @@ release-check-container:
 
 release-check-boot-container:
 	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
-		scripts/release_check_boot.sh scripts/release_check_guest_probes.py
+		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
+		scripts/release_check_guest_probes.py
 	@$(RELEASE_CHECK_DOCKER_BUILD)
 	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,0)
 
 # RC/release gate: clone from Git, build, boot, guest probes; optional double-run.
 fresh-clone-check:
 	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
-		scripts/release_check_boot.sh scripts/release_check_guest_probes.py
+		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
+		scripts/release_check_guest_probes.py
 	@$(RELEASE_CHECK_DOCKER_BUILD)
 	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,$(RELEASE_CHECK_DOUBLE))
 
@@ -133,7 +167,8 @@ release-check-container-local:
 
 release-check-boot-container-local:
 	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
-		scripts/release_check_boot.sh scripts/release_check_guest_probes.py
+		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
+		scripts/release_check_guest_probes.py
 	@ISD_ROOT="$$(scripts/resolve_isd_root.sh "$(KERNEL_ROOT)")"; \
 	$(RELEASE_CHECK_DOCKER_BUILD); \
 	docker run --rm \

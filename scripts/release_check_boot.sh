@@ -69,21 +69,9 @@ fi
 KMANG_DIR="$(mktemp -d /tmp/ir0-kmang-release.XXXXXX)"
 trap 'rm -rf "$KMANG_DIR"' EXIT
 
-run_step "kmang install-workspace + verify" bash -c "
-	python3 scripts/kernel_manager.py \
-		--machine-dir '$KMANG_DIR' \
-		--arch '$ARCH' \
-		--profile '$PROFILE' \
-		--kernel-root '$ROOT' \
-		--source '$ROOT/kernel-x64-userspace.iso' \
-		--version '$want' \
-		install-workspace && \
-	python3 scripts/kernel_manager.py \
-		--machine-dir '$KMANG_DIR' \
-		--arch '$ARCH' \
-		--profile '$PROFILE' \
-		verify
-"
+run_step "kmang CI pipeline" \
+	KMANG_DIR="$KMANG_DIR" PROFILE="$PROFILE" ISD_ARCH="$ARCH" \
+		scripts/release_check_kmang.sh
 
 run_step "smoke-runit-boot" \
 	make -s smoke-runit-boot IR0_PRODUCT_PROFILE="$PROFILE" ARCH="$ARCH"
