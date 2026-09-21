@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import tempfile
@@ -112,6 +113,43 @@ class UserspaceManagerTest(unittest.TestCase):
             self.assertIn("OK  busybox: bin/busybox", result.stdout)
             self.assertIn("verify runit: missing etc/runit", result.stderr)
             self.assertIn("unknown package 'ghost'", result.stderr)
+
+    def test_list_profiles_includes_minimal_sysvinit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            isd = Path(directory)
+            for name in ("minimal", "minimal-sysvinit"):
+                prof = isd / "profiles" / name
+                prof.mkdir(parents=True)
+                (prof / "profile.conf").write_text(
+                    f"PROFILE_NAME={name}\nUSERLAND_BASE=busybox\n"
+                    f"INIT_SYSTEM={'sysvinit' if name.endswith('sysvinit') else 'runit'}\n"
+                )
+            spec = importlib.util.spec_from_file_location("userspace_manager", MANAGER)
+            assert spec and spec.loader
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            names = module.list_profiles(isd)
+            self.assertIn("minimal-sysvinit", names)
+            self.assertEqual(module.profile_init_system(isd, "minimal-sysvinit"), "sysvinit")
+
+    def test_tui_help_lines_cover_verify(self) -> None:
+        spec = importlib.util.spec_from_file_location("userspace_manager", MANAGER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        text = "\n".join(module.tui_help_lines())
+        self.assertIn("verify", text)
+        self.assertIn("quit", text)
+
+    def test_tui_requires_tty(self) -> None:
+        result = subprocess.run(
+            ["python3", str(MANAGER), "tui"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("TTY", result.stderr)
 
     @unittest.skipUnless(ISD.is_dir(), "ISD sibling tree not present")
     def test_help_mentions_login_session_doc_when_isd_present(self) -> None:

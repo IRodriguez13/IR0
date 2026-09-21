@@ -9,6 +9,7 @@ ISD_VERSION are intentionally separate identities.
 from __future__ import annotations
 
 import argparse
+import curses
 import json
 import os
 import subprocess
@@ -40,8 +41,8 @@ def resolve_isd_root(explicit: Path | None = None) -> Path:
 USMANG_HELP_LINES = (
     "IR0 Userspace Manager (usmang) — host inspector for sibling ISD/",
     "",
-    "Today: read-only CLI (no TUI yet). Future: userland composition choices",
-    "(BusyBox vs GNU coreutils, runit vs sysvinit vs systemd) without kernel changes.",
+    "Today: curses TUI (make usmang) or read-only CLI. Future: userland composition",
+    "choices (BusyBox vs GNU coreutils, runit vs sysvinit vs systemd) without kernel changes.",
     "",
     "Commands:",
     "  summary     ISD version, userland base, package counts, desktop ABI",
@@ -53,6 +54,7 @@ USMANG_HELP_LINES = (
     "              Optional: --packages pkg[,pkg...] checks only those entries;",
     "              logs each failure and continues (does not abort mid-run)",
     "  help        This legend",
+    "  tui         Interactive curses inspector (default when make usmang on a TTY)",
     "",
     "Environment:",
     "  IR0_ISD_ROOT   Path to ISD checkout (default: ../ISD)",
@@ -61,7 +63,7 @@ USMANG_HELP_LINES = (
     "",
     "Examples:",
     "  make usmang",
-    "  python3 scripts/userspace_manager.py --isd-root ../ISD summary",
+    "  python3 scripts/userspace_manager.py --isd-root ../ISD tui",
     "  python3 scripts/userspace_manager.py --profile minimal --json userland",
     "  python3 scripts/userspace_manager.py --profile minimal verify -p busybox -p runit",
     "",
@@ -89,17 +91,191 @@ def parse_kv(text: str) -> dict[str, str]:
     return data
 
 
-def profile_userland(isd: Path, profile: str) -> str:
+def profile_conf(isd: Path, profile: str) -> dict[str, str]:
     conf = isd / "profiles" / profile / "profile.conf"
-    for raw in read_text(conf).splitlines():
-        if raw.startswith("USERLAND_BASE="):
-            return raw.split("=", 1)[1].strip()
-    return "busybox"
+    return parse_kv(read_text(conf))
+
+
+def profile_userland(isd: Path, profile: str) -> str:
+    return profile_conf(isd, profile).get("USERLAND_BASE", "busybox")
+
+
+def profile_init_system(isd: Path, profile: str) -> str:
+    init = profile_conf(isd, profile).get("INIT_SYSTEM", "runit")
+    return init if init in ("runit", "sysvinit") else "runit"
+
+
+def list_profiles(isd: Path) -> list[str]:
+    root = isd / "profiles"
+    if not root.is_dir():
+        return []
+    names = [
+        path.name
+        for path in sorted(root.iterdir())
+        if path.is_dir() and (path / "profile.conf").is_file()
+    ]
+    return names
+
+
+def staged_rootfs(isd: Path, profile: str, arch: str) -> Path:
+    return isd / "out" / arch / "rootfs" / profile
+
+
+def staged_ready(isd: Path, profile: str, arch: str) -> bool:
+    tree = staged_rootfs(isd, profile, arch)
+    return tree.is_dir() and (tree / "etc" / "ir0-profile").is_file()
+
+
+def build_summary_lines(isd: Path, profile: str, arch: str) -> list[str]:
+    ver = cmd_version(isd, profile, arch)
+    land = cmd_userland(isd, profile)
+    pkg = cmd_packages(isd, profile)
+    lines = [
+        f"ISD {ver.get('isd_version_file')}  profile={profile}  arch={arch}",
+        f"userland={land['userland_base']}  init={land['init_system']}",
+        f"packages={pkg['count']} "
+        f"(first={pkg['first_party']}, third={pkg['third_party']})",
+    ]
+    if staged_ready(isd, profile, arch):
+        lines.append(f"staged: {staged_rootfs(isd, profile, arch)}")
+    else:
+        lines.append("staged: (none — run make -C ISD rootfs-tree)")
+    desktop = cmd_desktop(isd, profile)
+    if desktop.get("applies"):
+        clients = ", ".join(desktop["x_session_packages"][:6])
+        extra = "…" if len(desktop["x_session_packages"]) > 6 else ""
+        lines.append(f"desktop clients: {clients}{extra}")
+    else:
+        lines.append(f"desktop: n/a ({desktop.get('note') or 'non-desktop profile'})")
+    return lines
+
+
+def tui_help_lines() -> list[str]:
+    return [
+        "Keys:",
+        "  Up/Down or j/k   move profile selection",
+        "  Enter            set active profile",
+        "  v                verify staged rootfs (ISD script)",
+        "  s                refresh summary",
+        "  h / ?            toggle this help",
+        "  q                quit",
+    ]
+
+
+def tui_draw_summary(
+    screen: curses.window,
+    isd: Path,
+    profiles: list[str],
+    selected: int,
+    active: str,
+    arch: str,
+    message: str,
+    show_help: bool,
+    help_scroll: int,
+) -> int:
+    height, width = screen.getmaxyx()
+    screen.erase()
+    if show_help:
+        overlay = tui_help_lines()
+        body_rows = max(1, height - 2)
+        max_scroll = max(0, len(overlay) - body_rows)
+        help_scroll = min(help_scroll, max_scroll)
+        for row, line in enumerate(overlay[help_scroll : help_scroll + body_rows]):
+            if row + 1 >= height:
+                break
+            screen.addstr(row + 1, 2, line[: max(0, width - 4)])
+        screen.addstr(0, 2, "usmang help (q/Esc close)", curses.A_BOLD)
+        return help_scroll
+
+    screen.addstr(0, 2, "IR0 Userspace Manager (usmang)", curses.A_BOLD)
+    screen.addstr(1, 2, f"ISD: {isd}"[: max(0, width - 4)])
+    list_top = 3
+    for index, name in enumerate(profiles):
+        y = list_top + index
+        if y >= height - 8:
+            break
+        marker = ">" if name == active else " "
+        attr = curses.A_REVERSE if index == selected else 0
+        init = profile_init_system(isd, name)
+        label = f"{marker} {name:<20} init={init}"
+        screen.addstr(y, 2, label[: max(0, width - 4)], attr)
+
+    detail_top = list_top + min(len(profiles), max(1, height - 11))
+    screen.addstr(detail_top, 2, f"Active profile: {active}", curses.A_BOLD)
+    for offset, line in enumerate(build_summary_lines(isd, active, arch)):
+        y = detail_top + 1 + offset
+        if y >= height - 2:
+            break
+        screen.addstr(y, 4, line[: max(0, width - 6)])
+    screen.addstr(height - 1, 2, message[: max(0, width - 4)])
+    screen.refresh()
+    return help_scroll
+
+
+def width_msg(screen: curses.window) -> int:
+    _height, width = screen.getmaxyx()
+    return max(20, width - 4)
+
+
+def tui(screen: curses.window, isd: Path, profile: str, arch: str) -> int:
+    try:
+        curses.curs_set(0)
+    except curses.error:
+        pass
+    profiles = list_profiles(isd)
+    if not profiles:
+        print("✗ no ISD profiles found", file=sys.stderr)
+        return 2
+    selected = profiles.index(profile) if profile in profiles else 0
+    active = profiles[selected]
+    message = "h/? help  v verify  Enter apply profile  q quit"
+    show_help = False
+    help_scroll = 0
+    while True:
+        help_scroll = tui_draw_summary(
+            screen, isd, profiles, selected, active, arch, message,
+            show_help, help_scroll,
+        )
+        if show_help:
+            key = screen.getch()
+            if key in (ord("q"), ord("Q"), 27):
+                show_help = False
+            continue
+        key = screen.getch()
+        if key in (ord("q"), ord("Q")):
+            return 0
+        if key in (ord("h"), ord("?")):
+            show_help = True
+            help_scroll = 0
+            continue
+        if key in (curses.KEY_UP, ord("k")) and profiles:
+            selected = (selected - 1) % len(profiles)
+            continue
+        if key in (curses.KEY_DOWN, ord("j")) and profiles:
+            selected = (selected + 1) % len(profiles)
+            continue
+        if key in (10, 13, curses.KEY_ENTER) and profiles:
+            active = profiles[selected]
+            message = f"active profile → {active}"
+            continue
+        if key == ord("s"):
+            message = "summary refreshed"
+            continue
+        if key == ord("v"):
+            payload, code = cmd_verify(isd, active, arch, None)
+            if payload.get("status") == "unknown":
+                message = payload.get("reason", "verify skipped")
+            elif code == 0:
+                message = f"verify OK profile={active}"
+            else:
+                detail = payload.get("stderr") or payload.get("stdout") or "verify failed"
+                message = detail.splitlines()[0][: width_msg(screen)]
+            continue
 
 
 def cmd_version(isd: Path, profile: str, arch: str) -> dict:
     version = read_text(isd / "VERSION").strip()
-    staged = isd / "out" / arch / "rootfs" / profile
+    staged = staged_rootfs(isd, profile, arch)
     release = parse_kv(read_text(staged / "usr/share/isd/release.txt"))
     os_release = parse_kv(read_text(staged / "etc/os-release"))
     build_info = parse_kv(read_text(staged / "usr/lib/ir0/build-info"))
@@ -109,6 +285,7 @@ def cmd_version(isd: Path, profile: str, arch: str) -> dict:
         "profile": profile,
         "arch": arch,
         "userland_base": profile_userland(isd, profile),
+        "init_system": profile_init_system(isd, profile),
         "staged_release": release or None,
         "staged_os_release": os_release or None,
         "staged_build_info": build_info or None,
@@ -152,8 +329,11 @@ def cmd_packages(isd: Path, profile: str) -> dict:
 
 def cmd_userland(isd: Path, profile: str) -> dict:
     base = profile_userland(isd, profile)
+    init = profile_init_system(isd, profile)
     return {
         "userland_base": base,
+        "init_system": init,
+        "init_implemented": init in ("runit", "sysvinit"),
         "implemented": base == "busybox",
         "coreutils": "reserved — IR0 must grow Linux surface before selecting it",
         "busybox_matrix": str(isd / "packages/busybox/bb_status.tsv"),
@@ -353,6 +533,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("version", "packages", "userland", "desktop", "summary", "help"):
         sub.add_parser(name)
+    sub.add_parser("tui")
     verify_parser = sub.add_parser("verify")
     verify_parser.add_argument(
         "-p",
@@ -372,6 +553,11 @@ def main() -> int:
     elif args.command == "help":
         print(format_usmang_help())
         return 0
+    elif args.command == "tui":
+        if not sys.stdout.isatty() or not sys.stdin.isatty():
+            print("✗ usmang tui requires a TTY (use summary/verify for CI)", file=sys.stderr)
+            return 2
+        return curses.wrapper(tui, isd, args.profile, args.arch)
     elif args.command == "packages":
         payload = cmd_packages(isd, args.profile)
     elif args.command == "userland":
@@ -421,6 +607,7 @@ def main() -> int:
             ver = payload["version"]
             print(f"ISD {ver.get('isd_version_file')}  profile={args.profile}")
             print(f"  userland: {payload['userland']['userland_base']}")
+            print(f"  init: {payload['userland']['init_system']}")
             print(
                 f"  packages: {payload['packages']['count']} "
                 f"(first-party={payload['packages']['first_party']}, "

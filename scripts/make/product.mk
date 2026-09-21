@@ -104,14 +104,19 @@ usmang-test:
 
 usmang: check-isd
 	@chmod +x scripts/userspace_manager.py
-	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
-		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" summary
-	@if [ "$(ISD_REQUIRES_HOME_DISK)" = "1" ]; then \
-		echo "---"; \
+	@if [ -t 0 ] && [ -t 1 ]; then \
 		python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
-			--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop; \
+			--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" tui; \
+	else \
+		python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
+			--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" summary; \
+		if [ "$(ISD_REQUIRES_HOME_DISK)" = "1" ]; then \
+			echo "---"; \
+			python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
+				--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop; \
+		fi; \
+		echo "guest: ir0-status version | packages | userland"; \
 	fi
-	@echo "guest: ir0-status version | packages | userland"
 
 usmang-verify: check-isd
 	@chmod +x scripts/userspace_manager.py

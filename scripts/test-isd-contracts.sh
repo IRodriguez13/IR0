@@ -137,8 +137,9 @@ python3 scripts/test_userspace_manager.py >/dev/null \
 	|| bad "D usmang behavior"
 grep -q 'format_usmang_help' scripts/userspace_manager.py \
 	&& grep -q '"help"' scripts/userspace_manager.py \
-	&& ok "D usmang help command wired" \
-	|| bad "D usmang help missing"
+	&& grep -q '"tui"' scripts/userspace_manager.py \
+	&& ok "D usmang help+tui commands wired" \
+	|| bad "D usmang help/tui missing"
 if [ -f "$ISD_ROOT/scripts/pack-minix.sh" ]; then
 	grep -q 'xload' "$ISD_ROOT/scripts/pack-minix.sh" \
 		&& ok "D ISD pack-minix includes xload" \
