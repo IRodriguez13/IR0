@@ -28,15 +28,20 @@ run_step() {
 
 if [ "$RELEASE_CHECK_FRESH" = "1" ]; then
 	echo "== release-check-clean (RELEASE_CHECK_FRESH=1) =="
-	if [ -d "${IR0_ISD_ROOT:-$ROOT/../ISD}/out" ]; then
-		step_fail "ISD out/ must not exist for fresh check (found ${IR0_ISD_ROOT:-$ROOT/../ISD}/out)"
-	fi
-	if [ -f "$ROOT/kernel-x64.bin" ] && [ "$RELEASE_CHECK_FRESH" = "1" ]; then
-		: # kernel rebuild is allowed; stale ISO alone is checked below
+	isd_root="${IR0_ISD_ROOT:-$ROOT/../ISD}"
+	if [ -d "${isd_root}/out" ]; then
+		step_fail "ISD out/ must not exist for fresh check (found ${isd_root}/out)"
+		exit 1
 	fi
 	if [ -f "$ROOT/kernel-x64-userspace.iso" ]; then
 		step_fail "remove kernel-x64-userspace.iso before release-check-clean"
+		exit 1
 	fi
+fi
+
+if [ ! -f "$ROOT/.config" ]; then
+	echo "== bootstrap .config from setup/defconfig =="
+	make -s defconfig
 fi
 
 run_step "repo-hygiene-guard" make -s repo-hygiene-guard
@@ -62,6 +67,11 @@ run_step "check-isd" make -s check-isd
 
 ISD_ROOT="$(bash scripts/resolve_isd_root.sh "$ROOT")"
 export IR0_ISD_ROOT="$ISD_ROOT"
+
+if [ ! -f "$ISD_ROOT/packages/busybox/src/Makefile" ]; then
+	run_step "ISD fetch PROFILE=${PROFILE}" \
+		make -s -C "$ISD_ROOT" fetch PROFILE="$PROFILE" ARCH="$ARCH"
+fi
 
 run_step "ISD release-check PROFILE=${PROFILE}" \
 	make -s -C "$ISD_ROOT" IR0_ROOT="$ROOT" ARCH="$ARCH" PROFILE="$PROFILE" release-check

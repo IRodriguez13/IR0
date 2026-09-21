@@ -1669,7 +1669,7 @@ help:
 	@echo "  make clone-isd | check-isd | isd-clean"
 	@echo "  make release-check PROFILE=minimal     # Tier-1 integration gate (no QEMU)"
 	@echo "  make release-check-clean PROFILE=minimal"
-	@echo "  make release-check-container           # fresh clone in Docker"
+	@echo "  make release-check-container           # fresh local dev clone in Docker"
 	@echo "  Legacy inject (smokes): IR0_LEGACY_USERSPACE=1 make run"
 	@echo "  Deprecated alias: bootstrap-userspace → first-boot"
 	@echo ""

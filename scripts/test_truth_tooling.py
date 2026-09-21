@@ -56,11 +56,14 @@ class TruthToolingTest(unittest.TestCase):
     def test_resolve_isd_root_fails_without_checkout(self) -> None:
         empty = self.root / "empty-ir0"
         empty.mkdir()
+        env = os.environ.copy()
+        env.pop("IR0_ISD_ROOT", None)
         result = subprocess.run(
             ["bash", str(RESOLVER), str(empty)],
             text=True,
             capture_output=True,
             check=False,
+            env=env,
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("Set IR0_ISD_ROOT", result.stderr)

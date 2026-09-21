@@ -15,12 +15,16 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     git \
     make \
     musl-tools \
+    nasm \
+    file \
     python3 \
     python3-venv \
     xorriso \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /work
+# Bump when release-check-fresh.sh changes (invalidates COPY cache).
+ARG RELEASE_CHECK_SCRIPT_REV=7
 COPY scripts/ci/release-check-fresh.sh /usr/local/bin/release-check-fresh.sh
 RUN chmod +x /usr/local/bin/release-check-fresh.sh
 

@@ -21,8 +21,18 @@ release-check-clean:
 		scripts/release_check.sh
 
 release-check-container:
-	@chmod +x scripts/ci/release-check-fresh.sh
-	@docker build -f scripts/ci/Dockerfile.release-check -t ir0-release-check "$(KERNEL_ROOT)"
-	@docker run --rm ir0-release-check
+	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh
+	@ISD_ROOT="$$(scripts/resolve_isd_root.sh "$(KERNEL_ROOT)")"; \
+	docker build --build-arg RELEASE_CHECK_SCRIPT_REV=7 \
+		-f scripts/ci/Dockerfile.release-check -t ir0-release-check "$(KERNEL_ROOT)"; \
+	docker run --rm \
+		-v "$(KERNEL_ROOT):/src/IR0:ro" \
+		-v "$$ISD_ROOT:/src/ISD:ro" \
+		-e RELEASE_CHECK_LOCAL=1 \
+		-e IR0_REF=dev \
+		-e ISD_REF=dev \
+		-e PROFILE="$(ISD_PROFILE)" \
+		-e ISD_ARCH="$(ISD_ARCH)" \
+		ir0-release-check
 
 endif
