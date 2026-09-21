@@ -158,6 +158,7 @@ WRAP5(sys_mount, const char *, const char *, const char *, unsigned long,
       const void *)
 WRAP2(sys_umount, const char *, int)
 WRAP2(sys_mkdir, const char *, mode_t)
+WRAP3(sys_mkdirat, int, const char *, mode_t)
 WRAP1(sys_rmdir, const char *)
 WRAP2(sys_chmod, const char *, mode_t)
 WRAP3(sys_chown, const char *, uid_t, gid_t)
@@ -377,6 +378,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_chroot]         = wrap_sys_chroot;
   syscall_table_rw[__NR_fchdir]         = wrap_sys_fchdir;
   syscall_table_rw[__NR_mkdir]          = wrap_sys_mkdir;
+  syscall_table_rw[__NR_mkdirat]        = wrap_sys_mkdirat;
   syscall_table_rw[__NR_rmdir]          = wrap_sys_rmdir;
   syscall_table_rw[__NR_link]           = wrap_sys_link;
   syscall_table_rw[__NR_readlink]       = wrap_sys_readlink;

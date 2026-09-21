@@ -53,6 +53,7 @@ USMANG_HELP_LINES = (
     "  verify      Postcondition check against staged rootfs (ISD-owned rules)",
     "              Optional: --packages pkg[,pkg...] checks only those entries;",
     "              logs each failure and continues (does not abort mid-run)",
+    "  boot-contract  Staged init audit + expected QEMU serial tags (read-only)",
     "  help        This legend",
     "  tui         Interactive curses inspector (default when make usmang on a TTY)",
     "",
@@ -102,7 +103,7 @@ def profile_userland(isd: Path, profile: str) -> str:
 
 def profile_init_system(isd: Path, profile: str) -> str:
     init = profile_conf(isd, profile).get("INIT_SYSTEM", "runit")
-    return init if init in ("runit", "sysvinit") else "runit"
+    return init if init in ("runit", "sysvinit", "openrc") else "runit"
 
 
 def list_profiles(isd: Path) -> list[str]:
@@ -156,6 +157,7 @@ def tui_help_lines() -> list[str]:
         "  Up/Down or j/k   move profile selection",
         "  Enter            set active profile",
         "  v                verify staged rootfs (ISD script)",
+        "  c                boot-contract audit (init + expected serial tags)",
         "  s                refresh summary",
         "  h / ?            toggle this help",
         "  q                quit",
@@ -228,7 +230,7 @@ def tui(screen: curses.window, isd: Path, profile: str, arch: str) -> int:
         return 2
     selected = profiles.index(profile) if profile in profiles else 0
     active = profiles[selected]
-    message = "h/? help  v verify  Enter apply profile  q quit"
+    message = "h/? help  v verify  c boot-contract  Enter apply  q quit"
     show_help = False
     help_scroll = 0
     while True:
@@ -270,6 +272,18 @@ def tui(screen: curses.window, isd: Path, profile: str, arch: str) -> int:
             else:
                 detail = payload.get("stderr") or payload.get("stdout") or "verify failed"
                 message = detail.splitlines()[0][: width_msg(screen)]
+            continue
+        if key == ord("c"):
+            payload = cmd_boot_contract(isd, active, arch)
+            if payload.get("status") == "ok":
+                tags = payload.get("required_serial_tags") or []
+                preview = ",".join(tags[:3])
+                if len(tags) > 3:
+                    preview += ",…"
+                message = f"boot-contract OK tags={preview}"
+            else:
+                issues = payload.get("issues") or [payload.get("note", "mismatch")]
+                message = str(issues[0])[: width_msg(screen)]
             continue
 
 
@@ -333,7 +347,7 @@ def cmd_userland(isd: Path, profile: str) -> dict:
     return {
         "userland_base": base,
         "init_system": init,
-        "init_implemented": init in ("runit", "sysvinit"),
+        "init_implemented": init in ("runit", "sysvinit", "openrc"),
         "implemented": base == "busybox",
         "coreutils": "reserved — IR0 must grow Linux surface before selecting it",
         "busybox_matrix": str(isd / "packages/busybox/bb_status.tsv"),
@@ -477,6 +491,65 @@ def cmd_verify_selected(
     return payload, 0
 
 
+def load_boot_contract() -> dict[str, object]:
+    path = ROOT / "scripts" / "init_boot_contract.json"
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def cmd_boot_contract(isd: Path, profile: str, arch: str) -> dict[str, object]:
+    contract = load_boot_contract()
+    profiles = contract.get("profiles", {})
+    spec = profiles.get(profile) if isinstance(profiles, dict) else None
+    init = profile_init_system(isd, profile)
+    staged = staged_rootfs(isd, profile, arch)
+    tree_ok = staged_ready(isd, profile, arch)
+    payload: dict[str, object] = {
+        "profile": profile,
+        "arch": arch,
+        "init_system_profile": init,
+        "staged_ready": tree_ok,
+        "staged_rootfs": str(staged),
+        "contract_defined": spec is not None,
+    }
+    if not spec or not isinstance(spec, dict):
+        payload["status"] = "no_contract"
+        payload["note"] = "profile not in init_boot_contract.json (boot capture N/A)"
+        return payload
+
+    payload["init_system_contract"] = spec.get("init_system")
+    payload["required_serial_tags"] = spec.get("required_serial_tags", [])
+    payload["boot_window"] = {
+        "start": spec.get("boot_window_start"),
+        "end": spec.get("boot_window_end"),
+    }
+    payload["future_systemd"] = (
+        "systemd not in contract yet; add profile + staged audit before claiming support"
+    )
+
+    issues: list[str] = []
+    if init != spec.get("init_system"):
+        issues.append(f"profile INIT_SYSTEM={init} != contract {spec.get('init_system')}")
+
+    if tree_ok:
+        init_path = staged / "sbin/init"
+        impl_rel = str(spec.get("staged_init_impl", "sbin/init"))
+        impl_path = staged / impl_rel
+        if not init_path.exists():
+            issues.append("missing sbin/init in staged rootfs")
+        if impl_rel != "sbin/init" and not impl_path.exists():
+            issues.append(f"missing {impl_rel}")
+        payload["init_path"] = str(init_path)
+        payload["impl_path"] = str(impl_path)
+    else:
+        issues.append("rootfs not staged — run make -C ISD rootfs-tree or ensure-isd-disk")
+
+    payload["issues"] = issues
+    payload["status"] = "ok" if not issues else "mismatch"
+    return payload
+
+
 def cmd_verify(
     isd: Path,
     profile: str,
@@ -531,7 +604,7 @@ def main() -> int:
     parser.add_argument("--arch", default=os.environ.get("ISD_ARCH", "x86_64"))
     parser.add_argument("--json", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("version", "packages", "userland", "desktop", "summary", "help"):
+    for name in ("version", "packages", "userland", "desktop", "summary", "help", "boot-contract"):
         sub.add_parser(name)
     sub.add_parser("tui")
     verify_parser = sub.add_parser("verify")
@@ -553,6 +626,24 @@ def main() -> int:
     elif args.command == "help":
         print(format_usmang_help())
         return 0
+    elif args.command == "boot-contract":
+        payload = cmd_boot_contract(isd, args.profile, args.arch)
+        if args.json:
+            print(json.dumps(payload, sort_keys=True, indent=2))
+        else:
+            print(
+                f"boot-contract profile={args.profile} status={payload.get('status')} "
+                f"init={payload.get('init_system_profile')}"
+            )
+            for item in payload.get("issues") or []:
+                print(f"  issue: {item}", file=sys.stderr)
+            tags = payload.get("required_serial_tags") or []
+            if tags:
+                print(f"  expected serial tags: {', '.join(tags)}")
+            note = payload.get("note")
+            if note:
+                print(f"  note: {note}")
+        return 0 if payload.get("status") == "ok" else 1
     elif args.command == "tui":
         if not sys.stdout.isatty() or not sys.stdin.isatty():
             print("✗ usmang tui requires a TTY (use summary/verify for CI)", file=sys.stderr)

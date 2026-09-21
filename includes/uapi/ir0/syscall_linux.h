@@ -104,6 +104,7 @@
 #define __NR_chroot       161
 #define __NR_rename        82
 #define __NR_mkdir         83
+#define __NR_mkdirat      258
 #define __NR_rmdir         84
 #define __NR_link          86
 #define __NR_unlink        87

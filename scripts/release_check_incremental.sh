@@ -82,4 +82,13 @@ else
 	exit 1
 fi
 
+echo "-- alt init profiles: resolve + usmang summary --"
+for alt in minimal-sysvinit minimal-openrc; do
+	pkgs="$(PROFILE="$alt" bash "$ISD_ROOT/scripts/resolve-packages.sh")"
+	echo "  OK  resolve PROFILE=${alt}: ${pkgs}"
+	python3 scripts/userspace_manager.py --isd-root "$ISD_ROOT" \
+		--profile "$alt" --arch "$ARCH" summary >/dev/null
+	echo "  OK  usmang summary PROFILE=${alt}"
+done
+
 echo "✓ incremental/idempotence OK"

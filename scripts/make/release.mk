@@ -19,13 +19,14 @@ ifndef _IR0_RELEASE_MK
 _IR0_RELEASE_MK := 1
 
 RELEASE_CHECK_IMAGE ?= ir0-release-check
-RELEASE_CHECK_SCRIPT_REV ?= 11
+RELEASE_CHECK_SCRIPT_REV ?= 12
 RELEASE_CHECK_IR0_REF ?= dev
 RELEASE_CHECK_ISD_REF ?= dev
 RELEASE_CHECK_DOUBLE ?= 0
 
 .PHONY: truth-tests tooling-check fresh-clone-check \
-	ci-local ci-local-fast ci-local-boot ci-local-docker ci-local-rc \
+	ci ci-fast ci-docker ci-local ci-local-fast ci-local-boot ci-local-docker ci-local-rc \
+	tui-k tui-u \
 	release-check release-check-clean \
 	release-check-container release-check-container-local \
 	release-check-boot release-check-boot-clean \
@@ -60,7 +61,7 @@ ci-local-boot:
 ci-local-docker:
 	@chmod +x scripts/ci_local.sh scripts/ci/release-check-fresh.sh \
 		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
-		scripts/release_check_guest_probes.py
+		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh
 	@CI_LOCAL_STAGE=docker PROFILE="$(ISD_PROFILE)" scripts/ci_local.sh
 
 ci-local-rc:
@@ -73,8 +74,12 @@ ci-local-rc:
 ci-local:
 	@chmod +x scripts/ci_local.sh scripts/ci/release-check-fresh.sh \
 		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
-		scripts/release_check_guest_probes.py
+		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh
 	@CI_LOCAL_STAGE=all PROFILE="$(ISD_PROFILE)" scripts/ci_local.sh
+
+ci: ci-local
+ci-fast: ci-local-fast
+ci-docker: ci-local-docker
 
 release-check:
 	@chmod +x scripts/release_check.sh scripts/resolve_isd_root.sh

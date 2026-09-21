@@ -1,0 +1,113 @@
+{
+  "schema": "ir0-init-boot-contract/1",
+  "architectures": {
+    "x86_64": {
+      "kernel_iso": "kernel-x64-userspace.iso",
+      "qemu": "qemu-system-x86_64",
+      "qemu_args": [
+        "-serial", "stdio",
+        "-display", "none",
+        "-m", "256M",
+        "-no-reboot",
+        "-net", "none"
+      ],
+      "disk_drive": "-drive file={disk},format=raw,if=ide,index=0"
+    },
+    "arm64": {
+      "kernel_iso": "kernel-arm64-userspace.iso",
+      "qemu": "qemu-system-aarch64",
+      "qemu_args": [
+        "-serial", "stdio",
+        "-display", "none",
+        "-m", "512M",
+        "-no-reboot",
+        "-net", "none",
+        "-machine", "virt",
+        "-cpu", "max"
+      ],
+      "disk_drive": "-drive file={disk},format=virtio,if=none,id=root -device virtio-blk-device,drive=root",
+      "status": "scaffold",
+      "note": "Build kernel-arm64-userspace.iso + ISD ARCH=arm64 rootfs before guest boot."
+    }
+  },
+  "profiles": {
+    "minimal": {
+      "init_system": "runit",
+      "staged_init_path": "sbin/init",
+      "staged_init_impl": "sbin/runit",
+      "autokill_success": [
+        "RUNSV_CONSOLE_START",
+        "RUNSV_LOGGER_START",
+        "GETTY_READY"
+      ],
+      "required_serial_tags": [
+        "RUNIT_STAGE1_OK",
+        "RUNIT_STAGE2_OK",
+        "RUNSV_CONSOLE_START",
+        "RUNSV_LOGGER_START",
+        "GETTY_READY",
+        "DRIVER_SUMMARY_OK"
+      ],
+      "optional_serial_tags": [
+        "FSCK_OK",
+        "FSCK_SKIPPED",
+        "FIRSTBOOT_SKIP",
+        "FIRSTBOOT_OK",
+        "FIRSTBOOT_PENDING"
+      ],
+      "boot_window_start": "RUNIT_STAGE1_OK",
+      "boot_window_end": "GETTY_READY"
+    },
+    "minimal-sysvinit": {
+      "init_system": "sysvinit",
+      "staged_init_path": "sbin/init",
+      "staged_init_impl": "sbin/init",
+      "autokill_success": [
+        "SYSVINIT_BOOT_OK",
+        "GETTY_READY"
+      ],
+      "required_serial_tags": [
+        "SYSVINIT_BOOT_OK",
+        "GETTY_READY",
+        "DRIVER_SUMMARY_OK"
+      ],
+      "optional_serial_tags": [
+        "FSCK_OK",
+        "FSCK_SKIPPED",
+        "FIRSTBOOT_SKIP",
+        "FIRSTBOOT_OK",
+        "FIRSTBOOT_PENDING",
+        "RUNTIME_TMPFS_OK",
+        "RUNTIME_TMPFS_FALLBACK"
+      ],
+      "boot_window_start": "SYSVINIT_BOOT_OK",
+      "boot_window_end": "GETTY_READY"
+    },
+    "minimal-openrc": {
+      "init_system": "openrc",
+      "staged_init_path": "sbin/init",
+      "staged_init_impl": "sbin/openrc-init",
+      "autokill_success": [
+        "OPENRC_EARLY_OK",
+        "GETTY_READY"
+      ],
+      "required_serial_tags": [
+        "OPENRC_EARLY_OK",
+        "GETTY_READY",
+        "DRIVER_SUMMARY_OK"
+      ],
+      "optional_serial_tags": [
+        "FSCK_OK",
+        "FSCK_SKIPPED",
+        "FIRSTBOOT_SKIP",
+        "FIRSTBOOT_OK",
+        "FIRSTBOOT_PENDING",
+        "RUNTIME_TMPFS_OK",
+        "RUNTIME_TMPFS_FALLBACK"
+      ],
+      "boot_window_start": "OPENRC_EARLY_OK",
+      "boot_window_end": "GETTY_READY",
+      "notes": "openrc-init supervises etc/init.d/*; ir0-boot runs early parity with runit stage1."
+    }
+  }
+}

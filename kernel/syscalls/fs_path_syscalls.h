@@ -25,6 +25,7 @@ int64_t sys_sync(void);
 int64_t sys_fsync(int fd);
 int64_t sys_fdatasync(int fd);
 int64_t sys_mkdir(const char *pathname, mode_t mode);
+int64_t sys_mkdirat(int dirfd, const char *pathname, mode_t mode);
 int64_t sys_chmod(const char *path, mode_t mode);
 int64_t sys_chown(const char *path, uid_t owner, gid_t group);
 int64_t sys_link(const char *oldpath, const char *newpath);

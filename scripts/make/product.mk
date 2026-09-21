@@ -8,10 +8,13 @@ _IR0_PRODUCT_MK := 1
 
 .PHONY: bootstrap-userspace first-boot machine-create machine-reset machine-info \
 	kernel-manager-install kernel-manager-list \
-	kmang kmang-cli kmang-test \
-	usmang usmang-test usmang-verify machine-update-kernel machine-update-userspace \
+	kmang kmang-cli kmang-test tui-k \
+	usmang usmang-test usmang-verify tui-u \
+	machine-update-kernel machine-update-userspace \
 	ensure-machine-desktop-sync machine-migrate-home image-vmware poweron run-isd \
-	smoke-runit-boot-isd
+	smoke-runit-boot-isd smoke-init-boot-isd init-cap init-smoke init-smoke-matrix
+
+INIT_BOOT_PY = python3 scripts/init_boot_capture.py
 
 # Deprecated alias → new bootstrap
 bootstrap-userspace:
@@ -93,6 +96,8 @@ kmang: check-isd
 		exit $$rc; \
 	fi
 
+tui-k: kmang
+
 kmang-cli:
 	@$(KMANG_PY) list --json
 
@@ -104,24 +109,15 @@ usmang-test:
 
 usmang: check-isd
 	@chmod +x scripts/userspace_manager.py
-	@if [ -t 0 ] && [ -t 1 ]; then \
-		python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
-			--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" tui; \
-	else \
-		python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
-			--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" summary; \
-		if [ "$(ISD_REQUIRES_HOME_DISK)" = "1" ]; then \
-			echo "---"; \
-			python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
-				--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop; \
-		fi; \
-		echo "guest: ir0-status version | packages | userland"; \
-	fi
+	@$(USMANG_PY) summary
+
+tui-u: check-isd
+	@chmod +x scripts/userspace_manager.py
+	@$(USMANG_PY) tui
 
 usmang-verify: check-isd
 	@chmod +x scripts/userspace_manager.py
-	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
-		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" verify
+	@$(USMANG_PY) verify
 
 machine-update-kernel: check-isd
 	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
@@ -261,5 +257,18 @@ smoke-runit-boot-isd: kernel-x64-userspace.iso ensure-isd-disk
 			$(RUNIT_SMOKE_LOG) | tail -40; \
 		exit 1; \
 	fi
+
+# Generic init boot smoke (PROFILE=minimal|minimal-sysvinit|minimal-openrc).
+smoke-init-boot-isd: kernel-x64-userspace.iso ensure-isd-disk
+	@$(INIT_BOOT_PY) --profile $(ISD_PROFILE) --arch $(ISD_ARCH) --smoke-only
+
+# Save serial boot capture under out/init-boot-capture/<arch>/<profile>/.
+init-cap: kernel-x64-userspace.iso ensure-isd-disk
+	@$(INIT_BOOT_PY) --profile $(ISD_PROFILE) --arch $(ISD_ARCH)
+
+init-smoke: smoke-init-boot-isd
+
+init-smoke-matrix: kernel-x64-userspace.iso
+	@$(INIT_BOOT_PY) --matrix --arch $(ISD_ARCH)
 
 endif

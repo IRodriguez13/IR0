@@ -129,6 +129,12 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
     dev_is_pseudo = 1;
     dev_path = dev_copy;
   }
+  else if (strcmp(mount_fstype, "proc") == 0 && dev_copy[0] != '\0')
+  {
+    /* Linux: mount("proc", "/proc", "proc", …) — source string is not a path. */
+    dev_is_pseudo = 1;
+    dev_path = dev_copy;
+  }
   else
   {
     rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, dev_copy, dev_resolved,
@@ -300,6 +306,25 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
                             current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
+
+  return vfs_mkdir(resolved, (int)mode);
+}
+
+int64_t sys_mkdirat(int dirfd, const char *pathname, mode_t mode)
+{
+  char resolved[256];
+  int rc;
+
+  if (!current_process)
+    return -ESRCH;
+  if (!pathname)
+    return -EFAULT;
+  if (validate_userspace_string(pathname, 256) != 0)
+    return -EFAULT;
+
+  rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
   if (rc != 0)
     return rc;
 

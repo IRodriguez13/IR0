@@ -229,6 +229,10 @@ KMANG_PY = python3 scripts/kernel_manager.py \
 	--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
 	--version "$(IR0_VERSION_STRING)"
 
+USMANG_PY = python3 scripts/userspace_manager.py \
+	--isd-root "$(IR0_ISD_ROOT)" \
+	--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)"
+
 -include $(KERNEL_ROOT)/scripts/make/product.mk
 
 endif

@@ -533,6 +533,39 @@ static void normalize_mount_path(const char *in, char *out, size_t out_sz)
 }
 
 /* ------------------------------------------------------------------ */
+/*  proc — Linux nodev mount succeeds; paths stay on pseudo /proc     */
+/* ------------------------------------------------------------------ */
+
+static int proc_fs_mount(const char *dev, const char *dir)
+{
+    (void)dev;
+
+    if (!dir || (strcmp(dir, "/proc") != 0 && strcmp(dir, "/proc/") != 0))
+        return -EINVAL;
+    return 0;
+}
+
+static int proc_fs_umount(const char *dir)
+{
+    if (!dir || (strcmp(dir, "/proc") != 0 && strcmp(dir, "/proc/") != 0))
+        return -EINVAL;
+    return -EBUSY;
+}
+
+static struct vfs_fstype proc_fs_type = {
+    .name   = "proc",
+    .ops    = NULL,
+    .mount  = proc_fs_mount,
+    .umount = proc_fs_umount,
+    .next   = NULL,
+};
+
+static void proc_fs_register(void)
+{
+    (void)vfs_register_fs(&proc_fs_type);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -570,6 +603,7 @@ int vfs_init(void)
 #if CONFIG_ENABLE_FS_EXT2
     ext2_fs_register();
 #endif
+    proc_fs_register();
     if (DEBUG_VFS)
     {
         klog_info("VFS", "CLASSIFY VFS_FS_CONTRACT_ACTIVE");
