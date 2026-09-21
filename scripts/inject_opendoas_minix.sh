@@ -31,9 +31,8 @@ if [ ! -f "${DISK}" ]; then
 fi
 
 if [ ! -f "${DOAS_BIN}" ]; then
-	echo "✗ inject_opendoas: missing ${DOAS_BIN}" >&2
-	echo "  Run: make build-opendoas" >&2
-	exit 1
+	echo "  SKIP    opendoas (no ${DOAS_BIN}; profile may omit OpenDoas)"
+	exit 0
 fi
 
 if [ ! -f "${DOAS_CONF}" ]; then

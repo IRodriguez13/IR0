@@ -339,12 +339,12 @@ build-passwd-smoke:
 ISD_OPENDOAS_STAMP = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/stamps/packages/opendoas
 
 build-opendoas: check-userspace
-	@if $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=$(ISD_ARCH) -n build-opendoas >/dev/null 2>&1; then \
-		$(IR0_USERSPACE_MAKE) build-opendoas; \
-	elif [ -f "$(ISD_OPENDOAS_STAMP)" ]; then \
+	@if [ -f "$(ISD_OPENDOAS_STAMP)" ]; then \
 		echo "  DOAS    opendoas stamp up to date"; \
+	elif $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=$(ISD_ARCH) -n build-opendoas >/dev/null 2>&1; then \
+		$(IR0_USERSPACE_MAKE) build-opendoas; \
 	else \
-		$(IR0_USERSPACE_MAKE) out/$(ISD_ARCH)/stamps/packages/opendoas; \
+		echo "  SKIP    opendoas (not in PROFILE / no ISD build-opendoas target)"; \
 	fi
 
 install-opendoas-minix: build-opendoas

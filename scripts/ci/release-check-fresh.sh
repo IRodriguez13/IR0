@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# Fresh-clone Tier-1 release-check (IR0 + ISD sibling layout, no QEMU).
+# Fresh-clone Tier-1 (+ optional Tier 1.5 boot) release-check.
 set -euo pipefail
 
 # Copied/bind-mounted repos in Docker are owned by the host UID.
@@ -10,6 +10,7 @@ IR0_REF="${IR0_REF:-dev}"
 ISD_REF="${ISD_REF:-dev}"
 PROFILE="${PROFILE:-minimal}"
 WORK="${WORK:-/tmp/ir0-release-check.$$}"
+RELEASE_CHECK_BOOT="${RELEASE_CHECK_BOOT:-0}"
 
 # Container/local simulation: mount sibling repos at /src/{IR0,ISD} (see release.mk).
 if [ "${RELEASE_CHECK_LOCAL:-0}" = "1" ]; then
@@ -27,10 +28,11 @@ copy_repo_tree() {
 
 	echo "  copy ${label} from ${src} → ${dest} (working tree)"
 	mkdir -p "$dest"
-	# Copy working tree, not just committed objects; drop stale build artefacts.
 	tar -C "$src" \
 		--exclude='./out' \
 		--exclude='./kernel-x64-userspace.iso' \
+		--exclude='./disk.img' \
+		--exclude='./disk.img.runit.stamp' \
 		--exclude='./.kernel-manager.lock' \
 		-cf - . | tar -C "$dest" -xf -
 }
@@ -57,7 +59,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$WORK"
-echo "== fresh-clone release-check WORK=$WORK PROFILE=$PROFILE IR0_REF=$IR0_REF ISD_REF=$ISD_REF =="
+echo "== fresh-clone release-check WORK=$WORK PROFILE=$PROFILE IR0_REF=$IR0_REF ISD_REF=$ISD_REF BOOT=${RELEASE_CHECK_BOOT} =="
 
 if [ "${RELEASE_CHECK_LOCAL:-0}" = "1" ]; then
 	copy_repo_tree "$IR0_SRC" "$WORK/IR0" "IR0 dev working tree"
@@ -73,5 +75,10 @@ export IR0_DEPS_INSTALL=never
 export RELEASE_CHECK_FRESH=1
 
 make -s release-check-clean PROFILE="$PROFILE"
+
+if [ "$RELEASE_CHECK_BOOT" = "1" ]; then
+	chmod +x scripts/release_check_boot.sh
+	PROFILE="$PROFILE" ISD_ARCH="${ISD_ARCH:-x86_64}" scripts/release_check_boot.sh
+fi
 
 echo "✓ fresh-clone release-check OK"

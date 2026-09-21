@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Tier-1 release-check image (no QEMU guest boot).
+# Tier-1 (+ optional Tier 1.5 boot) release-check image.
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -13,18 +13,20 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     e2fsprogs \
     flex \
     git \
+    grub-pc-bin \
     make \
     musl-tools \
     nasm \
     file \
     python3 \
     python3-venv \
+    qemu-system-x86 \
     xorriso \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /work
 # Bump when release-check-fresh.sh changes (invalidates COPY cache).
-ARG RELEASE_CHECK_SCRIPT_REV=7
+ARG RELEASE_CHECK_SCRIPT_REV=8
 COPY scripts/ci/release-check-fresh.sh /usr/local/bin/release-check-fresh.sh
 RUN chmod +x /usr/local/bin/release-check-fresh.sh
 
