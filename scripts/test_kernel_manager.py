@@ -34,6 +34,19 @@ def load_kernel_manager():
 KM = load_kernel_manager()
 
 
+def release_from_kernel_id(kernel_id: str) -> str:
+    match = re.match(r"^(.+)-build[0-9]+$", kernel_id)
+    return match.group(1) if match else "0.0.1-rc5"
+
+
+def fake_kernel_c_source(release: str, payload: bytes) -> str:
+    body = (
+        f'const char ir0_version_release[] = "IR0VER:{release}";\n'
+        f"const char payload[] = {payload!r};\n"
+    )
+    return body.replace("b'", '"').replace("';", '";')
+
+
 class KernelManagerTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -62,7 +75,7 @@ class KernelManagerTest(unittest.TestCase):
             obj = self.root / f"kernel-{kernel_id}.o"
             subprocess.run(
                 ["cc", "-c", "-x", "c", "-o", str(obj), "-"],
-                input=f"const char payload[] = {contents!r};\n".replace("b'", "\"").replace("';", "\";"),
+                input=fake_kernel_c_source(release_from_kernel_id(kernel_id), contents),
                 text=True, capture_output=True, check=True,
             )
             subprocess.run(
@@ -223,7 +236,7 @@ class KernelManagerTest(unittest.TestCase):
         obj = self.root / "workspace.o"
         subprocess.run(
             ["cc", "-c", "-x", "c", "-o", str(obj), "-"],
-            input='const char payload[] = "kernel-99";\n',
+            input=fake_kernel_c_source("0.0.1-rc5", b"kernel-99"),
             text=True, capture_output=True, check=True,
         )
         subprocess.run(
@@ -286,7 +299,7 @@ class KernelManagerTest(unittest.TestCase):
         obj = self.root / "ws.o"
         subprocess.run(
             ["cc", "-c", "-x", "c", "-o", str(obj), "-"],
-            input='const char payload[] = "kernel-55";\n',
+            input=fake_kernel_c_source("0.0.1-rc5", b"kernel-55"),
             text=True, capture_output=True, check=True,
         )
         subprocess.run(
@@ -334,6 +347,55 @@ class KernelManagerTest(unittest.TestCase):
         )
         self.assertIn("no embedded build identity", result.stderr)
 
+    def test_install_rejects_release_mismatch(self) -> None:
+        source = self.root / "mismatch.iso"
+        obj = self.root / "mismatch.o"
+        subprocess.run(
+            ["cc", "-c", "-x", "c", "-o", str(obj), "-"],
+            input=fake_kernel_c_source("0.0.1-rc5", b"kernel-mismatch"),
+            text=True, capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["ld", "-r", "--defsym=ir0_build_number=371", "-o", str(self.root / "mismatch.bin"), str(obj)],
+            capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["xorriso", "-outdev", str(source), "-map", str(self.root / "mismatch.bin"),
+             "/boot/kernel-x64.bin"],
+            capture_output=True, check=True,
+        )
+        result = self.run_manager(
+            "install", "--source", str(source), "--id", "0.0.1-rc6-build371",
+            success=False,
+        )
+        self.assertIn("kernel id says 0.0.1-rc6, image contains 0.0.1-rc5", result.stderr)
+
+    def test_install_workspace_rejects_makefile_release_mismatch(self) -> None:
+        source = self.root / "workspace-rc5.iso"
+        obj = self.root / "workspace-rc5.o"
+        subprocess.run(
+            ["cc", "-c", "-x", "c", "-o", str(obj), "-"],
+            input=fake_kernel_c_source("0.0.1-rc5", b"kernel-rc5"),
+            text=True, capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["ld", "-r", "--defsym=ir0_build_number=55", "-o", str(self.root / "workspace-rc5.bin"), str(obj)],
+            capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["xorriso", "-outdev", str(source), "-map", str(self.root / "workspace-rc5.bin"),
+             "/boot/kernel-x64.bin"],
+            capture_output=True, check=True,
+        )
+        result = self.run_manager(
+            "--source", str(source), "--version", "0.0.1-rc6", "install-workspace",
+            success=False,
+        )
+        self.assertIn(
+            "workspace Makefile says 0.0.1-rc6, kernel image contains 0.0.1-rc5",
+            result.stderr,
+        )
+
     def test_select_rejects_missing_kernel(self) -> None:
         result = self.run_manager("select", "missing-build1", success=False)
         self.assertEqual(result.returncode, 2)
@@ -347,6 +409,7 @@ class KernelManagerTest(unittest.TestCase):
         self.assertEqual(meta["format"], 3)
         self.assertEqual(meta["id"], "0.0.1-rc5-build41")
         self.assertEqual(meta["embedded_build"], 41)
+        self.assertEqual(meta["embedded_release"], "0.0.1-rc5")
         self.assertEqual(meta["build_scope"], "machine-local")
         self.assertTrue(meta["sha256"])
 

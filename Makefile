@@ -504,6 +504,7 @@ LIB_OBJS = \
     kernel/lib/path_user.o \
     kernel/lib/path_routed.o \
     kernel/lib/utsname_info.o \
+    kernel/lib/version_stamp.o \
     kernel/lib/console.o \
     kernel/lib/ps2_set1.o \
     kernel/lib/ps2_mouse_pkt.o \

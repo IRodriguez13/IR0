@@ -29,6 +29,8 @@ from pathlib import Path
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 BUILD_ID_RE = re.compile(r"-build([0-9]+)$")
+RELEASE_ID_RE = re.compile(r"^(.+)-build[0-9]+$")
+RELEASE_MARKER = b"IR0VER:"
 IR0_LOGIN_SESSION_TERMINAL = "terminal"
 IR0_LOGIN_SESSION_X = "x"
 IR0_SESSION_FILE = "etc/ir0-session"
@@ -175,6 +177,24 @@ class KernelStore:
         return False
 
     @staticmethod
+    def embedded_release(image: Path) -> str | None:
+        """Release string compiled into the kernel (IR0_VERSION_STRING at link time)."""
+        with tempfile.TemporaryDirectory(prefix="ir0-kernel-release.") as directory:
+            kernel = Path(directory) / "kernel.bin"
+            if not KernelStore._extract_kernel(image, kernel):
+                return None
+            data = kernel.read_bytes()
+        marker = data.find(RELEASE_MARKER)
+        if marker < 0:
+            return None
+        start = marker + len(RELEASE_MARKER)
+        end = data.find(b"\0", start)
+        if end < 0 or end <= start:
+            return None
+        release = data[start:end].decode("ascii", "replace")
+        return release if release else None
+
+    @staticmethod
     def embedded_build(image: Path) -> int | None:
         """Read the link-time build identity from the kernel inside an ISO."""
         with tempfile.TemporaryDirectory(prefix="ir0-kernel-verify.") as directory:
@@ -239,6 +259,11 @@ class KernelStore:
         match = BUILD_ID_RE.search(kernel_id)
         return int(match.group(1)) if match else None
 
+    @staticmethod
+    def identifier_release(kernel_id: str) -> str | None:
+        match = RELEASE_ID_RE.match(kernel_id)
+        return match.group(1) if match else None
+
     def next_local_build(self) -> int | None:
         """Counter that the next link on this tree will stamp (machine-local)."""
         if self.kernel_root is None:
@@ -296,14 +321,22 @@ class KernelStore:
             return False, "invalid ISO"
         digest = self.checksum(image)
         embedded = self.embedded_build(image)
+        embedded_release = self.embedded_release(image)
         embedded_arch = self.embedded_arch(image)
         expected = self.identifier_build(kernel_id)
+        expected_release = self.identifier_release(kernel_id)
         if embedded_arch is None and self.arch != "unknown":
             return False, "architecture inspection failed"
         if self.arch != "unknown" and embedded_arch != self.arch:
             return False, f"architecture mismatch: image is {embedded_arch or 'unknown'}"
         if embedded is not None and expected is not None and embedded != expected:
             return False, f"identity mismatch: image build{embedded}"
+        if (
+            embedded_release is not None
+            and expected_release is not None
+            and embedded_release != expected_release
+        ):
+            return False, f"release mismatch: image has {embedded_release}"
         meta_path = self.metadata_path(kernel_id)
         if meta_path.is_file():
             try:
@@ -321,26 +354,52 @@ class KernelStore:
             recorded = metadata.get("embedded_build")
             if recorded is not None and recorded != embedded:
                 return False, "embedded identity changed"
+            recorded_release = metadata.get("embedded_release")
+            if (
+                recorded_release is not None
+                and embedded_release is not None
+                and recorded_release != embedded_release
+            ):
+                return False, "embedded release changed"
             if enroll and (
                 metadata.get("arch") in (None, "unknown")
                 or metadata.get("format", 0) < 3
             ):
-                self._write_metadata(kernel_id, image, digest, embedded)
-            if embedded is not None and expected == embedded:
+                self._write_metadata(kernel_id, image, digest, embedded, embedded_release)
+            if (
+                embedded is not None
+                and expected == embedded
+                and (
+                    expected_release is None
+                    or embedded_release is None
+                    or expected_release == embedded_release
+                )
+            ):
                 return True, "verified"
             return True, "checksum-only"
         if enroll:
-            self._write_metadata(kernel_id, image, digest, embedded)
-            if embedded is not None and expected == embedded:
+            self._write_metadata(kernel_id, image, digest, embedded, embedded_release)
+            if (
+                embedded is not None
+                and expected == embedded
+                and (
+                    expected_release is None
+                    or embedded_release is None
+                    or expected_release == embedded_release
+                )
+            ):
                 return True, "verified"
             return True, "checksum-only"
         return True, "legacy-unverified"
 
     def _write_metadata(self, kernel_id: str, image: Path, digest: str,
-                        embedded_build: int | None) -> None:
+                        embedded_build: int | None,
+                        embedded_release: str | None = None) -> None:
         target = self.metadata_path(kernel_id)
         provenance = self.embedded_provenance(image)
         host_git = self.workspace_git()
+        if embedded_release is None:
+            embedded_release = self.embedded_release(image)
         payload = {
             "format": 3,
             "id": kernel_id,
@@ -348,6 +407,7 @@ class KernelStore:
             "size": image.stat().st_size,
             "installed_at": int(time.time()),
             "embedded_build": embedded_build,
+            "embedded_release": embedded_release,
             "arch": self.arch,
             "embedded_arch": self.embedded_arch(image),
             "build_scope": "machine-local",
@@ -436,8 +496,10 @@ class KernelStore:
         target = self.kernels / f"{kernel_id}.iso"
         source_digest = self.checksum(source)
         embedded = self.embedded_build(source)
+        embedded_release = self.embedded_release(source)
         embedded_arch = self.embedded_arch(source)
         expected = self.identifier_build(kernel_id)
+        expected_release = self.identifier_release(kernel_id)
         if embedded_arch is None and self.arch != "unknown":
             raise ValueError("kernel ISO architecture could not be inspected")
         if self.arch != "unknown" and embedded_arch != self.arch:
@@ -450,6 +512,13 @@ class KernelStore:
             if embedded != expected:
                 raise ValueError(
                     f"kernel id says build{expected}, image contains build{embedded}"
+                )
+        if expected_release is not None:
+            if embedded_release is None:
+                raise ValueError("kernel ISO has no embedded release identity")
+            if embedded_release != expected_release:
+                raise ValueError(
+                    f"kernel id says {expected_release}, image contains {embedded_release}"
                 )
         if target.exists():
             if self.checksum(target) != source_digest:
@@ -468,7 +537,7 @@ class KernelStore:
             self._fsync_dir(target.parent)
         finally:
             temporary.unlink(missing_ok=True)
-        self._write_metadata(kernel_id, target, source_digest, embedded)
+        self._write_metadata(kernel_id, target, source_digest, embedded, embedded_release)
         self.select(kernel_id)
 
     def source_identity(self, source: Path, version: str) -> tuple[str, str]:
@@ -476,16 +545,23 @@ class KernelStore:
         if not source.is_file():
             raise ValueError(f"missing workspace kernel ISO: {source}")
         embedded = self.embedded_build(source)
+        embedded_release = self.embedded_release(source)
         embedded_arch = self.embedded_arch(source)
         if embedded is None:
             raise ValueError("workspace kernel has no embedded build identity")
+        if embedded_release is None:
+            raise ValueError("workspace kernel has no embedded release identity")
         if embedded_arch is None:
             raise ValueError("workspace kernel architecture could not be inspected")
         if self.arch != "unknown" and embedded_arch != self.arch:
             raise ValueError(
                 f"workspace catalog is {self.arch}, image is {embedded_arch}"
             )
-        return f"{version}-build{embedded}", embedded_arch
+        if version != embedded_release:
+            raise ValueError(
+                f"workspace Makefile says {version}, kernel image contains {embedded_release}"
+            )
+        return f"{embedded_release}-build{embedded}", embedded_arch
 
     def delete(self, kernel_id: str) -> None:
         if kernel_id in {self.current_id(), self.fallback_id()}:
