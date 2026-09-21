@@ -18,6 +18,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+
+def resolve_isd_root(explicit: Path | None = None) -> Path:
+    if explicit is not None:
+        return explicit.resolve()
+    env = os.environ.get("IR0_ISD_ROOT")
+    if env:
+        return Path(env).resolve()
+    script = ROOT / "scripts" / "resolve_isd_root.sh"
+    if script.is_file():
+        result = subprocess.run(
+            ["bash", str(script), str(ROOT)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return Path(result.stdout.strip()).resolve()
+    return (ROOT.parent / "ISD").resolve()
+
 USMANG_HELP_LINES = (
     "IR0 Userspace Manager (usmang) — host inspector for sibling ISD/",
     "",
@@ -30,6 +49,7 @@ USMANG_HELP_LINES = (
     "  packages    Resolved package list with origins",
     "  userland    USERLAND_BASE and implementation status",
     "  desktop     X client set for PROFILE=desktop only",
+    "  verify      Postcondition check against staged rootfs (ISD-owned rules)",
     "  help        This legend",
     "",
     "Environment:",
@@ -138,21 +158,16 @@ def cmd_userland(isd: Path, profile: str) -> dict:
     }
 
 
-# Interactive X session clients listed in ISD desktop profile (not the full X stack).
-X_SESSION_CLIENTS = frozenset({
-    "tinyx",
-    "twm",
-    "xterm",
-    "xclock",
-    "xeyes",
-    "xlogo",
-    "xcalc",
-    "xmessage",
-    "xsetroot",
-    "xload",
-    "xinit",
-    "xauth",
-})
+# Interactive X session clients: metadata owned by ISD (profiles/desktop/x-session-clients.txt).
+def x_session_clients(isd: Path) -> frozenset[str]:
+    path = isd / "profiles" / "desktop" / "x-session-clients.txt"
+    names: list[str] = []
+    for raw in read_text(path).splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        names.append(line)
+    return frozenset(names)
 
 
 def profile_packages(isd: Path, profile: str) -> list[str]:
@@ -168,7 +183,8 @@ def profile_packages(isd: Path, profile: str) -> list[str]:
 
 def cmd_desktop(isd: Path, profile: str) -> dict:
     packages = profile_packages(isd, profile)
-    x_clients = [name for name in packages if name in X_SESSION_CLIENTS]
+    clients = x_session_clients(isd)
+    x_clients = [name for name in packages if name in clients]
     overlay = isd / "profiles" / profile / "overlay"
     wallpaper_candidates = [
         overlay / "usr/share/backgrounds/ir0-desktop.xbm",
@@ -185,7 +201,7 @@ def cmd_desktop(isd: Path, profile: str) -> dict:
         "profile": profile,
         "applies": profile == "desktop",
         "x_session_packages": x_clients,
-        "x_session_missing_from_profile": sorted(X_SESSION_CLIENTS - set(x_clients)),
+        "x_session_missing_from_profile": sorted(clients - set(x_clients)),
         "wallpaper_xbm": str(wallpaper) if wallpaper else None,
         "abi_doc": abi_doc,
         "golden_rule": "unmodified upstream clients; IR0 supplies Linux surfaces",
@@ -197,21 +213,56 @@ def cmd_desktop(isd: Path, profile: str) -> dict:
     }
 
 
+def cmd_verify(isd: Path, profile: str, arch: str) -> tuple[dict, int]:
+    staged = isd / "out" / arch / "rootfs" / profile
+    if not staged.is_dir():
+        return {
+            "status": "unknown",
+            "profile": profile,
+            "arch": arch,
+            "staged_rootfs": str(staged),
+            "reason": "rootfs not staged — run make -C ISD rootfs-tree first",
+        }, 3
+    script = isd / "scripts" / "verify-profile-rootfs.sh"
+    if not script.is_file():
+        return {
+            "status": "error",
+            "reason": f"missing ISD verify script: {script}",
+        }, 2
+    result = subprocess.run(
+        ["bash", str(script), str(staged)],
+        cwd=isd,
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, "PROFILE": profile, "ARCH": arch},
+    )
+    payload = {
+        "status": "verified" if result.returncode == 0 else "error",
+        "profile": profile,
+        "arch": arch,
+        "staged_rootfs": str(staged),
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+    }
+    return payload, 0 if result.returncode == 0 else 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ISD userspace manager (host)")
     parser.add_argument(
         "--isd-root",
         type=Path,
-        default=Path(os.environ.get("IR0_ISD_ROOT", Path.cwd().parent / "ISD")),
+        default=None,
     )
     parser.add_argument("--profile", default=os.environ.get("ISD_PROFILE", "desktop"))
     parser.add_argument("--arch", default=os.environ.get("ISD_ARCH", "x86_64"))
     parser.add_argument("--json", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("version", "packages", "userland", "desktop", "summary", "help"):
+    for name in ("version", "packages", "userland", "desktop", "summary", "verify", "help"):
         sub.add_parser(name)
     args = parser.parse_args()
-    isd = args.isd_root.resolve()
+    isd = resolve_isd_root(args.isd_root)
     if not (isd / "Makefile").is_file():
         print(f"✗ ISD not found at {isd}", file=sys.stderr)
         return 2
@@ -227,6 +278,15 @@ def main() -> int:
         payload = cmd_userland(isd, args.profile)
     elif args.command == "desktop":
         payload = cmd_desktop(isd, args.profile)
+    elif args.command == "verify":
+        payload, code = cmd_verify(isd, args.profile, args.arch)
+        if args.json:
+            print(json.dumps(payload, sort_keys=True, indent=2))
+        else:
+            print(payload.get("stdout") or payload.get("reason") or payload.get("status"))
+            if payload.get("stderr"):
+                print(payload["stderr"], file=sys.stderr)
+        return code
     else:
         desktop = cmd_desktop(isd, args.profile)
         payload = {

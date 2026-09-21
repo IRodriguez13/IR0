@@ -5,6 +5,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+MK_BRIDGE="scripts/make/isd.mk"
+MK_PRODUCT="scripts/make/product.mk"
+MK_ALL="$MK_BRIDGE $MK_PRODUCT"
 PASS=0
 FAIL=0
 ok() { echo "  OK  $*"; PASS=$((PASS + 1)); }
@@ -14,27 +17,27 @@ echo "=== IR0 ISD bridge contracts ==="
 
 grep -q 'IR0_ISD_URL.*IRodriguez13/ISD' scripts/make/isd.mk && ok "A IR0_ISD_URL" || bad "A URL"
 grep -q 'IR0_ISD_ROOT.*/ISD' scripts/make/isd.mk && ok "A IR0_ISD_ROOT default" || bad "A ROOT"
-grep -q 'bootstrap-isd.sh' scripts/make/isd.mk && ok "A first-boot → bootstrap-isd" || bad "A bootstrap"
+grep -q 'bootstrap-isd.sh' $MK_ALL && ok "A first-boot → bootstrap-isd" || bad "A bootstrap"
 test -x scripts/bootstrap-isd.sh && ok "A bootstrap-isd executable" || bad "A exec"
 grep -q 'PROFILE="$(ISD_PROFILE)"' scripts/make/isd.mk && ok "A PROFILE to ISD make" || bad "A PROFILE prop"
 grep -q 'filter minimal development desktop desktop-console appliance,$(PROFILE)' scripts/make/isd.mk \
 	&& ok "A ISD_PROFILE follows env PROFILE" || bad "A ISD_PROFILE env sync"
-got=$(PROFILE=desktop make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
+got=$(MAKEFLAGS= PROFILE=desktop IR0_PRODUCT_PROFILE= make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
 [ "$got" = desktop ] && ok "A PROFILE=desktop → ISD_PROFILE=desktop" \
 	|| bad "A PROFILE=desktop got ISD_PROFILE=${got:-empty}"
-got=$(PROFILE=desktop-console make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
+got=$(MAKEFLAGS= PROFILE=desktop-console IR0_PRODUCT_PROFILE= make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
 [ "$got" = desktop-console ] && ok "A PROFILE=desktop-console → ISD_PROFILE=desktop-console" \
 	|| bad "A PROFILE=desktop-console got ISD_PROFILE=${got:-empty}"
-grep -q 'ensure-machine-desktop-sync' scripts/make/isd.mk \
-	&& grep -E '^poweron:.*ensure-machine-desktop-sync' scripts/make/isd.mk >/dev/null \
+grep -q 'ensure-machine-desktop-sync' $MK_ALL \
+	&& grep -E '^poweron:.*ensure-machine-desktop-sync' $MK_ALL >/dev/null \
 	&& ok "D poweron syncs desktop userspace when stale" \
 	|| bad "D poweron desktop sync wiring"
-grep -q 'kmang has installed kernels' scripts/make/isd.mk \
-	&& ! grep -q 'kmanag has installed kernels' scripts/make/isd.mk \
+grep -q 'kmang has installed kernels' $MK_ALL \
+	&& ! grep -q 'kmanag has installed kernels' $MK_ALL \
 	&& ok "D poweron kmang typo fixed" || bad "D kmang message typo"
 grep -q 'run-isd' Makefile && ok "D run → run-isd" || bad "D run"
-grep -q 'images/\$(ISD_PROFILE)/disk.img' scripts/make/isd.mk && ok "D per-profile disk" || bad "D path"
-grep -q 'ensure-isd-disk' scripts/make/isd.mk \
+grep -q 'images/\$(ISD_PROFILE)/disk.img' "$MK_BRIDGE" && ok "D per-profile disk" || bad "D path"
+grep -q 'ensure-isd-disk' "$MK_BRIDGE" \
 	&& ok "D ensure-isd-disk target" || bad "D no ensure-isd-disk"
 grep -q 'ensure-isd-disk' Makefile \
 	&& ok "D run-* auto-ensure disk" || bad "D run still hard-fails missing disk"
@@ -56,33 +59,33 @@ echo "$out" | grep -q 'Unknown PROFILE' && bad "D deptest rejects PROFILE=minima
 grep -q 'minimal|development|appliance' scripts/deptest.sh \
 	&& ok "D deptest maps ISD profiles" || bad "D no ISD profile map"
 # Bugbot: env IR0_USERSPACE_ROOT syncs into IR0_ISD_ROOT
-grep -q 'origin IR0_USERSPACE_ROOT),environment' scripts/make/isd.mk \
+grep -q 'origin IR0_USERSPACE_ROOT),environment' "$MK_BRIDGE" \
 	&& ok "D isd.mk syncs env USERSPACE_ROOT" || bad "D no env sync"
-grep -q 'IR0_USERSPACE_ROOT := \$(IR0_ISD_ROOT)' scripts/make/isd.mk \
+grep -q 'IR0_USERSPACE_ROOT := \$(IR0_ISD_ROOT)' "$MK_BRIDGE" \
 	&& ok "D USERSPACE_ROOT aliases ISD" || bad "D no USERSPACE alias"
 grep -q 'IR0_LEGACY_USERSPACE' Makefile && ok "legacy gate" || bad "legacy"
 grep -q 'IR0_DEPS_SELFTEST' scripts/ensure-host-deps.sh && ok "F SELFTEST hook" || bad "F SELFTEST"
-if grep -E '^poweron:.*ensure-isd-disk' scripts/make/isd.mk >/dev/null; then
+if grep -E '^poweron:.*ensure-isd-disk' $MK_ALL >/dev/null; then
 	bad "D poweron may repack persistent state"
 else
 	ok "D poweron does not invoke ISD image packing"
 fi
-if grep -E '^poweron:.*kernel-x64-userspace\.iso' scripts/make/isd.mk >/dev/null; then
+if grep -E '^poweron:.*kernel-x64-userspace\.iso' $MK_ALL >/dev/null; then
 	bad "D poweron rebuilds the kernel ISO"
 else
 	ok "D poweron boots existing kernel artifacts"
 fi
-if grep -q '^machine-update-kernel: check-isd' scripts/make/isd.mk \
-	&& grep -A14 '^machine-update-kernel:' scripts/make/isd.mk | grep -q 'kernel-x64-userspace.iso' \
-	&& ! grep -A14 '^machine-update-kernel:' scripts/make/isd.mk | grep -Eq 'ensure-isd-disk|machine-reset'; then
+if grep -q '^machine-update-kernel: check-isd' $MK_ALL \
+	&& grep -A14 '^machine-update-kernel:' $MK_ALL | grep -q 'kernel-x64-userspace.iso' \
+	&& ! grep -A14 '^machine-update-kernel:' $MK_ALL | grep -Eq 'ensure-isd-disk|machine-reset'; then
 	ok "D machine-update-kernel refreshes ISO without persistent disk"
 else
 	bad "D machine-update-kernel contract"
 fi
-if grep -q '^kmang: check-isd' scripts/make/isd.mk \
-	&& grep -A12 '^poweron:' scripts/make/isd.mk | grep -q 'kernel_manager.py' \
-	&& grep -q 'KMANG_PY' scripts/make/isd.mk \
-	&& grep -q -- '--kernel-root' scripts/make/isd.mk; then
+if grep -q '^kmang: check-isd' $MK_ALL \
+	&& grep -A12 '^poweron:' $MK_ALL | grep -q 'kernel_manager.py' \
+	&& grep -q 'KMANG_PY' "$MK_BRIDGE" \
+	&& grep -q -- '--kernel-root' "$MK_BRIDGE"; then
 	ok "D kmang selects the persistent-machine boot kernel"
 else
 	bad "D kmang/poweron contract"
@@ -109,7 +112,7 @@ grep -q 'etc/ir0-session' scripts/kernel_manager.py \
 	&& ok "D ISD login-session guest contract doc" \
 	|| { [ -f "$ISD_ROOT/Documentation/LOGIN_SESSION.md" ] && bad "D ISD login-session doc"; \
 	     ok "D ISD login-session doc (skipped — no sibling ISD checkout)"; }
-grep -q '^usmang:' scripts/make/isd.mk \
+grep -q '^usmang:' $MK_ALL \
 	&& test -f scripts/userspace_manager.py \
 	&& ok "D usmang host inspector wired" \
 	|| bad "D usmang missing"
@@ -130,8 +133,8 @@ if [ -f "$ISD_ROOT/scripts/pack-minix.sh" ]; then
 else
 	ok "D ISD pack-minix xload (skipped — no sibling ISD checkout)"
 fi
-grep -q '^isd-contracts:' scripts/make/isd.mk \
-	&& grep -q 'test-isd-contracts.sh' scripts/make/isd.mk \
+grep -q '^isd-contracts:' "$MK_BRIDGE" \
+	&& grep -q 'test-isd-contracts.sh' "$MK_BRIDGE" \
 	&& ok "D isd-contracts make target" || bad "D isd-contracts target"
 grep -q 'isd-contracts' scripts/make/testing.mk \
 	&& ok "D test-fast runs isd-contracts" || bad "D test-fast isd-contracts"
