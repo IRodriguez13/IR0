@@ -11,7 +11,7 @@
 
   IR0 is a operating-system kernel (GPL-3.0). Primary bring-up target is
   **x86-64** under QEMU (Multiboot, GRUB, VFS/MINIX, ELF userspace). Version
-  string: **`0.0.1-rc5`** (last pre-release before `v0.0.1` final).
+  string: **`0.0.1-rc6`** (last pre-release before `v0.0.1` final).
 
 
 ## ISD — IR0 Software Distribution
@@ -66,7 +66,13 @@ ISD builds a finished image; IR0 boots it.
   <img src="scripts/kconfig/assets/isd-x11-desktop.png" alt="IR0 running an upstream X11 desktop with uname output" width="960" />
 </p>
 
-<p align="center"><em>Upstream X11 session on IR0 (<code>PROFILE=desktop-console</code>, manual <code>startx</code>): TinyX/Xfbdev, twm, xterm, Xaw clients. Terminal shows <code>uname -a</code> on kernel <code>0.0.1-rc5</code>.</em></p>
+<p align="center"><em>Upstream X11 session on IR0 (<code>PROFILE=desktop-console</code>, manual <code>startx</code>): TinyX/Xfbdev, twm, xterm, Xaw clients. Terminal shows <code>uname -a</code> on kernel <code>0.0.1-rc6</code>.</em></p>
+
+<p align="center">
+  <img src="scripts/kconfig/assets/isd-nano-desktop.png" alt="IR0 X11 desktop — GNU nano editing main.c in xterm" width="960" />
+</p>
+
+<p align="center"><em>Desktop session with twm, xclock, xeyes, and xlogo; <code>GNU nano</code> editing a small C program in xterm (<code>PROFILE=desktop</code>).</em></p>
 
 <p align="center">
   <img src="./scripts/kconfig/assets/isd-panic-gtk.png" alt="IR0 kernel panic on GTK framebuffer — uptime, fault site, safe shutdown" width="720" />
