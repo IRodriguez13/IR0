@@ -100,7 +100,7 @@ QEMU host warnings live on host stderr (`*.qemu-stderr`), not the guest serial s
 ## Product path (no in-kernel shell)
 
 Daily `make run-console` / `run-pid1` / `run-bootlog` → `kernel-x64-userspace.iso`
-+ runit/getty/ash from **IR0-userspace**. The ring-0 dbgshell / `debug_bins/`
++ runit/getty/ash from **ISD**. The ring-0 dbgshell / `debug_bins/`
 tree was **removed** (2026-07-25); see [`USERSPACE.md`](USERSPACE.md).
 
 Exploration: `cat /proc/kmsg` or `dmesg` from ash.

@@ -31,7 +31,7 @@ Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 
 ### Límite kernel / userspace (2026-07-25)
 
-- Hermano público **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)**.
+- Hermano público **[ISD](https://github.com/IRodriguez13/ISD)**.
 - Acoplamiento: [`USERSPACE.md`](USERSPACE.md) / [`../USERSPACE.md`](../USERSPACE.md).
 - Eliminados del kernel: `debug_bins/`, `kernel/init.c` (dbgshell), Kconfig
   `KERNEL_DEBUG_SHELL` / `DEBUG_BINS*`. Boot solo `kexecve("/sbin/init")`.

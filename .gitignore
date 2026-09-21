@@ -107,7 +107,7 @@ toolchain/
 /usr/
 
 
-# Product rootfs rebuild stamps (IR0-userspace drives the real build).
+# Product rootfs rebuild stamps (ISD drives the real build).
 *.runit.stamp
 disk.img.*.stamp
 

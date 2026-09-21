@@ -35,7 +35,7 @@ Linux completa. La profundidad de subsistemas está en otras páginas `IR0-*`.
   git clone IR0 → cd IR0
        → make check-env
        → make defconfig
-       → make first-boot   # clona ../IR0-userspace + rootfs BusyBox + ISO
+       → make first-boot   # clona ../ISD + rootfs BusyBox + ISO
        → make run          # QEMU → getty → BusyBox ash
 ```
 

@@ -1,14 +1,14 @@
 # BusyBox applet matrix — capture contract
 
 > **Última verificación:** 2026-07-28  
-> **Fuente de verdad:** `IR0-userspace/smoke/busybox_matrix_smoke.c`,  
-> `IR0-userspace/smoke/matrix_capture.c`, `make busybox-matrix`
+> **Fuente de verdad:** `ISD/smoke/busybox_matrix_smoke.c`,  
+> `ISD/smoke/matrix_capture.c`, `make busybox-matrix`
 
 ## Scope
 
 - **52** applet cases (real `execve("/bin/busybox", …)` in the guest).
 - Classification: `supported` / `partial` / `unavailable`.
-- Host aggregator: `IR0-userspace/scripts/busybox_applet_matrix.py` → `bb_status.tsv`.
+- Host aggregator: `ISD/scripts/busybox_applet_matrix.py` → `bb_status.tsv`.
 
 ## QEMU / memory layout
 

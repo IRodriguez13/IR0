@@ -9,7 +9,7 @@ Versión en español de [`../KLOG.md`](../KLOG.md). El logging humano es un
 observador opcional; `CONFIG_KTM=n` no apaga klog ni `/proc/kmsg`.
 
 Producto diario: `make run-console` / `run-pid1` → runit/getty/ash
-(IR0-userspace). El dbgshell in-kernel fue eliminado; ver [`USERSPACE.md`](USERSPACE.md).
+(ISD). El dbgshell in-kernel fue eliminado; ver [`USERSPACE.md`](USERSPACE.md).
 Perfiles: `LOG_PROFILE_*` + cmdline `ir0.loglevel=` / `ir0.trace=` (ver inglés).
 Exploración T0: `cat /proc/kmsg` desde ash.
 

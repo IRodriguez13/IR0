@@ -13,7 +13,7 @@
 
 The boot path on x86-64 runs from a Multiboot-compatible GRUB load through minimal
 page tables, `kmain`, driver and VFS bring-up, syscall/IRQ enablement, and
-`kexecve("/sbin/init")` (runit from **IR0-userspace**). The former in-kernel
+`kexecve("/sbin/init")` (runit from **ISD**). The former in-kernel
 dbgshell / `debug_bins/` path was **removed** (2026-07-25); see
 [`USERSPACE.md`](../../USERSPACE.md). Structured boot logging:
 [`KLOG.md`](../../KLOG.md).

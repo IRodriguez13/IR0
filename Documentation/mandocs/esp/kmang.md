@@ -117,7 +117,7 @@ Estados de salud: `verified`, `checksum-only`, `legacy-unverified`, o motivos de
 | Boot / version | `IR0_VERSION_STRING` prefija ids de catalogo |
 | KTM | Plano de prueba in-guest independiente |
 
-Ver tambien: `IR0-userspace`, `IR0-onboarding`, `Documentation/TOOLING.md`.
+Ver tambien: `ISD`, `IR0-onboarding`, `Documentation/TOOLING.md`.
 
 ## 7. Mapas visuales
 

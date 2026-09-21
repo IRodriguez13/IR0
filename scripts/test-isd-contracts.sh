@@ -139,6 +139,21 @@ grep -q '^isd-contracts:' "$MK_BRIDGE" \
 grep -q 'isd-contracts' scripts/make/testing.mk \
 	&& ok "D test-fast runs isd-contracts" || bad "D test-fast isd-contracts"
 
+echo "-- H naming coherence --"
+grep -q 'IR0_ISD_ROOT' userspace/README.md \
+	&& grep -q 'github.com/IRodriguez13/ISD' userspace/README.md \
+	&& ok "H userspace README points to ISD" || bad "H userspace README stale"
+path_leaks=$(rg -n '\.\./IR0-userspace|IRodriguez13/IR0-userspace|IR0-userspace/' \
+	Documentation scripts userspace setup --glob '*.md' --glob '*.sh' --glob '*.py' --glob '*.mk' 2>/dev/null \
+	| grep -v '^scripts/test-isd-contracts.sh:' || true)
+[ -z "$path_leaks" ] && ok "H no IR0-userspace path/URL leaks" \
+	|| bad "H IR0-userspace path leaks"
+grep -q 'Naming coherence' Documentation/USERSPACE.md \
+	&& ok "H USERSPACE naming table" || bad "H USERSPACE naming doc"
+! grep -q 'include setup/make/legacy-smokes.mk' scripts/make/testing.mk \
+	|| [ "$(grep -c 'include setup/make/legacy-smokes.mk' scripts/make/testing.mk)" -eq 1 ] \
+	&& ok "H single legacy-smokes include" || bad "H duplicate legacy-smokes include"
+
 ENS=scripts/ensure-host-deps.sh
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

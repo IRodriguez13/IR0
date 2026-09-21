@@ -19,7 +19,7 @@ INJECT="${ROOT}/scripts/inject_init_minix.py"
 resolve_init() {
 	local candidate
 	for candidate in "$INIT" \
-		"${IR0_USERSPACE_ROOT:-$ROOT/../IR0-userspace}/out/bin/runit-init" \
+		"${IR0_USERSPACE_ROOT:-$ROOT/../ISD}/out/bin/runit-init" \
 		setup/pid1/sbin/init \
 		setup/pid1/init; do
 		if [[ -f "$candidate" ]]; then

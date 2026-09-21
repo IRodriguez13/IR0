@@ -125,7 +125,7 @@ ASCII:
 | Syscalls | socket/bind/listen/accept/connect/send/recv → sock_stream |
 | devfs | ops y poll de `/dev/net` |
 | procfs | `/proc/netinfo`, `/proc/net/dev` |
-| IR0-userspace | applets BusyBox / smokes de red |
+| ISD | applets BusyBox / smokes de red |
 
 ## 7. Mapas visuales
 

@@ -151,7 +151,7 @@ MANDOC_CHAPTERS: list[MandocChapter] = [
     MandocChapter(
         "userspace",
         "userspace.md",
-        "IR0-userspace",
+        "ISD",
         "BusyBox, runit, musl, TCC, DoomGeneric bootstrap",
         "BusyBox, runit, musl, TCC y bootstrap DoomGeneric",
     ),

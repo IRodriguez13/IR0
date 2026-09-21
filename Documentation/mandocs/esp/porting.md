@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | userspace, syscalls, tty, vfs |
 | Man page | IR0-port (sección 7) |
-| Primary sources | `Documentation/USERSPACE.md`, `IR0-userspace/`, TinyCC en `/lib/tcc` |
+| Primary sources | `Documentation/USERSPACE.md`, `ISD/`, TinyCC en `/lib/tcc` |
 
 > **Última verificación:** 2026-07-28
 

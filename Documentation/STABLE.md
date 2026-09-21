@@ -8,7 +8,7 @@
 > `Documentation/releases/IR0_0.0.1_SCOPE.md`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md),  
 > [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETWORKING_MATRIX.md`](releases/NETWORKING_MATRIX.md),  
 > critical hybrid KTM battery ([`KTM.md`](KTM.md) § critical product battery),  
-> **SEP-2** userspace split: product rootfs built by the **`IR0-userspace`** / **ISD** sibling
+> **SEP-2** userspace split: product rootfs built by the **`ISD`** / **ISD** sibling
 > (`IR0_USERSPACE_ROOT`, `make headers_install`) — see [`USERSPACE.md`](USERSPACE.md).
 > In-kernel dbgshell / `debug_bins/` **removed** (2026-07-25).
 
@@ -116,7 +116,7 @@ AHCI NCQ (F2) and DSDT `_S5_` typed poweroff (F3) remain as previously landed Fu
 |------|--------|---------------|
 | **Hardening H1–H6** | **Closed** | [`HARDENING.md`](HARDENING.md); `make health` |
 | **runit boot** | **Stable** | `make smoke-runit-boot` |
-| **BusyBox ash + applets** | **Stable (product)** | Manifest `IR0-userspace/packages/busybox/required_applets.txt`; rootfs inject via `busybox_inject_manifest.sh`; ship smoke: `make ktm-userdev-busybox-manifest-run` (alias `smoke-busybox-manifest`) → `BUSYBOX_MANIFEST_OK` + `KTM_USERDEV_OK`. Extended probe: `smoke-fase58l-busybox-coreutils` |
+| **BusyBox ash + applets** | **Stable (product)** | Manifest `ISD/packages/busybox/required_applets.txt`; rootfs inject via `busybox_inject_manifest.sh`; ship smoke: `make ktm-userdev-busybox-manifest-run` (alias `smoke-busybox-manifest`) → `BUSYBOX_MANIFEST_OK` + `KTM_USERDEV_OK`. Extended probe: `smoke-fase58l-busybox-coreutils` |
 | **TinyCC in-guest** | **Merge-critical** | `ktm-userdev-tcc-power-halt-run` / `smoke-tcc-power-halt` — requires `POWER_TCC_KTM_OK` — **blocker for `master`** |
 | **COW fork** | **Stable** | `make smoke-mm-cow-lazy` (FASE40 A–F) |
 | **Lazy allocation** | **Stable** | `CONFIG_LAZY_ANON_MMAP`, `CONFIG_LAZY_BRK_HEAP`; same smoke |
@@ -180,14 +180,14 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 
 | Item | Paths | Proof |
 |------|-------|-------|
-| Product userspace tree | `IR0-userspace/` (`fetch build rootfs image`), `IR0_USERSPACE_ROOT` | `check-userspace` fails loudly if the sibling is missing |
-| runit PID1 | `IR0-userspace/services/`, `load-userspace-runit` | `smoke-runit-boot` |
-| BusyBox minimal | `IR0-userspace/packages/busybox/fase58_busybox.config`, `build-busybox-fase50-min` | `smoke-tier1` |
+| Product userspace tree | `ISD/` (`fetch build rootfs image`), `IR0_USERSPACE_ROOT` | `check-userspace` fails loudly if the sibling is missing |
+| runit PID1 | `ISD/services/`, `load-userspace-runit` | `smoke-runit-boot` |
+| BusyBox minimal | `ISD/packages/busybox/fase58_busybox.config`, `build-busybox-fase50-min` | `smoke-tier1` |
 | BusyBox extended applets | `build-busybox-fase58-full`, `smoke-fase58l-busybox-coreutils` | optional extended probe |
 | BusyBox product manifest | **BUSY-1 / BUSY-2 Closed** | `required_applets.txt` + `ktm-userdev-busybox-manifest-run` (`BUSYBOX_MANIFEST_OK`) |
 | Interactive ash on FB console | `includes/ir0/console.c`, TTY echo | [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.md) |
 | musl static toolchain | `MUSL_CC`, `kernel-x64-userspace.iso` | tier1 smokes |
-| Public UAPI export | `includes/uapi/`, `make headers_install DESTDIR=…` | `make -C IR0-userspace headers` |
+| Public UAPI export | `includes/uapi/`, `make headers_install DESTDIR=…` | `make -C ISD headers` |
 | TinyCC | `setup/tcc/build-fase52.sh` | `build-tcc-fase52` |
 
 ### Networking (UDP + local streams)
@@ -212,7 +212,7 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | virtio-9p + VFS fstype `9p` → `/mnt/host` | `make smoke-hostshare-9p` (`HOSTSHARE_9P_OK`, host file visible) |
 | 9p getattr + chunked read (ELF-sized) | `virtio_9p_stat_file` / `virtio_9p_read_file`; `hs_stat`/`hs_read` |
 | Exec payload from share | `make smoke-hostshare-exec` — stub `init_hostshare_exec` mounts `ir0share`, `execve(/mnt/host/ir0_payload)` |
-| Exec payload under **runit** PID1 | `IR0-userspace/services/runit_hostshare_payload_run.c` as supervised `sv/*/run` + `ktm_userdev_runner.py --disk` (prebuilt runit rootfs); reference: IR0-desktop Xfbdev smoke |
+| Exec payload under **runit** PID1 | `ISD/services/runit_hostshare_payload_run.c` as supervised `sv/*/run` + `ktm_userdev_runner.py --disk` (prebuilt runit rootfs); reference: IR0-desktop Xfbdev smoke |
 | virtiofs / FUSE | **Not implemented** — post-9p when FUSE exists |
 
 ### Storage (phase2 baseline)

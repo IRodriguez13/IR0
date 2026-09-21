@@ -82,7 +82,7 @@ Use this to compare before/after refactors **with the same toolchain**; bytecode
 ## Layered overview
 
 ```text
-  IR0-userspace (sibling) / ash
+  ISD (sibling) / ash
            │
            ▼  syscalls only
        kernel/, fs/, mm/, net/

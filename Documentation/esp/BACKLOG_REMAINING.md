@@ -7,7 +7,7 @@
 ## Closed
 
 Ver tablas en el archivo inglés, incluida la oleada **2026-07-25** (publicación
-de IR0-userspace, eliminación de `debug_bins`/dbgshell, docs de acoplamiento).
+de ISD, eliminación de `debug_bins`/dbgshell, docs de acoplamiento).
 Open residual KTM/HOST cerrado (pass=16, COW A–F, reclaim 41, ACPI FADT map
 on-demand, F2–F5).
 

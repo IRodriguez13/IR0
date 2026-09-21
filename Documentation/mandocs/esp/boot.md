@@ -14,7 +14,7 @@
 La ruta de arranque en x86-64 va desde una carga GRUB compatible con Multiboot
 hasta tablas de páginas mínimas, `kmain`, puesta en marcha de drivers y VFS,
 habilitación de syscalls/IRQ, y `kexecve("/sbin/init")` (runit desde
-**IR0-userspace**). El dbgshell / `debug_bins/` in-kernel se **eliminó**
+**ISD**). El dbgshell / `debug_bins/` in-kernel se **eliminó**
 (2026-07-25); ver [`USERSPACE.md`](../../USERSPACE.md) /
 [`esp/USERSPACE.md`](../../esp/USERSPACE.md). Logging estructurado:
 [`KLOG.md`](../../KLOG.md) / [`esp/KLOG.md`](../../esp/KLOG.md).

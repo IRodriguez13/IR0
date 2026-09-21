@@ -6,22 +6,23 @@
 | Fase IR0 | T1–T2 |
 | Estado | estable |
 | Depende de | boot, process, vfs, tty |
-| Man page | IR0-userspace (sección 7) |
+| Man page | Acoplamiento IR0-ISD (sección 7) |
 | Fuentes principales | `kernel/main.c`, `scripts/make/isd.mk`, `scripts/kernel_manager.py`, `scripts/userspace_manager.py`, repo hermano `ISD/` |
 
-> **Última verificación:** 2026-09-18
+> **Última verificación:** 2026-09-21
 
 > **Nota (2026-09-18):** el rootfs de producto y los perfiles se construyen desde el
 > repo hermano **`ISD/`** (`IR0_ISD_ROOT`). El kernel dispara boot vía `scripts/make/isd.mk`:
 > discos persistentes, `make kmang` (TUI catálogo ISO) y `make usmang` (inspector ISD
-> en host). El alias legacy `IR0-userspace/` apunta a `IR0_ISD_ROOT`.
+> en host). Env obsoleto `IR0_USERSPACE_*` alias de `IR0_ISD_*`; repo antes
+> **IR0-userspace**, hoy **ISD**.
 
 > **Nota (2026-07-24):** el PID1 transitorio **irinit** se eliminó. Producto y tests usan solo **runit** (`make build-runit` / `load-userspace-runit` / `smoke-runit-boot`).
 
 ## 1. Resumen
 
 El boot de producción siempre carga **`/sbin/init`** vía `kexecve` desde `kmain`.
-El PID1 canónico es **runit** (`IR0-userspace/out/bin/runit-init`
+El PID1 canónico es **runit** (`ISD/out/bin/runit-init`
 y stages), estático con musl —lo construye el repo hermano— e inyectado en el
 rootfs MINIX. BusyBox, TCC y
 DoomGeneric son payloads opcionales.
@@ -34,7 +35,7 @@ DoomGeneric son payloads opcionales.
 | `init_musl.c` | smoke de syscalls musl |
 | `rootfs_base.c` | Crea `/bin`, `/sbin`, `/dev`, `/proc`, … |
 | `inject_init_minix.py` | Escribe binarios en imagen MINIX v1 |
-| `busybox-1.36.1` | Applets; receta y configs en `IR0-userspace/packages/busybox/` |
+| `busybox-1.36.1` | Applets; receta y configs en `ISD/packages/busybox/` |
 
 **Comportamiento runit:** stage 1 prepara el rootfs; stage 2 supervisa
 servicios; la consola hace getty/login (`runit_console_run`): auth contra
@@ -46,7 +47,7 @@ servicios; la consola hace getty/login (`runit_console_run`): auth contra
 Smokes: `smoke-runit-login`, `smoke-runit-login-nonroot`.
 
 **Perfiles de producto.** `/etc/ir0-profile` (lo escribe
-`IR0-userspace/scripts/install-to-disk.sh` a partir de `IR0_PRODUCT_PROFILE`)
+`ISD/scripts/install-to-disk.sh` a partir de `IR0_PRODUCT_PROFILE`)
 define la política de consola: `development` mantiene autologin root con
 advertencia visible, `desktop` muestra `hostname login:` y bloquea el login
 directo de root con `/etc/ir0-noroot` (nombre ≤14 bytes por el límite de
@@ -58,7 +59,7 @@ entradas de directorio de MINIX v1), `appliance` no abre login interactivo
 | Target | Rol |
 |--------|-----|
 | `make headers_install DESTDIR=…` | Exportar la UAPI pública (`includes/uapi/`) al userspace |
-| `make build-runit` | Delega en `IR0-userspace` (runit + ELFs de servicio) |
+| `make build-runit` | Delega en `ISD` (runit + ELFs de servicio) |
 | `make load-userspace-runit` | Formatear disco MINIX e instalar el rootfs del hermano |
 | `make smoke-runit-boot` | Smoke headless de PID1 |
 | `make smoke-runit-login` | Autologin root (password vacío) |

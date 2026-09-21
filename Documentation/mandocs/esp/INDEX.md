@@ -12,7 +12,7 @@
 Documentación bilingüe fiel al código en `Documentation/mandocs/`.
 Empezá por: `make man TOPIC=onboarding`.
 
-**Nota de oleada (0.5):** `IR0-tty` documenta multiplex PTY; `IR0-userspace` puente ISD;
+**Nota de oleada (0.5):** `IR0-tty` documenta multiplex PTY; `ISD` puente ISD;
 **`IR0-kmang`** catalogo kernel persistente (`make kmang`); `usmang` inspector ISD
 (2026-09-20).
 
@@ -30,7 +30,7 @@ Empezá por: `make man TOPIC=onboarding`.
 | tty | IR0-tty | T1–T2 | stable | `console.h` |
 | drivers | IR0-drivers | T0 | stable | `*_backend.h` |
 | process | IR0-process | T1 | stable | process / signals |
-| userspace | IR0-userspace | T1–T2 | stable | exec / ash |
+| userspace | ISD | T1–T2 | stable | exec / ash |
 | kmang | IR0-kmang | T1 | stable | `scripts/kernel_manager.py`, `scripts/make/isd.mk` |
 | porting | IR0-port | T1 | stable | portar a ISD / dennis 9p |
 | multi-arch | IR0-multi-arch | T0 | stable | `arch_port.h`, `arm64_board.h` |

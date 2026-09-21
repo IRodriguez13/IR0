@@ -13,7 +13,7 @@ Bilingual, code-faithful kernel documentation under `Documentation/mandocs/`.
 Start here: `make man TOPIC=onboarding`. Study subsystems via `man IR0-vfs`, etc.
 
 **Oleada note (0.5):** `IR0-tty` documents PTY multiplex (`pty_devfs.h`, audit gate);
-`IR0-userspace` documents ISD bridge; **`IR0-kmang`** documents the persistent kernel
+`ISD` documents ISD bridge; **`IR0-kmang`** documents the persistent kernel
 catalog (`make kmang`); `usmang` covers ISD host inspection (2026-09-20).
 
 ## Chapter index
@@ -30,7 +30,7 @@ catalog (`make kmang`); `usmang` covers ISD host inspection (2026-09-20).
 | tty | IR0-tty | T1–T2 | stable | `console.h` |
 | drivers | IR0-drivers | T0 | stable | `*_backend.h` |
 | process | IR0-process | T1 | stable | process / signals facades |
-| userspace | IR0-userspace | T1–T2 | stable | exec / ash helpers |
+| userspace | ISD | T1–T2 | stable | exec / ash helpers |
 | kmang | IR0-kmang | T1 | stable | `scripts/kernel_manager.py`, `scripts/make/isd.mk` |
 | porting | IR0-port | T1 | stable | (ISD porting guide — guest `man IR0-port`) |
 | multi-arch | IR0-multi-arch | T0 | stable | `arch_port.h`, `arm64_board.h` |

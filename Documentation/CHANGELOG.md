@@ -89,7 +89,7 @@ input, stalling the soak at relogin.
 
 ### Kernel / userspace tree boundary (2026-07-25)
 
-- Sibling **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)** is the
+- Sibling **[ISD](https://github.com/IRodriguez13/ISD)** is the
   public Unix userland (runit, BusyBox, login/doas, rootfs profiles).
 - Kernel coupling: [`USERSPACE.md`](USERSPACE.md), `userspace/README.md`,
   `IR0_USERSPACE_ROOT` + `make check-userspace` / `headers_install`.

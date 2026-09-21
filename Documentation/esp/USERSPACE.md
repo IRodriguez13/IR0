@@ -1,6 +1,6 @@
 # Acoplamiento IR0 (kernel) ↔ ISD
 
-> **Última verificación:** 2026-09-18  
+> **Última verificación:** 2026-09-21  
 > **Fuente de verdad:** este archivo, `scripts/make/isd.mk`, hermano [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../../SETUP.md),
 > `ISD/services/runit_console_run.c`.  
 > **English:** [`../USERSPACE.md`](../USERSPACE.md)
@@ -37,6 +37,17 @@ MINIX (imprime progreso); no está colgado tras el ISO.
 | `IR0_ISD_ROOT` | `../ISD` |
 | `PROFILE` | `minimal` / `development` / … |
 | `IR0_USERSPACE_*` | alias deprecado de `IR0_ISD_*` |
+
+### Coherencia de nombres
+
+| Nombre | Estado |
+|--------|--------|
+| **ISD** | Repo y árbol canónicos (`../ISD`, `IR0_ISD_ROOT`) |
+| `IR0-userspace` | Nombre antiguo del repo — solo notas históricas |
+| `userspace/` (en IR0) | README puntero — no es rootfs |
+| `setup/pid1/` | Inits de **smoke** KTM — no PID1 de producto |
+
+Gate: `make isd-contracts` sección **H**.
 
 | Target | Rol |
 |--------|-----|

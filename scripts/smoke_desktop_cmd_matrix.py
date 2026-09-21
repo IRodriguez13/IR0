@@ -78,7 +78,7 @@ FAIL_RES = [
 LOCK_SPAM_RE = re.compile(r"unable to lock supervise/lock")
 STAGE2_RE = re.compile(r"enter stage: /etc/runit/2")
 # Product /etc/hostname is "ir0"; some images still ship the legacy "unix".
-# Root PS1 ends with '#', non-root with '$' (see IR0-userspace rootfs/etc/profile).
+# Root PS1 ends with '#', non-root with '$' (see ISD rootfs/etc/profile).
 _HOST = r"(?:ir0|unix)"
 _USER = r"(?:ivan|root)"
 PROMPT_RE = re.compile(rf"{_USER}@{_HOST}:\S*[#$]")

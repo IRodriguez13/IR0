@@ -120,12 +120,12 @@ Guest `/etc/profile` (ISD) reads the one-shot file on console login, then delete
 | Subsystem | Relation |
 |-----------|----------|
 | `scripts/make/isd.mk` | Defines `KMANG_PY`, `make kmang`, `kernel-manager-*`, `poweron` |
-| `IR0-userspace` / ISD | Rootfs disk separate from kernel catalog |
+| `ISD` / ISD | Rootfs disk separate from kernel catalog |
 | `make usmang` | Complementary host inspector for ISD userland |
 | Boot / version stamp | `IR0_VERSION_STRING` prefixes catalog ids |
 | KTM | Independent in-guest test plane — not enrolled by kmang |
 
-See also: `IR0-userspace`, `IR0-onboarding`, `Documentation/TOOLING.md`.
+See also: `ISD`, `IR0-onboarding`, `Documentation/TOOLING.md`.
 
 ## 7. Visual maps
 

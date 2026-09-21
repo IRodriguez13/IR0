@@ -16,7 +16,7 @@
 El **dbgshell** in-kernel (`debug_bins/`, `kernel/init.c` / `start_init_process`)
 era el REPL de laboratorio Tier-0. **Ya no está en el árbol IR0**.
 
-Producto y exploración usan el hermano **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)**
+Producto y exploración usan el hermano **[ISD](https://github.com/IRodriguez13/ISD)**
 (runit → getty/ash) y contratos del kernel (`make kernel-tests`, auditorías linux-abi).
 
 `make run-dbgshell` termina con mensaje de retiro. No existen símbolos
@@ -27,7 +27,7 @@ Producto y exploración usan el hermano **[IR0-userspace](https://github.com/IRo
 | Rol anterior | Camino actual |
 |--------------|---------------|
 | REPL PID1 | `/sbin/init` (runit) vía `kexecve` |
-| Comandos shell | applets BusyBox ash en IR0-userspace |
+| Comandos shell | applets BusyBox ash en ISD |
 | Contratos syscall/proc | `kernel/test/*`, `make kernel-tests` |
 | Exploración boot/kmsg | ash + `cat /proc/kmsg` ([`KLOG.md`](../../KLOG.md)) |
 | Docs de acoplamiento | [`USERSPACE.md`](../../USERSPACE.md), `userspace/README.md` |

@@ -1,6 +1,6 @@
 # Coupling IR0 (kernel) ↔ ISD
 
-> **Last verified:** 2026-09-18  
+> **Last verified:** 2026-09-21  
 > **Source of truth:** this file, `scripts/make/isd.mk`, `scripts/bootstrap-isd.sh`, sibling [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../SETUP.md),
 > `ISD/services/runit_console_run.c`, `ISD/lib/ir0_auth.c`.  
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
@@ -90,7 +90,20 @@ the sibling ISD supports the kernel's interface version.
 | `PROFILE` | `minimal` (when passed on CLI) | ISD product profile |
 | `IR0_PRODUCT_PROFILE` | alias of ISD profile | compat |
 | `ISD_ARCH` | `x86_64` | userspace arch name |
-| `IR0_USERSPACE_ROOT` / `_URL` | aliases of `IR0_ISD_*` | **deprecated** |
+| `IR0_USERSPACE_ROOT` / `_URL` | aliases of `IR0_ISD_*` | **deprecated** (remove after 0.0.1) |
+
+### Naming coherence
+
+| Name | Status |
+|------|--------|
+| **ISD** | Canonical repo and tree (`../ISD`, `IR0_ISD_ROOT`) |
+| `IR0-userspace` | Former repo name — only in historical footnotes |
+| `IR0_USERSPACE_*` | Deprecated env aliases; still synced in `isd.mk` |
+| `userspace/` (IR0 dir) | Pointer README only — not a rootfs |
+| `setup/pid1/` | KTM/tier **smoke** inits — not product PID1 |
+| `load-userspace-*` | Legacy **inject** smokes (`IR0_LEGACY_USERSPACE=1`) |
+
+Regression gate: `make isd-contracts` section **H** (no `IR0-userspace` leaks).
 
 ### Config layers
 

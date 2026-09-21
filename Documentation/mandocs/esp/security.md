@@ -19,7 +19,7 @@ efectivos. No hay conjunto de capabilities Linux.
 
 La elevación de privilegios es **política de userspace**, no un servicio del
 kernel: el kernel aplica los bits set-user-ID/set-group-ID en `execve` y el
-userspace de producto (`IR0-userspace`) trae **OpenDoas** con
+userspace de producto (`ISD`) trae **OpenDoas** con
 `permit persist :wheel as root`. La syscall específica `sudo_auth` (404) y sus
 contraseñas hardcodeadas se eliminaron; el número queda retirado en
 `includes/uapi/ir0/syscall_linux.h`.
@@ -84,7 +84,7 @@ Mapa ASCII:
 ## 5. Límites del subsistema
 
 - La autenticación y la política de elevación viven en userspace
-  (`IR0-userspace`), no en el kernel: el kernel solo aporta syscalls de
+  (`ISD`), no en el kernel: el kernel solo aporta syscalls de
   identidad, exec set-id, `/proc/[pid]/stat` y comprobación de permisos.
 - Sin PAM ni capabilities.
 
@@ -95,7 +95,7 @@ Mapa ASCII:
 | VFS | todas las operaciones de path |
 | Process | herencia cred en spawn/fork |
 | Syscalls | syscalls identidad y permisos |
-| IR0-userspace | login/getty, `passwd`, OpenDoas; `smoke-setuid-exec`, `smoke-passwd`, `smoke-doas` |
+| ISD | login/getty, `passwd`, OpenDoas; `smoke-setuid-exec`, `smoke-passwd`, `smoke-doas` |
 
 ## 7. Mapas visuales
 

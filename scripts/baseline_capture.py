@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "out" / "baseline"
-USERSPACE = ROOT.parent / "IR0-userspace"
+USERSPACE = ROOT.parent / "ISD"
 PROMPT_RE = re.compile(r"[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+:\S*[#$]")
 NEED_BOOT = ["RUNIT_STAGE1_OK", "GETTY_READY"]
 

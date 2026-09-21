@@ -16,7 +16,7 @@
 The in-kernel **dbgshell** (`debug_bins/`, `kernel/init.c` / `start_init_process`)
 was the Tier-0 laboratory REPL. It is **gone from the IR0 tree**.
 
-Product and lab exploration use the sibling **[IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)**
+Product and lab exploration use the sibling **[ISD](https://github.com/IRodriguez13/ISD)**
 (runit → getty/ash) plus kernel contracts (`make kernel-tests`, linux-abi audits).
 
 `make run-dbgshell` exits with a retirement message. There are no
@@ -27,7 +27,7 @@ Product and lab exploration use the sibling **[IR0-userspace](https://github.com
 | Former role | Current path |
 |-------------|--------------|
 | PID1 REPL | `/sbin/init` (runit) via `kexecve` |
-| Shell cmds (`ls`, `cat`, …) | BusyBox ash applets in IR0-userspace |
+| Shell cmds (`ls`, `cat`, …) | BusyBox ash applets in ISD |
 | Syscall / proc contracts | `kernel/test/*`, `make kernel-tests` |
 | Boot / kmsg exploration | ash + `cat /proc/kmsg` ([`KLOG.md`](../../KLOG.md)) |
 | Coupling docs | [`USERSPACE.md`](../../USERSPACE.md), `userspace/README.md` |

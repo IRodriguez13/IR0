@@ -6,22 +6,23 @@
 | IR0 phase | T1–T2 |
 | Status | stable |
 | Depends on | boot, process, vfs, tty |
-| Man page | IR0-userspace (section 7) |
+| Man page | IR0-ISD coupling (section 7) |
 | Primary sources | `kernel/main.c`, `scripts/make/isd.mk`, `scripts/kernel_manager.py`, `scripts/userspace_manager.py`, sibling `ISD/` |
 
-> **Last verified:** 2026-09-18
+> **Last verified:** 2026-09-21
 
 > **Note (2026-09-18):** product rootfs and profiles are built from the sibling **`ISD/`**
 > tree (`IR0_ISD_ROOT`). The kernel repo drives boot via `scripts/make/isd.mk`:
 > persistent machine disks, `make kmang` (kernel ISO catalog TUI), and `make usmang`
-> (host ISD inspector). Legacy `IR0-userspace/` naming is aliased to `IR0_ISD_ROOT`.
+> (host ISD inspector). Deprecated env `IR0_USERSPACE_*` aliases `IR0_ISD_*`; repo
+> formerly named **IR0-userspace**, now **ISD**.
 
 > **Note (2026-07-24):** transitional PID1 **irinit** was removed. Product and tests use **runit** only (`make build-runit` / `load-userspace-runit` / `smoke-runit-boot`).
 
 ## 1. Overview
 
 Production boot always loads **`/sbin/init`** via `kexecve` from `kmain`.
-The canonical PID1 is **runit** (`IR0-userspace/out/bin/runit-init`
+The canonical PID1 is **runit** (`ISD/out/bin/runit-init`
 and stage services), built static with musl by the sibling repository and
 injected into the MINIX root image. BusyBox, TCC, and DoomGeneric are optional rootfs payloads for smoke and
 T2 graphics milestones.
@@ -34,7 +35,7 @@ T2 graphics milestones.
 | `init_musl.c` | musl syscall smoke binary |
 | `rootfs_base.c` | Creates `/bin`, `/sbin`, `/dev`, `/proc`, … on disk |
 | `inject_init_minix.py` | Writes binaries into MINIX v1 image |
-| `busybox-1.36.1` | Applets; recipe and configs in `IR0-userspace/packages/busybox/` |
+| `busybox-1.36.1` | Applets; recipe and configs in `ISD/packages/busybox/` |
 | `kernel-x64-userspace.bin` | Kernel built with `IR0_USERSPACE_INIT_BOOT=1` |
 
 **runit behavior:** stage 1 prepares the rootfs; stage 2 supervises services; the
@@ -50,7 +51,7 @@ others (`HOSTNAME` from `/etc/hostname`, default `unix`). Accounts: `root`
 `smoke-runit-login` (root autologin), `smoke-runit-login-nonroot` (ivan + crypt).
 
 **Product profiles.** `/etc/ir0-profile` (written by
-`IR0-userspace/scripts/install-to-disk.sh` from `IR0_PRODUCT_PROFILE`) selects
+`ISD/scripts/install-to-disk.sh` from `IR0_PRODUCT_PROFILE`) selects
 the console policy: `development` keeps root autologin and prints a warning,
 `desktop` runs `hostname login:` and denies direct root login through
 `/etc/ir0-noroot` (name kept ≤14 bytes for MINIX v1 directory entries),
@@ -76,7 +77,7 @@ the console policy: `development` keeps root autologin and prints a warning,
 | Target | Role |
 |--------|------|
 | `make headers_install DESTDIR=…` | Export public UAPI (`includes/uapi/`) for the userspace build |
-| `make build-runit` | Delegates to `IR0-userspace` (runit + service ELFs) |
+| `make build-runit` | Delegates to `ISD` (runit + service ELFs) |
 | `make load-userspace-runit` | Format MINIX disk and install the product rootfs from the sibling |
 | `make smoke-runit-boot` | Headless PID1 boot smoke |
 | `make smoke-runit-login` | Root autologin (empty password) |

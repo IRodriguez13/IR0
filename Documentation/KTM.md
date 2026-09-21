@@ -88,7 +88,7 @@ compiled only when the option is on — keep that pairing intact.
 |-------|------|-----------------|
 | **klog** | Structured event core (sequence, phase, clock_state, sinks) | `#include <ir0/ktm/klog.h>` / [`KLOG.md`](KLOG.md) |
 | **KTM protocol** | Test transport `KTM\|seq\|KIND\|name\|status` | `ktm_transport_emit`, scenarios, `/dev/ktm` |
-| **Userspace smoke tags** | Bare tokens for autokill (`SMOKE_OK`, stage tags) | `ir0_smoke_tag()` in `IR0-userspace/lib/ir0_smoke_tag.h` (same role as `klog_smoke`) |
+| **Userspace smoke tags** | Bare tokens for autokill (`SMOKE_OK`, stage tags) | `ir0_smoke_tag()` in `ISD/lib/ir0_smoke_tag.h` (same role as `klog_smoke`) |
 | **QEMU host chatter** | Version banner / GTK / warnings | Sibling `*.qemu-stderr` from `scripts/smoke_autokill.py` — **not** mixed into the guest serial log |
 
 Rules of thumb:
@@ -340,7 +340,7 @@ residual. **Exception:** `init-exit-drain` stays stub/virtfs (SUT is PID1 `_exit
 Manual pattern (same as the wrapper):
 
 1. `install-to-disk.sh` → runit rootfs on a temp MINIX image.
-2. `inject-smoke-service.sh --run-only DISK SERVICE IR0-userspace/out/stage-bin/runit_hostshare_payload_run`
+2. `inject-smoke-service.sh --run-only DISK SERVICE ISD/out/stage-bin/runit_hostshare_payload_run`
    (service mounts `ir0share` and execs `/mnt/host/ir0_payload`).
 3. Optional: overwrite noisy `console`/`logger` `run` stubs with `runit_pause_run` so serial
    done-tags are not split by ash.

@@ -23,7 +23,7 @@ The goal is to document implemented behavior first, then known gaps.
 - `STABLE.md`: release 0.0.1 checklist; merge→`master` blockers = TinyCC + Doom T2.
 - `BACKLOG_REMAINING.md`: honest post-0.0.1 open work (storage, POSIX, residual).
 - `KTM.md`: **canonical KTM guide** — internals, **klog layers**, kernel API, `/dev/ktm`, gates (Spanish: `esp/KTM.md`).
-- `USERSPACE.md`: **kernel ↔ IR0-userspace coupling** — `make first-boot`, BusyBox
+- `USERSPACE.md`: **kernel ↔ ISD coupling** — `make first-boot`, BusyBox
   path, no-init panic contract (Spanish: `esp/USERSPACE.md`).
 - `virtio.md`: **virtio-9p hostshare + virtio-net** — QEMU flags, guest mount,
   `smoke-session-chaos` / `smoke-hostshare-*` (Spanish: `esp/virtio.md`).

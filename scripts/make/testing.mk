@@ -995,7 +995,7 @@ build-busybox-fase58-full:
 .PHONY: build-busybox-ir0-full build-busybox-ir0-auth build-busybox-matrix-smoke \
 	busybox-matrix busybox-profiles-check
 
-# Product BusyBox binaries (full 0755 + auth 4755) come from IR0-userspace.
+# Product BusyBox binaries (full 0755 + auth 4755) come from ISD.
 build-busybox-ir0-full: check-userspace
 	@$(IR0_USERSPACE_MAKE) build-busybox
 
@@ -5696,7 +5696,3 @@ build-fase58l-busybox-smoke: build-ktm-busybox-manifest-smoke
 build-fase58c-boot-halt: build-ktm-boot-halt-bin
 build-fase58c-fbdev: build-ktm-fbdev-gui-bin
 build-fase55e-doom-interactive: build-ktm-doom-interactive
-
-ifdef IR0_LEGACY_SMOKE
-include setup/make/legacy-smokes.mk
-endif

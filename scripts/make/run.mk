@@ -43,7 +43,7 @@ run: kernel-x64.iso
 
 # Retired: in-kernel dbgshell removed. Alias kept for muscle memory.
 run-dbgshell:
-	@echo "run-dbgshell retired: use make run-pid1 / run-console (IR0-userspace ash)"
+	@echo "run-dbgshell retired: use make run-pid1 / run-console (ISD ash)"
 	@exit 1
 
 # Userspace PID1: kernel-x64-userspace.iso + injected /sbin/init.

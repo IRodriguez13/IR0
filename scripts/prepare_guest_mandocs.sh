@@ -28,7 +28,7 @@ MDOC_DIR="${ROOT}/build/mandoc/en"
 # Guest invoke: man <GUEST_BASENAME>  (BusyBox looks for cat7/<name>.7)
 DEFAULT_PAGE_MAP=(
 	"IR0-boot"
-	"IR0-userspace IR0-uspace"
+	"ISD IR0-uspace"
 	"IR0-onboarding IR0-onboard"
 	"IR0-port"
 	"IR0-vfs"

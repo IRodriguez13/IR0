@@ -1,16 +1,29 @@
 # IR0 — Tree reorganization plan (post–0.0.1)
 
-> **Last verified:** 2026-06-27  
+> **Last verified:** 2026-09-21  
 > **Status:** PLAN ONLY — no file moves until release 0.0.1 capability gates are stable  
 > **Source of truth:** repository layout, `Makefile`, `scripts/make/*.mk`, `setup/pid1/`, `tests/`
 
 ---
 
+## Status update (2026-09-21) — naming + bridge coherence
+
+- **ISD canonical name** — docs, scripts, and `userspace/README.md` use **ISD**
+  only; the former repo name appears solely in historical footnotes. Env
+  `IR0_USERSPACE_*` remains a **deprecated alias** of `IR0_ISD_*` (see
+  `scripts/make/isd.mk`).
+- **`scripts/make/` split** — `isd.mk` (bridge), `product.mk` (kmang/first-boot),
+  `release.mk` (Tier-1 gates). Legacy inject stays in `testing.mk` behind
+  `IR0_LEGACY_USERSPACE=1`.
+- **`IR0_ISD_INTERFACE` v1** — bidirectional check with sibling ISD; `release-check`
+  orchestrates kernel + ISD without QEMU.
+- **Next physical move (still gated):** `setup/pid1/` → `qa/smokes/pid1/` per §4 below.
+
 ## Status update (2026-07-25)
 
 - **`debug_bins/` deleted** — not renamed under `userspace/`. Coupling pointer is
   `userspace/README.md` + [`USERSPACE.md`](USERSPACE.md); product shell is
-  [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace).
+  [ISD](https://github.com/IRodriguez13/ISD).
 - `make run-dbgshell` retired. Remaining stages below that mention renaming
   `debug_bins/` are **obsolete** for that path.
 
@@ -105,7 +118,7 @@ This document does **not** authorize moves yet. Execute after:
 ### P2 — Nice-to-have after 0.0.1
 
 1. Rename `debug_bins/` → `userspace/cmd/` or keep path with alias.
-2. Consolidate `setup/doom` under `setup/experiments/` (`setup/runit` already left the tree with SEP-2 → `IR0-userspace`).
+2. Consolidate `setup/doom` under `setup/experiments/` (`setup/runit` already left the tree with SEP-2 → `ISD`).
 3. Generate QA target list from `contracts.json` (single source).
 
 ---

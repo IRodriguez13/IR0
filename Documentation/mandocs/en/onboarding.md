@@ -35,7 +35,7 @@ Linux ABI. Subsystem depth lives in other `IR0-*` pages.
   git clone IR0 → cd IR0
        → make check-env
        → make defconfig
-       → make first-boot   # clone ../IR0-userspace + runit/BusyBox disk + ISO
+       → make first-boot   # clone ../ISD + runit/BusyBox disk + ISO
        → make run          # QEMU → getty → BusyBox ash
 ```
 

@@ -11,7 +11,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 ## Mapa de Archivos
 
 - `README.md`
-- `USERSPACE.md` — acoplamiento kernel ↔ [IR0-userspace](https://github.com/IRodriguez13/IR0-userspace)
+- `USERSPACE.md` — acoplamiento kernel ↔ [ISD](https://github.com/IRodriguez13/ISD)
 - `virtio.md` — virtio-9p / virtio-net y chaos de sesión
 - `DECOUPLING.md`
 - `MAKEFILE.md`

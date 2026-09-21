@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | userspace, syscalls, tty, vfs |
 | Man page | IR0-port (section 7) |
-| Primary sources | `Documentation/USERSPACE.md`, `IR0-userspace/`, `setup/pid1/`, TinyCC under `/lib/tcc` |
+| Primary sources | `Documentation/USERSPACE.md`, `ISD/`, `setup/pid1/`, TinyCC under `/lib/tcc` |
 
 > **Last verified:** 2026-07-28
 
@@ -99,4 +99,4 @@ kernel tree (`scripts/linux_abi/`) rather than guessing errno.
 - `man IR0-uspace` — product userspace / ISD layout
 - `man IR0-syscalls` — syscall surface
 - `man IR0-onboard` — first clone / first boot
-- Host: `Documentation/USERSPACE.md`, sibling `IR0-userspace/`
+- Host: `Documentation/USERSPACE.md`, sibling `ISD/`

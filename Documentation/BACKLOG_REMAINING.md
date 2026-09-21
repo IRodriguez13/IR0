@@ -77,7 +77,7 @@
 
 | Item | Proof |
 |------|-------|
-| Publish **IR0-userspace** sibling | https://github.com/IRodriguez13/IR0-userspace |
+| Publish **ISD** sibling | https://github.com/IRodriguez13/ISD |
 | Coupling docs | [`USERSPACE.md`](USERSPACE.md), `userspace/README.md` |
 | Remove `debug_bins/` + `kernel/init.c` (dbgshell PID1) | PR #28; `make run-dbgshell` retired |
 | Drop `CONFIG_KERNEL_DEBUG_SHELL` / `CONFIG_DEBUG_BINS*` | `setup/Kconfig`, `setup/defconfig` |
@@ -99,7 +99,7 @@
 | Item | Proof |
 |------|-------|
 | getty/login + welcome | `make smoke-runit-login` (`GETTY_READY` / `LOGIN_OK`); GUI: `run-fase58e-ash-gui` |
-| First-boot account defaults | `ir0-firstboot` → `FIRSTBOOT_OK` / `FIRSTBOOT_SKIP`; rootfs `IR0-userspace/rootfs/etc/` |
+| First-boot account defaults | `ir0-firstboot` → `FIRSTBOOT_OK` / `FIRSTBOOT_SKIP`; rootfs `ISD/rootfs/etc/` |
 | `fsck.ir0` stage1 | `FSCK_OK` / `FSCK_SKIPPED` / `FSCK_FAIL` (honest) |
 | Driver summary NOTICE | `DRIVER_SUMMARY_OK` + structured `DRIVER_SUMMARY` event |
 | SMP honesty | `[SMP] UP (1 CPU online)` |
@@ -146,7 +146,7 @@
 
 | Item | Proof |
 |------|-------|
-| Runit + 9p payload service | `IR0-userspace/services/runit_hostshare_payload_run.c`; `inject-smoke-service.sh --run-only` |
+| Runit + 9p payload service | `ISD/services/runit_hostshare_payload_run.c`; `inject-smoke-service.sh --run-only` |
 | Desktop X smoke | IR0-desktop `smoke/run-xfbdev-smoke.sh` → `IR0_XFBDEV_SMOKE_OK` (autokill PASS) |
 | Autokill mid-tag flush | `scripts/smoke_autokill.py` flat success match + pending line buffer |
 | Runner `--disk` payload copy | `ktm_userdev_runner.py` always copies `--init` → share `ir0_payload` when fsdev on |
@@ -204,7 +204,7 @@ Slice: connect+send/recv to QEMU gateway **10.0.2.2:8888** (MVP, not full stack)
 
 | Item | Proof |
 |------|-------|
-| **BUSY-1** product applet manifest | `IR0-userspace/packages/busybox/required_applets.txt` + `IR0-userspace/scripts/busybox_inject_manifest.sh` on runit disk (`load-userspace-runit`) |
+| **BUSY-1** product applet manifest | `ISD/packages/busybox/required_applets.txt` + `ISD/scripts/busybox_inject_manifest.sh` on runit disk (`load-userspace-runit`) |
 | **BUSY-2** applet smoke | `make smoke-busybox-manifest` → `BUSYBOX_MANIFEST_OK` (also `smoke-fase58l-busybox-coreutils`) |
 
 virtiofs/FUSE remains **Future** (no guest FUSE). Host-share remains virtio-**9p**.

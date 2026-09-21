@@ -36,7 +36,7 @@ if [ -z "$US_STAGE" ] || [ ! -x "$US_STAGE/runit_hostshare_payload_run" ]; then
 	exit 1
 fi
 if [ ! -x "$US_ROOT/scripts/install-to-disk.sh" ]; then
-	echo "✗ missing $US_ROOT/scripts/install-to-disk.sh (clone IR0-userspace)" >&2
+	echo "✗ missing $US_ROOT/scripts/install-to-disk.sh (set IR0_ISD_ROOT to sibling ISD)" >&2
 	exit 1
 fi
 

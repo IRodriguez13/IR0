@@ -34,7 +34,7 @@ from smoke_desktop_cmd_matrix import (  # noqa: E402
 DEFAULT_NANO = Path(
     os.environ.get(
         "IR0_NANO_BIN",
-        str(ROOT.parent / "IR0-userspace" / "out" / "stage-bin" / "nano"),
+        str(ROOT.parent / "ISD" / "out" / "stage-bin" / "nano"),
     )
 )
 INJECT = ROOT / "scripts" / "inject_init_minix.py"
@@ -145,7 +145,7 @@ def main() -> int:
     if not args.nano.is_file():
         print(
             f"✗ missing nano: {args.nano}\n"
-            "  (cd ../IR0-userspace && make fetch build-nano)",
+            "  (cd ../ISD && make fetch build-nano)",
             file=sys.stderr,
         )
         return 2

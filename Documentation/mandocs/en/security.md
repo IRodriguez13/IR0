@@ -19,7 +19,7 @@ There is no Linux capability set.
 
 Privilege elevation is **userspace policy**, not a kernel service: the kernel
 enforces set-user-ID/set-group-ID bits on `execve`, and the product userspace
-(`IR0-userspace`) ships **OpenDoas** with `permit persist :wheel as root`. The
+(`ISD`) ships **OpenDoas** with `permit persist :wheel as root`. The
 old IR0-specific `sudo_auth` syscall (404) and its hardcoded passwords were
 removed; the number is retired in `includes/uapi/ir0/syscall_linux.h`.
 
@@ -82,7 +82,7 @@ ASCII:
 
 ## 5. Subsystem boundaries
 
-- Authentication and elevation policy live in userspace (`IR0-userspace`), not
+- Authentication and elevation policy live in userspace (`ISD`), not
   in the kernel: the kernel only provides identity syscalls, set-id exec,
   `/proc/[pid]/stat` and file permission checks.
 - No PAM and no capabilities.
@@ -94,7 +94,7 @@ ASCII:
 | VFS | all path operations |
 | Process | cred inheritance on spawn/fork |
 | Syscalls | identity and permission syscalls |
-| IR0-userspace | login/getty, `passwd`, OpenDoas; `smoke-setuid-exec`, `smoke-passwd`, `smoke-doas` |
+| ISD | login/getty, `passwd`, OpenDoas; `smoke-setuid-exec`, `smoke-passwd`, `smoke-doas` |
 
 ## 7. Visual maps
 
