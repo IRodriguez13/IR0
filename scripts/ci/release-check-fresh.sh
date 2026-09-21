@@ -17,6 +17,7 @@
 #   RELEASE_CHECK_BOOT    1 → Tier 1.5 after Tier 1
 #   RELEASE_CHECK_GUEST   1 → guest shell probes after boot
 #   RELEASE_CHECK_DOUBLE    1 → run the full pipeline twice in one container
+#   RELEASE_CHECK_INCREMENTAL 1 → profile transition + idempotence (same WORK tree)
 #   RELEASE_CHECK_LOCAL     1 → copy bind-mounted /src trees (WIP dev only)
 #   RELEASE_CHECK_DEPS_INSTALL 1 → run ensure-host-deps (IR0_DEPS_INSTALL=yes) before build
 set -euo pipefail
@@ -30,6 +31,7 @@ ISD_ARCH="${ISD_ARCH:-x86_64}"
 RELEASE_CHECK_BOOT="${RELEASE_CHECK_BOOT:-0}"
 RELEASE_CHECK_GUEST="${RELEASE_CHECK_GUEST:-0}"
 RELEASE_CHECK_DOUBLE="${RELEASE_CHECK_DOUBLE:-0}"
+RELEASE_CHECK_INCREMENTAL="${RELEASE_CHECK_INCREMENTAL:-0}"
 RELEASE_CHECK_LOCAL="${RELEASE_CHECK_LOCAL:-0}"
 RELEASE_CHECK_DEPS_INSTALL="${RELEASE_CHECK_DEPS_INSTALL:-0}"
 
@@ -115,6 +117,11 @@ run_once() {
 			RELEASE_CHECK_GUEST="$RELEASE_CHECK_GUEST" \
 			scripts/release_check_boot.sh
 	fi
+
+	if [ "$RELEASE_CHECK_INCREMENTAL" = "1" ]; then
+		chmod +x scripts/release_check_incremental.sh
+		scripts/release_check_incremental.sh "$work/IR0" "$work/ISD"
+	fi
 }
 
 cleanup() {
@@ -124,7 +131,7 @@ trap cleanup EXIT
 
 echo "== fresh-clone release-check =="
 echo "   LOCAL=${RELEASE_CHECK_LOCAL} IR0_REF=${IR0_REF} ISD_REF=${ISD_REF}"
-echo "   PROFILE=${PROFILE} BOOT=${RELEASE_CHECK_BOOT} GUEST=${RELEASE_CHECK_GUEST} DOUBLE=${RELEASE_CHECK_DOUBLE}"
+echo "   PROFILE=${PROFILE} BOOT=${RELEASE_CHECK_BOOT} GUEST=${RELEASE_CHECK_GUEST} DOUBLE=${RELEASE_CHECK_DOUBLE} INCREMENTAL=${RELEASE_CHECK_INCREMENTAL}"
 
 run_once 1 "$WORK"
 

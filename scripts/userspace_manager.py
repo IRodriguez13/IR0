@@ -50,6 +50,8 @@ USMANG_HELP_LINES = (
     "  userland    USERLAND_BASE and implementation status",
     "  desktop     X client set for PROFILE=desktop only",
     "  verify      Postcondition check against staged rootfs (ISD-owned rules)",
+    "              Optional: --packages pkg[,pkg...] checks only those entries;",
+    "              logs each failure and continues (does not abort mid-run)",
     "  help        This legend",
     "",
     "Environment:",
@@ -61,6 +63,7 @@ USMANG_HELP_LINES = (
     "  make usmang",
     "  python3 scripts/userspace_manager.py --isd-root ../ISD summary",
     "  python3 scripts/userspace_manager.py --profile minimal --json userland",
+    "  python3 scripts/userspace_manager.py --profile minimal verify -p busybox -p runit",
     "",
     "See also: ISD/Documentation/LOGIN_SESSION.md (login one-shot, kmang-owned),",
     "Documentation/USERSPACE.md, make kmang (kernel ISO catalog).",
@@ -213,7 +216,93 @@ def cmd_desktop(isd: Path, profile: str) -> dict:
     }
 
 
-def cmd_verify(isd: Path, profile: str, arch: str) -> tuple[dict, int]:
+def load_verify_manifest(isd: Path, profile: str) -> list[tuple[str, str]]:
+    manifest = isd / "profiles" / profile / "verify-paths.txt"
+    if not manifest.is_file():
+        manifest = isd / "profiles" / "minimal" / "verify-paths.txt"
+    entries: list[tuple[str, str]] = []
+    for raw in read_text(manifest).splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            continue
+        pkg, rel = parts[0], parts[1].strip()
+        if rel:
+            entries.append((pkg, rel))
+    return entries
+
+
+def parse_package_list(values: list[str] | None) -> list[str] | None:
+    if not values:
+        return None
+    names: list[str] = []
+    for item in values:
+        for part in item.split(","):
+            name = part.strip()
+            if name:
+                names.append(name)
+    return names or None
+
+
+def cmd_verify_selected(
+    isd: Path,
+    profile: str,
+    arch: str,
+    staged: Path,
+    selected: list[str],
+) -> tuple[dict, int]:
+    manifest = load_verify_manifest(isd, profile)
+    by_pkg: dict[str, list[str]] = {}
+    for pkg, rel in manifest:
+        by_pkg.setdefault(pkg, []).append(rel)
+
+    unknown = sorted(set(selected) - set(by_pkg))
+    for pkg in unknown:
+        print(f"⚠ verify: unknown package {pkg!r} (no verify-paths entry)", file=sys.stderr)
+
+    rows: list[dict[str, str]] = []
+    failures = 0
+    checked = 0
+    for pkg in selected:
+        paths = by_pkg.get(pkg)
+        if not paths:
+            rows.append({"package": pkg, "status": "unknown", "reason": "no verify-paths entry"})
+            continue
+        for rel in paths:
+            checked += 1
+            target = staged / rel
+            if target.exists():
+                rows.append({"package": pkg, "path": rel, "status": "ok"})
+                print(f"  OK  {pkg}: {rel}")
+            else:
+                failures += 1
+                rows.append({"package": pkg, "path": rel, "status": "missing"})
+                print(f"⚠ verify {pkg}: missing {rel} in {staged}", file=sys.stderr)
+
+    payload = {
+        "status": "verified" if failures == 0 and not unknown else "partial",
+        "profile": profile,
+        "arch": arch,
+        "staged_rootfs": str(staged),
+        "selected_packages": selected,
+        "checked_paths": checked,
+        "failures": failures,
+        "unknown_packages": unknown,
+        "results": rows,
+    }
+    if failures or unknown:
+        return payload, 1
+    return payload, 0
+
+
+def cmd_verify(
+    isd: Path,
+    profile: str,
+    arch: str,
+    selected: list[str] | None = None,
+) -> tuple[dict, int]:
     staged = isd / "out" / arch / "rootfs" / profile
     if not staged.is_dir():
         return {
@@ -223,6 +312,9 @@ def cmd_verify(isd: Path, profile: str, arch: str) -> tuple[dict, int]:
             "staged_rootfs": str(staged),
             "reason": "rootfs not staged — run make -C ISD rootfs-tree first",
         }, 3
+    if selected:
+        return cmd_verify_selected(isd, profile, arch, staged, selected)
+
     script = isd / "scripts" / "verify-profile-rootfs.sh"
     if not script.is_file():
         return {
@@ -259,8 +351,16 @@ def main() -> int:
     parser.add_argument("--arch", default=os.environ.get("ISD_ARCH", "x86_64"))
     parser.add_argument("--json", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("version", "packages", "userland", "desktop", "summary", "verify", "help"):
+    for name in ("version", "packages", "userland", "desktop", "summary", "help"):
         sub.add_parser(name)
+    verify_parser = sub.add_parser("verify")
+    verify_parser.add_argument(
+        "-p",
+        "--packages",
+        action="append",
+        default=None,
+        help="check only these packages (comma-separated ok); log failures and continue",
+    )
     args = parser.parse_args()
     isd = resolve_isd_root(args.isd_root)
     if not (isd / "Makefile").is_file():
@@ -279,13 +379,21 @@ def main() -> int:
     elif args.command == "desktop":
         payload = cmd_desktop(isd, args.profile)
     elif args.command == "verify":
-        payload, code = cmd_verify(isd, args.profile, args.arch)
+        selected = parse_package_list(getattr(args, "packages", None))
+        payload, code = cmd_verify(isd, args.profile, args.arch, selected)
         if args.json:
             print(json.dumps(payload, sort_keys=True, indent=2))
         else:
-            print(payload.get("stdout") or payload.get("reason") or payload.get("status"))
-            if payload.get("stderr"):
-                print(payload["stderr"], file=sys.stderr)
+            if selected:
+                print(
+                    f"verify packages profile={args.profile} "
+                    f"failures={payload.get('failures', 0)} "
+                    f"unknown={len(payload.get('unknown_packages', []))}"
+                )
+            else:
+                print(payload.get("stdout") or payload.get("reason") or payload.get("status"))
+                if payload.get("stderr"):
+                    print(payload["stderr"], file=sys.stderr)
         return code
     else:
         desktop = cmd_desktop(isd, args.profile)

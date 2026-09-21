@@ -187,6 +187,18 @@ class TruthToolingTest(unittest.TestCase):
         (fake_ir0 / "scripts").mkdir()
         shutil.copy(ROOT / "scripts/inject_init_minix.py", fake_ir0 / "scripts/inject_init_minix.py")
         shutil.copy(ROOT / "scripts/verify_minix_rootfs.py", fake_ir0 / "scripts/verify_minix_rootfs.py")
+        # Minimal Makefile stubs for PUBLIC_TARGET= checks in ISD.
+        (fake_ir0 / "Makefile").write_text(
+            "KERNEL_ROOT:=$(CURDIR)\n"
+            "ir0-minix-inject-path:\n"
+            "\t@echo $(KERNEL_ROOT)/scripts/inject_init_minix.py\n"
+            "ir0-verify-minix-path:\n"
+            "\t@echo $(KERNEL_ROOT)/scripts/verify_minix_rootfs.py\n"
+            "headers_install:\n"
+            "\t@true\n"
+            "kernel-x64-userspace.iso:\n"
+            "\t@true\n"
+        )
         result = subprocess.run(
             ["bash", str(ISD_CHECK), str(fake_ir0)],
             text=True,

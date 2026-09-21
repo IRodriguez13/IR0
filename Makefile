@@ -131,6 +131,7 @@ endif
 
 # Product distribution (ISD). Recipes live in scripts/make/isd.mk.
 # Compat: IR0_USERSPACE_ROOT/URL alias IR0_ISD_ROOT/URL.
+-include scripts/make/ir0_public.mk
 -include scripts/make/isd.mk
 -include scripts/make/release.mk
 

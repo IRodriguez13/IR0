@@ -7,7 +7,7 @@
 #   check-isd clone-isd isd-defconfig isdconfig
 #   isd isd-rootfs isd-image isd-clean first-boot
 #
-# Canonical interface: PROFILE=minimal|development|desktop|desktop-console|appliance
+# Canonical interface: PROFILE passed to ISD (see ISD profiles/; no kernel-side semantics).
 # Compat: IR0_PRODUCT_PROFILE, IR0_USERSPACE_ROOT/URL, bootstrap-userspace
 
 ifndef _IR0_ISD_MK
@@ -60,8 +60,6 @@ endif
 ifneq ($(filter minimal development desktop desktop-console appliance,$(PROFILE)),)
   ISD_PROFILE := $(PROFILE)
 endif
-# Profiles with ext2 /home + full X11 userspace stack.
-ISD_PROFILE_IS_DESKTOP := $(filter $(ISD_PROFILE),desktop desktop-console)
 # Keep IR0_PRODUCT_PROFILE in sync for scripts that still read it.
 IR0_PRODUCT_PROFILE := $(ISD_PROFILE)
 export IR0_PRODUCT_PROFILE
@@ -71,10 +69,26 @@ IR0_ISD_MAKE = $(MAKE) -C "$(IR0_ISD_ROOT)" \
 	ARCH="$(ISD_ARCH)" \
 	PROFILE="$(ISD_PROFILE)"
 
-# Disk owned by ISD (not copied into IR0/ by default)
-IR0_ISD_DISK = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/images/$(ISD_PROFILE)/disk.img
-IR0_ISD_HOME_DISK = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/images/$(ISD_PROFILE)/home.ext2.img
-IR0_ISD_ROOTFS = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/rootfs/$(ISD_PROFILE)
+# Artifact paths come from ISD print-artifacts-mk (cached .mk; not hardcoded out/ layout).
+IR0_ISD_DISK ?=
+IR0_ISD_HOME_DISK ?=
+IR0_ISD_ROOTFS ?=
+ISD_REQUIRES_HOME_DISK ?=
+ISD_VARIANT_ID ?=
+ISD_ROOTFS_STAMP ?=
+ISD_ARTIFACTS_CACHE := $(KERNEL_ROOT)/.cache/isd-artifacts/$(ISD_ARCH)-$(ISD_PROFILE).mk
+KMANG_ARTIFACTS_CACHE := $(KERNEL_ROOT)/.cache/isd-artifacts/kmang-$(KMANG_ARCH)-$(KMANG_PROFILE).mk
+ifneq ($(wildcard $(IR0_ISD_ROOT)/Makefile),)
+$(shell bash "$(KERNEL_ROOT)/scripts/load_isd_artifacts.sh" \
+	"$(IR0_ISD_ROOT)" "$(ISD_ARCH)" "$(ISD_PROFILE)" "$(KERNEL_ROOT)" \
+	"$(ISD_ARTIFACTS_CACHE)")
+$(shell bash "$(KERNEL_ROOT)/scripts/load_isd_artifacts.sh" \
+	"$(IR0_ISD_ROOT)" "$(KMANG_ARCH)" "$(KMANG_PROFILE)" "$(KERNEL_ROOT)" \
+	"$(KMANG_ARTIFACTS_CACHE)" KMANG_)
+-include $(ISD_ARTIFACTS_CACHE)
+-include $(KMANG_ARTIFACTS_CACHE)
+endif
+KMANG_ISD_DISK ?= $(IR0_ISD_DISK)
 
 # Mutable guest state lives outside ISD out/. Rebuilding a package or rootfs may
 # recreate IR0_ISD_DISK, but must never overwrite an installed machine.
@@ -96,7 +110,8 @@ KMANG_MACHINE_DIR = $(IR0_MACHINE_ROOT)/$(KMANG_ARCH)/$(KMANG_PROFILE)/$(KMANG_M
 
 # Keep comma-bearing QEMU arguments out of $(if ...): make treats their commas
 # as function separators even when the text is shell-quoted.
-ifneq ($(ISD_PROFILE_IS_DESKTOP),)
+# Attach optional home disk when ISD declares REQUIRES_HOME_DISK=1.
+ifeq ($(ISD_REQUIRES_HOME_DISK),1)
 IR0_MACHINE_HOME_QEMU_DRIVE = -drive "file=$(IR0_MACHINE_HOME_DISK),format=raw,if=ide,index=1"
 IR0_ISD_HOME_QEMU_DRIVE = -drive "file=$(IR0_ISD_HOME_DISK),format=raw,if=ide,index=1"
 endif
@@ -192,7 +207,7 @@ ensure-isd-disk: check-isd
 	@echo "  DISK     $(IR0_ISD_DISK)"
 
 ensure-isd-home: check-isd
-	+@if [ -n "$(ISD_PROFILE_IS_DESKTOP)" ]; then \
+	+@if [ "$(ISD_REQUIRES_HOME_DISK)" = "1" ]; then \
 		$(IR0_ISD_MAKE) image-ext2-home; \
 		test -f "$(IR0_ISD_HOME_DISK)"; \
 	fi
@@ -209,7 +224,7 @@ KMANG_PY = python3 scripts/kernel_manager.py \
 	--machine "$(KMANG_MACHINE)" \
 	--kernel-root "$(KERNEL_ROOT)" \
 	--isd-root "$(IR0_ISD_ROOT)" \
-	--isd-disk "$(IR0_ISD_ROOT)/out/$(KMANG_ARCH)/images/$(KMANG_PROFILE)/disk.img" \
+	--isd-disk "$(KMANG_ISD_DISK)" \
 	--machine-disk "$(KMANG_MACHINE_DIR)/disk.img" \
 	--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
 	--version "$(IR0_VERSION_STRING)"

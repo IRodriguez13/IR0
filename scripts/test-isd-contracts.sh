@@ -36,9 +36,22 @@ grep -q 'kmang has installed kernels' $MK_ALL \
 	&& ! grep -q 'kmanag has installed kernels' $MK_ALL \
 	&& ok "D poweron kmang typo fixed" || bad "D kmang message typo"
 grep -q 'run-isd' Makefile && ok "D run → run-isd" || bad "D run"
-grep -q 'images/\$(ISD_PROFILE)/disk.img' "$MK_BRIDGE" && ok "D per-profile disk" || bad "D path"
-grep -q 'ensure-isd-disk' "$MK_BRIDGE" \
-	&& ok "D ensure-isd-disk target" || bad "D no ensure-isd-disk"
+grep -q 'update-machine MACHINE_DIR' "$MK_PRODUCT" \
+	&& ! grep -q 'isd_machine_desktop_update.sh' "$MK_PRODUCT" \
+	&& ok "D machine-update-userspace delegates to ISD" \
+	|| bad "D machine-update-userspace still in IR0"
+grep -q 'ISD_ROOTFS_STAMP' "$MK_BRIDGE" \
+	&& ok "D rootfs stamp from ISD manifest" || bad "D hardcoded rootfs stamp path"
+grep -q 'ir0-minix-inject-path' "$ROOT/IR0_ISD_INTERFACE" \
+	&& ok "D IR0_ISD_INTERFACE public targets" || bad "D no PUBLIC_TARGET in interface"
+grep -q 'load_isd_artifacts.sh' "$MK_BRIDGE" \
+	&& grep -q 'ISD_ARTIFACTS_CACHE' "$MK_BRIDGE" \
+	&& ok "D ISD artifacts via print-artifacts cache" || bad "D artifact bridge missing"
+! grep -q 'ISD_PROFILE_IS_DESKTOP' "$MK_BRIDGE" "$MK_PRODUCT" \
+	&& ok "D no kernel-side desktop profile semantics" \
+	|| bad "D ISD_PROFILE_IS_DESKTOP still present"
+grep -q 'ISD_REQUIRES_HOME_DISK' "$MK_BRIDGE" \
+	&& ok "D REQUIRES_HOME_DISK from ISD manifest" || bad "D no REQUIRES_HOME_DISK"
 grep -q 'ensure-isd-disk' Makefile \
 	&& ok "D run-* auto-ensure disk" || bad "D run still hard-fails missing disk"
 # Bugbot: run-console must boot ISD disk (not hard-dep load-userspace-runit).

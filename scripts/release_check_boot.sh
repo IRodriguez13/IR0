@@ -70,11 +70,11 @@ KMANG_DIR="$(mktemp -d /tmp/ir0-kmang-release.XXXXXX)"
 trap 'rm -rf "$KMANG_DIR"' EXIT
 
 run_step "kmang CI pipeline" \
-	KMANG_DIR="$KMANG_DIR" PROFILE="$PROFILE" ISD_ARCH="$ARCH" \
+	env KMANG_DIR="$KMANG_DIR" PROFILE="$PROFILE" ISD_ARCH="$ARCH" \
 		scripts/release_check_kmang.sh
 
 run_step "smoke-runit-boot" \
-	make -s smoke-runit-boot IR0_PRODUCT_PROFILE="$PROFILE" ARCH="$ARCH"
+	make -s smoke-runit-boot-isd PROFILE="$PROFILE" ARCH="$ARCH" ISD_ARCH="$ARCH"
 
 if [ "$RELEASE_CHECK_GUEST" = "1" ]; then
 	run_step "release-check-guest-probes" \

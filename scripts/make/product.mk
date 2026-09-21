@@ -7,9 +7,11 @@ ifndef _IR0_PRODUCT_MK
 _IR0_PRODUCT_MK := 1
 
 .PHONY: bootstrap-userspace first-boot machine-create machine-reset machine-info \
-	kernel-manager-install kernel-manager-list kmang kmang-cli kmang-test \
+	kernel-manager-install kernel-manager-list \
+	kmang kmang-cli kmang-test \
 	usmang usmang-test usmang-verify machine-update-kernel machine-update-userspace \
-	ensure-machine-desktop-sync machine-migrate-home image-vmware poweron run-isd
+	ensure-machine-desktop-sync machine-migrate-home image-vmware poweron run-isd \
+	smoke-runit-boot-isd
 
 # Deprecated alias → new bootstrap
 bootstrap-userspace:
@@ -38,7 +40,7 @@ machine-create: ensure-isd-disk ensure-isd-home
 	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create
-	@if [ -n "$(ISD_PROFILE_IS_DESKTOP)" ]; then \
+	@if [ "$(ISD_REQUIRES_HOME_DISK)" = "1" ]; then \
 		IR0_MACHINE_BASE_DISK="$(IR0_ISD_HOME_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_HOME_DISK)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create; \
@@ -104,7 +106,7 @@ usmang: check-isd
 	@chmod +x scripts/userspace_manager.py
 	@python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
 		--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" summary
-	@if [ -n "$(ISD_PROFILE_IS_DESKTOP)" ]; then \
+	@if [ "$(ISD_REQUIRES_HOME_DISK)" = "1" ]; then \
 		echo "---"; \
 		python3 scripts/userspace_manager.py --isd-root "$(IR0_ISD_ROOT)" \
 			--profile "$(ISD_PROFILE)" --arch "$(ISD_ARCH)" desktop; \
@@ -128,29 +130,21 @@ machine-update-kernel: check-isd
 	@echo "        (make kmang → i, or make kernel-manager-install)"
 
 machine-update-userspace: check-isd
-	@if [ -z "$(ISD_PROFILE_IS_DESKTOP)" ]; then \
-		echo "✗ machine-update-userspace requires PROFILE=desktop or desktop-console"; exit 2; \
-	fi
 	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
 		echo "✗ machine $(IR0_MACHINE) is running; power it off cleanly first"; \
 		exit 2; \
 	fi
-	+@$(IR0_ISD_MAKE) rootfs-tree
-	@chmod +x scripts/isd_machine_desktop_update.sh
-	@IR0_ISD_ROOTFS="$(IR0_ISD_ROOTFS)" \
-		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
-		IR0_INJECT_TOOL="$(KERNEL_ROOT)/scripts/inject_init_minix.py" \
-		scripts/isd_machine_desktop_update.sh
+	+@$(IR0_ISD_MAKE) update-machine MACHINE_DIR="$(IR0_MACHINE_DIR)"
 	@mkdir -p "$(IR0_MACHINE_DIR)"
 	@touch "$(IR0_MACHINE_DIR)/.desktop-sync-stamp"
 
 ensure-machine-desktop-sync: check-isd
-	@if [ -z "$(ISD_PROFILE_IS_DESKTOP)" ]; then exit 0; fi
+	@if [ "$(ISD_REQUIRES_HOME_DISK)" != "1" ]; then exit 0; fi
 	@if [ ! -f "$(IR0_MACHINE_DISK)" ]; then exit 0; fi
 	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
 		echo "note: machine running; skip desktop userspace sync"; exit 0; \
 	fi
-	@stamp="$(IR0_ISD_ROOT)/out/$(ISD_ARCH)/stamps/rootfs/$(ISD_PROFILE)"; \
+	@stamp="$(ISD_ROOTFS_STAMP)"; \
 	sync_stamp="$(IR0_MACHINE_DIR)/.desktop-sync-stamp"; \
 	if [ ! -f "$$sync_stamp" ] || [ "$$stamp" -nt "$$sync_stamp" ]; then \
 		echo "  SYNC     ISD desktop rootfs → $(IR0_MACHINE_DISK)"; \
@@ -235,5 +229,32 @@ run-isd: kernel-x64-userspace.iso ensure-isd-disk ensure-isd-home
 		$(QEMU_DENNIS_9P) \
 		-m 512M -no-reboot \
 		$(QEMU_DISPLAY)
+
+# Release / Tier 1.5: boot smoke on ISD-built disk (not legacy load-userspace-runit).
+smoke-runit-boot-isd: kernel-x64-userspace.iso ensure-isd-disk
+	@echo "  SMOKE   runit PID1 boot (ISD disk PROFILE=$(ISD_PROFILE))..."
+	@DISK=$$(mktemp /tmp/ir0-runit-smoke.XXXXXX.img); \
+	cp -f "$(IR0_ISD_DISK)" $$DISK; \
+	$(SMOKE_QEMU_RUN) --log $(RUNIT_SMOKE_LOG) --timeout 50 --stale-sec 18 \
+		--done RUNSV_CONSOLE_START --done RUNSV_LOGGER_START --done GETTY_READY -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK
+	@if grep -q "RUNIT_STAGE1_OK" $(RUNIT_SMOKE_LOG) && \
+	    grep -q "RUNIT_STAGE2_OK" $(RUNIT_SMOKE_LOG) && \
+	    grep -q "RUNSV_CONSOLE_START" $(RUNIT_SMOKE_LOG) && \
+	    grep -q "RUNSV_LOGGER_START" $(RUNIT_SMOKE_LOG) && \
+	    grep -q "GETTY_READY" $(RUNIT_SMOKE_LOG) && \
+	    grep -qE "FSCK_OK|FSCK_SKIPPED" $(RUNIT_SMOKE_LOG) && \
+	    grep -qE "FIRSTBOOT_SKIP|FIRSTBOOT_OK|FIRSTBOOT_PENDING" $(RUNIT_SMOKE_LOG) && \
+	    grep -q "DRIVER_SUMMARY_OK" $(RUNIT_SMOKE_LOG); then \
+		echo "✓ smoke-runit-boot-isd passed"; \
+	else \
+		echo "✗ smoke-runit-boot-isd FAILED"; \
+		grep -E 'RUNIT_|RUNSV_|GETTY_|FSCK_|FIRSTBOOT_|DRIVER_SUMMARY|KERNEL PANIC|panic' \
+			$(RUNIT_SMOKE_LOG) | tail -40; \
+		exit 1; \
+	fi
 
 endif

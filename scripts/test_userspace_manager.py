@@ -77,6 +77,41 @@ class UserspaceManagerTest(unittest.TestCase):
         self.assertIn("usmang", text.lower())
         for fragment in ("summary", "userland", "help", "BusyBox", "systemd"):
             self.assertIn(fragment, text)
+        self.assertIn("--packages", text)
+
+    def test_verify_selected_packages_logs_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            isd = Path(directory)
+            staged = isd / "out" / "x86_64" / "rootfs" / "minimal"
+            (staged / "bin").mkdir(parents=True)
+            (staged / "bin" / "busybox").write_text("stub\n")
+            (staged / "etc").mkdir(parents=True)
+            (staged / "etc" / "ir0-profile").write_text("minimal\n")
+            (isd / "Makefile").write_text("all:\n")
+            (isd / "profiles" / "minimal").mkdir(parents=True)
+            (isd / "profiles/minimal/verify-paths.txt").write_text(
+                "busybox bin/busybox\nrunit etc/runit\n"
+            )
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(MANAGER),
+                    "--isd-root",
+                    str(isd),
+                    "--profile",
+                    "minimal",
+                    "verify",
+                    "-p",
+                    "busybox,runit,ghost",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("OK  busybox: bin/busybox", result.stdout)
+            self.assertIn("verify runit: missing etc/runit", result.stderr)
+            self.assertIn("unknown package 'ghost'", result.stderr)
 
     @unittest.skipUnless(ISD.is_dir(), "ISD sibling tree not present")
     def test_help_mentions_login_session_doc_when_isd_present(self) -> None:

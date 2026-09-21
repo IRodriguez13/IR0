@@ -19,7 +19,7 @@ ifndef _IR0_RELEASE_MK
 _IR0_RELEASE_MK := 1
 
 RELEASE_CHECK_IMAGE ?= ir0-release-check
-RELEASE_CHECK_SCRIPT_REV ?= 10
+RELEASE_CHECK_SCRIPT_REV ?= 11
 RELEASE_CHECK_IR0_REF ?= dev
 RELEASE_CHECK_ISD_REF ?= dev
 RELEASE_CHECK_DOUBLE ?= 0
@@ -100,12 +100,10 @@ release-check-boot-clean:
 	@PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" \
 		RELEASE_CHECK_GUEST=1 scripts/release_check_boot.sh
 
-release-check-guest-probes: load-userspace-runit kernel-x64-userspace.iso
+release-check-guest-probes: ensure-isd-disk kernel-x64-userspace.iso
 	@chmod +x scripts/release_check_guest_probes.py
-	@IR0_PRODUCT_PROFILE="$${IR0_PRODUCT_PROFILE:-$(ISD_PROFILE)}" \
-		$(MAKE) -s load-userspace-runit
 	@python3 scripts/release_check_guest_probes.py \
-		--iso kernel-x64-userspace.iso --disk disk.img
+		--iso kernel-x64-userspace.iso --disk "$(IR0_ISD_DISK)"
 
 # --- Docker: default = git clone only (no host tree bind mounts) ---
 
@@ -123,28 +121,29 @@ define RELEASE_CHECK_DOCKER_RUN
 		-e RELEASE_CHECK_BOOT=$(1) \
 		-e RELEASE_CHECK_GUEST=$(2) \
 		-e RELEASE_CHECK_DOUBLE=$(3) \
+		-e RELEASE_CHECK_INCREMENTAL=$(4) \
 		$(RELEASE_CHECK_IMAGE)
 endef
 
 release-check-container:
 	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh
 	@$(RELEASE_CHECK_DOCKER_BUILD)
-	@$(call RELEASE_CHECK_DOCKER_RUN,0,0,0)
+	@$(call RELEASE_CHECK_DOCKER_RUN,0,0,0,0)
 
 release-check-boot-container:
 	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
 		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
 		scripts/release_check_guest_probes.py
 	@$(RELEASE_CHECK_DOCKER_BUILD)
-	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,0)
+	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,0,1)
 
 # RC/release gate: clone from Git, build, boot, guest probes; optional double-run.
 fresh-clone-check:
 	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
 		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
-		scripts/release_check_guest_probes.py
+		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh
 	@$(RELEASE_CHECK_DOCKER_BUILD)
-	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,$(RELEASE_CHECK_DOUBLE))
+	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,$(RELEASE_CHECK_DOUBLE),1)
 
 # --- Docker: local WIP only (bind mounts working tree; not a release gate) ---
 
@@ -168,7 +167,7 @@ release-check-container-local:
 release-check-boot-container-local:
 	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
 		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
-		scripts/release_check_guest_probes.py
+		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh
 	@ISD_ROOT="$$(scripts/resolve_isd_root.sh "$(KERNEL_ROOT)")"; \
 	$(RELEASE_CHECK_DOCKER_BUILD); \
 	docker run --rm \
@@ -182,6 +181,7 @@ release-check-boot-container-local:
 		-e RELEASE_CHECK_BOOT=1 \
 		-e RELEASE_CHECK_GUEST=1 \
 		-e RELEASE_CHECK_DOUBLE=0 \
+		-e RELEASE_CHECK_INCREMENTAL=1 \
 		$(RELEASE_CHECK_IMAGE)
 
 endif
