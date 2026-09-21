@@ -1,16 +1,48 @@
 # SPDX-License-Identifier: GPL-3.0-only
 #
-# IR0 release-check gates (Tier 1 build/contracts; Tier 1.5 optional QEMU boot).
+# IR0 release-check gates.
+#
+# Profile tiers (0.0.1):
+#   reference  — PROFILE=minimal (mandatory fresh-clone gate)
+#   supported  — CI may add desktop / development (not full cartesian product)
+#   experimental — ad-hoc usmang profiles; not release gates
+#
+# Targets:
+#   tooling-check       — fast host checks (no QEMU, no Docker)
+#   release-check*      — Tier 1 build + contracts on current tree
+#   release-check-boot* — Tier 1.5 ISO + QEMU + guest probes
+#   fresh-clone-check   — Docker: git clone IR0+ISD, build from scratch, boot
+#   *-container-local — opt-in bind mounts for uncommitted WIP only
 
 ifndef _IR0_RELEASE_MK
 _IR0_RELEASE_MK := 1
 
-.PHONY: release-check release-check-clean truth-tests \
-	release-check-container release-check-boot release-check-boot-clean \
-	release-check-boot-container
+RELEASE_CHECK_IMAGE ?= ir0-release-check
+RELEASE_CHECK_SCRIPT_REV ?= 10
+RELEASE_CHECK_IR0_REF ?= dev
+RELEASE_CHECK_ISD_REF ?= dev
+RELEASE_CHECK_DOUBLE ?= 0
+
+.PHONY: truth-tests tooling-check fresh-clone-check \
+	release-check release-check-clean \
+	release-check-container release-check-container-local \
+	release-check-boot release-check-boot-clean \
+	release-check-boot-container release-check-boot-container-local \
+	release-check-guest-probes
 
 truth-tests:
 	@python3 scripts/test_truth_tooling.py
+
+# Fast gate: unit/contract checks on the developer tree (no fresh clone, no QEMU).
+tooling-check:
+	@chmod +x scripts/release_check.sh scripts/resolve_isd_root.sh
+	@make -s repo-hygiene-guard
+	@make -s arch-guard
+	@make -s -C tests/host run
+	@python3 scripts/test_kernel_manager.py
+	@python3 scripts/test_truth_tooling.py
+	@make -s isd-contracts
+	@make -s check-isd
 
 release-check:
 	@chmod +x scripts/release_check.sh scripts/resolve_isd_root.sh
@@ -23,45 +55,98 @@ release-check-clean:
 		scripts/release_check.sh
 
 release-check-boot:
-	@chmod +x scripts/release_check_boot.sh scripts/resolve_isd_root.sh
-	@PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" scripts/release_check_boot.sh
+	@chmod +x scripts/release_check_boot.sh scripts/resolve_isd_root.sh \
+		scripts/release_check_guest_probes.py
+	@PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" \
+		RELEASE_CHECK_GUEST=1 scripts/release_check_boot.sh
 
 release-check-boot-clean:
-	@chmod +x scripts/release_check.sh scripts/release_check_boot.sh scripts/resolve_isd_root.sh
+	@chmod +x scripts/release_check.sh scripts/release_check_boot.sh \
+		scripts/release_check_guest_probes.py scripts/resolve_isd_root.sh
 	@RELEASE_CHECK_FRESH=1 PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" \
 		scripts/release_check.sh
-	@PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" scripts/release_check_boot.sh
+	@PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" \
+		RELEASE_CHECK_GUEST=1 scripts/release_check_boot.sh
+
+release-check-guest-probes: load-userspace-runit kernel-x64-userspace.iso
+	@chmod +x scripts/release_check_guest_probes.py
+	@IR0_PRODUCT_PROFILE="$${IR0_PRODUCT_PROFILE:-$(ISD_PROFILE)}" \
+		$(MAKE) -s load-userspace-runit
+	@python3 scripts/release_check_guest_probes.py \
+		--iso kernel-x64-userspace.iso --disk disk.img
+
+# --- Docker: default = git clone only (no host tree bind mounts) ---
+
+define RELEASE_CHECK_DOCKER_BUILD
+	docker build --build-arg RELEASE_CHECK_SCRIPT_REV=$(RELEASE_CHECK_SCRIPT_REV) \
+		-f scripts/ci/Dockerfile.release-check -t $(RELEASE_CHECK_IMAGE) "$(KERNEL_ROOT)"
+endef
+
+define RELEASE_CHECK_DOCKER_RUN
+	docker run --rm \
+		-e IR0_REF=$(RELEASE_CHECK_IR0_REF) \
+		-e ISD_REF=$(RELEASE_CHECK_ISD_REF) \
+		-e PROFILE="$(ISD_PROFILE)" \
+		-e ISD_ARCH="$(ISD_ARCH)" \
+		-e RELEASE_CHECK_BOOT=$(1) \
+		-e RELEASE_CHECK_GUEST=$(2) \
+		-e RELEASE_CHECK_DOUBLE=$(3) \
+		$(RELEASE_CHECK_IMAGE)
+endef
 
 release-check-container:
 	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh
+	@$(RELEASE_CHECK_DOCKER_BUILD)
+	@$(call RELEASE_CHECK_DOCKER_RUN,0,0,0)
+
+release-check-boot-container:
+	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
+		scripts/release_check_boot.sh scripts/release_check_guest_probes.py
+	@$(RELEASE_CHECK_DOCKER_BUILD)
+	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,0)
+
+# RC/release gate: clone from Git, build, boot, guest probes; optional double-run.
+fresh-clone-check:
+	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
+		scripts/release_check_boot.sh scripts/release_check_guest_probes.py
+	@$(RELEASE_CHECK_DOCKER_BUILD)
+	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,$(RELEASE_CHECK_DOUBLE))
+
+# --- Docker: local WIP only (bind mounts working tree; not a release gate) ---
+
+release-check-container-local:
+	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh
 	@ISD_ROOT="$$(scripts/resolve_isd_root.sh "$(KERNEL_ROOT)")"; \
-	docker build --build-arg RELEASE_CHECK_SCRIPT_REV=8 \
-		-f scripts/ci/Dockerfile.release-check -t ir0-release-check "$(KERNEL_ROOT)"; \
+	$(RELEASE_CHECK_DOCKER_BUILD); \
 	docker run --rm \
 		-v "$(KERNEL_ROOT):/src/IR0:ro" \
 		-v "$$ISD_ROOT:/src/ISD:ro" \
 		-e RELEASE_CHECK_LOCAL=1 \
-		-e IR0_REF=dev \
-		-e ISD_REF=dev \
+		-e IR0_REF=$(RELEASE_CHECK_IR0_REF) \
+		-e ISD_REF=$(RELEASE_CHECK_ISD_REF) \
 		-e PROFILE="$(ISD_PROFILE)" \
 		-e ISD_ARCH="$(ISD_ARCH)" \
 		-e RELEASE_CHECK_BOOT=0 \
-		ir0-release-check
+		-e RELEASE_CHECK_GUEST=0 \
+		-e RELEASE_CHECK_DOUBLE=0 \
+		$(RELEASE_CHECK_IMAGE)
 
-release-check-boot-container:
-	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh
+release-check-boot-container-local:
+	@chmod +x scripts/ci/release-check-fresh.sh scripts/resolve_isd_root.sh \
+		scripts/release_check_boot.sh scripts/release_check_guest_probes.py
 	@ISD_ROOT="$$(scripts/resolve_isd_root.sh "$(KERNEL_ROOT)")"; \
-	docker build --build-arg RELEASE_CHECK_SCRIPT_REV=8 \
-		-f scripts/ci/Dockerfile.release-check -t ir0-release-check "$(KERNEL_ROOT)"; \
+	$(RELEASE_CHECK_DOCKER_BUILD); \
 	docker run --rm \
 		-v "$(KERNEL_ROOT):/src/IR0:ro" \
 		-v "$$ISD_ROOT:/src/ISD:ro" \
 		-e RELEASE_CHECK_LOCAL=1 \
-		-e IR0_REF=dev \
-		-e ISD_REF=dev \
+		-e IR0_REF=$(RELEASE_CHECK_IR0_REF) \
+		-e ISD_REF=$(RELEASE_CHECK_ISD_REF) \
 		-e PROFILE="$(ISD_PROFILE)" \
 		-e ISD_ARCH="$(ISD_ARCH)" \
 		-e RELEASE_CHECK_BOOT=1 \
-		ir0-release-check
+		-e RELEASE_CHECK_GUEST=1 \
+		-e RELEASE_CHECK_DOUBLE=0 \
+		$(RELEASE_CHECK_IMAGE)
 
 endif

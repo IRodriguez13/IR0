@@ -44,6 +44,8 @@ if [ ! -f "$ROOT/.config" ]; then
 	make -s defconfig
 fi
 
+run_step "deptest PROFILE=${PROFILE}" make -s deptest PROFILE="$PROFILE"
+
 run_step "repo-hygiene-guard" make -s repo-hygiene-guard
 run_step "kernel-x64.bin" make -s kernel-x64.bin
 
