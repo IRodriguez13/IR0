@@ -142,12 +142,13 @@ machine-update-userspace: check-isd
 	@touch "$(IR0_MACHINE_DIR)/.desktop-sync-stamp"
 
 ensure-machine-desktop-sync: check-isd
-	@if [ "$(ISD_REQUIRES_HOME_DISK)" != "1" ]; then exit 0; fi
-	@if [ ! -f "$(IR0_MACHINE_DISK)" ]; then exit 0; fi
-	@if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
+	@set -e; \
+	if [ "$(ISD_REQUIRES_HOME_DISK)" != "1" ]; then exit 0; fi; \
+	if [ ! -f "$(IR0_MACHINE_DISK)" ]; then exit 0; fi; \
+	if pgrep -f '^qemu-system-x86_64 .*$(IR0_MACHINE_DISK)' >/dev/null 2>&1; then \
 		echo "note: machine running; skip desktop userspace sync"; exit 0; \
-	fi
-	@stamp="$(ISD_ROOTFS_STAMP)"; \
+	fi; \
+	stamp="$(ISD_ROOTFS_STAMP)"; \
 	sync_stamp="$(IR0_MACHINE_DIR)/.desktop-sync-stamp"; \
 	if [ ! -f "$$sync_stamp" ] || [ "$$stamp" -nt "$$sync_stamp" ]; then \
 		echo "  SYNC     ISD desktop rootfs → $(IR0_MACHINE_DISK)"; \

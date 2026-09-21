@@ -258,6 +258,11 @@ ensure-isd-ext2-disk: check-isd
 
 # Profile-selected root image (ROOT_FS=minix|ext2; CLI ROOT_FS= overrides profile.conf).
 ensure-isd-root-disk: check-isd
+ifeq ($(origin PROFILE),command line)
+ifneq ($(PROFILE),$(ISD_PROFILE))
+	@echo "⚠ PROFILE=$(PROFILE) not recognized — using ISD_PROFILE=$(ISD_PROFILE) (typo?)"
+endif
+endif
 	@echo "ISD root   PROFILE=$(ISD_PROFILE) ROOT_FS=$(ISD_ROOT_FS) → $(IR0_ISD_ROOT_DISK)"
 	@echo "            (first pack or format-large can take 1–3 min; stamps skip work when clean)"
 	+@$(IR0_ISD_MAKE) fetch
