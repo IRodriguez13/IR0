@@ -32,7 +32,7 @@ def repo_root() -> Path:
 
 
 def default_bb() -> Path:
-    return repo_root() / "setup/pid1/fase50_busybox_real"
+    return repo_root() / "setup/pid1/busybox_real"
 
 
 def sh_exec_copy(bb: Path, out_dir: Path) -> Path:

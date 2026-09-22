@@ -340,7 +340,7 @@ static void emit_wait_diag(pid_t child_pid, pid_t wait_ret, int status)
 	write_str("\n");
 }
 
-static void fase50d_classify_capture_fail(const char *step, const char *reason,
+static void busybox_classify_capture_fail(const char *step, const char *reason,
 					  int want_ec, int got_ec, int out_n,
 					  int err_n, int zomb_before,
 					  int fd_before, int fd_after)
@@ -374,7 +374,7 @@ static void fase50d_classify_capture_fail(const char *step, const char *reason,
 	}
 }
 
-static int fase50d_verify_elf_regular(const char *path)
+static int busybox_verify_elf_regular(const char *path)
 {
 	struct stat st;
 	unsigned char hdr[4];
@@ -399,7 +399,7 @@ static int fase50d_verify_elf_regular(const char *path)
 	return 0;
 }
 
-static void fase50d_verify_rootfs_bins(void)
+static void busybox_verify_rootfs_bins(void)
 {
 	const char *paths[] = { "/bin/busybox", "/bin/sh", "/bin/cat", NULL };
 	int i;
@@ -431,7 +431,7 @@ static void fase50d_verify_rootfs_bins(void)
 			ktm_busybox_d_emit_classify("KTM_BUSYBOX_D_FLAKE_STALE_ROOTFS");
 			continue;
 		}
-		if (fase50d_verify_elf_regular(paths[i]) != 0)
+		if (busybox_verify_elf_regular(paths[i]) != 0)
 		{
 			write_str(" elf_fail\n");
 			ktm_busybox_d_emit_classify("KTM_BUSYBOX_D_FLAKE_STALE_ROOTFS");
@@ -441,7 +441,7 @@ static void fase50d_verify_rootfs_bins(void)
 	}
 }
 
-static void fase50d_check_stale_temps(const char *tag)
+static void busybox_check_stale_temps(const char *tag)
 {
 	const char *paths[] = {
 		"/f50_dir", "/f50_touch.txt", "/f50_a.txt", "/f50_b.txt",
@@ -637,14 +637,14 @@ static int run_capture(const char *tag, char *const argv[], char *out,
 	return 0;
 }
 
-static void fase50d_fail(const char *step, const char *reason)
+static void busybox_fail(const char *step, const char *reason)
 {
 	write_str("[KTM_BUSYBOX_D][FAIL] step=");
 	write_str(step ? step : "(null)");
 	write_str(" reason=");
 	write_str(reason ? reason : "(null)");
 	write_str("\n");
-	write_str("BUSYBOX_FAIL_REASON=fase50d_");
+	write_str("BUSYBOX_FAIL_REASON=busybox_");
 	write_str(step ? step : "unknown");
 	write_str("\n");
 }
@@ -662,16 +662,16 @@ static int bb_expect_exit_code(const char *step, char *const argv[], int want_ec
 	if (run_capture(step, argv, out, sizeof(out), err, sizeof(err), &ec,
 			&out_n, &err_n) != 0)
 	{
-		fase50d_classify_capture_fail(step, "exec", want_ec, ec, out_n,
+		busybox_classify_capture_fail(step, "exec", want_ec, ec, out_n,
 					      err_n, zomb_before, 0, 0);
-		fase50d_fail(step, "exec");
+		busybox_fail(step, "exec");
 		return -1;
 	}
 	if (ec != want_ec)
 	{
-		fase50d_classify_capture_fail(step, "exit", want_ec, ec, out_n,
+		busybox_classify_capture_fail(step, "exit", want_ec, ec, out_n,
 					      err_n, zomb_before, 0, 0);
-		fase50d_fail(step, "exit");
+		busybox_fail(step, "exit");
 		return -1;
 	}
 	return 0;
@@ -696,23 +696,23 @@ static int bb_expect_stdout_prefix(const char *step, char *const argv[],
 	if (run_capture(step, argv, out, sizeof(out), err, sizeof(err), &ec,
 			&out_n, &err_n) != 0)
 	{
-		fase50d_classify_capture_fail(step, "exec", 0, ec, out_n, err_n,
+		busybox_classify_capture_fail(step, "exec", 0, ec, out_n, err_n,
 					      zomb_before, 0, 0);
-		fase50d_fail(step, "exec");
+		busybox_fail(step, "exec");
 		return -1;
 	}
 	if (ec != 0)
 	{
-		fase50d_classify_capture_fail(step, "exit", 0, ec, out_n, err_n,
+		busybox_classify_capture_fail(step, "exit", 0, ec, out_n, err_n,
 					      zomb_before, 0, 0);
-		fase50d_fail(step, "exit");
+		busybox_fail(step, "exit");
 		return -1;
 	}
 	if (!prefix || strncmp(out, prefix, strlen(prefix)) != 0)
 	{
-		fase50d_classify_capture_fail(step, "stdout", 0, ec, out_n,
+		busybox_classify_capture_fail(step, "stdout", 0, ec, out_n,
 					      err_n, zomb_before, 0, 0);
-		fase50d_fail(step, "stdout");
+		busybox_fail(step, "stdout");
 		return -1;
 	}
 	return 0;
@@ -827,8 +827,8 @@ int main(void)
 	write_str("BUSYBOX_BOOT_OK\n");
 
 	write_str("KTM_BUSYBOX_D_START\n");
-	fase50d_verify_rootfs_bins();
-	fase50d_check_stale_temps("tanda1_pre");
+	busybox_verify_rootfs_bins();
+	busybox_check_stale_temps("tanda1_pre");
 
 	if (bb_expect_stdout_prefix("pwd", argv_pwd, "/") != 0)
 		goto halt;
@@ -845,7 +845,7 @@ int main(void)
 	fd = open("/f50_a.txt", O_CREAT | O_TRUNC | O_WRONLY, 0644);
 	if (fd < 0)
 	{
-		fase50d_fail("cp_setup", "open_src");
+		busybox_fail("cp_setup", "open_src");
 		goto halt;
 	}
 	(void)write(fd, "copyme\n", 7);
@@ -876,7 +876,7 @@ int main(void)
 	fd = open("/f50_mv.txt", O_CREAT | O_TRUNC | O_WRONLY, 0644);
 	if (fd < 0)
 	{
-		fase50d_fail("mv_setup", "open_src");
+		busybox_fail("mv_setup", "open_src");
 		goto halt;
 	}
 	(void)write(fd, "moved\n", 6);
@@ -900,7 +900,7 @@ int main(void)
 		write_dec_u64((unsigned long long)(unsigned int)errno);
 		write_str("\n");
 		ktm_busybox_d_emit_classify("KTM_BUSYBOX_D_FLAKE_STALE_ROOTFS");
-		fase50d_fail("grep_setup", "open");
+		busybox_fail("grep_setup", "open");
 		goto halt;
 	}
 	(void)write(fd, "haystack\nneedle here\n", 20);
@@ -916,7 +916,7 @@ int main(void)
 		write_dec_u64((unsigned long long)(unsigned int)errno);
 		write_str("\n");
 		ktm_busybox_d_emit_classify("KTM_BUSYBOX_D_FLAKE_STALE_ROOTFS");
-		fase50d_fail("head_tail_setup", "open");
+		busybox_fail("head_tail_setup", "open");
 		goto halt;
 	}
 	(void)write(fd, "line1\nline2\nline3\n", 18);

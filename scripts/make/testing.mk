@@ -49,7 +49,7 @@ KTM_BUSYBOX_SMOKE_SRC = setup/pid1/ktm_busybox_smoke.c
 KTM_KTM_EXEC_ONLY_SMOKE_SRC = setup/pid1/ktm_exec_only_smoke.c
 KTM_SHELL_SMOKE_SRC = setup/pid1/ktm_shell_smoke.c
 KTM_TCC_SMOKE_SRC = setup/pid1/ktm_tcc_smoke.c
-KTM_TCC_HARNESS_BIN = setup/pid1/fase52_harness
+KTM_TCC_HARNESS_BIN = setup/pid1/tcc_harness
 INIT_TCC_POWER_HALT_SRC = setup/pid1/init_tcc_power_halt.c
 TCC_POWER_HALT_HARNESS_BIN = setup/pid1/tcc_power_halt_harness
 TCC_POWER_HALT_LOG = /tmp/tcc-power-halt-smoke.log
@@ -72,25 +72,31 @@ KTM_FBDEV_GUI_SMOKE_SRC = setup/pid1/ktm_fbdev_gui_smoke.c
 KTM_BOOT_HALT_BIN = setup/pid1/ktm_boot_halt
 KTM_FBDEV_GUI_BIN = setup/pid1/ktm_fbdev_gui
 KTM_GUI_DISPLAY ?= gtk
-KTM_BOOT_HALT_GUI_LOG = /tmp/fase58c-boot-gui.log
-KTM_FBDEV_GUI_LOG = /tmp/fase58c-fbdev-gui.log
-KTM_DOOM_GUI_LOG = /tmp/fase58c-doom-gui.log
-FASE58E_ASH_LOG = /tmp/fase58e-ash-gui.log
-FASE58E_DISPLAY ?= gtk
-FASE58E_ASH_SMOKE_LOG = /tmp/fase58e-ash-smoke.log
+KTM_BOOT_HALT_GUI_LOG = /tmp/boot-gui.log
+KTM_FBDEV_GUI_LOG = /tmp/fbdev-gui.log
+KTM_DOOM_GUI_LOG = /tmp/doom-gui.log
+ASH_GUI_LOG = /tmp/ash-gui.log
+ASH_GUI_DISPLAY ?= gtk
+# Honor the old override name if the caller still passes it.
+ifneq ($(origin FASE58E_DISPLAY), undefined)
+ASH_GUI_DISPLAY = $(FASE58E_DISPLAY)
+endif
+ASH_GUI_SMOKE_LOG = /tmp/ash-gui-smoke.log
 KTM_PROGRAMS_SMOKE_SRC = setup/pid1/ktm_programs_smoke.c
 KTM_IPC_CAT_HELPER_SRC = setup/pid1/ktm_ipc_cat_helper.c
 KTM_IPC_ECHO_HELPER_SRC = setup/pid1/ktm_ipc_echo_helper.c
 KTM_IPC_BUSYBOX_HELPER_SRC = setup/pid1/ktm_ipc_busybox_helper.c
 KTM_HELLO_HELPER_SRC = setup/pid1/ktm_hello_helper.c
-KTM_IPC_CAT_HELPER_BIN = setup/pid1/fase48_cat
-KTM_IPC_ECHO_HELPER_BIN = setup/pid1/fase48_echo
-KTM_IPC_BUSYBOX_HELPER_BIN = setup/pid1/fase48_busybox
-KTM_HELLO_HELPER_BIN = setup/pid1/fase50_hello
-FASE50_BUSYBOX_BIN = setup/pid1/fase50_busybox_real
-FASE50_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
-FASE58_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
-FASE58_FULL_BUSYBOX_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_full.config
+KTM_IPC_CAT_HELPER_BIN = setup/pid1/ipc_cat
+KTM_IPC_ECHO_HELPER_BIN = setup/pid1/ipc_echo
+KTM_IPC_BUSYBOX_HELPER_BIN = setup/pid1/ipc_busybox
+KTM_HELLO_HELPER_BIN = setup/pid1/hello_helper
+BUSYBOX_REAL_BIN = setup/pid1/busybox_real
+# ISD scripts still read FASE50_BUSYBOX_BIN; keep as alias.
+FASE50_BUSYBOX_BIN = $(BUSYBOX_REAL_BIN)
+BUSYBOX_MIN_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
+BUSYBOX_PLUS_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config
+BUSYBOX_FULL_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/fase58_full.config
 # Product split: large general binary (0755) + reduced privileged binary (4755).
 IR0_BUSYBOX_FULL_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/ir0_full.config
 IR0_BUSYBOX_AUTH_CFG = $(IR0_USERSPACE_ROOT)/packages/busybox/ir0_auth.config
@@ -101,8 +107,8 @@ BB_MATRIX_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/busybox_matrix_smoke
 BB_MATRIX_LOG = /tmp/busybox-applet-matrix.log
 BB_MATRIX_TSV = $(IR0_USERSPACE_ROOT)/packages/busybox/bb_status.tsv
 KTM_BUSYBOX_MANIFEST_SMOKE_SRC = setup/pid1/ktm_busybox_manifest_smoke.c
-KTM_BUSYBOX_MANIFEST_SMOKE_BIN = setup/pid1/fase58l_busybox_smoke
-KTM_BUSYBOX_MANIFEST_SMOKE_LOG = /tmp/fase58l-busybox-smoke.log
+KTM_BUSYBOX_MANIFEST_SMOKE_BIN = setup/pid1/busybox_manifest_smoke
+KTM_BUSYBOX_MANIFEST_SMOKE_LOG = /tmp/busybox-manifest-smoke.log
 KTM_TRUE_HELPER_SRC = setup/pid1/ktm_true_helper.c
 SH_SMOKE_SRC     = setup/pid1/sh_smoke.c
 SEGV_SMOKE_SRC   = setup/pid1/userspace_segv.c
@@ -122,45 +128,45 @@ ISO_SMOKE_LOG    = /tmp/userspace-stack-heap-iso.log
 FORK_MEM_SMOKE_LOG = /tmp/userspace-fork-mem-smoke.log
 FAT16_SMOKE_IMG  = build/fat16_smoke.img
 FAT16_SMOKE_LOG  = /tmp/fat16-smoke.log
-FASE41_RECLAIM_LOG = /tmp/userspace-fase41-reclaim.log
-FASE42_PT_RECLAIM_LOG = /tmp/userspace-fase42-pt-reclaim.log
-FASE42_EXEC_STORM_LOG = /tmp/userspace-fase42-exec-storm.log
-FASE42_FORK_EXIT_STORM_LOG = /tmp/userspace-fase42-fork-exit-storm.log
-FORK_EXIT_STORM_LOG = /tmp/userspace-fase43-fork-exit-storm.log
-FORK_WAIT_STORM_LOG = /tmp/userspace-fase43-fork-wait-storm.log
-EXEC_LOOP_LOG = /tmp/userspace-fase43-exec-loop.log
-FORK_WAIT_DRAIN_LOG = /tmp/userspace-fase44-fork-wait-drain.log
-EXEC_DRAIN_LOG = /tmp/userspace-fase44-exec-drain.log
-INIT_EXIT_DRAIN_LOG = /tmp/userspace-fase44-init-exit-drain.log
-FORK_ROLLBACK_STORM_LOG = /tmp/userspace-fase45-fork-rollback-storm.log
-FORK_MEM_TOUCH_LOG = /tmp/userspace-fase45-fork-mem-touch.log
-FORK_NO_RECURSE_LOG = /tmp/userspace-fase46-fork-no-recursion.log
-FORK_HEAP_LOG = /tmp/userspace-fase46-fork-heap.log
-IPC_SMOKE_LOG = /tmp/userspace-fase48-ipc.log
-PIPE_SMOKE_LOG = /tmp/userspace-fase49-pipe.log
-FASE50_BUSYBOX_LOG = /tmp/userspace-fase50-busybox.log
-FASE50_KTM_EXEC_ONLY_LOG = /tmp/userspace-fase50-exec-only.log
-KTM_SHELL_SHELL_LOG = /tmp/userspace-fase51-shell.log
-KTM_TCC_TCC_LOG = /tmp/userspace-fase52-tcc.log
+RECLAIM_LOG = /tmp/userspace-reclaim.log
+PT_RECLAIM_LOG = /tmp/userspace-pt-reclaim.log
+EXEC_STORM_LOG = /tmp/userspace-exec-storm.log
+FORK_EXIT_STORM42_LOG = /tmp/userspace-fork-exit-storm42.log
+FORK_EXIT_STORM_LOG = /tmp/userspace-fork-exit-storm.log
+FORK_WAIT_STORM_LOG = /tmp/userspace-fork-wait-storm.log
+EXEC_LOOP_LOG = /tmp/userspace-exec-loop.log
+FORK_WAIT_DRAIN_LOG = /tmp/userspace-fork-wait-drain.log
+EXEC_DRAIN_LOG = /tmp/userspace-exec-drain.log
+INIT_EXIT_DRAIN_LOG = /tmp/userspace-init-exit-drain.log
+FORK_ROLLBACK_STORM_LOG = /tmp/userspace-fork-rollback.log
+FORK_MEM_TOUCH_LOG = /tmp/userspace-fork-mem-touch.log
+FORK_NO_RECURSE_LOG = /tmp/userspace-fork-no-recursion.log
+FORK_HEAP_LOG = /tmp/userspace-fork-heap.log
+IPC_SMOKE_LOG = /tmp/userspace-ipc.log
+PIPE_SMOKE_LOG = /tmp/userspace-pipe.log
+BUSYBOX_SMOKE_LOG = /tmp/userspace-busybox.log
+EXEC_ONLY_LOG = /tmp/userspace-exec-only.log
+KTM_SHELL_SHELL_LOG = /tmp/userspace-shell.log
+KTM_TCC_TCC_LOG = /tmp/userspace-tcc.log
 # Bisect lazy vs eager MM in legacy smokes: KERNEL_USERSPACE_ISO=kernel-x64-userspace-eager.iso
 KERNEL_USERSPACE_ISO ?= kernel-x64-userspace.iso
-KTM_FS_DEV_FS_DEV_LOG = /tmp/userspace-fase53a-fs-dev.log
-KTM_POSIX_PSEUDOFS_POSIX_PSEUDOFS_LOG = /tmp/userspace-fase53b-posix-pseudofs.log
+KTM_FS_DEV_FS_DEV_LOG = /tmp/userspace-fs-dev.log
+KTM_POSIX_PSEUDOFS_POSIX_PSEUDOFS_LOG = /tmp/userspace-posix-pseudofs.log
 HEART_SMOKE_LOG = /tmp/userspace-heart.log
-KTM_FBDEV_FBDEV_LOG = /tmp/userspace-fase54a-fbdev.log
-KTM_INPUT_INPUT_LOG = /tmp/userspace-fase54b-input.log
-KTM_INPUT_DET_INPUT_DET_LOG = /tmp/userspace-fase54c-input-deterministic.log
-KTM_DOOM_PREREQ_LOG = /tmp/userspace-fase55a-doom-prereq.log
-KTM_DOOM_STUB_LOG = /tmp/userspace-fase55b-doom-stub.log
-KTM_DOOM_TIMING_STUB_LOG = /tmp/userspace-fase55c-timing-input.log
-KTM_DOOMGENERIC_LOG = /tmp/userspace-fase55d-doomgeneric.log
+KTM_FBDEV_FBDEV_LOG = /tmp/userspace-fbdev.log
+KTM_INPUT_INPUT_LOG = /tmp/userspace-input.log
+KTM_INPUT_DET_INPUT_DET_LOG = /tmp/userspace-input-det.log
+KTM_DOOM_PREREQ_LOG = /tmp/userspace-doom-prereq.log
+KTM_DOOM_STUB_LOG = /tmp/userspace-doom-stub.log
+KTM_DOOM_TIMING_STUB_LOG = /tmp/userspace-doom-timing.log
+KTM_DOOMGENERIC_LOG = /tmp/userspace-doomgeneric.log
 MUSL_ARCH_PRCTL_LOG = /tmp/userspace-musl-arch-prctl.log
 MUSL_PTHREAD_SMOKE_LOG = /tmp/userspace-musl-pthread.log
 SETUID_EXEC_SMOKE_LOG = /tmp/userspace-setuid-exec.log
 CHROOT_SMOKE_LOG = /tmp/userspace-chroot.log
 PASSWD_SMOKE_LOG = /tmp/userspace-passwd.log
 KTM_DOOM_INTERACTIVE_BIN = setup/pid1/ktm_doom_interactive
-KTM_DOOM_INTERACTIVE_GUI_LOG = /tmp/fase55e-doomgeneric-gui.log
+KTM_DOOM_INTERACTIVE_GUI_LOG = /tmp/doomgeneric-gui.log
 # irinit retired — product PID1 is runit (see build-runit / load-userspace-runit).
 RUNIT_BIN_DIR = $(IR0_USERSPACE_OUT)/bin
 RUNIT_INIT_BIN = $(RUNIT_BIN_DIR)/runit-init
@@ -172,7 +178,7 @@ DOOM_DISPLAY ?= gtk
 # Optional Doom IWAD for ken/games and legacy smokes (no maintainer home path).
 REAL_WAD_PATH ?= $(or $(ISD_DOOM_IWAD),$(IR0_DOOM_IWAD),)
 KTM_TCC_TCC_STAGE = setup/pid1/fase52_staging
-FASE50_PROGRAMS_LOG = /tmp/userspace-fase50-programs.log
+PROGRAMS_SMOKE_LOG = /tmp/userspace-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
@@ -796,7 +802,7 @@ build-ktm-true-helper:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  TRUE    Building FASE41 /bin/f41true ($(KTM_TRUE_HELPER_BIN))"
+	@echo "  TRUE    Building /bin/f41true helper ($(KTM_TRUE_HELPER_BIN))"
 	@$(MUSL_CC) -static -Os -o $(KTM_TRUE_HELPER_BIN) $(KTM_TRUE_HELPER_SRC)
 	@file $(KTM_TRUE_HELPER_BIN) | grep -q ELF
 	@echo "✓ build-ktm-true-helper OK"
@@ -806,7 +812,7 @@ build-ktm-reclaim-exit-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE41 reclaim smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building reclaim smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_RECLAIM_EXIT_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-reclaim-exit-smoke OK"
@@ -816,7 +822,7 @@ build-ktm-pt-reclaim-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE42 page-table reclaim smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building page-table reclaim smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_PT_RECLAIM_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-pt-reclaim-smoke OK"
@@ -826,7 +832,7 @@ build-ktm-exec-storm-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE42 exec storm smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building exec storm smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_EXEC_STORM_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-exec-storm-smoke OK"
@@ -836,7 +842,7 @@ build-ktm-fork-exit-storm-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE42 fork+exit storm smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fork+exit storm smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_EXIT_STORM_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-exit-storm-smoke OK"
@@ -846,7 +852,7 @@ build-ktm-fork-exit-storm-deep-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE43 fork+exit storm smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fork+exit storm smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_EXIT_STORM_DEEP_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-exit-storm-deep-smoke OK"
@@ -856,7 +862,7 @@ build-ktm-fork-wait-storm-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE43 fork+wait storm smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fork+wait storm smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_WAIT_STORM_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-wait-storm-smoke OK"
@@ -866,7 +872,7 @@ build-ktm-exec-loop-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE43 exec loop smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building exec loop smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_EXEC_LOOP_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-exec-loop-smoke OK"
@@ -876,7 +882,7 @@ build-ktm-fork-wait-drain-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE44 fork-wait-drain smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fork-wait-drain smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_WAIT_DRAIN_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-wait-drain-smoke OK"
@@ -886,7 +892,7 @@ build-ktm-exec-drain-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE44 exec-drain smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building exec-drain smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_EXEC_DRAIN_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-exec-drain-smoke OK"
@@ -896,7 +902,7 @@ build-ktm-init-exit-drain-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE44 init-exit-drain smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building init-exit-drain smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_INIT_EXIT_DRAIN_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-init-exit-drain-smoke OK"
@@ -906,7 +912,7 @@ build-ktm-fork-rollback-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE45 fork rollback storm ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fork rollback storm ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_ROLLBACK_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-rollback-smoke OK"
@@ -916,7 +922,7 @@ build-ktm-fork-mem-touch-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE45 fork mem touch ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fork mem touch ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_MEM_TOUCH_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-mem-touch-smoke OK"
@@ -926,7 +932,7 @@ build-ktm-fork-no-recursion-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE46 fork-no-recursion ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fork-no-recursion ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_NO_RECURSE_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-no-recursion-smoke OK"
@@ -936,7 +942,7 @@ build-ktm-fork-heap-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE46 fork+heap ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fork+heap ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_HEAP_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fork-heap-smoke OK"
@@ -946,7 +952,7 @@ build-ktm-ipc-helpers:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  FASE48  Building /bin/cat /bin/echo /bin/busybox"
+	@echo "  IPC     Building /bin/cat /bin/echo /bin/busybox"
 	@$(MUSL_CC) -static -Os -o $(KTM_IPC_CAT_HELPER_BIN) $(KTM_IPC_CAT_HELPER_SRC)
 	@$(MUSL_CC) -static -Os -o $(KTM_IPC_ECHO_HELPER_BIN) $(KTM_IPC_ECHO_HELPER_SRC)
 	@$(MUSL_CC) -static -Os -o $(KTM_IPC_BUSYBOX_HELPER_BIN) $(KTM_IPC_BUSYBOX_HELPER_SRC)
@@ -958,7 +964,7 @@ build-ktm-ipc-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE48 IPC smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building IPC smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_IPC_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-ipc-smoke OK"
@@ -968,12 +974,12 @@ build-ktm-pipe-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE49 pipe smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building pipe smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_PIPE_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-pipe-smoke OK"
 
-build-busybox-fase50-min:
+build-busybox-min:
 	@if [ -z "$(MUSL_CC)" ]; then \
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
@@ -984,21 +990,21 @@ build-busybox-fase50-min:
 		echo "  Or override: make ... BUSYBOX_SRC=/path/to/busybox-<version>"; \
 		exit 1; \
 	fi
-	@if [ ! -f "$(FASE50_BUSYBOX_CFG)" ]; then \
-		echo "✗ Missing config fragment $(FASE50_BUSYBOX_CFG)"; \
+	@if [ ! -f "$(BUSYBOX_MIN_CFG)" ]; then \
+		echo "✗ Missing config fragment $(BUSYBOX_MIN_CFG)"; \
 		exit 1; \
 	fi
-	@echo "  FASE50  Building ash+coreutils static BusyBox from $(BUSYBOX_SRC)"
+	@echo "  BUSYBOX Building ash+coreutils static BusyBox from $(BUSYBOX_SRC)"
 	@chmod +x scripts/busybox_apply_fragment.sh
-	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(FASE50_BUSYBOX_CFG)"
+	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(BUSYBOX_MIN_CFG)"
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
-	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
-	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@cp -f "$(BUSYBOX_SRC)/busybox" "$(BUSYBOX_REAL_BIN)"
+	@file "$(BUSYBOX_REAL_BIN)" | grep -q ELF
 	@chmod +x scripts/busybox_check_manifest.sh
-	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
-	@echo "✓ build-busybox-fase50-min OK"
+	@scripts/busybox_check_manifest.sh "$(BUSYBOX_REAL_BIN)"
+	@echo "✓ build-busybox-min OK"
 
-build-busybox-fase58-plus:
+build-busybox-plus:
 	@if [ -z "$(MUSL_CC)" ]; then \
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
@@ -1007,21 +1013,21 @@ build-busybox-fase58-plus:
 		echo "✗ BusyBox source missing at BUSYBOX_SRC=$(BUSYBOX_SRC)"; \
 		exit 1; \
 	fi
-	@if [ ! -f "$(FASE58_BUSYBOX_CFG)" ]; then \
-		echo "✗ Missing config fragment $(FASE58_BUSYBOX_CFG)"; \
+	@if [ ! -f "$(BUSYBOX_PLUS_CFG)" ]; then \
+		echo "✗ Missing config fragment $(BUSYBOX_PLUS_CFG)"; \
 		exit 1; \
 	fi
-	@echo "  FASE58  Building ash+coreutils BusyBox from $(BUSYBOX_SRC)"
+	@echo "  BUSYBOX Building ash+coreutils BusyBox from $(BUSYBOX_SRC)"
 	@chmod +x scripts/busybox_apply_fragment.sh
-	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(FASE58_BUSYBOX_CFG)"
+	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(BUSYBOX_PLUS_CFG)"
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
-	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
-	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@cp -f "$(BUSYBOX_SRC)/busybox" "$(BUSYBOX_REAL_BIN)"
+	@file "$(BUSYBOX_REAL_BIN)" | grep -q ELF
 	@chmod +x scripts/busybox_check_manifest.sh
-	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
-	@echo "✓ build-busybox-fase58-plus OK (installed to $(FASE50_BUSYBOX_BIN))"
+	@scripts/busybox_check_manifest.sh "$(BUSYBOX_REAL_BIN)"
+	@echo "✓ build-busybox-plus OK (installed to $(BUSYBOX_REAL_BIN))"
 
-build-busybox-fase58-full:
+build-busybox-full:
 	@if [ -z "$(MUSL_CC)" ]; then \
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
@@ -1030,19 +1036,19 @@ build-busybox-fase58-full:
 		echo "✗ BusyBox source missing at BUSYBOX_SRC=$(BUSYBOX_SRC)"; \
 		exit 1; \
 	fi
-	@if [ ! -f "$(FASE58_FULL_BUSYBOX_CFG)" ]; then \
-		echo "✗ Missing config fragment $(FASE58_FULL_BUSYBOX_CFG)"; \
+	@if [ ! -f "$(BUSYBOX_FULL_CFG)" ]; then \
+		echo "✗ Missing config fragment $(BUSYBOX_FULL_CFG)"; \
 		exit 1; \
 	fi
-	@echo "  FASE58L Building full applets BusyBox from $(BUSYBOX_SRC)"
+	@echo "  BUSYBOX Building full applets BusyBox from $(BUSYBOX_SRC)"
 	@chmod +x scripts/busybox_apply_fragment.sh
-	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(FASE58_FULL_BUSYBOX_CFG)"
+	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(BUSYBOX_FULL_CFG)"
 	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
-	@cp -f "$(BUSYBOX_SRC)/busybox" "$(FASE50_BUSYBOX_BIN)"
-	@file "$(FASE50_BUSYBOX_BIN)" | grep -q ELF
+	@cp -f "$(BUSYBOX_SRC)/busybox" "$(BUSYBOX_REAL_BIN)"
+	@file "$(BUSYBOX_REAL_BIN)" | grep -q ELF
 	@chmod +x scripts/busybox_check_manifest.sh
-	@scripts/busybox_check_manifest.sh "$(FASE50_BUSYBOX_BIN)"
-	@echo "✓ build-busybox-fase58-full OK (installed to $(FASE50_BUSYBOX_BIN))"
+	@scripts/busybox_check_manifest.sh "$(BUSYBOX_REAL_BIN)"
+	@echo "✓ build-busybox-full OK (installed to $(BUSYBOX_REAL_BIN))"
 
 .PHONY: build-busybox-ir0-full build-busybox-ir0-auth build-busybox-matrix-smoke \
 	busybox-matrix busybox-profiles-check
@@ -1098,7 +1104,7 @@ build-ktm-busybox-manifest-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE58L BusyBox smoke ($(KTM_BUSYBOX_MANIFEST_SMOKE_BIN))"
+	@echo "  INIT    Building BusyBox manifest smoke ($(KTM_BUSYBOX_MANIFEST_SMOKE_BIN))"
 	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
 		-o $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) $(KTM_BUSYBOX_MANIFEST_SMOKE_SRC) $(KTM_USERDEV_LIB_SRC)
 	@file $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) | grep -q ELF
@@ -1106,7 +1112,7 @@ build-ktm-busybox-manifest-smoke:
 
 # BUSY-2 ship gate — canonical KTM runner (prebuilt format-large + manifest disk)
 BUSYBOX_MANIFEST_SMOKE_LOG ?= /tmp/busybox-manifest-smoke.log
-ktm-userdev-busybox-manifest-run: build-ktm-busybox-manifest-smoke build-busybox-fase58-plus kernel-x64-userspace.iso
+ktm-userdev-busybox-manifest-run: build-ktm-busybox-manifest-smoke build-busybox-plus kernel-x64-userspace.iso
 	@echo "  SMOKE   BUSY-2 product applet manifest (KTM)..."
 	@strings $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) 2>/dev/null | grep -q "KTM_BB_MANIFEST_HARNESS_ID" || \
 		(echo "✗ $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) is not KTM busybox manifest harness — run build-ktm-busybox-manifest-smoke"; exit 1)
@@ -1115,7 +1121,8 @@ ktm-userdev-busybox-manifest-run: build-ktm-busybox-manifest-smoke build-busybox
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) sbin/init && \
 	chmod +x scripts/busybox_inject_manifest.sh && \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) scripts/busybox_inject_manifest.sh $$DISK $(FASE50_BUSYBOX_BIN) && \
+	FASE50_BUSYBOX_BIN=$(BUSYBOX_REAL_BIN) BUSYBOX_REAL_BIN=$(BUSYBOX_REAL_BIN) \
+		scripts/busybox_inject_manifest.sh $$DISK $(BUSYBOX_REAL_BIN) && \
 	python3 scripts/ktm_userdev_runner.py \
 		--disk $$DISK \
 		--legacy-disk-init \
@@ -1141,7 +1148,7 @@ build-ktm-hello-helper:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  FASE50  Building hello-world ($(KTM_HELLO_HELPER_BIN))"
+	@echo "  HELLO   Building hello-world ($(KTM_HELLO_HELPER_BIN))"
 	@$(MUSL_CC) -static -Os -o $(KTM_HELLO_HELPER_BIN) $(KTM_HELLO_HELPER_SRC)
 	@file $(KTM_HELLO_HELPER_BIN) | grep -q ELF
 	@echo "✓ build-ktm-hello-helper OK"
@@ -1151,7 +1158,7 @@ build-ktm-busybox-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE50 BusyBox smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building BusyBox smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_BUSYBOX_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-busybox-smoke OK"
@@ -1161,7 +1168,7 @@ build-ktm-exec-only-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE50 EXEC-only smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building EXEC-only smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_KTM_EXEC_ONLY_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-exec-only-smoke OK"
@@ -1171,7 +1178,7 @@ build-ktm-shell-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE51 shell smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building shell smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_SHELL_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-shell-smoke OK"
@@ -1189,7 +1196,7 @@ smoke-userspace-irinit:
 	@exit 2
 
 run-irinit-interactive-gui:
-	@echo "✗ run-irinit-interactive-gui retired — use: make run-fase58e-ash-gui"
+	@echo "✗ run-irinit-interactive-gui retired — use: make run-ash-gui"
 	@exit 2
 
 build-runit: check-userspace
@@ -1284,7 +1291,7 @@ build-gmake-static:
 
 # Product disk + TinyCC + GNU make. Default profile is minimal (firstboot wizard).
 # Lab autologin root: IR0_PRODUCT_PROFILE=development make load-userspace-devtools
-load-userspace-devtools: build-tcc-fase52 build-gmake-static
+load-userspace-devtools: build-tcc build-gmake-static
 	@if [ "$${IR0_DEV_PERSIST:-0}" != "1" ]; then rm -f disk.img.runit.stamp disk.img.devtools.stamp; fi
 	@IR0_PRODUCT_PROFILE=$${IR0_PRODUCT_PROFILE:-minimal} IR0_NO_AUTOLOGIN=$${IR0_NO_AUTOLOGIN:-0} \
 		$(MAKE) -s load-userspace-runit
@@ -1600,17 +1607,18 @@ build-init-tcc-power-halt:
 	@file $(TCC_POWER_HALT_HARNESS_BIN) | grep -q ELF
 	@echo "✓ build-init-tcc-power-halt OK"
 
-smoke-tcc-power-halt: build-runit build-init-tcc-power-halt build-tcc-fase52 $(KERNEL_USERSPACE_ISO)
+smoke-tcc-power-halt: build-runit build-init-tcc-power-halt build-tcc $(KERNEL_USERSPACE_ISO)
 	@echo "  SMOKE   TCC guest compile → KTM → reboot HALT..."
 	@test -f $(TCC_POWER_HALT_HARNESS_BIN) || (echo "✗ missing harness"; exit 1)
 	@strings $(TCC_POWER_HALT_HARNESS_BIN) 2>/dev/null | grep -q "TCC_POWER_HARNESS_ID" || \
 		(echo "✗ $(TCC_POWER_HALT_HARNESS_BIN) is not TCC power harness"; exit 1)
-	@test -d $(KTM_TCC_TCC_STAGE)/bin || (echo "✗ missing $(KTM_TCC_TCC_STAGE) — run build-tcc-fase52"; exit 1)
+	@test -d $(KTM_TCC_TCC_STAGE)/bin || (echo "✗ missing $(KTM_TCC_TCC_STAGE) — run build-tcc"; exit 1)
 	@test -f $(RUNIT_STAGE_BIN)/runit_tcc_power_run || (echo "✗ missing runit_tcc_power_run — run build-runit"; exit 1)
 	@DISK=$$(mktemp /tmp/ir0-tcc-power.XXXXXX.img); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	FASE50_BUSYBOX_BIN=$(FASE50_BUSYBOX_BIN) $(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK && \
+	FASE50_BUSYBOX_BIN=$(BUSYBOX_REAL_BIN) BUSYBOX_REAL_BIN=$(BUSYBOX_REAL_BIN) \
+		$(IR0_USERSPACE_ROOT)/scripts/install-to-disk.sh $$DISK && \
 	 \
 	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK tccpower \
 		$(RUNIT_STAGE_BIN)/runit_tcc_power_run $(TCC_POWER_HALT_HARNESS_BIN) bin/tccph && \
@@ -3535,18 +3543,18 @@ smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace-ash-smoke
 	@echo "  LOG     $(RUNIT_ASH_SMOKE_LOG)"
 
 # T1 GUI — runit → BusyBox ash on /dev/console (tier1 stable; not legacy-only).
-.PHONY: run-fase58e-ash-gui check-fase58e-logs
+.PHONY: run-ash-gui run-fase58e-ash-gui check-ash-logs check-fase58e-logs
 
-run-fase58e-ash-gui: load-userspace-runit kernel-x64-userspace.iso
-	@case "$(FASE58E_DISPLAY)" in none|headless) \
-		echo "✗ FASE58E ash GUI blocked: FASE58E_DISPLAY=$(FASE58E_DISPLAY)"; exit 1;; esac
-	@echo "  FASE58E   runit → getty/login → ash on /dev/console"
-	@echo "  QEMU     display=$(FASE58E_DISPLAY)"
-	@echo "  LOG      serial -> $(FASE58E_ASH_LOG)"
+run-ash-gui: load-userspace-runit kernel-x64-userspace.iso
+	@case "$(ASH_GUI_DISPLAY)" in none|headless) \
+		echo "✗ ash GUI blocked: ASH_GUI_DISPLAY=$(ASH_GUI_DISPLAY)"; exit 1;; esac
+	@echo "  ASH      runit → getty/login → ash on /dev/console"
+	@echo "  QEMU     display=$(ASH_GUI_DISPLAY)"
+	@echo "  LOG      serial -> $(ASH_GUI_LOG)"
 	@echo "  HINT     login: auto (etc/ir0-autologin) or IR0_NO_AUTOLOGIN=1 → root/(empty) or ivan/ivan"
 	@echo "  HINT     then: ls / pwd / echo hi"
 	@echo "  HINT     Doom via virtio-9p: /mnt/host/doomgeneric /mnt/host/doom1.wad"
-	@rm -f $(FASE58E_ASH_LOG); \
+	@rm -f $(ASH_GUI_LOG); \
 	DISK=$$(mktemp /tmp/ir0-fase58e-ash.XXXXXX.img); \
 	SHARE=$$(mktemp -d /tmp/ir0-fase58e-share.XXXXXX); \
 	cp -f disk.img $$DISK; \
@@ -3560,7 +3568,7 @@ run-fase58e-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 		echo "  SHARE   Doom/WAD on virtio-9p ($$SHARE) — mount: mkdir -p /mnt/host && mount -t 9p ir0share /mnt/host"; \
 	fi; \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/sh /bin/busybox; \
-	if [ "$(FASE58E_DISPLAY)" = "sdl" ]; then \
+	if [ "$(ASH_GUI_DISPLAY)" = "sdl" ]; then \
 		DISP="-display sdl2"; \
 	else \
 		DISP="-display gtk"; \
@@ -3568,22 +3576,26 @@ run-fase58e-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		$$VIRTFS \
-		-serial file:$(FASE58E_ASH_LOG) \
+		-serial file:$(ASH_GUI_LOG) \
 		$$DISP -m 256M -no-reboot -net none; \
 	rm -f $$DISK; \
 	rm -rf $$SHARE
 
-check-fase58e-logs:
-	@echo "=== FASE58E/K (runit ash GUI + compact smoke tags) ==="
-	@if [ -f "$(FASE58E_ASH_LOG)" ]; then \
-		grep -E 'RUNIT_STAGE1_OK|RUNIT_STAGE2_OK|RUNSV_CONSOLE_START|ASH_INTERACTIVE_READY|KBD_USER_POLL_OK|TTY_CANON_LINE_READY|SYS_READ_RETURN_OK|ASH_COMMAND_ECHO_OK|ASH_COMMAND_EXEC_OK' "$(FASE58E_ASH_LOG)" || echo "(no FASE58E/K tags)"; \
-	else echo "missing $(FASE58E_ASH_LOG)"; fi
-	@if [ -f "$(FASE58E_ASH_SMOKE_LOG)" ]; then \
-		echo "=== FASE58E ash smoke ($(FASE58E_ASH_SMOKE_LOG)) ==="; \
-		grep -E 'RUNIT_STAGE1_OK|RUNIT_STAGE2_OK|RUNSV_CONSOLE_START|ASH_INTERACTIVE_READY|KBD_USER_POLL_OK|TTY_CANON_LINE_READY|SYS_READ_RETURN_OK|ASH_COMMAND_ECHO_OK|ASH_COMMAND_EXEC_OK' "$(FASE58E_ASH_SMOKE_LOG)" || echo "(no smoke tags)"; \
+run-fase58e-ash-gui: run-ash-gui
+
+check-ash-logs:
+	@echo "=== ash GUI (runit + compact smoke tags) ==="
+	@if [ -f "$(ASH_GUI_LOG)" ]; then \
+		grep -E 'RUNIT_STAGE1_OK|RUNIT_STAGE2_OK|RUNSV_CONSOLE_START|ASH_INTERACTIVE_READY|KBD_USER_POLL_OK|TTY_CANON_LINE_READY|SYS_READ_RETURN_OK|ASH_COMMAND_ECHO_OK|ASH_COMMAND_EXEC_OK' "$(ASH_GUI_LOG)" || echo "(no ash GUI tags)"; \
+	else echo "missing $(ASH_GUI_LOG)"; fi
+	@if [ -f "$(ASH_GUI_SMOKE_LOG)" ]; then \
+		echo "=== ash smoke ($(ASH_GUI_SMOKE_LOG)) ==="; \
+		grep -E 'RUNIT_STAGE1_OK|RUNIT_STAGE2_OK|RUNSV_CONSOLE_START|ASH_INTERACTIVE_READY|KBD_USER_POLL_OK|TTY_CANON_LINE_READY|SYS_READ_RETURN_OK|ASH_COMMAND_ECHO_OK|ASH_COMMAND_EXEC_OK' "$(ASH_GUI_SMOKE_LOG)" || echo "(no smoke tags)"; \
 	fi
 
-build-tcc-fase52:
+check-fase58e-logs: check-ash-logs
+
+build-tcc:
 	@./setup/tcc/build-fase52.sh
 
 build-ktm-tcc-smoke:
@@ -3591,7 +3603,7 @@ build-ktm-tcc-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  HARNESS Building FASE52 TCC smoke ($(KTM_TCC_HARNESS_BIN))"
+	@echo "  HARNESS Building TCC smoke ($(KTM_TCC_HARNESS_BIN))"
 	@$(MUSL_CC) -static -Os -o $(KTM_TCC_HARNESS_BIN) $(KTM_TCC_SMOKE_SRC)
 	@file $(KTM_TCC_HARNESS_BIN) | grep -q ELF
 	@echo "✓ build-ktm-tcc-smoke OK"
@@ -3601,7 +3613,7 @@ build-ktm-fs-dev-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE53A fs/dev smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fs/dev smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FS_DEV_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fs-dev-smoke OK"
@@ -3611,7 +3623,7 @@ build-ktm-posix-pseudofs-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE53B posix/pseudo-fs smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building posix/pseudo-fs smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_POSIX_PSEUDOFS_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-posix-pseudofs-smoke OK"
@@ -3631,7 +3643,7 @@ build-ktm-fbdev-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE54A fbdev smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building fbdev smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FBDEV_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fbdev-smoke OK"
@@ -3641,7 +3653,7 @@ build-ktm-boot-halt-bin:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    FASE58C boot-halt probe ($(KTM_BOOT_HALT_BIN))"
+	@echo "  INIT    boot-halt probe ($(KTM_BOOT_HALT_BIN))"
 	@$(MUSL_CC) -static -Os -o $(KTM_BOOT_HALT_BIN) $(KTM_BOOT_HALT_SMOKE_SRC)
 	@file $(KTM_BOOT_HALT_BIN) | grep -q ELF
 	@echo "✓ build-ktm-boot-halt-bin OK"
@@ -3651,7 +3663,7 @@ build-ktm-fbdev-gui-bin:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    FASE58C fbdev probe ($(KTM_FBDEV_GUI_BIN))"
+	@echo "  INIT    fbdev probe ($(KTM_FBDEV_GUI_BIN))"
 	@$(MUSL_CC) -static -Os -o $(KTM_FBDEV_GUI_BIN) $(KTM_FBDEV_GUI_SMOKE_SRC)
 	@file $(KTM_FBDEV_GUI_BIN) | grep -q ELF
 	@echo "✓ build-ktm-fbdev-gui-bin OK"
@@ -3661,7 +3673,7 @@ build-ktm-input-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE54B input smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building input smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_INPUT_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-input-smoke OK"
@@ -3671,7 +3683,7 @@ build-ktm-input-det-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE54C deterministic input smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building deterministic input smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_INPUT_DET_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-input-det-smoke OK"
@@ -3743,7 +3755,7 @@ build-ktm-programs-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE50 programs smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building programs smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_PROGRAMS_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-programs-smoke OK"
@@ -4689,7 +4701,7 @@ ktm-userdev-fork-storm-run: build-ktm-fork-storm-case build-init-hostshare-exec 
 		--done KTM_USERDEV_FORK_STORM_OK \
 		--require 'TEST_END|fork_exit_storm|PASS' \
 		--require KTM_USERDEV_FORK_STORM_OK
-	@echo "✓ ktm-userdev-fork-storm-run (FASE42/44 depth ≥ legacy storms; share payload)"
+	@echo "✓ ktm-userdev-fork-storm-run (fork/wait depth ≥ legacy storms; share payload)"
 
 # Same storm + virtio-9p: guest writes /mnt/host/ktm_fork_storm.txt visible on host.
 .PHONY: ktm-userdev-fork-storm-virtfs-run
@@ -4726,7 +4738,7 @@ build-ktm-exec-drain-case: build-ktm-true-helper
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  KTM     Building exec_drain (FASE44) ($(KTM_EXEC_DRAIN_BIN))"
+	@echo "  KTM     Building exec_drain ($(KTM_EXEC_DRAIN_BIN))"
 	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
 		-o $(KTM_EXEC_DRAIN_BIN) $(KTM_EXEC_DRAIN_SRC)
 	@file $(KTM_EXEC_DRAIN_BIN) | grep -q ELF
@@ -4737,7 +4749,7 @@ build-ktm-reap-drain-case:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  KTM     Building reap_drain (FASE44 init-exit analogue) ($(KTM_REAP_DRAIN_BIN))"
+	@echo "  KTM     Building reap_drain (init-exit analogue) ($(KTM_REAP_DRAIN_BIN))"
 	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
 		-o $(KTM_REAP_DRAIN_BIN) $(KTM_REAP_DRAIN_SRC)
 	@file $(KTM_REAP_DRAIN_BIN) | grep -q ELF
@@ -4748,7 +4760,7 @@ build-ktm-init-exit-drain-case:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  KTM     Building init_exit_drain (FASE44 PID1 _exit) ($(KTM_INIT_EXIT_DRAIN_BIN))"
+	@echo "  KTM     Building init_exit_drain (PID1 _exit) ($(KTM_INIT_EXIT_DRAIN_BIN))"
 	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
 		-o $(KTM_INIT_EXIT_DRAIN_BIN) $(KTM_INIT_EXIT_DRAIN_SRC)
 	@file $(KTM_INIT_EXIT_DRAIN_BIN) | grep -q ELF
@@ -4763,7 +4775,7 @@ ktm-userdev-exec-drain-run: build-ktm-exec-drain-case build-init-hostshare-exec 
 		--done KTM_USERDEV_EXEC_DRAIN_OK \
 		--require 'TEST_END|exec_drain|PASS' \
 		--require KTM_USERDEV_EXEC_DRAIN_OK
-	@echo "✓ ktm-userdev-exec-drain-run (FASE44 exec-drain → KTM; share payload)"
+	@echo "✓ ktm-userdev-exec-drain-run (exec-drain → KTM; share payload)"
 
 ktm-userdev-exec-drain-virtfs-run: build-ktm-exec-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
@@ -4834,7 +4846,7 @@ ktm-userdev-reap-drain-run: build-ktm-reap-drain-case build-init-hostshare-exec 
 		--done KTM_USERDEV_REAP_DRAIN_OK \
 		--require 'TEST_END|reap_drain|PASS' \
 		--require KTM_USERDEV_REAP_DRAIN_OK
-	@echo "✓ ktm-userdev-reap-drain-run (FASE44 reap-drain → KTM; share payload)"
+	@echo "✓ ktm-userdev-reap-drain-run (reap-drain → KTM; share payload)"
 
 ktm-userdev-reap-drain-virtfs-run: build-ktm-reap-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
@@ -4873,7 +4885,7 @@ ktm-userdev-init-exit-drain-run: build-ktm-init-exit-drain-case build-init-hosts
 		--require 'TEST_END|init_exit_drain|PASS' \
 		--require KTM_INIT_EXIT_DRAIN_OK \
 		--require INIT_EXIT_DRAIN
-	@echo "✓ ktm-userdev-init-exit-drain-run (FASE44 PID1 _exit → KTM)"
+	@echo "✓ ktm-userdev-init-exit-drain-run (PID1 _exit → KTM)"
 
 ktm-userdev-init-exit-drain-virtfs-run: build-ktm-init-exit-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
@@ -4894,7 +4906,7 @@ build-ktm-posix-pseudofs-case:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  KTM     Building posix_pseudofs (FASE53B) ($(KTM_POSIX_PSEUDOFS_BIN))"
+	@echo "  KTM     Building posix_pseudofs ($(KTM_POSIX_PSEUDOFS_BIN))"
 	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
 		-o $(KTM_POSIX_PSEUDOFS_BIN) $(KTM_POSIX_PSEUDOFS_SRC)
 	@file $(KTM_POSIX_PSEUDOFS_BIN) | grep -q ELF
@@ -4905,7 +4917,7 @@ build-ktm-input-det-case:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  KTM     Building input_det (FASE54C) ($(KTM_INPUT_DET_BIN))"
+	@echo "  KTM     Building input_det ($(KTM_INPUT_DET_BIN))"
 	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) \
 		-o $(KTM_INPUT_DET_BIN) $(KTM_INPUT_DET_SRC)
 	@file $(KTM_INPUT_DET_BIN) | grep -q ELF
@@ -4942,7 +4954,7 @@ ktm-userdev-posix-pseudofs-run: build-ktm-posix-pseudofs-case build-init-hostsha
 		--require 'TEST_END|posix_pseudofs|PASS' \
 		--require KTM_USERDEV_POSIX_PSEUDOFS_OK \
 		--require KTM_GETDENTS_DEV_CURSOR_OK
-	@echo "✓ ktm-userdev-posix-pseudofs-run (FASE53B → KTM)"
+	@echo "✓ ktm-userdev-posix-pseudofs-run (posix-pseudofs → KTM)"
 
 ktm-userdev-posix-pseudofs-virtfs-run: build-ktm-posix-pseudofs-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
@@ -4982,7 +4994,7 @@ ktm-userdev-input-det-run: build-ktm-input-det-case build-init-hostshare-exec ke
 		--done KTM_USERDEV_INPUT_DET_OK \
 		--require 'TEST_END|input_det|PASS' \
 		--require KTM_USERDEV_INPUT_DET_OK
-	@echo "✓ ktm-userdev-input-det-run (FASE54C → KTM)"
+	@echo "✓ ktm-userdev-input-det-run (input-det → KTM)"
 
 ktm-userdev-input-det-virtfs-run: build-ktm-input-det-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
@@ -5768,7 +5780,7 @@ test-run:
 	build-init-fase58c-boot-halt build-init-fase58c-fbdev \
 	build-fase41-true 	build-fase48-busybox build-fase48-echo build-fase48-cat \
 	build-fase48-ipc-bins build-fase50-hello build-fase58l-busybox-smoke \
-	build-fase58c-boot-halt build-fase58c-fbdev build-fase55e-doom-interactive
+	build-fase58c-boot-halt build-fase58c-fbdev build-doom-interactive
 build-init-fase41-reclaim: build-ktm-reclaim-exit-smoke
 build-init-fase42-pt-reclaim: build-ktm-pt-reclaim-smoke
 build-init-fase42-exec-storm: build-ktm-exec-storm-smoke
@@ -5804,4 +5816,4 @@ build-fase50-hello: build-ktm-hello-helper
 build-fase58l-busybox-smoke: build-ktm-busybox-manifest-smoke
 build-fase58c-boot-halt: build-ktm-boot-halt-bin
 build-fase58c-fbdev: build-ktm-fbdev-gui-bin
-build-fase55e-doom-interactive: build-ktm-doom-interactive
+build-doom-interactive: build-ktm-doom-interactive

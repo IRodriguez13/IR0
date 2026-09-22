@@ -42,7 +42,8 @@ fi
 
 dd if=/dev/zero of="$DISK_OUT" bs=1M count=200 status=none
 python3 scripts/inject_init_minix.py --format-large "$DISK_OUT"
-FASE50_BUSYBOX_BIN="${FASE50_BUSYBOX_BIN:-setup/pid1/fase50_busybox_real}" \
+FASE50_BUSYBOX_BIN="${BUSYBOX_REAL_BIN:-${FASE50_BUSYBOX_BIN:-setup/pid1/busybox_real}}" \
+	BUSYBOX_REAL_BIN="${BUSYBOX_REAL_BIN:-$FASE50_BUSYBOX_BIN}" \
 	IR0_ROOT="$ROOT" "$US_ROOT/scripts/install-to-disk.sh" "$DISK_OUT"
 IR0_ROOT="$ROOT" "$US_ROOT/scripts/inject-smoke-service.sh" --run-only "$DISK_OUT" ktm \
 	"$US_STAGE/runit_hostshare_payload_run"

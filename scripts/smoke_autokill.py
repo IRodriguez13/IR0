@@ -61,12 +61,12 @@ PROFILES: dict[str, dict[str, object]] = {
         "timeout": 60,
         "stale_sec": 20,
     },
-    "fase50-busybox": {
+    "busybox": {
         "success": ["KTM_BUSYBOX_NO_REGRESSION"],
         "timeout": 150,
         "stale_sec": 90,
     },
-    "fase52-tcc": {
+    "tcc": {
         "success": ["KTM_TCC_OK"],
         "timeout": 300,
         "stale_sec": 240,
@@ -76,12 +76,12 @@ PROFILES: dict[str, dict[str, object]] = {
         "timeout": 90,
         "stale_sec": 45,
     },
-    "fase51-shell": {
+    "shell": {
         "success": ["KTM_SHELL_DEBUG_GATED"],
         "timeout": 120,
         "stale_sec": 60,
     },
-    "fase55d-doom": {
+    "doomgeneric": {
         # Wait for terminal OK tag — FRAME_LOOP alone used to autokill (mode any)
         # before KTM_DOOMGENERIC_OK was flushed → flaky post-grep FAIL.
         # Real IWAD boot + first frames often exceed 120s on loaded hosts.
@@ -90,37 +90,48 @@ PROFILES: dict[str, dict[str, object]] = {
         "timeout": 240,
         "stale_sec": 90,
     },
-    "fase50-exec-only": {
+    "exec-only": {
         "success": ["KTM_EXEC_ONLY_STABLE_OK"],
         "timeout": 120,
         "stale_sec": 60,
     },
-    "fase53a-fs-dev": {
+    "fs-dev": {
         "success": ["KTM_FS_DEV_OK"],
         "timeout": 120,
         "stale_sec": 60,
     },
-    "fase53b-posix": {
+    "posix-pseudofs": {
         "success": ["KTM_POSIX_PSEUDOFS_OK"],
         "timeout": 120,
         "stale_sec": 60,
     },
-    "fase54a-fbdev": {
+    "fbdev": {
         "success": ["KTM_FBDEV_OK"],
         "timeout": 120,
         "stale_sec": 60,
     },
-    "fase54b-input": {
+    "input": {
         "success": ["KTM_INPUT_OK"],
         "timeout": 120,
         "stale_sec": 60,
     },
-    "fase54c-input-det": {
+    "input-det": {
         "success": ["KTM_INPUT_DET_OK"],
         "timeout": 120,
         "stale_sec": 60,
     },
 }
+# Historical --profile names (same dicts).
+PROFILES["fase50-busybox"] = PROFILES["busybox"]
+PROFILES["fase52-tcc"] = PROFILES["tcc"]
+PROFILES["fase51-shell"] = PROFILES["shell"]
+PROFILES["fase55d-doom"] = PROFILES["doomgeneric"]
+PROFILES["fase50-exec-only"] = PROFILES["exec-only"]
+PROFILES["fase53a-fs-dev"] = PROFILES["fs-dev"]
+PROFILES["fase53b-posix"] = PROFILES["posix-pseudofs"]
+PROFILES["fase54a-fbdev"] = PROFILES["fbdev"]
+PROFILES["fase54b-input"] = PROFILES["input"]
+PROFILES["fase54c-input-det"] = PROFILES["input-det"]
 
 SYSCALL_LINE_RES: list[str] = [
     r"\[WAIT_EXIT_AUDIT\]\[sys_\w+\]",
