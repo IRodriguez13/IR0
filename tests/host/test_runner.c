@@ -46,6 +46,7 @@ extern void test_arch_irq_facade_nested(void);
 extern void test_arch_mm_pte_facade(void);
 extern void test_open_flags_linux_to_ir0(void);
 extern void test_open_flags_vfs_guard(void);
+extern void test_fcntl_linux_cmd_numbers(void);
 extern void test_ktm_panic_inventory_contract(void);
 extern void test_ktm_facade_no_mm_includes(void);
 extern void test_ps2_set1_ctrl_x_then_a(void);
@@ -102,6 +103,7 @@ static void (*test_functions[])(void) = {
 	test_arch_mm_pte_facade,
 	test_open_flags_linux_to_ir0,
 	test_open_flags_vfs_guard,
+	test_fcntl_linux_cmd_numbers,
 	test_ktm_panic_inventory_contract,
 	test_ktm_facade_no_mm_includes,
 	test_ps2_set1_ctrl_x_then_a,

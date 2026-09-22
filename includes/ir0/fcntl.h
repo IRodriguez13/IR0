@@ -40,6 +40,7 @@
 #define F_SETFL         4   /* Set file status flags */
 #define F_GETOWN        5   /* Get owner for SIGIO (Linux x86-64) */
 #define F_SETOWN        8   /* Set owner for SIGIO (Linux x86-64) */
+#define F_DUPFD_CLOEXEC 1030
 
 #define FD_CLOEXEC      1   /* Close-on-exec flag */
 

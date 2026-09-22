@@ -1,6 +1,6 @@
 # IR0 — Capability board (release certification)
 
-> **Last verified:** 2026-09-21  
+> **Last verified:** 2026-09-22  
 > **Source of truth:** `make linux-abi-audit`, `make smoke-release-0.0.1`,  
 > `scripts/linux_abi/contracts.json`, `Documentation/ai_driven_dev/linux_ground_truth.md`,  
 > `kernel/test/`, `tests/host/`
@@ -161,10 +161,11 @@ mappings; **no** file-backed mmap parity.
 | dup / dup2 | VERIFIED | `linux-abi-audit-dup` |
 | poll | VERIFIED | `linux-abi-audit-poll` |
 | select | TODO | no audit |
-| fcntl (minimal) | LINUX-LIKE | FD_CLOEXEC paths; partial |
+| fcntl | VERIFIED | `linux-abi-audit-fcntl`: F_GETFD/F_SETFD/F_GETFL, F_DUPFD, F_DUPFD_CLOEXEC=1030 |
 
-**Impact for userspace:** shell pipelines, simple poll-driven I/O; `select` and full
-fcntl surface still partial.
+**Impact for userspace:** shell pipelines, poll-driven I/O, CLOEXEC dup via fcntl.
+`select` still unaudited. Remaining fcntl cmds (locks, F_SETFL) are out of this
+contract.
 
 **Next within IPC:** `select` audit or honest ENOSYS policy; pipe `EINTR` ordering smokes.
 

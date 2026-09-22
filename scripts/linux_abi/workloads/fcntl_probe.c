@@ -52,6 +52,38 @@ int main(void)
 	if (flags < 0 || !(flags & FD_CLOEXEC))
 		return 1;
 
+	flags = (long)fcntl(fd, F_GETFL);
+	audit_fc(4, "fcntl_getfl", flags, flags < 0 ? errno : 0);
+	if (flags < 0 || ((int)flags & O_ACCMODE) != O_RDONLY)
+		return 1;
+
+	{
+		int d;
+
+		d = fcntl(fd, F_DUPFD, 20);
+		audit_fc(5, "fcntl_dupfd", (long)d, d < 0 ? errno : 0);
+		if (d < 20)
+			return 1;
+		flags = (long)fcntl(d, F_GETFD);
+		audit_fc(6, "fcntl_dupfd_getfd", flags, flags < 0 ? errno : 0);
+		if (flags < 0 || (flags & FD_CLOEXEC))
+			return 1;
+		if (close(d) != 0)
+			return 1;
+
+		d = fcntl(fd, F_DUPFD_CLOEXEC, 21);
+		audit_fc(7, "fcntl_dupfd_cloexec", (long)d, d < 0 ? errno : 0);
+		if (d < 21)
+			return 1;
+		flags = (long)fcntl(d, F_GETFD);
+		audit_fc(8, "fcntl_dupfd_cloexec_getfd", flags,
+			 flags < 0 ? errno : 0);
+		if (flags < 0 || !(flags & FD_CLOEXEC))
+			return 1;
+		if (close(d) != 0)
+			return 1;
+	}
+
 	if (close(fd) != 0)
 		return 1;
 

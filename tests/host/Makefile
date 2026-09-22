@@ -28,7 +28,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_signal_rt_sigaction_abi.c test_sigreturn_sleep_eintr_abi.c test_mmap_null_placement.c \
 	test_elf_initial_brk_abi.c test_blockdev_facade.c \
 	test_arch_irq_facade.c test_arch_mm_pte_facade.c \
-	test_open_flags_abi.c test_ktm_panic_inventory.c test_ktm_facade_contract.c \
+	test_open_flags_abi.c test_fcntl_abi.c test_ktm_panic_inventory.c test_ktm_facade_contract.c \
 	test_ps2_set1_modifiers.c \
 	test_ps2_mouse_pkt.c \
 	test_pipe_close_refcount.c \
@@ -150,6 +150,9 @@ host_open_flags.o: $(KERNEL_ROOT)/kernel/lib/open_flags.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_open_flags_abi.o: test_open_flags_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_fcntl_abi.o: test_fcntl_abi.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_ktm_panic_inventory.o: test_ktm_panic_inventory.c

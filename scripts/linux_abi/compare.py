@@ -1809,6 +1809,11 @@ def compare_fcntl(linux: dict, ir0: dict) -> CompareResult:
         ("fcntl_getfd", 0, None),
         ("fcntl_setfd", 0, None),
         ("fcntl_getfd_cloexec", None, None),
+        ("fcntl_getfl", None, None),
+        ("fcntl_dupfd", None, None),
+        ("fcntl_dupfd_getfd", None, None),
+        ("fcntl_dupfd_cloexec", None, None),
+        ("fcntl_dupfd_cloexec_getfd", None, None),
     )
 
     for op, exp_ret, exp_errno in required:
@@ -1828,13 +1833,42 @@ def compare_fcntl(linux: dict, ir0: dict) -> CompareResult:
                     res.divergences.append(f"{label} open: ret={step.get('ret')}")
             continue
 
-        if op == "fcntl_getfd_cloexec":
+        if op == "fcntl_getfd_cloexec" or op == "fcntl_dupfd_cloexec_getfd":
             for label, step in (("linux", l_s), ("ir0", i_s)):
                 flags = step.get("ret")
                 if flags is None or (int(flags) & 1) == 0:
                     res.ok = False
                     res.divergences.append(
                         f"{label} {op}: flags={flags} expected FD_CLOEXEC"
+                    )
+            continue
+
+        if op == "fcntl_dupfd_getfd":
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                flags = step.get("ret")
+                if flags is None or (int(flags) & 1) != 0:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: flags={flags} expected no FD_CLOEXEC"
+                    )
+            continue
+
+        if op == "fcntl_getfl":
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                flags = step.get("ret")
+                if flags is None or flags < 0 or (int(flags) & 3) != 0:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: flags={flags} expected O_RDONLY"
+                    )
+            continue
+
+        if op in ("fcntl_dupfd", "fcntl_dupfd_cloexec"):
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                if step.get("ret", -1) < 0:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: ret={step.get('ret')}"
                     )
             continue
 
@@ -1856,7 +1890,9 @@ def compare_fcntl(linux: dict, ir0: dict) -> CompareResult:
                 f"{op} ret mismatch linux={l_s.get('ret')} ir0={i_s.get('ret')}"
             )
 
-    res.notes.append("fcntl(F_GETFD/F_SETFD) FD_CLOEXEC on /proc/uptime")
+    res.notes.append(
+        "fcntl F_GETFD/F_SETFD/F_GETFL/F_DUPFD/F_DUPFD_CLOEXEC on /proc/uptime"
+    )
     return res
 
 

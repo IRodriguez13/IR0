@@ -2022,6 +2022,7 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
     }
     break;
   case F_DUPFD:
+  case F_DUPFD_CLOEXEC:
   {
     int start = (int)arg;
     int i;
@@ -2037,7 +2038,17 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
       {
 	/* Drop pin before dup2 (re-enters fd table). */
 	ir0_fd_put(&h);
-	return sys_dup2(fd, i);
+	ret = sys_dup2(fd, i);
+	if (ret < 0)
+	  return ret;
+	if (cmd == F_DUPFD_CLOEXEC)
+	{
+	  fd_table = get_process_fd_table();
+	  if (!fd_table)
+	    return -ESRCH;
+	  fd_table[i].fd_flags |= FD_CLOEXEC;
+	}
+	return ret;
       }
     }
     ret = -EMFILE;

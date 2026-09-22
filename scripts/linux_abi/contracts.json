@@ -167,8 +167,13 @@
     {
       "id": "fcntl",
       "enabled": true,
-      "title": "fcntl(2) F_GETFD/F_SETFD",
-      "status_doc": "LINUX-LIKE"
+      "title": "fcntl(2) F_GETFD/F_SETFD/F_GETFL/F_DUPFD/F_DUPFD_CLOEXEC",
+      "status_doc": "VERIFIED",
+      "done_tag": "FCNTLOK",
+      "linux_ref": "fs/fcntl.c; include/uapi/linux/fcntl.h F_DUPFD_CLOEXEC=1030; man2 fcntl(2)",
+      "smokes": [
+        "linux-abi-audit-fcntl"
+      ]
     },
     {
       "id": "read",
