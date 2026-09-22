@@ -57,6 +57,8 @@ int proc_open(const char *path, int flags);
 int proc_read(int fd, char *buf, size_t count, off_t offset);
 int proc_write(int fd, const char *buf, size_t count);
 int proc_stat(const char *path, stat_t *st);
+int proc_access_path(const char *path, uid_t euid);
+int proc_pid_get_owner(pid_t pid, uid_t *uid, gid_t *gid);
 
 /* Offset management for /proc files */
 off_t proc_get_offset(int fd);

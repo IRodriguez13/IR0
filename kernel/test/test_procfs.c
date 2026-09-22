@@ -20,6 +20,11 @@
 #include "syscalls.h"
 #include "process.h"
 #include <kernel/syscalls/fs_syscalls.h>
+#include <ir0/errno.h>
+#include <ir0/fcntl.h>
+#include <ir0/named_fifo.h>
+#include <ir0/path_routed.h>
+#include <ir0/permissions.h>
 #include <ir0/procfs.h>
 #include <ir0/stat.h>
 #include <string.h>
@@ -198,6 +203,72 @@ void ktest_procfs_pid_environ(void)
 	if (current_process->saved_environ_len > 0)
 		KASSERT_GT(n, 0);
 
+	KTEST_END();
+}
+
+void ktest_routed_open_access(void)
+{
+	const char *fifo_path = "/run/ktest-access-fifo";
+	uint32_t saved_euid;
+	uint32_t saved_egid;
+	uid_t target_uid;
+	gid_t target_gid;
+	stat_t st;
+	int64_t fd;
+
+	KTEST_BEGIN("routed_open_access");
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	saved_euid = current_process->euid;
+	saved_egid = current_process->egid;
+
+	KASSERT_EQ(proc_pid_get_owner(current_process->task.pid,
+				      &target_uid, &target_gid), 0);
+	KASSERT_EQ(target_uid, (uid_t)saved_euid);
+	KASSERT_EQ(proc_access_path("/proc/self/environ", target_uid), 0);
+	KASSERT_EQ(proc_access_path("/proc/self/maps", target_uid), 0);
+	KASSERT_EQ(proc_access_path("/proc/self/environ",
+				    (uid_t)(target_uid + 1U)), -EACCES);
+	KASSERT_EQ(proc_access_path("/proc/self/maps",
+				    (uid_t)(target_uid + 1U)), -EACCES);
+	KASSERT_EQ(proc_access_path("/proc/self/fd/0",
+				    (uid_t)(target_uid + 1U)), -EACCES);
+	KASSERT_EQ(proc_access_path("/proc/self/exe",
+				    (uid_t)(target_uid + 1U)), -EACCES);
+	KASSERT_EQ(ir0_open_access_path_routed("/proc/self/environ", O_RDONLY,
+					      target_uid, target_gid), 0);
+	KASSERT_EQ(ir0_open_access_path_routed("/proc/self/environ", O_RDONLY,
+					      (uid_t)(target_uid + 1U),
+					      target_gid), -EACCES);
+
+	memset(&st, 0, sizeof(st));
+	KASSERT_EQ(proc_stat("/proc/self/environ", &st), 0);
+	KASSERT_EQ(st.st_uid, target_uid);
+	KASSERT_EQ((unsigned)(st.st_mode & 0777), 0400U);
+
+	(void)named_fifo_unlink(fifo_path);
+	KASSERT_EQ(named_fifo_create_owned(fifo_path, 0600, ROOT_UID, ROOT_GID), 0);
+	memset(&st, 0, sizeof(st));
+	KASSERT_EQ(ir0_stat_path_routed(fifo_path, &st), 0);
+	KASSERT_EQ(st.st_uid, (uid_t)ROOT_UID);
+	KASSERT_EQ((unsigned)(st.st_mode & 0777), 0600U);
+	current_process->euid = 1000;
+	current_process->egid = 1000;
+	KASSERT_EQ(sys_open("/dev/kmsg", O_RDONLY, 0), -EACCES);
+	KASSERT_EQ(sys_open(fifo_path, O_RDONLY | O_NONBLOCK, 0), -EACCES);
+
+	fd = sys_open("/proc/self/environ", O_RDONLY, 0);
+	KASSERT_GT(fd, 0);
+	if (fd > 0)
+		sys_close((int)fd);
+
+	current_process->euid = saved_euid;
+	current_process->egid = saved_egid;
+	KASSERT_EQ(named_fifo_unlink(fifo_path), 0);
 	KTEST_END();
 }
 

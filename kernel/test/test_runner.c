@@ -37,6 +37,7 @@ static void (*const ktest_functions[])(void) = {
 	ktest_procfs_pid_maps,
 	ktest_procfs_pid_fd,
 	ktest_procfs_pid_environ,
+	ktest_routed_open_access,
 	ktest_procfs_self_symlink,
 	ktest_procfs_pid_exe,
 	ktest_procfs_stat,
@@ -96,6 +97,7 @@ static const char *const ktest_names[] = {
 	"procfs_pid_maps",
 	"procfs_pid_fd",
 	"procfs_pid_environ",
+	"routed_open_access",
 	"procfs_self_symlink",
 	"procfs_pid_exe",
 	"procfs_stat",
@@ -154,6 +156,7 @@ static const int ktest_needs_process[] = {
 	1,  /* procfs_pid_maps */
 	1,  /* procfs_pid_fd */
 	1,  /* procfs_pid_environ */
+	1,  /* routed_open_access */
 	1,  /* procfs_self_symlink */
 	1,  /* procfs_pid_exe */
 	1,  /* procfs_stat */

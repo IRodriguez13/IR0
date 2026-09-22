@@ -7,6 +7,7 @@
 #include <string.h>
 #include <ir0/devfs.h>
 #include <ir0/errno.h>
+#include <ir0/fcntl.h>
 #include <ir0/named_fifo.h>
 #include <ir0/named_socket.h>
 #include <ir0/named_devnode.h>
@@ -155,6 +156,42 @@ int64_t ir0_access_path_routed(const char *resolved_path, int mode,
         return 0;
 
     if (!ir0_access_from_stat(&st, access_mode, euid, egid))
+        return -EACCES;
+
+    return 0;
+}
+
+int ir0_open_access_path_routed(const char *resolved_path, int open_flags,
+                                uid_t euid, gid_t egid)
+{
+    stat_t st;
+    int access_mode;
+    int accmode;
+    int rc;
+
+    if (!resolved_path)
+        return -EFAULT;
+
+    rc = ir0_stat_path_routed(resolved_path, &st);
+    if (rc != 0)
+        return rc;
+
+    if (is_proc_path(resolved_path))
+    {
+        rc = proc_access_path(resolved_path, euid);
+        if (rc != 0)
+            return rc;
+    }
+
+    access_mode = 0;
+    accmode = open_flags & O_ACCMODE;
+    if (accmode == O_RDONLY || accmode == O_RDWR)
+        access_mode |= ACCESS_READ;
+    if (accmode == O_WRONLY || accmode == O_RDWR)
+        access_mode |= ACCESS_WRITE;
+
+    if (access_mode != 0 &&
+        !ir0_access_from_stat(&st, access_mode, euid, egid))
         return -EACCES;
 
     return 0;

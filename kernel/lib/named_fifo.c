@@ -15,6 +15,7 @@
 #include <ir0/named_fifo.h>
 #include <ir0/errno.h>
 #include <ir0/path.h>
+#include <ir0/permissions.h>
 #include <ir0/pipe.h>
 #include <ir0/types.h>
 #include <ir0/arch_port.h>
@@ -49,6 +50,8 @@ struct named_fifo_entry
     char path[256];
     pipe_t *pipe;
     mode_t mode;
+    uid_t uid;
+    gid_t gid;
     int in_use;
 };
 
@@ -146,7 +149,7 @@ static struct named_fifo_entry *named_fifo_find(const char *path)
     return NULL;
 }
 
-int named_fifo_create(const char *path, mode_t mode)
+int named_fifo_create_owned(const char *path, mode_t mode, uid_t uid, gid_t gid)
 {
     struct named_fifo_entry *slot = NULL;
     pipe_t *pipe;
@@ -212,9 +215,16 @@ int named_fifo_create(const char *path, mode_t mode)
     }
     slot->pipe = pipe;
     slot->mode = (mode_t)(S_IFIFO | (mode & 0777));
+    slot->uid = uid;
+    slot->gid = gid;
     slot->in_use = 1;
     named_fifo_irq_restore(irq_flags);
     return 0;
+}
+
+int named_fifo_create(const char *path, mode_t mode)
+{
+    return named_fifo_create_owned(path, mode, ROOT_UID, ROOT_GID);
 }
 
 int named_fifo_stat(const char *path, stat_t *buf)
@@ -236,6 +246,8 @@ int named_fifo_stat(const char *path, stat_t *buf)
     memset(buf, 0, sizeof(*buf));
     buf->st_mode = e->mode;
     buf->st_nlink = 1;
+    buf->st_uid = e->uid;
+    buf->st_gid = e->gid;
     named_fifo_irq_restore(irq_flags);
     return 0;
 }

@@ -17,6 +17,8 @@ int ir0_stat_path_routed_follow(const char *path, stat_t *st);
 int ir0_chown_path_routed(const char *path, uid_t owner, gid_t group);
 int64_t ir0_access_path_routed(const char *resolved_path, int mode,
                                uid_t euid, gid_t egid);
+int ir0_open_access_path_routed(const char *resolved_path, int open_flags,
+                                uid_t euid, gid_t egid);
 int ir0_getdents_path_routed(const char *path, struct vfs_dirent *entries,
                              int max_entries);
 

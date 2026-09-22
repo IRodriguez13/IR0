@@ -28,6 +28,7 @@ void ktest_procfs_pid_status(void);
 void ktest_procfs_pid_maps(void);
 void ktest_procfs_pid_fd(void);
 void ktest_procfs_pid_environ(void);
+void ktest_routed_open_access(void);
 void ktest_procfs_self_symlink(void);
 void ktest_procfs_pid_exe(void);
 void ktest_procfs_stat(void);

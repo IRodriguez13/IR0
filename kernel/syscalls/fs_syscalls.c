@@ -126,7 +126,11 @@ static int64_t mknod_create_named_fifo(const char *resolved, mode_t mode)
 {
   int rc;
 
-  rc = named_fifo_create(resolved, mode);
+  if (!current_process)
+    return -ESRCH;
+  rc = named_fifo_create_owned(resolved, mode,
+                               (uid_t)current_process->euid,
+                               (gid_t)current_process->egid);
   if (rc != 0)
     return rc;
 
@@ -234,6 +238,9 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
 
   if (is_proc_path(resolved))
   {
+    rc = proc_access_path(resolved, (uid_t)current_process->euid);
+    if (rc != 0)
+      return rc;
     rc = proc_readlink(resolved, kbuf, sizeof(kbuf));
     if (rc >= 0)
     {
@@ -1311,13 +1318,20 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
       strncpy(prep, path_to_use, sizeof(prep) - 1);
       prep[sizeof(prep) - 1] = '\0';
       if (mknod_prepare_fifo_path(prep, sizeof(prep)) == 0 &&
-          named_fifo_create(prep, 0600) == 0)
+          named_fifo_create_owned(prep, 0600,
+                                  (uid_t)current_process->euid,
+                                  (gid_t)current_process->egid) == 0)
         mknod_purge_vfs_shadow(prep);
     }
   }
 
   if (named_fifo_lookup(path_to_use))
   {
+    path_rc = ir0_open_access_path_routed(path_to_use, ir0_flags,
+                                          (uid_t)current_process->euid,
+                                          (gid_t)current_process->egid);
+    if (path_rc != 0)
+      return path_rc;
     open_ret = open_named_fifo_fd(path_to_use, ir0_flags);
     fase50c_log_open_result(path_to_use, open_ret, 13);
     return open_ret;
@@ -1347,6 +1361,11 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
 
       if (!dn)
         return -ENXIO;
+      drc = ir0_open_access_path_routed(path_to_use, ir0_flags,
+                                        (uid_t)current_process->euid,
+                                        (gid_t)current_process->egid);
+      if (drc != 0)
+        return drc;
       ensure_devfs_init();
       drc = devfs_open_node(dn, ir0_flags);
       if (drc < 0)
@@ -1496,6 +1515,7 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
 {
   fd_entry_t *fd_table;
   stat_t st;
+  int access_rc;
   int fd;
 
   if (!path || !current_process)
@@ -1507,7 +1527,14 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
     return -ENOENT;
   if (!S_ISDIR(st.st_mode))
     return -ENOTDIR;
-  if (!check_file_access(path, ACCESS_EXEC, current_process))
+  access_rc = ir0_open_access_path_routed(path, ir0_flags,
+                                          (uid_t)current_process->euid,
+                                          (gid_t)current_process->egid);
+  if (access_rc != 0)
+    return access_rc;
+  if (!ir0_access_from_stat(&st, ACCESS_EXEC,
+                            (uid_t)current_process->euid,
+                            (gid_t)current_process->egid))
     return -EACCES;
 
   fd_table = get_process_fd_table();
@@ -1556,6 +1583,12 @@ static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
 
   if (!path || !current_process)
     return -EINVAL;
+
+  rc = ir0_open_access_path_routed(path, ir0_flags,
+                                   (uid_t)current_process->euid,
+                                   (gid_t)current_process->egid);
+  if (rc != 0)
+    return rc;
 
   pseudo_fs_nodes_register_all();
   rc = pseudo_fs_acquire_path(path, ir0_flags, &ops, &ctx, &dynamic);
@@ -1611,6 +1644,14 @@ static int64_t devfs_open_resolved_node(const char *path, int ir0_flags)
   {
     fase50c_log_open_result(path, -ENOENT, 3);
     return -ENOENT;
+  }
+  drc = ir0_open_access_path_routed(path, ir0_flags,
+                                    (uid_t)current_process->euid,
+                                    (gid_t)current_process->egid);
+  if (drc != 0)
+  {
+    fase50c_log_open_result(path, drc, 4);
+    return drc;
   }
   drc = devfs_open_node(node, ir0_flags);
   if (drc < 0)

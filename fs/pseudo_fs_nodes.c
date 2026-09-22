@@ -626,20 +626,27 @@ static int64_t proc_pid_file_close(void *ctx)
 static int proc_pid_file_stat(void *ctx, stat_t *st)
 {
     proc_pid_file_ctx_t *file = ctx;
+    uid_t uid;
+    gid_t gid;
+    int rc;
 
-    if (!st)
+    if (!file || !st)
         return -EINVAL;
 
+    rc = proc_pid_get_owner(file->pid, &uid, &gid);
+    if (rc != 0)
+        return rc;
+
     memset(st, 0, sizeof(*st));
-    if (file && file->kind == PROC_PID_FILE_FD_LINK)
+    if (file->kind == PROC_PID_FILE_FD_LINK)
         st->st_mode = S_IFLNK | 0777;
-    else if (file && file->kind == PROC_PID_FILE_ENVIRON)
+    else if (file->kind == PROC_PID_FILE_ENVIRON)
         st->st_mode = S_IFREG | 0400;
     else
         st->st_mode = S_IFREG | 0444;
     st->st_nlink = 1;
-    st->st_uid = 0;
-    st->st_gid = 0;
+    st->st_uid = uid;
+    st->st_gid = gid;
     st->st_size = 0;
     pseudo_fs_stat_now(st);
     return 0;

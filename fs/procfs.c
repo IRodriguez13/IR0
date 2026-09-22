@@ -953,6 +953,71 @@ const char *proc_resolve_path(const char *path, pid_t *pid_out)
     return proc_parse_path(path, pid_out);
 }
 
+int proc_pid_get_owner(pid_t pid, uid_t *uid, gid_t *gid)
+{
+	process_t *proc;
+	unsigned long irqf;
+
+	if (!uid || !gid)
+		return -EINVAL;
+
+	irqf = irq_save();
+	if (pid == -1)
+		proc = current_process;
+	else
+	{
+		proc = process_list;
+		while (proc && proc->task.pid != pid)
+			proc = proc->next;
+	}
+	if (!proc)
+	{
+		irq_restore(irqf);
+		return -ENOENT;
+	}
+
+	*uid = (uid_t)proc->euid;
+	*gid = (gid_t)proc->egid;
+	irq_restore(irqf);
+	return 0;
+}
+
+int proc_access_path(const char *path, uid_t euid)
+{
+	pid_t pid;
+	const char *filename;
+	uid_t target_euid;
+	gid_t target_egid;
+	int rc;
+
+	filename = proc_resolve_path(path, &pid);
+	if (!filename)
+		return -ENOENT;
+
+	if (pid == -1 && strcmp(filename, "status") != 0)
+		return 0;
+
+	rc = proc_pid_get_owner(pid, &target_euid, &target_egid);
+	if (rc != 0)
+		return rc;
+	(void)target_egid;
+
+	/*
+	 * Linux protects these files with PTRACE_MODE_READ_FSCREDS. IR0 does
+	 * not yet model the complete ptrace/capability/namespace decision;
+	 * approximate it with root-or-same-effective-UID.
+	 */
+	if ((strcmp(filename, "environ") == 0 ||
+	     strcmp(filename, "maps") == 0 ||
+	     strcmp(filename, "fd_dir") == 0 ||
+	     strcmp(filename, "fd_link") == 0 ||
+	     strcmp(filename, "exe_link") == 0) &&
+	    euid != ROOT_UID && euid != target_euid)
+		return -EACCES;
+
+	return 0;
+}
+
 int proc_is_virtual_subdir(const char *path)
 {
     pid_t pid;
@@ -2746,6 +2811,9 @@ int proc_stat(const char *path, stat_t *st)
 {
     pid_t pid;
     const char *filename;
+    uid_t owner_uid;
+    gid_t owner_gid;
+    int owner_rc;
 
     if (!st || !is_proc_path(path))
         return -EINVAL;
@@ -2767,14 +2835,19 @@ int proc_stat(const char *path, stat_t *st)
             strcmp(filename, "fd_dir") == 0 ||
             strcmp(filename, "self_link") == 0)
         {
+            owner_uid = ROOT_UID;
+            owner_gid = ROOT_GID;
+            owner_rc = proc_pid_get_owner(pid, &owner_uid, &owner_gid);
+            if (owner_rc != 0)
+                return owner_rc;
             memset(st, 0, sizeof(stat_t));
             if (strcmp(filename, "self_link") == 0)
                 st->st_mode = S_IFLNK | 0777;
             else
                 st->st_mode = S_IFDIR | 0555;
             st->st_nlink = (strcmp(filename, "self_link") == 0) ? 1 : 2;
-            st->st_uid = 0;
-            st->st_gid = 0;
+            st->st_uid = owner_uid;
+            st->st_gid = owner_gid;
             st->st_size = 0;
             pseudo_fs_stat_now(st);
             return 0;
@@ -2783,11 +2856,14 @@ int proc_stat(const char *path, stat_t *st)
         if (strcmp(filename, "fd_link") == 0 ||
             strcmp(filename, "exe_link") == 0)
         {
+            owner_rc = proc_pid_get_owner(pid, &owner_uid, &owner_gid);
+            if (owner_rc != 0)
+                return owner_rc;
             memset(st, 0, sizeof(stat_t));
             st->st_mode = S_IFLNK | 0777;
             st->st_nlink = 1;
-            st->st_uid = 0;
-            st->st_gid = 0;
+            st->st_uid = owner_uid;
+            st->st_gid = owner_gid;
             st->st_size = 0;
             pseudo_fs_stat_now(st);
             return 0;
@@ -2795,11 +2871,14 @@ int proc_stat(const char *path, stat_t *st)
 
         if (strcmp(filename, "environ") == 0 && pid > 0)
         {
+            owner_rc = proc_pid_get_owner(pid, &owner_uid, &owner_gid);
+            if (owner_rc != 0)
+                return owner_rc;
             memset(st, 0, sizeof(stat_t));
             st->st_mode = S_IFREG | 0400;
             st->st_nlink = 1;
-            st->st_uid = 0;
-            st->st_gid = 0;
+            st->st_uid = owner_uid;
+            st->st_gid = owner_gid;
             st->st_size = 0;
             pseudo_fs_stat_now(st);
             return 0;
