@@ -132,8 +132,9 @@ int ir0_chown_path_routed(const char *path, uid_t owner, gid_t group)
     return vfs_chown(path, owner, group);
 }
 
-int64_t ir0_access_path_routed(const char *resolved_path, int mode,
-                               uid_t euid, gid_t egid)
+int64_t ir0_access_path_routed_groups(const char *resolved_path, int mode,
+                                      uid_t uid, gid_t gid,
+                                      const gid_t *groups, int ngroups)
 {
     stat_t st;
     int rc;
@@ -155,10 +156,18 @@ int64_t ir0_access_path_routed(const char *resolved_path, int mode,
     if (access_mode == 0)
         return 0;
 
-    if (!ir0_access_from_stat(&st, access_mode, euid, egid))
+    if (!ir0_access_from_stat_groups(&st, access_mode, uid, gid, groups,
+                                     ngroups))
         return -EACCES;
 
     return 0;
+}
+
+int64_t ir0_access_path_routed(const char *resolved_path, int mode,
+                               uid_t euid, gid_t egid)
+{
+    return ir0_access_path_routed_groups(resolved_path, mode, euid, egid,
+                                         NULL, 0);
 }
 
 int ir0_open_access_path_routed(const char *resolved_path, int open_flags,

@@ -511,9 +511,15 @@ int64_t sys_access(const char *pathname, int mode)
   if (rc != 0)
     return rc;
 
-  return ir0_access_path_routed(resolved, mode,
-                                (uid_t)current_process->euid,
-                                (gid_t)current_process->egid);
+  /*
+   * Linux access(2): real uid/gid + supplementary groups, not effective.
+   * man7 access(2); AT_EACCESS is only on faccessat.
+   */
+  return ir0_access_path_routed_groups(resolved, mode,
+                                       (uid_t)current_process->uid,
+                                       (gid_t)current_process->gid,
+                                       current_process->groups,
+                                       (int)current_process->ngroups);
 }
 
 int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
@@ -521,6 +527,8 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
   char resolved[256];
   int rc;
   int masked_flags;
+  uid_t uid;
+  gid_t gid;
 
   if (!current_process || !pathname)
     return -EFAULT;
@@ -535,13 +543,22 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
     return rc;
 
   /*
-   * IR0 currently evaluates access permissions against effective IDs.
-   * AT_EACCESS is accepted and maps to this same behavior.
-   * AT_SYMLINK_NOFOLLOW is accepted as a no-op because symlinks are not implemented.
+   * Linux faccessat(2): real IDs unless AT_EACCESS (then effective).
+   * AT_SYMLINK_NOFOLLOW is accepted as a no-op (no symlink walk yet).
    */
-  return ir0_access_path_routed(resolved, mode,
-                                (uid_t)current_process->euid,
-                                (gid_t)current_process->egid);
+  if (flags & IR0_AT_EACCESS)
+  {
+    uid = (uid_t)current_process->euid;
+    gid = (gid_t)current_process->egid;
+  }
+  else
+  {
+    uid = (uid_t)current_process->uid;
+    gid = (gid_t)current_process->gid;
+  }
+  return ir0_access_path_routed_groups(resolved, mode, uid, gid,
+                                       current_process->groups,
+                                       (int)current_process->ngroups);
 }
 
 /**

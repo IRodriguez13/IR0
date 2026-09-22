@@ -100,9 +100,11 @@ bool check_file_access(const char *path, int mode, const struct process *process
     if (ir0_stat_path_routed(path, &st) != 0)
         return false;
 
-    return ir0_access_from_stat(&st, mode,
-                                (uid_t)process->euid,
-                                (gid_t)process->egid);
+    return ir0_access_from_stat_groups(&st, mode,
+                                       (uid_t)process->euid,
+                                       (gid_t)process->egid,
+                                       process->groups,
+                                       (int)process->ngroups);
 }
 
 bool is_root(const struct process *process)
