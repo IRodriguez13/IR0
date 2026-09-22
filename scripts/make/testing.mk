@@ -3236,7 +3236,8 @@ LINUX_ABI_VFS_WRITE_PROBE := $(LINUX_ABI_AUDIT_DIR)/vfs_write_probe
 	linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
 	linux-abi-audit-pipe linux-abi-audit-poll linux-abi-audit-nanosleep \
 	linux-abi-audit-getcwd linux-abi-audit-chdir linux-abi-audit-dup linux-abi-audit-pty-multiplex linux-abi-audit-execve \
-	linux-abi-audit-ioctl linux-abi-audit-fcntl linux-abi-audit-kill-sigterm \
+	linux-abi-audit-ioctl linux-abi-audit-fcntl linux-abi-audit-clone \
+	linux-abi-audit-select linux-abi-audit-kill-sigterm \
 	linux-abi-audit-mmap linux-abi-audit-munmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
 	linux-abi-audit-proc-stat \
 	linux-abi-audit-process-lifecycle linux-abi-audit-ipc-bundle \
@@ -3431,6 +3432,20 @@ linux-abi-audit-fcntl: kernel-x64-userspace.iso
 	@grep -q '^## fcntl — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
 		echo "✓ linux-abi-audit-fcntl passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
 		(echo "✗ linux-abi-audit-fcntl FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-clone: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_workload.sh scripts/linux_abi/run_ir0_workload.sh
+	@python3 scripts/linux_abi_audit.py --contract clone
+	@grep -q '^## clone — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-clone passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-clone FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
+
+linux-abi-audit-select: kernel-x64-userspace.iso
+	@chmod +x scripts/linux_abi/run_linux_workload.sh scripts/linux_abi/run_ir0_workload.sh
+	@python3 scripts/linux_abi_audit.py --contract select
+	@grep -q '^## select — PASS' $(LINUX_ABI_AUDIT_DIR)/report.md && \
+		echo "✓ linux-abi-audit-select passed (see $(LINUX_ABI_AUDIT_DIR)/report.md)" || \
+		(echo "✗ linux-abi-audit-select FAILED — see $(LINUX_ABI_AUDIT_DIR)/report.md"; exit 1)
 
 linux-abi-audit-kill-sigterm: kernel-x64-userspace.iso build-linux-abi-wait4-probe
 	@chmod +x scripts/linux_abi/run_linux_kill_sigterm.sh scripts/linux_abi/run_ir0_kill_sigterm.sh
@@ -3911,6 +3926,7 @@ release-0.0.1-capabilities: kernel-x64.bin kernel-x64-userspace.iso
 	@$(MAKE) -s smoke-ctrl-c-spam
 	@$(MAKE) -s smoke-sigchld-no-false-logout
 	@$(MAKE) -s smoke-posix-setsid
+	@$(MAKE) -s smoke-posix-sighup-tty
 	@$(MAKE) -s smoke-fsck-remount-rw
 	@echo "✓ release-0.0.1-capabilities passed (audits + terminal smokes; board VERIFIED requires compare PASS)"
 

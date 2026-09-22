@@ -605,7 +605,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
         if (ret < 0)
           return ret;
         if (current_process->signal_pending != 0)
-          return 0;
+          return -EINTR;
       }
     }
     return syscall_sleep_ms_locked((uint64_t)timeout_ms);

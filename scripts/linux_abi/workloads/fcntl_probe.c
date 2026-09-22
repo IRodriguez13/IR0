@@ -58,6 +58,24 @@ int main(void)
 		return 1;
 
 	{
+		int restored = (int)flags;
+
+		if (fcntl(fd, F_SETFL, restored | O_NONBLOCK) != 0)
+		{
+			audit_fc(9, "fcntl_setfl_nonblock", -1L, errno);
+			return 1;
+		}
+		audit_fc(9, "fcntl_setfl_nonblock", 0L, 0);
+		flags = (long)fcntl(fd, F_GETFL);
+		audit_fc(10, "fcntl_getfl_nonblock", flags, flags < 0 ? errno : 0);
+		if (flags < 0 || ((int)flags & O_ACCMODE) != O_RDONLY ||
+		    !((int)flags & O_NONBLOCK))
+			return 1;
+		if (fcntl(fd, F_SETFL, restored) != 0)
+			return 1;
+	}
+
+	{
 		int d;
 
 		d = fcntl(fd, F_DUPFD, 20);

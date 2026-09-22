@@ -103,21 +103,23 @@ ASCII:
    Frames are placed by `signal_pick_handler_sp()` (also used from
    `signals_deliver_from_irq_frame`) with `SIGNAL_HANDLER_TOP_MARGIN` below
    `USER_STACK_TOP` so delivery does not land in the canary / overrun page.
-4. `sa_flags` not implemented (always 0).
+4. `sa_flags` stores `SA_RESTART` / `SA_SIGINFO` / `SA_RESTORER` on `rt_sigaction`.
+   Restart applies to syscalls that snap a blocked frame (`sigreturn_blocked_syscall`).
+   `select` / `poll` / `pselect6` / `rt_sigsuspend` do not restart (Linux).
 5. `act->sa_mask` overwrites entire process mask on sigaction.
 
 ## 9. Debugging tips
 
-- musl may expect `SA_RESTORER` — not implemented (T1 gap).
-- Signals during blocked syscalls: partial via `irq_frame_saved` / syscall frame capture.
+- musl `SA_RESTORER` is stored; restorer trampoline is not a full musl port.
+- Signals during blocked syscalls: `kernel_syscall_sleep` + `rt_sigreturn` resume.
 - Timer preemption disabled — delivery tied to explicit schedule points.
 
 ## 10. Future roadmap
 
-- `SA_RESTART`, `SA_SIGINFO`, `siginfo_t` — not implemented.
+- Broader `SA_RESTART` (connect/accept and other blocking sites).
 - Process groups, `kill(0)`, permission checks on send.
 - Reset signal state on exec (POSIX).
-- `pause`, `sigsuspend`, `signalfd`.
+- `pause`, `sigsuspend`, `signalfd`, `inotify`.
 - Real-time queued signals.
 
 See: `IR0-process`, `IR0-interrupts`, `IR0-scheduler`.

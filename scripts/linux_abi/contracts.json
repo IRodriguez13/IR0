@@ -51,9 +51,14 @@
     },
     {
       "id": "clone",
-      "enabled": false,
-      "title": "Clone thread/process",
-      "status_doc": "UNKNOWN"
+      "enabled": true,
+      "title": "clone(2) child stack (CLONE_VM|CLONE_VFORK)",
+      "status_doc": "VERIFIED",
+      "done_tag": "CLONEOK",
+      "linux_ref": "kernel/fork.c copy_thread childregs->sp; man2 clone(2)",
+      "smokes": [
+        "linux-abi-audit-clone"
+      ]
     },
     {
       "id": "wait4",
@@ -136,9 +141,14 @@
     },
     {
       "id": "select",
-      "enabled": false,
+      "enabled": true,
       "title": "select(2)",
-      "status_doc": "UNKNOWN"
+      "status_doc": "VERIFIED",
+      "done_tag": "SELECTOK",
+      "linux_ref": "fs/select.c; man2 select(2)",
+      "smokes": [
+        "linux-abi-audit-select"
+      ]
     },
     {
       "id": "pty_multiplex",
@@ -167,7 +177,7 @@
     {
       "id": "fcntl",
       "enabled": true,
-      "title": "fcntl(2) F_GETFD/F_SETFD/F_GETFL/F_DUPFD/F_DUPFD_CLOEXEC",
+      "title": "fcntl(2) F_GETFD/F_SETFD/F_GETFL/F_SETFL/F_DUPFD/F_DUPFD_CLOEXEC",
       "status_doc": "VERIFIED",
       "done_tag": "FCNTLOK",
       "linux_ref": "fs/fcntl.c; include/uapi/linux/fcntl.h F_DUPFD_CLOEXEC=1030; man2 fcntl(2)",

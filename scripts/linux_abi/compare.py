@@ -1814,6 +1814,8 @@ def compare_fcntl(linux: dict, ir0: dict) -> CompareResult:
         ("fcntl_dupfd_getfd", None, None),
         ("fcntl_dupfd_cloexec", None, None),
         ("fcntl_dupfd_cloexec_getfd", None, None),
+        ("fcntl_setfl_nonblock", 0, None),
+        ("fcntl_getfl_nonblock", None, None),
     )
 
     for op, exp_ret, exp_errno in required:
@@ -1863,6 +1865,31 @@ def compare_fcntl(linux: dict, ir0: dict) -> CompareResult:
                     )
             continue
 
+        if op == "fcntl_setfl_nonblock":
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                if step.get("ret") != 0:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: ret={step.get('ret')} expected=0"
+                    )
+            continue
+
+        if op == "fcntl_getfl_nonblock":
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                flags = step.get("ret")
+                if flags is None or flags < 0 or (int(flags) & 3) != 0:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: flags={flags} expected O_RDONLY"
+                    )
+                elif (int(flags) & 0x800) == 0 and (int(flags) & 0o4000) == 0:
+                    # Linux O_NONBLOCK is 04000 (octal) / 0x800
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: flags={flags} expected O_NONBLOCK"
+                    )
+            continue
+
         if op in ("fcntl_dupfd", "fcntl_dupfd_cloexec"):
             for label, step in (("linux", l_s), ("ir0", i_s)):
                 if step.get("ret", -1) < 0:
@@ -1891,7 +1918,94 @@ def compare_fcntl(linux: dict, ir0: dict) -> CompareResult:
             )
 
     res.notes.append(
-        "fcntl F_GETFD/F_SETFD/F_GETFL/F_DUPFD/F_DUPFD_CLOEXEC on /proc/uptime"
+        "fcntl F_GETFD/F_SETFD/F_GETFL/F_SETFL(O_NONBLOCK)/F_DUPFD/F_DUPFD_CLOEXEC; F_SETLK out of contract"
+    )
+    return res
+
+
+def compare_clone(linux: dict, ir0: dict) -> CompareResult:
+    res = CompareResult(contract="clone", ok=True)
+    required = (
+        "mmap_stack",
+        "clone_vfork_stack",
+        "wait_child",
+        "child_rsp_in_stack",
+        "clone_thread_no_vm",
+    )
+
+    for op in required:
+        l_s = _find_step(linux.get("audit_steps") or [], op)
+        i_s = _find_step(ir0.get("audit_steps") or [], op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(
+                f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})"
+            )
+            continue
+
+        if op == "clone_vfork_stack":
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                if step.get("ret", -1) <= 0:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: ret={step.get('ret')} expected pid>0"
+                    )
+            continue
+
+        if op == "clone_thread_no_vm":
+            for label, step in (("linux", l_s), ("ir0", i_s)):
+                if step.get("ret", 0) >= 0 or step.get("errno") != 22:
+                    res.ok = False
+                    res.divergences.append(
+                        f"{label} {op}: ret={step.get('ret')} errno={step.get('errno')} expected EINVAL"
+                    )
+            continue
+
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret") != 0:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: ret={step.get('ret')} expected=0"
+                )
+
+    res.notes.append(
+        "clone(CLONE_VM|CLONE_VFORK) child RSP must land on the supplied stack"
+    )
+    return res
+
+
+def compare_select(linux: dict, ir0: dict) -> CompareResult:
+    res = CompareResult(contract="select", ok=True)
+    required = (
+        ("select_pipe", 1, None),
+        ("select_timeout0", 0, None),
+        ("select_nfds_neg", -1, 22),
+    )
+
+    for op, exp_ret, exp_errno in required:
+        l_s = _find_step(linux.get("audit_steps") or [], op)
+        i_s = _find_step(ir0.get("audit_steps") or [], op)
+        if not l_s or not i_s:
+            res.ok = False
+            res.divergences.append(
+                f"missing {op} step (linux={bool(l_s)} ir0={bool(i_s)})"
+            )
+            continue
+
+        for label, step in (("linux", l_s), ("ir0", i_s)):
+            if step.get("ret") != exp_ret:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: ret={step.get('ret')} expected={exp_ret}"
+                )
+            if exp_errno is not None and step.get("errno") != exp_errno:
+                res.ok = False
+                res.divergences.append(
+                    f"{label} {op}: errno={step.get('errno')} expected={exp_errno}"
+                )
+
+    res.notes.append(
+        "select pipe POLLIN, zero timeout, nfds<0 EINVAL; pselect6 sigmask not in contract"
     )
     return res
 

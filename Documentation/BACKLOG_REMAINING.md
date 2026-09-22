@@ -110,8 +110,8 @@
 |------|--------|------------|
 | Maintainer manual VM (**mantenedor only**) | **0.0.1 ship** | Interactive QEMU GTK / serial — **not agent backlog** |
 | Interactive first-boot wizard (TTY Q&A) | UX polish | Today: non-interactive defaults via `ir0-firstboot` when `/etc/passwd` missing |
-| `crypt(3)` shadow hashes | Login hardening | Plain/`empty` passwords for bring-up; BusyBox login/PAM later |
-| Kernel root RO → fsck → remount RW | Storage path | `fsck.ir0` tags honest SKIP/OK/FAIL; remount pipeline TBD |
+| `crypt(3)` shadow hashes | ISD-only (not kernel) | `ISD/lib/ir0_auth.c` already hashes; kernel DAC does not store passwords |
+| Kernel root RO → fsck → remount RW | TBD product path | `fsck.ir0` is magic-check only; no boot-time `MS_RDONLY` root |
 | Interactive sendkey password path | TTY | Username echoes; password stage stalls in QEMU — lab uses `/etc/ir0-autologin`; GUI: `IR0_NO_AUTOLOGIN=1` |
 | `smoke-runit-ash-interactive` echo OK | **Closed 2026-09-22** | PASS 14.5s (`SYS_READ_RETURN_OK` + `ASH_COMMAND_ECHO_OK`) |
 | Full musl aarch64 CRT restore | Optional toolchain hygiene | Freestanding `hello_aarch64` + weak `sched_context_switch_to`/`klog_info` in `rr_early_stubs.c` unblock `smoke-arm64-boot`; re-extract musl.cc for libc programs |

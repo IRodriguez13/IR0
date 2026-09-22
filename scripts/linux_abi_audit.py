@@ -26,7 +26,9 @@ from compare import (  # noqa: E402
     compare_chdir,
     compare_dup,
     compare_execve,
+    compare_clone,
     compare_fcntl,
+    compare_select,
     compare_getcwd,
     compare_ioctl,
     compare_mmap,
@@ -227,6 +229,20 @@ def build_fcntl_probe(report_dir: Path) -> Path:
     return build_static_probe(
         report_dir / "fcntl_probe",
         ROOT / "scripts" / "linux_abi" / "workloads" / "fcntl_probe.c",
+    )
+
+
+def build_clone_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "clone_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "clone_probe.c",
+    )
+
+
+def build_select_probe(report_dir: Path) -> Path:
+    return build_static_probe(
+        report_dir / "select_probe",
+        ROOT / "scripts" / "linux_abi" / "workloads" / "select_probe.c",
     )
 
 
@@ -1473,6 +1489,56 @@ def audit_fcntl(report_dir: Path, cfg: dict) -> CompareResult:
     return compare_fcntl(linux_trace, ir0_trace)
 
 
+def audit_clone(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "clone"
+    ir0_dir = report_dir / "ir0" / "clone"
+
+    build_clone_probe(report_dir)
+
+    if not _run_simple_workloads(
+        "clone",
+        "clone_probe",
+        "CLONEOK",
+        "clone,wait4,mmap,munmap",
+        linux_dir,
+        ir0_dir,
+    ):
+        return CompareResult(
+            contract="clone",
+            ok=False,
+            divergences=["clone workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+    return compare_clone(linux_trace, ir0_trace)
+
+
+def audit_select(report_dir: Path, cfg: dict) -> CompareResult:
+    linux_dir = report_dir / "linux" / "select"
+    ir0_dir = report_dir / "ir0" / "select"
+
+    build_select_probe(report_dir)
+
+    if not _run_simple_workloads(
+        "select",
+        "select_probe",
+        "SELECTOK",
+        "select,pipe,write,read,close",
+        linux_dir,
+        ir0_dir,
+    ):
+        return CompareResult(
+            contract="select",
+            ok=False,
+            divergences=["select workload script failed"],
+        )
+
+    linux_trace = json.loads((linux_dir / "trace.json").read_text())
+    ir0_trace = json.loads((ir0_dir / "trace.json").read_text())
+    return compare_select(linux_trace, ir0_trace)
+
+
 AUDITORS = {
     "brk": audit_brk,
     "wait4": audit_wait4,
@@ -1489,6 +1555,8 @@ AUDITORS = {
     "pty_multiplex": audit_pty_multiplex,
     "ioctl": audit_ioctl,
     "fcntl": audit_fcntl,
+    "clone": audit_clone,
+    "select": audit_select,
     "mmap": audit_mmap,
     "mount": audit_mount,
     "execve": audit_execve,
